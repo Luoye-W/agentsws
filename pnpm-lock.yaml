@@ -35,21 +35,51 @@ importers:
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@agentsws/data':
+        specifier: workspace:*
+        version: link:../../packages/data
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@agentsws/knowledge':
+        specifier: workspace:*
+        version: link:../../packages/knowledge
+      '@agentsws/model-gateway':
+        specifier: workspace:*
+        version: link:../../packages/model-gateway
+      '@agentsws/roles':
+        specifier: workspace:*
+        version: link:../../packages/roles
+      '@agentsws/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../../packages/txn
+      '@hono/node-server':
+        specifier: ^2.1.1
+        version: 2.1.1(hono@4.13.7)
+      hono:
+        specifier: ^4.13.7
+        version: 4.13.7
 
   packages/api:
     dependencies:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@agentsws/kernel':
-        specifier: workspace:*
-        version: link:../kernel
+      hono:
+        specifier: ^4.13.7
+        version: 4.13.7
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
 
   packages/contracts: {}
 
@@ -461,6 +491,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@hono/node-server@2.1.1':
+    resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -877,6 +913,10 @@ packages:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
 
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
+    engines: {node: '>=16.9.0'}
+
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
 
@@ -1247,6 +1287,9 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+
 snapshots:
 
   '@ampproject/remapping@2.3.0':
@@ -1397,6 +1440,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@hono/node-server@2.1.1(hono@4.13.7)':
+    dependencies:
+      hono: 4.13.7
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -1777,6 +1824,8 @@ snapshots:
       path-scurry: 1.11.1
 
   has-flag@4.0.0: {}
+
+  hono@4.13.7: {}
 
   html-escaper@2.0.2: {}
 
@@ -2166,3 +2215,5 @@ snapshots:
   wrappy@1.0.2: {}
 
   yaml@2.9.0: {}
+
+  zod@4.5.4: {}

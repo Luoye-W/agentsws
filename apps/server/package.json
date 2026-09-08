@@ -7,6 +7,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "agentsws-server": "./dist/index.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,11 +18,21 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "start": "node dist/index.js",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@agentsws/api": "workspace:*",
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/data": "workspace:*",
     "@agentsws/kernel": "workspace:*",
+    "@agentsws/knowledge": "workspace:*",
+    "@agentsws/model-gateway": "workspace:*",
+    "@agentsws/roles": "workspace:*",
+    "@agentsws/skills": "workspace:*",
     "@agentsws/txn": "workspace:*",
-    "@agentsws/api": "workspace:*"
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.7"
   }
 }
