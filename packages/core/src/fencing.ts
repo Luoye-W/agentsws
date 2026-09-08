@@ -26,6 +26,7 @@ const INVISIBLE = new RegExp(
     ']',
   'gu',
 )
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 刻意匹配 C0/C1 控制字符（围栏移植）
 const CONTROL = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g
 const TURN_INDICATOR =
   /((?:\r\n|\r|\n)[ \t]*(?:\r\n|\r|\n)[ \t]*)(human|assistant|system|user)[ \t]*:/gi
@@ -111,7 +112,7 @@ export class Fence {
         : JSON.stringify(sanitized, (_k, v) =>
             typeof v === 'bigint' ? this.sanitizeText(String(v)) : v,
           )
-    if (body.length > maxChars) body = body.slice(0, maxChars) + ' ...[truncated]'
+    if (body.length > maxChars) body = `${body.slice(0, maxChars)} ...[truncated]`
     body = body.replace(LEADING_TURN_INDICATOR, '$1$2 -')
     return `${this.open}\n${body}\n${this.close}`
   }
@@ -124,7 +125,7 @@ export function sanitizeLabel(text: unknown, maxChars: number): string {
     .replace(CONTROL, ' ')
     .replace(WHITESPACE_RUN, ' ')
     .trim()
-  if (line.length > maxChars) line = line.slice(0, maxChars - 1).trimEnd() + '…'
+  if (line.length > maxChars) line = `${line.slice(0, maxChars - 1).trimEnd()}…`
   return line
 }
 
@@ -146,7 +147,7 @@ export function truncateDisplay(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
   let cut = text.slice(0, maxChars - 1)
   if (cut.includes(' ')) cut = cut.slice(0, cut.lastIndexOf(' '))
-  return cut.replace(/[ ,;:\-—–]+$/u, '') + '…'
+  return `${cut.replace(/[ ,;:\-—–]+$/u, '')}…`
 }
 
 /** 我们的默认围栏：所有入站外部文本（邮件、消息、网页、文档）。 */

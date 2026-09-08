@@ -174,8 +174,8 @@ describe('mandate resolution (15 §3.1)', () => {
       { caps: { max_auto_refund_amount: 80 } },
       { caps: { max_auto_refund_amount: 200, protected: ['b'] } },
     )
-    expect(m.caps['max_auto_refund_amount']).toBe(80)
-    expect(m.caps['protected']).toEqual(['b'])
+    expect(m.caps.max_auto_refund_amount).toBe(80)
+    expect(m.caps.protected).toEqual(['b'])
   })
 })
 

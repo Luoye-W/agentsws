@@ -14,7 +14,7 @@ export function resolveMandate(
     ...(role.per_change_limits || policy?.per_change_limits
       ? { per_change_limits: { ...role.per_change_limits, ...policy?.per_change_limits } }
       : {}),
-    ...((policy?.window ?? role.window) ? { window: (policy?.window ?? role.window)! } : {}),
+    ...windowOf(policy, role),
   }
   if (assignment) {
     for (const [k, v] of Object.entries(assignment.caps ?? {})) {
@@ -46,6 +46,14 @@ export function resolveMandate(
   return merged
 }
 
+function windowOf(
+  policy: Partial<Mandate> | undefined,
+  role: Mandate,
+): Pick<Mandate, 'window'> | Record<string, never> {
+  const w = policy?.window ?? role.window
+  return w ? { window: w } : {}
+}
+
 /** 数值取更小、集合取交集、布尔只能 false→true 收紧；Assignment 试图放宽的值被忽略。 */
 function tighter(cur: Cap | undefined, next: Cap): Cap {
   if (cur === undefined) return next
@@ -56,7 +64,7 @@ function tighter(cur: Cap | undefined, next: Cap): Cap {
 }
 
 export function mandateHash(m: Mandate): string {
-  return 'm:' + sha256(canonicalJson(m)).slice(0, 16)
+  return `m:${sha256(canonicalJson(m)).slice(0, 16)}`
 }
 
 export function capNumber(m: Mandate, name: string): number | undefined {

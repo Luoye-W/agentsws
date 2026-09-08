@@ -4,13 +4,13 @@ import type { ExecutionSnapshot } from '@agentsws/contracts'
 /** 稳定序列化：键排序，保证同一内容同一哈希。 */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']'
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
   const obj = value as Record<string, unknown>
   return (
     '{' +
     Object.keys(obj)
       .sort()
-      .map((k) => JSON.stringify(k) + ':' + canonicalJson(obj[k]))
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`)
       .join(',') +
     '}'
   )
