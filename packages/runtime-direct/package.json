@@ -1,0 +1,26 @@
+{
+  "name": "@agentsws/runtime-direct",
+  "version": "0.0.0",
+  "private": true,
+  "description": "direct-llm 运行时：不经 dsh、直接用模型网关跑 turn loop（17 §4）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/model-gateway": "workspace:*",
+    "@agentsws/stand-ins": "workspace:*"
+  }
+}

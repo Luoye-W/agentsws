@@ -5,14 +5,7 @@
   "references": [
     { "path": "../contracts" },
     { "path": "../core" },
-    { "path": "../data" },
-    { "path": "../dsh-adapter" },
-    { "path": "../kernel" },
-    { "path": "../knowledge" },
     { "path": "../model-gateway" },
-    { "path": "../roles" },
-    { "path": "../runtime-direct" },
-    { "path": "../stand-ins" },
-    { "path": "../txn" }
+    { "path": "../stand-ins" }
   ]
 }

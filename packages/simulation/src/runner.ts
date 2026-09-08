@@ -27,7 +27,7 @@ import type { ScenarioReport } from './report.js'
 import { buildReport } from './report.js'
 import { parseDuration, parseRange, resolveAt } from './scenario/duration.js'
 import type { Scenario, ScenarioEvent, Tier } from './scenario/types.js'
-import type { RunContext, World } from './world.js'
+import type { RunContext, RuntimeName, World } from './world.js'
 import { createWorld } from './world.js'
 
 /** 每推进一步的粒度：五分钟。取消窗口（120s）与升级（小时级）都能被看见。 */
@@ -46,8 +46,8 @@ export interface RunScenarioOptions {
   pack?: Pack
   /** 事件日志路径，缺省内存。 */
   dbPath?: string
-  /** 用哪个运行时适配器（17 §4）；缺省 `stub`。`dsh` 走 `@agentsws/dsh-adapter`。 */
-  runtime?: 'stub' | 'dsh'
+  /** 用哪个运行时跑（17 §4）；缺省 `stub`。`dsh` 走 `@agentsws/dsh-adapter`；`direct` = direct-llm 的 turn loop。 */
+  runtime?: RuntimeName
   /** 拿到原始证据（一致性用例要比对事件序列；报告里不塞这么大一坨）。 */
   captureEvidence?: (evidence: Evidence) => void
 }
@@ -308,7 +308,7 @@ async function execute(
     }
 
     const controller = new AbortController()
-    const result = await standIns.stubRuntime.run(request, sink, controller.signal)
+    const result = await world.runtime.run(request, sink, controller.signal)
     runs.push({
       request,
       started_at,
