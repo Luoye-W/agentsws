@@ -25,6 +25,7 @@ const STATUS: Record<ErrorCode, number> = {
   provider_error: 500,
   unauthenticated: 401,
   internal: 500,
+  not_implemented: 501,
 }
 
 /** 适配器统一错误。`details` 里只放脱敏后的上游线索，永远不含凭据。 */

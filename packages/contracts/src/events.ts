@@ -86,6 +86,15 @@ export type KnownEventType =
   | 'simulation.run_request'
   // delivery / notification (18)
   | 'notification.sent'
+  // connect (08/18)：payload 只带 token 指纹，永不带原文
+  | 'connect.token_issued'
+  | 'connect.tokens_revoked'
+  | 'connect.executed'
+  | 'connect.execute_failed'
+  | 'connect.proxy_denied'
+  | 'connect.connection_started'
+  | 'connect.connection_established'
+  | 'connect.connection_transferred'
   // privacy (21)
   | 'privacy.erased'
   // inbound / delivery (18)

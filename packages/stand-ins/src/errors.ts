@@ -28,6 +28,7 @@ const STATUS: Record<StandInErrorCode, number> = {
   residency_blocked: 403,
   unauthenticated: 401,
   internal: 500,
+  not_implemented: 501,
   rate_limited: 429,
   timeout: 504,
   provider_error: 500,

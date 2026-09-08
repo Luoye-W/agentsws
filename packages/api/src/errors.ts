@@ -41,6 +41,7 @@ export const STATUS_BY_CODE: Record<GatewayErrorCode, number> = {
   timeout: 504,
   provider_error: 502,
   internal: 500,
+  not_implemented: 501,
 }
 
 export function statusFor(code: GatewayErrorCode): number {

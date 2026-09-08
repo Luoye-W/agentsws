@@ -111,6 +111,7 @@ export type ErrorCode =
   | 'timeout'
   | 'provider_error'
   | 'unauthenticated'
+  | 'not_implemented'
   | 'internal'
 
 export interface AppError {
