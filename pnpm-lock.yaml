@@ -191,9 +191,6 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
-      '@agentsws/kernel':
-        specifier: workspace:*
-        version: link:../kernel
 
 packages:
 

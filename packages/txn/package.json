@@ -2,7 +2,7 @@
   "name": "@agentsws/txn",
   "version": "0.0.0",
   "private": true,
-  "description": "交易控制模块：审批 #3 + 账本 #4 + 执行器 #5",
+  "description": "交易控制模块（31 §1 I8）：审批总线 #3 + 变更账本 #4 + 执行器 #5，一个事务边界",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,11 +15,10 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/core": "workspace:*",
-    "@agentsws/kernel": "workspace:*"
+    "@agentsws/core": "workspace:*"
   }
 }
