@@ -225,6 +225,12 @@ export class MemoryInboundPipeline implements InboundPipeline {
     return { event, deduped: false }
   }
 
+  /** 替身无退避队列：无事可推进 */
+
+  async pump(): Promise<number> {
+    return 0
+  }
+
   async deadLetters(workspace_id: WorkspaceId): Promise<InboundEvent[]> {
     return this.dead.filter((e) => e.workspace_id === workspace_id)
   }

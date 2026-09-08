@@ -49,10 +49,14 @@ export interface ChannelAdapter {
   }
   start(handler: (raw: unknown) => Promise<void>): Promise<void>
   stop(): Promise<void>
+  /** 秘密在落 raw 之前抹掉（31 §4）；适配器可回带 secrets_scrubbed，管线再兜底 */
   toInbound(
     raw: unknown,
     workspace_id: WorkspaceId,
-  ): Promise<Omit<InboundEvent, 'id' | 'routing' | 'secrets_scrubbed'>>
+  ): Promise<
+    Omit<InboundEvent, 'id' | 'routing' | 'secrets_scrubbed'> & { secrets_scrubbed?: boolean }
+  >
+  /** 收件人由线程台账决定（31 §3.3 收件人门禁），不接受入参或模型给的地址 */
   send(
     thread: { external_id: string },
     parts: MessagePart[],
@@ -68,6 +72,8 @@ export interface InboundPipeline {
     workspace_id: WorkspaceId,
   ): Promise<{ event?: InboundEvent; deduped: boolean }>
   deadLetters(workspace_id: WorkspaceId): Promise<InboundEvent[]>
+  /** 由宿主驱动：推进到期重试（指数退避）；返回本次处理条数 */
+  pump(now?: Iso8601): Promise<number>
 }
 
 /** 18 §3 投递。回调只带 token 与动作。 */
@@ -77,19 +83,18 @@ export type DeliveryChannel =
   | 'wecom_card'
   | 'dingtalk_card'
   | 'email'
+export interface DeliveredItem {
+  id: string
+  title: string
+  summary: string
+  view: 'full' | 'redacted'
+  decision_token: string
+  actions: string[]
+}
+
 export interface DeliveryProvider {
   channel: DeliveryChannel
-  deliver(
-    item: {
-      id: string
-      title: string
-      summary: string
-      view: 'full' | 'redacted'
-      decision_token: string
-      actions: string[]
-    },
-    to: PersonId,
-  ): Promise<{ external_id?: string }>
+  deliver(item: DeliveredItem, to: PersonId): Promise<{ external_id?: string }>
   refresh(external_id: string, state: string): Promise<void>
   parseCallback(
     payload: unknown,
