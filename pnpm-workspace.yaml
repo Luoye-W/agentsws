@@ -3,9 +3,6 @@ packages:
   - apps/*
   - role-packs/*
 allowBuilds:
-  esbuild: set this to true or false
-
-onlyBuiltDependencies:
-  - esbuild
-  - better-sqlite3
-  - sqlite-vec
+  esbuild: true
+  better-sqlite3: true
+  sqlite-vec: true
