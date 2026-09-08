@@ -62,7 +62,7 @@ export function effectiveConfig(input: EffectiveConfigInput): EffectiveConfig {
     mandate: resolveMandate(
       action.mandate,
       policy?.mandates[action.id],
-      assignment.mandate_overrides,
+      assignment.mandate_overrides?.[action.id],
     ),
     risk_class: riskClassOf(action),
     route_to: action.route_to,

@@ -40,7 +40,7 @@ describe('effectiveConfig 额度解析 (05 §3)', () => {
       role_id: 'dtc.aftersales',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
-      mandate_overrides: { caps: { max_auto_refund_amount: 200 } },
+      mandate_overrides: { stage_refund: { caps: { max_auto_refund_amount: 200 } } },
     })
     expect(capOf(looser.id)).toBe(80)
 
@@ -50,7 +50,7 @@ describe('effectiveConfig 额度解析 (05 §3)', () => {
       role_id: 'dtc.aftersales',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
-      mandate_overrides: { caps: { max_auto_refund_amount: 30 } },
+      mandate_overrides: { stage_refund: { caps: { max_auto_refund_amount: 30 } } },
     })
     expect(capOf(tighter.id)).toBe(30)
   })

@@ -31,9 +31,10 @@ function feed(
 describe('adoptionLowerBound', () => {
   it('is the one-sided 95% bound and never rewards a tiny perfect run', () => {
     expect(adoptionLowerBound(0, 0)).toBe(0)
-    expect(adoptionLowerBound(3, 3)).toBeLessThan(0.5)
+    expect(adoptionLowerBound(3, 3)).toBeLessThan(0.6) // Wilson(3/3) ≈ 0.53
     expect(adoptionLowerBound(30, 30)).toBeLessThan(0.95)
-    expect(adoptionLowerBound(50, 50)).toBeGreaterThan(0.95)
+    expect(adoptionLowerBound(50, 50)).toBeLessThan(0.95) // Wilson：全采纳需 n ≥ 52
+    expect(adoptionLowerBound(60, 60)).toBeGreaterThan(0.95)
     expect(adoptionLowerBound(190, 200)).toBeLessThan(190 / 200)
     expect(adoptionLowerBound(1, 1)).toBeGreaterThanOrEqual(0)
   })
@@ -86,14 +87,14 @@ describe('recordDecision (05 §1.4)', () => {
 })
 
 describe('suggestPromotion (31 §3.4)', () => {
-  it('suggests L2 for a low-risk action at 50/50 adoption', () => {
+  it('suggests L2 for a low-risk action at 60/60 adoption', () => {
     const { s, a } = seeded()
-    feed(s, a.id, 'reply_customer', 'accepted', 50)
+    feed(s, a.id, 'reply_customer', 'accepted', 60)
     const suggestion = s.suggestPromotion(a.id, 'reply_customer', 'low')
     expect(suggestion).not.toBeNull()
     expect(suggestion?.to).toBe('L2')
     expect(suggestion?.from).toBe('L1')
-    expect(suggestion?.samples).toBe(50)
+    expect(suggestion?.samples).toBe(60)
     expect(suggestion?.adoption_rate).toBe(1)
     expect(suggestion?.target).toBe(0.95)
     expect(suggestion?.lower_bound).toBeGreaterThanOrEqual(0.95)
@@ -123,14 +124,14 @@ describe('suggestPromotion (31 §3.4)', () => {
 
   it('stops suggesting once edits show up', () => {
     const { s, a } = seeded()
-    feed(s, a.id, 'reply_customer', 'accepted', 50)
+    feed(s, a.id, 'reply_customer', 'accepted', 60)
     feed(s, a.id, 'reply_customer', 'edited', 5)
     expect(s.suggestPromotion(a.id, 'reply_customer', 'low')).toBeNull()
   })
 
   it('never suggests for a revoked assignment', () => {
     const { s, a } = seeded()
-    feed(s, a.id, 'reply_customer', 'accepted', 50)
+    feed(s, a.id, 'reply_customer', 'accepted', 60)
     const revoked = s.assignments.revoke(a.id)
     expect(suggestPromotion(revoked, aftersales(), 'reply_customer', 'low')).toBeNull()
   })

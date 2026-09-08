@@ -73,6 +73,15 @@ export type KnownEventType =
   | 'model.blocked_residency'
   | 'model.provider_down'
   | 'model.budget_frozen'
+  // knowledge (19)
+  | 'knowledge.card.proposed'
+  | 'knowledge.card.activated'
+  | 'knowledge.card.retired'
+  | 'knowledge.card.conflict'
+  | 'knowledge.card.recalled'
+  | 'knowledge.card.cited'
+  | 'knowledge.gap.opened'
+  | 'knowledge.gap.answered'
   // privacy (21)
   | 'privacy.erased'
   // inbound / delivery (18)

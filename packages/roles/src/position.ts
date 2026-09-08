@@ -17,7 +17,7 @@ export interface AssignmentInit {
   role: RoleDefinitionFull
   ranges: RangeRef[]
   granted_by: PersonId
-  mandate_overrides?: Partial<Mandate>
+  mandate_overrides?: Record<string, Partial<Mandate>>
 }
 
 export interface AssignmentFactoryOptions {

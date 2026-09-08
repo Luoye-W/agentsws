@@ -57,7 +57,7 @@ export interface CreateAssignmentInput {
   role_id: RoleId
   ranges?: RangeRef[]
   granted_by: PersonId
-  mandate_overrides?: Partial<Mandate>
+  mandate_overrides?: Record<string, Partial<Mandate>>
   /** 显式指定授予的职责版本；默认取当前已加载的版本。 */
   role_version?: string
 }

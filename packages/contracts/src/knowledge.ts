@@ -128,6 +128,9 @@ export interface MemoryStore {
     accepted: MemoryFactRecord[]
     rejected: { fact: MemoryFactRecord; reason: string }[]
   }>
-  recall(subject: ObjectRef, opts?: { cap?: number }): Promise<MemoryFactRecord[]>
-  forget(subject: ObjectRef, key: string): Promise<void>
+  recall(
+    subject: ObjectRef,
+    opts?: { cap?: number; workspace_id?: WorkspaceId },
+  ): Promise<MemoryFactRecord[]>
+  forget(subject: ObjectRef, key: string, opts?: { workspace_id?: WorkspaceId }): Promise<void>
 }

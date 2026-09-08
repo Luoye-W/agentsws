@@ -1,3 +1,4 @@
+import type { ChangeKind } from './changes.js'
 import type {
   AssignmentId,
   DataDomain,
@@ -7,10 +8,15 @@ import type {
   PersonId,
   Range,
   RangeRef,
+  RiskClass,
   RoleId,
   Sensitivity,
   WorkspaceId,
 } from './common.js'
+import type { GroundingRule } from './run.js'
+
+/** 动作 id（WriteActionSpec.id），如 'stage_refund' */
+export type ActionId = string
 
 /** 05 §1.1。09-08 修正：不做跨 Assignment 并集，每次运行绑定一个 Assignment，其 scopes 原样生效。 */
 export interface PermissionScope {
@@ -37,9 +43,12 @@ export interface AutomationSpec {
 }
 
 export interface WriteActionSpec {
-  id: string
+  id: ActionId
   target: DataDomain
   kind: 'staged_change' | 'outbound_message' | 'publish' | 'config_change'
+  /** 09-09（WP3）：显式映射到 15 §2 的变更种类与风险等级，不靠命名前缀猜 */
+  change_kind?: ChangeKind
+  risk_class?: RiskClass
   mandate: Mandate
   requires_record_read?: boolean
   protected_fields?: string[]
@@ -54,6 +63,26 @@ export interface ConnectorDependency {
   ownership: 'workspace' | 'person'
 }
 
+/** 05 §1.6 首页积木引用（组件与查询按名引用注册表） */
+export interface HomeBlockSpec {
+  id: string
+  placement: 'queue' | 'alert' | 'focus' | 'digest' | 'role_view'
+  component: string
+  query: string
+  default_order: number
+  pinnable: boolean
+  adaptive: boolean
+}
+
+/** 05 §1.7 通知路由 */
+export interface NotificationRule {
+  event: string
+  mode: 'immediate' | 'queue' | 'digest'
+  recipients: ('role_holder' | 'scope_manager' | 'owner')[]
+  escalate_after_hours?: number
+  digest_schedule?: string
+}
+
 export interface RoleDefinition {
   id: RoleId
   version: string
@@ -63,13 +92,17 @@ export interface RoleDefinition {
   scopes: PermissionScope[]
   connectors: ConnectorDependency[]
   actions: WriteActionSpec[]
-  automation: Record<string, AutomationSpec>
+  automation: Record<ActionId, AutomationSpec>
   skills: {
     name: string
     min_version?: string
     tier: 'open' | 'premium'
     load: 'always' | 'on_demand'
   }[]
+  home_blocks: HomeBlockSpec[]
+  notifications: NotificationRule[]
+  grounding?: GroundingRule[]
+  persona?: string
   handover: {
     transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]
     fallback: 'owner' | 'scope_manager'
@@ -85,9 +118,10 @@ export interface Assignment {
   role_id: RoleId
   role_version: string
   ranges: RangeRef[]
-  mandate_overrides?: Partial<Mandate>
+  /** 按动作收紧（09-09 改：额度按动作索引，不能一份 override 套全部动作） */
+  mandate_overrides?: Record<ActionId, Partial<Mandate>>
   automation_state: Record<
-    string,
+    ActionId,
     {
       level: Level
       adoption: { accepted: number; edited: number; rejected: number; since: Iso8601 }
@@ -97,13 +131,62 @@ export interface Assignment {
   granted_by: PersonId
   granted_at: Iso8601
   revoked_at?: Iso8601
-  handover_to?: PersonId
+  handover_to?: PersonId | 'owner' | 'scope_manager'
 }
 
 export interface WorkspacePolicy {
   workspace_id: WorkspaceId
-  mandates: Record<string, Partial<Mandate>>
+  mandates: Record<ActionId, Partial<Mandate>>
   global_caps: Record<string, number>
   sensitivity_overrides?: Record<string, Sensitivity>
-  separation_of_duties?: string[]
+  separation_of_duties?: ActionId[]
+}
+
+/** 05 §2 岗位模板：只在分配那一刻展开成一组 Assignment */
+export interface Position {
+  id: string
+  version: string
+  name: { zh: string; en: string }
+  roles: { role: RoleId; default: boolean }[]
+}
+
+/** 05 §4 有效配置（单个 Assignment，不并集） */
+export interface EffectiveAction {
+  id: ActionId
+  target: DataDomain
+  kind: WriteActionSpec['kind']
+  mandate: Mandate
+  risk_class: RiskClass
+  route_to: WriteActionSpec['route_to']
+  requires_record_read: boolean
+  protected_fields: string[]
+  review_cannot_be_disabled: boolean
+}
+export interface EffectiveAutomation {
+  level: Level
+  recorded_level: Level
+  ceiling: Level
+  hard_ceiling: boolean
+  risk_class: RiskClass
+  clamped_by?: 'ceiling' | 'risk_class'
+}
+export interface EffectiveConfig {
+  assignment_id: AssignmentId
+  person_id: PersonId
+  workspace_id: WorkspaceId
+  role_id: RoleId
+  role_version: string
+  scopes: PermissionScope[]
+  connectors: ConnectorDependency[]
+  missing_connectors: string[]
+  actions: EffectiveAction[]
+  automation: Record<ActionId, EffectiveAutomation>
+  skills: RoleDefinition['skills']
+  grounding: GroundingRule[]
+  persona?: string
+  ranges: RangeRef[]
+  home_blocks: HomeBlockSpec[]
+  notifications: NotificationRule[]
+  ready: boolean
+  unassigned_range: boolean
 }

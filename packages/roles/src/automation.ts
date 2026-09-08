@@ -21,11 +21,14 @@ export const Z_95_ONE_SIDED = 1.6448536269514722
  * 用"至少一次失败"的不确定度兜底后，全采纳仍需 n ≥ 33 才能越过 0.95。
  */
 export function adoptionLowerBound(accepted: number, samples: number): number {
+  // 09-09 审核改为 Wilson 单侧 95% 下界（z=1.645）：统计上可辩护，全采纳需 n ≥ 52 才越过 0.95
   if (samples <= 0) return 0
+  const z = Z_95_ONE_SIDED
   const p = accepted / samples
-  const variance = Math.max(p * (1 - p), 1 / samples)
-  const lower = p - Z_95_ONE_SIDED * Math.sqrt(variance / samples)
-  return Math.min(1, Math.max(0, lower))
+  const denom = 1 + (z * z) / samples
+  const centre = p + (z * z) / (2 * samples)
+  const margin = z * Math.sqrt((p * (1 - p)) / samples + (z * z) / (4 * samples * samples))
+  return Math.min(1, Math.max(0, (centre - margin) / denom))
 }
 
 const emptyState = (at: string, level: Level): Assignment['automation_state'][string] => ({
