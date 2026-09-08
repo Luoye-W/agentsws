@@ -6,3 +6,5 @@ allowBuilds:
   esbuild: true
   better-sqlite3: true
   sqlite-vec: true
+minimumReleaseAgeExclude:
+  - '@oomol-lab/connector@1.2.0'

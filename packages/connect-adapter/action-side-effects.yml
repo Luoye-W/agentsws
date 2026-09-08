@@ -1,0 +1,144 @@
+# 18 §1：OpenConnector 目录里没有 side_effect 字段，由这张覆盖表决定。
+#
+# 纪律（不要放宽）：
+#   - **未标的一律按 write**（`default: write`），宁可让读被当成写而多一道门，也不能让写混进 role-read；
+#   - 只有"确定不改上游状态"的 Action 才标 read；
+#   - GraphQL / 批量 / 代码执行类（`execute_graphql`、`submit_bulk_query`）永远是 write——
+#     它们的副作用取决于运行时传入的文档，静态判不了。
+#
+# 校验：`actions` 的键必须是全名 `service.action`；`patterns` 支持结尾 `*` 通配。
+version: 1
+default: write
+
+patterns:
+  # 逃生阀：新增的 get_/list_ 类 Action 在补进下表之前仍按 write（default），
+  # 这里只给"确定整族只读"的服务开通配，且必须逐个服务显式写出来。
+  - match: aftership.list_*
+    side_effect: read
+
+actions:
+  # ---------- Shopify Admin（客服 / 运营主力） ----------
+  shopify_admin.get_order: read
+  shopify_admin.get_product: read
+  shopify_admin.get_customer: read
+  shopify_admin.get_collection: read
+  shopify_admin.get_shop: read
+  shopify_admin.get_location: read
+  shopify_admin.get_inventory_item: read
+  shopify_admin.get_inventory_quantities: read
+  shopify_admin.get_fulfillment_order: read
+  shopify_admin.get_bulk_operation: read
+  shopify_admin.list_orders: read
+  shopify_admin.list_products: read
+  shopify_admin.list_product_variants: read
+  shopify_admin.list_customers: read
+  shopify_admin.list_collections: read
+  shopify_admin.list_locations: read
+  shopify_admin.list_inventory_items: read
+  shopify_admin.list_order_fulfillment_orders: read
+  shopify_admin.download_bulk_result: read
+  shopify_admin.create_product: write
+  shopify_admin.update_product: write
+  shopify_admin.create_fulfillment: write
+  shopify_admin.adjust_inventory_quantities: write
+  shopify_admin.set_inventory_quantities: write
+  # 副作用取决于传入的 GraphQL 文档 → 永远 write
+  shopify_admin.execute_graphql: write
+  shopify_admin.submit_bulk_query: write
+
+  # ---------- Gmail ----------
+  gmail.get_profile: read
+  gmail.get_message: read
+  gmail.get_draft: read
+  gmail.get_label: read
+  gmail.get_filter: read
+  gmail.get_auto_forwarding: read
+  gmail.get_vacation_settings: read
+  gmail.get_language_settings: read
+  gmail.list_threads: read
+  gmail.list_labels: read
+  gmail.list_drafts: read
+  gmail.list_filters: read
+  gmail.list_history: read
+  gmail.list_forwarding_addresses: read
+  gmail.search_threads: read
+  gmail.fetch_emails: read
+  gmail.fetch_message_by_message_id: read
+  gmail.fetch_message_by_thread_id: read
+  gmail.settings_get_imap: read
+  gmail.settings_get_pop: read
+  gmail.send_email: write
+  gmail.send_draft: write
+  gmail.reply_email: write
+  gmail.reply_to_thread: write
+  gmail.create_draft: write
+  gmail.create_email_draft: write
+  gmail.update_draft: write
+  gmail.delete_draft: write
+  gmail.create_label: write
+  gmail.update_label: write
+  gmail.patch_label: write
+  gmail.delete_label: write
+  gmail.add_label_to_email: write
+  gmail.modify_thread_labels: write
+  gmail.batch_modify_messages: write
+  gmail.create_filter: write
+  gmail.delete_filter: write
+  gmail.move_to_trash: write
+  gmail.move_thread_to_trash: write
+  gmail.untrash_message: write
+  gmail.untrash_thread: write
+  gmail.stop_watch: write
+  gmail.update_imap_settings: write
+  gmail.update_pop_settings: write
+  gmail.update_vacation_settings: write
+  gmail.update_language_settings: write
+
+  # ---------- Meta（Facebook / Instagram） ----------
+  meta.get_current_user: read
+  meta.get_insights: read
+  meta.list_ad_accounts: read
+  meta.list_campaigns: read
+
+  # ---------- WhatsApp Cloud API ----------
+  whatsapp.get_business_profile: read
+  whatsapp.get_phone_number: read
+  whatsapp.get_phone_numbers: read
+  whatsapp.get_media_info: read
+  whatsapp.get_message_templates: read
+  whatsapp.get_template_status: read
+  whatsapp.send_message: write
+  whatsapp.send_template_message: write
+  whatsapp.send_media: write
+  whatsapp.send_media_by_id: write
+  whatsapp.send_location: write
+  whatsapp.send_contacts: write
+  whatsapp.send_interactive_buttons: write
+  whatsapp.send_interactive_list: write
+  whatsapp.upload_media: write
+  whatsapp.create_message_template: write
+  whatsapp.delete_message_template: write
+
+  # ---------- Klaviyo ----------
+  klaviyo.get_profile: read
+  klaviyo.get_campaign: read
+  klaviyo.list_profiles: read
+  klaviyo.list_campaigns: read
+  klaviyo.list_events: read
+  klaviyo.validate_account: read
+  # create_event 会往 Klaviyo 里写一条事件（并可能触发 flow）→ write
+  klaviyo.create_event: write
+
+  # ---------- AfterShip ----------
+  aftership.get_tracking: read
+  aftership.detect_couriers: read
+  aftership.create_tracking: write
+  aftership.update_tracking: write
+  aftership.delete_tracking: write
+  aftership.retrack_tracking: write
+  aftership.mark_tracking_completed: write
+
+  # ---------- Gotify（契约一致性套件对真 runtime 用的最小 provider） ----------
+  gotify.get_version: read
+  gotify.get_health: read
+  gotify.send_message: write

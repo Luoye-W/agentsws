@@ -87,6 +87,22 @@ importers:
         specifier: ^4.5.4
         version: 4.5.4
 
+  packages/connect-adapter:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@oomol-lab/connector':
+        specifier: 1.2.0
+        version: 1.2.0
+      yaml:
+        specifier: ^2.6.0
+        version: 2.9.0
+    devDependencies:
+      '@agentsws/stand-ins':
+        specifier: workspace:*
+        version: link:../stand-ins
+
   packages/contracts: {}
 
   packages/core:
@@ -549,6 +565,10 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@oomol-lab/connector@1.2.0':
+    resolution: {integrity: sha512-UY3D8IWTkXNuLCdtTOxk1UPqhQEIuo5mabex91MNtD6Nacfe2tBof19O5+M7rBO/fl4mmB9esMq0Vn57l34WRg==}
+    engines: {node: '>=18'}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -1500,6 +1520,8 @@ snapshots:
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
+
+  '@oomol-lab/connector@1.2.0': {}
 
   '@pkgjs/parseargs@0.11.0':
     optional: true

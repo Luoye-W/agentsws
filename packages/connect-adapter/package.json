@@ -1,0 +1,30 @@
+{
+  "name": "@agentsws/connect-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "唯一允许 import @oomol-lab/connector 的包：对接自托管 OpenConnector runtime，实现 18 §1 Connect 契约",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "smoke": "node scripts/smoke-connect.ts",
+    "record": "RECORD_FIXTURES=1 vitest run test/record-fixtures.test.ts"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@oomol-lab/connector": "1.2.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@agentsws/stand-ins": "workspace:*"
+  }
+}
