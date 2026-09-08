@@ -1,0 +1,29 @@
+# agentsws profile 的 patch 层（16 §1）。
+#
+# 组合顺序：dsh-base 的 patch → dsh-headless 的 patch → 这一层 → $DSH_HOME/cordis.patch.yml。
+# 这里只放**发行版级**的决定；一职责一份的东西在 preset 里（`presets/<role_id>/agent.cordis.yml`，
+# 由 `@agentsws/dsh-adapter` 按 RunRequest 生成）。
+#
+# 占位：v1 的公司端执行器不装任何第三方代码（31 §3.5），所以这里是空 patch 加三条纪律注释。
+# 真接管 dsh 进程（跨进程 headless run）时，下面三行取消注释即可。
+
+# - id: system-prompt
+#   config:
+#     # persona 由 preset 的 complete 段接管，deployment 前后缀留空
+#     personaPrefix: ''
+#     personaSuffix: ''
+
+# - id: user-approval
+#   config:
+#     # 'ask' 才会走 answerer waterfall；没有 answerer 时 dsh 自己 fail-closed
+#     policy: ask
+
+# - insert:
+#     - id: agentsws-preset-roster
+#       name: '@deepseek-ai/dsh-agent-presets'
+#       config:
+#         default: company.standard
+#         includeShippedRoot: false
+#         roots:
+#           - path: ./presets
+#             trust: system
