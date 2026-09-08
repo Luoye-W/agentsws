@@ -90,8 +90,8 @@ export interface Decision {
   edit_diff?: Diff
   redirect_to?: { person_id?: PersonId; role_id?: RoleId }
   defer_until?: Iso8601
-  /** 绑定 (item_id, revision, execution_snapshot)；revision 变化即失效 */
-  decision_token: string
+  /** 绑定 (item_id, revision, execution_snapshot)；revision 变化即失效；by='mandate' 的自动决定无 token */
+  decision_token?: string
 }
 
 export interface ApplyRecord {
@@ -168,6 +168,17 @@ export interface ApprovalItem<P = unknown> {
   priority: 'immediate' | 'queue' | 'digest'
   due_at?: Iso8601
   execution_snapshot?: ExecutionSnapshot
+  /** 快照分量来源与门禁输入（09-09 WP4） */
+  execution_context?: {
+    connection_id?: string
+    record_version?: string
+    attachments?: string[]
+    mandate_hash?: string
+    change_id?: string
+    thread_participants?: string[]
+    verified_contacts?: string[]
+    precheck_overrides?: Partial<PrecheckResult>
+  }
   state: ApprovalState
   decision?: Decision
   apply?: ApplyRecord
@@ -201,7 +212,14 @@ export interface ApprovalBus {
       | 'updated_at'
       | 'decision'
       | 'apply'
-    > & { links?: Partial<ApprovalItem['links']> },
+      | 'automation'
+    > & {
+      links?: Partial<ApprovalItem['links']>
+      /** auto_approved / sampling 由宿主计算，调用方只给等级 */
+      automation?: Partial<ApprovalItem['automation']> & {
+        level_at_creation: ApprovalItem['automation']['level_at_creation']
+      }
+    },
   ): Promise<ApprovalItem<P>>
   get(id: string): Promise<ApprovalItem | undefined>
   queue(filter: {
@@ -217,5 +235,14 @@ export interface ApprovalBus {
   release(id: string, by: PersonId): Promise<ApprovalItem>
   withdraw(id: string, by: PersonId): Promise<ApprovalItem>
   retryApply(id: string, by: PersonId): Promise<ApprovalItem>
+  /** 14 §8：同 kind 同 role 批量；每条单独记 Decision，一条失败不影响其他 */
+  decideBatch(
+    entries: { id: string; decision_token: string }[],
+    by: PersonId,
+    input: Omit<DecideInput, 'decision_token' | 'via'>,
+  ): Promise<{ id: string; item?: ApprovalItem; error?: unknown }[]>
+  /** 由调度调用：24 工作小时 → scope_manager，48 → owner；加人不换人 */
+  escalate(now: Iso8601): Promise<ApprovalItem[]>
+  expire(now: Iso8601): Promise<ApprovalItem[]>
   history(id: string): Promise<{ revisions: ApprovalItem[]; events: string[] }>
 }
