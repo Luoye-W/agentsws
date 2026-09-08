@@ -20,6 +20,13 @@
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
     "@deepseek-ai/cordis": "4.0.2",
-    "@deepseek-ai/schemastery": "3.18.2"
+    "@deepseek-ai/schemastery": "3.18.2",
+    "better-sqlite3": "^11.10.0",
+    "semver": "^7.7.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/semver": "^7.7.0"
   }
 }
