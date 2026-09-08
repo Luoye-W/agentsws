@@ -291,8 +291,8 @@ description: 订单状态与物流、退换货、退款、改地址、漏发错�
 scopes:
   - { domain: order,     ops: [read],          range: assigned, max_sensitivity: internal }
   - { domain: shipment,  ops: [read],          range: assigned, max_sensitivity: internal }
-  - { domain: customer,  ops: [read, stage],   range: assigned, max_sensitivity: internal,
-      agent_max_sensitivity: confidential }   # Agent 可看客户私人联系方式以核对身份，回复里不回显
+  - { domain: customer,  ops: [read, stage],   range: assigned, max_sensitivity: internal }
+      # 09-09：agent_max_sensitivity 已删（31 §3.3 撤销"Agent 知道但不告诉人"）；身份核对走关系授权门禁（15 §6.1）
   - { domain: knowledge, ops: [read],          range: workspace, max_sensitivity: internal }
   - { domain: discount,  ops: [stage],         range: assigned, max_sensitivity: internal }
   - { domain: approval,  ops: [read, approve], range: own,      max_sensitivity: internal }

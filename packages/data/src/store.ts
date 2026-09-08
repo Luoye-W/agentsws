@@ -430,9 +430,21 @@ export class SqliteDataStore implements DataStore {
 
   // ── 删除与遗忘（21 §4）────────────────────────────────────────────────
 
-  /** 契约签名（返回 void）。要拿墓碑事件写日志请用 `eraseSubject`。 */
-  async erase(subject: { collection: string; id: string }, actor: DataActor): Promise<void> {
-    await this.eraseSubject(subject, actor)
+  /** 契约：返回墓碑事件，由调用方写事件日志。 */
+  async erase(
+    subject: { collection: string; id: string },
+    actor: DataActor,
+  ): Promise<PrivacyErasedEvent> {
+    return this.eraseSubject(subject, actor)
+  }
+
+  /** 21 §4 可携带权：该主体的记录（按 actor 权限过滤；v1 = 单条记录）。 */
+  async exportSubject(
+    subject: { collection: string; id: string },
+    actor: DataActor,
+  ): Promise<DataRecord<unknown>[]> {
+    const rec = await this.get<unknown>(subject.collection, subject.id, actor)
+    return rec === undefined ? [] : [rec]
   }
 
   /**
@@ -507,18 +519,26 @@ export class SqliteDataStore implements DataStore {
       .map((r) => JSON.parse(r.event) as PrivacyErasedEvent)
   }
 
-  /** 21 §4：备份恢复后重放墓碑——再销毁一次密钥。幂等；返回实际处理条数。 */
-  replayTombstones(list: readonly PrivacyErasedEvent[]): number {
+  /** 21 §4：备份恢复后重放墓碑——再销毁一次密钥。幂等：已有墓碑的计 skipped。 */
+  async replayTombstones(
+    list: readonly PrivacyErasedEvent[],
+  ): Promise<{ applied: number; skipped: number }> {
     let applied = 0
+    let skipped = 0
+    const exists = this.#db.prepare<[string], { n: number }>(
+      'SELECT COUNT(*) AS n FROM _tombstones WHERE subject_id = ?',
+    )
     const run = this.#db.transaction(() => {
       for (const event of list) {
+        const had = (exists.get(event.payload.key_id)?.n ?? 0) > 0
         this.#keys.destroy(event.payload.key_id, event.payload.destroyed_at)
         this.#writeTombstone(event)
-        applied += 1
+        if (had) skipped += 1
+        else applied += 1
       }
     })
     run()
-    return applied
+    return { applied, skipped }
   }
 }
 

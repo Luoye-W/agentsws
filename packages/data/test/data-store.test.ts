@@ -548,19 +548,19 @@ describe('erase and forget (21 §4)', () => {
     const before = (await restored.get('customer', 'cu_1', owner)) as Record<string, unknown>
     expect(before.phone).toBe('+1-555-0100')
 
-    expect(restored.replayTombstones([event])).toBe(1)
+    expect(await restored.replayTombstones([event])).toEqual({ applied: 1, skipped: 0 })
     const after = (await restored.get('customer', 'cu_1', owner)) as Record<string, unknown>
     expect(after.phone).toBe('[erased]')
     expect(after.display_name).toBe('Alice')
     expect(restored.tombstones().map((t) => t.payload.key_id)).toEqual(['customer:cu_1'])
 
     // 幂等重放
-    expect(restored.replayTombstones([event])).toBe(1)
+    expect(await restored.replayTombstones([event])).toEqual({ applied: 0, skipped: 1 })
     expect(restored.tombstones()).toHaveLength(1)
     restored.close()
   })
 
-  it('replay works even when the erased record was never restored', () => {
+  it('replay works even when the erased record was never restored', async () => {
     const fresh = newStore()
     const event: PrivacyErasedEvent = {
       schema_version: 1,
@@ -577,7 +577,7 @@ describe('erase and forget (21 §4)', () => {
         erased_fields: ['phone'],
       },
     }
-    expect(fresh.replayTombstones([event])).toBe(1)
+    expect(await fresh.replayTombstones([event])).toEqual({ applied: 1, skipped: 0 })
     fresh.close()
   })
 })
