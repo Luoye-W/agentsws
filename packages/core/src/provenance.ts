@@ -12,7 +12,10 @@ export class Provenance {
   private pinned = new Set<string>()
   readonly evicted: ObjectRef[] = []
 
-  constructor(readonly run_id: RunId, readonly cap = PROVENANCE_CAP) {}
+  constructor(
+    readonly run_id: RunId,
+    readonly cap = PROVENANCE_CAP,
+  ) {}
 
   static from(state: ProvenanceState): Provenance {
     const p = new Provenance(state.run_id)
@@ -21,7 +24,9 @@ export class Provenance {
     return p
   }
 
-  private key(ref: ObjectRef) { return `${ref.type}:${ref.id}` }
+  private key(ref: ObjectRef) {
+    return `${ref.type}:${ref.id}`
+  }
 
   /** 读处理器调用：工具结果里出现的实体 */
   see(refs: Iterable<ObjectRef>, opts?: { full?: boolean }): void {
@@ -42,13 +47,21 @@ export class Provenance {
   }
 
   /** stage 时调用：目标进 pinned，不再淘汰 */
-  pin(ref: ObjectRef): void { this.pinned.add(this.key(ref)) }
+  pin(ref: ObjectRef): void {
+    this.pinned.add(this.key(ref))
+  }
 
-  has(ref: ObjectRef): boolean { return (this.seen.get(ref.type) ?? []).includes(ref.id) }
-  hasFull(ref: ObjectRef): boolean { return this.readFull.has(this.key(ref)) }
+  has(ref: ObjectRef): boolean {
+    return (this.seen.get(ref.type) ?? []).includes(ref.id)
+  }
+  hasFull(ref: ObjectRef): boolean {
+    return this.readFull.has(this.key(ref))
+  }
 
   /** 写 / 呈现前检查；返回未见过的 */
-  missing(refs: Iterable<ObjectRef>): ObjectRef[] { return [...refs].filter((r) => !this.has(r)) }
+  missing(refs: Iterable<ObjectRef>): ObjectRef[] {
+    return [...refs].filter((r) => !this.has(r))
+  }
 
   toState(at: string): ProvenanceState {
     const seen: Record<string, string[]> = {}

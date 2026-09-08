@@ -4,11 +4,17 @@ import { canonicalJson, sha256 } from './snapshot.js'
 type Cap = number | string | boolean | string[]
 
 /** 15 §3.1：Role 默认 → WorkspacePolicy 覆盖（可松可紧） → Assignment 只能更紧。 */
-export function resolveMandate(role: Mandate, policy?: Partial<Mandate>, assignment?: Partial<Mandate>): Mandate {
+export function resolveMandate(
+  role: Mandate,
+  policy?: Partial<Mandate>,
+  assignment?: Partial<Mandate>,
+): Mandate {
   const merged: Mandate = {
     caps: { ...role.caps, ...(policy?.caps ?? {}) },
-    ...(role.per_change_limits || policy?.per_change_limits ? { per_change_limits: { ...role.per_change_limits, ...policy?.per_change_limits } } : {}),
-    ...(policy?.window ?? role.window ? { window: (policy?.window ?? role.window)! } : {}),
+    ...(role.per_change_limits || policy?.per_change_limits
+      ? { per_change_limits: { ...role.per_change_limits, ...policy?.per_change_limits } }
+      : {}),
+    ...((policy?.window ?? role.window) ? { window: (policy?.window ?? role.window)! } : {}),
   }
   if (assignment) {
     for (const [k, v] of Object.entries(assignment.caps ?? {})) {
@@ -23,8 +29,17 @@ export function resolveMandate(role: Mandate, policy?: Partial<Mandate>, assignm
       const cur = merged.per_change_limits ?? {}
       merged.per_change_limits = {
         ...cur,
-        ...(assignment.per_change_limits.max_items !== undefined ? { max_items: Math.min(cur.max_items ?? Number.POSITIVE_INFINITY, assignment.per_change_limits.max_items) } : {}),
-        ...(assignment.per_change_limits.no_repeat_target_field ? { no_repeat_target_field: true } : {}),
+        ...(assignment.per_change_limits.max_items !== undefined
+          ? {
+              max_items: Math.min(
+                cur.max_items ?? Number.POSITIVE_INFINITY,
+                assignment.per_change_limits.max_items,
+              ),
+            }
+          : {}),
+        ...(assignment.per_change_limits.no_repeat_target_field
+          ? { no_repeat_target_field: true }
+          : {}),
       }
     }
   }
@@ -40,11 +55,18 @@ function tighter(cur: Cap | undefined, next: Cap): Cap {
   return cur
 }
 
-export function mandateHash(m: Mandate): string { return 'm:' + sha256(canonicalJson(m)).slice(0, 16) }
+export function mandateHash(m: Mandate): string {
+  return 'm:' + sha256(canonicalJson(m)).slice(0, 16)
+}
 
 export function capNumber(m: Mandate, name: string): number | undefined {
   const v = m.caps[name]
   return typeof v === 'number' ? v : undefined
 }
-export function capBool(m: Mandate, name: string): boolean { return m.caps[name] === true }
-export function capList(m: Mandate, name: string): string[] { const v = m.caps[name]; return Array.isArray(v) ? v : [] }
+export function capBool(m: Mandate, name: string): boolean {
+  return m.caps[name] === true
+}
+export function capList(m: Mandate, name: string): string[] {
+  const v = m.caps[name]
+  return Array.isArray(v) ? v : []
+}

@@ -18,12 +18,25 @@ export interface RecordEnvelope {
 export type DataRecord<T> = RecordEnvelope & T
 
 /** 数据层访问：所有读写经此；查询在数据层按 actor 过滤（Casbin），不在应用层。 */
-export interface Actor { person_id: PersonId; assignment_id: string; workspace_id: WorkspaceId }
+export interface Actor {
+  person_id: PersonId
+  assignment_id: string
+  workspace_id: WorkspaceId
+}
 
 export interface DataStore {
   get<T>(collection: string, id: string, actor: Actor): Promise<DataRecord<T> | undefined>
-  query<T>(collection: string, filter: Record<string, unknown>, actor: Actor, opts?: { limit?: number; cursor?: string }): Promise<{ items: DataRecord<T>[]; cursor?: string }>
-  put<T>(collection: string, rec: Omit<DataRecord<T>, 'created_at' | 'updated_at' | 'version'> & { version?: string }, actor: Actor): Promise<DataRecord<T>>
+  query<T>(
+    collection: string,
+    filter: Record<string, unknown>,
+    actor: Actor,
+    opts?: { limit?: number; cursor?: string },
+  ): Promise<{ items: DataRecord<T>[]; cursor?: string }>
+  put<T>(
+    collection: string,
+    rec: Omit<DataRecord<T>, 'created_at' | 'updated_at' | 'version'> & { version?: string },
+    actor: Actor,
+  ): Promise<DataRecord<T>>
   /** 21 §4：销毁主体密钥 + 墓碑事件；不删事件 */
   erase(subject: { collection: string; id: string }, actor: Actor): Promise<void>
 }

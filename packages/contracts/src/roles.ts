@@ -1,4 +1,16 @@
-import type { AssignmentId, DataDomain, Iso8601, Level, Operation, PersonId, Range, RangeRef, RoleId, Sensitivity, WorkspaceId } from './common.js'
+import type {
+  AssignmentId,
+  DataDomain,
+  Iso8601,
+  Level,
+  Operation,
+  PersonId,
+  Range,
+  RangeRef,
+  RoleId,
+  Sensitivity,
+  WorkspaceId,
+} from './common.js'
 
 /** 05 §1.1。09-08 修正：不做跨 Assignment 并集，每次运行绑定一个 Assignment，其 scopes 原样生效。 */
 export interface PermissionScope {
@@ -52,8 +64,17 @@ export interface RoleDefinition {
   connectors: ConnectorDependency[]
   actions: WriteActionSpec[]
   automation: Record<string, AutomationSpec>
-  skills: { name: string; min_version?: string; tier: 'open' | 'premium'; load: 'always' | 'on_demand' }[]
-  handover: { transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]; fallback: 'owner' | 'scope_manager'; revoke_context_on_removal: boolean }
+  skills: {
+    name: string
+    min_version?: string
+    tier: 'open' | 'premium'
+    load: 'always' | 'on_demand'
+  }[]
+  handover: {
+    transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]
+    fallback: 'owner' | 'scope_manager'
+    revoke_context_on_removal: boolean
+  }
   requires?: RoleId[]
 }
 
@@ -65,7 +86,14 @@ export interface Assignment {
   role_version: string
   ranges: RangeRef[]
   mandate_overrides?: Partial<Mandate>
-  automation_state: Record<string, { level: Level; adoption: { accepted: number; edited: number; rejected: number; since: Iso8601 }; last_change: { at: Iso8601; reason: string } }>
+  automation_state: Record<
+    string,
+    {
+      level: Level
+      adoption: { accepted: number; edited: number; rejected: number; since: Iso8601 }
+      last_change: { at: Iso8601; reason: string }
+    }
+  >
   granted_by: PersonId
   granted_at: Iso8601
   revoked_at?: Iso8601
