@@ -2,7 +2,7 @@
   "name": "@agentsws/api",
   "version": "0.0.0",
   "private": true,
-  "description": "API 网关：HTTP / WS / OpenAPI / 鉴权 / 幂等",
+  "description": "API 网关：HTTP / OpenAPI / 鉴权 / 幂等 / 急停 / 限流",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/kernel": "workspace:*"
+    "hono": "^4.13.7",
+    "zod": "^4.5.4"
   }
 }
