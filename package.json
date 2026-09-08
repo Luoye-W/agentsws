@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "description": "开源本地跨境电商 Agent 中台（DeepSeek Harness 发行版）",
   "license": "Apache-2.0",
-  "engines": { "node": ">=22", "pnpm": ">=10" },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
   "packageManager": "pnpm@11.13.0",
   "type": "module",
   "scripts": {
@@ -19,5 +22,12 @@
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
     "@types/node": "^22.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "better-sqlite3",
+      "sqlite-vec"
+    ]
   }
 }
