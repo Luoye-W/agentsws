@@ -4,7 +4,8 @@ import type { ErrorCode } from '@agentsws/contracts'
  * 28 §2 的统一错误码没有覆盖三种"传输层"失败（上游限流、超时、上游 5xx），
  * 而 26 §3 的故障注入必须能表达 `429 | 500 | timeout`。这里只补这三个，不自造已有码的同义词。
  */
-export type StandInErrorCode = ErrorCode | 'rate_limited' | 'timeout' | 'provider_error'
+/** 09-09：传输层失败码已进契约 ErrorCode，这里只是别名 */
+export type StandInErrorCode = ErrorCode
 
 const STATUS: Record<StandInErrorCode, number> = {
   not_found: 404,
@@ -23,6 +24,8 @@ const STATUS: Record<StandInErrorCode, number> = {
   authorization_check_failed: 403,
   provenance_missing: 403,
   unknown_outcome: 500,
+  provider_unavailable: 503,
+  residency_blocked: 403,
   rate_limited: 429,
   timeout: 504,
   provider_error: 500,

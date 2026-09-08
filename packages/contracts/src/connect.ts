@@ -29,6 +29,10 @@ export interface ConnectToken {
   kind: 'role-read' | 'role-apply'
   assignment_id: AssignmentId
   expires_at: Iso8601
+  /** 签发结果回带，调用方能看到自己签了什么 */
+  allowed_actions: string[]
+  allowed_connections: string[]
+  allowed_proxies: string[]
 }
 export interface ExecuteOptions {
   token: string

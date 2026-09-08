@@ -291,7 +291,15 @@ export class MockOpenConnector implements Connect {
       expires_at,
       revoked: false,
     })
-    return { token, kind: input.kind, assignment_id: input.assignment_id, expires_at }
+    return {
+      token,
+      kind: input.kind,
+      assignment_id: input.assignment_id,
+      expires_at,
+      allowed_actions: [...input.allowed_actions],
+      allowed_connections: [...input.allowed_connections],
+      allowed_proxies: [],
+    }
   }
 
   async revokeTokens(assignment_id: AssignmentId): Promise<void> {

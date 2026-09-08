@@ -30,11 +30,8 @@ export interface Actor {
   department_id?: string
 }
 
-/** 契约 OverlayOp 的扩展：记住这段是人写的还是学来的（06 §3.4 纪律）。 */
-export interface OverlayOpEx extends OverlayOp {
-  origin?: SkillSection['origin']
-  learned_from?: SkillSection['learned_from']
-}
+/** 契约 OverlayOp 已带 origin / learned_from（06 §3.4）；保留别名以免改动调用处。 */
+export type OverlayOpEx = OverlayOp
 export interface OverlayEx extends Overlay {
   ops: OverlayOpEx[]
 }

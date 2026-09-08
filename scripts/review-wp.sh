@@ -10,6 +10,6 @@ echo "== changed files outside $PKG (should be only pnpm-lock.yaml):"
 git diff --name-only main..HEAD | grep -vE "^$PKG/" || echo "  (none)"
 echo "== diff stat:"; git diff --stat main..HEAD | tail -3
 echo "== install"; pnpm install --silent 2>&1 | grep -vE '^\s*$' | tail -2
-echo "== tsc"; ./node_modules/.bin/tsc -b 2>&1 | tail -5; echo "tsc exit=$?"
+echo "== tsc"; ./node_modules/.bin/tsc -b --force 2>&1 | tail -5; echo "tsc exit=$?"
 echo "== biome"; ./node_modules/.bin/biome check "$PKG" 2>&1 | grep -E 'Checked|Found|×' | head -5
 echo "== vitest"; ./node_modules/.bin/vitest run "$PKG" --coverage.enabled --coverage.include="$PKG/src/**" --coverage.reporter=text 2>&1 | grep -E 'Test Files|Tests |All files|FAIL|×|src/' | head -40

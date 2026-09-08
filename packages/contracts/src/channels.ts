@@ -1,3 +1,4 @@
+import type { DecisionAction } from './approval.js'
 import type { Iso8601, ObjectRef, PersonId, RoleId, WorkspaceId } from './common.js'
 
 /** 18 §2 入站。parts.text 已 fencing；raw_ref 指向受控原始材料区。 */

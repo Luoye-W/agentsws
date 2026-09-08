@@ -103,6 +103,11 @@ export type ErrorCode =
   | 'authorization_check_failed'
   | 'provenance_missing'
   | 'unknown_outcome'
+  | 'provider_unavailable'
+  | 'residency_blocked'
+  | 'rate_limited'
+  | 'timeout'
+  | 'provider_error'
 
 export interface AppError {
   code: ErrorCode

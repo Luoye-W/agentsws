@@ -133,7 +133,17 @@ export type RunOutput =
   | { kind: 'staged_change'; change_id: string }
   | { kind: 'proposal'; approval_item_id: string }
   | { kind: 'answer'; text: string }
-  | { kind: 'dev_result'; dev_task_id: string }
+  | {
+      kind: 'dev_result'
+      dev_task_id: string
+      payload?: {
+        pr_url?: string
+        theme_id?: string
+        branch?: string
+        commit?: string
+        artifact?: string
+      }
+    }
   | { kind: 'ui'; ref: string }
 
 export interface MemoryFact {
