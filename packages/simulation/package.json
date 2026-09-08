@@ -1,0 +1,13 @@
+{
+  "name": "@agentsws/simulation",
+  "version": "0.0.0",
+  "private": true,
+  "description": "场景 DSL、synth 生成器、runner、报告",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "tsc -b", "test": "vitest run --passWithNoTests" },
+  "dependencies": { "@agentsws/contracts": "workspace:*", "@agentsws/stand-ins": "workspace:*", "@agentsws/kernel": "workspace:*", "@agentsws/txn": "workspace:*" }
+}

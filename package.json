@@ -1,0 +1,23 @@
+{
+  "name": "agentsws",
+  "private": true,
+  "version": "0.0.0",
+  "description": "开源本地跨境电商 Agent 中台（DeepSeek Harness 发行版）",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=22", "pnpm": ">=10" },
+  "packageManager": "pnpm@11.13.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "simulate": "pnpm --filter @agentsws/cli exec agentsws simulate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "@types/node": "^22.0.0"
+  }
+}

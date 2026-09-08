@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+  - apps/*
+  - role-packs/*
+allowBuilds:
+  esbuild: set this to true or false

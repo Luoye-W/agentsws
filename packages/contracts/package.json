@@ -1,0 +1,13 @@
+{
+  "name": "@agentsws/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "18 份契约：类型、事件、错误码、一致性套件（纯类型，无实现）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "tsc -b", "test": "vitest run --passWithNoTests" },
+  "dependencies": {}
+}

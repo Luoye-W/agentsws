@@ -1,0 +1,7 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "files": { "ignore": ["node_modules", "dist", "docs/assets", "**/*.dc.html"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "javascript": { "formatter": { "quoteStyle": "single", "semicolons": "asNeeded" } }
+}

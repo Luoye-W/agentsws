@@ -1,0 +1,13 @@
+{
+  "name": "@agentsws/kernel",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cordis 容器、模块清单与签名、事件日志、config、halt、trace",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "tsc -b", "test": "vitest run --passWithNoTests" },
+  "dependencies": { "@agentsws/contracts": "workspace:*", "@deepseek-ai/cordis": "4.0.2", "@deepseek-ai/schemastery": "3.18.2" }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@agentsws/server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "协同服务进程（装配全部模块）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "tsc -b", "test": "vitest run --passWithNoTests" },
+  "dependencies": { "@agentsws/kernel": "workspace:*", "@agentsws/txn": "workspace:*", "@agentsws/api": "workspace:*" }
+}

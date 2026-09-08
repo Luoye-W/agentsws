@@ -1,0 +1,13 @@
+{
+  "name": "@agentsws/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "agentsws CLI：init / doctor / simulate / synth / test",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "tsc -b", "test": "vitest run --passWithNoTests" },
+  "dependencies": { "@agentsws/simulation": "workspace:*" }
+}
