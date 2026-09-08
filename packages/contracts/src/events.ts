@@ -82,6 +82,10 @@ export type KnownEventType =
   | 'knowledge.card.cited'
   | 'knowledge.gap.opened'
   | 'knowledge.gap.answered'
+  // simulation (26)：RunRequest 落日志，回放据此重组 prompt
+  | 'simulation.run_request'
+  // delivery / notification (18)
+  | 'notification.sent'
   // privacy (21)
   | 'privacy.erased'
   // inbound / delivery (18)

@@ -7,7 +7,9 @@
       "!**/dist",
       "!docs/assets",
       "!**/*.dc.html",
-      "!pnpm-lock.yaml"
+      "!pnpm-lock.yaml",
+      "!out",
+      "!**/out"
     ]
   },
   "formatter": {

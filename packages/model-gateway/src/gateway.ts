@@ -343,7 +343,7 @@ class Gateway implements ModelGatewayApi {
     this.ledger.release(reservation)
     const payload: ProviderDownPayload = { model: primary, attempts }
     this.emit('model.provider_down', ctx, payload)
-    throw new GatewayError('unknown_outcome', 'all providers failed', payload)
+    throw new GatewayError('provider_unavailable', 'all providers failed', payload)
   }
 
   async embed(
@@ -374,7 +374,7 @@ class Gateway implements ModelGatewayApi {
         attempts: [{ model: ref, message: messageOf(e) }],
       }
       this.emit('model.provider_down', ctx, payload)
-      throw new GatewayError('unknown_outcome', 'embed provider failed', payload)
+      throw new GatewayError('provider_unavailable', 'embed provider failed', payload)
     }
     const finishedAt = this.opts.clock.now()
     const usage: CompletionUsage = {

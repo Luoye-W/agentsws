@@ -15,7 +15,9 @@
     "test": "vitest run",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "simulate": "pnpm --filter @agentsws/cli exec agentsws simulate"
+    "simulate": "node apps/cli/bin/agentsws.mjs simulate",
+    "synth": "node apps/cli/bin/agentsws.mjs synth",
+    "replay": "node apps/cli/bin/agentsws.mjs replay"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

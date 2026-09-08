@@ -156,11 +156,11 @@ describe('22 §3 / 31 §1 I2 并发预留与结算', () => {
       budget: { workspace_daily_base: 10 },
     })
     await expect(gw.complete({ messages: msg, meta: meta() })).rejects.toMatchObject({
-      code: 'unknown_outcome',
+      code: 'provider_unavailable',
     })
     expect(await gw.budget({ workspace_id: 'ws_1' })).toMatchObject({ used_base: 0, frozen: false })
     await expect(gw.complete({ messages: msg, meta: meta() })).rejects.toMatchObject({
-      code: 'unknown_outcome',
+      code: 'provider_unavailable',
     })
   })
 })

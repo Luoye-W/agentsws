@@ -80,7 +80,7 @@ export class InboxDelivery implements DeliveryProvider {
 
   parseCallback(
     payload: unknown,
-  ): { item_id: string; decision_token: string; action: string } | undefined {
+  ): { item_id: string; decision_token: string; action: DecisionAction } | undefined {
     let raw: unknown = payload
     if (typeof raw === 'string') {
       try {
@@ -97,7 +97,7 @@ export class InboxDelivery implements DeliveryProvider {
     if (typeof item_id !== 'string' || item_id.length === 0) return undefined
     if (typeof decision_token !== 'string' || decision_token.length === 0) return undefined
     if (typeof action !== 'string' || !DECISION_ACTIONS.has(action)) return undefined
-    return { item_id, decision_token, action }
+    return { item_id, decision_token, action: action as DecisionAction }
   }
 
   // ---------- 观察面 ----------

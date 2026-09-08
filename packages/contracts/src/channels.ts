@@ -93,5 +93,5 @@ export interface DeliveryProvider {
   refresh(external_id: string, state: string): Promise<void>
   parseCallback(
     payload: unknown,
-  ): { item_id: string; decision_token: string; action: string } | undefined
+  ): { item_id: string; decision_token: string; action: DecisionAction } | undefined
 }

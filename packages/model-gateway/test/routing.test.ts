@@ -102,7 +102,7 @@ describe('22 §2 路由与降级', () => {
       env: {},
     })
     await expect(gw.complete({ messages: [userPrompt('q')], meta: meta() })).rejects.toMatchObject({
-      code: 'unknown_outcome',
+      code: 'provider_unavailable',
     })
     const evt = rec.ofType('model.provider_down')
     expect(evt).toHaveLength(1)
@@ -128,7 +128,7 @@ describe('22 §2 路由与降级', () => {
       env: {},
     })
     await expect(gw.complete({ messages: [userPrompt('q')], meta: meta() })).rejects.toMatchObject({
-      code: 'unknown_outcome',
+      code: 'provider_unavailable',
     })
     expect(rec.ofType('model.blocked_residency')).toHaveLength(1)
     expect(rec.ofType('model.provider_down')).toHaveLength(1)
