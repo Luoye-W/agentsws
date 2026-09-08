@@ -42,6 +42,9 @@
     },
     {
       "path": "packages/model-gateway"
+    },
+    {
+      "path": "packages/runtime-direct"
     }
   ]
 }

@@ -192,6 +192,21 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/runtime-direct:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@agentsws/stand-ins':
+        specifier: workspace:*
+        version: link:../stand-ins
+
   packages/simulation:
     dependencies:
       '@agentsws/contracts':
@@ -215,6 +230,9 @@ importers:
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../roles
+      '@agentsws/runtime-direct':
+        specifier: workspace:*
+        version: link:../runtime-direct
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins

@@ -14,6 +14,7 @@ import type {
   InboundEvent,
   Iso8601,
   Mandate,
+  ModelGateway,
   ModelRef,
   ObjectRef,
   PersonId,
@@ -21,6 +22,7 @@ import type {
   RoleId,
   RunEvent,
   RunRequest,
+  RuntimeAdapter,
   ToolDef,
 } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
@@ -34,6 +36,12 @@ import type { ModelGatewayApi, ModelGatewayPolicy } from '@agentsws/model-gatewa
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
 import { createRoleStore, loadBundledRole } from '@agentsws/roles'
+import {
+  aftersalesBrainProvider,
+  createDirectRuntime,
+  groundingInputFor,
+  withToolChoice,
+} from '@agentsws/runtime-direct'
 import type {
   DraftPayload,
   MockOpenConnector,
@@ -101,7 +109,15 @@ export interface WorldOptions {
   start: Iso8601
   /** 事件日志路径；缺省 `:memory:`（fast 档，26 §4）。 */
   dbPath?: string
+  /**
+   * 用哪个运行时跑（17 §4）。缺省 `stub`（规则草稿，fast 档）；
+   * `direct` = `@agentsws/runtime-direct` 的 turn loop，模型换成同样确定性的"规则脑" provider。
+   * 同一条场景在两个运行时下都要过六条不变量——这就是"运行时可替换"的证据（31 §1 I6）。
+   */
+  runtime?: RuntimeName
 }
+
+export type RuntimeName = 'stub' | 'direct'
 
 export interface World {
   clock: SyntheticClock
@@ -112,6 +128,8 @@ export interface World {
   knowledge: Knowledge
   txn: Txn
   standIns: StandIns
+  /** 17 §4 运行时适配器（`stub` 或 `direct-llm`）。 */
+  runtime: RuntimeAdapter
   connect: MockOpenConnector
   inbound: MemoryInboundPipeline
   pack: Pack
@@ -351,7 +369,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
 
   // ── 模型网关：stub provider + 可注入的"模型挂了" ──────────────────────
   let outageUntilMs = 0
-  const base = stubProvider({ seed, ref: MODEL })
+  // `direct` 分支：stub provider 只出文本、不出 tool_calls，turn loop 跑不起来；
+  // 换成同样确定性的"规则脑" provider（判定逻辑与 stub 运行时同一套，只是用工具协议表达）
+  const base =
+    opts.runtime === 'direct'
+      ? aftersalesBrainProvider({ clock, seed, ref: MODEL })
+      : stubProvider({ seed, ref: MODEL })
   const gatedProvider = {
     ref: MODEL,
     async complete(req: { messages: ChatMessage[]; tools?: ToolDef[]; seed?: number }) {
@@ -386,6 +409,36 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       },
     })
   let gateway = buildGateway({ workspace_daily_base: 1000, workspace_monthly_base: 20000 })
+
+  // ── 运行时（17 §4）：缺省 stub；`direct` 分支跑 direct-llm 的 turn loop ────
+  const liveGateway: ModelGateway = {
+    complete: (r) => gateway.complete(r),
+    embed: (texts, meta, model) => gateway.embed(texts, meta, model),
+    usage: (filter) => gateway.usage(filter),
+    budget: (scope) => gateway.budget(scope),
+  }
+  const runtimeAdapter: RuntimeAdapter =
+    opts.runtime === 'direct'
+      ? createDirectRuntime({
+          // 22 的 complete 还没有 tool_choice：包装器在宿主侧补上，
+          // grounding 命中时第一轮就被强制到那个工具（17 §5.4 的"强制"那一路）
+          gateway: withToolChoice(liveGateway, groundingInputFor),
+          clock,
+          seed,
+          executeTool: (c) => (holder.executeTool ?? (async () => ({ status: 'error' })))(c),
+          stage: (i) => (holder.stage ?? (async () => undefined))(i),
+          createDraft: (p) => (holder.createDraft ?? (async () => undefined))(p),
+          // 16 §3 副作用表：写外部的 Action 在 `executor` 策略下一律 block
+          sideEffectOf: (tool) => {
+            try {
+              const id = connect.resolveActionId(tool)
+              return connect.allActions().find((a) => a.id === id)?.side_effect
+            } catch {
+              return undefined
+            }
+          },
+        })
+      : standIns.stubRuntime
 
   // ── 交易控制模块（真实实现）──────────────────────────────────────────
   const orderOf = (id: string) => connect.state.orders.find((o) => o.id === id)
@@ -644,6 +697,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     knowledge,
     txn,
     standIns,
+    runtime: runtimeAdapter,
     connect,
     inbound,
     pack,

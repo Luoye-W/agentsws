@@ -1,8 +1,8 @@
 {
-  "name": "@agentsws/simulation",
+  "name": "@agentsws/runtime-direct",
   "version": "0.0.0",
   "private": true,
-  "description": "场景 DSL、synth 生成器、runner、报告",
+  "description": "direct-llm 运行时：不经 dsh、直接用模型网关跑 turn loop（17 §4）",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,19 +15,12 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
-    "@agentsws/data": "workspace:*",
-    "@agentsws/kernel": "workspace:*",
-    "@agentsws/knowledge": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
-    "@agentsws/roles": "workspace:*",
-    "@agentsws/runtime-direct": "workspace:*",
-    "@agentsws/stand-ins": "workspace:*",
-    "@agentsws/txn": "workspace:*",
-    "yaml": "^2.5.0"
+    "@agentsws/stand-ins": "workspace:*"
   }
 }
