@@ -19,6 +19,13 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/core": "workspace:*"
+    "@agentsws/core": "workspace:*",
+    "@deepseek-ai/schemastery": "3.18.2",
+    "better-sqlite3": "^12.2.0",
+    "casbin": "^5.38.0",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
   }
 }

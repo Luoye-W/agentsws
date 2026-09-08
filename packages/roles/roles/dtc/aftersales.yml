@@ -1,0 +1,179 @@
+# 05 §5 的完整示例。
+# 注：05 §5 原文 customer scope 上的 `agent_max_sensitivity: confidential` 已于 31 §3.3 撤销
+# （v1 Agent 不持有高于 actor 的读权限），因此这里不再声明；加载器会把它当作未知字段拒绝。
+id: dtc.aftersales
+version: 1.0.0
+domain: dtc
+name: { zh: 独立站售后客服, en: DTC After-sales Support }
+description: 订单状态与物流、退换货、退款、改地址、漏发错发破损、拒付争议
+
+scopes:
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: shipment, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: customer, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: discount, ops: [stage], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  - { kind: email, required: true, grants: [mail.read, mail.send], ownership: workspace }
+  - {
+      kind: shopify,
+      required: true,
+      grants: [read_orders, write_orders, read_fulfillments],
+      ownership: workspace,
+    }
+  - { kind: tracking, required: false, grants: [read], ownership: workspace }
+  - { kind: payment_dispute, required: false, grants: [disputes.read], ownership: workspace }
+
+actions:
+  - id: reply_customer
+    target: customer
+    kind: outbound_message
+    mandate: { caps: {}, window: { max_count: 200, per: day } }
+    route_to: role_holder
+  - id: stage_refund
+    target: order
+    kind: staged_change
+    requires_record_read: true
+    mandate:
+      caps: { max_auto_refund_amount: 50, currency: USD, within_policy_window_only: true }
+      per_change_limits: { max_items: 1, no_repeat_target_field: true }
+      window: { max_count: 20, per: day }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: stage_reship
+    target: order
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_items_per_order: 1 }, window: { max_count: 10, per: day } }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: stage_address_change
+    target: order
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { unfulfilled_only: true } }
+    protected_fields: [order.total, order.currency, order.customer_id]
+    route_to: role_holder
+  - id: draft_chargeback_evidence
+    target: finance
+    kind: staged_change
+    mandate: { caps: {} }
+    route_to: owner
+
+automation:
+  reply_customer:
+    ceiling: L3
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  stage_refund:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_reship:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_address_change:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [manual]
+  draft_chargeback_evidence:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+grounding:
+  - {
+      name: order_status,
+      intent_terms: [订单, order, 包裹, package],
+      cue_terms: [哪, where, 什么时候, when, 到了, arrived],
+      tool: get_order,
+      prefetch: true,
+    }
+  - {
+      name: policy,
+      intent_terms: [退, return, refund, 换, exchange],
+      cue_terms: [可以, can, 能, 政策, policy],
+      tool: search_policies,
+      prefetch: true,
+    }
+
+skills:
+  - { name: customer-care, tier: open, load: always }
+  - { name: returns-policy-calc, tier: open, load: on_demand }
+  - { name: chargeback-evidence, tier: open, load: on_demand }
+
+home_blocks:
+  - {
+      id: aftersales.pending_replies,
+      placement: queue,
+      component: approval_lane,
+      query: 'approvals.by_role(dtc.aftersales, reply_customer)',
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: aftersales.pending_refunds,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(dtc.aftersales),
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: aftersales.overdue_orders,
+      placement: focus,
+      component: order_table,
+      query: orders.overdue(assigned),
+      default_order: 30,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: aftersales.escalations,
+      placement: alert,
+      component: alert_list,
+      query: events.escalations(dtc.aftersales),
+      default_order: 5,
+      pinnable: false,
+      adaptive: false,
+    }
+
+notifications:
+  - { event: customer.complaint, mode: immediate, recipients: [role_holder, scope_manager] }
+  - { event: payment.dispute_opened, mode: immediate, recipients: [role_holder, owner] }
+  - {
+      event: 'approval.created:stage_refund',
+      mode: queue,
+      recipients: [scope_manager],
+      escalate_after_hours: 24,
+    }
+  - {
+      event: 'approval.created:reply_customer',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 8,
+    }
+  - {
+      event: order.overdue,
+      mode: digest,
+      recipients: [role_holder],
+      digest_schedule: '0 9 * * *',
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []

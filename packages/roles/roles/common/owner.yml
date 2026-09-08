@@ -1,0 +1,104 @@
+# 04 §7 工作区所有者：策略层规则、授权额度、职责分配、连接器授权、公司简报。
+# 05 §0 不变量 1：公司的额度住在 WorkspacePolicy，只有 owner 能改；因此这些动作永远 L1（hard_ceiling）。
+id: common.owner
+version: 1.0.0
+domain: common
+name: { zh: 工作区所有者, en: Workspace Owner }
+description: 策略层规则与授权额度、职责分配、连接器授权、公司简报；策略层变更永远人审
+
+scopes:
+  - { domain: policy, ops: [read, stage, approve], range: workspace, max_sensitivity: restricted }
+  - { domain: approval, ops: [read, approve], range: workspace, max_sensitivity: restricted }
+  - { domain: event_log, ops: [read], range: workspace, max_sensitivity: restricted }
+  - { domain: analytics, ops: [read], range: workspace, max_sensitivity: confidential }
+  - { domain: skill, ops: [read, stage, approve], range: workspace, max_sensitivity: internal }
+  - { domain: store_config, ops: [read], range: workspace, max_sensitivity: confidential }
+
+connectors: []
+
+actions:
+  - id: change_policy
+    target: policy
+    kind: config_change
+    mandate: { caps: {} }
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: grant_assignment
+    target: policy
+    kind: config_change
+    mandate: { caps: {} }
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: authorize_connector
+    target: store_config
+    kind: config_change
+    mandate: { caps: {} }
+    protected_fields: [payment, tax, domain, currency]
+    review_cannot_be_disabled: true
+    route_to: owner
+
+automation:
+  change_policy:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  grant_assignment:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  authorize_connector:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  - { name: workspace-basics, tier: open, load: on_demand }
+  - { name: policy-review, tier: open, load: on_demand }
+
+home_blocks:
+  - {
+      id: owner.pending_escalations,
+      placement: alert,
+      component: alert_list,
+      query: approvals.escalated(),
+      default_order: 1,
+      pinnable: false,
+      adaptive: false,
+    }
+  - {
+      id: owner.company_digest,
+      placement: digest,
+      component: digest_card,
+      query: digests.company(),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: owner.policy_changes,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(common.owner),
+      default_order: 20,
+      pinnable: true,
+      adaptive: false,
+    }
+
+notifications:
+  - { event: approval.escalated, mode: immediate, recipients: [owner] }
+  - { event: guardrail.hit, mode: immediate, recipients: [owner] }
+  - { event: 'approval.created:change_policy', mode: immediate, recipients: [owner] }
+  - { event: digest.ready, mode: digest, recipients: [owner], digest_schedule: '0 9 * * *' }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: owner
+  revoke_context_on_removal: true
+
+requires: []

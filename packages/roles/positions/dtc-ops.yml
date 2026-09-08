@@ -1,0 +1,16 @@
+# 04 §1.11 独立站运营岗位默认包：十个职责，默认包含八个，两个可选。
+# 岗位模板只在分配那一刻展开成一组 Assignment；之后改模板不影响已分配的人（05 §2）。
+id: dtc-ops
+version: 1.0.0
+name: { zh: 独立站运营, en: DTC Operations }
+roles:
+  - { role: dtc.presales, default: true }
+  - { role: dtc.aftersales, default: true }
+  - { role: dtc.store-config, default: true }
+  - { role: dtc.catalog, default: true }
+  - { role: dtc.content, default: true }
+  - { role: dtc.promotions, default: true }
+  - { role: dtc.analytics, default: true }
+  - { role: dtc.email-marketing, default: true }
+  - { role: dtc.reviews, default: false }
+  - { role: dtc.fulfillment, default: false }
