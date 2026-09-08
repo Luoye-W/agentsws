@@ -1,6 +1,8 @@
 /** 公共类型（05 §1.1、21 §2、14 §2）。所有 id 为字符串（ULID / 前缀 id）。 */
 
 export type Iso8601 = string
+/** 允许同步或异步实现 */
+export type MaybePromise<T> = T | Promise<T>
 export type PersonId = string
 export type WorkspaceId = string
 export type AssignmentId = string
@@ -108,6 +110,8 @@ export type ErrorCode =
   | 'rate_limited'
   | 'timeout'
   | 'provider_error'
+  | 'unauthenticated'
+  | 'internal'
 
 export interface AppError {
   code: ErrorCode

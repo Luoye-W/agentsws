@@ -1,4 +1,4 @@
-import type { Iso8601, PersonId, RangeRef, WorkspaceId } from './common.js'
+import type { Iso8601, MaybePromise, PersonId, RangeRef, WorkspaceId } from './common.js'
 import type { WorkspacePolicy } from './roles.js'
 
 /** 20 身份与工作区（v1：local provider、单工作区；Join 只定类型） */
@@ -52,7 +52,17 @@ export interface IdentityService {
   /** magic link：签发一次性登录 token；验证后返回会话 */
   issueLogin(email: string): Promise<{ token: string; expires_at: Iso8601 }>
   verifyLogin(token: string): Promise<{ person: Person; session_token: string } | undefined>
-  /** 所有 token 绑 workspace；返回解析后的主体 */
+  /** 20 §3：签发 API key / 运行时短期 token / 内部凭据；全部绑 workspace，可撤销 */
+  issue(
+    kind: 'session' | 'api_key' | 'runtime' | 'internal',
+    person_id: PersonId,
+    workspace_id: WorkspaceId,
+    ttl_ms?: number,
+  ): MaybePromise<{ token: string; expires_at?: Iso8601 }>
+  revoke(token: string): MaybePromise<void>
+  personByEmail(email: string): MaybePromise<Person | undefined>
+  workspacesOf(person_id: PersonId): MaybePromise<Workspace[]>
+  /** 所有 token 绑 workspace；入参为 Bearer 后的 token 本身 */
   authenticate(bearer: string): Promise<
     | {
         person_id: PersonId

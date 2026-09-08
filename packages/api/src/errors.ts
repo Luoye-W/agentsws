@@ -35,6 +35,11 @@ export const STATUS_BY_CODE: Record<GatewayErrorCode, number> = {
   authorization_check_failed: 500,
   provenance_missing: 500,
   unknown_outcome: 500,
+  provider_unavailable: 503,
+  residency_blocked: 403,
+  rate_limited: 429,
+  timeout: 504,
+  provider_error: 502,
   internal: 500,
 }
 

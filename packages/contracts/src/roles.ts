@@ -155,6 +155,8 @@ export interface EffectiveAction {
   id: ActionId
   target: DataDomain
   kind: WriteActionSpec['kind']
+  /** 15 §2 变更种类（显式映射优先，其次由动作 id 推导） */
+  change_kind?: ChangeKind
   mandate: Mandate
   risk_class: RiskClass
   route_to: WriteActionSpec['route_to']
