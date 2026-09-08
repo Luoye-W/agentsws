@@ -1,0 +1,36 @@
+# 预算耗尽 → 熔断：不起草、不写外部，owner 收到通知（09 §5.4、22 §5）。
+id: ops/budget-exhausted
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    inject.budget: { workspace_daily_base: 0 }
+  - at: '+5m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  run_failed_codes: [budget_exhausted]
+  notifications_to: [p_wang]
+  staged_change_kinds: []
+  never_calls: [get_order, create_refund]
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    runs_failed: 1
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+  - freeze_on_model_outage

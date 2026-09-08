@@ -15,12 +15,18 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/stand-ins": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/data": "workspace:*",
     "@agentsws/kernel": "workspace:*",
-    "@agentsws/txn": "workspace:*"
+    "@agentsws/knowledge": "workspace:*",
+    "@agentsws/model-gateway": "workspace:*",
+    "@agentsws/roles": "workspace:*",
+    "@agentsws/stand-ins": "workspace:*",
+    "@agentsws/txn": "workspace:*",
+    "yaml": "^2.5.0"
   }
 }

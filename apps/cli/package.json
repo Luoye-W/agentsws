@@ -2,22 +2,34 @@
   "name": "@agentsws/cli",
   "version": "0.0.0",
   "private": true,
-  "description": "agentsws CLI：init / doctor / simulate / synth / test",
+  "description": "agentsws CLI：init / doctor / simulate / synth / replay",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "agentsws": "./bin/agentsws.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "bin",
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@agentsws/simulation": "workspace:*"
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/simulation": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@agentsws/cli": "workspace:*"
   }
 }

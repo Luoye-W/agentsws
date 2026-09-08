@@ -1,0 +1,56 @@
+- id: prod_1
+  title: USB-C 65W Charger
+  price: 129
+  cost: 54
+  currency: USD
+  status: active
+  record_version: v1
+- id: prod_2
+  title: GaN Travel Adapter
+  price: 89
+  cost: 33
+  currency: USD
+  status: active
+  record_version: v1
+- id: prod_3
+  title: Braided Cable 2m
+  price: 22.5
+  cost: 6
+  currency: USD
+  status: active
+  record_version: v1
+- id: prod_4
+  title: MagSafe Car Mount
+  price: 45
+  cost: 14
+  currency: USD
+  status: active
+  record_version: v1
+- id: prod_5
+  title: 10000mAh Power Bank
+  price: 69
+  cost: 24
+  currency: USD
+  status: active
+  record_version: v1
+- id: prod_6
+  title: USB-C Hub 7-in-1
+  price: 99
+  cost: 38
+  currency: USD
+  status: active
+  record_version: v1
+- id: prod_7
+  title: Laptop Stand Alu
+  price: 59
+  cost: 19
+  currency: USD
+  status: active
+  record_version: v1
+- id: prod_8
+  title: Desk Cable Tray
+  price: 29
+  cost: 8
+  currency: USD
+  status: active
+  record_version: v1

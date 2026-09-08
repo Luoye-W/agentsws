@@ -1,0 +1,21 @@
+- person_id: p_wang
+  role_id: dtc.aftersales
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+  primary: true
+- person_id: p_wang
+  role_id: common.owner
+  ranges: []
+  granted_by: p_wang
+- person_id: p_li
+  role_id: dtc.aftersales
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_chen
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang

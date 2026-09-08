@@ -1,0 +1,13 @@
+- id: p_wang
+  name: 王岚
+  email: wang@nordvolt.example
+  title: 店主 / 售后
+  owner: true
+- id: p_li
+  name: 李默
+  email: li@nordvolt.example
+  title: 运营
+- id: p_chen
+  name: 陈晓
+  email: chen@nordvolt.example
+  title: 兼职客服

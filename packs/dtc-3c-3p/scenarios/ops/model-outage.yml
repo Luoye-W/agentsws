@@ -1,0 +1,36 @@
+# 模型挂两小时：期间来的工作项冻结（run.failed{provider_unavailable}），不起草不写外部；
+# 恢复后同一 idempotency_key 只发一次（09 §5.7 降级规则）。
+id: ops/model-outage
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    model.outage: { duration: 2h }
+  - at: '+10m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+8h'
+    clock.advance: {}
+expected:
+  run_failed_codes: [provider_unavailable]
+  staged_change_kinds: [refund]
+  approval_items: { kind: outbound_draft, count: 1, children: [staged_change] }
+  metrics:
+    outbound_sent: 1
+    applied_changes: 1
+    runs_failed: 1
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+  - freeze_on_model_outage
