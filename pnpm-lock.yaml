@@ -182,6 +182,15 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agentsws/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
 
   packages/txn:
     dependencies:

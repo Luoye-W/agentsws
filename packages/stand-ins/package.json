@@ -18,6 +18,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@agentsws/contracts": "workspace:*"
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/kernel": "workspace:*",
+    "@agentsws/model-gateway": "workspace:*"
   }
 }
