@@ -1,0 +1,21 @@
+id: thr_seed_1001
+subject: "Return request for #1001"
+participants:
+  - anna@example.com
+  - support@ws_dtc3c.example
+poison: false
+messages:
+  - id: msg_seed_1
+    direction: inbound
+    from: anna@example.com
+    to:
+      - support@ws_dtc3c.example
+    at: 2026-09-06T20:12:00.000Z
+    body: |
+      Hi,
+
+      The charger arrived last week but it does not fit my laptop. I would like to
+      return it and get a refund. Order #1001.
+
+      Thanks,
+      Anna

@@ -1,5 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": "src", "outDir": "dist" },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../core" },
+    { "path": "../data" },
+    { "path": "../kernel" },
+    { "path": "../knowledge" },
+    { "path": "../model-gateway" },
+    { "path": "../roles" },
+    { "path": "../stand-ins" },
+    { "path": "../txn" }
+  ]
 }

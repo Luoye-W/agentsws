@@ -183,8 +183,11 @@ function toolDefs(req: RunRequest): ToolDef[] {
 /**
  * 17 §1 装配顺序：静态前缀（persona 段 + skills 索引行 + 工具定义）→ 策略层 → 工作项上下文 → 用户消息。
  * 静态前缀只由请求里稳定的部分构成，字节稳定。
+ *
+ * 导出给模拟回路（17 §6.1、26 §6）：回放事件日志时用同一个函数重组 prompt，
+ * 与 `prompt.assembled.hash` 比对——同一个定义，不允许两处实现。
  */
-function assemble(req: RunRequest): { messages: ChatMessage[]; tools: ToolDef[] } {
+export function assemblePrompt(req: RunRequest): { messages: ChatMessage[]; tools: ToolDef[] } {
   const persona = [...req.persona.sections]
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
     .map((s) => `## ${s.id} ${s.name}\n${s.text}`)
@@ -211,6 +214,23 @@ function assemble(req: RunRequest): { messages: ChatMessage[]; tools: ToolDef[] 
     })
   }
   return { messages, tools: toolDefs(req) }
+}
+
+/**
+ * `prompt.assembled.hash` 的计算式（17 §2）。运行时发事件与回放校验共用这一处。
+ */
+export function promptHash(prompt: { messages: ChatMessage[]; tools: ToolDef[] }): string {
+  return sha256(canonicalJson(prompt))
+}
+
+/** 从 RunRequest 直接算出 `prompt.assembled.hash`（装配 + 哈希）。 */
+export function assemblePromptHash(req: RunRequest): string {
+  return promptHash(assemblePrompt(req))
+}
+
+/** 单个 ContextItem 的 `context.injected.hash` 计算式（17 §2）。 */
+export function contextItemHash(item: ContextItem): string {
+  return sha256(canonicalJson(item.content))
 }
 
 function estimateTokens(messages: ChatMessage[], tools: ToolDef[]): number {
@@ -351,14 +371,14 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           item_id: item.id,
           kind: item.kind,
           bytes: item.bytes,
-          hash: sha256(canonicalJson(item.content)),
+          hash: contextItemHash(item),
         })
         const ref = refOf(item)
         if (ref) prov.see([ref])
       }
 
       // 2) 装配 prompt
-      const { messages, tools } = assemble(req)
+      const { messages, tools } = assemblePrompt(req)
       const prefixHash = staticPrefixHash(messages, tools)
       const total_tokens = estimateTokens(messages, tools)
       usage.input_tokens = total_tokens
@@ -372,7 +392,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
       sink({
         type: 'prompt.assembled',
-        hash: sha256(canonicalJson({ messages, tools })),
+        hash: promptHash({ messages, tools }),
         static_prefix_hash: prefixHash,
         total_tokens,
       })

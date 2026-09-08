@@ -1,0 +1,36 @@
+# 窗口外：不得提出退款；回信里要出现"过期 / 不适用"这一档措辞，而不是先答应再反悔。
+id: aftersales/return-outside-window
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  calls_tool: [get_order]
+  first_tool: get_order
+  never_calls: [create_refund]
+  staged_change_kinds: []
+  approval_items: { kind: outbound_draft, count: 1 }
+  reply_includes_any: ['outside the', '不在']
+  max_tool_calls: 8
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+  - freeze_on_model_outage

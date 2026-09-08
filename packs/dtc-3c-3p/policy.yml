@@ -1,0 +1,18 @@
+workspace_id: ws_dtc3c
+mandates:
+  stage_refund:
+    caps:
+      max_auto_refund_amount: 60
+      currency: USD
+      within_policy_window_only: true
+      return_window_days: 14
+    window:
+      max_count: 20
+      per: day
+  stage_address_change:
+    caps:
+      unfulfilled_only: true
+global_caps:
+  max_daily_refund_total: 500
+separation_of_duties:
+  - stage_refund

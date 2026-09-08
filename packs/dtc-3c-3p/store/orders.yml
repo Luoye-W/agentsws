@@ -1,0 +1,1139 @@
+- id: ord_1001
+  name: "#1001"
+  email: anna@example.com
+  currency: USD
+  created_at: 2026-08-28T01:00:00.000Z
+  delivered_at: 2026-09-04T01:00:00.000Z
+  total_price: 129
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1001
+      product_id: prod_1
+      title: USB-C 65W Charger
+      quantity: 1
+      price: 129
+  shipping_address:
+    name: Anna Meyer
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1002
+  name: "#1002"
+  email: bob@example.com
+  currency: USD
+  created_at: 2026-07-21T01:00:00.000Z
+  delivered_at: 2026-07-29T01:00:00.000Z
+  total_price: 89
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1002
+      product_id: prod_2
+      title: GaN Travel Adapter
+      quantity: 1
+      price: 89
+  shipping_address:
+    name: Bob Ellis
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1003
+  name: "#1003"
+  email: cara@example.com
+  currency: USD
+  created_at: 2026-09-06T01:00:00.000Z
+  total_price: 22.5
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: unfulfilled
+  line_items:
+    - id: li_ord_1003
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 1
+      price: 22.5
+  shipping_address:
+    name: Cara Lopez
+    address1: 90 Alameda
+    city: Lisbon
+    country: PT
+    zip: 1100-001
+  record_version: v1
+- id: ord_1004
+  name: "#1004"
+  email: mallory@example.com
+  currency: USD
+  created_at: 2026-08-26T01:00:00.000Z
+  delivered_at: 2026-09-02T01:00:00.000Z
+  total_price: 45
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1004
+      product_id: prod_4
+      title: MagSafe Car Mount
+      quantity: 1
+      price: 45
+  shipping_address:
+    name: Mallory Novak
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1005
+  name: "#1005"
+  email: maya.keller.4@example.com
+  currency: USD
+  created_at: 2026-08-20T01:00:00.000Z
+  total_price: 89
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: fulfilled
+  line_items:
+    - id: li_ord_1005
+      product_id: prod_2
+      title: GaN Travel Adapter
+      quantity: 1
+      price: 89
+  shipping_address:
+    name: Maya Keller
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1006
+  name: "#1006"
+  email: maya.keller.4@example.com
+  currency: USD
+  created_at: 2026-06-12T01:00:00.000Z
+  delivered_at: 2026-06-19T01:00:00.000Z
+  total_price: 90
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1006
+      product_id: prod_4
+      title: MagSafe Car Mount
+      quantity: 2
+      price: 45
+  shipping_address:
+    name: Maya Keller
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1007
+  name: "#1007"
+  email: liam.novak.2@example.com
+  currency: USD
+  created_at: 2026-07-02T01:00:00.000Z
+  delivered_at: 2026-07-04T01:00:00.000Z
+  total_price: 22.5
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1007
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 1
+      price: 22.5
+  shipping_address:
+    name: Liam Novak
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1008
+  name: "#1008"
+  email: bob.vogel.1@example.com
+  currency: USD
+  created_at: 2026-09-01T01:00:00.000Z
+  total_price: 87
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: unfulfilled
+  line_items:
+    - id: li_ord_1008
+      product_id: prod_8
+      title: Desk Cable Tray
+      quantity: 3
+      price: 29
+  shipping_address:
+    name: Bob Vogel
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1009
+  name: "#1009"
+  email: piet.brandt.9@example.com
+  currency: USD
+  created_at: 2026-08-13T01:00:00.000Z
+  total_price: 67.5
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: fulfilled
+  line_items:
+    - id: li_ord_1009
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 3
+      price: 22.5
+  shipping_address:
+    name: Piet Brandt
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1010
+  name: "#1010"
+  email: piet.ellis.12@example.com
+  currency: USD
+  created_at: 2026-06-12T01:00:00.000Z
+  total_price: 29
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: fulfilled
+  line_items:
+    - id: li_ord_1010
+      product_id: prod_8
+      title: Desk Cable Tray
+      quantity: 1
+      price: 29
+  shipping_address:
+    name: Piet Ellis
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1011
+  name: "#1011"
+  email: anna@example.com
+  currency: USD
+  created_at: 2026-07-25T01:00:00.000Z
+  delivered_at: 2026-07-31T01:00:00.000Z
+  total_price: 67.5
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1011
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 3
+      price: 22.5
+  shipping_address:
+    name: Anna Meyer
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1012
+  name: "#1012"
+  email: greta.meyer.14@example.com
+  currency: USD
+  created_at: 2026-08-27T01:00:00.000Z
+  delivered_at: 2026-08-31T01:00:00.000Z
+  total_price: 69
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1012
+      product_id: prod_5
+      title: 10000mAh Power Bank
+      quantity: 1
+      price: 69
+  shipping_address:
+    name: Greta Meyer
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1013
+  name: "#1013"
+  email: bob.vogel.1@example.com
+  currency: USD
+  created_at: 2026-06-30T01:00:00.000Z
+  delivered_at: 2026-07-02T01:00:00.000Z
+  total_price: 207
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1013
+      product_id: prod_5
+      title: 10000mAh Power Bank
+      quantity: 3
+      price: 69
+  shipping_address:
+    name: Bob Vogel
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1014
+  name: "#1014"
+  email: klara.ellis.15@example.com
+  currency: USD
+  created_at: 2026-07-04T01:00:00.000Z
+  total_price: 267
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: unfulfilled
+  line_items:
+    - id: li_ord_1014
+      product_id: prod_2
+      title: GaN Travel Adapter
+      quantity: 3
+      price: 89
+  shipping_address:
+    name: Klara Ellis
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1015
+  name: "#1015"
+  email: bob.vogel.1@example.com
+  currency: USD
+  created_at: 2026-07-23T01:00:00.000Z
+  delivered_at: 2026-07-30T01:00:00.000Z
+  total_price: 45
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1015
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 2
+      price: 22.5
+  shipping_address:
+    name: Bob Vogel
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1016
+  name: "#1016"
+  email: greta.brandt.6@example.com
+  currency: USD
+  created_at: 2026-07-29T01:00:00.000Z
+  total_price: 90
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: fulfilled
+  line_items:
+    - id: li_ord_1016
+      product_id: prod_4
+      title: MagSafe Car Mount
+      quantity: 2
+      price: 45
+  shipping_address:
+    name: Greta Brandt
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1017
+  name: "#1017"
+  email: nils.vogel.16@example.com
+  currency: USD
+  created_at: 2026-06-12T01:00:00.000Z
+  total_price: 129
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: fulfilled
+  line_items:
+    - id: li_ord_1017
+      product_id: prod_1
+      title: USB-C 65W Charger
+      quantity: 1
+      price: 129
+  shipping_address:
+    name: Nils Vogel
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1018
+  name: "#1018"
+  email: greta.meyer.14@example.com
+  currency: USD
+  created_at: 2026-07-17T01:00:00.000Z
+  delivered_at: 2026-07-23T01:00:00.000Z
+  total_price: 45
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1018
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 2
+      price: 22.5
+  shipping_address:
+    name: Greta Meyer
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1019
+  name: "#1019"
+  email: greta.meyer.14@example.com
+  currency: USD
+  created_at: 2026-07-16T01:00:00.000Z
+  delivered_at: 2026-07-22T01:00:00.000Z
+  total_price: 45
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1019
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 2
+      price: 22.5
+  shipping_address:
+    name: Greta Meyer
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1020
+  name: "#1020"
+  email: bob@example.com
+  currency: USD
+  created_at: 2026-08-04T01:00:00.000Z
+  delivered_at: 2026-08-07T01:00:00.000Z
+  total_price: 267
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1020
+      product_id: prod_2
+      title: GaN Travel Adapter
+      quantity: 3
+      price: 89
+  shipping_address:
+    name: Bob Ellis
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1021
+  name: "#1021"
+  email: piet.brandt.9@example.com
+  currency: USD
+  created_at: 2026-06-25T01:00:00.000Z
+  delivered_at: 2026-06-27T01:00:00.000Z
+  total_price: 58
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1021
+      product_id: prod_8
+      title: Desk Cable Tray
+      quantity: 2
+      price: 29
+  shipping_address:
+    name: Piet Brandt
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1022
+  name: "#1022"
+  email: nils.vogel.16@example.com
+  currency: USD
+  created_at: 2026-09-04T01:00:00.000Z
+  total_price: 89
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: fulfilled
+  line_items:
+    - id: li_ord_1022
+      product_id: prod_2
+      title: GaN Travel Adapter
+      quantity: 1
+      price: 89
+  shipping_address:
+    name: Nils Vogel
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1023
+  name: "#1023"
+  email: liam.novak.2@example.com
+  currency: USD
+  created_at: 2026-06-14T01:00:00.000Z
+  delivered_at: 2026-06-20T01:00:00.000Z
+  total_price: 90
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1023
+      product_id: prod_4
+      title: MagSafe Car Mount
+      quantity: 2
+      price: 45
+  shipping_address:
+    name: Liam Novak
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1024
+  name: "#1024"
+  email: bob.vogel.1@example.com
+  currency: USD
+  created_at: 2026-07-27T01:00:00.000Z
+  delivered_at: 2026-07-29T01:00:00.000Z
+  total_price: 67.5
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1024
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 3
+      price: 22.5
+  shipping_address:
+    name: Bob Vogel
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1025
+  name: "#1025"
+  email: cara@example.com
+  currency: USD
+  created_at: 2026-06-21T01:00:00.000Z
+  delivered_at: 2026-06-27T01:00:00.000Z
+  total_price: 297
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1025
+      product_id: prod_6
+      title: USB-C Hub 7-in-1
+      quantity: 3
+      price: 99
+  shipping_address:
+    name: Cara Lopez
+    address1: 90 Alameda
+    city: Lisbon
+    country: PT
+    zip: 1100-001
+  record_version: v1
+- id: ord_1026
+  name: "#1026"
+  email: cara@example.com
+  currency: USD
+  created_at: 2026-07-28T01:00:00.000Z
+  delivered_at: 2026-07-31T01:00:00.000Z
+  total_price: 69
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1026
+      product_id: prod_5
+      title: 10000mAh Power Bank
+      quantity: 1
+      price: 69
+  shipping_address:
+    name: Cara Lopez
+    address1: 90 Alameda
+    city: Lisbon
+    country: PT
+    zip: 1100-001
+  record_version: v1
+- id: ord_1027
+  name: "#1027"
+  email: greta.brandt.6@example.com
+  currency: USD
+  created_at: 2026-06-09T01:00:00.000Z
+  delivered_at: 2026-06-15T01:00:00.000Z
+  total_price: 178
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1027
+      product_id: prod_2
+      title: GaN Travel Adapter
+      quantity: 2
+      price: 89
+  shipping_address:
+    name: Greta Brandt
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1028
+  name: "#1028"
+  email: nils.vogel.16@example.com
+  currency: USD
+  created_at: 2026-07-19T01:00:00.000Z
+  delivered_at: 2026-07-22T01:00:00.000Z
+  total_price: 177
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1028
+      product_id: prod_7
+      title: Laptop Stand Alu
+      quantity: 3
+      price: 59
+  shipping_address:
+    name: Nils Vogel
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1029
+  name: "#1029"
+  email: cara@example.com
+  currency: USD
+  created_at: 2026-08-05T01:00:00.000Z
+  total_price: 58
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: unfulfilled
+  line_items:
+    - id: li_ord_1029
+      product_id: prod_8
+      title: Desk Cable Tray
+      quantity: 2
+      price: 29
+  shipping_address:
+    name: Cara Lopez
+    address1: 90 Alameda
+    city: Lisbon
+    country: PT
+    zip: 1100-001
+  record_version: v1
+- id: ord_1030
+  name: "#1030"
+  email: liam.novak.2@example.com
+  currency: USD
+  created_at: 2026-08-18T01:00:00.000Z
+  delivered_at: 2026-08-22T01:00:00.000Z
+  total_price: 207
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1030
+      product_id: prod_5
+      title: 10000mAh Power Bank
+      quantity: 3
+      price: 69
+  shipping_address:
+    name: Liam Novak
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1031
+  name: "#1031"
+  email: greta.brandt.6@example.com
+  currency: USD
+  created_at: 2026-07-07T01:00:00.000Z
+  delivered_at: 2026-07-10T01:00:00.000Z
+  total_price: 129
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1031
+      product_id: prod_1
+      title: USB-C 65W Charger
+      quantity: 1
+      price: 129
+  shipping_address:
+    name: Greta Brandt
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1032
+  name: "#1032"
+  email: cara.weber.13@example.com
+  currency: USD
+  created_at: 2026-08-09T01:00:00.000Z
+  delivered_at: 2026-08-14T01:00:00.000Z
+  total_price: 58
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1032
+      product_id: prod_8
+      title: Desk Cable Tray
+      quantity: 2
+      price: 29
+  shipping_address:
+    name: Cara Weber
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1033
+  name: "#1033"
+  email: tessa.hahn.8@example.com
+  currency: USD
+  created_at: 2026-07-10T01:00:00.000Z
+  delivered_at: 2026-07-16T01:00:00.000Z
+  total_price: 87
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1033
+      product_id: prod_8
+      title: Desk Cable Tray
+      quantity: 3
+      price: 29
+  shipping_address:
+    name: Tessa Hahn
+    address1: 90 Alameda
+    city: Lisbon
+    country: PT
+    zip: 1100-001
+  record_version: v1
+- id: ord_1034
+  name: "#1034"
+  email: klara.ellis.15@example.com
+  currency: USD
+  created_at: 2026-08-24T01:00:00.000Z
+  delivered_at: 2026-08-30T01:00:00.000Z
+  total_price: 118
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1034
+      product_id: prod_7
+      title: Laptop Stand Alu
+      quantity: 2
+      price: 59
+  shipping_address:
+    name: Klara Ellis
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1035
+  name: "#1035"
+  email: piet.brandt.9@example.com
+  currency: USD
+  created_at: 2026-06-21T01:00:00.000Z
+  delivered_at: 2026-06-23T01:00:00.000Z
+  total_price: 90
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1035
+      product_id: prod_4
+      title: MagSafe Car Mount
+      quantity: 2
+      price: 45
+  shipping_address:
+    name: Piet Brandt
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1036
+  name: "#1036"
+  email: piet.ellis.12@example.com
+  currency: USD
+  created_at: 2026-07-30T01:00:00.000Z
+  delivered_at: 2026-08-06T01:00:00.000Z
+  total_price: 69
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1036
+      product_id: prod_5
+      title: 10000mAh Power Bank
+      quantity: 1
+      price: 69
+  shipping_address:
+    name: Piet Ellis
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1037
+  name: "#1037"
+  email: klara.ellis.15@example.com
+  currency: USD
+  created_at: 2026-06-24T01:00:00.000Z
+  delivered_at: 2026-06-26T01:00:00.000Z
+  total_price: 59
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1037
+      product_id: prod_7
+      title: Laptop Stand Alu
+      quantity: 1
+      price: 59
+  shipping_address:
+    name: Klara Ellis
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1038
+  name: "#1038"
+  email: greta.brandt.6@example.com
+  currency: USD
+  created_at: 2026-07-29T01:00:00.000Z
+  delivered_at: 2026-07-31T01:00:00.000Z
+  total_price: 258
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1038
+      product_id: prod_1
+      title: USB-C 65W Charger
+      quantity: 2
+      price: 129
+  shipping_address:
+    name: Greta Brandt
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1039
+  name: "#1039"
+  email: anna@example.com
+  currency: USD
+  created_at: 2026-09-04T01:00:00.000Z
+  delivered_at: 2026-09-07T01:00:00.000Z
+  total_price: 45
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1039
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 2
+      price: 22.5
+  shipping_address:
+    name: Anna Meyer
+    address1: 12 Baker Street
+    city: Berlin
+    country: DE
+    zip: "10115"
+  record_version: v1
+- id: ord_1040
+  name: "#1040"
+  email: piet.brandt.9@example.com
+  currency: USD
+  created_at: 2026-06-10T01:00:00.000Z
+  total_price: 45
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: unfulfilled
+  line_items:
+    - id: li_ord_1040
+      product_id: prod_3
+      title: Braided Cable 2m
+      quantity: 2
+      price: 22.5
+  shipping_address:
+    name: Piet Brandt
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1041
+  name: "#1041"
+  email: bob@example.com
+  currency: USD
+  created_at: 2026-06-29T01:00:00.000Z
+  delivered_at: 2026-07-05T01:00:00.000Z
+  total_price: 207
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1041
+      product_id: prod_5
+      title: 10000mAh Power Bank
+      quantity: 3
+      price: 69
+  shipping_address:
+    name: Bob Ellis
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1042
+  name: "#1042"
+  email: mallory@example.com
+  currency: USD
+  created_at: 2026-07-05T01:00:00.000Z
+  delivered_at: 2026-07-09T01:00:00.000Z
+  total_price: 58
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1042
+      product_id: prod_8
+      title: Desk Cable Tray
+      quantity: 2
+      price: 29
+  shipping_address:
+    name: Mallory Novak
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1043
+  name: "#1043"
+  email: maya.ellis.7@example.com
+  currency: USD
+  created_at: 2026-08-10T01:00:00.000Z
+  delivered_at: 2026-08-15T01:00:00.000Z
+  total_price: 99
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1043
+      product_id: prod_6
+      title: USB-C Hub 7-in-1
+      quantity: 1
+      price: 99
+  shipping_address:
+    name: Maya Ellis
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1
+- id: ord_1044
+  name: "#1044"
+  email: greta.brandt.6@example.com
+  currency: USD
+  created_at: 2026-06-29T01:00:00.000Z
+  delivered_at: 2026-07-04T01:00:00.000Z
+  total_price: 135
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1044
+      product_id: prod_4
+      title: MagSafe Car Mount
+      quantity: 3
+      price: 45
+  shipping_address:
+    name: Greta Brandt
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1045
+  name: "#1045"
+  email: bob@example.com
+  currency: USD
+  created_at: 2026-08-07T01:00:00.000Z
+  delivered_at: 2026-08-10T01:00:00.000Z
+  total_price: 297
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1045
+      product_id: prod_6
+      title: USB-C Hub 7-in-1
+      quantity: 3
+      price: 99
+  shipping_address:
+    name: Bob Ellis
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1046
+  name: "#1046"
+  email: anna.novak.10@example.com
+  currency: USD
+  created_at: 2026-08-24T01:00:00.000Z
+  delivered_at: 2026-08-31T01:00:00.000Z
+  total_price: 198
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1046
+      product_id: prod_6
+      title: USB-C Hub 7-in-1
+      quantity: 2
+      price: 99
+  shipping_address:
+    name: Anna Novak
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1047
+  name: "#1047"
+  email: cara@example.com
+  currency: USD
+  created_at: 2026-07-05T01:00:00.000Z
+  delivered_at: 2026-07-12T01:00:00.000Z
+  total_price: 387
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1047
+      product_id: prod_1
+      title: USB-C 65W Charger
+      quantity: 3
+      price: 129
+  shipping_address:
+    name: Cara Lopez
+    address1: 90 Alameda
+    city: Lisbon
+    country: PT
+    zip: 1100-001
+  record_version: v1
+- id: ord_1048
+  name: "#1048"
+  email: anna.novak.10@example.com
+  currency: USD
+  created_at: 2026-06-13T01:00:00.000Z
+  delivered_at: 2026-06-20T01:00:00.000Z
+  total_price: 99
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1048
+      product_id: prod_6
+      title: USB-C Hub 7-in-1
+      quantity: 1
+      price: 99
+  shipping_address:
+    name: Anna Novak
+    address1: 5 Harbour Road
+    city: Bristol
+    country: GB
+    zip: BS1 4QA
+  record_version: v1
+- id: ord_1049
+  name: "#1049"
+  email: nils.vogel.16@example.com
+  currency: USD
+  created_at: 2026-07-26T01:00:00.000Z
+  delivered_at: 2026-07-29T01:00:00.000Z
+  total_price: 207
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1049
+      product_id: prod_5
+      title: 10000mAh Power Bank
+      quantity: 3
+      price: 69
+  shipping_address:
+    name: Nils Vogel
+    address1: 3 Rue Neuve
+    city: Lyon
+    country: FR
+    zip: "69001"
+  record_version: v1
+- id: ord_1050
+  name: "#1050"
+  email: liam.novak.2@example.com
+  currency: USD
+  created_at: 2026-08-12T01:00:00.000Z
+  delivered_at: 2026-08-16T01:00:00.000Z
+  total_price: 387
+  refunded_amount: 0
+  financial_status: paid
+  fulfillment_status: delivered
+  line_items:
+    - id: li_ord_1050
+      product_id: prod_1
+      title: USB-C 65W Charger
+      quantity: 3
+      price: 129
+  shipping_address:
+    name: Liam Novak
+    address1: 18 Oudegracht
+    city: Utrecht
+    country: NL
+    zip: 3511 AA
+  record_version: v1

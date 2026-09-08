@@ -1,0 +1,15 @@
+schema_version: 1
+pack: dtc-3c-3p
+family: dtc-3c
+seed: 42
+anchor: 2026-09-07T01:00:00.000Z
+generator: agentsws synth
+sizes:
+  people: 3
+  assignments: 4
+  products: 8
+  customers: 20
+  orders: 50
+  shipments: 45
+  threads: 4
+  knowledge: 3

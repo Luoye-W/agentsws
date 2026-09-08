@@ -1,0 +1,10 @@
+- id: cre_1
+  handle: "@gadgetjonas"
+  platform: youtube
+  market: de
+  followers: 48000
+- id: cre_2
+  handle: "@deskrosa"
+  platform: instagram
+  market: gb
+  followers: 31000
