@@ -46,6 +46,8 @@ export interface RunScenarioOptions {
   pack?: Pack
   /** 事件日志路径，缺省内存。 */
   dbPath?: string
+  /** 用哪个运行时适配器（17 §4）；缺省 `stub`。`dsh` 走 `@agentsws/dsh-adapter`。 */
+  runtime?: 'stub' | 'dsh'
   /** 拿到原始证据（一致性用例要比对事件序列；报告里不塞这么大一坨）。 */
   captureEvidence?: (evidence: Evidence) => void
 }
@@ -91,6 +93,7 @@ export async function runScenario(
     seed,
     start: scenario.clock.start,
     ...(options.dbPath === undefined ? {} : { dbPath: options.dbPath }),
+    ...(options.runtime === undefined ? {} : { runtime: options.runtime }),
   })
 
   try {

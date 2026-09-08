@@ -26,6 +26,7 @@ import type {
 import { sha256 } from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
 import { createDataStore, defineCollection } from '@agentsws/data'
+import { createDshRuntime } from '@agentsws/dsh-adapter'
 import type { Kernel, Random } from '@agentsws/kernel'
 import { createKernel, seededRandom } from '@agentsws/kernel'
 import type { Knowledge } from '@agentsws/knowledge'
@@ -101,6 +102,11 @@ export interface WorldOptions {
   start: Iso8601
   /** 事件日志路径；缺省 `:memory:`（fast 档，26 §4）。 */
   dbPath?: string
+  /**
+   * 用哪个运行时适配器（17 §4）。缺省 `stub`（fast 档）；
+   * `dsh` 走 `@agentsws/dsh-adapter`（真 DeepSeek Harness 的 seam），证明运行时可替换。
+   */
+  runtime?: 'stub' | 'dsh'
 }
 
 export interface World {
@@ -386,6 +392,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       },
     })
   let gateway = buildGateway({ workspace_daily_base: 1000, workspace_monthly_base: 20000 })
+
+  // ── 17 §4：换运行时只换这一处；替身的其余部分（连接器、人、时钟）原样不动 ──
+  if (opts.runtime === 'dsh') {
+    standIns.stubRuntime = createDshRuntime({
+      clock,
+      seed,
+      gateway: { complete: (req) => gateway.complete(req) },
+      stage: (i) => (holder.stage ?? (async () => undefined))(i),
+      createDraft: (p) => (holder.createDraft ?? (async () => undefined))(p),
+      executeTool: (c) => (holder.executeTool ?? (async () => ({ status: 'error' as const })))(c),
+    })
+  }
 
   // ── 交易控制模块（真实实现）──────────────────────────────────────────
   const orderOf = (id: string) => connect.state.orders.find((o) => o.id === id)
