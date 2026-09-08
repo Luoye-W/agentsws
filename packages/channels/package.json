@@ -1,0 +1,33 @@
+{
+  "name": "@agentsws/channels",
+  "version": "0.0.0",
+  "private": true,
+  "description": "渠道 #9 入站 / #14 投递：邮件适配器（IMAP 收 / SMTP 发）、入站管线、邮件投递",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "imapflow": "^2.0.0",
+    "mailparser": "^3.9.23",
+    "nodemailer": "^10.0.1"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.6",
+    "@types/nodemailer": "^8.0.1",
+    "@types/smtp-server": "^3.5.13",
+    "smtp-server": "^3.19.9"
+  }
+}
