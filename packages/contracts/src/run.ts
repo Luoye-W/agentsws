@@ -97,6 +97,8 @@ export type RunEvent =
       kind: ContextItem['kind']
       bytes: number
       hash: string
+      /** 来源：请求自带 / 宿主 grounding 预取（17 §5.4）。缺省 `request`。 */
+      source?: 'request' | 'prefetch'
     }
   | { type: 'prompt.assembled'; hash: string; static_prefix_hash: string; total_tokens: number }
   | { type: 'text.delta'; text: string }
@@ -115,7 +117,14 @@ export type RunEvent =
   | { type: 'progress'; step: string; note?: string }
   | { type: 'budget.warning'; which: keyof RunRequest['budget']; used: number; cap: number }
   | { type: 'budget.exhausted'; which: keyof RunRequest['budget']; used: number; cap: number }
-  | { type: 'run.completed'; usage: RunUsage; outputs: RunOutput[]; summary: string }
+  | {
+      type: 'run.completed'
+      usage: RunUsage
+      outputs: RunOutput[]
+      summary: string
+      /** 15 §4.4：变更请求结束却没有 stage（与 RunResult.no_stage 同义，事件日志里也要看得到）。 */
+      no_stage?: boolean
+    }
   | { type: 'run.failed'; error: { code: string; message: string; retryable: boolean } }
   | { type: 'run.cancelled' }
 
@@ -174,7 +183,8 @@ export interface RunResult {
   memory_candidates: MemoryFact[]
   lessons: Lesson[]
   usage: RunUsage
-  session_ref: { runtime: string; session_id: string; log_uri: string }
+  /** `log_uri` 只有带会话文件的运行时（dsh）才有；direct-llm 之类省略。 */
+  session_ref: { runtime: string; session_id: string; log_uri?: string }
   summary: string
   /** 15 §4.4：变更请求结束却没有 stage */
   no_stage?: boolean

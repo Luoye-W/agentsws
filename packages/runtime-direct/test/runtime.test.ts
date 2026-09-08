@@ -46,7 +46,7 @@ describe('运行时适配器契约（17 §4）', () => {
     expect(result.usage.cost_base).toBeGreaterThan(0)
     expect(result.usage.tool_calls).toBe(1)
     expect(result.session_ref.runtime).toBe('direct-llm')
-    expect(result.session_ref.log_uri).toBe('memory://direct-llm/run_test_1')
+    expect(result.session_ref.log_uri).toBeUndefined() // direct-llm 无会话文件（契约 log_uri 可省）
     const completed = eventsOf(h.events, 'run.completed')[0]
     expect(completed?.usage).toEqual(result.usage)
     expect(completed?.summary).toBe(result.summary)

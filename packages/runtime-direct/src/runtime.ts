@@ -139,7 +139,6 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           session_ref: {
             runtime: RUNTIME_NAME,
             session_id: sha256(canonicalJson({ request: req.id, seed })).slice(0, 26),
-            log_uri: `memory://direct-llm/${req.id}`,
           },
           summary,
           ...(extra?.no_stage === true ? { no_stage: true } : {}),
@@ -151,7 +150,13 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       const complete = (summary: string, status: RunResult['status']): RunResult => {
         const noStage = req.expectations.must_stage_if_change_requested && wantsChange && !staged
         const result = finish(status, summary, noStage ? { no_stage: true } : undefined)
-        sink({ type: 'run.completed', usage: result.usage, outputs, summary })
+        sink({
+          type: 'run.completed',
+          usage: result.usage,
+          outputs,
+          summary,
+          ...(noStage ? { no_stage: true } : {}),
+        })
         return result
       }
 
@@ -267,6 +272,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           kind: item.kind,
           bytes: item.bytes,
           hash: contextItemHash(item),
+          source: prefetchItems.includes(item) ? 'prefetch' : 'request',
         })
         const ref = refOf(item)
         if (ref !== undefined) prov.see([ref])

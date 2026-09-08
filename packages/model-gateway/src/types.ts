@@ -10,6 +10,7 @@ import type {
   ModelPurpose,
   ModelRef,
   RoleId,
+  ToolChoice,
   ToolDef,
 } from '@agentsws/contracts'
 
@@ -113,6 +114,8 @@ export interface CompleteRequest {
   cache_breakpoints?: number[]
   meta: ModelMeta
   seed?: number
+  /** 17 §5.4 强制工具选择；provider 未声明 `supports_tool_choice` 时网关剥掉它。 */
+  tool_choice?: ToolChoice
   /** 运行预算（17 §1 RunRequest.budget.max_cost_base）。同一 run_id 内累计。 */
   max_cost_base?: number
   /** 该次调用涉及欧洲客户数据（22 §2 eu_customer_to_cloud_brain）。 */

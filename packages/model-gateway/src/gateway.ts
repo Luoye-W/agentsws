@@ -303,6 +303,10 @@ class Gateway implements ModelGatewayApi {
             messages: req.messages,
             ...(req.tools === undefined ? {} : { tools: req.tools }),
             ...(req.seed === undefined ? {} : { seed: req.seed }),
+            // 22：provider 不声明原生支持就剥掉 tool_choice（退化为 auto），由运行时自己兜底
+            ...(req.tool_choice === undefined || provider.supports_tool_choice !== true
+              ? {}
+              : { tool_choice: req.tool_choice }),
           })
           const finishedAt = this.opts.clock.now()
           const usage: CompletionUsage = {

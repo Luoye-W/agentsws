@@ -31,7 +31,7 @@ const fakeResult = (id: string): RunResult => ({
     seconds: 0,
     cost_base: 0,
   },
-  session_ref: { runtime: 'direct-llm', session_id: 's', log_uri: 'memory://x' },
+  session_ref: { runtime: 'direct-llm', session_id: 's' },
   summary: '',
 })
 
