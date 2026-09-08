@@ -124,9 +124,7 @@ export interface MemoryFactRecord {
 }
 export interface MemoryStore {
   /** 返回被写过滤拒绝的条目与原因 */
-  write(
-    facts: MemoryFactRecord[],
-  ): Promise<{
+  write(facts: MemoryFactRecord[]): Promise<{
     accepted: MemoryFactRecord[]
     rejected: { fact: MemoryFactRecord; reason: string }[]
   }>

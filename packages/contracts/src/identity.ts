@@ -53,9 +53,7 @@ export interface IdentityService {
   issueLogin(email: string): Promise<{ token: string; expires_at: Iso8601 }>
   verifyLogin(token: string): Promise<{ person: Person; session_token: string } | undefined>
   /** 所有 token 绑 workspace；返回解析后的主体 */
-  authenticate(
-    bearer: string,
-  ): Promise<
+  authenticate(bearer: string): Promise<
     | {
         person_id: PersonId
         workspace_id: WorkspaceId
