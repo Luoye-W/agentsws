@@ -4,3 +4,8 @@ packages:
   - role-packs/*
 allowBuilds:
   esbuild: set this to true or false
+
+onlyBuiltDependencies:
+  - esbuild
+  - better-sqlite3
+  - sqlite-vec

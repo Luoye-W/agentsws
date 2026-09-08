@@ -22,12 +22,5 @@
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
     "@types/node": "^22.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "better-sqlite3",
-      "sqlite-vec"
-    ]
   }
 }
