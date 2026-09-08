@@ -14,6 +14,9 @@
       "path": "packages/channels"
     },
     {
+      "path": "packages/connect-adapter"
+    },
+    {
       "path": "packages/contracts"
     },
     {

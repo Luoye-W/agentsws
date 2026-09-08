@@ -13,3 +13,5 @@ allowBuilds:
   koffi: false
   node-pty: false
   protobufjs: false
+minimumReleaseAgeExclude:
+  - '@oomol-lab/connector@1.2.0'

@@ -1,0 +1,17 @@
+{
+  "base_url": "http://127.0.0.1:39217",
+  "admin_token_env": "AGENTSWS_TEST_OC_ADMIN_TOKEN",
+  "admin_token_placeholder": "admin_fixture_1",
+  "workspace_id": "ws_local",
+  "service": "gotify",
+  "read_action": "gotify.get_version",
+  "write_action": "gotify.send_message",
+  "unknown_action": "gotify.__no_such_action__",
+  "connection_id": "c4f08c29-0265-405e-a087-a1679933afd9",
+  "other_connection_id": "6fd0058b-697e-415c-bd0f-5cdc37fbd36f",
+  "other_service_connection_id": "e83d0879-00dd-4179-a156-4c5ae32da8d0",
+  "assignment_id": "asg_conformance",
+  "oauth_service": "gmail",
+  "clock_start": "2026-09-09T09:00:00.000Z",
+  "runtime_kind": "docker"
+}
