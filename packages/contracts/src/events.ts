@@ -70,6 +70,9 @@ export type KnownEventType =
   | 'run.cancelled'
   // model (22)
   | 'model.usage'
+  | 'model.blocked_residency'
+  | 'model.provider_down'
+  | 'model.budget_frozen'
   // privacy (21)
   | 'privacy.erased'
   // inbound / delivery (18)
