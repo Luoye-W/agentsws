@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/knowledge",
+  "version": "0.0.0",
+  "private": true,
+  "description": "知识与记忆 #10：事实卡、带身份检索（FTS5）、运行记忆纪律",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}

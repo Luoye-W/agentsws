@@ -1,0 +1,23 @@
+{
+  "name": "@agentsws/skills",
+  "version": "0.0.0",
+  "private": true,
+  "description": "技能管理 #11/#12：Agent Skills 解析、段 id、三层叠加、lesson 池与夜间整理",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*"
+  }
+}

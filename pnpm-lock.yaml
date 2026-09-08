@@ -56,6 +56,15 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/data:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/kernel:
     dependencies:
       '@agentsws/contracts':
@@ -67,6 +76,33 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: 3.18.2
         version: 3.18.2
+
+  packages/knowledge:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/model-gateway:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/roles:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/simulation:
     dependencies:
@@ -82,6 +118,12 @@ importers:
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../txn
+
+  packages/skills:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/stand-ins:
     dependencies:

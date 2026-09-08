@@ -1,14 +1,47 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/contracts" },
-    { "path": "packages/core" },
-    { "path": "packages/kernel" },
-    { "path": "packages/stand-ins" },
-    { "path": "packages/txn" },
-    { "path": "packages/simulation" },
-    { "path": "packages/api" },
-    { "path": "apps/server" },
-    { "path": "apps/cli" }
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/kernel"
+    },
+    {
+      "path": "packages/stand-ins"
+    },
+    {
+      "path": "packages/txn"
+    },
+    {
+      "path": "packages/simulation"
+    },
+    {
+      "path": "packages/api"
+    },
+    {
+      "path": "apps/server"
+    },
+    {
+      "path": "apps/cli"
+    },
+    {
+      "path": "packages/data"
+    },
+    {
+      "path": "packages/roles"
+    },
+    {
+      "path": "packages/knowledge"
+    },
+    {
+      "path": "packages/skills"
+    },
+    {
+      "path": "packages/model-gateway"
+    }
   ]
 }

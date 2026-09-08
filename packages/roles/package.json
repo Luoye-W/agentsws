@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/roles",
+  "version": "0.0.0",
+  "private": true,
+  "description": "职责与分配 #2：YAML 职责定义、岗位、分配、策略层、Casbin 策略编译",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}

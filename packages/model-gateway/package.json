@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/model-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "模型网关 #7：路由、记账、三级预算、急停、静态前缀稳定",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}
