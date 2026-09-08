@@ -139,6 +139,22 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      '@deepseek-ai/schemastery':
+        specifier: 3.18.2
+        version: 3.18.2
+      better-sqlite3:
+        specifier: ^12.2.0
+        version: 12.11.1
+      casbin:
+        specifier: ^5.38.0
+        version: 5.51.1
+      yaml:
+        specifier: ^2.8.0
+        version: 2.9.0
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
 
   packages/simulation:
     dependencies:
