@@ -143,10 +143,21 @@ describe('subject-key crypto (21 §4)', () => {
   it('round-trips a value and is recognisable at rest', () => {
     const key = newSubjectKey()
     expect(key).toHaveLength(32)
-    const enc = encryptValue(key, 'customer:c1', { phone: '+1' })
+    const value = { phone: '+1-555-0142-sentinel' }
+    const enc = encryptValue(key, 'customer:c1', value)
     expect(isEncryptedField(enc)).toBe(true)
-    expect(JSON.stringify(enc)).not.toContain('+1')
-    expect(decryptValue(key, enc)).toEqual({ phone: '+1' })
+    // 「静态不可读」必须比对**解码后的字节**，不能比对 base64 文本：
+    // base64 字母表含 '+' 与数字，随机 IV / 密文编码出来会低概率恰好含 '+1' 这样的两字符片段，
+    // 旧断言 `expect(JSON.stringify(enc)).not.toContain('+1')` 因此每几十次跑就偶发失败一次。
+    // 明文同时换成一段足够长的哨兵，随机字节撞上它的概率可忽略。
+    const atRest = Buffer.concat([
+      Buffer.from(enc.iv, 'base64'),
+      Buffer.from(enc.tag, 'base64'),
+      Buffer.from(enc.ct, 'base64'),
+    ])
+    expect(atRest.includes(Buffer.from(value.phone, 'utf8'))).toBe(false)
+    expect(atRest.includes(Buffer.from('phone', 'utf8'))).toBe(false)
+    expect(decryptValue(key, enc)).toEqual(value)
   })
 
   it('every subject gets an independent key that cannot decrypt another subject', () => {

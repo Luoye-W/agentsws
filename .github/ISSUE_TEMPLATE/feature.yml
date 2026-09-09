@@ -1,0 +1,68 @@
+name: Feature request / 提一个需求
+description: Something the platform should do that it does not do today.
+title: 'feat: '
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        中文或英文都可以 / Chinese or English, both fine.
+
+        This project is built in public and the roadmap is driven by what people actually
+        need. Tell us the job, not the implementation — the most useful request describes
+        a day in your company that goes badly today.
+
+        Two things worth knowing before you write:
+
+        - The **interfaces are frozen** (`docs/32` §2). Adding fields and kinds is fine;
+          changing the meaning of an existing contract needs a major version and a migrator.
+        - Whole layers are deliberately deferred (application packages and the registry,
+          IM delivery, MCP surface, Postgres). See `docs/38-底层收口清单.md` §2 for the
+          order things are being closed out in.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The job to be done
+      description: What is the person trying to get done, and what happens today instead?
+      placeholder: |
+        Our after-sales person handles ~40 English emails a day across two brands.
+        Today she has to check the return window by hand in the Shopify admin for each one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: A sketch is enough. Screens, a card layout, a CLI shape — whatever fits.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What shape is this?
+      options:
+        - A role pack / skill / template (declarative — most welcome, easiest to land)
+        - A connector or provider (may belong upstream in OpenConnector or dsh-channels)
+        - A workstation screen or card
+        - A platform capability that needs a contract change
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you use today
+      description: |
+        Which tool, and what it costs you. "Nothing, we do it by hand, ~2 hours a day" is
+        a perfectly good answer and a useful one.
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to build it?
+      options:
+        - label: I would be willing to open a PR for this

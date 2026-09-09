@@ -1,0 +1,95 @@
+name: Bug report / 报告一个 bug
+description: Something behaves differently from what the docs or contracts say.
+title: 'bug: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        中文或英文都可以 / Chinese or English, both fine.
+
+        **Not here:** security vulnerabilities. Use the private channel in
+        [SECURITY.md](https://github.com/Luoye-W/agentsws/blob/main/SECURITY.md) instead.
+
+        **Never paste credentials, real customer data, or raw customer email.**
+        Use the synthetic pack (`packs/dtc-3c-3p`) to reproduce whenever you can.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I read the honest status table in the README (some things are simply not built yet)
+          required: true
+        - label: This is not a security vulnerability
+          required: true
+        - label: My report contains no credentials and no real customer data
+          required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got.
+      placeholder: |
+        I ran `pnpm simulate --tier fast --pack packs/dtc-3c-3p`.
+        Expected 8/8. Got 7/8, `security/injection-in-order-note` failed the
+        `fencing_covers_external` invariant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands. A failing scenario YAML is the best possible report.
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which layer
+      description: Best guess is fine.
+      options:
+        - kernel / event log / halt
+        - data layer / authorization
+        - roles, positions, assignments
+        - approvals, ledger, executor (txn)
+        - knowledge and memory
+        - skills and the learning loop
+        - model gateway
+        - runtimes (dsh / direct-llm / stub)
+        - connectors (OpenConnector)
+        - channels (email)
+        - work model (matters, goals, todos, plans)
+        - meetings
+        - API gateway / server
+        - workstation (web UI)
+        - desktop shell (Electron)
+        - simulation loop / scenarios
+        - build, CI, docs
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: |
+        Output of `node -v`, `pnpm -v`, `git rev-parse --short HEAD`, and your OS.
+        Say whether you were on the simulation (all stand-ins) or on real accounts.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or report output
+      description: |
+        Relevant output only. If a simulation run failed, attach the JSON under `out/`.
+        Scrub anything that came from a real account.
+      render: shell

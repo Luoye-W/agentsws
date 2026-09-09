@@ -1,0 +1,86 @@
+name: CI
+
+# 合并门禁（docs/35 §3 的审核清单自动化）：
+#   install → tsc -b --force → biome check → vitest（含覆盖率）→ 模拟回路 fast 档
+# 任何一步非 0 退出即红。模拟回路那一步是 09 §3.1 的「合并门禁 = fast 全过 + 指标不劣化」。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # 桌面壳在 CI 里只做 tsc + 单元测试，从不 electron-builder 打包，
+  # 所以不需要每个矩阵格子都下 ~100 MB 的 Electron 平台二进制（类型声明随 npm 包一起装）。
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  # 关掉 pnpm 的更新提示，让日志干净
+  npm_config_update_notifier: 'false'
+
+jobs:
+  check:
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # better-sqlite3 / sqlite-vec 是原生模块，两个平台各自装一次、各自跑一遍
+        os: [ubuntu-latest, macos-latest]
+        node: ['22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm 版本取自根 package.json 的 packageManager 字段（pnpm 11）
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: tsc -b --force
+        run: pnpm exec tsc -b --force
+
+      - name: biome check
+        run: pnpm exec biome check .
+
+      # 覆盖率写到 out/ 下：biome.json 已经忽略 out/，否则下一次 `biome check .`
+      # 会去 lint 覆盖率报告自带的那些 js
+      - name: vitest
+        run: pnpm exec vitest run --coverage --coverage.reportsDirectory=out/coverage
+
+      - name: upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-node${{ matrix.node }}
+          path: out/coverage/
+          if-no-files-found: warn
+          retention-days: 14
+
+      # 合并门禁：8 条场景 × 6 条不变量，全替身、固定 seed、分钟级
+      - name: simulate (merge gate, fast tier)
+        run: >-
+          pnpm -s simulate --tier fast --pack packs/dtc-3c-3p
+          --scenario 'scenarios/**/*.yml' --seed 42 --report out/simulation
+
+      - name: upload simulation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-report-${{ matrix.os }}-node${{ matrix.node }}
+          path: out/simulation/
+          if-no-files-found: warn
+          retention-days: 14
