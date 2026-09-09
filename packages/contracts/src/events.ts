@@ -123,6 +123,8 @@ export type KnownEventType =
   | 'workflow.compensated'
   | 'workflow.done'
   | 'workflow.cancelled'
+  // WP31：本机秘密库密钥轮换（payload 只有时间与条数）
+  | 'secrets.key_rotated'
   // privacy (21)
   | 'privacy.erased'
   // meetings (37 §4)：payload 只有摘要与条数，转写与音频永不进日志
