@@ -1,5 +1,11 @@
 /** 14 §10 审批 API。写路由（decide / retry-apply）属 send / apply 类，受 outbound 急停。 */
-import type { ApprovalItem, ApprovalKind, ApprovalState, DecideInput } from '@agentsws/contracts'
+import type {
+  ApprovalItem,
+  ApprovalKind,
+  ApprovalState,
+  DecideInput,
+  Todo,
+} from '@agentsws/contracts'
 import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
 import { ApiError, normalizeError } from '../errors.js'
@@ -293,11 +299,27 @@ export function approvalRoutes(): Route[] {
           ...optional(input.redirect_to, 'redirect_to'),
           ...optional(resolved.defer_until, 'defer_until'),
         })
+        // 37 §4.1：认领卡接下来才形成责任（31 I13）——建一条挂在会议事项上的待办
+        let claimed: Todo | undefined
+        if (
+          out.kind === 'claim' &&
+          (resolved.action === 'approve' || resolved.action === 'approve_edited')
+        ) {
+          claimed = (await deps.work?.acceptClaim?.(
+            {
+              workspace_id: p.workspace_id,
+              person_id: p.person_id,
+              assignment_id: assignmentOf(c).id,
+            },
+            out,
+          )) as Todo | undefined
+        }
         return ok(c, {
           ...redactItem(out, p.person_id),
           // 指导的作用域决定它之后落到哪（本条回复 / 技能 overlay 提案 / 职责策略变更）；
           // v1 只原样回给调用方，路由到 24 / 05 的机器留给后续 WP（见交付报告）。
           ...optional(resolved.instruction_scope, 'instruction_scope'),
+          ...optional(claimed, 'todo'),
         })
       },
     ),

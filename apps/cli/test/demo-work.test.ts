@@ -12,6 +12,8 @@ import type {
   GoalProgress,
   Matter,
   MatterView,
+  Meeting,
+  MeetingOutputs,
   Review,
   Todo,
 } from '@agentsws/contracts'
@@ -233,6 +235,69 @@ describe('demo 的工作模型（37）', () => {
     expect(out.run_id).toBeDefined()
     const view = await data<MatterView>(await call(`/v1/matters/${matter.id}`))
     expect(view.timeline.some((e) => e.run_id === out.run_id)).toBe(true)
+  })
+
+  it('会议 → 事项：处理完开一个 meeting 事项，Meeting.matter_id 回填，产出挂时间线', async () => {
+    const meetings = await data<Meeting[]>(await call('/v1/meetings'))
+    expect(meetings.length).toBeGreaterThan(0)
+    const meeting = meetings.find((m) => m.matter_id !== undefined)
+    if (meeting?.matter_id === undefined) throw new Error('会议没有回填 matter_id')
+
+    const view = await data<MatterView>(await call(`/v1/matters/${meeting.matter_id}`))
+    expect(view.matter.kind).toBe('meeting')
+    expect(view.matter.title).toBe(meeting.title)
+    // 会议本身固定在现场里
+    expect(view.matter.context.pinned.some((r) => r.id === meeting.id)).toBe(true)
+    // 产出挂在这条事项的时间线上
+    expect(view.timeline.filter((e) => e.kind === 'meeting').length).toBeGreaterThan(0)
+  })
+
+  it('会议上日历：会议那天的日历里有它（37 §2 表第三行）', async () => {
+    const meetings = await data<Meeting[]>(await call('/v1/meetings'))
+    const meeting = meetings[0]
+    if (meeting === undefined) throw new Error('demo 没种出会议')
+    const from = new Date(Date.parse(meeting.start) - 3_600_000).toISOString()
+    const to = new Date(Date.parse(meeting.end) + 3_600_000).toISOString()
+    const out = await data<{ items: CalendarItem[] }>(
+      await call(`/v1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    )
+    const item = out.items.find((i) => i.source === 'meeting' && i.ref?.id === meeting.id)
+    expect(item).toBeDefined()
+    expect(item?.matter_id).toBe(meeting.matter_id)
+  })
+
+  it('认领卡接下来 → 建待办（source=meeting、matter_id 指向会议事项、anchor 指向那条产出）', async () => {
+    const meetings = await data<Meeting[]>(await call('/v1/meetings'))
+    let sent: { approval_id: string } | undefined
+    let target: Meeting | undefined
+    for (const meeting of meetings) {
+      const outs = await data<MeetingOutputs[]>(await call(`/v1/meetings/${meeting.id}/outputs`))
+      // 没被明确指派给别人的那条：认领卡才会发到本人手上（31 I13 本人确认才形成责任）
+      const outputs = outs.find((o) => o.todos.some((t) => t.assignee_person_id === undefined))
+      const proposal = outputs?.todos.find((t) => t.assignee_person_id === undefined)
+      if (outputs === undefined || proposal === undefined) continue
+      sent = await data<{ approval_id: string }>(
+        await call(`/v1/meetings/${meeting.id}/outputs/send`, {
+          method: 'POST',
+          body: { record_id: outputs.record_id, kind: 'claim', item_id: proposal.id },
+        }),
+      )
+      target = meeting
+      break
+    }
+    if (sent === undefined || target?.matter_id === undefined) throw new Error('没有可发的认领卡')
+
+    const decided = await data<{ todo?: Todo }>(
+      await call(`/v1/approvals/${sent.approval_id}/decide`, {
+        method: 'POST',
+        body: { action: 'approve' },
+      }),
+    )
+    expect(decided.todo).toBeDefined()
+    expect(decided.todo?.source).toBe('meeting')
+    expect(decided.todo?.matter_id).toBe(target.matter_id)
+    expect(decided.todo?.anchor?.matter_event_id).toBeDefined()
+    expect(decided.todo?.origin?.card_id).toBe(sent.approval_id)
   })
 
   it('全程没有任何 model.* 事件（stub 运行时根本不叫模型）', () => {

@@ -14,8 +14,12 @@ import type {
 import type {
   ApprovalBus,
   ApprovalKind,
+  CalendarItem,
   Clock,
   EventEnvelope,
+  Matter,
+  Meeting,
+  MeetingOutputs,
   MeetingStore,
   ObjectRef,
   PersonId,
@@ -35,12 +39,17 @@ import {
   type SqliteMeetingStore,
 } from '@agentsws/meetings'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
+import type { Work } from '@agentsws/work'
 
 export interface MeetingsAssembly {
   store: MeetingStore
   raw: MeetingRawStore
   pipeline: MeetingPipeline
   port: MeetingsPort
+  /** 37 §2.2b：会议跟进的事项由工作模型开；装配完成后由 server 注入。 */
+  bind(work: Work): void
+  /** 会议 → 日历（37 §2 表第三行「会议一定有时间，一定上日历」）。 */
+  calendarItems(range: { from: string; to: string }, workspace_id: string): Promise<CalendarItem[]>
   close(): void
 }
 
@@ -168,6 +177,56 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     return { approval_id: item.id, title: item.title }
   }
 
+  let work: Work | undefined
+
+  /**
+   * 37 §2.2b / §4.1：会议记录一处理完就开一个 `meeting` 类事项，把 `Meeting.matter_id`
+   * 回填回去，产出（决定 / 待办提案 / 边界答案 / 知识候选）挂在它的时间线上。
+   *
+   * 事项是**上下文的家**：认领卡认下来之后建的待办 `anchor` 就指向这里的某一条，
+   * 点待办标题回到这个会议现场。会议本身固定在 `pinned` 里。
+   */
+  async function openMatter(
+    meeting: Meeting,
+    outputs: MeetingOutputs,
+  ): Promise<Matter | undefined> {
+    if (work === undefined) return undefined
+    let matter_id = meeting.matter_id
+    if (matter_id === undefined || work.getMatter(matter_id) === undefined) {
+      const matter = work.createMatter({
+        kind: 'meeting',
+        title: meeting.title,
+        participants: meeting.participants
+          .map((p) => p.person_id)
+          .filter((id): id is PersonId => id !== undefined),
+        summary: `会议「${meeting.title}」的跟进：${outputs.decisions.length} 条决定、${outputs.todos.length} 条待办提案。`,
+        pinned: [{ type: 'meeting', id: meeting.id }],
+        ...(meeting.position_id === undefined ? {} : { position_id: meeting.position_id }),
+      })
+      matter_id = matter.id
+      await store.updateMeeting(meeting.id, { matter_id })
+    }
+    const existing = new Set(
+      work.store.listMatterEvents(matter_id, { limit: 500 }).map((e) => e.text),
+    )
+    const note = (text: string): void => {
+      if (text === '' || existing.has(text)) return
+      existing.add(text)
+      work?.appendEvent(matter_id as string, {
+        kind: 'meeting',
+        text,
+        actor: { kind: 'agent', id: outputs.processor },
+        ref: { type: 'meeting_record', id: outputs.record_id },
+      })
+    }
+    for (const d of outputs.decisions) note(`决定：${d.text}`)
+    // 待办提案的时间线文本就是提案原文——认领卡认下来时按它找回锚点
+    for (const t of outputs.todos) note(t.text)
+    for (const b of outputs.boundary_answers) note(`口径：${b.question} → ${b.answer}`)
+    for (const k of outputs.knowledge) note(`知识候选：${k.statement}`)
+    return work.getMatter(matter_id)
+  }
+
   const port: MeetingsPort = {
     list: (filter) => store.listMeetings(filter),
     get: (id) => store.getMeeting(id),
@@ -175,7 +234,14 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     update: (id, patch) => store.updateMeeting(id, patch),
     records: (meeting_id) => store.records(meeting_id),
     ingest: (input: MeetingIngestInput) => pipeline.ingest(input),
-    process: (record_id): Promise<MeetingProcessOutcome> => pipeline.process(record_id),
+    process: async (record_id): Promise<MeetingProcessOutcome> => {
+      const outcome = await pipeline.process(record_id)
+      if (outcome.outputs !== undefined) {
+        const meeting = await store.getMeeting(outcome.outputs.meeting_id)
+        if (meeting !== undefined) await openMatter(meeting, outcome.outputs)
+      }
+      return outcome
+    },
     outputs: (meeting_id) => store.outputs(meeting_id),
     sendCard,
     minutes: async (meeting_id) => {
@@ -194,6 +260,30 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     raw,
     pipeline,
     port,
+    bind(w) {
+      work = w
+    },
+    async calendarItems(range, workspace_id) {
+      const meetings = await store.listMeetings({
+        workspace_id,
+        from: range.from,
+        to: range.to,
+      })
+      return meetings
+        .filter((m) => m.status !== 'cancelled')
+        .map((m) => ({
+          id: `cal_meeting_${m.id}`,
+          source: 'meeting' as const,
+          title: m.title,
+          start: m.start,
+          end: m.end,
+          all_day: false,
+          ref: { type: 'meeting', id: m.id },
+          status: m.status,
+          ...(m.position_id === undefined ? {} : { position_id: m.position_id }),
+          ...(m.matter_id === undefined ? {} : { matter_id: m.matter_id }),
+        }))
+    },
     close() {
       ;(store as Partial<SqliteMeetingStore>).close?.()
       ;(raw as Partial<SqliteMeetingRawStore>).close?.()
@@ -240,6 +330,7 @@ export async function seedDemoMeetings(
         notice_given: true,
       },
     })
-    for (const record of records) await assembly.pipeline.process(record.id)
+    // 走端口而不是管线：这样会议事项与时间线也一起开出来（37 §2.2b）
+    for (const record of records) await assembly.port.process(record.id)
   }
 }

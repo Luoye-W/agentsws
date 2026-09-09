@@ -319,6 +319,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     approvals: options.mount?.approvals ?? txn.approvals,
     role_id: ownerAssignment.role_id,
   })
+  // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
+  meetings.bind(work)
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {
@@ -386,6 +388,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: createWorkPort({
       clock,
       work,
+      // 37 §2 表第三行：会议一定有时间，一定上日历
+      meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
       // 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）
       approvals: (actor) =>
         approvals.queue({

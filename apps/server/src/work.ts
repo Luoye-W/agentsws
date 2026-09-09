@@ -11,6 +11,7 @@ import type { WorkActor, WorkHome, WorkPort } from '@agentsws/api'
 import type {
   ApprovalItem,
   CalendarItem,
+  ClaimPayload,
   Clock,
   Goal,
   GoalProgress,
@@ -53,8 +54,11 @@ export interface WorkPortOptions {
   label(ref: { type: string; id: string }): string | undefined
   /** 25 的定时任务；不给就是没有 */
   scheduledTasks?(actor: WorkActor): ScheduledTaskLike[]
-  /** WP23 的会议；不给就是没有 */
-  meetings?(actor: WorkActor, range: { from: Iso8601; to: Iso8601 }): CalendarItem[]
+  /** WP23 的会议；不给就是没有（会议上日历，37 §2 表第三行） */
+  meetings?(
+    actor: WorkActor,
+    range: { from: Iso8601; to: Iso8601 },
+  ): Promise<CalendarItem[]> | CalendarItem[]
   /** 24 的 lesson，进复盘的「Agent 学到的」 */
   lessons?(actor: WorkActor): { id: string; text: string }[]
 }
@@ -128,14 +132,14 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
   const waitingCount = (items: readonly ApprovalItem[]): number =>
     items.filter((i) => WAITING_STATES.has(i.state)).length
 
-  const sourcesFor = (
+  const sourcesFor = async (
     actor: WorkActor,
     range: { from: Iso8601; to: Iso8601 },
     cards: readonly ApprovalItem[],
-  ): CalendarSources => ({
+  ): Promise<CalendarSources> => ({
     cards: cards.filter((i) => WAITING_STATES.has(i.state)),
     ...(options.scheduledTasks === undefined ? {} : { tasks: options.scheduledTasks(actor) }),
-    ...(options.meetings === undefined ? {} : { meetings: options.meetings(actor, range) }),
+    ...(options.meetings === undefined ? {} : { meetings: await options.meetings(actor, range) }),
   })
 
   const runnerFor = (cards: readonly ApprovalItem[]): QueryRunner =>
@@ -167,7 +171,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
           timeline: work.calendar(
             range,
             { person_id: actor.person_id },
-            sourcesFor(actor, range, cards),
+            await sourcesFor(actor, range, cards),
           ),
           due: { todos: todayDue(actor.person_id), cards_waiting: waitingCount(cards) },
         },
@@ -223,14 +227,18 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
 
     async calendar(actor, range) {
       const cards = await cardsOf(actor)
-      return work.calendar(range, { person_id: actor.person_id }, sourcesFor(actor, range, cards))
+      return work.calendar(
+        range,
+        { person_id: actor.person_id },
+        await sourcesFor(actor, range, cards),
+      )
     },
 
     async todayPlan(actor, refresh) {
       const cards = await cardsOf(actor)
       const range = work.todayRange()
       const meetings = work
-        .calendar(range, { person_id: actor.person_id }, sourcesFor(actor, range, cards))
+        .calendar(range, { person_id: actor.person_id }, await sourcesFor(actor, range, cards))
         .filter((i) => i.source === 'meeting')
       return work.todayPlan({
         person_id: actor.person_id,
@@ -255,7 +263,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       const range = work.todayRange()
       const span = kind === 'day' ? 1 : kind === 'week' ? 7 : 30
       const start = new Date(ms(range.to) - span * DAY_MS).toISOString()
-      const sources = sourcesFor(actor, range, cards)
+      const sources = await sourcesFor(actor, range, cards)
       const meetings = work
         .calendar(range, { person_id: actor.person_id }, sources)
         .filter((i) => i.source === 'meeting')
@@ -278,6 +286,40 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         },
       })
       return work.saveReview(draft)
+    },
+
+    /**
+     * 37 §4.1：认领卡接下来 → 一条真待办。
+     *
+     * `source: 'meeting'`，`matter_id` 指向会议事项（`ClaimPayload.matter_id` 由会议侧回填），
+     * `anchor` 指向事项时间线上那条产出——点待办标题就回到会议现场的那一处（37 §2.2b）。
+     * **本人确认前不形成责任**（31 I13）：这一步只在本人按下"接"之后才发生。
+     */
+    acceptClaim(actor, item) {
+      const payload = item.payload as ClaimPayload | undefined
+      if (payload?.form !== 'claim') return undefined
+      const matter_id = payload.matter_id
+      // 同一张卡按两次不重复建（认领卡的 dedupe_key 稳定，卡本身也只能决定一次）
+      const existing = work
+        .listTodos({ owner: actor.person_id, ...(matter_id === undefined ? {} : { matter_id }) })
+        .find((t) => t.origin?.card_id === item.id)
+      if (existing !== undefined) return existing
+      const anchor =
+        matter_id === undefined
+          ? undefined
+          : work.store
+              .listMatterEvents(matter_id, { limit: 500 })
+              .find((e) => e.text === payload.text)
+      return work.createTodo({
+        title: payload.text,
+        owner: actor.person_id,
+        source: 'meeting',
+        position_id: actor.assignment_id,
+        origin: { card_id: item.id },
+        ...(matter_id === undefined ? {} : { matter_id }),
+        ...(anchor === undefined ? {} : { anchor: { matter_event_id: anchor.id } }),
+        ...(payload.due === undefined ? {} : { due: payload.due }),
+      })
     },
   }
 }
