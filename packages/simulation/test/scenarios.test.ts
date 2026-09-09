@@ -65,6 +65,25 @@ describe('pack 场景（26 §1 §4）', () => {
     expect(body).toMatch(/outside the 14-day window/)
   })
 
+  it('第一次遇到没答过的边界：真发一张 policy_change 选择题卡，且只问一次', async () => {
+    const { evidence } = await runPackScenario('aftersales/boundary-first-time.yml')
+    const questions = evidence.approvals.filter((a) => a.kind === 'policy_change')
+    // 管着这次退款的那条边界（物流丢件赔付）没答过 → 恰好一张卡，不是零也不是两张
+    expect(questions).toHaveLength(1)
+    const card = questions[0]
+    expect(card?.subject.object).toEqual({ type: 'policy', id: 'policy.lost_package_liability' })
+    // 选择题卡：必须带选项，裸 approve 会被 OPTION_REQUIRED 拒（36 §2.1）
+    expect((card?.options ?? []).length).toBeGreaterThan(1)
+    // dedupe_key 按 (工作区, 边界 id) 定：同一条边界一辈子只问一次
+    expect(card?.dedupe_key).toBe(
+      `${evidence.approvals[0]?.workspace_id}:policy_change:policy.lost_package_liability`,
+    )
+    expect(new Set(questions.map((q) => q.dedupe_key)).size).toBe(questions.length)
+    // 不自作主张：一条变更都没提，回信照发
+    expect(evidence.changes).toHaveLength(0)
+    expect(evidence.approvals.filter((a) => a.kind === 'outbound_draft')).toHaveLength(1)
+  })
+
   it('毒样本：围栏覆盖、无写操作、authorization_check 挡下', async () => {
     const { evidence } = await runPackScenario('security/injected-instruction.yml')
     expect(evidence.changes).toHaveLength(0)
