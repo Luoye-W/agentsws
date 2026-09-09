@@ -88,6 +88,8 @@ export class MockOpenConnector implements Connect {
   private readonly tokens = new Map<string, TokenRecord>()
   private readonly idem = new Map<string, IdempotencyRecord>()
   private readonly requests = new Map<string, ConnectRequest>()
+  /** connection_id → 经原生表单填过的**字段名**（永远不存值）。 */
+  private readonly submittedFields = new Map<string, string[]>()
   private readonly faults: FaultInjection[] = []
   private readonly idempotencyWindowMs: number
   private readonly tokenTtlSeconds: number
@@ -227,6 +229,62 @@ export class MockOpenConnector implements Connect {
       })
     }
     return 'connected'
+  }
+
+  /**
+   * WP20 原生表单直填的替身（13 §4.3）。
+   *
+   * 与真适配器同一条纪律：`fields` 的**值**只在这个方法的入参里存在——不进 `conns`、
+   * 不进观察日志、不进返回值。替身只记住"填过哪几个**字段名**"，测试据此断言零泄漏。
+   */
+  async submitForm(
+    service: string,
+    input: {
+      workspace_id: WorkspaceId
+      ownership: Connection['ownership']
+      alias: string
+      auth_type?: string
+      fields: Readonly<Record<string, string>>
+      request_id?: string
+    },
+  ): Promise<Connection> {
+    const provider = PROVIDERS.find((p) => p.service === service)
+    if (!provider) throw new StandInError('not_found', `未知 provider：${service}`, { service })
+    if (provider.auth === 'oauth2') {
+      throw new StandInError('invalid_input', `${service} 走 OAuth 授权，不接受表单直填`, {
+        service,
+      })
+    }
+    const names = Object.keys(input.fields)
+    if (names.length === 0) throw new StandInError('invalid_input', '表单没有任何字段', { service })
+    const id = this.nextId(`conn_${service}`)
+    const conn: Connection = {
+      id,
+      service,
+      alias: input.alias,
+      ownership: input.ownership,
+      workspace_id: input.workspace_id,
+      identity: { account_id: `acct_${service}`, display_name: input.alias },
+      status: 'active',
+    }
+    this.conns.set(id, conn)
+    this.submittedFields.set(id, names)
+    if (input.request_id !== undefined) this.requests.delete(input.request_id)
+    return { ...conn }
+  }
+
+  /** 断开：连接与它（替身里根本不存在的）凭据一起消失。 */
+  async removeConnection(id: string): Promise<void> {
+    if (!this.conns.has(id)) {
+      throw new StandInError('not_found', `连接不存在：${id}`, { connection: id })
+    }
+    this.conns.delete(id)
+    this.submittedFields.delete(id)
+  }
+
+  /** 测试用：某条连接是经表单填的哪几个**字段名**（永远拿不到值）。 */
+  fieldNamesOf(connection_id: string): string[] | undefined {
+    return this.submittedFields.get(connection_id)?.slice()
   }
 
   async transferConnection(id: string, to_workspace: WorkspaceId): Promise<Connection> {

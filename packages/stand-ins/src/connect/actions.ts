@@ -15,7 +15,8 @@ export interface ActionDef extends ActionMeta {
 }
 
 export const PROVIDERS: ProviderMeta[] = [
-  { service: 'shopify_admin', auth: 'oauth2', executable: true },
+  // 31 §3：v1 的 Shopify 走「自建应用 + Admin API 访问令牌」，不需要平台审核，所以是 api_key
+  { service: 'shopify_admin', auth: 'api_key', executable: true },
   { service: 'gmail', auth: 'oauth2', executable: true },
   { service: 'meta', auth: 'oauth2', executable: true },
   { service: 'klaviyo', auth: 'api_key', executable: true },

@@ -6,6 +6,8 @@
  */
 import type { StatTile } from '@agentsws/deck'
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Link2Off } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { connectPathFor } from '@/components/connections/links'
 import { useApp } from '@/lib/app-context'
 import { formatDelta, formatValue } from '@/lib/format'
 
@@ -51,10 +53,15 @@ export function StatTileView({ tile }: { tile: StatTile }): React.ReactNode {
         data-status="not_connected"
       >
         <div className="text-xs text-muted-foreground">{tile.label}</div>
-        <div className="mt-2 flex items-center gap-1.5 text-sm">
+        {/* WP20 §C：点它就落到那个数据源对应的 provider 卡片上 */}
+        <Link
+          to={connectPathFor(tile.source)}
+          className="mt-2 flex items-center gap-1.5 text-sm underline-offset-4 hover:underline"
+          data-testid="tile-connect-link"
+        >
           <Link2Off className="size-3.5" aria-hidden />
           <span>{t('tile.not_connected')}</span>
-        </div>
+        </Link>
         <p className="mt-1 text-[11px] text-muted-foreground">{t('tile.not_connected.hint')}</p>
       </div>
     )

@@ -110,6 +110,8 @@ function fromStatus(status: number): ErrorCode {
   if (status === 401) return 'unauthenticated'
   if (status === 403) return 'forbidden'
   if (status === 404) return 'not_found'
+  // 405：路径在、方法不在——这个 runtime 没实现这个动作，不是"东西不存在"（WP20 断开路径要分辨这两者）
+  if (status === 405) return 'not_implemented'
   if (status === 409) return 'idempotency_conflict'
   if (status === 429) return 'rate_limited'
   if (status === 408 || status === 504) return 'timeout'

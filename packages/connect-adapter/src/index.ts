@@ -4,6 +4,7 @@ export type {
   ProxyRequestLike,
   RuntimeActionMeta,
   SideEffect,
+  SubmitFormInput,
 } from './adapter.js'
 export { createConnectAdapter } from './adapter.js'
 export type { RuntimeFailure } from './errors.js'

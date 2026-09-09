@@ -75,6 +75,12 @@ importers:
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@agentsws/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
+      '@agentsws/connect-adapter':
+        specifier: workspace:*
+        version: link:../../packages/connect-adapter
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -105,6 +111,9 @@ importers:
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills
+      '@agentsws/stand-ins':
+        specifier: workspace:*
+        version: link:../../packages/stand-ins
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../../packages/txn
@@ -114,9 +123,16 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.7)
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
       hono:
         specifier: ^4.13.7
         version: 4.13.7
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
 
   apps/workstation:
     dependencies:

@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ensureSession, getHome, getPositions, setAssignment, setHomeTiles } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { CalendarPage } from '@/pages/calendar'
+import { ConnectionsPage } from '@/pages/connections'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 import { KnowledgePage } from '@/pages/knowledge'
@@ -97,6 +98,8 @@ export function App(): ReactNode {
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
+        {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}
+        <Route path="/connections" element={<ConnectionsPage />} />
         <Route
           path="/settings"
           element={

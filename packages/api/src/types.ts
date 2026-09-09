@@ -41,6 +41,7 @@ import type {
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
+import type { ConnectionsPort } from './routes/connections.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { WorkPort } from './routes/work.js'
 
@@ -250,6 +251,8 @@ export interface GatewayDeps {
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */
   meetings?: MeetingsPort
+  /** WP20 连接面（连接向导 / 凭据原生表单直填）；没装配时 `/v1/connections/*` 回 not_implemented。 */
+  connections?: ConnectionsPort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>

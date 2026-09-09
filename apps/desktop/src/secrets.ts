@@ -17,6 +17,14 @@ export interface DesktopSecrets {
   connectAdminToken: string
   /** 服务进程会话密钥（浏览器会话 token → HttpOnly cookie，13 §5）。 */
   serverSessionKey: string
+  /**
+   * `AGENTSWS_SECRETS_KEY`：服务进程的本机加密秘密库（WP20）。
+   *
+   * 上游 OpenConnector 没有通用 IMAP / SMTP provider（08 §3 的覆盖缺口），
+   * 所以邮箱的应用专用密码存在服务进程自己的 AES-256-GCM 库里，密钥由这里生成。
+   * 没有它，工作台会明确拒绝保存邮箱凭据，而不是退化成明文。
+   */
+  serverSecretsKey: string
 }
 
 export const SECRET_BYTES = 32
@@ -43,6 +51,7 @@ export function generateSecrets(randomBytes: RandomBytes): DesktopSecrets {
     connectEncryptionKey: toHex(randomBytes(SECRET_BYTES)),
     connectAdminToken: toHex(randomBytes(SECRET_BYTES)),
     serverSessionKey: toHex(randomBytes(SECRET_BYTES)),
+    serverSecretsKey: toHex(randomBytes(SECRET_BYTES)),
   }
 }
 
@@ -55,7 +64,9 @@ function isSecrets(raw: unknown): raw is DesktopSecrets {
     typeof obj.connectAdminToken === 'string' &&
     obj.connectAdminToken.length > 0 &&
     typeof obj.serverSessionKey === 'string' &&
-    obj.serverSessionKey.length > 0
+    obj.serverSessionKey.length > 0 &&
+    typeof obj.serverSecretsKey === 'string' &&
+    obj.serverSecretsKey.length > 0
   )
 }
 
@@ -125,10 +136,17 @@ export function secretsToEnv(secrets: DesktopSecrets): Record<string, string> {
     // 08 §5：安装器默认封死全部 provider proxy。
     OOMOL_CONNECT_BLOCKED_PROXIES: '*',
     AGENTSWS_SESSION_KEY: secrets.serverSessionKey,
+    // WP20：服务进程的本机加密秘密库（邮箱应用专用密码）
+    AGENTSWS_SECRETS_KEY: secrets.serverSecretsKey,
   }
 }
 
 /** 交给 `createRedactor()` 的字面量清单。 */
 export function secretLiterals(secrets: DesktopSecrets): string[] {
-  return [secrets.connectEncryptionKey, secrets.connectAdminToken, secrets.serverSessionKey]
+  return [
+    secrets.connectEncryptionKey,
+    secrets.connectAdminToken,
+    secrets.serverSessionKey,
+    secrets.serverSecretsKey,
+  ]
 }

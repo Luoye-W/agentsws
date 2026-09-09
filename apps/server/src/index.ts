@@ -6,6 +6,35 @@
  */
 export { type BackendCall, MemoryBackend } from './backend.js'
 export {
+  CATALOG,
+  type CatalogAuth,
+  type CatalogEntry,
+  catalogEntry,
+  serviceOfUpstream,
+  UPSTREAM_TO_SERVICE,
+} from './catalog.js'
+export {
+  type ConnectionsAssembly,
+  type ConnectionsOptions,
+  type ConnectLike,
+  classifyMailFailure,
+  createConnections,
+  createMailProbe,
+  type MailAccount,
+  type MailProbe,
+} from './connections.js'
+export {
+  createSecretStore,
+  parseSecretsKey,
+  SECRETS_KEY_ENV,
+  type SecretFields,
+  type SecretRecord,
+  type SecretStore,
+  SecretStoreError,
+  type SecretStoreOptions,
+  sameKey,
+} from './secret-store.js'
+export {
   type Bootstrap,
   BUNDLED_ROLES,
   createServer,

@@ -7,7 +7,8 @@ import type { Context } from 'hono'
 import type { ZodType } from 'zod'
 import type { GatewayDeps, RequestContext } from './types.js'
 
-export type HttpMethod = 'get' | 'post' | 'put'
+/** WP20 加了 `delete`：断开一条连接就是删掉它，用别的动词都得多解释一句。 */
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete'
 
 /** 31 §3.1：完整元组判定 (assignment, domain, op, range, sensitivity)。 */
 export interface AuthzSpec {

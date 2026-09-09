@@ -11,6 +11,8 @@
 | `connections()` | `GET /api/connections` + 本地 workspace / ownership 元数据 |
 | `beginConnect()` | oauth2 → `POST /api/oauth/authorizations`；api_key / custom_credential → 由 provider 的 `auth` 元数据生成 secure form 描述（**凭据不经本包**，由不经模型的原生表单直接 `PUT /api/connections/:service`） |
 | `pollConnect()` | 轮询 `GET /api/connections` 看目标 alias 是否出现（上游没有 connection-request 读接口） |
+| `submitForm()` | `PUT /api/connections/:service`（body `{ authType, connectionName, values }`）——WP20 原生表单直填的落点。**`values` 只在这一次转发里存在**：不进本包状态、不进事件（事件里只有字段名）、不进返回值 |
+| `removeConnection()` | 先试 `DELETE /api/connections/:service/:connectionName`，再试 `DELETE /api/connections/:id`；两条都不通抛 `not_implemented`（09-09 那次录制没打到管理面的删除端点，形状待实机确认，**绝不静默当成删掉了**） |
 | `transferConnection()` | v1：同一 runtime 内改本地 ownership / workspace 元数据；跨 runtime 未实现 |
 | `issueToken()` / `revokeTokens()` | `POST /api/runtime-tokens`、`GET`/`DELETE /api/runtime-tokens/:id` |
 | `execute()` | `POST /v1/actions/:id`（经 SDK `OpenConnector.executeRaw`）+ `Idempotency-Key` + `x-oo-connector-alias` |

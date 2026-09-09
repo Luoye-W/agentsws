@@ -11,14 +11,14 @@ import {
 import { fakeSafeStorage, seqRandomBytes } from './fakes.js'
 
 describe('generateSecrets', () => {
-  it('三把密钥都是 32 字节的十六进制', () => {
+  it('四把密钥都是 32 字节的十六进制', () => {
     const secrets = generateSecrets(seqRandomBytes())
     for (const value of secretLiterals(secrets)) {
       expect(value).toMatch(/^[0-9a-f]+$/)
       expect(value).toHaveLength(SECRET_BYTES * 2)
     }
-    // 三把互不相同（连续 seed 保证）
-    expect(new Set(secretLiterals(secrets)).size).toBe(3)
+    // 四把互不相同（连续 seed 保证）
+    expect(new Set(secretLiterals(secrets)).size).toBe(4)
   })
 })
 
@@ -30,6 +30,8 @@ describe('secretsToEnv', () => {
     expect(env.OOMOL_CONNECT_ADMIN_TOKEN).toBe(secrets.connectAdminToken)
     expect(env.OOMOL_CONNECT_BLOCKED_PROXIES).toBe('*')
     expect(env.AGENTSWS_SESSION_KEY).toBe(secrets.serverSessionKey)
+    // WP20：服务进程的本机加密秘密库密钥（邮箱应用专用密码）
+    expect(env.AGENTSWS_SECRETS_KEY).toBe(secrets.serverSecretsKey)
   })
 })
 

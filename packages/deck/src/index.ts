@@ -77,6 +77,15 @@ export {
   battleReport,
 } from './recap.js'
 export {
+  ALL_DATA_SOURCES,
+  ALWAYS_CONNECTED,
+  type ConnectionLike,
+  dataSourcesFromConnections,
+  dataSourcesOfService,
+  mergeDataSources,
+  SOURCES_BY_SERVICE,
+} from './sources.js'
+export {
   computeTile,
   computeTiles,
   DEFAULT_HOME_TILES,

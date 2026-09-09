@@ -56,6 +56,24 @@ export {
   route,
 } from './route-spec.js'
 export type {
+  BeginConnectResult,
+  ConnectionOwnership,
+  ConnectionStatus,
+  ConnectionsActor,
+  ConnectionsPort,
+  ConnectionView,
+  ConnectRequestStatus,
+  ConnectTestResult,
+  CredentialStore,
+  ProviderAuthKind,
+  ProviderFieldSpec,
+  ProviderSetupGuide,
+  ProviderView,
+  RuntimeStatusView,
+  SubmitConnectionInput,
+} from './routes/connections.js'
+export { connectionRoutes } from './routes/connections.js'
+export type {
   MeetingIngestInput,
   MeetingProcessOutcome,
   MeetingSendCardInput,
