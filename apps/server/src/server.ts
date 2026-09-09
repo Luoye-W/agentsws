@@ -620,6 +620,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     tz_offset_minutes: workData.tz_offset_minutes,
     ...(workStore === undefined ? {} : { store: workStore }),
     ...(startRun === undefined ? {} : { startRun }),
+    // WP35：待办 / 事项变化发一条摘要进同一条事件日志（WS 与工作台失效映射已就位）
+    emit: appendEvent,
   })
   runtime?.bind(work)
 

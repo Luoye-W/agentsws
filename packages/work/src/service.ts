@@ -19,11 +19,13 @@ import type {
   DailyPlan,
   DailyPlanId,
   DailyPlanSuggestion,
+  EventEnvelope,
   Goal,
   GoalFilter,
   GoalId,
   GoalProgress,
   Iso8601,
+  KnownEventType,
   Matter,
   MatterEvent,
   MatterEventKind,
@@ -62,6 +64,14 @@ export const TIMELINE_PAGE = 20
 /** 关闭事项时未完待办怎么办：一并关闭 / 保留（37 §2.2b 最后一条）。 */
 export type UnfinishedPolicy = 'close_all' | 'keep'
 
+/**
+ * 21 §1 的事件出口：形状按 `EventEnvelope`，不依赖 kernel 包（与 txn 的 `EventSink` 同源）。
+ *
+ * 同步、发完即忘：工作模型的写路径全是同步的，事件不该把它们染成异步；
+ * 宿主那边接的是 `apps/server` 的 `appendEvent`（内部也是 `appendSync`）。
+ */
+export type WorkEventSink = (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: Iso8601 }) => void
+
 /** 卡片回填要的最小投影；本包不该认识整个 `ApprovalItem`。 */
 export interface CardRef {
   id: string
@@ -99,6 +109,13 @@ export interface WorkOptions {
   startRun?: StartRun
   /** 事项摘要怎么写（24 记忆纪律）；不给就直接用运行的 summary */
   summarize?: (input: { matter: Matter; run_summary: string }) => string
+  /**
+   * 待办 / 事项变化时往事件日志发一条**摘要**（`todo.* / matter.*`，WP35）。
+   *
+   * 不给就不发——本包不依赖事件日志。发出去的 payload 只有「哪条、什么状态、几条」，
+   * **没有正文**：待办的备注、事项时间线里的人话都留在各自的库里（21 §1 的纪律）。
+   */
+  emit?: WorkEventSink
 }
 
 /**
@@ -178,6 +195,7 @@ export class Work {
   private readonly newId: (prefix: string) => string
   private readonly startRunFn: StartRun | undefined
   private readonly summarize: (input: { matter: Matter; run_summary: string }) => string
+  private readonly sink: WorkEventSink | undefined
 
   constructor(options: WorkOptions) {
     this.store = options.store ?? new MemoryWorkStore()
@@ -187,6 +205,29 @@ export class Work {
     this.newId = makeIdFactory(options.random ?? defaultRandom(), () => options.clock.now())
     this.startRunFn = options.startRun
     this.summarize = options.summarize ?? ((i) => i.run_summary)
+    this.sink = options.emit
+  }
+
+  /**
+   * 往事件日志发一条摘要。没接 sink 就什么都不做。
+   *
+   * `trace_id` 由宿主的 `appendEvent` 用请求内的那个覆盖（21 §1），这里只给一个兜底。
+   */
+  private emit(
+    type: KnownEventType,
+    subject: EventEnvelope['subject'],
+    actor: EventEnvelope['actor'],
+    payload: Record<string, unknown>,
+  ): void {
+    this.sink?.({
+      schema_version: 1,
+      workspace_id: this.workspace_id,
+      type,
+      actor,
+      ...(subject === undefined ? {} : { subject }),
+      correlation: { trace_id: `work_${subject?.id ?? type}` },
+      payload,
+    })
   }
 
   now(): Iso8601 {
@@ -221,6 +262,18 @@ export class Work {
       updated_at: at,
     }
     this.store.putMatter(matter)
+    this.emit(
+      'matter.opened',
+      { type: 'matter', id: matter.id },
+      { kind: 'person', id: matter.context.participants[0] ?? 'system' },
+      {
+        kind: matter.kind,
+        title: matter.title,
+        status: matter.status,
+        participants: matter.context.participants.length,
+        ...(matter.goal_id === undefined ? {} : { goal_id: matter.goal_id }),
+      },
+    )
     return matter
   }
 
@@ -311,6 +364,13 @@ export class Work {
       text: input.text,
       actor: { kind: 'person', id: input.person_id },
     })
+    // 只发「谁在哪条事项里说了一句、多长」，正文留在事项时间线里
+    this.emit(
+      'matter.message',
+      { type: 'matter', id: matter_id },
+      { kind: 'person', id: input.person_id },
+      { matter_event_id: event.id, kind: 'human_message', chars: input.text.length },
+    )
     if (this.startRunFn === undefined) return { event }
     const { run_id } = await this.startRunFn({
       matter,
@@ -404,6 +464,17 @@ export class Work {
           : `事项关闭，${open.length} 条未完待办保留在待办箱`,
       actor: { kind: 'person', id: options.by ?? 'system' },
     })
+    this.emit(
+      'matter.closed',
+      { type: 'matter', id: id },
+      { kind: 'person', id: options.by ?? 'system' },
+      {
+        kind: next.kind,
+        unfinished: options.unfinished,
+        closed_todos: closed_todo_ids.length,
+        kept_todos: options.unfinished === 'keep' ? open.length : 0,
+      },
+    )
     return {
       matter: next,
       closed_todo_ids,
@@ -448,6 +519,21 @@ export class Work {
         todo_id: todo.id,
       })
     }
+    // 摘要：标题 + 时段 + 从哪来；备注（note）是正文，不进日志
+    this.emit(
+      'todo.created',
+      { type: 'todo', id: todo.id },
+      { kind: 'person', id: todo.owner },
+      {
+        title: todo.title,
+        owner: todo.owner,
+        horizon: todo.horizon,
+        source: todo.source,
+        status: todo.status,
+        ...(todo.matter_id === undefined ? {} : { matter_id: todo.matter_id }),
+        ...(todo.due === undefined ? {} : { due: todo.due }),
+      },
+    )
     return todo
   }
 
@@ -524,6 +610,28 @@ export class Work {
         todo_id: next.id,
       })
     }
+    // 打勾 / 关掉各有自己的事件名（工作台按它失效重取，别的改动走 todo.updated）
+    const type: KnownEventType =
+      status === todo.status
+        ? 'todo.updated'
+        : status === 'done'
+          ? 'todo.done'
+          : status === 'dropped'
+            ? 'todo.dropped'
+            : 'todo.updated'
+    this.emit(
+      type,
+      { type: 'todo', id: next.id },
+      { kind: 'person', id: next.owner },
+      {
+        title: next.title,
+        owner: next.owner,
+        status: next.status,
+        horizon: next.horizon,
+        ...(todo.status === status ? {} : { from_status: todo.status }),
+        ...(next.matter_id === undefined ? {} : { matter_id: next.matter_id }),
+      },
+    )
     return next
   }
 

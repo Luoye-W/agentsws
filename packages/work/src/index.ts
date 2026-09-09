@@ -59,6 +59,7 @@ export {
   type UnfinishedPolicy,
   type UpdateTodoInput,
   Work,
+  type WorkEventSink,
   type WorkOptions,
 } from './service.js'
 export {

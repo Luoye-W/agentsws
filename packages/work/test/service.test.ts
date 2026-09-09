@@ -6,7 +6,7 @@
  * - 计划只是建议，采纳才写待办
  * - 关闭事项时未完待办不自动关，由调用方选「一并关闭 / 保留」
  */
-import type { Matter, StartRun } from '@agentsws/contracts'
+import type { EventEnvelope, Matter, StartRun } from '@agentsws/contracts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cardRefOf, createWork, TIMELINE_PAGE, Work } from '../src/service.js'
 import { SqliteWorkStore } from '../src/sqlite-store.js'
@@ -775,6 +775,67 @@ describe('装配', () => {
     work.createTodo({ title: 'T', owner: 'per_1', matter_id: m.id })
     expect(work.matterView(m.id).todos).toHaveLength(1)
     store.close()
+  })
+
+  it('待办 / 事项变化发摘要事件，正文不进日志（WP35）', async () => {
+    const events: (Omit<EventEnvelope, 'id' | 'at'> & { at?: string })[] = []
+    const work = createWork({
+      workspace_id: 'ws_1',
+      clock: new FakeClock(),
+      random: seeded(7),
+      startRun: () => ({ run_id: 'run_1' }),
+      emit: (e) => events.push(e),
+    })
+
+    const matter = work.createMatter({
+      kind: 'conversation',
+      title: 'Anna 的退货请求',
+      participants: ['per_1'],
+    })
+    const todo = work.createTodo({
+      title: '给 Anna 回信',
+      owner: 'per_1',
+      note: '这段备注不该进日志',
+      matter_id: matter.id,
+    })
+    work.updateTodo(todo.id, { horizon: 'today' })
+    work.complete(todo.id)
+    const dropped = work.createTodo({ title: '顺手删掉的', owner: 'per_1' })
+    work.drop(dropped.id)
+    await work.say(matter.id, {
+      person_id: 'per_1',
+      assignment_id: 'asg_1',
+      text: '这句话不该进日志',
+    })
+    work.closeMatter(matter.id, { unfinished: 'keep', by: 'per_1' })
+
+    expect(events.map((e) => e.type)).toEqual([
+      'matter.opened',
+      'todo.created',
+      'todo.updated',
+      'todo.done',
+      'todo.created',
+      'todo.dropped',
+      'matter.message',
+      'matter.closed',
+    ])
+    // 主体指得准
+    expect(events[1]?.subject).toEqual({ type: 'todo', id: todo.id })
+    expect(events[0]?.subject).toEqual({ type: 'matter', id: matter.id })
+    // 摘要有该有的字段
+    expect(events[1]?.payload).toMatchObject({ title: '给 Anna 回信', matter_id: matter.id })
+    expect(events[3]?.payload).toMatchObject({ status: 'done', from_status: 'open' })
+    expect(events[6]?.payload).toMatchObject({ kind: 'human_message', chars: 8 })
+    expect(events[7]?.payload).toMatchObject({ unfinished: 'keep', kept_todos: 0 })
+    // 正文一个字都没有
+    const dump = JSON.stringify(events)
+    expect(dump).not.toContain('这段备注不该进日志')
+    expect(dump).not.toContain('这句话不该进日志')
+  })
+
+  it('不给 emit 就一条都不发（本包不依赖事件日志）', () => {
+    const work = createWork({ workspace_id: 'ws_1', clock: new FakeClock(), random: seeded(7) })
+    expect(() => work.createTodo({ title: 'T', owner: 'per_1' })).not.toThrow()
   })
 
   it('startRun 可以是异步的', async () => {

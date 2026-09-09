@@ -93,7 +93,11 @@ export function createReconcileGuard(options: ReconcileGuardOptions): ReconcileG
   const outstanding = (): StagedChange[] =>
     txn.runtime.store.listChanges({ workspace_id, status: ['unknown', 'applying'] })
 
-  const emit = (type: 'halt.changed', payload: Record<string, unknown>, at: Iso8601): void => {
+  const emit = (
+    type: 'halt.changed' | 'reconcile.started' | 'reconcile.finished',
+    payload: Record<string, unknown>,
+    at: Iso8601,
+  ): void => {
     options.appendEvent({
       schema_version: 1,
       workspace_id,
@@ -152,6 +156,12 @@ export function createReconcileGuard(options: ReconcileGuardOptions): ReconcileG
       await txn.executor.recoverInterrupted(workspace_id)
 
       const queue = txn.executor.pendingReconcile(workspace_id)
+      // WP35：对账开始 / 收口各一条（只有条数与结论，不带变更内容）
+      emit(
+        'reconcile.started',
+        { pending: queue.length, outbound_halted: halt.isHalted('outbound') },
+        clock.now(),
+      )
       const applied: string[] = []
       const failed: string[] = []
       const unresolved: string[] = []
@@ -176,6 +186,18 @@ export function createReconcileGuard(options: ReconcileGuardOptions): ReconcileG
         unresolved,
       }
       if (state === 'done') release(report)
+      emit(
+        'reconcile.finished',
+        {
+          state,
+          checked: report.checked,
+          applied: applied.length,
+          failed: failed.length,
+          unresolved: unresolved.length,
+          outbound_halted: halt.isHalted('outbound'),
+        },
+        clock.now(),
+      )
       return { ...report, outbound_halted: halt.isHalted('outbound') }
     },
   }
