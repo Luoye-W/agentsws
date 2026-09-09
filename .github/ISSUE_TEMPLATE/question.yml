@@ -1,0 +1,44 @@
+name: Question / 提问
+description: You could not work something out from the docs.
+title: 'question: '
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        中文或英文都可以 / Chinese or English, both fine.
+
+        Places the answer might already be:
+
+        - [`README.md`](https://github.com/Luoye-W/agentsws/blob/main/README.md) — what it
+          is, the 30-minute path, and an honest status table
+        - [`docs/ARCHITECTURE.md`](https://github.com/Luoye-W/agentsws/blob/main/docs/ARCHITECTURE.md)
+          — the design in English: layers, contracts, runtimes, approvals, security model
+        - [`docs/README.md`](https://github.com/Luoye-W/agentsws/blob/main/docs/README.md)
+          — an index of the 38 Chinese design documents, one line each
+        - [`CONTRIBUTING.md`](https://github.com/Luoye-W/agentsws/blob/main/CONTRIBUTING.md)
+          — how to develop against this repo
+
+        If the docs were wrong or missing, say so — a question that turns into a doc fix
+        is one of the more useful issues you can file.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+
+  - type: textarea
+    id: looked
+    attributes:
+      label: Where you already looked
+      description: Which doc or file, and what was unclear or absent there.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: |
+        Optional. What you are trying to build or run, and whether you are on the
+        simulation (all stand-ins) or on real accounts.
