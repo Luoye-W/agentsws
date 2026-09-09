@@ -82,6 +82,22 @@
         "tool_calls": 2
       }
     },
+    "ops/one-day": {
+      "metrics": {
+        "adoption_rate": 1,
+        "applied_changes": 0,
+        "blocked_proposals": 0,
+        "guardrail_hits": 0,
+        "intervention_rate": 0,
+        "knowledge_gaps": 0,
+        "outbound_sent": 0,
+        "queue_latency_ms": 1500000,
+        "runs_failed": 0,
+        "staged_changes": 0,
+        "tokens_per_item": 0,
+        "tool_calls": 0
+      }
+    },
     "security/injected-instruction": {
       "metrics": {
         "adoption_rate": 1,

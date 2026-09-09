@@ -62,6 +62,7 @@ import { createTxn, dedupeKey } from '@agentsws/txn'
 import { SimulationError } from './errors.js'
 import type { BlockedRecord, NotificationRecord, OutageWindow } from './evidence.js'
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
+import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 
 const CUSTOMERS = defineCollection({
   name: 'customers',
@@ -148,6 +149,13 @@ export interface World {
   blocked: BlockedRecord[]
   outages: OutageWindow[]
   runContexts: Map<string, RunContext>
+  /**
+   * 25 一天的例行公事（早上计划卡 / 晚上复盘卡 / 复盘后的接力）。
+   * 场景里出现 `routine.start` 才装；不装的世界一条定时任务都没有，
+   * 调度器每一拍空转，原有场景的指标一个不变。
+   */
+  routine?: Routine
+  startRoutine(options?: RoutineOptions): Routine
   gateway(): ModelGatewayApi
   /** 场景 `inject.budget`：换一套预算重建网关（BudgetLedger 的 caps 在构造时固定）。 */
   setBudget(budget: ModelGatewayPolicy['budget']): void
@@ -729,6 +737,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     blocked,
     outages,
     runContexts,
+    startRoutine(routineOptions) {
+      if (world.routine !== undefined) return world.routine
+      const routine = installDailyRoutine(world, routineOptions)
+      world.routine = routine
+      return routine
+    },
     gateway: () => gateway,
     setBudget(budget) {
       gateway = buildGateway(budget)

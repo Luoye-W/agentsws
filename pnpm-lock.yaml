@@ -557,12 +557,18 @@ importers:
       '@agentsws/runtime-direct':
         specifier: workspace:*
         version: link:../runtime-direct
+      '@agentsws/schedule':
+        specifier: workspace:*
+        version: link:../schedule
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../txn
+      '@agentsws/work':
+        specifier: workspace:*
+        version: link:../work
       yaml:
         specifier: ^2.5.0
         version: 2.9.0

@@ -159,6 +159,12 @@ async function execute(
 
   const tick = async (): Promise<void> => {
     await standIns.actors.tick()
+    // 25 §4：合成时钟每推进一步驱动一次调度器与流程引擎（真实进程里是 setInterval）
+    const routine = world.routine
+    if (routine !== undefined) {
+      await routine.scheduler.runDue(clock.now())
+      await routine.workflows.tick(clock.now())
+    }
     await drainApprovals()
     await txn.approvals.expire(clock.now())
     // 模型恢复后把冻结期间的工作项重跑（17 §5.7 同 idempotency_key 不重复出结果）
@@ -479,9 +485,22 @@ async function execute(
         world.appendEvent('simulation.model_outage', { duration_ms: ms })
         return
       }
-      default: {
+      case 'inject.budget': {
         world.setBudget(event.budget)
         world.appendEvent('simulation.budget_changed', { ...event.budget })
+        return
+      }
+      default: {
+        // 25：装上一天的例行公事；不出现这条事件的场景一条定时任务都没有
+        const routine = world.startRoutine({
+          ...(event.routine.plan_hour === undefined ? {} : { planHour: event.routine.plan_hour }),
+          ...(event.routine.review_hour === undefined
+            ? {}
+            : { reviewHour: event.routine.review_hour }),
+        })
+        world.appendEvent('simulation.routine_started', {
+          tasks: routine.scheduler.list({ workspace_id: world.workspace_id }).map((t) => t.handler),
+        })
         return
       }
     }

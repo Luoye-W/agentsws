@@ -74,6 +74,7 @@ const EVENT_KEYS = [
   'inject.fault',
   'model.outage',
   'inject.budget',
+  'routine.start',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -91,6 +92,9 @@ const EXPECTED_KEYS = [
   'run_failed_codes',
   'notifications_to',
   'blocked_rules',
+  'event_types',
+  'approval_kinds',
+  'scheduled_handlers',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -208,6 +212,21 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'routine.start': {
+      known(source, `${path}.${key}`, body, ['plan_hour', 'review_hour'])
+      return {
+        at,
+        type: 'routine.start',
+        routine: {
+          ...(body.plan_hour === undefined
+            ? {}
+            : { plan_hour: num(source, `${path}.${key}.plan_hour`, body.plan_hour) }),
+          ...(body.review_hour === undefined
+            ? {}
+            : { review_hour: num(source, `${path}.${key}.review_hour`, body.review_hour) }),
+        },
+      }
+    }
     case 'model.outage': {
       known(source, `${path}.${key}`, body, ['duration'])
       const duration = optStr(source, `${path}.${key}.duration`, body.duration)
@@ -308,6 +327,19 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (notified !== undefined) out.notifications_to = notified
   const blocked = optStrList(source, 'expected.blocked_rules', raw.blocked_rules)
   if (blocked !== undefined) out.blocked_rules = blocked
+  const eventTypes = optStrList(source, 'expected.event_types', raw.event_types)
+  if (eventTypes !== undefined) out.event_types = eventTypes
+  if (raw.approval_kinds !== undefined) {
+    const k = raw.approval_kinds
+    if (!isRec(k)) fail(source, 'expected.approval_kinds', '必须是对象')
+    const kinds: Record<string, number | string> = {}
+    for (const [name, v] of Object.entries(k)) {
+      kinds[name] = numeric(source, `expected.approval_kinds.${name}`, v)
+    }
+    out.approval_kinds = kinds
+  }
+  const handlers = optStrList(source, 'expected.scheduled_handlers', raw.scheduled_handlers)
+  if (handlers !== undefined) out.scheduled_handlers = handlers
   return out
 }
 

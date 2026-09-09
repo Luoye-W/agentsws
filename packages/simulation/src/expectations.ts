@@ -221,6 +221,41 @@ export function checkExpectations(
       missing.length === 0 ? `通知到 [${[...to].join(', ')}]` : `没通知到：${missing.join(', ')}`,
     )
   }
+  if (expected.event_types !== undefined) {
+    const seen = new Set(evidence.events.map((e) => e.type))
+    const missing = expected.event_types.filter((t) => !seen.has(t))
+    add(
+      'event_types',
+      missing.length === 0,
+      missing.length === 0 ? '都出现过' : `事件日志里没有：${missing.join(', ')}`,
+    )
+  }
+  if (expected.approval_kinds !== undefined) {
+    for (const [kind, assertion] of Object.entries(expected.approval_kinds)) {
+      const n = evidence.approvals.filter((i) => i.kind === kind).length
+      add(
+        `approval_kinds.${kind}`,
+        matchNumeric(n, assertion),
+        `${kind} × ${n}（期望 ${String(assertion)}）`,
+      )
+    }
+  }
+  if (expected.scheduled_handlers !== undefined) {
+    // 定时任务不在 evidence 里（它属于调度器），从 `schedule.created` 事件看
+    const registered = new Set(
+      evidence.events
+        .filter((e) => e.type === 'schedule.created')
+        .map((e) => String(payloadOf(e).handler)),
+    )
+    const missing = expected.scheduled_handlers.filter((h) => !registered.has(h))
+    add(
+      'scheduled_handlers',
+      missing.length === 0,
+      missing.length === 0
+        ? `已注册 [${[...registered].join(', ')}]`
+        : `没注册：${missing.join(', ')}`,
+    )
+  }
   if (expected.blocked_rules !== undefined) {
     const rules = new Set(evidence.blocked.map((b) => b.rule))
     const missing = expected.blocked_rules.filter((r) => !rules.has(r))

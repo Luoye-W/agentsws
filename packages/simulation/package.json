@@ -27,8 +27,10 @@
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/roles": "workspace:*",
     "@agentsws/runtime-direct": "workspace:*",
+    "@agentsws/schedule": "workspace:*",
     "@agentsws/stand-ins": "workspace:*",
     "@agentsws/txn": "workspace:*",
+    "@agentsws/work": "workspace:*",
     "yaml": "^2.5.0"
   }
 }

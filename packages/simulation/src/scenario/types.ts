@@ -50,6 +50,8 @@ export type ScenarioEvent =
   | { at: string; type: 'inject.fault'; fault: ScenarioFault }
   | { at: string; type: 'model.outage'; outage: ScenarioOutage }
   | { at: string; type: 'inject.budget'; budget: ScenarioBudget }
+  /** 25：装上「一天的例行公事」（早上计划卡 / 晚上复盘卡 / 复盘后的接力）。 */
+  | { at: string; type: 'routine.start'; routine: ScenarioRoutine }
 
 export interface ScenarioInbound {
   from: string
@@ -79,6 +81,12 @@ export interface ScenarioFault {
 export interface ScenarioOutage {
   /** `2h` / `30m`；缺省 1h。 */
   duration?: string
+}
+
+/** 25：例行公事的两个钟点（本地时区）。 */
+export interface ScenarioRoutine {
+  plan_hour?: number
+  review_hour?: number
 }
 
 /** 26 扩展（本包）：把模型预算压到某个值，用来跑"预算耗尽 → 熔断"。 */
@@ -117,6 +125,12 @@ export interface ScenarioExpected {
   notifications_to?: string[]
   /** 26 扩展：被门禁挡下的规则（`authorization_check` 等），毒样本场景断言用。 */
   blocked_rules?: string[]
+  /** 25 扩展：这些类型的事件至少各出现一次（`schedule.fired` 之类）。 */
+  event_types?: string[]
+  /** 25 扩展：按 kind 数审批项（`daily_plan: 1`、`review: '>=1'`）。 */
+  approval_kinds?: Record<string, NumericAssertion>
+  /** 25 扩展：这些处理器至少各有一条定时任务（证明「接力已注册」）。 */
+  scheduled_handlers?: string[]
 }
 
 export interface Scenario {
