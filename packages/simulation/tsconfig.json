@@ -1,49 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
-  },
+  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
   "include": ["src"],
   "references": [
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../core"
-    },
-    {
-      "path": "../data"
-    },
-    {
-      "path": "../dsh-adapter"
-    },
-    {
-      "path": "../kernel"
-    },
-    {
-      "path": "../knowledge"
-    },
-    {
-      "path": "../model-gateway"
-    },
-    {
-      "path": "../roles"
-    },
-    {
-      "path": "../runtime-direct"
-    },
-    {
-      "path": "../schedule"
-    },
-    {
-      "path": "../stand-ins"
-    },
-    {
-      "path": "../txn"
-    },
-    {
-      "path": "../work"
-    }
+    { "path": "../contracts" },
+    { "path": "../core" },
+    { "path": "../data" },
+    { "path": "../dsh-adapter" },
+    { "path": "../kernel" },
+    { "path": "../knowledge" },
+    { "path": "../model-gateway" },
+    { "path": "../roles" },
+    { "path": "../runtime-direct" },
+    { "path": "../schedule" },
+    { "path": "../stand-ins" },
+    { "path": "../txn" },
+    { "path": "../work" }
   ]
 }

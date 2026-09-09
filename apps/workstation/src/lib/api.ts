@@ -195,7 +195,7 @@ export function clearToken(): void {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
   /** 不带 Authorization（登录那两条） */
   anonymous?: boolean
@@ -314,6 +314,33 @@ export const getPositionView = (id: string, range: RangeName): Promise<ViewData>
 
 export const getPositionRecords = (id: string): Promise<RecordsData> =>
   api<RecordsData>(`/v1/positions/${encodeURIComponent(id)}/records`, { assignment: id })
+
+/** 25 定时任务（列表只读 + 暂停 / 恢复）。 */
+export interface ScheduledTaskRow {
+  id: string
+  title?: string
+  handler?: string
+  trigger: { kind: string; expr?: string; tz?: string; at?: string; every_ms?: number }
+  state: string
+  fire_count: number
+  next_fire_at?: string
+  last_fire_at?: string
+  last_result?: string
+}
+
+export const getSchedules = (assignment: string): Promise<ScheduledTaskRow[]> =>
+  api<ScheduledTaskRow[]>('/v1/schedules', { assignment })
+
+export const patchSchedule = (
+  id: string,
+  patch: { action: 'pause' | 'resume' },
+  assignment: string,
+): Promise<ScheduledTaskRow> =>
+  api<ScheduledTaskRow>(`/v1/schedules/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: patch,
+    assignment,
+  })
 
 export const getBlockData = (
   id: string,
