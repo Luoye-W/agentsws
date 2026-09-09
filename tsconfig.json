@@ -62,6 +62,9 @@
       "path": "packages/schedule"
     },
     {
+      "path": "packages/sdk"
+    },
+    {
       "path": "packages/simulation"
     },
     {

@@ -56,6 +56,13 @@ jobs:
       - name: biome check
         run: pnpm exec biome check .
 
+      # WP33：SDK 是从路由声明生成并签进仓库的。这里重生成一遍再比 diff——
+      # 「改了路由但忘了重生成」会红在这里，而不是等第三方接的时候才发现。
+      - name: gen-sdk（生成后无 diff）
+        run: |
+          node scripts/gen-sdk.mjs
+          git diff --exit-code -- packages/sdk/openapi.json packages/sdk/src/schema.ts
+
       # 覆盖率写到 out/ 下：biome.json 已经忽略 out/，否则下一次 `biome check .`
       # 会去 lint 覆盖率报告自带的那些 js
       - name: vitest

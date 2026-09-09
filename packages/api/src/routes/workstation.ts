@@ -343,6 +343,68 @@ export function workstationRoutes(): Route[] {
     route(
       {
         method: 'get',
+        path: '/v1/positions/:id/summary',
+        operationId: 'getPositionSummary',
+        summary: '岗位页三个 Tab 各自的计数（首屏一发请求就够，不用三条各拉一遍）',
+        tag: 'workstation',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          { name: 'id', in: 'path', required: true, description: 'position_id = assignment_id' },
+          RANGE_PARAM,
+        ],
+        returns: '{ position, range, counts, sections }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const actor: WorkstationActor = { workspace_id: p.workspace_id, person_id: p.person_id }
+        const position = await positionOf(c, deps, actor)
+        const range = rangeOf(c)
+        const w = workstationOf(deps)
+        // 三个 Tab 读的是同一份 QueryContext（29 原则 ③：数都在服务端算）——
+        // 这条路由存在的全部理由就是「只算一次」。
+        const ctx = await w.queryContext(actor, position, range)
+        const cards = await cardsOf(deps, actor, position)
+        const filtered = filterCards(cards, { position_id: position.position_id })
+        const sections = assembleView(position.role_id as RoleId, ctx)
+          .map((s) => ({
+            source: s.source,
+            connected: s.connected,
+            blocks: s.blocks.filter((b: BlockDef) => allowed(deps, position.position_id, b.source))
+              .length,
+          }))
+          .filter((s) => s.blocks > 0)
+        let records = 0
+        try {
+          const data = computeBlock('records.timeline', ctx, range) as {
+            payload?: { rows?: unknown[] }
+          }
+          records = Array.isArray(data.payload?.rows) ? data.payload.rows.length : 0
+        } catch (err) {
+          // 记录 Tab 的块算不出来不该让整张摘要 500：这个计数留 0，其余照给
+          if (!(err instanceof DeckError)) throw err
+        }
+        return ok(c, {
+          position,
+          range,
+          counts: {
+            cards: filtered.counts.total,
+            folded: foldCards(filtered.cards).length,
+            pinned_p0: filtered.pinned_p0.length,
+            customer_waiting: filtered.counts.customer_waiting,
+            nobody_waiting: filtered.counts.nobody_waiting,
+            sections: sections.length,
+            blocks: sections.reduce((n, s) => n + s.blocks, 0),
+            records,
+          },
+          sections,
+        })
+      },
+    ),
+    route(
+      {
+        method: 'get',
         path: '/v1/positions/:id/view',
         operationId: 'getPositionView',
         summary: '岗位的面板 Tab：按数据源分块（店铺后台 / GA4 / Search Console / 广告后台）',

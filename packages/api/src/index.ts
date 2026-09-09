@@ -4,7 +4,7 @@
  * 框架无关的路由声明（鉴权元组 / Assignment / send-apply 标记）+ 一个 Hono 实现，
  * 由 `apps/server` 用具体模块装配。本包不 import 任何实现包，只依赖契约类型。
  */
-export { collectRoutes, createGateway, type Gateway, OPENAPI_PATH } from './app.js'
+export { bearerToken, collectRoutes, createGateway, type Gateway, OPENAPI_PATH } from './app.js'
 export {
   ApiError,
   type ApiErrorOptions,
@@ -53,7 +53,12 @@ export {
   sessionCookie,
   type TokenKind,
 } from './identity.js'
-export { buildOpenApi, type OpenApiDocument, toOpenApiPath } from './openapi.js'
+export {
+  asyncApiFragment,
+  buildOpenApi,
+  type OpenApiDocument,
+  toOpenApiPath,
+} from './openapi.js'
 export { DEFAULT_RATE_LIMITS, type RateLimitVerdict, TokenBucketLimiter } from './rate-limit.js'
 export {
   type AuthzSpec,
@@ -87,6 +92,16 @@ export type {
   SubmitConnectionInput,
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
+export {
+  AssignmentVisibility,
+  canReadAll,
+  DEFAULT_EVENT_LIMIT,
+  type EventQuery,
+  eventRoutes,
+  parseSince,
+  parseUntil,
+  readVisibleEvents,
+} from './routes/events.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export type {
@@ -150,6 +165,27 @@ export {
 } from './routes/work.js'
 export { fromDeckError, workstationRoutes } from './routes/workstation.js'
 export {
+  classify,
+  HALT_ONLY_EVENT,
+  parseSubprotocols,
+  summarize,
+  WS_BEARER_PREFIX,
+  WS_CLOSE,
+  WS_DEFAULT_PREFIXES,
+  WS_SUBPROTOCOL,
+  type WsClientMessage,
+  type WsControlFrame,
+  type WsEventFrame,
+  type WsFrame,
+  type WsFrameType,
+  type WsOptions,
+  WsSession,
+  type WsSink,
+  type WsSubscribeMessage,
+  wsOptions,
+  wsRoutes,
+} from './routes/ws.js'
+export {
   createSqliteIdempotencyStore,
   type SqliteIdempotencyOptions,
   SqliteIdempotencyStore,
@@ -165,11 +201,18 @@ export type {
   ChangesPort,
   EffectiveConfigLike,
   EventLogPort,
+  GatewayActor,
   GatewayDeps,
   GatewayOptions,
   GuardrailEvaluateInput,
   GuardrailPort,
+  IdentityTokenInfo,
+  KnowledgeGap,
+  KnowledgeGapAnswer,
+  KnowledgeGapInput,
+  KnowledgeGapStatus,
   KnowledgePort,
+  KnowledgeSourceInput,
   ModulesPort,
   PositionSummary,
   Principal,
@@ -187,6 +230,7 @@ export type {
   SkillProposalSummary,
   SkillSummary,
   SkillsPort,
+  TokenInfo,
   TraceScope,
   WorkflowInstanceView,
   WorkflowListQuery,
@@ -194,3 +238,4 @@ export type {
   WorkstationPort,
   WorkstationRange,
 } from './types.js'
+export { hasTokenInfo } from './types.js'

@@ -15,5 +15,9 @@
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "test", "vite.config.ts"],
-  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/deck" }]
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/deck" },
+    { "path": "../../packages/sdk" }
+  ]
 }

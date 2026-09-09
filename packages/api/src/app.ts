@@ -30,6 +30,7 @@ import { secretRoutes } from './routes/secrets.js'
 import { skillRoutes } from './routes/skills.js'
 import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
+import { wsRoutes } from './routes/ws.js'
 import type { GatewayDeps } from './types.js'
 
 export interface Gateway {
@@ -44,6 +45,12 @@ export interface Gateway {
 
 /** 网关自身的元数据路径，唯一不在 /v1 之下的东西（服务发现，非工作台功能）。 */
 export const OPENAPI_PATH = '/openapi.json'
+
+/** `Authorization: Bearer <t>` / 裸 token / cookie 值 → token 本身。 */
+export function bearerToken(raw: string): string | undefined {
+  const value = raw.startsWith('Bearer ') ? raw.slice('Bearer '.length).trim() : raw.trim()
+  return value === '' ? undefined : value
+}
 
 export function collectRoutes(): Route[] {
   return [
@@ -72,6 +79,8 @@ export function collectRoutes(): Route[] {
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),
     ...eventRoutes(),
+    // WP33 WebSocket 事件流：`/v1/ws` 的 HTTP 面（真正的升级由宿主在 http.Server 上做）
+    ...wsRoutes(),
     // 36 工作台面：首页 / 岗位 / 积木；`/v1/positions/:id/...` 里的 id 就是 assignment_id
     ...workstationRoutes(),
     // 37 工作模型：事项 / 目标 / 待办 / 日历 / 计划 / 复盘
@@ -134,13 +143,21 @@ export function createGateway(deps: GatewayDeps): Gateway {
         : undefined
     if ((header === undefined || header.trim() === '') && cookie === undefined)
       throw new ApiError('unauthenticated', '缺少 Authorization: Bearer <token> 或会话 cookie')
-    const principal = await deps.identity.authenticate(header ?? (cookie as string))
+    const raw = header ?? (cookie as string)
+    const principal = await deps.identity.authenticate(raw)
     if (!principal) throw new ApiError('unauthenticated', '凭据无效或已过期')
     // 20 §3：所有 token 绑 workspace_id；跨工作区一律显式切换。
     const explicit = c.req.header('X-Workspace')?.trim()
     if (explicit !== undefined && explicit !== '' && explicit !== principal.workspace_id)
       throw new ApiError('forbidden', '凭据不属于 X-Workspace 指定的工作区')
-    c.set('rctx', { ...c.get('rctx'), principal })
+    // token 原文只放进请求上下文，给 `POST /v1/auth/logout` 撤销**这一张**用；
+    // 不进日志、不进响应、不进 OpenAPI（21 §5 秘密不出）。
+    const token = bearerToken(raw)
+    c.set('rctx', {
+      ...c.get('rctx'),
+      principal,
+      ...(token === undefined ? {} : { token }),
+    })
     await next()
   }
 

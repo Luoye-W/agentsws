@@ -5,7 +5,9 @@
  * 只监听 127.0.0.1；一个进程一个端口（`AGENTSWS_PORT`，默认 4317）。
  */
 import { mkdirSync } from 'node:fs'
+import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
+import type { Duplex } from 'node:stream'
 import {
   ApiError,
   createAsyncTraceScope,
@@ -18,11 +20,16 @@ import {
   type GuardrailPort,
   type KnowledgePort,
   type LocalIdentityService,
+  parseSubprotocols,
   type RolesPort,
+  readCookie,
+  SESSION_COOKIE,
   type SkillsPort,
   SqliteIdempotencyStore,
   SqliteIdentityService,
   type TraceScope,
+  WS_SUBPROTOCOL,
+  WsSession,
 } from '@agentsws/api'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
@@ -52,6 +59,7 @@ import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
+import { WebSocketServer } from 'ws'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
@@ -298,6 +306,98 @@ export function mergeEventLogs(base: EventLogPort, extra?: EventLogPort): EventL
         yield e
       }
     },
+  }
+}
+
+/** `/v1/ws` 的路径（网关那边的路由声明与这里必须是同一个字面量）。 */
+const WS_PATH = '/v1/ws'
+
+/**
+ * 28 §2 WebSocket 事件流的**传输层**：在 `@hono/node-server` 返回的 `http.Server` 的
+ * `upgrade` 事件上握手，成了就把这条连接交给 `WsSession`（协议逻辑全在 `@agentsws/api`）。
+ *
+ * 为什么不走 `hono/ws`：网关的中间件链（急停 → 鉴权限流 → 出站急停 → 绑 Assignment → 幂等）
+ * 全部以 `Response` 为结果，拿不到底层 socket；而 Node 档下 `@hono/node-ws` 本来也是
+ * `ws` 的一层包装。这样分：协议逻辑可单测、换宿主只换这一个函数。
+ *
+ * 鉴权与 REST 完全同一套（`IdentityService.authenticate`）：
+ * - 浏览器同源：HttpOnly 会话 cookie，握手请求自带；
+ * - 其他调用方：`Sec-WebSocket-Protocol: agentsws.v1, agentsws.bearer.<token>`。
+ *   **token 一次都不进 URL**（20 §3 / 21 §5：URL 会进历史、进代理日志、进 Referer）。
+ */
+function mountEventStream(input: {
+  httpServer: ServerType
+  deps: GatewayDeps
+  cookieName: string
+}): () => Promise<void> {
+  const { deps, cookieName } = input
+  const wss = new WebSocketServer({
+    noServer: true,
+    // 浏览器要求服务端回一个**它提过的**子协议，否则连接直接失败
+    handleProtocols: (protocols) => (protocols.has(WS_SUBPROTOCOL) ? WS_SUBPROTOCOL : false),
+  })
+  const timers = new Set<NodeJS.Timeout>()
+
+  const deny = (socket: Duplex, status: number, text: string): void => {
+    socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`)
+    socket.destroy()
+  }
+
+  const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
+    // `req.url` 只用来认路径；凭据不从这里读
+    const path = (req.url ?? '').split('?')[0]
+    if (path !== WS_PATH) return
+    void (async () => {
+      const { token } = parseSubprotocols(req.headers['sec-websocket-protocol'])
+      const cookie = readCookie(
+        Array.isArray(req.headers.cookie) ? req.headers.cookie[0] : req.headers.cookie,
+        cookieName,
+      )
+      const credential = token ?? cookie
+      if (credential === undefined) return deny(socket, 401, 'Unauthorized')
+      const principal = await deps.identity.authenticate(credential)
+      if (!principal) return deny(socket, 401, 'Unauthorized')
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const session = new WsSession(deps, principal, {
+          send: (text) => {
+            if (ws.readyState === ws.OPEN) ws.send(text)
+          },
+          close: (code, reason) => {
+            ws.close(code, reason)
+          },
+        })
+        // 巡检：事件日志没有推送口，这里按固定间隔读增量（间隔进 CONTROL/ready，客户端知道）
+        const timer = setInterval(() => {
+          void session.pump()
+        }, session.pollIntervalMs)
+        timer.unref?.()
+        timers.add(timer)
+        ws.on('message', (raw: unknown) => {
+          void session.handle(String(raw))
+        })
+        const stop = (): void => {
+          clearInterval(timer)
+          timers.delete(timer)
+        }
+        ws.on('close', stop)
+        ws.on('error', stop)
+      })
+    })().catch(() => {
+      deny(socket, 500, 'Internal Server Error')
+    })
+  }
+
+  input.httpServer.on('upgrade', onUpgrade)
+  return async () => {
+    input.httpServer.off('upgrade', onUpgrade)
+    for (const t of timers) clearInterval(t)
+    timers.clear()
+    for (const client of wss.clients) client.terminate()
+    await new Promise<void>((resolve) => {
+      wss.close(() => {
+        resolve()
+      })
+    })
   }
 }
 
@@ -750,6 +850,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cards: (filter, actor) => knowledge.store.list(filter, actor),
     card: (id, actor) => knowledge.store.get(id, actor),
     health: (workspace_id) => knowledge.store.health(workspace_id),
+    // WP33 / 19 §3：引用计数。`sources` / `gaps` 那几个可选面还没有落库的地方
+    // （docs/38 §1 的知识缺口），装不上，那几条路由回 501。
+    cite: (_actor, fact_card_id, run_id) => knowledge.retrieval.cite(fact_card_id, run_id),
   }
 
   const skillsPort: SkillsPort = {
@@ -924,6 +1027,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   }
   let httpServer: ServerType | undefined
+  let unmountWs: (() => Promise<void>) | undefined
   let closed = false
 
   const server: Server = {
@@ -965,6 +1069,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 15 §5.8：接活之前先把账对完。`engage()` 已经在装配时把出站闸拉下来了，
       // 这里是慢的那一半（要查外部系统）；查不清的留成人工对账项，出站保持停着。
       await reconcile.run()
+      // WP33：WebSocket 事件流挂在同一个端口的 upgrade 上（28 §2 唯一入口）
+      unmountWs = mountEventStream({
+        httpServer: started,
+        deps,
+        cookieName: deps.options?.sessionCookieName ?? SESSION_COOKIE,
+      })
       // 25 §4：进程真的起来了才开始巡检（测试里 `scheduleIntervalMs: 0` 关掉）
       schedule.start()
       const address = started.address()
@@ -986,6 +1096,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     async close() {
       if (closed) return
       closed = true
+      if (unmountWs) {
+        // 先把 WS 收掉：否则还开着的连接会让 http.Server 的 close 一直挂着
+        await unmountWs()
+        unmountWs = undefined
+      }
       if (httpServer) {
         await new Promise<void>((resolve, reject) => {
           httpServer?.close((err) => (err ? reject(err) : resolve()))

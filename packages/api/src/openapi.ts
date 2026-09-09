@@ -17,6 +17,14 @@ const ERROR_SCHEMA = {
   },
 } as const
 
+/** 28 §2 的统一成功信封。 */
+const ENVELOPE_SCHEMA = {
+  type: 'object',
+  required: ['data', 'trace_id'],
+  properties: { data: {}, trace_id: { type: 'string' } },
+  description: '统一成功信封；`data` 的形状见每条路由的 `x-returns`',
+} as const
+
 /** `/v1/approvals/:id` → `/v1/approvals/{id}` */
 export function toOpenApiPath(path: string): string {
   return path.replace(/:([A-Za-z0-9_]+)/g, '{$1}')
@@ -40,6 +48,114 @@ export interface OpenApiDocument {
   servers: { url: string }[]
   components: Record<string, unknown>
   paths: Record<string, Record<string, unknown>>
+  /** WebSocket 那条流没法用 OpenAPI 描述，挂一段 AsyncAPI 2.6 片段（28 §2 / 29 §6）。 */
+  'x-asyncapi': Record<string, unknown>
+}
+
+/** WS 帧的 schema（29 §6 的 TEXT / TOOL_CALL / STATE / CUSTOM，外加一类 CONTROL）。 */
+const WS_FRAME_SCHEMA = {
+  oneOf: [
+    {
+      type: 'object',
+      title: 'EventFrame',
+      description: '**只有摘要，没有正文**：正文按本人身份去 /v1 取（19 §3 过滤下推）',
+      required: ['type', 'id', 'name', 'at'],
+      properties: {
+        type: { type: 'string', enum: ['TEXT', 'TOOL_CALL', 'STATE', 'CUSTOM'] },
+        id: { type: 'string', description: '事件日志 id（ulid）；重连时当 since' },
+        name: { type: 'string', description: '事件日志里的原始类型名，如 approval.decided' },
+        at: { type: 'string', format: 'date-time' },
+        subject: {
+          type: 'object',
+          required: ['type', 'id'],
+          properties: { type: { type: 'string' }, id: { type: 'string' } },
+        },
+        run_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      title: 'ControlFrame',
+      required: ['type', 'name', 'at'],
+      properties: {
+        type: { type: 'string', const: 'CONTROL' },
+        name: { type: 'string', enum: ['ready', 'error', 'halted', 'dropped', 'pong', 'closing'] },
+        at: { type: 'string', format: 'date-time' },
+        detail: { type: 'object' },
+      },
+      additionalProperties: false,
+    },
+  ],
+} as const
+
+const WS_CLIENT_SCHEMA = {
+  oneOf: [
+    {
+      type: 'object',
+      title: 'Subscribe',
+      required: ['op', 'assignment_id'],
+      properties: {
+        op: { type: 'string', const: 'subscribe' },
+        assignment_id: { type: 'string', description: '31 §3.1：一次连接一个 Assignment' },
+        since: { type: 'string', description: '断线重连补拉：上次收到的最后一条事件 id' },
+        types: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '事件类型前缀（approval. / change. …）；不给用默认集合',
+        },
+      },
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      title: 'Ping',
+      required: ['op'],
+      properties: { op: { type: 'string', const: 'ping' } },
+      additionalProperties: false,
+    },
+  ],
+} as const
+
+/**
+ * `GET /v1/ws` 的 AsyncAPI 2.6 片段。
+ *
+ * 第三方前端只靠 `openapi.json` 就能接上事件流：这一段说清了怎么鉴权、发什么、收什么。
+ */
+export function asyncApiFragment(version: string): Record<string, unknown> {
+  return {
+    asyncapi: '2.6.0',
+    info: {
+      title: 'agentsws 事件流',
+      version,
+      description:
+        'WebSocket，路径 `/v1/ws`，子协议 `agentsws.v1`。鉴权与 REST 同一套：同源浏览器靠 HttpOnly ' +
+        '会话 cookie（握手请求自带），其他调用方用 `Sec-WebSocket-Protocol: agentsws.v1, ' +
+        'agentsws.bearer.<token>`——**token 一次都不进 URL**（20 §3 / 21 §5）。' +
+        '连上后先发一帧 subscribe，服务端回 `CONTROL/ready`，之后按 workspace + assignment 推摘要。' +
+        '急停 all 期间只推 `halt.changed`。每连接限速，超限合并成一帧 `CONTROL/dropped { count }`，' +
+        '客户端据此整体重取。',
+    },
+    servers: {
+      local: { url: '127.0.0.1:4317', protocol: 'ws', description: '本地档只听回环口' },
+    },
+    channels: {
+      '/v1/ws': {
+        description: '可见性与 `GET /v1/events` 完全一致：非 owner 只看得到与本岗位相关的。',
+        publish: {
+          operationId: 'wsSubscribe',
+          summary: '客户端 → 服务端',
+          message: { name: 'ClientMessage', payload: WS_CLIENT_SCHEMA },
+        },
+        subscribe: {
+          operationId: 'wsFrames',
+          summary: '服务端 → 客户端',
+          message: { name: 'Frame', payload: WS_FRAME_SCHEMA },
+        },
+      },
+    },
+  }
 }
 
 export function buildOpenApi(routes: Route[], version: string): OpenApiDocument {
@@ -86,17 +202,13 @@ export function buildOpenApi(routes: Route[], version: string): OpenApiDocument 
         schema: { type: 'string' },
       })
 
+    // 成功信封与错误信封都走 `$ref`：一百来条路由 × 六个状态码，内联一份就是几百个副本，
+    // 生成出来的 openapi.json 会大到没法读也没法 diff。
     const responses: Record<string, unknown> = {
       '200': {
         description: spec.returns,
         content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              required: ['data', 'trace_id'],
-              properties: { data: {}, trace_id: { type: 'string' } },
-            },
-          },
+          'application/json': { schema: { $ref: '#/components/schemas/Envelope' } },
         },
       },
     }
@@ -112,7 +224,7 @@ export function buildOpenApi(routes: Route[], version: string): OpenApiDocument 
     for (const status of [...errorStatuses].sort((a, b) => a - b))
       responses[String(status)] = {
         description: '统一错误信封（28 §2）',
-        content: { 'application/json': { schema: ERROR_SCHEMA } },
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
       }
 
     const operation: Record<string, unknown> = {
@@ -128,6 +240,7 @@ export function buildOpenApi(routes: Route[], version: string): OpenApiDocument 
           }
         : {}),
       ...(spec.outbound ? { 'x-halt-scope': 'outbound' } : {}),
+      'x-returns': spec.returns,
     }
     if (spec.body)
       operation.requestBody = {
@@ -153,8 +266,14 @@ export function buildOpenApi(routes: Route[], version: string): OpenApiDocument 
       securitySchemes: {
         bearerAuth: { type: 'http', scheme: 'bearer', description: '会话 / API key / 内部凭据' },
       },
-      schemas: { Error: ERROR_SCHEMA },
+      schemas: {
+        Envelope: ENVELOPE_SCHEMA,
+        Error: ERROR_SCHEMA,
+        WsFrame: WS_FRAME_SCHEMA,
+        WsClientMessage: WS_CLIENT_SCHEMA,
+      },
     },
     paths,
+    'x-asyncapi': asyncApiFragment(version),
   }
 }

@@ -30,6 +30,7 @@
   "devDependencies": {
     "@agentsws/contracts": "workspace:*",
     "@agentsws/deck": "workspace:*",
+    "@agentsws/sdk": "workspace:*",
     "@tailwindcss/vite": "^4.0.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",

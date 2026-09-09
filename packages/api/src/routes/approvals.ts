@@ -4,6 +4,7 @@ import type {
   ApprovalKind,
   ApprovalState,
   DecideInput,
+  Diff,
   Todo,
 } from '@agentsws/contracts'
 import { projectCard, resolveDecision } from '@agentsws/deck'
@@ -35,6 +36,16 @@ const DECIDE = {
   range: 'own',
   sensitivity: 'internal',
 } as const
+/**
+ * 人主动建审批项（14 §10 表里第一行「人也可（`kind: policy_change` 等）」）的准入。
+ *
+ * 元组上**该**是 `approval.stage`（提议 ≠ 决定，这正是 SoD 的前提），但 v1 的三个职责包
+ * 里没有一条给 `approval` 域的 `stage`——真给了 `stage` 元组，连售后客服提一条「以后都这样」
+ * 都会 403。所以准入沿用 `read`（能看见自己队列的人可以往里提一张），**写侧的纪律在处理器里**：
+ * 提议者一律是调用者本人、工作区一律是本人的、自动化等级一律 L1 且不自动通过、
+ * 决定与施行仍然走 14 的原状态机。给职责包补 `approval.stage` 的建议写在交付报告里。
+ */
+const PROPOSE = READ
 
 const ACTIONS = ['approve', 'approve_edited', 'reject', 'redirect', 'defer', 'withdraw'] as const
 /**
@@ -68,6 +79,88 @@ const DecideBody = z.object({
   version: z.number().int().nonnegative().optional(),
 })
 
+const KINDS = [
+  'outbound_draft',
+  'staged_change',
+  'knowledge_update',
+  'skill_promotion',
+  'skill_lesson',
+  'claim',
+  'policy_change',
+  'home_suggestion',
+  'scheduled_task',
+  'app_install',
+  'app_upgrade',
+  'app_uninstall',
+  'upstream_upgrade',
+  'join_mapping',
+  'dev_handoff_result',
+  'ai_question',
+  'daily_plan',
+  'review',
+] as const
+
+const ObjectRefBody = z.object({ type: z.string().min(1), id: z.string().min(1) })
+
+/**
+ * `POST /v1/approvals` 的入参。
+ *
+ * 只收「提议者说得清的那些」：种类、关于什么、去重键、标题与人话摘要、载荷、证据、
+ * 收件人与优先级。`id` / `revision` / `state` / `deliveries` / `links.children` /
+ * `execution_snapshot` / `automation.auto_approved` 一律由 14 的实现算——
+ * 让调用方填这些等于把状态机交出去。
+ */
+const CreateBody = z.object({
+  kind: z.enum(KINDS),
+  subject: z.object({
+    object: ObjectRefBody,
+    matter_id: z.string().min(1).optional(),
+    todo_id: z.string().min(1).optional(),
+    conversation_id: z.string().min(1).optional(),
+  }),
+  /** 14 §2 去重：同键再提一次是同一张卡的新 revision，不是第二张卡。 */
+  dedupe_key: z.string().min(1).max(200),
+  title: z.string().min(1).max(200),
+  summary: z.string().min(1).max(2000),
+  payload: z.unknown().optional(),
+  evidence: z
+    .object({
+      run_id: z.string().min(1).optional(),
+      source_events: z.array(z.string().min(1)).optional(),
+      provenance_seen: z.array(ObjectRefBody).optional(),
+      diff: z
+        .object({ before: z.unknown(), after: z.unknown(), summary: z.string().optional() })
+        .optional(),
+    })
+    .optional(),
+  routing: z
+    .object({
+      recipients: z
+        .array(
+          z.object({
+            person: z.string().min(1),
+            via: z.enum(['role_holder', 'scope_manager', 'owner', 'explicit', 'escalation']),
+          }),
+        )
+        .min(1)
+        .optional(),
+      rule: z.enum(['role_holder', 'scope_manager', 'owner', 'explicit', 'unclaimed']).optional(),
+      escalate_after_hours: z
+        .number()
+        .int()
+        .positive()
+        .max(24 * 30)
+        .optional(),
+    })
+    .optional(),
+  priority: z.enum(['immediate', 'queue', 'digest']).optional(),
+  due_at: z.string().min(1).optional(),
+  /** 36 §2 选择题卡。 */
+  options: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) })).optional(),
+  /** 挂在哪张卡下面（`links.parent`）。 */
+  parent: z.string().min(1).optional(),
+})
+
 const BatchDecideBody = z.object({
   entries: z
     .array(z.object({ id: z.string().min(1), decision_token: z.string().min(1).optional() }))
@@ -89,6 +182,14 @@ async function mustGet(deps: GatewayDeps, id: string, workspace_id: string): Pro
 
 const optional = <T>(v: T | undefined, key: string): Record<string, T> =>
   v === undefined ? {} : ({ [key]: v } as Record<string, T>)
+
+/** zod 出来的 `summary?: string | undefined` 与契约的 `summary?: string` 在 exactOptional 下不同型。 */
+function diffOf(
+  d: { before: unknown; after: unknown; summary?: string | undefined } | undefined,
+): Diff | undefined {
+  if (d === undefined) return undefined
+  return { before: d.before, after: d.after, ...optional(d.summary, 'summary') }
+}
 
 /**
  * 36 §2.1 指导的**作用域落地**（原来只是把 scope 原样回给调用方）：
@@ -199,6 +300,84 @@ export function approvalRoutes(): Route[] {
   return [
     route(
       {
+        method: 'post',
+        path: '/v1/approvals',
+        operationId: 'createApproval',
+        summary: '建一张审批项（14 §10：执行器 / 秘书 / 哨兵 / 市场，人也可）',
+        tag: 'approval',
+        auth: 'bearer',
+        assignment: true,
+        authz: PROPOSE,
+        body: CreateBody,
+        returns: 'ApprovalItem（同 dedupe_key 重复提交 → 14 §11 用例 1，revision 递增）',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const assignment = assignmentOf(c)
+        const input = await body(c, CreateBody)
+        // 收件人不给就是本人（个人档最常见的那种：自己给自己提一条待办式的卡）
+        const recipients =
+          input.routing?.recipients ?? ([{ person: p.person_id, via: 'role_holder' }] as const)
+        const rule = input.routing?.rule ?? 'role_holder'
+        const created = await deps.approvals.create({
+          workspace_id: p.workspace_id,
+          schema_version: 1,
+          kind: input.kind,
+          // 职责一律是本次绑定岗位的（31 §3.1：一次请求一个 Assignment，不跨并集）
+          role_id: assignment.role_id,
+          ...(assignment.ranges.length === 0 ? {} : { range: assignment.ranges }),
+          subject: {
+            object: input.subject.object,
+            ...optional(input.subject.matter_id, 'matter_id'),
+            ...optional(input.subject.todo_id, 'todo_id'),
+            ...optional(input.subject.conversation_id, 'conversation_id'),
+          },
+          // 去重键带工作区与提议者：别的工作区 / 别的人的同名提议不会互相顶掉（14 §2）
+          dedupe_key: `${p.workspace_id}:${input.kind}:${input.dedupe_key}`,
+          title: input.title,
+          summary: input.summary,
+          payload: input.payload ?? {},
+          evidence: {
+            source_events: input.evidence?.source_events ?? [],
+            provenance: { seen: input.evidence?.provenance_seen ?? [] },
+            precheck: {},
+            ...optional(input.evidence?.run_id, 'run_id'),
+            ...optional(diffOf(input.evidence?.diff), 'diff'),
+          },
+          // 提议者一律是调用者本人：接口不接受「替别人提」（14 §7 撤回权跟着提议者走）
+          proposer: { kind: 'person', id: p.person_id, assignment_id: assignment.id },
+          // 契约上 `automation` 是 Partial，但 txn 的 create 只做浅合并、不补默认值，
+          // 少了 `mandate_check` 的卡到了 deck 的投影那一步会直接崩。这里给全
+          // （与本文件里 landInstruction 建卡时的做法一致）；建议见交付报告。
+          automation: {
+            level_at_creation: 'L1',
+            auto_approved: false,
+            mandate_check: { within: true, caps_hit: [] },
+            sampling: { selected: false },
+          },
+          routing: {
+            recipients: [...recipients],
+            rule,
+            escalation: {
+              after_hours: input.routing?.escalate_after_hours ?? 24,
+              business_hours: true,
+              chain: ['scope_manager', 'owner'],
+              escalated_at: [],
+            },
+            // 自己提、自己又是唯一收件人时打上 SoD 标记，由 14 按工作区档位裁决
+            // （14 §11 用例 12：个人工作区允许自批并标 self_approved，公司工作区拒）
+            separation_of_duties: recipients.every((r) => r.person === p.person_id),
+          },
+          priority: input.priority ?? 'queue',
+          ...optional(input.due_at, 'due_at'),
+          ...optional(input.options, 'options'),
+          ...(input.parent === undefined ? {} : { links: { parent: input.parent } }),
+        })
+        return ok(c, redactItem(created, p.person_id), 201)
+      },
+    ),
+    route(
+      {
         method: 'get',
         path: '/v1/approvals',
         operationId: 'listApprovals',
@@ -302,6 +481,33 @@ export function approvalRoutes(): Route[] {
         assignmentOf(c)
         const item = await mustGet(deps, param(c, 'id'), p.workspace_id)
         return ok(c, redactItem(item, p.person_id))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/approvals/:id/children',
+        operationId: 'listApprovalChildren',
+        summary: '这张卡下面挂着的卡（14 `links.children`：指导落地的提案、拆出来的子项）',
+        tag: 'approval',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
+        returns: 'ApprovalItem[]（他人的 decision_token 已抹去；跨工作区的子项直接不出）',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        const item = await mustGet(deps, param(c, 'id'), p.workspace_id)
+        const children: ApprovalItem[] = []
+        for (const child_id of item.links.children) {
+          const child = await deps.approvals.get(child_id)
+          // 跨工作区的子项一律不出（与详情一样：不泄漏存在性）
+          if (child && child.workspace_id === p.workspace_id)
+            children.push(redactItem(child, p.person_id))
+        }
+        return ok(c, children)
       },
     ),
     route(

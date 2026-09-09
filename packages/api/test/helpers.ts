@@ -13,6 +13,7 @@ import type {
   GuardrailResult,
   Halt,
   HaltScope,
+  KnowledgeSource,
   LessonRecord,
   ModuleHealth,
   Operation,
@@ -28,6 +29,7 @@ import type {
   EventLogPort,
   GatewayDeps,
   GuardrailPort,
+  KnowledgeGap,
   KnowledgePort,
   ModulesPort,
   PositionSummary,
@@ -35,6 +37,7 @@ import type {
   SkillsPort,
   WorkstationPort,
   WorkstationRange,
+  WsOptions,
 } from '../src/index.js'
 import { createAsyncTraceScope, createGateway, createMemoryIdentity } from '../src/index.js'
 
@@ -143,6 +146,11 @@ export interface Harness {
   approvals: MemoryApprovals
   thrower: ThrowingPort
   workstation: MemoryWorkstation
+  knowledgeState: {
+    sources: KnowledgeSource[]
+    gaps: KnowledgeGap[]
+    cites: { id: string; run_id: string }[]
+  }
   workspace_id: string
   person_id: string
   other_id: string
@@ -150,6 +158,7 @@ export interface Harness {
   otherToken: string
   assignment: Assignment
   weakAssignment: Assignment
+  memberAssignment: Assignment
   item: ApprovalItem
   get(path: string, init?: RequestInit & { assignment?: string | null }): Promise<Response>
   post(
@@ -534,6 +543,22 @@ const SCOPES = [
   },
 ]
 
+/** `packages/roles/roles/common/member.yml` 的那几条：事件日志只有 `own`。 */
+const MEMBER_SCOPES = [
+  {
+    domain: 'approval' as DataDomain,
+    ops: ['read', 'approve'] as Operation[],
+    range: 'own' as Range,
+    max_sensitivity: 'internal' as Sensitivity,
+  },
+  {
+    domain: 'event_log' as DataDomain,
+    ops: ['read'] as Operation[],
+    range: 'own' as Range,
+    max_sensitivity: 'internal' as Sensitivity,
+  },
+]
+
 const RANK: Sensitivity[] = ['public', 'internal', 'confidential', 'restricted']
 const COVERS: Record<Range, Range[]> = {
   workspace: ['workspace', 'assigned', 'own'],
@@ -545,6 +570,9 @@ export async function harness(
   options: {
     rateLimit?: { burst: number; per_second: number }
     exposeMagicLinkToken?: boolean
+    /** 不装 19 §6 的那几个可选面，用来测「没装配 → 501」。 */
+    bareKnowledge?: boolean
+    ws?: WsOptions
   } = {},
 ): Promise<Harness> {
   const clock = makeClock()
@@ -580,19 +608,26 @@ export async function harness(
   }
   // 只有 approval.read 的弱 Assignment，用来测 403
   const weakAssignment: Assignment = { ...assignment, id: 'asg_weak' }
+  /**
+   * 照 `common.member` 那一档：approval.read/own + event_log.read/**own**（不是 workspace）。
+   * WP33 的「事件日志按岗位可读」就靠它——它不再 403，但只看得到与本岗位相关的。
+   */
+  const memberAssignment: Assignment = { ...assignment, id: 'asg_member' }
   const revoked: Assignment = { ...assignment, id: 'asg_revoked', revoked_at: T0 }
   const foreign: Assignment = { ...assignment, id: 'asg_foreign', person_id: other.id }
 
   const assignments = new Map<string, Assignment>([
     [assignment.id, assignment],
     [weakAssignment.id, weakAssignment],
+    [memberAssignment.id, memberAssignment],
     [revoked.id, revoked],
     [foreign.id, foreign],
   ])
 
   const roles: RolesPort = {
     can: (id, domain, op, request) => {
-      const scopes = id === 'asg_weak' ? SCOPES.slice(0, 1) : SCOPES
+      const scopes =
+        id === 'asg_weak' ? SCOPES.slice(0, 1) : id === 'asg_member' ? MEMBER_SCOPES : SCOPES
       return scopes.some(
         (s) =>
           s.domain === domain &&
@@ -620,7 +655,10 @@ export async function harness(
   const changes: ChangesPort = {
     get: async (id) => {
       thrower.maybeThrow()
-      return id === 'chg_1' ? stagedChange(ws) : undefined
+      if (id === 'chg_1') return stagedChange(ws)
+      // WP33：一条挂在 `asg_member` 名下的变更，用来测事件流的按岗位可见
+      if (id === 'chg_member') return stagedChange({ ...ws, id, assignment_id: 'asg_member' })
+      return undefined
     },
     list: async () => {
       thrower.maybeThrow()
@@ -678,6 +716,63 @@ export async function harness(
     card: async (id) => (id === card.id ? card : undefined),
     health: async () => ({ total: 1, silent: 0, stale: 0, conflicts: 0 }),
   }
+  // WP33：19 §6 剩下那几件事是 `KnowledgePort` 上的可选面。默认装上（用来测路由），
+  // `harness({ bareKnowledge: true })` 则不装，用来测「没装配 → 501」。
+  const knowledgeState = {
+    sources: [] as KnowledgeSource[],
+    gaps: [] as KnowledgeGap[],
+    cites: [] as { id: string; run_id: string }[],
+  }
+  let knowledgeSeq = 0
+  const knowledgeExtras: Partial<KnowledgePort> = {
+    sources: () => [...knowledgeState.sources],
+    addSource: (_actor, input) => {
+      knowledgeSeq += 1
+      const source: KnowledgeSource = {
+        id: `src_${knowledgeSeq}`,
+        workspace_id: workspace.id,
+        kind: input.kind,
+        ref: input.ref,
+        parser: input.parser,
+        acl_inherit: input.acl_inherit ?? true,
+        chunks: 0,
+      }
+      knowledgeState.sources.push(source)
+      return source
+    },
+    cite: (_actor, fact_card_id, run_id) => {
+      knowledgeState.cites.push({ id: fact_card_id, run_id })
+    },
+    gaps: (_actor, filter) =>
+      knowledgeState.gaps.filter((g) => filter.status === undefined || g.status === filter.status),
+    openGap: (_actor, input) => {
+      knowledgeSeq += 1
+      const gap: KnowledgeGap = {
+        id: `gap_${knowledgeSeq}`,
+        workspace_id: workspace.id,
+        question: input.question,
+        subject: input.subject,
+        domain: input.domain ?? 'company',
+        status: 'open',
+        asked_by: { kind: 'person', id: me.id },
+        ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
+        created_at: clock.now(),
+      }
+      knowledgeState.gaps.push(gap)
+      return gap
+    },
+    answerGap: (_actor, id, input) => {
+      const gap = knowledgeState.gaps.find((g) => g.id === id)
+      if (!gap) throw Object.assign(new Error('no gap'), { code: 'not_found' })
+      gap.status = 'answered'
+      gap.answer = input.answer
+      gap.answered_by = me.id
+      gap.answered_at = clock.now()
+      gap.approval_item_id = 'ap_from_gap'
+      return { gap, approval_item_id: gap.approval_item_id }
+    },
+  }
+  if (options.bareKnowledge !== true) Object.assign(knowledge, knowledgeExtras)
 
   const lesson: LessonRecord = {
     id: 'les_1',
@@ -773,6 +868,7 @@ export async function harness(
     options: {
       version: '9.9.9',
       events: { pollIntervalMs: 5 },
+      ...(options.ws === undefined ? {} : { ws: options.ws }),
       ...(options.rateLimit ? { rateLimit: { default: options.rateLimit } } : {}),
       ...(options.exposeMagicLinkToken === undefined
         ? {}
@@ -828,6 +924,7 @@ export async function harness(
     approvals,
     thrower,
     workstation,
+    knowledgeState,
     workspace_id: workspace.id,
     person_id: me.id,
     other_id: other.id,
@@ -835,6 +932,7 @@ export async function harness(
     otherToken,
     assignment,
     weakAssignment,
+    memberAssignment,
     item,
     get: (path, init) => call('GET', path, undefined, init),
     post: (path, body, init) => call('POST', path, body, init),
