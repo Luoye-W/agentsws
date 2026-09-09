@@ -347,6 +347,9 @@ importers:
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
       '@deepseek-ai/cordis':
         specifier: 4.0.2
         version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
@@ -392,10 +395,6 @@ importers:
       yaml:
         specifier: ^2.5.0
         version: 2.9.0
-    devDependencies:
-      '@agentsws/simulation':
-        specifier: workspace:*
-        version: link:../simulation
 
   packages/kernel:
     dependencies:

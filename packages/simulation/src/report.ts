@@ -9,6 +9,8 @@ import type { Evidence } from './evidence.js'
 import type { ExpectationResult } from './expectations.js'
 import type { InvariantResult } from './invariants.js'
 import type { MetricTable } from './metrics.js'
+import type { BaselineRuntime, RuntimeName } from './runtime-name.js'
+import { baselineRuntime } from './runtime-name.js'
 import type { Scenario, Tier } from './scenario/types.js'
 
 export interface MetricDelta {
@@ -25,6 +27,8 @@ export interface ScenarioReport {
   pack: string
   tier: Tier
   seed: number
+  /** 17 §4：这一份报告是哪个运行时跑出来的（基线按它分档）。 */
+  runtime: RuntimeName
   passed: boolean
   /** 虚拟时间跨度 */
   clock: { start: Iso8601; end: Iso8601; virtual_ms: number }
@@ -51,6 +55,7 @@ export interface BuildReportInput {
   scenario: Scenario
   tier: Tier
   seed: number
+  runtime: RuntimeName
   evidence: Evidence
   metrics: MetricTable
   invariants: InvariantResult[]
@@ -69,6 +74,7 @@ export function buildReport(input: BuildReportInput): ScenarioReport {
     pack: scenario.dataset.pack,
     tier: input.tier,
     seed: input.seed,
+    runtime: input.runtime,
     passed,
     clock: {
       start: evidence.start,
@@ -102,24 +108,69 @@ export function buildReport(input: BuildReportInput): ScenarioReport {
 
 // ── 基线与门禁 ────────────────────────────────────────────────────────────
 
+export interface BaselineTier {
+  scenarios: Record<string, { metrics: Record<string, number> }>
+}
+
+/**
+ * 基线文件（WP30 D）。
+ *
+ * v2 **按运行时分档**：stub / direct / dsh 三档各一份数字——同一条场景在三个运行时下
+ * 都要过六条不变量，但 token 与工具调用数天然不同（规则草稿 vs turn loop vs dsh 组合），
+ * 拿一档去卡另一档只会把门禁变成噪音。三个 dsh 变体（auto / in-process / subprocess）共用
+ * `dsh` 一档：它们是同一份组合，只是宿主进程不同。
+ *
+ * v1（只有 `scenarios`）按 `stub` 档读，老文件不用改也能跑。
+ */
 export interface Baseline {
+  schema_version: 2
+  generated_at: Iso8601
+  runtimes: Partial<Record<BaselineRuntime, BaselineTier>>
+}
+
+/** 兼容读：v1 的扁平结构等于"只有 stub 一档"。 */
+export interface BaselineV1 {
   schema_version: 1
   generated_at: Iso8601
   scenarios: Record<string, { metrics: Record<string, number> }>
 }
 
-/** 从一组报告生成基线文件内容。 */
-export function toBaseline(reports: readonly ScenarioReport[], at: Iso8601): Baseline {
-  const scenarios: Baseline['scenarios'] = {}
-  for (const r of [...reports].sort((a, b) => a.id.localeCompare(b.id))) {
-    const metrics: Record<string, number> = {}
-    for (const key of Object.keys(r.metrics).sort()) {
-      const m = r.metrics[key]
-      if (m !== undefined) metrics[key] = m.value
-    }
-    scenarios[r.id] = { metrics }
+/** v1 / v2 都吃，统一成 v2。 */
+export function normalizeBaseline(raw: Baseline | BaselineV1): Baseline {
+  if (raw.schema_version === 2) return raw
+  return {
+    schema_version: 2,
+    generated_at: raw.generated_at,
+    runtimes: { stub: { scenarios: raw.scenarios } },
   }
-  return { schema_version: 1, generated_at: at, scenarios }
+}
+
+function tierOf(report: ScenarioReport): BaselineRuntime {
+  return baselineRuntime(report.runtime)
+}
+
+/**
+ * 从一组报告生成基线文件内容。报告里可以混着不同运行时——各自落进各自那一档，
+ * `previous` 给了就把没跑到的那几档原样留着（只更新这次跑过的运行时）。
+ */
+export function toBaseline(
+  reports: readonly ScenarioReport[],
+  at: Iso8601,
+  previous?: Baseline,
+): Baseline {
+  const runtimes: Baseline['runtimes'] = { ...(previous?.runtimes ?? {}) }
+  for (const r of [...reports].sort((a, b) => a.id.localeCompare(b.id))) {
+    const key = tierOf(r)
+    const metrics: Record<string, number> = {}
+    for (const name of Object.keys(r.metrics).sort()) {
+      const m = r.metrics[name]
+      if (m !== undefined) metrics[name] = m.value
+    }
+    const tier = runtimes[key] ?? { scenarios: {} }
+    tier.scenarios[r.id] = { metrics }
+    runtimes[key] = tier
+  }
+  return { schema_version: 2, generated_at: at, runtimes }
 }
 
 /** 把基线里的数与报告比一比，写进报告的 `delta`。 */
@@ -128,7 +179,7 @@ export function attachDelta(
   baseline: Baseline | undefined,
   maxRegressionPct: number,
 ): ScenarioReport {
-  const row = baseline?.scenarios[report.id]
+  const row = baseline?.runtimes[tierOf(report)]?.scenarios[report.id]
   if (row === undefined) return report
   const delta: Record<string, MetricDelta> = {}
   for (const [name, metric] of Object.entries(report.metrics)) {
@@ -213,7 +264,7 @@ export function gate(
 export function formatReport(report: ScenarioReport): string {
   const lines: string[] = []
   lines.push(
-    `${report.passed ? 'PASS' : 'FAIL'}  ${report.id}  [${report.tier}, seed ${report.seed}]`,
+    `${report.passed ? 'PASS' : 'FAIL'}  ${report.id}  [${report.tier}, ${report.runtime}, seed ${report.seed}]`,
   )
   const inv = report.invariants.map((i) => `${i.ok ? '✓' : '✗'}${i.name}`).join(' ')
   if (inv.length > 0) lines.push(`  invariants: ${inv}`)

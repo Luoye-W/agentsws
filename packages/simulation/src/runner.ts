@@ -25,9 +25,10 @@ import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
 import type { ScenarioReport } from './report.js'
 import { buildReport } from './report.js'
+import type { RuntimeName } from './runtime-name.js'
 import { parseDuration, parseRange, resolveAt } from './scenario/duration.js'
 import type { Scenario, ScenarioEvent, Tier } from './scenario/types.js'
-import type { RunContext, RuntimeName, World } from './world.js'
+import type { RunContext, World } from './world.js'
 import { createWorld } from './world.js'
 
 /** 每推进一步的粒度：五分钟。取消窗口（120s）与升级（小时级）都能被看见。 */
@@ -97,7 +98,15 @@ export async function runScenario(
   })
 
   try {
-    return await execute(scenario, world, pack, seed, tier, options.captureEvidence)
+    return await execute(
+      scenario,
+      world,
+      pack,
+      seed,
+      tier,
+      options.runtime ?? 'stub',
+      options.captureEvidence,
+    )
   } finally {
     await world.close()
   }
@@ -109,6 +118,7 @@ async function execute(
   pack: Pack,
   seed: number,
   tier: Tier,
+  runtime: RuntimeName,
   captureEvidence?: (evidence: Evidence) => void,
 ): Promise<ScenarioReport> {
   const { clock, standIns, txn } = world
@@ -541,5 +551,14 @@ async function execute(
   const invariants = checkInvariants(scenario.invariants, { evidence, writeActions })
   const expectations = checkExpectations(scenario.expected, evidence, metrics)
 
-  return buildReport({ scenario, tier, seed, evidence, metrics, invariants, expectations })
+  return buildReport({
+    scenario,
+    tier,
+    seed,
+    runtime,
+    evidence,
+    metrics,
+    invariants,
+    expectations,
+  })
 }

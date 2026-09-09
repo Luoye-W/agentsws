@@ -28,6 +28,7 @@ import type {
 import { sha256 } from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
 import { createDataStore, defineCollection } from '@agentsws/data'
+import type { DshRuntimeMode } from '@agentsws/dsh-adapter'
 import { createDshRuntime } from '@agentsws/dsh-adapter'
 import type { Kernel, Random } from '@agentsws/kernel'
 import { createKernel, seededRandom } from '@agentsws/kernel'
@@ -63,6 +64,7 @@ import { SimulationError } from './errors.js'
 import type { BlockedRecord, NotificationRecord, OutageWindow } from './evidence.js'
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
+import type { RuntimeName } from './runtime-name.js'
 
 const CUSTOMERS = defineCollection({
   name: 'customers',
@@ -116,12 +118,12 @@ export interface WorldOptions {
    * 用哪个运行时跑（17 §4）。缺省 `stub`（规则草稿，fast 档）；
    * `dsh` 走 `@agentsws/dsh-adapter`（真 DeepSeek Harness 的 seam）；
    * `direct` = `@agentsws/runtime-direct` 的 turn loop，模型换成同样确定性的"规则脑" provider。
-   * 同一条场景在三个运行时下都要过六条不变量——这就是"运行时可替换"的证据（31 §1 I6）。
+   * 同一条场景在三 / 四个运行时下都要过六条不变量——这就是"运行时可替换"的证据（31 §1 I6）。
    */
   runtime?: RuntimeName
 }
 
-export type RuntimeName = 'stub' | 'dsh' | 'direct'
+export type { RuntimeName } from './runtime-name.js'
 
 export interface World {
   clock: SyntheticClock
@@ -431,14 +433,22 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     usage: (filter) => gateway.usage(filter),
     budget: (scope) => gateway.budget(scope),
   }
+  const dshMode: DshRuntimeMode | undefined =
+    opts.runtime === 'dsh-in-process'
+      ? 'in-process'
+      : opts.runtime === 'dsh-subprocess'
+        ? 'subprocess'
+        : undefined
   const runtimeAdapter: RuntimeAdapter =
-    opts.runtime === 'dsh'
+    opts.runtime?.startsWith('dsh') === true
       ? createDshRuntime({
           clock,
           seed,
+          ...(dshMode === undefined ? {} : { mode: dshMode }),
           gateway: { complete: (req) => gateway.complete(req) },
           stage: (i) => (holder.stage ?? (async () => undefined))(i),
           createDraft: (p) => (holder.createDraft ?? (async () => undefined))(p),
+          createPolicyQuestion: (i) => (holder.createPolicyQuestion ?? (async () => undefined))(i),
           executeTool: (c) =>
             (holder.executeTool ?? (async () => ({ status: 'error' as const })))(c),
         })
@@ -452,6 +462,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             executeTool: (c) => (holder.executeTool ?? (async () => ({ status: 'error' })))(c),
             stage: (i) => (holder.stage ?? (async () => undefined))(i),
             createDraft: (p) => (holder.createDraft ?? (async () => undefined))(p),
+            createPolicyQuestion: (i) =>
+              (holder.createPolicyQuestion ?? (async () => undefined))(i),
             // 16 §3 副作用表：写外部的 Action 在 `executor` 策略下一律 block
             sideEffectOf: (tool) => {
               try {

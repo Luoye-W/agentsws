@@ -11,8 +11,14 @@
  */
 import type { ObjectRef, RunEvent, RunRequest } from '@agentsws/contracts'
 import { EXTERNAL_FENCE, type Provenance } from '@agentsws/core'
-import type { CreateDraftFn, DraftPayload, StageFn, StageIntent } from '@agentsws/stand-ins'
-import { contextItemHash } from '@agentsws/stand-ins'
+import type {
+  BoundaryGate,
+  CreateDraftFn,
+  DraftPayload,
+  StageFn,
+  StageIntent,
+} from '@agentsws/stand-ins'
+import { boundaryGate, contextItemHash } from '@agentsws/stand-ins'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -48,6 +54,12 @@ export interface GateInput {
   buildDraftPayload(args: { subject: string; body: string }): DraftPayload | undefined
 }
 
+/** 一张发出去的边界选择题卡。 */
+export interface AskedBoundary {
+  approval_item_id: string
+  label: string
+}
+
 export interface GateApi {
   ctx: Context
   /** preset 的 agent scope key：`tools.restrict` 与 scoped dispatch 都按它路由。 */
@@ -58,6 +70,13 @@ export interface GateApi {
   emitted: Set<string>
   /** 注入模型的上下文段名（按注册顺序），回放校验用。 */
   contextNames: string[]
+  /** 36 §2.2 的边界判定（与 stub / direct-llm 同一份：`@agentsws/stand-ins` 的 `boundaryGate`）。 */
+  boundary: BoundaryGate
+  /**
+   * 把没答过的边界发成选择题卡（`policy_change`），同一次运行只发一次。
+   * `tools/pre-execute` 拒掉 stage 时调它；运行时也调它（跳过 stage 那条路）。
+   */
+  askBoundaries(): Promise<AskedBoundary[]>
   /** 供契约测试直接驱动 answerer waterfall。 */
   requestApproval(req: {
     toolName: string
@@ -110,6 +129,14 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   const agent: object = { preset: request.runtime.preset, run_id: request.id }
   const scope = createScope(ctx, agent)
 
+  // 36 §2.2：管着这次变更的边界答过没有。三个运行时同一份判定。
+  const boundary = boundaryGate({
+    request,
+    now: options.clock.now(),
+    defaultReturnWindowDays: options.defaultReturnWindowDays ?? 14,
+  })
+  let askedOnce: Promise<AskedBoundary[]> | undefined
+
   const pendingStage = new Map<string, StageIntent>()
   const pendingDraft = new Map<string, DraftPayload>()
   const stageResults = new Map<string, { change_id: string }>()
@@ -122,6 +149,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     records: new Map(),
     emitted: new Set(),
     contextNames: [],
+    boundary,
+    async askBoundaries() {
+      if (askedOnce === undefined) askedOnce = askAll()
+      return askedOnce
+    },
     async requestApproval(req) {
       try {
         // 17 §4 的 answerer waterfall：任一 answerer 认领即返回；没人认领 → `unavailable`（fail-closed）
@@ -147,6 +179,24 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     async dispose() {
       await scope.dispose()
     },
+  }
+
+  /** 逐条把没答过的边界发成卡；宿主不接回调就什么都不发生。 */
+  async function askAll(): Promise<AskedBoundary[]> {
+    const ask = options.createPolicyQuestion
+    if (ask === undefined || boundary.missing.length === 0) return []
+    const out: AskedBoundary[] = []
+    for (const item of boundary.missing) {
+      const asked = await ask({ request, boundary: item })
+      if (asked === undefined) continue
+      out.push({ approval_item_id: asked.approval_item_id, label: item.label })
+      sink({
+        type: 'proposal.created',
+        approval_item_id: asked.approval_item_id,
+        kind: 'policy_change',
+      })
+    }
+    return out
   }
 
   // ── 工具：注册进 dsh 的注册表，读走注入的出口，写走审批 seam ────────────
@@ -220,6 +270,14 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
         reason,
         provenance_added: [],
       })
+      emitResult(api, sink, call_id)
+      return { kind: 'deny', reason }
+    }
+    // 36 §2.2：没答过的边界挡着变更——拒掉这次 stage，同时把选择题发给商家
+    if (exec.name === STAGE_TOOL && !boundary.allowed) {
+      await api.askBoundaries()
+      const reason = `boundary_unanswered: ${boundary.missing.map((b) => b.id).join(',')}`
+      note(api, { call_id, tool: exec.name, status: 'blocked', reason, provenance_added: [] })
       emitResult(api, sink, call_id)
       return { kind: 'deny', reason }
     }

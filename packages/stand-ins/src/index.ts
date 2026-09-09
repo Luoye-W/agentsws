@@ -44,6 +44,7 @@ export * from './registry.js'
 export * from './runtime/dev-stub.js'
 export * from './runtime/replay.js'
 export * from './runtime/stub.js'
+export * from './runtime/support.js'
 
 export const DEFAULT_START: Iso8601 = '2026-09-07T01:00:00.000Z'
 

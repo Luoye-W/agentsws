@@ -14,8 +14,14 @@ import type {
   ToolDef,
 } from '@agentsws/contracts'
 import { canonicalJson, EXTERNAL_FENCE, Provenance, sha256 } from '@agentsws/core'
-import type { CreateDraftFn, StageFn, ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
-import { contextItemHash } from '@agentsws/stand-ins'
+import type {
+  CreateDraftFn,
+  CreatePolicyQuestionFn,
+  StageFn,
+  ToolExecution,
+  ToolExecutor,
+} from '@agentsws/stand-ins'
+import { boundaryGate, contextItemHash, describeRun } from '@agentsws/stand-ins'
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
 import { failureOf } from './errors.js'
 import { gateToolCall, inferRefs, type SideEffectLookup } from './gate.js'
@@ -44,6 +50,14 @@ export interface DirectRuntimeOptions {
   executeTool?: ToolExecutor
   stage?: StageFn
   createDraft?: CreateDraftFn
+  /**
+   * 36 §2.2 的业务边界选择题卡。第一次遇到一条管着这次变更、商家又没答过的边界时，
+   * 规则脑不自作主张（不 stage），运行时把那道选择题交给宿主。
+   * 宿主不接这个回调时什么都不会发生——起草照常，只是少了那张卡。
+   */
+  createPolicyQuestion?: CreatePolicyQuestionFn
+  /** 策略层读不到窗口时的默认退货窗口天数（边界判定用）。 */
+  defaultReturnWindowDays?: number
   /** 16 §3 副作用表；不给的工具按读处理（executeTool 是兜底那道门）。 */
   sideEffectOf?: SideEffectLookup
   /** turn loop 上限（防死循环）；默认 8。 */
@@ -56,6 +70,7 @@ export interface DirectRuntimeOptions {
 
 const DEFAULT_MAX_TURNS = 8
 const COMPACT_HARD_CAP = 12_000
+const DEFAULT_RETURN_WINDOW_DAYS = 14
 
 interface CompleteArgsBase {
   messages: ChatMessage[]
@@ -76,6 +91,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
   const { clock, gateway } = options
   const seed = options.seed ?? 1
   const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS
+  const defaultWindow = options.defaultReturnWindowDays ?? DEFAULT_RETURN_WINDOW_DAYS
   const idempotency = new IdempotencyStore(
     clock,
     options.idempotencyWindowMs ?? IDEMPOTENCY_WINDOW_MS,
@@ -103,6 +119,11 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       const outputs: RunOutput[] = []
       const orders = new Map<string, OrderView>()
       const stagedChangeIds: string[] = []
+      /** 摘要用：真的读成功过的工具（按调用顺序）。 */
+      const readTools: string[] = []
+      const askedBoundaries: string[] = []
+      let stagedMoney: { kind: string; amount: number; currency: string } | undefined
+      let drafted = false
       const openCalls = new Map<string, string>()
       const usage = { input_tokens: 0, output_tokens: 0, cached_tokens: 0, cost_base: 0 }
       let toolCalls = 0
@@ -235,7 +256,10 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         openCalls.delete(call_id)
         const refs = exec.status === 'ok' ? (exec.provenance ?? inferRefs(exec.data)) : []
         if (refs.length > 0) prov.see(refs, { full: true })
-        if (exec.status === 'ok') rememberOrders(exec.data)
+        if (exec.status === 'ok') {
+          rememberOrders(exec.data)
+          readTools.push(rule.tool)
+        }
         sink({
           type: 'tool.result',
           call_id,
@@ -282,6 +306,14 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         }
       }
 
+      // ── 业务边界（36 §2.2）：与 stub / dsh 同一份判定（stand-ins 的 `boundaryGate`）──
+      // 管着这次退款的边界还没答过 → 规则脑不 stage，运行时把选择题交给宿主
+      const boundary = boundaryGate({
+        request: effective,
+        now: clock.now(),
+        defaultReturnWindowDays: defaultWindow,
+      })
+
       // ── 装配 prompt ──────────────────────────────────────────────────
       const prompt = assembleDirect(effective)
       messages.push(...prompt.messages)
@@ -316,6 +348,8 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         if (order === undefined) return { status: 'error', reason: `unknown_order: ${orderId}` }
         // 15 §6：只能对本次运行"读过"的实体动手
         if (!prov.has(order.ref)) return { status: 'blocked', reason: 'provenance_missing' }
+        // 36 §2.2：没答过的边界挡着就不提变更（选择题卡在 turn loop 结束后统一发）
+        if (!boundary.allowed) return { status: 'blocked', reason: 'boundary_unanswered' }
         const amount =
           typeof input.amount === 'number' && Number.isFinite(input.amount)
             ? Math.round(input.amount * 100) / 100
@@ -344,6 +378,11 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         if (res === undefined) return { status: 'blocked', reason: 'stage_rejected' }
         staged = true
         prov.pin(order.ref)
+        stagedMoney = {
+          kind: 'refund',
+          amount,
+          currency: typeof input.currency === 'string' ? input.currency : order.currency,
+        }
         stagedChangeIds.push(res.change_id)
         sink({ type: 'change.staged', change_id: res.change_id })
         outputs.push({ kind: 'staged_change', change_id: res.change_id })
@@ -388,6 +427,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           ...(threadItem === undefined ? {} : { thread_external_id: threadItem.id }),
         })
         if (res === undefined) return { status: 'blocked', reason: 'draft_rejected' }
+        drafted = true
         sink({
           type: 'proposal.created',
           approval_item_id: res.approval_item_id,
@@ -533,7 +573,12 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
 
           const refs = exec.status === 'ok' ? (exec.provenance ?? inferRefs(exec.data)) : []
           if (refs.length > 0) prov.see(refs, { full: true })
-          if (exec.status === 'ok') rememberOrders(exec.data)
+          if (exec.status === 'ok') {
+            rememberOrders(exec.data)
+            if (call.name !== STAGE_REFUND_TOOL && call.name !== DRAFT_REPLY_TOOL) {
+              readTools.push(call.name)
+            }
+          }
           sink({
             type: 'tool.result',
             call_id,
@@ -562,19 +607,41 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
 
       closeOpenToolUses('turn_limit')
 
-      if (exhausted !== undefined) {
-        return complete(
-          `预算耗尽（${exhausted.which}）：已补齐未闭合的工具调用`,
-          'budget_exhausted',
-        )
+      const orderName = [...orders.values()][0]?.name
+
+      // ── 边界选择题卡：第一次碰到就问一次，问完这一辈子不再问（宿主按 dedupe_key 去重）──
+      if (
+        exhausted === undefined &&
+        boundary.missing.length > 0 &&
+        options.createPolicyQuestion !== undefined
+      ) {
+        for (const item of boundary.missing) {
+          const asked = await options.createPolicyQuestion({ request: effective, boundary: item })
+          if (asked === undefined) continue
+          askedBoundaries.push(item.label)
+          sink({
+            type: 'proposal.created',
+            approval_item_id: asked.approval_item_id,
+            kind: 'policy_change',
+          })
+          outputs.push({ kind: 'proposal', approval_item_id: asked.approval_item_id })
+        }
       }
+
+      // 17 §3：摘要是一句人话（与 stub / dsh 同一份拼法）
+      const summary = describeRun({
+        readTools,
+        drafted,
+        askedBoundaries,
+        ...(orderName === undefined ? {} : { orderName }),
+        ...(stagedMoney === undefined ? {} : { staged: stagedMoney }),
+        ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+      })
+      if (exhausted !== undefined) return complete(summary, 'budget_exhausted')
       if (req.expectations.outputs.includes('answer') && finalText.length > 0) {
         outputs.push({ kind: 'answer', text: finalText })
       }
-      return complete(
-        `direct-llm 运行：${toolCalls} 次工具调用，${outputs.length} 项产物`,
-        'completed',
-      )
+      return complete(summary, 'completed')
     },
   }
 }
