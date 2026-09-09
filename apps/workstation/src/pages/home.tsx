@@ -7,87 +7,35 @@
  * **首页无图表无表格**——那些在岗位面板里。
  */
 import type { DeckCard, RangeName } from '@agentsws/deck'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Clock } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { DeckCardView } from '@/components/deck/deck-card'
+import { Link, useNavigate } from 'react-router-dom'
+import { DeckSection } from '@/components/deck'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { type DecideInput, decide, getHome } from '@/lib/api'
+import { getHome } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
 
-function CardList({
-  cards,
-  onDecide,
-  errors,
-  pendingId,
-}: {
-  cards: DeckCard[]
-  onDecide: (card: DeckCard, input: DecideInput) => void
-  errors: Record<string, string>
-  pendingId: string | null
-}): React.ReactNode {
-  return (
-    <div className="flex flex-col gap-3">
-      {cards.map((card) => (
-        <DeckCardView
-          key={card.id}
-          card={card}
-          busy={pendingId === card.id}
-          {...(errors[card.id] === undefined ? {} : { error: errors[card.id] })}
-          onDecide={(req) => {
-            onDecide(card, {
-              action: req.action,
-              version: req.version,
-              ...(req.selected_option_id === undefined
-                ? {}
-                : { selected_option_id: req.selected_option_id }),
-              ...(req.instruction === undefined ? {} : { instruction: req.instruction }),
-            })
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
 export function HomePage(): React.ReactNode {
   const { t } = useApp()
-  const client = useQueryClient()
+  const navigate = useNavigate()
   const [range, setRange] = useState<RangeName>('yesterday')
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [pendingId, setPendingId] = useState<string | null>(null)
 
   const home = useQuery({ queryKey: ['home', range], queryFn: () => getHome(range) })
 
-  const mutation = useMutation({
-    mutationFn: (input: { card: DeckCard; body: DecideInput }) =>
-      decide(input.card.id, input.body, input.card.position_id),
-    onMutate: (input) => {
-      setPendingId(input.card.id)
-      setErrors((prev) => {
-        const next = { ...prev }
-        delete next[input.card.id]
-        return next
-      })
-    },
-    onError: (error, input) => {
-      setErrors((prev) => ({ ...prev, [input.card.id]: error.message }))
-    },
-    onSettled: () => {
-      setPendingId(null)
-      void client.invalidateQueries({ queryKey: ['home'] })
-      void client.invalidateQueries({ queryKey: ['cards'] })
-    },
-  })
-
-  const onDecide = (card: DeckCard, body: DecideInput): void => {
-    mutation.mutate({ card, body })
+  /**
+   * 37 §2.2b：卡片是指向事项的指针，`open` = 进入那个事项。
+   *
+   * 事项页由 WP22 做；在它落地之前，这里只是把人送到卡片所属的岗位页，
+   * 而不是假装打开了一个不存在的现场。
+   */
+  const openCard = (card: DeckCard): void => {
+    void navigate(`/positions/${card.position_id}?tab=cards`)
   }
 
   if (home.isPending) return <Skeleton className="h-64 w-full" />
@@ -134,15 +82,21 @@ export function HomePage(): React.ReactNode {
         </section>
       ))}
 
-      {/* ① 告警 */}
+      {/* ① 告警（系统卡；P0 留在 deck 里） */}
       {data.alerts.length === 0 ? null : (
         <section data-testid="alerts">
           <h2 className="mb-2 text-sm font-medium">{t('home.alerts')}</h2>
-          <CardList cards={data.alerts} onDecide={onDecide} errors={errors} pendingId={pendingId} />
+          <ul className="flex flex-col gap-2">
+            {data.alerts.map((a) => (
+              <li key={a.id} className="rounded-lg border bg-card px-4 py-3 text-sm">
+                {a.title}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      {/* ① 队列 */}
+      {/* ① 卡片 deck —— 一次一张（37 §1） */}
       <section data-testid="queue">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium">{t('home.queue')}</h2>
@@ -151,11 +105,7 @@ export function HomePage(): React.ReactNode {
             {t('home.estimate', { minutes: data.estimated_minutes })}
           </span>
         </div>
-        {data.queue.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('home.queue.empty')}</p>
-        ) : (
-          <CardList cards={data.queue} onDecide={onDecide} errors={errors} pendingId={pendingId} />
-        )}
+        <DeckSection onOpen={openCard} />
       </section>
 
       {/* ③ 每日摘要 */}

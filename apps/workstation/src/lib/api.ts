@@ -7,8 +7,10 @@
  * - 前端不引入任何模型 SDK：卡片按钮只打 decide（29 §5 动作不经模型）。
  */
 import type {
+  BattleReport,
   BlockData,
   DeckCard,
+  DeckFilters,
   InstructionScope,
   PositionTiles,
   RangeName,
@@ -69,6 +71,13 @@ export interface PositionSummary {
   show_tiles: boolean
 }
 
+export interface DeckCounts {
+  total: number
+  customer_waiting: number
+  nobody_waiting: number
+  matched: number
+}
+
 export interface HomeData {
   queue: DeckCard[]
   alerts: DeckCard[]
@@ -76,6 +85,11 @@ export interface HomeData {
   digest?: DeckCard
   estimated_minutes: number
   range: RangeName
+  /** 37 §1 筛选：服务端回带生效的条件、按张数的计数、被筛掉的 P0、今日战报 */
+  filters: DeckFilters
+  counts: DeckCounts
+  pinned_p0: DeckCard[]
+  battle_report: BattleReport
 }
 
 export interface PositionsData {
@@ -87,6 +101,9 @@ export interface PositionsData {
 export interface CardsData {
   position: PositionSummary
   cards: DeckCard[]
+  filters: DeckFilters
+  counts: DeckCounts
+  pinned_p0: DeckCard[]
 }
 
 export interface ViewData {
@@ -232,13 +249,24 @@ export async function ensureSession(): Promise<Me> {
 
 // ── 各个面 ─────────────────────────────────────────────────────────────
 
-export const getHome = (range: RangeName): Promise<HomeData> =>
-  api<HomeData>(`/v1/home?range=${range}`)
+/** `DeckFilters` → query；空值不进 URL，免得服务端把空串当成一个筛选条件。 */
+export function filterQuery(filters: DeckFilters | undefined): string {
+  const params = new URLSearchParams()
+  if (filters !== undefined)
+    for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, v)
+  const s = params.toString()
+  return s === '' ? '' : `&${s}`
+}
+
+export const getHome = (range: RangeName, filters?: DeckFilters): Promise<HomeData> =>
+  api<HomeData>(`/v1/home?range=${range}${filterQuery(filters)}`)
 
 export const getPositions = (): Promise<PositionsData> => api<PositionsData>('/v1/positions')
 
-export const getPositionCards = (id: string): Promise<CardsData> =>
-  api<CardsData>(`/v1/positions/${encodeURIComponent(id)}/cards`, { assignment: id })
+export const getPositionCards = (id: string, filters?: DeckFilters): Promise<CardsData> =>
+  api<CardsData>(`/v1/positions/${encodeURIComponent(id)}/cards?_=1${filterQuery(filters)}`, {
+    assignment: id,
+  })
 
 export const getPositionView = (id: string, range: RangeName): Promise<ViewData> =>
   api<ViewData>(`/v1/positions/${encodeURIComponent(id)}/view?range=${range}`, { assignment: id })

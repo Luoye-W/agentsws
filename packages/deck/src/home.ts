@@ -4,7 +4,8 @@
  * 首页**没有图表也没有表格**（36 §5.2）：`tiles` 里只有 stat_tile，其余积木都在岗位面板。
  */
 import type { ApprovalItem, RoleId } from '@agentsws/contracts'
-import { estimatedMinutes, projectCard, sortCards } from './project.js'
+import { estimatedMinutes, projectCard } from './project.js'
+import { sortCards } from './queue.js'
 import { computeTiles } from './tiles.js'
 import type {
   DeckCard,
@@ -42,9 +43,15 @@ export interface HomeInput {
   riskClass?: ProjectContext['riskClass']
 }
 
-/** `alert` placement 的审批项（`immediate` 通知）从队列里分出去（06 §1.2）。 */
-const isAlert = (card: DeckCard): boolean =>
-  card.kind === 'system_alert' || card.priority_band === 'P0'
+/**
+ * 只有**系统卡**离开队列（06 §1.2 的 `alert` placement）。
+ *
+ * WP15 把 P0 也踢进告警区，这在 37 §1 的一次一张 deck 下是错的：P0 是"客户在等"，
+ * 它必须是这副牌的第一张、带着倒计时被人翻到，而不是被搬到卡片队列之外的另一个区
+ * ——那样筛选、合并、"第 N / M 张"全都跳过它，倒计时也没人看。排序已经把 P0 放在
+ * 最前面了，不需要第二个容器。
+ */
+const isAlert = (card: DeckCard): boolean => card.kind === 'system_alert'
 
 export function assembleHome(input: HomeInput): HomeAssembly {
   const queue: DeckCard[] = []

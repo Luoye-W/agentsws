@@ -33,13 +33,17 @@ export {
   riskClassFor,
 } from './matrix.js'
 export {
+  contentVariantsOf,
+  entityChipsOf,
   estimatedMinutes,
   evidenceChipsOf,
   highlightsOf,
+  MAX_ENTITY_CHIPS,
+  MAX_EVIDENCE_CHIPS,
   optionsOf,
   priorityBandOf,
   projectCard,
-  sortCards,
+  sourceOf,
 } from './project.js'
 export {
   QUERIES,
@@ -53,6 +57,25 @@ export {
   startOfDay,
   type Window,
 } from './queries.js'
+export {
+  CONTENT_MODES,
+  compareCards,
+  filterCards,
+  foldCards,
+  isCustomerWaiting,
+  isMergeable,
+  isNobodyWaiting,
+  mergeKeyOf,
+  type PickedContent,
+  pickContent,
+  sortCards,
+  waitingOf,
+} from './queue.js'
+export {
+  BATTLE_REPORT_EVENT_TYPES,
+  type BattleReportOptions,
+  battleReport,
+} from './recap.js'
 export {
   computeTile,
   computeTiles,

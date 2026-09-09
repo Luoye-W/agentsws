@@ -375,3 +375,250 @@ describe('OpenAPI', () => {
     ).toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// 37 §1：筛选、合并、enrichment、今日战报
+// ─────────────────────────────────────────────────────────────────────────
+
+interface DeckPage {
+  queue?: DeckCard[]
+  cards?: DeckCard[]
+  filters: Record<string, string>
+  counts: { total: number; customer_waiting: number; nobody_waiting: number; matched: number }
+  pinned_p0: DeckCard[]
+  battle_report?: {
+    date: string
+    ai_handled: number
+    handled: number
+    auto_sent: number
+    intercepted: number
+  }
+}
+
+/** 同族同型同渠道的三张草稿卡，用来验合并。 */
+function seedFamily(h: Harness): void {
+  for (const n of [1, 2, 3]) {
+    h.approvals.seed(
+      approvalItem({
+        id: `ap_fam_${n}`,
+        workspace_id: h.workspace_id,
+        dedupe_key: `draft:thr_${n}`,
+        title: `草稿 ${n}`,
+        payload: { channel: 'email', body: { text: `draft ${n}` } },
+        routing: {
+          recipients: [{ person: h.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 24,
+            business_hours: true,
+            chain: ['scope_manager', 'owner'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        deliveries: [
+          {
+            channel: 'workstation',
+            to: h.person_id,
+            sent_at: '2026-09-07T09:00:00.000Z',
+            view: 'full',
+            decision_token: `tok_fam_${n}`,
+            status: 'sent',
+          },
+        ],
+      }),
+    )
+  }
+}
+
+describe('37 §1 筛选：岗位 / 等待 / 卡型 / 来源', () => {
+  it('卡型筛选只留那一种，计数按张数', async () => {
+    const h = await harness()
+    seedQuestion(h)
+    const all = await json<DeckPage>(await h.get('/v1/home'))
+    expect((all.queue ?? []).length).toBeGreaterThan(1)
+    const only = await json<DeckPage>(await h.get('/v1/home?kind=policy_change'))
+    expect((only.queue ?? []).map((c) => c.kind)).toEqual(['policy_change'])
+    expect(only.counts.total).toBe(all.counts.total)
+    expect(only.counts.matched).toBe(1)
+    expect(only.filters.kind).toBe('policy_change')
+  })
+
+  it('来源与岗位筛选；岗位对不上就一张不剩', async () => {
+    const h = await harness()
+    const conv = await json<DeckPage>(await h.get('/v1/home?source=conversation'))
+    expect((conv.queue ?? []).length).toBeGreaterThan(0)
+    const nobody = await json<DeckPage>(await h.get('/v1/home?source=todo'))
+    expect(nobody.queue).toEqual([])
+    const wrong = await json<DeckPage>(await h.get('/v1/home?position_id=asg_nope'))
+    expect(wrong.queue).toEqual([])
+  })
+
+  it('等待态筛选；坏值回 400 而不是悄悄退成全部', async () => {
+    const h = await harness()
+    expect((await h.get('/v1/home?waiting=nobody_waiting')).status).toBe(200)
+    const bad = await h.get('/v1/home?waiting=lol')
+    expect(bad.status).toBe(400)
+    expect((await err(bad)).code).toBe('invalid_input')
+    const badSource = await h.get('/v1/home?source=nope')
+    expect(badSource.status).toBe(400)
+  })
+
+  it('P0 永不被筛掉：被筛掉时回到 pinned_p0', async () => {
+    const h = await harness()
+    h.approvals.seed(
+      approvalItem({
+        id: 'ap_p0',
+        workspace_id: h.workspace_id,
+        priority: 'immediate',
+        title: '客户在等',
+        routing: {
+          recipients: [{ person: h.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 1,
+            business_hours: true,
+            chain: ['owner'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        deliveries: [
+          {
+            channel: 'workstation',
+            to: h.person_id,
+            sent_at: '2026-09-07T09:00:00.000Z',
+            view: 'full',
+            decision_token: 'tok_p0',
+            status: 'sent',
+          },
+        ],
+      }),
+    )
+    const page = await json<DeckPage>(await h.get('/v1/home?kind=knowledge_update'))
+    expect((page.queue ?? []).map((c) => c.id)).not.toContain('ap_p0')
+    expect(page.pinned_p0.map((c) => c.id)).toContain('ap_p0')
+  })
+
+  it('岗位页用同一套筛选，但 position_id 永远被钉成本次 Assignment（31 §3.1）', async () => {
+    const h = await harness()
+    const page = await json<DeckPage>(
+      await h.get(`/v1/positions/${h.assignment.id}/cards?position_id=asg_other&source=system`),
+    )
+    expect(page.filters.position_id).toBe(h.assignment.id)
+    expect(page.cards).toEqual([])
+    const conv = await json<DeckPage>(
+      await h.get(`/v1/positions/${h.assignment.id}/cards?source=conversation`),
+    )
+    expect((conv.cards ?? []).length).toBeGreaterThan(0)
+  })
+})
+
+describe('37 §1 合并：同族同型同渠道折成一张', () => {
+  it('三张同族草稿 → 一张，merge_count = 3，成员各带各的 version', async () => {
+    const h = await harness()
+    seedFamily(h)
+    const page = await json<DeckPage>(await h.get('/v1/home?kind=outbound_draft'))
+    const merged = (page.queue ?? []).find((c) => c.merge_count > 1)
+    expect(merged?.merge_count).toBe(3)
+    expect(merged?.merged).toHaveLength(3)
+    // 计数仍按张数：合并不改总数
+    expect(page.counts.matched).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('29 §2 enrichment：ObjectRef → 展示名，查不到就丢并留 note', () => {
+  it('查得到的进实体芯片；查不到的丢掉并记数；证据芯片里一个裸 id 都没有', async () => {
+    const h = await harness()
+    h.approvals.seed(
+      approvalItem({
+        id: 'ap_rich',
+        workspace_id: h.workspace_id,
+        payload: { channel: 'email', to: { type: 'customer', id: 'cus_anna' } },
+        evidence: {
+          run_id: 'run_demo_42',
+          source_events: [],
+          provenance: {
+            seen: [
+              { type: 'customer', id: 'cus_anna' },
+              { type: 'order', id: 'ord_1001' },
+              { type: 'fact_card', id: 'fact_775c' },
+            ],
+          },
+          precheck: { provenance: 'ok' },
+          citations: [{ fact_card_id: 'fact_775c', quote: '14 days' }],
+        },
+        routing: {
+          recipients: [{ person: h.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 24,
+            business_hours: true,
+            chain: ['owner'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        deliveries: [
+          {
+            channel: 'workstation',
+            to: h.person_id,
+            sent_at: '2026-09-07T09:00:00.000Z',
+            view: 'full',
+            decision_token: 'tok_rich',
+            status: 'sent',
+          },
+        ],
+      }),
+    )
+    const page = await json<DeckPage>(await h.get('/v1/home'))
+    const card = (page.queue ?? []).flatMap((c) => (c.id === 'ap_rich' ? [c] : []))[0]
+    expect(card).toBeDefined()
+    // 只有 cus_anna 有展示名（MemoryWorkstation.label）；订单 / 事实卡 / thread 全丢掉
+    expect(card?.entity_chips).toEqual([{ type: 'customer', id: 'cus_anna', label: 'Anna Meyer' }])
+    expect(card?.detail.enrichment.dropped_refs).toBeGreaterThan(0)
+    expect(JSON.stringify(card?.evidence_chips)).not.toMatch(/fact_|cus_|run_|ord_/)
+    // run id 只进详情
+    expect(card?.detail.run_id).toBe('run_demo_42')
+    expect(card?.customer_label).toBe('Anna Meyer')
+  })
+})
+
+describe('37 §1 今日战报（GET /v1/home 的 battle_report）', () => {
+  it('四格从事件日志算，日界线按工作区时区', async () => {
+    const h = await harness()
+    const at = h.clock.now()
+    for (const [type, actor] of [
+      ['approval.created', { kind: 'agent', id: 'agent_1', run_id: 'run_ask' }],
+      ['run.completed', { kind: 'agent', id: 'agent_1', run_id: 'run_ask' }],
+      ['run.completed', { kind: 'agent', id: 'agent_1', run_id: 'run_ok' }],
+      ['approval.decided', { kind: 'person', id: h.person_id }],
+      ['approval.auto_approved', { kind: 'system', id: 'mandate' }],
+    ] as const) {
+      h.eventLog.append({
+        schema_version: 1,
+        workspace_id: h.workspace_id,
+        type,
+        at,
+        actor: { ...actor },
+        correlation: { trace_id: 'tr_x', ...('run_id' in actor ? { run_id: actor.run_id } : {}) },
+        payload: {},
+      })
+    }
+    const page = await json<DeckPage>(await h.get('/v1/home'))
+    expect(page.battle_report).toEqual({
+      date: page.battle_report?.date ?? '',
+      ai_handled: 1,
+      handled: 1,
+      auto_sent: 1,
+      intercepted: 1,
+    })
+  })
+
+  it('没有事件时四格是四个零，不是缺字段', async () => {
+    const h = await harness()
+    const page = await json<DeckPage>(await h.get('/v1/home'))
+    expect(page.battle_report?.ai_handled).toBe(0)
+    expect(page.battle_report?.intercepted).toBe(0)
+  })
+})

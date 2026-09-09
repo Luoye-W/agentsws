@@ -5,17 +5,10 @@
  */
 import { screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { HomeData } from '@/lib/api'
-import { draftCard, questionCard, TILE_BAR } from './fixtures'
+import { homeData } from './fixtures'
 import { renderWithProviders } from './helpers'
 
-const home: HomeData = {
-  queue: [draftCard(), questionCard()],
-  alerts: [],
-  tiles: [TILE_BAR],
-  estimated_minutes: 6,
-  range: 'yesterday',
-}
+const home = homeData()
 
 const getHome = vi.fn(async () => home)
 const decide = vi.fn(async () => ({}))
@@ -37,10 +30,12 @@ describe('首页（36 §3 三区）', () => {
     getHome.mockClear()
   })
 
-  it('队列、数据条与「预计 X 分钟」都在', async () => {
+  it('一副牌（一次一张）、数据条与「预计 X 分钟」都在', async () => {
     renderWithProviders(<HomePage />)
     expect(await screen.findByTestId('queue')).toBeDefined()
-    expect(screen.getAllByTestId('deck-card')).toHaveLength(2)
+    // 37 §1 第 1 行：首页不再平铺卡片列表，只有一张
+    expect(await screen.findByTestId('deck-card')).toBeDefined()
+    expect(screen.getAllByTestId('deck-card')).toHaveLength(1)
     expect(screen.getByTestId('tile-bar')).toBeDefined()
     expect(screen.getByText('今天队列预计 6 分钟')).toBeDefined()
   })
@@ -85,5 +80,7 @@ describe('首页（36 §3 三区）', () => {
     expect(getHome).toHaveBeenCalledWith('yesterday')
     await userEvent.click(screen.getByRole('button', { name: '近 7 天' }))
     expect(getHome).toHaveBeenCalledWith('last_7d')
+    // 数据条与 deck 各取各的：deck 带筛选参数（37 §1 末段）
+    expect(getHome).toHaveBeenCalledWith('yesterday', {})
   })
 })
