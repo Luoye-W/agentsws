@@ -858,9 +858,64 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cards: (filter, actor) => knowledge.store.list(filter, actor),
     card: (id, actor) => knowledge.store.get(id, actor),
     health: (workspace_id) => knowledge.store.health(workspace_id),
-    // WP33 / 19 §3：引用计数。`sources` / `gaps` 那几个可选面还没有落库的地方
-    // （docs/38 §1 的知识缺口），装不上，那几条路由回 501。
+    // WP33 / 19 §3：引用计数
     cite: (_actor, fact_card_id, run_id) => knowledge.retrieval.cite(fact_card_id, run_id),
+    // WP35：19 §1.3 导入源与 §4 缺口队列有表了（`knowledge.intake`），四条路由不再 501
+    sources: (actor) => knowledge.intake.sources(actor.workspace_id),
+    addSource: (actor, input) =>
+      knowledge.intake.addSource({ ...input, workspace_id: actor.workspace_id }),
+    gaps: (actor, filter) => knowledge.intake.gaps(actor.workspace_id, filter),
+    openGap: (actor, input) =>
+      knowledge.intake.openGap({
+        ...input,
+        workspace_id: actor.workspace_id,
+        asked_by: { kind: 'person', id: actor.person_id },
+      }),
+    // 19 §4：答案**不直接进知识库**，先变一张 knowledge_update 卡（批了才由 learning 施行）
+    answerGap: async (actor, id, input) => {
+      const gap = knowledge.intake.requireGap(id)
+      const card = await approvals.create({
+        workspace_id: actor.workspace_id,
+        schema_version: 1,
+        kind: 'knowledge_update',
+        role_id: actor.role_id,
+        subject: { object: { type: 'knowledge_gap', id: gap.id } },
+        dedupe_key: `${actor.workspace_id}:knowledge_update:gap:${gap.id}`,
+        title: `补一条知识：${gap.question.slice(0, 40)}`,
+        summary: '有人答了缺口队列里的一条。批准后写进知识库并激活（19 §4）。',
+        payload: {
+          layer: input.layer ?? 'fact',
+          statement: input.answer,
+          candidate_key: gap.subject.key,
+          gap_id: gap.id,
+        },
+        evidence: {
+          source_events: [],
+          provenance: { seen: [{ type: 'knowledge_gap', id: gap.id }] },
+          diff: { before: null, after: input.answer, summary: '知识库新增一条' },
+          precheck: {},
+        },
+        proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+        automation: { level_at_creation: 'L1' },
+        routing: {
+          recipients: [{ person: actor.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 72,
+            business_hours: true,
+            chain: ['owner'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+      })
+      return knowledge.intake.answerGap(id, {
+        answer: input.answer,
+        by: actor.person_id,
+        ...(card.state === 'blocked' ? {} : { approval_item_id: card.id }),
+      })
+    },
   }
 
   const skillsPort: SkillsPort = {

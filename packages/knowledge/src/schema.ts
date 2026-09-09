@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3'
 
 /**
- * 单库两簇表：事实卡（+ scope 展开表 + FTS5 + 向量）与运行记忆。
+ * 单库三簇表：事实卡（+ scope 展开表 + FTS5 + 向量）、运行记忆、导入源与缺口队列。
  * scope 展开成一行一个 `kind:id`，让 `range: 'assigned'` 的可见性判断留在 SQL 里（过滤下推）。
  */
 export const SCHEMA_SQL = `
@@ -81,6 +81,46 @@ CREATE TABLE IF NOT EXISTS memory_facts (
 );
 CREATE INDEX IF NOT EXISTS memory_facts_subject
   ON memory_facts (workspace_id, subject_type, subject_id, state);
+
+-- 19 §1.3 导入源：同工作区同 (kind, ref) 只有一条
+CREATE TABLE IF NOT EXISTS knowledge_sources (
+  id             TEXT PRIMARY KEY,
+  workspace_id   TEXT NOT NULL,
+  kind           TEXT NOT NULL,
+  ref            TEXT NOT NULL,
+  parser         TEXT NOT NULL,
+  acl_inherit    INTEGER NOT NULL,
+  chunks         INTEGER NOT NULL,
+  last_synced_at TEXT,
+  created_at     TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS knowledge_sources_ref
+  ON knowledge_sources (workspace_id, kind, ref);
+
+-- 19 §4 缺口队列：Agent 答不了的问题，等人答
+CREATE TABLE IF NOT EXISTS knowledge_gaps (
+  id               TEXT PRIMARY KEY,
+  workspace_id     TEXT NOT NULL,
+  question         TEXT NOT NULL,
+  subject_type     TEXT NOT NULL,
+  subject_id       TEXT,
+  subject_key      TEXT NOT NULL,
+  domain           TEXT NOT NULL,
+  status           TEXT NOT NULL,
+  asked_by_kind    TEXT NOT NULL,
+  asked_by_id      TEXT NOT NULL,
+  run_id           TEXT,
+  answer           TEXT,
+  answered_by      TEXT,
+  answered_at      TEXT,
+  approval_item_id TEXT,
+  created_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS knowledge_gaps_queue
+  ON knowledge_gaps (workspace_id, status, created_at);
+-- 「同问题只开一条」：只对还开着的那些唯一
+CREATE UNIQUE INDEX IF NOT EXISTS knowledge_gaps_open
+  ON knowledge_gaps (workspace_id, subject_key, question) WHERE status = 'open';
 
 CREATE TABLE IF NOT EXISTS knowledge_meta (
   k TEXT PRIMARY KEY,

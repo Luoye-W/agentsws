@@ -283,6 +283,60 @@ describe('端到端：stage → 队列 → 批准 → 施行 → 账本 → 事�
     expect(still.status).toBe('staged')
   })
 
+  it('19 §1.3 / §4 导入源与缺口队列真装配：不再 501，答缺口出一张 knowledge_update 卡（WP35）', async () => {
+    const { server } = ctx
+    const at = { assignment: ctx.aftersales.id }
+
+    const source = await data<{ id: string; kind: string; chunks: number }>(
+      await api('/v1/knowledge/sources', {
+        method: 'POST',
+        ...at,
+        body: JSON.stringify({
+          kind: 'website',
+          ref: 'https://example.com/return-policy',
+          parser: 'html',
+        }),
+      }),
+    )
+    expect(source.kind).toBe('website')
+    expect(
+      (await data<{ id: string }[]>(await api('/v1/knowledge/sources', at))).map((s) => s.id),
+    ).toEqual([source.id])
+
+    const gap = await data<{ id: string; status: string }>(
+      await api('/v1/knowledge/gaps', {
+        method: 'POST',
+        ...at,
+        body: JSON.stringify({
+          question: '德国境内退货运费谁出？',
+          subject: { type: 'policy', key: 'return_shipping_de' },
+        }),
+      }),
+    )
+    expect(gap.status).toBe('open')
+    expect(await data<unknown[]>(await api('/v1/knowledge/gaps?status=open', at))).toHaveLength(1)
+
+    const answered = await data<{
+      gap: { status: string; answer: string }
+      approval_item_id: string
+    }>(
+      await api(`/v1/knowledge/gaps/${gap.id}/answer`, {
+        method: 'POST',
+        ...at,
+        body: JSON.stringify({ answer: '我们出，走 DHL 退件面单。', layer: 'policy' }),
+      }),
+    )
+    expect(answered.gap.status).toBe('answered')
+    // 19 §4：答案不直接生效，先变一张 knowledge_update 卡
+    const card = await server.txn.approvals.get(answered.approval_item_id)
+    expect(card?.kind).toBe('knowledge_update')
+    expect(card?.state).toBe('pending')
+    expect(card?.automation.mandate_check).toEqual({ within: false, caps_hit: [] })
+    // 还没批，知识库里一条都没有
+    expect((await data<{ total: number }>(await api('/v1/knowledge/health', at))).total).toBe(0)
+    expect(await data<unknown[]>(await api('/v1/knowledge/gaps?status=open', at))).toHaveLength(0)
+  })
+
   it('指导 similar_cases → skill_lesson 卡 pending，不被围栏预检挡（WP35）', async () => {
     const { server } = ctx
     const person = server.bootstrap.person.id
