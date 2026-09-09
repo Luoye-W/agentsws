@@ -609,3 +609,20 @@ describe('任务与职责绑定（13 §1.3）', () => {
     )
   })
 })
+
+describe('处理器自己改排期', () => {
+  it('处理器里 update 了下一次时间，结算不会把它盖回去（令牌刷新用这条）', async () => {
+    const clock = new TestClock(START)
+    const s = createScheduler({ clock })
+    s.register('refresh', async (ctx) => {
+      await s.update(ctx.task.id, {
+        trigger: { kind: 'once', at: '2026-09-10T23:00:00.000Z' },
+      })
+      return 'ok'
+    })
+    await s.schedule(taskInput({ handler: 'refresh', trigger: { kind: 'once', at: START } }))
+    const [out] = await s.runDue(clock.now())
+    expect(out?.task.next_fire_at).toBe('2026-09-10T23:00:00.000Z')
+    expect(out?.task.state).toBe('active')
+  })
+})

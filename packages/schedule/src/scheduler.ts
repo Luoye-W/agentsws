@@ -245,8 +245,15 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
     return saved
   }
 
+  /**
+   * 处理器跑的时候可能自己改了这条任务（令牌刷新就会把下一次挪到「到期前一小时」），
+   * 所以结算前重新读一遍库，别拿触发那一刻的快照把人家的改动盖掉。
+   */
+  const latestOf = (task: ScheduleTask): ScheduleTask => store.getTask(task.id) ?? task
+
   /** 跑完一次：租约放掉，周期任务回 `active`，一次性任务 `done`。 */
-  const settle = (task: ScheduleTask, result: unknown): ScheduleTask => {
+  const settle = (fired: ScheduleTask, result: unknown): ScheduleTask => {
+    const task = latestOf(fired)
     const done = task.next_fire_at === undefined
     const summary = summarize(result)
     return save({
@@ -259,7 +266,8 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
   }
 
   /** 一次失败不改排期：周期任务下一次照跑（25「消费者失败不影响别的任务」）。 */
-  const settleFailed = (task: ScheduleTask, error: unknown): ScheduleTask => {
+  const settleFailed = (fired: ScheduleTask, error: unknown): ScheduleTask => {
+    const task = latestOf(fired)
     const e = error as { code?: string; message?: string }
     const message = e?.message ?? String(error)
     const done = task.next_fire_at === undefined

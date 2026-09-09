@@ -114,6 +114,9 @@ importers:
       '@agentsws/runtime-direct':
         specifier: workspace:*
         version: link:../../packages/runtime-direct
+      '@agentsws/schedule':
+        specifier: workspace:*
+        version: link:../../packages/schedule
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills
