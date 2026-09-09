@@ -90,6 +90,7 @@ export const DEFAULT_POLICY: TxnPolicy = {
   business_tz_offset_minutes: 480,
   retry_max: 3,
   cumulative_window_days: 30,
+  apply_lease_ms: 60_000,
   executor_id: 'txn.executor',
   executor_version: 'txn/1',
 }

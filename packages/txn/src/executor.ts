@@ -37,15 +37,30 @@ export interface ReconcileOutcome {
 
 /**
  * 15 §5 执行器：八步（含步骤 0 幂等）。同目标同 kind 串行；三态结果含 unknown。
+ *
+ * **串行是两层**（31 §3.2「单一施行者队列」）：
+ * 1. 进程内一条 Promise 链 —— 同一个执行器实例里排队，不去抢自己的锁；
+ * 2. 存储层的施行锁 + 围栏号 —— 跨进程那一层。WP4 只有第 1 层，
+ *    于是同一台机器上跑两个服务进程（或桌面壳重启 sidecar 时老进程还没死透）
+ *    就会两边同时 apply 同一条变更。第 2 层由 `TxnStore.acquireApplyLock` 兑现：
+ *    内存档是进程内 Map，SQLite 档是真表，一致性套件对两档跑同一份用例。
+ *
+ * 围栏号（fencing token）随每次拿锁**严格递增**，原样传给 `backendApply` /
+ * `deliverOutbound`。锁能防同时写，防不了「租约过期后才醒过来、以为自己还持着锁」
+ * 的迟到写——那一次能拦住的只有号：后端记下见过的最大号，比它小的一律拒。
  */
 export class Executor {
-  /** 同 (target, kind) 的施行串行队列（31 §3.2 单一施行者） */
+  /** 同 (target, kind) 的进程内施行串行队列 */
   private locks = new Map<string, Promise<unknown>>()
+  /** 这个执行器实例的身份（错误信息里告诉用户是谁占着）。 */
+  private readonly holder: string
 
   constructor(
     private readonly rt: TxnRuntime,
     private readonly bus: ApprovalBusImpl,
-  ) {}
+  ) {
+    this.holder = `${rt.policy.executor_id}#${rt.newId('ex')}`
+  }
 
   private serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.locks.get(key) ?? Promise.resolve()
@@ -60,11 +75,39 @@ export class Executor {
     return next
   }
 
+  /**
+   * 进程内排队 → 抢存储层的锁 → 把围栏号交给 `fn` → 无论成败都释放。
+   * 抢不到就是 `conflict`：另一个施行者正在动同一个目标，这一次不该硬挤进去。
+   */
+  private withApplyLock<T>(key: string, fn: (fencing_token: number) => Promise<T>): Promise<T> {
+    return this.serial(key, async () => {
+      const lock = this.rt.store.acquireApplyLock({
+        key,
+        holder: this.holder,
+        now: this.rt.now(),
+        leaseMs: this.rt.policy.apply_lease_ms,
+      })
+      if (lock === undefined) {
+        const held = this.rt.store.applyLockOf(key)
+        throw new TxnError('conflict', `同一目标正在施行中，请稍后再试：${key}`, {
+          key,
+          holder: held?.holder,
+          expires_at: held?.expires_at,
+        })
+      }
+      try {
+        return await fn(lock.token)
+      } finally {
+        this.rt.store.releaseApplyLock(key, lock.token)
+      }
+    })
+  }
+
   async apply(change_id: string, opts: { force?: boolean } = {}): Promise<ApplyOutcome> {
     const head = this.rt.store.getChange(change_id)
     if (!head) throw new TxnError('not_found', `变更不存在：${change_id}`)
-    return this.serial(`${refKey(head.target)}|${head.kind}`, () =>
-      this.applyLocked(change_id, opts),
+    return this.withApplyLock(`${refKey(head.target)}|${head.kind}`, (fencing_token) =>
+      this.applyLocked(change_id, { ...opts, fencing_token }),
     )
   }
 
@@ -87,7 +130,10 @@ export class Executor {
     return out
   }
 
-  private async applyLocked(change_id: string, opts: { force?: boolean }): Promise<ApplyOutcome> {
+  private async applyLocked(
+    change_id: string,
+    opts: { force?: boolean; fencing_token: number },
+  ): Promise<ApplyOutcome> {
     const now = this.rt.now()
     const change = this.rt.store.getChange(change_id)
     if (!change) throw new TxnError('not_found', change_id)
@@ -213,13 +259,14 @@ export class Executor {
     }
 
     // 步骤 6–8
-    return this.runBackend({ ...change, guardrail_rerun: rerun }, item, now)
+    return this.runBackend({ ...change, guardrail_rerun: rerun }, item, now, opts.fencing_token)
   }
 
   private async runBackend(
     change: StagedChange,
     item: ApprovalItem | undefined,
     now: Iso8601,
+    fencing_token: number,
   ): Promise<ApplyOutcome> {
     this.rt.store.putChange({ ...change, status: 'applying', updated_at: now })
     if (item) await this.bus.recordApply(item.id, 'applying', item.apply ?? { attempts: [] })
@@ -245,7 +292,11 @@ export class Executor {
     const maxAttempts = this.rt.policy.retry_max + 1
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       result = this.rt.opts.backendApply
-        ? await this.rt.opts.backendApply(change, { idempotencyKey: change.id, attempt })
+        ? await this.rt.opts.backendApply(change, {
+            idempotencyKey: change.id,
+            attempt,
+            fencing_token,
+          })
         : result
       attempts.push({
         at: this.rt.now(),
@@ -502,6 +553,13 @@ export class Executor {
     if (item.kind !== 'outbound_draft')
       throw new TxnError('invalid_input', `${item.kind} 无执行器（v1）`)
 
+    // 出站也要单一施行者：同一个线程 / 目标不能被两个进程同时发。
+    return this.withApplyLock(`${refKey(item.subject.object)}|outbound_draft`, (fencing_token) =>
+      this.deliverLocked(item, fencing_token),
+    )
+  }
+
+  private async deliverLocked(item: ApprovalItem, fencing_token: number): Promise<ApprovalItem> {
     for (const child_id of item.links.children) {
       const child = this.rt.store.getApproval(child_id)
       if (!child) throw new TxnError('not_found', child_id)
@@ -542,7 +600,11 @@ export class Executor {
     const maxAttempts = this.rt.policy.retry_max + 1
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       result = this.rt.opts.deliverOutbound
-        ? await this.rt.opts.deliverOutbound(item, { idempotencyKey: item.id, attempt })
+        ? await this.rt.opts.deliverOutbound(item, {
+            idempotencyKey: item.id,
+            attempt,
+            fencing_token,
+          })
         : result
       attempts.push({
         at: this.rt.now(),

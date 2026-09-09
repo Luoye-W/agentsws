@@ -421,4 +421,67 @@ export function runTxnStoreConformance(h: StoreHarness): void {
       expect(s.listChanges({ target: ORDER }).map((c) => c.id)).toEqual(['chg_1'])
     })
   })
+
+  // ── 施行锁 + 围栏号（15 §apply / 31 §3.2）
+  describe(`施行锁与围栏号 · ${h.name}`, () => {
+    const KEY = 'order:ord_1|refund'
+    const lease = (over: Partial<Parameters<TxnStore['acquireApplyLock']>[0]> = {}) => ({
+      key: KEY,
+      holder: 'exec_a',
+      now: T0,
+      leaseMs: 60_000,
+      ...over,
+    })
+
+    it('第一次拿到锁，围栏号从 1 开始；释放后再拿号 +1', () => {
+      const s = make()
+      const first = s.acquireApplyLock(lease())
+      expect(first?.token).toBe(1)
+      expect(first?.holder).toBe('exec_a')
+      s.releaseApplyLock(KEY, 1)
+      expect(s.acquireApplyLock(lease())?.token).toBe(2)
+    })
+
+    it('别人正持着且租约没过期 → undefined（调用方回 conflict）', () => {
+      const s = make()
+      expect(s.acquireApplyLock(lease())?.token).toBe(1)
+      expect(s.acquireApplyLock(lease({ holder: 'exec_b' }))).toBeUndefined()
+      expect(s.applyLockOf(KEY)?.holder).toBe('exec_a')
+    })
+
+    it('租约过期 → 接管，且**接管也拿新号**（老施行者的迟到写才拦得住）', () => {
+      const s = make()
+      const first = s.acquireApplyLock(lease({ leaseMs: 1000 }))
+      const later = new Date(Date.parse(T0) + 5000).toISOString()
+      const taken = s.acquireApplyLock(lease({ holder: 'exec_b', now: later }))
+      expect(taken?.holder).toBe('exec_b')
+      expect(taken?.token).toBe((first?.token ?? 0) + 1)
+    })
+
+    it('号只增不减：锁放了、再拿、再放，号也不回头', () => {
+      const s = make()
+      const seen: number[] = []
+      for (let i = 0; i < 4; i++) {
+        const lock = s.acquireApplyLock(lease())
+        seen.push(lock?.token ?? -1)
+        s.releaseApplyLock(KEY, lock?.token ?? -1)
+      }
+      expect(seen).toEqual([1, 2, 3, 4])
+    })
+
+    it('拿错号的释放不生效——别把别人的锁放了', () => {
+      const s = make()
+      s.acquireApplyLock(lease())
+      s.releaseApplyLock(KEY, 999)
+      expect(s.applyLockOf(KEY)?.token).toBe(1)
+      expect(s.acquireApplyLock(lease({ holder: 'exec_b' }))).toBeUndefined()
+    })
+
+    it('不同 key 互不干扰，各有各的号', () => {
+      const s = make()
+      expect(s.acquireApplyLock(lease())?.token).toBe(1)
+      expect(s.acquireApplyLock(lease({ key: 'order:ord_2|refund' }))?.token).toBe(1)
+      expect(s.applyLockOf('order:ord_9|refund')).toBeUndefined()
+    })
+  })
 }

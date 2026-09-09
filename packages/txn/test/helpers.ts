@@ -71,7 +71,7 @@ export interface Harness {
   clock: ReturnType<typeof makeClock>
   events: EventEnvelope[]
   typesOf(prefix?: string): string[]
-  backendCalls: { id: string; key: string; attempt: number }[]
+  backendCalls: { id: string; key: string; attempt: number; fencing_token: number }[]
   setRecord(target: ObjectRef, read: RecordRead): void
   setBackend(fn: (attempt: number, id: string) => BackendResult | Promise<BackendResult>): void
 }
@@ -95,7 +95,7 @@ export function harness(
   const clock = makeClock(opts.start ?? T0)
   const events: EventEnvelope[] = []
   const records: Record<string, RecordRead> = { ...opts.records }
-  const backendCalls: { id: string; key: string; attempt: number }[] = []
+  const backendCalls: { id: string; key: string; attempt: number; fencing_token: number }[] = []
   let backend: (attempt: number, id: string) => BackendResult | Promise<BackendResult> =
     opts.backend ?? (() => ({ status: 'ok', execution_id: 'exec_1' }))
   const txn = createTxn({
@@ -114,11 +114,21 @@ export function harness(
       ? {}
       : { readRecord: (t: ObjectRef) => records[`${t.type}:${t.id}`] ?? {} }),
     backendApply: (change, o) => {
-      backendCalls.push({ id: change.id, key: o.idempotencyKey, attempt: o.attempt })
+      backendCalls.push({
+        id: change.id,
+        key: o.idempotencyKey,
+        attempt: o.attempt,
+        fencing_token: o.fencing_token,
+      })
       return backend(o.attempt, change.id)
     },
     deliverOutbound: (item, o) => {
-      backendCalls.push({ id: item.id, key: o.idempotencyKey, attempt: o.attempt })
+      backendCalls.push({
+        id: item.id,
+        key: o.idempotencyKey,
+        attempt: o.attempt,
+        fencing_token: o.fencing_token,
+      })
       return backend(o.attempt, item.id)
     },
   })
