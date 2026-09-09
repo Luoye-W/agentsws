@@ -489,6 +489,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     roles: world.roles,
     approvals: world.txn.approvals,
     data: dataSourceOf(world, pack),
+    // 21 §1：世界的事件日志与服务进程的合一，首页四格战报才有真数
+    eventLog: world.kernel.eventLog,
   }
 
   const staticDir = options.staticDir ?? resolve(root, 'apps/workstation/dist')

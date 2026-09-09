@@ -11,6 +11,7 @@ import {
   createGateway,
   createMemoryIdentity,
   createSqliteIdentity,
+  type EventLogPort,
   type Gateway,
   type GatewayDeps,
   type GuardrailPort,
@@ -79,6 +80,12 @@ export interface MountedWorld {
   roles: RoleStore
   approvals: ApprovalBus
   data: WorkstationDataSource
+  /**
+   * 世界自己的事件日志。接进来之后 `/v1/events` 与今日战报读的是**合一**的那一条：
+   * 服务进程的日志 + 世界的日志按 id 归并。不给的话首页四格全是零——
+   * 世界里的 `approval.created` / `run.completed` 根本不在服务进程的日志里（WP21 遗留）。
+   */
+  eventLog?: EventLogPort
 }
 
 export interface ServerOptions {
@@ -147,6 +154,33 @@ export interface Server {
 const priceTable = {
   'stub/stub-v1': { in: 0, out: 0, cached: 0 },
   'deepseek/deepseek-chat': { in: 0.27, out: 1.1, cached: 0.07 },
+}
+
+/**
+ * 21 §1「所有模块的事件都进同一条日志」。demo 里世界与服务进程各有一份内核，
+ * 所以读的时候按 id 归并成一条：`/v1/events` 的 `since` 续传与今日战报都靠它。
+ *
+ * 归并是**读侧**的：两边各自 append-only，谁也不改谁；id 是 ulid，按字典序即时间序。
+ */
+export function mergeEventLogs(base: EventLogPort, extra?: EventLogPort): EventLogPort {
+  if (extra === undefined) return base
+  return {
+    async *read(filter) {
+      const all: EventEnvelope[] = []
+      for await (const e of base.read(filter)) all.push(e)
+      for await (const e of extra.read(filter)) all.push(e)
+      all.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      const since = filter.since
+      const limit = filter.limit
+      let n = 0
+      for (const e of all) {
+        if (since !== undefined && e.id <= since) continue
+        if (limit !== undefined && n >= limit) return
+        n += 1
+        yield e
+      }
+    },
+  }
 }
 
 export async function createServer(options: ServerOptions = {}): Promise<Server> {
@@ -375,7 +409,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     halt: kernel.halt,
     trace: kernel.trace,
     clock,
-    eventLog: kernel.eventLog,
+    eventLog: mergeEventLogs(kernel.eventLog, mount?.eventLog),
     modules: kernel.modules,
     approvals,
     changes: txn.ledger,

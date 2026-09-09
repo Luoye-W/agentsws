@@ -300,6 +300,16 @@ describe('demo 的工作模型（37）', () => {
     expect(decided.todo?.origin?.card_id).toBe(sent.approval_id)
   })
 
+  it('战报四格：读的是合一后的事件日志，demo 里不是四个零（21 §1）', async () => {
+    const home = await data<{
+      battle_report: { ai_handled: number; handled: number; auto_sent: number; intercepted: number }
+    }>(await call('/v1/home?range=yesterday'))
+    const r = home.battle_report
+    // 场景真跑出来的卡都算「拦截待确认」；四个数加起来必须大于零，否则就是日志没接上
+    expect(r.intercepted).toBeGreaterThan(0)
+    expect(r.ai_handled + r.handled + r.auto_sent + r.intercepted).toBeGreaterThan(0)
+  })
+
   it('全程没有任何 model.* 事件（stub 运行时根本不叫模型）', () => {
     expect(demo.world.events.filter((e) => e.type.startsWith('model.'))).toHaveLength(0)
   })
