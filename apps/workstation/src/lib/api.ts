@@ -1186,3 +1186,58 @@ export async function signInWithToken(token: string): Promise<Me> {
 
 /** 已经登录了吗（有 cookie 或存过的 bearer 就算）。 */
 export const currentSession = (): Promise<Me> => api<Me>('/v1/me')
+
+// ── 24 技能与学习回路（WP29）─────────────────────────────────────────
+
+export interface SkillOverlayOpView {
+  op: 'replace' | 'append' | 'remove'
+  section_id: string
+  heading?: string
+  origin: 'authored' | 'learned'
+  body?: string
+  learned_from?: { lessons: string[]; at: string }
+}
+
+export interface SkillOverlayView {
+  tier: 'company' | 'department' | 'personal'
+  owner: string
+  version: number
+  base_version: string
+  ops: SkillOverlayOpView[]
+}
+
+export interface SkillSummary {
+  name: string
+  tier: string
+  version: string
+  excluded: boolean
+  sections: { id: string; heading: string; origin: 'authored' | 'learned' }[]
+  overlays: SkillOverlayView[]
+  pending_proposals: number
+}
+
+export interface SkillProposalSummary {
+  approval_item_id: string
+  skill: string
+  section_id: string
+  heading: string
+  title: string
+  summary: string
+  hits: number
+  confidence: number
+  options: { id: string; label: string }[]
+  quotes: string[]
+  diff: { before: string | null; after: string; summary: string }
+}
+
+export const getSkills = (): Promise<SkillSummary[]> => api<SkillSummary[]>('/v1/skills')
+
+export const getSkillProposals = (): Promise<SkillProposalSummary[]> =>
+  api<SkillProposalSummary[]>('/v1/skills/proposals')
+
+/** 排除 / 取消排除（只影响本人，24 §2）。 */
+export const setSkillExcluded = (
+  name: string,
+  excluded: boolean,
+): Promise<{ name: string; excluded: boolean }> =>
+  api(`/v1/skills/${encodeURIComponent(name)}/exclude`, { method: 'POST', body: { excluded } })

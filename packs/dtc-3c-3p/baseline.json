@@ -147,6 +147,38 @@
             "tokens_per_item": 576,
             "tool_calls": 2
           }
+        },
+        "learning/learn-one": {
+          "metrics": {
+            "adoption_rate": 0.3333333333333333,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0.6666666666666666,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1400000,
+            "runs_failed": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 588,
+            "tool_calls": 6
+          }
+        },
+        "learning/reject-once": {
+          "metrics": {
+            "adoption_rate": 0,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1560000,
+            "runs_failed": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 588,
+            "tool_calls": 8
+          }
         }
       }
     },
@@ -164,7 +196,7 @@
             "queue_latency_ms": 4350000,
             "runs_failed": 0,
             "staged_changes": 0,
-            "tokens_per_item": 4145,
+            "tokens_per_item": 4147,
             "tool_calls": 3
           }
         },
@@ -180,7 +212,7 @@
             "queue_latency_ms": 2400000,
             "runs_failed": 0,
             "staged_changes": 0,
-            "tokens_per_item": 4166,
+            "tokens_per_item": 4163,
             "tool_calls": 3
           }
         },
@@ -196,7 +228,7 @@
             "queue_latency_ms": 7400000,
             "runs_failed": 0,
             "staged_changes": 1,
-            "tokens_per_item": 4611,
+            "tokens_per_item": 4608,
             "tool_calls": 7
           }
         },
@@ -228,7 +260,7 @@
             "queue_latency_ms": 1350000,
             "runs_failed": 1,
             "staged_changes": 1,
-            "tokens_per_item": 5259,
+            "tokens_per_item": 5260,
             "tool_calls": 4
           }
         },
@@ -276,7 +308,7 @@
             "queue_latency_ms": 4350000,
             "runs_failed": 0,
             "staged_changes": 1,
-            "tokens_per_item": 5344,
+            "tokens_per_item": 5343,
             "tool_calls": 4
           }
         },
@@ -292,8 +324,40 @@
             "queue_latency_ms": 0,
             "runs_failed": 0,
             "staged_changes": 1,
-            "tokens_per_item": 5523,
+            "tokens_per_item": 5521,
             "tool_calls": 4
+          }
+        },
+        "learning/learn-one": {
+          "metrics": {
+            "adoption_rate": 0.3333333333333333,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0.6666666666666666,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1400000,
+            "runs_failed": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 4467,
+            "tool_calls": 9
+          }
+        },
+        "learning/reject-once": {
+          "metrics": {
+            "adoption_rate": 0,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1560000,
+            "runs_failed": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 4458,
+            "tool_calls": 12
           }
         }
       }
@@ -442,6 +506,38 @@
             "staged_changes": 1,
             "tokens_per_item": 1152,
             "tool_calls": 4
+          }
+        },
+        "learning/learn-one": {
+          "metrics": {
+            "adoption_rate": 0.3333333333333333,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0.6666666666666666,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1400000,
+            "runs_failed": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 1176,
+            "tool_calls": 9
+          }
+        },
+        "learning/reject-once": {
+          "metrics": {
+            "adoption_rate": 0,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1560000,
+            "runs_failed": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 1174,
+            "tool_calls": 12
           }
         }
       }

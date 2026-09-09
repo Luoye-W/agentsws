@@ -29,6 +29,7 @@ import { MeetingsPage } from '@/pages/meetings'
 import { OrgPage } from '@/pages/org'
 import { PositionPage } from '@/pages/position'
 import { SettingsPage } from '@/pages/settings'
+import { SkillsPage } from '@/pages/skills'
 import { TodosPage } from '@/pages/todos'
 
 /**
@@ -123,6 +124,8 @@ function Workspace(): ReactNode {
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
+        {/* 24 技能与学习回路：当前版本、三层 overlay、待审提案 */}
+        <Route path="/skills" element={<SkillsPage />} />
         {/* WP28 制度面：岗位 / 成员 / 职责 */}
         <Route path="/org" element={<OrgPage />} />
         {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}

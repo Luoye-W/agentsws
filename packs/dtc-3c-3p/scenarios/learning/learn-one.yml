@@ -1,0 +1,88 @@
+# WP29 学习回路闭环（24 §3、06 §3.4）：从"运行里学到一条"走到"下次运行用新版本"。
+#
+# 人驳回两封回信并写同一条原因 → 池里攒出一条 lesson（夜里技能一个字不改）→
+# 次日 07:30 出一张「昨天学到的」选择题卡 → 人采纳一个候选改法 → 写进个人层 overlay →
+# 再来一封同类的信，这一次的 prompt 里就带着那条新规则。
+#
+# 场景里**不声明合成人**：决定全部由显式的 `actor.decide` 给出，
+# 因为这条场景要证明的正是"哪一步是人按的"——自动批准会把这条线看糊。
+id: learning/learn-one
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    learning.start: {}
+  # ① 第一封信 → 草稿 → 人驳回并写原因（最强信号）
+  - at: '+5m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: learn-1
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+30m'
+    actor.decide:
+      who: p_wang
+      item: $last_outbound_draft
+      action: reject
+      reason: 退货窗口要从送达日算，不是下单日
+  # ② 同类的第二封 → 同样的原因 → 池里合并成一条，hits = 2
+  - at: '+2h'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: learn-2
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+150m'
+    actor.decide:
+      who: p_wang
+      item: $last_outbound_draft
+      action: reject
+      reason: 退货窗口要从送达日算，不是下单日
+  # ③ 次日 07:30：一张选择题卡（夜里 overlay 一个字没动）
+  - at: '+1355m'
+    clock.advance: {}
+  # ④ 人采纳"在这一段后面加一句"
+  - at: '+1365m'
+    actor.decide:
+      who: p_wang
+      item: $last_skill_lesson
+      action: approve
+      option: append
+  # ⑤ 再来一封同类的信：这一次的 prompt 里带着新规则
+  - at: '+1410m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: learn-3
+      body_ref: fixtures/bob-late-return.txt
+expected:
+  calls_tool: [get_order]
+  first_tool: get_order
+  never_calls: [create_refund, update_order_shipping_address, create_discount_code]
+  staged_change_kinds: []
+  lessons_pooled: 1
+  approval_kinds:
+    skill_lesson: 1
+    outbound_draft: 3
+  event_types: ['lesson.pooled', 'lesson.proposed', 'skill.overlay.changed', 'schedule.fired']
+  scheduled_handlers: [skills.daily_lessons]
+  # 「下次运行用新版本」：最后一次运行的 prompt 里有那条学来的规则
+  prompt_includes_any: ['退货窗口要从送达日算']
+  metrics:
+    applied_changes: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+  - freeze_on_model_outage
+rubric: >-
+  卡片上说清了"这条是从哪两次纠正来的"吗？采纳之后技能里那一段读起来还像人话吗？

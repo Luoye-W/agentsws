@@ -98,6 +98,8 @@ export interface Decision {
   edit_diff?: Diff
   redirect_to?: { person_id?: PersonId; role_id?: RoleId }
   defer_until?: Iso8601
+  /** 36 §2 选择题卡：人选了哪个改法，落库后异步施行也拿得到（WP29） */
+  selected_option_id?: string
   /** 绑定 (item_id, revision, execution_snapshot)；revision 变化即失效；by='mandate' 的自动决定无 token */
   decision_token?: string
 }

@@ -339,6 +339,49 @@ export class MemorySkillRegistry {
     }
   }
 
+  /**
+   * 学习回路的提案要用：这个技能现在有哪些段（按层从近到远取第一份非空的）。
+   *
+   * 不走 `resolve`：提案是在**某一层上**改段落，要的是"段 id + 标题 + 正文"这份底稿，
+   * 而不是叠加后的结果；叠加后的样子由卡片上的 diff 预览负责。
+   */
+  listSections(name: string): ParsedSection[] {
+    for (const tier of [...TIER_ORDER].reverse()) {
+      for (const skill of this.#skills.values()) {
+        if (skill.name !== name || skill.tier !== tier) continue
+        if (skill.sections.length === 0) continue
+        return skill.sections.map((s) => ({ ...s }))
+      }
+    }
+    return []
+  }
+
+  /** 库里有哪些技能（跨层去重）。工作台技能页要列它们。 */
+  listSkillNames(): string[] {
+    return [...new Set([...this.#skills.values()].map((s) => s.name))].sort()
+  }
+
+  /** 按段 id 取正文（跨层，取最近的一层）。 */
+  sectionBody(name: string, section_id: string): string | undefined {
+    return this.listSections(name).find((s) => s.id === section_id)?.body
+  }
+
+  /**
+   * 24 §2「个人化修改：版本 +1」——把某一层技能记录的版本换成新的。
+   * 该层没有技能记录（只有 overlay）时什么都不做，回 undefined。
+   */
+  async bumpVersion(
+    name: string,
+    tier: SkillTier,
+    version: string,
+    scope?: SkillScopeRef,
+  ): Promise<string | undefined> {
+    const current = this.#lookup(name, tier, scope ?? {})
+    if (current === undefined) return undefined
+    await this.put({ ...current, version })
+    return version
+  }
+
   /** 学习回路的策略层过滤要用：按段 id 反查标题。 */
   sectionHeading(name: string, section_id: string): string | undefined {
     for (const skill of this.#skills.values()) {

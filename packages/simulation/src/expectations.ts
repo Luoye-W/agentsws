@@ -3,6 +3,7 @@
  * `reply_omits` / `reply_includes_any` 是"必须没有 / 至少有一个"的白名单，不是逐字比对。
  */
 import type { ChangeKind } from '@agentsws/contracts'
+import { assemblePrompt } from '@agentsws/stand-ins'
 import type { Evidence } from './evidence.js'
 import { payloadOf } from './evidence.js'
 import type { MetricTable } from './metrics.js'
@@ -254,6 +255,43 @@ export function checkExpectations(
       missing.length === 0
         ? `已注册 [${[...registered].join(', ')}]`
         : `没注册：${missing.join(', ')}`,
+    )
+  }
+  if (expected.prompt_includes_any !== undefined) {
+    // 17 §1 的装配函数只有一处（`assemblePrompt`），这里用同一个重组最后一次运行的 prompt
+    const last = evidence.runs.at(-1)
+    const text =
+      last === undefined
+        ? ''
+        : assemblePrompt(last.request)
+            .messages.map((m) => m.content)
+            .join('\n')
+    const hit = expected.prompt_includes_any.filter((w) => text.includes(w))
+    add(
+      'prompt_includes_any',
+      hit.length > 0,
+      hit.length > 0
+        ? `最后一次运行的 prompt 含 [${hit.join(', ')}]`
+        : `prompt 里一条都没有：[${expected.prompt_includes_any.join(', ')}]`,
+    )
+  }
+  if (expected.lessons_filtered !== undefined) {
+    const reasons = new Set(evidence.learning?.filtered ?? [])
+    const missing = expected.lessons_filtered.filter((r) => !reasons.has(r))
+    add(
+      'lessons_filtered',
+      missing.length === 0,
+      missing.length === 0
+        ? `拦下的原因 [${[...reasons].join(', ')}]`
+        : `没出现的原因：${missing.join(', ')}`,
+    )
+  }
+  if (expected.lessons_pooled !== undefined) {
+    const n = evidence.learning?.pooled ?? 0
+    add(
+      'lessons_pooled',
+      matchNumeric(n, expected.lessons_pooled),
+      `池里 ${n} 条（期望 ${String(expected.lessons_pooled)}）`,
     )
   }
   if (expected.blocked_rules !== undefined) {

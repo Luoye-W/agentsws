@@ -25,8 +25,66 @@ const OverlayBody = z.object({
   version: z.number().int().nonnegative(),
 })
 
+const ExcludeBody = z.object({ excluded: z.boolean() })
+
+const PromoteBody = z.object({
+  section_ids: z.array(z.string().min(1)).min(1),
+  to_tier: z.enum(['company', 'department']),
+})
+
 export function skillRoutes(): Route[] {
   return [
+    route(
+      {
+        method: 'get',
+        path: '/v1/skills',
+        operationId: 'listSkills',
+        summary: '技能列表：当前版本、三层 overlay（人写的 / 学到的）、待审提案数（24 §5）',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'department', in: 'query', description: '部门 id（可选）' }],
+        returns: 'SkillSummary[]',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.list === undefined) throw new ApiError('not_implemented', '技能面未装配')
+        const department = c.req.query('department')
+        return ok(
+          c,
+          await deps.skills.list({
+            person_id: p.person_id,
+            workspace_id: p.workspace_id,
+            ...(department === undefined ? {} : { department_id: department }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/skills/proposals',
+        operationId: 'listSkillProposals',
+        summary: '待审的「昨天学到的」提案卡（不批不生效）',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'SkillProposalSummary[]',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.proposals === undefined)
+          throw new ApiError('not_implemented', '学习回路未装配')
+        return ok(
+          c,
+          await deps.skills.proposals({ person_id: p.person_id, workspace_id: p.workspace_id }),
+        )
+      },
+    ),
     route(
       {
         method: 'get',
@@ -88,6 +146,60 @@ export function skillRoutes(): Route[] {
             })),
             base_version: input.base_version,
             version: input.version,
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/skills/:name/exclude',
+        operationId: 'excludeSkill',
+        summary: '排除 / 取消排除某个技能（只影响本人，24 §2）',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'name', in: 'path', required: true, description: '技能名' }],
+        body: ExcludeBody,
+        returns: '{ name, excluded }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.exclude === undefined) throw new ApiError('not_implemented', '技能面未装配')
+        const input = await body(c, ExcludeBody)
+        const name = param(c, 'name')
+        await deps.skills.exclude(name, p.person_id, input.excluded)
+        return ok(c, { name, excluded: input.excluded })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/skills/:name/promote',
+        operationId: 'promoteSkill',
+        summary: '把个人层的几段提上去：产出一条 skill_promotion 审批项（不落任何层）',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'name', in: 'path', required: true, description: '技能名' }],
+        body: PromoteBody,
+        returns: '{ accepted, approval_item_id?, reason? }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.promote === undefined) throw new ApiError('not_implemented', '技能面未装配')
+        const input = await body(c, PromoteBody)
+        return ok(
+          c,
+          await deps.skills.promote({
+            skill: param(c, 'name'),
+            section_ids: input.section_ids,
+            to_tier: input.to_tier,
+            actor: { person_id: p.person_id, workspace_id: p.workspace_id },
           }),
         )
       },

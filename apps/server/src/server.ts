@@ -56,6 +56,7 @@ import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
+import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOrg, type OrgAssembly } from './org.js'
@@ -67,6 +68,7 @@ import {
   offsetToTz,
   registerDailyPlan,
   registerIdempotencySweep,
+  registerLearning,
   registerMeetingPoll,
   registerPlanRelay,
   registerReview,
@@ -202,6 +204,8 @@ export interface Server {
   roles: RoleStore
   knowledge: Knowledge
   skills: Skills
+  /** WP29 学习回路（lesson 池 / 次日提案 / 采纳落 overlay）。 */
+  learning: LearningAssembly
   models: ModelGatewayApi
   txn: Txn
   /** 37 工作模型：事项 / 目标 / 待办 / 计划 / 复盘 */
@@ -395,7 +399,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   const internalToken = identity.issue('internal', person.id, workspace.id).token
 
-  const approvals = mount?.approvals ?? txn.approvals
+  const rawApprovals = mount?.approvals ?? txn.approvals
+  // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
+  // 再把审批总线包一层——每张卡被决定之后抽 lesson，技能 / 知识类卡批了就施行。
+  await seedDefaultSkill(skills, workspace.id)
+  const learning = createLearningAssembly({
+    workspace_id: workspace.id,
+    clock,
+    random,
+    skills,
+    knowledge,
+    roles,
+    approvals: rawApprovals,
+    owner: person.id,
+    ownerAssignment,
+    appendEvent,
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+  const approvals = learning.wrap(rawApprovals)
   // WP20 连接面：装配一次，`/v1/connections/*` 与工作台数据源共用同一份连接状态。
   const connections = await createConnections({
     clock,
@@ -431,6 +452,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           // WP25：有没有模型问模型面（加密库里的配置 + 环境变量兜底），不再只看环境变量
           hasModel: () => modelSettings.configured(),
           modelRef: () => modelSettings.defaultRef(),
+          // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
+          skills: skills.registry,
           ...(options.records === undefined ? {} : { source: options.records }),
         })
   const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
@@ -553,8 +576,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   registerSkillsWeekly(schedule.scheduler, {
     workspace_id: workspace.id,
     clock,
-    weeklyConsolidate: (ws, now) => skills.lessons.weeklyConsolidate(ws, now),
+    weeklyConsolidate: (ws, now) => learning.weeklyConsolidate(ws, now),
   })
+  // ⑧ 学习回路：每天 07:30 把昨天学到的整理成一张选择题卡
+  registerLearning(schedule.scheduler, { clock, proposeDaily: (now) => learning.proposeDaily(now) })
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -568,6 +593,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       idempotency: idempotencyStore !== undefined,
       shopify: true,
       skills: true,
+      learning: true,
     },
   })
 
@@ -599,7 +625,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const skillsPort: SkillsPort = {
     resolve: (name, actor) => skills.registry.resolve(name, actor),
     setOverlay: (overlay) => skills.registry.setOverlay(overlay),
-    lessons: (filter) => skills.lessons.list(filter),
+    // WP29：池的真源是学习回路那一份（`skills.lessons` 是 WP6 的内存池，只留给周合并的老接口）
+    lessons: (filter) => learning.lessons(filter),
+    // WP29 技能页与学习回路
+    list: (actor) => learning.summaries(actor),
+    exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
+    proposals: () => learning.proposalSummaries(),
+    promote: (input) =>
+      learning.promote({
+        skill: input.skill,
+        section_ids: input.section_ids,
+        to_tier: input.to_tier,
+        by: input.actor.person_id,
+      }),
   }
 
   /**
@@ -751,6 +789,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles,
     knowledge,
     skills,
+    learning,
     models,
     txn,
     work,
@@ -803,6 +842,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
         httpServer = undefined
       }
+      learning.close()
       knowledge.close()
       data.close()
       // 接进来的世界由调用方关（它还持有事件日志与替身）

@@ -57,6 +57,10 @@ export interface LessonRecord {
   confidence: number
   confirmations: number
   status: 'pooled' | 'proposed' | 'accepted' | 'ignored' | 'refuted'
+  /** WP29：lesson 种类、证据（原话 + 出处）、语义键（去重与黑名单用） */
+  kind?: 'rule' | 'example' | 'anti_example' | 'boundary'
+  evidence?: { quote: string; run_id?: RunId; approval_item_id?: string }[]
+  semantic_key?: string
   created_at: Iso8601
   /** 合并后的全部来源 */
   runs?: RunId[]

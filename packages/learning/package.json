@@ -1,0 +1,30 @@
+{
+  "name": "@agentsws/learning",
+  "version": "0.0.0",
+  "private": true,
+  "description": "学习回路 #12：lesson 抽取、去重合并、次日提案、采纳落 overlay、晋升门槛",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/roles": "workspace:*",
+    "@agentsws/skills": "workspace:*",
+    "better-sqlite3": "^12.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

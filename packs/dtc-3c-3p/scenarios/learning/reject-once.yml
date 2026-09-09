@@ -1,0 +1,103 @@
+# WP29 对照场景：**驳回一次，同类的以后不再提**（24 §3「驳回 → refuted」）。
+#
+# 与 `learning/learn-one` 同一条线，只在第四步分岔：人把提案卡驳回。
+# 语义键进黑名单，overlay 一个字不写；同类经验后来又出现两次，
+# 第三天的夜间整理里它只会以 `rejected_before` 出现在被拦下的那一堆里，
+# 不会再变成一张卡去烦人。
+id: learning/reject-once
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    learning.start: {}
+  - at: '+5m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: reject-1
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+30m'
+    actor.decide:
+      who: p_wang
+      item: $last_outbound_draft
+      action: reject
+      reason: 退货窗口要从送达日算，不是下单日
+  - at: '+2h'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: reject-2
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+150m'
+    actor.decide:
+      who: p_wang
+      item: $last_outbound_draft
+      action: reject
+      reason: 退货窗口要从送达日算，不是下单日
+  # 次日 07:30：出卡
+  - at: '+1355m'
+    clock.advance: {}
+  # 人驳回这条建议：语义键进黑名单
+  - at: '+1365m'
+    actor.decide:
+      who: p_wang
+      item: $last_skill_lesson
+      action: reject
+      reason: 这条我不认，窗口本来就按下单日算
+  # 同类经验又来两次
+  - at: '+25h'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: reject-3
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+1530m'
+    actor.decide:
+      who: p_wang
+      item: $last_outbound_draft
+      action: reject
+      reason: 退货窗口要从送达日算，不是下单日
+  - at: '+27h'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: reject-4
+      body_ref: fixtures/bob-late-return.txt
+  - at: '+1650m'
+    actor.decide:
+      who: p_wang
+      item: $last_outbound_draft
+      action: reject
+      reason: 退货窗口要从送达日算，不是下单日
+  # 第三天 07:30：夜间整理里它被拦下，不再出卡
+  - at: '+2795m'
+    clock.advance: {}
+expected:
+  never_calls: [create_refund, update_order_shipping_address, create_discount_code]
+  staged_change_kinds: []
+  # 一共只出过那一张（被驳回的）提案卡
+  approval_kinds:
+    skill_lesson: 1
+    outbound_draft: 4
+  lessons_filtered: [rejected_before]
+  event_types: ['lesson.pooled', 'lesson.proposed', 'lesson.ignored']
+  # 驳回不写 overlay：技能正文里不该出现那条规则
+  metrics:
+    applied_changes: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+  - freeze_on_model_outage
+rubric: >-
+  被驳回之后，界面上还能不能说清"这条以后不再提"是因为你驳回过？

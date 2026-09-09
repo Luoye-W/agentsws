@@ -62,6 +62,7 @@ import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
 import { SimulationError } from './errors.js'
 import type { BlockedRecord, NotificationRecord, OutageWindow } from './evidence.js'
+import { installLearningLoop, type LearningLoop, type LearningOptions } from './learning.js'
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 import type { RuntimeName } from './runtime-name.js'
@@ -158,6 +159,13 @@ export interface World {
    */
   routine?: Routine
   startRoutine(options?: RoutineOptions): Routine
+  /**
+   * WP29 学习回路（lesson 池 / 次日提案 / 采纳落 overlay）。
+   * 场景里出现 `learning.start` 才装；不装的世界一条 lesson 都不收，
+   * 技能正文也不进 prompt——原有场景的 prompt 字节与指标一个不变。
+   */
+  learning?: LearningLoop
+  startLearning(options?: LearningOptions): LearningLoop
   gateway(): ModelGatewayApi
   /** 场景 `inject.budget`：换一套预算重建网关（BudgetLedger 的 caps 在构造时固定）。 */
   setBudget(budget: ModelGatewayPolicy['budget']): void
@@ -754,6 +762,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       const routine = installDailyRoutine(world, routineOptions)
       world.routine = routine
       return routine
+    },
+    startLearning(learningOptions) {
+      if (world.learning !== undefined) return world.learning
+      const loop = installLearningLoop(world, learningOptions)
+      world.learning = loop
+      return loop
     },
     gateway: () => gateway,
     setBudget(budget) {

@@ -64,6 +64,18 @@ export interface Evidence {
   outages: OutageWindow[]
   notifications: NotificationRecord[]
   blocked: BlockedRecord[]
+  /** WP29 学习回路的状态（没装学习回路的场景没有这一项）。 */
+  learning?: LearningEvidence
+}
+
+/** 池里攒了几条、夜间整理拦下了什么（24 §3）。 */
+export interface LearningEvidence {
+  pooled: number
+  proposals: number
+  /** 最近一次夜间整理被拦下的原因（`rejected_before` / `policy_layer` …） */
+  filtered: string[]
+  /** 采纳后叠加解析出来的技能正文（下一次运行进 prompt 的就是它） */
+  resolved_skills: string[]
 }
 
 export const payloadOf = (e: EventEnvelope): Record<string, unknown> =>
