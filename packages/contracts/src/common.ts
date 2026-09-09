@@ -26,6 +26,11 @@ export type ObjectType =
   | 'campaign'
   | 'creator'
   | 'work_item'
+  | 'matter'
+  | 'goal'
+  | 'todo'
+  | 'meeting'
+  | 'meeting_record'
   | 'fact_card'
   | 'skill'
   | 'package'
@@ -83,6 +88,8 @@ export type DataDomain =
   | 'skill'
   | 'policy'
   | 'event_log'
+  /** 37 §4 会议对象与记录（WP23） */
+  | 'meeting'
 
 export type Operation = 'read' | 'stage' | 'approve' | 'agent_auto'
 export type Range = 'own' | 'assigned' | 'workspace'

@@ -97,6 +97,12 @@ export type KnownEventType =
   | 'connect.connection_transferred'
   // privacy (21)
   | 'privacy.erased'
+  // meetings (37 §4)：payload 只有摘要与条数，转写与音频永不进日志
+  | 'meeting.record.ingested'
+  | 'meeting.record.blocked'
+  | 'meeting.record.transcribed'
+  | 'meeting.record.processed'
+  | 'meeting.record.failed'
   // inbound / delivery (18)
   | 'inbound.received'
   | 'inbound.deduped'

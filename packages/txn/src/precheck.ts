@@ -144,7 +144,8 @@ export function runPrecheck<P>(
   }
 
   // 额度：超额不是失败，是 L1 路由
-  precheck.mandate = input.automation.mandate_check.within ? 'within' : 'review'
+  // 14：契约只要求给等级；没给 mandate_check 的一律走 L1 复核，不炸
+  precheck.mandate = input.automation.mandate_check?.within === true ? 'within' : 'review'
 
   if (notes.length > 0) precheck.notes = [...(precheck.notes ?? []), ...notes]
   return {
