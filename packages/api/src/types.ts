@@ -41,6 +41,7 @@ import type {
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
+import type { MeetingsPort } from './routes/meetings.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
 export interface Principal {
@@ -244,6 +245,8 @@ export interface GatewayDeps {
   roles: RolesPort
   /** 36 工作台面（首页 / 岗位 / 积木）；没装配时那几条路由回 not_implemented。 */
   workstation?: WorkstationPort
+  /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */
+  meetings?: MeetingsPort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>

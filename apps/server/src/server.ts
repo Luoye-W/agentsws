@@ -48,6 +48,7 @@ import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { type ServerType, serve } from '@hono/node-server'
 import { MemoryBackend } from './backend.js'
+import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { mountStatic } from './static.js'
 import {
   createWorkstationPort,
@@ -113,6 +114,8 @@ export interface Server {
   skills: Skills
   models: ModelGatewayApi
   txn: Txn
+  /** 37 §4 会议内核（存储 / 受控原始材料区 / 处理管线 / 端口）。 */
+  meetings: MeetingsAssembly
   identity: LocalIdentityService
   backend: MemoryBackend
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
@@ -252,6 +255,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   const internalToken = identity.issue('internal', person.id, workspace.id).token
 
+  // 37 §4：会议内核。ASR 走同一个模型网关（没装 ASR provider 时管线出系统卡，不炸）；
+  // 产出的认领卡进同一条审批队列（14 §1），挂在本人的岗位下，所以装在 txn 与 Assignment 之后。
+  const meetings = createMeetings({
+    ...(dbDir === undefined ? {} : { dbDir }),
+    clock,
+    random,
+    models,
+    appendEvent,
+    approvals: options.mount?.approvals ?? txn.approvals,
+    role_id: ownerAssignment.role_id,
+  })
+
+  // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
+  if (mount !== undefined) {
+    await seedDemoMeetings(meetings, {
+      workspace_id: workspace.id,
+      owner: person.id,
+      position_id: ownerAssignment.id,
+      clock,
+    })
+  }
+
   const rolesPort: RolesPort = {
     can: (id, domain, op, request) => roles.can(id, domain, op, request),
     effectiveConfig: (id) => roles.effectiveConfig(id),
@@ -303,6 +328,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     knowledge: knowledgePort,
     skills: skillsPort,
     roles: rolesPort,
+    meetings: meetings.port,
     workstation: createWorkstationPort({
       clock,
       roles,
@@ -338,6 +364,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills,
     models,
     txn,
+    meetings,
     identity,
     backend,
     traceScope,
@@ -379,6 +406,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       data.close()
       // 接进来的世界由调用方关（它还持有事件日志与替身）
       if (options.mount === undefined) roles.close()
+      meetings.close()
       txnStore?.close()
       idempotencyStore?.close()
       if (identity instanceof SqliteIdentityService) identity.close()

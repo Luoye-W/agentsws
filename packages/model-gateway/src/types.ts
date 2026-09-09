@@ -12,6 +12,7 @@ import type {
   RoleId,
   ToolChoice,
   ToolDef,
+  TranscriptionAudioDigest,
 } from '@agentsws/contracts'
 
 /**
@@ -73,6 +74,8 @@ export interface ModelUsagePayload {
   cost_base: number
   static_prefix_hash: string
   duration_ms: number
+  /** ASR 调用才有：音频摘要（哈希 / 时长 / 字节数）。**字节与转写正文永不进事件日志。** */
+  audio?: TranscriptionAudioDigest
 }
 
 export interface BlockedResidencyPayload {

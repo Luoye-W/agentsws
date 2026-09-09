@@ -29,6 +29,7 @@
     "@agentsws/deck": "workspace:*",
     "@agentsws/kernel": "workspace:*",
     "@agentsws/knowledge": "workspace:*",
+    "@agentsws/meetings": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/roles": "workspace:*",
     "@agentsws/skills": "workspace:*",

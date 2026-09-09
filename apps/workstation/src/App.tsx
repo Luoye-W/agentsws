@@ -12,6 +12,8 @@ import { ensureSession, getHome, getPositions, setAssignment, setHomeTiles } fro
 import { useApp } from '@/lib/app-context'
 import { HomePage } from '@/pages/home'
 import { KnowledgePage } from '@/pages/knowledge'
+import { MeetingPage } from '@/pages/meeting'
+import { MeetingsPage } from '@/pages/meetings'
 import { PositionPage } from '@/pages/position'
 import { SettingsPage } from '@/pages/settings'
 
@@ -83,6 +85,8 @@ export function App(): ReactNode {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/positions/:id" element={<PositionPage />} />
+        <Route path="/meetings" element={<MeetingsPage />} />
+        <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route
           path="/settings"

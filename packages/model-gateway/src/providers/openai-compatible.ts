@@ -1,4 +1,10 @@
-import type { ChatMessage, ModelProvider, ModelRef, ToolDef } from '@agentsws/contracts'
+import type {
+  ChatMessage,
+  ModelProvider,
+  ModelRef,
+  ProviderTranscription,
+  ToolDef,
+} from '@agentsws/contracts'
 import { GatewayError, ProviderError } from '../types.js'
 
 export type FetchLike = (
@@ -6,7 +12,8 @@ export type FetchLike = (
   init: {
     method: string
     headers: Record<string, string>
-    body: string
+    /** JSON 档是字符串；`/audio/transcriptions` 档是 multipart 的 FormData。 */
+    body: string | FormData
     signal?: AbortSignal
   },
 ) => Promise<{
@@ -29,6 +36,8 @@ export interface OpenAiCompatibleOptions {
   timeoutMs?: number
   /** 给了才暴露 embed（走 /embeddings）。 */
   embeddingModel?: string
+  /** 给了才暴露 transcribe（走 /audio/transcriptions，OpenAI 的 whisper 形态）。 */
+  transcriptionModel?: string
   extraHeaders?: Record<string, string>
 }
 
@@ -49,6 +58,13 @@ interface WireChatResponse {
 interface WireEmbeddingResponse {
   data?: { embedding?: number[] }[]
   usage?: WireUsage
+}
+/** OpenAI `/audio/transcriptions`（`response_format: verbose_json`）。 */
+interface WireTranscriptionResponse {
+  text?: string
+  language?: string
+  duration?: number
+  segments?: { start?: number; end?: number; text?: string; speaker?: string }[]
 }
 
 const toWireMessage = (m: ChatMessage): Record<string, unknown> => ({
@@ -91,8 +107,10 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     }
   }
 
-  const post = async (path: string, body: unknown): Promise<unknown> => {
+  const post = async (path: string, body: unknown, form?: FormData): Promise<unknown> => {
     const headers = authHeaders()
+    // multipart 的 boundary 由 fetch 自己写，手工塞 content-type 会让上游解不出来
+    if (form !== undefined) delete headers['content-type']
     const signal =
       options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
     let res: Awaited<ReturnType<FetchLike>>
@@ -100,7 +118,7 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       res = await doFetch(`${baseUrl}${path}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(body),
+        body: form ?? JSON.stringify(body),
         ...(signal === undefined ? {} : { signal }),
       })
     } catch (e) {
@@ -165,10 +183,60 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     },
   }
 
+  const transcriptionModel = options.transcriptionModel
+  const withAsr: ModelProvider =
+    transcriptionModel === undefined
+      ? provider
+      : {
+          ...provider,
+          async transcribe(audio): Promise<ProviderTranscription> {
+            const form = new FormData()
+            form.set('model', transcriptionModel)
+            form.set('response_format', 'verbose_json')
+            if (audio.language !== undefined) form.set('language', audio.language)
+            form.set(
+              'file',
+              new Blob([new Uint8Array(audio.bytes)], { type: audio.mime }),
+              `audio.${extensionFor(audio.mime)}`,
+            )
+            const json = (await post(
+              '/audio/transcriptions',
+              undefined,
+              form,
+            )) as WireTranscriptionResponse
+            const text = json.text ?? ''
+            const segments = (json.segments ?? []).map((seg, i) => ({
+              start_ms: Math.round((seg.start ?? i) * 1000),
+              end_ms: Math.round((seg.end ?? i + 1) * 1000),
+              ...(seg.speaker === undefined ? {} : { speaker: seg.speaker }),
+              text: seg.text ?? '',
+            }))
+            const speakers = [
+              ...new Set(
+                (json.segments ?? [])
+                  .map((seg) => seg.speaker)
+                  .filter((sp): sp is string => sp !== undefined),
+              ),
+            ]
+            return {
+              text,
+              segments,
+              ...(speakers.length === 0 ? {} : { speakers }),
+              ...(json.language === undefined ? {} : { language: json.language }),
+              usage: {
+                // 按秒计价：上游 verbose_json 回 duration（秒）
+                input_tokens: Math.max(1, Math.ceil(json.duration ?? 0)),
+                output_tokens: Math.ceil(text.length / 4),
+                cached_tokens: 0,
+              },
+            }
+          },
+        }
+
   const embeddingModel = options.embeddingModel
-  if (embeddingModel === undefined) return provider
+  if (embeddingModel === undefined) return withAsr
   return {
-    ...provider,
+    ...withAsr,
     async embed(texts: string[]) {
       const json = (await post('/embeddings', {
         model: embeddingModel,
@@ -191,4 +259,19 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       }
     },
   }
+}
+
+const MIME_EXTENSIONS: Readonly<Record<string, string>> = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/flac': 'flac',
+}
+
+/** 上游按文件名后缀判格式，所以 mime 要能翻成一个它认识的扩展名。 */
+export function extensionFor(mime: string): string {
+  return MIME_EXTENSIONS[mime.split(';')[0]?.trim() ?? mime] ?? 'bin'
 }
