@@ -1,6 +1,13 @@
 import type { ChatMessage, Clock, ModelProvider, ModelRef } from '@agentsws/contracts'
+import {
+  classifyText,
+  detectAnsweredBoundaries,
+  gateChange,
+  renderReplyBody,
+  returnWindowPolicy,
+} from '@agentsws/support-core'
 import { DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from '../assemble.js'
-import { asRecord, CHANGE_TERMS, type OrderView, orderIdFromText, orderView } from '../view.js'
+import { asRecord, type OrderView, orderIdFromText, orderView } from '../view.js'
 import type { ScriptedTurn, ScriptFn } from './scripted.js'
 import { scriptedProvider } from './scripted.js'
 
@@ -78,53 +85,6 @@ function lastLine(text: string): string {
   return lines[lines.length - 1] ?? ''
 }
 
-interface DraftInput {
-  order?: OrderView
-  windowDays: number
-  withinWindow: boolean
-  daysSince?: number
-  refundAmount?: number
-  customer: string
-  signature: string
-}
-
-/** 固定模板：引用政策 + 订单状态；不回显任何外部原文（围栏纪律）。 */
-function draftBody(d: DraftInput): string {
-  const lines: string[] = [`Hi ${d.customer},`, '']
-  if (d.order !== undefined) {
-    lines.push(
-      `Thanks for reaching out about order ${d.order.name}. Its payment status is "${d.order.financial_status}" and its fulfillment status is "${d.order.fulfillment_status}".`,
-    )
-  } else {
-    lines.push('Thanks for reaching out.')
-  }
-  lines.push('')
-  lines.push(`Our return policy allows returns within ${d.windowDays} days of delivery.`)
-  if (d.order?.delivered_at !== undefined && d.daysSince !== undefined) {
-    lines.push(
-      `Your order was delivered on ${d.order.delivered_at.slice(0, 10)}, ${d.daysSince} day(s) ago.`,
-    )
-  }
-  lines.push('')
-  if (d.withinWindow && d.refundAmount !== undefined && d.order !== undefined) {
-    lines.push(
-      `That is inside the ${d.windowDays}-day window, so we have prepared a refund of ${d.refundAmount} ${d.order.currency} to your original payment method. It is waiting for a colleague to confirm and will be issued right after.`,
-    )
-  } else if (d.withinWindow && d.order !== undefined) {
-    lines.push(
-      `That is inside the ${d.windowDays}-day window, so a return is possible. A colleague will confirm the next step with you.`,
-    )
-  } else if (d.order !== undefined) {
-    lines.push(
-      `That is outside the ${d.windowDays}-day window, so a refund is not available for this order. Tell us what went wrong and we will look at the options that do apply.`,
-    )
-  } else {
-    lines.push('Tell us the order number and we will check what applies.')
-  }
-  lines.push('', 'Kind regards,', d.signature)
-  return lines.join('\n')
-}
-
 /** 规则脑的一步决策：纯函数（messages + clock → 下一轮说什么）。 */
 export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
   const fallbackWindow = options.defaultReturnWindowDays ?? 14
@@ -158,8 +118,29 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
       return { tool_calls: [{ name: 'search_policies', input: { query: 'return window' } }] }
     }
 
-    const lower = `${threadBody}`.toLowerCase()
-    const wantsChange = CHANGE_TERMS.some((t) => lower.includes(t))
+    // 1c：分类 / 起草 / 边界判定统一走客服共享包（33 §1），与 stub 运行时同一套判定
+    const classification = classifyText(
+      { text: threadBody, subject: subjectLine },
+      { now: options.clock.now() },
+    )
+    const wantsChange = classification.intent === 'returns_refunds'
+    const answered = detectAnsweredBoundaries({
+      texts: blocks.filter((b) => b.kind === 'policy' || b.kind === 'fact_card').map((b) => b.body),
+      at: options.clock.now(),
+    })
+    if (
+      policy.card !== undefined &&
+      !answered.some((p) => p.boundary_id === 'policy.refund_window')
+    ) {
+      answered.push(returnWindowPolicy(policy.days, options.clock.now(), policy.card.id))
+    }
+    // 没答过的边界挡着：不提退款，只起草"交给同事确认"的回信（不自作主张）
+    const gate = gateChange({
+      change_kind: 'refund',
+      classification,
+      policies: answered,
+      text: threadBody,
+    })
     const nowMs = Date.parse(options.clock.now())
     const deliveredMs =
       order?.delivered_at === undefined ? undefined : Date.parse(order.delivered_at)
@@ -176,6 +157,7 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
       stageResults.length === 0 &&
       available.has(STAGE_REFUND_TOOL) &&
       wantsChange &&
+      gate.allowed &&
       withinWindow &&
       order !== undefined &&
       refundAmount !== undefined &&
@@ -206,13 +188,13 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
       const customer =
         order?.customer_name ?? order?.email?.split('@')[0] ?? to?.split('@')[0] ?? 'there'
       const subject = subjectLine.startsWith('Re:') ? subjectLine : `Re: ${subjectLine}`
-      const body = draftBody({
+      const body = renderReplyBody({
         windowDays: policy.days,
         withinWindow,
         customer,
         signature,
         ...(order === undefined ? {} : { order }),
-        ...(daysSince === undefined ? {} : { daysSince }),
+        ...(daysSince === undefined ? {} : { daysSinceDelivery: daysSince }),
         ...(stagedOk && refundAmount !== undefined ? { refundAmount } : {}),
       })
       return {

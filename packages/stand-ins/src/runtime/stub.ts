@@ -14,6 +14,14 @@ import type {
 } from '@agentsws/contracts'
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
+import type { BoundaryItem, SupportPolicy } from '@agentsws/support-core'
+import {
+  classifyText,
+  detectAnsweredBoundaries,
+  gateChange,
+  renderReplyBody,
+  returnWindowPolicy,
+} from '@agentsws/support-core'
 
 export interface ToolExecution {
   status: 'ok' | 'error' | 'blocked'
@@ -58,6 +66,15 @@ export type CreateDraftFn = (
   payload: DraftPayload,
 ) => Promise<{ approval_item_id: string } | undefined>
 
+/**
+ * 36 §2.2 的选择题卡：第一次遇到一条没答过的业务边界时问一次。
+ * 宿主不接这个回调时什么都不会发生——起草照常，只是少了那张卡。
+ */
+export type CreatePolicyQuestionFn = (input: {
+  request: RunRequest
+  boundary: BoundaryItem
+}) => Promise<{ approval_item_id: string } | undefined>
+
 export interface StubRuntimeOptions {
   clock: Clock
   /** 26 §3：seed 决定一切随机；同 seed 同请求 → 同事件序列。 */
@@ -65,13 +82,13 @@ export interface StubRuntimeOptions {
   executeTool?: ToolExecutor
   stage?: StageFn
   createDraft?: CreateDraftFn
+  createPolicyQuestion?: CreatePolicyQuestionFn
   /** policy 上下文里读不到窗口时的默认退货窗口天数。 */
   defaultReturnWindowDays?: number
   signature?: string
 }
 
 const DAY = 86_400_000
-const RETURN_TERMS = ['refund', 'return', 'money back', '退款', '退货', '退回']
 
 // ---------- 上下文读取 ----------
 
@@ -165,11 +182,6 @@ function hitsRule(text: string, rule: RunRequest['grounding'][number]): boolean 
   )
 }
 
-function looksLikeChangeRequest(text: string): boolean {
-  const lower = text.toLowerCase()
-  return RETURN_TERMS.some((t) => lower.includes(t))
-}
-
 // ---------- prompt 装配 ----------
 
 function toolDefs(req: RunRequest): ToolDef[] {
@@ -239,53 +251,32 @@ function estimateTokens(messages: ChatMessage[], tools: ToolDef[]): number {
   return Math.ceil(chars / 4)
 }
 
-// ---------- 草稿模板 ----------
+// ---------- 业务边界 ----------
 
-interface DraftInput {
-  order?: OrderView
-  windowDays: number
-  withinWindow: boolean
-  daysSinceDelivery?: number
-  refundAmount?: number
-  signature: string
-  customer: string
-}
-
-/** 固定模板：引用政策 + 订单状态；窗口内附带退款意图。不回显任何外部原文（围栏纪律）。 */
-function draftBody(d: DraftInput): string {
-  const lines: string[] = [`Hi ${d.customer},`, '']
-  if (d.order) {
-    lines.push(
-      `Thanks for reaching out about order ${d.order.name}. Its payment status is "${d.order.financial_status}" and its fulfillment status is "${d.order.fulfillment_status}".`,
-    )
-  } else {
-    lines.push('Thanks for reaching out.')
+/**
+ * 1c：分类 / 起草 / 边界判定都来自 `@agentsws/support-core`（客服共享包，33 §1）。
+ * 这里只负责把 RunRequest 的上下文翻译成共享包认得的形状。
+ *
+ * 已答的边界从**策略层与知识层**推（`detectAnsweredBoundaries`），
+ * 绝不从线程正文推——客户信里写什么都不能算商家答过一条边界。
+ */
+function answeredBoundaries(
+  req: RunRequest,
+  at: Iso8601,
+  policy: { days: number; source?: ContextItem },
+): SupportPolicy[] {
+  const structured = itemsOfKind(req, 'policy').map((i) => i.content)
+  const texts = [...itemsOfKind(req, 'policy'), ...itemsOfKind(req, 'fact_card')].map((i) =>
+    plainText(i.content),
+  )
+  const answered = detectAnsweredBoundaries({ texts, structured, at })
+  if (
+    policy.source !== undefined &&
+    !answered.some((p) => p.boundary_id === 'policy.refund_window')
+  ) {
+    answered.push(returnWindowPolicy(policy.days, at, policy.source.id))
   }
-  lines.push('')
-  lines.push(`Our return policy allows returns within ${d.windowDays} days of delivery.`)
-  if (d.order?.delivered_at && d.daysSinceDelivery !== undefined) {
-    lines.push(
-      `Your order was delivered on ${d.order.delivered_at.slice(0, 10)}, ${d.daysSinceDelivery} day(s) ago.`,
-    )
-  }
-  lines.push('')
-  if (d.withinWindow && d.refundAmount !== undefined && d.order) {
-    lines.push(
-      `That is inside the ${d.windowDays}-day window, so we have prepared a refund of ${d.refundAmount} ${d.order.currency} to your original payment method. It is waiting for a colleague to confirm and will be issued right after.`,
-    )
-  } else if (d.withinWindow && d.order) {
-    lines.push(
-      `That is inside the ${d.windowDays}-day window, so a return is possible. A colleague will confirm the next step with you.`,
-    )
-  } else if (d.order) {
-    lines.push(
-      `That is outside the ${d.windowDays}-day window, so a refund is not available for this order. Tell us what went wrong and we will look at the options that do apply.`,
-    )
-  } else {
-    lines.push('Tell us the order number and we will check what applies.')
-  }
-  lines.push('', 'Kind regards,', d.signature)
-  return lines.join('\n')
+  return answered
 }
 
 // ---------- 适配器 ----------
@@ -471,7 +462,21 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       // 5) 起草回复（+ 窗口内的 stage_refund 意图）
-      const wantsChange = looksLikeChangeRequest(threadText)
+      // 1c：分类交给客服共享包；"要不要改动"由意图定，不再各自维护一张词表
+      const subjectLine = threadSubject(threadItem)
+      const classification = classifyText(
+        { text: threadText, ...(subjectLine === undefined ? {} : { subject: subjectLine }) },
+        { now: clock.now() },
+      )
+      const wantsChange = classification.intent === 'returns_refunds'
+      const answered = answeredBoundaries(req, clock.now(), policy)
+      // 第一次遇到没答过的边界：不自作主张，只起草"交给同事确认"的回信 + 发一张选择题卡
+      const gate = gateChange({
+        change_kind: 'refund',
+        classification,
+        policies: answered,
+        text: threadText,
+      })
       const deliveredMs = order?.delivered_at ? Date.parse(order.delivered_at) : undefined
       const nowMs = Date.parse(clock.now())
       const daysSince =
@@ -488,6 +493,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       if (
         !exhausted &&
         wantsChange &&
+        gate.allowed &&
         withinWindow &&
         order &&
         refundAmount !== undefined &&
@@ -523,6 +529,19 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         }
       }
 
+      if (!exhausted && gate.missing.length > 0 && options.createPolicyQuestion) {
+        for (const boundary of gate.missing) {
+          const asked = await options.createPolicyQuestion({ request: req, boundary })
+          if (asked === undefined) continue
+          sink({
+            type: 'proposal.created',
+            approval_item_id: asked.approval_item_id,
+            kind: 'policy_change',
+          })
+          outputs.push({ kind: 'proposal', approval_item_id: asked.approval_item_id })
+        }
+      }
+
       let body = ''
       if (!exhausted && req.expectations.outputs.includes('draft') && options.createDraft) {
         const customer =
@@ -530,9 +549,8 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           order?.email?.split('@')[0] ??
           threadRecipient(threadItem) ??
           'there'
-        const subject =
-          threadSubject(threadItem) ?? (order ? `Re: order ${order.name}` : 'Re: your message')
-        body = draftBody({
+        const subject = subjectLine ?? (order ? `Re: order ${order.name}` : 'Re: your message')
+        body = renderReplyBody({
           windowDays: policy.days,
           withinWindow,
           signature,

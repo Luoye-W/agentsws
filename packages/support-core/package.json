@@ -1,8 +1,8 @@
 {
-  "name": "@agentsws/runtime-direct",
+  "name": "@agentsws/support-core",
   "version": "0.0.0",
   "private": true,
-  "description": "direct-llm 运行时：不经 dsh、直接用模型网关跑 turn loop（17 §4）",
+  "description": "客服共享包（33 §1）：入站分类、业务边界注册表、回复起草、知识引导、升级与 SLA。纯函数，无 IO，无模型调用。",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,9 +19,6 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/core": "workspace:*",
-    "@agentsws/model-gateway": "workspace:*",
-    "@agentsws/stand-ins": "workspace:*",
-    "@agentsws/support-core": "workspace:*"
+    "@agentsws/core": "workspace:*"
   }
 }

@@ -420,6 +420,9 @@ importers:
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
 
   packages/simulation:
     dependencies:
@@ -480,6 +483,18 @@ importers:
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
+
+  packages/support-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/txn:
     dependencies:
