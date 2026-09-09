@@ -1,0 +1,43 @@
+# 一天走完（25 消费者 ① ② ⑦）：合成时钟从早上 06:00 推到第二天早上，
+# 早上 08:00 出计划卡、晚上 20:00 出复盘卡、复盘完把次日计划草案接力成一条 at 任务。
+# 这条场景证明的是「时间推进能真的驱动调度器」——不是把卡片写死。
+id: ops/one-day
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T06:00:00+08:00' }
+events:
+  - at: '+0m'
+    routine.start: {}
+  # 早上 08:00 之后：计划卡应该已经出了
+  - at: '+3h'
+    clock.advance: {}
+  # 晚上 20:00 之后：复盘卡应该已经出了，接力任务也注册了
+  - at: '+15h'
+    clock.advance: {}
+  # 第二天早上：07:55 的接力任务跑过了，08:00 又出了一张新的计划卡
+  - at: '+26h'
+    clock.advance: {}
+expected:
+  approval_kinds:
+    # 两天各一张计划卡（第二天那张就是接力之后出的）
+    daily_plan: 2
+    review: 1
+  event_types:
+    - simulation.routine_started
+    - schedule.created
+    - schedule.fired
+  scheduled_handlers:
+    - work.daily_plan
+    - work.review
+    - work.plan_from_review
+  metrics:
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - fencing_covers_external

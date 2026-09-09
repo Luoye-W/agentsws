@@ -114,6 +114,9 @@ importers:
       '@agentsws/runtime-direct':
         specifier: workspace:*
         version: link:../../packages/runtime-direct
+      '@agentsws/schedule':
+        specifier: workspace:*
+        version: link:../../packages/schedule
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills
@@ -512,6 +515,19 @@ importers:
         specifier: workspace:*
         version: link:../support-core
 
+  packages/schedule:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
   packages/simulation:
     dependencies:
       '@agentsws/contracts':
@@ -541,12 +557,18 @@ importers:
       '@agentsws/runtime-direct':
         specifier: workspace:*
         version: link:../runtime-direct
+      '@agentsws/schedule':
+        specifier: workspace:*
+        version: link:../schedule
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../txn
+      '@agentsws/work':
+        specifier: workspace:*
+        version: link:../work
       yaml:
         specifier: ^2.5.0
         version: 2.9.0

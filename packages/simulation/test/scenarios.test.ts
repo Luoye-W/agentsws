@@ -114,6 +114,52 @@ describe('pack 场景（26 §1 §4）', () => {
     }
   })
 
+  it('一天走完（25）：早上计划卡出、晚上复盘卡出、复盘后次日计划草案已注册', async () => {
+    const { report, evidence } = await runPackScenario('ops/one-day.yml')
+    expect(report.passed).toBe(true)
+    const types = evidence.events.map((e) => e.type)
+    // 时间推进真的驱动了调度器（不是把卡片写死）
+    expect(types.filter((t) => t === 'schedule.fired').length).toBeGreaterThanOrEqual(3)
+
+    const plans = evidence.approvals.filter((a) => a.kind === 'daily_plan')
+    const reviews = evidence.approvals.filter((a) => a.kind === 'review')
+    expect(plans).toHaveLength(2)
+    expect(reviews).toHaveLength(1)
+
+    // 早上的计划卡在晚上的复盘卡之前
+    const firstPlan = plans[0]
+    const review = reviews[0]
+    expect(Date.parse(String(firstPlan?.created_at))).toBeLessThan(
+      Date.parse(String(review?.created_at)),
+    )
+
+    // ⑦ 复盘跑完注册了明早的接力任务，而且它真的跑了
+    const relayCreated = evidence.events.find(
+      (e) =>
+        e.type === 'schedule.created' &&
+        (e.payload as { handler?: string }).handler === 'work.plan_from_review',
+    )
+    expect(relayCreated).toBeDefined()
+    expect(Date.parse(String(relayCreated?.at))).toBeGreaterThan(
+      Date.parse(String(review?.created_at)) - 1,
+    )
+    const relayFired = evidence.events.find(
+      (e) =>
+        e.type === 'schedule.fired' &&
+        (e.payload as { handler?: string }).handler === 'work.plan_from_review',
+    )
+    expect(relayFired).toBeDefined()
+    // 接力在第二天那张计划卡之前
+    expect(Date.parse(String(relayFired?.at))).toBeLessThan(
+      Date.parse(String(plans[1]?.created_at)),
+    )
+  })
+
+  it('不装例行公事的世界一条定时任务都没有（原有场景指标不受影响）', async () => {
+    const { evidence } = await runPackScenario('aftersales/return-within-window.yml')
+    expect(evidence.events.filter((e) => e.type.startsWith('schedule.'))).toHaveLength(0)
+  })
+
   it('预算耗尽：熔断，一次工具都没调，owner 收到通知', async () => {
     const { evidence } = await runPackScenario('ops/budget-exhausted.yml')
     expect(evidence.events.filter((e) => e.type === 'tool.call')).toHaveLength(0)

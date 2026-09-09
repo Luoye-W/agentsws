@@ -59,10 +59,25 @@ import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meeti
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
+import {
+  createScheduleAssembly,
+  createSchedulePort,
+  ensureSystemTasks,
+  offsetToTz,
+  registerDailyPlan,
+  registerIdempotencySweep,
+  registerMeetingPoll,
+  registerPlanRelay,
+  registerReview,
+  registerSkillsWeekly,
+  registerTokenRefresh,
+  type ScheduleAssembly,
+  type SchedulePosition,
+} from './schedule.js'
 import { createSecretStore, type SecretStore } from './secret-store.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { mountStatic } from './static.js'
-import { createWorkPort } from './work.js'
+import { createWorkPort, periodQueryRunner } from './work.js'
 import {
   createWorkstationPort,
   emptyDataSource,
@@ -85,6 +100,9 @@ const QUEUE_STATES = [
   'expired',
   'withdrawn',
 ] as const
+
+/** 队列上还等着人的状态（战报与计划里的「还有几张等你定」都用它）。 */
+const WAITING_QUEUE_STATES = new Set(['pending', 'in_review'])
 
 export const DEFAULT_PORT = 4317
 export const HOST = '127.0.0.1'
@@ -152,10 +170,18 @@ export interface ServerOptions {
   /** WP25：模型试跑用的 fetch（测试注入 →「测试」按钮全程不联网）。 */
   modelFetch?: FetchLike
   /**
-   * WP25：Shopify 令牌到期巡检的间隔（毫秒）。缺省 15 分钟；
-   * 测试传 0 关掉——一次性任务不该留后台计时器。
+   * WP25：Shopify 令牌到期巡检的间隔（毫秒）。
+   *
+   * **WP27 起缺省 0**：巡检改由调度器那条 `connect.shopify_refresh` 任务驱动
+   * （到期前一小时换新，不再是 15 分钟一遍的 `setInterval`）。显式传一个正数
+   * 仍会起旧的 `setInterval`——只给不想装调度器的嵌入式用法留个后门。
    */
   tokenRefreshIntervalMs?: number
+  /**
+   * 25 §4 调度循环的巡检间隔（毫秒）；缺省 30 秒。传 `0` = 不起后台定时器
+   * （测试与模拟回路自己调 `scheduler.runDue`）。
+   */
+  scheduleIntervalMs?: number
 }
 
 export interface Bootstrap {
@@ -189,6 +215,8 @@ export interface Server {
   org: OrgAssembly
   /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
   secrets: SecretStore
+  /** 25 定时与流程：调度器 + 流程引擎 + 七个消费者的登记。 */
+  schedule: ScheduleAssembly
   /** 17 §4 运行时适配器 + `startRun`；`startRun: false` 时没有。 */
   runtime?: RuntimeAssembly
   identity: LocalIdentityService
@@ -376,8 +404,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     mailProbe: createMailProbe(),
     secrets,
-    // WP25：Shopify 的客户端凭据令牌 24 小时到期，每 15 分钟看一眼有没有快过期的
-    refreshIntervalMs: options.tokenRefreshIntervalMs ?? 15 * 60 * 1000,
+    // WP27：巡检交给调度器（`connect.shopify_refresh`，到期前一小时换新）；
+    // 这里默认不起 setInterval，除非调用方显式要旧行为
+    refreshIntervalMs: options.tokenRefreshIntervalMs ?? 0,
     ...(options.shopifyFetch === undefined ? {} : { shopifyFetch: options.shopifyFetch }),
     ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
     ...(dbDir === undefined ? {} : { dbDir }),
@@ -438,6 +467,105 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
     })
   }
+
+  // ── 25 定时与流程：调度器 + 七个消费者 ───────────────────────────────
+  // 装配的位置有讲究：要在 work / meetings / connections / skills 都起来之后，
+  // 因为七个消费者就是它们；但在网关之前，因为 `/v1/schedules` 要用它。
+  const schedule = createScheduleAssembly({
+    workspace_id: workspace.id,
+    clock,
+    random,
+    appendEvent,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(options.scheduleIntervalMs === undefined ? {} : { intervalMs: options.scheduleIntervalMs }),
+  })
+  const scheduleTz = offsetToTz(workData.tz_offset_minutes)
+  const positionsOf = (): SchedulePosition[] =>
+    roles.assignments
+      .listByPerson(person.id, { workspace_id: workspace.id })
+      .filter((a) => a.revoked_at === undefined)
+      .map((a) => ({ assignment_id: a.id, person_id: a.person_id, role_id: a.role_id }))
+  const cardsOfPosition = async (p: SchedulePosition): Promise<ApprovalItem[]> =>
+    (await approvals.queue({
+      workspace_id: workspace.id,
+      person_id: p.person_id,
+      lane: 'mine',
+      state: [...QUEUE_STATES],
+    })) as ApprovalItem[]
+  const planDeps = {
+    workspace_id: workspace.id,
+    work,
+    approvals,
+    positions: positionsOf,
+    tz: scheduleTz,
+    goals: async (p: SchedulePosition) =>
+      work.progress(
+        periodQueryRunner(
+          () => workData.orders(),
+          () => [],
+          'USD',
+        ),
+        { position_id: p.assignment_id, status: ['active'] },
+      ),
+    cardsWaiting: async (p: SchedulePosition) =>
+      (await cardsOfPosition(p)).filter((i) => WAITING_QUEUE_STATES.has(i.state)).length,
+  }
+  // ① 每日计划、② 复盘（day / week / month）、⑦ 复盘 → 次日计划草案的接力
+  registerDailyPlan(schedule.scheduler, planDeps)
+  const relay = registerPlanRelay({
+    workspace_id: workspace.id,
+    scheduler: schedule.scheduler,
+    work,
+    tz: scheduleTz,
+  })
+  registerReview(schedule.scheduler, {
+    ...planDeps,
+    cards: cardsOfPosition,
+    lessons: () =>
+      skills.lessons
+        .list({ workspace_id: workspace.id, status: 'pooled' })
+        .map((l) => ({ id: l.id, text: l.text })),
+    relay: (review) => relay(review),
+  })
+  // ③ 会议记录源轮询
+  registerMeetingPoll(schedule.scheduler, {
+    workspace_id: workspace.id,
+    clock,
+    meetings,
+    actor: person.id,
+  })
+  // ④ 幂等表清理（内存档的那份归网关自己管，这里只扫落盘那份）
+  if (idempotencyStore !== undefined) {
+    registerIdempotencySweep(schedule.scheduler, { clock, store: idempotencyStore })
+  }
+  // ⑤ Shopify 令牌刷新：到期前一小时
+  registerTokenRefresh({
+    clock,
+    scheduler: schedule.scheduler,
+    refreshTokens: () => connections.refreshTokens(),
+    expiries: () => connections.shopify.list().map((r) => r.expires_at),
+  })
+  // ⑥ 技能周合并
+  registerSkillsWeekly(schedule.scheduler, {
+    workspace_id: workspace.id,
+    clock,
+    weeklyConsolidate: (ws, now) => skills.lessons.weeklyConsolidate(ws, now),
+  })
+  await ensureSystemTasks(schedule.scheduler, {
+    workspace_id: workspace.id,
+    owner: person.id,
+    role_id: ownerAssignment.role_id,
+    assignment_id: ownerAssignment.id,
+    tz: scheduleTz,
+    positions: positionsOf(),
+    has: {
+      work: true,
+      meetings: true,
+      idempotency: idempotencyStore !== undefined,
+      shopify: true,
+      skills: true,
+    },
+  })
 
   const rolesPort: RolesPort = {
     can: (id, domain, op, request) => roles.can(id, domain, op, request),
@@ -532,6 +660,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return items.find((i) => i.id === id)
       },
     }),
+    // 25 §5 定时与流程面
+    schedules: createSchedulePort({
+      workspace_id: workspace.id,
+      scheduler: schedule.scheduler,
+      workflows: schedule.workflows,
+      approvals,
+      assignmentOf: (id) => {
+        const found = roles.assignments.get(id)
+        return found === undefined || found.workspace_id !== workspace.id
+          ? undefined
+          : { person_id: found.person_id, role_id: found.role_id }
+      },
+    }),
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
@@ -596,6 +737,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modelSettings,
     org,
     secrets,
+    schedule,
     ...(runtime === undefined ? {} : { runtime }),
     identity,
     backend,
@@ -612,6 +754,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
       })
       httpServer = started
+      // 25 §4：进程真的起来了才开始巡检（测试里 `scheduleIntervalMs: 0` 关掉）
+      schedule.start()
       const address = started.address()
       const bound = typeof address === 'object' && address !== null ? address.port : wanted
       boundPort = bound
@@ -642,6 +786,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 接进来的世界由调用方关（它还持有事件日志与替身）
       if (options.mount === undefined) roles.close()
       meetings.close()
+      schedule.close()
       connections.close()
       org.close()
       secrets.close()

@@ -12,6 +12,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
 import { connectPathFor } from '@/components/connections/links'
 import { DeckSection } from '@/components/deck'
+import { ScheduleList } from '@/components/schedule-list'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -79,6 +80,16 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
 }
 
 function RecordsTab({ id }: { id: string }): React.ReactNode {
+  return (
+    <div className="flex flex-col gap-6">
+      <RecordRows id={id} />
+      {/* 25 §3：机器在替你定时做哪几件事，这里看得见也停得掉 */}
+      <ScheduleList positionId={id} />
+    </div>
+  )
+}
+
+function RecordRows({ id }: { id: string }): React.ReactNode {
   const { t, lang } = useApp()
   const records = useQuery({ queryKey: ['records', id], queryFn: () => getPositionRecords(id) })
   if (records.isPending) return <Skeleton className="h-40 w-full" />

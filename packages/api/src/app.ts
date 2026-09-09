@@ -24,6 +24,7 @@ import { knowledgeRoutes } from './routes/knowledge.js'
 import { meetingRoutes } from './routes/meetings.js'
 import { modelRoutes } from './routes/models.js'
 import { orgRoutes } from './routes/org.js'
+import { scheduleRoutes } from './routes/schedules.js'
 import { skillRoutes } from './routes/skills.js'
 import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
@@ -58,6 +59,8 @@ export function collectRoutes(): Route[] {
     ...meetingRoutes(),
     ...modelRoutes(),
     ...skillRoutes(),
+    // 25 定时与流程；`/v1/schedules/:id/run-now` 是定值段，与 `:id` 不撞
+    ...scheduleRoutes(),
     ...assignmentRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法

@@ -130,6 +130,7 @@ export type {
   WorkspacePolicyView,
 } from './routes/org.js'
 export { orgRoutes, positionName } from './routes/org.js'
+export { scheduleRoutes } from './routes/schedules.js'
 export {
   type MatterListFilter,
   type TodoListFilter,
@@ -166,8 +167,17 @@ export type {
   RateLimitPolicy,
   RequestContext,
   RolesPort,
+  ScheduleActor,
+  ScheduleCreateInput,
+  ScheduledTaskView,
+  ScheduleListQuery,
+  SchedulePatchInput,
+  SchedulePort,
+  ScheduleRunOutcome,
   SkillsPort,
   TraceScope,
+  WorkflowInstanceView,
+  WorkflowListQuery,
   WorkstationActor,
   WorkstationPort,
   WorkstationRange,

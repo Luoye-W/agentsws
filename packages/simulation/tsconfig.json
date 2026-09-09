@@ -12,7 +12,9 @@
     { "path": "../model-gateway" },
     { "path": "../roles" },
     { "path": "../runtime-direct" },
+    { "path": "../schedule" },
     { "path": "../stand-ins" },
-    { "path": "../txn" }
+    { "path": "../txn" },
+    { "path": "../work" }
   ]
 }

@@ -255,6 +255,116 @@ export interface GatewayOptions {
   sessionOwnerEmail?: string
 }
 
+/* ------------------------------------------------------------------ */
+/* 25 定时与流程面                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 定时任务的网关投影。
+ *
+ * 比契约的 `ScheduledTask` **宽一点**：多一个 `interval` 触发器、多 `running` / `cancelled`
+ * 两个状态、多 `title` / `handler`（见 WP27 交付报告的「需要契约改动」）。网关这一层
+ * 不判断这些字段的语义，只负责把它们原样端出去。
+ */
+export interface ScheduledTaskView {
+  id: string
+  workspace_id: WorkspaceId
+  owner: PersonId
+  role_id: RoleId
+  assignment_id: AssignmentId
+  title?: string | undefined
+  handler?: string | undefined
+  trigger: { kind: string } & Record<string, unknown>
+  state: string
+  created_by: 'user' | 'agent'
+  misfire_policy: 'run_once_now' | 'skip'
+  fire_count: number
+  next_fire_at?: Iso8601 | undefined
+  last_fire_at?: Iso8601 | undefined
+  last_result?: string | undefined
+  approval?: string | undefined
+  origin?: { conversation_id: string } & Record<string, unknown>
+}
+
+/** 流程实例的网关投影（25 §1；`cancelled` 是实现层多出来的一态）。 */
+export interface WorkflowInstanceView {
+  id: string
+  def: { id: string; version: string }
+  workspace_id: WorkspaceId
+  role_id: RoleId
+  subject: ObjectRef
+  conversation_id?: string | undefined
+  state: string
+  cursor: string
+  history: { step_id: string; at: Iso8601; result: unknown }[]
+  started_at: Iso8601
+}
+
+export interface ScheduleActor {
+  workspace_id: WorkspaceId
+  person_id: PersonId
+}
+
+export interface ScheduleListQuery extends ScheduleActor {
+  assignment_id: AssignmentId
+  /** `position` = 本次绑定的岗位；`mine` = 本人全部岗位；`workspace` = 整个工作区 */
+  scope: 'position' | 'mine' | 'workspace'
+  conversation_id?: string
+  state?: string[]
+}
+
+export interface ScheduleCreateInput extends ScheduleActor {
+  /** 本次绑定的岗位（X-Assignment） */
+  assignment_id: AssignmentId
+  /** 建给哪个岗位；不给就是本次绑定的这个。给别人的要那边点头（25 §5） */
+  target_assignment_id?: AssignmentId
+  title: string
+  trigger: { kind: string } & Record<string, unknown>
+  handler?: string
+  params?: Record<string, unknown>
+  /** 到点那一下会做什么（25 §3 决定要不要人点头） */
+  effect: 'read_only' | 'writes' | 'sends'
+  misfire_policy: 'run_once_now' | 'skip'
+  conversation_id?: string
+}
+
+export interface SchedulePatchInput {
+  action?: 'pause' | 'resume' | undefined
+  trigger?: ({ kind: string } & Record<string, unknown>) | undefined
+  title?: string | undefined
+  params?: Record<string, unknown> | undefined
+  misfire_policy?: 'run_once_now' | 'skip' | undefined
+}
+
+export interface ScheduleRunOutcome {
+  task: ScheduledTaskView
+  ok: boolean
+  result?: unknown
+  error?: { code: string; message: string }
+}
+
+export interface WorkflowListQuery {
+  workspace_id: WorkspaceId
+  def_id?: string
+  state?: string[]
+  subject?: { type: string; id: string }
+}
+
+/** 25 §5 的端口；没装调度器的发行版不给它，那几条路由回 `not_implemented`。 */
+export interface SchedulePort {
+  list(query: ScheduleListQuery): MaybePromise<ScheduledTaskView[]>
+  create(input: ScheduleCreateInput): MaybePromise<ScheduledTaskView>
+  update(
+    actor: ScheduleActor,
+    id: string,
+    patch: SchedulePatchInput,
+  ): MaybePromise<ScheduledTaskView>
+  cancel(actor: ScheduleActor, id: string): MaybePromise<ScheduledTaskView>
+  runNow(actor: ScheduleActor, id: string): MaybePromise<ScheduleRunOutcome>
+  workflows(query: WorkflowListQuery): MaybePromise<WorkflowInstanceView[]>
+  workflow(actor: ScheduleActor, id: string): MaybePromise<WorkflowInstanceView | undefined>
+}
+
 export interface GatewayDeps {
   identity: IdentityService
   halt: Halt
@@ -285,6 +395,8 @@ export interface GatewayDeps {
   org?: OrgPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
+  /** 25 定时与流程面；没装调度器时 `/v1/schedules` 与 `/v1/workflows` 回 not_implemented。 */
+  schedules?: SchedulePort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>

@@ -56,6 +56,9 @@
       "path": "packages/runtime-direct"
     },
     {
+      "path": "packages/schedule"
+    },
+    {
       "path": "packages/simulation"
     },
     {
