@@ -24,9 +24,15 @@ import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { ApiError } from './errors.js'
 import {
+  type AcceptedInvitation,
+  type CreateInvitationInput,
+  DEFAULT_INVITE_TTL,
   DEFAULT_WORKSPACE_POLICY,
+  type Invitation,
+  type IssuedInvitation,
   type IssuedToken,
   type LocalIdentityService,
+  nameFromEmail,
   type TokenKind,
 } from './identity.js'
 import { type Migration, migrate, schemaVersion } from './sqlite-migrations.js'
@@ -80,6 +86,19 @@ CREATE TABLE IF NOT EXISTS counters (
   name  TEXT PRIMARY KEY NOT NULL,
   value INTEGER NOT NULL
 ) STRICT;
+`,
+  },
+  {
+    // WP28 多人：邀请同事。与 token 同一条纪律——只存哈希；"用过"是一列，不是删行
+    version: 2,
+    sql: `
+CREATE TABLE IF NOT EXISTS invitations (
+  hash         TEXT PRIMARY KEY NOT NULL,
+  id           TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  json         TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS invitations_by_ws ON invitations (workspace_id);
 `,
   },
 ]
@@ -248,7 +267,7 @@ export class SqliteIdentityService implements LocalIdentityService {
 
   // ───────────────────────────── 人
 
-  async createPerson(input: { email: string; name: string }): Promise<Person> {
+  async createPerson(input: { email: string; name: string; id?: PersonId }): Promise<Person> {
     const email = input.email.trim().toLowerCase()
     if (email === '' || !email.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
     const existing = this.#db
@@ -256,7 +275,7 @@ export class SqliteIdentityService implements LocalIdentityService {
       .get(email)
     if (existing !== undefined) return this.#person(existing)
     const person: Person = {
-      id: this.#id('per'),
+      id: input.id ?? this.#id('per'),
       email,
       name: input.name,
       identities: [{ provider: 'local', external_id: email, verified_at: this.#clock.now() }],
@@ -367,6 +386,113 @@ export class SqliteIdentityService implements LocalIdentityService {
       )
       .all(workspace_id)
       .map((r) => this.#membership(r))
+  }
+
+  // ── WP28 多人：邀请、接受、离开 ───────────────────────────────────────
+
+  async createInvitation(input: CreateInvitationInput): Promise<IssuedInvitation> {
+    if (this.#getWorkspace(input.workspace_id) === undefined)
+      throw new ApiError('not_found', `工作区不存在：${input.workspace_id}`)
+    const email = input.email.trim().toLowerCase()
+    if (email === '' || !email.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
+    const now = this.#clock.now()
+    const invitation: Invitation = {
+      id: this.#id('inv'),
+      workspace_id: input.workspace_id,
+      email,
+      ...(input.name === undefined ? {} : { name: input.name }),
+      role: input.role ?? 'member',
+      ranges: input.ranges ?? [],
+      ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+      invited_by: input.invited_by,
+      created_at: now,
+      expires_at: new Date(Date.parse(now) + (input.ttlMs ?? DEFAULT_INVITE_TTL)).toISOString(),
+      used: false,
+    }
+    const token = `inv_${this.#secret()}`
+    this.#db
+      .prepare('INSERT INTO invitations (hash, id, workspace_id, json) VALUES (?,?,?,?)')
+      .run(hashToken(token), invitation.id, invitation.workspace_id, JSON.stringify(invitation))
+    return { invitation, token }
+  }
+
+  listInvitations(workspace_id: WorkspaceId): Invitation[] {
+    return this.#db
+      .prepare<[string], { json: string }>(
+        'SELECT json FROM invitations WHERE workspace_id = ? ORDER BY rowid',
+      )
+      .all(workspace_id)
+      .map((r) => JSON.parse(r.json) as Invitation)
+  }
+
+  async acceptInvitation(token: string, input?: { name?: string }): Promise<AcceptedInvitation> {
+    const hash = hashToken(token)
+    const row = this.#db
+      .prepare<[string], { json: string }>('SELECT json FROM invitations WHERE hash = ?')
+      .get(hash)
+    const invitation = row === undefined ? undefined : (JSON.parse(row.json) as Invitation)
+    // 用过 / 过期 / 不存在，对外一律同一句话（不给探测的余地）
+    if (invitation === undefined || invitation.used || this.#expired(invitation.expires_at))
+      throw new ApiError('not_found', '邀请链接无效或已过期')
+    const workspace = this.#getWorkspace(invitation.workspace_id)
+    if (workspace === undefined) throw new ApiError('not_found', '工作区不存在')
+    const person =
+      this.personByEmail(invitation.email) ??
+      (await this.createPerson({
+        email: invitation.email,
+        name: input?.name ?? invitation.name ?? nameFromEmail(invitation.email),
+      }))
+    const active = this.#db
+      .prepare<[string, string], MembershipRow>(
+        `SELECT * FROM memberships
+          WHERE workspace_id = ? AND person_id = ? AND left_at IS NULL`,
+      )
+      .get(invitation.workspace_id, person.id)
+    const membership =
+      active === undefined
+        ? await this.addMember({
+            workspace_id: invitation.workspace_id,
+            person_id: person.id,
+            role: invitation.role,
+            ranges: invitation.ranges,
+          })
+        : this.#membership(active)
+    const accepted: Invitation = {
+      ...invitation,
+      used: true,
+      accepted_at: this.#clock.now(),
+      accepted_by: person.id,
+    }
+    this.#db
+      .prepare('UPDATE invitations SET json = ? WHERE hash = ?')
+      .run(JSON.stringify(accepted), hash)
+    return { invitation: accepted, person, membership, workspace }
+  }
+
+  async leaveWorkspace(
+    workspace_id: WorkspaceId,
+    person_id: PersonId,
+  ): Promise<Membership | undefined> {
+    const at = this.#clock.now()
+    const active = this.#db
+      .prepare<[string, string], MembershipRow>(
+        `SELECT * FROM memberships
+          WHERE workspace_id = ? AND person_id = ? AND left_at IS NULL`,
+      )
+      .get(workspace_id, person_id)
+    this.#db.transaction(() => {
+      this.#db
+        .prepare(
+          `UPDATE memberships SET left_at = ?
+            WHERE workspace_id = ? AND person_id = ? AND left_at IS NULL`,
+        )
+        .run(at, workspace_id, person_id)
+      // 20 §6 用例 6：人离开后其 token 立刻失效
+      this.#db
+        .prepare('UPDATE tokens SET revoked = 1 WHERE workspace_id = ? AND person_id = ?')
+        .run(workspace_id, person_id)
+    })()
+    return active === undefined ? undefined : { ...this.#membership(active), left_at: at }
   }
 
   workspacesOf(person_id: PersonId): Workspace[] {

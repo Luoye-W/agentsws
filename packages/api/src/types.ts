@@ -45,6 +45,7 @@ import type { AskPort } from './routes/ask.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
+import type { OrgPort } from './routes/org.js'
 import type { WorkPort } from './routes/work.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
@@ -277,6 +278,11 @@ export interface GatewayDeps {
   connections?: ConnectionsPort
   /** WP25 模型面（provider 配置 / 默认模型 / 预算 / 花费）；没装配时 `/v1/models/*` 回 not_implemented。 */
   models?: ModelsPort
+  /**
+   * WP28 制度面（05 职责 / 岗位 / 分配 / 策略层 + 20 成员与邀请）；
+   * 没装配时 `/v1/roles`、`/v1/org/*`、成员与邀请那几条回 not_implemented。
+   */
+  org?: OrgPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
   traceScope: TraceScope

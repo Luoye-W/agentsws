@@ -14,6 +14,7 @@ import type {
   Membership,
   Person,
   PersonId,
+  RangeRef,
   Workspace,
   WorkspaceId,
   WorkspacePolicy,
@@ -116,6 +117,8 @@ function constantTimeEqual(a: string, b: string): boolean {
  * 一致性套件与 `apps/server` 都按这个接口写，换档不改调用方。
  */
 export interface LocalIdentityService extends IdentityService {
+  /** `id` 只给装配用（demo / 模拟世界要让身份的 person_id 与职责库里的人对上）。 */
+  createPerson(input: { email: string; name: string; id?: PersonId }): Promise<Person>
   personByEmail(email: string): Person | undefined
   workspacesOf(person_id: PersonId): Workspace[]
   issue(
@@ -125,6 +128,76 @@ export interface LocalIdentityService extends IdentityService {
     ttlMs?: number,
   ): IssuedToken
   revoke(token: string): void
+  // ── WP28 多人：邀请同事、按邮箱登录、离开工作区 ──────────────────────
+  /** 20 §5：建一张一次性邀请（默认 24h）。明文 token 只在这里返回一次。 */
+  createInvitation(input: CreateInvitationInput): Promise<IssuedInvitation>
+  /** 某工作区的邀请清单（不含 token，只有状态）。 */
+  listInvitations(workspace_id: WorkspaceId): Invitation[]
+  /**
+   * 接受邀请：邮箱对应的人不存在就建一个，然后成为该工作区成员。
+   * 一次性——用过或过期的 token 一律 `not_found`（不区分，免得探测）。
+   */
+  acceptInvitation(token: string, input?: { name?: string }): Promise<AcceptedInvitation>
+  /**
+   * 20 §4 人离开：成员关系收尾 + **该人在这个工作区的全部 token 立刻失效**。
+   * 分配的撤销由 roles 侧做（这里只管身份）。
+   */
+  leaveWorkspace(workspace_id: WorkspaceId, person_id: PersonId): Promise<Membership | undefined>
+}
+
+/** 20 §5 邀请：一次性、带期限、绑工作区。token 只存哈希。 */
+export interface Invitation {
+  id: string
+  workspace_id: WorkspaceId
+  email: string
+  name?: string
+  /** 接受后拿到的成员身份（20 §1 Membership.role）。 */
+  role: Membership['role']
+  ranges: RangeRef[]
+  /** 接受后按这个岗位模板展开分配；由 org 端口解释，身份层只是原样存着。 */
+  position_id?: string
+  invited_by: PersonId
+  created_at: Iso8601
+  expires_at: Iso8601
+  accepted_at?: Iso8601
+  accepted_by?: PersonId
+  /** 一次性：接受过就是 true，过期不改这个位。 */
+  used: boolean
+}
+
+export interface CreateInvitationInput {
+  workspace_id: WorkspaceId
+  email: string
+  name?: string
+  role?: Membership['role']
+  ranges?: RangeRef[]
+  position_id?: string
+  invited_by: PersonId
+  /** 默认 24 小时。 */
+  ttlMs?: number
+}
+
+export interface IssuedInvitation {
+  invitation: Invitation
+  /** 明文只在签发那一刻出现一次（进链接，不进日志）。 */
+  token: string
+}
+
+export interface AcceptedInvitation {
+  invitation: Invitation
+  person: Person
+  membership: Membership
+  workspace: Workspace
+}
+
+/** 邀请默认有效期：24 小时（20 §5）。 */
+export const DEFAULT_INVITE_TTL = 24 * 60 * 60 * 1000
+
+const normalizeEmail = (email: string): string => email.trim().toLowerCase()
+
+/** 邮箱 → 一个能看的名字（没填名字时的兜底，不猜真名）。 */
+export function nameFromEmail(email: string): string {
+  return normalizeEmail(email).split('@')[0] ?? 'member'
 }
 
 export const DEFAULT_WORKSPACE_POLICY = (workspace_id: WorkspaceId): WorkspacePolicy => ({
@@ -145,6 +218,8 @@ export class MemoryIdentityService implements LocalIdentityService {
   readonly #members = new Map<WorkspaceId, Membership[]>()
   readonly #tokens = new Map<string, TokenRow>()
   readonly #logins = new Map<string, LoginRow>()
+  /** 邀请：键是 token 的 sha256，明文一次都不留 */
+  readonly #invites = new Map<string, Invitation>()
   #seq = 0
 
   constructor(options: MemoryIdentityOptions) {
@@ -265,6 +340,83 @@ export class MemoryIdentityService implements LocalIdentityService {
 
   async members(workspace_id: WorkspaceId): Promise<Membership[]> {
     return [...(this.#members.get(workspace_id) ?? [])]
+  }
+
+  // ── WP28 多人：邀请、接受、离开 ───────────────────────────────────────
+
+  async createInvitation(input: CreateInvitationInput): Promise<IssuedInvitation> {
+    const workspace = this.#workspaces.get(input.workspace_id)
+    if (!workspace) throw new ApiError('not_found', `工作区不存在：${input.workspace_id}`)
+    const email = normalizeEmail(input.email)
+    if (email === '' || !email.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
+    const now = this.#clock.now()
+    const invitation: Invitation = {
+      id: this.#id('inv'),
+      workspace_id: input.workspace_id,
+      email,
+      ...(input.name === undefined ? {} : { name: input.name }),
+      role: input.role ?? 'member',
+      ranges: input.ranges ?? [],
+      ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+      invited_by: input.invited_by,
+      created_at: now,
+      expires_at: new Date(Date.parse(now) + (input.ttlMs ?? DEFAULT_INVITE_TTL)).toISOString(),
+      used: false,
+    }
+    const token = `inv_${this.#secret()}`
+    this.#invites.set(hashToken(token), invitation)
+    return { invitation, token }
+  }
+
+  listInvitations(workspace_id: WorkspaceId): Invitation[] {
+    return [...this.#invites.values()].filter((i) => i.workspace_id === workspace_id)
+  }
+
+  async acceptInvitation(token: string, input?: { name?: string }): Promise<AcceptedInvitation> {
+    const hash = hashToken(token)
+    const invitation = this.#invites.get(hash)
+    // 用过 / 过期 / 根本不存在，对外一律同一句话：邀请链接无效
+    if (!invitation || invitation.used || this.#expired(invitation.expires_at))
+      throw new ApiError('not_found', '邀请链接无效或已过期')
+    const workspace = this.#workspaces.get(invitation.workspace_id)
+    if (!workspace) throw new ApiError('not_found', '工作区不存在')
+    const person =
+      this.personByEmail(invitation.email) ??
+      (await this.createPerson({
+        email: invitation.email,
+        name: input?.name ?? invitation.name ?? nameFromEmail(invitation.email),
+      }))
+    const list = this.#members.get(invitation.workspace_id) ?? []
+    const active = list.find((m) => m.person_id === person.id && m.left_at === undefined)
+    const membership =
+      active ??
+      (await this.addMember({
+        workspace_id: invitation.workspace_id,
+        person_id: person.id,
+        role: invitation.role,
+        ranges: invitation.ranges,
+      }))
+    const accepted: Invitation = {
+      ...invitation,
+      used: true,
+      accepted_at: this.#clock.now(),
+      accepted_by: person.id,
+    }
+    this.#invites.set(hash, accepted)
+    return { invitation: accepted, person, membership, workspace }
+  }
+
+  async leaveWorkspace(
+    workspace_id: WorkspaceId,
+    person_id: PersonId,
+  ): Promise<Membership | undefined> {
+    const list = this.#members.get(workspace_id) ?? []
+    const active = list.find((m) => m.person_id === person_id && m.left_at === undefined)
+    if (active !== undefined) active.left_at = this.#clock.now()
+    // 20 §6 用例 6：人离开后其 token 立刻失效
+    for (const row of this.#tokens.values())
+      if (row.person_id === person_id && row.workspace_id === workspace_id) row.revoked = true
+    return active
   }
 
   /** 该人在哪些工作区（用于登录后挑默认工作区）。 */

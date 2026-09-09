@@ -240,13 +240,30 @@ async function bootstrapConfig(): Promise<BootstrapConfig> {
   }
 }
 
+/** 没有会话——不是错误，是"该去登录页了"（WP28 之后工作区可能不止一个人）。 */
+export class NeedsLoginError extends Error {
+  /** 登录页把它填进邮箱框，本机单人档一按就进。 */
+  readonly hint: string | undefined
+  constructor(hint?: string) {
+    super('还没登录')
+    this.name = 'NeedsLoginError'
+    this.hint = hint
+  }
+}
+
+export const bootstrapHint = async (): Promise<BootstrapConfig> => bootstrapConfig()
+
 /**
  * 拿一个能用的会话，按这个顺序：
  *
  * 1. **HttpOnly 会话 cookie**（13 §5）——桌面壳用 `AGENTSWS_SESSION_KEY` 换好之后，
  *    同源请求自动带上它，前端**看不到也存不到** token，这是最安全的一条；
  * 2. 存过的 bearer（普通浏览器里上次登录留下的）；
- * 3. 都没有 → 本地单机档的 magic-link 自动登录。
+ * 3. demo 档自动 magic-link 登录（`agentsws demo` 不该要求任何人填东西）；
+ * 4. 其余情况抛 {@link NeedsLoginError} → 走登录页。
+ *
+ * 第 4 条是 WP28 加的：工作区从"只有所有者"变成"可以有同事"之后，
+ * 再拿 owner 的邮箱自动登录就等于所有人都是老板。
  */
 export async function ensureSession(): Promise<Me> {
   try {
@@ -257,15 +274,14 @@ export async function ensureSession(): Promise<Me> {
     clearToken()
   }
   const config = await bootstrapConfig()
+  if (config.demo !== true) throw new NeedsLoginError(config.owner_email)
   const email = config.owner_email ?? 'owner@localhost'
   const issued = await api<{ token?: string }>('/v1/auth/magic-link', {
     method: 'POST',
     body: { email },
     anonymous: true,
   })
-  if (issued.token === undefined) {
-    throw new Error('这个服务进程不在本地单机档，一次性登录 token 只经邮件投递')
-  }
+  if (issued.token === undefined) throw new NeedsLoginError(email)
   const verified = await api<{ session_token: string }>('/v1/auth/verify', {
     method: 'POST',
     body: { token: issued.token },
@@ -876,3 +892,270 @@ export const setModelDefaults = (
 
 export const getModelUsage = (assignment?: string): Promise<ModelUsageView> =>
   api('/v1/models/usage', withAssignment(assignment))
+
+// ── WP28 制度面：职责 / 岗位 / 分配 / 成员与邀请 ─────────────────────────
+//
+// 同一条纪律：这几条一律显式带**所有者那条 Assignment**（05 §3 策略层只有 owner 可改），
+// 不跟着左栏"当前岗位"走；网关是一次请求绑一个，带错了就是 403（31 §3.1）。
+
+export interface RoleSummaryView {
+  id: string
+  name: string
+  name_en: string
+  description: string
+  domain: string
+  version: string
+  source: 'bundled' | 'custom'
+  editable: boolean
+  holders: number
+  home_blocks: { id: string; placement: string; component: string }[]
+  actions: {
+    id: string
+    kind: string
+    target: string
+    route_to: string
+    review_cannot_be_disabled: boolean
+    caps: { key: string; value: string }[]
+    window?: { max_count: number; per: string }
+  }[]
+  automation: { action_id: string; ceiling: string; initial: string; hard_ceiling: boolean }[]
+  connectors: { kind: string; required: boolean }[]
+}
+
+export interface RoleDetailView extends RoleSummaryView {
+  scopes: { domain: string; ops: string[]; range: string; max_sensitivity: string }[]
+  skills: { name: string; tier: string; load: string }[]
+}
+
+export interface OrgPositionView {
+  id: string
+  name: string
+  name_en: string
+  version: string
+  source: 'bundled' | 'custom'
+  roles: { role_id: string; name: string; default: boolean; loaded: boolean }[]
+  holders: { person_id: string; name: string; ranges: { kind: string; id: string }[] }[]
+}
+
+export interface OrgAssignmentView {
+  assignment_id: string
+  person_id: string
+  person_name: string
+  role_id: string
+  role_name: string
+  role_version: string
+  ranges: { kind: string; id: string }[]
+  granted_at: string
+  revoked_at?: string
+  unassigned_range: boolean
+}
+
+export interface OrgMemberView {
+  person_id: string
+  name: string
+  email: string
+  role: 'owner' | 'manager' | 'member'
+  joined_at: string
+  left_at?: string
+  positions: { id: string; name: string }[]
+  assignments: OrgAssignmentView[]
+}
+
+export interface OrgInvitationView {
+  id: string
+  email: string
+  name?: string
+  role: 'owner' | 'manager' | 'member'
+  position_id?: string
+  ranges: { kind: string; id: string }[]
+  created_at: string
+  expires_at: string
+  accepted_at?: string
+  used: boolean
+  url?: string
+  delivered: 'link' | 'email'
+}
+
+export interface OrgChangeReceipt {
+  status: 'pending_approval' | 'applied'
+  approval_item_id?: string
+  summary: string
+}
+
+export interface RangeOption {
+  kind: 'store' | 'department' | 'account' | 'market'
+  id: string
+  label: string
+}
+
+export const listRoleDefinitions = (assignment?: string): Promise<RoleSummaryView[]> =>
+  api<RoleSummaryView[]>('/v1/roles', withAssignment(assignment))
+
+export const getRoleDefinition = (id: string, assignment?: string): Promise<RoleDetailView> =>
+  api<RoleDetailView>(`/v1/roles/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+export const copyRoleDefinition = (
+  from: string,
+  name: string | undefined,
+  assignment?: string,
+): Promise<RoleDetailView> =>
+  api<RoleDetailView>('/v1/roles', {
+    method: 'POST',
+    body: { from, ...(name === undefined ? {} : { name }) },
+    ...withAssignment(assignment),
+  })
+
+/** 改职责模板：不直接生效，回一张卡的 id（14 `policy_change`）。 */
+export const proposeRoleChange = (
+  id: string,
+  patch: {
+    name?: string
+    description?: string
+    actions?: { id: string; caps?: Record<string, number>; window_max_count?: number }[]
+  },
+  assignment?: string,
+): Promise<OrgChangeReceipt> =>
+  api<OrgChangeReceipt>(`/v1/roles/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: patch,
+    ...withAssignment(assignment),
+  })
+
+export const listOrgPositions = (assignment?: string): Promise<OrgPositionView[]> =>
+  api<OrgPositionView[]>('/v1/org/positions', withAssignment(assignment))
+
+export const createOrgPosition = (
+  input: { name: string; roles: { role_id: string; default?: boolean }[] },
+  assignment?: string,
+): Promise<OrgPositionView> =>
+  api<OrgPositionView>('/v1/org/positions', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const updateOrgPosition = (
+  id: string,
+  input: { name: string; roles: { role_id: string; default?: boolean }[] },
+  assignment?: string,
+): Promise<OrgPositionView> =>
+  api<OrgPositionView>(`/v1/org/positions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const deleteOrgPosition = (id: string, assignment?: string): Promise<{ deleted: boolean }> =>
+  api(`/v1/org/positions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })
+
+export const createAssignments = (
+  input: {
+    person_id: string
+    position_id?: string
+    role_id?: string
+    include?: string[]
+    ranges: { kind: string; id: string }[]
+  },
+  assignment?: string,
+): Promise<OrgAssignmentView[]> =>
+  api<OrgAssignmentView[]>('/v1/assignments', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const revokeAssignment = (id: string, assignment?: string): Promise<OrgAssignmentView> =>
+  api<OrgAssignmentView>(`/v1/assignments/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })
+
+export const listMembers = (workspace_id: string, assignment?: string): Promise<OrgMemberView[]> =>
+  api<OrgMemberView[]>(
+    `/v1/workspaces/${encodeURIComponent(workspace_id)}/members`,
+    withAssignment(assignment),
+  )
+
+export const removeMember = (
+  workspace_id: string,
+  person_id: string,
+  assignment?: string,
+): Promise<{ revoked_assignments: number }> =>
+  api(
+    `/v1/workspaces/${encodeURIComponent(workspace_id)}/members/${encodeURIComponent(person_id)}`,
+    { method: 'DELETE', ...withAssignment(assignment) },
+  )
+
+export const listInvitations = (
+  workspace_id: string,
+  assignment?: string,
+): Promise<OrgInvitationView[]> =>
+  api<OrgInvitationView[]>(
+    `/v1/workspaces/${encodeURIComponent(workspace_id)}/invitations`,
+    withAssignment(assignment),
+  )
+
+export const inviteMember = (
+  workspace_id: string,
+  input: {
+    email: string
+    name?: string
+    position_id?: string
+    ranges?: { kind: string; id: string }[]
+  },
+  assignment?: string,
+): Promise<OrgInvitationView> =>
+  api<OrgInvitationView>(`/v1/workspaces/${encodeURIComponent(workspace_id)}/invitations`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const listRangeOptions = (assignment?: string): Promise<RangeOption[]> =>
+  api<RangeOption[]>('/v1/org/ranges', withAssignment(assignment))
+
+// ── WP28 登录与邀请（真实模式：没有 demo 自动登录时走这条）────────────
+
+export interface AcceptedInvitationView {
+  workspace_id: string
+  workspace_name: string
+  email: string
+  person_id: string
+  assignments: OrgAssignmentView[]
+}
+
+/** 接受邀请：这会儿还没有任何凭据，所以是匿名请求。 */
+export const acceptInvitation = (token: string, name?: string): Promise<AcceptedInvitationView> =>
+  api<AcceptedInvitationView>(`/v1/invitations/${encodeURIComponent(token)}/accept`, {
+    method: 'POST',
+    body: { ...(name === undefined ? {} : { name }) },
+    anonymous: true,
+  })
+
+/**
+ * 按邮箱要一个登录链接。
+ *
+ * 本地档直接把一次性 token 回给调用方（`token` 有值），页面上给一个"直接进去"的按钮；
+ * 托管档只回 `expires_at`，token 走邮件——那时页面只说"去收件箱点链接"。
+ */
+export const requestMagicLink = (
+  email: string,
+): Promise<{ token?: string; expires_at: string; delivered?: string }> =>
+  api('/v1/auth/magic-link', { method: 'POST', body: { email }, anonymous: true })
+
+/** 用一次性 token 换会话，并把它存下来（之后所有请求都带它）。 */
+export async function signInWithToken(token: string): Promise<Me> {
+  const verified = await api<{ session_token: string }>('/v1/auth/verify', {
+    method: 'POST',
+    body: { token },
+    anonymous: true,
+  })
+  storeToken(verified.session_token)
+  return api<Me>('/v1/me')
+}
+
+/** 已经登录了吗（有 cookie 或存过的 bearer 就算）。 */
+export const currentSession = (): Promise<Me> => api<Me>('/v1/me')

@@ -35,12 +35,18 @@ export {
   type SweepableIdempotencyStore,
 } from './idempotency.js'
 export {
+  type AcceptedInvitation,
+  type CreateInvitationInput,
   createMemoryIdentity,
+  DEFAULT_INVITE_TTL,
   DEFAULT_WORKSPACE_POLICY,
+  type Invitation,
+  type IssuedInvitation,
   type IssuedToken,
   type LocalIdentityService,
   type MemoryIdentityOptions,
   MemoryIdentityService,
+  nameFromEmail,
   readCookie,
   SESSION_COOKIE,
   secretEquals,
@@ -103,6 +109,27 @@ export type {
   SetModelDefaultsInput,
 } from './routes/models.js'
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
+export type {
+  AcceptedInvitationView,
+  AssignInput,
+  AssignmentView,
+  CopyRoleInput,
+  InvitationView,
+  InviteInput,
+  MemberView,
+  OrgActor,
+  OrgChangeReceipt,
+  OrgPort,
+  PolicyPatchInput,
+  PositionInput,
+  PositionView,
+  RoleDetailView,
+  RolePatchInput,
+  RoleSummaryView,
+  UpdateAssignInput,
+  WorkspacePolicyView,
+} from './routes/org.js'
+export { orgRoutes, positionName } from './routes/org.js'
 export {
   type MatterListFilter,
   type TodoListFilter,
