@@ -56,6 +56,9 @@ importers:
       '@agentsws/connect-adapter':
         specifier: workspace:*
         version: link:../../packages/connect-adapter
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@agentsws/server':
         specifier: workspace:*
         version: link:../server

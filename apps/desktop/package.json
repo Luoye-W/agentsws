@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@agentsws/connect-adapter": "workspace:*",
+    "@agentsws/core": "workspace:*",
     "@agentsws/server": "workspace:*",
     "electron-updater": "^6.8.9"
   },
