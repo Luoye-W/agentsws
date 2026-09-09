@@ -28,6 +28,9 @@
       "path": "../../packages/knowledge"
     },
     {
+      "path": "../../packages/meetings"
+    },
+    {
       "path": "../../packages/model-gateway"
     },
     {

@@ -13,8 +13,12 @@ import type {
   RoleId,
   ToolDef,
   Trace,
+  TranscribeAudio,
+  Transcription,
+  TranscriptionAudioDigest,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { sha256 } from '@agentsws/core'
 import type { BudgetCtx, CapSpec, Reservation } from './ledger.js'
 import { BudgetLedger } from './ledger.js'
 import { staticPrefixHash } from './prefix.js'
@@ -69,8 +73,22 @@ export interface UsageFilter {
   model?: string
 }
 
+/**
+ * 22 ASR 槽的网关入参。`ref` 档由宿主解引用（受控原始材料区在 `@agentsws/meetings`，
+ * 网关不认识它），所以到网关这里必须已经是字节。
+ */
+export interface TranscribeRequest extends Omit<TranscribeAudio, 'ref'> {
+  bytes: Uint8Array
+  /** 该次转写涉及欧洲客户数据（22 §2 eu_customer_to_cloud_brain；音频同 eu 规则）。 */
+  eu_customer?: boolean
+  max_cost_base?: number
+  /** 覆盖预留时的预计输出 token 数（默认 0：ASR 的输出相对音频成本可忽略）。 */
+  estimated_output_tokens?: number
+}
+
 export interface ModelGatewayApi extends ModelGateway {
   complete(req: CompleteRequest): Promise<Completion>
+  transcribe(req: TranscribeRequest, meta: ModelMeta, model?: ModelRef): Promise<Transcription>
   usage(filter: UsageFilter): Promise<UsageReport>
   /** 只读账目，测试与报表用（与 model.usage 事件一一对应）。 */
   records(): readonly UsageRecord[]
@@ -205,6 +223,7 @@ class Gateway implements ModelGatewayApi {
     at: Iso8601,
     staticPrefix: string,
     durationMs: number,
+    audio?: TranscriptionAudioDigest,
   ): void {
     this.usageRecords.push({
       at,
@@ -230,6 +249,8 @@ class Gateway implements ModelGatewayApi {
       cost_base: usage.cost_base,
       static_prefix_hash: staticPrefix,
       duration_ms: durationMs,
+      // 21 §1「秘密从不进」的音频版：只记摘要，字节与转写正文永不进事件日志
+      ...(audio === undefined ? {} : { audio }),
     }
     this.emit('model.usage', ctxOf(meta), payload)
   }
@@ -399,6 +420,86 @@ class Gateway implements ModelGatewayApi {
     return { vectors: raw.vectors, usage }
   }
 
+  /**
+   * 22 ASR：音频 → 文本。与 `complete` 共用急停 / 路由 / 驻留 / 预算 / 记账五道；
+   * **音频字节永不进事件日志**——`model.usage` 里只多一个 `audio` 摘要（哈希、时长、字节数）。
+   */
+  async transcribe(
+    req: TranscribeRequest,
+    meta: ModelMeta,
+    model?: ModelRef,
+  ): Promise<Transcription> {
+    this.assertNotHalted()
+    const ctx = ctxOf(meta)
+    const ref = this.resolveRef(meta, model)
+    const provider = this.findProvider(ref)
+    this.assertResidency(ref, provider, ctx, meta.purpose, req.eu_customer === true)
+    if (provider.transcribe === undefined) {
+      throw new GatewayError('not_implemented', 'provider does not support transcribe', {
+        model: priceKey(ref),
+      })
+    }
+    const digest = audioDigest(req)
+    const startedAt = this.opts.clock.now()
+    // 音频不是消息，估算按"每秒音频折 1 token"（与 stub / OpenAI 的按秒计价一致）
+    const seconds = Math.max(1, Math.ceil(digest.duration_ms / 1000))
+    const price = priceFor(this.opts.policy.prices, ref)
+    const reservation = this.ledger.reserve({
+      ctx,
+      at: startedAt,
+      amount: estimateCost(price, seconds, req.estimated_output_tokens ?? 0),
+      ...(req.max_cost_base === undefined ? {} : { run_cap: req.max_cost_base }),
+    })
+    let raw: Awaited<ReturnType<NonNullable<ModelProvider['transcribe']>>>
+    try {
+      raw = await provider.transcribe({
+        bytes: req.bytes,
+        mime: req.mime,
+        ...(req.language === undefined ? {} : { language: req.language }),
+      })
+    } catch (e) {
+      this.ledger.release(reservation)
+      const payload: ProviderDownPayload = {
+        model: ref,
+        attempts: [
+          {
+            model: ref,
+            ...(e instanceof ProviderError && e.status !== undefined ? { status: e.status } : {}),
+            message: messageOf(e),
+          },
+        ],
+      }
+      this.emit('model.provider_down', ctx, payload)
+      throw new GatewayError('provider_unavailable', 'transcribe provider failed', payload)
+    }
+    const finishedAt = this.opts.clock.now()
+    const usage: CompletionUsage = {
+      input_tokens: raw.usage.input_tokens,
+      output_tokens: raw.usage.output_tokens,
+      cached_tokens: raw.usage.cached_tokens,
+      cost_base: costOf(price, raw.usage),
+    }
+    this.ledger.settle(reservation, usage.cost_base)
+    this.record(
+      meta,
+      ref,
+      usage,
+      finishedAt,
+      '',
+      Math.max(Date.parse(finishedAt) - Date.parse(startedAt), 0),
+      digest,
+    )
+    return {
+      text: raw.text,
+      segments: raw.segments,
+      ...(raw.speakers === undefined ? {} : { speakers: raw.speakers }),
+      ...(raw.language === undefined ? {} : { language: raw.language }),
+      usage,
+      model: ref,
+      audio: digest,
+    }
+  }
+
   async usage(filter: UsageFilter): Promise<UsageReport> {
     const sinceMs = filter.since === undefined ? undefined : Date.parse(filter.since)
     const rows = this.usageRecords.filter((r) => {
@@ -440,6 +541,18 @@ function ctxOf(meta: ModelMeta): BudgetCtx {
     workspace_id: meta.workspace_id,
     assignment_id: meta.assignment_id,
     run_id: meta.run_id,
+  }
+}
+
+/** 音频摘要：事件日志里唯一允许出现的音频信息（22 + 37 §4.3）。 */
+function audioDigest(req: TranscribeRequest): TranscriptionAudioDigest {
+  let hex = ''
+  for (const b of req.bytes) hex += b.toString(16).padStart(2, '0')
+  return {
+    sha256: sha256(hex),
+    duration_ms: req.duration_ms ?? 0,
+    bytes: req.bytes.byteLength,
+    mime: req.mime,
   }
 }
 

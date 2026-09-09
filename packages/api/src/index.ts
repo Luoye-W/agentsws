@@ -55,6 +55,13 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+export type {
+  MeetingIngestInput,
+  MeetingProcessOutcome,
+  MeetingSendCardInput,
+  MeetingsPort,
+} from './routes/meetings.js'
+export { meetingRoutes } from './routes/meetings.js'
 export {
   type MatterListFilter,
   type TodoListFilter,

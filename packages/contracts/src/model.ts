@@ -2,7 +2,14 @@ import type { AssignmentId, Iso8601, RoleId, RunId, WorkspaceId } from './common
 import type { ModelRef } from './run.js'
 
 /** 22 模型网关：key 只在网关；按 (workspace, assignment, role, run, purpose) 记账；预算三级；急停。 */
-export type ModelPurpose = 'run' | 'extraction' | 'reflection' | 'embedding' | 'judge'
+export type ModelPurpose =
+  | 'run'
+  | 'extraction'
+  | 'reflection'
+  | 'embedding'
+  | 'judge'
+  /** WP23：ASR（会议转写）。驻留与预算走与其它 purpose 相同的一套策略。 */
+  | 'transcription'
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
@@ -42,6 +49,54 @@ export interface Completion {
   static_prefix_hash: string
 }
 
+/* ------------------------------------------------------------------ */
+/* ASR 槽（22 + 37 §4.3）                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 转写入参。`bytes` 与 `ref` 二选一：`ref` 是受控原始材料区（18 §2.1）的引用，
+ * 由宿主解引用后再交给 provider——**音频永不进事件日志**，日志里只允许出现
+ * `TranscriptionAudioDigest`（哈希、时长、字节数）。
+ */
+export interface TranscribeAudio {
+  bytes?: Uint8Array
+  ref?: string
+  mime: string
+  language?: string
+  /** 已知时长（毫秒）；记账与日志用。 */
+  duration_ms?: number
+}
+
+export interface TranscriptionSegment {
+  start_ms: number
+  end_ms: number
+  speaker?: string
+  text: string
+}
+
+/** 事件日志里唯一允许出现的音频信息。 */
+export interface TranscriptionAudioDigest {
+  sha256: string
+  duration_ms: number
+  bytes: number
+  mime: string
+}
+
+export interface Transcription {
+  text: string
+  segments: TranscriptionSegment[]
+  speakers?: string[]
+  language?: string
+  usage: CompletionUsage
+  model: ModelRef
+  audio: TranscriptionAudioDigest
+}
+
+/** provider 返回的转写：`model` / `audio` 由网关补，`usage.cost_base` 由网关按价目表覆盖。 */
+export type ProviderTranscription = Omit<Transcription, 'model' | 'audio' | 'usage'> & {
+  usage: Omit<CompletionUsage, 'cost_base'> & { cost_base?: number }
+}
+
 export interface ModelGateway {
   complete(req: {
     model?: ModelRef
@@ -57,6 +112,11 @@ export interface ModelGateway {
     meta: ModelMeta,
     model?: ModelRef,
   ): Promise<{ vectors: number[][]; usage: CompletionUsage }>
+  /**
+   * 22 ASR 槽：音频 → 文本。可选——没装 ASR provider 的发行版不实现它。
+   * 记账与驻留同 `complete`（欧洲客户音频照 `eu_customer_to_cloud_brain` 判）。
+   */
+  transcribe?(audio: TranscribeAudio, meta: ModelMeta, model?: ModelRef): Promise<Transcription>
   usage(filter: {
     workspace_id: WorkspaceId
     assignment_id?: AssignmentId
@@ -91,4 +151,10 @@ export interface ModelProvider {
   /** 是否原生支持 `tool_choice`；缺省视为不支持（网关会剥掉该字段）。 */
   supports_tool_choice?: boolean
   embed?(texts: string[]): Promise<{ vectors: number[][]; usage: CompletionUsage }>
+  /** ASR provider 槽；拿到的一定是字节（`ref` 由网关的宿主解引用）。 */
+  transcribe?(audio: {
+    bytes: Uint8Array
+    mime: string
+    language?: string
+  }): Promise<ProviderTranscription>
 }

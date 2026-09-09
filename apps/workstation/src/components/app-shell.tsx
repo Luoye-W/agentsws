@@ -65,6 +65,9 @@ export function AppShell({
             </NavLink>
           ))}
           <Separator className="my-2" />
+          <NavLink to="/meetings" className={navClass}>
+            {t('nav.meetings')}
+          </NavLink>
           <NavLink to="/knowledge" className={navClass}>
             {t('nav.knowledge')}
           </NavLink>

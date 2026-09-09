@@ -1,0 +1,30 @@
+{
+  "name": "@agentsws/meetings",
+  "version": "0.0.0",
+  "private": true,
+  "description": "会议内核（37 §4）：会议对象、六种记录来源、受控原始材料区、转写 → 产出管线、免费默认会议助手",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/support-core": "workspace:*",
+    "better-sqlite3": "^12.0.0"
+  },
+  "devDependencies": {
+    "@agentsws/model-gateway": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

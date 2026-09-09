@@ -14,6 +14,10 @@ import type {
   Matter,
   MatterEvent,
   MatterView,
+  Meeting,
+  MeetingOutputs,
+  MeetingRecord,
+  MeetingRecordSourceKind,
   Review,
   Todo,
   BattleReport as WorkBattleReport,
@@ -416,3 +420,98 @@ export const decidePlan = (
   })
 
 export const listReviews = (): Promise<ReviewsData> => api<ReviewsData>('/v1/reviews?kind=day')
+// ── 会议（37 §4）─────────────────────────────────────────────────────
+
+export interface MeetingDetail {
+  meeting: Meeting
+  records: MeetingRecord[]
+}
+
+export interface MeetingSystemCard {
+  id: string
+  kind: 'system_alert'
+  reason: string
+  title: string
+  body: string
+  actions: { id: string; label: string }[]
+}
+
+export interface MeetingProcessResult {
+  record: MeetingRecord
+  outputs?: MeetingOutputs
+  approvals?: {
+    claims: { title: string; summary: string; dedupe_key: string; payload: unknown }[]
+    knowledge: { title: string; summary: string; dedupe_key: string; payload: unknown }[]
+    boundaries: { title: string; summary: string; dedupe_key: string; payload: unknown }[]
+  }
+  system_card?: MeetingSystemCard
+}
+
+export interface NewMeetingInput {
+  title: string
+  start: string
+  end: string
+  participants: { name?: string; email?: string; external?: boolean }[]
+  agenda?: string
+}
+
+export interface AddRecordInput {
+  source: MeetingRecordSourceKind
+  text?: string
+  /** 录音：字节按 base64 传（一次录完；分块的走 chunk_index / final）。 */
+  audio_base64?: string
+  mime?: string
+  name?: string
+  notice_given?: boolean
+  final?: boolean
+}
+
+export const getMeetings = (): Promise<Meeting[]> => api<Meeting[]>('/v1/meetings')
+
+export const getMeeting = (id: string): Promise<MeetingDetail> =>
+  api<MeetingDetail>(`/v1/meetings/${encodeURIComponent(id)}`)
+
+export const createMeeting = (input: NewMeetingInput): Promise<Meeting> =>
+  api<Meeting>('/v1/meetings', { method: 'POST', body: input })
+
+export const addMeetingRecord = (id: string, input: AddRecordInput): Promise<MeetingRecord[]> =>
+  api<MeetingRecord[]>(`/v1/meetings/${encodeURIComponent(id)}/records`, {
+    method: 'POST',
+    body: input,
+  })
+
+export const processMeetingRecord = (id: string, rid: string): Promise<MeetingProcessResult> =>
+  api<MeetingProcessResult>(
+    `/v1/meetings/${encodeURIComponent(id)}/records/${encodeURIComponent(rid)}/process`,
+    { method: 'POST' },
+  )
+
+export const getMeetingOutputs = (id: string): Promise<MeetingOutputs[]> =>
+  api<MeetingOutputs[]>(`/v1/meetings/${encodeURIComponent(id)}/outputs`)
+
+export interface SendCardInput {
+  record_id: string
+  kind: 'claim' | 'knowledge_update' | 'policy_change'
+  item_id: string
+}
+
+export const sendMeetingCard = (
+  id: string,
+  input: SendCardInput,
+): Promise<{ approval_id: string; title: string }> =>
+  api(`/v1/meetings/${encodeURIComponent(id)}/outputs/send`, { method: 'POST', body: input })
+
+export const exportMeeting = (
+  id: string,
+): Promise<{ format: string; filename: string; content: string }> =>
+  api(`/v1/meetings/${encodeURIComponent(id)}/export`)
+
+/** 浏览器录音的字节 → base64（Electron 与浏览器都走这条，不用 Node 的 Buffer）。 */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}

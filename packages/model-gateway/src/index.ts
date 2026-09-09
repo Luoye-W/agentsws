@@ -1,4 +1,10 @@
-export type { ModelGatewayApi, ModelGatewayOptions, UsageFilter, UsageReport } from './gateway.js'
+export type {
+  ModelGatewayApi,
+  ModelGatewayOptions,
+  TranscribeRequest,
+  UsageFilter,
+  UsageReport,
+} from './gateway.js'
 export { createModelGateway } from './gateway.js'
 export type { BudgetCtx, BudgetScopeState, CapSpec, Reservation } from './ledger.js'
 export { BudgetLedger } from './ledger.js'
@@ -13,9 +19,11 @@ export {
   priceKey,
 } from './pricing.js'
 export type { FetchLike, OpenAiCompatibleOptions } from './providers/openai-compatible.js'
-export { openaiCompatibleProvider } from './providers/openai-compatible.js'
+export { extensionFor, openaiCompatibleProvider } from './providers/openai-compatible.js'
 export type { StubProviderOptions } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
+export type { StubAsrProviderOptions } from './providers/stub-asr.js'
+export { decodeReadableText, segmentText, stubAsrProvider } from './providers/stub-asr.js'
 export type {
   BlockedResidencyPayload,
   BudgetExhaustedPayload,

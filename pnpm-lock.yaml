@@ -93,6 +93,9 @@ importers:
       '@agentsws/knowledge':
         specifier: workspace:*
         version: link:../../packages/knowledge
+      '@agentsws/meetings':
+        specifier: workspace:*
+        version: link:../../packages/meetings
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
@@ -409,6 +412,28 @@ importers:
         specifier: ^12.2.0
         version: 12.11.1
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
+  packages/meetings:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+    devDependencies:
+      '@agentsws/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13

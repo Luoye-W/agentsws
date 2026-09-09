@@ -15,6 +15,8 @@ import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 import { KnowledgePage } from '@/pages/knowledge'
 import { MatterPage } from '@/pages/matter'
+import { MeetingPage } from '@/pages/meeting'
+import { MeetingsPage } from '@/pages/meetings'
 import { PositionPage } from '@/pages/position'
 import { SettingsPage } from '@/pages/settings'
 import { TodosPage } from '@/pages/todos'
@@ -92,6 +94,8 @@ export function App(): ReactNode {
         <Route path="/todos" element={<TodosPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/goals" element={<GoalsPage />} />
+        <Route path="/meetings" element={<MeetingsPage />} />
+        <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route
           path="/settings"

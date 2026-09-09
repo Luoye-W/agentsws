@@ -61,7 +61,7 @@ describe('openaiCompatibleProvider（DeepSeek 形态，注入 fetch，不联网�
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe('https://api.deepseek.com/chat/completions')
     expect(calls[0]?.init.headers.authorization).toBe(`Bearer ${env[KEY_ENV]}`)
-    const sent = JSON.parse(calls[0]?.init.body ?? '{}') as Record<string, unknown>
+    const sent = JSON.parse(String(calls[0]?.init.body ?? '{}')) as Record<string, unknown>
     expect(sent).toMatchObject({ model: 'deepseek-chat', stream: false, seed: 42 })
     expect(sent.messages).toEqual([
       { role: 'system', content: 'persona' },
