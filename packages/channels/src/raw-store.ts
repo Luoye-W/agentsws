@@ -1,4 +1,5 @@
-import type { ChannelName, Iso8601, MaybePromise } from '@agentsws/contracts'
+import type { ChannelName } from '@agentsws/contracts'
+import type { RawRecordBase, RawStorePort } from '@agentsws/core'
 import { ChannelError } from './errors.js'
 
 /**
@@ -6,25 +7,16 @@ import { ChannelError } from './errors.js'
  * 三条纪律由宿主实现兑现——加密、保留期、随主体删除；本包只定义端口 + 一个内存实现。
  * **这里的内容永不进模型**：管线只把它的 `ref` 写进 `InboundEvent.raw_ref`。
  */
-export interface RawRecord {
-  ref: string
+export interface RawRecord extends RawRecordBase {
   channel: ChannelName
   kind: 'message' | 'attachment'
-  stored_at: Iso8601
-  /** 文本类（MIME 源）用 string；附件字节用 Uint8Array */
-  payload: string | Uint8Array
-  mime?: string
-  name?: string
-  /** 落库前已按 `rawSecretPolicy` 脱敏 */
-  secrets_scrubbed?: boolean
 }
 
-export interface RawStore {
-  put(input: Omit<RawRecord, 'ref'>): MaybePromise<string>
-  get(ref: string): MaybePromise<RawRecord | undefined>
-  /** 落库后才发现秘密时的就地脱敏（`rawSecretPolicy: 'redact'` 下管线兜底调用）。 */
-  scrub?(ref: string, redact: (text: string) => string): MaybePromise<void>
-}
+/**
+ * 端口在 `@agentsws/core`（WP24 上移）；这里只钉住渠道档的记录形状。
+ * 表不共享：邮件原文落 channels 自己的库（35 §2）。
+ */
+export type RawStore = RawStorePort<RawRecord>
 
 /** 内存实现（测试与 fast 档）。生产实现应是加密文件区 / 对象存储 + 保留期。 */
 export class MemoryRawStore implements RawStore {
