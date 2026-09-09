@@ -99,6 +99,9 @@ export type KnownEventType =
   | 'connect.form_submitted'
   | 'connect.connection_removed'
   | 'connect.connection_tested'
+  // WP24：问 AI 只记哈希；急停变更
+  | 'ask.answered'
+  | 'halt.changed'
   // privacy (21)
   | 'privacy.erased'
   // meetings (37 §4)：payload 只有摘要与条数，转写与音频永不进日志

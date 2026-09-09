@@ -409,6 +409,8 @@ export interface MeetingProcessor {
  * 路由结果也不得用于考核。
  */
 export interface ClaimPayload {
+  /** WP24：认领 → 待办时定位到会议事项时间线的那条产出（省掉按文本回找） */
+  anchor?: { matter_event_id: string }
   form: 'claim'
   claim_kind: 'action_item' | 'decision' | 'question' | 'data_request'
   source: 'meeting' | 'group' | 'email' | 'review'
