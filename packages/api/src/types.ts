@@ -47,6 +47,7 @@ import type { ReconcilePort } from './routes/health.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
 import type { OrgPort } from './routes/org.js'
+import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretsPort } from './routes/secrets.js'
 import type { WorkPort } from './routes/work.js'
 
@@ -406,6 +407,11 @@ export interface GatewayDeps {
    * 没装配就不出这一格（不要用 `done` 冒充「没装」）。
    */
   reconcile?: ReconcilePort
+  /**
+   * WP34：21 §4「删这个人」的跨库编排；没装配时 `POST /v1/privacy/erase`
+   * 回 not_implemented。
+   */
+  privacy?: PrivacyPort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>

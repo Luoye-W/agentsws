@@ -40,6 +40,14 @@ export {
   smokeDetail,
 } from './connections.js'
 export {
+  createPrivacyErase,
+  type EraseInput,
+  type EraseResult,
+  type EraseStep,
+  type PrivacyErase,
+  type PrivacyEraseOptions,
+} from './erase.js'
+export {
   type ApprovalDirectoryOptions,
   createApprovalDirectory,
   type HousekeepingDeps,

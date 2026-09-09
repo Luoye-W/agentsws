@@ -131,6 +131,12 @@ export type {
   WorkspacePolicyView,
 } from './routes/org.js'
 export { orgRoutes, positionName } from './routes/org.js'
+export {
+  type PrivacyEraseStepView,
+  type PrivacyEraseView,
+  type PrivacyPort,
+  privacyRoutes,
+} from './routes/privacy.js'
 export { scheduleRoutes } from './routes/schedules.js'
 export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
 export { secretRoutes } from './routes/secrets.js'

@@ -57,6 +57,7 @@ import { MemoryBackend } from './backend.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
+import { createPrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
@@ -560,6 +561,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels?.refresh()
   })
 
+  // 21 §4「删这个人」的跨库编排（39 待办 I）：数据层 + 邮件原始区 + 会议原始区
+  const privacy = createPrivacyErase({
+    workspace_id: workspace.id,
+    clock,
+    appendEvent,
+    data,
+    channels,
+    meetings,
+  })
+
   // ── 25 定时与流程：调度器 + 各个消费者 ───────────────────────────────
   // 装配的位置有讲究：要在 work / meetings / connections / skills 都起来之后，
   // 因为七个消费者就是它们；但在网关之前，因为 `/v1/schedules` 要用它。
@@ -815,6 +826,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           : { person_id: found.person_id, role_id: found.role_id }
       },
     }),
+    // 21 §4「删这个人」：网关只转发，编排在 ./erase.ts；actor 带上 grants 与 ranges，
+    // 因为数据层的删除同样要过 21 §3 的授权（没给删除开后门）
+    privacy: {
+      erase: async (input, actor) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        return privacy.erase(input, {
+          person_id: actor.person_id,
+          assignment_id: actor.assignment_id,
+          workspace_id: actor.workspace_id,
+          grants: config.scopes,
+          ranges: config.ranges,
+        })
+      },
+    },
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
