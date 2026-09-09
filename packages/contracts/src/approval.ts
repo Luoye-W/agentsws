@@ -125,6 +125,32 @@ export interface Delivery {
   status: 'sent' | 'delivered' | 'acted' | 'expired' | 'failed'
 }
 
+/**
+ * 一张审批项的**执行上下文**：执行快照的分量来源（14 §4 / 31 §3.2）与门禁输入（31 §3.3）。
+ *
+ * 落在 `ApprovalItem.execution_context` 上，由 `ApprovalBus.create` 的 `context` 传入。
+ * 创建时算一次快照、apply 前按同一份重算——两次算的必须是同一组分量，
+ * 所以它不能是宿主实现的私有交叉类型（WP4 的做法），得在契约里（WP24 后置项，WP31 补）。
+ */
+export interface ApprovalExecutionContext {
+  /** 快照分量：这条变更打到哪个连接上 */
+  connection_id?: string
+  /** 快照分量：目标记录的版本（apply 前重读，变了即 stale_record） */
+  record_version?: string
+  /** 快照分量：附件哈希（排序后进快照） */
+  attachments?: string[]
+  /** 快照分量：生效额度的哈希 */
+  mandate_hash?: string
+  /** `staged_change` 审批项指向的账本条目 */
+  change_id?: string
+  /** 31 §3.3 收件人门禁：线程原有参与者 */
+  thread_participants?: string[]
+  /** 31 §3.3 收件人门禁：经验证的客户联系方式 */
+  verified_contacts?: string[]
+  /** 预检结论覆盖（脱敏等由调用方判定时） */
+  precheck_overrides?: Partial<PrecheckResult>
+}
+
 export interface ApprovalItem<P = unknown> {
   id: string
   schema_version: 1
@@ -194,17 +220,8 @@ export interface ApprovalItem<P = unknown> {
   /** 稍后（snooze）记账；KefuAgent deck 同义 */
   snoozed?: { count: number; until?: Iso8601 }
   execution_snapshot?: ExecutionSnapshot
-  /** 快照分量来源与门禁输入（09-09 WP4） */
-  execution_context?: {
-    connection_id?: string
-    record_version?: string
-    attachments?: string[]
-    mandate_hash?: string
-    change_id?: string
-    thread_participants?: string[]
-    verified_contacts?: string[]
-    precheck_overrides?: Partial<PrecheckResult>
-  }
+  /** 快照分量来源与门禁输入（09-09 WP4）；创建时由 `ApprovalBus.create` 的 `context` 给 */
+  execution_context?: ApprovalExecutionContext
   state: ApprovalState
   decision?: Decision
   apply?: ApplyRecord
@@ -231,28 +248,37 @@ export interface DecideInput {
   via: Decision['via']
 }
 
+/** `ApprovalBus.create` 的入参：宿主负责生成的字段不收，另收一份执行上下文。 */
+export type CreateApprovalInput<P> = Omit<
+  ApprovalItem<P>,
+  | 'id'
+  | 'revision'
+  | 'state'
+  | 'deliveries'
+  | 'links'
+  | 'created_at'
+  | 'updated_at'
+  | 'decision'
+  | 'apply'
+  | 'automation'
+> & {
+  links?: Partial<ApprovalItem['links']>
+  /** auto_approved / sampling 由宿主计算，调用方只给等级 */
+  automation?: Partial<ApprovalItem['automation']> & {
+    level_at_creation: ApprovalItem['automation']['level_at_creation']
+  }
+  /**
+   * 31 §3.2 / §3.3：执行快照的分量来源与收件人门禁的输入。
+   *
+   * WP4 把它做成了宿主包（`@agentsws/txn`）的交叉类型，于是「收件人门禁拿什么判」
+   * 这件事在契约上看不见——WP24 的合并记录把它列成后置项，这里补上。
+   * 宿主收下后原样落在 `ApprovalItem.execution_context`。
+   */
+  context?: ApprovalExecutionContext
+}
+
 export interface ApprovalBus {
-  create<P>(
-    input: Omit<
-      ApprovalItem<P>,
-      | 'id'
-      | 'revision'
-      | 'state'
-      | 'deliveries'
-      | 'links'
-      | 'created_at'
-      | 'updated_at'
-      | 'decision'
-      | 'apply'
-      | 'automation'
-    > & {
-      links?: Partial<ApprovalItem['links']>
-      /** auto_approved / sampling 由宿主计算，调用方只给等级 */
-      automation?: Partial<ApprovalItem['automation']> & {
-        level_at_creation: ApprovalItem['automation']['level_at_creation']
-      }
-    },
-  ): Promise<ApprovalItem<P>>
+  create<P>(input: CreateApprovalInput<P>): Promise<ApprovalItem<P>>
   get(id: string): Promise<ApprovalItem | undefined>
   queue(filter: {
     workspace_id: WorkspaceId

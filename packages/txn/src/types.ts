@@ -1,4 +1,5 @@
 import type {
+  ApprovalExecutionContext,
   ApprovalItem,
   ApprovalKind,
   ApprovalState,
@@ -196,22 +197,13 @@ export interface TxnStore {
   transaction<T>(fn: () => T): T
 }
 
-/** 创建审批项时的额外上下文（契约 ApprovalItem 之外，包内交叉类型扩展）。 */
-export interface ApprovalContext {
-  /** 执行快照分量 */
-  connection_id?: string
-  record_version?: string
-  attachments?: string[]
-  mandate_hash?: string
-  /** staged_change 审批项指向的账本条目 */
-  change_id?: string
-  /** 31 §3.3 收件人门禁：线程原参与者 */
-  thread_participants?: string[]
-  /** 31 §3.3 收件人门禁：已验证联系方式 */
-  verified_contacts?: string[]
-  /** 预检结论覆盖（脱敏等由调用方判定时） */
-  precheck_overrides?: Partial<ApprovalItem['evidence']['precheck']>
-}
+/**
+ * 创建审批项时的额外上下文。
+ *
+ * WP4 时这是包内的交叉类型；WP31 把它搬进契约（`ApprovalExecutionContext`），
+ * 这里只留一个别名——「收件人门禁拿什么判」不该只有宿主实现知道。
+ */
+export type ApprovalContext = ApprovalExecutionContext
 
 type ContractCreateInput<P> = Omit<
   ApprovalItem<P>,

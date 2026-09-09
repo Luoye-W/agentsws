@@ -1,5 +1,6 @@
 import type {
   ApprovalBus,
+  ApprovalExecutionContext,
   ApprovalItem,
   ApprovalKind,
   ApprovalState,
@@ -35,6 +36,24 @@ const rec = (v: unknown): Record<string, unknown> =>
 export interface BatchEntry {
   id: string
   decision_token: string
+}
+
+/**
+ * 落在 `ApprovalItem.execution_context` 上的那一份：**只有快照分量的来源**。
+ *
+ * 门禁输入（`thread_participants` / `verified_contacts` / `precheck_overrides`）
+ * 留在旁边那张上下文表里，不进审批项本体——审批项会经 `/v1/approvals` 发给所有
+ * 有权看队列的人，客户联系方式没必要跟着走一圈（31 §3.3「输出通道清单统一过一遍脱敏」）。
+ * apply 前重算快照读的仍是上下文表，两处是同一份 `ApprovalExecutionContext`。
+ */
+function snapshotProvenanceOf(ctx: ApprovalContext): ApprovalExecutionContext {
+  return {
+    ...(ctx.connection_id === undefined ? {} : { connection_id: ctx.connection_id }),
+    ...(ctx.record_version === undefined ? {} : { record_version: ctx.record_version }),
+    ...(ctx.attachments === undefined ? {} : { attachments: [...ctx.attachments] }),
+    ...(ctx.mandate_hash === undefined ? {} : { mandate_hash: ctx.mandate_hash }),
+    ...(ctx.change_id === undefined ? {} : { change_id: ctx.change_id }),
+  }
 }
 
 export class ApprovalBusImpl implements ApprovalBus {
@@ -193,6 +212,7 @@ export class ApprovalBusImpl implements ApprovalBus {
       expires_at: input.expires_at ?? expiryFor(input.kind, now, this.rt.policy),
     }
     item.execution_snapshot = this.snapshotOf(item, ctx)
+    item.execution_context = snapshotProvenanceOf(ctx)
     this.rt.store.putContext(item.id, ctx)
     return item
   }
