@@ -1,0 +1,48 @@
+# 升级链（14 §7 / §11.6 用例 6）：一张卡没人理，先升到范围管理者，还没人理再升到 owner。
+#
+# 一封退货来信照常起草 + 提一笔退款，然后**谁也不去点那张卡**。合成时钟一小时一小时往前走，
+# runner 每一拍调 `ApprovalBus.escalate`（真实进程里这是定时任务），到点就多一条投递。
+#
+# 时限：14 里的默认是 24 / 48 **工作小时**（≈ 3 / 6 个自然日），一条回归题等不起，
+# 所以这条场景把它压到 4 / 8 工作小时——改的是配置，不是语义（`policy` 块）。
+# 3 人公司里范围管理者与 owner 是同一个人（王岚），所以看的是**升级事件本身**：
+# 两级都升过、每一级各多一条投递。人不一样的版本在 15 人 pack 里。
+id: ops/escalation-chain
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 一个合成人都不装 = 这张卡没有人会去处理
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+policy:
+  escalation_hours: { scope_manager: 4, owner: 8 }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  # 工作时间内往前走一整天：13:00 过 4 工作小时、17:00 过 8 工作小时
+  - at: '+270m'
+    clock.advance: {}
+  - at: '+510m'
+    clock.advance: {}
+expected:
+  escalated_tiers: [scope_manager, owner]
+  event_types:
+    - approval.escalated
+  # 没人点头 → 一条都不许施行（升级不等于批准）
+  approval_kinds: { staged_change: 1, outbound_draft: 1 }
+  metrics:
+    escalations: '>=2'
+    applied_changes: 0
+    outbound_sent: 0
+    adoption_rate: 1
+  judge_min_score: 1
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

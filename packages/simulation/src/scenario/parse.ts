@@ -16,6 +16,8 @@ import type {
   ScenarioEvent,
   ScenarioExpected,
   ScenarioStandIns,
+  ScenarioTxnPolicy,
+  Tier,
 } from './types.js'
 import { INVARIANT_NAMES } from './types.js'
 
@@ -76,6 +78,8 @@ const EVENT_KEYS = [
   'inject.budget',
   'routine.start',
   'learning.start',
+  'reconcile.run',
+  'process.restart',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -99,6 +103,12 @@ const EXPECTED_KEYS = [
   'prompt_includes_any',
   'lessons_filtered',
   'lessons_pooled',
+  'escalated_tiers',
+  'escalated_to',
+  'sampled',
+  'auto_approved',
+  'judge_min_score',
+  'assignments_not_unioned',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -202,6 +212,14 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
     case 'clock.advance': {
       known(source, `${path}.${key}`, body, [])
       return { at, type: 'clock.advance', advance: {} }
+    }
+    case 'reconcile.run': {
+      known(source, `${path}.${key}`, body, [])
+      return { at, type: 'reconcile.run', reconcile: {} }
+    }
+    case 'process.restart': {
+      known(source, `${path}.${key}`, body, [])
+      return { at, type: 'process.restart', restart: {} }
     }
     case 'inject.fault': {
       known(source, `${path}.${key}`, body, ['action', 'code', 'times'])
@@ -371,6 +389,66 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (raw.lessons_pooled !== undefined) {
     out.lessons_pooled = numeric(source, 'expected.lessons_pooled', raw.lessons_pooled)
   }
+  const tiersEscalated = optStrList(source, 'expected.escalated_tiers', raw.escalated_tiers)
+  if (tiersEscalated !== undefined) {
+    for (const t of tiersEscalated) {
+      if (!['scope_manager', 'owner'].includes(t)) {
+        fail(source, 'expected.escalated_tiers', `升级链只有 scope_manager / owner：${t}`)
+      }
+    }
+    out.escalated_tiers = tiersEscalated
+  }
+  const escalatedTo = optStrList(source, 'expected.escalated_to', raw.escalated_to)
+  if (escalatedTo !== undefined) out.escalated_to = escalatedTo
+  if (raw.sampled !== undefined) out.sampled = numeric(source, 'expected.sampled', raw.sampled)
+  if (raw.auto_approved !== undefined) {
+    out.auto_approved = numeric(source, 'expected.auto_approved', raw.auto_approved)
+  }
+  if (raw.judge_min_score !== undefined) {
+    const v = num(source, 'expected.judge_min_score', raw.judge_min_score)
+    if (v < 0 || v > 1) fail(source, 'expected.judge_min_score', '必须在 [0, 1]')
+    out.judge_min_score = v
+  }
+  const notUnioned = optStrList(
+    source,
+    'expected.assignments_not_unioned',
+    raw.assignments_not_unioned,
+  )
+  if (notUnioned !== undefined) out.assignments_not_unioned = notUnioned
+  return out
+}
+
+const TIER_NAMES = ['fast', 'realistic', 'soak'] as const
+
+function parsePolicy(source: string, raw: unknown): ScenarioTxnPolicy {
+  if (!isRec(raw)) fail(source, 'policy', '必须是对象')
+  known(source, 'policy', raw, ['escalation_hours', 'sampling_rate', 'expiry_days'])
+  const out: ScenarioTxnPolicy = {}
+  if (raw.escalation_hours !== undefined) {
+    const e = raw.escalation_hours
+    if (!isRec(e)) fail(source, 'policy.escalation_hours', '必须是对象')
+    known(source, 'policy.escalation_hours', e, ['scope_manager', 'owner'])
+    out.escalation_hours = {
+      ...(e.scope_manager === undefined
+        ? {}
+        : { scope_manager: num(source, 'policy.escalation_hours.scope_manager', e.scope_manager) }),
+      ...(e.owner === undefined
+        ? {}
+        : { owner: num(source, 'policy.escalation_hours.owner', e.owner) }),
+    }
+  }
+  if (raw.sampling_rate !== undefined) {
+    const v = num(source, 'policy.sampling_rate', raw.sampling_rate)
+    if (v < 0 || v > 1) fail(source, 'policy.sampling_rate', '必须在 [0, 1]')
+    out.sampling_rate = v
+  }
+  if (raw.expiry_days !== undefined) {
+    const d = raw.expiry_days
+    if (!isRec(d)) fail(source, 'policy.expiry_days', '必须是对象')
+    const days: Record<string, number> = {}
+    for (const [k, v] of Object.entries(d)) days[k] = num(source, `policy.expiry_days.${k}`, v)
+    out.expiry_days = days
+  }
   return out
 }
 
@@ -396,6 +474,8 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
     'rubric',
     'hidden',
     'control_for',
+    'policy',
+    'tiers',
   ])
 
   const id = str(source, 'id', doc.id)
@@ -451,6 +531,16 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
 
   const rubric = optStr(source, 'rubric', doc.rubric)
   const control_for = optStr(source, 'control_for', doc.control_for)
+  let tiers: Tier[] | undefined
+  if (doc.tiers !== undefined) {
+    const list = strList(source, 'tiers', doc.tiers)
+    for (const t of list) {
+      if (!(TIER_NAMES as readonly string[]).includes(t)) {
+        fail(source, 'tiers', `未知运行档：${t}（只有 ${TIER_NAMES.join(' / ')}）`)
+      }
+    }
+    tiers = list as Tier[]
+  }
   if (doc.hidden !== undefined && typeof doc.hidden !== 'boolean') {
     fail(source, 'hidden', '必须是布尔值')
   }
@@ -465,6 +555,8 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
     events,
     expected: parseExpected(source, doc.expected),
     invariants: invariantsRaw as InvariantName[],
+    ...(doc.policy === undefined ? {} : { policy: parsePolicy(source, doc.policy) }),
+    ...(tiers === undefined ? {} : { tiers }),
     ...(rubric === undefined ? {} : { rubric }),
     ...(doc.hidden === true ? { hidden: true } : {}),
     ...(control_for === undefined ? {} : { control_for }),

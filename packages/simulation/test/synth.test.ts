@@ -61,7 +61,7 @@ describe('合成公司生成器（26 §2）', () => {
     expect([...fresh.files.keys()].some((f) => f.startsWith('scenarios/'))).toBe(false)
     expect(fresh.files.has('baseline.json')).toBe(false)
     // 而仓库里的 pack 两样都有
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(11)
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(13)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 

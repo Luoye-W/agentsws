@@ -1,0 +1,158 @@
+name: Nightly
+
+# 每夜跑三样 fast 档跑不了的东西（26 §4 / 38 §2 WP32）：
+#
+# 1. **realistic** —— Agent 与合成人都走真模型（经 22 的网关，按预算）。
+#    没有 secret 就整档跳过并说明，**不红**：开源仓库里 fork 的 PR 拿不到 secret，
+#    让它红等于让所有人天天看一个假警报。
+# 2. **soak 3 天** —— 同一个世界连着过三天：随机来信、注入故障、模型停机、关库再开，
+#    每天断言队列不涨、预占收口、unknown 对账清零、事件日志有上界。
+# 3. **15 人 pack 的 fast 档** —— 更大的合成公司（4 个岗位含投放与运营、2 家店）。
+#
+# 三个 job 各自上传报告 artifact；合并门禁仍然只看 ci.yml 的 fast 档，
+# 这里跑红了是"要人看一眼"，不挡合并。
+
+on:
+  schedule:
+    # 每天 UTC 18:00 = 北京时间次日 02:00
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      soak_days:
+        description: soak 档连着跑几天
+        required: false
+        default: '3'
+
+permissions:
+  contents: read
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  npm_config_update_notifier: 'false'
+
+jobs:
+  # ── 1. realistic 档（有 secret 才真跑）──────────────────────────────────
+  realistic:
+    name: simulate · realistic（真模型，按预算）
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: tsc -b
+        run: pnpm exec tsc -b
+
+      # 同 seed 下客户来信的内容固定：第一次经模型生成后落进 out/realistic-cache/，
+      # 之后回放。缓存跨 job 复用，既省钱也让"上周红的那条"今天还能一样地红一次。
+      - name: restore realistic cache
+        uses: actions/cache@v4
+        with:
+          path: out/realistic-cache
+          key: realistic-cache-${{ hashFiles('packs/dtc-3c-3p/**') }}
+          restore-keys: realistic-cache-
+
+      # key 只从环境变量进 provider（22 §5：业务代码里 grep 不到 key）。
+      # 没配 secret 时这个变量是空的，simulate 会打印"整档跳过"并退 0。
+      - name: simulate --tier realistic
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: >-
+          pnpm -s simulate --tier realistic --pack packs/dtc-3c-3p
+          --scenario 'scenarios/**/*.yml' --seed 42
+          --max-cost-base 2 --report out/simulation-realistic
+
+      - name: upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-realistic
+          path: out/simulation-realistic/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ── 2. soak 档 ──────────────────────────────────────────────────────────
+  soak:
+    name: simulate · soak ${{ github.event.inputs.soak_days || 3 }} 天
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: tsc -b
+        run: pnpm exec tsc -b
+
+      - name: simulate --tier soak
+        run: >-
+          pnpm -s simulate --tier soak --pack packs/dtc-3c-3p
+          --days ${{ github.event.inputs.soak_days || 3 }} --seed 42
+          --report out/simulation-soak
+
+      - name: upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-soak
+          # 事件日志（.sqlite）也一起传：soak 红了要能拿回来 replay
+          path: out/simulation-soak/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ── 3. 15 人 pack 的 fast 档 ────────────────────────────────────────────
+  pack-15p:
+    name: simulate · 15 人 pack（fast）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [stub, direct, dsh-subprocess]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: tsc -b
+        run: pnpm exec tsc -b
+
+      - name: simulate --pack packs/dtc-15p
+        run: >-
+          pnpm -s simulate --tier fast --pack packs/dtc-15p
+          --scenario 'scenarios/**/*.yml' --seed 42
+          --runtime ${{ matrix.runtime }} --report out/simulation-15p
+
+      # 50 人 pack 只要求"生成得出来 + 一条烟测跑得通"，不进门禁（26 §4）。
+      # 它不入库（三百单的 YAML 没必要提交），所以现生成、现跑。
+      - name: synth --size 50 且跑一条烟测
+        if: matrix.runtime == 'stub'
+        run: pnpm exec vitest run packages/simulation/test/tiers.test.ts
+
+      - name: upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-15p-${{ matrix.runtime }}
+          path: out/simulation-15p/
+          if-no-files-found: warn
+          retention-days: 30

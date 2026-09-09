@@ -18,6 +18,27 @@ export interface PackManifest {
   seed: number
   anchor: Iso8601
   sizes: Record<string, number>
+  /** WP32 soak 档：这家公司一天大概来几封信、故障多密（26 §4）。 */
+  soak?: Partial<PackSoak>
+}
+
+/** soak 档的到达率与故障率（每天按 seed 抽，所以同 seed 的 30 天是同一段人生）。 */
+export interface PackSoak {
+  /** 每天新来几封客户信 */
+  inbound_per_day: number
+  /** 每天注入一次连接器故障的概率 */
+  fault_rate: number
+  /** 每天模型停机一段时间的概率 */
+  outage_rate: number
+  /** 每天"进程重启"（关库再开）的概率 */
+  restart_rate: number
+}
+
+export const DEFAULT_SOAK: PackSoak = {
+  inbound_per_day: 3,
+  fault_rate: 0.34,
+  outage_rate: 0.25,
+  restart_rate: 0.34,
 }
 
 export interface PackWorkspace {
@@ -36,6 +57,8 @@ export interface PackPerson {
   email: string
   title: string
   owner?: boolean
+  /** 14 §7 升级链的第一级；一个 pack 至多一个（没有就退回 owner）。 */
+  scope_manager?: boolean
 }
 
 export interface PackAssignment {
@@ -115,6 +138,28 @@ export interface PackSkillDoc {
   markdown: string
 }
 
+/** pack 自带的 judge rubric（`judge/*.md`）：frontmatter 是规则 judge 的配置，正文是模型 judge 的 rubric。 */
+export interface PackJudgeDoc {
+  /** pack 内相对路径 */
+  path: string
+  name: string
+  meta: Record<string, string>
+  body: string
+}
+
+/**
+ * pack 自带的职责定义（`roles/*.yml`）。
+ *
+ * 15 / 50 人 pack 要有投放、运营这些岗位，而 `packages/roles` 里目前只内置了
+ * `dtc.aftersales` / `common.owner` / `common.member` 三份。让 pack 能自带职责定义，
+ * 合成公司的规模就不再被内置职责的数量卡住；同 id 时 pack 里这份优先（它更具体）。
+ */
+export interface PackRoleFile {
+  path: string
+  id: RoleId
+  yaml: string
+}
+
 export interface Pack {
   dir: string
   manifest: PackManifest
@@ -130,6 +175,12 @@ export interface Pack {
   knowledge: PackKnowledgeDoc[]
   /** `skills/<name>.md`：只收带 frontmatter `name` 的（overlay 示例不算技能） */
   skills: PackSkillDoc[]
+  /** `judge/*.md`：规则 judge 的配置 + 模型 judge 的 rubric（WP32） */
+  judges: PackJudgeDoc[]
+  /** `roles/*.yml`：pack 自带的职责定义，按 id 覆盖内置（WP32） */
+  roles: PackRoleFile[]
+  /** soak 档参数（manifest 里没写就用默认） */
+  soak: PackSoak
   /** `fixtures/<name>` → 正文 */
   fixtures: Map<string, string>
   /** pack 自带的场景文件绝对路径（不含隐藏集） */
@@ -257,6 +308,23 @@ export function loadPack(dir: string): Pack {
     skills.push({ path: relative(root, f).split(sep).join('/'), name, markdown })
   }
 
+  const judges: PackJudgeDoc[] = []
+  for (const f of listFiles(join(root, 'judge'), '.md')) {
+    const { meta, body } = parseFrontmatter(readFileSync(f, 'utf8'))
+    const rel = relative(root, f).split(sep).join('/')
+    judges.push({ path: rel, name: meta.name ?? rel, meta, body })
+  }
+
+  const roles: PackRoleFile[] = []
+  for (const f of listFiles(join(root, 'roles'), '.yml')) {
+    const yamlText = readFileSync(f, 'utf8')
+    const parsed = parseYaml(yamlText) as { id?: unknown }
+    if (!isRec(parsed) || typeof parsed.id !== 'string') {
+      throw new SimulationError('invalid_input', `pack 的职责文件缺 id：${f}`)
+    }
+    roles.push({ path: relative(root, f).split(sep).join('/'), id: parsed.id, yaml: yamlText })
+  }
+
   const fixtures = new Map<string, string>()
   for (const f of listFiles(join(root, 'fixtures'))) {
     fixtures.set(
@@ -283,6 +351,9 @@ export function loadPack(dir: string): Pack {
     threads,
     knowledge,
     skills,
+    judges,
+    roles,
+    soak: { ...DEFAULT_SOAK, ...(manifest.soak ?? {}) },
     fixtures,
     scenarioFiles,
     mockState(): MockState {

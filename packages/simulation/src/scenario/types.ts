@@ -54,6 +54,10 @@ export type ScenarioEvent =
   | { at: string; type: 'routine.start'; routine: ScenarioRoutine }
   /** WP29：装上学习回路（lesson 池 + 每天 07:30 的次日提案）。 */
   | { at: string; type: 'learning.start'; learning: ScenarioLearning }
+  /** WP32 soak：跑一次对账（15 §5.8 unknown 的自动对账），soak 档每天一次。 */
+  | { at: string; type: 'reconcile.run'; reconcile: Record<string, never> }
+  /** WP32 soak：进程"重启"——关掉事件日志的连接再开一次，验链还完整。 */
+  | { at: string; type: 'process.restart'; restart: Record<string, never> }
 
 export interface ScenarioInbound {
   from: string
@@ -106,6 +110,21 @@ export interface ScenarioBudget {
   assignment_daily_base?: number
 }
 
+/**
+ * WP32：这条场景要把交易控制模块的两个时限旋钮调成多少（14 §11.6 / §13.2）。
+ *
+ * 为什么放进场景而不是改默认：默认值就是 14 里定的那套（24 / 48 工作小时、10% 抽检），
+ * 不能为了让一条回归题跑得快就把全公司的时限改了。升级链场景要在几小时内看见两级升级，
+ * 就在这条场景里把它压小——**改的是配置，不是语义**。
+ */
+export interface ScenarioTxnPolicy {
+  escalation_hours?: { scope_manager?: number; owner?: number }
+  /** L2 自动批的抽检比例（0..1）。 */
+  sampling_rate?: number
+  /** 审批项的过期天数（`default` 或按 kind）。 */
+  expiry_days?: Record<string, number>
+}
+
 /** 数值断言：裸数字 = 相等；字符串支持 `>=x` `<=x` `>x` `<x` `==x`。 */
 export type NumericAssertion = number | string
 
@@ -150,6 +169,21 @@ export interface ScenarioExpected {
   lessons_filtered?: string[]
   /** WP29 扩展：池里 lesson 的条数。 */
   lessons_pooled?: NumericAssertion
+  /** WP32 扩展：升级链上真的升到过哪几级（`scope_manager` / `owner`）。 */
+  escalated_tiers?: string[]
+  /** WP32 扩展：升级把卡交到了谁手上（跨岗位交接看的是**人**换了没有）。 */
+  escalated_to?: string[]
+  /** WP32 扩展：被抽检选中的自动批项条数。 */
+  sampled?: NumericAssertion
+  /** WP32 扩展：自动批（`auto_approved`）的项数——"不解锁自动执行"的反证也靠它。 */
+  auto_approved?: NumericAssertion
+  /** WP32 扩展：规则 judge 的分数下限（模型 judge 只报不拦，不接受断言）。 */
+  judge_min_score?: number
+  /**
+   * WP32 扩展：这些人身上有 ≥2 个分配时，**没有任何一个分配**拿到并集权限
+   * （05 §"不做跨 Assignment 并集"）。
+   */
+  assignments_not_unioned?: string[]
 }
 
 export interface Scenario {
@@ -162,8 +196,12 @@ export interface Scenario {
   events: ScenarioEvent[]
   expected: ScenarioExpected
   invariants: InvariantName[]
-  /** 唯一主观键；v1 不跑 judge，报告里记 skipped（26 §1）。 */
+  /** 唯一主观键；交模型 judge（realistic 档有 key 时才真跑，只报不拦；26 §1）。 */
   rubric?: string
+  /** WP32：这条场景要调的交易控制模块时限（升级 / 过期 / 抽检比例）。 */
+  policy?: ScenarioTxnPolicy
+  /** WP32：这条场景只在这些档跑（不写 = 每档都跑）。 */
+  tiers?: Tier[]
   /** 隐藏场景集标记（31 §1 I9：不随 pack 发布）。 */
   hidden?: boolean
   /** 毒样本必配的 should-serve 对照场景 id（26 §2 / §6.2）。 */

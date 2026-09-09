@@ -13,3 +13,10 @@ sizes:
   shipments: 45
   threads: 4
   knowledge: 3
+  stores: 1
+  roles: 0
+soak:
+  inbound_per_day: 3
+  fault_rate: 0.34
+  outage_rate: 0.25
+  restart_rate: 0.34

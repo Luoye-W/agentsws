@@ -1,0 +1,89 @@
+- person_id: p_wang
+  role_id: common.owner
+  ranges: []
+  granted_by: p_wang
+- person_id: p_li
+  role_id: dtc.ops
+  ranges:
+    - kind: store
+      id: store_main
+    - kind: store
+      id: store_eu
+  granted_by: p_wang
+- person_id: p_li
+  role_id: dtc.aftersales
+  ranges:
+    - kind: store
+      id: store_main
+    - kind: store
+      id: store_eu
+  granted_by: p_wang
+- person_id: p_zhao
+  role_id: dtc.ops
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_qian
+  role_id: dtc.ops
+  ranges:
+    - kind: store
+      id: store_eu
+  granted_by: p_wang
+- person_id: p_chen
+  role_id: dtc.aftersales
+  ranges:
+    - kind: store
+      id: store_main
+    - kind: store
+      id: store_eu
+  granted_by: p_wang
+  primary: true
+- person_id: p_sun
+  role_id: dtc.aftersales
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_zhou
+  role_id: dtc.aftersales
+  ranges:
+    - kind: store
+      id: store_eu
+  granted_by: p_wang
+- person_id: p_wu
+  role_id: ads.performance
+  ranges:
+    - kind: store
+      id: store_main
+    - kind: store
+      id: store_eu
+  granted_by: p_wang
+- person_id: p_zheng
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang
+- person_id: p_feng
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang
+- person_id: p_chu
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang
+- person_id: p_wei
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang
+- person_id: p_jiang
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang
+- person_id: p_shen
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang
+- person_id: p_han
+  role_id: common.member
+  ranges: []
+  granted_by: p_wang

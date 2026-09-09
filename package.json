@@ -25,6 +25,8 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "simulate": "node apps/cli/bin/agentsws.mjs simulate",
+    "soak": "node apps/cli/bin/agentsws.mjs simulate --tier soak",
+    "realistic": "node apps/cli/bin/agentsws.mjs simulate --tier realistic",
     "synth": "node apps/cli/bin/agentsws.mjs synth",
     "replay": "node apps/cli/bin/agentsws.mjs replay",
     "dev:demo": "tsc -b && pnpm --filter @agentsws/workstation exec vite build && node apps/cli/bin/agentsws.mjs demo",

@@ -4,6 +4,7 @@
  */
 import type { Evidence } from './evidence.js'
 import { payloadOf } from './evidence.js'
+import type { JudgeReport } from './judge.js'
 
 export interface Metric {
   value: number
@@ -42,8 +43,8 @@ const distinctChanges = (evidence: Evidence, type: string): Set<string> => {
 
 const ms = (iso: string): number => Date.parse(iso)
 
-/** 从事件日志算出全部指标。 */
-export function computeMetrics(evidence: Evidence): MetricTable {
+/** 从事件日志算出全部指标。judge 给了就把规则 judge 的分数也算一条指标（WP32）。 */
+export function computeMetrics(evidence: Evidence, judge?: JudgeReport): MetricTable {
   const decided = decisions(evidence)
   const accepted = decided.filter((e) => payloadOf(e).accepted === true).length
   const edited = decided.filter((e) => payloadOf(e).edited === true).length
@@ -107,6 +108,14 @@ export function computeMetrics(evidence: Evidence): MetricTable {
       direction: 'lower_better',
       note: `tokens=${tokens} work_items=${workItems}`,
     },
+    cost_base: {
+      value:
+        Math.round(usage.reduce((n, e) => n + Number(payloadOf(e).cost_base ?? 0), 0) * 1e6) / 1e6,
+      event_types: ['model.usage'],
+      event_count: usage.length,
+      direction: 'lower_better',
+      note: '22 §3 按价格表换算的基准货币；realistic 档的预算上限就是它的和',
+    },
     staged_changes: {
       value: distinctChanges(evidence, 'change.staged').size,
       event_types: ['change.staged'],
@@ -150,6 +159,37 @@ export function computeMetrics(evidence: Evidence): MetricTable {
       event_count: count(evidence, 'knowledge.gap.opened'),
       direction: 'lower_better',
     },
+    // ── WP32：升级链、过期、抽检 ────────────────────────────────────
+    escalations: {
+      value: count(evidence, 'approval.escalated'),
+      event_types: ['approval.escalated'],
+      event_count: count(evidence, 'approval.escalated'),
+      direction: 'lower_better',
+      note: '升级 = 没人在时限内理（14 §7），越少越健康',
+    },
+    expired_approvals: {
+      value: count(evidence, 'approval.expired'),
+      event_types: ['approval.expired'],
+      event_count: count(evidence, 'approval.expired'),
+      direction: 'lower_better',
+    },
+    sampling_reviews: {
+      value: count(evidence, 'simulation.sampling_review'),
+      event_types: ['simulation.sampling_review'],
+      event_count: count(evidence, 'simulation.sampling_review'),
+      direction: 'higher_better',
+      note: 'L2 自动批被抽出来复核的条数（14 §13.2）；掉到 0 说明抽检没在跑',
+    },
+  }
+  if (judge !== undefined) {
+    table.judge_rule_score = {
+      value: Math.round(judge.rule.score * 1000) / 1000,
+      // 规则 judge 读的是审批项与事件（草稿正文、决定原因），不是某一类事件
+      event_types: ['approval.created', 'approval.decided'],
+      event_count: judge.rule.total,
+      direction: 'higher_better',
+      note: `${judge.rule.passed}/${judge.rule.total} 条检查通过`,
+    }
   }
   return table
 }

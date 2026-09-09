@@ -6,6 +6,7 @@ import type { ChangeKind } from '@agentsws/contracts'
 import { assemblePrompt } from '@agentsws/stand-ins'
 import type { Evidence } from './evidence.js'
 import { payloadOf } from './evidence.js'
+import type { JudgeReport } from './judge.js'
 import type { MetricTable } from './metrics.js'
 import type { NumericAssertion, ScenarioExpected } from './scenario/types.js'
 
@@ -69,6 +70,7 @@ export function checkExpectations(
   expected: ScenarioExpected,
   evidence: Evidence,
   metrics: MetricTable,
+  judge?: JudgeReport,
 ): ExpectationResult[] {
   const out: ExpectationResult[] = []
   const add = (key: string, ok: boolean, detail: string): void => {
@@ -292,6 +294,87 @@ export function checkExpectations(
       'lessons_pooled',
       matchNumeric(n, expected.lessons_pooled),
       `池里 ${n} 条（期望 ${String(expected.lessons_pooled)}）`,
+    )
+  }
+  // ── WP32 ────────────────────────────────────────────────────────────
+  if (expected.escalated_tiers !== undefined) {
+    const tiers = new Set(
+      evidence.events
+        .filter((e) => e.type === 'approval.escalated')
+        .map((e) => String(payloadOf(e).tier)),
+    )
+    const missing = expected.escalated_tiers.filter((t) => !tiers.has(t))
+    add(
+      'escalated_tiers',
+      missing.length === 0,
+      missing.length === 0
+        ? `升到过 [${[...tiers].join(', ')}]`
+        : `没升到：${missing.join(', ')}（实际 [${[...tiers].join(', ')}]）`,
+    )
+  }
+  if (expected.escalated_to !== undefined) {
+    const people = new Set(
+      evidence.events
+        .filter((e) => e.type === 'approval.escalated')
+        .map((e) => String(payloadOf(e).to)),
+    )
+    const missing = expected.escalated_to.filter((p) => !people.has(p))
+    add(
+      'escalated_to',
+      missing.length === 0,
+      missing.length === 0
+        ? `交到过 [${[...people].join(', ')}]`
+        : `没交到：${missing.join(', ')}（实际 [${[...people].join(', ')}]）`,
+    )
+  }
+  if (expected.sampled !== undefined) {
+    const n = evidence.sampling_reviews.length
+    add(
+      'sampled',
+      matchNumeric(n, expected.sampled),
+      `抽检 ${n} 条（期望 ${String(expected.sampled)}）`,
+    )
+  }
+  if (expected.auto_approved !== undefined) {
+    const n = evidence.approvals.filter((i) => i.automation.auto_approved).length
+    add(
+      'auto_approved',
+      matchNumeric(n, expected.auto_approved),
+      `自动批 ${n} 条（期望 ${String(expected.auto_approved)}）`,
+    )
+  }
+  if (expected.judge_min_score !== undefined) {
+    const score = judge?.rule.score ?? 1
+    const failed = (judge?.rule.checks ?? []).filter((c) => !c.ok)
+    add(
+      'judge_min_score',
+      score >= expected.judge_min_score,
+      `规则 judge ${score.toFixed(3)} ≥ ${expected.judge_min_score}` +
+        (failed.length === 0
+          ? ''
+          : `；没过的：${failed.map((c) => `${c.id}@${c.target}(${c.detail})`).join(' | ')}`),
+    )
+  }
+  if (expected.assignments_not_unioned !== undefined) {
+    // 05 §4：一个人身上有两个分配时，**没有任何一个分配**能拿到两边权限的并集
+    const problems: string[] = []
+    for (const person of expected.assignments_not_unioned) {
+      const mine = evidence.assignments.filter((a) => a.person_id === person)
+      if (mine.length < 2) {
+        problems.push(`${person} 只有 ${mine.length} 个分配，这条断言没有意义`)
+        continue
+      }
+      const union = new Set(mine.flatMap((a) => a.scopes))
+      for (const a of mine) {
+        if (a.scopes.length === union.size) {
+          problems.push(`${person} 的分配 ${a.assignment_id}(${a.role_id}) 拿到了并集权限`)
+        }
+      }
+    }
+    add(
+      'assignments_not_unioned',
+      problems.length === 0,
+      problems.length === 0 ? '每个分配各管各的' : problems.join('；'),
     )
   }
   if (expected.blocked_rules !== undefined) {

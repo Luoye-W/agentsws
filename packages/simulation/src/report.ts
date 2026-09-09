@@ -8,6 +8,7 @@ import type { Iso8601 } from '@agentsws/contracts'
 import type { Evidence } from './evidence.js'
 import type { ExpectationResult } from './expectations.js'
 import type { InvariantResult } from './invariants.js'
+import type { JudgeReport } from './judge.js'
 import type { MetricTable } from './metrics.js'
 import type { BaselineRuntime, RuntimeName } from './runtime-name.js'
 import { baselineRuntime } from './runtime-name.js'
@@ -44,8 +45,13 @@ export interface ScenarioReport {
   invariants: InvariantResult[]
   expectations: ExpectationResult[]
   metrics: MetricTable
-  /** 26 §1：v1 不跑 judge，主观键记 skipped */
-  rubric?: { skipped: true; reason: string; prompt: string }
+  /**
+   * judge（26 §1）。规则 judge 每档都跑、进门禁；模型 judge 只在拿到真模型时跑、只报不拦——
+   * `judge.model.skipped` 有值就说明这次没真打分（无 key / 预算用完 / 解析失败）。
+   */
+  judge?: JudgeReport
+  /** 场景声明的主观 rubric 原文（模型 judge 没跑时留着，方便离线重打分）。 */
+  rubric?: { scored: boolean; reason?: string; prompt: string }
   delta?: Record<string, MetricDelta>
   /** 未被断言拦下、但值得看的东西（被挡下的提议、apply 失败） */
   notes: string[]
@@ -60,6 +66,7 @@ export interface BuildReportInput {
   metrics: MetricTable
   invariants: InvariantResult[]
   expectations: ExpectationResult[]
+  judge?: JudgeReport
 }
 
 export function buildReport(input: BuildReportInput): ScenarioReport {
@@ -93,12 +100,17 @@ export function buildReport(input: BuildReportInput): ScenarioReport {
     invariants: input.invariants,
     expectations: input.expectations,
     metrics: input.metrics,
+    ...(input.judge === undefined ? {} : { judge: input.judge }),
     ...(scenario.rubric === undefined
       ? {}
       : {
           rubric: {
-            skipped: true as const,
-            reason: 'v1 不跑 judge（26 §1）：无 key 时 replay 重打分，realistic 档再接',
+            scored: input.judge?.model !== undefined && input.judge.model.skipped === undefined,
+            ...(input.judge?.model?.skipped === undefined
+              ? input.judge?.model === undefined
+                ? { reason: '没跑模型 judge（fast / soak 档或没有 key）：rubric 留着离线重打分' }
+                : {}
+              : { reason: input.judge.model.skipped }),
             prompt: scenario.rubric,
           },
         }),
@@ -282,6 +294,20 @@ export function formatReport(report: ScenarioReport): string {
     .map(([k, m]) => `${k}=${m.value}`)
     .join(' ')
   lines.push(`  metrics: ${metrics}`)
-  if (report.rubric !== undefined) lines.push('  rubric: skipped (v1 不跑 judge)')
+  if (report.judge !== undefined) {
+    const rule = report.judge.rule
+    const model = report.judge.model
+    lines.push(
+      `  judge: 规则 ${rule.score.toFixed(3)}（${rule.passed}/${rule.total}）` +
+        (model === undefined
+          ? ''
+          : model.skipped === undefined
+            ? `；模型 ${model.score.toFixed(3)}（${model.model}，只报不拦）`
+            : `；模型 skipped（${model.skipped}）`),
+    )
+    for (const c of rule.checks.filter((x) => !x.ok)) {
+      lines.push(`    ✗ judge.${c.id} @ ${c.target}: ${c.detail}`)
+    }
+  }
   return lines.join('\n')
 }

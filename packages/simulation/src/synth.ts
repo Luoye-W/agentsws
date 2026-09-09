@@ -1,5 +1,8 @@
 /**
- * 合成公司生成器（26 §2）：`agentsws synth --pack dtc-3c --people 3 --orders 50 --seed 42`。
+ * 合成公司生成器（26 §2）：`agentsws synth --size 3 | 15 | 50 --seed 42`。
+ *
+ * 三个规模档共用一个生成器：`--size` 定人数、店铺数、岗位表与订单量；
+ * 15 / 50 人档还会带上自己的职责定义（`roles/`），因为内置职责表里只有三份。
  *
  * 规模、语言、行业参数化；**固定 seed 可复现**（两次生成逐字节相同）——
  * 所以这里一次 `Date.now()` / `Math.random()` 都不能有：时间来自 `anchor`，随机来自 `seed`。
@@ -21,18 +24,428 @@ const DAY = 86_400_000
 export const DEFAULT_ANCHOR: Iso8601 = '2026-09-07T01:00:00.000Z'
 
 export interface SynthOptions {
-  /** pack 家族（v1 只有 `dtc-3c`）。 */
+  /** pack 家族（`dtc-3c` = 3 人；15 / 50 人用 `size` 选，同一个生成器扩展出来）。 */
   pack?: string
   people?: number
+  /** 26 §2 的规模档：3 / 15 / 50。给了它就按那一档的岗位表与规模生成。 */
+  size?: number
   orders?: number
   seed?: number
-  /** 输出目录。 */
+  /** 输出目录；不给就按规模档落到 `packs/<pack>`。 */
   out: string
   /** 数据集的时间原点；订单日期都相对它生成。 */
   anchor?: Iso8601
   /** 生成前先清掉生成器拥有的目录（保证"重生成 = 逐字节相同"）。 */
   clean?: boolean
 }
+
+/** 一个规模档：多少人、几家店、默认多少单、pack 叫什么（26 §2 / 27）。 */
+export interface SizePreset {
+  size: number
+  pack: string
+  family: string
+  orders: number
+  stores: string[]
+  /** 15 / 50 人才有的岗位（3 人公司没有"投放岗"这种东西） */
+  extraRoles: boolean
+}
+
+export const SIZE_PRESETS: Record<number, SizePreset> = {
+  3: {
+    size: 3,
+    pack: 'dtc-3c-3p',
+    family: 'dtc-3c',
+    orders: 50,
+    stores: ['store_main'],
+    extraRoles: false,
+  },
+  15: {
+    size: 15,
+    pack: 'dtc-15p',
+    family: 'dtc-15p',
+    orders: 150,
+    stores: ['store_main', 'store_eu'],
+    extraRoles: true,
+  },
+  50: {
+    size: 50,
+    pack: 'dtc-50p',
+    family: 'dtc-50p',
+    orders: 300,
+    stores: ['store_main', 'store_eu', 'store_uk'],
+    extraRoles: true,
+  },
+}
+
+/** 27 §2 的岗位 × 人。`role` 是主分配；`extra` 是他兼的第二个岗位。 */
+interface PersonTemplate {
+  id: string
+  name: string
+  email: string
+  title: string
+  role: string
+  owner?: boolean
+  scope_manager?: boolean
+  /** 兼岗：同一个人的第二个分配（05 §4「不做跨 Assignment 并集」的活证据） */
+  extra?: string
+  /** 这个人管哪几家店（不写 = 全部） */
+  stores?: string[]
+}
+
+const N = (i: number): string => String(i).padStart(2, '0')
+
+/** 15 人公司（27 §2）：老板 1、运营主管 1、运营 2、客服 3、内容 / 社媒 / 红人 / 投放 / 设计 / 建站 / 供应链 / 财务 各 1。 */
+const PEOPLE_15: PersonTemplate[] = [
+  {
+    id: 'p_wang',
+    name: '王岚',
+    email: 'wang@nordvolt.example',
+    title: '店主',
+    role: 'common.owner',
+    owner: true,
+  },
+  {
+    id: 'p_li',
+    name: '李默',
+    email: 'li@nordvolt.example',
+    title: '运营主管',
+    role: 'dtc.ops',
+    scope_manager: true,
+    // 兼售后：同一个人两个岗位，权限**各管各的**，不并集（05 §4）
+    extra: 'dtc.aftersales',
+  },
+  {
+    id: 'p_zhao',
+    name: '赵宁',
+    email: 'zhao@nordvolt.example',
+    title: '运营',
+    role: 'dtc.ops',
+    stores: ['store_main'],
+  },
+  {
+    id: 'p_qian',
+    name: '钱睿',
+    email: 'qian@nordvolt.example',
+    title: '运营',
+    role: 'dtc.ops',
+    stores: ['store_eu'],
+  },
+  {
+    id: 'p_chen',
+    name: '陈晓',
+    email: 'chen@nordvolt.example',
+    title: '售后客服',
+    role: 'dtc.aftersales',
+  },
+  {
+    id: 'p_sun',
+    name: '孙洋',
+    email: 'sun@nordvolt.example',
+    title: '售后客服',
+    role: 'dtc.aftersales',
+    stores: ['store_main'],
+  },
+  {
+    id: 'p_zhou',
+    name: '周颖',
+    email: 'zhou@nordvolt.example',
+    title: '售后客服',
+    role: 'dtc.aftersales',
+    stores: ['store_eu'],
+  },
+  {
+    id: 'p_wu',
+    name: '吴迪',
+    email: 'wu@nordvolt.example',
+    title: '投放',
+    role: 'ads.performance',
+  },
+  {
+    id: 'p_zheng',
+    name: '郑好',
+    email: 'zheng@nordvolt.example',
+    title: '内容',
+    role: 'common.member',
+  },
+  {
+    id: 'p_feng',
+    name: '冯萱',
+    email: 'feng@nordvolt.example',
+    title: '社媒',
+    role: 'common.member',
+  },
+  {
+    id: 'p_chu',
+    name: '褚黎',
+    email: 'chu@nordvolt.example',
+    title: '红人',
+    role: 'common.member',
+  },
+  {
+    id: 'p_wei',
+    name: '卫青',
+    email: 'wei@nordvolt.example',
+    title: '设计',
+    role: 'common.member',
+  },
+  {
+    id: 'p_jiang',
+    name: '蒋一',
+    email: 'jiang@nordvolt.example',
+    title: '建站',
+    role: 'common.member',
+  },
+  {
+    id: 'p_shen',
+    name: '沈牧',
+    email: 'shen@nordvolt.example',
+    title: '供应链',
+    role: 'common.member',
+  },
+  {
+    id: 'p_han',
+    name: '韩雪',
+    email: 'han@nordvolt.example',
+    title: '财务',
+    role: 'common.member',
+  },
+]
+
+/** 3 人公司（26 §2 定案）。 */
+const PEOPLE_3: PersonTemplate[] = [
+  {
+    id: 'p_wang',
+    name: '王岚',
+    email: 'wang@nordvolt.example',
+    title: '店主 / 售后',
+    role: 'dtc.aftersales',
+    owner: true,
+    extra: 'common.owner',
+  },
+  { id: 'p_li', name: '李默', email: 'li@nordvolt.example', title: '运营', role: 'dtc.aftersales' },
+  {
+    id: 'p_chen',
+    name: '陈晓',
+    email: 'chen@nordvolt.example',
+    title: '兼职客服',
+    role: 'common.member',
+  },
+]
+
+/**
+ * 50 人公司（27 §3）：按部门放大 15 人的岗位表。
+ * 多出来的人一律 `common.member`——27 里那些部门（供应链、财务）v1 本来就没有职责定义。
+ */
+function people50(): PersonTemplate[] {
+  const out = [...PEOPLE_15]
+  const extra: { title: string; role: string }[] = [
+    { title: '售后客服', role: 'dtc.aftersales' },
+    { title: '运营', role: 'dtc.ops' },
+    { title: '投放', role: 'ads.performance' },
+    { title: '内容', role: 'common.member' },
+    { title: '社媒', role: 'common.member' },
+    { title: '设计', role: 'common.member' },
+    { title: '供应链', role: 'common.member' },
+  ]
+  for (let i = 0; out.length < 50; i += 1) {
+    const spec = extra[i % extra.length]
+    if (spec === undefined) break
+    const n = out.length + 1
+    out.push({
+      id: `p_${spec.title === '售后客服' ? 'cs' : spec.title === '运营' ? 'ops' : 'x'}${N(n)}`,
+      name: `同事 ${N(n)}`,
+      email: `staff${N(n)}@nordvolt.example`,
+      title: spec.title,
+      role: spec.role,
+    })
+  }
+  return out
+}
+
+function peopleFor(preset: SizePreset): PersonTemplate[] {
+  if (preset.size <= 3) return PEOPLE_3
+  if (preset.size <= 15) return PEOPLE_15
+  return people50()
+}
+
+/**
+ * pack 自带的职责定义（05 §1 的 RoleDefinition）。
+ *
+ * `packages/roles` 只内置了 `dtc.aftersales` / `common.owner` / `common.member` 三份，
+ * 而 15 / 50 人公司必须有运营与投放这两个岗位（27 §2）。让 pack 带着自己的职责定义走，
+ * 合成公司的规模就不再被内置职责的数量卡住——加载时 pack 里这一份按 id 覆盖内置。
+ *
+ * 两份的动作都挑了**低风险**的写动作（`listing_edit` / `pause_ad` / `negative_keyword`），
+ * 这样 31 §3.4 的"只有 low 风险才可能超过 L1"在 15 人 pack 里是**能被走到**的一条路。
+ */
+const ROLE_OPS = `# pack 自带的职责定义（05 §1）：独立站运营。
+# \`agentsws synth --size 15\` 生成；内置职责表里没有这一份，所以它跟着 pack 走。
+id: dtc.ops
+version: 1.0.0
+domain: dtc
+name: { zh: 独立站运营, en: DTC Store Operations }
+description: 商品与详情页、上下架、价格与促销、活动日历、店铺配置
+
+scopes:
+  - { domain: product, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: discount, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: campaign, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  - { kind: shopify, required: true, grants: [read_products, write_products], ownership: workspace }
+
+actions:
+  - id: stage_listing_edit
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 50, per: day } }
+    route_to: scope_manager
+  - id: stage_price_change
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_price_delta_pct: 20 }, window: { max_count: 20, per: day } }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: stage_promotion
+    target: discount
+    kind: staged_change
+    mandate: { caps: { max_promotion_discount_pct: 50 }, window: { max_count: 5, per: day } }
+    route_to: owner
+
+automation:
+  stage_listing_edit:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_price_change:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_promotion:
+    ceiling: L1
+    initial: L1
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills: []
+home_blocks:
+  - {
+      id: ops.pending_listings,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(dtc.ops),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+notifications:
+  - {
+      event: 'approval.created:stage_price_change',
+      mode: queue,
+      recipients: [scope_manager],
+      escalate_after_hours: 24,
+    }
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []
+`
+
+const ROLE_ADS = `# pack 自带的职责定义（05 §1）：投放。
+# \`agentsws synth --size 15\` 生成；内置职责表里没有这一份，所以它跟着 pack 走。
+id: ads.performance
+version: 1.0.0
+domain: ads
+name: { zh: 效果投放, en: Performance Ads }
+description: 计划与预算、出价、否词、暂停低效广告、投放报表
+
+scopes:
+  - { domain: ad_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: campaign, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  - { kind: meta, required: true, grants: [ads_read, ads_management], ownership: workspace }
+
+actions:
+  - id: stage_pause_ad
+    target: campaign
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: role_holder
+  - id: stage_negative_keyword
+    target: campaign
+    kind: staged_change
+    mandate: { caps: { max_terms: 50 }, window: { max_count: 20, per: day } }
+    route_to: role_holder
+  - id: stage_budget_change
+    target: campaign
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_daily_spend_total: 300 }, window: { max_count: 10, per: day } }
+    review_cannot_be_disabled: true
+    route_to: owner
+
+automation:
+  stage_pause_ad:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_negative_keyword:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_budget_change:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills: []
+home_blocks:
+  - {
+      id: ads.pending_changes,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(ads.performance),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+notifications:
+  - {
+      event: 'approval.created:stage_budget_change',
+      mode: queue,
+      recipients: [owner],
+      escalate_after_hours: 24,
+    }
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []
+`
+
+const EXTRA_ROLES: { id: string; yaml: string }[] = [
+  { id: 'ads.performance', yaml: ROLE_ADS },
+  { id: 'dtc.ops', yaml: ROLE_OPS },
+]
 
 export interface SynthResult {
   dir: string
@@ -266,12 +679,21 @@ Anna
 
 /** 生成一个 pack。返回写出去的文件表（测试可直接比对，不必读盘）。 */
 export function synth(options: SynthOptions): SynthResult {
-  const family = options.pack ?? 'dtc-3c'
-  if (family !== 'dtc-3c') {
-    throw new SimulationError('invalid_input', `v1 只有 dtc-3c 这个 pack 家族：${family}`)
+  // 26 §2：同一个生成器扩展出 3 / 15 / 50 三档；`--size` 选档，`--people` / `--orders` 再微调
+  const size = options.size ?? options.people ?? 3
+  const preset =
+    SIZE_PRESETS[size] ??
+    SIZE_PRESETS[size >= 50 ? 50 : size >= 15 ? 15 : 3] ??
+    (SIZE_PRESETS[3] as SizePreset)
+  const family = options.pack ?? preset.family
+  if (!['dtc-3c', 'dtc-15p', 'dtc-50p'].includes(family)) {
+    throw new SimulationError(
+      'invalid_input',
+      `未知的 pack 家族：${family}（只有 dtc-3c / dtc-15p / dtc-50p）`,
+    )
   }
-  const peopleCount = options.people ?? 3
-  const orderCount = options.orders ?? 50
+  const peopleCount = options.people ?? preset.size
+  const orderCount = options.orders ?? preset.orders
   const seed = options.seed ?? 42
   const anchor = options.anchor ?? DEFAULT_ANCHOR
   const base = Date.parse(anchor)
@@ -288,7 +710,8 @@ export function synth(options: SynthOptions): SynthResult {
   }
   const int = (min: number, max: number): number => min + Math.floor(random() * (max - min + 1))
 
-  const workspace_id = 'ws_dtc3c'
+  // 3 人档保持原来的 id（既有 pack 不动）；更大的档各有各的工作区
+  const workspace_id = preset.size <= 3 ? 'ws_dtc3c' : `ws_dtc${preset.size}p`
   const files = new Map<string, string>()
 
   // ── 商品 ────────────────────────────────────────────────────────────
@@ -411,50 +834,61 @@ export function synth(options: SynthOptions): SynthResult {
       ...(o.delivered_at === undefined ? {} : { delivered_at: o.delivered_at }),
     }))
 
-  // ── 人与分配 ────────────────────────────────────────────────────────
-  const people = [
-    {
-      id: 'p_wang',
-      name: '王岚',
-      email: 'wang@nordvolt.example',
-      title: '店主 / 售后',
-      owner: true,
-    },
-    { id: 'p_li', name: '李默', email: 'li@nordvolt.example', title: '运营' },
-    { id: 'p_chen', name: '陈晓', email: 'chen@nordvolt.example', title: '兼职客服' },
-  ].slice(0, Math.max(3, peopleCount))
+  // ── 人与分配（27 的岗位表）────────────────────────────────────────
+  const roleFiles = preset.extraRoles ? EXTRA_ROLES : []
+  const templates = peopleFor(preset).slice(0, peopleCount)
+  const ownerId = templates.find((p) => p.owner === true)?.id ?? templates[0]?.id ?? 'p_wang'
+  const people = templates.map((p) => ({
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    title: p.title,
+    ...(p.owner === true ? { owner: true } : {}),
+    ...(p.scope_manager === true ? { scope_manager: true } : {}),
+  }))
 
-  const assignments = [
-    {
-      person_id: 'p_wang',
-      role_id: 'dtc.aftersales',
-      ranges: [{ kind: 'store', id: 'store_main' }],
-      granted_by: 'p_wang',
-      primary: true,
-    },
-    { person_id: 'p_wang', role_id: 'common.owner', ranges: [], granted_by: 'p_wang' },
-    {
-      person_id: 'p_li',
-      role_id: 'dtc.aftersales',
-      ranges: [{ kind: 'store', id: 'store_main' }],
-      granted_by: 'p_wang',
-    },
-    { person_id: 'p_chen', role_id: 'common.member', ranges: [], granted_by: 'p_wang' },
-  ]
+  const rangesOf = (role: string, stores: string[] | undefined): { kind: string; id: string }[] =>
+    // `common.*` 是全工作区的职责，没有店铺范围；业务职责按这个人管的店给范围
+    role.startsWith('common.') ? [] : (stores ?? preset.stores).map((id) => ({ kind: 'store', id }))
+
+  const assignments: {
+    person_id: string
+    role_id: string
+    ranges: { kind: string; id: string }[]
+    granted_by: string
+    primary?: boolean
+  }[] = []
+  let primaryTaken = false
+  for (const p of templates) {
+    for (const role of [p.role, ...(p.extra === undefined ? [] : [p.extra])]) {
+      // 入站工作项默认落到第一条**主岗是售后**的分配。
+      // 不能拿兼岗顶上：15 人公司里运营主管兼着售后，让他当 primary 的话
+      // 「客服的卡没人理 → 升到运营主管」就变成升给他自己了，升级链看不出东西。
+      const isPrimary = !primaryTaken && role === 'dtc.aftersales' && role === p.role
+      if (isPrimary) primaryTaken = true
+      assignments.push({
+        person_id: p.id,
+        role_id: role,
+        ranges: rangesOf(role, p.stores),
+        granted_by: ownerId,
+        ...(isPrimary ? { primary: true } : {}),
+      })
+    }
+  }
 
   // ── 邮件线程（含毒样本 + should-serve 对照）────────────────────────
   const threads: PackThread[] = [
     {
       id: 'thr_seed_1001',
       subject: 'Return request for #1001',
-      participants: ['anna@example.com', 'support@ws_dtc3c.example'],
+      participants: ['anna@example.com', `support@${workspace_id}.example`],
       poison: false,
       messages: [
         {
           id: 'msg_seed_1',
           direction: 'inbound',
           from: 'anna@example.com',
-          to: ['support@ws_dtc3c.example'],
+          to: [`support@${workspace_id}.example`],
           at: iso(base, -0.2),
           body: FIXTURES['anna-return.txt'] ?? '',
         },
@@ -463,14 +897,14 @@ export function synth(options: SynthOptions): SynthResult {
     {
       id: 'thr_poison_1001',
       subject: 'Order #1001 refund and new address',
-      participants: ['mallory@example.com', 'support@ws_dtc3c.example'],
+      participants: ['mallory@example.com', `support@${workspace_id}.example`],
       poison: true,
       messages: [
         {
           id: 'msg_poison_1',
           direction: 'inbound',
           from: 'mallory@example.com',
-          to: ['support@ws_dtc3c.example'],
+          to: [`support@${workspace_id}.example`],
           at: iso(base, -0.1),
           body: FIXTURES['mallory-injected.txt'] ?? '',
         },
@@ -479,14 +913,14 @@ export function synth(options: SynthOptions): SynthResult {
     {
       id: 'thr_control_1001',
       subject: 'Order #1001 return, with a weird quote',
-      participants: ['anna@example.com', 'support@ws_dtc3c.example'],
+      participants: ['anna@example.com', `support@${workspace_id}.example`],
       control_of: 'thr_poison_1001',
       messages: [
         {
           id: 'msg_control_1',
           direction: 'inbound',
           from: 'anna@example.com',
-          to: ['support@ws_dtc3c.example'],
+          to: [`support@${workspace_id}.example`],
           at: iso(base, -0.1),
           body: FIXTURES['anna-injected-control.txt'] ?? '',
         },
@@ -495,14 +929,14 @@ export function synth(options: SynthOptions): SynthResult {
     {
       id: 'thr_seed_1002',
       subject: 'Late return for #1002',
-      participants: ['bob@example.com', 'support@ws_dtc3c.example'],
+      participants: ['bob@example.com', `support@${workspace_id}.example`],
       poison: false,
       messages: [
         {
           id: 'msg_seed_2',
           direction: 'inbound',
           from: 'bob@example.com',
-          to: ['support@ws_dtc3c.example'],
+          to: [`support@${workspace_id}.example`],
           at: iso(base, -0.3),
           body: FIXTURES['bob-late-return.txt'] ?? '',
         },
@@ -531,7 +965,7 @@ export function synth(options: SynthOptions): SynthResult {
     'manifest.yml',
     yaml({
       schema_version: 1,
-      pack: 'dtc-3c-3p',
+      pack: preset.pack,
       family,
       seed,
       anchor,
@@ -545,9 +979,19 @@ export function synth(options: SynthOptions): SynthResult {
         shipments: shipments.length,
         threads: threads.length,
         knowledge: KNOWLEDGE.length,
+        stores: preset.stores.length,
+        roles: roleFiles.length,
+      },
+      // WP32 soak 档：这家公司一天大概来几封信、故障多密（26 §4）
+      soak: {
+        inbound_per_day: Math.max(3, Math.round(people.length / 2)),
+        fault_rate: 0.34,
+        outage_rate: 0.25,
+        restart_rate: 0.34,
       },
     }),
   )
+  for (const role of roleFiles) files.set(`roles/${role.id}.yml`, role.yaml)
   files.set(
     'workspace.yml',
     yaml({
@@ -599,16 +1043,19 @@ export function synth(options: SynthOptions): SynthResult {
   for (const [name, body] of Object.entries(FIXTURES)) files.set(`fixtures/${name}`, body)
   files.set(
     'README.md',
-    `# dtc-3c-3p
+    `# ${preset.pack}
 
-\`agentsws synth --pack ${family} --people ${people.length} --orders ${orders.length} --seed ${seed}\` 生成（26 §2）。
+\`agentsws synth --size ${preset.size} --seed ${seed}\` 生成（26 §2）。
+家族 ${family}，${people.length} 人、${preset.stores.length} 家店、${orders.length} 单${
+      roleFiles.length === 0 ? '' : `、自带 ${roleFiles.length} 份职责定义（roles/）`
+    }。
 
 同一份数据是 demo 数据、上手引导数据和回归基线。**验收另用隐藏场景集**
 （\`packages/simulation/hidden/\`，31 §1 I9），不在这里。
 
 生成器拥有：manifest / workspace / people / assignments / policy / store / threads /
-creators / campaigns / knowledge / skills / fixtures / 本文件。
-生成器不动：\`scenarios/\`（人写的回归题）、\`baseline.json\`（跑出来的基线）。
+creators / campaigns / knowledge / skills / roles / fixtures / 本文件。
+生成器不动：\`scenarios/\`（人写的回归题）、\`judge/\`（评分标准）、\`baseline.json\`（跑出来的基线）。
 `,
   )
 

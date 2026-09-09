@@ -1,0 +1,22 @@
+schema_version: 1
+pack: dtc-15p
+family: dtc-15p
+seed: 42
+anchor: 2026-09-07T01:00:00.000Z
+generator: agentsws synth
+sizes:
+  people: 15
+  assignments: 16
+  products: 8
+  customers: 20
+  orders: 150
+  shipments: 136
+  threads: 4
+  knowledge: 3
+  stores: 2
+  roles: 2
+soak:
+  inbound_per_day: 8
+  fault_rate: 0.34
+  outage_rate: 0.25
+  restart_rate: 0.34

@@ -220,7 +220,8 @@ export async function buildRunRequest(input: BuildRequestInput): Promise<RunRequ
       preset: world.role_id,
       profile: 'simulation',
       plugins: [],
-      model: { provider: 'stub', model: 'stub-v1', region: 'cn' },
+      // realistic 档换成真模型的 ref（fast 档仍是 stub），prompt 的其余部分一个字节不变
+      model: world.modelRef,
       seed: input.seed,
     },
     idempotency_key: `idem_${inbound.dedupe_key}`,

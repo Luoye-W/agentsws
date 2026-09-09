@@ -1,0 +1,10 @@
+- id: cmp_1
+  channel: meta
+  name: DE charger prospecting
+  daily_budget: 40
+  currency: USD
+- id: cmp_2
+  channel: klaviyo
+  name: Winback 60d
+  daily_budget: 0
+  currency: USD

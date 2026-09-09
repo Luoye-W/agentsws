@@ -1,0 +1,45 @@
+# 跨岗位交接（14 §7 升级链，15 人公司版）。
+#
+# 3 人公司里"范围管理者"与"店主"是同一个人，升级只看得见事件；15 人公司里这三层是
+# **三个人**：客服陈晓 → 运营主管李默（scope_manager）→ 店主王岚（owner）。
+# 一张卡在客服手里放着没人理，4 工作小时后交到运营主管手上，再 4 小时交到店主手上——
+# 这就是"跨岗位交接"：**原收件人不撤销**，只是多了一层人能决定（14 §7）。
+#
+# 时限同样按 `policy` 压小；默认的 24 / 48 工作小时一条回归题等不起。
+id: ops/cross-desk-handover
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+# 一个合成人都不装：这张卡就是没人理
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+policy:
+  escalation_hours: { scope_manager: 4, owner: 8 }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+270m'
+    clock.advance: {}
+  - at: '+510m'
+    clock.advance: {}
+expected:
+  escalated_tiers: [scope_manager, owner]
+  escalated_to: [p_li, p_wang]
+  event_types:
+    - approval.escalated
+  # 交接不是批准：一条都不许施行
+  metrics:
+    escalations: '>=2'
+    applied_changes: 0
+    outbound_sent: 0
+  judge_min_score: 1
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
