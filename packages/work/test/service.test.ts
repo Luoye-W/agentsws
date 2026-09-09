@@ -529,6 +529,36 @@ describe('目标 / 日历 / 计划 / 复盘', () => {
     expect(withMeeting.map((i) => i.source)).toEqual(['todo', 'scheduled_task', 'meeting'])
   })
 
+  it('今天按工作区时区切；有运行时才给「交给 Agent」的建议', async () => {
+    expect(h.work.todayDate()).toBe('2026-09-09')
+    const m = h.work.createMatter({ kind: 'project', title: 'P' })
+    h.work.createTodo({
+      title: '有事项的本周待办',
+      owner: 'per_1',
+      matter_id: m.id,
+      due: plusMs(T0, 3 * DAY_MS),
+    })
+    const withRuntime = h.work.todayPlan({
+      person_id: 'per_1',
+      goals: [],
+      delegate_to: 'asg_1',
+    })
+    expect(withRuntime.suggestions.some((s) => s.kind === 'delegate')).toBe(true)
+
+    const bare = make({ startRun: false })
+    bare.work.createTodo({
+      title: '有事项的本周待办',
+      owner: 'per_1',
+      due: plusMs(T0, 3 * DAY_MS),
+    })
+    const noRuntime = bare.work.todayPlan({
+      person_id: 'per_1',
+      goals: [],
+      delegate_to: 'asg_1',
+    })
+    expect(noRuntime.suggestions.some((s) => s.kind === 'delegate')).toBe(false)
+  })
+
   it('今天的计划：一天一条，不重复问；refresh 才重拟', () => {
     h.work.createTodo({ title: '老待办', owner: 'per_1' })
     const first = h.work.todayPlan({ person_id: 'per_1', goals: [] })
