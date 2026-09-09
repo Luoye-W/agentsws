@@ -1,0 +1,23 @@
+{
+  "name": "@agentsws/deck",
+  "version": "0.0.0",
+  "private": true,
+  "description": "卡片投影与工作台积木的纯逻辑层（36 §2、29）：DeckCard、五动作矩阵、命名查询、数字块",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*"
+  }
+}

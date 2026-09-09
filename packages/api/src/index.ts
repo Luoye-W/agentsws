@@ -53,6 +53,7 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+export { fromDeckError, workstationRoutes } from './routes/workstation.js'
 export { createAsyncTraceScope, createNoopTraceScope } from './trace-scope.js'
 export type {
   ChangesPort,
@@ -64,10 +65,14 @@ export type {
   GuardrailPort,
   KnowledgePort,
   ModulesPort,
+  PositionSummary,
   Principal,
   RateLimitPolicy,
   RequestContext,
   RolesPort,
   SkillsPort,
   TraceScope,
+  WorkstationActor,
+  WorkstationPort,
+  WorkstationRange,
 } from './types.js'

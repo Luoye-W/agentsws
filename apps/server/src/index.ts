@@ -11,9 +11,17 @@ export {
   createServer,
   DEFAULT_PORT,
   HOST,
+  type MountedWorld,
   type Server,
   type ServerOptions,
 } from './server.js'
+export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
+export {
+  createWorkstationPort,
+  emptyDataSource,
+  type WorkstationDataSource,
+  type WorkstationPortOptions,
+} from './workstation.js'
 
 import { pathToFileURL } from 'node:url'
 import { createServer } from './server.js'

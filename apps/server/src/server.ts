@@ -20,12 +20,15 @@ import {
   type TraceScope,
 } from '@agentsws/api'
 import type {
+  ApprovalBus,
   Assignment,
   Clock,
   EventEnvelope,
   ModelRef,
   Person,
+  PersonId,
   Workspace,
+  WorkspaceId,
 } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
@@ -42,11 +45,32 @@ import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, type Txn } from '@agentsws/txn'
 import { type ServerType, serve } from '@hono/node-server'
 import { MemoryBackend } from './backend.js'
+import { mountStatic } from './static.js'
+import {
+  createWorkstationPort,
+  emptyDataSource,
+  type WorkstationDataSource,
+} from './workstation.js'
 
 export const DEFAULT_PORT = 4317
 export const HOST = '127.0.0.1'
 /** v1 自带的职责定义（roles 包 bundled）。 */
 export const BUNDLED_ROLES = ['common.owner', 'common.member', 'dtc.aftersales'] as const
+
+/**
+ * 36 §5.7 的 demo：把一个已经跑过场景的模拟世界接进同一个进程。
+ *
+ * 接进来的是**世界的**职责库与审批总线——工作台上看到的卡片就是场景真产生的那几条，
+ * 不是照着抄一份。身份的 person_id / workspace_id 也跟着世界走，否则网关一律 404。
+ */
+export interface MountedWorld {
+  workspace_id: WorkspaceId
+  workspace_name?: string
+  owner: { id: PersonId; email: string; name: string }
+  roles: RoleStore
+  approvals: ApprovalBus
+  data: WorkstationDataSource
+}
 
 export interface ServerOptions {
   /** SQLite 目录；不给则全部内存档（测试与一次性任务）。 */
@@ -59,6 +83,10 @@ export interface ServerOptions {
   random?: () => number
   /** 启动时不往 stdout 打字（测试用）。 */
   quiet?: boolean
+  /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
+  staticDir?: string
+  /** demo：把模拟世界接进来（同一进程）。 */
+  mount?: MountedWorld
 }
 
 export interface Bootstrap {
@@ -120,11 +148,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const data = createDataStore({ dbPath: file('data.db'), clock, collections: [] })
 
-  const roles = createRoleStore({
-    clock,
-    ...(dbDir === undefined ? {} : { dbPath: join(dbDir, 'roles.db') }),
-    roles: BUNDLED_ROLES.map((id) => loadBundledRole(id)),
-  })
+  const roles =
+    options.mount?.roles ??
+    createRoleStore({
+      clock,
+      ...(dbDir === undefined ? {} : { dbPath: join(dbDir, 'roles.db') }),
+      roles: BUNDLED_ROLES.map((id) => loadBundledRole(id)),
+    })
 
   const knowledge = createKnowledge({ dbPath: file('knowledge.db'), clock })
   const skills = createSkills({ clock, random })
@@ -171,24 +201,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const identity = createMemoryIdentity({ clock, random })
 
   // ── 首次启动：owner + 默认工作区 + 内部凭据（28 §3「内部服务凭据」）
-  const ownerEmail = env.AGENTSWS_OWNER_EMAIL?.trim() || 'owner@localhost'
+  const mount = options.mount
+  const ownerEmail = mount?.owner.email ?? (env.AGENTSWS_OWNER_EMAIL?.trim() || 'owner@localhost')
   const person = await identity.createPerson({
     email: ownerEmail,
-    name: ownerEmail.split('@')[0] ?? 'owner',
+    name: mount?.owner.name ?? ownerEmail.split('@')[0] ?? 'owner',
+    ...(mount === undefined ? {} : { id: mount.owner.id }),
   })
   const workspace = await identity.createWorkspace({
-    name: env.AGENTSWS_WORKSPACE_NAME?.trim() || 'default',
+    name: mount?.workspace_name ?? (env.AGENTSWS_WORKSPACE_NAME?.trim() || 'default'),
     owner_id: person.id,
     kind: 'personal',
+    ...(mount === undefined ? {} : { id: mount.workspace_id }),
   })
-  roles.policies.set(workspace.policy)
-  const ownerAssignment = roles.assignments.create({
-    person_id: person.id,
-    workspace_id: workspace.id,
-    role_id: 'common.owner',
-    granted_by: person.id,
-    ranges: [],
-  })
+  // 接进来的世界已经有自己的策略层与分配，不覆盖
+  if (mount === undefined) roles.policies.set(workspace.policy)
+  const ownerAssignment =
+    mount === undefined
+      ? roles.assignments.create({
+          person_id: person.id,
+          workspace_id: workspace.id,
+          role_id: 'common.owner',
+          granted_by: person.id,
+          ranges: [],
+        })
+      : (roles.assignments
+          .listByPerson(person.id, { workspace_id: workspace.id })
+          .find((a) => a.revoked_at === undefined) ??
+        roles.assignments.create({
+          person_id: person.id,
+          workspace_id: workspace.id,
+          role_id: 'common.owner',
+          granted_by: person.id,
+          ranges: [],
+        }))
   const internalToken = identity.issue('internal', person.id, workspace.id).token
 
   const rolesPort: RolesPort = {
@@ -236,17 +282,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     eventLog: kernel.eventLog,
     modules: kernel.modules,
-    approvals: txn.approvals,
+    approvals: mount?.approvals ?? txn.approvals,
     changes: txn.ledger,
     guardrails,
     knowledge: knowledgePort,
     skills: skillsPort,
     roles: rolesPort,
+    workstation: createWorkstationPort({
+      clock,
+      roles,
+      approvals: mount?.approvals ?? txn.approvals,
+      data: mount?.data ?? emptyDataSource(),
+    }),
     traceScope,
-    options: { version: env.AGENTSWS_VERSION ?? '0.1.0' },
+    options: {
+      version: env.AGENTSWS_VERSION ?? '0.1.0',
+      // 本地单机档：一次性登录 token 直接回给调用方，工作台才能自动登录（20 §3）
+      exposeMagicLinkToken: true,
+    },
   }
 
   const gateway = createGateway(deps)
+  // 静态托管必须在网关路由之后挂（Hono 按注册顺序匹配，`*` 放最后）
+  if (options.staticDir !== undefined) {
+    mountStatic(gateway.app, {
+      dir: options.staticDir,
+      bootstrap: { owner_email: person.email, workspace: workspace.id, demo: mount !== undefined },
+    })
+  }
   let httpServer: ServerType | undefined
   let closed = false
 
@@ -298,7 +361,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }
       knowledge.close()
       data.close()
-      roles.close()
+      // 接进来的世界由调用方关（它还持有事件日志与替身）
+      if (options.mount === undefined) roles.close()
       await kernel.dispose()
     },
   }

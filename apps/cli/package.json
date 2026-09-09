@@ -26,6 +26,9 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
+    "@agentsws/deck": "workspace:*",
+    "@agentsws/roles": "workspace:*",
+    "@agentsws/server": "workspace:*",
     "@agentsws/simulation": "workspace:*",
     "commander": "^12.1.0"
   },

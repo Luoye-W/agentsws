@@ -8,6 +8,9 @@
       "path": "apps/server"
     },
     {
+      "path": "apps/workstation"
+    },
+    {
       "path": "packages/api"
     },
     {
@@ -24,6 +27,9 @@
     },
     {
       "path": "packages/data"
+    },
+    {
+      "path": "packages/deck"
     },
     {
       "path": "packages/dsh-adapter"

@@ -1,0 +1,66 @@
+/**
+ * `@agentsws/deck` —— 卡片与积木的纯逻辑层（36 §5.8：为 1c 与 KefuAgent 共享做准备）。
+ *
+ * 这里没有 IO、没有框架、没有模型：给结构化输入就出结构化输出。
+ * 服务端用它算 payload（29 原则 ③「数字不经模型手」），前端用同一份类型渲染。
+ */
+export {
+  allBlocks,
+  assembleView,
+  blockDef,
+  blocksForRole,
+  COMPONENTS,
+  computeBlock,
+  isRegisteredComponent,
+  SOURCE_LABELS,
+  SOURCE_REPORT_URLS,
+  validatePayload,
+} from './blocks.js'
+export {
+  DEFAULT_SNOOZE_MS,
+  INSTRUCTION_SCOPES,
+  type ResolveOptions,
+  resolveDecision,
+} from './decide.js'
+export { DeckError, type DeckErrorReason, errorCodeFor } from './errors.js'
+export { assembleHome, type HomeInput, type HomePosition } from './home.js'
+export {
+  actionsFor,
+  DECIDABLE_STATES,
+  labelsFor,
+  minutesFor,
+  READ_ONLY_ACTIONS,
+  riskClassFor,
+} from './matrix.js'
+export {
+  estimatedMinutes,
+  evidenceChipsOf,
+  highlightsOf,
+  optionsOf,
+  priorityBandOf,
+  projectCard,
+  sortCards,
+} from './project.js'
+export {
+  QUERIES,
+  type QueryDef,
+  queryDef,
+  queryNames,
+  type RangeWindows,
+  rangeWindows,
+  runQuery,
+  sourceStatus,
+  startOfDay,
+  type Window,
+} from './queries.js'
+export {
+  computeTile,
+  computeTiles,
+  DEFAULT_HOME_TILES,
+  defaultTilesFor,
+  MAX_TILES_PER_POSITION,
+  TILE_LIBRARY,
+  tileSpec,
+  validateTileSelection,
+} from './tiles.js'
+export type * from './types.js'
