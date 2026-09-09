@@ -19,6 +19,9 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'upstream_upgrade',
   'join_mapping',
   'dev_handoff_result',
+  // WP22 / 37 §2.4：早上的计划卡与晚上的复盘卡（契约 #19 新增的两个 kind）
+  'daily_plan',
+  'review',
 ])
 
 export function isKnownKind(kind: string): boolean {

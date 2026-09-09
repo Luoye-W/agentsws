@@ -55,6 +55,14 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+export {
+  type MatterListFilter,
+  type TodoListFilter,
+  type WorkActor,
+  type WorkHome,
+  type WorkPort,
+  workRoutes,
+} from './routes/work.js'
 export { fromDeckError, workstationRoutes } from './routes/workstation.js'
 export {
   createSqliteIdempotencyStore,

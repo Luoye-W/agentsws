@@ -41,6 +41,9 @@ importers:
       '@agentsws/simulation':
         specifier: workspace:*
         version: link:../../packages/simulation
+      '@agentsws/work':
+        specifier: workspace:*
+        version: link:../../packages/work
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -102,6 +105,9 @@ importers:
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../../packages/txn
+      '@agentsws/work':
+        specifier: workspace:*
+        version: link:../../packages/work
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.7)
@@ -539,6 +545,19 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
+  packages/work:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       better-sqlite3:
         specifier: ^12.0.0
         version: 12.11.1

@@ -48,6 +48,16 @@ export function AppShell({
           <NavLink to="/" end className={navClass}>
             {t('nav.home')}
           </NavLink>
+          {/* 37 工作模型：待办 / 日历 / 目标 */}
+          <NavLink to="/todos" className={navClass}>
+            {t('nav.todos')}
+          </NavLink>
+          <NavLink to="/calendar" className={navClass}>
+            {t('nav.calendar')}
+          </NavLink>
+          <NavLink to="/goals" className={navClass}>
+            {t('nav.goals')}
+          </NavLink>
           <div className="px-2 pt-3 pb-1 text-xs text-muted-foreground">{t('nav.positions')}</div>
           {positions.map((p) => (
             <NavLink key={p.position_id} to={`/positions/${p.position_id}`} className={navClass}>

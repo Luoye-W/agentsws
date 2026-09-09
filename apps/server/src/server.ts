@@ -24,12 +24,14 @@ import {
 } from '@agentsws/api'
 import type {
   ApprovalBus,
+  ApprovalItem,
   Assignment,
   Clock,
   EventEnvelope,
   ModelRef,
   Person,
   PersonId,
+  StartRun,
   Workspace,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -46,9 +48,11 @@ import {
 import { changeKindOf, createRoleStore, loadBundledRole, type RoleStore } from '@agentsws/roles'
 import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
+import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
 import { MemoryBackend } from './backend.js'
 import { mountStatic } from './static.js'
+import { createWorkPort } from './work.js'
 import {
   createWorkstationPort,
   emptyDataSource,
@@ -94,6 +98,11 @@ export interface ServerOptions {
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
   mount?: MountedWorld
+  /**
+   * 37 委托与「在事项里说话」都要起 Run；本进程还没装运行时适配器，
+   * 由调用方（demo / 桌面壳）注入。不给的话那两条路回 not_implemented，其余照常。
+   */
+  startRun?: StartRun
 }
 
 export interface Bootstrap {
@@ -113,6 +122,8 @@ export interface Server {
   skills: Skills
   models: ModelGatewayApi
   txn: Txn
+  /** 37 工作模型：事项 / 目标 / 待办 / 计划 / 复盘 */
+  work: Work
   identity: LocalIdentityService
   backend: MemoryBackend
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
@@ -220,6 +231,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ? createMemoryIdentity({ clock, random })
       : createSqliteIdentity({ dbPath: join(dbDir, 'identity.sqlite'), clock, random })
 
+  // 37 工作模型：给了数据目录就落盘（事项 / 时间线 / 目标 / 待办 / 计划 / 复盘）
+  const workStore =
+    dbDir === undefined
+      ? undefined
+      : new SqliteWorkStore({ dbPath: join(dbDir, 'work.sqlite'), clock })
+
   // ── 首次启动：owner + 默认工作区 + 内部凭据（28 §3「内部服务凭据」）
   const mount = options.mount
   const ownerEmail = mount?.owner.email ?? (env.AGENTSWS_OWNER_EMAIL?.trim() || 'owner@localhost')
@@ -251,6 +268,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ranges: [],
     })
   const internalToken = identity.issue('internal', person.id, workspace.id).token
+
+  const approvals = mount?.approvals ?? txn.approvals
+  const workData = mount?.data ?? emptyDataSource()
+  const work = createWork({
+    workspace_id: workspace.id,
+    clock,
+    random,
+    tz_offset_minutes: workData.tz_offset_minutes,
+    ...(workStore === undefined ? {} : { store: workStore }),
+    ...(options.startRun === undefined ? {} : { startRun: options.startRun }),
+  })
 
   const rolesPort: RolesPort = {
     can: (id, domain, op, request) => roles.can(id, domain, op, request),
@@ -297,17 +325,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     eventLog: kernel.eventLog,
     modules: kernel.modules,
-    approvals: mount?.approvals ?? txn.approvals,
+    approvals,
     changes: txn.ledger,
     guardrails,
     knowledge: knowledgePort,
     skills: skillsPort,
     roles: rolesPort,
-    workstation: createWorkstationPort({
+    workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
+    work: createWorkPort({
       clock,
-      roles,
-      approvals: mount?.approvals ?? txn.approvals,
-      data: mount?.data ?? emptyDataSource(),
+      work,
+      // 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）
+      approvals: (actor) =>
+        approvals.queue({
+          workspace_id: actor.workspace_id,
+          person_id: actor.person_id,
+          lane: 'mine',
+        }) as Promise<ApprovalItem[]>,
+      orders: () => workData.orders(),
+      label: (ref) => workData.label(ref),
     }),
     traceScope,
     options: {
@@ -338,6 +374,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills,
     models,
     txn,
+    work,
     identity,
     backend,
     traceScope,
@@ -380,6 +417,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 接进来的世界由调用方关（它还持有事件日志与替身）
       if (options.mount === undefined) roles.close()
       txnStore?.close()
+      workStore?.close()
       idempotencyStore?.close()
       if (identity instanceof SqliteIdentityService) identity.close()
       await kernel.dispose()

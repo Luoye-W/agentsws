@@ -18,6 +18,7 @@ import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
 import { skillRoutes } from './routes/skills.js'
+import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
 import type { GatewayDeps } from './types.js'
 
@@ -47,6 +48,8 @@ export function collectRoutes(): Route[] {
     ...eventRoutes(),
     // 36 工作台面：首页 / 岗位 / 积木；`/v1/positions/:id/...` 里的 id 就是 assignment_id
     ...workstationRoutes(),
+    // 37 工作模型：事项 / 目标 / 待办 / 日历 / 计划 / 复盘
+    ...workRoutes(),
   ]
 }
 

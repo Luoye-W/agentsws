@@ -66,6 +66,9 @@
     },
     {
       "path": "packages/txn"
+    },
+    {
+      "path": "packages/work"
     }
   ]
 }

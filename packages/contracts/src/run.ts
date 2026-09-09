@@ -34,6 +34,8 @@ export interface ContextItem {
     | 'policy'
     /** WP17：已确认的业务边界（优先级高于爬来的政策页） */
     | 'boundary'
+    /** WP22 / 37 §2.2b：事项的「到哪了」摘要，事项续跑时注入（direct-llm 没有会话文件，靠它接上） */
+    | 'matter_summary'
   source_ref: ObjectRef | string
   sensitivity: Sensitivity
   content: unknown
@@ -71,6 +73,7 @@ export interface RunRequest {
   workspace_id: WorkspaceId
   kind: RunKind
   actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: RoleId }
+  /** = Matter（37 §2.2b：work_item 的正式形态是「事项」）；`id` 就是 `MatterId` */
   work_item?: { id: string; conversation_id: string; role_id: RoleId }
   trigger: {
     event_id: string

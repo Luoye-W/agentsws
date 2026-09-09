@@ -33,6 +33,7 @@
     "@agentsws/roles": "workspace:*",
     "@agentsws/skills": "workspace:*",
     "@agentsws/txn": "workspace:*",
+    "@agentsws/work": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "hono": "^4.13.7"
   }

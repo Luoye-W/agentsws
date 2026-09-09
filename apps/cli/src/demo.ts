@@ -1,23 +1,33 @@
 /**
- * `agentsws demo`（36 §5.7）：用合成世界当后端，把工作台跑起来。
+ * `agentsws demo`（36 §5.7 / 37 §3）：用合成世界当后端，把工作台跑起来。
  *
- * 做的事就三件：
+ * 做的事就四件：
  * 1. 用 `packs/dtc-3c-3p` 建一个合成世界（`createWorld`，runtime `stub`），
  * 2. 把「退货窗口内」场景**跑到产生审批项为止**——回复草稿卡与退款变更卡是真跑出来的，不是写死的，
- * 3. 把这个世界接进服务进程（同一进程），在 127.0.0.1:4317 上托管工作台。
+ * 3. 种一份工作模型（37）：1 个公司目标 + 2 个岗位目标、3 条长期待办、1 个 `conversation`
+ *    事项（就是那封 Anna 的信）、今天一张 `daily_plan` 卡，
+ * 4. 把这个世界接进服务进程（同一进程），在 127.0.0.1:4317 上托管工作台。
  *
  * 纪律：全程 **stub 模型**（`runtime: 'stub'` 根本不叫模型），所以事件日志里不该有任何 `model.*`；
  * 时间走合成时钟，随机走 seed，没有一处 `Date.now()` / `Math.random()`。
  */
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
-import type { ApprovalItem, InboundEvent, ObjectRef, RunEvent } from '@agentsws/contracts'
+import type {
+  ApprovalItem,
+  DailyPlanDraft,
+  InboundEvent,
+  Iso8601,
+  ObjectRef,
+  RunEvent,
+} from '@agentsws/contracts'
 import type { DataSourceStatus, DeckCard, OrderRow } from '@agentsws/deck'
 import { parseRole } from '@agentsws/roles'
 import type { MountedWorld, Server, WorkstationDataSource } from '@agentsws/server'
-import { createServer } from '@agentsws/server'
+import { createServer, periodQueryRunner } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
+import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
 export const DEMO_SCENARIO = 'scenarios/aftersales/return-within-window.yml'
@@ -234,6 +244,182 @@ async function seedPolicyQuestion(world: World): Promise<ApprovalItem> {
   })
 }
 
+/** 月初 / 月末（按工作区时区 +8 切），目标的期间用它。 */
+function monthWindow(now: Iso8601): { start: Iso8601; end: Iso8601 } {
+  const local = new Date(Date.parse(now) + 8 * 3_600_000)
+  const start = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - 8 * 3_600_000
+  const end = Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 1) - 8 * 3_600_000
+  return { start: new Date(start).toISOString(), end: new Date(end).toISOString() }
+}
+
+/** 当天本地 hh:00（工作区时区 +8）。 */
+function todayAt(now: Iso8601, hour: number): Iso8601 {
+  const shift = 8 * 3_600_000
+  const day = Math.floor((Date.parse(now) + shift) / DAY_MS) * DAY_MS - shift
+  return new Date(day + hour * 3_600_000).toISOString()
+}
+
+/**
+ * 种一份工作模型（37）。**这里种的是「人的东西」**：目标、待办、事项；
+ * 卡片仍然只来自场景真跑出来的审批项（回复草稿 + 退款变更 + 边界问题），
+ * 外加一张今天的 `daily_plan`——它是系统卡，payload 就是 `draftDailyPlan` 的产物。
+ */
+async function seedWorkModel(options: {
+  work: Work
+  world: World
+  pack: Pack
+  seed: number
+  aftersales_id: string
+  analytics_id: string
+}): Promise<void> {
+  const { work, world, pack } = options
+  const owner = world.roleHolder
+  const now = world.clock.now()
+  const period = monthWindow(now)
+
+  // ① 1 个公司目标 + 2 个岗位目标
+  const company = work.createGoal({
+    level: 'company',
+    title: '本月销售额 12 万',
+    owner,
+    metric: { query: 'sales.total', format: 'money' },
+    target: 120000,
+    period: { kind: 'month', ...period },
+  })
+  work.createGoal({
+    level: 'position',
+    title: '本月订单 800 单',
+    owner,
+    parent_id: company.id,
+    position_id: options.analytics_id,
+    metric: { query: 'orders.count', format: 'count' },
+    target: 800,
+    period: { kind: 'month', ...period },
+  })
+  work.createGoal({
+    level: 'position',
+    title: '本月退款额压到 3000 以内',
+    owner,
+    parent_id: company.id,
+    position_id: options.aftersales_id,
+    metric: { query: 'refunds.total', format: 'money' },
+    target: 3000,
+    period: { kind: 'month', ...period },
+  })
+
+  // ② 3 条长期待办：一条已拆两条短期，一条排期到今天
+  const launch = work.createTodo({
+    title: 'Q4 前上线新品页',
+    owner,
+    goal_id: company.id,
+    position_id: options.analytics_id,
+    note: '文案 + 主图 + 上架，卡在文案',
+  })
+  work.splitTodo(launch.id, [
+    { title: '写新品页文案' },
+    { title: '做新品页主图', due: new Date(Date.parse(now) + 3 * DAY_MS).toISOString() },
+  ])
+  work.createTodo({
+    title: '把退货政策页重写一遍',
+    owner,
+    position_id: options.aftersales_id,
+    note: '现在的写法和实际口径对不上，Agent 每次都要问',
+  })
+  work.createTodo({
+    title: '核对昨天的退款单',
+    owner,
+    position_id: options.aftersales_id,
+    scheduled: { start: todayAt(now, 10), end: todayAt(now, 11) },
+  })
+
+  // ③ 一个 conversation 事项：就是现在那封 Anna 的信
+  const customer = pack.customerByEmail('anna@example.com')
+  const matter = work.createMatter({
+    kind: 'conversation',
+    title: 'Anna 要退 #1001',
+    position_id: options.aftersales_id,
+    participants: [owner],
+    summary: '客户 12 天前收货，要求退货退款。窗口内，已按流程起草回复并挂了一笔退款待批。',
+    pinned: [
+      { type: 'order', id: 'ord_1001' },
+      ...(customer === undefined ? [] : [{ type: 'customer', id: customer.id } as ObjectRef]),
+    ],
+  })
+  work.appendEvent(matter.id, {
+    kind: 'human_message',
+    text: 'Hi, I received the order 12 days ago and would like to return it.',
+    actor: { kind: 'person', id: customer?.id ?? 'anna' },
+  })
+  work.appendEvent(matter.id, {
+    kind: 'run',
+    text: 'Agent 查了订单与退货政策，起草了回复并挂了一笔退款',
+    actor: { kind: 'agent', id: options.aftersales_id },
+    run_id: `run_demo_${options.seed}`,
+  })
+  // 场景真跑出来的卡挂到这个事项上（37 §2.2 交点：卡片是指向事项的指针）
+  const items = world.txn.runtime.store.listApprovals({ workspace_id: world.workspace_id })
+  const followUp = work.createTodo({
+    title: '等 Anna 寄回后确认退款到账',
+    owner,
+    matter_id: matter.id,
+    position_id: options.aftersales_id,
+    source: 'card',
+    due: new Date(Date.parse(now) + 5 * DAY_MS).toISOString(),
+  })
+  for (const item of items) {
+    if (item.kind === 'policy_change') continue
+    work.onCard({
+      ...cardRefOf(item),
+      matter_id: matter.id,
+      todo_id: followUp.id,
+    })
+  }
+
+  // ④ 今天一张 daily_plan 卡（系统卡；payload 就是计划草案，选择题：采纳 / 调整 / 稍后）
+  const plan = work.todayPlan({
+    person_id: owner,
+    // 计划里的目标进度与 /v1/goals 用同一个执行器，两处数字不会打架
+    goals: work.progress(
+      periodQueryRunner(
+        () => ordersOf(world),
+        () => items,
+        pack.workspace.base_currency,
+      ),
+    ),
+    cards_waiting: items.filter((i) => i.state === 'pending').length,
+    delegate_to: options.aftersales_id,
+  })
+  const draft: DailyPlanDraft = plan
+  const card = await world.txn.approvals.create({
+    workspace_id: world.workspace_id,
+    schema_version: 1,
+    kind: 'daily_plan',
+    role_id: world.role_id,
+    subject: { object: { type: 'daily_plan', id: plan.id } },
+    dedupe_key: `${world.workspace_id}:daily_plan:${plan.date}`,
+    title: planTitle(draft),
+    summary: planSummary(draft),
+    payload: draft,
+    evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
+    proposer: { kind: 'system', id: 'work.planner' },
+    automation: {
+      level_at_creation: 'L1',
+      auto_approved: false,
+      mandate_check: { within: true, caps_hit: [] },
+      sampling: { selected: false },
+    },
+    routing: {
+      recipients: [{ person: owner, via: 'role_holder' }],
+      rule: 'role_holder',
+      escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+      separation_of_duties: false,
+    },
+    priority: 'queue',
+    options: draft.options.map((o) => ({ id: o.id, label: o.label })),
+  })
+  work.linkPlanApproval(plan.id, card.id)
+}
+
 export async function createDemo(options: DemoOptions): Promise<Demo> {
   const root = options.root
   const pack = loadPack(fromRoot(root, DEMO_PACK))
@@ -252,7 +438,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
 
   // 独立站运营岗位：补一份只读的分析职责，并把它分给同一个人（36 §3 每岗位一条数据条）
   world.roles.roles.register(parseRole(ANALYTICS_ROLE, 'demo:dtc.analytics'))
-  world.roles.assignments.create({
+  const analytics = world.roles.assignments.create({
     person_id: world.roleHolder,
     workspace_id: world.workspace_id,
     role_id: 'dtc.analytics',
@@ -307,6 +493,15 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       }
     }
   }
+
+  await seedWorkModel({
+    work: server.work,
+    world,
+    pack,
+    seed,
+    aftersales_id: world.assignment.id,
+    analytics_id: analytics.id,
+  })
 
   return {
     server,

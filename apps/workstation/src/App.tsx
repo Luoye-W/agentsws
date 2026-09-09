@@ -10,10 +10,14 @@ import { AppShell } from '@/components/app-shell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ensureSession, getHome, getPositions, setAssignment, setHomeTiles } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { CalendarPage } from '@/pages/calendar'
+import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 import { KnowledgePage } from '@/pages/knowledge'
+import { MatterPage } from '@/pages/matter'
 import { PositionPage } from '@/pages/position'
 import { SettingsPage } from '@/pages/settings'
+import { TodosPage } from '@/pages/todos'
 
 export function App(): ReactNode {
   const { t, selectPosition, position } = useApp()
@@ -83,6 +87,11 @@ export function App(): ReactNode {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/positions/:id" element={<PositionPage />} />
+        {/* 37 工作模型：事项 / 待办 / 日历 / 目标 */}
+        <Route path="/matters/:id" element={<MatterPage />} />
+        <Route path="/todos" element={<TodosPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/goals" element={<GoalsPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route
           path="/settings"
