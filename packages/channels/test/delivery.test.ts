@@ -197,3 +197,22 @@ describe('渲染的纯函数', () => {
     expect(mail.text).not.toContain('脱敏视图')
   })
 })
+
+describe('31 §3.3 出站脱敏：卡片这一路走统一入口（39 待办 D）', () => {
+  const dirty: DeliveredItem = {
+    ...item,
+    title: '连接凭据 sk-4f9ab2c7d1e08356zq 已保存',
+    summary: '客户把邮箱授权码：abcdefghijklmnop 贴进了来信里。',
+  }
+
+  it('标题与摘要里的 sk-… 与邮箱授权码都不出现在发出去的卡片里', async () => {
+    const { provider, mailer } = makeProvider()
+    await provider.deliver(dirty, 'p_owner')
+    const sent = mailer.sent[0]
+    const wire = `${sent?.subject ?? ''}\n${sent?.text ?? ''}`
+    expect(wire).not.toContain('sk-4f9ab2c7d1e08356zq')
+    expect(wire).not.toContain('abcdefghijklmnop')
+    expect(wire).toContain('[redacted:api_key]')
+    expect(wire).toContain('[redacted:mail_app_password]')
+  })
+})

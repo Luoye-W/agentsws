@@ -267,6 +267,26 @@ describe('EmailChannelAdapter.send', () => {
     expect(adapter.routeOf('change_1')).toBe('smtp')
   })
 
+  it('回信正文过出站脱敏的统一入口：sk-… 与邮箱授权码都不发出去（31 §3.3 / 39 待办 D）', async () => {
+    const { adapter, mailer } = makeAdapter()
+    await adapter.toInbound(rawEmail(24, { from: 'ann@customer.com' }), 'ws_1')
+    await adapter.send(
+      { external_id: '<m-1@mail.example>' },
+      [
+        {
+          type: 'text',
+          text: '这是后台 key sk-4f9ab2c7d1e08356zq，邮箱授权码：abcdefghijklmnop',
+        },
+      ],
+      { connect_token: '', idempotency_key: 'change_redact' },
+    )
+    const body = mailer.sent[0]?.text ?? ''
+    expect(body).not.toContain('sk-4f9ab2c7d1e08356zq')
+    expect(body).not.toContain('abcdefghijklmnop')
+    expect(body).toContain('[redacted:api_key]')
+    expect(body).toContain('[redacted:mail_app_password]')
+  })
+
   it('同一 idempotency_key 不重发', async () => {
     const { adapter, mailer } = makeAdapter()
     await adapter.toInbound(rawEmail(23, { from: 'ann@customer.com' }), 'ws_1')
