@@ -68,6 +68,23 @@ function constantTimeEqual(a: string, b: string): boolean {
   return timingSafeEqual(x, y)
 }
 
+/**
+ * 本地档身份服务的公共面（内存 / SQLite 两档都实现）：
+ * 契约 `IdentityService` 之外，本地档还提供同步的 `issue` / `revoke` 与两个查询，
+ * 一致性套件与 `apps/server` 都按这个接口写，换档不改调用方。
+ */
+export interface LocalIdentityService extends IdentityService {
+  personByEmail(email: string): Person | undefined
+  workspacesOf(person_id: PersonId): Workspace[]
+  issue(
+    kind: TokenKind,
+    person_id: PersonId,
+    workspace_id: WorkspaceId,
+    ttlMs?: number,
+  ): IssuedToken
+  revoke(token: string): void
+}
+
 export const DEFAULT_WORKSPACE_POLICY = (workspace_id: WorkspaceId): WorkspacePolicy => ({
   workspace_id,
   mandates: {},
@@ -75,7 +92,7 @@ export const DEFAULT_WORKSPACE_POLICY = (workspace_id: WorkspaceId): WorkspacePo
 })
 
 /** 20 §1 单工作区本地档的身份服务；换成 SQLite 实现时接口不变。 */
-export class MemoryIdentityService implements IdentityService {
+export class MemoryIdentityService implements LocalIdentityService {
   readonly #clock: Clock
   readonly #random: () => number
   readonly #loginTtl: number

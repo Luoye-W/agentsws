@@ -32,11 +32,13 @@ export {
   type IdempotencyRecord,
   type IdempotencyStore,
   MemoryIdempotencyStore,
+  type SweepableIdempotencyStore,
 } from './idempotency.js'
 export {
   createMemoryIdentity,
   DEFAULT_WORKSPACE_POLICY,
   type IssuedToken,
+  type LocalIdentityService,
   type MemoryIdentityOptions,
   MemoryIdentityService,
   type TokenKind,
@@ -53,6 +55,17 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+export {
+  createSqliteIdempotencyStore,
+  type SqliteIdempotencyOptions,
+  SqliteIdempotencyStore,
+} from './sqlite-idempotency.js'
+export {
+  createSqliteIdentity,
+  type SqliteIdentityOptions,
+  SqliteIdentityService,
+} from './sqlite-identity.js'
+export { type Migration, migrate, schemaVersion } from './sqlite-migrations.js'
 export { createAsyncTraceScope, createNoopTraceScope } from './trace-scope.js'
 export type {
   ChangesPort,
