@@ -22,7 +22,7 @@ describe('compilePolicies (31 §3.1)', () => {
     expect(rows).toContainEqual([a.id, 'customer', 'stage', 'assigned', 'internal'])
     expect(rows).toContainEqual([a.id, 'approval', 'approve', 'own', 'internal'])
     // 6 个 scope，其中 customer 和 approval 各两个 op
-    expect(rows).toHaveLength(8)
+    expect(rows).toHaveLength(9)
     expect(rows.every((r) => r[0] === a.id)).toBe(true)
   })
 

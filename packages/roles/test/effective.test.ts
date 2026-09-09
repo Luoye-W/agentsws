@@ -99,6 +99,7 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
       'knowledge',
       'order',
       'shipment',
+      'skill',
     ])
     expect(ownCfg.scopes.map((x) => x.domain)).not.toContain('order')
     expect(ownCfg.scopes.find((x) => x.domain === 'policy')?.max_sensitivity).toBe('restricted')

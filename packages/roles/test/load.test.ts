@@ -19,7 +19,7 @@ describe('loadRole (05 §5)', () => {
     expect(role.version).toBe('1.0.0')
     expect(role.domain).toBe('dtc')
     expect(role.name).toEqual({ zh: '独立站售后客服', en: 'DTC After-sales Support' })
-    expect(role.scopes).toHaveLength(6)
+    expect(role.scopes).toHaveLength(7)
     expect(role.scopes[0]).toEqual({
       domain: 'order',
       ops: ['read'],

@@ -8,13 +8,13 @@ name: { zh: 独立站售后客服, en: DTC After-sales Support }
 description: 订单状态与物流、退换货、退款、改地址、漏发错发破损、拒付争议
 
 scopes:
-  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
   - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: shipment, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: customer, ops: [read, stage], range: assigned, max_sensitivity: internal }
   - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
   - { domain: discount, ops: [stage], range: assigned, max_sensitivity: internal }
   - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
 
 connectors:
   - { kind: email, required: true, grants: [mail.read, mail.send], ownership: workspace }
