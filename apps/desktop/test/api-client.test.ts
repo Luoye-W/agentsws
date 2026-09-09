@@ -227,3 +227,25 @@ describe('assignment / setHalt / rotateSecretsKey', () => {
     })
   })
 })
+
+describe('baseUrl 是取值函数（端口是 sidecar 起来后才知道的）', () => {
+  it('每次调用都重新取一遍，换了端口就打到新端口', async () => {
+    let port = 0
+    const seen: string[] = []
+    const api = createApiClient({
+      baseUrl: () => `http://127.0.0.1:${port}/`,
+      sessionKey: SESSION_KEY,
+      fetchImpl: async (url) => {
+        seen.push(url)
+        return SESSION_OK
+      },
+    })
+    await api.session()
+    port = 51234
+    await api.session()
+    expect(seen).toEqual([
+      'http://127.0.0.1:0/v1/auth/session',
+      'http://127.0.0.1:51234/v1/auth/session',
+    ])
+  })
+})

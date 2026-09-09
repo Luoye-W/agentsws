@@ -16,8 +16,11 @@ import type { ApiFetchLike } from './ports.js'
 export type HaltScopeName = 'all' | 'model' | 'outbound' | 'learning'
 
 export interface ApiClientOptions {
-  /** 形如 `http://127.0.0.1:4317`。 */
-  baseUrl: string
+  /**
+   * 形如 `http://127.0.0.1:4317`。**给函数**——端口是 sidecar 起来之后才知道的
+   * （`config.port = 0` 时由系统分配），装配时钉死会指到 0 号端口去。
+   */
+  baseUrl: string | (() => string)
   /** `AGENTSWS_SESSION_KEY`：桌面壳生成、经环境变量交给服务进程的那一把。 */
   sessionKey: string
   fetchImpl: ApiFetchLike
@@ -80,7 +83,11 @@ export interface ApiClient {
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
-  const base = options.baseUrl.replace(/\/+$/, '')
+  const base = (): string =>
+    (typeof options.baseUrl === 'function' ? options.baseUrl() : options.baseUrl).replace(
+      /\/+$/,
+      '',
+    )
 
   async function call<T>(
     path: string,
@@ -88,7 +95,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   ): Promise<ApiResult<{ value: T; response: Awaited<ReturnType<ApiFetchLike>> }>> {
     const guard = options.abort?.(options.timeoutMs ?? 5000)
     try {
-      const res = await options.fetchImpl(`${base}${path}`, {
+      const res = await options.fetchImpl(`${base()}${path}`, {
         method: init.method,
         headers: {
           accept: 'application/json',

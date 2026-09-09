@@ -279,7 +279,8 @@ async function bootstrap(): Promise<void> {
   // ── 服务进程的 /v1：换会话 cookie、运行期急停、换密钥（13 §5 / 28 §1）。
   //     会话密钥只在主进程里出现，换回来的 cookie 也只在主进程里；渲染进程与 URL 里一个字都没有。
   const api: ApiClient = createApiClient({
-    baseUrl: serverUrl(),
+    // 取值函数：端口是 sidecar 打印出 listening 那一行之后才知道的
+    baseUrl: serverUrl,
     sessionKey: secrets.serverSessionKey,
     fetchImpl: globalThis.fetch as never,
     abort: nodeAbort,
