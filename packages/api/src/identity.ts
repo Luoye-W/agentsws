@@ -1,5 +1,5 @@
 /**
- * 20 §1–§3 的内存 IdentityService（本波先做内存档；`本地 magic-link 身份的实现就在这里（曾计划的 packages/identity 已并入本包，见 docs/34 §2.1）
+ * 20 §1–§3 的 IdentityService（内存档在此，SQLite 档见 sqlite-identity.ts；曾计划的 packages/identity 已并入本包，见 docs/34 §2.1）。
  *
  * - magic link：一次性登录 token，默认 15 分钟过期，验证后换会话 token
  * - 所有 token 绑 `workspace_id`（20 §3）；跨工作区一律显式切换
