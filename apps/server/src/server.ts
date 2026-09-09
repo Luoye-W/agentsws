@@ -442,7 +442,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         process.stdout.write(`agentsws server listening on ${url}\n`)
         process.stdout.write(`health: ${url}/v1/health\n`)
         process.stdout.write(`workspace: ${workspace.id}  owner: ${person.email}\n`)
-        process.stdout.write(`internal token: ${internalToken}\n`)
+        process.stdout.write(
+          `internal token: ${internalToken.slice(0, 8)}…（已遮罩；完整值只在进程内）\n`,
+        )
       }
       return { url, port: bound }
     },

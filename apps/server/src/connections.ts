@@ -357,6 +357,13 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     if (baseUrl === undefined || baseUrl === '') return undefined
     const now = Date.parse(clock.now())
     if (hardening !== undefined && now - hardening.at < HARDENING_TTL_MS) return hardening.report
+    // 实测：全新 runtime 里一个 token 都没有时，匿名 /v1/health 是 200；适配器按需自签的
+    // 目录 token 一存在，/v1 就强制鉴权。所以先让适配器把目录 token 签出来，再探。
+    try {
+      await connect.providers()
+    } catch {
+      // 签不出来（runtime 不通 / admin token 错）会在探测里以自己的理由体现
+    }
     const report = await probe(baseUrl)
     hardening = { at: now, report }
     return report
@@ -451,7 +458,11 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   const listAll = async (): Promise<ConnectionView[]> => {
     const rows: ConnectionView[] = state.local.map(localView)
     try {
-      for (const c of await connect.connections(workspace_id)) rows.push(remoteView(c))
+      for (const c of await connect.connections(workspace_id)) {
+        // 上游的 no_auth 虚拟连接（`service:default`，公共只读 API）不是用户连的，不进"已连接"
+        if (c.id.endsWith(':default') && catalogEntry(c.service) === undefined) continue
+        rows.push(remoteView(c))
+      }
     } catch {
       // runtime 挂了不该让整页白屏：本地那几条照常列，状态条上会红着说明原因
     }

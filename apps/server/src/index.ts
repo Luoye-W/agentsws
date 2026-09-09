@@ -66,7 +66,12 @@ export async function main(): Promise<void> {
   // WP18：AGENTSWS_DATA_DIR 存在就整套走 SQLite；不给则全部内存档。
   // 旧名 AGENTSWS_DB_DIR 仍然认，避免已有脚本断掉。
   const dbDir = process.env.AGENTSWS_DATA_DIR ?? process.env.AGENTSWS_DB_DIR
-  const server = await createServer(dbDir === undefined ? {} : { dbDir })
+  // 单机真账号档：给了工作台构建目录就一并托管（demo 之外也能开工作台）
+  const staticDir = process.env.AGENTSWS_STATIC_DIR
+  const server = await createServer({
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(staticDir === undefined ? {} : { staticDir }),
+  })
   await server.listen()
   let closing = false
   const shutdown = (signal: string): void => {
