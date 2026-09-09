@@ -269,6 +269,19 @@ export async function ensureSession(): Promise<Me> {
   return api<Me>('/v1/me')
 }
 
+// ── 36 §3 问 AI（单轮、只你可见、不发给客户）────────────────────────────
+
+export interface AskAnswer {
+  answer: string
+  answer_hash: string
+  grounded_on: string[]
+}
+
+export const askAi = (input: {
+  scope: { matter_id?: string; card_id?: string }
+  question: string
+}): Promise<AskAnswer> => api<AskAnswer>('/v1/ask', { method: 'POST', body: input })
+
 // ── 各个面 ─────────────────────────────────────────────────────────────
 
 /** `DeckFilters` → query；空值不进 URL，免得服务端把空串当成一个筛选条件。 */

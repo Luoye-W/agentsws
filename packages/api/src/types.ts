@@ -41,6 +41,7 @@ import type {
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
+import type { AskPort } from './routes/ask.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { WorkPort } from './routes/work.js'
 
@@ -250,6 +251,8 @@ export interface GatewayDeps {
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */
   meetings?: MeetingsPort
+  /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
+  ask?: AskPort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>

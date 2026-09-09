@@ -310,6 +310,45 @@ describe('demo 的工作模型（37）', () => {
     expect(r.ai_handled + r.handled + r.auto_sent + r.intercepted).toBeGreaterThan(0)
   })
 
+  it('问 AI：单轮、有边界、只回给本人；事件日志只留哈希不留正文（36 §3）', async () => {
+    const { matters } = await data<{ matters: Matter[] }>(await call('/v1/matters'))
+    const matter = matters.find((m) => m.kind === 'conversation')
+    if (matter === undefined) throw new Error('demo 没种出 conversation 事项')
+
+    const out = await data<{ answer: string; answer_hash: string; grounded_on: string[] }>(
+      await call('/v1/ask', {
+        method: 'POST',
+        body: { scope: { matter_id: matter.id }, question: '这封信现在卡在哪了？' },
+      }),
+    )
+    expect(out.answer.length).toBeGreaterThan(0)
+    expect(out.answer_hash).toMatch(/^[0-9a-f]{64}$/)
+    expect(out.grounded_on.length).toBeGreaterThan(0)
+
+    // 没有边界一律 400：问 AI 一定挂在某张卡或某个事项上
+    expect(
+      (await call('/v1/ask', { method: 'POST', body: { scope: {}, question: 'x' } })).status,
+    ).toBe(400)
+
+    // 事件日志里有 ask.answered，但没有问题与答案的正文
+    const events: { type: string; payload: unknown }[] = []
+    for await (const e of demo.server.kernel.eventLog.read({
+      workspace_id: demo.world.workspace_id,
+      types: ['ask.answered'],
+    }))
+      events.push(e)
+    const answered = events.filter((e) => e.type === 'ask.answered')
+    expect(answered.length).toBeGreaterThan(0)
+    const payload = JSON.stringify(answered.at(-1)?.payload ?? {})
+    expect(payload).toContain(out.answer_hash)
+    expect(payload).not.toContain(out.answer)
+    expect(payload).not.toContain('这封信现在卡在哪了')
+
+    // 答案不落任何对客户可见的地方：没有新的对外草稿卡，事项时间线也没多出 Agent 的话
+    const view = await data<MatterView>(await call(`/v1/matters/${matter.id}`))
+    expect(view.timeline.some((e) => e.text.includes(out.answer))).toBe(false)
+  })
+
   it('全程没有任何 model.* 事件（stub 运行时根本不叫模型）', () => {
     expect(demo.world.events.filter((e) => e.type.startsWith('model.'))).toHaveLength(0)
   })

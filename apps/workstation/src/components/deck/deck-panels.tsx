@@ -8,7 +8,7 @@
 import type { InstructionScope } from '@agentsws/deck'
 import { INSTRUCTION_SCOPES } from '@agentsws/deck'
 import { useState } from 'react'
-import { AskAiPanel } from '@/components/deck/ask-ai-panel'
+import { AskAiPanel, type AskAiScope } from '@/components/deck/ask-ai-panel'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
@@ -18,11 +18,14 @@ export type NoteMode = 'instruct' | 'reject'
 export function DeckNotePanel({
   mode,
   busy,
+  ask,
   onCancel,
   onSubmit,
 }: {
   mode: NoteMode
   busy: boolean
+  /** 问 AI 的边界（这张卡 / 这个事项）；不给就是禁用态 */
+  ask?: AskAiScope | undefined
   onCancel: () => void
   onSubmit: (input: { text: string; scope?: InstructionScope }) => void
 }): React.ReactNode {
@@ -86,7 +89,7 @@ export function DeckNotePanel({
         36 §3 的第二个对话入口，就挂在指导区里。语义与上面那个框相反且必须一眼看得出来：
         指导会变成 AI 对客户说的话，问 AI 不会（面板自带那行标注）。
       */}
-      {mode === 'instruct' ? <AskAiPanel /> : null}
+      {mode === 'instruct' ? <AskAiPanel {...(ask === undefined ? {} : { scope: ask })} /> : null}
     </div>
   )
 }

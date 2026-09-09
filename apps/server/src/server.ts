@@ -51,6 +51,7 @@ import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
+import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
@@ -418,6 +419,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills: skillsPort,
     roles: rolesPort,
     meetings: meetings.port,
+    // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
+    ask: createAskPort({
+      clock,
+      models,
+      work,
+      roles,
+      appendEvent,
+      label: (ref) => workData.label(ref),
+      card: async (actor, id) => {
+        const items = (await approvals.queue({
+          workspace_id: actor.workspace_id,
+          person_id: actor.person_id,
+          lane: 'mine',
+        })) as ApprovalItem[]
+        return items.find((i) => i.id === id)
+      },
+    }),
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,

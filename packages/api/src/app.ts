@@ -11,6 +11,7 @@ import { buildOpenApi, type OpenApiDocument } from './openapi.js'
 import { TokenBucketLimiter } from './rate-limit.js'
 import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { approvalRoutes } from './routes/approvals.js'
+import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { changeRoutes } from './routes/changes.js'
 import { eventRoutes } from './routes/events.js'
@@ -53,6 +54,8 @@ export function collectRoutes(): Route[] {
     ...workstationRoutes(),
     // 37 工作模型：事项 / 目标 / 待办 / 日历 / 计划 / 复盘
     ...workRoutes(),
+    // 36 §3 对话入口之二：问 AI（单轮、只你可见）
+    ...askRoutes(),
   ]
 }
 

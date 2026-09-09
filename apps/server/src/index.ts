@@ -4,6 +4,7 @@
  * `createServer()` 装配内核与全部已合并模块并返回一个可 listen 的句柄；
  * 直接 `node dist/index.js` 时启动并监听，SIGTERM / SIGINT 优雅关闭。
  */
+export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, MemoryBackend } from './backend.js'
 export {
   createRuntime,

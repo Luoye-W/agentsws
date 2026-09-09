@@ -55,6 +55,7 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
 export type {
   MeetingIngestInput,
   MeetingProcessOutcome,
