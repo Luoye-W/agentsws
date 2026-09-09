@@ -1,0 +1,48 @@
+# 打包配置（13 §5「一个安装包把运行时带齐」）。
+# v1 不签名、不接更新源：本机验证用；正式发行要补 macOS 公证与 Windows 代码签名。
+appId: com.agentsws.desktop
+productName: agentsws
+copyright: Copyright © 2026 agentsws contributors
+directories:
+  output: release
+  buildResources: build
+# asar 关掉：服务进程是以 `ELECTRON_RUN_AS_NODE` 跑的子进程，
+# 从 asar 里执行脚本要额外的 hook，v1 用平铺目录换确定性（见 README「打包」）。
+asar: false
+files:
+  - dist/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/test/**'
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.png
+  # 托盘常驻、不进 Dock（13 §5「无主窗口启动」）。
+  extendInfo:
+    LSUIElement: 1
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - arm64
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: agentsws
+linux:
+  target:
+    - AppImage
+  category: Office
+# 不为 Electron 重建原生模块：服务进程跑在独立 Node 上（见 README「原生模块」）。
+# better-sqlite3 11 编不过 Electron 44 的 V8 头，强行重建还会把仓库里给 Node 用的
+# 那份 .node 覆盖掉。
+npmRebuild: false
+nodeGypRebuild: false
+publish: null

@@ -1,0 +1,40 @@
+{
+  "name": "@agentsws/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Electron 托盘壳：sidecar 监督、首次运行密钥、原生桥接（13 §5）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/main.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge-types.d.ts",
+      "import": "./dist/bridge-types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "start": "electron dist/main.js",
+    "package": "tsc -b && electron-builder --dir",
+    "dist": "tsc -b && electron-builder",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@agentsws/connect-adapter": "workspace:*",
+    "@agentsws/server": "workspace:*",
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "author": "agentsws contributors"
+}

@@ -17,7 +17,8 @@
     "format": "biome format --write .",
     "simulate": "node apps/cli/bin/agentsws.mjs simulate",
     "synth": "node apps/cli/bin/agentsws.mjs synth",
-    "replay": "node apps/cli/bin/agentsws.mjs replay"
+    "replay": "node apps/cli/bin/agentsws.mjs replay",
+    "desktop": "pnpm --filter @agentsws/desktop start"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

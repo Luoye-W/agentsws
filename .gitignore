@@ -9,3 +9,6 @@ dist/
 .agentsws-local/
 coverage/
 out/
+test-results/
+playwright-report/
+release/
