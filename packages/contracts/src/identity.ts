@@ -72,3 +72,16 @@ export interface IdentityService {
     | undefined
   >
 }
+
+/** 20 §1 补（WP28）：邀请同事。token 只存 sha256，一次性、24h；接受后成为 member 并可被分配。 */
+export interface Invitation {
+  id: string
+  workspace_id: WorkspaceId
+  email: string
+  invited_by: PersonId
+  position_id?: string
+  token_sha256: string
+  expires_at: Iso8601
+  used_at?: Iso8601
+  created_at: Iso8601
+}
