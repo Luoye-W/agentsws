@@ -10,13 +10,15 @@ import {
   createAsyncTraceScope,
   createGateway,
   createMemoryIdentity,
+  createSqliteIdentity,
   type Gateway,
   type GatewayDeps,
   type GuardrailPort,
   type KnowledgePort,
-  type MemoryIdentityService,
+  type LocalIdentityService,
   type RolesPort,
   type SkillsPort,
+  SqliteIdentityService,
   type TraceScope,
 } from '@agentsws/api'
 import type {
@@ -39,7 +41,7 @@ import {
 } from '@agentsws/model-gateway'
 import { changeKindOf, createRoleStore, loadBundledRole, type RoleStore } from '@agentsws/roles'
 import { createSkills, type Skills } from '@agentsws/skills'
-import { createTxn, type Txn } from '@agentsws/txn'
+import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { type ServerType, serve } from '@hono/node-server'
 import { MemoryBackend } from './backend.js'
 
@@ -49,7 +51,11 @@ export const HOST = '127.0.0.1'
 export const BUNDLED_ROLES = ['common.owner', 'common.member', 'dtc.aftersales'] as const
 
 export interface ServerOptions {
-  /** SQLite 目录；不给则全部内存档（测试与一次性任务）。 */
+  /**
+   * SQLite 目录；不给则全部内存档（测试与一次性任务）。
+   * 进程入口按 `AGENTSWS_DATA_DIR`（旧名 `AGENTSWS_DB_DIR` 仍认）取值。
+   * 各包各自一个 `.sqlite` 文件，不共享表（35 §2）。
+   */
   dbDir?: string
   env?: Record<string, string | undefined>
   port?: number
@@ -78,7 +84,7 @@ export interface Server {
   skills: Skills
   models: ModelGatewayApi
   txn: Txn
-  identity: MemoryIdentityService
+  identity: LocalIdentityService
   backend: MemoryBackend
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
   traceScope: TraceScope
@@ -157,9 +163,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
 
   const backend = new MemoryBackend()
+  // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
+  const txnStore =
+    dbDir === undefined
+      ? undefined
+      : new SqliteTxnStore({ dbPath: join(dbDir, 'txn.sqlite'), clock })
   const txn = createTxn({
     clock,
     random,
+    ...(txnStore === undefined ? {} : { store: txnStore }),
     eventSink: (e) => {
       appendEvent(e)
     },
@@ -168,7 +180,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     deliverOutbound: (item, opts) => backend.deliver(item, opts),
   })
 
-  const identity = createMemoryIdentity({ clock, random })
+  const identity: LocalIdentityService =
+    dbDir === undefined
+      ? createMemoryIdentity({ clock, random })
+      : createSqliteIdentity({ dbPath: join(dbDir, 'identity.sqlite'), clock, random })
 
   // ── 首次启动：owner + 默认工作区 + 内部凭据（28 §3「内部服务凭据」）
   const ownerEmail = env.AGENTSWS_OWNER_EMAIL?.trim() || 'owner@localhost'
@@ -176,19 +191,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     email: ownerEmail,
     name: ownerEmail.split('@')[0] ?? 'owner',
   })
-  const workspace = await identity.createWorkspace({
-    name: env.AGENTSWS_WORKSPACE_NAME?.trim() || 'default',
-    owner_id: person.id,
-    kind: 'personal',
-  })
+  // 落盘档会重启：owner 的工作区与 Assignment 只在第一次建，之后接着用同一份
+  const workspace =
+    identity.workspacesOf(person.id)[0] ??
+    (await identity.createWorkspace({
+      name: env.AGENTSWS_WORKSPACE_NAME?.trim() || 'default',
+      owner_id: person.id,
+      kind: 'personal',
+    }))
   roles.policies.set(workspace.policy)
-  const ownerAssignment = roles.assignments.create({
-    person_id: person.id,
-    workspace_id: workspace.id,
-    role_id: 'common.owner',
-    granted_by: person.id,
-    ranges: [],
-  })
+  const ownerAssignment =
+    roles.assignments
+      .listByPerson(person.id, { workspace_id: workspace.id, role_id: 'common.owner' })
+      .find((a) => a.revoked_at === undefined) ??
+    roles.assignments.create({
+      person_id: person.id,
+      workspace_id: workspace.id,
+      role_id: 'common.owner',
+      granted_by: person.id,
+      ranges: [],
+    })
   const internalToken = identity.issue('internal', person.id, workspace.id).token
 
   const rolesPort: RolesPort = {
@@ -299,6 +321,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       knowledge.close()
       data.close()
       roles.close()
+      txnStore?.close()
+      if (identity instanceof SqliteIdentityService) identity.close()
       await kernel.dispose()
     },
   }
