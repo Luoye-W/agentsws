@@ -105,11 +105,34 @@ export interface ProxyRequestLike {
   body?: unknown
 }
 
-/** 契约 `Connect` 之外我们额外提供的两件事：proxy 的拒绝面、以及可执行性带出。 */
+/**
+ * WP20 原生表单直填的入参（13 §4.3）。
+ *
+ * `fields` 的**值只在这一个对象里存在一次**：它从 server 的 `POST /v1/connections/:service/submit`
+ * 直接进来，被原样 `PUT` 给 runtime 的凭据库，然后连引用都不留。
+ * 它不进事件、不进日志、不进任何返回值——`submitForm` 返回的是 `Connection`，里面只有身份展示名。
+ */
+export interface SubmitFormInput {
+  workspace_id: WorkspaceId
+  ownership: Connection['ownership']
+  alias: string
+  /** 上游 `authType`；不给则按 provider 元数据里的第一个。 */
+  auth_type?: string
+  /** 字段名 → 值。**唯一持有凭据原文的地方**。 */
+  fields: Readonly<Record<string, string>>
+  /** `beginConnect` 给的 request_id；给了就顺带把那条 pending 结掉。 */
+  request_id?: string
+}
+
+/** 契约 `Connect` 之外我们额外提供的几件事：proxy 的拒绝面、可执行性带出、表单直填与断开。 */
 export interface ConnectAdapter extends Connect {
   actions(service: string): Promise<RuntimeActionMeta[]>
   /** 18 §1：role-read 的 allowedProxies 为空 → 禁 proxy；role-apply v1 也不开。一律拒。 */
   proxy(service: string, req: ProxyRequestLike, opts: { token: string }): Promise<never>
+  /** 13 §4.3：把原生表单填的凭据直接写进 runtime 凭据库；本包不留、不记、不回显。 */
+  submitForm(service: string, input: SubmitFormInput): Promise<Connection>
+  /** 断开一条连接（凭据随之在 runtime 侧删除）。 */
+  removeConnection(id: string): Promise<void>
   /** 当前进程记账的 token（只含 sha256，不含原文）——装配方做健康检查用。 */
   tokenLedger(): {
     assignment_id: AssignmentId
@@ -341,6 +364,114 @@ class OpenConnectorAdapter implements ConnectAdapter {
       return 'expired'
     }
     return 'initiated'
+  }
+
+  /**
+   * 13 §4.3 第二道措施：不经模型的原生表单把值直接写进 runtime 的凭据库。
+   *
+   * 上游是 `PUT /api/connections/:service`，body `{ authType, connectionName, values }`
+   * （09-09 实测形状，见包内 README）。这里**只**做一次转发：
+   * `input.fields` 不进 `this.state`、不进事件 payload、不进返回值，出错时也只回字段名。
+   */
+  async submitForm(service: string, input: SubmitFormInput): Promise<Connection> {
+    const names = Object.keys(input.fields)
+    if (names.length === 0) {
+      throw new ConnectAdapterError('invalid_input', '表单没有任何字段', { service })
+    }
+    const auth_type = input.auth_type ?? (await this.providerAuthKind(service))
+    if (auth_type === 'oauth2') {
+      throw new ConnectAdapterError('invalid_input', `${service} 走 OAuth 授权，不接受表单直填`, {
+        service,
+      })
+    }
+    const before = new Set((await this.listConnections(true)).map((c) => c.id))
+    await this.http.request<unknown>('PUT', `/api/connections/${encodeURIComponent(service)}`, {
+      auth: 'admin',
+      body: { authType: auth_type, connectionName: input.alias, values: { ...input.fields } },
+    })
+    const after = await this.listConnections(true)
+    const hit =
+      after.find(
+        (c) => c.service === service && c.connectionName === input.alias && !before.has(c.id),
+      ) ?? after.find((c) => c.service === service && c.connectionName === input.alias)
+    if (hit === undefined) {
+      throw new ConnectAdapterError(
+        'provider_error',
+        `runtime 接受了凭据但连接没有出现：${service}/${input.alias}`,
+        { service, alias: input.alias },
+      )
+    }
+    this.state.putConnectionMeta({
+      connection_id: hit.id,
+      workspace_id: input.workspace_id,
+      ownership: input.ownership,
+    })
+    if (input.request_id !== undefined) this.pending.delete(input.request_id)
+    // payload 里只有**字段名**，没有任何字段值
+    await this.emit({
+      type: 'connect.form_submitted',
+      at: this.now(),
+      payload: {
+        service,
+        alias: input.alias,
+        auth_type,
+        field_names: names,
+        connection_id: hit.id,
+        ...(input.request_id === undefined ? {} : { request_id: input.request_id }),
+      },
+    })
+    await this.emit({
+      type: 'connect.connection_established',
+      at: this.now(),
+      payload: {
+        service,
+        alias: input.alias,
+        connection_id: hit.id,
+        ...(input.request_id === undefined ? {} : { request_id: input.request_id }),
+      },
+    })
+    return this.toConnection(hit)
+  }
+
+  /**
+   * 断开：runtime 侧删掉连接与它的凭据。
+   *
+   * 上游 admin 面的删除端点在 09-09 那次录制里没打到（磁带里只有 GET / PUT），
+   * 所以这里按两种最可能的形状各试一次，两条都不通就明确抛 `not_implemented`——
+   * 不静默"当成删掉了"，否则界面会显示已断开而凭据还在。
+   */
+  async removeConnection(id: string): Promise<void> {
+    const list = await this.listConnections(true)
+    const wire = list.find((c) => c.id === id)
+    if (wire === undefined) {
+      throw new ConnectAdapterError('not_found', `连接不存在：${id}`, { connection: id })
+    }
+    const paths = [
+      `/api/connections/${encodeURIComponent(wire.service)}/${encodeURIComponent(wire.connectionName)}`,
+      `/api/connections/${encodeURIComponent(id)}`,
+    ]
+    let last: ConnectAdapterError | undefined
+    for (const path of paths) {
+      try {
+        await this.http.request<unknown>('DELETE', path, { auth: 'admin' })
+        this.connectionCache = undefined
+        await this.emit({
+          type: 'connect.connection_removed',
+          at: this.now(),
+          payload: { connection_id: id, service: wire.service, alias: wire.connectionName },
+        })
+        return
+      } catch (e) {
+        if (!(e instanceof ConnectAdapterError)) throw e
+        if (e.code !== 'not_found' && e.code !== 'not_implemented') throw e
+        last = e
+      }
+    }
+    throw new ConnectAdapterError(
+      'not_implemented',
+      `这个 OpenConnector runtime 没有可用的连接删除端点；请在它的管理面里删除 ${wire.service}/${wire.connectionName}`,
+      { connection: id, tried: paths, last_error: last?.code },
+    )
   }
 
   async transferConnection(id: string, to_workspace: WorkspaceId): Promise<Connection> {

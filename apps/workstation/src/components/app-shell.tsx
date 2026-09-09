@@ -1,5 +1,5 @@
 /**
- * 36 §3 的布局：左栏（首页 / 岗位 / 知识库 / 连接与设置）+ 主区。
+ * 36 §3 的布局：左栏（首页 / 岗位 / 知识库 / 连接 / 设置）+ 主区。
  *
  * 左栏按岗位分组——岗位就是一条 Assignment，点进去才展开它的面板（06 §1.3「被带过去」）。
  * 顶栏只有三样：深浅色、语言、⌘K。**没有全局聊天输入框**（36 §3 A4）。
@@ -70,6 +70,9 @@ export function AppShell({
           </NavLink>
           <NavLink to="/knowledge" className={navClass}>
             {t('nav.knowledge')}
+          </NavLink>
+          <NavLink to="/connections" className={navClass}>
+            {t('nav.connections')}
           </NavLink>
           <NavLink to="/settings" className={navClass}>
             {t('nav.settings')}

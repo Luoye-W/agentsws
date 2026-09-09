@@ -17,6 +17,10 @@ export type ConnectEventType =
   | 'connect.connection_started'
   | 'connect.connection_established'
   | 'connect.connection_transferred'
+  /** WP20 原生表单直填：payload 里只有**字段名**，没有任何字段值（13 §4.3）。 */
+  | 'connect.form_submitted'
+  | 'connect.connection_removed'
+  | 'connect.connection_tested'
 
 export interface ConnectEvent {
   type: ConnectEventType

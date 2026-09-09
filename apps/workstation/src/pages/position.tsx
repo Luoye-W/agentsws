@@ -8,8 +8,9 @@ import type { RangeName } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { Link2Off } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
+import { connectPathFor } from '@/components/connections/links'
 import { DeckSection } from '@/components/deck'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -65,7 +66,8 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
               </CardHeader>
               <CardContent>
                 <Button size="sm" variant="outline" asChild>
-                  <a href="/settings">{t('view.connect')}</a>
+                  {/* WP20 §C：直接落到那一个 provider 的卡片上，不让用户自己找 */}
+                  <Link to={connectPathFor(section.source)}>{t('view.connect')}</Link>
                 </Button>
               </CardContent>
             </Card>

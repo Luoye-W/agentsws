@@ -1,4 +1,10 @@
-/** 连接与设置：v1 只做壳 + 主题 / 语言两个真的开关。 */
+/**
+ * 设置：这台机器上的偏好——主题、语言、当前身份。
+ *
+ * WP20 之后，**连接搬到了 `/connections`**（左栏「连接」）：连接要管的东西
+ * （凭据、加固状态、试连）与"深色模式"不该挤在一页里。
+ */
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -37,7 +43,12 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
           </div>
         )}
         <Separator />
-        <p className="text-muted-foreground">{t('settings.placeholder')}</p>
+        <p className="text-muted-foreground">
+          {t('settings.placeholder')}{' '}
+          <Link to="/connections" className="text-primary underline-offset-4 hover:underline">
+            {t('nav.connections')}
+          </Link>
+        </p>
       </CardContent>
     </Card>
   )

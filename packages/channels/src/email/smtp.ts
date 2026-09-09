@@ -1,7 +1,8 @@
 import { sha256 } from '@agentsws/core'
 import nodemailer from 'nodemailer'
 import { ChannelError } from '../errors.js'
-import { asChannelError, errorText, readSecretFromEnv } from './imap.js'
+import type { CredentialSource } from './imap.js'
+import { asChannelError, errorText, readPassword } from './imap.js'
 
 export interface OutboundMail {
   from: string
@@ -28,8 +29,10 @@ export interface SmtpConfig {
   port: number
   secure: boolean
   user?: string
-  /** 应用专用密码的**环境变量名**（13 §4.3）；不给则按无鉴权 SMTP（本地/测试） */
+  /** 应用专用密码的**环境变量名**（13 §4.3）；不给且无 `connection_id` 则按无鉴权 SMTP（本地/测试） */
   password_env?: string
+  /** WP20：这条邮箱连接的 id；给了就改从本机加密秘密库按 id 取口令。 */
+  connection_id?: string
   /** 本机标识；也用于兜底生成 Message-ID 的域 */
   name?: string
   /** 测试用本地 SMTP 桩没有证书，允许显式关掉校验 */
@@ -57,6 +60,8 @@ export interface SmtpMailerOptions {
   config: SmtpConfig
   createTransport?: (config: SmtpConfig, password: string | undefined) => TransportLike
   env?: NodeJS.ProcessEnv
+  /** WP20：`config.connection_id` 存在时，口令从这里按连接 id 取。 */
+  credentials?: CredentialSource
 }
 
 /** SMTP 发信（自带账号：应用专用密码，31 F5 里"不需要平台审核的路径"）。 */
@@ -64,21 +69,23 @@ export class SmtpMailer implements Mailer {
   private readonly config: SmtpConfig
   private readonly env: NodeJS.ProcessEnv
   private readonly factory: (config: SmtpConfig, password: string | undefined) => TransportLike
+  private readonly credentials: CredentialSource | undefined
   private transport: TransportLike | undefined
 
   constructor(opts: SmtpMailerOptions) {
     this.config = opts.config
     this.env = opts.env ?? process.env
     this.factory = opts.createTransport ?? defaultTransport
+    this.credentials = opts.credentials
   }
 
   private get client(): TransportLike {
     if (this.transport === undefined) {
-      const password =
-        this.config.password_env === undefined
-          ? undefined
-          : readSecretFromEnv(this.config.password_env, this.env)
-      this.transport = this.factory(this.config, password)
+      // 口令来源只有两条：本机加密秘密库（按 connection_id）或环境变量。都没有 = 无鉴权 SMTP。
+      this.transport = this.factory(
+        this.config,
+        readPassword(this.config, this.env, this.credentials),
+      )
     }
     return this.transport
   }

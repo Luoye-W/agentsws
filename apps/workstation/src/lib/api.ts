@@ -195,7 +195,7 @@ export function clearToken(): void {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT'
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
   /** 不带 Authorization（登录那两条） */
   anonymous?: boolean
@@ -515,3 +515,142 @@ export function toBase64(bytes: Uint8Array): string {
   }
   return btoa(binary)
 }
+
+// ── WP20 连接面 ────────────────────────────────────────────────────────
+//
+// 纪律（13 §4.3）：**凭据只经 `submitConnection` 这一条路出去**，而且是原生 `<form>`
+// 收集、直接打到本机服务进程。前端不缓存、不打日志、不放进 react-query 的缓存键，
+// 提交完那个对象就没人再引用它。这里的类型与 `@agentsws/api` 的端口一一对应。
+
+export type ConnectionOwnership = 'workspace' | 'person'
+export type ProviderAuthKind = 'no_auth' | 'api_key' | 'oauth2' | 'custom_credential'
+
+export interface ProviderFieldSpec {
+  name: string
+  label: string
+  secret: boolean
+  required: boolean
+  kind?: 'text' | 'password' | 'email' | 'number' | 'url'
+  placeholder?: string
+  hint?: string
+  default?: string
+}
+
+export interface ConnectTestResult {
+  ok: boolean
+  reason?: string
+  detail?: string
+  checked_at: string
+}
+
+export interface ConnectionView {
+  id: string
+  service: string
+  service_label: string
+  alias: string
+  ownership: ConnectionOwnership
+  status: 'active' | 'reauth_required' | 'disabled'
+  identity?: { account_id?: string; display_name?: string }
+  credential_store: 'openconnector' | 'local_vault'
+  data_sources: string[]
+  last_tested_at?: string
+  last_test?: ConnectTestResult
+}
+
+export interface ProviderView {
+  service: string
+  label: string
+  auth: ProviderAuthKind
+  fields: ProviderFieldSpec[]
+  available: boolean
+  unavailable_reason?: string
+  data_sources: string[]
+  setup_guide: { summary: string; steps: string[]; links: { label: string; url: string }[] }
+  data_note?: string
+}
+
+export interface RuntimeStatusView {
+  state: 'absent' | 'unhardened' | 'ready' | 'stand_in'
+  base_url?: string
+  reasons: string[]
+  checks: { name: string; ok: boolean; detail: string }[]
+  checked_at: string
+  secrets_vault: { available: boolean; reason?: string }
+}
+
+export interface BeginConnectResult {
+  request_id: string
+  authorization_url?: string
+  secure_form?: { fields: ProviderFieldSpec[] }
+}
+
+/**
+ * 连接是**工作区所有者**的事（05 `common.owner` 的 `authorize_connector`）。
+ * 一个人可能同时持有客服岗位与所有者岗位，而网关是一次请求绑一个 Assignment（31 §3.1），
+ * 所以这几条一律显式带上所有者那条，不跟着"当前岗位"走。
+ */
+export const listConnections = (assignment?: string): Promise<{ connections: ConnectionView[] }> =>
+  api<{ connections: ConnectionView[] }>('/v1/connections', withAssignment(assignment))
+
+export const listProviders = (assignment?: string): Promise<{ providers: ProviderView[] }> =>
+  api<{ providers: ProviderView[] }>('/v1/connections/providers', withAssignment(assignment))
+
+export const getConnectRuntime = (assignment?: string): Promise<RuntimeStatusView> =>
+  api<RuntimeStatusView>('/v1/connections/runtime', withAssignment(assignment))
+
+export const beginConnect = (
+  service: string,
+  input: { alias?: string; ownership?: ConnectionOwnership } = {},
+  assignment?: string,
+): Promise<BeginConnectResult> =>
+  api<BeginConnectResult>(`/v1/connections/${encodeURIComponent(service)}/begin`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const pollConnectRequest = (
+  request_id: string,
+  assignment?: string,
+): Promise<{
+  status: 'initiated' | 'connected' | 'failed' | 'expired'
+  connection?: ConnectionView
+}> => api(`/v1/connections/requests/${encodeURIComponent(request_id)}`, withAssignment(assignment))
+
+function withAssignment(assignment: string | undefined): RequestOptions {
+  return assignment === undefined ? {} : { assignment }
+}
+
+/**
+ * **唯一一条会带凭据出门的请求。**
+ *
+ * 值从原生 `<form>` 的 FormData 里来，在这里组装一次、发出去，函数返回后就没人引用它了。
+ * 不写 localStorage、不进 query 缓存、不打 console。
+ */
+export const submitConnection = (
+  service: string,
+  input: {
+    alias?: string
+    ownership?: ConnectionOwnership
+    request_id?: string
+    fields: Record<string, string>
+  },
+  assignment?: string,
+): Promise<{ connection: ConnectionView; test: ConnectTestResult }> =>
+  api(`/v1/connections/${encodeURIComponent(service)}/submit`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const testConnection = (id: string, assignment?: string): Promise<ConnectTestResult> =>
+  api<ConnectTestResult>(`/v1/connections/${encodeURIComponent(id)}/test`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+export const removeConnection = (id: string, assignment?: string): Promise<{ removed: boolean }> =>
+  api<{ removed: boolean }>(`/v1/connections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })

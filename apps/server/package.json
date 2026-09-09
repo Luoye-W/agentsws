@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@agentsws/api": "workspace:*",
+    "@agentsws/channels": "workspace:*",
+    "@agentsws/connect-adapter": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/data": "workspace:*",
@@ -33,9 +35,14 @@
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/roles": "workspace:*",
     "@agentsws/skills": "workspace:*",
+    "@agentsws/stand-ins": "workspace:*",
     "@agentsws/txn": "workspace:*",
     "@agentsws/work": "workspace:*",
     "@hono/node-server": "^2.1.1",
+    "better-sqlite3": "^12.0.0",
     "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
   }
 }

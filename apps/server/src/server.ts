@@ -51,6 +51,7 @@ import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
 import { MemoryBackend } from './backend.js'
+import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { mountStatic } from './static.js'
 import { createWorkPort } from './work.js'
@@ -127,6 +128,8 @@ export interface Server {
   work: Work
   /** 37 §4 会议内核（存储 / 受控原始材料区 / 处理管线 / 端口）。 */
   meetings: MeetingsAssembly
+  /** WP20 连接面（连接向导 / 本机加密秘密库 / 连接状态回灌工作台）。 */
+  connections: ConnectionsAssembly
   identity: LocalIdentityService
   backend: MemoryBackend
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
@@ -273,7 +276,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const internalToken = identity.issue('internal', person.id, workspace.id).token
 
   const approvals = mount?.approvals ?? txn.approvals
-  const workData = mount?.data ?? emptyDataSource()
+  // WP20 连接面：装配一次，`/v1/connections/*` 与工作台数据源共用同一份连接状态。
+  const connections = await createConnections({
+    clock,
+    workspace_id: workspace.id,
+    env,
+    random,
+    appendEvent,
+    mailProbe: createMailProbe(),
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+  // 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
+  const workData = connections.wrapDataSource(mount?.data ?? emptyDataSource())
   const work = createWork({
     workspace_id: workspace.id,
     clock,
@@ -357,6 +371,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills: skillsPort,
     roles: rolesPort,
     meetings: meetings.port,
+    connections: connections.port,
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
@@ -402,6 +417,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     txn,
     work,
     meetings,
+    connections,
     identity,
     backend,
     traceScope,
@@ -444,6 +460,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 接进来的世界由调用方关（它还持有事件日志与替身）
       if (options.mount === undefined) roles.close()
       meetings.close()
+      connections.close()
       txnStore?.close()
       workStore?.close()
       idempotencyStore?.close()

@@ -1,0 +1,174 @@
+/**
+ * 可连接的一张卡：一句话说明 → "要准备什么"（≤ 5 步 + 外链）→ 向导。
+ *
+ * 两种向导：
+ * - **OAuth 类**：点"去授权"打开平台自己的授权页（Electron 里经桥接 `openExternal`，
+ *   浏览器里新窗口），然后轮询直到连上。密码只输在对方网站上，我们连表单都不出。
+ * - **表单类**：展开一个**原生 `<form>`**（`SecureForm`），提交只打一条 `/submit`，
+ *   提交完立刻试连并把结果显示出来。
+ */
+
+import { ChevronDown, ChevronRight, ExternalLink, Info, Plug } from 'lucide-react'
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
+import { useApp } from '@/lib/app-context'
+import { cn } from '@/lib/utils'
+import { SecureForm } from './secure-form'
+import { TestResultLine } from './test-result'
+
+export type WizardPhase = 'idle' | 'form' | 'authorizing' | 'saving'
+
+export function ProviderCard({
+  provider,
+  highlighted,
+  phase,
+  fields,
+  result,
+  oauthUrl,
+  onStart,
+  onCancel,
+  onSubmit,
+}: {
+  provider: ProviderView
+  /** 从「去连接」跳过来时高亮这一张。 */
+  highlighted: boolean
+  phase: WizardPhase
+  /** `begin` 回来的字段描述；没走过 begin 就用目录里那份。 */
+  fields: ProviderFieldSpec[] | undefined
+  result: ConnectTestResult | undefined
+  oauthUrl: string | undefined
+  onStart: () => void
+  onCancel: () => void
+  onSubmit: (values: Record<string, string>) => void
+}): React.ReactNode {
+  const { t } = useApp()
+  const [guideOpen, setGuideOpen] = useState(false)
+  const oauth = provider.auth === 'oauth2'
+  const busy = phase === 'saving'
+
+  return (
+    <Card
+      data-testid="provider-card"
+      data-service={provider.service}
+      data-highlighted={highlighted ? 'true' : 'false'}
+      className={cn(highlighted && 'ring-2 ring-primary')}
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Plug className="size-4" aria-hidden />
+          {provider.label}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 text-sm">
+        <p className="text-muted-foreground">{provider.setup_guide.summary}</p>
+
+        {provider.data_note === undefined ? null : (
+          <p
+            className="flex items-start gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground"
+            data-testid="provider-note"
+          >
+            <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+            <span>{provider.data_note}</span>
+          </p>
+        )}
+
+        <div>
+          <Button
+            size="xs"
+            variant="ghost"
+            aria-expanded={guideOpen}
+            onClick={() => {
+              setGuideOpen((v) => !v)
+            }}
+          >
+            {guideOpen ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
+            {t('connections.setup')}
+          </Button>
+          {guideOpen ? (
+            <div className="mt-1 flex flex-col gap-2 rounded-md border bg-muted/30 p-2.5">
+              <ol
+                className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground"
+                data-testid="setup-steps"
+              >
+                {provider.setup_guide.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <div className="flex flex-wrap gap-3">
+                {provider.setup_guide.links.map((link) => (
+                  <a
+                    key={link.url}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+                  >
+                    {link.label}
+                    <ExternalLink className="size-3" aria-hidden />
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {provider.available ? null : (
+          <p className="text-xs text-destructive" data-testid="provider-unavailable">
+            {t('connections.unavailable')}
+            {provider.unavailable_reason === undefined ? '' : `：${provider.unavailable_reason}`}
+          </p>
+        )}
+
+        {phase === 'form' ? (
+          <SecureForm
+            service={provider.service}
+            fields={fields ?? provider.fields}
+            busy={busy}
+            onCancel={onCancel}
+            onSubmit={onSubmit}
+          />
+        ) : phase === 'authorizing' ? (
+          <div className="flex flex-col gap-1.5" data-testid="oauth-waiting">
+            <p className="text-xs text-muted-foreground">{t('connections.oauth.opened')}</p>
+            {oauthUrl === undefined ? null : (
+              <a
+                href={oauthUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+              >
+                {t('connections.oauth.manual')}
+                <ExternalLink className="size-3" aria-hidden />
+              </a>
+            )}
+            <div>
+              <Button size="xs" variant="ghost" onClick={onCancel}>
+                {t('connections.cancel')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!provider.available || busy}
+              onClick={onStart}
+            >
+              {oauth ? t('connections.authorize') : t('connections.connect')}
+            </Button>
+            {oauth ? (
+              <span className="text-[11px] text-muted-foreground">
+                {t('connections.oauth.hint')}
+              </span>
+            ) : null}
+          </div>
+        )}
+
+        {result === undefined ? null : <TestResultLine result={result} />}
+      </CardContent>
+    </Card>
+  )
+}

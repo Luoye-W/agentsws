@@ -13,6 +13,7 @@ import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { changeRoutes } from './routes/changes.js'
+import { connectionRoutes } from './routes/connections.js'
 import { eventRoutes } from './routes/events.js'
 import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
@@ -43,6 +44,8 @@ export function collectRoutes(): Route[] {
     // batch 必须排在 :id 之前，否则 `/v1/approvals/batch/decide` 会被当成 id=batch
     ...approvalRoutes(),
     ...changeRoutes(),
+    // WP20 连接面：`providers` / `runtime` / `requests/:id` 是定值段，与 `/v1/connections/:service/...` 不撞
+    ...connectionRoutes(),
     ...knowledgeRoutes(),
     // 37 §4 会议面：`/v1/meetings/:id/records/:rid/process` 与 `/v1/meetings/:id/records` 路径不同，顺序无所谓
     ...meetingRoutes(),

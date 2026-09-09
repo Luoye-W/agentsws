@@ -495,6 +495,13 @@ const SCOPES = [
     range: 'workspace' as Range,
     max_sensitivity: 'restricted' as Sensitivity,
   },
+  // WP20 连接面：读连接清单走 store_config（05 common.owner 的那一条）
+  {
+    domain: 'store_config' as DataDomain,
+    ops: ['read'] as Operation[],
+    range: 'workspace' as Range,
+    max_sensitivity: 'confidential' as Sensitivity,
+  },
   // 工作台面板要读店铺侧的行；GA4 / Search Console 走 analytics 域
   {
     domain: 'order' as DataDomain,

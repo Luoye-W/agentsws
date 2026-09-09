@@ -10,6 +10,12 @@
       "path": "../../packages/api"
     },
     {
+      "path": "../../packages/channels"
+    },
+    {
+      "path": "../../packages/connect-adapter"
+    },
+    {
       "path": "../../packages/contracts"
     },
     {
@@ -38,6 +44,9 @@
     },
     {
       "path": "../../packages/skills"
+    },
+    {
+      "path": "../../packages/stand-ins"
     },
     {
       "path": "../../packages/txn"
