@@ -4,6 +4,8 @@ packages:
   - role-packs/*
 allowBuilds:
   esbuild: true
+  # Electron 的 postinstall 下载平台二进制；桌面壳（WP16）必须允许
+  electron: true
   better-sqlite3: true
   sqlite-vec: true
   # dsh 0.1.3-alpha.2 拖进来的原生构建：适配器不起子进程、不开 PTY，一律不构建（16 §3 最严解释）
@@ -13,5 +15,8 @@ allowBuilds:
   koffi: false
   node-pty: false
   protobufjs: false
+  # squirrel.windows 打包器（electron-builder 的可选依赖）；Windows 我们出 NSIS，不需要它
+  electron-winstaller: false
 minimumReleaseAgeExclude:
   - '@oomol-lab/connector@1.2.0'
+  - electron@44.3.0

@@ -18,7 +18,8 @@
     "simulate": "node apps/cli/bin/agentsws.mjs simulate",
     "synth": "node apps/cli/bin/agentsws.mjs synth",
     "replay": "node apps/cli/bin/agentsws.mjs replay",
-    "dev:demo": "tsc -b && pnpm --filter @agentsws/workstation exec vite build && node apps/cli/bin/agentsws.mjs demo"
+    "dev:demo": "tsc -b && pnpm --filter @agentsws/workstation exec vite build && node apps/cli/bin/agentsws.mjs demo",
+    "desktop": "pnpm --filter @agentsws/desktop start"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

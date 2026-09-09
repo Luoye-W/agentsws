@@ -9,7 +9,10 @@
       "!**/*.dc.html",
       "!pnpm-lock.yaml",
       "!out",
-      "!**/out"
+      "!**/out",
+      "!**/test-results",
+      "!**/playwright-report",
+      "!**/release"
     ]
   },
   "formatter": {

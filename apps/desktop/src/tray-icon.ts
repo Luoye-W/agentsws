@@ -1,0 +1,13 @@
+/**
+ * 托盘图标（macOS template image：纯黑 + alpha，系统按明暗自动反色）。
+ * 直接内嵌 data URL——托盘图标是壳启动的第一件事，不该依赖打包后的资源路径。
+ * 与 `build/trayTemplate.png` 同源，由同一段脚本生成。
+ */
+export const TRAY_ICON_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAABYAAAAWCAYAAADEtGw7AAAApklEQVR42sWVwQ2AIAxFWck5PLkRc3B2Gy4OwokFtCQ9kC8Fovna5F+gfOsDinM/xiryoqDyOvY4ikESnYaS5kzHIjo6hqhD1wxNW1VmUVRlo/quOVZajLZG3qZzWLnJtE7cJ7DtsKbJPEGlsxEBye1I1V/G30emiKWeWy0MeWDaMs8WjtDBMGNc4wifGNNQ0DaPdtyoF4R2palNiNY2qY2e/jS9igs8gMcNMbxC/wAAAABJRU5ErkJggg=='
+
+export const TRAY_ICON_2X_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAACwAAAAsCAYAAAAehFoBAAABRklEQVR42u1ZwQ2DMAxkhkzQJzMwAAtkCh7ZJgPw7ScLsACb9MkI1JVcqaoEdoJTdBWW7oNwOBnblzhNcxmGdYRAiIREmBiJnwV+51TrCSNhIaxKLOzT/5KoJ8wZJLcw81rV7Ma/eDVG4rXNo7pUIPuZKmbRDhWJfiMgkT1M2p9A9g1fUmA5Ofvgfvv6UEtwjJafRX4nJ6ezCjFlEB0y1h0yiCfrVLhzFHPNsa9ZamhEIRp0n6gUF1FuNZG1Mk2kd2V8VOSsMyTsFDk97i0gdQapwLb8pEKUOsbmFlGKbglZDWkpyl2JqsUDZCXSUgGGEid/kOweaV8SLEks2oqE2xIRmQQnV5GwE3ymvyAMlxJwRQfX1uCEA06aITc/cNtLuA085BEJ7hAKecyHG6RAjqogh4GQ41bIgTbklQHspQzstddlGnsCJNN8gp4jBGAAAAAASUVORK5CYII='
+
+export const TRAY_ICON_DATA_URL = `data:image/png;base64,${TRAY_ICON_PNG_BASE64}`
+export const TRAY_ICON_2X_DATA_URL = `data:image/png;base64,${TRAY_ICON_2X_PNG_BASE64}`
