@@ -53,6 +53,9 @@
       "path": "packages/stand-ins"
     },
     {
+      "path": "packages/support-core"
+    },
+    {
       "path": "packages/txn"
     }
   ]

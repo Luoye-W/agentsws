@@ -21,6 +21,7 @@
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/kernel": "workspace:*",
-    "@agentsws/model-gateway": "workspace:*"
+    "@agentsws/model-gateway": "workspace:*",
+    "@agentsws/support-core": "workspace:*"
   }
 }

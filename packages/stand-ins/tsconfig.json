@@ -6,6 +6,7 @@
     { "path": "../contracts" },
     { "path": "../core" },
     { "path": "../kernel" },
-    { "path": "../model-gateway" }
+    { "path": "../model-gateway" },
+    { "path": "../support-core" }
   ]
 }

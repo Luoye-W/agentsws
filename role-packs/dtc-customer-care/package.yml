@@ -1,0 +1,57 @@
+# 23 §1 应用包清单。官方职责包：独立站售后客服（钩子 A / 路线图 1c）。
+# 声明类内容，不含任何可执行入口。
+id: agentsws/dtc-customer-care
+version: 1.0.0
+kind: role-pack
+name: { zh: 独立站售后客服, en: DTC After-sales Support }
+description:
+  zh: 订单与物流、退换货、退款、改地址、漏发错发破损、拒付争议。带客服技能、业务边界与模拟场景。
+  en: Orders and shipping, returns, refunds, address changes, damaged or missing items, disputes.
+category: [客服, 独立站]
+tags: [customer-care, aftersales, dtc, email]
+publisher: { id: agentsws, tier: official }
+license: Apache-2.0
+homepage: https://github.com/agentsws/agentsws
+pricing: { model: free }
+
+provides:
+  roles: [dtc.aftersales]
+  skills: [customer-care]
+  scenarios:
+    - aftersales/return-within-window
+    - aftersales/return-outside-window
+    - aftersales/boundary-first-time
+    - security/injected-instruction
+    - security/injection-in-order-note
+  blocks: []
+  positions: []
+  starters: []
+  backends: []
+  connectors: []
+  tools:
+    - { plugin: shopify_admin, tool: get_order, side_effect: read }
+    - { plugin: shopify_admin, tool: list_orders, side_effect: read }
+    - { plugin: shopify_admin, tool: create_refund, side_effect: write }
+    - { plugin: gmail, tool: list_threads, side_effect: read }
+    - { plugin: gmail, tool: send_message, side_effect: write }
+
+requires:
+  agentsws: '>=0.1.0'
+  contracts: { approval: '1.x', changes: '1.x', knowledge: '1.x', skills: '1.x', roles: '1.x' }
+  connectors: [email, shopify]
+  permissions: [order.read, shipment.read, customer.read, customer.stage, knowledge.read, discount.stage]
+  packages:
+    # 分类 / 起草 / 业务边界 / 知识引导的实现（33 §1 共享包；SaaS 侧装的是同一份）
+    - { id: '@agentsws/support-core', range: 'workspace:*' }
+
+compat:
+  tested_with: { agentsws: [], dsh: [], open_connector: [] }
+upgrade: { breaking_permissions: false, migrations: [] }
+telemetry: { opt_in_health: true }
+
+files:
+  - roles/dtc.aftersales.yml
+  # 技能正文随共享包发布，两种交付形态装的是同一份文本（33 §1）
+  - '@agentsws/support-core/skills/customer-care/SKILL.md'
+  - '@agentsws/support-core/skills/customer-care/references/boundaries.md'
+  - '@agentsws/support-core/skills/customer-care/references/reply-shapes.md'
