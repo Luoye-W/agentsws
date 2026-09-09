@@ -45,16 +45,16 @@ describe('projectCard（36 §2 审批项 → 卡片）', () => {
     expect(card.customer_label).toBe('Anna Meyer')
   })
 
-  it('没有 label 回调时退化成 id', () => {
-    expect(projectCard(item(), ctx).customer_label).toBe('cus_anna')
+  it('37 §1 第 5 行：没有展示名就没有客户标签，绝不退化成裸 id', () => {
+    expect(projectCard(item(), ctx).customer_label).toBeUndefined()
   })
 
   it('subject 是客户、payload 没有 to 时也能出客户标签', () => {
     const card = projectCard(
       item({ payload: {}, subject: { object: { type: 'customer', id: 'cus_bob' } } }),
-      ctx,
+      { ...ctx, label: (ref) => (ref.id === 'cus_bob' ? 'Bob' : undefined) },
     )
-    expect(card.customer_label).toBe('cus_bob')
+    expect(card.customer_label).toBe('Bob')
   })
 
   it('既没有 to 也不是客户 subject → 没有客户标签、没有 channel', () => {
@@ -172,15 +172,45 @@ describe('highlights（只从结构化字段挖，不从模型的话里挖数字
   })
 })
 
-describe('证据芯片（i18n key + 出处，不出裸枚举）', () => {
-  it('预检绿、引用、见过的对象、运行 id 都在', () => {
-    const chips = evidenceChipsOf(item())
+describe('证据芯片（37 §1 第 5 行：i18n key + 参数，永不裸 id）', () => {
+  it('预检绿、引用条数、查过的单、读过的记录都在；run id 不在', () => {
+    const chips = evidenceChipsOf(item(), { ...ctx, label: () => '#1001' })
     expect(chips[0]?.label_key).toBe('evidence.precheck.ok')
-    expect(chips.some((c) => c.label_key === 'evidence.citation')).toBe(true)
-    // seen 只露前四个
-    expect(chips.filter((c) => c.label_key === 'evidence.seen')).toHaveLength(4)
-    expect(chips.some((c) => c.label_key === 'evidence.run')).toBe(true)
+    expect(chips.find((c) => c.label_key === 'evidence.citation')?.params).toEqual({ count: 1 })
+    expect(chips.find((c) => c.label_key === 'evidence.order_checked')?.params).toEqual({
+      order: '#1001',
+    })
+    expect(chips.find((c) => c.label_key === 'evidence.records_read')?.params).toEqual({ count: 4 })
+    expect(chips.some((c) => c.label_key === 'evidence.run')).toBe(false)
     for (const c of chips) expect(c.label_key.startsWith('evidence.')).toBe(true)
+    // 一条裸 id 都不许出现在芯片里
+    expect(JSON.stringify(chips)).not.toMatch(/ord_|cus_|fc_|run_|thr_|prod_/)
+  })
+
+  it('订单查不到展示名就报条数，不报 id', () => {
+    const chips = evidenceChipsOf(refundItem(), ctx)
+    expect(chips.find((c) => c.label_key === 'evidence.orders_checked')?.params).toEqual({
+      count: 1,
+    })
+    expect(JSON.stringify(chips)).not.toContain('ord_1001')
+  })
+
+  it('上限 10 条', () => {
+    const many = item({
+      evidence: {
+        ...item().evidence,
+        provenance: {
+          seen: Array.from({ length: 40 }, (_, i) => ({ type: 'order' as const, id: `o_${i}` })),
+        },
+      },
+    })
+    expect(evidenceChipsOf(many, ctx).length).toBeLessThanOrEqual(10)
+  })
+
+  it('run id 只进详情', () => {
+    const card = projectCard(item(), ctx)
+    expect(card.detail.run_id).toBe('run_1')
+    expect(JSON.stringify(card.evidence_chips)).not.toContain('run_1')
   })
 
   it('预检红 / 黄各有自己的 key', () => {

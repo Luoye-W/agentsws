@@ -9,10 +9,13 @@ import type { ApprovalItem, Iso8601, ObjectRef, RiskClass } from '@agentsws/cont
 import { actionsFor, labelsFor, minutesFor, riskClassFor } from './matrix.js'
 import type {
   DeckCard,
+  DeckContentVariants,
+  DeckEntityChip,
   DeckEvidenceChip,
   DeckHighlight,
   DeckKind,
   DeckOption,
+  DeckSource,
   PriorityBand,
   ProjectContext,
 } from './types.js'
@@ -97,8 +100,19 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
   return out
 }
 
-/** 证据芯片：i18n key + 出处 ref（36 §2.1）。 */
-export function evidenceChipsOf(item: ApprovalItem): DeckEvidenceChip[] {
+/** 37 §1 第 5 行：证据芯片上限 10 条。 */
+export const MAX_EVIDENCE_CHIPS = 10
+/** 实体芯片另起一行；也得有个上限，否则一个读了 40 条记录的运行会把卡面撑爆。 */
+export const MAX_ENTITY_CHIPS = 8
+
+/**
+ * 证据芯片：**只出 i18n key + 展示名 / 计数**（37 §1 第 5 行）。
+ *
+ * 与 WP15 的差别是硬性的：这里再也不带 `ref`。「读过订单 #1001」里的 `#1001` 是
+ * enrichment 查出来的**展示名**；查不到展示名就退成「读了 N 条记录」，绝不退成
+ * `ord_1001`。run id 一个字都不进来——它只在 `detail.run_id` 上。
+ */
+export function evidenceChipsOf(item: ApprovalItem, ctx?: ProjectContext): DeckEvidenceChip[] {
   const out: DeckEvidenceChip[] = []
   const p = item.evidence.precheck
   const values = Object.values(p).filter((v) => typeof v === 'string') as string[]
@@ -114,17 +128,100 @@ export function evidenceChipsOf(item: ApprovalItem): DeckEvidenceChip[] {
     })
   }
   if (item.evidence.diff !== undefined) out.push({ label_key: 'evidence.diff' })
-  for (const c of item.evidence.citations ?? []) {
-    out.push({ label_key: 'evidence.citation', ref: { type: 'fact_card', id: c.fact_card_id } })
+
+  const citations = item.evidence.citations ?? []
+  if (citations.length > 0) {
+    out.push({ label_key: 'evidence.citation', params: { count: citations.length } })
   }
-  // provenance.seen = 本次运行「见过」的 id（15 §6）；只露前四个，够人判断「它读过单没有」。
-  for (const ref of item.evidence.provenance.seen.slice(0, 4)) {
-    out.push({ label_key: 'evidence.seen', ref })
+
+  // provenance.seen = 本次运行「见过」的对象（15 §6）。人真正想知道的是「它查单了没有」，
+  // 所以订单单拎出来说，其余的只报条数。
+  const seen = item.evidence.provenance.seen
+  const orders = seen.filter((r) => r.type === 'order' || r.type === 'shipment')
+  const orderNames = orders
+    .map((r) => ctx?.label?.(r))
+    .filter((n): n is string => n !== undefined && n !== '')
+  if (orderNames.length === 1 && orderNames[0] !== undefined) {
+    out.push({ label_key: 'evidence.order_checked', params: { order: orderNames[0] } })
+  } else if (orders.length > 0) {
+    out.push({ label_key: 'evidence.orders_checked', params: { count: orders.length } })
   }
-  if (item.evidence.run_id !== undefined) {
-    out.push({ label_key: 'evidence.run', ref: { type: 'work_item', id: item.evidence.run_id } })
+  const others = seen.length - orders.length
+  if (others > 0) out.push({ label_key: 'evidence.records_read', params: { count: others } })
+
+  return out.slice(0, MAX_EVIDENCE_CHIPS)
+}
+
+/**
+ * 实体芯片：订单 / 客户 / 事实卡…，**带展示名**，另起一行（37 §1 第 5 行）。
+ *
+ * 29 §2 的 enrichment 在这里落地：`ctx.label` 是以本人身份查出来的展示名，返回
+ * `undefined` 就是「这个人看不到这条」——那条 ref 直接丢掉，只在 `dropped` 上记个数。
+ * 先给再脱敏是 19 §3 明令禁止的那种做法。
+ */
+export function entityChipsOf(
+  item: ApprovalItem,
+  ctx: ProjectContext,
+): { chips: DeckEntityChip[]; dropped: number } {
+  const refs: ObjectRef[] = [
+    item.subject.object,
+    ...item.evidence.provenance.seen,
+    ...(item.evidence.citations ?? []).map(
+      (c): ObjectRef => ({ type: 'fact_card', id: c.fact_card_id }),
+    ),
+  ]
+  const target = targetOf(item)
+  if (target !== undefined) refs.unshift(target)
+
+  const chips: DeckEntityChip[] = []
+  const seenKeys = new Set<string>()
+  let dropped = 0
+  for (const ref of refs) {
+    const key = `${ref.type}:${ref.id}`
+    if (seenKeys.has(key)) continue
+    seenKeys.add(key)
+    const label = ctx.label?.(ref)
+    if (label === undefined || label === '') {
+      dropped += 1
+      continue
+    }
+    if (chips.length < MAX_ENTITY_CHIPS) chips.push({ type: ref.type, id: ref.id, label })
   }
-  return out
+  return { chips, dropped }
+}
+
+/** 内容盒的三种语言变体；只从结构化字段里取，一个字不编（37 §1 第 4 行）。 */
+export function contentVariantsOf(item: ApprovalItem): DeckContentVariants {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const body = isRecord(payload.body) ? payload.body : {}
+  const original =
+    str(payload.original) ??
+    str(payload.original_text) ??
+    str(payload.source_text) ??
+    str(body.text)
+  const en = str(payload.summary_en) ?? str(payload.en)
+  return {
+    zh_summary: item.summary,
+    ...(original === undefined ? {} : { original }),
+    ...(en === undefined ? {} : { en }),
+  }
+}
+
+/**
+ * 这张卡是谁引出来的（37 §3 的第四枚筛选 chip）。
+ *
+ * 判序是「越具体越先」：挂在某条对话上的一定是 `conversation`（客户来信），
+ * 只挂事项没挂对话的是待办委托跑出来的 `todo`，剩下的（哨兵、注册表、系统卡）
+ * 是 `system`。
+ */
+export function sourceOf(item: ApprovalItem, kind: DeckKind): DeckSource {
+  if (kind === 'system_alert' || kind === 'digest') return 'system'
+  if (item.subject.conversation_id !== undefined) return 'conversation'
+  const subjectType = item.subject.object.type
+  if (subjectType === 'thread' || subjectType === 'message' || subjectType === 'customer')
+    return 'conversation'
+  if (item.subject.work_item_id !== undefined) return 'todo'
+  return 'system'
 }
 
 /**
@@ -148,23 +245,6 @@ export function priorityBandOf(
   if (risk === 'high' || left <= DAY) return 'P1'
   if (item.priority === 'queue') return 'P2'
   return 'P3'
-}
-
-const BAND_ORDER: Record<PriorityBand, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
-
-/** 队列排序：档位 → 期限 → 等待时长（14 §8）。同分按 id 保证稳定。 */
-export function sortCards(cards: DeckCard[]): DeckCard[] {
-  return [...cards].sort((a, b) => {
-    const band = BAND_ORDER[a.priority_band] - BAND_ORDER[b.priority_band]
-    if (band !== 0) return band
-    const ea = a.expires_at === undefined ? Number.POSITIVE_INFINITY : Date.parse(a.expires_at)
-    const eb = b.expires_at === undefined ? Number.POSITIVE_INFINITY : Date.parse(b.expires_at)
-    if (ea !== eb) return ea - eb
-    const ca = Date.parse(a.detail.created_at)
-    const cb = Date.parse(b.detail.created_at)
-    if (ca !== cb) return ca - cb
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  })
 }
 
 /** 选择题卡的选项（36 §2.2：`policy_change` 是问句形态）。 */
@@ -207,27 +287,38 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const payload = isRecord(item.payload) ? item.payload : {}
   const to = isObjectRef(payload.to) ? payload.to : undefined
   const subject = item.subject.object
+  // 展示名查不到就**没有客户标签**——退成 `cus_anna` 正是 37 §1 要删掉的那种裸 id。
   const customer =
-    (to === undefined ? undefined : (ctx.label?.(to) ?? to.id)) ??
-    (subject.type === 'customer' ? (ctx.label?.(subject) ?? subject.id) : undefined)
+    (to === undefined ? undefined : ctx.label?.(to)) ??
+    (subject.type === 'customer' ? ctx.label?.(subject) : undefined)
   const channel =
     CHANNEL_OF[str(payload.channel) ?? ''] ??
     (kind === 'system_alert' || kind === 'digest' ? 'system' : undefined)
+  const entities = entityChipsOf(item, ctx)
+  const matter_id = item.subject.work_item_id
+  const matter_label =
+    matter_id === undefined ? undefined : ctx.label?.({ type: 'work_item', id: matter_id })
 
   return {
     id: item.id,
     kind,
     status: item.state,
     priority_band: priorityBandOf(item, risk, ctx.now),
+    priority: item.priority,
     risk_class: risk,
     title: item.title,
     summary: item.summary,
+    content_variants: contentVariantsOf(item),
     position_id: ctx.position_id,
     role_id: item.role_id,
     ...(customer === undefined ? {} : { customer_label: customer }),
     ...(channel === undefined ? {} : { channel }),
+    ...(matter_id === undefined ? {} : { matter_id }),
+    ...(matter_label === undefined ? {} : { matter_label }),
+    source: sourceOf(item, kind),
     highlights: highlightsOf(item, ctx),
-    evidence_chips: evidenceChipsOf(item),
+    evidence_chips: evidenceChipsOf(item, ctx),
+    entity_chips: entities.chips,
     available_actions: actions,
     action_labels: labelsFor(kind, actions),
     ...(options === undefined ? {} : { options }),
@@ -240,6 +331,8 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
       created_at: item.created_at,
       updated_at: item.updated_at,
       proposer: item.proposer,
+      ...(item.evidence.run_id === undefined ? {} : { run_id: item.evidence.run_id }),
+      enrichment: { dropped_refs: entities.dropped },
     },
     dedupe_key: item.dedupe_key,
     ...(item.expires_at === undefined ? {} : { expires_at: item.expires_at }),
@@ -247,6 +340,7 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
       ? { snoozed_until: item.decision.defer_until }
       : {}),
     snooze_count: ctx.snoozeCount?.(item) ?? (item.state === 'deferred' ? 1 : 0),
+    merge_count: 1,
     version: item.revision,
   }
 }

@@ -1,5 +1,12 @@
-/** 证据芯片：i18n key + 出处（36 §2.1「证据芯片带出处」）。 */
-import type { DeckEvidenceChip, DeckHighlight } from '@agentsws/deck'
+/**
+ * 证据芯片与实体芯片（37 §1 第 5 行）。
+ *
+ * 两条硬规矩：
+ * - 证据芯片**只渲染 i18n key + 参数**，它的数据里根本没有 ref 可露。
+ * - 实体芯片**只渲染 `label`**（服务端 enrichment 查出来的展示名），`id` 只用来跳转，
+ *   一个字都不印在卡面上——WP15 截图里的 `fact_775c…` / `cus_anna` 就是这么漏出去的。
+ */
+import type { DeckEntityChip, DeckEvidenceChip, DeckHighlight } from '@agentsws/deck'
 import { Badge } from '@/components/ui/badge'
 import { useApp } from '@/lib/app-context'
 
@@ -7,18 +14,50 @@ export function EvidenceChips({ chips }: { chips: DeckEvidenceChip[] }): React.R
   const { t } = useApp()
   if (chips.length === 0) return null
   return (
-    <ul className="flex flex-wrap gap-1.5" aria-label={t('card.evidence')}>
+    <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label={t('card.evidence')}>
       {chips.map((chip) => (
-        <li key={`${chip.label_key}-${chip.ref?.type ?? ''}-${chip.ref?.id ?? ''}`}>
-          <Badge variant="secondary" className="font-normal">
-            <span>{t(chip.label_key)}</span>
-            {chip.ref === undefined ? null : (
-              <span className="ml-1 font-mono text-[10px] opacity-70">{chip.ref.id}</span>
-            )}
-          </Badge>
+        <li key={`${chip.label_key}-${JSON.stringify(chip.params ?? {})}`}>
+          <span className="inline-block rounded-lg border bg-muted/40 px-2.5 py-1 text-xs">
+            {t(chip.label_key, chip.params)}
+          </span>
         </li>
       ))}
     </ul>
+  )
+}
+
+/** 实体芯片另起一行（37 §1 第 5 行「实体 chip 另起一行」）。 */
+export function EntityChips({
+  chips,
+  dropped,
+  onOpen,
+}: {
+  chips: DeckEntityChip[]
+  dropped: number
+  onOpen?: (chip: DeckEntityChip) => void
+}): React.ReactNode {
+  const { t } = useApp()
+  if (chips.length === 0 && dropped === 0) return null
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="entity-chips">
+      {chips.map((chip) => (
+        <button
+          key={`${chip.type}:${chip.id}`}
+          type="button"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs hover:bg-primary/10"
+          onClick={() => {
+            onOpen?.(chip)
+          }}
+        >
+          {chip.label}
+        </button>
+      ))}
+      {dropped === 0 ? null : (
+        <span className="text-xs text-muted-foreground" data-testid="enrichment-note">
+          {t('deck.enrichment.dropped', { n: dropped })}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -40,7 +79,7 @@ export function Highlights({
   const { t } = useApp()
   if (highlights.length === 0) return null
   return (
-    <ul className="flex flex-wrap gap-1.5">
+    <ul className="mt-2.5 flex flex-wrap gap-1.5">
       {highlights.map((h) => (
         <li key={`${h.type}-${h.text}`}>
           <Badge variant="outline" className={`font-normal ${TONE[h.type]}`}>

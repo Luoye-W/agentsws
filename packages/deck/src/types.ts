@@ -39,11 +39,44 @@ export interface DeckHighlight {
   text: string
 }
 
-/** 证据芯片：只出 i18n key，不出裸枚举（36 §2.1）。 */
+/**
+ * 证据芯片（37 §1 第 5 行）：**只出 i18n key + 参数**，永不出裸 id。
+ *
+ * `params` 里只允许放已经过服务端 enrichment 的**展示名与数字**（订单号 `#1001`、
+ * 引用条数），绝不放 `fact_…` / `cus_…` / `run_…` 这类 ObjectRef id——那正是 WP15
+ * 截图里露出来的东西。要跳到对象的芯片走 `entity_chips`，它自带展示名。
+ */
 export interface DeckEvidenceChip {
   label_key: string
-  /** 出处：点开跳到那个对象 */
-  ref?: ObjectRef
+  params?: Record<string, string | number>
+}
+
+/**
+ * 实体芯片（订单 / 客户 / 事实卡…）：另起一行，**带展示名**。
+ *
+ * `label` 由 api 层的 enrichment 以本人身份查出来（29 §2）；查不到（无权见 / 已删）
+ * 的 ref 在投影时就被丢掉，只在 `DeckDetail.enrichment.dropped_refs` 上留个数。
+ * `id` 留着只为点击时跳转，**渲染层不许把它印在卡面上**。
+ */
+export interface DeckEntityChip {
+  type: ObjectRef['type']
+  id: string
+  label: string
+}
+
+/** 37 §3 筛选的第四枚 chip：这张卡是谁引出来的。 */
+export type DeckSource = 'todo' | 'conversation' | 'system'
+
+/** 内容盒一次只显示一种语言（37 §1 第 4 行，禁双语堆叠）。 */
+export type DeckContentMode = 'zh_summary' | 'original' | 'en'
+
+export interface DeckContentVariants {
+  /** 永远有：Agent 写的中文摘要，也是队列默认显示的那一种 */
+  zh_summary: string
+  /** 客户原文（多半是英文），从 payload 的结构化字段里取，不是模型现编的 */
+  original?: string
+  /** 英文版摘要；没有就回退中文摘要并在卡面上说明 */
+  en?: string
 }
 
 export interface DeckOption {
@@ -58,15 +91,26 @@ export interface DeckCard {
   status: ApprovalState
   /** 由 risk_class + expires_at + 14 §8 排序算出 */
   priority_band: PriorityBand
+  /** 14 §2 的三档优先级，排序第三顺位要用（KefuAgent `compareInboxQueueCards`） */
+  priority: ApprovalItem['priority']
   risk_class: RiskClass
   title: string
+  /** = `content_variants.zh_summary`；老调用方还在读它，所以不删 */
   summary: string
+  /** 37 §1 第 4 行：一次只显示一种，队列级切换 */
+  content_variants: DeckContentVariants
   position_id: PositionId
   role_id: RoleId
+  /** 37 §1 第 2 行：**不进标签行**；只在详情与筛选里用 */
   customer_label?: string
   channel?: 'email' | 'chat' | 'system'
+  /** 37 §2.2b：卡片是指向事项的指针；有它就在卡面顶部出「属于：事项 X」 */
+  matter_id?: string
+  matter_label?: string
+  source: DeckSource
   highlights: DeckHighlight[]
   evidence_chips: DeckEvidenceChip[]
+  entity_chips: DeckEntityChip[]
   available_actions: DeckAction[]
   /** 服务端给动词（outbound_draft 是「发送」而不是「批准」） */
   action_labels?: Partial<Record<DeckAction, string>>
@@ -77,6 +121,10 @@ export interface DeckCard {
   expires_at?: Iso8601
   snoozed_until?: Iso8601
   snooze_count: number
+  /** 同类合并后代表这一组的张数；1 = 没合并（37 §1 第 2 行的「合并 N 张」） */
+  merge_count: number
+  /** 合并进来的成员（含代表自己）：动作一次落到每一条，各带各的 version */
+  merged?: { id: string; version: number }[]
   /** 乐观并发：decide 带 version（= ApprovalItem.revision） */
   version: number
 }
@@ -92,6 +140,10 @@ export interface DeckDetail {
   updated_at: Iso8601
   /** 提议者（人 / Agent / 哨兵），界面上一行小字 */
   proposer: ApprovalItem['proposer']
+  /** 37 §1 第 5 行：run id **只进详情**，不进证据芯片 */
+  run_id?: string
+  /** 29 §2 enrichment：以本人身份查不到展示名的 ref 丢了几条 */
+  enrichment: { dropped_refs: number }
 }
 
 export interface ProjectContext {
@@ -281,6 +333,46 @@ export interface ResolvedDecision {
   edited_payload?: unknown
   defer_until?: Iso8601
   instruction_scope?: InstructionScope
+}
+
+// ── 筛选与战报（37 §1 末段） ────────────────────────────────────────────
+
+/** 等待态：客户此刻是不是坐在对面等（KefuAgent 的 waiting / nobody_waiting 两枚 chip）。 */
+export type DeckWaiting = 'customer_waiting' | 'nobody_waiting'
+
+export interface DeckFilters {
+  position_id?: PositionId
+  waiting?: DeckWaiting
+  kind?: DeckKind
+  source?: DeckSource
+}
+
+export interface DeckFilterResult {
+  /** 过滤后的队列（已排序） */
+  cards: DeckCard[]
+  /** 被筛掉但仍要置顶提示的 P0（37：P0 永不被筛掉） */
+  pinned_p0: DeckCard[]
+  counts: {
+    /** 按**张数**算（合并前），不是按组数 */
+    total: number
+    customer_waiting: number
+    nobody_waiting: number
+    matched: number
+  }
+}
+
+/** 今日战报四格（37 §1 第 9 行；数从事件日志来，不估算）。 */
+export interface BattleReport {
+  /** 工作区本地日期 YYYY-MM-DD */
+  date: string
+  /** AI 自主处理：跑完且全程没回头问人的运行 */
+  ai_handled: number
+  /** 你已处理：本人做出的决定 */
+  handled: number
+  /** 自动发送：额度内自动批准、没经过人的 */
+  auto_sent: number
+  /** 拦截待确认：被拦下来转人确认的（= 建了卡） */
+  intercepted: number
 }
 
 export interface HomeAssembly {

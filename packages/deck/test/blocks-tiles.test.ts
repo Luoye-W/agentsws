@@ -218,7 +218,7 @@ describe('首页装配（36 §3 三区 + 预计 X 分钟）', () => {
     }
   })
 
-  it('P0 与系统卡进告警区，摘要卡不进队列', () => {
+  it('只有系统卡进告警区：P0 留在 deck 里（37 §1 一次一张），摘要卡不进队列', () => {
     const home = assembleHome({
       now: NOW,
       positions: [
@@ -236,8 +236,8 @@ describe('首页装配（36 §3 三区 + 预计 X 分钟）', () => {
         },
       ],
     })
-    expect(home.queue).toHaveLength(0)
-    expect(home.alerts.map((c) => c.id).sort()).toEqual(['sys', 'urgent'])
+    expect(home.queue.map((c) => c.id)).toEqual(['urgent'])
+    expect(home.alerts.map((c) => c.id)).toEqual(['sys'])
   })
 
   it('全局 range 覆盖岗位记忆；摘要卡原样带出', () => {

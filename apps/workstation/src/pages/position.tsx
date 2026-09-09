@@ -4,82 +4,22 @@
  * 面板按数据源分块（店铺后台 / GA4 / Search Console / 广告后台）；
  * 数据源没接时出「去连接」，不出空图。
  */
-import type { DeckCard, RangeName } from '@agentsws/deck'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { RangeName } from '@agentsws/deck'
+import { useQuery } from '@tanstack/react-query'
 import { Link2Off } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
-import { DeckCardView } from '@/components/deck/deck-card'
+import { DeckSection } from '@/components/deck'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  type DecideInput,
-  decide,
-  getPositionCards,
-  getPositionRecords,
-  getPositionView,
-} from '@/lib/api'
+import { getPositionRecords, getPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
-
-function CardsTab({ id }: { id: string }): React.ReactNode {
-  const { t } = useApp()
-  const client = useQueryClient()
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [pendingId, setPendingId] = useState<string | null>(null)
-  const cards = useQuery({ queryKey: ['cards', id], queryFn: () => getPositionCards(id) })
-
-  const mutation = useMutation({
-    mutationFn: (input: { card: DeckCard; body: DecideInput }) =>
-      decide(input.card.id, input.body, id),
-    onMutate: (input) => {
-      setPendingId(input.card.id)
-    },
-    onError: (error, input) => {
-      setErrors((prev) => ({ ...prev, [input.card.id]: error.message }))
-    },
-    onSettled: () => {
-      setPendingId(null)
-      void client.invalidateQueries({ queryKey: ['cards', id] })
-      void client.invalidateQueries({ queryKey: ['home'] })
-    },
-  })
-
-  if (cards.isPending) return <Skeleton className="h-40 w-full" />
-  const list = cards.data?.cards ?? []
-  if (list.length === 0)
-    return <p className="text-sm text-muted-foreground">{t('position.cards.empty')}</p>
-  return (
-    <div className="flex flex-col gap-3">
-      {list.map((card) => (
-        <DeckCardView
-          key={card.id}
-          card={card}
-          busy={pendingId === card.id}
-          {...(errors[card.id] === undefined ? {} : { error: errors[card.id] })}
-          onDecide={(req) => {
-            mutation.mutate({
-              card,
-              body: {
-                action: req.action,
-                version: req.version,
-                ...(req.selected_option_id === undefined
-                  ? {}
-                  : { selected_option_id: req.selected_option_id }),
-                ...(req.instruction === undefined ? {} : { instruction: req.instruction }),
-              },
-            })
-          }}
-        />
-      ))}
-    </div>
-  )
-}
 
 function ViewTab({ id }: { id: string }): React.ReactNode {
   const { t } = useApp()
@@ -189,7 +129,8 @@ export function PositionPage(): React.ReactNode {
           <TabsTrigger value="records">{t('position.tab.records')}</TabsTrigger>
         </TabsList>
         <TabsContent value="cards">
-          <CardsTab id={id} />
+          {/* 37 §1：与首页同一副牌，只是钉死在这个岗位上 */}
+          <DeckSection positionId={id} onOpen={() => {}} />
         </TabsContent>
         <TabsContent value="view">
           <ViewTab id={id} />

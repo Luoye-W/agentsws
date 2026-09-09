@@ -11,12 +11,20 @@ import type { RoleId } from '@agentsws/contracts'
 import {
   assembleHome,
   assembleView,
+  BATTLE_REPORT_EVENT_TYPES,
   type BlockDef,
+  battleReport,
   blockDef,
   computeBlock,
   computeTiles,
   type DeckCard,
   DeckError,
+  type DeckFilters,
+  type DeckKind,
+  type DeckSource,
+  type DeckWaiting,
+  filterCards,
+  foldCards,
   type HomePosition,
   MAX_TILES_PER_POSITION,
   projectCard,
@@ -55,6 +63,71 @@ const RANGE_PARAM = {
   in: 'query',
   description: 'yesterday | last_7d，默认 yesterday（36 §3）',
 } as const
+
+/** 37 §1 末段的筛选行：岗位 / 等待 / 卡型 / 来源。 */
+const FILTER_PARAMS = [
+  { name: 'position_id', in: 'query', description: '只看这个岗位的卡（37 §1 岗位 chip）' },
+  {
+    name: 'waiting',
+    in: 'query',
+    description: 'customer_waiting | nobody_waiting（37 §1 等待 chip）',
+  },
+  { name: 'kind', in: 'query', description: '卡型（37 §1 卡型下拉）' },
+  { name: 'source', in: 'query', description: 'todo | conversation | system（来源）' },
+] as const
+
+const WAITINGS: readonly DeckWaiting[] = ['customer_waiting', 'nobody_waiting']
+const SOURCES: readonly DeckSource[] = ['todo', 'conversation', 'system']
+
+/**
+ * query → `DeckFilters`。
+ *
+ * 值一律先校验再进：`waiting=lol` 回 400 而不是悄悄退成"全部"——一个被默默忽略的
+ * 筛选条件，界面上显示的是"客户在等"，给的却是全部，比报错难查得多。
+ * `kind` 不查白名单（14 的 kind 表会长），未知值只是筛不出东西。
+ */
+function filtersOf(c: { req: { query(name: string): string | undefined } }): DeckFilters {
+  const pick = (name: string): string | undefined => {
+    const raw = c.req.query(name)
+    return raw === undefined || raw === '' ? undefined : raw
+  }
+  const waiting = pick('waiting')
+  if (waiting !== undefined && !WAITINGS.includes(waiting as DeckWaiting))
+    throw new ApiError('invalid_input', 'waiting 只能是 customer_waiting 或 nobody_waiting')
+  const source = pick('source')
+  if (source !== undefined && !SOURCES.includes(source as DeckSource))
+    throw new ApiError('invalid_input', 'source 只能是 todo / conversation / system')
+  const position_id = pick('position_id')
+  const kind = pick('kind')
+  return {
+    ...(position_id === undefined ? {} : { position_id }),
+    ...(waiting === undefined ? {} : { waiting: waiting as DeckWaiting }),
+    ...(kind === undefined ? {} : { kind: kind as DeckKind }),
+    ...(source === undefined ? {} : { source: source as DeckSource }),
+  }
+}
+
+/**
+ * 37 §1 第 9 行的今日战报。
+ *
+ * 事件日志按类型预过滤后一次读完；`limit` 是保险丝，不是分页——战报是"今天"的，
+ * 一个工作区一天不会有两万条这四类事件；真到那个量级，多出来的只会让四个数偏小，
+ * 不会算错别的东西。
+ */
+async function todaysReport(
+  deps: GatewayDeps,
+  workspace_id: string,
+  tz_offset_minutes: number,
+): Promise<ReturnType<typeof battleReport>> {
+  const events = []
+  for await (const e of deps.eventLog.read({
+    workspace_id,
+    types: [...BATTLE_REPORT_EVENT_TYPES],
+    limit: 5000,
+  }))
+    events.push(e)
+  return battleReport(events, { now: deps.clock.now(), tz_offset_minutes })
+}
 
 const HomeTilesBody = z.object({
   position_id: z.string().min(1),
@@ -139,13 +212,15 @@ export function workstationRoutes(): Route[] {
         method: 'get',
         path: '/v1/home',
         operationId: 'getHome',
-        summary: '首页：卡片队列 + 告警 + 每岗位核心数据条 + 摘要 + 预计 X 分钟（36 §3）',
+        summary:
+          '首页：卡片 deck（筛选 + 合并）+ 告警 + 每岗位核心数据条 + 摘要 + 今日战报（36 §3、37 §1）',
         tag: 'workstation',
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        params: [RANGE_PARAM],
-        returns: '{ queue, alerts, tiles, digest?, estimated_minutes, range }',
+        params: [RANGE_PARAM, ...FILTER_PARAMS],
+        returns:
+          '{ queue, alerts, tiles, digest?, estimated_minutes, range, filters, counts, pinned_p0, battle_report }',
       },
       async (c, deps) => {
         const p = principalOf(c)
@@ -153,12 +228,16 @@ export function workstationRoutes(): Route[] {
         const w = workstationOf(deps)
         const actor: WorkstationActor = { workspace_id: p.workspace_id, person_id: p.person_id }
         const range = rangeOf(c)
+        const filters = filtersOf(c)
         const positions = await w.positions(actor)
         const home: HomePosition[] = []
+        let tz_offset_minutes = 0
         for (const position of positions) {
           const items = await w.items(actor, position)
           // 没有默认数字块的职责（common.member 之类）不出数据条，但它的卡照样进队列。
           const tile_ids = position.show_tiles ? position.tile_ids : []
+          const query = await w.queryContext(actor, position, range)
+          tz_offset_minutes = query.tz_offset_minutes
           home.push({
             position_id: position.position_id,
             role_id: position.role_id,
@@ -166,22 +245,31 @@ export function workstationRoutes(): Route[] {
             items: [...items],
             tile_ids,
             range: position.range,
-            query: await w.queryContext(actor, position, range),
+            query,
           })
         }
         const system = await w.systemCards(actor)
         try {
-          return ok(
-            c,
-            assembleHome({
-              now: deps.clock.now(),
-              positions: home,
-              alerts: system.alerts,
-              ...(system.digest === undefined ? {} : { digest: system.digest }),
-              range,
-              label: (r) => w.label(r),
-            }),
-          )
+          const assembled = assembleHome({
+            now: deps.clock.now(),
+            positions: home,
+            alerts: system.alerts,
+            ...(system.digest === undefined ? {} : { digest: system.digest }),
+            range,
+            // 29 §2 enrichment：ObjectRef → 展示名，以本人身份查；查不到的 ref 在
+            // 投影时就被丢掉，只在 detail.enrichment.dropped_refs 上留个数。
+            label: (r) => w.label(r),
+          })
+          // 筛选 → 合并 → 一次一张。计数按张数（合并前），P0 被筛掉时回带置顶。
+          const filtered = filterCards(assembled.queue, filters)
+          return ok(c, {
+            ...assembled,
+            queue: foldCards(filtered.cards),
+            filters,
+            counts: filtered.counts,
+            pinned_p0: filtered.pinned_p0,
+            battle_report: await todaysReport(deps, p.workspace_id, tz_offset_minutes),
+          })
         } catch (err) {
           return fromDeckError(err)
         }
@@ -214,21 +302,31 @@ export function workstationRoutes(): Route[] {
         method: 'get',
         path: '/v1/positions/:id/cards',
         operationId: 'getPositionCards',
-        summary: '岗位的卡片 Tab（只这个岗位的队列）',
+        summary: '岗位的卡片 Tab（只这个岗位的队列；同一套筛选与合并）',
         tag: 'workstation',
         auth: 'bearer',
         assignment: true,
         authz: READ,
         params: [
           { name: 'id', in: 'path', required: true, description: 'position_id = assignment_id' },
+          ...FILTER_PARAMS,
         ],
-        returns: 'DeckCard[]',
+        returns: '{ position, cards, filters, counts, pinned_p0 }',
       },
       async (c, deps) => {
         const p = principalOf(c)
         const actor: WorkstationActor = { workspace_id: p.workspace_id, person_id: p.person_id }
         const position = await positionOf(c, deps, actor)
-        return ok(c, { position, cards: await cardsOf(deps, actor, position) })
+        // 岗位页天生只看这一个岗位；query 里再传 position_id 也不许换成别的（31 §3.1）。
+        const filters: DeckFilters = { ...filtersOf(c), position_id: position.position_id }
+        const filtered = filterCards(await cardsOf(deps, actor, position), filters)
+        return ok(c, {
+          position,
+          cards: foldCards(filtered.cards),
+          filters,
+          counts: filtered.counts,
+          pinned_p0: filtered.pinned_p0,
+        })
       },
     ),
     route(
