@@ -4,6 +4,15 @@
   "version": "0.0.0",
   "description": "开源本地跨境电商 Agent 中台（DeepSeek Harness 发行版）",
   "license": "Apache-2.0",
+  "homepage": "https://github.com/Luoye-W/agentsws#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Luoye-W/agentsws.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Luoye-W/agentsws/issues"
+  },
+  "author": "agentsws contributors",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"
