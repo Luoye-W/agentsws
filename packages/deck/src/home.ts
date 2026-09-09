@@ -64,14 +64,18 @@ export function assembleHome(input: HomeInput): HomeAssembly {
       if (isAlert(card)) alerts.push(card)
       else queue.push(card)
     }
-    const range = input.range ?? p.range
-    tiles.push({
-      position_id: p.position_id,
-      role_id: p.role_id,
-      role_name: p.role_name,
-      range,
-      tiles: computeTiles(p.tile_ids, p.query, range),
-    })
+    // 没有数字块的岗位（common.member / common.owner 之类）不出数据条，
+    // 但它的卡照样进队列——首页的形状不随岗位数变（06 §1.1）。
+    if (p.tile_ids.length > 0) {
+      const range = input.range ?? p.range
+      tiles.push({
+        position_id: p.position_id,
+        role_id: p.role_id,
+        role_name: p.role_name,
+        range,
+        tiles: computeTiles(p.tile_ids, p.query, range),
+      })
+    }
   }
 
   const sortedQueue = sortCards(queue)

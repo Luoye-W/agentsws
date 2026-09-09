@@ -169,10 +169,10 @@ describe('岗位三 Tab', () => {
     const data = await json<{
       sections: { source: string; connected: boolean; report_url?: string; blocks: unknown[] }[]
     }>(await h.get(`/v1/positions/${h.assignment.id}/view`))
-    expect(data.sections.map((s) => s.source)).toEqual(['shop', 'ga4', 'gsc'])
+    // 售后客服的面板只有店铺后台（它的职责里没有 analytics 域）
+    expect(data.sections.map((s) => s.source)).toEqual(['shop'])
     expect(data.sections[0]?.report_url).toBe('https://admin.shopify.com')
-    expect(data.sections[1]?.connected).toBe(false)
-    expect(data.sections[1]?.report_url).toBeUndefined()
+    expect(data.sections[0]?.connected).toBe(true)
   })
 
   it('记录 Tab 是时间线', async () => {

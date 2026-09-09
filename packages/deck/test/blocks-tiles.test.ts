@@ -52,8 +52,12 @@ describe('组件注册表（29 §7 用例 1）', () => {
 })
 
 describe('岗位面板（36 §3 按数据源分块）', () => {
-  it('售后与运营都有店铺后台 / GA4 / Search Console 三块', () => {
-    const sections = assembleView('dtc.aftersales', queryContext())
+  it('售后客服只有店铺后台（它的职责里没有 analytics 域）', () => {
+    expect(assembleView('dtc.aftersales', queryContext()).map((s) => s.source)).toEqual(['shop'])
+  })
+
+  it('独立站运营有店铺后台 / GA4 / Search Console 三块', () => {
+    const sections = assembleView('dtc.analytics', queryContext())
     expect(sections.map((s) => s.source)).toEqual(['shop', 'ga4', 'gsc'])
     expect(sections[0]?.connected).toBe(true)
     expect(sections[0]?.report_url).toBe('https://admin.shopify.com')
@@ -72,7 +76,7 @@ describe('岗位面板（36 §3 按数据源分块）', () => {
   })
 
   it('至少三种积木：stat_tile、table、chart_line', () => {
-    const components = new Set(blocksForRole('dtc.aftersales').map((b) => b.component))
+    const components = new Set(blocksForRole('dtc.analytics').map((b) => b.component))
     expect(components.has('stat_tile')).toBe(true)
     expect(components.has('table')).toBe(true)
     expect(components.has('chart_line')).toBe(true)

@@ -118,7 +118,8 @@ export class MemoryIdentityService implements IdentityService {
     return Date.parse(this.#clock.now()) >= Date.parse(at)
   }
 
-  async createPerson(input: { email: string; name: string }): Promise<Person> {
+  /** `id` 只给装配用（demo 要让身份的 person_id 与职责库里的 person 对上）；平时不传。 */
+  async createPerson(input: { email: string; name: string; id?: PersonId }): Promise<Person> {
     const email = input.email.trim().toLowerCase()
     if (email === '' || !email.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
     const existing = this.#byEmail.get(email)
@@ -127,7 +128,7 @@ export class MemoryIdentityService implements IdentityService {
       if (person) return person
     }
     const person: Person = {
-      id: this.#id('per'),
+      id: input.id ?? this.#id('per'),
       email,
       name: input.name,
       identities: [{ provider: 'local', external_id: email, verified_at: this.#clock.now() }],
@@ -153,11 +154,13 @@ export class MemoryIdentityService implements IdentityService {
     kind: Workspace['kind']
     tz?: string
     base_currency?: string
+    /** 同 `createPerson.id`：只给装配用。 */
+    id?: WorkspaceId
   }): Promise<Workspace> {
     if (!this.#people.has(input.owner_id))
       throw new ApiError('not_found', `owner 不存在：${input.owner_id}`)
     if (input.name.trim() === '') throw new ApiError('invalid_input', 'name 不能为空')
-    const id = this.#id('ws')
+    const id = input.id ?? this.#id('ws')
     const workspace: Workspace = {
       id,
       schema_version: 1,

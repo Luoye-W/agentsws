@@ -9,6 +9,7 @@
 import { isAbsolute, resolve } from 'node:path'
 import { formatReport, listRuns, replayRun, runSuite, synth, type Tier } from '@agentsws/simulation'
 import { Command } from 'commander'
+import { createDemo, DEMO_SCENARIO } from './demo.js'
 
 const TIERS: Tier[] = ['fast', 'realistic', 'soak']
 
@@ -131,6 +132,37 @@ export function buildProgram(
       }
       for (const p of result.problems) write(`  ! ${p}\n`)
       if (!result.ok) process.exitCode = 1
+    })
+
+  program
+    .command('demo')
+    .description('用合成世界当后端把工作台跑起来（36 §5.7）；只听回环口')
+    .option('--port <n>', '端口', '4317')
+    .option('--root <dir>', '仓库根（packs/ 与 apps/workstation/dist 相对它找）')
+    .option('--static <dir>', '工作台构建产物目录')
+    .action(async (opts: Record<string, unknown>) => {
+      const root = opts.root === undefined ? baseDir() : fromCwd(String(opts.root))
+      const demo = await createDemo({
+        root,
+        port: asInt(String(opts.port), '--port'),
+        quiet: true,
+        ...(opts.static === undefined ? {} : { staticDir: fromCwd(String(opts.static)) }),
+      })
+      const { url } = await demo.server.listen()
+      write(`工作台（合成世界）：${url}\n`)
+      write(`身份：${demo.server.bootstrap.person.email}（打开页面自动登录，不用填任何东西）\n`)
+      write(`工作区：${demo.server.bootstrap.workspace.id}  场景：${DEMO_SCENARIO}\n`)
+      write('Ctrl-C 退出\n')
+      // 批准之后由执行器施行（15 §5 通过 ≠ 施行）；每两秒看一次有没有东西要施行
+      const timer = setInterval(() => {
+        void demo.drain()
+      }, 2000)
+      const stop = (): void => {
+        clearInterval(timer)
+        void demo.close().then(() => process.exit(0))
+      }
+      process.on('SIGINT', stop)
+      process.on('SIGTERM', stop)
     })
 
   return program

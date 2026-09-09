@@ -1,17 +1,43 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/core" },
-    { "path": "../../packages/kernel" },
-    { "path": "../../packages/data" },
-    { "path": "../../packages/roles" },
-    { "path": "../../packages/knowledge" },
-    { "path": "../../packages/skills" },
-    { "path": "../../packages/model-gateway" },
-    { "path": "../../packages/txn" },
-    { "path": "../../packages/api" }
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/deck"
+    },
+    {
+      "path": "../../packages/kernel"
+    },
+    {
+      "path": "../../packages/data"
+    },
+    {
+      "path": "../../packages/roles"
+    },
+    {
+      "path": "../../packages/knowledge"
+    },
+    {
+      "path": "../../packages/skills"
+    },
+    {
+      "path": "../../packages/model-gateway"
+    },
+    {
+      "path": "../../packages/txn"
+    },
+    {
+      "path": "../../packages/api"
+    }
   ]
 }

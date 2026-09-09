@@ -29,6 +29,15 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@agentsws/deck':
+        specifier: workspace:*
+        version: link:../../packages/deck
+      '@agentsws/roles':
+        specifier: workspace:*
+        version: link:../../packages/roles
+      '@agentsws/server':
+        specifier: workspace:*
+        version: link:../server
       '@agentsws/simulation':
         specifier: workspace:*
         version: link:../../packages/simulation
@@ -50,6 +59,9 @@ importers:
       '@agentsws/data':
         specifier: workspace:*
         version: link:../../packages/data
+      '@agentsws/deck':
+        specifier: workspace:*
+        version: link:../../packages/deck
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
