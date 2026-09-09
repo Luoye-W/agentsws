@@ -215,6 +215,16 @@ export interface ConnectionsAssembly {
   mailAccounts(): MailAccount[]
   /** 交给 `@agentsws/channels` 的凭据来源：按连接 id 从加密库取口令。 */
   credentialSource(): { password(ref: { connection_id: string }): string }
+  /**
+   * WP34：邮箱连接**变了**（新增 / 改口令 / 断开）时叫一声。
+   *
+   * 渠道装配（`./channels.ts`）拿它做热更新——用户在连接页加一个邮箱，
+   * 下一轮轮询就该开始收信，而不是等重启。返回取消订阅的函数。
+   *
+   * 回调里**不带任何凭据**，连 id 都只是「有变动」的信号：订阅者自己再去
+   * `mailAccounts()` 取一份新的。
+   */
+  onMailChange(listener: () => void): () => void
   /** 把工作台数据源包一层：连接状态从真实连接算（36 §3）。 */
   wrapDataSource(base: WorkstationDataSource): WorkstationDataSource
   close(): void
@@ -1071,6 +1081,8 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           },
         })
         await listAll()
+        // 热更新：下一轮轮询就该开始收这个邮箱，不必等重启
+        notifyMailChange()
         // 存完立刻试一次连：用户点一次按钮就该知道成没成
         const test = rememberTest(id, await smokeLocal(id))
         const view = localView(meta)
@@ -1109,6 +1121,8 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           payload: { connection_id: id, store: 'local_vault' },
         })
         await listAll()
+        // 热更新：断开的邮箱要立刻停掉轮询，别再拿一份已经删掉的口令去登录
+        notifyMailChange()
         return
       }
       await connect.removeConnection(id)
@@ -1160,6 +1174,18 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     },
   }
 
+  // WP34 热更新：邮箱连接有变动就叫一声（不带凭据，只是「有变动」这个信号）
+  const mailListeners = new Set<() => void>()
+  const notifyMailChange = (): void => {
+    for (const fn of [...mailListeners]) {
+      try {
+        fn()
+      } catch {
+        // 一个订阅者炸了不该拖垮连接面：连接已经存好了，热更新失败下一轮轮询会自愈
+      }
+    }
+  }
+
   // 到期前 1 小时换新令牌。定时器只在服务进程装配时起（`refreshIntervalMs`），
   // 而且 `unref()`——它不该拦着进程退出。
   const refreshTokens = async (): Promise<void> => {
@@ -1183,6 +1209,10 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     mailAccounts: () =>
       state.local.map((m) => accountOf(m.id)).filter((a): a is MailAccount => a !== undefined),
     credentialSource: () => credentialSource,
+    onMailChange(listener) {
+      mailListeners.add(listener)
+      return () => mailListeners.delete(listener)
+    },
     wrapDataSource(base) {
       return {
         ...base,

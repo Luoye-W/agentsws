@@ -1,4 +1,4 @@
-import type { ChannelName, MaybePromise } from '@agentsws/contracts'
+import type { ChannelName, Clock, MaybePromise } from '@agentsws/contracts'
 import type { RawCipher, RawRecordBase, RawStorePort } from '@agentsws/core'
 import { ChannelError } from './errors.js'
 
@@ -34,11 +34,21 @@ export interface RawStore extends RawStorePort<RawRecord> {
    * 再删掉这个主体在本库里的行。两件事都做，才叫删干净。
    */
   eraseSubject(subject: string): MaybePromise<EraseSubjectResult>
+  /**
+   * 18 §2.1 保留期：丢掉 `retentionMs` 之前落进来的材料，返回删掉的条数。
+   *
+   * WP34 把它提上接口：以前只有 SQLite 档有这个方法，装配方拿到的是
+   * `RawStore` 类型就调不着——于是「谁来定时调 prune」这条待办连挂都没处挂
+   * （39 待办 H）。两档都要有，保留期才是一条纪律而不是一个实现细节。
+   */
+  prune(retentionMs: number, clock?: Clock): MaybePromise<number>
 }
 
 export interface MemoryRawStoreOptions {
   /** 给了就按主体加密（`@agentsws/data` 的 `SubjectKeyring`）。 */
   cipher?: RawCipher
+  /** `prune` 用；构造时不给就每次调用时给。 */
+  clock?: Clock
 }
 
 /**
@@ -50,10 +60,12 @@ export class MemoryRawStore implements RawStore {
   /** 已封装的载荷（明文不留在 Map 里）。 */
   private readonly sealed = new Map<string, { subject: string; bytes: Uint8Array }>()
   private readonly cipher: RawCipher | undefined
+  private readonly clock: Clock | undefined
   private seq = 0
 
   constructor(options: MemoryRawStoreOptions = {}) {
     this.cipher = options.cipher
+    this.clock = options.clock
   }
 
   put(input: Omit<RawRecord, 'ref'>): string {
@@ -96,6 +108,22 @@ export class MemoryRawStore implements RawStore {
       return
     }
     this.records.set(ref, { ...stored, payload: text, secrets_scrubbed: true })
+  }
+
+  /** 18 §2.1 保留期：与 SQLite 档同语义（按落库时间，一致性套件两档同跑）。 */
+  prune(retentionMs: number, clock?: Clock): number {
+    const c = clock ?? this.clock
+    if (c === undefined)
+      throw new ChannelError('invalid_input', 'prune 需要一个 Clock（构造时给或调用时给）')
+    const cutoff = Date.parse(c.now()) - retentionMs
+    let n = 0
+    for (const [ref, rec] of [...this.records]) {
+      if (Date.parse(rec.stored_at) > cutoff) continue
+      this.records.delete(ref)
+      this.sealed.delete(ref)
+      n += 1
+    }
+    return n
   }
 
   eraseSubject(subject: string): EraseSubjectResult {

@@ -17,6 +17,14 @@ export {
   UPSTREAM_TO_SERVICE,
 } from './catalog.js'
 export {
+  type ChannelsAssembly,
+  type ChannelsOptions,
+  createChannels,
+  forDisplay,
+  type MailPollReport,
+  OUTBOUND_HALTED,
+} from './channels.js'
+export {
   CONNECT_URL_ENV,
   connectBaseUrl,
   DEFAULT_CONNECT_URL,

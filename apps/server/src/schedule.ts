@@ -668,7 +668,10 @@ export interface SchedulePlanOptions {
     skills?: boolean
     /** WP34：审批过期与升级（总是该有——审批总线一定在） */
     approvals?: boolean
-    /** WP34：邮箱轮询（有邮箱连接才建，没有就不出现一条永远拉零的任务） */
+    /**
+     * WP34：邮箱轮询。**一个邮箱都没连也照建**——用户在连接页加一个邮箱之后
+     * 不必重启就开始收信（与会议轮询同一条道理：拉到零条不花钱，装配变了不用改一行）。
+     */
     mail?: boolean
     /** WP34：受控原始材料区的保留期清理 */
     raw?: boolean

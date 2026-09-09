@@ -54,6 +54,7 @@ import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
+import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
 import { createApprovalDirectory } from './housekeeping.js'
@@ -69,13 +70,16 @@ import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './
 import {
   createScheduleAssembly,
   createSchedulePort,
+  DEFAULT_RAW_RETENTION_DAYS,
   ensureSystemTasks,
   offsetToTz,
   registerApprovalHousekeeping,
   registerDailyPlan,
   registerIdempotencySweep,
+  registerMailPoll,
   registerMeetingPoll,
   registerPlanRelay,
+  registerRawPrune,
   registerReview,
   registerSkillsWeekly,
   registerTokenRefresh,
@@ -191,6 +195,12 @@ export interface ServerOptions {
    */
   scheduleIntervalMs?: number
   /**
+   * WP34 渠道的测试注入：收信端与发信端。
+   * 生产路径一个都不传，各自走真实现（imapflow / nodemailer）。
+   */
+  mailSource?: ChannelsOptions['makeSource']
+  mailer?: ChannelsOptions['makeMailer']
+  /**
    * 15 §5.8 对账时的「这条到底写进去没有」回查。
    *
    * 缺省问后端自己（`MemoryBackend.verify`）。真接了平台之后这里换成按
@@ -224,6 +234,8 @@ export interface Server {
   meetings: MeetingsAssembly
   /** WP20 连接面（连接向导 / 本机加密秘密库 / 连接状态回灌工作台）。 */
   connections: ConnectionsAssembly
+  /** WP34 渠道面（IMAP 轮询 / 入站管线 / 受控原始材料区 / 出站发信）。 */
+  channels: ChannelsAssembly
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
@@ -361,6 +373,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workspace_id: () => bootstrapWorkspace,
   })
 
+  // 渠道排在 txn 之后装（它要 work / connections / startRun），但执行器的出站回调
+  // 现在就要指向它——所以先留一个空壳引用，装到那一步再填。
+  let channels: ChannelsAssembly | undefined
+
   const backend = new MemoryBackend()
   // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
   const idempotencyStore =
@@ -381,7 +397,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     readRecord: (target) => backend.read(target),
     backendApply: (change, opts) => backend.apply(change, opts),
-    deliverOutbound: (item, opts) => backend.deliver(item, opts),
+    // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
+    // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
+    deliverOutbound: async (item, opts) =>
+      (await channels?.deliver(item, opts)) ?? backend.deliver(item, opts),
   })
 
   const identity: LocalIdentityService =
@@ -507,7 +526,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   }
 
-  // ── 25 定时与流程：调度器 + 七个消费者 ───────────────────────────────
+  // ── 18 渠道：IMAP 轮询 + 入站管线 + 出站发信（39 待办 C）────────────────
+  // 位置有讲究：要在 connections（拿邮箱参数与口令来源）、work（入站落成事项）、
+  // runtime（起 Run）之后；在调度器之前，因为轮询是调度器的一个消费者。
+  channels = createChannels({
+    clock,
+    workspace_id: workspace.id,
+    appendEvent,
+    halt: kernel.halt,
+    // 18 §2.1 第一条纪律：受控原始材料区加密。与会议档共用同一个密钥环，
+    // **但不共用它的表**（35 §2）。漏了这一行，邮件原文就是明文落盘。
+    cipher: data.keyring,
+    accounts: () => connections.mailAccounts(),
+    credentials: connections.credentialSource(),
+    work,
+    // 入站事项挂谁名下：本人现在持有的第一条岗位（v1 单人单工作区）。
+    // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
+    position: () => {
+      const first = roles.assignments
+        .listByPerson(person.id, { workspace_id: workspace.id })
+        .find((a) => a.revoked_at === undefined)
+      return first === undefined
+        ? undefined
+        : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
+    },
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(startRun === undefined ? {} : { startRun }),
+    ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
+    ...(options.mailer === undefined ? {} : { makeMailer: options.mailer }),
+  })
+  // 连接页新增 / 断开邮箱 → 下一轮轮询就换成新的那一份，不必重启
+  connections.onMailChange(() => {
+    channels?.refresh()
+  })
+
+  // ── 25 定时与流程：调度器 + 各个消费者 ───────────────────────────────
   // 装配的位置有讲究：要在 work / meetings / connections / skills 都起来之后，
   // 因为七个消费者就是它们；但在网关之前，因为 `/v1/schedules` 要用它。
   const schedule = createScheduleAssembly({
@@ -593,6 +646,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // ⑧ 审批过期与升级（39 待办 A）：模拟回路每 tick 调一次，真机器每分钟调一次。
   //    预占的「过期释放」也挂在这条上——15 §3.2 (d) 的释放是跟着审批项过期走的。
   registerApprovalHousekeeping(schedule.scheduler, { approvals })
+  // ⑨ 邮箱轮询 + 入站管线的重试推进（39 待办 C）
+  registerMailPoll(schedule.scheduler, { poll: () => (channels as ChannelsAssembly).poll() })
+  // ⑩ 受控原始材料区的保留期（39 待办 H）：两个库各清各的，表不共享（35 §2）
+  registerRawPrune(schedule.scheduler, {
+    clock,
+    // 保留天数进策略层：`global_caps.raw_retention_days`，缺省 90 天
+    retentionDays: () =>
+      roles.policies.get(workspace.id)?.global_caps?.raw_retention_days ??
+      DEFAULT_RAW_RETENTION_DAYS,
+    channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
+    meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
+  })
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -607,6 +672,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       shopify: true,
       skills: true,
       approvals: true,
+      mail: true,
+      raw: true,
     },
   })
 
@@ -809,6 +876,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work,
     meetings,
     connections,
+    channels,
     modelSettings,
     org,
     secrets,
@@ -866,6 +934,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (options.mount === undefined) roles.close()
       meetings.close()
       schedule.close()
+      await channels?.close()
       connections.close()
       org.close()
       secrets.close()
