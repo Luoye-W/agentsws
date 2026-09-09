@@ -15,5 +15,5 @@ const { approvals, ledger, executor } = createTxn({ clock, random, eventSink, st
   重算执行快照；三态结果 applied / failed / unknown（unknown 走 reconcile）；同目标同 kind 串行；
   批准后取消窗口；父子顺序（回信必须在子退款 applied 之后）。
 
-存储接口 `TxnStore`（默认 `MemoryTxnStore`，便于以后换 SQLite）；时间经 `Clock`、随机经注入、
+存储接口 `TxnStore` 两档：默认 `MemoryTxnStore`（测试与 fast 档模拟），落盘用 `SqliteTxnStore`（WP18，同一份契约一致性套件两档各跑一遍）；时间经 `Clock`、随机经注入、
 事件按 `EventEnvelope` 形状交给 `eventSink`（不依赖 kernel 包）。`staged_action` v1 关闭。
