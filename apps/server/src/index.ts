@@ -6,6 +6,13 @@
  */
 export { type BackendCall, MemoryBackend } from './backend.js'
 export {
+  createRuntime,
+  hasModelProvider,
+  type MatterRecordSource,
+  type RuntimeAssembly,
+  type RuntimeOptions,
+} from './runtime.js'
+export {
   type Bootstrap,
   BUNDLED_ROLES,
   createServer,

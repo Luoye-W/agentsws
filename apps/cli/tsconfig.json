@@ -19,6 +19,9 @@
       "path": "../../packages/simulation"
     },
     {
+      "path": "../../packages/stand-ins"
+    },
+    {
       "path": "../../packages/work"
     },
     {

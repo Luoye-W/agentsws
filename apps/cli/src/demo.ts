@@ -23,10 +23,16 @@ import type {
 } from '@agentsws/contracts'
 import type { DataSourceStatus, DeckCard, OrderRow } from '@agentsws/deck'
 import { parseRole } from '@agentsws/roles'
-import type { MountedWorld, Server, WorkstationDataSource } from '@agentsws/server'
+import type {
+  MatterRecordSource,
+  MountedWorld,
+  Server,
+  WorkstationDataSource,
+} from '@agentsws/server'
 import { createServer, periodQueryRunner } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
+import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
@@ -121,6 +127,28 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
     tz_offset_minutes: 480,
     base_currency: pack.workspace.base_currency,
     systemCards: () => ({ alerts }),
+  }
+}
+
+/**
+ * 事项现场的记录来源（37 §2.2b）：委托与「在事项里说话」起 Run 时，
+ * pinned 的订单 / 客户按本人身份取真记录注入，收件人只从这里解析（31 §3.3）。
+ */
+function recordSourceOf(world: World, pack: Pack): MatterRecordSource {
+  return {
+    record: (ref: ObjectRef) => {
+      if (ref.type === 'order') return world.connect.state.orders.find((o) => o.id === ref.id)
+      if (ref.type === 'customer') return pack.customers.find((c) => c.id === ref.id)
+      return undefined
+    },
+    label: (ref: ObjectRef) => {
+      if (ref.type === 'customer') return pack.customers.find((c) => c.id === ref.id)?.name
+      if (ref.type === 'order') return world.connect.state.orders.find((o) => o.id === ref.id)?.name
+      return undefined
+    },
+    contactOf: (email: string) => world.customerRefOf(email),
+    readToken: () => world.issueReadToken(),
+    executeTool: connectToolExecutor(world.connect),
   }
 }
 
@@ -469,8 +497,15 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     random: world.random,
     mount,
     staticDir,
+    // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
+    records: recordSourceOf(world, pack),
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),
-    env: { ...process.env, AGENTSWS_PORT: String(options.port ?? 4317) },
+    env: {
+      ...process.env,
+      // demo 一律 stub 运行时：即使机器上配了 DEEPSEEK_API_KEY 也不叫模型
+      DEEPSEEK_API_KEY: '',
+      AGENTSWS_PORT: String(options.port ?? 4317),
+    },
   })
 
   /**

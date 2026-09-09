@@ -37,7 +37,13 @@
       "path": "../../packages/roles"
     },
     {
+      "path": "../../packages/runtime-direct"
+    },
+    {
       "path": "../../packages/skills"
+    },
+    {
+      "path": "../../packages/stand-ins"
     },
     {
       "path": "../../packages/txn"

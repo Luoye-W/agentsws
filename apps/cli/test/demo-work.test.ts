@@ -180,13 +180,59 @@ describe('demo 的工作模型（37）', () => {
     expect(list.reviews[0]?.id).toBe(review.id)
   })
 
-  it('没装运行时的进程：委托与在事项里说话回 not_implemented，其余照常', async () => {
-    const { todos } = await data<{ todos: Todo[] }>(await call('/v1/todos?horizon=backlog'))
-    const target = todos[0]
-    if (target === undefined) throw new Error('待办箱是空的')
-    const res = await call(`/v1/todos/${target.id}/delegate`, { method: 'POST', body: {} })
-    expect(res.status).toBe(501)
-    expect(((await res.json()) as { code: string }).code).toBe('not_implemented')
+  it('委托：起真 Run → 卡出现在待办上 → 事项时间线有 run 事件（37 §2.1 交点一）', async () => {
+    const { matters } = await data<{ matters: Matter[] }>(await call('/v1/matters'))
+    const matter = matters.find((m) => m.kind === 'conversation')
+    if (matter === undefined) throw new Error('demo 没种出 conversation 事项')
+    const todo = await data<{ todo: Todo }>(
+      await call('/v1/todos', {
+        method: 'POST',
+        body: { title: '替我回一下 Anna 这封信', matter_id: matter.id },
+      }),
+      201,
+    )
+    const before = (await data<MatterView>(await call(`/v1/matters/${matter.id}`))).timeline.length
+
+    const out = await data<{ todo: Todo }>(
+      await call(`/v1/todos/${todo.todo.id}/delegate`, {
+        method: 'POST',
+        body: { brief: 'Anna 想退 #1001，帮我按政策回一封' },
+      }),
+    )
+    // 委托状态与 run 都回填到了待办上
+    expect(out.todo.delegate?.state).toBeDefined()
+    expect(out.todo.runs).toHaveLength(1)
+    expect(out.todo.matter_id).toBe(matter.id)
+    // Run 里产生的卡挂回这条待办（subject.todo_id）
+    expect(out.todo.cards.length).toBeGreaterThan(0)
+    const card = await data<{ id: string; kind: string; subject: { todo_id?: string } }>(
+      await call(`/v1/approvals/${out.todo.cards[0]}`),
+    )
+    expect(card.subject.todo_id).toBe(todo.todo.id)
+
+    // 事项时间线上有这次运行，摘要被 onRunCompleted 更新过
+    const view = await data<MatterView>(await call(`/v1/matters/${matter.id}`))
+    expect(view.timeline.length).toBeGreaterThan(before)
+    const runs = view.timeline.filter((e) => e.kind === 'run')
+    expect(runs.some((e) => e.run_id === out.todo.runs[0])).toBe(true)
+    expect(view.matter.context.summary).not.toBe('')
+  })
+
+  it('事项发言：说一句 → 起 Run → 时间线上人话与 Agent 的运行都在（对话入口第四处）', async () => {
+    const { matters } = await data<{ matters: Matter[] }>(await call('/v1/matters'))
+    const matter = matters.find((m) => m.kind === 'conversation')
+    if (matter === undefined) throw new Error('demo 没种出 conversation 事项')
+    const out = await data<{ event: { kind: string; text: string }; run_id?: string }>(
+      await call(`/v1/matters/${matter.id}/messages`, {
+        method: 'POST',
+        body: { text: '这封信按 14 天窗口回，别自己拍板退款' },
+      }),
+      201,
+    )
+    expect(out.event.kind).toBe('human_message')
+    expect(out.run_id).toBeDefined()
+    const view = await data<MatterView>(await call(`/v1/matters/${matter.id}`))
+    expect(view.timeline.some((e) => e.run_id === out.run_id)).toBe(true)
   })
 
   it('全程没有任何 model.* 事件（stub 运行时根本不叫模型）', () => {

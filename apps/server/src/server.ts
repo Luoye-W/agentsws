@@ -52,6 +52,7 @@ import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
 import { MemoryBackend } from './backend.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
+import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import { mountStatic } from './static.js'
 import { createWorkPort } from './work.js'
 import {
@@ -100,10 +101,13 @@ export interface ServerOptions {
   /** demo：把模拟世界接进来（同一进程）。 */
   mount?: MountedWorld
   /**
-   * 37 委托与「在事项里说话」都要起 Run；本进程还没装运行时适配器，
-   * 由调用方（demo / 桌面壳）注入。不给的话那两条路回 not_implemented，其余照常。
+   * 37 委托与「在事项里说话」都要起 Run。缺省由 `./runtime.ts` 自己装一个运行时适配器
+   * （有模型 provider 配置就走 direct-llm，否则 stub）；调用方也可以自己塞一个进来。
+   * 显式给 `false` 就是「这个进程不跑运行时」——那两条路回 not_implemented，其余照常。
    */
-  startRun?: StartRun
+  startRun?: StartRun | false
+  /** 事项现场的记录来源（订单 / 客户 / 联系人 / 工具执行器）；demo 由合成世界提供。 */
+  records?: MatterRecordSource
 }
 
 export interface Bootstrap {
@@ -127,6 +131,8 @@ export interface Server {
   work: Work
   /** 37 §4 会议内核（存储 / 受控原始材料区 / 处理管线 / 端口）。 */
   meetings: MeetingsAssembly
+  /** 17 §4 运行时适配器 + `startRun`；`startRun: false` 时没有。 */
+  runtime?: RuntimeAssembly
   identity: LocalIdentityService
   backend: MemoryBackend
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
@@ -274,14 +280,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const approvals = mount?.approvals ?? txn.approvals
   const workData = mount?.data ?? emptyDataSource()
+
+  // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
+  const runtime: RuntimeAssembly | undefined =
+    options.startRun === false || typeof options.startRun === 'function'
+      ? undefined
+      : createRuntime({
+          workspace_id: workspace.id,
+          clock,
+          random,
+          env,
+          models,
+          approvals,
+          roles,
+          appendEvent,
+          ...(options.records === undefined ? {} : { source: options.records }),
+        })
+  const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
+
   const work = createWork({
     workspace_id: workspace.id,
     clock,
     random,
     tz_offset_minutes: workData.tz_offset_minutes,
     ...(workStore === undefined ? {} : { store: workStore }),
-    ...(options.startRun === undefined ? {} : { startRun: options.startRun }),
+    ...(startRun === undefined ? {} : { startRun }),
   })
+  runtime?.bind(work)
 
   // 37 §4：会议内核。ASR 走同一个模型网关（没装 ASR provider 时管线出系统卡，不炸）；
   // 产出的认领卡进同一条审批队列（14 §1），挂在本人的岗位下，所以装在 txn 与 Assignment 之后。
@@ -402,6 +427,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     txn,
     work,
     meetings,
+    ...(runtime === undefined ? {} : { runtime }),
     identity,
     backend,
     traceScope,
