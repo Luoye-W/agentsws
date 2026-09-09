@@ -11,9 +11,9 @@ scopes:
   - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: shipment, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: customer, ops: [read, stage], range: assigned, max_sensitivity: internal }
-  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read, stage], range: workspace, max_sensitivity: internal }
   - { domain: discount, ops: [stage], range: assigned, max_sensitivity: internal }
-  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage, approve], range: own, max_sensitivity: internal }
   - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
 
 connectors:

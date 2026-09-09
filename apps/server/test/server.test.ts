@@ -393,13 +393,20 @@ describe('端到端：stage → 队列 → 批准 → 施行 → 账本 → 事�
 
   it('知识 / 技能 / 职责路由在真装配下也通', async () => {
     const { server } = ctx
-    // 知识域的读权限在售后职责上，owner 职责没有——换 Assignment（不做并集）
-    const forbidden = await api('/v1/knowledge/health')
+    // 一次请求一个 Assignment，**不做并集**：策略层在 owner 职责上，售后职责没有
+    const forbidden = await api(`/v1/workspaces/${server.bootstrap.workspace.id}/policy`, {
+      assignment: ctx.aftersales.id,
+    })
     expect(forbidden.status).toBe(403)
+    expect((await api(`/v1/workspaces/${server.bootstrap.workspace.id}/policy`)).status).toBe(200)
+
+    // WP35：owner 职责补了 knowledge 的 read / stage（19 §4 的缺口 owner 也要能提），
+    // 所以知识域两个 Assignment 都通
     const health = await data<{ total: number }>(
       await api('/v1/knowledge/health', { assignment: ctx.aftersales.id }),
     )
     expect(health.total).toBe(0)
+    expect((await api('/v1/knowledge/health')).status).toBe(200)
     const search = await data<{ hits: unknown[]; relevant: boolean }>(
       await api('/v1/knowledge/search', {
         method: 'POST',

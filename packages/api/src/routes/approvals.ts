@@ -37,15 +37,23 @@ const DECIDE = {
   sensitivity: 'internal',
 } as const
 /**
- * 人主动建审批项（14 §10 表里第一行「人也可（`kind: policy_change` 等）」）的准入。
+ * 人主动建审批项（14 §10 表里第一行「人也可（`kind: policy_change` 等）」）的准入：
+ * **`approval.stage`**——提议 ≠ 决定，这正是 SoD 的前提。
  *
- * 元组上**该**是 `approval.stage`（提议 ≠ 决定，这正是 SoD 的前提），但 v1 的三个职责包
- * 里没有一条给 `approval` 域的 `stage`——真给了 `stage` 元组，连售后客服提一条「以后都这样」
- * 都会 403。所以准入沿用 `read`（能看见自己队列的人可以往里提一张），**写侧的纪律在处理器里**：
- * 提议者一律是调用者本人、工作区一律是本人的、自动化等级一律 L1 且不自动通过、
- * 决定与施行仍然走 14 的原状态机。给职责包补 `approval.stage` 的建议写在交付报告里。
+ * WP33 时三个职责包一条 `approval.stage` 都没给，真按 `stage` 判会让所有人 403，于是
+ * 暂时沿用了 `read`；WP35 给 `common.owner` / `common.member` / `dtc.aftersales` 都补上了
+ * stage（owner workspace、另两个 own），这里改回该有的那一条。范围要 `own` 就够：
+ * 提议的是自己那一张，owner 的 workspace 覆盖它。
+ *
+ * 写侧的纪律仍在处理器里：提议者一律是调用者本人、工作区一律是本人的、
+ * 等级一律 L1 且不自动通过、决定与施行走 14 的原状态机。
  */
-const PROPOSE = READ
+const PROPOSE = {
+  domain: 'approval',
+  op: 'stage',
+  range: 'own',
+  sensitivity: 'internal',
+} as const
 
 const ACTIONS = ['approve', 'approve_edited', 'reject', 'redirect', 'defer', 'withdraw'] as const
 /**

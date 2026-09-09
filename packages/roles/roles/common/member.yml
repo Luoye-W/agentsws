@@ -1,14 +1,16 @@
 # 04 §7 公司通用职责：加入工作区自动获得，不属于任何岗位。
-# 个人任务、个人队列、日报阅读、知识库检索（按权限）。没有任何写操作。
+# 个人任务、个人队列、日报阅读、知识库检索（按权限）。
+# 只有 stage（提议），没有 approve / apply：14 §10「人也可提一张卡」、19 §4「答一条缺口」
+# 都是提议，批不批是别人的事——真正的写仍然只经审批项。
 id: common.member
 version: 1.0.0
 domain: common
 name: { zh: 工作区成员, en: Workspace Member }
-description: 个人任务与个人队列、日报阅读、按权限检索知识库；不含任何写操作
+description: 个人任务与个人队列、日报阅读、按权限检索知识库；只能提议（stage），不能批准或施行
 
 scopes:
-  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
-  - { domain: approval, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read, stage], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage], range: own, max_sensitivity: internal }
   - { domain: analytics, ops: [read], range: own, max_sensitivity: internal }
   - { domain: event_log, ops: [read], range: own, max_sensitivity: internal }
 

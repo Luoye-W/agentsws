@@ -1338,7 +1338,7 @@
         ],
         "x-authz": {
           "domain": "approval",
-          "op": "read",
+          "op": "stage",
           "range": "own",
           "sensitivity": "internal"
         },
@@ -5697,7 +5697,7 @@
         ],
         "x-authz": {
           "domain": "knowledge",
-          "op": "read",
+          "op": "stage",
           "range": "workspace",
           "sensitivity": "internal"
         },
@@ -5964,7 +5964,7 @@
         ],
         "x-authz": {
           "domain": "knowledge",
-          "op": "read",
+          "op": "stage",
           "range": "workspace",
           "sensitivity": "internal"
         },
@@ -6149,7 +6149,7 @@
         ],
         "x-authz": {
           "domain": "knowledge",
-          "op": "read",
+          "op": "stage",
           "range": "workspace",
           "sensitivity": "internal"
         },
