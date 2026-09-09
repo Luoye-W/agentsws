@@ -26,6 +26,9 @@
       "path": "packages/data"
     },
     {
+      "path": "packages/deck"
+    },
+    {
       "path": "packages/dsh-adapter"
     },
     {
