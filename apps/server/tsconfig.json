@@ -7,10 +7,16 @@
   "include": ["src"],
   "references": [
     {
+      "path": "../../packages/api"
+    },
+    {
       "path": "../../packages/contracts"
     },
     {
       "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/data"
     },
     {
       "path": "../../packages/deck"
@@ -19,25 +25,22 @@
       "path": "../../packages/kernel"
     },
     {
-      "path": "../../packages/data"
-    },
-    {
-      "path": "../../packages/roles"
-    },
-    {
       "path": "../../packages/knowledge"
-    },
-    {
-      "path": "../../packages/skills"
     },
     {
       "path": "../../packages/model-gateway"
     },
     {
+      "path": "../../packages/roles"
+    },
+    {
+      "path": "../../packages/skills"
+    },
+    {
       "path": "../../packages/txn"
     },
     {
-      "path": "../../packages/api"
+      "path": "../../packages/work"
     }
   ]
 }

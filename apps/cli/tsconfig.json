@@ -1,12 +1,28 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/deck" },
-    { "path": "../../packages/roles" },
-    { "path": "../../packages/simulation" },
-    { "path": "../server" }
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/deck"
+    },
+    {
+      "path": "../../packages/roles"
+    },
+    {
+      "path": "../../packages/simulation"
+    },
+    {
+      "path": "../../packages/work"
+    },
+    {
+      "path": "../server"
+    }
   ]
 }

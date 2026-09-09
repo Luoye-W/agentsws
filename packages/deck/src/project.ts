@@ -220,7 +220,7 @@ export function sourceOf(item: ApprovalItem, kind: DeckKind): DeckSource {
   const subjectType = item.subject.object.type
   if (subjectType === 'thread' || subjectType === 'message' || subjectType === 'customer')
     return 'conversation'
-  if (item.subject.work_item_id !== undefined) return 'todo'
+  if (item.subject.todo_id !== undefined || item.subject.work_item_id !== undefined) return 'todo'
   return 'system'
 }
 
@@ -295,7 +295,9 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     CHANNEL_OF[str(payload.channel) ?? ''] ??
     (kind === 'system_alert' || kind === 'digest' ? 'system' : undefined)
   const entities = entityChipsOf(item, ctx)
-  const matter_id = item.subject.work_item_id
+  // 37 §2.2b：事项 = 正名后的 work_item；两者同值，优先读新名
+  const matter_id = item.subject.matter_id ?? item.subject.work_item_id
+  const todo_id = item.subject.todo_id
   const matter_label =
     matter_id === undefined ? undefined : ctx.label?.({ type: 'work_item', id: matter_id })
 
@@ -315,6 +317,7 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     ...(channel === undefined ? {} : { channel }),
     ...(matter_id === undefined ? {} : { matter_id }),
     ...(matter_label === undefined ? {} : { matter_label }),
+    ...(todo_id === undefined ? {} : { todo_id }),
     source: sourceOf(item, kind),
     highlights: highlightsOf(item, ctx),
     evidence_chips: evidenceChipsOf(item, ctx),

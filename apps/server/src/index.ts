@@ -17,6 +17,12 @@ export {
 } from './server.js'
 export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
 export {
+  createWorkModel,
+  createWorkPort,
+  periodQueryRunner,
+  type WorkPortOptions,
+} from './work.js'
+export {
   createWorkstationPort,
   emptyDataSource,
   type WorkstationDataSource,

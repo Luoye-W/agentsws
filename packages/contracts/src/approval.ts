@@ -11,6 +11,7 @@ import type {
   RunId,
   WorkspaceId,
 } from './common.js'
+import type { MatterId, TodoId } from './work.js'
 
 /** 14 §1 审批项种类 */
 export type ApprovalKind =
@@ -31,6 +32,10 @@ export type ApprovalKind =
   | 'dev_handoff_result'
   /** WP17：本条对话的一次性缺资料提问（去重键带 conversation）；与 policy_change（一答定终身）分开 */
   | 'ai_question'
+  /** WP22 / 37 §2.4：早上的每日计划建议卡（选择题：采纳 / 调整 / 稍后）；payload = DailyPlanDraft */
+  | 'daily_plan'
+  /** WP22 / 37 §2.4：晚上的复盘卡；payload = ReviewDraft，含明天的计划草案 */
+  | 'review'
 
 export type ApprovalState =
   | 'proposed'
@@ -128,7 +133,19 @@ export interface ApprovalItem<P = unknown> {
   revision: number
   role_id: RoleId
   range?: RangeRef[]
-  subject: { object: ObjectRef; work_item_id?: string; conversation_id?: string }
+  subject: {
+    object: ObjectRef
+    /**
+     * 37 §2.2b：`work_item` 的正式形态就是 `Matter`。
+     * `matter_id` 是正名后的字段；`work_item_id` 暂留为别名（同一个 id），等调用方都迁完再删。
+     */
+    matter_id?: MatterId
+    /** @deprecated 用 `matter_id`；WP22 起两者同值 */
+    work_item_id?: string
+    /** 37 §2.1 交点一：待办委托给 Agent，Run 里产生的卡挂回这条待办 */
+    todo_id?: TodoId
+    conversation_id?: string
+  }
   dedupe_key: string
   title: string
   summary: string

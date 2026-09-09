@@ -1,0 +1,298 @@
+/**
+ * 37 工作模型端口的服务端实现。
+ *
+ * 这一层只做装配：`@agentsws/work` 出逻辑，审批总线出卡片，数据源出订单行，
+ * 目标指标按 29 的命名查询名在服务端算（数字不经模型手）。
+ *
+ * 一条边界：**委托与在事项里说话都要起 Run**，运行时由调用方注入（`startRun`）；
+ * 没注入时这两条路回 `not_implemented`，其余照常——工作台仍然能记事项、待办、目标。
+ */
+import type { WorkActor, WorkHome, WorkPort } from '@agentsws/api'
+import type {
+  ApprovalItem,
+  CalendarItem,
+  Clock,
+  Goal,
+  GoalProgress,
+  Iso8601,
+  PersonId,
+  StartRun,
+  Todo,
+  WorkStore,
+} from '@agentsws/contracts'
+import type { OrderRow } from '@agentsws/deck'
+import {
+  battleReport,
+  buildReview,
+  type CalendarSources,
+  type CardOutcome,
+  cardRefOf,
+  createWork,
+  DAY_MS,
+  ms,
+  planSummary,
+  planTitle,
+  type QueryRunner,
+  reviewSummary,
+  reviewTitle,
+  type ScheduledTaskLike,
+  type Work,
+} from '@agentsws/work'
+
+/** 队列上还等着人的状态。 */
+const WAITING_STATES = new Set(['pending', 'in_review'])
+
+export interface WorkPortOptions {
+  clock: Clock
+  work: Work
+  /** 本人可见的审批项（已按 recipient 过滤）——卡片到期叠层与战报四格都从它数 */
+  approvals(actor: WorkActor): Promise<ApprovalItem[]> | ApprovalItem[]
+  /** 店铺侧订单行；目标指标从它算 */
+  orders(): OrderRow[]
+  /** ObjectRef → 人话 */
+  label(ref: { type: string; id: string }): string | undefined
+  /** 25 的定时任务；不给就是没有 */
+  scheduledTasks?(actor: WorkActor): ScheduledTaskLike[]
+  /** WP23 的会议；不给就是没有 */
+  meetings?(actor: WorkActor, range: { from: Iso8601; to: Iso8601 }): CalendarItem[]
+  /** 24 的 lesson，进复盘的「Agent 学到的」 */
+  lessons?(actor: WorkActor): { id: string; text: string }[]
+}
+
+/**
+ * 目标指标：**按目标自己的期间**跑 29 的命名查询。
+ *
+ * `@agentsws/deck` 的 `runQuery` 只认「昨天 / 近 7 天」两个窗口（36 §3 的数字块就那两档），
+ * 而目标是周 / 月 / 季，所以窗口在这里自己切，行的语义与 deck 逐条对齐（同一批 `OrderRow`）。
+ * 不认识的查询名回 `undefined` → 进度显示 `no_data`，而不是编一个数。
+ */
+export function periodQueryRunner(
+  orders: () => OrderRow[],
+  approvals: () => ApprovalItem[],
+  base_currency: string,
+): QueryRunner {
+  return (goal: Goal) => {
+    const from = ms(goal.period.start)
+    const to = ms(goal.period.end)
+    const inWindow = (at: Iso8601): boolean => {
+      const t = ms(at)
+      return t >= from && t < to
+    }
+    const rows = orders().filter((o) => inWindow(o.created_at))
+    switch (goal.metric.query) {
+      case 'sales.total':
+        return {
+          value: round2(rows.reduce((s, o) => s + o.total_price - o.refunded_amount, 0)),
+          currency: base_currency,
+        }
+      case 'orders.count':
+        return { value: rows.length }
+      case 'refunds.total':
+        return {
+          value: round2(rows.reduce((s, o) => s + o.refunded_amount, 0)),
+          currency: base_currency,
+        }
+      case 'approvals.pending_replies':
+        return {
+          value: approvals().filter((i) => WAITING_STATES.has(i.state) && inWindow(i.created_at))
+            .length,
+        }
+      default:
+        return undefined
+    }
+  }
+}
+
+function round2(v: number): number {
+  return Math.round(v * 100) / 100
+}
+
+function outcomeOf(item: ApprovalItem): CardOutcome {
+  const by = item.decision?.by
+  return {
+    id: item.id,
+    kind: item.kind,
+    state: item.state,
+    auto_approved: item.automation.auto_approved || item.state === 'auto_approved',
+    decided_by_person: by !== undefined && by !== 'mandate',
+    applied: item.state === 'applied',
+    blocked: item.state === 'blocked',
+  }
+}
+
+export function createWorkPort(options: WorkPortOptions): WorkPort {
+  const work = options.work
+
+  const cardsOf = async (actor: WorkActor): Promise<ApprovalItem[]> => options.approvals(actor)
+
+  const waitingCount = (items: readonly ApprovalItem[]): number =>
+    items.filter((i) => WAITING_STATES.has(i.state)).length
+
+  const sourcesFor = (
+    actor: WorkActor,
+    range: { from: Iso8601; to: Iso8601 },
+    cards: readonly ApprovalItem[],
+  ): CalendarSources => ({
+    cards: cards.filter((i) => WAITING_STATES.has(i.state)),
+    ...(options.scheduledTasks === undefined ? {} : { tasks: options.scheduledTasks(actor) }),
+    ...(options.meetings === undefined ? {} : { meetings: options.meetings(actor, range) }),
+  })
+
+  const runnerFor = (cards: readonly ApprovalItem[]): QueryRunner =>
+    periodQueryRunner(options.orders, () => [...cards], 'USD')
+
+  const progressFor = async (
+    actor: WorkActor,
+    filter: { level?: Goal['level']; position_id?: string } = {},
+  ): Promise<GoalProgress[]> => {
+    const cards = await cardsOf(actor)
+    return work.progress(runnerFor(cards), { ...filter, status: ['active'] })
+  }
+
+  const todayDue = (person_id: PersonId): Todo[] =>
+    work.listTodos({ owner: person_id, horizon: ['today'], status: ['open', 'doing', 'blocked'] })
+
+  return {
+    async home(actor): Promise<WorkHome> {
+      const cards = await cardsOf(actor)
+      const range = work.todayRange()
+      const review = work.latestReview(actor.person_id, 'day')
+      const dayStart = ms(range.from)
+      const plan = work.store.findPlan(work.workspace_id, actor.person_id, work.todayDate())
+      return {
+        goals: await progressFor(actor),
+        // 白天的四格战报：今天动过的卡
+        report: battleReport(cards.filter((i) => ms(i.updated_at) >= dayStart).map(outcomeOf)),
+        today: {
+          timeline: work.calendar(
+            range,
+            { person_id: actor.person_id },
+            sourcesFor(actor, range, cards),
+          ),
+          due: { todos: todayDue(actor.person_id), cards_waiting: waitingCount(cards) },
+        },
+        ...(review === undefined ? {} : { review }),
+        ...(plan === undefined ? {} : { plan }),
+      }
+    },
+
+    matters: (_actor, filter) => work.listMatters(filter),
+    matter: (_actor, id) => work.matterView(id, { label: (ref) => options.label(ref) }),
+    createMatter: (actor, input) =>
+      work.createMatter({
+        ...input,
+        position_id: actor.assignment_id,
+        participants: [actor.person_id],
+      }),
+    closeMatter: (actor, id, unfinished) =>
+      work.closeMatter(id, { unfinished, by: actor.person_id }),
+    timeline: (_actor, id, opts) => {
+      const events = work.store.listMatterEvents(id, opts)
+      return { events, has_more: work.store.countMatterEvents(id) > events.length }
+    },
+    say: (actor, id, text) =>
+      work.say(id, { person_id: actor.person_id, assignment_id: actor.assignment_id, text }),
+
+    async goals(actor, filter) {
+      return {
+        goals: work.listGoals(filter),
+        progress: await progressFor(actor, filter),
+      }
+    },
+    createGoal: (actor, input) => work.createGoal({ ...input, owner: actor.person_id }),
+
+    todos: (actor, filter) =>
+      work.listTodos({
+        ...(filter.mine === false ? {} : { owner: actor.person_id }),
+        ...(filter.horizon === undefined ? {} : { horizon: filter.horizon }),
+        ...(filter.status === undefined ? {} : { status: filter.status }),
+        ...(filter.matter_id === undefined ? {} : { matter_id: filter.matter_id }),
+        ...(filter.goal_id === undefined ? {} : { goal_id: filter.goal_id }),
+      }),
+    createTodo: (actor, input) =>
+      work.createTodo({ ...input, owner: actor.person_id, position_id: actor.assignment_id }),
+    updateTodo: (_actor, id, patch) => work.updateTodo(id, patch),
+    scheduleTodo: (_actor, id, slot) => work.schedule(id, slot),
+    delegateTodo: (actor, id, input) =>
+      work.delegate(id, {
+        assignment_id: input.assignment_id ?? actor.assignment_id,
+        by: actor.person_id,
+        ...(input.brief === undefined ? {} : { brief: input.brief }),
+      }),
+    splitTodo: (_actor, id, children) => work.splitTodo(id, children),
+
+    async calendar(actor, range) {
+      const cards = await cardsOf(actor)
+      return work.calendar(range, { person_id: actor.person_id }, sourcesFor(actor, range, cards))
+    },
+
+    async todayPlan(actor, refresh) {
+      const cards = await cardsOf(actor)
+      const range = work.todayRange()
+      const meetings = work
+        .calendar(range, { person_id: actor.person_id }, sourcesFor(actor, range, cards))
+        .filter((i) => i.source === 'meeting')
+      return work.todayPlan({
+        person_id: actor.person_id,
+        goals: await progressFor(actor),
+        today_meetings: meetings,
+        cards_waiting: waitingCount(cards),
+        delegate_to: actor.assignment_id,
+        refresh,
+      })
+    },
+    decidePlan: async (actor, id, input) => {
+      if (input.option === 'later') return { plan: work.deferPlan(id), todos: [] }
+      return work.adoptPlan(id, {
+        by: actor.person_id,
+        ...(input.option === 'adjust' ? { selected_ids: input.selected_ids ?? [] } : {}),
+      })
+    },
+
+    reviews: (actor, filter) => work.listReviews({ person_id: actor.person_id, ...filter }),
+    async createReview(actor, kind) {
+      const cards = await cardsOf(actor)
+      const range = work.todayRange()
+      const span = kind === 'day' ? 1 : kind === 'week' ? 7 : 30
+      const start = new Date(ms(range.to) - span * DAY_MS).toISOString()
+      const sources = sourcesFor(actor, range, cards)
+      const meetings = work
+        .calendar(range, { person_id: actor.person_id }, sources)
+        .filter((i) => i.source === 'meeting')
+      const draft = buildReview({
+        now: work.now(),
+        person_id: actor.person_id,
+        tz_offset_minutes: work.tz_offset_minutes,
+        period: { kind, start, end: range.to },
+        goals: await progressFor(actor),
+        cards_events: cards.filter((i) => ms(i.updated_at) >= ms(start)).map(outcomeOf),
+        todos: todayDue(actor.person_id),
+        meetings,
+        ...(options.lessons === undefined ? {} : { lessons: options.lessons(actor) }),
+        tomorrow: {
+          now: new Date(ms(work.now()) + DAY_MS).toISOString(),
+          todos: work.inbox(actor.person_id),
+          today_meetings: [],
+          cards_waiting: waitingCount(cards),
+          delegate_to: actor.assignment_id,
+        },
+      })
+      return work.saveReview(draft)
+    },
+  }
+}
+
+/** demo 与服务进程共用的装配：给了 store 就落盘，没给就是内存档。 */
+export function createWorkModel(options: {
+  workspace_id: string
+  clock: Clock
+  random?: () => number
+  store?: WorkStore
+  startRun?: StartRun
+  tz_offset_minutes?: number
+}): Work {
+  return createWork(options)
+}
+
+export type { CardOutcome }
+export { battleReport, cardRefOf, planSummary, planTitle, reviewSummary, reviewTitle }

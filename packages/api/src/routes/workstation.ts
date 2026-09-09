@@ -213,14 +213,14 @@ export function workstationRoutes(): Route[] {
         path: '/v1/home',
         operationId: 'getHome',
         summary:
-          '首页：卡片 deck（筛选 + 合并）+ 告警 + 每岗位核心数据条 + 摘要 + 今日战报（36 §3、37 §1）',
+          '首页（37 §3 第三稿）：目标进度 + 今天（时间轴 / 到期清单）+ 卡片 deck（筛选 + 合并）+ 告警 + 核心数据条 + 今日战报 + 复盘',
         tag: 'workstation',
         auth: 'bearer',
         assignment: true,
         authz: READ,
         params: [RANGE_PARAM, ...FILTER_PARAMS],
         returns:
-          '{ queue, alerts, tiles, digest?, estimated_minutes, range, filters, counts, pinned_p0, battle_report }',
+          '{ queue, alerts, tiles, digest?, estimated_minutes, range, filters, counts, pinned_p0, battle_report, goals?, today?, review?, plan? }',
       },
       async (c, deps) => {
         const p = principalOf(c)
@@ -249,6 +249,16 @@ export function workstationRoutes(): Route[] {
           })
         }
         const system = await w.systemCards(actor)
+        // 37 §3 首页第三稿：在原有四区之外**只加字段**——目标进度、今天（时间轴 + 到期清单）、
+        // 复盘 / 每日计划。装了工作模型才有；没装配时这几个键直接不出，老前端照旧。
+        const workHome =
+          deps.work === undefined
+            ? undefined
+            : await deps.work.home({
+                workspace_id: p.workspace_id,
+                person_id: p.person_id,
+                assignment_id: assignmentOf(c).id,
+              })
         try {
           const assembled = assembleHome({
             now: deps.clock.now(),
@@ -269,6 +279,7 @@ export function workstationRoutes(): Route[] {
             counts: filtered.counts,
             pinned_p0: filtered.pinned_p0,
             battle_report: await todaysReport(deps, p.workspace_id, tz_offset_minutes),
+            ...(workHome === undefined ? {} : workHome),
           })
         } catch (err) {
           return fromDeckError(err)

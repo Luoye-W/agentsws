@@ -7,6 +7,18 @@
  * - 前端不引入任何模型 SDK：卡片按钮只打 decide（29 §5 动作不经模型）。
  */
 import type {
+  CalendarItem,
+  DailyPlan,
+  Goal,
+  GoalProgress,
+  Matter,
+  MatterEvent,
+  MatterView,
+  Review,
+  Todo,
+  BattleReport as WorkBattleReport,
+} from '@agentsws/contracts'
+import type {
   BattleReport,
   BlockData,
   DeckCard,
@@ -90,6 +102,12 @@ export interface HomeData {
   counts: DeckCounts
   pinned_p0: DeckCard[]
   battle_report: BattleReport
+  /** 37 §3 首页第三稿多出来的四段（服务进程没装工作模型时不出） */
+  goals?: GoalProgress[]
+  today?: { timeline: CalendarItem[]; due: { todos: Todo[]; cards_waiting: number } }
+  report?: WorkBattleReport
+  review?: Review
+  plan?: DailyPlan
 }
 
 export interface PositionsData {
@@ -298,3 +316,103 @@ export const setHomeTiles = (
     body: { position_id, tile_ids, ...(range === undefined ? {} : { range }) },
     assignment: position_id,
   })
+
+// ── 37 工作模型：事项 / 目标 / 待办 / 日历 / 计划 / 复盘 ────────────────
+
+export interface MattersData {
+  matters: Matter[]
+}
+export interface TodosData {
+  todos: Todo[]
+}
+export interface GoalsData {
+  goals: Goal[]
+  progress: GoalProgress[]
+}
+export interface CalendarData {
+  items: CalendarItem[]
+  from: string
+  to: string
+}
+export interface TimelineData {
+  events: MatterEvent[]
+  has_more: boolean
+}
+export interface PlanData {
+  plan: DailyPlan
+}
+export interface ReviewsData {
+  reviews: Review[]
+}
+
+export const listMatters = (query = ''): Promise<MattersData> =>
+  api<MattersData>(`/v1/matters${query}`)
+
+export const getMatter = (id: string): Promise<MatterView> =>
+  api<MatterView>(`/v1/matters/${encodeURIComponent(id)}`)
+
+export const getMatterTimeline = (id: string, limit: number): Promise<TimelineData> =>
+  api<TimelineData>(`/v1/matters/${encodeURIComponent(id)}/timeline?limit=${limit}`)
+
+export const postMatterMessage = (
+  id: string,
+  text: string,
+): Promise<{ event: MatterEvent; run_id?: string }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/messages`, { method: 'POST', body: { text } })
+
+export const closeMatter = (
+  id: string,
+  unfinished: 'close_all' | 'keep',
+): Promise<{ matter: Matter; closed_todo_ids: string[]; kept_todo_ids: string[] }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/close`, { method: 'POST', body: { unfinished } })
+
+export const listGoals = (): Promise<GoalsData> => api<GoalsData>('/v1/goals')
+
+export const listTodos = (query = ''): Promise<TodosData> => api<TodosData>(`/v1/todos${query}`)
+
+export const createTodo = (input: {
+  title: string
+  due?: string
+  matter_id?: string
+}): Promise<{ todo: Todo }> => api('/v1/todos', { method: 'POST', body: input })
+
+export const completeTodo = (id: string): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}/done`, { method: 'POST' })
+
+export const dropTodo = (id: string): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}/drop`, { method: 'POST' })
+
+export const updateTodo = (
+  id: string,
+  patch: { title?: string; due?: string | null; horizon?: 'backlog' | 'week' | 'today' },
+): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}`, { method: 'PUT', body: patch })
+
+export const scheduleTodo = (
+  id: string,
+  scheduled: { start: string; end: string } | null,
+): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}/schedule`, { method: 'POST', body: { scheduled } })
+
+export const delegateTodo = (id: string, brief?: string): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}/delegate`, {
+    method: 'POST',
+    body: brief === undefined ? {} : { brief },
+  })
+
+export const getCalendar = (from: string, to: string): Promise<CalendarData> =>
+  api<CalendarData>(`/v1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+
+export const getTodayPlan = (): Promise<PlanData> => api<PlanData>('/v1/plans/today')
+
+export const decidePlan = (
+  id: string,
+  option: 'adopt' | 'adjust' | 'later',
+  selected_ids?: string[],
+): Promise<{ plan: DailyPlan; todos: Todo[] }> =>
+  api(`/v1/plans/${encodeURIComponent(id)}/decide`, {
+    method: 'POST',
+    body: { option, ...(selected_ids === undefined ? {} : { selected_ids }) },
+  })
+
+export const listReviews = (): Promise<ReviewsData> => api<ReviewsData>('/v1/reviews?kind=day')

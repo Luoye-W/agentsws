@@ -30,6 +30,7 @@
     "@agentsws/roles": "workspace:*",
     "@agentsws/server": "workspace:*",
     "@agentsws/simulation": "workspace:*",
+    "@agentsws/work": "workspace:*",
     "commander": "^12.1.0"
   },
   "devDependencies": {}

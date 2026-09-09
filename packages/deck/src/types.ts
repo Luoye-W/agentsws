@@ -106,6 +106,8 @@ export interface DeckCard {
   channel?: 'email' | 'chat' | 'system'
   /** 37 §2.2b：卡片是指向事项的指针；有它就在卡面顶部出「属于：事项 X」 */
   matter_id?: string
+  /** 卡挂在哪条待办下（37 §2.1 交点一） */
+  todo_id?: string
   matter_label?: string
   source: DeckSource
   highlights: DeckHighlight[]
