@@ -5,7 +5,7 @@
  * 直接 `node dist/index.js` 时启动并监听，SIGTERM / SIGINT 优雅关闭。
  */
 export { type AskOptions, createAskPort } from './ask.js'
-export { type BackendCall, MemoryBackend } from './backend.js'
+export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {
   authOptionOf,
   CATALOG,
