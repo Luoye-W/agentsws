@@ -59,12 +59,8 @@ const item = await server.txn.approvals.create({
     precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
   },
   proposer: { kind: 'agent', id: 'agent_secretary', assignment_id: ownerAssignment.id },
-  automation: {
-    level_at_creation: 'L1',
-    auto_approved: false,
-    mandate_check: { within: true, caps_hit: [] },
-    sampling: { selected: false },
-  },
+  // 14：调用方只给等级，其余三项由 ApprovalBus.create 补齐
+  automation: { level_at_creation: 'L1' },
   routing: {
     recipients: [{ person: person.id, via: 'owner' }],
     rule: 'owner',

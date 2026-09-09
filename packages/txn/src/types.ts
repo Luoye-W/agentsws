@@ -6,6 +6,7 @@ import type {
   AuthorizationCheckInput,
   ChangeKind,
   Clock,
+  CreateApprovalInput as ContractCreateApprovalInput,
   Decision,
   ErrorCode,
   EventEnvelope,
@@ -260,20 +261,45 @@ export interface TxnStore {
  */
 export type ApprovalContext = ApprovalExecutionContext
 
-type ContractCreateInput<P> = Omit<
-  ApprovalItem<P>,
-  | 'id'
-  | 'revision'
-  | 'state'
-  | 'deliveries'
-  | 'links'
-  | 'created_at'
-  | 'updated_at'
-  | 'decision'
-  | 'apply'
-> & { links?: Partial<ApprovalItem['links']> }
+/**
+ * 建一张审批项的入参：**就是契约的那一份**（14 / `ApprovalBus.create`）。
+ *
+ * 契约上 `automation` 只强制 `level_at_creation`——「auto_approved / mandate_check /
+ * sampling 由宿主计算，调用方只给等级」。补齐默认值的地方是 {@link normalizeCreateInput}，
+ * 补完之后包内各步拿到的是 {@link NormalizedCreateInput}。
+ */
+export type CreateApprovalInput<P> = ContractCreateApprovalInput<P>
 
-export type CreateApprovalInput<P> = ContractCreateInput<P> & { context?: ApprovalContext }
+/**
+ * 补齐 `automation` 默认值之后的入参：预检、物化、额度判定都按它算，
+ * 于是 `input.automation.mandate_check` 在包内永远有值。
+ */
+export type NormalizedCreateInput<P> = Omit<CreateApprovalInput<P>, 'automation'> & {
+  automation: ApprovalItem['automation']
+}
+
+/**
+ * 14：调用方只给等级时，宿主补齐其余三项。
+ *
+ * - `auto_approved: false`——自动通过是宿主算出来的结论，调用方声明不算数；
+ * - `mandate_check: { within: false, caps_hit: [] }`——**没报过额度就当没核过**，
+ *   预检据此判 `mandate: 'review'`，卡走人审（宁可多一次人看）；
+ * - `sampling: { selected: false }`——抽检由宿主按 `sampling_rate` 掷。
+ *
+ * 整个 `automation` 都不给时，等级按最严的 `L1`（全人审）算。
+ */
+export function normalizeCreateInput<P>(input: CreateApprovalInput<P>): NormalizedCreateInput<P> {
+  const a = input.automation ?? { level_at_creation: 'L1' as Level }
+  return {
+    ...input,
+    automation: {
+      level_at_creation: a.level_at_creation,
+      auto_approved: a.auto_approved ?? false,
+      mandate_check: a.mandate_check ?? { within: false, caps_hit: [] },
+      sampling: a.sampling ?? { selected: false },
+    },
+  }
+}
 
 /** 15 §5 apply 的结果。 */
 export interface ApplyOutcome {

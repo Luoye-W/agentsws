@@ -1,6 +1,6 @@
 import type { ApprovalKind, ObjectRef, PrecheckResult } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
-import type { ApprovalContext, CreateApprovalInput } from './types.js'
+import type { ApprovalContext, NormalizedCreateInput } from './types.js'
 import { deepEqual, refKey, scanSecrets } from './util.js'
 
 const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
@@ -60,7 +60,7 @@ export interface PrecheckOutcome {
  * 31 §3.3 收件人门禁一并在此：收件人必须在 provenance.seen，且是线程原参与者或已验证联系方式。
  */
 export function runPrecheck<P>(
-  input: CreateApprovalInput<P>,
+  input: NormalizedCreateInput<P>,
   ctx: ApprovalContext = {},
 ): PrecheckOutcome {
   const blocked: string[] = []
@@ -144,8 +144,8 @@ export function runPrecheck<P>(
   }
 
   // 额度：超额不是失败，是 L1 路由
-  // 14：契约只要求给等级；没给 mandate_check 的一律走 L1 复核，不炸
-  precheck.mandate = input.automation.mandate_check?.within === true ? 'within' : 'review'
+  // 14：契约只要求给等级；没给 mandate_check 的由 normalizeCreateInput 补成「没核过」→ 复核
+  precheck.mandate = input.automation.mandate_check.within ? 'within' : 'review'
 
   if (notes.length > 0) precheck.notes = [...(precheck.notes ?? []), ...notes]
   return {

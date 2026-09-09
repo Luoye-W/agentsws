@@ -283,6 +283,32 @@ describe('端到端：stage → 队列 → 批准 → 施行 → 账本 → 事�
     expect(still.status).toBe('staged')
   })
 
+  it('POST /v1/approvals 只给 level_at_creation → 建卡成功且 /v1/home 不 500（WP35）', async () => {
+    const created = await api('/v1/approvals', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'policy_change',
+        subject: { object: { type: 'policy', id: 'return_window' } },
+        dedupe_key: 'return_window_14d',
+        title: '退货窗口写成 14 天',
+        summary: '客服每天解释一遍，写进策略层省一次解释。',
+        payload: { target: 'workspace_policy', before: null, after: { return_window_days: 14 } },
+      }),
+    })
+    expect(created.status).toBe(201)
+    const item = await data<{ id: string; state: string; automation: Record<string, unknown> }>(
+      created,
+    )
+    expect(item.state).toBe('pending')
+    // 宿主补齐的那三项（少了 mandate_check，下面这次 /v1/home 就是 500）
+    expect(item.automation.mandate_check).toEqual({ within: false, caps_hit: [] })
+
+    const home = await api('/v1/home?range=yesterday')
+    expect(home.status).toBe(200)
+    const page = await data<{ queue: { id: string }[] }>(home)
+    expect(page.queue.map((c) => c.id)).toContain(item.id)
+  })
+
   it('同 Idempotency-Key 的批准重放原响应，只决定一次', async () => {
     const { server } = ctx
     const person = server.bootstrap.person.id

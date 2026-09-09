@@ -232,12 +232,8 @@ async function landInstruction(
     schema_version: 1 as const,
     role_id: item.role_id,
     proposer: { kind: 'person' as const, id: input.person_id },
-    automation: {
-      level_at_creation: 'L1' as const,
-      auto_approved: false,
-      mandate_check: { within: true, caps_hit: [] },
-      sampling: { selected: false },
-    },
+    // 指导产的卡永远 L1：指导本身不改任何东西，改不改由人再批一次
+    automation: { level_at_creation: 'L1' as const },
     routing,
     priority: 'queue' as const,
     links: { parent: item.id },
@@ -346,15 +342,9 @@ export function approvalRoutes(): Route[] {
           },
           // 提议者一律是调用者本人：接口不接受「替别人提」（14 §7 撤回权跟着提议者走）
           proposer: { kind: 'person', id: p.person_id, assignment_id: assignment.id },
-          // 契约上 `automation` 是 Partial，但 txn 的 create 只做浅合并、不补默认值，
-          // 少了 `mandate_check` 的卡到了 deck 的投影那一步会直接崩。这里给全
-          // （与本文件里 landInstruction 建卡时的做法一致）；建议见交付报告。
-          automation: {
-            level_at_creation: 'L1',
-            auto_approved: false,
-            mandate_check: { within: true, caps_hit: [] },
-            sampling: { selected: false },
-          },
+          // 14：人主动提的卡一律 L1（提议 ≠ 决定）。其余三项由 `ApprovalBus.create` 补齐——
+          // 契约就是这么写的，宿主补默认值的义务在 WP35 落到了实处。
+          automation: { level_at_creation: 'L1' },
           routing: {
             recipients: [...recipients],
             rule,

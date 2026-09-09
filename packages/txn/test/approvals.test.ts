@@ -469,6 +469,34 @@ describe('审批总线其他行为（14 §4 §7 §8）', () => {
     expect(item.evidence.precheck.fencing).toBe('fail')
   })
 
+  it('只给 level_at_creation 建卡 → automation 三项补齐，mandate_check 不是 undefined（WP35）', async () => {
+    const h = harness()
+    const item = await h.txn.approvals.create(
+      outboundInput({ automation: { level_at_creation: 'L1' } }),
+    )
+    expect(item.state).toBe('pending')
+    expect(item.automation).toEqual({
+      level_at_creation: 'L1',
+      auto_approved: false,
+      mandate_check: { within: false, caps_hit: [] },
+      sampling: { selected: false },
+    })
+    // 没报过额度 = 没核过 → 预检判复核，不是「额度内」
+    expect(item.evidence.precheck.mandate).toBe('review')
+    // 存回来的那一份同样是补齐的（工作台投影读的是它）
+    const stored = await h.txn.approvals.get(item.id)
+    expect(stored?.automation.mandate_check).toEqual({ within: false, caps_hit: [] })
+  })
+
+  it('automation 整个不给 → 按最严的 L1 算（WP35）', async () => {
+    const h = harness()
+    const { automation: _drop, ...rest } = outboundInput()
+    const item = await h.txn.approvals.create(rest as Parameters<typeof h.txn.approvals.create>[0])
+    expect(item.automation.level_at_creation).toBe('L1')
+    expect(item.automation.mandate_check).toEqual({ within: false, caps_hit: [] })
+    expect(item.automation.sampling).toEqual({ selected: false })
+  })
+
   it('queue 按 priority 排序，lane=unclaimed 只给未认领的', async () => {
     const h = harness()
     const a = await h.txn.approvals.create(

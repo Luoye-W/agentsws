@@ -21,9 +21,10 @@ import type {
   ApplyOutcome,
   ApprovalContext,
   CreateApprovalInput,
+  NormalizedCreateInput,
   SnapshotComponents,
 } from './types.js'
-import { TxnError } from './types.js'
+import { normalizeCreateInput, TxnError } from './types.js'
 import { businessHoursBetween, expiryFor, ms, nonceFrom, refKey, signToken } from './util.js'
 
 /** §4 状态机里"还能被决定"的状态。 */
@@ -64,12 +65,14 @@ export class ApprovalBusImpl implements ApprovalBus {
 
   // ───────────────────────────── create（§0 → §6 → 额度 → 路由）
 
-  async create<P>(input: CreateApprovalInput<P>): Promise<ApprovalItem<P>> {
-    if (!isKnownKind(input.kind))
+  async create<P>(raw: CreateApprovalInput<P>): Promise<ApprovalItem<P>> {
+    if (!isKnownKind(raw.kind))
       throw new TxnError(
         'invalid_input',
-        `未知审批 kind：${String(input.kind)}（staged_action v1 关闭，31 §3.2）`,
+        `未知审批 kind：${String(raw.kind)}（staged_action v1 关闭，31 §3.2）`,
       )
+    // 14：调用方只给等级，其余三项宿主补齐（缺 mandate_check 的卡后面每一步都要用它）
+    const input = normalizeCreateInput(raw)
     const ctx: ApprovalContext = input.context ?? {}
     const now = this.rt.now()
     const pre = runPrecheck(input, ctx)
@@ -180,7 +183,7 @@ export class ApprovalBusImpl implements ApprovalBus {
   }
 
   private materialize<P>(
-    input: CreateApprovalInput<P>,
+    input: NormalizedCreateInput<P>,
     ctx: ApprovalContext,
     pre: ReturnType<typeof runPrecheck>,
     now: Iso8601,
@@ -239,7 +242,7 @@ export class ApprovalBusImpl implements ApprovalBus {
   }
 
   /** 31 §3.4：只有 risk_class=low 的已建模变更可自动；medium / high 永远人审。 */
-  private autoApprovable<P>(input: CreateApprovalInput<P>, ctx: ApprovalContext): boolean {
+  private autoApprovable<P>(input: NormalizedCreateInput<P>, ctx: ApprovalContext): boolean {
     if (input.kind !== 'staged_change') return false
     if (input.automation.level_at_creation === 'L1') return false
     if (!input.automation.mandate_check.within) return false
@@ -337,7 +340,7 @@ export class ApprovalBusImpl implements ApprovalBus {
    */
   private async updateRevision<P>(
     existing: ApprovalItem,
-    input: CreateApprovalInput<P>,
+    input: NormalizedCreateInput<P>,
     ctx: ApprovalContext,
     pre: ReturnType<typeof runPrecheck>,
     now: Iso8601,
