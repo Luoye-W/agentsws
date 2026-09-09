@@ -59,6 +59,30 @@ function markerPattern(label: string): RegExp {
   return re
 }
 
+/**
+ * 「这段文本没过围栏」的证据。都是清洗会**删改**的构造，与无害的 NFKC 归一 / 截断分开：
+ *
+ * | 值 | 是什么 |
+ * |---|---|
+ * | `invisible` | 零宽、方向控制一类不可见字符 |
+ * | `control` | C0 / C1 控制字符 |
+ * | `fence_marker` | 本围栏自己的标签（`<external_data>`），伪造闭合用 |
+ * | `special_token` | 转录 / 工具调用标记（`<function_calls>`、`<\|im_start\|>` 等） |
+ * | `turn_boundary` | 伪造的对话轮次边界（空行后的 `Human:` / `assistant:`） |
+ */
+export type FenceViolation =
+  | 'invisible'
+  | 'control'
+  | 'fence_marker'
+  | 'special_token'
+  | 'turn_boundary'
+
+/** 带 `g` 标志的正则有 `lastIndex`，每次 test 前必须归零，否则第二次调用会漏。 */
+function matches(re: RegExp, text: string): boolean {
+  re.lastIndex = 0
+  return re.test(text)
+}
+
 export class Fence {
   constructor(
     public readonly label: string,
@@ -89,6 +113,27 @@ export class Fence {
           : t.slice(0, maxChars)
     }
     return t
+  }
+
+  /**
+   * 这段文本里有没有**围栏该拦的东西**——供「外部文本进来之前有没有过围栏」这类检查用
+   * （14 §6 的 fencing 预检）。
+   *
+   * 不能拿 `sanitizeText(t) !== t` 当这个判断：清洗里的 NFKC 归一对**所有**文本都生效，
+   * 中文的全角标点（`，` `：` `（`）一归一就变半角，于是任何一句中文都会被判成
+   * 「未围栏」。归一与截断是无害的规范化，不是违规；违规只有下面这五类。
+   *
+   * 检测在 NFKC 归一之后做：`＜function_calls＞` 这种全角伪装归一后才现原形。
+   */
+  findViolations(text: string): FenceViolation[] {
+    const t = text.normalize('NFKC')
+    const out: FenceViolation[] = []
+    if (matches(INVISIBLE, t)) out.push('invisible')
+    if (matches(CONTROL, t)) out.push('control')
+    if (matches(markerPattern(this.label), t)) out.push('fence_marker')
+    if (matches(SPECIAL_TOKEN, t)) out.push('special_token')
+    if (matches(TURN_INDICATOR, t) || matches(LEADING_TURN_INDICATOR, t)) out.push('turn_boundary')
+    return out
   }
 
   sanitizeValue(value: unknown, maxChars?: number): unknown {
