@@ -56,6 +56,7 @@ import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
+import { createApprovalDirectory } from './housekeeping.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOrg, type OrgAssembly } from './org.js'
@@ -65,6 +66,7 @@ import {
   createSchedulePort,
   ensureSystemTasks,
   offsetToTz,
+  registerApprovalHousekeeping,
   registerDailyPlan,
   registerIdempotencySweep,
   registerMeetingPoll,
@@ -330,6 +332,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
   })
 
+  // 14 §7 升级链要问的两件事（范围管理者是谁 / owner 是谁）。取值函数，不是值——
+  // 审批总线排在身份之前，owner 与工作区要等下面那一段装完才知道。
+  let bootstrapOwner: PersonId | undefined
+  let bootstrapWorkspace: WorkspaceId | undefined
+  const approvalDirectory = createApprovalDirectory({
+    roles,
+    owner: () => bootstrapOwner,
+    workspace_id: () => bootstrapWorkspace,
+  })
+
   const backend = new MemoryBackend()
   // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
   const idempotencyStore =
@@ -343,6 +355,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const txn = createTxn({
     clock,
     random,
+    directory: approvalDirectory,
     ...(txnStore === undefined ? {} : { store: txnStore }),
     eventSink: (e) => {
       appendEvent(e)
@@ -394,6 +407,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ranges: [],
     })
   const internalToken = identity.issue('internal', person.id, workspace.id).token
+  // 空壳填上：从这一刻起升级链知道该找谁（39 待办 A）
+  bootstrapOwner = person.id
+  bootstrapWorkspace = workspace.id
 
   const approvals = mount?.approvals ?? txn.approvals
   // WP20 连接面：装配一次，`/v1/connections/*` 与工作台数据源共用同一份连接状态。
@@ -555,6 +571,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     weeklyConsolidate: (ws, now) => skills.lessons.weeklyConsolidate(ws, now),
   })
+  // ⑧ 审批过期与升级（39 待办 A）：模拟回路每 tick 调一次，真机器每分钟调一次。
+  //    预占的「过期释放」也挂在这条上——15 §3.2 (d) 的释放是跟着审批项过期走的。
+  registerApprovalHousekeeping(schedule.scheduler, { approvals })
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -568,6 +587,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       idempotency: idempotencyStore !== undefined,
       shopify: true,
       skills: true,
+      approvals: true,
     },
   })
 
