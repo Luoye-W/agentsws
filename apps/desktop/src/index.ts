@@ -27,9 +27,10 @@ export type {
   HardeningReportLike,
 } from './connect-runtime.js'
 export {
+  CONNECT_URL_ENV,
   classify,
+  connectUrlFrom,
   createConnectRuntime,
-  DEFAULT_CONNECT_URL,
   NotImplementedError,
   notImplementedLauncher,
 } from './connect-runtime.js'

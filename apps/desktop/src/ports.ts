@@ -75,3 +75,25 @@ export interface SafeStorageLike {
 }
 
 export type RandomBytes = (size: number) => Uint8Array
+
+/**
+ * 带请求体与响应头的 fetch 形状（WP31：桌面壳要调 `/v1/auth/session`、`/v1/halt`、
+ * `/v1/secrets/rotate`，光有状态码与文本不够）。`globalThis.fetch` 天然满足。
+ */
+export interface ApiResponseLike extends FetchResponseLike {
+  readonly headers: {
+    get(name: string): string | null
+    /** Node / Undici 的多值 Set-Cookie 读法；没有就退回 `get('set-cookie')`。 */
+    getSetCookie?(): string[]
+  }
+}
+
+export type ApiFetchLike = (
+  url: string,
+  init?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: string
+    signal?: AbortSignal
+  },
+) => Promise<ApiResponseLike>

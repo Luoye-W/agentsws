@@ -30,6 +30,13 @@ const KEY_BYTES = 32
 
 export type SecretStoreErrorCode = 'key_missing' | 'key_invalid' | 'decrypt_failed' | 'not_found'
 
+/** {@link SecretStore.rotate} 的结果。密钥本身永远不在返回值里。 */
+export interface SecretRotationResult {
+  /** 重新加密了几条连接的凭据。 */
+  rotated: number
+  at: Iso8601
+}
+
 export class SecretStoreError extends Error {
   readonly code: SecretStoreErrorCode
 
@@ -60,6 +67,16 @@ export interface SecretStore {
   list(): SecretRecord[]
   record(connection_id: string): SecretRecord | undefined
   remove(connection_id: string): boolean
+  /**
+   * 换一把密钥：**整库重加密**，旧密钥当场零化。
+   *
+   * 一个事务里做完——中途失败就一行都不改，绝不留下「一半旧钥一半新钥」的库
+   * （那种库谁也读不全，只能让用户把所有邮箱凭据重填一遍）。
+   *
+   * 调用方的责任：先把新密钥落进 safeStorage / 环境变量，再调这里；
+   * 顺序反了会得到一个解不开的库。密钥只从参数进来一次，不落日志、不进响应体。
+   */
+  rotate(newKey: string): SecretRotationResult
   close(): void
 }
 
@@ -106,7 +123,8 @@ interface Row {
  * 而不是整个服务起不来。真正被拒的只有 `put`。
  */
 export function createSecretStore(options: SecretStoreOptions): SecretStore {
-  const key = parseSecretsKey((options.env ?? process.env)[SECRETS_KEY_ENV])
+  // 换密钥要能就地生效，所以它是 let——但值只在这个闭包里，出不去。
+  let key = parseSecretsKey((options.env ?? process.env)[SECRETS_KEY_ENV])
   const rand = options.randomBytes ?? randomBytes
   if (options.dbPath !== ':memory:') mkdirSync(dirname(options.dbPath), { recursive: true })
   const db: Db = new Database(options.dbPath)
@@ -217,6 +235,56 @@ CREATE TABLE IF NOT EXISTS secrets (
       return (
         db.prepare('DELETE FROM secrets WHERE connection_id = ?').run(connection_id).changes > 0
       )
+    },
+
+    rotate(newKey) {
+      const old = requireKey()
+      const next = parseSecretsKey(newKey)
+      if (next === undefined)
+        throw new SecretStoreError('key_invalid', '新密钥是空的；轮换需要一把 32 字节密钥')
+      if (sameKey(old, next))
+        throw new SecretStoreError('key_invalid', '新密钥和现在这把一样，没什么可轮换的')
+
+      const at = options.clock.now()
+      // 先在内存里全部解开再全部封回去：任何一条解不开就整体不动
+      const reencrypt = db.transaction((rows: Row[]): number => {
+        for (const row of rows) {
+          const buf = Buffer.from(row.ciphertext)
+          if (buf.byteLength <= TAG_BYTES)
+            throw new SecretStoreError('decrypt_failed', `密文长度不合法：${row.connection_id}`)
+          let plain: Buffer
+          try {
+            const decipher = createDecipheriv('aes-256-gcm', old, Buffer.from(row.nonce))
+            decipher.setAAD(Buffer.from(row.connection_id, 'utf8'))
+            decipher.setAuthTag(buf.subarray(buf.byteLength - TAG_BYTES))
+            plain = Buffer.concat([
+              decipher.update(buf.subarray(0, buf.byteLength - TAG_BYTES)),
+              decipher.final(),
+            ])
+          } catch {
+            throw new SecretStoreError(
+              'decrypt_failed',
+              `轮换中止：${row.connection_id} 用现在这把密钥解不开（库里可能混着更早的密钥）。` +
+                '先把这条连接断开重填，再轮换。',
+            )
+          }
+          const nonce = rand(NONCE_BYTES)
+          const cipher = createCipheriv('aes-256-gcm', next, nonce)
+          cipher.setAAD(Buffer.from(row.connection_id, 'utf8'))
+          const body = Buffer.concat([cipher.update(plain), cipher.final()])
+          plain.fill(0)
+          db.prepare(
+            'UPDATE secrets SET nonce = ?, ciphertext = ?, updated_at = ? WHERE connection_id = ?',
+          ).run(nonce, Buffer.concat([body, cipher.getAuthTag()]), at, row.connection_id)
+        }
+        return rows.length
+      })
+
+      const rotated = reencrypt(selectAll.all())
+      // 旧密钥零化：这一刻起进程内存里也没有它了
+      old.fill(0)
+      key = next
+      return { rotated, at }
     },
 
     close() {

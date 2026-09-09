@@ -40,7 +40,8 @@ export class SecretsError extends Error {
   }
 }
 
-function toHex(bytes: Uint8Array): string {
+/** 32 字节 → 64 位十六进制（`AGENTSWS_SECRETS_KEY` / `AGENTSWS_DATA_KEY` 都认这个形状）。 */
+export function toHex(bytes: Uint8Array): string {
   let out = ''
   for (const b of bytes) out += b.toString(16).padStart(2, '0')
   return out
@@ -80,8 +81,14 @@ export interface SecretVaultOptions {
 export interface SecretVault {
   /** 首次运行生成并落盘；之后只解密读回。 */
   loadOrCreate(): { secrets: DesktopSecrets; created: boolean }
-  /** 换机 / 泄漏时重新生成（覆盖旧密文）。 */
+  /** 换机 / 泄漏时重新生成**全部**四把（覆盖旧密文）。 */
   rotate(): DesktopSecrets
+  /**
+   * 只换其中一把时用（WP31「轮换本机密钥」：`AGENTSWS_SECRETS_KEY` 换新，
+   * 另外三把不动——OpenConnector 的两把和会话密钥各有各的轮换时机）。
+   * **必须先落盘再去改库**，反过来崩一次就再也解不开了。
+   */
+  write(secrets: DesktopSecrets): void
 }
 
 export function createSecretVault(options: SecretVaultOptions): SecretVault {
@@ -101,6 +108,10 @@ export function createSecretVault(options: SecretVaultOptions): SecretVault {
   }
 
   return {
+    write(secrets) {
+      requireEncryption()
+      write(secrets)
+    },
     loadOrCreate() {
       requireEncryption()
       const bytes = files.readBytes(path)

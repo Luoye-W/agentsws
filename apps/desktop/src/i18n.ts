@@ -16,6 +16,7 @@ export interface Strings {
   connectAbsent: string
   connectUnhardened: string
   restartServer: string
+  rotateSecretsKey: string
   openLogs: string
   launchAtLogin: string
   quit: string
@@ -38,6 +39,7 @@ const ZH: Strings = {
   connectAbsent: '连接器 runtime：未检测到',
   connectUnhardened: '连接器 runtime：未加固，已拒绝接入',
   restartServer: '重启服务',
+  rotateSecretsKey: '轮换本机密钥',
   openLogs: '打开日志目录',
   launchAtLogin: '开机自启',
   quit: '退出',
@@ -60,6 +62,7 @@ const EN: Strings = {
   connectAbsent: 'Connector runtime: not detected',
   connectUnhardened: 'Connector runtime: not hardened, refused',
   restartServer: 'Restart service',
+  rotateSecretsKey: 'Rotate local key',
   openLogs: 'Open log folder',
   launchAtLogin: 'Launch at login',
   quit: 'Quit',

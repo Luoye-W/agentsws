@@ -20,12 +20,13 @@ import {
   shell,
   Tray,
 } from 'electron'
+import { type ApiClient, createApiClient, type DesktopSession } from './api-client.js'
 import { BRIDGE_CHANNELS, type BridgeInfo } from './bridge-types.js'
 import { createConfigStore, type DesktopConfig } from './config.js'
 import {
   type ConnectRuntimeStatus,
+  connectUrlFrom,
   createConnectRuntime,
-  DEFAULT_CONNECT_URL,
   type HardeningReportLike,
   notImplementedLauncher,
 } from './connect-runtime.js'
@@ -45,7 +46,7 @@ import {
 } from './node-runtime.js'
 import { desktopPaths } from './paths.js'
 import { createRedactor } from './redact.js'
-import { createSecretVault, type DesktopSecrets, secretLiterals } from './secrets.js'
+import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
 import {
   resolveServerEntry,
   resolveServerRuntime,
@@ -173,7 +174,13 @@ async function bootstrap(): Promise<void> {
         entry: serverEntry,
         port: config.port,
         dataDir: paths.serverDataDir,
+        // 13 §5：急停的真源是这个文件，两边共用。服务进程启动读它、每次改写回它，
+        // 所以托盘按下的暂停不必再靠重启 sidecar 生效。
+        haltFile: paths.haltFile,
         halt: halt.read(),
+        ...(connectUrlFrom(process.env) === undefined
+          ? {}
+          : { connectUrl: connectUrlFrom(process.env) as string }),
         secrets,
         version,
         baseEnv: process.env,
@@ -188,8 +195,13 @@ async function bootstrap(): Promise<void> {
   })
 
   // ── OpenConnector runtime：v1 只检测 + 加固检查，不负责拉起（08 §5）。
+  //     地址只有一个出处（`AGENTSWS_CONNECT_URL`，见 apps/server/src/connect-url.ts）；
+  //     桌面壳不再自带默认值，读不到就用服务进程那边的同一个常量。
+  // `@agentsws/server` 是唯一定默认值的地方；动态 import 免得把整个服务进程拖进主进程启动路径。
+  const { DEFAULT_CONNECT_URL: SERVER_DEFAULT_CONNECT_URL } = await import('@agentsws/server')
+  const connectUrl = connectUrlFrom(process.env) ?? SERVER_DEFAULT_CONNECT_URL
   const connect = createConnectRuntime({
-    baseUrl: process.env.AGENTSWS_CONNECT_URL ?? DEFAULT_CONNECT_URL,
+    baseUrl: connectUrl,
     clock: systemClock,
     launcher: notImplementedLauncher('docker'),
     probe: async (baseUrl): Promise<HardeningReportLike> => {
@@ -264,7 +276,68 @@ async function bootstrap(): Promise<void> {
     return true
   })
 
+  // ── 服务进程的 /v1：换会话 cookie、运行期急停、换密钥（13 §5 / 28 §1）。
+  //     会话密钥只在主进程里出现，换回来的 cookie 也只在主进程里；渲染进程与 URL 里一个字都没有。
+  const api: ApiClient = createApiClient({
+    baseUrl: serverUrl(),
+    sessionKey: secrets.serverSessionKey,
+    fetchImpl: globalThis.fetch as never,
+    abort: nodeAbort,
+    timeoutMs: 5000,
+  })
+  let sessionCache: DesktopSession | undefined
+  let assignmentCache: string | undefined
+
+  /**
+   * 换一次会话并把 cookie 装进 Electron 的 session（开窗前必须先做这一步）。
+   *
+   * 两条路里选了这一条：**主进程换、`session.cookies.set` 装**。另一条是先开一个
+   * `/session` 路由页、由页面自己去换——那样会话密钥必须传进渲染进程，
+   * 而「token 一次都不进 URL、不进渲染进程」正是这条接口存在的理由（13 §5 / 20 §3）。
+   */
+  const ensureSession = async (): Promise<DesktopSession | undefined> => {
+    if (sessionCache !== undefined) return sessionCache
+    const out = await api.session()
+    if (!out.ok) {
+      logger.warn('换会话失败', { reason: out.reason })
+      return undefined
+    }
+    sessionCache = out.value
+    try {
+      await session.defaultSession.cookies.set({
+        url: serverUrl(),
+        name: out.value.name,
+        value: out.value.value,
+        httpOnly: true,
+        sameSite: 'strict',
+      })
+    } catch (err) {
+      // cookie 装不进去不致命：窗口会走登录页
+      logger.warn('写入会话 cookie 失败', { error: String(err) })
+    }
+    return sessionCache
+  }
+
+  /** `PUT /v1/halt` 与 `POST /v1/secrets/rotate` 都要 `X-Assignment`。 */
+  const ensureAssignment = async (s: DesktopSession): Promise<string | undefined> => {
+    if (assignmentCache !== undefined) return assignmentCache
+    const out = await api.assignment(s)
+    if (!out.ok) {
+      logger.warn('取岗位分配失败', { reason: out.reason })
+      return undefined
+    }
+    assignmentCache = out.value
+    return assignmentCache
+  }
+
+  /** 服务进程重启（换端口 / 换实例）后，旧 cookie 与旧 assignment 都作废。 */
+  const forgetSession = (): void => {
+    sessionCache = undefined
+    assignmentCache = undefined
+  }
+
   const openWindow = async (path = '/'): Promise<string> => {
+    await ensureSession()
     const url = `${serverUrl()}${path}`
     if (window === undefined || window.isDestroyed()) {
       window = new BrowserWindow({
@@ -351,6 +424,66 @@ async function bootstrap(): Promise<void> {
     )
   }
 
+  /**
+   * 托盘「暂停」：调 `PUT /v1/halt`（28 §1「急停一个变量」的运行期入口）。
+   *
+   * 不再重启 sidecar——那会把一个正在处理的运行硬生生打断。急停的真源是
+   * `AGENTSWS_HALT_FILE` 指的那个文件，服务进程改完会写回去，所以这里只需要
+   * 把自己的缓存刷一遍。服务没起来时才退回「写文件 + 重启」的老路。
+   */
+  async function togglePause(): Promise<void> {
+    const wanted = !halt.isPaused()
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s !== undefined && assignment !== undefined) {
+      const out = await api.setHalt(s, assignment, 'all', wanted, '桌面壳托盘')
+      if (out.ok) {
+        const scopes = halt.reload()
+        logger.info(wanted ? '已暂停（急停 all）' : '已恢复', { scopes, via: 'PUT /v1/halt' })
+        await pollHealth()
+        return
+      }
+      logger.warn('运行期急停失败，退回写文件 + 重启', { reason: out.reason })
+    }
+    // 兜底：服务还没起来（或路由不可用），写文件再重启——重启后启动读得到
+    const scopes = wanted ? halt.set(['all']) : halt.set([])
+    logger.info(wanted ? '已暂停（急停 all）' : '已恢复', { scopes, via: 'halt.json + restart' })
+    forgetSession()
+    server.restart()
+    refreshTray()
+  }
+
+  /**
+   * 「轮换本机密钥」：生成一把新的 `AGENTSWS_SECRETS_KEY` → **先**落 safeStorage
+   * → 调 `POST /v1/secrets/rotate` 整库重加密 → 重启服务进程用新密钥。
+   *
+   * 顺序不能反：先换库后落盘，中间崩一次就再也解不开了。反过来最坏情况是
+   * safeStorage 里躺着一把还没用上的新密钥——重试一次就好。
+   */
+  async function rotateSecretsKey(): Promise<void> {
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) {
+      logger.warn('轮换密钥失败：换不到会话')
+      return
+    }
+    const next = toHex(cryptoRandomBytes(32))
+    const rotated = await api.rotateSecretsKey(s, assignment, next)
+    if (!rotated.ok) {
+      logger.warn('轮换密钥失败，本机密钥未动', { reason: rotated.reason })
+      return
+    }
+    secrets = { ...secrets, serverSecretsKey: next }
+    vault.write(secrets)
+    // 新密钥立刻进遮罩表；旧的那把留着也无妨（日志里出现照样遮）
+    logger.setRedactor(createRedactor(secretLiterals(secrets)))
+    serverLog.setRedactor(createRedactor(secretLiterals(secrets)))
+    logger.info('已轮换本机秘密库密钥', { rotated: rotated.value.rotated })
+    forgetSession()
+    server.restart()
+    refreshTray()
+  }
+
   function invoke(action: MenuAction): void {
     switch (action) {
       case 'open-workstation':
@@ -359,14 +492,14 @@ async function bootstrap(): Promise<void> {
       case 'open-browser':
         void shell.openExternal(serverUrl())
         break
-      case 'toggle-pause': {
-        const scopes = halt.toggle()
-        logger.info(scopes.includes('all') ? '已暂停（急停 all）' : '已恢复', { scopes })
-        server.restart()
-        refreshTray()
+      case 'toggle-pause':
+        void togglePause()
         break
-      }
+      case 'rotate-secrets-key':
+        void rotateSecretsKey()
+        break
       case 'restart-server':
+        forgetSession()
         server.restart()
         break
       case 'open-logs':

@@ -701,3 +701,57 @@ describe('WP25 §B 邮箱自动识别（端到端）', () => {
     expect(source.password({ connection_id: submitted.connection.id })).toBe(PASSWORD)
   })
 })
+
+describe('WP31 §6 密钥轮换路由（POST /v1/secrets/rotate）', () => {
+  const NEW_KEY = '1'.repeat(64)
+
+  it('owner 换密钥：整库重加密，凭据照旧读得出来，密钥不进响应也不进事件日志', async () => {
+    // 先存一条邮箱凭据
+    const begun = await data<{ request_id: string }>(
+      await post('/v1/connections/imap_smtp/begin', { alias: '客服邮箱' }),
+    )
+    const submitted = await post('/v1/connections/imap_smtp/submit', {
+      alias: '客服邮箱',
+      ownership: 'workspace',
+      request_id: begun.request_id,
+      fields: MAIL_FIELDS,
+    })
+    expect(submitted.status).toBe(200)
+
+    const res = await post('/v1/secrets/rotate', { new_key: NEW_KEY })
+    expect(res.status).toBe(200)
+    const out = await data<{ rotated: number; at: string }>(res)
+    expect(out.rotated).toBeGreaterThan(0)
+
+    // 响应里没有密钥
+    const bodyText = JSON.stringify(out)
+    expect(bodyText).not.toContain(NEW_KEY)
+    expect(bodyText).not.toContain(SECRETS_KEY)
+
+    // 事件日志里有这件事，但没有密钥
+    const events = await allEvents()
+    const rotated = events.filter((e) => e.type === 'secrets.key_rotated')
+    expect(rotated).toHaveLength(1)
+    const eventText = JSON.stringify(events)
+    expect(eventText).not.toContain(NEW_KEY)
+    expect(eventText).not.toContain(SECRETS_KEY)
+    expect(eventText).not.toContain(PASSWORD)
+
+    // 换完之后凭据还在（读路径不感知：连接列表照常）
+    const listed = await data<{ connections: ConnectionView[] }>(await api('/v1/connections'))
+    expect(listed.connections.some((c) => c.alias === '客服邮箱')).toBe(true)
+
+    // 数据目录每个文件的字节里都没有明文口令、也没有任何一把密钥
+    for (const f of allFileBytes(ctx.dir)) {
+      expect(f.bytes.includes(PASSWORD), `${f.name} 含明文口令`).toBe(false)
+      expect(f.bytes.includes(NEW_KEY), `${f.name} 含新密钥`).toBe(false)
+    }
+  })
+
+  it('新密钥长度不对 → 400；和现在这把一样 → 400', async () => {
+    const short = await post('/v1/secrets/rotate', { new_key: 'x'.repeat(40) })
+    expect(short.status).toBe(400)
+    const same = await post('/v1/secrets/rotate', { new_key: SECRETS_KEY })
+    expect(same.status).toBe(400)
+  })
+})
