@@ -37,15 +37,23 @@ const DECIDE = {
   sensitivity: 'internal',
 } as const
 /**
- * 人主动建审批项（14 §10 表里第一行「人也可（`kind: policy_change` 等）」）的准入。
+ * 人主动建审批项（14 §10 表里第一行「人也可（`kind: policy_change` 等）」）的准入：
+ * **`approval.stage`**——提议 ≠ 决定，这正是 SoD 的前提。
  *
- * 元组上**该**是 `approval.stage`（提议 ≠ 决定，这正是 SoD 的前提），但 v1 的三个职责包
- * 里没有一条给 `approval` 域的 `stage`——真给了 `stage` 元组，连售后客服提一条「以后都这样」
- * 都会 403。所以准入沿用 `read`（能看见自己队列的人可以往里提一张），**写侧的纪律在处理器里**：
- * 提议者一律是调用者本人、工作区一律是本人的、自动化等级一律 L1 且不自动通过、
- * 决定与施行仍然走 14 的原状态机。给职责包补 `approval.stage` 的建议写在交付报告里。
+ * WP33 时三个职责包一条 `approval.stage` 都没给，真按 `stage` 判会让所有人 403，于是
+ * 暂时沿用了 `read`；WP35 给 `common.owner` / `common.member` / `dtc.aftersales` 都补上了
+ * stage（owner workspace、另两个 own），这里改回该有的那一条。范围要 `own` 就够：
+ * 提议的是自己那一张，owner 的 workspace 覆盖它。
+ *
+ * 写侧的纪律仍在处理器里：提议者一律是调用者本人、工作区一律是本人的、
+ * 等级一律 L1 且不自动通过、决定与施行走 14 的原状态机。
  */
-const PROPOSE = READ
+const PROPOSE = {
+  domain: 'approval',
+  op: 'stage',
+  range: 'own',
+  sensitivity: 'internal',
+} as const
 
 const ACTIONS = ['approve', 'approve_edited', 'reject', 'redirect', 'defer', 'withdraw'] as const
 /**
@@ -232,12 +240,8 @@ async function landInstruction(
     schema_version: 1 as const,
     role_id: item.role_id,
     proposer: { kind: 'person' as const, id: input.person_id },
-    automation: {
-      level_at_creation: 'L1' as const,
-      auto_approved: false,
-      mandate_check: { within: true, caps_hit: [] },
-      sampling: { selected: false },
-    },
+    // 指导产的卡永远 L1：指导本身不改任何东西，改不改由人再批一次
+    automation: { level_at_creation: 'L1' as const },
     routing,
     priority: 'queue' as const,
     links: { parent: item.id },
@@ -346,15 +350,9 @@ export function approvalRoutes(): Route[] {
           },
           // 提议者一律是调用者本人：接口不接受「替别人提」（14 §7 撤回权跟着提议者走）
           proposer: { kind: 'person', id: p.person_id, assignment_id: assignment.id },
-          // 契约上 `automation` 是 Partial，但 txn 的 create 只做浅合并、不补默认值，
-          // 少了 `mandate_check` 的卡到了 deck 的投影那一步会直接崩。这里给全
-          // （与本文件里 landInstruction 建卡时的做法一致）；建议见交付报告。
-          automation: {
-            level_at_creation: 'L1',
-            auto_approved: false,
-            mandate_check: { within: true, caps_hit: [] },
-            sampling: { selected: false },
-          },
+          // 14：人主动提的卡一律 L1（提议 ≠ 决定）。其余三项由 `ApprovalBus.create` 补齐——
+          // 契约就是这么写的，宿主补默认值的义务在 WP35 落到了实处。
+          automation: { level_at_creation: 'L1' },
           routing: {
             recipients: [...recipients],
             rule,

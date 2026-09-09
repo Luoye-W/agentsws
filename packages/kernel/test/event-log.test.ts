@@ -219,11 +219,52 @@ describe('SqliteEventLog', () => {
       ).toHaveLength(1)
     })
 
+    it('since_at / until_at 是时间闭区间，与 ulid 游标取交集（WP35）', async () => {
+      const clock = new FixedClock('2026-09-08T09:00:00.000Z')
+      const ranged = new SqliteEventLog({ clock, random: seededRandom(7) })
+      const ids: string[] = []
+      const at: string[] = []
+      for (let i = 0; i < 5; i++) {
+        const written = await ranged.append(event({ payload: { i } }))
+        ids.push(written.id)
+        at.push(written.at)
+        clock.advance(60_000)
+      }
+
+      const from = at[1] as string
+      const to = at[3] as string
+      expect(
+        (await collect(ranged.read({ workspace_id: WS, since_at: from }))).map((e) => e.id),
+      ).toEqual(ids.slice(1))
+      expect(
+        (await collect(ranged.read({ workspace_id: WS, until_at: to }))).map((e) => e.id),
+      ).toEqual(ids.slice(0, 4))
+      // 闭区间：两端那条都在里面
+      expect(
+        (await collect(ranged.read({ workspace_id: WS, since_at: from, until_at: to }))).map(
+          (e) => e.id,
+        ),
+      ).toEqual(ids.slice(1, 4))
+      // 与游标同给取交集
+      expect(
+        (
+          await collect(ranged.read({ workspace_id: WS, since: ids[1] as string, until_at: to }))
+        ).map((e) => e.id),
+      ).toEqual(ids.slice(2, 4))
+      // 下推到 SQL：limit 是过滤**之后**的条数，不是先读 limit 条再扔
+      expect(
+        await collect(ranged.read({ workspace_id: WS, since_at: to, limit: 10 })),
+      ).toHaveLength(2)
+      ranged.close()
+    })
+
     it('拒绝非法过滤参数', () => {
       expect(() => log.readSync({ workspace_id: '' })).toThrow(/non-empty workspace_id/)
       expect(() => log.readSync({ workspace_id: WS, limit: -1 })).toThrow(/non-negative integer/)
       expect(() => log.readSync({ workspace_id: WS, since: '' })).toThrow(/non-empty since/)
       expect(() => log.readSync({ workspace_id: WS, types: [''] })).toThrow(/non-empty types/)
+      expect(() => log.readSync({ workspace_id: WS, since_at: '' })).toThrow(/non-empty since_at/)
+      expect(() => log.readSync({ workspace_id: WS, until_at: '' })).toThrow(/non-empty until_at/)
     })
 
     it('信封往返：subject / payload_encrypted / actor.run_id / correlation 全部保真', async () => {

@@ -66,7 +66,7 @@ describe('createPolicyEngine', () => {
   it('sets, reads and removes rows for one assignment', () => {
     const engine = createPolicyEngine()
     engine.set(assignment.id, compilePolicies(assignment, role))
-    expect(engine.rows(assignment.id)).toHaveLength(9)
+    expect(engine.rows(assignment.id)).toHaveLength(11)
     expect(
       engine.can(assignment.id, 'order', 'read', { range: 'assigned', sensitivity: 'internal' }),
     ).toBe(true)

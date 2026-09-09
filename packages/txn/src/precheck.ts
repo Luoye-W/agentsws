@@ -1,6 +1,6 @@
 import type { ApprovalKind, ObjectRef, PrecheckResult } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
-import type { ApprovalContext, CreateApprovalInput } from './types.js'
+import type { ApprovalContext, NormalizedCreateInput } from './types.js'
 import { deepEqual, refKey, scanSecrets } from './util.js'
 
 const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
@@ -60,7 +60,7 @@ export interface PrecheckOutcome {
  * 31 §3.3 收件人门禁一并在此：收件人必须在 provenance.seen，且是线程原参与者或已验证联系方式。
  */
 export function runPrecheck<P>(
-  input: CreateApprovalInput<P>,
+  input: NormalizedCreateInput<P>,
   ctx: ApprovalContext = {},
 ): PrecheckOutcome {
   const blocked: string[] = []
@@ -104,12 +104,18 @@ export function runPrecheck<P>(
     }
   }
 
-  // 围栏：外部文本进 payload 前必须已清洗（未清洗 = 执行器的 bug）
+  // 围栏：外部文本进 payload 前必须已清洗（未清洗 = 执行器的 bug）。
+  //
+  // 判据是「有没有围栏该拦的构造」，**不是** `sanitizeText(t) !== t`——后者把 NFKC 归一
+  // 也算成违规，而归一对所有文本都生效：一句带全角逗号的中文（人写的指导、中文草稿）
+  // 归一后就与原文不等，于是每张卡都 blocked。这是 WP24 起 `landInstruction` 产的
+  // skill_lesson 卡进不了队列的根因。
   const text = textOf(payload)
-  if (text && EXTERNAL_FENCE.sanitizeText(text) !== text) {
+  const violations = text ? EXTERNAL_FENCE.findViolations(text) : []
+  if (violations.length > 0) {
     precheck.fencing = 'fail'
     blocked.push('fencing')
-    notes.push('payload 含未围栏的外部文本标记')
+    notes.push(`payload 含未围栏的外部文本标记：${violations.join(', ')}`)
   } else if (text) precheck.fencing = 'ok'
 
   // 密钥扫描（所有 kind）
@@ -144,8 +150,8 @@ export function runPrecheck<P>(
   }
 
   // 额度：超额不是失败，是 L1 路由
-  // 14：契约只要求给等级；没给 mandate_check 的一律走 L1 复核，不炸
-  precheck.mandate = input.automation.mandate_check?.within === true ? 'within' : 'review'
+  // 14：契约只要求给等级；没给 mandate_check 的由 normalizeCreateInput 补成「没核过」→ 复核
+  precheck.mandate = input.automation.mandate_check.within ? 'within' : 'review'
 
   if (notes.length > 0) precheck.notes = [...(precheck.notes ?? []), ...notes]
   return {

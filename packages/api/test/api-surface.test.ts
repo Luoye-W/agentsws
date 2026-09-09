@@ -121,6 +121,34 @@ describe('14 §10 建审批项', () => {
     const h = await harness()
     expect((await h.get('/v1/approvals/ap_nope/children')).status).toBe(404)
   })
+
+  it('准入是 approval.stage：只有 read / approve 的岗位提不了卡（WP35）', async () => {
+    const h = await harness()
+    const res = await h.post(
+      '/v1/approvals',
+      {
+        kind: 'policy_change',
+        subject: { object: { type: 'policy', id: 'return_window' } },
+        dedupe_key: 'dk_readonly',
+        title: 't',
+        summary: 's',
+      },
+      { assignment: h.readonlyAssignment.id },
+    )
+    expect(res.status).toBe(403)
+    // 同一张卡换回有 stage 的岗位就建得出来
+    expect(
+      (
+        await h.post('/v1/approvals', {
+          kind: 'policy_change',
+          subject: { object: { type: 'policy', id: 'return_window' } },
+          dedupe_key: 'dk_readonly',
+          title: 't',
+          summary: 's',
+        })
+      ).status,
+    ).toBe(201)
+  })
 })
 
 describe('19 §6 知识：导入源 / 引用 / 缺口', () => {
@@ -182,6 +210,21 @@ describe('19 §6 知识：导入源 / 引用 / 缺口', () => {
   it('status 不合法 → 400', async () => {
     const h = await harness()
     expect((await h.get('/v1/knowledge/gaps?status=whatever')).status).toBe(400)
+  })
+
+  it('写侧准入是 knowledge.stage：只有 read 的岗位登记不了源、开不了缺口（WP35）', async () => {
+    const h = await harness()
+    const at = { assignment: h.readonlyAssignment.id }
+    expect(
+      (await h.post('/v1/knowledge/sources', { kind: 'website', ref: 'x', parser: 'html' }, at))
+        .status,
+    ).toBe(403)
+    expect(
+      (await h.post('/v1/knowledge/gaps', { question: 'q', subject: { type: 'p', key: 'k' } }, at))
+        .status,
+    ).toBe(403)
+    // 读侧照常
+    expect((await h.get('/v1/knowledge/sources', at)).status).toBe(200)
   })
 
   it('知识模块没装这几个可选面 → 501，不是 500 也不是 404', async () => {

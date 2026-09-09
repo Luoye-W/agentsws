@@ -101,6 +101,26 @@ describe('保留期定时清理（39 待办 H）', () => {
     expect(await s.channels.raw.get(fresh)).toBeDefined()
   })
 
+  it('保留天数进策略层：显式的 raw_retention_days 优先于 global_caps（WP35）', async () => {
+    const clock = makeClock()
+    const s = await start(clock)
+    const ref = await putRaw(s, 'ann@customer.com', clock.now())
+    const policy = s.roles.policies.get(s.bootstrap.workspace.id)
+    expect(policy).toBeDefined()
+    if (policy !== undefined) {
+      s.roles.policies.set({
+        ...policy,
+        raw_retention_days: 3,
+        // 老位置还留着：显式字段在，就不看它
+        global_caps: { ...policy.global_caps, raw_retention_days: 30 },
+      })
+    }
+    clock.advance(10 * DAY)
+    const out = await s.schedule.scheduler.runNow('sched_raw_prune')
+    expect(out.result).toMatchObject({ retention_days: 3, channels: 1 })
+    expect(await s.channels.raw.get(ref)).toBeUndefined()
+  })
+
   it('保留天数进策略层：global_caps.raw_retention_days 改小了就按新的清', async () => {
     const clock = makeClock()
     const s = await start(clock)

@@ -57,10 +57,17 @@ describe('loadRole (05 §5)', () => {
     const m = loadBundledRole('common.member')
     expect(m.domain).toBe('common')
     expect(m.actions).toEqual([])
-    expect(m.scopes.every((s) => s.ops.every((op) => op === 'read'))).toBe(true)
+    // 只读 + 提议（WP35 补的 stage）：没有 approve，也没有 apply
+    expect(m.scopes.every((s) => s.ops.every((op) => op === 'read' || op === 'stage'))).toBe(true)
+    expect(m.scopes.some((s) => s.ops.includes('approve'))).toBe(false)
+    expect(m.scopes.find((s) => s.domain === 'approval')?.ops).toEqual(['read', 'stage'])
+    expect(m.scopes.find((s) => s.domain === 'knowledge')?.ops).toEqual(['read', 'stage'])
 
     const o = loadBundledRole('common.owner')
     expect(o.scopes.find((s) => s.domain === 'policy')?.ops).toEqual(['read', 'stage', 'approve'])
+    // WP35：14 §10「人也可提一张卡」、19 §4「答一条缺口」要的两条 stage
+    expect(o.scopes.find((s) => s.domain === 'approval')?.ops).toEqual(['read', 'stage', 'approve'])
+    expect(o.scopes.find((s) => s.domain === 'knowledge')?.ops).toEqual(['read', 'stage'])
     // 策略层动作永远 L1
     for (const spec of Object.values(o.automation)) {
       expect(spec.ceiling).toBe('L1')
@@ -86,8 +93,8 @@ describe('loadRole (05 §5)', () => {
 
   it('names the exact path of a bad nested value', () => {
     const broken = source().replace(
-      '{ domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }',
-      '{ domain: knowledge, ops: [read], range: everywhere, max_sensitivity: internal }',
+      '{ domain: knowledge, ops: [read, stage], range: workspace, max_sensitivity: internal }',
+      '{ domain: knowledge, ops: [read, stage], range: everywhere, max_sensitivity: internal }',
     )
     expect(() => parseRole(broken, 'broken.yml')).toThrow(/scopes\[3\]\.range/)
   })

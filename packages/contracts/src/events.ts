@@ -136,6 +136,17 @@ export type KnownEventType =
   | 'meeting.record.transcribed'
   | 'meeting.record.processed'
   | 'meeting.record.failed'
+  // 工作模型 (37 §2)：摘要级，正文永不进日志（正文在事项时间线里）
+  | 'todo.created'
+  | 'todo.updated'
+  | 'todo.done'
+  | 'todo.dropped'
+  | 'matter.opened'
+  | 'matter.closed'
+  | 'matter.message'
+  // 恢复先对账（WP34 B）：payload 只有条数与结论
+  | 'reconcile.started'
+  | 'reconcile.finished'
   // inbound / delivery (18)
   | 'inbound.received'
   | 'inbound.deduped'
@@ -149,7 +160,12 @@ export interface EventLog {
   ): Promise<EventEnvelope<T, P>>
   read(filter: {
     workspace_id: WorkspaceId
+    /** 续传游标：ulid 严格递增，`id > since`。 */
     since?: EventId
+    /** 时间下界（ISO-8601，闭区间，`at >= since_at`）；与 `since` 可同时给，取交集。 */
+    since_at?: Iso8601
+    /** 时间上界（ISO-8601，闭区间，`at <= until_at`）。 */
+    until_at?: Iso8601
     types?: string[]
     run_id?: RunId
     limit?: number

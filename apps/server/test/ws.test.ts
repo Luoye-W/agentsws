@@ -165,6 +165,48 @@ describe('28 §2 WebSocket 事件流（真 socket）', () => {
     socket.close()
   })
 
+  it('建一条待办 → 订阅方收到 todo.created 摘要（正文不进推送，WP35）', async () => {
+    const socket = new WebSocket(wsUrl(), [
+      'agentsws.v1',
+      `agentsws.bearer.${server.bootstrap.internalToken}`,
+    ])
+    await new Promise((r) => socket.once('open', r))
+    socket.send(
+      JSON.stringify({ op: 'subscribe', assignment_id: server.bootstrap.ownerAssignment.id }),
+    )
+    const pending = collect(socket, (f) => f.some((x) => x.name === 'todo.created'))
+    await new Promise((r) => setTimeout(r, 50))
+
+    // 经工作模型真建一条（不是往日志里手写事件）
+    const todo = server.work.createTodo({
+      title: '给 Anna 回信',
+      owner: server.bootstrap.person.id,
+      note: '这段备注不该出现在推送里',
+      horizon: 'today',
+    })
+
+    const frames = await pending
+    const frame = frames.find((f) => f.name === 'todo.created')
+    expect(frame?.type).toBe('STATE')
+    expect(frame?.subject).toEqual({ type: 'todo', id: todo.id })
+    expect(JSON.stringify(frames)).not.toContain('这段备注不该出现在推送里')
+
+    // 日志里那一条也是摘要：有标题 / 时段，没有备注正文
+    const logged = server.kernel.eventLog.readSync({
+      workspace_id: server.bootstrap.workspace.id,
+      types: ['todo.created'],
+    })
+    expect(logged).toHaveLength(1)
+    expect(logged[0]?.payload).toMatchObject({ title: '给 Anna 回信', horizon: 'today' })
+    expect(JSON.stringify(logged[0]?.payload)).not.toContain('这段备注不该出现在推送里')
+
+    // 打勾 → todo.done（工作台的失效映射按 `todo.` 前缀走）
+    const done = collect(socket, (f) => f.some((x) => x.name === 'todo.done'))
+    server.work.complete(todo.id)
+    expect((await done).some((f) => f.name === 'todo.done')).toBe(true)
+    socket.close()
+  })
+
   it('普通 HTTP 打 /v1/ws → 426，并把怎么连说清楚', async () => {
     const res = await fetch(`${url}/v1/ws`)
     expect(res.status).toBe(426)

@@ -1,16 +1,9 @@
-import type { Iso8601, WorkspaceId } from '@agentsws/contracts'
+import type { Iso8601, KnownEventType, WorkspaceId } from '@agentsws/contracts'
 
 /**
- * 19 §6 的事件名。`KnownEventType`（contracts/events.ts）目前还没有 `knowledge.*`，
- * 本包不改契约，先在此声明，等契约补齐后换成 `KnownEventType` 的成员。
+ * 19 §6 的事件名。是契约 `KnownEventType` 的子集（本地窄化，方便本包的 emitter 只收这几条）。
  */
-export type KnowledgeEventType =
-  | 'knowledge.card.proposed'
-  | 'knowledge.card.activated'
-  | 'knowledge.card.retired'
-  | 'knowledge.card.conflict'
-  | 'knowledge.card.recalled'
-  | 'knowledge.card.cited'
+export type KnowledgeEventType = Extract<KnownEventType, `knowledge.${string}`>
 
 export interface KnowledgeEvent {
   type: KnowledgeEventType

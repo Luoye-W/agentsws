@@ -24,15 +24,20 @@ const READ = {
 } as const
 
 /**
- * 登记导入源 / 开缺口 / 答缺口的准入。
+ * 登记导入源 / 开缺口 / 答缺口的准入：**`knowledge.stage`**——这三件事都是
+ * 往知识库里**提议**东西。
  *
- * 元组上**该**是 `knowledge.stage`（这三件事是往知识库里提议东西），但 v1 的职责包里
- * 没有一条给 `knowledge` 域的 `stage`（`common.owner` / `common.member` / `dtc.aftersales`
- * 都只有 `read`），真按 `stage` 判会让所有人 403。所以准入沿用 `read`，**纪律在下游**：
- * 19 §4 的写仍然只经审批项——`answer` 产出的是一张 `knowledge_update` 卡，不是一条生效的知识。
- * 给职责包补 `knowledge.stage` 的建议写在交付报告里。
+ * WP33 时职责包一条 `knowledge.stage` 都没有，真按 `stage` 判会让所有人 403，于是暂时
+ * 沿用了 `read`；WP35 给三个职责包都补上了（知识库是工作区级的，所以范围也是 workspace），
+ * 这里改回该有的那一条。**纪律仍在下游**：19 §4 的写只经审批项——`answer` 产出的是一张
+ * `knowledge_update` 卡，不是一条生效的知识。
  */
-const WRITE = READ
+const WRITE = {
+  domain: 'knowledge',
+  op: 'stage',
+  range: 'workspace',
+  sensitivity: 'internal',
+} as const
 
 const LAYERS = ['fact', 'phrasing', 'policy'] as const
 const STATUSES = ['proposed', 'active', 'retired'] as const

@@ -8,9 +8,10 @@ description: 策略层规则与授权额度、职责分配、连接器授权、�
 
 scopes:
   - { domain: policy, ops: [read, stage, approve], range: workspace, max_sensitivity: restricted }
-  - { domain: approval, ops: [read, approve], range: workspace, max_sensitivity: restricted }
+  - { domain: approval, ops: [read, stage, approve], range: workspace, max_sensitivity: restricted }
   - { domain: event_log, ops: [read], range: workspace, max_sensitivity: restricted }
   - { domain: analytics, ops: [read], range: workspace, max_sensitivity: confidential }
+  - { domain: knowledge, ops: [read, stage], range: workspace, max_sensitivity: internal }
   - { domain: skill, ops: [read, stage, approve], range: workspace, max_sensitivity: internal }
   - { domain: store_config, ops: [read], range: workspace, max_sensitivity: confidential }
 

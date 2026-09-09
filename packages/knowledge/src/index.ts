@@ -9,6 +9,7 @@ import {
   ingestDocument,
   ingestMarkdown,
 } from './ingest.js'
+import { SqliteIntakeStore } from './intake.js'
 import { SqliteMemoryStore } from './memory.js'
 import { SqliteRetrieval } from './retrieval.js'
 import { migrate } from './schema.js'
@@ -17,6 +18,7 @@ import { type Embedder, SqliteKnowledgeStore } from './store.js'
 export * from './errors.js'
 export * from './events.js'
 export * from './ingest.js'
+export * from './intake.js'
 export * from './markdown.js'
 export * from './memory.js'
 export * from './retrieval.js'
@@ -37,7 +39,7 @@ export interface CreateKnowledgeOptions {
   embed?: Embedder
   /** anydoc / html 清洗 / 转写的挂点（13 §3）；本包不安装 anydoc。 */
   parser?: DocumentParser
-  /** 19 §6 事件；契约的 KnownEventType 还没有 knowledge.*，先走本地类型。 */
+  /** 19 §6 事件（`KnownEventType` 里 `knowledge.*` 的那几条）。 */
   emit?: KnowledgeEmitter
   /** 单工作区本地档的缺省 workspace（记忆的 recall / forget 契约里没带）。 */
   workspace_id?: WorkspaceId
@@ -48,6 +50,8 @@ export interface Knowledge {
   store: SqliteKnowledgeStore
   retrieval: SqliteRetrieval
   memory: SqliteMemoryStore
+  /** 19 §1.3 导入源与 §4 缺口队列（WP35 补的两张表）。 */
+  intake: SqliteIntakeStore
   ingestMarkdown(text: string, source: IngestSource, opts?: { maxChars?: number }): Chunk[]
   ingestDocument(
     input: { ref: string; parser: KnowledgeSource['parser']; data: string | Uint8Array },
@@ -69,6 +73,7 @@ export function createKnowledge(opts: CreateKnowledgeOptions = {}): Knowledge {
   }
   const store = new SqliteKnowledgeStore(db, shared)
   const retrieval = new SqliteRetrieval(db, shared)
+  const intake = new SqliteIntakeStore(db, shared)
   const memory = new SqliteMemoryStore(db, {
     clock,
     ...(opts.workspace_id === undefined ? {} : { workspace_id: opts.workspace_id }),
@@ -78,6 +83,7 @@ export function createKnowledge(opts: CreateKnowledgeOptions = {}): Knowledge {
     db,
     store,
     retrieval,
+    intake,
     memory,
     ingestMarkdown,
     ingestDocument: (input, source, chunkOpts) =>

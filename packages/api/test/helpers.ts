@@ -98,6 +98,8 @@ export class FakeEventLog implements EventLogPort {
   read(filter: {
     workspace_id: string
     since?: string
+    since_at?: string
+    until_at?: string
     types?: string[]
     run_id?: string
     limit?: number
@@ -107,6 +109,9 @@ export class FakeEventLog implements EventLogPort {
         (e) =>
           e.workspace_id === filter.workspace_id &&
           (filter.since === undefined || e.id > filter.since) &&
+          // WP35：时间闭区间，与 ulid 游标同给取交集
+          (filter.since_at === undefined || e.at >= filter.since_at) &&
+          (filter.until_at === undefined || e.at <= filter.until_at) &&
           (filter.types === undefined || filter.types.includes(e.type)) &&
           (filter.run_id === undefined || e.correlation.run_id === filter.run_id),
       )
@@ -159,6 +164,7 @@ export interface Harness {
   assignment: Assignment
   weakAssignment: Assignment
   memberAssignment: Assignment
+  readonlyAssignment: Assignment
   item: ApprovalItem
   get(path: string, init?: RequestInit & { assignment?: string | null }): Promise<Response>
   post(
@@ -491,15 +497,16 @@ export function stagedChange(over: Partial<StagedChange> = {}): StagedChange {
 }
 
 const SCOPES = [
+  // WP35：`stage` = 提议（14 §10 人也可提一张卡），与 `approve` 分开
   {
     domain: 'approval' as DataDomain,
-    ops: ['read', 'approve'] as Operation[],
+    ops: ['read', 'stage', 'approve'] as Operation[],
     range: 'own' as Range,
     max_sensitivity: 'internal' as Sensitivity,
   },
   {
     domain: 'knowledge' as DataDomain,
-    ops: ['read'] as Operation[],
+    ops: ['read', 'stage'] as Operation[],
     range: 'workspace' as Range,
     max_sensitivity: 'internal' as Sensitivity,
   },
@@ -547,7 +554,7 @@ const SCOPES = [
 const MEMBER_SCOPES = [
   {
     domain: 'approval' as DataDomain,
-    ops: ['read', 'approve'] as Operation[],
+    ops: ['read', 'stage', 'approve'] as Operation[],
     range: 'own' as Range,
     max_sensitivity: 'internal' as Sensitivity,
   },
@@ -555,6 +562,25 @@ const MEMBER_SCOPES = [
     domain: 'event_log' as DataDomain,
     ops: ['read'] as Operation[],
     range: 'own' as Range,
+    max_sensitivity: 'internal' as Sensitivity,
+  },
+]
+
+/**
+ * WP35：只读一档——`approval` / `knowledge` 都只有 `read`（+`approve`），**没有 `stage`**。
+ * 用来钉住「提议 ≠ 决定」：`POST /v1/approvals` 与知识写侧要的是 stage，这一档进不去。
+ */
+const READONLY_SCOPES = [
+  {
+    domain: 'approval' as DataDomain,
+    ops: ['read', 'approve'] as Operation[],
+    range: 'own' as Range,
+    max_sensitivity: 'internal' as Sensitivity,
+  },
+  {
+    domain: 'knowledge' as DataDomain,
+    ops: ['read'] as Operation[],
+    range: 'workspace' as Range,
     max_sensitivity: 'internal' as Sensitivity,
   },
 ]
@@ -606,13 +632,15 @@ export async function harness(
     granted_by: me.id,
     granted_at: T0,
   }
-  // 只有 approval.read 的弱 Assignment，用来测 403
+  // 只有 approval 那一条 scope 的弱 Assignment，用来测别的域 403
   const weakAssignment: Assignment = { ...assignment, id: 'asg_weak' }
   /**
    * 照 `common.member` 那一档：approval.read/own + event_log.read/**own**（不是 workspace）。
    * WP33 的「事件日志按岗位可读」就靠它——它不再 403，但只看得到与本岗位相关的。
    */
   const memberAssignment: Assignment = { ...assignment, id: 'asg_member' }
+  /** 只读一档（approval / knowledge 都没有 `stage`），用来测提议侧 403。 */
+  const readonlyAssignment: Assignment = { ...assignment, id: 'asg_readonly' }
   const revoked: Assignment = { ...assignment, id: 'asg_revoked', revoked_at: T0 }
   const foreign: Assignment = { ...assignment, id: 'asg_foreign', person_id: other.id }
 
@@ -620,6 +648,7 @@ export async function harness(
     [assignment.id, assignment],
     [weakAssignment.id, weakAssignment],
     [memberAssignment.id, memberAssignment],
+    [readonlyAssignment.id, readonlyAssignment],
     [revoked.id, revoked],
     [foreign.id, foreign],
   ])
@@ -627,7 +656,13 @@ export async function harness(
   const roles: RolesPort = {
     can: (id, domain, op, request) => {
       const scopes =
-        id === 'asg_weak' ? SCOPES.slice(0, 1) : id === 'asg_member' ? MEMBER_SCOPES : SCOPES
+        id === 'asg_weak'
+          ? SCOPES.slice(0, 1)
+          : id === 'asg_member'
+            ? MEMBER_SCOPES
+            : id === 'asg_readonly'
+              ? READONLY_SCOPES
+              : SCOPES
       return scopes.some(
         (s) =>
           s.domain === domain &&
@@ -932,6 +967,7 @@ export async function harness(
     otherToken,
     assignment,
     weakAssignment,
+    readonlyAssignment,
     memberAssignment,
     item,
     get: (path, init) => call('GET', path, undefined, init),

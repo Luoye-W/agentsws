@@ -19,8 +19,13 @@ import type {
   Halt,
   IdentityService,
   Iso8601,
+  KnowledgeGap,
+  KnowledgeGapAnswer,
+  KnowledgeGapInput,
+  KnowledgeGapStatus,
   KnowledgeLayer,
   KnowledgeSource,
+  KnowledgeSourceInput,
   LessonRecord,
   MaybePromise,
   ModuleHealth,
@@ -37,6 +42,7 @@ import type {
   Sensitivity,
   SkillTier,
   StagedChange,
+  TokenInfo,
   Trace,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -74,20 +80,14 @@ export interface RequestContext {
   assignment?: Assignment
 }
 
-/** 20 §3：一张 token 的状态（`GET /v1/auth/session` 要报「还剩多久」）。 */
-export interface TokenInfo {
-  kind: Principal['kind']
-  person_id: PersonId
-  workspace_id: WorkspaceId
-  expires_at?: Iso8601
-  revoked: boolean
-}
+/** 20 §3 一张 token 的状态：WP35 起在契约里（`IdentityService.tokenInfo?`）。 */
+export type { TokenInfo } from '@agentsws/contracts'
 
 /**
- * 契约的 `IdentityService` 之外的一件小事：查一张 token 的到期时间。
+ * `IdentityService.tokenInfo?` 装上了的那一档。
  *
- * 做成可选面（本地的内存 / SQLite 两档都实现）是因为它不属于「身份」的最小契约——
- * 换一个只实现契约的身份服务时，`GET /v1/auth/session` 少一个 `expires_at`，其余照常。
+ * 契约上它是**可选**方法（不属于「身份」的最小面）；网关拿 `hasTokenInfo` 探一下，
+ * 探不到就少一个 `expires_at`，其余照常。
  */
 export interface IdentityTokenInfo {
   tokenInfo(token: string): MaybePromise<TokenInfo | undefined>
@@ -105,6 +105,9 @@ export interface EventLogPort {
   read(filter: {
     workspace_id: WorkspaceId
     since?: EventId
+    /** WP35：时间闭区间，与 `since` 同给取交集；SQLite 档下推到 SQL。 */
+    since_at?: Iso8601
+    until_at?: Iso8601
     types?: string[]
     run_id?: RunId
     limit?: number
@@ -206,52 +209,14 @@ export interface KnowledgePort {
   ): MaybePromise<KnowledgeGapAnswer>
 }
 
-/** 19 §1.3 的登记入参（`id` / `chunks` / `last_synced_at` 由实现给）。 */
-export interface KnowledgeSourceInput {
-  kind: KnowledgeSource['kind']
-  ref: string
-  parser: KnowledgeSource['parser']
-  acl_inherit?: boolean
-}
-
-export type KnowledgeGapStatus = 'open' | 'answered' | 'dismissed'
-
-/**
- * 19 §4「缺口：Agent 答不了 → question 提议 → 有人答 → 自动变 knowledge_update」。
- *
- * 契约里还没有这个对象（19 §6 只在 API 表里提了 `POST /knowledge/gaps`），
- * 这里先按 §4 那一行的最小形状定义，进契约的建议写在交付报告里。
- */
-export interface KnowledgeGap {
-  id: string
-  workspace_id: WorkspaceId
-  question: string
-  /** 关于什么（与 FactCard.subject 同形）。 */
-  subject: { type: string; id?: string; key: string }
-  domain: DataDomain | 'company'
-  status: KnowledgeGapStatus
-  asked_by: { kind: 'agent' | 'person'; id: string }
-  run_id?: RunId
-  answer?: string
-  answered_by?: PersonId
-  answered_at?: Iso8601
-  /** 答完之后生成的那张 `knowledge_update` 审批项。 */
-  approval_item_id?: string
-  created_at: Iso8601
-}
-
-export interface KnowledgeGapInput {
-  question: string
-  subject: { type: string; id?: string; key: string }
-  domain?: DataDomain | 'company'
-  run_id?: RunId
-}
-
-export interface KnowledgeGapAnswer {
-  gap: KnowledgeGap
-  /** 19 §4：答案不直接生效，先变一张审批项。 */
-  approval_item_id?: string
-}
+/* 19 §1.3 / §4 的知识源与缺口对象已进契约（WP35），这里只转出去，不再自己定义。 */
+export type {
+  KnowledgeGap,
+  KnowledgeGapAnswer,
+  KnowledgeGapInput,
+  KnowledgeGapStatus,
+  KnowledgeSourceInput,
+} from '@agentsws/contracts'
 
 /** 写个人层 overlay 的入参（24 §1 OverlayOp）。 */
 export interface OverlayInput {

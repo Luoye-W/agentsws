@@ -78,12 +78,7 @@ export interface WsSubscribeMessage {
 
 export type WsClientMessage = WsSubscribeMessage | { op: 'ping' }
 
-/**
- * 默认推的类型前缀：17 §2 的运行事件 + 会改工作台上任何一格的那几类。
- *
- * `todo.` / `matter.` 现在还没有对应的事件类型（`packages/work` 不发事件），
- * 列在这里是为了「一旦发了就自动生效，不用改网关」——见交付报告「需要契约改动」。
- */
+/** 默认推的类型前缀：17 §2 的运行事件 + 会改工作台上任何一格的那几类。 */
 export const WS_DEFAULT_PREFIXES = [
   // 17 §2 运行协议
   'run.',
@@ -99,7 +94,7 @@ export const WS_DEFAULT_PREFIXES = [
   'approval.',
   'change.',
   'guardrail.',
-  // 37 工作模型（契约里还没有；先占位）
+  // 37 工作模型（WP35 起 packages/work 真发这几条）
   'todo.',
   'matter.',
   // 25 定时与流程

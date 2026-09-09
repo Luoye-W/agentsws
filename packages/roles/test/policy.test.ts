@@ -21,8 +21,11 @@ describe('compilePolicies (31 §3.1)', () => {
     expect(rows).toContainEqual([a.id, 'order', 'read', 'assigned', 'internal'])
     expect(rows).toContainEqual([a.id, 'customer', 'stage', 'assigned', 'internal'])
     expect(rows).toContainEqual([a.id, 'approval', 'approve', 'own', 'internal'])
-    // 6 个 scope，其中 customer 和 approval 各两个 op
-    expect(rows).toHaveLength(9)
+    // WP35：提议 ≠ 决定，approval / knowledge 各多一条 stage
+    expect(rows).toContainEqual([a.id, 'approval', 'stage', 'own', 'internal'])
+    expect(rows).toContainEqual([a.id, 'knowledge', 'stage', 'workspace', 'internal'])
+    // 7 个 scope；customer / knowledge 各两个 op，approval 三个
+    expect(rows).toHaveLength(11)
     expect(rows.every((r) => r[0] === a.id)).toBe(true)
   })
 

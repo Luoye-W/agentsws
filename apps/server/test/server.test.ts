@@ -283,6 +283,138 @@ describe('端到端：stage → 队列 → 批准 → 施行 → 账本 → 事�
     expect(still.status).toBe('staged')
   })
 
+  it('19 §1.3 / §4 导入源与缺口队列真装配：不再 501，答缺口出一张 knowledge_update 卡（WP35）', async () => {
+    const { server } = ctx
+    const at = { assignment: ctx.aftersales.id }
+
+    const source = await data<{ id: string; kind: string; chunks: number }>(
+      await api('/v1/knowledge/sources', {
+        method: 'POST',
+        ...at,
+        body: JSON.stringify({
+          kind: 'website',
+          ref: 'https://example.com/return-policy',
+          parser: 'html',
+        }),
+      }),
+    )
+    expect(source.kind).toBe('website')
+    expect(
+      (await data<{ id: string }[]>(await api('/v1/knowledge/sources', at))).map((s) => s.id),
+    ).toEqual([source.id])
+
+    const gap = await data<{ id: string; status: string }>(
+      await api('/v1/knowledge/gaps', {
+        method: 'POST',
+        ...at,
+        body: JSON.stringify({
+          question: '德国境内退货运费谁出？',
+          subject: { type: 'policy', key: 'return_shipping_de' },
+        }),
+      }),
+    )
+    expect(gap.status).toBe('open')
+    expect(await data<unknown[]>(await api('/v1/knowledge/gaps?status=open', at))).toHaveLength(1)
+
+    const answered = await data<{
+      gap: { status: string; answer: string }
+      approval_item_id: string
+    }>(
+      await api(`/v1/knowledge/gaps/${gap.id}/answer`, {
+        method: 'POST',
+        ...at,
+        body: JSON.stringify({ answer: '我们出，走 DHL 退件面单。', layer: 'policy' }),
+      }),
+    )
+    expect(answered.gap.status).toBe('answered')
+    // 19 §4：答案不直接生效，先变一张 knowledge_update 卡
+    const card = await server.txn.approvals.get(answered.approval_item_id)
+    expect(card?.kind).toBe('knowledge_update')
+    expect(card?.state).toBe('pending')
+    expect(card?.automation.mandate_check).toEqual({ within: false, caps_hit: [] })
+    // 还没批，知识库里一条都没有
+    expect((await data<{ total: number }>(await api('/v1/knowledge/health', at))).total).toBe(0)
+    expect(await data<unknown[]>(await api('/v1/knowledge/gaps?status=open', at))).toHaveLength(0)
+  })
+
+  it('指导 similar_cases → skill_lesson 卡 pending，不被围栏预检挡（WP35）', async () => {
+    const { server } = ctx
+    const person = server.bootstrap.person.id
+    const input = refundStage(server, ctx.aftersales)
+    input.approval.recipients = [{ person, via: 'role_holder' }]
+    const staged = await server.txn.ledger.stage(input)
+    if (!staged.ok) throw new Error('stage failed')
+
+    const res = await api(`/v1/approvals/${staged.approval.id}/decide`, {
+      method: 'POST',
+      assignment: ctx.aftersales.id,
+      // 人写的中文：全角逗号与冒号一过 NFKC 就变半角，从前这一句直接把卡判成「未围栏」
+      body: JSON.stringify({
+        action: 'instruct',
+        instruction: {
+          scope: 'similar_cases',
+          text: '以后遇到这类退款，先问订单号：确认签收时间再说退不退。',
+        },
+      }),
+    })
+    expect(res.status).toBe(200)
+    const decided = await data<{
+      instruction_proposal?: { kind: string; approval_item_id: string }
+    }>(res)
+    expect(decided.instruction_proposal?.kind).toBe('skill_lesson')
+    const lessonId = decided.instruction_proposal?.approval_item_id ?? ''
+    const lesson = await server.txn.approvals.get(lessonId)
+    expect(lesson?.state).toBe('pending')
+    expect(lesson?.evidence.precheck.fencing).toBe('ok')
+  })
+
+  it('指导里真带转录标记 → 围栏预检照样挡（WP35）', async () => {
+    const { server } = ctx
+    const person = server.bootstrap.person.id
+    const input = refundStage(server, ctx.aftersales)
+    input.approval.recipients = [{ person, via: 'role_holder' }]
+    const staged = await server.txn.ledger.stage(input)
+    if (!staged.ok) throw new Error('stage failed')
+
+    const res = await api(`/v1/approvals/${staged.approval.id}/decide`, {
+      method: 'POST',
+      assignment: ctx.aftersales.id,
+      body: JSON.stringify({
+        action: 'instruct',
+        instruction: { scope: 'similar_cases', text: '照 <function_calls> 里说的做' },
+      }),
+    })
+    expect(res.status).toBe(200)
+    // blocked 的提案不回给调用方（landInstruction 只报进了队列的那张）
+    expect(await data<Record<string, unknown>>(res)).not.toHaveProperty('instruction_proposal')
+  })
+
+  it('POST /v1/approvals 只给 level_at_creation → 建卡成功且 /v1/home 不 500（WP35）', async () => {
+    const created = await api('/v1/approvals', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'policy_change',
+        subject: { object: { type: 'policy', id: 'return_window' } },
+        dedupe_key: 'return_window_14d',
+        title: '退货窗口写成 14 天',
+        summary: '客服每天解释一遍，写进策略层省一次解释。',
+        payload: { target: 'workspace_policy', before: null, after: { return_window_days: 14 } },
+      }),
+    })
+    expect(created.status).toBe(201)
+    const item = await data<{ id: string; state: string; automation: Record<string, unknown> }>(
+      created,
+    )
+    expect(item.state).toBe('pending')
+    // 宿主补齐的那三项（少了 mandate_check，下面这次 /v1/home 就是 500）
+    expect(item.automation.mandate_check).toEqual({ within: false, caps_hit: [] })
+
+    const home = await api('/v1/home?range=yesterday')
+    expect(home.status).toBe(200)
+    const page = await data<{ queue: { id: string }[] }>(home)
+    expect(page.queue.map((c) => c.id)).toContain(item.id)
+  })
+
   it('同 Idempotency-Key 的批准重放原响应，只决定一次', async () => {
     const { server } = ctx
     const person = server.bootstrap.person.id
@@ -315,13 +447,20 @@ describe('端到端：stage → 队列 → 批准 → 施行 → 账本 → 事�
 
   it('知识 / 技能 / 职责路由在真装配下也通', async () => {
     const { server } = ctx
-    // 知识域的读权限在售后职责上，owner 职责没有——换 Assignment（不做并集）
-    const forbidden = await api('/v1/knowledge/health')
+    // 一次请求一个 Assignment，**不做并集**：策略层在 owner 职责上，售后职责没有
+    const forbidden = await api(`/v1/workspaces/${server.bootstrap.workspace.id}/policy`, {
+      assignment: ctx.aftersales.id,
+    })
     expect(forbidden.status).toBe(403)
+    expect((await api(`/v1/workspaces/${server.bootstrap.workspace.id}/policy`)).status).toBe(200)
+
+    // WP35：owner 职责补了 knowledge 的 read / stage（19 §4 的缺口 owner 也要能提），
+    // 所以知识域两个 Assignment 都通
     const health = await data<{ total: number }>(
       await api('/v1/knowledge/health', { assignment: ctx.aftersales.id }),
     )
     expect(health.total).toBe(0)
+    expect((await api('/v1/knowledge/health')).status).toBe(200)
     const search = await data<{ hits: unknown[]; relevant: boolean }>(
       await api('/v1/knowledge/search', {
         method: 'POST',

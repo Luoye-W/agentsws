@@ -132,6 +132,9 @@ function requireNonEmpty(value: unknown, field: string): string {
   return value
 }
 
+/** `EventLog.read` 的过滤器（契约的那一份，抽出来给 readSync 共用）。 */
+export type EventReadFilter = Parameters<EventLog['read']>[0]
+
 export class SqliteEventLog implements EventLog {
   readonly schemaVersion: number
   private readonly db: Database.Database
@@ -292,24 +295,16 @@ export class SqliteEventLog implements EventLog {
     return row?.hash
   }
 
-  /** 21 §1 的 `read`：`since` 按 ulid 序严格递增（断线续传无丢无重，28 §4 用例 4）。 */
-  read(filter: {
-    workspace_id: WorkspaceId
-    since?: EventId
-    types?: string[]
-    run_id?: RunId
-    limit?: number
-  }): AsyncIterable<EventEnvelope> {
+  /**
+   * 21 §1 的 `read`：`since` 按 ulid 序严格递增（断线续传无丢无重，28 §4 用例 4）；
+   * `since_at` / `until_at` 是时间闭区间，与 `since` 同给取交集。三个都下推到 SQL——
+   * 时间范围在调用方那一层过滤等于把整段日志读进内存再扔掉大半。
+   */
+  read(filter: EventReadFilter): AsyncIterable<EventEnvelope> {
     return lazyAsyncIterable(() => this.readSync(filter))
   }
 
-  readSync(filter: {
-    workspace_id: WorkspaceId
-    since?: EventId
-    types?: string[]
-    run_id?: RunId
-    limit?: number
-  }): EventEnvelope[] {
+  readSync(filter: EventReadFilter): EventEnvelope[] {
     const workspace_id = requireNonEmpty(filter.workspace_id, 'workspace_id')
     const where: string[] = ['workspace_id = ?']
     const params: (string | number)[] = [workspace_id]
@@ -317,6 +312,14 @@ export class SqliteEventLog implements EventLog {
     if (filter.since !== undefined) {
       where.push('id > ?')
       params.push(requireNonEmpty(filter.since, 'since'))
+    }
+    if (filter.since_at !== undefined) {
+      where.push('at >= ?')
+      params.push(requireNonEmpty(filter.since_at, 'since_at'))
+    }
+    if (filter.until_at !== undefined) {
+      where.push('at <= ?')
+      params.push(requireNonEmpty(filter.until_at, 'until_at'))
     }
     if (filter.types !== undefined) {
       if (filter.types.length === 0) return []

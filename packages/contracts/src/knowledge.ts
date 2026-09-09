@@ -62,6 +62,53 @@ export interface KnowledgeSource {
   parser: 'anydoc' | 'html' | 'transcript'
 }
 
+/** 19 §1.3 的登记入参（`id` / `chunks` / `last_synced_at` 由实现给）。 */
+export interface KnowledgeSourceInput {
+  kind: KnowledgeSource['kind']
+  ref: string
+  parser: KnowledgeSource['parser']
+  acl_inherit?: boolean
+}
+
+export type KnowledgeGapStatus = 'open' | 'answered' | 'dismissed'
+
+/**
+ * 19 §4 缺口：「Agent 答不了 → question 提议 → 有人答 → 自动变 knowledge_update」。
+ *
+ * WP33 时它只是网关包里的一个本地类型（19 §6 的 API 表提了 `POST /knowledge/gaps`，
+ * 契约里却没有这个对象）；WP35 搬进契约——换一个知识实现照样接得上。
+ */
+export interface KnowledgeGap {
+  id: string
+  workspace_id: WorkspaceId
+  question: string
+  /** 关于什么（与 `FactCard.subject` 同形）。 */
+  subject: { type: string; id?: string; key: string }
+  domain: DataDomain | 'company'
+  status: KnowledgeGapStatus
+  asked_by: { kind: 'agent' | 'person'; id: string }
+  run_id?: RunId
+  answer?: string
+  answered_by?: PersonId
+  answered_at?: Iso8601
+  /** 答完之后生成的那张 `knowledge_update` 审批项。 */
+  approval_item_id?: string
+  created_at: Iso8601
+}
+
+export interface KnowledgeGapInput {
+  question: string
+  subject: { type: string; id?: string; key: string }
+  domain?: DataDomain | 'company'
+  run_id?: RunId
+}
+
+export interface KnowledgeGapAnswer {
+  gap: KnowledgeGap
+  /** 19 §4：答案不直接生效，先变一张审批项。 */
+  approval_item_id?: string
+}
+
 export interface RetrievalActor {
   person_id: PersonId
   assignment_id: AssignmentId

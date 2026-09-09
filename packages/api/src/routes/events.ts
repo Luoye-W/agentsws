@@ -184,25 +184,22 @@ export async function readVisibleEvents(
   assignment: Assignment,
   query: EventQuery,
 ): Promise<{ events: EventEnvelope[]; scanned: EventEnvelope[] }> {
+  // WP35：时间上下界进了契约（`EventLog.read` 的 `since_at` / `until_at`），
+  // SQLite 档下推到 SQL——不再把整段日志读进内存再扔掉大半。
   const filter = {
     workspace_id: principal.workspace_id,
     limit: query.limit,
     ...(query.cursor === undefined ? {} : { since: query.cursor }),
+    ...(query.from === undefined ? {} : { since_at: query.from }),
+    ...(query.until === undefined ? {} : { until_at: query.until }),
     ...(query.types === undefined ? {} : { types: query.types }),
     ...(query.run_id === undefined ? {} : { run_id: query.run_id }),
   }
   const scanned: EventEnvelope[] = []
   for await (const e of deps.eventLog.read(filter)) scanned.push(e)
-  // 时间范围在网关这一层过滤：契约的 `EventLog.read` 只有 ulid 游标，没有时间上下界
-  // （21 的遗留，见交付报告「需要契约改动」）。ulid 时间有序，所以顺序不受影响。
-  const ranged = scanned.filter(
-    (e) =>
-      (query.from === undefined || e.at >= query.from) &&
-      (query.until === undefined || e.at <= query.until),
-  )
-  if (canReadAll(deps, assignment.id)) return { events: ranged, scanned }
+  if (canReadAll(deps, assignment.id)) return { events: scanned, scanned }
   const visibility = new AssignmentVisibility(deps, principal, assignment)
-  return { events: await visibility.filter(ranged), scanned }
+  return { events: await visibility.filter(scanned), scanned }
 }
 
 export function eventRoutes(): Route[] {

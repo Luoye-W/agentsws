@@ -36,6 +36,18 @@ export interface Membership {
   left_at?: Iso8601
 }
 
+/**
+ * 20 §3：一张 token 的状态。`GET /v1/auth/session` 要报「还剩多久」，
+ * 靠的就是它——签发时给了 `expires_at`，之后没人能再问一遍，是 20 的一个洞。
+ */
+export interface TokenInfo {
+  kind: 'session' | 'api_key' | 'runtime' | 'internal'
+  person_id: PersonId
+  workspace_id: WorkspaceId
+  expires_at?: Iso8601
+  revoked: boolean
+}
+
 export interface IdentityService {
   createPerson(input: { email: string; name: string }): Promise<Person>
   getPerson(id: PersonId): Promise<Person | undefined>
@@ -62,6 +74,11 @@ export interface IdentityService {
   revoke(token: string): MaybePromise<void>
   personByEmail(email: string): MaybePromise<Person | undefined>
   workspacesOf(person_id: PersonId): MaybePromise<Workspace[]>
+  /**
+   * 查一张 token 的状态（20 §3）。**可选**：不属于「身份」的最小面，
+   * 换一个只实现必需方法的身份服务时 `GET /v1/auth/session` 少一个 `expires_at`，其余照常。
+   */
+  tokenInfo?(token: string): MaybePromise<TokenInfo | undefined>
   /** 所有 token 绑 workspace；入参为 Bearer 后的 token 本身 */
   authenticate(bearer: string): Promise<
     | {

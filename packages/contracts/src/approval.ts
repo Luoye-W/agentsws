@@ -273,7 +273,20 @@ export type CreateApprovalInput<P> = Omit<
   | 'automation'
 > & {
   links?: Partial<ApprovalItem['links']>
-  /** auto_approved / sampling 由宿主计算，调用方只给等级 */
+  /**
+   * **调用方只给 `level_at_creation`**，其余三项由宿主补齐。不是「爱给不给」——
+   * 是「宿主保证补上」：WP35 之前宿主只做浅合并，只给等级的卡
+   * `automation.mandate_check` 留成 undefined，一路带到工作台投影那步才炸。
+   *
+   * 宿主补的默认值（`ApprovalBus.create` 的义务）：
+   * - `auto_approved: false`——自动通过是 §5 算出来的结论（低风险已建模变更 + 额度内），
+   *   调用方声明不算数；
+   * - `mandate_check: { within: false, caps_hit: [] }`——**没报过额度就当没核过**，
+   *   预检据此判 `mandate: 'review'`，卡走人审；
+   * - `sampling: { selected: false }`——抽检由宿主按工作区 `sampling_rate` 掷。
+   *
+   * 整个 `automation` 都不给时，等级按最严的 `L1`（全人审）算。
+   */
   automation?: Partial<ApprovalItem['automation']> & {
     level_at_creation: ApprovalItem['automation']['level_at_creation']
   }
