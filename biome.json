@@ -9,6 +9,7 @@
       "!**/*.dc.html",
       "!pnpm-lock.yaml",
       "!out",
+      "!coverage",
       "!**/out",
       "!**/test-results",
       "!**/playwright-report",
