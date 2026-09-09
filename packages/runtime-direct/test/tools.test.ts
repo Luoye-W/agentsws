@@ -227,3 +227,50 @@ describe('工具循环的两道门（17 §6.3、16 §3）', () => {
     expect(h.staged).toEqual([])
   })
 })
+
+describe('31 §3.3 出站脱敏：工具入参与工具返回（39 待办 F）', () => {
+  const KEY = 'sk-4f9ab2c7d1e08356zq'
+  const SIGNED_URL = 'https://cdn.example.com/invoice.pdf?X-Amz-Signature=deadbeefcafe&page=2'
+
+  it('工具入参进事件前叠一层秘密表：围栏放行的 sk-… 在这里被抹掉', async () => {
+    const h = harness({
+      script: [
+        { tool_calls: [{ name: 'get_order', input: { order_id: 'ord_1001', note: KEY } }] },
+        { text: 'done' },
+      ],
+      toolChoice: false,
+    })
+    await h.run(makeRequest({ grounding: [] }))
+    const call = eventsOf(h.events, 'tool.call')[0]
+    const wire = JSON.stringify(call?.input)
+    expect(wire).not.toContain(KEY)
+    expect(wire).toContain('[redacted:api_key]')
+    // 围栏那一层还在：它管的是别的事（不可见字符 / 伪造 turn 边界），两层都要
+    expect(wire).toContain('ord_1001')
+  })
+
+  it('工具返回的签名 URL 不进模型上下文，其余字段原样', async () => {
+    const seen: string[] = []
+    const h = harness({
+      script: ({ messages, turn }) => {
+        for (const m of messages) if (m.role === 'tool') seen.push(String(m.content))
+        return turn === 0
+          ? { tool_calls: [{ name: 'get_order', input: { order_id: 'ord_1001' } }] }
+          : { text: 'done' }
+      },
+      toolChoice: false,
+      tools: {
+        get_order: () => ({
+          status: 'ok',
+          data: { ...ORDER, invoice_url: SIGNED_URL },
+          provenance: [{ type: 'order', id: 'ord_1001' }],
+        }),
+      },
+    })
+    await h.run(makeRequest({ grounding: [] }))
+    const context = seen.join('\n')
+    expect(context).not.toContain('deadbeefcafe')
+    expect(context).toContain('[redacted:url_token]')
+    expect(context).toContain('ord_1001')
+  })
+})

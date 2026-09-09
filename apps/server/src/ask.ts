@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto'
 import type { AskActor, AskAnswer, AskPort } from '@agentsws/api'
 import type { ApprovalItem, ChatMessage, EventEnvelope, ObjectRef } from '@agentsws/contracts'
-import { EXTERNAL_FENCE } from '@agentsws/core'
+import { EXTERNAL_FENCE, redactOutboundText } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
@@ -104,7 +104,10 @@ export function createAskPort(options: AskOptions): AskPort {
           purpose: 'run',
         },
       })
-      const answer = completion.text
+      // 31 §3.3 出站脱敏：`answer` 也是一个输出通道。
+      // 「只回给本人」不等于「可以带着凭据回」——材料里抄来的 `sk-…` 一样要抹掉，
+      // 而且哈希要按**脱敏后**的正文算，否则审计对不上人看到的那一份（39 待办 E）。
+      const answer = redactOutboundText('answer', completion.text)
       const answer_hash = sha256(answer)
       // 21 §5：审计得到「问过、看了什么、答了多少字」，但拿不到正文
       options.appendEvent({

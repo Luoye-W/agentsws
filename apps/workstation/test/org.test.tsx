@@ -106,7 +106,20 @@ const MEMBERS: OrgMemberView[] = [
     role: 'member',
     joined_at: T0,
     positions: [],
-    assignments: [],
+    // 31 §3.1 (c) 空范围：给了职责但没给范围——他能进来，但什么都查不到
+    assignments: [
+      {
+        assignment_id: 'asg_2',
+        person_id: 'per_li',
+        person_name: '李默',
+        role_id: 'dtc.aftersales',
+        role_name: '独立站售后客服',
+        role_version: '1.0.0',
+        ranges: [],
+        granted_at: T0,
+        unassigned_range: true,
+      },
+    ],
   },
 ]
 
@@ -263,6 +276,21 @@ describe('公司页：成员与邀请', () => {
     const link = await screen.findByTestId('invite-link')
     expect(link.textContent).toBe('/invite/inv_secret_token')
     expect(invited[0]).toEqual({ email: 'chen@nordvolt.example' })
+  })
+
+  it('空范围的分配标出「没给范围，现在什么都查不到」（31 §3.1 c / 39 待办 M）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    await user.click(await screen.findByRole('tab', { name: '成员' }))
+    const rows = await screen.findAllByTestId('member-row')
+    // 有范围的那一行不出这句话
+    expect(
+      within(rows[0] as HTMLElement).getByTestId('member-assignment').textContent,
+    ).not.toContain('没给范围')
+    // 没范围的那一行：范围位写「还没给范围」，另外挂一条醒目的提示
+    const li = within(rows[1] as HTMLElement).getByTestId('member-assignment')
+    expect(li.textContent).toContain('还没给范围')
+    expect(li.textContent).toContain('没给范围，现在什么都查不到')
   })
 
   it('每个人名下的岗位与范围都看得见，撤销打的是那条分配', async () => {

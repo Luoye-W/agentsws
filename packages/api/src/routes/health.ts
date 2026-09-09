@@ -6,6 +6,19 @@
 import { ok } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 
+/**
+ * 15 §5.8 / 31 §3.2「备份恢复后先跑对账再放开出站」在健康检查上的那一格。
+ *
+ * `pending` = 账本里还有认识不完整的变更（`unknown` / 半路断掉的 `applying`），
+ * 这时出站是停着的；`done` = 都收口了。没装配这个端口（嵌入式用法）就不出这一格
+ * ——**不要用 `done` 冒充「没装」**，那会让运维以为对完账了。
+ */
+export interface ReconcilePort {
+  state(): 'pending' | 'done'
+  /** 还有几条没对上账（0 = 干净）。 */
+  pending(): number
+}
+
 export function healthRoutes(): Route[] {
   return [
     route(
@@ -16,7 +29,7 @@ export function healthRoutes(): Route[] {
         summary: '模块健康 + 急停状态',
         tag: 'kernel',
         auth: 'public',
-        returns: '{ status, at, version, pid, port?, halt, modules }',
+        returns: '{ status, at, version, pid, port?, halt, reconcile?, modules }',
       },
       async (c, deps) => {
         const modules = deps.modules.health()
@@ -27,6 +40,7 @@ export function healthRoutes(): Route[] {
         // 端口是启动后才知道的（0 = 随机端口），所以用一个取值函数，不在装配时钉死。
         const instance = deps.options?.instance
         const port = instance?.port()
+        const reconcile = deps.reconcile
         return ok(c, {
           status: halted ? 'halted' : degraded ? 'degraded' : 'ok',
           at: deps.clock.now(),
@@ -34,6 +48,10 @@ export function healthRoutes(): Route[] {
           pid: instance?.pid ?? process.pid,
           ...(port === undefined ? {} : { port }),
           halt,
+          // 15 §5.8：出站为什么停着，要在诊断入口上一眼看得见
+          ...(reconcile === undefined
+            ? {}
+            : { reconcile: { state: reconcile.state(), pending: reconcile.pending() } }),
           modules,
         })
       },

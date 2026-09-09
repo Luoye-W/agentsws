@@ -82,7 +82,7 @@ function tmpDb(): string {
 const archives: { name: string; make(cipher?: RawCipher): RawStore }[] = [
   {
     name: 'MemoryRawStore',
-    make: (cipher) => new MemoryRawStore(cipher === undefined ? {} : { cipher }),
+    make: (cipher) => new MemoryRawStore({ clock, ...(cipher === undefined ? {} : { cipher }) }),
   },
   {
     name: 'SqliteRawStore',
@@ -158,6 +158,16 @@ describe.each(archives)('原始材料区加密 · $name', ({ make }) => {
     const store = make(new TestKeyring())
     const ref = await put(store, { subject_ref: undefined })
     expect((await store.get(ref))?.payload).toBe(SECRET_BODY)
+  })
+
+  it('保留期 prune 两档同语义：过了保留期的丢掉，窗口内的留着（18 §2.1 / 39 待办 H）', async () => {
+    const store = make(new TestKeyring())
+    const old = await put(store, { stored_at: '2026-01-01T00:00:00.000Z' })
+    const fresh = await put(store, { subject_ref: 'bob@example.com' })
+    // 保留 30 天：一月那条早过期了，今天这条还在
+    expect(await store.prune(30 * 86_400_000, clock)).toBe(1)
+    expect(await store.get(old)).toBeUndefined()
+    expect((await store.get(fresh))?.payload).toBe(SECRET_BODY)
   })
 
   it('没接密钥环时也能跑，只是不加密', async () => {

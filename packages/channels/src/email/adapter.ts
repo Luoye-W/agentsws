@@ -8,7 +8,7 @@ import type {
   MessagePart,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { canonicalJson, sha256 } from '@agentsws/core'
+import { canonicalJson, redactOutboundText, sha256 } from '@agentsws/core'
 import { type AddressObject, type ParsedMail, simpleParser } from 'mailparser'
 import { ChannelError } from '../errors.js'
 import type { RawStore } from '../raw-store.js'
@@ -337,7 +337,9 @@ export class EmailChannelAdapter implements ChannelAdapter {
       )
     }
 
-    const text = textOf(parts)
+    // 31 §3.3 出站脱敏：回信正文这一路的收口。模型写的正文里可能夹着它从
+    // 入站材料里抄来的凭据形态串——发出去就收不回来了。
+    const text = redactOutboundText('email_body', textOf(parts))
     if (text.length === 0) {
       throw new ChannelError('invalid_input', 'send 的 parts 里没有文本')
     }

@@ -54,23 +54,35 @@ import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
+import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
+import { createPrivacyErase } from './erase.js'
+import { createApprovalDirectory } from './housekeeping.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOrg, type OrgAssembly } from './org.js'
+import {
+  createReconcileGuard,
+  type ReconcileGuard,
+  type ReconcileGuardOptions,
+} from './reconcile.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
   createSchedulePort,
+  DEFAULT_RAW_RETENTION_DAYS,
   ensureSystemTasks,
   offsetToTz,
+  registerApprovalHousekeeping,
   registerDailyPlan,
   registerIdempotencySweep,
   registerLearning,
+  registerMailPoll,
   registerMeetingPoll,
   registerPlanRelay,
+  registerRawPrune,
   registerReview,
   registerSkillsWeekly,
   registerTokenRefresh,
@@ -185,6 +197,19 @@ export interface ServerOptions {
    * （测试与模拟回路自己调 `scheduler.runDue`）。
    */
   scheduleIntervalMs?: number
+  /**
+   * WP34 渠道的测试注入：收信端与发信端。
+   * 生产路径一个都不传，各自走真实现（imapflow / nodemailer）。
+   */
+  mailSource?: ChannelsOptions['makeSource']
+  mailer?: ChannelsOptions['makeMailer']
+  /**
+   * 15 §5.8 对账时的「这条到底写进去没有」回查。
+   *
+   * 缺省问后端自己（`MemoryBackend.verify`）。真接了平台之后这里换成按
+   * `execution_id` / 平台对象的查询。答不上来回 `undefined`——**不许猜**。
+   */
+  verifyChange?: ReconcileGuardOptions['verify']
 }
 
 export interface Bootstrap {
@@ -214,14 +239,23 @@ export interface Server {
   meetings: MeetingsAssembly
   /** WP20 连接面（连接向导 / 本机加密秘密库 / 连接状态回灌工作台）。 */
   connections: ConnectionsAssembly
+  /** WP34 渠道面（IMAP 轮询 / 入站管线 / 受控原始材料区 / 出站发信）。 */
+  channels: ChannelsAssembly
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
   org: OrgAssembly
   /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
   secrets: SecretStore
-  /** 25 定时与流程：调度器 + 流程引擎 + 七个消费者的登记。 */
+  /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
+  /**
+   * 15 §5.8「备份恢复后先跑对账再放开出站」。
+   *
+   * `createServer` 里只 `engage()`（该挂档就挂上，不做 IO）；真正跑对账在
+   * `listen()` 里，或者由调用方自己 `await server.reconcile.run()`。
+   */
+  reconcile: ReconcileGuard
   /** 17 §4 运行时适配器 + `startRun`；`startRun: false` 时没有。 */
   runtime?: RuntimeAssembly
   identity: LocalIdentityService
@@ -334,6 +368,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
   })
 
+  // 14 §7 升级链要问的两件事（范围管理者是谁 / owner 是谁）。取值函数，不是值——
+  // 审批总线排在身份之前，owner 与工作区要等下面那一段装完才知道。
+  let bootstrapOwner: PersonId | undefined
+  let bootstrapWorkspace: WorkspaceId | undefined
+  const approvalDirectory = createApprovalDirectory({
+    roles,
+    owner: () => bootstrapOwner,
+    workspace_id: () => bootstrapWorkspace,
+  })
+
+  // 渠道排在 txn 之后装（它要 work / connections / startRun），但执行器的出站回调
+  // 现在就要指向它——所以先留一个空壳引用，装到那一步再填。
+  let channels: ChannelsAssembly | undefined
+
   const backend = new MemoryBackend()
   // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
   const idempotencyStore =
@@ -347,13 +395,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const txn = createTxn({
     clock,
     random,
+    directory: approvalDirectory,
     ...(txnStore === undefined ? {} : { store: txnStore }),
     eventSink: (e) => {
       appendEvent(e)
     },
     readRecord: (target) => backend.read(target),
     backendApply: (change, opts) => backend.apply(change, opts),
-    deliverOutbound: (item, opts) => backend.deliver(item, opts),
+    // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
+    // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
+    deliverOutbound: async (item, opts) =>
+      (await channels?.deliver(item, opts)) ?? backend.deliver(item, opts),
   })
 
   const identity: LocalIdentityService =
@@ -398,6 +450,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ranges: [],
     })
   const internalToken = identity.issue('internal', person.id, workspace.id).token
+  // 空壳填上：从这一刻起升级链知道该找谁（39 待办 A）
+  bootstrapOwner = person.id
+  bootstrapWorkspace = workspace.id
 
   const rawApprovals = mount?.approvals ?? txn.approvals
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
@@ -495,7 +550,51 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   }
 
-  // ── 25 定时与流程：调度器 + 七个消费者 ───────────────────────────────
+  // ── 18 渠道：IMAP 轮询 + 入站管线 + 出站发信（39 待办 C）────────────────
+  // 位置有讲究：要在 connections（拿邮箱参数与口令来源）、work（入站落成事项）、
+  // runtime（起 Run）之后；在调度器之前，因为轮询是调度器的一个消费者。
+  channels = createChannels({
+    clock,
+    workspace_id: workspace.id,
+    appendEvent,
+    halt: kernel.halt,
+    // 18 §2.1 第一条纪律：受控原始材料区加密。与会议档共用同一个密钥环，
+    // **但不共用它的表**（35 §2）。漏了这一行，邮件原文就是明文落盘。
+    cipher: data.keyring,
+    accounts: () => connections.mailAccounts(),
+    credentials: connections.credentialSource(),
+    work,
+    // 入站事项挂谁名下：本人现在持有的第一条岗位（v1 单人单工作区）。
+    // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
+    position: () => {
+      const first = roles.assignments
+        .listByPerson(person.id, { workspace_id: workspace.id })
+        .find((a) => a.revoked_at === undefined)
+      return first === undefined
+        ? undefined
+        : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
+    },
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(startRun === undefined ? {} : { startRun }),
+    ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
+    ...(options.mailer === undefined ? {} : { makeMailer: options.mailer }),
+  })
+  // 连接页新增 / 断开邮箱 → 下一轮轮询就换成新的那一份，不必重启
+  connections.onMailChange(() => {
+    channels?.refresh()
+  })
+
+  // 21 §4「删这个人」的跨库编排（39 待办 I）：数据层 + 邮件原始区 + 会议原始区
+  const privacy = createPrivacyErase({
+    workspace_id: workspace.id,
+    clock,
+    appendEvent,
+    data,
+    channels,
+    meetings,
+  })
+
+  // ── 25 定时与流程：调度器 + 各个消费者 ───────────────────────────────
   // 装配的位置有讲究：要在 work / meetings / connections / skills 都起来之后，
   // 因为七个消费者就是它们；但在网关之前，因为 `/v1/schedules` 要用它。
   const schedule = createScheduleAssembly({
@@ -580,6 +679,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   // ⑧ 学习回路：每天 07:30 把昨天学到的整理成一张选择题卡
   registerLearning(schedule.scheduler, { clock, proposeDaily: (now) => learning.proposeDaily(now) })
+  // ⑧ 审批过期与升级（39 待办 A）：模拟回路每 tick 调一次，真机器每分钟调一次。
+  //    预占的「过期释放」也挂在这条上——15 §3.2 (d) 的释放是跟着审批项过期走的。
+  registerApprovalHousekeeping(schedule.scheduler, { approvals })
+  // ⑨ 邮箱轮询 + 入站管线的重试推进（39 待办 C）
+  registerMailPoll(schedule.scheduler, { poll: () => (channels as ChannelsAssembly).poll() })
+  // ⑩ 受控原始材料区的保留期（39 待办 H）：两个库各清各的，表不共享（35 §2）
+  registerRawPrune(schedule.scheduler, {
+    clock,
+    // 保留天数进策略层：`global_caps.raw_retention_days`，缺省 90 天
+    retentionDays: () =>
+      roles.policies.get(workspace.id)?.global_caps?.raw_retention_days ??
+      DEFAULT_RAW_RETENTION_DAYS,
+    channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
+    meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
+  })
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -594,8 +708,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       shopify: true,
       skills: true,
       learning: true,
+      approvals: true,
+      mail: true,
+      raw: true,
     },
   })
+
+  // ── 15 §5.8：备份恢复后先对账再放开出站（39 待办 B）─────────────────
+  // 这一步要**排在网关之前**：`/v1/health` 要端出 reconcile 那一格；
+  // 而 `engage()` 里挂的 outbound 档要在进程开始接活之前就生效。
+  const reconcile = createReconcileGuard({
+    clock,
+    halt: kernel.halt,
+    txn,
+    workspace_id: workspace.id,
+    appendEvent,
+    verify: options.verifyChange ?? ((change) => backend.verify(change)),
+  })
+  reconcile.engage()
 
   const rolesPort: RolesPort = {
     can: (id, domain, op, request) => roles.can(id, domain, op, request),
@@ -676,6 +806,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     eventLog: eventLogPort,
     modules: kernel.modules,
+    reconcile,
     approvals,
     changes: txn.ledger,
     guardrails,
@@ -733,6 +864,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           : { person_id: found.person_id, role_id: found.role_id }
       },
     }),
+    // 21 §4「删这个人」：网关只转发，编排在 ./erase.ts；actor 带上 grants 与 ranges，
+    // 因为数据层的删除同样要过 21 §3 的授权（没给删除开后门）
+    privacy: {
+      erase: async (input, actor) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        return privacy.erase(input, {
+          person_id: actor.person_id,
+          assignment_id: actor.assignment_id,
+          workspace_id: actor.workspace_id,
+          grants: config.scopes,
+          ranges: config.ranges,
+        })
+      },
+    },
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
@@ -795,10 +940,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work,
     meetings,
     connections,
+    channels,
     modelSettings,
     org,
     secrets,
     schedule,
+    reconcile,
     ...(runtime === undefined ? {} : { runtime }),
     identity,
     backend,
@@ -815,6 +962,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
       })
       httpServer = started
+      // 15 §5.8：接活之前先把账对完。`engage()` 已经在装配时把出站闸拉下来了，
+      // 这里是慢的那一半（要查外部系统）；查不清的留成人工对账项，出站保持停着。
+      await reconcile.run()
       // 25 §4：进程真的起来了才开始巡检（测试里 `scheduleIntervalMs: 0` 关掉）
       schedule.start()
       const address = started.address()
@@ -849,6 +999,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (options.mount === undefined) roles.close()
       meetings.close()
       schedule.close()
+      await channels?.close()
       connections.close()
       org.close()
       secrets.close()

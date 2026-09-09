@@ -470,6 +470,62 @@ export class Executor {
     return { change: next, status: 'failed', error }
   }
 
+  /**
+   * 15 §5.8「备份恢复后先跑对账再放开出站」的第一步：**把半路断掉的收拢成 unknown**。
+   *
+   * `applying` 是一个瞬时状态——进程正在调后端。进程被 kill / 断电 / 从备份恢复，
+   * 这条就永远停在 `applying`：既不是「写进去了」也不是「没写」，而**没有人在管它**，
+   * 因为对账队列只看 `unknown`（`TxnStore.pendingReconcile`）。
+   *
+   * 所以启动时要先把它们挪进对账队列。挪的是状态，不是结论——`unknown` 的含义正是
+   * 「不知道写没写，等查」。预占**不释放**（与正常的 unknown 一致：万一真写进去了，
+   * 那笔额度就是花掉了的）。
+   *
+   * 幂等：已经是 `unknown` 的不动，跑几遍都一样。
+   */
+  async recoverInterrupted(workspace_id?: string): Promise<StagedChange[]> {
+    const at = this.rt.now()
+    const stuck = this.rt.store.listChanges({
+      status: ['applying'],
+      ...(workspace_id === undefined ? {} : { workspace_id }),
+    })
+    const out: StagedChange[] = []
+    for (const change of stuck) {
+      const next: StagedChange = {
+        ...change,
+        status: 'unknown',
+        updated_at: at,
+        apply: {
+          by_executor: change.apply?.by_executor ?? this.rt.policy.executor_id,
+          at: change.apply?.at ?? at,
+          idempotency_key: change.apply?.idempotency_key ?? change.id,
+          ...(change.apply?.execution_id ? { execution_id: change.apply.execution_id } : {}),
+          error: {
+            code: 'unknown_outcome',
+            message: '施行中途进程停了（重启 / 备份恢复），写没写进去不知道，待对账',
+            retryable: false,
+          },
+        },
+      }
+      this.rt.store.putChange(next)
+      await this.rt.emit('change.unknown', {
+        workspace_id: change.workspace_id,
+        actor: { kind: 'system', id: this.rt.policy.executor_id },
+        subject: { type: 'staged_change', id: change.id },
+        correlation: { change_id: change.id },
+        payload: { needs_reconciliation: true, reason: 'interrupted' },
+        ...(change.approval ? { item_id: change.approval.item_id } : {}),
+      })
+      out.push(next)
+    }
+    return out
+  }
+
+  /** 15 §5.8：还没对上账的那几条（`status = unknown`），按创建顺序。 */
+  pendingReconcile(workspace_id?: string): StagedChange[] {
+    return this.rt.store.pendingReconcile(workspace_id)
+  }
+
   /** 15 §5.8：unknown 的人工 / 自动对账。 */
   async reconcile(change_id: string, outcome: ReconcileOutcome): Promise<ApplyOutcome> {
     const change = this.rt.store.getChange(change_id)

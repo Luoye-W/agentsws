@@ -13,7 +13,7 @@ import type {
   RunUsage,
   ToolDef,
 } from '@agentsws/contracts'
-import { canonicalJson, EXTERNAL_FENCE, Provenance, sha256 } from '@agentsws/core'
+import { canonicalJson, EXTERNAL_FENCE, Provenance, redactOutbound, sha256 } from '@agentsws/core'
 import type {
   CreateDraftFn,
   CreatePolicyQuestionFn,
@@ -268,7 +268,9 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           ...(refs.length > 0 ? { provenance_added: refs } : {}),
         })
         if (exec.status !== 'ok') continue
-        const content = EXTERNAL_FENCE.fencePayload({ tool: rule.tool, result: exec.data })
+        const content = EXTERNAL_FENCE.fencePayload(
+          redactOutbound('tool_result', { tool: rule.tool, result: exec.data }),
+        )
         prefetchItems.push({
           id: `prefetch_${rule.name}`,
           kind: 'prefetch',
@@ -592,7 +594,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             tool_call_id: call_id,
             content:
               exec.status === 'ok'
-                ? EXTERNAL_FENCE.fencePayload(exec.data)
+                ? EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', exec.data))
                 : `[${exec.status}: ${exec.reason ?? 'no reason'}]`,
           })
 
@@ -646,9 +648,15 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
   }
 }
 
-/** `tool.call.input` 记事件前脱敏（17 §2）。 */
+/**
+ * `tool.call.input` 记事件前脱敏（17 §2 + 31 §3.3）。
+ *
+ * **两层，缺一不可**：先围栏清洗（去不可见字符 / 伪造的 turn 边界 / 截断），
+ * 再过出站脱敏的统一入口。围栏不认 `sk-…`——它管的是「别让外部文本冒充指令」，
+ * 不是「别把凭据写进日志」。39 待办 F 点的就是这里只做了前一半。
+ */
 function redact(input: Record<string, unknown>): unknown {
-  return EXTERNAL_FENCE.sanitizeValue(input, 500)
+  return redactOutbound('tool_input', EXTERNAL_FENCE.sanitizeValue(input, 500))
 }
 
 /** 宿主预取时给 grounding 工具补参数（模型还没说话，只能从上下文推）。 */

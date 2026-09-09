@@ -8,11 +8,12 @@
  *   用户改过时间 / 按过暂停的，重启后**照他改的来**（`ensure` 只在没有时建）。
  * - 时间只经注入的 Clock；工作区时区从数据源来，不读机器本地时区。
  *
- * 八个消费者（38 §2 WP27 那一行 + WP29 的学习回路）：
+ * 消费者清单（WP27 的七个 + WP34 接上的三个）：
  * ① 每日计划（每岗位 08:00）② 复盘（20:00 / 周五加周复盘 / 月末加月复盘）
  * ③ 会议记录源轮询（15 分钟）④ 幂等表清理（每小时）⑤ Shopify 令牌刷新（到期前 1 小时）
  * ⑥ 技能周合并（周一 06:00）⑦ 复盘 → 次日计划草案的接力（复盘跑完注册一个 at 任务）
- * ⑧ 学习回路的次日提案（每天 07:30，WP29）
+ * ⑧ 审批过期与升级（每分钟，39 待办 A）⑨ 邮箱轮询与入站管线（每 2 分钟，39 待办 C）
+ * ⑩ 受控原始材料区的保留期清理（每天 03:00，39 待办 H）⑪ 学习回路的次日提案（每天 07:30，WP29）
  */
 import { join } from 'node:path'
 import type {
@@ -32,6 +33,7 @@ import type {
   EventEnvelope,
   GoalProgress,
   Iso8601,
+  MaybePromise,
   MeetingRecordSource,
   PersonId,
   Review,
@@ -62,6 +64,7 @@ import {
   reviewTitle,
   type Work,
 } from '@agentsws/work'
+import { type HousekeepingDeps, runApprovalHousekeeping } from './housekeeping.js'
 import type { MeetingsAssembly } from './meetings.js'
 
 /** 每个消费者的登记名。改名字要同时改工作台的 i18n（列表上显示的是它）。 */
@@ -75,7 +78,20 @@ export const HANDLERS = {
   skillsWeekly: 'skills.weekly_consolidate',
   /** WP29：每天 07:30 把昨天学到的变成一张选择题卡 */
   learningDaily: 'skills.daily_lessons',
+  /** WP34：审批过期与升级（14 §4.4 / §7）。 */
+  approvalHousekeeping: 'txn.approval_housekeeping',
+  /** WP34：邮箱轮询 + 入站管线的重试推进（18 §2.2）。 */
+  mailPoll: 'channels.mail_poll',
+  /** WP34：受控原始材料区的保留期清理（18 §2.1）。 */
+  rawPrune: 'privacy.raw_prune',
 } as const
+
+/** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
+export const HOUSEKEEPING_INTERVAL_MS = 60_000
+/** 邮箱轮询的节奏：2 分钟一轮（IDLE 后置，见 `channels.ts`）。 */
+export const MAIL_POLL_INTERVAL_MS = 2 * 60_000
+/** 保留期默认值：90 天。策略层 `global_caps.raw_retention_days` 可改（15 §3.1 同一条路）。 */
+export const DEFAULT_RAW_RETENTION_DAYS = 90
 
 /** 令牌到期前多久换新的（25 交付：Shopify 客户端凭据 24 小时到期）。 */
 export const TOKEN_REFRESH_LEAD_MS = 60 * 60 * 1000
@@ -584,7 +600,80 @@ export function registerSkillsWeekly(scheduler: Scheduler, deps: SkillsWeeklyDep
 }
 
 /* ------------------------------------------------------------------ */
-/* 排期：七条任务的时间表                                                  */
+/* ⑧ 审批过期与升级：每分钟（39 待办 A）                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 把 `ApprovalBus.expire()` / `escalate()` 接进真实的时间。
+ *
+ * 业务全在 `./housekeeping.ts`，这里只登记一个名字——调度器不认识审批，
+ * 审批也不认识调度器（本文件开头那条规矩）。
+ */
+export function registerApprovalHousekeeping(scheduler: Scheduler, deps: HousekeepingDeps): void {
+  scheduler.register(HANDLERS.approvalHousekeeping, (ctx) => runApprovalHousekeeping(deps, ctx.at))
+}
+
+/* ------------------------------------------------------------------ */
+/* ⑨ 邮箱轮询 + 入站管线：每 2 分钟（39 待办 C）                            */
+/* ------------------------------------------------------------------ */
+
+export interface MailPollDeps {
+  /** 拉一轮所有邮箱账号，并推一轮入站队列的重试。 */
+  poll(): Promise<{ accounts: number; messages: number; retried: number; failed: string[] }>
+}
+
+export function registerMailPoll(scheduler: Scheduler, deps: MailPollDeps): void {
+  scheduler.register(HANDLERS.mailPoll, () => deps.poll())
+}
+
+/* ------------------------------------------------------------------ */
+/* ⑩ 受控原始材料区的保留期：每天 03:00（39 待办 H）                        */
+/* ------------------------------------------------------------------ */
+
+export interface RawPruneDeps {
+  clock: Clock
+  /** 保留多少天；不给按 {@link DEFAULT_RAW_RETENTION_DAYS}。策略层可改。 */
+  retentionDays?(): number
+  /** 渠道档（邮件原文与附件）。没装配就不清。 */
+  channels?(retentionMs: number, now: Iso8601): MaybePromise<number>
+  /** 会议档（录音与文档）。 */
+  meetings?(retentionMs: number, now: Iso8601): MaybePromise<number>
+}
+
+/**
+ * 一天一次，把过了保留期的原始材料丢掉（18 §2.1 三条纪律的第二条）。
+ *
+ * 两个库各清各的（35 §2 表不共享），一个挂了不影响另一个——
+ * 清不掉的下一天还会再试，比整拍失败强。
+ */
+export async function pruneRawStores(
+  deps: RawPruneDeps,
+  at: Iso8601,
+): Promise<{ retention_days: number; channels: number; meetings: number; failed: string[] }> {
+  const days = deps.retentionDays?.() ?? DEFAULT_RAW_RETENTION_DAYS
+  const retentionMs = days * DAY_MS
+  const failed: string[] = []
+  let channels = 0
+  let meetings = 0
+  try {
+    channels = (await deps.channels?.(retentionMs, at)) ?? 0
+  } catch (e) {
+    failed.push(`channels: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  try {
+    meetings = (await deps.meetings?.(retentionMs, at)) ?? 0
+  } catch (e) {
+    failed.push(`meetings: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  return { retention_days: days, channels, meetings, failed }
+}
+
+export function registerRawPrune(scheduler: Scheduler, deps: RawPruneDeps): void {
+  scheduler.register(HANDLERS.rawPrune, (ctx) => pruneRawStores(deps, ctx.at))
+}
+
+/* ------------------------------------------------------------------ */
+/* 排期：十条任务的时间表                                                  */
 /* ------------------------------------------------------------------ */
 
 export interface SchedulePlanOptions {
@@ -604,6 +693,15 @@ export interface SchedulePlanOptions {
     skills?: boolean
     /** WP29 学习回路（每天 07:30 的提案卡） */
     learning?: boolean
+    /** WP34：审批过期与升级（总是该有——审批总线一定在） */
+    approvals?: boolean
+    /**
+     * WP34：邮箱轮询。**一个邮箱都没连也照建**——用户在连接页加一个邮箱之后
+     * 不必重启就开始收信（与会议轮询同一条道理：拉到零条不花钱，装配变了不用改一行）。
+     */
+    mail?: boolean
+    /** WP34：受控原始材料区的保留期清理 */
+    raw?: boolean
   }
 }
 
@@ -737,6 +835,42 @@ export async function ensureSystemTasks(
         handler: HANDLERS.learningDaily,
         trigger: { kind: 'cron', expr: '30 7 * * *', tz },
         misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  // ⑨ 审批过期与升级：一分钟一拍。错过了要**补跑**——过期与升级是纯粹的
+  //    「时间到了该发生的事」，关机三天再开机，那三天该过期的仍然该过期。
+  if (options.has.approvals === true) {
+    await add(
+      'sched_approval_housekeeping',
+      systemTask(base, {
+        title: '每分钟看一眼有没有卡该过期或该升级',
+        handler: HANDLERS.approvalHousekeeping,
+        trigger: { kind: 'interval', every_ms: HOUSEKEEPING_INTERVAL_MS },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  // ⑩ 邮箱轮询：2 分钟一轮
+  if (options.has.mail === true) {
+    await add(
+      'sched_mail_poll',
+      systemTask(base, {
+        title: '每 2 分钟收一次邮件',
+        handler: HANDLERS.mailPoll,
+        trigger: { kind: 'interval', every_ms: MAIL_POLL_INTERVAL_MS },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  // ⑩ 保留期清理：每天凌晨 03:00（人不在用机器的时候）
+  if (options.has.raw === true) {
+    await add(
+      'sched_raw_prune',
+      systemTask(base, {
+        title: '每天清一次过了保留期的原始材料',
+        handler: HANDLERS.rawPrune,
+        trigger: { kind: 'cron', expr: '0 3 * * *', tz },
       }),
     )
   }

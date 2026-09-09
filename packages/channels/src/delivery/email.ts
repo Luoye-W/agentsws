@@ -8,11 +8,10 @@ import type {
   PersonId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { sanitizeLabel } from '@agentsws/core'
+import { redactOutboundText, sanitizeLabel } from '@agentsws/core'
 import { domainOf, type Mailer, messageIdFor } from '../email/smtp.js'
 import { ChannelError } from '../errors.js'
 import type { ChannelEventSink } from '../pipeline.js'
-import { scrubSecrets } from '../secrets.js'
 
 /** `DeliveryProvider.deliver` 的入参（契约里是内联类型，这里给它一个名字）。 */
 export interface DeliveredItem {
@@ -113,8 +112,9 @@ export function renderApprovalEmail(
   item: DeliveredItem,
   links: readonly DecisionLink[],
 ): { subject: string; text: string } {
-  const title = sanitizeLabel(item.title, 120)
-  const summary = scrubSecrets(item.summary).text
+  // 31 §3.3：卡片这一路（标题 / 摘要 / payload）走出站脱敏的统一入口
+  const title = redactOutboundText('card_payload', sanitizeLabel(item.title, 120))
+  const summary = redactOutboundText('card_payload', item.summary)
   const lines = [
     title,
     '',
@@ -179,8 +179,8 @@ export class EmailDeliveryProvider implements DeliveryProvider {
     const { subject, text } = renderApprovalEmail(item, links)
     const external_id = messageIdFor(`delivery:${item.id}:${to}`, domainOf(this.from))
     const html = this.renderHtml?.({
-      title: sanitizeLabel(item.title, 120),
-      summary: scrubSecrets(item.summary).text,
+      title: redactOutboundText('card_payload', sanitizeLabel(item.title, 120)),
+      summary: redactOutboundText('card_payload', item.summary),
       links,
     })
     try {

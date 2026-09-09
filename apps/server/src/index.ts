@@ -5,7 +5,7 @@
  * 直接 `node dist/index.js` 时启动并监听，SIGTERM / SIGINT 优雅关闭。
  */
 export { type AskOptions, createAskPort } from './ask.js'
-export { type BackendCall, MemoryBackend } from './backend.js'
+export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {
   authOptionOf,
   CATALOG,
@@ -16,6 +16,14 @@ export {
   serviceOfUpstream,
   UPSTREAM_TO_SERVICE,
 } from './catalog.js'
+export {
+  type ChannelsAssembly,
+  type ChannelsOptions,
+  createChannels,
+  forDisplay,
+  type MailPollReport,
+  OUTBOUND_HALTED,
+} from './channels.js'
 export {
   CONNECT_URL_ENV,
   connectBaseUrl,
@@ -32,6 +40,21 @@ export {
   smokeDetail,
 } from './connections.js'
 export {
+  createPrivacyErase,
+  type EraseInput,
+  type EraseResult,
+  type EraseStep,
+  type PrivacyErase,
+  type PrivacyEraseOptions,
+} from './erase.js'
+export {
+  type ApprovalDirectoryOptions,
+  createApprovalDirectory,
+  type HousekeepingDeps,
+  type HousekeepingOutcome,
+  runApprovalHousekeeping,
+} from './housekeeping.js'
+export {
   createModels,
   DEEPSEEK_KEY_ENV,
   ENV_PROVIDER_ID,
@@ -46,6 +69,14 @@ export {
 } from './models.js'
 export { createOrg, type OrgAssembly, type OrgOptions } from './org.js'
 export {
+  createReconcileGuard,
+  RECONCILE_HALT_REASON,
+  type ReconcileGuard,
+  type ReconcileGuardOptions,
+  type ReconcileReport,
+  type ReconcileState,
+} from './reconcile.js'
+export {
   createRuntime,
   hasModelProvider,
   type MatterRecordSource,
@@ -56,23 +87,32 @@ export {
   buildReviewsFor,
   createScheduleAssembly,
   createSchedulePort,
+  DEFAULT_RAW_RETENTION_DAYS,
   draftPlansFor,
   ensureSystemTasks,
   ensureTask,
   HANDLERS,
+  HOUSEKEEPING_INTERVAL_MS,
   isMonthEnd,
+  MAIL_POLL_INTERVAL_MS,
+  type MailPollDeps,
   type MeetingPollDeps,
   nextMorningAt,
   nextTokenCheck,
   offsetToTz,
   type PlanDeps,
   pollMeetingSources,
+  pruneRawStores,
+  type RawPruneDeps,
   type RelayDeps,
   type ReviewDeps,
+  registerApprovalHousekeeping,
   registerDailyPlan,
   registerIdempotencySweep,
+  registerMailPoll,
   registerMeetingPoll,
   registerPlanRelay,
+  registerRawPrune,
   registerReview,
   registerSkillsWeekly,
   registerTokenRefresh,
