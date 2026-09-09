@@ -22,6 +22,7 @@ import type {
   AssignmentId,
   Clock,
   ContextItem,
+  CreateApprovalInput,
   EventEnvelope,
   Matter,
   ModelRef,
@@ -39,12 +40,12 @@ import type { RoleStore } from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import { createStubRuntime } from '@agentsws/stand-ins'
-import type { CreateApprovalInput } from '@agentsws/txn'
+
 import { cardRefOf, type Work } from '@agentsws/work'
 
 /**
- * 卡片的出口。用 `@agentsws/txn` 的输入类型是因为收件人门禁（31 §3.3）要 `context`，
- * 而契约的 `ApprovalBus.create` 还没有这一项（见交付报告 §4 的契约建议）。
+ * 卡片的出口。类型就是契约的 `CreateApprovalInput`——收件人门禁（31 §3.3）要的
+ * `context` 已经在契约里了（WP31 补上 WP24 的后置项），这里不再借宿主包的交叉类型。
  */
 export interface ApprovalSink {
   create<P>(input: CreateApprovalInput<P>): Promise<ApprovalItem<P>>

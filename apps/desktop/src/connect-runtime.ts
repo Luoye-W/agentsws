@@ -8,7 +8,23 @@
  */
 import type { Clock } from './ports.js'
 
-export const DEFAULT_CONNECT_URL = 'http://127.0.0.1:3000'
+/**
+ * OpenConnector 本地 runtime 的地址**只有一个出处**：环境变量 `AGENTSWS_CONNECT_URL`
+ * （名字与默认值都由 `apps/server/src/connect-url.ts` 定，08 / 18）。
+ *
+ * WP16 的桌面壳自己另写了一份 `DEFAULT_CONNECT_URL = 'http://127.0.0.1:3000'`，
+ * 于是两处各写死同一个端口就是两个真源，换端口时必然漏一个。WP31 删掉了那一份：
+ * 桌面壳不再决定默认值，读不到变量就把 `baseUrl` 交给服务进程那边去解析。
+ */
+export const CONNECT_URL_ENV = 'AGENTSWS_CONNECT_URL'
+
+/** 从环境变量表里取；没设 / 空串 → undefined（由 `@agentsws/server` 的 `connectBaseUrl` 兜默认值）。 */
+export function connectUrlFrom(
+  env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const raw = env[CONNECT_URL_ENV]?.trim()
+  return raw === undefined || raw === '' ? undefined : raw
+}
 
 export type ConnectRuntimeState =
   /** 探不到 —— 还没装 / 没起。 */
@@ -68,7 +84,8 @@ export function notImplementedLauncher(mode: ConnectLaunchMode): ConnectLauncher
 }
 
 export interface ConnectRuntimeOptions {
-  baseUrl?: string
+  /** 必填：由 `connectUrlFrom(process.env)` 或 `@agentsws/server` 的默认值给。 */
+  baseUrl: string
   probe: HardeningProbe
   clock: Clock
   launcher?: ConnectLauncher
@@ -87,7 +104,7 @@ export function classify(report: HardeningReportLike): ConnectRuntimeState {
 }
 
 export function createConnectRuntime(options: ConnectRuntimeOptions): ConnectRuntime {
-  const baseUrl = options.baseUrl ?? DEFAULT_CONNECT_URL
+  const baseUrl = options.baseUrl
   let cached: ConnectRuntimeStatus | undefined
   return {
     get launcher() {

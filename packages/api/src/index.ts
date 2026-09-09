@@ -131,6 +131,8 @@ export type {
 } from './routes/org.js'
 export { orgRoutes, positionName } from './routes/org.js'
 export { scheduleRoutes } from './routes/schedules.js'
+export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
+export { secretRoutes } from './routes/secrets.js'
 export {
   type MatterListFilter,
   type TodoListFilter,

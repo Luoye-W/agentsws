@@ -75,3 +75,21 @@ describe('createHaltControl', () => {
     expect(halt.read()).toEqual(['model'])
   })
 })
+
+describe('WP31：reload（急停真源在文件里，服务进程会写它）', () => {
+  it('服务进程改了文件之后，reload 看得见；read 因为有缓存看不见', () => {
+    const files = memoryFileStore()
+    const control = createHaltControl(files, '/halt.json')
+    expect(control.isPaused()).toBe(false)
+
+    // 服务进程（`AGENTSWS_HALT_FILE`）把档位写回同一个文件
+    files.writeText('/halt.json', serializeHaltFile(['all']))
+    expect(control.read()).toEqual([])
+    expect(control.reload()).toEqual(['all'])
+    expect(control.isPaused()).toBe(true)
+
+    files.writeText('/halt.json', serializeHaltFile([]))
+    expect(control.reload()).toEqual([])
+    expect(control.isPaused()).toBe(false)
+  })
+})

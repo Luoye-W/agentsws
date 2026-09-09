@@ -66,6 +66,18 @@ export interface ServerSpawnInput {
   version: string
   baseEnv: Readonly<Record<string, string | undefined>>
   cwd?: string
+  /**
+   * `AGENTSWS_HALT_FILE`：桌面壳与服务进程**共用同一份急停真源**（13 §5）。
+   * 内核启动读它、每次 `set` 写回它——所以托盘按下的暂停，重启之后仍然是停的，
+   * 而且不必再靠重启 sidecar 来生效。
+   */
+  haltFile?: string
+  /**
+   * `AGENTSWS_CONNECT_URL`：OpenConnector 本地 runtime 的地址（08 / 18）。
+   * 名字与默认值都在 `apps/server/src/connect-url.ts`，桌面壳只负责把宿主环境里
+   * 那一条透传下去——不透传的话服务进程会用它自己的默认值，两边看的就不是同一个 runtime。
+   */
+  connectUrl?: string
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -76,6 +88,8 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     AGENTSWS_PORT: String(input.port),
     AGENTSWS_DB_DIR: input.dataDir,
     AGENTSWS_VERSION: input.version,
+    ...(input.haltFile === undefined ? {} : { AGENTSWS_HALT_FILE: input.haltFile }),
+    ...(input.connectUrl === undefined ? {} : { AGENTSWS_CONNECT_URL: input.connectUrl }),
     ...haltEnv(input.halt),
     ...secretsToEnv(input.secrets),
   }

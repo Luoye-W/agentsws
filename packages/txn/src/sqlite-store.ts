@@ -29,6 +29,8 @@ import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { type Migration, migrate, schemaVersion } from './migrations.js'
 import type {
+  AcquireApplyLockInput,
+  ApplyLock,
   ApprovalContext,
   ApprovalFilter,
   ChangeFilter,
@@ -127,6 +129,27 @@ CREATE TABLE IF NOT EXISTS cursors (
 ) STRICT;
 `,
   },
+  {
+    // WP31：跨进程施行锁 + 围栏号（31 §3.2「同目标同 kind 的 apply 串行」）。
+    // `last_token` 单独一张表：锁行会被删（释放），围栏号却**不能回头**，
+    // 否则接管者可能发出一个比老施行者还小的号，围栏就白建了。
+    version: 2,
+    sql: `
+CREATE TABLE IF NOT EXISTS apply_locks (
+  key         TEXT PRIMARY KEY NOT NULL,
+  holder      TEXT NOT NULL,
+  token       INTEGER NOT NULL,
+  acquired_at TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  expires_ms  INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS apply_lock_tokens (
+  key   TEXT PRIMARY KEY NOT NULL,
+  token INTEGER NOT NULL
+) STRICT;
+`,
+  },
 ]
 
 export interface SqliteTxnStoreOptions {
@@ -138,6 +161,14 @@ export interface SqliteTxnStoreOptions {
 
 interface JsonRow {
   json: string
+}
+interface ApplyLockRow {
+  key: string
+  holder: string
+  token: number
+  acquired_at: string
+  expires_at: string
+  expires_ms: number
 }
 interface TokenRow {
   token: string
@@ -481,6 +512,75 @@ export class SqliteTxnStore implements TxnStore {
         )
         .get(change_id) !== undefined
     )
+  }
+
+  // ───────────────────────────── 施行锁 + 围栏号（15 §apply / 31 §3.2）
+
+  /**
+   * 跨进程的那一档。整件事在**一个立即写事务**里做完——
+   * `IMMEDIATE` 让两个进程里只有一个能进来，另一个要么等要么当场 `SQLITE_BUSY`，
+   * 不会出现两边都读到「没人持锁」然后都写进去。
+   */
+  acquireApplyLock(input: AcquireApplyLockInput): ApplyLock | undefined {
+    const nowMs = ms(input.now)
+    const run = this.#db.transaction((): ApplyLock | undefined => {
+      const held = this.#db
+        .prepare<[string], ApplyLockRow>('SELECT * FROM apply_locks WHERE key = ?')
+        .get(input.key)
+      if (held !== undefined && held.expires_ms > nowMs) return undefined
+      const last =
+        this.#db
+          .prepare<[string], { token: number }>('SELECT token FROM apply_lock_tokens WHERE key = ?')
+          .get(input.key)?.token ?? 0
+      const token = last + 1
+      const expires_at = new Date(nowMs + input.leaseMs).toISOString()
+      this.#db
+        .prepare(
+          `INSERT INTO apply_lock_tokens (key, token) VALUES (?,?)
+           ON CONFLICT(key) DO UPDATE SET token = excluded.token`,
+        )
+        .run(input.key, token)
+      this.#db
+        .prepare(
+          `INSERT INTO apply_locks (key, holder, token, acquired_at, expires_at, expires_ms)
+           VALUES (?,?,?,?,?,?)
+           ON CONFLICT(key) DO UPDATE SET
+             holder = excluded.holder, token = excluded.token,
+             acquired_at = excluded.acquired_at,
+             expires_at = excluded.expires_at, expires_ms = excluded.expires_ms`,
+        )
+        .run(input.key, input.holder, token, input.now, expires_at, nowMs + input.leaseMs)
+      return {
+        key: input.key,
+        holder: input.holder,
+        token,
+        acquired_at: input.now,
+        expires_at,
+      }
+    })
+    // 已经在外层事务里（同进程嵌套）就直接跑；否则用 IMMEDIATE 抢写锁。
+    return this.#db.inTransaction ? run() : run.immediate()
+  }
+
+  releaseApplyLock(key: string, token: number): void {
+    this.#db
+      .prepare<[string, number]>('DELETE FROM apply_locks WHERE key = ? AND token = ?')
+      .run(key, token)
+  }
+
+  applyLockOf(key: string): ApplyLock | undefined {
+    const row = this.#db
+      .prepare<[string], ApplyLockRow>('SELECT * FROM apply_locks WHERE key = ?')
+      .get(key)
+    return row === undefined
+      ? undefined
+      : {
+          key: row.key,
+          holder: row.holder,
+          token: row.token,
+          acquired_at: row.acquired_at,
+          expires_at: row.expires_at,
+        }
   }
 
   // ───────────────────────────── 预占额度（31 §3.2）

@@ -25,6 +25,7 @@ import { meetingRoutes } from './routes/meetings.js'
 import { modelRoutes } from './routes/models.js'
 import { orgRoutes } from './routes/org.js'
 import { scheduleRoutes } from './routes/schedules.js'
+import { secretRoutes } from './routes/secrets.js'
 import { skillRoutes } from './routes/skills.js'
 import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
@@ -54,6 +55,8 @@ export function collectRoutes(): Route[] {
     ...changeRoutes(),
     // WP20 连接面：`providers` / `runtime` / `requests/:id` 是定值段，与 `/v1/connections/:service/...` 不撞
     ...connectionRoutes(),
+    // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
+    ...secretRoutes(),
     ...knowledgeRoutes(),
     // 37 §4 会议面：`/v1/meetings/:id/records/:rid/process` 与 `/v1/meetings/:id/records` 路径不同，顺序无所谓
     ...meetingRoutes(),

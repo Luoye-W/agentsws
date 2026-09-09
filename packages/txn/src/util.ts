@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import type { ApprovalKind, Iso8601, ObjectRef } from '@agentsws/contracts'
-import { canonicalJson, sha256 } from '@agentsws/core'
+import { canonicalJson, scanSecrets as scanSecretsInText, sha256 } from '@agentsws/core'
 import type { TxnPolicy } from './types.js'
 
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -90,6 +90,7 @@ export const DEFAULT_POLICY: TxnPolicy = {
   business_tz_offset_minutes: 480,
   retry_max: 3,
   cumulative_window_days: 30,
+  apply_lease_ms: 60_000,
   executor_id: 'txn.executor',
   executor_version: 'txn/1',
 }
@@ -118,17 +119,12 @@ export function dedupeKey(
   return `dk_${sha256(canonicalJson([workspace_id, kind, refKey(object), discriminator])).slice(0, 24)}`
 }
 
-const SECRET_PATTERNS: { rule: string; re: RegExp }[] = [
-  { rule: 'api_key', re: /\b(?:sk|pk|rk)[-_][A-Za-z0-9]{16,}\b/ },
-  { rule: 'aws_key', re: /\bAKIA[0-9A-Z]{16}\b/ },
-  { rule: 'bearer', re: /\b(?:api[_-]?key|secret|password|token)\s*[:=]\s*\S{8,}/i },
-  { rule: 'card_number', re: /\b(?:\d[ -]?){13,19}\b/ },
-]
-
-/** 14 §6 密钥扫描：payload 里出现 key / 卡号形态 → blocked。 */
+/**
+ * 14 §6 密钥扫描：payload 里出现 key / 卡号形态 → blocked。
+ * 模式表在 `@agentsws/core`（WP31 上移；本包过去抄过一份，两份跑偏就是两套纪律）。
+ */
 export function scanSecrets(value: unknown): string[] {
-  const text = typeof value === 'string' ? value : canonicalJson(value)
-  return SECRET_PATTERNS.filter((p) => p.re.test(text)).map((p) => p.rule)
+  return scanSecretsInText(typeof value === 'string' ? value : canonicalJson(value))
 }
 
 export function deepEqual(a: unknown, b: unknown): boolean {

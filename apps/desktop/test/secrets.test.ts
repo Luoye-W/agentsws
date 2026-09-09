@@ -7,6 +7,7 @@ import {
   SecretsError,
   secretLiterals,
   secretsToEnv,
+  toHex,
 } from '../src/secrets.js'
 import { fakeSafeStorage, seqRandomBytes } from './fakes.js'
 
@@ -118,5 +119,50 @@ describe('createSecretVault', () => {
         randomBytes: seqRandomBytes(),
       }).loadOrCreate().secrets,
     ).toEqual(rotated)
+  })
+})
+
+describe('WP31：只换其中一把（vault.write）', () => {
+  it('write 覆盖落盘，只有那一把变了，其余三把原样', () => {
+    const files = memoryFileStore()
+    const safeStorage = fakeSafeStorage()
+    const vault = createSecretVault({
+      files,
+      path: '/secrets.bin',
+      safeStorage,
+      randomBytes: seqRandomBytes(),
+    })
+    const { secrets } = vault.loadOrCreate()
+    const next = { ...secrets, serverSecretsKey: 'z'.repeat(64) }
+    vault.write(next)
+
+    const reopened = createSecretVault({
+      files,
+      path: '/secrets.bin',
+      safeStorage,
+      randomBytes: seqRandomBytes(),
+    }).loadOrCreate()
+    expect(reopened.created).toBe(false)
+    expect(reopened.secrets.serverSecretsKey).toBe('z'.repeat(64))
+    expect(reopened.secrets.connectEncryptionKey).toBe(secrets.connectEncryptionKey)
+    expect(reopened.secrets.connectAdminToken).toBe(secrets.connectAdminToken)
+    expect(reopened.secrets.serverSessionKey).toBe(secrets.serverSessionKey)
+  })
+
+  it('safeStorage 不可用时 write 直接抛——宁可起不来也不落明文', () => {
+    const vault = createSecretVault({
+      files: memoryFileStore(),
+      path: '/secrets.bin',
+      safeStorage: fakeSafeStorage(false),
+      randomBytes: seqRandomBytes(),
+    })
+    expect(() => {
+      vault.write(generateSecrets(seqRandomBytes()))
+    }).toThrow(SecretsError)
+  })
+
+  it('toHex：32 字节 → 64 位十六进制（密钥的形状）', () => {
+    expect(toHex(new Uint8Array([0, 15, 16, 255]))).toBe('000f10ff')
+    expect(toHex(new Uint8Array(32)).length).toBe(64)
   })
 })

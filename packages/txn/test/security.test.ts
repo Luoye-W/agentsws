@@ -1,5 +1,6 @@
-import type { ObjectRef, ProvenanceState } from '@agentsws/contracts'
+import type { ApprovalExecutionContext, ObjectRef, ProvenanceState } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
+import type { ApprovalContext } from '../src/types.js'
 import {
   CUSTOMER,
   harness,
@@ -263,5 +264,77 @@ describe('31 §3.3 关系授权与收件人门禁', () => {
       outboundInput({ context: { verified_contacts: [CUSTOMER.id], connection_id: 'conn_mail' } }),
     )
     expect(item.state).toBe('pending')
+  })
+})
+
+describe('WP31：ApprovalBus.create 的 context 进契约（14 §4 / 31 §3.2 §3.3）', () => {
+  it('契约类型就是包内类型：同一个对象两边都赋得进去', () => {
+    // 编译期断言——`ApprovalContext` 只是契约 `ApprovalExecutionContext` 的别名了。
+    const fromContract: ApprovalExecutionContext = {
+      connection_id: 'conn_mail',
+      record_version: 'v7',
+      attachments: ['sha256:a'],
+      mandate_hash: 'mh_1',
+      change_id: 'chg_1',
+      thread_participants: [CUSTOMER.id],
+      verified_contacts: ['anna@example.com'],
+      precheck_overrides: { secret_scan: 'clean' },
+    }
+    const asPackage: ApprovalContext = fromContract
+    expect(asPackage).toBe(fromContract)
+  })
+
+  it('create 收下的 context 原样进上下文表，apply 前重算快照读的是同一份', async () => {
+    const h = harness()
+    const item = await h.txn.approvals.create(
+      outboundInput({
+        context: {
+          connection_id: 'conn_mail',
+          record_version: 'v7',
+          attachments: ['sha256:b', 'sha256:a'],
+          mandate_hash: 'mh_1',
+          thread_participants: [CUSTOMER.id],
+          verified_contacts: ['anna@example.com'],
+        },
+      }),
+    )
+    expect(h.txn.runtime.store.getContext(item.id)).toMatchObject({
+      connection_id: 'conn_mail',
+      record_version: 'v7',
+      thread_participants: [CUSTOMER.id],
+      verified_contacts: ['anna@example.com'],
+    })
+    expect(item.execution_snapshot?.hash).toBeTruthy()
+  })
+
+  it('审批项本体只带快照分量来源，门禁输入不跟着卡片走一圈', async () => {
+    const h = harness()
+    const item = await h.txn.approvals.create(
+      outboundInput({
+        context: {
+          connection_id: 'conn_mail',
+          record_version: 'v7',
+          attachments: ['sha256:a'],
+          mandate_hash: 'mh_1',
+          change_id: 'chg_ctx',
+          thread_participants: [CUSTOMER.id],
+          verified_contacts: ['anna@example.com'],
+        },
+      }),
+    )
+    expect(item.execution_context).toEqual({
+      connection_id: 'conn_mail',
+      record_version: 'v7',
+      attachments: ['sha256:a'],
+      mandate_hash: 'mh_1',
+      change_id: 'chg_ctx',
+    })
+    expect(JSON.stringify(item)).not.toContain('anna@example.com')
+  })
+
+  it('不给 context 时审批项的 execution_context 是空对象（不是 undefined 陷阱）', async () => {
+    const h = harness()
+    const item = await h.txn.approvals.create(outboundInput({ context: undefined }))
+    expect(item.execution_context).toEqual({})
   })
 })

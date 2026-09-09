@@ -1,4 +1,5 @@
 import type {
+  ApprovalExecutionContext,
   ApprovalItem,
   ApprovalKind,
   ApprovalState,
@@ -51,13 +52,26 @@ export interface BackendResult {
   outcome_ref?: ObjectRef
   error?: { message: string; retryable?: boolean }
 }
+/**
+ * 施行回调收到的那一组东西。`fencing_token` 是 31 §3.2「单一施行者」的凭据：
+ * 同一个目标每次拿到锁都发一张**严格递增**的号。
+ *
+ * 后端该拿它做什么：**记下见过的最大号，比它小的一律拒**。
+ * 这样即使一个卡住的老施行者租约过期后又醒过来，它那一次写也进不去
+ * ——锁能防同时写，防不了「以为自己还持着锁」的迟到写，能防的只有围栏号。
+ */
+export interface ApplyCallbackOptions {
+  idempotencyKey: string
+  attempt: number
+  fencing_token: number
+}
 export type BackendApply = (
   change: StagedChange,
-  opts: { idempotencyKey: string; attempt: number },
+  opts: ApplyCallbackOptions,
 ) => Promise<BackendResult> | BackendResult
 export type DeliverOutbound = (
   item: ApprovalItem,
-  opts: { idempotencyKey: string; attempt: number },
+  opts: ApplyCallbackOptions,
 ) => Promise<BackendResult> | BackendResult
 
 /** 14 §4.2：谁能决定（Assignment 的 approve 操作）、个人工作区成员数、升级链。 */
@@ -83,6 +97,12 @@ export interface TxnPolicy {
   retry_max: number
   /** 15 §3.2：累计窗口天数 */
   cumulative_window_days: number
+  /**
+   * 31 §3.2 单一施行者队列的**租约时长**。施行者拿锁时写一个到期时刻；
+   * 进程崩了没来得及释放，别人等到期就能接管（接管时围栏号 +1）。
+   * 太短会让慢后端被抢锁（靠围栏号兜底），太长会让崩溃后的目标卡住这么久。
+   */
+  apply_lease_ms: number
   executor_id: string
   executor_version: string
 }
@@ -122,6 +142,31 @@ export interface Reservation {
   change_id: string
   amount: number
   state: 'held' | 'committed' | 'released'
+}
+
+/**
+ * 15 §apply / 31 §3.2「同目标同 kind 的 apply 串行（单一施行者队列）」的锁。
+ *
+ * WP4 只做到了**进程内**串行（一个 Promise 链）——同一台机器上跑两个服务进程、
+ * 或者桌面壳把 sidecar 重启了而老进程还没死透，两边就会同时 apply 同一条变更。
+ * WP31 把它换成落盘的锁 + **围栏号**（fencing token）。
+ */
+export interface ApplyLock {
+  /** `<target>|<kind>` */
+  key: string
+  /** 施行者实例 id（同一个进程内的所有 apply 共用一个）。 */
+  holder: string
+  /** 严格递增；每次成功拿锁 +1。后端拿它拒绝迟到的老施行者。 */
+  token: number
+  acquired_at: Iso8601
+  expires_at: Iso8601
+}
+
+export interface AcquireApplyLockInput {
+  key: string
+  holder: string
+  now: Iso8601
+  leaseMs: number
 }
 
 export interface ApprovalFilter {
@@ -171,6 +216,17 @@ export interface TxnStore {
   markApproved(change_id: string): void
   isApproved(change_id: string): boolean
 
+  /**
+   * 拿一把施行锁。拿到回 {@link ApplyLock}（`token` 比上一次大）；
+   * 别人正持着且租约没过期 → `undefined`（调用方回 `conflict`）。
+   * 租约过期即可接管——**接管也要拿到新号**，老施行者的迟到写才拦得住。
+   */
+  acquireApplyLock(input: AcquireApplyLockInput): ApplyLock | undefined
+  /** 释放。`token` 对不上（已被别人接管）就什么都不做——别把别人的锁放了。 */
+  releaseApplyLock(key: string, token: number): void
+  /** 现在谁持着（诊断与错误信息用）。 */
+  applyLockOf(key: string): ApplyLock | undefined
+
   reserve(counter: string, change_id: string, amount: number): Reservation
   reservationOf(change_id: string): Reservation | undefined
   countReserved(counter: string): number
@@ -196,22 +252,13 @@ export interface TxnStore {
   transaction<T>(fn: () => T): T
 }
 
-/** 创建审批项时的额外上下文（契约 ApprovalItem 之外，包内交叉类型扩展）。 */
-export interface ApprovalContext {
-  /** 执行快照分量 */
-  connection_id?: string
-  record_version?: string
-  attachments?: string[]
-  mandate_hash?: string
-  /** staged_change 审批项指向的账本条目 */
-  change_id?: string
-  /** 31 §3.3 收件人门禁：线程原参与者 */
-  thread_participants?: string[]
-  /** 31 §3.3 收件人门禁：已验证联系方式 */
-  verified_contacts?: string[]
-  /** 预检结论覆盖（脱敏等由调用方判定时） */
-  precheck_overrides?: Partial<ApprovalItem['evidence']['precheck']>
-}
+/**
+ * 创建审批项时的额外上下文。
+ *
+ * WP4 时这是包内的交叉类型；WP31 把它搬进契约（`ApprovalExecutionContext`），
+ * 这里只留一个别名——「收件人门禁拿什么判」不该只有宿主实现知道。
+ */
+export type ApprovalContext = ApprovalExecutionContext
 
 type ContractCreateInput<P> = Omit<
   ApprovalItem<P>,

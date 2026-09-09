@@ -1,10 +1,15 @@
 /**
- * 托盘"暂停" = 内核急停（28 §1「急停一个变量」）。
+ * 托盘「暂停」= 内核急停（28 §1「急停一个变量」）。
  *
- * `packages/kernel` 的 `MemoryHalt` 只在**进程启动时**读 `AGENTSWS_HALT`，网关也没有
- * 运行期改急停的路由。所以桌面壳的做法是：把档位写进用户数据目录的 `halt.json`
- * （重启后仍然是停的），再按新的环境变量重启服务进程 sidecar。
- * 一旦 server 提供了运行期急停接口，这里换成直接调它即可（见报告第 4 节）。
+ * **这个文件只是那份真源的读写口**。真源是用户数据目录里的 `halt.json`：
+ * 服务进程拿 `AGENTSWS_HALT_FILE` 指向它，启动读、每次 `set` 写回
+ * （见 `packages/kernel/src/halt.ts`）。所以「按下暂停」与「重启后仍然是停的」
+ * 是同一份文件。
+ *
+ * WP16 时服务进程还没有运行期急停接口，桌面壳只好写完文件再**重启 sidecar**
+ * ——一个正在处理的运行会被硬生生打断。WP24 补了 `PUT /v1/halt`，
+ * WP31 把托盘改成调它：文件由服务进程写，桌面壳只负责 {@link HaltControl.reload}
+ * 把自己的缓存刷新一遍。`set` 保留给**服务进程还没起来**时的兜底。
  */
 import type { FileStore } from './ports.js'
 
@@ -42,6 +47,9 @@ export function haltEnv(scopes: readonly HaltScope[]): Record<string, string> {
 
 export interface HaltControl {
   read(): HaltScope[]
+  /** 丢掉缓存重新读文件——服务进程刚刚写过它。 */
+  reload(): HaltScope[]
+  /** 直接写文件。只在服务进程没起来、调不了 `PUT /v1/halt` 时用。 */
   set(scopes: readonly HaltScope[]): HaltScope[]
   /** 托盘勾选态：`all` 打开就是"已暂停"。 */
   isPaused(): boolean
@@ -62,8 +70,13 @@ export function createHaltControl(files: FileStore, path: string): HaltControl {
     cached = [...clean]
     return [...clean]
   }
+  const reload = (): HaltScope[] => {
+    cached = undefined
+    return read()
+  }
   return {
     read,
+    reload,
     set,
     isPaused: () => read().includes('all'),
     toggle: () => (read().includes('all') ? set([]) : set(['all'])),

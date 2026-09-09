@@ -39,9 +39,10 @@ interface TestHandle {
   hasTray(): boolean
   menu(): MenuItem[]
   serverUrl(): string
-  health(): { ok: boolean; status?: string } | undefined
-  server(): { state: string }
+  health(): { ok: boolean; status?: string; halted?: boolean } | undefined
+  server(): { state: string; pid?: number }
   openWorkstation(path?: string): Promise<string>
+  invoke(action: string): void
 }
 
 type MainGlobal = { __agentsws__?: TestHandle }
@@ -112,6 +113,52 @@ test('托盘常驻，打开工作台能拿到 /v1/health 的 ok', async () => {
       return handle?.menu().find((item) => item.id === 'open-workstation')?.enabled ?? false
     })
     expect(openable).toBe(true)
+
+    // 6. WP31：托盘「暂停」走 `PUT /v1/halt`（**不重启 sidecar**）。
+    //    验的是三件事：health 里 halt.all 变 true、服务进程没被重启（pid 不变）、
+    //    再按一次能恢复。
+    const pidBefore = await app.evaluate(
+      () => (globalThis as MainGlobal).__agentsws__?.server().pid,
+    )
+    await app.evaluate(() => {
+      ;(globalThis as MainGlobal).__agentsws__?.invoke('toggle-pause')
+    })
+    await expect
+      .poll(
+        async () => {
+          const url = await app.evaluate(
+            () => (globalThis as MainGlobal).__agentsws__?.serverUrl() ?? '',
+          )
+          const body = (await (await fetch(`${url}/v1/health`)).json()) as {
+            data?: { halt?: Record<string, { on?: boolean }> }
+          }
+          return body.data?.halt?.all?.on ?? false
+        },
+        { timeout: 30_000, intervals: [300] },
+      )
+      .toBe(true)
+    expect(await app.evaluate(() => (globalThis as MainGlobal).__agentsws__?.server().pid)).toBe(
+      pidBefore,
+    )
+
+    // 7. 再按一次：恢复
+    await app.evaluate(() => {
+      ;(globalThis as MainGlobal).__agentsws__?.invoke('toggle-pause')
+    })
+    await expect
+      .poll(
+        async () => {
+          const url = await app.evaluate(
+            () => (globalThis as MainGlobal).__agentsws__?.serverUrl() ?? '',
+          )
+          const body = (await (await fetch(`${url}/v1/health`)).json()) as {
+            data?: { halt?: Record<string, { on?: boolean }> }
+          }
+          return body.data?.halt?.all?.on ?? false
+        },
+        { timeout: 30_000, intervals: [300] },
+      )
+      .toBe(false)
   } finally {
     await app.close()
     rmSync(userData, { recursive: true, force: true })

@@ -7,6 +7,8 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import type {
+  AcquireApplyLockInput,
+  ApplyLock,
   ApprovalContext,
   ApprovalFilter,
   ChangeFilter,
@@ -29,6 +31,10 @@ export class MemoryTxnStore implements TxnStore {
   private contexts = new Map<string, ApprovalContext>()
   private approved = new Set<string>()
   private reservations = new Map<string, Reservation>()
+  /** 31 §3.2 施行锁：内存档是**进程内** Map（跨进程那一档在 SQLite 上）。 */
+  private locks = new Map<string, ApplyLock>()
+  /** 围栏号只增不减：锁放了、行没了，号也不回头。 */
+  private lastToken = new Map<string, number>()
   private provenance = new Map<RunId, ProvenanceState>()
   private cursors = new Map<string, string>()
 
@@ -134,6 +140,32 @@ export class MemoryTxnStore implements TxnStore {
   }
   isApproved(change_id: string): boolean {
     return this.approved.has(change_id)
+  }
+
+  acquireApplyLock(input: AcquireApplyLockInput): ApplyLock | undefined {
+    const held = this.locks.get(input.key)
+    if (held !== undefined && ms(held.expires_at) > ms(input.now)) return undefined
+    const token = (this.lastToken.get(input.key) ?? 0) + 1
+    this.lastToken.set(input.key, token)
+    const lock: ApplyLock = {
+      key: input.key,
+      holder: input.holder,
+      token,
+      acquired_at: input.now,
+      expires_at: new Date(ms(input.now) + input.leaseMs).toISOString(),
+    }
+    this.locks.set(input.key, lock)
+    return { ...lock }
+  }
+
+  releaseApplyLock(key: string, token: number): void {
+    const held = this.locks.get(key)
+    if (held !== undefined && held.token === token) this.locks.delete(key)
+  }
+
+  applyLockOf(key: string): ApplyLock | undefined {
+    const held = this.locks.get(key)
+    return held ? { ...held } : undefined
   }
 
   reserve(counter: string, change_id: string, amount: number): Reservation {

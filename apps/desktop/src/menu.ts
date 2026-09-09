@@ -16,6 +16,7 @@ export type MenuAction =
   | 'open-logs'
   | 'toggle-launch-at-login'
   | 'restart-server'
+  | 'rotate-secrets-key'
   | 'quit'
 
 export interface MenuItemModel {
@@ -100,6 +101,13 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
     items.push({ id: 'status', type: 'normal', label: connect, enabled: false })
   items.push(
     { id: 'restart-server', type: 'normal', label: t.restartServer, enabled: true },
+    // WP31：换一把本机秘密库密钥（整库重加密）。服务得活着才换得了。
+    {
+      id: 'rotate-secrets-key',
+      type: 'normal',
+      label: t.rotateSecretsKey,
+      enabled: input.health?.ok === true,
+    },
     { id: 'open-logs', type: 'normal', label: t.openLogs, enabled: true },
     {
       id: 'toggle-launch-at-login',

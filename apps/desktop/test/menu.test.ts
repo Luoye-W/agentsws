@@ -141,6 +141,25 @@ describe('buildTrayMenu', () => {
   })
 })
 
+describe('WP31：轮换本机密钥', () => {
+  it('菜单里有这一项，且服务健康时才点得动（要调 /v1/secrets/rotate）', () => {
+    const up = buildTrayMenu(input()).find((i) => i.id === 'rotate-secrets-key')
+    expect(up).toMatchObject({ type: 'normal', enabled: true, label: '轮换本机密钥' })
+
+    const down = buildTrayMenu(input({ health: undefined })).find(
+      (i) => i.id === 'rotate-secrets-key',
+    )
+    expect(down?.enabled).toBe(false)
+  })
+
+  it('英文档也有文案', () => {
+    const item = buildTrayMenu(input({ language: 'en-US' })).find(
+      (i) => i.id === 'rotate-secrets-key',
+    )
+    expect(item?.label).toBe('Rotate local key')
+  })
+})
+
 describe('trayTooltip', () => {
   it('版本 + 状态；暂停时补一句', () => {
     expect(trayTooltip(input())).toBe('agentsws 0.1.0 · 服务运行中')

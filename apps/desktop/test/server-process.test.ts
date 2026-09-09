@@ -155,3 +155,34 @@ describe('resolveServerEntry', () => {
     expect(() => resolveServerEntry([], () => false)).toThrowError(/\(空\)/)
   })
 })
+
+describe('WP31：共享真源与地址透传', () => {
+  it('传了 haltFile 就设 AGENTSWS_HALT_FILE（急停真源两边共用）', () => {
+    const request = serverSpawnRequest(input({ haltFile: '/data/halt.json' }))
+    expect(request.env.AGENTSWS_HALT_FILE).toBe('/data/halt.json')
+  })
+
+  it('不传就不设——少一个变量少一次误会', () => {
+    expect(serverSpawnRequest(input()).env.AGENTSWS_HALT_FILE).toBeUndefined()
+    expect(serverSpawnRequest(input()).env.AGENTSWS_CONNECT_URL).toBeUndefined()
+  })
+
+  it('AGENTSWS_CONNECT_URL 原样透传（地址只有一个出处）', () => {
+    const request = serverSpawnRequest(input({ connectUrl: 'http://127.0.0.1:3100' }))
+    expect(request.env.AGENTSWS_CONNECT_URL).toBe('http://127.0.0.1:3100')
+  })
+
+  it('四把密钥都在，且 AGENTSWS_SECRETS_KEY 也在（WP20 的第四把）', () => {
+    const env = serverSpawnRequest(input()).env
+    expect(env.OOMOL_CONNECT_ENCRYPTION_KEY).toBe(secrets.connectEncryptionKey)
+    expect(env.OOMOL_CONNECT_ADMIN_TOKEN).toBe(secrets.connectAdminToken)
+    expect(env.AGENTSWS_SESSION_KEY).toBe(secrets.serverSessionKey)
+    expect(env.AGENTSWS_SECRETS_KEY).toBe(secrets.serverSecretsKey)
+    // 08 §5：安装器默认封死全部 provider proxy
+    expect(env.OOMOL_CONNECT_BLOCKED_PROXIES).toBe('*')
+  })
+
+  it('急停档位仍然经 AGENTSWS_HALT 传（启动时那一份）', () => {
+    expect(serverSpawnRequest(input({ halt: ['all'] })).env.AGENTSWS_HALT).toBe('all')
+  })
+})

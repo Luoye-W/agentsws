@@ -7,6 +7,7 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  ApiError,
   createAsyncTraceScope,
   createGateway,
   createMemoryIdentity,
@@ -74,7 +75,7 @@ import {
   type ScheduleAssembly,
   type SchedulePosition,
 } from './schedule.js'
-import { createSecretStore, type SecretStore } from './secret-store.js'
+import { createSecretStore, type SecretStore, SecretStoreError } from './secret-store.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { mountStatic } from './static.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
@@ -454,6 +455,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     approvals: options.mount?.approvals ?? txn.approvals,
     role_id: ownerAssignment.role_id,
+    // 18 §2.1 受控原始材料区的第一条纪律：加密。密钥环是数据层的（21 §4，
+    // 每主体一把独立随机密钥，销毁即不可读），录音库只拿这个端口——两个库不共享表（35 §2）。
+    cipher: data.keyring,
   })
   // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
   meetings.bind(work)
@@ -642,6 +646,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles: rolesPort,
     meetings: meetings.port,
     connections: connections.port,
+    // WP31：本机秘密库的密钥轮换（owner）。密钥只在请求体里出现一次，
+    // 网关这一层不碰库、也不碰值，只把「换了几条」端出去。
+    secrets: {
+      available: () => secrets.available,
+      rotate: (new_key) => {
+        try {
+          return secrets.rotate(new_key)
+        } catch (err) {
+          // 秘密库的错误码翻成网关的错误信封；**原文里没有密钥**（见 secret-store.ts）
+          if (err instanceof SecretStoreError)
+            throw new ApiError(
+              err.code === 'key_missing' ? 'not_implemented' : 'invalid_input',
+              err.message,
+            )
+          throw err
+        }
+      },
+    },
     models: modelSettings.port,
     org: org.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
