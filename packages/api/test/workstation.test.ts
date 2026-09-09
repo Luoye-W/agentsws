@@ -311,6 +311,37 @@ describe('POST /v1/approvals/:id/decide 的卡片扩展（36 §2.1）', () => {
     expect(data.instruction_scope).toBe('similar_cases')
   })
 
+  it('similar_cases → 建 skill_lesson（overlay 提案）；global_rule → 建 policy_change', async () => {
+    const lesson = await harness()
+    const a = await lesson.post(`/v1/approvals/${lesson.item.id}/decide`, {
+      action: 'instruct',
+      instruction: { scope: 'similar_cases', text: '类似的信一律先问尺码' },
+    })
+    expect(a.status).toBe(200)
+    const first = await json<{ instruction_proposal?: { kind: string; approval_item_id: string } }>(
+      a,
+    )
+    expect(first.instruction_proposal?.kind).toBe('skill_lesson')
+
+    const rule = await harness()
+    const b = await rule.post(`/v1/approvals/${rule.item.id}/decide`, {
+      action: 'instruct',
+      instruction: { scope: 'global_rule', text: '以后一律不给运费补偿' },
+    })
+    const second = await json<{ instruction_proposal?: { kind: string } }>(b)
+    expect(second.instruction_proposal?.kind).toBe('policy_change')
+
+    // single_reply 维持现状：只是 reject + 指导，不建新卡
+    const plain = await harness()
+    const c = await plain.post(`/v1/approvals/${plain.item.id}/decide`, {
+      action: 'instruct',
+      instruction: { scope: 'single_reply', text: '这封改一下措辞' },
+    })
+    expect(await json<{ instruction_proposal?: unknown }>(c)).not.toHaveProperty(
+      'instruction_proposal',
+    )
+  })
+
   it('作用域不在三个之内 → 400（zod 挡住）', async () => {
     const h = await harness()
     const res = await h.post(`/v1/approvals/${h.item.id}/decide`, {

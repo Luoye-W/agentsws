@@ -176,8 +176,25 @@ export class MemoryApprovals implements ApprovalBus {
     this.items.set(item.id, item)
     return item
   }
-  async create<P>(): Promise<ApprovalItem<P>> {
-    throw new Error('not used')
+  #seq = 0
+  /** 36 §2.1 指导落地要真建卡（skill_lesson / policy_change），所以这里给一个最小实现。 */
+  async create<P>(input: Parameters<ApprovalBus['create']>[0]): Promise<ApprovalItem<P>> {
+    const existing = [...this.items.values()].find((i) => i.dedupe_key === input.dedupe_key)
+    if (existing !== undefined) return existing as ApprovalItem<P>
+    this.#seq += 1
+    const item = {
+      ...input,
+      id: `ap_new_${this.#seq}`,
+      revision: 1,
+      state: 'pending',
+      deliveries: [],
+      links: { children: [], ...(input.links ?? {}) },
+      created_at: T0,
+      updated_at: T0,
+    } as unknown as ApprovalItem<P>
+    this.items.set(item.id, item as ApprovalItem)
+    this.log.push(`create:${item.id}:${item.kind}`)
+    return item
   }
   async get(id: string): Promise<ApprovalItem | undefined> {
     return this.items.get(id)

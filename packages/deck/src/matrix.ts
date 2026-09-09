@@ -29,6 +29,10 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   claim: NO_INSTRUCT,
   system_alert: ['open', 'snooze'],
   digest: ['open', 'snooze'],
+  // 37 §2.4：早上的计划卡与晚上的复盘卡。计划**只是建议**，采纳才写待办；
+  // 复盘的产物是明天计划的草案，所以它也有「按建议排明天」这一路。
+  daily_plan: ['approve', 'instruct', 'snooze', 'open'],
+  review: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -50,6 +54,8 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   claim: { approve: '接', reject: '不接', snooze: '稍后' },
   system_alert: { open: '去处理', snooze: '稍后' },
   digest: { open: '看', snooze: '稍后' },
+  daily_plan: { approve: '采纳', instruct: '我改几条', snooze: '稍后', open: '打开' },
+  review: { approve: '按建议排明天', reject: '我来排', snooze: '稍后', open: '看完' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -89,6 +95,8 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   claim: 'low',
   home_suggestion: 'low',
   digest: 'low',
+  daily_plan: 'low',
+  review: 'low',
 }
 
 export function riskClassFor(kind: DeckKind): RiskClass {
@@ -115,6 +123,8 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   home_suggestion: 1,
   system_alert: 3,
   digest: 3,
+  daily_plan: 3,
+  review: 4,
 }
 
 export function minutesFor(kind: DeckKind): number {

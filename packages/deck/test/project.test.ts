@@ -340,6 +340,23 @@ describe('矩阵表本身', () => {
     expect(actionsFor('system_alert', 'applied')).toEqual(['open', 'snooze'])
     expect(actionsFor('digest', 'expired')).toEqual(['open', 'snooze'])
   })
+  it('37 §2.4：daily_plan / review 有专属动作与动词', () => {
+    expect(actionsFor('daily_plan', 'pending')).toEqual(['approve', 'instruct', 'snooze', 'open'])
+    expect(labelsFor('daily_plan', ['approve', 'instruct', 'snooze'])).toEqual({
+      approve: '采纳',
+      instruct: '我改几条',
+      snooze: '稍后',
+    })
+    expect(actionsFor('review', 'pending')).toEqual(['approve', 'reject', 'snooze', 'open'])
+    expect(labelsFor('review', ['approve', 'reject', 'open'])).toEqual({
+      approve: '按建议排明天',
+      reject: '我来排',
+      open: '看完',
+    })
+    // 决定过就只剩「打开」，和别的卡一样
+    expect(actionsFor('daily_plan', 'applied')).toEqual(['open'])
+  })
+
   it('表里没有的 kind 走通用卡', () => {
     expect(actionsFor('join_mapping', 'pending')).toEqual(['approve', 'reject', 'open'])
     expect(labelsFor('join_mapping', ['approve', 'open'])).toEqual({
