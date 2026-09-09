@@ -7,8 +7,11 @@ import type { Context } from 'hono'
 import type { ZodType } from 'zod'
 import type { GatewayDeps, RequestContext } from './types.js'
 
-/** WP20 加了 `delete`：断开一条连接就是删掉它，用别的动词都得多解释一句。 */
-export type HttpMethod = 'get' | 'post' | 'put' | 'delete'
+/**
+ * WP20 加了 `delete`：断开一条连接就是删掉它，用别的动词都得多解释一句。
+ * WP27 加了 `patch`：改一条定时任务的时间 / 暂停恢复是**局部改**，用 `put` 就得整条重发。
+ */
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch'
 
 /** 31 §3.1：完整元组判定 (assignment, domain, op, range, sensitivity)。 */
 export interface AuthzSpec {

@@ -60,6 +60,7 @@ import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
+  createSchedulePort,
   ensureSystemTasks,
   offsetToTz,
   registerDailyPlan,
@@ -642,6 +643,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           lane: 'mine',
         })) as ApprovalItem[]
         return items.find((i) => i.id === id)
+      },
+    }),
+    // 25 §5 定时与流程面
+    schedules: createSchedulePort({
+      workspace_id: workspace.id,
+      scheduler: schedule.scheduler,
+      workflows: schedule.workflows,
+      approvals,
+      assignmentOf: (id) => {
+        const found = roles.assignments.get(id)
+        return found === undefined || found.workspace_id !== workspace.id
+          ? undefined
+          : { person_id: found.person_id, role_id: found.role_id }
       },
     }),
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),

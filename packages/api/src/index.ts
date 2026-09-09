@@ -103,6 +103,7 @@ export type {
   SetModelDefaultsInput,
 } from './routes/models.js'
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
+export { scheduleRoutes } from './routes/schedules.js'
 export {
   type MatterListFilter,
   type TodoListFilter,
@@ -139,8 +140,17 @@ export type {
   RateLimitPolicy,
   RequestContext,
   RolesPort,
+  ScheduleActor,
+  ScheduleCreateInput,
+  ScheduledTaskView,
+  ScheduleListQuery,
+  SchedulePatchInput,
+  SchedulePort,
+  ScheduleRunOutcome,
   SkillsPort,
   TraceScope,
+  WorkflowInstanceView,
+  WorkflowListQuery,
   WorkstationActor,
   WorkstationPort,
   WorkstationRange,

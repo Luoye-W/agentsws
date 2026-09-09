@@ -14,12 +14,20 @@
  * ⑥ 技能周合并（周一 06:00）⑦ 复盘 → 次日计划草案的接力（复盘跑完注册一个 at 任务）
  */
 import { join } from 'node:path'
-import type { SweepableIdempotencyStore } from '@agentsws/api'
+import type {
+  ScheduleActor,
+  ScheduleCreateInput,
+  ScheduledTaskView,
+  SchedulePort,
+  SweepableIdempotencyStore,
+  WorkflowInstanceView,
+} from '@agentsws/api'
 import type {
   ApprovalBus,
   ApprovalItem,
   Clock,
   DailyPlanDraft,
+  ErrorCode,
   EventEnvelope,
   GoalProgress,
   Iso8601,
@@ -33,6 +41,7 @@ import {
   createScheduler,
   createSqliteScheduleStore,
   createWorkflowEngine,
+  decideScheduleApproval,
   type FireOutcome,
   MemoryScheduleStore,
   type ScheduleInput,
@@ -40,6 +49,7 @@ import {
   type ScheduleStore,
   type ScheduleTask,
   type WorkflowEngine,
+  type WorkflowInstanceRecord,
   wallClock,
 } from '@agentsws/schedule'
 import {
@@ -702,4 +712,207 @@ export function offsetToTz(minutes: number): string {
   const hh = String(Math.floor(abs / 60)).padStart(2, '0')
   const mm = String(abs % 60).padStart(2, '0')
   return `${sign}${hh}:${mm}`
+}
+
+/* ------------------------------------------------------------------ */
+/* C. `/v1/schedules` 与 `/v1/workflows` 的端口                          */
+/* ------------------------------------------------------------------ */
+
+export interface SchedulePortOptions {
+  workspace_id: WorkspaceId
+  scheduler: Scheduler
+  workflows: WorkflowEngine
+  approvals: ApprovalBus
+  /** 判断一条任务是不是本人自己的岗位（25 §5：给别人建的要那边点头）。 */
+  assignmentOf(id: string): { person_id: PersonId; role_id: RoleId } | undefined
+}
+
+/** 本人能看能管的：同一个工作区、而且是自己的。 */
+function assertOwn(task: ScheduleTask | undefined, actor: ScheduleActor, id: string): ScheduleTask {
+  if (task === undefined || task.workspace_id !== actor.workspace_id) {
+    throw new ServerScheduleError('not_found', `定时任务不存在：${id}`)
+  }
+  if (task.owner !== actor.person_id) {
+    throw new ServerScheduleError('forbidden', '这条定时任务不是你的')
+  }
+  return task
+}
+
+/** 网关认 `code`，所以这里也用契约的错误码（28 §2「不许各模块自造同义码」）。 */
+export class ServerScheduleError extends Error {
+  readonly code: ErrorCode
+
+  constructor(code: ErrorCode, message: string) {
+    super(message)
+    this.name = 'ServerScheduleError'
+    this.code = code
+  }
+}
+
+/** 25 §3：Agent 建的会写 / 会发的定时任务先出一条 `scheduled_task` 审批项。 */
+async function createTaskApproval(
+  options: SchedulePortOptions,
+  input: ScheduleCreateInput,
+  target: { person_id: PersonId; role_id: RoleId },
+  reason: string,
+): Promise<string> {
+  const item = (await options.approvals.create({
+    workspace_id: options.workspace_id,
+    schema_version: 1,
+    kind: 'scheduled_task',
+    role_id: target.role_id,
+    subject: { object: { type: 'scheduled_task', id: `${input.assignment_id}:${input.title}` } },
+    dedupe_key: `${options.workspace_id}:scheduled_task:${input.assignment_id}:${input.title}`,
+    title: `要不要设这条定时：${input.title}`,
+    summary: reason,
+    payload: { title: input.title, trigger: input.trigger, effect: input.effect },
+    evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
+    proposer: { kind: 'person', id: input.person_id },
+    automation: {
+      level_at_creation: 'L1',
+      auto_approved: false,
+      mandate_check: { within: true, caps_hit: [] },
+      sampling: { selected: false },
+    },
+    routing: {
+      recipients: [{ person: target.person_id, via: 'role_holder' }],
+      rule: 'role_holder',
+      escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+      separation_of_duties: false,
+    },
+    priority: 'queue',
+  })) as ApprovalItem
+  return item.id
+}
+
+export function createSchedulePort(options: SchedulePortOptions): SchedulePort {
+  const { scheduler, workflows } = options
+
+  const view = (task: ScheduleTask): ScheduledTaskView => task as ScheduledTaskView
+
+  return {
+    list(query) {
+      const base = { workspace_id: query.workspace_id }
+      const tasks =
+        query.scope === 'workspace'
+          ? scheduler.list(base)
+          : query.scope === 'mine'
+            ? scheduler.list({ ...base, owner: query.person_id })
+            : scheduler.list({ ...base, assignment_id: query.assignment_id })
+      const byConversation =
+        query.conversation_id === undefined
+          ? tasks
+          : tasks.filter((t) => t.origin?.conversation_id === query.conversation_id)
+      const states = query.state
+      return (
+        states === undefined
+          ? byConversation
+          : byConversation.filter((t) => states.includes(t.state))
+      ).map(view)
+    },
+
+    async create(input) {
+      const target_id = input.target_assignment_id ?? input.assignment_id
+      const target = options.assignmentOf(target_id)
+      if (target === undefined) {
+        throw new ServerScheduleError('not_found', `岗位不存在：${target_id}`)
+      }
+      const own = target_id === input.assignment_id && target.person_id === input.person_id
+      const decision = decideScheduleApproval({
+        created_by: 'user',
+        effect: input.effect,
+        own_assignment: own,
+      })
+      const approval =
+        decision.needs_approval === false
+          ? undefined
+          : await createTaskApproval(options, input, target, decision.reason)
+      const task = await scheduler.schedule({
+        workspace_id: input.workspace_id,
+        owner: target.person_id,
+        role_id: target.role_id,
+        assignment_id: target_id,
+        title: input.title,
+        // 触发器的形状 zod 已经校过，这里只是把它交给调度器再算一次 next_fire_at
+        trigger: input.trigger as ScheduleTask['trigger'],
+        state: decision.state,
+        created_by: 'user',
+        misfire_policy: input.misfire_policy,
+        ...(input.handler === undefined ? {} : { handler: input.handler }),
+        ...(input.params === undefined ? {} : { params: input.params }),
+        ...(approval === undefined ? {} : { approval }),
+        ...(input.conversation_id === undefined
+          ? {}
+          : { origin: { conversation_id: input.conversation_id } }),
+      })
+      return view(task)
+    },
+
+    async update(actor, id, patch) {
+      assertOwn(scheduler.get(id), actor, id)
+      if (patch.action === 'pause') return view(await scheduler.pause(id))
+      if (patch.action === 'resume') return view(await scheduler.resume(id))
+      return view(
+        await scheduler.update(id, {
+          ...(patch.trigger === undefined
+            ? {}
+            : { trigger: patch.trigger as ScheduleTask['trigger'] }),
+          ...(patch.title === undefined ? {} : { title: patch.title }),
+          ...(patch.params === undefined ? {} : { params: patch.params }),
+          ...(patch.misfire_policy === undefined ? {} : { misfire_policy: patch.misfire_policy }),
+        }),
+      )
+    },
+
+    async cancel(actor, id) {
+      assertOwn(scheduler.get(id), actor, id)
+      return view(await scheduler.cancel(id))
+    },
+
+    async runNow(actor, id) {
+      assertOwn(scheduler.get(id), actor, id)
+      const out = await scheduler.runNow(id)
+      return {
+        task: view(out.task),
+        ok: out.ok,
+        ...(out.result === undefined ? {} : { result: out.result }),
+        ...(out.error === undefined ? {} : { error: out.error }),
+      }
+    },
+
+    workflows(query) {
+      return workflows
+        .list({
+          workspace_id: query.workspace_id,
+          ...(query.def_id === undefined ? {} : { def_id: query.def_id }),
+          ...(query.subject === undefined
+            ? {}
+            : { subject: query.subject as WorkflowInstanceRecord['subject'] }),
+        })
+        .filter((i) => query.state === undefined || query.state.includes(i.state))
+        .map(workflowView)
+    },
+
+    async workflow(actor, id) {
+      const found = await workflows.status(id)
+      if (found === undefined || found.workspace_id !== actor.workspace_id) return undefined
+      return workflowView(found)
+    },
+  }
+}
+
+/** 实例投影：不把定义快照与 `attempts` 这些内部状态端给前端。 */
+function workflowView(i: WorkflowInstanceRecord): WorkflowInstanceView {
+  return {
+    id: i.id,
+    def: i.def,
+    workspace_id: i.workspace_id,
+    role_id: i.role_id,
+    subject: i.subject,
+    state: i.state,
+    cursor: i.cursor,
+    history: i.history.map((h) => ({ step_id: h.step_id, at: h.at, result: h.result })),
+    started_at: i.started_at,
+    ...(i.conversation_id === undefined ? {} : { conversation_id: i.conversation_id }),
+  }
 }

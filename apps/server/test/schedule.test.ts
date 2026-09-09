@@ -384,3 +384,239 @@ describe('小工具', () => {
     )
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* C. `/v1/schedules` 与 `/v1/workflows`（25 §5）                        */
+/* ------------------------------------------------------------------ */
+
+describe('25 §5 API', () => {
+  beforeEach(async () => {
+    server = await start()
+  })
+
+  afterEach(async () => {
+    await server.close()
+  })
+
+  const call = async (
+    path: string,
+    init: RequestInit & { assignment?: string } = {},
+  ): Promise<Response> => {
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${server.bootstrap.internalToken}`)
+    headers.set('X-Assignment', init.assignment ?? server.bootstrap.ownerAssignment.id)
+    if (init.body !== undefined) headers.set('content-type', 'application/json')
+    return server.gateway.fetch(new Request(`http://127.0.0.1${path}`, { ...init, headers }))
+  }
+
+  const dataOf = async <T>(res: Response): Promise<T> => ((await res.json()) as { data: T }).data
+
+  it('GET /v1/schedules：默认只回本岗位；scope=workspace 回整个工作区', async () => {
+    const mine = await dataOf<{ id: string }[]>(await call('/v1/schedules'))
+    // 本岗位那七条：计划 + 日 / 周 / 月复盘 + 会议轮询 + 令牌刷新 + 技能周合并
+    // （内存档没有幂等表落盘，所以没有那条清理任务）
+    expect(mine).toHaveLength(7)
+    const all = await dataOf<{ id: string }[]>(await call('/v1/schedules?scope=workspace'))
+    expect(all.length).toBe(mine.length)
+    const byPerson = await dataOf<{ id: string }[]>(await call('/v1/schedules?scope=mine'))
+    expect(byPerson.length).toBe(all.length)
+    expect((await call('/v1/schedules?scope=乱写')).status).toBe(400)
+  })
+
+  it('GET /v1/schedules?state= 过滤；?conversation= 只看这次对话设的', async () => {
+    await call('/v1/schedules', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: '这次对话设的',
+        trigger: { kind: 'cron', expr: '0 9 * * *', tz: '+08:00' },
+        conversation_id: 'conv_1',
+      }),
+    })
+    const byConv = await dataOf<{ title: string }[]>(
+      await call('/v1/schedules?conversation=conv_1'),
+    )
+    expect(byConv.map((t) => t.title)).toEqual(['这次对话设的'])
+    const paused = await dataOf<unknown[]>(await call('/v1/schedules?state=paused'))
+    expect(paused).toHaveLength(0)
+  })
+
+  it('POST /v1/schedules：本人给自己岗位建的直接生效（25 §5）', async () => {
+    const res = await call('/v1/schedules', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: '每天早上看一眼昨天的单',
+        trigger: { kind: 'cron', expr: '0 9 * * *', tz: '+08:00' },
+        effect: 'read_only',
+      }),
+    })
+    expect(res.status).toBe(201)
+    const task = await dataOf<{ state: string; approval?: string; next_fire_at: string }>(res)
+    expect(task.state).toBe('active')
+    expect(task.approval).toBeUndefined()
+    expect(task.next_fire_at).toBe('2026-09-10T01:00:00.000Z')
+  })
+
+  it('POST /v1/schedules：给别人的岗位建 → 先出一条 scheduled_task 审批项', async () => {
+    // 再建一条岗位，分给另一个人
+    const other = server.roles.assignments.create({
+      person_id: 'p_other',
+      workspace_id: server.bootstrap.workspace.id,
+      role_id: 'common.member',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    const task = await dataOf<{ state: string; approval?: string; owner: string }>(
+      await call('/v1/schedules', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: '每周一给客户发跟进',
+          trigger: { kind: 'cron', expr: '0 9 * * 1', tz: '+08:00' },
+          effect: 'sends',
+          assignment_id: other.id,
+        }),
+      }),
+    )
+    expect(task.state).toBe('pending')
+    expect(task.owner).toBe('p_other')
+    expect(task.approval).toBeDefined()
+    const items = (await server.txn.approvals.queue({
+      workspace_id: server.bootstrap.workspace.id,
+      person_id: 'p_other',
+      lane: 'mine',
+    })) as ApprovalItem[]
+    expect(items.map((i) => i.kind)).toContain('scheduled_task')
+  })
+
+  it('POST /v1/schedules：岗位不存在 → 404；请求体不合法 → 400', async () => {
+    expect(
+      (
+        await call('/v1/schedules', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: 'x',
+            trigger: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
+            assignment_id: '没这个岗位',
+          }),
+        })
+      ).status,
+    ).toBe(404)
+    expect(
+      (await call('/v1/schedules', { method: 'POST', body: JSON.stringify({ title: '' }) })).status,
+    ).toBe(400)
+  })
+
+  it('PATCH /v1/schedules/:id：暂停 → 恢复 → 改时间', async () => {
+    const id = `sched_skills_weekly`
+    const paused = await dataOf<{ state: string }>(
+      await call(`/v1/schedules/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action: 'pause' }),
+      }),
+    )
+    expect(paused.state).toBe('paused')
+    const resumed = await dataOf<{ state: string }>(
+      await call(`/v1/schedules/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action: 'resume' }),
+      }),
+    )
+    expect(resumed.state).toBe('active')
+    const moved = await dataOf<{ next_fire_at: string; title: string }>(
+      await call(`/v1/schedules/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          trigger: { kind: 'cron', expr: '0 7 * * 1', tz: 'UTC' },
+          title: '改成 7 点',
+        }),
+      }),
+    )
+    expect(moved.title).toBe('改成 7 点')
+    expect(moved.next_fire_at).toBe('2026-09-14T07:00:00.000Z')
+    // 什么都不改 → 400
+    expect(
+      (await call(`/v1/schedules/${id}`, { method: 'PATCH', body: JSON.stringify({}) })).status,
+    ).toBe(400)
+  })
+
+  it('DELETE /v1/schedules/:id：不再触发，记录留着看历史', async () => {
+    const deleted = await dataOf<{ state: string }>(
+      await call('/v1/schedules/sched_skills_weekly', { method: 'DELETE' }),
+    )
+    expect(deleted.state).toBe('cancelled')
+    expect(server.schedule.scheduler.get('sched_skills_weekly')?.next_fire_at).toBeUndefined()
+  })
+
+  it('POST /v1/schedules/:id/run-now：立即跑一次，排期不动', async () => {
+    const before = server.schedule.scheduler.get('sched_skills_weekly')?.next_fire_at
+    const out = await dataOf<{ ok: boolean; task: { next_fire_at: string; fire_count: number } }>(
+      await call('/v1/schedules/sched_skills_weekly/run-now', { method: 'POST' }),
+    )
+    expect(out.ok).toBe(true)
+    expect(out.task.fire_count).toBe(1)
+    expect(out.task.next_fire_at).toBe(before)
+  })
+
+  it('别人的定时任务：看不见也改不了（403 / 404）', async () => {
+    const other = server.roles.assignments.create({
+      person_id: 'p_other',
+      workspace_id: server.bootstrap.workspace.id,
+      role_id: 'common.member',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    const task = await dataOf<{ id: string }>(
+      await call('/v1/schedules', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: '别人的',
+          trigger: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
+          assignment_id: other.id,
+        }),
+      }),
+    )
+    expect((await call(`/v1/schedules/${task.id}`, { method: 'DELETE' })).status).toBe(403)
+    expect((await call('/v1/schedules/没这条', { method: 'DELETE' })).status).toBe(404)
+  })
+
+  it('GET /v1/workflows 与 /v1/workflows/:id', async () => {
+    const instance = await server.schedule.workflows.start(
+      {
+        id: 'creator.collab',
+        version: '1',
+        name: '红人合作',
+        role_id: 'common.owner',
+        steps: [{ id: 'wait', kind: 'wait_event', params: { event: 'shipment.delivered' } }],
+      },
+      { type: 'creator', id: 'cr_1' },
+      { workspace_id: server.bootstrap.workspace.id },
+    )
+    const list = await dataOf<{ id: string; state: string }[]>(await call('/v1/workflows'))
+    expect(list.map((i) => i.id)).toEqual([instance.id])
+    expect((await dataOf<unknown[]>(await call('/v1/workflows?state=done'))).length).toBe(0)
+    expect((await dataOf<unknown[]>(await call('/v1/workflows?subject=creator:cr_1'))).length).toBe(
+      1,
+    )
+    expect((await call('/v1/workflows?subject=乱写')).status).toBe(400)
+
+    const one = await dataOf<{ cursor: string; history: unknown[] }>(
+      await call(`/v1/workflows/${instance.id}`),
+    )
+    expect(one.cursor).toBe('wait')
+    // 投影不把定义快照与 attempts 端给前端
+    expect(one).not.toHaveProperty('definition')
+    expect((await call('/v1/workflows/没这条')).status).toBe(404)
+  })
+
+  it('OpenAPI 里有这七条路由', async () => {
+    const doc = (await (
+      await server.gateway.fetch(new Request('http://127.0.0.1/openapi.json'))
+    ).json()) as { paths: Record<string, Record<string, unknown>> }
+    expect(doc.paths['/v1/schedules']).toHaveProperty('get')
+    expect(doc.paths['/v1/schedules']).toHaveProperty('post')
+    expect(doc.paths['/v1/schedules/{id}']).toHaveProperty('patch')
+    expect(doc.paths['/v1/schedules/{id}']).toHaveProperty('delete')
+    expect(doc.paths['/v1/schedules/{id}/run-now']).toHaveProperty('post')
+    expect(doc.paths['/v1/workflows']).toHaveProperty('get')
+    expect(doc.paths['/v1/workflows/{id}']).toHaveProperty('get')
+  })
+})

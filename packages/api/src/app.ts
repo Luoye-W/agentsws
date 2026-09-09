@@ -23,6 +23,7 @@ import { identityRoutes } from './routes/identity.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
 import { meetingRoutes } from './routes/meetings.js'
 import { modelRoutes } from './routes/models.js'
+import { scheduleRoutes } from './routes/schedules.js'
 import { skillRoutes } from './routes/skills.js'
 import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
@@ -57,6 +58,8 @@ export function collectRoutes(): Route[] {
     ...meetingRoutes(),
     ...modelRoutes(),
     ...skillRoutes(),
+    // 25 定时与流程；`/v1/schedules/:id/run-now` 是定值段，与 `:id` 不撞
+    ...scheduleRoutes(),
     ...assignmentRoutes(),
     ...eventRoutes(),
     // 36 工作台面：首页 / 岗位 / 积木；`/v1/positions/:id/...` 里的 id 就是 assignment_id

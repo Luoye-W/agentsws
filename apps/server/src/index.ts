@@ -54,6 +54,7 @@ export {
 export {
   buildReviewsFor,
   createScheduleAssembly,
+  createSchedulePort,
   draftPlansFor,
   ensureSystemTasks,
   ensureTask,
@@ -77,7 +78,9 @@ export {
   type ScheduleAssembly,
   type ScheduleAssemblyOptions,
   type SchedulePlanOptions,
+  type SchedulePortOptions,
   type SchedulePosition,
+  ServerScheduleError,
   type SkillsWeeklyDeps,
   TOKEN_IDLE_INTERVAL_MS,
   TOKEN_REFRESH_LEAD_MS,
