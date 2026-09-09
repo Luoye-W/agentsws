@@ -7,8 +7,14 @@ import type { TxnOptions } from './types.js'
 export { ApprovalBusImpl, type BatchEntry, finalPayload } from './approvals.js'
 export { Executor, type ReconcileOutcome } from './executor.js'
 export { ChangeLedgerImpl } from './ledger.js'
+export { type Migration, migrate, schemaVersion } from './migrations.js'
 export { isKnownKind, type PrecheckOutcome, runPrecheck } from './precheck.js'
 export { TxnRuntime } from './runtime.js'
+export {
+  createSqliteTxnStore,
+  SqliteTxnStore,
+  type SqliteTxnStoreOptions,
+} from './sqlite-store.js'
 export { MemoryTxnStore } from './store.js'
 export * from './types.js'
 export {

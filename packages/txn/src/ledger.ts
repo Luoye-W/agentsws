@@ -223,10 +223,13 @@ export class ChangeLedgerImpl {
       created_at: now,
       updated_at: now,
     }
-    this.rt.store.putChange(change)
-    this.rt.store.putMandate(id, input.mandate)
-    // 31 §3.2 预占：stage 即占 (assignment, kind, day) 的名额
-    this.rt.store.reserve(counter, id, 1)
+    // stage 的状态跃迁一次落地：变更 + 生效额度 + 预占，要么全成要么全不成
+    this.rt.tx(() => {
+      this.rt.store.putChange(change)
+      this.rt.store.putMandate(id, input.mandate)
+      // 31 §3.2 预占：stage 即占 (assignment, kind, day) 的名额
+      this.rt.store.reserve(counter, id, 1)
+    })
     await this.rt.emit('change.staged', {
       workspace_id: change.workspace_id,
       actor: { kind: change.created_by.kind, id: change.created_by.id, run_id: change.run_id },
@@ -295,12 +298,14 @@ export class ChangeLedgerImpl {
     })
 
     if (item.state === 'blocked') {
-      this.rt.store.releaseReservation(id)
-      this.rt.store.putChange({
-        ...change,
-        status: 'withdrawn',
-        reservation: { counter, amount: 1, released: true },
-        updated_at: now,
+      this.rt.tx(() => {
+        this.rt.store.releaseReservation(id)
+        this.rt.store.putChange({
+          ...change,
+          status: 'withdrawn',
+          reservation: { counter, amount: 1, released: true },
+          updated_at: now,
+        })
       })
       return {
         ok: false,

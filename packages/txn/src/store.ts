@@ -4,6 +4,7 @@ import type {
   ProvenanceState,
   RunId,
   StagedChange,
+  WorkspaceId,
 } from '@agentsws/contracts'
 import type {
   ApprovalContext,
@@ -29,6 +30,7 @@ export class MemoryTxnStore implements TxnStore {
   private approved = new Set<string>()
   private reservations = new Map<string, Reservation>()
   private provenance = new Map<RunId, ProvenanceState>()
+  private cursors = new Map<string, string>()
 
   private clone<T>(v: T): T {
     return structuredClone(v)
@@ -164,5 +166,23 @@ export class MemoryTxnStore implements TxnStore {
   getProvenance(run_id: RunId): ProvenanceState | undefined {
     const p = this.provenance.get(run_id)
     return p ? this.clone(p) : undefined
+  }
+
+  getCursor(name: string): string | undefined {
+    return this.cursors.get(name)
+  }
+  setCursor(name: string, value: string): void {
+    this.cursors.set(name, value)
+  }
+  pendingReconcile(workspace_id?: WorkspaceId): StagedChange[] {
+    return this.listChanges({
+      status: ['unknown'],
+      ...(workspace_id === undefined ? {} : { workspace_id }),
+    })
+  }
+
+  /** 内存档没有半写状态可回滚，直接执行；接口与 SQLite 档一致。 */
+  transaction<T>(fn: () => T): T {
+    return fn()
   }
 }

@@ -27,6 +27,11 @@ export class TxnRuntime {
     this.secret = opts.secret ?? `s_${nonceFrom(opts.random)}${nonceFrom(opts.random)}`
   }
 
+  /** 一组写放进一个事务（SQLite 档真事务；内存档直接执行）。 */
+  tx<T>(fn: () => T): T {
+    return this.store.transaction(fn)
+  }
+
   now(): Iso8601 {
     return this.opts.clock.now()
   }
