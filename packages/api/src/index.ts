@@ -70,7 +70,10 @@ export type {
   ConnectRequestStatus,
   ConnectTestResult,
   CredentialStore,
+  MailboxDetectResult,
+  MailboxPresetView,
   ProviderAuthKind,
+  ProviderAuthOption,
   ProviderFieldSpec,
   ProviderSetupGuide,
   ProviderView,
@@ -86,6 +89,20 @@ export type {
   MeetingsPort,
 } from './routes/meetings.js'
 export { meetingRoutes } from './routes/meetings.js'
+export type {
+  ModelDefaultsView,
+  ModelProviderKind,
+  ModelProviderTemplate,
+  ModelProviderView,
+  ModelsActor,
+  ModelsPort,
+  ModelTestResult,
+  ModelUsageRow,
+  ModelUsageView,
+  SaveModelProviderInput,
+  SetModelDefaultsInput,
+} from './routes/models.js'
+export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
 export {
   type MatterListFilter,
   type TodoListFilter,

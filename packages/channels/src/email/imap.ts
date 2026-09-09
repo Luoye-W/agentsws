@@ -73,8 +73,13 @@ export function readSecretFromEnv(name: string, env: NodeJS.ProcessEnv = process
  * channels 只认这个最小端口，不认识 SQLite、不认识加密——凭据怎么存是装配方的事。
  */
 export interface CredentialSource {
-  /** 取一条连接的口令；取不到就抛，别返回空串。 */
-  password(ref: { connection_id: string }): string
+  /**
+   * 取一条连接的口令；取不到就抛，别返回空串。
+   *
+   * `purpose` 区分收信与发信：多数邮箱两边同一个授权码（装配方对 `smtp` 回退到
+   * 收信那一份），少数（用户自己填了发信专用密码）两边不同。缺省按 `imap`。
+   */
+  password(ref: { connection_id: string; purpose?: 'imap' | 'smtp' }): string
 }
 
 /**
@@ -87,6 +92,7 @@ export function readPassword(
   config: { password_env?: string | undefined; connection_id?: string | undefined },
   env: NodeJS.ProcessEnv,
   credentials?: CredentialSource | undefined,
+  purpose: 'imap' | 'smtp' = 'imap',
 ): string | undefined {
   if (config.connection_id !== undefined) {
     if (credentials === undefined) {
@@ -96,7 +102,7 @@ export function readPassword(
         { connection_id: config.connection_id },
       )
     }
-    return credentials.password({ connection_id: config.connection_id })
+    return credentials.password({ connection_id: config.connection_id, purpose })
   }
   if (config.password_env !== undefined) return readSecretFromEnv(config.password_env, env)
   return undefined

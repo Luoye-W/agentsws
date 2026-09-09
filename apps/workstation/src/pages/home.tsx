@@ -15,6 +15,7 @@ import { AlarmClock, CalendarDays, CheckSquare, Clock, ListTodo, Users } from 'l
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
+import { NoModelBanner } from '@/components/models/no-model-banner'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -192,6 +193,8 @@ export function HomePage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-6" data-testid="home">
+      {/* WP25：没接模型时先说清楚——不然界面看着一切正常，Agent 却跑不起来 */}
+      <NoModelBanner />
       {/* ① 目标进度 */}
       {goals.length === 0 ? null : (
         <section data-testid="goals">

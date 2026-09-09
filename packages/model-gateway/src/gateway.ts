@@ -92,6 +92,19 @@ export interface ModelGatewayApi extends ModelGateway {
   usage(filter: UsageFilter): Promise<UsageReport>
   /** 只读账目，测试与报表用（与 model.usage 事件一一对应）。 */
   records(): readonly UsageRecord[]
+  /**
+   * 换一套 provider / 策略（WP25 设置页「保存后立刻生效」）。
+   *
+   * 为什么是"换"而不是"重建一个网关"：**账不能丢**。预算的已花额度、并发预留、
+   * usage 记录全在这个实例里；重建一个新网关等于把今天花的钱清零，
+   * 三级预算（22 §3）当场失效。所以只替换配置，账原样留着。
+   *
+   * 22 §5「业务代码里没有 key」照旧：调用方给的是**装配好的 provider**，
+   * key 怎么来（环境变量还是本机加密库）是装配方的事，网关不看值。
+   */
+  reconfigure(next: { providers?: ModelProvider[]; policy?: ModelGatewayPolicy }): void
+  /** 现在挂着哪几个 provider（设置页要显示"当前生效的是谁"）。 */
+  providers(): readonly ModelRef[]
 }
 
 const HALT_ENV = 'AGENTSWS_MODEL_HALT'
@@ -533,6 +546,18 @@ class Gateway implements ModelGatewayApi {
 
   records(): readonly UsageRecord[] {
     return this.usageRecords
+  }
+
+  reconfigure(next: { providers?: ModelProvider[]; policy?: ModelGatewayPolicy }): void {
+    if (next.providers !== undefined) this.opts.providers = next.providers
+    if (next.policy !== undefined) {
+      this.opts.policy = next.policy
+      this.ledger.setPolicy(next.policy.budget ?? {})
+    }
+  }
+
+  providers(): readonly ModelRef[] {
+    return this.opts.providers.map((p) => ({ ...p.ref }))
   }
 }
 

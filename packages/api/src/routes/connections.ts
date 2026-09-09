@@ -88,6 +88,25 @@ export interface ProviderSetupGuide {
   links: { label: string; url: string }[]
 }
 
+/**
+ * 同一个服务的**另一种接法**（WP25）。
+ *
+ * Shopify 是第一个需要它的：Dev Dashboard 建的应用只给客户端 ID + 密钥（推荐），
+ * 老的自定义应用给一串 `shpat_` 令牌（仍然能用）。两条路要的字段、要做的准备
+ * 完全不一样，硬塞进一张表单会让非技术用户填错，所以让他先选一次。
+ */
+export interface ProviderAuthOption {
+  id: string
+  label: string
+  /** 一句话说明这条路适合谁。 */
+  summary: string
+  /** 界面默认选中的那一条。 */
+  recommended?: boolean
+  auth: ProviderAuthKind
+  fields: ProviderFieldSpec[]
+  setup_guide: ProviderSetupGuide
+}
+
 export interface ProviderView {
   service: string
   label: string
@@ -101,6 +120,8 @@ export interface ProviderView {
   setup_guide: ProviderSetupGuide
   /** 「已连接，数据接入下一版」之类的诚实说明。 */
   data_note?: string
+  /** 有两种以上接法时给出来；只有一种时整个字段不出现（界面照旧画一张表单）。 */
+  auth_options?: ProviderAuthOption[]
 }
 
 export interface BeginConnectResult {
@@ -108,7 +129,29 @@ export interface BeginConnectResult {
   /** OAuth 类：把用户送到平台的授权页。 */
   authorization_url?: string
   /** 表单类：字段描述。值永远不经这条路回来。 */
-  secure_form?: { fields: ProviderFieldSpec[] }
+  secure_form?: { fields: ProviderFieldSpec[]; auth_option?: string }
+}
+
+/** 一次邮箱自动识别的结果。识别不到就 `preset: null`，界面回退手填。 */
+export interface MailboxDetectResult {
+  domain: string
+  /** MX 记录指向谁（按优先级排好）；给用户看"我们凭什么这么猜"。 */
+  mx_hosts: string[]
+  preset: MailboxPresetView | null
+}
+
+export interface MailboxPresetView {
+  id: string
+  label: string
+  imap_host: string
+  imap_port: number
+  smtp_host: string
+  smtp_port: number
+  /** `app_password` = 要去开授权码；`password` = 登录密码就行；`oauth_required` = 基础认证已被关闭。 */
+  auth: 'app_password' | 'password' | 'oauth_required'
+  /** 一句话：授权码去哪儿开 / 为什么现在还连不了。 */
+  note: string
+  help_url?: string
 }
 
 export type ConnectRequestStatus = 'initiated' | 'connected' | 'failed' | 'expired'
@@ -143,6 +186,8 @@ export interface SubmitConnectionInput {
   alias: string
   ownership: ConnectionOwnership
   request_id?: string
+  /** 用户选的那条接法（`ProviderAuthOption.id`）；不给按推荐那条。 */
+  auth_option?: string
   fields: Record<string, string>
 }
 
@@ -152,7 +197,12 @@ export interface ConnectionsPort {
   begin(
     actor: ConnectionsActor,
     service: string,
-    input: { alias: string; ownership: ConnectionOwnership; mode: 'own_app' | 'agentsws_connect' },
+    input: {
+      alias: string
+      ownership: ConnectionOwnership
+      mode: 'own_app' | 'agentsws_connect'
+      auth_option?: string
+    },
   ): MaybePromise<BeginConnectResult>
   pollRequest(
     actor: ConnectionsActor,
@@ -167,6 +217,13 @@ export interface ConnectionsPort {
   remove(actor: ConnectionsActor, id: string): MaybePromise<void>
   test(actor: ConnectionsActor, id: string): MaybePromise<ConnectTestResult>
   runtime(): MaybePromise<RuntimeStatusView>
+  /**
+   * 邮箱自动识别（WP25 交付 B）：只查一次 MX，回主机端口。
+   *
+   * **永不抛**——查不到就 `preset: null`，界面回退到手填。识别用的邮箱地址是"身份"
+   * 不是凭据，但它仍然不进事件日志（这条路只有一次 DNS 查询，什么都不落）。
+   */
+  detectMailbox?(actor: ConnectionsActor, email: string): MaybePromise<MailboxDetectResult>
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
@@ -177,6 +234,7 @@ const BeginBody = z.object({
   alias: z.string().min(1).max(64).optional(),
   ownership: OWNERSHIP.optional(),
   mode: z.enum(['own_app', 'agentsws_connect']).optional(),
+  auth_option: z.string().min(1).max(64).optional(),
 })
 
 /**
@@ -190,6 +248,7 @@ const SubmitBody = z.object({
   alias: z.string().min(1).max(64).optional(),
   ownership: OWNERSHIP.optional(),
   request_id: z.string().min(1).max(128).optional(),
+  auth_option: z.string().min(1).max(64).optional(),
   fields: z.record(z.string().min(1).max(64), z.string().max(4096)),
 })
 
@@ -270,6 +329,37 @@ export function connectionRoutes(): Route[] {
     route(
       {
         method: 'get',
+        path: '/v1/connections/mail/detect',
+        operationId: 'detectMailbox',
+        summary:
+          '按邮箱地址的 MX 记录认出是哪家邮箱，回主机与端口（WP25）：认不出回 preset: null，界面回退手填',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          {
+            name: 'email',
+            in: 'query',
+            required: true,
+            description: '要识别的邮箱地址；只用来取域名查一次 MX，不落盘、不进事件',
+          },
+        ],
+        returns: 'MailboxDetectResult',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.detectMailbox === undefined) {
+          throw new ApiError('not_implemented', '这个服务进程没有装配邮箱识别')
+        }
+        const email = c.req.query('email') ?? ''
+        if (email.trim() === '') throw new ApiError('invalid_input', '没有给邮箱地址')
+        return ok(c, await port.detectMailbox(actorOf(c), email))
+      },
+    ),
+    route(
+      {
+        method: 'get',
         path: '/v1/connections/requests/:id',
         operationId: 'pollConnectRequest',
         summary: '轮询一次授权请求（OAuth 回来了没有）',
@@ -307,6 +397,7 @@ export function connectionRoutes(): Route[] {
             alias: input.alias ?? 'default',
             ownership: input.ownership ?? 'workspace',
             mode: input.mode ?? 'own_app',
+            ...(input.auth_option === undefined ? {} : { auth_option: input.auth_option }),
           }),
         )
       },
@@ -339,6 +430,7 @@ export function connectionRoutes(): Route[] {
             alias: input.alias ?? 'default',
             ownership: input.ownership ?? 'workspace',
             ...(input.request_id === undefined ? {} : { request_id: input.request_id }),
+            ...(input.auth_option === undefined ? {} : { auth_option: input.auth_option }),
             fields: input.fields,
           }),
         )

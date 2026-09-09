@@ -24,12 +24,21 @@ import type {
   ConnectionView,
   ConnectRequestStatus,
   ConnectTestResult,
+  MailboxDetectResult,
+  MailboxPresetView,
   ProviderFieldSpec,
   ProviderView,
   RuntimeStatusView,
   SubmitConnectionInput,
 } from '@agentsws/api'
-import { ImapMailSource, SmtpMailer } from '@agentsws/channels'
+import {
+  classifyMailFailure,
+  detectMailbox,
+  ImapMailSource,
+  type MailboxPreset,
+  type ResolveMx,
+  SmtpMailer,
+} from '@agentsws/channels'
 import { assertRuntimeHardened, createConnectAdapter } from '@agentsws/connect-adapter'
 import type {
   ActionMeta,
@@ -46,13 +55,27 @@ import type { ConnectionLike, DataSourceStatus } from '@agentsws/deck'
 import { mergeDataSources } from '@agentsws/deck'
 import { seededRandom } from '@agentsws/kernel'
 import { MockOpenConnector } from '@agentsws/stand-ins'
-import { CATALOG, type CatalogEntry, catalogEntry, serviceOfUpstream } from './catalog.js'
+import {
+  authOptionOf,
+  CATALOG,
+  type CatalogAuthOption,
+  type CatalogEntry,
+  catalogEntry,
+  serviceOfUpstream,
+} from './catalog.js'
 import {
   createSecretStore,
   SECRETS_KEY_ENV,
   type SecretStore,
   SecretStoreError,
 } from './secret-store.js'
+import {
+  type BrokerFetch,
+  createShopifyBroker,
+  type ShopifyBroker,
+  ShopifyBrokerError,
+  type ShopifyBrokerRecord,
+} from './shopify-broker.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 试连时临时签发的 role-read token 挂在这个 assignment 下；用完立刻吊销。 */
@@ -125,7 +148,10 @@ export interface MailAccount {
 export interface MailProbe {
   check(
     account: MailAccount,
+    /** 收信口令。 */
     password: string,
+    /** 发信口令；用户没单独填就等于收信那一份。 */
+    smtpPassword: string,
   ): Promise<{ ok: boolean; reason?: string; detail?: string }>
 }
 
@@ -143,6 +169,8 @@ interface StateFile {
   local: LocalConnectionMeta[]
   /** connection_id → 上次试连结果（只有 ok / 原因，没有任何凭据线索）。 */
   tests: Record<string, ConnectTestResult>
+  /** WP25：客户端凭据接管的 Shopify 店（只有域名 / 连接 id / 到期时间）。 */
+  shopify?: ShopifyBrokerRecord[]
 }
 
 export interface ConnectionsOptions {
@@ -164,10 +192,23 @@ export interface ConnectionsOptions {
     reasons: readonly string[]
     checks: readonly { name: string; ok: boolean; detail: string }[]
   }>
+  /** WP25：Shopify 换令牌用的 fetch（测试注入 fixture 回放，不联网）。 */
+  shopifyFetch?: BrokerFetch
+  /** WP25：邮箱识别用的 MX 查询（测试注入；缺省用 `node:dns/promises`）。 */
+  resolveMx?: ResolveMx
+  /**
+   * WP25：Shopify 令牌刷新的巡检间隔（毫秒）。给 0 / 不给就不起定时器——
+   * 测试与一次性任务不该有后台计时器；服务进程装配时传 15 分钟。
+   */
+  refreshIntervalMs?: number
 }
 
 export interface ConnectionsAssembly {
   port: ConnectionsPort
+  /** WP25：Shopify 客户端凭据经纪人（换令牌 / 刷新 / 忘记）。 */
+  shopify: ShopifyBroker
+  /** 立刻跑一轮"快到期的都换一张"（服务进程的定时器与测试都调它）。 */
+  refreshTokens(): Promise<void>
   /** 当前真实连接（只有 service 与状态）——给 deck 算 `DataSourceStatus`。 */
   snapshot(): ConnectionLike[]
   /** 邮箱连接的参数（channels 装配 IMAP / SMTP 用）；口令仍要经 `credentialSource()` 取。 */
@@ -215,6 +256,63 @@ function humanize(code: string, fallback: string): string {
   }
 }
 
+/** 上游说"你没权限"的那几个码。Shopify 的 24 小时令牌过期就长这样。 */
+function isUnauthorized(code: string): boolean {
+  return (
+    code === 'unauthenticated' ||
+    code === 'authorization_failed' ||
+    code === 'forbidden' ||
+    code === 'bad_credentials'
+  )
+}
+
+/**
+ * 试连成功之后给用户看的那一句。
+ *
+ * Shopify 的 `get_shop` 回的是店铺信息——**回店铺名，不回令牌**，这样用户一眼能确认
+ * "接的是我那家店"。别的动作只说跑通了。
+ */
+export function smokeDetail(action_id: string, result: unknown): string {
+  const name = shopNameOf(result)
+  if (action_id.endsWith('get_shop') && name !== undefined) return `连上了：${name}`
+  return `试跑 ${action_id} 成功`
+}
+
+/** 从 `get_shop` 的返回里挖出店铺名。挖不到就 undefined（绝不编一个）。 */
+function shopNameOf(result: unknown): string | undefined {
+  const seen = new Set<unknown>()
+  const walk = (node: unknown, depth: number): string | undefined => {
+    if (depth > 4 || typeof node !== 'object' || node === null || seen.has(node)) return undefined
+    seen.add(node)
+    const record = node as Record<string, unknown>
+    for (const key of ['name', 'shopName', 'myshopifyDomain', 'displayName']) {
+      const value = record[key]
+      if (typeof value === 'string' && value.trim() !== '') return value
+    }
+    for (const value of Object.values(record)) {
+      const hit = walk(value, depth + 1)
+      if (hit !== undefined) return hit
+    }
+    return undefined
+  }
+  return walk(result, 0)
+}
+
+/** 预设 → 对外的那一份（前端只认这个形状）。 */
+function presetView(preset: MailboxPreset): MailboxPresetView {
+  return {
+    id: preset.id,
+    label: preset.label,
+    imap_host: preset.imap_host,
+    imap_port: preset.imap_port,
+    smtp_host: preset.smtp_host,
+    smtp_port: preset.smtp_port,
+    auth: preset.auth,
+    note: preset.note,
+    ...(preset.help_url === undefined ? {} : { help_url: preset.help_url }),
+  }
+}
+
 /** 只挑"不填任何参数就能跑"的只读 Action 当试连动作。 */
 function noRequiredInput(schema: unknown): boolean {
   if (typeof schema !== 'object' || schema === null) return true
@@ -259,10 +357,10 @@ function toNumber(raw: string | undefined, fallback: number): number {
  * 比我们拿一堆 `apiKey` / `baseUrl` 的裸字段名糊弄用户强。
  */
 function fieldSpecs(
-  entry: CatalogEntry | undefined,
+  catalogFields: readonly ProviderFieldSpec[] | undefined,
   runtime?: { name: string; secret: boolean }[],
 ): ProviderFieldSpec[] {
-  if (entry !== undefined && entry.fields.length > 0) return entry.fields
+  if (catalogFields !== undefined && catalogFields.length > 0) return [...catalogFields]
   return (runtime ?? []).map((f) => ({
     name: f.name,
     label: f.name,
@@ -283,6 +381,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   const stateFile =
     options.dbDir === undefined ? undefined : join(options.dbDir, 'connections.json')
 
+  // 秘密库可以由服务进程建好传进来（模型 key 与邮箱口令同一个库、不同 key 前缀）；
+  // 谁建的谁负责关，不然 `close()` 会把别人还在用的库关掉。
+  const ownsSecrets = options.secrets === undefined
   const secrets =
     options.secrets ??
     createSecretStore({
@@ -330,11 +431,16 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   const probe = options.probe ?? ((url: string) => assertRuntimeHardened(url, { env }))
 
   // ── 本地状态（只有非凭据元数据）
-  let state: StateFile = { version: 1, local: [], tests: {} }
+  let state: StateFile = { version: 1, local: [], tests: {}, shopify: [] }
   if (stateFile !== undefined) {
     try {
       const parsed = JSON.parse(readFileSync(stateFile, 'utf8')) as StateFile
-      state = { version: 1, local: parsed.local ?? [], tests: parsed.tests ?? {} }
+      state = {
+        version: 1,
+        local: parsed.local ?? [],
+        tests: parsed.tests ?? {},
+        shopify: parsed.shopify ?? [],
+      }
     } catch {
       // 第一次跑，或者文件坏了：从空开始，加密库里的凭据不受影响
     }
@@ -350,6 +456,69 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     seq += 1
     return `conn_mail_${Date.parse(clock.now()).toString(36)}_${seq}`
   }
+
+  /** 后台作业自己的 trace 根（没有请求可挂靠时用它）。 */
+  let traceSeq = 0
+  const nextTraceId = (kind: string): string => {
+    traceSeq += 1
+    return `trc_${kind}_${Date.parse(clock.now()).toString(36)}_${traceSeq}`
+  }
+
+  // ── WP25：Shopify 客户端凭据经纪人
+  //
+  // 换令牌那一跳在 `shopify-broker.ts`；这里只提供它需要的三个口子：
+  // 秘密库（存客户端 ID / 密钥）、记录存储（存到期时间，跟连接元数据同一个文件）、
+  // 以及"把令牌推进 OpenConnector"的那一次转发。
+  const shopify = createShopifyBroker({
+    clock,
+    vault: secrets,
+    records: {
+      list: () => state.shopify ?? [],
+      put(record) {
+        const rows = state.shopify ?? []
+        const at = rows.findIndex((r) => r.shop === record.shop)
+        if (at >= 0) rows[at] = record
+        else rows.push(record)
+        state.shopify = rows
+        flush()
+      },
+      remove(shop) {
+        state.shopify = (state.shopify ?? []).filter((r) => r.shop !== shop)
+        flush()
+      },
+    },
+    async pushToken({ shop, alias, accessToken }) {
+      // 令牌在这一句里第一次也是最后一次被本进程持有：上游认的字段名是
+      // `apiKey` / `shopDomain`（09-09 在真 runtime 上实测，写别的名字会 400）
+      const conn = await connect.submitForm('shopify_admin', {
+        workspace_id,
+        ownership: 'workspace',
+        alias,
+        auth_type: 'api_key',
+        fields: { apiKey: accessToken, shopDomain: shop },
+      })
+      return {
+        connection_id: conn.id,
+        ...(conn.identity?.display_name === undefined
+          ? {}
+          : { display_name: conn.identity.display_name }),
+      }
+    },
+    ...(options.shopifyFetch === undefined ? {} : { fetch: options.shopifyFetch }),
+    appendEvent: (type, payload) => {
+      options.appendEvent?.({
+        schema_version: 1,
+        workspace_id,
+        type,
+        actor: { kind: 'system', id: 'connections' },
+        // 别的地方写 `trace_id: ''` 是因为它们都在请求里，服务进程会拿当前那条 trace 覆盖掉。
+        // **换令牌不一样**：到期刷新是后台定时器跑的，压根没有请求，空串会被内核顶回来
+        // （事件要求非空 trace_id），于是每次自动换令牌都抛。后台作业自成一条 trace 的根。
+        correlation: { trace_id: nextTraceId('shopify') },
+        payload,
+      })
+    },
+  })
 
   // ── runtime 加固检查（带缓存）
   let hardening: { at: number; report: Awaited<ReturnType<typeof probe>> } | undefined
@@ -473,6 +642,41 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   await listAll()
 
   // ── 试连
+  /** 跑一次只读 Action。分出来是为了「上游 401 → 换张令牌 → 再跑一次」能复用。 */
+  const runSmokeAction = async (
+    action: ActionMeta,
+    connection_id: string,
+  ): Promise<{ result: unknown }> => {
+    let token: ConnectToken | undefined
+    try {
+      token = await connect.issueToken({
+        assignment_id: SMOKE_ASSIGNMENT,
+        kind: 'role-read',
+        allowed_actions: [action.id],
+        allowed_connections: [connection_id],
+        expires_in_seconds: SMOKE_TOKEN_TTL_SECONDS,
+      })
+      const outcome = await connect.execute(
+        action.id,
+        {},
+        {
+          token: token.token,
+          connection: connection_id,
+        },
+      )
+      return { result: (outcome as { result?: unknown }).result ?? outcome }
+    } finally {
+      // 试连用的 token 一定要吊销：它的存在时间就该只有这一次调用
+      if (token !== undefined) {
+        try {
+          await connect.revokeTokens(SMOKE_ASSIGNMENT)
+        } catch {
+          // 吊销失败也不该把试连结果变成失败；token 120 秒后本地记账也会过期
+        }
+      }
+    }
+  }
+
   const smokeRemote = async (view: ConnectionView): Promise<ConnectTestResult> => {
     const checked_at = clock.now()
     const entry = catalogEntry(view.service)
@@ -493,29 +697,37 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         checked_at,
       }
     }
-    let token: ConnectToken | undefined
     try {
-      token = await connect.issueToken({
-        assignment_id: SMOKE_ASSIGNMENT,
-        kind: 'role-read',
-        allowed_actions: [action.id],
-        allowed_connections: [view.id],
-        expires_in_seconds: SMOKE_TOKEN_TTL_SECONDS,
-      })
-      await connect.execute(action.id, {}, { token: token.token, connection: view.id })
-      return { ok: true, reason: 'ok', detail: `试跑 ${action.id} 成功`, checked_at }
+      const { result } = await runSmokeAction(action, view.id)
+      return { ok: true, reason: 'ok', detail: smokeDetail(action.id, result), checked_at }
     } catch (e) {
       const code = errorCodeOf(e)
-      return { ok: false, reason: code, detail: humanize(code, messageOf(e)), checked_at }
-    } finally {
-      // 试连用的 token 一定要吊销：它的存在时间就该只有这一次调用
-      if (token !== undefined) {
+      // 上游说"没权限"时，如果这条连接是客户端凭据接管的，多半只是那张 24 小时的
+      // 令牌过期了：换一张再跑一次。换不到才是真的连不上。
+      if (isUnauthorized(code) && shopify.recordOf(view.id) !== undefined) {
         try {
-          await connect.revokeTokens(SMOKE_ASSIGNMENT)
-        } catch {
-          // 吊销失败也不该把试连结果变成失败；token 120 秒后本地记账也会过期
+          await shopify.refresh(view.id)
+          const { result } = await runSmokeAction(action, view.id)
+          return {
+            ok: true,
+            reason: 'ok',
+            detail: `${smokeDetail(action.id, result)}（令牌过期了，已经自动换了一张新的）`,
+            checked_at,
+          }
+        } catch (again) {
+          if (again instanceof ShopifyBrokerError) {
+            return { ok: false, reason: again.code, detail: again.message, checked_at }
+          }
+          const retryCode = errorCodeOf(again)
+          return {
+            ok: false,
+            reason: retryCode,
+            detail: humanize(retryCode, messageOf(again)),
+            checked_at,
+          }
         }
       }
+      return { ok: false, reason: code, detail: humanize(code, messageOf(e)), checked_at }
     }
   }
 
@@ -559,6 +771,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     }
     let account: MailAccount | undefined
     let password: string | undefined
+    let smtpPassword: string | undefined
     try {
       const fields = secrets.get(id)
       if (fields === undefined) {
@@ -566,6 +779,8 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       }
       account = accountOf(id)
       password = fields.password
+      // 发信密码留空 = 复用收信那一份（多数邮箱本来就是同一个授权码）
+      smtpPassword = fields.smtp_password === '' ? undefined : fields.smtp_password
     } catch (e) {
       const detail = e instanceof SecretStoreError ? e.message : messageOf(e)
       return { ok: false, reason: errorCodeOf(e), detail, checked_at }
@@ -575,7 +790,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     }
     try {
       // 口令只在这一句里出现；探针不许留存、不许回显
-      const outcome = await probeImpl.check(account, password)
+      const outcome = await probeImpl.check(account, password, smtpPassword ?? password)
       return {
         ok: outcome.ok,
         ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
@@ -624,6 +839,66 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     return rememberTest(id, await smokeRemote(view))
   }
 
+  /**
+   * WP25 交付 A：客户端凭据 → 令牌 → OpenConnector。
+   *
+   * 凭据在这个函数里只经过一次：`input.fields` 交给经纪人，经纪人换到令牌立刻
+   * PUT 给 OpenConnector，然后把 ID / 密钥写进本机加密库。返回值里只有连接视图与
+   * 试连结果——没有 ID、没有密钥、没有令牌。
+   */
+  const submitShopifyApp = async (
+    entry: CatalogEntry,
+    option: CatalogAuthOption,
+    input: SubmitConnectionInput,
+  ): Promise<{ connection: ConnectionView; test: ConnectTestResult }> => {
+    const usable = await connectUsable()
+    if (!usable.ok) throw unavailable(usable.reason ?? 'OpenConnector 不可用')
+    let record: ShopifyBrokerRecord
+    try {
+      record = await shopify.connect({
+        shop: input.fields.shop_domain ?? '',
+        alias: input.alias,
+        client_id: input.fields.client_id ?? '',
+        client_secret: input.fields.client_secret ?? '',
+      })
+    } catch (e) {
+      if (e instanceof ShopifyBrokerError) {
+        // 中文人话进 message；上游原文（已经过 scrub）只进 details.detail
+        throw new ConnectionsError('invalid_input', e.message, {
+          reason: e.code,
+          ...(e.detail === undefined ? {} : { detail: e.detail }),
+        })
+      }
+      throw e
+    }
+    options.appendEvent?.({
+      schema_version: 1,
+      workspace_id,
+      type: 'connect.form_submitted',
+      actor: { kind: 'system', id: 'connections' },
+      correlation: { trace_id: '' },
+      // 只有字段名与接法，没有字段值
+      payload: {
+        service: entry.service,
+        alias: input.alias,
+        connection_id: record.connection_id,
+        field_names: Object.keys(input.fields),
+        auth_option: option.id,
+        store: 'local_vault+openconnector',
+      },
+    })
+    const rows = await listAll()
+    const view = rows.find((r) => r.id === record.connection_id)
+    if (view === undefined) {
+      throw new ConnectionsError(
+        'provider_error',
+        '令牌换到了，但连接器里没出现这条连接；再点一次试试',
+      )
+    }
+    const test = rememberTest(view.id, await smokeRemote(view))
+    return { connection: { ...view, last_test: test, last_tested_at: test.checked_at }, test }
+  }
+
   // ── 端口
   const port: ConnectionsPort = {
     async providers(): Promise<ProviderView[]> {
@@ -647,6 +922,20 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           data_sources: [...entry.data_sources],
           setup_guide: entry.setup_guide,
           ...(entry.data_note === undefined ? {} : { data_note: entry.data_note }),
+          // WP25：Shopify 有两种接法，让用户先选一次（`flow` 是装配细节，不出网关）
+          ...(entry.auth_options === undefined
+            ? {}
+            : {
+                auth_options: entry.auth_options.map(({ flow: _flow, ...option }) => ({
+                  ...option,
+                  fields: option.fields.map((f) => ({ ...f })),
+                  setup_guide: {
+                    ...option.setup_guide,
+                    steps: [...option.setup_guide.steps],
+                    links: option.setup_guide.links.map((l) => ({ ...l })),
+                  },
+                })),
+              }),
         }
       })
     },
@@ -656,6 +945,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     async begin(_actor: ConnectionsActor, service, input): Promise<BeginConnectResult> {
       const entry = catalogEntry(service)
       if (entry === undefined) throw notFound(`没有这个服务：${service}`)
+      const option = authOptionOf(entry, input.auth_option)
       if (entry.store === 'local_vault') {
         if (!secrets.available) {
           throw invalid(
@@ -664,6 +954,22 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         }
         // 本机档不需要跟任何人打招呼：直接把表单描述给出去
         return { request_id: `creq_local_${nextLocalId()}`, secure_form: { fields: entry.fields } }
+      }
+      // 客户端凭据那条路根本不去问上游要表单：字段是我们自己的（ID / 密钥 / 域名），
+      // 换到令牌之后才有 OpenConnector 的事。
+      if (option !== undefined && option.flow === 'shopify_client_credentials') {
+        if (!secrets.available) {
+          throw invalid(
+            `这台机器没有秘密库密钥（环境变量 ${SECRETS_KEY_ENV}），客户端密钥无处安全存放。` +
+              '可以先用"自定义应用访问令牌"那一种接法。',
+          )
+        }
+        const usableNow = await connectUsable()
+        if (!usableNow.ok) throw unavailable(usableNow.reason ?? 'OpenConnector 不可用')
+        return {
+          request_id: `creq_shopify_${nextLocalId()}`,
+          secure_form: { fields: option.fields, auth_option: option.id },
+        }
       }
       const usable = await connectUsable()
       if (!usable.ok) throw unavailable(usable.reason ?? 'OpenConnector 不可用')
@@ -680,12 +986,17 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           : { authorization_url: started.authorization_url }),
         ...(started.secure_form === undefined
           ? {}
-          : { secure_form: { fields: fieldSpecs(entry, started.secure_form.fields) } }),
+          : {
+              secure_form: {
+                fields: fieldSpecs(option?.fields ?? entry.fields, started.secure_form.fields),
+                ...(option === undefined ? {} : { auth_option: option.id }),
+              },
+            }),
       }
     },
 
     async pollRequest(_actor, request_id) {
-      if (request_id.startsWith('creq_local_')) {
+      if (request_id.startsWith('creq_local_') || request_id.startsWith('creq_shopify_')) {
         return { status: 'initiated' as const }
       }
       const status = await connect.pollConnect(request_id)
@@ -707,11 +1018,17 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       const entry = catalogEntry(service)
       if (entry === undefined) throw notFound(`没有这个服务：${service}`)
       if (entry.auth === 'oauth2') throw invalid(`${entry.label} 走授权页，不接受表单直填`)
-      const missing = entry.fields
+      const option = authOptionOf(entry, input.auth_option)
+      const required = option?.fields ?? entry.fields
+      const missing = required
         .filter((f) => f.required && (input.fields[f.name] ?? '').trim() === '')
         .map((f) => f.name)
       if (missing.length > 0) {
         throw invalid(`还有必填项没填：${missing.join('、')}`, { missing_fields: missing })
+      }
+
+      if (option !== undefined && option.flow === 'shopify_client_credentials') {
+        return submitShopifyApp(entry, option, input)
       }
 
       if (entry.store === 'local_vault') {
@@ -795,6 +1112,8 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         return
       }
       await connect.removeConnection(id)
+      // 客户端凭据接管的店：应用 ID / 密钥也一起从本机秘密库删掉，不留残渣
+      shopify.forget(id)
       delete state.tests[id]
       flush()
       await listAll()
@@ -803,11 +1122,36 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     test: (_actor, id) => testById(id),
 
     runtime: () => runtimeStatus(),
+
+    /**
+     * WP25 交付 B：按域名的 MX 记录认出是哪家邮箱。
+     *
+     * **永不抛**（`detectMailbox` 自己吞掉 DNS 的所有异常），认不出就 `preset: null`。
+     * 这条路什么都不落盘、不进事件——只是一次 DNS 查询。
+     */
+    async detectMailbox(_actor, email): Promise<MailboxDetectResult> {
+      const found = await detectMailbox(
+        email,
+        ...(options.resolveMx === undefined ? [] : [options.resolveMx]),
+      )
+      return {
+        domain: found.domain,
+        mx_hosts: [...found.mx_hosts],
+        preset: found.preset === undefined ? null : presetView(found.preset),
+      }
+    },
   }
 
   const credentialSource = {
-    password(ref: { connection_id: string }): string {
+    /**
+     * 按连接 id 取口令。`purpose: 'smtp'` 且用户填过发信专用密码就用那一份，
+     * 否则回退到收信那一份——「发信密码留空 = 复用」这条规则落在这里，
+     * channels 那边不需要知道。
+     */
+    password(ref: { connection_id: string; purpose?: 'imap' | 'smtp' }): string {
       const fields = secrets.get(ref.connection_id)
+      const smtp = fields?.smtp_password
+      if (ref.purpose === 'smtp' && smtp !== undefined && smtp !== '') return smtp
       const password = fields?.password
       if (password === undefined || password === '') {
         throw new SecretStoreError('not_found', `秘密库里没有这条连接的口令：${ref.connection_id}`)
@@ -816,8 +1160,24 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     },
   }
 
+  // 到期前 1 小时换新令牌。定时器只在服务进程装配时起（`refreshIntervalMs`），
+  // 而且 `unref()`——它不该拦着进程退出。
+  const refreshTokens = async (): Promise<void> => {
+    await shopify.refreshDue()
+  }
+  let timer: ReturnType<typeof setInterval> | undefined
+  const interval = options.refreshIntervalMs ?? 0
+  if (interval > 0) {
+    timer = setInterval(() => {
+      void refreshTokens()
+    }, interval)
+    timer.unref?.()
+  }
+
   return {
     port,
+    shopify,
+    refreshTokens,
     snapshot: () =>
       cached.map((c) => ({ service: c.service, status: c.status }) satisfies ConnectionLike),
     mailAccounts: () =>
@@ -834,7 +1194,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       }
     },
     close: () => {
-      secrets.close()
+      if (timer !== undefined) clearInterval(timer)
+      // 秘密库是别人传进来的就别关：服务进程还要拿它读模型 key
+      if (ownsSecrets) secrets.close()
     },
   }
 }
@@ -859,39 +1221,52 @@ const unavailable = (m: string): ConnectionsError => new ConnectionsError('provi
 
 // ── 邮箱试连的默认实现 ─────────────────────────────────────────────────
 
-/** 把上游报的那一句话归成一个原因码，界面才好出人话。 */
-export function classifyMailFailure(detail: string, side: 'imap' | 'smtp'): string {
-  const text = detail.toLowerCase()
-  if (/auth|credential|password|login|535|eauth|invalid user/.test(text)) return 'bad_credentials'
-  if (/enotfound|getaddrinfo|eai_again|dns/.test(text)) return 'host_not_found'
-  if (/econnrefused|ehostunreach|enetunreach/.test(text)) return 'unreachable'
-  if (/timeout|etimedout/.test(text)) return 'timeout'
-  if (/cert|tls|ssl|self.signed/.test(text)) return 'tls_failed'
-  return `${side}_failed`
-}
-
 /**
  * 真的去连一次：IMAP 登录 + 打开收件箱，SMTP 建连 + 鉴权握手（nodemailer 的 `verify()`）。
  *
  * 口令由参数进来、只交给 channels 的 `CredentialSource`，两个客户端用完即关；
  * 这个函数不返回、不记录、不缓存口令。
+ *
+ * WP25：失败原文交给 `@agentsws/channels` 的 {@link classifyMailFailure} 翻成中文——
+ * 主文案是人话（"要用授权码，不是登录密码"），上游原文只进 `detail`。
  */
 export function createMailProbe(): MailProbe {
   return {
-    async check(account, password) {
-      const credentials = { password: () => password }
-      const source = new ImapMailSource({ config: { ...account.imap }, credentials })
+    async check(account, password, smtpPassword) {
+      const source = new ImapMailSource({
+        config: { ...account.imap },
+        credentials: { password: () => password },
+      })
       const imap = await source.health()
       if (!imap.ok) {
-        const detail = imap.detail ?? 'IMAP 登录失败'
-        return { ok: false, reason: classifyMailFailure(detail, 'imap'), detail }
+        const failure = classifyMailFailure(
+          imap.detail ?? 'IMAP 登录失败',
+          'imap',
+          account.imap.host,
+        )
+        return {
+          ok: false,
+          reason: failure.reason,
+          detail: `${failure.message}（${failure.detail}）`,
+        }
       }
-      const mailer = new SmtpMailer({ config: { ...account.smtp }, credentials })
+      const mailer = new SmtpMailer({
+        config: { ...account.smtp },
+        credentials: { password: () => smtpPassword },
+      })
       const smtp = await mailer.health()
       await mailer.close()
       if (!smtp.ok) {
-        const detail = smtp.detail ?? 'SMTP 握手失败'
-        return { ok: false, reason: classifyMailFailure(detail, 'smtp'), detail }
+        const failure = classifyMailFailure(
+          smtp.detail ?? 'SMTP 握手失败',
+          'smtp',
+          account.smtp.host,
+        )
+        return {
+          ok: false,
+          reason: failure.reason,
+          detail: `${failure.message}（${failure.detail}）`,
+        }
       }
       return { ok: true, reason: 'ok', detail: '收信登录与发信握手都通过' }
     },

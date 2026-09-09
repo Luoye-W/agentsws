@@ -44,6 +44,7 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { AskPort } from './routes/ask.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { MeetingsPort } from './routes/meetings.js'
+import type { ModelsPort } from './routes/models.js'
 import type { WorkPort } from './routes/work.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
@@ -274,6 +275,8 @@ export interface GatewayDeps {
   meetings?: MeetingsPort
   /** WP20 连接面（连接向导 / 凭据原生表单直填）；没装配时 `/v1/connections/*` 回 not_implemented。 */
   connections?: ConnectionsPort
+  /** WP25 模型面（provider 配置 / 默认模型 / 预算 / 花费）；没装配时 `/v1/models/*` 回 not_implemented。 */
+  models?: ModelsPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
   traceScope: TraceScope

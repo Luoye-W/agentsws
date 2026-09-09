@@ -145,12 +145,13 @@ async function wired(): Promise<{
 const data = async <T>(res: Response): Promise<T> => ((await res.json()) as { data: T }).data
 
 describe('WP20 网关：路由与信封', () => {
-  it('七条路由都在 /v1/connections 之下，且都要 Bearer + X-Assignment', async () => {
+  it('八条路由都在 /v1/connections 之下，且都要 Bearer + X-Assignment', async () => {
     const { h } = await wired()
     const specs = h.gateway.specs.filter((s) => s.path.startsWith('/v1/connections'))
     expect(specs.map((s) => `${s.method.toUpperCase()} ${s.path}`).sort()).toEqual([
       'DELETE /v1/connections/:id',
       'GET /v1/connections',
+      'GET /v1/connections/mail/detect',
       'GET /v1/connections/providers',
       'GET /v1/connections/requests/:id',
       'GET /v1/connections/runtime',

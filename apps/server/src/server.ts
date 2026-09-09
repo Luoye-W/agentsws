@@ -23,13 +23,13 @@ import {
   SqliteIdentityService,
   type TraceScope,
 } from '@agentsws/api'
+import type { ResolveMx } from '@agentsws/channels'
 import type {
   ApprovalBus,
   ApprovalItem,
   Assignment,
   Clock,
   EventEnvelope,
-  ModelRef,
   Person,
   PersonId,
   StartRun,
@@ -42,8 +42,8 @@ import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
 import { createKnowledge, type Knowledge } from '@agentsws/knowledge'
 import {
   createModelGateway,
+  type FetchLike,
   type ModelGatewayApi,
-  openaiCompatibleProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
 import { changeKindOf, createRoleStore, loadBundledRole, type RoleStore } from '@agentsws/roles'
@@ -56,7 +56,10 @@ import { MemoryBackend } from './backend.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
+import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
+import { createSecretStore, type SecretStore } from './secret-store.js'
+import type { BrokerFetch } from './shopify-broker.js'
 import { mountStatic } from './static.js'
 import { createWorkPort } from './work.js'
 import {
@@ -135,6 +138,23 @@ export interface ServerOptions {
   startRun?: StartRun | false
   /** 事项现场的记录来源（订单 / 客户 / 联系人 / 工具执行器）；demo 由合成世界提供。 */
   records?: MatterRecordSource
+  /**
+   * WP25 的三个测试注入点。生产路径一个都不传，各自走真实现：Shopify 换令牌用
+   * `globalThis.fetch`、MX 用 `node:dns/promises`、模型试跑用网关自己的 fetch。
+   *
+   * 之所以从这里穿下去而不是让测试自己拼一套：**端到端要跑的就是这条真装配线**
+   * （路由 → 端口 → 加密库 → 网关），只把最外面那一跳换成回放，别处一行不动。
+   */
+  shopifyFetch?: BrokerFetch
+  /** WP25：邮箱识别用的 MX 查询（测试注入）。 */
+  resolveMx?: ResolveMx
+  /** WP25：模型试跑用的 fetch（测试注入 →「测试」按钮全程不联网）。 */
+  modelFetch?: FetchLike
+  /**
+   * WP25：Shopify 令牌到期巡检的间隔（毫秒）。缺省 15 分钟；
+   * 测试传 0 关掉——一次性任务不该留后台计时器。
+   */
+  tokenRefreshIntervalMs?: number
 }
 
 export interface Bootstrap {
@@ -162,6 +182,10 @@ export interface Server {
   meetings: MeetingsAssembly
   /** WP20 连接面（连接向导 / 本机加密秘密库 / 连接状态回灌工作台）。 */
   connections: ConnectionsAssembly
+  /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
+  modelSettings: ModelsAssembly
+  /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
+  secrets: SecretStore
   /** 17 §4 运行时适配器 + `startRun`；`startRun: false` 时没有。 */
   runtime?: RuntimeAssembly
   identity: LocalIdentityService
@@ -247,24 +271,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const knowledge = createKnowledge({ dbPath: file('knowledge.db'), clock })
   const skills = createSkills({ clock, random })
 
-  const deepseekKey = env.DEEPSEEK_API_KEY
-  const useDeepSeek = deepseekKey !== undefined && deepseekKey.trim() !== ''
-  const defaultModel: ModelRef = useDeepSeek
-    ? { provider: 'deepseek', model: 'deepseek-chat', region: 'cn' }
-    : { provider: 'stub', model: 'stub-v1', region: 'cn' }
+  // WP25：本机加密秘密库建**一次**，连接面（邮箱口令 / Shopify 应用密钥）与
+  // 模型面（API key）共用同一个库，靠 key 前缀分开。谁建的谁关——这里建，这里关。
+  const secrets = createSecretStore({ dbPath: file('secrets.sqlite'), clock, env })
+
+  // 网关先按 stub 起来，`createModels` 装配好之后立刻 `reconfigure` 成真配置。
+  // 之所以不在这里判断有没有 key：**有没有模型这件事现在由模型面说了算**
+  // （加密库里的配置 + 环境变量兜底），不再是"看一个环境变量在不在"。
   const models = createModelGateway({
-    providers: [
-      useDeepSeek
-        ? openaiCompatibleProvider({
-            apiKeyEnv: 'DEEPSEEK_API_KEY',
-            model: 'deepseek-chat',
-            provider: 'deepseek',
-            region: 'cn',
-            env,
-          })
-        : stubProvider({ seed: 7 }),
-    ],
-    policy: { default: defaultModel, data_residency: 'cn', prices: priceTable },
+    providers: [stubProvider({ seed: 7 })],
+    policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
     clock,
     env,
     halt: kernel.halt,
@@ -272,6 +288,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     eventSink: (e) => {
       appendEvent(e)
     },
+  })
+  const modelSettings = createModels({
+    clock,
+    gateway: models,
+    secrets,
+    env,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
   })
 
   const backend = new MemoryBackend()
@@ -348,6 +372,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     random,
     appendEvent,
     mailProbe: createMailProbe(),
+    secrets,
+    // WP25：Shopify 的客户端凭据令牌 24 小时到期，每 15 分钟看一眼有没有快过期的
+    refreshIntervalMs: options.tokenRefreshIntervalMs ?? 15 * 60 * 1000,
+    ...(options.shopifyFetch === undefined ? {} : { shopifyFetch: options.shopifyFetch }),
+    ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
     ...(dbDir === undefined ? {} : { dbDir }),
   })
   // 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
@@ -366,6 +395,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           approvals,
           roles,
           appendEvent,
+          // WP25：有没有模型问模型面（加密库里的配置 + 环境变量兜底），不再只看环境变量
+          hasModel: () => modelSettings.configured(),
+          modelRef: () => modelSettings.defaultRef(),
           ...(options.records === undefined ? {} : { source: options.records }),
         })
   const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
@@ -468,6 +500,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles: rolesPort,
     meetings: meetings.port,
     connections: connections.port,
+    models: modelSettings.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
     ask: createAskPort({
       models,
@@ -545,6 +578,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work,
     meetings,
     connections,
+    modelSettings,
+    secrets,
     ...(runtime === undefined ? {} : { runtime }),
     identity,
     backend,
@@ -592,6 +627,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (options.mount === undefined) roles.close()
       meetings.close()
       connections.close()
+      secrets.close()
       txnStore?.close()
       workStore?.close()
       idempotencyStore?.close()

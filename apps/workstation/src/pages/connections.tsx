@@ -43,6 +43,8 @@ interface Wizard {
   request_id?: string
   fields?: ProviderFieldSpec[]
   authorization_url?: string
+  /** WP25：用户选的那条接法（Shopify 两种）。 */
+  auth_option?: string
 }
 
 export function ConnectionsPage(): React.ReactNode {
@@ -137,8 +139,13 @@ export function ConnectionsPage(): React.ReactNode {
   )
 
   const begin = useMutation({
-    mutationFn: (service: string) => beginConnect(service, {}, ownerId),
-    onSuccess: (result, service) => {
+    mutationFn: (input: { service: string; auth_option?: string }) =>
+      beginConnect(
+        input.service,
+        input.auth_option === undefined ? {} : { auth_option: input.auth_option },
+        ownerId,
+      ),
+    onSuccess: (result, { service, auth_option }) => {
       if (result.authorization_url !== undefined) {
         openExternal(result.authorization_url)
         setWizard({
@@ -150,14 +157,16 @@ export function ConnectionsPage(): React.ReactNode {
         startPolling(service, result.request_id)
         return
       }
+      const chosen = result.secure_form?.auth_option ?? auth_option
       setWizard({
         service,
         phase: 'form',
         request_id: result.request_id,
         ...(result.secure_form === undefined ? {} : { fields: result.secure_form.fields }),
+        ...(chosen === undefined ? {} : { auth_option: chosen }),
       })
     },
-    onError: (error: Error, service) => {
+    onError: (error: Error, { service }) => {
       setResults((prev) => ({
         ...prev,
         [service]: { ok: false, detail: error.message, checked_at: new Date().toISOString() },
@@ -170,12 +179,18 @@ export function ConnectionsPage(): React.ReactNode {
    * 失败时只把**错误消息**记进结果，不回显任何用户填的值。
    */
   const submit = useMutation({
-    mutationFn: (input: { service: string; request_id?: string; values: Record<string, string> }) =>
+    mutationFn: (input: {
+      service: string
+      request_id?: string
+      auth_option?: string
+      values: Record<string, string>
+    }) =>
       submitConnection(
         input.service,
         {
           fields: input.values,
           ...(input.request_id === undefined ? {} : { request_id: input.request_id }),
+          ...(input.auth_option === undefined ? {} : { auth_option: input.auth_option }),
         },
         ownerId,
       ),
@@ -277,15 +292,19 @@ export function ConnectionsPage(): React.ReactNode {
               phase={wizard?.service === p.service ? wizard.phase : 'idle'}
               fields={wizard?.service === p.service ? wizard.fields : undefined}
               result={results[p.service]}
+              assignment={ownerId}
               oauthUrl={wizard?.service === p.service ? wizard.authorization_url : undefined}
-              onStart={() => {
+              onStart={(auth_option) => {
                 setResults((prev) => {
                   const { [p.service]: _dropped, ...rest } = prev
                   return rest
                 })
                 // 开始向导就把高亮撤掉，免得跳转来的高亮一直挂着
                 if (highlight !== null) setParams({}, { replace: true })
-                begin.mutate(p.service)
+                begin.mutate({
+                  service: p.service,
+                  ...(auth_option === undefined ? {} : { auth_option }),
+                })
               }}
               onCancel={() => {
                 stopPolling()
@@ -296,6 +315,7 @@ export function ConnectionsPage(): React.ReactNode {
                 submit.mutate({
                   service: p.service,
                   ...(wizard?.request_id === undefined ? {} : { request_id: wizard.request_id }),
+                  ...(wizard?.auth_option === undefined ? {} : { auth_option: wizard.auth_option }),
                   values,
                 })
               }}

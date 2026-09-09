@@ -84,7 +84,8 @@ export class SmtpMailer implements Mailer {
       // 口令来源只有两条：本机加密秘密库（按 connection_id）或环境变量。都没有 = 无鉴权 SMTP。
       this.transport = this.factory(
         this.config,
-        readPassword(this.config, this.env, this.credentials),
+        // 发信这一头按 `smtp` 取：用户填了发信专用密码就用那一份，没填装配方回退到收信那份
+        readPassword(this.config, this.env, this.credentials, 'smtp'),
       )
     }
     return this.transport
