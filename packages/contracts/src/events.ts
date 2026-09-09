@@ -95,6 +95,10 @@ export type KnownEventType =
   | 'connect.connection_started'
   | 'connect.connection_established'
   | 'connect.connection_transferred'
+  // WP20：表单直填只记字段名；试连只记 ok / reason
+  | 'connect.form_submitted'
+  | 'connect.connection_removed'
+  | 'connect.connection_tested'
   // privacy (21)
   | 'privacy.erased'
   // meetings (37 §4)：payload 只有摘要与条数，转写与音频永不进日志

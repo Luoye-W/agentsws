@@ -5,6 +5,19 @@ export interface ProviderMeta {
   service: string
   auth: 'no_auth' | 'api_key' | 'oauth2' | 'custom_credential'
   executable: boolean
+  /** 13 §4.3 / WP20：给非技术用户看的名字、≤ 5 步准备说明与外链、原生表单字段描述 */
+  label?: string
+  setup_guide?: { summary: string; steps: string[]; links?: { label: string; url: string }[] }
+  fields?: ProviderFieldSpec[]
+}
+export interface ProviderFieldSpec {
+  name: string
+  label: string
+  secret: boolean
+  required: boolean
+  placeholder?: string
+  hint?: string
+  default?: string
 }
 export interface ActionMeta {
   id: string
@@ -30,6 +43,10 @@ export interface Connection {
   owner_person_id?: string
   identity?: { account_id?: string; display_name?: string; granted_scopes?: string[] }
   status: 'active' | 'reauth_required' | 'disabled'
+  /** WP20：凭据在 OpenConnector 还是本机加密库（通用 IMAP / SMTP）；界面据此说清"断开会删掉什么" */
+  credential_store?: 'openconnector' | 'local_vault'
+  last_tested_at?: Iso8601
+  last_test?: { ok: boolean; reason?: string; detail?: string }
 }
 export interface ConnectToken {
   token: string
@@ -93,6 +110,23 @@ export interface Connect {
     expires_in_seconds?: number
   }): Promise<ConnectToken>
   revokeTokens(assignment_id: AssignmentId): Promise<void>
+  /**
+   * 13 §4.3 原生表单直填。`fields` 是契约里**唯一允许携带凭据原文的入参**：
+   * 实现必须转发（OpenConnector `PUT /api/connections/:service` 或本机加密库）后即遗忘，
+   * 不落日志、不进事件、不进任何模型上下文、不回显。
+   */
+  submitForm?(
+    service: string,
+    input: {
+      workspace_id: WorkspaceId
+      ownership: Connection['ownership']
+      alias: string
+      auth_type?: ProviderMeta['auth']
+      fields: Record<string, string>
+      request_id?: string
+    },
+  ): Promise<Connection>
+  removeConnection?(id: string): Promise<void>
   /** v1 一律 `forbidden`；留在契约上是为了一致性套件能对 mock 与真适配器同样断言。 */
   proxy?(service: string, req: ProxyRequest, opts: { token: string }): Promise<never>
   execute<T = unknown>(
