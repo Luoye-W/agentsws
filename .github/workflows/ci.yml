@@ -84,3 +84,42 @@ jobs:
           path: out/simulation/
           if-no-files-found: warn
           retention-days: 14
+
+  # WP30 D：同一批场景换到 dsh 的**跨进程 headless** 档再跑一遍。
+  # 17 §4「运行时可替换」不是口号：换掉运行时、换掉宿主进程，九条场景与六条不变量照样全过。
+  # 基线按运行时分档（packs/*/baseline.json 的 `runtimes.dsh`），所以指标门禁也照常生效。
+  dsh-subprocess:
+    name: simulate · dsh headless 子进程
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      # 子进程入口是编译产物（dist/headless/child.js），先建
+      - name: tsc -b
+        run: pnpm exec tsc -b
+
+      - name: simulate --runtime dsh-subprocess
+        run: >-
+          pnpm -s simulate --tier fast --pack packs/dtc-3c-3p
+          --scenario 'scenarios/**/*.yml' --seed 42 --runtime dsh-subprocess
+          --report out/simulation-dsh
+
+      - name: upload simulation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-report-dsh-subprocess
+          path: out/simulation-dsh/
+          if-no-files-found: warn
+          retention-days: 14

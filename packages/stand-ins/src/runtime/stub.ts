@@ -14,14 +14,9 @@ import type {
 } from '@agentsws/contracts'
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
-import type { BoundaryItem, SupportPolicy } from '@agentsws/support-core'
-import {
-  classifyText,
-  detectAnsweredBoundaries,
-  gateChange,
-  renderReplyBody,
-  returnWindowPolicy,
-} from '@agentsws/support-core'
+import type { BoundaryItem } from '@agentsws/support-core'
+import { renderReplyBody } from '@agentsws/support-core'
+import { boundaryGate, describeRun } from './support.js'
 
 export interface ToolExecution {
   status: 'ok' | 'error' | 'blocked'
@@ -251,34 +246,6 @@ function estimateTokens(messages: ChatMessage[], tools: ToolDef[]): number {
   return Math.ceil(chars / 4)
 }
 
-// ---------- 业务边界 ----------
-
-/**
- * 1c：分类 / 起草 / 边界判定都来自 `@agentsws/support-core`（客服共享包，33 §1）。
- * 这里只负责把 RunRequest 的上下文翻译成共享包认得的形状。
- *
- * 已答的边界从**策略层与知识层**推（`detectAnsweredBoundaries`），
- * 绝不从线程正文推——客户信里写什么都不能算商家答过一条边界。
- */
-function answeredBoundaries(
-  req: RunRequest,
-  at: Iso8601,
-  policy: { days: number; source?: ContextItem },
-): SupportPolicy[] {
-  const structured = itemsOfKind(req, 'policy').map((i) => i.content)
-  const texts = [...itemsOfKind(req, 'policy'), ...itemsOfKind(req, 'fact_card')].map((i) =>
-    plainText(i.content),
-  )
-  const answered = detectAnsweredBoundaries({ texts, structured, at })
-  if (
-    policy.source !== undefined &&
-    !answered.some((p) => p.boundary_id === 'policy.refund_window')
-  ) {
-    answered.push(returnWindowPolicy(policy.days, at, policy.source.id))
-  }
-  return answered
-}
-
 // ---------- 适配器 ----------
 
 /**
@@ -405,6 +372,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       // 3) 定位订单 / 线程 / 政策
+      const readTools: string[] = []
       const threadItem = itemsOfKind(req, 'thread')[0]
       const threadText = threadItem ? plainText(threadItem.content) : ''
       const orderItem = itemsOfKind(req, 'order')[0]
@@ -449,6 +417,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         }
         const res = await exec({ name: tool, input, request: req })
         toolCalls += 1
+        if (res.status === 'ok') readTools.push(tool)
         const refs = res.status === 'ok' ? (res.provenance ?? inferRefs(res.data)) : []
         if (refs.length > 0) prov.see(refs, { full: true })
         if (res.status === 'ok' && !order) order = orderView(res.data)
@@ -462,21 +431,14 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       // 5) 起草回复（+ 窗口内的 stage_refund 意图）
-      // 1c：分类交给客服共享包；"要不要改动"由意图定，不再各自维护一张词表
+      // 1c：分类与边界判定都交给共享判定（`support.ts`），三个运行时同一份口径
       const subjectLine = threadSubject(threadItem)
-      const classification = classifyText(
-        { text: threadText, ...(subjectLine === undefined ? {} : { subject: subjectLine }) },
-        { now: clock.now() },
-      )
-      const wantsChange = classification.intent === 'returns_refunds'
-      const answered = answeredBoundaries(req, clock.now(), policy)
-      // 第一次遇到没答过的边界：不自作主张，只起草"交给同事确认"的回信 + 发一张选择题卡
-      const gate = gateChange({
-        change_kind: 'refund',
-        classification,
-        policies: answered,
-        text: threadText,
+      const gate = boundaryGate({
+        request: req,
+        now: clock.now(),
+        defaultReturnWindowDays: defaultWindow,
       })
+      const wantsChange = gate.wantsChange
       const deliveredMs = order?.delivered_at ? Date.parse(order.delivered_at) : undefined
       const nowMs = Date.parse(clock.now())
       const daysSince =
@@ -529,10 +491,12 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         }
       }
 
+      const askedBoundaries: string[] = []
       if (!exhausted && gate.missing.length > 0 && options.createPolicyQuestion) {
         for (const boundary of gate.missing) {
           const asked = await options.createPolicyQuestion({ request: req, boundary })
           if (asked === undefined) continue
+          askedBoundaries.push(boundary.label)
           sink({
             type: 'proposal.created',
             approval_item_id: asked.approval_item_id,
@@ -590,9 +554,17 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       usage.output_tokens = Math.ceil(body.length / 4) + (seed % 7)
 
       const noStage = req.expectations.must_stage_if_change_requested && wantsChange && !staged
-      const summary = exhausted
-        ? `预算耗尽（${exhausted.which}）：已补齐未闭合的工具调用`
-        : `stub 运行：${toolCalls} 次工具调用，${outputs.length} 项产物`
+      // 17 §3：摘要是给下一次运行与人看的，写成一句人话（三个运行时同一份拼法）
+      const summary = describeRun({
+        readTools,
+        drafted: body.length > 0,
+        askedBoundaries,
+        ...(order === undefined ? {} : { orderName: order.name }),
+        ...(staged && refundAmount !== undefined && order !== undefined
+          ? { staged: { kind: 'refund', amount: refundAmount, currency: order.currency } }
+          : {}),
+        ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+      })
       sink({
         type: 'run.completed',
         usage: {

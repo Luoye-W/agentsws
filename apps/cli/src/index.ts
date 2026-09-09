@@ -7,7 +7,16 @@
  */
 
 import { isAbsolute, resolve } from 'node:path'
-import { formatReport, listRuns, replayRun, runSuite, synth, type Tier } from '@agentsws/simulation'
+import {
+  formatReport,
+  isRuntimeName,
+  listRuns,
+  RUNTIME_NAMES,
+  replayRun,
+  runSuite,
+  synth,
+  type Tier,
+} from '@agentsws/simulation'
 import { Command } from 'commander'
 import { createDemo, DEMO_SCENARIO } from './demo.js'
 
@@ -55,15 +64,25 @@ export function buildProgram(
     .option('--seed <n>', '覆盖场景里的 seed')
     .option('--report <dir>', '报告输出目录')
     .option('--baseline <file>', '基线文件（缺省 <pack>/baseline.json）')
+    .option(
+      '--runtime <name>',
+      `用哪个运行时跑（${RUNTIME_NAMES.join(' | ')}）；dsh 缺省按能力探测起 headless 子进程`,
+      'stub',
+    )
     .option('--write-baseline', '基线不存在时写一份', false)
+    .option('--rewrite-baseline', '把这一档基线覆盖写掉（换运行时后重定基线用）', false)
     .option('--max-regression-pct <n>', '指标劣化阈值（%）', '5')
     .action(async (opts: Record<string, unknown>) => {
       const tier = String(opts.tier) as Tier
       if (!TIERS.includes(tier)) throw new Error(`未知运行档：${String(opts.tier)}`)
+      const runtime = String(opts.runtime)
+      if (!isRuntimeName(runtime)) throw new Error(`未知运行时：${runtime}`)
       const result = await runSuite({
         packDir: fromCwd(String(opts.pack)),
         scenario: opts.scenario as string[],
         tier,
+        runtime,
+        writeBaseline: opts.rewriteBaseline === true,
         maxRegressionPct: asInt(String(opts.maxRegressionPct), '--max-regression-pct'),
         writeBaselineIfMissing: opts.writeBaseline === true,
         ...(opts.scenarioRoot === undefined
@@ -75,7 +94,9 @@ export function buildProgram(
       })
       for (const report of result.reports) write(`${formatReport(report)}\n`)
       const passed = result.reports.filter((r) => r.passed).length
-      write(`\n${passed}/${result.reports.length} 场景通过（${result.pack}，${result.tier} 档）\n`)
+      write(
+        `\n${passed}/${result.reports.length} 场景通过（${result.pack}，${result.tier} 档，${runtime} 运行时）\n`,
+      )
       if (result.gate.ok) {
         write('合并门禁：通过（fast 全过且指标未劣化）\n')
       } else {

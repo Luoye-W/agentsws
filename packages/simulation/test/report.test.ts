@@ -7,6 +7,7 @@ import {
   attachDelta,
   formatReport,
   gate,
+  normalizeBaseline,
   readBaseline,
   runSuite,
   toBaseline,
@@ -64,6 +65,7 @@ describe('基线与合并门禁（26 §4）', () => {
       pack: 'dtc-3c-3p',
       tier: 'fast',
       seed: 42,
+      runtime: 'stub',
       passed: true,
       clock: { start: 'a', end: 'b', virtual_ms: 0 },
       counts: {
@@ -95,11 +97,12 @@ describe('基线与合并门禁（26 §4）', () => {
       ...over,
     }) as ScenarioReport
 
-  const baseline: Baseline = {
+  // WP30：基线按运行时分档（v2）；v1 的老文件由 `normalizeBaseline` 当成 stub 一档读
+  const baseline: Baseline = normalizeBaseline({
     schema_version: 1,
     generated_at: '2026-09-07T00:00:00.000Z',
     scenarios: { 'a/b': { metrics: { adoption_rate: 1, tokens_per_item: 1000 } } },
-  }
+  })
 
   it('指标不劣化 → 门禁绿', () => {
     const ok = gate([fake('a/b')], baseline, { maxRegressionPct: 5 })
@@ -191,11 +194,53 @@ describe('基线与合并门禁（26 §4）', () => {
 
   it('toBaseline 按场景 id 与指标名排序（diff 可读）', () => {
     const b = toBaseline([fake('b/x'), fake('a/b')], '2026-09-07T00:00:00.000Z')
-    expect(Object.keys(b.scenarios)).toEqual(['a/b', 'b/x'])
-    expect(Object.keys(b.scenarios['a/b']?.metrics ?? {})).toEqual([
+    const stub = b.runtimes.stub
+    expect(b.schema_version).toBe(2)
+    expect(Object.keys(stub?.scenarios ?? {})).toEqual(['a/b', 'b/x'])
+    expect(Object.keys(stub?.scenarios['a/b']?.metrics ?? {})).toEqual([
       'adoption_rate',
       'tokens_per_item',
     ])
+  })
+
+  it('WP30：基线按运行时分档，一档的数字不会去卡另一档', () => {
+    const stubReport = fake('a/b')
+    const directReport = fake('a/b', { runtime: 'direct' })
+    directReport.metrics.tokens_per_item = {
+      value: 5000,
+      event_types: ['model.usage'],
+      event_count: 1,
+      direction: 'lower_better',
+    }
+    // 只有 stub 一档时：direct 的报告找不到自己那一档 → 不判劣化（新档第一次跑）
+    expect(gate([directReport], baseline).ok).toBe(true)
+
+    const both = toBaseline([stubReport, directReport], '2026-09-07T00:00:00.000Z')
+    expect(Object.keys(both.runtimes).sort()).toEqual(['direct', 'stub'])
+    expect(both.runtimes.direct?.scenarios['a/b']?.metrics.tokens_per_item).toBe(5000)
+    expect(both.runtimes.stub?.scenarios['a/b']?.metrics.tokens_per_item).toBe(1000)
+    // 各自与各自那一档比：都不劣化
+    expect(gate([stubReport, directReport], both).ok).toBe(true)
+  })
+
+  it('WP30：三个 dsh 变体共用 dsh 一档', () => {
+    const inProcess = fake('a/b', { runtime: 'dsh-in-process' })
+    const subprocess = fake('a/b', { runtime: 'dsh-subprocess' })
+    const auto = fake('a/b', { runtime: 'dsh' })
+    const b = toBaseline([inProcess], '2026-09-07T00:00:00.000Z')
+    expect(Object.keys(b.runtimes)).toEqual(['dsh'])
+    expect(attachDelta(subprocess, b, 5).delta?.tokens_per_item?.baseline).toBe(1000)
+    expect(attachDelta(auto, b, 5).delta?.tokens_per_item?.baseline).toBe(1000)
+  })
+
+  it('WP30：`previous` 里没跑到的那几档原样留着', () => {
+    const withStub = toBaseline([fake('a/b')], '2026-09-07T00:00:00.000Z')
+    const withDsh = toBaseline(
+      [fake('a/b', { runtime: 'dsh-subprocess' })],
+      '2026-09-08T00:00:00.000Z',
+      withStub,
+    )
+    expect(Object.keys(withDsh.runtimes).sort()).toEqual(['dsh', 'stub'])
   })
 })
 

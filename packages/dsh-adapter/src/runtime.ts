@@ -24,7 +24,7 @@ import type {
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
-import { assemblePrompt, promptHash } from '@agentsws/stand-ins'
+import { assemblePrompt, describeRun, promptHash } from '@agentsws/stand-ins'
 import { createHarness } from './harness.js'
 import { writePreset } from './preset.js'
 import {
@@ -65,9 +65,11 @@ interface Scratch {
 }
 
 /**
- * 17 §4 的 dsh 运行时。所有 dsh API 调用都收在这个包里，业务代码只见 RuntimeAdapter。
+ * 17 §4 的 dsh 运行时（**进程内装配**档）。所有 dsh API 调用都收在这个包里，
+ * 业务代码只见 RuntimeAdapter。跨进程档见 `headless/`——两档的语义、事件序列、
+ * `capabilities()` 完全一致（同一份契约测试跑两遍）。
  */
-export function createDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
+export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
   const { clock } = options
   const seed = options.seed ?? 1
   const defaultWindow = options.defaultReturnWindowDays ?? 14
@@ -110,6 +112,10 @@ export function createDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
       let toolCalls = 0
       let exhausted: { which: keyof RunRequest['budget']; used: number; cap: number } | undefined
       let staged = false
+      /** 摘要用：真的读成功过的工具（按调用顺序）。 */
+      const readTools: string[] = []
+      const askedBoundaries: string[] = []
+      let stagedMoney: { kind: string; amount: number; currency: string } | undefined
 
       const preset = writePreset(req, options.presetRoot)
       const session_id = sha256(canonicalJson({ run: req.id, seed, preset: preset.dir })).slice(
@@ -340,6 +346,7 @@ export function createDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
           }
           const res = await harness.gate.execute(call_id, tool, input)
           toolCalls += 1
+          if (!res.isError && tool !== STAGE_TOOL && tool !== DRAFT_TOOL) readTools.push(tool)
           if (!harness.gate.emitted.has(call_id)) {
             harness.gate.emitted.add(call_id)
             emit({
@@ -397,6 +404,8 @@ export function createDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
           refundAmount !== undefined &&
           refundAmount > 0 &&
           options.stage !== undefined &&
+          // 36 §2.2：管着这次退款的边界还没答过就不提（门禁插件的 pre-execute 是兜底那道门）
+          harness.gate.boundary.allowed &&
           (req.expectations.outputs.includes('staged_change') ||
             req.expectations.must_stage_if_change_requested) &&
           prov.has(order.ref)
@@ -410,10 +419,19 @@ export function createDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
           const value = res.value as { change_id?: unknown } | undefined
           if (res.ok && typeof value?.change_id === 'string') {
             staged = true
+            stagedMoney = { kind: 'refund', amount: refundAmount, currency: order.currency }
             scratch.childChangeIds.push(value.change_id)
             prov.pin(order.ref)
             emit({ type: 'change.staged', change_id: value.change_id })
             outputs.push({ kind: 'staged_change', change_id: value.change_id })
+          }
+        }
+
+        // ── 边界选择题卡（36 §2.2）：门禁插件发的卡在这里收进产物 ─────────────
+        if (exhausted === undefined) {
+          for (const asked of await harness.gate.askBoundaries()) {
+            askedBoundaries.push(asked.label)
+            outputs.push({ kind: 'proposal', approval_item_id: asked.approval_item_id })
           }
         }
 
@@ -457,10 +475,15 @@ export function createDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
 
         usage.output_tokens = Math.ceil(body.length / 4) + (seed % 7)
         const noStage = req.expectations.must_stage_if_change_requested && wantsChange && !staged
-        const summary =
-          exhausted !== undefined
-            ? `预算耗尽（${exhausted.which}）：已补齐未闭合的工具调用`
-            : `dsh 运行：${toolCalls} 次工具调用，${outputs.length} 项产物`
+        // 17 §3：摘要是一句人话（与 stub / direct-llm 同一份拼法）
+        const summary = describeRun({
+          readTools,
+          drafted: body.length > 0,
+          askedBoundaries,
+          ...(order === undefined ? {} : { orderName: order.name }),
+          ...(stagedMoney === undefined ? {} : { staged: stagedMoney }),
+          ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+        })
         emit({
           type: 'run.completed',
           usage: {

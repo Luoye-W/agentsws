@@ -7,9 +7,11 @@ import type { Iso8601 } from '@agentsws/contracts'
 import { SimulationError } from './errors.js'
 import type { Pack } from './pack.js'
 import { listFiles, loadPack } from './pack.js'
-import type { Baseline, GateResult, ScenarioReport } from './report.js'
-import { attachDelta, formatReport, gate, toBaseline } from './report.js'
+import type { Baseline, BaselineV1, GateResult, ScenarioReport } from './report.js'
+import { attachDelta, formatReport, gate, normalizeBaseline, toBaseline } from './report.js'
 import { runScenario } from './runner.js'
+import type { RuntimeName } from './runtime-name.js'
+import { baselineRuntime as baselineRuntimeOf } from './runtime-name.js'
 import { loadScenario } from './scenario/parse.js'
 import type { Scenario, Tier } from './scenario/types.js'
 
@@ -72,6 +74,10 @@ export interface SuiteOptions {
   maxRegressionPct?: number
   /** 报告文件里的生成时刻；不给就用最后一条场景的虚拟结束时刻（保持可复现）。 */
   generatedAt?: Iso8601
+  /** 用哪个运行时跑（17 §4）；缺省 `stub`。基线按运行时分档（`baselineRuntime`）。 */
+  runtime?: RuntimeName
+  /** 已有基线时也覆盖写这一档（跑新运行时时用）。 */
+  writeBaseline?: boolean
 }
 
 export interface SuiteResult {
@@ -86,7 +92,7 @@ export interface SuiteResult {
 
 export function readBaseline(file: string): Baseline | undefined {
   if (!existsSync(file)) return undefined
-  return JSON.parse(readFileSync(file, 'utf8')) as Baseline
+  return normalizeBaseline(JSON.parse(readFileSync(file, 'utf8')) as Baseline | BaselineV1)
 }
 
 /** 跑一整套场景。 */
@@ -117,6 +123,7 @@ export async function runSuite(options: SuiteOptions): Promise<SuiteResult> {
         tier,
         pack,
         ...(options.seed === undefined ? {} : { seed: options.seed }),
+        ...(options.runtime === undefined ? {} : { runtime: options.runtime }),
       }),
     )
   }
@@ -161,8 +168,10 @@ export async function runSuite(options: SuiteOptions): Promise<SuiteResult> {
     written.push(text)
   }
 
-  if (baseline === undefined && options.writeBaselineIfMissing === true) {
-    const next = toBaseline(withDelta, generatedAt)
+  const missingTier =
+    baseline === undefined || baseline.runtimes[baselineRuntimeOf(options.runtime)] === undefined
+  if (options.writeBaseline === true || (missingTier && options.writeBaselineIfMissing === true)) {
+    const next = toBaseline(withDelta, generatedAt, baseline)
     mkdirSync(resolve(baselineFile, '..'), { recursive: true })
     writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
     written.push(baselineFile)

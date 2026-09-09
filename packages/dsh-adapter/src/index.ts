@@ -6,19 +6,28 @@
  */
 
 export { DshAdapterError } from './errors.js'
-export type { GateApi, GateInput } from './gate.js'
+export type { AskedBoundary, GateApi, GateInput } from './gate.js'
 export { CONTEXT_PREFIX, installGate, PERSONA_SECTION } from './gate.js'
 export type { DshHarness, HarnessInput } from './harness.js'
 export { createHarness } from './harness.js'
+export {
+  createDshRuntime,
+  createSubprocessDshRuntime,
+  defaultChildEntry,
+  resolveMode,
+  subprocessAvailable,
+} from './headless/index.js'
+export * from './headless/protocol.js'
 export type { GatewayAdapterOptions } from './llm.js'
 export { GATEWAY_PROVIDER, GatewayLlmAdapter, toChatMessages, toToolDefs } from './llm.js'
 export type { PresetComposition, PresetPaths } from './preset.js'
 export { GATE_PLUGIN_MODULE, presetComposition, writePreset } from './preset.js'
 export * from './reading.js'
-export { createDshRuntime } from './runtime.js'
+export { createInProcessDshRuntime } from './runtime.js'
 export type { ReadToolHooks, StageToolHooks } from './tools.js'
 export { buildToolDefinitions, classifySideEffect, DRAFT_TOOL, STAGE_TOOL } from './tools.js'
 export type {
+  DshRuntimeMode,
   DshRuntimeOptions,
   DshSessionRef,
   GateHandles,

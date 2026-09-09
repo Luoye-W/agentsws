@@ -1,11 +1,25 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
   "include": ["src"],
   "references": [
-    { "path": "../contracts" },
-    { "path": "../core" },
-    { "path": "../model-gateway" },
-    { "path": "../stand-ins" }
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../model-gateway"
+    },
+    {
+      "path": "../stand-ins"
+    },
+    {
+      "path": "../support-core"
+    }
   ]
 }
