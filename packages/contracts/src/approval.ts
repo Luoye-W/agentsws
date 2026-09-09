@@ -37,6 +37,14 @@ export type ApprovalKind =
   /** WP22 / 37 §2.4：晚上的复盘卡；payload = ReviewDraft，含明天的计划草案 */
   | 'review'
 
+/** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
+export interface SamplingReview {
+  by: PersonId
+  at: Iso8601
+  verdict: 'ok' | 'issue'
+  note?: string
+}
+
 export type ApprovalState =
   | 'proposed'
   | 'blocked'

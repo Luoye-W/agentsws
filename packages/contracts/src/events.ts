@@ -84,6 +84,9 @@ export type KnownEventType =
   | 'knowledge.gap.answered'
   // simulation (26)：RunRequest 落日志，回放据此重组 prompt
   | 'simulation.run_request'
+  | 'simulation.sampling_review'
+  | 'simulation.reconciled'
+  | 'simulation.process_restarted'
   // delivery / notification (18)
   | 'notification.sent'
   // connect (08/18)：payload 只带 token 指纹，永不带原文
