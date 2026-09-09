@@ -1,0 +1,52 @@
+name: DCO
+
+# 贡献用 DCO（Developer Certificate of Origin，https://developercertificate.org/），不用 CLA——
+# 定案见 docs/33 §2.3。这里检查 PR 里每个非合并提交都带 `Signed-off-by:` 一行。
+# 忘了签：`git commit --amend -s`（最后一条）或 `git rebase --signoff main`（整条分支），然后强推。
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  signed-off-by:
+    name: every commit is signed off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: check Signed-off-by
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          missing=0
+          checked=0
+          # 合并提交由维护者用 `git merge --no-ff` 生成，不算贡献，跳过
+          for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            checked=$((checked + 1))
+            subject=$(git show -s --format=%s "$sha")
+            if git show -s --format=%B "$sha" | grep -qiE '^Signed-off-by: .+ <[^>]+@[^>]+>[[:space:]]*$'; then
+              echo "ok      ${sha:0:8}  $subject"
+            else
+              echo "MISSING ${sha:0:8}  $subject"
+              missing=$((missing + 1))
+            fi
+          done
+          echo "---"
+          echo "checked $checked commit(s), $missing missing Signed-off-by"
+          if [ "$missing" -ne 0 ]; then
+            echo ""
+            echo "Add a sign-off line to every commit:"
+            echo "    Signed-off-by: Your Name <you@example.com>"
+            echo "Fix the last commit with:  git commit --amend -s"
+            echo "Fix the whole branch with: git rebase --signoff origin/main"
+            exit 1
+          fi
