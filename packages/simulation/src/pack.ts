@@ -106,6 +106,15 @@ export interface PackKnowledgeDoc {
   body: string
 }
 
+/** pack 自带的技能（Agent Skills 格式）。WP29 的学习回路要有落脚的段落。 */
+export interface PackSkillDoc {
+  /** pack 内相对路径 */
+  path: string
+  /** frontmatter 里的 name */
+  name: string
+  markdown: string
+}
+
 export interface Pack {
   dir: string
   manifest: PackManifest
@@ -119,6 +128,8 @@ export interface Pack {
   shipments: PackShipment[]
   threads: PackThread[]
   knowledge: PackKnowledgeDoc[]
+  /** `skills/<name>.md`：只收带 frontmatter `name` 的（overlay 示例不算技能） */
+  skills: PackSkillDoc[]
   /** `fixtures/<name>` → 正文 */
   fixtures: Map<string, string>
   /** pack 自带的场景文件绝对路径（不含隐藏集） */
@@ -234,6 +245,18 @@ export function loadPack(dir: string): Pack {
 
   const knowledge = listFiles(join(root, 'knowledge'), '.md').map((f) => knowledgeDoc(root, f))
 
+  const skills: PackSkillDoc[] = []
+  for (const f of listFiles(join(root, 'skills'), '.md')) {
+    const markdown = readFileSync(f, 'utf8')
+    const name = /^\s*---[\s\S]*?\n[ \t]*name[ \t]*:[ \t]*(.+)$/m
+      .exec(markdown)?.[1]
+      ?.trim()
+      .replace(/^["']|["']$/g, '')
+    // 没有 frontmatter 的是示例片段（比如 overlay 样例），不当技能装进去
+    if (name === undefined || name === '') continue
+    skills.push({ path: relative(root, f).split(sep).join('/'), name, markdown })
+  }
+
   const fixtures = new Map<string, string>()
   for (const f of listFiles(join(root, 'fixtures'))) {
     fixtures.set(
@@ -259,6 +282,7 @@ export function loadPack(dir: string): Pack {
     shipments,
     threads,
     knowledge,
+    skills,
     fixtures,
     scenarioFiles,
     mockState(): MockState {

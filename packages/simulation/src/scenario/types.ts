@@ -52,6 +52,8 @@ export type ScenarioEvent =
   | { at: string; type: 'inject.budget'; budget: ScenarioBudget }
   /** 25：装上「一天的例行公事」（早上计划卡 / 晚上复盘卡 / 复盘后的接力）。 */
   | { at: string; type: 'routine.start'; routine: ScenarioRoutine }
+  /** WP29：装上学习回路（lesson 池 + 每天 07:30 的次日提案）。 */
+  | { at: string; type: 'learning.start'; learning: ScenarioLearning }
 
 export interface ScenarioInbound {
   from: string
@@ -66,10 +68,12 @@ export interface ScenarioInbound {
 
 export interface ScenarioDecide {
   who: string
-  /** `$last_outbound_draft` / `$last_staged_change` / 具体 approval_item id。 */
+  /** `$last_outbound_draft` / `$last_staged_change` / `$last_skill_lesson` / 具体 approval_item id。 */
   item: string
   action: 'approve' | 'approve_edited' | 'reject'
   reason?: string
+  /** 选择题卡（36 §2.1）：批准必须带一个选项 id。 */
+  option?: string
 }
 
 export interface ScenarioFault {
@@ -87,6 +91,12 @@ export interface ScenarioOutage {
 export interface ScenarioRoutine {
   plan_hour?: number
   review_hour?: number
+}
+
+/** WP29：次日提案几点出（本地时区），缺省 07:30。 */
+export interface ScenarioLearning {
+  propose_hour?: number
+  propose_minute?: number
 }
 
 /** 26 扩展（本包）：把模型预算压到某个值，用来跑"预算耗尽 → 熔断"。 */
@@ -131,6 +141,15 @@ export interface ScenarioExpected {
   approval_kinds?: Record<string, NumericAssertion>
   /** 25 扩展：这些处理器至少各有一条定时任务（证明「接力已注册」）。 */
   scheduled_handlers?: string[]
+  /**
+   * WP29 扩展：最后一次运行的 prompt 里至少出现其中一条。
+   * 「采纳之后下一次运行真的用了新版本」就靠它钉住。
+   */
+  prompt_includes_any?: string[]
+  /** WP29 扩展：夜间整理被拦下的原因（`rejected_before` / `policy_layer` …）。 */
+  lessons_filtered?: string[]
+  /** WP29 扩展：池里 lesson 的条数。 */
+  lessons_pooled?: NumericAssertion
 }
 
 export interface Scenario {

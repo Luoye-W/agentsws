@@ -102,6 +102,9 @@ importers:
       '@agentsws/knowledge':
         specifier: workspace:*
         version: link:../../packages/knowledge
+      '@agentsws/learning':
+        specifier: workspace:*
+        version: link:../../packages/learning
       '@agentsws/meetings':
         specifier: workspace:*
         version: link:../../packages/meetings
@@ -441,6 +444,28 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/learning:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/roles':
+        specifier: workspace:*
+        version: link:../roles
+      '@agentsws/skills':
+        specifier: workspace:*
+        version: link:../skills
+      better-sqlite3:
+        specifier: ^12.2.0
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
   packages/meetings:
     dependencies:
       '@agentsws/contracts':
@@ -548,6 +573,9 @@ importers:
       '@agentsws/knowledge':
         specifier: workspace:*
         version: link:../knowledge
+      '@agentsws/learning':
+        specifier: workspace:*
+        version: link:../learning
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
@@ -560,6 +588,9 @@ importers:
       '@agentsws/schedule':
         specifier: workspace:*
         version: link:../schedule
+      '@agentsws/skills':
+        specifier: workspace:*
+        version: link:../skills
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins

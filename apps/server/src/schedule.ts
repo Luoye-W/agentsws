@@ -8,10 +8,11 @@
  *   用户改过时间 / 按过暂停的，重启后**照他改的来**（`ensure` 只在没有时建）。
  * - 时间只经注入的 Clock；工作区时区从数据源来，不读机器本地时区。
  *
- * 七个消费者（38 §2 WP27 那一行）：
+ * 八个消费者（38 §2 WP27 那一行 + WP29 的学习回路）：
  * ① 每日计划（每岗位 08:00）② 复盘（20:00 / 周五加周复盘 / 月末加月复盘）
  * ③ 会议记录源轮询（15 分钟）④ 幂等表清理（每小时）⑤ Shopify 令牌刷新（到期前 1 小时）
  * ⑥ 技能周合并（周一 06:00）⑦ 复盘 → 次日计划草案的接力（复盘跑完注册一个 at 任务）
+ * ⑧ 学习回路的次日提案（每天 07:30，WP29）
  */
 import { join } from 'node:path'
 import type {
@@ -72,6 +73,8 @@ export const HANDLERS = {
   idempotencySweep: 'api.idempotency_sweep',
   shopifyRefresh: 'connect.shopify_refresh',
   skillsWeekly: 'skills.weekly_consolidate',
+  /** WP29：每天 07:30 把昨天学到的变成一张选择题卡 */
+  learningDaily: 'skills.daily_lessons',
 } as const
 
 /** 令牌到期前多久换新的（25 交付：Shopify 客户端凭据 24 小时到期）。 */
@@ -550,6 +553,29 @@ export interface SkillsWeeklyDeps {
   weeklyConsolidate(workspace_id: WorkspaceId, now: Iso8601): Promise<{ proposals: unknown[] }>
 }
 
+/* ------------------------------------------------------------------ */
+/* ⑧ 学习回路：每天 07:30 出「昨天学到的」                                 */
+/* ------------------------------------------------------------------ */
+
+export interface LearningDailyDeps {
+  clock: Clock
+  /** 出卡：返回建了几张、拦了几条（拦的原因进任务结果，界面上能解释） */
+  proposeDaily(now: Iso8601): Promise<{ created: string[]; filtered: { reason: string }[] }>
+}
+
+/**
+ * 排在早上 08:00 那条计划任务**之前**：人打开工作台第一眼就该看见昨天学到的那条，
+ * 而不是先看到今天的安排、再被一张迟到的卡打断。
+ */
+export function registerLearning(scheduler: Scheduler, deps: LearningDailyDeps): void {
+  scheduler.register(HANDLERS.learningDaily, async () => {
+    const { created, filtered } = await deps.proposeDaily(deps.clock.now())
+    const reasons: Record<string, number> = {}
+    for (const f of filtered) reasons[f.reason] = (reasons[f.reason] ?? 0) + 1
+    return { cards: created.length, filtered: filtered.length, reasons }
+  })
+}
+
 export function registerSkillsWeekly(scheduler: Scheduler, deps: SkillsWeeklyDeps): void {
   scheduler.register(HANDLERS.skillsWeekly, async () => {
     const { proposals } = await deps.weeklyConsolidate(deps.workspace_id, deps.clock.now())
@@ -576,6 +602,8 @@ export interface SchedulePlanOptions {
     idempotency?: boolean
     shopify?: boolean
     skills?: boolean
+    /** WP29 学习回路（每天 07:30 的提案卡） */
+    learning?: boolean
   }
 }
 
@@ -697,6 +725,18 @@ export async function ensureSystemTasks(
         title: '每周一合并一次学到的东西',
         handler: HANDLERS.skillsWeekly,
         trigger: { kind: 'cron', expr: '0 6 * * 1', tz },
+      }),
+    )
+  }
+  // ⑧ 学习回路：每天 07:30，赶在 08:00 的计划卡之前
+  if (options.has.learning === true) {
+    await add(
+      'sched_learning_daily',
+      systemTask(base, {
+        title: '每天早上把昨天学到的整理成一张卡',
+        handler: HANDLERS.learningDaily,
+        trigger: { kind: 'cron', expr: '30 7 * * *', tz },
+        misfire_policy: 'run_once_now',
       }),
     )
   }

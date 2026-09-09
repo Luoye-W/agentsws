@@ -9,10 +9,12 @@
     { "path": "../dsh-adapter" },
     { "path": "../kernel" },
     { "path": "../knowledge" },
+    { "path": "../learning" },
     { "path": "../model-gateway" },
     { "path": "../roles" },
     { "path": "../runtime-direct" },
     { "path": "../schedule" },
+    { "path": "../skills" },
     { "path": "../stand-ins" },
     { "path": "../txn" },
     { "path": "../work" }

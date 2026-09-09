@@ -370,6 +370,11 @@ async function execute(
       if (item === undefined) throw new SimulationError('not_found', '还没有对外草稿可决定')
       return item
     }
+    if (ref === '$last_skill_lesson') {
+      const item = [...all].reverse().find((i) => i.kind === 'skill_lesson')
+      if (item === undefined) throw new SimulationError('not_found', '还没有学习提案卡可决定')
+      return item
+    }
     if (ref === '$last_staged_change') {
       const item = [...all].reverse().find((i) => i.kind === 'staged_change')
       if (item === undefined) throw new SimulationError('not_found', '还没有待批变更可决定')
@@ -385,19 +390,28 @@ async function execute(
     who: string,
     action: DecisionAction,
     reason: string | undefined,
+    option?: string,
   ): Promise<void> => {
     const delivery = [...item.deliveries].reverse().find((d) => d.to === who && d.status === 'sent')
     if (delivery === undefined) {
-      throw new SimulationError('forbidden', `${who} 手上没有 ${item.id} 的 decision_token`)
+      throw new SimulationError(
+        'forbidden',
+        `${who} 手上没有 ${item.id}（${item.kind} / ${item.state}）的 decision_token`,
+      )
     }
-    await txn.approvals.decide(item.id, who, {
+    const decided = await txn.approvals.decide(item.id, who, {
       decision_token: delivery.decision_token,
       action,
       via: 'workstation',
       ...(reason === undefined ? {} : { reason }),
+      ...(option === undefined ? {} : { selected_option_id: option }),
       ...(action === 'approve_edited'
         ? { edited_payload: standIns.actors.applyEdits(item.payload) }
         : {}),
+    })
+    // WP29：人的决定就是最强的学习信号（24 §3）。装了学习回路才收。
+    await world.learning?.onDecided(decided, {
+      ...(option === undefined ? {} : { selected_option_id: option }),
     })
   }
 
@@ -463,7 +477,13 @@ async function execute(
             await decideOne(child, event.decide.who, event.decide.action, event.decide.reason)
           }
         }
-        await decideOne(item, event.decide.who, event.decide.action, event.decide.reason)
+        await decideOne(
+          item,
+          event.decide.who,
+          event.decide.action,
+          event.decide.reason,
+          event.decide.option,
+        )
         await tick()
         return
       }
@@ -488,6 +508,21 @@ async function execute(
       case 'inject.budget': {
         world.setBudget(event.budget)
         world.appendEvent('simulation.budget_changed', { ...event.budget })
+        return
+      }
+      case 'learning.start': {
+        // WP29：装上学习回路（它自己会先把「一天的例行公事」的调度器起起来）
+        world.startLearning({
+          ...(event.learning.propose_hour === undefined
+            ? {}
+            : { proposeHour: event.learning.propose_hour }),
+          ...(event.learning.propose_minute === undefined
+            ? {}
+            : { proposeMinute: event.learning.propose_minute }),
+        })
+        world.appendEvent('simulation.learning_started', {
+          skills: world.pack.skills.map((s) => s.name),
+        })
         return
       }
       default: {
@@ -528,6 +563,16 @@ async function execute(
     outages: world.outages,
     notifications: world.notifications,
     blocked: [...world.blocked, ...applyErrors],
+    ...(world.learning === undefined
+      ? {}
+      : {
+          learning: {
+            pooled: world.learning.pool.list({ workspace_id: world.workspace_id }).length,
+            proposals: world.learning.proposals.length,
+            filtered: world.learning.filtered.map((f) => f.reason),
+            resolved_skills: (await world.learning.promptSections()).map((s) => s.text),
+          },
+        }),
   }
 
   const writeActions = new Set(

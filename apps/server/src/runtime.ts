@@ -34,6 +34,7 @@ import type {
   TodoId,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
+import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
@@ -112,6 +113,12 @@ export interface RuntimeOptions {
   hasModel?: () => boolean
   /** WP25：现在生效的默认模型（进 `RunRequest.runtime.model`）。 */
   modelRef?: () => ModelRef
+  /**
+   * WP29：技能库。给了就把 `resolve` 出来的技能正文当 persona 段拼进 prompt——
+   * 学习回路采纳的那条 overlay 是靠这一步生效的（"下次运行用新版本"）。
+   * 不给就是老行为：prompt 里只有技能名。
+   */
+  skills?: SkillResolver
 }
 
 export interface RuntimeAssembly {
@@ -404,10 +411,19 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       tools: { allow, connect_token, side_effect_policy: 'executor' },
       skills: config.skills,
       persona: {
-        sections:
-          config.persona === undefined
+        sections: [
+          ...(config.persona === undefined
             ? []
-            : [{ id: 'role', name: config.role_id, order: 20, text: config.persona }],
+            : [{ id: 'role', name: config.role_id, order: 20, text: config.persona }]),
+          // 24 §1：解析后的技能正文（包 → 公司 → 部门 → 个人叠加完的那一份）
+          ...(options.skills === undefined
+            ? []
+            : await skillPromptSections({
+                skills: config.skills,
+                actor: { person_id: input.person_id, workspace_id },
+                registry: options.skills,
+              })),
+        ],
       },
       budget: { max_tokens: 60_000, max_tool_calls: 8, max_seconds: 120, max_cost_base: 5 },
       // 变更仍走各自的管线（渠道 / 执行器）；事项里的一次运行只出草稿与提案

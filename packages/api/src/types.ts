@@ -180,6 +180,67 @@ export interface SkillsPort {
     workspace_id?: WorkspaceId
     status?: LessonRecord['status']
   }): LessonRecord[] | Promise<LessonRecord[]>
+  /** WP29 技能页：每个技能的当前版本、三层 overlay、待审提案数。没装配就 not_implemented。 */
+  list?(actor: {
+    person_id: PersonId
+    workspace_id: WorkspaceId
+    department_id?: string
+  }): Promise<SkillSummary[]>
+  /** 24 §2 排除：个人不用某个技能，不影响别人。 */
+  exclude?(name: string, person_id: PersonId, excluded: boolean): Promise<void>
+  /** 24 §2 晋升：产出一条 `skill_promotion` 审批项（不落任何一层）。 */
+  promote?(input: {
+    skill: string
+    section_ids: string[]
+    to_tier: 'company' | 'department'
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }>
+  /** WP29：待审的 `skill_lesson` 提案卡（技能页上的"待审提案"）。 */
+  proposals?(actor: {
+    person_id: PersonId
+    workspace_id: WorkspaceId
+  }): Promise<SkillProposalSummary[]>
+}
+
+/** 一层 overlay 在界面上的样子：来源是"人写的"还是"学到的"，一眼能看出来。 */
+export interface SkillOverlayView {
+  tier: 'company' | 'department' | 'personal'
+  owner: string
+  version: number
+  base_version: string
+  ops: {
+    op: 'replace' | 'append' | 'remove'
+    section_id: string
+    heading?: string
+    origin: 'authored' | 'learned'
+    body?: string
+    learned_from?: { lessons: string[]; at: Iso8601 }
+  }[]
+}
+
+export interface SkillSummary {
+  name: string
+  /** 基础版所在的层 */
+  tier: string
+  version: string
+  excluded: boolean
+  sections: { id: string; heading: string; origin: 'authored' | 'learned' }[]
+  overlays: SkillOverlayView[]
+  pending_proposals: number
+}
+
+export interface SkillProposalSummary {
+  approval_item_id: string
+  skill: string
+  section_id: string
+  heading: string
+  title: string
+  summary: string
+  hits: number
+  confidence: number
+  options: { id: string; label: string }[]
+  quotes: string[]
+  diff: { before: string | null; after: string; summary: string }
 }
 
 /** 05 §4 有效配置的最小投影：网关只做序列化与身份校验，字段由 roles 包决定。 */

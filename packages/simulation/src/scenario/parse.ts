@@ -75,6 +75,7 @@ const EVENT_KEYS = [
   'model.outage',
   'inject.budget',
   'routine.start',
+  'learning.start',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -95,6 +96,9 @@ const EXPECTED_KEYS = [
   'event_types',
   'approval_kinds',
   'scheduled_handlers',
+  'prompt_includes_any',
+  'lessons_filtered',
+  'lessons_pooled',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -174,7 +178,7 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       }
     }
     case 'actor.decide': {
-      known(source, `${path}.${key}`, body, ['who', 'item', 'action', 'reason'])
+      known(source, `${path}.${key}`, body, ['who', 'item', 'action', 'reason', 'option'])
       const action = str(source, `${path}.${key}.action`, body.action)
       if (!['approve', 'approve_edited', 'reject'].includes(action)) {
         fail(source, `${path}.${key}.action`, 'action 只能是 approve / approve_edited / reject')
@@ -189,6 +193,9 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(body.reason === undefined
             ? {}
             : { reason: str(source, `${path}.${key}.reason`, body.reason) }),
+          ...(body.option === undefined
+            ? {}
+            : { option: str(source, `${path}.${key}.option`, body.option) }),
         },
       }
     }
@@ -224,6 +231,23 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(body.review_hour === undefined
             ? {}
             : { review_hour: num(source, `${path}.${key}.review_hour`, body.review_hour) }),
+        },
+      }
+    }
+    case 'learning.start': {
+      known(source, `${path}.${key}`, body, ['propose_hour', 'propose_minute'])
+      return {
+        at,
+        type: 'learning.start',
+        learning: {
+          ...(body.propose_hour === undefined
+            ? {}
+            : { propose_hour: num(source, `${path}.${key}.propose_hour`, body.propose_hour) }),
+          ...(body.propose_minute === undefined
+            ? {}
+            : {
+                propose_minute: num(source, `${path}.${key}.propose_minute`, body.propose_minute),
+              }),
         },
       }
     }
@@ -340,6 +364,13 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   }
   const handlers = optStrList(source, 'expected.scheduled_handlers', raw.scheduled_handlers)
   if (handlers !== undefined) out.scheduled_handlers = handlers
+  const promptIncludes = optStrList(source, 'expected.prompt_includes_any', raw.prompt_includes_any)
+  if (promptIncludes !== undefined) out.prompt_includes_any = promptIncludes
+  const lessonsFiltered = optStrList(source, 'expected.lessons_filtered', raw.lessons_filtered)
+  if (lessonsFiltered !== undefined) out.lessons_filtered = lessonsFiltered
+  if (raw.lessons_pooled !== undefined) {
+    out.lessons_pooled = numeric(source, 'expected.lessons_pooled', raw.lessons_pooled)
+  }
   return out
 }
 

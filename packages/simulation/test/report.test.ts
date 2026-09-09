@@ -208,7 +208,7 @@ describe('套件与报告落盘（26 §5）', () => {
       reportDir: out,
       seed: 42,
     })
-    expect(result.reports).toHaveLength(9)
+    expect(result.reports).toHaveLength(11)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {
@@ -216,7 +216,7 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(9)
+    expect(summary.scenarios).toHaveLength(11)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
   })
 

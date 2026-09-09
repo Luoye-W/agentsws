@@ -50,6 +50,38 @@
         "tool_calls": 4
       }
     },
+    "learning/learn-one": {
+      "metrics": {
+        "adoption_rate": 0.3333333333333333,
+        "applied_changes": 0,
+        "blocked_proposals": 0,
+        "guardrail_hits": 0,
+        "intervention_rate": 0.6666666666666666,
+        "knowledge_gaps": 0,
+        "outbound_sent": 0,
+        "queue_latency_ms": 1400000,
+        "runs_failed": 0,
+        "staged_changes": 0,
+        "tokens_per_item": 588,
+        "tool_calls": 6
+      }
+    },
+    "learning/reject-once": {
+      "metrics": {
+        "adoption_rate": 0,
+        "applied_changes": 0,
+        "blocked_proposals": 0,
+        "guardrail_hits": 0,
+        "intervention_rate": 1,
+        "knowledge_gaps": 0,
+        "outbound_sent": 0,
+        "queue_latency_ms": 1560000,
+        "runs_failed": 0,
+        "staged_changes": 0,
+        "tokens_per_item": 588,
+        "tool_calls": 8
+      }
+    },
     "ops/budget-exhausted": {
       "metrics": {
         "adoption_rate": 1,

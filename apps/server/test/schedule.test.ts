@@ -413,9 +413,9 @@ describe('25 §5 API', () => {
 
   it('GET /v1/schedules：默认只回本岗位；scope=workspace 回整个工作区', async () => {
     const mine = await dataOf<{ id: string }[]>(await call('/v1/schedules'))
-    // 本岗位那七条：计划 + 日 / 周 / 月复盘 + 会议轮询 + 令牌刷新 + 技能周合并
-    // （内存档没有幂等表落盘，所以没有那条清理任务）
-    expect(mine).toHaveLength(7)
+    // 本岗位那八条：计划 + 日 / 周 / 月复盘 + 会议轮询 + 令牌刷新 + 技能周合并
+    // + 学习回路的次日提案（WP29）；内存档没有幂等表落盘，所以没有那条清理任务
+    expect(mine).toHaveLength(8)
     const all = await dataOf<{ id: string }[]>(await call('/v1/schedules?scope=workspace'))
     expect(all.length).toBe(mine.length)
     const byPerson = await dataOf<{ id: string }[]>(await call('/v1/schedules?scope=mine'))
