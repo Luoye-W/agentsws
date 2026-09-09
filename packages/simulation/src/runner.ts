@@ -20,6 +20,8 @@ import { SimulationError } from './errors.js'
 import type { BlockedRecord, Evidence, RunRecord } from './evidence.js'
 import { checkExpectations } from './expectations.js'
 import { checkInvariants } from './invariants.js'
+import type { JudgeReport } from './judge.js'
+import { judgeConfigOf, runModelJudge, runRuleJudge } from './judge.js'
 import { computeMetrics } from './metrics.js'
 import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
@@ -28,7 +30,7 @@ import { buildReport } from './report.js'
 import type { RuntimeName } from './runtime-name.js'
 import { parseDuration, parseRange, resolveAt } from './scenario/duration.js'
 import type { Scenario, ScenarioEvent, Tier } from './scenario/types.js'
-import type { RunContext, World } from './world.js'
+import type { RealModelBinding, RunContext, World } from './world.js'
 import { createWorld } from './world.js'
 
 /** 每推进一步的粒度：五分钟。取消窗口（120s）与升级（小时级）都能被看见。 */
@@ -51,6 +53,37 @@ export interface RunScenarioOptions {
   runtime?: RuntimeName
   /** 拿到原始证据（一致性用例要比对事件序列；报告里不塞这么大一坨）。 */
   captureEvidence?: (evidence: Evidence) => void
+  /** WP32 realistic 档：真模型绑定（key 只从环境变量取）。 */
+  model?: RealModelBinding
+  /**
+   * WP32 realistic 档：合成人的决定与客户来信交给真模型演（26 §3）。
+   * 是个工厂，因为钩子要用这个世界的网关（记账、预算、驻留策略都在网关里）。
+   * 不给就是规则版合成人 + fixture 来信，fast 档一个字节不变。
+   */
+  realistic?: (world: World) => RealisticHooks
+  /** WP32：跑不跑模型 judge（规则 judge 一直跑）。 */
+  modelJudge?: boolean
+}
+
+/** realistic 档的两个钩子：客户来信怎么写、人怎么决定。 */
+export interface RealisticHooks {
+  /**
+   * 客户来信的正文。同 seed 下**内容固定**：第一次经模型生成后写进缓存，
+   * 之后一律回放缓存（26 原则 ①：一切随机来自 seed，失败可复现）。
+   */
+  writeInbound?: (input: {
+    scenario: string
+    index: number
+    from: string
+    subject: string
+    fallback: string
+  }) => Promise<string>
+  /** 人怎么处置这张卡（只影响 `actor.decide` 没点名的那部分行为，点名的照场景走）。 */
+  decide?: (input: {
+    person: string
+    item: ApprovalItem
+    action: DecisionAction
+  }) => Promise<{ action: DecisionAction; reason?: string }>
 }
 
 const POLICY_RE = /^edit_(\d{1,3})pct$/
@@ -81,32 +114,28 @@ export async function runScenario(
   options: RunScenarioOptions = {},
 ): Promise<ScenarioReport> {
   const tier: Tier = options.tier ?? 'fast'
-  if (tier !== 'fast') {
-    throw new SimulationError('invalid_input', `v1 只实现了 fast 档（收到 ${tier}）`)
-  }
   const seed = options.seed ?? scenario.dataset.seed
   const pack =
     options.pack ??
     loadPack(options.packDir ?? `${options.packsDir ?? 'packs'}/${scenario.dataset.pack}`)
 
+  // realistic 档默认走 direct 运行时：stub 运行时压根不看模型说了什么，
+  // 用真模型跑它等于花钱买一份规则草稿（26 §4 realistic = 真模型质量评测那一类）
+  const runtime: RuntimeName =
+    options.runtime ?? (tier === 'realistic' && options.model !== undefined ? 'direct' : 'stub')
+
   const world = await createWorld({
     pack,
     seed,
     start: scenario.clock.start,
+    runtime,
     ...(options.dbPath === undefined ? {} : { dbPath: options.dbPath }),
-    ...(options.runtime === undefined ? {} : { runtime: options.runtime }),
+    ...(scenario.policy === undefined ? {} : { txnPolicy: scenario.policy }),
+    ...(options.model === undefined ? {} : { model: options.model }),
   })
 
   try {
-    return await execute(
-      scenario,
-      world,
-      pack,
-      seed,
-      tier,
-      options.runtime ?? 'stub',
-      options.captureEvidence,
-    )
+    return await execute(scenario, world, pack, seed, tier, runtime, options)
   } finally {
     await world.close()
   }
@@ -119,8 +148,10 @@ async function execute(
   seed: number,
   tier: Tier,
   runtime: RuntimeName,
-  captureEvidence?: (evidence: Evidence) => void,
+  options: RunScenarioOptions,
 ): Promise<ScenarioReport> {
+  const captureEvidence = options.captureEvidence
+  const realistic = options.realistic?.(world)
   const { clock, standIns, txn } = world
 
   // 合成人（26 §3）：策略 + 延迟分布 + 驳回规则，随机全部经 seed
@@ -175,8 +206,15 @@ async function execute(
       await routine.scheduler.runDue(clock.now())
       await routine.workflows.tick(clock.now())
     }
-    await drainApprovals()
-    await txn.approvals.expire(clock.now())
+    // 22 §2 降级：provider 挂了 → **冻结队列**。冻结的不只是"不起新草稿"，
+    // 施行与投递也一起停——半冻结的系统正是 `freeze_on_model_outage` 要挡的东西：
+    // 模型不可用时谁也说不清这条草稿还该不该发。恢复后照常出队，
+    // 同一 idempotency_key 不会发第二次（17 §5.7）。
+    // soak 档第一次把这个洞压出来了：停机前批准的回信，停机中照发不误。
+    if (!world.modelDown()) await drainApprovals()
+    // 14 §4.4 / §7 / §13.2：过期、升级链、抽检复核。真实进程里这是定时任务，
+    // 模拟回路里合成时钟每推进一拍就得走一遍——否则"没人理就升级"在虚拟时间里永远不发生。
+    await world.tickApprovals()
     // 模型恢复后把冻结期间的工作项重跑（17 §5.7 同 idempotency_key 不重复出结果）
     while (retryQueue.length > 0 && !world.modelDown()) {
       const next = retryQueue.shift()
@@ -398,10 +436,18 @@ async function execute(
   const decideOne = async (
     item: ApprovalItem,
     who: string,
-    action: DecisionAction,
-    reason: string | undefined,
+    requested: DecisionAction,
+    requestedReason: string | undefined,
     option?: string,
   ): Promise<void> => {
+    // realistic 档：这个人会不会照场景写的那样决定，交给真模型按人设判（26 §3）
+    let action = requested
+    let reason = requestedReason
+    if (realistic?.decide !== undefined) {
+      const verdict = await realistic.decide({ person: who, item, action: requested })
+      action = verdict.action
+      reason = verdict.reason ?? requestedReason
+    }
     const delivery = [...item.deliveries].reverse().find((d) => d.to === who && d.status === 'sent')
     if (delivery === undefined) {
       throw new SimulationError(
@@ -429,13 +475,24 @@ async function execute(
     switch (event.type) {
       case 'inbound.email': {
         const spec = event.inbound
-        const body =
+        const fallback =
           spec.body ??
           pack.fixtures.get(spec.body_ref ?? '') ??
           (() => {
             throw new SimulationError('not_found', `pack 里没有 fixture：${String(spec.body_ref)}`)
           })()
         const subject = spec.subject ?? `Message from ${spec.from}`
+        // realistic 档：来信由真模型按人设写；同 seed 下内容固定（缓存 + 回放）
+        const body =
+          realistic?.writeInbound === undefined
+            ? fallback
+            : await realistic.writeInbound({
+                scenario: scenario.id,
+                index: scenario.events.indexOf(event),
+                from: spec.from,
+                subject,
+                fallback,
+              })
         const thread = threadFor(spec.from, spec.thread, subject)
         lastThread = thread
         const { event: inbound, deduped } = await world.inbound.ingest(
@@ -500,6 +557,24 @@ async function execute(
       case 'clock.advance':
         await tick()
         return
+      case 'reconcile.run': {
+        // 15 §5.8：unknown 的对账。soak 档每天跑一次，所以"下一次对账内清零"是可断言的
+        await world.reconcileUnknown()
+        await tick()
+        return
+      }
+      case 'process.restart': {
+        const res = await world.restartEventLog()
+        world.appendEvent('simulation.process_restarted', { ...res })
+        if (!res.chain_ok || res.events_after < res.events_before) {
+          throw new SimulationError(
+            'conflict',
+            `重启后事件日志对不上：${res.events_before} → ${res.events_after}，chain_ok=${res.chain_ok}`,
+          )
+        }
+        await tick()
+        return
+      }
       case 'inject.fault': {
         world.connect.inject({
           action: event.fault.action,
@@ -573,6 +648,8 @@ async function execute(
     outages: world.outages,
     notifications: world.notifications,
     blocked: [...world.blocked, ...applyErrors],
+    sampling_reviews: [...world.samplingReviews],
+    assignments: world.assignmentSnapshots(),
     ...(world.learning === undefined
       ? {}
       : {
@@ -592,9 +669,29 @@ async function execute(
       .map((a) => a.id),
   )
   captureEvidence?.(evidence)
-  const metrics = computeMetrics(evidence)
+
+  // judge（26 §1）：规则 judge 每档都跑并进门禁；模型 judge 只在拿到真模型时跑，只报不拦
+  const { config: judgeConfig, rubric, ref: rubricRef } = judgeConfigOf(pack.judges)
+  const judge: JudgeReport = { rule: runRuleJudge(evidence, judgeConfig) }
+  if (rubricRef !== undefined) judge.rubric_ref = rubricRef
+  const rubricText = scenario.rubric ?? rubric
+  if (options.modelJudge === true && rubricText !== undefined) {
+    judge.model = await runModelJudge({
+      gateway: { complete: (r) => world.gateway().complete(r) },
+      evidence,
+      rubric: rubricText,
+      meta: {
+        workspace_id: world.workspace_id,
+        assignment_id: world.assignment.id,
+        role_id: world.assignment.role_id,
+        run_id: `judge_${scenario.id.replace(/[^a-z0-9]+/gi, '_')}`,
+      },
+    })
+  }
+
+  const metrics = computeMetrics(evidence, judge)
   const invariants = checkInvariants(scenario.invariants, { evidence, writeActions })
-  const expectations = checkExpectations(scenario.expected, evidence, metrics)
+  const expectations = checkExpectations(scenario.expected, evidence, metrics, judge)
 
   return buildReport({
     scenario,
@@ -605,5 +702,6 @@ async function execute(
     metrics,
     invariants,
     expectations,
+    judge,
   })
 }

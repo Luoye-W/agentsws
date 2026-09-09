@@ -199,11 +199,15 @@ describe('pack 加载（26 §2）', () => {
 })
 
 describe('运行档', () => {
-  it('v1 只实现 fast，其余明确拒绝而不是假装跑了', async () => {
+  it('三档都能跑；realistic 没给真模型时退化成确定性 provider（WP32）', async () => {
     const scenario = loadScenario(join(PACK_DIR, 'scenarios', 'ops', 'model-outage.yml'))
-    await expect(runScenario(scenario, { tier: 'realistic', pack: pack() })).rejects.toThrow(
-      /只实现了 fast/,
-    )
-    await expect(runScenario(scenario, { tier: 'soak', pack: pack() })).rejects.toThrow()
+    // 档位不再是"只实现了 fast"：realistic / soak 走同一条执行器，
+    // 区别在替身（真模型 / 连着跑 N 天），不在能不能跑
+    const realistic = await runScenario(scenario, { tier: 'realistic', pack: pack() })
+    expect(realistic.tier).toBe('realistic')
+    expect(realistic.passed).toBe(true)
+    const soak = await runScenario(scenario, { tier: 'soak', pack: pack() })
+    expect(soak.tier).toBe('soak')
+    expect(soak.passed).toBe(true)
   })
 })

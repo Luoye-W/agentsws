@@ -1,0 +1,28 @@
+id: ws_dtc15p
+name: NordVolt Gear
+tz: Asia/Shanghai
+base_currency: USD
+locales:
+  customers: en
+  operators: zh
+markets:
+  - kind: market
+    id: de
+  - kind: market
+    id: gb
+  - kind: market
+    id: pt
+  - kind: market
+    id: fr
+  - kind: market
+    id: nl
+company_md: |
+  # NordVolt Gear
+
+  三个人的 3C 配件独立站：一个店主（王岚，同时管策略层与授权额度）、
+  一个售后（同上）、一个运营（李默）、一个兼职（陈晓）。
+  客户在欧洲，站内语言英文；团队内部用中文。
+
+  - 主要市场：德国、英国、葡萄牙、法国、荷兰
+  - 结算货币：USD；店铺按市场展示本地货币
+  - 售后原则：先查单再回话；任何改动都要有人点头才生效

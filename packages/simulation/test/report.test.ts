@@ -49,12 +49,19 @@ describe('报告（26 §4）', () => {
     expect(inv?.violations[0]?.event_ids.length).toBeGreaterThan(0)
   })
 
-  it('rubric 记 skipped，不跑 judge（26 §1）', async () => {
+  it('规则 judge 每档都跑并进指标；模型 judge 没 key 就不打分（WP32 / 26 §1）', async () => {
     const { report } = await runPackScenario('aftersales/return-within-window.yml')
-    expect(report.rubric?.skipped).toBe(true)
+    // 规则 judge：确定性、无模型、进合并门禁
+    expect(report.judge?.rule.total).toBeGreaterThan(0)
+    expect(report.judge?.rule.score).toBe(1)
+    expect(report.metrics.judge_rule_score?.value).toBe(1)
+    // 模型 judge：fast 档不跑，rubric 原文留着离线重打分
+    expect(report.judge?.model).toBeUndefined()
+    expect(report.rubric?.scored).toBe(false)
     expect(report.rubric?.prompt).toContain('退货窗口')
     const other = await runPackScenario('ops/model-outage.yml')
     expect(other.report.rubric).toBeUndefined()
+    expect(other.report.judge?.rule.score).toBe(1)
   })
 })
 
@@ -253,7 +260,7 @@ describe('套件与报告落盘（26 §5）', () => {
       reportDir: out,
       seed: 42,
     })
-    expect(result.reports).toHaveLength(11)
+    expect(result.reports).toHaveLength(13)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {
@@ -261,7 +268,7 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(11)
+    expect(summary.scenarios).toHaveLength(13)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
   })
 

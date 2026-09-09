@@ -1,0 +1,79 @@
+# pack 自带的职责定义（05 §1）：投放。
+# `agentsws synth --size 15` 生成；内置职责表里没有这一份，所以它跟着 pack 走。
+id: ads.performance
+version: 1.0.0
+domain: ads
+name: { zh: 效果投放, en: Performance Ads }
+description: 计划与预算、出价、否词、暂停低效广告、投放报表
+
+scopes:
+  - { domain: ad_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: campaign, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  - { kind: meta, required: true, grants: [ads_read, ads_management], ownership: workspace }
+
+actions:
+  - id: stage_pause_ad
+    target: campaign
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: role_holder
+  - id: stage_negative_keyword
+    target: campaign
+    kind: staged_change
+    mandate: { caps: { max_terms: 50 }, window: { max_count: 20, per: day } }
+    route_to: role_holder
+  - id: stage_budget_change
+    target: campaign
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_daily_spend_total: 300 }, window: { max_count: 10, per: day } }
+    review_cannot_be_disabled: true
+    route_to: owner
+
+automation:
+  stage_pause_ad:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_negative_keyword:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_budget_change:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills: []
+home_blocks:
+  - {
+      id: ads.pending_changes,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(ads.performance),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+notifications:
+  - {
+      event: 'approval.created:stage_budget_change',
+      mode: queue,
+      recipients: [owner],
+      escalate_after_hours: 24,
+    }
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []

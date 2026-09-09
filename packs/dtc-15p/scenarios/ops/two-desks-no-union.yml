@@ -1,0 +1,44 @@
+# 一人两岗位不并集（05 §4 / 31 §3.1）。
+#
+# 运营主管李默身上有两个分配：运营（dtc.ops）与售后（dtc.aftersales）。
+# 这两个岗位加起来能碰的数据域比任何一个都多——**但没有任何一个分配拿得到那个并集**。
+# 换句话说：他以售后身份处理一张卡时，读不到运营才有的商品与活动；
+# 反过来也一样。EffectiveConfig 是按 Assignment 算的，不做跨 Assignment 并集。
+#
+# 顺带跑一封正常的信：证明"不并集"不是靠把权限砍光换来的——活照干。
+id: ops/two-desks-no-union
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  p_chen:
+    approve: { policy: always_approve, latency: 15m..45m }
+  # 退款那张卡是店主批的（14 §4.2 路由 + SoD），和起草的人不是同一个
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..40m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  assignments_not_unioned: [p_li]
+  staged_change_kinds: [refund]
+  no_applied_changes_before: $approve
+  approval_items: { kind: outbound_draft, count: 1, children: [staged_change] }
+  metrics:
+    runs_failed: 0
+    applied_changes: 1
+    outbound_sent: '>=1'
+  judge_min_score: 1
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

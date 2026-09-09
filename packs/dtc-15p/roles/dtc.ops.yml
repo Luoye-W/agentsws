@@ -1,0 +1,81 @@
+# pack 自带的职责定义（05 §1）：独立站运营。
+# `agentsws synth --size 15` 生成；内置职责表里没有这一份，所以它跟着 pack 走。
+id: dtc.ops
+version: 1.0.0
+domain: dtc
+name: { zh: 独立站运营, en: DTC Store Operations }
+description: 商品与详情页、上下架、价格与促销、活动日历、店铺配置
+
+scopes:
+  - { domain: product, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: discount, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: campaign, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  - { kind: shopify, required: true, grants: [read_products, write_products], ownership: workspace }
+
+actions:
+  - id: stage_listing_edit
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 50, per: day } }
+    route_to: scope_manager
+  - id: stage_price_change
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_price_delta_pct: 20 }, window: { max_count: 20, per: day } }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: stage_promotion
+    target: discount
+    kind: staged_change
+    mandate: { caps: { max_promotion_discount_pct: 50 }, window: { max_count: 5, per: day } }
+    route_to: owner
+
+automation:
+  stage_listing_edit:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_price_change:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_promotion:
+    ceiling: L1
+    initial: L1
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills: []
+home_blocks:
+  - {
+      id: ops.pending_listings,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(dtc.ops),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+notifications:
+  - {
+      event: 'approval.created:stage_price_change',
+      mode: queue,
+      recipients: [scope_manager],
+      escalate_after_hours: 24,
+    }
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []

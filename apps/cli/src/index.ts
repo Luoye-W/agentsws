@@ -13,7 +13,10 @@ import {
   listRuns,
   RUNTIME_NAMES,
   replayRun,
+  runSoak,
   runSuite,
+  SIZE_PRESETS,
+  soakMarkdown,
   synth,
   type Tier,
 } from '@agentsws/simulation'
@@ -72,11 +75,38 @@ export function buildProgram(
     .option('--write-baseline', '基线不存在时写一份', false)
     .option('--rewrite-baseline', '把这一档基线覆盖写掉（换运行时后重定基线用）', false)
     .option('--max-regression-pct <n>', '指标劣化阈值（%）', '5')
+    .option('--days <n>', 'soak 档连着跑几天', '7')
+    .option(
+      '--max-cost-base <n>',
+      'realistic 档跑全部场景的花费上限（基准货币）；超了就停并报告已跑部分',
+      '2',
+    )
     .action(async (opts: Record<string, unknown>) => {
       const tier = String(opts.tier) as Tier
       if (!TIERS.includes(tier)) throw new Error(`未知运行档：${String(opts.tier)}`)
       const runtime = String(opts.runtime)
       if (!isRuntimeName(runtime)) throw new Error(`未知运行时：${runtime}`)
+
+      // soak 档不按 glob 选题：它是"同一个世界连着过 N 天"，题目由 pack 的到达率生成
+      if (tier === 'soak') {
+        const soak = await runSoak({
+          packDir: fromCwd(String(opts.pack)),
+          days: asInt(String(opts.days), '--days'),
+          runtime,
+          ...(opts.seed === undefined ? {} : { seed: asInt(String(opts.seed), '--seed') }),
+          ...(opts.report === undefined ? {} : { reportDir: fromCwd(String(opts.report)) }),
+        })
+        write(`${formatReport(soak.scenario)}\n\n`)
+        write(soakMarkdown(soak).split('## 整段场景')[0]?.split('# soak')[1] ?? '')
+        write(
+          `\n${soak.passed ? 'soak 通过' : 'soak 不通过'}：${soak.days} 天，${soak.pack}，` +
+            `${runtime} 运行时，事件日志 ${(soak.db_bytes / 1024).toFixed(1)} KiB\n`,
+        )
+        for (const p of soak.problems) write(`  ! ${p}\n`)
+        if (!soak.passed) process.exitCode = 1
+        return
+      }
+
       const result = await runSuite({
         packDir: fromCwd(String(opts.pack)),
         scenario: opts.scenario as string[],
@@ -85,6 +115,7 @@ export function buildProgram(
         writeBaseline: opts.rewriteBaseline === true,
         maxRegressionPct: asInt(String(opts.maxRegressionPct), '--max-regression-pct'),
         writeBaselineIfMissing: opts.writeBaseline === true,
+        maxCostBase: Number.parseFloat(String(opts.maxCostBase)),
         ...(opts.scenarioRoot === undefined
           ? {}
           : { scenarioRoot: fromCwd(String(opts.scenarioRoot)) }),
@@ -92,11 +123,25 @@ export function buildProgram(
         ...(opts.report === undefined ? {} : { reportDir: fromCwd(String(opts.report)) }),
         ...(opts.baseline === undefined ? {} : { baselineFile: fromCwd(String(opts.baseline)) }),
       })
+      // 无 key 的 realistic 档整档跳过：说明白为什么，退出码 0（26 §1）
+      if (result.skipped !== undefined) {
+        write(`${tier} 档跳过：${result.skipped}\n`)
+        return
+      }
       for (const report of result.reports) write(`${formatReport(report)}\n`)
       const passed = result.reports.filter((r) => r.passed).length
       write(
         `\n${passed}/${result.reports.length} 场景通过（${result.pack}，${result.tier} 档，${runtime} 运行时）\n`,
       )
+      for (const id of result.not_in_tier) write(`（${id} 声明了别的档，本档不跑）\n`)
+      if (result.cost !== undefined) {
+        write(
+          `真模型：${result.cost.model}\n花费：${result.cost.spent.toFixed(4)} / 上限 ${result.cost.cap}` +
+            (result.cost.stopped_at === undefined
+              ? '\n'
+              : `——预算用完，停在 ${result.cost.stopped_at} 之前\n`),
+        )
+      }
       if (result.gate.ok) {
         write('合并门禁：通过（fast 全过且指标未劣化）\n')
       } else {
@@ -110,21 +155,25 @@ export function buildProgram(
   program
     .command('synth')
     .description('生成合成公司数据集（26 §2）')
-    .option('--pack <family>', 'pack 家族', 'dtc-3c')
-    .option('--people <n>', '人数', '3')
-    .option('--orders <n>', '订单数', '50')
+    .option('--size <n>', '规模档：3 | 15 | 50（人数、店铺数、岗位表、订单量一起定）', '3')
+    .option('--pack <family>', 'pack 家族（dtc-3c | dtc-15p | dtc-50p）；不给就按规模档选')
+    .option('--people <n>', '人数（覆盖规模档）')
+    .option('--orders <n>', '订单数（覆盖规模档）')
     .option('--seed <n>', 'seed', '42')
-    .option('--out <dir>', '输出目录', 'packs/dtc-3c-3p')
+    .option('--out <dir>', '输出目录；不给就写 packs/<规模档的 pack 名>')
     .option('--anchor <iso>', '数据集时间原点')
     .option('--clean', '生成前清掉生成器拥有的目录', false)
     .action((opts: Record<string, unknown>) => {
+      const size = asInt(String(opts.size), '--size')
+      const preset = SIZE_PRESETS[size] ?? SIZE_PRESETS[size >= 50 ? 50 : size >= 15 ? 15 : 3]
       const result = synth({
-        pack: String(opts.pack),
-        people: asInt(String(opts.people), '--people'),
-        orders: asInt(String(opts.orders), '--orders'),
+        size,
         seed: asInt(String(opts.seed), '--seed'),
-        out: fromCwd(String(opts.out)),
+        out: fromCwd(String(opts.out ?? `packs/${preset?.pack ?? 'dtc-3c-3p'}`)),
         clean: opts.clean === true,
+        ...(opts.pack === undefined ? {} : { pack: String(opts.pack) }),
+        ...(opts.people === undefined ? {} : { people: asInt(String(opts.people), '--people') }),
+        ...(opts.orders === undefined ? {} : { orders: asInt(String(opts.orders), '--orders') }),
         ...(opts.anchor === undefined ? {} : { anchor: String(opts.anchor) }),
       })
       write(`生成 ${result.files.size} 个文件 → ${result.dir}\n`)

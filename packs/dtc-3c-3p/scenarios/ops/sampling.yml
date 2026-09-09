@@ -1,0 +1,48 @@
+# 抽检（14 §13.2）与"采纳率不解锁自动执行"（31 §3.4）。
+#
+# 这条题把抽检比例开到 **100%**——也就是说，只要有一条自动批的变更，它一定会被抽出来
+# 复核。然后跑一次正常的退货：结果仍然是 `auto_approved: 0`、`sampled: 0`。
+#
+# 这不是"抽检没实现"，恰恰是 31 §3.4 的正面证据：`refund` 是 **medium 风险**，
+# 有效自动化档位被钉死在 L1（`effectiveConfig` 里 `risk === 'low' ? byCeiling : 'L1'`），
+# 交易控制模块的自动批也只对 `risk_class === 'low'` 的变更开口。
+# 所以在售后这套职责里，**再高的采纳率也换不来一次自动执行**，抽检自然无从抽起。
+#
+# 抽检机制本身（自动批 → 按比例抽中 → 给范围管理者一张复核卡）由
+# `packages/simulation/test/sampling.test.ts` 用一条低风险变更端到端钉住。
+id: ops/sampling
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..20m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+policy:
+  # 抽中一切：这样"一条都没抽到"只可能是因为压根没有自动批的项
+  sampling_rate: 1
+events:
+  - at: '+0m'
+    inbound.email:
+      from: anna@example.com
+      thread: new
+      subject: Return request for #1001
+      body_ref: fixtures/anna-return.txt
+  - at: '+3h'
+    clock.advance: {}
+expected:
+  auto_approved: 0
+  sampled: 0
+  # 人点了头才施行：这一条能过，说明"没自动批"不是"什么都没发生"
+  staged_change_kinds: [refund]
+  metrics:
+    applied_changes: 1
+    outbound_sent: '>=1'
+    sampling_reviews: 0
+  judge_min_score: 1
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

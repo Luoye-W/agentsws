@@ -8,13 +8,13 @@
 import type {
   Assignment,
   ChangeKind,
-  ChatMessage,
   DataRecord,
   EventEnvelope,
   InboundEvent,
   Iso8601,
   Mandate,
   ModelGateway,
+  ModelProvider,
   ModelRef,
   ObjectRef,
   PersonId,
@@ -23,7 +23,6 @@ import type {
   RunEvent,
   RunRequest,
   RuntimeAdapter,
-  ToolDef,
 } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
@@ -34,10 +33,10 @@ import type { Kernel, Random } from '@agentsws/kernel'
 import { createKernel, seededRandom } from '@agentsws/kernel'
 import type { Knowledge } from '@agentsws/knowledge'
 import { createKnowledge } from '@agentsws/knowledge'
-import type { ModelGatewayApi, ModelGatewayPolicy } from '@agentsws/model-gateway'
+import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
-import { createRoleStore, loadBundledRole } from '@agentsws/roles'
+import { createRoleStore, loadBundledRole, parseRole } from '@agentsws/roles'
 import {
   aftersalesBrainProvider,
   createDirectRuntime,
@@ -61,7 +60,13 @@ import {
 import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
 import { SimulationError } from './errors.js'
-import type { BlockedRecord, NotificationRecord, OutageWindow } from './evidence.js'
+import type {
+  AssignmentSnapshot,
+  BlockedRecord,
+  NotificationRecord,
+  OutageWindow,
+  SamplingReviewRecord,
+} from './evidence.js'
 import { installLearningLoop, type LearningLoop, type LearningOptions } from './learning.js'
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
@@ -122,6 +127,32 @@ export interface WorldOptions {
    * 同一条场景在三 / 四个运行时下都要过六条不变量——这就是"运行时可替换"的证据（31 §1 I6）。
    */
   runtime?: RuntimeName
+  /**
+   * WP32：交易控制模块的时限旋钮（升级 / 过期 / 抽检比例）。
+   * 只覆盖给到的字段，其余仍是 14 里定的默认值。
+   */
+  txnPolicy?: SimulationTxnPolicy
+  /**
+   * WP32 realistic 档：把 stub provider 换成真模型（经网关，key 只从环境变量取）。
+   * 不给就是 fast 档那套确定性 provider。
+   */
+  model?: RealModelBinding
+}
+
+/** 14 §11.6 / §13.2 的两个旋钮 + 过期天数（只覆盖给到的字段）。 */
+export interface SimulationTxnPolicy {
+  escalation_hours?: { scope_manager?: number; owner?: number }
+  sampling_rate?: number
+  expiry_days?: Record<string, number>
+}
+
+/** realistic 档的真模型绑定（22）。 */
+export interface RealModelBinding {
+  provider: ModelProvider
+  ref: ModelRef
+  prices: PriceTable
+  /** 每次 `complete` 的成本上限（基准货币）；不给就不额外限制。 */
+  max_cost_base?: number
 }
 
 export type { RuntimeName } from './runtime-name.js'
@@ -147,6 +178,10 @@ export interface World {
   role_id: RoleId
   owner: PersonId
   roleHolder: PersonId
+  /** 14 §7 升级链的第一级（pack 没标就是 owner）。 */
+  scopeManager: PersonId
+  /** 这个世界实际用的模型（fast 档是 stub，realistic 档是真 provider 的 ref）。 */
+  modelRef: ModelRef
   events: EventEnvelope[]
   notifications: NotificationRecord[]
   blocked: BlockedRecord[]
@@ -166,6 +201,35 @@ export interface World {
    */
   learning?: LearningLoop
   startLearning(options?: LearningOptions): LearningLoop
+  /**
+   * WP32：每一拍的审批总线例行公事——过期、升级链、抽检复核、把新投递刷成卡片。
+   *
+   * 这三件事在真实进程里是定时任务（14 §4.4 §7 §13.2）；模拟回路里合成时钟每推进一拍
+   * 就得走一遍，否则"4 小时没人理就升级"这种事在虚拟时间里永远不会发生。
+   */
+  tickApprovals(): Promise<TickApprovalsResult>
+  /** 抽检复核记录（14 §13.2：L2 自动批按比例抽出来给人复核）。 */
+  samplingReviews: SamplingReviewRecord[]
+  /**
+   * soak 档的"进程重启"：关掉事件日志的连接再开一次（21 §1 append-only + 链式哈希）。
+   *
+   * 边界说清楚：能真重启的只有**事件日志**——交易控制模块的存储在 WP4 里还是内存实现，
+   * 关掉就没了。所以这条演练验的是"日志是持久的、重启后链还是完整的、接着写不会断链"，
+   * 不是"整个进程崩了还能接着干活"。后者要等 txn 的 SQLite 落盘。
+   */
+  restartEventLog(): Promise<{ events_before: number; events_after: number; chain_ok: boolean }>
+  /** 事件日志文件（`:memory:` 时为 undefined）。soak 档要看它有没有上界。 */
+  dbPath?: string
+  /**
+   * 15 §5.8 unknown 的自动对账：拿**出站观察**里那条同幂等键的记录当事实来源，
+   * 确认这笔到底做没做成，然后 `Executor.reconcile` 收口。
+   *
+   * 真实进程里这是每天一次的定时任务（WP34 的对账消费者）；模拟回路里由场景的
+   * `reconcile.run` 触发——soak 档每天一次，所以"unknown 在下一次对账内清零"是可断言的。
+   */
+  reconcileUnknown(): Promise<{ reconciled: number; applied: number; failed: number }>
+  /** 05 §4：每个分配的有效配置快照（"不做跨 Assignment 并集"的断言读它）。 */
+  assignmentSnapshots(): AssignmentSnapshot[]
   gateway(): ModelGatewayApi
   /** 场景 `inject.budget`：换一套预算重建网关（BudgetLedger 的 caps 在构造时固定）。 */
   setBudget(budget: ModelGatewayPolicy['budget']): void
@@ -191,6 +255,14 @@ export interface World {
   close(): Promise<void>
 }
 
+export interface TickApprovalsResult {
+  expired: number
+  /** 本拍新升上去的级数（一张卡升两级算两次） */
+  escalated: number
+  /** 本拍新抽出来的复核 */
+  sampled: number
+}
+
 export interface AppendOpts {
   run_id?: string
   change_id?: string
@@ -208,11 +280,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const random = seededRandom(seed)
   const workspace_id = pack.workspace.id
 
-  const kernel = await createKernel({
-    dbPath: opts.dbPath ?? ':memory:',
-    clock,
-    random: seededRandom(seed + 11),
-  })
+  const dbPath = opts.dbPath ?? ':memory:'
+  let kernel = await createKernel({ dbPath, clock, random: seededRandom(seed + 11) })
+  /** soak 档"关库再开"的次数（事件 id 的随机源每次要换，见 `restartEventLog`）。 */
+  let restarts = 0
   const events: EventEnvelope[] = []
   const notifications: NotificationRecord[] = []
   const blocked: BlockedRecord[] = []
@@ -230,13 +301,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   }
 
   // ── 制度：职责定义 + 分配 + 策略层 ─────────────────────────────────────
+  // pack 自带的职责定义按 id 覆盖内置（WP32：15 / 50 人 pack 要有投放、运营这些岗位，
+  // 而 `packages/roles` 只内置了三份；没有 `roles/` 的 pack 一个字都不变）
+  const bundledRoles = [
+    loadBundledRole('dtc.aftersales'),
+    loadBundledRole('common.owner'),
+    loadBundledRole('common.member'),
+  ]
+  const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
+  const overridden = new Set(packRoles.map((r) => r.id))
   const roles = createRoleStore({
     clock,
-    roles: [
-      loadBundledRole('dtc.aftersales'),
-      loadBundledRole('common.owner'),
-      loadBundledRole('common.member'),
-    ],
+    roles: [...bundledRoles.filter((r) => !overridden.has(r.id)), ...packRoles],
     newId: (s) => `asg_${sha256(s).slice(0, 20)}`,
   })
   roles.policies.set({
@@ -270,6 +346,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   })
   const owner = pack.people.find((p) => p.owner === true)?.id ?? primary.person_id
   const roleHolder = primary.person_id
+  const scopeManager = pack.people.find((p) => p.scope_manager === true)?.id ?? owner
+  /** 14 §13.2 默认 10%；场景可以压到 0 或提到 1，报告里要写清用的是哪个数。 */
+  const txnSamplingRate = opts.txnPolicy?.sampling_rate ?? 0.1
 
   const agentActor: DataActor = {
     person_id: assignment.person_id,
@@ -395,13 +474,20 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   let outageUntilMs = 0
   // `direct` 分支：stub provider 只出文本、不出 tool_calls，turn loop 跑不起来；
   // 换成同样确定性的"规则脑" provider（判定逻辑与 stub 运行时同一套，只是用工具协议表达）
+  // realistic 档给了真模型就用它；否则按运行时选确定性的替身 provider
+  const modelRef: ModelRef = opts.model?.ref ?? MODEL
   const base =
-    opts.runtime === 'direct'
-      ? aftersalesBrainProvider({ clock, seed, ref: MODEL })
-      : stubProvider({ seed, ref: MODEL })
-  const gatedProvider = {
-    ref: MODEL,
-    async complete(req: { messages: ChatMessage[]; tools?: ToolDef[]; seed?: number }) {
+    opts.model !== undefined
+      ? opts.model.provider
+      : opts.runtime === 'direct'
+        ? aftersalesBrainProvider({ clock, seed, ref: MODEL })
+        : stubProvider({ seed, ref: MODEL })
+  const gatedProvider: ModelProvider = {
+    ref: modelRef,
+    ...(base.supports_tool_choice === undefined
+      ? {}
+      : { supports_tool_choice: base.supports_tool_choice }),
+    async complete(req: Parameters<ModelProvider['complete']>[0]) {
       if (clock.nowMs() < outageUntilMs) {
         throw new ProviderError('注入的模型故障：provider 不可用', { status: 503 })
       }
@@ -417,9 +503,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   }
 
   const gatewayPolicy = (budget: ModelGatewayPolicy['budget']): ModelGatewayPolicy => ({
-    default: MODEL,
-    data_residency: 'cn',
-    prices: { 'stub/stub-v1': { in: 1, out: 2, cached: 0.1 } },
+    default: modelRef,
+    // realistic 档要走真 provider（多半在境外），驻留策略随之放开；fast 档仍是 cn
+    data_residency: opts.model === undefined ? 'cn' : 'any',
+    prices: opts.model?.prices ?? { 'stub/stub-v1': { in: 1, out: 2, cached: 0.1 } },
     ...(budget === undefined ? {} : { budget }),
   })
   const buildGateway = (budget: ModelGatewayPolicy['budget']): ModelGatewayApi =>
@@ -535,6 +622,25 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       business_tz_offset_minutes: 480,
       executor_id: 'sim.executor',
       executor_version: 'sim/1',
+      // WP32：升级 / 过期 / 抽检比例可以按场景压小；不给就是 14 里定的默认值
+      ...(opts.txnPolicy?.escalation_hours === undefined
+        ? {}
+        : {
+            escalation_hours: {
+              scope_manager: opts.txnPolicy.escalation_hours.scope_manager ?? 24,
+              owner: opts.txnPolicy.escalation_hours.owner ?? 48,
+            },
+          }),
+      ...(opts.txnPolicy?.sampling_rate === undefined
+        ? {}
+        : { sampling_rate: opts.txnPolicy.sampling_rate }),
+      ...(opts.txnPolicy?.expiry_days === undefined
+        ? {}
+        : {
+            expiry_days: { default: 7, ...opts.txnPolicy.expiry_days } as {
+              default: number
+            } & Record<string, number>,
+          }),
     },
     readRecord: (target) => recordFacts(target),
     backendApply: async (change, _opts) => {
@@ -640,7 +746,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         pack.assignments.some((a) => a.person_id === person && a.role_id === item.role_id) ||
         person === owner,
       memberCount: () => pack.people.length,
-      scopeManager: () => owner,
+      // 14 §7：升级链第一级是范围管理者。3 人公司里没有这个人，退回 owner；
+      // 15 / 50 人 pack 在 people.yml 里标了 `scope_manager: true`，升级才真的换人。
+      scopeManager: () => scopeManager,
       owner: () => owner,
     },
   })
@@ -668,6 +776,56 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         )
       }
     }
+  }
+
+  // ── 抽检复核（14 §13.2）────────────────────────────────────────────
+  //
+  // L2 额度内的变更自动批（`auto_approved`），审批总线按 `sampling_rate` 掷一次骰子决定
+  // 这条要不要人复核。**被抽中不等于有人看见**——总线只在项上打了个标记，
+  // 真把它送到复核人手上是宿主的事，所以这一步在模拟回路里补：
+  // 抽中的项给范围管理者投一张只读卡（自动批已经生效，复核是事后的），并记一条通知。
+  const samplingReviews: SamplingReviewRecord[] = []
+  const reviewed = new Set<string>()
+  const sampleAutoApproved = async (): Promise<number> => {
+    let n = 0
+    for (const item of txn.runtime.store.listApprovals({ workspace_id })) {
+      if (!item.automation.auto_approved || !item.automation.sampling.selected) continue
+      if (reviewed.has(item.id)) continue
+      reviewed.add(item.id)
+      const at = now(clock)
+      samplingReviews.push({
+        item_id: item.id,
+        kind: item.kind,
+        to: scopeManager,
+        at,
+        rate: txnSamplingRate,
+      })
+      await standIns.deliveries.workstation.deliver(
+        {
+          id: `smp_${item.id}`,
+          title: `抽检复核：${item.title}`,
+          summary: `这条已按额度自动批并施行，抽检比例 ${txnSamplingRate}。看一眼有没有问题。`,
+          view: 'full',
+          decision_token: '',
+          actions: [],
+        },
+        scopeManager,
+      )
+      world.appendEvent(
+        'simulation.sampling_review',
+        { item_id: item.id, kind: item.kind, to: scopeManager, rate: txnSamplingRate },
+        { subject: { type: 'approval_item', id: item.id } },
+      )
+      world.notify({
+        to: scopeManager,
+        channel: 'workstation',
+        title: `抽检复核：${item.title}`,
+        at,
+        reason: 'L2 自动批按比例抽检（14 §13.2）',
+      })
+      n += 1
+    }
+    return n
   }
 
   // ── 入站替身 ─────────────────────────────────────────────────────────
@@ -735,7 +893,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const world: World = {
     clock,
     random,
-    kernel,
+    // soak 档的"进程重启"会换一个 SqliteEventLog 实例，所以这里是取值不是快照
+    get kernel() {
+      return kernel
+    },
     data,
     roles,
     knowledge,
@@ -752,6 +913,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     role_id: primary.role_id,
     owner,
     roleHolder,
+    scopeManager,
+    modelRef,
     events,
     notifications,
     blocked,
@@ -768,6 +931,89 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       const loop = installLearningLoop(world, learningOptions)
       world.learning = loop
       return loop
+    },
+    samplingReviews,
+    ...(dbPath === ':memory:' ? {} : { dbPath }),
+    async restartEventLog() {
+      if (dbPath === ':memory:') {
+        throw new SimulationError(
+          'invalid_input',
+          '内存事件日志重启后什么都不剩，这条演练要 dbPath 指向真文件',
+        )
+      }
+      const before = kernel.eventLog.readSync({ workspace_id }).length
+      await kernel.dispose()
+      restarts += 1
+      // 事件 id 来自注入的随机源。真进程重启时熵是新的；模拟回路里如果原样重放同一条
+      // 随机序列，新写的第一条事件会撞上库里已有的那条 id（UNIQUE 冲突）。
+      // 所以每次重启换一个**确定性的**新种子：既不撞，也仍然可复现。
+      kernel = await createKernel({
+        dbPath,
+        clock,
+        random: seededRandom(seed + 11 + restarts * 977),
+      })
+      const after = kernel.eventLog.readSync({ workspace_id }).length
+      const chain = kernel.eventLog.verifyChain(workspace_id)
+      return { events_before: before, events_after: after, chain_ok: chain.ok }
+    },
+    async reconcileUnknown() {
+      let reconciled = 0
+      let applied = 0
+      let failed = 0
+      for (const change of txn.runtime.store.listChanges({ workspace_id })) {
+        if (change.status !== 'unknown') continue
+        // provider 那边这条幂等键到底成没成：出站观察就是"外面发生过什么"的账
+        const hit = standIns.observations
+          .all()
+          .find((o) => o.idempotency_key === change.id && o.status === 'ok')
+        const outcome =
+          hit === undefined
+            ? { status: 'failed' as const, message: '对账确认外部没有这笔' }
+            : {
+                status: 'applied' as const,
+                ...(hit.execution_id === undefined ? {} : { execution_id: hit.execution_id }),
+              }
+        await txn.executor.reconcile(change.id, outcome)
+        reconciled += 1
+        if (outcome.status === 'applied') applied += 1
+        else failed += 1
+      }
+      if (reconciled > 0) {
+        world.appendEvent('simulation.reconciled', { reconciled, applied, failed })
+      }
+      return { reconciled, applied, failed }
+    },
+    async tickApprovals() {
+      const at = now(clock)
+      const expired = await txn.approvals.expire(at)
+      const escalatedItems = await txn.approvals.escalate(at)
+      // 升级 = 新增一条投递（14 §7）；不刷成卡片的话新收件人手上没有 decision_token
+      await flushCards()
+      let escalated = 0
+      for (const item of escalatedItems) {
+        for (const at_ of item.routing.escalation.escalated_at) {
+          if (at_ === at) escalated += 1
+        }
+      }
+      const sampled = await sampleAutoApproved()
+      return { expired: expired.length, escalated, sampled }
+    },
+    assignmentSnapshots() {
+      const out: AssignmentSnapshot[] = []
+      for (const a of created.values()) {
+        const cfg = roles.effectiveConfig(a.id)
+        out.push({
+          person_id: a.person_id,
+          assignment_id: a.id,
+          role_id: a.role_id,
+          scopes: [
+            ...new Set(cfg.scopes.flatMap((s) => s.ops.map((op) => `${s.domain}:${op}`))),
+          ].sort(),
+          ranges: [...new Set(cfg.ranges.map((r) => `${r.kind}:${r.id}`))].sort(),
+          actions: cfg.actions.map((x) => x.id).sort(),
+        })
+      }
+      return out
     },
     gateway: () => gateway,
     setBudget(budget) {
