@@ -1,9 +1,10 @@
-/** 20 §5 身份与工作区路由。 */
+/** 20 §5 身份与工作区路由（WP33 补：`GET /v1/auth/session`、`POST /v1/auth/logout`）。 */
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
+import { assignmentOf, body, ctxOf, ok, param, principalOf } from '../helpers.js'
 import { SESSION_COOKIE, secretEquals, sessionCookie } from '../identity.js'
 import { type Route, route } from '../route-spec.js'
+import { hasTokenInfo } from '../types.js'
 
 const MagicLinkBody = z.object({ email: z.string().min(3) })
 const SessionBody = z.object({ key: z.string().min(8), email: z.string().min(3).optional() })
@@ -107,6 +108,65 @@ export function identityRoutes(): Route[] {
           person: { id: person.id, email: person.email, name: person.name },
           ...(workspace === undefined ? {} : { workspace_id: workspace.id }),
         })
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/auth/session',
+        operationId: 'getSession',
+        summary: '当前会话：是谁、哪个工作区、哪种凭据、什么时候到期',
+        tag: 'identity',
+        auth: 'bearer',
+        returns: '{ person, workspace_id, kind, expires_at?, expires_in_seconds? }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const person = await deps.identity.getPerson(p.person_id)
+        if (!person) throw new ApiError('not_found', '人不存在')
+        const token = ctxOf(c).token
+        // 到期时间是可选面：换一个只实现契约 `IdentityService` 的身份服务时这两个键不出，
+        // 客户端照旧能用（它本来就该在 401 时去重新登录，而不是靠倒计时）。
+        const info =
+          token === undefined || !hasTokenInfo(deps.identity)
+            ? undefined
+            : await deps.identity.tokenInfo(token)
+        const expires_at = info?.expires_at
+        const remaining =
+          expires_at === undefined
+            ? undefined
+            : Math.max(
+                0,
+                Math.floor((Date.parse(expires_at) - Date.parse(deps.clock.now())) / 1000),
+              )
+        return ok(c, {
+          person: { id: person.id, email: person.email, name: person.name },
+          workspace_id: p.workspace_id,
+          kind: p.kind,
+          ...(expires_at === undefined ? {} : { expires_at }),
+          ...(remaining === undefined ? {} : { expires_in_seconds: remaining }),
+        })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/auth/logout',
+        operationId: 'logout',
+        summary: '注销：撤销**这一张** token 并清掉会话 cookie',
+        tag: 'identity',
+        auth: 'bearer',
+        returns: '{ revoked: boolean }',
+      },
+      async (c, deps) => {
+        const token = ctxOf(c).token
+        // 撤销的是本次请求用的那一张，不是这个人的全部——同一个人在别的设备 / CLI 上的会话
+        // 不该被一次退出登录连坐（20 §3「所有 token 绑 workspace，可撤销」）。
+        if (token !== undefined) await deps.identity.revoke(token)
+        // 不管调用方用的是 cookie 还是 bearer 都把 cookie 抹掉：空值 + Max-Age=0。
+        const name = deps.options?.sessionCookieName ?? SESSION_COOKIE
+        c.header('Set-Cookie', sessionCookie(name, '', { maxAgeSeconds: 0 }))
+        return ok(c, { revoked: token !== undefined })
       },
     ),
     route(

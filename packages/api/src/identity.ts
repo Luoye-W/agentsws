@@ -20,6 +20,7 @@ import type {
   WorkspacePolicy,
 } from '@agentsws/contracts'
 import { ApiError } from './errors.js'
+import type { TokenInfo } from './types.js'
 
 export type TokenKind = 'session' | 'api_key' | 'runtime' | 'internal'
 
@@ -128,6 +129,13 @@ export interface LocalIdentityService extends IdentityService {
     ttlMs?: number,
   ): IssuedToken
   revoke(token: string): void
+  /**
+   * WP33：一张 token 的状态（`GET /v1/auth/session` 报「还剩多久」）。
+   *
+   * 不在契约的 `IdentityService` 上——它不属于身份的最小契约，只是本地两档都能便宜地给出来的
+   * 一件事；网关用 `hasTokenInfo` 探测，探不到就少一个 `expires_at`。
+   */
+  tokenInfo(token: string): TokenInfo | undefined
   // ── WP28 多人：邀请同事、按邮箱登录、离开工作区 ──────────────────────
   /** 20 §5：建一张一次性邀请（默认 24h）。明文 token 只在这里返回一次。 */
   createInvitation(input: CreateInvitationInput): Promise<IssuedInvitation>
@@ -492,6 +500,21 @@ export class MemoryIdentityService implements LocalIdentityService {
   revoke(token: string): void {
     const row = this.#tokens.get(hashToken(token))
     if (row) row.revoked = true
+  }
+
+  /** 20 §3：这张 token 的状态（`GET /v1/auth/session` 用；已撤销 / 已过期也如实回）。 */
+  tokenInfo(token: string): TokenInfo | undefined {
+    const raw = token.startsWith('Bearer ') ? token.slice('Bearer '.length).trim() : token.trim()
+    if (raw === '') return undefined
+    const row = this.#tokens.get(hashToken(raw))
+    if (!row) return undefined
+    return {
+      kind: row.kind,
+      person_id: row.person_id,
+      workspace_id: row.workspace_id,
+      ...(row.expires_at === undefined ? {} : { expires_at: row.expires_at }),
+      revoked: row.revoked,
+    }
   }
 
   async authenticate(bearer: string): Promise<

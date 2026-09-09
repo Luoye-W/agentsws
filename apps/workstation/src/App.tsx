@@ -4,7 +4,7 @@
  * 全应用只有一个后端：`/v1`。没有模型 SDK，没有全局聊天框。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/app-shell'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -15,8 +15,10 @@ import {
   NeedsLoginError,
   setAssignment,
   setHomeTiles,
+  storedToken,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { connectRealtime } from '@/lib/realtime'
 import { CalendarPage } from '@/pages/calendar'
 import { ConnectionsPage } from '@/pages/connections'
 import { GoalsPage } from '@/pages/goals'
@@ -71,6 +73,24 @@ function Workspace(): ReactNode {
     enabled: positions.data !== undefined,
     queryFn: () => getHome('yesterday'),
   })
+
+  /**
+   * WP33：实时刷新。收到摘要就让对应的查询失效，TanStack Query 自己重取。
+   *
+   * 连不上（浏览器拦了 WS、代理不支持）就什么都不发生——各页面原有的手动 invalidate
+   * 一直都在，工作台照常能用，只是要多点一下才看得到别人刚做完的事。
+   */
+  useEffect(() => {
+    if (position === null || session.data === undefined) return
+    const handle = connectRealtime({
+      client,
+      assignment: position,
+      token: storedToken() ?? undefined,
+    })
+    return () => {
+      handle.stop()
+    }
+  }, [client, position, session.data])
 
   const addTile = useMutation({
     mutationFn: (input: { position_id: string; tile_id: string }) => {

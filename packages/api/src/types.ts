@@ -20,6 +20,7 @@ import type {
   IdentityService,
   Iso8601,
   KnowledgeLayer,
+  KnowledgeSource,
   LessonRecord,
   MaybePromise,
   ModuleHealth,
@@ -48,6 +49,7 @@ import type { ModelsPort } from './routes/models.js'
 import type { OrgPort } from './routes/org.js'
 import type { SecretsPort } from './routes/secrets.js'
 import type { WorkPort } from './routes/work.js'
+import type { WsOptions } from './routes/ws.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
 export interface Principal {
@@ -59,8 +61,42 @@ export interface Principal {
 export interface RequestContext {
   trace_id: string
   principal?: Principal
+  /**
+   * 这次请求用的那张 token 原文（`Authorization` 里的，或会话 cookie 里的）。
+   *
+   * 只有 `POST /v1/auth/logout` 用得着——注销要撤销的正是**这一张**，不是这个人的全部。
+   * 它不进日志、不进响应、不进 OpenAPI。
+   */
+  token?: string
   /** X-Assignment；已校验属于本人且未撤销。 */
   assignment?: Assignment
+}
+
+/** 20 §3：一张 token 的状态（`GET /v1/auth/session` 要报「还剩多久」）。 */
+export interface TokenInfo {
+  kind: Principal['kind']
+  person_id: PersonId
+  workspace_id: WorkspaceId
+  expires_at?: Iso8601
+  revoked: boolean
+}
+
+/**
+ * 契约的 `IdentityService` 之外的一件小事：查一张 token 的到期时间。
+ *
+ * 做成可选面（本地的内存 / SQLite 两档都实现）是因为它不属于「身份」的最小契约——
+ * 换一个只实现契约的身份服务时，`GET /v1/auth/session` 少一个 `expires_at`，其余照常。
+ */
+export interface IdentityTokenInfo {
+  tokenInfo(token: string): MaybePromise<TokenInfo | undefined>
+}
+
+export function hasTokenInfo(identity: unknown): identity is IdentityTokenInfo {
+  return (
+    identity !== null &&
+    typeof identity === 'object' &&
+    typeof (identity as { tokenInfo?: unknown }).tokenInfo === 'function'
+  )
 }
 
 export interface EventLogPort {
@@ -150,6 +186,69 @@ export interface KnowledgePort {
   health(
     workspace_id: WorkspaceId,
   ): Promise<{ total: number; silent: number; stale: number; conflicts: number }>
+  /* ── 19 §6 的其余四件事。都是**可选**面：装了才有，没装那几条路由回 not_implemented ── */
+  /** 导入源清单（19 §1.3 KnowledgeSource）。 */
+  sources?(actor: GatewayActor): MaybePromise<KnowledgeSource[]>
+  /** 登记一个导入源；真正的解析与分块由 knowledge 包做，网关只转发。 */
+  addSource?(actor: GatewayActor, input: KnowledgeSourceInput): MaybePromise<KnowledgeSource>
+  /** 19 §3 `cite`：记一次引用（`usage.cited + 1`）。 */
+  cite?(actor: GatewayActor, fact_card_id: string, run_id: RunId): MaybePromise<void>
+  /** 19 §4 缺口队列。 */
+  gaps?(actor: GatewayActor, filter: { status?: KnowledgeGapStatus }): MaybePromise<KnowledgeGap[]>
+  openGap?(actor: GatewayActor, input: KnowledgeGapInput): MaybePromise<KnowledgeGap>
+  /** 有人答了 → 自动变一张 `knowledge_update` 审批项（19 §4）。 */
+  answerGap?(
+    actor: GatewayActor,
+    id: string,
+    input: { answer: string; layer?: KnowledgeLayer },
+  ): MaybePromise<KnowledgeGapAnswer>
+}
+
+/** 19 §1.3 的登记入参（`id` / `chunks` / `last_synced_at` 由实现给）。 */
+export interface KnowledgeSourceInput {
+  kind: KnowledgeSource['kind']
+  ref: string
+  parser: KnowledgeSource['parser']
+  acl_inherit?: boolean
+}
+
+export type KnowledgeGapStatus = 'open' | 'answered' | 'dismissed'
+
+/**
+ * 19 §4「缺口：Agent 答不了 → question 提议 → 有人答 → 自动变 knowledge_update」。
+ *
+ * 契约里还没有这个对象（19 §6 只在 API 表里提了 `POST /knowledge/gaps`），
+ * 这里先按 §4 那一行的最小形状定义，进契约的建议写在交付报告里。
+ */
+export interface KnowledgeGap {
+  id: string
+  workspace_id: WorkspaceId
+  question: string
+  /** 关于什么（与 FactCard.subject 同形）。 */
+  subject: { type: string; id?: string; key: string }
+  domain: DataDomain | 'company'
+  status: KnowledgeGapStatus
+  asked_by: { kind: 'agent' | 'person'; id: string }
+  run_id?: RunId
+  answer?: string
+  answered_by?: PersonId
+  answered_at?: Iso8601
+  /** 答完之后生成的那张 `knowledge_update` 审批项。 */
+  approval_item_id?: string
+  created_at: Iso8601
+}
+
+export interface KnowledgeGapInput {
+  question: string
+  subject: { type: string; id?: string; key: string }
+  domain?: DataDomain | 'company'
+  run_id?: RunId
+}
+
+export interface KnowledgeGapAnswer {
+  gap: KnowledgeGap
+  /** 19 §4：答案不直接生效，先变一张审批项。 */
+  approval_item_id?: string
 }
 
 /** 写个人层 overlay 的入参（24 §1 OverlayOp）。 */
@@ -232,6 +331,8 @@ export interface GatewayOptions {
   idempotencyStore?: IdempotencyStore
   /** 事件长轮询的最大等待与轮询间隔。 */
   events?: { maxWaitMs?: number; pollIntervalMs?: number; defaultLimit?: number }
+  /** WP33 WebSocket 事件流（`/v1/ws`）。 */
+  ws?: WsOptions
   /** 服务端版本号，进 `/v1/health`。 */
   version?: string
   /**

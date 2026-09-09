@@ -1,0 +1,30 @@
+{
+  "name": "@agentsws/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "由 /v1 的 OpenAPI 生成的类型 + 极薄 fetch 客户端（28 §3「同一 OpenAPI 生成的客户端」）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./openapi.json": "./openapi.json"
+  },
+  "files": [
+    "dist",
+    "openapi.json"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "generate": "node ../../scripts/gen-sdk.mjs",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@agentsws/server": "workspace:*",
+    "openapi-typescript": "^7.13.0"
+  }
+}

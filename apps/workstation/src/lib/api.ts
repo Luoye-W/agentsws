@@ -27,7 +27,6 @@ import type {
   BlockData,
   DeckCard,
   DeckFilters,
-  InstructionScope,
   PositionTiles,
   RangeName,
   RecordRow,
@@ -35,6 +34,9 @@ import type {
   TileSpec,
   ViewSection,
 } from '@agentsws/deck'
+import type { RequestBodyOf } from '@agentsws/sdk'
+
+export type { RequestBodyOf } from '@agentsws/sdk'
 
 export interface ApiEnvelope<T> {
   data: T
@@ -145,13 +147,17 @@ export interface TilesData {
   tiles: StatTile[]
 }
 
-export interface DecideInput {
-  action: 'approve' | 'reject' | 'instruct' | 'snooze'
-  selected_option_id?: string
-  instruction?: { scope: InstructionScope; text: string }
-  reason?: string
-  version?: number
-}
+/**
+ * 决定一张卡的入参。
+ *
+ * **类型从 `@agentsws/sdk` 引**（WP33 C）：它是由 `/v1` 的 OpenAPI 生成的，
+ * 而 OpenAPI 又是由路由上的 zod 生成的——于是「服务端改了字段、前端没跟上」
+ * 会红在 `tsc` 上，而不是等用户点下去才发现。手抄一份的老做法留在 git 历史里。
+ */
+export type DecideInput = NonNullable<RequestBodyOf<'/v1/approvals/{id}/decide', 'post'>>
+
+/** 36 §2.1 五动作矩阵里工作台真会发的那四个（`redirect / defer / withdraw` 走别的入口）。 */
+export type DeckDecideAction = 'approve' | 'reject' | 'instruct' | 'snooze'
 
 const TOKEN_KEY = 'agentsws.session_token'
 
@@ -164,6 +170,16 @@ export function setAssignment(id: string): void {
 
 export function assignmentId(): string | null {
   return currentAssignment
+}
+
+/**
+ * 存过的 bearer（普通浏览器里上次登录留下的）。
+ *
+ * 桌面壳里是 `null`——那条路走 HttpOnly 会话 cookie，前端看不到 token（13 §5）。
+ * WP33 的事件流靠它决定握手时要不要带子协议 bearer：有就带，没有就靠 cookie。
+ */
+export function storedToken(): string | null {
+  return readStoredToken()
 }
 
 function readStoredToken(): string | null {

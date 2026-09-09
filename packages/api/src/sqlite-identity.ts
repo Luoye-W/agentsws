@@ -36,6 +36,7 @@ import {
   type TokenKind,
 } from './identity.js'
 import { type Migration, migrate, schemaVersion } from './sqlite-migrations.js'
+import type { TokenInfo } from './types.js'
 
 const MIGRATIONS: readonly Migration[] = [
   {
@@ -568,6 +569,23 @@ export class SqliteIdentityService implements LocalIdentityService {
 
   revoke(token: string): void {
     this.#db.prepare('UPDATE tokens SET revoked = 1 WHERE hash = ?').run(hashToken(token))
+  }
+
+  /** 20 §3：这张 token 的状态（`GET /v1/auth/session` 用；已撤销 / 已过期也如实回）。 */
+  tokenInfo(token: string): TokenInfo | undefined {
+    const raw = token.startsWith('Bearer ') ? token.slice('Bearer '.length).trim() : token.trim()
+    if (raw === '') return undefined
+    const row = this.#db
+      .prepare<[string], TokenRow>('SELECT * FROM tokens WHERE hash = ?')
+      .get(hashToken(raw))
+    if (row === undefined) return undefined
+    return {
+      kind: row.kind as TokenKind,
+      person_id: row.person_id,
+      workspace_id: row.workspace_id,
+      ...(row.expires_at === null ? {} : { expires_at: row.expires_at }),
+      revoked: row.revoked === 1,
+    }
   }
 
   async authenticate(bearer: string): Promise<
