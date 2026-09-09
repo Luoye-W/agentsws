@@ -1,0 +1,27 @@
+{
+  "name": "@agentsws/schedule",
+  "version": "0.0.0",
+  "private": true,
+  "description": "定时与流程（契约 25）：Scheduler（at / interval / cron，内存 + SQLite 双档）+ 最小 WorkflowEngine",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "better-sqlite3": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

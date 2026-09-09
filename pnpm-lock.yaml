@@ -512,6 +512,19 @@ importers:
         specifier: workspace:*
         version: link:../support-core
 
+  packages/schedule:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
   packages/simulation:
     dependencies:
       '@agentsws/contracts':
