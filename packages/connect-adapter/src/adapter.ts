@@ -436,9 +436,16 @@ class OpenConnectorAdapter implements ConnectAdapter {
   /**
    * 断开：runtime 侧删掉连接与它的凭据。
    *
-   * 上游 admin 面的删除端点在 09-09 那次录制里没打到（磁带里只有 GET / PUT），
-   * 所以这里按两种最可能的形状各试一次，两条都不通就明确抛 `not_implemented`——
-   * 不静默"当成删掉了"，否则界面会显示已断开而凭据还在。
+   * **09-09 在真 runtime 的 `/openapi.json` 上核实过的形状**（WP20 那时是猜的，猜错了）：
+   * `DELETE /api/connections/:service`，可选 `?connectionName=`，成功回
+   * `{ service, connectionName, configured: false }`。
+   *
+   * 两个坑，都在这里挡住：
+   *
+   * 1. 路径段是 **service**，不是连接 id。拿 uuid 当路径段发过去，上游会把它当成
+   *    一个不存在的 service，然后**回 200**——界面会显示"已断开"而凭据还在。
+   * 2. 删一个根本不存在的 connectionName 同样回 200。所以删完必须**重新列一次**确认
+   *    它真的没了，没删掉就抛出来，绝不静默当成删掉了。
    */
   async removeConnection(id: string): Promise<void> {
     const list = await this.listConnections(true)
@@ -446,32 +453,23 @@ class OpenConnectorAdapter implements ConnectAdapter {
     if (wire === undefined) {
       throw new ConnectAdapterError('not_found', `连接不存在：${id}`, { connection: id })
     }
-    const paths = [
-      `/api/connections/${encodeURIComponent(wire.service)}/${encodeURIComponent(wire.connectionName)}`,
-      `/api/connections/${encodeURIComponent(id)}`,
-    ]
-    let last: ConnectAdapterError | undefined
-    for (const path of paths) {
-      try {
-        await this.http.request<unknown>('DELETE', path, { auth: 'admin' })
-        this.connectionCache = undefined
-        await this.emit({
-          type: 'connect.connection_removed',
-          at: this.now(),
-          payload: { connection_id: id, service: wire.service, alias: wire.connectionName },
-        })
-        return
-      } catch (e) {
-        if (!(e instanceof ConnectAdapterError)) throw e
-        if (e.code !== 'not_found' && e.code !== 'not_implemented') throw e
-        last = e
-      }
+    const path = `/api/connections/${encodeURIComponent(wire.service)}?connectionName=${encodeURIComponent(wire.connectionName)}`
+    await this.http.request<unknown>('DELETE', path, { auth: 'admin' })
+    this.connectionCache = undefined
+    // 上游对"删了个不存在的"也回 200，所以自己确认一次
+    const after = await this.listConnections(true)
+    if (after.some((c) => c.id === id)) {
+      throw new ConnectAdapterError(
+        'not_implemented',
+        `这个 OpenConnector runtime 没有真的删掉 ${wire.service}/${wire.connectionName}；请在它的管理面里删除`,
+        { connection: id, tried: path },
+      )
     }
-    throw new ConnectAdapterError(
-      'not_implemented',
-      `这个 OpenConnector runtime 没有可用的连接删除端点；请在它的管理面里删除 ${wire.service}/${wire.connectionName}`,
-      { connection: id, tried: paths, last_error: last?.code },
-    )
+    await this.emit({
+      type: 'connect.connection_removed',
+      at: this.now(),
+      payload: { connection_id: id, service: wire.service, alias: wire.connectionName },
+    })
   }
 
   async transferConnection(id: string, to_workspace: WorkspaceId): Promise<Connection> {

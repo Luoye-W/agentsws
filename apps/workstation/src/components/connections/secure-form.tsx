@@ -9,24 +9,27 @@
  *    `form.reset()`——DOM 里也不留。全程没有一次 `console.*`。
  */
 
-import { ShieldCheck } from 'lucide-react'
-import { type FormEvent, useId, useState } from 'react'
+import { ShieldCheck, Wand2 } from 'lucide-react'
+import { type FormEvent, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { ProviderFieldSpec } from '@/lib/api'
+import { detectMailbox, type MailboxPresetView, type ProviderFieldSpec } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export function SecureForm({
   service,
   fields,
   busy,
+  assignment,
   onCancel,
   onSubmit,
 }: {
   service: string
   fields: ProviderFieldSpec[]
   busy: boolean
+  /** 识别请求要带的岗位（连接是所有者的事）。 */
+  assignment?: string
   onCancel: () => void
   /** 唯一出口：值只在这一次调用里存在。 */
   onSubmit: (values: Record<string, string>) => void
@@ -34,6 +37,42 @@ export function SecureForm({
   const { t } = useApp()
   const prefix = useId()
   const [aliasEmpty, setAliasEmpty] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  /** WP25 交付 B：认出来是哪家邮箱（只影响主机端口这几个**非秘密**字段）。 */
+  const [preset, setPreset] = useState<MailboxPresetView | null>(null)
+  const [detecting, setDetecting] = useState(false)
+
+  /**
+   * 邮箱地址填完（失焦）→ 查一次 MX → 把主机端口填好。
+   *
+   * 只碰四个非秘密字段，而且**只在用户还没自己填过**的时候填（不覆盖手填的值）。
+   * 这个调用失败一律静默：识别不到就让用户手填，绝不打断填表。
+   */
+  const detect = (email: string): void => {
+    const form = formRef.current
+    if (form === null || !email.includes('@')) return
+    setDetecting(true)
+    void detectMailbox(email, assignment)
+      .then((found) => {
+        setPreset(found.preset)
+        if (found.preset === null) return
+        const fill = (name: string, value: string): void => {
+          const input = form.elements.namedItem(name)
+          if (input instanceof HTMLInputElement && input.value.trim() === '') input.value = value
+        }
+        fill('imap_host', found.preset.imap_host)
+        fill('imap_port', String(found.preset.imap_port))
+        fill('smtp_host', found.preset.smtp_host)
+        fill('smtp_port', String(found.preset.smtp_port))
+      })
+      .catch(() => {
+        // 认不出来就手填——这条路上什么都不该炸
+        setPreset(null)
+      })
+      .finally(() => {
+        setDetecting(false)
+      })
+  }
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
@@ -60,6 +99,7 @@ export function SecureForm({
 
   return (
     <form
+      ref={formRef}
       data-testid="secure-form"
       data-service={service}
       className="mt-3 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3"
@@ -71,6 +111,36 @@ export function SecureForm({
         <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden />
         <span>{t('connections.never_ai')}</span>
       </p>
+      {preset === null ? null : (
+        <p
+          className={
+            preset.auth === 'oauth_required'
+              ? 'flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs'
+              : 'flex items-start gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 text-xs'
+          }
+          data-testid="mail-preset"
+          data-preset={preset.id}
+          data-auth={preset.auth}
+        >
+          <Wand2 className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span>
+            <span className="font-medium">
+              {t('connections.mail.detected')} {preset.label}
+            </span>
+            <span className="ml-1 text-muted-foreground">{preset.note}</span>
+            {preset.help_url === undefined ? null : (
+              <a
+                href={preset.help_url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="ml-1 text-primary underline-offset-4 hover:underline"
+              >
+                {t('connections.mail.how')}
+              </a>
+            )}
+          </span>
+        </p>
+      )}
       {fields.map((field) => {
         const id = `${prefix}-${field.name}`
         return (
@@ -101,7 +171,19 @@ export function SecureForm({
               {...(field.secret || field.default === undefined
                 ? {}
                 : { defaultValue: field.default })}
+              {...(field.kind === 'email'
+                ? {
+                    onBlur: (event: React.FocusEvent<HTMLInputElement>) => {
+                      detect(event.currentTarget.value.trim())
+                    },
+                  }
+                : {})}
             />
+            {field.kind === 'email' && detecting ? (
+              <p className="text-[11px] text-muted-foreground" data-testid="mail-detecting">
+                {t('connections.mail.detecting')}
+              </p>
+            ) : null}
             {field.hint === undefined ? null : (
               <p className="text-[11px] text-muted-foreground">{field.hint}</p>
             )}

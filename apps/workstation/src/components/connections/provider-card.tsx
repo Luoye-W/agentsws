@@ -12,7 +12,12 @@ import { ChevronDown, ChevronRight, ExternalLink, Info, Plug } from 'lucide-reac
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
+import type {
+  ConnectTestResult,
+  ProviderAuthOption,
+  ProviderFieldSpec,
+  ProviderView,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 import { SecureForm } from './secure-form'
@@ -27,6 +32,7 @@ export function ProviderCard({
   fields,
   result,
   oauthUrl,
+  assignment,
   onStart,
   onCancel,
   onSubmit,
@@ -39,7 +45,9 @@ export function ProviderCard({
   fields: ProviderFieldSpec[] | undefined
   result: ConnectTestResult | undefined
   oauthUrl: string | undefined
-  onStart: () => void
+  /** 邮箱识别请求要带的岗位（连接是所有者的事）。 */
+  assignment: string | undefined
+  onStart: (auth_option?: string) => void
   onCancel: () => void
   onSubmit: (values: Record<string, string>) => void
 }): React.ReactNode {
@@ -47,6 +55,16 @@ export function ProviderCard({
   const [guideOpen, setGuideOpen] = useState(false)
   const oauth = provider.auth === 'oauth2'
   const busy = phase === 'saving'
+
+  // WP25：一个服务两种接法时先让用户选一次（Shopify）。默认选推荐的那条。
+  const options = provider.auth_options ?? []
+  const [optionId, setOptionId] = useState<string | undefined>(
+    options.find((o) => o.recommended)?.id ?? options[0]?.id,
+  )
+  const option: ProviderAuthOption | undefined =
+    options.find((o) => o.id === optionId) ?? options[0]
+  // 选了哪条，"要准备什么"与表单字段就跟着换
+  const guide = option?.setup_guide ?? provider.setup_guide
 
   return (
     <Card
@@ -62,7 +80,48 @@ export function ProviderCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
-        <p className="text-muted-foreground">{provider.setup_guide.summary}</p>
+        <p className="text-muted-foreground">{guide.summary}</p>
+
+        {options.length > 1 ? (
+          <fieldset className="flex flex-col gap-1.5" data-testid="auth-options">
+            <legend className="sr-only">{t('connections.auth_option')}</legend>
+            {options.map((o) => (
+              <label
+                key={o.id}
+                data-testid="auth-option"
+                data-option={o.id}
+                data-selected={option?.id === o.id ? 'true' : 'false'}
+                className={cn(
+                  'flex cursor-pointer items-start gap-2 rounded-md border p-2 text-xs',
+                  option?.id === o.id ? 'border-primary bg-primary/5' : 'border-border',
+                )}
+              >
+                <input
+                  type="radio"
+                  className="mt-0.5"
+                  name={`auth-option-${provider.service}`}
+                  value={o.id}
+                  checked={option?.id === o.id}
+                  disabled={phase !== 'idle'}
+                  onChange={() => {
+                    setOptionId(o.id)
+                  }}
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-medium">
+                    {o.label}
+                    {o.recommended ? (
+                      <span className="ml-1.5 rounded bg-primary/10 px-1 py-px text-[10px] text-primary">
+                        {t('connections.recommended')}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="text-muted-foreground">{o.summary}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
 
         {provider.data_note === undefined ? null : (
           <p
@@ -92,12 +151,12 @@ export function ProviderCard({
                 className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground"
                 data-testid="setup-steps"
               >
-                {provider.setup_guide.steps.map((step) => (
+                {guide.steps.map((step) => (
                   <li key={step}>{step}</li>
                 ))}
               </ol>
               <div className="flex flex-wrap gap-3">
-                {provider.setup_guide.links.map((link) => (
+                {guide.links.map((link) => (
                   <a
                     key={link.url}
                     href={link.url}
@@ -124,8 +183,9 @@ export function ProviderCard({
         {phase === 'form' ? (
           <SecureForm
             service={provider.service}
-            fields={fields ?? provider.fields}
+            fields={fields ?? option?.fields ?? provider.fields}
             busy={busy}
+            {...(assignment === undefined ? {} : { assignment })}
             onCancel={onCancel}
             onSubmit={onSubmit}
           />
@@ -155,7 +215,9 @@ export function ProviderCard({
               size="sm"
               variant="outline"
               disabled={!provider.available || busy}
-              onClick={onStart}
+              onClick={() => {
+                onStart(option?.id)
+              }}
             >
               {oauth ? t('connections.authorize') : t('connections.connect')}
             </Button>

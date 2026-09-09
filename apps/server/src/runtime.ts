@@ -24,6 +24,7 @@ import type {
   ContextItem,
   EventEnvelope,
   Matter,
+  ModelRef,
   ObjectRef,
   PersonId,
   RunEvent,
@@ -102,6 +103,15 @@ export interface RuntimeOptions {
   seed?: number
   /** 运行时的名字；缺省按有没有模型 provider 配置自动选 */
   prefer?: 'stub' | 'direct'
+  /**
+   * WP25：这台机器上有没有能用的模型。
+   *
+   * 以前只看 `DEEPSEEK_API_KEY` 在不在，用户在设置页里填了 key 也没用（要重启）。
+   * 现在由模型面回答（本机加密库里的配置 + 环境变量兜底）；不给就退回看环境变量。
+   */
+  hasModel?: () => boolean
+  /** WP25：现在生效的默认模型（进 `RunRequest.runtime.model`）。 */
+  modelRef?: () => ModelRef
 }
 
 export interface RuntimeAssembly {
@@ -111,7 +121,12 @@ export interface RuntimeAssembly {
   startRun: StartRun
 }
 
-/** 有没有配真模型 provider（22 §5：业务代码里没有 key，只看它在不在）。 */
+/**
+ * 有没有配真模型 provider（22 §5：业务代码里没有 key，只看它在不在）。
+ *
+ * WP25 之后这是**兜底**——服务进程会传 `hasModel`，让模型面（加密库里的配置）说了算；
+ * 没有界面的部署（CI、脚本）仍然靠这个环境变量。
+ */
 export function hasModelProvider(env: Record<string, string | undefined>): boolean {
   const key = env.DEEPSEEK_API_KEY
   return key !== undefined && key.trim() !== ''
@@ -292,8 +307,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     return { approval_item_id: item.id }
   }
 
-  const useDirect =
-    (options.prefer ?? (hasModelProvider(options.env) ? 'direct' : 'stub')) === 'direct'
+  const hasModel = options.hasModel ?? ((): boolean => hasModelProvider(options.env))
+  const useDirect = (options.prefer ?? (hasModel() ? 'direct' : 'stub')) === 'direct'
 
   const adapter: RuntimeAdapter = useDirect
     ? createDirectRuntime({
@@ -401,7 +416,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         preset: config.role_id,
         profile: 'server',
         plugins: [],
-        model: { provider: useDirect ? 'deepseek' : 'stub', model: 'default', region: 'cn' },
+        model: useDirect
+          ? (options.modelRef?.() ?? { provider: 'deepseek', model: 'default', region: 'cn' })
+          : { provider: 'stub', model: 'default', region: 'cn' },
         seed,
       },
       idempotency_key: `idem_${input.run_id}`,

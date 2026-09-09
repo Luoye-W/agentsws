@@ -49,9 +49,21 @@ export class BudgetLedger {
   private readonly frozenEmitted = new Set<string>()
 
   constructor(
-    private readonly policy: BudgetPolicy,
+    private policy: BudgetPolicy,
     private readonly hooks: LedgerHooks,
   ) {}
+
+  /**
+   * 换一套上限（WP25：设置页改完预算立刻生效，不重启进程）。
+   *
+   * **只换上限，不动已花的与已预留的**——那是账，不是配置。上限调高之后
+   * 已经冻结的 scope 会自己解冻（`freezeIfCrossed` 每次都重新比一遍），
+   * 但"冻结过"的记号要清掉，否则再次越线不会再发事件。
+   */
+  setPolicy(policy: BudgetPolicy): void {
+    this.policy = policy
+    this.frozenEmitted.clear()
+  }
 
   private get(map: Map<string, number>, key: string): number {
     return map.get(key) ?? 0

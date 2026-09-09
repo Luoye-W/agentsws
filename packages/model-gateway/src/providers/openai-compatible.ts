@@ -26,8 +26,23 @@ export type FetchLike = (
 export interface OpenAiCompatibleOptions {
   /** DeepSeek 即此形态；默认 https://api.deepseek.com */
   baseUrl?: string
-  /** 凭据只读环境变量名，网关外的代码永远拿不到值。 */
-  apiKeyEnv: string
+  /**
+   * 凭据的**环境变量名**（不是值）。无界面的部署（CI、`scripts/dev-real.sh`）走这条。
+   * 与 {@link OpenAiCompatibleOptions.apiKey} 二选一，两个都给时 `apiKey` 优先。
+   */
+  apiKeyEnv?: string
+  /**
+   * 凭据的**取值回调**（WP25）。
+   *
+   * 为什么要有它：用户在设置页填的 key 存在本机 AES-256-GCM 加密库里，不在环境变量里
+   * ——把它写进 `process.env` 等于让同进程的任何代码、任何 core dump、任何子进程都能读到，
+   * 正好是 22 §5「业务代码里没有 key」要防的。所以给一个**每次请求现取**的回调：
+   * key 不在配置对象里长住，改完设置下一次调用自然就是新的。
+   *
+   * 回调只在 `authHeaders()` 里调用一次，取回的值直接进 `Authorization` 头，
+   * 不落任何变量、不进日志、不进错误信封。
+   */
+  apiKey?: () => string | undefined
   model: string
   provider?: string
   region?: 'cn' | 'global'
@@ -94,10 +109,12 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
   }
 
   const authHeaders = (): Record<string, string> => {
-    const key = env[options.apiKeyEnv]
+    // 值只在这个函数栈里活一次：取 → 进 header → 结束
+    const key = options.apiKey === undefined ? env[options.apiKeyEnv ?? ''] : options.apiKey()
     if (key === undefined || key === '') {
-      throw new GatewayError('invalid_input', 'missing api key environment variable', {
-        env_var: options.apiKeyEnv,
+      throw new GatewayError('invalid_input', 'missing api key', {
+        // 报错里只有来源（环境变量名 / 本机加密库），永远没有值
+        source: options.apiKey === undefined ? (options.apiKeyEnv ?? 'unset') : 'local_vault',
       })
     }
     return {

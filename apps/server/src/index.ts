@@ -7,8 +7,10 @@
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, MemoryBackend } from './backend.js'
 export {
+  authOptionOf,
   CATALOG,
   type CatalogAuth,
+  type CatalogAuthOption,
   type CatalogEntry,
   catalogEntry,
   serviceOfUpstream,
@@ -23,12 +25,25 @@ export {
   type ConnectionsAssembly,
   type ConnectionsOptions,
   type ConnectLike,
-  classifyMailFailure,
   createConnections,
   createMailProbe,
   type MailAccount,
   type MailProbe,
+  smokeDetail,
 } from './connections.js'
+export {
+  createModels,
+  DEEPSEEK_KEY_ENV,
+  ENV_PROVIDER_ID,
+  humanizeModelError,
+  MODEL_KEY_PREFIX,
+  MODEL_TEMPLATES,
+  type ModelProviderConfig,
+  type ModelsAssembly,
+  type ModelsOptions,
+  modelIdOf,
+  STUB_REF,
+} from './models.js'
 export {
   createRuntime,
   hasModelProvider,
@@ -57,6 +72,19 @@ export {
   type Server,
   type ServerOptions,
 } from './server.js'
+export {
+  createShopifyBroker,
+  exchangeClientCredentials,
+  mapExchangeError,
+  normalizeShopDomain,
+  REFRESH_LEAD_MS,
+  SHOPIFY_APP_PREFIX,
+  type ShopifyBroker,
+  ShopifyBrokerError,
+  type ShopifyBrokerErrorCode,
+  type ShopifyBrokerRecord,
+  scrub,
+} from './shopify-broker.js'
 export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
 export {
   createWorkModel,

@@ -15,6 +15,7 @@ const SECRET = 'shpat_never_appears_anywhere_but_the_put_body'
 interface Recorded {
   method: string
   path: string
+  search: string
   body: string | undefined
 }
 
@@ -22,7 +23,7 @@ interface FakeRuntime {
   fetchImpl: FetchLike
   calls: Recorded[]
   connections: Record<string, unknown>[]
-  /** DELETE 走哪条路径才成功；其余回 405（"路径在、方法不在"）。 */
+  /** DELETE 走哪条路径才真删；其余按真 runtime 的行为回 200 但什么都不删。 */
   deletePath?: string
   putStatus: number
 }
@@ -48,10 +49,13 @@ function fakeRuntime(): FakeRuntime {
   state.fetchImpl = async (url, init) => {
     const u = new URL(url)
     const path = u.pathname
+    // 删除端点靠 `?connectionName=` 定位，所以单独留一份带查询串的
+    const full = `${u.pathname}${u.search}`
     const method = (init?.method ?? 'GET').toUpperCase()
     state.calls.push({
       method,
       path,
+      search: u.search,
       body: typeof init?.body === 'string' ? init.body : undefined,
     })
     const json = (body: unknown, status = 200): Response =>
@@ -71,11 +75,12 @@ function fakeRuntime(): FakeRuntime {
       return json({ ok: true })
     }
     if (path.startsWith('/api/connections/') && method === 'DELETE') {
-      if (state.deletePath !== undefined && path === state.deletePath) {
+      if (state.deletePath !== undefined && full === state.deletePath) {
         state.connections = []
-        return json({ ok: true })
+        return json({ service: 'gotify', connectionName: 'default', configured: false })
       }
-      return json({ error: { code: 'method_not_allowed', message: path } }, 405)
+      // 09-09 实测：真 runtime 对"删一个不存在的 service / connectionName"也回 200
+      return json({ service: 'x', connectionName: 'default', configured: false })
     }
     if (path === '/v1/providers') {
       return json({
@@ -204,29 +209,26 @@ describe('submitForm：凭据只经过一次', () => {
   })
 })
 
-describe('removeConnection：断开', () => {
-  it('service/connectionName 那条路能删就用它', async () => {
+describe('removeConnection：断开（WP25 按 openapi.json 实测的形状）', () => {
+  it('DELETE /api/connections/:service?connectionName=…（路径段是 service，不是连接 id）', async () => {
     const rt = fakeRuntime()
-    rt.deletePath = '/api/connections/gotify/default'
+    rt.deletePath = '/api/connections/gotify?connectionName=default'
     const sink = new MemoryEventSink()
     const connect = adapter(rt, { eventSink: sink })
     await connect.submitForm('gotify', INPUT)
     await connect.removeConnection('conn-1')
     expect(await connect.connections('ws_local')).toEqual([])
     expect(sink.ofType('connect.connection_removed')[0]?.payload.connection_id).toBe('conn-1')
+    // 发出去的确实是 service 那条路径，没有一处把 uuid 当路径段
+    const deletes = rt.calls.filter((c) => c.method === 'DELETE')
+    expect(deletes).toHaveLength(1)
+    expect(deletes[0]?.path).toBe('/api/connections/gotify')
+    expect(deletes[0]?.search).toBe('?connectionName=default')
   })
 
-  it('退回按 id 删', async () => {
+  it('上游回 200 但连接还在：抛 not_implemented，绝不静默当成删掉了', async () => {
     const rt = fakeRuntime()
-    rt.deletePath = '/api/connections/conn-1'
-    const connect = adapter(rt)
-    await connect.submitForm('gotify', INPUT)
-    await connect.removeConnection('conn-1')
-    expect(await connect.connections('ws_local')).toEqual([])
-  })
-
-  it('两条路都不通就抛 not_implemented，而不是静默当成删掉了', async () => {
-    const rt = fakeRuntime()
+    // deletePath 不设 = 上游收下请求、回 200，却什么都没删（真 runtime 对不存在的目标就这样）
     const connect = adapter(rt)
     await connect.submitForm('gotify', INPUT)
     await expect(connect.removeConnection('conn-1')).rejects.toMatchObject({

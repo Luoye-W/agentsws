@@ -22,6 +22,7 @@ import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
 import { meetingRoutes } from './routes/meetings.js'
+import { modelRoutes } from './routes/models.js'
 import { skillRoutes } from './routes/skills.js'
 import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
@@ -54,6 +55,7 @@ export function collectRoutes(): Route[] {
     ...knowledgeRoutes(),
     // 37 §4 会议面：`/v1/meetings/:id/records/:rid/process` 与 `/v1/meetings/:id/records` 路径不同，顺序无所谓
     ...meetingRoutes(),
+    ...modelRoutes(),
     ...skillRoutes(),
     ...assignmentRoutes(),
     ...eventRoutes(),

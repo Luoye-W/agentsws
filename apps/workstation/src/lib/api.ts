@@ -586,6 +586,8 @@ export interface ProviderView {
   data_sources: string[]
   setup_guide: { summary: string; steps: string[]; links: { label: string; url: string }[] }
   data_note?: string
+  /** WP25：两种以上接法时给出来，第一条是推荐的那条。 */
+  auth_options?: ProviderAuthOption[]
 }
 
 export interface RuntimeStatusView {
@@ -600,7 +602,7 @@ export interface RuntimeStatusView {
 export interface BeginConnectResult {
   request_id: string
   authorization_url?: string
-  secure_form?: { fields: ProviderFieldSpec[] }
+  secure_form?: { fields: ProviderFieldSpec[]; auth_option?: string }
 }
 
 /**
@@ -619,7 +621,7 @@ export const getConnectRuntime = (assignment?: string): Promise<RuntimeStatusVie
 
 export const beginConnect = (
   service: string,
-  input: { alias?: string; ownership?: ConnectionOwnership } = {},
+  input: { alias?: string; ownership?: ConnectionOwnership; auth_option?: string } = {},
   assignment?: string,
 ): Promise<BeginConnectResult> =>
   api<BeginConnectResult>(`/v1/connections/${encodeURIComponent(service)}/begin`, {
@@ -652,6 +654,7 @@ export const submitConnection = (
     alias?: string
     ownership?: ConnectionOwnership
     request_id?: string
+    auth_option?: string
     fields: Record<string, string>
   },
   assignment?: string,
@@ -673,3 +676,203 @@ export const removeConnection = (id: string, assignment?: string): Promise<{ rem
     method: 'DELETE',
     ...withAssignment(assignment),
   })
+
+// ── WP25 交付 A/B：Shopify 两种接法 + 邮箱自动识别 ──────────────────────
+
+/** 同一个服务的另一种接法（Shopify：Dev Dashboard 应用 / 老的访问令牌）。 */
+export interface ProviderAuthOption {
+  id: string
+  label: string
+  summary: string
+  recommended?: boolean
+  auth: ProviderAuthKind
+  fields: ProviderFieldSpec[]
+  setup_guide: { summary: string; steps: string[]; links: { label: string; url: string }[] }
+}
+
+export interface MailboxPresetView {
+  id: string
+  label: string
+  imap_host: string
+  imap_port: number
+  smtp_host: string
+  smtp_port: number
+  auth: 'app_password' | 'password' | 'oauth_required'
+  note: string
+  help_url?: string
+}
+
+export interface MailboxDetectResult {
+  domain: string
+  mx_hosts: string[]
+  preset: MailboxPresetView | null
+}
+
+/**
+ * 按邮箱地址认出是哪家邮箱。
+ *
+ * 只发地址、只回主机端口——**没有口令这条路**（口令仍然只走 `submitConnection`）。
+ * 认不出来就 `preset: null`，表单回退手填；这个调用失败也绝不打断填表。
+ */
+export const detectMailbox = (email: string, assignment?: string): Promise<MailboxDetectResult> =>
+  api<MailboxDetectResult>(
+    `/v1/connections/mail/detect?email=${encodeURIComponent(email)}`,
+    withAssignment(assignment),
+  )
+
+// ── WP25 交付 C：模型 ───────────────────────────────────────────────────
+//
+// 同一条纪律：**API key 只经 `saveModelProvider` 这一条路出去**，原生 `<form>` 收集、
+// 直接打到本机服务进程。`listModelProviders` 回来的只有 `has_key` 这个布尔值。
+
+export type ModelProviderKind = 'deepseek' | 'openai_compatible'
+
+export type ModelPurposeName =
+  | 'run'
+  | 'extraction'
+  | 'reflection'
+  | 'embedding'
+  | 'judge'
+  | 'transcription'
+
+export interface ModelTestResult {
+  ok: boolean
+  reason?: string
+  detail?: string
+  model?: string
+  duration_ms?: number
+  checked_at: string
+}
+
+export interface ModelProviderView {
+  id: string
+  kind: ModelProviderKind
+  label: string
+  base_url: string
+  model: string
+  embedding_model?: string
+  transcription_model?: string
+  region: 'cn' | 'global'
+  has_key: boolean
+  active: boolean
+  inactive_reason?: string
+  price_in?: number
+  price_out?: number
+  price_cached?: number
+  last_test?: ModelTestResult
+  from_env?: boolean
+}
+
+export interface ModelProviderTemplate {
+  kind: ModelProviderKind
+  label: string
+  summary: string
+  default_base_url: string
+  default_model: string
+  region: 'cn' | 'global'
+  steps: string[]
+  links: { label: string; url: string }[]
+  presets?: {
+    id: string
+    label: string
+    base_url: string
+    model: string
+    region: 'cn' | 'global'
+  }[]
+}
+
+export interface ModelDefaultsView {
+  default: string
+  by_purpose: Partial<Record<ModelPurposeName, string>>
+  data_residency: 'cn' | 'any'
+  budget: {
+    workspace_daily_base?: number
+    workspace_monthly_base?: number
+    assignment_daily_base?: number
+  }
+  choices: { id: string; label: string }[]
+}
+
+export interface ModelUsageRow {
+  purpose: ModelPurposeName
+  calls: number
+  input_tokens: number
+  output_tokens: number
+  cached_tokens: number
+  cost_base: number
+}
+
+export interface ModelUsageView {
+  since: string
+  rows: ModelUsageRow[]
+  total?: ModelUsageRow
+  budget: { used_base: number; cap_base: number; frozen: boolean }
+}
+
+export const listModelProviders = (
+  assignment?: string,
+): Promise<{ providers: ModelProviderView[]; templates: ModelProviderTemplate[] }> =>
+  api('/v1/models/providers', withAssignment(assignment))
+
+/**
+ * **唯一一条会带 API key 出门的请求。**
+ *
+ * 值从原生 `<form>` 的 FormData 里来，组装一次、发出去，函数返回后没人再引用它。
+ * 不写 localStorage、不进 query 缓存、不打 console。
+ */
+export const saveModelProvider = (
+  id: string,
+  input: {
+    kind: ModelProviderKind
+    label?: string
+    base_url?: string
+    model: string
+    embedding_model?: string
+    region?: 'cn' | 'global'
+    api_key?: string
+    price_in?: number
+    price_out?: number
+  },
+  assignment?: string,
+): Promise<ModelProviderView> =>
+  api(`/v1/models/providers/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const removeModelProvider = (
+  id: string,
+  assignment?: string,
+): Promise<{ removed: boolean }> =>
+  api(`/v1/models/providers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })
+
+export const testModelProvider = (id: string, assignment?: string): Promise<ModelTestResult> =>
+  api(`/v1/models/providers/${encodeURIComponent(id)}/test`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+export const getModelDefaults = (assignment?: string): Promise<ModelDefaultsView> =>
+  api('/v1/models/defaults', withAssignment(assignment))
+
+export const setModelDefaults = (
+  input: {
+    default?: string
+    by_purpose?: Partial<Record<ModelPurposeName, string>>
+    data_residency?: 'cn' | 'any'
+    budget?: {
+      workspace_daily_base?: number
+      workspace_monthly_base?: number
+      assignment_daily_base?: number
+    }
+  },
+  assignment?: string,
+): Promise<ModelDefaultsView> =>
+  api('/v1/models/defaults', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+export const getModelUsage = (assignment?: string): Promise<ModelUsageView> =>
+  api('/v1/models/usage', withAssignment(assignment))
