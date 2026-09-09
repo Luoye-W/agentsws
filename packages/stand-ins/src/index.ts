@@ -23,6 +23,7 @@ import type { Recording, ReplayRuntime } from './runtime/replay.js'
 import { createReplayRuntime } from './runtime/replay.js'
 import type {
   CreateDraftFn,
+  CreatePolicyQuestionFn,
   DraftPayload,
   StageFn,
   StageIntent,
@@ -72,6 +73,11 @@ export interface StandInsOptions {
   /** stub 运行时的 stage / 起草出口；不给就写进内存记录里。 */
   stage?: StageFn
   createDraft?: CreateDraftFn
+  /**
+   * 36 §2.2 的业务边界选择题出口（第一次遇到没答过的边界时问一次）。
+   * 不给就什么都不发生——起草照常，只是少了那张卡。
+   */
+  createPolicyQuestion?: CreatePolicyQuestionFn
   /** stub 运行时的工具执行器；不给就走 mock OpenConnector。 */
   executeTool?: ToolExecutor
   recording?: Recording
@@ -164,6 +170,9 @@ export function createStandIns(options: StandInsOptions = {}): StandIns {
     stage,
     createDraft,
     executeTool: options.executeTool ?? connectToolExecutor(connect),
+    ...(options.createPolicyQuestion === undefined
+      ? {}
+      : { createPolicyQuestion: options.createPolicyQuestion }),
     ...(options.returnWindowDays === undefined
       ? {}
       : { defaultReturnWindowDays: options.returnWindowDays }),

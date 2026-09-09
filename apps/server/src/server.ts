@@ -11,6 +11,7 @@ import {
   createGateway,
   createMemoryIdentity,
   createSqliteIdentity,
+  type EventLogPort,
   type Gateway,
   type GatewayDeps,
   type GuardrailPort,
@@ -50,9 +51,12 @@ import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
+import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
+import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
+import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import { mountStatic } from './static.js'
 import { createWorkPort } from './work.js'
 import {
@@ -60,6 +64,23 @@ import {
   emptyDataSource,
   type WorkstationDataSource,
 } from './workstation.js'
+
+/** 战报要数「今天处理掉的」，所以取队列时状态放全（等待类计数在 work 端自己过滤）。 */
+const QUEUE_STATES = [
+  'pending',
+  'in_review',
+  'approved',
+  'approved_edited',
+  'auto_approved',
+  'rejected',
+  'deferred',
+  'applying',
+  'applied',
+  'apply_failed',
+  'blocked',
+  'expired',
+  'withdrawn',
+] as const
 
 export const DEFAULT_PORT = 4317
 export const HOST = '127.0.0.1'
@@ -79,6 +100,12 @@ export interface MountedWorld {
   roles: RoleStore
   approvals: ApprovalBus
   data: WorkstationDataSource
+  /**
+   * 世界自己的事件日志。接进来之后 `/v1/events` 与今日战报读的是**合一**的那一条：
+   * 服务进程的日志 + 世界的日志按 id 归并。不给的话首页四格全是零——
+   * 世界里的 `approval.created` / `run.completed` 根本不在服务进程的日志里（WP21 遗留）。
+   */
+  eventLog?: EventLogPort
 }
 
 export interface ServerOptions {
@@ -101,10 +128,13 @@ export interface ServerOptions {
   /** demo：把模拟世界接进来（同一进程）。 */
   mount?: MountedWorld
   /**
-   * 37 委托与「在事项里说话」都要起 Run；本进程还没装运行时适配器，
-   * 由调用方（demo / 桌面壳）注入。不给的话那两条路回 not_implemented，其余照常。
+   * 37 委托与「在事项里说话」都要起 Run。缺省由 `./runtime.ts` 自己装一个运行时适配器
+   * （有模型 provider 配置就走 direct-llm，否则 stub）；调用方也可以自己塞一个进来。
+   * 显式给 `false` 就是「这个进程不跑运行时」——那两条路回 not_implemented，其余照常。
    */
-  startRun?: StartRun
+  startRun?: StartRun | false
+  /** 事项现场的记录来源（订单 / 客户 / 联系人 / 工具执行器）；demo 由合成世界提供。 */
+  records?: MatterRecordSource
 }
 
 export interface Bootstrap {
@@ -117,6 +147,8 @@ export interface Bootstrap {
 
 export interface Server {
   gateway: Gateway
+  /** OpenConnector 本地 runtime 的地址（`AGENTSWS_CONNECT_URL`；全仓唯一真源）。 */
+  connectUrl: string
   kernel: Kernel
   data: SqliteDataStore
   roles: RoleStore
@@ -130,6 +162,8 @@ export interface Server {
   meetings: MeetingsAssembly
   /** WP20 连接面（连接向导 / 本机加密秘密库 / 连接状态回灌工作台）。 */
   connections: ConnectionsAssembly
+  /** 17 §4 运行时适配器 + `startRun`；`startRun: false` 时没有。 */
+  runtime?: RuntimeAssembly
   identity: LocalIdentityService
   backend: MemoryBackend
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
@@ -146,6 +180,33 @@ const priceTable = {
   'deepseek/deepseek-chat': { in: 0.27, out: 1.1, cached: 0.07 },
 }
 
+/**
+ * 21 §1「所有模块的事件都进同一条日志」。demo 里世界与服务进程各有一份内核，
+ * 所以读的时候按 id 归并成一条：`/v1/events` 的 `since` 续传与今日战报都靠它。
+ *
+ * 归并是**读侧**的：两边各自 append-only，谁也不改谁；id 是 ulid，按字典序即时间序。
+ */
+export function mergeEventLogs(base: EventLogPort, extra?: EventLogPort): EventLogPort {
+  if (extra === undefined) return base
+  return {
+    async *read(filter) {
+      const all: EventEnvelope[] = []
+      for await (const e of base.read(filter)) all.push(e)
+      for await (const e of extra.read(filter)) all.push(e)
+      all.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      const since = filter.since
+      const limit = filter.limit
+      let n = 0
+      for (const e of all) {
+        if (since !== undefined && e.id <= since) continue
+        if (limit !== undefined && n >= limit) return
+        n += 1
+        yield e
+      }
+    },
+  }
+}
+
 export async function createServer(options: ServerOptions = {}): Promise<Server> {
   const env = options.env ?? process.env
   const clock: Clock = options.clock ?? { now: () => new Date().toISOString() }
@@ -153,6 +214,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const dbDir = options.dbDir
   if (dbDir !== undefined) mkdirSync(dbDir, { recursive: true })
   const file = (name: string): string => (dbDir === undefined ? ':memory:' : join(dbDir, name))
+
+  // 08 / 18：OpenConnector 的地址只在这一处解析（桌面壳读同名环境变量）
+  const connectUrl = connectBaseUrl(env)
 
   const kernel = await createKernel({ dbPath: file('events.db'), clock, random, env })
   const traceScope = createAsyncTraceScope()
@@ -288,14 +352,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   // 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
   const workData = connections.wrapDataSource(mount?.data ?? emptyDataSource())
+
+  // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
+  const runtime: RuntimeAssembly | undefined =
+    options.startRun === false || typeof options.startRun === 'function'
+      ? undefined
+      : createRuntime({
+          workspace_id: workspace.id,
+          clock,
+          random,
+          env,
+          models,
+          approvals,
+          roles,
+          appendEvent,
+          ...(options.records === undefined ? {} : { source: options.records }),
+        })
+  const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
+
   const work = createWork({
     workspace_id: workspace.id,
     clock,
     random,
     tz_offset_minutes: workData.tz_offset_minutes,
     ...(workStore === undefined ? {} : { store: workStore }),
-    ...(options.startRun === undefined ? {} : { startRun: options.startRun }),
+    ...(startRun === undefined ? {} : { startRun }),
   })
+  runtime?.bind(work)
 
   // 37 §4：会议内核。ASR 走同一个模型网关（没装 ASR provider 时管线出系统卡，不炸）；
   // 产出的认领卡进同一条审批队列（14 §1），挂在本人的岗位下，所以装在 txn 与 Assignment 之后。
@@ -308,6 +391,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     approvals: options.mount?.approvals ?? txn.approvals,
     role_id: ownerAssignment.role_id,
   })
+  // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
+  meetings.bind(work)
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {
@@ -357,12 +442,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
 
+  // 21 §1：读是合一的那一条（服务进程 + 接进来的世界）；写只写自己的
+  const merged = mergeEventLogs(kernel.eventLog, mount?.eventLog)
+  const eventLogPort: EventLogPort = {
+    read: (filter) => merged.read(filter),
+    append: appendEvent,
+  }
+
+  // 13 §5 浏览器会话：桌面壳生成、经环境变量交给服务进程；不设就没有 cookie 那条路
+  const sessionKey = env.AGENTSWS_SESSION_KEY?.trim() === '' ? undefined : env.AGENTSWS_SESSION_KEY
+  let boundPort: number | undefined
+
   const deps: GatewayDeps = {
     identity,
     halt: kernel.halt,
     trace: kernel.trace,
     clock,
-    eventLog: kernel.eventLog,
+    eventLog: eventLogPort,
     modules: kernel.modules,
     approvals,
     changes: txn.ledger,
@@ -372,16 +468,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles: rolesPort,
     meetings: meetings.port,
     connections: connections.port,
+    // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
+    ask: createAskPort({
+      models,
+      work,
+      roles,
+      appendEvent,
+      label: (ref) => workData.label(ref),
+      card: async (actor, id) => {
+        const items = (await approvals.queue({
+          workspace_id: actor.workspace_id,
+          person_id: actor.person_id,
+          lane: 'mine',
+        })) as ApprovalItem[]
+        return items.find((i) => i.id === id)
+      },
+    }),
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
       work,
-      // 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）
+      // 37 §2 表第三行：会议一定有时间，一定上日历
+      meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
+      /**
+       * 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）。
+       *
+       * 状态要全的——`queue` 默认只回 pending / in_review，而今日战报数的正是
+       * 「今天**已经**处理掉的」（37 §1 第 9 行）。等待类的计数在 work 端自己过滤，
+       * 所以这里放全不会把「还有几张等你定」算多。
+       */
       approvals: (actor) =>
         approvals.queue({
           workspace_id: actor.workspace_id,
           person_id: actor.person_id,
           lane: 'mine',
+          state: [...QUEUE_STATES],
         }) as Promise<ApprovalItem[]>,
       orders: () => workData.orders(),
       label: (ref) => workData.label(ref),
@@ -392,6 +513,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(idempotencyStore === undefined ? {} : { idempotencyStore }),
       // 本地单机档：一次性登录 token 直接回给调用方，工作台才能自动登录（20 §3）
       exposeMagicLinkToken: true,
+      // 13 §5：桌面壳靠 pid / port 认出「这个 sidecar 就是我起的那个」
+      instance: { pid: process.pid, port: () => boundPort },
+      // 13 §5：配了会话密钥就开 cookie 那条路（`POST /v1/auth/session`）
+      ...(sessionKey === undefined ? {} : { sessionKey }),
+      sessionOwnerEmail: person.email,
     },
   }
 
@@ -408,6 +534,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const server: Server = {
     gateway,
+    connectUrl,
     kernel,
     data,
     roles,
@@ -418,6 +545,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work,
     meetings,
     connections,
+    ...(runtime === undefined ? {} : { runtime }),
     identity,
     backend,
     traceScope,
@@ -435,6 +563,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       httpServer = started
       const address = started.address()
       const bound = typeof address === 'object' && address !== null ? address.port : wanted
+      boundPort = bound
       const url = `http://${HOST}:${bound}`
       server.url = url
       if (options.quiet !== true) {

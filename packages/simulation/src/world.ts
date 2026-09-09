@@ -44,6 +44,7 @@ import {
   withToolChoice,
 } from '@agentsws/runtime-direct'
 import type {
+  CreatePolicyQuestionFn,
   DraftPayload,
   MockOpenConnector,
   StageIntent,
@@ -340,6 +341,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const holder: {
     stage?: (i: StageIntent) => Promise<{ change_id: string } | undefined>
     createDraft?: (p: DraftPayload) => Promise<{ approval_item_id: string } | undefined>
+    createPolicyQuestion?: CreatePolicyQuestionFn
     executeTool?: (call: {
       name: string
       input: Record<string, unknown>
@@ -354,6 +356,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     state: pack.mockState(),
     stage: (i) => (holder.stage ?? (async () => undefined))(i),
     createDraft: (p) => (holder.createDraft ?? (async () => undefined))(p),
+    // WP17 遗留：接上之后 `boundary-first-time` 才真产出一张 policy_change 卡
+    createPolicyQuestion: (i) => (holder.createPolicyQuestion ?? (async () => undefined))(i),
     executeTool: (c) => (holder.executeTool ?? (async () => ({ status: 'error' as const })))(c),
   })
   const connect = standIns.connect
@@ -881,6 +885,67 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     ctx.child_approval_ids.push(outcome.approval.id)
     await flushCards()
     return { change_id: outcome.change.id }
+  }
+
+  /**
+   * 36 §2.2 的业务边界选择题（WP17 留的口子，WP24 接上）。
+   *
+   * 第一次遇到一条管着这次变更、而商家还没答过的边界时，**不自作主张**：
+   * 起草照常（回信只说"交给同事确认"），另外发一张选择题卡把口径定下来。
+   * `dedupe_key` 按 (工作区, 边界 id) 定，所以同一条边界一辈子只问一次——
+   * 第二次遇到时审批总线回同一张卡，不会再堆一张新的。
+   */
+  holder.createPolicyQuestion = async ({ request, boundary }) => {
+    const ctx = runContexts.get(request.id)
+    const item = await txn.approvals.create({
+      workspace_id,
+      schema_version: 1,
+      kind: 'policy_change',
+      role_id: primary.role_id,
+      subject: {
+        object: { type: 'policy', id: boundary.id },
+        ...(ctx === undefined
+          ? {}
+          : { work_item_id: `wi_${ctx.run_id}`, conversation_id: ctx.thread.id }),
+      },
+      dedupe_key: `${workspace_id}:policy_change:${boundary.id}`,
+      title: boundary.question,
+      summary: `第一次碰到这一条。定个答案，以后 Agent 自己按它走，不再问你（${boundary.label}）。`,
+      payload: {
+        target: 'workspace_policy',
+        boundary_id: boundary.id,
+        before: null,
+        after: { boundary_id: boundary.id },
+        affected_assignments: [assignment.id],
+        options: boundary.options.map((o) => ({ id: o.id, label: o.label })),
+      },
+      evidence: {
+        source_events: ctx === undefined ? [] : [ctx.inbound.id],
+        ...(ctx === undefined ? {} : { run_id: ctx.run_id }),
+        provenance: { seen: [] },
+        precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+      },
+      proposer: { kind: 'agent', id: 'agent_aftersales', assignment_id: assignment.id },
+      automation: {
+        level_at_creation: 'L1',
+        auto_approved: false,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [{ person: owner, via: 'owner' }],
+        rule: 'owner',
+        escalation: { after_hours: 48, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+      options: boundary.options.map((o) => ({ id: o.id, label: o.label })),
+    })
+    if (item.state === 'blocked') return undefined
+    // 不进 `child_approval_ids`：边界问题**不是**这封回信的子项——回信照发（它只说
+    // "交给同事确认"），口径那张卡另走一条线，两者没有父子顺序关系（14 §12）。
+    await flushCards()
+    return { approval_item_id: item.id }
   }
 
   holder.createDraft = async (payload: DraftPayload) => {

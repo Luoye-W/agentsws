@@ -12,6 +12,8 @@ import type {
   GoalProgress,
   Matter,
   MatterView,
+  Meeting,
+  MeetingOutputs,
   Review,
   Todo,
 } from '@agentsws/contracts'
@@ -180,13 +182,171 @@ describe('demo 的工作模型（37）', () => {
     expect(list.reviews[0]?.id).toBe(review.id)
   })
 
-  it('没装运行时的进程：委托与在事项里说话回 not_implemented，其余照常', async () => {
-    const { todos } = await data<{ todos: Todo[] }>(await call('/v1/todos?horizon=backlog'))
-    const target = todos[0]
-    if (target === undefined) throw new Error('待办箱是空的')
-    const res = await call(`/v1/todos/${target.id}/delegate`, { method: 'POST', body: {} })
-    expect(res.status).toBe(501)
-    expect(((await res.json()) as { code: string }).code).toBe('not_implemented')
+  it('委托：起真 Run → 卡出现在待办上 → 事项时间线有 run 事件（37 §2.1 交点一）', async () => {
+    const { matters } = await data<{ matters: Matter[] }>(await call('/v1/matters'))
+    const matter = matters.find((m) => m.kind === 'conversation')
+    if (matter === undefined) throw new Error('demo 没种出 conversation 事项')
+    const todo = await data<{ todo: Todo }>(
+      await call('/v1/todos', {
+        method: 'POST',
+        body: { title: '替我回一下 Anna 这封信', matter_id: matter.id },
+      }),
+      201,
+    )
+    const before = (await data<MatterView>(await call(`/v1/matters/${matter.id}`))).timeline.length
+
+    const out = await data<{ todo: Todo }>(
+      await call(`/v1/todos/${todo.todo.id}/delegate`, {
+        method: 'POST',
+        body: { brief: 'Anna 想退 #1001，帮我按政策回一封' },
+      }),
+    )
+    // 委托状态与 run 都回填到了待办上
+    expect(out.todo.delegate?.state).toBeDefined()
+    expect(out.todo.runs).toHaveLength(1)
+    expect(out.todo.matter_id).toBe(matter.id)
+    // Run 里产生的卡挂回这条待办（subject.todo_id）
+    expect(out.todo.cards.length).toBeGreaterThan(0)
+    const card = await data<{ id: string; kind: string; subject: { todo_id?: string } }>(
+      await call(`/v1/approvals/${out.todo.cards[0]}`),
+    )
+    expect(card.subject.todo_id).toBe(todo.todo.id)
+
+    // 事项时间线上有这次运行，摘要被 onRunCompleted 更新过
+    const view = await data<MatterView>(await call(`/v1/matters/${matter.id}`))
+    expect(view.timeline.length).toBeGreaterThan(before)
+    const runs = view.timeline.filter((e) => e.kind === 'run')
+    expect(runs.some((e) => e.run_id === out.todo.runs[0])).toBe(true)
+    expect(view.matter.context.summary).not.toBe('')
+  })
+
+  it('事项发言：说一句 → 起 Run → 时间线上人话与 Agent 的运行都在（对话入口第四处）', async () => {
+    const { matters } = await data<{ matters: Matter[] }>(await call('/v1/matters'))
+    const matter = matters.find((m) => m.kind === 'conversation')
+    if (matter === undefined) throw new Error('demo 没种出 conversation 事项')
+    const out = await data<{ event: { kind: string; text: string }; run_id?: string }>(
+      await call(`/v1/matters/${matter.id}/messages`, {
+        method: 'POST',
+        body: { text: '这封信按 14 天窗口回，别自己拍板退款' },
+      }),
+      201,
+    )
+    expect(out.event.kind).toBe('human_message')
+    expect(out.run_id).toBeDefined()
+    const view = await data<MatterView>(await call(`/v1/matters/${matter.id}`))
+    expect(view.timeline.some((e) => e.run_id === out.run_id)).toBe(true)
+  })
+
+  it('会议 → 事项：处理完开一个 meeting 事项，Meeting.matter_id 回填，产出挂时间线', async () => {
+    const meetings = await data<Meeting[]>(await call('/v1/meetings'))
+    expect(meetings.length).toBeGreaterThan(0)
+    const meeting = meetings.find((m) => m.matter_id !== undefined)
+    if (meeting?.matter_id === undefined) throw new Error('会议没有回填 matter_id')
+
+    const view = await data<MatterView>(await call(`/v1/matters/${meeting.matter_id}`))
+    expect(view.matter.kind).toBe('meeting')
+    expect(view.matter.title).toBe(meeting.title)
+    // 会议本身固定在现场里
+    expect(view.matter.context.pinned.some((r) => r.id === meeting.id)).toBe(true)
+    // 产出挂在这条事项的时间线上
+    expect(view.timeline.filter((e) => e.kind === 'meeting').length).toBeGreaterThan(0)
+  })
+
+  it('会议上日历：会议那天的日历里有它（37 §2 表第三行）', async () => {
+    const meetings = await data<Meeting[]>(await call('/v1/meetings'))
+    const meeting = meetings[0]
+    if (meeting === undefined) throw new Error('demo 没种出会议')
+    const from = new Date(Date.parse(meeting.start) - 3_600_000).toISOString()
+    const to = new Date(Date.parse(meeting.end) + 3_600_000).toISOString()
+    const out = await data<{ items: CalendarItem[] }>(
+      await call(`/v1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    )
+    const item = out.items.find((i) => i.source === 'meeting' && i.ref?.id === meeting.id)
+    expect(item).toBeDefined()
+    expect(item?.matter_id).toBe(meeting.matter_id)
+  })
+
+  it('认领卡接下来 → 建待办（source=meeting、matter_id 指向会议事项、anchor 指向那条产出）', async () => {
+    const meetings = await data<Meeting[]>(await call('/v1/meetings'))
+    let sent: { approval_id: string } | undefined
+    let target: Meeting | undefined
+    for (const meeting of meetings) {
+      const outs = await data<MeetingOutputs[]>(await call(`/v1/meetings/${meeting.id}/outputs`))
+      // 没被明确指派给别人的那条：认领卡才会发到本人手上（31 I13 本人确认才形成责任）
+      const outputs = outs.find((o) => o.todos.some((t) => t.assignee_person_id === undefined))
+      const proposal = outputs?.todos.find((t) => t.assignee_person_id === undefined)
+      if (outputs === undefined || proposal === undefined) continue
+      sent = await data<{ approval_id: string }>(
+        await call(`/v1/meetings/${meeting.id}/outputs/send`, {
+          method: 'POST',
+          body: { record_id: outputs.record_id, kind: 'claim', item_id: proposal.id },
+        }),
+      )
+      target = meeting
+      break
+    }
+    if (sent === undefined || target?.matter_id === undefined) throw new Error('没有可发的认领卡')
+
+    const decided = await data<{ todo?: Todo }>(
+      await call(`/v1/approvals/${sent.approval_id}/decide`, {
+        method: 'POST',
+        body: { action: 'approve' },
+      }),
+    )
+    expect(decided.todo).toBeDefined()
+    expect(decided.todo?.source).toBe('meeting')
+    expect(decided.todo?.matter_id).toBe(target.matter_id)
+    expect(decided.todo?.anchor?.matter_event_id).toBeDefined()
+    expect(decided.todo?.origin?.card_id).toBe(sent.approval_id)
+  })
+
+  it('战报四格：读的是合一后的事件日志，demo 里不是四个零（21 §1）', async () => {
+    const home = await data<{
+      battle_report: { ai_handled: number; handled: number; auto_sent: number; intercepted: number }
+    }>(await call('/v1/home?range=yesterday'))
+    const r = home.battle_report
+    // 场景真跑出来的卡都算「拦截待确认」；四个数加起来必须大于零，否则就是日志没接上
+    expect(r.intercepted).toBeGreaterThan(0)
+    expect(r.ai_handled + r.handled + r.auto_sent + r.intercepted).toBeGreaterThan(0)
+  })
+
+  it('问 AI：单轮、有边界、只回给本人；事件日志只留哈希不留正文（36 §3）', async () => {
+    const { matters } = await data<{ matters: Matter[] }>(await call('/v1/matters'))
+    const matter = matters.find((m) => m.kind === 'conversation')
+    if (matter === undefined) throw new Error('demo 没种出 conversation 事项')
+
+    const out = await data<{ answer: string; answer_hash: string; grounded_on: string[] }>(
+      await call('/v1/ask', {
+        method: 'POST',
+        body: { scope: { matter_id: matter.id }, question: '这封信现在卡在哪了？' },
+      }),
+    )
+    expect(out.answer.length).toBeGreaterThan(0)
+    expect(out.answer_hash).toMatch(/^[0-9a-f]{64}$/)
+    expect(out.grounded_on.length).toBeGreaterThan(0)
+
+    // 没有边界一律 400：问 AI 一定挂在某张卡或某个事项上
+    expect(
+      (await call('/v1/ask', { method: 'POST', body: { scope: {}, question: 'x' } })).status,
+    ).toBe(400)
+
+    // 事件日志里有 ask.answered，但没有问题与答案的正文
+    const events: { type: string; payload: unknown }[] = []
+    for await (const e of demo.server.kernel.eventLog.read({
+      workspace_id: demo.world.workspace_id,
+      types: ['ask.answered'],
+    }))
+      events.push(e)
+    const answered = events.filter((e) => e.type === 'ask.answered')
+    expect(answered.length).toBeGreaterThan(0)
+    const payload = JSON.stringify(answered.at(-1)?.payload ?? {})
+    expect(payload).toContain(out.answer_hash)
+    expect(payload).not.toContain(out.answer)
+    expect(payload).not.toContain('这封信现在卡在哪了')
+
+    // 答案不落任何对客户可见的地方：没有新的对外草稿卡，事项时间线也没多出 Agent 的话
+    const view = await data<MatterView>(await call(`/v1/matters/${matter.id}`))
+    expect(view.timeline.some((e) => e.text.includes(out.answer))).toBe(false)
   })
 
   it('全程没有任何 model.* 事件（stub 运行时根本不叫模型）', () => {

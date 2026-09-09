@@ -1,5 +1,11 @@
 /** 14 §10 审批 API。写路由（decide / retry-apply）属 send / apply 类，受 outbound 急停。 */
-import type { ApprovalItem, ApprovalKind, ApprovalState, DecideInput } from '@agentsws/contracts'
+import type {
+  ApprovalItem,
+  ApprovalKind,
+  ApprovalState,
+  DecideInput,
+  Todo,
+} from '@agentsws/contracts'
 import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
 import { ApiError, normalizeError } from '../errors.js'
@@ -83,6 +89,111 @@ async function mustGet(deps: GatewayDeps, id: string, workspace_id: string): Pro
 
 const optional = <T>(v: T | undefined, key: string): Record<string, T> =>
   v === undefined ? {} : ({ [key]: v } as Record<string, T>)
+
+/**
+ * 36 §2.1 指导的**作用域落地**（原来只是把 scope 原样回给调用方）：
+ *
+ * | scope | 落到哪 |
+ * |---|---|
+ * | `single_reply` | 就这一条：reject + 指导文本，Agent 重做（14 §9 的强负样本），不建新卡 |
+ * | `similar_cases` | 24 的学习回路：建一张 `skill_lesson` 卡（技能 overlay 提案），人再批一次才改行为 |
+ * | `global_rule` | 05 的策略层：建一张 `policy_change` 卡，批了才改职责策略 |
+ *
+ * 两条纪律：**指导本身不改任何东西**（它只是提议），且提议照样走 14 的预检与队列。
+ */
+async function landInstruction(
+  deps: GatewayDeps,
+  input: {
+    item: ApprovalItem
+    scope: string
+    text: string
+    person_id: string
+    workspace_id: string
+    assignment_id: string
+  },
+): Promise<{ kind: string; approval_item_id: string } | undefined> {
+  const { item, scope, text } = input
+  if (scope !== 'similar_cases' && scope !== 'global_rule') return undefined
+  const lesson = scope === 'similar_cases'
+  const routing = {
+    recipients: [{ person: input.person_id, via: lesson ? 'role_holder' : 'owner' } as const],
+    rule: (lesson ? 'role_holder' : 'owner') as 'role_holder' | 'owner',
+    escalation: {
+      after_hours: lesson ? 72 : 48,
+      business_hours: true,
+      chain: ['owner' as const],
+      escalated_at: [],
+    },
+    separation_of_duties: false,
+  }
+  const common = {
+    workspace_id: input.workspace_id,
+    schema_version: 1 as const,
+    role_id: item.role_id,
+    proposer: { kind: 'person' as const, id: input.person_id },
+    automation: {
+      level_at_creation: 'L1' as const,
+      auto_approved: false,
+      mandate_check: { within: true, caps_hit: [] },
+      sampling: { selected: false },
+    },
+    routing,
+    priority: 'queue' as const,
+    links: { parent: item.id },
+  }
+  const created = lesson
+    ? await deps.approvals.create({
+        ...common,
+        kind: 'skill_lesson' as const,
+        subject: {
+          object: { type: 'skill', id: item.role_id },
+          ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
+        },
+        dedupe_key: `${input.workspace_id}:skill_lesson:instruction:${item.id}`,
+        title: `把这条指导变成规矩：${text.slice(0, 40)}`,
+        summary: '你刚才说的这一条，以后类似情况都按它来。采纳后进技能 overlay（24）。',
+        payload: {
+          form: 'skill_lesson',
+          scope: 'similar_cases',
+          skill: item.role_id,
+          text,
+          source_card_id: item.id,
+          source_kind: item.kind,
+        },
+        evidence: {
+          source_events: [],
+          diff: { before: null, after: text, summary: '技能 overlay 追加一条' },
+          provenance: { seen: [item.subject.object] },
+          precheck: { permission_diff: 'ok' },
+        },
+      })
+    : await deps.approvals.create({
+        ...common,
+        kind: 'policy_change' as const,
+        subject: {
+          object: { type: 'policy', id: `instruction_${item.id}` },
+          ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
+        },
+        dedupe_key: `${input.workspace_id}:policy_change:instruction:${item.id}`,
+        title: `以后都这样：${text.slice(0, 40)}`,
+        summary: '这条要写进职责策略。批准后对这个岗位一律生效（05）。',
+        payload: {
+          target: 'workspace_policy',
+          before: null,
+          after: { rule: text },
+          affected_assignments: [input.assignment_id],
+          source_card_id: item.id,
+        },
+        evidence: {
+          source_events: [],
+          provenance: { seen: [item.subject.object] },
+          precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+        },
+      })
+  return created.state === 'blocked'
+    ? undefined
+    : { kind: created.kind, approval_item_id: created.id }
+}
 
 export function approvalRoutes(): Route[] {
   return [
@@ -293,11 +404,40 @@ export function approvalRoutes(): Route[] {
           ...optional(input.redirect_to, 'redirect_to'),
           ...optional(resolved.defer_until, 'defer_until'),
         })
+        // 36 §2.1：指导的作用域落地（similar_cases → overlay 提案；global_rule → 策略变更）
+        const landed =
+          resolved.instruction_scope === undefined || input.instruction === undefined
+            ? undefined
+            : await landInstruction(deps, {
+                item: out,
+                scope: resolved.instruction_scope,
+                text: input.instruction.text,
+                person_id: p.person_id,
+                workspace_id: p.workspace_id,
+                assignment_id: assignmentOf(c).id,
+              })
+        // 37 §4.1：认领卡接下来才形成责任（31 I13）——建一条挂在会议事项上的待办
+        let claimed: Todo | undefined
+        if (
+          out.kind === 'claim' &&
+          (resolved.action === 'approve' || resolved.action === 'approve_edited')
+        ) {
+          claimed = (await deps.work?.acceptClaim?.(
+            {
+              workspace_id: p.workspace_id,
+              person_id: p.person_id,
+              assignment_id: assignmentOf(c).id,
+            },
+            out,
+          )) as Todo | undefined
+        }
         return ok(c, {
           ...redactItem(out, p.person_id),
           // 指导的作用域决定它之后落到哪（本条回复 / 技能 overlay 提案 / 职责策略变更）；
           // v1 只原样回给调用方，路由到 24 / 05 的机器留给后续 WP（见交付报告）。
           ...optional(resolved.instruction_scope, 'instruction_scope'),
+          ...optional(landed, 'instruction_proposal'),
+          ...optional(claimed, 'todo'),
         })
       },
     ),

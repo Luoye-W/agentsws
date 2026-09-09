@@ -12,6 +12,7 @@
  * 只有委托与发言，那两条起的 Run 仍然要过 17 的额度、门禁与 14 的审批。
  */
 import type {
+  ApprovalItem,
   AssignmentId,
   BattleReport,
   CalendarItem,
@@ -249,6 +250,14 @@ export interface WorkPort {
     filter: { kind?: ReviewPeriodKind; limit?: number },
   ): MaybePromise<Review[]>
   createReview(actor: WorkActor, kind: ReviewPeriodKind): MaybePromise<Review>
+
+  /**
+   * 37 §4.1：认领卡被本人接下来才形成责任（31 I13）。
+   * 决定路由在 approve / approve_edited 之后调它，把 `claim` 变成一条真待办
+   * （`source: 'meeting'`，`matter_id` 指向会议事项，`anchor` 指向那条产出）。
+   * 不认识这张卡就回 `undefined`，什么都不发生。
+   */
+  acceptClaim?(actor: WorkActor, item: ApprovalItem): MaybePromise<Todo | undefined>
 }
 
 function workOf(deps: GatewayDeps): WorkPort {

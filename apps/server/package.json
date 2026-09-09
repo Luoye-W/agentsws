@@ -13,7 +13,9 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
@@ -34,6 +36,7 @@
     "@agentsws/meetings": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/roles": "workspace:*",
+    "@agentsws/runtime-direct": "workspace:*",
     "@agentsws/skills": "workspace:*",
     "@agentsws/stand-ins": "workspace:*",
     "@agentsws/txn": "workspace:*",

@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, CheckSquare, CreditCard, FileText, MessageSquare, Pin, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { AskAiPanel } from '@/components/deck/ask-ai-panel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -299,6 +300,12 @@ export function MatterPage(): React.ReactNode {
           </p>
         )}
       </form>
+
+      {/*
+        36 §3 问 AI：与上面那个框语义相反——说一句会让 Agent 去做事、可能变成对客户说的话，
+        问 AI 只是问一句给自己看，不产生任何动作，作用域同样是这个事项。
+      */}
+      <AskAiPanel scope={{ matter_id: view.matter.id }} />
     </div>
   )
 }

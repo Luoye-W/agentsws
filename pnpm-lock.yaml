@@ -41,6 +41,9 @@ importers:
       '@agentsws/simulation':
         specifier: workspace:*
         version: link:../../packages/simulation
+      '@agentsws/stand-ins':
+        specifier: workspace:*
+        version: link:../../packages/stand-ins
       '@agentsws/work':
         specifier: workspace:*
         version: link:../../packages/work
@@ -108,6 +111,9 @@ importers:
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../../packages/roles
+      '@agentsws/runtime-direct':
+        specifier: workspace:*
+        version: link:../../packages/runtime-direct
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills

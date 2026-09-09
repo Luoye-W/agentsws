@@ -43,6 +43,9 @@
       "path": "../../packages/roles"
     },
     {
+      "path": "../../packages/runtime-direct"
+    },
+    {
       "path": "../../packages/skills"
     },
     {

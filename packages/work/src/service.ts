@@ -599,12 +599,15 @@ export class Work {
       actor: { person_id: input.by, assignment_id: input.assignment_id },
       todo_id: todo.id,
     })
+    // startRun 期间宿主可能已经把卡回填进这条待办（`onCard`），所以要重新取一次再写，
+    // 否则这里的写回会把刚挂上的 cards 覆盖掉。
+    const fresh = this.requireTodo(id)
     const next: Todo = {
-      ...todo,
+      ...fresh,
       matter_id,
       status: 'doing',
       delegate: { assignment_id: input.assignment_id, brief, run_id, state: 'running', at },
-      runs: uniq([...todo.runs, run_id]),
+      runs: uniq([...fresh.runs, run_id]),
       updated_at: at,
     }
     this.store.putTodo(next)

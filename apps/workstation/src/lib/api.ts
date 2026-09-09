@@ -240,15 +240,21 @@ async function bootstrapConfig(): Promise<BootstrapConfig> {
   }
 }
 
-/** 拿一个能用的会话；已经有就直接用，没有就走 magic-link。 */
+/**
+ * 拿一个能用的会话，按这个顺序：
+ *
+ * 1. **HttpOnly 会话 cookie**（13 §5）——桌面壳用 `AGENTSWS_SESSION_KEY` 换好之后，
+ *    同源请求自动带上它，前端**看不到也存不到** token，这是最安全的一条；
+ * 2. 存过的 bearer（普通浏览器里上次登录留下的）；
+ * 3. 都没有 → 本地单机档的 magic-link 自动登录。
+ */
 export async function ensureSession(): Promise<Me> {
-  if (readStoredToken() !== null) {
-    try {
-      return await api<Me>('/v1/me')
-    } catch (err) {
-      if (!(err instanceof ApiClientError) || err.status !== 401) throw err
-      clearToken()
-    }
+  try {
+    // 没有 bearer 时这一发就是「只带 cookie」；桌面壳里它会直接成功
+    return await api<Me>('/v1/me')
+  } catch (err) {
+    if (!(err instanceof ApiClientError) || err.status !== 401) throw err
+    clearToken()
   }
   const config = await bootstrapConfig()
   const email = config.owner_email ?? 'owner@localhost'
@@ -268,6 +274,19 @@ export async function ensureSession(): Promise<Me> {
   storeToken(verified.session_token)
   return api<Me>('/v1/me')
 }
+
+// ── 36 §3 问 AI（单轮、只你可见、不发给客户）────────────────────────────
+
+export interface AskAnswer {
+  answer: string
+  answer_hash: string
+  grounded_on: string[]
+}
+
+export const askAi = (input: {
+  scope: { matter_id?: string; card_id?: string }
+  question: string
+}): Promise<AskAnswer> => api<AskAnswer>('/v1/ask', { method: 'POST', body: input })
 
 // ── 各个面 ─────────────────────────────────────────────────────────────
 

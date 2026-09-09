@@ -12,7 +12,7 @@ import './context.js'
 import { KernelError } from './errors.js'
 import { SqliteEventLog } from './event-log.js'
 import type { HaltEnv } from './halt.js'
-import { MemoryHalt } from './halt.js'
+import { haltFileAt, MemoryHalt } from './halt.js'
 import type { ModuleLoaderOptions } from './modules.js'
 import { ModuleRegistry } from './modules.js'
 import { kernelServices } from './plugins.js'
@@ -100,7 +100,13 @@ export async function createKernel(options: KernelOptions = {}): Promise<Kernel>
     random,
     ...(options.schemaVersion === undefined ? {} : { schemaVersion: options.schemaVersion }),
   })
-  const halt = new MemoryHalt(options.env ?? process.env)
+  // 13 §5：`AGENTSWS_HALT_FILE` 是桌面壳与服务进程共用的急停真源（启动读、变更写回）
+  const haltEnv = options.env ?? process.env
+  const haltPath = haltEnv.AGENTSWS_HALT_FILE
+  const halt = new MemoryHalt(
+    haltEnv,
+    haltPath === undefined || haltPath.trim() === '' ? {} : { file: haltFileAt(haltPath.trim()) },
+  )
   const trace = new KernelTrace({
     random,
     eventLog,

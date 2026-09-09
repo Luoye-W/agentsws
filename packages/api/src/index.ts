@@ -41,6 +41,10 @@ export {
   type LocalIdentityService,
   type MemoryIdentityOptions,
   MemoryIdentityService,
+  readCookie,
+  SESSION_COOKIE,
+  secretEquals,
+  sessionCookie,
   type TokenKind,
 } from './identity.js'
 export { buildOpenApi, type OpenApiDocument, toOpenApiPath } from './openapi.js'
@@ -55,6 +59,7 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
 export type {
   BeginConnectResult,
   ConnectionOwnership,
@@ -73,6 +78,7 @@ export type {
   SubmitConnectionInput,
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
+export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export type {
   MeetingIngestInput,
   MeetingProcessOutcome,

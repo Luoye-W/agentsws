@@ -332,6 +332,7 @@ export function DeckCardView({
           <DeckNotePanel
             mode={panel}
             busy={busy === true}
+            ask={{ card_id: card.id }}
             onCancel={() => {
               setPanel(null)
             }}
