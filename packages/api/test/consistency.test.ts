@@ -222,9 +222,24 @@ describe('28 §4 用例 5：同 Idempotency-Key 的 POST 重放原响应', () =>
 
   it('不带 Idempotency-Key 就每次都真的执行', async () => {
     const h = await harness()
+    // 两条各自 pending 的审批项：网关不去重，两次都真的打到审批总线。
+    // （同一条决定两次会被 36 §2 的动作矩阵挡住——已决定的卡只剩「打开」，见下一条用例。）
+    const second = h.approvals.seed({ ...h.item, id: 'ap_2', state: 'pending' })
     await h.post(`/v1/approvals/${h.item.id}/decide`, { action: 'approve' })
-    await h.post(`/v1/approvals/${h.item.id}/decide`, { action: 'approve' })
+    await h.post(`/v1/approvals/${second.id}/decide`, { action: 'approve' })
     expect(h.approvals.log).toHaveLength(2)
+  })
+
+  it('已决定的卡再决定一次 → 400（36 §2 动作矩阵：只剩「打开」）', async () => {
+    const h = await harness()
+    expect((await h.post(`/v1/approvals/${h.item.id}/decide`, { action: 'approve' })).status).toBe(
+      200,
+    )
+    const again = await h.post(`/v1/approvals/${h.item.id}/decide`, { action: 'approve' })
+    expect(again.status).toBe(400)
+    expect(((await again.json()) as { details: { reason: string } }).details.reason).toBe(
+      'ACTION_NOT_AVAILABLE',
+    )
   })
 })
 

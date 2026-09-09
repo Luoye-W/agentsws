@@ -1,5 +1,6 @@
 /** 14 §10 审批 API。写路由（decide / retry-apply）属 send / apply 类，受 outbound 急停。 */
 import type { ApprovalItem, ApprovalKind, ApprovalState, DecideInput } from '@agentsws/contracts'
+import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
 import { ApiError, normalizeError } from '../errors.js'
 import {
@@ -14,6 +15,7 @@ import {
 } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import { fromDeckError } from './workstation.js'
 
 const READ = {
   domain: 'approval',
@@ -29,6 +31,14 @@ const DECIDE = {
 } as const
 
 const ACTIONS = ['approve', 'approve_edited', 'reject', 'redirect', 'defer', 'withdraw'] as const
+/**
+ * 36 §2.1 的五动作矩阵：工作台按钮发的是这几个动词，翻译成 14 的状态机动作由
+ * `@agentsws/deck` 的 `resolveDecision` 做（选择题裸 approve 拒、instruct 必须带作用域、
+ * version 乐观并发都在那里）。`redirect / defer / withdraw / approve_edited` 是 14 的原生动作，
+ * 走老路，不经卡片投影。
+ */
+const DECK_ACTIONS = ['approve', 'reject', 'instruct', 'snooze'] as const
+const INSTRUCTION_SCOPES = ['single_reply', 'similar_cases', 'global_rule'] as const
 const VIA = ['workstation', 'im_card', 'email', 'api', 'batch'] as const
 const RedirectTo = z.object({
   person_id: z.string().optional(),
@@ -38,12 +48,18 @@ const RedirectTo = z.object({
 const DecideBody = z.object({
   /** 缺省时用本人那张有效投递 token（工作台内不必回传） */
   decision_token: z.string().min(1).optional(),
-  action: z.enum(ACTIONS),
+  action: z.enum([...ACTIONS, 'instruct', 'snooze'] as const),
   reason: z.string().optional(),
   edited_payload: z.unknown().optional(),
   redirect_to: RedirectTo.optional(),
   defer_until: z.string().optional(),
   via: z.enum(VIA).optional(),
+  /** 选择题卡必填（36 §2.1；裸 approve 会被 OPTION_REQUIRED 拒） */
+  selected_option_id: z.string().min(1).optional(),
+  /** 指导抽屉：先选作用域，再一句话 */
+  instruction: z.object({ scope: z.enum(INSTRUCTION_SCOPES), text: z.string().min(1) }).optional(),
+  /** 乐观并发：与卡片的 version（= revision）不一致即 409 */
+  version: z.number().int().nonnegative().optional(),
 })
 
 const BatchDecideBody = z.object({
@@ -225,16 +241,64 @@ export function approvalRoutes(): Route[] {
         const input = await body(c, DecideBody)
         const token = input.decision_token ?? tokenFor(item, p.person_id)
         if (token === undefined) throw new ApiError('forbidden', '没有属于本人的 decision_token')
+        const via = input.via ?? 'workstation'
+
+        // 卡片动词 → 14 的决定。卡片投影是纯函数，网关只是转译层。
+        const deckAction = DECK_ACTIONS.find((a) => a === input.action)
+        let resolved: {
+          action: DecideInput['action']
+          reason?: string
+          edited_payload?: unknown
+          defer_until?: string
+          instruction_scope?: string
+        }
+        if (deckAction !== undefined) {
+          const card = projectCard(item, {
+            now: deps.clock.now(),
+            position_id: c.req.header('X-Assignment') ?? '',
+            ...(deps.workstation === undefined ? {} : { label: (r) => deps.workstation?.label(r) }),
+          })
+          try {
+            resolved = resolveDecision(
+              card,
+              {
+                action: deckAction,
+                ...optional(input.selected_option_id, 'selected_option_id'),
+                ...optional(input.instruction, 'instruction'),
+                ...optional(input.reason, 'reason'),
+                ...optional(input.edited_payload, 'edited_payload'),
+                ...optional(input.defer_until, 'defer_until'),
+                ...optional(input.version, 'version'),
+              },
+              { now: deps.clock.now() },
+            )
+          } catch (err) {
+            return fromDeckError(err)
+          }
+        } else {
+          resolved = {
+            action: input.action as DecideInput['action'],
+            ...optional(input.reason, 'reason'),
+            ...optional(input.edited_payload, 'edited_payload'),
+            ...optional(input.defer_until, 'defer_until'),
+          }
+        }
+
         const out = await deps.approvals.decide(id, p.person_id, {
           decision_token: token,
-          action: input.action,
-          via: input.via ?? 'workstation',
-          ...optional(input.reason, 'reason'),
-          ...optional(input.edited_payload, 'edited_payload'),
+          action: resolved.action,
+          via,
+          ...optional(resolved.reason, 'reason'),
+          ...optional(resolved.edited_payload, 'edited_payload'),
           ...optional(input.redirect_to, 'redirect_to'),
-          ...optional(input.defer_until, 'defer_until'),
+          ...optional(resolved.defer_until, 'defer_until'),
         })
-        return ok(c, redactItem(out, p.person_id))
+        return ok(c, {
+          ...redactItem(out, p.person_id),
+          // 指导的作用域决定它之后落到哪（本条回复 / 技能 overlay 提案 / 职责策略变更）；
+          // v1 只原样回给调用方，路由到 24 / 05 的机器留给后续 WP（见交付报告）。
+          ...optional(resolved.instruction_scope, 'instruction_scope'),
+        })
       },
     ),
     ...(

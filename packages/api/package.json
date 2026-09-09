@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
+    "@agentsws/deck": "workspace:*",
     "hono": "^4.13.7",
     "zod": "^4.5.4"
   }

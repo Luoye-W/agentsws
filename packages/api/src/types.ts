@@ -2,8 +2,10 @@
  * 网关的端口（28 §2「网关里不写业务」）：每个端口都是已合并模块公开方法的最小投影，
  * 用契约类型描述，装配在 `apps/server`。这里不 import 任何实现包。
  */
+
 import type {
   ApprovalBus,
+  ApprovalItem,
   Assignment,
   AssignmentId,
   ChangeKind,
@@ -19,6 +21,7 @@ import type {
   Iso8601,
   KnowledgeLayer,
   LessonRecord,
+  MaybePromise,
   ModuleHealth,
   ObjectRef,
   Operation,
@@ -36,6 +39,7 @@ import type {
   Trace,
   WorkspaceId,
 } from '@agentsws/contracts'
+import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
 export interface Principal {
@@ -235,8 +239,66 @@ export interface GatewayDeps {
   knowledge: KnowledgePort
   skills: SkillsPort
   roles: RolesPort
+  /** 36 工作台面（首页 / 岗位 / 积木）；没装配时那几条路由回 not_implemented。 */
+  workstation?: WorkstationPort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>
   options?: GatewayOptions
+}
+
+/**
+ * 36 工作台端口。
+ *
+ * 「岗位」= 一个人对某职责在某范围上的持有，也就是一条 Assignment（`position_id === assignment_id`），
+ * 所以工作台的每个页面天然对应一个 `X-Assignment`，不会出现跨 Assignment 并集（31 §3.1）。
+ *
+ * 网关只做装配与校验，数从 `@agentsws/deck` 的命名查询里算（29 原则 ③「数字不经模型手」）。
+ */
+export interface PositionSummary {
+  position_id: AssignmentId
+  role_id: RoleId
+  role_name: string
+  ranges: RangeRef[]
+  /** 05 §4：连接器齐了没有 */
+  ready: boolean
+  missing_connectors: string[]
+  /** 用户挑过的数字块；没挑过就是职责默认值（36 §3） */
+  tile_ids: string[]
+  /** 该岗位记住的时间范围（36 §3：时间范围跟随岗位记忆） */
+  range: WorkstationRange
+  /** 首页要不要给这个岗位出一条核心数据条（没有默认块的职责不出） */
+  show_tiles: boolean
+}
+
+export type WorkstationRange = 'yesterday' | 'last_7d'
+
+export interface WorkstationActor {
+  workspace_id: WorkspaceId
+  person_id: PersonId
+}
+
+export interface WorkstationPort {
+  /** 本人持有的岗位。 */
+  positions(actor: WorkstationActor): MaybePromise<PositionSummary[]>
+  /** 某岗位队列里的审批项（已按 recipient 过滤）。 */
+  items(actor: WorkstationActor, position: PositionSummary): MaybePromise<ApprovalItem[]>
+  /**
+   * 某岗位的查询上下文：连接状态 + 店铺侧行 + 审批项。
+   * 返回的是 deck 的 `QueryContext`，网关不认识里面的字段，只负责传。
+   */
+  queryContext(
+    actor: WorkstationActor,
+    position: PositionSummary,
+    range: WorkstationRange,
+  ): MaybePromise<DeckQueryContext>
+  /** 系统卡（重新授权 / 预算告急 / 模型不可用）与每日摘要——不是审批项，宿主直接给。 */
+  systemCards(actor: WorkstationActor): MaybePromise<{ alerts: DeckCard[]; digest?: DeckCard }>
+  /** ObjectRef → 人话（前端不猜、也不查库）。 */
+  label(ref: ObjectRef): string | undefined
+  /** 36 §3：换 / 增减数字块与时间范围，跟随岗位记忆。 */
+  setHomeTiles(
+    actor: WorkstationActor,
+    input: { position_id: AssignmentId; tile_ids: string[]; range?: WorkstationRange },
+  ): MaybePromise<PositionSummary>
 }

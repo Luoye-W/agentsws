@@ -80,6 +80,9 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agentsws/deck':
+        specifier: workspace:*
+        version: link:../deck
       hono:
         specifier: ^4.13.7
         version: 4.13.7

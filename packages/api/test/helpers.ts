@@ -20,6 +20,8 @@ import type {
   Sensitivity,
   StagedChange,
 } from '@agentsws/contracts'
+import type { OrderRow, QueryContext } from '@agentsws/deck'
+import { defaultTilesFor, projectCard } from '@agentsws/deck'
 import type {
   ChangesPort,
   EffectiveConfigLike,
@@ -28,8 +30,11 @@ import type {
   GuardrailPort,
   KnowledgePort,
   ModulesPort,
+  PositionSummary,
   RolesPort,
   SkillsPort,
+  WorkstationPort,
+  WorkstationRange,
 } from '../src/index.js'
 import { createAsyncTraceScope, createGateway, createMemoryIdentity } from '../src/index.js'
 
@@ -137,6 +142,7 @@ export interface Harness {
   identity: ReturnType<typeof createMemoryIdentity>
   approvals: MemoryApprovals
   thrower: ThrowingPort
+  workstation: MemoryWorkstation
   workspace_id: string
   person_id: string
   other_id: string
@@ -147,6 +153,11 @@ export interface Harness {
   item: ApprovalItem
   get(path: string, init?: RequestInit & { assignment?: string | null }): Promise<Response>
   post(
+    path: string,
+    body?: unknown,
+    init?: RequestInit & { assignment?: string | null },
+  ): Promise<Response>
+  put(
     path: string,
     body?: unknown,
     init?: RequestInit & { assignment?: string | null },
@@ -241,6 +252,123 @@ export class MemoryApprovals implements ApprovalBus {
   async history(id: string): Promise<{ revisions: ApprovalItem[]; events: string[] }> {
     const item = this.items.get(id)
     return { revisions: item ? [item] : [], events: ['evt_000001'] }
+  }
+}
+
+/** 36 工作台端口的内存实现：岗位 = Assignment，数从固定的几行订单与审批项里算。 */
+export const WS_ORDERS: OrderRow[] = [
+  {
+    id: 'ord_a',
+    name: '#1001',
+    email: 'a@example.com',
+    currency: 'USD',
+    created_at: '2026-09-06T02:00:00.000Z',
+    total_price: 129,
+    refunded_amount: 0,
+    financial_status: 'paid',
+    fulfillment_status: 'delivered',
+  },
+  {
+    id: 'ord_b',
+    name: '#1002',
+    email: 'b@example.com',
+    currency: 'USD',
+    created_at: '2026-09-05T02:00:00.000Z',
+    total_price: 89,
+    refunded_amount: 0,
+    financial_status: 'paid',
+    fulfillment_status: 'unfulfilled',
+  },
+]
+
+export class MemoryWorkstation implements WorkstationPort {
+  readonly tiles = new Map<string, string[]>()
+  readonly ranges = new Map<string, WorkstationRange>()
+  alertsOn = false
+
+  constructor(
+    private readonly deps: {
+      workspace_id: string
+      person_id: string
+      assignment_id: string
+      approvals: MemoryApprovals
+      now: () => string
+    },
+  ) {}
+
+  positions(): PositionSummary[] {
+    const id = this.deps.assignment_id
+    return [
+      {
+        position_id: id,
+        role_id: 'dtc.aftersales',
+        role_name: '独立站售后客服',
+        ranges: [{ kind: 'store', id: 'store_1' }],
+        ready: true,
+        missing_connectors: [],
+        tile_ids: this.tiles.get(id) ?? defaultTilesFor('dtc.aftersales'),
+        range: this.ranges.get(id) ?? 'yesterday',
+        show_tiles: true,
+      },
+    ]
+  }
+
+  items(): ApprovalItem[] {
+    return [...this.deps.approvals.items.values()].filter(
+      (i) => i.workspace_id === this.deps.workspace_id,
+    )
+  }
+
+  queryContext(
+    _actor: { workspace_id: string; person_id: string },
+    position: PositionSummary,
+    _range: WorkstationRange,
+  ): QueryContext {
+    return {
+      now: this.deps.now(),
+      tz_offset_minutes: 480,
+      base_currency: 'USD',
+      role_id: position.role_id,
+      position_id: position.position_id,
+      orders: WS_ORDERS,
+      approvals: this.items(),
+      sources: [
+        { id: 'shop', label: '店铺后台', connected: true },
+        { id: 'approvals', label: '工作队列', connected: true },
+        { id: 'ga4', label: 'GA4', connected: false },
+        { id: 'gsc', label: 'Search Console', connected: false },
+        { id: 'ads', label: '广告后台', connected: false },
+        { id: 'csat', label: '满意度调查', connected: false },
+      ],
+    }
+  }
+
+  systemCards(): {
+    alerts: ReturnType<typeof projectCard>[]
+    digest?: ReturnType<typeof projectCard>
+  } {
+    if (!this.alertsOn) return { alerts: [] }
+    const base = approvalItem({ id: 'sys_1', workspace_id: this.deps.workspace_id })
+    const card = projectCard(base, { now: this.deps.now(), position_id: this.deps.assignment_id })
+    return {
+      alerts: [{ ...card, kind: 'system_alert', title: '连接需要重新授权' }],
+      digest: { ...card, id: 'digest_1', kind: 'digest', title: '昨天的摘要' },
+    }
+  }
+
+  label(ref: { type: string; id: string }): string | undefined {
+    return ref.id === 'cus_anna' ? 'Anna Meyer' : undefined
+  }
+
+  setHomeTiles(
+    _actor: { workspace_id: string; person_id: string },
+    input: { position_id: string; tile_ids: string[]; range?: WorkstationRange },
+  ): PositionSummary {
+    this.tiles.set(input.position_id, input.tile_ids)
+    if (input.range !== undefined) this.ranges.set(input.position_id, input.range)
+    const found = this.positions()[0]
+    if (found === undefined) throw new Error('no position')
+    return found
   }
 }
 
@@ -366,6 +494,19 @@ const SCOPES = [
     ops: ['read', 'stage'] as Operation[],
     range: 'workspace' as Range,
     max_sensitivity: 'restricted' as Sensitivity,
+  },
+  // 工作台面板要读店铺侧的行；GA4 / Search Console 走 analytics 域
+  {
+    domain: 'order' as DataDomain,
+    ops: ['read'] as Operation[],
+    range: 'assigned' as Range,
+    max_sensitivity: 'internal' as Sensitivity,
+  },
+  {
+    domain: 'analytics' as DataDomain,
+    ops: ['read'] as Operation[],
+    range: 'assigned' as Range,
+    max_sensitivity: 'internal' as Sensitivity,
   },
 ]
 
@@ -576,6 +717,13 @@ export async function harness(
 
   const modules: ModulesPort = { health: () => MODULES }
   const traceScope = createAsyncTraceScope()
+  const workstation = new MemoryWorkstation({
+    workspace_id: workspace.id,
+    person_id: me.id,
+    assignment_id: assignment.id,
+    approvals,
+    now: () => clock.now(),
+  })
 
   const deps: GatewayDeps = {
     identity,
@@ -593,6 +741,7 @@ export async function harness(
     knowledge,
     skills,
     roles,
+    workstation,
     traceScope,
     sleep: async () => {
       clock.advance(10)
@@ -654,6 +803,7 @@ export async function harness(
     identity,
     approvals,
     thrower,
+    workstation,
     workspace_id: workspace.id,
     person_id: me.id,
     other_id: other.id,
@@ -664,5 +814,6 @@ export async function harness(
     item,
     get: (path, init) => call('GET', path, undefined, init),
     post: (path, body, init) => call('POST', path, body, init),
+    put: (path, body, init) => call('PUT', path, body, init),
   }
 }
