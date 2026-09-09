@@ -57,6 +57,7 @@ export interface ScheduleTask
     | 'last_fire_at'
     | 'last_result'
     | 'approval'
+    | 'lease'
   > {
   /** 下一次什么时候（`after_event` 与已结束的任务没有）。 */
   next_fire_at?: Iso8601 | undefined

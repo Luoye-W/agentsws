@@ -106,6 +106,23 @@ export type KnownEventType =
   | 'invitation.created'
   | 'invitation.accepted'
   | 'membership.removed'
+  // schedule / workflow (25 §5, WP27)
+  | 'schedule.created'
+  | 'schedule.updated'
+  | 'schedule.fired'
+  | 'schedule.failed'
+  | 'schedule.misfired'
+  | 'schedule.paused'
+  | 'schedule.resumed'
+  | 'schedule.deleted'
+  | 'workflow.started'
+  | 'workflow.step.completed'
+  | 'workflow.step.failed'
+  | 'workflow.waiting'
+  | 'workflow.failed'
+  | 'workflow.compensated'
+  | 'workflow.done'
+  | 'workflow.cancelled'
   // privacy (21)
   | 'privacy.erased'
   // meetings (37 §4)：payload 只有摘要与条数，转写与音频永不进日志
