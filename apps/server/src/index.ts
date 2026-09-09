@@ -53,6 +53,14 @@ export {
 } from './models.js'
 export { createOrg, type OrgAssembly, type OrgOptions } from './org.js'
 export {
+  createReconcileGuard,
+  RECONCILE_HALT_REASON,
+  type ReconcileGuard,
+  type ReconcileGuardOptions,
+  type ReconcileReport,
+  type ReconcileState,
+} from './reconcile.js'
+export {
   createRuntime,
   hasModelProvider,
   type MatterRecordSource,

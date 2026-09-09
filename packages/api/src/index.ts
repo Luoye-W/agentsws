@@ -88,6 +88,7 @@ export type {
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
+export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export type {
   MeetingIngestInput,
   MeetingProcessOutcome,

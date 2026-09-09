@@ -43,6 +43,7 @@ import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { AskPort } from './routes/ask.js'
 import type { ConnectionsPort } from './routes/connections.js'
+import type { ReconcilePort } from './routes/health.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
 import type { OrgPort } from './routes/org.js'
@@ -400,6 +401,11 @@ export interface GatewayDeps {
   ask?: AskPort
   /** 25 定时与流程面；没装调度器时 `/v1/schedules` 与 `/v1/workflows` 回 not_implemented。 */
   schedules?: SchedulePort
+  /**
+   * WP34：15 §5.8 对账状态；`GET /v1/health` 的 `reconcile` 那一格。
+   * 没装配就不出这一格（不要用 `done` 冒充「没装」）。
+   */
+  reconcile?: ReconcilePort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>

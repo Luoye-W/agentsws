@@ -60,6 +60,11 @@ import { createApprovalDirectory } from './housekeeping.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOrg, type OrgAssembly } from './org.js'
+import {
+  createReconcileGuard,
+  type ReconcileGuard,
+  type ReconcileGuardOptions,
+} from './reconcile.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
@@ -185,6 +190,13 @@ export interface ServerOptions {
    * （测试与模拟回路自己调 `scheduler.runDue`）。
    */
   scheduleIntervalMs?: number
+  /**
+   * 15 §5.8 对账时的「这条到底写进去没有」回查。
+   *
+   * 缺省问后端自己（`MemoryBackend.verify`）。真接了平台之后这里换成按
+   * `execution_id` / 平台对象的查询。答不上来回 `undefined`——**不许猜**。
+   */
+  verifyChange?: ReconcileGuardOptions['verify']
 }
 
 export interface Bootstrap {
@@ -218,8 +230,15 @@ export interface Server {
   org: OrgAssembly
   /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
   secrets: SecretStore
-  /** 25 定时与流程：调度器 + 流程引擎 + 七个消费者的登记。 */
+  /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
+  /**
+   * 15 §5.8「备份恢复后先跑对账再放开出站」。
+   *
+   * `createServer` 里只 `engage()`（该挂档就挂上，不做 IO）；真正跑对账在
+   * `listen()` 里，或者由调用方自己 `await server.reconcile.run()`。
+   */
+  reconcile: ReconcileGuard
   /** 17 §4 运行时适配器 + `startRun`；`startRun: false` 时没有。 */
   runtime?: RuntimeAssembly
   identity: LocalIdentityService
@@ -591,6 +610,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   })
 
+  // ── 15 §5.8：备份恢复后先对账再放开出站（39 待办 B）─────────────────
+  // 这一步要**排在网关之前**：`/v1/health` 要端出 reconcile 那一格；
+  // 而 `engage()` 里挂的 outbound 档要在进程开始接活之前就生效。
+  const reconcile = createReconcileGuard({
+    clock,
+    halt: kernel.halt,
+    txn,
+    workspace_id: workspace.id,
+    appendEvent,
+    verify: options.verifyChange ?? ((change) => backend.verify(change)),
+  })
+  reconcile.engage()
+
   const rolesPort: RolesPort = {
     can: (id, domain, op, request) => roles.can(id, domain, op, request),
     effectiveConfig: (id) => roles.effectiveConfig(id),
@@ -658,6 +690,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     eventLog: eventLogPort,
     modules: kernel.modules,
+    reconcile,
     approvals,
     changes: txn.ledger,
     guardrails,
@@ -780,6 +813,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     org,
     secrets,
     schedule,
+    reconcile,
     ...(runtime === undefined ? {} : { runtime }),
     identity,
     backend,
@@ -796,6 +830,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
       })
       httpServer = started
+      // 15 §5.8：接活之前先把账对完。`engage()` 已经在装配时把出站闸拉下来了，
+      // 这里是慢的那一半（要查外部系统）；查不清的留成人工对账项，出站保持停着。
+      await reconcile.run()
       // 25 §4：进程真的起来了才开始巡检（测试里 `scheduleIntervalMs: 0` 关掉）
       schedule.start()
       const address = started.address()
