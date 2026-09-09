@@ -28,6 +28,7 @@ import {
   type StoreBackend,
 } from './backend.js'
 import { effectiveConfig as effectiveConfigPure, riskClassOf } from './effective.js'
+import { assertTighterOverrides } from './overrides.js'
 import { compilePolicies as compilePoliciesPure, createPolicyEngine } from './policy.js'
 import { applyPosition as applyPositionPure, buildAssignment } from './position.js'
 import {
@@ -62,6 +63,13 @@ export interface CreateAssignmentInput {
   role_version?: string
 }
 
+/** 改一条已有分配：换范围、收紧额度。人与职责不给改——换职责就是另一条分配。 */
+export interface UpdateAssignmentInput {
+  ranges?: RangeRef[]
+  /** 05 §0 不变量 2：只能更紧；想放宽直接 `invalid_input`，不静默丢掉。 */
+  mandate_overrides?: Record<string, Partial<Mandate>>
+}
+
 export interface RevokeInput {
   /** 接手人（05 §3）；没有接手人时按 Role.handover.fallback 兜底，由调用方落地。 */
   handover_to?: PersonId
@@ -85,6 +93,8 @@ export interface AssignmentApi {
   ): Assignment[]
   get(id: AssignmentId): Assignment | undefined
   require(id: AssignmentId): Assignment
+  /** 改范围 / 收紧额度；已撤销的不给改。 */
+  update(id: AssignmentId, input: UpdateAssignmentInput): Assignment
   revoke(id: AssignmentId, input?: RevokeInput): Assignment
   listByPerson(person: PersonId, filter?: Omit<AssignmentFilter, 'person_id'>): Assignment[]
   listByRole(role: RoleId, filter?: Omit<AssignmentFilter, 'role_id'>): Assignment[]
@@ -218,6 +228,21 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       const found = backend.getAssignment(id)
       if (!found) throw new RoleError('not_found', `assignment ${id} not found`)
       return found
+    },
+    update(id, input) {
+      const found = assignments.require(id)
+      if (found.revoked_at)
+        throw new RoleError('conflict', `分配 ${id} 已在 ${found.revoked_at} 撤销，不能再改`)
+      const role = roleFor(found)
+      const overrides = input.mandate_overrides
+      if (overrides !== undefined)
+        assertTighterOverrides(role, backend.getPolicy(found.workspace_id), overrides)
+      const next: Assignment = {
+        ...found,
+        ...(input.ranges === undefined ? {} : { ranges: [...input.ranges] }),
+        ...(overrides === undefined ? {} : { mandate_overrides: overrides }),
+      }
+      return persist(next)
     },
     revoke(id, input) {
       const found = assignments.require(id)

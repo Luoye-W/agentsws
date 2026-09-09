@@ -511,6 +511,36 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   })
 
   /**
+   * WP28 交付 D：合成公司的**三个人都真的是成员**。
+   *
+   * 在这之前 demo 里只有 owner 一个身份，职责库里却有三个人的分配——「公司」页上
+   * 就会出现"岗位有人做，但成员只有一个"这种自相矛盾。这里把另外两位也建成 Person
+   * 并加进工作区；他们的分配本来就在 pack 的 assignments.yml 里，不用再造一遍。
+   */
+  for (const person of pack.people) {
+    if (person.id === owner.id) continue
+    const created = await server.identity.createPerson({
+      id: person.id,
+      email: person.email,
+      name: person.name,
+    })
+    const ranges = new Map<
+      string,
+      { kind: 'store' | 'department' | 'account' | 'market'; id: string }
+    >()
+    for (const assignment of world.roles.assignments.listByPerson(created.id, {
+      workspace_id: world.workspace_id,
+    }))
+      for (const range of assignment.ranges) ranges.set(`${range.kind}:${range.id}`, range)
+    await server.identity.addMember({
+      workspace_id: world.workspace_id,
+      person_id: created.id,
+      role: 'member',
+      ranges: [...ranges.values()],
+    })
+  }
+
+  /**
    * 15 §5「通过 ≠ 施行」：批准只是写下批准，施行由执行器发起，而且有 2 分钟取消窗口。
    * demo 里时间是合成的，所以每次 drain 先把合成时钟往前推 3 分钟——只在真的有东西要施行时推，
    * 不会把「昨天」推成「今天」。

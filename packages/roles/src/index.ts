@@ -28,6 +28,7 @@ export {
   parsePosition,
   parseRole,
 } from './load.js'
+export { assertTighterOverrides } from './overrides.js'
 export type { PolicyEngine } from './policy.js'
 export { compilePolicies, createPolicyEngine, rangeCovers, sensAtMost } from './policy.js'
 export type {
@@ -45,6 +46,7 @@ export type {
   RoleRegistry,
   RoleStore,
   RoleStoreOptions,
+  UpdateAssignmentInput,
 } from './store.js'
 export { createRoleStore } from './store.js'
 export type {

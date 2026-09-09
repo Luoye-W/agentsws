@@ -8,21 +8,44 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/app-shell'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ensureSession, getHome, getPositions, setAssignment, setHomeTiles } from '@/lib/api'
+import {
+  ensureSession,
+  getHome,
+  getPositions,
+  NeedsLoginError,
+  setAssignment,
+  setHomeTiles,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { CalendarPage } from '@/pages/calendar'
 import { ConnectionsPage } from '@/pages/connections'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 import { KnowledgePage } from '@/pages/knowledge'
+import { LoginPage } from '@/pages/login'
 import { MatterPage } from '@/pages/matter'
 import { MeetingPage } from '@/pages/meeting'
 import { MeetingsPage } from '@/pages/meetings'
+import { OrgPage } from '@/pages/org'
 import { PositionPage } from '@/pages/position'
 import { SettingsPage } from '@/pages/settings'
 import { TodosPage } from '@/pages/todos'
 
+/**
+ * 登录与接受邀请这两条路不需要会话（WP28）：同事点着邀请链接进来时，
+ * 他在这个工作区里还什么都不是——先接受、再登录，然后才谈得上岗位与卡片。
+ */
 export function App(): ReactNode {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/invite/:token" element={<LoginPage />} />
+      <Route path="*" element={<Workspace />} />
+    </Routes>
+  )
+}
+
+function Workspace(): ReactNode {
   const { t, selectPosition, position } = useApp()
   const client = useQueryClient()
 
@@ -61,6 +84,8 @@ export function App(): ReactNode {
     },
   })
 
+  // WP28：没有会话不是错误，是"该登录了"——工作区现在可能不止一个人
+  if (session.error instanceof NeedsLoginError) return <LoginPage />
   if (session.error !== null) {
     return (
       <div className="p-6">
@@ -98,6 +123,8 @@ export function App(): ReactNode {
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
+        {/* WP28 制度面：岗位 / 成员 / 职责 */}
+        <Route path="/org" element={<OrgPage />} />
         {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route

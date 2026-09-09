@@ -44,6 +44,7 @@ export {
   modelIdOf,
   STUB_REF,
 } from './models.js'
+export { createOrg, type OrgAssembly, type OrgOptions } from './org.js'
 export {
   createRuntime,
   hasModelProvider,

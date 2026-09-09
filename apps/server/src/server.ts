@@ -57,6 +57,7 @@ import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
+import { createOrg, type OrgAssembly } from './org.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import { createSecretStore, type SecretStore } from './secret-store.js'
 import type { BrokerFetch } from './shopify-broker.js'
@@ -184,6 +185,8 @@ export interface Server {
   connections: ConnectionsAssembly
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
   modelSettings: ModelsAssembly
+  /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
+  org: OrgAssembly
   /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
   secrets: SecretStore
   /** 17 §4 运行时适配器 + `startRun`；`startRun: false` 时没有。 */
@@ -443,6 +446,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     listAssignments: (person_id, filter) => roles.assignments.listByPerson(person_id, filter ?? {}),
   }
 
+  // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请（业务全在 ./org.ts，这里只装配）
+  const org = createOrg({
+    clock,
+    identity,
+    roles,
+    approvals,
+    workspace_id: workspace.id,
+    appendEvent,
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+
   const knowledgePort: KnowledgePort = {
     search: (q) => knowledge.retrieval.search(q),
     cards: (filter, actor) => knowledge.store.list(filter, actor),
@@ -501,6 +515,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     meetings: meetings.port,
     connections: connections.port,
     models: modelSettings.port,
+    org: org.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
     ask: createAskPort({
       models,
@@ -579,6 +594,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     meetings,
     connections,
     modelSettings,
+    org,
     secrets,
     ...(runtime === undefined ? {} : { runtime }),
     identity,
@@ -627,6 +643,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (options.mount === undefined) roles.close()
       meetings.close()
       connections.close()
+      org.close()
       secrets.close()
       txnStore?.close()
       workStore?.close()

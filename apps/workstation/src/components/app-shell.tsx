@@ -71,6 +71,10 @@ export function AppShell({
           <NavLink to="/knowledge" className={navClass}>
             {t('nav.knowledge')}
           </NavLink>
+          {/* WP28 制度面：岗位 / 成员 / 职责（谁在做什么、能做到哪一步） */}
+          <NavLink to="/org" className={navClass}>
+            {t('nav.org')}
+          </NavLink>
           <NavLink to="/connections" className={navClass}>
             {t('nav.connections')}
           </NavLink>
