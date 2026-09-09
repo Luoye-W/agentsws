@@ -7,6 +7,11 @@
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, MemoryBackend } from './backend.js'
 export {
+  CONNECT_URL_ENV,
+  connectBaseUrl,
+  DEFAULT_CONNECT_URL,
+} from './connect-url.js'
+export {
   createRuntime,
   hasModelProvider,
   type MatterRecordSource,

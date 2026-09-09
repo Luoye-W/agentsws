@@ -7,6 +7,7 @@ import type { MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import { ApiError, errorBody, normalizeError } from './errors.js'
 import { DEFAULT_IDEMPOTENCY_TTL_MS, fingerprint, MemoryIdempotencyStore } from './idempotency.js'
+import { readCookie, SESSION_COOKIE } from './identity.js'
 import { buildOpenApi, type OpenApiDocument } from './openapi.js'
 import { TokenBucketLimiter } from './rate-limit.js'
 import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
@@ -15,6 +16,7 @@ import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { changeRoutes } from './routes/changes.js'
 import { eventRoutes } from './routes/events.js'
+import { haltRoutes } from './routes/halt.js'
 import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
@@ -40,6 +42,8 @@ export const OPENAPI_PATH = '/openapi.json'
 export function collectRoutes(): Route[] {
   return [
     ...healthRoutes(),
+    // 28 §1 运行期急停（13 §5 托盘的「暂停」）；与 /v1/health 一样不受 all 急停拦截
+    ...haltRoutes(),
     ...identityRoutes(),
     // batch 必须排在 :id 之前，否则 `/v1/approvals/batch/decide` 会被当成 id=batch
     ...approvalRoutes(),
@@ -95,11 +99,24 @@ export function createGateway(deps: GatewayDeps): Gateway {
     await next()
   }
 
+  const cookieName = deps.options?.sessionCookieName ?? SESSION_COOKIE
+
+  /**
+   * 20 §3 / 13 §5：**cookie 或 bearer，二选一**。
+   *
+   * 浏览器（工作台、桌面壳窗口）靠 HttpOnly + SameSite=Strict 的会话 cookie；
+   * SDK / CLI / 插件靠 `Authorization: Bearer`。两个都在时以 bearer 为准——
+   * 显式给的凭据优先于浏览器自动带上的那个。
+   */
   const auth: MiddlewareHandler<GatewayEnv> = async (c, next) => {
     const header = c.req.header('Authorization')
-    if (header === undefined || header.trim() === '')
-      throw new ApiError('unauthenticated', '缺少 Authorization: Bearer <token>')
-    const principal = await deps.identity.authenticate(header)
+    const cookie =
+      header === undefined || header.trim() === ''
+        ? readCookie(c.req.header('Cookie'), cookieName)
+        : undefined
+    if ((header === undefined || header.trim() === '') && cookie === undefined)
+      throw new ApiError('unauthenticated', '缺少 Authorization: Bearer <token> 或会话 cookie')
+    const principal = await deps.identity.authenticate(header ?? (cookie as string))
     if (!principal) throw new ApiError('unauthenticated', '凭据无效或已过期')
     // 20 §3：所有 token 绑 workspace_id；跨工作区一律显式切换。
     const explicit = c.req.header('X-Workspace')?.trim()
@@ -200,8 +217,8 @@ export function createGateway(deps: GatewayDeps): Gateway {
 
   for (const { spec, handler } of routes) {
     const chain: MiddlewareHandler<GatewayEnv>[] = []
-    // /v1/health 是诊断入口：急停时也必须能看（28 §4 用例 2 / 3）
-    if (spec.path !== '/v1/health') chain.push(haltAll)
+    // /v1/health 是诊断入口、/v1/halt 是解停入口：急停时这两条也必须能用（28 §4 用例 2 / 3）
+    if (spec.path !== '/v1/health' && spec.path !== '/v1/halt') chain.push(haltAll)
     if (spec.auth === 'bearer') chain.push(auth, rateLimit)
     if (spec.outbound) chain.push(haltOutbound)
     if (spec.assignment) chain.push(bindAssignment(spec))

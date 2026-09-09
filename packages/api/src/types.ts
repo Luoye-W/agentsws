@@ -67,6 +67,11 @@ export interface EventLogPort {
     run_id?: RunId
     limit?: number
   }): AsyncIterable<EventEnvelope>
+  /**
+   * 网关自己要记的那几条（`halt.changed`）。可选：只读投影不实现它，
+   * 那就只是少一条日志，路由照常工作。
+   */
+  append?(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
 }
 
 export interface ModulesPort {
@@ -230,6 +235,21 @@ export interface GatewayOptions {
    * 托管档必须置 false——那时 token 只能经邮件投递，不进 HTTP 响应（20 §3）。
    */
   exposeMagicLinkToken?: boolean
+  /**
+   * 13 §5：进程身份进 `/v1/health`（桌面壳靠它认出「这个 sidecar 就是我起的那个」）。
+   * `port` 是取值函数——端口是 listen 之后才知道的。
+   */
+  instance?: { pid: number; port(): number | undefined }
+  /**
+   * 13 §5 浏览器会话：桌面壳与服务进程共享的一次性会话密钥（`AGENTSWS_SESSION_KEY`）。
+   * 给了就开 `POST /v1/auth/session`：拿密钥换一个 HttpOnly + SameSite=Strict cookie，
+   * 之后浏览器靠 cookie、SDK 靠 bearer，**token 一次都不进 URL**。
+   */
+  sessionKey?: string
+  /** 会话 cookie 名，默认 `agentsws_session`。 */
+  sessionCookieName?: string
+  /** 本地单机档只有一个人；换会话时不必让调用方报邮箱。 */
+  sessionOwnerEmail?: string
 }
 
 export interface GatewayDeps {

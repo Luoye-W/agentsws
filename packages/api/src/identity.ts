@@ -61,6 +61,48 @@ const DEFAULT_SESSION_TTL = 12 * 60 * 60 * 1000
 
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex')
 
+/** 13 §5 会话 cookie 的默认名字。 */
+export const SESSION_COOKIE = 'agentsws_session'
+
+/**
+ * `Cookie:` 头 → 某个 cookie 的值。只认最简单那种形态（`k=v; k2=v2`），
+ * 不做属性解析——服务端自己签的 cookie 不会有奇怪的编码。
+ */
+export function readCookie(header: string | undefined, name: string): string | undefined {
+  if (header === undefined) return undefined
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=')
+    if (eq < 0) continue
+    if (part.slice(0, eq).trim() !== name) continue
+    return decodeURIComponent(part.slice(eq + 1).trim())
+  }
+  return undefined
+}
+
+/**
+ * HttpOnly + SameSite=Strict + Path=/ 的会话 cookie。
+ *
+ * 没有 `Secure`：本地档只监听 127.0.0.1 的 http，加了 `Secure` 浏览器会直接丢掉它。
+ * `SameSite=Strict` 是这里真正的防线——任何第三方站点发起的请求都带不上它。
+ */
+export function sessionCookie(
+  name: string,
+  value: string,
+  options: { maxAgeSeconds?: number } = {},
+): string {
+  const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Strict']
+  parts.push(`Max-Age=${String(options.maxAgeSeconds ?? 0)}`)
+  return parts.join('; ')
+}
+
+/** 定时安全比较（长度不同直接 false，不泄漏长度之外的东西）。 */
+export function secretEquals(a: string, b: string): boolean {
+  const x = Buffer.from(a, 'utf8')
+  const y = Buffer.from(b, 'utf8')
+  if (x.length !== y.length) return false
+  return timingSafeEqual(x, y)
+}
+
 function constantTimeEqual(a: string, b: string): boolean {
   const x = Buffer.from(a, 'utf8')
   const y = Buffer.from(b, 'utf8')

@@ -53,6 +53,7 @@ import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
+import { connectBaseUrl } from './connect-url.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import { mountStatic } from './static.js'
@@ -128,6 +129,8 @@ export interface Bootstrap {
 
 export interface Server {
   gateway: Gateway
+  /** OpenConnector 本地 runtime 的地址（`AGENTSWS_CONNECT_URL`；全仓唯一真源）。 */
+  connectUrl: string
   kernel: Kernel
   data: SqliteDataStore
   roles: RoleStore
@@ -191,6 +194,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const dbDir = options.dbDir
   if (dbDir !== undefined) mkdirSync(dbDir, { recursive: true })
   const file = (name: string): string => (dbDir === undefined ? ':memory:' : join(dbDir, name))
+
+  // 08 / 18：OpenConnector 的地址只在这一处解析（桌面壳读同名环境变量）
+  const connectUrl = connectBaseUrl(env)
 
   const kernel = await createKernel({ dbPath: file('events.db'), clock, random, env })
   const traceScope = createAsyncTraceScope()
@@ -405,12 +411,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
 
+  // 21 §1：读是合一的那一条（服务进程 + 接进来的世界）；写只写自己的
+  const merged = mergeEventLogs(kernel.eventLog, mount?.eventLog)
+  const eventLogPort: EventLogPort = {
+    read: (filter) => merged.read(filter),
+    append: appendEvent,
+  }
+
+  // 13 §5 浏览器会话：桌面壳生成、经环境变量交给服务进程；不设就没有 cookie 那条路
+  const sessionKey = env.AGENTSWS_SESSION_KEY?.trim() === '' ? undefined : env.AGENTSWS_SESSION_KEY
+  let boundPort: number | undefined
+
   const deps: GatewayDeps = {
     identity,
     halt: kernel.halt,
     trace: kernel.trace,
     clock,
-    eventLog: mergeEventLogs(kernel.eventLog, mount?.eventLog),
+    eventLog: eventLogPort,
     modules: kernel.modules,
     approvals,
     changes: txn.ledger,
@@ -458,6 +475,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(idempotencyStore === undefined ? {} : { idempotencyStore }),
       // 本地单机档：一次性登录 token 直接回给调用方，工作台才能自动登录（20 §3）
       exposeMagicLinkToken: true,
+      // 13 §5：桌面壳靠 pid / port 认出「这个 sidecar 就是我起的那个」
+      instance: { pid: process.pid, port: () => boundPort },
+      // 13 §5：配了会话密钥就开 cookie 那条路（`POST /v1/auth/session`）
+      ...(sessionKey === undefined ? {} : { sessionKey }),
+      sessionOwnerEmail: person.email,
     },
   }
 
@@ -474,6 +496,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const server: Server = {
     gateway,
+    connectUrl,
     kernel,
     data,
     roles,
@@ -501,6 +524,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       httpServer = started
       const address = started.address()
       const bound = typeof address === 'object' && address !== null ? address.port : wanted
+      boundPort = bound
       const url = `http://${HOST}:${bound}`
       server.url = url
       if (options.quiet !== true) {
