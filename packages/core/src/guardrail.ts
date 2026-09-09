@@ -18,6 +18,7 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   reship: 'medium',
   address_change: 'medium',
   discount_code: 'low',
+  goodwill_credit: 'medium',
   price_change: 'medium',
   listing_edit: 'low',
   publish_product: 'medium',

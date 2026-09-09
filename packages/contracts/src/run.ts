@@ -32,6 +32,8 @@ export interface ContextItem {
     | 'prefetch'
     | 'app_events'
     | 'policy'
+    /** WP17：已确认的业务边界（优先级高于爬来的政策页） */
+    | 'boundary'
   source_ref: ObjectRef | string
   sensitivity: Sensitivity
   content: unknown
@@ -111,7 +113,7 @@ export type RunEvent =
       provenance_added?: ObjectRef[]
     }
   | { type: 'change.staged'; change_id: string }
-  | { type: 'proposal.created'; approval_item_id: string; kind: string }
+  | { type: 'proposal.created'; approval_item_id: string; kind: string; dedupe_key?: string }
   | { type: 'ui'; component: string; payload: unknown }
   | { type: 'ui.partial'; component: string; payload: unknown }
   | { type: 'progress'; step: string; note?: string }

@@ -17,6 +17,8 @@ export type ChangeKind =
   | 'reship'
   | 'address_change'
   | 'discount_code'
+  /** WP17：安抚补偿（店铺余额 / 补发优惠券），与营销发码分开计额度 */
+  | 'goodwill_credit'
   | 'price_change'
   | 'listing_edit'
   | 'publish_product'

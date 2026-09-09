@@ -6,6 +6,7 @@ import type {
   ObjectRef,
   PersonId,
   RangeRef,
+  RiskClass,
   RoleId,
   RunId,
   WorkspaceId,
@@ -28,6 +29,8 @@ export type ApprovalKind =
   | 'upstream_upgrade'
   | 'join_mapping'
   | 'dev_handoff_result'
+  /** WP17：本条对话的一次性缺资料提问（去重键带 conversation）；与 policy_change（一答定终身）分开 */
+  | 'ai_question'
 
 export type ApprovalState =
   | 'proposed'
@@ -167,6 +170,12 @@ export interface ApprovalItem<P = unknown> {
   }
   priority: 'immediate' | 'queue' | 'digest'
   due_at?: Iso8601
+  /** 36 §2：选择题卡的选项；有则 approve 必须带 selected_option_id（否则 invalid_input / details.reason='OPTION_REQUIRED'） */
+  options?: { id: string; label: string }[]
+  /** 卡片档位用；真源仍在变更账本（15） */
+  risk_class?: RiskClass
+  /** 稍后（snooze）记账；KefuAgent deck 同义 */
+  snoozed?: { count: number; until?: Iso8601 }
   execution_snapshot?: ExecutionSnapshot
   /** 快照分量来源与门禁输入（09-09 WP4） */
   execution_context?: {
@@ -196,6 +205,12 @@ export interface DecideInput {
   edited_payload?: unknown
   redirect_to?: { person_id?: PersonId; role_id?: RoleId }
   defer_until?: Iso8601
+  /** 36 §2：选择题卡的答案 */
+  selected_option_id?: string
+  /** 36 §2「指导」：先选作用域再一句话；作用域决定落到本条回复 / 技能 overlay 提案 / 职责策略变更 */
+  instruction?: { scope: 'single_reply' | 'similar_cases' | 'global_rule'; text: string }
+  /** 乐观并发：与 ApprovalItem.revision 比对 */
+  version?: number
   via: Decision['via']
 }
 

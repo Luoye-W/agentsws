@@ -1,4 +1,4 @@
-import type { PersonId, RangeRef } from './common.js'
+import type { DataDomain, PersonId, RangeRef } from './common.js'
 
 /** 29 积木：组件只来自注册表；查询以本人身份在服务端执行；数字不经模型手。 */
 export type Placement = 'queue' | 'alert' | 'focus' | 'digest' | 'role_view'
@@ -16,6 +16,9 @@ export interface NamedQuery {
   service?: string
   returns: unknown
   acl: 'actor'
+  /** 29 §2「校验 actor 对 query 的权限」要知道查的是哪个数据域 / 数据源 */
+  domain?: DataDomain
+  source?: 'shop' | 'ga4' | 'gsc' | 'ads' | 'internal'
 }
 export interface Block {
   id: string

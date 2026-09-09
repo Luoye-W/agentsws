@@ -72,6 +72,9 @@ export interface HomeBlockSpec {
   default_order: number
   pinnable: boolean
   adaptive: boolean
+  /** 36 §3：focus 块限 stat_tile，数字块要知道怎么格式化与默认时间窗 */
+  format?: 'money' | 'count' | 'percent' | 'ratio'
+  range_default?: 'yesterday' | 'last_7d'
 }
 
 /** 05 §1.7 通知路由 */
