@@ -98,6 +98,8 @@ export class FakeEventLog implements EventLogPort {
   read(filter: {
     workspace_id: string
     since?: string
+    since_at?: string
+    until_at?: string
     types?: string[]
     run_id?: string
     limit?: number
@@ -107,6 +109,9 @@ export class FakeEventLog implements EventLogPort {
         (e) =>
           e.workspace_id === filter.workspace_id &&
           (filter.since === undefined || e.id > filter.since) &&
+          // WP35：时间闭区间，与 ulid 游标同给取交集
+          (filter.since_at === undefined || e.at >= filter.since_at) &&
+          (filter.until_at === undefined || e.at <= filter.until_at) &&
           (filter.types === undefined || filter.types.includes(e.type)) &&
           (filter.run_id === undefined || e.correlation.run_id === filter.run_id),
       )

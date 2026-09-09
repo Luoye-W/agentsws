@@ -787,10 +787,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // ⑩ 受控原始材料区的保留期（39 待办 H）：两个库各清各的，表不共享（35 §2）
   registerRawPrune(schedule.scheduler, {
     clock,
-    // 保留天数进策略层：`global_caps.raw_retention_days`，缺省 90 天
-    retentionDays: () =>
-      roles.policies.get(workspace.id)?.global_caps?.raw_retention_days ??
-      DEFAULT_RAW_RETENTION_DAYS,
+    // 保留天数进策略层：显式的 `raw_retention_days`（WP35 进契约），
+    // 回落 WP34 用过的 `global_caps.raw_retention_days`，最后才是默认的 90 天
+    retentionDays: () => {
+      const policy = roles.policies.get(workspace.id)
+      return (
+        policy?.raw_retention_days ??
+        policy?.global_caps?.raw_retention_days ??
+        DEFAULT_RAW_RETENTION_DAYS
+      )
+    },
     channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
     meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
   })

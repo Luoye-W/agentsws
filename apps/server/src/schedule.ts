@@ -90,7 +90,7 @@ export const HANDLERS = {
 export const HOUSEKEEPING_INTERVAL_MS = 60_000
 /** 邮箱轮询的节奏：2 分钟一轮（IDLE 后置，见 `channels.ts`）。 */
 export const MAIL_POLL_INTERVAL_MS = 2 * 60_000
-/** 保留期默认值：90 天。策略层 `global_caps.raw_retention_days` 可改（15 §3.1 同一条路）。 */
+/** 保留期默认值：90 天。策略层 `WorkspacePolicy.raw_retention_days` 可改（回落 `global_caps` 同名键）。 */
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 
 /** 令牌到期前多久换新的（25 交付：Shopify 客户端凭据 24 小时到期）。 */

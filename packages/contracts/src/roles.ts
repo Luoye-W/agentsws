@@ -143,6 +143,14 @@ export interface WorkspacePolicy {
   global_caps: Record<string, number>
   sensitivity_overrides?: Record<string, Sensitivity>
   separation_of_duties?: ActionId[]
+  /**
+   * 18 §2.1 受控原始材料区保留多少天（缺省 90）。
+   *
+   * WP34 先把它塞在 `global_caps.raw_retention_days` 里——但 `global_caps` 是**额度**
+   * （15 §3.1「可松可紧」的那一组数），保留期不是额度。WP35 给它一个显式字段；
+   * 读的一侧先看这里，没有再回落 `global_caps.raw_retention_days`，最后才是默认值。
+   */
+  raw_retention_days?: number
 }
 
 /** 05 §2 岗位模板：只在分配那一刻展开成一组 Assignment */
