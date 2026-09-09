@@ -10,13 +10,7 @@
  */
 import { createHash } from 'node:crypto'
 import type { AskActor, AskAnswer, AskPort } from '@agentsws/api'
-import type {
-  ApprovalItem,
-  ChatMessage,
-  Clock,
-  EventEnvelope,
-  ObjectRef,
-} from '@agentsws/contracts'
+import type { ApprovalItem, ChatMessage, EventEnvelope, ObjectRef } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
@@ -35,7 +29,6 @@ const SYSTEM = [
 ].join('\n')
 
 export interface AskOptions {
-  clock: Clock
   models: ModelGatewayApi
   work?: Work
   roles: RoleStore

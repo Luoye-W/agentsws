@@ -64,6 +64,23 @@ import {
   type WorkstationDataSource,
 } from './workstation.js'
 
+/** 战报要数「今天处理掉的」，所以取队列时状态放全（等待类计数在 work 端自己过滤）。 */
+const QUEUE_STATES = [
+  'pending',
+  'in_review',
+  'approved',
+  'approved_edited',
+  'auto_approved',
+  'rejected',
+  'deferred',
+  'applying',
+  'applied',
+  'apply_failed',
+  'blocked',
+  'expired',
+  'withdrawn',
+] as const
+
 export const DEFAULT_PORT = 4317
 export const HOST = '127.0.0.1'
 /** v1 自带的职责定义（roles 包 bundled）。 */
@@ -438,7 +455,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     meetings: meetings.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
     ask: createAskPort({
-      clock,
       models,
       work,
       roles,
@@ -459,12 +475,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       work,
       // 37 §2 表第三行：会议一定有时间，一定上日历
       meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
-      // 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）
+      /**
+       * 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）。
+       *
+       * 状态要全的——`queue` 默认只回 pending / in_review，而今日战报数的正是
+       * 「今天**已经**处理掉的」（37 §1 第 9 行）。等待类的计数在 work 端自己过滤，
+       * 所以这里放全不会把「还有几张等你定」算多。
+       */
       approvals: (actor) =>
         approvals.queue({
           workspace_id: actor.workspace_id,
           person_id: actor.person_id,
           lane: 'mine',
+          state: [...QUEUE_STATES],
         }) as Promise<ApprovalItem[]>,
       orders: () => workData.orders(),
       label: (ref) => workData.label(ref),

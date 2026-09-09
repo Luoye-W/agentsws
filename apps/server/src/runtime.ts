@@ -24,7 +24,6 @@ import type {
   ContextItem,
   EventEnvelope,
   Matter,
-  MatterId,
   ObjectRef,
   PersonId,
   RunEvent,
@@ -491,5 +490,3 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     startRun,
   }
 }
-
-export type { MatterId }
