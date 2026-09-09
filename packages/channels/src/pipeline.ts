@@ -16,7 +16,9 @@ import { EXTERNAL_FENCE, sha256 } from '@agentsws/core'
 import { ChannelError } from './errors.js'
 import {
   backoffMs,
+  DEFAULT_LEASE_MS,
   DEFAULT_RETRY,
+  type DeadLetterRecord,
   laneOf,
   MemoryQueueStore,
   type QueueItem,
@@ -55,7 +57,8 @@ export function defaultRoute(input: RouteInput): RouteResult {
   return { confidence: 0 }
 }
 
-interface Seen {
+/** 去重表里一条：什么时候见过、见过的是哪条事件。 */
+export interface Seen {
   at_ms: number
   event: InboundEvent
 }
@@ -104,6 +107,8 @@ export interface ChannelInboundPipelineOptions {
   /** 去重窗口，默认 24h */
   dedupe_window_ms?: number
   queue?: QueueStore
+  /** 领取一条入站消息的租约时长；领取方崩了，过了它这条自动回到可领取状态 */
+  lease_ms?: number
   retry?: Partial<RetryPolicy>
   raw_secret_policy?: 'redact' | 'keep'
   /** 解析不到发件人身份就直接进死信（默认 false：陌生客户首封邮件是常态） */
@@ -140,10 +145,10 @@ export class ChannelInboundPipeline implements InboundPipeline {
   private readonly windowMs: number
   private readonly queue: QueueStore
   private readonly retry: RetryPolicy
+  private readonly leaseMs: number
   private readonly rawSecretPolicy: 'redact' | 'keep'
   private readonly deadLetterOnUnresolvedActor: boolean
   private readonly maxTextChars: number | undefined
-  private readonly dead: InboundEvent[] = []
   private readonly accepted: InboundEvent[] = []
   private seq = 0
 
@@ -161,6 +166,7 @@ export class ChannelInboundPipeline implements InboundPipeline {
     this.windowMs = opts.dedupe_window_ms ?? DAY_MS
     this.queue = opts.queue ?? new MemoryQueueStore()
     this.retry = { ...DEFAULT_RETRY, ...opts.retry }
+    this.leaseMs = opts.lease_ms ?? DEFAULT_LEASE_MS
     this.rawSecretPolicy = opts.raw_secret_policy ?? 'redact'
     this.deadLetterOnUnresolvedActor = opts.dead_letter_on_unresolved_actor ?? false
     this.maxTextChars = opts.max_text_chars
@@ -281,10 +287,13 @@ export class ChannelInboundPipeline implements InboundPipeline {
     return { event, deduped: false }
   }
 
-  /** 推一轮到期的重试（宿主的定时器调用；时间经 Clock，测试用假时钟推进）。 */
+  /**
+   * 推一轮到期的重试（宿主的定时器调用；时间经 Clock，测试用假时钟推进）。
+   * 领取带租约：同一条不会被两个 pump 同时处理；领取方崩了，租约到期后它回到队列。
+   */
   async pump(): Promise<number> {
     const now_ms = Date.parse(this.clock.now())
-    const due = await this.queue.due(now_ms)
+    const due = await this.queue.claim(now_ms, this.leaseMs)
     let handled = 0
     for (const item of due) {
       await this.attempt(item)
@@ -294,7 +303,12 @@ export class ChannelInboundPipeline implements InboundPipeline {
   }
 
   async deadLetters(workspace_id: WorkspaceId): Promise<InboundEvent[]> {
-    return this.dead.filter((e) => e.workspace_id === workspace_id)
+    return (await this.queue.deadLetters(workspace_id)).map((d) => d.event)
+  }
+
+  /** 死信的完整记录（原因 / 尝试次数 / 最后一次错误），工作台要展示的就是这个。 */
+  async deadLetterRecords(workspace_id: WorkspaceId): Promise<DeadLetterRecord[]> {
+    return this.queue.deadLetters(workspace_id)
   }
 
   /** 观察面：已成功触发的事件。 */
@@ -328,8 +342,10 @@ export class ChannelInboundPipeline implements InboundPipeline {
         })
         return
       }
+      // 退避重排：顺手清掉租约，这条立刻回到「等到期」而不是「有人在处理」
+      const { lease_until_ms: _lease, ...rest } = item
       await this.queue.put({
-        ...item,
+        ...rest,
         attempts,
         next_at_ms: Date.parse(this.clock.now()) + backoffMs(attempts, this.retry),
         last_error: detail,
@@ -341,9 +357,20 @@ export class ChannelInboundPipeline implements InboundPipeline {
     event: InboundEvent,
     reason: string,
     role_id: RoleId | undefined,
-    extra?: Record<string, unknown>,
+    extra?: { attempts?: number; last_error?: string },
   ): Promise<void> {
-    this.dead.push(event)
+    // 18 §2.2：死信落盘并进 owner 车道，重启后还能翻
+    await this.queue.putDead({
+      id: `dl_${event.id}`,
+      lane: laneOf(event.workspace_id, undefined),
+      workspace_id: event.workspace_id,
+      event,
+      reason,
+      attempts: extra?.attempts ?? 0,
+      at_ms: Date.parse(this.clock.now()),
+      ...(role_id === undefined ? {} : { role_id }),
+      ...(extra?.last_error === undefined ? {} : { last_error: extra.last_error }),
+    })
     await this.emit('inbound.dead_letter', event, {
       reason,
       lane: laneOf(event.workspace_id, undefined),

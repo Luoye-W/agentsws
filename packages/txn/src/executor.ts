@@ -272,7 +272,6 @@ export class Executor {
       caps_hit: (change.guardrail_rerun?.hits ?? []).map((h) => h.rule),
     }
     if (result.status === 'ok') {
-      this.rt.store.commitReservation(change.id)
       const next: StagedChange = {
         ...change,
         status: 'applied',
@@ -285,7 +284,11 @@ export class Executor {
           ...(result.outcome_ref ? { outcome_ref: result.outcome_ref } : {}),
         },
       }
-      this.rt.store.putChange(next)
+      // apply 成功的落地一次做完：预占转 committed + 变更转 applied
+      this.rt.tx(() => {
+        this.rt.store.commitReservation(change.id)
+        this.rt.store.putChange(next)
+      })
       if (item)
         await this.bus.recordApply(item.id, 'applied', {
           attempts,
@@ -369,7 +372,6 @@ export class Executor {
     attempts: NonNullable<ApprovalItem['apply']>['attempts'] = [],
   ): Promise<ApplyOutcome> {
     const at = this.rt.now()
-    this.rt.store.releaseReservation(change.id)
     const next: StagedChange = {
       ...change,
       status: 'failed',
@@ -382,7 +384,11 @@ export class Executor {
         error,
       },
     }
-    this.rt.store.putChange(next)
+    // 失败的落地一次做完：释放预占 + 变更转 failed
+    this.rt.tx(() => {
+      this.rt.store.releaseReservation(change.id)
+      this.rt.store.putChange(next)
+    })
     const linked =
       item ?? (change.approval ? this.rt.store.getApproval(change.approval.item_id) : undefined)
     if (linked)
@@ -454,14 +460,16 @@ export class Executor {
     const approvedAt = change.approval?.at ?? change.updated_at
     if (ms(now) - ms(approvedAt) >= this.rt.policy.cancel_window_sec * 1000)
       throw new TxnError('conflict', '取消窗口已关闭')
-    this.rt.store.releaseReservation(change_id)
     const next: StagedChange = {
       ...change,
       status: 'withdrawn',
       updated_at: now,
       ...(change.reservation ? { reservation: { ...change.reservation, released: true } } : {}),
     }
-    this.rt.store.putChange(next)
+    this.rt.tx(() => {
+      this.rt.store.releaseReservation(change_id)
+      this.rt.store.putChange(next)
+    })
     if (change.approval)
       await this.bus.recordApply(change.approval.item_id, 'apply_failed', undefined)
     await this.rt.emit('change.withdrawn', {

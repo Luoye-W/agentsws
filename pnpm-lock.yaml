@@ -177,12 +177,19 @@ importers:
       '@agentsws/deck':
         specifier: workspace:*
         version: link:../deck
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
       hono:
         specifier: ^4.13.7
         version: 4.13.7
       zod:
         specifier: ^4.5.4
         version: 4.5.4
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
 
   packages/channels:
     dependencies:
@@ -192,6 +199,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
       imapflow:
         specifier: ^2.0.0
         version: 2.0.0
@@ -202,6 +212,9 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
       '@types/mailparser':
         specifier: ^3.4.6
         version: 3.4.6
@@ -504,6 +517,13 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
 
 packages:
 

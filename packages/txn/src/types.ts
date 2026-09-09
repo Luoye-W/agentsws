@@ -179,6 +179,21 @@ export interface TxnStore {
 
   putProvenance(state: ProvenanceState): void
   getProvenance(run_id: RunId): ProvenanceState | undefined
+
+  /**
+   * 15 §5.8 对账游标：`unknown` 的对账重启后要能接着跑，
+   * 所以「处理到哪儿了」必须和状态存在同一处（内存档同样提供，两档接口一致）。
+   */
+  getCursor(name: string): string | undefined
+  setCursor(name: string, value: string): void
+  /** 15 §5.8：还没对上账的变更（`status = unknown`），按创建顺序。 */
+  pendingReconcile(workspace_id?: WorkspaceId): StagedChange[]
+
+  /**
+   * 把一组写放进一个事务（stage / decide / apply 三处的状态跃迁各自原子）。
+   * SQLite 档是真事务（抛异常即整组回滚）；内存档直接执行——内存里没有半写状态可回滚。
+   */
+  transaction<T>(fn: () => T): T
 }
 
 /** 创建审批项时的额外上下文（契约 ApprovalItem 之外，包内交叉类型扩展）。 */

@@ -19,6 +19,14 @@ export interface IdempotencyStore {
   put(scope: string, key: string, record: IdempotencyRecord): void
 }
 
+/** 带过期清理与观察面的幂等表（内存 / SQLite 两档都实现，一致性套件按这个接口跑）。 */
+export interface SweepableIdempotencyStore extends IdempotencyStore {
+  /** 过期清理（宿主定时调用；时间经注入的 Clock）。返回删掉的条数。 */
+  sweep(clock: Clock): number
+  /** 表里现有的条数（观察面）。 */
+  readonly size: number
+}
+
 export const DEFAULT_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 
 export function fingerprint(method: string, path: string, body: string): string {
@@ -26,7 +34,7 @@ export function fingerprint(method: string, path: string, body: string): string 
 }
 
 /** 内存表；换 SQLite 时接口不变。 */
-export class MemoryIdempotencyStore implements IdempotencyStore {
+export class MemoryIdempotencyStore implements SweepableIdempotencyStore {
   readonly #rows = new Map<string, IdempotencyRecord>()
   readonly #ttl: number
 
@@ -59,5 +67,10 @@ export class MemoryIdempotencyStore implements IdempotencyStore {
         removed += 1
       }
     return removed
+  }
+
+  /** 表里现有的条数（观察面）。 */
+  get size(): number {
+    return this.#rows.size
   }
 }

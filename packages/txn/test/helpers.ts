@@ -13,6 +13,7 @@ import type {
   StageInput,
   TxnOptions,
   TxnPolicy,
+  TxnStore,
 } from '../src/index.js'
 import { createTxn } from '../src/index.js'
 
@@ -84,9 +85,14 @@ export function harness(
     backend?: (attempt: number, id: string) => BackendResult | Promise<BackendResult>
     mandateFor?: TxnOptions['mandateFor']
     readRecordEnabled?: boolean
+    /** 换存储（WP18：同一套用例也要能跑在 SQLite 档上） */
+    store?: TxnStore
+    /** 固定 decision_token 密钥，重启后仍能验签 */
+    secret?: string
+    start?: string
   } = {},
 ): Harness {
-  const clock = makeClock()
+  const clock = makeClock(opts.start ?? T0)
   const events: EventEnvelope[] = []
   const records: Record<string, RecordRead> = { ...opts.records }
   const backendCalls: { id: string; key: string; attempt: number }[] = []
@@ -96,6 +102,8 @@ export function harness(
     clock: { now: () => clock.now() },
     random: seeded(7),
     ...(opts.sampler ? { sampler: opts.sampler } : {}),
+    ...(opts.store ? { store: opts.store } : {}),
+    ...(opts.secret ? { secret: opts.secret } : {}),
     eventSink: (e) => {
       events.push(e)
     },

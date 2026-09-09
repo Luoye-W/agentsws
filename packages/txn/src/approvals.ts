@@ -463,7 +463,6 @@ export class ApprovalBusImpl implements ApprovalBus {
       ...(input.defer_until !== undefined ? { defer_until: input.defer_until } : {}),
     }
 
-    this.rt.store.putToken({ ...tok, used: { at: now, by, action: input.action } })
     item.decision = decision
     item.updated_at = now
     item.deliveries = item.deliveries.map((d) =>
@@ -471,7 +470,6 @@ export class ApprovalBusImpl implements ApprovalBus {
         ? { ...d, status: 'acted' as const }
         : { ...d, status: 'expired' as const },
     )
-    this.rt.store.revokeTokensFor(item.id)
 
     let learning: 'accepted' | 'edited' | 'rejected' | 'redirected' | 'deferred' = 'accepted'
     switch (input.action) {
@@ -511,7 +509,12 @@ export class ApprovalBusImpl implements ApprovalBus {
         learning = 'deferred'
         break
     }
-    this.rt.store.putApproval(item)
+    // decide 的状态跃迁一次落地：token 置为已用 + 撤销同项其余 token + 审批项落库
+    this.rt.tx(() => {
+      this.rt.store.putToken({ ...tok, used: { at: now, by, action: input.action } })
+      this.rt.store.revokeTokensFor(item.id)
+      this.rt.store.putApproval(item)
+    })
 
     await this.rt.emit('approval.decided', {
       workspace_id: item.workspace_id,
@@ -600,8 +603,11 @@ export class ApprovalBusImpl implements ApprovalBus {
               approved_exception: change.guardrail.verdict === 'require_review',
             },
     }
-    this.rt.store.putChange(next)
-    this.rt.store.markApproved(change_id)
+    // 15 §5.2：批准标记与变更状态必须同生同死，不能只落一半
+    this.rt.tx(() => {
+      this.rt.store.putChange(next)
+      this.rt.store.markApproved(change_id)
+    })
     await this.rt.emit('change.approved', {
       workspace_id: change.workspace_id,
       actor: by === 'mandate' ? { kind: 'system', id: 'mandate' } : { kind: 'person', id: by },

@@ -55,9 +55,9 @@ export function createGateway(deps: GatewayDeps): Gateway {
   const routes = collectRoutes()
   const version = deps.options?.version ?? '0.0.0'
   const limiter = new TokenBucketLimiter(deps.options?.rateLimit ?? {})
-  const idempotency = new MemoryIdempotencyStore(
-    deps.options?.idempotencyTtlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS,
-  )
+  const idempotency =
+    deps.options?.idempotencyStore ??
+    new MemoryIdempotencyStore(deps.options?.idempotencyTtlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS)
   const openapi = buildOpenApi(routes, version)
   const nowMs = (): number => Date.parse(deps.clock.now())
 

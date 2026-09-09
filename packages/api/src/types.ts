@@ -40,6 +40,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
+import type { IdempotencyStore } from './idempotency.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
 export interface Principal {
@@ -215,6 +216,8 @@ export interface GatewayOptions {
   }
   /** 幂等表保留时长，默认 24h（28 §2）。 */
   idempotencyTtlMs?: number
+  /** WP18：不给就用内存档；apps/server 在有数据目录时传 SqliteIdempotencyStore。 */
+  idempotencyStore?: IdempotencyStore
   /** 事件长轮询的最大等待与轮询间隔。 */
   events?: { maxWaitMs?: number; pollIntervalMs?: number; defaultLimit?: number }
   /** 服务端版本号，进 `/v1/health`。 */

@@ -10,13 +10,16 @@ import {
   createAsyncTraceScope,
   createGateway,
   createMemoryIdentity,
+  createSqliteIdentity,
   type Gateway,
   type GatewayDeps,
   type GuardrailPort,
   type KnowledgePort,
-  type MemoryIdentityService,
+  type LocalIdentityService,
   type RolesPort,
   type SkillsPort,
+  SqliteIdempotencyStore,
+  SqliteIdentityService,
   type TraceScope,
 } from '@agentsws/api'
 import type {
@@ -42,7 +45,7 @@ import {
 } from '@agentsws/model-gateway'
 import { changeKindOf, createRoleStore, loadBundledRole, type RoleStore } from '@agentsws/roles'
 import { createSkills, type Skills } from '@agentsws/skills'
-import { createTxn, type Txn } from '@agentsws/txn'
+import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { type ServerType, serve } from '@hono/node-server'
 import { MemoryBackend } from './backend.js'
 import { mountStatic } from './static.js'
@@ -73,7 +76,11 @@ export interface MountedWorld {
 }
 
 export interface ServerOptions {
-  /** SQLite 目录；不给则全部内存档（测试与一次性任务）。 */
+  /**
+   * SQLite 目录；不给则全部内存档（测试与一次性任务）。
+   * 进程入口按 `AGENTSWS_DATA_DIR`（旧名 `AGENTSWS_DB_DIR` 仍认）取值。
+   * 各包各自一个 `.sqlite` 文件，不共享表（35 §2）。
+   */
   dbDir?: string
   env?: Record<string, string | undefined>
   port?: number
@@ -106,7 +113,7 @@ export interface Server {
   skills: Skills
   models: ModelGatewayApi
   txn: Txn
-  identity: MemoryIdentityService
+  identity: LocalIdentityService
   backend: MemoryBackend
   /** 请求外的后台动作（调度、执行器）可以借它把自己挂进同一条 trace。 */
   traceScope: TraceScope
@@ -187,9 +194,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
 
   const backend = new MemoryBackend()
+  // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
+  const idempotencyStore =
+    dbDir === undefined
+      ? undefined
+      : new SqliteIdempotencyStore({ dbPath: join(dbDir, 'idempotency.sqlite'), clock })
+  const txnStore =
+    dbDir === undefined
+      ? undefined
+      : new SqliteTxnStore({ dbPath: join(dbDir, 'txn.sqlite'), clock })
   const txn = createTxn({
     clock,
     random,
+    ...(txnStore === undefined ? {} : { store: txnStore }),
     eventSink: (e) => {
       appendEvent(e)
     },
@@ -198,7 +215,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     deliverOutbound: (item, opts) => backend.deliver(item, opts),
   })
 
-  const identity = createMemoryIdentity({ clock, random })
+  const identity: LocalIdentityService =
+    dbDir === undefined
+      ? createMemoryIdentity({ clock, random })
+      : createSqliteIdentity({ dbPath: join(dbDir, 'identity.sqlite'), clock, random })
 
   // ── 首次启动：owner + 默认工作区 + 内部凭据（28 §3「内部服务凭据」）
   const mount = options.mount
@@ -208,33 +228,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     name: mount?.owner.name ?? ownerEmail.split('@')[0] ?? 'owner',
     ...(mount === undefined ? {} : { id: mount.owner.id }),
   })
-  const workspace = await identity.createWorkspace({
-    name: mount?.workspace_name ?? (env.AGENTSWS_WORKSPACE_NAME?.trim() || 'default'),
-    owner_id: person.id,
-    kind: 'personal',
-    ...(mount === undefined ? {} : { id: mount.workspace_id }),
-  })
-  // 接进来的世界已经有自己的策略层与分配，不覆盖
+  // 落盘档会重启：owner 的工作区与 Assignment 只在第一次建，之后接着用同一份；
+  // 接进来的世界（mount）用它给的 id，且它已有自己的策略层与分配，不覆盖
+  const workspace =
+    (await identity.workspacesOf(person.id))[0] ??
+    (await identity.createWorkspace({
+      name: mount?.workspace_name ?? (env.AGENTSWS_WORKSPACE_NAME?.trim() || 'default'),
+      owner_id: person.id,
+      kind: 'personal',
+      ...(mount === undefined ? {} : { id: mount.workspace_id }),
+    }))
   if (mount === undefined) roles.policies.set(workspace.policy)
   const ownerAssignment =
-    mount === undefined
-      ? roles.assignments.create({
-          person_id: person.id,
-          workspace_id: workspace.id,
-          role_id: 'common.owner',
-          granted_by: person.id,
-          ranges: [],
-        })
-      : (roles.assignments
-          .listByPerson(person.id, { workspace_id: workspace.id })
-          .find((a) => a.revoked_at === undefined) ??
-        roles.assignments.create({
-          person_id: person.id,
-          workspace_id: workspace.id,
-          role_id: 'common.owner',
-          granted_by: person.id,
-          ranges: [],
-        }))
+    roles.assignments
+      .listByPerson(person.id, { workspace_id: workspace.id, role_id: 'common.owner' })
+      .find((a) => a.revoked_at === undefined) ??
+    roles.assignments.create({
+      person_id: person.id,
+      workspace_id: workspace.id,
+      role_id: 'common.owner',
+      granted_by: person.id,
+      ranges: [],
+    })
   const internalToken = identity.issue('internal', person.id, workspace.id).token
 
   const rolesPort: RolesPort = {
@@ -297,6 +312,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',
+      ...(idempotencyStore === undefined ? {} : { idempotencyStore }),
       // 本地单机档：一次性登录 token 直接回给调用方，工作台才能自动登录（20 §3）
       exposeMagicLinkToken: true,
     },
@@ -363,6 +379,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       data.close()
       // 接进来的世界由调用方关（它还持有事件日志与替身）
       if (options.mount === undefined) roles.close()
+      txnStore?.close()
+      idempotencyStore?.close()
+      if (identity instanceof SqliteIdentityService) identity.close()
       await kernel.dispose()
     },
   }
