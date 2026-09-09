@@ -25,7 +25,14 @@ import {
   isLegalFieldName,
   piiFields,
 } from './collection.js'
-import { decryptValue, ERASED, encryptValue, isEncryptedField } from './crypto.js'
+import {
+  DATA_KEY_ENV,
+  decryptValue,
+  ERASED,
+  encryptValue,
+  isEncryptedField,
+  parseDataKey,
+} from './crypto.js'
 import { conflict, forbidden, invalidInput, notFound } from './errors.js'
 import { SubjectKeyring } from './keyring.js'
 import { sensitivityRank } from './sensitivity.js'
@@ -71,6 +78,11 @@ export interface DataStoreOptions {
   /** 25 §4：所有 now() 经注入的时钟。 */
   clock: Clock
   collections?: readonly CollectionDef[]
+  /**
+   * 只传环境变量表；根密钥（`AGENTSWS_DATA_KEY`）由本模块自己取（35 §2：秘密只从环境变量读）。
+   * 有根密钥就把主体密钥包一层再落盘；没有也照常跑（主体密钥本来就是每主体一把独立随机的）。
+   */
+  env?: Record<string, string | undefined>
 }
 
 const DEFAULT_LIMIT = 50
@@ -87,7 +99,10 @@ export class SqliteDataStore implements DataStore {
     this.#db = new Database(opts.dbPath)
     this.#db.pragma('journal_mode = WAL')
     this.#clock = opts.clock
-    this.#keys = new SubjectKeyring(this.#db, opts.clock)
+    const rootKey = parseDataKey((opts.env ?? process.env)[DATA_KEY_ENV])
+    this.#keys = new SubjectKeyring(this.#db, opts.clock, {
+      ...(rootKey === undefined ? {} : { rootKey }),
+    })
     this.#db.exec(
       `CREATE TABLE IF NOT EXISTS _tombstones (
         subject_id TEXT PRIMARY KEY,
@@ -99,6 +114,15 @@ export class SqliteDataStore implements DataStore {
       )`,
     )
     for (const def of opts.collections ?? []) this.register(def)
+  }
+
+  /**
+   * 主体密钥环（21 §4）。**受控原始材料区的加密就接这里**：
+   * `@agentsws/channels` 与 `@agentsws/meetings` 拿它当 `RawCipher` 用，
+   * 于是「随主体删除」在数据层、邮件原文区、录音区是同一次 `shred`（WP18 的跨包接线遗留）。
+   */
+  get keyring(): SubjectKeyring {
+    return this.#keys
   }
 
   /** 每个 collection 一张表（21 §2 信封列 + body JSON）。 */

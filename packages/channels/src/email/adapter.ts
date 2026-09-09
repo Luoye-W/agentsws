@@ -221,6 +221,8 @@ export class EmailChannelAdapter implements ChannelAdapter {
       }) ?? `email-thread:${sha256(from + (parsed.subject ?? '')).slice(0, 16)}`
 
     // ① 原始 MIME 进受控原始材料区（不进模型）；秘密按策略在落库前就抹掉
+    //    `subject_ref` = 发件人地址：受控区按它加密、按它随主体删除（21 §4 / 18 §2.1）。
+    //    没有它，材料就是明文落盘——所以每条都要带。
     const sourceForRaw =
       this.rawSecretPolicy === 'redact' ? scrubSecrets(msg.source) : { text: msg.source, rules: [] }
     const raw_ref = await this.rawStore.put({
@@ -229,6 +231,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
       stored_at: received_at,
       payload: sourceForRaw.text,
       mime: 'message/rfc822',
+      subject_ref: from,
       ...(sourceForRaw.rules.length > 0 ? { secrets_scrubbed: true } : {}),
       ...(msg.mailbox.length > 0 ? { name: `${msg.mailbox}/${msg.uid}` } : {}),
     })
@@ -244,6 +247,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
         kind: 'attachment',
         stored_at: received_at,
         payload: new Uint8Array(att.content),
+        subject_ref: from,
         ...(att.contentType === undefined ? {} : { mime: att.contentType }),
         ...(att.filename === undefined ? {} : { name: att.filename }),
       })

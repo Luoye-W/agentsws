@@ -24,6 +24,7 @@ import type {
   ObjectRef,
   PersonId,
 } from '@agentsws/contracts'
+import type { RawCipher } from '@agentsws/core'
 import {
   approvalRequestsFor,
   createMeetingPipeline,
@@ -63,6 +64,12 @@ export interface MeetingsOptions {
   approvals: ApprovalBus
   /** 卡片挂在哪个职责下；默认 `common.member`（06 §2.1 秘书以本人权限运行）。 */
   role_id?: string
+  /**
+   * 21 §4 / 18 §2.1：受控原始材料区的加密。传 `data.keyring`（`@agentsws/data`
+   * 的主体密钥环）——录音与会议文档就以密文落盘，销毁密钥即不可读。
+   * 不传就是明文落盘（只有 `dbDir` 为空的内存档才该这样）。
+   */
+  cipher?: RawCipher
 }
 
 export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
@@ -71,10 +78,15 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     dbDir === undefined
       ? createMemoryMeetingStore({ clock, random })
       : createSqliteMeetingStore({ dbPath: join(dbDir, 'meetings.sqlite'), clock, random })
+  const cipherOpt = options.cipher === undefined ? {} : { cipher: options.cipher }
   const raw: MeetingRawStore =
     dbDir === undefined
-      ? new MemoryMeetingRawStore()
-      : createSqliteMeetingRawStore({ dbPath: join(dbDir, 'meetings-raw.sqlite'), clock })
+      ? new MemoryMeetingRawStore(cipherOpt)
+      : createSqliteMeetingRawStore({
+          dbPath: join(dbDir, 'meetings-raw.sqlite'),
+          clock,
+          ...cipherOpt,
+        })
 
   const pipeline = createMeetingPipeline({
     store,

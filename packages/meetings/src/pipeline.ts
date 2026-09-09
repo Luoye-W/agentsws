@@ -33,6 +33,7 @@ import type {
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE, type Fence } from '@agentsws/core'
 import { defaultMeetingAssistant } from './assistant/processor.js'
+import { meetingSubjectRef } from './erase.js'
 import { MeetingError } from './errors.js'
 import { createIdFactory, type IdFactory } from './ids.js'
 import { approvalRequestsFor, type MeetingApprovalRequests } from './outputs.js'
@@ -223,6 +224,10 @@ export class MeetingPipeline {
         kind,
         stored_at: now,
         payload: draft.bytes,
+        // 21 §4：受控区按主体加密、按主体删除。一段录音里有好几个人，
+        // 没法给每个与会者各一把密钥（那要按人重新加密同一段音频），
+        // 所以会议档的主体是**这场会**——删一个人删他的转写行，删整场会销毁这把密钥。
+        subject_ref: meetingSubjectRef(meeting.id),
         ...(draft.mime === undefined ? {} : { mime: draft.mime }),
         ...(draft.name === undefined ? {} : { name: draft.name }),
       })

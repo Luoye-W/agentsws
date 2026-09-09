@@ -454,6 +454,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     approvals: options.mount?.approvals ?? txn.approvals,
     role_id: ownerAssignment.role_id,
+    // 18 §2.1 受控原始材料区的第一条纪律：加密。密钥环是数据层的（21 §4，
+    // 每主体一把独立随机密钥，销毁即不可读），录音库只拿这个端口——两个库不共享表（35 §2）。
+    cipher: data.keyring,
   })
   // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
   meetings.bind(work)

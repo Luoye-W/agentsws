@@ -21,6 +21,36 @@ export interface RawRecordBase {
   name?: string
   /** 落库前已按宿主的秘密策略脱敏（文本类） */
   secrets_scrubbed?: boolean
+  /**
+   * 21 §4「随主体删除」：这条材料是**谁**的（客户 id / 参会人 id / 邮箱地址…）。
+   *
+   * 有 {@link RawCipher} 时它同时是加密的 AAD 与密钥选择依据——没有 subject_ref
+   * 的材料落库时就是明文（比如系统自己的日志附件），这不是漏洞，是「没有主体可绑」。
+   */
+  subject_ref?: string
+  /** 读出来时主体密钥已销毁：行还在，内容读不出来了。 */
+  erased?: true
+}
+
+/**
+ * 受控原始材料区的**加密端口**（18 §2.1 三条纪律里的第一条）。
+ *
+ * 实现在 `@agentsws/data` 的 `SubjectKeyring`——每个主体一把独立随机、
+ * 不可从主密钥重派生的密钥，`shred` 即 crypto-shredding。
+ * 端口在这里，是因为 `@agentsws/channels` 与 `@agentsws/meetings`
+ * **不共享 data 的表**（35 §2），只能靠一个接口把密钥环接进来。
+ *
+ * 三条实现约束：
+ * 1. `seal` 对已销毁的主体必须**抛**（销毁过的主体不能又发新钥，否则删除可被下一次写入撤销）；
+ * 2. `open` 解不开一律 `undefined`，不抛、不返回半截；
+ * 3. AAD 绑 `subject`：把一条密文搬到另一个主体名下必须解不开。
+ */
+export interface RawCipher {
+  seal(subject: string, plaintext: Uint8Array): Uint8Array
+  open(subject: string, sealed: Uint8Array): Uint8Array | undefined
+  /** 销毁主体密钥；返回销毁时间。幂等。 */
+  shred(subject: string, at?: string): string
+  isShredded(subject: string): boolean
 }
 
 /**

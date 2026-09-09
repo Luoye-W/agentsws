@@ -29,7 +29,7 @@ describe('边角', () => {
     expect(memRaw.size).toBe(1)
 
     const sqliteRaw = createSqliteMeetingRawStore({ clock })
-    expect(sqliteRaw.schemaVersion).toBe(1)
+    expect(sqliteRaw.schemaVersion).toBe(2)
     sqliteRaw.put({ workspace_id: 'ws_1', kind: 'document', stored_at: T0, payload: '甲' })
     expect(sqliteRaw.all()).toHaveLength(1)
     expect(sqliteRaw.size).toBe(1)
