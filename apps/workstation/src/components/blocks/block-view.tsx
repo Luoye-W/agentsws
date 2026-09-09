@@ -13,6 +13,7 @@ import type {
 } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
+import { useMemo } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -100,7 +101,30 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
   )
 }
 
+/**
+ * recharts 把颜色写成 SVG 的**表现属性**，而表现属性里的 `var(--x)` 浏览器不解析——
+ * 写进去等于没写（线会消失）。所以在这里按当前主题把 token 读成真颜色再传。
+ */
+function useChartColors(theme: string): { grid: string; axis: string; series: string[] } {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: theme 不进闭包，只当「重读 CSS 变量」的信号——深浅色是两套 token
+  return useMemo(() => {
+    const read = (name: string, fallback: string): string => {
+      const root = globalThis.document?.documentElement
+      if (root === undefined) return fallback
+      const value = getComputedStyle(root).getPropertyValue(name).trim()
+      return value === '' ? fallback : value
+    }
+    return {
+      grid: read('--border', '#e5e5e5'),
+      axis: read('--muted-foreground', '#737373'),
+      series: [1, 2, 3, 4, 5].map((i) => read(`--chart-${i}`, '#888')),
+    }
+  }, [theme])
+}
+
 function ChartLineBlock({ payload }: { payload: SeriesResult }): React.ReactNode {
+  const { theme } = useApp()
+  const colors = useChartColors(theme)
   const rows = payload.x.map((x, i) => {
     const row: Record<string, string | number> = { x }
     for (const s of payload.series) row[s.key] = s.points[i] ?? 0
@@ -110,9 +134,9 @@ function ChartLineBlock({ payload }: { payload: SeriesResult }): React.ReactNode
     <div className="h-56 w-full" data-testid="block-chart">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="x" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-          <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+          <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
+          <XAxis dataKey="x" tick={{ fontSize: 11, fill: colors.axis }} stroke={colors.grid} />
+          <YAxis tick={{ fontSize: 11, fill: colors.axis }} stroke={colors.grid} />
           <ReTooltip
             contentStyle={{
               background: 'var(--popover)',
@@ -124,10 +148,11 @@ function ChartLineBlock({ payload }: { payload: SeriesResult }): React.ReactNode
           {payload.series.map((s, i) => (
             <Line
               key={s.key}
-              type="monotone"
+              // 按天分桶的数据不做平滑：曲线插值会画出根本不存在的中间值
+              type="linear"
               dataKey={s.key}
               name={s.label}
-              stroke={`var(--chart-${(i % 5) + 1})`}
+              stroke={colors.series[i % 5]}
               strokeWidth={2}
               dot={false}
             />
