@@ -3,7 +3,7 @@
 dsh profile（16 §1）：**"我们这种模式"的技术实体**。
 
 - `package.json` —— `dsh.profile.bundles` 列出组合的 bundle，并把每个 `@deepseek-ai/dsh-*`
-  **锁到 0.1.3-alpha.2**（不用 `^`：上游预发布期"可自由重命名重组"，浮动版本等于随时炸）。
+  **锁到 0.1.5-rc.1**（不用 `^`：上游预发布期"可自由重命名重组"，浮动版本等于随时炸）。
 - `cordis.patch.yml` —— 我们的 patch 层（发行版级决定）。
 
 profile 与 preset 的分工：profile 决定**装哪些包、锁什么版本、打什么补丁**；

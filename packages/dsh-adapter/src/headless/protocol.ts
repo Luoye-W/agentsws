@@ -4,24 +4,24 @@
  * 传输用 dsh 官方 SDK 自己的那一条线：`@deepseek-ai/dsh-sdk-protocol` 的
  * `JsonRpcLineTransport`（NDJSON JSON-RPC 2.0 over stdio）。用它而不是自造，
  * 有两条理由：① 它是 dsh 生态里"宿主驱动 headless runtime"的既定形态（`dsh --profile sdk`
- * 就是这条线）；② 它的**两端都能发请求**，而 dsh 的 `sdk-jsonrpc-server` 目前只实现了
- * client→server 一个方向（README「Known Limitations」：server→client requests are
- * unimplemented ... for future approval flows）——我们的审批 answerer、工具出口与模型网关
- * 全都要从子进程回调宿主，所以方法集是我们自己的，传输是它的。
+ * 就是这条线）；② 它的**两端都能发请求**，而 dsh 的 `sdk-jsonrpc-server` 至今只用了
+ * client→server 一个方向——我们的审批 answerer、工具出口与模型网关全都要从子进程回调宿主，
+ * 所以方法集是我们自己的，传输是它的。
  *
  * 只走 stdio：子进程不监听任何端口（比"只绑 127.0.0.1"更严）。
  * 每一帧都带一次性 run token（`AGENTSWS_DSH_RUN_TOKEN`），token 不对一律拒。
  *
- * ── 为什么不直接用 `dsh --profile sdk` + `dsh-sdk-client`（09-10 实测 0.1.3-alpha.2）──
+ * ── 为什么仍然不直接用 `dsh --profile sdk` + `dsh-sdk-client` ──
+ * （WP30 在 0.1.3-alpha.2 上判过一次；WP41 在 **0.1.5-rc.1** 上重判，三条里第 1 条已经不成立）
  *
- * 1. **它能起，但要开一个原生构建**：`dsh --profile sdk` 的插件树里有
- *    `@deepseek-ai/dsh-session-persistence-jsonl`，它 require 原生模块 `fs-ext`（文件建议锁）。
- *    仓库的 `pnpm-workspace.yaml` 把 dsh 拖进来的原生依赖一律 `allowBuilds: false`（16 §3 最严解释），
- *    于是 boot 直接死在 `Cannot find module './build/Release/fs_ext.node'`。
- *    手工 `node-gyp rebuild fs-ext` 之后 `initialize` 握手就通了（回 `deepseek-harness-sdk-runtime`）——
- *    也就是说这条路的唯一硬门槛是那一个原生模块。我们没为它开构建：见第 2、3 条，开了也用不上。
- * 2. **官方 server 没有 server→client 请求**：`dsh-sdk-jsonrpc-server` 的
- *    「Known Limitations」写明 server→client requests 尚未实现（transport 留着位子给未来的审批流）。
+ * 1. ~~它能起，但要开一个原生构建~~ —— **0.1.5-rc.1 已解决**。
+ *    `@deepseek-ai/dsh-session-persistence-jsonl` 不再依赖原生模块 `fs-ext`（文件建议锁改到
+ *    `@deepseek-ai/node-addon-system`：预编译平台包，不走 node-gyp）。实测在
+ *    `allowBuilds` 一个都没开的情况下 `dsh --profile sdk` 直接起得来，
+ *    `initialize{provider:'deepseek-official'}` 回 `deepseek-harness-sdk-runtime`。
+ * 2. **官方 server 仍然没有 server→client 请求**：`HarnessSdkJsonRpcServer` 只 `onRequest`
+ *    收 client 的调用、只 `notify` 往回发通知（`session.event` / `session.status` /
+ *    `subagent.*`），全包一次 `transport.request(...)` 都没有，也没有审批 answerer 的位置。
  *    我们的五个 seam 有四个要从子进程回调宿主（工具出口、模型网关、stage / 起草、边界卡），
  *    走官方 server 就得另开一条我们自己的旁路（socket 或额外 fd），并不比现在这条干净。
  * 3. **语义会变**：官方 `sdk` 档由 dsh 自己的 agent loop 驱动 turn，而 17 §4 要求
@@ -33,6 +33,7 @@
  * 组合与进程内档共用 `harness.ts` + `gate.ts` 一份代码，preset 也仍然按 `preset.ts` 生成——
  * 换的是宿主进程，不是组合。等上游把 server→client 请求补上、且 headless 的 loop 能被
  * 我们的 seam 完全接管时，这一层可以整块换成官方 SDK client，方法集不用动。
+ * 完整评估见 `packages/dsh-adapter/UPGRADE.md` §5。
  */
 import type { ObjectRef, RunEvent, RunRequest, RunResult } from '@agentsws/contracts'
 import type { CreatePolicyQuestionFn, DraftPayload, StageIntent } from '@agentsws/stand-ins'

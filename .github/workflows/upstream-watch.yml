@@ -1,0 +1,312 @@
+name: Upstream watch (draft, not enabled)
+
+# 上游哨兵（docs/10 §3）的 CI 草案 —— **写好了，但没启用**。
+#
+# 现在只有 `workflow_dispatch`：要手动跑一次可以，不会自己动。
+# 下面 `schedule:` 那三行注释着，两次人肉演练都顺之后再取消注释（理由见 docs/42 §3）。
+#
+# 它做 docs/42 checklist 里的第 ② 步（观察）与第 ⑥ 步（对比），到"开一个 issue"为止：
+#   查 npm dist-tags → 和仓库锁的版本比 → 有新版就在临时分支上试升级 →
+#   装 / tsc / dsh-adapter 全部测试 / 采一份新基线 / 与仓库里的旧基线逐条对比 → 把结果贴进 issue
+#
+# 它**不做**：不改版本号、不开 PR、不推分支、不合并、不替人决定纳不纳入。
+# 为什么止步于 issue：10 §3.3 第 ⑤ 步是「L1 人看报告点通过」；自动开 PR 会让
+# "点一下 merge"变成默认动作，而升级的风险恰恰在测试全绿、基线却悄悄变了的地方。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 试升级到哪个版本（留空 = npm 的 latest）
+        required: false
+        default: ''
+      dry_run:
+        description: 只报告不开 issue
+        required: false
+        default: 'true'
+
+  # ── 启用时取消这三行的注释（每周一 UTC 06:00 = 北京时间 14:00）────────────
+  # schedule:
+  #   - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  # 开 issue 需要；启用前保持最小权限，dry_run 下用不到
+  issues: write
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  npm_config_update_notifier: 'false'
+  # 这两个包是 34 §核实里的"共享兄弟包"：dsh vendored 出来独立发，packages/kernel 也在用。
+  # 它们跟着升是"必要时"才做的事，所以只观察、不试升级。
+  WATCH_SIBLINGS: '@deepseek-ai/cordis @deepseek-ai/schemastery'
+
+jobs:
+  # ── ① 观察：npm 上是什么，仓库里锁的是什么 ────────────────────────────────
+  observe:
+    name: 观察 · npm dist-tags vs 仓库锁的版本
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      pinned: ${{ steps.compare.outputs.pinned }}
+      latest: ${{ steps.compare.outputs.latest }}
+      target: ${{ steps.compare.outputs.target }}
+      changed: ${{ steps.compare.outputs.changed }}
+      tags: ${{ steps.compare.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - id: compare
+        name: 比版本
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # 仓库锁的版本：以 dsh-adapter 的 package.json 为准（profile 与它同步）
+          PINNED=$(node -p "require('./packages/dsh-adapter/package.json').dependencies['@deepseek-ai/dsh']")
+          TAGS=$(npm view @deepseek-ai/dsh dist-tags --json | tr -d '\n ')
+          LATEST=$(node -p "JSON.parse(process.argv[1]).latest" "$TAGS")
+          TARGET="${REQUESTED:-$LATEST}"
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "tags=$TAGS"     >> "$GITHUB_OUTPUT"
+          if [ "$PINNED" = "$TARGET" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "## 上游观察"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| 仓库锁的版本 | \`$PINNED\` |"
+            echo "| npm latest | \`$LATEST\` |"
+            echo "| 本次试升级到 | \`$TARGET\` |"
+            echo "| dist-tags | \`$TAGS\` |"
+            echo
+            echo "> dist-tags 要如实看：预发布期的 \`latest\` 可能就是一个 rc，"
+            echo "> 而且**未必存在同号的正式版**（docs/42 §1 第 ② 步）。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 共享兄弟包（只观察，不试升级）
+        run: |
+          set -euo pipefail
+          echo "## 共享兄弟包" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 包 | 仓库锁 | npm latest |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          for p in $WATCH_SIBLINGS; do
+            HAVE=$(node -p "require('./packages/kernel/package.json').dependencies['$p'] ?? '—'")
+            WANT=$(npm view "$p" version 2>/dev/null || echo '?')
+            echo "| \`$p\` | \`$HAVE\` | \`$WANT\` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # ── ⑥ 试升级 + 对比：在临时工作树里做，不碰 main、不推任何分支 ─────────────
+  try-upgrade:
+    name: 试升级 · ${{ needs.observe.outputs.pinned }} → ${{ needs.observe.outputs.target }}
+    needs: observe
+    if: needs.observe.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # 试升级失败**不等于**流程失败：结论要进 issue 给人看，不是把 CI 染红
+    continue-on-error: true
+    outputs:
+      verdict: ${{ steps.compare.outputs.verdict }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      # 第 ① 步：基线必须来自**升级前**。仓库里已经有一份（上次升级时采的），
+      # 但那份是上一版的口径；这里在动版本号之前**重新采一份当前版的**，
+      # 才是 docs/42「基线在升级前采」的真意思。
+      - name: install（升级前）
+        run: pnpm install --frozen-lockfile
+
+      - name: tsc -b（升级前）
+        run: pnpm exec tsc -b
+
+      - name: 采升级前基线
+        run: node packages/dsh-adapter/test/upgrade-baseline/capture.mjs watch-before.json
+
+      # 第 ③ 步：改版本号
+      - name: 改版本号到 ${{ needs.observe.outputs.target }}
+        env:
+          FROM: ${{ needs.observe.outputs.pinned }}
+          TO: ${{ needs.observe.outputs.target }}
+        run: |
+          set -euo pipefail
+          sed -i "s/\"$FROM\"/\"$TO\"/g" packages/dsh-adapter/package.json profiles/agentsws/package.json
+          git --no-pager diff --stat
+
+      - name: install（升级后；lockfile 会被重解析）
+        id: install
+        run: pnpm install --no-frozen-lockfile
+
+      # 依赖树的变化要人看：新出现的原生依赖默认 false 是人的决定，不是 CI 的
+      - name: 依赖树 diff（新增 / 消失的包）
+        if: always()
+        run: |
+          set -euo pipefail
+          git show HEAD:pnpm-lock.yaml > /tmp/lock-old.yaml
+          pkgs() { awk '/^packages:/{f=1;next} /^snapshots:/{f=0} f && /^  [^ ]/{print}' "$1" \
+                   | sed 's/^  //;s/:$//' | sed -E 's/@[^@]*$//' | sort -u; }
+          pkgs /tmp/lock-old.yaml > /tmp/old.pkgs
+          pkgs pnpm-lock.yaml     > /tmp/new.pkgs
+          {
+            echo "## 依赖树变化"
+            echo
+            echo "### 新增"
+            comm -13 /tmp/old.pkgs /tmp/new.pkgs | sed 's/^/- /' || true
+            echo
+            echo "### 消失"
+            comm -23 /tmp/old.pkgs /tmp/new.pkgs | sed 's/^/- /' || true
+            echo
+            echo "> 新增的**原生**依赖要人来决定 \`allowBuilds\`（16 §3：默认 \`false\`）；"
+            echo "> 消失的原生依赖可能解锁了以前放弃的选项（docs/42 §1 第 ③⑤ 步）。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: tsc -b --force（升级后）
+        id: tsc
+        run: pnpm exec tsc -b --force
+
+      - name: dsh-adapter 全部测试
+        id: tests
+        run: pnpm exec vitest run --project @agentsws/dsh-adapter
+
+      - name: 采升级后基线
+        id: capture
+        run: node packages/dsh-adapter/test/upgrade-baseline/capture.mjs watch-after.json
+
+      # 第 ⑥ 步：逐条对比。用与 upgrade.test.ts 同一套口径，只是这里对着刚采的两份跑
+      - name: 对比两份基线
+        id: compare
+        if: always()
+        run: |
+          set -euo pipefail
+          node - <<'JS' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs')
+          const dir = 'packages/dsh-adapter/test/upgrade-baseline'
+          const read = (f) => JSON.parse(fs.readFileSync(`${dir}/${f}`, 'utf8'))
+          const a = read('watch-before.json')
+          const b = read('watch-after.json')
+          const types = (fp) => fp.events.map((e) => e.slice(0, e.indexOf('@')))
+          const rows = []
+          let worst = 0
+          let bad = 0
+          for (const rt of ['dsh-in-process', 'dsh-subprocess']) {
+            for (const id of Object.keys(a.runtimes[rt]).sort()) {
+              const x = a.runtimes[rt][id]
+              const y = b.runtimes[rt][id]
+              if (y === undefined) { rows.push([rt, id, '场景没了', '—', '❌']); bad++; continue }
+              const seq = JSON.stringify(types(x)) === JSON.stringify(types(y))
+              const full = JSON.stringify(x.events) === JSON.stringify(y.events)
+              const inv = Object.values(y.invariants).every(Boolean)
+              const from = x.metrics.tokens_per_item ?? 0
+              const to = y.metrics.tokens_per_item ?? 0
+              const drift = from === 0 ? (to === 0 ? 0 : Infinity) : Math.abs((to - from) / from) * 100
+              if (Number.isFinite(drift)) worst = Math.max(worst, drift)
+              const ok = seq && inv && drift <= 5
+              if (!ok) bad++
+              rows.push([rt, id, seq ? (full ? '逐条相同' : '类型同/时刻变') : '**变了**',
+                         Number.isFinite(drift) ? `${drift.toFixed(2)}%` : '∞', ok ? '✅' : '❌'])
+            }
+          }
+          console.log('## 升级前后对比')
+          console.log('')
+          console.log(`\`${a.dsh_version}\` → \`${b.dsh_version}\``)
+          console.log('')
+          console.log('| 运行时 | 场景 | 事件序列 | tokens_per_item 偏差 | |')
+          console.log('|---|---|---|---|---|')
+          for (const r of rows) console.log(`| ${r.join(' | ')} |`)
+          console.log('')
+          const verdict = bad === 0
+            ? `✅ 全部相同，最大 token 偏差 ${worst.toFixed(2)}%（阈值 5%）`
+            : `❌ ${bad} 处不一致，最大 token 偏差 ${Number.isFinite(worst) ? worst.toFixed(2) + '%' : '∞'}`
+          console.log(`**结论：${verdict}**`)
+          console.log('')
+          console.log('> 这只是"行为一不一样"。**纳不纳入是人的决定**：还要按 docs/42 第 ④ 步')
+          console.log('> 逐个 seam 对着 `.d.ts` diff 看一遍、按第 ⑤ 步重判上次放弃的选项。')
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `verdict=${verdict}\n`)
+          JS
+
+      # 采出来的两份基线只当 artifact，不进仓库
+      - name: 上传两份基线
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-watch-baselines
+          path: packages/dsh-adapter/test/upgrade-baseline/watch-*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ── 开 issue：同一个版本只开一次（靠标题去重）───────────────────────────────
+  report:
+    name: 报告 · 开 issue（不开 PR、不合并）
+    needs: [observe, try-upgrade]
+    if: needs.observe.outputs.changed == 'true' && inputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          PINNED: ${{ needs.observe.outputs.pinned }}
+          TARGET: ${{ needs.observe.outputs.target }}
+          TAGS: ${{ needs.observe.outputs.tags }}
+          VERDICT: ${{ needs.try-upgrade.outputs.verdict }}
+        with:
+          script: |
+            const { PINNED, TARGET, TAGS, VERDICT } = process.env
+            const title = `上游哨兵：dsh ${PINNED} → ${TARGET}`
+            // 同一个版本只开一次
+            const found = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue in:title "${title}"`,
+            })
+            if (found.data.total_count > 0) {
+              core.info(`已经开过：#${found.data.items[0].number}`)
+              return
+            }
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const body = [
+              `上游 \`@deepseek-ai/dsh\` 有新版本。**这条 issue 只是提议，没有任何东西被改或被合并。**`,
+              ``,
+              `| | |`,
+              `|---|---|`,
+              `| 仓库锁的版本 | \`${PINNED}\` |`,
+              `| 新版本 | \`${TARGET}\` |`,
+              `| dist-tags | \`${TAGS}\` |`,
+              `| 自动试升级结论 | ${VERDICT || '（试升级没跑完，见运行日志）'} |`,
+              ``,
+              `完整对比表、依赖树 diff 与两份基线在这次运行里：${run}`,
+              ``,
+              `## 接下来（人做）`,
+              ``,
+              `按 \`docs/42-上游升级流程-v1.md\` 的 checklist 走：`,
+              ``,
+              `- [ ] ② 看清 dist-tags：latest 是不是 rc？有没有同号的正式版？`,
+              `- [ ] ③ 依赖树 diff：新增的原生依赖 \`allowBuilds: false\` + 写注释；消失的删掉并想一想它解锁了什么`,
+              `- [ ] ④ 逐个 seam 对着 \`.d.ts\` diff 看，填 \`packages/dsh-adapter/UPGRADE.md\` 的表（「出处」列不许空）`,
+              `- [ ] ⑤ 重判上次放弃的选项（官方 SDK 等），换与不换的线事先说死`,
+              `- [ ] ⑥ 指标若真变了，逐条解释之后才可以 \`--rewrite-baseline\``,
+              `- [ ] ⑦ 全仓验证：四运行时 × 场景矩阵 + 15 人 pack`,
+              ``,
+              `> 17 §4：**任一红 = 不升级**。自动化只负责把事实摆出来。`,
+            ].join('\n')
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['upstream', 'dsh'],
+            })
