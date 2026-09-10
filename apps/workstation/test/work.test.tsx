@@ -143,7 +143,9 @@ const home: HomeData = {
   plan,
 }
 
-const matterView: MatterView = {
+const matterView: MatterView & {
+  participant_labels: { person_id: string; label: string }[]
+} = {
   matter: {
     id: 'mat_1',
     schema_version: 1,
@@ -174,6 +176,8 @@ const matterView: MatterView = {
   todos: [todo({ matter_id: 'mat_1', cards: ['ap_1'] })],
   open_card_ids: ['ap_1'],
   pinned_labels: [{ ref: { type: 'order', id: 'ord_1001' }, label: '#1001' }],
+  // WP38：参与者展示名由服务端补（40 §3.3）
+  participant_labels: [{ person_id: 'per_1', label: '李默' }],
 }
 
 const getHome = vi.fn(async () => home)

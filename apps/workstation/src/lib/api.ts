@@ -43,10 +43,33 @@ export interface ApiEnvelope<T> {
   trace_id: string
 }
 
+/** 撞车候选（40 §3.1）：`409` 的 `details.candidates` 里的一条。 */
+export interface SimilarCandidate {
+  kind: 'todo' | 'matter'
+  id: string
+  title: string
+  owner: string
+  status: string
+  /** 靠哪几把钥匙命中的：object / semantic / position_day */
+  keys: string[]
+  /** 等他定的卡数 */
+  cards: number
+  started_at: string
+  last_activity: string
+  matter_id?: string
+}
+
 export interface ApiErrorBody {
   code: string
   message: string
-  details?: { reason?: string }
+  details?: {
+    reason?: string
+    /** `similar_in_progress` 时带的候选 */
+    candidates?: SimilarCandidate[]
+    /** `already_claimed` 时带的主人 */
+    owner?: string
+    [key: string]: unknown
+  }
   trace_id?: string
 }
 
@@ -54,6 +77,8 @@ export class ApiClientError extends Error {
   readonly code: string
   readonly status: number
   readonly reason: string | undefined
+  /** 整个 `details`：409 的候选与主人都在这里（选择题卡要用） */
+  readonly details: ApiErrorBody['details']
 
   constructor(status: number, body: ApiErrorBody) {
     super(body.message)
@@ -61,6 +86,7 @@ export class ApiClientError extends Error {
     this.status = status
     this.code = body.code
     this.reason = body.details?.reason
+    this.details = body.details
   }
 }
 
@@ -430,8 +456,13 @@ export interface ReviewsData {
 export const listMatters = (query = ''): Promise<MattersData> =>
   api<MattersData>(`/v1/matters${query}`)
 
-export const getMatter = (id: string): Promise<MatterView> =>
-  api<MatterView>(`/v1/matters/${encodeURIComponent(id)}`)
+/** 服务端在 `MatterView` 上多补的一份参与者展示名（前端不猜、也不查库）。 */
+export interface MatterViewWithPeople extends MatterView {
+  participant_labels: { person_id: string; label: string }[]
+}
+
+export const getMatter = (id: string): Promise<MatterViewWithPeople> =>
+  api<MatterViewWithPeople>(`/v1/matters/${encodeURIComponent(id)}`)
 
 export const getMatterTimeline = (id: string, limit: number): Promise<TimelineData> =>
   api<TimelineData>(`/v1/matters/${encodeURIComponent(id)}/timeline?limit=${limit}`)
@@ -456,7 +487,69 @@ export const createTodo = (input: {
   title: string
   due?: string
   matter_id?: string
+  /** 主题对象（订单 / 客户 / 会议 / 店铺）——撞车第一把钥匙 */
+  refs?: { type: string; id: string }[]
+  /** 撞上了怎么办；不给就是「先查」：撞了回 409 */
+  collision?: 'join' | 'handoff' | 'force'
+  collision_target?: string
+  /** 选「我这个不一样」必须写一句区别 */
+  distinct_reason?: string
 }): Promise<{ todo: Todo }> => api('/v1/todos', { method: 'POST', body: input })
+
+// ── WP38 认领与撞车（40 §3）────────────────────────────────────────────
+
+/** 待认领池里的一条。 */
+export interface ClaimPoolItem {
+  todo_id: string
+  title: string
+  note?: string
+  source: Todo['source']
+  position_id?: string
+  matter_id?: string
+  due?: string
+  pooled_at: string
+  /** 回过几次池（上一个主人没动它） */
+  recycled: number
+  similar_to: string[]
+  /** 这条是转交给我的，不是池里的公共项 */
+  offered_by?: string
+}
+
+/** 「正在进行」的一条。 */
+export interface InProgressItem {
+  kind: 'todo' | 'matter'
+  id: string
+  title: string
+  owner: string
+  owner_label: string
+  collaborators: string[]
+  status: string
+  position_id?: string
+  started_at: string
+  last_activity: string
+  cards: number
+  matter_id?: string
+}
+
+export const listClaimPool = (): Promise<{ pool: ClaimPoolItem[] }> =>
+  api<{ pool: ClaimPoolItem[] }>('/v1/todos/pool')
+
+export const claimTodo = (id: string): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}/claim`, { method: 'POST', body: {} })
+
+export const transferTodo = (id: string, to: string): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}/transfer`, { method: 'POST', body: { to } })
+
+export const addTodoCollaborator = (id: string, person_id: string): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}/collaborators`, {
+    method: 'POST',
+    body: { person_id },
+  })
+
+export const listInProgress = (
+  scope: 'position' | 'workspace' = 'position',
+): Promise<{ items: InProgressItem[]; scope: string }> =>
+  api<{ items: InProgressItem[]; scope: string }>(`/v1/work/in-progress?scope=${scope}`)
 
 export const completeTodo = (id: string): Promise<{ todo: Todo }> =>
   api(`/v1/todos/${encodeURIComponent(id)}/done`, { method: 'POST' })

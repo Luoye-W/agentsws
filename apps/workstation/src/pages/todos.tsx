@@ -17,7 +17,17 @@ import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { completeTodo, createTodo, delegateTodo, dropTodo, listTodos, updateTodo } from '@/lib/api'
+import { CollisionCard } from '@/components/work/collision-card'
+import {
+  ApiClientError,
+  completeTodo,
+  createTodo,
+  delegateTodo,
+  dropTodo,
+  listTodos,
+  type SimilarCandidate,
+  updateTodo,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { DAY_MS, groupByHorizon, HORIZONS, todoUrl } from '@/lib/work'
 
@@ -167,10 +177,29 @@ export function TodosPage(): React.ReactNode {
     onSettled: refresh,
   })
 
+  /**
+   * 建之前先查（40 §3.1）：服务端撞上进行中的相似项就回 409，
+   * 这里把候选接住、出一张选择题卡，而不是把「建不成」丢给用户。
+   */
+  const [candidates, setCandidates] = useState<SimilarCandidate[]>([])
+
   const add = useMutation({
-    mutationFn: (value: string) => createTodo({ title: value }),
+    mutationFn: (input: {
+      title: string
+      collision?: 'join' | 'handoff' | 'force'
+      collision_target?: string
+      distinct_reason?: string
+    }) => createTodo(input),
     onSuccess: () => {
       setTitle('')
+      setCandidates([])
+    },
+    onError: (err: unknown) => {
+      const hit =
+        err instanceof ApiClientError && err.details?.reason === 'similar_in_progress'
+          ? (err.details.candidates ?? [])
+          : []
+      setCandidates(hit)
     },
     onSettled: refresh,
   })
@@ -197,7 +226,7 @@ export function TodosPage(): React.ReactNode {
         onSubmit={(e) => {
           e.preventDefault()
           if (title.trim() === '') return
-          add.mutate(title.trim())
+          add.mutate({ title: title.trim() })
         }}
       >
         <Input
@@ -212,6 +241,30 @@ export function TodosPage(): React.ReactNode {
           {t('todos.new')}
         </Button>
       </form>
+
+      {candidates.length === 0 ? null : (
+        <CollisionCard
+          candidates={candidates}
+          busy={add.isPending}
+          onJoin={(target) => {
+            add.mutate({ title: title.trim(), collision: 'join', collision_target: target.id })
+          }}
+          onHandoff={(target) => {
+            add.mutate({ title: title.trim(), collision: 'handoff', collision_target: target.id })
+          }}
+          onForce={(target, reason) => {
+            add.mutate({
+              title: title.trim(),
+              collision: 'force',
+              collision_target: target.id,
+              distinct_reason: reason,
+            })
+          }}
+          onCancel={() => {
+            setCandidates([])
+          }}
+        />
+      )}
 
       {HORIZONS.map((horizon) => (
         <section key={horizon} data-testid={`horizon-${horizon}`}>

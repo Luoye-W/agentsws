@@ -69,6 +69,14 @@ export interface WorkInProgressItem {
   matter_id?: string
 }
 
+/**
+ * 进入事项的一屏，比契约的 `MatterView` 多一份参与者展示名（29 enrichment：
+ * 服务端补，前端不猜、也不查库）。翻译不出来时回落成 `person_id` 本身。
+ */
+export interface WorkMatterView extends MatterView {
+  participant_labels: { person_id: PersonId; label: string }[]
+}
+
 /** 待认领池里的一条（40 §3.2）。 */
 export interface WorkPoolItem {
   todo_id: string
@@ -250,7 +258,7 @@ export interface WorkPort {
   home(actor: WorkActor): MaybePromise<WorkHome>
 
   matters(actor: WorkActor, filter: MatterListFilter): MaybePromise<Matter[]>
-  matter(actor: WorkActor, id: string): MaybePromise<MatterView>
+  matter(actor: WorkActor, id: string): MaybePromise<WorkMatterView>
   createMatter(actor: WorkActor, input: z.infer<typeof CreateMatterBody>): MaybePromise<Matter>
   closeMatter(
     actor: WorkActor,
@@ -415,7 +423,7 @@ export function workRoutes(): Route[] {
         assignment: true,
         authz: READ,
         params: [ID_PARAM],
-        returns: 'MatterView',
+        returns: 'WorkMatterView',
       },
       async (c, deps) => ok(c, await workOf(deps).matter(actorOf(c), param(c, 'id'))),
     ),

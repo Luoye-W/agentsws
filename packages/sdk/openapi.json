@@ -15538,7 +15538,7 @@
         ],
         "responses": {
           "200": {
-            "description": "MatterView",
+            "description": "WorkMatterView",
             "content": {
               "application/json": {
                 "schema": {
@@ -15629,7 +15629,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "MatterView"
+        "x-returns": "WorkMatterView"
       }
     },
     "/v1/matters/{id}/timeline": {

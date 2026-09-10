@@ -12320,7 +12320,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description MatterView */
+      /** @description WorkMatterView */
       200: {
         headers: {
           [name: string]: unknown

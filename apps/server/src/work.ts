@@ -200,7 +200,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     },
 
     matters: (_actor, filter) => work.listMatters(filter),
-    matter: (_actor, id) => work.matterView(id, { label: (ref) => options.label(ref) }),
+    matter: (_actor, id) => {
+      const view = work.matterView(id, { label: (ref) => options.label(ref) })
+      return {
+        ...view,
+        // 40 §3.3：事项页显示参与者（展示名由服务端补，翻译不出来回落成 id）
+        participant_labels: view.matter.context.participants.map((person_id) => ({
+          person_id,
+          label: options.label({ type: 'person', id: person_id }) ?? person_id,
+        })),
+      }
+    },
     createMatter: (actor, input) =>
       work.createMatter({
         ...input,
