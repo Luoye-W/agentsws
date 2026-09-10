@@ -24,6 +24,16 @@ import Database from 'better-sqlite3'
 /** 环境变量名。秘密只从环境变量名读，不接受直接传值（35 §2）。 */
 export const SECRETS_KEY_ENV = 'AGENTSWS_SECRETS_KEY'
 
+/**
+ * WP40：数据后端的凭据（Postgres 连接串 + S3 兼容的 access key）在这个库里的 key。
+ *
+ * 与连接面（`conn:*`）、模型面（`model:*`）同一个库、同一把密钥、同一条纪律；
+ * 靠前缀分开，谁也读不到谁的（41 §2.2「凭据进本机加密库，不经模型」）。
+ * 这一条不是「一条连接」，所以用一个固定 id，不带工作区——
+ * 数据后端是**整台机器**的事，与工作区无关。
+ */
+export const STORAGE_SECRET_ID = 'storage:backend'
+
 const NONCE_BYTES = 12
 const TAG_BYTES = 16
 const KEY_BYTES = 32

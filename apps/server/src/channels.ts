@@ -24,6 +24,7 @@
 
 import { join } from 'node:path'
 import {
+  BlobBackedRawStore,
   ChannelInboundPipeline,
   type CredentialSource,
   createSqliteChannelStores,
@@ -56,7 +57,7 @@ import type {
   StartRun,
   WorkspaceId,
 } from '@agentsws/contracts'
-import type { RawCipher } from '@agentsws/core'
+import type { RawBlobPort, RawCipher } from '@agentsws/core'
 import type { BackendResult } from '@agentsws/txn'
 import type { Work } from '@agentsws/work'
 import type { MailAccount } from './connections.js'
@@ -84,6 +85,12 @@ export interface ChannelsOptions {
    * **不传就是明文落盘**——只有内存档（`dbDir` 为空）才该这样。
    */
   cipher?: RawCipher
+  /**
+   * WP40：附件字节落**对象存储**（本地目录 / S3 兼容），受控区里只留一句 `blob://…`
+   * （18 §2.1「原始材料区只留文本与引用」）。不传就照旧落库。
+   * 邮件原文是文本，无论如何都留在库里——它要检索、要脱敏。
+   */
+  blobs?: RawBlobPort
   /** 现在连着哪几个邮箱（`connections.mailAccounts()`）。 */
   accounts(): MailAccount[]
   /** 口令来源（`connections.credentialSource()`）；本文件不碰值。 */
@@ -163,7 +170,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
     dbDir === undefined
       ? undefined
       : createSqliteChannelStores({ dbPath: join(dbDir, 'channels.sqlite'), clock })
-  const raw: RawStore =
+  const innerRaw =
     dbDir === undefined
       ? new MemoryRawStore({
           clock,
@@ -175,6 +182,11 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           // 18 §2.1 第一条纪律。漏了这一行邮件原文就是明文落盘。
           ...(options.cipher === undefined ? {} : { cipher: options.cipher }),
         })
+  // WP40：装了对象存储就套一层——附件走 blob，邮件原文照旧留库
+  const raw: RawStore =
+    options.blobs === undefined
+      ? innerRaw
+      : new BlobBackedRawStore({ inner: innerRaw, blobs: options.blobs })
   const queue = sqliteStores?.queue ?? new MemoryQueueStore()
   const dedupe = sqliteStores?.dedupe ?? new MemoryDedupeStore()
 

@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@agentsws/api": "workspace:*",
+    "@agentsws/blob": "workspace:*",
     "@agentsws/channels": "workspace:*",
     "@agentsws/connect-adapter": "workspace:*",
     "@agentsws/contracts": "workspace:*",

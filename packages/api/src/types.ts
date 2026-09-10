@@ -56,6 +56,7 @@ import type { ModelsPort } from './routes/models.js'
 import type { OrgPort } from './routes/org.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretsPort } from './routes/secrets.js'
+import type { StoragePort } from './routes/storage.js'
 import type { WorkPort } from './routes/work.js'
 import type { WsOptions } from './routes/ws.js'
 
@@ -518,6 +519,8 @@ export interface GatewayDeps {
   connections?: ConnectionsPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
+  /** WP40 数据后端（41 §2.4 的三档与迁移向导）；没装配时 `/v1/storage/*` 回 not_implemented。 */
+  storage?: StoragePort
   /** WP25 模型面（provider 配置 / 默认模型 / 预算 / 花费）；没装配时 `/v1/models/*` 回 not_implemented。 */
   models?: ModelsPort
   /**

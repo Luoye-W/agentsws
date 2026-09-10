@@ -156,6 +156,16 @@ export { scheduleRoutes } from './routes/schedules.js'
 export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
 export { secretRoutes } from './routes/secrets.js'
 export {
+  type StorageBackendInput,
+  type StorageBackendView,
+  type StorageMigrationView,
+  type StoragePort,
+  type StorageTestResult,
+  type StorageTier,
+  type StorageView,
+  storageRoutes,
+} from './routes/storage.js'
+export {
   type MatterListFilter,
   type TodoListFilter,
   type WorkActor,

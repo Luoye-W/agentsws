@@ -24,9 +24,10 @@ import type {
   ObjectRef,
   PersonId,
 } from '@agentsws/contracts'
-import type { RawCipher } from '@agentsws/core'
+import type { RawBlobPort, RawCipher } from '@agentsws/core'
 import {
   approvalRequestsFor,
+  BlobBackedMeetingRawStore,
   createMeetingPipeline,
   createMemoryMeetingStore,
   createSqliteMeetingRawStore,
@@ -70,6 +71,12 @@ export interface MeetingsOptions {
    * 不传就是明文落盘（只有 `dbDir` 为空的内存档才该这样）。
    */
   cipher?: RawCipher
+  /**
+   * WP40：录音与视频落**对象存储**（本地目录 / S3 兼容），受控区里只留一句 `blob://…`
+   * （18 §2.1「原始材料区只留文本与引用」）。不传就照旧落库——
+   * 一小时录音几十上百 MB，落 SQLite 是把库撑爆。
+   */
+  blobs?: RawBlobPort
 }
 
 export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
@@ -79,7 +86,7 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
       ? createMemoryMeetingStore({ clock, random })
       : createSqliteMeetingStore({ dbPath: join(dbDir, 'meetings.sqlite'), clock, random })
   const cipherOpt = options.cipher === undefined ? {} : { cipher: options.cipher }
-  const raw: MeetingRawStore =
+  const inner =
     dbDir === undefined
       ? new MemoryMeetingRawStore(cipherOpt)
       : createSqliteMeetingRawStore({
@@ -87,6 +94,11 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
           clock,
           ...cipherOpt,
         })
+  // WP40：装了对象存储就套一层——媒体走 blob，转写与文档照旧留库
+  const raw: MeetingRawStore =
+    options.blobs === undefined
+      ? inner
+      : new BlobBackedMeetingRawStore({ inner, blobs: options.blobs })
 
   const pipeline = createMeetingPipeline({
     store,

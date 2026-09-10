@@ -28,6 +28,7 @@ import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { secretRoutes } from './routes/secrets.js'
 import { skillRoutes } from './routes/skills.js'
+import { storageRoutes } from './routes/storage.js'
 import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
 import { wsRoutes } from './routes/ws.js'
@@ -65,6 +66,8 @@ export function collectRoutes(): Route[] {
     ...connectionRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
+    // WP40：数据后端（41 §2.4）。凭据只走 /v1/storage/backend 一条路，GET 永不含凭据。
+    ...storageRoutes(),
     // WP34 21 §4「删这个人」（owner）：三个库一次清掉，独立路径不与别处撞
     ...privacyRoutes(),
     ...knowledgeRoutes(),

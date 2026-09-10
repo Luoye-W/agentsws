@@ -31,6 +31,7 @@ import {
   WS_SUBPROTOCOL,
   WsSession,
 } from '@agentsws/api'
+import { openBlobStore } from '@agentsws/blob'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
   ApprovalBus,
@@ -100,6 +101,7 @@ import {
 import { createSecretStore, type SecretStore, SecretStoreError } from './secret-store.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { mountStatic } from './static.js'
+import { createStorage } from './storage.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
 import {
   createWorkstationPort,
@@ -438,6 +440,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       roles: BUNDLED_ROLES.map((id) => loadBundledRole(id)),
     })
 
+  // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
+  // 把它指到共享目录）或 S3 兼容（阿里 OSS / 腾讯 COS / R2 / MinIO）。
+  // 加密接同一个主体密钥环：销毁一个主体的密钥，他的每一个对象当场读不出来（21 §4）。
+  const blobs = await openBlobStore({
+    clock,
+    cipher: data.keyring,
+    env,
+    ...(dbDir === undefined ? {} : { defaultRoot: join(dbDir, 'blobs') }),
+  })
+
   const knowledge = createKnowledge({ dbPath: file('knowledge.db'), clock })
   const skills = createSkills({ clock, random })
 
@@ -638,6 +650,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 18 §2.1 受控原始材料区的第一条纪律：加密。密钥环是数据层的（21 §4，
     // 每主体一把独立随机密钥，销毁即不可读），录音库只拿这个端口——两个库不共享表（35 §2）。
     cipher: data.keyring,
+    // WP40：录音与视频落对象存储，受控区里只留一句 `blob://…`（18 §2.1）
+    blobs,
   })
   // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
   meetings.bind(work)
@@ -663,6 +677,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 18 §2.1 第一条纪律：受控原始材料区加密。与会议档共用同一个密钥环，
     // **但不共用它的表**（35 §2）。漏了这一行，邮件原文就是明文落盘。
     cipher: data.keyring,
+    // WP40：附件字节落对象存储；邮件原文是文本，照旧留库加密
+    blobs,
     accounts: () => connections.mailAccounts(),
     credentials: connections.credentialSource(),
     work,
@@ -694,6 +710,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     data,
     channels,
     meetings,
+  })
+
+  // WP40 / 41 §2.4：数据后端面。凭据进本机加密库（与连接面、模型面同一个库，
+  // 靠 key 前缀分开）；`GET /v1/storage` 端出去的永远是脱敏后的描述。
+  const storage = createStorage({
+    clock,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    blobs,
+    secrets,
+    env,
   })
 
   // ── 25 定时与流程：调度器 + 各个消费者 ───────────────────────────────
@@ -1000,6 +1026,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     },
     models: modelSettings.port,
+    // WP40 数据后端（41 §2.4 的三档与迁移向导）
+    storage: storage.port,
     org: org.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
     ask: createAskPort({
