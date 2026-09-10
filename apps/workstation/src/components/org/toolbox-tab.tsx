@@ -13,6 +13,7 @@ import { SimilarChoiceCard } from '@/components/org/similar-choice'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -146,7 +147,11 @@ export function ToolboxTab({
 
   return (
     <div className="flex flex-col gap-4" data-testid="toolbox">
-      <p className="text-xs text-muted-foreground">{t('toolbox.subtitle')}</p>
+      {/* WP43 ③：一句副标题，「建之前先看一眼」那句进问号 */}
+      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+        {t('toolbox.subtitle')}
+        <Hint text={t('toolbox.subtitle.hint')} />
+      </p>
 
       <div className="flex flex-wrap items-center gap-2">
         <Input
@@ -287,10 +292,12 @@ export function ToolboxTab({
       {duplicates.length === 0 ? null : (
         <Card className="border-amber-400/60" data-testid="toolbox-duplicates">
           <CardHeader>
-            <CardTitle className="text-sm">{t('toolbox.dupes')}</CardTitle>
+            <CardTitle className="flex items-center gap-1 text-sm">
+              {t('toolbox.dupes')}
+              <Hint text={t('toolbox.dupes.hint')} />
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">{t('toolbox.dupes.hint')}</p>
             {duplicates.map((d) => {
               const key = `${d.a.id}|${d.b.id}`
               return (
@@ -376,10 +383,12 @@ export function ToolboxTab({
                       : t('toolbox.last_run', { at: shortDate(e.last_run_at) ?? '' })}{' '}
                     · {t('toolbox.runs', { n: e.runs_30d })}
                   </span>
+                  {/* 「当初为什么另建」是列表项里的来龙去脉，进问号 */}
                   {e.reason_for_duplicate === undefined ? null : (
-                    <span className="text-xs text-amber-700">
-                      {t('toolbox.reason', { reason: e.reason_for_duplicate })}
-                    </span>
+                    <Hint
+                      text={t('toolbox.reason', { reason: e.reason_for_duplicate })}
+                      className="text-amber-700"
+                    />
                   )}
                 </div>
               ))}

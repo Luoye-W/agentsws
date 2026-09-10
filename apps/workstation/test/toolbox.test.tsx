@@ -131,8 +131,12 @@ describe('40 §2.2 第 1 条：工具箱看得见', () => {
     expect(screen.getByText(/累计跑了 28 次/)).toBeTruthy()
     expect(screen.getAllByText('个人').length).toBeGreaterThan(0)
     expect(screen.getByText('公司')).toBeTruthy()
-    // 当初"仍新建"写的那句理由，下一个人看得到
-    expect(screen.getByText(/我这条只看退货窗口内的单/)).toBeTruthy()
+    // 当初"仍新建"写的那句理由，下一个人看得到——WP43 ③ 之后它在问号 tooltip 上
+    expect(
+      screen
+        .getAllByRole('button')
+        .some((b) => (b.getAttribute('data-hint') ?? '').includes('我这条只看退货窗口内的单')),
+    ).toBe(true)
   })
 
   it('按 kind 分组，点分组按钮只留那一类', async () => {

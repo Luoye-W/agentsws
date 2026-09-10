@@ -67,22 +67,23 @@ EOT
 fi
 set -a; . "$ENV_FILE"; set +a
 
-# 代理 fake-IP 模式（Clash / Surge 的 198.18.0.0/15）会让容器把外网域名解析成保留段地址，
+# 代理 fake-IP 模式（Clash / Surge 的 198.18.0.0/15）会把外网域名解析成保留段地址，
 # OpenConnector 的出站防护会把它当内网拦下（"must not resolve to private or reserved IP"）。
-# 检测到就让容器用公共 DNS 直接解析；也可用 AGENTSWS_CONNECT_TRUSTED_HOSTS 白名单（逗号分隔）。
-OC_DNS_ARGS=""
-if getent hosts api.deepseek.com 2>/dev/null | grep -qE '^198\.1[89]\.' || dscacheutil -q host -a name api.deepseek.com 2>/dev/null | grep -qE 'ip_address: 198\.1[89]\.'; then
-  OC_DNS_ARGS="--dns 223.5.5.5 --dns 1.1.1.1"
-  echo "检测到代理 fake-IP：连接器容器改用公共 DNS 直接解析外网域名"
-fi
+# 实测容器加 --dns 也绕不开（代理在系统层劫持了 DNS），所以检测到就给一份常见 SaaS 域名白名单；
+# 可用 AGENTSWS_CONNECT_TRUSTED_HOSTS 覆盖（逗号分隔，前导点表示整个子域，如 .myshopify.com）。
+FAKE_IP_TRUSTED=".myshopify.com,.shopify.com,api.deepseek.com,.openai.com,.anthropic.com,.zoho.com,.google.com,.googleapis.com,.qq.com,.163.com,.126.com,.aliyun.com,.mxhichina.com,.outlook.com,.office365.com,.microsoft.com,.feishu.cn,.larksuite.com,.dingtalk.com"
 OC_TRUST_ARGS=""
+if getent hosts api.deepseek.com 2>/dev/null | grep -qE '^198\.1[89]\.' || dscacheutil -q host -a name api.deepseek.com 2>/dev/null | grep -qE 'ip_address: 198\.1[89]\.'; then
+  : "${AGENTSWS_CONNECT_TRUSTED_HOSTS:=$FAKE_IP_TRUSTED}"
+  echo "检测到代理 fake-IP：连接器出站白名单 = $AGENTSWS_CONNECT_TRUSTED_HOSTS"
+fi
 [ -n "${AGENTSWS_CONNECT_TRUSTED_HOSTS:-}" ] && OC_TRUST_ARGS="-e OOMOL_CONNECT_EGRESS_TRUSTED_HOSTS=${AGENTSWS_CONNECT_TRUSTED_HOSTS}"
 
 # OpenConnector：加固三件套；只绑 127.0.0.1
 if ! docker ps --format '{{.Names}}' | grep -qx "$OC_NAME" || [ "${AGENTSWS_CONNECT_RECREATE:-0}" = "1" ]; then
   docker rm -f "$OC_NAME" >/dev/null 2>&1 || true
   # shellcheck disable=SC2086
-  docker run -d --name "$OC_NAME" -p "127.0.0.1:${OC_PORT}:3000" $OC_DNS_ARGS $OC_TRUST_ARGS \
+  docker run -d --name "$OC_NAME" -p "127.0.0.1:${OC_PORT}:3000" $OC_TRUST_ARGS \
     -e "OOMOL_CONNECT_ENCRYPTION_KEY=$OOMOL_CONNECT_ENCRYPTION_KEY" \
     -e "OOMOL_CONNECT_ADMIN_TOKEN=$OOMOL_CONNECT_ADMIN_TOKEN" \
     -e "OOMOL_CONNECT_BLOCKED_PROXIES=*" \

@@ -373,7 +373,8 @@ describe('连接页：OAuth 向导', () => {
     const ga4 = screen
       .getAllByTestId('provider-card')
       .find((c) => c.getAttribute('data-service') === 'ga4') as HTMLElement
-    expect(within(ga4).getByTestId('provider-note').textContent).toContain('下一版')
+    // WP43 ③：这段说明从卡面挪进了标题旁的问号（jsdom 打不开 tooltip，读属性）
+    expect(within(ga4).getByTestId('provider-note').getAttribute('data-hint')).toContain('下一版')
   })
 })
 

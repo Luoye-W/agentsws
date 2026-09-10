@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { RoleSummaryView } from '@/lib/api'
@@ -206,8 +207,9 @@ export function RolesTab({
                     }}
                   />
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">{t('org.roles.approval_note')}</p>
+                <div className="flex items-center justify-end gap-1">
+                  {/* WP43 ③：「改职责要经过审批」是规则，进问号 */}
+                  <Hint text={t('org.roles.approval_note')} />
                   <Button
                     size="sm"
                     data-testid="role-submit"
@@ -247,8 +249,8 @@ export function RolesTab({
                 ) : null}
               </section>
             ) : (
-              <section className="flex items-center justify-between gap-2 rounded-md border p-2">
-                <p className="text-xs text-muted-foreground">{t('org.roles.copy_note')}</p>
+              <section className="flex items-center justify-end gap-1 rounded-md border p-2">
+                <Hint text={t('org.roles.copy_note')} />
                 <Button
                   size="sm"
                   variant="outline"

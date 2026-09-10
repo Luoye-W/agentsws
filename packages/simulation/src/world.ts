@@ -88,8 +88,7 @@ const CUSTOMERS = defineCollection({
   },
 })
 
-const messageOfError = (err: unknown): string =>
-  err instanceof Error ? err.message : String(err)
+const messageOfError = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 /** 05 §1 动作 id ↔ 15 §2 变更种类。 */
 const ACTION_BY_KIND: Partial<Record<ChangeKind, string>> = {
@@ -1314,7 +1313,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       const verdict = devMcp.execute(MCP_VALIDATE_TOOL, { document })
       const verdictData = verdict.data as { result?: string; errors?: string[] } | undefined
       if (verdict.status !== 'ok' || verdictData?.result !== 'success') {
-        const errors = verdictData?.errors ?? [verdict.reason ?? 'unknown'];
+        const errors = verdictData?.errors ?? [verdict.reason ?? 'unknown']
         blocked.push({
           rule: 'graphql_invalid',
           at: now(clock),

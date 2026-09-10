@@ -15,6 +15,7 @@ import { ProfileForm } from '@/components/secretary/profile-form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -124,10 +125,11 @@ export function SecretaryPage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4" data-testid="secretary-page">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-semibold text-base">{t('secretary.title')}</h1>
-        <p className="text-muted-foreground text-xs">{t('secretary.intro')}</p>
-      </div>
+      {/* WP43 ③：一句标题就够，「代理只管四件事」进问号 */}
+      <h1 className="flex items-center gap-1 font-semibold text-base">
+        {t('secretary.title')}
+        <Hint text={t('secretary.intro')} />
+      </h1>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>

@@ -352,6 +352,26 @@ describe('WP25 §C 模型面板：填 key（零泄漏）', () => {
     expect(form.textContent).toMatch(/不上传|不进模型|这台电脑/)
   })
 
+  it('WP43 ②：字段说明进问号 tooltip，不再在框底下铺灰字', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    // 接口地址那条说明只在 Hint 上（jsdom 打不开 tooltip，读 aria-label / data-hint）
+    const hints = Array.from(form.querySelectorAll('[data-slot="hint"]'))
+    expect(hints.length).toBeGreaterThan(0)
+    const texts = hints.map((h) => h.getAttribute('data-hint'))
+    expect(texts).toContain('看那家的文档，一般以 /v1 结尾。')
+    for (const h of hints) {
+      expect(h.getAttribute('aria-label')).toBe(h.getAttribute('data-hint'))
+      expect(h.querySelector('svg')).not.toBeNull()
+    }
+    // 已经不再作为正文渲染
+    expect(form.textContent).not.toContain('看那家的文档')
+    // 例外：安全承诺照旧看得见
+    expect(form.querySelector('[data-slot="safety-note"]')).not.toBeNull()
+  })
+
   it('已经存过 key 的那条：改配置时 key 可以留空（不用重填）', async () => {
     state.providers = [ACTIVE]
     const user = userEvent.setup()

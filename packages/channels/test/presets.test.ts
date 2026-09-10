@@ -13,6 +13,7 @@ import {
   MAILBOX_PRESETS,
   matchPresetByMx,
   presetById,
+  withMxFallback,
 } from '../src/email/presets.js'
 
 describe('WP25 §B 预设表', () => {
@@ -153,6 +154,36 @@ describe('WP25 §B 域名与识别', () => {
     const found = await detectMailbox('a@acme.com', async () => {
       throw new Error('queryMx ESERVFAIL')
     })
+    expect(found.preset).toBeUndefined()
+  })
+
+  it('主解析器查不到 MX（空或抛错）就换备用解析器；查到了就不再问备用', async () => {
+    const zoho = [{ priority: 10, exchange: 'mx.zoho.com' }]
+    let fallbackCalls = 0
+    const fallback = async () => {
+      fallbackCalls += 1
+      return zoho
+    }
+    expect(await withMxFallback(async () => [], fallback)('kefuagents.com')).toEqual(zoho)
+    expect(
+      await withMxFallback(() => {
+        throw new Error('ENODATA')
+      }, fallback)('kefuagents.com'),
+    ).toEqual(zoho)
+    expect(fallbackCalls).toBe(2)
+    const ali = [{ priority: 5, exchange: 'mx1.mxhichina.com' }]
+    expect(await withMxFallback(async () => ali, fallback)('acme.com')).toEqual(ali)
+    expect(fallbackCalls).toBe(2)
+    // 备用也失败：异常往外抛，由 detectMailbox 兜住变成 preset: undefined
+    const found = await detectMailbox(
+      'a@x.example',
+      withMxFallback(
+        async () => [],
+        () => {
+          throw new Error('ETIMEOUT')
+        },
+      ),
+    )
     expect(found.preset).toBeUndefined()
   })
 

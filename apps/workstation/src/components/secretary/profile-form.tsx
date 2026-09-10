@@ -11,6 +11,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -142,9 +143,7 @@ export function ProfileForm({
               setSaved(false)
             }}
           />
-          <span className="text-muted-foreground text-xs">
-            {t('secretary.profile.availability.hint', { n: minutes })}
-          </span>
+          <Hint text={t('secretary.profile.availability.hint', { n: minutes })} />
         </div>
         <span className="text-muted-foreground text-xs">
           {profile.availability.rules
@@ -213,7 +212,8 @@ export function ProfileForm({
             ))}
           </tbody>
         </table>
-        <p className="text-muted-foreground text-xs">{t('secretary.profile.disclosure.hint')}</p>
+        {/* 例外：私有数据永远只有本人看得到——隐私承诺不藏 */}
+        <SafetyNote text={t('secretary.profile.disclosure.hint')} />
       </div>
 
       <div className="flex items-center gap-2">

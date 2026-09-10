@@ -10,6 +10,7 @@ import { INSTRUCTION_SCOPES } from '@agentsws/deck'
 import { useState } from 'react'
 import { AskAiPanel, type AskAiScope } from '@/components/deck/ask-ai-panel'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
 
@@ -37,8 +38,10 @@ export function DeckNotePanel({
 
   return (
     <div className="flex flex-col gap-2" data-testid={`deck-panel-${mode}`}>
-      <p className="text-xs text-muted-foreground">
-        {mode === 'instruct' ? t('deck.instruct.hint') : t('deck.reject.hint')}
+      {/* WP43 ③：提示进问号；输入框自己的 aria-label 照旧 */}
+      <p className="flex items-center gap-1 text-xs font-medium">
+        {mode === 'instruct' ? t('card.instruct.title') : t('action.reject')}
+        <Hint text={mode === 'instruct' ? t('deck.instruct.hint') : t('deck.reject.hint')} />
       </p>
       <Textarea
         autoFocus
@@ -111,8 +114,10 @@ export function DeckSupplementPanel({
   const { t } = useApp()
   return (
     <div className="flex flex-col gap-2" data-testid="deck-panel-supplement">
-      <p className="text-sm font-medium">{t('deck.supplement.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('deck.supplement.hint')}</p>
+      <p className="flex items-center gap-1 text-sm font-medium">
+        {t('deck.supplement.title')}
+        <Hint text={t('deck.supplement.hint')} />
+      </p>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={onSnooze}>
           {t('deck.supplement.snooze')}
