@@ -109,6 +109,7 @@ export {
   registerApprovalHousekeeping,
   registerDailyPlan,
   registerIdempotencySweep,
+  registerIdleTodos,
   registerMailPoll,
   registerMeetingPoll,
   registerPlanRelay,

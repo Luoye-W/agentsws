@@ -9,7 +9,7 @@
  */
 import type { Assignment, Todo } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createServer, type Server } from '../src/index.js'
+import { createServer, HANDLERS, type Server } from '../src/index.js'
 
 const T0 = '2026-09-07T09:00:00.000Z'
 
@@ -288,5 +288,23 @@ describe('看得见谁在做（40 §3.3）', () => {
 
   it('scope 只认 position / workspace', async () => {
     expect((await call('GET', '/v1/work/in-progress?scope=everything')).status).toBe(400)
+  })
+})
+
+describe('闲置回收（40 §3.5）', () => {
+  it('调度器上有一条每天 09:00 的巡检任务，处理器已登记', () => {
+    const task = server.schedule.scheduler.get('sched_idle_todos')
+    expect(task?.handler).toBe(HANDLERS.idleTodos)
+    expect(task?.trigger).toMatchObject({ kind: 'cron', expr: '0 9 * * *' })
+    expect(server.schedule.scheduler.handlers()).toContain(HANDLERS.idleTodos)
+  })
+
+  it('跑一次：没到点什么都不动', async () => {
+    const pooled = server.work.poolTodo({ title: '盘一下上月库存差异' })
+    server.work.claimTodo(pooled.id, server.bootstrap.person.id)
+    const out = await server.schedule.scheduler.runNow('sched_idle_todos')
+    expect(out.ok).toBe(true)
+    expect(out.result).toMatchObject({ reminded: 0, recycled: 0 })
+    expect(server.work.requireTodo(pooled.id).owner).toBe(server.bootstrap.person.id)
   })
 })

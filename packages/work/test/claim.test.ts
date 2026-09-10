@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { claimOf, DEFAULT_IDLE_DAYS, UNCLAIMED_OWNER } from '../src/claim.js'
+import { filterCollidingSuggestions } from '../src/plan.js'
 import { createWork, type Work } from '../src/service.js'
 import { DAY_MS } from '../src/util.js'
 import { FakeClock, seeded } from './helpers.js'
@@ -286,5 +287,75 @@ describe('闲置回收（40 §3.5）', () => {
     expect(work.sweepIdleTodos().reminded).toEqual([])
     clock.advance(3 * DAY_MS)
     expect(work.sweepIdleTodos().reminded).toEqual([todo.id])
+  })
+})
+
+describe('分配时防撞（40 §3.4）', () => {
+  it('每日计划里撞上「别人正在做的」那几条不建议，理由是 in_progress_elsewhere', () => {
+    const { kept, filtered } = filterCollidingSuggestions({
+      suggestions: [
+        {
+          id: 'sug_1',
+          kind: 'create',
+          title: '核对昨天的退款单',
+          reason: '目标落后',
+          selected: true,
+        },
+        {
+          id: 'sug_2',
+          kind: 'create',
+          title: '给供应商打电话催货',
+          reason: '目标落后',
+          selected: true,
+        },
+      ],
+      in_progress: [
+        {
+          kind: 'todo',
+          id: 'td_a',
+          title: '核对昨天的退款单',
+          owner: 'p_li',
+          collaborators: [],
+          status: 'doing',
+          refs: [],
+          item_kind: 'manual',
+          started_at: '2026-09-09T01:00:00.000Z',
+          last_activity: '2026-09-09T01:00:00.000Z',
+          cards: 1,
+        },
+      ],
+      person_id: 'p_chen',
+      now: '2026-09-09T01:00:00.000Z',
+      tz_offset_minutes: TZ,
+    })
+    expect(kept.map((s) => s.id)).toEqual(['sug_2'])
+    expect(filtered).toEqual([
+      {
+        suggestion_id: 'sug_1',
+        reason: 'in_progress_elsewhere',
+        owner: 'p_li',
+        conflicts_with: 'td_a',
+      },
+    ])
+  })
+
+  it('自己正在做的不算撞车（那本来就是他的活）', () => {
+    const { work } = make()
+    liIsBusy(work)
+    const { plan, filtered } = work.todayPlanWithFilter({ person_id: 'p_li', goals: [] })
+    expect(filtered).toEqual([])
+    expect(plan.suggestions.length).toBeGreaterThanOrEqual(0)
+  })
+
+  it('别人正在做的那条不会出现在我的计划建议里', () => {
+    const { work } = make()
+    liIsBusy(work)
+    // 陈晓的 backlog 里有一条与李默在做的重名
+    work.createTodo({ title: '核对昨天的退款单', owner: 'p_chen', horizon: 'backlog' })
+    const { plan } = work.todayPlanWithFilter({ person_id: 'p_chen', goals: [] })
+    // 指着自己那条待办的建议照给（promote 有 todo_id，不算撞车）
+    expect(
+      plan.suggestions.every((s) => s.todo_id !== undefined || s.title !== '核对昨天的退款单'),
+    ).toBe(true)
   })
 })
