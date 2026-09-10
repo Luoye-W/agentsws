@@ -49,6 +49,44 @@ export interface WorkActor {
   assignment_id: AssignmentId
 }
 
+/**
+ * 「正在进行」的一条（40 §3.3）。展示名由服务端补（前端不猜、也不查库）：
+ * `owner_label` 没有数据源能翻译时回落成 `owner` 本身。
+ */
+export interface WorkInProgressItem {
+  kind: 'todo' | 'matter'
+  id: string
+  title: string
+  owner: PersonId
+  owner_label: string
+  collaborators: PersonId[]
+  status: string
+  position_id?: string
+  started_at: string
+  last_activity: string
+  /** 等他定的卡数 */
+  cards: number
+  matter_id?: string
+}
+
+/** 待认领池里的一条（40 §3.2）。 */
+export interface WorkPoolItem {
+  todo_id: string
+  title: string
+  note?: string
+  source: Todo['source']
+  position_id?: string
+  matter_id?: string
+  due?: string
+  pooled_at: string
+  /** 回过几次池（上一个主人没动它） */
+  recycled: number
+  /** 可能与这些进行中项重复 */
+  similar_to: string[]
+  /** 这条是转交给我的，不是池里的公共项 */
+  offered_by?: PersonId
+}
+
 /** 首页第三稿（37 §3）在 `GET /v1/home` 上多出来的三段。 */
 export interface WorkHome {
   /** ① 目标进度 */
@@ -102,6 +140,11 @@ const CreateGoalBody = z.object({
   position_id: z.string().min(1).optional(),
 })
 
+const Ref = z.object({ type: z.string().min(1).max(40), id: z.string().min(1).max(200) })
+
+/** 撞上了怎么办（40 §3.1 的选择题三选一）。 */
+const COLLISION = ['join', 'handoff', 'force'] as const
+
 const CreateTodoBody = z.object({
   title: z.string().min(1).max(200),
   note: z.string().max(2000).optional(),
@@ -110,7 +153,18 @@ const CreateTodoBody = z.object({
   parent_id: z.string().min(1).optional(),
   due: z.string().min(1).optional(),
   horizon: z.enum(HORIZON).optional(),
+  /** 主题对象（订单 / 客户 / 会议 / 店铺）——撞车第一把钥匙 */
+  refs: z.array(Ref).max(5).optional(),
+  /** 不给就是「先查」：撞上了回 409，不建 */
+  collision: z.enum(COLLISION).optional(),
+  collision_target: z.string().min(1).optional(),
+  /** 选「我这个不一样」必须写一句区别 */
+  distinct_reason: z.string().max(500).optional(),
 })
+
+const ClaimBody = z.object({ position_id: z.string().min(1).optional() })
+const TransferBody = z.object({ to: z.string().min(1) })
+const CollaboratorBody = z.object({ person_id: z.string().min(1) })
 
 const UpdateTodoBody = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -218,7 +272,22 @@ export interface WorkPort {
   createGoal(actor: WorkActor, input: z.infer<typeof CreateGoalBody>): MaybePromise<Goal>
 
   todos(actor: WorkActor, filter: TodoListFilter): MaybePromise<Todo[]>
+  /**
+   * 记一条待办。**建之前先查**（40 §3.1）：撞上进行中的相似项时抛
+   * `conflict` + `details.reason = 'similar_in_progress'` + 候选，由界面出选择题；
+   * 带上 `collision` 才放行。
+   */
   createTodo(actor: WorkActor, input: z.infer<typeof CreateTodoBody>): MaybePromise<Todo>
+
+  /** 待认领池（40 §3.2）：来自会议 / 计划 / 告警的活，还没有主人 */
+  pool(actor: WorkActor): MaybePromise<WorkPoolItem[]>
+  /** 认领即锁：第一个成功的是主人，其余回 `conflict / already_claimed` */
+  claimTodo(actor: WorkActor, id: string): MaybePromise<Todo>
+  /** 转交（对方接下之前不形成责任，31 I13） */
+  transferTodo(actor: WorkActor, id: string, to: PersonId): MaybePromise<Todo>
+  addCollaborator(actor: WorkActor, id: string, person_id: PersonId): MaybePromise<Todo>
+  /** 看得见谁在做（40 §3.3） */
+  inProgress(actor: WorkActor, scope: 'position' | 'workspace'): MaybePromise<WorkInProgressItem[]>
   updateTodo(
     actor: WorkActor,
     id: string,
@@ -510,7 +579,8 @@ export function workRoutes(): Route[] {
         method: 'post',
         path: '/v1/todos',
         operationId: 'createTodo',
-        summary: '记一条待办（人的承诺）',
+        summary:
+          '记一条待办（人的承诺）。建之前先查撞车：命中回 409（details.reason = similar_in_progress）+ 候选',
         tag: 'work',
         auth: 'bearer',
         assignment: true,
@@ -524,6 +594,105 @@ export function workRoutes(): Route[] {
           { todo: await workOf(deps).createTodo(actorOf(c), await body(c, CreateTodoBody)) },
           201,
         ),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/todos/pool',
+        operationId: 'listClaimPool',
+        summary: '待认领池：会议 / 计划 / 告警抽出来的活，谁点「我来」谁是主人（40 §3.2）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '{ pool: WorkPoolItem[] }',
+      },
+      async (c, deps) => ok(c, { pool: await workOf(deps).pool(actorOf(c)) }),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/todos/:id/claim',
+        operationId: 'claimTodo',
+        summary: '我来做这条（认领即锁；已经有人认了回 409 并附主人）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        body: ClaimBody,
+        returns: '{ todo: Todo }',
+      },
+      async (c, deps) => {
+        const actor = actorOf(c)
+        await body(c, ClaimBody)
+        return ok(c, { todo: await workOf(deps).claimTodo(actor, param(c, 'id')) })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/todos/:id/transfer',
+        operationId: 'transferTodo',
+        summary: '转交给别人（对方接下之前不形成责任，31 I13）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        body: TransferBody,
+        returns: '{ todo: Todo }',
+      },
+      async (c, deps) => {
+        const actor = actorOf(c)
+        const { to } = await body(c, TransferBody)
+        return ok(c, { todo: await workOf(deps).transferTodo(actor, param(c, 'id'), to) })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/todos/:id/collaborators',
+        operationId: 'addTodoCollaborator',
+        summary: '加协作者（主人还是一个）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        body: CollaboratorBody,
+        returns: '{ todo: Todo }',
+      },
+      async (c, deps) => {
+        const actor = actorOf(c)
+        const { person_id } = await body(c, CollaboratorBody)
+        return ok(c, {
+          todo: await workOf(deps).addCollaborator(actor, param(c, 'id'), person_id),
+        })
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/work/in-progress',
+        operationId: 'listInProgress',
+        summary: '谁在做什么：进行中的待办与事项，带主人、开始时间、卡数（40 §3.3）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          { name: 'scope', in: 'query', description: 'position（默认，本岗位）/ workspace' },
+        ],
+        returns: '{ items: WorkInProgressItem[], scope }',
+      },
+      async (c, deps) => {
+        const raw = c.req.query('scope')
+        if (raw !== undefined && raw !== '' && raw !== 'position' && raw !== 'workspace')
+          throw new ApiError('invalid_input', 'scope 只能是 position / workspace')
+        const scope = raw === 'workspace' ? 'workspace' : 'position'
+        return ok(c, { items: await workOf(deps).inProgress(actorOf(c), scope), scope })
+      },
     ),
     route(
       {

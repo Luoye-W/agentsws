@@ -160,6 +160,8 @@ export {
   type TodoListFilter,
   type WorkActor,
   type WorkHome,
+  type WorkInProgressItem,
+  type WorkPoolItem,
   type WorkPort,
   workRoutes,
 } from './routes/work.js'

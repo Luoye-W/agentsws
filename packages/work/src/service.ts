@@ -1127,12 +1127,19 @@ export class Work {
     return next
   }
 
-  /** 池里还没人认的（可按岗位缩小）。 */
+  /**
+   * 池里还没人认的。
+   *
+   * 按岗位缩小时，**没写岗位的那些仍然在列**：一条没挂岗位的活是全公司的活，
+   * 谁都该看得见（否则它会掉进谁也看不见的缝里）。
+   */
   pool(filter: { position_id?: PositionId } = {}): Todo[] {
     return this.listTodos({ owner: UNCLAIMED_OWNER, status: ['open', 'doing', 'blocked'] }).filter(
       (t) =>
         claimOf(t).state === 'unclaimed' &&
-        (filter.position_id === undefined || t.position_id === filter.position_id),
+        (filter.position_id === undefined ||
+          t.position_id === undefined ||
+          t.position_id === filter.position_id),
     )
   }
 
