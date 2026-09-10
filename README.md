@@ -107,6 +107,8 @@ pnpm dev:demo --port 4318         # 4317 被占了就换一个
 
 ```bash
 scripts/dev-real.sh     # 起加固的 OpenConnector 容器 + SQLite 落盘的服务进程 + 工作台
+# 代理开了 fake-IP（Clash / Surge 的 198.18.x）时脚本会自动给连接器一份出站白名单；要加域名：
+# AGENTSWS_CONNECT_TRUSTED_HOSTS=".myshopify.com,api.deepseek.com" AGENTSWS_CONNECT_RECREATE=1 scripts/dev-real.sh
 ```
 
 密钥只生成一次、落在 600 权限的文件里。凭据在工作台「连接」页的原生表单里自己填，**不经过
