@@ -29,6 +29,14 @@ export interface WorkstationDataSource {
   base_currency: string
   /** 系统卡与每日摘要；v1 缺省没有 */
   systemCards?(actor: WorkstationActor): { alerts: DeckCard[]; digest?: DeckCard }
+  /**
+   * WP46：读之前先把数据拉新一轮（活数据源用；写死的表不需要，所以是可选的）。
+   *
+   * `orders()` / `sources()` 是同步的——不能在里面等一次上游请求。于是把「要不要
+   * 拉一轮」放在这里：`queryContext` 组装之前 await 一次，缓存还新就立刻返回。
+   * **永不抛**：上游挂了就用上一份缓存，面板照常出，不该让整页 500。
+   */
+  ensureFresh?(): Promise<void>
 }
 
 /** 队列上的状态；记录 Tab 要看全部。 */
@@ -107,6 +115,8 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
     items: (actor, position) => itemsFor(actor, position, OPEN_STATES),
 
     async queryContext(actor, position, range): Promise<QueryContext> {
+      // 活数据源在这里拉新（缓存还新就是个空操作）；写死的表没有这个方法
+      await options.data.ensureFresh?.()
       return {
         now: options.clock.now(),
         tz_offset_minutes: options.data.tz_offset_minutes,

@@ -109,8 +109,26 @@ export interface MockWhatsappMessage {
   at: Iso8601
 }
 
+/**
+ * 店铺自己（`shopify_admin.get_shop` 回的那一份）。
+ *
+ * WP46：工作台要拿它算币种与日界线——`iana_timezone` 决定「昨天」从几点切。
+ * 字段名照 Shopify Admin 的原样（`myshopify_domain` / `iana_timezone`），
+ * 真身与替身的形状对齐，映射那一层才只写一遍。
+ */
+export interface MockShop {
+  id: string
+  name: string
+  myshopify_domain: string
+  email: string
+  currency: string
+  iana_timezone: string
+}
+
 export interface MockState {
   orders: MockOrder[]
+  /** 店铺自己；不给就用一份默认的（pack 造的状态里没有这一格）。 */
+  shop?: MockShop
   products: MockProduct[]
   themes: MockTheme[]
   discounts: MockDiscountCode[]
@@ -137,6 +155,14 @@ export function defaultState(start: Iso8601): MockState {
   const base = Date.parse(start)
   if (!Number.isFinite(base)) throw new RangeError(`invalid dataset start: ${start}`)
   return {
+    shop: {
+      id: 'shop_stand_in',
+      name: 'Stand-in Store',
+      myshopify_domain: 'stand-in.myshopify.com',
+      email: 'owner@example.com',
+      currency: 'USD',
+      iana_timezone: 'Asia/Shanghai',
+    },
     orders: [
       {
         id: 'ord_1001',

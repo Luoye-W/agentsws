@@ -113,6 +113,9 @@ export type KnownEventType =
   | 'shopify.graphql_unvalidated'
   | 'shopify.devmcp_started'
   | 'shopify.devmcp_unavailable'
+  // WP46：活数据源——只记条数 / 页数 / 耗时 / 失败原因码，订单原文不进事件
+  | 'data.refreshed'
+  | 'data.refresh_failed'
   // WP24：问 AI 只记哈希；急停变更
   | 'ask.answered'
   | 'halt.changed'

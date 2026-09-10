@@ -45,7 +45,9 @@ describe('mock OpenConnector：发现与连接', () => {
       'whatsapp',
     ])
     const shopify = await connect.actions('shopify_admin')
-    expect(shopify).toHaveLength(7)
+    // WP46 起多了一条只读的 `get_shop`（工作台拿它算币种与日界线）
+    expect(shopify).toHaveLength(8)
+    expect(shopify.find((a) => a.id === 'shopify_admin.get_shop')?.side_effect).toBe('read')
     expect(shopify.find((a) => a.id === 'shopify_admin.get_order')?.side_effect).toBe('read')
     expect(shopify.find((a) => a.id === 'shopify_admin.create_refund')?.side_effect).toBe('write')
     expect((await connect.actions('whatsapp')).map((a) => a.id)).toEqual([
@@ -678,7 +680,7 @@ describe('mock OpenConnector：名字解析', () => {
     expect(connect.resolveActionId('shopify_admin.get_order')).toBe('shopify_admin.get_order')
     expect(() => connect.resolveActionId('send_message')).toThrowError(/歧义/)
     expect(() => connect.resolveActionId('nope')).toThrowError(/未知 Action/)
-    expect(connect.allActions()).toHaveLength(13)
+    expect(connect.allActions()).toHaveLength(14)
     try {
       connect.resolveActionId('nope')
     } catch (e) {
