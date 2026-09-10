@@ -102,6 +102,17 @@ export type KnownEventType =
   | 'connect.form_submitted'
   | 'connect.connection_removed'
   | 'connect.connection_tested'
+  // WP44：Shopify 深度接入——老 shpat 连接标 legacy；主题 CLI 只记命令名与退出码；GraphQL 校验结果
+  | 'connect.legacy_connection_detected'
+  | 'shopify.theme_command'
+  | 'shopify.theme_pushed'
+  | 'shopify.theme_published'
+  | 'shopify.theme_dev_started'
+  | 'shopify.theme_cli'
+  | 'shopify.graphql_rejected'
+  | 'shopify.graphql_unvalidated'
+  | 'shopify.devmcp_started'
+  | 'shopify.devmcp_unavailable'
   // WP24：问 AI 只记哈希；急停变更
   | 'ask.answered'
   | 'halt.changed'

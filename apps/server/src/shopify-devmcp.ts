@@ -51,9 +51,12 @@ export const UPSTREAM_CANDIDATES: Readonly<Record<string, readonly string[]>> = 
   [VALIDATE_TOOL]: ['validate_graphql_codeblocks'],
 }
 
-/** 起 Dev MCP 的默认命令。`-y` 是为了让 npx 别在没有 TTY 的地方等人按回车。 */
+/**
+ * 起 Dev MCP 的默认命令。`-y` 是为了让 npx 别在没有 TTY 的地方等人按回车。
+ * 版本钉死：`@latest` 等于每次启动都拉一份没审过的新代码进本机；升级走 docs/42 上游升级流程。
+ */
 export const DEV_MCP_COMMAND = 'npx'
-export const DEV_MCP_ARGS: readonly string[] = ['-y', '@shopify/dev-mcp@latest']
+export const DEV_MCP_ARGS: readonly string[] = ['-y', '@shopify/dev-mcp@1.15.0']
 
 export interface DevMcpStatus {
   available: boolean

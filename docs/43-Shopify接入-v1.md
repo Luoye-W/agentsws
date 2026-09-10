@@ -124,7 +124,7 @@ CLI 没装不是错误：`status()` 回 `installed: false` 加一条能直接复
 
 ### 2.5 查文档与校验：Dev MCP
 
-`apps/server/src/shopify-devmcp.ts` 起 `npx -y @shopify/dev-mcp@latest`（stdio JSON-RPC），
+`apps/server/src/shopify-devmcp.ts` 起 `npx -y @shopify/dev-mcp@1.15.0`（stdio JSON-RPC），
 对模型只暴露**三个我们自己命名的只读工具**：
 
 | 我们的名字 | 干什么 |
