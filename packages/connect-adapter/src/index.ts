@@ -35,6 +35,14 @@ export { assertRuntimeHardened } from './hardened.js'
 export type { AuthKind, FetchLike, RuntimeRequestInit, RuntimeResult } from './http.js'
 export { RuntimeHttp } from './http.js'
 export { fingerprint, readSecretFromEnv, secretKey } from './secrets.js'
+export type { ShopifyTargetType, ShopifyWriteAction } from './shopify-actions.js'
+export {
+  actionsOfChangeKind,
+  canStageAction,
+  changeKindOfAction,
+  SHOPIFY_WRITE_ACTIONS,
+  shopifyWriteAction,
+} from './shopify-actions.js'
 export type { SideEffectTableFile } from './side-effects.js'
 export {
   defaultSideEffectsFile,

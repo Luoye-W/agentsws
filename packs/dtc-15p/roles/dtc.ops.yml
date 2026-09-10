@@ -37,6 +37,21 @@ actions:
     kind: staged_change
     mandate: { caps: { max_promotion_discount_pct: 50 }, window: { max_count: 5, per: day } }
     route_to: owner
+  # WP44：Admin GraphQL 的上下架写口对应 15 §2 的 publish_product / unpublish_product。
+  # 上架是"让顾客能买到"，撤下是"让顾客买不到"——两件事都要有人点头，
+  # 但撤下更急（多半是发现了合规或质量问题），所以给到 role_holder 手上，别卡在主管那儿。
+  - id: stage_publish_product
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: scope_manager
+  - id: stage_unpublish_product
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: role_holder
 
 automation:
   stage_listing_edit:
@@ -55,6 +70,16 @@ automation:
     initial: L1
     promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
     demotion_triggers: [manual]
+  stage_publish_product:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_unpublish_product:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
 
 skills: []
 home_blocks:
