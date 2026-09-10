@@ -2,7 +2,7 @@
   "name": "@agentsws/data",
   "version": "0.0.0",
   "private": true,
-  "description": "共享数据层 #16：SQLite 记录信封、乐观锁、Casbin 过滤下推、加密分片删除",
+  "description": "共享数据层 #16：记录信封、乐观锁、Casbin 过滤下推、加密分片删除；SQLite ↔ Postgres 双方言",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

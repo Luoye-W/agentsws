@@ -138,13 +138,13 @@ class PgExecutor implements SqlExecutor {
 export class PostgresDriver extends PgExecutor implements SqlDriver {
   #closed = false
 
+  /**
+   * 回调抛出的错误**原样**往上抛（回滚已经由 postgres.js 做掉了）。
+   * 不在这里包一层：业务错误（乐观锁 conflict、权限 forbidden）经过事务边界
+   * 不该变成 `SqlDriverError`，否则调用方的 `instanceof` 判断在 Postgres 档上会全错。
+   */
   async transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-    try {
-      return (await this.sql.begin(async (tx) => fn(new PgExecutor(tx as unknown as Sql)))) as T
-    } catch (error) {
-      if (error instanceof SqlDriverError) throw error
-      return wrapError(error)
-    }
+    return (await this.sql.begin(async (tx) => fn(new PgExecutor(tx as unknown as Sql)))) as T
   }
 
   async close(): Promise<void> {
