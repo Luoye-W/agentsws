@@ -68,10 +68,16 @@ import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './ba
 import { createCatalogIndex } from './catalog-index.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 import { connectBaseUrl } from './connect-url.js'
-import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
+import {
+  type ConnectionsAssembly,
+  type ConnectLike,
+  createConnections,
+  createMailProbe,
+} from './connections.js'
 import { createPrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
+import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
@@ -227,6 +233,16 @@ export interface ServerOptions {
   /** WP42：抓各家价目页用的 fetch（测试回放固定页面 → 价目刷新全程不联网）。 */
   pricingFetch?: PageFetch
   /**
+   * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
+   * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
+   */
+  connect?: ConnectLike
+  /**
+   * WP46：活数据源的刷新间隔（毫秒）。不传按 `AGENTSWS_LIVE_DATA_REFRESH_SECONDS`
+   * / 默认 5 分钟；传 `0` = 不起后台定时器（测试与一次性任务）。
+   */
+  liveDataIntervalMs?: number
+  /**
    * WP25：Shopify 令牌到期巡检的间隔（毫秒）。
    *
    * **WP27 起缺省 0**：巡检改由调度器那条 `connect.shopify_refresh` 任务驱动
@@ -281,6 +297,10 @@ export interface Server {
   meetings: MeetingsAssembly
   /** WP20 连接面（连接向导 / 本机加密秘密库 / 连接状态回灌工作台）。 */
   connections: ConnectionsAssembly
+  /**
+   * WP46 活数据源（真实店铺数据喂岗位面板）。接了模拟世界（`mount.data`）时没有它。
+   */
+  liveData?: LiveDataSource
   /** WP34 渠道面（IMAP 轮询 / 入站管线 / 受控原始材料区 / 出站发信）。 */
   channels: ChannelsAssembly
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
@@ -688,11 +708,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     refreshIntervalMs: options.tokenRefreshIntervalMs ?? 0,
     ...(options.shopifyFetch === undefined ? {} : { shopifyFetch: options.shopifyFetch }),
     ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
+    ...(options.connect === undefined ? {} : { connect: options.connect }),
     ...(dbDir === undefined ? {} : { dbDir }),
   })
   connectedKinds = () => connections.connectedKinds()
-  // 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
-  const workData = connections.wrapDataSource(mount?.data ?? emptyDataSource())
+  /**
+   * WP46：岗位面板吃**真实**店铺数据。
+   *
+   * 以前这里挂的是 `emptyDataSource()`——Shopify 连上了、岗位也 ready 了，数字块与
+   * 「店铺后台」分块却全是空的，因为没有任何真实读动作在喂它。现在没有接进来的
+   * 模拟世界（`mount.data`）时就挂活数据源：定时经连接器跑 `list_orders` / `get_shop`，
+   * 结果只进内存缓存。接了模拟世界的 demo / 测试路径一行不变。
+   *
+   * 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
+   */
+  let liveData: LiveDataSource | undefined
+  if (mount?.data === undefined) {
+    liveData = createLiveDataSource({
+      connections,
+      connect: connections.connect,
+      clock,
+      workspace_id: workspace.id,
+      appendEvent,
+      env,
+      ...(options.liveDataIntervalMs === undefined
+        ? {}
+        : { refreshIntervalMs: options.liveDataIntervalMs }),
+    })
+  }
+  const workData: WorkstationDataSource =
+    liveData ?? connections.wrapDataSource(mount?.data ?? emptyDataSource())
+  // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
+  connections.onConnectionChange(() => {
+    liveData?.invalidate()
+  })
 
   // WP44：Shopify 官方 Dev MCP 作为**只读**工具源（查文档 / 看 schema / 校验 GraphQL）。
   //
@@ -823,6 +872,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 连接页新增 / 断开邮箱 → 下一轮轮询就换成新的那一份，不必重启
   connections.onMailChange(() => {
     channels?.refresh()
+    // 邮箱连接变了，客服那几个数字块的前提也变了：让活数据源重新算一次连接状态
+    liveData?.invalidate()
   })
 
   // 21 §4「删这个人」的跨库编排（39 待办 I）：数据层 + 邮件原始区 + 会议原始区
@@ -1427,6 +1478,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work,
     meetings,
     connections,
+    ...(liveData === undefined ? {} : { liveData }),
     channels,
     modelSettings,
     org,
@@ -1502,6 +1554,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       catalog.close()
       secretary.close()
       await channels?.close()
+      liveData?.close()
       connections.close()
       await devMcp?.close()
       org.close()
