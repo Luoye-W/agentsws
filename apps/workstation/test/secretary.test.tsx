@@ -1,8 +1,8 @@
 /**
- * 「我的秘书」与别人的 profile 页（41 §1，WP39）。
+ * 「我的代理」（原「秘书」，09-10 改名）与别人的 profile 页（41 §1，WP39）。
  *
  * 四件事：
- * - 问他的秘书：答案照实显示；被拒的那一句也照实显示（不粉饰成"暂无数据"）
+ * - 问他的代理：答案照实显示；被拒的那一句也照实显示（不粉饰成"暂无数据"）
  * - 公开级别表就是 41 §1.3 那张表；"日程明细"那一行没有"全工作区"这一格
  * - 别人的 profile 页：藏起来的字段写"这个要问本人"，而不是当它不存在
  * - 约时间撞上了：出替代时段，点一下就换过去
@@ -79,7 +79,7 @@ const DOING: SecretaryAnswer = {
 }
 
 const REFUSED: SecretaryAnswer = {
-  answer: '这个秘书不能说——私有待办只有李默本人看得到。这个要问李默本人。',
+  answer: '这个代理不能说——私有待办只有李默本人看得到。这个要问李默本人。',
   kind: 'private',
   fields: [],
   refused: true,
@@ -144,7 +144,7 @@ const { AskSecretary } = await import('@/components/secretary/ask-secretary')
 const { MeetDialog } = await import('@/components/secretary/meet-dialog')
 const { ProfileForm } = await import('@/components/secretary/profile-form')
 
-describe('问他的秘书（41 §1.2）', () => {
+describe('问他的代理（41 §1.2）', () => {
   it('答案照实显示', async () => {
     const user = userEvent.setup()
     renderWithProviders(<AskSecretary people={PEOPLE} />)
@@ -237,17 +237,17 @@ describe('约时间（41 §1.2 第二行）', () => {
   })
 })
 
-describe('我的秘书页', () => {
-  it('四个 Tab；"把一件事丢给秘书"在问秘书那一页', async () => {
+describe('我的代理页', () => {
+  it('四个 Tab；"把一件事丢给代理"在问代理那一页', async () => {
     renderWithProviders(<SecretaryPage />)
     await screen.findByTestId('secretary-page')
-    expect(screen.getByRole('tab', { name: /问秘书/ })).toBeDefined()
+    expect(screen.getByRole('tab', { name: /问代理/ })).toBeDefined()
     expect(screen.getByRole('tab', { name: /我的 profile/ })).toBeDefined()
     expect(screen.getByRole('tab', { name: /谁问过我/ })).toBeDefined()
     expect(await screen.findByTestId('route-panel')).toBeDefined()
   })
 
-  it('丢一件事给秘书 → 界面写清楚判给了哪个岗位、为什么', async () => {
+  it('丢一件事给代理 → 界面写清楚判给了哪个岗位、为什么', async () => {
     routeToDesk.mockResolvedValueOnce({
       kind: 'task',
       role_id: 'dtc.aftersales',
@@ -255,7 +255,7 @@ describe('我的秘书页', () => {
       owner: 'p_chen',
       owner_label: '陈晓',
       confidence: 0.8,
-      reason: '秘书判断：独立站售后客服，因为你说了「退款」',
+      reason: '代理判断：独立站售后客服，因为你说了「退款」',
       existing_tools: [],
       similar_in_progress: [],
       claim_item_id: 'item_1',
@@ -273,13 +273,13 @@ describe('我的秘书页', () => {
     expect(result.textContent).toContain('因为你说了')
   })
 
-  it('专业问题：界面说清"秘书不答，转给岗位"', async () => {
+  it('专业问题：界面说清"代理不答，转给岗位"', async () => {
     routeToDesk.mockResolvedValueOnce({
       kind: 'question',
       role_id: 'dtc.aftersales',
       role_name: '独立站售后客服',
       confidence: 0.7,
-      reason: '秘书判断：这是独立站售后客服的专业问题，秘书不答，转给岗位',
+      reason: '代理判断：这是独立站售后客服的专业问题，代理不答，转给岗位',
       existing_tools: [],
       similar_in_progress: [],
       run_id: 'run_4',

@@ -1763,7 +1763,7 @@ export const getStorageMigration = (
   assignment?: string,
 ): Promise<StorageMigrationView> =>
   api(`/v1/storage/migrations/${encodeURIComponent(id)}`, withAssignment(assignment))
-// ── 41 §1 秘书 Agent（profile 与公开级别 / 代答 / 日程与约时间 / 任务路由）────────
+// ── 41 §1 代理 Agent（profile 与公开级别 / 代答 / 日程与约时间 / 任务路由）────────
 
 /** 41 §1.3 三档；`agenda_detail` 最高只到 `colleagues`。 */
 export type DisclosureLevel = 'self' | 'colleagues' | 'workspace'
@@ -1940,7 +1940,7 @@ export const listPeople = (): Promise<PersonCard[]> => api<PersonCard[]>('/v1/pe
 export const getPersonProfile = (id: string): Promise<VisibleProfile> =>
   api<VisibleProfile>(`/v1/people/${encodeURIComponent(id)}/profile`)
 
-/** 问他的秘书（只答公开级别内的四类问题）。 */
+/** 问他的代理（只答公开级别内的四类问题）。 */
 export const askSecretary = (id: string, question: string): Promise<SecretaryAnswer> =>
   api<SecretaryAnswer>(`/v1/people/${encodeURIComponent(id)}/ask`, {
     method: 'POST',
@@ -1977,7 +1977,7 @@ export const decideMeet = (
     body: input,
   })
 
-/** 把一件事丢给秘书：它判断该谁做，出一张认领卡（专业问题只转岗位，不出卡）。 */
+/** 把一件事丢给代理：它判断该谁做，出一张认领卡（专业问题只转岗位，不出卡）。 */
 export const routeToDesk = (text: string): Promise<SecretaryRouteResult> =>
   api<SecretaryRouteResult>('/v1/me/secretary/route', { method: 'POST', body: { text } })
 

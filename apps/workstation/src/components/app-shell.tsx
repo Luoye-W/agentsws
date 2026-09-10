@@ -65,7 +65,7 @@ export function AppShell({
             </NavLink>
           ))}
           <Separator className="my-2" />
-          {/* 41 §1：每人自带的个人 Agent——问别人的秘书、管自己的 profile 与日程 */}
+          {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程 */}
           <NavLink to="/secretary" className={navClass}>
             {t('nav.secretary')}
           </NavLink>
