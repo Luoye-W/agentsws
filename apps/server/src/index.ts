@@ -207,6 +207,27 @@ export {
   scrub,
 } from './shopify-broker.js'
 export type {
+  DevMcpStatus,
+  GraphqlVerdict,
+  McpChannel,
+  ShopifyDevMcp,
+  ShopifyDevMcpOptions,
+  SpawnMcp,
+  StageGuardOutcome,
+} from './shopify-devmcp.js'
+export {
+  createShopifyDevMcp,
+  DEV_MCP_ARGS,
+  DEV_MCP_COMMAND,
+  DEV_MCP_TOOLS,
+  DOCS_TOOL,
+  guardGraphqlStage,
+  readVerdict,
+  SCHEMA_TOOL,
+  UPSTREAM_CANDIDATES,
+  VALIDATE_TOOL,
+} from './shopify-devmcp.js'
+export type {
   CliResult,
   PushedTheme,
   RunCli,

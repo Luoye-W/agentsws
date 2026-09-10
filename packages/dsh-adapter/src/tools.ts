@@ -7,6 +7,7 @@
  * - 写外部工具（`create_refund` 之类）→ 注册但由 `tools/pre-execute` 在 executor 策略下一律拒
  */
 import type { ObjectRef, RunRequest } from '@agentsws/contracts'
+import { isMcpReadTool } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -28,6 +29,10 @@ export function classifySideEffect(
   const bare = tool.includes('.') ? tool.slice(tool.indexOf('.') + 1) : tool
   const explicit = overrides?.[tool] ?? overrides?.[bare]
   if (explicit !== undefined) return explicit
+  // WP44：Shopify 官方 Dev MCP 的三个工具**永远只读**（查文档 / 看 schema / 校验 GraphQL，
+  // 碰不到任何店铺数据）。要显式列出来：它们既不是 `get_` 也不是 `list_` 开头，
+  // 落到下面的兜底就会被当成"写外部"，在 executor 策略下一调就拒。
+  if (isMcpReadTool(tool)) return 'read_external'
   if (bare === STAGE_TOOL || bare === DRAFT_TOOL || bare.startsWith('stage_')) return 'staged'
   if (READ_PREFIXES.some((p) => bare.startsWith(p))) return 'read_external'
   if (WRITE_PREFIXES.some((p) => bare.startsWith(p))) return 'write_external'

@@ -107,6 +107,7 @@ import {
 import { createSecretStore, type SecretStore, SecretStoreError } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
+import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
@@ -689,6 +690,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
   const workData = connections.wrapDataSource(mount?.data ?? emptyDataSource())
 
+  // WP44：Shopify 官方 Dev MCP 作为**只读**工具源（查文档 / 看 schema / 校验 GraphQL）。
+  //
+  // 默认**不起**：它要 `npx` 去网上拉一个包，装在别人机器上的进程不该悄悄这么干。
+  // `AGENTSWS_SHOPIFY_DEVMCP=1` 打开。起不来就是空工具面（`toolNames()` 回空数组），
+  // 写类变更照常能 stage——校验是加固，不是门禁。
+  const devMcp =
+    env.AGENTSWS_SHOPIFY_DEVMCP === '1'
+      ? createShopifyDevMcp({
+          env,
+          appendEvent: (type, payload) => {
+            appendEvent({
+              schema_version: 1,
+              workspace_id: workspace.id,
+              type,
+              actor: { kind: 'system', id: 'shopify.devmcp' },
+              correlation: { trace_id: `trc_devmcp_${Date.parse(clock.now()).toString(36)}` },
+              payload,
+            })
+          },
+        })
+      : undefined
+  // 起它这件事不该拦着服务进程启动：后台起，起好之前 `toolNames()` 就是空的
+  if (devMcp !== undefined) void devMcp.start()
+
   // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
   const runtime: RuntimeAssembly | undefined =
     options.startRun === false || typeof options.startRun === 'function'
@@ -707,6 +732,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           modelRef: () => modelSettings.defaultRef(),
           // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
           skills: skills.registry,
+          ...(devMcp === undefined
+            ? {}
+            : {
+                devTools: {
+                  toolNames: () => Object.keys(devMcp.status().mapped),
+                  call: (name: string, input: Record<string, unknown>) => devMcp.call(name, input),
+                },
+              }),
           ...(options.records === undefined ? {} : { source: options.records }),
         })
   const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
@@ -1466,6 +1499,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       secretary.close()
       await channels?.close()
       connections.close()
+      await devMcp?.close()
       org.close()
       offboard.close()
       secrets.close()

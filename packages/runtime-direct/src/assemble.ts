@@ -1,6 +1,6 @@
 import type { ChatMessage, RunRequest, ToolDef } from '@agentsws/contracts'
 import { estimateInputTokens, staticPrefixHash } from '@agentsws/model-gateway'
-import { assemblePrompt, assemblePromptHash } from '@agentsws/stand-ins'
+import { assemblePrompt, assemblePromptHash, MCP_TOOL_DEF_BY_NAME } from '@agentsws/stand-ins'
 
 /**
  * 17 §1 装配顺序：静态前缀（persona 段 → skills 索引行 → 工具定义）→ 策略层 ContextItem →
@@ -75,10 +75,25 @@ export interface DirectPrompt {
   total_tokens: number
 }
 
+/**
+ * WP44：MCP 只读工具（`shopify.docs.search` / `.schema.introspect` / `.graphql.validate`）
+ * 的定义换成真的。
+ *
+ * `assemblePrompt` 对 `tools.allow` 里的每个名字只会生成一句 `stand-in tool <name>` 的
+ * 占位描述——对普通读工具够用（模型从名字就猜得出 `get_order` 干什么），对这三个不够：
+ * 它们的价值恰恰在描述里那句"**写之前先查、先验**"。模型是在挑工具的那一刻读描述的，
+ * 这句话放在这儿比放在 persona 里管用。
+ *
+ * 只替换、不新增：`allow` 里没有的名字不会凭空出现在工具表里。
+ */
+function withMcpDefs(tools: ToolDef[]): ToolDef[] {
+  return tools.map((t) => MCP_TOOL_DEF_BY_NAME.get(t.name) ?? t)
+}
+
 /** 装配一次运行的 prompt（静态前缀在前，产出工具定义并入工具表）。 */
 export function assembleDirect(req: RunRequest): DirectPrompt {
   const base = assemblePrompt(req)
-  const tools = [...base.tools, ...outputToolDefs(req)]
+  const tools = [...withMcpDefs(base.tools), ...outputToolDefs(req)]
   return {
     messages: base.messages,
     tools,

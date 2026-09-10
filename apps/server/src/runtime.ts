@@ -120,6 +120,17 @@ export interface RuntimeOptions {
    * 不给就是老行为：prompt 里只有技能名。
    */
   skills?: SkillResolver
+  /**
+   * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
+   *
+   * 给了就把它现在真能调的那几个工具加进工具面——**起不来就一个都不加**，
+   * 模型不该看见调不动的工具。校验是加固不是门禁：没有它，写类变更照常能 stage。
+   */
+  devTools?: {
+    /** 现在真能调的工具名（Dev MCP 没起来就是空数组）。 */
+    toolNames(): readonly string[]
+    call(name: string, input: Record<string, unknown>): Promise<{ text: string }>
+  }
 }
 
 export interface RuntimeAssembly {
@@ -318,6 +329,36 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   const hasModel = options.hasModel ?? ((): boolean => hasModelProvider(options.env))
   const useDirect = (options.prefer ?? (hasModel() ? 'direct' : 'stub')) === 'direct'
 
+  /**
+   * WP44：把 Dev MCP 的三个只读工具并进工具执行器。
+   *
+   * 它们不经连接器，也就没有 provenance 可言——查一段文档不等于"读过某个订单"，
+   * 所以这条路**不往 provenance 里加任何 ref**（15 §6：seen 只证明读过业务对象）。
+   */
+  const devToolNames = (): readonly string[] => options.devTools?.toolNames() ?? []
+  const executeTool: ToolExecutor | undefined =
+    options.devTools === undefined
+      ? source.executeTool
+      : async (call) => {
+          if (devToolNames().includes(call.name)) {
+            try {
+              const { text } = await (
+                options.devTools as NonNullable<RuntimeOptions['devTools']>
+              ).call(call.name, call.input)
+              return { status: 'ok', data: { text } }
+            } catch (e) {
+              return {
+                status: 'error',
+                reason: e instanceof Error ? e.message : String(e),
+              }
+            }
+          }
+          if (source.executeTool === undefined) {
+            return { status: 'error', reason: 'no_tool_executor' }
+          }
+          return source.executeTool(call)
+        }
+
   const adapter: RuntimeAdapter = useDirect
     ? createDirectRuntime({
         gateway: withToolChoice({
@@ -329,14 +370,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         clock,
         seed,
         createDraft,
-        ...(source.executeTool === undefined ? {} : { executeTool: source.executeTool }),
+        ...(executeTool === undefined ? {} : { executeTool }),
       })
     : createStubRuntime({
         clock,
         seed,
         createDraft,
         createPolicyQuestion,
-        ...(source.executeTool === undefined ? {} : { executeTool: source.executeTool }),
+        ...(executeTool === undefined ? {} : { executeTool }),
       })
 
   /** 事项现场 → ContextItem[]（37 §2.2b：摘要 + pinned 记录，围栏与出处照旧）。 */
@@ -387,7 +428,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     assignment_id: AssignmentId
   }): Promise<RunRequest> => {
     const config = roles.effectiveConfig(input.assignment_id)
-    const allow = [...new Set([...config.grounding.map((g) => g.tool), ...DEFAULT_TOOLS])].sort()
+    const allow = [
+      ...new Set([...config.grounding.map((g) => g.tool), ...DEFAULT_TOOLS, ...devToolNames()]),
+    ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
     return {
       id: input.run_id,
