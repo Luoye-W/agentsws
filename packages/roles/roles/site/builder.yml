@@ -1,0 +1,141 @@
+# 12 §2 的建站岗位（WP44 落地）。
+#
+# 一句话定位：**Agent 负责需求、验收、预览、发布门禁；代码交给编码 Agent。**
+# 主题天然适合这个模式——未发布的主题副本就是 stage，预览链接就是审批材料，
+# "发布"就是 apply（15 §2：`publish_theme` 是 high 风险、hard_ceiling，永远 L1）。
+#
+# 它跟 `dtc.ops` 的分工：运营改的是**内容**（标题、价格、上下架），
+# 建站改的是**壳**（模板、section、样式）。两边都不许直接写线上。
+id: site.builder
+version: 1.0.0
+domain: dev
+name: { zh: 建站与主题, en: Site & Theme Builder }
+description: Shopify 主题定制、落地页与页面美化、速度优化；改动走未发布副本 + 预览，发布永远人审
+
+scopes:
+  # 主题文件、页面、博客都算 content；商品只读（改价不是这个岗位的事）
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: asset, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: store_config, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+
+connectors:
+  # 主题读写要 read_themes / write_themes；CLI 与 Admin API 用的是同一套权限
+  - {
+      kind: shopify,
+      required: true,
+      grants: [read_themes, write_themes, read_content, write_content, read_products],
+      ownership: workspace,
+    }
+  - { kind: github, required: false, grants: [repo.read], ownership: workspace }
+
+actions:
+  # 推一份未发布副本 + 预览链接：这是"给人看"的一步，不动线上，所以可以放到 L3。
+  # 它仍然建一条审批记录（14：所有改变都进同一条队列），只是不进人的待办。
+  - id: stage_theme_preview
+    target: content
+    kind: staged_change
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: role_holder
+  # 把某份副本设成线上主题。15 §2 hard_ceiling：配置成什么等级都要人点头。
+  - id: stage_publish_theme
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 5, per: day } }
+    review_cannot_be_disabled: true
+    route_to: owner
+  # 页面与博客的正文改动（尺码表、政策页、活动页文案）
+  - id: stage_page_edit
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 30, per: day } }
+    route_to: scope_manager
+  # 12 §2.1 的 Dev Handoff：把"改哪、验收标准、禁区"写成任务书派给编码 Agent。
+  # 任务书本身不改任何线上东西，所以 L3；它产出的结果仍要走上面两条。
+  - id: stage_dev_task
+    target: content
+    kind: staged_change
+    mandate: { caps: {}, window: { max_count: 10, per: day } }
+    route_to: role_holder
+
+automation:
+  stage_theme_preview:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_publish_theme:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_page_edit:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_dev_task:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [manual]
+
+grounding:
+  - {
+      name: theme_list,
+      intent_terms: [主题, theme, 模板, template, 首页, homepage],
+      cue_terms: [改, change, 换, switch, 发布, publish, 预览, preview],
+      tool: shopify.theme.list,
+      prefetch: true,
+    }
+  - {
+      name: graphql_docs,
+      intent_terms: [graphql, admin api, mutation, 接口],
+      cue_terms: [怎么, how, 字段, field, 报错, error],
+      tool: shopify.docs.search,
+      prefetch: false,
+    }
+
+skills: []
+
+home_blocks:
+  - {
+      id: site.pending_publishes,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(site.builder),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: site.theme_previews,
+      placement: focus,
+      component: card_list,
+      query: 'changes.by_kind(site.builder, publish_theme)',
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_publish_theme',
+      mode: immediate,
+      recipients: [owner],
+      escalate_after_hours: 24,
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, scheduled_tasks]
+  fallback: owner
+  revoke_context_on_removal: true
+
+requires: []

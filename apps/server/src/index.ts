@@ -206,6 +206,28 @@ export {
   type ShopifyBrokerRecord,
   scrub,
 } from './shopify-broker.js'
+export type {
+  CliResult,
+  PushedTheme,
+  RunCli,
+  ShopifyTheme,
+  ShopifyThemeErrorCode,
+  ShopifyThemeOptions,
+  SpawnCli,
+  ThemeCliStatus,
+  ThemeProcess,
+  ThemePublishProposal,
+  ThemeSummary,
+} from './shopify-theme.js'
+export {
+  createShopifyTheme,
+  PASSTHROUGH_ENV,
+  ShopifyThemeError,
+  scrubCliOutput,
+  THEME_CLI_INSTALL,
+  THEME_STORE_ENV,
+  THEME_TOKEN_ENV,
+} from './shopify-theme.js'
 export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
 export {
   createWorkModel,

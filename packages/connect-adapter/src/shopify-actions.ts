@@ -1,6 +1,10 @@
 /**
  * Shopify Admin 的**写动作 → 变更种类**对照表（WP44）。
  *
+ * `graphql` 一栏是 2026-09-10 对着 `@shopify/dev-mcp@1.15.0` 随包分发的官方
+ * Admin schema（2026-10 版）逐条核过的，弃用的旧名一并标出来——写文档时抄错一个名字，
+ * 排查起来要半天。
+ *
  * 为什么要这张表：08 §2.3 定死了"读走原生 Action，写走 Backend"。Agent 想改店里的
  * 任何东西，都不能直接调一个写 Action，只能 stage 一条 {@link ChangeKind} 的变更；
  * 审批过了，执行器才拿 `role-apply` 令牌去调对应的 Action。于是每个写 Action 都必须
@@ -74,7 +78,7 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     action_id: 'shopify_admin.update_product_variant',
     change_kind: 'listing_edit',
     target: 'variant',
-    graphql: 'productVariantsBulkUpdate',
+    graphql: 'productVariantsBulkUpdate（单变体的 productVariantUpdate 在 schema 里根本不存在）',
     what: '改变体的非价格字段（SKU、条码、重量、选项值）',
   },
   {
@@ -88,14 +92,14 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     action_id: 'shopify_admin.publish_product',
     change_kind: 'publish_product',
     target: 'product',
-    graphql: 'publishablePublish',
+    graphql: 'publishablePublish（旧的 productPublish 已弃用）',
     what: '把商品放到某个销售渠道上（在线商店 / POS…）',
   },
   {
     action_id: 'shopify_admin.unpublish_product',
     change_kind: 'unpublish_product',
     target: 'product',
-    graphql: 'publishableUnpublish',
+    graphql: 'publishableUnpublish（旧的 productUnpublish 已弃用）',
     what: '把商品从销售渠道上撤下来',
   },
   {
@@ -111,7 +115,7 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
   {
     action_id: 'shopify_admin.set_inventory_quantities',
     target: 'inventory_item',
-    graphql: 'inventorySetQuantities',
+    graphql: 'inventorySetQuantities（旧的 inventorySetOnHandQuantities 已弃用）',
     what: '把某个仓的可售数量直接设成一个值（盘点后对账用）',
     not_stageable:
       '15 §2 里没有库存类 kind。它既不是 listing_edit（不改商品信息）也不是 price_change，' +
@@ -143,14 +147,15 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     action_id: 'shopify_admin.add_products_to_collection',
     change_kind: 'listing_edit',
     target: 'collection',
-    graphql: 'collectionAddProducts',
+    graphql:
+      'collectionUpdate.sourcesToUpdate…inclusion.selectionsToAdd（旧 collectionAddProducts 已弃用）',
     what: '往手动集合里加商品',
   },
   {
     action_id: 'shopify_admin.remove_products_from_collection',
     change_kind: 'listing_edit',
     target: 'collection',
-    graphql: 'collectionRemoveProducts',
+    graphql: 'collectionUpdate…inclusion.selectionsToRemove（旧 collectionRemoveProducts 已弃用）',
     what: '把商品从手动集合里拿掉',
   },
   // ── 订单 ─────────────────────────────────────────────────────────────
@@ -172,7 +177,7 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     action_id: 'shopify_admin.create_fulfillment',
     change_kind: 'reship',
     target: 'order',
-    graphql: 'fulfillmentCreate',
+    graphql: 'fulfillmentCreate（旧的 fulfillmentCreateV2 已弃用，注意没有 V2）',
     what: '给订单建一次发货（补发也走这一条）',
   },
   {
@@ -247,8 +252,10 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     action_id: 'shopify_admin.publish_theme',
     change_kind: 'publish_theme',
     target: 'theme',
-    graphql: 'themePublish（老 API 版本上只有 REST `PUT /themes/{id}` role=main）',
-    what: '把一份未发布的主题副本设成线上主题',
+    graphql: 'themePublish（2024-10 起有；**要 write_themes + Shopify 豁免**）',
+    what:
+      '把一份未发布的主题副本设成线上主题。' +
+      '实际走的是 Shopify CLI（`theme publish`）——GraphQL 那条要向官方申请豁免',
   },
   {
     action_id: 'shopify_admin.update_theme_asset',
@@ -276,7 +283,7 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     action_id: 'shopify_admin.delete_metafield',
     change_kind: 'listing_edit',
     target: 'product',
-    graphql: 'metafieldsDelete',
+    graphql: 'metafieldsDelete（复数；单数的 metafieldSet / metafieldDelete 不存在）',
     what: '删掉一个自定义字段',
   },
   // ── 页面与博客 ───────────────────────────────────────────────────────
