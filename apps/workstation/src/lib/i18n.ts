@@ -753,6 +753,9 @@ const zh: Table = {
   'models.field.base_url': '接口地址',
   'models.field.base_url.hint': '看那家的文档，一般以 /v1 结尾。',
   'models.field.model': '模型名',
+  'models.field.model.hint': '这家有 {n} 个模型，打字就能筛。',
+  'models.discover': '拉取模型列表',
+  'models.discover.failed': '没拉到模型列表，先手填一个模型名也行。原因：{reason}',
   'models.field.api_key': 'API key',
   'models.field.api_key.hint': '只存在这台电脑的加密库里，不上传、不进日志、不进模型。',
   'models.field.api_key.keep': '已经存过一把了。留空就不动它，填了就换成新的。',
@@ -1549,6 +1552,10 @@ const en: Table = {
   'models.field.base_url': 'API base URL',
   'models.field.base_url.hint': 'Check their docs — usually ends in /v1.',
   'models.field.model': 'Model name',
+  'models.field.model.hint': '{n} models available — start typing to filter.',
+  'models.discover': 'Fetch model list',
+  'models.discover.failed':
+    'Could not fetch the model list; typing the model name still works. Reason: {reason}',
   'models.field.api_key': 'API key',
   'models.field.api_key.hint':
     'Stored only in this machine encrypted store. Never uploaded, logged, or shown to a model.',

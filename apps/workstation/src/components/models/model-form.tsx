@@ -6,12 +6,12 @@
  * 3. 提交只打 `PUT /v1/models/providers/:id` 这一条路，提交完立刻 `form.reset()`；
  * 4. 全程没有一次 `console.*`。
  */
-import { ShieldCheck } from 'lucide-react'
+import { Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
 import { type FormEvent, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { ModelProviderTemplate, ModelProviderView } from '@/lib/api'
+import type { ModelListing, ModelProviderTemplate, ModelProviderView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export interface ModelFormValues {
@@ -32,6 +32,7 @@ export function ModelForm({
   busy,
   onCancel,
   onSubmit,
+  onDiscover,
 }: {
   template: ModelProviderTemplate
   /** 改一条已有的：id 锁住，key 留空就是"别动已经存着的那一把"。 */
@@ -40,11 +41,25 @@ export function ModelForm({
   onCancel: () => void
   /** 唯一出口：值只在这一次调用里存在。 */
   onSubmit: (values: ModelFormValues) => void
+  /**
+   * WP42「拉取模型列表」。和提交同一条纪律：地址与 key 从 FormData 里现取，
+   * 组装一次交出去，函数返回后表单这边不再引用。
+   */
+  onDiscover: (probe: {
+    id: string
+    base_url: string
+    api_key?: string
+    region: 'cn' | 'global'
+  }) => Promise<ModelListing>
 }): React.ReactNode {
   const { t } = useApp()
   const prefix = useId()
   const formRef = useRef<HTMLFormElement>(null)
   const [region, setRegion] = useState<'cn' | 'global'>(existing?.region ?? template.region)
+  // 拉回来的模型清单。**只有模型名**——不含地址、不含 key
+  const [listing, setListing] = useState<ModelListing | undefined>(existing?.last_listing)
+  const [models, setModels] = useState<string[]>(existing?.models ?? [])
+  const [pulling, setPulling] = useState(false)
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
@@ -83,6 +98,43 @@ export function ModelForm({
     })
     // key 发出去之后连 DOM 里也不留
     form.reset()
+  }
+
+  /**
+   * 「拉取模型列表」。地址与 key 从**当前 DOM** 里现取——用户可能刚改完地址还没保存，
+   * 拉的就该是新地址上的那一份。key 取出来只往 `onDiscover` 传一次，不进 state。
+   */
+  const pull = async (): Promise<void> => {
+    const form = formRef.current
+    if (form === null) return
+    const data = new FormData(form)
+    const text = (name: string): string => {
+      const raw = data.get(name)
+      return typeof raw === 'string' ? raw.trim() : ''
+    }
+    const id = existing?.id ?? text('id')
+    const base_url = text('base_url') === '' ? template.default_base_url : text('base_url')
+    const key = text('api_key')
+    setPulling(true)
+    try {
+      const result = await onDiscover({
+        id: id === '' ? template.kind : id,
+        base_url,
+        region,
+        ...(key === '' ? {} : { api_key: key }),
+      })
+      setListing(result)
+      if (result.ok) setModels(result.models)
+    } catch (e) {
+      setListing({
+        ok: false,
+        models: [],
+        reason: e instanceof Error ? e.message : String(e),
+        checked_at: '',
+      })
+    } finally {
+      setPulling(false)
+    }
   }
 
   const presets = template.presets ?? []
@@ -166,15 +218,57 @@ export function ModelForm({
         />
       </Field>
 
-      <Field id={`${prefix}-model`} label={t('models.field.model')}>
-        <Input
-          id={`${prefix}-model`}
-          name="model"
-          required
-          defaultValue={existing?.model ?? template.default_model}
-          autoComplete="off"
-          spellCheck={false}
-        />
+      {/*
+        模型名：拉过清单就是一个**可搜索的下拉**（原生 datalist——照打字就筛，
+        不用第三方组件，也不破坏 FormData 收集）；拉不到就还是一个能手填的框，
+        底下把"为什么没拉到"原样写出来。
+      */}
+      <Field
+        id={`${prefix}-model`}
+        label={t('models.field.model')}
+        hint={models.length > 0 ? t('models.field.model.hint', { n: models.length }) : undefined}
+      >
+        <div className="flex items-center gap-1.5">
+          <Input
+            id={`${prefix}-model`}
+            name="model"
+            required
+            list={models.length === 0 ? undefined : `${prefix}-model-list`}
+            defaultValue={existing?.model ?? template.default_model}
+            autoComplete="off"
+            spellCheck={false}
+            data-testid="model-name-input"
+            data-options={models.length}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pulling || busy}
+            onClick={() => {
+              void pull()
+            }}
+            data-testid="model-discover"
+          >
+            {pulling ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />}
+            {t('models.discover')}
+          </Button>
+        </div>
+        {models.length === 0 ? null : (
+          <datalist id={`${prefix}-model-list`} data-testid="model-datalist">
+            {models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        )}
+        {listing === undefined || listing.ok ? null : (
+          <p
+            className="text-[11px] text-amber-600 dark:text-amber-400"
+            data-testid="model-discover-failed"
+          >
+            {t('models.discover.failed', { reason: listing.reason ?? '' })}
+          </p>
+        )}
       </Field>
 
       <Field
@@ -281,7 +375,7 @@ function Field({
 }: {
   id: string
   label: string
-  hint?: string
+  hint?: string | undefined
   children: React.ReactNode
 }): React.ReactNode {
   return (

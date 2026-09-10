@@ -28,6 +28,7 @@ import type {
   ModelTestResult,
 } from '@/lib/api'
 import {
+  discoverModelProviderModels,
   getModelDefaults,
   getModelUsage,
   listModelProviders,
@@ -114,6 +115,20 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
     },
   })
 
+  /**
+   * WP42「拉取模型列表」。`probe.api_key` 只在这一次调用里存在——
+   * 不进 state、不进 query key、不进 query 缓存（`useMutation` 不缓存入参）。
+   */
+  const discover = (probe: {
+    id: string
+    base_url: string
+    api_key?: string
+    region: 'cn' | 'global'
+  }) => {
+    const { id, ...rest } = probe
+    return discoverModelProviderModels(id, rest, assignment)
+  }
+
   const saveDefaults = useMutation({
     mutationFn: (input: Parameters<typeof setModelDefaults>[0]) =>
       setModelDefaults(input, assignment),
@@ -198,6 +213,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                       }
                       existing={p}
                       busy={save.isPending}
+                      onDiscover={discover}
                       onCancel={() => {
                         setEditing(null)
                       }}
@@ -248,6 +264,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   <ModelForm
                     template={tpl}
                     busy={save.isPending}
+                    onDiscover={discover}
                     onCancel={() => {
                       setAdding(null)
                     }}

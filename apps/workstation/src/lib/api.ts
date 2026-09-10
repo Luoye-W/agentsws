@@ -1023,6 +1023,14 @@ export interface ModelTestResult {
   checked_at: string
 }
 
+/** WP42：这家现在有哪些模型（从 `/models` 拉的）。拉不到时 `ok: false` + 一句人话。 */
+export interface ModelListing {
+  ok: boolean
+  models: string[]
+  reason?: string
+  checked_at: string
+}
+
 export interface ModelProviderView {
   id: string
   kind: ModelProviderKind
@@ -1038,6 +1046,9 @@ export interface ModelProviderView {
   price_in?: number
   price_out?: number
   price_cached?: number
+  /** WP42：上次拉回来的模型清单。 */
+  models?: string[]
+  last_listing?: ModelListing
   last_test?: ModelTestResult
   from_env?: boolean
 }
@@ -1132,6 +1143,23 @@ export const removeModelProvider = (
 export const testModelProvider = (id: string, assignment?: string): Promise<ModelTestResult> =>
   api(`/v1/models/providers/${encodeURIComponent(id)}/test`, {
     method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+/**
+ * WP42：去这家的 `/models` 拉一次模型清单。
+ *
+ * `api_key` 是第二条会带 key 出门的路——用户刚把地址与 key 填进表单、还没点保存就想
+ * 看看有哪些模型可选时用它。和保存那条一样：组装一次、发出去，函数返回后没人再引用它。
+ */
+export const discoverModelProviderModels = (
+  id: string,
+  input: { base_url?: string; api_key?: string; region?: 'cn' | 'global' },
+  assignment?: string,
+): Promise<ModelListing> =>
+  api(`/v1/models/providers/${encodeURIComponent(id)}/discover`, {
+    method: 'POST',
+    body: input,
     ...withAssignment(assignment),
   })
 

@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ModelDefaultsView,
+  ModelListing,
   ModelProviderTemplate,
   ModelProviderView,
   ModelTestResult,
@@ -145,9 +146,16 @@ const state = {
   /** 列表这条路 403（客服岗位问模型面就是这样）。 */
   forbidden: false,
   testResult: { ok: true, reason: 'ok', checked_at: T0 } as ModelTestResult,
+  /** WP42：`discoverModelProviderModels` 回什么。 */
+  listing: {
+    ok: true,
+    models: ['deepseek-chat', 'deepseek-flash', 'deepseek-v4-pro'],
+    checked_at: T0,
+  } as ModelListing,
 }
 
 const saved: { id: string; input: Record<string, unknown> }[] = []
+const discovered: { id: string; input: Record<string, unknown> }[] = []
 const removed: string[] = []
 const tested: string[] = []
 
@@ -180,6 +188,10 @@ vi.mock('@/lib/api', async () => {
       tested.push(id)
       return state.testResult
     },
+    discoverModelProviderModels: async (id: string, input: Record<string, unknown>) => {
+      discovered.push({ id, input })
+      return state.listing
+    },
     getModelDefaults: async () => DEFAULTS,
     setModelDefaults: async () => DEFAULTS,
     getModelUsage: async () => USAGE,
@@ -197,6 +209,12 @@ beforeEach(() => {
   saved.length = 0
   removed.length = 0
   tested.length = 0
+  discovered.length = 0
+  state.listing = {
+    ok: true,
+    models: ['deepseek-chat', 'deepseek-flash', 'deepseek-v4-pro'],
+    checked_at: T0,
+  }
   // localStorage 由 AppProvider 自己管，这里不清（jsdom 的实现没有 clear）
 })
 
@@ -417,5 +435,80 @@ describe('WP25 §C 模型面板：已配的那几条', () => {
     for (const label of ['跑活', '抽取', '反思', '向量', '判分', '转写']) {
       expect(panel.textContent, label).toContain(label)
     }
+  })
+})
+
+describe('WP42 §1 模型名从接口拉', () => {
+  it('点「拉取模型列表」：模型名框变成可搜索的下拉（原生 datalist）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    // 拉之前：就是一个手填的框，没有下拉
+    expect(within(form).getByTestId('model-name-input').getAttribute('list')).toBeNull()
+    expect(within(form).queryByTestId('model-datalist')).toBeNull()
+
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByTestId('model-discover'))
+
+    const list = await within(form).findByTestId('model-datalist')
+    expect(list.querySelectorAll('option')).toHaveLength(3)
+    expect(within(form).getByTestId('model-name-input').getAttribute('list')).toBe(list.id)
+  })
+
+  it('拉取带上表单里现填的地址与 key；key 不留在 DOM 里', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByTestId('model-discover'))
+
+    await waitFor(() => {
+      expect(discovered).toHaveLength(1)
+    })
+    expect(discovered[0]?.input).toMatchObject({
+      base_url: 'https://api.deepseek.com',
+      api_key: API_KEY,
+      region: 'cn',
+    })
+    expect(document.body.innerHTML).not.toContain(API_KEY)
+  })
+
+  it('拉不到：把原因原样说出来，模型名还是能手填', async () => {
+    state.listing = {
+      ok: false,
+      models: [],
+      reason: '连不上这个地址：本地模型的话看看它起来了没有',
+      checked_at: T0,
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByTestId('model-discover'))
+
+    const failed = await within(form).findByTestId('model-discover-failed')
+    expect(failed.textContent).toContain('看看它起来了没有')
+    // 退回手填：框还在，还能打字
+    const input = within(form).getByTestId('model-name-input') as HTMLInputElement
+    expect(input.getAttribute('list')).toBeNull()
+    await user.clear(input)
+    await user.type(input, 'llama3.1')
+    expect(input.value).toBe('llama3.1')
+  })
+
+  it('改一条已有的：上次拉回来的清单直接就在（不用再点一次）', async () => {
+    state.providers = [
+      { ...ACTIVE, models: ['deepseek-chat', 'deepseek-flash'], last_listing: state.listing },
+    ]
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByText('改'))
+    const form = await screen.findByTestId('model-form')
+    expect(within(form).getByTestId('model-datalist').querySelectorAll('option')).toHaveLength(2)
+    expect(discovered).toHaveLength(0)
   })
 })

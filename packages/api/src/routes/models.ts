@@ -89,6 +89,10 @@ export interface ModelProviderView {
   price_in?: number
   price_out?: number
   price_cached?: number
+  /** 上次从 `/models` 拉回来的模型清单（WP42）。表单里的"模型名"下拉照它画。 */
+  models?: string[]
+  /** 上次拉清单是什么时候 / 通没通。 */
+  last_listing?: ModelListing
   /** 上次"测试"的结果。 */
   last_test?: ModelTestResult
   /** 这一条是环境变量给的（`DEEPSEEK_API_KEY`），界面上不给删。 */
@@ -125,6 +129,34 @@ export interface ModelTestResult {
   model?: string
   duration_ms?: number
   checked_at: string
+}
+
+/**
+ * 「拉一次模型列表」的结果（WP42 交付 1）。
+ *
+ * 拉不到**不是错**：本地 Ollama 没起来、地址写错、key 过期、这家干脆没有 `/models`
+ * ——都可能。所以回的是 `ok: false` + 一句人话，界面据此退回手填而不是弹一个红框。
+ */
+export interface ModelListing {
+  ok: boolean
+  /** 拿到的模型名（已去重排序）。拉不到时是空数组。 */
+  models: string[]
+  /** 拉不到的原因（人话）。**永远没有 key。** */
+  reason?: string
+  checked_at: string
+}
+
+/**
+ * 拉模型列表的入参。**全都可选**：
+ *
+ * - 已经保存过的那条，什么都不给就用存着的地址与加密库里的 key；
+ * - 还没保存的（用户刚把地址与 key 填进表单、还没点保存），把这两样带上就能先拉一次。
+ *   `api_key` 与保存那条路一样：只走这一次，不落盘、不进事件、不进返回值。
+ */
+export interface DiscoverModelsInput {
+  base_url?: string | undefined
+  api_key?: string | undefined
+  region?: 'cn' | 'global' | undefined
 }
 
 /** 22 §2 的策略：默认模型 + 按 purpose 覆盖 + 驻留 + 三级预算。 */
@@ -208,6 +240,8 @@ export interface ModelsPort {
   remove(actor: ModelsActor, id: string): MaybePromise<void>
   /** 经网关跑一次最小 complete（`purpose: 'judge'`，十来个 token）。 */
   test(actor: ModelsActor, id: string): MaybePromise<ModelTestResult>
+  /** 去 provider 的 `/models` 拉一次可用模型清单（WP42）。拉不到回 `ok: false` + 人话。 */
+  discover(actor: ModelsActor, id: string, input?: DiscoverModelsInput): MaybePromise<ModelListing>
   defaults(actor: ModelsActor): MaybePromise<ModelDefaultsView>
   setDefaults(actor: ModelsActor, input: SetModelDefaultsInput): MaybePromise<ModelDefaultsView>
   usage(actor: ModelsActor, since?: string): MaybePromise<ModelUsageView>
@@ -246,6 +280,13 @@ const SaveBody = z.object({
   price_in: z.number().min(0).max(100_000).optional(),
   price_out: z.number().min(0).max(100_000).optional(),
   price_cached: z.number().min(0).max(100_000).optional(),
+})
+
+/** 拉模型列表的请求体。`api_key` 同 `SaveBody`：只限长度，值不进任何错误信封。 */
+const DiscoverBody = z.object({
+  base_url: z.string().min(1).max(512).optional(),
+  api_key: z.string().min(1).max(4096).optional(),
+  region: REGION.optional(),
 })
 
 const DefaultsBody = z.object({
@@ -410,6 +451,27 @@ export function modelRoutes(): Route[] {
         returns: 'ModelTestResult',
       },
       async (c, deps) => ok(c, await portOf(deps).test(actorOf(c), param(c, 'id'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/models/providers/:id/discover',
+        operationId: 'discoverModelProviderModels',
+        summary:
+          '去这家的 /models 拉一次可用模型清单（WP42）：设置页的"模型名"因此是一个下拉而不是手填；拉不到回 ok=false + 一句人话',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [ID_PARAM],
+        body: DiscoverBody,
+        returns: 'ModelListing',
+      },
+      async (c, deps) => {
+        const input = await body(c, DiscoverBody)
+        // 和保存那条路同一条纪律：`api_key` 往下传一次，自己不读、不记、不回显。
+        return ok(c, await portOf(deps).discover(actorOf(c), param(c, 'id'), input))
+      },
     ),
     route(
       {

@@ -23,7 +23,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type {
+  DiscoverModelsInput,
   ModelDefaultsView,
+  ModelListing,
   ModelProviderKind,
   ModelProviderTemplate,
   ModelProviderView,
@@ -68,6 +70,10 @@ export interface ModelProviderConfig {
   price_in?: number
   price_out?: number
   price_cached?: number
+  /** WP42：上次从 `/models` 拉回来的清单（下拉框照它画，按 purpose 选也从它里面挑）。 */
+  models?: string[]
+  /** WP42：上次拉清单通没通（拉不到时界面退回手填，并把原因原样显示出来）。 */
+  last_listing?: ModelListing
 }
 
 interface ModelsStateFile {
@@ -86,6 +92,9 @@ interface ModelsStateFile {
   /** provider id → 上次测试结果（只有 ok / 延迟 / 模型名，没有 key 线索）。 */
   tests: Record<string, ModelTestResult>
 }
+
+/** 拉一次模型清单最多等多久。本机 Ollama 冷启动慢，10 秒够了；卡住不该拖着界面。 */
+export const DISCOVER_TIMEOUT_MS = 10_000
 
 export interface ModelsOptions {
   clock: Clock
@@ -324,13 +333,22 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   const fromEnvOnly = (id: string): boolean =>
     id === ENV_PROVIDER_ID && !state.providers.some((p) => p.id === ENV_PROVIDER_ID)
 
-  /** 一条配置 → 一个真 provider。缺 key 就不装（网关上没有它，选它会报没注册）。 */
-  const buildProvider = (config: ModelProviderConfig): ModelProvider | undefined => {
+  /**
+   * 一条配置 → 一个真 provider。缺 key 就不装（网关上没有它，选它会报没注册）。
+   *
+   * `model` 可以覆盖：同一家可能被按 purpose 挑了好几个模型（WP42），
+   * 每个都要有自己的 provider 实例——网关按 `provider/model` 找，
+   * 找不到精确的才退回"同一家的第一个"，而那一个发出去的模型名是它自己的。
+   */
+  const buildProvider = (
+    config: ModelProviderConfig,
+    model = config.model,
+  ): ModelProvider | undefined => {
     if (!hasKey(config.id)) return undefined
     return openaiCompatibleProvider({
       baseUrl: config.base_url,
       apiKey: keySource(config.id),
-      model: config.model,
+      model,
       provider: config.id,
       region: config.region,
       env,
@@ -340,6 +358,32 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ? {}
         : { transcriptionModel: config.transcription_model }),
     })
+  }
+
+  /** 这家现在**已知**有哪些模型：拉过清单就是那一份，没拉过就只有配置里那一个。 */
+  const knownModels = (config: ModelProviderConfig): string[] => {
+    const listed = config.models ?? []
+    return listed.includes(config.model) ? listed : [config.model, ...listed]
+  }
+
+  /**
+   * 这家**真的要挂上网关**的那几个模型：配置里的主模型 + 被默认 / 按 purpose 选中的。
+   *
+   * 为什么不是"已知的全部"：OpenAI 的 `/models` 一口气回八十条，
+   * 每条都建一个 provider、每条都要一行价格，等于把一份下拉框的数据塞进运行时。
+   * 选中的才装。
+   */
+  const selectedModels = (config: ModelProviderConfig): string[] => {
+    const picked = new Set([config.model])
+    const ids = [state.defaults.default, ...Object.values(state.defaults.by_purpose ?? {})]
+    for (const id of ids) {
+      if (id === undefined || id === '') continue
+      const at = id.indexOf('/')
+      if (at <= 0 || id.slice(0, at) !== config.id) continue
+      const model = id.slice(at + 1)
+      if (knownModels(config).includes(model)) picked.add(model)
+    }
+    return [...picked]
   }
 
   const activeConfigs = (): ModelProviderConfig[] => effectiveConfigs().filter((c) => hasKey(c.id))
@@ -354,21 +398,31 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     return { provider: picked.id, model: picked.model, region: picked.region }
   }
 
+  /**
+   * `provider_id/model` → ModelRef。**认这家已知的任何一个模型**（WP42）——
+   * 拉过清单之后，按 purpose 可以挑同一家的另一个模型，而不必再建一条 provider。
+   */
   const refOf = (id: string | undefined): ModelRef | undefined => {
     if (id === undefined) return undefined
-    const hit = activeConfigs().find((c) => modelIdOf(c) === id)
-    return hit === undefined
-      ? undefined
-      : { provider: hit.id, model: hit.model, region: hit.region }
+    const at = id.indexOf('/')
+    if (at <= 0 || at === id.length - 1) return undefined
+    const config = activeConfigs().find((c) => c.id === id.slice(0, at))
+    if (config === undefined) return undefined
+    const model = id.slice(at + 1)
+    if (!knownModels(config).includes(model)) return undefined
+    return { provider: config.id, model, region: config.region }
   }
 
   const policyOf = (): ModelGatewayPolicy => {
     const prices: ModelGatewayPolicy['prices'] = { ...STUB_PRICES }
     for (const c of activeConfigs()) {
-      prices[modelIdOf(c)] = {
-        in: c.price_in ?? 0,
-        out: c.price_out ?? 0,
-        cached: c.price_cached ?? 0,
+      // 主模型用用户填的价；同一家被按 purpose 挑中的其它模型没有单独的价，按 0 记
+      // （记 0 好过记错——记错会让预算按一个假数字拦人）
+      for (const model of selectedModels(c)) {
+        prices[`${c.id}/${model}`] =
+          model === c.model
+            ? { in: c.price_in ?? 0, out: c.price_out ?? 0, cached: c.price_cached ?? 0 }
+            : { in: 0, out: 0, cached: 0 }
       }
     }
     const by_purpose: Partial<Record<ModelPurpose, ModelRef>> = {}
@@ -396,14 +450,92 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   const reassemble = (): void => {
     const providers: ModelProvider[] = []
     for (const config of activeConfigs()) {
-      const provider = buildProvider(config)
-      if (provider !== undefined) providers.push(provider)
+      for (const model of selectedModels(config)) {
+        const provider = buildProvider(config, model)
+        if (provider !== undefined) providers.push(provider)
+      }
     }
     if (providers.length === 0) providers.push(stubProvider({ seed: 7 }))
     gateway.reconfigure({ providers, policy: policyOf() })
   }
 
   reassemble()
+
+  /**
+   * 去这家的 `/models` 拉一次清单（WP42）。
+   *
+   * `probe` 是"还没保存就先拉"那条路：用户刚把地址与 key 填进表单、还没点保存，
+   * 就想看看有哪些模型可选。key 的走法和保存那条路一模一样——只在
+   * `openaiCompatibleProvider` 的 `apiKey()` 回调里出现一次，直接进 header，
+   * 不落盘、不进返回值、不进日志。
+   *
+   * **拉不到不抛**：回一条 `ok: false` + 一句人话，界面据此退回手填。
+   */
+  const listModelsOf = async (
+    id: string,
+    probe?: DiscoverModelsInput,
+    fallback?: ModelProviderConfig,
+  ): Promise<ModelListing> => {
+    const checked_at = clock.now()
+    const base_url = probe?.base_url?.trim() ?? fallback?.base_url ?? ''
+    if (base_url === '') {
+      return { ok: false, models: [], reason: '还没填接口地址，填了才知道去哪儿拉', checked_at }
+    }
+    const probeKey = probe?.api_key?.trim()
+    const hasProbeKey = probeKey !== undefined && probeKey !== ''
+    if (!hasProbeKey && !hasKey(id)) {
+      return { ok: false, models: [], reason: '还没填 API key，先填一把再拉', checked_at }
+    }
+    // 值只在这个回调里活一次：取 → 进 header → 结束
+    const apiKey = hasProbeKey ? () => probeKey : keySource(id)
+    const provider = openaiCompatibleProvider({
+      baseUrl: base_url,
+      apiKey,
+      model: fallback?.model ?? 'probe',
+      provider: id,
+      region: probe?.region ?? fallback?.region ?? 'cn',
+      env,
+      timeoutMs: DISCOVER_TIMEOUT_MS,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    })
+    try {
+      const rows = (await provider.listModels?.()) ?? []
+      if (rows.length === 0) {
+        return {
+          ok: false,
+          models: [],
+          reason: '这家没回模型列表（有的服务没有这个接口）。模型名手填也一样能用。',
+          checked_at,
+        }
+      }
+      return { ok: true, models: rows.map((r) => r.id), checked_at }
+    } catch (e) {
+      return {
+        ok: false,
+        models: [],
+        reason: humanizeModelError(codeOf(e), messageOf(e)),
+        checked_at,
+      }
+    }
+  }
+
+  /** 拉一次并把结果记在这条配置上（拉不到也记：界面要显示"为什么没拉到"）。 */
+  const refreshListing = async (
+    config: ModelProviderConfig,
+    probe?: DiscoverModelsInput,
+  ): Promise<ModelListing> => {
+    const listing = await listModelsOf(config.id, probe, config)
+    const saved = state.providers.find((p) => p.id === config.id)
+    const target = saved ?? config
+    target.last_listing = listing
+    if (listing.ok) target.models = listing.models
+    if (saved !== undefined) {
+      flush()
+      // 清单变了，能选的模型跟着变——但只有被选中的那几个才真的挂上网关
+      reassemble()
+    }
+    return listing
+  }
 
   const viewOf = (config: ModelProviderConfig): ModelProviderView => {
     const has_key = hasKey(config.id)
@@ -431,6 +563,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(config.price_in === undefined ? {} : { price_in: config.price_in }),
       ...(config.price_out === undefined ? {} : { price_out: config.price_out }),
       ...(config.price_cached === undefined ? {} : { price_cached: config.price_cached }),
+      ...(config.models === undefined ? {} : { models: config.models }),
+      ...(config.last_listing === undefined ? {} : { last_listing: config.last_listing }),
       ...(test === undefined ? {} : { last_test: test }),
       ...(fromEnvOnly(config.id) ? { from_env: true } : {}),
     }
@@ -444,7 +578,13 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       by_purpose: { ...state.defaults.by_purpose },
       data_residency: state.defaults.data_residency ?? 'cn',
       budget: defined(budget),
-      choices: active.map((c) => ({ id: modelIdOf(c), label: `${c.label}（${c.model}）` })),
+      // WP42：拉过清单的，这家的每一个模型都能选（没拉过就只有配置里那一个）
+      choices: active.flatMap((c) =>
+        knownModels(c).map((model) => ({
+          id: `${c.id}/${model}`,
+          label: `${c.label}（${model}）`,
+        })),
+      ),
     }
   }
 
@@ -460,7 +600,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
      * 不抄进 `state`（那是明文 JSON）、不进事件、不进返回值、不进日志。
      * 不给 `api_key` 就是"别动已经存着的那一把"——改个模型名不用重填 key。
      */
-    save(_actor: ModelsActor, id: string, input: SaveModelProviderInput): ModelProviderView {
+    async save(
+      _actor: ModelsActor,
+      id: string,
+      input: SaveModelProviderInput,
+    ): Promise<ModelProviderView> {
       if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(id)) {
         throw invalid('provider 的 id 只能是小写字母、数字、下划线和短横线（32 位以内）')
       }
@@ -478,11 +622,14 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         secrets.put(keyOf(id), { api_key: key })
       }
       const existing = state.providers.find((p) => p.id === id)
+      const base_url = input.base_url?.trim() ?? existing?.base_url ?? template.default_base_url
+      // 换了地址就等于换了一家：上一份模型清单跟着作废，重新拉
+      const keepList = existing !== undefined && existing.base_url === base_url
       const config: ModelProviderConfig = {
         id,
         kind: input.kind,
         label: input.label?.trim() ?? existing?.label ?? template.label,
-        base_url: input.base_url?.trim() ?? existing?.base_url ?? template.default_base_url,
+        base_url,
         model: input.model.trim(),
         region: input.region ?? existing?.region ?? template.region,
         ...defined({
@@ -491,6 +638,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           price_in: input.price_in ?? existing?.price_in,
           price_out: input.price_out ?? existing?.price_out,
           price_cached: input.price_cached ?? existing?.price_cached,
+          models: keepList ? existing.models : undefined,
+          last_listing: keepList ? existing.last_listing : undefined,
         }),
       }
       if (existing === undefined) state.providers.push(config)
@@ -501,6 +650,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       }
       flush()
       reassemble()
+      // WP42：保存时顺手拉一次模型清单（还没拉过、或刚换了地址的才拉）。
+      // 拉不到不影响保存——它只是让下一次打开表单时"模型名"是个下拉。
+      if (config.models === undefined) await refreshListing(config)
       return viewOf(config)
     },
 
@@ -588,6 +740,21 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       state.tests[id] = result
       flush()
       return result
+    },
+
+    /**
+     * WP42：去这家的 `/models` 拉一次可用模型清单。
+     *
+     * 两种用法：已经保存过的那条什么都不给（用存着的地址与加密库里的 key）；
+     * 还没保存的把地址与 key 带上（`api_key` 只走这一次，不落盘）。
+     */
+    async discover(_actor, id, input): Promise<ModelListing> {
+      const config = effectiveConfigs().find((c) => c.id === id)
+      if (config === undefined) {
+        // 还没保存的那条：没有配置可依，全靠请求体里带来的地址与 key
+        return listModelsOf(id, input)
+      }
+      return refreshListing(config, input)
     },
 
     defaults: () => defaultsView(),

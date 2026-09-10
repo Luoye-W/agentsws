@@ -19,7 +19,11 @@ export {
   priceKey,
 } from './pricing.js'
 export type { FetchLike, OpenAiCompatibleOptions } from './providers/openai-compatible.js'
-export { extensionFor, openaiCompatibleProvider } from './providers/openai-compatible.js'
+export {
+  extensionFor,
+  ollamaTagsUrl,
+  openaiCompatibleProvider,
+} from './providers/openai-compatible.js'
 export type { StubProviderOptions } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'

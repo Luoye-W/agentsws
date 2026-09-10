@@ -2,6 +2,7 @@ import type {
   ChatMessage,
   ModelProvider,
   ModelRef,
+  ProviderModelInfo,
   ProviderTranscription,
   ToolDef,
 } from '@agentsws/contracts'
@@ -12,8 +13,8 @@ export type FetchLike = (
   init: {
     method: string
     headers: Record<string, string>
-    /** JSON 档是字符串；`/audio/transcriptions` 档是 multipart 的 FormData。 */
-    body: string | FormData
+    /** JSON 档是字符串；`/audio/transcriptions` 档是 multipart 的 FormData；GET 没有 body。 */
+    body?: string | FormData
     signal?: AbortSignal
   },
 ) => Promise<{
@@ -70,6 +71,14 @@ interface WireChatResponse {
   choices?: { message?: { content?: string | null; tool_calls?: WireToolCall[] } }[]
   usage?: WireUsage
 }
+/** OpenAI 形态的 `GET /models`。DeepSeek、Moonshot、通义、智谱、SiliconFlow、Ollama 都回这个形状。 */
+interface WireModelList {
+  data?: { id?: string; owned_by?: string }[]
+}
+/** Ollama 自己的 `GET /api/tags`（没开 OpenAI 兼容层的老版本只有这个口）。 */
+interface WireOllamaTags {
+  models?: { name?: string; model?: string }[]
+}
 interface WireEmbeddingResponse {
   data?: { embedding?: number[] }[]
   usage?: WireUsage
@@ -124,25 +133,29 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     }
   }
 
-  const post = async (path: string, body: unknown, form?: FormData): Promise<unknown> => {
+  /** 一次上游调用。**唯一**发请求的地方——header 由 `authHeaders()` 现取现用。 */
+  const request = async (
+    url: string,
+    init: { method: 'GET' | 'POST'; body?: string | FormData; multipart?: boolean },
+  ): Promise<unknown> => {
     const headers = authHeaders()
     // multipart 的 boundary 由 fetch 自己写，手工塞 content-type 会让上游解不出来
-    if (form !== undefined) delete headers['content-type']
+    if (init.multipart === true) delete headers['content-type']
     const signal =
       options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
     let res: Awaited<ReturnType<FetchLike>>
     try {
-      res = await doFetch(`${baseUrl}${path}`, {
-        method: 'POST',
+      res = await doFetch(url, {
+        method: init.method,
         headers,
-        body: form ?? JSON.stringify(body),
+        ...(init.body === undefined ? {} : { body: init.body }),
         ...(signal === undefined ? {} : { signal }),
       })
     } catch (e) {
       const name = e instanceof Error ? e.name : ''
       const timeout = name === 'TimeoutError' || name === 'AbortError'
       throw new ProviderError(
-        `request to ${baseUrl}${path} failed: ${e instanceof Error ? e.message : String(e)}`,
+        `request to ${url} failed: ${e instanceof Error ? e.message : String(e)}`,
         { timeout },
       )
     }
@@ -155,8 +168,46 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     return res.json()
   }
 
+  const post = async (path: string, body: unknown, form?: FormData): Promise<unknown> =>
+    request(`${baseUrl}${path}`, {
+      method: 'POST',
+      body: form ?? JSON.stringify(body),
+      ...(form === undefined ? {} : { multipart: true }),
+    })
+
+  /**
+   * 这家现在有哪些模型（WP42）。
+   *
+   * 先打 OpenAI 形态的 `GET {base}/models`——DeepSeek、OpenAI、Moonshot、通义、
+   * 智谱、SiliconFlow、Ollama 的 `/v1/models` 都是这一个形状。打不通再兜一次
+   * Ollama 自己的 `GET {origin}/api/tags`（本机跑的老 Ollama 只有这个口）。
+   *
+   * 两条都不通就把**第一条**的错抛出去：用户想知道的是"我填的这个地址怎么了"，
+   * 不是"顺手试的那个兜底口怎么了"。
+   */
+  const listModels = async (): Promise<ProviderModelInfo[]> => {
+    let first: unknown
+    try {
+      const json = (await request(`${baseUrl}/models`, { method: 'GET' })) as WireModelList
+      const rows = json.data ?? []
+      if (rows.length > 0) return normalizeModels(rows.map((r) => ({ id: r.id, from: r.owned_by })))
+      first = new ProviderError('provider returned an empty model list')
+    } catch (e) {
+      first = e
+    }
+    try {
+      const json = (await request(`${ollamaTagsUrl(baseUrl)}`, { method: 'GET' })) as WireOllamaTags
+      const rows = json.models ?? []
+      if (rows.length > 0) return normalizeModels(rows.map((r) => ({ id: r.model ?? r.name })))
+    } catch {
+      // 兜底口的错吞掉：报第一条的
+    }
+    throw first
+  }
+
   const provider: ModelProvider = {
     ref,
+    listModels,
     async complete(req) {
       const json = (await post('/chat/completions', {
         model: options.model,
@@ -291,4 +342,26 @@ const MIME_EXTENSIONS: Readonly<Record<string, string>> = {
 /** 上游按文件名后缀判格式，所以 mime 要能翻成一个它认识的扩展名。 */
 export function extensionFor(mime: string): string {
   return MIME_EXTENSIONS[mime.split(';')[0]?.trim() ?? mime] ?? 'bin'
+}
+
+/** `.../v1` → `.../api/tags`；没有 `/v1` 就直接挂在后面。 */
+export function ollamaTagsUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/v1$/, '')}/api/tags`
+}
+
+/** 去重、去空、按名字排序——下拉框要的是一份稳定的清单，不是上游的返回顺序。 */
+function normalizeModels(
+  rows: { id?: string | undefined; from?: string | undefined }[],
+): ProviderModelInfo[] {
+  const seen = new Map<string, ProviderModelInfo>()
+  for (const row of rows) {
+    const id = row.id?.trim()
+    if (id === undefined || id === '') continue
+    if (seen.has(id)) continue
+    seen.set(id, {
+      id,
+      ...(row.from === undefined || row.from === '' ? {} : { owned_by: row.from }),
+    })
+  }
+  return [...seen.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
