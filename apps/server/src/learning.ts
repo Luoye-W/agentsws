@@ -627,6 +627,10 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       const overlays = skills.registry
         .listOverlays(name)
         .filter((o) => o.tier !== 'package')
+        // 40 E1「管理员对个人数据没有读」：个人层是**本人的**。
+        // 在这之前技能页把工作区里每个人的个人层正文都端出来了——
+        // 公司层与部门层是公共的，个人层不是（21 §3 敏感级，默认 confidential）。
+        .filter((o) => o.tier !== 'personal' || String(o.owner) === actor.person_id)
         .map((o) => ({
           tier: o.tier as 'company' | 'department' | 'personal',
           owner: String(o.owner),

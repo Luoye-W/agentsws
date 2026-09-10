@@ -33,6 +33,13 @@ export interface LearningStore {
   list(filter: LessonFilter): PooledLesson[]
   reject(entry: RejectedKey): void
   rejected(workspace_id: WorkspaceId): RejectedKey[]
+  /**
+   * 按 id 删行（40 §1.2 离职里 `personal_layer: 'erase'` 那一档）。
+   *
+   * 可选：没实现的档退回「标成 refuted」——那条不再被提，但行还在。
+   * 要「连行一起没」的档实现它。
+   */
+  delete?(id: string): void
   close?(): void
 }
 
@@ -58,6 +65,10 @@ export class MemoryLearningStore implements LearningStore {
 
   reject(entry: RejectedKey): void {
     this.#rejected.set(`${entry.workspace_id}::${entry.semantic_key}`, { ...entry })
+  }
+
+  delete(id: string): void {
+    this.#lessons.delete(id)
   }
 
   rejected(workspace_id: WorkspaceId): RejectedKey[] {
@@ -174,6 +185,68 @@ export class LearningPool {
     if (status === 'proposed') next.proposed_at = next.updated_at
     this.#store.put(next)
     return next
+  }
+
+  // ── 40 §1.2 离职：走的人在池里那些还没提上去的经验怎么办 ────────────────
+
+  /**
+   * 归档：把这几条分配名下**还没被采纳**的 lesson 标成 `ignored`，以后不再提。
+   *
+   * 为什么不删：24 §3 的池是"每人一份的观察"，人走了，观察没被验证过，
+   * 不该继续以他的名义变成提案卡；但证据（人当时的原话、run id）还得留着——
+   * 周复盘里"这条经验其实有两个人都提过"要靠它。已经 `accepted` 的不动：
+   * 那条已经进过 overlay，属于公司。
+   *
+   * 幂等：跑完就没有 `pooled` / `proposed` 的了，再跑一次是 0 条。
+   */
+  archiveContributor(input: {
+    workspace_id: WorkspaceId
+    assignment_ids: readonly string[]
+    at?: Iso8601
+  }): number {
+    const at = input.at ?? this.#clock.now()
+    let n = 0
+    for (const lesson of this.#byContributor(input.workspace_id, input.assignment_ids)) {
+      if (lesson.status !== 'pooled' && lesson.status !== 'proposed') continue
+      this.#store.put({
+        ...lesson,
+        status: 'ignored',
+        confidence: round(lesson.confidence * IGNORE_DECAY),
+        updated_at: at,
+      })
+      n += 1
+    }
+    return n
+  }
+
+  /**
+   * 销毁：`personal_layer: 'erase'` 那一档——连行一起删。
+   *
+   * 存储档没实现 `delete` 时退回"标成 refuted、置信度归零"：那条不会再被提，
+   * 但行还在（内存档在进程结束时本来就没了，落盘档实现了 `delete`）。
+   */
+  eraseContributor(input: {
+    workspace_id: WorkspaceId
+    assignment_ids: readonly string[]
+    at?: Iso8601
+  }): number {
+    const at = input.at ?? this.#clock.now()
+    let n = 0
+    for (const lesson of this.#byContributor(input.workspace_id, input.assignment_ids)) {
+      const drop = this.#store.delete?.bind(this.#store)
+      if (drop === undefined)
+        this.#store.put({ ...lesson, status: 'refuted', confidence: 0, updated_at: at })
+      else drop(lesson.id)
+      n += 1
+    }
+    return n
+  }
+
+  #byContributor(workspace_id: WorkspaceId, assignment_ids: readonly string[]): PooledLesson[] {
+    const wanted = new Set(assignment_ids)
+    return this.#store
+      .list({ workspace_id })
+      .filter((l) => l.assignments.some((a) => wanted.has(a)) || wanted.has(l.assignment_id))
   }
 
   /** 记一条"这个语义键以后别再提"。 */

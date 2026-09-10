@@ -69,6 +69,31 @@ export interface RebaseResult {
   conflicts: SkillConflict[]
 }
 
+/**
+ * 40 §1.2「个人层 overlay 归档成『前员工层』只读」。
+ *
+ * 归档 ≠ 删。人走了，他在技能上攒的那些改动往往是公司最值钱的一点东西，删掉等于
+ * 把经验一起裁掉；但也不能继续当"个人层"叠加——那一层的主人已经不在，谁也不该以
+ * 他的身份跑。所以搬到一个**只读**的存放处：{@link MemorySkillRegistry.resolve} 不
+ * 再叠它，接手人可以一键"采纳进部门层"（走 `policy_change` 审批，见
+ * `apps/server/src/offboard.ts`）。
+ *
+ * 这个类型故意没有 setter：改归档就是改历史。要用它就采纳到某一层去，改的是那一层。
+ */
+export interface ArchivedOverlay {
+  skill: string
+  /** 归档前在哪一层（v1 永远是 `personal`）。 */
+  from_tier: SkillTier
+  /** 前员工。 */
+  owner: string
+  ops: readonly OverlayOpEx[]
+  base_version: string
+  version: number
+  archived_at: string
+  /** 为什么归档（「李默离职」）。 */
+  reason?: string
+}
+
 const SEP = '::'
 
 export class MemorySkillRegistry {
@@ -76,6 +101,7 @@ export class MemorySkillRegistry {
   readonly #history = new Map<string, Skill[]>()
   readonly #frontmatter = new Map<string, Frontmatter>()
   readonly #overlays = new Map<string, OverlayEx>()
+  readonly #archived = new Map<string, ArchivedOverlay>()
   readonly #excluded = new Map<PersonId, Set<string>>()
   readonly #sidecar: SidecarStore
   readonly #nextId: IdFactory
@@ -219,6 +245,78 @@ export class MemorySkillRegistry {
       rebased.push(next)
     }
     return { rebased, conflicts }
+  }
+
+  // ---------- 归档（40 §1.2 离职）----------
+
+  /**
+   * 把某个人的**全部**个人层 overlay 搬进只读的归档区，返回搬走的那些。
+   *
+   * 幂等：搬完他名下就没有个人层 overlay 了，再跑一次回 0 条——离职动作可重跑靠这一条。
+   * 已经归档过的同一条（同技能同人）不覆盖：归档区是 append-once 的历史。
+   */
+  archivePersonalOverlays(
+    owner: string,
+    at: string,
+    options: { reason?: string } = {},
+  ): ArchivedOverlay[] {
+    const out: ArchivedOverlay[] = []
+    for (const [key, overlay] of [...this.#overlays]) {
+      if (overlay.tier !== 'personal' || overlay.owner !== owner) continue
+      this.#overlays.delete(key)
+      const archiveKey = this.#overlayKey(overlay.skill, overlay.tier, overlay.owner)
+      const existing = this.#archived.get(archiveKey)
+      if (existing !== undefined) {
+        out.push(cloneArchived(existing))
+        continue
+      }
+      const archived: ArchivedOverlay = {
+        skill: overlay.skill,
+        from_tier: overlay.tier,
+        owner: overlay.owner,
+        ops: overlay.ops.map((op) => ({ ...op })),
+        base_version: overlay.base_version,
+        version: overlay.version,
+        archived_at: at,
+        ...(options.reason === undefined ? {} : { reason: options.reason }),
+      }
+      this.#archived.set(archiveKey, archived)
+      out.push(cloneArchived(archived))
+    }
+    return out
+  }
+
+  /** 归档区里有哪些（只读）。不给 owner 就是全部。 */
+  listArchivedOverlays(filter: { owner?: string; skill?: string } = {}): ArchivedOverlay[] {
+    return [...this.#archived.values()]
+      .filter(
+        (a) =>
+          (filter.owner === undefined || a.owner === filter.owner) &&
+          (filter.skill === undefined || a.skill === filter.skill),
+      )
+      .sort((a, b) =>
+        a.skill === b.skill ? a.owner.localeCompare(b.owner) : a.skill < b.skill ? -1 : 1,
+      )
+      .map(cloneArchived)
+  }
+
+  getArchivedOverlay(skill: string, owner: string): ArchivedOverlay | undefined {
+    const hit = this.#archived.get(this.#overlayKey(skill, 'personal', owner))
+    return hit === undefined ? undefined : cloneArchived(hit)
+  }
+
+  /**
+   * 归档区里的这几段**丢掉**（`personal_layer: 'erase'`：人要求连技能改动一起销毁）。
+   * 返回丢掉的条数。
+   */
+  dropArchivedOverlays(owner: string): number {
+    let n = 0
+    for (const [key, archived] of [...this.#archived]) {
+      if (archived.owner !== owner) continue
+      this.#archived.delete(key)
+      n += 1
+    }
+    return n
   }
 
   // ---------- 排除 ----------
@@ -493,6 +591,10 @@ export class MemorySkillRegistry {
     const sidecar: Sidecar = { skill: name, sections: [...entries.values()] }
     this.#sidecar.write(sidecar)
   }
+}
+
+function cloneArchived(a: ArchivedOverlay): ArchivedOverlay {
+  return { ...a, ops: a.ops.map((op) => ({ ...op })) }
 }
 
 function record(

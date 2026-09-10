@@ -233,6 +233,85 @@ export interface AcceptedInvitationView {
   assignments: AssignmentView[]
 }
 
+// ── 离职（40 §1.2 第三条规则；WP36）────────────────────────────────────
+
+/** 个人层 overlay 怎么处置：归档成"前员工层"只读（默认），或整个销毁。 */
+export type PersonalLayerPolicy = 'archive' | 'erase'
+/** 个人记忆怎么处置：工作相关的迁给接手人（经审批），其余按 21 擦除；或全擦。 */
+export type MemoryPolicy = 'migrate_work' | 'erase'
+
+export interface OffboardInput {
+  handover_to?: string | undefined
+  personal_layer?: PersonalLayerPolicy | undefined
+  memory?: MemoryPolicy | undefined
+}
+
+export interface OffboardStepView {
+  step: 'revoke' | 'handover' | 'skills' | 'memory' | 'lessons' | 'report'
+  status: 'done' | 'skipped' | 'failed' | 'pending_approval'
+  /** **只有数字，没有内容**（40 E1：管理员对个人数据没有「读」）。 */
+  counts?: Record<string, number>
+  approval_item_id?: string
+  error?: string
+}
+
+/** 40 §1.2 最后一步的那张「离职报告」。 */
+export interface OffboardReportView {
+  person_id: string
+  person_name: string
+  handover_to: string
+  handover_to_name: string
+  fallback_used: boolean
+  personal_layer: PersonalLayerPolicy
+  memory: MemoryPolicy
+  status: 'done' | 'partial' | 'pending_approval'
+  at: string
+  steps: OffboardStepView[]
+  summary: string
+  manual: string[]
+  matter_id?: string
+}
+
+/** 归档区里的一条（**只有段数，没有正文**）。 */
+export interface ArchivedSkillView {
+  skill: string
+  owner: string
+  owner_name: string
+  sections: number
+  base_version: string
+  archived_at: string
+  reason?: string
+}
+
+export interface AdoptArchivedInput {
+  skill: string
+  owner: string
+  to_tier: 'company' | 'department'
+  scope_id?: string | undefined
+}
+
+export interface AdoptReceiptView {
+  status: 'pending_approval'
+  approval_item_id: string
+  summary: string
+}
+
+/**
+ * 离职编排（业务全在 `apps/server/src/offboard.ts`）。
+ *
+ * 这一层只做路由与权限：三条路由都要 `policy.stage@workspace/restricted`——
+ * 动别人的分配、动别人的个人数据、动公司技能层，都是 owner 级的事（14 §13.3）。
+ */
+export interface OffboardPort {
+  offboard(
+    actor: OrgActor,
+    person_id: string,
+    input: OffboardInput,
+  ): MaybePromise<OffboardReportView>
+  archivedSkills(actor: OrgActor, owner?: string): MaybePromise<ArchivedSkillView[]>
+  adopt(actor: OrgActor, input: AdoptArchivedInput): MaybePromise<AdoptReceiptView>
+}
+
 export interface OrgPort {
   roles(actor: OrgActor): MaybePromise<RoleSummaryView[]>
   role(actor: OrgActor, id: string): MaybePromise<RoleDetailView | undefined>
@@ -352,12 +431,32 @@ const InviteBody = z.object({
 
 const AcceptBody = z.object({ name: z.string().min(1).max(64).optional() })
 
+const OffboardBody = z.object({
+  handover_to: z.string().min(1).max(128).optional(),
+  personal_layer: z.enum(['archive', 'erase']).optional(),
+  memory: z.enum(['migrate_work', 'erase']).optional(),
+})
+
+const AdoptBody = z.object({
+  skill: z.string().min(1).max(128),
+  owner: z.string().min(1).max(128),
+  to_tier: z.enum(['company', 'department']),
+  scope_id: z.string().min(1).max(64).optional(),
+})
+
 // ── 装配 ───────────────────────────────────────────────────────────────
 
 function portOf(deps: GatewayDeps): OrgPort {
   const p = deps.org
   if (p === undefined)
     throw new ApiError('not_implemented', '这个服务进程没有装配制度面（GatewayDeps.org）')
+  return p
+}
+
+function offboardOf(deps: GatewayDeps): OffboardPort {
+  const p = deps.offboard
+  if (p === undefined)
+    throw new ApiError('not_implemented', '这个服务进程没有装配离职编排（GatewayDeps.offboard）')
   return p
 }
 
@@ -672,6 +771,74 @@ export function orgRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).removeMember(sameWorkspace(c), param(c, 'person_id'))),
+    ),
+    // ── 离职（40 §1.2；WP36）──────────────────────────────────────────
+    // 路径里的 `offboard` 是定值段，排在 `:person_id` 的 DELETE 之外，不与它撞。
+    route(
+      {
+        method: 'post',
+        path: '/v1/workspaces/:id/members/:person_id/offboard',
+        operationId: 'offboardMember',
+        summary:
+          '离职：撤权限 → 在办事项 / 未完待办 / 定时任务真转接手人 → 个人层归档或销毁 → 个人记忆迁移或擦除 → 出一份离职报告（owner；可重跑）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '工作区 id' },
+          { name: 'person_id', in: 'path', required: true, description: '走的人 person_id' },
+        ],
+        body: OffboardBody,
+        returns: 'OffboardReportView（**只有数字，没有个人数据正文**）',
+      },
+      async (c, deps) => {
+        const actor = sameWorkspace(c)
+        const input = await body(c, OffboardBody)
+        return ok(c, await offboardOf(deps).offboard(actor, param(c, 'person_id'), input))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/workspaces/:id/archived-skills',
+        operationId: 'listArchivedSkills',
+        summary: '前员工层：归档的技能改动清单（只有段数，没有正文）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '工作区 id' },
+          { name: 'owner', in: 'query', description: '只看某位前员工的' },
+        ],
+        returns: 'ArchivedSkillView[]',
+      },
+      async (c, deps) => {
+        const actor = sameWorkspace(c)
+        const owner = c.req.query('owner')
+        return ok(c, await offboardOf(deps).archivedSkills(actor, owner === '' ? undefined : owner))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/workspaces/:id/archived-skills/adopt',
+        operationId: 'adoptArchivedSkill',
+        summary: '把前员工层的那几段采纳进部门 / 公司层：建一张 policy_change 卡，批了才落',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '工作区 id' }],
+        body: AdoptBody,
+        returns: 'AdoptReceiptView',
+      },
+      async (c, deps) => {
+        const actor = sameWorkspace(c)
+        const input = await body(c, AdoptBody)
+        return ok(c, await offboardOf(deps).adopt(actor, input), 201)
+      },
     ),
     route(
       {
