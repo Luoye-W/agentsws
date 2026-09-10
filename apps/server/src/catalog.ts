@@ -111,7 +111,10 @@ const SHOPIFY_DEV_APP_GUIDE: ProviderSetupGuide = {
     // 括号里给上原文：Dev Dashboard 的界面上只显示英文 scope 名，
     // 用户要照着一个个勾，不给原文等于让他自己猜哪一行对应"订单读写"
     '在应用的版本配置里勾上权限：订单读写（read_orders / write_orders）、退货读写' +
-      '（read_returns / write_returns）、客户读取（read_customers）、商品读取（read_products）',
+      '（read_returns / write_returns）、客户读取（read_customers）、商品读取（read_products）；' +
+      // 09-11 真店实测：没做这一步，商品读得到、客户直接被拒、订单查出来是 0 条——而且不报错
+      '同一页再申请"受保护客户数据"（Protected customer data access，勾姓名 / 邮箱 / 地址），' +
+      '不申请的话订单和客户读出来是空的，还不报错',
     '点 Install app，选中你要接的那家店（必须是同一个组织下的店）',
     '回应用的 Settings 页，抄下 Client ID 与 Client secret',
     '把店铺域名和这两个值填进下面的表单——密钥只存在这台电脑上',

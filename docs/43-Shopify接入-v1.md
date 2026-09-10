@@ -245,3 +245,11 @@ Clash / Surge 这类代理开着 fake-IP 时，把外网域名解析成 `198.18.
 | Storefront MCP（店面顾客对话） | ⬜ 二阶段 |
 | Customer Accounts MCP（顾客查自己的单） | ⬜ 二阶段 |
 | `inventory_change` / `cancel_order` / `delete_*` 这几种新 kind | ⬜ 要先过 15 §2 那道手续 |
+
+## 附：真店实测记录（2026-09-11，glass-bowl 开发店）
+
+- client credentials 换令牌 ✓；`get_shop` ✓（回 `{ shop: { id, name, myshopifyDomain, primaryDomainUrl } }`，**没有币种与时区**，币种只能从订单行的 `currencyCode` 取）；`list_products` ✓（3 个样品商品）。
+- `list_customers` ✗：`This app is not approved to access the Customer object`——Shopify 的 **Protected customer data** 审批（Dev Dashboard → 应用 → API access → Protected customer data access）。开发店也要点一次。
+- `list_orders` 回 **0 条且不报错**（`first: 5` 不带 query 也是 0）。两种可能：开发店确实没订单，或同样被受保护客户数据规则挡住（Shopify 对未审批的应用把订单过滤成空而不是报错）。连接卡的准备步骤已补这一条；1d 复验要先在店里下一笔测试订单。
+- 真实入参：`list_orders` 只认 GraphQL connection 三件套 `first` / `after` / `query`（多一个键被 schema 校验顶回）；返回 `{ orders: [{ id(gid), name, email, displayFinancialStatus, displayFulfillmentStatus, currencyCode, totalAmount, totalCurrencyCode, createdAt, cursor, raw }], pageInfo: { hasNextPage, endCursor } }`。
+
