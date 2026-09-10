@@ -6,9 +6,10 @@
  * 3. 提交只打 `PUT /v1/models/providers/:id` 这一条路，提交完立刻 `form.reset()`；
  * 4. 全程没有一次 `console.*`。
  */
-import { ChevronDown, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
+import { ChevronDown, Loader2, RefreshCw } from 'lucide-react'
 import { type FormEvent, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type {
@@ -221,10 +222,7 @@ export function ModelForm({
       onSubmit={submit}
       autoComplete="off"
     >
-      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-        <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden />
-        <span>{t('models.never_ai')}</span>
-      </p>
+      <SafetyNote text={t('models.never_ai')} className="text-xs" />
 
       {presets.length === 0 || existing !== undefined ? null : (
         <div className="flex flex-wrap gap-1.5" data-testid="model-presets">
@@ -409,13 +407,16 @@ export function ModelForm({
         )}
       </Field>
 
+      {/* key 的两句都属于 §2 例外：安全承诺与「已经存过一把」的状态，都不藏 */}
       <Field
         id={`${prefix}-api_key`}
         label={t('models.field.api_key')}
-        hint={
-          existing?.has_key === true
-            ? t('models.field.api_key.keep')
-            : t('models.field.api_key.hint')
+        note={
+          existing?.has_key === true ? (
+            <p className="text-[11px] text-muted-foreground">{t('models.field.api_key.keep')}</p>
+          ) : (
+            <SafetyNote text={t('models.field.api_key.hint')} />
+          )
         }
       >
         <Input
@@ -551,24 +552,33 @@ export function ModelForm({
   )
 }
 
+/**
+ * 一个字段。**说明进 `hint`（问号 tooltip），不再在框底下铺一行灰字**（WP43 ②）。
+ * `note` 是那三类不许藏的：安全承诺、错误与状态、空态——它照旧显示在框下面。
+ */
 function Field({
   id,
   label,
   hint,
+  note,
   children,
 }: {
   id: string
   label: string
   hint?: string | undefined
+  note?: React.ReactNode
   children: React.ReactNode
 }): React.ReactNode {
   return (
     <div className="flex flex-col gap-1">
-      <Label htmlFor={id} className="text-xs">
-        {label}
-      </Label>
+      <div className="flex items-center gap-1">
+        <Label htmlFor={id} className="text-xs">
+          {label}
+        </Label>
+        {hint === undefined ? null : <Hint text={hint} />}
+      </div>
       {children}
-      {hint === undefined ? null : <p className="text-[11px] text-muted-foreground">{hint}</p>}
+      {note}
     </div>
   )
 }

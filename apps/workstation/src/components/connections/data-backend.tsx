@@ -18,6 +18,7 @@ import { Cloud, Database, ExternalLink, HardDrive, Server, ShieldCheck } from 'l
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -494,9 +495,12 @@ function Field({
 }): React.ReactNode {
   return (
     <div className="flex flex-col gap-1">
-      <Label htmlFor={id} className="text-xs">
-        {label}
-      </Label>
+      <div className="flex items-center gap-1">
+        <Label htmlFor={id} className="text-xs">
+          {label}
+        </Label>
+        {hint === undefined ? null : <Hint text={hint} />}
+      </div>
       <Input
         id={id}
         name={name}
@@ -507,7 +511,6 @@ function Field({
         data-1p-ignore={secret === true ? 'true' : undefined}
         {...(placeholder === undefined ? {} : { placeholder })}
       />
-      {hint === undefined ? null : <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   )
 }
