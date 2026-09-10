@@ -7,7 +7,7 @@
  * 2. **黄条**：没有能用的模型时出现在首页与设置页，接上之后消失；不是所有者就什么都不显示；
  * 3. **面板**：模板卡带准备说明与预设、试跑结果就地显示、环境变量那条不给删。
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -485,22 +485,29 @@ describe('WP25 §C 模型面板：已配的那几条', () => {
 })
 
 describe('WP42 §1 模型名从接口拉', () => {
-  it('点「拉取模型列表」：模型名框变成可搜索的下拉（原生 datalist）', async () => {
+  it('点「拉取模型列表」：模型名框变成点开就列全部的下拉（不用先敲字）', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
     const form = await screen.findByTestId('model-form')
 
-    // 拉之前：就是一个手填的框，没有下拉
-    expect(within(form).getByTestId('model-name-input').getAttribute('list')).toBeNull()
-    expect(within(form).queryByTestId('model-datalist')).toBeNull()
+    // 拉之前：就是一个手填的框，没有下拉按钮
+    expect(within(form).queryByTestId('model-dropdown-toggle')).toBeNull()
+    expect(within(form).queryByTestId('model-list')).toBeNull()
 
     await user.type(within(form).getByLabelText('API key'), API_KEY)
     await user.click(within(form).getByTestId('model-discover'))
 
-    const list = await within(form).findByTestId('model-datalist')
-    expect(list.querySelectorAll('option')).toHaveLength(3)
-    expect(within(form).getByTestId('model-name-input').getAttribute('list')).toBe(list.id)
+    // 拉到之后：一个下拉按钮，点开就列全部（不用先敲字）
+    const toggle = await within(form).findByTestId('model-dropdown-toggle')
+    fireEvent.mouseDown(toggle)
+    const list = await within(form).findByTestId('model-list')
+    expect(list.querySelectorAll('[role="option"]')).toHaveLength(3)
+    // 点一项就填进输入框
+    fireEvent.mouseDown(list.querySelectorAll('[role="option"]')[1] as HTMLElement)
+    expect((within(form).getByTestId('model-name-input') as HTMLInputElement).value).toBe(
+      (list.querySelectorAll('[role="option"]')[1] as HTMLElement).textContent,
+    )
   })
 
   it('拉取带上表单里现填的地址与 key；key 不留在 DOM 里', async () => {
@@ -554,7 +561,10 @@ describe('WP42 §1 模型名从接口拉', () => {
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     await user.click(await screen.findByText('改'))
     const form = await screen.findByTestId('model-form')
-    expect(within(form).getByTestId('model-datalist').querySelectorAll('option')).toHaveLength(2)
+    fireEvent.mouseDown(within(form).getByTestId('model-dropdown-toggle'))
+    expect(within(form).getByTestId('model-list').querySelectorAll('[role="option"]')).toHaveLength(
+      2,
+    )
     expect(discovered).toHaveLength(0)
   })
 })

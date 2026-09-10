@@ -760,6 +760,7 @@ const zh: Table = {
   'models.field.base_url.hint': '看那家的文档，一般以 /v1 结尾。',
   'models.field.model': '模型名',
   'models.field.model.hint': '这家有 {n} 个模型，打字就能筛。',
+  'models.field.model.open': '展开模型列表',
   'models.discover': '拉取模型列表',
   'models.discover.failed': '没拉到模型列表，先手填一个模型名也行。原因：{reason}',
   'models.field.api_key': 'API key',
@@ -1571,6 +1572,7 @@ const en: Table = {
   'models.field.base_url.hint': 'Check their docs — usually ends in /v1.',
   'models.field.model': 'Model name',
   'models.field.model.hint': '{n} models available — start typing to filter.',
+  'models.field.model.open': 'Show model list',
   'models.discover': 'Fetch model list',
   'models.discover.failed':
     'Could not fetch the model list; typing the model name still works. Reason: {reason}',

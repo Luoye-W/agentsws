@@ -6,7 +6,7 @@
  * 3. 提交只打 `PUT /v1/models/providers/:id` 这一条路，提交完立刻 `form.reset()`；
  * 4. 全程没有一次 `console.*`。
  */
-import { Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
+import { ChevronDown, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
 import { type FormEvent, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -74,6 +74,8 @@ export function ModelForm({
   // 拉回来的模型清单。**只有模型名**——不含地址、不含 key
   const [listing, setListing] = useState<ModelListing | undefined>(existing?.last_listing)
   const [models, setModels] = useState<string[]>(existing?.models ?? [])
+  const [listOpen, setListOpen] = useState(false)
+  const [filter, setFilter] = useState('')
   const [pulling, setPulling] = useState(false)
   /**
    * 价是"照价目表填的"还是"用户自己改的"。
@@ -287,9 +289,9 @@ export function ModelForm({
       </Field>
 
       {/*
-        模型名：拉过清单就是一个**可搜索的下拉**（原生 datalist——照打字就筛，
-        不用第三方组件，也不破坏 FormData 收集）；拉不到就还是一个能手填的框，
-        底下把"为什么没拉到"原样写出来。
+        模型名：拉过清单就是一个**点开就列全部、打字能筛、也能手填**的组合框。
+        不用原生 datalist（Chrome / Electron 里要先敲字才弹，不是下拉）；也不用 Radix 浮层
+        （jsdom 里点不开）。一个 input + 一个内联 listbox，input 仍是 FormData 的来源。
       */}
       <Field
         id={`${prefix}-model`}
@@ -297,26 +299,92 @@ export function ModelForm({
         hint={models.length > 0 ? t('models.field.model.hint', { n: models.length }) : undefined}
       >
         <div className="flex items-center gap-1.5">
-          <Input
-            id={`${prefix}-model`}
-            name="model"
-            required
-            list={models.length === 0 ? undefined : `${prefix}-model-list`}
-            defaultValue={existing?.model ?? template.default_model}
-            autoComplete="off"
-            spellCheck={false}
-            data-testid="model-name-input"
-            data-options={models.length}
-            onInput={(event) => {
-              const form = formRef.current
-              const base = form?.elements.namedItem('base_url')
-              const url =
-                base instanceof HTMLInputElement && base.value.trim() !== ''
-                  ? base.value.trim()
-                  : template.default_base_url
-              applyQuote(url, event.currentTarget.value)
-            }}
-          />
+          <div className="relative flex-1">
+            <Input
+              id={`${prefix}-model`}
+              name="model"
+              required
+              defaultValue={existing?.model ?? template.default_model}
+              autoComplete="off"
+              spellCheck={false}
+              data-testid="model-name-input"
+              data-options={models.length}
+              role={models.length === 0 ? undefined : 'combobox'}
+              aria-expanded={models.length === 0 ? undefined : listOpen}
+              className={models.length === 0 ? undefined : 'pr-9'}
+              onFocus={() => {
+                if (models.length > 0) setListOpen(true)
+              }}
+              onBlur={() => {
+                // 让 listbox 里的 mousedown 先落地再收
+                window.setTimeout(() => setListOpen(false), 120)
+              }}
+              onInput={(event) => {
+                setFilter(event.currentTarget.value)
+                if (models.length > 0) setListOpen(true)
+                const form = formRef.current
+                const base = form?.elements.namedItem('base_url')
+                const url =
+                  base instanceof HTMLInputElement && base.value.trim() !== ''
+                    ? base.value.trim()
+                    : template.default_base_url
+                applyQuote(url, event.currentTarget.value)
+              }}
+            />
+            {models.length === 0 ? null : (
+              <button
+                type="button"
+                aria-label={t('models.field.model.open')}
+                data-testid="model-dropdown-toggle"
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  setFilter('')
+                  setListOpen((v) => !v)
+                }}
+              >
+                <ChevronDown className="size-4" aria-hidden />
+              </button>
+            )}
+            {models.length === 0 || !listOpen ? null : (
+              <div
+                role="listbox"
+                data-testid="model-list"
+                className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md"
+              >
+                {models
+                  .filter((m) => filter === '' || m.toLowerCase().includes(filter.toLowerCase()))
+                  .map((m) => (
+                    <div key={m}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        className="w-full rounded px-2 py-1.5 text-left hover:bg-accent"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          const el = document.getElementById(`${prefix}-model`)
+                          if (el instanceof HTMLInputElement) {
+                            el.value = m
+                            const form = formRef.current
+                            const base = form?.elements.namedItem('base_url')
+                            const url =
+                              base instanceof HTMLInputElement && base.value.trim() !== ''
+                                ? base.value.trim()
+                                : template.default_base_url
+                            applyQuote(url, m)
+                          }
+                          setFilter('')
+                          setListOpen(false)
+                        }}
+                      >
+                        {m}
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
           <Button
             type="button"
             size="sm"
@@ -331,13 +399,6 @@ export function ModelForm({
             {t('models.discover')}
           </Button>
         </div>
-        {models.length === 0 ? null : (
-          <datalist id={`${prefix}-model-list`} data-testid="model-datalist">
-            {models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        )}
         {listing === undefined || listing.ok ? null : (
           <p
             className="text-[11px] text-amber-600 dark:text-amber-400"
