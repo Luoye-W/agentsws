@@ -1046,6 +1046,11 @@ export interface ModelProviderView {
   price_in?: number
   price_out?: number
   price_cached?: number
+  /** WP42：这三个价从哪来。`manual` 的不会被每周那次官网刷新覆盖。 */
+  price_source?: 'catalog' | 'manual'
+  price_currency?: string
+  price_source_url?: string
+  price_as_of?: string
   /** WP42：上次拉回来的模型清单。 */
   models?: string[]
   last_listing?: ModelListing
@@ -1183,6 +1188,97 @@ export const setModelDefaults = (
 
 export const getModelUsage = (assignment?: string): Promise<ModelUsageView> =>
   api('/v1/models/usage', withAssignment(assignment))
+
+// ── WP42 价目表：内置价 + 官网刷新 ──────────────────────────────────────
+
+export interface ModelPricingModel {
+  model: string
+  in: number
+  out: number
+  cached: number
+  aliases?: string[]
+}
+
+export interface ModelPricingVendorView {
+  id: string
+  label: string
+  currency: string
+  hosts: string[]
+  source_url: string
+  as_of: string
+  last_refresh?: { at: string; ok: boolean; models: number; reason?: string }
+  models: ModelPricingModel[]
+}
+
+export interface ModelPricingView {
+  vendors: ModelPricingVendorView[]
+  refreshed_at?: string
+}
+
+export interface ModelPricingRefreshResult {
+  at: string
+  ok: boolean
+  vendors: { id: string; label: string; ok: boolean; models: number; reason?: string }[]
+  updated_providers: number
+  reason?: string
+}
+
+export const getModelPricing = (assignment?: string): Promise<ModelPricingView> =>
+  api('/v1/models/pricing', withAssignment(assignment))
+
+export const refreshModelPricing = (assignment?: string): Promise<ModelPricingRefreshResult> =>
+  api('/v1/models/pricing/refresh', { method: 'POST', ...withAssignment(assignment) })
+
+/** `https://api.deepseek.com/v1` → `api.deepseek.com`。认不出来回空串。 */
+function hostOf(baseUrl: string): string {
+  const raw = baseUrl.trim()
+  if (raw === '') return ''
+  try {
+    return new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 按（接口地址, 模型名）在价目表里查一条价。
+ *
+ * 匹配顺序与服务端一致：完全一样 → 别名 → 去掉日期后缀。查不到就回 undefined
+ * ——不猜。表单据此决定"自动填"还是"留空让人自己填"。
+ */
+export function findCatalogPrice(
+  pricing: ModelPricingView | undefined,
+  baseUrl: string,
+  model: string,
+):
+  | { in: number; out: number; cached: number; currency: string; as_of: string; source_url: string }
+  | undefined {
+  if (pricing === undefined) return undefined
+  const host = hostOf(baseUrl)
+  if (host === '') return undefined
+  const vendor = pricing.vendors.find((v) =>
+    v.hosts.some((h) => host === h || host.endsWith(`.${h}`)),
+  )
+  if (vendor === undefined) return undefined
+  const name = model.trim().toLowerCase()
+  if (name === '') return undefined
+  const undated = name.replace(/-\d{4}-\d{2}-\d{2}$/, '')
+  const hit = vendor.models.find(
+    (m) =>
+      m.model.toLowerCase() === name ||
+      m.model.toLowerCase() === undated ||
+      (m.aliases ?? []).some((a) => a.toLowerCase() === name),
+  )
+  if (hit === undefined) return undefined
+  return {
+    in: hit.in,
+    out: hit.out,
+    cached: hit.cached,
+    currency: vendor.currency,
+    as_of: vendor.as_of,
+    source_url: vendor.source_url,
+  }
+}
 
 // ── WP28 制度面：职责 / 岗位 / 分配 / 成员与邀请 ─────────────────────────
 //

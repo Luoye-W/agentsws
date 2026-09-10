@@ -11,7 +11,13 @@ import { type FormEvent, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { ModelListing, ModelProviderTemplate, ModelProviderView } from '@/lib/api'
+import type {
+  ModelListing,
+  ModelPricingView,
+  ModelProviderTemplate,
+  ModelProviderView,
+} from '@/lib/api'
+import { findCatalogPrice } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export interface ModelFormValues {
@@ -24,6 +30,9 @@ export interface ModelFormValues {
   api_key?: string
   price_in?: number
   price_out?: number
+  price_cached?: number
+  /** WP42：这三个价是照价目表填的还是用户自己改的。 */
+  price_source?: 'catalog' | 'manual'
 }
 
 export function ModelForm({
@@ -33,6 +42,7 @@ export function ModelForm({
   onCancel,
   onSubmit,
   onDiscover,
+  pricing,
 }: {
   template: ModelProviderTemplate
   /** 改一条已有的：id 锁住，key 留空就是"别动已经存着的那一把"。 */
@@ -51,6 +61,8 @@ export function ModelForm({
     api_key?: string
     region: 'cn' | 'global'
   }) => Promise<ModelListing>
+  /** WP42 内置价目表：选定模型后照它自动填价。 */
+  pricing?: ModelPricingView
 }): React.ReactNode {
   const { t } = useApp()
   const prefix = useId()
@@ -60,6 +72,21 @@ export function ModelForm({
   const [listing, setListing] = useState<ModelListing | undefined>(existing?.last_listing)
   const [models, setModels] = useState<string[]>(existing?.models ?? [])
   const [pulling, setPulling] = useState(false)
+  /**
+   * 价是"照价目表填的"还是"用户自己改的"。
+   *
+   * 一旦用户在价格框里敲过一个字，这一条就变成 `manual`——之后换模型不再自动改它，
+   * 每周那次官网刷新也一条都不动它。改过的数字不该被任何自动的东西悄悄覆盖。
+   */
+  const [priceManual, setPriceManual] = useState(existing?.price_source === 'manual')
+  /** 现在这个模型在价目表里查到的那条（查不到就是 undefined，价格框留空让人自己填）。 */
+  const [quote, setQuote] = useState(() =>
+    findCatalogPrice(
+      pricing,
+      existing?.base_url ?? template.default_base_url,
+      existing?.model ?? template.default_model,
+    ),
+  )
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
@@ -85,6 +112,7 @@ export function ModelForm({
     const embedding = text('embedding_model')
     const price_in = num('price_in')
     const price_out = num('price_out')
+    const price_cached = num('price_cached')
     onSubmit({
       id,
       label: text('label') === '' ? template.label : text('label'),
@@ -95,9 +123,32 @@ export function ModelForm({
       ...(key === '' ? {} : { api_key: key }),
       ...(price_in === undefined ? {} : { price_in }),
       ...(price_out === undefined ? {} : { price_out }),
+      ...(price_cached === undefined ? {} : { price_cached }),
+      price_source: priceManual ? 'manual' : 'catalog',
     })
     // key 发出去之后连 DOM 里也不留
     form.reset()
+  }
+
+  /**
+   * 换了模型名（或地址）之后，把价目表里那条价填进价格框。
+   *
+   * 直接写 DOM 的 `value`，而不是把价搬进 React state——这是个原生表单，
+   * 值的真源就是那三个 input。用户改过（`priceManual`）就一个字都不碰。
+   */
+  const applyQuote = (base_url: string, model: string): void => {
+    const hit = findCatalogPrice(pricing, base_url, model)
+    setQuote(hit)
+    if (priceManual) return
+    const form = formRef.current
+    if (form === null) return
+    const set = (name: string, value: number | undefined): void => {
+      const el = form.elements.namedItem(name)
+      if (el instanceof HTMLInputElement) el.value = value === undefined ? '' : String(value)
+    }
+    set('price_in', hit?.in)
+    set('price_out', hit?.out)
+    set('price_cached', hit?.cached)
   }
 
   /**
@@ -173,6 +224,7 @@ export function ModelForm({
                 set('base_url', p.base_url)
                 set('model', p.model)
                 setRegion(p.region)
+                applyQuote(p.base_url, p.model)
               }}
             >
               {p.label}
@@ -239,6 +291,15 @@ export function ModelForm({
             spellCheck={false}
             data-testid="model-name-input"
             data-options={models.length}
+            onInput={(event) => {
+              const form = formRef.current
+              const base = form?.elements.namedItem('base_url')
+              const url =
+                base instanceof HTMLInputElement && base.value.trim() !== ''
+                  ? base.value.trim()
+                  : template.default_base_url
+              applyQuote(url, event.currentTarget.value)
+            }}
           />
           <Button
             type="button"
@@ -329,31 +390,43 @@ export function ModelForm({
         <p className="text-[11px] text-muted-foreground">{t('models.field.region.hint')}</p>
       </fieldset>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field id={`${prefix}-price_in`} label={t('models.field.price_in')}>
-          <Input
-            id={`${prefix}-price_in`}
-            name="price_in"
-            type="number"
-            step="0.01"
-            min="0"
-            defaultValue={existing?.price_in ?? ''}
-            autoComplete="off"
-          />
-        </Field>
-        <Field id={`${prefix}-price_out`} label={t('models.field.price_out')}>
-          <Input
-            id={`${prefix}-price_out`}
-            name="price_out"
-            type="number"
-            step="0.01"
-            min="0"
-            defaultValue={existing?.price_out ?? ''}
-            autoComplete="off"
-          />
-        </Field>
+      {/*
+        价：选定模型之后照内置价目表自动填，并写清楚"来源：官网 {日期}"。
+        用户在框里敲一个字就变成"手动"——之后换模型不自动改它，每周那次官网
+        刷新也不动它。
+      */}
+      <div className="grid grid-cols-3 gap-2" data-testid="model-prices">
+        {(
+          [
+            ['price_in', t('models.field.price_in'), existing?.price_in],
+            ['price_out', t('models.field.price_out'), existing?.price_out],
+            ['price_cached', t('models.field.price_cached'), existing?.price_cached],
+          ] as const
+        ).map(([name, label, value]) => (
+          <Field key={name} id={`${prefix}-${name}`} label={label}>
+            <Input
+              id={`${prefix}-${name}`}
+              name={name}
+              type="number"
+              step="0.001"
+              min="0"
+              defaultValue={value ?? (priceManual ? '' : (quote?.[priceKeyOf(name)] ?? ''))}
+              autoComplete="off"
+              data-testid={`model-${name}`}
+              onInput={() => {
+                setPriceManual(true)
+              }}
+            />
+          </Field>
+        ))}
       </div>
-      <p className="text-[11px] text-muted-foreground">{t('models.field.price.hint')}</p>
+      <p className="text-[11px] text-muted-foreground" data-testid="model-price-source">
+        {priceManual
+          ? t('models.price.manual')
+          : quote === undefined
+            ? t('models.field.price.hint')
+            : t('models.price.from_catalog', { as_of: quote.as_of, currency: quote.currency })}
+      </p>
 
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" disabled={busy}>
@@ -387,4 +460,9 @@ function Field({
       {hint === undefined ? null : <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   )
+}
+
+/** 三个价格框的 name → 价目表里那条价的字段名。 */
+function priceKeyOf(name: 'price_in' | 'price_out' | 'price_cached'): 'in' | 'out' | 'cached' {
+  return name === 'price_in' ? 'in' : name === 'price_out' ? 'out' : 'cached'
 }

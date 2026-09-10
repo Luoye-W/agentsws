@@ -9,6 +9,31 @@ export { createModelGateway } from './gateway.js'
 export type { BudgetCtx, BudgetScopeState, CapSpec, Reservation } from './ledger.js'
 export { BudgetLedger } from './ledger.js'
 export { staticPrefixHash, staticPrefixLength, truncateToHour } from './prefix.js'
+export type {
+  CatalogHit,
+  CatalogModel,
+  CatalogPrice,
+  CatalogVendor,
+  PriceCatalog,
+  PriceParserId,
+} from './pricing/catalog.js'
+export {
+  catalogPrice,
+  findModel,
+  hostOf,
+  PRICE_CATALOG,
+  vendorForBaseUrl,
+} from './pricing/catalog.js'
+export type { PageFetch, RefreshOptions, VendorRefresh } from './pricing/refresh.js'
+export {
+  PRICING_TIMEOUT_MS,
+  PRICING_USER_AGENT,
+  parseDeepSeek,
+  parseKimi,
+  parseOpenAi,
+  parseZhipu,
+  refreshPriceCatalog,
+} from './pricing/refresh.js'
 export {
   costOf,
   DEFAULT_CHARS_PER_TOKEN,

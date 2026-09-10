@@ -12,17 +12,20 @@
  */
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type {
   ModelDefaultsView,
   ModelListing,
+  ModelPricingRefreshResult,
+  ModelPricingView,
   ModelProviderTemplate,
   ModelProviderView,
   ModelTestResult,
   ModelUsageView,
 } from '@agentsws/api'
 import type { EventEnvelope } from '@agentsws/contracts'
-import type { FetchLike } from '@agentsws/model-gateway'
+import type { FetchLike, PageFetch } from '@agentsws/model-gateway'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import { DEEPSEEK_KEY_ENV } from '../src/models.js'
@@ -122,6 +125,7 @@ interface Ctx {
   url: string
   dir: string
   upstream: FakeUpstream
+  pricing: { fetch: PageFetch; calls: string[] }
 }
 
 let ctx: Ctx
@@ -171,9 +175,50 @@ const SAVE = {
   price_out: 1.1,
 }
 
+/**
+ * WP42：抓价目页用的假 fetch。回放 `packages/model-gateway/test/fixtures/pricing/`
+ * 里那几张 2026-09-10 从官网抓下来的真页面片段——**一个字节都不出网**。
+ */
+const PRICING_PAGES: Record<string, string> = {
+  'https://api-docs.deepseek.com/quick_start/pricing/': 'deepseek.html',
+  'https://developers.openai.com/api/docs/pricing': 'openai.html',
+  'https://platform.kimi.com/docs/pricing/chat-k3.md': 'kimi-k3.md',
+  'https://platform.kimi.com/docs/pricing/chat-k26.md': 'kimi-k26.md',
+  'https://platform.kimi.com/docs/pricing/chat-k27-code.md': 'kimi-k27-code.md',
+  'https://docs.bigmodel.cn/cn/guide/start/pricing.md': 'zhipu.md',
+}
+
+const FIXTURE_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'packages',
+  'model-gateway',
+  'test',
+  'fixtures',
+  'pricing',
+)
+
+function pricingReplay(): { fetch: PageFetch; calls: string[] } {
+  const calls: string[] = []
+  const fetch: PageFetch = async (url) => {
+    calls.push(url)
+    const name = PRICING_PAGES[url]
+    if (name === undefined) return { ok: false, status: 503, text: async () => '' }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => readFileSync(join(FIXTURE_DIR, name), 'utf8'),
+    }
+  }
+  return { fetch, calls }
+}
+
 async function boot(env: Record<string, string | undefined> = {}): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'agentsws-models-'))
   const upstream = fakeUpstream()
+  const pricing = pricingReplay()
   const server = await createServer({
     dbDir: dir,
     clock: makeClock(),
@@ -181,11 +226,12 @@ async function boot(env: Record<string, string | undefined> = {}): Promise<void>
     quiet: true,
     env: { [SECRETS_KEY_ENV]: SECRETS_KEY, ...env },
     modelFetch: upstream.fetch,
+    pricingFetch: pricing.fetch,
     // 一次性任务不留后台计时器
     tokenRefreshIntervalMs: 0,
   })
   const { url } = await server.listen(0)
-  ctx = { server, url, dir, upstream }
+  ctx = { server, url, dir, upstream, pricing }
 }
 
 beforeEach(async () => {
@@ -496,7 +542,7 @@ describe('WP25 §C 默认模型 / 驻留 / 三级预算', () => {
       tokenRefreshIntervalMs: 0,
     })
     const { url } = await server.listen(0)
-    ctx = { server, url, dir, upstream }
+    ctx = { server, url, dir, upstream, pricing: pricingReplay() }
     expect(server.modelSettings.configured()).toBe(true)
     const defaults = await data<ModelDefaultsView>(await api('/v1/models/defaults'))
     expect(defaults.budget.workspace_daily_base).toBe(7)
@@ -565,7 +611,7 @@ describe('WP25 §C 没有秘密库密钥的机器', () => {
       tokenRefreshIntervalMs: 0,
     })
     const { url } = await server.listen(0)
-    ctx = { server, url, dir, upstream }
+    ctx = { server, url, dir, upstream, pricing: pricingReplay() }
     const res = await put('/v1/models/providers/deepseek', SAVE)
     expect(res.status).toBe(400)
     const text = await res.text()
@@ -664,5 +710,126 @@ describe('WP42 §1 拉模型列表', () => {
     await put('/v1/models/providers/deepseek', SAVE)
     const res = await put('/v1/models/defaults', { default: 'deepseek/not-a-real-model' })
     expect(res.status).toBe(400)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* WP42 交付 2：价格自动填 + 手动可改                                      */
+/* ------------------------------------------------------------------ */
+
+describe('WP42 §2 价目表', () => {
+  it('内置价目表端得出来，每条带出处与币种', async () => {
+    const pricing = await data<ModelPricingView>(await api('/v1/models/pricing'))
+    const deepseek = pricing.vendors.find((v) => v.id === 'deepseek')
+    expect(deepseek?.currency).toBe('USD')
+    expect(deepseek?.source_url).toContain('api-docs.deepseek.com')
+    expect(deepseek?.models.find((m) => m.model === 'deepseek-flash')).toMatchObject({
+      in: 0.3,
+      out: 1.2,
+      cached: 0.006,
+    })
+  })
+
+  it('保存时按（地址, 模型）自动填价，并记下"来源：官网 {日期}"', async () => {
+    const saved = await data<ModelProviderView>(
+      await put('/v1/models/providers/deepseek', {
+        kind: 'deepseek',
+        base_url: 'https://api.deepseek.com',
+        model: 'deepseek-flash',
+        api_key: API_KEY,
+      }),
+    )
+    expect(saved.price_in).toBe(0.3)
+    expect(saved.price_out).toBe(1.2)
+    expect(saved.price_cached).toBe(0.006)
+    expect(saved.price_source).toBe('catalog')
+    expect(saved.price_currency).toBe('USD')
+    expect(saved.price_as_of).toBe('2026-09-10')
+  })
+
+  it('用户自己改的价标"手动"，官网刷新一条都不动它', async () => {
+    await put('/v1/models/providers/deepseek', {
+      kind: 'deepseek',
+      base_url: 'https://api.deepseek.com',
+      model: 'deepseek-flash',
+      api_key: API_KEY,
+      price_in: 9.99,
+      price_out: 19.99,
+      price_source: 'manual',
+    })
+    const result = await data<ModelPricingRefreshResult>(await post('/v1/models/pricing/refresh'))
+    expect(result.ok).toBe(true)
+    expect(result.updated_providers).toBe(0)
+    const { providers } = await data<{ providers: ModelProviderView[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(providers[0]?.price_in).toBe(9.99)
+    expect(providers[0]?.price_source).toBe('manual')
+  })
+
+  it('刷新：抓得到的四家抓到，抓不了的两家明说为什么，事件里只有条数与来源', async () => {
+    const result = await data<ModelPricingRefreshResult>(await post('/v1/models/pricing/refresh'))
+    const byId = Object.fromEntries(result.vendors.map((v) => [v.id, v]))
+    expect(byId.deepseek?.ok).toBe(true)
+    expect(byId.openai?.ok).toBe(true)
+    expect(byId.moonshot?.ok).toBe(true)
+    expect(byId.zhipu?.ok).toBe(true)
+    expect(byId.qwen?.ok).toBe(false)
+    expect(byId.siliconflow?.ok).toBe(false)
+
+    const events = (await allEvents()).filter((e) => e.type === 'pricing.refreshed')
+    expect(events).toHaveLength(1)
+    const payload = events[0]?.payload as {
+      vendors_ok: number
+      models: number
+      sources: string[]
+    }
+    expect(payload.vendors_ok).toBe(4)
+    expect(payload.models).toBeGreaterThan(10)
+    expect(payload.sources.every((u) => u.startsWith('https://'))).toBe(true)
+    // 事件里没有价、没有页面正文
+    const raw = JSON.stringify(events[0])
+    expect(raw).not.toContain('0.006')
+    expect(raw).not.toContain('<table')
+  })
+
+  it('抓完之后 provider 上的价跟着更新（非手动的那些）', async () => {
+    await put('/v1/models/providers/deepseek', {
+      kind: 'deepseek',
+      base_url: 'https://api.deepseek.com',
+      model: 'deepseek-v4-pro',
+      api_key: API_KEY,
+    })
+    const result = await data<ModelPricingRefreshResult>(await post('/v1/models/pricing/refresh'))
+    // 抓回来的和内置价一样，所以没有一条需要改——但抓这件事本身是通的
+    expect(result.ok).toBe(true)
+    const { providers } = await data<{ providers: ModelProviderView[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(providers[0]?.price_out).toBe(3.96)
+    expect(providers[0]?.price_source).toBe('catalog')
+  })
+
+  it('出站急停开着：一次请求都不发，并且明说是被急停拦下的', async () => {
+    ctx.server.kernel.halt.set('outbound', true, 'test')
+    const before = ctx.pricing.calls.length
+    const result = await data<ModelPricingRefreshResult>(await post('/v1/models/pricing/refresh'))
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain('急停')
+    expect(ctx.pricing.calls).toHaveLength(before)
+    ctx.server.kernel.halt.set('outbound', false)
+  })
+
+  it('内置价目表里没有的（本机 Ollama）：不硬套一条价，让用户自己填', async () => {
+    const saved = await data<ModelProviderView>(
+      await put('/v1/models/providers/ollama', {
+        kind: 'openai_compatible',
+        base_url: 'http://127.0.0.1:11434/v1',
+        model: 'llama3.1',
+        api_key: API_KEY,
+      }),
+    )
+    expect(saved.price_in).toBeUndefined()
+    expect(saved.price_source).toBeUndefined()
   })
 })

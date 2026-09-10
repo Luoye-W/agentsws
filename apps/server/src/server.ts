@@ -53,6 +53,7 @@ import {
   createModelGateway,
   type FetchLike,
   type ModelGatewayApi,
+  type PageFetch,
   stubProvider,
 } from '@agentsws/model-gateway'
 import { changeKindOf, createRoleStore, loadBundledRole, type RoleStore } from '@agentsws/roles'
@@ -95,6 +96,7 @@ import {
   registerMailPoll,
   registerMeetingPoll,
   registerPlanRelay,
+  registerPricingRefresh,
   registerRawPrune,
   registerReview,
   registerSkillsWeekly,
@@ -221,6 +223,8 @@ export interface ServerOptions {
   resolveMx?: ResolveMx
   /** WP25：模型试跑用的 fetch（测试注入 →「测试」按钮全程不联网）。 */
   modelFetch?: FetchLike
+  /** WP42：抓各家价目页用的 fetch（测试回放固定页面 → 价目刷新全程不联网）。 */
+  pricingFetch?: PageFetch
   /**
    * WP25：Shopify 令牌到期巡检的间隔（毫秒）。
    *
@@ -514,8 +518,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     gateway: models,
     secrets,
     env,
+    // WP42：价目刷新是一次普通出站 HTTP GET，照 28 §1 的 outbound 档管
+    halt: kernel.halt,
+    appendEvent: (e) => {
+      appendEvent(e)
+    },
+    workspace_id: () => bootstrapWorkspace,
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
+    ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
   })
 
   // 14 §7 升级链要问的两件事（范围管理者是谁 / owner 是谁）。取值函数，不是值——
@@ -922,6 +933,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   if (dbDir !== undefined) registerBackup(schedule.scheduler, { run: runWorkspaceBackup })
 
+  // WP42：每周一 05:00 去各家官网看一眼模型价（抓不到就保留内置价，不算失败）
+  registerPricingRefresh(schedule.scheduler, {
+    run: async () => {
+      const result = await modelSettings.port.refreshPricing({
+        workspace_id: workspace.id,
+        person_id: person.id,
+        assignment_id: ownerAssignment.id,
+        role_id: ownerAssignment.role_id,
+      })
+      return { vendors: result.vendors, updated_providers: result.updated_providers }
+    },
+  })
+
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -940,6 +964,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       mail: true,
       raw: true,
       backup: dbDir !== undefined,
+      pricing: true,
     },
   })
 

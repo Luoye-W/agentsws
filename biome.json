@@ -8,6 +8,7 @@
       "!**/dist",
       "!docs/assets",
       "!**/*.dc.html",
+      "!**/test/fixtures",
       "!pnpm-lock.yaml",
       "!out",
       "!coverage",

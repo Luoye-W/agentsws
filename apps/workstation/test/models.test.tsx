@@ -13,6 +13,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ModelDefaultsView,
   ModelListing,
+  ModelPricingRefreshResult,
+  ModelPricingView,
   ModelProviderTemplate,
   ModelProviderView,
   ModelTestResult,
@@ -124,6 +126,40 @@ const USAGE: ModelUsageView = {
   budget: { used_base: 0.0007, cap_base: 0, frozen: false },
 }
 
+/** WP42：内置价目表（就是 catalog.json 里 DeepSeek 那一段）。 */
+const PRICING: ModelPricingView = {
+  vendors: [
+    {
+      id: 'deepseek',
+      label: 'DeepSeek 官方',
+      currency: 'USD',
+      hosts: ['api.deepseek.com'],
+      source_url: 'https://api-docs.deepseek.com/quick_start/pricing/',
+      as_of: '2026-09-10',
+      models: [
+        {
+          model: 'deepseek-flash',
+          in: 0.3,
+          out: 1.2,
+          cached: 0.006,
+          aliases: ['deepseek-v4-flash'],
+        },
+        { model: 'deepseek-v4-pro', in: 1.32, out: 3.96, cached: 0.044 },
+      ],
+    },
+  ],
+}
+
+const PRICE_REFRESH: ModelPricingRefreshResult = {
+  at: T0,
+  ok: true,
+  vendors: [
+    { id: 'deepseek', label: 'DeepSeek 官方', ok: true, models: 2 },
+    { id: 'qwen', label: '通义千问（百炼）', ok: false, models: 0, reason: '阶梯计价，抓不准' },
+  ],
+  updated_providers: 1,
+}
+
 const OWNER_POSITION = {
   position_id: 'asg_owner',
   role_id: 'common.owner',
@@ -146,6 +182,7 @@ const state = {
   /** 列表这条路 403（客服岗位问模型面就是这样）。 */
   forbidden: false,
   testResult: { ok: true, reason: 'ok', checked_at: T0 } as ModelTestResult,
+  priceRefresh: PRICE_REFRESH,
   /** WP42：`discoverModelProviderModels` 回什么。 */
   listing: {
     ok: true,
@@ -156,6 +193,7 @@ const state = {
 
 const saved: { id: string; input: Record<string, unknown> }[] = []
 const discovered: { id: string; input: Record<string, unknown> }[] = []
+const priceRefreshes: number[] = []
 const removed: string[] = []
 const tested: string[] = []
 
@@ -195,6 +233,11 @@ vi.mock('@/lib/api', async () => {
     getModelDefaults: async () => DEFAULTS,
     setModelDefaults: async () => DEFAULTS,
     getModelUsage: async () => USAGE,
+    getModelPricing: async () => PRICING,
+    refreshModelPricing: async () => {
+      priceRefreshes.push(1)
+      return state.priceRefresh
+    },
   }
 })
 
@@ -210,6 +253,8 @@ beforeEach(() => {
   removed.length = 0
   tested.length = 0
   discovered.length = 0
+  priceRefreshes.length = 0
+  state.priceRefresh = PRICE_REFRESH
   state.listing = {
     ok: true,
     models: ['deepseek-chat', 'deepseek-flash', 'deepseek-v4-pro'],
@@ -510,5 +555,92 @@ describe('WP42 §1 模型名从接口拉', () => {
     const form = await screen.findByTestId('model-form')
     expect(within(form).getByTestId('model-datalist').querySelectorAll('option')).toHaveLength(2)
     expect(discovered).toHaveLength(0)
+  })
+})
+
+describe('WP42 §2 价格自动填 + 手动可改', () => {
+  it('选定模型：三个价自动填上，并写清楚来源是官网哪一天', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    const model = within(form).getByTestId('model-name-input') as HTMLInputElement
+    await user.clear(model)
+    await user.type(model, 'deepseek-flash')
+
+    await waitFor(() => {
+      expect((within(form).getByTestId('model-price_in') as HTMLInputElement).value).toBe('0.3')
+    })
+    expect((within(form).getByTestId('model-price_out') as HTMLInputElement).value).toBe('1.2')
+    expect((within(form).getByTestId('model-price_cached') as HTMLInputElement).value).toBe('0.006')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('2026-09-10')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('USD')
+  })
+
+  it('用户改了价：标成"手动"，换模型也不再自动改它，保存时带 price_source=manual', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    const priceIn = within(form).getByTestId('model-price_in') as HTMLInputElement
+    await user.clear(priceIn)
+    await user.type(priceIn, '5')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('手动')
+
+    // 换个模型：价不动
+    const model = within(form).getByTestId('model-name-input') as HTMLInputElement
+    await user.clear(model)
+    await user.type(model, 'deepseek-v4-pro')
+    expect(priceIn.value).toBe('5')
+
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(saved).toHaveLength(1)
+    })
+    expect(saved[0]?.input).toMatchObject({ price_in: 5, price_source: 'manual' })
+  })
+
+  it('价目表里没有的（本机 Ollama）：不硬填一个数，提示自己去官网抄', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[1] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    const base = within(form).getByLabelText('接口地址') as HTMLInputElement
+    await user.clear(base)
+    await user.type(base, 'http://127.0.0.1:11434/v1')
+    const model = within(form).getByTestId('model-name-input') as HTMLInputElement
+    await user.clear(model)
+    await user.type(model, 'llama3.1')
+    expect((within(form).getByTestId('model-price_in') as HTMLInputElement).value).toBe('')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('自己去官网抄')
+  })
+
+  it('点「去官网抓一次」：抓到的与没抓到的都逐家写出来', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByTestId('model-pricing-refresh'))
+    const result = await screen.findByTestId('model-pricing-result')
+    expect(result.textContent).toContain('抓到 2 条')
+    expect(result.textContent).toContain('官网抓取失败')
+    expect(result.textContent).toContain('阶梯计价')
+    expect(priceRefreshes).toHaveLength(1)
+  })
+
+  it('被急停拦下：说是急停，不假装"抓不到"', async () => {
+    state.priceRefresh = {
+      at: T0,
+      ok: false,
+      vendors: [],
+      updated_providers: 0,
+      reason: '出站急停开着，这一轮没去抓。解除急停之后再点一次。',
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByTestId('model-pricing-refresh'))
+    const result = await screen.findByTestId('model-pricing-result')
+    expect(result.textContent).toContain('急停')
   })
 })
