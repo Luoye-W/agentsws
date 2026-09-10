@@ -9,9 +9,10 @@
  *    `form.reset()`——DOM 里也不留。全程没有一次 `console.*`。
  */
 
-import { ShieldCheck, Wand2 } from 'lucide-react'
+import { Wand2 } from 'lucide-react'
 import { type FormEvent, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { detectMailbox, type MailboxPresetView, type ProviderFieldSpec } from '@/lib/api'
@@ -107,10 +108,7 @@ export function SecureForm({
       autoComplete="off"
       noValidate={false}
     >
-      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-        <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden />
-        <span>{t('connections.never_ai')}</span>
-      </p>
+      <SafetyNote text={t('connections.never_ai')} className="text-xs" />
       {preset === null ? null : (
         <p
           className={
@@ -145,18 +143,21 @@ export function SecureForm({
         const id = `${prefix}-${field.name}`
         return (
           <div key={field.name} className="flex flex-col gap-1">
-            <Label htmlFor={id} className="text-xs">
-              {field.label}
-              {field.required ? (
-                <span className="text-destructive" title={t('connections.field.required')}>
-                  *<span className="sr-only">{t('connections.field.required')}</span>
-                </span>
-              ) : (
-                <span className="text-xs font-normal text-muted-foreground/70">
-                  （{t('connections.field.optional')}）
-                </span>
-              )}
-            </Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor={id} className="text-xs">
+                {field.label}
+                {field.required ? (
+                  <span className="text-destructive" title={t('connections.field.required')}>
+                    *<span className="sr-only">{t('connections.field.required')}</span>
+                  </span>
+                ) : (
+                  <span className="text-xs font-normal text-muted-foreground/70">
+                    （{t('connections.field.optional')}）
+                  </span>
+                )}
+              </Label>
+              {field.hint === undefined ? null : <Hint text={field.hint} />}
+            </div>
             <Input
               id={id}
               name={field.name}
@@ -184,9 +185,6 @@ export function SecureForm({
                 {t('connections.mail.detecting')}
               </p>
             ) : null}
-            {field.hint === undefined ? null : (
-              <p className="text-[11px] text-muted-foreground">{field.hint}</p>
-            )}
           </div>
         )
       })}

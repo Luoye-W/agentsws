@@ -166,7 +166,8 @@ const zh: Table = {
   'org.tab.roles': '职责',
   // ── WP37 工具箱与查重（40 §2）────────────────────────────────────────
   'org.tab.toolbox': '工具箱',
-  'toolbox.subtitle': '公司里已经做出来的自动化都在这儿。建之前先来看一眼，别人做过就别再做一遍。',
+  'toolbox.subtitle': '公司里已经做出来的自动化都在这儿。',
+  'toolbox.subtitle.hint': '建之前先来看一眼，别人做过就别再做一遍。',
   'toolbox.search': '按用途搜，比如「退款」「红人」',
   'toolbox.empty': '还没有人建过东西。建一条定时任务或在对话里定制一张卡，这儿就有了。',
   'toolbox.empty.filtered': '没搜到。换个说法试试。',
@@ -451,7 +452,9 @@ const zh: Table = {
   // ── WP20 连接向导 ──────────────────────────────────────────────
   'nav.connections': '连接',
   'connections.title': '连接',
-  'connections.subtitle': '把店铺、邮箱、数据后台接进来。密码只在这台电脑上填一次，不经 AI。',
+  // 「密码不经 AI」这句安全承诺挪到真正填密码的那张表单上（`connections.never_ai`），
+  // 页头只留一句话（WP43 ③）
+  'connections.subtitle': '把店铺、邮箱、数据后台接进来。',
   'connections.connected': '已连接',
   'connections.available': '可以连接',
   'connections.empty': '还什么都没连。下面挑一个开始——每个都写清楚了要准备什么。',
@@ -485,10 +488,12 @@ const zh: Table = {
   'storage.tier.local': '本地（默认）',
   'storage.tier.byo': '接我的云',
   'storage.tier.managed': '用 agentsws 托管',
-  'storage.local.note':
-    '数据在这台机器上（公司 NAS 也算这一档）。谁走了都带不走，也不经过任何第三方。人多了可以换成 Postgres，大文件可以放 NAS 的共享目录或 MinIO——都在下面「高级」里。',
-  'storage.managed.note':
-    '这一档还没开放：我们只跑无状态的服务进程，数据仍在你自己的机器上。开放之前，「接我的云」已经能把数据放到你自己的阿里云 / AWS / 腾讯云账号里，我们不代持任何云账号。',
+  'storage.local.note': '数据在这台机器上（公司 NAS 也算这一档）。',
+  'storage.local.more.hint':
+    '谁走了都带不走，也不经过任何第三方。人多了可以换成 Postgres，大文件可以放 NAS 的共享目录或 MinIO——都在下面「高级」里。',
+  'storage.managed.note': '这一档还没开放。',
+  'storage.managed.more.hint':
+    '开放了我们也只跑无状态的服务进程，数据仍在你自己的机器上。在那之前，「接我的云」已经能把数据放到你自己的阿里云 / AWS / 腾讯云账号里，我们不代持任何云账号。',
   'storage.managed.learn': '看看这一档会是什么样',
   'storage.never_ai': '这是网页原生表单：填的内容直接存进这台机器的加密库，不经过 AI，也不进日志。',
   'storage.field.database_url': 'Postgres 连接串',
@@ -732,7 +737,8 @@ const zh: Table = {
   'connections.reason.invalid_client': '客户端 ID 或密钥不对',
   'connections.reason.invalid_shop': '店铺域名不对',
   'models.title': '模型',
-  'models.subtitle': 'Agent 靠模型说话。填一把 API key，这台电脑上的所有岗位就都能用了。',
+  'models.subtitle': 'Agent 靠模型说话。',
+  'models.subtitle.hint': '填一把 API key，这台电脑上的所有岗位就都能用了。',
   'models.banner': '还没接模型，Agent 跑不起来。',
   'models.banner.cta': '去设置里接一个 →',
   'models.configured': '已配的',
@@ -775,8 +781,8 @@ const zh: Table = {
   'models.field.price_in': '输入价（每百万 token）',
   'models.field.price_out': '输出价（每百万 token）',
   'models.field.price_cached': '缓存命中价（每百万 token）',
-  'models.field.price.hint':
-    '这家不在内置价目表里，价要自己去官网抄。填了才算得出花了多少钱、预算才拦得住；不填按 0 记。',
+  'models.field.price.hint': '这家不在内置价目表里，价要自己去官网抄。',
+  'models.field.price.why.hint': '填了才算得出花了多少钱、预算才拦得住；不填按 0 记。',
   'models.price.from_catalog': '来源：官网 {as_of}（{currency}）。改了就算你自己填的。',
   'models.price.manual': '手动：你改过这几个数，每周那次官网刷新不会动它。',
   'models.pricing': '价目表',
@@ -798,6 +804,7 @@ const zh: Table = {
   'models.residency': '数据驻留',
   'models.residency.cn': '只用境内的模型',
   'models.residency.any': '境内境外都可以',
+  'models.budget': '预算上限',
   'models.budget.daily': '每天上限',
   'models.budget.monthly': '每月上限',
   'models.budget.assignment': '每个岗位每天',
@@ -966,8 +973,8 @@ const en: Table = {
   'org.tab.roles': 'Duties',
   // ── WP37 toolbox & dedupe (40 §2) ─────────────────────────────────────
   'org.tab.toolbox': 'Toolbox',
-  'toolbox.subtitle':
-    'Everything your company already automated. Look here before building — someone may have built it already.',
+  'toolbox.subtitle': 'Everything your company already automated.',
+  'toolbox.subtitle.hint': 'Look here before building — someone may have built it already.',
   'toolbox.search': 'Search by purpose, e.g. "refunds"',
   'toolbox.empty': 'Nothing built yet. Create a scheduled task or pin a card and it shows up here.',
   'toolbox.empty.filtered': 'No match. Try different words.',
@@ -1252,8 +1259,7 @@ const en: Table = {
   'settings.placeholder': 'Preferences on this machine. Connections live under “Connections”.',
   'nav.connections': 'Connections',
   'connections.title': 'Connections',
-  'connections.subtitle':
-    'Hook up your store, mailbox and analytics. Passwords are typed once on this machine and never reach the AI.',
+  'connections.subtitle': 'Hook up your store, mailbox and analytics.',
   'connections.connected': 'Connected',
   'connections.available': 'Available',
   'connections.empty': 'Nothing connected yet. Pick one below — each says what to prepare.',
@@ -1288,10 +1294,12 @@ const en: Table = {
   'storage.tier.local': 'Local (default)',
   'storage.tier.byo': 'My own cloud',
   'storage.tier.managed': 'Hosted by agentsws',
-  'storage.local.note':
-    'Data stays on this machine — a company NAS counts as this tier. Nobody can walk off with it and no third party sees it. More people? Switch to Postgres. Big files? Point them at a NAS share or MinIO. Both are under Advanced below.',
-  'storage.managed.note':
-    'Not open yet: we would only run the stateless service, your data would still be on your own machine. Until then, "My own cloud" already puts the data in your own Alibaba Cloud / AWS / Tencent account — we never hold your cloud credentials.',
+  'storage.local.note': 'Data stays on this machine — a company NAS counts as this tier.',
+  'storage.local.more.hint':
+    'Nobody can walk off with it and no third party sees it. More people? Switch to Postgres. Big files? Point them at a NAS share or MinIO. Both are under Advanced below.',
+  'storage.managed.note': 'Not open yet.',
+  'storage.managed.more.hint':
+    'Even then we would only run the stateless service — your data would stay on your own machine. Until then, "My own cloud" already puts the data in your own Alibaba Cloud / AWS / Tencent account, and we never hold your cloud credentials.',
   'storage.managed.learn': 'See what this tier would look like',
   'storage.never_ai':
     'This is a plain web form. What you type goes straight into this machine\u2019s encrypted store \u2014 never through the AI, never into logs.',
@@ -1543,8 +1551,8 @@ const en: Table = {
   'connections.reason.invalid_client': 'Client ID or secret is wrong',
   'connections.reason.invalid_shop': 'Shop domain is wrong',
   'models.title': 'Models',
-  'models.subtitle':
-    'Agents need a model to speak. One API key covers every position on this machine.',
+  'models.subtitle': 'Agents need a model to speak.',
+  'models.subtitle.hint': 'One API key covers every position on this machine.',
   'models.banner': 'No model connected yet — agents cannot run.',
   'models.banner.cta': 'Connect one in Settings →',
   'models.configured': 'Configured',
@@ -1592,7 +1600,8 @@ const en: Table = {
   'models.field.price_in': 'Input price (per 1M tokens)',
   'models.field.price_out': 'Output price (per 1M tokens)',
   'models.field.price.hint':
-    'This vendor is not in the built-in price list — copy the prices from their site. Needed for spend tracking and budgets; blank counts as zero.',
+    'This vendor is not in the built-in price list — copy the prices from their site.',
+  'models.field.price.why.hint': 'Needed for spend tracking and budgets; blank counts as zero.',
   'models.field.price_cached': 'Cache-hit price (per 1M tokens)',
   'models.price.from_catalog':
     'Source: vendor site, {as_of} ({currency}). Edit and it becomes yours.',
@@ -1617,6 +1626,7 @@ const en: Table = {
   'models.residency': 'Data residency',
   'models.residency.cn': 'China-based models only',
   'models.residency.any': 'Anywhere is fine',
+  'models.budget': 'Budget caps',
   'models.budget.daily': 'Daily cap',
   'models.budget.monthly': 'Monthly cap',
   'models.budget.assignment': 'Per position, per day',

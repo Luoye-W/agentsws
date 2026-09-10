@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import type {
@@ -179,7 +180,10 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
-        <p className="text-muted-foreground">{t('models.subtitle')}</p>
+        <p className="flex items-center gap-1 text-muted-foreground">
+          {t('models.subtitle')}
+          <Hint text={t('models.subtitle.hint')} />
+        </p>
 
         {error === null ? null : (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
@@ -582,6 +586,11 @@ function DefaultsSection({
         </select>
       </label>
 
+      {/* WP43 ③：原来底下那段规则说明进问号 */}
+      <div className="flex items-center gap-1">
+        <span className="text-xs font-medium text-muted-foreground">{t('models.budget')}</span>
+        <Hint text={t('models.budget.hint')} />
+      </div>
       <div className="grid grid-cols-3 gap-2">
         <BudgetInput
           label={t('models.budget.daily')}
@@ -608,7 +617,6 @@ function DefaultsSection({
           }}
         />
       </div>
-      <p className="text-[11px] text-muted-foreground">{t('models.budget.hint')}</p>
     </section>
   )
 }

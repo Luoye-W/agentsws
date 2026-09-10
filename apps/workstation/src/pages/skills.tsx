@@ -13,6 +13,7 @@ import { SkillCard } from '@/components/skills/skill-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getSkillProposals, getSkills, setSkillExcluded } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -57,10 +58,12 @@ export function SkillsPage(): React.ReactNode {
                   </Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{p.summary}</p>
+                {/* WP43 ③：这条建议「怎么来的」进问号 */}
                 {p.quotes.length === 0 ? null : (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t('skills.proposal.quotes')}：「{p.quotes[0]}」
-                  </p>
+                  <Hint
+                    className="mt-1"
+                    text={`${t('skills.proposal.quotes')}：「${p.quotes[0] ?? ''}」`}
+                  />
                 )}
                 <Button
                   variant="outline"

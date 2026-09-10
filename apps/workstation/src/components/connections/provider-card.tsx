@@ -8,10 +8,11 @@
  *   提交完立刻试连并把结果显示出来。
  */
 
-import { ChevronDown, ChevronRight, ExternalLink, Info, Plug } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, Plug } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import type {
   ConnectTestResult,
   ProviderAuthOption,
@@ -77,9 +78,16 @@ export function ProviderCard({
         <CardTitle className="flex items-center gap-2 text-sm">
           <Plug className="size-4" aria-hidden />
           {provider.label}
+          {provider.data_note === undefined ? null : (
+            <Hint text={provider.data_note} testId="provider-note" />
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
+        {/*
+          WP43 ③：卡面只留一句话说明。原来跟在后面那段「连上之后会怎样」
+          （`data_note`）压成标题旁一个问号，「要准备什么」照旧是下面的折叠区。
+        */}
         <p className="text-muted-foreground">{guide.summary}</p>
 
         {options.length > 1 ? (
@@ -122,16 +130,6 @@ export function ProviderCard({
             ))}
           </fieldset>
         ) : null}
-
-        {provider.data_note === undefined ? null : (
-          <p
-            className="flex items-start gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground"
-            data-testid="provider-note"
-          >
-            <Info className="mt-px size-3.5 shrink-0" aria-hidden />
-            <span>{provider.data_note}</span>
-          </p>
-        )}
 
         <div>
           <Button
@@ -221,11 +219,8 @@ export function ProviderCard({
             >
               {oauth ? t('connections.authorize') : t('connections.connect')}
             </Button>
-            {oauth ? (
-              <span className="text-[11px] text-muted-foreground">
-                {t('connections.oauth.hint')}
-              </span>
-            ) : null}
+            {/* 例外：密码输在哪儿是安全承诺，不藏 */}
+            {oauth ? <SafetyNote text={t('connections.oauth.hint')} /> : null}
           </div>
         )}
 
