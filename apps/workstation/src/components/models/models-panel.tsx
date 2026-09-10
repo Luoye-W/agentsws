@@ -288,6 +288,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                     template={tpl}
                     busy={save.isPending}
                     onDiscover={discover}
+                    takenIds={rows.map((p) => p.id)}
                     {...(pricing.data === undefined ? {} : { pricing: pricing.data })}
                     onCancel={() => {
                       setAdding(null)

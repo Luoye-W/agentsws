@@ -751,8 +751,10 @@ const zh: Table = {
   'models.from_env': '环境变量',
   'models.never_ai':
     '这个表单是网页原生表单，填的 API key 直接存进本机加密库，不经过 AI，也不进日志。',
+  'models.advanced': '高级',
   'models.field.id': '编号',
-  'models.field.id.hint': '自己起个短名字，比如 deepseek、kimi、my-ollama。存下来之后不能改。',
+  'models.field.id.hint':
+    '这条配置在文件里的名字，按接口地址自动起好了。改地址它跟着改；存下来之后不能改。',
   'models.field.label': '显示名',
   'models.field.base_url': '接口地址',
   'models.field.base_url.hint': '看那家的文档，一般以 /v1 结尾。',
@@ -1560,9 +1562,10 @@ const en: Table = {
   'models.from_env': 'from env',
   'models.never_ai':
     'A plain web form. The API key goes straight into this machine encrypted store — never through AI, never into logs.',
+  'models.advanced': 'Advanced',
   'models.field.id': 'Id',
   'models.field.id.hint':
-    'A short name you choose: deepseek, kimi, my-ollama. Cannot be changed later.',
+    "This config's name on disk, filled in from the API address. Change the address and it follows; cannot be changed after saving.",
   'models.field.label': 'Display name',
   'models.field.base_url': 'API base URL',
   'models.field.base_url.hint': 'Check their docs — usually ends in /v1.',

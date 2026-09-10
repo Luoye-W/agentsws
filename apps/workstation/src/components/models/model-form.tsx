@@ -43,6 +43,7 @@ export function ModelForm({
   onSubmit,
   onDiscover,
   pricing,
+  takenIds,
 }: {
   template: ModelProviderTemplate
   /** 改一条已有的：id 锁住，key 留空就是"别动已经存着的那一把"。 */
@@ -63,6 +64,8 @@ export function ModelForm({
   }) => Promise<ModelListing>
   /** WP42 内置价目表：选定模型后照它自动填价。 */
   pricing?: ModelPricingView
+  /** 已经用掉的编号（自动生成时避开它们）。 */
+  takenIds?: string[]
 }): React.ReactNode {
   const { t } = useApp()
   const prefix = useId()
@@ -79,6 +82,16 @@ export function ModelForm({
    * 每周那次官网刷新也一条都不动它。改过的数字不该被任何自动的东西悄悄覆盖。
    */
   const [priceManual, setPriceManual] = useState(existing?.price_source === 'manual')
+  /**
+   * 「编号」（WP42 交付 4）。
+   *
+   * 这个字段对非技术用户太技术了——它只是这条配置在文件里的键名，用户既不该关心
+   * 也没法凭直觉起一个。所以**按接口地址自动生成**（`deepseek` / `kimi` / `ollama`…），
+   * 折进「高级」里；真要改的人打开一栏就能改。
+   */
+  const [autoId, setAutoId] = useState(() =>
+    suggestProviderId(template.default_base_url, takenIds ?? []),
+  )
   /** 现在这个模型在价目表里查到的那条（查不到就是 undefined，价格框留空让人自己填）。 */
   const [quote, setQuote] = useState(() =>
     findCatalogPrice(
@@ -102,7 +115,7 @@ export function ModelForm({
       const parsed = Number(raw)
       return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
     }
-    const id = existing?.id ?? text('id')
+    const id = existing?.id ?? (text('id') === '' ? autoId : text('id'))
     const model = text('model')
     if (id === '' || model === '') {
       form.reportValidity()
@@ -163,7 +176,7 @@ export function ModelForm({
       const raw = data.get(name)
       return typeof raw === 'string' ? raw.trim() : ''
     }
-    const id = existing?.id ?? text('id')
+    const id = existing?.id ?? (text('id') === '' ? autoId : text('id'))
     const base_url = text('base_url') === '' ? template.default_base_url : text('base_url')
     const key = text('api_key')
     setPulling(true)
@@ -224,6 +237,7 @@ export function ModelForm({
                 set('base_url', p.base_url)
                 set('model', p.model)
                 setRegion(p.region)
+                setAutoId(suggestProviderId(p.base_url, takenIds ?? []))
                 applyQuote(p.base_url, p.model)
               }}
             >
@@ -232,20 +246,6 @@ export function ModelForm({
           ))}
         </div>
       )}
-
-      {existing === undefined ? (
-        <Field id={`${prefix}-id`} label={t('models.field.id')} hint={t('models.field.id.hint')}>
-          <Input
-            id={`${prefix}-id`}
-            name="id"
-            required
-            pattern="[a-z0-9][a-z0-9_-]*"
-            defaultValue={template.kind === 'deepseek' ? 'deepseek' : ''}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </Field>
-      ) : null}
 
       <Field id={`${prefix}-label`} label={t('models.field.label')}>
         <Input
@@ -267,6 +267,15 @@ export function ModelForm({
           defaultValue={existing?.base_url ?? template.default_base_url}
           autoComplete="off"
           spellCheck={false}
+          data-testid="model-base-url"
+          onInput={(event) => {
+            const url = event.currentTarget.value
+            // 换了地址就等于换了一家：编号跟着改，价也重新查
+            if (existing === undefined) setAutoId(suggestProviderId(url, takenIds ?? []))
+            const form = formRef.current
+            const model = form?.elements.namedItem('model')
+            if (model instanceof HTMLInputElement) applyQuote(url, model.value)
+          }}
         />
       </Field>
 
@@ -428,6 +437,40 @@ export function ModelForm({
             : t('models.price.from_catalog', { as_of: quote.as_of, currency: quote.currency })}
       </p>
 
+      {/*
+        「编号」只是这条配置在文件里的键名——非技术用户既不该关心也没法凭直觉起一个，
+        所以按接口地址自动生成，折进这里。真要改的人打开一栏就能改。
+      */}
+      {existing === undefined ? (
+        <details
+          className="rounded-md border bg-background/60 px-2 py-1.5"
+          data-testid="model-advanced"
+        >
+          <summary className="cursor-pointer text-xs text-muted-foreground">
+            {t('models.advanced')}
+          </summary>
+          <div className="mt-2">
+            <Field
+              id={`${prefix}-id`}
+              label={t('models.field.id')}
+              hint={t('models.field.id.hint')}
+            >
+              <Input
+                key={autoId}
+                id={`${prefix}-id`}
+                name="id"
+                required
+                pattern="[a-z0-9][a-z0-9_-]*"
+                defaultValue={autoId}
+                autoComplete="off"
+                spellCheck={false}
+                data-testid="model-id-input"
+              />
+            </Field>
+          </div>
+        </details>
+      ) : null}
+
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" disabled={busy}>
           {busy ? t('models.saving') : t('models.save')}
@@ -465,4 +508,45 @@ function Field({
 /** 三个价格框的 name → 价目表里那条价的字段名。 */
 function priceKeyOf(name: 'price_in' | 'price_out' | 'price_cached'): 'in' | 'out' | 'cached' {
   return name === 'price_in' ? 'in' : name === 'price_out' ? 'out' : 'cached'
+}
+
+/** 主机名 → 一个短编号。认得出的几家写死，认不出的取主机名头一段。 */
+const ID_BY_HOST: readonly (readonly [RegExp, string])[] = [
+  [/(^|\.)deepseek\.com$/, 'deepseek'],
+  [/(^|\.)openai\.com$/, 'openai'],
+  [/(^|\.)(moonshot\.(cn|ai)|kimi\.com)$/, 'kimi'],
+  [/(^|\.)aliyuncs\.com$/, 'qwen'],
+  [/(^|\.)(bigmodel\.cn|z\.ai)$/, 'zhipu'],
+  [/(^|\.)siliconflow\.(cn|com)$/, 'siliconflow'],
+  [/(^|\.)anthropic\.com$/, 'anthropic'],
+  [/(^|\.)openrouter\.ai$/, 'openrouter'],
+  [/^(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])$/, 'ollama'],
+]
+
+/**
+ * 按接口地址猜一个编号（WP42 交付 4）。
+ *
+ * 编号只要满足「小写字母数字下划线短横线、32 位以内、这台机器上没重」——
+ * 认得出的几家给个好记的名字，认不出的取主机名头一段。重名就在后面加个序号。
+ */
+export function suggestProviderId(baseUrl: string, taken: readonly string[]): string {
+  let host = ''
+  try {
+    const raw = baseUrl.trim()
+    host = new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.toLowerCase()
+  } catch {
+    host = ''
+  }
+  let base = ID_BY_HOST.find(([re]) => re.test(host))?.[1]
+  if (base === undefined) {
+    const parts = host.split('.').filter((p) => p !== '' && p !== 'api' && p !== 'www')
+    base = (parts[0] ?? 'model').replace(/[^a-z0-9_-]/g, '').slice(0, 24)
+  }
+  if (base === '' || /^[^a-z0-9]/.test(base)) base = 'model'
+  if (!taken.includes(base)) return base
+  for (let n = 2; n < 100; n += 1) {
+    const candidate = `${base}-${n}`
+    if (!taken.includes(candidate)) return candidate
+  }
+  return base
 }

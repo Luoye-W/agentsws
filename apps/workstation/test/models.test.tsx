@@ -242,6 +242,7 @@ vi.mock('@/lib/api', async () => {
 })
 
 const { ModelsPanel } = await import('@/components/models/models-panel')
+const { suggestProviderId } = await import('@/components/models/model-form')
 const { NoModelBanner } = await import('@/components/models/no-model-banner')
 
 beforeEach(() => {
@@ -642,5 +643,68 @@ describe('WP42 §2 价格自动填 + 手动可改', () => {
     await user.click(await screen.findByTestId('model-pricing-refresh'))
     const result = await screen.findByTestId('model-pricing-result')
     expect(result.textContent).toContain('急停')
+  })
+})
+
+describe('WP42 §4 「编号」折进「高级」', () => {
+  it('新建时表单上看不到「编号」——它在「高级」里，而且已经按接口地址填好了', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    const advanced = within(form).getByTestId('model-advanced') as HTMLDetailsElement
+    // 默认收着：第一屏上没有这个字段
+    expect(advanced.open).toBe(false)
+    expect((within(form).getByTestId('model-id-input') as HTMLInputElement).value).toBe('deepseek')
+  })
+
+  it('换了接口地址：编号跟着改（api.moonshot.cn → kimi）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[1] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    const base = within(form).getByTestId('model-base-url') as HTMLInputElement
+    await user.clear(base)
+    await user.type(base, 'https://api.moonshot.cn/v1')
+    await waitFor(() => {
+      expect((within(form).getByTestId('model-id-input') as HTMLInputElement).value).toBe('kimi')
+    })
+  })
+
+  it('保存时把自动生成的编号带上（用户一个字都没打过）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(saved).toHaveLength(1)
+    })
+    expect(saved[0]?.id).toBe('deepseek')
+  })
+
+  it('改一条已有的：编号根本不出现（存下来就不能改）', async () => {
+    state.providers = [ACTIVE]
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByText('改'))
+    const form = await screen.findByTestId('model-form')
+    expect(within(form).queryByTestId('model-advanced')).toBeNull()
+  })
+
+  it('suggestProviderId：认得出的几家给好记的名字，重名往后排', () => {
+    expect(suggestProviderId('https://api.deepseek.com', [])).toBe('deepseek')
+    expect(suggestProviderId('https://api.moonshot.cn/v1', [])).toBe('kimi')
+    expect(suggestProviderId('https://dashscope.aliyuncs.com/compatible-mode/v1', [])).toBe('qwen')
+    expect(suggestProviderId('https://open.bigmodel.cn/api/paas/v4', [])).toBe('zhipu')
+    expect(suggestProviderId('http://127.0.0.1:11434/v1', [])).toBe('ollama')
+    // 认不出来的取主机名头一段（去掉 api. / www.）
+    expect(suggestProviderId('https://api.example.dev/v1', [])).toBe('example')
+    // 重名往后排
+    expect(suggestProviderId('https://api.deepseek.com', ['deepseek'])).toBe('deepseek-2')
+    // 地址是空的 / 乱写的也得给出一个合法编号
+    expect(suggestProviderId('', [])).toBe('model')
   })
 })
