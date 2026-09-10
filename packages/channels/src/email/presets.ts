@@ -271,16 +271,39 @@ export interface MailboxDetection {
 }
 
 /**
- * 查一次域名的 MX 并匹配预设。**永不抛。**
- *
- * @param resolve 不给就用 `node:dns/promises` 的 `resolveMx`（动态引入，
- *                这样纯匹配那部分在浏览器端 bundle 里也能用）。
+ * 先用第一个解析器查 MX；查不到或抛错就换第二个再查一次。
+ * 代理的 fake-IP 模式下系统 DNS 常常只回 A 记录不回 MX，这时换公共 DNS 才识别得出"这是哪家邮箱"。
+ * 只用于识别，不影响连接本身（连接仍走系统解析）。
  */
+export function withMxFallback(primary: ResolveMx, fallback: ResolveMx): ResolveMx {
+  return async (domain) => {
+    try {
+      const records = await primary(domain)
+      if (records.length > 0) return records
+    } catch {
+      // 落到备用解析器
+    }
+    return fallback(domain)
+  }
+}
+
+export const PUBLIC_DNS_SERVERS = ['223.5.5.5', '1.1.1.1'] as const
+
+async function systemThenPublicDns(): Promise<ResolveMx> {
+  const dns = await import('node:dns/promises')
+  const resolver = new dns.Resolver()
+  resolver.setServers([...PUBLIC_DNS_SERVERS])
+  return withMxFallback(
+    (d) => dns.resolveMx(d),
+    (d) => resolver.resolveMx(d),
+  )
+}
+
 export async function detectMailbox(email: string, resolve?: ResolveMx): Promise<MailboxDetection> {
   const domain = domainOfEmail(email)
   if (domain === undefined) return { domain: '', mx_hosts: [], preset: undefined }
   try {
-    const resolveMx = resolve ?? (await import('node:dns/promises')).resolveMx
+    const resolveMx = resolve ?? (await systemThenPublicDns())
     const records = await resolveMx(domain)
     return {
       domain,
