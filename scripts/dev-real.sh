@@ -78,6 +78,11 @@ if getent hosts api.deepseek.com 2>/dev/null | grep -qE '^198\.1[89]\.' || dscac
   echo "检测到代理 fake-IP：连接器出站白名单 = $AGENTSWS_CONNECT_TRUSTED_HOSTS"
 fi
 [ -n "${AGENTSWS_CONNECT_TRUSTED_HOSTS:-}" ] && OC_TRUST_ARGS="-e OOMOL_CONNECT_EGRESS_TRUSTED_HOSTS=${AGENTSWS_CONNECT_TRUSTED_HOSTS}"
+# 服务进程也要看得到这份名单（连接页 runtime 状态里的 egress.trusted_hosts）
+export AGENTSWS_CONNECT_TRUSTED_HOSTS
+
+# 真账号环境打开 Shopify 官方 Dev MCP（npx 拉 @shopify/dev-mcp，版本钉在服务进程里）；默认服务进程不起它
+export AGENTSWS_SHOPIFY_DEVMCP="${AGENTSWS_SHOPIFY_DEVMCP:-1}"
 
 # OpenConnector：加固三件套；只绑 127.0.0.1
 if ! docker ps --format '{{.Names}}' | grep -qx "$OC_NAME" || [ "${AGENTSWS_CONNECT_RECREATE:-0}" = "1" ]; then
