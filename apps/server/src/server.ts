@@ -62,6 +62,7 @@ import { type ServerType, serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
+import { createCatalogIndex } from './catalog-index.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
@@ -707,6 +708,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.scheduleIntervalMs === undefined ? {} : { intervalMs: options.scheduleIntervalMs }),
   })
+  /**
+   * 40 §2 工具箱：把定时任务、流程、技能投影成同一张卡片，供"建之前先查"与工具箱页用。
+   * 装在调度器之后——它的第一个来源就是调度库。
+   */
+  const catalog = createCatalogIndex({
+    workspace_id: workspace.id,
+    clock,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    scheduler: schedule.scheduler,
+    workflows: schedule.workflows,
+    // 整个工作区的岗位（不是本人那几个）：算"哪些岗位在用"要全的
+    positions: () =>
+      roles.roles
+        .list()
+        .flatMap((r) => roles.assignments.listByRole(r.id, { workspace_id: workspace.id }))
+        .filter((a) => a.revoked_at === undefined)
+        .map((a) => ({
+          id: a.id,
+          person_id: a.person_id,
+          role_id: a.role_id,
+          skills: (roles.roles.get(a.role_id)?.skills ?? []).map((sk) => sk.name),
+        })),
+    skillNames: () => skills.registry.listSkillNames(),
+    // 有人写过个人层 overlay 的技能算"个人副本"，其余算公司在用的
+    skillOwner: (name) => {
+      const personal = skills.registry
+        .listOverlays(name)
+        .find((o) => o.tier === 'personal' && o.ops.length > 0)
+      return personal === undefined
+        ? { owner: 'package' as PersonId, layer: 'company' as const }
+        : { owner: String(personal.owner) as PersonId, layer: 'personal' as const }
+    },
+  })
+
   const scheduleTz = offsetToTz(workData.tz_offset_minutes)
   const positionsOf = (): SchedulePosition[] =>
     roles.assignments
@@ -1044,6 +1079,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
       },
     },
+    // 40 §2 工具箱与查重；五个"建"的入口经 `guardSimilar` 用同一份判定
+    catalog: catalog.port,
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
@@ -1177,6 +1214,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (options.mount === undefined) roles.close()
       meetings.close()
       schedule.close()
+      catalog.close()
       await channels?.close()
       connections.close()
       org.close()

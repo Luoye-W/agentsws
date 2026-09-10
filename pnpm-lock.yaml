@@ -81,6 +81,9 @@ importers:
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@agentsws/catalog':
+        specifier: workspace:*
+        version: link:../../packages/catalog
       '@agentsws/channels':
         specifier: workspace:*
         version: link:../../packages/channels

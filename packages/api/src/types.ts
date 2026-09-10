@@ -49,6 +49,7 @@ import type {
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { AskPort } from './routes/ask.js'
+import type { CatalogPort } from './routes/catalog.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { MeetingsPort } from './routes/meetings.js'
@@ -527,6 +528,12 @@ export interface GatewayDeps {
   org?: OrgPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
+  /**
+   * 40 §2 工具箱与查重；没装配时 `/v1/catalog/*` 回 not_implemented，
+   * 五个"建"的入口也**不再查重**（`guardSimilar` 直接放行）——查重是加分项，
+   * 不该让没装工具箱的发行版连定时任务都建不了。
+   */
+  catalog?: CatalogPort
   /** 25 定时与流程面；没装调度器时 `/v1/schedules` 与 `/v1/workflows` 回 not_implemented。 */
   schedules?: SchedulePort
   /**
