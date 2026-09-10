@@ -83,6 +83,14 @@ services:
       - '3000'
 
   # ── Postgres 档（可选）────────────────────────────────────────────────
+  #
+  # **说清楚现在到哪一步了**：WP40 把 kernel（事件日志）与 data（共享数据层）
+  # 做成了双方言，`DATABASE_URL` 一设就能连；但 txn / api / channels / meetings /
+  # work / schedule / learning / knowledge 这几个包的 store **还是同步契约**，
+  # 只能跑 SQLite。所以今天起这个 profile，服务进程仍然把数据写在 SQLite 里，
+  # 这个容器是**为下一步准备的**（也可以现在就拿它跑双方言的一致性套件）。
+  # 等那几个包转成异步面，服务进程才会真的整体切过去。
+  #
   # 打开方式：docker compose --profile postgres up -d
   # 然后在 .env 里写：
   #   DATABASE_URL=postgres://agentsws:<密码>@postgres:5432/agentsws

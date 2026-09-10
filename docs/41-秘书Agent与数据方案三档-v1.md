@@ -49,6 +49,26 @@
 
 先说共同底座：**不管数据住哪，都是同一套服务进程 + 同一套契约**，换的只是存储后端。为此要补两个抽象：`DataStore` 方言（SQLite ↔ Postgres，21 已留位）与 `BlobStore`（本地目录 ↔ S3 兼容对象存储，放会议录音、附件、原始材料等大文件）。三档只是这两个开关加部署形态。
 
+### 2.0 落地进度（WP40 合并时按实际打勾）
+
+| 项 | 状态 | 落在哪 |
+|---|---|---|
+| SQL 驱动抽象（异步接口、`?` → `$n`、方言表、共用迁移器一次一事务） | ✅ | `packages/core/src/sql/**` |
+| `kernel` 事件日志双方言（append-only 与哈希链在 Postgres 上等价） | ✅ | `packages/kernel/{event-log-sql,sql-event-log}.ts` |
+| `data` 共享数据层双方言（过滤仍在数据层下推、主体密钥环双方言） | ✅ | `packages/data/{store,sql-keyring,store-sql}.ts` |
+| `txn` 双方言 | ⛔ **只做到表结构可移植性** | `TxnStore` 契约是同步的，Postgres 驱动只能异步；见 WP40 报告 §5 |
+| 其余包（api / channels / meetings / work / schedule / learning / knowledge）双方言 | ⛔ 未做 | 改点清单与估算见 WP40 报告 |
+| `BlobStore` 本地目录档（原子写、NAS 共享目录即这一档） | ✅ | `packages/blob/local-store.ts` |
+| `BlobStore` S3 兼容档（自写 SigV4，不装 aws sdk） | ✅ | `packages/blob/{sigv4,s3-store}.ts` |
+| 每对象密钥经主体密钥环包裹（销毁即全不可读） | ✅ | `packages/blob/envelope.ts` |
+| 附件与会议音视频走 blob（受控区只留文本与引用） | ✅ | `packages/{channels,meetings}/blob-raw-store.ts` |
+| `docker-compose.yml` + `Dockerfile` + NAS 说明（群晖 / 威联通） | ✅ | 仓库根 + `deploy/nas/` |
+| 服务进程整体切 Postgres（`DATABASE_URL` 一设就换） | ⛔ 还不行 | 上面那几个包还是同步 store；compose 的 `--profile postgres` 是**为下一步准备的**，今天起它数据仍落 SQLite |
+| 连接页「数据后端」三个按钮 + 原生表单 + 测试连接 + 迁移向导 | ✅ | `apps/workstation/src/components/connections/data-backend.tsx` |
+| `GET /v1/storage`（当前后端、大小、上次备份） | ✅ | `packages/api/src/routes/storage.ts` |
+| 迁移用的 `export` / `import` 同一包格式 | ⏳ 最小实现 + `TODO(WP36)` | `apps/server/src/storage.ts` |
+| 托管档（第三档） | ⏳ 只有说明页，不建集群（本来就是 WP40 的范围） | 连接页「用 agentsws 托管」按钮 |
+
 ### 2.1 第一档：本地自托管（免费，开源版默认）
 
 | 形态 | 适合 | 存储 | 大文件 | 备份 |
@@ -88,6 +108,16 @@
 ### 2.4 一键选与技术入口
 
 连接页"数据后端"三个按钮：**本地（默认）/ 接我的云 / 用 agentsws 托管**。前两个走原生表单与向导；第三个跳到账号页充值开通。底下永远留"高级"：直接改 `AGENTSWS_DATA_DIR` / `DATABASE_URL` / `BLOB_URL` 环境变量，compose 文件公开。
+
+WP40 落下来之后的实际形状（与上面一致，补三个当时没写死的细节）：
+
+- 环境变量的实际名字是 `AGENTSWS_DATA_DIR` / `DATABASE_URL` / `AGENTSWS_BLOB_URL`
+  （加上凭据的 `AGENTSWS_BLOB_ACCESS_KEY_ID` / `AGENTSWS_BLOB_SECRET_ACCESS_KEY`，
+  以及主体密钥的根密钥 `AGENTSWS_DATA_KEY`）。「高级」一栏里凭据类**只说「已设置 / 未设置」**。
+- **切换后端要重启服务进程**才生效：连接池、迁移、密钥环都是装配时接好的，
+  热切换等于在跑着的事务底下换库。界面上明说，不假装能热切。
+- 「用 agentsws 托管」这一档点开是**一段实话**（还没开放，你可以先用「接我的云」把数据
+  放进自己的云账号），不是一个假的开通流程。
 
 ## 3. 派工
 

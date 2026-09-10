@@ -276,3 +276,18 @@ describe('POST /v1/storage/migrate：四步 + 旧后端只读留 7 天', () => {
     expect((await api('/v1/storage/migrations/nope')).status).toBe(404)
   })
 })
+
+describe('监听地址（WP40：容器档）', () => {
+  it('默认只绑回环——不设那个环境变量，行为一个字没变（13 §5）', async () => {
+    const { bindHost } = await import('../src/server.js')
+    expect(bindHost({})).toBe('127.0.0.1')
+    expect(bindHost({ AGENTSWS_BIND_HOST: '' })).toBe('127.0.0.1')
+  })
+
+  it('容器里绑 0.0.0.0；别的地址直接报错（写内网地址多半是配错了）', async () => {
+    const { bindHost } = await import('../src/server.js')
+    expect(bindHost({ AGENTSWS_BIND_HOST: '0.0.0.0' })).toBe('0.0.0.0')
+    expect(bindHost({ AGENTSWS_BIND_HOST: '::' })).toBe('::')
+    expect(() => bindHost({ AGENTSWS_BIND_HOST: '192.168.1.10' })).toThrow(/只接受/)
+  })
+})

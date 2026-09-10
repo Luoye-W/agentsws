@@ -130,7 +130,29 @@ const QUEUE_STATES = [
 const WAITING_QUEUE_STATES = new Set(['pending', 'in_review'])
 
 export const DEFAULT_PORT = 4317
+/**
+ * 默认只监听回环（13 §5：桌面壳的 sidecar，别人连不上）。
+ *
+ * WP40 加了一个开关 `AGENTSWS_BIND_HOST`，**唯一的用途是容器里**：
+ * 在容器里 `127.0.0.1` 的意思是「连自己都只有容器里能连」，
+ * 端口映射出去也是空的。容器档下真正的暴露控制在两处，都比这一行更靠外：
+ * compose 的端口绑定（默认 `127.0.0.1:4317`，见 docker-compose.yml）与 NAS 的防火墙。
+ *
+ * 换句话说：**不在容器里就别设它**。默认值一个字没变。
+ */
 export const HOST = '127.0.0.1'
+export const BIND_HOST_ENV = 'AGENTSWS_BIND_HOST'
+
+/** 只接受回环与「全部网卡」两种——写别的地址多半是配错了，不如报出来。 */
+export function bindHost(env: Record<string, string | undefined>): string {
+  const raw = env[BIND_HOST_ENV]?.trim()
+  if (raw === undefined || raw === '') return HOST
+  if (raw === '0.0.0.0' || raw === '::' || raw === '127.0.0.1' || raw === '::1') return raw
+  throw new Error(
+    `${BIND_HOST_ENV} 只接受 127.0.0.1 / ::1 / 0.0.0.0 / ::（拿到的是 ${raw}）。` +
+      '要限制谁能连，用 compose 的端口绑定或 NAS 防火墙，不要在这里写内网地址。',
+  )
+}
 /** v1 自带的职责定义（roles 包 bundled）。 */
 export const BUNDLED_ROLES = ['common.owner', 'common.member', 'dtc.aftersales'] as const
 
@@ -443,12 +465,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
   // 把它指到共享目录）或 S3 兼容（阿里 OSS / 腾讯 COS / R2 / MinIO）。
   // 加密接同一个主体密钥环：销毁一个主体的密钥，他的每一个对象当场读不出来（21 §4）。
-  const blobs = await openBlobStore({
-    clock,
-    cipher: data.keyring,
-    env,
-    ...(dbDir === undefined ? {} : { defaultRoot: join(dbDir, 'blobs') }),
-  })
+  //
+  // **内存档（没有 dbDir）不开对象存储**：那一档的意思就是「什么都不落盘」，
+  // 开了它会在当前工作目录里长出一个 `blobs/`——测试跑一遍就在仓库根上留一堆文件。
+  // 这一档下附件与录音仍在内存 store 里，与 WP40 之前一模一样。
+  const blobs =
+    dbDir === undefined
+      ? undefined
+      : await openBlobStore({
+          clock,
+          cipher: data.keyring,
+          env,
+          defaultRoot: join(dbDir, 'blobs'),
+        })
 
   const knowledge = createKnowledge({ dbPath: file('knowledge.db'), clock })
   const skills = createSkills({ clock, random })
@@ -651,7 +680,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 每主体一把独立随机密钥，销毁即不可读），录音库只拿这个端口——两个库不共享表（35 §2）。
     cipher: data.keyring,
     // WP40：录音与视频落对象存储，受控区里只留一句 `blob://…`（18 §2.1）
-    blobs,
+    ...(blobs === undefined ? {} : { blobs }),
   })
   // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
   meetings.bind(work)
@@ -678,7 +707,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // **但不共用它的表**（35 §2）。漏了这一行，邮件原文就是明文落盘。
     cipher: data.keyring,
     // WP40：附件字节落对象存储；邮件原文是文本，照旧留库加密
-    blobs,
+    ...(blobs === undefined ? {} : { blobs }),
     accounts: () => connections.mailAccounts(),
     credentials: connections.credentialSource(),
     work,
@@ -717,7 +746,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const storage = createStorage({
     clock,
     ...(dbDir === undefined ? {} : { dbDir }),
-    blobs,
+    ...(blobs === undefined ? {} : { blobs }),
     secrets,
     env,
   })
@@ -1152,7 +1181,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (!Number.isInteger(wanted) || wanted < 0 || wanted > 65535)
         throw new Error(`AGENTSWS_PORT 不合法：${String(env.AGENTSWS_PORT)}`)
       const started = await new Promise<ServerType>((resolve) => {
-        const s = serve({ fetch: gateway.fetch, port: wanted, hostname: HOST }, () => {
+        const s = serve({ fetch: gateway.fetch, port: wanted, hostname: bindHost(env) }, () => {
           resolve(s)
         })
       })

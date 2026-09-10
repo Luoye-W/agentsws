@@ -37,26 +37,31 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm exec tsc -b \
  && pnpm --filter @agentsws/workstation exec vite build
 
-# 只留生产依赖（把 vitest / biome / typescript 那一坨扔掉）
-RUN pnpm prune --prod --ignore-scripts
+# 打包成一个自足的目录。
+#
+# 为什么用 `pnpm deploy` 而不是 `pnpm prune --prod` + 拷 node_modules：
+# pnpm 的 workspace 依赖在 node_modules 里是**符号链接**，`prune --prod` 会把
+# workspace 那一层链接一起剪掉，镜像起来就是 `Cannot find package '@agentsws/core'`。
+# `deploy` 把链接**实拷**成真目录，出来的 /out 可以整个搬走。
+# （这不是假设：第一版就是这么挂的，日志里那一行 ERR_MODULE_NOT_FOUND。）
+RUN pnpm --filter @agentsws/server deploy --prod --legacy /out
 
 # ── 运行 ────────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
+# 容器里必须绑 0.0.0.0：绑回环等于端口映射出去是空的。
+# 真正的暴露控制在更靠外的两处——compose 的端口绑定（默认 127.0.0.1）与 NAS 防火墙。
 ENV NODE_ENV=production \
+    AGENTSWS_BIND_HOST=0.0.0.0 \
     AGENTSWS_PORT=4317 \
     AGENTSWS_DATA_DIR=/data \
     AGENTSWS_STATIC_DIR=/app/apps/workstation/dist
 
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/apps/server/dist ./apps/server/dist
-COPY --from=build /app/apps/server/package.json ./apps/server/package.json
-COPY --from=build /app/apps/server/node_modules ./apps/server/node_modules
+# /out 就是服务进程的全部（含实拷过来的 workspace 依赖与它们的数据文件）
+COPY --from=build /out ./
+# 工作台的静态产物：服务进程按 AGENTSWS_STATIC_DIR 直接读它
 COPY --from=build /app/apps/workstation/dist ./apps/workstation/dist
-COPY --from=build /app/packages ./packages
-COPY --from=build /app/role-packs ./role-packs
 
 # 数据目录挂出去：SQLite 库、blob 目录、密钥文件都在里面。
 # NAS 档就是把宿主的共享目录挂到这里（见 deploy/nas/README.md）。
@@ -70,4 +75,4 @@ USER node
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.AGENTSWS_PORT||4317}/v1/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
-CMD ["node", "apps/server/dist/index.js"]
+CMD ["node", "dist/index.js"]
