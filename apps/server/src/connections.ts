@@ -190,6 +190,12 @@ export interface ConnectionsOptions {
   /** WP25：邮箱识别用的 MX 查询（测试注入；缺省用 `node:dns/promises`）。 */
   resolveMx?: ResolveMx
   /**
+   * WP44：把一个公网域名解析成 IPv4 地址，用来判断这台机器是不是在代理的
+   * fake-IP 模式下（解析结果落在保留网段 = 是）。测试注入；缺省用
+   * `node:dns/promises` 的 `lookup`，查不到就当"没开 fake-IP"。
+   */
+  resolveIpv4?: (host: string) => Promise<string[]>
+  /**
    * WP25：Shopify 令牌刷新的巡检间隔（毫秒）。给 0 / 不给就不起定时器——
    * 测试与一次性任务不该有后台计时器；服务进程装配时传 15 分钟。
    */
@@ -235,6 +241,54 @@ function errorCodeOf(e: unknown): string {
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
+}
+
+/**
+ * WP44：出站防护踩到代理 fake-IP 时的人话。
+ *
+ * 现象是这样的：Clash / Surge 这类代理开着 fake-IP 模式时，会把外网域名解析成
+ * `198.18.x.x` 这种**保留网段**的假地址（真正的连接由代理接管）。OpenConnector 的
+ * SSRF 防护看到解析结果落在保留段里，就当成"有人想让我去打内网"，直接拒掉，
+ * 回一句 `Egress blocked: hostname must not resolve to private or reserved IP`。
+ *
+ * 用户看到这句只会以为"我们的软件坏了"。这里把它翻成一句他照着能做的话。
+ */
+const EGRESS_BLOCK_RE =
+  /must not resolve to (?:a\s+)?private or reserved IP|egress blocked|private or reserved ip/i
+
+/** fake-IP 常用的保留网段（外加真正的私网段——解析到这些一律不算真地址）。 */
+function isReservedIpv4(ip: string): boolean {
+  const parts = ip.split('.').map((p) => Number.parseInt(p, 10))
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255))
+    return false
+  const [a = 0, b = 0] = parts
+  if (a === 10 || a === 127 || a === 0) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 169 && b === 254) return true
+  // 198.18.0.0/15：基准测试保留段，Clash / Surge 的 fake-IP 默认就在这里
+  if (a === 198 && (b === 18 || b === 19)) return true
+  // 240.0.0.0/4：保留段，少数代理拿它当 fake-IP 池
+  if (a >= 240) return true
+  return false
+}
+
+/**
+ * 出站被防护挡下时给用户的那一句。不是这个原因就回 undefined，让原来的映射接手。
+ */
+export function egressAdvice(raw: string, trusted: readonly string[]): string | undefined {
+  if (!EGRESS_BLOCK_RE.test(raw)) return undefined
+  const tail =
+    trusted.length === 0
+      ? '要么让连接器改用公共 DNS 直接解析外网域名（开发环境跑 scripts/dev-real.sh 会自动这么做，重启生效），' +
+        '要么把这个域名加进信任名单（环境变量 AGENTSWS_CONNECT_TRUSTED_HOSTS，逗号分隔）。'
+      : `已经放行的域名有：${trusted.join('、')}。要连的这个不在里面就一起加进去` +
+        '（环境变量 AGENTSWS_CONNECT_TRUSTED_HOSTS，逗号分隔），或者让连接器改用公共 DNS。'
+  return (
+    '连不出去：你的网络在用代理的 fake-IP 模式——代理把外网域名解析成了保留网段的假地址，' +
+    '连接器的出站防护把它当成内网拦下了。' +
+    tail
+  )
 }
 
 /** 上游错误 → 人话。界面还会按 `reason` 出自己的文案，这里是兜底。 */
@@ -523,6 +577,83 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     },
   })
 
+  // ── WP44 出站解析环境（代理 fake-IP）
+  //
+  // 两个来源合起来判断：
+  // 1. **主动探一次**：把一个公网域名解析成 IPv4，落在保留网段就是 fake-IP；
+  // 2. **被动记一笔**：真的被出站防护拦过一次，那就是铁证（探测可能因为
+  //    这台机器和容器走不同的解析路径而看不出来）。
+  const trustedHosts = (
+    env.AGENTSWS_CONNECT_TRUSTED_HOSTS ??
+    env.OOMOL_CONNECT_EGRESS_TRUSTED_HOSTS ??
+    ''
+  )
+    .split(',')
+    .map((h) => h.trim())
+    .filter((h) => h !== '')
+  const probeHost = env.AGENTSWS_EGRESS_PROBE_HOST?.trim() ?? 'api.deepseek.com'
+  /**
+   * 主动探测只在**真配了连接器**时做（或者测试显式注入了解析函数）。
+   *
+   * 替身档不探：那是开发与 demo 的形态，压根没有出站，为了一句提示去查一次真 DNS
+   * 会让测试变慢、变飘。替身档如果真被拦过（`egressBlockedSeen`），照样报。
+   */
+  const defaultResolveIpv4 = async (host: string): Promise<string[]> => {
+    if (baseUrl === undefined || baseUrl === '') return []
+    try {
+      const { lookup } = await import('node:dns/promises')
+      const found = await lookup(host, { all: true, family: 4 })
+      return found.map((a) => a.address)
+    } catch {
+      // 查不到就当没开 fake-IP：这条判断只用来给一句更好的话，不该拦住任何事
+      return []
+    }
+  }
+  const resolveIpv4 = options.resolveIpv4 ?? defaultResolveIpv4
+  /** 真被出站防护拦过一次 —— 比任何探测都硬。 */
+  let egressBlockedSeen = false
+  let egressProbe: { at: number; fake_ip: boolean; detail?: string } | undefined
+  const egressStatus = async (): Promise<{
+    fake_ip_detected: boolean
+    trusted_hosts: string[]
+    detail?: string
+  }> => {
+    const now = Date.parse(clock.now())
+    if (egressProbe === undefined || now - egressProbe.at >= HARDENING_TTL_MS) {
+      const addresses = await resolveIpv4(probeHost)
+      const reserved = addresses.filter(isReservedIpv4)
+      egressProbe = {
+        at: now,
+        fake_ip: reserved.length > 0,
+        ...(reserved.length === 0
+          ? {}
+          : { detail: `${probeHost} 解析到了保留网段地址 ${reserved.join('、')}` }),
+      }
+    }
+    const detail = egressBlockedSeen
+      ? (egressProbe.detail ?? '连接器已经因为"解析到保留地址"拒绝过一次出站请求')
+      : egressProbe.detail
+    return {
+      fake_ip_detected: egressProbe.fake_ip || egressBlockedSeen,
+      trusted_hosts: [...trustedHosts],
+      ...(detail === undefined ? {} : { detail }),
+    }
+  }
+
+  /**
+   * 上游错误 → 用户看得懂的一句。出站防护那一类先认（它是最容易被误当成"软件坏了"的），
+   * 认不出来再交给按错误码的兜底映射。
+   */
+  const explain = (code: string, e: unknown): string => {
+    const raw = messageOf(e)
+    const advice = egressAdvice(raw, trustedHosts)
+    if (advice !== undefined) {
+      egressBlockedSeen = true
+      return advice
+    }
+    return humanize(code, raw)
+  }
+
   // ── runtime 加固检查（带缓存）
   let hardening: { at: number; report: Awaited<ReturnType<typeof probe>> } | undefined
   const hardeningReport = async (): Promise<Awaited<ReturnType<typeof probe>> | undefined> => {
@@ -549,6 +680,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           available: false,
           reason: `环境变量 ${SECRETS_KEY_ENV} 未设置：这台机器还不能保存邮箱账号密码`,
         }
+    // WP44：出站解析环境跟着状态条一起回。三条路径都带上——代理 fake-IP
+    // 在替身档也照样影响别的出站（模型网关就是第一个撞上的）
+    const egress = await egressStatus()
     if (usingStandIn) {
       return {
         state: 'stand_in',
@@ -556,6 +690,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         checks: [],
         checked_at,
         secrets_vault: vault,
+        egress,
       }
     }
     const report = await hardeningReport()
@@ -566,6 +701,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         checks: [],
         checked_at,
         secrets_vault: vault,
+        egress,
       }
     }
     const absent = report.reasons.includes('runtime_unreachable')
@@ -576,6 +712,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       checks: report.checks.map((c) => ({ ...c })),
       checked_at,
       secrets_vault: vault,
+      egress,
     }
   }
 
@@ -727,7 +864,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       actions = await connect.actions(upstream)
     } catch (e) {
       const code = errorCodeOf(e)
-      return { ok: false, reason: code, detail: humanize(code, messageOf(e)), checked_at }
+      return { ok: false, reason: code, detail: explain(code, e), checked_at }
     }
     const action = pickSmokeAction(actions, entry?.smoke_hints ?? [])
     if (action === undefined) {
@@ -763,12 +900,12 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           return {
             ok: false,
             reason: retryCode,
-            detail: humanize(retryCode, messageOf(again)),
+            detail: explain(retryCode, again),
             checked_at,
           }
         }
       }
-      return { ok: false, reason: code, detail: humanize(code, messageOf(e)), checked_at }
+      return { ok: false, reason: code, detail: explain(code, e), checked_at }
     }
   }
 
@@ -842,7 +979,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       }
     } catch (e) {
       const code = errorCodeOf(e)
-      return { ok: false, reason: code, detail: humanize(code, messageOf(e)), checked_at }
+      return { ok: false, reason: code, detail: explain(code, e), checked_at }
     }
   }
 

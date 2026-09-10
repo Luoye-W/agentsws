@@ -443,3 +443,30 @@ describe('WP44 Shopify：只有一条接法 + 老连接提示', () => {
     expect(screen.queryByTestId('connection-legacy')).toBeNull()
   })
 })
+
+describe('WP44 状态条：代理 fake-IP 说人话', () => {
+  it('fake_ip_detected → 黄条说清楚两条修法，并念出信任名单', async () => {
+    state.runtime = {
+      ...READY,
+      egress: {
+        fake_ip_detected: true,
+        trusted_hosts: ['admin.shopify.com'],
+        detail: 'api.deepseek.com 解析到了保留网段地址 198.18.0.7',
+      },
+    }
+    renderWithProviders(<ConnectionsPage />)
+    const bar = await screen.findByTestId('egress-fake-ip')
+    const text = bar.textContent ?? ''
+    expect(text).toContain('fake-IP')
+    expect(text).toContain('公共 DNS')
+    expect(text).toContain('admin.shopify.com')
+    expect(text).toContain('198.18.0.7')
+  })
+
+  it('没检测到就不出这条黄条（别吓人）', async () => {
+    state.runtime = { ...READY, egress: { fake_ip_detected: false, trusted_hosts: [] } }
+    renderWithProviders(<ConnectionsPage />)
+    await screen.findByTestId('runtime-bar')
+    expect(screen.queryByTestId('egress-fake-ip')).toBeNull()
+  })
+})

@@ -184,6 +184,20 @@ export interface RuntimeStatusView {
   checked_at: string
   /** 本机加密秘密库（通用 IMAP / SMTP 凭据存这里）。 */
   secrets_vault: { available: boolean; reason?: string }
+  /**
+   * WP44：这台机器的**出站解析环境**。
+   *
+   * 代理开着 fake-IP 模式时，外网域名会被解析成保留网段的假地址，连接器的
+   * SSRF 防护把它当内网直接拒掉。界面上要把这件事说成人话，而不是把
+   * `must not resolve to private or reserved IP` 原样甩给用户。
+   */
+  egress?: {
+    fake_ip_detected: boolean
+    /** 已经放行的域名（`AGENTSWS_CONNECT_TRUSTED_HOSTS`）。 */
+    trusted_hosts: string[]
+    /** 凭什么这么判（"api.deepseek.com 解析到了 198.18.0.7"）。 */
+    detail?: string
+  }
 }
 
 export interface ConnectionsActor {

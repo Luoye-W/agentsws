@@ -16,7 +16,7 @@ import type {
 } from '@agentsws/api'
 import type { EventEnvelope } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createConnections } from '../src/connections.js'
+import { createConnections, egressAdvice } from '../src/connections.js'
 import { createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 import type { BrokerFetch } from '../src/shopify-broker.js'
@@ -825,6 +825,104 @@ describe('WP44 老办法接的连接：标 legacy 并提示改用客户端凭据
     })
     try {
       expect((await assembly.port.list())[0]?.legacy).toBeUndefined()
+    } finally {
+      assembly.close()
+    }
+  })
+})
+
+// ── WP44：代理 fake-IP 环境下的出站防护 ────────────────────────────────
+
+describe('WP44 出站防护给人话（代理 fake-IP）', () => {
+  it('egressAdvice：认得出上游那句英文，翻成"两条修法"的中文；别的错原样放过', () => {
+    const raw = 'Egress blocked: hostname must not resolve to private or reserved IP'
+    const advice = egressAdvice(raw, [])
+    expect(advice).toContain('fake-IP')
+    expect(advice).toContain('公共 DNS')
+    expect(advice).toContain('AGENTSWS_CONNECT_TRUSTED_HOSTS')
+    // 已经有信任名单时把名单念出来（用户要判断"我要连的这个在不在里面"）
+    expect(egressAdvice(raw, ['admin.shopify.com'])).toContain('admin.shopify.com')
+    // 不是这个原因就不抢答
+    expect(egressAdvice('bad credentials', [])).toBeUndefined()
+    expect(egressAdvice('ECONNREFUSED 127.0.0.1:993', [])).toBeUndefined()
+  })
+
+  it('runtime 状态里带 egress：解析到保留网段 = fake_ip_detected，信任名单原样回', async () => {
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: {
+        [SECRETS_KEY_ENV]: SECRETS_KEY,
+        AGENTSWS_CONNECT_TRUSTED_HOSTS: 'admin.shopify.com, api.deepseek.com',
+      },
+      connect: fakeConnect([]) as never,
+      // Clash 的 fake-IP 池
+      resolveIpv4: async () => ['198.18.0.7'],
+    })
+    try {
+      const status = await assembly.port.runtime()
+      expect(status.egress?.fake_ip_detected).toBe(true)
+      expect(status.egress?.trusted_hosts).toEqual(['admin.shopify.com', 'api.deepseek.com'])
+      expect(status.egress?.detail).toContain('198.18.0.7')
+    } finally {
+      assembly.close()
+    }
+  })
+
+  it('解析到真实公网地址 = 没开 fake-IP', async () => {
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: { [SECRETS_KEY_ENV]: SECRETS_KEY },
+      connect: fakeConnect([]) as never,
+      resolveIpv4: async () => ['104.18.26.90'],
+    })
+    try {
+      const status = await assembly.port.runtime()
+      expect(status.egress?.fake_ip_detected).toBe(false)
+      expect(status.egress?.trusted_hosts).toEqual([])
+    } finally {
+      assembly.close()
+    }
+  })
+
+  it('试连撞上出站防护：回的是人话，而且这台机器从此记住"被拦过"', async () => {
+    const connect = fakeConnect([{ id: 'conn_shop', service: 'shopify_admin', alias: '主店' }])
+    // 目录里给一个零必填参数的只读动作，试连才挑得到它
+    connect.actions = async () => [
+      {
+        id: 'shopify_admin.get_shop',
+        service: 'shopify_admin',
+        side_effect: 'read' as const,
+        required_scopes: [],
+        input_schema: { type: 'object', properties: {}, required: [] },
+      },
+    ]
+    connect.execute = async () => {
+      throw Object.assign(
+        new Error('Egress blocked: hostname must not resolve to private or reserved IP'),
+        { code: 'provider_unavailable' },
+      )
+    }
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: { [SECRETS_KEY_ENV]: SECRETS_KEY },
+      connect: connect as never,
+      // 主动探测看不出来（宿主机和容器的解析路径可能不一样）——被拦过这件事本身就是证据
+      resolveIpv4: async () => ['104.18.26.90'],
+    })
+    try {
+      const result = await assembly.port.test(
+        { workspace_id: 'ws_1', person_id: 'p_1' },
+        'conn_shop',
+      )
+      expect(result.ok).toBe(false)
+      expect(result.detail).toContain('fake-IP')
+      // 不该把上游那句英文原样甩给用户
+      expect(result.detail).not.toContain('must not resolve')
+      const status = await assembly.port.runtime()
+      expect(status.egress?.fake_ip_detected).toBe(true)
     } finally {
       assembly.close()
     }
