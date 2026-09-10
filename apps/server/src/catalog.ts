@@ -8,21 +8,17 @@
  *
  * 每条 `steps` ≤ 5 步、全是白话、带外链——用户照着做完就能把值粘进原生表单。
  */
-import type { ProviderAuthOption, ProviderFieldSpec, ProviderSetupGuide } from '@agentsws/api'
+import type { ProviderFieldSpec, ProviderSetupGuide } from '@agentsws/api'
 
 export type CatalogAuth = 'oauth2' | 'api_key' | 'custom_credential'
 
 /**
- * 同一个服务的一种接法（WP25）。
- *
- * `flow` 决定提交后走哪条装配路径：
- * - `form`：字段原样转给 `store` 指的那个凭据库（老行为）；
+ * 提交后走哪条装配路径（WP44 起每个 provider 只有一条）：
+ * - `form`：字段原样转给 `store` 指的那个凭据库；
  * - `shopify_client_credentials`：字段是**应用凭据**，先经 `shopify-broker.ts`
  *   换成 Admin API 令牌，再把令牌 PUT 进 OpenConnector。
  */
-export interface CatalogAuthOption extends ProviderAuthOption {
-  flow: 'form' | 'shopify_client_credentials'
-}
+export type CatalogFlow = 'form' | 'shopify_client_credentials'
 
 export interface CatalogEntry {
   /** 我们对外的 provider id。 */
@@ -35,22 +31,19 @@ export interface CatalogEntry {
   store: 'openconnector' | 'local_vault'
   /** 喂哪些工作台数据源（deck 的 DataSourceId）。 */
   data_sources: string[]
-  /** 默认（推荐）那条接法的字段。有 `auth_options` 时等于第一条的 `fields`。 */
+  /** 原生表单要画的字段。 */
   fields: ProviderFieldSpec[]
   setup_guide: ProviderSetupGuide
   data_note?: string
   /** 试连时优先挑名字里带这些词的只读 Action。 */
   smoke_hints?: string[]
-  /** 两种以上接法时列出来，第一条是推荐的那条。 */
-  auth_options?: CatalogAuthOption[]
+  /** 提交后走哪条装配路径；不写就是 `form`。 */
+  flow?: CatalogFlow
 }
 
-/** 用户选的那条接法；`id` 不认识就回推荐的那条（不报错，界面可能是旧的）。 */
-export function authOptionOf(entry: CatalogEntry, id?: string): CatalogAuthOption | undefined {
-  const options = entry.auth_options
-  if (options === undefined || options.length === 0) return undefined
-  if (id === undefined) return options[0]
-  return options.find((o) => o.id === id) ?? options[0]
+/** 这个 provider 的接法。**每个 provider 只有一条**（WP44 删掉了 Shopify 的第二条）。 */
+export function flowOf(entry: CatalogEntry): CatalogFlow {
+  return entry.flow ?? 'form'
 }
 
 /** 08 §3 覆盖对照：上游 service 名 → 我们的 provider id。 */
@@ -131,63 +124,11 @@ export const CATALOG: readonly CatalogEntry[] = [
     smoke_hints: ['get_shop', 'shop', 'list_locations'],
     fields: SHOPIFY_DEV_APP_FIELDS,
     setup_guide: SHOPIFY_DEV_APP_GUIDE,
-    auth_options: [
-      {
-        id: 'dev_app',
-        label: 'Dev Dashboard 应用（客户端 ID + 密钥）',
-        summary: '2025 年之后 Shopify 推荐的做法。填一次 ID 和密钥，令牌到期我们自己换，不用你管。',
-        recommended: true,
-        auth: 'api_key',
-        flow: 'shopify_client_credentials',
-        fields: SHOPIFY_DEV_APP_FIELDS,
-        setup_guide: SHOPIFY_DEV_APP_GUIDE,
-      },
-      {
-        id: 'access_token',
-        label: '自定义应用访问令牌（shpat_…）',
-        summary: '老办法。店铺后台里建的"自定义应用"直接给一串令牌，粘过来就行，不会过期。',
-        auth: 'api_key',
-        flow: 'form',
-        // 09-09 实测：上游的字段 id 是 `apiKey` / `shopDomain`，写别的名字会被 400 顶回来
-        fields: [
-          {
-            name: 'shopDomain',
-            label: '店铺域名',
-            secret: false,
-            required: true,
-            kind: 'text',
-            placeholder: 'your-store.myshopify.com',
-            hint: '就是后台地址里 admin.shopify.com/store/ 后面那一段，写全 .myshopify.com',
-          },
-          {
-            name: 'apiKey',
-            label: 'Admin API 访问令牌',
-            secret: true,
-            required: true,
-            kind: 'password',
-            placeholder: 'shpat_…',
-            hint: '只显示一次，关掉页面就看不到了；没抄下来就重新装一次应用',
-          },
-        ],
-        setup_guide: {
-          summary:
-            '在自己的 Shopify 后台建一个"自定义应用"，把它的访问令牌粘过来。不用申请、不用审核。',
-          steps: [
-            '打开 Shopify 后台 → 设置 → 应用和销售渠道 → 开发应用',
-            '点"创建应用"，名字随便写（比如 agentsws）',
-            '在"配置 Admin API 权限"里勾上：订单读写、退货读写、客户读取、商品读取',
-            '保存后点"安装应用"，页面上会出现一串 shpat_ 开头的访问令牌',
-            '把店铺域名和这串令牌填进下面的表单——令牌只显示一次，先复制',
-          ],
-          links: [
-            {
-              label: 'Shopify 自定义应用官方说明',
-              url: 'https://help.shopify.com/manual/apps/app-types/custom-apps',
-            },
-          ],
-        },
-      },
-    ],
+    // WP44：老的「自定义应用访问令牌（shpat_…）」那条接法已经删掉。
+    // Shopify 2025 之后新建的自定义应用只在 Dev Dashboard 里给客户端 ID + 密钥；
+    // 保留两条路只会让非技术用户在两张表单之间猜，而且 shpat 那串不会过期、
+    // 撤销全靠人记得去后台删——权限与轮换都不如客户端凭据。
+    flow: 'shopify_client_credentials',
   },
   {
     service: 'imap_smtp',

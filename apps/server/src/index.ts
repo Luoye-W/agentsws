@@ -34,12 +34,12 @@ export {
   zipDir,
 } from './backup.js'
 export {
-  authOptionOf,
   CATALOG,
   type CatalogAuth,
-  type CatalogAuthOption,
   type CatalogEntry,
+  type CatalogFlow,
   catalogEntry,
+  flowOf,
   serviceOfUpstream,
   UPSTREAM_TO_SERVICE,
 } from './catalog.js'

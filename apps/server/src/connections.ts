@@ -55,14 +55,7 @@ import type { ConnectionLike, DataSourceStatus } from '@agentsws/deck'
 import { mergeDataSources } from '@agentsws/deck'
 import { seededRandom } from '@agentsws/kernel'
 import { MockOpenConnector } from '@agentsws/stand-ins'
-import {
-  authOptionOf,
-  CATALOG,
-  type CatalogAuthOption,
-  type CatalogEntry,
-  catalogEntry,
-  serviceOfUpstream,
-} from './catalog.js'
+import { CATALOG, type CatalogEntry, catalogEntry, flowOf, serviceOfUpstream } from './catalog.js'
 import {
   createSecretStore,
   SECRETS_KEY_ENV,
@@ -614,10 +607,33 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     ...testFields(state.tests[meta.id]),
   })
 
+  /**
+   * WP44 老连接识别：一条 Shopify 连接**不是经纪人接管的**，就只能是老办法接的
+   * （用户自己在店铺后台建的自定义应用，把 `shpat_` 令牌直填进来）。
+   *
+   * 判据是"我们这边有没有它的客户端凭据"，不是去猜令牌长什么样——凭据在
+   * OpenConnector 的库里，我们看不到，也不该看。
+   */
+  const legacyOf = (
+    service: string,
+    connection_id: string,
+  ): { kind: 'shopify_access_token'; hint: string } | undefined => {
+    if (service !== 'shopify_admin') return undefined
+    if (shopify.recordOf(connection_id) !== undefined) return undefined
+    return {
+      kind: 'shopify_access_token',
+      hint:
+        '这家店当初是把 shpat_ 开头的访问令牌直接粘进来接的。那条路已经不再提供：' +
+        '令牌不会过期、也没人替你换，泄露了只能去后台手删。' +
+        '断开它，再用「Dev Dashboard 应用（客户端 ID + 密钥）」重接一次——之后令牌我们自己续。',
+    }
+  }
+
   const remoteView = (conn: Connection): ConnectionView => {
     const service = serviceOfUpstream(conn.service)
     const entry = catalogEntry(service)
     const test = state.tests[conn.id]
+    const legacy = legacyOf(service, conn.id)
     return {
       id: conn.id,
       service,
@@ -629,6 +645,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       credential_store: 'openconnector',
       data_sources: entry?.data_sources ?? [],
       ...testFields(test),
+      ...(legacy === undefined ? {} : { legacy }),
     }
   }
 
@@ -650,6 +667,20 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   }
 
   await listAll()
+
+  // 启动时把老办法接的那几条各记一条事件（只有连接 id 与种类，没有任何凭据线索）。
+  // 界面上那句提示来自 `ConnectionView.legacy`；这条事件是给审计与升级检查看的。
+  for (const row of cached) {
+    if (row.legacy === undefined) continue
+    options.appendEvent?.({
+      schema_version: 1,
+      workspace_id,
+      type: 'connect.legacy_connection_detected',
+      actor: { kind: 'system', id: 'connections' },
+      correlation: { trace_id: nextTraceId('legacy') },
+      payload: { connection_id: row.id, service: row.service, kind: row.legacy.kind },
+    })
+  }
 
   // ── 试连
   /** 跑一次只读 Action。分出来是为了「上游 401 → 换张令牌 → 再跑一次」能复用。 */
@@ -858,7 +889,6 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
    */
   const submitShopifyApp = async (
     entry: CatalogEntry,
-    option: CatalogAuthOption,
     input: SubmitConnectionInput,
   ): Promise<{ connection: ConnectionView; test: ConnectTestResult }> => {
     const usable = await connectUsable()
@@ -893,7 +923,6 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         alias: input.alias,
         connection_id: record.connection_id,
         field_names: Object.keys(input.fields),
-        auth_option: option.id,
         store: 'local_vault+openconnector',
       },
     })
@@ -932,20 +961,6 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           data_sources: [...entry.data_sources],
           setup_guide: entry.setup_guide,
           ...(entry.data_note === undefined ? {} : { data_note: entry.data_note }),
-          // WP25：Shopify 有两种接法，让用户先选一次（`flow` 是装配细节，不出网关）
-          ...(entry.auth_options === undefined
-            ? {}
-            : {
-                auth_options: entry.auth_options.map(({ flow: _flow, ...option }) => ({
-                  ...option,
-                  fields: option.fields.map((f) => ({ ...f })),
-                  setup_guide: {
-                    ...option.setup_guide,
-                    steps: [...option.setup_guide.steps],
-                    links: option.setup_guide.links.map((l) => ({ ...l })),
-                  },
-                })),
-              }),
         }
       })
     },
@@ -955,7 +970,6 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     async begin(_actor: ConnectionsActor, service, input): Promise<BeginConnectResult> {
       const entry = catalogEntry(service)
       if (entry === undefined) throw notFound(`没有这个服务：${service}`)
-      const option = authOptionOf(entry, input.auth_option)
       if (entry.store === 'local_vault') {
         if (!secrets.available) {
           throw invalid(
@@ -967,18 +981,18 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       }
       // 客户端凭据那条路根本不去问上游要表单：字段是我们自己的（ID / 密钥 / 域名），
       // 换到令牌之后才有 OpenConnector 的事。
-      if (option !== undefined && option.flow === 'shopify_client_credentials') {
+      if (flowOf(entry) === 'shopify_client_credentials') {
         if (!secrets.available) {
           throw invalid(
             `这台机器没有秘密库密钥（环境变量 ${SECRETS_KEY_ENV}），客户端密钥无处安全存放。` +
-              '可以先用"自定义应用访问令牌"那一种接法。',
+              '桌面壳首次启动会生成它；直接跑服务进程时自己生成一把 32 字节密钥再启动。',
           )
         }
         const usableNow = await connectUsable()
         if (!usableNow.ok) throw unavailable(usableNow.reason ?? 'OpenConnector 不可用')
         return {
           request_id: `creq_shopify_${nextLocalId()}`,
-          secure_form: { fields: option.fields, auth_option: option.id },
+          secure_form: { fields: entry.fields },
         }
       }
       const usable = await connectUsable()
@@ -996,12 +1010,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           : { authorization_url: started.authorization_url }),
         ...(started.secure_form === undefined
           ? {}
-          : {
-              secure_form: {
-                fields: fieldSpecs(option?.fields ?? entry.fields, started.secure_form.fields),
-                ...(option === undefined ? {} : { auth_option: option.id }),
-              },
-            }),
+          : { secure_form: { fields: fieldSpecs(entry.fields, started.secure_form.fields) } }),
       }
     },
 
@@ -1028,8 +1037,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       const entry = catalogEntry(service)
       if (entry === undefined) throw notFound(`没有这个服务：${service}`)
       if (entry.auth === 'oauth2') throw invalid(`${entry.label} 走授权页，不接受表单直填`)
-      const option = authOptionOf(entry, input.auth_option)
-      const required = option?.fields ?? entry.fields
+      const required = entry.fields
       const missing = required
         .filter((f) => f.required && (input.fields[f.name] ?? '').trim() === '')
         .map((f) => f.name)
@@ -1037,9 +1045,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         throw invalid(`还有必填项没填：${missing.join('、')}`, { missing_fields: missing })
       }
 
-      if (option !== undefined && option.flow === 'shopify_client_credentials') {
-        return submitShopifyApp(entry, option, input)
-      }
+      if (flowOf(entry) === 'shopify_client_credentials') return submitShopifyApp(entry, input)
 
       if (entry.store === 'local_vault') {
         if (!secrets.available) {

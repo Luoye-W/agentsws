@@ -66,7 +66,17 @@ export interface ConnectionView {
   data_sources: string[]
   last_tested_at?: string
   last_test?: ConnectTestResult
+  /**
+   * WP44：这条连接是用**已经下线的老办法**接的（Shopify 的 `shpat_` 直填令牌）。
+   *
+   * 它照常能用——令牌还在 OpenConnector 的凭据库里——但没人替它轮换，也撤不掉。
+   * 界面上要说清楚该怎么换过去；`hint` 就是给非技术用户看的那一句。
+   */
+  legacy?: { kind: LegacyConnectionKind; hint: string }
 }
+
+/** 老办法的种类。v1 只有一种：Shopify 自定义应用的 `shpat_` 访问令牌。 */
+export type LegacyConnectionKind = 'shopify_access_token'
 
 /** 原生表单的一个字段。`secret: true` 的在前端一律 `type=password` + `autocomplete=off`。 */
 export interface ProviderFieldSpec {
@@ -89,11 +99,11 @@ export interface ProviderSetupGuide {
 }
 
 /**
- * 同一个服务的**另一种接法**（WP25）。
+ * 同一个服务的**另一种接法**（WP25 引入）。
  *
- * Shopify 是第一个需要它的：Dev Dashboard 建的应用只给客户端 ID + 密钥（推荐），
- * 老的自定义应用给一串 `shpat_` 令牌（仍然能用）。两条路要的字段、要做的准备
- * 完全不一样，硬塞进一张表单会让非技术用户填错，所以让他先选一次。
+ * WP44 起没有任何 provider 再产出它：Shopify 的第二条路（`shpat_` 直填令牌）已经删掉，
+ * 每个 provider 只有一条接法。类型与 `auth_options` 字段保留，等下一个真需要两条路的
+ * provider（多半是同时支持 API key 与 OAuth 的那种）；界面对空字段照旧画一张表单。
  */
 export interface ProviderAuthOption {
   id: string
@@ -120,7 +130,7 @@ export interface ProviderView {
   setup_guide: ProviderSetupGuide
   /** 「已连接，数据接入下一版」之类的诚实说明。 */
   data_note?: string
-  /** 有两种以上接法时给出来；只有一种时整个字段不出现（界面照旧画一张表单）。 */
+  /** 有两种以上接法时给出来；WP44 起没有 provider 产出它（见 {@link ProviderAuthOption}）。 */
   auth_options?: ProviderAuthOption[]
 }
 
