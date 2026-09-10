@@ -1072,6 +1072,32 @@ export function createSchedulePort(options: SchedulePortOptions): SchedulePort {
       if (found === undefined || found.workspace_id !== actor.workspace_id) return undefined
       return workflowView(found)
     },
+
+    /** 25 §5：开一条流程实例。定义必须先登记过（包里带的那几条）。 */
+    async startWorkflow(actor, input) {
+      const def = workflows.definition(input.def_id)
+      if (def === undefined) {
+        throw new ServerScheduleError('not_found', `没有这个流程定义：${input.def_id}`)
+      }
+      const role_id = options.assignmentOf?.(actor.assignment_id)?.role_id
+      const started = await workflows.start(
+        def,
+        input.subject as WorkflowInstanceRecord['subject'],
+        {
+          workspace_id: actor.workspace_id,
+          ...(input.conversation_id === undefined
+            ? {}
+            : { conversation_id: input.conversation_id }),
+          ...(role_id === undefined ? {} : { role_id }),
+        },
+      )
+      return workflowView(started)
+    },
+
+    workflowDefinition(def_id) {
+      const def = workflows.definition(def_id)
+      return def === undefined ? undefined : { id: def.id, name: def.name }
+    },
   }
 }
 

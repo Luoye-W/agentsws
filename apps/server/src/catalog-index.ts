@@ -22,6 +22,8 @@ import type {
   CatalogPort,
   CatalogSimilarHit,
 } from '@agentsws/api'
+// 与 `POST /v1/schedules` 算的是同一把钥匙——一处定义，两处用
+import { triggerKeyOf } from '@agentsws/api'
 import {
   type CatalogEntry,
   CatalogError,
@@ -31,23 +33,6 @@ import {
 } from '@agentsws/catalog'
 import type { AssignmentId, Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
 import type { Scheduler, ScheduleTask, WorkflowEngine } from '@agentsws/schedule'
-
-/** 触发器 → 那把"同触发器"的钥匙。写法规整成一行，两条一样的定时任务才认得出来。 */
-export function triggerKeyOf(trigger: ScheduleTask['trigger'] | undefined): string | undefined {
-  if (trigger === undefined) return undefined
-  switch (trigger.kind) {
-    case 'cron':
-      return `cron:${trigger.expr}@${trigger.tz}`
-    case 'interval':
-      return `interval:${trigger.every_ms}`
-    case 'once':
-      return `once:${trigger.at}`
-    case 'after_event':
-      return `event:${trigger.event}`
-    default:
-      return undefined
-  }
-}
 
 /** 已经停掉的不进工具箱：工具箱是"现在有什么能用"，不是墓地。 */
 const LIVE_TASK_STATES = new Set<ScheduleTask['state']>(['pending', 'active', 'running', 'paused'])

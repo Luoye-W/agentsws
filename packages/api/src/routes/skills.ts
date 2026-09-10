@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
+import { DuplicateAck, guardSimilar, recordCatalogNote } from './catalog.js'
 
 const READ = { domain: 'skill', op: 'read', range: 'workspace', sensitivity: 'internal' } as const
 const WRITE = { domain: 'skill', op: 'stage', range: 'workspace', sensitivity: 'internal' } as const
@@ -23,6 +24,14 @@ const OverlayBody = z.object({
     .min(1),
   base_version: z.string().min(1),
   version: z.number().int().nonnegative(),
+  /**
+   * 40 §2.2「建之前先查」。**只在第一次给自己开副本时查**（`version === 0`）：
+   * 之后每次改自己的那份都弹一次选择题卡，那是骚扰不是帮忙。
+   *
+   * 查到的候选就是公司 / 部门层那一份同名技能——"要不要先看看公司版够不够用，
+   * 真不够再自己开一份，并且说一句为什么"。
+   */
+  duplicate_ack: DuplicateAck.optional(),
 })
 
 const ExcludeBody = z.object({ excluded: z.boolean() })
@@ -132,22 +141,37 @@ export function skillRoutes(): Route[] {
         const p = principalOf(c)
         assignmentOf(c)
         const input = await body(c, OverlayBody)
-        return ok(
-          c,
-          await deps.skills.setOverlay({
-            skill: param(c, 'name'),
-            tier: 'personal',
-            owner: p.person_id,
-            ops: input.ops.map((o) => ({
-              op: o.op,
-              section_id: o.section_id,
-              ...(o.body === undefined ? {} : { body: o.body }),
-              ...(o.origin === undefined ? {} : { origin: o.origin }),
-            })),
-            base_version: input.base_version,
-            version: input.version,
-          }),
-        )
+        const name = param(c, 'name')
+        // 技能副本 = 第一次写个人层 overlay。已经有副本的（version > 0）不再拦
+        const guard =
+          input.version === 0
+            ? await guardSimilar(deps, {
+                workspace_id: p.workspace_id,
+                kind: 'skill',
+                title: name,
+                target: `skill:${name}`,
+                ...(input.duplicate_ack === undefined ? {} : { ack: input.duplicate_ack }),
+              })
+            : {}
+        const overlay = await deps.skills.setOverlay({
+          skill: name,
+          tier: 'personal',
+          owner: p.person_id,
+          ops: input.ops.map((o) => ({
+            op: o.op,
+            section_id: o.section_id,
+            ...(o.body === undefined ? {} : { body: o.body }),
+            ...(o.origin === undefined ? {} : { origin: o.origin }),
+          })),
+          base_version: input.base_version,
+          version: input.version,
+        })
+        await recordCatalogNote(deps, {
+          workspace_id: p.workspace_id,
+          entry_id: `skill:${name}`,
+          guard,
+        })
+        return ok(c, overlay)
       },
     ),
     route(

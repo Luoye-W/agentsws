@@ -22,6 +22,7 @@ import {
 } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import { DuplicateAck, type GuardResult, guardSimilar, recordCatalogNote } from './catalog.js'
 import { fromDeckError } from './workstation.js'
 
 const READ = {
@@ -85,6 +86,12 @@ const DecideBody = z.object({
   instruction: z.object({ scope: z.enum(INSTRUCTION_SCOPES), text: z.string().min(1) }).optional(),
   /** 乐观并发：与卡片的 version（= revision）不一致即 409 */
   version: z.number().int().nonnegative().optional(),
+  /**
+   * 40 §2.2「建之前先查」：`instruction.scope === 'global_rule'` 会落成一条**规矩**，
+   * 规矩也是"被建出来的东西"。公司里已经有一条差不多的规矩时，这里回
+   * `409 similar_exists`；"我这个不一样，仍新建"要写一句为什么。
+   */
+  duplicate_ack: DuplicateAck.optional(),
 })
 
 const KINDS = [
@@ -219,9 +226,11 @@ async function landInstruction(
     person_id: string
     workspace_id: string
     assignment_id: string
+    /** 40 §2.2：`global_rule` 的查重在 `decide` **之前**就做完了，结果传进来 */
+    guard: GuardResult
   },
 ): Promise<{ kind: string; approval_item_id: string } | undefined> {
-  const { item, scope, text } = input
+  const { item, scope, text, guard } = input
   if (scope !== 'similar_cases' && scope !== 'global_rule') return undefined
   const lesson = scope === 'similar_cases'
   const routing = {
@@ -295,9 +304,27 @@ async function landInstruction(
           precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
         },
       })
-  return created.state === 'blocked'
-    ? undefined
-    : { kind: created.kind, approval_item_id: created.id }
+  if (created.state === 'blocked') return undefined
+  if (!lesson) {
+    // 规矩在别处没有一张自己的表：目录替它保管一份，工具箱上才看得见
+    await deps.catalog?.record?.({
+      kind: 'rule',
+      id: `rule:${created.id}`,
+      title: text.slice(0, 60),
+      summary: '指导落成的规矩：批准后对这个岗位一律生效（05）',
+      owner: input.person_id,
+      layer: 'personal',
+      used_by_positions: [input.assignment_id],
+      runs_30d: 0,
+      workspace_id: input.workspace_id,
+    })
+    await recordCatalogNote(deps, {
+      workspace_id: input.workspace_id,
+      entry_id: `rule:${created.id}`,
+      guard,
+    })
+  }
+  return { kind: created.kind, approval_item_id: created.id }
 }
 
 export function approvalRoutes(): Route[] {
@@ -599,6 +626,21 @@ export function approvalRoutes(): Route[] {
           }
         }
 
+        /**
+         * 40 §2.2：`global_rule` 落的是一条**规矩**，规矩也是"被建出来的东西"。
+         * 查重必须在 `decide` **之前**——不然人的驳回已经生效了，却回一个 409，
+         * 界面上就成了"我按了没反应但报错"。
+         */
+        const ruleGuard: GuardResult =
+          resolved.instruction_scope === 'global_rule' && input.instruction !== undefined
+            ? await guardSimilar(deps, {
+                workspace_id: p.workspace_id,
+                kind: 'rule',
+                title: input.instruction.text,
+                ...(input.duplicate_ack === undefined ? {} : { ack: input.duplicate_ack }),
+              })
+            : {}
+
         const out = await deps.approvals.decide(id, p.person_id, {
           decision_token: token,
           action: resolved.action,
@@ -619,6 +661,7 @@ export function approvalRoutes(): Route[] {
                 person_id: p.person_id,
                 workspace_id: p.workspace_id,
                 assignment_id: assignmentOf(c).id,
+                guard: ruleGuard,
               })
         // 37 §4.1：认领卡接下来才形成责任（31 I13）——建一条挂在会议事项上的待办
         let claimed: Todo | undefined

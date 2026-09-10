@@ -1135,7 +1135,8 @@ export interface paths {
     /** 流程实例列表（25 §5 `GET /workflows/instances?subject=&state=`） */
     get: operations['listWorkflows']
     put?: never
-    post?: never
+    /** 开一条流程实例（25 §5 `POST /workflows/{def}/start`）；建之前先查 */
+    post: operations['startWorkflow']
     delete?: never
     options?: never
     head?: never
@@ -1535,6 +1536,23 @@ export interface paths {
     get: operations['getBlockData']
     put?: never
     post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/blocks/propose': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 对话定制卡：把一个积木钉成自己的卡（29 §4）；建之前先查 */
+    post: operations['proposeBlock']
     delete?: never
     options?: never
     head?: never
@@ -3436,6 +3454,13 @@ export interface operations {
             text: string
           }
           version?: number
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
         }
       }
     }
@@ -8244,6 +8269,13 @@ export interface operations {
           }[]
           base_version: string
           version: number
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
         }
       }
     }
@@ -8755,6 +8787,13 @@ export interface operations {
            */
           misfire_policy?: 'run_once_now' | 'skip'
           conversation_id?: string
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
         }
       }
     }
@@ -9195,6 +9234,109 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  startWorkflow: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          def_id: string
+          subject: string
+          conversation_id?: string
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
+        }
+      }
+    }
+    responses: {
+      /** @description WorkflowInstance */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
         headers: {
           [name: string]: unknown
         }
@@ -11966,6 +12108,110 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  proposeBlock: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          block_id: string
+          title?: string
+          conversation_id: string
+          message_ref?: string
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
+        }
+      }
+    }
+    responses: {
+      /** @description CustomCard */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
         headers: {
           [name: string]: unknown
         }

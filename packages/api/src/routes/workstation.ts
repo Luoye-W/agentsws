@@ -44,6 +44,7 @@ import type {
   WorkstationPort,
   WorkstationRange,
 } from '../types.js'
+import { DuplicateAck, guardSimilar, recordCatalogNote } from './catalog.js'
 
 /** 工作台的基础准入：能读自己的审批队列。逐条查询的域权限在处理器里另查（29 §2）。 */
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
@@ -128,6 +129,17 @@ async function todaysReport(
     events.push(e)
   return battleReport(events, { now: deps.clock.now(), tz_offset_minutes })
 }
+
+/** 29 §4 对话定制：模型只提出"把哪个积木钉成卡"，payload 永远由服务端算（原则 ③）。 */
+const ProposeBlockBody = z.object({
+  block_id: z.string().min(1),
+  /** 不给就用积木自己的标题 */
+  title: z.string().min(1).max(120).optional(),
+  /** 29 §1 `CustomCard.created_from`：从哪次对话来的 */
+  conversation_id: z.string().min(1),
+  message_ref: z.string().min(1).optional(),
+  duplicate_ack: DuplicateAck.optional(),
+})
 
 const HomeTilesBody = z.object({
   position_id: z.string().min(1),
@@ -500,6 +512,80 @@ export function workstationRoutes(): Route[] {
         } catch (err) {
           return fromDeckError(err)
         }
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/blocks/propose',
+        operationId: 'proposeBlock',
+        summary: '对话定制卡：把一个积木钉成自己的卡（29 §4）；建之前先查',
+        tag: 'workstation',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: ProposeBlockBody,
+        returns: 'CustomCard',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const assignment = assignmentOf(c)
+        const input = await body(c, ProposeBlockBody)
+        // 29 原则 ①：组件与查询只能来自注册表；未注册的积木 id 一律拒
+        let source: keyof typeof SOURCE_AUTHZ
+        let def: BlockDef
+        try {
+          def = blockDef(input.block_id)
+          source = queryDef(def.query).source
+        } catch (err) {
+          return fromDeckError(err)
+        }
+        // 29 §2：查询以本人身份执行，无权的数据源连卡都不给定制
+        assertQueryAllowed(deps, assignment.id, source)
+        const title = input.title ?? def.title
+        // 40 §2.2：定制卡也走"建之前先查"——同一个积木上钉两张一样的卡最常见
+        const guard = await guardSimilar(deps, {
+          workspace_id: p.workspace_id,
+          kind: 'custom_card',
+          title,
+          target: `block:${input.block_id}`,
+          ...(input.duplicate_ack === undefined ? {} : { ack: input.duplicate_ack }),
+        })
+        const card = {
+          id: `card_${assignment.id}_${input.block_id}`,
+          placement: def.placement,
+          component: def.component,
+          query: { name: def.query, params: {} },
+          pinnable: true,
+          adaptive: false,
+          source: 'user' as const,
+          owner: p.person_id,
+          created_from: {
+            conversation_id: input.conversation_id,
+            ...(input.message_ref === undefined ? {} : { message_ref: input.message_ref }),
+          },
+        }
+        // 定制卡在别处没有一张自己的表：目录替它保管一份（工具箱上看得见、下次查得到）
+        await deps.catalog?.record?.({
+          kind: 'custom_card',
+          id: `custom_card:${card.id}`,
+          title,
+          summary: `对话里定制的卡：${def.title}`,
+          owner: p.person_id,
+          layer: 'personal',
+          used_by_positions: [assignment.id],
+          runs_30d: 0,
+          created_from: card.created_from,
+          target: `block:${input.block_id}`,
+          workspace_id: p.workspace_id,
+          created_at: deps.clock.now(),
+        })
+        await recordCatalogNote(deps, {
+          workspace_id: p.workspace_id,
+          entry_id: `custom_card:${card.id}`,
+          guard,
+        })
+        return ok(c, card, 201)
       },
     ),
     route(

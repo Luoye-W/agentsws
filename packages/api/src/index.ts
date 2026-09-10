@@ -87,6 +87,7 @@ export {
   guardSimilar,
   MIN_DUPLICATE_REASON,
   recordCatalogNote,
+  triggerKeyOf,
 } from './routes/catalog.js'
 export type {
   BeginConnectResult,

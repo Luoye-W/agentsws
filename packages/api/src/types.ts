@@ -494,6 +494,16 @@ export interface SchedulePort {
   runNow(actor: ScheduleActor, id: string): MaybePromise<ScheduleRunOutcome>
   workflows(query: WorkflowListQuery): MaybePromise<WorkflowInstanceView[]>
   workflow(actor: ScheduleActor, id: string): MaybePromise<WorkflowInstanceView | undefined>
+  /**
+   * 25 §5 `POST /workflows/{def}/start`：开一条流程实例。
+   * 可选面——没装流程引擎的发行版少这一条路由（回 not_implemented），其余照常。
+   */
+  startWorkflow?(
+    actor: ScheduleActor & { assignment_id: AssignmentId },
+    input: { def_id: string; subject: { type: string; id: string }; conversation_id?: string },
+  ): MaybePromise<WorkflowInstanceView>
+  /** 流程定义的一句人话标题（"建之前先查"要拿它去比） */
+  workflowDefinition?(def_id: string): MaybePromise<{ id: string; name: string } | undefined>
 }
 
 export interface GatewayDeps {

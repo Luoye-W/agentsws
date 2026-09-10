@@ -111,6 +111,40 @@ export interface CatalogPort {
     entry_id: string
     reused: string
   }): MaybePromise<void>
+  /**
+   * 记一条"没有家的条目"：对话里定制出来的卡、指导落成的规矩，
+   * 在别的包里没有一张自己的表，目录替它们保管一份。可选面：没装就少两种 kind。
+   */
+  record?(entry: CatalogEntryView): MaybePromise<void>
+}
+
+/**
+ * 触发器 → 那把"同触发器"的钥匙。
+ *
+ * **一处定义，两处用**：建定时任务时（网关）与把调度库投影进目录时（宿主）
+ * 必须算出同一个字符串，否则"同一个 cron 上的两条"永远认不出来。
+ */
+export function triggerKeyOf(
+  trigger:
+    | { kind: 'once'; at: string }
+    | { kind: 'interval'; every_ms: number; from?: string | undefined }
+    | { kind: 'cron'; expr: string; tz: string }
+    | { kind: 'after_event'; event: string }
+    | undefined,
+): string | undefined {
+  if (trigger === undefined) return undefined
+  switch (trigger.kind) {
+    case 'cron':
+      return `cron:${trigger.expr}@${trigger.tz}`
+    case 'interval':
+      return `interval:${trigger.every_ms}`
+    case 'once':
+      return `once:${trigger.at}`
+    case 'after_event':
+      return `event:${trigger.event}`
+    default:
+      return undefined
+  }
 }
 
 const SimilarBody = z.object({

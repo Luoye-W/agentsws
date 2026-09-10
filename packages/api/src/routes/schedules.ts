@@ -19,6 +19,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import { DuplicateAck, guardSimilar, recordCatalogNote, triggerKeyOf } from './catalog.js'
 
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
 
@@ -46,6 +47,11 @@ const CreateBody = z.object({
   misfire_policy: z.enum(['run_once_now', 'skip']).default('run_once_now'),
   /** 与会话绑定（13 §1.3）：从哪次对话来的 */
   conversation_id: z.string().min(1).optional(),
+  /**
+   * 40 §2.2「建之前先查」：不给就先查，查到像的回 `409 similar_exists` + 候选；
+   * 人在选择题卡上选了"我这个不一样，仍新建"就带着理由再来一次。
+   */
+  duplicate_ack: DuplicateAck.optional(),
 })
 
 const PatchBody = z
@@ -65,6 +71,14 @@ const PatchBody = z
       v.misfire_policy !== undefined,
     { message: '至少要改一样（暂停 / 恢复 / 时间 / 标题 / 参数 / 错过策略）' },
   )
+
+const StartWorkflowBody = z.object({
+  def_id: z.string().min(1),
+  /** 这条流程是围着谁转的：`order:ord_1001` / `creator:c_7` */
+  subject: z.string().min(3),
+  conversation_id: z.string().min(1).optional(),
+  duplicate_ack: DuplicateAck.optional(),
+})
 
 const SCOPES = ['position', 'mine', 'workspace'] as const
 
@@ -130,27 +144,38 @@ export function scheduleRoutes(): Route[] {
         const assignment = assignmentOf(c)
         const port = portOf(deps)
         const input = await body(c, CreateBody)
-        return ok(
-          c,
-          await port.create({
-            workspace_id: p.workspace_id,
-            person_id: p.person_id,
-            assignment_id: assignment.id,
-            title: input.title,
-            trigger: input.trigger,
-            effect: input.effect,
-            misfire_policy: input.misfire_policy,
-            ...(input.handler === undefined ? {} : { handler: input.handler }),
-            ...(input.params === undefined ? {} : { params: input.params }),
-            ...(input.assignment_id === undefined
-              ? {}
-              : { target_assignment_id: input.assignment_id }),
-            ...(input.conversation_id === undefined
-              ? {}
-              : { conversation_id: input.conversation_id }),
-          }),
-          201,
-        )
+        // 40 §2.2：保存前先查。触发器是三把钥匙之一——同一个 cron 上挂两条一样的活最常见
+        const trigger = triggerKeyOf(input.trigger)
+        const guard = await guardSimilar(deps, {
+          workspace_id: p.workspace_id,
+          kind: 'schedule',
+          title: input.title,
+          ...(trigger === undefined ? {} : { trigger }),
+          ...(input.duplicate_ack === undefined ? {} : { ack: input.duplicate_ack }),
+        })
+        const created = await port.create({
+          workspace_id: p.workspace_id,
+          person_id: p.person_id,
+          assignment_id: assignment.id,
+          title: input.title,
+          trigger: input.trigger,
+          effect: input.effect,
+          misfire_policy: input.misfire_policy,
+          ...(input.handler === undefined ? {} : { handler: input.handler }),
+          ...(input.params === undefined ? {} : { params: input.params }),
+          ...(input.assignment_id === undefined
+            ? {}
+            : { target_assignment_id: input.assignment_id }),
+          ...(input.conversation_id === undefined
+            ? {}
+            : { conversation_id: input.conversation_id }),
+        })
+        await recordCatalogNote(deps, {
+          workspace_id: p.workspace_id,
+          entry_id: `schedule:${created.id}`,
+          guard,
+        })
+        return ok(c, created, 201)
       },
     ),
     route(
@@ -232,6 +257,60 @@ export function scheduleRoutes(): Route[] {
             param(c, 'id'),
           ),
         )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/workflows',
+        operationId: 'startWorkflow',
+        summary: '开一条流程实例（25 §5 `POST /workflows/{def}/start`）；建之前先查',
+        tag: 'schedule',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        // 流程里可能有 `action` / 发信步骤：`AGENTSWS_HALT=outbound` 时 503
+        outbound: true,
+        body: StartWorkflowBody,
+        returns: 'WorkflowInstance',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const assignment = assignmentOf(c)
+        const port = portOf(deps)
+        if (port.startWorkflow === undefined)
+          throw new ApiError('not_implemented', '这个进程没有装流程引擎')
+        const input = await body(c, StartWorkflowBody)
+        const [type, ...rest] = input.subject.split(':')
+        const id = rest.join(':')
+        if (type === undefined || type === '' || id === '')
+          throw new ApiError('invalid_input', 'subject 要写成 `type:id`')
+        const def = await port.workflowDefinition?.(input.def_id)
+        // 40 §2.2：流程也走"建之前先查"——同一个定义、同一个对象上开两条是最典型的撞车
+        const guard = await guardSimilar(deps, {
+          workspace_id: p.workspace_id,
+          kind: 'workflow',
+          title: def?.name ?? input.def_id,
+          trigger: `workflow:${input.def_id}`,
+          target: `${type}:${id}`,
+          ...(input.duplicate_ack === undefined ? {} : { ack: input.duplicate_ack }),
+        })
+        const started = await port.startWorkflow(
+          { workspace_id: p.workspace_id, person_id: p.person_id, assignment_id: assignment.id },
+          {
+            def_id: input.def_id,
+            subject: { type, id },
+            ...(input.conversation_id === undefined
+              ? {}
+              : { conversation_id: input.conversation_id }),
+          },
+        )
+        await recordCatalogNote(deps, {
+          workspace_id: p.workspace_id,
+          entry_id: `workflow:${input.def_id}`,
+          guard,
+        })
+        return ok(c, started, 201)
       },
     ),
     route(
