@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
     "@deepseek-ai/cordis": "4.0.2",
     "@deepseek-ai/schemastery": "3.18.2",
     "better-sqlite3": "^11.10.0",
