@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
+    "@agentsws/learning": "workspace:*",
     "better-sqlite3": "^12.0.0"
   },
   "devDependencies": {

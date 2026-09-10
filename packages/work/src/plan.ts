@@ -19,6 +19,7 @@ import type {
   Review,
   Todo,
 } from '@agentsws/contracts'
+import { findInProgressSimilar, type InProgressItem } from './collision.js'
 import { isOpen } from './horizon.js'
 import { atLocalTime, HOUR_MS, localDay, MINUTE_MS, ms, overlaps, startOfDay } from './util.js'
 
@@ -46,6 +47,67 @@ export interface DailyPlanInput {
   cards_waiting?: number
   /** 有它才会给「委托给 Agent」的建议 */
   delegate_to?: AssignmentId
+  /**
+   * 40 §3.4「分配任务时就防撞」：别人正在做的事。撞上的建议**不建议**——
+   * 计划卡不该把人推去做一件已经有主人的事。
+   */
+  in_progress?: readonly InProgressItem[]
+  /** 计划是给这个人拟的；他自己正在做的不算撞车（那本来就是他的活） */
+  in_progress_position?: string
+}
+
+/** 一条被撞车挡掉的建议：谁挡的、挡的理由（进 `daily_plan` 卡的运行结果，不进 payload）。 */
+export interface FilteredSuggestion {
+  suggestion_id: string
+  reason: 'in_progress_elsewhere'
+  /** 谁在做 */
+  owner: PersonId
+  /** 在做的那条（待办 / 事项 id） */
+  conflicts_with: string
+}
+
+/**
+ * 把与「别人正在做的事」撞上的建议挑出来（40 §3.4）。
+ *
+ * 只挡**别人**的：自己正在做的那条，正是计划该提醒他接着做的。
+ */
+export function filterCollidingSuggestions(input: {
+  suggestions: readonly DailyPlanSuggestion[]
+  in_progress: readonly InProgressItem[]
+  person_id: PersonId
+  now: Iso8601
+  tz_offset_minutes: number
+  position_id?: string | undefined
+}): { kept: DailyPlanSuggestion[]; filtered: FilteredSuggestion[] } {
+  const pool = input.in_progress.filter((i) => i.owner !== input.person_id)
+  if (pool.length === 0) return { kept: [...input.suggestions], filtered: [] }
+  const kept: DailyPlanSuggestion[] = []
+  const filtered: FilteredSuggestion[] = []
+  for (const s of input.suggestions) {
+    // 已经指着某条待办的建议（promote / schedule / delegate）不算撞车：那条待办本来就是他的
+    if (s.todo_id !== undefined) {
+      kept.push(s)
+      continue
+    }
+    const hit = findInProgressSimilar({
+      subject: {
+        title: s.title,
+        at: input.now,
+        ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+      },
+      pool,
+      tz_offset_minutes: input.tz_offset_minutes,
+    })[0]
+    if (hit === undefined) kept.push(s)
+    else
+      filtered.push({
+        suggestion_id: s.id,
+        reason: 'in_progress_elsewhere',
+        owner: hit.owner,
+        conflicts_with: hit.id,
+      })
+  }
+  return { kept, filtered }
 }
 
 const OPTIONS: DailyPlanDraft['options'] = [
@@ -96,6 +158,14 @@ function promoteSuggestion(todo: Todo, reason: string): DailyPlanSuggestion {
 }
 
 export function draftDailyPlan(input: DailyPlanInput): DailyPlanDraft {
+  return draftDailyPlanWithFilter(input).draft
+}
+
+/** 同 {@link draftDailyPlan}，另外回「哪几条被撞车挡掉了」（进任务运行结果，便于解释）。 */
+export function draftDailyPlanWithFilter(input: DailyPlanInput): {
+  draft: DailyPlanDraft
+  filtered: FilteredSuggestion[]
+} {
   const openOf = (list: readonly Todo[]): Todo[] => list.filter(isOpen)
   const backlog = openOf(input.todos.backlog)
   const week = openOf(input.todos.week)
@@ -174,10 +244,22 @@ export function draftDailyPlan(input: DailyPlanInput): DailyPlanDraft {
     push(promoteSuggestion(backlog[0], '待办箱里最久没动的一条'))
   }
 
-  const cap = input.today_meetings.length >= BUSY_MEETINGS ? BUSY_MAX_SUGGESTIONS : MAX_SUGGESTIONS
-  const capped = suggestions.slice(0, cap).map((s, i) => ({ ...s, selected: i < DEFAULT_SELECTED }))
+  // 40 §3.4：撞上「别人正在做的」那几条不建议
+  const { kept, filtered } = filterCollidingSuggestions({
+    suggestions,
+    in_progress: input.in_progress ?? [],
+    person_id: input.person_id,
+    now: input.now,
+    tz_offset_minutes: input.tz_offset_minutes,
+    ...(input.in_progress_position === undefined
+      ? {}
+      : { position_id: input.in_progress_position }),
+  })
 
-  return {
+  const cap = input.today_meetings.length >= BUSY_MEETINGS ? BUSY_MAX_SUGGESTIONS : MAX_SUGGESTIONS
+  const capped = kept.slice(0, cap).map((s, i) => ({ ...s, selected: i < DEFAULT_SELECTED }))
+
+  const draft: DailyPlanDraft = {
     date: localDay(input.now, input.tz_offset_minutes),
     person_id: input.person_id,
     basis: {
@@ -192,6 +274,7 @@ export function draftDailyPlan(input: DailyPlanInput): DailyPlanDraft {
     suggestions: capped,
     options: OPTIONS,
   }
+  return { draft, filtered }
 }
 
 /** 一句话卡面标题（14 §2 title ≤ 80 字）。 */
