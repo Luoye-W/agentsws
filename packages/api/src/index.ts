@@ -71,6 +71,8 @@ export {
   route,
 } from './route-spec.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
+export type { BackupExportView, BackupPort } from './routes/backup.js'
+export { backupRoutes } from './routes/backup.js'
 export {
   CATALOG_KINDS,
   CATALOG_LAYERS,
@@ -89,8 +91,6 @@ export {
   recordCatalogNote,
   triggerKeyOf,
 } from './routes/catalog.js'
-export type { BackupExportView, BackupPort } from './routes/backup.js'
-export { backupRoutes } from './routes/backup.js'
 export type {
   BeginConnectResult,
   ConnectionOwnership,
@@ -182,6 +182,27 @@ export {
   privacyRoutes,
 } from './routes/privacy.js'
 export { scheduleRoutes } from './routes/schedules.js'
+export type {
+  AgendaCheckView,
+  AskedView,
+  AskView,
+  AvailabilityPatchView,
+  AvailabilityView,
+  DisclosureLevelName,
+  DisclosurePatchView,
+  MeetingBriefView,
+  MeetView,
+  MyProfileView,
+  PersonCardView,
+  ProfileFieldName,
+  ProfilePositionView,
+  ProfileSkillView,
+  RouteView,
+  SecretaryActor,
+  SecretaryPort,
+  VisibleProfileView,
+} from './routes/secretary.js'
+export { PROFILE_FIELD_NAMES, secretaryRoutes } from './routes/secretary.js'
 export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
 export { secretRoutes } from './routes/secrets.js'
 export {

@@ -126,6 +126,9 @@ importers:
       '@agentsws/schedule':
         specifier: workspace:*
         version: link:../../packages/schedule
+      '@agentsws/secretary':
+        specifier: workspace:*
+        version: link:../../packages/secretary
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills

@@ -527,7 +527,9 @@ export class Secretary {
   async decideMeet(
     id: string,
     by: PersonId,
-    decision: { action: 'accept'; slot?: MeetSlot } | { action: 'decline'; reason?: string },
+    decision:
+      | { action: 'accept'; slot?: MeetSlot | undefined }
+      | { action: 'decline'; reason?: string | undefined },
   ): Promise<MeetProposal> {
     const proposal = this.store.getMeet(id)
     if (proposal === undefined || proposal.workspace_id !== this.workspace_id)

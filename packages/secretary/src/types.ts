@@ -93,7 +93,7 @@ export interface ProfileSkill {
   /** `skill` = 技能层里有这个技能；`memory` = 从做过的事里算出来的；`self` = 本人自己加的 */
   source: 'skill' | 'memory' | 'self'
   /** 本人手动藏掉的那几条（算出来的不一定对，人有最终解释权） */
-  hidden?: boolean
+  hidden?: boolean | undefined
 }
 
 /** 怎么找我（41 §1.2「维护 profile……联系方式」）。 */
@@ -173,12 +173,25 @@ export interface VisibleProfile {
   disclosure?: Record<ProfileField, DisclosureLevel>
 }
 
-/** `PUT /v1/me/profile` 的补丁：只覆盖给了的字段。 */
+/**
+ * `PUT /v1/me/profile` 的补丁：只覆盖给了的字段。
+ *
+ * 每一格都显式带上 `| undefined`——`exactOptionalPropertyTypes` 下"没给这一格"与
+ * "这一格给了 undefined"是两回事，而 HTTP 那一层解析出来的一定是后者。
+ */
 export interface ProfilePatch {
-  skills?: ProfileSkill[]
-  contact_policy?: Partial<ContactPolicy>
-  availability?: Partial<Availability>
-  disclosure?: Partial<Record<ProfileField, DisclosureLevel>>
+  skills?: ProfileSkill[] | undefined
+  contact_policy?:
+    | { prefer?: ContactPolicy['prefer'] | undefined; note?: string | undefined }
+    | undefined
+  availability?:
+    | {
+        rules?: AvailabilityRule[] | undefined
+        default_minutes?: number | undefined
+        max_meetings_per_day?: number | undefined
+      }
+    | undefined
+  disclosure?: { [K in ProfileField]?: DisclosureLevel | undefined } | undefined
 }
 
 /* ------------------------------------------------------------------ */
