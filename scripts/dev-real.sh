@@ -67,10 +67,22 @@ EOT
 fi
 set -a; . "$ENV_FILE"; set +a
 
+# 代理 fake-IP 模式（Clash / Surge 的 198.18.0.0/15）会让容器把外网域名解析成保留段地址，
+# OpenConnector 的出站防护会把它当内网拦下（"must not resolve to private or reserved IP"）。
+# 检测到就让容器用公共 DNS 直接解析；也可用 AGENTSWS_CONNECT_TRUSTED_HOSTS 白名单（逗号分隔）。
+OC_DNS_ARGS=""
+if getent hosts api.deepseek.com 2>/dev/null | grep -qE '^198\.1[89]\.' || dscacheutil -q host -a name api.deepseek.com 2>/dev/null | grep -qE 'ip_address: 198\.1[89]\.'; then
+  OC_DNS_ARGS="--dns 223.5.5.5 --dns 1.1.1.1"
+  echo "检测到代理 fake-IP：连接器容器改用公共 DNS 直接解析外网域名"
+fi
+OC_TRUST_ARGS=""
+[ -n "${AGENTSWS_CONNECT_TRUSTED_HOSTS:-}" ] && OC_TRUST_ARGS="-e OOMOL_CONNECT_EGRESS_TRUSTED_HOSTS=${AGENTSWS_CONNECT_TRUSTED_HOSTS}"
+
 # OpenConnector：加固三件套；只绑 127.0.0.1
-if ! docker ps --format '{{.Names}}' | grep -qx "$OC_NAME"; then
+if ! docker ps --format '{{.Names}}' | grep -qx "$OC_NAME" || [ "${AGENTSWS_CONNECT_RECREATE:-0}" = "1" ]; then
   docker rm -f "$OC_NAME" >/dev/null 2>&1 || true
-  docker run -d --name "$OC_NAME" -p "127.0.0.1:${OC_PORT}:3000" \
+  # shellcheck disable=SC2086
+  docker run -d --name "$OC_NAME" -p "127.0.0.1:${OC_PORT}:3000" $OC_DNS_ARGS $OC_TRUST_ARGS \
     -e "OOMOL_CONNECT_ENCRYPTION_KEY=$OOMOL_CONNECT_ENCRYPTION_KEY" \
     -e "OOMOL_CONNECT_ADMIN_TOKEN=$OOMOL_CONNECT_ADMIN_TOKEN" \
     -e "OOMOL_CONNECT_BLOCKED_PROXIES=*" \
