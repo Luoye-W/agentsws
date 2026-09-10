@@ -375,9 +375,23 @@ describe('WP20 §A 试连 / 断开 / 数据源回灌', () => {
     expect(sources.sources().find((s) => s.id === 'shop')?.connected).toBe(true)
     expect(sources.sources().find((s) => s.id === 'ga4')?.connected).toBe(false)
 
+    // 职责的 ready 也从真实连接算：连上 Shopify 后 aftersales 岗位只剩邮箱没接
+    expect(ctx.server.connections.connectedKinds()).toEqual(['shopify'])
+    const aftersales = ctx.server.roles.assignments.create({
+      person_id: ctx.server.bootstrap.person.id,
+      workspace_id: ctx.server.bootstrap.workspace.id,
+      role_id: 'dtc.aftersales',
+      granted_by: ctx.server.bootstrap.person.id,
+    })
+    expect(ctx.server.roles.effectiveConfig(aftersales.id).missing_connectors).toEqual(['email'])
+
     const removed = await api(`/v1/connections/${submitted.connection.id}`, { method: 'DELETE' })
     expect(removed.status).toBe(200)
     expect(sources.sources().find((s) => s.id === 'shop')?.connected).toBe(false)
+    expect(ctx.server.roles.effectiveConfig(aftersales.id).missing_connectors).toEqual([
+      'email',
+      'shopify',
+    ])
     const listed = await data<{ connections: ConnectionView[] }>(await api('/v1/connections'))
     expect(listed.connections).toEqual([])
   })

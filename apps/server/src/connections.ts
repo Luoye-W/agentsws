@@ -55,7 +55,14 @@ import type { ConnectionLike, DataSourceStatus } from '@agentsws/deck'
 import { mergeDataSources } from '@agentsws/deck'
 import { seededRandom } from '@agentsws/kernel'
 import { MockOpenConnector } from '@agentsws/stand-ins'
-import { CATALOG, type CatalogEntry, catalogEntry, flowOf, serviceOfUpstream } from './catalog.js'
+import {
+  CATALOG,
+  type CatalogEntry,
+  catalogEntry,
+  flowOf,
+  ROLE_CONNECTOR_KIND,
+  serviceOfUpstream,
+} from './catalog.js'
 import {
   createSecretStore,
   SECRETS_KEY_ENV,
@@ -226,6 +233,8 @@ export interface ConnectionsAssembly {
   onMailChange(listener: () => void): () => void
   /** 把工作台数据源包一层：连接状态从真实连接算（36 §3）。 */
   wrapDataSource(base: WorkstationDataSource): WorkstationDataSource
+  /** 现在接上了哪些职责连接器 kind（email / shopify / ga4 …），给职责的 ready 算法用。 */
+  connectedKinds(): string[]
   close(): void
 }
 
@@ -1355,6 +1364,15 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     onMailChange(listener) {
       mailListeners.add(listener)
       return () => mailListeners.delete(listener)
+    },
+    connectedKinds() {
+      const kinds = new Set<string>()
+      for (const c of cached) {
+        if (c.status !== 'active') continue
+        const kind = ROLE_CONNECTOR_KIND[c.service]
+        if (kind !== undefined) kinds.add(kind)
+      }
+      return [...kinds]
     },
     wrapDataSource(base) {
       return {

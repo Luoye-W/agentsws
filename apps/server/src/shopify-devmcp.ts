@@ -93,8 +93,15 @@ export interface ShopifyDevMcpOptions {
   command?: string
   args?: readonly string[]
   spawnMcp?: SpawnMcp
-  /** `initialize` 与每次 `tools/call` 的超时（毫秒）。 */
+  /** 每次 `tools/call` 的超时（毫秒）。 */
   timeoutMs?: number
+  /**
+   * 起进程到 `initialize` 回来的超时（毫秒）。第一次 `npx` 要下载整个包，一分钟经常不够；
+   * 默认 3 分钟。超时了会再试一次（下载多半已经完成了一半，第二次就快）。
+   */
+  initTimeoutMs?: number
+  /** 第一次起失败后隔多久再试一次（毫秒）；测试里调小。 */
+  retryDelayMs?: number
   appendEvent?: (type: string, payload: Record<string, unknown>) => void
 }
 
@@ -206,6 +213,8 @@ export function createShopifyDevMcp(options: ShopifyDevMcpOptions = {}): Shopify
   const env = options.env ?? process.env
   const spawnMcp = options.spawnMcp ?? defaultSpawn()
   const timeoutMs = options.timeoutMs ?? 60_000
+  const initTimeoutMs = options.initTimeoutMs ?? 180_000
+  const retryDelayMs = options.retryDelayMs ?? 15_000
   const emit = (type: string, payload: Record<string, unknown>): void => {
     options.appendEvent?.(type, payload)
   }
@@ -233,7 +242,11 @@ export function createShopifyDevMcp(options: ShopifyDevMcpOptions = {}): Shopify
     return out
   }
 
-  const rpc = async (method: string, params?: unknown): Promise<unknown> => {
+  const rpc = async (
+    method: string,
+    params?: unknown,
+    waitMs: number = timeoutMs,
+  ): Promise<unknown> => {
     const ch = channel
     if (ch === undefined) throw new Error('Dev MCP 没有起来')
     seq += 1
@@ -248,7 +261,7 @@ export function createShopifyDevMcp(options: ShopifyDevMcpOptions = {}): Shopify
       const timer = setTimeout(() => {
         pending.delete(id)
         reject(new Error(`Dev MCP 的 ${method} 超时了`))
-      }, timeoutMs)
+      }, waitMs)
       ;(timer as { unref?: () => void }).unref?.()
       pending.set(id, (res) => {
         clearTimeout(timer)
@@ -298,7 +311,9 @@ export function createShopifyDevMcp(options: ShopifyDevMcpOptions = {}): Shopify
     return { text: textOf(result) }
   }
 
+  let lastStartTimedOut = false
   const doStart = async (): Promise<DevMcpStatus> => {
+    lastStartTimedOut = false
     try {
       channel = spawnMcp(options.command ?? DEV_MCP_COMMAND, options.args ?? DEV_MCP_ARGS, {
         env: childEnv(),
@@ -326,14 +341,18 @@ export function createShopifyDevMcp(options: ShopifyDevMcpOptions = {}): Shopify
         }
       })
 
-      const init = (await rpc('initialize', {
-        protocolVersion: '2024-11-05',
-        capabilities: {},
-        clientInfo: { name: 'agentsws', version: '0.0.0' },
-      })) as { serverInfo?: { name?: unknown; version?: unknown } }
+      const init = (await rpc(
+        'initialize',
+        {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'agentsws', version: '0.0.0' },
+        },
+        initTimeoutMs,
+      )) as { serverInfo?: { name?: unknown; version?: unknown } }
       notify('notifications/initialized')
 
-      const listed = (await rpc('tools/list')) as { tools?: unknown }
+      const listed = (await rpc('tools/list', undefined, initTimeoutMs)) as { tools?: unknown }
       upstream = Array.isArray(listed.tools) ? (listed.tools as UpstreamTool[]) : []
       const names = new Set(upstream.map((t) => t.name))
       const mapped: Record<string, string> = {}
@@ -378,6 +397,7 @@ export function createShopifyDevMcp(options: ShopifyDevMcpOptions = {}): Shopify
       })
       return state
     } catch (e) {
+      lastStartTimedOut = e instanceof Error && e.message.includes('超时')
       channel?.close()
       channel = undefined
       state = {
@@ -396,7 +416,16 @@ export function createShopifyDevMcp(options: ShopifyDevMcpOptions = {}): Shopify
 
   return {
     start() {
-      started ??= doStart()
+      // 第一次没起来（多半是 npx 还在下载）就隔一会儿再试一次；两次都不行才认
+      started ??= doStart().then(async (first) => {
+        // 只在**超时**时再试一次（多半是 npx 还在下载）；进程直接退出 / 命令不存在再试也一样
+        if (first.available || !lastStartTimedOut) return first
+        await new Promise<void>((resolve) => {
+          const t = setTimeout(resolve, retryDelayMs)
+          ;(t as { unref?: () => void }).unref?.()
+        })
+        return doStart()
+      })
       return started
     },
 

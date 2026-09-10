@@ -10,6 +10,19 @@
  */
 import type { ProviderFieldSpec, ProviderSetupGuide } from '@agentsws/api'
 
+/**
+ * 连接目录里的 service → 职责模板里的连接器 kind（`connectors[].kind`）。
+ * 职责模板不关心"邮箱是 Gmail 还是 IMAP"，只问"有没有邮箱"；这张表就是那一步归并。
+ */
+export const ROLE_CONNECTOR_KIND: Readonly<Record<string, string>> = {
+  shopify_admin: 'shopify',
+  imap_smtp: 'email',
+  gmail: 'email',
+  ga4: 'ga4',
+  gsc: 'gsc',
+  meta_ads: 'meta',
+}
+
 export type CatalogAuth = 'oauth2' | 'api_key' | 'custom_credential'
 
 /**

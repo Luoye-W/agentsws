@@ -468,12 +468,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const data = createDataStore({ dbPath: file('data.db'), clock, collections: [] })
 
+  let connectedKinds: () => string[] = () => []
   const roles =
     options.mount?.roles ??
     createRoleStore({
       clock,
       ...(dbDir === undefined ? {} : { dbPath: join(dbDir, 'roles.db') }),
       roles: BUNDLED_ROLES.map((id) => loadBundledRole(id)),
+      // 连接表在下面才建；用一个晚绑定的读法，岗位 ready 从真实连接算
+      connected: () => connectedKinds(),
     })
 
   // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
@@ -687,6 +690,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
     ...(dbDir === undefined ? {} : { dbDir }),
   })
+  connectedKinds = () => connections.connectedKinds()
   // 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
   const workData = connections.wrapDataSource(mount?.data ?? emptyDataSource())
 

@@ -18,6 +18,26 @@ afterEach(() => {
 const roles = () => [aftersales(), member(), owner()]
 
 describe('createRoleStore 内存后端', () => {
+  it('没显式传 connected 时用 options.connected 提供的实时连接表算 ready', () => {
+    let live: string[] = []
+    const s = createRoleStore({ clock: fixedClock(), roles: roles(), connected: () => live })
+    const a = s.assignments.create({
+      person_id: 'p_cs',
+      workspace_id: 'ws_1',
+      role_id: 'dtc.aftersales',
+      granted_by: 'p_owner',
+    })
+    expect(s.effectiveConfig(a.id).ready).toBe(false)
+    expect(s.effectiveConfig(a.id).missing_connectors).toEqual(['email', 'shopify'])
+    live = ['email', 'shopify']
+    expect(s.effectiveConfig(a.id).ready).toBe(true)
+    expect(s.effectiveConfig(a.id).missing_connectors).toEqual([])
+    // 显式传的优先
+    expect(s.effectiveConfig(a.id, { connected: ['email'] }).missing_connectors).toEqual([
+      'shopify',
+    ])
+  })
+
   it('lists assignments by person and by role, hiding revoked ones', () => {
     const s = createRoleStore({ clock: fixedClock(), roles: roles() })
     const cs = s.assignments.create({

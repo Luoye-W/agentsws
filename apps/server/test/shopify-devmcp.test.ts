@@ -262,3 +262,61 @@ describe('WP44 §5 不给它任何秘密', () => {
     expect(captured?.DO_NOT_TRACK).toBe('1')
   })
 })
+
+describe('WP44 起不来先重试一次', () => {
+  it('第一次 initialize 超时、第二次成功 → 最终 available，只记一条 unavailable', async () => {
+    const events: { type: string; payload: Record<string, unknown> }[] = []
+    let spawns = 0
+    const mcp = createShopifyDevMcp({
+      env: { PATH: process.env.PATH ?? '' },
+      timeoutMs: 2000,
+      initTimeoutMs: 100,
+      retryDelayMs: 10,
+      appendEvent: (type, payload) => events.push({ type, payload }),
+      spawnMcp: () => {
+        spawns += 1
+        const answers = spawns >= 2
+        let cb: (line: string) => void = () => {}
+        let exit: (code: number) => void = () => {}
+        const exited = new Promise<number>((resolve) => {
+          exit = resolve
+        })
+        return {
+          send(line) {
+            if (!answers) return
+            const req = JSON.parse(line) as { id?: number; method: string }
+            if (typeof req.id !== 'number') return
+            const result =
+              req.method === 'initialize'
+                ? { serverInfo: { name: 'fake', version: '0' } }
+                : req.method === 'tools/list'
+                  ? {
+                      tools: [
+                        { name: 'search_docs_chunks' },
+                        { name: 'validate_graphql_codeblocks' },
+                      ],
+                    }
+                  : {}
+            setTimeout(() => cb(JSON.stringify({ jsonrpc: '2.0', id: req.id, result })), 1)
+          },
+          onLine(fn) {
+            cb = fn
+          },
+          close() {
+            exit(0)
+          },
+          exited,
+        }
+      },
+    })
+    open.push(mcp)
+    const status = await mcp.start()
+    expect(spawns).toBe(2)
+    expect(status.available).toBe(true)
+    expect(events.map((e) => e.type)).toEqual([
+      'shopify.devmcp_unavailable',
+      'shopify.devmcp_started',
+    ])
+    expect(String(events[0]?.payload.reason)).toContain('超时')
+  })
+})

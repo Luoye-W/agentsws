@@ -50,6 +50,12 @@ export interface RoleStoreOptions {
   roles?: RoleDefinitionFull[]
   /** 自定义 Assignment id 生成；默认是 (人 × 职责 × 工作区 × 时间 × 序号) 的哈希，无随机源。 */
   newId?: (seed: string) => string
+  /**
+   * 现在接上了哪些连接器（按职责模板里的 `connectors[].kind`：email / shopify / ga4 …）。
+   * `effectiveConfig` 没显式传 `connected` 时用它——服务进程把真实连接表挂在这里，
+   * 岗位的 `ready` / `missing_connectors` 才不会在连上之后还说"缺"。
+   */
+  connected?: () => Iterable<string>
 }
 
 export interface CreateAssignmentInput {
@@ -289,7 +295,9 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
         assignment,
         role,
         policy: backend.getPolicy(assignment.workspace_id),
-        ...(opts?.connected ? { connected: opts.connected } : {}),
+        ...((opts?.connected ?? options.connected?.()) === undefined
+          ? {}
+          : { connected: opts?.connected ?? options.connected?.() ?? [] }),
       })
     },
     compilePolicies(id) {
