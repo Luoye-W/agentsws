@@ -25,9 +25,10 @@ import type {
   StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { openSqliteDriver, type SqliteDriver } from '@agentsws/core/sql'
 import type { Database as Db } from 'better-sqlite3'
-import Database from 'better-sqlite3'
-import { type Migration, migrate, schemaVersion } from './migrations.js'
+import { migrate, schemaVersion } from './migrations.js'
+import { MIGRATIONS } from './schema.js'
 import type {
   AcquireApplyLockInput,
   ApplyLock,
@@ -39,118 +40,6 @@ import type {
   TxnStore,
 } from './types.js'
 import { ms, refKey } from './util.js'
-
-const MIGRATIONS: readonly Migration[] = [
-  {
-    version: 1,
-    sql: `
-CREATE TABLE IF NOT EXISTS approvals (
-  id           TEXT PRIMARY KEY NOT NULL,
-  workspace_id TEXT NOT NULL,
-  kind         TEXT NOT NULL,
-  role_id      TEXT,
-  state        TEXT NOT NULL,
-  dedupe_key   TEXT,
-  json         TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS approvals_by_ws ON approvals (workspace_id, state);
-CREATE INDEX IF NOT EXISTS approvals_by_dedupe ON approvals (dedupe_key);
-
-CREATE TABLE IF NOT EXISTS approval_revisions (
-  item_id TEXT NOT NULL,
-  json    TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS approval_revisions_by_item ON approval_revisions (item_id);
-
-CREATE TABLE IF NOT EXISTS approval_events (
-  item_id  TEXT NOT NULL,
-  event_id TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS approval_events_by_item ON approval_events (item_id);
-
-CREATE TABLE IF NOT EXISTS tokens (
-  token         TEXT PRIMARY KEY NOT NULL,
-  item_id       TEXT NOT NULL,
-  revision      INTEGER NOT NULL,
-  snapshot_hash TEXT NOT NULL,
-  person        TEXT NOT NULL,
-  issued_at     TEXT NOT NULL,
-  revoked       INTEGER NOT NULL,
-  used          TEXT
-) STRICT;
-CREATE INDEX IF NOT EXISTS tokens_by_item ON tokens (item_id);
-
-CREATE TABLE IF NOT EXISTS changes (
-  id            TEXT PRIMARY KEY NOT NULL,
-  workspace_id  TEXT NOT NULL,
-  kind          TEXT NOT NULL,
-  run_id        TEXT,
-  assignment_id TEXT,
-  change_set_id TEXT,
-  status        TEXT NOT NULL,
-  target_key    TEXT NOT NULL,
-  created_ms    INTEGER NOT NULL,
-  json          TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS changes_by_status ON changes (status, created_ms);
-CREATE INDEX IF NOT EXISTS changes_by_target ON changes (target_key, kind);
-CREATE INDEX IF NOT EXISTS changes_by_run    ON changes (run_id);
-
-CREATE TABLE IF NOT EXISTS mandates (
-  change_id TEXT PRIMARY KEY NOT NULL,
-  json      TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS contexts (
-  item_id TEXT PRIMARY KEY NOT NULL,
-  json    TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS approved_changes (
-  change_id TEXT PRIMARY KEY NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS reservations (
-  change_id TEXT PRIMARY KEY NOT NULL,
-  counter   TEXT NOT NULL,
-  amount    INTEGER NOT NULL,
-  state     TEXT NOT NULL CHECK (state IN ('held','committed','released'))
-) STRICT;
-CREATE INDEX IF NOT EXISTS reservations_by_counter ON reservations (counter, state);
-
-CREATE TABLE IF NOT EXISTS provenance (
-  run_id TEXT PRIMARY KEY NOT NULL,
-  json   TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS cursors (
-  name  TEXT PRIMARY KEY NOT NULL,
-  value TEXT NOT NULL
-) STRICT;
-`,
-  },
-  {
-    // WP31：跨进程施行锁 + 围栏号（31 §3.2「同目标同 kind 的 apply 串行」）。
-    // `last_token` 单独一张表：锁行会被删（释放），围栏号却**不能回头**，
-    // 否则接管者可能发出一个比老施行者还小的号，围栏就白建了。
-    version: 2,
-    sql: `
-CREATE TABLE IF NOT EXISTS apply_locks (
-  key         TEXT PRIMARY KEY NOT NULL,
-  holder      TEXT NOT NULL,
-  token       INTEGER NOT NULL,
-  acquired_at TEXT NOT NULL,
-  expires_at  TEXT NOT NULL,
-  expires_ms  INTEGER NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS apply_lock_tokens (
-  key   TEXT PRIMARY KEY NOT NULL,
-  token INTEGER NOT NULL
-) STRICT;
-`,
-  },
-]
 
 export interface SqliteTxnStoreOptions {
   /** SQLite 文件路径；缺省 `:memory:`（测试与一次性任务）。 */
@@ -188,21 +77,20 @@ const parse = <T>(row: JsonRow | undefined): T | undefined =>
   row === undefined ? undefined : (JSON.parse(row.json) as T)
 
 export class SqliteTxnStore implements TxnStore {
+  readonly #driver: SqliteDriver
   readonly #db: Db
   #closed = false
 
   constructor(options: SqliteTxnStoreOptions = {}) {
-    this.#db = new Database(options.dbPath ?? ':memory:')
-    this.#db.pragma('journal_mode = WAL')
-    this.#db.pragma('foreign_keys = ON')
-    // 崩溃中途不能留下半个事务（15 §5.8 的 unknown 要靠状态本身可信）
-    this.#db.pragma('synchronous = FULL')
-    migrate(this.#db, MIGRATIONS, options.clock?.now() ?? EPOCH)
+    // 崩溃中途不能留下半个事务（15 §5.8 的 unknown 要靠状态本身可信）→ synchronous = FULL
+    this.#driver = openSqliteDriver({ path: options.dbPath ?? ':memory:', fullSync: true })
+    this.#db = this.#driver.database
+    migrate(this.#driver, MIGRATIONS, options.clock?.now() ?? EPOCH)
   }
 
   /** 已应用的最高迁移版本；同一个库开两次不重跑（幂等）。 */
   get schemaVersion(): number {
-    return schemaVersion(this.#db)
+    return schemaVersion(this.#driver)
   }
 
   /** 底层连接；只给同包测试用（断言迁移与并发），业务代码不得直连 SQL。 */
@@ -213,7 +101,7 @@ export class SqliteTxnStore implements TxnStore {
   close(): void {
     if (this.#closed) return
     this.#closed = true
-    this.#db.close()
+    this.#driver.closeSync()
   }
 
   transaction<T>(fn: () => T): T {

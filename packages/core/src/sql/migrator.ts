@@ -7,7 +7,7 @@
  *   也不会把已经成功的第 1、2 版回滚掉（原来的做法是全部一个事务）
  */
 import { translateSql } from './dialect.js'
-import type { SqlDriver } from './driver.js'
+import type { SqlDriver, SyncSqlDriver } from './driver.js'
 
 export interface Migration {
   version: number
@@ -70,5 +70,53 @@ export async function schemaVersion(
   const row = await driver
     .prepare<{ v: number | null }>(`SELECT MAX(version) AS v FROM "${table}"`)
     .get()
+  return row?.v === null || row?.v === undefined ? 0 : Number(row.v)
+}
+
+/**
+ * 同步档（只有 SQLite 有）。给还没转异步的包用——`SqliteTxnStore` 的构造是同步的，
+ * 模拟世界与服务进程都指望「new 出来就能用」。
+ *
+ * 与 {@link migrate} **共用同一张版本表、同一套待跑计算、同一条一次一事务的纪律**；
+ * 差别只有 await。
+ */
+export function migrateSync(
+  driver: SyncSqlDriver,
+  migrations: readonly Migration[],
+  at: string,
+  options: MigrateOptions = {},
+): number[] {
+  const table = options.table ?? DEFAULT_TABLE
+  driver.execSync(translateSql(versionTable(table), 'sqlite'))
+  const done = new Set(
+    driver
+      .prepareSync<{ version: number }>(`SELECT version FROM "${table}"`)
+      .allSync()
+      .map((r) => Number(r.version)),
+  )
+  const pending = [...migrations]
+    .filter((m) => !done.has(m.version))
+    .sort((a, b) => a.version - b.version)
+
+  const applied: number[] = []
+  for (const m of pending) {
+    driver.transactionSync(() => {
+      driver.execSync(m.sql)
+      driver
+        .prepareSync(`INSERT INTO "${table}" (version, applied_at) VALUES (?, ?)`)
+        .runSync(m.version, at)
+    })
+    applied.push(m.version)
+  }
+  return applied
+}
+
+/** 已应用的最高版本（同步档）。 */
+export function schemaVersionSync(driver: SyncSqlDriver, options: MigrateOptions = {}): number {
+  const table = options.table ?? DEFAULT_TABLE
+  driver.execSync(translateSql(versionTable(table), 'sqlite'))
+  const row = driver
+    .prepareSync<{ v: number | null }>(`SELECT MAX(version) AS v FROM "${table}"`)
+    .getSync()
   return row?.v === null || row?.v === undefined ? 0 : Number(row.v)
 }

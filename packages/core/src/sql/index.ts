@@ -31,7 +31,14 @@ export {
   type SyncSqlStatement,
   splitStatements,
 } from './driver.js'
-export { type MigrateOptions, type Migration, migrate, schemaVersion } from './migrator.js'
+export {
+  type MigrateOptions,
+  type Migration,
+  migrate,
+  migrateSync,
+  schemaVersion,
+  schemaVersionSync,
+} from './migrator.js'
 export {
   openPostgresDriver,
   PostgresDriver,
