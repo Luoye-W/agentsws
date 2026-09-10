@@ -70,7 +70,7 @@ export function score(
     reasons.push(
       shared.length === 0
         ? `说的像是同一件事（词重合 ${pct(semantic)}）`
-        : `说的像是同一件事（${shared.slice(0, 4).join('')}，词重合 ${pct(semantic)}）`,
+        : `说的像是同一件事（${shared.slice(0, 4).join('、')}，词重合 ${pct(semantic)}）`,
     )
   }
 
