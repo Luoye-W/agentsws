@@ -113,6 +113,29 @@ export interface ScenarioSecretaryRoute {
   text: string
 }
 
+/** WP44：运营 Agent 改一件商品的价（先查文档 → 过官方 GraphQL 校验 → 提一条变更）。 */
+export interface ScenarioShopPriceChange {
+  who: string
+  product: string
+  price: number
+  /** 故意写错的 GraphQL（回归"官方校验挡幻觉"用）；不给就按官方名字生成一段。 */
+  graphql?: string
+  note?: string
+}
+
+/** WP44：把主题工作副本推成一份**未发布**主题（造预览，线上不动）。 */
+export interface ScenarioShopThemePush {
+  who: string
+  name: string
+}
+
+/** WP44：提一条"把这份副本发布上线"的变更（`publish_theme`，永远 L1）。 */
+export interface ScenarioShopThemePublish {
+  who: string
+  /** 要发布哪一份；不给就是最近推上去的那一份。 */
+  theme?: string
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -146,6 +169,12 @@ export type ScenarioEvent =
   | { at: string; type: 'secretary.meet_decide'; decide_meet: ScenarioSecretaryDecide }
   /** WP39：把一件事丢给秘书（任务路由 → 认领卡）。 */
   | { at: string; type: 'secretary.route'; route: ScenarioSecretaryRoute }
+  /** WP44：运营改价（真读 → 官方校验 → staged price_change）。 */
+  | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
+  /** WP44：推一份未发布主题副本（造预览）。 */
+  | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
+  /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
+  | { at: string; type: 'shop.theme_publish'; theme_publish: ScenarioShopThemePublish }
 
 export interface ScenarioInbound {
   from: string

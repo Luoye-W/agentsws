@@ -59,9 +59,14 @@
     - kind: store
       id: store_eu
   granted_by: p_wang
+# WP44：27 §2 的 15 人里本来就有一个"建站"，这里把职责真的挂上去（12 §2 site.builder）
 - person_id: p_zheng
-  role_id: common.member
-  ranges: []
+  role_id: site.builder
+  ranges:
+    - kind: store
+      id: store_main
+    - kind: store
+      id: store_eu
   granted_by: p_wang
 - person_id: p_feng
   role_id: common.member

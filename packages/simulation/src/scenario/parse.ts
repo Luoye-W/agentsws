@@ -91,6 +91,10 @@ const EVENT_KEYS = [
   'secretary.meet',
   'secretary.meet_decide',
   'secretary.route',
+  // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
+  'shop.price_change',
+  'shop.theme_push',
+  'shop.theme_publish',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -291,6 +295,48 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         claim: {
           who: str(source, `${path}.${key}.who`, body.who),
           title: str(source, `${path}.${key}.title`, body.title),
+        },
+      }
+    }
+    case 'shop.price_change': {
+      known(source, `${path}.${key}`, body, ['who', 'product', 'price', 'graphql', 'note'])
+      return {
+        at,
+        type: 'shop.price_change',
+        price_change: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          product: str(source, `${path}.${key}.product`, body.product),
+          price: num(source, `${path}.${key}.price`, body.price),
+          ...(body.graphql === undefined
+            ? {}
+            : { graphql: str(source, `${path}.${key}.graphql`, body.graphql) }),
+          ...(body.note === undefined
+            ? {}
+            : { note: str(source, `${path}.${key}.note`, body.note) }),
+        },
+      }
+    }
+    case 'shop.theme_push': {
+      known(source, `${path}.${key}`, body, ['who', 'name'])
+      return {
+        at,
+        type: 'shop.theme_push',
+        theme_push: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          name: str(source, `${path}.${key}.name`, body.name),
+        },
+      }
+    }
+    case 'shop.theme_publish': {
+      known(source, `${path}.${key}`, body, ['who', 'theme'])
+      return {
+        at,
+        type: 'shop.theme_publish',
+        theme_publish: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(body.theme === undefined
+            ? {}
+            : { theme: str(source, `${path}.${key}.theme`, body.theme) }),
         },
       }
     }

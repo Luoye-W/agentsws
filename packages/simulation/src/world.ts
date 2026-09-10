@@ -55,7 +55,10 @@ import type {
 import {
   connectToolExecutor,
   createStandIns,
+  MCP_DOCS_TOOL,
+  MCP_VALIDATE_TOOL,
   MemoryInboundPipeline,
+  MockDevMcp,
   SyntheticClock,
 } from '@agentsws/stand-ins'
 import type { Txn } from '@agentsws/txn'
@@ -85,20 +88,38 @@ const CUSTOMERS = defineCollection({
   },
 })
 
+const messageOfError = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err)
+
 /** 05 §1 动作 id ↔ 15 §2 变更种类。 */
 const ACTION_BY_KIND: Partial<Record<ChangeKind, string>> = {
   refund: 'stage_refund',
   reship: 'stage_reship',
   address_change: 'stage_address_change',
+  // WP44：运营与建站那一侧
+  price_change: 'stage_price_change',
+  listing_edit: 'stage_listing_edit',
+  publish_product: 'stage_publish_product',
+  unpublish_product: 'stage_unpublish_product',
+  publish_theme: 'stage_publish_theme',
 }
 
 const READ_ACTIONS = [
   'shopify_admin.get_order',
   'shopify_admin.list_orders',
   'shopify_admin.get_product',
+  // WP44：建站岗位要先看清楚现在线上是哪一份主题
+  'shopify_admin.list_themes',
   'gmail.list_threads',
 ]
-const APPLY_ACTIONS = ['shopify_admin.create_refund', 'gmail.send_message']
+const APPLY_ACTIONS = [
+  'shopify_admin.create_refund',
+  // WP44：改价与主题发布的施行口（只在 role-apply 令牌里，Agent 的读令牌拿不到）
+  'shopify_admin.update_product_price',
+  'shopify_admin.create_theme',
+  'shopify_admin.publish_theme',
+  'gmail.send_message',
+]
 const CONNECTIONS = ['conn_shopify_admin', 'conn_gmail']
 const MODEL: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
 
@@ -261,11 +282,49 @@ export interface World {
   searchPolicies(
     text: string,
   ): Promise<{ hits: { id: string; statement: string; layer: string }[] }>
+  /**
+   * WP44：店铺操作（运营改价 / 建站主题）。
+   *
+   * 这三条走的是**真机制**：先经 mock connect 真读一次记录（所以 provenance 是真的），
+   * 再过 Dev MCP 替身的官方 GraphQL 校验，最后经 `txn.ledger.stage` 提一条变更。
+   * 批准与施行照旧走审批总线与执行器——这一层只负责"提"。
+   */
+  shop: ShopOps
   mandateFor(action: string): Mandate
   levelFor(action: string): 'L1' | 'L2' | 'L3'
   issueReadToken(): Promise<string>
   issueApplyToken(): Promise<string>
   close(): Promise<void>
+}
+
+/** WP44：一次店铺操作的结果。没提成时 `reason` 说得出为什么。 */
+export interface ShopStageResult {
+  staged: boolean
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+export interface ShopOps {
+  /** 改一件商品的价：真读 → 查文档 → 过官方校验 → stage 一条 `price_change`。 */
+  priceChange(input: {
+    who: PersonId
+    product: string
+    price: number
+    /** 故意写错的 GraphQL（回归"校验挡幻觉"用）；不给就按官方名字生成一段。 */
+    graphql?: string
+    note?: string
+  }): Promise<ShopStageResult>
+  /** 推一份**未发布**的主题副本（造预览，线上一个字节不动）。 */
+  themePush(input: { who: PersonId; name: string }): Promise<{
+    theme_id: string
+    theme_name: string
+    preview_url?: string
+  }>
+  /** 提一条"把这份副本发布上线"的变更（`publish_theme`，15 §2 永远 L1）。 */
+  themePublish(input: { who: PersonId; theme?: string }): Promise<ShopStageResult>
+  /** Dev MCP 替身；场景断言"真的查了、真的验了"读它的 `calls`。 */
+  devMcp: MockDevMcp
 }
 
 export interface TickApprovalsResult {
@@ -320,6 +379,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('dtc.aftersales'),
     loadBundledRole('common.owner'),
     loadBundledRole('common.member'),
+    // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——
+    // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效
+    loadBundledRole('site.builder'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
@@ -472,9 +534,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   })
   const connect = standIns.connect
 
-  const tokenFor = async (kind: 'role-read' | 'role-apply'): Promise<string> => {
+  const tokenFor = async (
+    kind: 'role-read' | 'role-apply',
+    assignment_id: string = assignment.id,
+  ): Promise<string> => {
     const t = await connect.issueToken({
-      assignment_id: assignment.id,
+      assignment_id,
       kind,
       allowed_actions: kind === 'role-read' ? READ_ACTIONS : [...READ_ACTIONS, ...APPLY_ACTIONS],
       allowed_connections: CONNECTIONS,
@@ -657,6 +722,54 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
     readRecord: (target) => recordFacts(target),
     backendApply: async (change, _opts) => {
+      // WP44：改价与主题发布的施行口。两条都经 mock connect 真跑一次写 Action，
+      // 用的是 `role-apply` 令牌与 `Idempotency-Key = change_id`（15 §5 步骤 6）——
+      // 与退款走的是同一条路，只是 Action 不一样。
+      if (change.kind === 'price_change') {
+        const after = change.after as { price?: unknown }
+        const price = typeof after.price === 'number' ? after.price : Number.NaN
+        if (!Number.isFinite(price)) {
+          return { status: 'failed', error: { message: 'price_change 的 after.price 不是数字' } }
+        }
+        try {
+          const res = await connect.execute<{ product_id: string }>(
+            'shopify_admin.update_product_price',
+            { product_id: change.target.id, price },
+            {
+              token: await tokenFor('role-apply'),
+              connection: 'conn_shopify_admin',
+              idempotencyKey: change.id,
+            },
+          )
+          return {
+            status: 'ok',
+            execution_id: res.execution_id,
+            outcome_ref: { type: 'product', id: change.target.id },
+          }
+        } catch (err) {
+          return { status: 'failed', error: { message: messageOfError(err) } }
+        }
+      }
+      if (change.kind === 'publish_theme') {
+        try {
+          const res = await connect.execute<{ theme_id: string }>(
+            'shopify_admin.publish_theme',
+            { theme_id: change.target.id },
+            {
+              token: await tokenFor('role-apply'),
+              connection: 'conn_shopify_admin',
+              idempotencyKey: change.id,
+            },
+          )
+          return {
+            status: 'ok',
+            execution_id: res.execution_id,
+            outcome_ref: { type: 'theme', id: change.target.id },
+          }
+        } catch (err) {
+          return { status: 'failed', error: { message: messageOfError(err) } }
+        }
+      }
       if (change.kind !== 'refund') {
         return { status: 'failed', error: { message: `模拟执行器未实现 kind：${change.kind}` } }
       }
@@ -928,6 +1041,11 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     get kernel() {
       return kernel
     },
+    // WP44：`shop` 与 `holder.stage` 一样，装在这个对象字面量之后（它要用 txn 与 flushCards），
+    // 所以这里取值不是快照
+    get shop() {
+      return shop
+    },
     data,
     roles,
     knowledge,
@@ -1135,6 +1253,228 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   }
 
   // ── stage / createDraft：stub 运行时的两个出口接到真实交易控制模块 ────
+  // ── WP44 店铺操作（运营改价 / 建站主题）────────────────────────────
+  //
+  // 为什么不是"让模型自己去调 update_product_price"：08 §2.3 与 16 §3 定死了
+  // 公司端的写口只在执行器手里。所以这三条做的都是同一件事——**读真记录、过校验、
+  // 提一条变更**——剩下的（额度、审批、施行、幂等）一步不少地走既有那条链。
+  const devMcp = new MockDevMcp()
+  let shopSeq = 0
+
+  /** 这个人在这条职责上的分配；没有就退回主分配（3 人公司常常一人多职）。 */
+  const assignmentFor = (who: PersonId, role_id: RoleId): Assignment =>
+    created.get(`${who}|${role_id}`) ?? assignment
+
+  /** 15 §6：这一次操作"读过"了哪些对象。read_full 让 `requires_record_read` 过得去。 */
+  const provenanceOfRead = (run_id: string, ref: ObjectRef): ProvenanceState => ({
+    run_id,
+    seen: { [ref.type]: [ref.id] },
+    read_full: [`${ref.type}:${ref.id}`],
+    recorded_at: now(clock),
+  })
+
+  const recipientOf = (
+    via: 'scope_manager' | 'owner' | 'role_holder',
+  ): { person: PersonId; via: 'scope_manager' | 'owner' | 'role_holder' } => ({
+    person: via === 'owner' ? owner : via === 'scope_manager' ? scopeManager : roleHolder,
+    via,
+  })
+
+  const shop: ShopOps = {
+    devMcp,
+
+    async priceChange({ who, product, price, graphql, note }) {
+      shopSeq += 1
+      const run_id = `run_shop_${shopSeq}`
+      const asg = assignmentFor(who, 'dtc.ops')
+      const target: ObjectRef = { type: 'product', id: product }
+
+      // ① 真读一次。读不到就别提——`before` 必须来自记录，不是谁转述的（15 §1）
+      let record: { id: string; price: number; title: string; record_version: string }
+      try {
+        const res = await connect.execute<typeof record>(
+          'shopify_admin.get_product',
+          { product_id: product },
+          { token: await tokenFor('role-read', asg.id), connection: 'conn_shopify_admin' },
+        )
+        record = res.data
+      } catch (err) {
+        blocked.push({ rule: 'record_read_failed', at: now(clock), message: messageOfError(err) })
+        return { staged: false, reason: 'record_read_failed' }
+      }
+
+      // ② 先查文档再动手：官方给的是 productVariantsBulkUpdate，不是模型记忆里那个
+      devMcp.execute(MCP_DOCS_TOOL, { query: `how to change the price of ${record.title}` })
+
+      // ③ 过官方校验。**不给 graphql 的场景按真名字生成**，给了的就照原样验
+      const document =
+        graphql ??
+        `mutation { productVariantsBulkUpdate(productId: "${product}", ` +
+          `variants: [{ id: "${product}-v1", price: "${price}" }]) { userErrors { field message } } }`
+      const verdict = devMcp.execute(MCP_VALIDATE_TOOL, { document })
+      const verdictData = verdict.data as { result?: string; errors?: string[] } | undefined
+      if (verdict.status !== 'ok' || verdictData?.result !== 'success') {
+        const errors = verdictData?.errors ?? [verdict.reason ?? 'unknown'];
+        blocked.push({
+          rule: 'graphql_invalid',
+          at: now(clock),
+          run_id,
+          message: `官方校验器不认这段 GraphQL：${errors.join('；')}`,
+        })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'shopify.graphql_rejected',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          payload: { errors: errors.slice(0, 3) },
+        })
+        return { staged: false, reason: 'graphql_invalid' }
+      }
+
+      // ④ 提一条变更。额度与等级来自**这个人这条职责**的生效配置，不是主分配的
+      const config = roles.effectiveConfig(asg.id)
+      const action = config.actions.find((a) => a.id === 'stage_price_change')
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_shop_${shopSeq}`,
+        kind: 'price_change',
+        target,
+        field: 'price',
+        before: { price: record.price, title: record.title },
+        after: { price },
+        record_version: record.record_version,
+        notes: note === undefined ? [] : [note],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate: action?.mandate ?? { caps: {} },
+        level: config.automation.stage_price_change?.level ?? 'L1',
+        provenance: provenanceOfRead(run_id, target),
+        connection_id: 'conn_shopify_admin',
+        approval: {
+          title: `改价：${record.title} ${record.price} → ${price}`,
+          summary: note ?? `${record.title} 的售价从 ${record.price} 改成 ${price}`,
+          recipients: [recipientOf('scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'scope_manager',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async themePush({ who, name }) {
+      const asg = assignmentFor(who, 'site.builder')
+      // 造一份未发布副本对线上没有任何影响，所以它不进账本（见
+      // `connect-adapter/src/shopify-actions.ts` 里 create_theme 那一条的理由）。
+      // 真实进程里这一步是 `shopify theme push --unpublished`；这里是它的替身。
+      const res = await connect.execute<{ id: string; name: string; preview_url?: string }>(
+        'shopify_admin.create_theme',
+        { name },
+        {
+          token: await tokenFor('role-apply', asg.id),
+          connection: 'conn_shopify_admin',
+          idempotencyKey: `theme_push_${name}`,
+        },
+      )
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'shopify.theme_pushed',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId() },
+        payload: { theme_id: res.data.id, unpublished: true },
+      })
+      return {
+        theme_id: res.data.id,
+        theme_name: res.data.name,
+        ...(res.data.preview_url === undefined ? {} : { preview_url: res.data.preview_url }),
+      }
+    },
+
+    async themePublish({ who, theme }) {
+      shopSeq += 1
+      const run_id = `run_shop_${shopSeq}`
+      const asg = assignmentFor(who, 'site.builder')
+
+      // 真读一次主题列表：`before` 是**现在线上那一份**，不是谁记得的那一份
+      const listed = await connect.execute<{
+        themes: { id: string; name: string; role: string }[]
+      }>(
+        'shopify_admin.list_themes',
+        {},
+        { token: await tokenFor('role-read', asg.id), connection: 'conn_shopify_admin' },
+      )
+      const live = listed.data.themes.find((t) => t.role === 'main')
+      const candidate =
+        theme === undefined
+          ? listed.data.themes.filter((t) => t.role === 'unpublished').at(-1)
+          : listed.data.themes.find((t) => t.id === theme)
+      if (live === undefined || candidate === undefined) {
+        blocked.push({
+          rule: 'theme_not_found',
+          at: now(clock),
+          run_id,
+          message: '找不到线上主题或要发布的那份副本',
+        })
+        return { staged: false, reason: 'theme_not_found' }
+      }
+
+      const target: ObjectRef = { type: 'theme', id: candidate.id }
+      const config = roles.effectiveConfig(asg.id)
+      const action = config.actions.find((a) => a.id === 'stage_publish_theme')
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_shop_${shopSeq}`,
+        kind: 'publish_theme',
+        target,
+        before: { theme_id: live.id, theme_name: live.name },
+        after: { theme_id: candidate.id, theme_name: candidate.name },
+        notes: [`把线上主题从「${live.name}」换成「${candidate.name}」`],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate: action?.mandate ?? { caps: {} },
+        // 15 §2 hard_ceiling：这里就算传 L3，guardrail 的 hard_ceiling 也会把它拉回人审
+        level: config.automation.stage_publish_theme?.level ?? 'L1',
+        provenance: provenanceOfRead(run_id, target),
+        connection_id: 'conn_shopify_admin',
+        approval: {
+          title: `发布主题：${candidate.name}`,
+          summary: `线上主题会从「${live.name}」换成「${candidate.name}」。批准前先点开预览看一眼。`,
+          recipients: [recipientOf('owner')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'owner',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+  }
+
   holder.stage = async (intent: StageIntent) => {
     const ctx = runContexts.get(intent.request.id)
     if (ctx === undefined) return undefined
