@@ -130,3 +130,134 @@ jobs:
           path: out/simulation-dsh/
           if-no-files-found: warn
           retention-days: 14
+
+  # WP40 A：**同一套一致性套件换到 Postgres 上再跑一遍**。
+  # 21 §3 说的「存储档切换只换配置」如果只在 SQLite 上验，那就只是一句话。
+  # 这里用 service container 起 postgres:16，把 kernel / data / txn 三个包的
+  # 双方言套件跑掉；本地没 docker 时这些用例会跳过，CI 里必须真跑。
+  dual-dialect:
+    name: 双方言 · kernel / data / txn on postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agentsws
+          POSTGRES_PASSWORD: agentsws
+          POSTGRES_DB: agentsws_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentsws"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AGENTSWS_TEST_DATABASE_URL: postgres://agentsws:agentsws@127.0.0.1:55432/agentsws_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: tsc -b
+        run: pnpm exec tsc -b
+      # 跳过 = 没连上库 = 配置坏了。先自证连得上，再跑套件。
+      - name: 确认 Postgres 真的连得上（跳过不算过）
+        run: |
+          node -e "
+            const postgres = require('postgres');
+            const sql = postgres(process.env.AGENTSWS_TEST_DATABASE_URL);
+            sql\`select 1\`.then(() => { console.log('postgres ok'); return sql.end(); })
+              .catch((e) => { console.error(e); process.exit(1); });
+          "
+      - name: vitest（双方言套件）
+        run: >-
+          pnpm exec vitest run
+          packages/core/test/sql-driver.test.ts
+          packages/kernel/test/conformance-dual.test.ts
+          packages/data/test/conformance-dual.test.ts
+          packages/txn/test/dialect-portability.test.ts
+
+  # WP40 B：对象存储的 S3 路径打真的 MinIO。
+  # 自己写的 SigV4（不装 40 MB 的 aws sdk）必须有一台真服务端验证签名，
+  # 不然「签名对不对」这件事就只有我们自己说了算。
+  blob-s3:
+    name: 对象存储 · S3 路径打 MinIO
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: agentsws
+          MINIO_ROOT_PASSWORD: agentsws-secret
+        ports:
+          - 59000:9000
+        options: >-
+          --health-cmd "curl -fsS http://127.0.0.1:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      AGENTSWS_TEST_S3_ENDPOINT: http://127.0.0.1:59000
+      AGENTSWS_TEST_S3_ACCESS_KEY: agentsws
+      AGENTSWS_TEST_S3_SECRET_KEY: agentsws-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: tsc -b
+        run: pnpm exec tsc -b
+      - name: 确认 MinIO 真的起来了（跳过不算过）
+        run: curl -fsS "$AGENTSWS_TEST_S3_ENDPOINT/minio/health/live"
+      - name: vitest（BlobStore 一致性）
+        run: pnpm exec vitest run packages/blob
+
+  # WP40 C：compose 冒烟。40 §1.3 的「公司 Docker 档」要能在一台干净机器上起来，
+  # 所以每次合并都真建一次镜像、真起一次、真打一次 /v1/health。
+  compose-smoke:
+    name: compose 冒烟 · 起来并打通 /v1/health
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: 生成 .env（与 NAS 上第一次装是同一条路）
+        run: |
+          cp deploy/nas/env.example .env
+          sh deploy/nas/gen-keys.sh >> .env
+          chmod 600 .env
+      - name: docker compose up
+        run: docker compose up -d --build
+      - name: 等 /v1/health 变绿
+        run: |
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4317/v1/health || true)
+            [ "$code" = "200" ] && echo "health ok after ${i}0s" && exit 0
+            sleep 2
+          done
+          echo "服务进程没起来" >&2
+          docker compose ps
+          docker compose logs --tail=200
+          exit 1
+      - name: 健康检查的内容也看一眼（status 不能是 halted）
+        run: |
+          body=$(curl -fsS http://127.0.0.1:4317/v1/health)
+          echo "$body" | head -c 600
+          echo "$body" | grep -q '"status":"ok"' || {
+            echo "status 不是 ok" >&2
+            docker compose logs --tail=200 server
+            exit 1
+          }
+      - name: 收尾
+        if: always()
+        run: docker compose down -v

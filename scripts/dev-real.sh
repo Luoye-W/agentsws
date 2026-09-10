@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # 1d 真账号验收：本机起 OpenConnector（加固）+ 服务进程（SQLite 落盘）+ 工作台。
 # 凭据在工作台"连接"页的原生表单里自己填，不经 AI、不进日志。
+#
+# 两种起法：
+#   scripts/dev-real.sh                      本机档：node 直接跑服务进程（改代码即时生效）
+#   scripts/dev-real.sh --compose            公司档：docker compose 起同一套（验镜像与部署）
+#   scripts/dev-real.sh --compose postgres s3  再换上 Postgres 与 MinIO（验双方言与对象存储）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DATA_DIR="${AGENTSWS_DATA_DIR:-$HOME/Library/Application Support/agentsws-dev}"
@@ -8,6 +13,45 @@ ENV_FILE="$DATA_DIR/.env.local"
 PORT="${AGENTSWS_PORT:-4317}"
 OC_PORT="${AGENTSWS_CONNECT_PORT:-3000}"
 OC_NAME="agentsws-openconnector"
+
+# --compose：走 docker-compose.yml 那一档（40 §1.3 公司 Docker 档 / 41 §2.1）。
+# 与默认的本机档跑的是**同一个服务进程**，差别只在谁来起它、数据落在哪。
+# 后面可以再跟 profile：`--compose postgres`、`--compose postgres s3`。
+COMPOSE=0
+PROFILES=""
+if [ "${1:-}" = "--compose" ]; then
+  COMPOSE=1
+  shift
+  for p in "$@"; do PROFILES="$PROFILES --profile $p"; done
+fi
+
+if [ "$COMPOSE" = "1" ]; then
+  cd "$ROOT"
+  if [ ! -f .env ]; then
+    cp deploy/nas/env.example .env
+    sh deploy/nas/gen-keys.sh >> .env
+    chmod 600 .env
+    echo "已生成 .env（600 权限）：$ROOT/.env —— 密钥只生成这一次，别再跑第二遍"
+  fi
+  # shellcheck disable=SC2086
+  docker compose $PROFILES up -d --build
+  echo "等服务进程起来…"
+  for _ in $(seq 1 90); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/v1/health" || true)
+    [ "$code" = "200" ] && break
+    sleep 2
+  done
+  if [ "${code:-}" != "200" ]; then
+    echo "起不来，看日志：docker compose logs --tail=200 server" >&2
+    docker compose ps >&2
+    exit 1
+  fi
+  echo "工作台：http://127.0.0.1:${PORT}   连接页：http://127.0.0.1:${PORT}/connections"
+  echo "数据目录（宿主）：$(grep -E '^AGENTSWS_HOST_DATA_DIR=' .env | cut -d= -f2-)"
+  echo "停：docker compose $PROFILES down"
+  exit 0
+fi
+
 mkdir -p "$DATA_DIR"
 
 # 密钥只生成一次，落在 600 权限文件里；不打印、不进 git
