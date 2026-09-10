@@ -50,7 +50,10 @@ export function CollisionCard({
       <p className="flex items-start gap-1.5 text-sm font-medium">
         <Users className="mt-0.5 size-4 shrink-0" aria-hidden />
         <span>
-          {t('collision.headline', { who: target.owner, title: target.title })}
+          {t('collision.headline', {
+            who: target.owner_label ?? target.owner,
+            title: target.title,
+          })}
           {target.cards > 0 ? t('collision.cards', { count: target.cards }) : null}
         </span>
       </p>

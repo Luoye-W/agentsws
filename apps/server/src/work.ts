@@ -46,6 +46,19 @@ import {
 /** 队列上还等着人的状态。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
 
+/**
+ * 撞车候选里的 `owner` 是 person_id；界面上不该出现裸 id，所以在这里补一份展示名
+ * （29 enrichment：服务端补，前端不猜）。翻译不出来就回落成 id 本身。
+ */
+function labelCandidates(err: unknown, label: (id: PersonId) => string): unknown {
+  if (err === null || typeof err !== 'object') return err
+  const rec = err as { details?: { reason?: string; candidates?: { owner: PersonId }[] } }
+  const candidates = rec.details?.candidates
+  if (rec.details?.reason !== 'similar_in_progress' || candidates === undefined) return err
+  rec.details.candidates = candidates.map((c) => ({ ...c, owner_label: label(c.owner) }))
+  return err
+}
+
 /** `PoolItem` → 网关的 `WorkPoolItem`（同形；显式抄一遍，别让内部形状漏出去）。 */
 function poolItemView(item: PoolItem): WorkPoolItem {
   return {
@@ -247,12 +260,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
      * （网关映射成 409，`details.reason = 'similar_in_progress'`）。
      * 带上 `collision` 才放行：`join` 加进对方的事项、`handoff` 交给对方、`force` 要写一句区别。
      */
-    createTodo: (actor, input) =>
-      work.createTodoChecked({
-        ...input,
-        owner: actor.person_id,
-        position_id: actor.assignment_id,
-      }).todo,
+    createTodo: (actor, input) => {
+      try {
+        return work.createTodoChecked({
+          ...input,
+          owner: actor.person_id,
+          position_id: actor.assignment_id,
+        }).todo
+      } catch (err) {
+        throw labelCandidates(err, (id) => options.label({ type: 'person', id }) ?? id)
+      }
+    },
 
     pool: (actor) => [
       ...work.poolView({ position_id: actor.assignment_id }).map(poolItemView),

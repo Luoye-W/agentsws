@@ -275,7 +275,8 @@ describe('看得见谁在做（40 §3.3）', () => {
     }>(await call('GET', '/v1/work/in-progress'))
     expect(own.scope).toBe('position')
     expect(own.items[0]?.owner).toBe(server.bootstrap.person.id)
-    expect(own.items[0]?.owner_label).not.toBe('')
+    // 展示名由服务端补：不是一串裸 id
+    expect(own.items[0]?.owner_label).toBe('owner')
     expect(own.items[0]?.cards).toBe(0)
     expect(Date.parse(own.items[0]?.started_at ?? '')).toBeGreaterThan(0)
 

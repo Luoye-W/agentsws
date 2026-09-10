@@ -337,11 +337,48 @@ export interface WorkPort {
   acceptClaim?(actor: WorkActor, item: ApprovalItem): MaybePromise<Todo | undefined>
 }
 
+/**
+ * `person_id` → 展示名（29 §2 enrichment：服务端补，前端不猜、也不查库）。
+ *
+ * 只翻译**这次响应里本来就带着的那些人**——他们的 id 已经在回给调用方的数据里了，
+ * 补一个名字不多给任何东西，反而挡住了「界面上出现一串裸 id」。查不到就原样返回。
+ */
+async function personLabels(
+  deps: GatewayDeps,
+  ids: readonly PersonId[],
+): Promise<Map<PersonId, string>> {
+  const out = new Map<PersonId, string>()
+  for (const id of new Set(ids)) {
+    const person = await deps.identity.getPerson(id)
+    if (person !== undefined && person.name !== '') out.set(id, person.name)
+  }
+  return out
+}
+
 function workOf(deps: GatewayDeps): WorkPort {
   const w = deps.work
   if (w === undefined)
     throw new ApiError('not_implemented', '这个服务进程没有装配工作模型（GatewayDeps.work）')
   return w
+}
+
+/** 撞车候选里的 `owner` 补一个展示名——选择题卡上不该出现一串裸 id。 */
+async function labelCollision(deps: GatewayDeps, err: unknown): Promise<unknown> {
+  if (err === null || typeof err !== 'object') return err
+  const rec = err as {
+    details?: { reason?: string; candidates?: { owner: PersonId; owner_label?: string }[] }
+  }
+  const candidates = rec.details?.candidates
+  if (rec.details?.reason !== 'similar_in_progress' || candidates === undefined) return err
+  const names = await personLabels(
+    deps,
+    candidates.map((x) => x.owner),
+  )
+  rec.details.candidates = candidates.map((x) => ({
+    ...x,
+    owner_label: names.get(x.owner) ?? x.owner_label ?? x.owner,
+  }))
+  return err
 }
 
 type Ctx = Parameters<typeof param>[0]
@@ -425,7 +462,20 @@ export function workRoutes(): Route[] {
         params: [ID_PARAM],
         returns: 'WorkMatterView',
       },
-      async (c, deps) => ok(c, await workOf(deps).matter(actorOf(c), param(c, 'id'))),
+      async (c, deps) => {
+        const view = await workOf(deps).matter(actorOf(c), param(c, 'id'))
+        const names = await personLabels(
+          deps,
+          view.participant_labels.map((p) => p.person_id),
+        )
+        return ok(c, {
+          ...view,
+          participant_labels: view.participant_labels.map((p) => ({
+            ...p,
+            label: names.get(p.person_id) ?? p.label,
+          })),
+        })
+      },
     ),
     route(
       {
@@ -596,12 +646,14 @@ export function workRoutes(): Route[] {
         body: CreateTodoBody,
         returns: '{ todo: Todo }',
       },
-      async (c, deps) =>
-        ok(
-          c,
-          { todo: await workOf(deps).createTodo(actorOf(c), await body(c, CreateTodoBody)) },
-          201,
-        ),
+      async (c, deps) => {
+        const input = await body(c, CreateTodoBody)
+        try {
+          return ok(c, { todo: await workOf(deps).createTodo(actorOf(c), input) }, 201)
+        } catch (err) {
+          throw await labelCollision(deps, err)
+        }
+      },
     ),
     route(
       {
@@ -699,7 +751,15 @@ export function workRoutes(): Route[] {
         if (raw !== undefined && raw !== '' && raw !== 'position' && raw !== 'workspace')
           throw new ApiError('invalid_input', 'scope 只能是 position / workspace')
         const scope = raw === 'workspace' ? 'workspace' : 'position'
-        return ok(c, { items: await workOf(deps).inProgress(actorOf(c), scope), scope })
+        const items = await workOf(deps).inProgress(actorOf(c), scope)
+        const names = await personLabels(
+          deps,
+          items.map((i) => i.owner),
+        )
+        return ok(c, {
+          items: items.map((i) => ({ ...i, owner_label: names.get(i.owner) ?? i.owner_label })),
+          scope,
+        })
       },
     ),
     route(

@@ -49,6 +49,8 @@ export interface SimilarCandidate {
   id: string
   title: string
   owner: string
+  /** 主人的展示名（服务端补；翻译不出来就是 `owner` 本身） */
+  owner_label?: string
   status: string
   /** 靠哪几把钥匙命中的：object / semantic / position_day */
   keys: string[]
