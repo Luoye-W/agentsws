@@ -4,9 +4,11 @@
  * - `simulate` 按 glob 跑场景，出报告与合并门禁结论；任一失败退出码非 0
  * - `synth` 生成合成公司数据集（固定 seed 可复现）
  * - `replay` 从事件日志重组 prompt，与 `prompt.assembled.hash` 比对（17 §6.1）
+ * - `export` / `import` 双向搬家（40 §1.3、33 §1）：带清单与哈希的包，凭据只导密文
  */
 
 import { isAbsolute, resolve } from 'node:path'
+import { createServer, exportWorkspace, importWorkspace } from '@agentsws/server'
 import {
   formatReport,
   isRuntimeName,
@@ -235,7 +237,97 @@ export function buildProgram(
       process.on('SIGTERM', stop)
     })
 
+  // ── 40 §1.3 / 33 §1 双向搬家 ───────────────────────────────────────
+
+  program
+    .command('export')
+    .description('把一个工作区导成带清单与哈希的包（40 §1.3；凭据只导密文，不导明文）')
+    .requiredOption('--workspace <id>', '工作区 id')
+    .option('--data-dir <dir>', '数据目录（缺省读 AGENTSWS_DATA_DIR）')
+    .requiredOption('--out <dir|zip>', '导到哪：一个目录，或一个 .zip 文件')
+    .action((opts: Record<string, unknown>) => {
+      const dataDir = dataDirOf(opts)
+      const out = exportWorkspace({
+        dataDir,
+        workspace_id: String(opts.workspace),
+        out: fromCwd(String(opts.out)),
+        clock: { now: () => new Date().toISOString() },
+      })
+      const m = out.manifest
+      write(`导出：${out.out}（${out.format}，${humanBytes(out.bytes)}）\n`)
+      write(`  ${m.files.length} 个文件，${m.chain.count} 条事件`)
+      write(m.chain.last_hash === undefined ? '\n' : `，链尾 ${m.chain.last_hash.slice(0, 12)}\n`)
+      write(`  秘密库 ${m.secrets.records} 条（密文）；主体密钥 ${m.keyring.subjects} 把\n`)
+      if (m.keyring.plain > 0)
+        write(
+          `  注意：${m.keyring.plain} 把主体密钥是**裸着**存的（这台机器没设 AGENTSWS_DATA_KEY）。\n` +
+            '        这个包等同明文，请当秘密保管。\n',
+        )
+    })
+
+  program
+    .command('import')
+    .description('把一个导出包铺到数据目录：核对清单与哈希 → 验事件链 → 先对账再放开出站')
+    .argument('<pkg>', '导出包：一个目录或 .zip')
+    .requiredOption('--data-dir <dir>', '导到哪个数据目录（非空要 --force）')
+    .option('--force', '目录非空也照导（覆盖同名文件）')
+    .option('--no-reconcile', '只落地，不启动服务进程对账（15 §5.8 那一步自己来）')
+    .action(async (pkg: string, opts: Record<string, unknown>) => {
+      const dataDir = fromCwd(String(opts['dataDir']))
+      const out = await importWorkspace({
+        pkg: fromCwd(pkg),
+        dataDir,
+        ...(opts.force === true ? { force: true } : {}),
+        // 15 §5.8：恢复之后不直接开工——起一次服务进程，它在装配时就把 outbound
+        // 急停挂上（账本里有 unknown / 半路 applying 时），对完账再放开
+        ...(opts['reconcile'] === false
+          ? {}
+          : {
+              afterImport: async (dir: string) => {
+                const server = await createServer({ quiet: true, dbDir: dir, startRun: false })
+                try {
+                  const report = await server.reconcile.run()
+                  return { reconcile: report.state, pending: report.unresolved.length }
+                } finally {
+                  await server.close()
+                }
+              },
+            }),
+      })
+      write(`导入：${out.dataDir}\n`)
+      write(`  ${out.files_verified} 个文件哈希全对上\n`)
+      write(
+        out.chain.ok
+          ? `  事件链完整：${out.chain.events} 条\n`
+          : `  事件链断了：${String(out.chain.broken_at)}（${String(out.chain.reason)}）\n`,
+      )
+      if (out.reconcile !== undefined)
+        write(
+          `  对账：${out.reconcile.reconcile}` +
+            (out.reconcile.pending > 0
+              ? `，还有 ${out.reconcile.pending} 笔没对上——出站还挂着急停\n`
+              : '，出站已放开\n'),
+        )
+      if (!out.chain.ok) process.exitCode = 1
+    })
+
   return program
+}
+
+/** 数据目录：命令行优先，其次 `AGENTSWS_DATA_DIR`（旧名 `AGENTSWS_DB_DIR` 仍认）。 */
+function dataDirOf(opts: Record<string, unknown>): string {
+  const given = opts['dataDir']
+  if (given !== undefined) return fromCwd(String(given))
+  const env = process.env.AGENTSWS_DATA_DIR ?? process.env.AGENTSWS_DB_DIR
+  if (env === undefined || env.trim() === '')
+    throw new Error('没给 --data-dir，环境里也没有 AGENTSWS_DATA_DIR')
+  return fromCwd(env)
+}
+
+function humanBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
 /** bin 入口。 */

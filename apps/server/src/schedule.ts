@@ -14,6 +14,7 @@
  * ⑥ 技能周合并（周一 06:00）⑦ 复盘 → 次日计划草案的接力（复盘跑完注册一个 at 任务）
  * ⑧ 审批过期与升级（每分钟，39 待办 A）⑨ 邮箱轮询与入站管线（每 2 分钟，39 待办 C）
  * ⑩ 受控原始材料区的保留期清理（每天 03:00，39 待办 H）⑪ 学习回路的次日提案（每天 07:30，WP29）
+ * ⑫ 每天一份备份（每天 04:00，WP36 / 40 §1.3）
  */
 import { join } from 'node:path'
 import type {
@@ -64,6 +65,7 @@ import {
   reviewTitle,
   type Work,
 } from '@agentsws/work'
+import type { BackupRunResult } from './backup.js'
 import { type HousekeepingDeps, runApprovalHousekeeping } from './housekeeping.js'
 import type { MeetingsAssembly } from './meetings.js'
 
@@ -84,6 +86,8 @@ export const HANDLERS = {
   mailPoll: 'channels.mail_poll',
   /** WP34：受控原始材料区的保留期清理（18 §2.1）。 */
   rawPrune: 'privacy.raw_prune',
+  /** WP36：每天一份备份（40 §1.3；导出与搬家同一个格式）。 */
+  backup: 'backup.daily',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -673,6 +677,28 @@ export function registerRawPrune(scheduler: Scheduler, deps: RawPruneDeps): void
 }
 
 /* ------------------------------------------------------------------ */
+/* ⑫ 每天一份备份：每天 04:00（40 §1.3）                                  */
+/* ------------------------------------------------------------------ */
+
+export interface BackupDeps {
+  /** 跑一次备份，返回落在哪 / 多大 / 留了几份。实现在 `./backup.ts`。 */
+  run(): BackupRunResult
+}
+
+/**
+ * 备份是**导出的一个定时调用**——同一个格式、同一份清单与哈希（40 §1.3）。
+ *
+ * 挂 04:00 而不是 03:00：保留期清理排在 03:00，先清完过期的原始材料再备份，
+ * 包里就不会带上一份马上要被删掉的东西。
+ *
+ * 错过不补跑（`misfire_policy: 'skip'` 的默认）：机器关了三天，开机时补三份
+ * 内容几乎一样的包没有意义，当天那一份照常跑。
+ */
+export function registerBackup(scheduler: Scheduler, deps: BackupDeps): void {
+  scheduler.register(HANDLERS.backup, () => deps.run())
+}
+
+/* ------------------------------------------------------------------ */
 /* 排期：十条任务的时间表                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -702,6 +728,8 @@ export interface SchedulePlanOptions {
     mail?: boolean
     /** WP34：受控原始材料区的保留期清理 */
     raw?: boolean
+    /** WP36：每天一份备份。**只有落盘档有**——内存档没有可导的库。 */
+    backup?: boolean
   }
 }
 
@@ -871,6 +899,17 @@ export async function ensureSystemTasks(
         title: '每天清一次过了保留期的原始材料',
         handler: HANDLERS.rawPrune,
         trigger: { kind: 'cron', expr: '0 3 * * *', tz },
+      }),
+    )
+  }
+  // ⑫ 每天 04:00 存一份（排在 03:00 的保留期清理之后）
+  if (options.has.backup === true) {
+    await add(
+      'sched_backup',
+      systemTask(base, {
+        title: '每天存一份备份',
+        handler: HANDLERS.backup,
+        trigger: { kind: 'cron', expr: '0 4 * * *', tz },
       }),
     )
   }

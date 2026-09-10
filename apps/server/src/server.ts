@@ -62,6 +62,7 @@ import { type ServerType, serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
+import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
@@ -85,6 +86,7 @@ import {
   ensureSystemTasks,
   offsetToTz,
   registerApprovalHousekeeping,
+  registerBackup,
   registerDailyPlan,
   registerIdempotencySweep,
   registerLearning,
@@ -805,6 +807,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
     meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
   })
+  // ⑫ WP36 40 §1.3：每天一份备份。**只有落盘档有**——内存档没有可导的库文件。
+  const runWorkspaceBackup = (): BackupRunResult => {
+    if (dbDir === undefined) throw new Error('这个服务进程没有数据目录，没有可导的东西')
+    return runBackup({
+      dataDir: dbDir,
+      workspace_id: workspace.id,
+      outDir: backupDirOf(env, dbDir),
+      clock,
+      keep: backupKeepOf(env),
+      release: env.AGENTSWS_VERSION ?? '0.1.0',
+    })
+  }
+  if (dbDir !== undefined) registerBackup(schedule.scheduler, { run: runWorkspaceBackup })
+
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -822,6 +838,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals: true,
       mail: true,
       raw: true,
+      backup: dbDir !== undefined,
     },
   })
 
@@ -1088,6 +1105,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           { person_id: actor.person_id, role_id: actor.role_id },
         ),
     },
+    // WP36 40 §1.3 备份：网关只转发；路径由服务端定（owner 也不能指定往哪写）
+    ...(dbDir === undefined
+      ? {}
+      : {
+          backup: {
+            export: async (_actor, input) => {
+              const out = runBackup({
+                dataDir: dbDir,
+                workspace_id: workspace.id,
+                outDir: backupDirOf(env, dbDir),
+                clock,
+                keep: input.keep ?? backupKeepOf(env),
+                release: env.AGENTSWS_VERSION ?? '0.1.0',
+              })
+              return {
+                out: out.out,
+                bytes: out.bytes,
+                events: out.events,
+                kept: out.kept,
+                pruned: out.pruned,
+                at: clock.now(),
+              }
+            },
+          },
+        }),
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,

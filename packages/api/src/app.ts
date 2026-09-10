@@ -14,6 +14,7 @@ import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
+import { backupRoutes } from './routes/backup.js'
 import { changeRoutes } from './routes/changes.js'
 import { connectionRoutes } from './routes/connections.js'
 import { eventRoutes } from './routes/events.js'
@@ -67,6 +68,8 @@ export function collectRoutes(): Route[] {
     ...secretRoutes(),
     // WP34 21 §4「删这个人」（owner）：三个库一次清掉，独立路径不与别处撞
     ...privacyRoutes(),
+    // WP36 40 §1.3 备份（owner）：`/v1/backup/export` 独立路径，不与别处撞
+    ...backupRoutes(),
     ...knowledgeRoutes(),
     // 37 §4 会议面：`/v1/meetings/:id/records/:rid/process` 与 `/v1/meetings/:id/records` 路径不同，顺序无所谓
     ...meetingRoutes(),

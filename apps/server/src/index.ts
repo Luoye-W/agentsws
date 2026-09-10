@@ -7,6 +7,33 @@
 export { type AskOptions, createAskPort } from './ask.js'
 export { type BackendCall, LATE_WRITE_ERROR, MemoryBackend } from './backend.js'
 export {
+  BACKUP_DIR_ENV,
+  BACKUP_FORMAT,
+  BACKUP_KEEP_ENV,
+  BackupError,
+  type BackupFileEntry,
+  type BackupManifest,
+  type BackupRunInput,
+  type BackupRunResult,
+  backupDirOf,
+  backupFiles,
+  backupKeepOf,
+  backupName,
+  crc32,
+  DEFAULT_BACKUP_KEEP,
+  type ExportInput,
+  type ExportResult,
+  exportWorkspace,
+  head,
+  type ImportInput,
+  type ImportResult,
+  importWorkspace,
+  MANIFEST,
+  runBackup,
+  unzipTo,
+  zipDir,
+} from './backup.js'
+export {
   authOptionOf,
   CATALOG,
   type CatalogAuth,
@@ -67,6 +94,21 @@ export {
   modelIdOf,
   STUB_REF,
 } from './models.js'
+export {
+  type AdoptInput,
+  type AdoptReceipt,
+  type ArchivedSkillView,
+  createOffboard,
+  type MemoryPolicy,
+  type Offboard,
+  type OffboardInput,
+  type OffboardOptions,
+  type OffboardReport,
+  type OffboardStep,
+  type OffboardStepId,
+  type PersonalLayerPolicy,
+  personSubject,
+} from './offboard.js'
 export { createOrg, type OrgAssembly, type OrgOptions } from './org.js'
 export {
   createReconcileGuard,
@@ -84,6 +126,7 @@ export {
   type RuntimeOptions,
 } from './runtime.js'
 export {
+  type BackupDeps,
   buildReviewsFor,
   createScheduleAssembly,
   createSchedulePort,
@@ -107,6 +150,7 @@ export {
   type RelayDeps,
   type ReviewDeps,
   registerApprovalHousekeeping,
+  registerBackup,
   registerDailyPlan,
   registerIdempotencySweep,
   registerMailPoll,
