@@ -20,6 +20,7 @@
 import type { Clock, EventEnvelope, WorkspaceId } from '@agentsws/contracts'
 import type { ConnectionLike, DataSourceStatus, OrderRow } from '@agentsws/deck'
 import { dataSourcesFromConnections } from '@agentsws/deck'
+import { catalogEntry } from './catalog.js'
 import type { ConnectLike } from './connections.js'
 import type { WorkstationDataSource } from './workstation.js'
 
@@ -429,9 +430,14 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
       .liveConnections()
       .find((c) => SHOP_SERVICES.has(c.service) && c.status === 'active')
 
-  /** 目录里这个只读动作叫什么（真身与替身都用 `service.动作名`，但别写死）。 */
+  /**
+   * 目录里这个只读动作叫什么（真身与替身都用 `service.动作名`，但别写死）。
+   *
+   * 查目录要用**上游的 service 名**（`catalog.ts` 的 `upstream`），不是我们对外的
+   * provider id——两者对 Shopify 恰好同名，别的 provider 不是（`smokeRemote` 同此）。
+   */
   const findAction = async (service: string, bare: string): Promise<{ id: string } | undefined> => {
-    const actions = await options.connect.actions(service)
+    const actions = await options.connect.actions(catalogEntry(service)?.upstream ?? service)
     return actions.find((a) => a.side_effect === 'read' && a.id.endsWith(`.${bare}`))
   }
 
