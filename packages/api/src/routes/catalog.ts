@@ -112,6 +112,19 @@ export interface CatalogPort {
     reused: string
   }): MaybePromise<void>
   /**
+   * 复盘卡 / 工具箱上的"一键合并"：出一张 `policy_change` 卡，
+   * 批了才把留下的那条升层、把并掉的那条指过去。**只出卡，不合并**。
+   */
+  merge?(input: {
+    workspace_id: WorkspaceId
+    /** 留下的那条 */
+    keep: string
+    /** 并进去的那条 */
+    drop: string
+    by: PersonId
+    assignment_id: string
+  }): MaybePromise<{ approval_item_id: string } | undefined>
+  /**
    * 记一条"没有家的条目"：对话里定制出来的卡、指导落成的规矩，
    * 在别的包里没有一张自己的表，目录替它们保管一份。可选面：没装就少两种 kind。
    */
@@ -146,6 +159,11 @@ export function triggerKeyOf(
       return undefined
   }
 }
+
+const MergeBody = z.object({
+  keep: z.string().min(1),
+  drop: z.string().min(1),
+})
 
 const SimilarBody = z.object({
   kind: z.enum(CATALOG_KINDS),
@@ -340,6 +358,38 @@ export function catalogRoutes(): Route[] {
             ...(limit === undefined ? {} : { limit }),
           }),
         )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/catalog/merge',
+        operationId: 'mergeCatalogEntries',
+        summary: '一键合并两条疑似重复的（40 §2.2 第 4 条）：出一张 policy_change 卡，批了才合',
+        tag: 'catalog',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: MergeBody,
+        returns: '{ approval_item_id }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const assignment = assignmentOf(c)
+        const port = portOf(deps)
+        if (port.merge === undefined) throw new ApiError('not_implemented', '这个进程不支持合并')
+        const input = await body(c, MergeBody)
+        if (input.keep === input.drop)
+          throw new ApiError('invalid_input', '留下的和并掉的不能是同一条')
+        const out = await port.merge({
+          workspace_id: p.workspace_id,
+          keep: input.keep,
+          drop: input.drop,
+          by: p.person_id,
+          assignment_id: assignment.id,
+        })
+        if (out === undefined) throw new ApiError('not_found', '目录里没有这两条')
+        return ok(c, out, 201)
       },
     ),
     route(

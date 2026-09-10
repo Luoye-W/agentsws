@@ -17,6 +17,7 @@
  */
 import { join } from 'node:path'
 import type {
+  CatalogDuplicateView,
   ScheduleActor,
   ScheduleCreateInput,
   ScheduledTaskView,
@@ -305,6 +306,17 @@ export interface ReviewDeps extends PlanDeps {
   lessons?(position: SchedulePosition): { id: string; text: string }[]
   /** 复盘跑完把「明天的计划草案」接力成一个 `at` 任务（消费者 ⑦） */
   relay?(review: Review, position: SchedulePosition): Promise<void> | void
+  /**
+   * 40 §2 工具箱：周复盘里报一段"疑似重复"，并把过了门槛的好东西往上浮。
+   * 没装工具箱就少这两样，复盘照跑。
+   */
+  catalog?: {
+    duplicates(limit?: number): Promise<CatalogDuplicateView[]>
+    proposePromotions(
+      deps: { approvals: ApprovalBus; owner: PersonId; role_id: string },
+      named_in_review?: Iterable<string>,
+    ): Promise<{ created: string[]; blocked: string[] }>
+  }
 }
 
 const WAITING_STATES = new Set(['pending', 'in_review'])
@@ -364,8 +376,27 @@ async function createReviewCard(
 export async function buildReviewsFor(
   deps: ReviewDeps,
   kind: 'day' | 'week' | 'month',
-): Promise<{ reviews: string[] }> {
+): Promise<{ reviews: string[]; duplicates?: number; promotions?: string[] }> {
   const reviews: string[] = []
+  /**
+   * 40 §2.2 第 4 条：**周复盘**里报"疑似重复"（相似度高但两条都在用）。
+   * 日复盘不报——同一对东西天天提醒一次就是噪音。
+   */
+  const rawDuplicates = kind === 'day' ? [] : ((await deps.catalog?.duplicates(5)) ?? [])
+  // 复盘卡的 payload 只要认得出这两条是什么、谁建的，不把整条目录条目抄进去
+  const brief = (e: CatalogDuplicateView['a']) => ({
+    id: e.id,
+    title: e.title,
+    owner: e.owner,
+    kind: e.kind,
+  })
+  const duplicates = rawDuplicates.map((d) => ({
+    a: brief(d.a),
+    b: brief(d.b),
+    similarity: d.similarity,
+    both_in_use: d.both_in_use,
+    reasons: d.reasons,
+  }))
   const work = deps.work
   const range = work.todayRange()
   const start = iso(Date.parse(range.to) - SPAN_DAYS[kind] * DAY_MS)
@@ -387,6 +418,7 @@ export async function buildReviewsFor(
         status: ['open', 'doing', 'blocked'],
       }),
       meetings: [],
+      ...(duplicates.length === 0 ? {} : { duplicates }),
       ...(deps.lessons === undefined ? {} : { lessons: deps.lessons(position) }),
       tomorrow: {
         now: iso(Date.parse(work.now()) + DAY_MS),
@@ -401,7 +433,23 @@ export async function buildReviewsFor(
     reviews.push(review.id)
     await deps.relay?.(review, position)
   }
-  return { reviews }
+  // 40 §2.2 第 3 条：好东西往上浮。被复盘点名的（疑似重复里的两条）也算进候选
+  const named = duplicates.flatMap((d) => [d.a.id, d.b.id])
+  const first = deps.positions()[0]
+  const promotions =
+    deps.catalog === undefined || first === undefined || kind === 'day'
+      ? undefined
+      : (
+          await deps.catalog.proposePromotions(
+            { approvals: deps.approvals, owner: first.person_id, role_id: first.role_id },
+            named,
+          )
+        ).created
+  return {
+    reviews,
+    ...(duplicates.length === 0 ? {} : { duplicates: duplicates.length }),
+    ...(promotions === undefined ? {} : { promotions }),
+  }
 }
 
 /** 今天是不是这个月的最后一天（按工作区时区）。cron 不认识「月末」，只能这样判。 */

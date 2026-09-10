@@ -58,6 +58,20 @@ export function battleReport(outcomes: readonly CardOutcome[]): BattleReport {
   return { ai_handled, you_handled, auto_sent, blocked }
 }
 
+/**
+ * 40 §2.2 第 4 条：周复盘里的"疑似重复"——相似度高**而且两条都还在用**的成对。
+ *
+ * 判定不在本包（在 `@agentsws/catalog`）；这里只负责把它端到复盘上，并在
+ * `highlights` 里写一句人话。复盘卡上那个"合并"按钮走 05 的 `policy_change`。
+ */
+export interface ReviewDuplicate {
+  a: { id: string; title: string; owner: string; kind: string }
+  b: { id: string; title: string; owner: string; kind: string }
+  similarity: number
+  both_in_use: boolean
+  reasons?: string[]
+}
+
 export interface ReviewInput {
   now: Iso8601
   person_id: PersonId
@@ -72,12 +86,14 @@ export interface ReviewInput {
   /** 会议产出的条数（决定 + 待办 + 边界答案 + 知识；WP23 给） */
   meeting_outputs?: number
   lessons?: readonly { id: string; text: string }[]
+  /** 40 §2.2：疑似重复的成对（日复盘不给，周 / 月复盘才报） */
+  duplicates?: readonly ReviewDuplicate[]
   /** 明天的计划草案要用的输入；`goals` 不给就沿用今天的 */
   tomorrow: Omit<DailyPlanInput, 'yesterday_review' | 'person_id' | 'tz_offset_minutes' | 'goals'> &
     Partial<Pick<DailyPlanInput, 'goals'>>
 }
 
-export function buildReview(input: ReviewInput): ReviewDraft {
+export function buildReview(input: ReviewInput): ReviewDraft & { duplicates?: ReviewDuplicate[] } {
   const cards = battleReport(input.cards_events)
   const total = input.todos.length
   const done = input.todos.filter((t) => t.status === 'done').length
@@ -98,6 +114,15 @@ export function buildReview(input: ReviewInput): ReviewDraft {
     highlights.push(`AI 自主处理 ${cards.ai_handled} 张，其中发出去 ${cards.auto_sent} 张`)
   if (lessons.length > 0)
     highlights.push(`Agent 记下 ${lessons.length} 条经验，明天会问你要不要采纳`)
+  const duplicates = [...(input.duplicates ?? [])]
+  if (duplicates.length > 0) {
+    const first = duplicates[0]
+    highlights.push(
+      first === undefined
+        ? `发现 ${duplicates.length} 对疑似重复的东西`
+        : `疑似重复 ${duplicates.length} 对，最像的是「${first.a.title}」与「${first.b.title}」——要不要合成一份`,
+    )
+  }
 
   const next_plan_draft: DailyPlanDraft = draftDailyPlan({
     ...input.tomorrow,
@@ -116,6 +141,8 @@ export function buildReview(input: ReviewInput): ReviewDraft {
     lessons,
     highlights,
     next_plan_draft,
+    // 契约里的 `ReviewDraft` 还没有这一段（见交付报告的契约建议）；多带一个字段不影响别处
+    ...(duplicates.length === 0 ? {} : { duplicates }),
   }
 }
 

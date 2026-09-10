@@ -401,3 +401,34 @@ describe('战报四格与复盘', () => {
     expect(reviewTitle(empty)).toContain('本月')
   })
 })
+
+describe('40 §2.2 第 4 条：复盘里的"疑似重复"', () => {
+  const base = {
+    now: T0,
+    person_id: 'per_1',
+    tz_offset_minutes: TZ,
+    period: { kind: 'week' as const, start: T0, end: T0 },
+    goals: [],
+    cards_events: [],
+    todos: [],
+    meetings: [],
+    tomorrow: { now: T0, todos: emptyInbox, today_meetings: [], goals: [] },
+  }
+  const pair = {
+    a: { id: 'schedule:a', title: '每天早上汇总退款单', owner: 'p_li', kind: 'schedule' },
+    b: { id: 'schedule:b', title: '早上汇总退款单', owner: 'p_wang', kind: 'schedule' },
+    similarity: 0.83,
+    both_in_use: true,
+  }
+
+  it('给了就端到复盘上，并在 highlights 里写一句人话', () => {
+    const draft = buildReview({ ...base, duplicates: [pair] })
+    expect(draft.duplicates).toEqual([pair])
+    expect(draft.highlights.join('')).toContain('疑似重复 1 对')
+    expect(draft.highlights.join('')).toContain('每天早上汇总退款单')
+  })
+
+  it('不给就一个字都不多（日复盘不报重复）', () => {
+    expect(buildReview(base).duplicates).toBeUndefined()
+  })
+})

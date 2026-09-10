@@ -572,7 +572,44 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
-  const approvals = learning.wrap(rawApprovals)
+  /**
+   * 40 §2 工具箱：把定时任务、流程、技能投影成同一张卡片，供"建之前先查"与工具箱页用。
+   *
+   * 装在审批总线**之前**——它要包一层总线（晋升卡批准了才真的升层）。调度器与流程引擎
+   * 要到后面才起来，所以那两个来源是惰性的：真正取值发生在请求到来时。
+   */
+  const catalog = createCatalogIndex({
+    workspace_id: workspace.id,
+    clock,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    scheduler: () => schedule.scheduler,
+    workflows: () => schedule.workflows,
+    // 整个工作区的岗位（不是本人那几个）：算"哪些岗位在用"要全的
+    positions: () =>
+      roles.roles
+        .list()
+        .flatMap((r) => roles.assignments.listByRole(r.id, { workspace_id: workspace.id }))
+        .filter((a) => a.revoked_at === undefined)
+        .map((a) => ({
+          id: a.id,
+          person_id: a.person_id,
+          role_id: a.role_id,
+          skills: (roles.roles.get(a.role_id)?.skills ?? []).map((sk) => sk.name),
+        })),
+    skillNames: () => skills.registry.listSkillNames(),
+    // 有人写过个人层 overlay 的技能算"个人副本"，其余算公司在用的
+    skillOwner: (name) => {
+      const personal = skills.registry
+        .listOverlays(name)
+        .find((o) => o.tier === 'personal' && o.ops.length > 0)
+      return personal === undefined
+        ? { owner: 'package' as PersonId, layer: 'company' as const }
+        : { owner: String(personal.owner) as PersonId, layer: 'personal' as const }
+    },
+  })
+
+  // 两层包装：学习回路先落 overlay / 知识卡，目录再看是不是一张晋升卡
+  const approvals = catalog.wrap(learning.wrap(rawApprovals))
   // WP20 连接面：装配一次，`/v1/connections/*` 与工作台数据源共用同一份连接状态。
   const connections = await createConnections({
     clock,
@@ -708,40 +745,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.scheduleIntervalMs === undefined ? {} : { intervalMs: options.scheduleIntervalMs }),
   })
-  /**
-   * 40 §2 工具箱：把定时任务、流程、技能投影成同一张卡片，供"建之前先查"与工具箱页用。
-   * 装在调度器之后——它的第一个来源就是调度库。
-   */
-  const catalog = createCatalogIndex({
-    workspace_id: workspace.id,
-    clock,
-    ...(dbDir === undefined ? {} : { dbDir }),
-    scheduler: schedule.scheduler,
-    workflows: schedule.workflows,
-    // 整个工作区的岗位（不是本人那几个）：算"哪些岗位在用"要全的
-    positions: () =>
-      roles.roles
-        .list()
-        .flatMap((r) => roles.assignments.listByRole(r.id, { workspace_id: workspace.id }))
-        .filter((a) => a.revoked_at === undefined)
-        .map((a) => ({
-          id: a.id,
-          person_id: a.person_id,
-          role_id: a.role_id,
-          skills: (roles.roles.get(a.role_id)?.skills ?? []).map((sk) => sk.name),
-        })),
-    skillNames: () => skills.registry.listSkillNames(),
-    // 有人写过个人层 overlay 的技能算"个人副本"，其余算公司在用的
-    skillOwner: (name) => {
-      const personal = skills.registry
-        .listOverlays(name)
-        .find((o) => o.tier === 'personal' && o.ops.length > 0)
-      return personal === undefined
-        ? { owner: 'package' as PersonId, layer: 'company' as const }
-        : { owner: String(personal.owner) as PersonId, layer: 'personal' as const }
-    },
-  })
-
   const scheduleTz = offsetToTz(workData.tz_offset_minutes)
   const positionsOf = (): SchedulePosition[] =>
     roles.assignments
@@ -789,6 +792,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         .list({ workspace_id: workspace.id, status: 'pooled' })
         .map((l) => ({ id: l.id, text: l.text })),
     relay: (review) => relay(review),
+    // 40 §2.2：周复盘报"疑似重复"，并把过了 Wilson 门槛的好东西往上浮
+    catalog: {
+      duplicates: (limit) => catalog.duplicates(limit),
+      proposePromotions: (deps, named) => catalog.proposePromotions(deps, named),
+    },
   })
   // ③ 会议记录源轮询
   registerMeetingPoll(schedule.scheduler, {
@@ -1080,7 +1088,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     },
     // 40 §2 工具箱与查重；五个"建"的入口经 `guardSimilar` 用同一份判定
-    catalog: catalog.port,
+    catalog: {
+      ...catalog.port,
+      // 复盘卡 / 工具箱上那个"合并"：出一张 policy_change 卡，批了才合
+      merge: (input) =>
+        catalog.proposeMerge({
+          approvals,
+          owner: person.id,
+          role_id: ownerAssignment.role_id,
+          keep: input.keep,
+          drop: input.drop,
+          by: input.by,
+        }),
+    },
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
@@ -1103,6 +1123,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }) as Promise<ApprovalItem[]>,
       orders: () => workData.orders(),
       label: (ref) => workData.label(ref),
+      // 40 §2.2：周 / 月复盘里那一段"疑似重复"
+      duplicates: async () =>
+        (await catalog.duplicates(5)).map((d) => ({
+          a: { id: d.a.id, title: d.a.title, owner: d.a.owner, kind: d.a.kind },
+          b: { id: d.b.id, title: d.b.title, owner: d.b.owner, kind: d.b.kind },
+          similarity: d.similarity,
+          both_in_use: d.both_in_use,
+          reasons: d.reasons,
+        })),
     }),
     traceScope,
     options: {
