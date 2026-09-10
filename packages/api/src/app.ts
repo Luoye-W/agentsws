@@ -28,6 +28,7 @@ import { modelRoutes } from './routes/models.js'
 import { orgRoutes } from './routes/org.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
+import { secretaryRoutes } from './routes/secretary.js'
 import { secretRoutes } from './routes/secrets.js'
 import { skillRoutes } from './routes/skills.js'
 import { storageRoutes } from './routes/storage.js'
@@ -96,6 +97,10 @@ export function collectRoutes(): Route[] {
     ...askRoutes(),
     // 40 §2 工具箱与查重；`/v1/catalog/similar` 与 `/v1/catalog/duplicates` 是定值段，与 `/v1/catalog` 不撞
     ...catalogRoutes(),
+    // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/meetings/:id/brief`。
+    // 必须排在 meetingRoutes 之后（`/v1/meetings/:id/brief` 与 `/v1/meetings/:id` 是两条路径，
+    // 顺序无所谓，但放最后与"秘书是加分项"这件事对得上）
+    ...secretaryRoutes(),
   ]
 }
 

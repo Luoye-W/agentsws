@@ -1,0 +1,29 @@
+{
+  "name": "@agentsws/secretary",
+  "version": "0.0.0",
+  "private": true,
+  "description": "秘书 Agent（41 §1）：个人 profile 与公开级别 · 代答 · 日程与约时间 · 任务路由",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/skills": "workspace:*",
+    "better-sqlite3": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

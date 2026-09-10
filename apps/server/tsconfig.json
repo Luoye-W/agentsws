@@ -58,6 +58,9 @@
       "path": "../../packages/schedule"
     },
     {
+      "path": "../../packages/secretary"
+    },
+    {
       "path": "../../packages/skills"
     },
     {

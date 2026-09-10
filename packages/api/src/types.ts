@@ -57,6 +57,7 @@ import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { PrivacyPort } from './routes/privacy.js'
+import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
 import type { StoragePort } from './routes/storage.js'
 import type { WorkPort } from './routes/work.js'
@@ -535,6 +536,12 @@ export interface GatewayDeps {
   storage?: StoragePort
   /** WP25 模型面（provider 配置 / 默认模型 / 预算 / 花费）；没装配时 `/v1/models/*` 回 not_implemented。 */
   models?: ModelsPort
+  /**
+   * 41 §1 秘书面（profile 与公开级别 / 代答 / 日程与约时间 / 任务路由）；
+   * 没装配时 `/v1/me/*` 的秘书那几条与 `/v1/people/*` 回 not_implemented。
+   * 工作台照常能用——秘书是加分项，不是首页的前提。
+   */
+  secretary?: SecretaryPort
   /**
    * WP28 制度面（05 职责 / 岗位 / 分配 / 策略层 + 20 成员与邀请）；
    * 没装配时 `/v1/roles`、`/v1/org/*`、成员与邀请那几条回 not_implemented。

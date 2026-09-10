@@ -1,0 +1,63 @@
+# 约时间：撞上了被挡并给替代，对方点头才进双方日历（41 §1.2 第二行）。
+#
+# 王岚想约李默聊定价。第一次挑的是**本地晚上 11 点**——不在李默的可用时段里，
+# 于是这一张卡根本发不出去：回来的是"约不上"加几个能约的时段（发一张注定被拒的卡不礼貌）。
+#
+# 换到工作时段再发一次，卡出去了——但**双方日历上仍然什么都没有**。
+# 李默点头之后，那场会才同时出现在两个人的日历上（`simulation.meet_on_both_calendars`）。
+#
+# 第三段是"约到已经占着的时段":同一个时段再约一次，这次撞的是刚约成的那场会。
+id: secretary/meet-conflict
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 本地 23:00（UTC 15:00）：不在可用时段里 → 挡下，给替代
+  - at: '+0m'
+    secretary.meet:
+      who: p_wang
+      with: p_li
+      slot: '2026-09-07T15:00:00.000Z'
+      minutes: 30
+      title: 聊定价
+  # 换到本地 14:00（UTC 06:00）→ 卡发得出去
+  - at: '+10m'
+    secretary.meet:
+      who: p_wang
+      with: p_li
+      slot: '2026-09-07T06:00:00.000Z'
+      minutes: 30
+      title: 聊定价
+  # 李默点头 → 双方日历都有
+  - at: '+20m'
+    secretary.meet_decide: { who: p_li, action: accept }
+  # 同一个时段再约一次：这次撞的是刚约成的那场会
+  - at: '+30m'
+    secretary.meet:
+      who: p_wang
+      with: p_li
+      slot: '2026-09-07T06:00:00.000Z'
+      minutes: 30
+      title: 再聊一次
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  blocked_rules: [slot_conflict]
+  event_types:
+    - meet.proposed
+    - meet.accepted
+    - simulation.meet_on_both_calendars
+  # 约时间不动任何外部世界
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    runs_failed: 0
+    blocked_proposals: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

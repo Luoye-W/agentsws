@@ -1,0 +1,54 @@
+# 把一件事丢给秘书：它路由给对的岗位，**自己不回**（41 §1.2 第三行、§1.4）。
+#
+# 王岚手上多了一件售后的活。她丢给自己的秘书，秘书按 04 / 05 的职责定义判断
+# 「这属于售后」——判据来自职责定义本身（description 里的"退款"、动作 `stage_refund`），
+# 所以公司改了职责定义，路由跟着变，不用改代码。
+#
+# 结果是一张**等人认领的卡**进了待认领池（40 §3.2），不是一封回信：
+# 秘书没有起草任何东西、没有发任何信、没有改任何数据。
+#
+# 第二段是边界：同一个域的**专业问题**（"退货窗口外能不能退？"）它一个字都不答，
+# 只说"这是售后的专业问题，去问岗位"——所以池子里仍然只有一条。
+id: secretary/route-to-desk
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 一件售后的活 → 售后岗位的认领卡
+  - at: '+0m'
+    secretary.route:
+      who: p_wang
+      text: 这个客户投诉说包裹破损，要退款，处理一下
+  # 一个投放的活 → 投放岗位（同一套判据，换一个域）
+  - at: '+5m'
+    secretary.route:
+      who: p_wang
+      text: 把那条低效广告暂停，顺便加几个否词
+  # 专业问题 → 只转岗位，不出卡
+  - at: '+10m'
+    secretary.route:
+      who: p_wang
+      text: 退货窗口外能不能退？
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  # 两件活各出一张认领卡，都进了池；专业问题一张都没出
+  routed_to: [dtc.aftersales, ads.performance]
+  event_types:
+    - todo.pooled
+    - secretary.routed
+  # 秘书自己没回：没起草、没发信、没改数据
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    runs_failed: 0
+    blocked_proposals: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

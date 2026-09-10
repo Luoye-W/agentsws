@@ -32,10 +32,16 @@ import { parseDuration, parseRange, resolveAt } from './scenario/duration.js'
 import type {
   Scenario,
   ScenarioEvent,
+  ScenarioSecretaryAsk,
+  ScenarioSecretaryDecide,
+  ScenarioSecretaryMeet,
+  ScenarioSecretaryRoute,
   ScenarioWorkClaim,
   ScenarioWorkTodo,
   Tier,
 } from './scenario/types.js'
+import type { SecretaryLoop } from './secretary.js'
+import { installSecretary } from './secretary.js'
 import type { RealModelBinding, RunContext, World } from './world.js'
 import { createWorld } from './world.js'
 
@@ -550,6 +556,130 @@ async function execute(
     }
   }
 
+  /* ── WP39 秘书 Agent（41 §1）──────────────────────────────────────── */
+
+  /** 惰性装：场景里没有 `secretary.*` 就一个都不装，原有场景一条指标不变。 */
+  const secretaryLoop = (): SecretaryLoop => {
+    if (world.secretary === undefined) world.secretary = installSecretary(world)
+    return world.secretary
+  }
+
+  /** 一天的窗口（"双方日历都有"那条断言按它取）。 */
+  const dayRange = (at: Iso8601): { from: Iso8601; to: Iso8601 } => ({
+    from: new Date(Date.parse(at) - 86_400_000).toISOString(),
+    to: new Date(Date.parse(at) + 7 * 86_400_000).toISOString(),
+  })
+
+  const secretaryAsk = async (input: ScenarioSecretaryAsk): Promise<void> => {
+    const loop = secretaryLoop()
+    try {
+      const out = await loop.secretary.ask({
+        viewer: input.who,
+        person_id: input.about,
+        question: input.question,
+        assignment_id: world.assignment.id,
+      })
+      loop.answers.push(out.kind)
+      // 被拒也是一次"挡下"：场景用 `blocked_rules: [secretary_refused]` 断言
+      if (out.refused)
+        world.blocked.push({
+          rule: 'secretary_refused',
+          at: clock.now(),
+          message: out.answer,
+        })
+      world.appendEvent('simulation.secretary_asked', {
+        asked_by: input.who,
+        about: input.about,
+        kind: out.kind,
+        refused: out.refused,
+        fields: out.fields,
+      })
+    } catch (e) {
+      workBlocked(e, 'secretary_ask_failed')
+    }
+  }
+
+  const secretaryMeet = async (input: ScenarioSecretaryMeet): Promise<void> => {
+    const loop = secretaryLoop()
+    const minutes = input.minutes ?? 30
+    try {
+      const proposal = await loop.secretary.meet({
+        from: input.who,
+        to: input.with,
+        title: input.title ?? '聊一下',
+        candidates: [
+          {
+            start: input.slot,
+            end: new Date(Date.parse(input.slot) + minutes * 60_000).toISOString(),
+          },
+        ],
+        duration_minutes: minutes,
+        assignment_id: world.assignment.id,
+      })
+      world.appendEvent('simulation.meet_proposed', {
+        meet_id: proposal.id,
+        from: proposal.from,
+        to: proposal.to,
+      })
+    } catch (e) {
+      workBlocked(e, 'slot_conflict')
+    }
+  }
+
+  const secretaryDecide = async (input: ScenarioSecretaryDecide): Promise<void> => {
+    const loop = secretaryLoop()
+    const pending = loop.secretary
+      .meets(input.who, { state: ['proposed'] })
+      .find((m) => m.to === input.who)
+    if (pending === undefined) {
+      world.blocked.push({
+        rule: 'not_found',
+        at: clock.now(),
+        message: `没有等 ${input.who} 点头的约时间卡`,
+      })
+      return
+    }
+    try {
+      const decided = await loop.secretary.decideMeet(pending.id, input.who, {
+        action: input.action,
+      })
+      if (decided.state !== 'accepted') return
+      // 41 §1.2「对方点头才进双方日历」——这一条断言就是这么钉住的
+      const range = dayRange(decided.accepted?.start ?? clock.now())
+      const onBoth = [decided.from, decided.to].every((person) =>
+        loop.agendaOf(person, range).some((i) => i.ref.id === decided.meeting_id),
+      )
+      if (onBoth)
+        world.appendEvent('simulation.meet_on_both_calendars', {
+          meet_id: decided.id,
+          meeting_id: decided.meeting_id,
+          from: decided.from,
+          to: decided.to,
+        })
+    } catch (e) {
+      workBlocked(e, 'meet_decide_failed')
+    }
+  }
+
+  const secretaryRoute = async (input: ScenarioSecretaryRoute): Promise<void> => {
+    const loop = secretaryLoop()
+    try {
+      const out = await loop.secretary.route({
+        person_id: input.who,
+        assignment_id: world.assignment.id,
+        text: input.text,
+      })
+      world.appendEvent('simulation.secretary_routed', {
+        kind: out.kind,
+        confidence: out.confidence,
+        ...(out.role_id === undefined ? {} : { role_id: out.role_id }),
+        ...(out.owner === undefined ? {} : { owner: out.owner }),
+      })
+    } catch (e) {
+      workBlocked(e, 'secretary_route_failed')
+    }
+  }
+
   const dispatch = async (event: ScenarioEvent): Promise<void> => {
     switch (event.type) {
       case 'inbound.email': {
@@ -719,6 +849,36 @@ async function execute(
           reminded: swept.reminded.length,
           recycled: swept.recycled.length,
         })
+        return
+      }
+      // ── WP39 秘书 Agent（41 §1）────────────────────────────────────
+      case 'secretary.profile': {
+        secretaryLoop().secretary.updateProfile(event.profile.who, {
+          disclosure: {
+            [event.profile.field]: event.profile.level,
+          } as Record<string, 'self' | 'colleagues' | 'workspace'>,
+        })
+        world.appendEvent('simulation.secretary_profile', {
+          who: event.profile.who,
+          field: event.profile.field,
+          level: event.profile.level,
+        })
+        return
+      }
+      case 'secretary.ask': {
+        await secretaryAsk(event.ask)
+        return
+      }
+      case 'secretary.meet': {
+        await secretaryMeet(event.meet)
+        return
+      }
+      case 'secretary.meet_decide': {
+        await secretaryDecide(event.decide_meet)
+        return
+      }
+      case 'secretary.route': {
+        await secretaryRoute(event.route)
         return
       }
       default: {

@@ -103,6 +103,7 @@ import {
   type SchedulePosition,
 } from './schedule.js'
 import { createSecretStore, type SecretStore, SecretStoreError } from './secret-store.js'
+import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
@@ -281,6 +282,8 @@ export interface Server {
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
   org: OrgAssembly
+  /** 41 §1 秘书 Agent（profile / 代答 / 日程 / 路由）。 */
+  secretary: SecretaryAssembly
   /** WP36 离职编排（撤权限 → 真交接 → 个人层归档 / 销毁 → 个人记忆迁移 / 擦除 → 报告）。 */
   offboard: Offboard
   /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
@@ -1099,6 +1102,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const sessionKey = env.AGENTSWS_SESSION_KEY?.trim() === '' ? undefined : env.AGENTSWS_SESSION_KEY
   let boundPort: number | undefined
 
+  /**
+   * 41 §1 秘书 Agent。装在最后：它要用到工作模型、会议、工具箱、审批总线与调度器，
+   * 自己不被任何人依赖——秘书是**加分项**，拆掉它工作台照常能用。
+   */
+  const secretary = createSecretaryAssembly({
+    workspace_id: workspace.id,
+    clock,
+    random,
+    appendEvent,
+    tz_offset_minutes: workData.tz_offset_minutes,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    identity: {
+      members: (ws) => identity.members(ws),
+      getPerson: (id) => identity.getPerson(id),
+    },
+    roles,
+    work,
+    approvals,
+    meetings: {
+      list: (filter) => meetings.store.listMeetings(filter),
+      get: (id) => meetings.store.getMeeting(id),
+      create: (input) => meetings.store.createMeeting(input),
+    },
+    catalog: catalog.port,
+    // 25：本人的定时任务也占日程（37 §2 表第四行）
+    scheduledTasks: (person_id) =>
+      schedule.scheduler
+        .list({ workspace_id: workspace.id, owner: person_id })
+        // 还没算出下一次触发时刻的（暂停 / 一次性已跑完）不占日程
+        .flatMap((t) =>
+          t.next_fire_at === undefined
+            ? []
+            : [
+                {
+                  id: t.id,
+                  state: t.state,
+                  next_fire_at: t.next_fire_at,
+                  ...(t.title === undefined ? {} : { title: t.title }),
+                  assignment_id: t.assignment_id,
+                },
+              ],
+        ),
+  })
+
   const deps: GatewayDeps = {
     identity,
     halt: kernel.halt,
@@ -1137,6 +1184,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
     storage: storage.port,
     org: org.port,
+    // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
+    secretary: secretary.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
     ask: createAskPort({
       models,
@@ -1319,6 +1368,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels,
     modelSettings,
     org,
+    secretary,
     offboard,
     secrets,
     schedule,
@@ -1388,6 +1438,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       meetings.close()
       schedule.close()
       catalog.close()
+      secretary.close()
       await channels?.close()
       connections.close()
       org.close()

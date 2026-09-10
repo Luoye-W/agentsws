@@ -85,6 +85,12 @@ const EVENT_KEYS = [
   'work.pool',
   'work.claim',
   'work.idle_sweep',
+  // WP39 秘书 Agent（41 §1）
+  'secretary.profile',
+  'secretary.ask',
+  'secretary.meet',
+  'secretary.meet_decide',
+  'secretary.route',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -114,6 +120,8 @@ const EXPECTED_KEYS = [
   'auto_approved',
   'judge_min_score',
   'assignments_not_unioned',
+  'routed_to',
+  'secretary_kinds',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -286,6 +294,73 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'secretary.profile': {
+      known(source, `${path}.${key}`, body, ['who', 'field', 'level'])
+      const level = str(source, `${path}.${key}.level`, body.level)
+      if (!['self', 'colleagues', 'workspace'].includes(level))
+        fail(source, `${path}.${key}.level`, 'level 只能是 self / colleagues / workspace')
+      return {
+        at,
+        type: 'secretary.profile',
+        profile: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          field: str(source, `${path}.${key}.field`, body.field),
+          level,
+        },
+      }
+    }
+    case 'secretary.ask': {
+      known(source, `${path}.${key}`, body, ['who', 'about', 'question'])
+      return {
+        at,
+        type: 'secretary.ask',
+        ask: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          about: str(source, `${path}.${key}.about`, body.about),
+          question: str(source, `${path}.${key}.question`, body.question),
+        },
+      }
+    }
+    case 'secretary.meet': {
+      known(source, `${path}.${key}`, body, ['who', 'with', 'slot', 'minutes', 'title'])
+      return {
+        at,
+        type: 'secretary.meet',
+        meet: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          with: str(source, `${path}.${key}.with`, body.with),
+          slot: str(source, `${path}.${key}.slot`, body.slot),
+          ...(body.minutes === undefined
+            ? {}
+            : { minutes: num(source, `${path}.${key}.minutes`, body.minutes) }),
+          ...(body.title === undefined
+            ? {}
+            : { title: str(source, `${path}.${key}.title`, body.title) }),
+        },
+      }
+    }
+    case 'secretary.meet_decide': {
+      known(source, `${path}.${key}`, body, ['who', 'action'])
+      const action = str(source, `${path}.${key}.action`, body.action)
+      if (action !== 'accept' && action !== 'decline')
+        fail(source, `${path}.${key}.action`, 'action 只能是 accept / decline')
+      return {
+        at,
+        type: 'secretary.meet_decide',
+        decide_meet: { who: str(source, `${path}.${key}.who`, body.who), action },
+      }
+    }
+    case 'secretary.route': {
+      known(source, `${path}.${key}`, body, ['who', 'text'])
+      return {
+        at,
+        type: 'secretary.route',
+        route: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          text: str(source, `${path}.${key}.text`, body.text),
+        },
+      }
+    }
     case 'work.idle_sweep': {
       known(source, `${path}.${key}`, body, ['idle_days'])
       return {
@@ -446,6 +521,10 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (notified !== undefined) out.notifications_to = notified
   const blocked = optStrList(source, 'expected.blocked_rules', raw.blocked_rules)
   if (blocked !== undefined) out.blocked_rules = blocked
+  const routedTo = optStrList(source, 'expected.routed_to', raw.routed_to)
+  if (routedTo !== undefined) out.routed_to = routedTo
+  const secretaryKinds = optStrList(source, 'expected.secretary_kinds', raw.secretary_kinds)
+  if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const eventTypes = optStrList(source, 'expected.event_types', raw.event_types)
   if (eventTypes !== undefined) out.event_types = eventTypes
   if (raw.approval_kinds !== undefined) {

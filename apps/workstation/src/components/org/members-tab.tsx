@@ -6,6 +6,7 @@
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -314,7 +315,14 @@ export function MembersTab({
           <Card key={m.person_id} data-testid="member-row" data-person={m.person_id}>
             <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle className="text-sm">
-                {m.name}
+                {/* 41 §1：点人 → 他的 profile 页（能问他的秘书、能约时间） */}
+                <Link
+                  to={`/people/${encodeURIComponent(m.person_id)}`}
+                  className="hover:underline"
+                  data-testid="member-profile-link"
+                >
+                  {m.name}
+                </Link>
                 <span className="ml-2 font-normal text-muted-foreground text-xs">{m.email}</span>
               </CardTitle>
               <div className="flex items-center gap-2">

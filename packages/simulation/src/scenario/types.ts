@@ -75,6 +75,44 @@ export interface ScenarioWorkIdle {
   idle_days?: number
 }
 
+/** WP39：本人改一格公开级别（41 §1.3）。 */
+export interface ScenarioSecretaryProfile {
+  who: string
+  /** `positions` / `ranges` / `in_progress` / `availability` / `agenda_detail` / `skills` / `contact` */
+  field: string
+  /** `self` / `colleagues` / `workspace` */
+  level: string
+}
+
+/** WP39：谁问了谁的秘书。 */
+export interface ScenarioSecretaryAsk {
+  who: string
+  /** 被问的人 */
+  about: string
+  question: string
+}
+
+/** WP39：向对方秘书发一张「约时间」卡。`slot` 是绝对 ISO-8601（场景的钟是固定的）。 */
+export interface ScenarioSecretaryMeet {
+  who: string
+  with: string
+  slot: string
+  minutes?: number
+  title?: string
+}
+
+/** WP39：对方（他的秘书按他的规则）答那张卡。 */
+export interface ScenarioSecretaryDecide {
+  who: string
+  action: 'accept' | 'decline'
+}
+
+/** WP39：把一件事丢给秘书，让它判断该谁做。 */
+export interface ScenarioSecretaryRoute {
+  who: string
+  text: string
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -98,6 +136,16 @@ export type ScenarioEvent =
   | { at: string; type: 'work.claim'; claim: ScenarioWorkClaim }
   /** WP38：跑一次闲置回收巡检（40 §3.5）。 */
   | { at: string; type: 'work.idle_sweep'; idle: ScenarioWorkIdle }
+  /** WP39：本人改一格公开级别（41 §1.3）。 */
+  | { at: string; type: 'secretary.profile'; profile: ScenarioSecretaryProfile }
+  /** WP39：问别人的秘书（代答）。 */
+  | { at: string; type: 'secretary.ask'; ask: ScenarioSecretaryAsk }
+  /** WP39：约时间（撞上了不发卡，回冲突 + 替代时段）。 */
+  | { at: string; type: 'secretary.meet'; meet: ScenarioSecretaryMeet }
+  /** WP39：答一张「约时间」卡（点头才进双方日历）。 */
+  | { at: string; type: 'secretary.meet_decide'; decide_meet: ScenarioSecretaryDecide }
+  /** WP39：把一件事丢给秘书（任务路由 → 认领卡）。 */
+  | { at: string; type: 'secretary.route'; route: ScenarioSecretaryRoute }
 
 export interface ScenarioInbound {
   from: string
@@ -224,6 +272,10 @@ export interface ScenarioExpected {
    * （05 §"不做跨 Assignment 并集"）。
    */
   assignments_not_unioned?: string[]
+  /** WP39：秘书把事路由给了这些职责（`role_id`）。 */
+  routed_to?: string[]
+  /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
+  secretary_kinds?: string[]
 }
 
 export interface Scenario {

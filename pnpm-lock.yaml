@@ -129,6 +129,9 @@ importers:
       '@agentsws/schedule':
         specifier: workspace:*
         version: link:../../packages/schedule
+      '@agentsws/secretary':
+        specifier: workspace:*
+        version: link:../../packages/secretary
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills
@@ -620,6 +623,25 @@ importers:
         specifier: ^7.13.0
         version: 7.13.0(typescript@5.9.3)
 
+  packages/secretary:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/skills':
+        specifier: workspace:*
+        version: link:../skills
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
   packages/simulation:
     dependencies:
       '@agentsws/contracts':
@@ -655,6 +677,9 @@ importers:
       '@agentsws/schedule':
         specifier: workspace:*
         version: link:../schedule
+      '@agentsws/secretary':
+        specifier: workspace:*
+        version: link:../secretary
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../skills
