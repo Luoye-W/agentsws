@@ -37,11 +37,71 @@ actions:
   shopify_admin.list_inventory_items: read
   shopify_admin.list_order_fulfillment_orders: read
   shopify_admin.download_bulk_result: read
+  # 主题、页面、博客、元字段、折扣、发布状态的读侧（建站与运营岗位要看的那些）
+  shopify_admin.get_theme: read
+  shopify_admin.list_themes: read
+  shopify_admin.get_theme_asset: read
+  shopify_admin.list_theme_assets: read
+  shopify_admin.get_page: read
+  shopify_admin.list_pages: read
+  shopify_admin.get_blog: read
+  shopify_admin.list_blogs: read
+  shopify_admin.get_article: read
+  shopify_admin.list_articles: read
+  shopify_admin.get_metafield: read
+  shopify_admin.list_metafields: read
+  shopify_admin.get_metafield_definition: read
+  shopify_admin.list_metafield_definitions: read
+  shopify_admin.get_discount: read
+  shopify_admin.list_discounts: read
+  shopify_admin.get_price_rule: read
+  shopify_admin.list_price_rules: read
+  shopify_admin.list_publications: read
+  shopify_admin.get_product_publications: read
+  shopify_admin.get_variant: read
+  shopify_admin.get_refund: read
+  shopify_admin.list_refunds: read
+  shopify_admin.get_return: read
+  shopify_admin.list_returns: read
+  shopify_admin.get_market: read
+  shopify_admin.list_markets: read
+
+  # 写侧：与 `src/shopify-actions.ts` 的对照表一一对应（那张表还回答"对应哪条 ChangeKind"）。
+  # 标在这里不是为了"允许"，恰恰相反——默认就是 write，写出来是为了让人一眼看全
+  # Agent 有可能碰到的写口都有哪些，以及漏了哪些（漏的按 default 仍是 write）。
   shopify_admin.create_product: write
   shopify_admin.update_product: write
+  shopify_admin.update_product_variant: write
+  shopify_admin.update_product_price: write
+  shopify_admin.publish_product: write
+  shopify_admin.unpublish_product: write
+  shopify_admin.delete_product: write
+  shopify_admin.create_collection: write
+  shopify_admin.update_collection: write
+  shopify_admin.add_products_to_collection: write
+  shopify_admin.remove_products_from_collection: write
   shopify_admin.create_fulfillment: write
+  shopify_admin.create_refund: write
+  shopify_admin.update_order: write
+  shopify_admin.update_order_shipping_address: write
+  shopify_admin.cancel_order: write
   shopify_admin.adjust_inventory_quantities: write
   shopify_admin.set_inventory_quantities: write
+  shopify_admin.create_discount_code: write
+  shopify_admin.update_discount_code: write
+  shopify_admin.delete_discount_code: write
+  shopify_admin.create_automatic_discount: write
+  shopify_admin.update_automatic_discount: write
+  shopify_admin.create_theme: write
+  shopify_admin.publish_theme: write
+  shopify_admin.update_theme_asset: write
+  shopify_admin.delete_theme: write
+  shopify_admin.set_metafields: write
+  shopify_admin.delete_metafield: write
+  shopify_admin.create_page: write
+  shopify_admin.update_page: write
+  shopify_admin.create_article: write
+  shopify_admin.update_article: write
   # 副作用取决于传入的 GraphQL 文档 → 永远 write
   shopify_admin.execute_graphql: write
   shopify_admin.submit_bulk_query: write

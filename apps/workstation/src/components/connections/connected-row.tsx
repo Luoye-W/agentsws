@@ -5,7 +5,7 @@
  * 所以这个组件不可能把凭据画出来。
  */
 
-import { Link2Off, Lock, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Link2Off, Lock, RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { ConnectionView } from '@/lib/api'
@@ -54,6 +54,20 @@ export function ConnectedRow({
           </Button>
         </div>
       </div>
+      {connection.legacy === undefined ? null : (
+        <p
+          className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400"
+          data-testid="connection-legacy"
+          data-legacy-kind={connection.legacy.kind}
+        >
+          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span>
+            <strong className="font-medium">{t('connections.legacy')}</strong>
+            <span aria-hidden>：</span>
+            {connection.legacy.hint}
+          </span>
+        </p>
+      )}
       {connection.identity?.display_name === undefined ? null : (
         <p className="text-xs text-muted-foreground" data-testid="connection-identity">
           {connection.identity.display_name}

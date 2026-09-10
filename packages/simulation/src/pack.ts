@@ -366,6 +366,16 @@ export function loadPack(dir: string): Pack {
       return {
         orders: orders.map((o) => ({ ...o, line_items: o.line_items.map((li) => ({ ...li })) })),
         products: products.map((p) => ({ ...p })),
+        // WP44：每个 pack 都从"一份线上主题"开始。建站岗位干的第一件事是拉它下来，
+        // 之后所有副本都是从它派生的（pack 里不生成主题文件，主题的内容不是这一层的事）
+        themes: [
+          {
+            id: 'thm_live',
+            name: 'Dawn（现行主题）',
+            role: 'main' as const,
+            updated_at: manifest.anchor,
+          },
+        ],
         discounts: [],
         threads: mockThreads,
         messages: threads.flatMap((t) =>

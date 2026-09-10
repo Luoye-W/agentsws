@@ -1,0 +1,72 @@
+# 运营 Agent 改价：查文档 → 过官方 GraphQL 校验 → 提一条变更 → 超额度转人审 → 批准后施行。
+#
+# 这条题要钉住的是 WP44 的整条链条，而且每一环都是**真的**：
+#
+# 1. **先读**：改价之前真去 `shopify_admin.get_product` 读一次，`before` 来自记录
+#    而不是谁转述的（15 §1 的字段纪律）；读不到就不提。
+# 2. **先验**：把要执行的那段 Admin GraphQL 交给 Shopify 官方的校验器过一遍。
+#    Admin GraphQL 有五百多个 mutation，模型编一个不存在的字段名太容易了——
+#    在提案进人的队列**之前**挡住，比让人在审批卡上发现"这条根本跑不通"便宜得多。
+# 3. **超额度不是禁止，是转人审**（15 §3.2）：`dtc.ops` 的 `max_price_delta_pct` 是 20，
+#    129 → 99 是降 23%，于是这条从"能自动"掉到 L1，进主管李默的队列。
+# 4. **批准后才施行**：执行器拿 `role-apply` 令牌调 `update_product_price`，
+#    幂等键就是变更 id。Agent 全程碰不到这个写口。
+#
+# 反过来说，这条题也证明了一件事：**Agent 真的能操作店铺了**——它不再只是"提个建议给人抄"，
+# 而是自己查文档、自己写 GraphQL、自己验、自己提案，人只需要点一下"可以"。
+id: ops/edit-product-price
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  # 15 人公司里运营主管李默才是运营的 scope_manager（王岚是店主）。改价这张卡
+  # 落在李默手上——提案的是他手下的运营赵宁，职责分离这一条自然就满足了。
+  p_li:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 第一次：模型按记忆写了 `productVariantUpdate`（这个 mutation 在 Admin schema 里
+  # 根本不存在，正确的是 productVariantsBulkUpdate）→ 官方校验器当场拦下，不进队列。
+  - at: '+0m'
+    shop.price_change:
+      who: p_zhao
+      product: prod_1
+      price: 99
+      graphql: 'mutation { productVariantUpdate(input: { id: "prod_1", price: "99" }) { productVariant { id } } }'
+      note: 竞品降价了，跟一档
+  # 改对之后再提一次：这一次校验过了，变更进队列
+  - at: '+15m'
+    shop.price_change:
+      who: p_zhao
+      product: prod_1
+      price: 99
+      note: 竞品降价了，跟一档
+  # 主管点头
+  - at: '+30m'
+    actor.decide: { who: p_li, item: $last_staged_change, action: approve }
+expected:
+  # 第一次被官方校验挡下（这条断言就是"幻觉进不了人的队列"）
+  blocked_rules: [graphql_invalid]
+  staged_change_kinds: [price_change]
+  # 真读了商品、真查了官方文档、真过了官方校验器——三步一步不少
+  calls_tool: [get_product, shopify.docs.search, shopify.graphql.validate]
+  first_tool: get_product
+  # 批准之前一次都没有真改过价
+  no_applied_changes_before: $approve
+  event_types:
+    - shopify.graphql_rejected
+    - change.staged
+    - change.applied
+  metrics:
+    staged_changes: 1
+    applied_changes: 1
+    # 129 → 99 是降 23%，超过 dtc.ops 的 max_price_delta_pct: 20 → 命中一条 review
+    guardrail_hits: '>=1'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

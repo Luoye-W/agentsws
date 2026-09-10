@@ -131,3 +131,55 @@ describe('loadPosition (05 §2)', () => {
     )
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* WP44：建站与主题职责（12 §2）                                        */
+/* ------------------------------------------------------------------ */
+
+describe('site.builder（12 §2 建站岗位）', () => {
+  const builder = () => loadBundledRole('site.builder')
+
+  it('装得进来，八个 scope、四条写动作', () => {
+    const role = builder()
+    expect(role.id).toBe('site.builder')
+    expect(role.domain).toBe('dev')
+    expect(role.scopes).toHaveLength(8)
+    expect(role.actions.map((a) => a.id)).toEqual([
+      'stage_theme_preview',
+      'stage_publish_theme',
+      'stage_page_edit',
+      'stage_dev_task',
+    ])
+  })
+
+  it('发布主题永远 L1：hard_ceiling + 复核不可关（15 §2）', () => {
+    const role = builder()
+    const publish = role.automation.stage_publish_theme
+    expect(publish?.ceiling).toBe('L1')
+    expect(publish?.initial).toBe('L1')
+    expect(publish?.hard_ceiling).toBe(true)
+    expect(
+      role.actions.find((a) => a.id === 'stage_publish_theme')?.review_cannot_be_disabled,
+    ).toBe(true)
+    // 发布要惊动所有者，而且是立刻，不是攒到日报里
+    const note = role.notifications.find((n) => n.event.includes('stage_publish_theme'))
+    expect(note?.mode).toBe('immediate')
+    expect(note?.recipients).toEqual(['owner'])
+  })
+
+  it('推未发布副本可以升到 L3：它不动线上，只是造一个预览给人看', () => {
+    expect(builder().automation.stage_theme_preview?.ceiling).toBe('L3')
+  })
+
+  it('商品只读：改价不是这个岗位的事（那是 dtc.ops）', () => {
+    const product = builder().scopes.find((s) => s.domain === 'product')
+    expect(product?.ops).toEqual(['read'])
+  })
+
+  it('连接器要主题读写权限', () => {
+    const shopify = builder().connectors.find((c) => c.kind === 'shopify')
+    expect(shopify?.required).toBe(true)
+    expect(shopify?.grants).toContain('read_themes')
+    expect(shopify?.grants).toContain('write_themes')
+  })
+})

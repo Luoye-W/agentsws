@@ -853,6 +853,8 @@ export interface ConnectionView {
   data_sources: string[]
   last_tested_at?: string
   last_test?: ConnectTestResult
+  /** WP44：用已经下线的老办法接的（Shopify 的 shpat_ 直填令牌）。 */
+  legacy?: { kind: 'shopify_access_token'; hint: string }
 }
 
 export interface ProviderView {
@@ -876,6 +878,8 @@ export interface RuntimeStatusView {
   checks: { name: string; ok: boolean; detail: string }[]
   checked_at: string
   secrets_vault: { available: boolean; reason?: string }
+  /** WP44：出站解析环境（代理 fake-IP 会让连接器把外网域名当内网拦下）。 */
+  egress?: { fake_ip_detected: boolean; trusted_hosts: string[]; detail?: string }
 }
 
 export interface BeginConnectResult {

@@ -34,12 +34,12 @@ export {
   zipDir,
 } from './backup.js'
 export {
-  authOptionOf,
   CATALOG,
   type CatalogAuth,
-  type CatalogAuthOption,
   type CatalogEntry,
+  type CatalogFlow,
   catalogEntry,
+  flowOf,
   serviceOfUpstream,
   UPSTREAM_TO_SERVICE,
 } from './catalog.js'
@@ -206,6 +206,49 @@ export {
   type ShopifyBrokerRecord,
   scrub,
 } from './shopify-broker.js'
+export type {
+  DevMcpStatus,
+  GraphqlVerdict,
+  McpChannel,
+  ShopifyDevMcp,
+  ShopifyDevMcpOptions,
+  SpawnMcp,
+  StageGuardOutcome,
+} from './shopify-devmcp.js'
+export {
+  createShopifyDevMcp,
+  DEV_MCP_ARGS,
+  DEV_MCP_COMMAND,
+  DEV_MCP_TOOLS,
+  DOCS_TOOL,
+  guardGraphqlStage,
+  readVerdict,
+  SCHEMA_TOOL,
+  UPSTREAM_CANDIDATES,
+  VALIDATE_TOOL,
+} from './shopify-devmcp.js'
+export type {
+  CliResult,
+  PushedTheme,
+  RunCli,
+  ShopifyTheme,
+  ShopifyThemeErrorCode,
+  ShopifyThemeOptions,
+  SpawnCli,
+  ThemeCliStatus,
+  ThemeProcess,
+  ThemePublishProposal,
+  ThemeSummary,
+} from './shopify-theme.js'
+export {
+  createShopifyTheme,
+  PASSTHROUGH_ENV,
+  ShopifyThemeError,
+  scrubCliOutput,
+  THEME_CLI_INSTALL,
+  THEME_STORE_ENV,
+  THEME_TOKEN_ENV,
+} from './shopify-theme.js'
 export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
 export {
   createWorkModel,

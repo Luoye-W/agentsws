@@ -48,6 +48,20 @@ export interface MockProduct {
   record_version: string
 }
 
+/**
+ * WP44：一份主题。`main` 就是线上那一份，同一时刻只可能有一个。
+ *
+ * 12 §2「未发布的主题副本就是 stage，预览链接就是审批材料」——所以这里的关键
+ * 不是主题里有什么文件，而是**它是不是线上那一份**，以及有没有预览链接。
+ */
+export interface MockTheme {
+  id: string
+  name: string
+  role: 'main' | 'unpublished'
+  updated_at: Iso8601
+  preview_url?: string
+}
+
 export interface MockDiscountCode {
   id: string
   code: string
@@ -98,6 +112,7 @@ export interface MockWhatsappMessage {
 export interface MockState {
   orders: MockOrder[]
   products: MockProduct[]
+  themes: MockTheme[]
   discounts: MockDiscountCode[]
   threads: MockThread[]
   messages: MockEmailMessage[]
@@ -219,6 +234,14 @@ export function defaultState(start: Iso8601): MockState {
         currency: 'USD',
         status: 'active',
         record_version: 'v1',
+      },
+    ],
+    themes: [
+      {
+        id: 'thm_live',
+        name: 'Dawn（现行主题）',
+        role: 'main',
+        updated_at: iso(base, -30),
       },
     ],
     discounts: [],

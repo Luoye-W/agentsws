@@ -881,6 +881,37 @@ async function execute(
         await secretaryRoute(event.route)
         return
       }
+      // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────
+      case 'shop.price_change': {
+        const out = await world.shop.priceChange(event.price_change)
+        world.appendEvent('simulation.shop_price_change', {
+          product: event.price_change.product,
+          price: event.price_change.price,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
+      case 'shop.theme_push': {
+        const pushed = await world.shop.themePush(event.theme_push)
+        world.appendEvent('simulation.shop_theme_pushed', {
+          theme_id: pushed.theme_id,
+          theme_name: pushed.theme_name,
+        })
+        return
+      }
+      case 'shop.theme_publish': {
+        const out = await world.shop.themePublish({
+          who: event.theme_publish.who,
+          ...(event.theme_publish.theme === undefined ? {} : { theme: event.theme_publish.theme }),
+          ...(event.theme_publish.level === undefined ? {} : { level: event.theme_publish.level }),
+        })
+        world.appendEvent('simulation.shop_theme_publish_staged', {
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
       default: {
         // 25：装上一天的例行公事；不出现这条事件的场景一条定时任务都没有
         const routine = world.startRoutine({
@@ -909,7 +940,11 @@ async function execute(
     start,
     end: clock.now(),
     events: [...world.events],
-    runs,
+    // WP44：入站信件起的运行在 `runs` 里，工作台上点出来的店铺操作在 `world.shopRuns` 里；
+    // 证据只认一份清单，按开始时间并起来
+    runs: [...runs, ...world.shopRuns].sort(
+      (a, b) => Date.parse(a.started_at) - Date.parse(b.started_at),
+    ),
     inbound: inboundEvents,
     observations: world.standIns.observations.all(),
     cards: world.standIns.deliveries.workstation.all(),

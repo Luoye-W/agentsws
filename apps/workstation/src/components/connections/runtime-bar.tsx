@@ -10,7 +10,7 @@
  * 但他要把这一行发给帮他装机的人。
  */
 
-import { AlertTriangle, CheckCircle2, FlaskConical, PackageOpen } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FlaskConical, PackageOpen, Wifi } from 'lucide-react'
 import type { RuntimeStatusView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
@@ -68,6 +68,27 @@ export function RuntimeBar({ status }: { status: RuntimeStatusView }): React.Rea
           })}
         </ul>
       )}
+      {status.egress?.fake_ip_detected === true ? (
+        <p
+          className="mt-0.5 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400"
+          data-testid="egress-fake-ip"
+        >
+          <Wifi className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span>
+            <strong className="font-medium">{t('connections.egress.fake_ip')}</strong>
+            <span aria-hidden>：</span>
+            {t('connections.egress.fake_ip.detail')}
+            {status.egress.trusted_hosts.length === 0 ? null : (
+              <span className="ml-1 opacity-80">
+                {t('connections.egress.trusted', { hosts: status.egress.trusted_hosts.join('、') })}
+              </span>
+            )}
+            {status.egress.detail === undefined ? null : (
+              <span className="ml-1 opacity-70">（{status.egress.detail}）</span>
+            )}
+          </span>
+        </p>
+      ) : null}
       {status.secrets_vault.available ? null : (
         <p className="text-xs opacity-90" data-testid="vault-missing">
           {t('connections.vault.missing')}

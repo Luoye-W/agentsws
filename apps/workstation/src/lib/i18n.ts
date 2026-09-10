@@ -557,6 +557,15 @@ const zh: Table = {
     '这台机器没配连接器地址，现在连出来的都是假连接，只能用来看界面。',
   'connections.runtime.install': '怎么装',
   'connections.vault.missing': '这台电脑还没有秘密库密钥，邮箱账号密码暂时存不了。',
+  // WP44：老办法接的连接（Shopify 的 shpat_ 直填令牌）
+  'connections.legacy': '老办法接的',
+  'connections.legacy.action': '断开后重接一次',
+  // WP44：代理 fake-IP 模式下的出站防护
+  'connections.egress.fake_ip': '你的网络在用代理的 fake-IP 模式',
+  'connections.egress.fake_ip.detail':
+    '代理把外网域名解析成了保留网段的地址，连接器的出站防护会把它当内网拦下。已经让连接器改用公共 DNS 直接解析（重启开发环境生效）；' +
+    '或者把要连的域名加进信任名单（AGENTSWS_CONNECT_TRUSTED_HOSTS）。',
+  'connections.egress.trusted': '信任名单：{hosts}',
   'connections.field.required': '必填',
   'connections.field.optional': '选填',
   'connections.oauth.hint':
@@ -1368,6 +1377,12 @@ const en: Table = {
   'connections.runtime.install': 'How to install',
   'connections.vault.missing':
     'This machine has no vault key yet, so mailbox passwords cannot be stored.',
+  'connections.legacy': 'connected the old way',
+  'connections.legacy.action': 'Disconnect and reconnect',
+  'connections.egress.fake_ip': 'Your network is using a proxy in fake-IP mode',
+  'connections.egress.fake_ip.detail':
+    'The proxy resolves public domains to reserved-range addresses, so the connector’s egress guard treats them as internal and blocks them. The connector has been switched to public DNS (restart the dev environment to apply), or add the domain to the trusted list (AGENTSWS_CONNECT_TRUSTED_HOSTS).',
+  'connections.egress.trusted': 'Trusted hosts: {hosts}',
   'connections.field.required': 'required',
   'connections.field.optional': 'optional',
   'connections.oauth.hint':

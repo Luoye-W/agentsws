@@ -1,0 +1,73 @@
+# 建站 Agent 改主题：推一份未发布副本（造预览）→ 提"发布上线" → 永远卡人审 → 批准后才换线上。
+#
+# 12 §2 那句话落成一条题：**未发布的主题副本就是 stage，预览链接就是审批材料，
+# "发布"就是 apply。**
+#
+# 三件事要钉住：
+#
+# 1. **推副本不动线上**：`shopify theme push --unpublished` 随便推，推多少份线上都还是原来那份。
+#    它也不进账本——账本管的是"会改变现状的事"，副本改变不了任何顾客看到的东西。
+# 2. **发布永远要人点头**：这一条**故意**把等级报成 L3（等于有人在设置里把"发布主题"
+#    开到了全自动）。15 §2 的 hard_ceiling 当场把它拉回 L1，记一条 `hard_ceiling`，
+#    卡进店主的队列。想让 Agent 自动换首页，这条路是走不通的——这正是我们要的。
+# 3. **主题不经连接器**：`shopify theme …` 用的是 CLI 自己那套登录，
+#    所以整条题里一次连接器写调用都没有（`no_write_without_stage` 顺带把这一点验了）。
+#
+# 为什么这条题该在 15 人公司里：3 人公司没有专职建站，主题是店主自己按模板凑的；
+# 到 15 人才会有一个人（郑立）专门管壳，也才会出现"他改、店主拍板"这种分工。
+id: ops/theme-publish-needs-approval
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  # 发布主题 route_to: owner——这张卡只可能落在店主王岚手上
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 郑立把改好的首页推成一份未发布副本，拿到预览链接
+  - at: '+0m'
+    shop.theme_push:
+      who: p_zheng
+      name: 首页改版 v2（加尺码表 + 压首屏图）
+  # 再推一份：副本可以推很多份，线上一份都没换
+  - at: '+20m'
+    shop.theme_push:
+      who: p_zheng
+      name: 首页改版 v3（改回原图，只留尺码表）
+  # 提"把 v3 发上线"。level: L3 是故意报高的——hard_ceiling 应当把它拉回人审
+  - at: '+40m'
+    shop.theme_publish:
+      who: p_zheng
+      level: L3
+  # 空跑几个小时：王岚点开预览、看过、点头（合成人按 30m..2h 的延迟决定），
+  # 在他点头之前线上一个字节都不该变
+  - at: '+6h'
+    clock.advance: {}
+expected:
+  staged_change_kinds: [publish_theme]
+  # 批准之前一次都没换过线上主题
+  no_applied_changes_before: $approve
+  # 报了 L3 也自动批不了：这一条永远是 0
+  auto_approved: 0
+  approval_kinds: { staged_change: 1 }
+  # `before` 是真跑了一次 `theme list` 读回来的，不是谁记得的那一份
+  calls_tool: [theme_list]
+  event_types:
+    - shopify.theme_pushed
+    - shopify.theme_cli
+    - change.staged
+    - change.applied
+  metrics:
+    staged_changes: 1
+    applied_changes: 1
+    # hard_ceiling 那一条
+    guardrail_hits: '>=1'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

@@ -16,6 +16,7 @@ import type {
 } from '@agentsws/api'
 import type { EventEnvelope } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createConnections, egressAdvice } from '../src/connections.js'
 import { createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 import type { BrokerFetch } from '../src/shopify-broker.js'
@@ -206,10 +207,11 @@ describe('WP20 §A 连接清单与目录', () => {
     const mail = providers.find((p) => p.service === 'imap_smtp')
     expect(mail?.fields.find((f) => f.name === 'password')?.secret).toBe(true)
     expect(mail?.fields.find((f) => f.name === 'email')?.secret).toBe(false)
-    // WP25：Shopify 两种接法，推荐的那条排第一
+    // WP44：Shopify 只剩 Dev Dashboard 应用一条接法（老的 shpat_ 直填已删）
     const shop = providers.find((p) => p.service === 'shopify_admin')
-    expect(shop?.auth_options?.map((o) => o.id)).toEqual(['dev_app', 'access_token'])
-    expect(shop?.auth_options?.[0]?.recommended).toBe(true)
+    expect(shop?.auth_options).toBeUndefined()
+    expect(shop?.fields.map((f) => f.name)).toEqual(['shop_domain', 'client_id', 'client_secret'])
+    expect(JSON.stringify(shop)).not.toContain('shpat')
     // GA4 / GSC / Meta：连上了也先说清楚数据下一版接
     expect(providers.find((p) => p.service === 'ga4')?.data_note).toContain('下一版')
   })
@@ -276,23 +278,25 @@ describe('WP20 §A 原生表单直填（凭据零泄漏）', () => {
     }
   })
 
-  it('Shopify：表单直填走 OpenConnector 凭据库，访问令牌不进任何返回值与日志', async () => {
-    // WP25：字段名以上游目录为准（09-09 实测 `apiKey` / `shopDomain`），
-    // 且要显式挑"自定义应用访问令牌"那条接法——默认那条是客户端凭据换令牌
+  it('WP44：老办法（shpat_ 直填令牌）这条路已经没了，连字段都不认', async () => {
     const raw = await post('/v1/connections/shopify_admin/submit', {
       alias: '主店',
+      // 老界面会发的那一份：上游的 `apiKey` / `shopDomain`，外加当年的 auth_option
       auth_option: 'access_token',
       fields: { shopDomain: 'demo.myshopify.com', apiKey: SHOP_TOKEN },
     })
-    if (raw.status !== 200) throw new Error(`submit failed: ${raw.status} ${await raw.text()}`)
-    const submitted = await data<{ connection: ConnectionView; test: ConnectTestResult }>(raw)
-    expect(submitted.connection.service).toBe('shopify_admin')
-    expect(submitted.connection.credential_store).toBe('openconnector')
-    expect(submitted.connection.data_sources).toEqual(['shop'])
-    // 替身的 shopify 目录里有 list_orders（只读、无必填参数）→ 冒烟能真跑一次
-    expect(submitted.test.ok).toBe(true)
-
-    expect(JSON.stringify(submitted)).not.toContain(SHOP_TOKEN)
+    expect(raw.status).toBe(400)
+    const text = await raw.text()
+    // 报错里只说缺哪几个字段名，令牌一个字节都不回显
+    for (const field of ['shop_domain', 'client_id', 'client_secret']) {
+      expect(text, field).toContain(field)
+    }
+    expect(text).not.toContain(SHOP_TOKEN)
+    // 一次上游请求都不该发出去
+    expect(shopifyUpstream.calls).toEqual([])
+    expect(
+      (await data<{ connections: ConnectionView[] }>(await api('/v1/connections'))).connections,
+    ).toEqual([])
     const events = await allEvents()
     expect(JSON.stringify(events)).not.toContain(SHOP_TOKEN)
     for (const f of allFileBytes(ctx.dir)) {
@@ -354,11 +358,7 @@ describe('WP20 §A 试连 / 断开 / 数据源回灌', () => {
     expect(home0).toBeDefined()
 
     const submitted = await data<{ connection: ConnectionView }>(
-      await post('/v1/connections/shopify_admin/submit', {
-        alias: '主店',
-        auth_option: 'access_token',
-        fields: { shopDomain: 'demo.myshopify.com', apiKey: SHOP_TOKEN },
-      }),
+      await post('/v1/connections/shopify_admin/submit', DEV_APP),
     )
     const connected = ctx.server.connections.snapshot().filter((c) => c.service === 'shopify_admin')
     expect(connected).toHaveLength(1)
@@ -447,7 +447,6 @@ const CLIENT_ID = '9a7bcd0e1f2a3b4c5d6e7f8091a2b3c4'
 const CLIENT_SECRET = 'shpss_wp25_client_secret_never_logged'
 const DEV_APP = {
   alias: '主店',
-  auth_option: 'dev_app',
   fields: {
     shop_domain: 'https://admin.shopify.com/store/demo',
     client_id: CLIENT_ID,
@@ -456,37 +455,31 @@ const DEV_APP = {
 }
 
 describe('WP25 §A Shopify 客户端凭据换令牌（端到端）', () => {
-  it('目录里两种接法：Dev Dashboard 应用推荐在前，老的访问令牌在后，各带 ≤ 5 步说明', async () => {
+  it('WP44：Shopify 只剩这一条接法，说明 ≤ 5 步且把要勾的权限写全', async () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
     const shop = providers.find((p) => p.service === 'shopify_admin')
-    const options = shop?.auth_options ?? []
-    expect(options.map((o) => o.id)).toEqual(['dev_app', 'access_token'])
-    for (const o of options) {
-      expect(o.setup_guide.steps.length).toBeGreaterThan(0)
-      expect(o.setup_guide.steps.length).toBeLessThanOrEqual(5)
-      expect(o.label).not.toBe('')
-    }
+    if (shop === undefined) throw new Error('目录里没有 shopify_admin')
+    expect(shop.auth_options).toBeUndefined()
+    expect(shop.setup_guide.steps.length).toBeGreaterThan(0)
+    expect(shop.setup_guide.steps.length).toBeLessThanOrEqual(5)
     // 权限清单要在文案里写清楚（用户在版本页要逐个勾）
-    const guide = JSON.stringify(options[0]?.setup_guide)
+    const guide = JSON.stringify(shop.setup_guide)
     for (const scope of ['read_orders', 'write_orders', 'read_returns', 'read_customers']) {
       expect(guide, scope).toContain(scope)
     }
     // 客户端密钥字段必须标 secret
-    expect(options[0]?.fields.find((f) => f.name === 'client_secret')?.secret).toBe(true)
-    expect(options[0]?.fields.find((f) => f.name === 'shop_domain')?.secret).toBe(false)
+    expect(shop.fields.find((f) => f.name === 'client_secret')?.secret).toBe(true)
+    expect(shop.fields.find((f) => f.name === 'shop_domain')?.secret).toBe(false)
   })
 
   it('begin：这条路不去问上游要表单，直接给 ID / 密钥 / 域名三个格子', async () => {
-    const res = await post('/v1/connections/shopify_admin/begin', {
-      alias: '主店',
-      auth_option: 'dev_app',
-    })
+    const res = await post('/v1/connections/shopify_admin/begin', { alias: '主店' })
     expect(res.status).toBe(200)
     const begun = await data<{
       request_id: string
-      secure_form: { fields: { name: string }[]; auth_option?: string }
+      secure_form: { fields: { name: string }[] }
     }>(res)
     expect(begun.request_id.startsWith('creq_shopify_')).toBe(true)
     expect(begun.secure_form.fields.map((f) => f.name)).toEqual([
@@ -494,7 +487,6 @@ describe('WP25 §A Shopify 客户端凭据换令牌（端到端）', () => {
       'client_id',
       'client_secret',
     ])
-    expect(begun.secure_form.auth_option).toBe('dev_app')
   })
 
   it('submit：按官方形状换令牌 → 推进 OpenConnector → 试连回店铺名', async () => {
@@ -753,5 +745,186 @@ describe('WP31 §6 密钥轮换路由（POST /v1/secrets/rotate）', () => {
     expect(short.status).toBe(400)
     const same = await post('/v1/secrets/rotate', { new_key: SECRETS_KEY })
     expect(same.status).toBe(400)
+  })
+})
+
+// ── WP44：老连接迁移提示 ───────────────────────────────────────────────
+
+/**
+ * 一条**老办法接的** Shopify 连接：它在 OpenConnector 的凭据库里躺着，
+ * 但我们这边没有它的客户端凭据（`shopify.list()` 里没有它）。
+ *
+ * 直接对 `createConnections` 跑，因为经端口是造不出这种连接的——WP44 之后
+ * 那条路根本不存在了，只有升级上来的用户才会有这样一条。
+ */
+function fakeConnect(connections: { id: string; service: string; alias: string }[]) {
+  return {
+    providers: async () => [],
+    actions: async () => [],
+    connections: async () =>
+      connections.map((c) => ({
+        id: c.id,
+        service: c.service,
+        alias: c.alias,
+        ownership: 'workspace' as const,
+        status: 'active' as const,
+        workspace_id: 'ws_1',
+        created_at: T0,
+      })),
+    beginConnect: async () => ({ request_id: 'creq_x' }),
+    pollConnect: async () => 'connected' as const,
+    submitForm: async () => {
+      throw new Error('不该走到这里')
+    },
+    removeConnection: async () => {},
+    issueToken: async () => ({ token: 't', kind: 'role-read' as const, expires_at: T0 }),
+    revokeTokens: async () => {},
+    execute: async () => ({ result: {} }),
+  }
+}
+
+describe('WP44 老办法接的连接：标 legacy 并提示改用客户端凭据', () => {
+  it('没有客户端凭据的 Shopify 连接 → legacy + 一句怎么换过去；启动时记一条事件', async () => {
+    const events: { type: string; payload: unknown }[] = []
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: { [SECRETS_KEY_ENV]: SECRETS_KEY },
+      connect: fakeConnect([
+        { id: 'conn_old_shop', service: 'shopify_admin', alias: '主店' },
+      ]) as never,
+      appendEvent: (e) => {
+        events.push({ type: e.type, payload: e.payload })
+      },
+    })
+    try {
+      const rows = await assembly.port.list()
+      const shop = rows.find((r) => r.id === 'conn_old_shop')
+      expect(shop?.legacy?.kind).toBe('shopify_access_token')
+      expect(shop?.legacy?.hint).toContain('Dev Dashboard 应用')
+      const detected = events.filter((e) => e.type === 'connect.legacy_connection_detected')
+      expect(detected).toHaveLength(1)
+      expect(detected[0]?.payload).toEqual({
+        connection_id: 'conn_old_shop',
+        service: 'shopify_admin',
+        kind: 'shopify_access_token',
+      })
+    } finally {
+      assembly.close()
+    }
+  })
+
+  it('别的服务不管它有没有客户端凭据，都不标 legacy', async () => {
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: { [SECRETS_KEY_ENV]: SECRETS_KEY },
+      connect: fakeConnect([
+        { id: 'conn_ga4', service: 'google_analytics', alias: '主站' },
+      ]) as never,
+    })
+    try {
+      expect((await assembly.port.list())[0]?.legacy).toBeUndefined()
+    } finally {
+      assembly.close()
+    }
+  })
+})
+
+// ── WP44：代理 fake-IP 环境下的出站防护 ────────────────────────────────
+
+describe('WP44 出站防护给人话（代理 fake-IP）', () => {
+  it('egressAdvice：认得出上游那句英文，翻成"两条修法"的中文；别的错原样放过', () => {
+    const raw = 'Egress blocked: hostname must not resolve to private or reserved IP'
+    const advice = egressAdvice(raw, [])
+    expect(advice).toContain('fake-IP')
+    expect(advice).toContain('公共 DNS')
+    expect(advice).toContain('AGENTSWS_CONNECT_TRUSTED_HOSTS')
+    // 已经有信任名单时把名单念出来（用户要判断"我要连的这个在不在里面"）
+    expect(egressAdvice(raw, ['admin.shopify.com'])).toContain('admin.shopify.com')
+    // 不是这个原因就不抢答
+    expect(egressAdvice('bad credentials', [])).toBeUndefined()
+    expect(egressAdvice('ECONNREFUSED 127.0.0.1:993', [])).toBeUndefined()
+  })
+
+  it('runtime 状态里带 egress：解析到保留网段 = fake_ip_detected，信任名单原样回', async () => {
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: {
+        [SECRETS_KEY_ENV]: SECRETS_KEY,
+        AGENTSWS_CONNECT_TRUSTED_HOSTS: 'admin.shopify.com, api.deepseek.com',
+      },
+      connect: fakeConnect([]) as never,
+      // Clash 的 fake-IP 池
+      resolveIpv4: async () => ['198.18.0.7'],
+    })
+    try {
+      const status = await assembly.port.runtime()
+      expect(status.egress?.fake_ip_detected).toBe(true)
+      expect(status.egress?.trusted_hosts).toEqual(['admin.shopify.com', 'api.deepseek.com'])
+      expect(status.egress?.detail).toContain('198.18.0.7')
+    } finally {
+      assembly.close()
+    }
+  })
+
+  it('解析到真实公网地址 = 没开 fake-IP', async () => {
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: { [SECRETS_KEY_ENV]: SECRETS_KEY },
+      connect: fakeConnect([]) as never,
+      resolveIpv4: async () => ['104.18.26.90'],
+    })
+    try {
+      const status = await assembly.port.runtime()
+      expect(status.egress?.fake_ip_detected).toBe(false)
+      expect(status.egress?.trusted_hosts).toEqual([])
+    } finally {
+      assembly.close()
+    }
+  })
+
+  it('试连撞上出站防护：回的是人话，而且这台机器从此记住"被拦过"', async () => {
+    const connect = fakeConnect([{ id: 'conn_shop', service: 'shopify_admin', alias: '主店' }])
+    // 目录里给一个零必填参数的只读动作，试连才挑得到它
+    connect.actions = async () => [
+      {
+        id: 'shopify_admin.get_shop',
+        service: 'shopify_admin',
+        side_effect: 'read' as const,
+        required_scopes: [],
+        input_schema: { type: 'object', properties: {}, required: [] },
+      },
+    ]
+    connect.execute = async () => {
+      throw Object.assign(
+        new Error('Egress blocked: hostname must not resolve to private or reserved IP'),
+        { code: 'provider_unavailable' },
+      )
+    }
+    const assembly = await createConnections({
+      clock: { now: () => T0 },
+      workspace_id: 'ws_1',
+      env: { [SECRETS_KEY_ENV]: SECRETS_KEY },
+      connect: connect as never,
+      // 主动探测看不出来（宿主机和容器的解析路径可能不一样）——被拦过这件事本身就是证据
+      resolveIpv4: async () => ['104.18.26.90'],
+    })
+    try {
+      const result = await assembly.port.test(
+        { workspace_id: 'ws_1', person_id: 'p_1' },
+        'conn_shop',
+      )
+      expect(result.ok).toBe(false)
+      expect(result.detail).toContain('fake-IP')
+      // 不该把上游那句英文原样甩给用户
+      expect(result.detail).not.toContain('must not resolve')
+      const status = await assembly.port.runtime()
+      expect(status.egress?.fake_ip_detected).toBe(true)
+    } finally {
+      assembly.close()
+    }
   })
 })

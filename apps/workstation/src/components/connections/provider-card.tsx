@@ -13,12 +13,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
-import type {
-  ConnectTestResult,
-  ProviderAuthOption,
-  ProviderFieldSpec,
-  ProviderView,
-} from '@/lib/api'
+import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 import { SecureForm } from './secure-form'
@@ -48,6 +43,7 @@ export function ProviderCard({
   oauthUrl: string | undefined
   /** 邮箱识别请求要带的岗位（连接是所有者的事）。 */
   assignment: string | undefined
+  /** WP44 起没有第二条接法可选，参数保留只为不动调用方（连接页仍带着它的 wizard 状态）。 */
   onStart: (auth_option?: string) => void
   onCancel: () => void
   onSubmit: (values: Record<string, string>) => void
@@ -57,15 +53,9 @@ export function ProviderCard({
   const oauth = provider.auth === 'oauth2'
   const busy = phase === 'saving'
 
-  // WP25：一个服务两种接法时先让用户选一次（Shopify）。默认选推荐的那条。
-  const options = provider.auth_options ?? []
-  const [optionId, setOptionId] = useState<string | undefined>(
-    options.find((o) => o.recommended)?.id ?? options[0]?.id,
-  )
-  const option: ProviderAuthOption | undefined =
-    options.find((o) => o.id === optionId) ?? options[0]
-  // 选了哪条，"要准备什么"与表单字段就跟着换
-  const guide = option?.setup_guide ?? provider.setup_guide
+  // WP44：每个 provider 只有一条接法。Shopify 曾经有两条（Dev Dashboard 应用 /
+  // 老的 shpat_ 直填令牌），老的那条已经删掉——留着只会让非技术用户在两张表单之间猜。
+  const guide = provider.setup_guide
 
   return (
     <Card
@@ -89,47 +79,6 @@ export function ProviderCard({
           （`data_note`）压成标题旁一个问号，「要准备什么」照旧是下面的折叠区。
         */}
         <p className="text-muted-foreground">{guide.summary}</p>
-
-        {options.length > 1 ? (
-          <fieldset className="flex flex-col gap-1.5" data-testid="auth-options">
-            <legend className="sr-only">{t('connections.auth_option')}</legend>
-            {options.map((o) => (
-              <label
-                key={o.id}
-                data-testid="auth-option"
-                data-option={o.id}
-                data-selected={option?.id === o.id ? 'true' : 'false'}
-                className={cn(
-                  'flex cursor-pointer items-start gap-2 rounded-md border p-2 text-xs',
-                  option?.id === o.id ? 'border-primary bg-primary/5' : 'border-border',
-                )}
-              >
-                <input
-                  type="radio"
-                  className="mt-0.5"
-                  name={`auth-option-${provider.service}`}
-                  value={o.id}
-                  checked={option?.id === o.id}
-                  disabled={phase !== 'idle'}
-                  onChange={() => {
-                    setOptionId(o.id)
-                  }}
-                />
-                <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">
-                    {o.label}
-                    {o.recommended ? (
-                      <span className="ml-1.5 rounded bg-primary/10 px-1 py-px text-[10px] text-primary">
-                        {t('connections.recommended')}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="text-muted-foreground">{o.summary}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        ) : null}
 
         <div>
           <Button
@@ -181,7 +130,7 @@ export function ProviderCard({
         {phase === 'form' ? (
           <SecureForm
             service={provider.service}
-            fields={fields ?? option?.fields ?? provider.fields}
+            fields={fields ?? provider.fields}
             busy={busy}
             {...(assignment === undefined ? {} : { assignment })}
             onCancel={onCancel}
@@ -214,7 +163,7 @@ export function ProviderCard({
               variant="outline"
               disabled={!provider.available || busy}
               onClick={() => {
-                onStart(option?.id)
+                onStart()
               }}
             >
               {oauth ? t('connections.authorize') : t('connections.connect')}

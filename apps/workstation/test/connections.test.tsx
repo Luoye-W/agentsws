@@ -54,14 +54,32 @@ const SHOP_PROVIDER: ProviderView = {
   service: 'shopify_admin',
   label: 'Shopify 店铺',
   auth: 'api_key',
+  // WP44：只剩 Dev Dashboard 应用这一条接法（客户端 ID + 密钥）
   fields: [
-    { name: 'shop', label: '店铺域名', secret: false, required: true },
-    { name: 'accessToken', label: 'Admin API 访问令牌', secret: true, required: true },
+    { name: 'shop_domain', label: '店铺域名', secret: false, required: true },
+    { name: 'client_id', label: '客户端 ID', secret: false, required: true },
+    { name: 'client_secret', label: '客户端密钥', secret: true, required: true },
   ],
   available: false,
   unavailable_reason: '本机还没有装 OpenConnector runtime',
   data_sources: ['shop'],
-  setup_guide: { summary: '建一个自定义应用。', steps: ['开发应用'], links: [] },
+  setup_guide: { summary: '在 Dev Dashboard 里建一个应用。', steps: ['建应用'], links: [] },
+}
+
+/** WP44：升级上来的那条老连接——OpenConnector 里有它，我们这边没有它的客户端凭据。 */
+const LEGACY_SHOP_CONNECTION: ConnectionView = {
+  id: 'conn_old_shop',
+  service: 'shopify_admin',
+  service_label: 'Shopify 店铺',
+  alias: '主店',
+  ownership: 'workspace',
+  status: 'active',
+  credential_store: 'openconnector',
+  data_sources: ['shop'],
+  legacy: {
+    kind: 'shopify_access_token',
+    hint: '这家店当初是把 shpat_ 开头的访问令牌直接粘进来接的。断开它，再用「Dev Dashboard 应用（客户端 ID + 密钥）」重接一次。',
+  },
 }
 
 const MAIL_CONNECTION: ConnectionView = {
@@ -394,5 +412,62 @@ describe('连接页：已连接的两个动作', () => {
       expect(screen.getByTestId('connections-empty')).toBeDefined()
     })
     confirm.mockRestore()
+  })
+})
+
+describe('WP44 Shopify：只有一条接法 + 老连接提示', () => {
+  it('卡上不再有"接法"单选，也没有 shpat_ 那条老路', async () => {
+    renderWithProviders(<ConnectionsPage />)
+    const card = await screen.findByTestId('provider-card-shopify_admin').catch(async () => {
+      const cards = await screen.findAllByTestId('provider-card')
+      const hit = cards.find((c) => c.getAttribute('data-service') === 'shopify_admin')
+      if (hit === undefined) throw new Error('没有 Shopify 卡')
+      return hit
+    })
+    expect(within(card).queryByTestId('auth-options')).toBeNull()
+    expect(card.textContent ?? '').not.toContain('shpat')
+  })
+
+  it('老办法接的那条连接：黄条提示"断开后重接一次"', async () => {
+    state.connections = [LEGACY_SHOP_CONNECTION]
+    renderWithProviders(<ConnectionsPage />)
+    const badge = await screen.findByTestId('connection-legacy')
+    expect(badge.getAttribute('data-legacy-kind')).toBe('shopify_access_token')
+    expect(badge.textContent ?? '').toContain('老办法接的')
+    expect(badge.textContent ?? '').toContain('Dev Dashboard 应用')
+  })
+
+  it('正常接的连接不出这条黄条', async () => {
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />)
+    await screen.findByTestId('connection-row')
+    expect(screen.queryByTestId('connection-legacy')).toBeNull()
+  })
+})
+
+describe('WP44 状态条：代理 fake-IP 说人话', () => {
+  it('fake_ip_detected → 黄条说清楚两条修法，并念出信任名单', async () => {
+    state.runtime = {
+      ...READY,
+      egress: {
+        fake_ip_detected: true,
+        trusted_hosts: ['admin.shopify.com'],
+        detail: 'api.deepseek.com 解析到了保留网段地址 198.18.0.7',
+      },
+    }
+    renderWithProviders(<ConnectionsPage />)
+    const bar = await screen.findByTestId('egress-fake-ip')
+    const text = bar.textContent ?? ''
+    expect(text).toContain('fake-IP')
+    expect(text).toContain('公共 DNS')
+    expect(text).toContain('admin.shopify.com')
+    expect(text).toContain('198.18.0.7')
+  })
+
+  it('没检测到就不出这条黄条（别吓人）', async () => {
+    state.runtime = { ...READY, egress: { fake_ip_detected: false, trusted_hosts: [] } }
+    renderWithProviders(<ConnectionsPage />)
+    await screen.findByTestId('runtime-bar')
+    expect(screen.queryByTestId('egress-fake-ip')).toBeNull()
   })
 })

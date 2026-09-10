@@ -249,3 +249,30 @@ curl -fsS http://127.0.0.1:4317/v1/health | head -c 400
 | 连接页里 provider 全是「不可用」 | `openconnector` 容器没起来，或 `OOMOL_CONNECT_ADMIN_TOKEN` 两边不一致 |
 | Postgres 档连不上 | `DATABASE_URL` 里的主机名要写 `postgres`（compose 服务名），不是 `localhost` |
 | 大文件写不进去 | S3 档的桶还没建，或 `AGENTSWS_BLOB_*` 三个变量没配齐 |
+| 试连报 `must not resolve to private or reserved IP` | 这台机器（或它的网关）在用**代理的 fake-IP 模式**，见下面一段 |
+
+### 9.1 代理 fake-IP：外网域名被当成内网拦下
+
+Clash / Surge 这类代理开着 fake-IP 时，会把外网域名解析成 `198.18.x.x` 这种
+**保留网段**的假地址（真连接由代理接管）。连接器的出站防护看到解析结果落在保留段里，
+就当成"有人想让我去打内网"，直接拒掉，回一句
+`Egress blocked: hostname must not resolve to private or reserved IP`。
+
+连接页的状态条会把这件事说成人话（黄条「你的网络在用代理的 fake-IP 模式」）。
+两条修法，任选其一：
+
+```sh
+# ① 让连接器容器绕开代理的解析，直接用公共 DNS
+#    compose 里给 openconnector 加 dns:；本机开发跑 scripts/dev-real.sh 会自动检测并这么做
+docker compose exec openconnector cat /etc/resolv.conf   # 先看它现在用的是谁
+
+# ② 或者把要连的域名加进信任名单（逗号分隔），写进 .env 再 up -d
+echo 'AGENTSWS_CONNECT_TRUSTED_HOSTS=admin.shopify.com,api.deepseek.com' >> .env
+```
+
+判断"是不是这个原因"的一句话：
+
+```sh
+docker compose exec openconnector getent hosts admin.shopify.com
+# 回 198.18.x.x / 240.x.x.x 这种 = 是；回真实公网地址 = 不是，另找原因
+```
