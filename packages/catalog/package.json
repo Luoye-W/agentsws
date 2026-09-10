@@ -1,0 +1,29 @@
+{
+  "name": "@agentsws/catalog",
+  "version": "0.0.0",
+  "private": true,
+  "description": "工具箱与查重（40 §2）：统一条目、建之前先查、疑似重复、好东西往上浮",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/learning": "workspace:*",
+    "@agentsws/roles": "workspace:*",
+    "better-sqlite3": "^12.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}
