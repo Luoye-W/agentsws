@@ -22,6 +22,7 @@ Electron 托盘壳（13 §5「桌面壳改为浏览器打开 + 极小启动器�
 | `src/navigation.ts` `src/csp.ts` | URL 拦截判定与 CSP |
 | `src/menu.ts` `src/i18n.ts` | 托盘菜单的数据模型 |
 | `src/connect-runtime.ts` | OpenConnector runtime 检测 + 加固检查（v1 不负责拉起） |
+| `src/mode.ts` | 本机 / 连公司服务器的判定（40 §1.3）；`src/wizard-preload.cts` 是首启向导的界面 |
 | `src/updater.ts` | electron-updater 骨架 +「冒烟不过不切换」 |
 
 除 `main.ts` / `preload.cts` 外**没有一个模块 import `electron`**——所以状态机、退避、密钥、
@@ -32,7 +33,7 @@ URL 判定、菜单模型都能在 vitest 里跑满 100% 行覆盖；`main.ts` �
 `app.getPath('userData')`（macOS `~/Library/Application Support/agentsws`）：
 
 ```
-config.json     端口 / 是否浏览器打开 / 开机自启 / 语言 —— 不含任何密钥
+config.json     端口 / 是否浏览器打开 / 开机自启 / 语言 / 模式与公司服务器地址 —— 不含任何密钥
 secrets.bin     safeStorage 密文（macOS 钥匙串 / Windows DPAPI 背书）
 halt.json       急停档位（托盘"暂停"写它）
 logs/           desktop.log、server.log（子进程 stdout / stderr，脱敏后）
@@ -40,6 +41,21 @@ data/           传给服务进程的 AGENTSWS_DB_DIR
 ```
 
 `AGENTSWS_DESKTOP_USER_DATA` 可以把整个目录挪走（开发与 e2e 用）。
+
+## 两种模式（40 §1.3、41 §2.1）
+
+|  | `local`（默认） | `remote` |
+|---|---|---|
+| 服务进程 | 本机 sidecar，壳负责起停 | 公司那台常开机器 / NAS 上跑，壳**一个进程都不拉** |
+| 本机密钥 | 四把（safeStorage 加密落盘） | **一把都不生成**——没有本机服务要喂 |
+| 登录 | 会话密钥换 cookie（token 不进渲染进程） | 邀请链接 / magic-link，cookie 由公司服务器下发 |
+| 数据 | 就在这台机器上 | 在公司机器上；**这台电脑不存真源** |
+| 托盘状态 | 「服务运行中（127.0.0.1:4317）」 | 「已连接 nas.company.lan」；没有「重启服务」「轮换本机密钥」 |
+
+第一次启动会问一句（本机 / 公司服务器二选一），选完写进 `config.json`；
+`AGENTSWS_SERVER_URL` 覆盖配置，也跳过那道问卷（运维批量部署与 e2e 都靠它）。
+地址只认 http / https，取源（路径与尾斜杠都丢掉）——它同时是 `allowedOrigins`、
+cookie 的 url 与 CSP `'self'` 的依据，三处必须是同一个字符串。
 
 ## 密钥
 

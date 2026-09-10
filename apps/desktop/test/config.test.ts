@@ -24,7 +24,18 @@ describe('parseConfig', () => {
       openInBrowser: false,
       launchAtLogin: true,
       language: 'zh-CN',
+      mode: 'local',
+      serverUrl: '',
     })
+  })
+
+  // WP36 / 40 §1.3：模式与公司服务器地址
+  it('mode 只认 local / remote；serverUrl 只认字符串', () => {
+    expect(parseConfig({ mode: 'remote' }).mode).toBe('remote')
+    expect(parseConfig({ mode: 'local' }).mode).toBe('local')
+    expect(parseConfig({ mode: 'hosted' }).mode).toBe('local')
+    expect(parseConfig({ serverUrl: 'https://nas.lan' }).serverUrl).toBe('https://nas.lan')
+    expect(parseConfig({ serverUrl: 42 }).serverUrl).toBe('')
   })
 
   it('端口必须是 0..65535 的整数', () => {
@@ -41,7 +52,7 @@ describe('parseConfig', () => {
 })
 
 describe('serializeConfig', () => {
-  it('只写四个已知字段——配置里不可能夹带密钥', () => {
+  it('只写已知字段——配置里不可能夹带密钥', () => {
     const raw = { ...DEFAULT_CONFIG, adminToken: 'oct_secret' } as never
     const text = serializeConfig(raw)
     expect(text).not.toContain('adminToken')
@@ -56,6 +67,15 @@ describe('createConfigStore', () => {
     const store = createConfigStore(memoryFileStore(), '/cfg.json')
     expect(store.load()).toEqual(DEFAULT_CONFIG)
     expect(store.current()).toEqual(DEFAULT_CONFIG)
+  })
+
+  // WP36：首启向导按它决定要不要问（`mode.needsWizard`）
+  it('exists 分得清「还没选过」与「已经存过一份」', () => {
+    const files = memoryFileStore()
+    const store = createConfigStore(files, '/cfg.json')
+    expect(store.exists()).toBe(false)
+    store.save(DEFAULT_CONFIG)
+    expect(store.exists()).toBe(true)
   })
 
   it('坏 JSON 也不炸', () => {

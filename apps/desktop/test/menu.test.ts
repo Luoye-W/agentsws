@@ -166,3 +166,49 @@ describe('trayTooltip', () => {
     expect(trayTooltip(input({ paused: true }))).toContain('已暂停')
   })
 })
+
+describe('WP36 / 40 §1.3：连公司服务器那一档', () => {
+  const remote = (patch: Partial<TrayModelInput> = {}): TrayModelInput =>
+    input({
+      mode: 'remote',
+      company: 'nas.company.lan',
+      serverUrl: 'https://nas.company.lan:4317',
+      // remote 档这台电脑没有 sidecar，快照永远是 stopped
+      server: server('stopped'),
+      ...patch,
+    })
+
+  it('状态那一行说的是「已连接谁」，不是「服务已停止」', () => {
+    expect(serverStateLabel(remote())).toBe('已连接 nas.company.lan')
+    expect(serverStateLabel(remote({ language: 'en-US' }))).toBe('Connected to nas.company.lan')
+  })
+
+  it('连不上就如实说，不假装', () => {
+    const t = strings('zh-CN')
+    expect(serverStateLabel(remote({ health: undefined }))).toBe(t.remoteUnreachable)
+  })
+
+  it('「重启服务」「轮换本机密钥」不出现——那两样都不在这台电脑上', () => {
+    const ids = buildTrayMenu(remote()).map((i) => i.id)
+    expect(ids).not.toContain('restart-server')
+    expect(ids).not.toContain('rotate-secrets-key')
+    expect(ids).toContain('open-workstation')
+    expect(ids).toContain('toggle-pause')
+    expect(ids).toContain('quit')
+  })
+
+  it('本机档照旧有那两项', () => {
+    const ids = buildTrayMenu(input()).map((i) => i.id)
+    expect(ids).toContain('restart-server')
+    expect(ids).toContain('rotate-secrets-key')
+  })
+
+  it('tooltip 也跟着说「已连接」', () => {
+    expect(trayTooltip(remote())).toContain('已连接 nas.company.lan')
+  })
+
+  it('公司名还不知道时不留一个孤零零的空格', () => {
+    expect(serverStateLabel(remote({ company: '' }))).toBe('已连接')
+    expect(serverStateLabel(remote({ company: undefined }))).toBe('已连接')
+  })
+})

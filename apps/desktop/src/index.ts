@@ -58,6 +58,19 @@ export {
   serverStateLabel,
   trayTooltip,
 } from './menu.js'
+export {
+  companyLabel,
+  configPatchOf,
+  type DesktopMode,
+  type ModeSource,
+  needsWizard,
+  normalizeServerUrl,
+  type ResolvedMode,
+  resolveMode,
+  SERVER_URL_ENV,
+  serverUrlFrom,
+  type WizardChoice,
+} from './mode.js'
 export type { NavigationDecision } from './navigation.js'
 export {
   decideNavigation,

@@ -1,9 +1,13 @@
 /**
- * `config.json`（13 §5 启动器：端口、浏览器打开、开机自启、语言）。
+ * `config.json`（13 §5 启动器：端口、浏览器打开、开机自启、语言、连哪台机器）。
  *
- * **不含任何密钥**——写盘时只序列化下面这四个已知字段，未知字段一律丢弃，
+ * **不含任何密钥**——写盘时只序列化下面这几个已知字段，未知字段一律丢弃，
  * 所以就算有人往文件里塞了 token 也不会被写回去。密钥走 `secrets.ts` 的 safeStorage。
+ *
+ * WP36 起多两个字段：`mode` 与 `serverUrl`（40 §1.3「员工电脑的桌面壳加连接公司服务器
+ * 模式」）。判定在 `mode.ts`，这里只负责存与取。
  */
+import type { DesktopMode } from './mode.js'
 import type { FileStore } from './ports.js'
 
 export const LANGUAGES = ['zh-CN', 'en-US'] as const
@@ -16,6 +20,13 @@ export interface DesktopConfig {
   openInBrowser: boolean
   launchAtLogin: boolean
   language: Language
+  /**
+   * `local` = 本机拉 sidecar（默认，单机档）；`remote` = 连公司服务器，
+   * 这台电脑一个服务进程都不起、一把密钥都不生成（40 §1.3、41 §2.1）。
+   */
+  mode: DesktopMode
+  /** `remote` 时连哪：`https://nas.company.lan:4317`。空串 = 没设。 */
+  serverUrl: string
 }
 
 export const DEFAULT_PORT = 4317
@@ -25,10 +36,16 @@ export const DEFAULT_CONFIG: DesktopConfig = {
   openInBrowser: false,
   launchAtLogin: false,
   language: 'zh-CN',
+  mode: 'local',
+  serverUrl: '',
 }
 
 function isLanguage(value: unknown): value is Language {
   return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value)
+}
+
+function isMode(value: unknown): value is DesktopMode {
+  return value === 'local' || value === 'remote'
 }
 
 function readPort(value: unknown): number | undefined {
@@ -48,6 +65,8 @@ export function parseConfig(raw: unknown): DesktopConfig {
     launchAtLogin:
       typeof obj.launchAtLogin === 'boolean' ? obj.launchAtLogin : DEFAULT_CONFIG.launchAtLogin,
     language: isLanguage(obj.language) ? obj.language : DEFAULT_CONFIG.language,
+    mode: isMode(obj.mode) ? obj.mode : DEFAULT_CONFIG.mode,
+    serverUrl: typeof obj.serverUrl === 'string' ? obj.serverUrl : DEFAULT_CONFIG.serverUrl,
   }
 }
 
@@ -58,11 +77,15 @@ export function serializeConfig(config: DesktopConfig): string {
     openInBrowser: config.openInBrowser,
     launchAtLogin: config.launchAtLogin,
     language: config.language,
+    mode: config.mode,
+    serverUrl: config.serverUrl,
   }
   return `${JSON.stringify(clean, null, 2)}\n`
 }
 
 export interface ConfigStore {
+  /** 配置文件在不在（首启向导按它决定要不要问，见 `mode.needsWizard`）。 */
+  exists(): boolean
   load(): DesktopConfig
   save(config: DesktopConfig): DesktopConfig
   update(patch: Partial<DesktopConfig>): DesktopConfig
@@ -96,6 +119,7 @@ export function createConfigStore(files: FileStore, path: string): ConfigStore {
   }
 
   return {
+    exists: () => files.exists(path),
     load,
     save,
     update(patch) {
