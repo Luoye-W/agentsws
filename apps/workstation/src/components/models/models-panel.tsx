@@ -15,6 +15,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { useState } from 'react'
+import { BrandIcon } from '@/components/brand-icons'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -266,7 +267,11 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                 data-testid="model-template"
                 data-kind={tpl.kind}
               >
-                <p className="text-sm font-medium">{tpl.label}</p>
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  {/* WP45：加模型那两张卡也戴各家自己的标志 */}
+                  <BrandIcon provider={tpl.kind} />
+                  {tpl.label}
+                </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{tpl.summary}</p>
                 <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
                   {tpl.steps.map((step) => (
@@ -449,6 +454,11 @@ function ProviderRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">
+            <BrandIcon
+              provider={provider.kind}
+              size={16}
+              className="mr-1.5 inline-block align-text-bottom"
+            />
             {provider.label}
             <span className="ml-1.5 text-xs font-normal text-muted-foreground">
               {provider.model}

@@ -8,8 +8,9 @@
  *   提交完立刻试连并把结果显示出来。
  */
 
-import { ChevronDown, ChevronRight, ExternalLink, Plug } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
+import { BrandIcon } from '@/components/brand-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -66,7 +67,8 @@ export function ProviderCard({
     >
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <Plug className="size-4" aria-hidden />
+          {/* WP45：卡上戴的是这家自己的标志（品牌色原样），认不出的才落通用插头 */}
+          <BrandIcon provider={provider.service} />
           {provider.label}
           {provider.data_note === undefined ? null : (
             <Hint text={provider.data_note} testId="provider-note" />
