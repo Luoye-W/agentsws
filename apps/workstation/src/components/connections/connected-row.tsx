@@ -6,6 +6,7 @@
  */
 
 import { AlertTriangle, Link2Off, Lock, RefreshCw } from 'lucide-react'
+import { BrandIcon } from '@/components/brand-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { ConnectionView } from '@/lib/api'
@@ -33,6 +34,7 @@ export function ConnectedRow({
       className="flex flex-col gap-2 rounded-lg border p-3"
     >
       <div className="flex flex-wrap items-center gap-2">
+        <BrandIcon provider={connection.service} size={16} />
         <span className="text-sm font-medium">{connection.service_label}</span>
         <Badge variant={connection.status === 'active' ? 'secondary' : 'destructive'}>
           {t(`connections.status.${connection.status}`)}
