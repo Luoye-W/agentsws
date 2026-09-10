@@ -860,7 +860,27 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       reassemble()
       // WP42：保存时顺手拉一次模型清单（还没拉过、或刚换了地址的才拉）。
       // 拉不到不影响保存——它只是让下一次打开表单时"模型名"是个下拉。
-      if (config.models === undefined) await refreshListing(config)
+      if (config.models === undefined) {
+        const listing = await refreshListing(config)
+        // 模板里的默认模型名不一定还存在（DeepSeek 官网已不列 deepseek-chat）：
+        // 接口回的清单才是真的，不在清单里就换成清单第一个，别让用户看到一个接口不认的名字
+        const saved = state.providers.find((p) => p.id === config.id) ?? config
+        const untouchedDefault =
+          MODEL_TEMPLATES.find((t) => t.kind === saved.kind)?.default_model === saved.model
+        // 只兜模板默认值；用户自己填的名字（哪怕清单里没有）照他的来
+        if (
+          untouchedDefault &&
+          listing.ok &&
+          listing.models.length > 0 &&
+          !listing.models.includes(saved.model)
+        ) {
+          const before = modelIdOf(saved)
+          saved.model = listing.models[0] as string
+          if (state.defaults.default === before) state.defaults.default = modelIdOf(saved)
+          flush()
+          reassemble()
+        }
+      }
       return viewOf(config)
     },
 

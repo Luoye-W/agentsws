@@ -188,7 +188,14 @@ export function ModelForm({
         ...(key === '' ? {} : { api_key: key }),
       })
       setListing(result)
-      if (result.ok) setModels(result.models)
+      if (result.ok) {
+        setModels(result.models)
+        // 模板默认名不在接口清单里就换成第一个——用户不该看到一个接口不认的名字
+        const el = document.getElementById(`${prefix}-model`) as HTMLInputElement | null
+        if (el !== null && result.models.length > 0 && !result.models.includes(el.value)) {
+          el.value = result.models[0] as string
+        }
+      }
     } catch (e) {
       setListing({
         ok: false,
