@@ -273,14 +273,14 @@ export function buildProgram(
     .option('--force', '目录非空也照导（覆盖同名文件）')
     .option('--no-reconcile', '只落地，不启动服务进程对账（15 §5.8 那一步自己来）')
     .action(async (pkg: string, opts: Record<string, unknown>) => {
-      const dataDir = fromCwd(String(opts['dataDir']))
+      const dataDir = fromCwd(String(opts.dataDir))
       const out = await importWorkspace({
         pkg: fromCwd(pkg),
         dataDir,
         ...(opts.force === true ? { force: true } : {}),
         // 15 §5.8：恢复之后不直接开工——起一次服务进程，它在装配时就把 outbound
         // 急停挂上（账本里有 unknown / 半路 applying 时），对完账再放开
-        ...(opts['reconcile'] === false
+        ...(opts.reconcile === false
           ? {}
           : {
               afterImport: async (dir: string) => {
@@ -316,7 +316,7 @@ export function buildProgram(
 
 /** 数据目录：命令行优先，其次 `AGENTSWS_DATA_DIR`（旧名 `AGENTSWS_DB_DIR` 仍认）。 */
 function dataDirOf(opts: Record<string, unknown>): string {
-  const given = opts['dataDir']
+  const given = opts.dataDir
   if (given !== undefined) return fromCwd(String(given))
   const env = process.env.AGENTSWS_DATA_DIR ?? process.env.AGENTSWS_DB_DIR
   if (env === undefined || env.trim() === '')

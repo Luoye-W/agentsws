@@ -71,6 +71,8 @@ export {
   route,
 } from './route-spec.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
+export type { BackupExportView, BackupPort } from './routes/backup.js'
+export { backupRoutes } from './routes/backup.js'
 export {
   CATALOG_KINDS,
   CATALOG_LAYERS,
@@ -89,8 +91,6 @@ export {
   recordCatalogNote,
   triggerKeyOf,
 } from './routes/catalog.js'
-export type { BackupExportView, BackupPort } from './routes/backup.js'
-export { backupRoutes } from './routes/backup.js'
 export type {
   BeginConnectResult,
   ConnectionOwnership,

@@ -12,3 +12,6 @@ out/
 test-results/
 playwright-report/
 release/
+
+# 桌面端后台会话的临时工作树
+.claude/worktrees/
