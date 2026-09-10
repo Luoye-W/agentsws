@@ -85,10 +85,20 @@ export interface ModelProviderView {
   active: boolean
   /** 挂不上的原因（人话）。 */
   inactive_reason?: string
-  /** 每百万 token 的价格（用户自己填，用于预算记账）；不填按 0 记。 */
+  /** 每百万 token 的价格（用于预算记账）；不填按 0 记。 */
   price_in?: number
   price_out?: number
   price_cached?: number
+  /** WP42：这三个价从哪来。`manual` 的不会被每周刷新覆盖。 */
+  price_source?: 'catalog' | 'manual'
+  /** 内置 / 抓来的价才有：币种、出处、日期（界面上写"来源：官网 2026-09-10"）。 */
+  price_currency?: string
+  price_source_url?: string
+  price_as_of?: string
+  /** 上次从 `/models` 拉回来的模型清单（WP42）。表单里的"模型名"下拉照它画。 */
+  models?: string[]
+  /** 上次拉清单是什么时候 / 通没通。 */
+  last_listing?: ModelListing
   /** 上次"测试"的结果。 */
   last_test?: ModelTestResult
   /** 这一条是环境变量给的（`DEEPSEEK_API_KEY`），界面上不给删。 */
@@ -125,6 +135,82 @@ export interface ModelTestResult {
   model?: string
   duration_ms?: number
   checked_at: string
+}
+
+/**
+ * 「拉一次模型列表」的结果（WP42 交付 1）。
+ *
+ * 拉不到**不是错**：本地 Ollama 没起来、地址写错、key 过期、这家干脆没有 `/models`
+ * ——都可能。所以回的是 `ok: false` + 一句人话，界面据此退回手填而不是弹一个红框。
+ */
+export interface ModelListing {
+  ok: boolean
+  /** 拿到的模型名（已去重排序）。拉不到时是空数组。 */
+  models: string[]
+  /** 拉不到的原因（人话）。**永远没有 key。** */
+  reason?: string
+  checked_at: string
+}
+
+/**
+ * 拉模型列表的入参。**全都可选**：
+ *
+ * - 已经保存过的那条，什么都不给就用存着的地址与加密库里的 key；
+ * - 还没保存的（用户刚把地址与 key 填进表单、还没点保存），把这两样带上就能先拉一次。
+ *   `api_key` 与保存那条路一样：只走这一次，不落盘、不进事件、不进返回值。
+ */
+export interface DiscoverModelsInput {
+  base_url?: string | undefined
+  api_key?: string | undefined
+  region?: 'cn' | 'global' | undefined
+}
+
+/**
+ * 内置价目表的对外形状（WP42 交付 2）。
+ *
+ * 在这之前，「输入价 / 输出价」是两个空的数字框——用户得自己去官网翻出「每百万
+ * token 多少钱」再填进来。填错了不会报错，只会让 22 §3 的三级预算按一个假数字拦人。
+ *
+ * **不换算币种**：各家官网标什么就是什么，`currency` 跟着走，界面上写出来。
+ */
+export interface ModelPricingModel {
+  model: string
+  in: number
+  out: number
+  cached: number
+  aliases?: string[]
+}
+
+export interface ModelPricingVendorView {
+  id: string
+  label: string
+  currency: string
+  /** 按接口地址的主机名认这一家。 */
+  hosts: string[]
+  source_url: string
+  /** 这份价是哪天的（内置价的日期，或者上次抓成功那天）。 */
+  as_of: string
+  /** 上次去官网抓这一家的结果（没抓过就没有）。 */
+  last_refresh?: { at: string; ok: boolean; models: number; reason?: string }
+  models: ModelPricingModel[]
+}
+
+export interface ModelPricingView {
+  vendors: ModelPricingVendorView[]
+  /** 上次整轮刷新是什么时候。 */
+  refreshed_at?: string
+}
+
+/** 刷一轮价的结果。**只有条数与来源**，没有页面正文、没有任何凭据。 */
+export interface ModelPricingRefreshResult {
+  at: string
+  ok: boolean
+  /** 抓成功几家 / 一共几家。 */
+  vendors: { id: string; label: string; ok: boolean; models: number; reason?: string }[]
+  /** 跟着改了几条 provider 的价（标了"手动"的一条都不动）。 */
+  updated_providers: number
+  /** 整轮被拦下的原因（比如出站急停）。 */
+  reason?: string
 }
 
 /** 22 §2 的策略：默认模型 + 按 purpose 覆盖 + 驻留 + 三级预算。 */
@@ -194,6 +280,13 @@ export interface SaveModelProviderInput {
   price_in?: number | undefined
   price_out?: number | undefined
   price_cached?: number | undefined
+  /**
+   * WP42：这三个价是用户自己改的（`manual`）还是照内置价目表填的（`catalog`）。
+   *
+   * 标了 `manual` 的，**每周那次官网刷新一条都不动它**——用户改过的数字不该被
+   * 一个后台任务悄悄覆盖掉。不给就由服务端判断（能在价目表里查到就是 catalog）。
+   */
+  price_source?: 'catalog' | 'manual' | undefined
 }
 
 export interface ModelsPort {
@@ -208,9 +301,15 @@ export interface ModelsPort {
   remove(actor: ModelsActor, id: string): MaybePromise<void>
   /** 经网关跑一次最小 complete（`purpose: 'judge'`，十来个 token）。 */
   test(actor: ModelsActor, id: string): MaybePromise<ModelTestResult>
+  /** 去 provider 的 `/models` 拉一次可用模型清单（WP42）。拉不到回 `ok: false` + 人话。 */
+  discover(actor: ModelsActor, id: string, input?: DiscoverModelsInput): MaybePromise<ModelListing>
   defaults(actor: ModelsActor): MaybePromise<ModelDefaultsView>
   setDefaults(actor: ModelsActor, input: SetModelDefaultsInput): MaybePromise<ModelDefaultsView>
   usage(actor: ModelsActor, since?: string): MaybePromise<ModelUsageView>
+  /** 内置价目表（含上次抓回来的覆盖）。表单照它自动填价。 */
+  pricing(actor: ModelsActor): MaybePromise<ModelPricingView>
+  /** 去各家官网抓一次价（普通 HTTP GET，不经模型；出站受急停管）。 */
+  refreshPricing(actor: ModelsActor): MaybePromise<ModelPricingRefreshResult>
   /** 这台机器上有没有能用的模型（首页那条黄条按它出现 / 消失）。 */
   configured(): boolean
 }
@@ -246,6 +345,14 @@ const SaveBody = z.object({
   price_in: z.number().min(0).max(100_000).optional(),
   price_out: z.number().min(0).max(100_000).optional(),
   price_cached: z.number().min(0).max(100_000).optional(),
+  price_source: z.enum(['catalog', 'manual']).optional(),
+})
+
+/** 拉模型列表的请求体。`api_key` 同 `SaveBody`：只限长度，值不进任何错误信封。 */
+const DiscoverBody = z.object({
+  base_url: z.string().min(1).max(512).optional(),
+  api_key: z.string().min(1).max(4096).optional(),
+  region: REGION.optional(),
 })
 
 const DefaultsBody = z.object({
@@ -376,6 +483,36 @@ export function modelRoutes(): Route[] {
     ),
     route(
       {
+        method: 'get',
+        path: '/v1/models/pricing',
+        operationId: 'getModelPricing',
+        summary:
+          '内置价目表（WP42）：各家每百万 token 的输入 / 输出 / 缓存命中价，每条带出处与日期。选定模型后表单照它自动填',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'ModelPricingView',
+      },
+      async (c, deps) => ok(c, await portOf(deps).pricing(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/models/pricing/refresh',
+        operationId: 'refreshModelPricing',
+        summary:
+          '去各家官网抓一次价（普通 HTTP GET，**不经模型**；出站受急停管）。抓不到就保留内置价并说清楚为什么；标了"手动"的价一条都不动',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'ModelPricingRefreshResult',
+      },
+      async (c, deps) => ok(c, await portOf(deps).refreshPricing(actorOf(c))),
+    ),
+    route(
+      {
         method: 'put',
         path: '/v1/models/providers/:id',
         operationId: 'saveModelProvider',
@@ -410,6 +547,27 @@ export function modelRoutes(): Route[] {
         returns: 'ModelTestResult',
       },
       async (c, deps) => ok(c, await portOf(deps).test(actorOf(c), param(c, 'id'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/models/providers/:id/discover',
+        operationId: 'discoverModelProviderModels',
+        summary:
+          '去这家的 /models 拉一次可用模型清单（WP42）：设置页的"模型名"因此是一个下拉而不是手填；拉不到回 ok=false + 一句人话',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [ID_PARAM],
+        body: DiscoverBody,
+        returns: 'ModelListing',
+      },
+      async (c, deps) => {
+        const input = await body(c, DiscoverBody)
+        // 和保存那条路同一条纪律：`api_key` 往下传一次，自己不读、不记、不回显。
+        return ok(c, await portOf(deps).discover(actorOf(c), param(c, 'id'), input))
+      },
     ),
     route(
       {

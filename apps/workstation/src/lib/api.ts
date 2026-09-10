@@ -1023,6 +1023,14 @@ export interface ModelTestResult {
   checked_at: string
 }
 
+/** WP42：这家现在有哪些模型（从 `/models` 拉的）。拉不到时 `ok: false` + 一句人话。 */
+export interface ModelListing {
+  ok: boolean
+  models: string[]
+  reason?: string
+  checked_at: string
+}
+
 export interface ModelProviderView {
   id: string
   kind: ModelProviderKind
@@ -1038,6 +1046,14 @@ export interface ModelProviderView {
   price_in?: number
   price_out?: number
   price_cached?: number
+  /** WP42：这三个价从哪来。`manual` 的不会被每周那次官网刷新覆盖。 */
+  price_source?: 'catalog' | 'manual'
+  price_currency?: string
+  price_source_url?: string
+  price_as_of?: string
+  /** WP42：上次拉回来的模型清单。 */
+  models?: string[]
+  last_listing?: ModelListing
   last_test?: ModelTestResult
   from_env?: boolean
 }
@@ -1135,6 +1151,23 @@ export const testModelProvider = (id: string, assignment?: string): Promise<Mode
     ...withAssignment(assignment),
   })
 
+/**
+ * WP42：去这家的 `/models` 拉一次模型清单。
+ *
+ * `api_key` 是第二条会带 key 出门的路——用户刚把地址与 key 填进表单、还没点保存就想
+ * 看看有哪些模型可选时用它。和保存那条一样：组装一次、发出去，函数返回后没人再引用它。
+ */
+export const discoverModelProviderModels = (
+  id: string,
+  input: { base_url?: string; api_key?: string; region?: 'cn' | 'global' },
+  assignment?: string,
+): Promise<ModelListing> =>
+  api(`/v1/models/providers/${encodeURIComponent(id)}/discover`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
 export const getModelDefaults = (assignment?: string): Promise<ModelDefaultsView> =>
   api('/v1/models/defaults', withAssignment(assignment))
 
@@ -1155,6 +1188,97 @@ export const setModelDefaults = (
 
 export const getModelUsage = (assignment?: string): Promise<ModelUsageView> =>
   api('/v1/models/usage', withAssignment(assignment))
+
+// ── WP42 价目表：内置价 + 官网刷新 ──────────────────────────────────────
+
+export interface ModelPricingModel {
+  model: string
+  in: number
+  out: number
+  cached: number
+  aliases?: string[]
+}
+
+export interface ModelPricingVendorView {
+  id: string
+  label: string
+  currency: string
+  hosts: string[]
+  source_url: string
+  as_of: string
+  last_refresh?: { at: string; ok: boolean; models: number; reason?: string }
+  models: ModelPricingModel[]
+}
+
+export interface ModelPricingView {
+  vendors: ModelPricingVendorView[]
+  refreshed_at?: string
+}
+
+export interface ModelPricingRefreshResult {
+  at: string
+  ok: boolean
+  vendors: { id: string; label: string; ok: boolean; models: number; reason?: string }[]
+  updated_providers: number
+  reason?: string
+}
+
+export const getModelPricing = (assignment?: string): Promise<ModelPricingView> =>
+  api('/v1/models/pricing', withAssignment(assignment))
+
+export const refreshModelPricing = (assignment?: string): Promise<ModelPricingRefreshResult> =>
+  api('/v1/models/pricing/refresh', { method: 'POST', ...withAssignment(assignment) })
+
+/** `https://api.deepseek.com/v1` → `api.deepseek.com`。认不出来回空串。 */
+function hostOf(baseUrl: string): string {
+  const raw = baseUrl.trim()
+  if (raw === '') return ''
+  try {
+    return new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 按（接口地址, 模型名）在价目表里查一条价。
+ *
+ * 匹配顺序与服务端一致：完全一样 → 别名 → 去掉日期后缀。查不到就回 undefined
+ * ——不猜。表单据此决定"自动填"还是"留空让人自己填"。
+ */
+export function findCatalogPrice(
+  pricing: ModelPricingView | undefined,
+  baseUrl: string,
+  model: string,
+):
+  | { in: number; out: number; cached: number; currency: string; as_of: string; source_url: string }
+  | undefined {
+  if (pricing === undefined) return undefined
+  const host = hostOf(baseUrl)
+  if (host === '') return undefined
+  const vendor = pricing.vendors.find((v) =>
+    v.hosts.some((h) => host === h || host.endsWith(`.${h}`)),
+  )
+  if (vendor === undefined) return undefined
+  const name = model.trim().toLowerCase()
+  if (name === '') return undefined
+  const undated = name.replace(/-\d{4}-\d{2}-\d{2}$/, '')
+  const hit = vendor.models.find(
+    (m) =>
+      m.model.toLowerCase() === name ||
+      m.model.toLowerCase() === undated ||
+      (m.aliases ?? []).some((a) => a.toLowerCase() === name),
+  )
+  if (hit === undefined) return undefined
+  return {
+    in: hit.in,
+    out: hit.out,
+    cached: hit.cached,
+    currency: vendor.currency,
+    as_of: vendor.as_of,
+    source_url: vendor.source_url,
+  }
+}
 
 // ── WP28 制度面：职责 / 岗位 / 分配 / 成员与邀请 ─────────────────────────
 //
@@ -1639,7 +1763,7 @@ export const getStorageMigration = (
   assignment?: string,
 ): Promise<StorageMigrationView> =>
   api(`/v1/storage/migrations/${encodeURIComponent(id)}`, withAssignment(assignment))
-// ── 41 §1 秘书 Agent（profile 与公开级别 / 代答 / 日程与约时间 / 任务路由）────────
+// ── 41 §1 代理 Agent（profile 与公开级别 / 代答 / 日程与约时间 / 任务路由）────────
 
 /** 41 §1.3 三档；`agenda_detail` 最高只到 `colleagues`。 */
 export type DisclosureLevel = 'self' | 'colleagues' | 'workspace'
@@ -1816,7 +1940,7 @@ export const listPeople = (): Promise<PersonCard[]> => api<PersonCard[]>('/v1/pe
 export const getPersonProfile = (id: string): Promise<VisibleProfile> =>
   api<VisibleProfile>(`/v1/people/${encodeURIComponent(id)}/profile`)
 
-/** 问他的秘书（只答公开级别内的四类问题）。 */
+/** 问他的代理（只答公开级别内的四类问题）。 */
 export const askSecretary = (id: string, question: string): Promise<SecretaryAnswer> =>
   api<SecretaryAnswer>(`/v1/people/${encodeURIComponent(id)}/ask`, {
     method: 'POST',
@@ -1853,7 +1977,7 @@ export const decideMeet = (
     body: input,
   })
 
-/** 把一件事丢给秘书：它判断该谁做，出一张认领卡（专业问题只转岗位，不出卡）。 */
+/** 把一件事丢给代理：它判断该谁做，出一张认领卡（专业问题只转岗位，不出卡）。 */
 export const routeToDesk = (text: string): Promise<SecretaryRouteResult> =>
   api<SecretaryRouteResult>('/v1/me/secretary/route', { method: 'POST', body: { text } })
 

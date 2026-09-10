@@ -92,6 +92,8 @@ export const HANDLERS = {
   backup: 'backup.daily',
   /** WP38：认领了没动的活先提醒、再回池（40 §3.5）。 */
   idleTodos: 'work.idle_todos',
+  /** WP42：每周一去各家官网抓一次模型价（22 §3 的价目表）。 */
+  pricingRefresh: 'models.pricing_refresh',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -782,6 +784,34 @@ export function registerBackup(scheduler: Scheduler, deps: BackupDeps): void {
 }
 
 /* ------------------------------------------------------------------ */
+/* ⑬ 模型价目刷新：每周一 05:00（22 §3、WP42）                             */
+/* ------------------------------------------------------------------ */
+
+export interface PricingRefreshDeps {
+  /** 抓一轮，回抓成功几家 / 一共几条。实现在 `./models.ts`。 */
+  run(): Promise<{ vendors: { ok: boolean }[]; updated_providers: number }>
+}
+
+/**
+ * 价目表会变（各家一年调好几次价），而算钱的那张表是**用户填的一串数字**——
+ * 不刷新，它就一直停在填进去那天。所以每周去官网看一眼。
+ *
+ * 挂周一 05:00：排在 06:00 的技能周合并之前，也早于任何人上班。
+ * 错过不补跑：关机三天开机时补三轮抓同一份价没有意义，当周那一轮照常。
+ * 抓不到不算失败——`models.ts` 里那一轮本来就"永不抛"，抓不到就保留内置价。
+ */
+export function registerPricingRefresh(scheduler: Scheduler, deps: PricingRefreshDeps): void {
+  scheduler.register(HANDLERS.pricingRefresh, async () => {
+    const result = await deps.run()
+    return {
+      vendors_ok: result.vendors.filter((v) => v.ok).length,
+      vendors_total: result.vendors.length,
+      updated_providers: result.updated_providers,
+    }
+  })
+}
+
+/* ------------------------------------------------------------------ */
 /* 排期：十条任务的时间表                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -813,6 +843,8 @@ export interface SchedulePlanOptions {
     raw?: boolean
     /** WP36：每天一份备份。**只有落盘档有**——内存档没有可导的库。 */
     backup?: boolean
+    /** WP42：每周一去各家官网抓一次模型价。 */
+    pricing?: boolean
   }
 }
 
@@ -992,6 +1024,17 @@ export async function ensureSystemTasks(
         title: '每天清一次过了保留期的原始材料',
         handler: HANDLERS.rawPrune,
         trigger: { kind: 'cron', expr: '0 3 * * *', tz },
+      }),
+    )
+  }
+  // ⑬ 每周一 05:00 去各家官网抓一次模型价（排在 06:00 的技能周合并之前）
+  if (options.has.pricing === true) {
+    await add(
+      'sched_pricing_refresh',
+      systemTask(base, {
+        title: '每周一去各家官网看一眼模型价',
+        handler: HANDLERS.pricingRefresh,
+        trigger: { kind: 'cron', expr: '0 5 * * 1', tz },
       }),
     )
   }

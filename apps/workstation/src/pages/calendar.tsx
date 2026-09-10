@@ -115,7 +115,7 @@ export function CalendarPage(): React.ReactNode {
   const client = useQueryClient()
   const [view, setView] = useState<View>('week')
   const [anchor, setAnchor] = useState(() => new Date())
-  // 41 §1.2：约别人 = 向对方秘书发一张卡，对方点头才进双方日历
+  // 41 §1.2：约别人 = 向对方的代理发一张卡，对方点头才进双方日历
   const [meeting, setMeeting] = useState(false)
 
   const start = view === 'week' ? startOfWeek(anchor) : startOfMonthGrid(anchor)

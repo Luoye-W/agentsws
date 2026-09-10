@@ -148,7 +148,7 @@ function Workspace(): ReactNode {
         <Route path="/knowledge" element={<KnowledgePage />} />
         {/* 24 技能与学习回路：当前版本、三层 overlay、待审提案 */}
         <Route path="/skills" element={<SkillsPage />} />
-        {/* 41 §1 秘书 Agent：我的秘书（问 / profile 与公开级别 / 谁问过我 / 约时间） */}
+        {/* 41 §1 个人代理（原「秘书」）：我的代理（问 / profile 与公开级别 / 谁问过我 / 约时间） */}
         <Route path="/secretary" element={<SecretaryPage />} />
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/people/:id" element={<PersonPage />} />

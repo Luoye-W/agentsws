@@ -9,6 +9,31 @@ export { createModelGateway } from './gateway.js'
 export type { BudgetCtx, BudgetScopeState, CapSpec, Reservation } from './ledger.js'
 export { BudgetLedger } from './ledger.js'
 export { staticPrefixHash, staticPrefixLength, truncateToHour } from './prefix.js'
+export type {
+  CatalogHit,
+  CatalogModel,
+  CatalogPrice,
+  CatalogVendor,
+  PriceCatalog,
+  PriceParserId,
+} from './pricing/catalog.js'
+export {
+  catalogPrice,
+  findModel,
+  hostOf,
+  PRICE_CATALOG,
+  vendorForBaseUrl,
+} from './pricing/catalog.js'
+export type { PageFetch, RefreshOptions, VendorRefresh } from './pricing/refresh.js'
+export {
+  PRICING_TIMEOUT_MS,
+  PRICING_USER_AGENT,
+  parseDeepSeek,
+  parseKimi,
+  parseOpenAi,
+  parseZhipu,
+  refreshPriceCatalog,
+} from './pricing/refresh.js'
 export {
   costOf,
   DEFAULT_CHARS_PER_TOKEN,
@@ -19,7 +44,11 @@ export {
   priceKey,
 } from './pricing.js'
 export type { FetchLike, OpenAiCompatibleOptions } from './providers/openai-compatible.js'
-export { extensionFor, openaiCompatibleProvider } from './providers/openai-compatible.js'
+export {
+  extensionFor,
+  ollamaTagsUrl,
+  openaiCompatibleProvider,
+} from './providers/openai-compatible.js'
 export type { StubProviderOptions } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'

@@ -132,7 +132,13 @@ export type {
 } from './routes/meetings.js'
 export { meetingRoutes } from './routes/meetings.js'
 export type {
+  DiscoverModelsInput,
   ModelDefaultsView,
+  ModelListing,
+  ModelPricingModel,
+  ModelPricingRefreshResult,
+  ModelPricingVendorView,
+  ModelPricingView,
   ModelProviderKind,
   ModelProviderTemplate,
   ModelProviderView,

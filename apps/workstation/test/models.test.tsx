@@ -12,6 +12,9 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ModelDefaultsView,
+  ModelListing,
+  ModelPricingRefreshResult,
+  ModelPricingView,
   ModelProviderTemplate,
   ModelProviderView,
   ModelTestResult,
@@ -123,6 +126,40 @@ const USAGE: ModelUsageView = {
   budget: { used_base: 0.0007, cap_base: 0, frozen: false },
 }
 
+/** WP42：内置价目表（就是 catalog.json 里 DeepSeek 那一段）。 */
+const PRICING: ModelPricingView = {
+  vendors: [
+    {
+      id: 'deepseek',
+      label: 'DeepSeek 官方',
+      currency: 'USD',
+      hosts: ['api.deepseek.com'],
+      source_url: 'https://api-docs.deepseek.com/quick_start/pricing/',
+      as_of: '2026-09-10',
+      models: [
+        {
+          model: 'deepseek-flash',
+          in: 0.3,
+          out: 1.2,
+          cached: 0.006,
+          aliases: ['deepseek-v4-flash'],
+        },
+        { model: 'deepseek-v4-pro', in: 1.32, out: 3.96, cached: 0.044 },
+      ],
+    },
+  ],
+}
+
+const PRICE_REFRESH: ModelPricingRefreshResult = {
+  at: T0,
+  ok: true,
+  vendors: [
+    { id: 'deepseek', label: 'DeepSeek 官方', ok: true, models: 2 },
+    { id: 'qwen', label: '通义千问（百炼）', ok: false, models: 0, reason: '阶梯计价，抓不准' },
+  ],
+  updated_providers: 1,
+}
+
 const OWNER_POSITION = {
   position_id: 'asg_owner',
   role_id: 'common.owner',
@@ -145,9 +182,18 @@ const state = {
   /** 列表这条路 403（客服岗位问模型面就是这样）。 */
   forbidden: false,
   testResult: { ok: true, reason: 'ok', checked_at: T0 } as ModelTestResult,
+  priceRefresh: PRICE_REFRESH,
+  /** WP42：`discoverModelProviderModels` 回什么。 */
+  listing: {
+    ok: true,
+    models: ['deepseek-chat', 'deepseek-flash', 'deepseek-v4-pro'],
+    checked_at: T0,
+  } as ModelListing,
 }
 
 const saved: { id: string; input: Record<string, unknown> }[] = []
+const discovered: { id: string; input: Record<string, unknown> }[] = []
+const priceRefreshes: number[] = []
 const removed: string[] = []
 const tested: string[] = []
 
@@ -180,13 +226,23 @@ vi.mock('@/lib/api', async () => {
       tested.push(id)
       return state.testResult
     },
+    discoverModelProviderModels: async (id: string, input: Record<string, unknown>) => {
+      discovered.push({ id, input })
+      return state.listing
+    },
     getModelDefaults: async () => DEFAULTS,
     setModelDefaults: async () => DEFAULTS,
     getModelUsage: async () => USAGE,
+    getModelPricing: async () => PRICING,
+    refreshModelPricing: async () => {
+      priceRefreshes.push(1)
+      return state.priceRefresh
+    },
   }
 })
 
 const { ModelsPanel } = await import('@/components/models/models-panel')
+const { suggestProviderId } = await import('@/components/models/model-form')
 const { NoModelBanner } = await import('@/components/models/no-model-banner')
 
 beforeEach(() => {
@@ -197,6 +253,14 @@ beforeEach(() => {
   saved.length = 0
   removed.length = 0
   tested.length = 0
+  discovered.length = 0
+  priceRefreshes.length = 0
+  state.priceRefresh = PRICE_REFRESH
+  state.listing = {
+    ok: true,
+    models: ['deepseek-chat', 'deepseek-flash', 'deepseek-v4-pro'],
+    checked_at: T0,
+  }
   // localStorage 由 AppProvider 自己管，这里不清（jsdom 的实现没有 clear）
 })
 
@@ -417,5 +481,230 @@ describe('WP25 §C 模型面板：已配的那几条', () => {
     for (const label of ['跑活', '抽取', '反思', '向量', '判分', '转写']) {
       expect(panel.textContent, label).toContain(label)
     }
+  })
+})
+
+describe('WP42 §1 模型名从接口拉', () => {
+  it('点「拉取模型列表」：模型名框变成可搜索的下拉（原生 datalist）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    // 拉之前：就是一个手填的框，没有下拉
+    expect(within(form).getByTestId('model-name-input').getAttribute('list')).toBeNull()
+    expect(within(form).queryByTestId('model-datalist')).toBeNull()
+
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByTestId('model-discover'))
+
+    const list = await within(form).findByTestId('model-datalist')
+    expect(list.querySelectorAll('option')).toHaveLength(3)
+    expect(within(form).getByTestId('model-name-input').getAttribute('list')).toBe(list.id)
+  })
+
+  it('拉取带上表单里现填的地址与 key；key 不留在 DOM 里', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByTestId('model-discover'))
+
+    await waitFor(() => {
+      expect(discovered).toHaveLength(1)
+    })
+    expect(discovered[0]?.input).toMatchObject({
+      base_url: 'https://api.deepseek.com',
+      api_key: API_KEY,
+      region: 'cn',
+    })
+    expect(document.body.innerHTML).not.toContain(API_KEY)
+  })
+
+  it('拉不到：把原因原样说出来，模型名还是能手填', async () => {
+    state.listing = {
+      ok: false,
+      models: [],
+      reason: '连不上这个地址：本地模型的话看看它起来了没有',
+      checked_at: T0,
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByTestId('model-discover'))
+
+    const failed = await within(form).findByTestId('model-discover-failed')
+    expect(failed.textContent).toContain('看看它起来了没有')
+    // 退回手填：框还在，还能打字
+    const input = within(form).getByTestId('model-name-input') as HTMLInputElement
+    expect(input.getAttribute('list')).toBeNull()
+    await user.clear(input)
+    await user.type(input, 'llama3.1')
+    expect(input.value).toBe('llama3.1')
+  })
+
+  it('改一条已有的：上次拉回来的清单直接就在（不用再点一次）', async () => {
+    state.providers = [
+      { ...ACTIVE, models: ['deepseek-chat', 'deepseek-flash'], last_listing: state.listing },
+    ]
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByText('改'))
+    const form = await screen.findByTestId('model-form')
+    expect(within(form).getByTestId('model-datalist').querySelectorAll('option')).toHaveLength(2)
+    expect(discovered).toHaveLength(0)
+  })
+})
+
+describe('WP42 §2 价格自动填 + 手动可改', () => {
+  it('选定模型：三个价自动填上，并写清楚来源是官网哪一天', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    const model = within(form).getByTestId('model-name-input') as HTMLInputElement
+    await user.clear(model)
+    await user.type(model, 'deepseek-flash')
+
+    await waitFor(() => {
+      expect((within(form).getByTestId('model-price_in') as HTMLInputElement).value).toBe('0.3')
+    })
+    expect((within(form).getByTestId('model-price_out') as HTMLInputElement).value).toBe('1.2')
+    expect((within(form).getByTestId('model-price_cached') as HTMLInputElement).value).toBe('0.006')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('2026-09-10')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('USD')
+  })
+
+  it('用户改了价：标成"手动"，换模型也不再自动改它，保存时带 price_source=manual', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    const priceIn = within(form).getByTestId('model-price_in') as HTMLInputElement
+    await user.clear(priceIn)
+    await user.type(priceIn, '5')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('手动')
+
+    // 换个模型：价不动
+    const model = within(form).getByTestId('model-name-input') as HTMLInputElement
+    await user.clear(model)
+    await user.type(model, 'deepseek-v4-pro')
+    expect(priceIn.value).toBe('5')
+
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(saved).toHaveLength(1)
+    })
+    expect(saved[0]?.input).toMatchObject({ price_in: 5, price_source: 'manual' })
+  })
+
+  it('价目表里没有的（本机 Ollama）：不硬填一个数，提示自己去官网抄', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[1] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    const base = within(form).getByLabelText('接口地址') as HTMLInputElement
+    await user.clear(base)
+    await user.type(base, 'http://127.0.0.1:11434/v1')
+    const model = within(form).getByTestId('model-name-input') as HTMLInputElement
+    await user.clear(model)
+    await user.type(model, 'llama3.1')
+    expect((within(form).getByTestId('model-price_in') as HTMLInputElement).value).toBe('')
+    expect(within(form).getByTestId('model-price-source').textContent).toContain('自己去官网抄')
+  })
+
+  it('点「去官网抓一次」：抓到的与没抓到的都逐家写出来', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByTestId('model-pricing-refresh'))
+    const result = await screen.findByTestId('model-pricing-result')
+    expect(result.textContent).toContain('抓到 2 条')
+    expect(result.textContent).toContain('官网抓取失败')
+    expect(result.textContent).toContain('阶梯计价')
+    expect(priceRefreshes).toHaveLength(1)
+  })
+
+  it('被急停拦下：说是急停，不假装"抓不到"', async () => {
+    state.priceRefresh = {
+      at: T0,
+      ok: false,
+      vendors: [],
+      updated_providers: 0,
+      reason: '出站急停开着，这一轮没去抓。解除急停之后再点一次。',
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByTestId('model-pricing-refresh'))
+    const result = await screen.findByTestId('model-pricing-result')
+    expect(result.textContent).toContain('急停')
+  })
+})
+
+describe('WP42 §4 「编号」折进「高级」', () => {
+  it('新建时表单上看不到「编号」——它在「高级」里，而且已经按接口地址填好了', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+
+    const advanced = within(form).getByTestId('model-advanced') as HTMLDetailsElement
+    // 默认收着：第一屏上没有这个字段
+    expect(advanced.open).toBe(false)
+    expect((within(form).getByTestId('model-id-input') as HTMLInputElement).value).toBe('deepseek')
+  })
+
+  it('换了接口地址：编号跟着改（api.moonshot.cn → kimi）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[1] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    const base = within(form).getByTestId('model-base-url') as HTMLInputElement
+    await user.clear(base)
+    await user.type(base, 'https://api.moonshot.cn/v1')
+    await waitFor(() => {
+      expect((within(form).getByTestId('model-id-input') as HTMLInputElement).value).toBe('kimi')
+    })
+  })
+
+  it('保存时把自动生成的编号带上（用户一个字都没打过）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click((await screen.findAllByText('填 API key'))[0] as HTMLElement)
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), API_KEY)
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(saved).toHaveLength(1)
+    })
+    expect(saved[0]?.id).toBe('deepseek')
+  })
+
+  it('改一条已有的：编号根本不出现（存下来就不能改）', async () => {
+    state.providers = [ACTIVE]
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.click(await screen.findByText('改'))
+    const form = await screen.findByTestId('model-form')
+    expect(within(form).queryByTestId('model-advanced')).toBeNull()
+  })
+
+  it('suggestProviderId：认得出的几家给好记的名字，重名往后排', () => {
+    expect(suggestProviderId('https://api.deepseek.com', [])).toBe('deepseek')
+    expect(suggestProviderId('https://api.moonshot.cn/v1', [])).toBe('kimi')
+    expect(suggestProviderId('https://dashscope.aliyuncs.com/compatible-mode/v1', [])).toBe('qwen')
+    expect(suggestProviderId('https://open.bigmodel.cn/api/paas/v4', [])).toBe('zhipu')
+    expect(suggestProviderId('http://127.0.0.1:11434/v1', [])).toBe('ollama')
+    // 认不出来的取主机名头一段（去掉 api. / www.）
+    expect(suggestProviderId('https://api.example.dev/v1', [])).toBe('example')
+    // 重名往后排
+    expect(suggestProviderId('https://api.deepseek.com', ['deepseek'])).toBe('deepseek-2')
+    // 地址是空的 / 乱写的也得给出一个合法编号
+    expect(suggestProviderId('', [])).toBe('model')
   })
 })

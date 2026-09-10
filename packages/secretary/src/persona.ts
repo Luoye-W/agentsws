@@ -1,11 +1,14 @@
 /**
- * 秘书的 persona 与**只读工具面**（41 §1.4 最后一段）。
+ * 个人代理（原「秘书」，09-10 改名）的 persona 与**只读工具面**（41 §1.4 最后一段）。
  *
- * > 秘书用的是 direct-llm / dsh 同一套运行协议（17），只是 persona 与工具面不同：
+ * 包名 / 类型名 / 常量名仍然是 `secretary`：那是契约面，改了就是无谓地把外面接着的
+ * 东西全打断。改的只有**人会读到的字**。
+ *
+ * > 代理用的是 direct-llm / dsh 同一套运行协议（17），只是 persona 与工具面不同：
  * > 工具只有日历、profile、目录查询、认领卡、撞车检测；**没有任何写外部系统的动作**。
  *
  * 这一条不是注释，是有用例钉住的：{@link forbiddenTools} 扫一遍白名单，出现任何
- * `connect.*` 的写类动作、任何发信 / 下单 / 改价的动作就红。秘书能改的只有一样东西——
+ * `connect.*` 的写类动作、任何发信 / 下单 / 改价的动作就红。代理能改的只有一样东西——
  * **本人自己的日历**（`calendar.write_own`）。
  */
 import type {
@@ -18,11 +21,11 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 
-/** 秘书跑在 `common.member` 下：以本人权限运行，不借任何岗位的权限（06 §2.1）。 */
+/** 代理跑在 `common.member` 下：以本人权限运行，不借任何岗位的权限（06 §2.1）。 */
 export const SECRETARY_ROLE_ID: RoleId = 'common.member'
 
 /**
- * 秘书能用的全部工具。**这份清单是穷举的**——运行时的门禁按它拦（17 §5）。
+ * 代理能用的全部工具。**这份清单是穷举的**——运行时的门禁按它拦（17 §5）。
  *
  * - `profile.read` 看 profile（按公开级别过滤过的那一份）
  * - `agenda.read` / `agenda.check` 看日程、算冲突与替代时段
@@ -63,7 +66,7 @@ export function forbiddenTools(allow: readonly string[]): string[] {
 }
 
 export const SECRETARY_PERSONA = [
-  '你是这位同事的秘书 Agent，以他本人的权限运行。你只管三件事：他是谁、他在做什么、他什么时候有空；',
+  '你是这位同事的代理 Agent，以他本人的权限运行。你只管三件事：他是谁、他在做什么、他什么时候有空；',
   '外加一件：别人丢过来的事该归哪个岗位。',
   '规矩：',
   '① 只根据下面给出的现场材料回答；材料里没有的就说"这个要问本人"，**永远不要猜**。',
@@ -88,9 +91,9 @@ export interface SecretaryRunInput {
 }
 
 /**
- * 组一次秘书运行的 `RunRequest`（17 §1）。
+ * 组一次代理运行的 `RunRequest`（17 §1）。
  *
- * 没有 `work_item`：秘书的一次代答不属于任何事项——它不开事项、不进任何人的时间线。
+ * 没有 `work_item`：代理的一次代答不属于任何事项——它不开事项、不进任何人的时间线。
  * 事件日志里靠 `run_id` 就能把这次运行的 `run.started` / `prompt.assembled` /
  * `run.completed` 串起来重放（35 §2「可回放」）。
  */
@@ -108,7 +111,7 @@ export function buildSecretaryRunRequest(input: SecretaryRunInput): RunRequest {
     trigger: { event_id: input.run_id, source: 'manual' },
     context: input.context,
     grounding: [],
-    // 16 §3：连接令牌一律不给秘书——它没有任何外部写口，也不该有读外部系统的口
+    // 16 §3：连接令牌一律不给代理——它没有任何外部写口，也不该有读外部系统的口
     tools: { allow: [...SECRETARY_TOOLS], connect_token: '', side_effect_policy: 'executor' },
     skills: [],
     persona: {

@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "as_of": "2026-09-10",
+  "note": "每百万 token 的价格。in = 输入（缓存未命中），out = 输出，cached = 输入（缓存命中）。currency 是各家官网标价的币种，**不换算**——汇率会过期，换算出来的数字比不填还危险。分档计价的（优惠时段 / 阶梯 / 批量）一律记贵的那一档：预算宁可保守。",
+  "vendors": [
+    {
+      "id": "deepseek",
+      "label": "DeepSeek 官方",
+      "currency": "USD",
+      "hosts": ["api.deepseek.com"],
+      "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "as_of": "2026-09-10",
+      "parser": "deepseek",
+      "note": "记的是标准时段（peak）价；优惠时段是它的一半。deepseek-v4-flash / deepseek-v4-flash-vision-exp 这两个老名字仍然收，按 flash 价计费。",
+      "models": [
+        {
+          "model": "deepseek-flash",
+          "in": 0.3,
+          "out": 1.2,
+          "cached": 0.006,
+          "aliases": ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"]
+        },
+        { "model": "deepseek-v4-pro", "in": 1.32, "out": 3.96, "cached": 0.044 }
+      ]
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "currency": "USD",
+      "hosts": ["api.openai.com"],
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-09-10",
+      "parser": "openai",
+      "note": "标准档（standard processing）价；Fast mode 与 Batch 不在这张表里。",
+      "models": [
+        { "model": "gpt-6-astra", "in": 10, "out": 50, "cached": 1 },
+        { "model": "gpt-5.6-sol", "in": 4, "out": 20, "cached": 0.4 },
+        { "model": "gpt-5.6-terra", "in": 2, "out": 12, "cached": 0.2 },
+        { "model": "gpt-5.6-luna", "in": 0.2, "out": 1.2, "cached": 0.02 },
+        { "model": "gpt-5.4", "in": 2.5, "out": 15, "cached": 0.25 },
+        { "model": "gpt-5.4-mini", "in": 0.75, "out": 4.5, "cached": 0.075 },
+        { "model": "gpt-5.4-nano", "in": 0.2, "out": 1.25, "cached": 0.02 },
+        { "model": "gpt-5", "in": 1.25, "out": 10, "cached": 0.125 },
+        { "model": "gpt-5-mini", "in": 0.25, "out": 2, "cached": 0.025 },
+        { "model": "gpt-5-nano", "in": 0.05, "out": 0.4, "cached": 0.005 },
+        { "model": "gpt-4.1", "in": 2, "out": 8, "cached": 0.5 },
+        { "model": "gpt-4.1-mini", "in": 0.4, "out": 1.6, "cached": 0.1 },
+        { "model": "gpt-4.1-nano", "in": 0.1, "out": 0.4, "cached": 0.025 },
+        { "model": "gpt-4o", "in": 2.5, "out": 10, "cached": 1.25 },
+        { "model": "gpt-4o-mini", "in": 0.15, "out": 0.6, "cached": 0.075 }
+      ]
+    },
+    {
+      "id": "moonshot",
+      "label": "Moonshot / Kimi",
+      "currency": "CNY",
+      "hosts": ["api.moonshot.cn", "api.moonshot.ai", "api.kimi.com"],
+      "source_url": "https://platform.kimi.com/docs/pricing/chat-k3.md",
+      "extra_source_urls": [
+        "https://platform.kimi.com/docs/pricing/chat-k26.md",
+        "https://platform.kimi.com/docs/pricing/chat-k27-code.md"
+      ],
+      "as_of": "2026-09-10",
+      "parser": "kimi",
+      "note": "实时推理价；批量推理另有一张表。",
+      "models": [
+        { "model": "kimi-k3", "in": 20, "out": 100, "cached": 2 },
+        { "model": "kimi-k2.6", "in": 6.5, "out": 27, "cached": 1.1 },
+        { "model": "kimi-k2.7-code", "in": 6.5, "out": 27, "cached": 1.3 },
+        { "model": "kimi-k2.7-code-highspeed", "in": 13, "out": 54, "cached": 2.6 }
+      ]
+    },
+    {
+      "id": "zhipu",
+      "label": "智谱 GLM",
+      "currency": "CNY",
+      "hosts": ["open.bigmodel.cn", "api.z.ai"],
+      "source_url": "https://docs.bigmodel.cn/cn/guide/start/pricing.md",
+      "as_of": "2026-09-10",
+      "parser": "zhipu",
+      "note": "缓存存储费（元/百万 token/小时）不在这张表里——它按时长算，不按 token 算。",
+      "models": [
+        { "model": "glm-5.3", "in": 8, "out": 28, "cached": 2 },
+        { "model": "glm-5.3-flash", "in": 0.8, "out": 2.8, "cached": 0.23 },
+        { "model": "glm-5.2", "in": 8, "out": 28, "cached": 2 },
+        { "model": "glm-4.7", "in": 2, "out": 8, "cached": 0.4 }
+      ]
+    },
+    {
+      "id": "qwen",
+      "label": "通义千问（百炼）",
+      "currency": "CNY",
+      "hosts": ["dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"],
+      "source_url": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
+      "as_of": "2026-09-10",
+      "parser": "none",
+      "parser_note": "这张价目表按地域 × 思考模式 × 输入长度阶梯分了四层，同一个模型名在页面上出现七八次。机器抽出来的数字对不上用户实际用的那一档，反而比不抓更糟——所以这家只保内置价，改价了手工来。",
+      "note": "记的是北京地域、非思考模式、第一档阶梯的价。缓存命中按输入价的 10% 计（官网口径）。",
+      "models": [
+        { "model": "qwen3.8-max", "in": 12, "out": 36, "cached": 1.2 },
+        { "model": "qwen-max", "in": 2.4, "out": 9.6, "cached": 0.24 },
+        { "model": "qwen-plus", "in": 0.8, "out": 2, "cached": 0.08 },
+        { "model": "qwen-turbo", "in": 0.3, "out": 0.6, "cached": 0.03 }
+      ]
+    },
+    {
+      "id": "siliconflow",
+      "label": "硅基流动 SiliconFlow",
+      "currency": "CNY",
+      "hosts": ["api.siliconflow.cn", "api.siliconflow.com"],
+      "source_url": "https://cloud.siliconflow.cn/models",
+      "as_of": "2026-09-10",
+      "parser": "none",
+      "parser_note": "价目在登录后的控制台里，公开页是前端渲染的、拿不到数字。",
+      "note": "这家是模型市场：同一个模型名的价随上下架变，没有一份能内置的价目表。它的模型价在控制台的「模型广场」里，照着填进表单即可。",
+      "models": []
+    }
+  ]
+}

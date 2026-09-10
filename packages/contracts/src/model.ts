@@ -140,6 +140,19 @@ export type ProviderCompletion = Omit<Completion, 'model' | 'static_prefix_hash'
   usage: Omit<CompletionUsage, 'cost_base'> & { cost_base?: number }
 }
 
+/**
+ * provider 自报的一个可用模型（WP42）。
+ *
+ * 为什么进契约：设置页的「模型名」原本是一个手填的输入框——用户得自己去官网翻文档，
+ * 抄一个字符串进来，抄错了要点「测试」才知道。让 provider 自己报一份清单，
+ * 这个框才能变成一个下拉。**只有 id 是必须的**：各家 `/models` 回的字段并不一致，
+ * 网关不假装它们一样。
+ */
+export interface ProviderModelInfo {
+  id: string
+  owned_by?: string
+}
+
 export interface ModelProvider {
   ref: ModelRef
   complete(req: {
@@ -151,6 +164,11 @@ export interface ModelProvider {
   /** 是否原生支持 `tool_choice`；缺省视为不支持（网关会剥掉该字段）。 */
   supports_tool_choice?: boolean
   embed?(texts: string[]): Promise<{ vectors: number[][]; usage: CompletionUsage }>
+  /**
+   * 这家现在有哪些模型（WP42）。可选——不是每个 provider 都有这个口
+   * （stub 就没有）。实现里**不许**把凭据写进返回值或错误信封。
+   */
+  listModels?(): Promise<ProviderModelInfo[]>
   /** ASR provider 槽；拿到的一定是字节（`ref` 由网关的宿主解引用）。 */
   transcribe?(audio: {
     bytes: Uint8Array

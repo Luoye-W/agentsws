@@ -13,7 +13,7 @@
  * 这个文件里没有一处把它放进 state、query 缓存、URL 或日志。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Brain, CheckCircle2, ExternalLink, Plus, Trash2, XCircle } from 'lucide-react'
+import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
 import { Button } from '@/components/ui/button'
@@ -22,15 +22,19 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import type {
   ModelDefaultsView,
+  ModelPricingRefreshResult,
   ModelProviderKind,
   ModelProviderView,
   ModelPurposeName,
   ModelTestResult,
 } from '@/lib/api'
 import {
+  discoverModelProviderModels,
   getModelDefaults,
+  getModelPricing,
   getModelUsage,
   listModelProviders,
+  refreshModelPricing,
   removeModelProvider,
   saveModelProvider,
   setModelDefaults,
@@ -54,6 +58,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   const [editing, setEditing] = useState<string | null>(null)
   const [tests, setTests] = useState<Record<string, ModelTestResult>>({})
   const [error, setError] = useState<string | null>(null)
+  const [priceRefresh, setPriceRefresh] = useState<ModelPricingRefreshResult | null>(null)
 
   const providers = useQuery({
     queryKey: ['model-providers', assignment],
@@ -66,6 +71,11 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   const usage = useQuery({
     queryKey: ['model-usage', assignment],
     queryFn: () => getModelUsage(assignment),
+  })
+  // WP42 内置价目表：表单照它自动填价。整份一次拿完，选模型时在本地查
+  const pricing = useQuery({
+    queryKey: ['model-pricing', assignment],
+    queryFn: () => getModelPricing(assignment),
   })
 
   const refresh = (): void => {
@@ -108,6 +118,33 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
     mutationFn: (id: string) => removeModelProvider(id, assignment),
     onSuccess: () => {
       refresh()
+    },
+    onError: (e: Error) => {
+      setError(e.message)
+    },
+  })
+
+  /**
+   * WP42「拉取模型列表」。`probe.api_key` 只在这一次调用里存在——
+   * 不进 state、不进 query key、不进 query 缓存（`useMutation` 不缓存入参）。
+   */
+  const discover = (probe: {
+    id: string
+    base_url: string
+    api_key?: string
+    region: 'cn' | 'global'
+  }) => {
+    const { id, ...rest } = probe
+    return discoverModelProviderModels(id, rest, assignment)
+  }
+
+  /** WP42：去各家官网抓一次价。抓不到不算失败——内置价原样留着。 */
+  const refreshPrices = useMutation({
+    mutationFn: () => refreshModelPricing(assignment),
+    onSuccess: (result) => {
+      setPriceRefresh(result)
+      void client.invalidateQueries({ queryKey: ['model-pricing'] })
+      void client.invalidateQueries({ queryKey: ['model-providers'] })
     },
     onError: (e: Error) => {
       setError(e.message)
@@ -198,6 +235,8 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                       }
                       existing={p}
                       busy={save.isPending}
+                      onDiscover={discover}
+                      {...(pricing.data === undefined ? {} : { pricing: pricing.data })}
                       onCancel={() => {
                         setEditing(null)
                       }}
@@ -248,6 +287,9 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   <ModelForm
                     template={tpl}
                     busy={save.isPending}
+                    onDiscover={discover}
+                    takenIds={rows.map((p) => p.id)}
+                    {...(pricing.data === undefined ? {} : { pricing: pricing.data })}
                     onCancel={() => {
                       setAdding(null)
                     }}
@@ -272,6 +314,61 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
               </div>
             ))}
           </div>
+        </section>
+
+        {/* ②′ 价目表：内置的 + 去官网抓一次 */}
+        <section className="flex flex-col gap-1.5" data-testid="model-pricing">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-xs font-medium text-muted-foreground">{t('models.pricing')}</h4>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={refreshPrices.isPending}
+              onClick={() => {
+                setError(null)
+                refreshPrices.mutate()
+              }}
+              data-testid="model-pricing-refresh"
+            >
+              <RefreshCw aria-hidden />
+              {refreshPrices.isPending
+                ? t('models.pricing.refreshing')
+                : t('models.pricing.refresh')}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {pricing.data?.refreshed_at === undefined
+              ? t('models.pricing.builtin')
+              : t('models.pricing.refreshed_at', {
+                  at: pricing.data.refreshed_at.slice(0, 10),
+                })}
+          </p>
+          {priceRefresh === null ? null : (
+            <ul className="flex flex-col gap-0.5" data-testid="model-pricing-result">
+              {priceRefresh.reason === undefined ? null : (
+                <li className="text-[11px] text-amber-600 dark:text-amber-400">
+                  {priceRefresh.reason}
+                </li>
+              )}
+              {priceRefresh.vendors.map((v) => (
+                <li
+                  key={v.id}
+                  className={
+                    v.ok
+                      ? 'text-[11px] text-muted-foreground'
+                      : 'text-[11px] text-amber-600 dark:text-amber-400'
+                  }
+                >
+                  {v.ok
+                    ? t('models.pricing.vendor_ok', { label: v.label, n: v.models })
+                    : t('models.pricing.vendor_failed', {
+                        label: v.label,
+                        reason: v.reason ?? '',
+                      })}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {settings === undefined || active.length === 0 ? null : (

@@ -315,7 +315,7 @@ export function MembersTab({
           <Card key={m.person_id} data-testid="member-row" data-person={m.person_id}>
             <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle className="text-sm">
-                {/* 41 §1：点人 → 他的 profile 页（能问他的秘书、能约时间） */}
+                {/* 41 §1：点人 → 他的 profile 页（能问他的代理、能约时间） */}
                 <Link
                   to={`/people/${encodeURIComponent(m.person_id)}`}
                   className="hover:underline"
