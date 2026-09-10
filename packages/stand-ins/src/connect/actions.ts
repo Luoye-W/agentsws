@@ -133,11 +133,22 @@ export function actionCatalog(): ActionDef[] {
       service: 'shopify_admin',
       side_effect: 'read',
       required_scopes: ['read_orders'],
-      input_schema: SCHEMA({ email: 'string', financial_status: 'string', limit: 'number' }, []),
+      // 与真 OpenConnector 对齐：GraphQL connection 三件套 first / after / query；老的 limit 也认
+      input_schema: SCHEMA(
+        {
+          email: 'string',
+          financial_status: 'string',
+          limit: 'number',
+          first: 'number',
+          after: 'string',
+          query: 'string',
+        },
+        [],
+      ),
       handler(input, ctx) {
         const email = optStr(input, 'email')
         const financial = optStr(input, 'financial_status')
-        const limit = optNum(input, 'limit') ?? 50
+        const limit = optNum(input, 'first') ?? optNum(input, 'limit') ?? 50
         const orders = ctx.state.orders
           .filter((o) => email === undefined || o.email === email)
           .filter((o) => financial === undefined || o.financial_status === financial)

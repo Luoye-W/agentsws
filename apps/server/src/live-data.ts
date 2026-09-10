@@ -194,7 +194,9 @@ export function toOrderRow(
   if (id === undefined) return undefined
   const number = pick(row, ['name', 'order_number', 'orderNumber'])
   const total =
-    numberOf(pick(row, ['total_price', 'totalPrice', 'current_total_price', 'total'])) ??
+    numberOf(
+      pick(row, ['total_price', 'totalPrice', 'current_total_price', 'totalAmount', 'total']),
+    ) ??
     moneyOf(pick(row, ['totalPriceSet', 'total_price_set', 'currentTotalPriceSet'])).amount ??
     0
   const refunded =
@@ -203,7 +205,15 @@ export function toOrderRow(
     refundsSum(row.refunds) ??
     0
   const currency =
-    stringOf(pick(row, ['currency', 'currency_code', 'currencyCode', 'presentment_currency'])) ??
+    stringOf(
+      pick(row, [
+        'currency',
+        'currency_code',
+        'currencyCode',
+        'totalCurrencyCode',
+        'presentment_currency',
+      ]),
+    ) ??
     moneyOf(pick(row, ['totalPriceSet', 'total_price_set'])).currency ??
     fallbackCurrency
   const customer = row.customer
@@ -485,10 +495,13 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
       let cursor: string | undefined
       let pages = 0
       while (pages < ORDER_MAX_PAGES) {
-        // 只带上游一定认得的 `limit`；`cursor` 只在上游自己给过时才回传
+        // 入参按 OpenConnector `shopify_admin.list_orders` 的真实 schema（09-11 对着容器源码核过）：
+        // GraphQL connection 三件套 `first` / `after` / `query`，多一个键都会被 schema 校验顶回来。
+        // 30 天窗口先让上游按 Shopify 搜索语法切一刀，本地再切一次兜底。
         const payload = await run(listOrders.id, {
-          limit: ORDER_PAGE_LIMIT,
-          ...(cursor === undefined ? {} : { cursor }),
+          first: ORDER_PAGE_LIMIT,
+          query: `created_at:>=${new Date(cutoff).toISOString().slice(0, 10)}`,
+          ...(cursor === undefined ? {} : { after: cursor }),
         })
         pages += 1
         const raw = ordersArrayOf(payload)

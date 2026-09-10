@@ -577,3 +577,49 @@ describe('WP46 §E 上游返回 → OrderRow（真身与替身两种形状）', 
     )
   })
 })
+
+describe('WP46 真身形状（09-11 对着 OpenConnector shopify_admin 源码核的）', () => {
+  it('list_orders 回 { orders: [normalized], pageInfo }：totalAmount / totalCurrencyCode / displayFinancialStatus 都认', () => {
+    const payload = {
+      orders: [
+        {
+          id: 'gid://shopify/Order/1',
+          name: '#1003',
+          email: 'a@b.c',
+          phone: null,
+          displayFinancialStatus: 'PAID',
+          displayFulfillmentStatus: 'UNFULFILLED',
+          currencyCode: 'USD',
+          totalAmount: '22.50',
+          totalCurrencyCode: 'USD',
+          customerId: null,
+          customerDisplayName: 'A B',
+          createdAt: '2026-09-06T10:00:00Z',
+          updatedAt: '2026-09-06T10:00:00Z',
+          cursor: 'eyJ',
+          raw: {},
+        },
+      ],
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: false,
+        startCursor: 'eyJ',
+        endCursor: 'eyJ',
+      },
+    }
+    const rows = ordersArrayOf(payload).map((r) => toOrderRow(r, 'EUR'))
+    expect(rows).toEqual([
+      {
+        id: 'gid://shopify/Order/1',
+        name: '#1003',
+        email: 'a@b.c',
+        currency: 'USD',
+        created_at: '2026-09-06T10:00:00Z',
+        total_price: 22.5,
+        refunded_amount: 0,
+        financial_status: 'paid',
+        fulfillment_status: 'unfulfilled',
+      },
+    ])
+  })
+})
