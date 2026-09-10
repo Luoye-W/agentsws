@@ -63,6 +63,7 @@ import { WebSocketServer } from 'ws'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { createCatalogIndex } from './catalog-index.js'
+import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 import { connectBaseUrl } from './connect-url.js'
 import { type ConnectionsAssembly, createConnections, createMailProbe } from './connections.js'
@@ -71,6 +72,7 @@ import { createApprovalDirectory } from './housekeeping.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
+import { createOffboard, type Offboard } from './offboard.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import {
   createReconcileGuard,
@@ -85,6 +87,7 @@ import {
   ensureSystemTasks,
   offsetToTz,
   registerApprovalHousekeeping,
+  registerBackup,
   registerDailyPlan,
   registerIdempotencySweep,
   registerLearning,
@@ -254,6 +257,8 @@ export interface Server {
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
   org: OrgAssembly
+  /** WP36 离职编排（撤权限 → 真交接 → 个人层归档 / 销毁 → 个人记忆迁移 / 擦除 → 报告）。 */
+  offboard: Offboard
   /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
   secrets: SecretStore
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
@@ -845,6 +850,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
     meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
   })
+  // ⑫ WP36 40 §1.3：每天一份备份。**只有落盘档有**——内存档没有可导的库文件。
+  const runWorkspaceBackup = (): BackupRunResult => {
+    if (dbDir === undefined) throw new Error('这个服务进程没有数据目录，没有可导的东西')
+    return runBackup({
+      dataDir: dbDir,
+      workspace_id: workspace.id,
+      outDir: backupDirOf(env, dbDir),
+      clock,
+      keep: backupKeepOf(env),
+      release: env.AGENTSWS_VERSION ?? '0.1.0',
+    })
+  }
+  if (dbDir !== undefined) registerBackup(schedule.scheduler, { run: runWorkspaceBackup })
+
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -862,6 +881,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals: true,
       mail: true,
       raw: true,
+      backup: dbDir !== undefined,
     },
   })
 
@@ -893,6 +913,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     approvals,
     workspace_id: workspace.id,
     appendEvent,
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+
+  // WP36 离职编排（40 §1.2）：装在 org 之后——它要撤分配、真转事项、动个人层与个人记忆。
+  const offboard = createOffboard({
+    workspace_id: workspace.id,
+    clock,
+    appendEvent,
+    identity,
+    roles,
+    approvals,
+    work,
+    skills: skills.registry,
+    lessons: learning.learning.pool,
+    memory: knowledge.memory,
+    schedule: schedule.store,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
 
@@ -1101,6 +1137,56 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           by: input.by,
         }),
     },
+    // WP36 40 §1.2：离职是一个正式动作。网关只转发，编排在 ./offboard.ts；
+    // 三条路由都是 owner 级（动别人的分配、别人的个人数据、公司技能层）
+    offboard: {
+      offboard: (actor, person_id, input) =>
+        offboard.offboard(
+          {
+            person_id,
+            ...(input.handover_to === undefined ? {} : { handover_to: input.handover_to }),
+            ...(input.personal_layer === undefined ? {} : { personal_layer: input.personal_layer }),
+            ...(input.memory === undefined ? {} : { memory: input.memory }),
+          },
+          actor.person_id,
+        ),
+      archivedSkills: (_actor, owner) => offboard.archivedSkills(owner),
+      adopt: (actor, input) =>
+        offboard.adopt(
+          {
+            skill: input.skill,
+            owner: input.owner,
+            to_tier: input.to_tier,
+            ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+          },
+          { person_id: actor.person_id, role_id: actor.role_id },
+        ),
+    },
+    // WP36 40 §1.3 备份：网关只转发；路径由服务端定（owner 也不能指定往哪写）
+    ...(dbDir === undefined
+      ? {}
+      : {
+          backup: {
+            export: async (_actor, input) => {
+              const out = runBackup({
+                dataDir: dbDir,
+                workspace_id: workspace.id,
+                outDir: backupDirOf(env, dbDir),
+                clock,
+                keep: input.keep ?? backupKeepOf(env),
+                release: env.AGENTSWS_VERSION ?? '0.1.0',
+              })
+              return {
+                out: out.out,
+                bytes: out.bytes,
+                events: out.events,
+                kept: out.kept,
+                pruned: out.pruned,
+                at: clock.now(),
+              }
+            },
+          },
+        }),
     workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
     work: createWorkPort({
       clock,
@@ -1176,6 +1262,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels,
     modelSettings,
     org,
+    offboard,
     secrets,
     schedule,
     reconcile,
@@ -1247,6 +1334,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await channels?.close()
       connections.close()
       org.close()
+      offboard.close()
       secrets.close()
       txnStore?.close()
       workStore?.close()

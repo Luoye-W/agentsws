@@ -1260,6 +1260,82 @@ export const removeMember = (
     { method: 'DELETE', ...withAssignment(assignment) },
   )
 
+/** 40 §1.2 离职报告（**只有数字，没有个人数据正文**）。 */
+export interface OffboardStepView {
+  step: 'revoke' | 'handover' | 'skills' | 'memory' | 'lessons' | 'report'
+  status: 'done' | 'skipped' | 'failed' | 'pending_approval'
+  counts?: Record<string, number>
+  approval_item_id?: string
+  error?: string
+}
+
+export interface OffboardReportView {
+  person_id: string
+  person_name: string
+  handover_to: string
+  handover_to_name: string
+  fallback_used: boolean
+  personal_layer: 'archive' | 'erase'
+  memory: 'migrate_work' | 'erase'
+  status: 'done' | 'partial' | 'pending_approval'
+  at: string
+  steps: OffboardStepView[]
+  summary: string
+  manual: string[]
+  matter_id?: string
+}
+
+export interface ArchivedSkillView {
+  skill: string
+  owner: string
+  owner_name: string
+  sections: number
+  base_version: string
+  archived_at: string
+  reason?: string
+}
+
+/**
+ * 离职：撤权限 → 在办事项 / 未完待办 / 定时任务真转接手人 → 个人层归档或销毁 →
+ * 个人记忆迁移或擦除 → 出一份报告（40 §1.2）。可重跑。
+ */
+export const offboardMember = (
+  workspace_id: string,
+  person_id: string,
+  input: {
+    handover_to?: string
+    personal_layer?: 'archive' | 'erase'
+    memory?: 'migrate_work' | 'erase'
+  },
+  assignment?: string,
+): Promise<OffboardReportView> =>
+  api<OffboardReportView>(
+    `/v1/workspaces/${encodeURIComponent(workspace_id)}/members/${encodeURIComponent(person_id)}/offboard`,
+    { method: 'POST', body: input, ...withAssignment(assignment) },
+  )
+
+/** 前员工层：归档的技能改动（只有段数，没有正文）。 */
+export const listArchivedSkills = (
+  workspace_id: string,
+  assignment?: string,
+): Promise<ArchivedSkillView[]> =>
+  api<ArchivedSkillView[]>(
+    `/v1/workspaces/${encodeURIComponent(workspace_id)}/archived-skills`,
+    withAssignment(assignment),
+  )
+
+/** 一键「采纳进部门层」：建一张 policy_change 卡，批了才落。 */
+export const adoptArchivedSkill = (
+  workspace_id: string,
+  input: { skill: string; owner: string; to_tier: 'company' | 'department'; scope_id?: string },
+  assignment?: string,
+): Promise<{ status: string; approval_item_id: string; summary: string }> =>
+  api(`/v1/workspaces/${encodeURIComponent(workspace_id)}/archived-skills/adopt`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
 export const listInvitations = (
   workspace_id: string,
   assignment?: string,

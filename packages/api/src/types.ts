@@ -50,11 +50,12 @@ import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { AskPort } from './routes/ask.js'
 import type { CatalogPort } from './routes/catalog.js'
+import type { BackupPort } from './routes/backup.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
-import type { OrgPort } from './routes/org.js'
+import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretsPort } from './routes/secrets.js'
 import type { WorkPort } from './routes/work.js'
@@ -556,6 +557,16 @@ export interface GatewayDeps {
    * 回 not_implemented。
    */
   privacy?: PrivacyPort
+  /**
+   * WP36：40 §1.2「离职是一个正式动作」的编排；没装配时
+   * `POST /v1/workspaces/:id/members/:person_id/offboard` 与前员工层那两条回 not_implemented。
+   */
+  offboard?: OffboardPort
+  /**
+   * WP36：40 §1.3 备份 / 搬家。内存档（没有数据目录）没有可导的东西，
+   * 不装配时 `POST /v1/backup/export` 回 not_implemented。
+   */
+  backup?: BackupPort
   traceScope: TraceScope
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>

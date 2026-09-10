@@ -235,6 +235,83 @@ export class SqliteMemoryStore implements MemoryStore {
       )
   }
 
+  // ── 40 §1.2：管理员对个人数据只有「迁移 / 归档 / 销毁」，没有「读」 ──────
+  //
+  // 下面三个方法一个字的正文都不返回，只回条数。这不是偷懒，是那条规则的实现方式：
+  // 只要没有一条能以管理员身份读出 value 的路径，「管理员看不到内容」就不靠自觉。
+
+  /**
+   * 数一数这个主体名下有多少条活着的记忆，按「工作相关 / 其余」分开。
+   *
+   * 工作相关 = 这条记忆带着本工作区的域引用（`workspace_id` 等于给的那个）；
+   * 其余 = 空 workspace 或别的工作区写的——那属于人自己，不跟着公司走（40 §1.2 第三类）。
+   */
+  countSubject(
+    subject: ObjectRef,
+    opts: { workspace_id?: WorkspaceId } = {},
+  ): { total: number; work: number; personal: number } {
+    const rows = this.db
+      .prepare(
+        "SELECT workspace_id FROM memory_facts WHERE subject_type = ? AND subject_id = ? AND state = 'live'",
+      )
+      .all(subject.type, subject.id) as { workspace_id: string }[]
+    const ws = opts.workspace_id ?? this.defaultWorkspace
+    const work = ws === undefined ? 0 : rows.filter((r) => r.workspace_id === ws).length
+    return { total: rows.length, work, personal: rows.length - work }
+  }
+
+  /**
+   * 把**工作相关的**那些记忆迁给接手人（40 §1.2 离职第四步的 `migrate_work`）。
+   *
+   * 只搬 `workspace_id` 等于本工作区的行：人自己的东西不跟着公司走。
+   * 幂等：搬完 `from` 名下就没有本工作区的行了，再跑一次是 0 条。
+   * 返回搬走的条数——**不返回搬了什么**。
+   */
+  migrateSubject(
+    from: ObjectRef,
+    to: ObjectRef,
+    opts: { workspace_id?: WorkspaceId } = {},
+  ): number {
+    const ws = opts.workspace_id ?? this.defaultWorkspace
+    if (ws === undefined) return 0
+    return this.db
+      .prepare(
+        'UPDATE memory_facts SET subject_type = ?, subject_id = ? WHERE subject_type = ? AND subject_id = ? AND workspace_id = ?',
+      )
+      .run(to.type, to.id, from.type, from.id, ws).changes
+  }
+
+  /**
+   * 销毁这个主体的记忆（21 §4 的擦除落到记忆这一层的样子：行直接删，不留正文）。
+   *
+   * 三档 scope：
+   * - `all` —— 他名下全部（`personal_layer: 'erase'` / `memory: 'erase'`）；
+   * - `workspace` —— 只删本工作区写的那些；
+   * - `other` —— 删**不**属于本工作区的那些，也就是 `migrate_work` 里的「其余按 21 擦除」：
+   *   没有本工作区域引用的记忆是他自己的，不跟着公司走，也不该留在公司库里。
+   *
+   * 墓碑不写在这里——一次离职整体记一条事件，由编排那一层写（21 §4）。
+   */
+  eraseSubject(
+    subject: ObjectRef,
+    opts: { workspace_id?: WorkspaceId; scope?: 'workspace' | 'other' | 'all' } = {},
+  ): number {
+    const scope = opts.scope ?? 'all'
+    if (scope === 'all') {
+      return this.db
+        .prepare('DELETE FROM memory_facts WHERE subject_type = ? AND subject_id = ?')
+        .run(subject.type, subject.id).changes
+    }
+    const ws = opts.workspace_id ?? this.defaultWorkspace
+    if (ws === undefined) return 0
+    const op = scope === 'workspace' ? '=' : '!='
+    return this.db
+      .prepare(
+        `DELETE FROM memory_facts WHERE subject_type = ? AND subject_id = ? AND workspace_id ${op} ?`,
+      )
+      .run(subject.type, subject.id, ws).changes
+  }
+
   /** 撤销记录（给"如实说明"用）：哪些 key 在什么时候被忘掉了。 */
   async revocations(
     subject: ObjectRef,

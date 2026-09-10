@@ -56,6 +56,8 @@ export {
   type CreateTodoInput,
   cardRefOf,
   createWork,
+  type HandoverInput,
+  type HandoverResult,
   TIMELINE_PAGE,
   type UnfinishedPolicy,
   type UpdateTodoInput,

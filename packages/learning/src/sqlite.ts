@@ -205,6 +205,10 @@ export class SqliteLearningStore implements LearningStore {
       .all(workspace_id) as RejectedKey[]
   }
 
+  delete(id: string): void {
+    this.db.prepare('DELETE FROM learning_lessons WHERE id = ?').run(id)
+  }
+
   close(): void {
     if (this.#own) this.db.close()
   }

@@ -160,6 +160,28 @@ export interface UpdateTodoInput {
   position_id?: PositionId | null | undefined
 }
 
+/** 40 §1.2「离职是一个正式动作」里「真转」那一步的入参。 */
+export interface HandoverInput {
+  /** 走的人 */
+  from: PersonId
+  /** 接手人（05 §3 `handover_to`；没有接手人时由调用方按 `Role.handover.fallback` 算出来） */
+  to: PersonId
+  /** 谁发起的这次交接；进事项时间线的 actor。缺省算接手人自己接的。 */
+  by?: PersonId | undefined
+  /** 一句人话的理由（「李默离职」），进时间线。 */
+  reason?: string | undefined
+}
+
+export interface HandoverResult {
+  from: PersonId
+  to: PersonId
+  at: Iso8601
+  /** 真转走的在办事项 */
+  matters: MatterId[]
+  /** 真转走的未完待办 */
+  todos: TodoId[]
+}
+
 export interface CreateGoalInput {
   level: Goal['level']
   title: string
@@ -803,6 +825,75 @@ export class Work {
       })
     }
     return matter
+  }
+
+  // ── 交接（40 §1.2 第三条规则）───────────────────────────────────────
+
+  /**
+   * 把一个人手上**还在办的**事项与**还没完的**待办真转给接手人（05 §3 `handover`）。
+   *
+   * 05 只把 `handover_to` 透传给撤销的那条分配，事项与待办一条都不动——于是人走了，
+   * 他名下的活还挂在他名下，谁也不知道该谁接。这个方法把「透传」变成「真转」。
+   *
+   * 三条纪律：
+   * 1. **只动在办的**：已关闭的事项、已完成 / 已放弃的待办是历史，历史不改主人。
+   * 2. **幂等**：转完之后 `from` 既不在参与者里、也不是任何未完待办的主人，
+   *    再跑一次就是 0 条——离职动作「任一步失败可重跑」靠的就是这一条。
+   * 3. **留痕**：每条被转走的事项在自己的时间线上多一行（`kind: 'status'`），
+   *    写清楚从谁转到谁、为什么。时间线是 append-only 的，交接这件事赖不掉。
+   */
+  handover(input: HandoverInput): HandoverResult {
+    const at = this.now()
+    const actor: MatterEvent['actor'] = { kind: 'person', id: input.by ?? input.to }
+    const why = input.reason === undefined ? '' : `（${input.reason}）`
+    const matters: MatterId[] = []
+    const todos: TodoId[] = []
+
+    for (const matter of this.store.listMatters({
+      workspace_id: this.workspace_id,
+      participant: input.from,
+      status: ['open', 'waiting'],
+    })) {
+      const participants = uniq(
+        matter.context.participants.map((p) => (p === input.from ? input.to : p)),
+      )
+      this.store.putMatter({
+        ...matter,
+        updated_at: at,
+        context: { ...matter.context, participants, last_activity: at },
+      })
+      this.store.appendMatterEvent({
+        id: this.newId('mev'),
+        matter_id: matter.id,
+        at,
+        kind: 'status',
+        text: `交接：${input.from} → ${input.to}${why}`,
+        actor,
+      })
+      matters.push(matter.id)
+    }
+
+    for (const todo of this.store.listTodos({
+      workspace_id: this.workspace_id,
+      owner: input.from,
+      status: ['open', 'doing', 'blocked'],
+    })) {
+      this.store.putTodo({ ...todo, owner: input.to, updated_at: at })
+      if (todo.matter_id !== undefined && this.store.getMatter(todo.matter_id) !== undefined) {
+        this.store.appendMatterEvent({
+          id: this.newId('mev'),
+          matter_id: todo.matter_id,
+          at,
+          kind: 'todo',
+          text: `待办交接：${todo.title}（${input.from} → ${input.to}）`,
+          actor,
+          todo_id: todo.id,
+        })
+      }
+      todos.push(todo.id)
+    }
+
+    return { from: input.from, to: input.to, at, matters, todos }
   }
 
   // ── 目标 ────────────────────────────────────────────────────────────

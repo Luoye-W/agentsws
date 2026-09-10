@@ -59,6 +59,13 @@ describe('index 桶文件', () => {
       'nodeFileStore',
       'memoryFileStore',
       'strings',
+      // WP36 / 40 §1.3：本机 / 公司服务器
+      'resolveMode',
+      'needsWizard',
+      'normalizeServerUrl',
+      'serverUrlFrom',
+      'configPatchOf',
+      'companyLabel',
     ])
       expect(typeof (desktop as Record<string, unknown>)[name]).toBe('function')
   })

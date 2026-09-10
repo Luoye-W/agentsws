@@ -89,6 +89,8 @@ export {
   recordCatalogNote,
   triggerKeyOf,
 } from './routes/catalog.js'
+export type { BackupExportView, BackupPort } from './routes/backup.js'
+export { backupRoutes } from './routes/backup.js'
 export type {
   BeginConnectResult,
   ConnectionOwnership,
@@ -145,15 +147,24 @@ export type {
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
 export type {
   AcceptedInvitationView,
+  AdoptArchivedInput,
+  AdoptReceiptView,
+  ArchivedSkillView,
   AssignInput,
   AssignmentView,
   CopyRoleInput,
   InvitationView,
   InviteInput,
   MemberView,
+  MemoryPolicy,
+  OffboardInput,
+  OffboardPort,
+  OffboardReportView,
+  OffboardStepView,
   OrgActor,
   OrgChangeReceipt,
   OrgPort,
+  PersonalLayerPolicy,
   PolicyPatchInput,
   PositionInput,
   PositionView,

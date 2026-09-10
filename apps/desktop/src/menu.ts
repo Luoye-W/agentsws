@@ -7,6 +7,7 @@ import type { Language } from './config.js'
 import type { ConnectRuntimeStatus } from './connect-runtime.js'
 import type { HealthSnapshot } from './health.js'
 import { strings } from './i18n.js'
+import type { DesktopMode } from './mode.js'
 import type { SidecarSnapshot } from './sidecar.js'
 
 export type MenuAction =
@@ -36,12 +37,23 @@ export interface TrayModelInput {
   paused: boolean
   connect: ConnectRuntimeStatus | undefined
   launchAtLogin: boolean
+  /** WP36：`remote` 时这台电脑不起服务进程，托盘上说的是"已连接谁"（40 §1.3）。 */
+  mode?: DesktopMode
+  /** 公司名（登录前退到主机名，见 `mode.companyLabel`）。 */
+  company?: string
 }
 
 const separator: MenuItemModel = { id: 'separator', type: 'separator', label: '', enabled: false }
 
 export function serverStateLabel(input: TrayModelInput): string {
   const t = strings(input.language)
+  // remote：这台电脑没有 sidecar，`server.state` 永远是 `stopped`——
+  // 把那句"服务已停止"端给用户是错的，他要看的是"连上公司了没有"。
+  if (input.mode === 'remote') {
+    return input.health?.ok === true
+      ? `${t.connectedTo} ${input.company ?? ''}`.trim()
+      : t.remoteUnreachable
+  }
   switch (input.server.state) {
     case 'running':
       return t.serverRunning
@@ -99,15 +111,20 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
   const connect = connectStateLabel(input)
   if (connect !== undefined)
     items.push({ id: 'status', type: 'normal', label: connect, enabled: false })
+  // remote：服务进程与本机秘密库都不在这台电脑上，这两项没有意义——
+  // 摆一个点了不生效的菜单项比没有它更糟（`SEED_POSITIONS` 那条同一个道理）。
+  if (input.mode !== 'remote')
+    items.push(
+      { id: 'restart-server', type: 'normal', label: t.restartServer, enabled: true },
+      // WP31：换一把本机秘密库密钥（整库重加密）。服务得活着才换得了。
+      {
+        id: 'rotate-secrets-key',
+        type: 'normal',
+        label: t.rotateSecretsKey,
+        enabled: input.health?.ok === true,
+      },
+    )
   items.push(
-    { id: 'restart-server', type: 'normal', label: t.restartServer, enabled: true },
-    // WP31：换一把本机秘密库密钥（整库重加密）。服务得活着才换得了。
-    {
-      id: 'rotate-secrets-key',
-      type: 'normal',
-      label: t.rotateSecretsKey,
-      enabled: input.health?.ok === true,
-    },
     { id: 'open-logs', type: 'normal', label: t.openLogs, enabled: true },
     {
       id: 'toggle-launch-at-login',
