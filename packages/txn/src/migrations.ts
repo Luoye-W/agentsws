@@ -1,51 +1,29 @@
 /**
- * 迁移器（21 §5 的做法照 kernel 事件日志：内嵌 SQL 数组 + 版本号表）。
+ * 迁移器：WP40 起**用共用的那一份**（`@agentsws/core/sql`），本文件只剩转接。
  *
- * - 每个包一张自己的 `_migrations`，**不共享其他包的表**（35 §2）
- * - 幂等：同一个库开两次只补跑没跑过的版本
- * - 全程一个事务：中途失败不会留下半张表
+ * 共用之后多了两件事，行为上都更好：
+ * - 版本表与待跑计算与 kernel / data 同一套，三个包不会各写各的
+ * - **一次一事务**（原来是全部一个事务）：第 3 版失败不会把已经成功的第 1、2 版回滚掉，
+ *   也不会留下半张表
+ *
+ * 仍然是**每个包一张自己的 `_migrations`**（35 §2）：SQLite 档下一个包一个库文件，
+ * Postgres 档下一个包一个 schema，表名逐字相同。
  */
-import type { Database } from 'better-sqlite3'
+import type { Migration, SyncSqlDriver } from '@agentsws/core/sql'
+import { migrateSync, schemaVersionSync } from '@agentsws/core/sql'
 
-export interface Migration {
-  version: number
-  sql: string
-}
-
-const VERSION_TABLE = `
-CREATE TABLE IF NOT EXISTS _migrations (
-  version    INTEGER PRIMARY KEY NOT NULL,
-  applied_at TEXT    NOT NULL
-) STRICT;
-`
+export type { Migration } from '@agentsws/core/sql'
 
 /** 跑到最新版；返回本次实际补跑的版本号（已是最新则空数组）。 */
-export function migrate(db: Database, migrations: readonly Migration[], at: string): number[] {
-  db.exec(VERSION_TABLE)
-  const done = new Set(
-    db
-      .prepare<[], { version: number }>('SELECT version FROM _migrations')
-      .all()
-      .map((r) => r.version),
-  )
-  const record = db.prepare('INSERT INTO _migrations (version, applied_at) VALUES (?, ?)')
-  const applied: number[] = []
-  const run = db.transaction((list: readonly Migration[]) => {
-    for (const m of list) {
-      db.exec(m.sql)
-      record.run(m.version, at)
-      applied.push(m.version)
-    }
-  })
-  run([...migrations].filter((m) => !done.has(m.version)).sort((a, b) => a.version - b.version))
-  return applied
+export function migrate(
+  driver: SyncSqlDriver,
+  migrations: readonly Migration[],
+  at: string,
+): number[] {
+  return migrateSync(driver, migrations, at)
 }
 
 /** 已应用的最高版本（0 = 空库）。 */
-export function schemaVersion(db: Database): number {
-  db.exec(VERSION_TABLE)
-  const row = db
-    .prepare<[], { v: number | null }>('SELECT MAX(version) AS v FROM _migrations')
-    .get()
-  return row?.v ?? 0
+export function schemaVersion(driver: SyncSqlDriver): number {
+  return schemaVersionSync(driver)
 }

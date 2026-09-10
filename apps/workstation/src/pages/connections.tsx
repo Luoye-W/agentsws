@@ -6,6 +6,7 @@
  * 2. **已连接**——身份展示名、状态、上次测试，两个动作：测试、断开；
  * 3. **可以连接**——每个 provider 一张卡，说明要准备什么（≤ 5 步 + 外链），
  *    OAuth 类走授权页，表单类走**不经模型的原生表单**。
+ * 4. **数据后端**（WP40 / 41 §2.4）——本地 / 接我的云 / 托管三个按钮 + 迁移向导。
  *
  * 凭据这条线：值从 `SecureForm` 的 FormData 出来 → `submitConnection` 发出去 → 结束。
  * 这个文件里没有一处把它放进 state、query 缓存、URL 或日志。
@@ -16,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { ConnectedRow } from '@/components/connections/connected-row'
+import { DataBackend } from '@/components/connections/data-backend'
 import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
 import { RuntimeBar } from '@/components/connections/runtime-bar'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -323,6 +325,9 @@ export function ConnectionsPage(): React.ReactNode {
           ))}
         </div>
       </section>
+
+      {/* WP40 / 41 §2.4：数据后端三档（本地 / 接我的云 / 托管）+ 迁移向导 */}
+      <DataBackend {...(ownerId === undefined ? {} : { assignment: ownerId })} />
     </div>
   )
 }

@@ -25,6 +25,7 @@ export * from './event-log.js'
 export * from './halt.js'
 export * from './modules.js'
 export * from './plugins.js'
+export * from './sql-event-log.js'
 export * from './trace.js'
 export * from './ulid.js'
 

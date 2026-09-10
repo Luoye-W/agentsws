@@ -1,3 +1,15 @@
+/**
+ * 共享数据层（21 §2 / §3 / §4）：信封列 + body JSON、乐观锁、Casbin 过滤下推、
+ * 加密分片删除。
+ *
+ * WP40 起这一层跑在 {@link SqlDriver} 上，**同一个类**同时是 SQLite 档与 Postgres 档：
+ * `DataStore` 契约本来就是异步的，所以换后端只换驱动，业务代码一个字不用改（21 §3）。
+ * 方言差异只有两处，都在驱动层兜住：DDL 的类型名，以及 JSON 字段过滤的写法
+ * （`json_extract` ←→ `->>`，见 `jsonExtract`）。
+ *
+ * {@link SqliteDataStore} 是它的 SQLite 特化：构造同步（文件档不需要握手）、
+ * 另外露出同步的 {@link SubjectKeyring} 给受控原始材料区当 `RawCipher` 用。
+ */
 import type {
   Clock,
   DataRecord,
@@ -7,8 +19,12 @@ import type {
   Sensitivity,
 } from '@agentsws/contracts'
 import { SENSITIVITY_ORDER } from '@agentsws/contracts'
-import type { Database as Db } from 'better-sqlite3'
-import Database from 'better-sqlite3'
+import {
+  jsonExtract,
+  openSqliteDriver,
+  type SqlDriver,
+  type SqliteDriver,
+} from '@agentsws/core/sql'
 import {
   accessWhere,
   admittingGrants,
@@ -34,32 +50,22 @@ import {
   parseDataKey,
 } from './crypto.js'
 import { conflict, forbidden, invalidInput, notFound } from './errors.js'
-import { SubjectKeyring } from './keyring.js'
+import { asKeyringPort, type KeyringPort, SubjectKeyring } from './keyring.js'
 import { sensitivityRank } from './sensitivity.js'
+import { SqlSubjectKeyring } from './sql-keyring.js'
+import {
+  COUNT_TOMBSTONE_SQL,
+  collectionDdl,
+  INSERT_TOMBSTONE_SQL,
+  insertRecordSql,
+  type Row,
+  SELECT_TOMBSTONES_SQL,
+  selectOneSql,
+  TOMBSTONES_DDL,
+  type TombstoneRow,
+  updateRecordSql,
+} from './store-sql.js'
 import { EVENT_SCHEMA_VERSION, type PrivacyErasedEvent } from './tombstone.js'
-
-interface Row {
-  id: string
-  schema_version: number
-  workspace_id: string
-  owners: string
-  scope: string
-  sensitivity: string
-  source: string | null
-  created_at: string
-  updated_at: string
-  version: string
-  body: string
-}
-
-interface TombstoneRow {
-  subject_id: string
-  collection: string
-  record_id: string
-  workspace_id: string
-  at: string
-  event: string
-}
 
 /** 信封里可直接当过滤条件用的列。owners / scope / source 是 JSON，不开放为等值过滤。 */
 const FILTERABLE_ENVELOPE: ReadonlySet<string> = new Set([
@@ -85,86 +91,80 @@ export interface DataStoreOptions {
   env?: Record<string, string | undefined>
 }
 
+export interface SqlDataStoreOptions {
+  driver: SqlDriver
+  clock: Clock
+  collections?: readonly CollectionDef[]
+  /** 密钥环端口；不给就在同一个驱动上开一个双方言档。 */
+  keyring?: KeyringPort
+  env?: Record<string, string | undefined>
+}
+
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 500
 
-export class SqliteDataStore implements DataStore {
-  readonly #db: Db
-  readonly #clock: Clock
-  readonly #collections = new Map<string, CollectionDef>()
-  readonly #keys: SubjectKeyring
+export class SqlDataStore implements DataStore {
+  protected readonly driver: SqlDriver
+  protected readonly clock: Clock
+  protected readonly collectionMap = new Map<string, CollectionDef>()
+  protected readonly keys: KeyringPort
   readonly #gate = new CasbinGate()
 
-  constructor(opts: DataStoreOptions) {
-    this.#db = new Database(opts.dbPath)
-    this.#db.pragma('journal_mode = WAL')
-    this.#clock = opts.clock
-    const rootKey = parseDataKey((opts.env ?? process.env)[DATA_KEY_ENV])
-    this.#keys = new SubjectKeyring(this.#db, opts.clock, {
-      ...(rootKey === undefined ? {} : { rootKey }),
-    })
-    this.#db.exec(
-      `CREATE TABLE IF NOT EXISTS _tombstones (
-        subject_id TEXT PRIMARY KEY,
-        collection TEXT NOT NULL,
-        record_id TEXT NOT NULL,
-        workspace_id TEXT NOT NULL,
-        at TEXT NOT NULL,
-        event TEXT NOT NULL
-      )`,
-    )
-    for (const def of opts.collections ?? []) this.register(def)
+  protected constructor(driver: SqlDriver, clock: Clock, keys: KeyringPort) {
+    this.driver = driver
+    this.clock = clock
+    this.keys = keys
   }
 
-  /**
-   * 主体密钥环（21 §4）。**受控原始材料区的加密就接这里**：
-   * `@agentsws/channels` 与 `@agentsws/meetings` 拿它当 `RawCipher` 用，
-   * 于是「随主体删除」在数据层、邮件原文区、录音区是同一次 `shred`（WP18 的跨包接线遗留）。
-   */
-  get keyring(): SubjectKeyring {
-    return this.#keys
+  /** Postgres（或任意驱动）档的入口：建表、注册 collection 后返回。 */
+  static async open(opts: SqlDataStoreOptions): Promise<SqlDataStore> {
+    const rootKey = parseDataKey((opts.env ?? process.env)[DATA_KEY_ENV])
+    const keys =
+      opts.keyring ??
+      (await SqlSubjectKeyring.open(opts.driver, opts.clock, {
+        ...(rootKey === undefined ? {} : { rootKey }),
+      }))
+    const store = new SqlDataStore(opts.driver, opts.clock, keys)
+    await opts.driver.exec(TOMBSTONES_DDL)
+    for (const def of opts.collections ?? []) await store.registerCollection(def)
+    return store
   }
 
   /** 每个 collection 一张表（21 §2 信封列 + body JSON）。 */
-  register(def: CollectionDef): this {
-    const existing = this.#collections.get(def.name)
-    if (existing !== undefined && existing !== def)
-      throw invalidInput(`collection already registered: ${def.name}`)
-    this.#db.exec(
-      `CREATE TABLE IF NOT EXISTS "${def.name}" (
-        id TEXT PRIMARY KEY,
-        schema_version INTEGER NOT NULL,
-        workspace_id TEXT NOT NULL,
-        owners TEXT NOT NULL,
-        scope TEXT NOT NULL,
-        sensitivity TEXT NOT NULL,
-        source TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        version TEXT NOT NULL,
-        body TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS "${def.name}_ws" ON "${def.name}" (workspace_id);`,
-    )
-    this.#collections.set(def.name, def)
+  async registerCollection(def: CollectionDef): Promise<this> {
+    this.#claim(def)
+    await this.driver.exec(collectionDdl(def.name))
+    this.collectionMap.set(def.name, def)
     return this
   }
 
+  #claim(def: CollectionDef): void {
+    const existing = this.collectionMap.get(def.name)
+    if (existing !== undefined && existing !== def)
+      throw invalidInput(`collection already registered: ${def.name}`)
+  }
+
+  /** 已注册的 collection（子类建表时也走这个登记口）。 */
+  protected remember(def: CollectionDef): void {
+    this.#claim(def)
+    this.collectionMap.set(def.name, def)
+  }
+
   collections(): CollectionDef[] {
-    return [...this.#collections.values()]
+    return [...this.collectionMap.values()]
   }
 
-  close(): void {
-    this.#db.close()
+  close(): void | Promise<void> {
+    return this.driver.close()
   }
 
-  #def(collection: string): CollectionDef {
-    const def = this.#collections.get(collection)
+  protected def(collection: string): CollectionDef {
+    const def = this.collectionMap.get(collection)
     if (def === undefined) throw invalidInput(`unknown collection: ${collection}`)
     return def
   }
 
-  #subject(collection: string, id: string): string {
+  protected subjectOf(collection: string, id: string): string {
     return `${collection}:${id}`
   }
 
@@ -175,16 +175,14 @@ export class SqliteDataStore implements DataStore {
     id: string,
     actor: DataActor,
   ): Promise<DataRecord<T> | undefined> {
-    const def = this.#def(collection)
-    const where = accessWhere(def.name, actor, def.domain, READ_OPS)
+    const def = this.def(collection)
+    const where = accessWhere(def.name, actor, def.domain, READ_OPS, this.driver.dialect)
     // 没有任何可能命中的 grant（含空 ranges 的 assigned）→ 空，不抛错
     if (where === undefined) return undefined
     if (!(await this.#gate.allows(actor, def.domain, READ_OPS))) return undefined
-    const row = this.#db
-      .prepare<unknown[], Row>(
-        `SELECT * FROM "${def.name}" WHERE workspace_id = ? AND id = ? AND ${where.sql}`,
-      )
-      .get(actor.workspace_id, id, ...where.params)
+    const row = await this.driver
+      .prepare<Row>(selectOneSql(def.name, where.sql))
+      .get(actor.workspace_id, id, ...(where.params as string[]))
     if (row === undefined) return undefined
     return this.#hydrate<T>(def, row, actor)
   }
@@ -195,14 +193,14 @@ export class SqliteDataStore implements DataStore {
     actor: DataActor,
     opts?: { limit?: number; cursor?: string },
   ): Promise<{ items: DataRecord<T>[]; cursor?: string }> {
-    const def = this.#def(collection)
+    const def = this.def(collection)
     const limit = Math.min(Math.max(opts?.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
-    const where = accessWhere(def.name, actor, def.domain, READ_OPS)
+    const where = accessWhere(def.name, actor, def.domain, READ_OPS, this.driver.dialect)
     if (where === undefined) return { items: [] }
     if (!(await this.#gate.allows(actor, def.domain, READ_OPS))) return { items: [] }
 
     const clauses = [`"${def.name}".workspace_id = ?`, where.sql]
-    const params: unknown[] = [actor.workspace_id, ...where.params]
+    const params: (string | number)[] = [actor.workspace_id, ...(where.params as string[])]
 
     // 过滤条件也受字段分级约束：不能拿看不到的字段当探针
     const probeCeiling = maxGrantSensitivity(actor, def, READ_OPS)
@@ -222,7 +220,8 @@ export class SqliteDataStore implements DataStore {
         sensitivityRank(spec.sensitivity) > sensitivityRank(probeCeiling)
       )
         throw forbidden(`field above max_sensitivity: ${def.name}.${key}`)
-      clauses.push(`json_extract("${def.name}".body, '$.${key}') = ?`)
+      // 21 §3：过滤在数据层下推，不在应用层过滤。两个方言各自的 JSON 取值写法。
+      clauses.push(`${jsonExtract(this.driver.dialect, `"${def.name}".body`, key)} = ?`)
       params.push(value as string | number)
     }
     if (opts?.cursor !== undefined) {
@@ -230,14 +229,14 @@ export class SqliteDataStore implements DataStore {
       params.push(opts.cursor)
     }
 
-    const rows = this.#db
-      .prepare<unknown[], Row>(
+    const rows = await this.driver
+      .prepare<Row>(
         `SELECT * FROM "${def.name}" WHERE ${clauses.join(' AND ')} ORDER BY id ASC LIMIT ?`,
       )
       .all(...params, limit)
     const items: DataRecord<T>[] = []
     for (const row of rows) {
-      const rec = this.#hydrate<T>(def, row, actor)
+      const rec = await this.#hydrate<T>(def, row, actor)
       if (rec !== undefined) items.push(rec)
     }
     const last = rows[rows.length - 1]
@@ -245,7 +244,11 @@ export class SqliteDataStore implements DataStore {
   }
 
   /** SQL 之后、返回之前：解密 PII，删掉高于 actor 密级的字段（21 §2 字段分级）。 */
-  #hydrate<T>(def: CollectionDef, row: Row, actor: DataActor): DataRecord<T> | undefined {
+  async #hydrate<T>(
+    def: CollectionDef,
+    row: Row,
+    actor: DataActor,
+  ): Promise<DataRecord<T> | undefined> {
     const owners = JSON.parse(row.owners) as string[]
     const scope = JSON.parse(row.scope) as RangeRef[]
     const sensitivity = row.sensitivity as Sensitivity
@@ -254,11 +257,17 @@ export class SqliteDataStore implements DataStore {
     const ceilingRank = sensitivityRank(ceiling)
 
     const stored = JSON.parse(row.body) as Record<string, unknown>
-    const key = this.#keys.get(this.#subject(def.name, row.id))
     const body: Record<string, unknown> = {}
+    let key: Buffer | undefined
+    let keyLoaded = false
     for (const [field, raw] of Object.entries(stored)) {
       if (sensitivityRank(fieldSpec(def, field).sensitivity) > ceilingRank) continue
       if (isEncryptedField(raw)) {
+        if (!keyLoaded) {
+          // 只有真有密文字段时才去取密钥：一页 50 条明文记录不该打 50 次密钥表
+          key = await this.keys.get(this.subjectOf(def.name, row.id))
+          keyLoaded = true
+        }
         body[field] = key === undefined ? ERASED : decryptValue(key, raw)
         continue
       }
@@ -266,7 +275,7 @@ export class SqliteDataStore implements DataStore {
     }
     const envelope = {
       id: row.id,
-      schema_version: row.schema_version,
+      schema_version: Number(row.schema_version),
       workspace_id: row.workspace_id,
       owners,
       scope,
@@ -286,7 +295,7 @@ export class SqliteDataStore implements DataStore {
     rec: Omit<DataRecord<T>, 'created_at' | 'updated_at' | 'version'> & { version?: string },
     actor: DataActor,
   ): Promise<DataRecord<T>> {
-    const def = this.#def(collection)
+    const def = this.def(collection)
     const input = rec as unknown as Record<string, unknown>
 
     const id = input.id
@@ -339,23 +348,21 @@ export class SqliteDataStore implements DataStore {
       body[field] = value
     }
 
-    const subject = this.#subject(def.name, id)
+    const subject = this.subjectOf(def.name, id)
     const pii = piiFields(def).filter((f) => f in body)
     if (pii.length > 0) {
-      const key = this.#keys.ensure(subject)
+      const key = await this.keys.ensure(subject)
       for (const field of pii) body[field] = encryptValue(key, subject, body[field])
     }
 
-    const now = this.#clock.now()
+    const now = this.clock.now()
     const expected = input.version
     if (expected !== undefined && typeof expected !== 'string')
       throw invalidInput('version must be a string')
     const source = input.source === undefined ? null : JSON.stringify(input.source)
 
-    const written = this.#db.transaction((): Row => {
-      const existing = this.#db
-        .prepare<[string], Row>(`SELECT * FROM "${def.name}" WHERE id = ?`)
-        .get(id)
+    const written = await this.driver.transaction(async (tx): Promise<Row> => {
+      const existing = await tx.prepare<Row>(`SELECT * FROM "${def.name}" WHERE id = ?`).get(id)
       if (existing === undefined) {
         if (expected !== undefined)
           throw conflict(`record does not exist, cannot match version ${expected}`)
@@ -372,13 +379,8 @@ export class SqliteDataStore implements DataStore {
           version: '1',
           body: JSON.stringify(body),
         }
-        this.#db
-          .prepare(
-            `INSERT INTO "${def.name}"
-             (id, schema_version, workspace_id, owners, scope, sensitivity, source,
-              created_at, updated_at, version, body)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
+        await tx
+          .prepare(insertRecordSql(def.name))
           .run(
             row.id,
             row.schema_version,
@@ -402,12 +404,8 @@ export class SqliteDataStore implements DataStore {
       if (existing.workspace_id !== workspaceId)
         throw forbidden(`cannot move a record across workspaces: ${def.name}:${id}`)
       const next = String(Number(existing.version) + 1)
-      const res = this.#db
-        .prepare(
-          `UPDATE "${def.name}" SET schema_version = ?, owners = ?, scope = ?, sensitivity = ?,
-             source = ?, updated_at = ?, version = ?, body = ?
-           WHERE id = ? AND version = ?`,
-        )
+      const res = await tx
+        .prepare(updateRecordSql(def.name))
         .run(
           schemaVersion,
           JSON.stringify(owners),
@@ -432,7 +430,7 @@ export class SqliteDataStore implements DataStore {
         version: next,
         body: JSON.stringify(body),
       }
-    })()
+    })
 
     const plain: Record<string, unknown> = {}
     for (const [field, value] of Object.entries(input))
@@ -479,11 +477,9 @@ export class SqliteDataStore implements DataStore {
     subject: { collection: string; id: string },
     actor: DataActor,
   ): Promise<PrivacyErasedEvent> {
-    const def = this.#def(subject.collection)
-    const row = this.#db
-      .prepare<[string, string], Row>(
-        `SELECT * FROM "${def.name}" WHERE workspace_id = ? AND id = ?`,
-      )
+    const def = this.def(subject.collection)
+    const row = await this.driver
+      .prepare<Row>(`SELECT * FROM "${def.name}" WHERE workspace_id = ? AND id = ?`)
       .get(actor.workspace_id, subject.id)
     if (row === undefined) throw notFound(`${def.name}:${subject.id}`)
     const facts = {
@@ -496,10 +492,10 @@ export class SqliteDataStore implements DataStore {
     if (!(await this.#gate.allows(actor, def.domain, WRITE_OPS)))
       throw forbidden(`casbin denied erase on ${def.domain}`)
 
-    const subjectKey = this.#subject(def.name, subject.id)
+    const subjectKey = this.subjectOf(def.name, subject.id)
     const stored = JSON.parse(row.body) as Record<string, unknown>
     const erasedFields = Object.keys(stored).filter((f) => isEncryptedField(stored[f]))
-    const at = this.#keys.destroy(subjectKey, this.#clock.now())
+    const at = await this.keys.destroy(subjectKey, this.clock.now())
     const event: PrivacyErasedEvent = {
       schema_version: EVENT_SCHEMA_VERSION,
       workspace_id: row.workspace_id,
@@ -515,17 +511,13 @@ export class SqliteDataStore implements DataStore {
         erased_fields: erasedFields,
       },
     }
-    this.#writeTombstone(event)
+    await this.writeTombstone(event)
     return event
   }
 
-  #writeTombstone(event: PrivacyErasedEvent): void {
-    this.#db
-      .prepare(
-        `INSERT INTO _tombstones (subject_id, collection, record_id, workspace_id, at, event)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(subject_id) DO NOTHING`,
-      )
+  protected async writeTombstone(event: PrivacyErasedEvent): Promise<void> {
+    await this.driver
+      .prepare(INSERT_TOMBSTONE_SQL)
       .run(
         event.payload.key_id,
         event.payload.subject.collection,
@@ -536,11 +528,9 @@ export class SqliteDataStore implements DataStore {
       )
   }
 
-  tombstones(): PrivacyErasedEvent[] {
-    return this.#db
-      .prepare<[], TombstoneRow>('SELECT * FROM _tombstones ORDER BY at ASC, subject_id ASC')
-      .all()
-      .map((r) => JSON.parse(r.event) as PrivacyErasedEvent)
+  async listTombstones(): Promise<PrivacyErasedEvent[]> {
+    const rows = await this.driver.prepare<TombstoneRow>(SELECT_TOMBSTONES_SQL).all()
+    return rows.map((r) => JSON.parse(r.event) as PrivacyErasedEvent)
   }
 
   /** 21 §4：备份恢复后重放墓碑——再销毁一次密钥。幂等：已有墓碑的计 skipped。 */
@@ -549,20 +539,68 @@ export class SqliteDataStore implements DataStore {
   ): Promise<{ applied: number; skipped: number }> {
     let applied = 0
     let skipped = 0
-    const exists = this.#db.prepare<[string], { n: number }>(
-      'SELECT COUNT(*) AS n FROM _tombstones WHERE subject_id = ?',
-    )
-    const run = this.#db.transaction(() => {
-      for (const event of list) {
-        const had = (exists.get(event.payload.key_id)?.n ?? 0) > 0
-        this.#keys.destroy(event.payload.key_id, event.payload.destroyed_at)
-        this.#writeTombstone(event)
-        if (had) skipped += 1
-        else applied += 1
-      }
-    })
-    run()
+    for (const event of list) {
+      const row = await this.driver
+        .prepare<{ n: number }>(COUNT_TOMBSTONE_SQL)
+        .get(event.payload.key_id)
+      const had = Number(row?.n ?? 0) > 0
+      await this.keys.destroy(event.payload.key_id, event.payload.destroyed_at)
+      await this.writeTombstone(event)
+      if (had) skipped += 1
+      else applied += 1
+    }
     return { applied, skipped }
+  }
+}
+
+/**
+ * SQLite 档。与 {@link SqlDataStore} 是同一套逻辑，只多两件 SQLite 才有的事：
+ * 构造与建表同步（`createDataStore` 一直是同步的，模拟世界靠它），
+ * 以及露出同步的 {@link SubjectKeyring} 当 `RawCipher`（18 §2.1 的跨包接线）。
+ */
+export class SqliteDataStore extends SqlDataStore {
+  readonly #sqlite: SqliteDriver
+  readonly #keys: SubjectKeyring
+
+  constructor(opts: DataStoreOptions) {
+    const driver = openSqliteDriver({ path: opts.dbPath })
+    const rootKey = parseDataKey((opts.env ?? process.env)[DATA_KEY_ENV])
+    const keys = new SubjectKeyring(driver.database, opts.clock, {
+      ...(rootKey === undefined ? {} : { rootKey }),
+    })
+    super(driver, opts.clock, asKeyringPort(keys))
+    this.#sqlite = driver
+    this.#keys = keys
+    driver.execSync(TOMBSTONES_DDL)
+    for (const def of opts.collections ?? []) this.register(def)
+  }
+
+  /**
+   * 主体密钥环（21 §4）。**受控原始材料区的加密就接这里**：
+   * `@agentsws/channels` 与 `@agentsws/meetings` 拿它当 `RawCipher` 用，
+   * 于是「随主体删除」在数据层、邮件原文区、录音区是同一次 `shred`（WP18 的跨包接线遗留）。
+   */
+  get keyring(): SubjectKeyring {
+    return this.#keys
+  }
+
+  /** 同步建表（SQLite 档专有）。双方言档用 `registerCollection`。 */
+  register(def: CollectionDef): this {
+    this.remember(def)
+    this.#sqlite.execSync(collectionDdl(def.name))
+    return this
+  }
+
+  /** 墓碑清单（同步；SQLite 档专有）。双方言档用 `listTombstones`。 */
+  tombstones(): PrivacyErasedEvent[] {
+    return this.#sqlite
+      .prepareSync<TombstoneRow>(SELECT_TOMBSTONES_SQL)
+      .allSync()
+      .map((r) => JSON.parse(r.event) as PrivacyErasedEvent)
+  }
+
+  override close(): void {
+    this.#sqlite.closeSync()
   }
 }
 

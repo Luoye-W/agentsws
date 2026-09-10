@@ -1,0 +1,141 @@
+# agentsws 公司档（40 §1.3 / 41 §2.1）：一台机器跑起服务进程 + OpenConnector。
+#
+# 三挡开关，都在这一个文件里，靠 profile 取舍：
+#
+#   docker compose up -d                        # SQLite + 本地目录（默认，5–50 人够用）
+#   docker compose --profile postgres up -d     # 换 Postgres（人多了、并发写多了）
+#   docker compose --profile s3 up -d           # 再加一个 MinIO 当对象存储（大文件）
+#
+# 换后端**不换服务进程**：变的只有 DATABASE_URL 与 AGENTSWS_BLOB_URL 两个环境变量
+# （21 §3、41 §2）。
+#
+# 秘密从 `.env` 来（同目录，600 权限，不进 git）。第一次跑：
+#   cp deploy/nas/env.example .env && sh deploy/nas/gen-keys.sh >> .env
+#
+# 只绑 127.0.0.1 的端口在 NAS 上要改成 NAS 的内网地址 —— 见 deploy/nas/README.md
+# 的「端口与 HTTPS」一节；别把 4317 直接暴到公网。
+
+name: agentsws
+
+services:
+  server:
+    # 本地构建；发行版会推 ghcr.io/luoye-w/agentsws:<version>，那时把 image 打开、build 注释掉
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agentsws/server:dev
+    restart: unless-stopped
+    depends_on:
+      openconnector:
+        condition: service_started
+    environment:
+      AGENTSWS_PORT: '4317'
+      AGENTSWS_DATA_DIR: /data
+      AGENTSWS_STATIC_DIR: /app/apps/workstation/dist
+      AGENTSWS_CONNECT_URL: http://openconnector:3000
+      AGENTSWS_OWNER_EMAIL: ${AGENTSWS_OWNER_EMAIL:-owner@localhost}
+      AGENTSWS_WORKSPACE_NAME: ${AGENTSWS_WORKSPACE_NAME:-我的公司}
+      # 本机加密库与会话签名（gen-keys.sh 生成，落在 .env）
+      AGENTSWS_SECRETS_KEY: ${AGENTSWS_SECRETS_KEY:?请先跑 deploy/nas/gen-keys.sh 生成密钥}
+      AGENTSWS_SESSION_KEY: ${AGENTSWS_SESSION_KEY:?请先跑 deploy/nas/gen-keys.sh 生成密钥}
+      # 主体密钥的根密钥（21 §4）：有它，库文件泄漏 ≠ 明文泄漏
+      AGENTSWS_DATA_KEY: ${AGENTSWS_DATA_KEY:-}
+      OOMOL_CONNECT_ADMIN_TOKEN: ${OOMOL_CONNECT_ADMIN_TOKEN:?同上}
+      OOMOL_CONNECT_BLOCKED_PROXIES: '*'
+      # ── 存储后端。留空 = SQLite + 本地目录（第一档默认）
+      #    postgres 档：docker compose --profile postgres up -d 时打开下面这行
+      DATABASE_URL: ${DATABASE_URL:-}
+      #    S3 档：s3://bucket/prefix?endpoint=…&region=…；凭据走下面两个变量
+      AGENTSWS_BLOB_URL: ${AGENTSWS_BLOB_URL:-}
+      AGENTSWS_BLOB_ACCESS_KEY_ID: ${AGENTSWS_BLOB_ACCESS_KEY_ID:-}
+      AGENTSWS_BLOB_SECRET_ACCESS_KEY: ${AGENTSWS_BLOB_SECRET_ACCESS_KEY:-}
+    volumes:
+      # NAS 档：把左边换成 NAS 共享目录，例如 /volume1/agentsws/data
+      - ${AGENTSWS_HOST_DATA_DIR:-./.agentsws-data}:/data
+    ports:
+      # 只绑回环；要给同事用就换成 NAS 的内网地址（见 README）
+      - '${AGENTSWS_BIND:-127.0.0.1}:${AGENTSWS_HOST_PORT:-4317}:4317'
+    healthcheck:
+      # 镜像里没有 curl（见 Dockerfile 的「不跑 apt」一段），用 node 自己打
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:4317/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # 连接器运行时（08 / 18）。加固三件套照 scripts/dev-real.sh 那一份。
+  openconnector:
+    image: ghcr.io/oomol-lab/open-connector:latest
+    restart: unless-stopped
+    environment:
+      OOMOL_CONNECT_ENCRYPTION_KEY: ${OOMOL_CONNECT_ENCRYPTION_KEY:?请先跑 deploy/nas/gen-keys.sh 生成密钥}
+      OOMOL_CONNECT_ADMIN_TOKEN: ${OOMOL_CONNECT_ADMIN_TOKEN:?同上}
+      # 出站代理一律禁掉：连接器只做 OAuth 与凭据保管，不当跳板
+      OOMOL_CONNECT_BLOCKED_PROXIES: '*'
+    volumes:
+      - ${AGENTSWS_HOST_DATA_DIR:-./.agentsws-data}/openconnector:/data
+    # 不对外开端口：只有 server 经内部网络访问它
+    expose:
+      - '3000'
+
+  # ── Postgres 档（可选）────────────────────────────────────────────────
+  #
+  # **说清楚现在到哪一步了**：WP40 把 kernel（事件日志）与 data（共享数据层）
+  # 做成了双方言，`DATABASE_URL` 一设就能连；但 txn / api / channels / meetings /
+  # work / schedule / learning / knowledge 这几个包的 store **还是同步契约**，
+  # 只能跑 SQLite。所以今天起这个 profile，服务进程仍然把数据写在 SQLite 里，
+  # 这个容器是**为下一步准备的**（也可以现在就拿它跑双方言的一致性套件）。
+  # 等那几个包转成异步面，服务进程才会真的整体切过去。
+  #
+  # 打开方式：docker compose --profile postgres up -d
+  # 然后在 .env 里写：
+  #   DATABASE_URL=postgres://agentsws:<密码>@postgres:5432/agentsws
+  postgres:
+    profiles: ['postgres']
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentsws}
+      # 空着起不来（postgres 镜像自己会喊）——这是故意的，别给默认密码
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_DB: ${POSTGRES_DB:-agentsws}
+    volumes:
+      - ${AGENTSWS_HOST_DATA_DIR:-./.agentsws-data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-agentsws}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - '5432'
+
+  # ── 对象存储档（可选）─────────────────────────────────────────────────
+  # 打开方式：docker compose --profile s3 up -d
+  # 然后在 .env 里写：
+  #   AGENTSWS_BLOB_URL=s3://agentsws/?endpoint=http://minio:9000&region=us-east-1
+  #   AGENTSWS_BLOB_ACCESS_KEY_ID / AGENTSWS_BLOB_SECRET_ACCESS_KEY 同 MinIO 的账号
+  # 群晖 / 威联通自带 MinIO 套件的，可以不起这个容器，直接把 URL 指过去。
+  minio:
+    profiles: ['s3']
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${AGENTSWS_BLOB_ACCESS_KEY_ID:-agentsws}
+      # 同上：空着 MinIO 自己会拒绝启动，不给默认密码
+      MINIO_ROOT_PASSWORD: ${AGENTSWS_BLOB_SECRET_ACCESS_KEY:-}
+    volumes:
+      - ${AGENTSWS_HOST_DATA_DIR:-./.agentsws-data}/minio:/data
+    ports:
+      - '${AGENTSWS_BIND:-127.0.0.1}:9001:9001'
+    expose:
+      - '9000'
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 10

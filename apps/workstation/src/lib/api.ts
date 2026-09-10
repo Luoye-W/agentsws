@@ -1553,3 +1553,89 @@ export const setSkillExcluded = (
   excluded: boolean,
 ): Promise<{ name: string; excluded: boolean }> =>
   api(`/v1/skills/${encodeURIComponent(name)}/exclude`, { method: 'POST', body: { excluded } })
+
+// ── WP40 数据后端（41 §2.4）────────────────────────────────────────────
+//
+// 纪律与连接面逐字相同：**凭据只经 `saveStorageBackend` / `testStorageBackend`
+// 这两条路出门**，值从原生 `<form>` 的 FormData 里来，函数返回后就没人引用它了。
+// 不写 localStorage、不进 query 缓存、不打 console。
+// `getStorage` 回来的东西**永远不含凭据**，所以它可以进缓存。
+
+export type StorageTier = 'local' | 'byo_cloud' | 'managed'
+
+export interface StorageBackendView {
+  kind: string
+  display: string
+  bytes?: number
+  objects?: number
+  encrypted?: boolean
+}
+
+export interface StorageView {
+  tier: StorageTier
+  database: StorageBackendView
+  blobs: StorageBackendView
+  last_backup_at?: string
+  previous_backend_readonly_until?: string
+  env: { name: string; value: string; secret: boolean }[]
+  compose_url: string
+}
+
+export interface StorageTestResult {
+  ok: boolean
+  reason?: string
+  detail?: string
+}
+
+export interface StorageMigrationView {
+  id: string
+  state: 'running' | 'done' | 'failed'
+  step: 'export' | 'import' | 'switch' | 'retire' | 'finished'
+  started_at: string
+  finished_at?: string
+  exported_records?: number
+  exported_bytes?: number
+  reason?: string
+  previous_readonly_until?: string
+}
+
+/** 表单收上来的那一份；**只在一次调用里存在**。 */
+export interface StorageBackendInput {
+  database_url?: string
+  blob_endpoint?: string
+  blob_bucket?: string
+  blob_region?: string
+  blob_prefix?: string
+  blob_access_key_id?: string
+  blob_secret_access_key?: string
+}
+
+export const getStorage = (assignment?: string): Promise<StorageView> =>
+  api<StorageView>('/v1/storage', withAssignment(assignment))
+
+/** 测一下能不能用。**不落库、不切换。** */
+export const testStorageBackend = (
+  input: StorageBackendInput,
+  assignment?: string,
+): Promise<{ database?: StorageTestResult; blobs?: StorageTestResult }> =>
+  api('/v1/storage/test', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** 唯一一条会带数据后端凭据出门的写请求。 */
+export const saveStorageBackend = (
+  input: StorageBackendInput,
+  assignment?: string,
+): Promise<{ saved_fields: string[] }> =>
+  api('/v1/storage/backend', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const migrateStorage = (assignment?: string): Promise<StorageMigrationView> =>
+  api('/v1/storage/migrate', {
+    method: 'POST',
+    body: { confirm: true },
+    ...withAssignment(assignment),
+  })
+
+export const getStorageMigration = (
+  id: string,
+  assignment?: string,
+): Promise<StorageMigrationView> =>
+  api(`/v1/storage/migrations/${encodeURIComponent(id)}`, withAssignment(assignment))

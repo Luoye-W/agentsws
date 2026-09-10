@@ -12,6 +12,33 @@ import {
   wrapKey,
 } from './crypto.js'
 import { forbidden } from './errors.js'
+import { SUBJECT_KEYS_DDL } from './store-sql.js'
+
+/**
+ * 密钥环的**最小端口**：数据层只需要这三件事，同步档（{@link SubjectKeyring}）与
+ * 双方言档（`SqlSubjectKeyring`）各自实现。端口是异步的——理由与 SQL 驱动一样：
+ * 异步能包同步，反过来不行。
+ */
+export interface KeyringPort {
+  ensure(subject: string): Promise<Buffer>
+  get(subject: string): Promise<Buffer | undefined>
+  destroy(subject: string, at?: string): Promise<string>
+}
+
+/** 把同步密钥环包成端口（SQLite 档走这条）。 */
+export function asKeyringPort(keys: SubjectKeyring): KeyringPort {
+  return {
+    async ensure(subject) {
+      return keys.ensure(subject)
+    },
+    async get(subject) {
+      return keys.get(subject)
+    },
+    async destroy(subject, at) {
+      return at === undefined ? keys.destroy(subject) : keys.destroy(subject, at)
+    },
+  }
+}
 
 interface KeyRow {
   subject_id: string
@@ -51,14 +78,7 @@ export class SubjectKeyring implements RawCipher {
     this.#db = db
     this.#clock = clock
     this.#rootKey = options.rootKey
-    db.exec(
-      `CREATE TABLE IF NOT EXISTS _subject_keys (
-        subject_id TEXT PRIMARY KEY,
-        key BLOB,
-        created_at TEXT NOT NULL,
-        destroyed_at TEXT
-      )`,
-    )
+    db.exec(SUBJECT_KEYS_DDL)
     // WP31：老库没有 wrapped 列，补一列（默认 0 = 直接存的主体密钥，照旧读）。
     const columns = db
       .prepare<[string], { name: string }>('SELECT name FROM pragma_table_info(?)')

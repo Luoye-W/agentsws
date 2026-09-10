@@ -7,6 +7,8 @@ dist/
 .agentsws-local/
 *.tsbuildinfo
 .agentsws-local/
+# compose 默认的数据目录（NAS 上换成共享目录，见 deploy/nas/README.md）
+.agentsws-data/
 coverage/
 out/
 test-results/

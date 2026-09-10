@@ -7,6 +7,7 @@ import type {
   RangeRef,
   Sensitivity,
 } from '@agentsws/contracts'
+import type { SqlDialect } from '@agentsws/core/sql'
 import { maxSensitivity, sensitivitiesUpTo, sensitivityLte } from './sensitivity.js'
 
 /**
@@ -83,12 +84,16 @@ export function fieldCeiling(
  * 21 §3：**过滤下推到 SQL**，不是取回来再在应用层筛。返回 undefined 表示没有任何 grant 可能命中
  * （空 ranges 的 assigned grant 也落在这里）→ 调用方直接返回空，而不是抛错。
  * `table` 必须是已校验过的标识符（见 defineCollection）。
+ *
+ * WP40：JSON 数组展开是两个方言唯一不同的地方——SQLite 的 `json_each` 对
+ * Postgres 的 `jsonb_array_elements`。判权逻辑本身一个字没变。
  */
 export function accessWhere(
   table: string,
   actor: DataActor,
   domain: DataDomain,
   ops: readonly Operation[],
+  dialect: SqlDialect = 'sqlite',
 ): AccessWhere | undefined {
   const parts: string[] = []
   const params: unknown[] = []
@@ -98,15 +103,23 @@ export function accessWhere(
     if (g.range === 'workspace') {
       rangeSql = '1 = 1'
     } else if (g.range === 'own') {
-      rangeSql = `EXISTS (SELECT 1 FROM json_each("${table}".owners) AS o WHERE o.value = ?)`
+      // owners 是一个 JSON 字符串数组；两个方言各有各的展开函数
+      rangeSql =
+        dialect === 'sqlite'
+          ? `EXISTS (SELECT 1 FROM json_each("${table}".owners) AS o WHERE o.value = ?)`
+          : `EXISTS (SELECT 1 FROM jsonb_array_elements_text("${table}".owners::jsonb) AS o WHERE o = ?)`
       params.push(actor.person_id)
     } else {
       if (actor.ranges.length === 0) continue
       const placeholders = actor.ranges.map(() => '?').join(', ')
       rangeSql =
-        `EXISTS (SELECT 1 FROM json_each("${table}".scope) AS s ` +
-        `WHERE json_extract(s.value, '$.kind') || ':' || json_extract(s.value, '$.id') ` +
-        `IN (${placeholders}))`
+        dialect === 'sqlite'
+          ? `EXISTS (SELECT 1 FROM json_each("${table}".scope) AS s ` +
+            `WHERE json_extract(s.value, '$.kind') || ':' || json_extract(s.value, '$.id') ` +
+            `IN (${placeholders}))`
+          : `EXISTS (SELECT 1 FROM jsonb_array_elements("${table}".scope::jsonb) AS s ` +
+            `WHERE (s ->> 'kind') || ':' || (s ->> 'id') ` +
+            `IN (${placeholders}))`
       for (const r of actor.ranges) params.push(`${r.kind}:${r.id}`)
     }
     const levels = sensitivitiesUpTo(g.max_sensitivity)
