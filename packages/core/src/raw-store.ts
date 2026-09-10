@@ -65,3 +65,50 @@ export interface RawStorePort<R extends RawRecordBase = RawRecordBase> {
   /** 落库后才发现秘密时的就地脱敏（`redact` 由调用方给，端口不认识秘密模式表） */
   scrub?(ref: string, redact: (text: string) => string): MaybePromise<void>
 }
+
+/**
+ * 大文件的去处（WP40 / 41 §2）。
+ *
+ * 受控原始材料区**只留文本与引用**：邮件原文、转写、文档正文留在库里（那是要检索、
+ * 要脱敏、要按主体加密的东西）；附件字节与会议音视频落 {@link RawBlobPort}，
+ * 库里只留一行 `blob://<key>`。
+ *
+ * 为什么端口在这里而不是直接依赖 `@agentsws/blob`：`@agentsws/channels` 与
+ * `@agentsws/meetings` 只需要三个动作，接一个窄端口就够；`@agentsws/blob` 的
+ * `BlobStore` 结构上满足它，装配时直接传进去，两个包不必多一个依赖（35 §2）。
+ */
+export interface RawBlobPort {
+  put(
+    key: string,
+    body: Uint8Array,
+    meta?: {
+      content_type?: string
+      filename?: string
+      subject_ref?: string
+      workspace_id?: string
+    },
+  ): Promise<{ uri: string; key: string; size: number }>
+  get(key: string): Promise<{ bytes?: Uint8Array } | undefined>
+  delete(key: string): Promise<void>
+}
+
+/** 库里那一行文本的形状。 */
+export const BLOB_MARKER_PREFIX = 'blob://'
+
+export function blobMarker(key: string): string {
+  return `${BLOB_MARKER_PREFIX}${key}`
+}
+
+/** 这条材料的正文是不是「一行 blob 引用」。 */
+export function isBlobMarker(payload: string | Uint8Array): payload is string {
+  return (
+    typeof payload === 'string' &&
+    payload.startsWith(BLOB_MARKER_PREFIX) &&
+    payload.length > BLOB_MARKER_PREFIX.length &&
+    !payload.includes('\n')
+  )
+}
+
+export function blobKeyOfMarker(marker: string): string {
+  return marker.slice(BLOB_MARKER_PREFIX.length)
+}

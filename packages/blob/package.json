@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/blob",
+  "version": "0.0.0",
+  "private": true,
+  "description": "对象存储抽象（41 §2）：本地目录 ↔ S3 兼容；每对象密钥经密钥环包裹",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}

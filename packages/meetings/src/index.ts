@@ -9,6 +9,7 @@
  */
 export * from './assistant/extract.js'
 export * from './assistant/processor.js'
+export * from './blob-raw-store.js'
 export * from './erase.js'
 export * from './errors.js'
 export * from './fixtures.js'
