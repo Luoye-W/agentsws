@@ -1,0 +1,56 @@
+# 待认领池：认领即锁，闲置回池（40 §3.2 / §3.5，15 人公司版）。
+#
+# 一场周会散了，抽出三条活。它们**先进待认领池**——没有主人，谁都看得见。
+# 陈晓点了「我来」，同一条活孙洋再点就点不动了：回来的是「已经有人在做」加主人是谁，
+# 而不是第二条一模一样的待办。这就是「一件事一个主人，认领即锁」。
+#
+# 后半段是闲置回收：认领了却一直没动的那两条，先提醒主人，再回到池里。
+# 这里把 `idle_days` 压到 1 天（默认 5 天），一条回归题等不起五天。
+id: ops/claim-pool
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 周会产出三条活，先进池
+  - at: '+0m'
+    work.pool: { title: 把上周的退款单汇总一下, source: meeting }
+  - at: '+1m'
+    work.pool: { title: 给三家供应商发对账单, source: meeting }
+  - at: '+2m'
+    work.pool: { title: 盘一下上月的库存差异, source: meeting }
+  # 陈晓先认下第一条
+  - at: '+30m'
+    work.claim: { who: p_chen, title: 把上周的退款单汇总一下 }
+  # 孙洋晚了一步：这条已经有主人了
+  - at: '+35m'
+    work.claim: { who: p_sun, title: 把上周的退款单汇总一下 }
+  # 他改认第三条
+  - at: '+40m'
+    work.claim: { who: p_sun, title: 盘一下上月的库存差异 }
+  # 一天过去，两条都没动 → 提醒主人
+  - at: '+26h'
+    work.idle_sweep: { idle_days: 1 }
+  # 再一天还是没动 → 回池
+  - at: '+52h'
+    work.idle_sweep: { idle_days: 1 }
+expected:
+  # 第二个人认不到：认领即锁
+  blocked_rules: [already_claimed]
+  event_types:
+    - todo.pooled
+    - todo.claimed
+    - todo.idle_reminded
+    - todo.recycled
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    runs_failed: 0
+    blocked_proposals: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

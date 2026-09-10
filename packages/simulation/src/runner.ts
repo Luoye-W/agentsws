@@ -29,7 +29,13 @@ import type { ScenarioReport } from './report.js'
 import { buildReport } from './report.js'
 import type { RuntimeName } from './runtime-name.js'
 import { parseDuration, parseRange, resolveAt } from './scenario/duration.js'
-import type { Scenario, ScenarioEvent, Tier } from './scenario/types.js'
+import type {
+  Scenario,
+  ScenarioEvent,
+  ScenarioWorkClaim,
+  ScenarioWorkTodo,
+  Tier,
+} from './scenario/types.js'
 import type { RealModelBinding, RunContext, World } from './world.js'
 import { createWorld } from './world.js'
 
@@ -471,6 +477,79 @@ async function execute(
     })
   }
 
+  /* ── WP38 认领与撞车（40 §3）──────────────────────────────────────── */
+
+  /** 一次被拦下的动作。`rule` 就是服务端给的 `details.reason`，场景用 `blocked_rules` 断言。 */
+  const workBlocked = (err: unknown, fallback: string): void => {
+    const rec = err as { code?: string; message?: string; details?: { reason?: string } }
+    world.blocked.push({
+      rule: rec.details?.reason ?? rec.code ?? fallback,
+      at: clock.now(),
+      message: typeof rec.message === 'string' ? rec.message : fallback,
+    })
+  }
+
+  /**
+   * 某人记一条待办，**建之前先查**（40 §3.1）。
+   * 撞上了就不建：这一次拦截进 `blocked`，候选的主人写进消息里。
+   */
+  const workTodo = (input: ScenarioWorkTodo): void => {
+    try {
+      const made = world.work.createTodoChecked({
+        title: input.title,
+        owner: input.who,
+        position_id: world.assignment.id,
+        ...(input.order === undefined
+          ? {}
+          : { refs: [{ type: 'order', id: input.order }] as const }),
+        ...(input.collision === undefined ? {} : { collision: input.collision }),
+        ...(input.distinct_reason === undefined ? {} : { distinct_reason: input.distinct_reason }),
+      })
+      world.appendEvent(
+        'simulation.work_todo',
+        {
+          title: made.todo.title,
+          owner: made.todo.owner,
+          ...(made.joined_matter_id === undefined
+            ? {}
+            : { joined_matter_id: made.joined_matter_id }),
+          ...(made.offered_to === undefined ? {} : { offered_to: made.offered_to }),
+        },
+        { subject: { type: 'todo', id: made.todo.id } },
+      )
+    } catch (e) {
+      workBlocked(e, 'similar_in_progress')
+    }
+  }
+
+  /** 某人点「我来」：第一个成功的是主人，其余进 `blocked`（`already_claimed`）。 */
+  const workClaim = (input: ScenarioWorkClaim): void => {
+    const target = world.work
+      .listTodos({})
+      .filter((t) => t.title === input.title)
+      .pop()
+    if (target === undefined) {
+      world.blocked.push({
+        rule: 'not_found',
+        at: clock.now(),
+        message: `池里没有这条活：${input.title}`,
+      })
+      return
+    }
+    try {
+      const todo = world.work.claimTodo(target.id, input.who, {
+        position_id: world.assignment.id,
+      })
+      world.appendEvent(
+        'simulation.work_claimed',
+        { title: todo.title, owner: todo.owner },
+        { subject: { type: 'todo', id: todo.id } },
+      )
+    } catch (e) {
+      workBlocked(e, 'already_claimed')
+    }
+  }
+
   const dispatch = async (event: ScenarioEvent): Promise<void> => {
     switch (event.type) {
       case 'inbound.email': {
@@ -607,6 +686,38 @@ async function execute(
         })
         world.appendEvent('simulation.learning_started', {
           skills: world.pack.skills.map((s) => s.name),
+        })
+        return
+      }
+      // ── WP38 认领与撞车（40 §3）────────────────────────────────────
+      case 'work.todo': {
+        workTodo(event.todo)
+        return
+      }
+      case 'work.pool': {
+        const item = world.work.poolTodo({
+          title: event.pool.title,
+          source: (event.pool.source ?? 'meeting') as 'meeting' | 'plan' | 'alert' | 'review',
+        })
+        world.appendEvent(
+          'simulation.work_pooled',
+          { title: item.title, source: item.source },
+          { subject: { type: 'todo', id: item.id } },
+        )
+        return
+      }
+      case 'work.claim': {
+        workClaim(event.claim)
+        return
+      }
+      case 'work.idle_sweep': {
+        const swept = world.work.sweepIdleTodos(
+          event.idle.idle_days === undefined ? {} : { idle_days: event.idle.idle_days },
+        )
+        world.appendEvent('simulation.work_idle_swept', {
+          checked: swept.checked,
+          reminded: swept.reminded.length,
+          recycled: swept.recycled.length,
         })
         return
       }
