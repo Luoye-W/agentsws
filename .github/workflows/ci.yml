@@ -149,7 +149,7 @@ jobs:
         ports:
           - 55432:5432
         options: >-
-          --health-cmd "pg_isready -U agentsws"
+          --health-cmd "pg_isready -U agentsws -d agentsws_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -168,6 +168,7 @@ jobs:
         run: pnpm exec tsc -b
       # 跳过 = 没连上库 = 配置坏了。先自证连得上，再跑套件。
       - name: 确认 Postgres 真的连得上（跳过不算过）
+        working-directory: packages/core
         run: |
           node -e "
             const postgres = require('postgres');
@@ -190,19 +191,6 @@ jobs:
     name: 对象存储 · S3 路径打 MinIO
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: agentsws
-          MINIO_ROOT_PASSWORD: agentsws-secret
-        ports:
-          - 59000:9000
-        options: >-
-          --health-cmd "curl -fsS http://127.0.0.1:9000/minio/health/live"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 15
     env:
       AGENTSWS_TEST_S3_ENDPOINT: http://127.0.0.1:59000
       AGENTSWS_TEST_S3_ACCESS_KEY: agentsws
@@ -218,8 +206,19 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: tsc -b
         run: pnpm exec tsc -b
+      # 官方镜像要带 `server /data` 命令，GitHub 的 service container 给不了命令，所以用 docker run
+      - name: 起 MinIO（官方镜像，固定版本）
+        run: |
+          docker run -d --name minio -p 59000:9000 \
+            -e MINIO_ROOT_USER=agentsws -e MINIO_ROOT_PASSWORD=agentsws-secret \
+            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
       - name: 确认 MinIO 真的起来了（跳过不算过）
-        run: curl -fsS "$AGENTSWS_TEST_S3_ENDPOINT/minio/health/live"
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS "$AGENTSWS_TEST_S3_ENDPOINT/minio/health/live" && exit 0
+            sleep 2
+          done
+          docker logs minio; exit 1
       - name: vitest（BlobStore 一致性）
         run: pnpm exec vitest run packages/blob
 
@@ -236,6 +235,9 @@ jobs:
           cp deploy/nas/env.example .env
           sh deploy/nas/gen-keys.sh >> .env
           chmod 600 .env
+      # 容器里以 node（uid 1000）跑，bind mount 的目录得先建好并交给它（NAS 说明里同一条）
+      - name: 数据目录属主给容器用户
+        run: mkdir -p .agentsws-data && sudo chown -R 1000:1000 .agentsws-data
       - name: docker compose up
         run: docker compose up -d --build
       - name: 等 /v1/health 变绿
