@@ -29,7 +29,9 @@ import { MatterPage } from '@/pages/matter'
 import { MeetingPage } from '@/pages/meeting'
 import { MeetingsPage } from '@/pages/meetings'
 import { OrgPage } from '@/pages/org'
+import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
+import { SecretaryPage } from '@/pages/profile'
 import { SettingsPage } from '@/pages/settings'
 import { SkillsPage } from '@/pages/skills'
 import { TodosPage } from '@/pages/todos'
@@ -146,6 +148,10 @@ function Workspace(): ReactNode {
         <Route path="/knowledge" element={<KnowledgePage />} />
         {/* 24 技能与学习回路：当前版本、三层 overlay、待审提案 */}
         <Route path="/skills" element={<SkillsPage />} />
+        {/* 41 §1 秘书 Agent：我的秘书（问 / profile 与公开级别 / 谁问过我 / 约时间） */}
+        <Route path="/secretary" element={<SecretaryPage />} />
+        <Route path="/people" element={<PeoplePage />} />
+        <Route path="/people/:id" element={<PersonPage />} />
         {/* WP28 制度面：岗位 / 成员 / 职责 */}
         <Route path="/org" element={<OrgPage />} />
         {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}

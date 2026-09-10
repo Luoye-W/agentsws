@@ -9,9 +9,11 @@ import type { CalendarItem } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { MeetDialog } from '@/components/secretary/meet-dialog'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getCalendar, scheduleTodo } from '@/lib/api'
+import { getCalendar, listPeople, scheduleTodo } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { addDays, dayKey, groupByDay, hhmm, startOfMonthGrid, startOfWeek } from '@/lib/work'
 import { TODO_DRAG_TYPE } from '@/pages/todos'
@@ -113,6 +115,8 @@ export function CalendarPage(): React.ReactNode {
   const client = useQueryClient()
   const [view, setView] = useState<View>('week')
   const [anchor, setAnchor] = useState(() => new Date())
+  // 41 §1.2：约别人 = 向对方秘书发一张卡，对方点头才进双方日历
+  const [meeting, setMeeting] = useState(false)
 
   const start = view === 'week' ? startOfWeek(anchor) : startOfMonthGrid(anchor)
   const dayCount = view === 'week' ? 7 : 42
@@ -123,6 +127,12 @@ export function CalendarPage(): React.ReactNode {
   const calendar = useQuery({
     queryKey: ['calendar', start.toISOString(), dayCount],
     queryFn: () => getCalendar(start.toISOString(), end.toISOString()),
+  })
+
+  const people = useQuery({
+    queryKey: ['secretary', 'people'],
+    enabled: meeting,
+    queryFn: listPeople,
   })
 
   const schedule = useMutation({
@@ -170,6 +180,17 @@ export function CalendarPage(): React.ReactNode {
           >
             <ChevronRight aria-hidden />
           </Button>
+          <Button
+            size="xs"
+            variant={meeting ? 'secondary' : 'ghost'}
+            data-testid="calendar-meet"
+            aria-pressed={meeting}
+            onClick={() => {
+              setMeeting(!meeting)
+            }}
+          >
+            {t('secretary.meet.title')}
+          </Button>
           {(['week', 'month'] as View[]).map((v) => (
             <Button
               key={v}
@@ -185,6 +206,26 @@ export function CalendarPage(): React.ReactNode {
           ))}
         </div>
       </div>
+
+      {meeting ? (
+        <Card data-testid="calendar-meet-panel">
+          <CardHeader>
+            <CardTitle className="text-sm">{t('secretary.meet.title')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {people.data === undefined ? (
+              <Skeleton className="h-24 w-full" />
+            ) : (
+              <MeetDialog
+                people={people.data}
+                onSent={() => {
+                  void client.invalidateQueries({ queryKey: ['secretary', 'meets'] })
+                }}
+              />
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {calendar.isPending ? (
         <Skeleton className="h-64 w-full" />

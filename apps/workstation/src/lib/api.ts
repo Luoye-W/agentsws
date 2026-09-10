@@ -1553,3 +1553,224 @@ export const setSkillExcluded = (
   excluded: boolean,
 ): Promise<{ name: string; excluded: boolean }> =>
   api(`/v1/skills/${encodeURIComponent(name)}/exclude`, { method: 'POST', body: { excluded } })
+
+// ── 41 §1 秘书 Agent（profile 与公开级别 / 代答 / 日程与约时间 / 任务路由）────────
+
+/** 41 §1.3 三档；`agenda_detail` 最高只到 `colleagues`。 */
+export type DisclosureLevel = 'self' | 'colleagues' | 'workspace'
+
+export type ProfileFieldName =
+  | 'positions'
+  | 'ranges'
+  | 'in_progress'
+  | 'availability'
+  | 'agenda_detail'
+  | 'skills'
+  | 'contact'
+
+/** 界面上按这个顺序排（与 41 §1.3 那张表同序）。 */
+export const PROFILE_FIELDS: ProfileFieldName[] = [
+  'positions',
+  'ranges',
+  'in_progress',
+  'availability',
+  'agenda_detail',
+  'skills',
+  'contact',
+]
+
+export interface ProfileSkill {
+  name: string
+  source: 'skill' | 'memory' | 'self'
+  hidden?: boolean
+}
+
+export interface Availability {
+  rules: { days: number[]; from: string; to: string }[]
+  default_minutes: number
+  max_meetings_per_day?: number
+}
+
+export interface ProfilePosition {
+  position_id: string
+  role_id: string
+  role_name: string
+  ranges: { kind: string; id: string }[]
+}
+
+export interface MyProfile {
+  person_id: string
+  name: string
+  positions: ProfilePosition[]
+  ranges: { kind: string; id: string }[]
+  skills: ProfileSkill[]
+  contact_policy: { prefer: 'secretary' | 'direct'; note?: string }
+  availability: Availability
+  disclosure: Record<ProfileFieldName, DisclosureLevel>
+  updated_at: string
+}
+
+/** 别人那一份：藏起来的字段只留名字（界面照着它写「这个要问本人」）。 */
+export interface VisibleProfile {
+  person_id: string
+  name: string
+  relation: 'self' | 'colleague' | 'outsider'
+  positions?: ProfilePosition[]
+  ranges?: { kind: string; id: string }[]
+  skills?: ProfileSkill[]
+  availability?: Availability
+  contact_policy?: { prefer: 'secretary' | 'direct'; note?: string }
+  hidden_fields: ProfileFieldName[]
+  disclosure?: Record<ProfileFieldName, DisclosureLevel>
+}
+
+export interface PersonCard {
+  person_id: string
+  name: string
+  positions: { role_id: string; role_name: string }[]
+  in_progress?: number
+}
+
+export interface SecretaryAnswer {
+  answer: string
+  kind: string
+  fields: ProfileFieldName[]
+  refused: boolean
+  refer_to?: { role_id: string; role_name: string; person_id?: string }
+  run_id: string
+}
+
+/** 「谁问过我」：正文只有本人看得到（41 §1.2）。 */
+export interface AskedRecordView {
+  id: string
+  asked_by: string
+  asked_by_label?: string
+  at: string
+  kind: string
+  question: string
+  answer: string
+  fields: ProfileFieldName[]
+  refused: boolean
+}
+
+export interface MeetSlot {
+  start: string
+  end: string
+}
+
+export interface MeetProposalView {
+  id: string
+  from: string
+  from_label?: string
+  to: string
+  to_label?: string
+  title: string
+  duration_minutes: number
+  candidates: MeetSlot[]
+  state: 'proposed' | 'accepted' | 'declined' | 'expired'
+  accepted?: MeetSlot
+  alternatives: MeetSlot[]
+  approval_item_id?: string
+  meeting_id?: string
+  decline_reason?: string
+  created_at: string
+  decided_at?: string
+}
+
+export interface AgendaCheckResult {
+  ok: boolean
+  conflicts: { id: string; title: string; start: string; end?: string }[]
+  reasons: string[]
+  alternatives: MeetSlot[]
+}
+
+export interface SecretaryRouteResult {
+  kind: 'task' | 'question'
+  role_id?: string
+  role_name?: string
+  position_id?: string
+  owner?: string
+  owner_label?: string
+  confidence: number
+  reason: string
+  existing_tools: { id: string; title: string; kind: string; similarity: number }[]
+  similar_in_progress: {
+    id: string
+    title: string
+    owner: string
+    owner_label?: string
+    similarity: number
+  }[]
+  claim_item_id?: string
+  todo_id?: string
+  run_id: string
+}
+
+export interface MeetingBriefView {
+  meeting_id: string
+  title: string
+  start: string
+  end: string
+  participants: string[]
+  agenda: string[]
+  matters: { id: string; title: string; summary: string; status: string }[]
+  open_items: { title: string; owner: string; owner_label?: string }[]
+}
+
+export const getMyProfile = (): Promise<MyProfile> => api<MyProfile>('/v1/me/profile')
+
+export const updateMyProfile = (patch: {
+  skills?: ProfileSkill[]
+  contact_policy?: { prefer?: 'secretary' | 'direct'; note?: string }
+  availability?: Partial<Availability>
+  disclosure?: Partial<Record<ProfileFieldName, DisclosureLevel>>
+}): Promise<MyProfile> => api<MyProfile>('/v1/me/profile', { method: 'PUT', body: patch })
+
+export const listPeople = (): Promise<PersonCard[]> => api<PersonCard[]>('/v1/people')
+
+export const getPersonProfile = (id: string): Promise<VisibleProfile> =>
+  api<VisibleProfile>(`/v1/people/${encodeURIComponent(id)}/profile`)
+
+/** 问他的秘书（只答公开级别内的四类问题）。 */
+export const askSecretary = (id: string, question: string): Promise<SecretaryAnswer> =>
+  api<SecretaryAnswer>(`/v1/people/${encodeURIComponent(id)}/ask`, {
+    method: 'POST',
+    body: { question },
+  })
+
+export const listAskedMe = (limit = 30): Promise<AskedRecordView[]> =>
+  api<AskedRecordView[]>(`/v1/me/secretary/asked?limit=${limit}`)
+
+export const getMyAgenda = (from: string, to: string): Promise<CalendarItem[]> =>
+  api<CalendarItem[]>(`/v1/me/agenda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+
+export const checkMyAgenda = (slot: MeetSlot): Promise<AgendaCheckResult> =>
+  api<AgendaCheckResult>('/v1/me/agenda/check', { method: 'POST', body: slot })
+
+export const proposeMeet = (
+  id: string,
+  input: { title: string; candidates: MeetSlot[]; duration?: number },
+): Promise<MeetProposalView> =>
+  api<MeetProposalView>(`/v1/people/${encodeURIComponent(id)}/meet`, {
+    method: 'POST',
+    body: input,
+  })
+
+export const listMyMeets = (): Promise<MeetProposalView[]> =>
+  api<MeetProposalView[]>('/v1/me/meets')
+
+export const decideMeet = (
+  id: string,
+  input: { action: 'accept'; slot?: MeetSlot } | { action: 'decline'; reason?: string },
+): Promise<MeetProposalView> =>
+  api<MeetProposalView>(`/v1/me/meets/${encodeURIComponent(id)}/decide`, {
+    method: 'POST',
+    body: input,
+  })
+
+/** 把一件事丢给秘书：它判断该谁做，出一张认领卡（专业问题只转岗位，不出卡）。 */
+export const routeToDesk = (text: string): Promise<SecretaryRouteResult> =>
+  api<SecretaryRouteResult>('/v1/me/secretary/route', { method: 'POST', body: { text } })
+
+export const getMeetingBrief = (id: string): Promise<MeetingBriefView> =>
+  api<MeetingBriefView>(`/v1/meetings/${encodeURIComponent(id)}/brief`)
