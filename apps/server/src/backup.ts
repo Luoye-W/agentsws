@@ -291,7 +291,8 @@ export async function importWorkspace(input: ImportInput): Promise<ImportResult>
   const pkg = resolve(input.pkg)
   if (!existsSync(pkg)) throw new BackupError('not_found', `没有这个包：${pkg}`)
   const temp = pkg.endsWith('.zip') ? mkdtempSync(join(tmpdir(), 'agentsws-import-')) : undefined
-  const dir = temp === undefined ? pkg : (unzipTo(pkg, temp), temp)
+  if (temp !== undefined) unzipTo(pkg, temp)
+  const dir = temp ?? pkg
 
   try {
     const manifestPath = join(dir, MANIFEST)
