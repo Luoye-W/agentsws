@@ -226,61 +226,6 @@ export function actionCatalog(): ActionDef[] {
         }
       },
     },
-    // ── WP44 主题（12 §2 建站岗位）────────────────────────────────────
-    {
-      id: 'shopify_admin.list_themes',
-      service: 'shopify_admin',
-      side_effect: 'read',
-      required_scopes: ['read_themes'],
-      input_schema: SCHEMA({}, []),
-      handler(_input, ctx) {
-        return { themes: ctx.state.themes.map((t) => ({ ...t })) }
-      },
-    },
-    {
-      id: 'shopify_admin.create_theme',
-      service: 'shopify_admin',
-      side_effect: 'write',
-      required_scopes: ['write_themes'],
-      input_schema: SCHEMA({ name: 'string' }, ['name']),
-      handler(input, ctx) {
-        // 副本永远是 unpublished：这个 Action 造不出线上主题，
-        // 换线上主题只有 publish_theme 一条路（12 §2 的门禁就落在那一下）
-        const theme = {
-          id: ctx.nextId('thm'),
-          name: str(input, 'name'),
-          role: 'unpublished' as const,
-          updated_at: ctx.now,
-          preview_url: `https://demo.myshopify.com?preview_theme_id=${ctx.state.themes.length + 1}`,
-        }
-        ctx.state.themes.push(theme)
-        return { ...theme }
-      },
-    },
-    {
-      id: 'shopify_admin.publish_theme',
-      service: 'shopify_admin',
-      side_effect: 'write',
-      required_scopes: ['write_themes'],
-      input_schema: SCHEMA({ theme_id: 'string' }, ['theme_id']),
-      handler(input, ctx) {
-        const id = str(input, 'theme_id')
-        const target = ctx.state.themes.find((t) => t.id === id)
-        if (!target) throw new StandInError('not_found', `主题不存在：${id}`, { theme_id: id })
-        if (target.role === 'main') {
-          throw new StandInError('conflict', `${target.name} 已经是线上主题了`, { theme_id: id })
-        }
-        const previous = ctx.state.themes.find((t) => t.role === 'main')
-        if (previous) previous.role = 'unpublished'
-        target.role = 'main'
-        target.updated_at = ctx.now
-        return {
-          theme_id: target.id,
-          name: target.name,
-          previous_theme_id: previous?.id ?? null,
-        }
-      },
-    },
     {
       id: 'shopify_admin.create_discount_code',
       service: 'shopify_admin',

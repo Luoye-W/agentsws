@@ -328,7 +328,11 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
       }
     }
     case 'shop.theme_publish': {
-      known(source, `${path}.${key}`, body, ['who', 'theme'])
+      known(source, `${path}.${key}`, body, ['who', 'theme', 'level'])
+      const themeLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (themeLevel !== undefined && !['L1', 'L2', 'L3'].includes(themeLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
       return {
         at,
         type: 'shop.theme_publish',
@@ -337,6 +341,7 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(body.theme === undefined
             ? {}
             : { theme: str(source, `${path}.${key}.theme`, body.theme) }),
+          ...(themeLevel === undefined ? {} : { level: themeLevel as 'L1' | 'L2' | 'L3' }),
         },
       }
     }

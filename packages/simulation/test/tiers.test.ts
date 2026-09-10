@@ -218,13 +218,16 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的八条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       'ops/claim-pool',
       'ops/collision-two-people',
       'ops/cross-desk-handover',
+      // WP44 店铺深度接入：改价走官方校验 + 超额度转人审；主题发布永远人审
+      'ops/edit-product-price',
       'ops/multi-desk-concurrency',
+      'ops/theme-publish-needs-approval',
       'ops/two-desks-no-union',
       // WP39 秘书 Agent（41 §1）
       'secretary/ask-colleague',

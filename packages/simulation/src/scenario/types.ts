@@ -134,6 +134,13 @@ export interface ScenarioShopThemePublish {
   who: string
   /** 要发布哪一份；不给就是最近推上去的那一份。 */
   theme?: string
+  /**
+   * 提案时报的自动化等级。默认按职责的生效配置走（L1）。
+   *
+   * 场景填 `L3` 是**故意**的：等于有人在设置里把"发布主题"开到了全自动。
+   * 15 §2 的 hard_ceiling 应当当场把它拉回人审——这条题要钉的就是这一下。
+   */
+  level?: 'L1' | 'L2' | 'L3'
 }
 
 export type ScenarioEvent =

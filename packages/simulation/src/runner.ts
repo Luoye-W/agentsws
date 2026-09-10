@@ -901,7 +901,11 @@ async function execute(
         return
       }
       case 'shop.theme_publish': {
-        const out = await world.shop.themePublish(event.theme_publish)
+        const out = await world.shop.themePublish({
+          who: event.theme_publish.who,
+          ...(event.theme_publish.theme === undefined ? {} : { theme: event.theme_publish.theme }),
+          ...(event.theme_publish.level === undefined ? {} : { level: event.theme_publish.level }),
+        })
         world.appendEvent('simulation.shop_theme_publish_staged', {
           staged: out.staged,
           ...(out.reason === undefined ? {} : { reason: out.reason }),
@@ -936,7 +940,11 @@ async function execute(
     start,
     end: clock.now(),
     events: [...world.events],
-    runs,
+    // WP44：入站信件起的运行在 `runs` 里，工作台上点出来的店铺操作在 `world.shopRuns` 里；
+    // 证据只认一份清单，按开始时间并起来
+    runs: [...runs, ...world.shopRuns].sort(
+      (a, b) => Date.parse(a.started_at) - Date.parse(b.started_at),
+    ),
     inbound: inboundEvents,
     observations: world.standIns.observations.all(),
     cards: world.standIns.deliveries.workstation.all(),

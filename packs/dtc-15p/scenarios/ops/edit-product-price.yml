@@ -8,7 +8,7 @@
 #    Admin GraphQL 有五百多个 mutation，模型编一个不存在的字段名太容易了——
 #    在提案进人的队列**之前**挡住，比让人在审批卡上发现"这条根本跑不通"便宜得多。
 # 3. **超额度不是禁止，是转人审**（15 §3.2）：`dtc.ops` 的 `max_price_delta_pct` 是 20，
-#    129 → 99 是降 23%，于是这条从"能自动"掉到 L1，进王总的队列。
+#    129 → 99 是降 23%，于是这条从"能自动"掉到 L1，进主管李默的队列。
 # 4. **批准后才施行**：执行器拿 `role-apply` 令牌调 `update_product_price`，
 #    幂等键就是变更 id。Agent 全程碰不到这个写口。
 #
@@ -18,8 +18,10 @@ id: ops/edit-product-price
 version: 1
 dataset: { pack: dtc-15p, seed: 42 }
 actors:
-  # 王总是所有者，也是运营的 scope_manager：改价这张卡落在他手上
-  p_wang: { policy: always_approve, latency: '0m' }
+  # 15 人公司里运营主管李默才是运营的 scope_manager（王岚是店主）。改价这张卡
+  # 落在李默手上——提案的是他手下的运营赵宁，职责分离这一条自然就满足了。
+  p_li:
+    approve: { policy: always_approve, latency: 10m..30m }
 stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
 clock: { start: '2026-09-07T09:00:00+08:00' }
 events:
@@ -27,7 +29,7 @@ events:
   # 根本不存在，正确的是 productVariantsBulkUpdate）→ 官方校验器当场拦下，不进队列。
   - at: '+0m'
     shop.price_change:
-      who: p_li
+      who: p_zhao
       product: prod_1
       price: 99
       graphql: 'mutation { productVariantUpdate(input: { id: "prod_1", price: "99" }) { productVariant { id } } }'
@@ -35,17 +37,20 @@ events:
   # 改对之后再提一次：这一次校验过了，变更进队列
   - at: '+15m'
     shop.price_change:
-      who: p_li
+      who: p_zhao
       product: prod_1
       price: 99
       note: 竞品降价了，跟一档
-  # 王总点头
+  # 主管点头
   - at: '+30m'
-    actor.decide: { who: p_wang, item: $last_staged_change, action: approve }
+    actor.decide: { who: p_li, item: $last_staged_change, action: approve }
 expected:
   # 第一次被官方校验挡下（这条断言就是"幻觉进不了人的队列"）
   blocked_rules: [graphql_invalid]
   staged_change_kinds: [price_change]
+  # 真读了商品、真查了官方文档、真过了官方校验器——三步一步不少
+  calls_tool: [get_product, shopify.docs.search, shopify.graphql.validate]
+  first_tool: get_product
   # 批准之前一次都没有真改过价
   no_applied_changes_before: $approve
   event_types:
