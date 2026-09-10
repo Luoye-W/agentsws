@@ -135,6 +135,23 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     const assignee = input.kind === 'claim' ? outputs.todos[index]?.assignee_person_id : undefined
     const recipient: PersonId = assignee ?? input.actor
     const subject: ObjectRef = request.subject
+    /**
+     * 40 §3.4：认领卡上写一句「可能与 X 重复」。
+     * 只加在**卡面**上（`summary`），不动 payload——`ClaimPayload` 是契约形状。
+     */
+    const collision =
+      input.kind === 'claim' && work !== undefined
+        ? work.findSimilar({
+            title: (request.payload as { text?: string }).text ?? request.title,
+            at: options.clock.now(),
+            item_kind: 'meeting',
+            ...(meeting.position_id === undefined ? {} : { position_id: meeting.position_id }),
+          })
+        : []
+    const summary =
+      collision[0] === undefined
+        ? request.summary
+        : `${request.summary}｜可能与「${collision[0].title}」重复（${collision[0].owner} 正在做）`
     const item = await options.approvals.create({
       workspace_id: meeting.workspace_id,
       schema_version: 1,
@@ -143,7 +160,7 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
       subject: { object: subject },
       dedupe_key: request.dedupe_key,
       title: request.title,
-      summary: request.summary,
+      summary,
       payload: request.payload,
       evidence: {
         source_events: [],
@@ -186,6 +203,35 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
       },
       priority: request.priority,
     })
+    /**
+     * 40 §3.2：会议产出的待办**先进待认领池**（`Todo` 没有主人），谁点「我来」谁是主人。
+     * 卡还是那张卡——批准它就是认领（见 `createWorkPort().acceptClaim`）；
+     * 池子让**其他人**也看得见这条活，并在有人认下之后立刻看到「已认领」。
+     */
+    if (input.kind === 'claim' && work !== undefined) {
+      const already = work
+        .listTodos({})
+        .some((t) => t.origin?.card_id === item.id || t.origin?.meeting_id === item.id)
+      if (!already) {
+        const payload = request.payload as { text?: string; due?: string }
+        const anchor =
+          meeting.matter_id === undefined
+            ? undefined
+            : work.store
+                .listMatterEvents(meeting.matter_id, { limit: 500 })
+                .find((e) => e.text === payload.text)
+        work.poolTodo({
+          title: payload.text ?? request.title,
+          source: 'meeting',
+          origin: { card_id: item.id, meeting_id: meeting.id },
+          ...(meeting.position_id === undefined ? {} : { position_id: meeting.position_id }),
+          ...(meeting.matter_id === undefined ? {} : { matter_id: meeting.matter_id }),
+          ...(anchor === undefined ? {} : { anchor: { matter_event_id: anchor.id } }),
+          ...(payload.due === undefined ? {} : { due: payload.due }),
+          similar_to: collision.map((c) => c.id),
+        })
+      }
+    }
     return { approval_id: item.id, title: item.title }
   }
 

@@ -43,6 +43,7 @@ import {
   groundingInputFor,
   withToolChoice,
 } from '@agentsws/runtime-direct'
+import { wallClock } from '@agentsws/schedule'
 import type {
   CreatePolicyQuestionFn,
   DraftPayload,
@@ -59,6 +60,7 @@ import {
 } from '@agentsws/stand-ins'
 import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
+import { createWork, type Work } from '@agentsws/work'
 import { SimulationError } from './errors.js'
 import type {
   AssignmentSnapshot,
@@ -193,6 +195,11 @@ export interface World {
    * 调度器每一拍空转，原有场景的指标一个不变。
    */
   routine?: Routine
+  /**
+   * 37 工作模型（事项 / 待办 / 待认领池）。**总是装**——内存档、没有定时任务，
+   * 所以不装 `routine.start` 的世界也一条指标不变；装了的话例行公事用的是同一个。
+   */
+  work: Work
   startRoutine(options?: RoutineOptions): Routine
   /**
    * WP29 学习回路（lesson 池 / 次日提案 / 采纳落 overlay）。
@@ -890,7 +897,25 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     return connectExec(call)
   }
 
+  /**
+   * 工作模型：事件发进同一条日志（`todo.*` / `matter.*` 摘要），
+   * 所以场景可以用 `event_types: [todo.claimed]` 这类断言看见认领发生过。
+   */
+  const work = createWork({
+    workspace_id,
+    clock,
+    random,
+    tz_offset_minutes: wallClock(clock.nowMs(), pack.workspace.tz).offset,
+    emit: (e) => {
+      world.appendEvent(e.type, e.payload, {
+        actor: e.actor,
+        ...(e.subject === undefined ? {} : { subject: e.subject }),
+      })
+    },
+  })
+
   const world: World = {
+    work,
     clock,
     random,
     // soak 档的"进程重启"会换一个 SqliteEventLog 实例，所以这里是取值不是快照

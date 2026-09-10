@@ -7,7 +7,7 @@
  * 一条边界：**委托与在事项里说话都要起 Run**，运行时由调用方注入（`startRun`）；
  * 没注入时这两条路回 `not_implemented`，其余照常——工作台仍然能记事项、待办、目标。
  */
-import type { WorkActor, WorkHome, WorkPort } from '@agentsws/api'
+import type { WorkActor, WorkHome, WorkPoolItem, WorkPort } from '@agentsws/api'
 import type {
   ApprovalItem,
   CalendarItem,
@@ -28,11 +28,14 @@ import {
   type CalendarSources,
   type CardOutcome,
   cardRefOf,
+  claimOf,
   createWork,
   DAY_MS,
   ms,
+  type PoolItem,
   planSummary,
   planTitle,
+  poolItemOf,
   type QueryRunner,
   type ReviewDuplicate,
   reviewSummary,
@@ -43,6 +46,35 @@ import {
 
 /** 队列上还等着人的状态。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
+
+/**
+ * 撞车候选里的 `owner` 是 person_id；界面上不该出现裸 id，所以在这里补一份展示名
+ * （29 enrichment：服务端补，前端不猜）。翻译不出来就回落成 id 本身。
+ */
+function labelCandidates(err: unknown, label: (id: PersonId) => string): unknown {
+  if (err === null || typeof err !== 'object') return err
+  const rec = err as { details?: { reason?: string; candidates?: { owner: PersonId }[] } }
+  const candidates = rec.details?.candidates
+  if (rec.details?.reason !== 'similar_in_progress' || candidates === undefined) return err
+  rec.details.candidates = candidates.map((c) => ({ ...c, owner_label: label(c.owner) }))
+  return err
+}
+
+/** `PoolItem` → 网关的 `WorkPoolItem`（同形；显式抄一遍，别让内部形状漏出去）。 */
+function poolItemView(item: PoolItem): WorkPoolItem {
+  return {
+    todo_id: item.todo_id,
+    title: item.title,
+    source: item.source,
+    pooled_at: item.pooled_at,
+    recycled: item.recycled,
+    similar_to: item.similar_to,
+    ...(item.note === undefined ? {} : { note: item.note }),
+    ...(item.position_id === undefined ? {} : { position_id: item.position_id }),
+    ...(item.matter_id === undefined ? {} : { matter_id: item.matter_id }),
+    ...(item.due === undefined ? {} : { due: item.due }),
+  }
+}
 
 export interface WorkPortOptions {
   clock: Clock
@@ -187,7 +219,17 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     },
 
     matters: (_actor, filter) => work.listMatters(filter),
-    matter: (_actor, id) => work.matterView(id, { label: (ref) => options.label(ref) }),
+    matter: (_actor, id) => {
+      const view = work.matterView(id, { label: (ref) => options.label(ref) })
+      return {
+        ...view,
+        // 40 §3.3：事项页显示参与者（展示名由服务端补，翻译不出来回落成 id）
+        participant_labels: view.matter.context.participants.map((person_id) => ({
+          person_id,
+          label: options.label({ type: 'person', id: person_id }) ?? person_id,
+        })),
+      }
+    },
     createMatter: (actor, input) =>
       work.createMatter({
         ...input,
@@ -219,8 +261,58 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         ...(filter.matter_id === undefined ? {} : { matter_id: filter.matter_id }),
         ...(filter.goal_id === undefined ? {} : { goal_id: filter.goal_id }),
       }),
-    createTodo: (actor, input) =>
-      work.createTodo({ ...input, owner: actor.person_id, position_id: actor.assignment_id }),
+    /**
+     * 40 §3.1「建之前先查」：撞上进行中的相似项就不建，抛 `conflict` 带候选
+     * （网关映射成 409，`details.reason = 'similar_in_progress'`）。
+     * 带上 `collision` 才放行：`join` 加进对方的事项、`handoff` 交给对方、`force` 要写一句区别。
+     */
+    createTodo: (actor, input) => {
+      try {
+        return work.createTodoChecked({
+          ...input,
+          owner: actor.person_id,
+          position_id: actor.assignment_id,
+        }).todo
+      } catch (err) {
+        throw labelCandidates(err, (id) => options.label({ type: 'person', id }) ?? id)
+      }
+    },
+
+    pool: (actor) => [
+      ...work.poolView({ position_id: actor.assignment_id }).map(poolItemView),
+      // 「交给你」的那几条也挂在这一区：它们同样是「等你点头才形成责任」
+      ...work.offeredTo(actor.person_id).map((t) => {
+        const c = claimOf(t)
+        return {
+          ...poolItemView(poolItemOf(t)),
+          ...(c.offered_by === undefined ? {} : { offered_by: c.offered_by }),
+        }
+      }),
+    ],
+
+    claimTodo: (actor, id) =>
+      work.claimTodo(id, actor.person_id, { position_id: actor.assignment_id }),
+    transferTodo: (actor, id, to) => work.transferTodo(id, { to, by: actor.person_id }),
+    addCollaborator: (_actor, id, person_id) => work.addCollaborator(id, person_id),
+
+    inProgress: (actor, scope) =>
+      work
+        .inProgress(scope === 'workspace' ? {} : { position_id: actor.assignment_id, scope })
+        .map((i) => ({
+          kind: i.kind,
+          id: i.id,
+          title: i.title,
+          owner: i.owner,
+          // 展示名由服务端补（29 enrichment）；数据源翻译不出来就回落成 id
+          owner_label: options.label({ type: 'person', id: i.owner }) ?? i.owner,
+          collaborators: i.collaborators,
+          status: i.status,
+          started_at: i.started_at,
+          last_activity: i.last_activity,
+          cards: i.cards,
+          ...(i.position_id === undefined ? {} : { position_id: i.position_id }),
+          ...(i.matter_id === undefined ? {} : { matter_id: i.matter_id }),
+        })),
     updateTodo: (_actor, id, patch) => work.updateTodo(id, patch),
     scheduleTodo: (_actor, id, slot) => work.schedule(id, slot),
     delegateTodo: (actor, id, input) =>
@@ -313,6 +405,14 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         .listTodos({ owner: actor.person_id, ...(matter_id === undefined ? {} : { matter_id }) })
         .find((t) => t.origin?.card_id === item.id)
       if (existing !== undefined) return existing
+      /**
+       * 40 §3.2「认领卡批准 = 认领」：会议侧已经把这条活放进待认领池了，
+       * 批准这张卡就是从池里把它认下来——**第一个成功的是主人**，
+       * 别人再点同一张卡会拿到 `conflict / already_claimed`。
+       */
+      const pooled = work.pool().find((t) => t.origin?.card_id === item.id)
+      if (pooled !== undefined)
+        return work.claimTodo(pooled.id, actor.person_id, { position_id: actor.assignment_id })
       const anchor =
         matter_id === undefined
           ? undefined

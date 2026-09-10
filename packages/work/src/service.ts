@@ -51,12 +51,44 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { buildCalendar, type CalendarInput, type ScheduledTaskLike } from './calendar.js'
+import {
+  claimOf,
+  DEFAULT_IDLE_DAYS,
+  distinctReasonOk,
+  idleVerdict,
+  MIN_DISTINCT_REASON,
+  type PoolItem,
+  poolItemOf,
+  type TodoClaim,
+  type TodoWithClaim,
+  UNCLAIMED_OWNER,
+  withClaim,
+} from './claim.js'
+import {
+  type CollisionCandidate,
+  type CollisionSubject,
+  findInProgressSimilar,
+  type InProgressItem,
+} from './collision.js'
 import { notFound, WorkError } from './errors.js'
 import { goalProgress, goalProgressAll, type QueryRunner } from './goals.js'
 import { isOpen, resolveHorizon } from './horizon.js'
-import { type DailyPlanInput, draftDailyPlan } from './plan.js'
+import { type DailyPlanInput, draftDailyPlanWithFilter, type FilteredSuggestion } from './plan.js'
 import { MemoryWorkStore } from './store.js'
 import { DAY_MS, localDay, makeIdFactory, ms, startOfDay, uniq } from './util.js'
+
+/**
+ * 认领管道多出来的五个事件名（40 §3.2 / §3.5）。
+ *
+ * 契约的 `KnownEventType` 里还没有它们（见交付报告 §4 的契约建议）；`EventEnvelope.type`
+ * 本来就是 `string`，事件日志与 WS 的 `todo.` 前缀过滤都照收，所以先在本包声明。
+ */
+export type WorkExtraEventType =
+  | 'todo.pooled'
+  | 'todo.claimed'
+  | 'todo.transferred'
+  | 'todo.idle_reminded'
+  | 'todo.recycled'
 
 /** 进入事项时只加载最近这么多条时间线（37 §2.2b「上下文怎么自动加载」）。 */
 export const TIMELINE_PAGE = 20
@@ -149,6 +181,55 @@ export interface CreateTodoInput {
   origin?: Todo['origin'] | undefined
 }
 
+/** 撞上了怎么办（40 §3.1 的选择题三选一）。 */
+export type CollisionChoice = 'join' | 'handoff' | 'force'
+
+export interface CheckedTodoInput extends CreateTodoInput {
+  /** 主题对象（订单 / 客户 / 会议 / 店铺）——撞车第一把钥匙 */
+  refs?: readonly ObjectRef[] | undefined
+  /** 不给就是「先查」：撞了抛 `similar_in_progress`，不建 */
+  collision?: CollisionChoice | undefined
+  /** 撞的是哪一条；不给就取最像的那条 */
+  collision_target?: string | undefined
+  /** `force` 必须写一句区别 */
+  distinct_reason?: string | undefined
+}
+
+export interface CheckedTodoResult {
+  todo: Todo
+  /** `join`：加进了谁的事项 */
+  joined_matter_id?: MatterId
+  /** `handoff`：交给了谁（对方接下之前不形成责任） */
+  offered_to?: PersonId
+  /** 建的时候撞过哪些 */
+  similar_to: string[]
+}
+
+/** 进池的一条活：跟建待办一样，只是**没有主人**。 */
+export type PoolTodoInput = Omit<CreateTodoInput, 'owner'> & {
+  /** 可能与这些进行中项重复（认领卡上那句「可能与 X 重复」） */
+  similar_to?: readonly TodoId[] | undefined
+}
+
+/** 从「带撞车选项的输入」里挑出建待办真正要的那些字段。 */
+function baseTodoInput(input: CheckedTodoInput): CreateTodoInput {
+  return {
+    title: input.title,
+    owner: input.owner,
+    ...(input.note === undefined ? {} : { note: input.note }),
+    ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+    ...(input.goal_id === undefined ? {} : { goal_id: input.goal_id }),
+    ...(input.parent_id === undefined ? {} : { parent_id: input.parent_id }),
+    ...(input.matter_id === undefined ? {} : { matter_id: input.matter_id }),
+    ...(input.anchor === undefined ? {} : { anchor: input.anchor }),
+    ...(input.due === undefined ? {} : { due: input.due }),
+    ...(input.scheduled === undefined ? {} : { scheduled: input.scheduled }),
+    ...(input.horizon === undefined ? {} : { horizon: input.horizon }),
+    ...(input.source === undefined ? {} : { source: input.source }),
+    ...(input.origin === undefined ? {} : { origin: input.origin }),
+  }
+}
+
 export interface UpdateTodoInput {
   title?: string | undefined
   note?: string | undefined
@@ -236,7 +317,7 @@ export class Work {
    * `trace_id` 由宿主的 `appendEvent` 用请求内的那个覆盖（21 §1），这里只给一个兜底。
    */
   private emit(
-    type: KnownEventType,
+    type: KnownEventType | WorkExtraEventType,
     subject: EventEnvelope['subject'],
     actor: EventEnvelope['actor'],
     payload: Record<string, unknown>,
@@ -896,6 +977,483 @@ export class Work {
     return { from: input.from, to: input.to, at, matters, todos }
   }
 
+  // ── 撞车与认领（40 §3）──────────────────────────────────────────────
+
+  /**
+   * 正在做的事（40 §3.3「看得见谁在做」）：进行中的待办 + 进行中的事项。
+   *
+   * 事项已经有进行中的待办在列表里就不重复列——同一件事只出现一次。
+   * 池里没主人的项不算「在做」，所以不进这份清单（它们在 {@link poolView} 里）。
+   */
+  inProgress(
+    options: { position_id?: PositionId; scope?: 'position' | 'workspace' } = {},
+  ): InProgressItem[] {
+    const scope = options.scope ?? (options.position_id === undefined ? 'workspace' : 'position')
+    const mine = (position?: PositionId): boolean =>
+      scope === 'workspace' || position === options.position_id
+    const items: InProgressItem[] = []
+    const covered = new Set<MatterId>()
+    for (const todo of this.listTodos({ status: ['open', 'doing', 'blocked'] })) {
+      const claim = claimOf(todo)
+      if (claim.state !== 'claimed' || todo.owner === UNCLAIMED_OWNER) continue
+      if (!mine(todo.position_id)) continue
+      const matter = todo.matter_id === undefined ? undefined : this.store.getMatter(todo.matter_id)
+      items.push({
+        kind: 'todo',
+        id: todo.id,
+        title: todo.title,
+        owner: todo.owner,
+        collaborators: claim.collaborators,
+        status: todo.status,
+        refs: matter?.context.pinned ?? [],
+        item_kind: todo.source,
+        started_at: claim.claimed_at ?? todo.created_at,
+        last_activity: matter?.context.last_activity ?? todo.updated_at,
+        cards: todo.cards.length,
+        ...(todo.position_id === undefined ? {} : { position_id: todo.position_id }),
+        ...(todo.matter_id === undefined ? {} : { matter_id: todo.matter_id }),
+      })
+      if (todo.matter_id !== undefined) covered.add(todo.matter_id)
+    }
+    for (const matter of this.listMatters({ status: ['open', 'waiting'] })) {
+      if (covered.has(matter.id)) continue
+      const owner = matter.context.participants[0]
+      if (owner === undefined || !mine(matter.position_id)) continue
+      items.push({
+        kind: 'matter',
+        id: matter.id,
+        title: matter.title,
+        owner,
+        collaborators: matter.context.participants.slice(1),
+        status: matter.status,
+        refs: matter.context.pinned,
+        item_kind: matter.kind,
+        started_at: matter.created_at,
+        last_activity: matter.context.last_activity,
+        cards: this.store
+          .listTodos({ workspace_id: this.workspace_id, matter_id: matter.id })
+          .reduce((sum, t) => sum + t.cards.length, 0),
+        matter_id: matter.id,
+        ...(matter.position_id === undefined ? {} : { position_id: matter.position_id }),
+      })
+    }
+    items.sort(
+      (a, b) =>
+        ms(b.last_activity) - ms(a.last_activity) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    )
+    return items
+  }
+
+  /**
+   * 撞车检测（40 §3.1 三把钥匙）。**范围永远是整个工作区**——撞车的定义就是
+   * 「别的岗位也有人在做同一件事」，按岗位缩小范围会把最该发现的那一类漏掉。
+   */
+  findSimilar(
+    subject: CollisionSubject,
+    options: { exclude_ids?: readonly string[] } = {},
+  ): CollisionCandidate[] {
+    return findInProgressSimilar({
+      subject,
+      pool: this.inProgress(),
+      tz_offset_minutes: this.tz_offset_minutes,
+      ...(options.exclude_ids === undefined ? {} : { exclude_ids: options.exclude_ids }),
+    })
+  }
+
+  /**
+   * 建一条待办，**先看撞不撞**（40 §3.1）。
+   *
+   * 撞上了就不直接建：抛 `conflict / similar_in_progress` 带候选，界面出选择题。
+   * 带上 `collision` 才放行——`join` 加进对方的事项、`handoff` 转给对方、
+   * `force` 必须写一句区别（≥ {@link MIN_DISTINCT_REASON} 字）。
+   */
+  createTodoChecked(input: CheckedTodoInput): CheckedTodoResult {
+    const at = this.now()
+    const base = baseTodoInput(input)
+    const subject: CollisionSubject = {
+      title: input.title,
+      at,
+      item_kind: input.source ?? 'manual',
+      ...(input.note === undefined ? {} : { note: input.note }),
+      ...(input.refs === undefined ? {} : { refs: input.refs }),
+      ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+    }
+    const candidates = this.findSimilar(subject)
+    const first = candidates[0]
+    if (first === undefined) return { todo: this.createTodo(base), similar_to: [] }
+
+    const target =
+      input.collision_target === undefined
+        ? first
+        : candidates.find((c) => c.id === input.collision_target)
+    if (input.collision === undefined || target === undefined)
+      throw new WorkError('conflict', `已经有人在做这件事：${first.title}`, {
+        reason: 'similar_in_progress',
+        candidates,
+      })
+
+    const matter_id = target.matter_id ?? (target.kind === 'matter' ? target.id : undefined)
+
+    if (input.collision === 'join') {
+      const todo = this.createTodo({
+        ...base,
+        ...(matter_id === undefined ? {} : { matter_id }),
+      })
+      if (matter_id !== undefined) {
+        this.addParticipant(matter_id, input.owner)
+        this.appendEvent(matter_id, {
+          kind: 'todo',
+          text: `${input.owner} 加入协作（原本 ${target.owner} 在做）`,
+          actor: { kind: 'person', id: input.owner },
+          todo_id: todo.id,
+        })
+      }
+      if (target.kind === 'todo') this.addCollaborator(target.id, input.owner)
+      const next = this.putClaim(todo, { ...claimOf(todo), similar_to: [target.id] })
+      return {
+        todo: next,
+        similar_to: [target.id],
+        ...(matter_id === undefined ? {} : { joined_matter_id: matter_id }),
+      }
+    }
+
+    if (input.collision === 'handoff') {
+      const todo = this.createTodo({
+        ...base,
+        ...(matter_id === undefined ? {} : { matter_id }),
+      })
+      const next = this.putClaim(todo, {
+        state: 'offered',
+        collaborators: [],
+        recycled: 0,
+        offered_to: target.owner,
+        offered_by: input.owner,
+        offered_at: at,
+        similar_to: [target.id],
+      })
+      this.emit(
+        'todo.transferred',
+        { type: 'todo', id: todo.id },
+        { kind: 'person', id: input.owner },
+        { title: todo.title, to: target.owner, from: input.owner, reason: 'collision_handoff' },
+      )
+      return { todo: next, offered_to: target.owner, similar_to: [target.id] }
+    }
+
+    // force：仍新建，但必须写一句区别，理由留在库里（下次别人查得到）
+    if (!distinctReasonOk(input.distinct_reason))
+      throw new WorkError(
+        'invalid_input',
+        `「我这个不一样」要写一句区别（至少 ${MIN_DISTINCT_REASON} 个字）`,
+        {
+          reason: 'distinct_reason_required',
+          min: MIN_DISTINCT_REASON,
+        },
+      )
+    const todo = this.createTodo(base)
+    const similar_to = candidates.map((c) => c.id)
+    const next = this.putClaim(todo, {
+      ...claimOf(todo),
+      similar_to,
+      distinct_reason: input.distinct_reason as string,
+    })
+    return { todo: next, similar_to }
+  }
+
+  /** 写回认领状态（只动 `claim` 与 `updated_at`）。 */
+  private putClaim(todo: Todo, claim: TodoClaim): TodoWithClaim {
+    const next = withClaim({ ...todo, updated_at: this.now() }, claim)
+    this.store.putTodo(next)
+    return next
+  }
+
+  /** 参与者名单里加一个人（事项是上下文的家，协作先体现在这里）。 */
+  addParticipant(matter_id: MatterId, person: PersonId): Matter {
+    const matter = this.requireMatter(matter_id)
+    if (matter.context.participants.includes(person)) return matter
+    const next: Matter = {
+      ...matter,
+      updated_at: this.now(),
+      context: { ...matter.context, participants: [...matter.context.participants, person] },
+    }
+    this.store.putMatter(next)
+    return next
+  }
+
+  /**
+   * 进**待认领池**：一条没有主人的待办（40 §3.2）。
+   * 会议产出、每日计划、告警、秘书路由都走这里，谁点「我来」谁是主人。
+   */
+  poolTodo(input: PoolTodoInput): Todo {
+    const { similar_to, ...rest } = input
+    const todo = this.createTodo({ ...rest, owner: UNCLAIMED_OWNER })
+    const at = this.now()
+    const next = this.putClaim(todo, {
+      state: 'unclaimed',
+      collaborators: [],
+      recycled: 0,
+      pooled_at: at,
+      ...(similar_to === undefined || similar_to.length === 0
+        ? {}
+        : { similar_to: [...similar_to] }),
+    })
+    if (todo.matter_id !== undefined)
+      this.appendEvent(todo.matter_id, {
+        kind: 'todo',
+        text: `「${todo.title}」进了待认领池，等人认`,
+        actor: { kind: 'system', id: 'work.claim_pool' },
+        todo_id: todo.id,
+      })
+    this.emit(
+      'todo.pooled',
+      { type: 'todo', id: todo.id },
+      { kind: 'system', id: 'work.claim_pool' },
+      {
+        title: todo.title,
+        source: todo.source,
+        similar_to: (similar_to ?? []).length,
+        ...(todo.position_id === undefined ? {} : { position_id: todo.position_id }),
+      },
+    )
+    return next
+  }
+
+  /**
+   * 池里还没人认的。
+   *
+   * 按岗位缩小时，**没写岗位的那些仍然在列**：一条没挂岗位的活是全公司的活，
+   * 谁都该看得见（否则它会掉进谁也看不见的缝里）。
+   */
+  pool(filter: { position_id?: PositionId } = {}): Todo[] {
+    return this.listTodos({ owner: UNCLAIMED_OWNER, status: ['open', 'doing', 'blocked'] }).filter(
+      (t) =>
+        claimOf(t).state === 'unclaimed' &&
+        (filter.position_id === undefined ||
+          t.position_id === undefined ||
+          t.position_id === filter.position_id),
+    )
+  }
+
+  /** 池的展示投影（首页「待认领」那一区）。 */
+  poolView(filter: { position_id?: PositionId } = {}): PoolItem[] {
+    return this.pool(filter).map(poolItemOf)
+  }
+
+  /** 转交出去、还等着这个人接的（首页「交给你」）。 */
+  offeredTo(person: PersonId): Todo[] {
+    return this.listTodos({ status: ['open', 'doing', 'blocked'] }).filter((t) => {
+      const c = claimOf(t)
+      return c.state === 'offered' && c.offered_to === person
+    })
+  }
+
+  /**
+   * 认领即锁（40 §3.2）：**第一个成功的就是主人**，其余人回
+   * `conflict / already_claimed` 并附主人。
+   */
+  claimTodo(id: TodoId, person: PersonId, options: { position_id?: PositionId } = {}): Todo {
+    const todo = this.requireTodo(id)
+    const c = claimOf(todo)
+    if (c.state === 'claimed')
+      throw new WorkError('conflict', `这条已经有人在做了`, {
+        reason: 'already_claimed',
+        todo_id: todo.id,
+        title: todo.title,
+        owner: todo.owner,
+      })
+    if (c.state === 'offered' && c.offered_to !== undefined && c.offered_to !== person)
+      throw new WorkError('conflict', `这条已经交给别人了`, {
+        reason: 'already_claimed',
+        todo_id: todo.id,
+        title: todo.title,
+        owner: c.offered_to,
+      })
+    const at = this.now()
+    const claim: TodoClaim = {
+      state: 'claimed',
+      collaborators: c.collaborators.filter((p) => p !== person),
+      recycled: c.recycled,
+      claimed_at: at,
+      claimed_by: person,
+      ...(c.pooled_at === undefined ? {} : { pooled_at: c.pooled_at }),
+      ...(c.similar_to === undefined ? {} : { similar_to: c.similar_to }),
+      ...(c.distinct_reason === undefined ? {} : { distinct_reason: c.distinct_reason }),
+    }
+    const owned: Todo = { ...todo, owner: person, updated_at: at }
+    if (options.position_id !== undefined) owned.position_id = options.position_id
+    const next = this.putClaim(owned, claim)
+    if (todo.matter_id !== undefined) {
+      this.addParticipant(todo.matter_id, person)
+      this.appendEvent(todo.matter_id, {
+        kind: 'todo',
+        text: `「${todo.title}」由 ${person} 认领`,
+        actor: { kind: 'person', id: person },
+        todo_id: todo.id,
+        at,
+      })
+    }
+    this.emit(
+      'todo.claimed',
+      { type: 'todo', id: todo.id },
+      { kind: 'person', id: person },
+      { title: todo.title, owner: person, from_state: c.state, source: todo.source },
+    )
+    return next
+  }
+
+  /**
+   * 转交：交出去，但**对方接下之前不形成责任**（31 I13）——所以先落成 `offered`，
+   * 主人还是原来那个，等对方 {@link claimTodo} 才真换人。
+   */
+  transferTodo(id: TodoId, input: { to: PersonId; by: PersonId }): Todo {
+    const todo = this.requireTodo(id)
+    const c = claimOf(todo)
+    if (todo.owner !== input.by)
+      throw new WorkError('forbidden', '只有主人能把这条转交出去', {
+        reason: 'not_owner',
+        owner: todo.owner,
+      })
+    if (input.to === todo.owner) return todo
+    const at = this.now()
+    const next = this.putClaim(todo, {
+      ...c,
+      state: 'offered',
+      offered_to: input.to,
+      offered_by: input.by,
+      offered_at: at,
+    })
+    if (todo.matter_id !== undefined)
+      this.appendEvent(todo.matter_id, {
+        kind: 'todo',
+        text: `「${todo.title}」交给 ${input.to}，等他接`,
+        actor: { kind: 'person', id: input.by },
+        todo_id: todo.id,
+      })
+    this.emit(
+      'todo.transferred',
+      { type: 'todo', id: todo.id },
+      { kind: 'person', id: input.by },
+      { title: todo.title, to: input.to, from: input.by, reason: 'transfer' },
+    )
+    return next
+  }
+
+  /** 加协作者：主人还是一个，协作者一起在这个事项里做。 */
+  addCollaborator(id: TodoId, person: PersonId): Todo {
+    const todo = this.requireTodo(id)
+    const c = claimOf(todo)
+    if (person === todo.owner || c.collaborators.includes(person)) return todo
+    const next = this.putClaim(todo, { ...c, collaborators: [...c.collaborators, person] })
+    if (todo.matter_id !== undefined) this.addParticipant(todo.matter_id, person)
+    this.emit(
+      'todo.updated',
+      { type: 'todo', id: todo.id },
+      { kind: 'person', id: person },
+      {
+        title: todo.title,
+        owner: todo.owner,
+        status: todo.status,
+        collaborators: next.claim?.collaborators.length ?? 0,
+      },
+    )
+    return next
+  }
+
+  /** 回池：主人没动它，还给大家（40 §3.5）。 */
+  recycleTodo(id: TodoId, reason = 'idle'): Todo {
+    const todo = this.requireTodo(id)
+    const c = claimOf(todo)
+    const previous_owner = todo.owner
+    const at = this.now()
+    const claim: TodoClaim = {
+      state: 'unclaimed',
+      collaborators: [],
+      recycled: c.recycled + 1,
+      pooled_at: at,
+      ...(c.similar_to === undefined ? {} : { similar_to: c.similar_to }),
+    }
+    const next = this.putClaim({ ...todo, owner: UNCLAIMED_OWNER, status: 'open' }, claim)
+    if (todo.matter_id !== undefined)
+      this.appendEvent(todo.matter_id, {
+        kind: 'todo',
+        text: `「${todo.title}」${c.recycled + 1} 次回到待认领池（${previous_owner} 认了之后没动它）`,
+        actor: { kind: 'system', id: 'work.idle' },
+        todo_id: todo.id,
+      })
+    this.emit(
+      'todo.recycled',
+      { type: 'todo', id: todo.id },
+      { kind: 'system', id: 'work.idle' },
+      { title: todo.title, previous_owner, reason, recycled: claim.recycled },
+    )
+    return next
+  }
+
+  /** 闲置提醒：发一条给主人，同一轮不重复发。 */
+  remindIdleTodo(id: TodoId): Todo {
+    const todo = this.requireTodo(id)
+    const c = claimOf(todo)
+    const at = this.now()
+    const next = this.putClaim(todo, { ...c, reminded_at: at })
+    this.emit(
+      'todo.idle_reminded',
+      { type: 'todo', id: todo.id },
+      { kind: 'system', id: 'work.idle' },
+      { title: todo.title, owner: todo.owner, since: c.claimed_at ?? todo.created_at },
+    )
+    return next
+  }
+
+  /**
+   * 闲置回收巡检（40 §3.5）：认领后 N 天无卡无时间线 → 提醒主人；再 N 天 → 回池。
+   * 由调度器每天叫一次（`registerIdleTodos`）。
+   */
+  sweepIdleTodos(options: { idle_days?: number } = {}): {
+    checked: number
+    reminded: TodoId[]
+    recycled: TodoId[]
+  } {
+    const idle_days = options.idle_days ?? DEFAULT_IDLE_DAYS
+    const now = this.now()
+    const reminded: TodoId[] = []
+    const recycled: TodoId[] = []
+    let checked = 0
+    for (const todo of this.listTodos({ status: ['open', 'doing', 'blocked'] })) {
+      const claim = claimOf(todo)
+      if (claim.state !== 'claimed') continue
+      checked += 1
+      const last = this.lastActivityOf(todo, claim.claimed_at)
+      const verdict = idleVerdict({
+        claim,
+        cards: todo.cards.length,
+        now,
+        idle_days,
+        ...(last === undefined ? {} : { last_activity: last }),
+      })
+      if (verdict === 'remind') {
+        this.remindIdleTodo(todo.id)
+        reminded.push(todo.id)
+      } else if (verdict === 'recycle') {
+        this.recycleTodo(todo.id, 'idle')
+        recycled.push(todo.id)
+      }
+    }
+    return { checked, reminded, recycled }
+  }
+
+  /** 认领之后这条待办真动过没有：事项时间线上属于它的、认领之后的最后一条。 */
+  private lastActivityOf(todo: Todo, since?: Iso8601): Iso8601 | undefined {
+    if (todo.matter_id === undefined) return undefined
+    const floor = since === undefined ? Number.NEGATIVE_INFINITY : ms(since)
+    let last: Iso8601 | undefined
+    for (const e of this.store.listMatterEvents(todo.matter_id, { limit: 500 })) {
+      if (e.todo_id !== todo.id) continue
+      if (ms(e.at) <= floor) continue
+      last = e.at
+    }
+    return last
+  }
+
   // ── 目标 ────────────────────────────────────────────────────────────
 
   createGoal(input: CreateGoalInput): Goal {
@@ -975,11 +1533,26 @@ export class Work {
     delegate_to?: AssignmentId
     /** 强制重拟（比如目标刚改过） */
     refresh?: boolean
+    /** 计划是按哪个岗位拟的（撞车第三把钥匙用它） */
+    position_id?: PositionId
   }): DailyPlan {
+    return this.todayPlanWithFilter(input).plan
+  }
+
+  /** 同 {@link todayPlan}，另外回「哪几条被撞车挡掉了」（40 §3.4）。 */
+  todayPlanWithFilter(input: {
+    person_id: PersonId
+    goals: readonly GoalProgress[]
+    today_meetings?: readonly CalendarItem[]
+    cards_waiting?: number
+    delegate_to?: AssignmentId
+    refresh?: boolean
+    position_id?: PositionId
+  }): { plan: DailyPlan; filtered: FilteredSuggestion[] } {
     const now = this.now()
     const date = localDay(now, this.tz_offset_minutes)
     const existing = this.store.findPlan(this.workspace_id, input.person_id, date)
-    if (existing !== undefined && input.refresh !== true) return existing
+    if (existing !== undefined && input.refresh !== true) return { plan: existing, filtered: [] }
     const inbox = this.inbox(input.person_id)
     const yesterday = this.store.listReviews({
       workspace_id: this.workspace_id,
@@ -1000,8 +1573,11 @@ export class Work {
       ...(input.delegate_to === undefined || this.startRunFn === undefined
         ? {}
         : { delegate_to: input.delegate_to }),
+      // 40 §3.4：别人正在做的事，撞上的建议不建议
+      in_progress: this.inProgress(),
+      ...(input.position_id === undefined ? {} : { in_progress_position: input.position_id }),
     }
-    const draft = draftDailyPlan(draftInput)
+    const { draft, filtered } = draftDailyPlanWithFilter(draftInput)
     const plan: DailyPlan = {
       ...draft,
       id: existing?.id ?? this.newId('plan'),
@@ -1016,7 +1592,7 @@ export class Work {
         : { approval_item_id: existing.approval_item_id }),
     }
     this.store.putPlan(plan)
-    return plan
+    return { plan, filtered }
   }
 
   getPlan(id: DailyPlanId): DailyPlan | undefined {

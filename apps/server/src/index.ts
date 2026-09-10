@@ -153,6 +153,7 @@ export {
   registerBackup,
   registerDailyPlan,
   registerIdempotencySweep,
+  registerIdleTodos,
   registerMailPoll,
   registerMeetingPoll,
   registerPlanRelay,

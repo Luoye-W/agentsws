@@ -43,6 +43,38 @@ export interface ScenarioStandIns {
 }
 
 /** `at` 是相对开钟时刻的偏移（`+65m` / `+1d`）或绝对 ISO-8601。 */
+/** 40 §3.1：建一条待办，撞上了怎么办。 */
+export interface ScenarioWorkTodo {
+  /** 谁记的（`people.yml` 里的 person id） */
+  who: string
+  title: string
+  /** 主题对象：订单号（撞车第一把钥匙） */
+  order?: string
+  /** 撞上了怎么办；不给就是「先查」——撞了这一条就建不成 */
+  collision?: 'join' | 'handoff' | 'force'
+  /** `force` 要写的那句区别 */
+  distinct_reason?: string
+}
+
+/** 40 §3.2：一条还没有主人的活。 */
+export interface ScenarioWorkPool {
+  title: string
+  /** 从哪来（会议 / 计划 / 告警…），默认 `meeting` */
+  source?: string
+}
+
+/** 40 §3.2：谁点了「我来」。按标题找那条活。 */
+export interface ScenarioWorkClaim {
+  who: string
+  title: string
+}
+
+/** 40 §3.5：跑一次闲置回收。 */
+export interface ScenarioWorkIdle {
+  /** 认领后几天没动就提醒 / 回池；不给按 `@agentsws/work` 的缺省 */
+  idle_days?: number
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -58,6 +90,14 @@ export type ScenarioEvent =
   | { at: string; type: 'reconcile.run'; reconcile: Record<string, never> }
   /** WP32 soak：进程"重启"——关掉事件日志的连接再开一次，验链还完整。 */
   | { at: string; type: 'process.restart'; restart: Record<string, never> }
+  /** WP38：某人记一条待办（走「建之前先查」，40 §3.1）。 */
+  | { at: string; type: 'work.todo'; todo: ScenarioWorkTodo }
+  /** WP38：把一条活丢进待认领池（会议 / 计划 / 告警的最小替身，40 §3.2）。 */
+  | { at: string; type: 'work.pool'; pool: ScenarioWorkPool }
+  /** WP38：某人点「我来」（认领即锁）。 */
+  | { at: string; type: 'work.claim'; claim: ScenarioWorkClaim }
+  /** WP38：跑一次闲置回收巡检（40 §3.5）。 */
+  | { at: string; type: 'work.idle_sweep'; idle: ScenarioWorkIdle }
 
 export interface ScenarioInbound {
   from: string

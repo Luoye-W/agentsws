@@ -22,7 +22,6 @@ import {
 } from '@agentsws/schedule'
 import {
   buildReview,
-  createWork,
   DAY_MS,
   planSummary,
   planTitle,
@@ -123,12 +122,8 @@ export function installDailyRoutine(world: World, options: RoutineOptions = {}):
       })
     },
   })
-  const work = createWork({
-    workspace_id: world.workspace_id,
-    clock,
-    random: world.random,
-    tz_offset_minutes: wallClock(clock.nowMs(), tz).offset,
-  })
+  // 工作模型由 `createWorld` 统一装（场景不必先 `routine.start` 才能建待办）
+  const work = world.work
 
   const base = {
     workspace_id: world.workspace_id,

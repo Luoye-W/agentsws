@@ -58,7 +58,7 @@ function TimelineEvent({ event }: { event: MatterEvent }): React.ReactNode {
 }
 
 export function MatterPage(): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const client = useQueryClient()
   const params = useParams()
   const id = params.id ?? ''
@@ -202,6 +202,33 @@ export function MatterPage(): React.ReactNode {
           </div>
         </section>
       )}
+
+      {/* 参与者与最近活动（40 §3.3：一件事看得见谁在做） */}
+      <section data-testid="matter-participants">
+        <h2 className="mb-1 text-sm font-medium">{t('matter.participants')}</h2>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {view.participant_labels.length === 0 ? (
+            <span className="text-sm text-muted-foreground">{t('matter.participants.empty')}</span>
+          ) : (
+            view.participant_labels.map((p) => (
+              <span
+                key={p.person_id}
+                className="inline-flex items-center gap-1 rounded border bg-muted/50 px-1.5 py-0.5 text-xs"
+                data-testid="matter-participant"
+                data-person={p.person_id}
+              >
+                <User className="size-3" aria-hidden />
+                {p.label}
+              </span>
+            ))
+          )}
+          <span className="text-xs text-muted-foreground">
+            {t('matter.last_activity', {
+              at: formatDateTime(view.matter.context.last_activity, lang),
+            })}
+          </span>
+        </div>
+      </section>
 
       {/* 这里的待办 */}
       <section data-testid="matter-todos">

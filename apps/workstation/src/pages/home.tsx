@@ -11,7 +11,15 @@
 import type { CalendarItem, GoalProgress, Todo } from '@agentsws/contracts'
 import type { RangeName } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
-import { AlarmClock, CalendarDays, CheckSquare, Clock, ListTodo, Users } from 'lucide-react'
+import {
+  AlarmClock,
+  CalendarDays,
+  CheckSquare,
+  Clock,
+  HandHeart,
+  ListTodo,
+  Users,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
@@ -20,7 +28,9 @@ import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getHome } from '@/lib/api'
+import { ClaimPool } from '@/components/work/claim-pool'
+import { InProgressList } from '@/components/work/in-progress-list'
+import { getHome, listInProgress } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { daysLeftLabel, hhmm, matterUrl, todoUrl } from '@/lib/work'
 
@@ -172,6 +182,23 @@ function BattleReportGrid({
   )
 }
 
+/**
+ * 「正在进行」（40 §3.3）：本岗位 + 相关岗位正在做的事。
+ *
+ * 自己取数、挂在 `todos` 这把 key 下——WS 一收到 `todo.* / matter.*` 摘要就自动重取。
+ */
+function InProgressSection(): React.ReactNode {
+  const { t } = useApp()
+  const board = useQuery({
+    queryKey: ['todos', 'in-progress', 'position'],
+    queryFn: () => listInProgress('position'),
+  })
+  if (board.isPending) return <Skeleton className="h-12 w-full" />
+  if (board.error !== null)
+    return <p className="text-sm text-muted-foreground">{t('inprogress.empty')}</p>
+  return <InProgressList items={board.data.items} />
+}
+
 export function HomePage(): React.ReactNode {
   const { t } = useApp()
   const navigate = useNavigate()
@@ -260,17 +287,42 @@ export function HomePage(): React.ReactNode {
                 <TodayTimeline items={today.timeline} />
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-1.5 text-sm">
-                  <ListTodo className="size-4" aria-hidden />
-                  {t('home.today.due')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TodayDue todos={today.due.todos} cardsWaiting={today.due.cards_waiting} />
-              </CardContent>
-            </Card>
+            {/* 右栏：到期清单 + 正在进行 + 待认领（40 §3.2 / §3.3） */}
+            <div className="flex flex-col gap-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-1.5 text-sm">
+                    <ListTodo className="size-4" aria-hidden />
+                    {t('home.today.due')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <TodayDue todos={today.due.todos} cardsWaiting={today.due.cards_waiting} />
+                </CardContent>
+              </Card>
+              <Card data-testid="home-inprogress">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-1.5 text-sm">
+                    <Users className="size-4" aria-hidden />
+                    {t('home.inprogress')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <InProgressSection />
+                </CardContent>
+              </Card>
+              <Card data-testid="home-claim-pool">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-1.5 text-sm">
+                    <HandHeart className="size-4" aria-hidden />
+                    {t('home.claim_pool')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ClaimPool />
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </section>
       )}

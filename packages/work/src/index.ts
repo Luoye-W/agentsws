@@ -12,6 +12,39 @@ export {
   sortCalendar,
   todoCalendarItem,
 } from './calendar.js'
+export {
+  type ClaimState,
+  claimOf,
+  DEFAULT_IDLE_DAYS,
+  distinctReasonOk,
+  type IdleInput,
+  type IdleVerdict,
+  idleVerdict,
+  involves,
+  isOfferedTo,
+  isUnclaimed,
+  MIN_DISTINCT_REASON,
+  type PoolItem,
+  poolItemOf,
+  type TodoClaim,
+  type TodoWithClaim,
+  UNCLAIMED_OWNER,
+  withClaim,
+} from './claim.js'
+export {
+  COROBORATION_THRESHOLD,
+  type CollisionCandidate,
+  type CollisionInput,
+  type CollisionKey,
+  type CollisionSubject,
+  collisionHeadline,
+  collisionKey,
+  collisionReason,
+  findInProgressSimilar,
+  type InProgressItem,
+  keyTokens,
+  SEMANTIC_THRESHOLD,
+} from './collision.js'
 export { notFound, WorkError } from './errors.js'
 export {
   BEHIND_THRESHOLD_PCT,
@@ -31,6 +64,9 @@ export {
   type DailyPlanInput,
   DEFAULT_SELECTED,
   draftDailyPlan,
+  draftDailyPlanWithFilter,
+  type FilteredSuggestion,
+  filterCollidingSuggestions,
   freeSlots,
   MAX_SUGGESTIONS,
   planSummary,
@@ -51,6 +87,9 @@ export {
 export {
   type CalendarSources,
   type CardRef,
+  type CheckedTodoInput,
+  type CheckedTodoResult,
+  type CollisionChoice,
   type CreateGoalInput,
   type CreateMatterInput,
   type CreateTodoInput,
@@ -58,11 +97,13 @@ export {
   createWork,
   type HandoverInput,
   type HandoverResult,
+  type PoolTodoInput,
   TIMELINE_PAGE,
   type UnfinishedPolicy,
   type UpdateTodoInput,
   Work,
   type WorkEventSink,
+  type WorkExtraEventType,
   type WorkOptions,
 } from './service.js'
 export {

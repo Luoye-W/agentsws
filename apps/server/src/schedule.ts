@@ -15,6 +15,7 @@
  * ⑧ 审批过期与升级（每分钟，39 待办 A）⑨ 邮箱轮询与入站管线（每 2 分钟，39 待办 C）
  * ⑩ 受控原始材料区的保留期清理（每天 03:00，39 待办 H）⑪ 学习回路的次日提案（每天 07:30，WP29）
  * ⑫ 每天一份备份（每天 04:00，WP36 / 40 §1.3）
+ * ⑬ 认领了没动的活先提醒再回池（每天 09:00，40 §3.5）
  */
 import { join } from 'node:path'
 import type {
@@ -89,6 +90,8 @@ export const HANDLERS = {
   rawPrune: 'privacy.raw_prune',
   /** WP36：每天一份备份（40 §1.3；导出与搬家同一个格式）。 */
   backup: 'backup.daily',
+  /** WP38：认领了没动的活先提醒、再回池（40 §3.5）。 */
+  idleTodos: 'work.idle_todos',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -285,6 +288,8 @@ export async function draftPlansFor(deps: PlanDeps): Promise<{ plans: string[] }
       goals: (await deps.goals?.(position)) ?? [],
       cards_waiting: (await deps.cardsWaiting?.(position)) ?? 0,
       delegate_to: position.assignment_id,
+      // 40 §3.4：撞上「别人正在做的」那几条不建议
+      position_id: position.assignment_id,
     })
     if (plan.approval_item_id === undefined) {
       const card = await createPlanCard(deps, position, plan)
@@ -297,6 +302,36 @@ export async function draftPlansFor(deps: PlanDeps): Promise<{ plans: string[] }
 
 export function registerDailyPlan(scheduler: Scheduler, deps: PlanDeps): void {
   scheduler.register(HANDLERS.dailyPlan, () => draftPlansFor(deps))
+  // ⑫ 闲置回收与每日计划是同一批依赖（都只要 `work`），一起登记——
+  //    装配那边少一行，也不会出现「建了任务却没有处理器」的半装配状态。
+  registerIdleTodos(scheduler, { work: deps.work })
+}
+
+/* ------------------------------------------------------------------ */
+/* ⑫ 闲置回收：每天 09:00（40 §3.5）                                      */
+/* ------------------------------------------------------------------ */
+
+export interface IdleTodosDeps {
+  work: Work
+  /** 策略层的 `idle_days`；不给按 `@agentsws/work` 的缺省（5 天） */
+  idleDays?(): number
+}
+
+/**
+ * 认领之后 N 天无卡无时间线 → 提醒主人；再 N 天 → 回待认领池，主人收到通知。
+ *
+ * 业务全在 `Work.sweepIdleTodos`（纯逻辑、时间经 Clock），这里只登记一个名字。
+ */
+export function registerIdleTodos(scheduler: Scheduler, deps: IdleTodosDeps): void {
+  scheduler.register(HANDLERS.idleTodos, () => {
+    const days = deps.idleDays?.()
+    const swept = deps.work.sweepIdleTodos(days === undefined ? {} : { idle_days: days })
+    return {
+      checked: swept.checked,
+      reminded: swept.reminded.length,
+      recycled: swept.recycled.length,
+    }
+  })
 }
 
 /* ------------------------------------------------------------------ */
@@ -856,6 +891,16 @@ export async function ensureSystemTasks(
         ),
       )
     }
+    // ⑫ 每天 09:00 看一眼认领了没动的活（40 §3.5）。
+    //    错过了跳过：闲置判定看的是「到今天为止有没有动」，补跑昨天没有意义。
+    await add(
+      'sched_idle_todos',
+      systemTask(base, {
+        title: '每天早上看一眼认领了没动的活',
+        handler: HANDLERS.idleTodos,
+        trigger: { kind: 'cron', expr: '0 9 * * *', tz },
+      }),
+    )
   }
   // ③ 会议记录源每 15 分钟拉一次
   if (options.has.meetings === true) {

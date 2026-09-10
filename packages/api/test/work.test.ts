@@ -11,12 +11,11 @@ import type {
   GoalProgress,
   Matter,
   MatterEvent,
-  MatterView,
   Review,
   Todo,
 } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import type { GatewayDeps, WorkActor, WorkHome, WorkPort } from '../src/index.js'
+import type { GatewayDeps, WorkActor, WorkHome, WorkMatterView, WorkPort } from '../src/index.js'
 import { createGateway } from '../src/index.js'
 import { harness, T0 } from './helpers.js'
 
@@ -88,13 +87,15 @@ const event: MatterEvent = {
   actor: { kind: 'person', id: 'per_me' },
 }
 
-const view: MatterView = {
+const view: WorkMatterView = {
   matter: matter(),
   timeline: [event],
   has_more: false,
   todos: [todo()],
   open_card_ids: ['ap_1'],
   pinned_labels: [],
+  // WP38：参与者展示名由服务端补（40 §3.3）
+  participant_labels: [{ person_id: 'per_me', label: '我' }],
 }
 
 const plan: DailyPlan = {
@@ -183,7 +184,7 @@ class FakeWork implements WorkPort {
     this.record('matters', actor, filter)
     return [matter()]
   }
-  matter(actor: WorkActor, id: string): MatterView {
+  matter(actor: WorkActor, id: string): WorkMatterView {
     this.record('matter', actor, id)
     return view
   }

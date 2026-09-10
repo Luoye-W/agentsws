@@ -80,6 +80,11 @@ const EVENT_KEYS = [
   'learning.start',
   'reconcile.run',
   'process.restart',
+  // WP38 认领与撞车（40 §3）
+  'work.todo',
+  'work.pool',
+  'work.claim',
+  'work.idle_sweep',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -220,6 +225,78 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
     case 'process.restart': {
       known(source, `${path}.${key}`, body, [])
       return { at, type: 'process.restart', restart: {} }
+    }
+    case 'work.todo': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'title',
+        'order',
+        'collision',
+        'distinct_reason',
+      ])
+      const collision = optStr(source, `${path}.${key}.collision`, body.collision)
+      if (collision !== undefined && !['join', 'handoff', 'force'].includes(collision)) {
+        fail(source, `${path}.${key}.collision`, 'collision 只能是 join / handoff / force')
+      }
+      return {
+        at,
+        type: 'work.todo',
+        todo: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          title: str(source, `${path}.${key}.title`, body.title),
+          ...(body.order === undefined
+            ? {}
+            : { order: str(source, `${path}.${key}.order`, body.order) }),
+          ...(collision === undefined
+            ? {}
+            : { collision: collision as 'join' | 'handoff' | 'force' }),
+          ...(body.distinct_reason === undefined
+            ? {}
+            : {
+                distinct_reason: str(
+                  source,
+                  `${path}.${key}.distinct_reason`,
+                  body.distinct_reason,
+                ),
+              }),
+        },
+      }
+    }
+    case 'work.pool': {
+      known(source, `${path}.${key}`, body, ['title', 'source'])
+      return {
+        at,
+        type: 'work.pool',
+        pool: {
+          title: str(source, `${path}.${key}.title`, body.title),
+          ...(body.source === undefined
+            ? {}
+            : { source: str(source, `${path}.${key}.source`, body.source) }),
+        },
+      }
+    }
+    case 'work.claim': {
+      known(source, `${path}.${key}`, body, ['who', 'title'])
+      return {
+        at,
+        type: 'work.claim',
+        claim: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          title: str(source, `${path}.${key}.title`, body.title),
+        },
+      }
+    }
+    case 'work.idle_sweep': {
+      known(source, `${path}.${key}`, body, ['idle_days'])
+      return {
+        at,
+        type: 'work.idle_sweep',
+        idle: {
+          ...(body.idle_days === undefined
+            ? {}
+            : { idle_days: num(source, `${path}.${key}.idle_days`, body.idle_days) }),
+        },
+      }
     }
     case 'inject.fault': {
       known(source, `${path}.${key}`, body, ['action', 'code', 'times'])

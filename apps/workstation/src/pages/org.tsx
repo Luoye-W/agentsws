@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AssignWizard } from '@/components/org/assign-wizard'
+import { InprogressTab } from '@/components/org/inprogress-tab'
 import { MembersTab } from '@/components/org/members-tab'
 import { PositionsTab } from '@/components/org/positions-tab'
 import { RolesTab } from '@/components/org/roles-tab'
@@ -258,6 +259,7 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
           <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
           <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
+          <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="positions" className="pt-3">
@@ -330,6 +332,11 @@ export function OrgPage(): React.ReactNode {
         </TabsContent>
         <TabsContent value="toolbox" className="pt-3">
           <ToolboxTab assignment={owner} {...(query === null ? {} : { initialQuery: query })} />
+        </TabsContent>
+
+        {/* 40 §3.3 进行中看板：自己取数，页面这边只多这一行 */}
+        <TabsContent value="inprogress" className="pt-3">
+          <InprogressTab />
         </TabsContent>
       </Tabs>
     </div>

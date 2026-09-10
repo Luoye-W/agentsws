@@ -1,0 +1,64 @@
+# 两个人做同一件事（40 §3.1「建之前先查」，15 人公司版）。
+#
+# 3 人公司里一件活撞不撞，一眼就看得出来；15 人公司里客服陈晓根本不知道运营主管李默
+# 已经在核那张退款单了。这条题证明系统替他看了一眼：
+# 李默先记下「核对昨天的退款单」（指着订单 #1001）→ 陈晓换个说法记同一件事 →
+# **第二条建不成**，回来的是「李默正在做」加三个出口（加入协作 / 交给他 / 我这个不一样）→
+# 陈晓选「加入协作」，于是这件事仍然只有一个主人，陈晓是协作者。
+#
+# 撞车靠的是三把钥匙里的前两把：同一个主题对象（订单 #1001）、同一把语义键。
+# 一封信都不来、一次运行都不起——撞车检测是**创建路径上的一道闸**，不是模型的判断。
+id: ops/collision-two-people
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+# 一个合成人都不装：这条题里没有卡要决定
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 李默先记下
+  - at: '+0m'
+    work.todo:
+      who: p_li
+      title: 核对昨天的退款单
+      order: ord_1001
+  # 陈晓换个说法记同一件事 → 撞上，建不成
+  - at: '+20m'
+    work.todo:
+      who: p_chen
+      title: 把昨天的退款单核对一下
+      order: ord_1001
+  # 「我这个不一样」不写理由也不行（服务端拦）
+  - at: '+30m'
+    work.todo:
+      who: p_chen
+      title: 把昨天的退款单核对一下
+      order: ord_1001
+      collision: force
+      distinct_reason: 不同
+  # 选「加入协作」才放行
+  - at: '+40m'
+    work.todo:
+      who: p_chen
+      title: 把昨天的退款单核对一下
+      order: ord_1001
+      collision: join
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  # 第一次被撞车挡下、第二次被「没写区别」挡下
+  blocked_rules: [similar_in_progress, distinct_reason_required]
+  event_types:
+    - todo.created
+  # 撞车检测不动任何外部世界：不起运行、不发信、不改数据
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    runs_failed: 0
+    blocked_proposals: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
