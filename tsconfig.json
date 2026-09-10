@@ -68,6 +68,9 @@
       "path": "packages/sdk"
     },
     {
+      "path": "packages/secretary"
+    },
+    {
       "path": "packages/simulation"
     },
     {
