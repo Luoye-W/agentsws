@@ -24,6 +24,9 @@ import { useApp } from '@/lib/app-context'
 
 const LEVELS: DisclosureLevel[] = ['self', 'colleagues', 'workspace']
 
+/** 0 = 周日（与 `AvailabilityRule.days` 同序）。 */
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
+
 /** 41 §1.3：日程明细那一行没有"全工作区"这一格。 */
 const CEILING: Partial<Record<ProfileFieldName, DisclosureLevel>> = { agenda_detail: 'colleagues' }
 
@@ -145,7 +148,7 @@ export function ProfileForm({
         </div>
         <span className="text-muted-foreground text-xs">
           {profile.availability.rules
-            .map((r) => `${r.days.map((d) => d).join('')} ${r.from}–${r.to}`)
+            .map((r) => `周${r.days.map((d) => WEEKDAYS[d] ?? d).join('')} ${r.from}–${r.to}`)
             .join('；')}
         </span>
       </div>
