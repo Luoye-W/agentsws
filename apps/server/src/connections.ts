@@ -213,10 +213,34 @@ export interface ConnectionsAssembly {
   port: ConnectionsPort
   /** WP25：Shopify 客户端凭据经纪人（换令牌 / 刷新 / 忘记）。 */
   shopify: ShopifyBroker
+  /**
+   * WP46：OpenConnector 那一面（真适配器或替身）——活数据源要用它跑只读 Action。
+   *
+   * 拿到它**不等于**拿到凭据：`execute` 一律要一张现签的 token，凭据始终在
+   * OpenConnector 的库里。
+   */
+  connect: ConnectLike
   /** 立刻跑一轮"快到期的都换一张"（服务进程的定时器与测试都调它）。 */
   refreshTokens(): Promise<void>
   /** 当前真实连接（只有 service 与状态）——给 deck 算 `DataSourceStatus`。 */
   snapshot(): ConnectionLike[]
+  /**
+   * WP46：当前真实连接的 id / service / 状态（**没有也不可能有凭据**）——
+   * 活数据源要靠 id 挑「跟哪条连接要订单」。
+   */
+  liveConnections(): { id: string; service: string; status: ConnectionView['status'] }[]
+  /**
+   * WP46：上游说「你没权限」时换一张令牌再试（`smokeRemote` 里那条路的复用）。
+   * 这条连接不是客户端凭据经纪人接管的就回 `false`——没得换。
+   */
+  refreshConnectionToken(connection_id: string): Promise<boolean>
+  /**
+   * WP46：连接**清单**变了（连上 / 断开 / 状态变）时叫一声。
+   *
+   * 与 `onMailChange` 分开：那一条只管邮箱（渠道要热更新轮询），这一条管所有连接
+   * （活数据源要立刻重拉一轮店铺数据）。回调里同样不带任何凭据。
+   */
+  onConnectionChange(listener: () => void): () => void
   /** 邮箱连接的参数（channels 装配 IMAP / SMTP 用）；口令仍要经 `credentialSource()` 取。 */
   mailAccounts(): MailAccount[]
   /** 交给 `@agentsws/channels` 的凭据来源：按连接 id 从加密库取口令。 */
@@ -797,6 +821,23 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
 
   let cached: ConnectionView[] = state.local.map(localView)
 
+  // WP46：连接清单变了就叫一声（活数据源据此重拉）。指纹只有 id / service / 状态。
+  const connectionListeners = new Set<() => void>()
+  const notifyConnectionChange = (): void => {
+    for (const fn of [...connectionListeners]) {
+      try {
+        fn()
+      } catch {
+        // 一个订阅者炸了不该拖垮连接面
+      }
+    }
+  }
+  const fingerprint = (rows: readonly ConnectionView[]): string =>
+    rows
+      .map((c) => `${c.id}:${c.service}:${c.status}`)
+      .sort()
+      .join('|')
+
   const listAll = async (): Promise<ConnectionView[]> => {
     const rows: ConnectionView[] = state.local.map(localView)
     try {
@@ -808,7 +849,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     } catch {
       // runtime 挂了不该让整页白屏：本地那几条照常列，状态条上会红着说明原因
     }
+    const before = fingerprint(cached)
     cached = rows
+    if (fingerprint(rows) !== before) notifyConnectionChange()
     return rows
   }
 
@@ -1355,9 +1398,20 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   return {
     port,
     shopify,
+    connect,
     refreshTokens,
     snapshot: () =>
       cached.map((c) => ({ service: c.service, status: c.status }) satisfies ConnectionLike),
+    liveConnections: () => cached.map((c) => ({ id: c.id, service: c.service, status: c.status })),
+    async refreshConnectionToken(connection_id) {
+      if (shopify.recordOf(connection_id) === undefined) return false
+      await shopify.refresh(connection_id)
+      return true
+    },
+    onConnectionChange(listener) {
+      connectionListeners.add(listener)
+      return () => connectionListeners.delete(listener)
+    },
     mailAccounts: () =>
       state.local.map((m) => accountOf(m.id)).filter((a): a is MailAccount => a !== undefined),
     credentialSource: () => credentialSource,

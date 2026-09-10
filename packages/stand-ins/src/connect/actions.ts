@@ -83,6 +83,16 @@ function productOf(ctx: ActionContext, id: string) {
   return product
 }
 
+/** pack 造的状态里没有 `shop` 那一格时用这份（形状与 `defaultState` 的一致）。 */
+const DEFAULT_SHOP = {
+  id: 'shop_stand_in',
+  name: 'Stand-in Store',
+  myshopify_domain: 'stand-in.myshopify.com',
+  email: 'owner@example.com',
+  currency: 'USD',
+  iana_timezone: 'Asia/Shanghai',
+} as const
+
 const SCHEMA = (props: Record<string, string>, required: string[]) => ({
   type: 'object',
   properties: Object.fromEntries(Object.entries(props).map(([k, t]) => [k, { type: t }])),
@@ -105,6 +115,17 @@ export function actionCatalog(): ActionDef[] {
       input_schema: SCHEMA({ order_id: 'string' }, ['order_id']),
       handler(input, ctx) {
         return { ...orderOf(ctx, str(input, 'order_id')) }
+      },
+    },
+    {
+      // WP46：工作台的活数据源拿它算币种与日界线；试连也优先挑它（目录的 smoke_hints）
+      id: 'shopify_admin.get_shop',
+      service: 'shopify_admin',
+      side_effect: 'read',
+      required_scopes: [],
+      input_schema: SCHEMA({}, []),
+      handler(_input, ctx) {
+        return { shop: { ...(ctx.state.shop ?? DEFAULT_SHOP) } }
       },
     },
     {
