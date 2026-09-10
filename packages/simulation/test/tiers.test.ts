@@ -218,7 +218,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的五条场景在 fast 档全过', async () => {
+  it('15 人 pack 的八条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       'ops/claim-pool',
@@ -226,6 +226,10 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'ops/cross-desk-handover',
       'ops/multi-desk-concurrency',
       'ops/two-desks-no-union',
+      // WP39 秘书 Agent（41 §1）
+      'secretary/ask-colleague',
+      'secretary/meet-conflict',
+      'secretary/route-to-desk',
     ])
     for (const r of result.reports) {
       expect(

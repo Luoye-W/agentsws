@@ -73,6 +73,7 @@ import { installLearningLoop, type LearningLoop, type LearningOptions } from './
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 import type { RuntimeName } from './runtime-name.js'
+import type { SecretaryLoop } from './secretary.js'
 
 const CUSTOMERS = defineCollection({
   name: 'customers',
@@ -208,6 +209,11 @@ export interface World {
    */
   learning?: LearningLoop
   startLearning(options?: LearningOptions): LearningLoop
+  /**
+   * 41 §1 秘书 Agent（profile 与公开级别 / 代答 / 约时间 / 任务路由）。
+   * 场景里出现 `secretary.*` 才装；不装的世界一次代答都不跑，原有场景的指标一个不变。
+   */
+  secretary?: SecretaryLoop
   /**
    * WP32：每一拍的审批总线例行公事——过期、升级链、抽检复核、把新投递刷成卡片。
    *

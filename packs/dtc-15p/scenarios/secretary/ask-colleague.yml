@@ -1,0 +1,63 @@
+# 问同事的秘书（41 §1.2 第一行、§1.3 三档公开级别）。
+#
+# 15 人公司里，王岚想知道李默在忙什么。她**不去打扰李默**，问他的秘书——
+# 秘书按李默设的公开级别答："手上有 2 件在进行"，标题给了，正文一个字都没有。
+#
+# 然后是两条边界：
+# ① 问私有待办 → 拒。这不是级别问题，是秘书的边界（41 §1.2「秘书从不透露对话正文、
+#    私有待办、个人记忆」）——把公开级别开到全工作区也一样拒。
+# ② 李默把「忙闲」设成仅本人 → 同一个问题再问一次就答不出来了，回的是"这个要问本人"。
+#
+# 一封信都不来、一次外部动作都没有：代答是**只读**的（秘书没有任何写外部系统的动作）。
+id: secretary/ask-colleague
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 李默手上有两件在做的活
+  - at: '+0m'
+    work.todo: { who: p_li, title: 核对昨天的退款单, order: ord_1001 }
+  - at: '+1m'
+    work.todo: { who: p_li, title: 德国站补货计划 }
+  # 王岚问他的秘书：在忙什么 → 同事可见级，给标题与条数
+  - at: '+10m'
+    secretary.ask: { who: p_wang, about: p_li, question: 李默在忙什么？ }
+  # 负责哪些店 → 岗位与范围
+  - at: '+11m'
+    secretary.ask: { who: p_wang, about: p_li, question: 李默负责哪些店？ }
+  # 现在忙不忙 → 忙闲（时段级，不带"和谁"）
+  - at: '+12m'
+    secretary.ask: { who: p_wang, about: p_li, question: 李默现在忙不忙？ }
+  # 问私有待办 → 拒（不是级别问题，是边界）
+  - at: '+13m'
+    secretary.ask: { who: p_wang, about: p_li, question: 把李默的私有待办给我看看 }
+  # 李默把忙闲设成仅本人
+  - at: '+20m'
+    secretary.profile: { who: p_li, field: availability, level: self }
+  # 同一个问题再问 → 答不出来了
+  - at: '+21m'
+    secretary.ask: { who: p_wang, about: p_li, question: 李默现在忙不忙？ }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  # 私有待办那次、忙闲被藏之后那次，都被挡下
+  blocked_rules: [secretary_refused]
+  # 四类里的三类都答过；第四类（私有）是拒
+  secretary_kinds: [doing, scope, busy, private]
+  event_types:
+    - secretary.answered
+    - todo.created
+  # 代答是只读的：不起运行、不发信、不改数据
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    runs_failed: 0
+    blocked_proposals: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

@@ -377,6 +377,38 @@ export function checkExpectations(
       problems.length === 0 ? '每个分配各管各的' : problems.join('；'),
     )
   }
+  // WP39：秘书把事路由给了哪些职责（41 §1.2「不是自己回，是转给对的岗位」）
+  if (expected.routed_to !== undefined) {
+    const roles = new Set(
+      evidence.events
+        .filter((e) => e.type === 'simulation.secretary_routed')
+        .map((e) => String(payloadOf(e).role_id ?? '')),
+    )
+    const missing = expected.routed_to.filter((r) => !roles.has(r))
+    add(
+      'routed_to',
+      missing.length === 0,
+      missing.length === 0
+        ? `路由到 [${[...roles].join(', ')}]`
+        : `没路由到：${missing.join(', ')}（实际 [${[...roles].join(', ')}]）`,
+    )
+  }
+  // WP39：代答里出现过哪几类（doing / scope / busy / skills / private / professional）
+  if (expected.secretary_kinds !== undefined) {
+    const kinds = new Set(
+      evidence.events
+        .filter((e) => e.type === 'simulation.secretary_asked')
+        .map((e) => String(payloadOf(e).kind ?? '')),
+    )
+    const missing = expected.secretary_kinds.filter((k) => !kinds.has(k))
+    add(
+      'secretary_kinds',
+      missing.length === 0,
+      missing.length === 0
+        ? `代答了 [${[...kinds].join(', ')}]`
+        : `没出现：${missing.join(', ')}（实际 [${[...kinds].join(', ')}]）`,
+    )
+  }
   if (expected.blocked_rules !== undefined) {
     const rules = new Set(evidence.blocked.map((b) => b.rule))
     const missing = expected.blocked_rules.filter((r) => !rules.has(r))
