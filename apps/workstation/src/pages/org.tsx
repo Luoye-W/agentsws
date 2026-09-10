@@ -11,10 +11,12 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { MembersTab } from '@/components/org/members-tab'
 import { PositionsTab } from '@/components/org/positions-tab'
 import { RolesTab } from '@/components/org/roles-tab'
+import { ToolboxTab } from '@/components/org/toolbox-tab'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -43,7 +45,10 @@ import { useApp } from '@/lib/app-context'
 export function OrgPage(): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  const [tab, setTab] = useState('positions')
+  // ⌘K 的"工具箱"结果跳到这里：`/org?tab=toolbox&q=…`
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState(params.get('tab') === 'toolbox' ? 'toolbox' : 'positions')
+  const query = params.get('q')
   const [wizard, setWizard] = useState<string | null>(null)
   const [fresh, setFresh] = useState<OrgInvitationView | undefined>(undefined)
   const [submitted, setSubmitted] = useState<string | undefined>(undefined)
@@ -252,6 +257,7 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
           <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
+          <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="positions" className="pt-3">
@@ -321,6 +327,9 @@ export function OrgPage(): React.ReactNode {
               }}
             />
           )}
+        </TabsContent>
+        <TabsContent value="toolbox" className="pt-3">
+          <ToolboxTab assignment={owner} {...(query === null ? {} : { initialQuery: query })} />
         </TabsContent>
       </Tabs>
     </div>
