@@ -71,6 +71,24 @@ export {
   route,
 } from './route-spec.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
+export {
+  CATALOG_KINDS,
+  CATALOG_LAYERS,
+  type CatalogDuplicateView,
+  type CatalogEntryView,
+  type CatalogKindName,
+  type CatalogLayerName,
+  type CatalogPort,
+  type CatalogSimilarHit,
+  type CatalogSimilarQuery,
+  catalogRoutes,
+  DuplicateAck,
+  type DuplicateAckInput,
+  guardSimilar,
+  MIN_DUPLICATE_REASON,
+  recordCatalogNote,
+  triggerKeyOf,
+} from './routes/catalog.js'
 export type {
   BeginConnectResult,
   ConnectionOwnership,

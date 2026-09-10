@@ -46,7 +46,7 @@ export interface ApiEnvelope<T> {
 export interface ApiErrorBody {
   code: string
   message: string
-  details?: { reason?: string }
+  details?: { reason?: string } & Record<string, unknown>
   trace_id?: string
 }
 
@@ -54,6 +54,8 @@ export class ApiClientError extends Error {
   readonly code: string
   readonly status: number
   readonly reason: string | undefined
+  /** 原样留着：`409 similar_exists` 的候选就在这里（40 §2.2 的选择题卡要用）。 */
+  readonly details: ApiErrorBody['details']
 
   constructor(status: number, body: ApiErrorBody) {
     super(body.message)
@@ -61,8 +63,134 @@ export class ApiClientError extends Error {
     this.status = status
     this.code = body.code
     this.reason = body.details?.reason
+    this.details = body.details
   }
 }
+
+/* ── 40 §2 工具箱与查重 ───────────────────────────────────────────────── */
+
+export type CatalogKind = 'app' | 'skill' | 'workflow' | 'schedule' | 'custom_card' | 'rule'
+export type CatalogLayer = 'personal' | 'dept' | 'company'
+
+export interface CatalogEntryView {
+  kind: CatalogKind
+  id: string
+  title: string
+  summary: string
+  owner: string
+  layer: CatalogLayer
+  used_by_positions: string[]
+  last_run_at?: string
+  runs_30d: number
+  created_from?: { entry_id?: string; conversation_id?: string; message_ref?: string }
+  reason_for_duplicate?: string
+  superseded_by?: string
+  trigger?: string
+  target?: string
+  created_at?: string
+}
+
+export interface CatalogSimilarHit {
+  entry: CatalogEntryView
+  similarity: number
+  keys: string[]
+  reasons: string[]
+}
+
+export interface CatalogDuplicateView {
+  a: CatalogEntryView
+  b: CatalogEntryView
+  similarity: number
+  both_in_use: boolean
+  reasons: string[]
+}
+
+/**
+ * `409 similar_exists` 的 details。界面照它渲染那张选择题卡
+ * 「复用它 / 合并进它 / 我这个不一样，仍新建」。
+ */
+export interface SimilarExistsDetails {
+  kind: CatalogKind
+  candidates: CatalogSimilarHit[]
+  options: { id: string; label: string; requires_reason?: boolean }[]
+}
+
+/** 这个错是不是"已经有人做过像的了"。 */
+export function similarExists(err: unknown): SimilarExistsDetails | undefined {
+  if (!(err instanceof ApiClientError) || err.code !== 'similar_exists') return undefined
+  const details = err.details as SimilarExistsDetails | undefined
+  return details === undefined || !Array.isArray(details.candidates) ? undefined : details
+}
+
+/** 选"仍新建"时要带的那一段（理由少于 8 个字服务端回 400）。 */
+export interface DuplicateAck {
+  decision: 'new'
+  reason: string
+  similar_to: string[]
+}
+
+export const MIN_DUPLICATE_REASON = 8
+
+export const listCatalog = (
+  filter: { kind?: CatalogKind[]; layer?: CatalogLayer[]; position?: string; q?: string } = {},
+  assignment?: string,
+): Promise<CatalogEntryView[]> => {
+  const q = new URLSearchParams()
+  if (filter.kind !== undefined && filter.kind.length > 0) q.set('kind', filter.kind.join(','))
+  if (filter.layer !== undefined && filter.layer.length > 0) q.set('layer', filter.layer.join(','))
+  if (filter.position !== undefined) q.set('position', filter.position)
+  if (filter.q !== undefined && filter.q.trim() !== '') q.set('q', filter.q.trim())
+  const query = q.toString()
+  return api<CatalogEntryView[]>(
+    `/v1/catalog${query === '' ? '' : `?${query}`}`,
+    withAssignment(assignment),
+  )
+}
+
+export const listCatalogDuplicates = (assignment?: string): Promise<CatalogDuplicateView[]> =>
+  api<CatalogDuplicateView[]>('/v1/catalog/duplicates', withAssignment(assignment))
+
+export const findSimilarCatalogEntries = (
+  input: { kind: CatalogKind; title: string; summary?: string; trigger?: string; target?: string },
+  assignment?: string,
+): Promise<CatalogSimilarHit[]> =>
+  api<CatalogSimilarHit[]>('/v1/catalog/similar', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/**
+ * 建一条定时任务（25 §5）。
+ *
+ * 不带 `duplicate_ack` 时服务端会先查重：查到像的回 `409 similar_exists` + 候选，
+ * 界面出选择题卡；选了"仍新建"再带着理由发一次。
+ */
+export const createSchedule = (
+  input: {
+    title: string
+    trigger: { kind: 'cron'; expr: string; tz: string }
+    handler?: string
+    duplicate_ack?: DuplicateAck
+  },
+  assignment?: string,
+): Promise<{ id: string; title?: string }> =>
+  api<{ id: string; title?: string }>('/v1/schedules', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 一键合并：出一张 policy_change 卡，批了才真的合。 */
+export const mergeCatalogEntries = (
+  input: { keep: string; drop: string },
+  assignment?: string,
+): Promise<{ approval_item_id: string }> =>
+  api<{ approval_item_id: string }>('/v1/catalog/merge', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
 
 export interface Assignment {
   id: string

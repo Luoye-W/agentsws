@@ -17,6 +17,9 @@
       "path": "packages/api"
     },
     {
+      "path": "packages/catalog"
+    },
+    {
       "path": "packages/channels"
     },
     {

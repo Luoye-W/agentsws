@@ -1,13 +1,15 @@
 /**
  * 28 §2 统一错误：`{ code, message, details, trace_id }`，错误码跨模块复用。
  *
- * 网关在契约的 `ErrorCode` 之外只加两个码，且都在交付报告里作为契约建议提出：
+ * 网关在契约的 `ErrorCode` 之外只加三个码，且都在交付报告里作为契约建议提出：
  * - `unauthenticated`：缺 / 无效 Bearer（契约里没有对应码，但 20 §3 要求 401）
  * - `internal`：未归类的实现错误（不泄漏细节）
+ * - `similar_exists`：建之前先查查到了像的（40 §2.2）。语义上是 `conflict` 的一种，
+ *   但界面要凭它出选择题卡，混在 `conflict` 里就得靠 details 猜，所以单列一个码。
  */
 import type { ErrorCode } from '@agentsws/contracts'
 
-export type GatewayErrorCode = ErrorCode | 'unauthenticated' | 'internal'
+export type GatewayErrorCode = ErrorCode | 'unauthenticated' | 'internal' | 'similar_exists'
 
 export interface ErrorBody {
   code: GatewayErrorCode
@@ -25,6 +27,8 @@ export const STATUS_BY_CODE: Record<GatewayErrorCode, number> = {
   not_found: 404,
   conflict: 409,
   idempotency_conflict: 409,
+  // 40 §2.2：已经有人做过像的了 —— 不直接建，回候选让人选（复用 / 合并 / 仍新建）
+  similar_exists: 409,
   stale_record: 409,
   snapshot_mismatch: 409,
   budget_exhausted: 429,

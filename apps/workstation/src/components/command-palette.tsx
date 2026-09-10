@@ -5,6 +5,7 @@
  * 没有自由文本会被送去问模型。工作台**没有全局聊天框**（36 §3 A4）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -16,7 +17,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import type { PositionSummary } from '@/lib/api'
+import { listCatalog, type PositionSummary } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export function CommandPalette({
@@ -36,6 +37,15 @@ export function CommandPalette({
 }): React.ReactNode {
   const { t, position } = useApp()
   const navigate = useNavigate()
+  /**
+   * 40 §2.2 第 1 条：⌘K 里也搜工具箱——"建之前先查"不能只在建的时候才想得起来。
+   * 与工具箱页同源：都打 `GET /v1/catalog`。面板没打开就不拉（它不是首页的一部分）。
+   */
+  const catalog = useQuery({
+    queryKey: ['catalog', 'palette'],
+    enabled: open,
+    queryFn: () => listCatalog({}),
+  })
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -106,6 +116,24 @@ export function CommandPalette({
                   }}
                 >
                   {card.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {(catalog.data ?? []).length === 0 ? null : (
+            <CommandGroup heading={t('command.group.toolbox')}>
+              {(catalog.data ?? []).slice(0, 20).map((entry) => (
+                <CommandItem
+                  key={entry.id}
+                  value={`${entry.title} ${entry.summary}`}
+                  onSelect={() => {
+                    go(`/org?tab=toolbox&q=${encodeURIComponent(entry.title)}`)
+                  }}
+                >
+                  {entry.title}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {t(`toolbox.kind.${entry.kind}`)} · {t('toolbox.owner', { who: entry.owner })}
+                  </span>
                 </CommandItem>
               ))}
             </CommandGroup>

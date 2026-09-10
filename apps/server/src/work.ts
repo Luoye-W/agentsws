@@ -34,6 +34,7 @@ import {
   planSummary,
   planTitle,
   type QueryRunner,
+  type ReviewDuplicate,
   reviewSummary,
   reviewTitle,
   type ScheduledTaskLike,
@@ -61,6 +62,11 @@ export interface WorkPortOptions {
   ): Promise<CalendarItem[]> | CalendarItem[]
   /** 24 的 lesson，进复盘的「Agent 学到的」 */
   lessons?(actor: WorkActor): { id: string; text: string }[]
+  /**
+   * 40 §2.2 第 4 条：复盘里那一段"疑似重复"。
+   * 日复盘不报（同一对东西天天提醒一次就是噪音），周 / 月才报。
+   */
+  duplicates?(kind: 'week' | 'month'): Promise<ReviewDuplicate[]> | ReviewDuplicate[]
 }
 
 /**
@@ -267,6 +273,8 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       const meetings = work
         .calendar(range, { person_id: actor.person_id }, sources)
         .filter((i) => i.source === 'meeting')
+      const duplicates =
+        kind === 'day' || options.duplicates === undefined ? [] : await options.duplicates(kind)
       const draft = buildReview({
         now: work.now(),
         person_id: actor.person_id,
@@ -276,6 +284,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         cards_events: cards.filter((i) => ms(i.updated_at) >= ms(start)).map(outcomeOf),
         todos: todayDue(actor.person_id),
         meetings,
+        ...(duplicates.length === 0 ? {} : { duplicates }),
         ...(options.lessons === undefined ? {} : { lessons: options.lessons(actor) }),
         tomorrow: {
           now: new Date(ms(work.now()) + DAY_MS).toISOString(),

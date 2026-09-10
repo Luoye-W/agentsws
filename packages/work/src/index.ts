@@ -43,6 +43,7 @@ export {
   battleReport,
   buildReview,
   type CardOutcome,
+  type ReviewDuplicate,
   type ReviewInput,
   reviewSummary,
   reviewTitle,

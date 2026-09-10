@@ -81,6 +81,9 @@ importers:
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@agentsws/catalog':
+        specifier: workspace:*
+        version: link:../../packages/catalog
       '@agentsws/channels':
         specifier: workspace:*
         version: link:../../packages/channels
@@ -257,6 +260,25 @@ importers:
       zod:
         specifier: ^4.5.4
         version: 4.5.4
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
+  packages/catalog:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/learning':
+        specifier: workspace:*
+        version: link:../learning
+      '@agentsws/roles':
+        specifier: workspace:*
+        version: link:../roles
+      better-sqlite3:
+        specifier: ^12.2.0
+        version: 12.11.1
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13

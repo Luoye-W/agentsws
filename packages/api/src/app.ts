@@ -14,6 +14,7 @@ import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
+import { catalogRoutes } from './routes/catalog.js'
 import { changeRoutes } from './routes/changes.js'
 import { connectionRoutes } from './routes/connections.js'
 import { eventRoutes } from './routes/events.js'
@@ -87,6 +88,8 @@ export function collectRoutes(): Route[] {
     ...workRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
+    // 40 §2 工具箱与查重；`/v1/catalog/similar` 与 `/v1/catalog/duplicates` 是定值段，与 `/v1/catalog` 不撞
+    ...catalogRoutes(),
   ]
 }
 

@@ -49,6 +49,7 @@ import type {
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { AskPort } from './routes/ask.js'
+import type { CatalogPort } from './routes/catalog.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { MeetingsPort } from './routes/meetings.js'
@@ -493,6 +494,16 @@ export interface SchedulePort {
   runNow(actor: ScheduleActor, id: string): MaybePromise<ScheduleRunOutcome>
   workflows(query: WorkflowListQuery): MaybePromise<WorkflowInstanceView[]>
   workflow(actor: ScheduleActor, id: string): MaybePromise<WorkflowInstanceView | undefined>
+  /**
+   * 25 §5 `POST /workflows/{def}/start`：开一条流程实例。
+   * 可选面——没装流程引擎的发行版少这一条路由（回 not_implemented），其余照常。
+   */
+  startWorkflow?(
+    actor: ScheduleActor & { assignment_id: AssignmentId },
+    input: { def_id: string; subject: { type: string; id: string }; conversation_id?: string },
+  ): MaybePromise<WorkflowInstanceView>
+  /** 流程定义的一句人话标题（"建之前先查"要拿它去比） */
+  workflowDefinition?(def_id: string): MaybePromise<{ id: string; name: string } | undefined>
 }
 
 export interface GatewayDeps {
@@ -527,6 +538,12 @@ export interface GatewayDeps {
   org?: OrgPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
+  /**
+   * 40 §2 工具箱与查重；没装配时 `/v1/catalog/*` 回 not_implemented，
+   * 五个"建"的入口也**不再查重**（`guardSimilar` 直接放行）——查重是加分项，
+   * 不该让没装工具箱的发行版连定时任务都建不了。
+   */
+  catalog?: CatalogPort
   /** 25 定时与流程面；没装调度器时 `/v1/schedules` 与 `/v1/workflows` 回 not_implemented。 */
   schedules?: SchedulePort
   /**
