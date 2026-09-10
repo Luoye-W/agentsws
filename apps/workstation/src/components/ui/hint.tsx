@@ -19,7 +19,16 @@ import type { ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 /** 一个问号图标；hover / focus 出 tooltip。放在标题、字段名、列表项后面。 */
-export function Hint({ text, className }: { text: string; className?: string }): ReactNode {
+export function Hint({
+  text,
+  className,
+  testId,
+}: {
+  text: string
+  className?: string
+  /** 原来那段灰字上挂过 `data-testid` 的，把它挪到问号上，断言照旧找得到。 */
+  testId?: string
+}): ReactNode {
   return (
     <TooltipProvider>
       <Tooltip>
@@ -29,6 +38,7 @@ export function Hint({ text, className }: { text: string; className?: string }):
             data-slot="hint"
             data-hint={text}
             aria-label={text}
+            {...(testId === undefined ? {} : { 'data-testid': testId })}
             // 在 <label> 里点问号不该顺带聚焦输入框
             onClick={(e) => {
               e.preventDefault()

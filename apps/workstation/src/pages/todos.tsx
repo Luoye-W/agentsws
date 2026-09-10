@@ -15,6 +15,7 @@ import { Bot, MoreHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CollisionCard } from '@/components/work/collision-card'
@@ -216,10 +217,10 @@ export function TodosPage(): React.ReactNode {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6" data-testid="todos">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-base font-semibold">{t('todos.title')}</h1>
-        <span className="text-xs text-muted-foreground">{t('todos.drag_hint')}</span>
-      </div>
+      <h1 className="flex items-center gap-1 text-base font-semibold">
+        {t('todos.title')}
+        <Hint text={t('todos.drag_hint')} />
+      </h1>
 
       <form
         className="flex gap-2"

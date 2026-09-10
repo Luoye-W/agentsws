@@ -8,6 +8,7 @@
  */
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { OrgMemberView, OrgPositionView, RangeOption } from '@/lib/api'
@@ -115,8 +116,10 @@ export function AssignWizard({
       </section>
 
       <section className={cn('flex flex-col gap-2', position === null && 'opacity-40')}>
-        <p className="font-medium">{t('org.assign.step3')}</p>
-        <p className="text-xs text-muted-foreground">{t('org.assign.step3.hint')}</p>
+        <p className="flex items-center gap-1 font-medium">
+          {t('org.assign.step3')}
+          <Hint text={t('org.assign.step3.hint')} />
+        </p>
         <div className="flex flex-wrap gap-2">
           {options.map((o) => {
             const key = `${o.kind}:${o.id}`

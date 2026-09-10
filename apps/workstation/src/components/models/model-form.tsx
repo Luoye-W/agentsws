@@ -448,7 +448,10 @@ export function ModelForm({
       </Field>
 
       <fieldset className="flex flex-col gap-1">
-        <legend className="text-xs font-medium">{t('models.field.region')}</legend>
+        <legend className="flex items-center gap-1 text-xs font-medium">
+          {t('models.field.region')}
+          <Hint text={t('models.field.region.hint')} />
+        </legend>
         <div className="flex gap-3 text-xs">
           {(['cn', 'global'] as const).map((r) => (
             <label key={r} className="flex cursor-pointer items-center gap-1.5">
@@ -465,7 +468,6 @@ export function ModelForm({
             </label>
           ))}
         </div>
-        <p className="text-[11px] text-muted-foreground">{t('models.field.region.hint')}</p>
       </fieldset>
 
       {/*
@@ -498,12 +500,17 @@ export function ModelForm({
           </Field>
         ))}
       </div>
-      <p className="text-[11px] text-muted-foreground" data-testid="model-price-source">
+      {/* 价的来源是状态，可见；「为什么要填」是规则，进问号 */}
+      <p
+        className="flex items-center gap-1 text-[11px] text-muted-foreground"
+        data-testid="model-price-source"
+      >
         {priceManual
           ? t('models.price.manual')
           : quote === undefined
             ? t('models.field.price.hint')
             : t('models.price.from_catalog', { as_of: quote.as_of, currency: quote.currency })}
+        <Hint text={t('models.field.price.why.hint')} />
       </p>
 
       {/*

@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type {
@@ -220,12 +221,12 @@ export function MembersTab({
       {leaving === null ? null : (
         <Card data-testid="offboard-form">
           <CardHeader>
-            <CardTitle className="text-sm">
+            <CardTitle className="flex items-center gap-1 text-sm">
               {t('org.members.offboard.title', { name: leaving.name })}
+              <Hint text={t('org.members.offboard.intro')} />
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm">
-            <p className="text-muted-foreground text-xs">{t('org.members.offboard.intro')}</p>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="offboard-successor">{t('org.members.offboard.handover')}</Label>

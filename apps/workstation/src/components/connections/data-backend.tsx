@@ -14,11 +14,11 @@
  * 按钮点开是一段实话，不是一个假的开通流程。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Cloud, Database, ExternalLink, HardDrive, Server, ShieldCheck } from 'lucide-react'
+import { Cloud, Database, ExternalLink, HardDrive, Server } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
 import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -261,9 +261,14 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
         ))}
       </fieldset>
 
+      {/* WP43 ③：原来一整段「数据在哪、人多了怎么办」压成一行，其余进问号 */}
       {selected === 'local' ? (
-        <p className="mt-3 text-xs text-muted-foreground" data-testid="storage-local-note">
+        <p
+          className="mt-3 flex items-center gap-1 text-xs text-muted-foreground"
+          data-testid="storage-local-note"
+        >
           {t('storage.local.note')}
+          <Hint text={t('storage.local.more.hint')} />
         </p>
       ) : null}
 
@@ -272,7 +277,10 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
           className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs"
           data-testid="storage-managed"
         >
-          <p>{t('storage.managed.note')}</p>
+          <p className="flex items-center gap-1">
+            {t('storage.managed.note')}
+            <Hint text={t('storage.managed.more.hint')} />
+          </p>
           <Button
             type="button"
             size="sm"
@@ -295,10 +303,7 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
           onSubmit={submit}
           autoComplete="off"
         >
-          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-            <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden />
-            <span>{t('storage.never_ai')}</span>
-          </p>
+          <SafetyNote text={t('storage.never_ai')} className="text-xs" />
 
           <Field
             id={`${prefix}-database_url`}
@@ -444,12 +449,12 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
         >
           {advanced ? t('storage.advanced.close') : t('storage.advanced.open')}
         </Button>
+        <Hint text={t('storage.advanced.note')} className="ml-1 align-middle" />
         {advanced && view !== undefined ? (
           <div
             className="mt-2 rounded-lg border bg-muted/20 p-3 text-xs"
             data-testid="storage-advanced"
           >
-            <p className="text-muted-foreground">{t('storage.advanced.note')}</p>
             <dl className="mt-2 grid gap-1">
               {view.env.map((row) => (
                 <div key={row.name} className="flex flex-wrap gap-2">
