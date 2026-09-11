@@ -512,6 +512,7 @@ export function OrgPage(): React.ReactNode {
           ) : (
             <JoinPanel
               {...(peers.data === undefined ? {} : { discovery: peers.data })}
+              configured={me.data.profile !== undefined}
               me={me.data.person}
               invites={invites.data ?? []}
               requests={requests.data ?? []}

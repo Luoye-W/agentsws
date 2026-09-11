@@ -955,6 +955,7 @@ const zh: Table = {
   'onboarding.join.peers': '发现 {n} 位同事也在用',
   'onboarding.join.peers.empty': '这个网段上还没看见同事。',
   'onboarding.join.peers.off': '"让同事找到我"是关着的，所以不广播也不监听。',
+  'onboarding.join.peers.no_profile': '公司全称还没存下来，所以这会儿还找不了同事。存完就开始找。',
   'onboarding.join.peers.unavailable': '这台机器上用不了局域网发现：{reason}',
   'onboarding.join.apply_to': '申请加入他们',
   'onboarding.invite.title': '邀请同事',
@@ -1945,6 +1946,8 @@ const en: Table = {
   'onboarding.join.peers.empty': 'No colleagues seen on this network yet.',
   'onboarding.join.peers.off':
     '"Let colleagues find me" is off, so nothing is broadcast and nothing is listened for.',
+  'onboarding.join.peers.no_profile':
+    'The company name is not saved yet, so there is nobody to look for. Saving it starts the search.',
   'onboarding.join.peers.unavailable': 'Local network discovery does not work here: {reason}',
   'onboarding.join.apply_to': 'Ask to join them',
   'onboarding.invite.title': 'Invite colleagues',

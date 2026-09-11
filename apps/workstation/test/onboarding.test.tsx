@@ -97,6 +97,18 @@ const STATE: OnboardingStateView = {
   discovery: { available: true, enabled: true },
 }
 
+/** 公司档案已经存下来了的那一档（找同事这件事从这里才开始）。 */
+const SAVED: OnboardingStateView = {
+  ...STATE,
+  profile: {
+    legal_name: '深圳诺伏特科技',
+    domain: 'nordvolt.cn',
+    discoverable: true,
+    set_at: '2026-09-07T09:00:00.000Z',
+  },
+  discovery: { available: true, enabled: true },
+}
+
 const PEERS: DiscoveryStateView = {
   available: true,
   enabled: true,
@@ -118,13 +130,15 @@ const state = {
   applies: [] as OnboardingPlanInput[],
   joins: [] as { code?: string; peer_id?: string; name: string; email: string }[],
   peers: PEERS as DiscoveryStateView,
+  /** 这一次渲染时服务端那边的档案设过没有。 */
+  state: STATE as OnboardingStateView,
 }
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
-    getOnboardingState: async () => STATE,
+    getOnboardingState: async () => state.state,
     listOnboardingPositions: async () => POSITIONS,
     listDiscoveryPeers: async () => state.peers,
     setWorkspaceProfile: async (input: { legal_name: string }) => {
@@ -163,7 +177,7 @@ beforeEach(() => {
   state.applies = []
   state.joins = []
   state.peers = PEERS
-  globalThis.sessionStorage?.clear()
+  state.state = STATE
 })
 
 /** 走到第 n 步（0 开始）。 */
@@ -195,8 +209,17 @@ describe('46 §1 首次设置向导', () => {
     expect(state.profiles[0]?.legal_name).toBe('深圳诺伏特科技有限公司')
   })
 
+  it('① 公司全称还没存下来时，说的是"存完就开始找"，而不是"开关关着"（开关明明开着）', async () => {
+    renderWithProviders(<OnboardingPage />)
+    const peers = await screen.findByTestId('join-peers')
+    await waitFor(() => {
+      expect(within(peers).getByText(/存完就开始找/)).toBeTruthy()
+    })
+  })
+
   it('① 局域网："发现 N 位同事"与邀请码输入都在；申请加入带的是我的名字与邮箱', async () => {
     const user = userEvent.setup()
+    state.state = SAVED
     renderWithProviders(<OnboardingPage />)
 
     const peers = await screen.findByTestId('join-peers')
@@ -229,6 +252,7 @@ describe('46 §1 首次设置向导', () => {
 
   it('① 开关关着时说清楚"不广播也不监听"，而不是显示一个空列表', async () => {
     state.peers = { available: true, enabled: false, peers: [] }
+    state.state = SAVED
     renderWithProviders(<OnboardingPage />)
     const peers = await screen.findByTestId('join-peers')
     await waitFor(() => {
@@ -243,6 +267,7 @@ describe('46 §1 首次设置向导', () => {
       reason: '这台机器没有可用网卡',
       peers: [],
     }
+    state.state = SAVED
     renderWithProviders(<OnboardingPage />)
     const peers = await screen.findByTestId('join-peers')
     await waitFor(() => {

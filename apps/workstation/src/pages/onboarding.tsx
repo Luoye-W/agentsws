@@ -217,6 +217,7 @@ export function OnboardingPage(): React.ReactNode {
               {/* 46 §2 I2 I3：已经有同事在用的话，这一步就是"加入他们"而不是"再开一家" */}
               <JoinPanel
                 {...(peers.data === undefined ? {} : { discovery: peers.data })}
+                configured={state.data.profile !== undefined}
                 me={state.data.person}
                 busy={join.isPending}
                 sent={sent}

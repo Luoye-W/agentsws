@@ -32,8 +32,10 @@ export function PickToggle({
       disabled={disabled === true}
       {...(testId === undefined ? {} : { 'data-testid': testId })}
       className={cn(
-        'rounded-md border px-2 py-1 text-left transition-colors hover:bg-muted disabled:opacity-40',
-        checked && 'border-primary bg-primary/10',
+        'rounded-md border px-2 py-1 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed',
+        // 勾上了就**照常高亮**，哪怕这会儿点不动：向导第 ③ 步里"岗位勾着 → 它的职责
+        // 全勾且单条不可动"，把它们一起调暗的话看起来像没勾上，那是在骗人
+        checked ? 'border-primary bg-primary/10' : 'disabled:opacity-40',
         className,
       )}
       onClick={onToggle}

@@ -90,6 +90,33 @@ type RangeRef = { kind: 'store' | 'department' | 'account' | 'market'; id: strin
 
 `POST /auth/magic-link`、`POST /auth/sso/{provider}`、`GET /me`、`POST /workspaces`、`POST /workspaces/{id}/upgrade-to-shared`、`POST /workspaces/{id}/memberships`、`POST /join/export`、`POST /join/import`（生成 join_mapping 审批项）、`POST /join/{id}/complete`、`POST /workspaces/{id}/leave`。事件：`person.created`、`workspace.created / upgraded / joined / archived`、`membership.added / removed`、`join.started / mapped / completed`。
 
+**首次设置与同事发现（46，WP51 实现）。** 一个人第一次打开工具时怎么说清"我们公司叫什么"，
+以及同一家公司的两个人怎么互相看见、怎么连上——规范在 [46](46-首次设置与同事发现-v1.md)，
+路由这一层多出这几条：
+
+| 路由 | 做什么 | 46 |
+|---|---|---|
+| `GET /v1/onboarding/state` | 要不要走首次设置向导（公司档案没设过 **且** 除所有者外没有分配） | §1 |
+| `PUT /v1/workspace/profile` | 写公司档案：全称、可选域名、"让同事找到我"开关 | §1 ① |
+| `GET /v1/onboarding/positions` | 向导第 ③ 步的候选：岗位 → 职责，每条带一句"它会干什么" | §1 ③ |
+| `POST /v1/onboarding/plan` | 勾选 → 要连的平台 / 要装的技能 / 要建的岗位（只算不写） | §3 I5 |
+| `POST /v1/onboarding/apply` | 真建分配（一条职责一条 Assignment） | §3 I6 |
+| `GET /v1/discovery/peers` | 局域网上同一家公司的同伴（开关关着时永远是空的） | §2 I2 |
+| `GET /v1/discovery/hello` | **公开**：同伴问"你是谁"，只回一个展示名与人数 | §2 I2 |
+| `POST /v1/discovery/superseded` | **公开**：同伴说"先批的那一边已经定了" | §2 I3 |
+| `GET` / `POST /v1/invites` | 邀请码：8 位人类可读、24h、默认 5 次（owner） | §2 I2 |
+| `GET /v1/memberships/requests` | 谁申请过加入这个工作区 | §2 I3 |
+| `POST /v1/memberships/requests` | **公开**：贴码或挑一位局域网同伴申请加入 | §2 I3 |
+| `POST /v1/memberships/requests/:id/decide` | 同意 / 拒绝（owner）；同意后建成员并交给本文 §4 的 Join | §2 I3 |
+
+事件另加九条：`workspace.profile_set`、`discovery.enabled / disabled / peer_seen`、
+`invite.created / redeemed`、`membership.requested / approved / rejected`。
+
+两条与本规范的接口：**`membership` 审批卡通过之后，人就是这个工作区的成员**（本文 §1），
+接着该走的是本文 §4 的 Join 导入与映射确认——`membership.approved` 的 payload 带
+`next: 'join_import'` 就是那个交接点。**发现阶段不交换任何本文定义的对象**：
+没有 Person、没有 Workspace、没有 Membership，只有一串 `sha256(归一化公司名 + '|' + 域名)`。
+
 ---
 
 ## 6. 一致性用例

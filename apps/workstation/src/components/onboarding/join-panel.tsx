@@ -28,6 +28,7 @@ export interface JoinSubmit {
 
 export function JoinPanel({
   discovery,
+  configured,
   me,
   invites,
   requests,
@@ -39,6 +40,12 @@ export function JoinPanel({
   onDecide,
 }: {
   discovery?: DiscoveryStateView
+  /**
+   * 公司档案设过没有。没设过的话开关那一栏还只是一份草稿——服务端那边既没有公司名
+   * 也就没有钥匙，不广播也不监听。这时候说"开关关着"是误导（界面上它明明开着），
+   * 该说的是"先把公司全称存下来"。
+   */
+  configured?: boolean
   me: { name: string; email: string }
   /** 不给 = 不显示"邀请同事"那一块（向导第 ① 步就不给）。 */
   invites?: InviteView[]
@@ -98,7 +105,9 @@ export function JoinPanel({
 
         {/* 局域网上看见的同伴（46 §2 I3：看见之后按钮就是"申请加入他们"） */}
         <div className="flex flex-col gap-1" data-testid="join-peers">
-          {discovery === undefined ? null : !discovery.available ? (
+          {discovery === undefined ? null : configured === false ? (
+            <p className="text-xs text-muted-foreground">{t('onboarding.join.peers.no_profile')}</p>
+          ) : !discovery.available ? (
             <p className="text-xs text-muted-foreground">
               {t('onboarding.join.peers.unavailable', {
                 reason: discovery.reason ?? '',
