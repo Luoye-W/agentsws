@@ -31,6 +31,7 @@ import type {
   SimilarQuery,
 } from './types.js'
 
+export * from './org-keys.js'
 export * from './promote.js'
 export * from './similar.js'
 export * from './sqlite-store.js'
