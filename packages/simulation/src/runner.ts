@@ -912,6 +912,63 @@ async function execute(
         })
         return
       }
+      // ── WP47 范围模型（44 G1 / G2 / G3 / G5）──────────────────────
+      case 'org.range_group': {
+        const out = await world.org.rangeGroup({
+          id: event.range_group.id,
+          name: event.range_group.name,
+          members: event.range_group.members,
+        })
+        world.appendEvent('simulation.range_group', {
+          range_group: event.range_group.id,
+          created: out.created,
+          members: event.range_group.members.length,
+          affected_assignments: out.affected,
+        })
+        await tick()
+        return
+      }
+      case 'org.product_line': {
+        const out = world.org.productLine({
+          id: event.product_line.id,
+          name: event.product_line.name,
+          parent: event.product_line.parent,
+          rule: event.product_line.rule,
+        })
+        world.appendEvent('simulation.product_line', {
+          product_line: event.product_line.id,
+          created: out.created,
+          platform: event.product_line.rule.platform,
+        })
+        return
+      }
+      case 'org.assign_range': {
+        const out = world.org.assignRange({
+          who: event.assign_range.who,
+          role: event.assign_range.role,
+          ...(event.assign_range.ranges === undefined ? {} : { ranges: event.assign_range.ranges }),
+          ...(event.assign_range.range_groups === undefined
+            ? {}
+            : { range_groups: event.assign_range.range_groups }),
+        })
+        world.appendEvent('simulation.assign_range', {
+          who: event.assign_range.who,
+          role: event.assign_range.role,
+          assignment_id: out.assignment_id,
+          ranges: out.ranges,
+        })
+        return
+      }
+      case 'org.scope_check': {
+        const seen = world.org.visible(event.scope_check.who, event.scope_check.role)
+        world.appendEvent('simulation.scope_checked', {
+          who: event.scope_check.who,
+          role: event.scope_check.role,
+          orders: seen.orders,
+          products: seen.products,
+        })
+        return
+      }
       default: {
         // 25：装上一天的例行公事；不出现这条事件的场景一条定时任务都没有
         const routine = world.startRoutine({

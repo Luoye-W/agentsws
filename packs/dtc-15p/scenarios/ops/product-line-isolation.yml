@@ -1,0 +1,104 @@
+# 同一家店里的两条产品线，两个运营各改各的价，互相看不到对方的东西（44 G2）。
+#
+# 账号是最小范围的时候，这件事表达不了：同一个亚马逊账号里 A 管厨房、B 管户外，
+# 要么都能看全部，要么谁都看不到。加了 `product_line` 这种范围之后，切得到账号内部：
+#
+# 1. **读**：赵宁只看得到厨房线那几件商品的订单，钱睿只看得到户外线的——
+#    两边的订单集合与商品集合**两两不相交**（`scope_disjoint`）。判定发生在拉数据那一刻
+#    （19 §3 过滤下推：能交给上游的交出去，交不出去的拉回来按行项目切），不是先给再脱敏。
+# 2. **写**：赵宁改自己线里的 prod_1 → 照常提案；改钱睿线里的 prod_7 → `target_in_range`
+#    当场拒，理由是人话。这一条拦在 **stage 那一步**，不是等审批卡上才发现跑不通。
+#
+# 注意这两个人**都没有**挂整家店：只要有一条整店范围，产品线那一层就被并集盖过去了
+# （44 G3 取并集）。这也是为什么向导里会提示"两种切法建议建两个岗位"。
+id: ops/product-line-isolation
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  # 合法的那一次改价要落到运营主管手上（15 人公司里他是运营的 scope_manager）
+  p_li:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 店主把主店里的商品分成两条线（手填清单：判据最直白，也最好核）
+  - at: '+0m'
+    org.product_line:
+      id: pl_kitchen
+      name: 厨房线
+      parent: { kind: store, id: store_main }
+      rule:
+        platform: manual
+        product_ids: [prod_1, prod_2, prod_3]
+  - at: '+1m'
+    org.product_line:
+      id: pl_outdoor
+      name: 户外线
+      parent: { kind: store, id: store_main }
+      rule:
+        platform: manual
+        product_ids: [prod_6, prod_7, prod_8]
+  # 两个运营各挂一条线（**不挂整店**，否则并集会把线盖过去）
+  - at: '+5m'
+    org.assign_range:
+      who: p_zhao
+      role: dtc.ops
+      ranges:
+        - { kind: product_line, id: pl_kitchen }
+      range_groups: []
+  - at: '+6m'
+    org.assign_range:
+      who: p_qian
+      role: dtc.ops
+      ranges:
+        - { kind: product_line, id: pl_outdoor }
+      range_groups: []
+  # 各看各的：这两笔记下他们此刻看得到的订单与商品
+  - at: '+10m'
+    org.scope_check: { who: p_zhao, role: dtc.ops }
+  - at: '+11m'
+    org.scope_check: { who: p_qian, role: dtc.ops }
+  # 赵宁改自己线里的商品：照常走"真读 → 查文档 → 过官方校验 → 提案"。
+  # 129 → 99 是降 23%，超过 dtc.ops 的 max_price_delta_pct: 20 → 掉到 L1 进主管队列
+  # （故意挑一个超额度的幅度：不然它会自动批掉，"批准后才施行"那一条就断言不了）
+  - at: '+30m'
+    shop.price_change:
+      who: p_zhao
+      product: prod_1
+      price: 99
+      note: 厨房线跟一档竞品
+  # 赵宁去改户外线的商品：越权，stage 那一步就拒
+  - at: '+45m'
+    shop.price_change:
+      who: p_zhao
+      product: prod_7
+      price: 49
+      note: 顺手把户外的也调一下
+  # 主管点头（合成人按自己的节奏决定），合法的那一条才施行
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  # 44 G2 读那一半：两条线各看各的，而且各自都看得到东西
+  scope_disjoint: [p_zhao, p_qian]
+  # 44 G2 写那一半：越权那一次被 target_in_range 拦下
+  blocked_rules: [target_in_range]
+  staged_change_kinds: [price_change]
+  calls_tool: [get_product]
+  no_applied_changes_before: $approve
+  event_types:
+    - product_line.created
+    - change.staged
+    - change.applied
+  metrics:
+    # 提了一条、施行一条——越权那一条根本没进账本
+    staged_changes: 1
+    applied_changes: 1
+    guardrail_hits: '>=1'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

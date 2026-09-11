@@ -1,0 +1,76 @@
+# 品牌乙新开一家店，挂了这个品牌的岗位自动看得到（44 G1 / G5）。
+#
+# 这条题要钉住的是"少一遍挨个改"这件事本身，以及它的代价：
+#
+# 1. **品牌不是一种新的数据切法**，是一组店铺的名字（范围组）。岗位挂的是"品牌乙"，
+#    判权限那一刻展开成成员——所以 19 §3 的过滤下推与 31 §3.1 的完整元组判定一行都没改。
+# 2. **新开一家店，改一处就够了**：把 store_new 加进品牌乙，挂了它的两个岗位
+#    （运营钱睿、售后周颖）下一次 `effectiveConfig` 就多这家店。要是没有品牌这一层，
+#    得挨个岗位去补。
+# 3. **自动跟，但留痕**（44 G5）：每条受影响的分配记一条 `assignment.range_expanded`，
+#    店主王岚收到一张 L3 卡——默认放行、只通知，"不想这样就去改岗位的范围"。
+#    这是 40 §1 数据归属的底线：能自动，但不能悄悄。
+#
+# 反过来也验一条：**没挂这个品牌的人一个字不动**。运营赵宁挂的是 store_main，
+# 品牌乙加店与他无关，他的范围前后完全一样。
+id: org/brand-adds-store
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  # L3 的卡默认放行，店主不用点；装一个是为了"他真的收到了"这件事看得见
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 公司把欧洲那摊子归成一个品牌
+  - at: '+0m'
+    org.range_group:
+      id: rg_brand_b
+      name: 品牌乙
+      members:
+        - { kind: store, id: store_eu }
+  # 钱睿（运营）与周颖（售后）改挂品牌，不再一个个挂店
+  - at: '+10m'
+    org.assign_range:
+      who: p_qian
+      role: dtc.ops
+      ranges: []
+      range_groups: [rg_brand_b]
+  - at: '+12m'
+    org.assign_range:
+      who: p_zhou
+      role: dtc.aftersales
+      ranges: []
+      range_groups: [rg_brand_b]
+  # 品牌乙新开一家店：只改品牌这一处
+  - at: '+2h'
+    org.range_group:
+      id: rg_brand_b
+      name: 品牌乙
+      members:
+        - { kind: store, id: store_eu }
+        - { kind: store, id: store_new }
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  event_types:
+    - range_group.created
+    - range_group.updated
+    # 44 G5：自动跟，但每条受影响的分配都留痕
+    - assignment.range_expanded
+  # 店主收到那一张说明这件事的卡
+  approval_kinds:
+    policy_change: '>=1'
+  metrics:
+    runs_failed: 0
+    # 改组织结构不动外部世界：一封信不发、一条变更不施行
+    applied_changes: 0
+    outbound_sent: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

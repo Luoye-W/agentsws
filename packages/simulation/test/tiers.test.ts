@@ -218,7 +218,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十二条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       'ops/claim-pool',
@@ -227,8 +227,12 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       // WP44 店铺深度接入：改价走官方校验 + 超额度转人审；主题发布永远人审
       'ops/edit-product-price',
       'ops/multi-desk-concurrency',
+      // WP47 范围模型（44）：同一家店两条产品线各改各的价、互相看不到
+      'ops/product-line-isolation',
       'ops/theme-publish-needs-approval',
       'ops/two-desks-no-union',
+      // WP47 范围模型（44 G1 / G5）：品牌新开一家店，挂它的岗位自动扩范围并留痕
+      'org/brand-adds-store',
       // WP39 秘书 Agent（41 §1）
       'secretary/ask-colleague',
       'secretary/meet-conflict',

@@ -138,6 +138,111 @@ describe('时长与时刻', () => {
 })
 
 describe('断言比较式与 glob', () => {
+  // ── WP47 范围模型（44）──────────────────────────────────────────
+  const ORG = (events: string) => `
+id: t/org
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+${events}
+invariants: [prompt_replayable]
+`
+
+  it('四条组织事件解析得出来（品牌 / 产品线 / 改范围 / 记一笔看得到什么）', () => {
+    const s = parseScenario(
+      ORG(`  - at: '+0m'
+    org.range_group:
+      id: rg_b
+      name: 品牌乙
+      members: [{ kind: store, id: store_eu }]
+  - at: '+1m'
+    org.product_line:
+      id: pl_kitchen
+      name: 厨房线
+      parent: { kind: store, id: store_main }
+      rule: { platform: shopify, tags: [kitchen] }
+  - at: '+2m'
+    org.assign_range:
+      who: p_zhao
+      role: dtc.ops
+      ranges: [{ kind: product_line, id: pl_kitchen }]
+      range_groups: [rg_b]
+  - at: '+3m'
+    org.scope_check: { who: p_zhao, role: dtc.ops }`),
+      't.yml',
+    )
+    expect(s.events.map((e) => e.type)).toEqual([
+      'org.range_group',
+      'org.product_line',
+      'org.assign_range',
+      'org.scope_check',
+    ])
+    expect(s.events[0]).toMatchObject({
+      range_group: { id: 'rg_b', members: [{ kind: 'store', id: 'store_eu' }] },
+    })
+    expect(s.events[1]).toMatchObject({
+      product_line: { parent: { kind: 'store' }, rule: { platform: 'shopify', tags: ['kitchen'] } },
+    })
+    expect(s.events[2]).toMatchObject({ assign_range: { range_groups: ['rg_b'] } })
+  })
+
+  it('亚马逊与手填两种判据也认', () => {
+    const s = parseScenario(
+      ORG(`  - at: '+0m'
+    org.product_line:
+      id: pl_a
+      name: 北美厨房线
+      parent: { kind: market, id: 'amz_na:US' }
+      rule: { platform: amazon, asins: [B01], sku_prefixes: ['KIT-'], brand: Nordvolt }
+  - at: '+1m'
+    org.product_line:
+      id: pl_b
+      name: 手填线
+      parent: { kind: account, id: amz_na }
+      rule: { platform: manual, product_ids: [prod_1] }`),
+      't.yml',
+    )
+    expect(s.events[0]).toMatchObject({
+      product_line: { rule: { platform: 'amazon', brand: 'Nordvolt' } },
+    })
+    expect(s.events[1]).toMatchObject({ product_line: { rule: { platform: 'manual' } } })
+  })
+
+  it('范围种类、判据平台、未知字段都在解析时顶回来', () => {
+    const bad = (body: string) => () => parseScenario(ORG(body), 't.yml')
+    expect(
+      bad(`  - at: '+0m'
+    org.range_group: { id: rg, name: x, members: [{ kind: brand, id: b }] }`),
+    ).toThrow(ScenarioSchemaError)
+    expect(
+      bad(`  - at: '+0m'
+    org.product_line:
+      id: pl
+      name: x
+      parent: { kind: store, id: s }
+      rule: { platform: taobao }`),
+    ).toThrow(ScenarioSchemaError)
+    expect(
+      bad(`  - at: '+0m'
+    org.assign_range: { who: p_zhao, role: dtc.ops, stores: [a] }`),
+    ).toThrow(ScenarioSchemaError)
+  })
+
+  it('scope_disjoint 是一条断言键', () => {
+    const s = parseScenario(
+      `${ORG(`  - at: '+0m'
+    org.scope_check: { who: p_zhao, role: dtc.ops }`)}
+expected:
+  scope_disjoint: [p_zhao, p_qian]
+`,
+      't.yml',
+    )
+    expect(s.expected.scope_disjoint).toEqual(['p_zhao', 'p_qian'])
+  })
+
   it('matchNumeric', () => {
     expect(matchNumeric(0.7, '>=0.6')).toBe(true)
     expect(matchNumeric(0.5, '>=0.6')).toBe(false)

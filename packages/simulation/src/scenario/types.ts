@@ -4,7 +4,7 @@
  * `state + events[] + expected` 的 Commerce Agents case 形状，扩展 `clock`（虚拟时间推进）、
  * `actors`（合成人策略）、`invariants`（全程不变量）、`rubric`（唯一主观键）。
  */
-import type { ChangeKind, Iso8601 } from '@agentsws/contracts'
+import type { ChangeKind, Iso8601, ProductLineRule, RangeRef } from '@agentsws/contracts'
 
 /** 26 §4 三档。 */
 export type Tier = 'fast' | 'realistic' | 'soak'
@@ -143,6 +143,36 @@ export interface ScenarioShopThemePublish {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/** WP47 / 44 G1：建或改一个品牌（范围组）。改成员会重算挂了它的岗位范围并留痕。 */
+export interface ScenarioOrgRangeGroup {
+  id: string
+  name: string
+  members: RangeRef[]
+}
+
+/** WP47 / 44 G2：建或改一条产品线。 */
+export interface ScenarioOrgProductLine {
+  id: string
+  name: string
+  /** 切在哪家店 / 哪个账号 / 哪个市场里面。 */
+  parent: RangeRef
+  rule: ProductLineRule
+}
+
+/** WP47 / 44 G3：改某人某条职责挂的范围（挑店 / 挑品牌 / 挑产品线，取并集）。 */
+export interface ScenarioOrgAssignRange {
+  who: string
+  role: string
+  ranges?: RangeRef[]
+  range_groups?: string[]
+}
+
+/** WP47 / 44 G2：记一笔"这个人现在看得到哪几张订单、哪几件商品"（给 `scope_disjoint` 用）。 */
+export interface ScenarioOrgScopeCheck {
+  who: string
+  role: string
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -182,6 +212,14 @@ export type ScenarioEvent =
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
   | { at: string; type: 'shop.theme_publish'; theme_publish: ScenarioShopThemePublish }
+  /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
+  | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
+  /** WP47：建 / 改一条产品线（44 G2）。 */
+  | { at: string; type: 'org.product_line'; product_line: ScenarioOrgProductLine }
+  /** WP47：改某人某条职责挂的范围（44 G3）。 */
+  | { at: string; type: 'org.assign_range'; assign_range: ScenarioOrgAssignRange }
+  /** WP47：记一笔"他现在看得到什么"（44 G2 读那一半）。 */
+  | { at: string; type: 'org.scope_check'; scope_check: ScenarioOrgScopeCheck }
 
 export interface ScenarioInbound {
   from: string
@@ -312,6 +350,11 @@ export interface ScenarioExpected {
   routed_to?: string[]
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
   secretary_kinds?: string[]
+  /**
+   * WP47 / 44 G2：这些人（各自那一次 `org.scope_check`）看到的订单与商品**两两不相交**，
+   * 而且各自都不是空的——"同一个账号的两条产品线，互相看不到对方的订单和商品"。
+   */
+  scope_disjoint?: string[]
 }
 
 export interface Scenario {

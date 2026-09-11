@@ -18,7 +18,9 @@ import type {
   ModelRef,
   ObjectRef,
   PersonId,
+  ProductLineRule,
   ProvenanceState,
+  RangeRef,
   RoleId,
   RunEvent,
   RunOutput,
@@ -38,7 +40,14 @@ import { createKnowledge } from '@agentsws/knowledge'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
-import { createRoleStore, loadBundledRole, parseRole, rangeTargetOfProduct } from '@agentsws/roles'
+import {
+  createRoleStore,
+  loadBundledRole,
+  parseRole,
+  productLineMatches,
+  type RangeExpanded,
+  rangeTargetOfProduct,
+} from '@agentsws/roles'
 import {
   aftersalesBrainProvider,
   createDirectRuntime,
@@ -299,6 +308,13 @@ export interface World {
    * 批准与施行照旧走审批总线与执行器——这一层只负责"提"。
    */
   shop: ShopOps
+  /**
+   * WP47 / 44：品牌（范围组）与产品线的组织动作。
+   *
+   * 也走真机制：品牌成员一变，职责层重算所有挂了它的岗位的范围，这里记一条
+   * `assignment.range_expanded` 并给 owner 发一张 L3 卡（44 G5）。
+   */
+  org: OrgOps
   mandateFor(action: string): Mandate
   levelFor(action: string): 'L1' | 'L2' | 'L3'
   issueReadToken(): Promise<string>
@@ -312,6 +328,34 @@ export interface ShopStageResult {
   change_id?: string
   approval_item_id?: string
   reason?: string
+}
+
+/** WP47：一个人在某条职责上现在看得到什么（44 G2 读那一半）。 */
+export interface VisibleScope {
+  orders: string[]
+  products: string[]
+}
+
+export interface OrgOps {
+  /** 44 G1：建或改一个品牌（范围组）。改成员会重算挂了它的岗位范围并留痕。 */
+  rangeGroup(input: {
+    id: string
+    name: string
+    members: RangeRef[]
+  }): Promise<{ created: boolean; affected: number }>
+  /** 44 G2：建或改一条产品线。 */
+  productLine(input: { id: string; name: string; parent: RangeRef; rule: ProductLineRule }): {
+    created: boolean
+  }
+  /** 改某人某条职责挂的范围 / 品牌（挑店 / 挑品牌 / 挑产品线，44 G3）。 */
+  assignRange(input: {
+    who: PersonId
+    role: RoleId
+    ranges?: RangeRef[]
+    range_groups?: string[]
+  }): { assignment_id: string; ranges: RangeRef[] }
+  /** 这个人这条职责现在看得到哪几张订单、哪几件商品。 */
+  visible(who: PersonId, role: RoleId): VisibleScope
 }
 
 export interface ShopOps {
@@ -402,10 +446,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
+  /** 44 G5：品牌成员一变，职责层喊一声，`org` 那边记事件 + 发卡（装配完成后才接上）。 */
+  let rangeExpandedSink: ((e: RangeExpanded) => void) | undefined
   const roles = createRoleStore({
     clock,
     roles: [...bundledRoles.filter((r) => !overridden.has(r.id)), ...packRoles],
     newId: (s) => `asg_${sha256(s).slice(0, 20)}`,
+    onRangeExpanded: (e) => rangeExpandedSink?.(e),
   })
   roles.policies.set({
     workspace_id,
@@ -1073,6 +1120,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     get shop() {
       return shop
     },
+    // 44：与 `shop` 同理，装在这个对象字面量之后
+    get org() {
+      return org
+    },
     data,
     roles,
     knowledge,
@@ -1426,6 +1477,183 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         return provenance
       },
     }
+  }
+
+  // ── WP47 / 44：品牌与产品线 ─────────────────────────────────────────
+
+  /** 44 G5 攒一拍：一次改品牌常常影响好几个岗位，人只该看到一张卡。 */
+  const expandedBatch: RangeExpanded[] = []
+
+  rangeExpandedSink = (e) => {
+    expandedBatch.push(e)
+    appendEnvelope({
+      schema_version: 1,
+      workspace_id,
+      type: 'assignment.range_expanded',
+      actor: { kind: 'system', id: 'org.ranges' },
+      correlation: { trace_id: traceId() },
+      payload: {
+        assignment_id: e.assignment_id,
+        person_id: e.person_id,
+        role_id: e.role_id,
+        range_group: e.range_group,
+        added: e.added,
+        removed: e.removed,
+      },
+    })
+  }
+
+  /** 攒完一拍，给 owner 发一张 L3 卡（默认放行、只通知）。 */
+  const flushRangeExpanded = async (): Promise<number> => {
+    const batch = expandedBatch.splice(0)
+    const first = batch[0]
+    if (first === undefined) return 0
+    const added = batch.flatMap((e) => e.added)
+    const removed = batch.flatMap((e) => e.removed)
+    const what =
+      added.length > 0
+        ? `新增了 ${[...new Set(added.map((r) => r.id))].join('、')}`
+        : `去掉了 ${[...new Set(removed.map((r) => r.id))].join('、')}`
+    const summary = `「${first.range_group_name}」${what}，这 ${batch.length} 个岗位现在跟着看得到 / 看不到了。不想这样就改岗位的范围。`
+    const item = await txn.approvals.create({
+      workspace_id,
+      schema_version: 1,
+      kind: 'policy_change',
+      role_id: 'common.owner',
+      subject: { object: { type: 'policy', id: `range_group:${first.range_group}` } },
+      dedupe_key: `${workspace_id}:range_expanded:${first.range_group}:${sha256(what).slice(0, 12)}`,
+      title: `品牌「${first.range_group_name}」的范围变了`,
+      summary,
+      payload: {
+        target: 'range_group',
+        range_group: first.range_group,
+        affected_assignments: batch.map((e) => e.assignment_id),
+        added,
+        removed,
+      },
+      evidence: {
+        source_events: [],
+        diff: { before: { removed }, after: { added }, summary },
+        provenance: { seen: [] },
+        precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+      },
+      proposer: { kind: 'system', id: 'org.ranges' },
+      // 44 G5：自动跟，但留痕——L3 默认放行，只通知
+      automation: {
+        level_at_creation: 'L3',
+        auto_approved: true,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [recipientOf('owner')],
+        rule: 'owner',
+        escalation: { after_hours: 48, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+    })
+    if (item.state !== 'blocked') await flushCards()
+    return batch.length
+  }
+
+  const org: OrgOps = {
+    async rangeGroup({ id, name, members }) {
+      const existing = roles.rangeGroups.get(id)
+      if (existing === undefined) {
+        roles.rangeGroups.create({ id, workspace_id, name, members })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'range_group.created',
+          actor: { kind: 'person', id: owner },
+          correlation: { trace_id: traceId() },
+          payload: { range_group_id: id, name, members: members.length },
+        })
+        return { created: true, affected: 0 }
+      }
+      roles.rangeGroups.update(id, { name, members })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'range_group.updated',
+        actor: { kind: 'person', id: owner },
+        correlation: { trace_id: traceId() },
+        payload: { range_group_id: id, name, members: members.length },
+      })
+      const affected = await flushRangeExpanded()
+      return { created: false, affected }
+    },
+
+    productLine({ id, name, parent, rule }) {
+      const existing = roles.productLines.get(id)
+      if (existing === undefined) {
+        roles.productLines.create({ id, workspace_id, name, parent, rule })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'product_line.created',
+          actor: { kind: 'person', id: owner },
+          correlation: { trace_id: traceId() },
+          payload: { product_line_id: id, name, parent, platform: rule.platform },
+        })
+        return { created: true }
+      }
+      roles.productLines.update(id, { name, parent, rule })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'product_line.updated',
+        actor: { kind: 'person', id: owner },
+        correlation: { trace_id: traceId() },
+        payload: { product_line_id: id, name, platform: rule.platform },
+      })
+      return { created: false }
+    },
+
+    assignRange({ who, role, ranges, range_groups }) {
+      const target = assignmentFor(who, role)
+      const next = roles.assignments.update(target.id, {
+        ...(ranges === undefined ? {} : { ranges }),
+        ...(range_groups === undefined ? {} : { range_groups }),
+      })
+      created.set(`${who}|${role}`, next)
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'assignment.updated',
+        actor: { kind: 'person', id: owner },
+        correlation: { trace_id: traceId() },
+        payload: { assignment_id: next.id, person_id: who, ranges: next.ranges },
+      })
+      return { assignment_id: next.id, ranges: [...next.ranges] }
+    },
+
+    visible(who, role) {
+      const target = assignmentFor(who, role)
+      const lines = target.ranges
+        .filter((r) => r.kind === 'product_line')
+        .map((r) => roles.productLines.get(r.id))
+        .filter((l) => l !== undefined)
+      const state = standIns.connect.state
+      // 挂整店 / 整账号的看全部；一条范围都没有的什么都看不到（05 §5）
+      if (target.ranges.length === 0) return { orders: [], products: [] }
+      if (lines.length === 0)
+        return {
+          orders: state.orders.map((o) => o.id),
+          products: state.products.map((p) => p.id),
+        }
+      const hits = (product_id: string): boolean =>
+        lines.some((l) =>
+          productLineMatches(l.rule, { platform: 'shopify', product_ids: [product_id] }),
+        )
+      return {
+        orders: state.orders
+          .filter((o) => o.line_items.some((li) => hits(li.product_id)))
+          .map((o) => o.id),
+        products: state.products.filter((p) => hits(p.id)).map((p) => p.id),
+      }
+    },
   }
 
   const shop: ShopOps = {
