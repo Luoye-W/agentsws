@@ -38,6 +38,11 @@ export function startOfDay(ms: number, tzOffsetMinutes: number): number {
   return Math.floor((ms + shift) / DAY) * DAY - shift
 }
 
+/** 日期标签按工作区时区取，不按 UTC（+8 时区用 UTC 日期整条横轴会错一天）。 */
+export function dayLabel(ms: number, tzOffsetMinutes: number): string {
+  return new Date(ms + tzOffsetMinutes * 60_000).toISOString().slice(0, 10)
+}
+
 export interface RangeWindows {
   current: Window
   previous: Window
@@ -45,21 +50,44 @@ export interface RangeWindows {
   spark: Window[]
 }
 
-/** 36 §3：昨天 vs 前一天；近 7 天 vs 前 7 天。 */
+/**
+ * 36 §3 的两档，含义按 WP49 修正：
+ *
+ * - **昨天** = 本地昨天 0 点 → 今天 0 点；对比期 = 前天。迷你走势最后一桶 = 昨天。
+ * - **近 7 天** = 本地 6 天前 0 点 → **现在**（含今天，共 7 个自然日，今天是不完整的一天）；
+ *   对比期 = 再往前 7 整天（13 天前 0 点 → 6 天前 0 点）。迷你走势最后一桶 = 今天（到现在为止）。
+ *
+ * 改的原因（1d 真店验收）：原来「近 7 天」是 `[今天 0 点 − 7 天, 今天 0 点)`，今天被排在窗外，
+ * 于是今天刚下的订单已经拉回来了、面板上还是 0。用户嘴里的「近 7 天」本来就包含今天。
+ */
 export function rangeWindows(
   range: RangeName,
   now: Iso8601,
   tzOffsetMinutes: number,
 ): RangeWindows {
-  const today = startOfDay(Date.parse(now), tzOffsetMinutes)
-  const days = range === 'yesterday' ? 1 : 7
-  const current: Window = { from: today - days * DAY, to: today }
-  const previous: Window = { from: current.from - days * DAY, to: current.from }
+  const nowMs = Date.parse(now)
+  const today = startOfDay(nowMs, tzOffsetMinutes)
   const spark: Window[] = []
-  for (let i = SPARK_BUCKETS - 1; i >= 0; i -= 1) {
-    spark.push({ from: today - (i + 1) * DAY, to: today - i * DAY })
+  if (range === 'yesterday') {
+    for (let i = SPARK_BUCKETS - 1; i >= 0; i -= 1) {
+      spark.push({ from: today - (i + 1) * DAY, to: today - i * DAY })
+    }
+    return {
+      current: { from: today - DAY, to: today },
+      previous: { from: today - 2 * DAY, to: today - DAY },
+      spark,
+    }
   }
-  return { current, previous, spark }
+  // 近 7 天：今天在窗内，最后一桶到「现在」为止，不是到今天 24 点。
+  for (let i = SPARK_BUCKETS - 1; i >= 0; i -= 1) {
+    spark.push({ from: today - i * DAY, to: i === 0 ? nowMs : today - (i - 1) * DAY })
+  }
+  const span = (SPARK_BUCKETS - 1) * DAY
+  return {
+    current: { from: today - span, to: nowMs },
+    previous: { from: today - span - SPARK_BUCKETS * DAY, to: today - span },
+    spark,
+  }
 }
 
 const inWindow = (ms: number, w: Window): boolean => ms >= w.from && ms < w.to
@@ -254,9 +282,11 @@ const QUERY_LIST: QueryDef[] = [
     name: 'orders.recent',
     source: 'shop',
     returns: 'table',
-    run: (ctx, w) => {
+    run: (ctx) => {
+      // 「最近订单」就是字面意思：按下单时间倒序取最新 20 条，**不受时间窗限制**。
+      // （WP49：窗内取会让刚下的单在「昨天」档看不见，也会让淡季的窗口整张表空掉。）
       const rows = ctx.orders
-        .filter((o) => inWindow(Date.parse(o.created_at), w.current))
+        .slice()
         .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
         .slice(0, 20)
         .map((o) => ({
@@ -314,7 +344,7 @@ const QUERY_LIST: QueryDef[] = [
       const points = orderPoints(ctx, (o) => o.total_price)
       const counts = orderPoints(ctx, () => 1)
       return {
-        x: w.spark.map((b) => new Date(b.from).toISOString().slice(0, 10)),
+        x: w.spark.map((b) => dayLabel(b.from, ctx.tz_offset_minutes)),
         series: [
           { key: 'sales', label: '销售额', points: w.spark.map((b) => sum(points, b)) },
           { key: 'orders', label: '订单数', points: w.spark.map((b) => sum(counts, b)) },

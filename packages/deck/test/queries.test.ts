@@ -1,14 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import type { ScalarResult, SeriesResult, TableResult } from '../src/index.js'
+import type { OrderRow, ScalarResult, SeriesResult, TableResult } from '../src/index.js'
 import {
   DeckError,
+  dayLabel,
   queryDef,
   queryNames,
   rangeWindows,
   runQuery,
   startOfDay,
 } from '../src/index.js'
-import { item, NOW, queryContext, refundItem, TZ } from './fixtures.js'
+import { item, NOW, ORDERS, queryContext, refundItem, TZ } from './fixtures.js'
+
+const DAY = 86_400_000
+/** 三个时区各验一遍：+8（上海）、−5（纽约夏令时）、0（UTC）。 */
+const ZONES = [480, -300, 0]
+
+const order = (id: string, created_at: string, total_price: number): OrderRow => ({
+  id,
+  name: id,
+  email: `${id}@example.com`,
+  currency: 'USD',
+  created_at,
+  total_price,
+  refunded_amount: 0,
+  financial_status: 'paid',
+  fulfillment_status: 'delivered',
+})
 
 const scalar = (
   name: string,
@@ -20,20 +37,40 @@ const scalar = (
   return r.data as ScalarResult
 }
 
-describe('时间窗（36 §3 昨天 vs 前一天、近 7 天 vs 前 7 天）', () => {
+describe('时间窗（36 §3 两档；WP49：近 7 天含今天）', () => {
   it('按工作区时区切日界线', () => {
     // 2026-09-07T01:00Z = 北京时间 09:07 09:00 → 当天零点是 2026-09-06T16:00Z
     expect(new Date(startOfDay(Date.parse(NOW), TZ)).toISOString()).toBe('2026-09-06T16:00:00.000Z')
     expect(new Date(startOfDay(Date.parse(NOW), 0)).toISOString()).toBe('2026-09-07T00:00:00.000Z')
   })
 
-  it('yesterday 是一天，last_7d 是七天，走势永远 7 桶', () => {
-    const y = rangeWindows('yesterday', NOW, TZ)
-    expect(y.current.to - y.current.from).toBe(86_400_000)
-    expect(y.previous.to).toBe(y.current.from)
+  it.each(ZONES)('昨天 = [昨天 0 点, 今天 0 点)，对比期 = 前天，末桶 = 昨天（tz=%i）', (tz) => {
+    const today = startOfDay(Date.parse(NOW), tz)
+    const y = rangeWindows('yesterday', NOW, tz)
+    expect(y.current).toEqual({ from: today - DAY, to: today })
+    expect(y.previous).toEqual({ from: today - 2 * DAY, to: today - DAY })
     expect(y.spark).toHaveLength(7)
-    const w = rangeWindows('last_7d', NOW, TZ)
-    expect(w.current.to - w.current.from).toBe(7 * 86_400_000)
+    // 末桶就是昨天；首桶是 7 天前那一整天；今天不在任何一个桶里
+    expect(y.spark[6]).toEqual({ from: today - DAY, to: today })
+    expect(y.spark[0]).toEqual({ from: today - 7 * DAY, to: today - 6 * DAY })
+    expect(y.spark.every((b) => b.to <= today)).toBe(true)
+  })
+
+  it.each(ZONES)('近 7 天 = [6 天前 0 点, 现在)，含今天；末桶到现在为止（tz=%i）', (tz) => {
+    const nowMs = Date.parse(NOW)
+    const today = startOfDay(nowMs, tz)
+    const w = rangeWindows('last_7d', NOW, tz)
+    // 今天在窗内：窗右端是"现在"，不是今天 0 点
+    expect(w.current).toEqual({ from: today - 6 * DAY, to: nowMs })
+    expect(w.current.to).toBeGreaterThan(today)
+    // 对比期 = 再往前 7 整天
+    expect(w.previous).toEqual({ from: today - 13 * DAY, to: today - 6 * DAY })
+    expect(w.previous.to - w.previous.from).toBe(7 * DAY)
+    // 7 桶与窗对齐、首尾相接，末桶 = 今天（到现在）
+    expect(w.spark).toHaveLength(7)
+    expect(w.spark[0]?.from).toBe(w.current.from)
+    expect(w.spark[6]).toEqual({ from: today, to: nowMs })
+    for (let i = 1; i < w.spark.length; i += 1) expect(w.spark[i]?.from).toBe(w.spark[i - 1]?.to)
   })
 })
 
@@ -76,10 +113,77 @@ describe('店铺侧的数（来自 mock connect 的订单）', () => {
     expect(r.delta_pct).toBeUndefined()
   })
 
-  it('最近订单表 / 超期未发表', () => {
+  it.each(ZONES)('今天下的单进「近 7 天」，不进「昨天」（tz=%i）', (tz) => {
+    // 1d 真店验收的那个洞：今天刚下的单已经拉回来了，面板上还是 0——因为今天被排在窗外。
+    const plain = queryContext({ tz_offset_minutes: tz })
+    const ctx = queryContext({
+      tz_offset_minutes: tz,
+      // 比 now 早半小时：在哪个时区都算"今天"
+      orders: [...ORDERS, order('ord_today', '2026-09-07T00:30:00.000Z', 200)],
+    })
+    const withToday = scalar('sales.total', 'last_7d', ctx)
+    expect(withToday.value - scalar('sales.total', 'last_7d', plain).value).toBe(200)
+    expect(scalar('orders.count', 'last_7d', ctx).value).toBe(
+      scalar('orders.count', 'last_7d', plain).value + 1,
+    )
+    // 迷你走势的末桶就是今天这一单
+    expect(withToday.spark[6]).toBe(200)
+    // 「昨天」档不受影响
+    expect(scalar('sales.total', 'yesterday', ctx).value).toBe(
+      scalar('sales.total', 'yesterday', plain).value,
+    )
+  })
+
+  it.each(ZONES)('近 7 天的环比期 = 再往前 7 整天（tz=%i）', (tz) => {
+    const ctx = queryContext({
+      tz_offset_minutes: tz,
+      orders: [
+        order('ord_now', '2026-09-07T00:30:00.000Z', 200), // 今天 → 本期
+        order('ord_prev', '2026-08-28T02:00:00.000Z', 300), // 6–13 天前 → 对比期
+        order('ord_older', '2026-08-20T02:00:00.000Z', 999), // 更早 → 两个窗都不进
+      ],
+    })
+    const r = scalar('sales.total', 'last_7d', ctx)
+    expect(r.value).toBe(200)
+    expect(r.previous).toBe(300)
+  })
+
+  it.each(ZONES)('最近订单不受时间窗限制：倒序取最新 20 条（tz=%i）', (tz) => {
+    const ctx = queryContext({
+      tz_offset_minutes: tz,
+      orders: [
+        ...ORDERS,
+        order('ord_today', '2026-09-07T00:30:00.000Z', 200),
+        order('ord_ancient', '2026-06-01T02:00:00.000Z', 10), // 远在任何窗口之外
+      ],
+    })
+    for (const range of ['yesterday', 'last_7d'] as const) {
+      const recent = runQuery('orders.recent', ctx, range)
+      if (recent.status !== 'ok') throw new Error('expected ok')
+      const rows = (recent.data as TableResult).rows
+      // 五单全在（窗口不参与筛选），且按下单时间倒序
+      expect(rows.map((r) => r.order)).toEqual([
+        'ord_today',
+        '#1001',
+        '#1002',
+        '#1003',
+        'ord_ancient',
+      ])
+    }
+  })
+
+  it('最近订单最多 20 条', () => {
+    const many = Array.from({ length: 25 }, (_, i) =>
+      order(`ord_${i}`, new Date(Date.parse(NOW) - i * 3_600_000).toISOString(), 1),
+    )
+    const recent = runQuery('orders.recent', queryContext({ orders: many }), 'yesterday')
+    if (recent.status !== 'ok') throw new Error('expected ok')
+    expect((recent.data as TableResult).rows).toHaveLength(20)
+  })
+
+  it('超期未发表（存量，也不受窗限制）', () => {
     const recent = runQuery('orders.recent', queryContext(), 'last_7d')
     if (recent.status !== 'ok') throw new Error('expected ok')
-    expect((recent.data as TableResult).rows).toHaveLength(3)
     expect((recent.data as TableResult).columns[0]?.key).toBe('order')
 
     const overdue = runQuery('orders.overdue', queryContext(), 'last_7d')
@@ -95,6 +199,46 @@ describe('店铺侧的数（来自 mock connect 的订单）', () => {
     expect(data.x).toHaveLength(7)
     expect(data.series.map((s) => s.key)).toEqual(['sales', 'orders'])
     expect(data.currency).toBe('USD')
+  })
+
+  it('走势横轴的日期按工作区时区取，不按 UTC', () => {
+    const x = (tz: number, range: 'yesterday' | 'last_7d'): string[] => {
+      const r = runQuery('sales.trend', queryContext({ tz_offset_minutes: tz }), range)
+      if (r.status !== 'ok') throw new Error('expected ok')
+      return (r.data as SeriesResult).x
+    }
+    // NOW = 2026-09-07T01:00Z：+8 时是当地 09-07 09:00，近 7 天的末格就是 09-07（今天）。
+    // 老写法直接拿 UTC 日期，末格会显示 09-06——整条横轴错一天。
+    expect(x(480, 'last_7d')).toEqual([
+      '2026-09-01',
+      '2026-09-02',
+      '2026-09-03',
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
+      '2026-09-07',
+    ])
+    // −5 时当地还是 09-06 20:00，所以末格是 09-06
+    expect(x(-300, 'last_7d')).toEqual([
+      '2026-08-31',
+      '2026-09-01',
+      '2026-09-02',
+      '2026-09-03',
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
+    ])
+    expect(x(0, 'last_7d')[6]).toBe('2026-09-07')
+    // 昨天档的末格 = 昨天
+    expect(x(480, 'yesterday')[6]).toBe('2026-09-06')
+    expect(x(-300, 'yesterday')[6]).toBe('2026-09-05')
+  })
+
+  it('dayLabel 把 UTC 毫秒挪到当地再截到天', () => {
+    const ms = Date.parse('2026-09-06T16:00:00.000Z')
+    expect(dayLabel(ms, 480)).toBe('2026-09-07')
+    expect(dayLabel(ms, 0)).toBe('2026-09-06')
+    expect(dayLabel(ms, -300)).toBe('2026-09-06')
   })
 })
 
