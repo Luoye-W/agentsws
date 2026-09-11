@@ -230,6 +230,12 @@ export interface OrgOptions {
 export interface OrgAssembly {
   port: OrgPort
   /**
+   * 岗位模板本身（27）。WP51 的首次设置向导要拿它列"你做什么"，
+   * 而 `port.positions` 回的是**带持有人**的视图、还要一个 OrgActor——
+   * 向导那一步只需要模板，不该为了读一张表先编一个 actor 出来。
+   */
+  positions(): Position[]
+  /**
    * 44 G5：把它接到 `createRoleStore({ onRangeExpanded })` 上——品牌成员一变，
    * 挂它的岗位范围跟着变，这里记事件 + 给 owner 发一张 L3 卡。
    *
@@ -1193,6 +1199,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
 
   return {
     port,
+    positions: () => backend.positions(),
     onRangeExpanded,
     close() {
       backend.close()

@@ -152,6 +152,28 @@ export type {
 } from './routes/models.js'
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
 export type {
+  DiscoveryHelloView,
+  DiscoveryPeerView,
+  DiscoveryStateView,
+  InviteView,
+  MembershipRequestInput,
+  MembershipRequestView,
+  OnboardingActor,
+  OnboardingApplyView,
+  OnboardingConnectorItem,
+  OnboardingPlanInput,
+  OnboardingPlanView,
+  OnboardingPort,
+  OnboardingPositionPlanItem,
+  OnboardingPositionView,
+  OnboardingSkillItem,
+  OnboardingStateView,
+  SupersedeInput,
+  WorkspaceProfileInput,
+  WorkspaceProfileView,
+} from './routes/onboarding.js'
+export { onboardingRoutes } from './routes/onboarding.js'
+export type {
   AcceptedInvitationView,
   AdoptArchivedInput,
   AdoptReceiptView,

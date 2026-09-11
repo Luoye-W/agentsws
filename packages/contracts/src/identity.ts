@@ -18,6 +18,8 @@ export interface Workspace {
   schema_version: 1
   kind: 'personal' | 'shared'
   name: string
+  /** 46 §1 ①：公司档案（全称 / 域名 / 发现开关）。没设过 = 还没走过首次设置向导。 */
+  profile?: WorkspaceProfile
   tz: string
   base_currency: string
   parent_id?: WorkspaceId
@@ -101,4 +103,61 @@ export interface Invitation {
   expires_at: Iso8601
   used_at?: Iso8601
   created_at: Iso8601
+}
+
+/**
+ * 46 §1 ①：这个工作区背后是哪家公司。
+ *
+ * 三个字段都是**人填的身份信息**，不是凭据：`legal_name` 是营业执照上的全称，
+ * `domain` 是公司邮箱域名（可选，从登录邮箱带出），`discoverable` 是"让用同一个
+ * 工具的同事找到我"那个开关。
+ *
+ * 46 §2 I1 的底线：发现阶段**只出哈希**（`companyKey` 算出来的那一串），
+ * 全称与域名从不离开本机；名字一样也不等于同一家——连上必须有人申请、有人批准。
+ */
+export interface WorkspaceProfile {
+  legal_name: string
+  domain?: string
+  /** 默认 true（46 §1 表）。关了 = 独立使用，不广播、不监听、不登记。 */
+  discoverable: boolean
+  set_at: Iso8601
+}
+
+/**
+ * 46 §2 I2 第一条渠道：邀请码。
+ *
+ * 8 位人类可读码（去掉了形近字），24h 过期，默认能用 5 次——它只是一张"你可以来敲门"
+ * 的条子，敲完仍要目标工作区的 owner 批（`MembershipRequest`），所以多次可用不等于多人直通。
+ */
+export interface Invite {
+  code: string
+  workspace_id: WorkspaceId
+  created_by: PersonId
+  expires_at: Iso8601
+  uses_left: number
+}
+
+/** 46 §2 I3：怎么看见对方的。 */
+export type MembershipRequestVia = 'invite' | 'lan' | 'directory'
+
+export type MembershipRequestStatus = 'pending' | 'approved' | 'rejected' | 'superseded'
+
+/**
+ * 46 §2 I3：一次"申请加入你们工作区"。
+ *
+ * `person` 只有名字与邮箱——申请阶段不交换任何业务数据（46 §4）。批准后才走
+ * 20 §4 的 Join（导入 + 映射确认），凭据仍要本人自己交出。
+ */
+export interface MembershipRequest {
+  id: string
+  workspace_id: WorkspaceId
+  person: { name: string; email: string }
+  via: MembershipRequestVia
+  status: MembershipRequestStatus
+  created_at: Iso8601
+  decided_at?: Iso8601
+  /** 批准后建出来的成员（没批就没有）。 */
+  person_id?: PersonId
+  /** 46 I3：两边互相申请时后批的那一条为什么自动失效。 */
+  superseded_reason?: string
 }

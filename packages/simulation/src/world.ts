@@ -28,7 +28,7 @@ import type {
   RuntimeAdapter,
   RunUsage,
 } from '@agentsws/contracts'
-import { sha256 } from '@agentsws/core'
+import { companyKey, sha256 } from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
 import { createDataStore, defineCollection } from '@agentsws/data'
 import type { DshRuntimeMode } from '@agentsws/dsh-adapter'
@@ -315,6 +315,15 @@ export interface World {
    * `assignment.range_expanded` 并给 owner 发一张 L3 卡（44 G5）。
    */
   org: OrgOps
+  /**
+   * WP51 / 46 §2：两个各自单干的人怎么发现对方、怎么连上。
+   *
+   * 走的也是真机制里那几件真事：公司名归一化用的是服务进程**同一个函数**
+   * （`@agentsws/core` 的 `companyKey`），申请加入出的是一张真的 `membership`
+   * 审批卡（14），批了才建成员。局域网那一跳是替身——一条内存"网段"，
+   * 与服务进程注入假 mDNS 的测试同一种做法。
+   */
+  discover: DiscoverOps
   mandateFor(action: string): Mandate
   levelFor(action: string): 'L1' | 'L2' | 'L3'
   issueReadToken(): Promise<string>
@@ -356,6 +365,48 @@ export interface OrgOps {
   }): { assignment_id: string; ranges: RangeRef[] }
   /** 这个人这条职责现在看得到哪几张订单、哪几件商品。 */
   visible(who: PersonId, role: RoleId): VisibleScope
+}
+
+/**
+ * 46 §2：一台各自单干的机器（"一个人用"的那种工作区）在这条模拟网段上的样子。
+ *
+ * 它只有三样东西：公司档案、开关、以及一个与工作区 id 无关的 peer id。
+ * **没有成员名单、没有业务数据**——发现阶段交换的只有 `company_key` 这一串哈希。
+ */
+export interface DiscoverSide {
+  id: string
+  owner: PersonId
+  legal_name: string
+  domain?: string
+  discoverable: boolean
+  company_key: string
+}
+
+export interface DiscoverOps {
+  /**
+   * 46 §1 ①：某一边走完首次设置的第一步——写下公司全称与域名，开关默认开。
+   * 记一条 `workspace.profile_set`（payload 里只有哈希，全称不进日志）与
+   * `discovery.enabled`，然后立刻看一眼网段上有没有同一把钥匙的人。
+   */
+  firstRun(input: {
+    side: string
+    who: PersonId
+    legal_name: string
+    domain?: string
+    discoverable?: boolean
+  }): DiscoverSide
+  /** 这一边现在在网段上看得见谁（同 key、不是自己、两边开关都开着）。 */
+  peers(side: string): string[]
+  /**
+   * 46 §2 I3：`from` 朝 `to` 申请加入 → `to` 的 owner 收一张 `membership` 卡。
+   * 申请里只有名字与邮箱。批了才建成员——这一步只出卡。
+   */
+  requestJoin(input: {
+    from: string
+    to: string
+    name: string
+    email: string
+  }): Promise<{ approval_item_id?: string; reason?: string }>
 }
 
 export interface ShopOps {
@@ -1124,6 +1175,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     get org() {
       return org
     },
+    // 46：同上（它要用 txn 的审批总线与 flushCards）
+    get discover() {
+      return discover
+    },
     data,
     roles,
     knowledge,
@@ -1224,6 +1279,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         }
       }
       const sampled = await sampleAutoApproved()
+      // 46 §2 I3：这一拍里被定了的 membership 卡，效果在这里落地
+      await settleMemberships()
       return { expired: expired.length, escalated, sampled }
     },
     assignmentSnapshots() {
@@ -1555,6 +1612,182 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     })
     if (item.state !== 'blocked') await flushCards()
     return batch.length
+  }
+
+  /* ── WP51 / 46 §2：同事发现与申请加入 ──────────────────────────────── */
+  //
+  // 模拟的是"两个各自单干的人在同一个办公室里"：两台机器、两份公司档案、
+  // 一条内存网段。三件事是**真的**：
+  //
+  // 1. 公司名归一化与 `company_key` 用的是服务进程同一个函数（`@agentsws/core`）——
+  //    "一个写全称、一个多打空格还加了有限公司" 算出同一把钥匙这件事，
+  //    在这里与在真进程里是同一段代码说了算；
+  // 2. 申请加入出的是一张真的 `membership` 审批卡，走真的审批总线、真的投递与决定；
+  // 3. 批了之后建成员、记 `membership.approved` 并交给 20 §4 的 Join。
+  //
+  // 替身只有一样：局域网那一跳。多播换成一个数组——够验"同 key 互见、异 key 不见"。
+  const sides = new Map<string, DiscoverSide>()
+  const seenPairs = new Set<string>()
+  /** 已经结过账的 membership 卡（批准的效果只走一次）。 */
+  const settledMemberships = new Set<string>()
+  /** 卡 id → 这条申请是谁朝谁提的。 */
+  const membershipRequests = new Map<
+    string,
+    { request_id: string; from: string; to: string; name: string; email: string }
+  >()
+
+  /** 两边都开着开关、钥匙一样、不是同一边 → 在网段上互相看得见。 */
+  const visibleTo = (side: DiscoverSide): DiscoverSide[] =>
+    [...sides.values()].filter(
+      (other) =>
+        other.id !== side.id &&
+        other.discoverable &&
+        side.discoverable &&
+        other.company_key === side.company_key,
+    )
+
+  /** 新看见的每一对记一条 `discovery.peer_seen`（同一对只记一次）。 */
+  const noticePeers = (side: DiscoverSide): void => {
+    for (const other of visibleTo(side)) {
+      for (const [a, b] of [
+        [side, other],
+        [other, side],
+      ] as [DiscoverSide, DiscoverSide][]) {
+        const key = `${a.id}->${b.id}`
+        if (seenPairs.has(key)) continue
+        seenPairs.add(key)
+        // 日志里只有对方的 peer id：没有公司名、没有成员、没有钥匙
+        world.appendEvent(
+          'discovery.peer_seen',
+          { peer_id: b.id },
+          { actor: { kind: 'system', id: 'discovery' } },
+        )
+      }
+    }
+  }
+
+  const discover: DiscoverOps = {
+    firstRun({ side, who, legal_name, domain, discoverable }) {
+      const key = companyKey(legal_name, domain)
+      const row: DiscoverSide = {
+        id: side,
+        owner: who,
+        legal_name,
+        ...(domain === undefined ? {} : { domain }),
+        discoverable: discoverable ?? true,
+        company_key: key,
+      }
+      sides.set(side, row)
+      // 21 §5：只有哈希与"有没有域名"进日志，全称留在本机
+      world.appendEvent(
+        'workspace.profile_set',
+        { company_key: key, has_domain: domain !== undefined, discoverable: row.discoverable },
+        { actor: { kind: 'person', id: who } },
+      )
+      world.appendEvent(
+        row.discoverable ? 'discovery.enabled' : 'discovery.disabled',
+        { available: true },
+        { actor: { kind: 'person', id: who } },
+      )
+      if (row.discoverable) noticePeers(row)
+      return { ...row }
+    },
+
+    peers(side) {
+      const row = sides.get(side)
+      if (row === undefined) throw new SimulationError('not_found', `没有这一边：${side}`)
+      return visibleTo(row).map((p) => p.id)
+    },
+
+    async requestJoin({ from, to, name, email }) {
+      const source = sides.get(from)
+      const target = sides.get(to)
+      if (source === undefined || target === undefined) {
+        throw new SimulationError('not_found', `没有这一边：${sides.has(from) ? to : from}`)
+      }
+      // 46 §2 I1 的底线：钥匙对不上就不是同一家，这条申请压根递不过去
+      if (source.company_key !== target.company_key) {
+        return { reason: '公司对不上，这条申请不属于那个工作区' }
+      }
+      const request_id = `mrq_${sha256(`${from}|${to}|${email}`).slice(0, 10)}`
+      const summary = `${name}（${email}）在同一个局域网里，公司名算出来和你们一样。同意他就成为成员，之后走一遍合并向导。`
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'membership',
+        role_id: 'common.owner',
+        subject: { object: { type: 'membership_request', id: request_id } },
+        dedupe_key: `${workspace_id}:membership:${sha256(email.trim().toLowerCase()).slice(0, 16)}`,
+        title: `${name} 想加入`,
+        summary,
+        // 46 §4：申请阶段只有名字与邮箱，一个业务字段都不带
+        payload: { request_id, person: { name, email }, via: 'lan' },
+        evidence: {
+          source_events: [],
+          provenance: { seen: [] },
+          diff: { before: null, after: { name, email }, summary: '工作区多一个人' },
+          precheck: {},
+        },
+        proposer: { kind: 'system', id: 'invites' },
+        automation: { level_at_creation: 'L1' },
+        routing: {
+          recipients: [recipientOf('owner')],
+          rule: 'owner',
+          escalation: { after_hours: 48, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+      })
+      if (item.state === 'blocked') return { reason: '这条申请被交易控制挡下了' }
+      membershipRequests.set(item.id, { request_id, from, to, name, email })
+      world.appendEvent(
+        'membership.requested',
+        {
+          request_id,
+          via: 'lan',
+          // 完整邮箱留在卡里给人看，日志里只有域名
+          email_domain: email.split('@')[1] ?? '',
+          approval_item_id: item.id,
+        },
+        { actor: { kind: 'system', id: 'invites' } },
+      )
+      await flushCards()
+      return { approval_item_id: item.id }
+    },
+  }
+
+  /**
+   * 定了的 `membership` 卡 → 真建成员 + 交给 20 §4 的 Join（46 §2 I3）。
+   *
+   * 每一拍走一遍，所以不管这张卡是被合成人按策略批的还是场景里 `actor.decide`
+   * 点的，效果都一样。**批准的效果只走一次**（`settledMemberships`）。
+   *
+   * 这里只把人放进来：品牌 / 产品线 / 店铺范围的对照是 45 合并向导的活，
+   * 凭据仍要本人自己交出。`next: 'join_import'` 就是那个交接点。
+   */
+  const settleMemberships = async (): Promise<void> => {
+    for (const item of txn.runtime.store.listApprovals({ workspace_id })) {
+      if (item.kind !== 'membership' || settledMemberships.has(item.id)) continue
+      if (item.state !== 'approved' && item.state !== 'rejected') continue
+      const row = membershipRequests.get(item.id)
+      if (row === undefined) continue
+      settledMemberships.add(item.id)
+      if (item.state === 'rejected') {
+        world.appendEvent(
+          'membership.rejected',
+          { request_id: row.request_id },
+          { actor: { kind: 'person', id: owner } },
+        )
+        continue
+      }
+      // 46 I3：谁 owner 批谁是目标——批了之后申请人那一边就是并进来的那一边
+      sides.delete(row.from)
+      world.appendEvent(
+        'membership.approved',
+        { request_id: row.request_id, via: 'lan', next: 'join_import' },
+        { actor: { kind: 'person', id: owner } },
+      )
+    }
   }
 
   const org: OrgOps = {

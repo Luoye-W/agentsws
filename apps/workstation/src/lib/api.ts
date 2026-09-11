@@ -2086,3 +2086,198 @@ export const routeToDesk = (text: string): Promise<SecretaryRouteResult> =>
 
 export const getMeetingBrief = (id: string): Promise<MeetingBriefView> =>
   api<MeetingBriefView>(`/v1/meetings/${encodeURIComponent(id)}/brief`)
+
+// ── 46 首次设置与同事发现（WP51）──────────────────────────────────────
+//
+// 这几个类型与 `packages/api/src/routes/onboarding.ts` 的端口一一对应。工作台不依赖
+// `@agentsws/api`（那是服务端的包），所以照老规矩在这里把出参的形状再写一遍。
+//
+// **发现这一摊没有一个字段是内部 id**：同伴报的是"王岚的工作区 · 3 人"，
+// 清单里的岗位与职责说的是名字，公司档案里也没有归一化哈希——哈希只在局域网的
+// TXT 记录里出现，界面上永远看不到（46 §2 I1）。
+
+export interface WorkspaceProfileView {
+  legal_name: string
+  domain?: string
+  discoverable: boolean
+  set_at: string
+}
+
+export interface OnboardingStateView {
+  needs_setup: boolean
+  workspace_name: string
+  profile?: WorkspaceProfileView
+  person: { name: string; email: string }
+  other_assignments: number
+  is_owner: boolean
+  discovery: { available: boolean; enabled: boolean; reason?: string }
+}
+
+/** 向导第 ③ 步的候选：一个岗位与它包含的职责（每条带一句"它会干什么"）。 */
+export interface OnboardingPositionView {
+  id: string
+  name: string
+  roles: { id: string; name: string; default: boolean; what_it_does: string }[]
+}
+
+export interface OnboardingConnectorItem {
+  /** 连接页那张卡的 provider id——"去连"就是跳 `/connections?service=<它>`。 */
+  service: string
+  label: string
+  required: boolean
+  connected: boolean
+  needed_by: string[]
+}
+
+export interface OnboardingSkillItem {
+  name: string
+  installed: boolean
+  needed_by: string[]
+}
+
+export interface OnboardingPositionPlanItem {
+  position_id: string
+  name: string
+  role_ids: string[]
+  already_held: boolean
+}
+
+export interface OnboardingPlanView {
+  connectors: OnboardingConnectorItem[]
+  skills: OnboardingSkillItem[]
+  positions: OnboardingPositionPlanItem[]
+  model_configured: boolean
+  /** 真时清单第一条固定是"接模型"：平台连得再全也没人替你干活。 */
+  model_first: boolean
+  role_ids: string[]
+}
+
+export interface OnboardingApplyView {
+  created_assignments: { id: string; role_id: string; role_name: string }[]
+  skipped: string[]
+  ranges: { kind: string; id: string; label: string }[]
+  plan: OnboardingPlanView
+}
+
+export interface DiscoveryPeerView {
+  peer_id: string
+  workspace_label: string
+  host: string
+  port: number
+  first_seen_at: string
+  last_seen_at: string
+}
+
+export interface DiscoveryStateView {
+  available: boolean
+  enabled: boolean
+  reason?: string
+  peers: DiscoveryPeerView[]
+}
+
+export interface InviteView {
+  code: string
+  expires_at: string
+  uses_left: number
+  created_at: string
+}
+
+export interface MembershipRequestView {
+  id: string
+  person: { name: string; email: string }
+  via: 'invite' | 'lan' | 'directory'
+  status: 'pending' | 'approved' | 'rejected' | 'superseded'
+  created_at: string
+  decided_at?: string
+  superseded_reason?: string
+  approval_item_id?: string
+}
+
+export interface OnboardingPlanInput {
+  position_ids: string[]
+  role_ids: string[]
+  custom_position_name?: string
+}
+
+export const getOnboardingState = (assignment?: string): Promise<OnboardingStateView> =>
+  api<OnboardingStateView>('/v1/onboarding/state', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const setWorkspaceProfile = (
+  input: { legal_name: string; domain?: string; discoverable?: boolean },
+  assignment?: string,
+): Promise<WorkspaceProfileView> =>
+  api<WorkspaceProfileView>('/v1/workspace/profile', {
+    method: 'PUT',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listOnboardingPositions = (assignment?: string): Promise<OnboardingPositionView[]> =>
+  api<OnboardingPositionView[]>('/v1/onboarding/positions', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const planOnboarding = (
+  input: OnboardingPlanInput,
+  assignment?: string,
+): Promise<OnboardingPlanView> =>
+  api<OnboardingPlanView>('/v1/onboarding/plan', {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const applyOnboarding = (
+  input: OnboardingPlanInput,
+  assignment?: string,
+): Promise<OnboardingApplyView> =>
+  api<OnboardingApplyView>('/v1/onboarding/apply', {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listDiscoveryPeers = (assignment?: string): Promise<DiscoveryStateView> =>
+  api<DiscoveryStateView>('/v1/discovery/peers', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listInvites = (assignment?: string): Promise<InviteView[]> =>
+  api<InviteView[]>('/v1/invites', { ...(assignment === undefined ? {} : { assignment }) })
+
+export const createInvite = (uses?: number, assignment?: string): Promise<InviteView> =>
+  api<InviteView>('/v1/invites', {
+    method: 'POST',
+    body: uses === undefined ? {} : { uses },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listMembershipRequests = (assignment?: string): Promise<MembershipRequestView[]> =>
+  api<MembershipRequestView[]>('/v1/memberships/requests', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/**
+ * 申请加入：贴一个邀请码，或挑一位局域网上的同伴。**公开路由**——这会儿我们在对方
+ * 工作区里还什么都不是，所以不带 Assignment（带了也没用，那是我们自己这边的）。
+ */
+export const requestMembership = (input: {
+  code?: string
+  peer_id?: string
+  name: string
+  email: string
+}): Promise<MembershipRequestView> =>
+  api<MembershipRequestView>('/v1/memberships/requests', { method: 'POST', body: input })
+
+export const decideMembershipRequest = (
+  id: string,
+  input: { approve: boolean; reason?: string },
+  assignment?: string,
+): Promise<MembershipRequestView> =>
+  api<MembershipRequestView>(`/v1/memberships/requests/${encodeURIComponent(id)}/decide`, {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })

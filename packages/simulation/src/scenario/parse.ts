@@ -157,6 +157,9 @@ const EVENT_KEYS = [
   'org.product_line',
   'org.assign_range',
   'org.scope_check',
+  // WP51 首次设置与同事发现（46）
+  'org.first_run',
+  'org.join_request',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -410,6 +413,38 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         scope_check: {
           who: str(source, `${path}.${key}.who`, body.who),
           role: str(source, `${path}.${key}.role`, body.role),
+        },
+      }
+    }
+    case 'org.first_run': {
+      known(source, `${path}.${key}`, body, ['side', 'who', 'legal_name', 'domain', 'discoverable'])
+      const domain = optStr(source, `${path}.${key}.domain`, body.domain)
+      const discoverable = body.discoverable
+      if (discoverable !== undefined && typeof discoverable !== 'boolean') {
+        fail(source, `${path}.${key}.discoverable`, '必须是 true / false')
+      }
+      return {
+        at,
+        type: 'org.first_run',
+        first_run: {
+          side: str(source, `${path}.${key}.side`, body.side),
+          who: str(source, `${path}.${key}.who`, body.who),
+          legal_name: str(source, `${path}.${key}.legal_name`, body.legal_name),
+          ...(domain === undefined ? {} : { domain }),
+          ...(discoverable === undefined ? {} : { discoverable }),
+        },
+      }
+    }
+    case 'org.join_request': {
+      known(source, `${path}.${key}`, body, ['from', 'to', 'name', 'email'])
+      return {
+        at,
+        type: 'org.join_request',
+        join_request: {
+          from: str(source, `${path}.${key}.from`, body.from),
+          to: str(source, `${path}.${key}.to`, body.to),
+          name: str(source, `${path}.${key}.name`, body.name),
+          email: str(source, `${path}.${key}.email`, body.email),
         },
       }
     }

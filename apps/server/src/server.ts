@@ -14,6 +14,7 @@ import {
   createGateway,
   createMemoryIdentity,
   createSqliteIdentity,
+  type DiscoveryHelloView,
   type EventLogPort,
   type Gateway,
   type GatewayDeps,
@@ -81,6 +82,7 @@ import {
   createConnections,
   createMailProbe,
 } from './connections.js'
+import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
@@ -88,6 +90,7 @@ import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
+import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import {
   createReconcileGuard,
@@ -245,6 +248,17 @@ export interface ServerOptions {
    */
   connect?: ConnectLike
   /**
+   * WP51：局域网发现的三个注入点（生产一个都不传，走 `bonjour-service` 与 `fetch`）。
+   *
+   * 之所以从这里穿下去：**测试要跑的就是这条真装配线**（路由 → 端口 → discovery →
+   * invites → 审批总线），只把最底下那一跳多播换成内存总线。
+   */
+  mdns?: MdnsFactory
+  /** WP51：往同伴那边发请求（申请加入 / 告知失效）。 */
+  discoveryPost?: (url: string, body: unknown) => Promise<{ ok: boolean; data?: unknown }>
+  /** WP51：问同伴"你是谁"。 */
+  discoveryHello?: (url: string) => Promise<DiscoveryHelloView | undefined>
+  /**
    * WP46：活数据源的刷新间隔（毫秒）。不传按 `AGENTSWS_LIVE_DATA_REFRESH_SECONDS`
    * / 默认 5 分钟；传 `0` = 不起后台定时器（测试与一次性任务）。
    */
@@ -314,6 +328,8 @@ export interface Server {
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
   org: OrgAssembly
+  /** WP51 首次设置与同事发现（公司档案 / 岗位清单 / 局域网发现 / 邀请码 / 申请加入）。 */
+  onboarding: OnboardingAssembly
   /** 41 §1 秘书 Agent（profile / 代答 / 日程 / 路由）。 */
   secretary: SecretaryAssembly
   /** WP36 离职编排（撤权限 → 真交接 → 个人层归档 / 销毁 → 个人记忆迁移 / 擦除 → 报告）。 */
@@ -1113,6 +1129,58 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   rangeExpandedSink = org.onRangeExpanded
 
+  /**
+   * WP51 首次设置与同事发现（46）。
+   *
+   * 装在 org 之后：岗位模板的真源在那边（`org.port.positions` 背后的那张表），
+   * 向导第 ③ 步要读它。装在网关之前：`/v1/onboarding/*` 那几条路由要用它。
+   *
+   * 三个取值函数是故意的——连接、技能、模型都是会在运行期变的，向导第 ④ 步那张
+   * 清单必须现算，不能在装配那一刻定死（否则"去连"回来之后清单还说没连）。
+   */
+  const onboarding = createOnboarding({
+    clock,
+    random,
+    workspace_id: workspace.id,
+    owner: person.id,
+    workspaceName: () => workspace.name,
+    appendEvent,
+    roles,
+    approvals,
+    identity: {
+      personByEmail: (email) => identity.personByEmail(email),
+      createPerson: (input) => identity.createPerson(input),
+      addMember: (m) => identity.addMember(m),
+    },
+    members: async () => {
+      const rows = await identity.members(workspace.id)
+      const people = await Promise.all(
+        rows
+          .filter((m) => m.left_at === undefined)
+          .map(async (m) => {
+            const who = await identity.getPerson(m.person_id)
+            return {
+              person_id: m.person_id,
+              name: who?.name ?? '',
+              email: who?.email ?? '',
+            }
+          }),
+      )
+      return people
+    },
+    positions: () => org.positions(),
+    connectedKinds: () => connections.connectedKinds(),
+    installedSkills: () => skills.registry.listSkillNames(),
+    modelConfigured: () => modelSettings.configured(),
+    // 46 I6：连上 Shopify 的店自动挂上岗位的范围；一家没连就挂空
+    shopifyStores: () => connections.shopify.list().map((r) => ({ id: r.shop, label: r.alias })),
+    port: () => boundPort,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
+    ...(options.discoveryPost === undefined ? {} : { post: options.discoveryPost }),
+    ...(options.discoveryHello === undefined ? {} : { helloFetch: options.discoveryHello }),
+  })
+
   // WP36 离职编排（40 §1.2）：装在 org 之后——它要撤分配、真转事项、动个人层与个人记忆。
   const offboard = createOffboard({
     workspace_id: workspace.id,
@@ -1323,6 +1391,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
     storage: storage.port,
     org: org.port,
+    // WP51（46）：首次设置向导、同事发现、邀请码与申请加入
+    onboarding: onboarding.port,
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
     secretary: secretary.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
@@ -1508,6 +1578,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels,
     modelSettings,
     org,
+    onboarding,
     secretary,
     offboard,
     secrets,
@@ -1584,6 +1655,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connections.close()
       await devMcp?.close()
       org.close()
+      onboarding.close()
       offboard.close()
       secrets.close()
       txnStore?.close()

@@ -959,6 +959,43 @@ async function execute(
         })
         return
       }
+      // ── WP51 首次设置与同事发现（46 §1 §2）─────────────────────────
+      case 'org.first_run': {
+        const side = world.discover.firstRun({
+          side: event.first_run.side,
+          who: event.first_run.who,
+          legal_name: event.first_run.legal_name,
+          ...(event.first_run.domain === undefined ? {} : { domain: event.first_run.domain }),
+          ...(event.first_run.discoverable === undefined
+            ? {}
+            : { discoverable: event.first_run.discoverable }),
+        })
+        // 这条也只出哈希的前 12 位：报告是要给人看的，公司全称不该出现在里面
+        world.appendEvent('simulation.first_run', {
+          side: side.id,
+          company_key_fp: side.company_key.slice(0, 12),
+          discoverable: side.discoverable,
+          peers: world.discover.peers(side.id),
+        })
+        await tick()
+        return
+      }
+      case 'org.join_request': {
+        const out = await world.discover.requestJoin({
+          from: event.join_request.from,
+          to: event.join_request.to,
+          name: event.join_request.name,
+          email: event.join_request.email,
+        })
+        world.appendEvent('simulation.join_requested', {
+          from: event.join_request.from,
+          to: event.join_request.to,
+          ...(out.approval_item_id === undefined ? {} : { approval_item_id: out.approval_item_id }),
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
       case 'org.scope_check': {
         const seen = world.org.visible(event.scope_check.who, event.scope_check.role)
         world.appendEvent('simulation.scope_checked', {

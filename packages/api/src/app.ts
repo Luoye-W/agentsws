@@ -25,6 +25,7 @@ import { identityRoutes } from './routes/identity.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
 import { meetingRoutes } from './routes/meetings.js'
 import { modelRoutes } from './routes/models.js'
+import { onboardingRoutes } from './routes/onboarding.js'
 import { orgRoutes } from './routes/org.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
@@ -86,6 +87,14 @@ export function collectRoutes(): Route[] {
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),
+    /*
+     * WP51（46）：首次设置、同事发现、邀请码与申请加入。
+     *
+     * 排在 org 之后、events 之前没有讲究——`/v1/onboarding/*`、`/v1/discovery/*`、
+     * `/v1/invites`、`/v1/memberships/*` 四个前缀与已有路径都不撞（`/v1/workspaces/:id/invitations`
+     * 是 WP28 的**定向邮件邀请**，与这里的**人类可读码**是两件事，路径也不同）。
+     */
+    ...onboardingRoutes(),
     ...eventRoutes(),
     // WP33 WebSocket 事件流：`/v1/ws` 的 HTTP 面（真正的升级由宿主在 http.Server 上做）
     ...wsRoutes(),

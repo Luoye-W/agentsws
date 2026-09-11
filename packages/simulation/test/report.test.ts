@@ -270,7 +270,8 @@ describe('套件与报告落盘（26 §5）', () => {
     expect(summary.passed).toBe(true)
     expect(summary.scenarios).toHaveLength(13)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
-  })
+    // 跑一整个 pack（13 条场景）不是 5 秒的活，而且并行跑别的项目时还要抢 CPU
+  }, 120_000)
 
   it('与仓库里提交的基线比，指标没有劣化', async () => {
     const result = await runSuite({ packDir: PACK_DIR, seed: 42 })
@@ -278,7 +279,8 @@ describe('套件与报告落盘（26 §5）', () => {
     expect(result.baseline).toBeDefined()
     expect(result.gate.failures).toEqual([])
     for (const r of result.reports) expect(r.delta, r.id).toBeDefined()
-  })
+    // 同上：这条也跑一整个 pack
+  }, 120_000)
 
   it('隐藏集用 --scenario-root 单独跑，不在 pack 里', async () => {
     const result = await runSuite({
