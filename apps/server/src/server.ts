@@ -1200,6 +1200,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
     ...(options.discoveryPost === undefined ? {} : { post: options.discoveryPost }),
     ...(options.discoveryHello === undefined ? {} : { helloFetch: options.discoveryHello }),
+    // WP52：批准一条加入申请之后，直接交给 20 §4 的 Join（owner 当场收一张 join_mapping 卡）。
+    // 懒取：`joinAssembly` 在下面几行才建出来。
+    join: () => joinAssembly.port,
   })
 
   // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——

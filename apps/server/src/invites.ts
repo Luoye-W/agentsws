@@ -22,12 +22,18 @@
  */
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import type { InviteView, MembershipRequestInput, MembershipRequestView } from '@agentsws/api'
+import type {
+  InviteView,
+  JoinPort,
+  MembershipRequestInput,
+  MembershipRequestView,
+} from '@agentsws/api'
 import type {
   ApprovalBus,
   Clock,
   EventEnvelope,
   Invite,
+  JoinExportBundle,
   MembershipRequest,
   MembershipRequestVia,
   PersonId,
@@ -64,6 +70,19 @@ export const INVITE_DEFAULT_USES = 5
  * 码的字母表：去掉了 0 / O、1 / I / L、以及 U（手写像 V）。
  * 32 个字符 × 8 位 = 40 bit，对一个 24 小时、要人点头才作数的码来说绰绰有余。
  */
+/**
+ * 新同事的**个人工作区 id**。
+ *
+ * 46 §4 定死了申请里只有名字与邮箱——业务数据、凭据、岗位一个都不带，所以这会儿
+ * 我们并不知道他那台机器上的工作区叫什么。批准的这一刻要建的是一张**空的对照卡**：
+ * "人进来了，他的品牌 / 产品线 / 店铺还没并进来"。等他从自己那台机器
+ * `POST /v1/join/export` → `import` 真包过来时，卡上就有东西了。
+ *
+ * 派生而不是随机：同一个人两次批准落到同一个 `join_id`，卡也就是同一张（去重键稳定）。
+ */
+export const personalWorkspaceIdOf = (person_id: PersonId): WorkspaceId =>
+  `ws_personal_${person_id}`
+
 const ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'
 
 /** 申请在本机的存法：多一个方向与对方是谁。 */
@@ -172,6 +191,13 @@ export interface InvitesOptions {
   peerIds(): string[]
   /** 往同伴那边发一条请求；默认 `fetch`，测试注入内存实现。 */
   post?: (url: string, body: unknown) => Promise<{ ok: boolean; data?: unknown }>
+  /**
+   * 20 §4 的 Join 入口（WP50）。**懒取**：Join 装在 onboarding 之后，
+   * 直接传值会拿到 undefined；这里在 `decide` 那一刻才去要它。
+   *
+   * 不装配时走兜底（只记一条 `next: 'join_import'` 的事件，与 WP51 原样）。
+   */
+  join?: () => JoinPort | undefined
   dbDir?: string
 }
 
@@ -492,13 +518,63 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       }
       row.status = 'approved'
       row.person_id = person_id
+
+      /*
+       * 20 §4：人进来了，接着该走的是 Join 的导入 + 映射确认（45 的合并向导）。
+       *
+       * WP51 时这里只记了一句 `next: 'join_import'`——没人接得住它，owner 的队列里
+       * 什么都没有，"接着该走"就只是一句话。WP52 把它接上：**真调 WP50 的
+       * `join.import`**，owner 当场收到一张 `join_mapping` 卡。
+       *
+       * 包是空的（46 §4：申请里只有名字与邮箱，我们还不知道他那边有什么），
+       * 所以这张卡此刻的意思是"该把他的个人工作区并进来了"。他从自己那台机器导出
+       * 真包再 import 时，`join_id` 由 (源工作区, 公司工作区, 人) 派生、去重键稳定，
+       * 落到的还是这一张卡——不会变成两张。
+       *
+       * Join 没装配、或者建卡失败：退回 WP51 的老路（只记事件）。
+       * **人已经建好了，不能因为一张卡没建成就把批准回滚。**
+       */
+      const port = options.join?.()
+      let joined: { join_id: string; approval_item_id: string } | undefined
+      let joinFailed: string | undefined
+      if (port !== undefined) {
+        const source = personalWorkspaceIdOf(person_id)
+        const bundle: JoinExportBundle = {
+          schema_version: 1,
+          workspace_id: source,
+          person_id,
+          exported_at: row.decided_at ?? clock.now(),
+          range_groups: [],
+          product_lines: [],
+          store_ranges: [],
+          connections: [],
+        }
+        try {
+          const receipt = await port.import(
+            {
+              workspace_id,
+              person_id: by,
+              assignment_id: 'onboarding',
+              role_id: 'common.owner',
+            },
+            bundle,
+          )
+          joined = { join_id: receipt.join_id, approval_item_id: receipt.approval_item_id }
+        } catch (e) {
+          joinFailed = e instanceof Error ? e.message : String(e)
+        }
+      }
+
       backend.putRequest(row)
       emit('membership.approved', by, {
         request_id: row.id,
         person_id,
         via: row.via,
-        // 20 §4：人进来了，接着该走的是 Join 的导入 + 映射确认（45 的合并向导）
         next: 'join_import',
+        ...(joined === undefined
+          ? {}
+          : { join_id: joined.join_id, join_approval_item_id: joined.approval_item_id }),
+        ...(joinFailed === undefined ? {} : { join_error: joinFailed }),
       })
 
       // 46 I3：我们既然收下了对方的人，我们自己朝他那边的申请就没有意义了——

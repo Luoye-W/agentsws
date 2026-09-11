@@ -24,6 +24,7 @@ import type {
   DiscoveryHelloView,
   DiscoveryStateView,
   InviteView,
+  JoinPort,
   MembershipRequestInput,
   MembershipRequestView,
   OnboardingApplyView,
@@ -171,6 +172,11 @@ export interface OnboardingOptions {
   helloFetch?: (url: string) => Promise<DiscoveryHelloView | undefined>
   /** 往同伴那边发一条请求（申请加入 / 告知失效）；默认 `fetch`，测试注入内存实现。 */
   post?: (url: string, body: unknown) => Promise<{ ok: boolean; data?: unknown }>
+  /**
+   * 20 §4 的 Join 入口（WP50）：批准一条加入申请之后，给 owner 建一张 `join_mapping` 卡。
+   * **懒取**——Join 装在本模块之后，要到真用的时候才拿得到。不给就走兜底（只记事件）。
+   */
+  join?: () => JoinPort | undefined
 }
 
 export interface OnboardingAssembly {
@@ -240,6 +246,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     peerAddress: (id) => discovery.peer(id),
     peerIds: () => discovery.peerIds(),
     ...(options.post === undefined ? {} : { post: options.post }),
+    ...(options.join === undefined ? {} : { join: options.join }),
     ...(options.dbDir === undefined ? {} : { dbDir: options.dbDir }),
   })
 
