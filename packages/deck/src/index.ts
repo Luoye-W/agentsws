@@ -46,6 +46,7 @@ export {
   sourceOf,
 } from './project.js'
 export {
+  dayLabel,
   QUERIES,
   type QueryDef,
   queryDef,
