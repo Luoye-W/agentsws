@@ -502,7 +502,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
                 workspace_id,
                 type: e.type,
                 actor: { kind: 'system', id: 'connections' },
-                correlation: { trace_id: '' },
+                // 后台刷新（活数据源定时拉订单）没有请求上下文，空 trace_id 会被内核顶回来，
+                // 连带整轮刷新失败——09-11 真店实测踩到。自己生成一个。
+                correlation: { trace_id: nextTraceId('connect') },
                 payload: e.payload,
                 ...(e.at === undefined ? {} : { at: e.at }),
               })
