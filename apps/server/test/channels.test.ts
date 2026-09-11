@@ -177,6 +177,52 @@ describe('IMAP 轮询 → 入站管线 → 岗位事项 → 起 Run（39 待办 
     expect(h.runs).toHaveLength(1)
   })
 
+  it('起 Run 抛了异常 → 队列退避重试：时间线上来信只记一行，不是每次重试都多一行', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-channels-retry-'))
+    cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
+    const data = createDataStore({ dbPath: join(dir, 'data.db'), clock, collections: [] })
+    cleanup.push(() => data.close())
+    let nowMs = Date.parse(T0)
+    const ticking: Clock = {
+      now: () => new Date(nowMs).toISOString(),
+      sleep: async () => undefined,
+    }
+    const work = createWork({ workspace_id: WS, clock: ticking, random: () => 0.5 })
+    let attempts = 0
+    const channels = createChannels({
+      clock: ticking,
+      workspace_id: WS,
+      dbDir: dir,
+      halt: new MemoryHalt({}),
+      appendEvent: () => undefined,
+      cipher: data.keyring,
+      accounts: () => [account()],
+      credentials: { password: () => PASS },
+      work,
+      position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.aftersales' }),
+      startRun: () => {
+        attempts += 1
+        if (attempts === 1) throw new Error('模型没起来')
+        return { run_id: `run_${attempts}` }
+      },
+      makeMailer: () => new RecordingMailer(),
+    })
+    assemblies.push(channels)
+
+    await channels.poll()
+    expect(attempts).toBe(1)
+    // 退避 1 秒后再拉一轮：重试成功
+    nowMs += 5_000
+    await channels.poll()
+    expect(attempts).toBe(2)
+
+    const matter = work.listMatters({ kind: 'conversation' })[0]
+    expect(matter).toBeDefined()
+    const timeline = work.matterView(matter?.id ?? '').timeline
+    expect(timeline.filter((e) => e.kind === 'human_message')).toHaveLength(1)
+    expect(timeline.filter((e) => e.kind === 'run')).toHaveLength(1)
+  })
+
   it('原始材料区接了 data.keyring：库文件字节里找不到正文（18 §2.1）', async () => {
     const h = harness()
     await h.channels.poll()

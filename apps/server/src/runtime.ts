@@ -184,7 +184,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       type,
       actor: { kind: 'agent', id: req.actor.assignment_id, run_id: req.id },
       correlation: {
-        trace_id: '',
+        // 请求里起的运行由网关的 traceScope 覆盖成请求 trace；渠道消费者 / 定时任务起的运行
+        // 没有请求上下文，空 trace 会被内核整条顶回、整次运行报"没跑成"（09-12 真账号验收撞上）
+        trace_id: `trc_run_${req.id}`,
         run_id: req.id,
         ...(req.work_item === undefined ? {} : { work_item_id: req.work_item.id }),
       },

@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto'
 import type { ExecutionSnapshot } from '@agentsws/contracts'
 
 /** 稳定序列化：键排序，保证同一内容同一哈希。 */
+/**
+ * 与 `JSON.stringify` 同一套取舍：对象里值为 `undefined`（以及函数 / symbol）的键**跳过**，
+ * 数组里的 `undefined` 变 `null`——否则 `JSON.stringify(undefined)` 回的是 `undefined` 本身，
+ * 拼进字符串就成了字面量 `undefined`，谁 `JSON.parse` 谁炸（09-12 真账号验收：一封客户来信
+ * 带着一个 `label: undefined` 进运行时，规范化那一步整条入站流水线卡死）。
+ */
 export function canonicalJson(value: unknown): string {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') return 'null'
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
   const obj = value as Record<string, unknown>
@@ -10,6 +17,10 @@ export function canonicalJson(value: unknown): string {
     '{' +
     Object.keys(obj)
       .sort()
+      .filter((k) => {
+        const v = obj[k]
+        return v !== undefined && typeof v !== 'function' && typeof v !== 'symbol'
+      })
       .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`)
       .join(',') +
     '}'

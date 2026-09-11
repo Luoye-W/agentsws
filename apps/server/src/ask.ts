@@ -115,7 +115,8 @@ export function createAskPort(options: AskOptions): AskPort {
         workspace_id: actor.workspace_id,
         type: 'ask.answered',
         actor: { kind: 'person', id: actor.person_id },
-        correlation: { trace_id: '', run_id },
+        // 请求里网关会覆盖成请求 trace；没有请求时（定时 / 渠道触发的代答）也不能是空串
+        correlation: { trace_id: `trc_ask_${run_id}`, run_id },
         payload: {
           scope: {
             ...(matter_id === undefined ? {} : { matter_id }),

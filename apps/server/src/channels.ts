@@ -212,18 +212,29 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
     })
   }
 
+  /**
+   * 同一封信在队列里重试时（起 Run 抛了异常 → 退避 → 再来），时间线上不能每次都多一行来信。
+   * 09-12 真账号验收：一封客户来信重试五次，事项里出现五条一模一样的 human_message。
+   * 按 (事项, 去重键) 记一下——只在本进程内，跨重启的重复由去重表（24h 窗口）兜住。
+   */
+  const appendedInbound = new Set<string>()
+
   const onEvent = async (event: InboundEvent): Promise<void> => {
     const work = options.work
     const matter = matterFor(event)
     if (work === undefined || matter === undefined) return
     // 进模型的正文仍然带围栏（管线已经围过了）；时间线上给人看的那一行去掉标记
     const body = textOf(event.parts)
-    work.appendEvent(matter.id, {
-      kind: 'human_message',
-      text: forDisplay(body),
-      actor: { kind: 'system', id: `channel:${event.channel}` },
-      ...(event.actor?.resolved === undefined ? {} : { ref: event.actor.resolved }),
-    })
+    const inboundKey = `${matter.id}|${event.dedupe_key}`
+    if (!appendedInbound.has(inboundKey)) {
+      appendedInbound.add(inboundKey)
+      work.appendEvent(matter.id, {
+        kind: 'human_message',
+        text: forDisplay(body),
+        actor: { kind: 'system', id: `channel:${event.channel}` },
+        ...(event.actor?.resolved === undefined ? {} : { ref: event.actor.resolved }),
+      })
+    }
     const position = options.position?.()
     const startRun = options.startRun
     if (startRun === undefined || position === undefined) return
