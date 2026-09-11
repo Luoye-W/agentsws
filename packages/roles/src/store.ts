@@ -186,6 +186,11 @@ export interface AssignmentApi {
   revoke(id: AssignmentId, input?: RevokeInput): Assignment
   listByPerson(person: PersonId, filter?: Omit<AssignmentFilter, 'person_id'>): Assignment[]
   listByRole(role: RoleId, filter?: Omit<AssignmentFilter, 'role_id'>): Assignment[]
+  /** 44：整个工作区活着的分配（算范围下推 / 品牌影响面时用）。 */
+  listByWorkspace(
+    workspace: WorkspaceId,
+    filter?: Omit<AssignmentFilter, 'workspace_id'>,
+  ): Assignment[]
 }
 
 export interface PolicyApi {
@@ -586,6 +591,9 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
     },
     listByRole(role, filter) {
       return backend.listAssignments({ ...filter, role_id: role })
+    },
+    listByWorkspace(workspace, filter) {
+      return backend.listAssignments({ ...filter, workspace_id: workspace })
     },
   }
 

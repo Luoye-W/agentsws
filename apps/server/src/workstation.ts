@@ -18,8 +18,13 @@ import type { RoleStore } from '@agentsws/roles'
 
 /** 工作台要的那点外部数据；接了连接器就换成真的，没接就 `connected: false`。 */
 export interface WorkstationDataSource {
-  /** 店铺侧的订单行（v1 来自 mock OpenConnector 的状态） */
-  orders(): OrderRow[]
+  /**
+   * 店铺侧的订单行（v1 来自 mock OpenConnector 的状态）。
+   *
+   * 44 G2：给了 `view.assignment_id` 就按这个岗位的产品线切一刀——一张混了两条
+   * 产品线的订单两边都看得见，但金额只算自己那部分行项目。不给（老调用方）原样回全部。
+   */
+  orders(view?: { assignment_id?: string }): OrderRow[]
   /** 数据源连接状态（36 §3：没接的显示「去连接」而不是空图） */
   sources(): DataSourceStatus[]
   /** ObjectRef → 人话 */
@@ -123,7 +128,8 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         base_currency: options.data.base_currency,
         role_id: position.role_id,
         position_id: position.position_id,
-        orders: options.data.orders(),
+        // 44 G2：岗位视角——挂产品线的岗位只看得到自己那条线的订单与金额
+        orders: options.data.orders({ assignment_id: position.position_id }),
         // 记录 Tab 与几个「存量」指标要看全部状态，不只是队列里那几条
         approvals: await itemsFor(actor, position, ALL_STATES),
         sources: options.data.sources(),

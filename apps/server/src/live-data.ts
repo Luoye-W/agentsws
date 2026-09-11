@@ -18,10 +18,17 @@
  *    `connected: false`，界面显示「去连接」而不是一排永远为 0 的数字块。
  */
 import type { Clock, EventEnvelope, WorkspaceId } from '@agentsws/contracts'
-import type { ConnectionLike, DataSourceStatus, OrderRow } from '@agentsws/deck'
+import type { ConnectionLike, DataSourceStatus, OrderLineItem, OrderRow } from '@agentsws/deck'
 import { dataSourcesFromConnections } from '@agentsws/deck'
 import { catalogEntry } from './catalog.js'
 import type { ConnectLike } from './connections.js'
+import {
+  LINE_ITEM_BACKFILL_DAYS,
+  type OrderScopePort,
+  type OrderView,
+  pushdownQueryOf,
+  scopedOrders,
+} from './order-scope.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 刷新周期默认 5 分钟；`AGENTSWS_LIVE_DATA_REFRESH_SECONDS` 可调。 */
@@ -36,6 +43,13 @@ export const ORDER_WINDOW_DAYS = 30
 export const ORDER_PAGE_LIMIT = 250
 /** 最多翻几页——面板不是导数据工具，1000 条足够算完 30 天的数字块。 */
 export const ORDER_MAX_PAGES = 4
+/**
+ * 44 G2：最多给几张订单补 `get_order`（`list_orders` 不给行项目，产品线又要按行切）。
+ *
+ * 只补近 7 天（`LINE_ITEM_BACKFILL_DAYS`）里没带行项目的那些，再加这条硬上限——
+ * 一次刷新最多多打 60 个请求，够 15 人公司一周的量，也不至于把上游的额度打光。
+ */
+export const ORDER_LINE_ITEM_MAX_FETCH = 60
 
 const DAY = 86_400_000
 
@@ -71,6 +85,11 @@ export interface LiveDataOptions {
   env?: Record<string, string | undefined>
   /** 后台定时器间隔（毫秒）；不给按环境变量 / 默认 5 分钟，传 0 = 不起定时器。 */
   refreshIntervalMs?: number
+  /**
+   * 44 G2：制度那边的产品线与岗位范围。不给 = 这个进程不做产品线切分
+   * （`orders()` 原样回全部，一次 `get_order` 都不多打）。
+   */
+  scope?: OrderScopePort
 }
 
 /** 一次刷新的结论（只有计数与原因码，没有任何订单内容）。 */
@@ -85,6 +104,10 @@ export interface LiveRefreshReport {
   stale?: boolean
   /** 这一轮换过令牌（上游 401 → 换一张再试）。 */
   refreshed_token?: boolean
+  /** 44 G2：这一轮补了几张订单的行项目（`list_orders` 不给行项目）。 */
+  line_items_fetched?: number
+  /** 44 G2：这一轮让上游先切的那一刀（产品线的 `query:` 下推；没下推就没有）。 */
+  pushdown?: string
 }
 
 export interface LiveDataSource extends WorkstationDataSource {
@@ -105,6 +128,8 @@ export interface LiveDataStatus {
   /** 缓存里这份是不是「上游拉失败后留下的旧的」。 */
   stale: boolean
   orders: number
+  /** 44 G2：缓存里有几张订单带着行项目（切得动产品线的那些）。 */
+  orders_with_line_items?: number
   last?: LiveRefreshReport
 }
 
@@ -222,6 +247,7 @@ export function toOrderRow(
     (isRecord(customer) ? stringOf(customer.email) : undefined) ??
     ''
   const delivered = stringOf(pick(row, ['delivered_at', 'deliveredAt']))
+  const lineItems = lineItemsOf(pick(row, ['line_items', 'lineItems']))
   return {
     id,
     name: typeof number === 'string' || typeof number === 'number' ? `${number}` : id,
@@ -240,7 +266,68 @@ export function toOrderRow(
       pick(row, ['fulfillment_status', 'fulfillmentStatus', 'displayFulfillmentStatus']),
       'unfulfilled',
     ),
+    ...(lineItems === undefined ? {} : { line_items: lineItems }),
   }
+}
+
+/**
+ * 44 G2：上游那一坨 → 行项目数组（认不出来回 undefined，**不编**）。
+ *
+ * 真身与替身的形状又不一样：REST 是 `line_items: [{ product_id, quantity, price }]`，
+ * GraphQL 是 `lineItems: { edges: [{ node: { product: { id }, quantity,
+ * originalTotalSet: { shopMoney: { amount } } } }] }`。
+ */
+export function lineItemsOf(node: unknown): OrderLineItem[] | undefined {
+  const raw = Array.isArray(node)
+    ? node
+    : isRecord(node) && Array.isArray(node.edges)
+      ? node.edges
+      : isRecord(node) && Array.isArray(node.nodes)
+        ? node.nodes
+        : undefined
+  if (raw === undefined) return undefined
+  const out: OrderLineItem[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue
+    const item = isRecord(entry.node) ? entry.node : entry
+    const quantity = numberOf(pick(item, ['quantity', 'currentQuantity'])) ?? 1
+    const unit =
+      numberOf(pick(item, ['price', 'unit_price', 'originalUnitPrice'])) ??
+      moneyOf(pick(item, ['originalUnitPriceSet', 'discountedUnitPriceSet'])).amount
+    const total =
+      numberOf(pick(item, ['total', 'line_total', 'total_price'])) ??
+      moneyOf(pick(item, ['originalTotalSet', 'discountedTotalSet', 'original_total_set']))
+        .amount ??
+      (unit === undefined ? 0 : Math.round(unit * quantity * 100) / 100)
+    const product = item.product
+    const productId =
+      stringOf(pick(item, ['product_id', 'productId'])) ??
+      (isRecord(product) ? (stringOf(product.id) ?? stringOf(product.gid)) : undefined) ??
+      (typeof pick(item, ['product_id', 'productId']) === 'number'
+        ? `${pick(item, ['product_id', 'productId'])}`
+        : undefined)
+    const variant = item.variant
+    const variantId =
+      stringOf(pick(item, ['variant_id', 'variantId'])) ??
+      (isRecord(variant) ? stringOf(variant.id) : undefined)
+    const vendor =
+      stringOf(item.vendor) ?? (isRecord(product) ? stringOf(product.vendor) : undefined)
+    const productType =
+      stringOf(pick(item, ['product_type', 'productType'])) ??
+      (isRecord(product) ? stringOf(product.productType) : undefined)
+    out.push({
+      ...(stringOf(item.id) === undefined ? {} : { id: stringOf(item.id) as string }),
+      ...(productId === undefined ? {} : { product_id: productId }),
+      ...(variantId === undefined ? {} : { variant_id: variantId }),
+      ...(stringOf(item.sku) === undefined ? {} : { sku: stringOf(item.sku) as string }),
+      ...(stringOf(item.title) === undefined ? {} : { title: stringOf(item.title) as string }),
+      ...(vendor === undefined ? {} : { vendor }),
+      ...(productType === undefined ? {} : { product_type: productType }),
+      quantity,
+      total,
+    })
+  }
+  return out.length === 0 ? undefined : out
 }
 
 function refundsSum(node: unknown): number | undefined {
@@ -458,13 +545,27 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
    */
   const pullOnce = async (
     connection: LiveConnection,
-  ): Promise<{ orders: OrderRow[]; pages: number; currency?: string; tz?: number }> => {
+  ): Promise<{
+    orders: OrderRow[]
+    pages: number
+    currency?: string
+    tz?: number
+    lineItemsFetched?: number
+    pushdown?: string
+  }> => {
     const listOrders = await findAction(connection.service, 'list_orders')
     if (listOrders === undefined) {
       throw codedError('action_unavailable', `连接器目录里没有 ${connection.service}.list_orders`)
     }
     const getShop = await findAction(connection.service, 'get_shop')
-    const allowed = [listOrders.id, ...(getShop === undefined ? [] : [getShop.id])]
+    // 44 G2：`list_orders` 不给行项目，产品线要按行切 → 近 7 天的补一次 `get_order`
+    const needsLineItems = (options.scope?.productLines().length ?? 0) > 0
+    const getOrder = needsLineItems ? await findAction(connection.service, 'get_order') : undefined
+    const allowed = [
+      listOrders.id,
+      ...(getShop === undefined ? [] : [getShop.id]),
+      ...(getOrder === undefined ? [] : [getOrder.id]),
+    ]
     const token = await options.connect.issueToken({
       assignment_id: LIVE_ASSIGNMENT,
       kind: 'role-read',
@@ -490,6 +591,8 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
       }
 
       const cutoff = Date.parse(clock.now()) - ORDER_WINDOW_DAYS * DAY
+      // 19 §3 过滤下推：全工作区的人都只挂产品线时，让上游先按 `tag:` / `vendor:` 切一刀
+      const pushdown = pushdownQueryOf(options.scope)
       const rows: OrderRow[] = []
       const ids = new Set<string>()
       let cursor: string | undefined
@@ -498,9 +601,11 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
         // 入参按 OpenConnector `shopify_admin.list_orders` 的真实 schema（09-11 对着容器源码核过）：
         // GraphQL connection 三件套 `first` / `after` / `query`，多一个键都会被 schema 校验顶回来。
         // 30 天窗口先让上游按 Shopify 搜索语法切一刀，本地再切一次兜底。
+        const window = `created_at:>=${new Date(cutoff).toISOString().slice(0, 10)}`
         const payload = await run(listOrders.id, {
           first: ORDER_PAGE_LIMIT,
-          query: `created_at:>=${new Date(cutoff).toISOString().slice(0, 10)}`,
+          // 空格 = AND：先切时间窗，再切产品线（Shopify 搜索语法）
+          query: pushdown === undefined ? window : `${window} (${pushdown})`,
           ...(cursor === undefined ? {} : { after: cursor }),
         })
         pages += 1
@@ -516,11 +621,42 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
         cursor = cursorOf(payload)
         if (cursor === undefined || raw.length === 0) break
       }
+
+      // 44 G2：近 7 天里还没有行项目的，补一次 `get_order`（有硬上限，更早的不补）
+      let lineItemsFetched = 0
+      if (getOrder !== undefined) {
+        const since = Date.parse(clock.now()) - LINE_ITEM_BACKFILL_DAYS * DAY
+        for (const row of rows) {
+          if (lineItemsFetched >= ORDER_LINE_ITEM_MAX_FETCH) break
+          if (row.line_items !== undefined) continue
+          if (Date.parse(row.created_at) < since) continue
+          try {
+            const detail = await run(getOrder.id, { order_id: row.id })
+            const items = lineItemsOf(
+              isRecord(detail)
+                ? (pick(detail, ['line_items', 'lineItems']) ??
+                    (isRecord(detail.order)
+                      ? pick(detail.order, ['line_items', 'lineItems'])
+                      : undefined))
+                : undefined,
+            )
+            if (items !== undefined) {
+              row.line_items = items
+              lineItemsFetched += 1
+            }
+          } catch {
+            // 补不到就算了：这张订单进不了产品线视角，但整店视角照常有它
+          }
+        }
+      }
+
       return {
         orders: rows,
         pages,
         ...(currency === undefined ? {} : { currency }),
         ...(tz === undefined ? {} : { tz }),
+        ...(lineItemsFetched === 0 ? {} : { lineItemsFetched }),
+        ...(pushdown === undefined ? {} : { pushdown }),
       }
     } finally {
       try {
@@ -564,6 +700,11 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
             pages: pulled.pages,
             duration_ms: Date.now() - started,
             ...(refreshed_token ? { refreshed_token: true } : {}),
+            ...(pulled.lineItemsFetched === undefined
+              ? {}
+              : { line_items_fetched: pulled.lineItemsFetched }),
+            // 下推的是**判据**（tag / vendor / 集合 id），不是任何订单内容
+            ...(pulled.pushdown === undefined ? {} : { pushdown: true }),
           })
           return {
             status: 'ok',
@@ -571,6 +712,10 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
             pages: pulled.pages,
             duration_ms: Date.now() - started,
             ...(refreshed_token ? { refreshed_token: true } : {}),
+            ...(pulled.lineItemsFetched === undefined
+              ? {}
+              : { line_items_fetched: pulled.lineItemsFetched }),
+            ...(pulled.pushdown === undefined ? {} : { pushdown: pulled.pushdown }),
           }
         } catch (e) {
           // 上游 401 多半只是那张 24 小时的令牌过期了：换一张再跑一次
@@ -653,7 +798,9 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
   }
 
   return {
-    orders: () => (activeShop() === undefined ? [] : (cache?.orders ?? [])),
+    // 44 G2：给了岗位视角就按它的产品线切一刀（没给 / 挂整店的原样回）
+    orders: (view?: OrderView) =>
+      activeShop() === undefined ? [] : scopedOrders(cache?.orders ?? [], options.scope, view),
 
     sources: (): DataSourceStatus[] => dataSourcesFromConnections(connectionsOf()),
 
@@ -679,6 +826,8 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
         .some((c) => MAIL_SERVICES.has(c.service) && c.status === 'active'),
       stale,
       orders: cache?.orders.length ?? 0,
+      orders_with_line_items: (cache?.orders ?? []).filter((o) => o.line_items !== undefined)
+        .length,
       ...(last === undefined ? {} : { last }),
     }),
     close: () => {

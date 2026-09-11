@@ -731,6 +731,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: workspace.id,
       appendEvent,
       env,
+      // 44 G2：产品线切分要认制度那边的范围与判据（一条产品线都没有时整条路短路）
+      scope: {
+        rangesOf: (assignment_id) => roles.assignments.get(assignment_id)?.ranges ?? [],
+        productLine: (id) => roles.productLines.get(id),
+        productLines: () => roles.productLines.list(workspace.id),
+        activeRanges: () => roles.assignments.listByWorkspace(workspace.id).map((a) => a.ranges),
+      },
       ...(options.liveDataIntervalMs === undefined
         ? {}
         : { refreshIntervalMs: options.liveDataIntervalMs }),
@@ -929,7 +936,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     goals: async (p: SchedulePosition) =>
       work.progress(
         periodQueryRunner(
-          () => workData.orders(),
+          () => workData.orders({ assignment_id: p.assignment_id }),
           () => [],
           'USD',
         ),
