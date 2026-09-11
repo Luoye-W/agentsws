@@ -393,6 +393,52 @@ export function checkExpectations(
         : `没路由到：${missing.join(', ')}（实际 [${[...roles].join(', ')}]）`,
     )
   }
+  // WP47 / 44 G2：同一个账号的两条产品线，互相看不到对方的订单和商品
+  if (expected.scope_disjoint !== undefined) {
+    const seen = new Map<string, { orders: string[]; products: string[] }>()
+    for (const e of evidence.events) {
+      if (e.type !== 'simulation.scope_checked') continue
+      const p = payloadOf(e)
+      const who = String(p.who ?? '')
+      seen.set(who, {
+        orders: Array.isArray(p.orders) ? (p.orders as string[]) : [],
+        products: Array.isArray(p.products) ? (p.products as string[]) : [],
+      })
+    }
+    const problems: string[] = []
+    for (const who of expected.scope_disjoint) {
+      const mine = seen.get(who)
+      if (mine === undefined) {
+        problems.push(`${who} 没有 org.scope_check，这条断言没有意义`)
+        continue
+      }
+      // 看不到任何东西的"隔离"不算隔离（那只是没给范围）
+      if (mine.orders.length === 0) problems.push(`${who} 一张订单都看不到`)
+      if (mine.products.length === 0) problems.push(`${who} 一件商品都看不到`)
+    }
+    for (const a of expected.scope_disjoint)
+      for (const b of expected.scope_disjoint) {
+        if (a >= b) continue
+        const x = seen.get(a)
+        const y = seen.get(b)
+        if (x === undefined || y === undefined) continue
+        const sharedOrders = x.orders.filter((id) => y.orders.includes(id))
+        const sharedProducts = x.products.filter((id) => y.products.includes(id))
+        if (sharedOrders.length > 0)
+          problems.push(`${a} 与 ${b} 都看得到订单 ${sharedOrders.slice(0, 3).join('、')}`)
+        if (sharedProducts.length > 0)
+          problems.push(`${a} 与 ${b} 都看得到商品 ${sharedProducts.slice(0, 3).join('、')}`)
+      }
+    add(
+      'scope_disjoint',
+      problems.length === 0,
+      problems.length === 0
+        ? `${expected.scope_disjoint.join(' / ')} 各看各的（${expected.scope_disjoint
+            .map((w) => `${w}:${seen.get(w)?.orders.length ?? 0} 单`)
+            .join('，')}）`
+        : problems.join('；'),
+    )
+  }
   // WP39：代答里出现过哪几类（doing / scope / busy / skills / private / professional）
   if (expected.secretary_kinds !== undefined) {
     const kinds = new Set(

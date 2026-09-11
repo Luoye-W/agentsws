@@ -116,6 +116,15 @@ export type KnownEventType =
   // WP46：活数据源——只记条数 / 页数 / 耗时 / 失败原因码，订单原文不进事件
   | 'data.refreshed'
   | 'data.refresh_failed'
+  // WP47：范围模型（44）——品牌（范围组）与产品线的增删改；payload 只有 id / 名字 / 成员条数
+  | 'range_group.created'
+  | 'range_group.updated'
+  | 'range_group.deleted'
+  | 'product_line.created'
+  | 'product_line.updated'
+  | 'product_line.deleted'
+  /** 44 G5：品牌组成员变了，挂了它的岗位范围自动跟着变——**变更必须留痕**（40 §1 的底线）。 */
+  | 'assignment.range_expanded'
   // WP24：问 AI 只记哈希；急停变更
   | 'ask.answered'
   | 'halt.changed'

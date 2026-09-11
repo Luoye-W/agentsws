@@ -123,12 +123,20 @@ export interface EffectiveConfig {
   skills: RoleDefinition['skills']
   grounding: GroundingRule[]
   persona?: string
+  /** 展开后的范围（44 G1：挂的范围组已经摊平进来了）。 */
   ranges: RangeRef[]
+  /** 44 G1：这些范围是从哪几个范围组（品牌）来的。 */
+  range_groups?: string[]
   home_blocks: HomeBlock[]
   notifications: NotificationRule[]
   /** required 连接器齐全 */
   ready: boolean
-  /** ranges 为空且任一 scope.range == 'assigned'：拒签 token、查询返回空、界面标"未分配范围" */
+  /**
+   * ranges 为空且任一 scope.range == 'assigned'：拒签 token、查询返回空、界面标"未分配范围"。
+   *
+   * 44 G2：产品线也算范围——只挂了 `product_line` 的岗位**不是**未分配范围，
+   * 它只是看得比整店窄（09-11 真店验收里"店铺后台"静默消失的那一条就是这里）。
+   */
   unassigned_range: boolean
 }
 

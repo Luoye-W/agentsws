@@ -211,6 +211,20 @@ export interface PositionTiles {
 
 // ── 命名查询 ───────────────────────────────────────────────────────────
 
+/** 一张订单里的一行商品（44 G2：产品线要按行项目切，所以行项目得带回来）。 */
+export interface OrderLineItem {
+  id?: string
+  product_id?: string
+  variant_id?: string
+  sku?: string
+  title?: string
+  vendor?: string
+  product_type?: string
+  quantity: number
+  /** 这一行的小计（上游给了就用上游的，没给按单价 × 数量）。 */
+  total: number
+}
+
 export interface OrderRow {
   id: string
   name: string
@@ -222,6 +236,15 @@ export interface OrderRow {
   refunded_amount: number
   financial_status: string
   fulfillment_status: string
+  /** 行项目（拉得到才有；`list_orders` 通常不给，要补一次 `get_order`）。 */
+  line_items?: OrderLineItem[]
+  /**
+   * 44 G2：这一行是**按产品线切过**的——`total_price` 只算自己那部分行项目，
+   * 整单金额在 `full_total_price`。一张混了两条产品线的订单两边都看得见，
+   * 但两边的数字块各算各的那一半。
+   */
+  partial?: boolean
+  full_total_price?: number
 }
 
 /** 记录 Tab 的一行（29 role_view 的 timeline 积木）。 */

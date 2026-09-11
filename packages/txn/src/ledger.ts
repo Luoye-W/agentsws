@@ -11,6 +11,7 @@ import {
   KIND_RISK,
   mandateHash,
   Provenance,
+  TARGET_SCOPED_KINDS,
 } from '@agentsws/core'
 import type { ApprovalBusImpl } from './approvals.js'
 import type { TxnRuntime } from './runtime.js'
@@ -128,6 +129,17 @@ export class ChangeLedgerImpl {
       }
     }
 
+    // 44 G2 前置检查：目标商品在不在这个岗位管的范围里（挂整店的永远真）
+    const scope = TARGET_SCOPED_KINDS.has(input.kind)
+      ? this.rt.opts.targetInRange?.({
+          assignment_id: input.assignment_id,
+          kind: input.kind,
+          target: input.target,
+          before: input.before,
+          after: input.after,
+        })
+      : undefined
+
     const provenance = input.provenance ? Provenance.from(input.provenance) : undefined
     if (provenance) provenance.pin(input.target)
     const counter = counterKey(
@@ -160,6 +172,8 @@ export class ChangeLedgerImpl {
           ? { dailySpendTotal: input.daily_spend_total }
           : {}),
         ...(provenance ? { provenance } : {}),
+        // 44 G2：只在"目标是一件具体商品"的那几种变更上问一句（不装这个口子就不判）
+        ...(scope === undefined ? {} : { target_in_range: scope }),
       },
       'stage',
     )

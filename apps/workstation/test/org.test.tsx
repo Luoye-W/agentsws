@@ -12,7 +12,14 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OrgInvitationView, OrgMemberView, OrgPositionView, RoleSummaryView } from '@/lib/api'
+import type {
+  OrgInvitationView,
+  OrgMemberView,
+  OrgPositionView,
+  ProductLineView,
+  RangeGroupView,
+  RoleSummaryView,
+} from '@/lib/api'
 import { OrgPage } from '@/pages/org'
 import { renderWithProviders } from './helpers'
 
@@ -152,7 +159,42 @@ const state = {
   roles: [AFTERSALES, CUSTOM] as RoleSummaryView[],
 }
 
+/** 44：两个品牌 + 一条切在别的品牌里的产品线（跨切法提示要用到）。 */
+const BRANDS: RangeGroupView[] = [
+  {
+    id: 'rg_a',
+    name: '品牌甲',
+    members: [{ kind: 'store', id: 'store_main' }],
+    created_at: T0,
+    updated_at: T0,
+    holders: 1,
+  },
+  {
+    id: 'rg_b',
+    name: '品牌乙',
+    members: [{ kind: 'store', id: 'store_eu' }],
+    created_at: T0,
+    updated_at: T0,
+    holders: 0,
+  },
+]
+
+const LINES: ProductLineView[] = [
+  {
+    id: 'pl_kitchen',
+    name: '厨房线',
+    parent: { kind: 'store', id: 'store_eu' },
+    rule: { platform: 'shopify', tags: ['kitchen'] },
+    created_at: T0,
+    updated_at: T0,
+    holders: 0,
+    pushdown: true,
+  },
+]
+
 const assigned: unknown[] = []
+const brandWrites: unknown[] = []
+const lineWrites: unknown[] = []
 const invited: unknown[] = []
 const proposed: unknown[] = []
 const revoked: string[] = []
@@ -175,7 +217,32 @@ vi.mock('@/lib/api', async () => {
     listRoleDefinitions: async () => state.roles,
     listMembers: async () => MEMBERS,
     listInvitations: async () => [],
-    listRangeOptions: async () => [{ kind: 'store', id: 'store_main', label: 'store_main' }],
+    listRangeOptions: async () => [
+      { kind: 'store', id: 'store_main', label: 'store_main' },
+      { kind: 'store', id: 'store_eu', label: 'store_eu' },
+    ],
+    listRangeGroups: async () => BRANDS,
+    listProductLines: async () => LINES,
+    createRangeGroup: async (input: unknown) => {
+      brandWrites.push({ op: 'create', input })
+      return BRANDS[0]
+    },
+    updateRangeGroup: async (id: string, input: unknown) => {
+      brandWrites.push({ op: 'update', id, input })
+      return BRANDS[0]
+    },
+    deleteRangeGroup: async (id: string) => {
+      brandWrites.push({ op: 'delete', id })
+      return { deleted: true }
+    },
+    createProductLine: async (input: unknown) => {
+      lineWrites.push({ op: 'create', input })
+      return LINES[0]
+    },
+    deleteProductLine: async (id: string) => {
+      lineWrites.push({ op: 'delete', id })
+      return { deleted: true }
+    },
     createAssignments: async (input: unknown) => {
       assigned.push(input)
       return []
@@ -202,6 +269,8 @@ vi.mock('@/lib/api', async () => {
 
 beforeEach(() => {
   assigned.length = 0
+  brandWrites.length = 0
+  lineWrites.length = 0
   invited.length = 0
   proposed.length = 0
   revoked.length = 0
@@ -262,6 +331,174 @@ describe('公司页：分配向导', () => {
       person_id: 'per_li',
       position_id: 'dtc-support',
       ranges: [{ kind: 'store', id: 'store_main' }],
+      range_groups: [],
+    })
+  })
+
+  // ── WP47 / 44 G3 三种入口 ────────────────────────────────────────
+  it('挑品牌：发出去的是 range_groups，不是摊平的店铺清单', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    await user.click(within(cards[0] as HTMLElement).getByTestId('position-assign'))
+    const wizard = await screen.findByTestId('assign-wizard')
+    await user.click(within(wizard).getByRole('button', { name: '李默' }))
+    await user.click(within(wizard).getByTestId('assign-entry-brand'))
+    await user.click(await within(wizard).findByRole('button', { name: /品牌乙/ }))
+    // 确认那一句用的是品牌的名字，不是它展开出来的 id
+    expect(within(wizard).getByTestId('assign-summary').textContent).toContain('品牌乙')
+    await user.click(within(wizard).getByTestId('assign-confirm'))
+    await waitFor(() => {
+      expect(assigned).toHaveLength(1)
+    })
+    expect(assigned[0]).toEqual({
+      person_id: 'per_li',
+      position_id: 'dtc-support',
+      ranges: [],
+      range_groups: ['rg_b'],
+    })
+  })
+
+  it('挑产品线：产品线也是一条范围', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    await user.click(within(cards[0] as HTMLElement).getByTestId('position-assign'))
+    const wizard = await screen.findByTestId('assign-wizard')
+    await user.click(within(wizard).getByRole('button', { name: '李默' }))
+    await user.click(within(wizard).getByTestId('assign-entry-line'))
+    await user.click(await within(wizard).findByRole('button', { name: '厨房线' }))
+    await user.click(within(wizard).getByTestId('assign-confirm'))
+    await waitFor(() => {
+      expect(assigned).toHaveLength(1)
+    })
+    expect(assigned[0]).toEqual({
+      person_id: 'per_li',
+      position_id: 'dtc-support',
+      ranges: [{ kind: 'product_line', id: 'pl_kitchen' }],
+      range_groups: [],
+    })
+  })
+
+  it('整品牌 + 另一个品牌里的一条产品线 → 提示"建两个岗位"（44 G3）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    await user.click(within(cards[0] as HTMLElement).getByTestId('position-assign'))
+    const wizard = await screen.findByTestId('assign-wizard')
+    await user.click(within(wizard).getByRole('button', { name: '李默' }))
+    expect(within(wizard).queryByTestId('assign-cross-cut')).toBeNull()
+
+    await user.click(within(wizard).getByTestId('assign-entry-brand'))
+    await user.click(await within(wizard).findByRole('button', { name: /品牌甲/ }))
+    // 厨房线归品牌乙，挑的却是品牌甲——两种切法
+    await user.click(within(wizard).getByTestId('assign-entry-line'))
+    await user.click(await within(wizard).findByRole('button', { name: '厨房线' }))
+    expect(within(wizard).getByTestId('assign-cross-cut').textContent).toContain('两个岗位')
+  })
+
+  it('同一个品牌里再切一条线不提示（那只是看得更细）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    await user.click(within(cards[0] as HTMLElement).getByTestId('position-assign'))
+    const wizard = await screen.findByTestId('assign-wizard')
+    await user.click(within(wizard).getByRole('button', { name: '李默' }))
+    await user.click(within(wizard).getByTestId('assign-entry-brand'))
+    await user.click(await within(wizard).findByRole('button', { name: /品牌乙/ }))
+    await user.click(within(wizard).getByTestId('assign-entry-line'))
+    await user.click(await within(wizard).findByRole('button', { name: '厨房线' }))
+    expect(within(wizard).queryByTestId('assign-cross-cut')).toBeNull()
+  })
+})
+
+describe('公司页：品牌与产品线（44）', () => {
+  const openTab = async (user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> => {
+    renderWithProviders(<OrgPage />)
+    await screen.findAllByTestId('position-card')
+    await user.click(screen.getByRole('tab', { name: '品牌与产品线' }))
+    return screen.findByTestId('ranges-tab')
+  }
+
+  it('品牌与产品线各一张清单，说得出几个岗位挂着、判据是什么、能不能下推', async () => {
+    const user = userEvent.setup()
+    const tab = await openTab(user)
+    const brands = within(tab).getAllByTestId('brand-card')
+    expect(brands).toHaveLength(2)
+    expect((brands[0] as HTMLElement).textContent).toContain('品牌甲')
+    expect((brands[0] as HTMLElement).textContent).toContain('1 个岗位挂着')
+    const line = within(tab).getByTestId('line-card')
+    expect(line.textContent).toContain('厨房线')
+    expect(line.textContent).toContain('标签 kitchen')
+    expect(line.textContent).toContain('上游先切一刀')
+  })
+
+  it('建一个品牌：名字 + 勾几个店', async () => {
+    const user = userEvent.setup()
+    const tab = await openTab(user)
+    await user.type(within(tab).getByLabelText('品牌叫什么'), '品牌丙')
+    const options = within(tab).getAllByTestId('brand-new-member')
+    await user.click(options[1] as HTMLElement)
+    await user.click(within(tab).getByTestId('brand-create'))
+    await waitFor(() => {
+      expect(brandWrites).toHaveLength(1)
+    })
+    expect(brandWrites[0]).toEqual({
+      op: 'create',
+      input: { name: '品牌丙', members: [{ kind: 'store', id: 'store_eu' }] },
+    })
+  })
+
+  it('改品牌成员：发的是整份成员表（组变了岗位范围会跟着变）', async () => {
+    const user = userEvent.setup()
+    const tab = await openTab(user)
+    const card = within(tab).getAllByTestId('brand-card')[1] as HTMLElement
+    await user.click(within(card).getByTestId('brand-edit'))
+    const options = within(card).getAllByTestId('brand-member-option')
+    await user.click(options[0] as HTMLElement)
+    await user.click(within(card).getByTestId('brand-save'))
+    await waitFor(() => {
+      expect(brandWrites).toHaveLength(1)
+    })
+    expect(brandWrites[0]).toEqual({
+      op: 'update',
+      id: 'rg_b',
+      input: {
+        name: '品牌乙',
+        members: [
+          { kind: 'store', id: 'store_eu' },
+          { kind: 'store', id: 'store_main' },
+        ],
+      },
+    })
+  })
+
+  it('建一条产品线：切在哪里 + 按什么切', async () => {
+    const user = userEvent.setup()
+    const tab = await openTab(user)
+    await user.type(within(tab).getByLabelText('产品线叫什么'), '户外线')
+    await user.click(within(tab).getAllByTestId('line-parent-option')[0] as HTMLElement)
+    await user.type(within(tab).getByPlaceholderText('kitchen, home'), 'outdoor, camping')
+    await user.click(within(tab).getByTestId('line-create'))
+    await waitFor(() => {
+      expect(lineWrites).toHaveLength(1)
+    })
+    expect(lineWrites[0]).toEqual({
+      op: 'create',
+      input: {
+        name: '户外线',
+        parent: { kind: 'store', id: 'store_main' },
+        rule: { platform: 'shopify', tags: ['outdoor', 'camping'] },
+      },
+    })
+  })
+
+  it('删一条产品线', async () => {
+    const user = userEvent.setup()
+    const tab = await openTab(user)
+    await user.click(within(tab).getByTestId('line-delete'))
+    await waitFor(() => {
+      expect(lineWrites).toEqual([{ op: 'delete', id: 'pl_kitchen' }])
     })
   })
 })

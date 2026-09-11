@@ -5,7 +5,7 @@
  * 场景文件是回归基线，静默忽略一个拼错的键等于静默关掉一条断言。
  */
 import { readFileSync } from 'node:fs'
-import type { ChangeKind } from '@agentsws/contracts'
+import type { ChangeKind, ProductLineRule, RangeRef } from '@agentsws/contracts'
 import { parse as parseYaml } from 'yaml'
 import { ScenarioSchemaError } from '../errors.js'
 import { parseDuration, parseRange } from './duration.js'
@@ -63,6 +63,63 @@ function optStrList(source: string, path: string, v: unknown): string[] | undefi
 
 const NUMERIC_RE = /^(>=|<=|==|>|<)\s*-?\d+(\.\d+)?$/
 
+const RANGE_KINDS = ['store', 'department', 'account', 'market', 'product_line'] as const
+const LINE_PARENT_KINDS = ['store', 'account', 'market'] as const
+
+/** `{ kind, id }`（44 §3 的五种范围）。 */
+function rangeRef(source: string, path: string, v: unknown): RangeRef {
+  if (!isRec(v)) fail(source, path, '必须是 { kind, id }')
+  known(source, path, v, ['kind', 'id'])
+  const kind = str(source, `${path}.kind`, v.kind)
+  if (!(RANGE_KINDS as readonly string[]).includes(kind))
+    fail(source, `${path}.kind`, `范围种类只能是 ${RANGE_KINDS.join(' / ')}`)
+  return { kind: kind as RangeRef['kind'], id: str(source, `${path}.id`, v.id) }
+}
+
+function rangeList(source: string, path: string, v: unknown): RangeRef[] {
+  if (!Array.isArray(v)) fail(source, path, '必须是列表')
+  return v.map((item, i) => rangeRef(source, `${path}[${i}]`, item))
+}
+
+/** 产品线判据：三种平台各一套字段（44 G2）。 */
+function lineRule(source: string, path: string, v: unknown): ProductLineRule {
+  if (!isRec(v)) fail(source, path, '必须是对象')
+  const platform = str(source, `${path}.platform`, v.platform)
+  if (platform === 'manual') {
+    known(source, path, v, ['platform', 'product_ids'])
+    return {
+      platform: 'manual',
+      product_ids: strList(source, `${path}.product_ids`, v.product_ids),
+    }
+  }
+  if (platform === 'amazon') {
+    known(source, path, v, ['platform', 'asins', 'sku_prefixes', 'brand'])
+    const asins = optStrList(source, `${path}.asins`, v.asins)
+    const prefixes = optStrList(source, `${path}.sku_prefixes`, v.sku_prefixes)
+    const brand = optStr(source, `${path}.brand`, v.brand)
+    return {
+      platform: 'amazon',
+      ...(asins === undefined ? {} : { asins }),
+      ...(prefixes === undefined ? {} : { sku_prefixes: prefixes }),
+      ...(brand === undefined ? {} : { brand }),
+    }
+  }
+  if (platform !== 'shopify')
+    fail(source, `${path}.platform`, 'platform 只能是 shopify / amazon / manual')
+  known(source, path, v, ['platform', 'collection_ids', 'tags', 'vendors', 'product_types'])
+  const collections = optStrList(source, `${path}.collection_ids`, v.collection_ids)
+  const tags = optStrList(source, `${path}.tags`, v.tags)
+  const vendors = optStrList(source, `${path}.vendors`, v.vendors)
+  const types = optStrList(source, `${path}.product_types`, v.product_types)
+  return {
+    platform: 'shopify',
+    ...(collections === undefined ? {} : { collection_ids: collections }),
+    ...(tags === undefined ? {} : { tags }),
+    ...(vendors === undefined ? {} : { vendors }),
+    ...(types === undefined ? {} : { product_types: types }),
+  }
+}
+
 function numeric(source: string, path: string, v: unknown): number | string {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   if (typeof v === 'string' && NUMERIC_RE.test(v.trim())) return v.trim()
@@ -95,6 +152,11 @@ const EVENT_KEYS = [
   'shop.price_change',
   'shop.theme_push',
   'shop.theme_publish',
+  // WP47 范围模型（44）
+  'org.range_group',
+  'org.product_line',
+  'org.assign_range',
+  'org.scope_check',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -126,6 +188,7 @@ const EXPECTED_KEYS = [
   'assignments_not_unioned',
   'routed_to',
   'secretary_kinds',
+  'scope_disjoint',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -295,6 +358,58 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         claim: {
           who: str(source, `${path}.${key}.who`, body.who),
           title: str(source, `${path}.${key}.title`, body.title),
+        },
+      }
+    }
+    case 'org.range_group': {
+      known(source, `${path}.${key}`, body, ['id', 'name', 'members'])
+      return {
+        at,
+        type: 'org.range_group',
+        range_group: {
+          id: str(source, `${path}.${key}.id`, body.id),
+          name: str(source, `${path}.${key}.name`, body.name),
+          members: rangeList(source, `${path}.${key}.members`, body.members ?? []),
+        },
+      }
+    }
+    case 'org.product_line': {
+      known(source, `${path}.${key}`, body, ['id', 'name', 'parent', 'rule'])
+      return {
+        at,
+        type: 'org.product_line',
+        product_line: {
+          id: str(source, `${path}.${key}.id`, body.id),
+          name: str(source, `${path}.${key}.name`, body.name),
+          parent: rangeRef(source, `${path}.${key}.parent`, body.parent),
+          rule: lineRule(source, `${path}.${key}.rule`, body.rule),
+        },
+      }
+    }
+    case 'org.assign_range': {
+      known(source, `${path}.${key}`, body, ['who', 'role', 'ranges', 'range_groups'])
+      const groups = optStrList(source, `${path}.${key}.range_groups`, body.range_groups)
+      return {
+        at,
+        type: 'org.assign_range',
+        assign_range: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          role: str(source, `${path}.${key}.role`, body.role),
+          ...(body.ranges === undefined
+            ? {}
+            : { ranges: rangeList(source, `${path}.${key}.ranges`, body.ranges) }),
+          ...(groups === undefined ? {} : { range_groups: groups }),
+        },
+      }
+    }
+    case 'org.scope_check': {
+      known(source, `${path}.${key}`, body, ['who', 'role'])
+      return {
+        at,
+        type: 'org.scope_check',
+        scope_check: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          role: str(source, `${path}.${key}.role`, body.role),
         },
       }
     }
@@ -576,6 +691,8 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (routedTo !== undefined) out.routed_to = routedTo
   const secretaryKinds = optStrList(source, 'expected.secretary_kinds', raw.secretary_kinds)
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
+  const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)
+  if (disjoint !== undefined) out.scope_disjoint = disjoint
   const eventTypes = optStrList(source, 'expected.event_types', raw.event_types)
   if (eventTypes !== undefined) out.event_types = eventTypes
   if (raw.approval_kinds !== undefined) {

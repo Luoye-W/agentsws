@@ -56,7 +56,14 @@ import {
   type PageFetch,
   stubProvider,
 } from '@agentsws/model-gateway'
-import { changeKindOf, createRoleStore, loadBundledRole, type RoleStore } from '@agentsws/roles'
+import {
+  changeKindOf,
+  createRoleStore,
+  loadBundledRole,
+  type RangeExpanded,
+  type RoleStore,
+  rangeTargetOfProduct,
+} from '@agentsws/roles'
 import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -489,6 +496,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const data = createDataStore({ dbPath: file('data.db'), clock, collections: [] })
 
   let connectedKinds: () => string[] = () => []
+  /**
+   * 44 G5：品牌成员一变，挂它的岗位范围跟着变——记事件 + 给 owner 发卡的那一段
+   * 住在 `createOrg`（它才有审批总线），而职责层比它先建起来，所以这里留一个晚绑定的钩子。
+   */
+  let rangeExpandedSink: ((e: RangeExpanded) => void) | undefined
   const roles =
     options.mount?.roles ??
     createRoleStore({
@@ -497,6 +509,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       roles: BUNDLED_ROLES.map((id) => loadBundledRole(id)),
       // 连接表在下面才建；用一个晚绑定的读法，岗位 ready 从真实连接算
       connected: () => connectedKinds(),
+      onRangeExpanded: (e) => rangeExpandedSink?.(e),
     })
 
   // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
@@ -586,6 +599,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent(e)
     },
     readRecord: (target) => backend.read(target),
+    // 44 G2 前置检查：改价 / 改 Listing 的目标商品必须落在这个岗位的范围里
+    targetInRange: ({ assignment_id, target, before }) => {
+      const scoped = rangeTargetOfProduct(target, before)
+      return scoped === undefined ? undefined : roles.targetInRange(assignment_id, scoped)
+    },
     backendApply: (change, opts) => backend.apply(change, opts),
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
     // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
@@ -731,6 +749,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: workspace.id,
       appendEvent,
       env,
+      // 44 G2：产品线切分要认制度那边的范围与判据（一条产品线都没有时整条路短路）
+      scope: {
+        rangesOf: (assignment_id) => roles.assignments.get(assignment_id)?.ranges ?? [],
+        productLine: (id) => roles.productLines.get(id),
+        productLines: () => roles.productLines.list(workspace.id),
+        activeRanges: () => roles.assignments.listByWorkspace(workspace.id).map((a) => a.ranges),
+      },
       ...(options.liveDataIntervalMs === undefined
         ? {}
         : { refreshIntervalMs: options.liveDataIntervalMs }),
@@ -929,7 +954,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     goals: async (p: SchedulePosition) =>
       work.progress(
         periodQueryRunner(
-          () => workData.orders(),
+          () => workData.orders({ assignment_id: p.assignment_id }),
           () => [],
           'USD',
         ),
@@ -1086,6 +1111,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
+  rangeExpandedSink = org.onRangeExpanded
 
   // WP36 离职编排（40 §1.2）：装在 org 之后——它要撤分配、真转事项、动个人层与个人记忆。
   const offboard = createOffboard({

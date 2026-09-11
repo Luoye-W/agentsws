@@ -7,6 +7,7 @@ import {
   Provenance,
   resolveMandate,
   snapshotMatches,
+  TARGET_SCOPED_KINDS,
 } from '../src/index.js'
 
 const now = '2026-09-08T09:00:00Z'
@@ -234,5 +235,72 @@ describe('authorization check (15 §6.1)', () => {
     expect(
       authorizationCheck({ ...base, requester: { channel: 'email', external_id: 'a@y' } }).ok,
     ).toBe(false)
+  })
+})
+
+describe('44 G2 target_in_range', () => {
+  const priceChange = {
+    kind: 'price_change' as const,
+    target: { type: 'product', id: 'prod_7' },
+    field: 'price',
+    before: { price: 129 },
+    after: { price: 119 },
+  }
+  const prodFacts = (over: Record<string, unknown> = {}) => {
+    const p = new Provenance('run_1')
+    p.see([priceChange.target], { full: true })
+    return { now, changeSet: [], windowCount: 0, provenance: p, ...over }
+  }
+
+  it('不在范围里 = block，理由原样带进 hit', () => {
+    const out = evaluateGuardrail(
+      priceChange,
+      { caps: {} },
+      prodFacts({ target_in_range: { ok: false, reason: '户外线的商品不归你管' } }),
+      'stage',
+    )
+    expect(out.verdict).toBe('block')
+    const hit = out.hits.find((h) => h.rule === 'target_in_range')
+    expect(hit?.severity).toBe('block')
+    expect(hit?.cap).toBe('product:prod_7')
+    expect(hit?.actual).toBe('户外线的商品不归你管')
+  })
+
+  it('在范围里 / 压根没给结论 → 这一条不出现', () => {
+    for (const facts of [prodFacts({ target_in_range: { ok: true } }), prodFacts()]) {
+      const out = evaluateGuardrail(priceChange, { caps: {} }, facts, 'stage')
+      expect(out.hits.some((h) => h.rule === 'target_in_range')).toBe(false)
+      expect(out.verdict).toBe('allow')
+    }
+  })
+
+  it('没写理由时落一句机器码，不留空', () => {
+    const out = evaluateGuardrail(
+      priceChange,
+      { caps: {} },
+      prodFacts({ target_in_range: { ok: false } }),
+      'stage',
+    )
+    expect(out.hits.find((h) => h.rule === 'target_in_range')?.actual).toBe('out_of_range')
+  })
+
+  it('哪几种变更该问范围写在一张表里（补货计划等有 ChangeKind 时再加）', () => {
+    expect([...TARGET_SCOPED_KINDS].sort()).toEqual([
+      'listing_edit',
+      'price_change',
+      'promotion',
+      'publish_product',
+      'unpublish_product',
+    ])
+  })
+
+  it('批准过的软额度例外救不了越权：block 就是 block', () => {
+    const out = evaluateGuardrail(
+      priceChange,
+      { caps: {} },
+      prodFacts({ target_in_range: { ok: false }, approvedException: true }),
+      'apply',
+    )
+    expect(out.verdict).toBe('block')
   })
 })

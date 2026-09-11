@@ -504,3 +504,218 @@ describe('一致性用例', () => {
     expect(events.some((e) => e.includes('invitation.created'))).toBe(true)
   })
 })
+
+/**
+ * WP47 / 44：品牌（范围组）与产品线走完整条路由 → OrgPort → roles 的真装配线。
+ */
+describe('44 品牌与产品线', () => {
+  interface RangeGroupView {
+    id: string
+    name: string
+    members: { kind: string; id: string }[]
+    holders: number
+  }
+  interface ProductLineView {
+    id: string
+    name: string
+    parent: { kind: string; id: string }
+    rule: { platform: string; tags?: string[] }
+    holders: number
+    pushdown: boolean
+  }
+
+  const brand = (body: unknown) => call('POST', '/v1/org/range-groups', { body })
+  const lineOf = (body: unknown) => call('POST', '/v1/org/product-lines', { body })
+
+  it('G1：建一个品牌，把它分给同事 → 岗位拿到的是展开后的范围', async () => {
+    const created = await data<RangeGroupView>(
+      await brand({
+        name: '品牌乙',
+        members: [
+          { kind: 'store', id: 'store_b1' },
+          { kind: 'store', id: 'store_b2' },
+        ],
+      }),
+    )
+    expect(created.holders).toBe(0)
+    const li = await inviteColleague('li@example.com', { name: '李默' })
+    await data(
+      await call('POST', '/v1/assignments', {
+        body: {
+          person_id: li.person_id,
+          position_id: 'dtc-support',
+          ranges: [],
+          range_groups: [created.id],
+        },
+      }),
+    )
+    const mine = (await assignmentsOf(li.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    expect(mine?.ranges.map((r) => r.id).sort()).toEqual(['store_b1', 'store_b2'])
+    expect(mine?.unassigned_range).toBe(false)
+    const groups = await data<RangeGroupView[]>(await call('GET', '/v1/org/range-groups'))
+    expect(groups[0]?.holders).toBe(1)
+  })
+
+  it('G5：品牌新开一家店 → 挂它的岗位自动多这家店，留一条事件 + 一张给 owner 的 L3 卡', async () => {
+    const created = await data<RangeGroupView>(
+      await brand({ name: '品牌乙', members: [{ kind: 'store', id: 'store_b1' }] }),
+    )
+    const li = await inviteColleague('li2@example.com', { name: '李默' })
+    await data(
+      await call('POST', '/v1/assignments', {
+        body: {
+          person_id: li.person_id,
+          position_id: 'dtc-support',
+          ranges: [],
+          range_groups: [created.id],
+        },
+      }),
+    )
+    await data(
+      await call('PUT', `/v1/org/range-groups/${created.id}`, {
+        body: {
+          name: '品牌乙',
+          members: [
+            { kind: 'store', id: 'store_b1' },
+            { kind: 'store', id: 'store_b3' },
+          ],
+        },
+      }),
+    )
+    const mine = (await assignmentsOf(li.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    expect(mine?.ranges.map((r) => r.id).sort()).toEqual(['store_b1', 'store_b3'])
+
+    const types: string[] = []
+    for await (const e of server.kernel.eventLog.read({ workspace_id: ws() })) types.push(e.type)
+    expect(types).toContain('range_group.created')
+    expect(types).toContain('range_group.updated')
+    expect(types).toContain('assignment.range_expanded')
+
+    // owner 手上有一张说明这件事的卡（L3：默认放行，只通知）
+    const cards = await server.txn.approvals.queue({
+      workspace_id: ws(),
+      person_id: server.bootstrap.workspace.owner_id,
+      lane: 'mine',
+      state: ['pending', 'auto_approved', 'approved', 'in_review'],
+    })
+    const card = cards.find((c) => c.title.includes('品牌乙'))
+    expect(card).toBeDefined()
+    expect(card?.automation.level_at_creation).toBe('L3')
+  })
+
+  it('还有岗位挂着的品牌删不掉（409）', async () => {
+    const created = await data<RangeGroupView>(
+      await brand({ name: '品牌甲', members: [{ kind: 'store', id: 'store_a' }] }),
+    )
+    const chen = await inviteColleague('chen@example.com', { name: '陈晓' })
+    await data(
+      await call('POST', '/v1/assignments', {
+        body: {
+          person_id: chen.person_id,
+          position_id: 'dtc-support',
+          ranges: [],
+          range_groups: [created.id],
+        },
+      }),
+    )
+    const res = await call('DELETE', `/v1/org/range-groups/${created.id}`)
+    expect(res.status).toBe(409)
+    // 摘掉之后就删得了
+    const mine = (await assignmentsOf(chen.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    await data(
+      await call('PUT', `/v1/assignments/${mine?.assignment_id}`, {
+        body: { ranges: [], range_groups: [] },
+      }),
+    )
+    expect((await call('DELETE', `/v1/org/range-groups/${created.id}`)).status).toBe(200)
+  })
+
+  it('G2：产品线 CRUD；能下推的判据标 pushdown，产品线也进"选范围"的候选', async () => {
+    const created = await data<ProductLineView>(
+      await lineOf({
+        name: '厨房线',
+        parent: { kind: 'store', id: 'store_main' },
+        rule: { platform: 'shopify', tags: ['kitchen'] },
+      }),
+    )
+    expect(created.pushdown).toBe(true)
+    const options = await data<{ kind: string; id: string; label: string }[]>(
+      await call('GET', '/v1/org/ranges'),
+    )
+    expect(options).toContainEqual({ kind: 'product_line', id: created.id, label: '厨房线' })
+
+    const renamed = await data<ProductLineView>(
+      await call('PUT', `/v1/org/product-lines/${created.id}`, {
+        body: {
+          name: '厨房线（北美）',
+          parent: { kind: 'market', id: 'amz_na:US' },
+          rule: { platform: 'amazon', asins: ['B0KITCHEN'] },
+        },
+      }),
+    )
+    expect(renamed.name).toBe('厨房线（北美）')
+    expect(renamed.pushdown).toBe(false)
+    expect((await call('DELETE', `/v1/org/product-lines/${created.id}`)).status).toBe(200)
+    expect(await data<ProductLineView[]>(await call('GET', '/v1/org/product-lines'))).toEqual([])
+  })
+
+  it('G3：一个岗位同时挂店铺 + 品牌 + 产品线，取并集', async () => {
+    const group = await data<RangeGroupView>(
+      await brand({ name: '品牌乙', members: [{ kind: 'store', id: 'store_b1' }] }),
+    )
+    const line = await data<ProductLineView>(
+      await lineOf({
+        name: '厨房线',
+        parent: { kind: 'store', id: 'store_main' },
+        rule: { platform: 'manual', product_ids: ['prod_1'] },
+      }),
+    )
+    const sun = await inviteColleague('sun@example.com', { name: '孙洋' })
+    await data(
+      await call('POST', '/v1/assignments', {
+        body: {
+          person_id: sun.person_id,
+          position_id: 'dtc-support',
+          ranges: [
+            { kind: 'store', id: 'store_main' },
+            { kind: 'product_line', id: line.id },
+          ],
+          range_groups: [group.id],
+        },
+      }),
+    )
+    const mine = (await assignmentsOf(sun.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    expect(mine?.ranges.map((r) => `${r.kind}:${r.id}`).sort()).toEqual(
+      [`product_line:${line.id}`, 'store:store_b1', 'store:store_main'].sort(),
+    )
+  })
+
+  it('产品线只能切在店铺 / 账号 / 市场里面（400）；挂不存在的品牌 404', async () => {
+    const bad = await lineOf({
+      name: '不合法',
+      parent: { kind: 'department', id: 'dep_1' },
+      rule: { platform: 'manual', product_ids: [] },
+    })
+    expect(bad.status).toBe(400)
+    const chu = await inviteColleague('chu@example.com', { name: '褚黎' })
+    const res = await call('POST', '/v1/assignments', {
+      body: {
+        person_id: chu.person_id,
+        position_id: 'dtc-support',
+        ranges: [],
+        range_groups: ['rg_nope'],
+      },
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('普通成员碰不到这两组路由（403）', async () => {
+    const wei = await inviteColleague('wei@example.com', { name: '卫青' })
+    const mine = (await assignmentsOf(wei.person_id))[0]
+    const res = await call('GET', '/v1/org/range-groups', {
+      token: wei.token,
+      assignment: mine?.assignment_id ?? '',
+    })
+    expect(res.status).toBe(403)
+  })
+})

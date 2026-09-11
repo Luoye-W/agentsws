@@ -16,6 +16,7 @@ import { AssignWizard } from '@/components/org/assign-wizard'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { MembersTab } from '@/components/org/members-tab'
 import { PositionsTab } from '@/components/org/positions-tab'
+import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/components/org/ranges-tab'
 import { RolesTab } from '@/components/org/roles-tab'
 import { ToolboxTab } from '@/components/org/toolbox-tab'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,19 +28,26 @@ import {
   copyRoleDefinition,
   createAssignments,
   createOrgPosition,
+  createProductLine,
+  createRangeGroup,
   deleteOrgPosition,
+  deleteProductLine,
+  deleteRangeGroup,
   ensureSession,
   getPositions,
   inviteMember,
   listInvitations,
   listMembers,
   listOrgPositions,
+  listProductLines,
+  listRangeGroups,
   listRangeOptions,
   listRoleDefinitions,
   proposeRoleChange,
   removeMember,
   revokeAssignment,
   updateOrgPosition,
+  updateRangeGroup,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -87,6 +95,17 @@ export function OrgPage(): React.ReactNode {
     enabled,
     queryFn: () => listRangeOptions(owner),
   })
+  // 44：品牌（范围组）与产品线
+  const brands = useQuery({
+    queryKey: ['org', 'range-groups'],
+    enabled,
+    queryFn: () => listRangeGroups(owner),
+  })
+  const lines = useQuery({
+    queryKey: ['org', 'product-lines'],
+    enabled,
+    queryFn: () => listProductLines(owner),
+  })
 
   const refresh = async (): Promise<void> => {
     await client.invalidateQueries({ queryKey: ['org'] })
@@ -103,6 +122,7 @@ export function OrgPage(): React.ReactNode {
       person_id: string
       position_id: string
       ranges: { kind: string; id: string }[]
+      range_groups: string[]
     }) => createAssignments(input, owner),
     onSuccess: async () => {
       setFailure(undefined)
@@ -194,8 +214,56 @@ export function OrgPage(): React.ReactNode {
     onError: say,
   })
 
+  // 44 G1 / G2：品牌与产品线的增删改
+  const brandCreate = useMutation({
+    mutationFn: (input: RangeGroupDraft) => createRangeGroup(input, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+  const brandUpdate = useMutation({
+    mutationFn: (input: { id: string; body: RangeGroupDraft }) =>
+      updateRangeGroup(input.id, input.body, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+  const brandDelete = useMutation({
+    mutationFn: (id: string) => deleteRangeGroup(id, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+  const lineCreate = useMutation({
+    mutationFn: (input: ProductLineDraft) => createProductLine(input, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+  const lineDelete = useMutation({
+    mutationFn: (id: string) => deleteProductLine(id, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+
   const busy =
     assign.isPending ||
+    brandCreate.isPending ||
+    brandUpdate.isPending ||
+    brandDelete.isPending ||
+    lineCreate.isPending ||
+    lineDelete.isPending ||
     create.isPending ||
     update.isPending ||
     drop.isPending ||
@@ -239,6 +307,8 @@ export function OrgPage(): React.ReactNode {
               members={members.data ?? []}
               positions={positions.data ?? []}
               rangeOptions={ranges.data ?? []}
+              rangeGroups={brands.data ?? []}
+              productLines={lines.data ?? []}
               presetPosition={wizard}
               busy={assign.isPending}
               {...(failure === undefined ? {} : { error: failure })}
@@ -258,6 +328,7 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
           <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
+          <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
           <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
           <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>
         </TabsList>
@@ -330,6 +401,36 @@ export function OrgPage(): React.ReactNode {
             />
           )}
         </TabsContent>
+        {/* 44：品牌与产品线（G1 / G2） */}
+        <TabsContent value="ranges" className="pt-3">
+          {brands.data === undefined || lines.data === undefined ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <RangesTab
+              groups={brands.data}
+              lines={lines.data}
+              rangeOptions={ranges.data ?? []}
+              busy={busy}
+              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+              onCreateGroup={(input) => {
+                brandCreate.mutate(input)
+              }}
+              onUpdateGroup={(id, body) => {
+                brandUpdate.mutate({ id, body })
+              }}
+              onDeleteGroup={(id) => {
+                brandDelete.mutate(id)
+              }}
+              onCreateLine={(input) => {
+                lineCreate.mutate(input)
+              }}
+              onDeleteLine={(id) => {
+                lineDelete.mutate(id)
+              }}
+            />
+          )}
+        </TabsContent>
+
         <TabsContent value="toolbox" className="pt-3">
           <ToolboxTab assignment={owner} {...(query === null ? {} : { initialQuery: query })} />
         </TabsContent>

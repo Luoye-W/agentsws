@@ -112,6 +112,9 @@ export function effectiveConfig(input: EffectiveConfigInput): EffectiveConfig {
     grounding: role.grounding ?? [],
     ...(role.persona !== undefined ? { persona: role.persona } : {}),
     ranges: [...assignment.ranges],
+    ...(assignment.range_groups === undefined || assignment.range_groups.length === 0
+      ? {}
+      : { range_groups: [...assignment.range_groups] }),
     home_blocks: role.home_blocks.map((b) => ({ ...b })),
     notifications: role.notifications.map((n) => ({ ...n })),
     ready: missing.length === 0,

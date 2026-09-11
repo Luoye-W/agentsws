@@ -90,6 +90,8 @@ export function harness(
     /** 固定 decision_token 密钥，重启后仍能验签 */
     secret?: string
     start?: string
+    /** 44 G2：目标在不在岗位范围里（不装就是不判） */
+    targetInRange?: TxnOptions['targetInRange']
   } = {},
 ): Harness {
   const clock = makeClock(opts.start ?? T0)
@@ -110,6 +112,7 @@ export function harness(
     ...(opts.policy ? { policy: opts.policy } : {}),
     ...(opts.directory ? { directory: opts.directory } : {}),
     ...(opts.mandateFor ? { mandateFor: opts.mandateFor } : {}),
+    ...(opts.targetInRange ? { targetInRange: opts.targetInRange } : {}),
     ...(opts.readRecordEnabled === false
       ? {}
       : { readRecord: (t: ObjectRef) => records[`${t.type}:${t.id}`] ?? {} }),

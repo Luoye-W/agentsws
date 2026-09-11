@@ -1336,6 +1336,8 @@ export interface OrgAssignmentView {
   role_name: string
   role_version: string
   ranges: { kind: string; id: string }[]
+  /** 44 G1：这些范围是从哪几个品牌来的。 */
+  range_groups?: string[]
   granted_at: string
   revoked_at?: string
   unassigned_range: boolean
@@ -1374,10 +1376,105 @@ export interface OrgChangeReceipt {
 }
 
 export interface RangeOption {
-  kind: 'store' | 'department' | 'account' | 'market'
+  kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
   id: string
   label: string
 }
+
+// ── 44 品牌（范围组）与产品线 ──────────────────────────────────────────
+
+export type ProductLineRule =
+  | {
+      platform: 'shopify'
+      collection_ids?: string[]
+      tags?: string[]
+      vendors?: string[]
+      product_types?: string[]
+    }
+  | { platform: 'amazon'; asins?: string[]; sku_prefixes?: string[]; brand?: string }
+  | { platform: 'manual'; product_ids: string[] }
+
+export interface RangeGroupView {
+  id: string
+  name: string
+  members: { kind: string; id: string }[]
+  created_at: string
+  updated_at: string
+  /** 有几个岗位挂着它（删之前看这个数）。 */
+  holders: number
+}
+
+export interface ProductLineView {
+  id: string
+  name: string
+  parent: { kind: string; id: string }
+  rule: ProductLineRule
+  created_at: string
+  updated_at: string
+  holders: number
+  /** 这条判据能不能交给上游先切一刀（19 §3 过滤下推）。 */
+  pushdown: boolean
+}
+
+export const listRangeGroups = (assignment?: string): Promise<RangeGroupView[]> =>
+  api<RangeGroupView[]>('/v1/org/range-groups', withAssignment(assignment))
+
+export const createRangeGroup = (
+  input: { name: string; members: { kind: string; id: string }[] },
+  assignment?: string,
+): Promise<RangeGroupView> =>
+  api<RangeGroupView>('/v1/org/range-groups', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const updateRangeGroup = (
+  id: string,
+  input: { name: string; members: { kind: string; id: string }[] },
+  assignment?: string,
+): Promise<RangeGroupView> =>
+  api<RangeGroupView>(`/v1/org/range-groups/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const deleteRangeGroup = (id: string, assignment?: string): Promise<{ deleted: boolean }> =>
+  api<{ deleted: boolean }>(`/v1/org/range-groups/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })
+
+export const listProductLines = (assignment?: string): Promise<ProductLineView[]> =>
+  api<ProductLineView[]>('/v1/org/product-lines', withAssignment(assignment))
+
+export const createProductLine = (
+  input: { name: string; parent: { kind: string; id: string }; rule: ProductLineRule },
+  assignment?: string,
+): Promise<ProductLineView> =>
+  api<ProductLineView>('/v1/org/product-lines', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const updateProductLine = (
+  id: string,
+  input: { name: string; parent: { kind: string; id: string }; rule: ProductLineRule },
+  assignment?: string,
+): Promise<ProductLineView> =>
+  api<ProductLineView>(`/v1/org/product-lines/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const deleteProductLine = (id: string, assignment?: string): Promise<{ deleted: boolean }> =>
+  api<{ deleted: boolean }>(`/v1/org/product-lines/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })
 
 export const listRoleDefinitions = (assignment?: string): Promise<RoleSummaryView[]> =>
   api<RoleSummaryView[]>('/v1/roles', withAssignment(assignment))
@@ -1449,6 +1546,8 @@ export const createAssignments = (
     role_id?: string
     include?: string[]
     ranges: { kind: string; id: string }[]
+    /** 44 G1：挂的品牌（范围组）。 */
+    range_groups?: string[]
   },
   assignment?: string,
 ): Promise<OrgAssignmentView[]> =>

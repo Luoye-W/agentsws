@@ -19,6 +19,7 @@ import type {
   InboundEvent,
   Iso8601,
   ObjectRef,
+  RangeRef,
   RunEvent,
 } from '@agentsws/contracts'
 import type { DataSourceStatus, DeckCard, OrderRow } from '@agentsws/deck'
@@ -524,10 +525,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       email: person.email,
       name: person.name,
     })
-    const ranges = new Map<
-      string,
-      { kind: 'store' | 'department' | 'account' | 'market'; id: string }
-    >()
+    const ranges = new Map<string, RangeRef>()
     for (const assignment of world.roles.assignments.listByPerson(created.id, {
       workspace_id: world.workspace_id,
     }))

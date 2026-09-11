@@ -88,6 +88,8 @@ export interface PrecheckResult {
   eval?: 'ok' | 'fail'
   simulation?: 'ok' | 'fail'
   secret_scan?: 'ok' | 'fail'
+  /** 44 G2：改价 / 改 Listing 的目标商品在不在这个岗位的范围里（`fail` → 不进队列）。 */
+  target_in_range?: 'ok' | 'fail'
   notes?: string[]
 }
 
@@ -159,6 +161,11 @@ export interface ApprovalExecutionContext {
   verified_contacts?: string[]
   /** 预检结论覆盖（脱敏等由调用方判定时） */
   precheck_overrides?: Partial<PrecheckResult>
+  /**
+   * 44 G2：目标商品在不在这个岗位的范围里（由职责层 `targetInRange` 判定）。
+   * `ok: false` → 这张卡直接 blocked，不进任何人的队列，理由按 `reason` 说人话。
+   */
+  target_in_range?: { ok: boolean; reason?: string }
 }
 
 export interface ApprovalItem<P = unknown> {

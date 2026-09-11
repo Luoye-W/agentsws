@@ -37,11 +37,26 @@ export type {
   AssignmentInit,
 } from './position.js'
 export { applyPosition, buildAssignment, initialAutomationState } from './position.js'
+export type { RangeTarget, TargetInRangeResult } from './ranges.js'
+export {
+  dedupeRanges,
+  expandRanges,
+  PRODUCT_LINE_PARENT_KINDS,
+  productLineMatches,
+  rangeCoversRef,
+  rangeKey,
+  rangeTargetOfProduct,
+  shopifyLineQuery,
+  targetInRange,
+} from './ranges.js'
 export { collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'
 export type {
   AssignmentApi,
   CreateAssignmentInput,
   PolicyApi,
+  ProductLineApi,
+  RangeExpanded,
+  RangeGroupApi,
   RevokeInput,
   RoleRegistry,
   RoleStore,

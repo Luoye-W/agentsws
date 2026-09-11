@@ -49,6 +49,22 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   'domain_config',
   'create_campaign',
 ])
+/**
+ * 44 G2：这些变更的**目标是一件具体商品**，于是"目标在不在我管的范围里"这句话才有意义。
+ *
+ * 挂整家店的岗位判起来永远是真（整店的过滤下推 19 §3 早就管住了）；只有挂**产品线**的
+ * 岗位才切得到商品这一级——同一个亚马逊账号里，厨房线的运营不该改得动户外线的价。
+ *
+ * 补货计划暂时不在这张表里：15 §2 还没有对应的 `ChangeKind`；加的时候记得一起加进来。
+ */
+export const TARGET_SCOPED_KINDS: ReadonlySet<ChangeKind> = new Set([
+  'price_change',
+  'promotion',
+  'listing_edit',
+  'publish_product',
+  'unpublish_product',
+])
+
 /** 09-08：受保护字段 = Agent 不得提议；人经 policy_change 可改。 */
 export const PROTECTED_FIELDS: Partial<Record<ChangeKind, string[]>> = {
   address_change: ['total', 'currency', 'customer_id'],
@@ -80,6 +96,13 @@ export interface GuardrailFacts {
   provenance?: Provenance
   /** 已被人批准的软额度例外（apply 阶段） */
   approvedException?: boolean
+  /**
+   * 44 G2：目标商品在不在这个岗位的范围里（职责层 `targetInRange` 的结论）。
+   *
+   * 不给 = 调用方还不认范围模型，这一条不判（老调用方一个字不用改）；
+   * 给了而且是 `false` → **block**，理由原样带进 hit 里让人看得懂。
+   */
+  target_in_range?: { ok: boolean; reason?: string }
 }
 
 const rec = (v: unknown): Record<string, unknown> =>
@@ -153,6 +176,14 @@ export function evaluateGuardrail(
 
   // 硬顶：永远 L1
   if (HARD_L1.has(change.kind)) review('hard_ceiling', 'L1', change.kind)
+
+  // 44 G2：目标不在这个岗位管的范围里 —— 越权，当场拦（`unassigned_range` 同一条路）
+  if (facts.target_in_range !== undefined && !facts.target_in_range.ok)
+    block(
+      'target_in_range',
+      `${change.target.type}:${change.target.id}`,
+      facts.target_in_range.reason ?? 'out_of_range',
+    )
 
   switch (change.kind) {
     case 'refund': {
