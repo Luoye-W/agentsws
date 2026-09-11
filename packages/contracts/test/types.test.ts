@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type {
   ApprovalItem,
+  ApprovalKind,
   Assignment,
+  Invite,
   KnowledgeGap,
   KnownEventType,
+  MembershipRequest,
   ProductLine,
   ProductLineRule,
   RangeGroup,
@@ -11,7 +14,9 @@ import type {
   RunRequest,
   StagedChange,
   TokenInfo,
+  Workspace,
   WorkspacePolicy,
+  WorkspaceProfile,
 } from '../src/index.js'
 import { parseMarketId, SENSITIVITY_ORDER } from '../src/index.js'
 
@@ -123,5 +128,54 @@ describe('WP47 范围模型（44）', () => {
       'assignment.range_expanded',
     ]
     expect(types).toHaveLength(7)
+  })
+
+  it('WP51 / 46：公司档案、邀请码、申请加入，九条事件 + membership 这一种审批项', () => {
+    // 46 §1 ①：公司全称 + 可选域名 + 发现开关；设过就有 set_at
+    const profile: WorkspaceProfile = {
+      legal_name: '深圳市诺伏特科技有限公司',
+      domain: 'nordvolt.cn',
+      discoverable: true,
+      set_at: '2026-09-11T01:00:00.000Z',
+    }
+    const workspace: Pick<Workspace, 'profile'> = { profile }
+    expect(workspace.profile?.discoverable).toBe(true)
+
+    // 46 §2 I2：8 位人类可读码，24h，默认 5 次
+    const invite: Invite = {
+      code: 'K7M2PQR4',
+      workspace_id: 'ws_1',
+      created_by: 'p_1',
+      expires_at: '2026-09-12T01:00:00.000Z',
+      uses_left: 5,
+    }
+    expect(invite.code).toHaveLength(8)
+
+    // 46 §2 I3：申请里只有名字与邮箱，一条业务数据都没有
+    const request: MembershipRequest = {
+      id: 'mrq_1',
+      workspace_id: 'ws_1',
+      person: { name: '李默', email: 'li@nordvolt.cn' },
+      via: 'lan',
+      status: 'pending',
+      created_at: '2026-09-11T01:05:00.000Z',
+    }
+    expect(Object.keys(request.person).sort()).toEqual(['email', 'name'])
+
+    const types: KnownEventType[] = [
+      'workspace.profile_set',
+      'discovery.enabled',
+      'discovery.disabled',
+      'discovery.peer_seen',
+      'invite.created',
+      'invite.redeemed',
+      'membership.requested',
+      'membership.approved',
+      'membership.rejected',
+    ]
+    expect(types).toHaveLength(9)
+
+    const kind: ApprovalKind = 'membership'
+    expect(kind).toBe('membership')
   })
 })

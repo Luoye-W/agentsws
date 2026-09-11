@@ -1372,7 +1372,8 @@
                       "dev_handoff_result",
                       "ai_question",
                       "daily_plan",
-                      "review"
+                      "review",
+                      "membership"
                     ]
                   },
                   "subject": {

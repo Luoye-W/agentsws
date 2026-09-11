@@ -113,6 +113,8 @@ const KINDS = [
   'ai_question',
   'daily_plan',
   'review',
+  // WP51 / 46 §2 I3：申请加入这个工作区
+  'membership',
 ] as const
 
 const ObjectRefBody = z.object({ type: z.string().min(1), id: z.string().min(1) })

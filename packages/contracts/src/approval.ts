@@ -36,6 +36,14 @@ export type ApprovalKind =
   | 'daily_plan'
   /** WP22 / 37 §2.4：晚上的复盘卡；payload = ReviewDraft，含明天的计划草案 */
   | 'review'
+  /**
+   * WP51 / 46 §2 I3：有人申请加入这个工作区（邀请码 / 局域网同伴 / 云目录）。
+   *
+   * 通过后施行什么：由 `apps/server/src/invites.ts` 把申请人建成 Membership 并交给
+   * 20 §4 的 Join 入口；失败回滚 = 申请回到 pending，成员不建（46 I3）。
+   * payload = `{ request_id, person: { name, email }, via }`。
+   */
+  | 'membership'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

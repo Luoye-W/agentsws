@@ -3497,6 +3497,7 @@ export interface operations {
             | 'ai_question'
             | 'daily_plan'
             | 'review'
+            | 'membership'
           subject: {
             object: {
               type: string

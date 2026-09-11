@@ -24,6 +24,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'review',
   // WP17：本条对话的一次性缺资料提问
   'ai_question',
+  // WP51 / 46 §2 I3：有人申请加入这个工作区
+  'membership',
 ])
 
 export function isKnownKind(kind: string): boolean {

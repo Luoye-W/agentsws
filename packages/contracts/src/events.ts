@@ -132,6 +132,22 @@ export type KnownEventType =
   | 'invitation.created'
   | 'invitation.accepted'
   | 'membership.removed'
+  /*
+   * WP51（46）：首次设置与同事发现。
+   *
+   * 三条纪律写在 payload 里：`workspace.profile_set` 只记**归一化后的哈希**与有没有域名，
+   * 全称不进日志；`discovery.peer_seen` 只有对方的 peer_id 与主机端口，没有成员名单；
+   * 邀请码同样只记指纹（`code_sha256` 的前若干位），明文只出现在 owner 手里那一次。
+   */
+  | 'workspace.profile_set'
+  | 'discovery.enabled'
+  | 'discovery.disabled'
+  | 'discovery.peer_seen'
+  | 'invite.created'
+  | 'invite.redeemed'
+  | 'membership.requested'
+  | 'membership.approved'
+  | 'membership.rejected'
   // schedule / workflow (25 §5, WP27)
   | 'schedule.created'
   | 'schedule.updated'
