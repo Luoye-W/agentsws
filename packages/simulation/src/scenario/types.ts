@@ -173,6 +173,28 @@ export interface ScenarioOrgScopeCheck {
   role: string
 }
 
+/**
+ * WP51 / 46 §1 ①：某一边走完首次设置的第一步。
+ *
+ * `side` 是这条题里给这台机器起的名字（`solo_a` / `solo_b`），与工作区 id 无关——
+ * 发现阶段本来就不该出现内部 id。
+ */
+export interface ScenarioOrgFirstRun {
+  side: string
+  who: string
+  legal_name: string
+  domain?: string
+  discoverable?: boolean
+}
+
+/** WP51 / 46 §2 I3：一边朝另一边申请加入（对方 owner 收一张 membership 卡）。 */
+export interface ScenarioOrgJoinRequest {
+  from: string
+  to: string
+  name: string
+  email: string
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -220,6 +242,10 @@ export type ScenarioEvent =
   | { at: string; type: 'org.assign_range'; assign_range: ScenarioOrgAssignRange }
   /** WP47：记一笔"他现在看得到什么"（44 G2 读那一半）。 */
   | { at: string; type: 'org.scope_check'; scope_check: ScenarioOrgScopeCheck }
+  /** WP51：某一边走完首次设置（46 §1 ①：公司档案 + 发现开关）。 */
+  | { at: string; type: 'org.first_run'; first_run: ScenarioOrgFirstRun }
+  /** WP51：一边朝另一边申请加入（46 §2 I3）。 */
+  | { at: string; type: 'org.join_request'; join_request: ScenarioOrgJoinRequest }
 
 export interface ScenarioInbound {
   from: string

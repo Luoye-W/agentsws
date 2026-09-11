@@ -1,0 +1,79 @@
+# 两个各自单干的人，在同一个办公室里发现对方、连上（46 §1 §2 I1 I3）。
+#
+# 这条题钉住的是"同一家公司"这件事怎么认、以及认出来之后**不会发生什么**：
+#
+# 1. **写法不同不影响**（46 §2 I1）。王岚写的是全称「深圳诺伏特科技」，李默多打了
+#    两个空格还加了「有限公司」，域名一个小写一个大小写混着——归一化之后是同一个串，
+#    `company_key` 是同一把钥匙。算钥匙用的是服务进程**同一个函数**
+#    （`@agentsws/core` 的 `companyKey`），不是这条题自己抄的一份。
+# 2. **看见 ≠ 连上**。钥匙一样只让他们在网段上互相看得见（`discovery.peer_seen`）。
+#    要连上，得有一方申请（`membership.requested`）、另一方 owner 批
+#    （一张真的 `membership` 审批卡，14）。名字相同从不自动共享任何东西。
+# 3. **发现阶段什么都不外泄**（46 §4）。广播出去的只有一串哈希；申请里只有名字与
+#    邮箱；事件日志里连全称都没有——`workspace.profile_set` 的 payload 只有
+#    `company_key` 与"有没有域名"。
+# 4. **连上不等于合并**。owner 批了之后这一步只把人放进来，记一条
+#    `membership.approved`（带 `next: join_import`）就交给 20 §4 的 Join 与 45 的
+#    合并向导：品牌 / 产品线 / 店铺范围的对照在那边做，凭据要本人自己交出。
+#    所以这条题跑完**一条变更都没提、一封信都没发**——组织上多了一个人，
+#    外面的世界一个字没动。
+id: org/two-solo-users-discover
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  # 王岚是店主：李默那条申请的卡落在他手上，他点头才算数
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 王岚第一次打开工具：写下公司全称，"让同事找到我"默认开着
+  - at: '+0m'
+    org.first_run:
+      side: solo_wang
+      who: p_wang
+      legal_name: 深圳诺伏特科技
+      domain: nordvolt.cn
+  # 半小时后李默也装上了。他凭记忆打的公司名：多了两个空格、加了「有限公司」，
+  # 域名还大小写混着——归一化之后和王岚那串一模一样
+  - at: '+30m'
+    org.first_run:
+      side: solo_li
+      who: p_li
+      legal_name: '深圳诺伏特  科技 有限公司'
+      domain: NordVolt.cn
+  # 李默在向导第 ① 步看见"发现 1 位同事"，点了"申请加入他们"
+  - at: '+35m'
+    org.join_request:
+      from: solo_li
+      to: solo_wang
+      name: 李默
+      email: li@nordvolt.cn
+  # 王岚过一会儿看到队列里那张卡，点了同意
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  event_types:
+    # 46 §1 ①：两边各写了一次公司档案（payload 里只有哈希）
+    - workspace.profile_set
+    - discovery.enabled
+    # 46 §2 I1：同一把钥匙 → 在网段上互相看得见
+    - discovery.peer_seen
+    # 46 §2 I3：看见之后要连上，得走申请 + 批准
+    - membership.requested
+    - membership.approved
+  # 那张 membership 卡是真的走了审批总线（14）
+  approval_kinds:
+    membership: '>=1'
+  metrics:
+    runs_failed: 0
+    # 连上不等于合并：这一步一条变更都没提、一封信都没发
+    applied_changes: 0
+    outbound_sent: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

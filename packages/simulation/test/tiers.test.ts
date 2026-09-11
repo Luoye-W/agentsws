@@ -218,7 +218,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十二条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十三条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       'ops/claim-pool',
@@ -233,6 +233,9 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'ops/two-desks-no-union',
       // WP47 范围模型（44 G1 / G5）：品牌新开一家店，挂它的岗位自动扩范围并留痕
       'org/brand-adds-store',
+      // WP51 首次设置与同事发现（46 §2 I1 / I3）：两个各自单干的人，
+      // 公司名写法不同但算出同一把钥匙 → 局域网互见 → 一方申请 → 对方 owner 批
+      'org/two-solo-users-discover',
       // WP39 秘书 Agent（41 §1）
       'secretary/ask-colleague',
       'secretary/meet-conflict',

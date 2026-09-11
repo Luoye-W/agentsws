@@ -1,3 +1,4 @@
+export * from './company.js'
 export * from './fencing.js'
 export * from './guardrail.js'
 export * from './mandate.js'
