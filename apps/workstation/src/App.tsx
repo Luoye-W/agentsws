@@ -5,12 +5,13 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/app-shell'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   ensureSession,
   getHome,
+  getOnboardingState,
   getPositions,
   NeedsLoginError,
   setAssignment,
@@ -28,6 +29,7 @@ import { LoginPage } from '@/pages/login'
 import { MatterPage } from '@/pages/matter'
 import { MeetingPage } from '@/pages/meeting'
 import { MeetingsPage } from '@/pages/meetings'
+import { OnboardingPage, onboardingSkipped } from '@/pages/onboarding'
 import { OrgPage } from '@/pages/org'
 import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
@@ -53,6 +55,7 @@ export function App(): ReactNode {
 function Workspace(): ReactNode {
   const { t, selectPosition, position } = useApp()
   const client = useQueryClient()
+  const location = useLocation()
 
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
 
@@ -68,6 +71,19 @@ function Workspace(): ReactNode {
       }
       return getPositions()
     },
+  })
+
+  /**
+   * 46 §1 末段：向导只在**这个工作区还没设过公司名**的时候弹（服务端的
+   * `needs_setup` 还多看一条——除所有者外没有别的分配，免得一个用了半年的
+   * 工作区在第 100 天被弹一次）。
+   */
+  const onboarding = useQuery({
+    queryKey: ['onboarding', 'state'],
+    enabled: positions.data !== undefined,
+    queryFn: () => getOnboardingState(),
+    // 弹不弹向导这件事不该因为一次网络抖动就把人挡在外面
+    retry: false,
   })
 
   // 命令面板要能搜卡片：拿首页的队列就够（跨岗位合并过了）
@@ -126,6 +142,15 @@ function Workspace(): ReactNode {
     )
   }
 
+  // 第一次打开 → 直接进四步向导。"先跳过"之后这一次会话里不再拦。
+  if (
+    onboarding.data?.needs_setup === true &&
+    !onboardingSkipped() &&
+    location.pathname !== '/onboarding'
+  ) {
+    return <Navigate to="/onboarding" replace />
+  }
+
   return (
     <AppShell
       positions={positions.data.positions}
@@ -137,6 +162,8 @@ function Workspace(): ReactNode {
     >
       <Routes>
         <Route path="/" element={<HomePage />} />
+        {/* 46 §1：首次设置向导（公司 → 你 → 你做什么 → 要配的东西） */}
+        <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/positions/:id" element={<PositionPage />} />
         {/* 37 工作模型：事项 / 待办 / 日历 / 目标 */}
         <Route path="/matters/:id" element={<MatterPage />} />

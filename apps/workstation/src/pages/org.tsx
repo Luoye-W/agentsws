@@ -12,6 +12,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { MembersTab } from '@/components/org/members-tab'
@@ -27,17 +28,23 @@ import {
   ApiClientError,
   copyRoleDefinition,
   createAssignments,
+  createInvite,
   createOrgPosition,
   createProductLine,
   createRangeGroup,
+  decideMembershipRequest,
   deleteOrgPosition,
   deleteProductLine,
   deleteRangeGroup,
   ensureSession,
+  getOnboardingState,
   getPositions,
   inviteMember,
+  listDiscoveryPeers,
   listInvitations,
+  listInvites,
   listMembers,
+  listMembershipRequests,
   listOrgPositions,
   listProductLines,
   listRangeGroups,
@@ -45,6 +52,7 @@ import {
   listRoleDefinitions,
   proposeRoleChange,
   removeMember,
+  requestMembership,
   revokeAssignment,
   updateOrgPosition,
   updateRangeGroup,
@@ -107,10 +115,40 @@ export function OrgPage(): React.ReactNode {
     queryFn: () => listProductLines(owner),
   })
 
+  /**
+   * 46 §2：加入 / 邀请。公司页是"这家公司都有谁"的地方，所以"还没进来的人"
+   * 也该在这里——邀请码在这儿发，别人的申请在这儿定（同一条也在首页队列里）。
+   */
+  const me = useQuery({
+    queryKey: ['onboarding', 'state'],
+    enabled,
+    queryFn: () => getOnboardingState(owner),
+    retry: false,
+  })
+  const peers = useQuery({
+    queryKey: ['onboarding', 'peers'],
+    enabled,
+    queryFn: () => listDiscoveryPeers(owner),
+    retry: false,
+  })
+  const invites = useQuery({
+    queryKey: ['onboarding', 'invites'],
+    enabled,
+    queryFn: () => listInvites(owner),
+    retry: false,
+  })
+  const requests = useQuery({
+    queryKey: ['onboarding', 'requests'],
+    enabled,
+    queryFn: () => listMembershipRequests(owner),
+    retry: false,
+  })
+
   const refresh = async (): Promise<void> => {
     await client.invalidateQueries({ queryKey: ['org'] })
     // 分配 / 撤销会改左栏（本人持有的岗位）
     await client.invalidateQueries({ queryKey: ['positions'] })
+    await client.invalidateQueries({ queryKey: ['onboarding'] })
   }
 
   const say = (err: unknown): void => {
@@ -257,8 +295,43 @@ export function OrgPage(): React.ReactNode {
     onError: say,
   })
 
+  const [joinSent, setJoinSent] = useState(false)
+  const newInvite = useMutation({
+    mutationFn: () => createInvite(undefined, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+  const join = useMutation({
+    mutationFn: (input: { code?: string; peer_id?: string }) =>
+      requestMembership({
+        ...input,
+        name: me.data?.person.name ?? '',
+        email: me.data?.person.email ?? '',
+      }),
+    onSuccess: () => {
+      setFailure(undefined)
+      setJoinSent(true)
+    },
+    onError: say,
+  })
+  const decide = useMutation({
+    mutationFn: (input: { id: string; approve: boolean }) =>
+      decideMembershipRequest(input.id, { approve: input.approve }, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+
   const busy =
     assign.isPending ||
+    newInvite.isPending ||
+    join.isPending ||
+    decide.isPending ||
     brandCreate.isPending ||
     brandUpdate.isPending ||
     brandDelete.isPending ||
@@ -329,6 +402,7 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
           <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
           <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
+          <TabsTrigger value="join">{t('onboarding.join.title')}</TabsTrigger>
           <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
           <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>
         </TabsList>
@@ -426,6 +500,32 @@ export function OrgPage(): React.ReactNode {
               }}
               onDeleteLine={(id) => {
                 lineDelete.mutate(id)
+              }}
+            />
+          )}
+        </TabsContent>
+
+        {/* 46 §2 I2 I3：加入一家公司 / 邀请同事 / 谁申请过加入 */}
+        <TabsContent value="join" className="pt-3">
+          {me.data === undefined ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <JoinPanel
+              {...(peers.data === undefined ? {} : { discovery: peers.data })}
+              me={me.data.person}
+              invites={invites.data ?? []}
+              requests={requests.data ?? []}
+              busy={busy}
+              sent={joinSent}
+              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+              onJoin={(input) => {
+                join.mutate(input)
+              }}
+              onCreateInvite={() => {
+                newInvite.mutate()
+              }}
+              onDecide={(id, approve) => {
+                decide.mutate({ id, approve })
               }}
             />
           )}
