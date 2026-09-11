@@ -64,8 +64,9 @@ describe('时间窗（36 §3 两档；WP49：近 7 天含今天）', () => {
     expect(w.current).toEqual({ from: today - 6 * DAY, to: nowMs })
     expect(w.current.to).toBeGreaterThan(today)
     // 对比期 = 再往前 7 整天
-    expect(w.previous).toEqual({ from: today - 13 * DAY, to: today - 6 * DAY })
-    expect(w.previous.to - w.previous.from).toBe(7 * DAY)
+    // 对比期截到同一时刻：7 天前的同一段，长度 = 本期长度
+    expect(w.previous).toEqual({ from: today - 13 * DAY, to: Date.parse(NOW) - 7 * DAY })
+    expect(w.previous.to - w.previous.from).toBe(w.current.to - w.current.from)
     // 7 桶与窗对齐、首尾相接，末桶 = 今天（到现在）
     expect(w.spark).toHaveLength(7)
     expect(w.spark[0]?.from).toBe(w.current.from)

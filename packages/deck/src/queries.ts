@@ -83,9 +83,11 @@ export function rangeWindows(
     spark.push({ from: today - i * DAY, to: i === 0 ? nowMs : today - (i - 1) * DAY })
   }
   const span = (SPARK_BUCKETS - 1) * DAY
+  // 对比期截到同一时刻（Luoye 09-11 定）：本期是 6 整天 + 今天到现在，
+  // 对比期就是 7 天前的同一段——否则早上看环比天生偏低。
   return {
     current: { from: today - span, to: nowMs },
-    previous: { from: today - span - SPARK_BUCKETS * DAY, to: today - span },
+    previous: { from: today - span - SPARK_BUCKETS * DAY, to: nowMs - SPARK_BUCKETS * DAY },
     spark,
   }
 }
