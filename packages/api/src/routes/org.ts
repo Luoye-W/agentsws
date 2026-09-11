@@ -20,7 +20,13 @@
  * - 岗位用 `/v1/org/positions`：`/v1/positions` 已经被工作台面占了（36 §3「本人持有的岗位」）；
  * - 改分配用 `PUT /v1/assignments/:id`：路由声明层只有 get/post/put/delete，没有 patch。
  */
-import type { MaybePromise, Membership, Position, RangeRef } from '@agentsws/contracts'
+import type {
+  MaybePromise,
+  Membership,
+  Position,
+  ProductLineRule,
+  RangeRef,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -107,7 +113,10 @@ export interface AssignmentView {
   role_id: string
   role_name: string
   role_version: string
+  /** 展开后的范围（挂的品牌已经摊平进来了）。 */
   ranges: RangeRef[]
+  /** 44 G1：这些范围是从哪几个品牌来的。 */
+  range_groups?: string[]
   granted_at: string
   revoked_at?: string
   /** 05 §4：范围为空且职责按 assigned 取数 → 这条分配现在查不到任何东西 */
@@ -144,6 +153,62 @@ export interface InvitationView {
   url?: string
   /** `link` = 本地档，链接交给 owner 自己转发；`email` = 已经发信了。 */
   delivered: 'link' | 'email'
+}
+
+/** 44 G1 品牌（范围组）在界面上的形状。 */
+export interface RangeGroupView {
+  id: string
+  name: string
+  members: RangeRef[]
+  created_at: string
+  updated_at: string
+  /** 有几个岗位挂着它（删之前要看这个数）。 */
+  holders: number
+}
+
+/** 44 G2 产品线在界面上的形状。 */
+export interface ProductLineView {
+  id: string
+  name: string
+  parent: RangeRef
+  rule: ProductLineRule
+  created_at: string
+  updated_at: string
+  holders: number
+  /** 这条判据能不能交给上游先切一刀（19 §3 过滤下推；界面上说人话用）。 */
+  pushdown: boolean
+}
+
+export interface RangeGroupInput {
+  name: string
+  members: RangeRef[]
+}
+
+/**
+ * 判据的**入参**形状：与契约的 `ProductLineRule` 同构，只是每个可选键都显式带
+ * `| undefined`——`exactOptionalPropertyTypes` 下 zod 解出来的对象就是这个样子，
+ * 装配方收到后再去掉 undefined 键存进契约类型。
+ */
+export type ProductLineRuleInput =
+  | {
+      platform: 'shopify'
+      collection_ids?: string[] | undefined
+      tags?: string[] | undefined
+      vendors?: string[] | undefined
+      product_types?: string[] | undefined
+    }
+  | {
+      platform: 'amazon'
+      asins?: string[] | undefined
+      sku_prefixes?: string[] | undefined
+      brand?: string | undefined
+    }
+  | { platform: 'manual'; product_ids: string[] }
+
+export interface ProductLineInput {
+  name: string
+  parent: RangeRef
+  rule: ProductLineRuleInput
 }
 
 /** 策略层（05 §3）在界面上的形状。 */
@@ -200,11 +265,16 @@ export interface AssignInput {
   role_id?: string | undefined
   /** 岗位里 `default: false` 的可选职责，勾了才给。 */
   include?: string[] | undefined
+  /** 显式挂的范围（店铺 / 账号 / 市场 / 产品线）。 */
   ranges: RangeRef[]
+  /** 44 G1：挂的品牌（范围组）；判权限时展开成成员，与 `ranges` 取并集。 */
+  range_groups?: string[] | undefined
 }
 
 export interface UpdateAssignInput {
   ranges?: RangeRef[] | undefined
+  /** 44 G1：挂的品牌（范围组）；给了就整份替换，摘掉的品牌贡献的成员一起撤走。 */
+  range_groups?: string[] | undefined
   /** 只能更紧（05 §0 不变量 2）；放宽 → 400。 */
   mandate_overrides?: Record<string, { caps?: Record<string, number> | undefined }> | undefined
 }
@@ -349,13 +419,68 @@ export interface OrgPort {
   rangeOptions(
     actor: OrgActor,
   ): MaybePromise<{ kind: RangeRef['kind']; id: string; label: string }[]>
+  // ── 44 品牌与产品线 ─────────────────────────────────────────────────
+  rangeGroups(actor: OrgActor): MaybePromise<RangeGroupView[]>
+  createRangeGroup(actor: OrgActor, input: RangeGroupInput): MaybePromise<RangeGroupView>
+  updateRangeGroup(
+    actor: OrgActor,
+    id: string,
+    input: RangeGroupInput,
+  ): MaybePromise<RangeGroupView>
+  deleteRangeGroup(actor: OrgActor, id: string): MaybePromise<void>
+  productLines(actor: OrgActor): MaybePromise<ProductLineView[]>
+  createProductLine(actor: OrgActor, input: ProductLineInput): MaybePromise<ProductLineView>
+  updateProductLine(
+    actor: OrgActor,
+    id: string,
+    input: ProductLineInput,
+  ): MaybePromise<ProductLineView>
+  deleteProductLine(actor: OrgActor, id: string): MaybePromise<void>
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
 
 const RANGE = z.object({
-  kind: z.enum(['store', 'department', 'account', 'market']),
+  // 44 G2：产品线也是一种范围
+  kind: z.enum(['store', 'department', 'account', 'market', 'product_line']),
   id: z.string().min(1).max(128),
+})
+
+/** 产品线只能切在店铺 / 平台账号 / 市场里面（44 G2/G4）。 */
+const LINE_PARENT = z.object({
+  kind: z.enum(['store', 'account', 'market']),
+  id: z.string().min(1).max(128),
+})
+
+const LINE_RULE = z.discriminatedUnion('platform', [
+  z.object({
+    platform: z.literal('shopify'),
+    collection_ids: z.array(z.string().min(1).max(128)).max(100).optional(),
+    tags: z.array(z.string().min(1).max(128)).max(100).optional(),
+    vendors: z.array(z.string().min(1).max(128)).max(100).optional(),
+    product_types: z.array(z.string().min(1).max(128)).max(100).optional(),
+  }),
+  z.object({
+    platform: z.literal('amazon'),
+    asins: z.array(z.string().min(1).max(32)).max(500).optional(),
+    sku_prefixes: z.array(z.string().min(1).max(64)).max(100).optional(),
+    brand: z.string().min(1).max(128).optional(),
+  }),
+  z.object({
+    platform: z.literal('manual'),
+    product_ids: z.array(z.string().min(1).max(128)).max(1000),
+  }),
+])
+
+const RangeGroupBody = z.object({
+  name: z.string().min(1).max(64),
+  members: z.array(RANGE).max(200).default([]),
+})
+
+const ProductLineBody = z.object({
+  name: z.string().min(1).max(64),
+  parent: LINE_PARENT,
+  rule: LINE_RULE,
 })
 
 const CopyRoleBody = z.object({
@@ -399,10 +524,12 @@ const AssignBody = z.object({
   role_id: z.string().min(1).max(128).optional(),
   include: z.array(z.string().min(1).max(128)).max(30).optional(),
   ranges: z.array(RANGE).max(50).default([]),
+  range_groups: z.array(z.string().min(1).max(64)).max(20).optional(),
 })
 
 const UpdateAssignBody = z.object({
   ranges: z.array(RANGE).max(50).optional(),
+  range_groups: z.array(z.string().min(1).max(64)).max(20).optional(),
   mandate_overrides: z
     .record(
       z.string().min(1).max(64),
@@ -908,6 +1035,155 @@ export function orgRoutes(): Route[] {
         returns: '{ kind, id, label }[]',
       },
       async (c, deps) => ok(c, await portOf(deps).rangeOptions(actorOf(c))),
+    ),
+
+    // ── 品牌与产品线（44 G1 / G2）──────────────────────────────────────
+    //
+    // 读走 `policy.read@workspace`、写走 `policy.stage@workspace/restricted`——
+    // 与这一组里别的写一样，也就是 owner 与拿到了 policy 域的范围管理者才动得了。
+    // **不走审批**：品牌加一家店是组织结构的日常，不是改职责模板；留痕靠
+    // `range_group.*` 与 `assignment.range_expanded` 两类事件（44 G5）。
+    route(
+      {
+        method: 'get',
+        path: '/v1/org/range-groups',
+        operationId: 'listRangeGroups',
+        summary: '品牌清单（= 范围组：一组店铺 / 账号 / 市场的名字）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'RangeGroupView[]',
+      },
+      async (c, deps) => ok(c, await portOf(deps).rangeGroups(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/range-groups',
+        operationId: 'createRangeGroup',
+        summary: '建一个品牌',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: RangeGroupBody,
+        returns: 'RangeGroupView',
+      },
+      async (c, deps) => {
+        const actor = actorOf(c)
+        const input = await body(c, RangeGroupBody)
+        return ok(c, await portOf(deps).createRangeGroup(actor, input), 201)
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/org/range-groups/:id',
+        operationId: 'updateRangeGroup',
+        summary: '改品牌的名字或成员（成员变了，挂它的岗位范围自动跟着变并留痕）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '范围组 id' }],
+        body: RangeGroupBody,
+        returns: 'RangeGroupView',
+      },
+      async (c, deps) => {
+        const actor = actorOf(c)
+        const input = await body(c, RangeGroupBody)
+        return ok(c, await portOf(deps).updateRangeGroup(actor, param(c, 'id'), input))
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/org/range-groups/:id',
+        operationId: 'deleteRangeGroup',
+        summary: '删一个品牌（还有岗位挂着就不给删）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '范围组 id' }],
+        returns: '{ deleted }',
+      },
+      async (c, deps) => {
+        await portOf(deps).deleteRangeGroup(actorOf(c), param(c, 'id'))
+        return ok(c, { deleted: true })
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/org/product-lines',
+        operationId: 'listProductLines',
+        summary: '产品线清单（账号 / 店铺内部按平台判据切出来的子集）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'ProductLineView[]',
+      },
+      async (c, deps) => ok(c, await portOf(deps).productLines(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/product-lines',
+        operationId: 'createProductLine',
+        summary: '建一条产品线',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: ProductLineBody,
+        returns: 'ProductLineView',
+      },
+      async (c, deps) => {
+        const actor = actorOf(c)
+        const input = await body(c, ProductLineBody)
+        return ok(c, await portOf(deps).createProductLine(actor, input), 201)
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/org/product-lines/:id',
+        operationId: 'updateProductLine',
+        summary: '改一条产品线的名字 / 归属 / 判据',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '产品线 id' }],
+        body: ProductLineBody,
+        returns: 'ProductLineView',
+      },
+      async (c, deps) => {
+        const actor = actorOf(c)
+        const input = await body(c, ProductLineBody)
+        return ok(c, await portOf(deps).updateProductLine(actor, param(c, 'id'), input))
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/org/product-lines/:id',
+        operationId: 'deleteProductLine',
+        summary: '删一条产品线（还有岗位挂着就不给删）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '产品线 id' }],
+        returns: '{ deleted }',
+      },
+      async (c, deps) => {
+        await portOf(deps).deleteProductLine(actorOf(c), param(c, 'id'))
+        return ok(c, { deleted: true })
+      },
     ),
   ]
 }

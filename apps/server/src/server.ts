@@ -60,6 +60,7 @@ import {
   changeKindOf,
   createRoleStore,
   loadBundledRole,
+  type RangeExpanded,
   type RoleStore,
   rangeTargetOfProduct,
 } from '@agentsws/roles'
@@ -495,6 +496,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const data = createDataStore({ dbPath: file('data.db'), clock, collections: [] })
 
   let connectedKinds: () => string[] = () => []
+  /**
+   * 44 G5：品牌成员一变，挂它的岗位范围跟着变——记事件 + 给 owner 发卡的那一段
+   * 住在 `createOrg`（它才有审批总线），而职责层比它先建起来，所以这里留一个晚绑定的钩子。
+   */
+  let rangeExpandedSink: ((e: RangeExpanded) => void) | undefined
   const roles =
     options.mount?.roles ??
     createRoleStore({
@@ -503,6 +509,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       roles: BUNDLED_ROLES.map((id) => loadBundledRole(id)),
       // 连接表在下面才建；用一个晚绑定的读法，岗位 ready 从真实连接算
       connected: () => connectedKinds(),
+      onRangeExpanded: (e) => rangeExpandedSink?.(e),
     })
 
   // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
@@ -1104,6 +1111,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
+  rangeExpandedSink = org.onRangeExpanded
 
   // WP36 离职编排（40 §1.2）：装在 org 之后——它要撤分配、真转事项、动个人层与个人记忆。
   const offboard = createOffboard({

@@ -33,6 +33,10 @@ import type {
   PolicyPatchInput,
   PositionInput,
   PositionView,
+  ProductLineInput,
+  ProductLineView,
+  RangeGroupInput,
+  RangeGroupView,
   RoleDetailView,
   RolePatchInput,
   RoleSummaryView,
@@ -50,13 +54,23 @@ import type {
   Person,
   PersonId,
   Position,
+  ProductLine,
+  ProductLineRule,
+  RangeGroup,
   RangeRef,
   RoleId,
   WorkspaceId,
   WorkspacePolicy,
 } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
-import { parseRole, type RoleDefinitionFull, RoleError, type RoleStore } from '@agentsws/roles'
+import {
+  parseRole,
+  type RangeExpanded,
+  type RoleDefinitionFull,
+  RoleError,
+  type RoleStore,
+  shopifyLineQuery,
+} from '@agentsws/roles'
 import type BetterSqlite3 from 'better-sqlite3'
 
 /** 岗位模板的存储形状（契约 `Position` + 从哪来）。 */
@@ -215,6 +229,14 @@ export interface OrgOptions {
 
 export interface OrgAssembly {
   port: OrgPort
+  /**
+   * 44 G5：把它接到 `createRoleStore({ onRangeExpanded })` 上——品牌成员一变，
+   * 挂它的岗位范围跟着变，这里记事件 + 给 owner 发一张 L3 卡。
+   *
+   * 为什么不直接在 `updateRangeGroup` 里做：职责层是唯一知道"哪几条分配受影响、
+   * 各自多了少了什么"的地方，在这边重算一遍等于把同一条规则写两份。
+   */
+  onRangeExpanded(e: RangeExpanded): void
   close(): void
 }
 
@@ -461,10 +483,142 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       role_name: roleName(a.role_id),
       role_version: a.role_version,
       ranges: [...a.ranges],
+      ...(a.range_groups === undefined || a.range_groups.length === 0
+        ? {}
+        : { range_groups: [...a.range_groups] }),
       granted_at: a.granted_at,
       ...(a.revoked_at === undefined ? {} : { revoked_at: a.revoked_at }),
       unassigned_range: needsRanges && a.ranges.length === 0,
     }
+  }
+
+  // ── 44 品牌与产品线的视图 ─────────────────────────────────────────
+
+  const rangeGroupView = (g: RangeGroup): RangeGroupView => ({
+    id: g.id,
+    name: g.name,
+    members: [...g.members],
+    created_at: g.created_at,
+    updated_at: g.updated_at,
+    holders: roles.rangeGroups.assignments(g.id).length,
+  })
+
+  const productLineView = (l: ProductLine): ProductLineView => ({
+    id: l.id,
+    name: l.name,
+    parent: { ...l.parent },
+    rule: structuredClone(l.rule),
+    created_at: l.created_at,
+    updated_at: l.updated_at,
+    holders: roles.productLines.assignments(l.id).length,
+    // 19 §3：这条判据交得出 `query:` 吗（界面上说"上游先切一刀"还是"拉回来本地切"）
+    pushdown: shopifyLineQuery(l.rule) !== undefined,
+  })
+
+  /** zod 解出来的可选键带着 `undefined`，契约类型不收——存之前把它们去掉。 */
+  const cleanRule = (rule: ProductLineInput['rule']): ProductLineRule => {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(rule)) if (v !== undefined) out[k] = v
+    return out as unknown as ProductLineRule
+  }
+
+  /**
+   * 44 G5：品牌成员变了 → 挂它的岗位范围自动跟上，**但要留痕**。
+   *
+   * 两件事：一条 `assignment.range_expanded` 事件（40 §1 数据归属的底线），
+   * 加一张给 owner 的卡。卡按 **L3** 提（14：默认放行、只通知），因为品牌就是
+   * 为了少一遍挨个改——真要拦，owner 在卡上驳回再去改岗位。
+   */
+  const onRangeExpanded = (e: RangeExpanded): void => {
+    emit('assignment.range_expanded', 'system', {
+      assignment_id: e.assignment_id,
+      person_id: e.person_id,
+      role_id: e.role_id,
+      range_group: e.range_group,
+      added: e.added,
+      removed: e.removed,
+    })
+    pendingExpanded.push(e)
+    void flushExpanded()
+  }
+
+  /** 攒一拍再发卡：一次改品牌常常影响好几个岗位，人只该看到一张卡。 */
+  const pendingExpanded: RangeExpanded[] = []
+  let flushing: Promise<void> | undefined
+  const flushExpanded = async (): Promise<void> => {
+    if (flushing !== undefined) return flushing
+    flushing = (async () => {
+      // 让同一次 `rangeGroups.update` 里的全部回调先落完，再攒成一张卡
+      await Promise.resolve()
+      const batch = pendingExpanded.splice(0)
+      if (batch.length === 0) return
+      const first = batch[0]
+      if (first === undefined) return
+      const workspace = await identity.getWorkspace(workspace_id)
+      const owner = workspace?.owner_id
+      if (owner === undefined) return
+      const added = batch.flatMap((e) => e.added)
+      const removed = batch.flatMap((e) => e.removed)
+      const what =
+        added.length > 0
+          ? `新增了 ${[...new Set(added.map((r) => r.id))].join('、')}`
+          : `去掉了 ${[...new Set(removed.map((r) => r.id))].join('、')}`
+      const summary = `「${first.range_group_name}」${what}，这 ${batch.length} 个岗位现在跟着看得到 / 看不到了。不想这样就改岗位的范围。`
+      const fingerprint = sha256(
+        canonicalJson({ group: first.range_group, batch: batch.map((e) => e.assignment_id), what }),
+      ).slice(0, 12)
+      try {
+        await approvals.create({
+          workspace_id,
+          schema_version: 1,
+          kind: 'policy_change',
+          role_id: 'common.owner',
+          subject: { object: { type: 'policy', id: `range_group:${first.range_group}` } },
+          dedupe_key: `${workspace_id}:range_expanded:${fingerprint}`,
+          title: `品牌「${first.range_group_name}」的范围变了`,
+          summary,
+          payload: {
+            target: 'range_group',
+            range_group: first.range_group,
+            affected_assignments: batch.map((e) => e.assignment_id),
+            added,
+            removed,
+          },
+          evidence: {
+            source_events: [],
+            diff: { before: { removed }, after: { added }, summary },
+            provenance: { seen: [] },
+            precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+          },
+          proposer: { kind: 'system', id: 'org.ranges' },
+          // 14：L3 = 默认放行、只通知（44 G5「自动跟，但留痕」）
+          automation: {
+            level_at_creation: 'L3',
+            auto_approved: true,
+            mandate_check: { within: true, caps_hit: [] },
+            sampling: { selected: false },
+          },
+          routing: {
+            recipients: [{ person: owner, via: 'owner' }],
+            rule: 'owner',
+            escalation: {
+              after_hours: 48,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          priority: 'queue',
+        })
+      } catch {
+        // 发不出卡不该把已经改好的范围回滚——事件已经记上了
+      }
+    })().finally(() => {
+      flushing = undefined
+      if (pendingExpanded.length > 0) void flushExpanded()
+    })
+    return flushing
   }
 
   /** 谁在做这个岗位：默认包里的职责都在他名下才算（05 §2 岗位只是模板）。 */
@@ -554,6 +708,8 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     granted_by: PersonId
     roleIds: RoleId[]
     ranges: RangeRef[]
+    /** 44 G1：挂的品牌（范围组）；判权限时展开成成员。 */
+    range_groups?: string[]
   }): Assignment[] => {
     const held = activeAssignments(input.person_id)
     const created: Assignment[] = []
@@ -568,6 +724,9 @@ export function createOrg(options: OrgOptions): OrgAssembly {
           role_id,
           granted_by: input.granted_by,
           ranges: input.ranges,
+          ...(input.range_groups === undefined || input.range_groups.length === 0
+            ? {}
+            : { range_groups: input.range_groups }),
         }),
       )
     }
@@ -748,6 +907,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         granted_by: actor.person_id,
         roleIds,
         ranges: input.ranges,
+        ...(input.range_groups === undefined ? {} : { range_groups: input.range_groups }),
       })
       for (const a of created)
         emit('assignment.granted', actor.person_id, {
@@ -769,6 +929,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         overrides[actionId] = { caps: { ...(value.caps ?? {}) } }
       const next = roles.assignments.update(id, {
         ...(input.ranges === undefined ? {} : { ranges: input.ranges }),
+        ...(input.range_groups === undefined ? {} : { range_groups: input.range_groups }),
         ...(input.mandate_overrides === undefined ? {} : { mandate_overrides: overrides }),
       })
       emit('assignment.updated', actor.person_id, { assignment_id: id, ranges: next.ranges })
@@ -920,6 +1081,98 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       } satisfies AcceptedInvitationView
     },
 
+    // ── 44 品牌与产品线 ──────────────────────────────────────────────
+    //
+    // 这两组**不走审批**：品牌加一家店是组织结构的日常，不是改职责模板（14 §1
+    // 的 `policy_change` 管的是后者）。留痕靠 `range_group.*` / `product_line.*`
+    // 两类事件，加上成员变动时每条受影响分配一条 `assignment.range_expanded`（44 G5）。
+    rangeGroups(_actor) {
+      return Promise.resolve(roles.rangeGroups.list(workspace_id).map(rangeGroupView))
+    },
+
+    createRangeGroup(actor, input) {
+      const created = roles.rangeGroups.create({
+        workspace_id,
+        name: input.name,
+        members: input.members,
+      })
+      emit('range_group.created', actor.person_id, {
+        range_group_id: created.id,
+        name: created.name,
+        members: created.members.length,
+      })
+      return Promise.resolve(rangeGroupView(created))
+    },
+
+    updateRangeGroup(actor, id, input) {
+      const before = roles.rangeGroups.get(id)
+      if (before === undefined || before.workspace_id !== workspace_id)
+        throw ORG_ERROR('not_found', `没有这个品牌：${id}`)
+      const next = roles.rangeGroups.update(id, { name: input.name, members: input.members })
+      emit('range_group.updated', actor.person_id, {
+        range_group_id: id,
+        name: next.name,
+        members: next.members.length,
+        members_before: before.members.length,
+      })
+      return Promise.resolve(rangeGroupView(next))
+    },
+
+    deleteRangeGroup(actor, id) {
+      const found = roles.rangeGroups.get(id)
+      if (found === undefined || found.workspace_id !== workspace_id)
+        throw ORG_ERROR('not_found', `没有这个品牌：${id}`)
+      roles.rangeGroups.delete(id)
+      emit('range_group.deleted', actor.person_id, { range_group_id: id, name: found.name })
+      return Promise.resolve()
+    },
+
+    productLines(_actor) {
+      return Promise.resolve(roles.productLines.list(workspace_id).map(productLineView))
+    },
+
+    createProductLine(actor, input) {
+      const created = roles.productLines.create({
+        workspace_id,
+        name: input.name,
+        parent: input.parent,
+        rule: cleanRule(input.rule),
+      })
+      emit('product_line.created', actor.person_id, {
+        product_line_id: created.id,
+        name: created.name,
+        parent: created.parent,
+        platform: created.rule.platform,
+      })
+      return Promise.resolve(productLineView(created))
+    },
+
+    updateProductLine(actor, id, input) {
+      const found = roles.productLines.get(id)
+      if (found === undefined || found.workspace_id !== workspace_id)
+        throw ORG_ERROR('not_found', `没有这条产品线：${id}`)
+      const next = roles.productLines.update(id, {
+        name: input.name,
+        parent: input.parent,
+        rule: cleanRule(input.rule),
+      })
+      emit('product_line.updated', actor.person_id, {
+        product_line_id: id,
+        name: next.name,
+        platform: next.rule.platform,
+      })
+      return Promise.resolve(productLineView(next))
+    },
+
+    deleteProductLine(actor, id) {
+      const found = roles.productLines.get(id)
+      if (found === undefined || found.workspace_id !== workspace_id)
+        throw ORG_ERROR('not_found', `没有这条产品线：${id}`)
+      roles.productLines.delete(id)
+      emit('product_line.deleted', actor.person_id, { product_line_id: id, name: found.name })
+      return Promise.resolve()
+    },
+
     async rangeOptions(_actor) {
       await reconcile()
       // 候选就是这个工作区里已经用过的那些范围；第一次分配时允许手填一个新的
@@ -927,12 +1180,20 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       for (const person of await memberIds())
         for (const a of activeAssignments(person))
           for (const r of a.ranges) seen.set(`${r.kind}:${r.id}`, { ...r, label: r.id })
+      // 44 G2：建好的产品线也是候选，而且显示的是名字不是 id
+      for (const line of roles.productLines.list(workspace_id))
+        seen.set(`product_line:${line.id}`, {
+          kind: 'product_line',
+          id: line.id,
+          label: line.name,
+        })
       return [...seen.values()]
     },
   }
 
   return {
     port,
+    onRangeExpanded,
     close() {
       backend.close()
     },
