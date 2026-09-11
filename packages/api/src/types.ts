@@ -53,6 +53,7 @@ import type { BackupPort } from './routes/backup.js'
 import type { CatalogPort } from './routes/catalog.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
+import type { JoinPort } from './routes/join.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
@@ -547,6 +548,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/roles`、`/v1/org/*`、成员与邀请那几条回 not_implemented。
    */
   org?: OrgPort
+  /**
+   * WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司的对照 / 合并 / 退出。
+   * 没装配时 `/v1/join/*` 回 not_implemented。
+   */
+  join?: JoinPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
   /**

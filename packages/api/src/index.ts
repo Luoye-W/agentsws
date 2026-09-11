@@ -124,6 +124,13 @@ export {
 } from './routes/events.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
+export {
+  type JoinActor,
+  type JoinDecisionInput,
+  type JoinImportReceipt,
+  type JoinPort,
+  joinRoutes,
+} from './routes/join.js'
 export type {
   MeetingIngestInput,
   MeetingProcessOutcome,

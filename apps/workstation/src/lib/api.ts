@@ -1476,6 +1476,81 @@ export const deleteProductLine = (id: string, assignment?: string): Promise<{ de
     ...withAssignment(assignment),
   })
 
+// ── 45 Join 向导：个人工作区并进公司 ──────────────────────────────────
+
+export type JoinResolution =
+  | 'merge_union'
+  | 'adopt_company'
+  | 'keep_both'
+  | 'create_in_company'
+  | 'skip'
+
+export interface JoinObjectSideView {
+  id: string
+  name: string
+  summary: string
+  holders?: number
+}
+
+export interface JoinObjectView {
+  kind: 'range_group' | 'product_line' | 'store_range'
+  unique_key: string
+  verdict: 'same' | 'similar' | 'missing'
+  mine: JoinObjectSideView
+  theirs?: JoinObjectSideView
+  similarity?: number
+  reasons: string[]
+  suggested: JoinResolution
+  options: JoinResolution[]
+}
+
+export interface JoinConnectionView {
+  connection_id: string
+  service: string
+  label: string
+  transfer: boolean
+  company_has_same_service?: boolean
+}
+
+export interface JoinMappingView {
+  join_id: string
+  source_workspace_id: string
+  target_workspace_id: string
+  person_id: string
+  objects: JoinObjectView[]
+  connections: JoinConnectionView[]
+  counts: { same: number; similar: number; missing: number }
+}
+
+export interface JoinCompleteView {
+  join_id: string
+  merged: number
+  created: number
+  kept: number
+  transferred_connections: number
+  range_rewrites: number
+}
+
+export const listJoins = (assignment?: string): Promise<JoinMappingView[]> =>
+  api<JoinMappingView[]>('/v1/join', withAssignment(assignment))
+
+export const getJoinMapping = (id: string, assignment?: string): Promise<JoinMappingView> =>
+  api<JoinMappingView>(`/v1/join/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+export const completeJoin = (
+  id: string,
+  input: {
+    objects: { unique_key: string; chosen: JoinResolution; name_choice?: 'company' | 'personal' }[]
+    connections: { connection_id: string; transfer: boolean }[]
+  },
+  assignment?: string,
+): Promise<JoinCompleteView> =>
+  api<JoinCompleteView>(`/v1/join/${encodeURIComponent(id)}/complete`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
 export const listRoleDefinitions = (assignment?: string): Promise<RoleSummaryView[]> =>
   api<RoleSummaryView[]>('/v1/roles', withAssignment(assignment))
 

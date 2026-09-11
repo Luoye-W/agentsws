@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { InprogressTab } from '@/components/org/inprogress-tab'
+import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
 import { PositionsTab } from '@/components/org/positions-tab'
 import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/components/org/ranges-tab'
@@ -25,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { OrgInvitationView } from '@/lib/api'
 import {
   ApiClientError,
+  completeJoin,
   copyRoleDefinition,
   createAssignments,
   createOrgPosition,
@@ -37,6 +39,7 @@ import {
   getPositions,
   inviteMember,
   listInvitations,
+  listJoins,
   listMembers,
   listOrgPositions,
   listProductLines,
@@ -94,6 +97,12 @@ export function OrgPage(): React.ReactNode {
     queryKey: ['org', 'ranges'],
     enabled,
     queryFn: () => listRangeOptions(owner),
+  })
+  // 45：等着并进来的个人工作区（对照表）
+  const joins = useQuery({
+    queryKey: ['org', 'joins'],
+    enabled,
+    queryFn: () => listJoins(owner),
   })
   // 44：品牌（范围组）与产品线
   const brands = useQuery({
@@ -248,6 +257,15 @@ export function OrgPage(): React.ReactNode {
     },
     onError: say,
   })
+  const joinComplete = useMutation({
+    mutationFn: (input: { id: string; choice: JoinChoice }) =>
+      completeJoin(input.id, input.choice, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
   const lineDelete = useMutation({
     mutationFn: (id: string) => deleteProductLine(id, owner),
     onSuccess: async () => {
@@ -263,6 +281,7 @@ export function OrgPage(): React.ReactNode {
     brandUpdate.isPending ||
     brandDelete.isPending ||
     lineCreate.isPending ||
+    joinComplete.isPending ||
     lineDelete.isPending ||
     create.isPending ||
     update.isPending ||
@@ -329,6 +348,7 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
           <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
           <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
+          <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
           <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
           <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>
         </TabsList>
@@ -429,6 +449,19 @@ export function OrgPage(): React.ReactNode {
               }}
             />
           )}
+        </TabsContent>
+
+        {/* 45 H2：个人工作区并进公司的对照页（三类分组、每类全部采纳） */}
+        <TabsContent value="join" className="pt-3">
+          <JoinTab
+            {...(joins.data?.[0] === undefined ? {} : { mapping: joins.data[0] })}
+            busy={busy}
+            {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+            onComplete={(choice) => {
+              const first = joins.data?.[0]
+              if (first !== undefined) joinComplete.mutate({ id: first.join_id, choice })
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="toolbox" className="pt-3">

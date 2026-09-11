@@ -22,6 +22,7 @@ import { eventRoutes } from './routes/events.js'
 import { haltRoutes } from './routes/halt.js'
 import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
+import { joinRoutes } from './routes/join.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
 import { meetingRoutes } from './routes/meetings.js'
 import { modelRoutes } from './routes/models.js'
@@ -86,6 +87,8 @@ export function collectRoutes(): Route[] {
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),
+    // WP50 Join 向导（20 §4–§5、45）：`/v1/join/*` 独立路径，与制度面不撞
+    ...joinRoutes(),
     ...eventRoutes(),
     // WP33 WebSocket 事件流：`/v1/ws` 的 HTTP 面（真正的升级由宿主在 http.Server 上做）
     ...wsRoutes(),

@@ -83,6 +83,7 @@ import {
 } from './connections.js'
 import { createPrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
+import { createJoin, type JoinAssembly } from './join.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
@@ -314,6 +315,8 @@ export interface Server {
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
   org: OrgAssembly
+  /** WP50 Join 向导（个人工作区并进公司：对照 / 合并 / 别名 / 退出）。 */
+  join: JoinAssembly
   /** 41 §1 秘书 Agent（profile / 代答 / 日程 / 路由）。 */
   secretary: SecretaryAssembly
   /** WP36 离职编排（撤权限 → 真交接 → 个人层归档 / 销毁 → 个人记忆迁移 / 擦除 → 报告）。 */
@@ -1113,6 +1116,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   rangeExpandedSink = org.onRangeExpanded
 
+  // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——
+  // 它要读同一份职责层（品牌 / 产品线 / 分配），并往同一条审批总线上建 `join_mapping`。
+  const joinAssembly = createJoin({
+    clock,
+    workspace_id: workspace.id,
+    roles,
+    approvals,
+    appendEvent,
+    connect: connections.connect,
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+
   // WP36 离职编排（40 §1.2）：装在 org 之后——它要撤分配、真转事项、动个人层与个人记忆。
   const offboard = createOffboard({
     workspace_id: workspace.id,
@@ -1323,6 +1338,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
     storage: storage.port,
     org: org.port,
+    join: joinAssembly.port,
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
     secretary: secretary.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
@@ -1508,6 +1524,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels,
     modelSettings,
     org,
+    join: joinAssembly,
     secretary,
     offboard,
     secrets,
@@ -1584,6 +1601,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connections.close()
       await devMcp?.close()
       org.close()
+      joinAssembly.close()
       offboard.close()
       secrets.close()
       txnStore?.close()

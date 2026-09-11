@@ -82,6 +82,12 @@ export {
   runApprovalHousekeeping,
 } from './housekeeping.js'
 export {
+  createJoin,
+  type JoinAssembly,
+  type JoinOptions,
+  unionRule,
+} from './join.js'
+export {
   createLiveDataSource,
   DEFAULT_REFRESH_SECONDS,
   LIVE_ASSIGNMENT,

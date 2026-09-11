@@ -72,6 +72,30 @@ describe('45 H2 唯一键：店铺 / 平台账号范围 = 平台 + 归一化 id'
     expect(platformOfRange(store('store_main'), 'shopify')).toBe('shopify')
   })
 
+  it('有一边平台没认出来（other）时按原样 id 比——公司那边的店铺范围是推出来的', () => {
+    // 公司这边从岗位范围推出 `store_a`（推不出平台 → other），导入的包自报 shopify
+    expect(
+      compareStoreRanges(
+        { platform: 'other', external_id: 'store_a' },
+        { platform: 'shopify', external_id: 'store_a' },
+      ).verdict,
+    ).toBe('same')
+    // 两边都认出平台且不同 → 仍然是两条
+    expect(
+      compareStoreRanges(
+        { platform: 'amazon', external_id: 'store_a' },
+        { platform: 'shopify', external_id: 'store_a' },
+      ).verdict,
+    ).toBe('none')
+    // id 不同就还是不同
+    expect(
+      compareStoreRanges(
+        { platform: 'other', external_id: 'store_a' },
+        { platform: 'shopify', external_id: 'store_b' },
+      ).verdict,
+    ).toBe('none')
+  })
+
   it('店铺范围只有 same / none：域名是身份证，不给"相似"', () => {
     const a = { platform: 'shopify', external_id: 'https://Glass-Bowl.myshopify.com/' } as const
     const b = { platform: 'shopify', external_id: 'glass-bowl' } as const

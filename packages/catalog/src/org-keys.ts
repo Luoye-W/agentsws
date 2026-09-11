@@ -261,19 +261,34 @@ export function compareProductLines(
  *
  * 45 H2 的表里这一格的"相似"是一横杠——域名与卖家 id 是身份证，不是名字；
  * 让人去判两个域名像不像只会判错。
+ *
+ * 一条例外：**有一边的平台是 `other`（没认出来）时，按原样 id 比**。
+ * 公司这边的店铺范围是从岗位与品牌成员里**推**出来的（没有一张店铺表），
+ * 推不出平台的一律 `other`；导入的包却可能自报 `shopify`。同一个 `store_a`
+ * 因此会算出两把不同的键——那不是两家店，是我们对同一家店知道得多少不一样。
  */
 export function compareStoreRanges(
   a: { platform: JoinPlatform; external_id: string },
   b: { platform: JoinPlatform; external_id: string },
 ): OrgMatch {
+  const known = a.platform === b.platform
   const ka = storeRangeKey(a)
   const kb = storeRangeKey(b)
-  if (ka !== kb) return NONE
+  if (known) {
+    if (ka !== kb) return NONE
+    return {
+      verdict: 'same',
+      similarity: 1,
+      reasons: [
+        `同一个${a.platform === 'amazon' ? '卖家账号 / 站点' : '店铺域名'}（${ka.split(':').slice(2).join(':')}）`,
+      ],
+    }
+  }
+  if (a.platform !== 'other' && b.platform !== 'other') return NONE
+  if (normalizeOther(a.external_id) !== normalizeOther(b.external_id)) return NONE
   return {
     verdict: 'same',
     similarity: 1,
-    reasons: [
-      `同一个${a.platform === 'amazon' ? '卖家账号 / 站点' : '店铺域名'}（${ka.split(':').slice(2).join(':')}）`,
-    ],
+    reasons: [`同一个店铺 / 账号 id（${normalizeOther(a.external_id)}；有一边没认出是哪个平台）`],
   }
 }
