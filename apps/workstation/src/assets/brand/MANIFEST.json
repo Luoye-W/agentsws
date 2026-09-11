@@ -1,0 +1,88 @@
+{
+  "$comment": "构建期抓一次入库的第三方品牌图标（WP48）。手动跑 `pnpm icons:fetch` 更新，跑完人自己看一眼再提交。运行时不联网。规矩见 docs/36 §8。",
+  "fetched_at": "2026-09-11",
+  "min_png": 64,
+  "icons": {
+    "shopify_admin": {
+      "brand": "Shopify",
+      "file": "shopify_admin.png",
+      "format": "png",
+      "width": 144,
+      "height": 144,
+      "bytes": 11295,
+      "sha256": "1982bc10f6fc11f535e084435b72ee8debc56631b15d8d1500e9b872577ab87d",
+      "source_url": "https://cdn.shopify.com/b/shopify-brochure2-assets/b13486e5693b246af63c66ab047a6b6b.png",
+      "source_page": "https://www.shopify.com",
+      "note": "官网首页的 apple-touch-icon",
+      "fetched_at": "2026-09-11"
+    },
+    "gmail": {
+      "brand": "Gmail",
+      "file": "gmail.png",
+      "format": "png",
+      "width": 128,
+      "height": 128,
+      "bytes": 1384,
+      "sha256": "860f3d32b1733bf7ca01c827b3e032ca0e55c8d4fa0d8482395e333f4e42ef9c",
+      "source_url": "https://www.gstatic.com/images/branding/product/2x/gmail_2020q4_64dp.png",
+      "source_page": "https://mail.google.com",
+      "note": "Google 品牌资源目录 gstatic branding/product（2020 版多色 M）；mail.google.com 本身是登录墙",
+      "fetched_at": "2026-09-11"
+    },
+    "ga4": {
+      "brand": "Google Analytics",
+      "file": "ga4.png",
+      "format": "png",
+      "width": 128,
+      "height": 128,
+      "bytes": 1520,
+      "sha256": "c3992b01343ced9cd279f81ac15ac04618edd6188e6c5b40bb7c04b3e8325660",
+      "source_url": "https://www.gstatic.com/images/branding/product/2x/google_analytics_64dp.png",
+      "source_page": "https://analytics.google.com",
+      "note": "Google 品牌资源目录 gstatic branding/product（GA4 的黄橙柱状图标）；analytics.google.com 是登录墙",
+      "fetched_at": "2026-09-11"
+    },
+    "gsc": {
+      "brand": "Google Search Console",
+      "file": "gsc.png",
+      "format": "png",
+      "width": 128,
+      "height": 128,
+      "bytes": 1984,
+      "sha256": "97db2ff60097307843a6f9bfc5b936735873d3cde4262cb0283f327d3040fa46",
+      "source_url": "https://www.gstatic.com/images/branding/product/2x/search_console_64dp.png",
+      "source_page": "https://search.google.com/search-console",
+      "note": "Google 品牌资源目录 gstatic branding/product；与 search-console/about 页上那张 logo_search_console.svg 是同一个标志的方形版",
+      "fetched_at": "2026-09-11"
+    },
+    "deepseek": {
+      "brand": "DeepSeek",
+      "file": "deepseek.svg",
+      "format": "svg",
+      "width": null,
+      "height": null,
+      "bytes": 3652,
+      "sha256": "0bf5e13ce954f13423a692f083f5cb0f4bcfde35c8b812f64efe89dabfdaed20",
+      "source_url": "https://api-docs.deepseek.com/img/favicon.svg",
+      "source_page": "https://api-docs.deepseek.com/",
+      "note": "DeepSeek 官方 API 文档站的 <link rel=icon>（矢量）",
+      "fetched_at": "2026-09-11"
+    }
+  },
+  "fallbacks": {
+    "meta_ads": {
+      "brand": "Meta 广告",
+      "reason": "官方来源都没给出能用的 PNG / SVG，界面退回 Simple Icons 的矢量图（见 brand-icons.tsx）",
+      "tried": [
+        {
+          "source": "https://static.xx.fbcdn.net/rsrc.php/y5/r/m4nf26cLQxS.ico",
+          "why": "返回的是 ICO（最大 32px），不收"
+        },
+        {
+          "source": "https://business.facebook.com/favicon.ico",
+          "why": "返回的是 ICO（最大 60px），不收"
+        }
+      ]
+    }
+  }
+}
