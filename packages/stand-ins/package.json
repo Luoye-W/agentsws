@@ -22,6 +22,7 @@
     "@agentsws/core": "workspace:*",
     "@agentsws/kernel": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
+    "@agentsws/ontology": "workspace:*",
     "@agentsws/support-core": "workspace:*"
   }
 }

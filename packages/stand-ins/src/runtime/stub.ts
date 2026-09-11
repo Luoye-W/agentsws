@@ -14,6 +14,7 @@ import type {
 } from '@agentsws/contracts'
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
+import { orderTools, runOntologyBrief } from '@agentsws/ontology'
 import type { BoundaryItem } from '@agentsws/support-core'
 import { renderReplyBody } from '@agentsws/support-core'
 import { boundaryGate, describeRun } from './support.js'
@@ -179,8 +180,32 @@ function hitsRule(text: string, rule: RunRequest['grounding'][number]): boolean 
 
 // ---------- prompt 装配 ----------
 
+/**
+ * 17 §1 的两个产出工具：它们是宿主回调，不在 `tools.allow` 里，但模型看得见、
+ * 也确实调得到——所以按岗位裁剪登记表时必须把它们算进"你能做什么"。
+ *
+ * 只有一处定义（`runtime-direct` 的 `outputToolDefs` 也用它），否则两边一错位，
+ * 提示词里许诺的工具与真正注册的工具就对不上了。
+ */
+export function outputToolNames(req: RunRequest): string[] {
+  const wants = new Set(req.expectations.outputs)
+  const names: string[] = []
+  if (wants.has('draft')) names.push(DRAFT_REPLY_TOOL)
+  if (wants.has('staged_change') || req.expectations.must_stage_if_change_requested)
+    names.push(STAGE_REFUND_TOOL)
+  return names.sort()
+}
+
+export const DRAFT_REPLY_TOOL = 'draft_reply'
+export const STAGE_REFUND_TOOL = 'stage_refund'
+
+/**
+ * 47 J3：工具面按**查对象 → 查知识 → 提议动作**三组排列。
+ * 排序规则在 `@agentsws/ontology`（登记表知道每个 Action 读的是哪类对象、是读是写）；
+ * 这里只负责让三个运行时用同一份顺序——名字一个字都不改，只换先后。
+ */
 function toolDefs(req: RunRequest): ToolDef[] {
-  return [...req.tools.allow].sort().map((name) => ({
+  return orderTools(req.tools.allow).map((name) => ({
     name,
     description: `stand-in tool ${name}`,
     input_schema: { type: 'object' },
@@ -188,11 +213,14 @@ function toolDefs(req: RunRequest): ToolDef[] {
 }
 
 /**
- * 17 §1 装配顺序：静态前缀（persona 段 + skills 索引行 + 工具定义）→ 策略层 → 工作项上下文 → 用户消息。
- * 静态前缀只由请求里稳定的部分构成，字节稳定。
+ * 17 §1 装配顺序：静态前缀（persona 段 + skills 索引行 + 登记表那一段 + 工具定义）→
+ * 策略层 → 工作项上下文 → 用户消息。静态前缀只由请求里稳定的部分构成，字节稳定。
  *
  * 导出给模拟回路（17 §6.1、26 §6）：回放事件日志时用同一个函数重组 prompt，
  * 与 `prompt.assembled.hash` 比对——同一个定义，不允许两处实现。
+ *
+ * **47 J3 那一段"你能查什么、能做什么"从本体登记表生成**，不手写：它是纯函数
+ * （输入只有 `actor` 与 `tools.allow`），所以回放照样重组得出同一份字节。
  */
 export function assemblePrompt(req: RunRequest): { messages: ChatMessage[]; tools: ToolDef[] } {
   const persona = [...req.persona.sections]
@@ -206,6 +234,8 @@ export function assemblePrompt(req: RunRequest): { messages: ChatMessage[]; tool
     { role: 'system', content: persona },
     { role: 'system', content: `# skills\n${skills}` },
   ]
+  const brief = ontologyBriefOf(req)
+  if (brief !== '') messages.push({ role: 'system', content: brief })
   const ordered = [
     ...itemsOfKind(req, 'policy'),
     ...req.context.filter(
@@ -221,6 +251,15 @@ export function assemblePrompt(req: RunRequest): { messages: ChatMessage[]; tool
     })
   }
   return { messages, tools: toolDefs(req) }
+}
+
+/** 47 J3 的那一段（按这次运行的工具面裁剪登记表）。 */
+export function ontologyBriefOf(req: RunRequest): string {
+  return runOntologyBrief({
+    assignment_id: req.actor.assignment_id,
+    role_id: req.actor.role_id,
+    tools: [...req.tools.allow, ...outputToolNames(req)],
+  })
 }
 
 /**

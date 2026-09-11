@@ -18,7 +18,7 @@ import type {
   StageFn,
   StageIntent,
 } from '@agentsws/stand-ins'
-import { boundaryGate, contextItemHash } from '@agentsws/stand-ins'
+import { boundaryGate, contextItemHash, ontologyBriefOf } from '@agentsws/stand-ins'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -371,14 +371,20 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   })
 
   // ── `systemPrompt.section`：persona（complete 段 = 唯一有效段）──────────
+  //
+  // 47 J3 的那一段"你能查什么、能做什么"跟着 persona 一起进这个段：
+  // preset 的白名单里 complete 段是**唯一**有效段（16 §2），另开一段会被遮掉。
+  // 真正喂给模型的那一份仍然是 `assemblePrompt(req)`（`runtime.ts` 里），
+  // 两边同一个生成器，所以 `systemText()` 看到的与模型看到的是同一段话。
   const persona = [...request.persona.sections]
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
     .map((s) => `## ${s.id} ${s.name}\n${s.text}`)
     .join('\n\n')
+  const brief = ontologyBriefOf(request)
   ctx.systemPrompt.section({
     name: PERSONA_SECTION,
     order: 0,
-    text: persona,
+    text: brief === '' ? persona : `${persona}\n\n${brief}`,
     complete: true,
   })
 

@@ -7,6 +7,7 @@
  * - 写外部工具（`create_refund` 之类）→ 注册但由 `tools/pre-execute` 在 executor 策略下一律拒
  */
 import type { ObjectRef, RunRequest } from '@agentsws/contracts'
+import { orderTools } from '@agentsws/ontology'
 import { isMcpReadTool } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -162,14 +163,17 @@ function draftTool(hooks: StageToolHooks): ToolDefinition {
 
 /**
  * 一次运行注册的全部工具：allowlist 里的读工具 + 两个 staging 工具。
- * 名字排序，保证同一 RunRequest 两次装配的工具清单逐字节相同（17 §6.2）。
+ *
+ * 47 J3：按**查对象 → 查知识 → 提议动作**三组排（排序规则在 `@agentsws/ontology`，
+ * 三个运行时共用同一份）。两个 staging 工具本来就在最后一组，位置不变；
+ * 名字一个字都没改。组内仍按名字，所以同一 RunRequest 两次装配逐字节相同（17 §6.2）。
  */
 export function buildToolDefinitions(
   req: RunRequest,
   read: ReadToolHooks,
   staging: StageToolHooks,
 ): ToolDefinition[] {
-  const names = [...new Set(req.tools.allow)].sort()
+  const names = orderTools([...new Set(req.tools.allow)])
   const defs: ToolDefinition[] = names
     .filter((n) => n !== STAGE_TOOL && n !== DRAFT_TOOL)
     .map((n) => readTool(n, read))

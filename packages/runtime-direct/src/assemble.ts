@@ -1,6 +1,14 @@
 import type { ChatMessage, RunRequest, ToolDef } from '@agentsws/contracts'
 import { estimateInputTokens, staticPrefixHash } from '@agentsws/model-gateway'
-import { assemblePrompt, assemblePromptHash, MCP_TOOL_DEF_BY_NAME } from '@agentsws/stand-ins'
+import { orderTools } from '@agentsws/ontology'
+import {
+  assemblePrompt,
+  assemblePromptHash,
+  DRAFT_REPLY_TOOL,
+  MCP_TOOL_DEF_BY_NAME,
+  outputToolNames,
+  STAGE_REFUND_TOOL,
+} from '@agentsws/stand-ins'
 
 /**
  * 17 §1 装配顺序：静态前缀（persona 段 → skills 索引行 → 工具定义）→ 策略层 ContextItem →
@@ -11,18 +19,22 @@ import { assemblePrompt, assemblePromptHash, MCP_TOOL_DEF_BY_NAME } from '@agent
  * direct-llm 只在它之上加自己的两个产出工具定义。
  */
 
-/** 15 §5 stage 的意图：模型只表达"要改什么"，账本与门禁由宿主回调负责。 */
-export const STAGE_REFUND_TOOL = 'stage_refund'
-/** 14 §2 对外草稿：模型写正文，审批项由宿主回调建。 */
-export const DRAFT_REPLY_TOOL = 'draft_reply'
+/**
+ * 两个产出工具的名字只有一处定义（`@agentsws/stand-ins`）——`assemblePrompt` 要按
+ * 同一份名单裁剪登记表（47 J3），两边各写一份迟早错位。这里原样转出，公开名不变。
+ *
+ * - `stage_refund`（15 §5）：模型只表达"要改什么"，账本与门禁由宿主回调负责。
+ * - `draft_reply`（14 §2）：模型写正文，审批项由宿主回调建。
+ */
+export { DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL }
 
 export const OUTPUT_TOOLS: readonly string[] = [DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL]
 
 /** 产出工具是宿主回调，不是外部 Action：不过 Connect allowlist，也永远不写外部。 */
 export function outputToolDefs(req: RunRequest): ToolDef[] {
-  const wants = new Set(req.expectations.outputs)
+  const wants = new Set(outputToolNames(req))
   const defs: ToolDef[] = []
-  if (wants.has('draft')) {
+  if (wants.has(DRAFT_REPLY_TOOL)) {
     defs.push({
       name: DRAFT_REPLY_TOOL,
       description:
@@ -45,7 +57,7 @@ export function outputToolDefs(req: RunRequest): ToolDef[] {
       },
     })
   }
-  if (wants.has('staged_change') || req.expectations.must_stage_if_change_requested) {
+  if (wants.has(STAGE_REFUND_TOOL)) {
     defs.push({
       name: STAGE_REFUND_TOOL,
       description:
@@ -93,7 +105,10 @@ function withMcpDefs(tools: ToolDef[]): ToolDef[] {
 /** 装配一次运行的 prompt（静态前缀在前，产出工具定义并入工具表）。 */
 export function assembleDirect(req: RunRequest): DirectPrompt {
   const base = assemblePrompt(req)
-  const tools = [...withMcpDefs(base.tools), ...outputToolDefs(req)]
+  // 47 J3：并进产出工具之后再按三组排一次——产出工具是"提议动作"，永远在最后一组
+  const merged = [...withMcpDefs(base.tools), ...outputToolDefs(req)]
+  const rank = new Map(orderTools(merged.map((t) => t.name)).map((n, i) => [n, i]))
+  const tools = merged.sort((a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0))
   return {
     messages: base.messages,
     tools,

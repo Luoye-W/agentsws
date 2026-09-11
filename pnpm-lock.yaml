@@ -409,6 +409,9 @@ importers:
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@agentsws/ontology':
+        specifier: workspace:*
+        version: link:../ontology
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
@@ -607,6 +610,9 @@ importers:
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@agentsws/ontology':
+        specifier: workspace:*
+        version: link:../ontology
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
@@ -732,6 +738,9 @@ importers:
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@agentsws/ontology':
+        specifier: workspace:*
+        version: link:../ontology
       '@agentsws/support-core':
         specifier: workspace:*
         version: link:../support-core

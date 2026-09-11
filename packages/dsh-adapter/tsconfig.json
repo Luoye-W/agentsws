@@ -16,6 +16,9 @@
       "path": "../model-gateway"
     },
     {
+      "path": "../ontology"
+    },
+    {
       "path": "../stand-ins"
     },
     {
