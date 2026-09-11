@@ -18,6 +18,70 @@ import type { GroundingRule } from './run.js'
 /** 动作 id（WriteActionSpec.id），如 'stage_refund' */
 export type ActionId = string
 
+/** 范围组 id（`rg_*`）。 */
+export type RangeGroupId = string
+/** 产品线 id（`pl_*`）。 */
+export type ProductLineId = string
+
+/**
+ * 44 G1 品牌 = 范围组：**一组范围的名字**，不是一种新的范围种类。
+ *
+ * 岗位可以挂"品牌乙"这个组；判权限时展开成成员（`Assignment.ranges` 里存的是展开后的，
+ * `Assignment.range_groups` 记住来源）。品牌新开一家店 → 把店加进组 → 挂了这个组的
+ * 岗位自动多这家店，并记一条 `assignment.range_expanded`（44 G5）。
+ */
+export interface RangeGroup {
+  id: RangeGroupId
+  workspace_id: WorkspaceId
+  name: string
+  members: RangeRef[]
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
+/** Shopify 的产品线判据：这四个字段 Admin GraphQL 都能 `query:` 直接过滤（44 §3 G2）。 */
+export interface ShopifyLineRule {
+  platform: 'shopify'
+  collection_ids?: string[]
+  tags?: string[]
+  vendors?: string[]
+  product_types?: string[]
+}
+
+/** 亚马逊的产品线判据（SP-API 报表能按 ASIN 过滤；订单要在本地按行项目切）。 */
+export interface AmazonLineRule {
+  platform: 'amazon'
+  asins?: string[]
+  sku_prefixes?: string[]
+  brand?: string
+}
+
+/** 手填一份商品清单——平台不给判据、或者就是想按人头切的时候用。 */
+export interface ManualLineRule {
+  platform: 'manual'
+  product_ids: string[]
+}
+
+export type ProductLineRule = ShopifyLineRule | AmazonLineRule | ManualLineRule
+
+/**
+ * 44 G2 产品线 = 新范围种类 `product_line` 的定义。
+ *
+ * `parent` 是它切在哪一层（一家店 / 一个平台账号 / 账号下的一个市场）；
+ * `rule` 是平台内的判据。判定发生在两处：拉数据时（能下推的下推，不能的本地按行项目切）、
+ * 写动作时（目标商品必须落在成员里，否则 `target_in_range` 拒）。
+ */
+export interface ProductLine {
+  id: ProductLineId
+  workspace_id: WorkspaceId
+  name: string
+  /** 只允许 `store` / `account` / `market` 三种（产品线切在它们**里面**）。 */
+  parent: RangeRef
+  rule: ProductLineRule
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
 /** 05 §1.1。09-08 修正：不做跨 Assignment 并集，每次运行绑定一个 Assignment，其 scopes 原样生效。 */
 export interface PermissionScope {
   domain: DataDomain
@@ -120,7 +184,13 @@ export interface Assignment {
   workspace_id: WorkspaceId
   role_id: RoleId
   role_version: string
+  /** **展开后**的范围（挂的范围组已经摊平进来了）；判权限只看这一份。 */
   ranges: RangeRef[]
+  /**
+   * 44 G1：这条分配挂了哪几个范围组（品牌）。`ranges` 里由它们展开出来的成员随组变；
+   * 组成员一变就重算，并记一条 `assignment.range_expanded`（44 G5）。
+   */
+  range_groups?: RangeGroupId[]
   /** 按动作收紧（09-09 改：额度按动作索引，不能一份 override 套全部动作） */
   mandate_overrides?: Record<ActionId, Partial<Mandate>>
   automation_state: Record<
@@ -197,7 +267,10 @@ export interface EffectiveConfig {
   skills: RoleDefinition['skills']
   grounding: GroundingRule[]
   persona?: string
+  /** 展开后的范围（挂的范围组已摊平）。 */
   ranges: RangeRef[]
+  /** 44 G1：这些范围是从哪几个范围组（品牌）来的。 */
+  range_groups?: RangeGroupId[]
   home_blocks: HomeBlockSpec[]
   notifications: NotificationRule[]
   ready: boolean

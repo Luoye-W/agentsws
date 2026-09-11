@@ -52,10 +52,34 @@ export interface ObjectRef {
   id: string
 }
 
-export type RangeKind = 'store' | 'department' | 'account' | 'market'
+/**
+ * 范围的种类（44 §3）。
+ *
+ * - `store`：一家独立站 / 一个店铺。Shopify Markets（多币种多语言）是店的属性，不当范围（44 G4）。
+ * - `department`：部门（20 §2 的组织结构）。
+ * - `account`：平台卖家账号（亚马逊的一个卖家账号）；**隐含它下面的全部市场**。
+ * - `market`：账号下的一个站点。**id 约定写成 `账号id:站点`**（如 `amz_na:US`）——
+ *   于是「这个市场属于哪个账号」不用另建一张表，切一刀冒号就知道（44 G4）。
+ * - `product_line`：店铺 / 账号 / 市场**内部**的一个商品子集，成员由平台内判据决定
+ *   （Shopify 集合 / 标签 / 供应商 / 商品类型；亚马逊 ASIN 清单 / SKU 前缀 / 品牌）。
+ *   定义见 `ProductLine`（44 G2）。
+ *
+ * 品牌**不是**一种范围，是一组范围的名字：见 `RangeGroup`（44 G1）。
+ */
+export type RangeKind = 'store' | 'department' | 'account' | 'market' | 'product_line'
 export interface RangeRef {
   kind: RangeKind
   id: string
+}
+
+/** `market` 的 id 分隔符（`账号id:站点`，44 G4）。 */
+export const MARKET_ID_SEPARATOR = ':'
+
+/** 把 `amz_na:US` 拆成 `{ account: 'amz_na', site: 'US' }`；不是这个形状回 undefined。 */
+export function parseMarketId(id: string): { account: string; site: string } | undefined {
+  const at = id.indexOf(MARKET_ID_SEPARATOR)
+  if (at <= 0 || at === id.length - 1) return undefined
+  return { account: id.slice(0, at), site: id.slice(at + 1) }
 }
 
 export type Sensitivity = 'public' | 'internal' | 'confidential' | 'restricted'
