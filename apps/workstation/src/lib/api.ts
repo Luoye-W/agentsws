@@ -1394,6 +1394,13 @@ export type ProductLineRule =
   | { platform: 'amazon'; asins?: string[]; sku_prefixes?: string[]; brand?: string }
   | { platform: 'manual'; product_ids: string[] }
 
+/** 45 H2 / H3：一条组织对象是从谁那儿带进来的，以及它是不是别名。 */
+export interface OrgObjectOrigin {
+  workspace_id: string
+  person_id: string
+  object_id?: string
+}
+
 export interface RangeGroupView {
   id: string
   name: string
@@ -1402,6 +1409,14 @@ export interface RangeGroupView {
   updated_at: string
   /** 有几个岗位挂着它（删之前看这个数）。 */
   holders: number
+  /** 45 H3：被公司那份取代了（值是真源那条的 id）。 */
+  superseded_by?: string
+  /** 45 H3 / H5：这一条只能看——界面上给的按钮是"提议修改"，不是"改"。 */
+  readonly?: boolean
+  /** 45 H2：谁、从哪个工作区带进来的。 */
+  origin?: OrgObjectOrigin
+  /** 45 H3：你点开的是 `alias_of` 那一条，读到的是这一条。 */
+  alias_of?: string
 }
 
 export interface ProductLineView {
@@ -1412,6 +1427,10 @@ export interface ProductLineView {
   created_at: string
   updated_at: string
   holders: number
+  superseded_by?: string
+  readonly?: boolean
+  origin?: OrgObjectOrigin
+  alias_of?: string
   /** 这条判据能不能交给上游先切一刀（19 §3 过滤下推）。 */
   pushdown: boolean
 }
@@ -1445,6 +1464,28 @@ export const deleteRangeGroup = (id: string, assignment?: string): Promise<{ del
     method: 'DELETE',
     ...withAssignment(assignment),
   })
+
+/**
+ * 45 H5：提议改一条品牌 / 产品线。**不直接改**——回的是一张 `policy_change` 卡的 id。
+ *
+ * 只读的那一份（并进公司之后的个人副本）走的也是这条：界面上那个按钮不叫"改"。
+ */
+export const proposeRangeChange = (
+  target: 'range_group' | 'product_line',
+  id: string,
+  input: {
+    reason: string
+    name?: string
+    members?: { kind: string; id: string }[]
+    parent?: { kind: string; id: string }
+    rule?: ProductLineRule
+  },
+  assignment?: string,
+): Promise<{ status: string; approval_item_id?: string; summary: string }> =>
+  api<{ status: string; approval_item_id?: string; summary: string }>(
+    `/v1/org/${target === 'range_group' ? 'range-groups' : 'product-lines'}/${encodeURIComponent(id)}/propose`,
+    { method: 'POST', body: input, ...withAssignment(assignment) },
+  )
 
 export const listProductLines = (assignment?: string): Promise<ProductLineView[]> =>
   api<ProductLineView[]>('/v1/org/product-lines', withAssignment(assignment))

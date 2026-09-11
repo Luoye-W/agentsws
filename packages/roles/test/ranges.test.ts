@@ -724,3 +724,109 @@ describe('外围守则', () => {
     expect(owner().id).toBe('common.owner')
   })
 })
+
+describe('45 H3 别名解析：合并之后公司那份是真源', () => {
+  it('supersede 之后 update 直接 conflict（别名是只读的），断开就恢复可编辑', () => {
+    const s = store()
+    const mine = s.rangeGroups.create({
+      workspace_id: 'ws_solo',
+      name: '品牌乙',
+      members: [{ kind: 'store', id: 'store_b' }],
+    })
+    const company = s.rangeGroups.create({
+      workspace_id: WS,
+      name: '品牌B',
+      members: [{ kind: 'store', id: 'store_a' }],
+    })
+    s.rangeGroups.supersede(mine.id, company.id)
+    expect(() => s.rangeGroups.update(mine.id, { name: '改个名' })).toThrow(/只能看/)
+    // 20 §4.4 退出公司：别名断开，个人那份恢复可编辑
+    s.rangeGroups.supersede(mine.id, undefined)
+    expect(s.rangeGroups.get(mine.id)?.superseded_by).toBeUndefined()
+    expect(s.rangeGroups.update(mine.id, { name: '改个名' }).name).toBe('改个名')
+    s.close()
+  })
+
+  it('resolve 顺着链走到真源；断链与成环都停在走得到的最后一条，不抛', () => {
+    const s = store()
+    const a = s.rangeGroups.create({ workspace_id: WS, name: 'A' })
+    const b = s.rangeGroups.create({ workspace_id: WS, name: 'B' })
+    const c = s.rangeGroups.create({ workspace_id: WS, name: 'C' })
+    s.rangeGroups.supersede(a.id, b.id)
+    s.rangeGroups.supersede(b.id, c.id)
+    expect(s.rangeGroups.resolve(a.id)?.name).toBe('C')
+    // 断链：指向一个不存在的 id，停在当前这条
+    s.rangeGroups.supersede(c.id, 'rg_nope')
+    expect(s.rangeGroups.resolve(a.id)?.name).toBe('C')
+    // 成环：C → A，回到看过的那条就停
+    s.rangeGroups.supersede(c.id, a.id)
+    expect(s.rangeGroups.resolve(a.id)).toBeDefined()
+    // 一条东西不能取代它自己
+    expect(() => s.rangeGroups.supersede(a.id, a.id)).toThrow(/不能取代它自己/)
+    expect(s.rangeGroups.resolve('rg_nope')).toBeUndefined()
+    s.close()
+  })
+
+  it('挂着的品牌被并进公司之后，岗位展开出来的是公司那份的成员', () => {
+    const s = store()
+    const mine = s.rangeGroups.create({
+      workspace_id: WS,
+      name: '品牌乙',
+      members: [{ kind: 'store', id: 'store_b' }],
+    })
+    const a = grant(s, {
+      person_id: 'p_li',
+      workspace_id: WS,
+      role_id: 'dtc.aftersales',
+      range_groups: [mine.id],
+      granted_by: 'p_wang',
+    })
+    expect(a.ranges).toEqual([{ kind: 'store', id: 'store_b' }])
+    const company = s.rangeGroups.create({
+      workspace_id: WS,
+      name: '品牌B',
+      members: [
+        { kind: 'store', id: 'store_a' },
+        { kind: 'store', id: 'store_b' },
+        { kind: 'store', id: 'store_c' },
+      ],
+    })
+    s.rangeGroups.supersede(mine.id, company.id)
+    // 45 H3：展开走 resolve，所以哪怕分配上挂的还是他个人那条 id，
+    // 下一次重新展开出来的已经是公司那份的成员——落地漏改一条也不会展开错
+    const after = s.assignments.update(a.id, { range_groups: [mine.id] })
+    expect(after.ranges.map((r) => r.id).sort()).toEqual(['store_a', 'store_b', 'store_c'])
+    expect(s.effectiveConfig(a.id).unassigned_range).toBe(false)
+    s.close()
+  })
+
+  it('挂着的产品线被并进公司之后，targetInRange 判的是公司那份的判据', () => {
+    const s = store()
+    const mine = s.productLines.create({
+      workspace_id: WS,
+      name: '厨房线',
+      parent: { kind: 'store', id: 'store_a' },
+      rule: { platform: 'manual', product_ids: ['prod_1'] },
+    })
+    const a = grant(s, {
+      person_id: 'p_li',
+      workspace_id: WS,
+      role_id: 'dtc.aftersales',
+      ranges: [{ kind: 'product_line', id: mine.id }],
+      granted_by: 'p_wang',
+    })
+    expect(s.targetInRange(a.id, { platform: 'manual', product_ids: ['prod_9'] }).ok).toBe(false)
+    const company = s.productLines.create({
+      workspace_id: WS,
+      name: '厨房线（公司）',
+      parent: { kind: 'store', id: 'store_a' },
+      rule: { platform: 'manual', product_ids: ['prod_1', 'prod_9'] },
+    })
+    s.productLines.supersede(mine.id, company.id)
+    expect(s.targetInRange(a.id, { platform: 'manual', product_ids: ['prod_9'] }).ok).toBe(true)
+    expect(() => s.productLines.update(mine.id, { name: 'x' })).toThrow(/只能看/)
+    expect(() => s.productLines.supersede('pl_nope', company.id)).toThrow(/没有这条产品线/)
+    expect(() => s.rangeGroups.supersede('rg_nope', 'x')).toThrow(/没有这个品牌/)
+    s.close()
+  })
+})

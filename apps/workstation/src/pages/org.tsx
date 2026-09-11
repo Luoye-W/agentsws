@@ -46,6 +46,7 @@ import {
   listRangeGroups,
   listRangeOptions,
   listRoleDefinitions,
+  proposeRangeChange,
   proposeRoleChange,
   removeMember,
   revokeAssignment,
@@ -266,6 +267,16 @@ export function OrgPage(): React.ReactNode {
     },
     onError: say,
   })
+  // 45 H5：只读的那一条（并进公司之后的个人副本、非 owner 看到的组织结构）改动走提议卡
+  const rangePropose = useMutation({
+    mutationFn: (input: { target: 'range_group' | 'product_line'; id: string; reason: string }) =>
+      proposeRangeChange(input.target, input.id, { reason: input.reason }, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
   const lineDelete = useMutation({
     mutationFn: (id: string) => deleteProductLine(id, owner),
     onSuccess: async () => {
@@ -282,6 +293,7 @@ export function OrgPage(): React.ReactNode {
     brandDelete.isPending ||
     lineCreate.isPending ||
     joinComplete.isPending ||
+    rangePropose.isPending ||
     lineDelete.isPending ||
     create.isPending ||
     update.isPending ||
@@ -446,6 +458,9 @@ export function OrgPage(): React.ReactNode {
               }}
               onDeleteLine={(id) => {
                 lineDelete.mutate(id)
+              }}
+              onPropose={(target, id, reason) => {
+                rangePropose.mutate({ target, id, reason })
               }}
             />
           )}

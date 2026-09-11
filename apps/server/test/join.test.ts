@@ -392,3 +392,117 @@ async function eventTypes(): Promise<string[]> {
   const page = await data<{ events: { type: string }[] }>(await call('GET', '/v1/events?limit=500'))
   return page.events.map((e) => e.type)
 }
+
+describe('45 H3 / H5：别名解析与「提议修改」', () => {
+  /** 并完之后回一对 `{ 个人那条, 公司那条 }`。 */
+  async function joined(): Promise<{ mine: string; company: string }> {
+    const company = await companyBrand()
+    const receipt = await data<JoinReceipt>(
+      await call('POST', '/v1/join/import', { body: soloBundle() }),
+    )
+    await data<CompleteResult>(
+      await call('POST', `/v1/join/${receipt.join_id}/complete`, { body: {} }),
+    )
+    return { mine: 'rg_solo_b', company: company.id }
+  }
+
+  it('打开自己那份被取代的品牌，读到的是公司那份（只读 + 记着点进来的是哪一条）', async () => {
+    const { mine, company } = await joined()
+    const view = await data<{
+      id: string
+      name: string
+      alias_of?: string
+      readonly?: boolean
+      members: { id: string }[]
+    }>(await call('GET', `/v1/org/range-groups/${mine}`))
+    expect(view.id).toBe(company)
+    expect(view.alias_of).toBe(mine)
+    expect(view.members.map((m) => m.id).sort()).toEqual(['store_a', 'store_b', 'store_c'])
+    // 公司那条自己不是别名，所以没有 readonly / alias_of
+    const direct = await data<{ alias_of?: string; readonly?: boolean; origin?: unknown }>(
+      await call('GET', `/v1/org/range-groups/${company}`),
+    )
+    expect(direct.alias_of).toBeUndefined()
+    expect(direct.readonly).toBeUndefined()
+    // 45 H2：公司那条记着是谁、从哪个工作区带进来的
+    expect(direct.origin).toMatchObject({ workspace_id: SOLO, person_id: SUN })
+    expect((await call('GET', '/v1/org/range-groups/rg_nope')).status).toBe(404)
+  })
+
+  it('提议修改：卡落在真源那一条上，批了才改，理由太短直接 400', async () => {
+    const { mine, company } = await joined()
+    expect(
+      (
+        await call('POST', `/v1/org/range-groups/${mine}/propose`, {
+          body: { reason: '短' },
+        })
+      ).status,
+    ).toBe(400)
+
+    const receipt = await data<{ status: string; approval_item_id: string; summary: string }>(
+      await call('POST', `/v1/org/range-groups/${mine}/propose`, {
+        body: {
+          reason: '店 D 也是这个品牌的，想加进来',
+          members: [{ kind: 'store', id: 'store_d' }],
+        },
+      }),
+    )
+    expect(receipt.status).toBe('pending_approval')
+    // 提议**不改任何东西**
+    const before = await data<{ members: { id: string }[] }>(
+      await call('GET', `/v1/org/range-groups/${company}`),
+    )
+    expect(before.members.map((m) => m.id)).not.toContain('store_d')
+
+    await call('POST', `/v1/approvals/${receipt.approval_item_id}/decide`, {
+      // 36 §2.2：policy_change 是选择题卡，批准必须说清选哪一个（after = 按提议改）
+      body: { action: 'approve', selected_option_id: 'after' },
+    })
+    // 落库发生在下一次读（org 端口每个方法先 reconcile 一遍）
+    await call('GET', '/v1/org/ranges')
+    const after = await data<{ members: { id: string }[] }>(
+      await call('GET', `/v1/org/range-groups/${company}`),
+    )
+    expect(after.members.map((m) => m.id)).toEqual(['store_d'])
+    expect(await eventTypes()).toEqual(expect.arrayContaining(['policy_change.proposed']))
+  })
+
+  it('产品线也能提议；提的是不存在的那条 → 404', async () => {
+    const line = await data<{ id: string }>(
+      await call('POST', '/v1/org/product-lines', {
+        body: {
+          name: '厨房线',
+          parent: { kind: 'store', id: 'store_a' },
+          rule: { platform: 'shopify', tags: ['kitchen'] },
+        },
+      }),
+    )
+    expect((await call('GET', `/v1/org/product-lines/${line.id}`)).status).toBe(200)
+    expect((await call('GET', '/v1/org/product-lines/pl_nope')).status).toBe(404)
+    expect(
+      (
+        await call('POST', '/v1/org/product-lines/pl_nope/propose', {
+          body: { reason: '这条线该带上锅具那几件' },
+        })
+      ).status,
+    ).toBe(404)
+
+    const receipt = await data<{ approval_item_id: string }>(
+      await call('POST', `/v1/org/product-lines/${line.id}/propose`, {
+        body: {
+          reason: '锅具也该算厨房线',
+          rule: { platform: 'shopify', tags: ['kitchen', 'pot'] },
+        },
+      }),
+    )
+    await call('POST', `/v1/approvals/${receipt.approval_item_id}/decide`, {
+      // 36 §2.2：policy_change 是选择题卡，批准必须说清选哪一个（after = 按提议改）
+      body: { action: 'approve', selected_option_id: 'after' },
+    })
+    await call('GET', '/v1/org/ranges')
+    const after = await data<{ rule: { tags?: string[] } }>(
+      await call('GET', `/v1/org/product-lines/${line.id}`),
+    )
+    expect(after.rule.tags).toEqual(['kitchen', 'pot'])
+  })
+})

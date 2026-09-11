@@ -1618,12 +1618,30 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get?: never
+    /** 读一个品牌；已经并进公司的那一份会**解析到公司那条**（45 H3） */
+    get: operations['getRangeGroup']
     /** 改品牌的名字或成员（成员变了，挂它的岗位范围自动跟着变并留痕） */
     put: operations['updateRangeGroup']
     post?: never
     /** 删一个品牌（还有岗位挂着就不给删） */
     delete: operations['deleteRangeGroup']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/org/range-groups/{id}/propose': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 提议改一个品牌（45 H5：成员只能提议；只读的那一份也走这条） */
+    post: operations['proposeRangeGroupChange']
+    delete?: never
     options?: never
     head?: never
     patch?: never
@@ -1654,12 +1672,30 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get?: never
+    /** 读一条产品线；已经并进公司的那一份会解析到公司那条（45 H3） */
+    get: operations['getProductLine']
     /** 改一条产品线的名字 / 归属 / 判据 */
     put: operations['updateProductLine']
     post?: never
     /** 删一条产品线（还有岗位挂着就不给删） */
     delete: operations['deleteProductLine']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/org/product-lines/{id}/propose': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 提议改一条产品线（45 H5） */
+    post: operations['proposeProductLineChange']
+    delete?: never
     options?: never
     head?: never
     patch?: never
@@ -13399,6 +13435,95 @@ export interface operations {
       }
     }
   }
+  getRangeGroup: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path: {
+        /** @description 范围组 id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description RangeGroupView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   updateRangeGroup: {
     parameters: {
       query?: never
@@ -13553,6 +13678,144 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  proposeRangeGroupChange: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 范围组 id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          reason: string
+          name?: string
+          members?: {
+            /** @enum {string} */
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            id: string
+          }[]
+          parent?: {
+            /** @enum {string} */
+            kind: 'store' | 'account' | 'market'
+            id: string
+          }
+          rule?:
+            | {
+                /** @constant */
+                platform: 'shopify'
+                collection_ids?: string[]
+                tags?: string[]
+                vendors?: string[]
+                product_types?: string[]
+              }
+            | {
+                /** @constant */
+                platform: 'amazon'
+                asins?: string[]
+                sku_prefixes?: string[]
+                brand?: string
+              }
+            | {
+                /** @constant */
+                platform: 'manual'
+                product_ids: string[]
+              }
+        }
+      }
+    }
+    responses: {
+      /** @description OrgChangeReceipt */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
         headers: {
           [name: string]: unknown
         }
@@ -13786,6 +14049,95 @@ export interface operations {
       }
     }
   }
+  getProductLine: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path: {
+        /** @description 产品线 id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description ProductLineView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   updateProductLine: {
     parameters: {
       query?: never
@@ -13960,6 +14312,144 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  proposeProductLineChange: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 产品线 id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          reason: string
+          name?: string
+          members?: {
+            /** @enum {string} */
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            id: string
+          }[]
+          parent?: {
+            /** @enum {string} */
+            kind: 'store' | 'account' | 'market'
+            id: string
+          }
+          rule?:
+            | {
+                /** @constant */
+                platform: 'shopify'
+                collection_ids?: string[]
+                tags?: string[]
+                vendors?: string[]
+                product_types?: string[]
+              }
+            | {
+                /** @constant */
+                platform: 'amazon'
+                asins?: string[]
+                sku_prefixes?: string[]
+                brand?: string
+              }
+            | {
+                /** @constant */
+                platform: 'manual'
+                product_ids: string[]
+              }
+        }
+      }
+    }
+    responses: {
+      /** @description OrgChangeReceipt */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
         headers: {
           [name: string]: unknown
         }

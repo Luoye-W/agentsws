@@ -81,6 +81,78 @@ function ruleFrom(platform: ProductLineRule['platform'], raw: string): ProductLi
   return { platform: 'shopify', tags: items }
 }
 
+/**
+ * 45 H3 / H5：只读的那一条给的不是"改"，是"提议修改"——写一句为什么，出一张卡给老板。
+ *
+ * 为什么不给一个完整的编辑表单：提议的价值在那句人话上（老板照它点头），
+ * 把字段也搬过来等于让人填两遍；批下来要改什么，卡上的 diff 说得清。
+ */
+function ProposeBox({
+  target,
+  id,
+  busy,
+  open,
+  reason,
+  done,
+  onOpen,
+  onReason,
+  onSubmit,
+}: {
+  target: 'range_group' | 'product_line'
+  id: string
+  busy: boolean
+  open: boolean
+  reason: string
+  done: boolean
+  onOpen(): void
+  onReason(value: string): void
+  onSubmit(target: 'range_group' | 'product_line', id: string, reason: string): void
+}): React.ReactNode {
+  const { t } = useApp()
+  if (done)
+    return (
+      <p className="text-xs text-muted-foreground" data-testid="propose-done">
+        {t('org.ranges.propose.done')}
+      </p>
+    )
+  if (!open)
+    return (
+      <div className="flex justify-end">
+        <Button size="xs" variant="outline" data-testid="propose-open" onClick={onOpen}>
+          {t('org.ranges.propose')}
+        </Button>
+      </div>
+    )
+  return (
+    <div className="flex flex-col gap-1">
+      <Label htmlFor={`propose-${id}`} className="text-xs text-muted-foreground">
+        {t('org.ranges.propose.reason')}
+      </Label>
+      <Input
+        id={`propose-${id}`}
+        value={reason}
+        data-testid="propose-reason"
+        placeholder={t('org.ranges.propose.placeholder')}
+        onChange={(e) => {
+          onReason(e.target.value)
+        }}
+      />
+      <div className="flex justify-end">
+        <Button
+          size="xs"
+          disabled={busy || reason.trim().length < 8}
+          data-testid="propose-submit"
+          onClick={() => {
+            onSubmit(target, id, reason.trim())
+          }}
+        >
+          {t('org.ranges.propose.submit')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export function RangesTab({
   groups,
   lines,
@@ -92,6 +164,7 @@ export function RangesTab({
   onDeleteGroup,
   onCreateLine,
   onDeleteLine,
+  onPropose,
 }: {
   groups: RangeGroupView[]
   lines: ProductLineView[]
@@ -103,6 +176,8 @@ export function RangesTab({
   onDeleteGroup(id: string): void
   onCreateLine(input: ProductLineDraft): void
   onDeleteLine(id: string): void
+  /** 45 H5：只读的那一条按这条路走——出一张卡，不直接改。没接就不显示那个按钮。 */
+  onPropose?(target: 'range_group' | 'product_line', id: string, reason: string): void
 }): React.ReactNode {
   const { t } = useApp()
   const [brandName, setBrandName] = useState('')
@@ -113,6 +188,10 @@ export function RangesTab({
   const [lineParent, setLineParent] = useState('')
   const [linePlatform, setLinePlatform] = useState<ProductLineRule['platform']>('shopify')
   const [lineRule, setLineRule] = useState('')
+  // 45 H5：正在给哪一条写提议，写了什么
+  const [proposing, setProposing] = useState<string | null>(null)
+  const [reason, setReason] = useState('')
+  const [proposed, setProposed] = useState<string | null>(null)
 
   // 品牌的成员只能是"整层"的范围（产品线是切在它们里面的，不能当品牌成员）
   const memberOptions = rangeOptions.filter((o) => o.kind !== 'product_line')
@@ -150,9 +229,17 @@ export function RangesTab({
               <Card key={g.id} data-testid="brand-card" data-brand={g.id}>
                 <CardHeader className="flex-row items-center justify-between gap-2">
                   <CardTitle className="text-sm">{g.name}</CardTitle>
-                  <Badge variant="outline">
-                    {t('org.ranges.holders', { n: String(g.holders) })}
-                  </Badge>
+                  <span className="flex items-center gap-1">
+                    {g.readonly === true ? (
+                      <Badge variant="secondary" data-testid="brand-readonly">
+                        {t('org.ranges.readonly')}
+                        <Hint text={t('org.ranges.readonly.hint')} />
+                      </Badge>
+                    ) : null}
+                    <Badge variant="outline">
+                      {t('org.ranges.holders', { n: String(g.holders) })}
+                    </Badge>
+                  </span>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2 text-sm">
                   <div className="flex flex-wrap gap-1">
@@ -165,7 +252,33 @@ export function RangesTab({
                       <span className="text-muted-foreground">{t('org.ranges.members.none')}</span>
                     ) : null}
                   </div>
-                  {editing === g.id ? (
+                  {g.origin === undefined ? null : (
+                    <p className="text-xs text-muted-foreground" data-testid="brand-origin">
+                      {t('org.ranges.origin', { who: g.origin.person_id })}
+                    </p>
+                  )}
+                  {g.readonly === true ? (
+                    onPropose === undefined ? null : (
+                      <ProposeBox
+                        target="range_group"
+                        id={g.id}
+                        busy={busy}
+                        open={proposing === g.id}
+                        reason={reason}
+                        done={proposed === g.id}
+                        onOpen={() => {
+                          setProposing(g.id)
+                          setReason('')
+                        }}
+                        onReason={setReason}
+                        onSubmit={(target, id, why) => {
+                          onPropose(target, id, why)
+                          setProposing(null)
+                          setProposed(id)
+                        }}
+                      />
+                    )
+                  ) : editing === g.id ? (
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap gap-1">
                         {memberOptions.map((o) => {

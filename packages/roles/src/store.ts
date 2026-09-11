@@ -330,9 +330,13 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
     `${prefix}_${sha256(canonicalJson({ workspace, name })).slice(0, 20)}`
 
   /**
-   * 45 H3 别名解析发生在**读**这一侧：挂着的那条被并进公司之后，展开出来的是
+   * 45 H3 别名解析发生在**展开**这一侧：挂着的那条被并进公司之后，展开出来的是
    * 公司那份的成员。于是"他的岗位范围自动指到公司那份"这件事，就算落地那一步
-   * 漏改了分配（老数据、并发），下一次 `effectiveConfig` 也仍然是对的。
+   * 漏改了分配上的组 id（老数据、并发），下一次重新展开也仍然是对的。
+   *
+   * 注意 `effectiveConfig` 读的是**存下来的那份已展开范围**（44 G1 就是这么设计的：
+   * 判权限那一刻不再查品牌表），所以别名要真的生效，还得有一次重新展开——
+   * Join 落地那一步的 `assignments.update` 就是那一次。
    */
   const groupsOf = (ids: readonly string[] | undefined): RangeGroup[] => {
     const out: RangeGroup[] = []

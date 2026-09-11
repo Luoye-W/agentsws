@@ -240,6 +240,16 @@ const zh: Table = {
   'org.ranges.pushdown.no': '拉回来本地切',
   'org.ranges.pushdown.hint':
     'Shopify 的标签 / 供应商 / 商品类型 / 集合这四个字段，能直接交给上游过滤，省一半流量；ASIN 与手填清单交不出去，只能拉回来按订单行项目自己切。',
+  // ── WP50 45 H3 / H5：并进公司之后只能看，改动走提议卡 ─────────────────
+  'org.ranges.readonly': '只能看',
+  'org.ranges.readonly.hint':
+    '这一条已经并进公司那份了，公司那份才是真源。想改就提一张卡给老板——批了改的是公司那条，不是这里再存一份。',
+  'org.ranges.origin': '{who} 从他自己的工作区带进来的',
+  'org.ranges.propose': '提议修改',
+  'org.ranges.propose.reason': '想改成什么样、为什么（至少 8 个字，老板照这句话点头）',
+  'org.ranges.propose.placeholder': '店 D 也是这个品牌的，想加进来',
+  'org.ranges.propose.submit': '提上去',
+  'org.ranges.propose.done': '提上去了，等老板点头。',
   // ── WP37 工具箱与查重（40 §2）────────────────────────────────────────
   'org.tab.toolbox': '工具箱',
   'toolbox.subtitle': '公司里已经做出来的自动化都在这儿。',
@@ -1149,6 +1159,17 @@ const en: Table = {
   'org.ranges.pushdown.no': 'filtered locally after fetching',
   'org.ranges.pushdown.hint':
     'Shopify can filter on tags / vendors / product types / collections directly, which halves the traffic. ASIN lists and manual lists cannot be pushed upstream, so orders are fetched and sliced by line item locally.',
+  // ── WP50 45 H3 / H5 ──────────────────────────────────────────────────
+  'org.ranges.readonly': 'Read-only',
+  'org.ranges.readonly.hint':
+    'This one has been merged into the company copy, and the company copy is the source of truth. To change it, send a card to the owner — approving it changes the company copy, not a second copy here.',
+  'org.ranges.origin': 'Brought in by {who} from their own workspace',
+  'org.ranges.propose': 'Propose a change',
+  'org.ranges.propose.reason':
+    'What you want changed and why (at least 8 characters — the owner decides on this sentence)',
+  'org.ranges.propose.placeholder': 'Store D belongs to this brand too; please add it',
+  'org.ranges.propose.submit': 'Send it up',
+  'org.ranges.propose.done': 'Sent. Waiting for the owner.',
   // ── WP37 toolbox & dedupe (40 §2) ─────────────────────────────────────
   'org.tab.toolbox': 'Toolbox',
   'toolbox.subtitle': 'Everything your company already automated.',

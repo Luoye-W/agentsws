@@ -164,12 +164,22 @@ export interface RangeGroupView {
   updated_at: string
   /** 有几个岗位挂着它（删之前要看这个数）。 */
   holders: number
-  /** 45 H3：被公司那份取代了，这一条只能看（`resolved` 是真源那一条的 id）。 */
+  /** 45 H3：被公司那份取代了，这一条只能看（值是真源那一条的 id）。 */
   superseded_by?: string
-  /** 45 H3 / H5：这一条改不了——已经被取代，或本人不是 owner / 范围管理者。 */
+  /**
+   * 45 H3 / H5：这一条改不了。
+   *
+   * 这里只答"因为它是别名"那一半；"因为你不是 owner / 范围管理者"那一半由路由
+   * 判（`policy.stage@workspace/restricted`，不够就 403）——端口不重判权限（28 §2）。
+   */
   readonly?: boolean
   /** 45 H2：谁、从哪个工作区带进来的。 */
   origin?: { workspace_id: string; person_id: string; object_id?: string }
+  /**
+   * 45 H3 别名解析：你点开的是 `alias_of` 那一条，读到的是**这一条**（公司那份）。
+   * 只有按 id 读一条时才有；列表里不出现。
+   */
+  alias_of?: string
 }
 
 /** 44 G2 产品线在界面上的形状。 */
@@ -185,6 +195,8 @@ export interface ProductLineView {
   superseded_by?: string
   readonly?: boolean
   origin?: { workspace_id: string; person_id: string; object_id?: string }
+  /** 45 H3 别名解析：你点开的是 `alias_of` 那一条，读到的是这一条。 */
+  alias_of?: string
   /** 这条判据能不能交给上游先切一刀（19 §3 过滤下推；界面上说人话用）。 */
   pushdown: boolean
 }
@@ -431,6 +443,11 @@ export interface OrgPort {
   ): MaybePromise<{ kind: RangeRef['kind']; id: string; label: string }[]>
   // ── 44 品牌与产品线 ─────────────────────────────────────────────────
   rangeGroups(actor: OrgActor): MaybePromise<RangeGroupView[]>
+  /**
+   * 45 H3 别名解析：按 id 读一条。给的 id 是被取代的那份时，**回公司那份**
+   * （`alias_of` 记住点进来的是哪一条，`readonly` 让界面把"改"换成"提议修改"）。
+   */
+  rangeGroup(actor: OrgActor, id: string): MaybePromise<RangeGroupView | undefined>
   createRangeGroup(actor: OrgActor, input: RangeGroupInput): MaybePromise<RangeGroupView>
   updateRangeGroup(
     actor: OrgActor,
@@ -439,6 +456,8 @@ export interface OrgPort {
   ): MaybePromise<RangeGroupView>
   deleteRangeGroup(actor: OrgActor, id: string): MaybePromise<void>
   productLines(actor: OrgActor): MaybePromise<ProductLineView[]>
+  /** 45 H3 别名解析（同 {@link OrgPort.rangeGroup}）。 */
+  productLine(actor: OrgActor, id: string): MaybePromise<ProductLineView | undefined>
   createProductLine(actor: OrgActor, input: ProductLineInput): MaybePromise<ProductLineView>
   updateProductLine(
     actor: OrgActor,
@@ -469,6 +488,10 @@ export interface ProposeRangeChangeInput {
   name?: string | undefined
   /** 品牌：想改成的成员（可选）。 */
   members?: RangeRef[] | undefined
+  /** 产品线：想改成的归属（可选）。 */
+  parent?: RangeRef | undefined
+  /** 产品线：想改成的判据（可选）。 */
+  rule?: ProductLineInput['rule'] | undefined
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
@@ -514,6 +537,15 @@ const ProductLineBody = z.object({
   name: z.string().min(1).max(64),
   parent: LINE_PARENT,
   rule: LINE_RULE,
+})
+
+/** 45 H5：一条「提议修改」。想改的那几格都可选——只改名字也是一条正经提议。 */
+const ProposeRangeBody = z.object({
+  reason: z.string().min(1).max(500),
+  name: z.string().min(1).max(64).optional(),
+  members: z.array(RANGE).max(200).optional(),
+  parent: LINE_PARENT.optional(),
+  rule: LINE_RULE.optional(),
 })
 
 const CopyRoleBody = z.object({
@@ -1092,6 +1124,55 @@ export function orgRoutes(): Route[] {
     ),
     route(
       {
+        method: 'get',
+        path: '/v1/org/range-groups/:id',
+        operationId: 'getRangeGroup',
+        summary: '读一个品牌；已经并进公司的那一份会**解析到公司那条**（45 H3）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: '范围组 id' }],
+        returns: 'RangeGroupView',
+      },
+      async (c, deps) => {
+        const found = await portOf(deps).rangeGroup(actorOf(c), param(c, 'id'))
+        if (found === undefined) throw new ApiError('not_found', `没有这个品牌：${param(c, 'id')}`)
+        return ok(c, found)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/range-groups/:id/propose',
+        operationId: 'proposeRangeGroupChange',
+        summary: '提议改一个品牌（45 H5：成员只能提议；只读的那一份也走这条）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        // 提议不是改：读得到这一页的人就提得了议，批不批是 owner 的事
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: '范围组 id' }],
+        body: ProposeRangeBody,
+        returns: 'OrgChangeReceipt',
+      },
+      async (c, deps) => {
+        const input = await body(c, ProposeRangeBody)
+        return ok(
+          c,
+          await portOf(deps).proposeRangeChange(actorOf(c), {
+            target: 'range_group',
+            id: param(c, 'id'),
+            reason: input.reason,
+            ...(input.name === undefined ? {} : { name: input.name }),
+            ...(input.members === undefined ? {} : { members: input.members }),
+          }),
+          202,
+        )
+      },
+    ),
+    route(
+      {
         method: 'post',
         path: '/v1/org/range-groups',
         operationId: 'createRangeGroup',
@@ -1160,6 +1241,56 @@ export function orgRoutes(): Route[] {
         returns: 'ProductLineView[]',
       },
       async (c, deps) => ok(c, await portOf(deps).productLines(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/org/product-lines/:id',
+        operationId: 'getProductLine',
+        summary: '读一条产品线；已经并进公司的那一份会解析到公司那条（45 H3）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: '产品线 id' }],
+        returns: 'ProductLineView',
+      },
+      async (c, deps) => {
+        const found = await portOf(deps).productLine(actorOf(c), param(c, 'id'))
+        if (found === undefined)
+          throw new ApiError('not_found', `没有这条产品线：${param(c, 'id')}`)
+        return ok(c, found)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/product-lines/:id/propose',
+        operationId: 'proposeProductLineChange',
+        summary: '提议改一条产品线（45 H5）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: '产品线 id' }],
+        body: ProposeRangeBody,
+        returns: 'OrgChangeReceipt',
+      },
+      async (c, deps) => {
+        const input = await body(c, ProposeRangeBody)
+        return ok(
+          c,
+          await portOf(deps).proposeRangeChange(actorOf(c), {
+            target: 'product_line',
+            id: param(c, 'id'),
+            reason: input.reason,
+            ...(input.name === undefined ? {} : { name: input.name }),
+            ...(input.parent === undefined ? {} : { parent: input.parent }),
+            ...(input.rule === undefined ? {} : { rule: input.rule }),
+          }),
+          202,
+        )
+      },
     ),
     route(
       {
