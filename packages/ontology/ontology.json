@@ -31,7 +31,7 @@
     "packages/roles/roles/dtc/aftersales.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "83fbc57e8ccf5da6126570a4def5c6f8",
+  "source_digest": "66858a8333e2e88aa77523d6f38da667",
   "objects": [
     {
       "id": "ad_set",
@@ -801,6 +801,18 @@
         {
           "name": "valid.until",
           "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "as_of",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "downgraded_from",
+          "type": "KnowledgeLayer",
           "sensitivity": "internal",
           "optional": true
         },

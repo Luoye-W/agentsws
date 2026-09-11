@@ -11,8 +11,17 @@ import type {
   WorkspaceId,
 } from './common.js'
 
-/** 19 §1 事实卡 */
-export type KnowledgeLayer = 'fact' | 'phrasing' | 'policy'
+/**
+ * 19 §1 事实卡的层。
+ *
+ * WP52（47 J2）加了第四层 `historical_case`：**知识层只存文字与判断，不存状态**。
+ * 带订单号 / 金额 / 库存数 / 履约状态这类"状态词"的句子进 Wiki 时降到这一层，
+ * 打上"当时"的时间戳（`as_of`），从此它是**历史案例**不是事实——回答时可以参考
+ * "上次这种情况我们怎么办的"，但不能拿它当"现在是什么样"。
+ *
+ * **只加不删**：原来那三层的含义一个字没动。
+ */
+export type KnowledgeLayer = 'fact' | 'phrasing' | 'policy' | 'historical_case'
 export interface Provenance {
   source: 'document' | 'meeting' | 'email' | 'web' | 'human' | 'agent_inference'
   ref: string
@@ -38,6 +47,21 @@ export interface FactCard {
   }
   conflicts?: { with: string; note: string }[]
   valid: { from?: Iso8601; until?: Iso8601 }
+  /**
+   * 47 J2：这句话描述的是**什么时候**的状态。
+   *
+   * 只有 `historical_case` 层有——它就是那个"当时"。`valid.from` 说的是"这条从
+   * 什么时候开始生效"（政策的启用日），两回事：一条 2026-09 写下的退款记录，
+   * `as_of` 是 2026-09，而它作为一条政策从来没有"生效"过。
+   */
+  as_of?: Iso8601
+  /**
+   * 47 J2：进入管道把它从哪一层降下来的。
+   *
+   * 留着是为了**能改回去**：正则会误伤（"我们承诺 30 天内退款"里也有数字），
+   * 人在界面上点一下就能还原成原来那层，不用猜它本来是什么。
+   */
+  downgraded_from?: KnowledgeLayer
   usage: {
     recalled: number
     cited: number

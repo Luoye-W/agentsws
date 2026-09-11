@@ -7,6 +7,7 @@
  *   一个字都不印在卡面上——WP15 截图里的 `fact_775c…` / `cus_anna` 就是这么漏出去的。
  */
 import type { DeckEntityChip, DeckEvidenceChip, DeckHighlight } from '@agentsws/deck'
+import { FactChip, ObjectChip } from '@/components/chips'
 import { Badge } from '@/components/ui/badge'
 import { useApp } from '@/lib/app-context'
 
@@ -26,7 +27,12 @@ export function EvidenceChips({ chips }: { chips: DeckEvidenceChip[] }): React.R
   )
 }
 
-/** 实体芯片另起一行（37 §1 第 5 行「实体 chip 另起一行」）。 */
+/**
+ * 实体芯片另起一行（37 §1 第 5 行「实体 chip 另起一行」）。
+ *
+ * 47 J2：**对象引用与知识引用长得不一样**——`fact_card` 走 `FactChip`（虚线 + 引号），
+ * 其余对象走 `ObjectChip`（实框 + 主色）。人一眼就分得出"这是现在的状态"还是"这是一句话"。
+ */
 export function EntityChips({
   chips,
   dropped,
@@ -40,18 +46,26 @@ export function EntityChips({
   if (chips.length === 0 && dropped === 0) return null
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="entity-chips">
-      {chips.map((chip) => (
-        <button
-          key={`${chip.type}:${chip.id}`}
-          type="button"
-          className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs hover:bg-primary/10"
-          onClick={() => {
-            onOpen?.(chip)
-          }}
-        >
-          {chip.label}
-        </button>
-      ))}
+      {chips.map((chip) =>
+        chip.type === 'fact_card' ? (
+          <FactChip
+            key={`${chip.type}:${chip.id}`}
+            label={chip.label}
+            onOpen={() => {
+              onOpen?.(chip)
+            }}
+          />
+        ) : (
+          <ObjectChip
+            key={`${chip.type}:${chip.id}`}
+            label={chip.label}
+            id={chip.id}
+            onOpen={() => {
+              onOpen?.(chip)
+            }}
+          />
+        ),
+      )}
       {dropped === 0 ? null : (
         <span className="text-xs text-muted-foreground" data-testid="enrichment-note">
           {t('deck.enrichment.dropped', { n: dropped })}

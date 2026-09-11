@@ -21,6 +21,8 @@ export interface CardRow {
   conflicts_json: string
   valid_from: string | null
   valid_until: string | null
+  as_of: string | null
+  downgraded_from: string | null
   usage_recalled: number
   usage_cited: number
   usage_last_recalled_at: string | null
@@ -53,6 +55,8 @@ export const CARD_COLUMNS = [
   'conflicts_json',
   'valid_from',
   'valid_until',
+  'as_of',
+  'downgraded_from',
   'usage_recalled',
   'usage_cited',
   'usage_last_recalled_at',
@@ -107,6 +111,8 @@ export function rowToCard(row: CardRow): FactCard {
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
+  if (row.as_of !== null) card.as_of = row.as_of
+  if (row.downgraded_from !== null) card.downgraded_from = row.downgraded_from as FactCard['layer']
   if (row.structured_json !== null)
     card.structured = JSON.parse(row.structured_json) as Record<string, unknown>
   if (conflicts && conflicts.length > 0) card.conflicts = conflicts
@@ -134,6 +140,8 @@ export function cardToRowValues(card: FactCard): (string | number | null)[] {
     JSON.stringify(card.conflicts ?? []),
     card.valid.from ?? null,
     card.valid.until ?? null,
+    card.as_of ?? null,
+    card.downgraded_from ?? null,
     card.usage.recalled,
     card.usage.cited,
     card.usage.last_recalled_at ?? null,
