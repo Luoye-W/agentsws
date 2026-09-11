@@ -333,12 +333,14 @@ describe('WP46 §A 连上店铺 → 面板有数', () => {
     expect(shop?.report_url).toBe('https://admin.shopify.com')
     expect((shop?.blocks ?? []).map((b) => b.id)).toContain('shop.recent_orders')
 
-    // 「最近订单」表里就是替身那两笔昨天的单
+    // 「最近订单」= 拉回来的三笔全在，按下单时间倒序。
+    // WP49：这张表不受右上角时间窗限制（"最近"就是字面意思），所以 range=yesterday
+    // 也会带出前天那笔 #2003——以前是窗内取，今天刚下的单反而看不见。
     const recent = await data<{ status: string; payload: { rows: { order: string }[] } }>(
       await api('/v1/blocks/shop.recent_orders/data?range=yesterday'),
     )
     expect(recent.status).toBe('ok')
-    expect(recent.payload.rows.map((r) => r.order)).toEqual(['#2001', '#2002'])
+    expect(recent.payload.rows.map((r) => r.order)).toEqual(['#2001', '#2002', '#2003'])
 
     // 数字块：昨天 129 + 71 = 200，两笔；环比是前一天那 50 / 1 笔
     const tiles = await shopTiles()
