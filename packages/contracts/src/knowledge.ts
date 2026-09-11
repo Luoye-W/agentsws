@@ -146,6 +146,8 @@ export interface RetrievalHit {
   statement_redacted: string
   provenance_summary: string
   sensitivity: Sensitivity
+  /** 47 J2：`historical_case` 层才有——这句话说的是**什么时候**的状态。 */
+  as_of?: Iso8601
 }
 
 /** 19 §3：先按身份过滤候选再算相似度（过滤下推）；precheck 不读正文不计 usage。 */

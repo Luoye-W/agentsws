@@ -206,6 +206,8 @@ export class SqliteRetrieval implements Retrieval {
         statement_redacted: redactSecrets(card.statement),
         provenance_summary: summary,
         sensitivity: card.sensitivity,
+        // 47 J2：历史案例要把"当时"一起带出去——调用方据此决定要不要标它过时
+        ...(card.as_of === undefined ? {} : { as_of: card.as_of }),
       })
     }
     return { hits, relevant: hits.length > 0, matched, missing }

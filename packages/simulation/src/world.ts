@@ -311,7 +311,7 @@ export interface World {
   readCustomer(id: string): Promise<DataRecord<Record<string, unknown>> | undefined>
   searchPolicies(
     text: string,
-  ): Promise<{ hits: { id: string; statement: string; layer: string }[] }>
+  ): Promise<{ hits: { id: string; statement: string; layer: string; as_of?: string }[] }>
   /**
    * WP44：店铺操作（运营改价 / 建站主题）。
    *
@@ -1149,9 +1149,76 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
 
   // ── 工具执行器：读走 mock connect，`search_policies` 走知识检索 ────────
   const connectExec = connectToolExecutor(connect)
+  /** 47 J2：已经给哪几张卡开过"知识过时"卡了（一张卡一次，别刷屏）。 */
+  const staleFlagged = new Set<string>()
+
+  /**
+   * 47 J2 / J3：检索命中一条**历史案例**就标一次过时。
+   *
+   * 它带着"当时"的时间戳（`as_of`）——那是它被写下来那一刻的状态，不是现在。
+   * Agent 照 J3 的顺序先查了对象、再查的知识，所以它手上已经有当前状态；
+   * 这里要做的是把矛盾**报出来**：给 owner 一张 `knowledge_update` 卡，
+   * 说清"这条说的是当时，现在以操作层为准，要不要更新它"。24 的学习回路吃这张卡。
+   */
+  const flagStale = async (hit: {
+    fact_card_id: string
+    statement_redacted: string
+    as_of?: string
+  }): Promise<void> => {
+    if (staleFlagged.has(hit.fact_card_id)) return
+    staleFlagged.add(hit.fact_card_id)
+    world.appendEvent('knowledge.card.stale', {
+      card_id: hit.fact_card_id,
+      ...(hit.as_of === undefined ? {} : { as_of: hit.as_of }),
+    })
+    await txn.approvals.create({
+      workspace_id,
+      schema_version: 1,
+      kind: 'knowledge_update',
+      role_id: assignment.role_id,
+      subject: { object: { type: 'fact_card', id: hit.fact_card_id } },
+      dedupe_key: `${workspace_id}:knowledge_update:stale:${hit.fact_card_id}`,
+      title: '这条知识可能过时了',
+      summary:
+        '检索到的是一条历史案例（记的是当时的状态）。回答已经以操作层的当前状态为准；' +
+        '这条要不要更新或退休，你定。',
+      payload: {
+        form: 'knowledge_update',
+        reason: 'stale_vs_live_state',
+        card_id: hit.fact_card_id,
+        ...(hit.as_of === undefined ? {} : { as_of: hit.as_of }),
+        options: [
+          { id: 'retire', label: '退休它（已经不成立了）' },
+          { id: 'keep_as_case', label: '留着当历史案例' },
+        ],
+      },
+      evidence: {
+        source_events: [],
+        diff: { before: {}, after: { card_id: hit.fact_card_id }, summary: '知识过时' },
+        provenance: { seen: [{ type: 'fact_card', id: hit.fact_card_id }] },
+        precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+      },
+      proposer: { kind: 'agent', id: assignment.id },
+      // 19 §2：知识怎么改是人的事，不自动放行
+      automation: {
+        level_at_creation: 'L1',
+        auto_approved: false,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [],
+        rule: 'owner',
+        escalation: { after_hours: 72, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+    })
+  }
+
   const searchPolicies = async (
     text: string,
-  ): Promise<{ hits: { id: string; statement: string; layer: string }[] }> => {
+  ): Promise<{ hits: { id: string; statement: string; layer: string; as_of?: string }[] }> => {
     const res = await knowledge.retrieval.search({
       text,
       // 19 §3 过滤下推：把本次 Assignment 的 scopes 原样传下去（不并集），
@@ -1166,11 +1233,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       },
       k: 3,
     })
+    for (const h of res.hits) {
+      if (h.layer === 'historical_case') await flagStale(h)
+    }
     return {
       hits: res.hits.map((h) => ({
         id: h.fact_card_id,
         statement: h.statement_redacted,
         layer: h.layer,
+        ...(h.as_of === undefined ? {} : { as_of: h.as_of }),
       })),
     }
   }

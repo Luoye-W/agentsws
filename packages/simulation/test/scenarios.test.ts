@@ -40,7 +40,7 @@ describe('pack 场景（26 §1 §4）', () => {
     const { evidence } = await runPackScenario('aftersales/return-within-window.yml')
     // 三层知识都进了库
     const activated = evidence.events.filter((e) => e.type === 'knowledge.card.activated')
-    expect(activated).toHaveLength(3)
+    expect(activated).toHaveLength(4)
     // 命中的卡作为 fact_card 注入（17 §5.4 宿主预取）
     const cards = evidence.runs[0]?.request.context.filter((c) => c.kind === 'fact_card') ?? []
     expect(cards.length).toBeGreaterThan(0)

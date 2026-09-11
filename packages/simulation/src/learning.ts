@@ -89,7 +89,10 @@ export function installLearningLoop(world: World, options: LearningOptions = {})
       await applyProposal(item, input)
       return
     }
-    if (item.kind === 'skill_promotion' || item.kind === 'knowledge_update') return
+    // 晋升卡不产 lesson（它本来就是 lesson 攒出来的）。
+    // `knowledge_update` **产**：47 J3 那张"知识过时"卡上人怎么决定（退休它 / 留着当案例），
+    // 正是 24 学习回路要吃的信号——"以后碰到这种旧状态该怎么办"。
+    if (item.kind === 'skill_promotion') return
     const d = item.decision
     if (d === undefined) return
     if (d.action !== 'reject' && d.action !== 'approve_edited' && d.action !== 'approve') return
