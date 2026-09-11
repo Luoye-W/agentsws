@@ -55,6 +55,7 @@ import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
+import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
@@ -547,6 +548,12 @@ export interface GatewayDeps {
    * 没装配时 `/v1/roles`、`/v1/org/*`、成员与邀请那几条回 not_implemented。
    */
   org?: OrgPort
+  /**
+   * WP51（46）：首次设置向导、同事发现、邀请码与申请加入。
+   * 没装配时 `/v1/onboarding/*`、`/v1/discovery/*`、`/v1/invites`、`/v1/memberships/*`
+   * 回 not_implemented——向导是加分项，没有它工作台照常能用（只是第一次打开时没人带路）。
+   */
+  onboarding?: OnboardingPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
   /**

@@ -25,8 +25,8 @@
   },
   "dependencies": {
     "@agentsws/api": "workspace:*",
-    "@agentsws/catalog": "workspace:*",
     "@agentsws/blob": "workspace:*",
+    "@agentsws/catalog": "workspace:*",
     "@agentsws/channels": "workspace:*",
     "@agentsws/connect-adapter": "workspace:*",
     "@agentsws/contracts": "workspace:*",
@@ -48,6 +48,7 @@
     "@agentsws/work": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "better-sqlite3": "^12.0.0",
+    "bonjour-service": "1.4.4",
     "hono": "^4.13.7",
     "ws": "^8.18.0"
   },
