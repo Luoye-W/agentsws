@@ -1,0 +1,26 @@
+{
+  "name": "@agentsws/ontology",
+  "version": "0.0.0",
+  "private": true,
+  "description": "47 J1 本体登记表：对象 / 链接 / 动作的只读索引（由 scripts/gen-ontology.mjs 从契约生成）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@agentsws/core": "workspace:*"
+  }
+}

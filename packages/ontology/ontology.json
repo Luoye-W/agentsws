@@ -1,0 +1,4352 @@
+{
+  "version": 1,
+  "generated_from": [
+    "apps/server/src/live-data.ts",
+    "packages/connect-adapter/action-side-effects.yml",
+    "packages/connect-adapter/src/shopify-actions.ts",
+    "packages/contracts/src/approval.ts",
+    "packages/contracts/src/blocks.ts",
+    "packages/contracts/src/changes.ts",
+    "packages/contracts/src/channels.ts",
+    "packages/contracts/src/common.ts",
+    "packages/contracts/src/connect.ts",
+    "packages/contracts/src/data.ts",
+    "packages/contracts/src/events.ts",
+    "packages/contracts/src/identity.ts",
+    "packages/contracts/src/join.ts",
+    "packages/contracts/src/kernel.ts",
+    "packages/contracts/src/knowledge.ts",
+    "packages/contracts/src/meetings.ts",
+    "packages/contracts/src/model.ts",
+    "packages/contracts/src/packages.ts",
+    "packages/contracts/src/roles.ts",
+    "packages/contracts/src/run.ts",
+    "packages/contracts/src/schedule.ts",
+    "packages/contracts/src/skills.ts",
+    "packages/contracts/src/work.ts",
+    "packages/core/src/guardrail.ts",
+    "packages/deck/src/queries.ts",
+    "packages/roles/roles/common/member.yml",
+    "packages/roles/roles/common/owner.yml",
+    "packages/roles/roles/dtc/aftersales.yml",
+    "packages/roles/roles/site/builder.yml"
+  ],
+  "source_digest": "83fbc57e8ccf5da6126570a4def5c6f8",
+  "objects": [
+    {
+      "id": "ad_set",
+      "label": "广告组",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "ad_account",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": [],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "approval_item",
+      "label": "审批项",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "ApprovalKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "revision",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "range",
+          "type": "RangeRef[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "subject.object",
+          "type": "ObjectRef",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "subject.matter_id",
+          "type": "MatterId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "subject.work_item_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "subject.todo_id",
+          "type": "TodoId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "subject.conversation_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "dedupe_key",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "payload",
+          "type": "P",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "evidence.run_id",
+          "type": "RunId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "evidence.source_events",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "evidence.provenance.seen",
+          "type": "ObjectRef[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "evidence.diff",
+          "type": "Diff",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "evidence.precheck",
+          "type": "PrecheckResult",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "evidence.citations",
+          "type": "{ fact_card_id: string; quote: string }[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "proposer.kind",
+          "type": "'agent' | 'person' | 'sentinel' | 'registry' | 'system'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "proposer.id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "proposer.assignment_id",
+          "type": "AssignmentId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "automation.level_at_creation",
+          "type": "Level",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "automation.auto_approved",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "automation.mandate_check.within",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "automation.mandate_check.caps_hit",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "automation.sampling.selected",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "automation.sampling.reviewed",
+          "type": "{ by: PersonId; at: Iso8601; outcome: 'ok' | 'issue'; note?: string }",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "routing.recipients",
+          "type": "Recipient[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routing.assignee",
+          "type": "PersonId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "routing.explicit",
+          "type": "PersonId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "routing.rule",
+          "type": "'role_holder' | 'scope_manager' | 'owner' | 'explicit' | 'unclaimed'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routing.escalation.after_hours",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routing.escalation.business_hours",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routing.escalation.chain",
+          "type": "('scope_manager' | 'owner')[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routing.escalation.escalated_at",
+          "type": "Iso8601[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routing.separation_of_duties",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "priority",
+          "type": "'immediate' | 'queue' | 'digest'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "due_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "options",
+          "type": "{ id: string; label: string }[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "risk_class",
+          "type": "RiskClass",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "snoozed.count",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "snoozed.until",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "execution_snapshot",
+          "type": "ExecutionSnapshot",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "execution_context",
+          "type": "ApprovalExecutionContext",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "state",
+          "type": "ApprovalState",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "decision",
+          "type": "Decision",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "apply",
+          "type": "ApplyRecord",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "deliveries",
+          "type": "Delivery[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "links.parent",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "links.children",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "links.supersedes",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "links.superseded_by",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "expires_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [
+        "approvals.pending_replies",
+        "approvals.refund_requests",
+        "approvals.reply_rate_24h",
+        "records.timeline"
+      ],
+      "contract": "ApprovalItem"
+    },
+    {
+      "id": "assignment",
+      "label": "岗位",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "AssignmentId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "person_id",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "role_version",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "ranges",
+          "type": "RangeRef[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "range_groups",
+          "type": "RangeGroupId[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "mandate_overrides",
+          "type": "Record<ActionId, Partial<Mandate>>",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "automation_state",
+          "type": "Record< ActionId, { level: Level adoption: { accepted: number; edited: number…",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "granted_by",
+          "type": "PersonId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "granted_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "revoked_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "handover_to",
+          "type": "PersonId | 'owner' | 'scope_manager'",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Assignment"
+    },
+    {
+      "id": "campaign",
+      "label": "活动",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "campaign",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": [],
+      "properties": [],
+      "read_via": ["klaviyo.get_campaign", "klaviyo.list_campaigns", "meta.list_campaigns"]
+    },
+    {
+      "id": "company",
+      "label": "客户公司",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "customer",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "connection",
+      "label": "连接",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "store_config",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "alias",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "ownership",
+          "type": "'workspace' | 'person'",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "owner_person_id",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "identity.account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "identity.display_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "identity.granted_scopes",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "'active' | 'reauth_required' | 'disabled'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "credential_store",
+          "type": "'openconnector' | 'local_vault'",
+          "sensitivity": "restricted",
+          "optional": true
+        },
+        {
+          "name": "last_tested_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_test.ok",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "last_test.reason",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_test.detail",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Connection"
+    },
+    {
+      "id": "contact",
+      "label": "联系人",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "customer",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "creator",
+      "label": "达人",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "creator",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": [],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "customer",
+      "label": "客户",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "customer",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "id": "discount",
+      "label": "折扣",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "discount",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": [],
+      "properties": [],
+      "read_via": ["shopify_admin.get_discount", "shopify_admin.list_discounts"]
+    },
+    {
+      "id": "email_campaign",
+      "label": "邮件营销",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "campaign",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": [],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "fact_card",
+      "label": "事实卡",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "knowledge",
+      "source_of_truth": "human",
+      "freshness": "authored",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "layer",
+          "type": "KnowledgeLayer",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "domain",
+          "type": "DataDomain | 'company'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "scope",
+          "type": "RangeRef[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "sensitivity",
+          "type": "Sensitivity",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "subject.type",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "subject.id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "subject.key",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "statement",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "structured",
+          "type": "Record<string, unknown>",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "provenance",
+          "type": "Provenance[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "confidence.value",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "confidence.state",
+          "type": "'unverified' | 'plausible' | 'probable' | 'verified' | 'refuted'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "conflicts",
+          "type": "{ with: string; note: string }[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "valid.from",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "valid.until",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "usage.recalled",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "usage.cited",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "usage.last_recalled_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "usage.drafts_edited_after_cite",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "'proposed' | 'active' | 'retired'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "owner",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "created_by.kind",
+          "type": "'agent' | 'person'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_by.id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": ["search_policies"],
+      "contract": "FactCard"
+    },
+    {
+      "id": "goal",
+      "label": "目标",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "GoalId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "level",
+          "type": "GoalLevel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "parent_id",
+          "type": "GoalId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "position_id",
+          "type": "PositionId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "owner",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "metric.query",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "metric.format",
+          "type": "MetricFormat",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "metric.params",
+          "type": "Record<string, unknown>",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "target",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "period.kind",
+          "type": "GoalPeriodKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "period.start",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "period.end",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "GoalStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "Goal"
+    },
+    {
+      "id": "matter",
+      "label": "事项",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "MatterId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "position_id",
+          "type": "PositionId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "kind",
+          "type": "MatterKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "MatterStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "goal_id",
+          "type": "GoalId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "context",
+          "type": "MatterContext",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "closed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Matter"
+    },
+    {
+      "id": "meeting",
+      "label": "会议",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "meeting",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "MeetingId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "position_id",
+          "type": "PositionId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "start",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "end",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "location",
+          "type": "MeetingLocation",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "participants",
+          "type": "MeetingParticipant[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "agenda",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "records",
+          "type": "MeetingRecordId[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "outputs",
+          "type": "MeetingOutputs",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "calendar_ref",
+          "type": "MeetingCalendarRef",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "sensitivity",
+          "type": "Sensitivity",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "scope",
+          "type": "RangeRef[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "matter_id",
+          "type": "MatterId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "MeetingStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_by",
+          "type": "PersonId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "Meeting"
+    },
+    {
+      "id": "meeting_record",
+      "label": "会议记录",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "meeting",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "MeetingRecordId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "meeting_id",
+          "type": "MeetingId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source",
+          "type": "MeetingRecordSourceKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "media",
+          "type": "MeetingRecordMedia",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "transcript",
+          "type": "MeetingTranscript",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "consent",
+          "type": "MeetingConsent",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "MeetingRecordStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "sensitivity",
+          "type": "Sensitivity",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "ingested_by.kind",
+          "type": "'person' | 'agent' | 'system'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "ingested_by.id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "MeetingRecord"
+    },
+    {
+      "id": "membership_request",
+      "label": "加入申请",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "person.name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "person.email",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "via",
+          "type": "MembershipRequestVia",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "MembershipRequestStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "decided_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "person_id",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "superseded_reason",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "MembershipRequest"
+    },
+    {
+      "id": "message",
+      "label": "消息",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "customer",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["gmail.get_message"]
+    },
+    {
+      "id": "order",
+      "label": "订单",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "order",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": [
+        "get_order",
+        "orders.count",
+        "orders.overdue",
+        "orders.recent",
+        "shopify_admin.get_order",
+        "shopify_admin.list_orders"
+      ]
+    },
+    {
+      "id": "package",
+      "label": "应用包",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "skill",
+      "source_of_truth": "human",
+      "freshness": "authored",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "manifest",
+          "type": "PackageManifest",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "installed_at",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "consent_event_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "'ready' | 'missing_connectors' | 'disabled'",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "InstalledPackage"
+    },
+    {
+      "id": "person",
+      "label": "人",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "PersonId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "identities",
+          "type": "{ provider: 'local' | 'feishu' | 'wecom' | 'dingtalk' external_id: string ver…",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "Person"
+    },
+    {
+      "id": "policy",
+      "label": "策略",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "human",
+      "freshness": "authored",
+      "read_ranges": ["workspace"],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "product",
+      "label": "商品",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "product",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "id": "product_line",
+      "label": "产品线",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "ProductLineId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "parent",
+          "type": "RangeRef",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "rule",
+          "type": "ProductLineRule",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "superseded_by",
+          "type": "ProductLineId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin",
+          "type": "ObjectOrigin",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_by",
+          "type": "PersonId",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "ProductLine"
+    },
+    {
+      "id": "range_group",
+      "label": "品牌（范围组）",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "RangeGroupId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "members",
+          "type": "RangeRef[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "superseded_by",
+          "type": "RangeGroupId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin",
+          "type": "ObjectOrigin",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_by",
+          "type": "PersonId",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "RangeGroup"
+    },
+    {
+      "id": "repo_pr",
+      "label": "代码合并请求",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "content",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "scheduled_task",
+      "label": "定时任务",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "owner",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "assignment_id",
+          "type": "AssignmentId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin.conversation_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "origin.run_id",
+          "type": "RunId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin.message_ref",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "trigger",
+          "type": "| { kind: 'once'; at: Iso8601 } | { kind: 'interval'; every_ms: number; from?…",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "action",
+          "type": "Partial<RunRequest> & { kind: RunRequest['kind'] }",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "handler",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "params",
+          "type": "unknown",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "context_policy",
+          "type": "'resume_conversation' | 'fresh_with_summary'",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "state",
+          "type": "'pending' | 'active' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_by",
+          "type": "'user' | 'agent' | 'system'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "approval",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "misfire_policy",
+          "type": "'run_once_now' | 'skip'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "misfire_grace_ms",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "lease.holder",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "lease.until",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "next_fire_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_fire_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "fire_count",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "last_result",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "ScheduledTask"
+    },
+    {
+      "id": "shipment",
+      "label": "物流",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "shipment",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "skill",
+      "label": "技能",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "skill",
+      "source_of_truth": "human",
+      "freshness": "authored",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "tier",
+          "type": "SkillTier",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "owner",
+          "type": "PersonId | 'package'",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "base.tier",
+          "type": "SkillTier",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "base.version",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "sections",
+          "type": "SkillSection[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "evals",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source.package",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source.version",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "scope_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Skill"
+    },
+    {
+      "id": "social_post",
+      "label": "社媒帖子",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "social_account",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": [],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "staged_change",
+      "label": "待批变更",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "assignment_id",
+          "type": "AssignmentId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "run_id",
+          "type": "RunId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "change_set_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "ChangeKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "risk_class",
+          "type": "RiskClass",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "target",
+          "type": "ObjectRef",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "field",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "before",
+          "type": "unknown",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "after",
+          "type": "unknown",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "record_version",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "money",
+          "type": "Money & { margin_before_pct?: number; margin_after_pct?: number }",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "guardrail",
+          "type": "GuardrailResult",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "guardrail_rerun",
+          "type": "GuardrailResult",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "reservation.counter",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "reservation.amount",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "reservation.released",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "execution_snapshot",
+          "type": "ExecutionSnapshot",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "notes",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_by.kind",
+          "type": "'agent' | 'person'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_by.id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "ChangeStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "approval.item_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "approval.by",
+          "type": "PersonId | 'mandate'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "approval.at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "apply.by_executor",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "apply.at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "apply.idempotency_key",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "apply.execution_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "apply.outcome_ref",
+          "type": "ObjectRef",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "apply.error",
+          "type": "ApplyError",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "approved_exception",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "reversal_of",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "expires_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "StagedChange"
+    },
+    {
+      "id": "store_config",
+      "label": "店铺设置",
+      "key_format": "连接器给的 id，原样存、不解析",
+      "domain": "store_config",
+      "source_of_truth": "connector",
+      "freshness": "cached:300",
+      "read_ranges": ["workspace", "assigned"],
+      "properties": [],
+      "read_via": []
+    },
+    {
+      "id": "theme",
+      "label": "主题",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "content",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+    },
+    {
+      "id": "thread",
+      "label": "会话",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "customer",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["gmail.list_threads", "gmail.search_threads"]
+    },
+    {
+      "id": "todo",
+      "label": "待办",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "TodoId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "position_id",
+          "type": "PositionId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "goal_id",
+          "type": "GoalId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "parent_id",
+          "type": "TodoId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "owner",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "delegate",
+          "type": "TodoDelegate",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "horizon",
+          "type": "TodoHorizon",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "due",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "scheduled.start",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "scheduled.end",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source",
+          "type": "TodoSource",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "TodoStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "matter_id",
+          "type": "MatterId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "anchor.matter_event_id",
+          "type": "MatterEventId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "cards",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "runs",
+          "type": "RunId[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "origin.meeting_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin.card_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin.review_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin.alert_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "closed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Todo"
+    },
+    {
+      "id": "variant",
+      "label": "变体",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "product",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_variant"]
+    },
+    {
+      "id": "work_item",
+      "label": "工作项",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "MatterId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "position_id",
+          "type": "PositionId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "kind",
+          "type": "MatterKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "MatterStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "goal_id",
+          "type": "GoalId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "context",
+          "type": "MatterContext",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "closed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Matter"
+    },
+    {
+      "id": "workflow_instance",
+      "label": "流程实例",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "approval",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace", "own"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "def.id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "def.version",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "subject",
+          "type": "ObjectRef",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "conversation_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "state",
+          "type": "'running' | 'waiting' | 'paused' | 'done' | 'failed' | 'compensated' | 'cance…",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "history",
+          "type": "{ step_id: string at: Iso8601 result: unknown outcome?: 'ok' | 'failed' | 'sk…",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "waiting.reason",
+          "type": "'event' | 'approval' | 'human_task' | 'sleep' | 'retry'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "waiting.until",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "waiting.key",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "attempts",
+          "type": "Record<string, number>",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "started_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "WorkflowInstance"
+    },
+    {
+      "id": "workspace",
+      "label": "工作区",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "'personal' | 'shared'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "profile",
+          "type": "WorkspaceProfile",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "tz",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "base_currency",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "parent_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "runtime.mode",
+          "type": "'local' | 'docker' | 'hosted'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "runtime.endpoint",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "owner_id",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "policy",
+          "type": "WorkspacePolicy",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "registries",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "'active' | 'joined' | 'archived'",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "Workspace"
+    }
+  ],
+  "links": [
+    {
+      "from": "approval_item",
+      "to": "assignment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "proposer.assignment_id",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "approval_item",
+      "to": "customer",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "from": "approval_item",
+      "to": "discount",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_discount", "shopify_admin.list_discounts"]
+    },
+    {
+      "from": "approval_item",
+      "to": "matter",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.matter_id",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "order",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["get_order", "orders.count"]
+    },
+    {
+      "from": "approval_item",
+      "to": "policy",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "product",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "from": "approval_item",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.approval.item_id",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "store_config",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "theme",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+    },
+    {
+      "from": "approval_item",
+      "to": "todo",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.todo_id",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "variant",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_variant"]
+    },
+    {
+      "from": "approval_item",
+      "to": "work_item",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.work_item_id",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "assignment",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.proposer.assignment_id",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "assignment",
+      "to": "person",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "person_id",
+      "lookup": []
+    },
+    {
+      "from": "assignment",
+      "to": "scheduled_task",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "scheduled_task.assignment_id",
+      "lookup": []
+    },
+    {
+      "from": "assignment",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.assignment_id",
+      "lookup": []
+    },
+    {
+      "from": "assignment",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "campaign",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "campaign",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "campaign",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "campaign",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "connection",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "customer",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "customer",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "customer",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "customer",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "discount",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "discount",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "discount",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "discount",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "fact_card",
+      "to": "todo",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "todo.origin.card_id",
+      "lookup": []
+    },
+    {
+      "from": "fact_card",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "goal",
+      "to": "matter",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "matter.goal_id",
+      "lookup": []
+    },
+    {
+      "from": "goal",
+      "to": "todo",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "todo.goal_id",
+      "lookup": []
+    },
+    {
+      "from": "goal",
+      "to": "work_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "work_item.goal_id",
+      "lookup": []
+    },
+    {
+      "from": "goal",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "matter",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.matter_id",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "matter",
+      "to": "goal",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "goal_id",
+      "lookup": []
+    },
+    {
+      "from": "matter",
+      "to": "meeting",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "meeting.matter_id",
+      "lookup": []
+    },
+    {
+      "from": "matter",
+      "to": "todo",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "todo.matter_id",
+      "lookup": []
+    },
+    {
+      "from": "matter",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "meeting",
+      "to": "matter",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "matter_id",
+      "lookup": []
+    },
+    {
+      "from": "meeting",
+      "to": "meeting_record",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "meeting_record.meeting_id",
+      "lookup": []
+    },
+    {
+      "from": "meeting",
+      "to": "todo",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "todo.origin.meeting_id",
+      "lookup": []
+    },
+    {
+      "from": "meeting",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "meeting_record",
+      "to": "meeting",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "meeting_id",
+      "lookup": []
+    },
+    {
+      "from": "meeting_record",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "membership_request",
+      "to": "person",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "person_id",
+      "lookup": []
+    },
+    {
+      "from": "membership_request",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "order",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "order",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "order",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "order",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "package",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "person",
+      "to": "assignment",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "assignment.person_id",
+      "lookup": []
+    },
+    {
+      "from": "person",
+      "to": "membership_request",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "membership_request.person_id",
+      "lookup": []
+    },
+    {
+      "from": "policy",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "policy",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "policy",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "policy",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "product",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "product",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "product",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "product",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "product_line",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "range_group",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "scheduled_task",
+      "to": "assignment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "assignment_id",
+      "lookup": []
+    },
+    {
+      "from": "scheduled_task",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "skill",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "approval_item",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "approval.item_id",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "staged_change",
+      "to": "assignment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "assignment_id",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "staged_change",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "staged_change",
+      "to": "customer",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "from": "staged_change",
+      "to": "customer",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "from": "staged_change",
+      "to": "discount",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_discount", "shopify_admin.list_discounts"]
+    },
+    {
+      "from": "staged_change",
+      "to": "discount",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_discount", "shopify_admin.list_discounts"]
+    },
+    {
+      "from": "staged_change",
+      "to": "order",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["get_order", "orders.count"]
+    },
+    {
+      "from": "staged_change",
+      "to": "order",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["get_order", "orders.count"]
+    },
+    {
+      "from": "staged_change",
+      "to": "policy",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "policy",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "product",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "from": "staged_change",
+      "to": "product",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "from": "staged_change",
+      "to": "store_config",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "store_config",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "theme",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+    },
+    {
+      "from": "staged_change",
+      "to": "theme",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+    },
+    {
+      "from": "staged_change",
+      "to": "variant",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_variant"]
+    },
+    {
+      "from": "staged_change",
+      "to": "variant",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_variant"]
+    },
+    {
+      "from": "staged_change",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "store_config",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "store_config",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "store_config",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "store_config",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "theme",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "theme",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "theme",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "theme",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "todo",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.todo_id",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "todo",
+      "to": "fact_card",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "origin.card_id",
+      "lookup": ["search_policies"]
+    },
+    {
+      "from": "todo",
+      "to": "goal",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "goal_id",
+      "lookup": []
+    },
+    {
+      "from": "todo",
+      "to": "matter",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "matter_id",
+      "lookup": []
+    },
+    {
+      "from": "todo",
+      "to": "meeting",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "origin.meeting_id",
+      "lookup": []
+    },
+    {
+      "from": "todo",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "variant",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "variant",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "variant",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "variant",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "work_item",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.work_item_id",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "work_item",
+      "to": "goal",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "goal_id",
+      "lookup": []
+    },
+    {
+      "from": "work_item",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "customer",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "discount",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_discount", "shopify_admin.list_discounts"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "order",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["get_order", "orders.count"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "policy",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "product",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "store_config",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "theme",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "variant",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_variant"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.workspace_id",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "workspace",
+      "to": "assignment",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "assignment.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "connection",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "connection.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "fact_card",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "fact_card.workspace_id",
+      "lookup": ["search_policies"]
+    },
+    {
+      "from": "workspace",
+      "to": "goal",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "goal.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "matter",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "matter.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "meeting",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "meeting.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "meeting_record",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "meeting_record.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "membership_request",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "membership_request.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "package",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "package.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "product_line",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "product_line.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "range_group",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "range_group.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "scheduled_task",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "scheduled_task.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "skill",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "skill.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "todo",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "todo.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "work_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "work_item.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.workspace_id",
+      "lookup": []
+    }
+  ],
+  "actions": [
+    {
+      "id": "gmail.get_message",
+      "object": "message",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 message"
+    },
+    {
+      "id": "gmail.list_threads",
+      "object": "thread",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 thread"
+    },
+    {
+      "id": "gmail.search_threads",
+      "object": "thread",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 thread"
+    },
+    {
+      "id": "klaviyo.get_campaign",
+      "object": "campaign",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 campaign"
+    },
+    {
+      "id": "klaviyo.list_campaigns",
+      "object": "campaign",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 campaign"
+    },
+    {
+      "id": "meta.list_campaigns",
+      "object": "campaign",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 campaign"
+    },
+    {
+      "id": "shopify_admin.cancel_order",
+      "object": "order",
+      "source": "connector",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "取消一笔订单（含退款与恢复库存的选项）"
+    },
+    {
+      "id": "shopify_admin.create_automatic_discount",
+      "object": "campaign",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "promotion",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "建一个自动折扣（全店活动，不用输码）"
+    },
+    {
+      "id": "shopify_admin.create_discount_code",
+      "object": "discount",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "discount_code",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "建一个优惠码（客服安抚、售前促单都用它）"
+    },
+    {
+      "id": "shopify_admin.create_fulfillment",
+      "object": "order",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "reship",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "给订单建一次发货（补发也走这一条）"
+    },
+    {
+      "id": "shopify_admin.create_product",
+      "object": "product",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "新建一个商品（草稿态；上架是另一条 publish_product）"
+    },
+    {
+      "id": "shopify_admin.create_refund",
+      "object": "order",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "refund",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "给一笔订单退款"
+    },
+    {
+      "id": "shopify_admin.create_theme",
+      "object": "theme",
+      "source": "connector",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "建一份**未发布**的主题副本"
+    },
+    {
+      "id": "shopify_admin.delete_discount_code",
+      "object": "discount",
+      "source": "connector",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "删掉一个优惠码"
+    },
+    {
+      "id": "shopify_admin.delete_metafield",
+      "object": "product",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "删掉一个自定义字段"
+    },
+    {
+      "id": "shopify_admin.delete_product",
+      "object": "product",
+      "source": "connector",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "删掉一个商品"
+    },
+    {
+      "id": "shopify_admin.delete_theme",
+      "object": "theme",
+      "source": "connector",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "删掉一份主题"
+    },
+    {
+      "id": "shopify_admin.get_customer",
+      "object": "customer",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 customer"
+    },
+    {
+      "id": "shopify_admin.get_discount",
+      "object": "discount",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 discount"
+    },
+    {
+      "id": "shopify_admin.get_order",
+      "object": "order",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 order"
+    },
+    {
+      "id": "shopify_admin.get_product",
+      "object": "product",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 product"
+    },
+    {
+      "id": "shopify_admin.get_theme",
+      "object": "theme",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 theme"
+    },
+    {
+      "id": "shopify_admin.get_variant",
+      "object": "variant",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 variant"
+    },
+    {
+      "id": "shopify_admin.list_customers",
+      "object": "customer",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 customer"
+    },
+    {
+      "id": "shopify_admin.list_discounts",
+      "object": "discount",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 discount"
+    },
+    {
+      "id": "shopify_admin.list_orders",
+      "object": "order",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 order"
+    },
+    {
+      "id": "shopify_admin.list_products",
+      "object": "product",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 product"
+    },
+    {
+      "id": "shopify_admin.list_themes",
+      "object": "theme",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 theme"
+    },
+    {
+      "id": "shopify_admin.publish_product",
+      "object": "product",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "publish_product",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "把商品放到某个销售渠道上（在线商店 / POS…）"
+    },
+    {
+      "id": "shopify_admin.publish_theme",
+      "object": "theme",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "publish_theme",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "把一份未发布的主题副本设成线上主题。实际走的是 Shopify CLI（`theme publish`）——GraphQL 那条要向官方申请豁免"
+    },
+    {
+      "id": "shopify_admin.set_metafields",
+      "object": "product",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "写商品 / 集合的自定义字段（成分、尺码表、结构化卖点）"
+    },
+    {
+      "id": "shopify_admin.unpublish_product",
+      "object": "product",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "unpublish_product",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "把商品从销售渠道上撤下来"
+    },
+    {
+      "id": "shopify_admin.update_automatic_discount",
+      "object": "campaign",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "promotion",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "改自动折扣的力度或期限"
+    },
+    {
+      "id": "shopify_admin.update_discount_code",
+      "object": "discount",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "discount_code",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "改优惠码的额度、期限、适用范围"
+    },
+    {
+      "id": "shopify_admin.update_order",
+      "object": "order",
+      "source": "connector",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "改订单的备注、标签、联系邮箱这些非金额字段"
+    },
+    {
+      "id": "shopify_admin.update_order_shipping_address",
+      "object": "order",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "address_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "改一笔未发货订单的收货地址"
+    },
+    {
+      "id": "shopify_admin.update_product",
+      "object": "product",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "改标题、描述、图片、标签、商品类型"
+    },
+    {
+      "id": "shopify_admin.update_product_price",
+      "object": "variant",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "price_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "改一个变体的售价或划线价"
+    },
+    {
+      "id": "shopify_admin.update_product_variant",
+      "object": "variant",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "改变体的非价格字段（SKU、条码、重量、选项值）"
+    },
+    {
+      "id": "shopify_admin.update_theme_asset",
+      "object": "theme",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "publish_theme",
+      "risk_class": "high",
+      "requires_approval": true,
+      "what": "往主题里写文件。**只允许写未发布的副本**，写线上主题等于绕过发布门禁"
+    },
+    {
+      "id": "authorize_connector",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["common.owner"],
+      "what": "授权一个连接器"
+    },
+    {
+      "id": "change_policy",
+      "object": "policy",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["common.owner"],
+      "what": "改工作区策略"
+    },
+    {
+      "id": "grant_assignment",
+      "object": "policy",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["common.owner"],
+      "what": "给人派一条岗位"
+    },
+    {
+      "id": "reply_customer",
+      "object": "customer",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["dtc.aftersales"],
+      "tool": "draft_reply",
+      "what": "给客户回信（草稿，批了才发）"
+    },
+    {
+      "id": "stage_address_change",
+      "object": "order",
+      "source": "role",
+      "access": "write",
+      "change_kind": "address_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["dtc.aftersales"],
+      "what": "改收件地址"
+    },
+    {
+      "id": "stage_dev_task",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["site.builder"],
+      "what": "提一条建站任务"
+    },
+    {
+      "id": "stage_page_edit",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["site.builder"],
+      "what": "改一个页面"
+    },
+    {
+      "id": "stage_publish_theme",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "change_kind": "publish_theme",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["site.builder"],
+      "what": "发布主题"
+    },
+    {
+      "id": "stage_refund",
+      "object": "order",
+      "source": "role",
+      "access": "write",
+      "change_kind": "refund",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.aftersales"],
+      "tool": "stage_refund",
+      "what": "提一笔退款"
+    },
+    {
+      "id": "stage_reship",
+      "object": "order",
+      "source": "role",
+      "access": "write",
+      "change_kind": "reship",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.aftersales"],
+      "what": "提一次补发"
+    },
+    {
+      "id": "stage_theme_preview",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["site.builder"],
+      "what": "出一份主题预览"
+    }
+  ]
+}

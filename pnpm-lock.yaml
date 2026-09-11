@@ -561,6 +561,16 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/ontology:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/roles:
     dependencies:
       '@agentsws/contracts':
