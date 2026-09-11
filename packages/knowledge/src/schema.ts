@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS fact_cards (
   conflicts_json         TEXT NOT NULL,
   valid_from             TEXT,
   valid_until            TEXT,
+  -- 47 J2：降成历史案例的那两格（"当时"是什么时候、本来是哪一层）
+  as_of                  TEXT,
+  downgraded_from        TEXT,
   usage_recalled         INTEGER NOT NULL,
   usage_cited            INTEGER NOT NULL,
   usage_last_recalled_at TEXT,

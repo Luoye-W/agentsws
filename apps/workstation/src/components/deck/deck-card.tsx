@@ -13,6 +13,7 @@
 import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { useEffect, useState } from 'react'
+import { FactChip } from '@/components/chips'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
 import {
   countdownFace,
@@ -67,9 +68,13 @@ function CardDetail({ card }: { card: DeckCard }): React.ReactNode {
         </dl>
       )}
       {card.detail.citations.length === 0 ? null : (
-        <ul className="list-inside list-disc text-xs text-muted-foreground">
+        // 47 J2：引的是知识层的一句话 → 走 FactChip（虚线 + 引号），
+        // 与上面那排对象芯片刻意不同；原始 id 一个字都不露。
+        <ul className="flex flex-wrap gap-1.5" data-testid="card-citations">
           {card.detail.citations.map((c) => (
-            <li key={c.fact_card_id}>「{c.quote}」</li>
+            <li key={c.fact_card_id}>
+              <FactChip label={t('chip.fact')} quote={c.quote} />
+            </li>
           ))}
         </ul>
       )}

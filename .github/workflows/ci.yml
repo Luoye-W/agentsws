@@ -63,6 +63,11 @@ jobs:
           node scripts/gen-sdk.mjs
           git diff --exit-code -- packages/sdk/openapi.json packages/sdk/src/schema.ts
 
+      # WP52：本体登记表同样是从契约生成并签进仓库的（47 J1「不手写第二份」）。
+      # 改了 ObjectType / 副作用覆盖表 / 职责 scopes 却忘了重生成，会红在这里。
+      - name: gen-ontology（零漂移）
+        run: node scripts/gen-ontology.mjs --check
+
       # 覆盖率写到 out/ 下：biome.json 已经忽略 out/，否则下一次 `biome check .`
       # 会去 lint 覆盖率报告自带的那些 js
       - name: vitest

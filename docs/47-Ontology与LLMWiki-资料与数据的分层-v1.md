@@ -1,8 +1,8 @@
-# 47 · Ontology 与 LLM Wiki：资料与数据的分层 v1（调研 + 建议）
+# 47 · Ontology 与 LLM Wiki：资料与数据的分层 v1
 
 | | |
 |---|---|
-| 状态 | Luoye 2026-09-12 同意 J1–J4（追问「为什么不用 Palantir 那个现成平台」：闭源托管、按合同卖、没有开源 / 自托管版，与开源本地优先和 40 §1 数据归属冲突；Ontology 是设计模式不是产品）；已派 WP52 |
+| 状态 | Luoye 2026-09-12 同意 J1–J4（追问「为什么不用 Palantir 那个现成平台」：闭源托管、按合同卖、没有开源 / 自托管版，与开源本地优先和 40 §1 数据归属冲突；Ontology 是设计模式不是产品）；**WP52 已实现，落点见 §6** |
 | 起因 | 2026-09-12 Luoye 看到"LLM Wiki = 知识层、Ontology = 操作层"的说法（文档 / 会议 / 政策 / 历史案例 vs 客户 / 订单 / 实时状态 / 业务关系 / 权限 / 动作），问要不要把 Ontology 纳进来，和现在的 LLM Wiki 一起做资料与数据的存取和调用方案 |
 | 关联 | 19（知识对象：FactCard / MemoryFact / KnowledgeSource）、21（事件日志与共享数据层）、15（变更账本）、05 / 44（职责、范围）、18（连接器 Action）、29（命名查询）、40（数据归属） |
 
@@ -81,11 +81,32 @@
 | 模拟 | 一条"知识过时 vs 实时状态"场景 | 小 |
 | 文档 | 19 加边界条款；17 加调用顺序；ARCHITECTURE 加分层图 | 小 |
 
-## 5. 请拍板
+## 5. 拍板结果
+
+J1–J4 全采纳（2026-09-12），派 WP52 实现。
 
 - J1 做薄登记表（从契约生成、只读、按岗位裁剪），不做本体平台
 - J2 知识层不存状态、操作层只经动作改，写进 19 / 15 并在进入管道里拦
 - J3 调用顺序先对象后知识再动作，提示与工具面从登记表生成，加一条模拟
 - J4 不引入图数据库 / 本体建模工具，用户只建实例不建类型
 
-同意后派 WP52。
+---
+
+## 6. 实现落点（WP52）
+
+| 条 | 落在哪 | 具体是什么 |
+|---|---|---|
+| J1 登记表 | `packages/ontology` | 只读的 `OntologyRegistry`：**39 类对象 / 142 条链接 / 51 个动作**。`ontology.json` 是**生成物**，签进仓库 |
+| J1 生成器 | `scripts/gen-ontology.mjs` | 输入全是已有真源：契约的 `ObjectType` / `DataDomain` / `ChangeKind` 联合（TypeScript 编译器 API 解析）、同名契约接口的成员（属性与敏感级）、`packages/roles/roles/**.yml` 的 scopes（可读范围）与写动作、`action-side-effects.yml` + Shopify 写动作对照表（18 §1）、`KIND_RISK`（15 §2）、29 的命名查询与 05 §1.8 的 grounding 工具（从哪查）、`DEFAULT_REFRESH_SECONDS`（新鲜度）。`--check` 零漂移，CI 里与 SDK 并排 |
+| J1 按岗位裁剪 | `ontologyFor(EffectiveConfig)` / `ontologyForRun(tools)` | 两种形态：给界面的 JSON、给模型的中文紧凑文本（`ontologyBrief`，≤ 1500 字） |
+| J1 数据地图 | `apps/workstation` 设置页 + `GET /v1/positions/:id/ontology` | 一行一类对象：真源 / 新鲜度 / 我能看的范围 / 能做的；解释进 tooltip（36 §7）。截图 `docs/assets/workstation/ontology-data-map.png` |
+| J2 边界 | `packages/knowledge/src/state-words.ts` + `store.propose` | 带状态词的句子降成 `historical_case`、打 `as_of`、记 `downgraded_from`；`restoreLayer` 人工改回。写进 19 §2.1 |
+| J2 两种引用 | `apps/workstation/src/components/chips.tsx` | `ObjectChip`（实框可点）vs `FactChip`（虚线带引号，历史案例带"当时"）；都不露原始 id |
+| J3 工具面 | `stand-ins` / `runtime-direct` / `dsh-adapter` | 三组排列（查对象 → 查知识 → 提议动作），只换顺序不换名字。写进 17 §5.1 |
+| J3 那段固定话 | `ORDER_RULE`（`packages/ontology/src/brief.ts`） | 代码里只有一处；三个运行时的提示词与设置页的数据地图都用它 |
+| J3 模拟 | `packs/dtc-3c-3p/scenarios/knowledge/stale-fact-vs-live-state.yml` | 知识过时 vs 实时状态；3 人 pack 14/14 → 15/15，stub / direct / dsh-subprocess 三档全过 |
+| J4 不做的 | — | 没有图数据库、没有本体建模工具、没有"用户建本体"；`ontology.json` 只是生成物，不是第二真源 |
+
+**没做到的一处**：职责动作里 `target` 是**数据域**（05 §1.4），域下面没有对应对象类型的
+（`finance` 的 `draft_chargeback_evidence`）不进登记表——宁可少一行，不编一行。
+等 `ObjectType` 里有了对应的对象再收进来。

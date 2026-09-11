@@ -59,6 +59,9 @@
       "path": "packages/model-gateway"
     },
     {
+      "path": "packages/ontology"
+    },
+    {
       "path": "packages/roles"
     },
     {

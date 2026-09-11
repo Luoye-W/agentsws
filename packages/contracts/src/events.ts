@@ -79,6 +79,12 @@ export type KnownEventType =
   | 'knowledge.card.retired'
   | 'knowledge.card.conflict'
   | 'knowledge.card.recalled'
+  /**
+   * 47 J2 / J3：检索命中了一条**历史案例**（带"当时"时间戳的旧状态），
+   * 而这次运行问的是"现在怎么样"。Agent 以操作层为准回答，同时把这条知识标出来
+   * ——它该更新了。24 的学习回路吃这条对应的 `knowledge_update` 卡。
+   */
+  | 'knowledge.card.stale'
   | 'knowledge.card.cited'
   | 'knowledge.gap.opened'
   | 'knowledge.gap.answered'

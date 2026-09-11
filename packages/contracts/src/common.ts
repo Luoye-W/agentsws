@@ -45,6 +45,20 @@ export type ObjectType =
   | 'email_campaign'
   | 'store_config'
   | 'connection'
+  /**
+   * WP52（47 J1）：下面这七类**早就在用**，只是一直靠 `(string & {})` 那道开口混进来——
+   * `apps/server/src/invites.ts` 建的 `{ type: 'membership_request' }`、`join.ts` 建的
+   * `{ type: 'policy', id: 'join:…' }`、47 §3 点名的 `person` / `assignment` /
+   * `range_group` / `product_line`。本体登记表要按对象类型逐条登记"真源是谁、谁读得到、
+   * 能对它做什么"，名字不写出来就登记不上。**只加不删**：加成员不影响任何既有判断。
+   */
+  | 'person'
+  | 'assignment'
+  | 'workspace'
+  | 'range_group'
+  | 'product_line'
+  | 'membership_request'
+  | 'policy'
   | (string & {})
 
 export interface ObjectRef {

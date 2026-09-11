@@ -34,6 +34,7 @@ import type {
   TileSpec,
   ViewSection,
 } from '@agentsws/deck'
+import type { TailoredOntology } from '@agentsws/ontology/view'
 import type { RequestBodyOf } from '@agentsws/sdk'
 
 export type { RequestBodyOf } from '@agentsws/sdk'
@@ -2432,5 +2433,19 @@ export const decideMembershipRequest = (
   api<MembershipRequestView>(`/v1/memberships/requests/${encodeURIComponent(id)}/decide`, {
     method: 'POST',
     body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/**
+ * WP52（47 J1）数据地图：这条岗位能查什么对象、能做什么动作。
+ *
+ * 出参就是 `@agentsws/ontology` 的 `TailoredOntology`——那是个纯类型包（只读登记表，
+ * 没有实现），工作台直接用它，不必照老规矩再抄一份形状。
+ */
+export const getPositionOntology = (
+  position: string,
+  assignment?: string,
+): Promise<TailoredOntology> =>
+  api<TailoredOntology>(`/v1/positions/${encodeURIComponent(position)}/ontology`, {
     ...(assignment === undefined ? {} : { assignment }),
   })

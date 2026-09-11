@@ -57,6 +57,59 @@ Storage        event log (append-only) · shared data (SQLite → Postgres) ·
 
 ![Layered overview](assets/架构图-01-分层总图.png)
 
+### Knowledge layer, operation layer, and the registry between them
+
+Two kinds of "data" live in this system and they behave nothing alike. **Knowledge** is
+text a person wrote — policies, phrasings, past cases. It is slow, it goes stale, and
+nobody goes back to update it. **Operations** is state — orders, customers, staged
+changes, approvals. It is fast, it is authoritative, and it only ever changes through an
+action that goes through the ledger.
+
+Confusing the two is the expensive mistake: a sentence in the wiki saying *"order #1002 was
+refunded"* was true the day it was written and is a lie today. So the two layers are kept
+apart, and a third thing — the **ontology registry** (`docs/47`, `packages/ontology`) —
+indexes what exists, what links to what, and what may be done to it. The registry is
+generated from the contracts; it stores nothing of its own.
+
+```mermaid
+flowchart TB
+  subgraph K["Knowledge layer · LLM Wiki (docs/19)"]
+    K1["fact / phrasing / policy<br/>written by people, goes stale"]
+    K2["historical_case<br/>state words downgraded on intake, stamped as_of"]
+  end
+
+  subgraph R["Ontology registry (docs/47 J1) · generated, read-only"]
+    R1["objects: key, properties, sensitivity"]
+    R2["links: from → to, how to look it up"]
+    R3["actions: ChangeKind, risk, approval"]
+  end
+
+  subgraph O["Operation layer (docs/15, 18, 21)"]
+    O1["platform API via connectors<br/>orders · customers · products"]
+    O2["local ledger<br/>approvals · staged changes · assignments"]
+  end
+
+  C["contracts + action-side-effects.yml + role scopes"] -- "gen-ontology.mjs, CI checks zero drift" --> R
+  R -- "tailored per position" --> A["Agent run (docs/17 §5.1)"]
+  R -- "tailored per position" --> U["Workstation data map"]
+  A -- "1. read the object" --> O
+  A -- "2. read the knowledge" --> K
+  A -- "3. propose an action → ledger → approval" --> O2
+  K2 -. "contradicts live state → knowledge.card.stale + knowledge_update card" .-> O
+```
+
+Three rules fall out of the picture, and all three are enforced in code:
+
+1. **The knowledge layer stores text and judgement, never state.** Sentences carrying
+   order ids, fulfilment status, stock counts or concrete amounts are downgraded to
+   `historical_case` on intake and stamped with the time they describe.
+2. **The operation layer changes only through actions.** Every write is a `StagedChange`
+   in the ledger behind an approval (docs/15 §5); a model can never "remember" a state and
+   treat it as true.
+3. **Order of consultation: object first, then knowledge, then a proposal.** The tool
+   surface is laid out in those three groups and the system prompt says so in one fixed
+   sentence — both generated from the registry, never hand-written.
+
 ---
 
 ## 3. The contracts

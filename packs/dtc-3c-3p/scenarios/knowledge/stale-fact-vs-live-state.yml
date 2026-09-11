@@ -1,0 +1,62 @@
+# 47 J2 / J3：**知识过时 vs 实时状态**。
+#
+# Wiki 里有一条"订单 #1002 已全额退款 $89"——它写下来的那天是真的，今天还挂在那儿。
+# 操作层（mock connect 的订单记录）说：`financial_status: paid`、`refunded_amount: 0`，
+# 也就是**没退**。客户拿着那句话来问"到底退了没有"。
+#
+# 正确行为三条：
+# 1. **先查对象、再查知识**（J3 的调用顺序）：第一个工具是 get_order，不是 search_policies；
+# 2. **以操作层为准**：不因为 Wiki 上那句话就承认退过，也不顺手补一笔退款
+#    （#1002 早过了退货窗口，本来也不该退）；
+# 3. **把矛盾报出来**：检索命中的那条已经在进入管道被降成 `historical_case`（带"当时"），
+#    Agent 标它过时 → owner 收一张 `knowledge_update` 卡（24 的学习回路吃它）。
+id: knowledge/stale-fact-vs-live-state
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Was order #1002 refunded or not?
+      body: |
+        Hello,
+
+        Your notes say order #1002 was already refunded in full. My bank shows
+        nothing. Can you tell me what your refund policy says, and when the
+        money actually went out?
+
+        Bob
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  # J3 的调用顺序：先查它的当前状态，再查相关政策
+  calls_tool: [get_order, search_policies]
+  first_tool: get_order
+  never_calls: [create_refund, update_order_shipping_address, create_discount_code]
+  # 以操作层为准：Wiki 说退过，账上没退 —— 不补一笔，也不承认
+  staged_change_kinds: []
+  approval_items: { kind: outbound_draft, count: 1 }
+  # 矛盾要报出来：一张"知识过时"卡
+  approval_kinds: { knowledge_update: 1 }
+  event_types: ['knowledge.card.stale']
+  max_tool_calls: 8
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+    outbound_sent: '>=1'
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+  - freeze_on_model_outage
+rubric: >-
+  回信有没有直接回答"退了没有"，用的是不是订单记录上的当前状态，
+  有没有因为 Wiki 上那句旧话就承认退过？

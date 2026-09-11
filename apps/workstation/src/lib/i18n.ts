@@ -1026,6 +1026,43 @@ const zh: Table = {
   'onboarding.requests.card': '这条也在首页队列里等你定。',
   'settings.company': '公司档案',
   'settings.company.hint': '改公司全称等于换一把"同一家公司"的钥匙：改完要和同事对一下写法。',
+
+  // WP52（47 J2 / J3）：对象引用 vs 知识引用、设置页的数据地图
+  'chip.object': '对象',
+  'chip.object.hint': '这是一个具体的东西（订单、客户、商品），显示的是它现在的状态；点开看详情。',
+  'chip.fact': '知识',
+  'chip.fact.hint': '这是知识库里的一句话，人写的，可能已经过时；和当前状态矛盾时以当前状态为准。',
+  'chip.fact.stale.hint':
+    '这是一条历史案例——它记的是当时的情况，不是现在。拿它参考可以，别拿它当现在的状态。',
+  'chip.fact.as_of': '当时 {at}',
+  'datamap.title': '数据地图',
+  'datamap.hint':
+    '这一页只读：按对象类型列出它的真源在哪、多新、你看得到多大范围、能对它做什么。数据本身不在这儿，这里只是一张目录。',
+  'datamap.empty': '这条岗位还没有任何看得到的对象。',
+  'datamap.col.object': '对象',
+  'datamap.col.source': '真源',
+  'datamap.col.source.hint':
+    '这类东西谁说了算：平台（订单、商品在上游）、本地账本（审批项、变更是我们自己的）、人写的（知识、技能）。',
+  'datamap.col.freshness': '新鲜度',
+  'datamap.col.freshness.hint':
+    '缓存 N 分钟 = 最多旧这么久；实时 = 每次都读真源；人写的 = 没有"新"这回事，只有"什么时候写的"。',
+  'datamap.col.range': '我能看的范围',
+  'datamap.col.range.hint':
+    '这条岗位的权限范围（05 §1.1）：只有我自己的 / 我负责的范围 / 整个工作区。',
+  'datamap.col.actions': '能做的',
+  'datamap.actions.none': '只能看',
+  'datamap.source.platform_api': '平台',
+  'datamap.source.connector': '连接器',
+  'datamap.source.local_ledger': '本地账本',
+  'datamap.source.human': '人写的',
+  'datamap.range.own': '只有我自己的',
+  'datamap.range.assigned': '我负责的范围',
+  'datamap.range.workspace': '整个工作区',
+  'datamap.freshness.realtime': '实时',
+  'datamap.freshness.authored': '人写的',
+  'datamap.freshness.cached': '缓存 {n} 分钟',
+  'datamap.order': '调用顺序',
+  'datamap.order.hint': '这段话与 Agent 看到的那一份是同一处生成的——改了登记表，两边一起变。',
 }
 
 const en: Table = {
@@ -2069,6 +2106,46 @@ const en: Table = {
   'settings.company': 'Company details',
   'settings.company.hint':
     'Changing the registered name changes the "same company" key — line the spelling up with your colleagues afterwards.',
+
+  // WP52 (47 J2 / J3): object vs knowledge references, and the settings data map
+  'chip.object': 'Object',
+  'chip.object.hint':
+    'A concrete thing (an order, a customer, a product) showing its current state. Click to open it.',
+  'chip.fact': 'Knowledge',
+  'chip.fact.hint':
+    'A sentence from the knowledge base — written by a person, and possibly out of date. When it contradicts the current state, the current state wins.',
+  'chip.fact.stale.hint':
+    'A historical case: it records how things were at the time, not how they are now. Use it as precedent, not as current state.',
+  'chip.fact.as_of': 'as of {at}',
+  'datamap.title': 'Data map',
+  'datamap.hint':
+    'Read-only: for each object type, where the truth lives, how fresh it is, how much of it you can see, and what you can do to it. No data here — this is a table of contents.',
+  'datamap.empty': 'This position cannot see any object type yet.',
+  'datamap.col.object': 'Object',
+  'datamap.col.source': 'Source of truth',
+  'datamap.col.source.hint':
+    'Who gets the last word: the platform (orders, products live upstream), our local ledger (approvals, staged changes), or a person (knowledge, skills).',
+  'datamap.col.freshness': 'Freshness',
+  'datamap.col.freshness.hint':
+    'Cached N minutes = at most that stale; realtime = read from the source every time; authored = there is no "new", only "when it was written".',
+  'datamap.col.range': 'What you can see',
+  'datamap.col.range.hint':
+    "This position's permission range (05 §1.1): only your own / the ranges you are assigned / the whole workspace.",
+  'datamap.col.actions': 'What you can do',
+  'datamap.actions.none': 'Read only',
+  'datamap.source.platform_api': 'Platform',
+  'datamap.source.connector': 'Connector',
+  'datamap.source.local_ledger': 'Local ledger',
+  'datamap.source.human': 'Written by a person',
+  'datamap.range.own': 'only your own',
+  'datamap.range.assigned': 'the ranges you are assigned',
+  'datamap.range.workspace': 'the whole workspace',
+  'datamap.freshness.realtime': 'realtime',
+  'datamap.freshness.authored': 'authored',
+  'datamap.freshness.cached': 'cached {n} min',
+  'datamap.order': 'Call order',
+  'datamap.order.hint':
+    'This paragraph and the one the agent sees are generated from the same place — change the registry and both change.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

@@ -16,6 +16,7 @@ import type { ApprovalItem } from '@agentsws/contracts'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Mdns, MdnsPeer } from '../src/discovery.js'
 import { createServer, type Server } from '../src/index.js'
+import { createInvites } from '../src/invites.js'
 import { companyKey, normalizeCompanyName, normalizeDomain } from '../src/onboarding.js'
 
 const T0 = '2026-09-07T09:00:00.000Z'
@@ -552,8 +553,85 @@ describe('46 §2 邀请码与申请加入', () => {
     ])
     // 明文码不进日志，只有指纹
     expect(JSON.stringify(events.events)).not.toContain(invite.code)
-    // 20 §4：人进来了，下一步交给 Join
-    expect(events.events.at(-1)?.payload.next).toBe('join_import')
+
+    /*
+     * 20 §4：人进来了，下一步交给 Join。**WP52 起这不再只是一句话**——
+     * 批准那一刻就真调了 WP50 的 `join.import`，owner 的队列里当场多一张
+     * `join_mapping` 卡，事件里带着它的 id。
+     */
+    const approved = events.events.at(-1)?.payload
+    expect(approved?.next).toBe('join_import')
+    expect(approved?.join_id).toMatch(/^join_/)
+    const cardId = approved?.join_approval_item_id
+    expect(typeof cardId).toBe('string')
+    expect(approved?.join_error).toBeUndefined()
+
+    const joinCard = await data<{ kind: string; state: string; role_id: string }>(
+      await a.call('GET', `/v1/approvals/${String(cardId)}`),
+    )
+    expect([joinCard.kind, joinCard.state]).toEqual(['join_mapping', 'pending'])
+    // 这张卡是给 owner 的（合并组织结构是 owner 的事，14）
+    expect(joinCard.role_id).toBe('common.owner')
+
+    // 包是空的：这会儿我们只知道"该并了"，还不知道他那边有什么（46 §4）
+    const mapping = await data<{ objects: unknown[]; counts: Record<string, number> }>(
+      await a.call('GET', `/v1/join/${String(approved?.join_id)}`),
+    )
+    expect(mapping.objects).toEqual([])
+  })
+
+  it('Join 没装配时退回老路：只记一条 next: join_import，批准照样成立', async () => {
+    // 不经服务进程，直接装一份**没有 `join`** 的 invites——与"这个服务进程没装 Join"等价
+    const events: { type: string; payload: Record<string, unknown> }[] = []
+    const created: string[] = []
+    const invites = createInvites({
+      clock: makeClock(),
+      random: seeded(3),
+      workspace_id: 'ws_a',
+      owner: 'per_owner',
+      appendEvent: (e) => {
+        events.push({ type: e.type, payload: e.payload as Record<string, unknown> })
+      },
+      roles: {
+        roles: { get: () => undefined },
+        assignments: { listByPerson: () => [], create: () => undefined },
+      } as unknown as Parameters<typeof createInvites>[0]['roles'],
+      approvals: {
+        create: async (input: { kind: string }) => {
+          created.push(input.kind)
+          return { id: 'ap_1', state: 'pending' }
+        },
+      } as unknown as Parameters<typeof createInvites>[0]['approvals'],
+      identity: {
+        personByEmail: () => undefined,
+        createPerson: async () => ({ id: 'per_new' }),
+        addMember: async () => undefined,
+      },
+      members: async () => [],
+      companyKey: () => 'key',
+      peerId: () => 'a',
+      peerAddress: () => undefined,
+      peerIds: () => [],
+    })
+    try {
+      const request = await invites.request({
+        code: invites.create('per_owner').code,
+        name: '李工',
+        email: 'li@nordvolt.cn',
+      })
+      const decided = await invites.decide('per_owner', request.id, { approve: true })
+      expect(decided.status).toBe('approved')
+
+      const approved = events.find((e) => e.type === 'membership.approved')
+      expect(approved?.payload.next).toBe('join_import')
+      // 没装 Join：不编一个 join_id，也不报错
+      expect(approved?.payload.join_id).toBeUndefined()
+      expect(approved?.payload.join_error).toBeUndefined()
+      // 只有那张 membership 卡，没有 join_mapping
+      expect(created).toEqual(['membership'])
+    } finally {
+      invites.close()
+    }
   })
 
   it('码过期 / 用完了一律 404（不区分，免得拿它探测）', async () => {
@@ -645,6 +723,10 @@ describe('46 §2 邀请码与申请加入', () => {
       await a.call('GET', `/v1/workspaces/${a.server.bootstrap.workspace.id}/members`),
     )
     expect(members.map((m) => m.email)).toContain('li@nordvolt.cn')
+
+    // WP52：局域网这条路同样接 Join——A 的 owner 队列里多一张 join_mapping 卡
+    const joins = await data<{ join_id: string }[]>(await a.call('GET', '/v1/join'))
+    expect(joins).toHaveLength(1)
   })
 
   it('46 I3 两边互相申请：先批的那一边为准，另一边自动失效并说清为什么', async () => {
