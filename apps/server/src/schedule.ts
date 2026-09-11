@@ -94,6 +94,8 @@ export const HANDLERS = {
   idleTodos: 'work.idle_todos',
   /** WP42：每周一去各家官网抓一次模型价（22 §3 的价目表）。 */
   pricingRefresh: 'models.pricing_refresh',
+  /** WP50：夜里扫一遍同唯一键 / 相似的品牌、产品线、店铺范围（45 H4）。 */
+  orgDuplicates: 'org.duplicate_scan',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -703,6 +705,19 @@ export function registerApprovalHousekeeping(scheduler: Scheduler, deps: Houseke
 }
 
 /* ------------------------------------------------------------------ */
+/* ⑭ 重复的组织对象：每天 03:30（45 H4）                                   */
+/* ------------------------------------------------------------------ */
+
+export interface OrgDuplicateDeps {
+  /** 扫一轮：上一轮批了的合掉，新发现的出卡。业务全在 `./org-duplicates.ts`。 */
+  scan(): Promise<{ asked: number; merged: number; kept: number; range_rewrites: number }>
+}
+
+export function registerOrgDuplicateScan(scheduler: Scheduler, deps: OrgDuplicateDeps): void {
+  scheduler.register(HANDLERS.orgDuplicates, () => deps.scan())
+}
+
+/* ------------------------------------------------------------------ */
 /* ⑨ 邮箱轮询 + 入站管线：每 2 分钟（39 待办 C）                            */
 /* ------------------------------------------------------------------ */
 
@@ -845,6 +860,8 @@ export interface SchedulePlanOptions {
     backup?: boolean
     /** WP42：每周一去各家官网抓一次模型价。 */
     pricing?: boolean
+    /** WP50：每天夜里扫一遍重复的组织对象（45 H4）。 */
+    orgDuplicates?: boolean
   }
 }
 
@@ -1035,6 +1052,19 @@ export async function ensureSystemTasks(
         title: '每周一去各家官网看一眼模型价',
         handler: HANDLERS.pricingRefresh,
         trigger: { kind: 'cron', expr: '0 5 * * 1', tz },
+      }),
+    )
+  }
+  // ⑭ 每天 03:30 扫一遍重复的品牌 / 产品线 / 店铺范围（45 H4）。
+  //    排在 03:00 的保留期清理之后、04:00 的备份之前：合并动的是组织结构，
+  //    该在当天那份备份里留下痕迹。错过了跳过——明晚照样扫得到同一对。
+  if (options.has.orgDuplicates === true) {
+    await add(
+      'sched_org_duplicates',
+      systemTask(base, {
+        title: '每天夜里看一眼有没有两条是同一个',
+        handler: HANDLERS.orgDuplicates,
+        trigger: { kind: 'cron', expr: '30 3 * * *', tz },
       }),
     )
   }

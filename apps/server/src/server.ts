@@ -90,6 +90,7 @@ import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meeti
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOrg, type OrgAssembly } from './org.js'
+import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -109,6 +110,7 @@ import {
   registerLearning,
   registerMailPoll,
   registerMeetingPoll,
+  registerOrgDuplicateScan,
   registerPlanRelay,
   registerPricingRefresh,
   registerRawPrune,
@@ -317,6 +319,8 @@ export interface Server {
   org: OrgAssembly
   /** WP50 Join 向导（个人工作区并进公司：对照 / 合并 / 别名 / 退出）。 */
   join: JoinAssembly
+  /** WP50 夜间扫描（45 H4：同唯一键 / 相似的组织对象出卡合并）。 */
+  orgDuplicates: OrgDuplicateScan
   /** 41 §1 秘书 Agent（profile / 代答 / 日程 / 路由）。 */
   secretary: SecretaryAssembly
   /** WP36 离职编排（撤权限 → 真交接 → 个人层归档 / 销毁 → 个人记忆迁移 / 擦除 → 报告）。 */
@@ -1049,6 +1053,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   if (dbDir !== undefined) registerBackup(schedule.scheduler, { run: runWorkspaceBackup })
 
+  // WP50 45 H4：夜里扫一遍重复的品牌 / 产品线 / 店铺范围。装在这儿而不是 `createOrg`
+  // 旁边，是因为它只认识职责层与审批总线——制度面那一套（岗位、成员、邀请）与它无关。
+  const orgDuplicates = createOrgDuplicateScan({
+    workspace_id: workspace.id,
+    clock,
+    roles,
+    approvals,
+    appendEvent,
+    owner: async () => (await identity.getWorkspace(workspace.id))?.owner_id,
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+  registerOrgDuplicateScan(schedule.scheduler, { scan: () => orgDuplicates.run() })
+
   // WP42：每周一 05:00 去各家官网看一眼模型价（抓不到就保留内置价，不算失败）
   registerPricingRefresh(schedule.scheduler, {
     run: async () => {
@@ -1081,6 +1098,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       raw: true,
       backup: dbDir !== undefined,
       pricing: true,
+      orgDuplicates: true,
     },
   })
 
@@ -1525,6 +1543,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modelSettings,
     org,
     join: joinAssembly,
+    orgDuplicates,
     secretary,
     offboard,
     secrets,
@@ -1602,6 +1621,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await devMcp?.close()
       org.close()
       joinAssembly.close()
+      orgDuplicates.close()
       offboard.close()
       secrets.close()
       txnStore?.close()

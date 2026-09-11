@@ -26,8 +26,12 @@ import {
   compareJoinBundle,
   deriveStoreRanges,
   joinSummary,
+  mergeOrgPair,
   normalizeExternalId,
+  type OrgAlias,
+  rewriteAliasedAssignments,
   storeRangeKey,
+  unionRule,
 } from '@agentsws/catalog'
 import type {
   ApprovalBus,
@@ -44,9 +48,7 @@ import type {
   ObjectOrigin,
   PersonId,
   ProductLine,
-  ProductLineRule,
   RangeGroup,
-  RangeRef,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
@@ -172,43 +174,8 @@ export interface JoinAssembly {
 const JOIN_ERROR = (code: 'not_found' | 'conflict' | 'invalid_input', msg: string): RoleError =>
   new RoleError(code, msg)
 
-const rangeKeyOf = (r: RangeRef): string => `${r.kind}:${r.id}`
-
-/** 两条判据取并集（同平台才调得到这儿——不同平台在对照那一步就 `none` 了）。 */
-export function unionRule(a: ProductLineRule, b: ProductLineRule): ProductLineRule {
-  if (a.platform !== b.platform) return structuredClone(a)
-  const merge = (x?: readonly string[], y?: readonly string[]): string[] | undefined => {
-    if (x === undefined && y === undefined) return undefined
-    return [...new Set([...(x ?? []), ...(y ?? [])])]
-  }
-  if (a.platform === 'manual' && b.platform === 'manual')
-    return { platform: 'manual', product_ids: merge(a.product_ids, b.product_ids) ?? [] }
-  if (a.platform === 'amazon' && b.platform === 'amazon') {
-    const asins = merge(a.asins, b.asins)
-    const prefixes = merge(a.sku_prefixes, b.sku_prefixes)
-    const brand = a.brand ?? b.brand
-    return {
-      platform: 'amazon',
-      ...(asins === undefined ? {} : { asins }),
-      ...(prefixes === undefined ? {} : { sku_prefixes: prefixes }),
-      ...(brand === undefined ? {} : { brand }),
-    }
-  }
-  if (a.platform === 'shopify' && b.platform === 'shopify') {
-    const collections = merge(a.collection_ids, b.collection_ids)
-    const tags = merge(a.tags, b.tags)
-    const vendors = merge(a.vendors, b.vendors)
-    const types = merge(a.product_types, b.product_types)
-    return {
-      platform: 'shopify',
-      ...(collections === undefined ? {} : { collection_ids: collections }),
-      ...(tags === undefined ? {} : { tags }),
-      ...(vendors === undefined ? {} : { vendors }),
-      ...(types === undefined ? {} : { product_types: types }),
-    }
-  }
-  return structuredClone(a)
-}
+/** 45 H3 的合并动作在 `@agentsws/catalog/org-merge`（Join、夜间扫描、模拟三处共用）。 */
+export { unionRule }
 
 export function createJoin(options: JoinOptions): JoinAssembly {
   const { clock, roles, approvals, appendEvent, workspace_id } = options
@@ -351,57 +318,35 @@ export function createJoin(options: JoinOptions): JoinAssembly {
   /**
    * 45 H3 最后一句：挂在被取代对象上的岗位范围自动指到公司那份。
    *
-   * 品牌走 `range_groups`（改完 `assignments.update` 会自己重新展开成员）；
-   * 产品线与店铺范围走 `ranges` 里的 id 替换。每条记一条 `range.alias_resolved`，
-   * 范围真的变了再记一条 `assignment.range_expanded`（44 G5 的留痕口径）。
+   * 动作在 `@agentsws/catalog/org-merge`（夜间扫描合并的那一条走的是同一段）；
+   * 这里只把它算出来的那串留痕记进事件日志——那个包不认识事件日志。
    */
   const rewriteAssignments = (
-    aliases: { kind: JoinObjectKind; from: string; to: string }[],
+    aliases: OrgAlias[],
     person: PersonId,
     direction: 'to_company' | 'back_to_personal',
   ): number => {
-    const byId = new Map(aliases.map((a) => [a.from, a] as const))
-    if (byId.size === 0) return 0
-    let count = 0
-    for (const a of roles.assignments.listByWorkspace(workspace_id, {})) {
-      if (a.revoked_at !== undefined) continue
-      const groupsBefore = a.range_groups ?? []
-      const groupsAfter = groupsBefore.map((g) => byId.get(g)?.to ?? g)
-      const rangesBefore = a.ranges
-      const rangesAfter = rangesBefore.map((r) => {
-        const hit = byId.get(r.id)
-        return hit === undefined || hit.kind === 'range_group' ? r : { kind: r.kind, id: hit.to }
-      })
-      const groupsChanged = groupsAfter.some((g, i) => g !== groupsBefore[i])
-      const rangesChanged = rangesAfter.some(
-        (r, i) => rangeKeyOf(r) !== rangeKeyOf(rangesBefore[i] ?? r),
-      )
-      if (!groupsChanged && !rangesChanged) continue
-      const next = roles.assignments.update(a.id, {
-        ranges: rangesAfter,
-        ...(groupsChanged ? { range_groups: groupsAfter } : {}),
-      })
-      count += 1
-      emit('range.alias_resolved', person, {
-        assignment_id: a.id,
-        direction,
-        changed: aliases.filter((x) => byId.has(x.from)).map((x) => ({ from: x.from, to: x.to })),
-      })
-      const beforeKeys = new Set(a.ranges.map(rangeKeyOf))
-      const added = next.ranges.filter((r) => !beforeKeys.has(rangeKeyOf(r)))
-      const afterKeys = new Set(next.ranges.map(rangeKeyOf))
-      const removed = a.ranges.filter((r) => !afterKeys.has(rangeKeyOf(r)))
-      if (added.length > 0 || removed.length > 0)
+    const { rewrites, traces } = rewriteAliasedAssignments(roles, aliases, {
+      assignments: roles.assignments.listByWorkspace(workspace_id, {}),
+    })
+    for (const trace of traces) {
+      if (trace.type === 'range.alias_resolved')
+        emit('range.alias_resolved', person, {
+          assignment_id: trace.assignment_id,
+          direction,
+          changed: trace.changed,
+        })
+      else
         emit('assignment.range_expanded', 'system', {
-          assignment_id: a.id,
-          person_id: a.person_id,
-          role_id: a.role_id,
+          assignment_id: trace.assignment_id,
+          person_id: trace.person_id,
+          role_id: trace.role_id,
           reason: 'join_alias',
-          added,
-          removed,
+          added: trace.added,
+          removed: trace.removed,
         })
     }
-    return count
+    return rewrites
   }
 
   const port: JoinPort = {
@@ -513,32 +458,26 @@ export function createJoin(options: JoinOptions): JoinAssembly {
         if (chosen === 'skip') continue
 
         if (chosen === 'merge_union' && o.theirs !== undefined) {
-          if (o.kind === 'range_group') {
-            const company = roles.rangeGroups.get(o.theirs.id)
-            if (company === undefined) continue
-            const members = [...company.members, ...(o.mine.members ?? [])]
-            const name = o.name_choice === 'personal' ? o.mine.name : company.name
-            roles.rangeGroups.update(company.id, { name, members, origin: origin(o.mine.id) })
-            emit('range_group.merged', person, {
-              range_group_id: company.id,
-              from: o.mine.id,
-              name,
-              members: roles.rangeGroups.get(company.id)?.members.length ?? 0,
-            })
-          } else if (o.kind === 'product_line') {
-            const company = roles.productLines.get(o.theirs.id)
-            if (company === undefined || o.mine.rule === undefined) continue
-            const rule = unionRule(company.rule, o.mine.rule)
-            const name = o.name_choice === 'personal' ? o.mine.name : company.name
-            roles.productLines.update(company.id, { name, rule, origin: origin(o.mine.id) })
-            emit('product_line.merged', person, {
-              product_line_id: company.id,
-              from: o.mine.id,
-              name,
-              platform: rule.platform,
-            })
-          }
+          // 个人那条先落进库（`aliasPersonal` 会把它建出来），合并那一步才有两条可并
           aliasPersonal(o, source, person, o.theirs.id)
+          if (o.kind !== 'store_range') {
+            const result = mergeOrgPair(roles, {
+              kind: o.kind,
+              keep: o.theirs.id,
+              drop: o.mine.id,
+              // 45 H3：名字默认跟公司那份（真源）；owner 点了"用他的名字"才换
+              ...(o.name_choice === 'personal' ? { name: o.mine.name } : {}),
+              origin: origin(o.mine.id),
+            })
+            if (result !== undefined)
+              emit(`${o.kind}.merged`, person, {
+                ...(o.kind === 'range_group'
+                  ? { range_group_id: result.keep, members: result.members }
+                  : { product_line_id: result.keep, platform: result.platform }),
+                from: result.drop,
+                name: result.name,
+              })
+          }
           aliases.push({ kind: o.kind, from: o.mine.id, to: o.theirs.id })
           merged += 1
           continue

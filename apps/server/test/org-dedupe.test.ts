@@ -206,3 +206,132 @@ describe('45 H4：建品牌之前先查', () => {
     expect((await line({ platform: 'amazon', asins: ['B0ABC'] }, '亚马逊厨房')).status).toBe(201)
   })
 })
+
+describe('45 H4：建之后——夜里扫一遍，出一张「这两条是同一个吗」', () => {
+  /** 绕开界面建两条重复的（并发、脚本、老数据都会这样）。 */
+  const sneak = (name: string, members: string[]) =>
+    server.roles.rangeGroups.create({
+      workspace_id: server.bootstrap.workspace.id,
+      name,
+      members: members.map((id) => ({ kind: 'store' as const, id })),
+      created_by: server.bootstrap.person.id,
+    })
+
+  /** 扫出来的卡：从事件日志里捡 id，再按 id 读回来（卡是发给 owner 的，不在"我的"那条道上）。 */
+  const cards = async (): Promise<{ id: string; title: string; summary: string }[]> => {
+    const page = await data<{ events: { type: string; payload: Record<string, unknown> }[] }>(
+      await call('GET', '/v1/events?limit=500'),
+    )
+    const ids = [
+      ...new Set(
+        page.events
+          .filter(
+            (e) => e.type === 'policy_change.proposed' && e.payload.target === 'org_duplicate',
+          )
+          .map((e) => String(e.payload.approval_item_id)),
+      ),
+    ]
+    const out: { id: string; title: string; summary: string }[] = []
+    for (const id of ids)
+      out.push(
+        await data<{ id: string; title: string; summary: string }>(
+          await call('GET', `/v1/approvals/${id}`),
+        ),
+      )
+    return out
+  }
+
+  it('扫出一对 → 一张卡；owner 批了 → 下一轮真的合，岗位范围跟着改指', async () => {
+    const ws = server.bootstrap.workspace.id
+    const me = server.bootstrap.person.id
+    const one = sneak('品牌乙', ['store_a'])
+    const two = sneak('品牌 乙 ', ['store_b'])
+    // 两条各有一个岗位挂着：合完之后挂着"被并掉那条"的那个岗位必须被改指
+    server.roles.assignments.update(server.bootstrap.ownerAssignment.id, {
+      range_groups: [one.id],
+    })
+    server.roles.assignments.create({
+      person_id: 'per_two',
+      workspace_id: ws,
+      role_id: 'common.member',
+      granted_by: me,
+      range_groups: [two.id],
+    })
+
+    const first = await server.orgDuplicates.run()
+    expect(first).toMatchObject({ asked: 1, merged: 0 })
+    const [card] = await cards()
+    expect(card?.summary).toContain('品牌乙')
+    expect(card?.summary).toContain('名字归一化后一样')
+
+    // 45 §4：只出卡，一个字都没合
+    expect(server.roles.rangeGroups.get(one.id)?.superseded_by).toBeUndefined()
+    expect(server.roles.rangeGroups.get(two.id)?.superseded_by).toBeUndefined()
+
+    const decided = await call('POST', `/v1/approvals/${card?.id}/decide`, {
+      body: { action: 'approve', selected_option_id: 'merge' },
+    })
+    expect(decided.status).toBe(200)
+    const second = await server.orgDuplicates.run()
+    expect(second).toMatchObject({ asked: 0, merged: 1 })
+    // 挂着被并掉那条的岗位被改指了（不改，他的权限就停在一份没人读的副本上）
+    expect(second.range_rewrites).toBeGreaterThan(0)
+
+    // 留下的那条取并集，并掉的那条变别名（断得开，所以退得回去）
+    const alive = server.roles.rangeGroups
+      .list(ws)
+      .filter((g) => g.superseded_by === undefined && g.name.includes('乙'))
+    expect(alive).toHaveLength(1)
+    expect(alive[0]?.members.map((m) => m.id).sort()).toEqual(['store_a', 'store_b'])
+    const aliased = [one, two].find((g) => g.id !== alive[0]?.id)
+    expect(server.roles.rangeGroups.get(aliased?.id ?? '')?.superseded_by).toBe(alive[0]?.id)
+    // 两个岗位现在都挂着留下的那一条，范围是合过的两家店
+    for (const a of server.roles.assignments.listByWorkspace(ws, {})) {
+      if ((a.range_groups ?? []).length === 0) continue
+      expect(a.range_groups).toEqual([alive[0]?.id])
+      expect(a.ranges.map((r) => r.id).sort()).toEqual(['store_a', 'store_b'])
+    }
+    const types = (
+      await data<{ events: { type: string }[] }>(await call('GET', '/v1/events?limit=500'))
+    ).events.map((e) => e.type)
+    expect(types).toEqual(expect.arrayContaining(['range_group.merged', 'range.alias_resolved']))
+  })
+
+  it('同一对只出一张卡：扫十遍还是一张，选了"维持现状"也不再问', async () => {
+    sneak('品牌乙', ['store_a'])
+    sneak('品牌 乙 ', ['store_b'])
+    for (let i = 0; i < 10; i += 1) await server.orgDuplicates.run()
+    expect(await cards()).toHaveLength(1)
+
+    // 36 §2.2：这是一张选择题卡，光按"批准"不算——得说清选的是哪一个
+    const [card] = await cards()
+    expect(
+      (
+        await call('POST', `/v1/approvals/${card?.id}/decide`, {
+          body: { action: 'approve' },
+        })
+      ).status,
+    ).toBe(400)
+    const kept = await call('POST', `/v1/approvals/${card?.id}/decide`, {
+      body: { action: 'approve', selected_option_id: 'keep_both' },
+    })
+    expect(kept.status).toBe(200)
+    const settled = await server.orgDuplicates.run()
+    expect(settled).toMatchObject({ asked: 0, merged: 0, kept: 1 })
+    // 两条都还在，而且以后不再问
+    expect(
+      server.roles.rangeGroups
+        .list(server.bootstrap.workspace.id)
+        .filter((g) => g.superseded_by === undefined && g.name.includes('乙')),
+    ).toHaveLength(2)
+    await server.orgDuplicates.run()
+    expect(await cards()).toHaveLength(1)
+  })
+
+  it('没有重复就一张卡都不出；被取代的那份不再参与（不会跟自己的真源配成一对）', async () => {
+    sneak('品牌甲', ['store_a'])
+    sneak('品牌丙', ['store_x'])
+    expect(await server.orgDuplicates.run()).toMatchObject({ asked: 0, merged: 0, kept: 0 })
+    expect(await cards()).toHaveLength(0)
+  })
+})

@@ -33,6 +33,7 @@ import type {
 
 export * from './join-compare.js'
 export * from './org-keys.js'
+export * from './org-merge.js'
 export * from './promote.js'
 export * from './similar.js'
 export * from './sqlite-store.js'
