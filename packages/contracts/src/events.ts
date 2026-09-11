@@ -125,6 +125,16 @@ export type KnownEventType =
   | 'product_line.deleted'
   /** 44 G5：品牌组成员变了，挂了它的岗位范围自动跟着变——**变更必须留痕**（40 §1 的底线）。 */
   | 'assignment.range_expanded'
+  // WP50：个人用 → 公司用（45）。合并与别名都留痕；payload 只有 id / 名字 / 条数，不含成员内容
+  /** 45 H3：两条品牌合成一条（公司那份取并集，个人那份 `superseded_by`）。 */
+  | 'range_group.merged'
+  /** 45 H3：两条产品线合成一条。 */
+  | 'product_line.merged'
+  /**
+   * 45 H3：一条岗位范围因为别名被改指到公司那份，或退出公司时别名断开恢复个人那份。
+   * payload 带 `from` / `to` / `direction`（`to_company` | `back_to_personal`）。
+   */
+  | 'range.alias_resolved'
   // WP24：问 AI 只记哈希；急停变更
   | 'ask.answered'
   | 'halt.changed'
