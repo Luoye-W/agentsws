@@ -1435,6 +1435,43 @@ export interface ProductLineView {
   pushdown: boolean
 }
 
+/** 45 H4：查重命中的一条——界面照它显示"已有：X（谁建的，几个岗位挂着）→ 直接用它"。 */
+export interface OrgDuplicateHit {
+  id: string
+  kind: 'range_group' | 'product_line' | 'store_range'
+  name: string
+  verdict: 'same' | 'similar'
+  similarity: number
+  reasons: string[]
+  created_by?: string
+  created_by_name?: string
+  holders: number
+}
+
+/**
+ * 45 H4「建之前先查」：新建表单一边打字一边防抖来问。**只读**，问一百遍也不建东西。
+ *
+ * 命中之后界面给的是"直接用它"——点了就是引用已有那条，不会产生第二份。
+ */
+export const checkOrgDuplicate = (
+  query: {
+    kind: 'range_group' | 'product_line' | 'store_range'
+    name: string
+    members?: { kind: string; id: string }[]
+    parent?: { kind: string; id: string }
+    rule?: ProductLineRule
+    platform?: 'shopify' | 'amazon' | 'other'
+    external_id?: string
+    exclude_id?: string
+  },
+  assignment?: string,
+): Promise<OrgDuplicateHit[]> =>
+  api<OrgDuplicateHit[]>('/v1/org/duplicate-check', {
+    method: 'POST',
+    body: query,
+    ...withAssignment(assignment),
+  })
+
 export const listRangeGroups = (assignment?: string): Promise<RangeGroupView[]> =>
   api<RangeGroupView[]>('/v1/org/range-groups', withAssignment(assignment))
 

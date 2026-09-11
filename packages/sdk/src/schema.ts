@@ -1593,6 +1593,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/org/duplicate-check': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 建之前先查：同唯一键或相似的品牌 / 产品线 / 店铺范围（45 H4） */
+    post: operations['checkOrgDuplicate']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/org/range-groups': {
     parameters: {
       query?: never
@@ -13258,6 +13275,137 @@ export interface operations {
       }
     }
   }
+  checkOrgDuplicate: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @enum {string} */
+          kind: 'range_group' | 'product_line' | 'store_range'
+          name: string
+          members?: {
+            /** @enum {string} */
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            id: string
+          }[]
+          parent?: {
+            /** @enum {string} */
+            kind: 'store' | 'account' | 'market'
+            id: string
+          }
+          rule?:
+            | {
+                /** @constant */
+                platform: 'shopify'
+                collection_ids?: string[]
+                tags?: string[]
+                vendors?: string[]
+                product_types?: string[]
+              }
+            | {
+                /** @constant */
+                platform: 'amazon'
+                asins?: string[]
+                sku_prefixes?: string[]
+                brand?: string
+              }
+            | {
+                /** @constant */
+                platform: 'manual'
+                product_ids: string[]
+              }
+          /** @enum {string} */
+          platform?: 'shopify' | 'amazon' | 'other'
+          external_id?: string
+          exclude_id?: string
+        }
+      }
+    }
+    responses: {
+      /** @description OrgDuplicateHit[] */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   listRangeGroups: {
     parameters: {
       query?: never
@@ -13357,6 +13505,13 @@ export interface operations {
             kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
             id: string
           }[]
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
         }
       }
     }
@@ -13547,6 +13702,13 @@ export interface operations {
             kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
             id: string
           }[]
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
         }
       }
     }
@@ -13971,6 +14133,13 @@ export interface operations {
                 platform: 'manual'
                 product_ids: string[]
               }
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
         }
       }
     }
@@ -14181,6 +14350,13 @@ export interface operations {
                 platform: 'manual'
                 product_ids: string[]
               }
+          duplicate_ack?: {
+            /** @constant */
+            decision: 'new'
+            reason: string
+            /** @default [] */
+            similar_to?: string[]
+          }
         }
       }
     }

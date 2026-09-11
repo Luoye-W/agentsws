@@ -201,9 +201,24 @@ export interface ProductLineView {
   pushdown: boolean
 }
 
+/**
+ * 45 H4「建之前先查」命中之后，人在选择题卡上按的那一下。
+ *
+ * 只有"我这个不一样，仍新建"需要服务端放行——"直接用它"根本不会走到创建这条路由上
+ * （界面直接引用已有那条）。理由是硬要求（40 §5 E4 同一个口径）：它会进事件日志，
+ * 下次谁再查到这一对，看得见上一个人为什么没复用。
+ */
+export interface OrgDuplicateAckInput {
+  reason: string
+  /** 卡上列出的候选 id（回写进事件，留痕用）。 */
+  similar_to: string[]
+}
+
 export interface RangeGroupInput {
   name: string
   members: RangeRef[]
+  /** 45 H4：查到像的还是要建时带上（不带就先查，查到就 409）。 */
+  duplicate_ack?: OrgDuplicateAckInput | undefined
 }
 
 /**
@@ -231,6 +246,40 @@ export interface ProductLineInput {
   name: string
   parent: RangeRef
   rule: ProductLineRuleInput
+  /** 45 H4：查到像的还是要建时带上。 */
+  duplicate_ack?: OrgDuplicateAckInput | undefined
+}
+
+/** 45 H4：一次"建之前先查"。三类共用一条路由，各填各的那几格。 */
+export interface OrgDuplicateQuery {
+  kind: 'range_group' | 'product_line' | 'store_range'
+  name: string
+  /** 品牌：想挂哪几家店。 */
+  members?: RangeRef[] | undefined
+  /** 产品线：切在哪里面、按什么切。 */
+  parent?: RangeRef | undefined
+  rule?: ProductLineRuleInput | undefined
+  /** 店铺 / 平台账号范围：哪个平台、外部 id（域名 / 卖家 id）。 */
+  platform?: 'shopify' | 'amazon' | 'other' | undefined
+  external_id?: string | undefined
+  /** 改一条已有对象时把它自己排掉（不然它永远和自己一模一样）。 */
+  exclude_id?: string | undefined
+}
+
+/** 查重命中的一条：界面照它显示"已有：X（谁建的，几个岗位挂着）→ 直接用它"。 */
+export interface OrgDuplicateHit {
+  id: string
+  kind: OrgDuplicateQuery['kind']
+  name: string
+  /** `same` = 同一把唯一键；`similar` = 像（成员重合 / 判据重叠）。 */
+  verdict: 'same' | 'similar'
+  similarity: number
+  /** 人话理由，界面直接显示。 */
+  reasons: string[]
+  created_by?: string
+  /** 建它那个人的名字（说"王岚 建的"比说 `per_wang` 有用）。 */
+  created_by_name?: string
+  holders: number
 }
 
 /** 策略层（05 §3）在界面上的形状。 */
@@ -458,6 +507,13 @@ export interface OrgPort {
   productLines(actor: OrgActor): MaybePromise<ProductLineView[]>
   /** 45 H3 别名解析（同 {@link OrgPort.rangeGroup}）。 */
   productLine(actor: OrgActor, id: string): MaybePromise<ProductLineView | undefined>
+  /**
+   * 45 H4「建之前先查」：查同唯一键或相似的三类组织对象。**只读，不改任何东西**。
+   *
+   * 40 §2.2 那五个"建"的入口加上这三类，凑成八个；八个入口一处判定
+   * （唯一键与相似度在 `@agentsws/catalog/org-keys`）。
+   */
+  checkDuplicate(actor: OrgActor, query: OrgDuplicateQuery): MaybePromise<OrgDuplicateHit[]>
   createProductLine(actor: OrgActor, input: ProductLineInput): MaybePromise<ProductLineView>
   updateProductLine(
     actor: OrgActor,
@@ -528,15 +584,36 @@ const LINE_RULE = z.discriminatedUnion('platform', [
   }),
 ])
 
+/** 45 H4：查到像的还要建时带这一段（与 40 §2.2 五个入口的 `DuplicateAck` 同一个形状）。 */
+const OrgDuplicateAck = z.object({
+  decision: z.literal('new'),
+  reason: z.string().min(1).max(500),
+  similar_to: z.array(z.string().min(1)).default([]),
+})
+
 const RangeGroupBody = z.object({
   name: z.string().min(1).max(64),
   members: z.array(RANGE).max(200).default([]),
+  duplicate_ack: OrgDuplicateAck.optional(),
 })
 
 const ProductLineBody = z.object({
   name: z.string().min(1).max(64),
   parent: LINE_PARENT,
   rule: LINE_RULE,
+  duplicate_ack: OrgDuplicateAck.optional(),
+})
+
+/** 45 H4：一次"建之前先查"的问法。 */
+const DuplicateCheckBody = z.object({
+  kind: z.enum(['range_group', 'product_line', 'store_range']),
+  name: z.string().min(1).max(128),
+  members: z.array(RANGE).max(200).optional(),
+  parent: LINE_PARENT.optional(),
+  rule: LINE_RULE.optional(),
+  platform: z.enum(['shopify', 'amazon', 'other']).optional(),
+  external_id: z.string().min(1).max(200).optional(),
+  exclude_id: z.string().min(1).max(128).optional(),
 })
 
 /** 45 H5：一条「提议修改」。想改的那几格都可选——只改名字也是一条正经提议。 */
@@ -674,6 +751,56 @@ function sameWorkspace(c: Ctx): OrgActor {
 
 const optional = <T>(v: T | undefined, key: string): Record<string, T> =>
   v === undefined ? {} : ({ [key]: v } as Record<string, T>)
+
+/** 45 H4「仍新建」那句理由的最短长度。与 40 §5 E4 的五个入口同一个数。 */
+export const MIN_ORG_DUPLICATE_REASON = 8
+
+/**
+ * 45 H4：**建之前先查**，三类组织对象共用这一个函数（与 40 §2.2 的
+ * {@link guardSimilar} 是一对孪生：那边判词袋 + 触发器，这边判唯一键 + 成员 / 判据重合）。
+ *
+ * - 带了 `duplicate_ack` → 校验理由长度；短了 400，够了放行并把理由带回去留痕
+ * - 没带且查到像的 → 抛 `409 similar_exists`，`details.candidates` 是候选，
+ *   界面照 `details.options` 渲染「直接用它 / 我这个不一样，仍新建」
+ *
+ * 只有两个选项：组织对象在"还没建出来"这一刻没有"合并进它"可言——
+ * 那是建完之后夜间扫描出卡的事（45 H4 后半句）。
+ */
+async function guardOrgSimilar(
+  deps: GatewayDeps,
+  actor: OrgActor,
+  query: OrgDuplicateQuery,
+  ack: { reason: string; similar_to: string[] } | undefined,
+): Promise<void> {
+  if (ack !== undefined) {
+    if (ack.reason.trim().length < MIN_ORG_DUPLICATE_REASON)
+      throw new ApiError(
+        'invalid_input',
+        `选"仍新建"要写一句为什么（至少 ${MIN_ORG_DUPLICATE_REASON} 个字），它会进事件日志，下次别人查得到`,
+        { details: { field: 'duplicate_ack.reason', min: MIN_ORG_DUPLICATE_REASON } },
+      )
+    return
+  }
+  const hits = await portOf(deps).checkDuplicate(actor, query)
+  if (hits.length === 0) return
+  const first = hits[0]
+  throw new ApiError(
+    'similar_exists',
+    first === undefined
+      ? '已经有像的了'
+      : `已有「${first.name}」（${first.created_by_name ?? first.created_by ?? '不知道谁'} 建的，${first.holders} 个岗位挂着）→ 直接用它`,
+    {
+      details: {
+        kind: query.kind,
+        candidates: hits,
+        options: [
+          { id: 'reuse', label: '直接用它' },
+          { id: 'new', label: '我这个不一样，仍新建', requires_reason: true },
+        ],
+      },
+    },
+  )
+}
 
 export function orgRoutes(): Route[] {
   return [
@@ -1102,6 +1229,36 @@ export function orgRoutes(): Route[] {
       async (c, deps) => ok(c, await portOf(deps).rangeOptions(actorOf(c))),
     ),
 
+    /**
+     * 45 H4 第八个查重入口，也是前两个入口在**输入时**的那一半：
+     * 界面一边打字一边防抖来问，命中就显示"已有：X（谁建的，几个岗位挂着）→ 直接用它"。
+     *
+     * 店铺 / 平台账号范围只有这一个入口——它没有自己的"建"路由（范围是从岗位、
+     * 品牌成员、产品线归属里**推**出来的），所以分配向导里手填一个新店铺 id 那一刻
+     * 就是它唯一的"建之前"。硬拦一条分配是不对的（同一家店本来就该指到同一个 id，
+     * 指错了要能改），所以这一格给的是提示与"直接用它"，不是 409。
+     *
+     * 只读：40 §2「查重不改任何东西」。
+     */
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/duplicate-check',
+        operationId: 'checkOrgDuplicate',
+        summary: '建之前先查：同唯一键或相似的品牌 / 产品线 / 店铺范围（45 H4）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: DuplicateCheckBody,
+        returns: 'OrgDuplicateHit[]',
+      },
+      async (c, deps) => {
+        const input = await body(c, DuplicateCheckBody)
+        return ok(c, await portOf(deps).checkDuplicate(actorOf(c), input))
+      },
+    ),
+
     // ── 品牌与产品线（44 G1 / G2）──────────────────────────────────────
     //
     // 读走 `policy.read@workspace`、写走 `policy.stage@workspace/restricted`——
@@ -1187,6 +1344,13 @@ export function orgRoutes(): Route[] {
       async (c, deps) => {
         const actor = actorOf(c)
         const input = await body(c, RangeGroupBody)
+        // 45 H4：第六个查重入口。查到像的就不建，回 409 + 候选让人选
+        await guardOrgSimilar(
+          deps,
+          actor,
+          { kind: 'range_group', name: input.name, members: input.members },
+          input.duplicate_ack,
+        )
         return ok(c, await portOf(deps).createRangeGroup(actor, input), 201)
       },
     ),
@@ -1308,6 +1472,13 @@ export function orgRoutes(): Route[] {
       async (c, deps) => {
         const actor = actorOf(c)
         const input = await body(c, ProductLineBody)
+        // 45 H4：第七个查重入口
+        await guardOrgSimilar(
+          deps,
+          actor,
+          { kind: 'product_line', name: input.name, parent: input.parent, rule: input.rule },
+          input.duplicate_ack,
+        )
         return ok(c, await portOf(deps).createProductLine(actor, input), 201)
       },
     ),

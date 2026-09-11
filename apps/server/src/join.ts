@@ -24,9 +24,9 @@ import { join as joinPath } from 'node:path'
 import type { JoinActor, JoinDecisionInput, JoinImportReceipt, JoinPort } from '@agentsws/api'
 import {
   compareJoinBundle,
+  deriveStoreRanges,
   joinSummary,
   normalizeExternalId,
-  platformOfRange,
   storeRangeKey,
 } from '@agentsws/catalog'
 import type {
@@ -244,25 +244,16 @@ export function createJoin(options: JoinOptions): JoinAssembly {
    * 也是这么算的）。再并上由 Join 新建进来的那些（`join_store_ranges`）。
    */
   const companyStoreRanges = (): JoinStoreRange[] => {
-    const seen = new Map<string, JoinStoreRange>()
-    const add = (range: RangeRef): void => {
-      if (range.kind === 'product_line' || range.kind === 'department') return
-      const platform = platformOfRange(range)
-      const row: JoinStoreRange = {
-        range: { ...range },
-        platform,
-        external_id: normalizeExternalId(platform, range.id),
-        name: range.id,
-      }
-      seen.set(storeRangeKey(row), row)
-    }
-    for (const a of roles.assignments.listByWorkspace(workspace_id, {}))
-      if (a.revoked_at === undefined) for (const r of a.ranges) add(r)
     const { groups, lines } = live(workspace_id)
-    for (const g of groups) for (const m of g.members) add(m)
-    for (const l of lines) add(l.parent)
-    for (const row of backend.storeRanges()) seen.set(storeRangeKey(row), row)
-    return [...seen.values()].sort((a, b) => a.external_id.localeCompare(b.external_id))
+    return deriveStoreRanges({
+      assignment_ranges: roles.assignments
+        .listByWorkspace(workspace_id, {})
+        .filter((a) => a.revoked_at === undefined)
+        .flatMap((a) => a.ranges),
+      range_groups: groups,
+      product_lines: lines,
+      extra: backend.storeRanges(),
+    })
   }
 
   const holders = (kind: JoinObjectKind, id: string): number => {
@@ -275,32 +266,15 @@ export function createJoin(options: JoinOptions): JoinAssembly {
 
   const exportBundle = (actor: JoinActor): JoinExportBundle => {
     const { groups, lines } = live(actor.workspace_id)
-    const seen = new Map<string, JoinStoreRange>()
-    for (const a of roles.assignments.listByWorkspace(actor.workspace_id, {}))
-      if (a.revoked_at === undefined)
-        for (const r of a.ranges) {
-          if (r.kind === 'product_line' || r.kind === 'department') continue
-          const platform = platformOfRange(r)
-          const row: JoinStoreRange = {
-            range: { ...r },
-            platform,
-            external_id: normalizeExternalId(platform, r.id),
-            name: r.id,
-          }
-          seen.set(storeRangeKey(row), row)
-        }
-    for (const g of groups)
-      for (const m of g.members) {
-        if (m.kind === 'product_line' || m.kind === 'department') continue
-        const platform = platformOfRange(m)
-        const row: JoinStoreRange = {
-          range: { ...m },
-          platform,
-          external_id: normalizeExternalId(platform, m.id),
-          name: m.id,
-        }
-        seen.set(storeRangeKey(row), row)
-      }
+    // 导出包里的店铺范围不含产品线的父范围：那一条会跟着产品线自己走
+    const stores = deriveStoreRanges({
+      assignment_ranges: roles.assignments
+        .listByWorkspace(actor.workspace_id, {})
+        .filter((a) => a.revoked_at === undefined)
+        .flatMap((a) => a.ranges),
+      range_groups: groups,
+      product_lines: [],
+    })
     return {
       schema_version: 1,
       workspace_id: actor.workspace_id,
@@ -308,7 +282,7 @@ export function createJoin(options: JoinOptions): JoinAssembly {
       exported_at: clock.now(),
       range_groups: groups.map((g) => structuredClone(g)),
       product_lines: lines.map((l) => structuredClone(l)),
-      store_ranges: [...seen.values()].sort((a, b) => a.external_id.localeCompare(b.external_id)),
+      store_ranges: stores,
       connections: [],
     }
   }

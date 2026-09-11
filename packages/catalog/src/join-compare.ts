@@ -29,7 +29,9 @@ import {
   compareProductLines,
   compareRangeGroups,
   compareStoreRanges,
+  normalizeExternalId,
   type OrgMatch,
+  platformOfRange,
   productLineKey,
   rangeGroupKey,
   storeRangeKey,
@@ -265,4 +267,43 @@ export function joinSummary(payload: JoinMappingPayload): string {
   const { same, similar, missing } = payload.counts
   const transfer = payload.connections.length
   return `要并进公司的有 ${payload.objects.length} 条：一样 ${same} 条（直接合）、像但不确定 ${similar} 条（要你选）、公司还没有 ${missing} 条（新建）。另有 ${transfer} 条个人连接——**默认不交给公司**，要交的逐条打开开关。`
+}
+
+/**
+ * 公司（或个人工作区）**认得的**店铺 / 平台账号范围。
+ *
+ * 没有一张"店铺表"：范围就是岗位、品牌成员、产品线归属里出现过的那些 id。
+ * 认不出平台的一律 `other`（唯一键退化成原样 id）——判错的代价是当成两条，
+ * 不会错合，所以这里宁可保守。
+ *
+ * 一处定义、两处用：Join 的对照（`apps/server/src/join.ts`）与建之前查重
+ * （`apps/server/src/org.ts`）必须算出同一份清单，否则同一家店在两条路上
+ * 会长出两把不同的钥匙。
+ */
+export function deriveStoreRanges(input: {
+  /** 活跃分配上挂的范围（已展开）。 */
+  assignment_ranges: readonly RangeRef[]
+  range_groups: readonly RangeGroup[]
+  product_lines: readonly ProductLine[]
+  /** 额外并进来的（Join 新建进公司的那些）。 */
+  extra?: readonly JoinStoreRange[]
+}): JoinStoreRange[] {
+  const seen = new Map<string, JoinStoreRange>()
+  const add = (range: RangeRef): void => {
+    // 产品线切在别的范围里面、部门不是店铺，两者都不是"外部账号"
+    if (range.kind === 'product_line' || range.kind === 'department') return
+    const platform = platformOfRange(range)
+    const row: JoinStoreRange = {
+      range: { ...range },
+      platform,
+      external_id: normalizeExternalId(platform, range.id),
+      name: range.id,
+    }
+    seen.set(storeRangeKey(row), row)
+  }
+  for (const r of input.assignment_ranges) add(r)
+  for (const g of input.range_groups) for (const m of g.members) add(m)
+  for (const l of input.product_lines) add(l.parent)
+  for (const row of input.extra ?? []) seen.set(storeRangeKey(row), row)
+  return [...seen.values()].sort((a, b) => a.external_id.localeCompare(b.external_id))
 }

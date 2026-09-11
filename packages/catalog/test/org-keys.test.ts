@@ -10,11 +10,17 @@ import {
   compareProductLines,
   compareRangeGroups,
   compareStoreRanges,
+  deriveStoreRanges,
+  findOrgDuplicatePairs,
+  findOrgSimilar,
   MEMBER_OVERLAP_SIMILAR,
+  matchOrgObjects,
   memberOverlap,
   normalizeAmazonId,
   normalizeName,
   normalizeShopifyDomain,
+  type OrgExisting,
+  orgUniqueKey,
   platformOfRange,
   productLineKey,
   rangeGroupKey,
@@ -219,5 +225,160 @@ describe('45 H2 唯一键：产品线 = 父范围 + 判据平台 + 判据集合'
       compareProductLines({ parent: store('s'), rule: empty }, { parent: store('s'), rule: empty })
         .verdict,
     ).toBe('same')
+  })
+})
+
+describe('45 H4 建之前先查：同唯一键或相似的三类对象', () => {
+  const brandB: OrgExisting = {
+    kind: 'range_group',
+    id: 'rg_b',
+    name: '品牌B',
+    members: [store('store_a'), store('store_c')],
+    created_by: 'per_wang',
+    holders: 3,
+  }
+  const brandA: OrgExisting = {
+    kind: 'range_group',
+    id: 'rg_a',
+    name: '品牌甲',
+    members: [store('store_main')],
+    holders: 1,
+  }
+
+  it('唯一键：三类各算各的，同一把键 = 同一个东西', () => {
+    expect(orgUniqueKey({ kind: 'range_group', name: '品牌乙', members: [] })).toBe(
+      rangeGroupKey('品牌乙'),
+    )
+    expect(
+      orgUniqueKey({
+        kind: 'product_line',
+        name: '厨房线',
+        parent: store('s'),
+        rule: { platform: 'shopify', tags: ['kitchen'] },
+      }),
+    ).toBe(productLineKey({ parent: store('s'), rule: { platform: 'shopify', tags: ['kitchen'] } }))
+    expect(
+      orgUniqueKey({
+        kind: 'store_range',
+        name: '店 A',
+        platform: 'shopify',
+        external_id: 'glass-bowl',
+      }),
+    ).toBe(storeRangeKey({ platform: 'shopify', external_id: 'glass-bowl.myshopify.com' }))
+  })
+
+  it('kind 是道门：不同类的永远 none', () => {
+    expect(
+      matchOrgObjects(
+        { kind: 'range_group', name: 'x', members: [] },
+        { kind: 'store_range', name: 'x', platform: 'other', external_id: 'x' },
+      ).verdict,
+    ).toBe('none')
+  })
+
+  it('命中说得出"谁建的、几个岗位挂着"，same 排在 similar 前面', () => {
+    // 名字归一化后一样 → same；成员大半重合 → similar
+    const hits = findOrgSimilar(
+      { kind: 'range_group', name: '品牌 B', members: [store('store_a'), store('store_b')] },
+      [brandA, brandB],
+    )
+    expect(hits).toHaveLength(1)
+    expect(hits[0]).toMatchObject({
+      id: 'rg_b',
+      verdict: 'same',
+      created_by: 'per_wang',
+      holders: 3,
+    })
+    // 名字不同、成员重合 50% → similar
+    const similar = findOrgSimilar(
+      { kind: 'range_group', name: '品牌乙', members: [store('store_a'), store('store_b')] },
+      [brandA, brandB],
+    )
+    expect(similar.map((h) => h.verdict)).toEqual(['similar'])
+    expect(similar[0]?.reasons.join('')).toContain('成员重合')
+    // 什么都不像 → 一条都不回，照常建
+    expect(
+      findOrgSimilar({ kind: 'range_group', name: '品牌丙', members: [store('store_x')] }, [
+        brandA,
+        brandB,
+      ]),
+    ).toEqual([])
+  })
+
+  it('改一条已有对象时把它自己排掉（不然它永远和自己一模一样）', () => {
+    const q = { kind: 'range_group' as const, name: '品牌B', members: brandB.members }
+    expect(findOrgSimilar(q, [brandB])).toHaveLength(1)
+    expect(findOrgSimilar(q, [brandB], { exclude_id: 'rg_b' })).toEqual([])
+  })
+
+  it('limit 截断，但截的是排过序的（第一条永远是最该直接用的那个）', () => {
+    const many: OrgExisting[] = [
+      brandB,
+      { kind: 'range_group', id: 'rg_c', name: '品牌 B ', members: [], holders: 0 },
+    ]
+    expect(findOrgSimilar(q0(), many, { limit: 1 }).map((h) => h.verdict)).toEqual(['same'])
+    function q0() {
+      return { kind: 'range_group' as const, name: '品牌B', members: [store('store_a')] }
+    }
+  })
+
+  it('夜间扫描：两两比，每对只出一次，顺序稳定', () => {
+    const dupes = findOrgDuplicatePairs([
+      { kind: 'range_group', id: 'rg_2', name: '品牌 B', members: [], holders: 0 },
+      brandB,
+      brandA,
+    ])
+    expect(dupes).toHaveLength(1)
+    // 对里两条按 id 排定：谁先扫到都是同一对，于是去重键每晚算出来都一样
+    expect([dupes[0]?.a.id, dupes[0]?.b.id]).toEqual(['rg_2', 'rg_b'])
+    expect(dupes[0]?.verdict).toBe('same')
+    expect(dupes[0]?.unique_key).toBe(rangeGroupKey('品牌B'))
+    expect(findOrgDuplicatePairs([brandA])).toEqual([])
+    expect(findOrgDuplicatePairs([brandB, brandA], { limit: 0 })).toEqual([])
+  })
+
+  it('店铺范围是推出来的：岗位范围、品牌成员、产品线归属并起来，部门与产品线不算', () => {
+    const rows = deriveStoreRanges({
+      assignment_ranges: [
+        store('glass-bowl.myshopify.com'),
+        { kind: 'department', id: 'dept_ops' },
+        { kind: 'product_line', id: 'pl_kitchen' },
+      ],
+      range_groups: [{ ...brandB, workspace_id: 'ws', created_at: '', updated_at: '' }],
+      product_lines: [
+        {
+          id: 'pl_1',
+          workspace_id: 'ws',
+          name: '厨房线',
+          parent: { kind: 'account', id: 'AMZ1:US' },
+          rule: { platform: 'manual', product_ids: [] },
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+    })
+    expect(rows.map((r) => r.range.id).sort()).toEqual([
+      'AMZ1:US',
+      'glass-bowl.myshopify.com',
+      'store_a',
+      'store_c',
+    ])
+    expect(rows.find((r) => r.range.id === 'AMZ1:US')?.platform).toBe('amazon')
+    // 同一家店两种写法只留一条（归一化后是同一把键）
+    const once = deriveStoreRanges({
+      assignment_ranges: [store('Glass-Bowl.MyShopify.com/')],
+      range_groups: [],
+      product_lines: [],
+      extra: [
+        {
+          range: store('glass-bowl.myshopify.com'),
+          platform: 'shopify',
+          external_id: 'glass-bowl.myshopify.com',
+          name: '主店',
+        },
+      ],
+    })
+    expect(once).toHaveLength(1)
+    expect(once[0]?.name).toBe('主店')
   })
 })

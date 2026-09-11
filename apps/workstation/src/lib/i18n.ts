@@ -250,6 +250,13 @@ const zh: Table = {
   'org.ranges.propose.placeholder': '店 D 也是这个品牌的，想加进来',
   'org.ranges.propose.submit': '提上去',
   'org.ranges.propose.done': '提上去了，等老板点头。',
+  // ── WP50 45 H4：建之前先查 ───────────────────────────────────────────
+  'org.ranges.dupe.hit': '已有：{name}（{who} 建，{n} 个岗位挂着）',
+  'org.ranges.dupe.unknown': '不知道谁',
+  'org.ranges.dupe.reuse': '直接用它',
+  'org.ranges.dupe.reused': '好，用「{name}」那一条——不再建第二份。',
+  'org.ranges.dupe.still': '我这个不一样，仍新建',
+  'org.ranges.dupe.reason': '写一句为什么不复用（至少 8 个字，会进日志，下次别人查得到）',
   // ── WP37 工具箱与查重（40 §2）────────────────────────────────────────
   'org.tab.toolbox': '工具箱',
   'toolbox.subtitle': '公司里已经做出来的自动化都在这儿。',
@@ -1170,6 +1177,14 @@ const en: Table = {
   'org.ranges.propose.placeholder': 'Store D belongs to this brand too; please add it',
   'org.ranges.propose.submit': 'Send it up',
   'org.ranges.propose.done': 'Sent. Waiting for the owner.',
+  // ── WP50 45 H4 ───────────────────────────────────────────────────────
+  'org.ranges.dupe.hit': 'Already exists: {name} (created by {who}, {n} position(s))',
+  'org.ranges.dupe.unknown': 'unknown',
+  'org.ranges.dupe.reuse': 'Just use it',
+  'org.ranges.dupe.reused': 'Using "{name}" — no second copy.',
+  'org.ranges.dupe.still': 'Mine is different, create anyway',
+  'org.ranges.dupe.reason':
+    'Say why you are not reusing it (at least 8 characters; it goes into the log so others can find it)',
   // ── WP37 toolbox & dedupe (40 §2) ─────────────────────────────────────
   'org.tab.toolbox': 'Toolbox',
   'toolbox.subtitle': 'Everything your company already automated.',

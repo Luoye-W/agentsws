@@ -198,8 +198,8 @@ export const MEMBER_OVERLAP_SIMILAR = 0.5
  * 成员取并集），成员大半重合只是像（"是同一个品牌，用哪个名字"要人来定）。
  */
 export function compareRangeGroups(
-  a: Pick<RangeGroup, 'name' | 'members'>,
-  b: Pick<RangeGroup, 'name' | 'members'>,
+  a: { name: string; members: readonly RangeRef[] },
+  b: { name: string; members: readonly RangeRef[] },
 ): OrgMatch {
   if (rangeGroupKey(a.name) === rangeGroupKey(b.name))
     return {
@@ -291,4 +291,146 @@ export function compareStoreRanges(
     similarity: 1,
     reasons: [`同一个店铺 / 账号 id（${normalizeOther(a.external_id)}；有一边没认出是哪个平台）`],
   }
+}
+
+/* ── 45 H4：建之前先查（查重入口从五个变八个）───────────────────────── */
+
+/**
+ * 一条待判定的组织对象。三类共用一个形状，于是"建之前查"与"建之后扫"用的是
+ * 同一把尺子——判据只写一遍，两处的行为不可能漂移。
+ */
+export type OrgCandidate =
+  | { kind: 'range_group'; name: string; members: readonly RangeRef[] }
+  | { kind: 'product_line'; name: string; parent: RangeRef; rule: ProductLineRule }
+  | { kind: 'store_range'; name: string; platform: JoinPlatform; external_id: string }
+
+/** 库里已经有的一条（比 {@link OrgCandidate} 多出"是谁的、几个岗位挂着"）。 */
+export type OrgExisting = OrgCandidate & {
+  id: string
+  /** 谁建的（没有就是老数据 / 系统种的）。 */
+  created_by?: string
+  /** 几个岗位挂着它。 */
+  holders?: number
+}
+
+/** 唯一键：同一把键 = 同一个东西，只允许存在一份（45 H4 第一句）。 */
+export function orgUniqueKey(candidate: OrgCandidate): string {
+  if (candidate.kind === 'range_group') return rangeGroupKey(candidate.name)
+  if (candidate.kind === 'product_line') return productLineKey(candidate)
+  return storeRangeKey(candidate)
+}
+
+/** 两条**同类**对象对照（不同类一律 `none`——kind 是道门，与 40 §2.2 一致）。 */
+export function matchOrgObjects(a: OrgCandidate, b: OrgCandidate): OrgMatch {
+  if (a.kind !== b.kind) return NONE
+  if (a.kind === 'range_group' && b.kind === 'range_group') return compareRangeGroups(a, b)
+  if (a.kind === 'product_line' && b.kind === 'product_line') return compareProductLines(a, b)
+  if (a.kind === 'store_range' && b.kind === 'store_range') return compareStoreRanges(a, b)
+  return NONE
+}
+
+/** 查重命中的一条。 */
+export interface OrgSimilarHit {
+  id: string
+  kind: OrgObjectKind
+  name: string
+  verdict: 'same' | 'similar'
+  similarity: number
+  reasons: string[]
+  created_by?: string
+  holders: number
+}
+
+/**
+ * 建之前先查（45 H4「建之前」那一半）。
+ *
+ * 排序：`same` 永远排在 `similar` 前面，同一档按相似度降序、再按名字——
+ * 同样的输入永远出同样的一张卡，界面上第一条就是"最该直接用的那个"。
+ * `exclude_id` 是改一条已有对象时把它自己排掉（不然它永远和自己一模一样）。
+ */
+export function findOrgSimilar(
+  candidate: OrgCandidate,
+  existing: readonly OrgExisting[],
+  options: { exclude_id?: string; limit?: number } = {},
+): OrgSimilarHit[] {
+  const hits: OrgSimilarHit[] = []
+  for (const other of existing) {
+    if (other.id === options.exclude_id) continue
+    const match = matchOrgObjects(candidate, other)
+    if (match.verdict === 'none') continue
+    hits.push({
+      id: other.id,
+      kind: other.kind,
+      name: other.name,
+      verdict: match.verdict,
+      similarity: match.similarity,
+      reasons: match.reasons,
+      ...(other.created_by === undefined ? {} : { created_by: other.created_by }),
+      holders: other.holders ?? 0,
+    })
+  }
+  hits.sort(
+    (a, b) =>
+      (a.verdict === b.verdict ? 0 : a.verdict === 'same' ? -1 : 1) ||
+      b.similarity - a.similarity ||
+      a.name.localeCompare(b.name),
+  )
+  return options.limit === undefined ? hits : hits.slice(0, options.limit)
+}
+
+/**
+ * 建之后扫（45 H4「建之后」那一半，夜间任务用）：**两两**比，每对只出一次。
+ *
+ * 顺序稳定（按对里两条 id 排过序再按 kind / key 排），于是同一对每晚算出来的
+ * 去重键都一样——出过卡的第二天不会再出一张。
+ */
+export function findOrgDuplicatePairs(
+  existing: readonly OrgExisting[],
+  options: { limit?: number } = {},
+): {
+  kind: OrgObjectKind
+  unique_key: string
+  a: OrgExisting
+  b: OrgExisting
+  verdict: 'same' | 'similar'
+  similarity: number
+  reasons: string[]
+}[] {
+  const out: {
+    kind: OrgObjectKind
+    unique_key: string
+    a: OrgExisting
+    b: OrgExisting
+    verdict: 'same' | 'similar'
+    similarity: number
+    reasons: string[]
+  }[] = []
+  for (let i = 0; i < existing.length; i += 1) {
+    for (let j = i + 1; j < existing.length; j += 1) {
+      const left = existing[i]
+      const right = existing[j]
+      if (left === undefined || right === undefined) continue
+      const match = matchOrgObjects(left, right)
+      if (match.verdict === 'none') continue
+      // 对里两条按 id 排定，谁先扫到都是同一对
+      const [a, b] = left.id <= right.id ? [left, right] : [right, left]
+      out.push({
+        kind: left.kind,
+        unique_key: orgUniqueKey(a),
+        a,
+        b,
+        verdict: match.verdict,
+        similarity: match.similarity,
+        reasons: match.reasons,
+      })
+    }
+  }
+  out.sort(
+    (x, y) =>
+      x.kind.localeCompare(y.kind) ||
+      (x.verdict === y.verdict ? 0 : x.verdict === 'same' ? -1 : 1) ||
+      y.similarity - x.similarity ||
+      `${x.a.id}|${x.b.id}`.localeCompare(`${y.a.id}|${y.b.id}`),
+  )
+  return options.limit === undefined ? out : out.slice(0, options.limit)
 }

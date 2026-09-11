@@ -60,6 +60,11 @@ export interface RangeGroup {
   superseded_by?: RangeGroupId
   /** 45 H2：这一条是谁、从哪个工作区带进来的（合并进公司之后还看得出来源）。 */
   origin?: ObjectOrigin
+  /**
+   * 45 H4：谁建的。查重命中时界面上那句"已有：品牌乙（王岚 建，3 个岗位挂着）"
+   * 里的"王岚"就是它——没有这一格，后来的人看不出该去问谁。
+   */
+  created_by?: PersonId
 }
 
 /** Shopify 的产品线判据：这四个字段 Admin GraphQL 都能 `query:` 直接过滤（44 §3 G2）。 */
@@ -107,6 +112,8 @@ export interface ProductLine {
   superseded_by?: ProductLineId
   /** 45 H2：谁、从哪个工作区带进来的。 */
   origin?: ObjectOrigin
+  /** 45 H4：谁建的（查重命中时界面上显示"去问他"）。 */
+  created_by?: PersonId
 }
 
 /** 05 §1.1。09-08 修正：不做跨 Assignment 并集，每次运行绑定一个 Assignment，其 scopes 原样生效。 */

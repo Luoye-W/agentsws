@@ -10,7 +10,7 @@
  * 2. **改职责模板不会立刻生效**：提交之后只显示「已提交审批」，卡片回到首页队列里等你定。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { InprogressTab } from '@/components/org/inprogress-tab'
@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { OrgInvitationView } from '@/lib/api'
 import {
   ApiClientError,
+  checkOrgDuplicate,
   completeJoin,
   copyRoleDefinition,
   createAssignments,
@@ -116,6 +117,12 @@ export function OrgPage(): React.ReactNode {
     enabled,
     queryFn: () => listProductLines(owner),
   })
+
+  // 45 H4：建之前先查。身份稳定（`useCallback`），不然表单每渲染一次就重排一次查询
+  const checkDuplicate = useCallback(
+    (query: Parameters<typeof checkOrgDuplicate>[0]) => checkOrgDuplicate(query, owner),
+    [owner],
+  )
 
   const refresh = async (): Promise<void> => {
     await client.invalidateQueries({ queryKey: ['org'] })
@@ -462,6 +469,7 @@ export function OrgPage(): React.ReactNode {
               onPropose={(target, id, reason) => {
                 rangePropose.mutate({ target, id, reason })
               }}
+              onCheckDuplicate={checkDuplicate}
             />
           )}
         </TabsContent>

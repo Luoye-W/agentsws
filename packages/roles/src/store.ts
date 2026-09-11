@@ -131,6 +131,8 @@ export interface RangeGroupApi {
     origin?: ObjectOrigin
     /** 45 H3：建出来就是别名（Join 落地时个人那份走这条）。 */
     superseded_by?: string
+    /** 45 H4：谁建的（查重命中时界面上说"去问他"）。 */
+    created_by?: PersonId
   }): RangeGroup
   /**
    * 改名字 / 改成员。改成员会重算所有挂了这个组的岗位范围（44 G5）。
@@ -172,6 +174,8 @@ export interface ProductLineApi {
     origin?: ObjectOrigin
     /** 45 H3：建出来就是别名。 */
     superseded_by?: string
+    /** 45 H4：谁建的。 */
+    created_by?: PersonId
   }): ProductLine
   /** 45 H3：已经被取代的那份不给改（`conflict`）。 */
   update(
@@ -459,6 +463,7 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
         updated_at: at,
         ...(input.origin === undefined ? {} : { origin: { ...input.origin } }),
         ...(input.superseded_by === undefined ? {} : { superseded_by: input.superseded_by }),
+        ...(input.created_by === undefined ? {} : { created_by: input.created_by }),
       }
       backend.putRangeGroup(group)
       return group
@@ -541,6 +546,7 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
         updated_at: at,
         ...(input.origin === undefined ? {} : { origin: { ...input.origin } }),
         ...(input.superseded_by === undefined ? {} : { superseded_by: input.superseded_by }),
+        ...(input.created_by === undefined ? {} : { created_by: input.created_by }),
       }
       backend.putProductLine(line)
       return line
