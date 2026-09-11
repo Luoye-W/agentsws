@@ -329,10 +329,15 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
   const mintDocId = (prefix: string, workspace: string, name: string): string =>
     `${prefix}_${sha256(canonicalJson({ workspace, name })).slice(0, 20)}`
 
+  /**
+   * 45 H3 别名解析发生在**读**这一侧：挂着的那条被并进公司之后，展开出来的是
+   * 公司那份的成员。于是"他的岗位范围自动指到公司那份"这件事，就算落地那一步
+   * 漏改了分配（老数据、并发），下一次 `effectiveConfig` 也仍然是对的。
+   */
   const groupsOf = (ids: readonly string[] | undefined): RangeGroup[] => {
     const out: RangeGroup[] = []
     for (const id of ids ?? []) {
-      const found = backend.getRangeGroup(id)
+      const found = resolveChain(id, (x) => backend.getRangeGroup(x))
       if (found !== undefined) out.push(found)
     }
     return out
@@ -755,7 +760,8 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       return targetInRangePure({
         ranges: assignment.ranges,
         target,
-        productLine: (lineId) => backend.getProductLine(lineId),
+        // 45 H3：挂着的产品线被并进公司之后，判的是公司那份的判据
+        productLine: (lineId) => resolveChain(lineId, (x) => backend.getProductLine(x)),
       })
     },
     recordDecision(id, actionId, outcome) {

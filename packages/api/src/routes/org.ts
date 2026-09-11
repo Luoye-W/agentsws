@@ -164,6 +164,12 @@ export interface RangeGroupView {
   updated_at: string
   /** 有几个岗位挂着它（删之前要看这个数）。 */
   holders: number
+  /** 45 H3：被公司那份取代了，这一条只能看（`resolved` 是真源那一条的 id）。 */
+  superseded_by?: string
+  /** 45 H3 / H5：这一条改不了——已经被取代，或本人不是 owner / 范围管理者。 */
+  readonly?: boolean
+  /** 45 H2：谁、从哪个工作区带进来的。 */
+  origin?: { workspace_id: string; person_id: string; object_id?: string }
 }
 
 /** 44 G2 产品线在界面上的形状。 */
@@ -175,6 +181,10 @@ export interface ProductLineView {
   created_at: string
   updated_at: string
   holders: number
+  /** 45 H3：被公司那份取代了，只能看。 */
+  superseded_by?: string
+  readonly?: boolean
+  origin?: { workspace_id: string; person_id: string; object_id?: string }
   /** 这条判据能不能交给上游先切一刀（19 §3 过滤下推；界面上说人话用）。 */
   pushdown: boolean
 }
@@ -436,6 +446,29 @@ export interface OrgPort {
     input: ProductLineInput,
   ): MaybePromise<ProductLineView>
   deleteProductLine(actor: OrgActor, id: string): MaybePromise<void>
+  /**
+   * 45 H5：成员改不了公司的品牌 / 产品线，只能**提议**——出一张 `policy_change` 卡。
+   *
+   * 同一条路也是 45 H3 里"个人打开被取代的那份"时的出口：那一份是只读的，
+   * 界面上给的按钮不是"改"而是"提议修改"，点了就到这里。
+   */
+  proposeRangeChange(
+    actor: OrgActor,
+    input: ProposeRangeChangeInput,
+  ): MaybePromise<OrgChangeReceipt>
+}
+
+/** 一条「提议修改品牌 / 产品线」。 */
+export interface ProposeRangeChangeInput {
+  target: 'range_group' | 'product_line'
+  /** 提的是哪一条；给的是被取代的那份时，卡落在**真源**那条上。 */
+  id: string
+  /** 想改成什么样（人话，进卡的摘要）。至少 8 个字——一句话说不清的改动不该走这条路。 */
+  reason: string
+  /** 想改成的名字（可选）。 */
+  name?: string | undefined
+  /** 品牌：想改成的成员（可选）。 */
+  members?: RangeRef[] | undefined
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
