@@ -45,6 +45,7 @@ export {
   productLineMatches,
   rangeCoversRef,
   rangeKey,
+  rangeTargetOfProduct,
   shopifyLineQuery,
   targetInRange,
 } from './ranges.js'

@@ -1,5 +1,5 @@
-import type { ApprovalKind, ObjectRef, PrecheckResult } from '@agentsws/contracts'
-import { EXTERNAL_FENCE } from '@agentsws/core'
+import type { ApprovalKind, ChangeKind, ObjectRef, PrecheckResult } from '@agentsws/contracts'
+import { EXTERNAL_FENCE, TARGET_SCOPED_KINDS } from '@agentsws/core'
 import type { ApprovalContext, NormalizedCreateInput } from './types.js'
 import { deepEqual, refKey, scanSecrets } from './util.js'
 
@@ -134,6 +134,21 @@ export function runPrecheck<P>(
       blocked.push('empty_diff')
       notes.push('语义 diff 为空，不建项')
     } else precheck.semantic_diff = 'ok'
+  }
+
+  // 44 G2：目标商品不在这个岗位管的范围里 —— 越权，卡直接 blocked，不进任何人的队列。
+  //
+  // 判定发生在职责层（`roles.targetInRange`），这里只认结论：没给就是调用方还不认
+  // 范围模型（老路径一个字不用改），给了 `ok: false` 就拦。
+  if (input.kind === 'staged_change' && TARGET_SCOPED_KINDS.has(p.kind as ChangeKind)) {
+    const scope = ctx.target_in_range
+    if (scope !== undefined) {
+      precheck.target_in_range = scope.ok ? 'ok' : 'fail'
+      if (!scope.ok) {
+        blocked.push('target_in_range')
+        notes.push(scope.reason ?? '这件商品不在这个岗位管的范围里（44 G2）')
+      }
+    }
   }
 
   // 改前必读（listing_edit）

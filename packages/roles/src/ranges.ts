@@ -206,3 +206,52 @@ export function shopifyLineQuery(rule: ProductLineRule): string | undefined {
 function quote(value: string): string {
   return /[\s"()]/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value
 }
+
+/** 商品类的目标（44 G2 只对这些判范围；退款那种以订单为目标的走别的门禁）。 */
+const PRODUCT_TARGET_TYPES: ReadonlySet<string> = new Set(['product', 'variant', 'listing'])
+
+const stringOf = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() !== '' ? v : undefined
+
+const stringsOf = (v: unknown): string[] | undefined => {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string')
+  const one = stringOf(v)
+  return one === undefined ? undefined : one.split(',').map((s) => s.trim())
+}
+
+/**
+ * 一条变更的目标 → `targetInRange` 认识的形状。
+ *
+ * `record` 是 stage 时读到的那份记录（15 §1：`before` 必须来自记录）。产品线按标签 /
+ * 供应商 / 商品类型切时，判据全靠它——读不到就只剩 id，判不出来就当"不在"（见
+ * `productLineMatches` 的注释）。目标不是商品类的回 `undefined` = **这一条不判**。
+ */
+export function rangeTargetOfProduct(
+  target: { type: string; id: string },
+  record: unknown,
+  parent?: RangeRef,
+): RangeTarget | undefined {
+  if (!PRODUCT_TARGET_TYPES.has(target.type)) return undefined
+  const r = record !== null && typeof record === 'object' ? (record as Record<string, unknown>) : {}
+  const sku = stringOf(r.sku)
+  const asin = stringOf(r.asin)
+  const tags = stringsOf(r.tags)
+  const vendor = stringOf(r.vendor)
+  const productType = stringOf(r.product_type ?? r.productType)
+  const brand = stringOf(r.brand)
+  const collections = stringsOf(r.collection_ids ?? r.collections)
+  return {
+    platform: asin === undefined ? 'shopify' : 'amazon',
+    product_ids: [target.id],
+    ...(asin === undefined ? {} : { asins: [asin] }),
+    ...(sku === undefined ? {} : { skus: [sku] }),
+    attributes: {
+      ...(tags === undefined ? {} : { tags }),
+      ...(vendor === undefined ? {} : { vendor }),
+      ...(productType === undefined ? {} : { product_type: productType }),
+      ...(brand === undefined ? {} : { brand }),
+      ...(collections === undefined ? {} : { collection_ids: collections }),
+    },
+    ...(parent === undefined ? {} : { parent }),
+  }
+}

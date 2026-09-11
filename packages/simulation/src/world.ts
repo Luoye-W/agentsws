@@ -38,7 +38,7 @@ import { createKnowledge } from '@agentsws/knowledge'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
-import { createRoleStore, loadBundledRole, parseRole } from '@agentsws/roles'
+import { createRoleStore, loadBundledRole, parseRole, rangeTargetOfProduct } from '@agentsws/roles'
 import {
   aftersalesBrainProvider,
   createDirectRuntime,
@@ -748,6 +748,11 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           }),
     },
     readRecord: (target) => recordFacts(target),
+    // 44 G2 前置检查：改价 / 改 Listing 的目标商品必须落在这个岗位的范围里
+    targetInRange: ({ assignment_id, target, before }) => {
+      const scoped = rangeTargetOfProduct(target, before)
+      return scoped === undefined ? undefined : roles.targetInRange(assignment_id, scoped)
+    },
     backendApply: async (change, _opts) => {
       // WP44：改价与主题发布的施行口。
       //

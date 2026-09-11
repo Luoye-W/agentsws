@@ -108,6 +108,20 @@ export interface TxnPolicy {
   executor_version: string
 }
 
+/** 44 G2 前置检查的入参（用平凡类型，这个包不依赖 `@agentsws/roles`）。 */
+export interface TargetInRangeQuery {
+  assignment_id: string
+  kind: ChangeKind
+  target: ObjectRef
+  /** stage 时读到的记录：产品线按标签 / 供应商切时，属性从这里取。 */
+  before: unknown
+  after: unknown
+}
+
+export type TargetInRangeCheck = (
+  query: TargetInRangeQuery,
+) => { ok: boolean; reason?: string } | undefined
+
 export interface TxnOptions {
   clock: Clock
   random: () => number
@@ -116,6 +130,14 @@ export interface TxnOptions {
   /** 抽检用随机源；缺省复用 random */
   sampler?: () => number
   readRecord?: ReadRecord
+  /**
+   * 44 G2 前置检查：改价 / 改 Listing 的目标商品在不在这个岗位的范围里。
+   *
+   * 判定住在职责层（`roles.targetInRange`）——这个包不认岗位也不认产品线，
+   * 只在 `TARGET_SCOPED_KINDS` 那几种变更上问一句，得到 `ok: false` 就拦在 stage 那一步。
+   * 不装 = 不判（老调用方一个字不用改）。
+   */
+  targetInRange?: TargetInRangeCheck
   backendApply?: BackendApply
   deliverOutbound?: DeliverOutbound
   directory?: Directory

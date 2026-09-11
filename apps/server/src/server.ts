@@ -56,7 +56,13 @@ import {
   type PageFetch,
   stubProvider,
 } from '@agentsws/model-gateway'
-import { changeKindOf, createRoleStore, loadBundledRole, type RoleStore } from '@agentsws/roles'
+import {
+  changeKindOf,
+  createRoleStore,
+  loadBundledRole,
+  type RoleStore,
+  rangeTargetOfProduct,
+} from '@agentsws/roles'
 import { createSkills, type Skills } from '@agentsws/skills'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -586,6 +592,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent(e)
     },
     readRecord: (target) => backend.read(target),
+    // 44 G2 前置检查：改价 / 改 Listing 的目标商品必须落在这个岗位的范围里
+    targetInRange: ({ assignment_id, target, before }) => {
+      const scoped = rangeTargetOfProduct(target, before)
+      return scoped === undefined ? undefined : roles.targetInRange(assignment_id, scoped)
+    },
     backendApply: (change, opts) => backend.apply(change, opts),
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
     // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
