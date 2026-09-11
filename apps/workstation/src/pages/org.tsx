@@ -10,11 +10,12 @@
  * 2. **改职责模板不会立刻生效**：提交之后只显示「已提交审批」，卡片回到首页队列里等你定。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { InprogressTab } from '@/components/org/inprogress-tab'
+import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
 import { PositionsTab } from '@/components/org/positions-tab'
 import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/components/org/ranges-tab'
@@ -26,6 +27,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { OrgInvitationView } from '@/lib/api'
 import {
   ApiClientError,
+  checkOrgDuplicate,
+  completeJoin,
   copyRoleDefinition,
   createAssignments,
   createInvite,
@@ -43,6 +46,7 @@ import {
   listDiscoveryPeers,
   listInvitations,
   listInvites,
+  listJoins,
   listMembers,
   listMembershipRequests,
   listOrgPositions,
@@ -50,6 +54,7 @@ import {
   listRangeGroups,
   listRangeOptions,
   listRoleDefinitions,
+  proposeRangeChange,
   proposeRoleChange,
   removeMember,
   requestMembership,
@@ -103,6 +108,12 @@ export function OrgPage(): React.ReactNode {
     enabled,
     queryFn: () => listRangeOptions(owner),
   })
+  // 45：等着并进来的个人工作区（对照表）
+  const joins = useQuery({
+    queryKey: ['org', 'joins'],
+    enabled,
+    queryFn: () => listJoins(owner),
+  })
   // 44：品牌（范围组）与产品线
   const brands = useQuery({
     queryKey: ['org', 'range-groups'],
@@ -143,6 +154,11 @@ export function OrgPage(): React.ReactNode {
     queryFn: () => listMembershipRequests(owner),
     retry: false,
   })
+  // 45 H4：建之前先查。身份稳定（`useCallback`），不然表单每渲染一次就重排一次查询
+  const checkDuplicate = useCallback(
+    (query: Parameters<typeof checkOrgDuplicate>[0]) => checkOrgDuplicate(query, owner),
+    [owner],
+  )
 
   const refresh = async (): Promise<void> => {
     await client.invalidateQueries({ queryKey: ['org'] })
@@ -286,6 +302,25 @@ export function OrgPage(): React.ReactNode {
     },
     onError: say,
   })
+  const joinComplete = useMutation({
+    mutationFn: (input: { id: string; choice: JoinChoice }) =>
+      completeJoin(input.id, input.choice, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+  // 45 H5：只读的那一条（并进公司之后的个人副本、非 owner 看到的组织结构）改动走提议卡
+  const rangePropose = useMutation({
+    mutationFn: (input: { target: 'range_group' | 'product_line'; id: string; reason: string }) =>
+      proposeRangeChange(input.target, input.id, { reason: input.reason }, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
   const lineDelete = useMutation({
     mutationFn: (id: string) => deleteProductLine(id, owner),
     onSuccess: async () => {
@@ -336,6 +371,8 @@ export function OrgPage(): React.ReactNode {
     brandUpdate.isPending ||
     brandDelete.isPending ||
     lineCreate.isPending ||
+    joinComplete.isPending ||
+    rangePropose.isPending ||
     lineDelete.isPending ||
     create.isPending ||
     update.isPending ||
@@ -402,7 +439,8 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
           <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
           <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
-          <TabsTrigger value="join">{t('onboarding.join.title')}</TabsTrigger>
+          <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
+          <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
           <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
           <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>
         </TabsList>
@@ -501,12 +539,16 @@ export function OrgPage(): React.ReactNode {
               onDeleteLine={(id) => {
                 lineDelete.mutate(id)
               }}
+              onPropose={(target, id, reason) => {
+                rangePropose.mutate({ target, id, reason })
+              }}
+              onCheckDuplicate={checkDuplicate}
             />
           )}
         </TabsContent>
 
         {/* 46 §2 I2 I3：加入一家公司 / 邀请同事 / 谁申请过加入 */}
-        <TabsContent value="join" className="pt-3">
+        <TabsContent value="invite" className="pt-3">
           {me.data === undefined ? (
             <Skeleton className="h-40 w-full" />
           ) : (
@@ -530,6 +572,19 @@ export function OrgPage(): React.ReactNode {
               }}
             />
           )}
+        </TabsContent>
+
+        {/* 45 H2：个人工作区并进公司的对照页（三类分组、每类全部采纳） */}
+        <TabsContent value="join" className="pt-3">
+          <JoinTab
+            {...(joins.data?.[0] === undefined ? {} : { mapping: joins.data[0] })}
+            busy={busy}
+            {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+            onComplete={(choice) => {
+              const first = joins.data?.[0]
+              if (first !== undefined) joinComplete.mutate({ id: first.join_id, choice })
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="toolbox" className="pt-3">

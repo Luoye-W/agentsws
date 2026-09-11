@@ -8,6 +8,7 @@ import type {
   Clock,
   DataDomain,
   Mandate,
+  ObjectOrigin,
   Operation,
   PersonId,
   ProductLine,
@@ -126,9 +127,33 @@ export interface RangeGroupApi {
     members?: RangeRef[]
     /** 想自己指定 id 就给（迁移 / 场景用）；不给按名字哈希。 */
     id?: string
+    /** 45 H2：谁、从哪个工作区带进来的。 */
+    origin?: ObjectOrigin
+    /** 45 H3：建出来就是别名（Join 落地时个人那份走这条）。 */
+    superseded_by?: string
+    /** 45 H4：谁建的（查重命中时界面上说"去问他"）。 */
+    created_by?: PersonId
   }): RangeGroup
-  /** 改名字 / 改成员。改成员会重算所有挂了这个组的岗位范围（44 G5）。 */
-  update(id: string, input: { name?: string; members?: RangeRef[] }): RangeGroup
+  /**
+   * 改名字 / 改成员。改成员会重算所有挂了这个组的岗位范围（44 G5）。
+   *
+   * 45 H3：**已经被取代的那份不给改**（`conflict`）——它是别名，改的是公司那条。
+   */
+  update(
+    id: string,
+    input: { name?: string; members?: RangeRef[]; origin?: ObjectOrigin },
+  ): RangeGroup
+  /**
+   * 45 H3：把这一份标成"被公司那条取代"（`by` 给 `undefined` = 退出公司，别名断开）。
+   *
+   * 与 `update` 分开是因为它**绕过只读**：别名本身的建立与解除不是"改内容"。
+   */
+  supersede(id: string, by: string | undefined): RangeGroup
+  /**
+   * 45 H3 别名解析：顺着 `superseded_by` 走到真源那一条（没有别名就是它自己）。
+   * 链上有环或断链时回走得到的最后一条，不抛——读路径不该因为一个坏引用打不开。
+   */
+  resolve(id: string): RangeGroup | undefined
   /** 还有岗位挂着就不给删（`conflict`）。 */
   delete(id: string): void
   get(id: string): RangeGroup | undefined
@@ -145,11 +170,22 @@ export interface ProductLineApi {
     parent: RangeRef
     rule: ProductLineRule
     id?: string
+    /** 45 H2：谁、从哪个工作区带进来的。 */
+    origin?: ObjectOrigin
+    /** 45 H3：建出来就是别名。 */
+    superseded_by?: string
+    /** 45 H4：谁建的。 */
+    created_by?: PersonId
   }): ProductLine
+  /** 45 H3：已经被取代的那份不给改（`conflict`）。 */
   update(
     id: string,
-    input: { name?: string; parent?: RangeRef; rule?: ProductLineRule },
+    input: { name?: string; parent?: RangeRef; rule?: ProductLineRule; origin?: ObjectOrigin },
   ): ProductLine
+  /** 45 H3：标成被取代 / 解除别名。 */
+  supersede(id: string, by: string | undefined): ProductLine
+  /** 45 H3 别名解析。 */
+  resolve(id: string): ProductLine | undefined
   /** 还有岗位挂着就不给删（`conflict`）。 */
   delete(id: string): void
   get(id: string): ProductLine | undefined
@@ -297,10 +333,19 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
   const mintDocId = (prefix: string, workspace: string, name: string): string =>
     `${prefix}_${sha256(canonicalJson({ workspace, name })).slice(0, 20)}`
 
+  /**
+   * 45 H3 别名解析发生在**展开**这一侧：挂着的那条被并进公司之后，展开出来的是
+   * 公司那份的成员。于是"他的岗位范围自动指到公司那份"这件事，就算落地那一步
+   * 漏改了分配上的组 id（老数据、并发），下一次重新展开也仍然是对的。
+   *
+   * 注意 `effectiveConfig` 读的是**存下来的那份已展开范围**（44 G1 就是这么设计的：
+   * 判权限那一刻不再查品牌表），所以别名要真的生效，还得有一次重新展开——
+   * Join 落地那一步的 `assignments.update` 就是那一次。
+   */
   const groupsOf = (ids: readonly string[] | undefined): RangeGroup[] => {
     const out: RangeGroup[] = []
     for (const id of ids ?? []) {
-      const found = backend.getRangeGroup(id)
+      const found = resolveChain(id, (x) => backend.getRangeGroup(x))
       if (found !== undefined) out.push(found)
     }
     return out
@@ -331,6 +376,28 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       if (line.workspace_id !== workspace)
         throw new RoleError('invalid_input', `产品线 ${r.id} 不属于工作区 ${workspace}`)
     }
+  }
+
+  /**
+   * 45 H3 别名解析：顺着 `superseded_by` 一路走到真源。
+   *
+   * 走不动了（断链）或者绕回来了（环）就停在**当前这一条**——读路径上一个坏引用
+   * 不该让整个岗位打不开；上限也保住了"改坏一条数据把进程转死"这条。
+   */
+  function resolveChain<T extends { id: string; superseded_by?: string }>(
+    id: string,
+    get: (id: string) => T | undefined,
+  ): T | undefined {
+    const seen = new Set<string>()
+    let current = get(id)
+    while (current !== undefined && current.superseded_by !== undefined) {
+      if (seen.has(current.id)) return current
+      seen.add(current.id)
+      const next = get(current.superseded_by)
+      if (next === undefined) return current
+      current = next
+    }
+    return current
   }
 
   const attachedTo = (predicate: (a: Assignment) => boolean): Assignment[] =>
@@ -394,6 +461,9 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
         members: dedupeRanges(input.members ?? []),
         created_at: at,
         updated_at: at,
+        ...(input.origin === undefined ? {} : { origin: { ...input.origin } }),
+        ...(input.superseded_by === undefined ? {} : { superseded_by: input.superseded_by }),
+        ...(input.created_by === undefined ? {} : { created_by: input.created_by }),
       }
       backend.putRangeGroup(group)
       return group
@@ -401,17 +471,40 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
     update(id, input) {
       const found = backend.getRangeGroup(id)
       if (found === undefined) throw new RoleError('not_found', `没有这个品牌（范围组）：${id}`)
+      // 45 H3：别名是只读的——改的是公司那条，不是这一份
+      if (found.superseded_by !== undefined)
+        throw new RoleError(
+          'conflict',
+          `「${found.name}」已经并进公司那份了，这里只能看。要改去公司那条上提一张「提议修改」。`,
+        )
       const name = input.name?.trim()
       if (name !== undefined && name === '') throw new RoleError('invalid_input', '品牌要有名字')
       const next: RangeGroup = {
         ...found,
         ...(name === undefined ? {} : { name }),
         ...(input.members === undefined ? {} : { members: dedupeRanges(input.members) }),
+        ...(input.origin === undefined ? {} : { origin: { ...input.origin } }),
         updated_at: options.clock.now(),
       }
       backend.putRangeGroup(next)
       if (input.members !== undefined) recomputeForGroup(next, found.members)
       return next
+    },
+    supersede(id, by) {
+      const found = backend.getRangeGroup(id)
+      if (found === undefined) throw new RoleError('not_found', `没有这个品牌（范围组）：${id}`)
+      if (by === id) throw new RoleError('invalid_input', '一条东西不能取代它自己')
+      const { superseded_by: _dropped, ...rest } = found
+      const next: RangeGroup = {
+        ...rest,
+        ...(by === undefined ? {} : { superseded_by: by }),
+        updated_at: options.clock.now(),
+      }
+      backend.putRangeGroup(next)
+      return next
+    },
+    resolve(id) {
+      return resolveChain(id, (x) => backend.getRangeGroup(x))
     },
     delete(id) {
       const found = backend.getRangeGroup(id)
@@ -451,6 +544,9 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
         rule: structuredClone(input.rule),
         created_at: at,
         updated_at: at,
+        ...(input.origin === undefined ? {} : { origin: { ...input.origin } }),
+        ...(input.superseded_by === undefined ? {} : { superseded_by: input.superseded_by }),
+        ...(input.created_by === undefined ? {} : { created_by: input.created_by }),
       }
       backend.putProductLine(line)
       return line
@@ -458,6 +554,12 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
     update(id, input) {
       const found = backend.getProductLine(id)
       if (found === undefined) throw new RoleError('not_found', `没有这条产品线：${id}`)
+      // 45 H3：别名只读
+      if (found.superseded_by !== undefined)
+        throw new RoleError(
+          'conflict',
+          `「${found.name}」已经并进公司那份了，这里只能看。要改去公司那条上提一张「提议修改」。`,
+        )
       if (input.parent !== undefined && !PRODUCT_LINE_PARENT_KINDS.includes(input.parent.kind))
         throw new RoleError(
           'invalid_input',
@@ -470,10 +572,27 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
         ...(name === undefined ? {} : { name }),
         ...(input.parent === undefined ? {} : { parent: { ...input.parent } }),
         ...(input.rule === undefined ? {} : { rule: structuredClone(input.rule) }),
+        ...(input.origin === undefined ? {} : { origin: { ...input.origin } }),
         updated_at: options.clock.now(),
       }
       backend.putProductLine(next)
       return next
+    },
+    supersede(id, by) {
+      const found = backend.getProductLine(id)
+      if (found === undefined) throw new RoleError('not_found', `没有这条产品线：${id}`)
+      if (by === id) throw new RoleError('invalid_input', '一条东西不能取代它自己')
+      const { superseded_by: _dropped, ...rest } = found
+      const next: ProductLine = {
+        ...rest,
+        ...(by === undefined ? {} : { superseded_by: by }),
+        updated_at: options.clock.now(),
+      }
+      backend.putProductLine(next)
+      return next
+    },
+    resolve(id) {
+      return resolveChain(id, (x) => backend.getProductLine(x))
     },
     delete(id) {
       const found = backend.getProductLine(id)
@@ -651,7 +770,8 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       return targetInRangePure({
         ranges: assignment.ranges,
         target,
-        productLine: (lineId) => backend.getProductLine(lineId),
+        // 45 H3：挂着的产品线被并进公司之后，判的是公司那份的判据
+        productLine: (lineId) => resolveChain(lineId, (x) => backend.getProductLine(x)),
       })
     },
     recordDecision(id, actionId, outcome) {

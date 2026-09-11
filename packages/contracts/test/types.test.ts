@@ -4,9 +4,13 @@ import type {
   ApprovalKind,
   Assignment,
   Invite,
+  JoinExportBundle,
+  JoinMappingPayload,
+  JoinObjectComparison,
   KnowledgeGap,
   KnownEventType,
   MembershipRequest,
+  ObjectOrigin,
   ProductLine,
   ProductLineRule,
   RangeGroup,
@@ -18,7 +22,7 @@ import type {
   WorkspacePolicy,
   WorkspaceProfile,
 } from '../src/index.js'
-import { parseMarketId, SENSITIVITY_ORDER } from '../src/index.js'
+import { JOIN_OBJECT_KINDS, parseMarketId, SENSITIVITY_ORDER } from '../src/index.js'
 
 describe('contracts', () => {
   it('sensitivity order is total', () => {
@@ -177,5 +181,86 @@ describe('WP47 范围模型（44）', () => {
 
     const kind: ApprovalKind = 'membership'
     expect(kind).toBe('membership')
+  })
+
+  // ── WP50 / 45：个人用 → 公司用 ────────────────────────────────────
+  it('45 H3：品牌与产品线记得住"被谁取代"和"谁带进来的"', () => {
+    const origin: ObjectOrigin = {
+      workspace_id: 'ws_solo',
+      person_id: 'p_sun',
+      object_id: 'rg_1',
+    }
+    const personal: Pick<RangeGroup, 'id' | 'superseded_by' | 'origin'> = {
+      id: 'rg_1',
+      superseded_by: 'rg_company_b',
+    }
+    const company: Pick<RangeGroup, 'id' | 'origin'> = { id: 'rg_company_b', origin }
+    const line: Pick<ProductLine, 'id' | 'superseded_by'> = {
+      id: 'pl_solo_kitchen',
+      superseded_by: 'pl_company_kitchen',
+    }
+    expect([personal.superseded_by, company.origin?.person_id, line.superseded_by]).toEqual([
+      'rg_company_b',
+      'p_sun',
+      'pl_company_kitchen',
+    ])
+    // 没合并过的那份两个字段都不在（`exactOptionalPropertyTypes`：不存在 ≠ undefined）
+    expect(Object.keys(company)).not.toContain('superseded_by')
+  })
+
+  it('45 H2：join_mapping 的 payload 一张卡装三类对象 + 连接开关', () => {
+    expect(JOIN_OBJECT_KINDS).toEqual(['range_group', 'product_line', 'store_range'])
+    const brand: JoinObjectComparison = {
+      kind: 'range_group',
+      unique_key: 'brand:品牌乙',
+      verdict: 'similar',
+      mine: { id: 'rg_solo_b', name: '品牌乙', summary: '店 A、店 B' },
+      theirs: { id: 'rg_b', name: '品牌B', summary: '店 A、店 C', holders: 2 },
+      similarity: 0.6667,
+      reasons: ['成员重合 50%'],
+      suggested: 'merge_union',
+      options: ['merge_union', 'adopt_company', 'keep_both'],
+    }
+    const payload: JoinMappingPayload = {
+      join_id: 'join_1',
+      source_workspace_id: 'ws_solo',
+      target_workspace_id: 'ws_co',
+      person_id: 'p_sun',
+      objects: [brand],
+      // 45 H2 第三条：凭据不自动走，默认开关是关的
+      connections: [
+        {
+          connection_id: 'c_1',
+          service: 'shopify_admin',
+          label: 'Shopify · 店 B',
+          transfer: false,
+        },
+      ],
+      counts: { same: 0, similar: 1, missing: 0 },
+    }
+    expect(payload.connections[0]?.transfer).toBe(false)
+    expect(payload.counts.similar).toBe(1)
+
+    const bundle: Pick<JoinExportBundle, 'schema_version' | 'store_ranges'> = {
+      schema_version: 1,
+      store_ranges: [
+        {
+          range: { kind: 'store', id: 'store_b' },
+          platform: 'shopify',
+          external_id: 'glass-bowl.myshopify.com',
+          name: '店 B',
+        },
+      ],
+    }
+    expect(bundle.store_ranges[0]?.external_id).toBe('glass-bowl.myshopify.com')
+  })
+
+  it('45 的三条新事件在册', () => {
+    const types: KnownEventType[] = [
+      'range_group.merged',
+      'product_line.merged',
+      'range.alias_resolved',
+    ]
+    expect(types).toHaveLength(3)
   })
 })

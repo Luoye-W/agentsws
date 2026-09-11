@@ -195,6 +195,38 @@ export interface ScenarioOrgJoinRequest {
   email: string
 }
 
+/**
+ * WP50 / 45 H1：某人单干时在**自己的工作区**里攒下的东西。
+ *
+ * 个人工作区不是另一套界面，是同一套东西换了个 `workspace_id`——所以这里能填的
+ * 就是公司那边能填的（品牌 / 产品线），外加"他在自己那儿的那条岗位"。
+ */
+export interface ScenarioOrgPersonal {
+  who: string
+  /** 他自己那个工作区的 id（`ws_solo` 之类）。 */
+  workspace: string
+  /** 他单干时做的那条职责。 */
+  role: string
+  range_groups?: ScenarioOrgRangeGroup[]
+  product_lines?: ScenarioOrgProductLine[]
+}
+
+/** WP50 / 45 H2 / H3：把个人工作区并进公司，owner 逐条选。 */
+export interface ScenarioOrgJoin {
+  who: string
+  /** 从哪个个人工作区并过来。 */
+  from: string
+  /**
+   * owner 在对照卡上选了什么。没提到的按对照给的建议走——
+   * 那也是他按下"批准"这一下带来的（45 §4：`similar` 不会自动合）。
+   */
+  decisions?: {
+    unique_key: string
+    chosen: 'merge_union' | 'adopt_company' | 'keep_both' | 'create_in_company' | 'skip'
+    name_choice?: 'company' | 'personal'
+  }[]
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -246,6 +278,10 @@ export type ScenarioEvent =
   | { at: string; type: 'org.first_run'; first_run: ScenarioOrgFirstRun }
   /** WP51：一边朝另一边申请加入（46 §2 I3）。 */
   | { at: string; type: 'org.join_request'; join_request: ScenarioOrgJoinRequest }
+  /** WP50：某人单干时在自己的工作区里攒下的东西（45 H1）。 */
+  | { at: string; type: 'org.personal'; personal: ScenarioOrgPersonal }
+  /** WP50：把个人工作区并进公司（45 H2 / H3）。 */
+  | { at: string; type: 'org.join'; join: ScenarioOrgJoin }
 
 export interface ScenarioInbound {
   from: string

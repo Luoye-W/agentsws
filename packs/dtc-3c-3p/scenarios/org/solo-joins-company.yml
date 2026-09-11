@@ -1,0 +1,108 @@
+# 一个人先自己用，后来并进公司（45 H1 / H2 / H3）。
+#
+# 这条题钉的是 45 的整条路：**进公司不是"把我的东西复制过去"，是走一遍
+# 对照 → 去重 → 老板批**。四件事：
+#
+# 1. **个人工作区 = 一家一个人的公司**（H1）：陈晓单干那阵子，品牌、产品线、
+#    岗位全建在他自己的工作区里，用的是同一套东西——所以进公司那天不用
+#    "从个人设置里挑哪些是公司的"，每样东西都有唯一键，向导自己对得上。
+# 2. **对照出三种结果**（H2）：他的「品牌乙」（店 A + 店 B）与公司的「品牌B」
+#    （店 A + 店 C）名字不一样、成员重合 50% → `similar`，**不自动合**，
+#    出一张 `join_mapping` 卡让老板选；厨房线公司没有 → `missing`；
+#    店 A 公司已经认得 → `same`。
+# 3. **合完之后公司那份是真源**（H3）：老板选了"同一个，取并集"，公司品牌变成
+#    店 A + B + C（**店 B 进来了**），陈晓那份打 `superseded_by` 变成指向它的别名——
+#    不是删掉，所以退出公司时断得开、恢复可编辑。
+# 4. **他的岗位范围自动指到公司那份**：陈晓在自己工作区里的那条岗位挂的还是
+#    `rg_chen_b`，但展开那一刻会顺着别名走到公司那条，于是他的范围变成了三家店，
+#    并且**留痕**（`range.alias_resolved` + `assignment.range_expanded`）。
+#
+# 反过来也验一条：**合并不动外部世界**。一封信不发、一条变更不施行——
+# 这是组织结构的事，不是业务动作。
+id: org/solo-joins-company
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  # 公司品牌成员变了会给店主发一张 L3 卡（44 G5 默认放行、只通知）；装一个人在那儿，
+  # 是为了"他真的收到了"这件事看得见
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 公司这边早就有「品牌B」：店 A 与店 C
+  - at: '+0m'
+    org.range_group:
+      id: rg_brand_b
+      name: 品牌B
+      members:
+        - { kind: store, id: store_a }
+        - { kind: store, id: store_c }
+  # 李默的岗位挂着它（合并之后他会跟着多看见一家店，所以要有这一条）
+  - at: '+5m'
+    org.assign_range:
+      who: p_li
+      role: dtc.aftersales
+      ranges: []
+      range_groups: [rg_brand_b]
+  # 陈晓这一年一直自己单干：他自己的工作区里有「品牌乙」（店 A + 店 B）与厨房线
+  - at: '+10m'
+    org.personal:
+      who: p_chen
+      workspace: ws_chen
+      role: dtc.aftersales
+      range_groups:
+        - id: rg_chen_b
+          name: 品牌乙
+          members:
+            - { kind: store, id: store_a }
+            - { kind: store, id: store_b }
+      product_lines:
+        - id: pl_chen_kitchen
+          name: 厨房线
+          parent: { kind: store, id: store_a }
+          rule:
+            platform: shopify
+            tags: [kitchen]
+  # 他并进公司：老板在对照卡上把那两个品牌判成同一个，取并集用公司的名字。
+  # 厨房线与店 B 公司还没有，按建议在公司新建（没写就是照建议走）。
+  - at: '+1h'
+    org.join:
+      who: p_chen
+      from: ws_chen
+      decisions:
+        - unique_key: 'brand:品牌乙'
+          chosen: merge_union
+          name_choice: company
+  - at: '+3h'
+    clock.advance: {}
+expected:
+  event_types:
+    # 公司原来就有的那一条
+    - range_group.created
+    # 陈晓单干时攒下的东西
+    - simulation.personal_workspace
+    # 对照 → 卡 → 合 → 别名解析 → 完成
+    - join.started
+    - range_group.merged
+    - product_line.created
+    - range.alias_resolved
+    - assignment.range_expanded
+    - join.completed
+  approval_kinds:
+    # 一次 Join 一张卡（不是每条对照一张）
+    join_mapping: '==1'
+    # 公司品牌多了一家店 → 店主收到那张说明这件事的 L3 卡（44 G5）
+    policy_change: '>=1'
+  metrics:
+    runs_failed: 0
+    # 并进公司不动外部世界：一封信不发、一条变更不施行
+    applied_changes: 0
+    outbound_sent: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

@@ -160,6 +160,9 @@ const EVENT_KEYS = [
   // WP51 首次设置与同事发现（46）
   'org.first_run',
   'org.join_request',
+  // WP50 个人用 → 公司用（45）
+  'org.personal',
+  'org.join',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -402,6 +405,100 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             ? {}
             : { ranges: rangeList(source, `${path}.${key}.ranges`, body.ranges) }),
           ...(groups === undefined ? {} : { range_groups: groups }),
+        },
+      }
+    }
+    case 'org.personal': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'workspace',
+        'role',
+        'range_groups',
+        'product_lines',
+      ])
+      const groups = body.range_groups
+      const lines = body.product_lines
+      if (groups !== undefined && !Array.isArray(groups))
+        fail(source, `${path}.${key}.range_groups`, '必须是列表')
+      if (lines !== undefined && !Array.isArray(lines))
+        fail(source, `${path}.${key}.product_lines`, '必须是列表')
+      return {
+        at,
+        type: 'org.personal',
+        personal: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          workspace: str(source, `${path}.${key}.workspace`, body.workspace),
+          role: str(source, `${path}.${key}.role`, body.role),
+          ...(groups === undefined
+            ? {}
+            : {
+                range_groups: (groups as unknown[]).map((g, i) => {
+                  const at2 = `${path}.${key}.range_groups[${i}]`
+                  if (!isRec(g)) fail(source, at2, '必须是对象')
+                  known(source, at2, g, ['id', 'name', 'members'])
+                  return {
+                    id: str(source, `${at2}.id`, g.id),
+                    name: str(source, `${at2}.name`, g.name),
+                    members: rangeList(source, `${at2}.members`, g.members ?? []),
+                  }
+                }),
+              }),
+          ...(lines === undefined
+            ? {}
+            : {
+                product_lines: (lines as unknown[]).map((l, i) => {
+                  const at2 = `${path}.${key}.product_lines[${i}]`
+                  if (!isRec(l)) fail(source, at2, '必须是对象')
+                  known(source, at2, l, ['id', 'name', 'parent', 'rule'])
+                  return {
+                    id: str(source, `${at2}.id`, l.id),
+                    name: str(source, `${at2}.name`, l.name),
+                    parent: rangeRef(source, `${at2}.parent`, l.parent),
+                    rule: lineRule(source, `${at2}.rule`, l.rule),
+                  }
+                }),
+              }),
+        },
+      }
+    }
+    case 'org.join': {
+      known(source, `${path}.${key}`, body, ['who', 'from', 'decisions'])
+      const decisions = body.decisions
+      if (decisions !== undefined && !Array.isArray(decisions))
+        fail(source, `${path}.${key}.decisions`, '必须是列表')
+      const RESOLUTIONS = [
+        'merge_union',
+        'adopt_company',
+        'keep_both',
+        'create_in_company',
+        'skip',
+      ] as const
+      return {
+        at,
+        type: 'org.join',
+        join: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          from: str(source, `${path}.${key}.from`, body.from),
+          ...(decisions === undefined
+            ? {}
+            : {
+                decisions: (decisions as unknown[]).map((d, i) => {
+                  const at2 = `${path}.${key}.decisions[${i}]`
+                  if (!isRec(d)) fail(source, at2, '必须是对象')
+                  known(source, at2, d, ['unique_key', 'chosen', 'name_choice'])
+                  const chosen = str(source, `${at2}.chosen`, d.chosen)
+                  if (!(RESOLUTIONS as readonly string[]).includes(chosen))
+                    fail(source, `${at2}.chosen`, `只能是 ${RESOLUTIONS.join(' / ')}`)
+                  const name = optStr(source, `${at2}.name_choice`, d.name_choice)
+                  if (name !== undefined && name !== 'company' && name !== 'personal')
+                    fail(source, `${at2}.name_choice`, '只能是 company / personal')
+                  return {
+                    unique_key: str(source, `${at2}.unique_key`, d.unique_key),
+                    chosen: chosen as (typeof RESOLUTIONS)[number],
+                    ...(name === undefined ? {} : { name_choice: name }),
+                  }
+                }),
+              }),
         },
       }
     }

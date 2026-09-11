@@ -189,6 +189,53 @@ invariants: [prompt_replayable]
     expect(s.events[2]).toMatchObject({ assign_range: { range_groups: ['rg_b'] } })
   })
 
+  it('45 的两条：个人工作区里攒的东西 + 并进公司时 owner 选了什么', () => {
+    const s = parseScenario(
+      ORG(`  - at: '+0m'
+    org.personal:
+      who: p_chen
+      workspace: ws_chen
+      role: dtc.aftersales
+      range_groups:
+        - id: rg_chen_b
+          name: 品牌乙
+          members: [{ kind: store, id: store_b }]
+      product_lines:
+        - id: pl_chen_kitchen
+          name: 厨房线
+          parent: { kind: store, id: store_a }
+          rule: { platform: shopify, tags: [kitchen] }
+  - at: '+1h'
+    org.join:
+      who: p_chen
+      from: ws_chen
+      decisions:
+        - { unique_key: 'brand:品牌乙', chosen: merge_union, name_choice: company }`),
+      't.yml',
+    )
+    expect(s.events.map((e) => e.type)).toEqual(['org.personal', 'org.join'])
+    expect(s.events[0]).toMatchObject({
+      personal: {
+        workspace: 'ws_chen',
+        range_groups: [{ id: 'rg_chen_b', members: [{ kind: 'store', id: 'store_b' }] }],
+        product_lines: [{ rule: { platform: 'shopify', tags: ['kitchen'] } }],
+      },
+    })
+    expect(s.events[1]).toMatchObject({
+      join: { from: 'ws_chen', decisions: [{ chosen: 'merge_union', name_choice: 'company' }] },
+    })
+  })
+
+  it('并进公司时选了个不存在的动作 → 解析就报错，不等到跑起来', () => {
+    expect(() =>
+      parseScenario(
+        ORG(`  - at: '+0m'
+    org.join: { who: p_chen, from: ws_chen, decisions: [{ unique_key: x, chosen: 乱选 }] }`),
+        't.yml',
+      ),
+    ).toThrow(/merge_union/)
+  })
+
   it('亚马逊与手填两种判据也认', () => {
     const s = parseScenario(
       ORG(`  - at: '+0m'

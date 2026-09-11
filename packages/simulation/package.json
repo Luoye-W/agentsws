@@ -18,6 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@agentsws/catalog": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/data": "workspace:*",

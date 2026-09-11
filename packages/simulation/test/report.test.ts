@@ -260,7 +260,7 @@ describe('套件与报告落盘（26 §5）', () => {
       reportDir: out,
       seed: 42,
     })
-    expect(result.reports).toHaveLength(13)
+    expect(result.reports).toHaveLength(14)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {
@@ -268,7 +268,7 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(13)
+    expect(summary.scenarios).toHaveLength(14)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
     // 跑一整个 pack（13 条场景）不是 5 秒的活，而且并行跑别的项目时还要抢 CPU
   }, 120_000)

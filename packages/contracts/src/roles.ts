@@ -24,6 +24,21 @@ export type RangeGroupId = string
 export type ProductLineId = string
 
 /**
+ * 45 H2：一个组织对象是**谁带进来的**。
+ *
+ * 个人工作区里建的品牌 / 产品线经 Join 向导并进公司之后，公司那份记一条 `origin`——
+ * 于是"这条是王岚一个人用的时候建的"这件事在合并十次之后仍然看得见（40 §1 数据归属）。
+ */
+export interface ObjectOrigin {
+  /** 它原来在哪个工作区（个人工作区的 id）。 */
+  workspace_id: WorkspaceId
+  /** 原来的主人。 */
+  person_id: PersonId
+  /** 原来那条的 id（合并后它会打上 `superseded_by` 指回公司这条）。 */
+  object_id?: string
+}
+
+/**
  * 44 G1 品牌 = 范围组：**一组范围的名字**，不是一种新的范围种类。
  *
  * 岗位可以挂"品牌乙"这个组；判权限时展开成成员（`Assignment.ranges` 里存的是展开后的，
@@ -37,6 +52,19 @@ export interface RangeGroup {
   members: RangeRef[]
   created_at: Iso8601
   updated_at: Iso8601
+  /**
+   * 45 H3：这一份已经被公司那份取代，**只读**；读它的人看到的是 `superseded_by` 指的那一条。
+   *
+   * 退出公司时（45 H3 最后一句）把它清掉，个人那份恢复可编辑——所以是"别名"不是"删除"。
+   */
+  superseded_by?: RangeGroupId
+  /** 45 H2：这一条是谁、从哪个工作区带进来的（合并进公司之后还看得出来源）。 */
+  origin?: ObjectOrigin
+  /**
+   * 45 H4：谁建的。查重命中时界面上那句"已有：品牌乙（王岚 建，3 个岗位挂着）"
+   * 里的"王岚"就是它——没有这一格，后来的人看不出该去问谁。
+   */
+  created_by?: PersonId
 }
 
 /** Shopify 的产品线判据：这四个字段 Admin GraphQL 都能 `query:` 直接过滤（44 §3 G2）。 */
@@ -80,6 +108,12 @@ export interface ProductLine {
   rule: ProductLineRule
   created_at: Iso8601
   updated_at: Iso8601
+  /** 45 H3：已经被公司那份取代，只读；读它的人看到的是 `superseded_by` 指的那一条。 */
+  superseded_by?: ProductLineId
+  /** 45 H2：谁、从哪个工作区带进来的。 */
+  origin?: ObjectOrigin
+  /** 45 H4：谁建的（查重命中时界面上显示"去问他"）。 */
+  created_by?: PersonId
 }
 
 /** 05 §1.1。09-08 修正：不做跨 Assignment 并集，每次运行绑定一个 Assignment，其 scopes 原样生效。 */

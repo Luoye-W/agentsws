@@ -1394,6 +1394,13 @@ export type ProductLineRule =
   | { platform: 'amazon'; asins?: string[]; sku_prefixes?: string[]; brand?: string }
   | { platform: 'manual'; product_ids: string[] }
 
+/** 45 H2 / H3：一条组织对象是从谁那儿带进来的，以及它是不是别名。 */
+export interface OrgObjectOrigin {
+  workspace_id: string
+  person_id: string
+  object_id?: string
+}
+
 export interface RangeGroupView {
   id: string
   name: string
@@ -1402,6 +1409,14 @@ export interface RangeGroupView {
   updated_at: string
   /** 有几个岗位挂着它（删之前看这个数）。 */
   holders: number
+  /** 45 H3：被公司那份取代了（值是真源那条的 id）。 */
+  superseded_by?: string
+  /** 45 H3 / H5：这一条只能看——界面上给的按钮是"提议修改"，不是"改"。 */
+  readonly?: boolean
+  /** 45 H2：谁、从哪个工作区带进来的。 */
+  origin?: OrgObjectOrigin
+  /** 45 H3：你点开的是 `alias_of` 那一条，读到的是这一条。 */
+  alias_of?: string
 }
 
 export interface ProductLineView {
@@ -1412,9 +1427,50 @@ export interface ProductLineView {
   created_at: string
   updated_at: string
   holders: number
+  superseded_by?: string
+  readonly?: boolean
+  origin?: OrgObjectOrigin
+  alias_of?: string
   /** 这条判据能不能交给上游先切一刀（19 §3 过滤下推）。 */
   pushdown: boolean
 }
+
+/** 45 H4：查重命中的一条——界面照它显示"已有：X（谁建的，几个岗位挂着）→ 直接用它"。 */
+export interface OrgDuplicateHit {
+  id: string
+  kind: 'range_group' | 'product_line' | 'store_range'
+  name: string
+  verdict: 'same' | 'similar'
+  similarity: number
+  reasons: string[]
+  created_by?: string
+  created_by_name?: string
+  holders: number
+}
+
+/**
+ * 45 H4「建之前先查」：新建表单一边打字一边防抖来问。**只读**，问一百遍也不建东西。
+ *
+ * 命中之后界面给的是"直接用它"——点了就是引用已有那条，不会产生第二份。
+ */
+export const checkOrgDuplicate = (
+  query: {
+    kind: 'range_group' | 'product_line' | 'store_range'
+    name: string
+    members?: { kind: string; id: string }[]
+    parent?: { kind: string; id: string }
+    rule?: ProductLineRule
+    platform?: 'shopify' | 'amazon' | 'other'
+    external_id?: string
+    exclude_id?: string
+  },
+  assignment?: string,
+): Promise<OrgDuplicateHit[]> =>
+  api<OrgDuplicateHit[]>('/v1/org/duplicate-check', {
+    method: 'POST',
+    body: query,
+    ...withAssignment(assignment),
+  })
 
 export const listRangeGroups = (assignment?: string): Promise<RangeGroupView[]> =>
   api<RangeGroupView[]>('/v1/org/range-groups', withAssignment(assignment))
@@ -1446,6 +1502,28 @@ export const deleteRangeGroup = (id: string, assignment?: string): Promise<{ del
     ...withAssignment(assignment),
   })
 
+/**
+ * 45 H5：提议改一条品牌 / 产品线。**不直接改**——回的是一张 `policy_change` 卡的 id。
+ *
+ * 只读的那一份（并进公司之后的个人副本）走的也是这条：界面上那个按钮不叫"改"。
+ */
+export const proposeRangeChange = (
+  target: 'range_group' | 'product_line',
+  id: string,
+  input: {
+    reason: string
+    name?: string
+    members?: { kind: string; id: string }[]
+    parent?: { kind: string; id: string }
+    rule?: ProductLineRule
+  },
+  assignment?: string,
+): Promise<{ status: string; approval_item_id?: string; summary: string }> =>
+  api<{ status: string; approval_item_id?: string; summary: string }>(
+    `/v1/org/${target === 'range_group' ? 'range-groups' : 'product-lines'}/${encodeURIComponent(id)}/propose`,
+    { method: 'POST', body: input, ...withAssignment(assignment) },
+  )
+
 export const listProductLines = (assignment?: string): Promise<ProductLineView[]> =>
   api<ProductLineView[]>('/v1/org/product-lines', withAssignment(assignment))
 
@@ -1473,6 +1551,81 @@ export const updateProductLine = (
 export const deleteProductLine = (id: string, assignment?: string): Promise<{ deleted: boolean }> =>
   api<{ deleted: boolean }>(`/v1/org/product-lines/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    ...withAssignment(assignment),
+  })
+
+// ── 45 Join 向导：个人工作区并进公司 ──────────────────────────────────
+
+export type JoinResolution =
+  | 'merge_union'
+  | 'adopt_company'
+  | 'keep_both'
+  | 'create_in_company'
+  | 'skip'
+
+export interface JoinObjectSideView {
+  id: string
+  name: string
+  summary: string
+  holders?: number
+}
+
+export interface JoinObjectView {
+  kind: 'range_group' | 'product_line' | 'store_range'
+  unique_key: string
+  verdict: 'same' | 'similar' | 'missing'
+  mine: JoinObjectSideView
+  theirs?: JoinObjectSideView
+  similarity?: number
+  reasons: string[]
+  suggested: JoinResolution
+  options: JoinResolution[]
+}
+
+export interface JoinConnectionView {
+  connection_id: string
+  service: string
+  label: string
+  transfer: boolean
+  company_has_same_service?: boolean
+}
+
+export interface JoinMappingView {
+  join_id: string
+  source_workspace_id: string
+  target_workspace_id: string
+  person_id: string
+  objects: JoinObjectView[]
+  connections: JoinConnectionView[]
+  counts: { same: number; similar: number; missing: number }
+}
+
+export interface JoinCompleteView {
+  join_id: string
+  merged: number
+  created: number
+  kept: number
+  transferred_connections: number
+  range_rewrites: number
+}
+
+export const listJoins = (assignment?: string): Promise<JoinMappingView[]> =>
+  api<JoinMappingView[]>('/v1/join', withAssignment(assignment))
+
+export const getJoinMapping = (id: string, assignment?: string): Promise<JoinMappingView> =>
+  api<JoinMappingView>(`/v1/join/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+export const completeJoin = (
+  id: string,
+  input: {
+    objects: { unique_key: string; chosen: JoinResolution; name_choice?: 'company' | 'personal' }[]
+    connections: { connection_id: string; transfer: boolean }[]
+  },
+  assignment?: string,
+): Promise<JoinCompleteView> =>
+  api<JoinCompleteView>(`/v1/join/${encodeURIComponent(id)}/complete`, {
+    method: 'POST',
+    body: input,
     ...withAssignment(assignment),
   })
 

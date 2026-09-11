@@ -85,6 +85,7 @@ import {
 import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
+import { createJoin, type JoinAssembly } from './join.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
@@ -92,6 +93,7 @@ import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
+import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -111,6 +113,7 @@ import {
   registerLearning,
   registerMailPoll,
   registerMeetingPoll,
+  registerOrgDuplicateScan,
   registerPlanRelay,
   registerPricingRefresh,
   registerRawPrune,
@@ -330,6 +333,10 @@ export interface Server {
   org: OrgAssembly
   /** WP51 首次设置与同事发现（公司档案 / 岗位清单 / 局域网发现 / 邀请码 / 申请加入）。 */
   onboarding: OnboardingAssembly
+  /** WP50 Join 向导（个人工作区并进公司：对照 / 合并 / 别名 / 退出）。 */
+  join: JoinAssembly
+  /** WP50 夜间扫描（45 H4：同唯一键 / 相似的组织对象出卡合并）。 */
+  orgDuplicates: OrgDuplicateScan
   /** 41 §1 秘书 Agent（profile / 代答 / 日程 / 路由）。 */
   secretary: SecretaryAssembly
   /** WP36 离职编排（撤权限 → 真交接 → 个人层归档 / 销毁 → 个人记忆迁移 / 擦除 → 报告）。 */
@@ -1062,6 +1069,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   if (dbDir !== undefined) registerBackup(schedule.scheduler, { run: runWorkspaceBackup })
 
+  // WP50 45 H4：夜里扫一遍重复的品牌 / 产品线 / 店铺范围。装在这儿而不是 `createOrg`
+  // 旁边，是因为它只认识职责层与审批总线——制度面那一套（岗位、成员、邀请）与它无关。
+  const orgDuplicates = createOrgDuplicateScan({
+    workspace_id: workspace.id,
+    clock,
+    roles,
+    approvals,
+    appendEvent,
+    owner: async () => (await identity.getWorkspace(workspace.id))?.owner_id,
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+  registerOrgDuplicateScan(schedule.scheduler, { scan: () => orgDuplicates.run() })
+
   // WP42：每周一 05:00 去各家官网看一眼模型价（抓不到就保留内置价，不算失败）
   registerPricingRefresh(schedule.scheduler, {
     run: async () => {
@@ -1094,6 +1114,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       raw: true,
       backup: dbDir !== undefined,
       pricing: true,
+      orgDuplicates: true,
     },
   })
 
@@ -1179,6 +1200,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
     ...(options.discoveryPost === undefined ? {} : { post: options.discoveryPost }),
     ...(options.discoveryHello === undefined ? {} : { helloFetch: options.discoveryHello }),
+  })
+
+  // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——
+  // 它要读同一份职责层（品牌 / 产品线 / 分配），并往同一条审批总线上建 `join_mapping`。
+  const joinAssembly = createJoin({
+    clock,
+    workspace_id: workspace.id,
+    roles,
+    approvals,
+    appendEvent,
+    connect: connections.connect,
+    ...(dbDir === undefined ? {} : { dbDir }),
   })
 
   // WP36 离职编排（40 §1.2）：装在 org 之后——它要撤分配、真转事项、动个人层与个人记忆。
@@ -1393,6 +1426,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     org: org.port,
     // WP51（46）：首次设置向导、同事发现、邀请码与申请加入
     onboarding: onboarding.port,
+    join: joinAssembly.port,
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
     secretary: secretary.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
@@ -1579,6 +1613,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modelSettings,
     org,
     onboarding,
+    join: joinAssembly,
+    orgDuplicates,
     secretary,
     offboard,
     secrets,
@@ -1656,6 +1692,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await devMcp?.close()
       org.close()
       onboarding.close()
+      joinAssembly.close()
+      orgDuplicates.close()
       offboard.close()
       secrets.close()
       txnStore?.close()

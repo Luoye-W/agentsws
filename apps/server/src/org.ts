@@ -29,13 +29,13 @@ import type {
   MemberView,
   OrgActor,
   OrgChangeReceipt,
+  OrgDuplicateQuery,
   OrgPort,
   PolicyPatchInput,
   PositionInput,
   PositionView,
   ProductLineInput,
   ProductLineView,
-  RangeGroupInput,
   RangeGroupView,
   RoleDetailView,
   RolePatchInput,
@@ -43,6 +43,13 @@ import type {
   UpdateAssignInput,
   WorkspacePolicyView,
 } from '@agentsws/api'
+import {
+  deriveStoreRanges,
+  findOrgSimilar,
+  type OrgCandidate,
+  type OrgExisting,
+  platformOfRange,
+} from '@agentsws/catalog'
 import type {
   ApprovalBus,
   ApprovalItem,
@@ -82,10 +89,24 @@ interface StoredPosition extends Position {
 interface PendingChange {
   id: string
   approval_id: string
-  kind: 'role' | 'policy'
-  /** kind=role 时是改完的整份职责定义；kind=policy 时是改完的整份策略层。 */
+  /** 45 H5 加了 `range_group` / `product_line`：成员改不了组织结构，只能提议。 */
+  kind: 'role' | 'policy' | 'range_group' | 'product_line'
+  /**
+   * kind=role 时是改完的整份职责定义；kind=policy 时是改完的整份策略层；
+   * 两种范围对象时是一条 {@link PendingRangeChange}（只带真正要改的那几格）。
+   */
   doc: string
   status: 'pending' | 'applied' | 'dropped'
+}
+
+/** 45 H5：一条批了才落地的「改品牌 / 改产品线」。 */
+interface PendingRangeChange {
+  /** 落在**真源**那一条上（提议时给的可能是被取代的那份别名）。 */
+  id: string
+  name?: string
+  members?: RangeRef[]
+  parent?: RangeRef
+  rule?: ProductLineRule
 }
 
 interface OrgBackend {
@@ -249,6 +270,12 @@ export interface OrgAssembly {
 const ORG_ERROR = (code: 'not_found' | 'conflict' | 'invalid_input' | 'forbidden', msg: string) =>
   new RoleError(code, msg)
 
+/**
+ * 45 H5「提议修改」那句理由的最短长度。与 40 §5 E4 的"仍新建"同一个口径：
+ * 一句话说不清的改动不该走这条路，owner 是照这句话点头的。
+ */
+export const MIN_PROPOSAL_REASON = 8
+
 const APPROVED = new Set(['approved', 'approved_edited', 'auto_approved', 'applying', 'applied'])
 const DEAD = new Set(['rejected', 'withdrawn', 'expired', 'superseded', 'blocked'])
 
@@ -324,6 +351,34 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       emit('policy_change.applied', 'system', { target: 'role', role_id: role.id })
       return
     }
+    // 45 H5：批准之后，成员提的那条改动才真的落到公司那份上
+    if (row.kind === 'range_group' || row.kind === 'product_line') {
+      const change = JSON.parse(row.doc) as PendingRangeChange
+      if (row.kind === 'range_group') {
+        roles.rangeGroups.update(change.id, {
+          ...(change.name === undefined ? {} : { name: change.name }),
+          ...(change.members === undefined ? {} : { members: change.members }),
+        })
+        emit('range_group.updated', 'system', {
+          range_group_id: change.id,
+          from_proposal: true,
+          ...(change.name === undefined ? {} : { name: change.name }),
+        })
+      } else {
+        roles.productLines.update(change.id, {
+          ...(change.name === undefined ? {} : { name: change.name }),
+          ...(change.parent === undefined ? {} : { parent: change.parent }),
+          ...(change.rule === undefined ? {} : { rule: change.rule }),
+        })
+        emit('product_line.updated', 'system', {
+          product_line_id: change.id,
+          from_proposal: true,
+          ...(change.name === undefined ? {} : { name: change.name }),
+        })
+      }
+      emit('policy_change.applied', 'system', { target: row.kind, object_id: change.id })
+      return
+    }
     const policy = JSON.parse(row.doc) as WorkspacePolicy
     roles.policies.set(policy)
     emit('policy_change.applied', 'system', { target: 'workspace_policy' })
@@ -355,11 +410,11 @@ export function createOrg(options: OrgOptions): OrgAssembly {
   const propose = async (
     actor: OrgActor,
     input: {
-      kind: 'role' | 'policy'
+      kind: PendingChange['kind']
       doc: string
       title: string
       summary: string
-      target: 'role' | 'workspace_policy'
+      target: 'role' | 'workspace_policy' | 'range_group' | 'product_line'
       before: unknown
       after: unknown
       affected: string[]
@@ -500,16 +555,20 @@ export function createOrg(options: OrgOptions): OrgAssembly {
 
   // ── 44 品牌与产品线的视图 ─────────────────────────────────────────
 
-  const rangeGroupView = (g: RangeGroup): RangeGroupView => ({
+  const rangeGroupView = (g: RangeGroup, alias_of?: string): RangeGroupView => ({
     id: g.id,
     name: g.name,
     members: [...g.members],
     created_at: g.created_at,
     updated_at: g.updated_at,
     holders: roles.rangeGroups.assignments(g.id).length,
+    // 45 H3：被取代的那一份只能看——改的是公司那条
+    ...(g.superseded_by === undefined ? {} : { superseded_by: g.superseded_by, readonly: true }),
+    ...(g.origin === undefined ? {} : { origin: { ...g.origin } }),
+    ...(alias_of === undefined || alias_of === g.id ? {} : { alias_of }),
   })
 
-  const productLineView = (l: ProductLine): ProductLineView => ({
+  const productLineView = (l: ProductLine, alias_of?: string): ProductLineView => ({
     id: l.id,
     name: l.name,
     parent: { ...l.parent },
@@ -517,6 +576,9 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     created_at: l.created_at,
     updated_at: l.updated_at,
     holders: roles.productLines.assignments(l.id).length,
+    ...(l.superseded_by === undefined ? {} : { superseded_by: l.superseded_by, readonly: true }),
+    ...(l.origin === undefined ? {} : { origin: { ...l.origin } }),
+    ...(alias_of === undefined || alias_of === l.id ? {} : { alias_of }),
     // 19 §3：这条判据交得出 `query:` 吗（界面上说"上游先切一刀"还是"拉回来本地切"）
     pushdown: shopifyLineQuery(l.rule) !== undefined,
   })
@@ -737,6 +799,67 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       )
     }
     return created
+  }
+
+  // ── 45 H4 建之前先查 ──────────────────────────────────────────────
+
+  /** 问的那一条翻成 catalog 的判定形状（三类各填各的那几格）。 */
+  const candidateOf = (query: OrgDuplicateQuery): OrgCandidate => {
+    if (query.kind === 'range_group')
+      return { kind: 'range_group', name: query.name, members: query.members ?? [] }
+    if (query.kind === 'product_line') {
+      if (query.parent === undefined || query.rule === undefined)
+        throw ORG_ERROR('invalid_input', '查产品线要给"切在哪里面"与"按什么切"')
+      return {
+        kind: 'product_line',
+        name: query.name,
+        parent: query.parent,
+        rule: cleanRule(query.rule),
+      }
+    }
+    const external_id = query.external_id ?? query.name
+    const platform = query.platform ?? platformOfRange({ kind: 'store', id: external_id })
+    return { kind: 'store_range', name: query.name, platform, external_id }
+  }
+
+  /** 公司这边同类的东西（被取代的那些不算——它们是别名，不是第二份）。 */
+  const existingOrgObjects = (kind: OrgDuplicateQuery['kind']): OrgExisting[] => {
+    const groups = roles.rangeGroups.list(workspace_id).filter((g) => g.superseded_by === undefined)
+    const lines = roles.productLines.list(workspace_id).filter((l) => l.superseded_by === undefined)
+    if (kind === 'range_group')
+      return groups.map((g) => ({
+        kind: 'range_group' as const,
+        id: g.id,
+        name: g.name,
+        members: g.members,
+        holders: roles.rangeGroups.assignments(g.id).length,
+        ...(g.created_by === undefined ? {} : { created_by: g.created_by }),
+      }))
+    if (kind === 'product_line')
+      return lines.map((l) => ({
+        kind: 'product_line' as const,
+        id: l.id,
+        name: l.name,
+        parent: l.parent,
+        rule: l.rule,
+        holders: roles.productLines.assignments(l.id).length,
+        ...(l.created_by === undefined ? {} : { created_by: l.created_by }),
+      }))
+    const live = roles.assignments
+      .listByWorkspace(workspace_id, {})
+      .filter((a) => a.revoked_at === undefined)
+    return deriveStoreRanges({
+      assignment_ranges: live.flatMap((a) => a.ranges),
+      range_groups: groups,
+      product_lines: lines,
+    }).map((s) => ({
+      kind: 'store_range' as const,
+      id: s.range.id,
+      name: s.name,
+      platform: s.platform,
+      external_id: s.external_id,
+      holders: live.filter((a) => a.ranges.some((r) => r.id === s.range.id)).length,
+    }))
   }
 
   // ── 端口 ───────────────────────────────────────────────────────────
@@ -1093,7 +1216,18 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     // 的 `policy_change` 管的是后者）。留痕靠 `range_group.*` / `product_line.*`
     // 两类事件，加上成员变动时每条受影响分配一条 `assignment.range_expanded`（44 G5）。
     rangeGroups(_actor) {
-      return Promise.resolve(roles.rangeGroups.list(workspace_id).map(rangeGroupView))
+      return Promise.resolve(roles.rangeGroups.list(workspace_id).map((g) => rangeGroupView(g)))
+    },
+
+    /**
+     * 45 H3 别名解析的**读**那一侧：打开一条被并进公司的品牌，看到的是公司那份。
+     *
+     * 回的是真源那一条（`alias_of` 记着"你点进来的是哪一条"），`readonly` 让界面
+     * 把"改"换成"提议修改"。链断了或成环就停在走得到的最后一条（读路径不该打不开）。
+     */
+    rangeGroup(_actor, id) {
+      const found = roles.rangeGroups.resolve(id)
+      return Promise.resolve(found === undefined ? undefined : rangeGroupView(found, id))
     },
 
     createRangeGroup(actor, input) {
@@ -1101,11 +1235,19 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         workspace_id,
         name: input.name,
         members: input.members,
+        created_by: actor.person_id,
       })
       emit('range_group.created', actor.person_id, {
         range_group_id: created.id,
         name: created.name,
         members: created.members.length,
+        // 45 H4：查到像的还是建了的，那句为什么进日志——下次谁查到这一对看得见
+        ...(input.duplicate_ack === undefined
+          ? {}
+          : {
+              duplicate_reason: input.duplicate_ack.reason,
+              duplicate_of: input.duplicate_ack.similar_to,
+            }),
       })
       return Promise.resolve(rangeGroupView(created))
     },
@@ -1134,7 +1276,13 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     },
 
     productLines(_actor) {
-      return Promise.resolve(roles.productLines.list(workspace_id).map(productLineView))
+      return Promise.resolve(roles.productLines.list(workspace_id).map((l) => productLineView(l)))
+    },
+
+    /** 45 H3 别名解析（同 {@link OrgPort.rangeGroup}，产品线那一份）。 */
+    productLine(_actor, id) {
+      const found = roles.productLines.resolve(id)
+      return Promise.resolve(found === undefined ? undefined : productLineView(found, id))
     },
 
     createProductLine(actor, input) {
@@ -1143,12 +1291,19 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         name: input.name,
         parent: input.parent,
         rule: cleanRule(input.rule),
+        created_by: actor.person_id,
       })
       emit('product_line.created', actor.person_id, {
         product_line_id: created.id,
         name: created.name,
         parent: created.parent,
         platform: created.rule.platform,
+        ...(input.duplicate_ack === undefined
+          ? {}
+          : {
+              duplicate_reason: input.duplicate_ack.reason,
+              duplicate_of: input.duplicate_ack.similar_to,
+            }),
       })
       return Promise.resolve(productLineView(created))
     },
@@ -1177,6 +1332,81 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       roles.productLines.delete(id)
       emit('product_line.deleted', actor.person_id, { product_line_id: id, name: found.name })
       return Promise.resolve()
+    },
+
+    /**
+     * 45 H4「建之前先查」：查同唯一键或相似的三类组织对象。**只读，不改任何东西**。
+     *
+     * 公司这边的"店铺 / 平台账号范围"是**推**出来的（没有店铺表）：岗位范围、
+     * 品牌成员、产品线归属里出现过的那些 id 就是它——与 Join 那条路用同一个
+     * `deriveStoreRanges`，不然同一家店在两条路上会长出两把不同的钥匙。
+     */
+    async checkDuplicate(_actor, query) {
+      await reconcile()
+      const hits = findOrgSimilar(
+        candidateOf(query),
+        existingOrgObjects(query.kind),
+        query.exclude_id === undefined ? {} : { exclude_id: query.exclude_id },
+      )
+      return Promise.all(
+        hits.map(async (h) => ({
+          ...h,
+          ...(h.created_by === undefined
+            ? {}
+            : { created_by_name: await personName(h.created_by) }),
+        })),
+      )
+    },
+
+    /**
+     * 45 H5 / H3：**提议修改**一条品牌 / 产品线。
+     *
+     * 两种人走这条路：公司里的普通成员（组织结构对他只读，44 里范围直接决定
+     * 谁看得到什么，让他随手改等于让他自己给自己扩权限），以及打开了被取代的
+     * 那份个人对象的本人（那一份是别名，改的是公司那条）。
+     *
+     * 给的 id 是别名时，卡落在**真源**那一条上——不然批下来会去改一份没人读的副本。
+     */
+    async proposeRangeChange(actor, input) {
+      await reconcile()
+      const isGroup = input.target === 'range_group'
+      const target = isGroup
+        ? roles.rangeGroups.resolve(input.id)
+        : roles.productLines.resolve(input.id)
+      if (target === undefined || target.workspace_id !== workspace_id)
+        throw ORG_ERROR('not_found', `没有这一条：${input.id}`)
+      const reason = input.reason.trim()
+      if (reason.length < MIN_PROPOSAL_REASON)
+        throw ORG_ERROR(
+          'invalid_input',
+          `提议修改要写一句为什么（至少 ${MIN_PROPOSAL_REASON} 个字）——owner 是照这句话点头的`,
+        )
+      const group = isGroup ? (target as RangeGroup) : undefined
+      const line = isGroup ? undefined : (target as ProductLine)
+      const change: PendingRangeChange = {
+        id: target.id,
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.members === undefined || !isGroup ? {} : { members: input.members }),
+        ...(input.parent === undefined || isGroup ? {} : { parent: input.parent }),
+        ...(input.rule === undefined || isGroup ? {} : { rule: cleanRule(input.rule) }),
+      }
+      const what = isGroup ? '品牌' : '产品线'
+      const alias = target.id === input.id ? '' : `（他点开的是自己那份 ${input.id}）`
+      return propose(actor, {
+        kind: input.target,
+        doc: JSON.stringify(change),
+        target: input.target,
+        title: `${actor.person_id} 想改${what}「${target.name}」`,
+        summary: `${reason}${alias}。批了才改；不批就维持现状。`,
+        before: isGroup
+          ? { name: group?.name, members: group?.members }
+          : { name: line?.name, parent: line?.parent, rule: line?.rule },
+        after: change,
+        affected: (isGroup
+          ? roles.rangeGroups.assignments(target.id)
+          : roles.productLines.assignments(target.id)
+        ).map((a) => a.id),
+      })
     },
 
     async rangeOptions(_actor) {

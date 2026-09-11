@@ -165,6 +165,36 @@ const zh: Table = {
   'org.tab.members': '成员',
   'org.tab.roles': '职责',
   'org.tab.ranges': '品牌与产品线',
+  'org.tab.join': '并进来',
+  'org.join.empty':
+    '现在没有等着并进来的工作区。有人要把自己的个人工作区并进公司时，这里会出现一张对照表。',
+  'org.join.subtitle':
+    '一次看完、一次签字。合并之后公司这份是唯一能改的那份，他原来那份变成指向它的别名；哪天他退出公司，别名断开、他那份恢复能改。',
+  'org.join.counts':
+    '一样 {same} 条（直接合）、像但不确定 {similar} 条（要你选）、公司还没有 {missing} 条（新建）。',
+  'org.join.kind.range_group': '品牌',
+  'org.join.kind.product_line': '产品线',
+  'org.join.kind.store_range': '店铺 / 平台账号',
+  'org.join.adopt_all': '这一类全部采纳',
+  'org.join.verdict.same': '一样',
+  'org.join.verdict.similar': '像，但不确定',
+  'org.join.verdict.missing': '公司还没有',
+  'org.join.option.merge_union': '同一个，取并集',
+  'org.join.option.adopt_company': '以公司那条为准',
+  'org.join.option.keep_both': '保留两条',
+  'org.join.option.create_in_company': '在公司新建',
+  'org.join.option.skip': '这条不带进公司',
+  'org.join.side.mine': '他的：{summary}',
+  'org.join.side.theirs': '公司的「{name}」：{summary}（{n} 个岗位挂着）',
+  'org.join.side.none': '公司这边还没有对得上的',
+  'org.join.name_choice': '合成一条之后叫：',
+  'org.join.connections': '他的连接',
+  'org.join.connections.hint':
+    '凭据不跟着人走。要把某条连接交给公司，得他自己在这里打开开关——默认一条都不交。',
+  'org.join.connections.same_service': '公司里已经有同一类连接了，交过来要选主。',
+  'org.join.connections.on': '交给公司',
+  'org.join.connections.off': '不交',
+  'org.join.complete': '按上面这些并进来',
   'org.ranges.brands': '品牌',
   'org.ranges.brands.hint':
     '品牌不是一种新的数据切法，是一组店铺 / 账号 / 市场的名字。挂了品牌的岗位，品牌里新开一家店就自动看得到——这件事会记一条事件，所有者也会收到一张卡。',
@@ -210,6 +240,23 @@ const zh: Table = {
   'org.ranges.pushdown.no': '拉回来本地切',
   'org.ranges.pushdown.hint':
     'Shopify 的标签 / 供应商 / 商品类型 / 集合这四个字段，能直接交给上游过滤，省一半流量；ASIN 与手填清单交不出去，只能拉回来按订单行项目自己切。',
+  // ── WP50 45 H3 / H5：并进公司之后只能看，改动走提议卡 ─────────────────
+  'org.ranges.readonly': '只能看',
+  'org.ranges.readonly.hint':
+    '这一条已经并进公司那份了，公司那份才是真源。想改就提一张卡给老板——批了改的是公司那条，不是这里再存一份。',
+  'org.ranges.origin': '{who} 从他自己的工作区带进来的',
+  'org.ranges.propose': '提议修改',
+  'org.ranges.propose.reason': '想改成什么样、为什么（至少 8 个字，老板照这句话点头）',
+  'org.ranges.propose.placeholder': '店 D 也是这个品牌的，想加进来',
+  'org.ranges.propose.submit': '提上去',
+  'org.ranges.propose.done': '提上去了，等老板点头。',
+  // ── WP50 45 H4：建之前先查 ───────────────────────────────────────────
+  'org.ranges.dupe.hit': '已有：{name}（{who} 建，{n} 个岗位挂着）',
+  'org.ranges.dupe.unknown': '不知道谁',
+  'org.ranges.dupe.reuse': '直接用它',
+  'org.ranges.dupe.reused': '好，用「{name}」那一条——不再建第二份。',
+  'org.ranges.dupe.still': '我这个不一样，仍新建',
+  'org.ranges.dupe.reason': '写一句为什么不复用（至少 8 个字，会进日志，下次别人查得到）',
   // ── WP37 工具箱与查重（40 §2）────────────────────────────────────────
   'org.tab.toolbox': '工具箱',
   'toolbox.subtitle': '公司里已经做出来的自动化都在这儿。',
@@ -1136,6 +1183,37 @@ const en: Table = {
   'org.tab.members': 'People',
   'org.tab.roles': 'Duties',
   'org.tab.ranges': 'Brands & product lines',
+  'org.tab.join': 'Joining in',
+  'org.join.empty':
+    'No workspace is waiting to join. When somebody brings their personal workspace into the company, the comparison shows up here.',
+  'org.join.subtitle':
+    'Review once, sign once. After merging, the company copy is the only editable one and theirs becomes an alias pointing at it; if they leave the company the alias is broken and their copy becomes editable again.',
+  'org.join.counts':
+    '{same} identical (merge as-is), {similar} similar (your call), {missing} the company does not have yet (create).',
+  'org.join.kind.range_group': 'Brands',
+  'org.join.kind.product_line': 'Product lines',
+  'org.join.kind.store_range': 'Stores / platform accounts',
+  'org.join.adopt_all': 'Accept all in this group',
+  'org.join.verdict.same': 'Identical',
+  'org.join.verdict.similar': 'Similar, not certain',
+  'org.join.verdict.missing': 'Company does not have it',
+  'org.join.option.merge_union': 'Same thing — take the union',
+  'org.join.option.adopt_company': 'Use the company one',
+  'org.join.option.keep_both': 'Keep both',
+  'org.join.option.create_in_company': 'Create in the company',
+  'org.join.option.skip': 'Do not bring this one',
+  'org.join.side.mine': 'Theirs: {summary}',
+  'org.join.side.theirs': 'Company "{name}": {summary} ({n} positions hold it)',
+  'org.join.side.none': 'Nothing matching on the company side',
+  'org.join.name_choice': 'After merging, call it:',
+  'org.join.connections': 'Their connections',
+  'org.join.connections.hint':
+    'Credentials do not follow the person. Handing a connection to the company takes an explicit switch here — none are handed over by default.',
+  'org.join.connections.same_service':
+    'The company already has a connection of this kind; you will need to pick a primary.',
+  'org.join.connections.on': 'Hand to company',
+  'org.join.connections.off': 'Keep personal',
+  'org.join.complete': 'Join with these choices',
   'org.ranges.brands': 'Brands',
   'org.ranges.brands.hint':
     'A brand is not a new way of slicing data — it is a name for a group of stores / accounts / markets. A position that holds a brand automatically picks up any store later added to it; that change is logged and the owner gets a card.',
@@ -1184,6 +1262,25 @@ const en: Table = {
   'org.ranges.pushdown.no': 'filtered locally after fetching',
   'org.ranges.pushdown.hint':
     'Shopify can filter on tags / vendors / product types / collections directly, which halves the traffic. ASIN lists and manual lists cannot be pushed upstream, so orders are fetched and sliced by line item locally.',
+  // ── WP50 45 H3 / H5 ──────────────────────────────────────────────────
+  'org.ranges.readonly': 'Read-only',
+  'org.ranges.readonly.hint':
+    'This one has been merged into the company copy, and the company copy is the source of truth. To change it, send a card to the owner — approving it changes the company copy, not a second copy here.',
+  'org.ranges.origin': 'Brought in by {who} from their own workspace',
+  'org.ranges.propose': 'Propose a change',
+  'org.ranges.propose.reason':
+    'What you want changed and why (at least 8 characters — the owner decides on this sentence)',
+  'org.ranges.propose.placeholder': 'Store D belongs to this brand too; please add it',
+  'org.ranges.propose.submit': 'Send it up',
+  'org.ranges.propose.done': 'Sent. Waiting for the owner.',
+  // ── WP50 45 H4 ───────────────────────────────────────────────────────
+  'org.ranges.dupe.hit': 'Already exists: {name} (created by {who}, {n} position(s))',
+  'org.ranges.dupe.unknown': 'unknown',
+  'org.ranges.dupe.reuse': 'Just use it',
+  'org.ranges.dupe.reused': 'Using "{name}" — no second copy.',
+  'org.ranges.dupe.still': 'Mine is different, create anyway',
+  'org.ranges.dupe.reason':
+    'Say why you are not reusing it (at least 8 characters; it goes into the log so others can find it)',
   // ── WP37 toolbox & dedupe (40 §2) ─────────────────────────────────────
   'org.tab.toolbox': 'Toolbox',
   'toolbox.subtitle': 'Everything your company already automated.',

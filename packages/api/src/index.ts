@@ -124,6 +124,13 @@ export {
 } from './routes/events.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
+export {
+  type JoinActor,
+  type JoinDecisionInput,
+  type JoinImportReceipt,
+  type JoinPort,
+  joinRoutes,
+} from './routes/join.js'
 export type {
   MeetingIngestInput,
   MeetingProcessOutcome,
@@ -191,6 +198,9 @@ export type {
   OffboardStepView,
   OrgActor,
   OrgChangeReceipt,
+  OrgDuplicateAckInput,
+  OrgDuplicateHit,
+  OrgDuplicateQuery,
   OrgPort,
   PersonalLayerPolicy,
   PolicyPatchInput,
@@ -199,6 +209,7 @@ export type {
   ProductLineInput,
   ProductLineRuleInput,
   ProductLineView,
+  ProposeRangeChangeInput,
   RangeGroupInput,
   RangeGroupView,
   RoleDetailView,
@@ -207,7 +218,7 @@ export type {
   UpdateAssignInput,
   WorkspacePolicyView,
 } from './routes/org.js'
-export { orgRoutes, positionName } from './routes/org.js'
+export { MIN_ORG_DUPLICATE_REASON, orgRoutes, positionName } from './routes/org.js'
 export {
   type PrivacyEraseStepView,
   type PrivacyEraseView,

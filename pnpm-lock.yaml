@@ -647,6 +647,9 @@ importers:
 
   packages/simulation:
     dependencies:
+      '@agentsws/catalog':
+        specifier: workspace:*
+        version: link:../catalog
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts

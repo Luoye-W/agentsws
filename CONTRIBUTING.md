@@ -125,3 +125,7 @@ pnpm -s simulate --tier fast --pack packs/dtc-3c-3p --scenario 'scenarios/**/*.y
 ## 8. 安全问题
 
 **不要开公开 issue。** 走 [`SECURITY.md`](SECURITY.md) 里的私密渠道。
+
+## 后台模块发事件：自起 trace
+
+没有请求上下文的模块（定时刷新、mDNS 回调、夜间扫描、邀请码核销）发事件时 `correlation.trace_id` 不能留空——内核会整条顶回，症状常常很远（活数据源整轮失败、局域网只能单向看见、保存表单变 400）。照 `apps/server/src/live-data.ts` 的做法：模块自己生成 `trc_<模块>_<时间>_<序号>`，网关在请求里调用时会覆盖成请求的 trace。回调里一律 try/catch，别让异常爬回调用方。

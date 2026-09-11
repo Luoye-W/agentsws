@@ -449,6 +449,92 @@ async function seedWorkModel(options: {
   work.linkPlanApproval(plan.id, card.id)
 }
 
+/**
+ * 45（WP50）：让「并进来」与「建之前先查」这两件事在 demo 里看得见。
+ *
+ * 两步：公司先有一个「品牌B」（店主建的，运营岗位挂着），然后把陈晓个人工作区的包
+ * 导进来——「品牌乙」（主店 + 他自己那家）与厨房线。导入**不改任何东西**，只出一张
+ * `join_mapping` 卡：公司页「并进来」Tab 上那张三类分组的对照表就是它。
+ *
+ * 顺带也让查重有东西可查：公司里已经有「品牌B」，新建表单里再打一遍这个名字就会命中。
+ */
+async function seedJoin(world: World, server: Server): Promise<void> {
+  const at = world.clock.now()
+  world.roles.rangeGroups.create({
+    id: 'rg_brand_b',
+    workspace_id: world.workspace_id,
+    name: '品牌B',
+    members: [
+      { kind: 'store', id: 'store_main' },
+      { kind: 'store', id: 'store_eu' },
+    ],
+    created_by: world.owner,
+  })
+  const solo = 'ws_chen'
+  const mine = 'p_chen'
+  await server.join.port.import(
+    {
+      workspace_id: world.workspace_id,
+      person_id: world.owner,
+      assignment_id: server.bootstrap.ownerAssignment.id,
+      role_id: server.bootstrap.ownerAssignment.role_id,
+    },
+    {
+      schema_version: 1,
+      workspace_id: solo,
+      person_id: mine,
+      exported_at: at,
+      range_groups: [
+        {
+          id: 'rg_chen_b',
+          workspace_id: solo,
+          name: '品牌乙',
+          members: [
+            { kind: 'store', id: 'store_main' },
+            { kind: 'store', id: 'store_chen' },
+          ],
+          created_at: at,
+          updated_at: at,
+        },
+      ],
+      product_lines: [
+        {
+          id: 'pl_chen_kitchen',
+          workspace_id: solo,
+          name: '厨房线',
+          parent: { kind: 'store', id: 'store_main' },
+          rule: { platform: 'shopify', tags: ['kitchen'] },
+          created_at: at,
+          updated_at: at,
+        },
+      ],
+      store_ranges: [
+        {
+          range: { kind: 'store', id: 'store_chen' },
+          platform: 'shopify',
+          external_id: 'store_chen',
+          name: 'store_chen',
+        },
+        {
+          range: { kind: 'store', id: 'store_main' },
+          platform: 'shopify',
+          external_id: 'store_main',
+          name: 'store_main',
+        },
+      ],
+      // 45 H2 第三条：凭据不跟着走，开关默认关着
+      connections: [
+        {
+          connection_id: 'conn_chen_shopify',
+          service: 'shopify_admin',
+          label: 'Shopify · 陈晓自己那家店',
+          transfer: false,
+        },
+      ],
+    },
+  )
+}
+
 export async function createDemo(options: DemoOptions): Promise<Demo> {
   const root = options.root
   const pack = loadPack(fromRoot(root, DEMO_PACK))
@@ -558,6 +644,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       }
     }
   }
+
+  // 45（WP50）：公司页「并进来」Tab 与新建品牌时的查重提示都要有东西可看
+  await seedJoin(world, server)
 
   await seedWorkModel({
     work: server.work,

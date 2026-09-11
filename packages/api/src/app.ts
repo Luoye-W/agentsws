@@ -22,6 +22,7 @@ import { eventRoutes } from './routes/events.js'
 import { haltRoutes } from './routes/halt.js'
 import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
+import { joinRoutes } from './routes/join.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
 import { meetingRoutes } from './routes/meetings.js'
 import { modelRoutes } from './routes/models.js'
@@ -95,6 +96,8 @@ export function collectRoutes(): Route[] {
      * 是 WP28 的**定向邮件邀请**，与这里的**人类可读码**是两件事，路径也不同）。
      */
     ...onboardingRoutes(),
+    // WP50 Join 向导（20 §4–§5、45）：`/v1/join/*` 独立路径，与制度面不撞
+    ...joinRoutes(),
     ...eventRoutes(),
     // WP33 WebSocket 事件流：`/v1/ws` 的 HTTP 面（真正的升级由宿主在 http.Server 上做）
     ...wsRoutes(),
