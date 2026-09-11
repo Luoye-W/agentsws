@@ -1,24 +1,51 @@
 /**
- * 第三方品牌图标（WP45）。
+ * 第三方品牌图标（WP45 起，WP48 改来源）。
  *
  * Luoye 看连接页截图提的：六张卡都戴同一个插头，认不出哪张是哪家。这里按 provider id
  * 给每家换上它自己的标志。
  *
- * 三条纪律（同步写进 `docs/36` §8，以后加新家照这个来）：
+ * **WP48 改了第一条**：Luoye 看完 WP45 说「有几个已经不是这些平台现在在用的图标了」。
+ * 现在的顺序是——
  *
- * 1. **来源**：路径数据一律抄自 [Simple Icons](https://simpleicons.org)（CC0-1.0，
- *    v16.30.0），每条下面注明 slug、品牌色与抄写日期；抄进来之后**一个点都不改**
- *    （不改色、不拉伸、不加描边阴影）——商标只能原样用来指代它所标识的那家服务。
- * 2. **只用来标识**：图标永远跟着一行品牌文字（卡标题 / 行标题）出现，自己 `aria-hidden`，
- *    读屏念到的是文字不是图标；尺寸固定 20px 一档，不当装饰画。
- * 3. **配色**：彩色品牌图标用品牌色（`fill` 写死 hex），深浅色主题下都是那个色；
- *    没有品牌图标可用的（首字母徽标、通用邮箱）走 `currentColor`，跟着主题走。
+ * 1. **先用官网当前在用的那张图**：`../assets/brand/<provider>.png|svg`，由
+ *    `scripts/fetch-brand-icons.mjs`（`pnpm icons:fetch`，**手动跑**）在构建期抓一次
+ *    提进仓库，来源 URL / 抓取日期 / 尺寸 / sha256 都记在同目录的 `MANIFEST.json` 里。
+ *    **运行时不联网**——工作台本地优先，用户打开连接页时不该有请求偷偷发去 shopify.com。
+ * 2. **抓不到就退回 Simple Icons 的矢量图**（CC0-1.0，v16.30.0，抄进来一个点都不改）。
+ *    眼下退回的只有 Meta：官网只给 32px 的 ICO，business.facebook.com 的也才 60px，
+ *    两个都进不了 `<img>`——好在 Meta 那个无限符号本来也没变过。
+ * 3. 都没有就落 lucide 的 `Plug`。
  *
- * Simple Icons 里**没有 OpenAI**（品牌方要求下架），所以「OpenAI 兼容」那张模型卡
- * 用首字母圆形徽标——它本来指的也是"任何 OpenAI 兼容网关"，不是 OpenAI 这家公司。
+ * 商标三条不变（同步写在 `docs/36` §8，以后加新家照这个来）：
+ *
+ * - **只用来标识它自己**：图标永远跟着一行品牌文字（卡标题 / 行标题）出现，自己
+ *   `aria-hidden`，读屏念到的是文字不是图标；不当插画、背景、按钮底纹。
+ * - **原样，不改**：不改色、不描边、不加阴影渐变、不拉伸变形（官方图非正方的用
+ *   `object-fit: contain` 按原比例放进方格，不是拉满）；圆角由外层决定，图本身不裁。
+ * - **配色**：官方图与彩色矢量图都是官方那个色，深浅色主题下都不变；只有**不属于
+ *   任何一家的**（首字母徽标、通用邮箱）走 `currentColor` 跟着主题。
+ *
+ * 「OpenAI 兼容」那张模型卡用中性的首字母徽标——它指的是"任何 OpenAI 兼容网关"
+ * （Moonshot / 通义 / 智谱 / 本地 Ollama 都从这张卡进来），不是 OpenAI 这家公司。
  */
 
 import { Mail, Plug } from 'lucide-react'
+
+/**
+ * 抓回来入库的官方图：`assets/brand/` 里有什么就认什么，文件名（去掉后缀）就是
+ * provider id。Vite 在构建期把它们打进产物并返回 URL，运行时不会有任何外发请求。
+ *
+ * 这里刻意**不写一份手抄的清单**——重抓一轮之后目录变了，组件自动跟着变，不会出现
+ * 「MANIFEST 里有、界面上没有」的偏差（`test/brand-icons.test.tsx` 拿 MANIFEST 对表）。
+ */
+const OFFICIAL: Record<string, string> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob('../assets/brand/*.{png,svg}', { eager: true, import: 'default' }) as Record<
+      string,
+      string
+    >,
+  ).map(([path, url]) => [path.replace(/^.*\//, '').replace(/\.(png|svg)$/, ''), url]),
+)
 
 /** 一个品牌图标：24×24 的 viewBox + 一条 path + 品牌色。 */
 interface BrandGlyph {
@@ -32,6 +59,9 @@ interface BrandGlyph {
 /**
  * 抄自 simple-icons v16.30.0（CC0-1.0），2026-09-11。
  * 每条 = `icons/<slug>.svg` 里那条 path，原样，未改动。
+ *
+ * WP48 之后这一层是**兜底**：`assets/brand/` 里有官方图的，用官方图；这里留着是为了
+ * 抓不到的那家（眼下是 Meta）以及断网 / 清空目录时界面不碎。
  */
 const GLYPHS = {
   shopify: {
@@ -81,6 +111,9 @@ type IconChoice =
  * id 从 `apps/server/src/catalog.ts`（连接目录）与 `packages/api/src/routes/models.ts`
  * 的 `ModelProviderKind`（模型卡）来。新增一家就在这里补一条，`brand-icons.test.tsx`
  * 会照着目录逐个核对。
+ *
+ * 这张表在 WP48 之后是**第二顺位**：`assets/brand/<id>.png|svg` 有文件就用那张官方图，
+ * 这里的矢量图只在没抓到时露面。
  */
 const ICONS: Record<string, IconChoice> = {
   // ── 连接目录 ────────────────────────────────────────────────────────
@@ -100,7 +133,12 @@ const ICONS: Record<string, IconChoice> = {
 
 /** 这个 id 有没有专属图标（`false` = 会落到通用插头）。 */
 export function hasBrandIcon(provider: string): boolean {
-  return provider in ICONS
+  return provider in OFFICIAL || provider in ICONS
+}
+
+/** 这个 id 用的是抓回来的官方图（`false` = 走矢量兜底或通用图标）。测试与排查用。 */
+export function hasOfficialIcon(provider: string): boolean {
+  return provider in OFFICIAL
 }
 
 /**
@@ -127,6 +165,21 @@ export function BrandIcon({
     className,
     'aria-hidden': true,
   } as const
+
+  // 官网自己现在在用的那张图（构建期抓回来的，见文件头）。非正方的图按原比例放进
+  // 方格里（`contain`），不拉伸——商标不能变形；圆角留给外层，这里不裁图。
+  const official = OFFICIAL[provider]
+  if (official !== undefined) {
+    return (
+      <img
+        {...common}
+        src={official}
+        alt=""
+        data-icon="official"
+        style={{ objectFit: 'contain' }}
+      />
+    )
+  }
 
   if (choice === undefined) {
     return <Plug {...common} data-icon="fallback" />

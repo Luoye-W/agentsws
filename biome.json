@@ -7,6 +7,7 @@
       "!.claude",
       "!**/dist",
       "!docs/assets",
+      "!**/src/assets/brand",
       "!**/*.dc.html",
       "!**/test/fixtures",
       "!pnpm-lock.yaml",
