@@ -12,6 +12,7 @@ import type {
   ChangeStatus,
   Clock,
   DataDomain,
+  EffectiveAction,
   EventEnvelope,
   EventId,
   FactCard,
@@ -326,6 +327,11 @@ export interface EffectiveConfigLike {
   ranges: RangeRef[]
   ready: boolean
   unassigned_range: boolean
+  /**
+   * 05 §4 解析完三层额度之后的写动作。**可选**：老的装配没给这一格也照常跑
+   * （`/v1/positions/:id/ontology` 会当成"这条岗位没有可提议的动作"）。
+   */
+  actions?: EffectiveAction[]
 }
 
 /** 31 §3.1：一次请求绑定一个 Assignment，判定用完整元组。 */

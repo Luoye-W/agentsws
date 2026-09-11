@@ -10,6 +10,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { DataMapPanel } from '@/components/data-map'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
@@ -21,7 +22,7 @@ import { ApiClientError, getOnboardingState, getPositions, setWorkspaceProfile }
 import { useApp } from '@/lib/app-context'
 
 export function SettingsPage({ identity }: { identity?: string }): React.ReactNode {
-  const { t, theme, toggleTheme, lang, setLang } = useApp()
+  const { t, theme, toggleTheme, lang, setLang, position } = useApp()
   const client = useQueryClient()
   const [saved, setSaved] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
@@ -126,6 +127,11 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
         </Card>
       )}
       {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
+      {/*
+        47 J1 数据地图：按**当前选中的那条岗位**裁剪（登记表是按岗位的，
+        不像模型 key 那样统一走所有者）。左栏还没选岗位时这一块不出。
+      */}
+      {position === null ? null : <DataMapPanel position={position} />}
     </div>
   )
 }
