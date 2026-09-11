@@ -1,6 +1,13 @@
 /** Assignment / WorkspacePolicy 的存储后端：内存默认，给了 dbPath 就用 SQLite（同步 API）。 */
 import { createRequire } from 'node:module'
-import type { Assignment, AssignmentId, WorkspaceId, WorkspacePolicy } from '@agentsws/contracts'
+import type {
+  Assignment,
+  AssignmentId,
+  ProductLine,
+  RangeGroup,
+  WorkspaceId,
+  WorkspacePolicy,
+} from '@agentsws/contracts'
 import type BetterSqlite3 from 'better-sqlite3'
 
 export interface AssignmentFilter {
@@ -17,6 +24,16 @@ export interface StoreBackend {
   countAssignments(): number
   putPolicy(policy: WorkspacePolicy): void
   getPolicy(workspaceId: WorkspaceId): WorkspacePolicy | undefined
+  /** 44 G1 范围组（品牌）。 */
+  putRangeGroup(group: RangeGroup): void
+  getRangeGroup(id: string): RangeGroup | undefined
+  listRangeGroups(workspaceId?: WorkspaceId): RangeGroup[]
+  deleteRangeGroup(id: string): void
+  /** 44 G2 产品线。 */
+  putProductLine(line: ProductLine): void
+  getProductLine(id: string): ProductLine | undefined
+  listProductLines(workspaceId?: WorkspaceId): ProductLine[]
+  deleteProductLine(id: string): void
   close(): void
 }
 
@@ -33,6 +50,8 @@ function matches(a: Assignment, f: AssignmentFilter): boolean {
 export function createMemoryBackend(): StoreBackend {
   const assignments = new Map<AssignmentId, Assignment>()
   const policies = new Map<WorkspaceId, WorkspacePolicy>()
+  const groups = new Map<string, RangeGroup>()
+  const lines = new Map<string, ProductLine>()
   return {
     putAssignment(assignment) {
       assignments.set(assignment.id, clone(assignment))
@@ -54,9 +73,43 @@ export function createMemoryBackend(): StoreBackend {
       const found = policies.get(workspaceId)
       return found ? clone(found) : undefined
     },
+    putRangeGroup(group) {
+      groups.set(group.id, clone(group))
+    },
+    getRangeGroup(id) {
+      const found = groups.get(id)
+      return found ? clone(found) : undefined
+    },
+    listRangeGroups(workspaceId) {
+      return [...groups.values()]
+        .filter((g) => workspaceId === undefined || g.workspace_id === workspaceId)
+        .map(clone)
+        .sort((a, b) => a.id.localeCompare(b.id))
+    },
+    deleteRangeGroup(id) {
+      groups.delete(id)
+    },
+    putProductLine(line) {
+      lines.set(line.id, clone(line))
+    },
+    getProductLine(id) {
+      const found = lines.get(id)
+      return found ? clone(found) : undefined
+    },
+    listProductLines(workspaceId) {
+      return [...lines.values()]
+        .filter((l) => workspaceId === undefined || l.workspace_id === workspaceId)
+        .map(clone)
+        .sort((a, b) => a.id.localeCompare(b.id))
+    },
+    deleteProductLine(id) {
+      lines.delete(id)
+    },
     close() {
       assignments.clear()
       policies.clear()
+      groups.clear()
+      lines.clear()
     },
   }
 }
@@ -76,6 +129,18 @@ CREATE TABLE IF NOT EXISTS workspace_policies (
   workspace_id TEXT PRIMARY KEY,
   doc TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS range_groups (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  doc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS range_groups_workspace ON range_groups(workspace_id);
+CREATE TABLE IF NOT EXISTS product_lines (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  doc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS product_lines_workspace ON product_lines(workspace_id);
 `
 
 /** 惰性 require：内存模式下不碰原生模块。 */
@@ -108,6 +173,36 @@ export function createSqliteBackend(dbPath: string): StoreBackend {
   const getPolicyStmt = db.prepare('SELECT doc FROM workspace_policies WHERE workspace_id = ?')
 
   const parse = (row: unknown): Assignment => JSON.parse((row as { doc: string }).doc) as Assignment
+
+  /** 44 G1/G2：范围组与产品线的两张表长得一样，SQL 也就长得一样。 */
+  const docTable = <T extends { id: string; workspace_id: string }>(table: string) => {
+    const put = db.prepare(
+      `INSERT INTO ${table} (id, workspace_id, doc) VALUES (@id, @workspace_id, @doc)
+       ON CONFLICT(id) DO UPDATE SET workspace_id = excluded.workspace_id, doc = excluded.doc`,
+    )
+    const one = db.prepare(`SELECT doc FROM ${table} WHERE id = ?`)
+    const all = db.prepare(`SELECT doc FROM ${table} ORDER BY id`)
+    const byWorkspace = db.prepare(`SELECT doc FROM ${table} WHERE workspace_id = ? ORDER BY id`)
+    const drop = db.prepare(`DELETE FROM ${table} WHERE id = ?`)
+    const read = (row: unknown): T => JSON.parse((row as { doc: string }).doc) as T
+    return {
+      put(doc: T): void {
+        put.run({ id: doc.id, workspace_id: doc.workspace_id, doc: JSON.stringify(doc) })
+      },
+      get(id: string): T | undefined {
+        const row = one.get(id)
+        return row ? read(row) : undefined
+      },
+      list(workspaceId?: string): T[] {
+        return (workspaceId === undefined ? all.all() : byWorkspace.all(workspaceId)).map(read)
+      },
+      remove(id: string): void {
+        drop.run(id)
+      },
+    }
+  }
+  const groups = docTable<RangeGroup>('range_groups')
+  const lines = docTable<ProductLine>('product_lines')
 
   return {
     putAssignment(assignment) {
@@ -155,6 +250,22 @@ export function createSqliteBackend(dbPath: string): StoreBackend {
     getPolicy(workspaceId) {
       const row = getPolicyStmt.get(workspaceId)
       return row ? (JSON.parse((row as { doc: string }).doc) as WorkspacePolicy) : undefined
+    },
+    putRangeGroup: (group) => {
+      groups.put(group)
+    },
+    getRangeGroup: (id) => groups.get(id),
+    listRangeGroups: (workspaceId) => groups.list(workspaceId),
+    deleteRangeGroup: (id) => {
+      groups.remove(id)
+    },
+    putProductLine: (line) => {
+      lines.put(line)
+    },
+    getProductLine: (id) => lines.get(id),
+    listProductLines: (workspaceId) => lines.list(workspaceId),
+    deleteProductLine: (id) => {
+      lines.remove(id)
     },
     close() {
       db.close()
