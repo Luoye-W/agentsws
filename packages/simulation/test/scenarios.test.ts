@@ -168,3 +168,45 @@ describe('pack 场景（26 §1 §4）', () => {
     expect(evidence.observations.filter((o) => o.category === 'write_external')).toHaveLength(0)
   })
 })
+
+describe('45 个人用 → 公司用：并进公司之后公司那份是真源', () => {
+  it('similar → owner 选取并集 → 店 B 进了公司品牌、个人那份变别名、他的岗位范围跟着走', async () => {
+    const { evidence } = await runPackScenario('org/solo-joins-company.yml')
+    const types = evidence.events.map((e) => e.type)
+
+    // 一次 Join 一张卡，而且是 owner 的（45 §4：任何合并都要人点头）
+    const card = evidence.approvals.filter((a) => a.kind === 'join_mapping')
+    expect(card).toHaveLength(1)
+    const counts = (card[0]?.payload as { counts?: Record<string, number> } | undefined)?.counts
+    // 品牌乙 vs 品牌B：名字不同、成员重合 50% → similar；厨房线与店 B 公司还没有；店 A 已经有
+    expect(counts).toEqual({ same: 1, similar: 1, missing: 2 })
+
+    // 对照在前，合并在后——卡不是事后补的
+    expect(types.indexOf('join.started')).toBeLessThan(types.indexOf('range_group.merged'))
+    expect(types.indexOf('range_group.merged')).toBeLessThan(types.indexOf('join.completed'))
+
+    const joined = evidence.events.find((e) => e.type === 'simulation.joined')
+    expect(joined?.payload).toMatchObject({ merged: 2, created: 2 })
+
+    // 45 H3 最后一句：别名解析真的落到了岗位上（不落，他的权限就停在一份没人读的副本上）
+    const resolved = evidence.events.filter((e) => e.type === 'range.alias_resolved')
+    expect(resolved.length).toBeGreaterThan(0)
+    const added = (rows: typeof evidence.events): string[] =>
+      rows.flatMap((e) => ((e.payload.added as { id: string }[]) ?? []).map((r) => r.id))
+    // 他自己那条岗位：挂的还是 `rg_chen_b`，但展开走别名，于是多看见公司的店 C
+    const viaAlias = evidence.events.filter(
+      (e) => e.type === 'assignment.range_expanded' && e.payload.reason === 'join_alias',
+    )
+    expect(viaAlias.length).toBeGreaterThan(0)
+    expect(added(viaAlias)).toContain('store_c')
+    // 反过来：公司品牌多了店 B，挂着它的老同事（李默）跟着看得见（44 G5，另一条路）
+    const viaGroup = evidence.events.filter(
+      (e) => e.type === 'assignment.range_expanded' && e.payload.reason !== 'join_alias',
+    )
+    expect(added(viaGroup)).toContain('store_b')
+
+    // 合并不动外部世界：一封信不发、一条变更不施行
+    expect(evidence.changes).toHaveLength(0)
+    expect(evidence.emails).toHaveLength(0)
+  })
+})

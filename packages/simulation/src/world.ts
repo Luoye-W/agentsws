@@ -5,6 +5,15 @@
  * 全部是真实实现；只有 provider（mock OpenConnector）、模型（stub）、人（合成人）、
  * 时钟（合成时钟）、投递（收件箱）、入站（内存管线）是替身。
  */
+
+import {
+  compareJoinBundle,
+  deriveStoreRanges,
+  joinSummary,
+  mergeOrgPair,
+  type OrgAlias,
+  rewriteAliasedAssignments,
+} from '@agentsws/catalog'
 import type {
   Assignment,
   ChangeKind,
@@ -12,6 +21,9 @@ import type {
   EventEnvelope,
   InboundEvent,
   Iso8601,
+  JoinExportBundle,
+  JoinObjectComparison,
+  JoinResolution,
   Mandate,
   ModelGateway,
   ModelProvider,
@@ -356,6 +368,43 @@ export interface OrgOps {
   }): { assignment_id: string; ranges: RangeRef[] }
   /** 这个人这条职责现在看得到哪几张订单、哪几件商品。 */
   visible(who: PersonId, role: RoleId): VisibleScope
+  /**
+   * 45 H1：某人单干时在**自己的工作区**里攒下的东西（品牌 / 产品线 / 一条岗位）。
+   *
+   * 个人工作区不是另一套界面，是同一套东西换了个 `workspace_id`——所以这里用的
+   * 就是公司那边同一个职责层，只是工作区不同。
+   */
+  personalWorkspace(input: {
+    who: PersonId
+    workspace: string
+    role: RoleId
+    range_groups?: { id: string; name: string; members: RangeRef[] }[]
+    product_lines?: { id: string; name: string; parent: RangeRef; rule: ProductLineRule }[]
+  }): { assignment_id: string; ranges: RangeRef[] }
+  /**
+   * 45 H2 / H3：把个人工作区并进公司——对照 → 一张 `join_mapping` 卡 → owner 选 → 落地。
+   *
+   * 判定与合并都走真的那一套（`@agentsws/catalog`），场景里只给"owner 选了什么"。
+   */
+  join(input: {
+    who: PersonId
+    from: string
+    decisions?: {
+      unique_key: string
+      chosen: JoinResolution
+      name_choice?: 'company' | 'personal'
+    }[]
+  }): Promise<JoinRunResult>
+}
+
+/** 一次 Join 跑完的样子（场景里断言用）。 */
+export interface JoinRunResult {
+  approval_item_id: string
+  counts: Record<'same' | 'similar' | 'missing', number>
+  merged: number
+  created: number
+  aliases: { kind: string; from: string; to: string }[]
+  range_rewrites: number
 }
 
 export interface ShopOps {
@@ -1627,6 +1676,255 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         payload: { assignment_id: next.id, person_id: who, ranges: next.ranges },
       })
       return { assignment_id: next.id, ranges: [...next.ranges] }
+    },
+
+    // ── 45：个人用 → 公司用 ────────────────────────────────────────
+    personalWorkspace({ who, workspace, role, range_groups, product_lines }) {
+      for (const g of range_groups ?? [])
+        roles.rangeGroups.create({
+          id: g.id,
+          workspace_id: workspace,
+          name: g.name,
+          members: g.members,
+          created_by: who,
+        })
+      for (const l of product_lines ?? [])
+        roles.productLines.create({
+          id: l.id,
+          workspace_id: workspace,
+          name: l.name,
+          parent: l.parent,
+          rule: l.rule,
+          created_by: who,
+        })
+      // 一个人用 = 一家一个人的公司：他在自己那个工作区里也有一条正经岗位
+      const asg = roles.assignments.create({
+        person_id: who,
+        workspace_id: workspace,
+        role_id: role,
+        granted_by: who,
+        ...(range_groups === undefined || range_groups.length === 0
+          ? {}
+          : { range_groups: range_groups.map((g) => g.id) }),
+      })
+      // 不用 `${who}|${role}` 那把键：那是"他在公司的岗位"，别被个人那条盖掉
+      created.set(`${who}|${role}@${workspace}`, asg)
+      return { assignment_id: asg.id, ranges: [...asg.ranges] }
+    },
+
+    async join({ who, from, decisions }) {
+      const liveOf = (ws: string) => ({
+        groups: roles.rangeGroups.list(ws).filter((g) => g.superseded_by === undefined),
+        lines: roles.productLines.list(ws).filter((l) => l.superseded_by === undefined),
+      })
+      const mineSide = liveOf(from)
+      const bundle: JoinExportBundle = {
+        schema_version: 1,
+        workspace_id: from,
+        person_id: who,
+        exported_at: clock.now(),
+        range_groups: mineSide.groups.map((g) => structuredClone(g)),
+        product_lines: mineSide.lines.map((l) => structuredClone(l)),
+        store_ranges: deriveStoreRanges({
+          assignment_ranges: roles.assignments
+            .listByWorkspace(from, {})
+            .filter((a) => a.revoked_at === undefined)
+            .flatMap((a) => a.ranges),
+          range_groups: mineSide.groups,
+          product_lines: [],
+        }),
+        connections: [],
+      }
+      const companySide = liveOf(workspace_id)
+      const join_id = `join_${sha256(`${from}:${workspace_id}:${who}`).slice(0, 12)}`
+      const payload = compareJoinBundle({
+        bundle,
+        company: {
+          range_groups: companySide.groups,
+          product_lines: companySide.lines,
+          store_ranges: deriveStoreRanges({
+            assignment_ranges: roles.assignments
+              .listByWorkspace(workspace_id, {})
+              .filter((a) => a.revoked_at === undefined)
+              .flatMap((a) => a.ranges),
+            range_groups: companySide.groups,
+            product_lines: companySide.lines,
+          }),
+        },
+        holders: (kind, id) =>
+          kind === 'range_group'
+            ? roles.rangeGroups.assignments(id).length
+            : kind === 'product_line'
+              ? roles.productLines.assignments(id).length
+              : 0,
+        join_id,
+        target_workspace_id: workspace_id,
+      })
+      // 一次 Join 一张卡，owner 一次签字（14；45 §4「任何合并都要人点头」）
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'join_mapping',
+        role_id: 'common.owner',
+        subject: { object: { type: 'policy', id: `join:${join_id}` } },
+        dedupe_key: `${workspace_id}:join:${join_id}`,
+        title: `${who} 要把个人工作区并进公司`,
+        summary: joinSummary(payload),
+        payload: payload as unknown as Record<string, unknown>,
+        evidence: {
+          source_events: [],
+          diff: { before: {}, after: { objects: payload.counts }, summary: joinSummary(payload) },
+          provenance: { seen: [] },
+          precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+        },
+        proposer: { kind: 'person', id: who },
+        automation: {
+          level_at_creation: 'L1',
+          auto_approved: false,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [recipientOf('owner')],
+          rule: 'owner',
+          escalation: {
+            after_hours: 72,
+            business_hours: true,
+            chain: ['owner'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+      })
+      if (item.state !== 'blocked') await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'join.started',
+        actor: { kind: 'person', id: who },
+        correlation: { trace_id: traceId() },
+        payload: { join_id, source_workspace_id: from, counts: payload.counts },
+      })
+
+      // owner 选了什么（没提到的按 `suggested`——那也是他按下"批准"这一下带来的）
+      const picked = new Map((decisions ?? []).map((d) => [d.unique_key, d] as const))
+      const aliases: OrgAlias[] = []
+      let merged = 0
+      let made = 0
+      for (const o of payload.objects as JoinObjectComparison[]) {
+        const choice = picked.get(o.unique_key)
+        const chosen = choice?.chosen ?? o.suggested
+        if (chosen === 'skip' || chosen === 'keep_both') continue
+        if ((chosen === 'merge_union' || chosen === 'adopt_company') && o.theirs !== undefined) {
+          if (chosen === 'merge_union' && o.kind !== 'store_range') {
+            const result = mergeOrgPair(roles, {
+              kind: o.kind,
+              keep: o.theirs.id,
+              drop: o.mine.id,
+              ...(choice?.name_choice === 'personal' ? { name: o.mine.name } : {}),
+              origin: { workspace_id: from, person_id: who, object_id: o.mine.id },
+            })
+            if (result !== undefined)
+              appendEnvelope({
+                schema_version: 1,
+                workspace_id,
+                type: `${o.kind}.merged`,
+                actor: { kind: 'person', id: who },
+                correlation: { trace_id: traceId() },
+                payload: { keep: result.keep, from: result.drop, name: result.name },
+              })
+          } else if (o.kind === 'range_group') roles.rangeGroups.supersede(o.mine.id, o.theirs.id)
+          else if (o.kind === 'product_line') roles.productLines.supersede(o.mine.id, o.theirs.id)
+          aliases.push({ kind: o.kind, from: o.mine.id, to: o.theirs.id })
+          merged += 1
+          continue
+        }
+        if (chosen === 'create_in_company') {
+          if (o.kind === 'range_group') {
+            const madeGroup = roles.rangeGroups.create({
+              workspace_id,
+              name: o.mine.name,
+              members: o.mine.members ?? [],
+              created_by: who,
+              origin: { workspace_id: from, person_id: who, object_id: o.mine.id },
+            })
+            roles.rangeGroups.supersede(o.mine.id, madeGroup.id)
+            aliases.push({ kind: o.kind, from: o.mine.id, to: madeGroup.id })
+          } else if (
+            o.kind === 'product_line' &&
+            o.mine.parent !== undefined &&
+            o.mine.rule !== undefined
+          ) {
+            const madeLine = roles.productLines.create({
+              workspace_id,
+              name: o.mine.name,
+              parent: o.mine.parent,
+              rule: o.mine.rule,
+              created_by: who,
+              origin: { workspace_id: from, person_id: who, object_id: o.mine.id },
+            })
+            roles.productLines.supersede(o.mine.id, madeLine.id)
+            aliases.push({ kind: o.kind, from: o.mine.id, to: madeLine.id })
+            appendEnvelope({
+              schema_version: 1,
+              workspace_id,
+              type: 'product_line.created',
+              actor: { kind: 'person', id: who },
+              correlation: { trace_id: traceId() },
+              payload: { product_line_id: madeLine.id, name: madeLine.name, from_join: join_id },
+            })
+          }
+          made += 1
+        }
+      }
+      // 45 H3 最后一句：挂在被取代对象上的岗位范围指到公司那份（两个工作区都过一遍）
+      const { rewrites, traces } = rewriteAliasedAssignments(roles, aliases, {
+        assignments: [
+          ...roles.assignments.listByWorkspace(workspace_id, {}),
+          ...roles.assignments.listByWorkspace(from, {}),
+        ],
+      })
+      for (const trace of traces)
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: trace.type,
+          actor:
+            trace.type === 'range.alias_resolved'
+              ? { kind: 'person', id: who }
+              : { kind: 'system', id: 'join' },
+          correlation: { trace_id: traceId() },
+          payload:
+            trace.type === 'range.alias_resolved'
+              ? { assignment_id: trace.assignment_id, changed: trace.changed }
+              : {
+                  assignment_id: trace.assignment_id,
+                  person_id: trace.person_id,
+                  role_id: trace.role_id,
+                  reason: 'join_alias',
+                  added: trace.added,
+                  removed: trace.removed,
+                },
+        })
+      // 合并让公司品牌多了成员 → 挂着它的老同事的范围也跟着变（44 G5，一张 L3 卡）
+      await flushRangeExpanded()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'join.completed',
+        actor: { kind: 'person', id: who },
+        correlation: { trace_id: traceId() },
+        payload: { join_id, merged, created: made, range_rewrites: rewrites },
+      })
+      return {
+        approval_item_id: item.id,
+        counts: payload.counts,
+        merged,
+        created: made,
+        aliases,
+        range_rewrites: rewrites,
+      }
     },
 
     visible(who, role) {

@@ -325,10 +325,17 @@ export function createJoin(options: JoinOptions): JoinAssembly {
     aliases: OrgAlias[],
     person: PersonId,
     direction: 'to_company' | 'back_to_personal',
+    source?: WorkspaceId,
   ): number => {
-    const { rewrites, traces } = rewriteAliasedAssignments(roles, aliases, {
-      assignments: roles.assignments.listByWorkspace(workspace_id, {}),
-    })
+    // 两边都要过一遍：公司这边的岗位换成公司那条 id；他自己那个工作区里的岗位换不了
+    // （跨工作区挂品牌会被职责层拒），但要重新展开一次，好让别名解析生效
+    const assignments = [
+      ...roles.assignments.listByWorkspace(workspace_id, {}),
+      ...(source === undefined || source === workspace_id
+        ? []
+        : roles.assignments.listByWorkspace(source, {})),
+    ]
+    const { rewrites, traces } = rewriteAliasedAssignments(roles, aliases, { assignments })
     for (const trace of traces) {
       if (trace.type === 'range.alias_resolved')
         emit('range.alias_resolved', person, {
@@ -549,7 +556,7 @@ export function createJoin(options: JoinOptions): JoinAssembly {
         kept += 1
       }
 
-      const range_rewrites = rewriteAssignments(aliases, person, 'to_company')
+      const range_rewrites = rewriteAssignments(aliases, person, 'to_company', source)
 
       let transferred_connections = 0
       for (const c of input.connections ?? []) {
@@ -621,7 +628,12 @@ export function createJoin(options: JoinOptions): JoinAssembly {
         }
       }
       const back = record.result.aliases.map((a) => ({ kind: a.kind, from: a.to, to: a.from }))
-      const rewrites = rewriteAssignments(back, record.payload.person_id, 'back_to_personal')
+      const rewrites = rewriteAssignments(
+        back,
+        record.payload.person_id,
+        'back_to_personal',
+        record.payload.source_workspace_id,
+      )
       backend.put({ ...record, status: 'left' })
       emit('workspace.archived', record.payload.person_id, {
         join_id,

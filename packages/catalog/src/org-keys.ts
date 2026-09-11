@@ -15,13 +15,7 @@
  *    也不要让人去判两个域名像不像。
  * 3. **相似一律给人选**（45 §4）：这里只回结论与理由，合不合是卡片上按的。
  */
-import type {
-  JoinPlatform,
-  ProductLine,
-  ProductLineRule,
-  RangeGroup,
-  RangeRef,
-} from '@agentsws/contracts'
+import type { JoinPlatform, ProductLine, ProductLineRule, RangeRef } from '@agentsws/contracts'
 import { parseMarketId } from '@agentsws/contracts'
 
 /** 45 H4 新增的三个查重入口（与 {@link CatalogKind} 的五个并列，凑成八个）。 */

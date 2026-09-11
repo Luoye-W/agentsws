@@ -162,6 +162,11 @@ export type OrgAliasTrace =
  * 品牌走 `range_groups`（改完 `assignments.update` 会自己重新展开成员）；
  * 产品线与店铺范围走 `ranges` 里的 id 替换。回一串要记的事件——**这里不记**，
  * 因为它不认识事件日志（这个包不接线）。
+ *
+ * 一处不能直接换 id：**留下的那条不在这条分配所在的工作区**（并进公司之后，
+ * 他在自己那个个人工作区里的岗位就是这种）。职责层不许跨工作区挂品牌，换了会被拒。
+ * 那种情况原样存回去——`groupsOf` 展开时会顺着 `superseded_by` 走到公司那份，
+ * 于是这条岗位的范围照样变成了公司那条的成员。留痕一样记。
  */
 export function rewriteAliasedAssignments(
   store: OrgMergeStore,
@@ -172,23 +177,43 @@ export function rewriteAliasedAssignments(
   const traces: OrgAliasTrace[] = []
   if (byId.size === 0) return { rewrites: 0, traces }
   let rewrites = 0
+  /** 换成 `to` 会跨工作区吗（跨了就只能原样存回去、靠展开时解析别名）。 */
+  const movable = (assignment: Assignment, alias: OrgAlias): boolean => {
+    const target =
+      alias.kind === 'range_group'
+        ? store.rangeGroups.get(alias.to)
+        : alias.kind === 'product_line'
+          ? store.productLines.get(alias.to)
+          : undefined
+    // 店铺范围没有自己的表，换 id 永远安全
+    return target === undefined || target.workspace_id === assignment.workspace_id
+  }
   for (const a of options.assignments) {
     if (a.revoked_at !== undefined) continue
     const groupsBefore = a.range_groups ?? []
-    const groupsAfter = groupsBefore.map((g) => byId.get(g)?.to ?? g)
+    const groupsAfter = groupsBefore.map((g) => {
+      const hit = byId.get(g)
+      return hit !== undefined && movable(a, hit) ? hit.to : g
+    })
     const rangesBefore = a.ranges
     const rangesAfter = rangesBefore.map((r) => {
       const hit = byId.get(r.id)
-      return hit === undefined || hit.kind === 'range_group' ? r : { kind: r.kind, id: hit.to }
+      if (hit === undefined || hit.kind === 'range_group' || !movable(a, hit)) return r
+      return { kind: r.kind, id: hit.to }
     })
     const groupsChanged = groupsAfter.some((g, i) => g !== groupsBefore[i])
     const rangesChanged = rangesAfter.some(
       (r, i) => rangeKeyOf(r) !== rangeKeyOf(rangesBefore[i] ?? r),
     )
-    if (!groupsChanged && !rangesChanged) continue
+    // 跨工作区那条换不了 id，但仍然要**重新展开一次**——别名是在展开那一侧解析的
+    const needsReexpand =
+      !groupsChanged &&
+      !rangesChanged &&
+      (groupsBefore.some((g) => byId.has(g)) || rangesBefore.some((r) => byId.has(r.id)))
+    if (!groupsChanged && !rangesChanged && !needsReexpand) continue
     const next = store.assignments.update(a.id, {
       ranges: rangesAfter,
-      ...(groupsChanged ? { range_groups: groupsAfter } : {}),
+      ...(groupsChanged || needsReexpand ? { range_groups: groupsAfter } : {}),
     })
     rewrites += 1
     traces.push({

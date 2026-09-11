@@ -959,6 +959,44 @@ async function execute(
         })
         return
       }
+      // ── WP50 个人用 → 公司用（45 H1 / H2 / H3）────────────────────
+      case 'org.personal': {
+        const out = world.org.personalWorkspace({
+          who: event.personal.who,
+          workspace: event.personal.workspace,
+          role: event.personal.role,
+          ...(event.personal.range_groups === undefined
+            ? {}
+            : { range_groups: event.personal.range_groups }),
+          ...(event.personal.product_lines === undefined
+            ? {}
+            : { product_lines: event.personal.product_lines }),
+        })
+        world.appendEvent('simulation.personal_workspace', {
+          who: event.personal.who,
+          workspace: event.personal.workspace,
+          assignment_id: out.assignment_id,
+          ranges: out.ranges,
+        })
+        return
+      }
+      case 'org.join': {
+        const out = await world.org.join({
+          who: event.join.who,
+          from: event.join.from,
+          ...(event.join.decisions === undefined ? {} : { decisions: event.join.decisions }),
+        })
+        world.appendEvent('simulation.joined', {
+          who: event.join.who,
+          from: event.join.from,
+          counts: out.counts,
+          merged: out.merged,
+          created: out.created,
+          range_rewrites: out.range_rewrites,
+        })
+        await tick()
+        return
+      }
       case 'org.scope_check': {
         const seen = world.org.visible(event.scope_check.who, event.scope_check.role)
         world.appendEvent('simulation.scope_checked', {
