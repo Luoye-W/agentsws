@@ -300,8 +300,10 @@ describe('中文检索（13 §2 的 FTS5 中文缺口）', () => {
     expect(
       (await k.retrieval.search({ text: '无理由退回', actor: aftersales() })).hits,
     ).toHaveLength(1)
-    expect((await k.retrieval.search({ text: '关税申报', actor: aftersales() })).hits).toHaveLength(
-      0,
-    )
+    // WP56：这一条断言的是 **lexical 档**的词面匹配。默认的 auto 档在小库上走
+    // 长上下文（整库注入，不检索），那时"不命中"这个概念本身不存在。
+    expect(
+      (await k.retrieval.search({ text: '关税申报', actor: aftersales(), mode: 'lexical' })).hits,
+    ).toHaveLength(0)
   })
 })

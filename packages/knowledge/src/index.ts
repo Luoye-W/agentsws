@@ -48,6 +48,11 @@ export interface CreateKnowledgeOptions {
   emit?: KnowledgeEmitter
   /** 单工作区本地档的缺省 workspace（记忆的 recall / forget 契约里没带）。 */
   workspace_id?: WorkspaceId
+  /**
+   * WP56（48 §4 #7）：长上下文档的字符预算，缺省 `DEFAULT_CONTEXT_BUDGET_CHARS`
+   * （16000）。全库（按身份过滤后）不超过它就整库注入，不检索。
+   */
+  budgetChars?: number
 }
 
 export interface Knowledge {
@@ -79,7 +84,10 @@ export function createKnowledge(opts: CreateKnowledgeOptions = {}): Knowledge {
     ...(opts.emit === undefined ? {} : { emit: opts.emit }),
   }
   const store = new SqliteKnowledgeStore(db, shared)
-  const retrieval = new SqliteRetrieval(db, shared)
+  const retrieval = new SqliteRetrieval(db, {
+    ...shared,
+    ...(opts.budgetChars === undefined ? {} : { budgetChars: opts.budgetChars }),
+  })
   const intake = new SqliteIntakeStore(db, shared)
   const recheck = new SqliteRecheckStore(db, store, shared)
   const memory = new SqliteMemoryStore(db, {
