@@ -453,6 +453,12 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         plan_action: plan.action,
         intent: plan.intent,
         money_touch: plan.money_touch,
+        /*
+         * 31 §3.3 收件人门禁：`outbound_draft` 的收件人必须是**这次读过的**
+         * 线程参与者。聊天里的收件人就是这条会话里的那个访客——
+         * 漏了这一格，卡会被预检直接打成 `blocked`，人永远看不到它。
+         */
+        to: { type: 'contact', id: session.visitor_id },
         // 卡上给的是**建议话术**，不是已发出的话。人点头之后才推进会话
         body: { text: plan.next_question },
         visitor_said: sanitizeExternal(turn_text).slice(0, 500),
@@ -460,7 +466,12 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       evidence: {
         run_id: `run_chat_${session.id}`,
         source_events: [],
-        provenance: { seen: [threadRef(session.thread_external_id)] },
+        provenance: {
+          seen: [
+            threadRef(session.thread_external_id),
+            { type: 'contact', id: session.visitor_id },
+          ],
+        },
         precheck: {},
         citations: [],
       },
@@ -484,8 +495,8 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       // 访客在等：这张卡不进队列排队，它是"现在就看"
       priority: 'immediate',
       context: {
-        thread_participants: [session.thread_external_id],
-        verified_contacts: [session.thread_external_id],
+        thread_participants: [session.visitor_id],
+        verified_contacts: [session.visitor_id],
       },
     })
     return item.state === 'blocked' ? undefined : item.id

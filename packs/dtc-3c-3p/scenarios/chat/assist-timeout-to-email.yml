@@ -1,0 +1,57 @@
+# 48 §3 L1 的另一半：**求助超时**。
+#
+# 访客点名要真人 → 出一张卡，同时起两个钟点（T+3 提醒 / T+10 转邮件跟进）。
+# 然后**谁也不去点那张卡**。合成时钟往前走：三分钟时访客拿到一条进度提醒，
+# 十分钟时这条会话转成邮件跟进——没有会话可以永远挂在那儿等。
+#
+# 中途还验一条：转邮件之后访客再说话，AI **不再自动答**
+# （`canChatAutoReply` 只放行 open / assist_answered 两态）。
+id: chat/assist-timeout-to-email
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 一个合成人都不装 = 求助没人接，这正是这条题要的
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    chat.visitor_message:
+      visitor: bob@example.com
+      text: I need to speak to a human, please.
+  # T+3：访客还在页面上（他上一条消息就是"还在"的证据），拿到一条进度提醒
+  - at: '+4m'
+    clock.advance: {}
+  # T+10：没人接，转邮件跟进
+  - at: '+11m'
+    clock.advance: {}
+  # 转过邮件之后再说一句：AI 不该再自动答
+  - at: '+12m'
+    chat.visitor_message:
+      visitor: bob@example.com
+      text: Hello? Are you still there?
+  - at: '+13m'
+    clock.advance: {}
+expected:
+  # 第一轮求助；第二轮已经不在自动回复态 → AI 停口
+  chat_actions: [assist, handoff]
+  chat_assist:
+    reminder: 1
+    email_follow_up: 1
+  approval_kinds: { outbound_draft: 1 }
+  event_types:
+    - simulation.chat_assist
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    # 31 §3.3 收件人门禁：卡上得有收件人，否则预检直接把它打成 blocked，
+    # 人永远看不到那张卡。这一条是这次接线真踩到的坑，钉在这儿。
+    blocked_proposals: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  提醒那一句是不是给了访客一个出口（留邮箱），而不是空口安慰？
+  转邮件那一句是不是说清楚了"别在这儿干等"？

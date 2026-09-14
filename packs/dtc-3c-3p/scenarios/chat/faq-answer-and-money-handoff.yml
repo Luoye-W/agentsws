@@ -1,0 +1,56 @@
+# 48 §3 L1「网站在线客服」的那条硬规则，一条回归题钉住：
+# **聊天里只答不承诺，涉钱一律转卡片或邮件。**
+#
+# 访客先问运费 → 词表命中售前、资料齐 → 轻模型答一句；
+# 同一个人接着问"能退款吗" → 词表命中退款 → **不答**，出一张卡给人定，
+# 聊天里只说一句安抚。
+#
+# 两轮之间隔一分钟：不是为了好看——聊天的轮次聚合是 2 秒静默窗口，
+# 隔得太近这两句会被并成一轮，那就验不出"第一轮答了、第二轮转卡"。
+id: chat/faq-answer-and-money-handoff
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 一个合成人都不装：这两轮里没有任何东西该被自动批掉
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    chat.visitor_message:
+      visitor: anna@example.com
+      text: Hi! How much is shipping to the US?
+  # 静默窗口过了，这一轮才算说完
+  - at: '+1m'
+    clock.advance: {}
+  - at: '+2m'
+    chat.visitor_message:
+      visitor: anna@example.com
+      text: Thanks. One more thing — can I get a refund for order #1001?
+  - at: '+3m'
+    clock.advance: {}
+expected:
+  # 顺序即断言：先答，再转卡
+  chat_actions: [answer, human_review]
+  # 涉钱那一轮出了一张卡，且没人点头 → 什么都没发出去、什么都没施行
+  approval_kinds: { outbound_draft: 1 }
+  event_types:
+    - simulation.chat_turn
+    - simulation.chat_message
+  # 聊天里不该出现任何承诺：卡上的建议话术也不许把"退款"当成已经定了的事
+  reply_omits: ['refund approved', '已退款', '给你退']
+  metrics:
+    applied_changes: 0
+    outbound_sent: 0
+    # 31 §3.3 收件人门禁：卡上得有收件人，否则预检直接把它打成 blocked，
+    # 人永远看不到那张卡。这一条是这次接线真踩到的坑，钉在这儿。
+    blocked_proposals: 0
+    guardrail_hits: '<=1'
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  第一轮是不是直接回答了运费、没有绕；第二轮是不是明确说了"这件事我在聊天里定不了"，
+  而不是含糊地承诺"会帮你处理退款"？

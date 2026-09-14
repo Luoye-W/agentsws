@@ -227,6 +227,20 @@ export interface ScenarioOrgJoin {
   }[]
 }
 
+/** WP57 / 48 §4 #11：访客在网站聊天窗里说了一句。 */
+export interface ScenarioChatMessage {
+  /** 访客的外部身份（同一个值 = 同一条会话）。 */
+  visitor: string
+  text: string
+}
+
+/** WP57：人工接管开关。开着的时候 AI 一句都不答。 */
+export interface ScenarioChatTakeover {
+  /** 哪条会话；不给就是最近开的那一条。 */
+  visitor?: string
+  on: boolean
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -282,6 +296,10 @@ export type ScenarioEvent =
   | { at: string; type: 'org.personal'; personal: ScenarioOrgPersonal }
   /** WP50：把个人工作区并进公司（45 H2 / H3）。 */
   | { at: string; type: 'org.join'; join: ScenarioOrgJoin }
+  /** WP57：访客在网站聊天窗里说一句（48 §4 #11 的实时车道）。 */
+  | { at: string; type: 'chat.visitor_message'; chat_message: ScenarioChatMessage }
+  /** WP57：人工接管这条会话（AI 停口）。 */
+  | { at: string; type: 'chat.human_takeover'; chat_takeover: ScenarioChatTakeover }
 
 export interface ScenarioInbound {
   from: string
@@ -417,6 +435,16 @@ export interface ScenarioExpected {
    * 而且各自都不是空的——"同一个账号的两条产品线，互相看不到对方的订单和商品"。
    */
   scope_disjoint?: string[]
+  /**
+   * WP57：这几轮聊天判成了哪几种动作（`answer` / `collect_info` / `human_review` /
+   * `assist` / `handoff`），**按顺序**。
+   *
+   * 为什么是顺序而不是集合：这条流水线的价值就在顺序里——"先答了运费，再把退款
+   * 转成卡"与"先转卡、再答运费"是两件完全不同的事，集合断言分不开它们。
+   */
+  chat_actions?: string[]
+  /** WP57：求助超时各做了几次（`reminder` / `email_follow_up`）。 */
+  chat_assist?: Record<string, NumericAssertion>
 }
 
 export interface Scenario {

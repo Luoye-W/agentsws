@@ -301,6 +301,55 @@ expected:
     expect(matchNumeric(3, '==3')).toBe(true)
   })
 
+  // WP57（48 §4 #11）：聊天那两条事件与两条断言
+  it('chat.visitor_message / chat.human_takeover 解析成结构', () => {
+    const s = parseScenario(
+      `${MINIMAL}
+      `.replace(
+        'invariants: [prompt_replayable]',
+        `  - at: '+2m'
+    chat.visitor_message: { visitor: anna@example.com, text: 'how much is shipping?' }
+  - at: '+3m'
+    chat.human_takeover: { on: true }
+expected:
+  chat_actions: [answer, human_review]
+  chat_assist: { reminder: 1, email_follow_up: '>=1' }
+invariants: [prompt_replayable]`,
+      ),
+      't.yml',
+    )
+    expect(s.events[2]).toMatchObject({
+      type: 'chat.visitor_message',
+      chat_message: { visitor: 'anna@example.com', text: 'how much is shipping?' },
+    })
+    expect(s.events[3]).toMatchObject({ type: 'chat.human_takeover', chat_takeover: { on: true } })
+    expect(s.expected.chat_actions).toEqual(['answer', 'human_review'])
+    expect(s.expected.chat_assist).toEqual({ reminder: 1, email_follow_up: '>=1' })
+  })
+
+  it('聊天只有五种动作；`on` 必须是布尔', () => {
+    const withExpected = (block: string): string =>
+      MINIMAL.replace(
+        'invariants: [prompt_replayable]',
+        `${block}\ninvariants: [prompt_replayable]`,
+      )
+    expect(() =>
+      parseScenario(withExpected('expected:\n  chat_actions: [answer, whatever]'), 'x.yml'),
+    ).toThrow(/五种动作/)
+    expect(() =>
+      parseScenario(withExpected('expected:\n  chat_assist: { nope: 1 }'), 'x.yml'),
+    ).toThrow(/reminder/)
+    expect(() =>
+      parseScenario(
+        MINIMAL.replace(
+          'invariants: [prompt_replayable]',
+          `  - at: '+3m'\n    chat.human_takeover: { on: 'yes' }\ninvariants: [prompt_replayable]`,
+        ),
+        'x.yml',
+      ),
+    ).toThrow(/true \/ false/)
+  })
+
   it('globToRegExp', () => {
     const re = globToRegExp('scenarios/**/*.yml')
     expect(re.test('scenarios/ops/model-outage.yml')).toBe(true)

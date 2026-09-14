@@ -15,6 +15,8 @@ import type {
   RunResult,
 } from '@agentsws/contracts'
 import type { ActorPolicy } from '@agentsws/stand-ins'
+import type { ChatLoop } from './chat.js'
+import { installChat } from './chat.js'
 import { buildRunRequest } from './context.js'
 import { SimulationError } from './errors.js'
 import type { BlockedRecord, Evidence, RunRecord } from './evidence.js'
@@ -227,6 +229,9 @@ async function execute(
     // 14 §4.4 / §7 / §13.2：过期、升级链、抽检复核。真实进程里这是定时任务，
     // 模拟回路里合成时钟每推进一拍就得走一遍——否则"没人理就升级"在虚拟时间里永远不发生。
     await world.tickApprovals()
+    // WP57：聊天那条实时车道也要跟着走一拍——静默窗口到了的那一轮要答出来，
+    // 求助等到 T+3 / T+10 的会话要提醒 / 转邮件。装了才走（没有 `chat.*` 事件就没装）。
+    if (chat !== undefined) await chat.tick()
     // 模型恢复后把冻结期间的工作项重跑（17 §5.7 同 idempotency_key 不重复出结果）
     while (retryQueue.length > 0 && !world.modelDown()) {
       const next = retryQueue.shift()
@@ -661,6 +666,16 @@ async function execute(
     }
   }
 
+  /**
+   * WP57：聊天车道是**惰性**的——场景里没有 `chat.*` 事件就一个都不装，
+   * 原有场景的事件序列与指标一个字节不变（同 `secretary` / `learning` 的做法）。
+   */
+  let chat: ChatLoop | undefined
+  const chatLoop = (): ChatLoop => {
+    chat ??= installChat(world)
+    return chat
+  }
+
   const secretaryRoute = async (input: ScenarioSecretaryRoute): Promise<void> => {
     const loop = secretaryLoop()
     try {
@@ -1042,6 +1057,15 @@ async function execute(
           orders: seen.orders,
           products: seen.products,
         })
+        return
+      }
+      // WP57（48 §4 #11）：网站在线聊天的实时车道
+      case 'chat.visitor_message': {
+        await chatLoop().visitorMessage(event.chat_message)
+        return
+      }
+      case 'chat.human_takeover': {
+        await chatLoop().takeover(event.chat_takeover)
         return
       }
       default: {
