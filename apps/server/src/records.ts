@@ -611,14 +611,48 @@ export function createConnectRecordSource(
   }
 
   const runConnectorTool = async (
-    bare: string,
+    requestedBare: string,
     input: Record<string, unknown>,
   ): Promise<ToolExecution> => {
+    let bare = requestedBare
     const shop = activeShop()
     if (shop === undefined) return { status: 'error', reason: NOT_CONNECTED }
-    const action = await findAction(shop.service, TOOL_ACTIONS[bare] as string)
-    if (action === undefined) return { status: 'error', reason: ACTION_UNAVAILABLE(bare) }
-    const payload = await runAction(shop, action, inputFor(bare, input))
+    // 真店实测（09-14）：模型拿着来信里的订单号 "#1001" 调 get_order，而 Shopify 的 get_order
+    // 只认内部 id（gid 或长数字）。看着像订单号的先经 list_orders 按 name 查成 id，再拉那一张。
+    let effectiveBare = bare
+    let effectiveInput = input
+    if (bare === 'get_order') {
+      const raw = stringOf(input.order_id ?? input.id ?? input.name ?? input.order_name) ?? ''
+      const m = /^#?(\d{1,8})$/.exec(raw.trim())
+      if (m !== null) {
+        const listAction = await findAction(shop.service, TOOL_ACTIONS.list_orders as string)
+        if (listAction === undefined)
+          return { status: 'error', reason: ACTION_UNAVAILABLE('list_orders') }
+        const listed = await runAction(shop, listAction, { first: 5, query: `name:#${m[1]}` })
+        const hit = ordersArrayOf(listed)
+          .map((r) => orderRecordOf(r, 'USD'))
+          .find((r) => r !== undefined && r.name.replace(/^#/, '') === m[1])
+        if (hit === undefined) {
+          return { status: 'error', reason: `not_found：店铺后台里没有订单 #${m[1]}。` }
+        }
+        effectiveInput = { order_id: hit.id }
+      }
+    }
+    // get_product 拿到的是关键词而不是 id：按 list_products 查
+    if (
+      bare === 'get_product' &&
+      stringOf(input.product_id ?? input.id ?? input.handle) === undefined
+    ) {
+      const query = stringOf(input.query ?? input.title ?? input.name)
+      if (query !== undefined) {
+        effectiveBare = 'list_products'
+        effectiveInput = { query }
+      }
+    }
+    const action = await findAction(shop.service, TOOL_ACTIONS[effectiveBare] as string)
+    if (action === undefined) return { status: 'error', reason: ACTION_UNAVAILABLE(effectiveBare) }
+    const payload = await runAction(shop, action, inputFor(effectiveBare, effectiveInput))
+    bare = effectiveBare
 
     if (bare === 'get_order') {
       const row = orderRowOf(payload)

@@ -477,7 +477,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               })),
         ],
       },
-      budget: { max_tokens: 60_000, max_tool_calls: 8, max_seconds: 120, max_cost_base: 5 },
+      budget: { max_tokens: 60_000, max_tool_calls: 12, max_seconds: 120, max_cost_base: 5 },
       // 变更仍走各自的管线（渠道 / 执行器）；事项里的一次运行只出草稿与提案
       expectations: { outputs: ['draft', 'answer'], must_stage_if_change_requested: false },
       runtime: {

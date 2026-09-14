@@ -308,6 +308,38 @@ describe('令牌短命：现签、只含这一个 Action、用完即吊销', () 
     expect(connect.steps[2]).toMatchObject({ kind: 'revoke', assignment_id: TOOLS_ASSIGNMENT })
   })
 
+  it('get_order 拿到订单号 #1001：先 list_orders 按 name 查成 id，再拉那一张（两张令牌各自用完即吊销）', async () => {
+    const { source, connect } = setup()
+    const out = await call(source, 'get_order', { order_id: '#1001' })
+    expect(out.status).toBe('ok')
+    const executes = connect.steps.filter((s) => s.kind === 'execute')
+    expect(executes[0]).toMatchObject({
+      action_id: 'shopify_admin.list_orders',
+      input: { first: 5, query: 'name:#1001' },
+    })
+    expect(executes[1]).toMatchObject({
+      action_id: 'shopify_admin.get_order',
+      input: { order_id: 'gid://shopify/Order/1001' },
+    })
+    expect(connect.steps.map((s) => s.kind)).toEqual([
+      'issue',
+      'execute',
+      'revoke',
+      'issue',
+      'execute',
+      'revoke',
+    ])
+  })
+
+  it('get_product 拿到的是关键词不是 id：按 list_products 查', async () => {
+    const { source, connect } = setup()
+    await call(source, 'get_product', { query: 'snowboard' })
+    expect(connect.steps.find((s) => s.kind === 'execute')).toMatchObject({
+      action_id: 'shopify_admin.list_products',
+      input: { first: 20, query: 'snowboard' },
+    })
+  })
+
   it('上游抛了也吊销（失败不该把令牌留在外面）', async () => {
     const { source, connect } = setup()
     connect.failNext = new UpstreamError('rate_limited', 'slow down')
