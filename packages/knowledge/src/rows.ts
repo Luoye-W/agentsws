@@ -23,6 +23,14 @@ export interface CardRow {
   valid_until: string | null
   as_of: string | null
   downgraded_from: string | null
+  // WP56
+  stage: string | null
+  fact_fingerprint_json: string | null
+  verification_state: string | null
+  source_content_hash: string | null
+  source_changed_at: string | null
+  media_json: string | null
+  last_verified_at: string | null
   usage_recalled: number
   usage_cited: number
   usage_last_recalled_at: string | null
@@ -57,6 +65,14 @@ export const CARD_COLUMNS = [
   'valid_until',
   'as_of',
   'downgraded_from',
+  // WP56
+  'stage',
+  'fact_fingerprint_json',
+  'verification_state',
+  'source_content_hash',
+  'source_changed_at',
+  'media_json',
+  'last_verified_at',
   'usage_recalled',
   'usage_cited',
   'usage_last_recalled_at',
@@ -111,6 +127,16 @@ export function rowToCard(row: CardRow): FactCard {
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
+  // WP56：空列不写进对象（exactOptionalPropertyTypes：缺省与 undefined 不是一回事）
+  if (row.stage !== null) card.stage = row.stage as NonNullable<FactCard['stage']>
+  if (row.fact_fingerprint_json !== null)
+    card.fact_fingerprint = JSON.parse(row.fact_fingerprint_json) as Record<string, string | number>
+  if (row.verification_state !== null)
+    card.verification_state = row.verification_state as NonNullable<FactCard['verification_state']>
+  if (row.source_content_hash !== null) card.source_content_hash = row.source_content_hash
+  if (row.source_changed_at !== null) card.source_changed_at = row.source_changed_at
+  if (row.media_json !== null) card.media = JSON.parse(row.media_json) as string[]
+  if (row.last_verified_at !== null) card.last_verified_at = row.last_verified_at
   if (row.as_of !== null) card.as_of = row.as_of
   if (row.downgraded_from !== null) card.downgraded_from = row.downgraded_from as FactCard['layer']
   if (row.structured_json !== null)
@@ -142,6 +168,14 @@ export function cardToRowValues(card: FactCard): (string | number | null)[] {
     card.valid.until ?? null,
     card.as_of ?? null,
     card.downgraded_from ?? null,
+    // WP56
+    card.stage ?? null,
+    card.fact_fingerprint === undefined ? null : JSON.stringify(card.fact_fingerprint),
+    card.verification_state ?? null,
+    card.source_content_hash ?? null,
+    card.source_changed_at ?? null,
+    card.media === undefined ? null : JSON.stringify(card.media),
+    card.last_verified_at ?? null,
     card.usage.recalled,
     card.usage.cited,
     card.usage.last_recalled_at ?? null,

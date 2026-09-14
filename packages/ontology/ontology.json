@@ -31,7 +31,7 @@
     "packages/roles/roles/dtc/aftersales.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "132ba62c8a94b79f09ec7ca2ca4e38a8",
+  "source_digest": "7a65a89ea307254573589f22a86664aa",
   "objects": [
     {
       "id": "ad_set",
@@ -813,6 +813,48 @@
         {
           "name": "downgraded_from",
           "type": "KnowledgeLayer",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "stage",
+          "type": "KnowledgeStage",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "fact_fingerprint",
+          "type": "Record<string, string | number>",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "verification_state",
+          "type": "KnowledgeVerificationState",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "source_content_hash",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "source_changed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "media",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_verified_at",
+          "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
         },

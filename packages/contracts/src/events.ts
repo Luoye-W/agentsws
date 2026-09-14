@@ -96,6 +96,14 @@ export type KnownEventType =
   | 'knowledge.card.cited'
   | 'knowledge.gap.opened'
   | 'knowledge.gap.answered'
+  // WP56（48 §4 #6 知识溯源链）：源页 / 文档内容变了之后的那条链。
+  // `knowledge.card.stale` 复用上面那条（47 J2 与源页复核是同一个意思：这条别当"现在"用）。
+  /** 复核完了（或受管辖数值压根没变）→ 这张卡回鲜，`last_verified_at` 往前走。 */
+  | 'knowledge.card.refreshed'
+  /** 开了一张复核卡（`knowledge_update` 的 recheck 形态，三选一）。 */
+  | 'knowledge.recheck.opened'
+  /** 有人答了那张复核卡：确认没变 / 按新值更新 / 忽略。 */
+  | 'knowledge.recheck.resolved'
   // simulation (26)：RunRequest 落日志，回放据此重组 prompt
   | 'simulation.run_request'
   | 'simulation.sampling_review'
