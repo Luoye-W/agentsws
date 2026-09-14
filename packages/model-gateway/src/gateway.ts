@@ -361,6 +361,8 @@ class Gateway implements ModelGatewayApi {
           return {
             text: raw.text,
             ...(raw.tool_calls === undefined ? {} : { tool_calls: raw.tool_calls }),
+            // 思考模型的推理内容要透传：运行时下一轮带回 provider（DeepSeek thinking 模式硬要求）
+            ...(raw.reasoning === undefined ? {} : { reasoning: raw.reasoning }),
             usage,
             model: ref,
             static_prefix_hash: staticPrefix,
