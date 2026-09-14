@@ -98,10 +98,10 @@
 | # | 搬什么 | 落到哪 |
 |---|---|---|
 | 1 | 垂直包（两套人设 / 规则 / 意图 / L3 黑名单 / 边界 registry） | `support-core/verticals/*` |
-| 2 | Amazon 渠道识别、出站硬闸、SLA 三档 | `support-core` + `packages/schedule` |
-| 3 | 自主发送门 G04 / G06 / G10 | 15 的 guardrail 前置：`l3_denylist` / `draft_origin` / `commitment_scan`，fail-closed，规则集哈希只可加行 |
-| 4 | outbox 状态机 + 对账（`sent_unknown` 绝不自动重试） | `packages/channels` 出站 + housekeeping |
-| 5 | 邮箱加固：UID 游标持久化、毒消息隔离、扫描租约、`agentsws` 归档文件夹 | `packages/channels` |
+| 2 | Amazon 渠道识别、出站硬闸、SLA 三档 | `support-core` + `packages/schedule`。**WP55 实现**：`support-core/amazon/{detect,outbound-guard,sla}.ts`（常量表与正则逐字节抄 KefuAgent，识别规则是安全边界的一部分）；`channels` 线程台账加 `channel` / `channel_meta` 两列 + **注入式**判定钩子（规则住 `support-core`，`channels` 是更低一层，反过来依赖会把依赖链倒过来）；`defaultRoute` 判成 amazon 的落 `amz.support`；`apps/server` 在 `deliver` 里跑硬闸、把钓鱼 / 退信 / 索赔类落事项但不起 Run、登记 `support.amazon_sla` 每 5 分钟 sweep。SLA 的唯一时钟锚是 `last_buyer_message_at`，只有买家消息族写它 |
+| 3 | 自主发送门 G04 / G06 / G10 | 15 的 guardrail 前置：`l3_denylist` / `draft_origin` / `commitment_scan`，fail-closed，规则集哈希只可加行。**WP55 实现**：`support-core/gates/{gates,l3-denylist}.ts`（九类六语词表 + 子句级否定守卫 + 句内共现的让步兜底）；`txn/precheck.ts` 三个字段 **只记录不改状态**、`autonomous` 用 `undefined` 表示「没问过」；`txn/approvals.ts` 建卡时落一条 `guardrail.gate_decided`（只有门名、结论、规则 id 与规则集哈希，被扫的文本一个字不进日志）。四条纪律与规则集哈希见 15 §3.4 |
+| 4 | outbox 状态机 + 对账（`sent_unknown` 绝不自动重试） | `packages/channels` 出站 + housekeeping。**WP55 实现**：`channels/outbox.ts` 七态 + 合法迁移表（写在数据里，不写在四散的 `if` 里）+ 失败三态分类器 + 退避表；`sqlite-queue.ts` 迁移 v2，`(workspace_id, idempotency_key)` 唯一索引就是「同一审批项只发一次」的落地处；`channels.reconcile_deliveries` 每分钟拿 Message-ID 去已发 / 归档文件夹找证据，退避六轮耗尽出一张人工卡。状态机与对账流程见 18 §3.3 |
+| 5 | 邮箱加固：UID 游标持久化、毒消息隔离、扫描租约、`agentsws` 归档文件夹 | `packages/channels`。**WP55 实现**：`channels/email/cursors.ts` + 迁移 v3（每文件夹一个游标，`uid_validity` 变了旧水位全部作废）；毒消息**跳过但不推水位**、连续三次才永久越过并出卡；扫描租约是条件 UPDATE + 条件 INSERT 包在事务里（不是先查后写），到期自动释放；归档失败一律只 log。外加死信重投 `POST /v1/channels/dead-letters/:id/requeue`（owner，**人**按，不自动不批量不定时）。游标 / 租约 / 重投的规范见 18 §2.4–§2.6 |
 | 6 | 知识溯源链：事实指纹、源页复核、stale 降权、承诺类永不自动发布 | 19 FactCard 加字段；健康看板加复核卡 |
 | 7 | 长上下文检索档（全库 ≤ 预算整库注入） | `packages/knowledge/retrieval.ts` |
 | 8 | 影子质检 + 回流 | 24 学习回路 |
@@ -110,6 +110,13 @@
 | 11 | **在线聊天**：聊天流水线（词表分类 → 计划 → 轻模型答 → 求助 / 转人工 / 超时转邮件） | 流水线进 `support-core` / `channels`（本地能跑）；**widget 与公网端点**在托管档 |
 
 不搬：官网爬取（留给托管档做"知识引导"服务，或后置）、计费代码。
+
+**#2–#5 的验收（WP55，2026-09-14）**：3 人 pack 两条新场景 `amazon/buyer-message-guardrail`
+（relay 来信 → 判成 `amazon` → 草稿带站外链接被硬闸拦下 → 打回重写 → 重写那一版过闸 → 人审）
+与 `security/commitment-scan-blocks-autosend`（来信不沾黑名单词、草稿是 AI 写的，只有承诺扫描
+说话 → 不自主 → 人点头之前一分钱不施行），17/17；15 人 pack 13/13 不劣化；两个 pack 各在
+`stub` / `direct` / `dsh-subprocess` 三个运行时下跑过，四档跑出来的草稿正文逐字节相同、
+门决策与规则集哈希也相同。
 
 ## 5. 红人岗位：从零建（L4）
 

@@ -142,6 +142,51 @@ type GuardrailResult = {
 | stage | stage 时读到的记录 + 当时的 effective mandate | `guardrail`；`allow` 且等级 ≥ L2 → 宿主写 approved_change_ids（审批项 auto_approved）；`require_review` → L1 路由；`block` → 不建审批项，运行内告诉模型原因 |
 | apply | **重新读目标记录** + **当前**的 effective mandate + **重算执行快照** | `guardrail_rerun`；硬禁令 block → `failed{policy_tightened}`；软额度超出且已 approved → 记 `approved_exception` 继续；快照不一致 → `failed{snapshot_mismatch}` |
 
+### 3.4 前置里的三道「不自主」门（WP55 / 48 §4 L3 #3）
+
+上面那套额度评估回答的是「这个变更**合不合法**」。审批项前置还要回答另一个问题：
+**这封回信能不能自己发出去**。两者不是一回事——一封完全合法的回信，
+可能因为措辞不该由机器定稿而必须过人手。
+
+| 门 | 问的是 | `fail` 的意思 | 对应 KefuAgent |
+|---|---|---|---|
+| `l3_denylist` | 这件事在不在「永不自动发送」的九类里 | 不自主，转人审 | G04 的 L3 部分 |
+| `draft_origin` | 这份草稿是 AI 写的吗、它自己说缺料了吗 | 不自主，转人审 | G06 的草稿来源部分 |
+| `commitment_scan` | 这封回信里有没有第一人称承诺 / 无依据让步 | 不自主，转人审 | G10 |
+
+四条纪律：
+
+1. **只记录，不改状态。** 门说「不自主」不等于这张卡不该建，只等于它不能自己发出去——
+   卡照常进队列等人按。把它当拦截，客户就被晾在那儿了。
+2. **fail-closed。** 门内抛异常 → `gate_error` → 同样不自主。但 `gate_error` 与 `fail`
+   **必须分得开**：不然一个写崩的正则会被当成"确实命中了黑名单"，没人去修它。
+3. **不短路。** 三道门按固定顺序全部跑完，三条结论都要进审计行——
+   否则事后没法回答"当时另外两道门怎么说"。
+4. **`autonomous` 用 `undefined` 表示「没装这三道门」，不是 `true`。**
+   "没问过"与"问过了说可以"在自主发送这件事上必须分得开。
+
+两处评估语义照搬 KefuAgent 踩过的坑：Tier-3 命中过**子句级否定守卫**
+（"I'm not able to issue a refund" 是在拒绝，不是在承诺；被否定的命中降级进
+`negated_hits` 供审计，不阻断）；让步兜底是**句内共现**而不是整篇共现
+（整篇共现会把"政策援引在第二句、I'll 在第四句"的正确回复误判掉）。
+否定守卫**故意不进规则集哈希**——它改的是扫法，不是词表。
+
+**规则集哈希。** 每条门决策都印一个 `ruleset_hash`（规则集内容的规范化哈希），
+因为"当时用的是哪一版规则"是自主发送审计链的全部内容。契约是**只可加行**：
+加一条 pattern 哈希会变（预期，改快照）；删一条 / 弱化一条 / 挪一个键名哈希也会变
+（不预期，快照测试当场红，改动要有人解释）。键的顺序与名字是契约的一部分。
+当前值 `b057f8af4ff14964f90f4e4d0d75a3f9783037a184a187ca397ea496e263ac13`。
+
+**审计行只留结论。** `guardrail.gate_decided` 的 payload 只有门名、`pass` / `fail` / `gate_error`、
+机器可读原因、命中的规则 id 与规则集哈希——被扫的**客户原文与草稿正文一个字不进日志**。
+
+**同路进前置但不是门的那一条：`amazon_outbound`。** Amazon 站内信的出站硬闸不是
+"自不自主"的问题，是"这封信根本不能这样发出去"，所以它命中就 **block**，
+重写指令原样进 `notes` 回给起草那一跳。拦下 = **打回重写**，不是静默删改后照发——
+静默删改会让运营永远不知道模型在写违规内容，问题只会越积越多。
+它触发的条件是**收件人域**，与自动回复开关、急停开关都无关
+（急停该让判定回到现状，不该让一封已经存在的 Amazon 线程绕过 Amazon 的社区规范）。
+
 ---
 
 ## 4. 变更集与防绕过
@@ -207,7 +252,7 @@ type ProvenanceState = {
 | POST | `/changes/{id}/reverse` | 可逆 kind，生成反向 StagedChange |
 | POST | `/guardrails/evaluate` | 预检、模拟、界面预览（只评估不 stage） |
 
-事件：`change.staged`、`.blocked`、`.approved`、`.applying`、`.applied`、`.failed`、`.expired`、`.withdrawn`、`.superseded`、`.reversed`、`guardrail.hit`（每次命中一条，健康看板与降级用）。
+事件：`change.staged`、`.blocked`、`.approved`、`.applying`、`.applied`、`.failed`、`.expired`、`.withdrawn`、`.superseded`、`.reversed`、`guardrail.hit`（每次命中一条，健康看板与降级用）、`guardrail.gate_decided`（WP55，§3.4 三道门的结论，建卡时一条）。
 
 ---
 
@@ -228,6 +273,11 @@ type ProvenanceState = {
 11. 多币种：店铺 EUR 退款 €45 换算基准 USD 后与 cap 比较，fx 快照记录
 12. `pause_ad` 在 L3 下仍建审批记录（auto_approved，不进人的待办）并 apply，留 StagedChange 与事件（与 14 一致）
 13. 模拟：合成 provider 注入 429 → 自动重试 3 次后 failed{retryable}，审批项 apply_failed
+14. （WP55 / §3.4）草稿里有一句第一人称退款承诺 → `commitment_scan` fail → `autonomous: false`，
+    **但卡照常建、照常带着那笔待批退款**；人点头之前 `change.applied` 一条都没有
+15. （WP55 / §3.4）门内抛异常 → `gate_error` → 同样不自主，且与 `fail` 在审计行里分得开
+16. （WP55 / §3.4）收件人是 Amazon relay 且正文带站外链接 → `amazon_outbound` block，
+    重写指令回给起草那一跳；重写后的那一版过闸并照常建卡——回信要发出去，只是不能带链接
 
 ---
 
