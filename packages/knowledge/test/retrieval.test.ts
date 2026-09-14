@@ -130,7 +130,8 @@ describe('Retrieval 过滤与排序', () => {
           structured: { version: n },
         }),
       )
-    const r = await k.retrieval.search({ text: '退货', actor: admin(), k: 2 })
+    // 排序是 lexical 档的事（auto 档在小库上整库注入，分数一律 0）
+    const r = await k.retrieval.search({ text: '退货', actor: admin(), k: 2, mode: 'lexical' })
     expect(r.hits).toHaveLength(2)
     expect(r.hits[0]?.score).toBeGreaterThanOrEqual(r.hits[1]?.score ?? 0)
   })
@@ -182,11 +183,15 @@ describe('Retrieval 向量融合与引用', () => {
   it('传了 embed 就做 RRF：词面搜不到也能召回', async () => {
     const lexical = make()
     await activated(lexical, cardInput({ statement: '德国站退货窗口 14 天' }))
-    expect((await lexical.retrieval.search({ text: '退款', actor: admin() })).hits).toHaveLength(0)
+    // WP56：两边都钉在 lexical 档——这条比的是"词面搜不到 vs 向量搜得到"，
+    // 默认的 auto 档在小库上走长上下文，两边都会整库返回，比不出 RRF 的作用。
+    expect(
+      (await lexical.retrieval.search({ text: '退款', actor: admin(), mode: 'lexical' })).hits,
+    ).toHaveLength(0)
 
     const hybrid = make({ embed: toyEmbed })
     await activated(hybrid, cardInput({ statement: '德国站退货窗口 14 天' }))
-    const r = await hybrid.retrieval.search({ text: '退款', actor: admin() })
+    const r = await hybrid.retrieval.search({ text: '退款', actor: admin(), mode: 'lexical' })
     expect(r.hits).toHaveLength(1)
     expect(r.hits[0]?.score).toBeGreaterThan(0)
   })

@@ -59,6 +59,8 @@ interface SourceRow {
   chunks: number
   last_synced_at: string | null
   created_at: string
+  /** WP56：上一次同步时源的内容 hash。 */
+  last_content_hash: string | null
 }
 
 interface GapRow {
@@ -90,6 +92,7 @@ function rowToSource(r: SourceRow): KnowledgeSource {
     acl_inherit: r.acl_inherit === 1,
     chunks: r.chunks,
     ...(r.last_synced_at === null ? {} : { last_synced_at: r.last_synced_at }),
+    ...(r.last_content_hash === null ? {} : { last_content_hash: r.last_content_hash }),
   }
 }
 
@@ -194,6 +197,7 @@ export class SqliteIntakeStore {
       chunks: 0,
       last_synced_at: null,
       created_at: now,
+      last_content_hash: null,
     }
     this.db
       .prepare(
@@ -234,11 +238,19 @@ export class SqliteIntakeStore {
   }
 
   /** 解析完之后回填「切了几块、什么时候同步的」。 */
-  markSynced(id: string, chunks: number): KnowledgeSource {
+  markSynced(id: string, chunks: number, contentHash?: string): KnowledgeSource {
     if (!Number.isInteger(chunks) || chunks < 0) throw invalidInput('chunks 必须是非负整数')
-    const info = this.db
-      .prepare('UPDATE knowledge_sources SET chunks = ?, last_synced_at = ? WHERE id = ?')
-      .run(chunks, this.clock.now(), id)
+    const info =
+      contentHash === undefined
+        ? this.db
+            .prepare('UPDATE knowledge_sources SET chunks = ?, last_synced_at = ? WHERE id = ?')
+            .run(chunks, this.clock.now(), id)
+        : this.db
+            .prepare(
+              'UPDATE knowledge_sources SET chunks = ?, last_synced_at = ?, last_content_hash = ?' +
+                ' WHERE id = ?',
+            )
+            .run(chunks, this.clock.now(), contentHash, id)
     if (info.changes === 0) throw notFound(`导入源不存在：${id}`, { id })
     return this.getSource(id) as KnowledgeSource
   }

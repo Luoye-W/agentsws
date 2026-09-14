@@ -12,7 +12,7 @@ sizes:
   orders: 50
   shipments: 45
   threads: 4
-  knowledge: 3
+  knowledge: 4
   stores: 1
   roles: 0
 soak:

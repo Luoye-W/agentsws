@@ -32,6 +32,9 @@ importers:
       '@agentsws/deck':
         specifier: workspace:*
         version: link:../../packages/deck
+      '@agentsws/knowledge':
+        specifier: workspace:*
+        version: link:../../packages/knowledge
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../../packages/roles
@@ -138,6 +141,9 @@ importers:
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../../packages/stand-ins
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../../packages/support-core
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../../packages/txn
@@ -531,6 +537,9 @@ importers:
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../skills
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
       better-sqlite3:
         specifier: ^12.2.0
         version: 12.11.1

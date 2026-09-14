@@ -282,6 +282,21 @@ export type ScenarioEvent =
   | { at: string; type: 'org.personal'; personal: ScenarioOrgPersonal }
   /** WP50：把个人工作区并进公司（45 H2 / H3）。 */
   | { at: string; type: 'org.join'; join: ScenarioOrgJoin }
+  /** WP56：一个知识源（网页 / 文档）同步了一次新正文（48 §4 #6）。 */
+  | { at: string; type: 'knowledge.source_sync'; source_sync: ScenarioKnowledgeSourceSync }
+
+/**
+ * WP56（48 §4 #6）：源页 / 文档同步了一次。
+ *
+ * 场景给的是**新正文**，不是"内容变了没有"——变没变由内容 hash 判，
+ * 该不该惊动人由事实指纹判。两件事都在 `packages/knowledge` 里，场景不参与。
+ */
+export interface ScenarioKnowledgeSourceSync {
+  /** 源的 ref（pack 里那条知识的出处，或 `knowledge.source_sync` 前先登记过的 url）。 */
+  ref: string
+  /** 这一版的正文。 */
+  content: string
+}
 
 export interface ScenarioInbound {
   from: string

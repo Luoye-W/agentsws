@@ -11,16 +11,21 @@ import {
 } from './ingest.js'
 import { SqliteIntakeStore } from './intake.js'
 import { SqliteMemoryStore } from './memory.js'
+import { SqliteRecheckStore } from './recheck.js'
 import { SqliteRetrieval } from './retrieval.js'
 import { migrate } from './schema.js'
 import { type Embedder, SqliteKnowledgeStore } from './store.js'
 
 export * from './errors.js'
 export * from './events.js'
+export * from './fact-fingerprint.js'
 export * from './ingest.js'
 export * from './intake.js'
 export * from './markdown.js'
 export * from './memory.js'
+export * from './pack.js'
+export * from './provenance.js'
+export * from './recheck.js'
 export * from './retrieval.js'
 export * from './rows.js'
 export * from './schema.js'
@@ -28,6 +33,7 @@ export * from './state-words.js'
 export * from './store.js'
 export * from './text.js'
 export * from './visibility.js'
+export * from './zip.js'
 
 /** 系统时钟：本包唯一一处 `new Date()`，其余全部经注入的 Clock（25 §4）。 */
 export const systemClock: Clock = { now: () => new Date().toISOString() }
@@ -44,6 +50,11 @@ export interface CreateKnowledgeOptions {
   emit?: KnowledgeEmitter
   /** 单工作区本地档的缺省 workspace（记忆的 recall / forget 契约里没带）。 */
   workspace_id?: WorkspaceId
+  /**
+   * WP56（48 §4 #7）：长上下文档的字符预算，缺省 `DEFAULT_CONTEXT_BUDGET_CHARS`
+   * （16000）。全库（按身份过滤后）不超过它就整库注入，不检索。
+   */
+  budgetChars?: number
 }
 
 export interface Knowledge {
@@ -53,6 +64,8 @@ export interface Knowledge {
   memory: SqliteMemoryStore
   /** 19 §1.3 导入源与 §4 缺口队列（WP35 补的两张表）。 */
   intake: SqliteIntakeStore
+  /** WP56（48 §4 #6）：源页 / 文档变更 → 事实指纹比对 → stale + 复核卡。 */
+  recheck: SqliteRecheckStore
   ingestMarkdown(text: string, source: IngestSource, opts?: { maxChars?: number }): Chunk[]
   ingestDocument(
     input: { ref: string; parser: KnowledgeSource['parser']; data: string | Uint8Array },
@@ -73,8 +86,12 @@ export function createKnowledge(opts: CreateKnowledgeOptions = {}): Knowledge {
     ...(opts.emit === undefined ? {} : { emit: opts.emit }),
   }
   const store = new SqliteKnowledgeStore(db, shared)
-  const retrieval = new SqliteRetrieval(db, shared)
+  const retrieval = new SqliteRetrieval(db, {
+    ...shared,
+    ...(opts.budgetChars === undefined ? {} : { budgetChars: opts.budgetChars }),
+  })
   const intake = new SqliteIntakeStore(db, shared)
+  const recheck = new SqliteRecheckStore(db, store, shared)
   const memory = new SqliteMemoryStore(db, {
     clock,
     ...(opts.workspace_id === undefined ? {} : { workspace_id: opts.workspace_id }),
@@ -85,6 +102,7 @@ export function createKnowledge(opts: CreateKnowledgeOptions = {}): Knowledge {
     store,
     retrieval,
     intake,
+    recheck,
     memory,
     ingestMarkdown,
     ingestDocument: (input, source, chunkOpts) =>

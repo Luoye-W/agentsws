@@ -617,6 +617,25 @@ Returns are counted from the delivery date, not the order date.
 `,
   },
   {
+    // WP56（48 §4 #6）：一条**源页派生**的知识，`knowledge/source-changed-recheck`
+    // 就是拿它演的——官网保修页改了月数，这条卡先标待复核，人答完才改口径。
+    path: 'knowledge/fact-warranty.md',
+    front: {
+      layer: 'fact',
+      domain: 'knowledge',
+      subject_key: 'warranty.window',
+      sensitivity: 'internal',
+    },
+    body: `# 保修期
+
+充电类产品的保修期是 24 个月，从签收日算起。
+
+这条是从官网保修页抄下来的（\`https://shop.example/warranty\`）——它是**源页派生**的知识：
+那一页改了正文、而且改的正是这个月数时，这条卡会被标成待复核（48 §4 #6），
+在人确认之前口径一个字都不改。
+`,
+  },
+  {
     path: 'knowledge/phrasing-aftersales-tone.md',
     front: {
       layer: 'phrasing',

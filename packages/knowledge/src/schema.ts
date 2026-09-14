@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS fact_cards (
   -- 47 J2：降成历史案例的那两格（"当时"是什么时候、本来是哪一层）
   as_of                  TEXT,
   downgraded_from        TEXT,
+  -- WP56（48 §3 L2 / §4 #6）：适用范围、事实指纹、时效三件套、外部链接
+  stage                  TEXT,
+  fact_fingerprint_json  TEXT,
+  verification_state     TEXT,
+  source_content_hash    TEXT,
+  source_changed_at      TEXT,
+  media_json             TEXT,
+  last_verified_at       TEXT,
   usage_recalled         INTEGER NOT NULL,
   usage_cited            INTEGER NOT NULL,
   usage_last_recalled_at TEXT,
@@ -95,7 +103,9 @@ CREATE TABLE IF NOT EXISTS knowledge_sources (
   acl_inherit    INTEGER NOT NULL,
   chunks         INTEGER NOT NULL,
   last_synced_at TEXT,
-  created_at     TEXT NOT NULL
+  created_at     TEXT NOT NULL,
+  -- WP56：上一次同步时源的内容 hash（变了才去比事实指纹）
+  last_content_hash TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS knowledge_sources_ref
   ON knowledge_sources (workspace_id, kind, ref);
@@ -125,14 +135,57 @@ CREATE INDEX IF NOT EXISTS knowledge_gaps_queue
 CREATE UNIQUE INDEX IF NOT EXISTS knowledge_gaps_open
   ON knowledge_gaps (workspace_id, subject_key, question) WHERE status = 'open';
 
+-- WP56（48 §4 #6）：源页 / 文档改了之后开出来的复核。
+-- 一个 (源, 派生卡) 同时只有一张开着的——同一页连改三次不该刷出三张卡。
+CREATE TABLE IF NOT EXISTS knowledge_rechecks (
+  id               TEXT PRIMARY KEY,
+  workspace_id     TEXT NOT NULL,
+  source_id        TEXT NOT NULL,
+  card_id          TEXT NOT NULL,
+  status           TEXT NOT NULL,
+  reason           TEXT NOT NULL,
+  before_json      TEXT NOT NULL,
+  after_json       TEXT NOT NULL,
+  categories_json  TEXT NOT NULL,
+  approval_item_id TEXT,
+  resolution       TEXT,
+  resolved_by      TEXT,
+  resolved_at      TEXT,
+  created_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS knowledge_rechecks_queue
+  ON knowledge_rechecks (workspace_id, status, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS knowledge_rechecks_open
+  ON knowledge_rechecks (workspace_id, source_id, card_id) WHERE status = 'open';
+
 CREATE TABLE IF NOT EXISTS knowledge_meta (
   k TEXT PRIMARY KEY,
   v TEXT NOT NULL
 );
 `
 
+/**
+ * WP56 加的列。`CREATE TABLE IF NOT EXISTS` 对**已经存在**的库不补列，
+ * 所以老库要逐列 ALTER 一次。只加不删、只加可空列——加完的库回退到旧代码照样跑。
+ */
+const ADDED_COLUMNS: readonly [table: string, column: string, type: string][] = [
+  ['fact_cards', 'stage', 'TEXT'],
+  ['fact_cards', 'fact_fingerprint_json', 'TEXT'],
+  ['fact_cards', 'verification_state', 'TEXT'],
+  ['fact_cards', 'source_content_hash', 'TEXT'],
+  ['fact_cards', 'source_changed_at', 'TEXT'],
+  ['fact_cards', 'media_json', 'TEXT'],
+  ['fact_cards', 'last_verified_at', 'TEXT'],
+  ['knowledge_sources', 'last_content_hash', 'TEXT'],
+]
+
 export function migrate(db: Database): void {
   db.exec(SCHEMA_SQL)
+  for (const [table, column, type] of ADDED_COLUMNS) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+    if (cols.some((c) => c.name === column)) continue
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+  }
 }
 
 /** 单调计数器，用于生成稳定的卡片 id（不依赖 Math.random / Date.now）。 */

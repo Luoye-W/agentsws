@@ -23,6 +23,7 @@ import type {
   RunEvent,
 } from '@agentsws/contracts'
 import type { DataSourceStatus, DeckCard, OrderRow } from '@agentsws/deck'
+import { contentHashOf } from '@agentsws/knowledge'
 import { parseRole } from '@agentsws/roles'
 import type {
   MatterRecordSource,
@@ -535,6 +536,68 @@ async function seedJoin(world: World, server: Server): Promise<void> {
   )
 }
 
+/**
+ * 48 §4 #6（WP56）：让知识页上真的有知识，并且「源页改了、口径先不动、等人复核」
+ * 这条链看得见。
+ *
+ * **为什么要在这儿单独种一遍**：`MountedWorld` 没有 knowledge 这一格——
+ * 服务进程自己 `createKnowledge` 一个库，模拟世界另有一个，两边不通。
+ * 在 WP56 之前知识页是个壳，这件事看不出来；现在那一页要显示卡片、复核、缺口，
+ * 空库就等于整页空白。所以这里把 pack 的知识按**服务进程这一侧**再登记一遍，
+ * 用的是同样的 `store.propose` / `activate` / `intake.addSource`（19 §1.3、§4）。
+ *
+ * 然后喂一份"官网保修页改过的正文"：24 个月 → 12 个月，顺带换了标题、
+ * 加了段营销文案。措辞那部分产生不了指纹项，真正触发复核的是那个月数——
+ * 走的是 `recheck.syncSource`，与模拟题 `knowledge/source-changed-recheck` 同一个函数。
+ */
+async function seedKnowledgeRecheck(server: Server, world: World, pack: Pack): Promise<void> {
+  const { knowledge } = server
+  const workspace_id = world.workspace_id
+  const owner = world.roleHolder
+  const at = world.clock.now()
+
+  for (const doc of pack.knowledge) {
+    const card = await knowledge.store.propose({
+      schema_version: 1,
+      workspace_id,
+      layer: doc.layer,
+      domain: doc.domain as 'company',
+      scope: [],
+      sensitivity: doc.sensitivity,
+      subject: { type: doc.domain, key: doc.subject_key },
+      statement: doc.body.trim(),
+      provenance: [{ source: 'document', ref: doc.path, at }],
+      confidence: { value: 0.9, state: 'probable' },
+      valid: {},
+      owner,
+      created_by: { kind: 'person', id: owner },
+    })
+    await knowledge.store.activate(card.id, owner)
+    const src = knowledge.intake.addSource({
+      workspace_id,
+      kind: 'upload',
+      ref: doc.path,
+      parser: 'anydoc',
+    })
+    knowledge.intake.markSynced(src.id, 1, contentHashOf(doc.body))
+  }
+
+  const source = knowledge.intake
+    .sources(workspace_id)
+    .find((s) => s.ref === 'knowledge/fact-warranty.md')
+  if (source === undefined) return
+  const content = [
+    '# 保修期（2026 秋季更新）',
+    '',
+    '好消息：我们把保修流程简化了，理赔更快！',
+    '',
+    '充电类产品的保修期是 **12 个月**，从签收日算起。',
+    '',
+  ].join('\n')
+  await knowledge.recheck.syncSource({ source, content })
+  knowledge.intake.markSynced(source.id, source.chunks, contentHashOf(content))
+}
+
 export async function createDemo(options: DemoOptions): Promise<Demo> {
   const root = options.root
   const pack = loadPack(fromRoot(root, DEMO_PACK))
@@ -647,6 +710,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
 
   // 45（WP50）：公司页「并进来」Tab 与新建品牌时的查重提示都要有东西可看
   await seedJoin(world, server)
+
+  // 48 §4 #6（WP56）：知识页的复核卡要有东西可看
+  await seedKnowledgeRecheck(server, world, pack)
 
   await seedWorkModel({
     work: server.work,

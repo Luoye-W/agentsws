@@ -435,6 +435,18 @@ async function execute(
       if (item === undefined) throw new SimulationError('not_found', '还没有学习提案卡可决定')
       return item
     }
+    // WP56：最近一张复核卡（`knowledge_update` 的 recheck 形态）
+    if (ref === '$last_knowledge_recheck') {
+      const item = [...all]
+        .reverse()
+        .find(
+          (i) =>
+            i.kind === 'knowledge_update' &&
+            (i.payload as { form?: string }).form === 'knowledge_recheck',
+        )
+      if (item === undefined) throw new SimulationError('not_found', '还没有复核卡可决定')
+      return item
+    }
     if (ref === '$last_staged_change') {
       const item = [...all].reverse().find((i) => i.kind === 'staged_change')
       if (item === undefined) throw new SimulationError('not_found', '还没有待批变更可决定')
@@ -481,6 +493,9 @@ async function execute(
     await world.learning?.onDecided(decided, {
       ...(option === undefined ? {} : { selected_option_id: option }),
     })
+    // WP56（48 §4 #6）：复核卡答完了才真正动知识（人没答之前口径逐字段不变）
+    if (decided.kind === 'knowledge_update' && action !== 'reject')
+      await world.resolveKnowledgeRecheck(decided, option)
   }
 
   /* ── WP38 认领与撞车（40 §3）──────────────────────────────────────── */
@@ -1042,6 +1057,12 @@ async function execute(
           orders: seen.orders,
           products: seen.products,
         })
+        return
+      }
+      // WP56（48 §4 #6）：一个知识源同步了一次新正文
+      case 'knowledge.source_sync': {
+        await world.syncKnowledgeSource(event.source_sync.ref, event.source_sync.content)
+        await tick()
         return
       }
       default: {

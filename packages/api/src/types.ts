@@ -214,6 +214,48 @@ export interface KnowledgePort {
     id: string,
     input: { answer: string; layer?: KnowledgeLayer },
   ): MaybePromise<KnowledgeGapAnswer>
+  /* ── WP56（48 §4 #6 / #9）：复核队列与知识包。都是**可选**面 ────────────── */
+  /** 源页 / 文档改了之后开出来的复核（`status` 缺省只给还开着的）。 */
+  rechecks?(actor: GatewayActor, filter: { status?: string }): MaybePromise<unknown[]>
+  /** 答一张复核卡：确认没变 / 按新值更新 / 忽略。 */
+  resolveRecheck?(
+    actor: GatewayActor,
+    id: string,
+    input: { resolution: 'unchanged' | 'adopt_new' | 'ignore' },
+  ): MaybePromise<unknown>
+  /**
+   * 导入一个 `kefu-knowledge-pack/v1`。
+   *
+   * 19 §4 的纪律不变：**承诺类（定价 / 政策 / 边界）一律落候选**，
+   * 其余的也只有 `confidence: high` 且带核实日期时才自动激活。
+   */
+  importPack?(
+    actor: GatewayActor,
+    input: { zip?: Uint8Array; files?: readonly { path: string; content: string }[] },
+  ): MaybePromise<{
+    imported: number
+    activated: number
+    proposed: number
+    warnings: string[]
+    manifest: { name: string; version: string }
+  }>
+  /**
+   * 36 §2.2 业务边界清单：15 条里哪几条商家已经答过。
+   *
+   * "答过"不是另存一张表——答案就在知识库里（`layer: 'policy'` 的卡），
+   * 这一条只是把注册表与知识库对一遍，告诉人还差哪几条。
+   */
+  boundaries?(actor: GatewayActor): MaybePromise<
+    {
+      id: string
+      label: string
+      question: string
+      answered: boolean
+      options: { id: string; label: string }[]
+    }[]
+  >
+  /** 整库导出成一个知识包。**zip 在下游打**——网关不认识 zip 格式，只转字节。 */
+  exportPack?(actor: GatewayActor): MaybePromise<{ filename: string; zip: Uint8Array }>
 }
 
 /* 19 §1.3 / §4 的知识源与缺口对象已进契约（WP35），这里只转出去，不再自己定义。 */

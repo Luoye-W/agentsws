@@ -90,6 +90,7 @@
 
 - 46 公司档案加"你卖的是：实物商品 / 虚拟产品与服务"；`support-core` 按垂直包参数化，代码里禁止 `if (vertical === 'digital')`，parity guard 照搬。
 - 知识条目加 `stage: both | presales | postsales`；网站客服按意图判定当前 stage 过滤；邮件是混合渠道不硬过滤。
+  **WP56 实现**：`FactCard.stage`（缺省 `both`）落在 `contracts/knowledge.ts` 与 `knowledge/schema.ts`（只加列）；检索入参 `stage` 做过滤下推——只排除**只属于另一头**的条目，`both` 与没标 stage 的两头都进；不传 `stage` 就不过滤，这就是邮件那条"混合渠道不硬过滤"。
 
 ## 4. 客服岗位：还要搬什么（L3，不变）
 
@@ -102,10 +103,10 @@
 | 3 | 自主发送门 G04 / G06 / G10 | 15 的 guardrail 前置：`l3_denylist` / `draft_origin` / `commitment_scan`，fail-closed，规则集哈希只可加行 |
 | 4 | outbox 状态机 + 对账（`sent_unknown` 绝不自动重试） | `packages/channels` 出站 + housekeeping |
 | 5 | 邮箱加固：UID 游标持久化、毒消息隔离、扫描租约、`agentsws` 归档文件夹 | `packages/channels` |
-| 6 | 知识溯源链：事实指纹、源页复核、stale 降权、承诺类永不自动发布 | 19 FactCard 加字段；健康看板加复核卡 |
-| 7 | 长上下文检索档（全库 ≤ 预算整库注入） | `packages/knowledge/retrieval.ts` |
+| 6 | 知识溯源链：事实指纹、源页复核、stale 降权、承诺类永不自动发布 | 19 FactCard 加字段；健康看板加复核卡。**WP56 实现**：`knowledge/fact-fingerprint.ts`（五类受管辖数值，词表冻结的纯函数，零模型）、`provenance.ts`（溯源等级读取时派生 + 分层排序 + 承诺类永不自动激活）、`recheck.ts`（源 hash 变 → 比指纹 → 标 `stale` + 开三选一复核卡）；存储只加列 + 复核队列一张新表（`knowledge/schema.ts`）；`GET /v1/knowledge/rechecks`、`POST /v1/knowledge/rechecks/:id/resolve`；模拟题 `knowledge/source-changed-recheck` |
+| 7 | 长上下文检索档（全库 ≤ 预算整库注入） | `packages/knowledge/retrieval.ts`。**WP56 实现**：`mode: 'context'`（缺省预算 16000 字符，全库按更新时间倒序整库注入、**不检索**），超预算退回 `lexical`，`hybrid` 留接口不实现；两档都叠一层溯源分层装箱；`stage` 过滤下推（只排除只属于另一头的条目） |
 | 8 | 影子质检 + 回流 | 24 学习回路 |
-| 9 | 知识包导入、历史邮件学、缺口补、边界问答卡 | 知识包 = 我们的 markdown 格式（§6 迁移工具共用） |
+| 9 | 知识包导入、历史邮件学、缺口补、边界问答卡 | 知识包 = 我们的 markdown 格式（§6 迁移工具共用）。**WP56 实现**：`knowledge/pack.ts`（`kefu-knowledge-pack/v1` ↔ `FactCard` 双向转换）+ `zip.ts`（内存 zip，解包拒绝绝对路径与路径穿越）；`POST /v1/knowledge/import`、`GET /v1/knowledge/export`；`packages/learning/src/history.ts`（先聚类再出题，成本跟簇数走）；缺口两种补法（贴链接 / 粘文字）与边界清单 `GET /v1/knowledge/boundaries` 都在知识页 |
 | 10 | 视觉附件 | 模型网关视觉位，后置 |
 | 11 | **在线聊天**：聊天流水线（词表分类 → 计划 → 轻模型答 → 求助 / 转人工 / 超时转邮件） | 流水线进 `support-core` / `channels`（本地能跑）；**widget 与公网端点**在托管档 |
 
