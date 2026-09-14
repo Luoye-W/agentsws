@@ -71,7 +71,13 @@ export class SqliteRetrieval implements Retrieval {
   /** 可见性 + 状态 + 显式过滤条件，供 FTS 查询与向量查询共用。 */
   private candidateWhere(q: SearchQuery): { sql: string; params: (string | number)[] } {
     const vis = visibilityWhere(q.actor)
-    const where = [vis.sql, "c.status = 'active'"]
+    const where = [
+      vis.sql,
+      "c.status = 'active'",
+      // WP56（48 §4 #6）：`quarantined` 是**唯一**真正从检索里排除的状态，
+      // 而且只能由人显式产生。`stale` / `unverified` 一律不排除——只是排在后面。
+      "(c.verification_state IS NULL OR c.verification_state != 'quarantined')",
+    ]
     const params: (string | number)[] = [...vis.params]
 
     if (q.domains !== undefined && q.domains.length > 0) {

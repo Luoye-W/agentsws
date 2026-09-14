@@ -11,16 +11,20 @@ import {
 } from './ingest.js'
 import { SqliteIntakeStore } from './intake.js'
 import { SqliteMemoryStore } from './memory.js'
+import { SqliteRecheckStore } from './recheck.js'
 import { SqliteRetrieval } from './retrieval.js'
 import { migrate } from './schema.js'
 import { type Embedder, SqliteKnowledgeStore } from './store.js'
 
 export * from './errors.js'
 export * from './events.js'
+export * from './fact-fingerprint.js'
 export * from './ingest.js'
 export * from './intake.js'
 export * from './markdown.js'
 export * from './memory.js'
+export * from './provenance.js'
+export * from './recheck.js'
 export * from './retrieval.js'
 export * from './rows.js'
 export * from './schema.js'
@@ -53,6 +57,8 @@ export interface Knowledge {
   memory: SqliteMemoryStore
   /** 19 §1.3 导入源与 §4 缺口队列（WP35 补的两张表）。 */
   intake: SqliteIntakeStore
+  /** WP56（48 §4 #6）：源页 / 文档变更 → 事实指纹比对 → stale + 复核卡。 */
+  recheck: SqliteRecheckStore
   ingestMarkdown(text: string, source: IngestSource, opts?: { maxChars?: number }): Chunk[]
   ingestDocument(
     input: { ref: string; parser: KnowledgeSource['parser']; data: string | Uint8Array },
@@ -75,6 +81,7 @@ export function createKnowledge(opts: CreateKnowledgeOptions = {}): Knowledge {
   const store = new SqliteKnowledgeStore(db, shared)
   const retrieval = new SqliteRetrieval(db, shared)
   const intake = new SqliteIntakeStore(db, shared)
+  const recheck = new SqliteRecheckStore(db, store, shared)
   const memory = new SqliteMemoryStore(db, {
     clock,
     ...(opts.workspace_id === undefined ? {} : { workspace_id: opts.workspace_id }),
@@ -85,6 +92,7 @@ export function createKnowledge(opts: CreateKnowledgeOptions = {}): Knowledge {
     store,
     retrieval,
     intake,
+    recheck,
     memory,
     ingestMarkdown,
     ingestDocument: (input, source, chunkOpts) =>
