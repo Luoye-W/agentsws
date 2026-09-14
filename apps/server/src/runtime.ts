@@ -166,6 +166,18 @@ interface RunScope {
   seen: ObjectRef[]
 }
 
+/**
+ * 回信收件人：事项上钉着来信人（`contact`）就只能是他；没钉（老事项）才用模型给的地址解析出来的那个。
+ * 纯函数，方便钉住"模型给别的邮箱也发不出去"这一条。
+ */
+export function pickDraftRecipient(input: {
+  pinnedContact: ObjectRef | undefined
+  resolved: ObjectRef | undefined
+}): ObjectRef | undefined {
+  if (input.pinnedContact !== undefined) return input.pinnedContact
+  return input.resolved
+}
+
 export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   const { clock, workspace_id, roles, approvals } = options
   const source = options.source ?? {}
@@ -215,8 +227,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (s === undefined || work === undefined) return undefined
     const email = payload.to[0]
     if (email === undefined) return undefined
-    const to = source.contactOf?.(email)
+    const resolved = source.contactOf?.(email)
+    // 31 §3.3 + 09-14 真店实测：模型会把订单上的客户邮箱当收件人，而来信人可能是另一个地址
+    // （代下单、家人、测试账号）。回信只能回给**来信人**——事项上钉着的那个联系人；
+    // 模型给的地址不一致就改指过去并在时间线上说一句，绝不按模型给的发。
+    const pinnedContact = s.matter.context.pinned.find((p) => p.type === 'contact')
+    const to = pickDraftRecipient({ pinnedContact, resolved })
     if (to === undefined) return undefined
+    if (resolved !== undefined && refKey(resolved) !== refKey(to)) {
+      work.appendEvent(s.matter.id, {
+        kind: 'status',
+        text: `回信收件人改为来信人：模型给的地址（${email}）与来信人不一致，已按来信人处理。`,
+        actor: { kind: 'system', id: 'runtime' },
+        run_id: s.run_id,
+      })
+    }
     const seen = [...s.seen]
     if (!seen.some((r) => refKey(r) === refKey(to))) return undefined
     const subject = seen.find((r) => r.type === 'thread') ?? seen.find((r) => r.type === 'order')
@@ -234,7 +259,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         conversation_id: s.matter.id,
       },
       dedupe_key: `${workspace_id}:outbound_draft:${s.matter.id}:${s.run_id}`,
-      title: `回复 ${source.label?.(to) ?? email}：${payload.subject}`,
+      title: `回复 ${source.label?.(to) ?? (resolved !== undefined && refKey(resolved) === refKey(to) ? email : '来信人')}：${payload.subject}`,
       summary: payload.subject,
       payload: {
         channel: payload.channel,
