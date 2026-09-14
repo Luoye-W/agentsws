@@ -23,6 +23,7 @@ import {
   exportKnowledgePack,
   importKnowledgePack,
   type KnowledgePackImportResult,
+  listKnowledgeBoundaries,
   listKnowledgeCards,
   listKnowledgeGaps,
   listKnowledgeRechecks,
@@ -43,6 +44,10 @@ export function KnowledgePage(): React.ReactNode {
     queryFn: () => listKnowledgeRechecks(),
   })
   const gaps = useQuery({ queryKey: ['knowledge-gaps'], queryFn: () => listKnowledgeGaps() })
+  const boundaries = useQuery({
+    queryKey: ['knowledge-boundaries'],
+    queryFn: () => listKnowledgeBoundaries(),
+  })
 
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['knowledge-cards'] })
@@ -179,6 +184,25 @@ export function KnowledgePage(): React.ReactNode {
               ))}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="knowledge-boundaries">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">{t('knowledge.boundaries')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-xs text-muted-foreground">{t('knowledge.boundaries.note')}</p>
+          <ul className="divide-y text-sm">
+            {(boundaries.data ?? []).map((b) => (
+              <li key={b.id} className="flex items-center gap-2 py-2">
+                <span className="min-w-0 flex-1 truncate">{b.label}</span>
+                <Badge variant={b.answered ? 'secondary' : 'outline'}>
+                  {b.answered ? t('knowledge.boundaries.answered') : t('knowledge.boundaries.open')}
+                </Badge>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
 

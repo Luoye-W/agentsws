@@ -2567,3 +2567,17 @@ export async function exportKnowledgePack(assignment?: string): Promise<Blob> {
   if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
   return res.blob()
 }
+
+/** 36 §2.2 业务边界：15 条里哪几条答过。 */
+export interface KnowledgeBoundaryRow {
+  id: string
+  label: string
+  question: string
+  answered: boolean
+  options: { id: string; label: string }[]
+}
+
+export const listKnowledgeBoundaries = (assignment?: string): Promise<KnowledgeBoundaryRow[]> =>
+  api<KnowledgeBoundaryRow[]>('/v1/knowledge/boundaries', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })

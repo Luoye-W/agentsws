@@ -6,6 +6,7 @@
     { "path": "../contracts" },
     { "path": "../core" },
     { "path": "../roles" },
-    { "path": "../skills" }
+    { "path": "../skills" },
+    { "path": "../support-core" }
   ]
 }

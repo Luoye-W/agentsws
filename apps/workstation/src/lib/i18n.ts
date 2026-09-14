@@ -558,6 +558,11 @@ const zh: Table = {
   'knowledge.import_result':
     '读进来 {imported} 条：{activated} 条直接生效，{proposed} 条等你确认。',
   'knowledge.cards': '知识清单',
+  'knowledge.boundaries': '业务边界',
+  'knowledge.boundaries.note':
+    '这些不预先问你。Agent 第一次撞上没答过的那一条时，出一道选择题；答过就不再问。',
+  'knowledge.boundaries.answered': '已定',
+  'knowledge.boundaries.open': '还没问过',
   'knowledge.gaps': '缺口',
   'knowledge.gaps.empty': '没有等着补的缺口。',
   'knowledge.gap.paste_link': '贴个链接',
@@ -1652,6 +1657,11 @@ const en: Table = {
   'knowledge.import_result':
     'Read {imported} entries: {activated} active, {proposed} waiting for you.',
   'knowledge.cards': 'Knowledge',
+  'knowledge.boundaries': 'Business boundaries',
+  'knowledge.boundaries.note':
+    'Never asked up front. The first time the Agent hits one you have not answered, it asks a single multiple-choice question — then never again.',
+  'knowledge.boundaries.answered': 'Set',
+  'knowledge.boundaries.open': 'Not asked yet',
   'knowledge.gaps': 'Gaps',
   'knowledge.gaps.empty': 'No open gaps.',
   'knowledge.gap.paste_link': 'Paste a link',

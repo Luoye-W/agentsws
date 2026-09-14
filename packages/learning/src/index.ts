@@ -19,6 +19,8 @@ import { SqliteLearningStore } from './sqlite.js'
 export * from './apply.js'
 export * from './errors.js'
 export * from './extract.js'
+// WP56（48 §4 #9）：从历史邮件学一遍
+export * from './history.js'
 export * from './pool.js'
 export * from './promote.js'
 export * from './proposals.js'

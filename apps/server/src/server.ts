@@ -72,6 +72,7 @@ import {
   rangeTargetOfProduct,
 } from '@agentsws/roles'
 import { createSkills, type Skills } from '@agentsws/skills'
+import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
@@ -1345,6 +1346,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }),
     resolveRecheck: (actor, id, input) =>
       knowledge.recheck.resolve(id, { resolution: input.resolution, by: actor.person_id }),
+    /**
+     * WP56（36 §2.2）：15 条业务边界里哪几条答过。
+     *
+     * **答案不另存一张表**——它就在知识库里。这一条把注册表与知识库对一遍：
+     * 剩下的那几条就是「Agent 下次撞到时会问你」的清单。
+     */
+    boundaries: async (actor) => {
+      const cards = await knowledge.store.list(
+        { workspace_id: actor.workspace_id, status: 'active' },
+        actor,
+      )
+      const answered = detectAnsweredBoundaries({
+        texts: cards.map((c) => c.statement),
+        structured: cards.flatMap((c) => (c.structured === undefined ? [] : [c.structured])),
+        at: clock.now(),
+      })
+      return SUPPORT_BOUNDARIES.map((b) => ({
+        id: b.id,
+        label: b.label,
+        question: b.question,
+        answered: answered.some((p) => p.boundary_id === b.id),
+        options: b.options.map((o) => ({ id: o.id, label: o.label })),
+      }))
+    },
     // WP56（48 §4 #9）：知识包导入 / 导出。zip 在这一层解与打，网关只转字节
     importPack: (actor, input) => importKnowledgePack(knowledge, actor, input, { clock }),
     exportPack: async (actor) => {

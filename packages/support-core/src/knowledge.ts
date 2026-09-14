@@ -228,3 +228,165 @@ export function toFactCardDraft(
     created_by: { kind: 'agent', id: ctx.created_by_id },
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* WP56（48 §4 #9）：从历史邮件里学                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Extracted from KefuAgent `src/lib/support/knowledge-learning.ts`
+ * （`learnKnowledgeFromHistory` 的聚类口径：≥ 3 条成簇、最多 8 簇、每簇 6 个例子），
+ * rewritten for agentsws。
+ *
+ * 一个刚接进来的工作区，知识库是空的，但它的邮箱里躺着两年的「客户问 → 真人答」。
+ * 那就是现成的知识，只是没人整理过。这里做的是**聚类与出题**——
+ * 归纳那一步交给模型（经运行时 / 网关，本包不认识模型）。
+ *
+ * 三条边界：
+ * - 只看**内部人写的那一半**（真人回复），客户原话只当"问题长什么样"，永不成为知识；
+ * - 聚类是关键词的，不是语义的：一个确定性的、看得懂的规则，比一个说不清为什么
+ *   把这两封归到一起的向量更适合让人审；
+ * - 归纳出来的一律是**候选**，走 `knowledge_update` 卡。
+ */
+
+/** 一对「客户问 → 真人答」。 */
+export interface QaPair {
+  thread_id: string
+  /** 客户当时问的（只用来聚类与出题，不进知识）。 */
+  question: string
+  /** 真人当时怎么答的——这才是要学的东西。 */
+  human_answer: string
+  at: Iso8601
+}
+
+/** 几条才算一簇。少于这个数的归纳出来只是个案，不是口径。 */
+export const MIN_CLUSTER_SIZE = 3
+/** 一次最多学几簇。再多就不是"学一遍"，是让人审到崩溃。 */
+export const MAX_CLUSTERS = 8
+/** 每簇给模型看几个例子。 */
+export const EXAMPLES_PER_CLUSTER = 6
+/** 每个例子的字数上限（问与答各一份）。 */
+export const EXAMPLE_MAX_CHARS = 800
+
+export interface HistoryCluster {
+  /** 簇键 = 主题分类（`categorize` 的结果）。 */
+  category: SupportIntent
+  /** 这一簇有多少对。 */
+  size: number
+  /** 挑出来给模型看的例子（按时间倒序取前 `EXAMPLES_PER_CLUSTER` 条）。 */
+  examples: QaPair[]
+  /** 全部线程 id（出处：归纳出来的那条知识是从哪几封信来的）。 */
+  thread_ids: string[]
+}
+
+/**
+ * 按主题关键词聚类。
+ *
+ * `other` 那一堆不成簇——它就是"没归上类的一堆"，归纳它等于让模型编。
+ */
+export function clusterHistory(
+  pairs: readonly QaPair[],
+  opts: { minClusterSize?: number; maxClusters?: number } = {},
+): HistoryCluster[] {
+  const min = opts.minClusterSize ?? MIN_CLUSTER_SIZE
+  const max = opts.maxClusters ?? MAX_CLUSTERS
+  const byCategory = new Map<SupportIntent, QaPair[]>()
+  for (const pair of pairs) {
+    const question = pair.question.trim()
+    const answer = pair.human_answer.trim()
+    // 太短的问 / 空的答都成不了知识
+    if (question.length < MIN_CANDIDATE_CHARS || answer.length < MIN_CANDIDATE_CHARS) continue
+    if (isNoInfoAnswer(answer)) continue
+    const category = categorize(question)
+    if (category === 'other') continue
+    byCategory.set(category, [...(byCategory.get(category) ?? []), pair])
+  }
+  return (
+    [...byCategory.entries()]
+      .filter(([, list]) => list.length >= min)
+      // 大簇优先；同样大的按类别名定序（确定性）
+      .sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1))
+      .slice(0, max)
+      .map(([category, list]) => {
+        const sorted = [...list].sort((a, b) => (a.at < b.at ? 1 : -1))
+        return {
+          category,
+          size: list.length,
+          examples: sorted.slice(0, EXAMPLES_PER_CLUSTER),
+          thread_ids: sorted.map((p) => p.thread_id),
+        }
+      })
+  )
+}
+
+/** 出给模型的题：一段说明 + 几个例子。**模型调用不在本包**。 */
+export interface HistoryPrompt {
+  /** 要模型干什么。 */
+  instruction: string
+  /** 例子（已过围栏、已截断）。 */
+  examples: { customer_question: string; human_reply: string }[]
+  /** 这一簇的主题，回填进候选。 */
+  category: SupportIntent
+}
+
+/**
+ * 组 prompt 的零件。
+ *
+ * 例子里的每一个字都是**外部文本**（客户写的、同事写的），一律先过围栏再进 prompt
+ * ——历史邮件里躺着的注入串，跟今天刚收到的那一封一样有效。
+ */
+export function historyPrompt(cluster: HistoryCluster): HistoryPrompt {
+  return {
+    instruction: [
+      `下面是 ${cluster.size} 封历史邮件里「客户问题 → 我们同事的真实回复」的例子，主题是「${cluster.category}」。`,
+      '请归纳出一条**我们的口径**：客户通常怎么问，我们的标准答案是什么。',
+      '只写这些回复里真实出现过的内容；同事之间说法不一致时，写出分歧而不是挑一个。',
+      '不要编造天数、金额、比例这类具体数值——例子里没写死的，就说"按具体情况"。',
+    ].join('\n'),
+    examples: cluster.examples.map((p) => ({
+      customer_question: sanitizeExternal(p.question).slice(0, EXAMPLE_MAX_CHARS),
+      human_reply: sanitizeExternal(p.human_answer).slice(0, EXAMPLE_MAX_CHARS),
+    })),
+    category: cluster.category,
+  }
+}
+
+/** 模型归纳完回来的那一点东西。 */
+export interface HistorySummary {
+  /** 客户通常怎么问。 */
+  question: string
+  /** 我们的口径。 */
+  answer: string
+  confidence?: number
+}
+
+/**
+ * 归纳结果 → 知识候选。
+ *
+ * 走的还是 {@link knowledgeCandidate} 那三条判据——从历史邮件学来的东西不比别的
+ * 来源更可信：含承诺的照样得人审。出处记的是这一簇的线程 id。
+ */
+export function historyCandidate(
+  cluster: HistoryCluster,
+  summary: HistorySummary,
+  at: Iso8601,
+): KnowledgeCandidate | undefined {
+  const candidate = knowledgeCandidate({
+    text: summary.answer,
+    source: 'human_reply',
+    ref: `history:${cluster.category}:${cluster.thread_ids.length}`,
+    at,
+    question: summary.question,
+  })
+  if (candidate === undefined) return undefined
+  return {
+    ...candidate,
+    category: cluster.category,
+    // 归纳来的东西比单句摘出来的更值得信，但仍然不是"已核实"
+    confidence: Math.min(0.9, summary.confidence ?? candidate.confidence),
+    provenance: {
+      ...candidate.provenance,
+      ref: `history:${cluster.thread_ids.slice(0, 20).join(',')}`,
+    },
+  }
+}

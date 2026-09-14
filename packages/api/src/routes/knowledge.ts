@@ -451,6 +451,28 @@ export function knowledgeRoutes(): Route[] {
         )
       },
     ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/knowledge/boundaries',
+        operationId: 'listKnowledgeBoundaries',
+        summary: '业务边界：哪几条答过、哪几条还没（36 §2.2 选择题卡的清单面）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '{ id, label, question, answered, options }[]',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const list = needs(deps.knowledge.boundaries, '业务边界清单')
+        return ok(
+          c,
+          await list.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a })),
+        )
+      },
+    ),
     /* ── WP56（48 §4 #9）：知识包导入 / 导出 ────────────────────────── */
     route(
       {

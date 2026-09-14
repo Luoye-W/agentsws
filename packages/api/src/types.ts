@@ -239,6 +239,21 @@ export interface KnowledgePort {
     warnings: string[]
     manifest: { name: string; version: string }
   }>
+  /**
+   * 36 §2.2 业务边界清单：15 条里哪几条商家已经答过。
+   *
+   * "答过"不是另存一张表——答案就在知识库里（`layer: 'policy'` 的卡），
+   * 这一条只是把注册表与知识库对一遍，告诉人还差哪几条。
+   */
+  boundaries?(actor: GatewayActor): MaybePromise<
+    {
+      id: string
+      label: string
+      question: string
+      answered: boolean
+      options: { id: string; label: string }[]
+    }[]
+  >
   /** 整库导出成一个知识包。**zip 在下游打**——网关不认识 zip 格式，只转字节。 */
   exportPack?(actor: GatewayActor): MaybePromise<{ filename: string; zip: Uint8Array }>
 }
