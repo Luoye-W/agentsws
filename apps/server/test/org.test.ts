@@ -166,13 +166,18 @@ describe('制度面：职责与岗位', () => {
     expect(aftersales?.home_blocks.length).toBeGreaterThan(0)
   })
 
-  it('首批岗位里有「独立站售后客服」，岗位 = 职责的默认包', async () => {
+  // WP54（48 v2 L1 / 46 §1 表 ③）：勾"客服"这个岗位 = 三条职责全勾
+  it('首批岗位里有「客服」，岗位 = 三条客服职责的默认包', async () => {
     const positions = await data<{ id: string; name: string; roles: { role_id: string }[] }[]>(
       await call('GET', '/v1/org/positions'),
     )
-    const support = positions.find((p) => p.id === 'dtc-support')
-    expect(support?.name).toBe('独立站售后客服')
-    expect(support?.roles.map((r) => r.role_id)).toContain('dtc.support')
+    const support = positions.find((p) => p.id === 'customer-care')
+    expect(support?.name).toBe('客服')
+    expect(support?.roles.filter((r) => r.default).map((r) => r.role_id)).toEqual([
+      'dtc.support',
+      'dtc.live-chat',
+      'amz.support',
+    ])
   })
 
   it('新建岗位 → 分配 → 删岗位被拦（还有人在做）→ 撤销后能删', async () => {
@@ -213,7 +218,7 @@ describe('把「网站客服」分给一个同事（派工书的验收路径）'
       await call('POST', '/v1/assignments', {
         body: {
           person_id: mate.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [{ kind: 'store', id: 'store_main' }],
         },
       }),
@@ -271,7 +276,7 @@ describe('一致性用例', () => {
     const mate = await inviteColleague('empty@example.com')
     const granted = await data<AssignmentView[]>(
       await call('POST', '/v1/assignments', {
-        body: { person_id: mate.person_id, position_id: 'dtc-support', ranges: [] },
+        body: { person_id: mate.person_id, position_id: 'customer-care', ranges: [] },
       }),
     )
     const support = granted.find((a) => a.role_id === 'dtc.support')
@@ -297,7 +302,7 @@ describe('一致性用例', () => {
       await call('POST', '/v1/assignments', {
         body: {
           person_id: mate.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [{ kind: 'store', id: 'store_main' }],
         },
       }),
@@ -316,7 +321,7 @@ describe('一致性用例', () => {
     await call('POST', '/v1/assignments', {
       body: {
         person_id: mate.person_id,
-        position_id: 'dtc-support',
+        position_id: 'customer-care',
         ranges: [{ kind: 'store', id: 'store_main' }],
       },
     })
@@ -334,7 +339,7 @@ describe('一致性用例', () => {
       await call('POST', '/v1/assignments', {
         body: {
           person_id: mate.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [{ kind: 'store', id: 'store_main' }],
         },
       }),
@@ -437,7 +442,7 @@ describe('一致性用例', () => {
       await call('POST', '/v1/assignments', {
         body: {
           person_id: mate.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [{ kind: 'store', id: 'store_main' }],
         },
       }),
@@ -543,7 +548,7 @@ describe('44 品牌与产品线', () => {
       await call('POST', '/v1/assignments', {
         body: {
           person_id: li.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [],
           range_groups: [created.id],
         },
@@ -553,7 +558,8 @@ describe('44 品牌与产品线', () => {
     expect(mine?.ranges.map((r) => r.id).sort()).toEqual(['store_b1', 'store_b2'])
     expect(mine?.unassigned_range).toBe(false)
     const groups = await data<RangeGroupView[]>(await call('GET', '/v1/org/range-groups'))
-    expect(groups[0]?.holders).toBe(1)
+    // WP54：「客服」岗位一次建三条分配，三条都挂着这个品牌
+    expect(groups[0]?.holders).toBe(3)
   })
 
   it('G5：品牌新开一家店 → 挂它的岗位自动多这家店，留一条事件 + 一张给 owner 的 L3 卡', async () => {
@@ -565,7 +571,7 @@ describe('44 品牌与产品线', () => {
       await call('POST', '/v1/assignments', {
         body: {
           person_id: li.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [],
           range_groups: [created.id],
         },
@@ -612,7 +618,7 @@ describe('44 品牌与产品线', () => {
       await call('POST', '/v1/assignments', {
         body: {
           person_id: chen.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [],
           range_groups: [created.id],
         },
@@ -620,13 +626,15 @@ describe('44 品牌与产品线', () => {
     )
     const res = await call('DELETE', `/v1/org/range-groups/${created.id}`)
     expect(res.status).toBe(409)
-    // 摘掉之后就删得了
-    const mine = (await assignmentsOf(chen.person_id)).find((a) => a.role_id === 'dtc.support')
-    await data(
-      await call('PUT', `/v1/assignments/${mine?.assignment_id}`, {
-        body: { ranges: [], range_groups: [] },
-      }),
-    )
+    // 摘掉之后就删得了（WP54：「客服」岗位一次建三条分配，三条都要摘）
+    for (const mine of await assignmentsOf(chen.person_id)) {
+      if (mine.ranges.length === 0) continue
+      await data(
+        await call('PUT', `/v1/assignments/${mine.assignment_id}`, {
+          body: { ranges: [], range_groups: [] },
+        }),
+      )
+    }
     expect((await call('DELETE', `/v1/org/range-groups/${created.id}`)).status).toBe(200)
   })
 
@@ -675,7 +683,7 @@ describe('44 品牌与产品线', () => {
       await call('POST', '/v1/assignments', {
         body: {
           person_id: sun.person_id,
-          position_id: 'dtc-support',
+          position_id: 'customer-care',
           ranges: [
             { kind: 'store', id: 'store_main' },
             { kind: 'product_line', id: line.id },
@@ -701,7 +709,7 @@ describe('44 品牌与产品线', () => {
     const res = await call('POST', '/v1/assignments', {
       body: {
         person_id: chu.person_id,
-        position_id: 'dtc-support',
+        position_id: 'customer-care',
         ranges: [],
         range_groups: ['rg_nope'],
       },

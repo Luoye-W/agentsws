@@ -292,19 +292,26 @@ describe('46 §3 岗位与职责 → 清单', () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
 
-    const positions = await data<{ id: string; roles: { id: string; what_it_does: string }[] }[]>(
-      await m.call('GET', '/v1/onboarding/positions'),
-    )
-    const support = positions.find((p) => p.id === 'dtc-support')
-    expect(support?.roles.map((r) => r.id)).toContain('dtc.support')
+    const positions = await data<
+      { id: string; roles: { id: string; default: boolean; what_it_does: string }[] }[]
+    >(await m.call('GET', '/v1/onboarding/positions'))
+    const support = positions.find((p) => p.id === 'customer-care')
+    // WP54（48 v2 L1）：勾"客服"= 三条职责全勾（+ 可选的 common.member）
+    expect(support?.roles.filter((r) => r.default).map((r) => r.id)).toEqual([
+      'dtc.support',
+      'dtc.live-chat',
+      'amz.support',
+    ])
     // 46 §1 表 ③：每条职责旁有一句"它会干什么"
     expect(support?.roles.find((r) => r.id === 'dtc.support')?.what_it_does).toContain('退款')
 
     const plan = await data<PlanView>(
-      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['dtc-support'] } }),
+      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['customer-care'] } }),
     )
     // 勾岗位 = 模板里的职责全进来（不只是默认包）
-    expect(plan.role_ids).toEqual(expect.arrayContaining(['dtc.support', 'common.member']))
+    expect(plan.role_ids).toEqual(
+      expect.arrayContaining(['dtc.support', 'dtc.live-chat', 'amz.support', 'common.member']),
+    )
     // dtc.support 要邮箱与 Shopify，两条都 required
     const services = plan.connectors.map((c) => c.service)
     expect(services).toContain('shopify_admin')
@@ -347,13 +354,13 @@ describe('46 §3 岗位与职责 → 清单', () => {
       created_assignments: { role_id: string }[]
       skipped: string[]
       ranges: { id: string }[]
-    }>(await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['dtc-support'] } }))
+    }>(await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } }))
     expect(applied.created_assignments.map((a) => a.role_id)).toContain('dtc.support')
     // 46 I6：一家 Shopify 都没连 → 范围挂空（面板照 05 §4 明说"查不到东西"）
     expect(applied.ranges).toEqual([])
 
     const again = await data<{ created_assignments: unknown[]; skipped: string[] }>(
-      await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['dtc-support'] } }),
+      await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } }),
     )
     expect(again.created_assignments).toEqual([])
     expect(again.skipped).toContain('dtc.support')
