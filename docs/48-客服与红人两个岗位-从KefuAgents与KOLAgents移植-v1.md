@@ -107,9 +107,32 @@
 | 8 | 影子质检 + 回流 | 24 学习回路 |
 | 9 | 知识包导入、历史邮件学、缺口补、边界问答卡 | 知识包 = 我们的 markdown 格式（§6 迁移工具共用） |
 | 10 | 视觉附件 | 模型网关视觉位，后置 |
-| 11 | **在线聊天**：聊天流水线（词表分类 → 计划 → 轻模型答 → 求助 / 转人工 / 超时转邮件） | 流水线进 `support-core` / `channels`（本地能跑）；**widget 与公网端点**在托管档 |
+| 11 | **在线聊天**：聊天流水线（词表分类 → 计划 → 轻模型答 → 求助 / 转人工 / 超时转邮件） | **WP57 实现（本地部分），落点见 §4.1**；流水线进 `support-core` / `channels`（本地能跑）；**widget 与公网端点**在托管档 |
 
 不搬：官网爬取（留给托管档做"知识引导"服务，或后置）、计费代码。
+
+### 4.1 实现落点（#11 本地部分，WP57）
+
+| 条 | 落在哪 | 具体是什么 |
+|---|---|---|
+| 纯函数层 | `packages/support-core/src/chat/` | 零 IO、零模型（同 `support-core` 纪律）。轮次聚合（2s 静默 / 20s 爆发）、词表分类（八种意图，`ChatIntent` 名字不改——WP54 的垂直包按这些名字引用规则）、回复计划（五种动作）、教 AI、求助超时 |
+| 五种动作 | `chat/plan.ts` | 判定顺序即优先级：`handoff`（人已接管 / 会话不接受自动回复）→ `assist`（点名要真人）→ `human_review`（**涉钱** / 高风险 / 包里的必审意图）→ `collect_info`（缺关键资料且这一类缺了走不下去）→ `answer`。第三条是 §3 L1 那句"聊天里只答不承诺，涉钱一律转卡片 / 邮件"的机器可读形态：`money_touch` 为真时 `can_auto_reply` **恒**为 false，任何垂直包都覆盖不了它（包只决定措辞，决定不了要不要过人） |
+| 渠道与会话表 | `packages/channels/src/chat/` | 会话 / 消息 / SQLite 存储 / 入站限流 / SSE 事件流。与邮件**共用**同一条入站管线、同一个受控原始材料区、同一张队列、同一张去重表。写进 18 §2.4 |
+| 实时车道 | `apps/server/src/chat.ts` | 接线：一条会话 = 一件事项（thread ref 与邮件同一套钉法）、每一轮的判定进事件日志、出卡走 14 的审批项与 31 §3.3 的收件人门禁、批了的卡由出站推进会话、急停 outbound 时说得出为什么。求助超时巡检挂 `support.chat_assist_timeout` |
+| 求助超时 | `support-core/src/chat/assist-timeout.ts` | T+3 提醒（一次）、T+10 转邮件跟进。两个钟点从 `assist_requested_at` 一列算出来。没接邮件渠道时会话照样转态但**不假装发了邮件** |
+| 本地 API | `packages/api/src/routes/chat.ts` | 八条 `/v1/chat/*`，**全部只对已登录用户开放**；会让 AI 对外说话的那几条过出站急停，读的那几条不受影响（停机时还要看得见发生过什么）。SSE 那条是唯一不返回统一信封的，鉴权与别的一样且**凭据不进 URL**（20 §3 / 21 §5）。端出去的会话不带 `visitor_id`（21 §4 的加密主体键，没有界面需要它） |
+| 聊天沙盒页 | `apps/workstation/src/pages/chat-sandbox.tsx` | widget 要等托管档；在那之前商家怎么知道他的在线客服会怎么答——**自己坐到访客那一边试一遍**。左边扮演访客，右边看判成哪种、为什么、碰没碰钱、花没花模型、出没出卡，外加人工接管与「教 AI」。`dtc.live-chat` 岗位面板顶部给入口。截图 `docs/assets/workstation/chat-sandbox.png` |
+| 模拟 | `packs/dtc-3c-3p/scenarios/chat/*.yml` | 两条回归题钉两句硬话：`faq-answer-and-money-handoff`（问运费 → 答；问退款 → 出卡，不承诺）、`assist-timeout-to-email`（要人工 → 没人接 → T+3 提醒 → T+10 转邮件 → 之后 AI 停口）。3 人 pack 15/15 → **17/17**，stub / direct / dsh-subprocess 三档全过；DSL 加 `chat.visitor_message` / `chat.human_takeover` 两个事件与 `chat_actions`（按**顺序**比）/ `chat_assist` 两条断言 |
+
+**不在本 WP（托管档 B 期，不是"还没做"）**：网站聊天窗 widget 脚本、不要凭据的
+公开访客端点、Origin 白名单、公网限流。一条不需要凭据就能写进工作区的路由，
+放在本地单机档里没有任何人受益，却让每一台跑着 agentsws 的机器多一个对外写入口。
+API 测试里有一条断言钉着这个边界。
+
+**真跑 `agentsws demo` 才发现的两处**（都只在合成时钟下暴露，已修）：入站自编的
+`external_id` 只带时刻，时钟不走时第二句会撞唯一键静默消失；`advanceTurn` 等 2 秒
+静默窗口，时钟不走就永远判不完——沙盒页那条 `advance` 路由现在传 `force`，
+**只**跳静默窗口，分类 / 涉钱 / 围栏 / 出卡一个不少。
 
 ## 5. 红人岗位：从零建（L4）
 
