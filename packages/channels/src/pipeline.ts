@@ -40,6 +40,10 @@ export interface RouteInput {
   subject?: string
   /** 已脱敏、未围栏的正文（路由器是我们自己的代码，不是模型） */
   text: string
+  /** WP55 / 48 §4 L3 #2：渠道细分（`amazon`）。传输层仍是邮件，收信岗位不是。 */
+  sub_channel?: string
+  /** WP55：渠道细分的判定结果（路由器只读，不改）。 */
+  channel_meta?: Record<string, unknown>
 }
 
 export interface RouteResult {
@@ -49,10 +53,20 @@ export interface RouteResult {
 }
 
 /**
+ * WP55 / 48 §4 L3 #2：Amazon 买家消息的收信岗位。
+ *
+ * 它跟普通 DTC 售后**不是同一条职责**：Amazon 的社区规范、24h 响应率考核、
+ * relay 地址回信都只对这条岗位成立，落错岗位 = 出站硬闸那一层根本不会被调用。
+ */
+export const AMAZON_ROLE_ID: RoleId = 'amz.support'
+
+/**
  * 默认路由（06 §2.4 同一路由器的 v1 形态）：按渠道映射到职责。
- * 邮件 = 英文客服邮件全接管的入口，落 `dtc.aftersales`。
+ * 邮件 = 英文客服邮件全接管的入口，落 `dtc.aftersales`；
+ * 判定成 Amazon 的那一份落 `amz.support`（WP55）。
  */
 export function defaultRoute(input: RouteInput): RouteResult {
+  if (input.sub_channel === 'amazon') return { role_id: AMAZON_ROLE_ID, confidence: 0.9 }
   if (input.channel === 'email') return { role_id: 'dtc.aftersales', confidence: 0.6 }
   return { confidence: 0 }
 }
@@ -227,6 +241,9 @@ export class ChannelInboundPipeline implements InboundPipeline {
       workspace_id: ws,
       text: plainText,
       ...(head.actor === undefined ? {} : { actor_external_id: head.actor.external_id }),
+      // WP55：渠道细分先于路由（判定不花积分），路由器据它落到 `amz.support`
+      ...(head.sub_channel === undefined ? {} : { sub_channel: head.sub_channel }),
+      ...(head.channel_meta === undefined ? {} : { channel_meta: head.channel_meta }),
     })
 
     this.seq += 1
@@ -399,6 +416,9 @@ export class ChannelInboundPipeline implements InboundPipeline {
         routing: event.routing,
         ...(event.actor === undefined ? {} : { actor_external_id: event.actor.external_id }),
         ...(event.thread === undefined ? {} : { thread_external_id: event.thread.external_id }),
+        // WP55：渠道细分只记结论（marketplace / 消息类型 / 置信），正文永不进日志
+        ...(event.sub_channel === undefined ? {} : { sub_channel: event.sub_channel }),
+        ...(event.channel_meta === undefined ? {} : { channel_meta: event.channel_meta }),
         ...payload,
       },
     })

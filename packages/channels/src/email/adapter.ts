@@ -54,6 +54,39 @@ export interface EmailAdapterOptions {
   render_html?: (text: string) => string
   /** 轮询循环里的异常出口（不抛出中断循环） */
   on_error?: (e: unknown) => void
+  /**
+   * WP55 / 48 §4 L3 #2：**渠道细分判定**（Amazon 买家消息寄生在客服邮箱上）。
+   *
+   * 注入而不是内建：判定规则住在 `@agentsws/support-core`（纯函数、与 SaaS 共用
+   * 同一份常量表），而 channels 是比它低一层的传输包——反过来依赖会把整条依赖链
+   * 倒过来。不注入 = 老行为，一个字不用改。
+   */
+  classify_sub_channel?: (hints: SubChannelHints) => SubChannelVerdict | undefined
+}
+
+/** 渠道细分判定要看的那几样（全是已解析的头与正文，判定方自己不碰 MIME）。 */
+export interface SubChannelHints {
+  from_email: string
+  from_name?: string | undefined
+  reply_to_email?: string | undefined
+  subject?: string | undefined
+  body_text: string
+  body_html?: string | undefined
+  /** 原始 `Authentication-Results` 头值；缺失 ≠ fail。 */
+  authentication_results?: string | undefined
+  in_reply_to_message_id?: string | undefined
+}
+
+/** 判定结论：写到线程与入站事件上的那两个字段，外加「这封信要不要人看一眼」。 */
+export interface SubChannelVerdict {
+  /** 渠道细分名（`amazon`）。 */
+  channel: string
+  /** 线程 `channel_meta` 的**增量补丁**（只写自己确实知道的键）。 */
+  meta: Record<string, unknown>
+  /** 路由要落到哪条职责（不给就走默认路由）。 */
+  role_id?: string
+  /** 钓鱼 / 退信 / 索赔这类：落库但绝不生成草稿，交人看。 */
+  needs_human_review?: boolean
 }
 
 const DEFAULT_INTERVAL_MS = 60_000
@@ -82,6 +115,9 @@ export class EmailChannelAdapter implements ChannelAdapter {
   private readonly renderHtml: ((text: string) => string) | undefined
   private readonly onError: ((e: unknown) => void) | undefined
   private readonly displayName: string | undefined
+  private readonly classifySubChannel:
+    | ((hints: SubChannelHints) => SubChannelVerdict | undefined)
+    | undefined
 
   private running = false
   private loop: Promise<void> | undefined
@@ -105,6 +141,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
     this.rawSecretPolicy = opts.raw_secret_policy ?? 'redact'
     this.renderHtml = opts.render_html
     this.onError = opts.on_error
+    this.classifySubChannel = opts.classify_sub_channel
   }
 
   capabilities(): {
@@ -260,7 +297,26 @@ export class EmailChannelAdapter implements ChannelAdapter {
       })
     }
 
-    // ④ 线程台账（收件人门禁的依据）
+    // ④ 渠道细分（WP55 / 48 §4 L3 #2）：Amazon 买家消息寄生在这只邮箱上。
+    //    判定在 AI 分类之前，所以它不花任何积分，也不受模型可用性影响。
+    const replyTo = firstAddress(parsed.replyTo)
+    const bodyHtml = typeof parsed.html === 'string' ? parsed.html : undefined
+    const sub = this.classifySubChannel?.({
+      from_email: from,
+      body_text: bodyText,
+      ...(displayNameOf(parsed.from) === undefined
+        ? {}
+        : { from_name: displayNameOf(parsed.from) }),
+      ...(replyTo === undefined ? {} : { reply_to_email: replyTo }),
+      ...(parsed.subject === undefined ? {} : { subject: parsed.subject }),
+      ...(bodyHtml === undefined ? {} : { body_html: bodyHtml }),
+      ...(headerValue(parsed, 'authentication-results') === undefined
+        ? {}
+        : { authentication_results: headerValue(parsed, 'authentication-results') }),
+      ...(in_reply_to === undefined ? {} : { in_reply_to_message_id: in_reply_to }),
+    })
+
+    // ⑤ 线程台账（收件人门禁的依据）
     const participants = [
       from,
       ...addressesOf(parsed.to),
@@ -275,6 +331,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
         at: received_at,
         ...(parsed.subject === undefined ? {} : { subject: parsed.subject }),
         ...(message_id === undefined ? {} : { message_id }),
+        ...(sub === undefined ? {} : { channel: sub.channel, channel_meta: sub.meta }),
       }),
     )
 
@@ -300,6 +357,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
       thread: { external_id: thread_external },
       parts,
       raw_ref,
+      ...(sub === undefined ? {} : { sub_channel: sub.channel, channel_meta: sub.meta }),
     }
   }
 
@@ -360,14 +418,17 @@ export class EmailChannelAdapter implements ChannelAdapter {
         ? await this.sendViaConnect({ to, text, html, headers, message_id, opts })
         : await this.sendViaSmtp({ to, text, html, headers, message_id })
 
+    const sent_at = this.clock.now()
     await this.threads.upsert(
       mergeThread(record, {
         external_id: record.external_id,
         participants: record.participants,
         references: record.references,
-        at: this.clock.now(),
+        at: sent_at,
         message_id,
         ...(record.subject === undefined ? {} : { subject: record.subject }),
+        // WP55：24h SLA 闭账要知道「这封信回了没有」，锚是买家来信、停表是这一刻
+        ...(record.channel === undefined ? {} : { channel_meta: { last_outbound_at: sent_at } }),
       }),
     )
     this.sentByKey.set(opts.idempotency_key, { external_id, route })
@@ -489,6 +550,17 @@ export function emailDedupeKey(
 ): string {
   if (message_id !== undefined) return `email:${message_id}`
   return `email:${sha256(canonicalJson(fallback)).slice(0, 32)}`
+}
+
+/** 取一个原始头的字符串值（mailparser 的 headers 是 Map，值可能不是字符串）。 */
+function headerValue(parsed: ParsedMail, name: string): string | undefined {
+  const raw = parsed.headers?.get(name)
+  if (typeof raw === 'string') return raw
+  if (Array.isArray(raw)) {
+    const first = raw.find((v) => typeof v === 'string')
+    return typeof first === 'string' ? first : undefined
+  }
+  return undefined
 }
 
 function pickBodyText(parsed: ParsedMail): string {

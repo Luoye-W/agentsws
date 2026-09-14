@@ -29,7 +29,8 @@ const T0 = '2026-09-10T00:00:00.000Z'
 const SECRET_LINE = '我的授权码：abcdefghijklmnop'
 const ADDRESS = 'Torstrasse 12, Berlin'
 
-const clock: Clock = { now: () => T0, sleep: async () => undefined }
+const baseClock: Clock = { now: () => T0, sleep: async () => undefined }
+const clock = baseClock
 
 function mime(over: {
   from?: string
@@ -119,8 +120,11 @@ function harness(
     cipher?: boolean
     resolveActor?: (external_id: string) => ObjectRef | undefined
     batch?: number
+    /** WP55：SLA sweep 要把时间往前推，所以这只钟要能动。 */
+    clock?: Clock
   } = {},
 ): Harness {
+  const clock = over.clock ?? baseClock
   const dir = mkdtempSync(join(tmpdir(), 'agentsws-channels-'))
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
   const data = createDataStore({ dbPath: join(dir, 'data.db'), clock, collections: [] })
@@ -433,5 +437,254 @@ describe('forDisplay', () => {
 
   it('太长的截断加省略号', () => {
     expect(forDisplay('x'.repeat(50), 10)).toBe(`${'x'.repeat(9)}…`)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* WP55 / 48 §4 L3 #2：Amazon 渠道                                       */
+/* ------------------------------------------------------------------ */
+
+const AMZ_RELAY = 'a1b2c3d4e5f6@marketplace.amazon.com'
+
+function amazonMime(
+  over: { from?: string; text?: string; auth?: string; message_id?: string } = {},
+): string {
+  return [
+    `From: Anna <${over.from ?? AMZ_RELAY}>`,
+    `To: ${USER}`,
+    'Subject: Message from Amazon buyer for order 113-1234567-1234567',
+    'Date: Wed, 09 Sep 2026 08:55:00 +0000',
+    `Message-ID: ${over.message_id ?? '<amz-1@marketplace.amazon.com>'}`,
+    ...(over.auth === undefined ? [] : [`Authentication-Results: mx.example; ${over.auth}`]),
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    over.text ?? 'The charger does not fit my laptop. Please help.',
+    '',
+  ].join('\r\n')
+}
+
+describe('Amazon 渠道接线（识别 → 线程打标 → 路由 → 出站硬闸 → 24h SLA）', () => {
+  it('relay 域来信被判成 amazon：线程打上 channel/channel_meta，路由落 amz.support', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    const received = h.events.find((e) => e.type === 'inbound.received')
+    expect(received?.payload).toMatchObject({ sub_channel: 'amazon' })
+    const payload = (received?.payload ?? {}) as {
+      routing?: { role_id?: string }
+      channel_meta?: Record<string, unknown>
+    }
+    expect(payload.routing?.role_id).toBe('amz.support')
+    const meta = payload.channel_meta
+    expect(meta).toMatchObject({ marketplace: 'com', message_type: 'buyer_message' })
+    expect(meta?.last_buyer_message_at).toBe(T0)
+    // 买家消息照常起 Run（钓鱼件才不起）
+    expect(h.runs).toHaveLength(1)
+  })
+
+  it('认证显式 fail 的 relay 来信 → 人工复核：落进事项但绝不起 Run、绝不静默丢', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime({ auth: 'spf=fail' }) }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    const received = h.events.find((e) => e.type === 'inbound.received')
+    const payload = (received?.payload ?? {}) as { channel_meta?: Record<string, unknown> }
+    expect(payload.channel_meta).toMatchObject({
+      message_type: 'phishing_suspect',
+      needs_human_review: true,
+    })
+    // 信在事项里（不静默丢），但没有 Run（不自动回）
+    const matter = h.work.listMatters({ kind: 'conversation' })[0]
+    expect(matter).toBeDefined()
+    expect(h.runs).toHaveLength(0)
+    const { timeline } = h.work.matterView(matter?.id ?? '')
+    expect(timeline.some((e) => e.kind === 'note' && e.text.includes('钓鱼'))).toBe(true)
+  })
+
+  it('出站硬闸：带外链的草稿被打回重写（不可重试），改干净就发得出去', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    const card = (text: string): ApprovalItem =>
+      ({
+        id: 'apr_amz',
+        kind: 'outbound_draft',
+        payload: {
+          channel: 'email',
+          thread_ref: '<amz-1@marketplace.amazon.com>',
+          body: { text, subject: 'Re: Message from Amazon buyer for order 113-1234567-1234567' },
+        },
+      }) as unknown as ApprovalItem
+
+    const blocked = await h.channels.deliver(
+      card('Please visit https://brandsite.com/promo for a coupon.'),
+      {
+        idempotencyKey: 'amz_1',
+      },
+    )
+    expect(blocked).toMatchObject({ status: 'failed', error: { retryable: false } })
+    // 原因原样回给调用方，喂进重写循环——不静默删改后照发
+    expect((blocked as { error: { message: string } }).error.message).toContain('外部链接')
+    expect((blocked as { error: { message: string } }).error.message).toContain('请按下面各条重写')
+    expect(h.mailer.sent).toHaveLength(0)
+    expect(h.events.some((e) => e.type === 'delivery.failed')).toBe(true)
+
+    const ok = await h.channels.deliver(
+      card('We are sorry the charger does not fit. We will look into order 113-1234567-1234567.'),
+      { idempotencyKey: 'amz_2' },
+    )
+    expect(ok).toMatchObject({ status: 'ok' })
+    expect(h.mailer.sent).toHaveLength(1)
+  })
+
+  it('24h SLA sweep：三档按剩余时间出，幂等不重复出；回了就闭账', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    // T0 起表，此刻剩满 24h：一张卡都不该出
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({
+      scanned: 1,
+      reminders: 0,
+      criticals: 0,
+    })
+  })
+
+  it('24h SLA sweep：剩 ≤12h 出提醒且幂等；剩 ≤4h 升级；回了就闭账', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    let at = T0
+    const movable: Clock = { now: () => at, sleep: async () => undefined }
+    const h = harness({
+      clock: movable,
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    // 锚 = T0；+13h → 剩 11h ≤ 12h：提醒档
+    at = '2026-09-10T13:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ reminders: 1, criticals: 0 })
+    // 同一周期内再扫一次：幂等，不再出（否则一张卡变成每 5 分钟一张）
+    at = '2026-09-10T14:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ reminders: 0, criticals: 0 })
+
+    // +21h → 剩 3h ≤ 4h：升级档
+    at = '2026-09-10T21:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ criticals: 1 })
+    expect(
+      h.events
+        .filter((e) => e.type === 'support.amazon_sla')
+        .map((e) => (e.payload as { tier: string }).tier),
+    ).toEqual(['reminder', 'critical'])
+
+    // 回了 → 闭账 within，且之后不再出任何卡
+    await h.channels.deliver(
+      {
+        id: 'apr_amz_sla',
+        kind: 'outbound_draft',
+        payload: {
+          channel: 'email',
+          thread_ref: '<amz-1@marketplace.amazon.com>',
+          body: {
+            text: 'Sorry about that, we are checking order 113-1234567-1234567 now.',
+            subject: 'Re: Message from Amazon buyer for order 113-1234567-1234567',
+          },
+        },
+      } as unknown as ApprovalItem,
+      { idempotencyKey: 'amz_sla_1' },
+    )
+    at = '2026-09-10T22:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ accounted: 1 })
+    at = '2026-09-10T23:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({
+      accounted: 0,
+      reminders: 0,
+      criticals: 0,
+    })
   })
 })

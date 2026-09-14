@@ -107,6 +107,7 @@ import {
   DEFAULT_RAW_RETENTION_DAYS,
   ensureSystemTasks,
   offsetToTz,
+  registerAmazonSla,
   registerApprovalHousekeeping,
   registerBackup,
   registerDailyPlan,
@@ -1088,6 +1089,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
     meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
+  })
+  // WP55 / 48 §4 L3 #2：Amazon 24h 响应线三档 sweep（每 5 分钟，幂等三字段）
+  registerAmazonSla(schedule.scheduler, {
+    sweep: () => (channels as ChannelsAssembly).amazonSlaSweep(),
   })
   // ⑫ WP36 40 §1.3：每天一份备份。**只有落盘档有**——内存档没有可导的库文件。
   const runWorkspaceBackup = (): BackupRunResult => {
