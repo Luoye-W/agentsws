@@ -13,6 +13,9 @@
       "path": "../../packages/deck"
     },
     {
+      "path": "../../packages/knowledge"
+    },
+    {
       "path": "../../packages/roles"
     },
     {

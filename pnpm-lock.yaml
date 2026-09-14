@@ -32,6 +32,9 @@ importers:
       '@agentsws/deck':
         specifier: workspace:*
         version: link:../../packages/deck
+      '@agentsws/knowledge':
+        specifier: workspace:*
+        version: link:../../packages/knowledge
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../../packages/roles
