@@ -23,6 +23,7 @@ export * from './ingest.js'
 export * from './intake.js'
 export * from './markdown.js'
 export * from './memory.js'
+export * from './pack.js'
 export * from './provenance.js'
 export * from './recheck.js'
 export * from './retrieval.js'
@@ -32,6 +33,7 @@ export * from './state-words.js'
 export * from './store.js'
 export * from './text.js'
 export * from './visibility.js'
+export * from './zip.js'
 
 /** 系统时钟：本包唯一一处 `new Date()`，其余全部经注入的 Clock（25 §4）。 */
 export const systemClock: Clock = { now: () => new Date().toISOString() }

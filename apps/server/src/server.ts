@@ -49,7 +49,13 @@ import type {
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
-import { createKnowledge, type Knowledge } from '@agentsws/knowledge'
+import {
+  cardsToPack,
+  createKnowledge,
+  type Knowledge,
+  type RecheckStatus,
+  zipFiles,
+} from '@agentsws/knowledge'
 import {
   createModelGateway,
   type FetchLike,
@@ -86,6 +92,8 @@ import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createJoin, type JoinAssembly } from './join.js'
+// WP56（48 §4 #9）：知识包导入的落库那一步
+import { importKnowledgePack } from './knowledge-pack.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
@@ -1329,6 +1337,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         by: actor.person_id,
         ...(card.state === 'blocked' ? {} : { approval_item_id: card.id }),
       })
+    },
+    // WP56（48 §4 #6）：源页复核队列
+    rechecks: (actor, filter) =>
+      knowledge.recheck.list(actor.workspace_id, {
+        ...(filter.status === undefined ? {} : { status: filter.status as RecheckStatus }),
+      }),
+    resolveRecheck: (actor, id, input) =>
+      knowledge.recheck.resolve(id, { resolution: input.resolution, by: actor.person_id }),
+    // WP56（48 §4 #9）：知识包导入 / 导出。zip 在这一层解与打，网关只转字节
+    importPack: (actor, input) => importKnowledgePack(knowledge, actor, input, { clock }),
+    exportPack: async (actor) => {
+      const cards = await knowledge.store.list({ workspace_id: actor.workspace_id }, actor)
+      const files = cardsToPack(cards, {
+        name: actor.workspace_id,
+        version: '1',
+        generated_at: clock.now(),
+      })
+      return {
+        filename: `knowledge-pack-${actor.workspace_id}.zip`,
+        zip: new Uint8Array(zipFiles(files)),
+      }
     },
   }
 

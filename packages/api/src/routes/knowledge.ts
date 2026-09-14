@@ -80,6 +80,51 @@ const GapAnswerBody = z.object({
   layer: z.enum(LAYERS).optional(),
 })
 
+const RECHECK_STATUSES: readonly string[] = ['open', 'resolved', 'superseded']
+
+const RecheckResolveBody = z.object({
+  /** 冻结的三选一（`packages/knowledge` 的 `RECHECK_OPTIONS`）。 */
+  resolution: z.enum(['unchanged', 'adopt_new', 'ignore']),
+})
+
+/**
+ * 网关这一层的请求体上限（2 MiB）。
+ *
+ * **权威上限在 `packages/knowledge` 的 `PACK_MAX_TOTAL_BYTES`**——网关不依赖知识实现
+ * （它只认端口），所以这里是一道粗的入口闸：zip bomb 要在解包之前拦，解开再拦就晚了。
+ */
+const IMPORT_MAX_BYTES = 2 * 1024 * 1024
+const IMPORT_MAX_FILES = 200
+
+/** JSON 档：直接传 `路径 → 正文`（粘贴形态与 CLI 用）。 */
+const ImportBody = z.object({
+  files: z
+    .array(z.object({ path: z.string().min(1).max(512), content: z.string() }))
+    .min(1)
+    .max(IMPORT_MAX_FILES),
+})
+
+/**
+ * 两条路归一成同一份入参：multipart 传 zip（浏览器拖一个文件夹打的包），
+ * JSON 传 `files`（CLI 与粘贴形态）。**解包在下游**——网关不认识 zip 格式，
+ * 它只把字节转下去。
+ */
+async function packInput(
+  c: Parameters<Route['handler']>[0],
+): Promise<{ zip?: Uint8Array; files?: { path: string; content: string }[] }> {
+  const contentType = c.req.header('content-type') ?? ''
+  if (!contentType.includes('multipart/form-data')) {
+    const input = await body(c, ImportBody)
+    return { files: input.files }
+  }
+  const form = await c.req.parseBody()
+  const file = form.file
+  if (!(file instanceof File)) throw new ApiError('invalid_input', 'multipart 里没有 file')
+  if (file.size > IMPORT_MAX_BYTES)
+    throw new ApiError('invalid_input', `知识包超过大小上限（${IMPORT_MAX_BYTES} 字节）`)
+  return { zip: new Uint8Array(await file.arrayBuffer()) }
+}
+
 /** 没装配那几个可选方法时的统一说法。 */
 function needs<T>(fn: T | undefined, what: string): NonNullable<T> {
   if (fn === undefined || fn === null)
@@ -344,6 +389,115 @@ export function knowledgeRoutes(): Route[] {
             },
           ),
         )
+      },
+    ),
+
+    /* ── WP56（48 §4 #6）：源页复核队列 ─────────────────────────────── */
+    route(
+      {
+        method: 'get',
+        path: '/v1/knowledge/rechecks',
+        operationId: 'listKnowledgeRechecks',
+        summary: '复核队列（源页 / 文档改了、受管辖数值也变了的那些）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'status', in: 'query', description: 'open | resolved | superseded' }],
+        returns: 'KnowledgeRecheck[]',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const status = c.req.query('status')
+        if (status !== undefined && !RECHECK_STATUSES.includes(status))
+          throw new ApiError('invalid_input', 'status 只能是 open / resolved / superseded')
+        const list = needs(deps.knowledge.rechecks, '复核队列')
+        return ok(
+          c,
+          await list.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a }), {
+            ...(status === undefined ? {} : { status }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/rechecks/:id/resolve',
+        operationId: 'resolveKnowledgeRecheck',
+        summary: '答一张复核卡：确认没变 / 按新值更新 / 忽略',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '复核 id' }],
+        body: RecheckResolveBody,
+        returns: '{ recheck, archived_card_id? }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await body(c, RecheckResolveBody)
+        const resolve = needs(deps.knowledge.resolveRecheck, '复核队列')
+        return ok(
+          c,
+          await resolve.call(
+            deps.knowledge,
+            actorOf(deps, { principal: p, assignment: a }),
+            param(c, 'id'),
+            { resolution: input.resolution },
+          ),
+        )
+      },
+    ),
+    /* ── WP56（48 §4 #9）：知识包导入 / 导出 ────────────────────────── */
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/import',
+        operationId: 'importKnowledgePack',
+        summary: '导入一个 kefu-knowledge-pack/v1（multipart 传 zip，或 JSON 传文件数组）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: ImportBody,
+        returns: '{ imported, activated, proposed, warnings, manifest }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await packInput(c)
+        const run = needs(deps.knowledge.importPack, '知识包导入')
+        return ok(
+          c,
+          await run.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a }), input),
+          201,
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/knowledge/export',
+        operationId: 'exportKnowledgePack',
+        summary: '整库导出成一个 kefu-knowledge-pack/v1（zip 二进制）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'application/zip（Content-Disposition 带文件名）',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const run = needs(deps.knowledge.exportPack, '知识包导出')
+        const out = await run.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a }))
+        return c.body(out.zip as unknown as ArrayBuffer, 200, {
+          'content-type': 'application/zip',
+          'content-disposition': `attachment; filename="${out.filename}"`,
+        })
       },
     ),
     route(

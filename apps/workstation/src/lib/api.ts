@@ -2449,3 +2449,121 @@ export const getPositionOntology = (
   api<TailoredOntology>(`/v1/positions/${encodeURIComponent(position)}/ontology`, {
     ...(assignment === undefined ? {} : { assignment }),
   })
+
+// ── WP56（48 §4 #6 / #9）知识库：复核队列、缺口补、知识包导入 / 导出 ──────────
+
+/** 19 §1.1 事实卡（工作台只用得着这几格）。 */
+export interface KnowledgeCardRow {
+  id: string
+  layer: 'fact' | 'phrasing' | 'policy' | 'historical_case'
+  subject: { type: string; key: string }
+  statement: string
+  status: 'proposed' | 'active' | 'retired'
+  stage?: 'both' | 'presales' | 'postsales'
+  verification_state?: 'fresh' | 'stale' | 'quarantined'
+  last_verified_at?: string
+  media?: string[]
+  updated_at: string
+}
+
+/** 48 §4 #6：源页 / 文档改了、受管辖数值也变了，等人答的那一张。 */
+export interface KnowledgeRecheckRow {
+  id: string
+  card_id: string
+  source_id: string
+  status: 'open' | 'resolved' | 'superseded'
+  before: string[]
+  after: string[]
+  categories: string[]
+  proposed_statement?: string
+  created_at: string
+}
+
+export interface KnowledgeGapRow {
+  id: string
+  question: string
+  subject: { type: string; key: string }
+  status: 'open' | 'answered' | 'dismissed'
+  created_at: string
+}
+
+export const listKnowledgeCards = (assignment?: string): Promise<KnowledgeCardRow[]> =>
+  api<KnowledgeCardRow[]>('/v1/knowledge/cards', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listKnowledgeRechecks = (assignment?: string): Promise<KnowledgeRecheckRow[]> =>
+  api<KnowledgeRecheckRow[]>('/v1/knowledge/rechecks?status=open', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const resolveKnowledgeRecheck = (
+  id: string,
+  resolution: 'unchanged' | 'adopt_new' | 'ignore',
+  assignment?: string,
+): Promise<unknown> =>
+  api<unknown>(`/v1/knowledge/rechecks/${encodeURIComponent(id)}/resolve`, {
+    method: 'POST',
+    body: { resolution },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listKnowledgeGaps = (assignment?: string): Promise<KnowledgeGapRow[]> =>
+  api<KnowledgeGapRow[]>('/v1/knowledge/gaps?status=open', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/**
+ * 补一个缺口。两种补法（48 §4 #9）：贴一条外部链接，或者粘一段文字口径。
+ * **没有上传、没有图床、没有富文本**——链接就是链接，文字就是文字。
+ */
+export const answerKnowledgeGap = (
+  id: string,
+  answer: string,
+  assignment?: string,
+): Promise<unknown> =>
+  api<unknown>(`/v1/knowledge/gaps/${encodeURIComponent(id)}/answer`, {
+    method: 'POST',
+    body: { answer },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export interface KnowledgePackImportResult {
+  imported: number
+  activated: number
+  proposed: number
+  warnings: string[]
+  manifest: { name: string; version: string }
+}
+
+/** 导入一个知识包（zip）。走 multipart——包是用户从磁盘拖进来的一个文件。 */
+export async function importKnowledgePack(
+  file: File,
+  assignment?: string,
+): Promise<KnowledgePackImportResult> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = assignment ?? currentAssignment
+  if (asg !== null) headers.set('X-Assignment', asg)
+  const form = new FormData()
+  form.append('file', file)
+  // content-type 交给浏览器填（它要带 boundary）
+  const res = await fetch('/v1/knowledge/import', { method: 'POST', headers, body: form })
+  const text = await res.text()
+  const parsed: unknown = text === '' ? {} : JSON.parse(text)
+  if (!res.ok) throw new ApiClientError(res.status, parsed as ApiErrorBody)
+  return (parsed as ApiEnvelope<KnowledgePackImportResult>).data
+}
+
+/** 导出整库成一个知识包（zip）。拿到 blob 之后由调用方去触发下载。 */
+export async function exportKnowledgePack(assignment?: string): Promise<Blob> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = assignment ?? currentAssignment
+  if (asg !== null) headers.set('X-Assignment', asg)
+  const res = await fetch('/v1/knowledge/export', { headers })
+  if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
+  return res.blob()
+}
