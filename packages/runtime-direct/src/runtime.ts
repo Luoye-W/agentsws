@@ -538,6 +538,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
                   input: c.input,
                 })),
               }),
+          ...(completion.reasoning === undefined ? {} : { reasoning: completion.reasoning }),
         })
         if (calls.length === 0) break
 

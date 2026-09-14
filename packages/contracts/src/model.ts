@@ -17,6 +17,12 @@ export interface ChatMessage {
   tool_call_id?: string
   /** 角色为 `assistant` 时有效：上一轮模型发出的工具调用（真 provider 需要它来还原对话，WP14）。 */
   tool_calls?: { id: string; name: string; input: unknown }[]
+  /**
+   * 角色为 `assistant` 时有效：思考模型上一轮的推理内容。DeepSeek 的 thinking 模式要求多轮时
+   * 原样带回（"reasoning_content in the thinking mode must be passed back"，09-14 真店实测 400）。
+   * 只在运行时的对话历史里流转，不进事件、不进卡片。
+   */
+  reasoning?: string
 }
 /** 17 §5.4 强制工具选择：`tool` 时模型这一轮只能调 `name` 那个工具；provider 不支持则网关退化为 `auto`。 */
 export interface ToolChoice {
@@ -44,6 +50,8 @@ export interface CompletionUsage {
 export interface Completion {
   text: string
   tool_calls?: { id: string; name: string; input: unknown }[]
+  /** 思考模型回的推理内容（下一轮要原样带回给 provider）；非思考模型没有。 */
+  reasoning?: string
   usage: CompletionUsage
   model: ModelRef
   static_prefix_hash: string

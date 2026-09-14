@@ -68,7 +68,13 @@ interface WireUsage {
   prompt_tokens_details?: { cached_tokens?: number }
 }
 interface WireChatResponse {
-  choices?: { message?: { content?: string | null; tool_calls?: WireToolCall[] } }[]
+  choices?: {
+    message?: {
+      content?: string | null
+      reasoning_content?: string | null
+      tool_calls?: WireToolCall[]
+    }
+  }[]
   usage?: WireUsage
 }
 /** OpenAI 形态的 `GET /models`。DeepSeek、Moonshot、通义、智谱、SiliconFlow、Ollama 都回这个形状。 */
@@ -104,6 +110,10 @@ const toWireMessage = (m: ChatMessage): Record<string, unknown> => ({
   content: m.content,
   ...(m.name === undefined ? {} : { name: m.role === 'tool' ? wireToolName(m.name) : m.name }),
   ...(m.tool_call_id === undefined ? {} : { tool_call_id: m.tool_call_id }),
+  // 思考模型（DeepSeek thinking 模式）多轮时要把上一轮的推理原样带回，否则 400
+  ...(m.role === 'assistant' && m.reasoning !== undefined
+    ? { reasoning_content: m.reasoning }
+    : {}),
   // 上一轮模型发出的工具调用必须原样带回去，否则 provider 400：
   // "Messages with role 'tool' must be a response to a preceding message with 'tool_calls'"
   ...(m.role !== 'assistant' || m.tool_calls === undefined || m.tool_calls.length === 0
@@ -276,9 +286,11 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         return { id: c.id ?? `call_${i}`, name, input }
       })
       const usage = json.usage
+      const reasoning = message.reasoning_content
       return {
         text: message.content ?? '',
         ...(calls.length === 0 ? {} : { tool_calls: calls }),
+        ...(typeof reasoning === 'string' && reasoning.length > 0 ? { reasoning } : {}),
         usage: {
           input_tokens: usage?.prompt_tokens ?? 0,
           output_tokens: usage?.completion_tokens ?? 0,

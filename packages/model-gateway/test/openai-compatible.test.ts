@@ -128,6 +128,37 @@ describe('openaiCompatibleProvider（DeepSeek 形态，注入 fetch，不联网�
     })
   })
 
+  it('思考模型：reasoning_content 读进 Completion.reasoning，下一轮 assistant 消息原样带回', async () => {
+    const { fetch, calls } = mockFetch({
+      choices: [{ message: { content: 'ok', reasoning_content: 'let me think' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    })
+    const provider = openaiCompatibleProvider({
+      apiKeyEnv: KEY_ENV,
+      model: 'deepseek-flash',
+      env,
+      fetch,
+    })
+    const out = await provider.complete({ messages: [userPrompt('q')] })
+    expect(out.reasoning).toBe('let me think')
+    await provider.complete({
+      messages: [
+        userPrompt('q'),
+        { role: 'assistant', content: 'ok', reasoning: 'let me think' },
+        userPrompt('and?'),
+      ],
+    })
+    const sent = JSON.parse(String(calls[1]?.init.body ?? '{}')) as {
+      messages: Record<string, unknown>[]
+    }
+    expect(sent.messages[1]).toMatchObject({
+      role: 'assistant',
+      content: 'ok',
+      reasoning_content: 'let me think',
+    })
+    expect(sent.messages[0]).not.toHaveProperty('reasoning_content')
+  })
+
   it('带点的工具名：出站换成 __，回来的 tool_call 映射回原名；撞名当场拒', async () => {
     const body = {
       choices: [
