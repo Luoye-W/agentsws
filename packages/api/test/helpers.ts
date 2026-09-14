@@ -535,6 +535,13 @@ const SCOPES = [
     range: 'workspace' as Range,
     max_sensitivity: 'confidential' as Sensitivity,
   },
+  // WP57：在线客服读写聊天会话（照 `dtc.aftersales` 的那条 customer scope）
+  {
+    domain: 'customer' as DataDomain,
+    ops: ['read', 'stage'] as Operation[],
+    range: 'assigned' as Range,
+    max_sensitivity: 'internal' as Sensitivity,
+  },
   // 工作台面板要读店铺侧的行；GA4 / Search Console 走 analytics 域
   {
     domain: 'order' as DataDomain,

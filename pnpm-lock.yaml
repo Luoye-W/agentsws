@@ -723,6 +723,9 @@ importers:
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
       '@agentsws/txn':
         specifier: workspace:*
         version: link:../txn

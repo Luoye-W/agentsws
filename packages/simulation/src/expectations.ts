@@ -455,6 +455,42 @@ export function checkExpectations(
         : `没出现：${missing.join(', ')}（实际 [${[...kinds].join(', ')}]）`,
     )
   }
+  // WP57（48 §4 #11）：这几轮聊天判成了哪几种动作，**按顺序**。
+  //
+  // 为什么是顺序：这条流水线的价值就在顺序里——"先答了运费，再把退款转成卡"
+  // 与"先转卡、再答运费"是两件完全不同的事，集合断言分不开它们。
+  if (expected.chat_actions !== undefined) {
+    const actual = evidence.events
+      .filter((e) => e.type === 'simulation.chat_turn')
+      .map((e) => String(payloadOf(e).action ?? ''))
+    const ok =
+      actual.length === expected.chat_actions.length &&
+      actual.every((a, i) => a === expected.chat_actions?.[i])
+    add(
+      'chat_actions',
+      ok,
+      ok
+        ? `聊天这几轮：${actual.join(' → ')}`
+        : `期望 ${expected.chat_actions.join(' → ')}，实际 ${actual.join(' → ') || '（一轮都没判）'}`,
+    )
+  }
+  // WP57：求助超时各做了几次（T+3 提醒 / T+10 转邮件跟进）
+  if (expected.chat_assist !== undefined) {
+    const counts = new Map<string, number>()
+    for (const e of evidence.events) {
+      if (e.type !== 'simulation.chat_assist') continue
+      const action = String(payloadOf(e).action ?? '')
+      counts.set(action, (counts.get(action) ?? 0) + 1)
+    }
+    for (const [name, assertion] of Object.entries(expected.chat_assist)) {
+      const actual = counts.get(name) ?? 0
+      add(
+        `chat_assist.${name}`,
+        matchNumeric(actual, assertion),
+        `${name} ${actual} 次（期望 ${String(assertion)}）`,
+      )
+    }
+  }
   if (expected.blocked_rules !== undefined) {
     const rules = new Set(evidence.blocked.map((b) => b.rule))
     const missing = expected.blocked_rules.filter((r) => !rules.has(r))

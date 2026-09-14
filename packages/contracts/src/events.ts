@@ -226,6 +226,13 @@ export type KnownEventType =
   | 'inbound.dead_letter'
   | 'delivery.sent'
   | 'delivery.failed'
+  // WP57（48 §4 L3 #11）：网站在线聊天。入站仍用 `inbound.*`（同一条管线），
+  // 这三条记的是聊天独有的那几件事：一轮判了什么、人接管了、求助超时怎么处理的
+  | 'chat.turn_planned'
+  | 'chat.takeover_changed'
+  | 'chat.assist_timeout'
+  // WP57：商家在聊天里「教 AI」之后沉淀下来的知识候选（承诺类永不自动发布，19）
+  | 'knowledge.candidate_created'
 
 export interface EventLog {
   append<T extends string, P>(

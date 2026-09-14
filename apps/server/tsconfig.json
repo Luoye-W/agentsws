@@ -58,6 +58,9 @@
       "path": "../../packages/schedule"
     },
     {
+      "path": "../../packages/support-core"
+    },
+    {
       "path": "../../packages/secretary"
     },
     {

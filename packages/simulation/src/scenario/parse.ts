@@ -63,6 +63,21 @@ function optStrList(source: string, path: string, v: unknown): string[] | undefi
 
 const NUMERIC_RE = /^(>=|<=|==|>|<)\s*-?\d+(\.\d+)?$/
 
+/** 必填布尔（DSL 里只有 `chat.human_takeover.on` 用得着）。 */
+function requireBool(source: string, path: string, value: unknown): boolean {
+  if (typeof value !== 'boolean') fail(source, path, '必须是 true / false')
+  return value
+}
+
+/** WP57：聊天计划的五种动作（`support-core/chat/types.ts` 的冻结面）。 */
+const CHAT_ACTIONS: readonly string[] = [
+  'answer',
+  'collect_info',
+  'human_review',
+  'assist',
+  'handoff',
+]
+
 const RANGE_KINDS = ['store', 'department', 'account', 'market', 'product_line'] as const
 const LINE_PARENT_KINDS = ['store', 'account', 'market'] as const
 
@@ -165,6 +180,9 @@ const EVENT_KEYS = [
   'org.join',
   // WP56 知识溯源链（48 §4 #6）
   'knowledge.source_sync',
+  // WP57 网站在线客服（48 §4 #11 的实时车道）
+  'chat.visitor_message',
+  'chat.human_takeover',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -197,6 +215,9 @@ const EXPECTED_KEYS = [
   'routed_to',
   'secretary_kinds',
   'scope_disjoint',
+  // WP57
+  'chat_actions',
+  'chat_assist',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -672,6 +693,30 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'chat.visitor_message': {
+      known(source, `${path}.${key}`, body, ['visitor', 'text'])
+      return {
+        at,
+        type: 'chat.visitor_message',
+        chat_message: {
+          visitor: str(source, `${path}.${key}.visitor`, body.visitor),
+          text: str(source, `${path}.${key}.text`, body.text),
+        },
+      }
+    }
+    case 'chat.human_takeover': {
+      known(source, `${path}.${key}`, body, ['visitor', 'on'])
+      return {
+        at,
+        type: 'chat.human_takeover',
+        chat_takeover: {
+          on: requireBool(source, `${path}.${key}.on`, body.on),
+          ...(body.visitor === undefined
+            ? {}
+            : { visitor: str(source, `${path}.${key}.visitor`, body.visitor) }),
+        },
+      }
+    }
     case 'work.idle_sweep': {
       known(source, `${path}.${key}`, body, ['idle_days'])
       return {
@@ -838,6 +883,32 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)
   if (disjoint !== undefined) out.scope_disjoint = disjoint
+  // WP57：这几轮聊天各判成了什么（按顺序），以及求助超时各做了几次
+  const chatActions = optStrList(source, 'expected.chat_actions', raw.chat_actions)
+  if (chatActions !== undefined) {
+    for (const a of chatActions) {
+      if (!CHAT_ACTIONS.includes(a)) {
+        fail(
+          source,
+          'expected.chat_actions',
+          `聊天只有五种动作：${CHAT_ACTIONS.join(' / ')}；不是 ${a}`,
+        )
+      }
+    }
+    out.chat_actions = chatActions
+  }
+  if (raw.chat_assist !== undefined) {
+    const a = raw.chat_assist
+    if (!isRec(a)) fail(source, 'expected.chat_assist', '必须是对象')
+    const counts: Record<string, number | string> = {}
+    for (const [name, v] of Object.entries(a)) {
+      if (!['reminder', 'email_follow_up'].includes(name)) {
+        fail(source, 'expected.chat_assist', `只有 reminder / email_follow_up：${name}`)
+      }
+      counts[name] = numeric(source, `expected.chat_assist.${name}`, v)
+    }
+    out.chat_assist = counts
+  }
   const eventTypes = optStrList(source, 'expected.event_types', raw.event_types)
   if (eventTypes !== undefined) out.event_types = eventTypes
   if (raw.approval_kinds !== undefined) {

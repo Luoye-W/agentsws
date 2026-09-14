@@ -9,6 +9,8 @@ export type MessagePart =
 
 export type ChannelName =
   | 'email'
+  // WP57（48 §4 L3 #11）：网站在线聊天。入站走同一条管线，出站是会话内推送
+  | 'chat'
   | 'whatsapp'
   | 'meta_dm'
   | 'feishu'

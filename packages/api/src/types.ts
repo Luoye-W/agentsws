@@ -52,6 +52,7 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
 import type { CatalogPort } from './routes/catalog.js'
+import type { ChatPort } from './routes/chat.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
@@ -610,6 +611,11 @@ export interface GatewayDeps {
   join?: JoinPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
+  /**
+   * WP57（48 §4 L3 #11）：网站在线客服。没装配时 `/v1/chat/*` 回 not_implemented——
+   * 在线客服是一条职责，不是工作台的前提。
+   */
+  chat?: ChatPort
   /**
    * 40 §2 工具箱与查重；没装配时 `/v1/catalog/*` 回 not_implemented，
    * 五个"建"的入口也**不再查重**（`guardSimilar` 直接放行）——查重是加分项，

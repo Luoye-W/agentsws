@@ -6,6 +6,7 @@
  */
 export * from './approvals.js'
 export * from './boundaries.js'
+export * from './chat/index.js'
 export * from './classify.js'
 export * from './detect.js'
 export * from './draft.js'
