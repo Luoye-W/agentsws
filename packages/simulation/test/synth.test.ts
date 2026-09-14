@@ -43,7 +43,11 @@ describe('合成公司生成器（26 §2）', () => {
   it('规模参数化', () => {
     const small = synth({ orders: 10, out: tempDir() })
     const orders = small.files.get('store/orders.yml') ?? ''
-    expect(orders.match(/^- id: ord_/gm)?.length).toBe(10)
+    // `--orders N` = 生成 N 张 DTC 订单；WP55 的那张 Amazon 订单（`ord_1101`）是
+    // **追加**上去的，不占 N 的名额——占了名额就得少生成一张，46 张既有订单的
+    // 取样会整体前移，等于为了加一条题去改所有人的数据。
+    expect(orders.match(/^- id: ord_/gm)?.length).toBe(10 + 1)
+    expect(orders).toContain('ord_1101')
     expect(() => synth({ orders: 2, out: tempDir() })).toThrow()
     expect(() => synth({ people: 1, out: tempDir() })).toThrow()
     expect(() => synth({ pack: 'amz-10p', out: tempDir() })).toThrow(/dtc-3c/)
@@ -61,7 +65,7 @@ describe('合成公司生成器（26 §2）', () => {
     expect([...fresh.files.keys()].some((f) => f.startsWith('scenarios/'))).toBe(false)
     expect(fresh.files.has('baseline.json')).toBe(false)
     // 而仓库里的 pack 两样都有
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(19)
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(21)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
@@ -93,7 +97,8 @@ describe('合成公司生成器（26 §2）', () => {
     expect(pack.workspace.id).toBe('ws_dtc3c')
     expect(pack.people).toHaveLength(3)
     expect(pack.assignments.filter((a) => a.primary === true)).toHaveLength(1)
-    expect(pack.orders).toHaveLength(50)
+    // 50 张生成订单 + WP55 追加的那张 Amazon 订单（见「规模参数化」那条的注释）
+    expect(pack.orders).toHaveLength(51)
     expect(pack.customers.length).toBeGreaterThanOrEqual(20)
     // 三层知识都有（WP56 加了第二条 fact：源页派生的保修期，给复核场景用）
     expect(pack.knowledge.map((k) => k.layer).sort()).toEqual([

@@ -36,6 +36,14 @@ export interface InboundEvent {
   raw_ref: string
   routing: { role_id?: RoleId; work_item_id?: string; confidence: number }
   secrets_scrubbed: boolean
+  /**
+   * WP55 / 48 §4 L3 #2：**渠道细分**。Amazon 买家消息寄生在客服邮箱上，传输层仍是
+   * 邮件（`channel` 照旧是 `email`），但社区规范、SLA 与出站硬闸都按 `amazon` 那一套走。
+   * 不给 = 老行为，一个字不用改。
+   */
+  sub_channel?: string
+  /** WP55：渠道细分的判定结果（marketplace、relay 地址、消息类型、置信、信号）。 */
+  channel_meta?: Record<string, unknown>
 }
 
 /** 渠道适配器（dsh-channels 契约的子集 + 我们的扩展）。send 内部委托 Connect，不持有 token。 */

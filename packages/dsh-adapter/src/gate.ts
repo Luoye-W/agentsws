@@ -14,11 +14,17 @@ import { EXTERNAL_FENCE, type Provenance } from '@agentsws/core'
 import type {
   BoundaryGate,
   CreateDraftFn,
+  CreateDraftResult,
   DraftPayload,
   StageFn,
   StageIntent,
 } from '@agentsws/stand-ins'
-import { boundaryGate, contextItemHash, ontologyBriefOf } from '@agentsws/stand-ins'
+import {
+  boundaryGate,
+  contextItemHash,
+  ontologyBriefOf,
+  rewriteForChannelGuard,
+} from '@agentsws/stand-ins'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -140,7 +146,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   const pendingStage = new Map<string, StageIntent>()
   const pendingDraft = new Map<string, DraftPayload>()
   const stageResults = new Map<string, { change_id: string }>()
-  const draftResults = new Map<string, { approval_item_id: string }>()
+  const draftResults = new Map<string, Exclude<CreateDraftResult, undefined>>()
 
   const api: GateApi = {
     ctx,
@@ -358,7 +364,20 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
         if (payload === undefined) return 'unavailable'
         const create: CreateDraftFn | undefined = options.createDraft
         if (create === undefined) return 'unavailable'
-        const res = await create(payload)
+        // WP55 / 48 §4 L3 #2：出站硬闸的重写循环。拦下 = **打回重写**——原因回到
+        // 写正文的这一跳，重写一版再提交给闸判一次；绝不静默删改后照发。
+        // 循环在 answerer 里而不是在 turn loop 里：重写是同一次 `draft_reply`
+        // 调用内部的事，跑成两次工具调用会让 dsh 这一档的工具计数与另外两个
+        // 运行时对不上。只重写一次：修不好的那几类本来就不该进重写循环。
+        let res = await create(payload)
+        if (res !== undefined && 'rewrite' in res) {
+          sink({
+            type: 'progress',
+            step: 'channel_guard_rewrite',
+            note: res.rewrite.split('\n')[1] ?? '',
+          })
+          res = await create({ ...payload, body: rewriteForChannelGuard(payload.body) })
+        }
         if (res === undefined) return 'rejected'
         draftResults.set(callId, res)
         return GRANT

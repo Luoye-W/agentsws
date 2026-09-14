@@ -4,6 +4,7 @@
  * 纯函数、无 IO、无模型调用。SaaS（KefuAgent）与开源中台装的是同一份代码：
  * 修一条话术规则、加一条业务边界，两边同时受益。
  */
+export * from './amazon/index.js'
 export * from './approvals.js'
 export * from './boundaries.js'
 export * from './chat/index.js'
@@ -12,6 +13,7 @@ export * from './detect.js'
 export * from './draft.js'
 export * from './entities.js'
 export * from './escalation.js'
+export * from './gates/index.js'
 export * from './knowledge.js'
 export * from './lexicon.js'
 export * from './prompts/index.js'

@@ -43,6 +43,16 @@ export interface InboundResolver {
   thread?(external_id: string): ObjectRef | undefined
   /** 正文里认得出的订单（`#1001`） */
   order?(text: string): ObjectRef | undefined
+  /**
+   * WP55 / 48 §4 L3 #2：**渠道细分**判定（真环境是 `apps/server` 的
+   * `classify_sub_channel`）。传输层是邮件，规则不是邮件的那一套——判成 `amazon`
+   * 的线程从此走 Amazon 那一套（出站硬闸 + 24h SLA）。
+   *
+   * 判定规则住在 `@agentsws/support-core`；本包只留这一个注入口，不自己抄一份。
+   */
+  sub_channel?(
+    mail: RawEmail,
+  ): { sub_channel: string; channel_meta?: Record<string, unknown> } | undefined
   /** 路由：给哪个职责（06 §2.4 同一路由器的替身） */
   route?(input: {
     channel: ChannelName
@@ -173,6 +183,7 @@ export class MemoryInboundPipeline implements InboundPipeline {
     const fencedText = fenceInbound(scrubbedBody.text)
 
     const parts: MessagePart[] = [{ type: 'text', text: fencedText }]
+    const sub = this.resolver.sub_channel?.(mail)
     const customer = this.resolver.customer?.(mail.from)
     const threadExternal =
       mail.thread_id === undefined || mail.thread_id === 'new' ? undefined : mail.thread_id
@@ -196,6 +207,12 @@ export class MemoryInboundPipeline implements InboundPipeline {
       raw_ref,
       routing: routed ?? { confidence: 0 },
       secrets_scrubbed,
+      ...(sub === undefined
+        ? {}
+        : {
+            sub_channel: sub.sub_channel,
+            ...(sub.channel_meta === undefined ? {} : { channel_meta: sub.channel_meta }),
+          }),
       actor: {
         external_id: mail.from,
         ...(mail.from.length > 0 ? { display: mail.from.split('@')[0] ?? mail.from } : {}),

@@ -15,11 +15,28 @@ export interface ThreadRecord {
   last_message_id?: string
   references: string[]
   updated_at: Iso8601
+  /**
+   * WP55 / 48 §4 L3 #2：渠道细分（`amazon`）。传输层仍是邮件，但这条线程上的
+   * 出站要过 Amazon 的社区规范硬闸、进 24h SLA 表。
+   */
+  channel?: string
+  /**
+   * 渠道细分的判定结果。写入是**增量补丁**语义：给了的键覆盖，没给的键保留旧值
+   * ——`last_buyer_message_at` 是 SLA 的唯一时钟锚，一封系统通知不该把它推掉；
+   * `relay_address` 同理，L2 通知没有 relay 地址，照写 null 会把回信目标抹掉。
+   */
+  channel_meta?: Record<string, unknown>
 }
 
 export interface ThreadStore {
   get(external_id: string): MaybePromise<ThreadRecord | undefined>
   upsert(record: ThreadRecord): MaybePromise<void>
+  /**
+   * WP55：列出全部线程（24h SLA sweep 要按渠道细分挑）。
+   *
+   * 可选：不实现 = sweep 扫不到这只邮箱（它只会少扫，不会扫错）。
+   */
+  list?(): MaybePromise<ThreadRecord[]>
 }
 
 export class MemoryThreadStore implements ThreadStore {
@@ -29,7 +46,12 @@ export class MemoryThreadStore implements ThreadStore {
     const rec = this.threads.get(external_id)
     return rec === undefined
       ? undefined
-      : { ...rec, participants: [...rec.participants], references: [...rec.references] }
+      : {
+          ...rec,
+          participants: [...rec.participants],
+          references: [...rec.references],
+          ...(rec.channel_meta === undefined ? {} : { channel_meta: { ...rec.channel_meta } }),
+        }
   }
 
   upsert(record: ThreadRecord): void {
@@ -37,7 +59,12 @@ export class MemoryThreadStore implements ThreadStore {
       ...record,
       participants: [...record.participants],
       references: [...record.references],
+      ...(record.channel_meta === undefined ? {} : { channel_meta: { ...record.channel_meta } }),
     })
+  }
+
+  list(): ThreadRecord[] {
+    return [...this.threads.keys()].map((id) => this.get(id) as ThreadRecord)
   }
 
   get size(): number {
@@ -55,6 +82,10 @@ export function mergeThread(
     message_id?: string
     references: readonly string[]
     at: Iso8601
+    /** WP55：渠道细分；不给 = 保留旧值（一封普通邮件不该把线程从 amazon 降回 email）。 */
+    channel?: string
+    /** WP55：`channel_meta` 的增量补丁；只合并给了的键。 */
+    channel_meta?: Record<string, unknown>
   },
 ): ThreadRecord {
   const participants = [...(prior?.participants ?? [])]
@@ -66,12 +97,19 @@ export function mergeThread(
   for (const r of [...next.references, ...(next.message_id === undefined ? [] : [next.message_id])])
     if (!references.includes(r)) references.push(r)
   const subject = next.subject ?? prior?.subject
+  const channel = next.channel ?? prior?.channel
+  const channel_meta =
+    next.channel_meta === undefined
+      ? prior?.channel_meta
+      : { ...(prior?.channel_meta ?? {}), ...next.channel_meta }
   return {
     external_id: next.external_id,
     participants,
     references,
     updated_at: next.at,
     ...(subject === undefined ? {} : { subject }),
+    ...(channel === undefined ? {} : { channel }),
+    ...(channel_meta === undefined ? {} : { channel_meta }),
     ...(next.message_id === undefined
       ? prior?.last_message_id === undefined
         ? {}

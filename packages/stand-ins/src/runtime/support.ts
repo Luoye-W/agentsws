@@ -16,6 +16,7 @@ import {
   detectAnsweredBoundaries,
   gateChange,
   getVerticalPack,
+  isMarketplaceRelayAddress,
   returnWindowPolicy,
 } from '@agentsws/support-core'
 
@@ -252,4 +253,42 @@ export function describeRun(input: RunSummaryInput): string {
   }
   if (parts.length === 0) return '这次什么也没做：没查到东西，也没出草稿。'
   return `${parts.join('，')}。`
+}
+
+// ---------- WP55 / 48 §4 L3 #2：Amazon 出站硬闸在模拟回路里的那一跳 ----------
+
+/**
+ * 模拟回路里复现「模型把知识库里的官网链接原样抄进 Amazon 站内信」。
+ *
+ * 这不是给正文加料，是**把真模型最常犯的那一次违规钉成确定性事件**：没有它，
+ * 硬闸在模拟里永远是绿的，「拦下 → 打回重写 → 再提交」这条路一次都走不到。
+ * 触发条件与闸本身一致——收件人域，别的一概不看。
+ *
+ * 三个运行时共用这一份。各写一遍的话，`--runtime stub|direct|dsh` 跑出来的
+ * 就不是同一条路，跨运行时一致性那条断言也就没意义了。
+ */
+export function marketplaceLinkSlip(body: string, to: readonly string[]): string {
+  if (!to.some((address) => isMarketplaceRelayAddress(address))) return body
+  if (MARKETPLACE_SLIP_RE.test(body)) return body
+  return `${body}\n\n${MARKETPLACE_SLIP_LINE}`
+}
+
+/** 桩塞进去的那一行（重写要能把它整行去掉）。 */
+export const MARKETPLACE_SLIP_LINE = 'More details: https://brandsite.example/returns'
+const MARKETPLACE_SLIP_RE = /\bhttps?:\/\//i
+
+/**
+ * 「按闸给的原因重写一版」的桩实现。
+ *
+ * 真模型收到中文的违规清单之后会重写整段；桩只做闸真正在拦的那件事——把带站外
+ * 链接的行整行去掉。**不是静默删改后照发**：这一版要重新提交给闸，闸再判一次，
+ * 判不过照样拦。
+ */
+export function rewriteForChannelGuard(body: string): string {
+  return body
+    .split('\n')
+    .filter((line) => !/\b(?:https?:\/\/|www\.)/i.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }

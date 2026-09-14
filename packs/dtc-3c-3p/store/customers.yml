@@ -78,3 +78,7 @@
   name: Nils Vogel
   email: nils.vogel.16@example.com
   market: fr
+- id: cus_amz_de
+  name: Amazon Buyer DE
+  email: k3m9xq2vr7t4@marketplace.amazon.de
+  market: de

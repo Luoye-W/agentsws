@@ -474,6 +474,18 @@ export interface ScenarioExpected {
   chat_actions?: string[]
   /** WP57：求助超时各做了几次（`reminder` / `email_follow_up`）。 */
   chat_assist?: Record<string, NumericAssertion>
+  /**
+   * WP55 / 48 §4 L3 #2：本次模拟里入站被判成的**渠道细分**（`amazon`）。
+   * 传输层仍是邮件，规则不是邮件的那一套——判错了，出站硬闸那一层根本不会被调用。
+   */
+  sub_channel?: string
+  /**
+   * WP55 / 48 §4 L3 #3：这几道 guardrail 前置门在本次模拟里**至少各判过一次
+   * 「不自主」**（`fail` 或 `gate_error`）。
+   *
+   * 断言的是「门说了话」，不是「卡被拦了」——三道门只记录不改状态，卡照常进队列。
+   */
+  gates_failed?: string[]
 }
 
 export interface Scenario {

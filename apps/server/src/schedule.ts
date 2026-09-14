@@ -106,12 +106,29 @@ export const HANDLERS = {
    * 40 §2 的工具箱里去，跟人建的定时任务混在一起。
    */
   chatAssistTimeout: CHAT_ASSIST_TIMEOUT_HANDLER,
+  /** WP55 / 48 §4 L3 #2：Amazon 24h 响应线的三档 sweep（每 5 分钟）。 */
+  amazonSla: 'support.amazon_sla',
+  /** WP55 / 48 §4 L3 #4：出站 outbox 的对账（每分钟）。 */
+  reconcileDeliveries: 'channels.reconcile_deliveries',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
 export const HOUSEKEEPING_INTERVAL_MS = 60_000
 /** 邮箱轮询的节奏：2 分钟一轮（IDLE 后置，见 `channels.ts`）。 */
 export const MAIL_POLL_INTERVAL_MS = 2 * 60_000
+/**
+ * WP55：Amazon 24h SLA 的 sweep 节奏。
+ *
+ * 5 分钟一轮是三档阈值（12h / 4h）下的一个安全余量：最坏情况下一张告警卡晚 5 分钟，
+ * 而 4 小时的那一档本来就是给人留出反应时间的。更密没有意义（幂等字段挡住重复出卡），
+ * 更疏会让「只剩十几分钟」的线程根本来不及提醒。
+ */
+export const AMAZON_SLA_SWEEP_INTERVAL_MS = 5 * 60_000
+/**
+ * WP55：出站对账的节奏。一分钟一轮——`sent_unknown` 的每一分钟都是「这封信到底
+ * 发出去没有」的悬而未决，而对账本身只是去已发 / 归档文件夹搜一个 Message-ID。
+ */
+export const RECONCILE_INTERVAL_MS = 60_000
 /** 保留期默认值：90 天。策略层 `WorkspacePolicy.raw_retention_days` 可改（回落 `global_caps` 同名键）。 */
 export const DEFAULT_RAW_RETENTION_DAYS = 90
 
@@ -741,6 +758,43 @@ export function registerMailPoll(scheduler: Scheduler, deps: MailPollDeps): void
 }
 
 /* ------------------------------------------------------------------ */
+/* ⑮ WP55 / 48 §4 L3 #2：Amazon 24h 响应线三档：每 5 分钟                  */
+/* ------------------------------------------------------------------ */
+
+export interface AmazonSlaDeps {
+  /** 扫一轮所有 Amazon 线程：该提醒的提醒、该升级的升级、该闭账的闭账。 */
+  sweep(): Promise<{ scanned: number; reminders: number; criticals: number; accounted: number }>
+}
+
+export function registerAmazonSla(scheduler: Scheduler, deps: AmazonSlaDeps): void {
+  scheduler.register(HANDLERS.amazonSla, () => deps.sweep())
+}
+
+/* ------------------------------------------------------------------ */
+/* ⑯ WP55 / 48 §4 L3 #4：出站 outbox 对账：每分钟                          */
+/* ------------------------------------------------------------------ */
+
+export interface ReconcileDeliveriesDeps {
+  /**
+   * 对一轮 `sent_unknown` 与迟迟没确认的已受理项去找证据。
+   * **绝不自动重发**——重发一封可能已经发出去的信，代价是客户收到两封。
+   */
+  reconcile(): Promise<{
+    scanned: number
+    confirmed: number
+    still_unknown: number
+    escalated: number
+  }>
+}
+
+export function registerReconcileDeliveries(
+  scheduler: Scheduler,
+  deps: ReconcileDeliveriesDeps,
+): void {
+  scheduler.register(HANDLERS.reconcileDeliveries, () => deps.reconcile())
+}
+
+/* ------------------------------------------------------------------ */
 /* ⑩ 受控原始材料区的保留期：每天 03:00（39 待办 H）                        */
 /* ------------------------------------------------------------------ */
 
@@ -1039,6 +1093,29 @@ export async function ensureSystemTasks(
         title: '每 2 分钟收一次邮件',
         handler: HANDLERS.mailPoll,
         trigger: { kind: 'interval', every_ms: MAIL_POLL_INTERVAL_MS },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  // ⑮ WP55：Amazon 24h 响应线的三档 sweep：每 5 分钟。错过了**补跑一次**——
+  //    「还有几小时到线」是纯粹的时间到了该发生的事，关机再开机该提醒的仍然该提醒。
+  if (options.has.mail === true) {
+    await add(
+      'sched_amazon_sla',
+      systemTask(base, {
+        title: '每 5 分钟看一眼 Amazon 的 24 小时响应线',
+        handler: HANDLERS.amazonSla,
+        trigger: { kind: 'interval', every_ms: AMAZON_SLA_SWEEP_INTERVAL_MS },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+    // ⑯ WP55：出站对账：每分钟。同样补跑——一封 `sent_unknown` 不会自己变清楚。
+    await add(
+      'sched_reconcile_deliveries',
+      systemTask(base, {
+        title: '每分钟对一次还没确认发出去的信',
+        handler: HANDLERS.reconcileDeliveries,
+        trigger: { kind: 'interval', every_ms: RECONCILE_INTERVAL_MS },
         misfire_policy: 'run_once_now',
       }),
     )

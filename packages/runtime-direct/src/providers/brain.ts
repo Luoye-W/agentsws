@@ -1,4 +1,5 @@
 import type { ChatMessage, Clock, ModelProvider, ModelRef } from '@agentsws/contracts'
+import { marketplaceLinkSlip } from '@agentsws/stand-ins'
 import type { Vertical } from '@agentsws/support-core'
 import {
   classifyText,
@@ -197,23 +198,30 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
       const customer =
         order?.customer_name ?? order?.email?.split('@')[0] ?? to?.split('@')[0] ?? 'there'
       const subject = subjectLine.startsWith('Re:') ? subjectLine : `Re: ${subjectLine}`
-      const body = renderReplyBody({
-        windowDays: policy.days,
-        withinWindow,
-        windowFromFact: policy.card !== undefined,
-        customer,
-        signature,
-        ...(vertical === undefined ? {} : { vertical }),
-        ...(order === undefined ? {} : { order }),
-        ...(daysSince === undefined ? {} : { daysSinceDelivery: daysSince }),
-        ...(stagedOk && refundAmount !== undefined ? { refundAmount } : {}),
-      })
+      const recipients = to === undefined ? [] : [to]
+      // WP55 / 48 §4 L3 #2：Amazon 站内信上真模型最常犯的那一次违规（把官网链接
+      // 原样抄进正文）。三个运行时共用同一份复现，硬闸那条路才在每个运行时下
+      // 都真的走一遍。WP54：模板按垂直包取。
+      const body = marketplaceLinkSlip(
+        renderReplyBody({
+          windowDays: policy.days,
+          withinWindow,
+          windowFromFact: policy.card !== undefined,
+          customer,
+          signature,
+          ...(vertical === undefined ? {} : { vertical }),
+          ...(order === undefined ? {} : { order }),
+          ...(daysSince === undefined ? {} : { daysSinceDelivery: daysSince }),
+          ...(stagedOk && refundAmount !== undefined ? { refundAmount } : {}),
+        }),
+        recipients,
+      )
       return {
         tool_calls: [
           {
             name: DRAFT_REPLY_TOOL,
             input: {
-              to: to === undefined ? [] : [to],
+              to: recipients,
               subject,
               body,
               citations:

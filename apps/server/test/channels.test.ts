@@ -9,7 +9,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Mailer, OutboundMail } from '@agentsws/channels'
+import type { Mailer, MailSource, OutboundMail, RawEmailMessage } from '@agentsws/channels'
 import type { ApprovalItem, Clock, EventEnvelope, Matter, ObjectRef } from '@agentsws/contracts'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { MemoryHalt } from '@agentsws/kernel'
@@ -29,7 +29,8 @@ const T0 = '2026-09-10T00:00:00.000Z'
 const SECRET_LINE = '我的授权码：abcdefghijklmnop'
 const ADDRESS = 'Torstrasse 12, Berlin'
 
-const clock: Clock = { now: () => T0, sleep: async () => undefined }
+const baseClock: Clock = { now: () => T0, sleep: async () => undefined }
+const clock = baseClock
 
 function mime(over: {
   from?: string
@@ -59,7 +60,14 @@ function mime(over: {
 /** 记录发出去的信；不连真 SMTP。 */
 class RecordingMailer implements Mailer {
   readonly sent: OutboundMail[] = []
+  /** WP55：下一次 `send` 抛这个错（模拟"正文流完了、250 没回来"）。 */
+  throwNext?: Error
   async send(mail: OutboundMail): Promise<{ message_id: string }> {
+    const boom = this.throwNext
+    if (boom !== undefined) {
+      this.throwNext = undefined
+      throw boom
+    }
     this.sent.push(mail)
     return { message_id: mail.message_id ?? '<sent@shop.example>' }
   }
@@ -119,8 +127,21 @@ function harness(
     cipher?: boolean
     resolveActor?: (external_id: string) => ObjectRef | undefined
     batch?: number
+    /** WP55：SLA sweep 要把时间往前推，所以这只钟要能动。 */
+    clock?: Clock
+    /** WP55：出站对账要能让 SMTP 抛一个歧义错误。 */
+    mailer?: RecordingMailer
+    /** WP55：对账耗尽时出的那张人工卡。 */
+    escalate?: (input: { outbox_id: string; attempts: number }) => void
+    /**
+     * WP55：注入收信端。真 IMAP 桩对任何 SEARCH 都回全部 UID（见
+     * `fake-imap-server.ts`），拿它测对账会假阳性——所以对账那几条自带一个
+     * 说得清"找到 / 找不到"的收信端。
+     */
+    makeSource?: (account: MailAccount) => MailSource
   } = {},
 ): Harness {
+  const clock = over.clock ?? baseClock
   const dir = mkdtempSync(join(tmpdir(), 'agentsws-channels-'))
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
   const data = createDataStore({ dbPath: join(dir, 'data.db'), clock, collections: [] })
@@ -129,7 +150,7 @@ function harness(
   const events: EventEnvelope[] = []
   const runs: { matter: Matter; brief: string }[] = []
   const work = createWork({ workspace_id: WS, clock, random: () => 0.5 })
-  const mailer = new RecordingMailer()
+  const mailer = over.mailer ?? new RecordingMailer()
   const accounts = over.accounts ?? [account()]
   const channels = createChannels({
     clock,
@@ -152,6 +173,10 @@ function harness(
       return { run_id: `run_${runs.length}` }
     },
     makeMailer: () => mailer,
+    ...(over.makeSource === undefined
+      ? {}
+      : { makeSource: (a: MailAccount) => (over.makeSource as (x: MailAccount) => MailSource)(a) }),
+    ...(over.escalate === undefined ? {} : { escalateUnresolvedDelivery: over.escalate }),
   })
   assemblies.push(channels)
   return { channels, work, data, halt, mailer, events, runs, dir, accounts }
@@ -433,5 +458,476 @@ describe('forDisplay', () => {
 
   it('太长的截断加省略号', () => {
     expect(forDisplay('x'.repeat(50), 10)).toBe(`${'x'.repeat(9)}…`)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* WP55 / 48 §4 L3 #2：Amazon 渠道                                       */
+/* ------------------------------------------------------------------ */
+
+const AMZ_RELAY = 'a1b2c3d4e5f6@marketplace.amazon.com'
+
+function amazonMime(
+  over: { from?: string; text?: string; auth?: string; message_id?: string } = {},
+): string {
+  return [
+    `From: Anna <${over.from ?? AMZ_RELAY}>`,
+    `To: ${USER}`,
+    'Subject: Message from Amazon buyer for order 113-1234567-1234567',
+    'Date: Wed, 09 Sep 2026 08:55:00 +0000',
+    `Message-ID: ${over.message_id ?? '<amz-1@marketplace.amazon.com>'}`,
+    ...(over.auth === undefined ? [] : [`Authentication-Results: mx.example; ${over.auth}`]),
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    over.text ?? 'The charger does not fit my laptop. Please help.',
+    '',
+  ].join('\r\n')
+}
+
+describe('Amazon 渠道接线（识别 → 线程打标 → 路由 → 出站硬闸 → 24h SLA）', () => {
+  it('relay 域来信被判成 amazon：线程打上 channel/channel_meta，路由落 amz.support', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    const received = h.events.find((e) => e.type === 'inbound.received')
+    expect(received?.payload).toMatchObject({ sub_channel: 'amazon' })
+    const payload = (received?.payload ?? {}) as {
+      routing?: { role_id?: string }
+      channel_meta?: Record<string, unknown>
+    }
+    expect(payload.routing?.role_id).toBe('amz.support')
+    const meta = payload.channel_meta
+    expect(meta).toMatchObject({ marketplace: 'com', message_type: 'buyer_message' })
+    expect(meta?.last_buyer_message_at).toBe(T0)
+    // 买家消息照常起 Run（钓鱼件才不起）
+    expect(h.runs).toHaveLength(1)
+  })
+
+  it('认证显式 fail 的 relay 来信 → 人工复核：落进事项但绝不起 Run、绝不静默丢', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime({ auth: 'spf=fail' }) }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    const received = h.events.find((e) => e.type === 'inbound.received')
+    const payload = (received?.payload ?? {}) as { channel_meta?: Record<string, unknown> }
+    expect(payload.channel_meta).toMatchObject({
+      message_type: 'phishing_suspect',
+      needs_human_review: true,
+    })
+    // 信在事项里（不静默丢），但没有 Run（不自动回）
+    const matter = h.work.listMatters({ kind: 'conversation' })[0]
+    expect(matter).toBeDefined()
+    expect(h.runs).toHaveLength(0)
+    const { timeline } = h.work.matterView(matter?.id ?? '')
+    expect(timeline.some((e) => e.kind === 'note' && e.text.includes('钓鱼'))).toBe(true)
+  })
+
+  it('出站硬闸：带外链的草稿被打回重写（不可重试），改干净就发得出去', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    const card = (text: string): ApprovalItem =>
+      ({
+        id: 'apr_amz',
+        kind: 'outbound_draft',
+        payload: {
+          channel: 'email',
+          thread_ref: '<amz-1@marketplace.amazon.com>',
+          body: { text, subject: 'Re: Message from Amazon buyer for order 113-1234567-1234567' },
+        },
+      }) as unknown as ApprovalItem
+
+    const blocked = await h.channels.deliver(
+      card('Please visit https://brandsite.com/promo for a coupon.'),
+      {
+        idempotencyKey: 'amz_1',
+      },
+    )
+    expect(blocked).toMatchObject({ status: 'failed', error: { retryable: false } })
+    // 原因原样回给调用方，喂进重写循环——不静默删改后照发
+    expect((blocked as { error: { message: string } }).error.message).toContain('外部链接')
+    expect((blocked as { error: { message: string } }).error.message).toContain('请按下面各条重写')
+    expect(h.mailer.sent).toHaveLength(0)
+    expect(h.events.some((e) => e.type === 'delivery.failed')).toBe(true)
+
+    const ok = await h.channels.deliver(
+      card('We are sorry the charger does not fit. We will look into order 113-1234567-1234567.'),
+      { idempotencyKey: 'amz_2' },
+    )
+    expect(ok).toMatchObject({ status: 'ok' })
+    expect(h.mailer.sent).toHaveLength(1)
+  })
+
+  it('24h SLA sweep：三档按剩余时间出，幂等不重复出；回了就闭账', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    // T0 起表，此刻剩满 24h：一张卡都不该出
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({
+      scanned: 1,
+      reminders: 0,
+      criticals: 0,
+    })
+  })
+
+  it('24h SLA sweep：剩 ≤12h 出提醒且幂等；剩 ≤4h 升级；回了就闭账', async () => {
+    const server = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [{ uid: 1, source: amazonMime() }],
+    })
+    cleanup.push(() => void server.close())
+    let at = T0
+    const movable: Clock = { now: () => at, sleep: async () => undefined }
+    const h = harness({
+      clock: movable,
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: server.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+    })
+    await h.channels.poll()
+
+    // 锚 = T0；+13h → 剩 11h ≤ 12h：提醒档
+    at = '2026-09-10T13:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ reminders: 1, criticals: 0 })
+    // 同一周期内再扫一次：幂等，不再出（否则一张卡变成每 5 分钟一张）
+    at = '2026-09-10T14:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ reminders: 0, criticals: 0 })
+
+    // +21h → 剩 3h ≤ 4h：升级档
+    at = '2026-09-10T21:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ criticals: 1 })
+    expect(
+      h.events
+        .filter((e) => e.type === 'support.amazon_sla')
+        .map((e) => (e.payload as { tier: string }).tier),
+    ).toEqual(['reminder', 'critical'])
+
+    // 回了 → 闭账 within，且之后不再出任何卡
+    await h.channels.deliver(
+      {
+        id: 'apr_amz_sla',
+        kind: 'outbound_draft',
+        payload: {
+          channel: 'email',
+          thread_ref: '<amz-1@marketplace.amazon.com>',
+          body: {
+            text: 'Sorry about that, we are checking order 113-1234567-1234567 now.',
+            subject: 'Re: Message from Amazon buyer for order 113-1234567-1234567',
+          },
+        },
+      } as unknown as ApprovalItem,
+      { idempotencyKey: 'amz_sla_1' },
+    )
+    at = '2026-09-10T22:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({ accounted: 1 })
+    at = '2026-09-10T23:00:00.000Z'
+    expect(await h.channels.amazonSlaSweep()).toMatchObject({
+      accounted: 0,
+      reminders: 0,
+      criticals: 0,
+    })
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* WP55 / 48 §4 L3 #4：出站 outbox 与对账                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 说得清"找到 / 找不到"的收信端：一封种子信 + 一个可控的 Message-ID 搜索。
+ * 真 IMAP 桩对任何 SEARCH 都回全部 UID，拿它测对账是假阳性。
+ */
+class StubSource implements MailSource {
+  #drained = false
+  /** 让 `findMessageId` 从这一刻起"找得到"。 */
+  evidence?: string
+  constructor(private readonly source: string) {}
+  async fetchSince(): Promise<RawEmailMessage[]> {
+    if (this.#drained) return []
+    this.#drained = true
+    return [{ uid: 1, mailbox: 'INBOX', source: this.source }]
+  }
+  async health(): Promise<{ ok: boolean }> {
+    return { ok: true }
+  }
+  async findMessageId(message_id: string): Promise<string | undefined> {
+    return this.evidence !== undefined && message_id.length > 0 ? this.evidence : undefined
+  }
+}
+
+describe('出站 outbox 与对账（sent_unknown 绝不自动重试）', () => {
+  const draftCard = (thread: string, text = '已经补寄了，单号 SF123。'): ApprovalItem =>
+    ({
+      id: 'apr_obx',
+      kind: 'outbound_draft',
+      payload: { channel: 'email', thread_ref: thread, body: { text } },
+    }) as unknown as ApprovalItem
+
+  it('同一审批项只发一次：第二次 deliver 不再走 SMTP', async () => {
+    const h = harness()
+    await h.channels.poll()
+    const first = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_1',
+    })
+    expect(first).toMatchObject({ status: 'ok' })
+    expect(h.mailer.sent).toHaveLength(1)
+    // 人又按了一遍通过 / 上游重投了一次：outbox 挡住，不发第二封
+    const second = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_1',
+    })
+    expect(second).toMatchObject({ status: 'ok' })
+    expect(h.mailer.sent).toHaveLength(1)
+  })
+
+  it('同一幂等键换了正文 → 拒绝（这不是重试，是调用方的 bug）', async () => {
+    const h = harness()
+    await h.channels.poll()
+    await h.channels.deliver(draftCard('<m-1@mail.example>', 'A'), { idempotencyKey: 'obx_2' })
+    const drift = await h.channels.deliver(draftCard('<m-1@mail.example>', 'B'), {
+      idempotencyKey: 'obx_2',
+    })
+    expect(drift).toMatchObject({ status: 'failed', error: { retryable: false } })
+    expect((drift as { error: { message: string } }).error.message).toContain('payload_drift')
+    expect(h.mailer.sent).toHaveLength(1)
+  })
+
+  it('歧义错误 → sent_unknown：不可重试，且下一次 deliver 也不重发', async () => {
+    const mailer = new RecordingMailer()
+    const h = harness({ mailer })
+    await h.channels.poll()
+    mailer.throwNext = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+    const out = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_3',
+    })
+    expect(out).toMatchObject({ status: 'failed', error: { retryable: false } })
+    expect((out as { error: { message: string } }).error.message).toContain('sent_unknown')
+    expect(mailer.sent).toHaveLength(0)
+
+    // 再来一次：outbox 说「可能已经发出去了」，不发
+    const again = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_3',
+    })
+    expect(again).toMatchObject({ status: 'ok' })
+    expect(mailer.sent).toHaveLength(0)
+
+    const row = (await h.channels.outbox.store.list(WS))[0]
+    expect(row?.status).toBe('sent_unknown')
+    // 事件里只有状态与分类标记，没有正文
+    const changed = h.events.filter((e) => e.type === 'outbound.state_changed')
+    expect(changed.map((e) => (e.payload as { to: string }).to)).toContain('sent_unknown')
+    expect(JSON.stringify(changed)).not.toContain('SF123')
+  })
+
+  it('对账找到证据 → confirmed；找不到就排下一次，一次都不重发', async () => {
+    let at = T0
+    const movable: Clock = { now: () => at, sleep: async () => undefined }
+    const mailer = new RecordingMailer()
+    const source = new StubSource(mime({}))
+    const h = harness({ mailer, clock: movable, makeSource: () => source })
+    await h.channels.poll()
+    mailer.throwNext = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+    await h.channels.deliver(draftCard('<m-1@mail.example>'), { idempotencyKey: 'obx_4' })
+
+    // 还没到对账时刻
+    expect(await h.channels.reconcileDeliveries()).toMatchObject({ scanned: 0 })
+
+    // 到点了，但已发送文件夹里还搜不到 → 排下一次（**不重发**）
+    at = '2026-09-10T00:20:00.000Z'
+    expect(await h.channels.reconcileDeliveries()).toMatchObject({
+      scanned: 1,
+      confirmed: 0,
+      still_unknown: 1,
+      escalated: 0,
+    })
+    expect(mailer.sent).toHaveLength(0)
+
+    // 服务器那边其实收下了：下一轮搜到了 → confirmed
+    source.evidence = 'Sent'
+    at = '2026-09-10T02:00:00.000Z'
+    expect(await h.channels.reconcileDeliveries()).toMatchObject({ scanned: 1, confirmed: 1 })
+    expect((await h.channels.outbox.store.list(WS))[0]?.status).toBe('confirmed')
+    expect(mailer.sent).toHaveLength(0)
+    const reconciled = h.events.filter((e) => e.type === 'outbound.reconciled')
+    expect(reconciled.map((e) => (e.payload as { outcome: string }).outcome)).toEqual([
+      'still_unknown',
+      'confirmed',
+    ])
+  })
+
+  it('退避耗尽 → 一张人工卡，写明"系统不会自动重发"', async () => {
+    let at = T0
+    const movable: Clock = { now: () => at, sleep: async () => undefined }
+    const mailer = new RecordingMailer()
+    const escalated: { outbox_id: string; attempts: number }[] = []
+    const h = harness({
+      mailer,
+      clock: movable,
+      makeSource: () => new StubSource(mime({})),
+      escalate: (input) => {
+        escalated.push(input)
+      },
+    })
+    await h.channels.poll()
+    mailer.throwNext = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+    await h.channels.deliver(draftCard('<m-1@mail.example>'), { idempotencyKey: 'obx_5' })
+
+    // 一路推到退避耗尽
+    for (let hours = 1; hours <= 40; hours += 1) {
+      at = new Date(Date.parse(T0) + hours * 3_600_000).toISOString()
+      const r = await h.channels.reconcileDeliveries()
+      if (r.escalated > 0) break
+    }
+    expect(escalated).toHaveLength(1)
+    expect(escalated[0]?.attempts).toBeGreaterThanOrEqual(6)
+    // 全程一封信都没重发
+    expect(mailer.sent).toHaveLength(0)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* WP55 / 18 §2.2：死信重投                                              */
+/* ------------------------------------------------------------------ */
+
+describe('死信重投（09-12 真账号验收留下的后置项）', () => {
+  it('重试用尽进死信；修好之后重投一次，这封信真的进来了', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-channels-requeue-'))
+    cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
+    const data = createDataStore({ dbPath: join(dir, 'data.db'), clock, collections: [] })
+    cleanup.push(() => data.close())
+    let nowMs = Date.parse(T0)
+    const ticking: Clock = {
+      now: () => new Date(nowMs).toISOString(),
+      sleep: async () => undefined,
+    }
+    const work = createWork({ workspace_id: WS, clock: ticking, random: () => 0.5 })
+    const events: EventEnvelope[] = []
+    // 09-12 那次就是这样：一个 `canonicalJson` 的 bug 让每一次起 Run 都炸
+    let broken = true
+    const runs: string[] = []
+    const channels = createChannels({
+      clock: ticking,
+      workspace_id: WS,
+      dbDir: dir,
+      halt: new MemoryHalt({}),
+      appendEvent: (e) => {
+        events.push(e as EventEnvelope)
+      },
+      cipher: data.keyring,
+      accounts: () => [account()],
+      credentials: { password: () => PASS },
+      work,
+      position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.aftersales' }),
+      startRun: (input) => {
+        if (broken) throw new Error('Unexpected token \'u\', "{"label":undefined')
+        runs.push(input.brief)
+        return { run_id: `run_${runs.length}` }
+      },
+      makeMailer: () => new RecordingMailer(),
+    })
+    assemblies.push(channels)
+
+    // 一路重试到死信（18 §2.2：退避 ≤ 5 次）
+    await channels.poll()
+    for (let i = 0; i < 6; i += 1) {
+      nowMs += 60 * 60_000
+      await channels.poll()
+    }
+    const dead = await channels.deadLetters()
+    expect(dead).toHaveLength(1)
+    expect(dead[0]?.reason).toBe('retries_exhausted')
+    expect(runs).toHaveLength(0)
+
+    // 修好了：重投。这一条以前只能手改 SQLite
+    broken = false
+    const first = dead[0]
+    expect(first).toBeDefined()
+    expect(await channels.requeueDeadLetter(first?.id ?? '')).toEqual({ requeued: true })
+    expect(runs).toHaveLength(1)
+    expect(await channels.deadLetters()).toHaveLength(0)
+    expect(events.some((e) => e.type === 'inbound.requeued')).toBe(true)
+
+    // 不存在的 id 只是没重投，不是报错
+    expect(await channels.requeueDeadLetter('dl_nope')).toEqual({ requeued: false })
   })
 })

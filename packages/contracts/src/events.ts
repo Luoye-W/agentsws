@@ -236,6 +236,20 @@ export type KnownEventType =
   // WP54（48 v2 L1）：职责改名 / 合并之后，已有分配在启动时迁到新 id。
   // payload 只有分配 id、人、旧 id、新 id、迁过去的职责版本——改名也是一次变更，必须留痕。
   | 'assignment.role_migrated'
+  // WP55（48 §4 L3 #2–#5）：客服安全边界四件套。payload 一律只有结论与计数，
+  // 正文、relay 地址、凭据永不进日志。
+  /** Amazon 24h 响应线的三档（提醒 / 升级 / 闭账）。 */
+  | 'support.amazon_sla'
+  /** 三道门的结论（只记门名与 pass / fail / gate_error，不记被扫的文本）。 */
+  | 'guardrail.gate_decided'
+  /** 出站 outbox 的状态迁移（prepared → sending → accepted → confirmed / …）。 */
+  | 'outbound.state_changed'
+  /** `sent_unknown` 的对账结论（找到证据 / 没找到 / 退避次数耗尽）。 */
+  | 'outbound.reconciled'
+  /** 邮箱加固：毒消息隔离、扫描租约被别人占着、归档文件夹动不了。 */
+  | 'inbound.folder_fault'
+  /** 死信被人重投回队列。 */
+  | 'inbound.requeued'
 
 export interface EventLog {
   append<T extends string, P>(

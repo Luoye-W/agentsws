@@ -253,7 +253,7 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
         const res = await options.createDraft({ ...p.payload, request: req })
         return {
           now: options.clock.now(),
-          ...(res === undefined ? {} : { approval_item_id: res.approval_item_id }),
+          ...(res === undefined ? {} : res),
         }
       }
       if (method === M_HOST_BOUNDARY) {

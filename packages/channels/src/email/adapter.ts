@@ -13,6 +13,16 @@ import { type AddressObject, type ParsedMail, simpleParser } from 'mailparser'
 import { ChannelError } from '../errors.js'
 import type { RawStore } from '../raw-store.js'
 import { scrubSecrets } from '../secrets.js'
+import {
+  advanceCursor,
+  clearFault,
+  DEFAULT_SCAN_LEASE_MS,
+  type FolderSyncFault,
+  isSkipped,
+  type MailboxStateStore,
+  recordFault,
+  resumeFrom,
+} from './cursors.js'
 import type { MailSource, RawEmailMessage } from './imap.js'
 import {
   buildReplyHeaders,
@@ -47,6 +57,8 @@ export interface EmailAdapterOptions {
   gmail_service?: string
   /** 轮询周期，默认 60s；时间一律经 Clock */
   interval_ms?: number
+  /** WP55：游标按「账号 × 文件夹」记，所以适配器要知道自己在扫哪个文件夹（缺省 INBOX）。 */
+  mailbox?: string
   threads?: ThreadStore
   /** 原始材料区里的秘密处理：默认 redact（31 §4「秘密脱敏后才落 raw」） */
   raw_secret_policy?: 'redact' | 'keep'
@@ -54,6 +66,58 @@ export interface EmailAdapterOptions {
   render_html?: (text: string) => string
   /** 轮询循环里的异常出口（不抛出中断循环） */
   on_error?: (e: unknown) => void
+  /**
+   * WP55 / 48 §4 L3 #2：**渠道细分判定**（Amazon 买家消息寄生在客服邮箱上）。
+   *
+   * 注入而不是内建：判定规则住在 `@agentsws/support-core`（纯函数、与 SaaS 共用
+   * 同一份常量表），而 channels 是比它低一层的传输包——反过来依赖会把整条依赖链
+   * 倒过来。不注入 = 老行为，一个字不用改。
+   */
+  classify_sub_channel?: (hints: SubChannelHints) => SubChannelVerdict | undefined
+  /**
+   * WP55 / 48 §4 L3 #5：邮箱状态（每文件夹 UID 游标 / 毒消息隔离 / 扫描租约）。
+   *
+   * 不给 = 老行为（游标只在内存里，重启从头拉，没有隔离也没有租约）。
+   */
+  mailbox_state?: MailboxStateStore
+  /** 本进程的身份（租约持有者）。同一只邮箱同一时刻只有一个持有者。 */
+  scan_owner?: string
+  /** 租约时长；一轮拉取不该超过这么久。 */
+  scan_lease_ms?: number
+  /**
+   * WP55：处理过的信搬进哪个文件夹并标已读。不给 = 不归档（这条可关）。
+   * 建不了 / 服务器拒绝 MOVE 只 log，不影响收信。
+   */
+  archive_folder?: string
+  /** 归档时是否顺手标已读（默认 true）。 */
+  archive_mark_read?: boolean
+  /** WP55：毒消息被永久越过时出一张卡（不给就只留在隔离表里）。 */
+  on_folder_fault?: (fault: FolderSyncFault & { account: string; quarantined: boolean }) => void
+}
+
+/** 渠道细分判定要看的那几样（全是已解析的头与正文，判定方自己不碰 MIME）。 */
+export interface SubChannelHints {
+  from_email: string
+  from_name?: string | undefined
+  reply_to_email?: string | undefined
+  subject?: string | undefined
+  body_text: string
+  body_html?: string | undefined
+  /** 原始 `Authentication-Results` 头值；缺失 ≠ fail。 */
+  authentication_results?: string | undefined
+  in_reply_to_message_id?: string | undefined
+}
+
+/** 判定结论：写到线程与入站事件上的那两个字段，外加「这封信要不要人看一眼」。 */
+export interface SubChannelVerdict {
+  /** 渠道细分名（`amazon`）。 */
+  channel: string
+  /** 线程 `channel_meta` 的**增量补丁**（只写自己确实知道的键）。 */
+  meta: Record<string, unknown>
+  /** 路由要落到哪条职责（不给就走默认路由）。 */
+  role_id?: string
+  /** 钓鱼 / 退信 / 索赔这类：落库但绝不生成草稿，交人看。 */
+  needs_human_review?: boolean
 }
 
 const DEFAULT_INTERVAL_MS = 60_000
@@ -82,11 +146,24 @@ export class EmailChannelAdapter implements ChannelAdapter {
   private readonly renderHtml: ((text: string) => string) | undefined
   private readonly onError: ((e: unknown) => void) | undefined
   private readonly displayName: string | undefined
+  private readonly classifySubChannel:
+    | ((hints: SubChannelHints) => SubChannelVerdict | undefined)
+    | undefined
+  private readonly mailbox: string
+  private readonly mailboxState: MailboxStateStore | undefined
+  private readonly scanOwner: string
+  private readonly scanLeaseMs: number
+  private readonly archiveFolder: string | undefined
+  private readonly archiveMarkRead: boolean
+  private readonly onFolderFault:
+    | ((fault: FolderSyncFault & { account: string; quarantined: boolean }) => void)
+    | undefined
 
   private running = false
   private loop: Promise<void> | undefined
   private waking: (() => void) | undefined
   private lastUid = 0
+  private leaseBusy = false
   private gmailReady: boolean | undefined
   private readonly sentByKey = new Map<string, { external_id: string; route: SendRoute }>()
 
@@ -105,6 +182,14 @@ export class EmailChannelAdapter implements ChannelAdapter {
     this.rawSecretPolicy = opts.raw_secret_policy ?? 'redact'
     this.renderHtml = opts.render_html
     this.onError = opts.on_error
+    this.classifySubChannel = opts.classify_sub_channel
+    this.mailbox = opts.mailbox ?? 'INBOX'
+    this.mailboxState = opts.mailbox_state
+    this.scanOwner = opts.scan_owner ?? `pid_${process.pid}`
+    this.scanLeaseMs = opts.scan_lease_ms ?? DEFAULT_SCAN_LEASE_MS
+    this.archiveFolder = opts.archive_folder
+    this.archiveMarkRead = opts.archive_mark_read ?? true
+    this.onFolderFault = opts.on_folder_fault
   }
 
   capabilities(): {
@@ -146,17 +231,132 @@ export class EmailChannelAdapter implements ChannelAdapter {
     return this.running
   }
 
-  /** 拉一轮（测试与"立刻收一次"用）；返回本轮新邮件数。 */
+  /**
+   * 拉一轮（测试与"立刻收一次"用）；返回本轮**处理成功**的邮件数。
+   *
+   * WP55 / 48 §4 L3 #5 的三件事都在这一跳里：
+   * ① 先领扫描租约（领不到 = 别人正在扫这只邮箱，本轮直接让开）；
+   * ② 水位从持久游标读（`uid_validity` 变了就从 0 重来）；
+   * ③ 一封信炸了就记一笔、跳过、继续——连续到阈值就永久越过并出卡。
+   */
   async poll(handler: (raw: unknown) => Promise<void>): Promise<number> {
-    if (this.source === undefined) {
+    const source = this.source
+    if (source === undefined) {
       throw new ChannelError('invalid_input', '未注入 MailSource，邮件适配器无法收信')
     }
-    const batch = await this.source.fetchSince(this.lastUid)
-    for (const msg of batch) {
-      this.lastUid = Math.max(this.lastUid, msg.uid)
-      await handler(msg)
+    const state = this.mailboxState
+    const now = this.clock.now()
+    // ① 同一只邮箱同一时刻只有一个进程在扫。两个进程各自推游标、各自归档，
+    //    最后谁也说不清哪封处理过——所以领不到就让开，下一轮再来。
+    if (state !== undefined) {
+      const got = await state.claimScanLease(
+        this.address,
+        this.scanOwner,
+        Date.parse(now),
+        this.scanLeaseMs,
+      )
+      if (!got) {
+        this.leaseBusy = true
+        return 0
+      }
+      this.leaseBusy = false
     }
-    return batch.length
+    try {
+      return await this.pollUnderLease(source, handler, now)
+    } finally {
+      await state?.releaseScanLease(this.address, this.scanOwner)
+    }
+  }
+
+  /** 观察面：上一轮是不是因为别人占着租约而让开了。 */
+  get lastPollWasLeaseBusy(): boolean {
+    return this.leaseBusy
+  }
+
+  private async pollUnderLease(
+    source: MailSource,
+    handler: (raw: unknown) => Promise<void>,
+    now: Iso8601,
+  ): Promise<number> {
+    const state = this.mailboxState
+    const folder = this.mailbox
+    const uid_validity = (await source.uidValidity?.()) ?? 0
+    const prior = await state?.cursor(this.address, folder)
+    // `uid_validity` 变了 = 服务器重建过这个邮箱，旧水位全部作废，从 0 重来。
+    // 宁可重拉一遍（去重表挡住重复产出），也不要静默漏信。
+    const since = state === undefined ? this.lastUid : resumeFrom(prior, uid_validity)
+    let cursor = prior
+    let fault = await state?.fault(this.address, folder)
+
+    const batch = await source.fetchSince(since)
+    let handled = 0
+    /**
+     * 本轮第一封「炸了但还没到永久越过阈值」的 UID。
+     *
+     * 水位**不能推过它**：推过去就等于只失败一次就永久跳过，而那一次多半只是
+     * 那一瞬间的抖动。它后面的信照常处理（不挡路），只是水位留在它前面，
+     * 下一轮把它和它后面的一起重拉——重复的那几封由去重表（24h 窗口）挡住。
+     */
+    let blocked: number | undefined
+    const advance = async (uid: number): Promise<void> => {
+      if (blocked !== undefined) return
+      cursor = advanceCursor(cursor, folder, uid_validity, uid)
+      await state?.setCursor(this.address, cursor)
+    }
+    for (const msg of batch) {
+      // 已经被永久越过的：连拉都不该再拉进来
+      if (isSkipped(fault, msg.uid)) {
+        await advance(msg.uid)
+        continue
+      }
+      try {
+        await handler(msg)
+        handled += 1
+        this.lastUid = Math.max(this.lastUid, msg.uid)
+        // ③ 处理成功：水位推过它（前提是前面没有卡住的那一封）；
+        //    它要是刚才那封卡住的，把计数清掉
+        await advance(msg.uid)
+        const cleared = clearFault(fault, folder, msg.uid)
+        if (cleared !== fault && cleared !== undefined) {
+          fault = cleared
+          await state?.setFault(this.address, cleared)
+        }
+        await this.archiveOne(source, msg.uid)
+      } catch (e) {
+        // ② 毒消息隔离：记一笔、跳过、继续。一封畸形的信不该让它后面的每一封
+        //    都永远进不来，但跳过必须是**有记录的跳过**。
+        const detail = e instanceof Error ? e.message : String(e)
+        this.onError?.(e)
+        if (state === undefined) continue
+        const next = recordFault(fault, { folder, uid: msg.uid, error: detail, at: now })
+        fault = next.fault
+        await state.setFault(this.address, next.fault)
+        this.onFolderFault?.({
+          ...next.fault,
+          account: this.address,
+          quarantined: next.quarantined,
+        })
+        if (next.quarantined) {
+          // 连续失败到阈值：永久越过它，水位推过去
+          await advance(msg.uid)
+        } else if (blocked === undefined) {
+          blocked = msg.uid
+        }
+      }
+    }
+    return handled
+  }
+
+  /** 处理过的信搬进归档文件夹并标已读。搬不动只 log——归档不该拖垮收信。 */
+  private async archiveOne(source: MailSource, uid: number): Promise<void> {
+    const folder = this.archiveFolder
+    if (folder === undefined || source.archive === undefined) return
+    try {
+      const moved = await source.archive(uid, folder, this.archiveMarkRead)
+      if (!moved) this.onError?.(new Error(`归档文件夹动不了：${folder}（uid ${uid}）`))
+    } catch (e) {
+      this.onError?.(e)
+    }
   }
 
   private async runLoop(handler: (raw: unknown) => Promise<void>): Promise<void> {
@@ -260,7 +460,26 @@ export class EmailChannelAdapter implements ChannelAdapter {
       })
     }
 
-    // ④ 线程台账（收件人门禁的依据）
+    // ④ 渠道细分（WP55 / 48 §4 L3 #2）：Amazon 买家消息寄生在这只邮箱上。
+    //    判定在 AI 分类之前，所以它不花任何积分，也不受模型可用性影响。
+    const replyTo = firstAddress(parsed.replyTo)
+    const bodyHtml = typeof parsed.html === 'string' ? parsed.html : undefined
+    const sub = this.classifySubChannel?.({
+      from_email: from,
+      body_text: bodyText,
+      ...(displayNameOf(parsed.from) === undefined
+        ? {}
+        : { from_name: displayNameOf(parsed.from) }),
+      ...(replyTo === undefined ? {} : { reply_to_email: replyTo }),
+      ...(parsed.subject === undefined ? {} : { subject: parsed.subject }),
+      ...(bodyHtml === undefined ? {} : { body_html: bodyHtml }),
+      ...(headerValue(parsed, 'authentication-results') === undefined
+        ? {}
+        : { authentication_results: headerValue(parsed, 'authentication-results') }),
+      ...(in_reply_to === undefined ? {} : { in_reply_to_message_id: in_reply_to }),
+    })
+
+    // ⑤ 线程台账（收件人门禁的依据）
     const participants = [
       from,
       ...addressesOf(parsed.to),
@@ -275,6 +494,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
         at: received_at,
         ...(parsed.subject === undefined ? {} : { subject: parsed.subject }),
         ...(message_id === undefined ? {} : { message_id }),
+        ...(sub === undefined ? {} : { channel: sub.channel, channel_meta: sub.meta }),
       }),
     )
 
@@ -300,6 +520,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
       thread: { external_id: thread_external },
       parts,
       raw_ref,
+      ...(sub === undefined ? {} : { sub_channel: sub.channel, channel_meta: sub.meta }),
     }
   }
 
@@ -360,14 +581,17 @@ export class EmailChannelAdapter implements ChannelAdapter {
         ? await this.sendViaConnect({ to, text, html, headers, message_id, opts })
         : await this.sendViaSmtp({ to, text, html, headers, message_id })
 
+    const sent_at = this.clock.now()
     await this.threads.upsert(
       mergeThread(record, {
         external_id: record.external_id,
         participants: record.participants,
         references: record.references,
-        at: this.clock.now(),
+        at: sent_at,
         message_id,
         ...(record.subject === undefined ? {} : { subject: record.subject }),
+        // WP55：24h SLA 闭账要知道「这封信回了没有」，锚是买家来信、停表是这一刻
+        ...(record.channel === undefined ? {} : { channel_meta: { last_outbound_at: sent_at } }),
       }),
     )
     this.sentByKey.set(opts.idempotency_key, { external_id, route })
@@ -489,6 +713,17 @@ export function emailDedupeKey(
 ): string {
   if (message_id !== undefined) return `email:${message_id}`
   return `email:${sha256(canonicalJson(fallback)).slice(0, 32)}`
+}
+
+/** 取一个原始头的字符串值（mailparser 的 headers 是 Map，值可能不是字符串）。 */
+function headerValue(parsed: ParsedMail, name: string): string | undefined {
+  const raw = parsed.headers?.get(name)
+  if (typeof raw === 'string') return raw
+  if (Array.isArray(raw)) {
+    const first = raw.find((v) => typeof v === 'string')
+    return typeof first === 'string' ? first : undefined
+  }
+  return undefined
 }
 
 function pickBodyText(parsed: ParsedMail): string {

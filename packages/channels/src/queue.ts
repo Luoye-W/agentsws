@@ -53,6 +53,13 @@ export interface QueueStore {
   putDead(record: DeadLetterRecord): MaybePromise<void>
   /** 某工作区的死信，按进入顺序 */
   deadLetters(workspace_id: WorkspaceId): MaybePromise<DeadLetterRecord[]>
+  /**
+   * WP55 / 18 §2.2：按 id 取一条死信（重投要读它的事件）。
+   * 可选：不实现 = 这一档没有重投入口（老实现一个字不用改）。
+   */
+  deadLetter?(id: string): MaybePromise<DeadLetterRecord | undefined>
+  /** WP55：删掉一条死信（重投成功之后）。 */
+  removeDead?(id: string): MaybePromise<void>
 }
 
 /** 默认租约：一条入站消息的处理不该超过这么久。 */
@@ -97,6 +104,16 @@ export class MemoryQueueStore implements QueueStore {
 
   deadLetters(workspace_id: WorkspaceId): DeadLetterRecord[] {
     return this.dead.filter((d) => d.workspace_id === workspace_id).map((d) => ({ ...d }))
+  }
+
+  deadLetter(id: string): DeadLetterRecord | undefined {
+    const found = this.dead.find((d) => d.id === id)
+    return found === undefined ? undefined : { ...found }
+  }
+
+  removeDead(id: string): void {
+    const idx = this.dead.findIndex((d) => d.id === id)
+    if (idx >= 0) this.dead.splice(idx, 1)
   }
 
   get size(): number {

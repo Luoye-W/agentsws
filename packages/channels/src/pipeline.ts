@@ -40,6 +40,10 @@ export interface RouteInput {
   subject?: string
   /** 已脱敏、未围栏的正文（路由器是我们自己的代码，不是模型） */
   text: string
+  /** WP55 / 48 §4 L3 #2：渠道细分（`amazon`）。传输层仍是邮件，收信岗位不是。 */
+  sub_channel?: string
+  /** WP55：渠道细分的判定结果（路由器只读，不改）。 */
+  channel_meta?: Record<string, unknown>
 }
 
 export interface RouteResult {
@@ -49,10 +53,20 @@ export interface RouteResult {
 }
 
 /**
+ * WP55 / 48 §4 L3 #2：Amazon 买家消息的收信岗位。
+ *
+ * 它跟普通 DTC 售后**不是同一条职责**：Amazon 的社区规范、24h 响应率考核、
+ * relay 地址回信都只对这条岗位成立，落错岗位 = 出站硬闸那一层根本不会被调用。
+ */
+export const AMAZON_ROLE_ID: RoleId = 'amz.support'
+
+/**
  * 默认路由（06 §2.4 同一路由器的 v1 形态）：按渠道映射到职责。
- * 邮件 = 英文客服邮件全接管的入口，落 `dtc.support`。
+ * 邮件 = 英文客服邮件全接管的入口，落 `dtc.support`（WP54 合并售前售后）；
+ * 判定成 Amazon 的那一份落 `amz.support`（WP55）。
  */
 export function defaultRoute(input: RouteInput): RouteResult {
+  if (input.sub_channel === 'amazon') return { role_id: AMAZON_ROLE_ID, confidence: 0.9 }
   if (input.channel === 'email') return { role_id: 'dtc.support', confidence: 0.6 }
   return { confidence: 0 }
 }
@@ -227,6 +241,9 @@ export class ChannelInboundPipeline implements InboundPipeline {
       workspace_id: ws,
       text: plainText,
       ...(head.actor === undefined ? {} : { actor_external_id: head.actor.external_id }),
+      // WP55：渠道细分先于路由（判定不花积分），路由器据它落到 `amz.support`
+      ...(head.sub_channel === undefined ? {} : { sub_channel: head.sub_channel }),
+      ...(head.channel_meta === undefined ? {} : { channel_meta: head.channel_meta }),
     })
 
     this.seq += 1
@@ -309,6 +326,41 @@ export class ChannelInboundPipeline implements InboundPipeline {
   /** 死信的完整记录（原因 / 尝试次数 / 最后一次错误），工作台要展示的就是这个。 */
   async deadLetterRecords(workspace_id: WorkspaceId): Promise<DeadLetterRecord[]> {
     return this.queue.deadLetters(workspace_id)
+  }
+
+  /**
+   * WP55 / 18 §2.2：把一条死信**重投**回队列。
+   *
+   * 09-12 的真账号验收里，三封信死在 `canonicalJson` 的 bug 上，修好之后只能手改
+   * SQLite 把它们放回队列——这就是那次留下的后置项。
+   *
+   * 重投是**人**的动作：它会让这条消息重新起一次 Run（会写、会发），所以不自动、
+   * 不批量、不定时。重投成功就把死信记录删掉（它已经不是死信了）。
+   */
+  async requeueDeadLetter(id: string): Promise<{ requeued: boolean }> {
+    const record = await this.queue.deadLetter?.(id)
+    if (record === undefined) return { requeued: false }
+    const now_ms = Date.parse(this.clock.now())
+    const role_id = record.role_id ?? record.event.routing.role_id
+    const item: QueueItem = {
+      id: `q_${record.event.id}`,
+      lane: laneOf(record.workspace_id, role_id),
+      workspace_id: record.workspace_id,
+      event: record.event,
+      // 从头开始数：上一次是因为别的原因失败的，修好之后它值得一个完整的重试预算
+      attempts: 0,
+      next_at_ms: now_ms,
+      ...(role_id === undefined ? {} : { role_id }),
+    }
+    await this.queue.put(item)
+    await this.queue.removeDead?.(id)
+    await this.emit('inbound.requeued', record.event, {
+      dead_letter_id: id,
+      reason: record.reason,
+      attempts: record.attempts,
+    })
+    await this.attempt(item)
+    return { requeued: true }
   }
 
   /** 观察面：已成功触发的事件。 */
@@ -399,6 +451,9 @@ export class ChannelInboundPipeline implements InboundPipeline {
         routing: event.routing,
         ...(event.actor === undefined ? {} : { actor_external_id: event.actor.external_id }),
         ...(event.thread === undefined ? {} : { thread_external_id: event.thread.external_id }),
+        // WP55：渠道细分只记结论（marketplace / 消息类型 / 置信），正文永不进日志
+        ...(event.sub_channel === undefined ? {} : { sub_channel: event.sub_channel }),
+        ...(event.channel_meta === undefined ? {} : { channel_meta: event.channel_meta }),
         ...payload,
       },
     })

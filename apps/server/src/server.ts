@@ -128,6 +128,7 @@ import {
   ensureSystemTasks,
   ensureTask,
   offsetToTz,
+  registerAmazonSla,
   registerApprovalHousekeeping,
   registerBackup,
   registerDailyPlan,
@@ -139,6 +140,7 @@ import {
   registerPlanRelay,
   registerPricingRefresh,
   registerRawPrune,
+  registerReconcileDeliveries,
   registerReview,
   registerSkillsWeekly,
   registerTokenRefresh,
@@ -1008,6 +1010,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? undefined
         : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
     },
+    /**
+     * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
+     *
+     * 复用 `policy_change` 而不是新造一个 kind：14 §1 的规矩是「新增 kind 必须能
+     * 回答通过后施行什么」，而这张卡通过之后要施行的是**人的判断**（去客户那边
+     * 确认收没收到、然后决定重发还是作罢），不是一个执行器。等这类卡多起来、
+     * 施行动作稳定了再正名。payload 里只有 outbox id 与次数，没有正文。
+     */
+    escalateUnresolvedDelivery: async (input) => {
+      await approvals.create({
+        workspace_id: workspace.id,
+        schema_version: 1,
+        kind: 'policy_change',
+        role_id: 'dtc.aftersales',
+        proposer: { kind: 'agent', id: 'channel:outbox' },
+        automation: { level_at_creation: 'L1' },
+        priority: 'queue',
+        routing: {
+          recipients: [{ person: person.id, via: 'owner' }],
+          rule: 'owner',
+          escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        subject: { object: { type: 'outbox', id: input.outbox_id } },
+        dedupe_key: `${workspace.id}:outbox_unresolved:${input.outbox_id}`,
+        title: '这封回信到底发出去没有，需要人确认一次',
+        summary: `对账找了 ${input.attempts} 轮，已发送与归档文件夹里都没搜到它。系统**不会**自动重发（重发一封可能已经发出去的信，客户会收到两封）。请去客户那边确认一次，再决定重发还是作罢。`,
+        payload: {
+          form: 'outbox_unresolved',
+          outbox_id: input.outbox_id,
+          thread_ref: input.thread_ref,
+          reconcile_attempts: input.attempts,
+          ...(input.approval_item_id === undefined
+            ? {}
+            : { approval_item_id: input.approval_item_id }),
+          ...(input.last_error === undefined ? {} : { last_error: input.last_error }),
+        },
+        evidence: {
+          source_events: [],
+          provenance: { seen: [] },
+          precheck: {},
+        },
+      })
+    },
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(startRun === undefined ? {} : { startRun }),
     ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
@@ -1197,6 +1243,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
     meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
+  })
+  // WP55 / 48 §4 L3 #2：Amazon 24h 响应线三档 sweep（每 5 分钟，幂等三字段）
+  registerAmazonSla(schedule.scheduler, {
+    sweep: () => (channels as ChannelsAssembly).amazonSlaSweep(),
+  })
+  // WP55 / 48 §4 L3 #4：出站对账（每分钟）。`sent_unknown` 绝不自动重发
+  registerReconcileDeliveries(schedule.scheduler, {
+    reconcile: () => (channels as ChannelsAssembly).reconcileDeliveries(),
   })
   // ⑫ WP36 40 §1.3：每天一份备份。**只有落盘档有**——内存档没有可导的库文件。
   const runWorkspaceBackup = (): BackupRunResult => {
@@ -1614,7 +1668,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills: skillsPort,
     roles: rolesPort,
     meetings: meetings.port,
-    connections: connections.port,
+    // WP55 / 18 §2.2：连接页上的死信与重投。包一层而不是改连接面本身——
+    // 死信是渠道的事，连接面只是它在界面上的落脚点。
+    connections: {
+      ...connections.port,
+      deadLetters: async () =>
+        (await (channels as ChannelsAssembly).deadLetters()).map((d) => ({
+          id: d.id,
+          channel: d.event.channel,
+          reason: d.reason,
+          attempts: d.attempts,
+          at: new Date(d.at_ms).toISOString(),
+          // 列表里只有"是谁 / 何时 / 为什么"：正文永远不进这一层
+          ...(d.event.actor?.display === undefined ? {} : { from: d.event.actor.display }),
+          ...(d.last_error === undefined ? {} : { last_error: d.last_error }),
+        })),
+      requeueDeadLetter: (_actor, id) => (channels as ChannelsAssembly).requeueDeadLetter(id),
+    },
     // WP31：本机秘密库的密钥轮换（owner）。密钥只在请求体里出现一次，
     // 网关这一层不碰库、也不碰值，只把「换了几条」端出去。
     secrets: {

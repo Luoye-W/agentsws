@@ -24,23 +24,37 @@
 
 import { join } from 'node:path'
 import {
+  ARCHIVE_MARK_READ_DEFAULT,
   BlobBackedRawStore,
   ChannelInboundPipeline,
   type CredentialSource,
+  classifySendFailure,
   createSqliteChannelStores,
+  type DeadLetterRecord,
   defaultRoute,
+  domainOf,
   EmailChannelAdapter,
+  type FolderSyncFault,
   ImapMailSource,
   type Mailer,
   type MailSource,
   MemoryDedupeStore,
+  MemoryMailboxStateStore,
+  MemoryOutboxStore,
   MemoryQueueStore,
   MemoryRawStore,
+  mergeThread,
+  messageIdFor,
+  Outbox,
+  type OutboxTransitionEvent,
+  outboxPayloadHash,
   type RawStore,
   type RouteInput,
   type RouteResult,
   SmtpMailer,
   SqliteRawStore,
+  type SubChannelHints,
+  type SubChannelVerdict,
 } from '@agentsws/channels'
 import type {
   ApprovalItem,
@@ -50,6 +64,7 @@ import type {
   InboundEvent,
   Iso8601,
   Matter,
+  MaybePromise,
   MessagePart,
   ObjectRef,
   PersonId,
@@ -58,6 +73,19 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { RawBlobPort, RawCipher } from '@agentsws/core'
+import {
+  AMAZON_MESSAGE_ACTIONS,
+  type AmazonSlaThreadState,
+  amazonSlaCardTitle,
+  buildAmazonChannelMeta,
+  buildAmazonRewriteInstruction,
+  describeAmazonDetection,
+  detectAmazonChannel,
+  evaluateAmazonOutbound,
+  evaluateAmazonSlaCycle,
+  isMarketplaceRelayAddress,
+  summarizeAmazonViolations,
+} from '@agentsws/support-core'
 import type { BackendResult } from '@agentsws/txn'
 import type { Work } from '@agentsws/work'
 import type { MailAccount } from './connections.js'
@@ -65,11 +93,73 @@ import type { MailAccount } from './connections.js'
 /** 出站被急停挡下时回给执行器的那一条。 */
 export const OUTBOUND_HALTED = '出站已急停（AGENTSWS_HALT=outbound 或对账未完成），这封信没有发出'
 
+/**
+ * WP55 / 48 §4 L3 #2：Amazon 出站硬闸挡下时回给执行器的那一条。
+ *
+ * **不可重试**：同一份正文重发多少次都会被同一条规则拦下。要的是**打回重写**
+ * ——原因原样回给上游，由起草那一跳重写正文，而不是在这里静默删改后照发。
+ */
+export const AMAZON_OUTBOUND_BLOCKED = 'Amazon 站内信出站守卫拦下了这封回复'
+
+/** 同一幂等键换了正文：调用方的 bug，不该被当成"重试"悄悄发出另一封信。 */
+export const OUTBOX_PAYLOAD_DRIFT =
+  '同一个幂等键上换了正文（outbox payload_drift）：这不是重试，拒绝发送'
+
+/** WP55 / 48 §4 L3 #5：处理过的信搬进哪个文件夹。 */
+export const ARCHIVE_FOLDER = 'agentsws'
+
+/** 单轮对账的扫描上限；落后的下一分钟补上。 */
+const RECONCILE_BATCH = 20
+
+/**
+ * WP55：Amazon 渠道细分判定（`classify_sub_channel` 的真实现）。
+ *
+ * 判定规则全在 `@agentsws/support-core/amazon`（纯函数、常量表逐字节抄
+ * KefuAgent）。这里只做两件事：把适配器给的头喂进去，把结论翻译成线程补丁。
+ */
+export function createAmazonSubChannelClassifier(
+  clock: Clock,
+): (hints: SubChannelHints) => SubChannelVerdict | undefined {
+  return (hints) => classifyAmazonSubChannel(hints, clock.now())
+}
+
+export function classifyAmazonSubChannel(
+  hints: SubChannelHints,
+  at: Iso8601,
+): SubChannelVerdict | undefined {
+  const detection = detectAmazonChannel({
+    from_email: hints.from_email,
+    from_name: hints.from_name ?? null,
+    reply_to_email: hints.reply_to_email ?? null,
+    subject: hints.subject ?? '',
+    body_text: hints.body_text,
+    body_html: hints.body_html ?? null,
+    authentication_results: hints.authentication_results ?? null,
+    in_reply_to_message_id: hints.in_reply_to_message_id ?? null,
+  })
+  if (detection === undefined) return undefined
+  const action = AMAZON_MESSAGE_ACTIONS[detection.message_type]
+  return {
+    channel: 'amazon',
+    meta: {
+      // 时钟锚只由买家消息族写（`buildAmazonChannelMeta` 自己管这条纪律）
+      ...buildAmazonChannelMeta(detection, at),
+      summary: describeAmazonDetection(detection),
+      // 这两条跟着 meta 走，因为线程与入站事件都要读：钓鱼件绝不起草。
+      needs_human_review: action.needs_human_review,
+      generates_draft: action.generates_draft,
+    },
+    ...(action.needs_human_review ? { needs_human_review: true } : {}),
+  }
+}
+
 /** 一个装好的邮箱账号：适配器 + 它自己的那条入站管线。 */
 interface MailChannel {
   account: MailAccount
   adapter: EmailChannelAdapter
   pipeline: ChannelInboundPipeline
+  /** WP55：对账要直接问这只邮箱「已发送里有没有这封」。 */
+  source: MailSource
 }
 
 export interface ChannelsOptions {
@@ -116,6 +206,16 @@ export interface ChannelsOptions {
   makeMailer?(account: MailAccount, credentials: CredentialSource): Mailer
   /** 每轮最多取多少封。 */
   batch?: number
+  /**
+   * WP55 / 48 §4 L3 #4：对账退避耗尽时出一张人工卡。
+   *
+   * 不装 = 只落事件不出卡（测试与最小装配）。真服务进程里它接到审批总线上。
+   */
+  escalateUnresolvedDelivery?(input: UnresolvedDelivery): MaybePromise<void>
+  /** WP55 / 48 §4 L3 #5：归档文件夹名；`null` = 关掉归档。 */
+  archive_folder?: string | null
+  /** WP55：归档时顺手标已读（默认开）。 */
+  archive_mark_read?: boolean
 }
 
 export interface MailPollReport {
@@ -127,6 +227,35 @@ export interface MailPollReport {
   failed: string[]
 }
 
+/** WP55：一轮 Amazon 24h SLA sweep 的结果（三档各出了几张、闭了几笔账）。 */
+export interface AmazonSlaReport {
+  /** 本轮真正评估过的线程数（没有时钟锚的不计入）。 */
+  scanned: number
+  reminders: number
+  criticals: number
+  accounted: number
+}
+
+/** WP55：一轮出站对账的结果。 */
+export interface ReconcileReport {
+  scanned: number
+  /** 在已发 / 归档文件夹里找到证据了。 */
+  confirmed: number
+  /** 这一轮没拿到证据，排下一次（**不重发**）。 */
+  still_unknown: number
+  /** 退避次数耗尽 → 出了人工卡。 */
+  escalated: number
+}
+
+/** WP55：对账耗尽时要人看一眼的那一条。 */
+export interface UnresolvedDelivery {
+  outbox_id: string
+  thread_ref: string
+  attempts: number
+  approval_item_id?: string
+  last_error?: string
+}
+
 export interface ChannelsAssembly {
   /** 受控原始材料区（保留期与随主体删除都从这里进）。 */
   raw: RawStore
@@ -136,6 +265,18 @@ export interface ChannelsAssembly {
   poll(): Promise<MailPollReport>
   /** 连接页新增 / 断开邮箱之后热更新（幂等，可反复调）。 */
   refresh(): void
+  /** WP55 / 48 §4 L3 #2：Amazon 24h SLA 三档 sweep（调度器每 5 分钟调一次）。 */
+  amazonSlaSweep(): Promise<AmazonSlaReport>
+  /** WP55 / 48 §4 L3 #4：出站对账（调度器每分钟调一次）。绝不自动重发。 */
+  reconcileDeliveries(): Promise<ReconcileReport>
+  /** WP55：出站 outbox（工作台与人工卡要能翻这张表）。 */
+  outbox: Outbox
+  /** WP55 / 18 §2.2：进了死信的入站消息（正文不进列表）。 */
+  deadLetters(): Promise<DeadLetterRecord[]>
+  /** WP55：把一条死信重投回队列（人按的按钮：会重新起一次 Run）。 */
+  requeueDeadLetter(id: string): Promise<{ requeued: boolean }>
+  /** WP55 / 48 §4 L3 #5：毒消息隔离表（哪几封被永久越过了）。 */
+  folderFaults(): Promise<FolderSyncFault[]>
   /**
    * 出站：审批通过的对外草稿真发出去。
    * 回 `undefined` = 这条不归渠道管（不是邮件 / 没有线程 / 没装邮箱），调用方回落到别处。
@@ -167,6 +308,18 @@ export function forDisplay(text: string, max = 200): string {
 /** 收件人 / 线程 → 事项的钉子：事项的 `pinned` 里放一条 thread ref，重启后还认得出。 */
 const threadRef = (external_id: string): ObjectRef => ({ type: 'thread', id: external_id })
 
+/** `channel_meta` 里的一个 ISO 串 → SLA 状态的一个字段（不是串就当没有）。 */
+function pickIso<K extends string>(
+  meta: Record<string, unknown>,
+  from: string,
+  to: K,
+): Partial<Record<K, Iso8601>> {
+  const value = meta[from]
+  return typeof value === 'string' && value.length > 0
+    ? ({ [to]: value as Iso8601 } as Partial<Record<K, Iso8601>>)
+    : {}
+}
+
 export function createChannels(options: ChannelsOptions): ChannelsAssembly {
   const { clock, workspace_id, dbDir } = options
 
@@ -196,6 +349,33 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       : new BlobBackedRawStore({ inner: innerRaw, blobs: options.blobs })
   const queue = sqliteStores?.queue ?? new MemoryQueueStore()
   const dedupe = sqliteStores?.dedupe ?? new MemoryDedupeStore()
+  /**
+   * WP55 / 48 §4 L3 #4：出站 outbox。与队列、去重表同一张库（同一个进程里的几个
+   * 邮箱账号共用），因为幂等是按**审批项**算的，不是按邮箱算的。
+   */
+  /** WP55 / 48 §4 L3 #5：每文件夹 UID 游标、毒消息隔离、扫描租约。 */
+  const mailboxState = sqliteStores?.mailbox ?? new MemoryMailboxStateStore()
+  const outbox = new Outbox({
+    store: sqliteStores?.outbox ?? new MemoryOutboxStore(),
+    workspace_id,
+    onTransition: (e: OutboxTransitionEvent) => {
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'outbound.state_changed',
+        actor: { kind: 'system', id: 'channel:outbox' },
+        subject: { type: 'outbox', id: e.record.id },
+        correlation: { trace_id: `tr_obx_${e.record.id}` },
+        // 只记状态与分类标记：收件人与正文永远不进日志
+        payload: {
+          from: e.from,
+          to: e.to,
+          attempts: e.record.attempts,
+          ...(e.reason === undefined ? {} : { reason: e.reason }),
+        },
+      })
+    },
+  })
 
   let channels: MailChannel[] = []
 
@@ -243,6 +423,25 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
    */
   const appendedInbound = new Set<string>()
 
+  /**
+   * WP55：SLA 的三档（提醒 / 升级 / 闭账）落在**事项时间线**上——那是人真正会看的
+   * 地方。找不到事项就只留事件（线程还没落成事项时不该凭空开一个）。
+   */
+  const noteOnThread = (thread_external: string, text: string): void => {
+    const work = options.work
+    if (work === undefined) return
+    const ref = threadRef(thread_external)
+    const matter = work
+      .listMatters({ kind: 'conversation' })
+      .find((m) => m.context.pinned.some((p) => p.type === ref.type && p.id === ref.id))
+    if (matter === undefined) return
+    work.appendEvent(matter.id, {
+      kind: 'note',
+      text,
+      actor: { kind: 'system', id: 'channel:amazon' },
+    })
+  }
+
   const onEvent = async (event: InboundEvent): Promise<void> => {
     const work = options.work
     const matter = matterFor(event)
@@ -258,6 +457,18 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         actor: { kind: 'system', id: `channel:${event.channel}` },
         ...(event.actor?.resolved === undefined ? {} : { ref: event.actor.resolved }),
       })
+    }
+    // WP55：钓鱼 / 退信 / A-to-z 这几类**落库但绝不生成草稿**——它们要人看一眼。
+    // 「不静默丢」与「不自动回」是同一条纪律的两面：信留在事项里，Run 不起。
+    const meta = event.channel_meta
+    if (meta?.needs_human_review === true || meta?.generates_draft === false) {
+      const summary = typeof meta.summary === 'string' ? meta.summary : '渠道判定要求人工处理'
+      work.appendEvent(matter.id, {
+        kind: 'note',
+        text: `${summary}——按渠道规则不生成回复草稿，请人看一眼。`,
+        actor: { kind: 'system', id: `channel:${event.channel}` },
+      })
+      return
     }
     const position = options.position?.()
     const startRun = options.startRun
@@ -308,6 +519,34 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       address: account.address,
       source,
       mailer,
+      // WP55 / 48 §4 L3 #2：Amazon 买家消息寄生在这只客服邮箱上。判定在 AI 分类
+      // 之前，不花积分；判成 amazon 的线程从此走 Amazon 那一套（硬闸 + 24h SLA）。
+      classify_sub_channel: createAmazonSubChannelClassifier(clock),
+      // WP55 / 48 §4 L3 #5：游标持久化 + 毒消息隔离 + 扫描租约 + 归档文件夹。
+      // 不接这几行的后果各不相同，但都在真机器上见过：重启从头拉、一封畸形信
+      // 卡住整只邮箱、两个进程同时扫同一只邮箱。
+      mailbox_state: mailboxState,
+      scan_owner: `ws_${workspace_id}`,
+      archive_folder: options.archive_folder ?? ARCHIVE_FOLDER,
+      archive_mark_read: options.archive_mark_read ?? ARCHIVE_MARK_READ_DEFAULT,
+      on_folder_fault: (fault) => {
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'inbound.folder_fault',
+          actor: { kind: 'system', id: 'channel:email' },
+          correlation: { trace_id: `tr_fault_${clock.now()}` },
+          // 只有 UID 与次数，没有正文——那封信正是"解析不出来"的那一封
+          payload: {
+            account: fault.account,
+            folder: fault.folder,
+            failed_uid: fault.failed_uid,
+            fail_count: fault.fail_count,
+            quarantined: fault.quarantined,
+            skipped: fault.skipped_uids.length,
+          },
+        })
+      },
       on_error: (e) => {
         options.appendEvent({
           schema_version: 1,
@@ -335,7 +574,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         : { resolveActor: options.resolveActor.bind(options) }),
       onEvent,
     })
-    return { account, adapter, pipeline }
+    return { account, adapter, pipeline, source }
   }
 
   const refresh = (): void => {
@@ -410,22 +649,299 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
 
       const body = payload.body as { text?: string; subject?: string } | undefined
       const text = typeof body?.text === 'string' ? body.text : ''
+
+      // WP55 / 48 §4 L3 #2：**Amazon 出站硬闸**。
+      //
+      // 触发条件是收件人域，与任何开关无关：急停关了也照样跑（急停该让判定回到
+      // 现状，不该让一封已经存在的 Amazon 线程绕过 Amazon 的社区规范）。拦下 =
+      // **打回重写**，原因原样回给调用方喂进重写循环——绝不静默删改后照发，
+      // 那会让运营永远不知道模型在写违规内容。
+      const record = await channel.adapter.threads.get(thread)
+      const amazonTo = (record?.participants ?? []).find((p) => isMarketplaceRelayAddress(p))
+      if (record?.channel === 'amazon' || amazonTo !== undefined) {
+        const verdict = evaluateAmazonOutbound('amazon', {
+          to_address: amazonTo ?? record?.participants[0] ?? '',
+          subject:
+            typeof body?.subject === 'string' ? body.subject : `Re: ${record?.subject ?? ''}`,
+          original_subject: record?.subject ?? null,
+          body_text: text,
+          is_reply_to_buyer_thread: (record?.references.length ?? 0) > 0,
+          recipient_opted_out: record?.channel_meta?.message_type === 'buyer_opt_out',
+        })
+        if (!verdict.ok) {
+          options.appendEvent({
+            schema_version: 1,
+            workspace_id,
+            type: 'delivery.failed',
+            actor: { kind: 'system', id: 'channel:amazon' },
+            subject: { type: 'approval_item', id: item.id },
+            correlation: { trace_id: `tr_amz_guard_${item.id}` },
+            // 只记违规码与中文原因，不记正文
+            payload: {
+              reason: 'amazon_outbound_guard',
+              thread_ref: thread,
+              codes: verdict.violations.map((v) => v.code),
+            },
+          })
+          return {
+            status: 'failed',
+            error: {
+              // 同一份正文重发多少次都会被同一条规则拦下：不可重试，只能重写
+              message: `${AMAZON_OUTBOUND_BLOCKED}\n${summarizeAmazonViolations(verdict.violations)}\n\n${buildAmazonRewriteInstruction(verdict.violations)}`,
+              retryable: false,
+            },
+          }
+        }
+      }
+
+      // WP55 / 48 §4 L3 #4：**出站 outbox**。
+      //
+      // SMTP 抛异常不等于这封信没发出去，所以发送前先在这张表上落一行：同一审批项
+      // 只发一次（重试、人手再按一遍通过、进程重启后的补偿，都只认这一行）。
+      const to = (record?.participants ?? []).filter((p) => p !== channel.account.address)
+      const prepared = await outbox.prepare({
+        idempotency_key: opts.idempotencyKey,
+        thread_ref: thread,
+        message_id: messageIdFor(opts.idempotencyKey, domainOf(channel.account.address)),
+        // 只哈希**草稿内容**（收件人 + 主题 + 正文）。线程头不进哈希：它是投递管线
+        // 按线程台账现算的，第一封发出去之后 `last_message_id` 就变了——把它算进去
+        // 的话，同一张卡重投一次会被自己误判成 payload_drift。
+        payload_hash: outboxPayloadHash({
+          to,
+          text,
+          ...(typeof body?.subject === 'string' ? { subject: body.subject } : {}),
+        }),
+        approval_item_id: item.id,
+        now: clock.now(),
+      })
+      if (prepared.kind === 'payload_drift') {
+        // 同一幂等键换了正文：这是调用方的 bug，不该被当成"重试"悄悄发出另一封信
+        return {
+          status: 'failed',
+          error: { message: OUTBOX_PAYLOAD_DRIFT, retryable: false },
+        }
+      }
+      if (prepared.kind === 'already') {
+        // 已经发过（或可能已经发出去了）：**不要再发**。回 ok 让调用方别重试——
+        // `sent_unknown` 那一份由对账去找证据，不由这里去赌。
+        return { status: 'ok', execution_id: prepared.record.external_id ?? prepared.record.id }
+      }
+
+      let row = await outbox.beginSend(prepared.record, clock.now())
       try {
         // 正文的出站脱敏在适配器的 `send` 里（`redactOutbound('email_body', …)`）
         const sent = await channel.adapter.send({ external_id: thread }, [{ type: 'text', text }], {
           connect_token: '',
           idempotency_key: opts.idempotencyKey,
         })
+        row = await outbox.markAccepted(row, clock.now(), sent.external_id)
         return { status: 'ok', execution_id: sent.external_id }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
         const code = (e as { code?: string }).code
-        // 收件人门禁拒发不是「网络抖了」，重试没有意义
+        // 三态分类：只有能证明"在被接受之前就失败了"的错误才可重试，其余一律歧义
+        const failure = classifySendFailure(
+          Object.assign(
+            e instanceof Error ? e : new Error(message),
+            code === undefined ? {} : { code },
+          ),
+        )
+        row = await outbox.recordFailure(row, failure, clock.now())
         return {
           status: 'failed',
-          error: { message, retryable: code !== 'authorization_check_failed' },
+          error: {
+            message: `${message}（outbox：${row.status}）`,
+            // `sent_unknown` **绝不自动重试**：重发一封可能已经发出去的信，
+            // 代价是客户收到两封，而两封信是收不回来的。
+            retryable: row.status === 'failed_retryable',
+          },
         }
       }
+    },
+
+    outbox,
+
+    /**
+     * WP55 / 48 §4 L3 #4：出站对账。
+     *
+     * 对一轮 `sent_unknown` 与迟迟没确认的已受理项，去已发 / 归档文件夹里搜
+     * Message-ID 找证据。找到 → `confirmed`；找不到 → 排下一次；退避次数耗尽 →
+     * 出人工卡。**任何一条路上都不重发。**
+     */
+    async reconcileDeliveries(): Promise<ReconcileReport> {
+      const now = clock.now()
+      const report: ReconcileReport = {
+        scanned: 0,
+        confirmed: 0,
+        still_unknown: 0,
+        escalated: 0,
+      }
+      const due = await outbox.dueForReconcile(now, RECONCILE_BATCH)
+      for (const record of due) {
+        report.scanned += 1
+        const channel = await pick(channels, record.thread_ref)
+        let found: { source: 'sent_folder' | 'archive_folder' } | undefined
+        try {
+          const folder = await channel?.source.findMessageId?.(record.message_id)
+          if (folder !== undefined) {
+            found = {
+              source: folder === ARCHIVE_FOLDER ? 'archive_folder' : 'sent_folder',
+            }
+          }
+        } catch {
+          // 搜不动（邮箱连不上 / 服务器不支持 SEARCH）：这一轮当"没找到证据"，
+          // 下一轮再试。**不**当成"没发出去"。
+        }
+        const { record: next, outcome } = await outbox.recordReconcile(record, found, now)
+        if (outcome === 'confirmed') report.confirmed += 1
+        else if (outcome === 'exhausted') report.escalated += 1
+        else report.still_unknown += 1
+
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'outbound.reconciled',
+          actor: { kind: 'system', id: 'channel:outbox' },
+          subject: { type: 'outbox', id: next.id },
+          correlation: { trace_id: `tr_obx_${next.id}` },
+          // 只记结论与计数：收件人、正文、Message-ID 都不进日志
+          payload: {
+            outcome,
+            status: next.status,
+            reconcile_attempts: next.reconcile_attempts,
+            ...(next.confirmation_source === undefined
+              ? {}
+              : { confirmation_source: next.confirmation_source }),
+          },
+        })
+
+        if (outcome === 'exhausted') {
+          await options.escalateUnresolvedDelivery?.({
+            outbox_id: next.id,
+            thread_ref: next.thread_ref,
+            attempts: next.reconcile_attempts,
+            ...(next.approval_item_id === undefined
+              ? {}
+              : { approval_item_id: next.approval_item_id }),
+            ...(next.last_error === undefined ? {} : { last_error: next.last_error }),
+          })
+        }
+      }
+      return report
+    },
+
+    /**
+     * WP55 / 48 §4 L3 #2：Amazon 24h SLA 三档 sweep。
+     *
+     * 幂等靠线程 `channel_meta` 里的三个字段（`sla_reminder_fired_at` /
+     * `sla_escalation_fired_at` / `sla_cycle_accounted_at`），语义都是「为空**或
+     * 早于锚** = 本轮还没做」。新一轮买家来信把锚往前推，三个字段自动全部过期
+     * = 重新武装，不需要任何清理任务。
+     *
+     * 认领（写三个字段）与出卡在同一跳里做完：出卡失败就不写字段，下一轮补上
+     * ——反过来（先写后出）会让一次网络抖动把这一轮的卡永远吞掉。
+     */
+    async amazonSlaSweep(): Promise<AmazonSlaReport> {
+      const now = clock.now()
+      const report: AmazonSlaReport = { scanned: 0, reminders: 0, criticals: 0, accounted: 0 }
+      for (const channel of channels) {
+        const threads = (await channel.adapter.threads.list?.()) ?? []
+        for (const record of threads) {
+          if (record.channel !== 'amazon') continue
+          const meta = record.channel_meta ?? {}
+          const state: AmazonSlaThreadState = {
+            thread_id: record.external_id,
+            ...pickIso(meta, 'last_buyer_message_at', 'last_buyer_message_at'),
+            ...pickIso(meta, 'last_outbound_at', 'last_outbound_at'),
+            ...pickIso(meta, 'sla_reminder_fired_at', 'reminder_fired_at'),
+            ...pickIso(meta, 'sla_escalation_fired_at', 'escalation_fired_at'),
+            ...pickIso(meta, 'sla_cycle_accounted_at', 'cycle_accounted_at'),
+          }
+          if (state.last_buyer_message_at === undefined) continue
+          report.scanned += 1
+          const action = evaluateAmazonSlaCycle(state, now)
+          if (action.kind === 'none') continue
+
+          const patch: Record<string, unknown> = {}
+          let text: string
+          if (action.kind === 'reminder') {
+            patch.sla_reminder_fired_at = now
+            report.reminders += 1
+            text = `${amazonSlaCardTitle('reminder', record.external_id, action.cycle_stamp)}：还有 ${action.remaining_minutes} 分钟到 24 小时响应线。`
+          } else if (action.kind === 'critical') {
+            patch.sla_escalation_fired_at = now
+            // 12h 档已被 4h 档吸收：第一次看见就已经 ≤4h 的线程不该先补一张提醒卡
+            if (action.absorbs_reminder) patch.sla_reminder_fired_at = now
+            report.criticals += 1
+            text = `${amazonSlaCardTitle('critical', record.external_id, action.cycle_stamp)}：只剩 ${action.remaining_minutes} 分钟（负数 = 已超时），再不回就要扣响应率。`
+          } else {
+            patch.sla_cycle_accounted_at = now
+            if (action.responded) {
+              patch.sla_reminder_fired_at = now
+              patch.sla_escalation_fired_at = now
+            }
+            report.accounted += 1
+            text =
+              action.outcome === 'within'
+                ? `Amazon 24 小时响应闭账：这封买家来信已在窗口内回复（截止 ${action.deadline}）。`
+                : `Amazon 24 小时响应闭账：**超时未回**（截止 ${action.deadline}），这一笔计入 miss。`
+          }
+
+          options.appendEvent({
+            schema_version: 1,
+            workspace_id,
+            type: 'support.amazon_sla',
+            actor: { kind: 'system', id: 'channel:amazon' },
+            subject: { type: 'thread', id: record.external_id },
+            correlation: { trace_id: `tr_amz_sla_${record.external_id}` },
+            // 只记档位与时刻，不记正文、不记 relay 地址
+            payload: {
+              tier: action.kind,
+              deadline: action.deadline,
+              cycle_stamp: action.kind === 'account' ? action.cycle_stamp : action.cycle_stamp,
+              ...(action.kind === 'account' ? { outcome: action.outcome } : {}),
+            },
+          })
+          noteOnThread(record.external_id, text)
+          await channel.adapter.threads.upsert(
+            mergeThread(record, {
+              external_id: record.external_id,
+              participants: record.participants,
+              references: record.references,
+              at: now,
+              channel_meta: patch,
+              ...(record.subject === undefined ? {} : { subject: record.subject }),
+            }),
+          )
+        }
+      }
+      return report
+    },
+
+    async deadLetters(): Promise<DeadLetterRecord[]> {
+      const out: DeadLetterRecord[] = []
+      for (const channel of channels)
+        out.push(...(await channel.pipeline.deadLetterRecords(workspace_id)))
+      return out
+    },
+
+    /**
+     * WP55：重投。死信是按 `dl_<event id>` 存的，不带账号信息，所以挨个问一遍
+     * 哪条管线认得它——找到就投，找不到回 `{ requeued: false }`。
+     */
+    async requeueDeadLetter(id: string): Promise<{ requeued: boolean }> {
+      for (const channel of channels) {
+        const out = await channel.pipeline.requeueDeadLetter(id)
+        if (out.requeued) return out
+      }
+      return { requeued: false }
+    },
+
+    async folderFaults(): Promise<FolderSyncFault[]> {
+      const out: FolderSyncFault[] = []
+      for (const channel of channels)
+        out.push(...(await mailboxState.faults(channel.account.address)))
+      return out
     },
 
     eraseSubject: async (subject) => raw.eraseSubject(subject),

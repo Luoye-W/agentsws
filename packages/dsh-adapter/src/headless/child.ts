@@ -188,6 +188,7 @@ export function startChildBridge(io: {
             createDraft: async (payload) => {
               const { request: _drop, ...rest } = payload
               const reply = await ask<DraftResult>(M_HOST_DRAFT, { payload: rest })
+              if (reply.rewrite !== undefined) return { rewrite: reply.rewrite }
               return reply.approval_item_id === undefined
                 ? undefined
                 : { approval_item_id: reply.approval_item_id }

@@ -98,7 +98,45 @@ export interface PrecheckResult {
   secret_scan?: 'ok' | 'fail'
   /** 44 G2：改价 / 改 Listing 的目标商品在不在这个岗位的范围里（`fail` → 不进队列）。 */
   target_in_range?: 'ok' | 'fail'
+  /**
+   * 48 §4 L3 #3 / G04：这件事在不在「永不自动发送」的九类黑名单里
+   * （`fail` → **不自主**，这张卡转人审；卡本身照常建）。
+   */
+  l3_denylist?: 'ok' | 'fail' | 'gate_error'
+  /**
+   * 48 §4 L3 #3 / G06：草稿是 AI 写的且没自标缺料吗
+   * （`fail` → 人写的 / 缺料的转人审）。
+   */
+  draft_origin?: 'ok' | 'fail' | 'gate_error'
+  /**
+   * 48 §4 L3 #3 / G10：出站草稿里的第一人称承诺与无依据让步
+   * （`fail` → 不自主，转人审）。
+   */
+  commitment_scan?: 'ok' | 'fail' | 'gate_error'
+  /**
+   * 48 §4 L3 #2：Amazon 站内信社区规范的出站硬闸
+   * （`fail` → **这张卡 blocked**，原因打回给起草那一跳重写；与上面三道门不同，
+   * 它不是「自不自主」的问题，是「这封信根本不能这样发出去」）。
+   */
+  amazon_outbound?: 'ok' | 'fail'
   notes?: string[]
+}
+
+/**
+ * 48 §4 L3 #3：一道 guardrail 前置门的结论。
+ *
+ * `gate_error` = 门自己炸了。按 fail-closed 与 `fail` 同样**不自主**，但要分得
+ * 出来——不然一个写崩的正则会被当成「确实命中了黑名单」，没人去修它。
+ */
+export interface GateDecision {
+  gate: 'l3_denylist' | 'draft_origin' | 'commitment_scan'
+  status: 'pass' | 'fail' | 'gate_error'
+  /** 机器可读原因（snake_case）。 */
+  reason?: string
+  /** 只有规则 id、枚举与数值；被扫的客户 / 草稿文本绝不进这里。 */
+  evidence?: Record<string, unknown>
+  /** 当时用的是哪一版规则集（内容哈希，只可加行）。 */
+  ruleset_hash: string
 }
 
 export interface Recipient {
@@ -174,6 +212,18 @@ export interface ApprovalExecutionContext {
    * `ok: false` → 这张卡直接 blocked，不进任何人的队列，理由按 `reason` 说人话。
    */
   target_in_range?: { ok: boolean; reason?: string }
+  /**
+   * 48 §4 L3 #3：三道门的结论（由客服层的 `evaluateAutonomyGates` 算好传进来）。
+   *
+   * 前置**只记录不改状态**：门说「不自主」不等于这张卡不该建，只等于它不能自己发。
+   * 不给 = 调用方还不认这三道门（老路径一个字不用改）。
+   */
+  gates?: GateDecision[]
+  /**
+   * 48 §4 L3 #2：Amazon 出站硬闸的结论（`ok: false` → 这张卡 blocked）。
+   * `rewrite_instruction` 原样回给起草那一跳——拦下是**打回重写**，不是静默删改。
+   */
+  amazon_outbound?: { ok: boolean; codes?: string[]; rewrite_instruction?: string }
 }
 
 export interface ApprovalItem<P = unknown> {

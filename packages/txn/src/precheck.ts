@@ -1,5 +1,11 @@
-import type { ApprovalKind, ChangeKind, ObjectRef, PrecheckResult } from '@agentsws/contracts'
-import { EXTERNAL_FENCE, TARGET_SCOPED_KINDS } from '@agentsws/core'
+import type {
+  ApprovalKind,
+  ChangeKind,
+  GateDecision,
+  ObjectRef,
+  PrecheckResult,
+} from '@agentsws/contracts'
+import { AUTONOMY_GATES, EXTERNAL_FENCE, TARGET_SCOPED_KINDS } from '@agentsws/core'
 import type { ApprovalContext, NormalizedCreateInput } from './types.js'
 import { deepEqual, refKey, scanSecrets } from './util.js'
 
@@ -55,6 +61,20 @@ export interface PrecheckOutcome {
   blocked: string[]
   /** outbound_draft 生成的脱敏预览 */
   redaction_preview?: string
+  /**
+   * 48 §4 L3 #3：三道门的结论，原样带出来给调用方落 `guardrail.gate_decided`。
+   *
+   * 前置自己不发事件（它是纯函数），但门的结论必须有人记——「当时用的是哪一版
+   * 规则集、三道门各怎么说」是自主发送审计链的全部内容。
+   */
+  gate_decisions?: GateDecision[]
+  /**
+   * 48 §4 L3 #3：三道门全 pass 才算「这封可以自主发」。
+   *
+   * `undefined` = 调用方没装这三道门（老路径），**不是** `true`——「没问过」与
+   * 「问过了说可以」在自主发送这件事上必须分得开。
+   */
+  autonomous?: boolean
 }
 
 /**
@@ -166,6 +186,46 @@ export function runPrecheck<P>(
     }
   }
 
+  // 48 §4 L3 #3：三道「不自主」的门。
+  //
+  // 这里**只记录不改状态**：门说「不自主」不等于这张卡不该建，只等于它不能自己
+  // 发出去——卡照常进队列，等人按。fail-closed 在门里面（`gate_error` 与 `fail`
+  // 同样算不自主），前置这一层只忠实转录。
+  let gate_decisions: GateDecision[] | undefined
+  let autonomous: boolean | undefined
+  const gates = ctx.gates
+  if (gates !== undefined) {
+    gate_decisions = gates
+    autonomous = true
+    for (const decision of gates) {
+      if (!AUTONOMY_GATES.includes(decision.gate)) continue
+      const verdict = decision.status === 'pass' ? 'ok' : decision.status
+      precheck[decision.gate] = verdict
+      if (decision.status !== 'pass') {
+        autonomous = false
+        notes.push(
+          `门 ${decision.gate} 说不自主：${decision.reason ?? decision.status}（规则集 ${decision.ruleset_hash.slice(0, 12)}）`,
+        )
+      }
+    }
+  }
+
+  // 48 §4 L3 #2：Amazon 站内信的出站硬闸。
+  //
+  // 与上面三道门不同，这一条是 **block**：不是「这封信不能自己发」，是「这封信
+  // 根本不能这样发出去」。重写指令原样进 notes，回给起草那一跳——拦下是打回重写，
+  // 不是静默删改后照发。
+  const amazon = ctx.amazon_outbound
+  if (input.kind === 'outbound_draft' && amazon !== undefined) {
+    precheck.amazon_outbound = amazon.ok ? 'ok' : 'fail'
+    if (!amazon.ok) {
+      blocked.push('amazon_outbound')
+      notes.push(
+        `Amazon 站内信出站守卫拦下（${(amazon.codes ?? []).join(', ')}）：${amazon.rewrite_instruction ?? '按社区规范重写正文'}`,
+      )
+    }
+  }
+
   // 额度：超额不是失败，是 L1 路由
   // 14：契约只要求给等级；没给 mandate_check 的由 normalizeCreateInput 补成「没核过」→ 复核
   precheck.mandate = input.automation.mandate_check.within ? 'within' : 'review'
@@ -175,5 +235,7 @@ export function runPrecheck<P>(
     precheck,
     blocked,
     ...(redaction_preview !== undefined ? { redaction_preview } : {}),
+    ...(gate_decisions === undefined ? {} : { gate_decisions }),
+    ...(autonomous === undefined ? {} : { autonomous }),
   }
 }
