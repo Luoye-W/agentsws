@@ -1,4 +1,4 @@
-import type { ContextItem } from '@agentsws/contracts'
+import type { ChatMessage, ContextItem } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import { failureOf, RUNTIME_NAME, refsFromEvents } from '../src/index.js'
 import { eventsOf, harness, makeRequest, types } from './helpers.js'
@@ -36,6 +36,28 @@ describe('运行时适配器契约（17 §4）', () => {
     expect(seq.indexOf('prompt.assembled')).toBeLessThan(seq.indexOf('tool.call'))
     expect(eventsOf(h.events, 'run.started')[0]?.runtime).toBe('direct-llm')
     expect(eventsOf(h.events, 'run.started')[0]?.model).toEqual(req.runtime.model)
+  })
+
+  it('工具循环的历史：assistant 消息带 tool_calls，随后的 tool 消息 tool_call_id 一一对应（真 provider 要它还原对话）', async () => {
+    let seen: ChatMessage[] = []
+    const h = harness({
+      script: ({ messages, turn }) => {
+        if (turn === 0)
+          return { tool_calls: [{ name: 'get_order', input: { order_id: 'ord_1001' } }] }
+        seen = [...messages]
+        return { text: 'done' }
+      },
+    })
+    await h.run()
+    const assistant = seen.find((m) => m.role === 'assistant' && (m.tool_calls?.length ?? 0) > 0)
+    expect(assistant?.tool_calls).toHaveLength(1)
+    const toolMsg = seen.find((m) => m.role === 'tool')
+    expect(toolMsg?.tool_call_id).toBe(assistant?.tool_calls?.[0]?.id)
+    expect(toolMsg?.name).toBe('get_order')
+    expect(assistant?.tool_calls?.[0]).toMatchObject({
+      name: 'get_order',
+      input: { order_id: 'ord_1001' },
+    })
   })
 
   it('usage 从网关的 Completion.usage 累加；session_ref 认得出运行时', async () => {

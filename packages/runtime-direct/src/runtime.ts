@@ -518,6 +518,9 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           sink({ type: 'text.delta', text: completion.text })
           finalText = completion.text
         }
+        // call_id 在这里一次算好：assistant 消息里的 tool_calls 与随后每条 tool 消息的
+        // tool_call_id 必须一一对应，否则真 provider 400（"tool 消息没有出处"，09-14 真店实测）
+        const callIds = calls.map((c, i) => (c.id.length > 0 ? c.id : `call_${toolCalls + 1 + i}`))
         messages.push({
           role: 'assistant',
           content: [
@@ -526,12 +529,22 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           ]
             .filter((s) => s.length > 0)
             .join('\n'),
+          ...(calls.length === 0
+            ? {}
+            : {
+                tool_calls: calls.map((c, i) => ({
+                  id: callIds[i] ?? c.id,
+                  name: c.name,
+                  input: c.input,
+                })),
+              }),
         })
         if (calls.length === 0) break
 
         let stop = false
-        for (const call of calls) {
-          const call_id = call.id.length > 0 ? call.id : `call_${toolCalls + 1}`
+        for (const [callIndex, call] of calls.entries()) {
+          const call_id =
+            callIds[callIndex] ?? (call.id.length > 0 ? call.id : `call_${toolCalls + 1}`)
           const input = asRecord(call.input) ?? {}
           sink({ type: 'tool.call', call_id, tool: call.name, input: redact(input) })
           openCalls.set(call_id, call.name)
