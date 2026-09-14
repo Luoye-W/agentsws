@@ -78,7 +78,12 @@ const refKey = (ref: ObjectRef): string => `${ref.type}:${ref.id}`
  * 一个都不给也能跑——那就是「只有摘要」的运行。
  */
 export interface MatterRecordSource {
-  /** ObjectRef → 可注入模型的记录内容；不认识回 undefined（不编造） */
+  /**
+   * ObjectRef → 可注入模型的记录内容；不认识回 undefined（不编造）。
+   *
+   * WP53：可以回一个 Promise——真环境的记录源缓存没命中时要经连接器现拉一张订单，
+   * `contextOf` 会 await 它（装配期的 `buildRequest` 本来就是 async）。
+   */
   record?(ref: ObjectRef): unknown
   /** ObjectRef → 人话 */
   label?(ref: ObjectRef): string | undefined
@@ -383,7 +388,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       })
 
   /** 事项现场 → ContextItem[]（37 §2.2b：摘要 + pinned 记录，围栏与出处照旧）。 */
-  const contextOf = (matter: Matter, brief: string): ContextItem[] => {
+  const contextOf = async (matter: Matter, brief: string): Promise<ContextItem[]> => {
     const items: ContextItem[] = []
     const summary = matter.context.summary.trim()
     if (summary !== '') {
@@ -398,7 +403,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       })
     }
     for (const ref of matter.context.pinned) {
-      const record = source.record?.(ref)
+      // WP53：真环境的记录源可能要现去拉一张订单，回的是 Promise——等它
+      const record = await source.record?.(ref)
       const label = source.label?.(ref)
       const content = canonical(record ?? { ref, label })
       items.push({
@@ -451,7 +457,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         role_id: config.role_id,
       },
       trigger: { event_id: input.run_id, source: 'manual' },
-      context: contextOf(input.matter, input.brief),
+      context: await contextOf(input.matter, input.brief),
       grounding: config.grounding,
       // 16 §3：公司端 write_external 一律经执行器，运行时拿不到写口
       tools: { allow, connect_token, side_effect_policy: 'executor' },

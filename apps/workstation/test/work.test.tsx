@@ -18,7 +18,7 @@ import type {
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HomeData } from '@/lib/api'
 import { draftCard, TILE_BAR } from './fixtures'
 import { renderWithProviders } from './helpers'
@@ -355,6 +355,14 @@ describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）'
 })
 
 describe('日历（37 C3：视图 + 排期面）', () => {
+  // 日历按真实"今天"定周 / 月锚点；用例的 fixture 都在 2026-09-09 那一周，所以把系统时间钉住
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(T0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   beforeEach(() => {
     scheduleTodo.mockClear()
     getCalendar.mockClear()
