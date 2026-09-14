@@ -27,9 +27,11 @@ import {
   getConnectRuntime,
   getPositions,
   listConnections,
+  listDeadLetters,
   listProviders,
   pollConnectRequest,
   removeConnection,
+  requeueDeadLetter,
   submitConnection,
   testConnection,
 } from '@/lib/api'
@@ -81,6 +83,27 @@ export function ConnectionsPage(): React.ReactNode {
     queryKey: ['connections', ownerId],
     enabled: ready,
     queryFn: () => listConnections(ownerId),
+  })
+
+  /**
+   * WP55 / 18 §2.2：没进来的那几封信。
+   *
+   * 放在连接页而不是单开一页：用户会想起「我的邮箱是不是漏信了」的地方就是这里，
+   * 而且能不能重投本来就取决于这条连接还在不在。
+   */
+  const deadLetters = useQuery({
+    queryKey: ['dead-letters', ownerId],
+    enabled: ready,
+    queryFn: () => listDeadLetters(ownerId),
+  })
+  const [requeueing, setRequeueing] = useState<string | undefined>(undefined)
+  const requeue = useMutation({
+    mutationFn: (id: string) => requeueDeadLetter(id, ownerId),
+    onSettled: () => {
+      setRequeueing(undefined)
+      void client.invalidateQueries({ queryKey: ['dead-letters'] })
+      void client.invalidateQueries({ queryKey: ['view'] })
+    },
   })
 
   const refresh = useCallback((): void => {
@@ -276,6 +299,12 @@ export function ConnectionsPage(): React.ReactNode {
                   if (!globalThis.confirm(t('connections.disconnect.confirm'))) return
                   setBusyId({ id: c.id, kind: 'remove' })
                   disconnect.mutate(c.id)
+                }}
+                deadLetters={deadLetters.data?.dead_letters ?? []}
+                {...(requeueing === undefined ? {} : { requeueing })}
+                onRequeue={(id) => {
+                  setRequeueing(id)
+                  requeue.mutate(id)
                 }}
               />
             ))}

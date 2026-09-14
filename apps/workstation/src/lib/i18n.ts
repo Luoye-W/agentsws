@@ -557,6 +557,10 @@ const zh: Table = {
   'settings.placeholder': '这台机器上的偏好；连接在左栏的「连接」里。',
   // ── WP20 连接向导 ──────────────────────────────────────────────
   'nav.connections': '连接',
+  'connections.dead_letters': '{n} 封信没进来',
+  'connections.dead_letters.hint': '处理时出错、重试完还是没成的信。修好之后可以重投一次。',
+  'connections.requeue': '重投',
+  'connections.requeuing': '重投中…',
   'connections.title': '连接',
   // 「密码不经 AI」这句安全承诺挪到真正填密码的那张表单上（`connections.never_ai`），
   // 页头只留一句话（WP43 ③）
@@ -1618,6 +1622,11 @@ const en: Table = {
   'settings.identity': 'Identity',
   'settings.placeholder': 'Preferences on this machine. Connections live under “Connections”.',
   'nav.connections': 'Connections',
+  'connections.dead_letters': '{n} message(s) never made it in',
+  'connections.dead_letters.hint':
+    'Messages that errored out and ran out of retries. Once the cause is fixed you can re-queue them.',
+  'connections.requeue': 'Re-queue',
+  'connections.requeuing': 'Re-queueing…',
   'connections.title': 'Connections',
   'connections.subtitle': 'Hook up your store, mailbox and analytics.',
   'connections.connected': 'Connected',

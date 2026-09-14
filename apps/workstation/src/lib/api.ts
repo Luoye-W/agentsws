@@ -961,6 +961,31 @@ export const removeConnection = (id: string, assignment?: string): Promise<{ rem
     ...withAssignment(assignment),
   })
 
+/** WP55 / 18 §2.2：进了死信的入站消息。正文不在这里——只有"是谁 / 何时 / 为什么"。 */
+export interface DeadLetterView {
+  id: string
+  channel: string
+  from?: string
+  subject?: string
+  reason: string
+  attempts: number
+  last_error?: string
+  at: string
+}
+
+export const listDeadLetters = (assignment?: string): Promise<{ dead_letters: DeadLetterView[] }> =>
+  api<{ dead_letters: DeadLetterView[] }>('/v1/channels/dead-letters', withAssignment(assignment))
+
+/** WP55：重投一条死信。会让这条消息重新起一次 Run，所以是人按的按钮。 */
+export const requeueDeadLetter = (
+  id: string,
+  assignment?: string,
+): Promise<{ requeued: boolean }> =>
+  api<{ requeued: boolean }>(`/v1/channels/dead-letters/${encodeURIComponent(id)}/requeue`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
 // ── WP25 交付 A/B：Shopify 两种接法 + 邮箱自动识别 ──────────────────────
 
 /** 同一个服务的另一种接法（Shopify：Dev Dashboard 应用 / 老的访问令牌）。 */

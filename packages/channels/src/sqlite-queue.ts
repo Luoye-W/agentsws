@@ -12,9 +12,10 @@
  * 纪律：所有 SQL 参数化；`better-sqlite3` 同步 API；时间由调用方按注入的 Clock 传进来。
  */
 
-import type { Clock, InboundEvent, WorkspaceId } from '@agentsws/contracts'
+import type { Clock, InboundEvent, Iso8601, WorkspaceId } from '@agentsws/contracts'
 import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
+import type { FolderCursor, FolderSyncFault, MailboxStateStore } from './email/cursors.js'
 import { type Migration, migrate, schemaVersion } from './migrations.js'
 import type { ConfirmationSource, OutboxRecord, OutboxStore } from './outbox.js'
 import { ACCEPTED_RECONCILE_GRACE_MS, MAX_RECONCILE_ATTEMPTS } from './outbox.js'
@@ -89,6 +90,36 @@ CREATE TABLE IF NOT EXISTS outbox (
 CREATE UNIQUE INDEX IF NOT EXISTS outbox_idem ON outbox (workspace_id, idempotency_key);
 CREATE INDEX IF NOT EXISTS outbox_reconcile ON outbox (status, reconcile_next_at_ms);
 CREATE INDEX IF NOT EXISTS outbox_by_ws ON outbox (workspace_id);
+`,
+  },
+  {
+    // WP55 / 48 §4 L3 #5：邮箱加固的三样——每文件夹 UID 游标、毒消息隔离、扫描租约。
+    version: 3,
+    sql: `
+CREATE TABLE IF NOT EXISTS folder_cursors (
+  account       TEXT NOT NULL,
+  folder        TEXT NOT NULL,
+  uid_validity  INTEGER NOT NULL,
+  last_seen_uid INTEGER NOT NULL,
+  PRIMARY KEY (account, folder)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS folder_sync_faults (
+  account        TEXT NOT NULL,
+  folder         TEXT NOT NULL,
+  failed_uid     INTEGER,
+  fail_count     INTEGER NOT NULL,
+  last_error     TEXT,
+  last_failed_at TEXT,
+  skipped_uids   TEXT NOT NULL,
+  PRIMARY KEY (account, folder)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS scan_leases (
+  account        TEXT PRIMARY KEY NOT NULL,
+  owner          TEXT NOT NULL,
+  expires_at_ms  INTEGER NOT NULL
+) STRICT;
 `,
   },
 ]
@@ -295,6 +326,29 @@ export class SqliteQueueStore implements QueueStore {
         ...(row.role_id === null ? {} : { role_id: row.role_id }),
         ...(row.last_error === null ? {} : { last_error: row.last_error }),
       }))
+  }
+
+  deadLetter(id: string): DeadLetterRecord | undefined {
+    const row = this.#db
+      .prepare<[string], DeadRow>('SELECT * FROM dead_letters WHERE id = ?')
+      .get(id)
+    return row === undefined
+      ? undefined
+      : {
+          id: row.id,
+          lane: row.lane,
+          workspace_id: row.workspace_id,
+          reason: row.reason,
+          attempts: row.attempts,
+          at_ms: row.at_ms,
+          event: JSON.parse(row.event) as InboundEvent,
+          ...(row.role_id === null ? {} : { role_id: row.role_id }),
+          ...(row.last_error === null ? {} : { last_error: row.last_error }),
+        }
+  }
+
+  removeDead(id: string): void {
+    this.#db.prepare('DELETE FROM dead_letters WHERE id = ?').run(id)
   }
 
   get size(): number {
@@ -516,22 +570,177 @@ export class SqliteOutboxStore implements OutboxStore {
   }
 }
 
+/**
+ * WP55 / 48 §4 L3 #5：邮箱状态（游标 / 隔离 / 租约）的 SQLite 档。
+ *
+ * 租约的领取是**一条条件 UPDATE + 一条条件 INSERT**，包在一个事务里：
+ * 「先查有没有人占着，再写上自己」这种写法，两个进程同时跑就会双双拿到。
+ */
+export class SqliteMailboxStateStore implements MailboxStateStore {
+  readonly #db: Db
+  readonly #owned: boolean
+  #closed = false
+
+  constructor(options: SqliteChannelStoreOptions | { database: Db } = {}) {
+    if ('database' in options) {
+      this.#db = options.database
+      this.#owned = false
+    } else {
+      this.#db = openDb(options)
+      this.#owned = true
+    }
+  }
+
+  get database(): Db {
+    return this.#db
+  }
+
+  close(): void {
+    if (this.#closed || !this.#owned) return
+    this.#closed = true
+    this.#db.close()
+  }
+
+  cursor(account: string, folder: string): FolderCursor | undefined {
+    const row = this.#db
+      .prepare<[string, string], { folder: string; uid_validity: number; last_seen_uid: number }>(
+        'SELECT folder, uid_validity, last_seen_uid FROM folder_cursors WHERE account = ? AND folder = ?',
+      )
+      .get(account, folder)
+    return row === undefined ? undefined : { ...row }
+  }
+
+  setCursor(account: string, cursor: FolderCursor): void {
+    this.#db
+      .prepare(
+        `INSERT INTO folder_cursors (account, folder, uid_validity, last_seen_uid)
+         VALUES (?,?,?,?)
+         ON CONFLICT(account, folder) DO UPDATE SET
+           uid_validity  = excluded.uid_validity,
+           last_seen_uid = excluded.last_seen_uid`,
+      )
+      .run(account, cursor.folder, cursor.uid_validity, cursor.last_seen_uid)
+  }
+
+  #fault(row: {
+    folder: string
+    failed_uid: number | null
+    fail_count: number
+    last_error: string | null
+    last_failed_at: string | null
+    skipped_uids: string
+  }): FolderSyncFault {
+    return {
+      folder: row.folder,
+      fail_count: row.fail_count,
+      skipped_uids: JSON.parse(row.skipped_uids) as number[],
+      ...(row.failed_uid === null ? {} : { failed_uid: row.failed_uid }),
+      ...(row.last_error === null ? {} : { last_error: row.last_error }),
+      ...(row.last_failed_at === null ? {} : { last_failed_at: row.last_failed_at as Iso8601 }),
+    }
+  }
+
+  fault(account: string, folder: string): FolderSyncFault | undefined {
+    const row = this.#db
+      .prepare<
+        [string, string],
+        {
+          folder: string
+          failed_uid: number | null
+          fail_count: number
+          last_error: string | null
+          last_failed_at: string | null
+          skipped_uids: string
+        }
+      >('SELECT * FROM folder_sync_faults WHERE account = ? AND folder = ?')
+      .get(account, folder)
+    return row === undefined ? undefined : this.#fault(row)
+  }
+
+  faults(account: string): FolderSyncFault[] {
+    return this.#db
+      .prepare<
+        [string],
+        {
+          folder: string
+          failed_uid: number | null
+          fail_count: number
+          last_error: string | null
+          last_failed_at: string | null
+          skipped_uids: string
+        }
+      >('SELECT * FROM folder_sync_faults WHERE account = ? ORDER BY folder')
+      .all(account)
+      .map((r) => this.#fault(r))
+  }
+
+  setFault(account: string, fault: FolderSyncFault): void {
+    this.#db
+      .prepare(
+        `INSERT INTO folder_sync_faults
+           (account, folder, failed_uid, fail_count, last_error, last_failed_at, skipped_uids)
+         VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(account, folder) DO UPDATE SET
+           failed_uid     = excluded.failed_uid,
+           fail_count     = excluded.fail_count,
+           last_error     = excluded.last_error,
+           last_failed_at = excluded.last_failed_at,
+           skipped_uids   = excluded.skipped_uids`,
+      )
+      .run(
+        account,
+        fault.folder,
+        fault.failed_uid ?? null,
+        fault.fail_count,
+        fault.last_error ?? null,
+        fault.last_failed_at ?? null,
+        JSON.stringify(fault.skipped_uids),
+      )
+  }
+
+  claimScanLease(account: string, owner: string, now_ms: number, ttl_ms: number): boolean {
+    const claim = this.#db.transaction((): boolean => {
+      // 条件 UPDATE：只有"没人占着 / 过期了 / 就是我"才改得动
+      const updated = this.#db
+        .prepare(
+          `UPDATE scan_leases SET owner = ?, expires_at_ms = ?
+            WHERE account = ? AND (expires_at_ms <= ? OR owner = ?)`,
+        )
+        .run(owner, now_ms + ttl_ms, account, now_ms, owner)
+      if (updated.changes > 0) return true
+      // 还没有这一行：条件 INSERT（`OR IGNORE` 在别人抢先时不炸）
+      const inserted = this.#db
+        .prepare('INSERT OR IGNORE INTO scan_leases (account, owner, expires_at_ms) VALUES (?,?,?)')
+        .run(account, owner, now_ms + ttl_ms)
+      return inserted.changes > 0
+    })
+    return claim.immediate()
+  }
+
+  releaseScanLease(account: string, owner: string): void {
+    this.#db.prepare('DELETE FROM scan_leases WHERE account = ? AND owner = ?').run(account, owner)
+  }
+}
+
 /** 一张库、一个连接，同时给队列与去重表用（`apps/server` 的装配走这条）。 */
 export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {}): {
   queue: SqliteQueueStore
   dedupe: SqliteDedupeStore
   outbox: SqliteOutboxStore
+  mailbox: SqliteMailboxStateStore
   close(): void
 } {
   const database = openDb(options)
   const queue = new SqliteQueueStore({ database })
   const dedupe = new SqliteDedupeStore({ database })
   const outbox = new SqliteOutboxStore({ database })
+  const mailbox = new SqliteMailboxStateStore({ database })
   let closed = false
   return {
     queue,
     dedupe,
     outbox,
+    mailbox,
     close(): void {
       if (closed) return
       closed = true

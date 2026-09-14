@@ -248,6 +248,33 @@ export interface ConnectionsPort {
    * 不是凭据，但它仍然不进事件日志（这条路只有一次 DNS 查询，什么都不落）。
    */
   detectMailbox?(actor: ConnectionsActor, email: string): MaybePromise<MailboxDetectResult>
+  /**
+   * WP55 / 18 §2.2：死信列表（进了死信的入站消息，按工作区可翻）。
+   *
+   * 不实现 = 这台机器没装渠道（连接页上那一行就不画重投按钮）。
+   */
+  deadLetters?(actor: ConnectionsActor): MaybePromise<DeadLetterView[]>
+  /**
+   * WP55：把一条死信**重投**回入站队列。
+   *
+   * 09-12 的真账号验收里，三封信死在 `canonicalJson` 的 bug 上，修好之后只能
+   * 手改 SQLite 把它们放回队列——这条口子就是那次留下的后置项。
+   */
+  requeueDeadLetter?(actor: ConnectionsActor, id: string): MaybePromise<{ requeued: boolean }>
+}
+
+/** 一条死信在界面上的样子。正文不进这里——只有"是谁、什么时候、为什么"。 */
+export interface DeadLetterView {
+  id: string
+  channel: string
+  /** 发件人（已是线程台账里的展示身份，不是原始正文）。 */
+  from?: string
+  subject?: string
+  /** 为什么进的死信（`retries_exhausted` / `no_route` / `actor_unresolved`）。 */
+  reason: string
+  attempts: number
+  last_error?: string
+  at: string
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
@@ -474,6 +501,45 @@ export function connectionRoutes(): Route[] {
         returns: 'ConnectTestResult',
       },
       async (c, deps) => ok(c, await portOf(deps).test(actorOf(c), param(c, 'id'))),
+    ),
+    // ── WP55 / 18 §2.2：死信与重投 ──────────────────────────────────────
+    route(
+      {
+        method: 'get',
+        path: '/v1/channels/dead-letters',
+        operationId: 'listDeadLetters',
+        summary: '进了死信的入站消息（正文不进列表，只有是谁 / 何时 / 为什么）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '{ dead_letters: DeadLetterView[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(c, { dead_letters: (await port.deadLetters?.(actorOf(c))) ?? [] })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/channels/dead-letters/:id/requeue',
+        operationId: 'requeueDeadLetter',
+        summary: '把一条死信重投回入站队列（owner）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        // 重投会让这条消息重新起一次 Run（会写、会发），所以按写类权限判
+        authz: WRITE,
+        params: [ID_PARAM],
+        returns: '{ requeued: boolean }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.requeueDeadLetter === undefined)
+          throw new ApiError('not_found', '这台机器没有装渠道，没有可重投的死信')
+        return ok(c, await port.requeueDeadLetter(actorOf(c), param(c, 'id')))
+      },
     ),
     route(
       {

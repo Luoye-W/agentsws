@@ -1492,7 +1492,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills: skillsPort,
     roles: rolesPort,
     meetings: meetings.port,
-    connections: connections.port,
+    // WP55 / 18 §2.2：连接页上的死信与重投。包一层而不是改连接面本身——
+    // 死信是渠道的事，连接面只是它在界面上的落脚点。
+    connections: {
+      ...connections.port,
+      deadLetters: async () =>
+        (await (channels as ChannelsAssembly).deadLetters()).map((d) => ({
+          id: d.id,
+          channel: d.event.channel,
+          reason: d.reason,
+          attempts: d.attempts,
+          at: new Date(d.at_ms).toISOString(),
+          // 列表里只有"是谁 / 何时 / 为什么"：正文永远不进这一层
+          ...(d.event.actor?.display === undefined ? {} : { from: d.event.actor.display }),
+          ...(d.last_error === undefined ? {} : { last_error: d.last_error }),
+        })),
+      requeueDeadLetter: (_actor, id) => (channels as ChannelsAssembly).requeueDeadLetter(id),
+    },
     // WP31：本机秘密库的密钥轮换（owner）。密钥只在请求体里出现一次，
     // 网关这一层不碰库、也不碰值，只把「换了几条」端出去。
     secrets: {

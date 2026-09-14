@@ -328,6 +328,41 @@ export class ChannelInboundPipeline implements InboundPipeline {
     return this.queue.deadLetters(workspace_id)
   }
 
+  /**
+   * WP55 / 18 §2.2：把一条死信**重投**回队列。
+   *
+   * 09-12 的真账号验收里，三封信死在 `canonicalJson` 的 bug 上，修好之后只能手改
+   * SQLite 把它们放回队列——这就是那次留下的后置项。
+   *
+   * 重投是**人**的动作：它会让这条消息重新起一次 Run（会写、会发），所以不自动、
+   * 不批量、不定时。重投成功就把死信记录删掉（它已经不是死信了）。
+   */
+  async requeueDeadLetter(id: string): Promise<{ requeued: boolean }> {
+    const record = await this.queue.deadLetter?.(id)
+    if (record === undefined) return { requeued: false }
+    const now_ms = Date.parse(this.clock.now())
+    const role_id = record.role_id ?? record.event.routing.role_id
+    const item: QueueItem = {
+      id: `q_${record.event.id}`,
+      lane: laneOf(record.workspace_id, role_id),
+      workspace_id: record.workspace_id,
+      event: record.event,
+      // 从头开始数：上一次是因为别的原因失败的，修好之后它值得一个完整的重试预算
+      attempts: 0,
+      next_at_ms: now_ms,
+      ...(role_id === undefined ? {} : { role_id }),
+    }
+    await this.queue.put(item)
+    await this.queue.removeDead?.(id)
+    await this.emit('inbound.requeued', record.event, {
+      dead_letter_id: id,
+      reason: record.reason,
+      attempts: record.attempts,
+    })
+    await this.attempt(item)
+    return { requeued: true }
+  }
+
   /** 观察面：已成功触发的事件。 */
   delivered(): InboundEvent[] {
     return [...this.accepted]

@@ -864,3 +864,70 @@ describe('出站 outbox 与对账（sent_unknown 绝不自动重试）', () => {
     expect(mailer.sent).toHaveLength(0)
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* WP55 / 18 §2.2：死信重投                                              */
+/* ------------------------------------------------------------------ */
+
+describe('死信重投（09-12 真账号验收留下的后置项）', () => {
+  it('重试用尽进死信；修好之后重投一次，这封信真的进来了', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-channels-requeue-'))
+    cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
+    const data = createDataStore({ dbPath: join(dir, 'data.db'), clock, collections: [] })
+    cleanup.push(() => data.close())
+    let nowMs = Date.parse(T0)
+    const ticking: Clock = {
+      now: () => new Date(nowMs).toISOString(),
+      sleep: async () => undefined,
+    }
+    const work = createWork({ workspace_id: WS, clock: ticking, random: () => 0.5 })
+    const events: EventEnvelope[] = []
+    // 09-12 那次就是这样：一个 `canonicalJson` 的 bug 让每一次起 Run 都炸
+    let broken = true
+    const runs: string[] = []
+    const channels = createChannels({
+      clock: ticking,
+      workspace_id: WS,
+      dbDir: dir,
+      halt: new MemoryHalt({}),
+      appendEvent: (e) => {
+        events.push(e as EventEnvelope)
+      },
+      cipher: data.keyring,
+      accounts: () => [account()],
+      credentials: { password: () => PASS },
+      work,
+      position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.aftersales' }),
+      startRun: (input) => {
+        if (broken) throw new Error('Unexpected token \'u\', "{"label":undefined')
+        runs.push(input.brief)
+        return { run_id: `run_${runs.length}` }
+      },
+      makeMailer: () => new RecordingMailer(),
+    })
+    assemblies.push(channels)
+
+    // 一路重试到死信（18 §2.2：退避 ≤ 5 次）
+    await channels.poll()
+    for (let i = 0; i < 6; i += 1) {
+      nowMs += 60 * 60_000
+      await channels.poll()
+    }
+    const dead = await channels.deadLetters()
+    expect(dead).toHaveLength(1)
+    expect(dead[0]?.reason).toBe('retries_exhausted')
+    expect(runs).toHaveLength(0)
+
+    // 修好了：重投。这一条以前只能手改 SQLite
+    broken = false
+    const first = dead[0]
+    expect(first).toBeDefined()
+    expect(await channels.requeueDeadLetter(first?.id ?? '')).toEqual({ requeued: true })
+    expect(runs).toHaveLength(1)
+    expect(await channels.deadLetters()).toHaveLength(0)
+    expect(events.some((e) => e.type === 'inbound.requeued')).toBe(true)
+
+    // 不存在的 id 只是没重投，不是报错
+    expect(await channels.requeueDeadLetter('dl_nope')).toEqual({ requeued: false })
+  })
+})

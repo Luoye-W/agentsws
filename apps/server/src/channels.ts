@@ -24,18 +24,22 @@
 
 import { join } from 'node:path'
 import {
+  ARCHIVE_MARK_READ_DEFAULT,
   BlobBackedRawStore,
   ChannelInboundPipeline,
   type CredentialSource,
   classifySendFailure,
   createSqliteChannelStores,
+  type DeadLetterRecord,
   defaultRoute,
   domainOf,
   EmailChannelAdapter,
+  type FolderSyncFault,
   ImapMailSource,
   type Mailer,
   type MailSource,
   MemoryDedupeStore,
+  MemoryMailboxStateStore,
   MemoryOutboxStore,
   MemoryQueueStore,
   MemoryRawStore,
@@ -208,6 +212,10 @@ export interface ChannelsOptions {
    * 不装 = 只落事件不出卡（测试与最小装配）。真服务进程里它接到审批总线上。
    */
   escalateUnresolvedDelivery?(input: UnresolvedDelivery): MaybePromise<void>
+  /** WP55 / 48 §4 L3 #5：归档文件夹名；`null` = 关掉归档。 */
+  archive_folder?: string | null
+  /** WP55：归档时顺手标已读（默认开）。 */
+  archive_mark_read?: boolean
 }
 
 export interface MailPollReport {
@@ -263,6 +271,12 @@ export interface ChannelsAssembly {
   reconcileDeliveries(): Promise<ReconcileReport>
   /** WP55：出站 outbox（工作台与人工卡要能翻这张表）。 */
   outbox: Outbox
+  /** WP55 / 18 §2.2：进了死信的入站消息（正文不进列表）。 */
+  deadLetters(): Promise<DeadLetterRecord[]>
+  /** WP55：把一条死信重投回队列（人按的按钮：会重新起一次 Run）。 */
+  requeueDeadLetter(id: string): Promise<{ requeued: boolean }>
+  /** WP55 / 48 §4 L3 #5：毒消息隔离表（哪几封被永久越过了）。 */
+  folderFaults(): Promise<FolderSyncFault[]>
   /**
    * 出站：审批通过的对外草稿真发出去。
    * 回 `undefined` = 这条不归渠道管（不是邮件 / 没有线程 / 没装邮箱），调用方回落到别处。
@@ -339,6 +353,8 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
    * WP55 / 48 §4 L3 #4：出站 outbox。与队列、去重表同一张库（同一个进程里的几个
    * 邮箱账号共用），因为幂等是按**审批项**算的，不是按邮箱算的。
    */
+  /** WP55 / 48 §4 L3 #5：每文件夹 UID 游标、毒消息隔离、扫描租约。 */
+  const mailboxState = sqliteStores?.mailbox ?? new MemoryMailboxStateStore()
   const outbox = new Outbox({
     store: sqliteStores?.outbox ?? new MemoryOutboxStore(),
     workspace_id,
@@ -506,6 +522,31 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       // WP55 / 48 §4 L3 #2：Amazon 买家消息寄生在这只客服邮箱上。判定在 AI 分类
       // 之前，不花积分；判成 amazon 的线程从此走 Amazon 那一套（硬闸 + 24h SLA）。
       classify_sub_channel: createAmazonSubChannelClassifier(clock),
+      // WP55 / 48 §4 L3 #5：游标持久化 + 毒消息隔离 + 扫描租约 + 归档文件夹。
+      // 不接这几行的后果各不相同，但都在真机器上见过：重启从头拉、一封畸形信
+      // 卡住整只邮箱、两个进程同时扫同一只邮箱。
+      mailbox_state: mailboxState,
+      scan_owner: `ws_${workspace_id}`,
+      archive_folder: options.archive_folder ?? ARCHIVE_FOLDER,
+      archive_mark_read: options.archive_mark_read ?? ARCHIVE_MARK_READ_DEFAULT,
+      on_folder_fault: (fault) => {
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'inbound.folder_fault',
+          actor: { kind: 'system', id: 'channel:email' },
+          correlation: { trace_id: `tr_fault_${clock.now()}` },
+          // 只有 UID 与次数，没有正文——那封信正是"解析不出来"的那一封
+          payload: {
+            account: fault.account,
+            folder: fault.folder,
+            failed_uid: fault.failed_uid,
+            fail_count: fault.fail_count,
+            quarantined: fault.quarantined,
+            skipped: fault.skipped_uids.length,
+          },
+        })
+      },
       on_error: (e) => {
         options.appendEvent({
           schema_version: 1,
@@ -875,6 +916,32 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         }
       }
       return report
+    },
+
+    async deadLetters(): Promise<DeadLetterRecord[]> {
+      const out: DeadLetterRecord[] = []
+      for (const channel of channels)
+        out.push(...(await channel.pipeline.deadLetterRecords(workspace_id)))
+      return out
+    },
+
+    /**
+     * WP55：重投。死信是按 `dl_<event id>` 存的，不带账号信息，所以挨个问一遍
+     * 哪条管线认得它——找到就投，找不到回 `{ requeued: false }`。
+     */
+    async requeueDeadLetter(id: string): Promise<{ requeued: boolean }> {
+      for (const channel of channels) {
+        const out = await channel.pipeline.requeueDeadLetter(id)
+        if (out.requeued) return out
+      }
+      return { requeued: false }
+    },
+
+    async folderFaults(): Promise<FolderSyncFault[]> {
+      const out: FolderSyncFault[] = []
+      for (const channel of channels)
+        out.push(...(await mailboxState.faults(channel.account.address)))
+      return out
     },
 
     eraseSubject: async (subject) => raw.eraseSubject(subject),

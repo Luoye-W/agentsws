@@ -18,6 +18,20 @@ export interface MailSource {
   health(): Promise<{ ok: boolean; detail?: string }>
   close?(): Promise<void>
   /**
+   * WP55 / 48 §4 L3 #5：这个文件夹当前的 `UIDVALIDITY`。
+   *
+   * 它一变，游标水位立刻作废（服务器重建过邮箱）。不实现 = 永远回同一个值，
+   * 游标照常工作，只是失去了"服务器重建过"这一层保护。
+   */
+  uidValidity?(): Promise<number>
+  /**
+   * WP55 / 48 §4 L3 #5：把处理过的信搬进归档文件夹并标已读。
+   *
+   * 建不了 / 服务器拒绝 MOVE **只 log**——归档是锦上添花，不该拖垮收信。
+   * 回 `false` = 没搬动（调用方据此只记一条日志，不重试、不报错）。
+   */
+  archive?(uid: number, folder: string, mark_read: boolean): Promise<boolean>
+  /**
    * WP55 / 48 §4 L3 #4：去已发 / 归档文件夹里搜一个 Message-ID。
    *
    * 出站对账的全部内容就是这一句话：一封 `sent_unknown` 的信到底发出去没有，
@@ -35,6 +49,14 @@ export interface ImapClientLike {
   logout(): Promise<void>
   close(): void
   getMailboxLock(path: string): Promise<{ release: () => void }>
+  /** WP55：打开一个文件夹并拿到它的 `UIDVALIDITY`。 */
+  mailboxOpen?(path: string): Promise<{ uidValidity?: number | bigint }>
+  /** WP55：新建文件夹（归档文件夹第一次用时）。 */
+  mailboxCreate?(path: string): Promise<unknown>
+  /** WP55：把一封信搬到另一个文件夹。 */
+  messageMove?(range: string, destination: string, options: { uid: true }): Promise<unknown>
+  /** WP55：加 flag（归档时顺手标已读）。 */
+  messageFlagsAdd?(range: string, flags: string[], options: { uid: true }): Promise<unknown>
   /** WP55：按头搜（对账用）。imapflow 有，最小桩可以不实现。 */
   search?(
     query: { header: Record<string, string> },
@@ -142,6 +164,10 @@ export function fromImapFlow(client: ImapFlow): ImapClientLike {
       const lock = await client.getMailboxLock(path)
       return { release: () => lock.release() }
     },
+    mailboxOpen: (path) => client.mailboxOpen(path),
+    mailboxCreate: (path) => client.mailboxCreate(path),
+    messageMove: (range, destination, options) => client.messageMove(range, destination, options),
+    messageFlagsAdd: (range, flags, options) => client.messageFlagsAdd(range, flags, options),
     search: (query, options) => client.search(query, options),
     fetch: (range, query, options) => client.fetch(range, query, options),
   }
@@ -229,6 +255,63 @@ export class ImapMailSource implements MailSource {
       throw asChannelError(e, 'IMAP 拉取失败')
     }
     return out.sort((a, b) => a.uid - b.uid)
+  }
+
+  /**
+   * WP55 / 48 §4 L3 #5：这个文件夹当前的 `UIDVALIDITY`。
+   *
+   * 取不到就回 0：游标照常工作，只是失去了"服务器重建过邮箱"这一层保护——
+   * 比整轮拉取失败强。
+   */
+  async uidValidity(): Promise<number> {
+    const client = this.connectedClient()
+    if (client.mailboxOpen === undefined) return 0
+    try {
+      await client.connect()
+      const box = await client.mailboxOpen(this.mailbox)
+      await client.logout()
+      return Number(box.uidValidity ?? 0)
+    } catch {
+      client.close()
+      return 0
+    }
+  }
+
+  /**
+   * WP55 / 48 §4 L3 #5：把处理过的信搬进归档文件夹并标已读。
+   *
+   * 文件夹不存在就先建一个；建不了 / 服务器拒绝 MOVE 一律回 `false`（调用方只
+   * 记一条日志）。**绝不抛**——归档是锦上添花，不该拖垮这一轮收信。
+   */
+  async archive(uid: number, folder: string, mark_read: boolean): Promise<boolean> {
+    const client = this.connectedClient()
+    if (client.messageMove === undefined) return false
+    try {
+      await client.connect()
+      try {
+        const lock = await client.getMailboxLock(this.mailbox)
+        try {
+          if (mark_read) {
+            await client.messageFlagsAdd?.(String(uid), ['\\Seen'], { uid: true })
+          }
+          try {
+            await client.messageMove(String(uid), folder, { uid: true })
+          } catch {
+            // 文件夹可能还不存在：建一个再搬一次，还不行就认输
+            await client.mailboxCreate?.(folder)
+            await client.messageMove(String(uid), folder, { uid: true })
+          }
+        } finally {
+          lock.release()
+        }
+      } finally {
+        await client.logout()
+      }
+      return true
+    } catch {
+      client.close()
+      return false
+    }
   }
 
   /**
