@@ -75,6 +75,14 @@ import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { createCatalogIndex } from './catalog-index.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
+// WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
+import {
+  CHAT_ASSIST_TASK_ID,
+  CHAT_ASSIST_TIMEOUT_HANDLER,
+  type ChatLane,
+  chatAssistTask,
+  createChatLane,
+} from './chat.js'
 import { connectBaseUrl } from './connect-url.js'
 import {
   type ConnectionsAssembly,
@@ -106,6 +114,7 @@ import {
   createSchedulePort,
   DEFAULT_RAW_RETENTION_DAYS,
   ensureSystemTasks,
+  ensureTask,
   offsetToTz,
   registerApprovalHousekeeping,
   registerBackup,
@@ -328,6 +337,8 @@ export interface Server {
   liveData?: LiveDataSource
   /** WP34 渠道面（IMAP 轮询 / 入站管线 / 受控原始材料区 / 出站发信）。 */
   channels: ChannelsAssembly
+  /** WP57 在线聊天的实时车道（会话 / 轮次聚合 / 五种动作 / 求助超时）。 */
+  chat: ChatLane
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
@@ -603,6 +614,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 渠道排在 txn 之后装（它要 work / connections / startRun），但执行器的出站回调
   // 现在就要指向它——所以先留一个空壳引用，装到那一步再填。
   let channels: ChannelsAssembly | undefined
+  // WP57：聊天车道（装在 channels 之后——它要共用同一个受控原始材料区）
+  let chat: ChatLane | undefined
 
   const backend = new MemoryBackend()
   // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
@@ -632,7 +645,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
     // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
     deliverOutbound: async (item, opts) =>
-      (await channels?.deliver(item, opts)) ?? backend.deliver(item, opts),
+      // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
+      (await chat?.deliver(item, opts)) ??
+      (await channels?.deliver(item, opts)) ??
+      backend.deliver(item, opts),
   })
 
   const identity: LocalIdentityService =
@@ -958,6 +974,53 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     liveData?.invalidate()
   })
 
+  /*
+   * WP57（48 §4 L3 #11 的本地部分）：在线聊天的实时车道。
+   *
+   * 位置有讲究：**必须在 channels 之后**——它共用那一个受控原始材料区、那一张队列、
+   * 那一张去重表。两套区意味着 21 §4「删这个人」会漏掉一半，两张去重表意味着
+   * 同一条消息从两处进来会产出两条事件。
+   *
+   * 公网访客端点、widget 脚本与 Origin 白名单属于托管档（B 期），这里没有。
+   */
+  chat = createChatLane({
+    clock,
+    workspace_id: workspace.id,
+    appendEvent,
+    halt: kernel.halt,
+    raw: (channels as ChannelsAssembly).raw,
+    work,
+    approvals,
+    models,
+    // 同一套知识与订单只读：记录源就是运行时那一个
+    source: records,
+    searchKnowledge: async (text, limit) => {
+      const config = roles.effectiveConfig(ownerAssignment.id)
+      const { hits } = await knowledge.retrieval.search({
+        text,
+        k: limit,
+        actor: {
+          person_id: person.id,
+          workspace_id: workspace.id,
+          assignment_id: ownerAssignment.id,
+          role_id: ownerAssignment.role_id,
+          grants: config.scopes,
+          ranges: config.ranges,
+        },
+      })
+      return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
+    },
+    position: () => {
+      const first = roles.assignments
+        .listByPerson(person.id, { workspace_id: workspace.id })
+        .find((a) => a.revoked_at === undefined)
+      return first === undefined
+        ? undefined
+        : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
+    },
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+
   // 21 §4「删这个人」的跨库编排（39 待办 I）：数据层 + 邮件原始区 + 会议原始区
   const privacy = createPrivacyErase({
     workspace_id: workspace.id,
@@ -1128,6 +1191,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return { vendors: result.vendors, updated_providers: result.updated_providers }
     },
   })
+
+  /*
+   * WP57：求助超时巡检（`support.chat_assist_timeout`，30 秒一拍）。
+   *
+   * 登记与排期放在一起，是为了不让调度装配那边多认识一个业务概念——
+   * `createScheduleAssembly` 的消费者清单是注册表，注册表只追加（35 §2）。
+   */
+  schedule.scheduler.register(CHAT_ASSIST_TIMEOUT_HANDLER, async () =>
+    (chat as ChatLane).sweepAssistTimeouts(),
+  )
+  await ensureTask(
+    schedule.scheduler,
+    CHAT_ASSIST_TASK_ID,
+    chatAssistTask({
+      workspace_id: workspace.id,
+      owner: person.id,
+      role_id: ownerAssignment.role_id,
+      assignment_id: ownerAssignment.id,
+    }),
+  )
 
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
@@ -1647,6 +1730,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     connections,
     ...(liveData === undefined ? {} : { liveData }),
     channels,
+    // WP57：在线聊天车道
+    chat,
     modelSettings,
     org,
     onboarding,
@@ -1723,6 +1808,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       schedule.close()
       catalog.close()
       secretary.close()
+      await chat?.close() // WP57
       await channels?.close()
       liveData?.close()
       connections.close()

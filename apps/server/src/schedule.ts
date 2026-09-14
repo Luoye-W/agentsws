@@ -68,6 +68,8 @@ import {
   type Work,
 } from '@agentsws/work'
 import type { BackupRunResult } from './backup.js'
+// WP57：聊天求助超时巡检的 handler 名（真源在 ./chat.ts）
+import { CHAT_ASSIST_TIMEOUT_HANDLER } from './chat.js'
 import { type HousekeepingDeps, runApprovalHousekeeping } from './housekeeping.js'
 import type { MeetingsAssembly } from './meetings.js'
 
@@ -96,6 +98,14 @@ export const HANDLERS = {
   pricingRefresh: 'models.pricing_refresh',
   /** WP50：夜里扫一遍同唯一键 / 相似的品牌、产品线、店铺范围（45 H4）。 */
   orgDuplicates: 'org.duplicate_scan',
+  /**
+   * WP57：聊天里等人工的会话（T+3 提醒 / T+10 转邮件跟进）。
+   *
+   * 名字的真源在 `./chat.ts`——登记在这里是因为 `SYSTEM_HANDLERS`（工具箱那张
+   * 「不进目录」的名单）是从这张表算出来的。漏了它，这条系统巡检会跑到
+   * 40 §2 的工具箱里去，跟人建的定时任务混在一起。
+   */
+  chatAssistTimeout: CHAT_ASSIST_TIMEOUT_HANDLER,
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */

@@ -74,6 +74,10 @@ export class ChatChannelAdapter implements ChannelAdapter {
   private readonly rawSecretPolicy: 'redact' | 'keep'
   private handler: ((raw: unknown) => Promise<void>) | undefined
   private readonly sentByKey = new Map<string, string>()
+  /** `say` 的序号。同一毫秒里连说两句（安抚 + 教出来的那一句）不能撞同一个
+   *  `external_id`——撞上就会被消息表的 `(session_id, external_id)` 唯一键
+   *  当成重放，第二句静默地消失。 */
+  private saySeq = 0
   private running = false
 
   constructor(opts: ChatAdapterOptions) {
@@ -293,13 +297,18 @@ export class ChatChannelAdapter implements ChannelAdapter {
       role,
       text,
       at: now,
-      external_id: extra.external_id ?? `sys_${role}_${now}`,
+      external_id: extra.external_id ?? this.nextSayId(role, now),
       ...(extra.run_id === undefined ? {} : { run_id: extra.run_id }),
       ...(extra.plan_action === undefined ? {} : { plan_action: extra.plan_action }),
     })
     await this.store.patchSession(session_id, { at: now })
     this.stream.publish(session_id, { type: 'message', message })
     return message
+  }
+
+  private nextSayId(role: string, now: string): string {
+    this.saySeq += 1
+    return `sys_${role}_${now}_${this.saySeq}`
   }
 
   async health(): Promise<{ ok: boolean; detail?: string }> {
