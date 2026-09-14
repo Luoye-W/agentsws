@@ -163,6 +163,8 @@ const EVENT_KEYS = [
   // WP50 个人用 → 公司用（45）
   'org.personal',
   'org.join',
+  // WP56 知识溯源链（48 §4 #6）
+  'knowledge.source_sync',
 ] as const
 
 const EXPECTED_KEYS = [
@@ -298,6 +300,17 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
     case 'clock.advance': {
       known(source, `${path}.${key}`, body, [])
       return { at, type: 'clock.advance', advance: {} }
+    }
+    case 'knowledge.source_sync': {
+      known(source, `${path}.${key}`, body, ['ref', 'content'])
+      return {
+        at,
+        type: 'knowledge.source_sync',
+        source_sync: {
+          ref: str(source, `${path}.${key}.ref`, body.ref),
+          content: str(source, `${path}.${key}.content`, body.content),
+        },
+      }
     }
     case 'reconcile.run': {
       known(source, `${path}.${key}`, body, [])

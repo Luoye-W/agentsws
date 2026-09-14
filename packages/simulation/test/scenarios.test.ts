@@ -38,9 +38,9 @@ describe('pack 场景（26 §1 §4）', () => {
 
   it('知识层：政策卡被检索、注入、并被草稿引用（19 §3 usage）', async () => {
     const { evidence } = await runPackScenario('aftersales/return-within-window.yml')
-    // 三层知识都进了库
+    // 三层知识都进了库（WP56 起 fact 层有两条：退货窗口与保修期）
     const activated = evidence.events.filter((e) => e.type === 'knowledge.card.activated')
-    expect(activated).toHaveLength(4)
+    expect(activated).toHaveLength(5)
     // 命中的卡作为 fact_card 注入（17 §5.4 宿主预取）
     const cards = evidence.runs[0]?.request.context.filter((c) => c.kind === 'fact_card') ?? []
     expect(cards.length).toBeGreaterThan(0)

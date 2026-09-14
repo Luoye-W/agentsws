@@ -1,0 +1,61 @@
+# WP56（48 §4 #6）：**源页改了，口径要不要跟着改，人说了算。**
+#
+# 官网保修页原来写"24 个月"，今天改成了"12 个月"（顺带换了标题、加了段营销文案）。
+# 这条链要走完：
+#
+# 1. 内容 hash 变了 → 比事实指纹（纯函数，**模型不参与**"是不是实质变更"这个判断）；
+# 2. 受管辖数值真的变了（保修 24 个月 → 12 个月）→ 那条派生卡标 `stale`，
+#    **口径先一个字都不改**，同时开一张复核卡（确认没变 / 按新值更新 / 忽略）；
+# 3. owner 选"按新值更新" → 卡回鲜、换成新口径，**旧值进历史案例**
+#    （它当时是真的，将来还查得到"我们那会儿保 24 个月"）。
+#
+# 反面一起钉住：人没答之前，那张卡的正文逐字节不变（`no_write_without_stage` 之外，
+# 断言里 `staged_change_kinds: []` 说的就是这次谁都没改业务数据）。
+id: knowledge/source-changed-recheck
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    knowledge.source_sync:
+      ref: knowledge/fact-warranty.md
+      content: |
+        # 保修期（2026 秋季更新）
+
+        好消息：我们把保修流程简化了，理赔更快！
+
+        充电类产品的保修期是 **12 个月**，从签收日算起。
+  - at: '+10m'
+    clock.advance: {}
+  - at: '+30m'
+    actor.decide:
+      who: p_wang
+      item: $last_knowledge_recheck
+      action: approve
+      option: adopt_new
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  # 一张复核卡，形态是 knowledge_update
+  approval_kinds: { knowledge_update: 1 }
+  event_types:
+    - knowledge.card.stale
+    - knowledge.recheck.opened
+    - knowledge.card.refreshed
+    - knowledge.recheck.resolved
+  staged_change_kinds: []
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  源页改了受管辖数值之后，有没有先问人再改口径？人答完之后旧值有没有留档？

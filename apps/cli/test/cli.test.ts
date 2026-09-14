@@ -53,7 +53,7 @@ describe('agentsws simulate（26 §5）', () => {
       '--report',
       report,
     )
-    expect(text()).toContain('15/15 场景通过')
+    expect(text()).toContain('16/16 场景通过')
     expect(text()).toContain('合并门禁：通过')
     expect(process.exitCode).toBeUndefined()
     expect(existsSync(join(report, 'summary.json'))).toBe(true)
@@ -62,7 +62,7 @@ describe('agentsws simulate（26 §5）', () => {
       scenarios: unknown[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(15)
+    expect(summary.scenarios).toHaveLength(16)
     expect(existsSync(join(report, 'aftersales__return-within-window.json'))).toBe(true)
   }, 60_000)
 
@@ -136,7 +136,7 @@ describe('agentsws synth', () => {
       '--out',
       dir,
     )
-    expect(text()).toContain('生成 25 个文件')
+    expect(text()).toContain('生成 26 个文件')
     expect(existsSync(join(dir, 'manifest.yml'))).toBe(true)
     expect(existsSync(join(dir, 'store', 'orders.yml'))).toBe(true)
     expect(text().indexOf('  README.md')).toBeLessThan(text().indexOf('  workspace.yml'))

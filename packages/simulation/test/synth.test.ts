@@ -61,7 +61,7 @@ describe('合成公司生成器（26 §2）', () => {
     expect([...fresh.files.keys()].some((f) => f.startsWith('scenarios/'))).toBe(false)
     expect(fresh.files.has('baseline.json')).toBe(false)
     // 而仓库里的 pack 两样都有
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(15)
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(16)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
@@ -95,8 +95,13 @@ describe('合成公司生成器（26 §2）', () => {
     expect(pack.assignments.filter((a) => a.primary === true)).toHaveLength(1)
     expect(pack.orders).toHaveLength(50)
     expect(pack.customers.length).toBeGreaterThanOrEqual(20)
-    // 三层知识各一份
-    expect(pack.knowledge.map((k) => k.layer).sort()).toEqual(['fact', 'phrasing', 'policy'])
+    // 三层知识都有（WP56 加了第二条 fact：源页派生的保修期，给复核场景用）
+    expect(pack.knowledge.map((k) => k.layer).sort()).toEqual([
+      'fact',
+      'fact',
+      'phrasing',
+      'policy',
+    ])
     expect(pack.knowledge.find((k) => k.layer === 'fact')?.body).toContain('14 days')
     expect(pack.knowledge.find((k) => k.layer === 'fact')?.body).toContain('14 天')
     // mock provider 的初始状态从 store/* 来

@@ -15,6 +15,7 @@ import {
   rewriteAliasedAssignments,
 } from '@agentsws/catalog'
 import type {
+  ApprovalItem,
   Assignment,
   ChangeKind,
   DataRecord,
@@ -48,7 +49,12 @@ import { createDshRuntime } from '@agentsws/dsh-adapter'
 import type { Kernel, Random } from '@agentsws/kernel'
 import { createKernel, seededRandom } from '@agentsws/kernel'
 import type { Knowledge } from '@agentsws/knowledge'
-import { createKnowledge } from '@agentsws/knowledge'
+import {
+  contentHashOf,
+  createKnowledge,
+  describeFactKeyZh,
+  RECHECK_OPTIONS,
+} from '@agentsws/knowledge'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
@@ -292,6 +298,15 @@ export interface World {
    * `reconcile.run` 触发——soak 档每天一次，所以"unknown 在下一次对账内清零"是可断言的。
    */
   reconcileUnknown(): Promise<{ reconciled: number; applied: number; failed: number }>
+  /**
+   * WP56（48 §4 #6）：一个知识源同步了一次新正文。
+   *
+   * 内容 hash 没变就什么都不做；变了但受管辖数值没变就自动回鲜；
+   * 数值也变了才把派生卡标 `stale` 并开一张复核卡（`knowledge_update` 的 recheck 形态）。
+   */
+  syncKnowledgeSource(ref: string, content: string): Promise<{ stale: number; rechecks: number }>
+  /** WP56：人在复核卡上选了一个（确认没变 / 按新值更新 / 忽略）。 */
+  resolveKnowledgeRecheck(item: ApprovalItem, option: string | undefined): Promise<void>
   /** 05 §4：每个分配的有效配置快照（"不做跨 Assignment 并集"的断言读它）。 */
   assignmentSnapshots(): AssignmentSnapshot[]
   gateway(): ModelGatewayApi
@@ -669,6 +684,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     await knowledge.store.activate(card.id, owner)
     // ingestMarkdown 只为把长文切段（19 §2），fast 档不检索分段
     knowledge.ingestMarkdown(doc.body, { id: `src_${doc.subject_key}`, ref: doc.path })
+    // WP56（48 §4 #6）：每份 pack 知识登记成一个源，并记下这一版的内容 hash。
+    // 有了它，后面 `knowledge.source_sync` 才有"上一版"可比。
+    const src = knowledge.intake.addSource({
+      workspace_id,
+      kind: 'upload',
+      ref: doc.path,
+      parser: 'anydoc',
+    })
+    knowledge.intake.markSynced(src.id, 1, contentHashOf(doc.body))
   }
 
   // ── 替身：mock OpenConnector / stub 运行时 / 合成人 / 收件箱 ──────────
@@ -1231,7 +1255,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         grants: [...effective.scopes],
         ranges: [...effective.ranges],
       },
-      k: 3,
+      // WP56（48 §4 #7）：**不再截 top-3**。这个库按身份过滤之后只有几条，
+      // 长上下文档会整库给出来——截断反而会把该看见的那条挡在外面。
+      // 超预算时自动退回 lexical，那一档照 DEFAULT_K 收口。
     })
     for (const h of res.hits) {
       if (h.layer === 'historical_case') await flagStale(h)
@@ -1385,6 +1411,112 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         world.appendEvent('simulation.reconciled', { reconciled, applied, failed })
       }
       return { reconciled, applied, failed }
+    },
+    /**
+     * WP56（48 §4 #6）：一个知识源同步了一次新正文。
+     *
+     * 判定全在 `packages/knowledge`（内容 hash → 事实指纹 → 该不该惊动人）；
+     * 这里只负责把"要惊动人"那一档变成一张卡。
+     */
+    async syncKnowledgeSource(ref, content) {
+      const source = knowledge.intake.sources(workspace_id).find((x) => x.ref === ref)
+      if (source === undefined) throw new SimulationError('not_found', `知识源不存在：${ref}`)
+      const result = await knowledge.recheck.syncSource({ source, content })
+      // 记下这一版，下次再同步时"上一版"就是它
+      knowledge.intake.markSynced(source.id, source.chunks, result.plan.content_hash)
+
+      for (const recheck of result.rechecks) {
+        const card = knowledge.store.getUnchecked(recheck.card_id)
+        const before = recheck.before.map(describeFactKeyZh).join('、')
+        const after = recheck.after.map(describeFactKeyZh).join('、')
+        const item = await txn.approvals.create({
+          workspace_id,
+          schema_version: 1,
+          kind: 'knowledge_update',
+          role_id: assignment.role_id,
+          subject: { object: { type: 'fact_card', id: recheck.card_id } },
+          dedupe_key: `${workspace_id}:knowledge_update:recheck:${recheck.id}`,
+          title: '这条知识要复核',
+          summary:
+            `来源改过了，改的正是这条管着的数值（${before || '—'} → ${after || '—'}）。` +
+            '它还在用，只是排到了后面。确认没变 / 按新值更新 / 忽略，你定。',
+          payload: {
+            form: 'knowledge_recheck',
+            recheck_id: recheck.id,
+            card_id: recheck.card_id,
+            source_id: recheck.source_id,
+            before: recheck.before,
+            after: recheck.after,
+            categories: recheck.categories,
+            ...(recheck.proposed_statement === undefined
+              ? {}
+              : { proposed_statement: recheck.proposed_statement }),
+            options: RECHECK_OPTIONS.map((o) => ({ id: o.id, label: o.label })),
+          },
+          evidence: {
+            source_events: [],
+            diff: {
+              before: { statement: card?.statement ?? null },
+              after: { statement: recheck.proposed_statement ?? null },
+              summary: '源页改了受管辖数值',
+            },
+            provenance: { seen: [{ type: 'fact_card', id: recheck.card_id }] },
+            precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+          },
+          proposer: { kind: 'agent', id: assignment.id },
+          // 19 §2：知识怎么改是人的事，不自动放行
+          automation: {
+            level_at_creation: 'L1',
+            auto_approved: false,
+            mandate_check: { within: true, caps_hit: [] },
+            sampling: { selected: false },
+          },
+          routing: {
+            // 知识的主人就是 owner（19 §2）：这张卡只送他
+            recipients: [{ person: owner, via: 'owner' }],
+            rule: 'owner',
+            escalation: {
+              after_hours: 72,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          priority: 'queue',
+          options: RECHECK_OPTIONS.map((o) => ({ id: o.id, label: o.label })),
+        })
+        if (item.state !== 'blocked') knowledge.recheck.linkApproval(recheck.id, item.id)
+      }
+      await flushCards()
+      world.appendEvent('simulation.knowledge_source_synced', {
+        ref,
+        changed: result.plan.changed,
+        refreshed: result.refreshed.length,
+        stale: result.stale.length,
+        rechecks: result.rechecks.length,
+      })
+      return { stale: result.stale.length, rechecks: result.rechecks.length }
+    },
+    /**
+     * WP56：人在复核卡上选了一个。
+     *
+     * 选项 id 是冻结的（`RECHECK_OPTIONS`）；没选（裸 approve）当"确认没变"——
+     * 不猜"按新值更新"，改口径这件事必须是显式的。
+     */
+    async resolveKnowledgeRecheck(item, option) {
+      const payload = item.payload as { form?: string; recheck_id?: string }
+      if (payload.form !== 'knowledge_recheck' || typeof payload.recheck_id !== 'string') return
+      const recheck = knowledge.recheck.get(payload.recheck_id)
+      if (recheck === undefined || recheck.status !== 'open') return
+      const resolution =
+        option === 'adopt_new' || option === 'ignore' || option === 'unchanged'
+          ? option
+          : 'unchanged'
+      await knowledge.recheck.resolve(recheck.id, {
+        resolution,
+        by: owner,
+      })
     },
     async tickApprovals() {
       const at = now(clock)
