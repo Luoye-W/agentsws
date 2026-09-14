@@ -540,6 +540,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('dtc.support'),
     loadBundledRole('common.owner'),
     loadBundledRole('common.member'),
+    // WP54（48 v2 L1）：客服岗位另外两条。**这两条在 pack 里没人挂**——职责定义躺在
+    // 库里不产生任何行为。装它们只为一件事：`agentsws demo` 起的就是这个世界，
+    // 首次设置向导里的「客服」岗位得显示三条而不是一条（种岗位那一步会把解析不到的
+    // 职责筛掉）。服务进程侧的 `BUNDLED_ROLES` 早就是这三条，两边别再错位。
+    loadBundledRole('dtc.live-chat'),
+    loadBundledRole('amz.support'),
     // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——
     // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效
     loadBundledRole('site.builder'),
