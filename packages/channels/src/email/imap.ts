@@ -17,6 +17,16 @@ export interface MailSource {
   fetchSince(since_uid: number, limit?: number): Promise<RawEmailMessage[]>
   health(): Promise<{ ok: boolean; detail?: string }>
   close?(): Promise<void>
+  /**
+   * WP55 / 48 §4 L3 #4：去已发 / 归档文件夹里搜一个 Message-ID。
+   *
+   * 出站对账的全部内容就是这一句话：一封 `sent_unknown` 的信到底发出去没有，
+   * 唯一能问的人是邮箱服务器自己——「已发送」里有没有它。
+   *
+   * 可选：不实现 = 这只邮箱的对账永远找不到证据，于是走到退避耗尽出人工卡。
+   * 那是**正确**的降级（人去看一眼），不是静默重发。
+   */
+  findMessageId?(message_id: string, folders?: readonly string[]): Promise<string | undefined>
 }
 
 /** imapflow 里我们真正用到的那几个方法（便于替身与最小 IMAP 桩）。 */
@@ -25,6 +35,11 @@ export interface ImapClientLike {
   logout(): Promise<void>
   close(): void
   getMailboxLock(path: string): Promise<{ release: () => void }>
+  /** WP55：按头搜（对账用）。imapflow 有，最小桩可以不实现。 */
+  search?(
+    query: { header: Record<string, string> },
+    options: { uid: true },
+  ): Promise<number[] | false | undefined>
   fetch(
     range: string,
     query: { uid: true; source: true; internalDate: true },
@@ -55,6 +70,13 @@ export interface ImapConfig {
   mailbox?: string
   /** 每轮最多取多少封，默认 50 */
   batch?: number
+  /**
+   * WP55 / 48 §4 L3 #5：处理过的信搬进哪个文件夹（缺省 `agentsws`）。
+   * 建不了 / 服务器拒绝 MOVE 就只记一条日志——归档是锦上添花，不该拖垮收信。
+   */
+  archive_folder?: string
+  /** WP55：对账去哪几个文件夹找证据；不给用 {@link DEFAULT_SENT_FOLDERS}。 */
+  sent_folders?: readonly string[]
 }
 
 export function readSecretFromEnv(name: string, env: NodeJS.ProcessEnv = process.env): string {
@@ -120,9 +142,26 @@ export function fromImapFlow(client: ImapFlow): ImapClientLike {
       const lock = await client.getMailboxLock(path)
       return { release: () => lock.release() }
     },
+    search: (query, options) => client.search(query, options),
     fetch: (range, query, options) => client.fetch(range, query, options),
   }
 }
+
+/**
+ * WP55：出站对账要看的文件夹（按顺序找，命中即停）。
+ *
+ * 名字各家不一样（Gmail 是 `[Gmail]/Sent Mail`，Outlook 是 `Sent Items`）——
+ * 全试一遍，打不开的跳过。多试几个文件夹的代价是几次 IMAP 往返，找不到证据的
+ * 代价是一张本来不必出的人工卡。
+ */
+export const DEFAULT_SENT_FOLDERS: readonly string[] = [
+  'Sent',
+  'Sent Items',
+  'Sent Messages',
+  '[Gmail]/Sent Mail',
+  '已发送',
+  'agentsws',
+]
 
 export interface ImapMailSourceOptions {
   config: ImapConfig
@@ -190,6 +229,47 @@ export class ImapMailSource implements MailSource {
       throw asChannelError(e, 'IMAP 拉取失败')
     }
     return out.sort((a, b) => a.uid - b.uid)
+  }
+
+  /**
+   * WP55 / 48 §4 L3 #4：去已发 / 归档文件夹里搜这个 Message-ID。
+   *
+   * 找到 = 这封信确实发出去了（`confirmed`）；找不到 **不等于**没发出去，只等于
+   * 「这一轮没拿到证据」——所以返回 `undefined` 的那条路上一个字都不会重发。
+   */
+  async findMessageId(
+    message_id: string,
+    folders: readonly string[] = this.config.sent_folders ?? DEFAULT_SENT_FOLDERS,
+  ): Promise<string | undefined> {
+    const normalized = message_id.startsWith('<') ? message_id : `<${message_id}>`
+    const client = this.connectedClient()
+    if (client.search === undefined) return undefined
+    try {
+      await client.connect()
+      try {
+        for (const folder of folders) {
+          let lock: { release: () => void } | undefined
+          try {
+            lock = await client.getMailboxLock(folder)
+            const hits = await client.search?.(
+              { header: { 'message-id': normalized } },
+              { uid: true },
+            )
+            if (Array.isArray(hits) && hits.length > 0) return folder
+          } catch {
+            // 这个文件夹不存在 / 打不开：换下一个，别让一个名字拖垮整轮对账
+          } finally {
+            lock?.release()
+          }
+        }
+      } finally {
+        await client.logout()
+      }
+    } catch (e) {
+      client.close()
+      throw asChannelError(e, 'IMAP 对账搜索失败')
+    }
+    return undefined
   }
 
   /**

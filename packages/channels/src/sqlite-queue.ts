@@ -16,6 +16,8 @@ import type { Clock, InboundEvent, WorkspaceId } from '@agentsws/contracts'
 import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { type Migration, migrate, schemaVersion } from './migrations.js'
+import type { ConfirmationSource, OutboxRecord, OutboxStore } from './outbox.js'
+import { ACCEPTED_RECONCILE_GRACE_MS, MAX_RECONCILE_ATTEMPTS } from './outbox.js'
 import type { DedupeStore, Seen } from './pipeline.js'
 import type { DeadLetterRecord, QueueItem, QueueStore } from './queue.js'
 
@@ -56,6 +58,37 @@ CREATE TABLE IF NOT EXISTS dedupe (
   event TEXT NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS dedupe_by_age ON dedupe (at_ms);
+`,
+  },
+  {
+    // WP55 / 48 §4 L3 #4：出站 outbox。这张表是「能不能发、是不是已经发了、要不要
+    // 对账」的唯一持久权威——SMTP 抛异常不等于这封信没发出去。
+    version: 2,
+    sql: `
+CREATE TABLE IF NOT EXISTS outbox (
+  id                        TEXT PRIMARY KEY NOT NULL,
+  workspace_id              TEXT NOT NULL,
+  idempotency_key           TEXT NOT NULL,
+  approval_item_id          TEXT,
+  thread_ref                TEXT NOT NULL,
+  payload_hash              TEXT NOT NULL,
+  message_id                TEXT NOT NULL,
+  status                    TEXT NOT NULL,
+  attempts                  INTEGER NOT NULL,
+  next_at_ms                INTEGER,
+  reconcile_attempts        INTEGER NOT NULL,
+  reconcile_next_at_ms      INTEGER,
+  reconcile_exhausted_at_ms INTEGER,
+  confirmation_source       TEXT,
+  external_id               TEXT,
+  last_error                TEXT,
+  created_at_ms             INTEGER NOT NULL,
+  updated_at_ms             INTEGER NOT NULL
+) STRICT;
+-- 同一工作区同一幂等键只有一行：这就是「同一审批项只发一次」的落地处。
+CREATE UNIQUE INDEX IF NOT EXISTS outbox_idem ON outbox (workspace_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS outbox_reconcile ON outbox (status, reconcile_next_at_ms);
+CREATE INDEX IF NOT EXISTS outbox_by_ws ON outbox (workspace_id);
 `,
   },
 ]
@@ -324,19 +357,181 @@ export class SqliteDedupeStore implements DedupeStore {
   }
 }
 
+interface OutboxRow {
+  id: string
+  workspace_id: string
+  idempotency_key: string
+  approval_item_id: string | null
+  thread_ref: string
+  payload_hash: string
+  message_id: string
+  status: string
+  attempts: number
+  next_at_ms: number | null
+  reconcile_attempts: number
+  reconcile_next_at_ms: number | null
+  reconcile_exhausted_at_ms: number | null
+  confirmation_source: string | null
+  external_id: string | null
+  last_error: string | null
+  created_at_ms: number
+  updated_at_ms: number
+}
+
+/** WP55 / 48 §4 L3 #4：出站 outbox 的 SQLite 档（接口与内存档一致）。 */
+export class SqliteOutboxStore implements OutboxStore {
+  readonly #db: Db
+  readonly #owned: boolean
+  #closed = false
+
+  constructor(options: SqliteChannelStoreOptions | { database: Db } = {}) {
+    if ('database' in options) {
+      this.#db = options.database
+      this.#owned = false
+    } else {
+      this.#db = openDb(options)
+      this.#owned = true
+    }
+  }
+
+  get database(): Db {
+    return this.#db
+  }
+
+  close(): void {
+    if (this.#closed || !this.#owned) return
+    this.#closed = true
+    this.#db.close()
+  }
+
+  #row(row: OutboxRow): OutboxRecord {
+    return {
+      id: row.id,
+      workspace_id: row.workspace_id,
+      idempotency_key: row.idempotency_key,
+      thread_ref: row.thread_ref,
+      payload_hash: row.payload_hash,
+      message_id: row.message_id,
+      status: row.status as OutboxRecord['status'],
+      attempts: row.attempts,
+      reconcile_attempts: row.reconcile_attempts,
+      created_at_ms: row.created_at_ms,
+      updated_at_ms: row.updated_at_ms,
+      ...(row.approval_item_id === null ? {} : { approval_item_id: row.approval_item_id }),
+      ...(row.next_at_ms === null ? {} : { next_at_ms: row.next_at_ms }),
+      ...(row.reconcile_next_at_ms === null
+        ? {}
+        : { reconcile_next_at_ms: row.reconcile_next_at_ms }),
+      ...(row.reconcile_exhausted_at_ms === null
+        ? {}
+        : { reconcile_exhausted_at_ms: row.reconcile_exhausted_at_ms }),
+      ...(row.confirmation_source === null
+        ? {}
+        : { confirmation_source: row.confirmation_source as ConfirmationSource }),
+      ...(row.external_id === null ? {} : { external_id: row.external_id }),
+      ...(row.last_error === null ? {} : { last_error: row.last_error }),
+    }
+  }
+
+  get(id: string): OutboxRecord | undefined {
+    const row = this.#db.prepare<[string], OutboxRow>('SELECT * FROM outbox WHERE id = ?').get(id)
+    return row === undefined ? undefined : this.#row(row)
+  }
+
+  byIdempotencyKey(workspace_id: WorkspaceId, key: string): OutboxRecord | undefined {
+    const row = this.#db
+      .prepare<[string, string], OutboxRow>(
+        'SELECT * FROM outbox WHERE workspace_id = ? AND idempotency_key = ?',
+      )
+      .get(workspace_id, key)
+    return row === undefined ? undefined : this.#row(row)
+  }
+
+  put(record: OutboxRecord): void {
+    this.#db
+      .prepare(
+        `INSERT INTO outbox (id, workspace_id, idempotency_key, approval_item_id, thread_ref,
+                             payload_hash, message_id, status, attempts, next_at_ms,
+                             reconcile_attempts, reconcile_next_at_ms, reconcile_exhausted_at_ms,
+                             confirmation_source, external_id, last_error,
+                             created_at_ms, updated_at_ms)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+           status                    = excluded.status,
+           attempts                  = excluded.attempts,
+           next_at_ms                = excluded.next_at_ms,
+           reconcile_attempts        = excluded.reconcile_attempts,
+           reconcile_next_at_ms      = excluded.reconcile_next_at_ms,
+           reconcile_exhausted_at_ms = excluded.reconcile_exhausted_at_ms,
+           confirmation_source       = excluded.confirmation_source,
+           external_id               = excluded.external_id,
+           last_error                = excluded.last_error,
+           updated_at_ms             = excluded.updated_at_ms`,
+      )
+      .run(
+        record.id,
+        record.workspace_id,
+        record.idempotency_key,
+        record.approval_item_id ?? null,
+        record.thread_ref,
+        record.payload_hash,
+        record.message_id,
+        record.status,
+        record.attempts,
+        record.next_at_ms ?? null,
+        record.reconcile_attempts,
+        record.reconcile_next_at_ms ?? null,
+        record.reconcile_exhausted_at_ms ?? null,
+        record.confirmation_source ?? null,
+        record.external_id ?? null,
+        record.last_error ?? null,
+        record.created_at_ms,
+        record.updated_at_ms,
+      )
+  }
+
+  dueForReconcile(now_ms: number, limit?: number): OutboxRecord[] {
+    return this.#db
+      .prepare<[number, number, number, number, number], OutboxRow>(
+        `SELECT * FROM outbox
+          WHERE reconcile_exhausted_at_ms IS NULL
+            AND (
+              (status = 'sent_unknown'
+                 AND IFNULL(reconcile_next_at_ms, 0) <= ?
+                 AND reconcile_attempts < ?)
+              OR (status = 'accepted_by_provider' AND updated_at_ms + ? <= ?)
+            )
+          ORDER BY IFNULL(reconcile_next_at_ms, 0), rowid
+          LIMIT ?`,
+      )
+      .all(now_ms, MAX_RECONCILE_ATTEMPTS, ACCEPTED_RECONCILE_GRACE_MS, now_ms, limit ?? -1)
+      .map((r) => this.#row(r))
+  }
+
+  list(workspace_id: WorkspaceId): OutboxRecord[] {
+    return this.#db
+      .prepare<[string], OutboxRow>('SELECT * FROM outbox WHERE workspace_id = ? ORDER BY rowid')
+      .all(workspace_id)
+      .map((r) => this.#row(r))
+  }
+}
+
 /** 一张库、一个连接，同时给队列与去重表用（`apps/server` 的装配走这条）。 */
 export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {}): {
   queue: SqliteQueueStore
   dedupe: SqliteDedupeStore
+  outbox: SqliteOutboxStore
   close(): void
 } {
   const database = openDb(options)
   const queue = new SqliteQueueStore({ database })
   const dedupe = new SqliteDedupeStore({ database })
+  const outbox = new SqliteOutboxStore({ database })
   let closed = false
   return {
     queue,
     dedupe,
+    outbox,
     close(): void {
       if (closed) return
       closed = true

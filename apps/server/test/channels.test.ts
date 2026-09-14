@@ -9,7 +9,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Mailer, OutboundMail } from '@agentsws/channels'
+import type { Mailer, MailSource, OutboundMail, RawEmailMessage } from '@agentsws/channels'
 import type { ApprovalItem, Clock, EventEnvelope, Matter, ObjectRef } from '@agentsws/contracts'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { MemoryHalt } from '@agentsws/kernel'
@@ -60,7 +60,14 @@ function mime(over: {
 /** 记录发出去的信；不连真 SMTP。 */
 class RecordingMailer implements Mailer {
   readonly sent: OutboundMail[] = []
+  /** WP55：下一次 `send` 抛这个错（模拟"正文流完了、250 没回来"）。 */
+  throwNext?: Error
   async send(mail: OutboundMail): Promise<{ message_id: string }> {
+    const boom = this.throwNext
+    if (boom !== undefined) {
+      this.throwNext = undefined
+      throw boom
+    }
     this.sent.push(mail)
     return { message_id: mail.message_id ?? '<sent@shop.example>' }
   }
@@ -122,6 +129,16 @@ function harness(
     batch?: number
     /** WP55：SLA sweep 要把时间往前推，所以这只钟要能动。 */
     clock?: Clock
+    /** WP55：出站对账要能让 SMTP 抛一个歧义错误。 */
+    mailer?: RecordingMailer
+    /** WP55：对账耗尽时出的那张人工卡。 */
+    escalate?: (input: { outbox_id: string; attempts: number }) => void
+    /**
+     * WP55：注入收信端。真 IMAP 桩对任何 SEARCH 都回全部 UID（见
+     * `fake-imap-server.ts`），拿它测对账会假阳性——所以对账那几条自带一个
+     * 说得清"找到 / 找不到"的收信端。
+     */
+    makeSource?: (account: MailAccount) => MailSource
   } = {},
 ): Harness {
   const clock = over.clock ?? baseClock
@@ -133,7 +150,7 @@ function harness(
   const events: EventEnvelope[] = []
   const runs: { matter: Matter; brief: string }[] = []
   const work = createWork({ workspace_id: WS, clock, random: () => 0.5 })
-  const mailer = new RecordingMailer()
+  const mailer = over.mailer ?? new RecordingMailer()
   const accounts = over.accounts ?? [account()]
   const channels = createChannels({
     clock,
@@ -156,6 +173,10 @@ function harness(
       return { run_id: `run_${runs.length}` }
     },
     makeMailer: () => mailer,
+    ...(over.makeSource === undefined
+      ? {}
+      : { makeSource: (a: MailAccount) => (over.makeSource as (x: MailAccount) => MailSource)(a) }),
+    ...(over.escalate === undefined ? {} : { escalateUnresolvedDelivery: over.escalate }),
   })
   assemblies.push(channels)
   return { channels, work, data, halt, mailer, events, runs, dir, accounts }
@@ -686,5 +707,160 @@ describe('Amazon 渠道接线（识别 → 线程打标 → 路由 → 出站硬
       reminders: 0,
       criticals: 0,
     })
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* WP55 / 48 §4 L3 #4：出站 outbox 与对账                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 说得清"找到 / 找不到"的收信端：一封种子信 + 一个可控的 Message-ID 搜索。
+ * 真 IMAP 桩对任何 SEARCH 都回全部 UID，拿它测对账是假阳性。
+ */
+class StubSource implements MailSource {
+  #drained = false
+  /** 让 `findMessageId` 从这一刻起"找得到"。 */
+  evidence?: string
+  constructor(private readonly source: string) {}
+  async fetchSince(): Promise<RawEmailMessage[]> {
+    if (this.#drained) return []
+    this.#drained = true
+    return [{ uid: 1, mailbox: 'INBOX', source: this.source }]
+  }
+  async health(): Promise<{ ok: boolean }> {
+    return { ok: true }
+  }
+  async findMessageId(message_id: string): Promise<string | undefined> {
+    return this.evidence !== undefined && message_id.length > 0 ? this.evidence : undefined
+  }
+}
+
+describe('出站 outbox 与对账（sent_unknown 绝不自动重试）', () => {
+  const draftCard = (thread: string, text = '已经补寄了，单号 SF123。'): ApprovalItem =>
+    ({
+      id: 'apr_obx',
+      kind: 'outbound_draft',
+      payload: { channel: 'email', thread_ref: thread, body: { text } },
+    }) as unknown as ApprovalItem
+
+  it('同一审批项只发一次：第二次 deliver 不再走 SMTP', async () => {
+    const h = harness()
+    await h.channels.poll()
+    const first = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_1',
+    })
+    expect(first).toMatchObject({ status: 'ok' })
+    expect(h.mailer.sent).toHaveLength(1)
+    // 人又按了一遍通过 / 上游重投了一次：outbox 挡住，不发第二封
+    const second = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_1',
+    })
+    expect(second).toMatchObject({ status: 'ok' })
+    expect(h.mailer.sent).toHaveLength(1)
+  })
+
+  it('同一幂等键换了正文 → 拒绝（这不是重试，是调用方的 bug）', async () => {
+    const h = harness()
+    await h.channels.poll()
+    await h.channels.deliver(draftCard('<m-1@mail.example>', 'A'), { idempotencyKey: 'obx_2' })
+    const drift = await h.channels.deliver(draftCard('<m-1@mail.example>', 'B'), {
+      idempotencyKey: 'obx_2',
+    })
+    expect(drift).toMatchObject({ status: 'failed', error: { retryable: false } })
+    expect((drift as { error: { message: string } }).error.message).toContain('payload_drift')
+    expect(h.mailer.sent).toHaveLength(1)
+  })
+
+  it('歧义错误 → sent_unknown：不可重试，且下一次 deliver 也不重发', async () => {
+    const mailer = new RecordingMailer()
+    const h = harness({ mailer })
+    await h.channels.poll()
+    mailer.throwNext = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+    const out = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_3',
+    })
+    expect(out).toMatchObject({ status: 'failed', error: { retryable: false } })
+    expect((out as { error: { message: string } }).error.message).toContain('sent_unknown')
+    expect(mailer.sent).toHaveLength(0)
+
+    // 再来一次：outbox 说「可能已经发出去了」，不发
+    const again = await h.channels.deliver(draftCard('<m-1@mail.example>'), {
+      idempotencyKey: 'obx_3',
+    })
+    expect(again).toMatchObject({ status: 'ok' })
+    expect(mailer.sent).toHaveLength(0)
+
+    const row = (await h.channels.outbox.store.list(WS))[0]
+    expect(row?.status).toBe('sent_unknown')
+    // 事件里只有状态与分类标记，没有正文
+    const changed = h.events.filter((e) => e.type === 'outbound.state_changed')
+    expect(changed.map((e) => (e.payload as { to: string }).to)).toContain('sent_unknown')
+    expect(JSON.stringify(changed)).not.toContain('SF123')
+  })
+
+  it('对账找到证据 → confirmed；找不到就排下一次，一次都不重发', async () => {
+    let at = T0
+    const movable: Clock = { now: () => at, sleep: async () => undefined }
+    const mailer = new RecordingMailer()
+    const source = new StubSource(mime({}))
+    const h = harness({ mailer, clock: movable, makeSource: () => source })
+    await h.channels.poll()
+    mailer.throwNext = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+    await h.channels.deliver(draftCard('<m-1@mail.example>'), { idempotencyKey: 'obx_4' })
+
+    // 还没到对账时刻
+    expect(await h.channels.reconcileDeliveries()).toMatchObject({ scanned: 0 })
+
+    // 到点了，但已发送文件夹里还搜不到 → 排下一次（**不重发**）
+    at = '2026-09-10T00:20:00.000Z'
+    expect(await h.channels.reconcileDeliveries()).toMatchObject({
+      scanned: 1,
+      confirmed: 0,
+      still_unknown: 1,
+      escalated: 0,
+    })
+    expect(mailer.sent).toHaveLength(0)
+
+    // 服务器那边其实收下了：下一轮搜到了 → confirmed
+    source.evidence = 'Sent'
+    at = '2026-09-10T02:00:00.000Z'
+    expect(await h.channels.reconcileDeliveries()).toMatchObject({ scanned: 1, confirmed: 1 })
+    expect((await h.channels.outbox.store.list(WS))[0]?.status).toBe('confirmed')
+    expect(mailer.sent).toHaveLength(0)
+    const reconciled = h.events.filter((e) => e.type === 'outbound.reconciled')
+    expect(reconciled.map((e) => (e.payload as { outcome: string }).outcome)).toEqual([
+      'still_unknown',
+      'confirmed',
+    ])
+  })
+
+  it('退避耗尽 → 一张人工卡，写明"系统不会自动重发"', async () => {
+    let at = T0
+    const movable: Clock = { now: () => at, sleep: async () => undefined }
+    const mailer = new RecordingMailer()
+    const escalated: { outbox_id: string; attempts: number }[] = []
+    const h = harness({
+      mailer,
+      clock: movable,
+      makeSource: () => new StubSource(mime({})),
+      escalate: (input) => {
+        escalated.push(input)
+      },
+    })
+    await h.channels.poll()
+    mailer.throwNext = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+    await h.channels.deliver(draftCard('<m-1@mail.example>'), { idempotencyKey: 'obx_5' })
+
+    // 一路推到退避耗尽
+    for (let hours = 1; hours <= 40; hours += 1) {
+      at = new Date(Date.parse(T0) + hours * 3_600_000).toISOString()
+      const r = await h.channels.reconcileDeliveries()
+      if (r.escalated > 0) break
+    }
+    expect(escalated).toHaveLength(1)
+    expect(escalated[0]?.attempts).toBeGreaterThanOrEqual(6)
+    // 全程一封信都没重发
+    expect(mailer.sent).toHaveLength(0)
   })
 })

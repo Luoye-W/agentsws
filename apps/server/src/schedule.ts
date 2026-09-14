@@ -1099,6 +1099,16 @@ export async function ensureSystemTasks(
         misfire_policy: 'run_once_now',
       }),
     )
+    // ⑯ WP55：出站对账：每分钟。同样补跑——一封 `sent_unknown` 不会自己变清楚。
+    await add(
+      'sched_reconcile_deliveries',
+      systemTask(base, {
+        title: '每分钟对一次还没确认发出去的信',
+        handler: HANDLERS.reconcileDeliveries,
+        trigger: { kind: 'interval', every_ms: RECONCILE_INTERVAL_MS },
+        misfire_policy: 'run_once_now',
+      }),
+    )
   }
   // ⑩ 保留期清理：每天凌晨 03:00（人不在用机器的时候）
   if (options.has.raw === true) {

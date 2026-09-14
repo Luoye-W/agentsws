@@ -27,16 +27,23 @@ import {
   BlobBackedRawStore,
   ChannelInboundPipeline,
   type CredentialSource,
+  classifySendFailure,
   createSqliteChannelStores,
   defaultRoute,
+  domainOf,
   EmailChannelAdapter,
   ImapMailSource,
   type Mailer,
   type MailSource,
   MemoryDedupeStore,
+  MemoryOutboxStore,
   MemoryQueueStore,
   MemoryRawStore,
   mergeThread,
+  messageIdFor,
+  Outbox,
+  type OutboxTransitionEvent,
+  outboxPayloadHash,
   type RawStore,
   type RouteInput,
   type RouteResult,
@@ -53,6 +60,7 @@ import type {
   InboundEvent,
   Iso8601,
   Matter,
+  MaybePromise,
   MessagePart,
   ObjectRef,
   PersonId,
@@ -88,6 +96,16 @@ export const OUTBOUND_HALTED = '出站已急停（AGENTSWS_HALT=outbound 或对�
  * ——原因原样回给上游，由起草那一跳重写正文，而不是在这里静默删改后照发。
  */
 export const AMAZON_OUTBOUND_BLOCKED = 'Amazon 站内信出站守卫拦下了这封回复'
+
+/** 同一幂等键换了正文：调用方的 bug，不该被当成"重试"悄悄发出另一封信。 */
+export const OUTBOX_PAYLOAD_DRIFT =
+  '同一个幂等键上换了正文（outbox payload_drift）：这不是重试，拒绝发送'
+
+/** WP55 / 48 §4 L3 #5：处理过的信搬进哪个文件夹。 */
+export const ARCHIVE_FOLDER = 'agentsws'
+
+/** 单轮对账的扫描上限；落后的下一分钟补上。 */
+const RECONCILE_BATCH = 20
 
 /**
  * WP55：Amazon 渠道细分判定（`classify_sub_channel` 的真实现）。
@@ -136,6 +154,8 @@ interface MailChannel {
   account: MailAccount
   adapter: EmailChannelAdapter
   pipeline: ChannelInboundPipeline
+  /** WP55：对账要直接问这只邮箱「已发送里有没有这封」。 */
+  source: MailSource
 }
 
 export interface ChannelsOptions {
@@ -182,6 +202,12 @@ export interface ChannelsOptions {
   makeMailer?(account: MailAccount, credentials: CredentialSource): Mailer
   /** 每轮最多取多少封。 */
   batch?: number
+  /**
+   * WP55 / 48 §4 L3 #4：对账退避耗尽时出一张人工卡。
+   *
+   * 不装 = 只落事件不出卡（测试与最小装配）。真服务进程里它接到审批总线上。
+   */
+  escalateUnresolvedDelivery?(input: UnresolvedDelivery): MaybePromise<void>
 }
 
 export interface MailPollReport {
@@ -202,6 +228,26 @@ export interface AmazonSlaReport {
   accounted: number
 }
 
+/** WP55：一轮出站对账的结果。 */
+export interface ReconcileReport {
+  scanned: number
+  /** 在已发 / 归档文件夹里找到证据了。 */
+  confirmed: number
+  /** 这一轮没拿到证据，排下一次（**不重发**）。 */
+  still_unknown: number
+  /** 退避次数耗尽 → 出了人工卡。 */
+  escalated: number
+}
+
+/** WP55：对账耗尽时要人看一眼的那一条。 */
+export interface UnresolvedDelivery {
+  outbox_id: string
+  thread_ref: string
+  attempts: number
+  approval_item_id?: string
+  last_error?: string
+}
+
 export interface ChannelsAssembly {
   /** 受控原始材料区（保留期与随主体删除都从这里进）。 */
   raw: RawStore
@@ -213,6 +259,10 @@ export interface ChannelsAssembly {
   refresh(): void
   /** WP55 / 48 §4 L3 #2：Amazon 24h SLA 三档 sweep（调度器每 5 分钟调一次）。 */
   amazonSlaSweep(): Promise<AmazonSlaReport>
+  /** WP55 / 48 §4 L3 #4：出站对账（调度器每分钟调一次）。绝不自动重发。 */
+  reconcileDeliveries(): Promise<ReconcileReport>
+  /** WP55：出站 outbox（工作台与人工卡要能翻这张表）。 */
+  outbox: Outbox
   /**
    * 出站：审批通过的对外草稿真发出去。
    * 回 `undefined` = 这条不归渠道管（不是邮件 / 没有线程 / 没装邮箱），调用方回落到别处。
@@ -285,6 +335,31 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       : new BlobBackedRawStore({ inner: innerRaw, blobs: options.blobs })
   const queue = sqliteStores?.queue ?? new MemoryQueueStore()
   const dedupe = sqliteStores?.dedupe ?? new MemoryDedupeStore()
+  /**
+   * WP55 / 48 §4 L3 #4：出站 outbox。与队列、去重表同一张库（同一个进程里的几个
+   * 邮箱账号共用），因为幂等是按**审批项**算的，不是按邮箱算的。
+   */
+  const outbox = new Outbox({
+    store: sqliteStores?.outbox ?? new MemoryOutboxStore(),
+    workspace_id,
+    onTransition: (e: OutboxTransitionEvent) => {
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'outbound.state_changed',
+        actor: { kind: 'system', id: 'channel:outbox' },
+        subject: { type: 'outbox', id: e.record.id },
+        correlation: { trace_id: `tr_obx_${e.record.id}` },
+        // 只记状态与分类标记：收件人与正文永远不进日志
+        payload: {
+          from: e.from,
+          to: e.to,
+          attempts: e.record.attempts,
+          ...(e.reason === undefined ? {} : { reason: e.reason }),
+        },
+      })
+    },
+  })
 
   let channels: MailChannel[] = []
 
@@ -458,7 +533,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         : { resolveActor: options.resolveActor.bind(options) }),
       onEvent,
     })
-    return { account, adapter, pipeline }
+    return { account, adapter, pipeline, source }
   }
 
   const refresh = (): void => {
@@ -578,22 +653,140 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         }
       }
 
+      // WP55 / 48 §4 L3 #4：**出站 outbox**。
+      //
+      // SMTP 抛异常不等于这封信没发出去，所以发送前先在这张表上落一行：同一审批项
+      // 只发一次（重试、人手再按一遍通过、进程重启后的补偿，都只认这一行）。
+      const to = (record?.participants ?? []).filter((p) => p !== channel.account.address)
+      const prepared = await outbox.prepare({
+        idempotency_key: opts.idempotencyKey,
+        thread_ref: thread,
+        message_id: messageIdFor(opts.idempotencyKey, domainOf(channel.account.address)),
+        // 只哈希**草稿内容**（收件人 + 主题 + 正文）。线程头不进哈希：它是投递管线
+        // 按线程台账现算的，第一封发出去之后 `last_message_id` 就变了——把它算进去
+        // 的话，同一张卡重投一次会被自己误判成 payload_drift。
+        payload_hash: outboxPayloadHash({
+          to,
+          text,
+          ...(typeof body?.subject === 'string' ? { subject: body.subject } : {}),
+        }),
+        approval_item_id: item.id,
+        now: clock.now(),
+      })
+      if (prepared.kind === 'payload_drift') {
+        // 同一幂等键换了正文：这是调用方的 bug，不该被当成"重试"悄悄发出另一封信
+        return {
+          status: 'failed',
+          error: { message: OUTBOX_PAYLOAD_DRIFT, retryable: false },
+        }
+      }
+      if (prepared.kind === 'already') {
+        // 已经发过（或可能已经发出去了）：**不要再发**。回 ok 让调用方别重试——
+        // `sent_unknown` 那一份由对账去找证据，不由这里去赌。
+        return { status: 'ok', execution_id: prepared.record.external_id ?? prepared.record.id }
+      }
+
+      let row = await outbox.beginSend(prepared.record, clock.now())
       try {
         // 正文的出站脱敏在适配器的 `send` 里（`redactOutbound('email_body', …)`）
         const sent = await channel.adapter.send({ external_id: thread }, [{ type: 'text', text }], {
           connect_token: '',
           idempotency_key: opts.idempotencyKey,
         })
+        row = await outbox.markAccepted(row, clock.now(), sent.external_id)
         return { status: 'ok', execution_id: sent.external_id }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
         const code = (e as { code?: string }).code
-        // 收件人门禁拒发不是「网络抖了」，重试没有意义
+        // 三态分类：只有能证明"在被接受之前就失败了"的错误才可重试，其余一律歧义
+        const failure = classifySendFailure(
+          Object.assign(
+            e instanceof Error ? e : new Error(message),
+            code === undefined ? {} : { code },
+          ),
+        )
+        row = await outbox.recordFailure(row, failure, clock.now())
         return {
           status: 'failed',
-          error: { message, retryable: code !== 'authorization_check_failed' },
+          error: {
+            message: `${message}（outbox：${row.status}）`,
+            // `sent_unknown` **绝不自动重试**：重发一封可能已经发出去的信，
+            // 代价是客户收到两封，而两封信是收不回来的。
+            retryable: row.status === 'failed_retryable',
+          },
         }
       }
+    },
+
+    outbox,
+
+    /**
+     * WP55 / 48 §4 L3 #4：出站对账。
+     *
+     * 对一轮 `sent_unknown` 与迟迟没确认的已受理项，去已发 / 归档文件夹里搜
+     * Message-ID 找证据。找到 → `confirmed`；找不到 → 排下一次；退避次数耗尽 →
+     * 出人工卡。**任何一条路上都不重发。**
+     */
+    async reconcileDeliveries(): Promise<ReconcileReport> {
+      const now = clock.now()
+      const report: ReconcileReport = {
+        scanned: 0,
+        confirmed: 0,
+        still_unknown: 0,
+        escalated: 0,
+      }
+      const due = await outbox.dueForReconcile(now, RECONCILE_BATCH)
+      for (const record of due) {
+        report.scanned += 1
+        const channel = await pick(channels, record.thread_ref)
+        let found: { source: 'sent_folder' | 'archive_folder' } | undefined
+        try {
+          const folder = await channel?.source.findMessageId?.(record.message_id)
+          if (folder !== undefined) {
+            found = {
+              source: folder === ARCHIVE_FOLDER ? 'archive_folder' : 'sent_folder',
+            }
+          }
+        } catch {
+          // 搜不动（邮箱连不上 / 服务器不支持 SEARCH）：这一轮当"没找到证据"，
+          // 下一轮再试。**不**当成"没发出去"。
+        }
+        const { record: next, outcome } = await outbox.recordReconcile(record, found, now)
+        if (outcome === 'confirmed') report.confirmed += 1
+        else if (outcome === 'exhausted') report.escalated += 1
+        else report.still_unknown += 1
+
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'outbound.reconciled',
+          actor: { kind: 'system', id: 'channel:outbox' },
+          subject: { type: 'outbox', id: next.id },
+          correlation: { trace_id: `tr_obx_${next.id}` },
+          // 只记结论与计数：收件人、正文、Message-ID 都不进日志
+          payload: {
+            outcome,
+            status: next.status,
+            reconcile_attempts: next.reconcile_attempts,
+            ...(next.confirmation_source === undefined
+              ? {}
+              : { confirmation_source: next.confirmation_source }),
+          },
+        })
+
+        if (outcome === 'exhausted') {
+          await options.escalateUnresolvedDelivery?.({
+            outbox_id: next.id,
+            thread_ref: next.thread_ref,
+            attempts: next.reconcile_attempts,
+            ...(next.approval_item_id === undefined
+              ? {}
+              : { approval_item_id: next.approval_item_id }),
+            ...(next.last_error === undefined ? {} : { last_error: next.last_error }),
+          })
+        }
+      }
+      return report
     },
 
     /**
