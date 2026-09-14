@@ -17,7 +17,12 @@ import { staticPrefixHash } from '@agentsws/model-gateway'
 import { orderTools, runOntologyBrief } from '@agentsws/ontology'
 import type { BoundaryItem } from '@agentsws/support-core'
 import { renderReplyBody } from '@agentsws/support-core'
-import { boundaryGate, describeRun } from './support.js'
+import {
+  boundaryGate,
+  describeRun,
+  marketplaceLinkSlip,
+  rewriteForChannelGuard,
+} from './support.js'
 
 export interface ToolExecution {
   status: 'ok' | 'error' | 'blocked'
@@ -58,9 +63,15 @@ export interface DraftPayload {
   citations: { fact_card_id: string; quote: string }[]
 }
 
-export type CreateDraftFn = (
-  payload: DraftPayload,
-) => Promise<{ approval_item_id: string } | undefined>
+/**
+ * 起草的回执。
+ *
+ * WP55 / 48 §4 L3 #2：`rewrite` = 出站硬闸把这一版**打回重写**了，里面是中文的
+ * 违规原因。拦截不是静默删改后照发——原因要回到写正文的那一跳，让它重写一版。
+ */
+export type CreateDraftResult = { approval_item_id: string } | { rewrite: string } | undefined
+
+export type CreateDraftFn = (payload: DraftPayload) => Promise<CreateDraftResult>
 
 /**
  * 36 §2.2 的选择题卡：第一次遇到一条没答过的业务边界时问一次。
@@ -562,10 +573,16 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           ...(daysSince === undefined ? {} : { daysSinceDelivery: daysSince }),
           ...(staged && refundAmount !== undefined ? { refundAmount } : {}),
         })
+        const to = order?.email ? [order.email] : threadParticipants(threadItem)
+        // WP55：Amazon 站内信上，真模型最常见的那一次违规就是把知识库里的官网
+        // 链接原样抄进正文（1% 的概率落在真账号上就是不可逆的处置）。三个运行时
+        // 共用同一份复现（`marketplaceLinkSlip`），好让硬闸 → 打回重写 → 再提交
+        // 这条路在每个运行时下都真的走一遍。
+        body = marketplaceLinkSlip(body, to)
         const payload: DraftPayload = {
           request: req,
           channel: 'email',
-          to: order?.email ? [order.email] : threadParticipants(threadItem),
+          to,
           subject,
           body,
           child_change_ids: childChangeIds,
@@ -579,8 +596,23 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             : [],
           ...(threadItem === undefined ? {} : { thread_external_id: threadItem.id }),
         }
-        const draft = await options.createDraft(payload)
-        if (draft) {
+        // WP55 / 48 §4 L3 #2：出站硬闸的重写循环。
+        //
+        // 真模型最常见的那一次违规是「把知识库里的官网链接原样抄进正文」——
+        // 桩在 `renderReplyBody` 之后照着写一遍（见下），被闸拦下之后按原因重写。
+        // 只重写一次：修不好的那几类（附件 / 主题）本来就不该进重写循环。
+        let draft = await options.createDraft(payload)
+        if (draft !== undefined && 'rewrite' in draft) {
+          // 出站硬闸把这一版打回了：原因进进度流（人能看见「为什么重写了一次」）
+          sink({
+            type: 'progress',
+            step: 'channel_guard_rewrite',
+            note: draft.rewrite.split('\n')[1] ?? '',
+          })
+          body = rewriteForChannelGuard(body)
+          draft = await options.createDraft({ ...payload, body })
+        }
+        if (draft !== undefined && 'approval_item_id' in draft) {
           sink({
             type: 'proposal.created',
             approval_item_id: draft.approval_item_id,

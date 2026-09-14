@@ -21,7 +21,12 @@ import type {
   ToolExecution,
   ToolExecutor,
 } from '@agentsws/stand-ins'
-import { boundaryGate, contextItemHash, describeRun } from '@agentsws/stand-ins'
+import {
+  boundaryGate,
+  contextItemHash,
+  describeRun,
+  rewriteForChannelGuard,
+} from '@agentsws/stand-ins'
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
 import { failureOf } from './errors.js'
 import { gateToolCall, inferRefs, type SideEffectLookup } from './gate.js'
@@ -418,17 +423,31 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
                 : []
             })
           : []
-        const res = await options.createDraft({
+        const payload = {
           request: effective,
-          channel: 'email',
+          channel: 'email' as const,
           to,
           subject: typeof input.subject === 'string' ? input.subject : 'Re: your message',
           body,
           child_change_ids: [...stagedChangeIds],
           citations,
           ...(threadItem === undefined ? {} : { thread_external_id: threadItem.id }),
-        })
-        if (res === undefined) return { status: 'blocked', reason: 'draft_rejected' }
+        }
+        // WP55 / 48 §4 L3 #2：出站硬闸的重写循环。拦下 = **打回重写**——原因回到
+        // 写正文的这一跳，重写一版再提交给闸判一次；绝不静默删改后照发。
+        // 只重写一次：修不好的那几类（附件 / 主题 / 线程头）本来就不该进重写循环。
+        let res = await options.createDraft(payload)
+        if (res !== undefined && 'rewrite' in res) {
+          sink({
+            type: 'progress',
+            step: 'channel_guard_rewrite',
+            note: res.rewrite.split('\n')[1] ?? '',
+          })
+          res = await options.createDraft({ ...payload, body: rewriteForChannelGuard(body) })
+        }
+        if (res === undefined || !('approval_item_id' in res)) {
+          return { status: 'blocked', reason: 'draft_rejected' }
+        }
         drafted = true
         sink({
           type: 'proposal.created',

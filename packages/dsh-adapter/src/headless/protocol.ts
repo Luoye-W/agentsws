@@ -149,6 +149,11 @@ export interface DraftParams {
 }
 export interface DraftResult extends HostReply {
   approval_item_id?: string
+  /**
+   * WP55 / 48 §4 L3 #2：出站硬闸把这一版打回重写了，里面是中文的违规原因。
+   * 与 `approval_item_id` 互斥——打回意味着这一版**没有**建卡。
+   */
+  rewrite?: string
 }
 
 export type BoundaryInput = Parameters<CreatePolicyQuestionFn>[0]['boundary']

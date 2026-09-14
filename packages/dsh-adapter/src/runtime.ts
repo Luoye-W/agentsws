@@ -24,7 +24,7 @@ import type {
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
-import { assemblePrompt, describeRun, promptHash } from '@agentsws/stand-ins'
+import { assemblePrompt, describeRun, marketplaceLinkSlip, promptHash } from '@agentsws/stand-ins'
 import { createHarness } from './harness.js'
 import { writePreset } from './preset.js'
 import {
@@ -218,12 +218,17 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         body: string
       }): DraftPayload | undefined => {
         const order = scratch.order
+        const to =
+          order?.email !== undefined ? [order.email] : threadParticipants(scratch.threadItem)
         return {
           request: req,
           channel: 'email',
-          to: order?.email !== undefined ? [order.email] : threadParticipants(scratch.threadItem),
+          to,
           subject: args.subject,
-          body: args.body,
+          // WP55 / 48 §4 L3 #2：Amazon 站内信上真模型最常犯的那一次违规（把官网
+          // 链接原样抄进正文）。三个运行时共用同一份复现，硬闸 → 打回重写 →
+          // 再提交这条路在每个运行时下都真的走一遍。
+          body: marketplaceLinkSlip(args.body, to),
           child_change_ids: [...scratch.childChangeIds],
           citations:
             scratch.policySource === undefined

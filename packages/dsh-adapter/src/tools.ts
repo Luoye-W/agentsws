@@ -8,6 +8,7 @@
  */
 import type { ObjectRef, RunRequest } from '@agentsws/contracts'
 import { orderTools } from '@agentsws/ontology'
+import type { CreateDraftResult } from '@agentsws/stand-ins'
 import { isMcpReadTool } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -83,10 +84,7 @@ export interface StageToolHooks {
     callId: string,
     args: { amount: number; currency?: string; reason?: string },
   ): Promise<{ change_id: string } | undefined>
-  draft(
-    callId: string,
-    args: { subject: string; body: string },
-  ): Promise<{ approval_item_id: string } | undefined>
+  draft(callId: string, args: { subject: string; body: string }): Promise<CreateDraftResult>
 }
 
 function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {

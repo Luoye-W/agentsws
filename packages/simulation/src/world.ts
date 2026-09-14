@@ -68,6 +68,7 @@ import {
 } from '@agentsws/runtime-direct'
 import { wallClock } from '@agentsws/schedule'
 import type {
+  CreateDraftResult,
   CreatePolicyQuestionFn,
   DraftPayload,
   MockOpenConnector,
@@ -86,6 +87,14 @@ import {
   MockShopifyCli,
   SyntheticClock,
 } from '@agentsws/stand-ins'
+import {
+  buildAmazonRewriteInstruction,
+  evaluateAmazonOutbound,
+  evaluateAutonomyGates,
+  hasRewritableAmazonViolation,
+  isMarketplaceRelayAddress,
+  summarizeAmazonViolations,
+} from '@agentsws/support-core'
 import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
 import { createWork, type Work } from '@agentsws/work'
@@ -676,7 +685,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   // 用可变闭包打断这个环，装配完成后两侧都指向真实实现。
   const holder: {
     stage?: (i: StageIntent) => Promise<{ change_id: string } | undefined>
-    createDraft?: (p: DraftPayload) => Promise<{ approval_item_id: string } | undefined>
+    createDraft?: (p: DraftPayload) => Promise<CreateDraftResult>
     createPolicyQuestion?: CreatePolicyQuestionFn
     executeTool?: (call: {
       name: string
@@ -2615,6 +2624,59 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     const toEmail = payload.to[0]
     const to = toEmail === undefined ? undefined : customerRefOf(toEmail)
     if (to === undefined) return undefined
+
+    // WP55 / 48 §4 L3 #2：Amazon 站内信的出站硬闸。
+    //
+    // 触发条件是**收件人域**，与任何开关无关。拦下 = 打回重写：原因回给写正文的
+    // 那一跳，由它重写一版再提交——绝不静默删改后照发。
+    let amazonOutbound: { ok: boolean; codes?: string[]; rewrite_instruction?: string } | undefined
+    if (isMarketplaceRelayAddress(toEmail ?? '')) {
+      const verdict = evaluateAmazonOutbound('amazon', {
+        to_address: toEmail ?? '',
+        subject: payload.subject,
+        original_subject: ctx.thread.subject ?? null,
+        body_text: payload.body,
+        is_reply_to_buyer_thread: true,
+      })
+      if (verdict.ok) {
+        amazonOutbound = { ok: true }
+      } else {
+        blocked.push({
+          rule: 'amazon_outbound',
+          at: now(clock),
+          run_id: ctx.run_id,
+          message: summarizeAmazonViolations(verdict.violations),
+        })
+        const rewrite_instruction = buildAmazonRewriteInstruction(verdict.violations)
+        // 能靠重写正文修好的：打回给起草那一跳，它重写一版再提交（**不建卡**——
+        // 这一版根本没成形）。修不掉的（附件 / 主题 / 线程头）落进前置，那张卡
+        // blocked，理由原样写在卡面上，等人处理。
+        if (hasRewritableAmazonViolation(verdict.violations)) {
+          return { rewrite: rewrite_instruction }
+        }
+        amazonOutbound = {
+          ok: false,
+          codes: verdict.violations.map((v) => v.code),
+          rewrite_instruction,
+        }
+      }
+    }
+
+    // WP55 / 48 §4 L3 #3：三道「不自主」的门。**只记录不改状态**——门说不自主，
+    // 这张卡照常建、照常进队列，只是它不能自己发出去。
+    const inboundText = ctx.inbound.parts
+      .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+      .map((part) => part.text)
+      .join('\n')
+    const gates = evaluateAutonomyGates({
+      channel: 'email',
+      // 模拟回路里没有真分类器：`source: 'none'` 让 Tier-2 入站盲扫跑起来，
+      // 这正是它的定位——分类器没说话时的兜底。
+      classification: { source: 'none', risk_level: 'normal' },
+      inbound_text: inboundText,
+      proposed_reply_text: payload.body,
+      draft: { generated_by: 'ai' },
+    })
     const prov = world.provenanceOf(ctx)
     const seen: ObjectRef[] = []
     for (const [type, ids] of Object.entries(prov.seen))
@@ -2670,6 +2732,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         thread_participants: [to.id],
         verified_contacts: [to.id],
         connection_id: 'conn_gmail',
+        ...(amazonOutbound === undefined ? {} : { amazon_outbound: amazonOutbound }),
+        // 门的结论进前置、落一条 `guardrail.gate_decided`（只有门名与结论）
+        gates: gates.results.map((r) => ({
+          gate: r.gate,
+          status: r.status,
+          ruleset_hash: r.ruleset_hash,
+          ...(r.reason === undefined ? {} : { reason: r.reason }),
+          ...(r.evidence === undefined ? {} : { evidence: r.evidence }),
+        })),
       },
     })
     if (item.state === 'blocked') {
