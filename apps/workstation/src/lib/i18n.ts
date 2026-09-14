@@ -1063,6 +1063,91 @@ const zh: Table = {
   'datamap.freshness.cached': '缓存 {n} 分钟',
   'datamap.order': '调用顺序',
   'datamap.order.hint': '这段话与 Agent 看到的那一份是同一处生成的——改了登记表，两边一起变。',
+  // ── WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒 ─────────────────
+  'nav.chat': '聊天沙盒',
+  'chat.title': '聊天沙盒',
+  'chat.subtitle': '左边扮演访客发一句，右边看在线客服会怎么判、怎么答。',
+  'chat.intro':
+    '网站聊天窗本身要等托管档（widget 与公网端点）。在那之前，在这里先把 AI 的判断试一遍：哪些它直接答、哪些它要你定、哪些它转人工。',
+  'chat.unavailable': '这个服务进程没有装在线客服。',
+  'chat.entry.open': '去试一句',
+
+  'chat.visitor.title': '访客这一边',
+  'chat.visitor.why':
+    '这里发出去的消息与真访客走同一条流水线：同一条入站管线、同一套知识与订单只读、同一条审批队列。',
+  'chat.visitor.placeholder': '像访客那样问一句，例如：运费多少？',
+  'chat.visitor.send': '发',
+  'chat.transcript.empty': '还没有消息。发一句试试。',
+
+  'chat.role.visitor': '访客',
+  'chat.role.agent': 'AI 客服',
+  'chat.role.operator': '你（内部指导）',
+  'chat.role.operator.note': '这一句只进 AI 的脑子，不会出现在访客屏幕上。',
+  'chat.role.system': '系统',
+
+  'chat.plan.title': '这一轮的判断',
+  'chat.plan.empty': '发一句之后，这里显示 AI 判成了哪一种、为什么。',
+  'chat.plan.intent': '问的是',
+  'chat.plan.money': '碰到钱没有',
+  'chat.plan.money.why':
+    '退款、赔偿、折扣、补发、改单、改地址都算。聊天里只答不承诺——碰到钱一律出卡或转邮件，由你来定。',
+  'chat.plan.money.yes': '碰到了，已经转给你定',
+  'chat.plan.money.no': '没有',
+  'chat.plan.missing': '还缺',
+  'chat.plan.model': '花模型了吗',
+  'chat.plan.model.why':
+    '判定是词表做的，不花模型；只有「直接答」那一种才叫一次轻模型去写那句话。追问缺料的话术来自职责包，也不花模型。',
+  'chat.plan.model.yes': '叫了一次轻模型',
+  'chat.plan.model.no': '没有，纯规则',
+  'chat.plan.card': '已经出了一张卡等你定',
+  'chat.plan.card.open': '去看',
+  'chat.plan.blocked': '这一轮没答出来：{reason}',
+
+  'chat.action.answer': '直接答',
+  'chat.action.answer.why': '低风险、资料齐：按知识与订单事实答一句，不承诺任何事。',
+  'chat.action.collect_info': '先问清楚',
+  'chat.action.collect_info.why': '这一类缺了关键资料就走不下去（比如查订单没给单号），先问出来。',
+  'chat.action.human_review': '要你定',
+  'chat.action.human_review.why':
+    '碰到钱或高风险：聊天里只安抚、只收集信息，具体怎么办出一张卡给你。',
+  'chat.action.assist': '转人工',
+  'chat.action.assist.why':
+    '访客点名要真人，或 AI 答不了。三分钟没人接会给访客一条提醒，十分钟没人接转邮件跟进。',
+  'chat.action.handoff': 'AI 已停口',
+  'chat.action.handoff.why': '你接管了这条会话（或它已转邮件 / 已关），AI 一句都不会再答。',
+  'chat.action.teach': '你教的',
+
+  'chat.intent.presales_product': '买之前的产品问题',
+  'chat.intent.order_tracking': '订单到哪了',
+  'chat.intent.shipping_delay': '物流慢了 / 卡住了',
+  'chat.intent.return_refund': '退换货与退款',
+  'chat.intent.product_issue': '产品用不了 / 坏了',
+  'chat.intent.warranty_parts': '保修与配件',
+  'chat.intent.human_handoff': '要找真人',
+  'chat.intent.general_support': '还说不清',
+
+  'chat.status.open': '在自动接待',
+  'chat.status.assist_requested': '等人接手',
+  'chat.status.assist_answered': '你教过之后继续自动接待',
+  'chat.status.human_takeover': '你已接管',
+  'chat.status.email_follow_up': '已转邮件跟进',
+  'chat.status.closed': '已关闭',
+
+  'chat.takeover.title': '人工接管',
+  'chat.takeover.why': '打开之后 AI 一句都不答，这条会话归你。关掉它就接着自动接待。',
+  'chat.takeover.on': '开着：AI 已停口',
+  'chat.takeover.off': '关着：AI 在自动接待',
+
+  'chat.teach.title': '教 AI 怎么答',
+  'chat.teach.why':
+    '用中文说这种问题该怎么答。AI 会用访客的语言把它说出去，同时把这条沉淀成知识候选——下次不用再教一遍。你打的这段中文不会出现在访客屏幕上。',
+  'chat.teach.placeholder': '例如：巴西我们发的，走 DHL，大概两周到，运费另算。',
+  'chat.teach.send': '教它',
+  'chat.teach.outcome.sent': '已经用访客的语言说出去了，并存成了知识候选。',
+  'chat.teach.outcome.ai_unavailable': '模型这会儿不可用；你打的这段留着了，回头再试一次。',
+  'chat.teach.outcome.blocked_verbatim_leak':
+    'AI 差点把你这段中文原样发给访客，已经拦下——换个说法再教一次。',
+  'chat.teach.outcome.archived_only': '这条会话已经关了：指导留着，没有对外说话。',
 }
 
 const en: Table = {
@@ -2146,6 +2231,98 @@ const en: Table = {
   'datamap.order': 'Call order',
   'datamap.order.hint':
     'This paragraph and the one the agent sees are generated from the same place — change the registry and both change.',
+
+  // ── WP57 (48 §4 L3 #11): live chat sandbox ───────────────────────
+  'nav.chat': 'Chat sandbox',
+  'chat.title': 'Chat sandbox',
+  'chat.subtitle': 'Play the visitor on the left; watch what live chat decides on the right.',
+  'chat.intro':
+    'The website chat widget ships with the hosted tier (widget script and public endpoints). Until then, try the decisions here: what it answers itself, what it hands to you, what it escalates.',
+  'chat.unavailable': 'This server does not have live chat installed.',
+  'chat.entry.open': 'Try a message',
+
+  'chat.visitor.title': "The visitor's side",
+  'chat.visitor.why':
+    'Messages sent here go down the same pipeline a real visitor would: same inbound pipeline, same read-only knowledge and orders, same approval queue.',
+  'chat.visitor.placeholder': 'Ask like a visitor would, e.g. how much is shipping?',
+  'chat.visitor.send': 'Send',
+  'chat.transcript.empty': 'No messages yet. Send one.',
+
+  'chat.role.visitor': 'Visitor',
+  'chat.role.agent': 'AI support',
+  'chat.role.operator': 'You (internal note)',
+  'chat.role.operator.note': 'This goes into the AI only — the visitor never sees it.',
+  'chat.role.system': 'System',
+
+  'chat.plan.title': "This turn's decision",
+  'chat.plan.empty': 'Send a message and this shows what the AI decided, and why.',
+  'chat.plan.intent': 'Asking about',
+  'chat.plan.money': 'Money involved?',
+  'chat.plan.money.why':
+    'Refunds, compensation, discounts, reshipments, order and address changes all count. Chat answers but never commits — anything touching money becomes a card or an email for you to decide.',
+  'chat.plan.money.yes': 'Yes — handed to you',
+  'chat.plan.money.no': 'No',
+  'chat.plan.missing': 'Still missing',
+  'chat.plan.model': 'Did it call a model?',
+  'chat.plan.model.why':
+    'Classification is a word list, no model. Only "answer it" spends one light model call to write the sentence. Follow-up questions come from the role pack, also free.',
+  'chat.plan.model.yes': 'One light model call',
+  'chat.plan.model.no': 'No — rules only',
+  'chat.plan.card': 'A card is waiting for your decision',
+  'chat.plan.card.open': 'Open',
+  'chat.plan.blocked': 'No answer this turn: {reason}',
+
+  'chat.action.answer': 'Answer it',
+  'chat.action.answer.why':
+    'Low risk and nothing missing: answer from knowledge and order facts, commit to nothing.',
+  'chat.action.collect_info': 'Ask first',
+  'chat.action.collect_info.why':
+    'This kind cannot proceed without the key detail (an order lookup with no order number), so ask for it first.',
+  'chat.action.human_review': 'Your call',
+  'chat.action.human_review.why':
+    'Money or high risk: chat only reassures and collects context; what actually happens comes to you as a card.',
+  'chat.action.assist': 'Escalated',
+  'chat.action.assist.why':
+    'The visitor asked for a person, or the AI could not answer. Three minutes without a reply sends the visitor a progress note; ten minutes moves it to email.',
+  'chat.action.handoff': 'AI stays quiet',
+  'chat.action.handoff.why':
+    'You took this conversation over (or it moved to email / closed). The AI will not say another word.',
+  'chat.action.teach': 'You taught this',
+
+  'chat.intent.presales_product': 'Pre-purchase product question',
+  'chat.intent.order_tracking': 'Where is my order',
+  'chat.intent.shipping_delay': 'Shipping delayed or stuck',
+  'chat.intent.return_refund': 'Returns and refunds',
+  'chat.intent.product_issue': 'Product broken or not working',
+  'chat.intent.warranty_parts': 'Warranty and parts',
+  'chat.intent.human_handoff': 'Wants a person',
+  'chat.intent.general_support': 'Not clear yet',
+
+  'chat.status.open': 'Handled automatically',
+  'chat.status.assist_requested': 'Waiting for someone',
+  'chat.status.assist_answered': 'Back on auto after you taught it',
+  'chat.status.human_takeover': 'You took it over',
+  'chat.status.email_follow_up': 'Moved to email',
+  'chat.status.closed': 'Closed',
+
+  'chat.takeover.title': 'Take over',
+  'chat.takeover.why':
+    'While this is on the AI says nothing and the conversation is yours. Turn it off and it resumes.',
+  'chat.takeover.on': 'On — the AI is quiet',
+  'chat.takeover.off': 'Off — the AI is handling it',
+
+  'chat.teach.title': 'Teach the AI',
+  'chat.teach.why':
+    "Say how this kind of question should be answered. The AI says it in the visitor's language and keeps it as a knowledge candidate, so you only teach it once. What you type never reaches the visitor.",
+  'chat.teach.placeholder': 'e.g. We do ship to Brazil, via DHL, about two weeks, shipping extra.',
+  'chat.teach.send': 'Teach it',
+  'chat.teach.outcome.sent': "Said in the visitor's language and saved as a knowledge candidate.",
+  'chat.teach.outcome.ai_unavailable':
+    'The model is unavailable right now; what you typed was kept — try again.',
+  'chat.teach.outcome.blocked_verbatim_leak':
+    'The draft quoted your note back at the visitor, so it was refused — reword and teach again.',
+  'chat.teach.outcome.archived_only':
+    'This conversation is closed: the note was kept, nothing was said.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

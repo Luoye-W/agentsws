@@ -81,6 +81,8 @@ import {
   CHAT_ASSIST_TIMEOUT_HANDLER,
   type ChatLane,
   chatAssistTask,
+  chatTurnView,
+  chatView,
   createChatLane,
 } from './chat.js'
 import { connectBaseUrl } from './connect-url.js'
@@ -1550,6 +1552,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
     secretary: secretary.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
+    /*
+     * WP57：在线客服面。`ChatPort` 只做投影——判定、卡片、模型都在 `./chat.ts` 里，
+     * 网关这一层不写业务（28 §2）。
+     *
+     * 端出去的会话**不带 `visitor_id`**：那是受控原始材料区的加密主体键
+     * （21 §4 随主体删除按它走），没有任何界面需要它。
+     */
+    chat: {
+      openSandbox: async (person_id) => chatView(await (chat as ChatLane).openSandbox(person_id)),
+      sessions: async (filter) =>
+        (await (chat as ChatLane).sessions(filter)).map((s) => chatView(s)),
+      session: async (id) => {
+        const found = await (chat as ChatLane).session(id)
+        return found === undefined ? undefined : chatView(found)
+      },
+      messages: async (session_id, limit) =>
+        (await (chat as ChatLane).messages(session_id, limit)).map((m) => ({
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          at: m.at,
+          ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
+        })),
+      send: async (input) => chatTurnView(await (chat as ChatLane).receive(input)),
+      advance: async (session_id) => chatTurnView(await (chat as ChatLane).advanceTurn(session_id)),
+      setTakeover: async (id, on) => chatView(await (chat as ChatLane).setTakeover(id, on)),
+      teach: async (input) => {
+        const out = await (chat as ChatLane).teach({ ...input, taught_by: input.taught_by })
+        return {
+          outcome: out.outcome,
+          sediment: out.sediment,
+          ...(out.reply === undefined ? {} : { reply: out.reply }),
+        }
+      },
+      touch: async (session_id) => {
+        await (chat as ChatLane).touch(session_id)
+      },
+      subscribe: (session_id, listener) => {
+        const sub = (chat as ChatLane).stream.subscribe(session_id, (frame) =>
+          listener(frame as unknown as Record<string, unknown> & { type: string }),
+        )
+        return () => sub.stop()
+      },
+    },
     ask: createAskPort({
       models,
       work,

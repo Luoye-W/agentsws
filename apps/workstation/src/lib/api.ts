@@ -2449,3 +2449,83 @@ export const getPositionOntology = (
   api<TailoredOntology>(`/v1/positions/${encodeURIComponent(position)}/ontology`, {
     ...(assignment === undefined ? {} : { assignment }),
   })
+
+/* ------------------------------------------------------------------ */
+/* WP57（48 §4 L3 #11）：网站在线客服                                     */
+/* ------------------------------------------------------------------ */
+
+export interface ChatSessionView {
+  id: string
+  source: string
+  external_session_id: string
+  visitor_display?: string
+  status: string
+  takeover: boolean
+  thread_external_id: string
+  created_at: string
+  updated_at: string
+  assist_requested_at?: string
+}
+
+export interface ChatMessageView {
+  id: string
+  role: string
+  text: string
+  at: string
+  plan_action?: string
+}
+
+export interface ChatPlanView {
+  action: string
+  intent: string
+  risk: string
+  can_auto_reply: boolean
+  money_touch: boolean
+  missing_info: string[]
+  summary: string
+  next_question: string
+}
+
+export interface ChatTurnView {
+  session_id: string
+  plan?: ChatPlanView
+  reply?: string
+  approval_item_id?: string
+  used_model: boolean
+  blocked?: string
+}
+
+export const openChatSession = (): Promise<ChatSessionView> =>
+  api<ChatSessionView>('/v1/chat/sessions', { method: 'POST' })
+
+export const getChatMessages = (
+  id: string,
+): Promise<{ session: ChatSessionView; messages: ChatMessageView[] }> =>
+  api(`/v1/chat/sessions/${encodeURIComponent(id)}/messages`)
+
+export const sendChatMessage = (id: string, text: string): Promise<ChatTurnView> =>
+  api<ChatTurnView>(`/v1/chat/sessions/${encodeURIComponent(id)}/messages`, {
+    method: 'POST',
+    body: { text },
+  })
+
+/**
+ * 静默窗口到了：让服务端把这一轮判完。
+ *
+ * 沙盒页自己点这一下，不等服务进程里那个真定时器——不然每发一句都要干等 2 秒
+ * 才看得到判定，商家试不下去。真访客那一路仍然由定时器驱动。
+ */
+export const advanceChatTurn = (id: string): Promise<ChatTurnView> =>
+  api<ChatTurnView>(`/v1/chat/sessions/${encodeURIComponent(id)}/advance`, { method: 'POST' })
+
+export const setChatTakeover = (id: string, on: boolean): Promise<ChatSessionView> =>
+  api<ChatSessionView>(`/v1/chat/sessions/${encodeURIComponent(id)}/takeover`, {
+    method: 'PUT',
+    body: { on },
+  })
+
+export const teachChatSession = (
+  id: string,
+  input: { instruction: string; scope: 'single_reply' | 'similar_cases' | 'global_rule' },
+): Promise<{ outcome: string; reply?: string; sediment: string }> =>
+  api(`/v1/chat/sessions/${encodeURIComponent(id)}/teach`, { method: 'POST', body: input })

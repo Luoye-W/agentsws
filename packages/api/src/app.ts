@@ -17,6 +17,8 @@ import { assignmentRoutes } from './routes/assignments.js'
 import { backupRoutes } from './routes/backup.js'
 import { catalogRoutes } from './routes/catalog.js'
 import { changeRoutes } from './routes/changes.js'
+// WP57（48 §4 L3 #11）：网站在线客服的本地 API（公开访客端点属于托管档）
+import { chatRoutes } from './routes/chat.js'
 import { connectionRoutes } from './routes/connections.js'
 import { eventRoutes } from './routes/events.js'
 import { haltRoutes } from './routes/halt.js'
@@ -117,6 +119,8 @@ export function collectRoutes(): Route[] {
     // 必须排在 meetingRoutes 之后（`/v1/meetings/:id/brief` 与 `/v1/meetings/:id` 是两条路径，
     // 顺序无所谓，但放最后与"秘书是加分项"这件事对得上）
     ...secretaryRoutes(),
+    // WP57：在线客服。`/v1/chat/*` 是独立前缀，与已有路径都不撞
+    ...chatRoutes(),
   ]
 }
 

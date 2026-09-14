@@ -900,3 +900,80 @@ export function chatAssistTask(base: {
     misfire_policy: 'skip',
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 网关投影（28 §2「网关里不写业务」：这里只做字段裁剪）                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 会话 → API 上的样子。
+ *
+ * **不端 `visitor_id`**：它是受控原始材料区的加密主体键（21 §4 随主体删除按它走），
+ * 没有任何界面需要它，端出去只会让它出现在浏览器缓存与日志里。
+ */
+export function chatView(s: ChatSession): {
+  id: string
+  source: string
+  external_session_id: string
+  visitor_display?: string
+  status: string
+  takeover: boolean
+  thread_external_id: string
+  created_at: string
+  updated_at: string
+  assist_requested_at?: string
+} {
+  return {
+    id: s.id,
+    source: s.source,
+    external_session_id: s.external_session_id,
+    status: s.status,
+    takeover: s.takeover,
+    thread_external_id: s.thread_external_id,
+    created_at: s.created_at,
+    updated_at: s.updated_at,
+    ...(s.visitor_display === undefined ? {} : { visitor_display: s.visitor_display }),
+    ...(s.assist_requested_at === undefined ? {} : { assist_requested_at: s.assist_requested_at }),
+  }
+}
+
+/** 一轮的结果 → 沙盒页要看的那几格。 */
+export function chatTurnView(out: ChatTurnOutcome): {
+  session_id: string
+  plan?: {
+    action: string
+    intent: string
+    risk: string
+    can_auto_reply: boolean
+    money_touch: boolean
+    missing_info: string[]
+    summary: string
+    next_question: string
+  }
+  reply?: string
+  approval_item_id?: string
+  used_model: boolean
+  blocked?: string
+} {
+  return {
+    session_id: out.session_id,
+    used_model: out.used_model,
+    ...(out.plan === undefined
+      ? {}
+      : {
+          plan: {
+            action: out.plan.action,
+            intent: out.plan.intent,
+            risk: out.plan.risk,
+            can_auto_reply: out.plan.can_auto_reply,
+            money_touch: out.plan.money_touch,
+            missing_info: out.plan.missing_info,
+            summary: out.plan.summary,
+            next_question: out.plan.next_question,
+          },
+        }),
+    ...(out.reply === undefined ? {} : { reply: out.reply }),
+    ...(out.approval_item_id === undefined ? {} : { approval_item_id: out.approval_item_id }),
+    ...(out.blocked === undefined ? {} : { blocked: out.blocked }),
+  }
+}

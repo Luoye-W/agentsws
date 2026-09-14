@@ -58,6 +58,31 @@ function NoRangeNotice({ id, isOwner }: { id: string; isOwner: boolean }): React
   )
 }
 
+/**
+ * WP57（48 §3 L1）：网站在线客服这条岗位的面板入口。
+ *
+ * 它与别的面板块不是一类东西——别的块是数字，这一块是一扇门：在线客服的产出
+ * 不在图表里，在对话里。所以它只出现在 `dtc.live-chat` 上，而且排在最前面。
+ */
+function ChatSandboxEntry(): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <Card data-testid="chat-sandbox-entry">
+      <CardHeader>
+        <CardTitle className="text-sm">{t('chat.title')}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
+        <p>{t('chat.subtitle')}</p>
+        <div>
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/chat">{t('chat.entry.open')}</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function ViewTab({ id }: { id: string }): React.ReactNode {
   const { t } = useApp()
   const [range, setRange] = useState<RangeName>('yesterday')
@@ -69,11 +94,14 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
   const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const here = mine.data?.positions.find((p) => p.position_id === id)
   const isOwner = (mine.data?.positions ?? []).some((p) => p.role_id === 'common.owner')
+  const isLiveChat = here?.role_id === 'dtc.live-chat'
   if (view.isPending) return <Skeleton className="h-64 w-full" />
   if (here !== undefined && here.ranges.length === 0)
     return <NoRangeNotice id={id} isOwner={isOwner} />
   return (
     <div className="flex flex-col gap-6">
+      {/* WP57：在线客服的入口排在最前——它的产出在对话里，不在数字块里 */}
+      {isLiveChat ? <ChatSandboxEntry /> : null}
       <div className="flex items-center gap-1">
         {RANGES.map((r) => (
           <Button

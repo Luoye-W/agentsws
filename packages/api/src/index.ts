@@ -91,6 +91,17 @@ export {
   recordCatalogNote,
   triggerKeyOf,
 } from './routes/catalog.js'
+// WP57（48 §4 L3 #11）：网站在线客服的本地 API
+export {
+  CHAT_SSE_HEARTBEAT_MS,
+  type ChatFrame,
+  type ChatMessageView,
+  type ChatPort,
+  type ChatSessionView,
+  type ChatTurnView,
+  chatRoutes,
+  sseResponse,
+} from './routes/chat.js'
 export type {
   BeginConnectResult,
   ConnectionOwnership,
