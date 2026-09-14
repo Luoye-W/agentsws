@@ -103,6 +103,13 @@ export interface ChannelsOptions {
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /** 06 §2.4 路由器；缺省按渠道映射（邮件 → `dtc.aftersales`）。 */
   route?(input: RouteInput): RouteResult | undefined
+  /**
+   * WP53：发件人 → 线程台账里的那条联系人（31 §3.3）。真环境接的是
+   * `records.ts` 的 `contactOf`，所以入站解析出来的 ref 与运行时里工具带回来的
+   * 是**同一条**记录。不给就是老行为：`event.actor.resolved` 永远为空，
+   * 事项上没有联系人可钉，那次运行也就建不出回信草稿卡。
+   */
+  resolveActor?(external_id: string): ObjectRef | undefined
   /** 测试注入：收信端。缺省真 IMAP（`imapflow`）。 */
   makeSource?(account: MailAccount, credentials: CredentialSource): MailSource
   /** 测试注入：发信端。缺省真 SMTP（`nodemailer`）。 */
@@ -198,16 +205,33 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
     const thread = event.thread?.external_id
     if (work === undefined || thread === undefined) return undefined
     const ref = threadRef(thread)
+    /**
+     * WP53：来信人也钉在事项上。
+     *
+     * 收件人门禁（31 §3.3）要的是"这次运行读过这个联系人"——运行时只认注入进
+     * ContextItem 的那几条 pinned。09-14 真店验收里草稿卡建不出来，就差这一条：
+     * 线程钉上了，写信的人没钉上。
+     */
+    const actor = event.actor?.resolved
     const existing = work
       .listMatters({ kind: 'conversation' })
       .find((m) => m.context.pinned.some((p) => p.type === ref.type && p.id === ref.id))
-    if (existing !== undefined) return existing
+    if (existing !== undefined) {
+      if (
+        actor !== undefined &&
+        !existing.context.pinned.some((p) => p.type === actor.type && p.id === actor.id)
+      ) {
+        // 老事项是 WP53 之前开的（只钉了线程）：补钉一次，下一次运行就认得出收件人
+        return work.pin(existing.id, actor)
+      }
+      return existing
+    }
     const position = options.position?.()
     const who = event.actor?.display ?? event.actor?.external_id ?? '客户'
     return work.createMatter({
       kind: 'conversation',
       title: `与 ${who} 的往来`,
-      pinned: [ref],
+      pinned: actor === undefined ? [ref] : [ref, actor],
       ...(position === undefined ? {} : { position_id: position.assignment_id }),
     })
   }
@@ -305,6 +329,10 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       queue,
       dedupe,
       route: (input) => options.route?.(input) ?? defaultRoute(input),
+      // WP53：发件人解析进管线；解析结果就是事项上要钉的那条联系人
+      ...(options.resolveActor === undefined
+        ? {}
+        : { resolveActor: options.resolveActor.bind(options) }),
       onEvent,
     })
     return { account, adapter, pipeline }

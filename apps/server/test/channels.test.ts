@@ -10,7 +10,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Mailer, OutboundMail } from '@agentsws/channels'
-import type { ApprovalItem, Clock, EventEnvelope, Matter } from '@agentsws/contracts'
+import type { ApprovalItem, Clock, EventEnvelope, Matter, ObjectRef } from '@agentsws/contracts'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { MemoryHalt } from '@agentsws/kernel'
 import { createWork, type Work } from '@agentsws/work'
@@ -36,6 +36,8 @@ function mime(over: {
   message_id?: string
   subject?: string
   text?: string
+  /** 同一条线程的后续来信（`threadExternalId` 认这一格）。 */
+  in_reply_to?: string
 }): string {
   return [
     `From: ${over.from ?? 'ann@customer.com'}`,
@@ -43,6 +45,9 @@ function mime(over: {
     `Subject: ${over.subject ?? 'Where is order #1042?'}`,
     'Date: Wed, 09 Sep 2026 07:55:00 +0000',
     `Message-ID: ${over.message_id ?? '<m-1@mail.example>'}`,
+    ...(over.in_reply_to === undefined
+      ? []
+      : [`In-Reply-To: ${over.in_reply_to}`, `References: ${over.in_reply_to}`]),
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
     '',
@@ -108,7 +113,14 @@ interface Harness {
   accounts: MailAccount[]
 }
 
-function harness(over: { accounts?: MailAccount[]; cipher?: boolean } = {}): Harness {
+function harness(
+  over: {
+    accounts?: MailAccount[]
+    cipher?: boolean
+    resolveActor?: (external_id: string) => ObjectRef | undefined
+    batch?: number
+  } = {},
+): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'agentsws-channels-'))
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
   const data = createDataStore({ dbPath: join(dir, 'data.db'), clock, collections: [] })
@@ -133,6 +145,8 @@ function harness(over: { accounts?: MailAccount[]; cipher?: boolean } = {}): Har
     credentials: { password: () => PASS },
     work,
     position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.aftersales' }),
+    ...(over.resolveActor === undefined ? {} : { resolveActor: over.resolveActor }),
+    ...(over.batch === undefined ? {} : { batch: over.batch }),
     startRun: (input) => {
       runs.push({ matter: input.matter, brief: input.brief })
       return { run_id: `run_${runs.length}` }
@@ -166,6 +180,73 @@ describe('IMAP 轮询 → 入站管线 → 岗位事项 → 起 Run（39 待办 
     expect(JSON.stringify(h.events)).not.toContain('abcdefghijklmnop')
     // 口令一个字节都不进事件
     expect(JSON.stringify(h.events)).not.toContain(PASS)
+  })
+
+  it('WP53：来信人解析成联系人并钉在事项上（31 §3.3 的收件人从这里来）', async () => {
+    const asked: string[] = []
+    const contact: ObjectRef = { type: 'contact', id: 'cnt_ann' }
+    const h = harness({
+      resolveActor: (email) => {
+        asked.push(email)
+        return contact
+      },
+    })
+    await h.channels.poll()
+    expect(asked).toEqual(['ann@customer.com'])
+    const matter = h.work.listMatters({ kind: 'conversation' })[0]
+    // 线程与来信人**都**钉上了：运行时的 ContextItem 注入靠 pinned，
+    // 收件人门禁（31 §3.3）又只认"这次运行读过的"——少钉一条就永远建不出草稿卡
+    expect(matter?.context.pinned).toEqual([{ type: 'thread', id: expect.any(String) }, contact])
+  })
+
+  it('WP53：老事项（只钉了线程）下一封信来时补钉一次联系人，不另开事项', async () => {
+    const contact: ObjectRef = { type: 'contact', id: 'cnt_ann' }
+    // 同一个人、同一个主题 = 同一条线程；第一封认不出来信人，第二封认得出
+    const two = await startFakeImapServer({
+      user: USER,
+      pass: PASS,
+      messages: [
+        { uid: 1, source: mime({ message_id: '<t-1@mail.example>' }) },
+        {
+          uid: 2,
+          source: mime({
+            message_id: '<t-2@mail.example>',
+            in_reply_to: '<t-1@mail.example>',
+            text: '还没到，催一下',
+          }),
+        },
+      ],
+    })
+    cleanup.push(() => {
+      void two.close()
+    })
+    let resolves = false
+    const h = harness({
+      accounts: [
+        account({
+          imap: {
+            host: '127.0.0.1',
+            port: two.port,
+            secure: false,
+            user: USER,
+            connection_id: 'conn_mail_1',
+          },
+        }),
+      ],
+      resolveActor: () => (resolves ? contact : undefined),
+      // 一轮只拉一封，好让第一封落成"只钉了线程"的老事项
+      batch: 1,
+    })
+    await h.channels.poll()
+    const first = h.work.listMatters({ kind: 'conversation' })[0]
+    expect(first?.context.pinned).toHaveLength(1)
+
+    resolves = true
+    await h.channels.poll()
+    const matters = h.work.listMatters({ kind: 'conversation' })
+    // 还是那一条事项，只是补钉了来信人
+    expect(matters).toHaveLength(1)
+    expect(matters[0]?.context.pinned).toEqual([first?.context.pinned[0], contact])
   })
 
   it('同一封信再拉一次不重复出事项（去重 24h 窗口）', async () => {

@@ -25,6 +25,7 @@ import type {
 } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConnectLike } from '../src/connections.js'
+import { createServer } from '../src/index.js'
 import {
   bareToolName,
   contactIdOf,
@@ -560,5 +561,51 @@ describe('record 与 label', () => {
     // 拉不到就回 undefined（不编造）
     const other = setup({ connected: false })
     expect(await other.source.record?.({ type: 'order', id: 'o_missing' })).toBeUndefined()
+  })
+})
+
+// ── 服务进程装配（交付二）─────────────────────────────────────────────
+
+describe('真环境自动装上记录源（WP53 交付二）', () => {
+  it('一次事项运行里的工具调用不再是 no_tool_executor', async () => {
+    const server = await createServer({
+      quiet: true,
+      clock: { now: () => T0 },
+      random: () => 0.5,
+      env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com' },
+    })
+    try {
+      const matter = server.work.createMatter({
+        kind: 'conversation',
+        title: '与客户的往来',
+        // 钉一张订单：运行时会把它注进上下文，运行时里的工具循环就会去查它
+        pinned: [{ type: 'order', id: 'ord_1001' }],
+      })
+      await server.work.say(matter.id, {
+        person_id: server.bootstrap.person.id,
+        assignment_id: server.bootstrap.ownerAssignment.id,
+        text: '客户问订单 #1001 什么时候到',
+      })
+
+      const events: EventEnvelope[] = []
+      for await (const e of server.kernel.eventLog.read({
+        workspace_id: server.bootstrap.workspace.id,
+        limit: 2000,
+      })) {
+        events.push(e)
+      }
+      const results = events.filter((e) => e.type === 'tool.result')
+      expect(results.length).toBeGreaterThan(0)
+      // 09-14 真店验收里就是这一句
+      expect(
+        results.some((e) => (e.payload as { reason?: string }).reason === 'no_tool_executor'),
+      ).toBe(false)
+      // 记录源真的接上了：没连 Shopify，它说的是"没连"，不是"没有执行器"
+      const executed = events.filter((e) => e.type === 'tool.executed')
+      expect(executed.length).toBeGreaterThan(0)
+      expect(executed[0]?.payload).toMatchObject({ status: 'error', reason: 'not_connected' })
+    } finally {
+      await server.close()
+    }
   })
 })

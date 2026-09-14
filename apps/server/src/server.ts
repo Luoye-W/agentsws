@@ -99,6 +99,7 @@ import {
   type ReconcileGuard,
   type ReconcileGuardOptions,
 } from './reconcile.js'
+import { createConnectRecordSource } from './records.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
@@ -784,6 +785,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : { refreshIntervalMs: options.liveDataIntervalMs }),
     })
   }
+  /**
+   * WP53：真环境的事项记录源。
+   *
+   * 09-14 真店验收撞上的那个洞：`options.records` 只有 `agentsws demo` 会传（接的是
+   * 合成世界），真环境是空的——于是模型调 `get_order` 回 `no_tool_executor`，
+   * `contactOf` 也拿不到，一封客户来信走完运行时什么卡都建不出来。这里把真源接上：
+   * 订单 / 商品经连接器的只读 Action，政策经知识层，联系人进线程台账。
+   *
+   * demo 与测试传了 `records` 就原样用那一份，一行不变。
+   */
+  let workRef: Work | undefined
+  const records: MatterRecordSource =
+    options.records ??
+    createConnectRecordSource({
+      connections,
+      connect: connections.connect,
+      clock,
+      workspace_id: workspace.id,
+      knowledge: knowledge.retrieval,
+      roles,
+      // 运行时装在工作模型之前（两者互相需要），所以这里收的是取值函数
+      work: () => workRef,
+      appendEvent,
+      ...(liveData === undefined ? {} : { liveData }),
+    })
+
   const workData: WorkstationDataSource =
     liveData ?? connections.wrapDataSource(mount?.data ?? emptyDataSource())
   // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
@@ -841,7 +868,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   call: (name: string, input: Record<string, unknown>) => devMcp.call(name, input),
                 },
               }),
-          ...(options.records === undefined ? {} : { source: options.records }),
+          source: records,
         })
   const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -856,6 +883,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     emit: appendEvent,
   })
   runtime?.bind(work)
+  // 记录源要从工作模型里认线程（`record({ type: 'thread' })`）；到这一步才有得认
+  workRef = work
 
   // 37 §4：会议内核。ASR 走同一个模型网关（没装 ASR provider 时管线出系统卡，不炸）；
   // 产出的认领卡进同一条审批队列（14 §1），挂在本人的岗位下，所以装在 txn 与 Assignment 之后。
@@ -902,6 +931,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     accounts: () => connections.mailAccounts(),
     credentials: connections.credentialSource(),
     work,
+    // WP53 / 31 §3.3：发件人解析成线程台账里的那条联系人，并钉在事项上——
+    // 没有这一步，运行时里的"这次读过谁"就没有收件人，回信草稿卡永远建不出来
+    ...(records.contactOf === undefined
+      ? {}
+      : { resolveActor: (email: string) => records.contactOf?.(email) }),
     // 入站事项挂谁名下：本人现在持有的第一条岗位（v1 单人单工作区）。
     // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
     position: () => {
