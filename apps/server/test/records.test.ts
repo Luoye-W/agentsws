@@ -319,7 +319,7 @@ describe('令牌短命：现签、只含这一个 Action、用完即吊销', () 
     })
     expect(executes[1]).toMatchObject({
       action_id: 'shopify_admin.get_order',
-      input: { order_id: 'gid://shopify/Order/1001' },
+      input: { id: 'gid://shopify/Order/1001' },
     })
     expect(connect.steps.map((s) => s.kind)).toEqual([
       'issue',
@@ -353,7 +353,7 @@ describe('令牌短命：现签、只含这一个 Action、用完即吊销', () 
     const { source, connect } = setup()
     await call(source, 'get_order', { order_id: 'o_1', bogus: 'drop me' })
     expect(connect.steps.find((s) => s.kind === 'execute')).toMatchObject({
-      input: { order_id: 'o_1' },
+      input: { id: 'o_1' },
     })
     await call(source, 'list_orders', { limit: 999, query: 'status:open' })
     const last = [...connect.steps].reverse().find((s) => s.kind === 'execute')

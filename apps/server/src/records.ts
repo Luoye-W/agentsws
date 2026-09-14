@@ -539,7 +539,7 @@ export function createConnectRecordSource(
     if (shop === undefined) return undefined
     const action = await findAction(shop.service, 'get_order')
     if (action === undefined) return undefined
-    const payload = await runAction(shop, action, { order_id })
+    const payload = await runAction(shop, action, { id: order_id })
     const row = orderRowOf(payload)
     return row === undefined ? undefined : orderRecordOf(row, 'USD')
   }
@@ -584,6 +584,12 @@ export function createConnectRecordSource(
           layer: h.layer,
           ...(h.as_of === undefined ? {} : { as_of: h.as_of }),
         })),
+        // 真店实测（09-14）：知识库是空的时模型会换十个词反复查，把工具预算烧光。明说没有。
+        ...(hits.length === 0
+          ? {
+              note: '知识库里没有与这个问题相关的条目。不要换关键词重试；按"政策未知"处理，把要确认的点交给同事。',
+            }
+          : {}),
       },
       provenance: hits.map((h) => ({ type: 'fact_card', id: h.fact_card_id }) satisfies ObjectRef),
     }
@@ -593,12 +599,12 @@ export function createConnectRecordSource(
   const inputFor = (bare: string, input: Record<string, unknown>): Record<string, unknown> => {
     const query = stringOf(input.query)
     switch (bare) {
+      // 上游（OpenConnector shopify_admin）的 get_order / get_product 只认 `{ id: gid }`——
+      // 09-14 对着容器源码 `s.actionInput({ id: gid }, ["id"])` 核过；传 order_id 会被 schema 顶回。
       case 'get_order':
-        return {
-          order_id: stringOf(input.order_id ?? input.id ?? input.name ?? input.order_name) ?? '',
-        }
+        return { id: stringOf(input.order_id ?? input.id ?? input.name ?? input.order_name) ?? '' }
       case 'get_product':
-        return { product_id: stringOf(input.product_id ?? input.id ?? input.handle) ?? '' }
+        return { id: stringOf(input.product_id ?? input.id ?? input.handle) ?? '' }
       default:
         return {
           first: Math.min(
@@ -635,7 +641,7 @@ export function createConnectRecordSource(
         if (hit === undefined) {
           return { status: 'error', reason: `not_found：店铺后台里没有订单 #${m[1]}。` }
         }
-        effectiveInput = { order_id: hit.id }
+        effectiveInput = { id: hit.id }
       }
     }
     // get_product 拿到的是关键词而不是 id：按 list_products 查
