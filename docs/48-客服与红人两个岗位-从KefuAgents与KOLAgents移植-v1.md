@@ -5,6 +5,7 @@
 | 状态 | **v2 方案稿，等 Luoye 拍板 L1–L8**；v1 的 K1–K8 已按 09-14 的新方向重写（K2 / K3 / K4 的本地部分保留，K5 / K6 整体推翻） |
 | 新方向（09-14 Luoye 定） | **KefuAgents 与 KOLAgents 两个 SaaS 不再长期维护（不是立刻断）。以 agentsws 为核心，把两个 SaaS 的"线上部分"重建为 agentsws 的增值部分。** 于是不再有"本地 ↔ 旧 SaaS 同步 / 交接"，只有"agentsws 本地 ↔ agentsws 托管"这一种关系 |
 | 职责拆法（09-14 Luoye 定） | 客服不按售前 / 售后拆，拆成**网站客服、网站在线客服（实时聊天）、Amazon 客服**三条 |
+| 实现进度 | **L1 / L2 由 WP54 实现**（三条职责 + 岗位模板 + 垂直包参数化 + 公司档案「你卖的是」），落点逐条见 §3 末的表；§7 L7 第一条里「岗位列表加客服三条」与「公司档案加你卖的是」两处界面已落地。L3 的其余条目、L4–L8 未动 |
 | 输入 | 两份只读调研（KefuAgent 主仓 + Shopify 应用 + Flutter；KOLAgents 主仓，插件仓在未挂载外置盘，§1 是浓缩）、41 §2 数据三档（托管档）、36 / WP36（桌面壳"连接公司服务器"远程模式已落地）、20（导出 / 导入 / Join）、11 §4、33、04 / 27、19、46 |
 
 ## 0. 一句话
@@ -91,6 +92,26 @@
 - 46 公司档案加"你卖的是：实物商品 / 虚拟产品与服务"；`support-core` 按垂直包参数化，代码里禁止 `if (vertical === 'digital')`，parity guard 照搬。
 - 知识条目加 `stage: both | presales | postsales`；网站客服按意图判定当前 stage 过滤；邮件是混合渠道不硬过滤。
 
+### 实现落点（WP54）
+
+| 条 | 落在哪 | 具体是什么 |
+|---|---|---|
+| L1 三条职责 | `packages/roles/roles/dtc/support.yml`、`dtc/live-chat.yml`、`amz/support.yml` | `dtc.presales` + `dtc.aftersales` → `dtc.support`（数据域 / 连接器 / 写动作与额度全部并集，**额度按动作分**，major 2.0.0）；新建 `dtc.live-chat`（同一套知识与订单只读，写动作一条没有，连接器 `chat_widget` 先登记）；`amz.buyer-messages` → `amz.support`（只改名不改语义） |
+| L1 旧 id 兼容 | `packages/roles/src/load.ts` 的 `ROLE_ID_ALIASES` + `assignments.migrateRoleIds()` | 别名表只可加行；已有分配在服务进程启动时迁一次并记 `assignment.role_migrated`（只改 `role_id` / `role_version`，范围与采纳率一个字不动，已撤销的不动，幂等） |
+| L1 岗位模板 | `packages/roles/positions/customer-care.yml` + `apps/server/src/org.ts` 的 `SEED_POSITIONS` | 「客服」= 三条默认全勾 + `common.member` 可选；解析不到的职责在种岗位那一步筛掉。截图 `docs/assets/workstation/roles-support-position.png` |
+| L2 垂直包 | `packages/support-core/src/verticals/`（`goods/` + `digital/`） | 人设 / 聊天硬性边界 / 邮件起草规则 / 意图三套枚举 / L3 永不自动发送 / 缺料追问 / 知识探测 / 业务边界 registry 从 KefuAgent **逐字节**抄内容，不抄框架；`getVerticalPack()` 是唯一解析入口，非法值与缺省一律回落实物 |
+| L2 代码里不许判垂直 | `packages/support-core/test/vertical-no-literal.test.ts` | 扫 `src/**` 源码禁止 `vertical === 'digital'` 这类字面比较，并反过来验扫描器自己认得出违规；另有一条 parity guard 钉两个包的字段面递归相同 + digital 三条红线 |
+| L2 公司档案 | `WorkspaceProfile.vertical` → 向导第 ① 步与设置页同一个 `ProfileForm` | 默认实物；不给 = 沿用上一次；非法值 400；选项的中文名与那一句人话**从服务端来**（真源是垂直包），界面不自己写一份文案。截图 `docs/assets/workstation/roles-support-vertical.png` |
+| L2 传到运行时 | `RunRequest.vertical`（`apps/server/src/runtime.ts` 晚绑定填）→ stub / 规则脑 / 共享 `boundaryGate` / dsh 四条路 | 用户在设置页改完下一次运行就生效，不用重启；模拟回路那一侧从 `workspace.yml` 的 `vertical` 读 |
+| L2 模拟 | `packs/dtc-3c-3p/scenarios/digital-vertical/account-issue.yml`（场景 DSL 新增 `dataset.vertical`） | 虚拟产品工作区来信问登录：分类走 digital 意图表、不查订单、**追问注册邮箱而不是订单号**。3 人 pack 15/15 → 16/16，stub / direct / dsh-subprocess 三档全过；15 人 pack 13/13 |
+
+**顺带修掉的两个真问题**（都是被这次改动照出来的）：
+
+1. 客服拆成三条之后，一句"退款、投诉、包裹"对网站客服与 Amazon 客服打一样的分，秘书按 id 字典序判给了 `amz.support`，而工作区里没人持有它——出来是一张没人能认领的卡。`scoreRoles` 的并列处理改成**先看有没有人在做**。
+2. dsh 那条运行时在 `reading.ts` 里自己抄了一份 goods 的回信模板，于是工作区改成虚拟产品之后只有它还在向一个没有订单的客户要订单号。改为委托 `renderReplyBody`（实物那一档逐字节相同）。
+
+**这一版没做的**：L3 的其余条目（stage 过滤、聊天 widget、影子质检…）与 L4–L8 一条没动；`dtc.live-chat` 的连接器 `chat_widget` 只是**登记**，托管档还没有，所以这条职责现在勾上也连不上东西。
+
 ## 4. 客服岗位：还要搬什么（L3，不变）
 
 全部进 agentsws 本体（`support-core` 纯函数 + `packages/channels` + `packages/knowledge`），先安全边界后功能：
@@ -146,7 +167,7 @@
 
 ## 7. 在 agentsws 里的呈现（L7）
 
-- 46 首次设置：岗位列表加"客服"（三条）与"红人营销"（六条）；公司档案加"你卖的是"。
+- 46 首次设置：岗位列表加"客服"（三条）与"红人营销"（六条）；公司档案加"你卖的是"。**客服三条与"你卖的是"WP54 已落地**（截图见 `docs/assets/workstation/roles-support-*.png`）；红人六条等 C 期。
 - 连接页"数据后端"三档下加一格 **"在线值守（agentsws 托管）"**：一句话说明关机后谁来接、点进去走切档；不再有"KefuAgents / KOLAgents 账号"卡。
 - 连接页加"KOLAgents 插件"卡：配对指向 agentsws 云；未开托管档时提示"插件采集要托管档"。
 - 岗位面板：客服三块流水各一条待审车道 + 逾期 + 投诉；红人六块新增。
