@@ -208,8 +208,15 @@ export interface ChatLane {
     text: string
     external_id?: string
   }): Promise<ChatReceiveOutcome>
-  /** 推进一轮（静默窗口到了 / 测试与模拟手动驱动）。 */
-  advanceTurn(session_id: string): Promise<ChatTurnOutcome>
+  /**
+   * 推进一轮（静默窗口到了 / 测试与模拟手动驱动）。
+   *
+   * `force` = "这一轮我说完了，现在就判"：**只**跳过 2 秒静默窗口，别的一个不跳
+   * （分类、涉钱判定、围栏、出卡照走）。沙盒页那颗「发」按钮走这一支——
+   * 背后是一个人在一句一句手动试，让他每发一句干等两秒，他试两句就走了。
+   * 真访客那一路照常由静默窗口的定时器驱动，`force` 不在那条路上。
+   */
+  advanceTurn(session_id: string, options?: { force?: boolean }): Promise<ChatTurnOutcome>
   /**
    * 访客还在页面上（widget 心跳 / SSE 挂着）。
    *
@@ -597,10 +604,21 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     return { ...base, reply: said.text, used_model: true }
   }
 
-  const advanceTurn = async (session_id: string): Promise<ChatTurnOutcome> => {
+  /** 入站消息的序号（`receive` 自编 `external_id` 时用；见那里的注释）。 */
+  let visitorSeq = 0
+
+  const advanceTurn = async (
+    session_id: string,
+    options: { force?: boolean } = {},
+  ): Promise<ChatTurnOutcome> => {
     const session = await store.getSession(session_id)
     if (session === undefined) return { session_id, used_model: false, blocked: 'no_session' }
-    const turn = evaluateChatTurn({ messages: await turnMessages(session_id), now: clock.now() })
+    const turn = evaluateChatTurn({
+      messages: await turnMessages(session_id),
+      now: clock.now(),
+      // 手动推进：静默窗口收到 0，这一轮立刻算说完（爆发上限不动——它只会更早结束一轮）
+      ...(options.force === true ? { windows: { idle_ms: 0 } } : {}),
+    })
     if (turn.state !== 'ready') {
       if (turn.state === 'collecting' && turn.reply_not_before_ms !== undefined) {
         const delay = Math.max(0, turn.reply_not_before_ms - Date.parse(clock.now()))
@@ -640,7 +658,15 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       store.listMessages(session_id, limit === undefined ? {} : { limit }),
 
     async receive(input): Promise<ChatReceiveOutcome> {
-      const external_id = input.external_id ?? `v_${clock.now()}_${input.session_id}`
+      /*
+       * 入站没给 `external_id` 时自己编一个。**必须带序号**——同 `saySeq`
+       * （`channels/chat/adapter.ts`）那条注释：只用时刻做 id，同一毫秒里连发两句
+       * 就会撞上消息表的 `(session_id, external_id)` 唯一键，第二句被当成重放
+       * 静默地消失。合成时钟（`agentsws demo`）下这不是"偶尔"，是**每一句**：
+       * 时钟根本不走，第一句之后的每一句都撞同一个 id。
+       */
+      visitorSeq += 1
+      const external_id = input.external_id ?? `v_${clock.now()}_${visitorSeq}`
       const received = await adapter.receive({
         workspace_id,
         session_id: input.session_id,

@@ -240,6 +240,43 @@ describe('轮次聚合：连着发三条是一轮', () => {
     expect(r.models.calls).toHaveLength(1)
     expect(r.models.calls[0]?.user).toContain('寄美国')
   })
+
+  /*
+   * 沙盒页那颗「发」按钮走的是 `force`：时钟一动不动也要能判完这一轮。
+   *
+   * 这两条是 `agentsws demo` 真踩到的——demo 的时钟是**合成**的，只在有东西要施行
+   * 时往前推三分钟，平时一毫秒都不走。于是静默窗口永远到不了点，沙盒页发一句
+   * 卡在那儿；入站自编的 `external_id` 只带时刻，第二句直接撞唯一键消失。
+   */
+  it('force：时钟不走也能判完这一轮（沙盒页那颗按钮）', async () => {
+    const r = rig()
+    const s = await open(r)
+    await r.chat.receive({ session_id: s.id, text: 'how much is shipping to the US?' })
+    // 一毫秒都不推进：不 force 就还在收集
+    expect((await r.chat.advanceTurn(s.id)).plan).toBeUndefined()
+    const out = await r.chat.advanceTurn(s.id, { force: true })
+    expect(out.plan?.action).toBe('answer')
+  })
+
+  it('force 只跳静默窗口，涉钱照样出卡不承诺', async () => {
+    const r = rig()
+    const s = await open(r)
+    await r.chat.receive({ session_id: s.id, text: 'can I get a refund for order #1001?' })
+    const out = await r.chat.advanceTurn(s.id, { force: true })
+    expect(out.plan?.action).toBe('human_review')
+    expect(out.plan?.money_touch).toBe(true)
+    expect(out.plan?.can_auto_reply).toBe(false)
+    expect(out.approval_item_id).toBeDefined()
+  })
+
+  it('时钟不走时连发两句：第二句不会被自编的 external_id 撞掉', async () => {
+    const r = rig()
+    const s = await open(r)
+    await r.chat.receive({ session_id: s.id, text: 'hello' })
+    await r.chat.receive({ session_id: s.id, text: 'are you there?' })
+    const visitor = (await r.chat.messages(s.id)).filter((m) => m.role === 'visitor')
+    expect(visitor.map((m) => m.text)).toEqual(['hello', 'are you there?'])
+  })
 })
 
 describe('求助超时：T+3 提醒 / T+10 转邮件', () => {

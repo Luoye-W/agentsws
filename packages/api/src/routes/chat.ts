@@ -75,7 +75,11 @@ export interface ChatPort {
   messages(session_id: string, limit?: number): Promise<ChatMessageView[]>
   /** 访客说一句（沙盒里就是商家自己扮演访客）。 */
   send(input: { session_id: string; text: string }): Promise<ChatTurnView>
-  /** 静默窗口到了：把这一轮判完。沙盒页按 `2s` 自己点，不必等真定时器。 */
+  /**
+   * 「这一轮我说完了，现在就判」：跳过 2 秒静默窗口，立刻判这一轮。
+   * 沙盒页发完一句自己点一下，不等真定时器——跳过的只有那个窗口，
+   * 分类、涉钱判定、围栏与出卡一个不少。
+   */
   advance(session_id: string): Promise<ChatTurnView>
   /** 人工接管开关。 */
   setTakeover(session_id: string, on: boolean): Promise<ChatSessionView>

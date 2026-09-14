@@ -1576,7 +1576,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
         })),
       send: async (input) => chatTurnView(await (chat as ChatLane).receive(input)),
-      advance: async (session_id) => chatTurnView(await (chat as ChatLane).advanceTurn(session_id)),
+      // `force`：这条路由就是"这一轮我说完了，现在就判"（沙盒页那颗「发」按钮）。
+      // 只跳过 2 秒静默窗口，别的一个不跳。真访客那一路由车道自己的定时器驱动。
+      advance: async (session_id) =>
+        chatTurnView(await (chat as ChatLane).advanceTurn(session_id, { force: true })),
       setTakeover: async (id, on) => chatView(await (chat as ChatLane).setTakeover(id, on)),
       teach: async (input) => {
         const out = await (chat as ChatLane).teach({ ...input, taught_by: input.taught_by })
