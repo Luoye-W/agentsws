@@ -7,14 +7,11 @@
  * 全部靠正则从**清洗过的**外部文本里取，只用来给人看与给规则用——
  * 起草时真正写进信里的数字来自订单事实，不来自这里（29 原则 ③）。
  */
-import {
-  COMMITMENT_PATTERNS,
-  DEADLINE_PATTERNS,
-  MISSING_INFO_RULES,
-  RISK_TERMS,
-} from './lexicon.js'
+import { COMMITMENT_PATTERNS, DEADLINE_PATTERNS } from './lexicon.js'
 import { displayLine, sanitizeExternal } from './text.js'
 import type { SupportEntities } from './types.js'
+import { getVerticalPack } from './verticals/index.js'
+import type { Vertical } from './verticals/types.js'
 
 /** `#1001` / `order 1001` / `订单号 1001`。取第一个，不猜第二个。 */
 const ORDER_REF_PATTERNS: readonly RegExp[] = [
@@ -63,16 +60,25 @@ export function extractAmount(text: string): { value: number; currency?: string 
   return undefined
 }
 
-/** 风险词：小写子串命中（与 KefuAgent deriveRiskLevel 同口径），按词表顺序返回。 */
-export function extractRiskTerms(text: string): string[] {
+/**
+ * 风险词：小写子串命中（与 KefuAgent deriveRiskLevel 同口径），按词表顺序返回。
+ *
+ * WP54：词表按垂直取——实物那套里的 `tracking` / `damaged` 在虚拟产品上没有指涉对象，
+ * 拿它去判风险只会把"email delivery failed"判成物流事故。
+ */
+export function extractRiskTerms(text: string, vertical?: Vertical): string[] {
   const lower = text.toLowerCase()
-  return RISK_TERMS.filter((t) => lower.includes(t))
+  return getVerticalPack(vertical).triage.riskTerms.filter((t) => lower.includes(t))
 }
 
-/** 缺什么资料。首条命中即返回（与 deriveMissingInfoSummary 同口径的"第一条命中"）。 */
-export function deriveNeeds(text: string): string[] {
+/**
+ * 缺什么资料。首条命中即返回（与 deriveMissingInfoSummary 同口径的"第一条命中"）。
+ *
+ * WP54：**措辞即产品口径**——实物问订单号与照片，虚拟产品问注册邮箱与复现信息。
+ */
+export function deriveNeeds(text: string, vertical?: Vertical): string[] {
   const lower = text.toLowerCase()
-  for (const rule of MISSING_INFO_RULES) {
+  for (const rule of getVerticalPack(vertical).triage.needs) {
     if (rule.terms.some((t) => lower.includes(t))) return [rule.need]
   }
   return []
@@ -80,13 +86,21 @@ export function deriveNeeds(text: string): string[] {
 
 /** 一次把五种证据都取出来。传进来的可以是没清洗过的原文。 */
 export function extractEntities(...parts: (string | undefined)[]): SupportEntities {
+  return extractEntitiesIn(undefined, ...parts)
+}
+
+/** 带垂直的那一版（`extractEntities` 就是它的 `goods` 特例）。 */
+export function extractEntitiesIn(
+  vertical: Vertical | undefined,
+  ...parts: (string | undefined)[]
+): SupportEntities {
   const text = sanitizeExternal(parts.filter((p): p is string => p !== undefined).join('\n'))
   const order_ref = extractOrderRef(text)
   const amount = extractAmount(text)
   const deadline = firstMatch(text, DEADLINE_PATTERNS)
   const commitment = firstMatch(text, COMMITMENT_PATTERNS)
   return {
-    risk_terms: extractRiskTerms(text),
+    risk_terms: extractRiskTerms(text, vertical),
     ...(order_ref === undefined ? {} : { order_ref }),
     ...(amount === undefined ? {} : { amount }),
     ...(deadline === undefined ? {} : { deadline: displayLine(deadline, 80) }),

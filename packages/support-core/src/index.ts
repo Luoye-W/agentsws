@@ -17,3 +17,5 @@ export * from './prompts/index.js'
 export * from './sla.js'
 export * from './text.js'
 export * from './types.js'
+// WP54（48 v2 L2）：实物 / 虚拟两套垂直包与 `getVerticalPack` 解析入口
+export * from './verticals/index.js'

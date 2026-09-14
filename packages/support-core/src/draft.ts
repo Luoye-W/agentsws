@@ -14,7 +14,7 @@
  */
 import type { ChangeKind } from '@agentsws/contracts'
 import type { AnsweredBoundaryRef } from './boundaries.js'
-import { findBoundary, findUnansweredBoundaries } from './boundaries.js'
+import { boundariesOf, findBoundary, findUnansweredBoundaries } from './boundaries.js'
 import { deriveNeeds } from './entities.js'
 import { sanitizeExternal } from './text.js'
 import type {
@@ -26,6 +26,9 @@ import type {
   OrderFacts,
   SupportPolicy,
 } from './types.js'
+import { getVerticalPack } from './verticals/index.js'
+import { fillTemplate } from './verticals/render.js'
+import type { Vertical } from './verticals/types.js'
 
 const DAY_MS = 86_400_000
 
@@ -46,10 +49,12 @@ export interface ResolvedWindow {
 export function resolveReturnWindow(
   policies: readonly SupportPolicy[],
   knowledge_hits: readonly KnowledgeHit[],
-  fallback = DEFAULT_RETURN_WINDOW_DAYS,
+  fallback?: number,
+  vertical?: Vertical,
 ): ResolvedWindow {
-  const answered = policies.find((p) => p.boundary_id === 'policy.refund_window')
-  const days = answered?.value.days
+  const gate = getVerticalPack(vertical).changeGate.window
+  const answered = policies.find((p) => p.boundary_id === gate.boundaryId)
+  const days = answered?.value[gate.valuePath]
   if (typeof days === 'number' && Number.isFinite(days)) {
     const card = answered?.value.fact_card_id
     return typeof card === 'string' ? { days, fact_card_id: card } : { days }
@@ -64,7 +69,7 @@ export function resolveReturnWindow(
       return { days: Number.parseInt(m[1], 10), fact_card_id: hit.fact_card_id }
     }
   }
-  return { days: fallback }
+  return { days: fallback ?? gate.defaultDays }
 }
 
 /** 签收到现在过了几天。没有签收日期就没有天数——不猜。 */
@@ -83,45 +88,35 @@ export function refundableAmount(order: OrderFacts | undefined): number | undefi
 /* 边界门（"第一次遇到就问一次"，不自作主张）                              */
 /* ------------------------------------------------------------------ */
 
-/** 客户声称"物流说送到了，我没收到"。两个线索都要有，只有一个不算。 */
-const DELIVERED_CLAIM_TERMS = [
-  'marked as delivered',
-  'says delivered',
-  'shows delivered',
-  'tracking says it was delivered',
-  'was delivered',
-  '显示已签收',
-  '显示已送达',
-  '物流显示',
-] as const
-const NOT_RECEIVED_TERMS = [
-  'never arrived',
-  'not arrived',
-  'never received',
-  'did not receive',
-  "didn't receive",
-  'nothing arrived',
-  'lost in transit',
-  '没有收到',
-  '未收到',
-  '没收到',
-] as const
-
+/**
+ * 客户声称"物流说送到了，我没收到"。两个线索都要有，只有一个不算。
+ *
+ * WP54：判据搬进了垂直包的 `changeGate.extra`（虚拟产品没有包裹，那张表是空的）。
+ * 这个函数保留下来是因为外面在用它；它就是实物那条规则的一个特例。
+ */
 export function lostPackageSignal(text: string): boolean {
-  const lower = sanitizeExternal(text).toLowerCase()
-  return (
-    DELIVERED_CLAIM_TERMS.some((t) => lower.includes(t)) &&
-    NOT_RECEIVED_TERMS.some((t) => lower.includes(t))
-  )
+  return extraGateHit(text, 'goods', 'refund').includes('policy.lost_package_liability')
 }
 
-/** 提出某一类变更之前，哪几条边界必须先有答案。 */
-export const GOVERNING_BOUNDARIES: Readonly<Partial<Record<ChangeKind, readonly string[]>>> = {
-  refund: ['policy.refund_window'],
-  reship: ['policy.replacement_first'],
-  address_change: ['policy.cancel_change_window'],
-  discount_code: ['policy.compensation_cap'],
+/** 正文同时命中每一组词时，这一类变更额外要哪几条边界答过。 */
+function extraGateHit(text: string, vertical: Vertical | undefined, kind: ChangeKind): string[] {
+  const lower = sanitizeExternal(text).toLowerCase()
+  return getVerticalPack(vertical)
+    .changeGate.extra.filter(
+      (rule) =>
+        rule.changeKind === kind &&
+        rule.allOf.every((group) => group.some((t) => lower.includes(t))),
+    )
+    .map((rule) => rule.boundaryId)
 }
+
+/**
+ * 提出某一类变更之前，哪几条边界必须先有答案（实物那一套）。
+ *
+ * WP54：真源在垂直包的 `changeGate.governing`；这个名字保留给外面用，值与之前逐条相同。
+ */
+export const GOVERNING_BOUNDARIES: Readonly<Partial<Record<ChangeKind, readonly string[]>>> =
+  getVerticalPack('goods').changeGate.governing
 
 export interface ChangeGateInput {
   change_kind: ChangeKind
@@ -129,6 +124,8 @@ export interface ChangeGateInput {
   policies: readonly AnsweredBoundaryRef[]
   /** 来信正文（判断丢件这类"额外需要一条边界"的情形）。 */
   text?: string
+  /** 48 v2 L2：工作区卖的是什么。不给就实物。 */
+  vertical?: Vertical
 }
 
 export interface ChangeGateResult {
@@ -145,19 +142,17 @@ export interface ChangeGateResult {
  * 同时给商家一张选择题卡（36 §2.2）。这就是"第一次遇到，问一次"。
  */
 export function gateChange(input: ChangeGateInput): ChangeGateResult {
-  const required = [...(GOVERNING_BOUNDARIES[input.change_kind] ?? [])]
-  if (
-    input.change_kind === 'refund' &&
-    input.text !== undefined &&
-    lostPackageSignal(input.text) &&
-    !required.includes('policy.lost_package_liability')
-  ) {
-    required.push('policy.lost_package_liability')
+  const pack = getVerticalPack(input.vertical)
+  const registry = pack.boundaries
+  const required = [...(pack.changeGate.governing[input.change_kind] ?? [])]
+  if (input.text !== undefined) {
+    for (const id of extraGateHit(input.text, input.vertical, input.change_kind))
+      if (!required.includes(id)) required.push(id)
   }
   const missing: BoundaryItem[] = []
   for (const id of required) {
     if (input.policies.some((p) => p.boundary_id === id)) continue
-    const boundary = findBoundary(id)
+    const boundary = findBoundary(id, registry)
     if (boundary !== undefined) missing.push(boundary)
   }
   return { allowed: missing.length === 0, missing }
@@ -171,60 +166,86 @@ export interface ReplyTemplateInput {
   order?: OrderFacts
   windowDays: number
   withinWindow: boolean
+  /** 窗口天数是不是从**真读到的**条款 / 已确认边界来的（不是兜底值）。 */
+  windowFromFact?: boolean
   daysSinceDelivery?: number
   /** 只有真的提出了退款才填；填了正文才会写"已经准备好一笔退款"。 */
   refundAmount?: number
   signature: string
   customer: string
+  /** 48 v2 L2：工作区卖的是什么。不给就实物（模板与 WP54 之前逐字节相同）。 */
+  vertical?: Vertical
 }
 
 /**
- * 固定模板：引用政策 + 订单状态；窗口内且已提出退款时附带金额。
+ * 固定模板：引用政策 + 记录状态；窗口内且已提出退款时附带金额。
  * 不回显任何外部原文（围栏纪律）。
+ *
+ * WP54：每一句话搬到了垂直包的 `draft.template`。实物那一套的字节一个没动
+ * ——三条路径（stub / direct 规则脑 / dsh）共用这一处，改一个字三边一起变。
  */
 export function renderReplyBody(d: ReplyTemplateInput): string {
-  const lines: string[] = [`Hi ${d.customer},`, '']
+  const t = getVerticalPack(d.vertical).draft.template
+  const days = String(d.windowDays)
+  const lines: string[] = [fillTemplate(t.greeting, { customer: d.customer }), '']
   if (d.order !== undefined) {
     lines.push(
-      `Thanks for reaching out about order ${d.order.name}. Its payment status is "${d.order.financial_status}" and its fulfillment status is "${d.order.fulfillment_status}".`,
+      fillTemplate(t.record, {
+        order: d.order.name,
+        financial_status: d.order.financial_status,
+        fulfillment_status: d.order.fulfillment_status,
+      }),
     )
   } else {
-    lines.push('Thanks for reaching out.')
+    lines.push(t.noRecord)
   }
   lines.push('')
-  lines.push(`Our return policy allows returns within ${d.windowDays} days of delivery.`)
+  // 读不到任何条款数值时要不要照印那一句，由包说了算（实物照印、虚拟产品不印）
+  if (d.windowFromFact !== false || t.policyWhenUnknown) {
+    lines.push(fillTemplate(t.policy, { days }))
+  }
   if (d.order?.delivered_at !== undefined && d.daysSinceDelivery !== undefined) {
     lines.push(
-      `Your order was delivered on ${d.order.delivered_at.slice(0, 10)}, ${d.daysSinceDelivery} day(s) ago.`,
+      fillTemplate(t.timeline, {
+        date: d.order.delivered_at.slice(0, 10),
+        days: String(d.daysSinceDelivery),
+      }),
     )
   }
   lines.push('')
   if (d.withinWindow && d.refundAmount !== undefined && d.order !== undefined) {
     lines.push(
-      `That is inside the ${d.windowDays}-day window, so we have prepared a refund of ${d.refundAmount} ${d.order.currency} to your original payment method. It is waiting for a colleague to confirm and will be issued right after.`,
+      fillTemplate(t.withinWithChange, {
+        days,
+        amount: String(d.refundAmount),
+        currency: d.order.currency,
+      }),
     )
   } else if (d.withinWindow && d.order !== undefined) {
-    lines.push(
-      `That is inside the ${d.windowDays}-day window, so a return is possible. A colleague will confirm the next step with you.`,
-    )
+    lines.push(fillTemplate(t.within, { days }))
   } else if (d.order !== undefined) {
-    lines.push(
-      `That is outside the ${d.windowDays}-day window, so a refund is not available for this order. Tell us what went wrong and we will look at the options that do apply.`,
-    )
+    lines.push(fillTemplate(t.outside, { days }))
   } else {
-    lines.push('Tell us the order number and we will check what applies.')
+    lines.push(t.noRecordNextStep)
   }
-  lines.push('', 'Kind regards,', d.signature)
+  lines.push('', t.signoff, d.signature)
   return lines.join('\n')
 }
 
 /** 回信主题：已经是 `Re:` 就不再加一层。 */
-export function replySubject(subject: string | undefined, order?: OrderFacts): string {
+export function replySubject(
+  subject: string | undefined,
+  order?: OrderFacts,
+  vertical?: Vertical,
+): string {
   const raw = subject?.trim()
   if (raw !== undefined && raw.length > 0) {
     return raw.startsWith('Re:') ? raw : `Re: ${raw}`
   }
-  return order === undefined ? 'Re: your message' : `Re: order ${order.name}`
+  const t = getVerticalPack(vertical).draft.template
+  return order === undefined
+    ? t.fallbackSubject
+    : fillTemplate(t.orderSubject, { order: order.name })
 }
 
 /** 称呼：订单上的名字 > 订单邮箱前缀 > 来信邮箱前缀 > `there`。 */
@@ -248,9 +269,10 @@ export function draftReply(input: DraftReplyInput): DraftedReply {
     persona,
     now,
     default_return_window_days,
+    vertical,
   } = input
   const text = sanitizeExternal(inbound.text)
-  const window = resolveReturnWindow(policies, knowledge_hits, default_return_window_days)
+  const window = resolveReturnWindow(policies, knowledge_hits, default_return_window_days, vertical)
   const daysSince = daysSinceDelivery(order, now)
   const withinWindow = daysSince !== undefined && daysSince <= window.days && order !== undefined
 
@@ -259,6 +281,7 @@ export function draftReply(input: DraftReplyInput): DraftedReply {
     classification,
     policies,
     text,
+    ...(vertical === undefined ? {} : { vertical }),
   })
   const refundAmount = refundableAmount(order)
   const proposesRefund =
@@ -272,8 +295,10 @@ export function draftReply(input: DraftReplyInput): DraftedReply {
   const body = renderReplyBody({
     windowDays: window.days,
     withinWindow,
+    windowFromFact: window.fact_card_id !== undefined,
     signature: persona.signature,
     customer: persona.customer_name ?? greetingName(order, inbound.from),
+    ...(vertical === undefined ? {} : { vertical }),
     ...(order === undefined ? {} : { order }),
     ...(daysSince === undefined ? {} : { daysSinceDelivery: daysSince }),
     ...(proposesRefund && refundAmount !== undefined ? { refundAmount } : {}),
@@ -289,20 +314,24 @@ export function draftReply(input: DraftReplyInput): DraftedReply {
           },
         ]
 
-  const needs = deriveNeeds(text)
+  const needs = deriveNeeds(text, vertical)
   if (order === undefined && classification.entities.order_ref === undefined) {
-    if (!needs.includes('order_ref')) needs.push('order_ref')
+    // 一条记录都没读到：缺的那一样按垂直取（订单号 / 注册邮箱）
+    const ref = getVerticalPack(vertical).triage.recordRefNeed
+    if (!needs.includes(ref)) needs.push(ref)
   }
 
   const risk_flags = classification.entities.risk_terms.map((t) => `risk:${t}`)
   for (const boundary of gate.missing) risk_flags.push(`boundary_unanswered:${boundary.id}`)
-  for (const boundary of findUnansweredBoundaries(classification, policies)) {
+  for (const boundary of findUnansweredBoundaries(classification, policies, {
+    registry: boundariesOf(vertical),
+  })) {
     const flag = `boundary_unanswered:${boundary.id}`
     if (!risk_flags.includes(flag)) risk_flags.push(flag)
   }
 
   return {
-    subject: replySubject(inbound.subject, order),
+    subject: replySubject(inbound.subject, order, vertical),
     body,
     citations,
     needs,

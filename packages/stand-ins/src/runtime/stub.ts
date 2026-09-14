@@ -16,7 +16,7 @@ import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import { orderTools, runOntologyBrief } from '@agentsws/ontology'
 import type { BoundaryItem } from '@agentsws/support-core'
-import { renderReplyBody } from '@agentsws/support-core'
+import { renderReplyBody, replySubject } from '@agentsws/support-core'
 import { boundaryGate, describeRun } from './support.js'
 
 export interface ToolExecution {
@@ -552,12 +552,14 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           order?.email?.split('@')[0] ??
           threadRecipient(threadItem) ??
           'there'
-        const subject = subjectLine ?? (order ? `Re: order ${order.name}` : 'Re: your message')
+        const subject = subjectLine ?? replySubject(undefined, order, req.vertical)
         body = renderReplyBody({
           windowDays: policy.days,
           withinWindow,
+          windowFromFact: policy.source !== undefined,
           signature,
           customer,
+          ...(req.vertical === undefined ? {} : { vertical: req.vertical }),
           ...(order === undefined ? {} : { order }),
           ...(daysSince === undefined ? {} : { daysSinceDelivery: daysSince }),
           ...(staged && refundAmount !== undefined ? { refundAmount } : {}),

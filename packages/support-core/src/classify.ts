@@ -4,30 +4,20 @@
  * rewritten for agentsws contracts.
  *
  * 两层 + 一个可注入口：
- *   ① 强规则（线程接管、发件人域、平台通知）——不看词表就能定
- *   ② 词表（SUPPORT_TERMS 命中后再细分）
+ *   ① 强规则（线程接管）——不看词表就能定
+ *   ② 词表（**按垂直包取**：实物先过"是不是客服诉求"那道门再细分；虚拟产品按方向判）
  *   ③ 宿主先跑好的模型分类（`ctx.model`）——**包内不调模型**（22：模型只在网关后面）
+ *
+ * WP54（48 v2 L2）：词表不再写在这个文件里，从 `getVerticalPack(vertical).triage` 取。
+ * 这个文件里**不许出现 `vertical === 'digital'` 这种字面比较**
+ * （`test/vertical-no-literal.test.ts` 扫源码钉住）。
  *
  * 注入指令进不来这里的判定：所有文本先过 `sanitizeExternal`（围栏清洗），
  * 而且判定只看**词面命中**，从不解释文本里的祈使句。
  */
 import type { InboundEvent } from '@agentsws/contracts'
-import { extractEntities } from './entities.js'
-import {
-  BUSINESS_TERMS,
-  CANCELLATION_TERMS,
-  COMPLAINT_TERMS,
-  DAMAGE_TERMS,
-  MARKETING_TERMS,
-  PLATFORM_TERMS,
-  PRODUCT_QUESTION_TERMS,
-  RETURN_REFUND_TERMS,
-  SPAM_TERMS,
-  SUPPORT_TERMS,
-  TRACKING_TERMS,
-  URGENCY_TERMS,
-  WARRANTY_TERMS,
-} from './lexicon.js'
+import { extractEntitiesIn } from './entities.js'
+import { URGENCY_TERMS } from './lexicon.js'
 import { detectLanguage, haystack, includesAny, matchTerms, sanitizeExternal } from './text.js'
 import type {
   Classification,
@@ -37,6 +27,8 @@ import type {
   SupportIntent,
   Urgency,
 } from './types.js'
+import { getVerticalPack } from './verticals/index.js'
+import type { Vertical } from './verticals/types.js'
 
 const INTENTS: readonly SupportIntent[] = [
   'pre_sales',
@@ -53,6 +45,14 @@ const INTENTS: readonly SupportIntent[] = [
   'platform_notification',
   'spam',
   'other',
+  // WP54：虚拟产品与服务那一套（`digital` 垂直包产出它们）
+  'billing',
+  'account_access',
+  'bug_report',
+  'how_to',
+  'integration',
+  'data_privacy',
+  'feature_request',
 ]
 
 const NON_SUPPORT_INTENTS: ReadonlySet<SupportIntent> = new Set<SupportIntent>([
@@ -102,149 +102,51 @@ interface Verdict {
 }
 
 /**
- * 词表层。分支顺序即优先级，与 KefuAgent 一致：
- * 先看是不是客服诉求（SUPPORT_TERMS），命中后按 退换退款 → 物流 → 破损 → … 细分；
- * 没命中再依次排除平台通知、推广、商务。
+ * 词表层。规则顺序即优先级，先命中先返回；`requires` 是那道"先确认是客服诉求"的门。
+ *
+ * 表在垂直包里（`triage.rules`），这里只跑它。实物那张表与 WP54 之前的分支顺序、
+ * 置信度、原因文案逐条相同——搬家不改一个字节。
  */
-function lexiconVerdict(text: string): Verdict {
-  if (includesAny(text, SPAM_TERMS)) {
+function lexiconVerdict(text: string, vertical: Vertical | undefined): Verdict {
+  const pack = getVerticalPack(vertical).triage
+  for (const rule of pack.rules) {
+    if (rule.requires !== undefined && !includesAny(text, rule.requires)) continue
+    if (!includesAny(text, rule.terms)) continue
     return {
-      intent: 'spam',
-      is_customer_service: false,
-      confidence: 0.92,
-      reason: '命中垃圾邮件词面，不进客服队列。',
-      terms: SPAM_TERMS,
+      intent: rule.intent,
+      is_customer_service: rule.is_customer_service,
+      confidence: rule.confidence,
+      reason: rule.reason,
+      terms: rule.terms,
     }
   }
-  if (includesAny(text, SUPPORT_TERMS)) {
-    if (includesAny(text, COMPLAINT_TERMS)) {
-      return {
-        intent: 'complaint',
-        is_customer_service: true,
-        confidence: 0.95,
-        reason: '邮件包含投诉、差评或争议信号，应由客服职责接管。',
-        terms: COMPLAINT_TERMS,
-      }
-    }
-    if (includesAny(text, RETURN_REFUND_TERMS)) {
-      return {
-        intent: 'returns_refunds',
-        is_customer_service: true,
-        confidence: 0.94,
-        reason: '邮件包含退货、退款或换货相关诉求，应由客服职责接管。',
-        terms: RETURN_REFUND_TERMS,
-      }
-    }
-    if (includesAny(text, CANCELLATION_TERMS)) {
-      return {
-        intent: 'cancellation',
-        is_customer_service: true,
-        confidence: 0.93,
-        reason: '邮件在要求取消订单或修改地址，应由客服职责接管。',
-        terms: CANCELLATION_TERMS,
-      }
-    }
-    if (includesAny(text, TRACKING_TERMS)) {
-      return {
-        intent: 'order_tracking',
-        is_customer_service: true,
-        confidence: 0.96,
-        reason: '邮件在询问订单、物流、包裹或配送状态，应由客服职责接管。',
-        terms: TRACKING_TERMS,
-      }
-    }
-    if (includesAny(text, DAMAGE_TERMS)) {
-      return {
-        intent: 'complaint',
-        is_customer_service: true,
-        confidence: 0.95,
-        reason: '邮件包含损坏、错发或少件信号，应由客服职责接管。',
-        terms: DAMAGE_TERMS,
-      }
-    }
-    if (includesAny(text, WARRANTY_TERMS)) {
-      return {
-        intent: 'warranty',
-        is_customer_service: true,
-        confidence: 0.92,
-        reason: '邮件在问保修或维修，应由客服职责接管。',
-        terms: WARRANTY_TERMS,
-      }
-    }
-    if (includesAny(text, PRODUCT_QUESTION_TERMS)) {
-      return {
-        intent: 'product_question',
-        is_customer_service: true,
-        confidence: 0.9,
-        reason: '邮件在问产品用法、尺寸或兼容性，应由客服职责接管。',
-        terms: PRODUCT_QUESTION_TERMS,
-      }
-    }
-    return {
-      intent: 'post_sales',
-      is_customer_service: true,
-      confidence: 0.91,
-      reason: '邮件包含典型售前/售后客服问题，应由客服职责接管。',
-      terms: SUPPORT_TERMS,
-    }
-  }
-  if (includesAny(text, PLATFORM_TERMS)) {
-    return {
-      intent: 'platform_notification',
-      is_customer_service: false,
-      confidence: 0.9,
-      reason: '邮件更像平台、安全或账单通知，不进客服队列。',
-      terms: PLATFORM_TERMS,
-    }
-  }
-  if (includesAny(text, MARKETING_TERMS)) {
-    return {
-      intent: 'marketing',
-      is_customer_service: false,
-      confidence: 0.89,
-      reason: '邮件更像推广、SEO、广告或合作邀约，不进客服队列。',
-      terms: MARKETING_TERMS,
-    }
-  }
-  if (includesAny(text, BUSINESS_TERMS)) {
-    return {
-      intent: 'business',
-      is_customer_service: false,
-      confidence: 0.86,
-      reason: '邮件更像商务合作或供应链沟通，不进客服队列。',
-      terms: BUSINESS_TERMS,
-    }
-  }
-  return {
-    intent: 'other',
-    is_customer_service: false,
-    confidence: 0.75,
-    reason: '未发现明确售前/售后客服诉求，默认保持在原收件箱。',
-    terms: [],
-  }
+  return { ...pack.fallback, terms: [] }
 }
 
 /** 分类一封来信。纯函数：同输入同输出，不看时钟也不看随机。 */
 export function classifyText(inbound: InboundText, ctx: ClassifyContext): Classification {
+  const vertical = ctx.vertical
+  const pack = getVerticalPack(vertical)
   const text = haystack(inbound.subject ?? ctx.subject, inbound.text, inbound.from ?? ctx.from)
-  const entities = extractEntities(inbound.subject ?? ctx.subject, inbound.text)
+  const entities = extractEntitiesIn(vertical, inbound.subject ?? ctx.subject, inbound.text)
   const language = detectLanguage(inbound.subject ?? ctx.subject, inbound.text)
 
   if (ctx.thread_taken_over === true) {
+    const taken = pack.triage.takenOverIntent
     return {
-      intent: 'post_sales',
+      intent: taken,
       is_customer_service: true,
       confidence: 1,
       classifier: 'thread_takeover',
       reason: '该邮件属于已被客服职责接管的线程，后续回复默认继续由它处理。',
       language,
-      urgency: urgencyOf(text, 'post_sales', entities),
+      urgency: urgencyOf(text, taken, entities),
       entities,
       matched_terms: [],
     }
   }
 
-  const lexicon = lexiconVerdict(text)
+  const lexicon = lexiconVerdict(text, vertical)
   const matched_terms = matchTerms(text, lexicon.terms)
 
   const model = ctx.model

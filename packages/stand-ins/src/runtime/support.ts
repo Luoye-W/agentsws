@@ -10,11 +10,12 @@
  * 放在替身包里而不是各写一遍：一处改，三个运行时同时改（09 §0 "插拔 = 契约 + 一致性套件"）。
  */
 import type { ContextItem, Iso8601, RunRequest } from '@agentsws/contracts'
-import type { BoundaryItem, Classification, SupportPolicy } from '@agentsws/support-core'
+import type { BoundaryItem, Classification, SupportPolicy, Vertical } from '@agentsws/support-core'
 import {
   classifyText,
   detectAnsweredBoundaries,
   gateChange,
+  getVerticalPack,
   returnWindowPolicy,
 } from '@agentsws/support-core'
 
@@ -93,11 +94,10 @@ export function answeredBoundaries(
     (i) => contextText(i.content),
   )
   const answered = detectAnsweredBoundaries({ texts, structured, at })
-  if (
-    policy.source !== undefined &&
-    !answered.some((p) => p.boundary_id === 'policy.refund_window')
-  ) {
-    answered.push(returnWindowPolicy(policy.days, at, policy.source.id))
+  // 48 v2 L2：窗口边界的 id 按垂直取（实物是退款 / 退货窗口，虚拟产品是订阅退款口径）
+  const windowBoundary = getVerticalPack(req.vertical).changeGate.window.boundaryId
+  if (policy.source !== undefined && !answered.some((p) => p.boundary_id === windowBoundary)) {
+    answered.push(returnWindowPolicy(policy.days, at, policy.source.id, windowBoundary))
   }
   return answered
 }
@@ -113,6 +113,8 @@ export interface BoundaryGate {
   /** 读到的退货窗口。 */
   windowDays: number
   windowSource?: ContextItem
+  /** 48 v2 L2：这次运行用的是哪一套垂直包（给起草与摘要用）。 */
+  vertical?: Vertical
 }
 
 /**
@@ -127,27 +129,39 @@ export function boundaryGate(input: {
   defaultReturnWindowDays: number
 }): BoundaryGate {
   const { request, now } = input
+  const vertical = request.vertical
   const policy = returnWindowFrom(request, input.defaultReturnWindowDays)
   const text = threadBodyOf(request)
   const subject = threadSubjectOf(request)
   const classification = classifyText(
     { text, ...(subject === undefined ? {} : { subject }) },
-    { now },
+    { now, ...(vertical === undefined ? {} : { vertical }) },
   )
   const gate = gateChange({
     change_kind: 'refund',
     classification,
     policies: answeredBoundaries(request, now, policy),
     text,
+    ...(vertical === undefined ? {} : { vertical }),
   })
   return {
     classification,
-    wantsChange: classification.intent === 'returns_refunds',
+    // 想要一笔变更 = 这次的意图落在"管着退款那条边界"的触发面上。
+    // 实物是"退换退款"，虚拟产品还多一个"账单与用量"——判据来自包，不来自 if。
+    wantsChange: refundIntents(vertical).includes(classification.intent),
     allowed: gate.allowed,
     missing: gate.missing,
     windowDays: policy.days,
     ...(policy.source === undefined ? {} : { windowSource: policy.source }),
+    ...(vertical === undefined ? {} : { vertical }),
   }
+}
+
+/** 哪些意图算"客户在要一笔退款"——从管着退款的那条边界的触发面读，不写死。 */
+function refundIntents(vertical: Vertical | undefined): readonly string[] {
+  const pack = getVerticalPack(vertical)
+  const id = pack.changeGate.window.boundaryId
+  return pack.boundaries.find((b) => b.id === id)?.applies_when.intents ?? []
 }
 
 // ---------- 事项摘要 ----------

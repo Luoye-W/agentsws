@@ -1,4 +1,5 @@
 import type { ChatMessage, Clock, ModelProvider, ModelRef } from '@agentsws/contracts'
+import type { Vertical } from '@agentsws/support-core'
 import {
   classifyText,
   detectAnsweredBoundaries,
@@ -23,6 +24,12 @@ export interface AftersalesBrainOptions {
   /** 政策里读不到窗口时的默认天数。 */
   defaultReturnWindowDays?: number
   signature?: string
+  /**
+   * 48 v2 L2（WP54）：这个工作区卖的是什么。规则脑是**按工作区装配**的
+   * （一个进程一个工作区），所以垂直在装配那一刻就定了，不用每条消息再带一次。
+   * 不给就实物——与 WP54 之前逐字节相同。
+   */
+  vertical?: Vertical
 }
 
 const DAY = 86_400_000
@@ -89,6 +96,7 @@ function lastLine(text: string): string {
 export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
   const fallbackWindow = options.defaultReturnWindowDays ?? 14
   const signature = options.signature ?? 'Customer Care'
+  const vertical = options.vertical
 
   return ({ messages, tools }): ScriptedTurn => {
     const available = new Set((tools ?? []).map((t) => t.name))
@@ -121,7 +129,7 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
     // 1c：分类 / 起草 / 边界判定统一走客服共享包（33 §1），与 stub 运行时同一套判定
     const classification = classifyText(
       { text: threadBody, subject: subjectLine },
-      { now: options.clock.now() },
+      { now: options.clock.now(), ...(vertical === undefined ? {} : { vertical }) },
     )
     const wantsChange = classification.intent === 'returns_refunds'
     const answered = detectAnsweredBoundaries({
@@ -137,6 +145,7 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
     // 没答过的边界挡着：不提退款，只起草"交给同事确认"的回信（不自作主张）
     const gate = gateChange({
       change_kind: 'refund',
+      ...(vertical === undefined ? {} : { vertical }),
       classification,
       policies: answered,
       text: threadBody,
@@ -191,8 +200,10 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
       const body = renderReplyBody({
         windowDays: policy.days,
         withinWindow,
+        windowFromFact: policy.card !== undefined,
         customer,
         signature,
+        ...(vertical === undefined ? {} : { vertical }),
         ...(order === undefined ? {} : { order }),
         ...(daysSince === undefined ? {} : { daysSinceDelivery: daysSince }),
         ...(stagedOk && refundAmount !== undefined ? { refundAmount } : {}),
