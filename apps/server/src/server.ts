@@ -45,6 +45,7 @@ import type {
   StartRun,
   Workspace,
   WorkspaceId,
+  WorkspaceVertical,
 } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
@@ -871,6 +872,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 起它这件事不该拦着服务进程启动：后台起，起好之前 `toolNames()` 就是空的
   if (devMcp !== undefined) void devMcp.start()
 
+  // WP54（48 v2 L2）：公司档案在向导第 ① 步才写，而运行时比它先装配好——
+  // 用一个晚绑定的读法，用户改完「你卖的是」下一次运行就生效，不用重启。
+  let verticalOf: () => WorkspaceVertical | undefined = () => undefined
+
   // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
   const runtime: RuntimeAssembly | undefined =
     options.startRun === false || typeof options.startRun === 'function'
@@ -898,6 +903,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 },
               }),
           source: records,
+          vertical: () => verticalOf(),
         })
   const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -1267,6 +1273,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 懒取：`joinAssembly` 在下面几行才建出来。
     join: () => joinAssembly.port,
   })
+  // 档案建出来了，把上面那个晚绑定的读法接上（48 v2 L2）
+  verticalOf = () => onboarding.vertical()
 
   // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——
   // 它要读同一份职责层（品牌 / 产品线 / 分配），并往同一条审批总线上建 `join_mapping`。

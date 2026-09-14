@@ -18546,7 +18546,7 @@
     "/v1/workspace/profile": {
       "put": {
         "operationId": "setWorkspaceProfile",
-        "summary": "写公司档案：全称、可选域名、\"让同事找到我\"开关（46 §1 ①）",
+        "summary": "写公司档案：全称、可选域名、\"让同事找到我\"开关、\"你卖的是\"（46 §1 ①）",
         "tags": ["onboarding"],
         "parameters": [
           {
@@ -18662,6 +18662,10 @@
                   },
                   "discoverable": {
                     "type": "boolean"
+                  },
+                  "vertical": {
+                    "type": "string",
+                    "enum": ["goods", "digital"]
                   }
                 },
                 "required": ["legal_name"]

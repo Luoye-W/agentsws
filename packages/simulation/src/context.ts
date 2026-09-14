@@ -224,6 +224,10 @@ export async function buildRunRequest(input: BuildRequestInput): Promise<RunRequ
       model: world.modelRef,
       seed: input.seed,
     },
+    // 48 v2 L2：客服共享包按它取人设、词表、业务边界与追问措辞
+    ...(world.pack.workspace.vertical === undefined
+      ? {}
+      : { vertical: world.pack.workspace.vertical }),
     idempotency_key: `idem_${inbound.dedupe_key}`,
   }
   return request

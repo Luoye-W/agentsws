@@ -51,11 +51,16 @@ export interface OnboardingActor {
   role_id: string
 }
 
-/** 46 §1 ①：界面上那三个字段。`discoverable` 不给按 true（表里的默认值）。 */
+/**
+ * 46 §1 ①：界面上那几个字段。`discoverable` 不给按 true（表里的默认值）。
+ *
+ * WP54（48 v2 L2）：加 `vertical`「你卖的是」。不给 = 不改（第一次不给就是实物）。
+ */
 export interface WorkspaceProfileInput {
   legal_name: string
   domain?: string | undefined
   discoverable?: boolean | undefined
+  vertical?: 'goods' | 'digital' | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -63,7 +68,16 @@ export interface WorkspaceProfileView {
   legal_name: string
   domain?: string
   discoverable: boolean
+  /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
+  vertical: 'goods' | 'digital'
   set_at: string
+}
+
+/** 「你卖的是」那一步的选项：中文名 + 一句人话（进 tooltip）。 */
+export interface VerticalChoiceView {
+  key: 'goods' | 'digital'
+  label: string
+  hint: string
 }
 
 /**
@@ -86,6 +100,11 @@ export interface OnboardingStateView {
   is_owner: boolean
   /** 局域网发现这台机器上能不能用；不能用时 `reason` 是一句人话。 */
   discovery: { available: boolean; enabled: boolean; reason?: string }
+  /**
+   * WP54（48 v2 L2 / 46 §1）：「你卖的是」那两个选项与各自的一句人话。
+   * 从客服共享包的垂直包读，界面上不再自己写一份文案。
+   */
+  verticals: VerticalChoiceView[]
 }
 
 /** 向导第 ③ 步的候选：岗位与它包含的职责。 */
@@ -262,6 +281,8 @@ const ProfileBody = z.object({
   legal_name: z.string().min(1).max(200),
   domain: z.string().max(253).optional(),
   discoverable: z.boolean().optional(),
+  // WP54（48 v2 L2）：你卖的是实物商品 / 虚拟产品与服务。不给 = 不改。
+  vertical: z.enum(['goods', 'digital']).optional(),
 })
 
 const PlanBody = z.object({
@@ -346,7 +367,7 @@ export function onboardingRoutes(): Route[] {
         method: 'put',
         path: '/v1/workspace/profile',
         operationId: 'setWorkspaceProfile',
-        summary: '写公司档案：全称、可选域名、"让同事找到我"开关（46 §1 ①）',
+        summary: '写公司档案：全称、可选域名、"让同事找到我"开关、"你卖的是"（46 §1 ①）',
         tag: TAG,
         auth: 'bearer',
         assignment: true,
@@ -362,6 +383,7 @@ export function onboardingRoutes(): Route[] {
             legal_name: input.legal_name,
             ...(input.domain === undefined ? {} : { domain: input.domain }),
             ...(input.discoverable === undefined ? {} : { discoverable: input.discoverable }),
+            ...(input.vertical === undefined ? {} : { vertical: input.vertical }),
           }),
         )
       },

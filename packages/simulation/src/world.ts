@@ -722,7 +722,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     opts.model !== undefined
       ? opts.model.provider
       : opts.runtime === 'direct'
-        ? aftersalesBrainProvider({ clock, seed, ref: MODEL })
+        ? aftersalesBrainProvider({
+            clock,
+            seed,
+            ref: MODEL,
+            // 48 v2 L2：规则脑按工作区装配，垂直在这一刻就定了
+            ...(pack.workspace.vertical === undefined ? {} : { vertical: pack.workspace.vertical }),
+          })
         : stubProvider({ seed, ref: MODEL })
   const gatedProvider: ModelProvider = {
     ref: modelRef,

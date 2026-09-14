@@ -266,6 +266,53 @@ describe('46 §1 首次设置', () => {
     expect(JSON.stringify(set?.payload)).not.toContain('诺伏特')
   })
 
+  // WP54（48 v2 L2 / 46 §1）
+  it('「你卖的是」：默认实物、可改成虚拟产品、再存一次不给就沿用；选项与人话从垂直包来', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+
+    const state = await data<{
+      verticals: { key: string; label: string; hint: string }[]
+    }>(await m.call('GET', '/v1/onboarding/state'))
+    expect(state.verticals.map((v) => v.key)).toEqual(['goods', 'digital'])
+    expect(state.verticals[0]?.label).toBe('实物商品')
+    expect(state.verticals[1]?.hint.length).toBeGreaterThan(8)
+
+    // 不给 → 实物
+    const first = await data<{ vertical: string }>(
+      await m.call('PUT', '/v1/workspace/profile', { body: { legal_name: '一家 SaaS' } }),
+    )
+    expect(first.vertical).toBe('goods')
+
+    // 改成虚拟产品
+    const second = await data<{ vertical: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家 SaaS', vertical: 'digital' },
+      }),
+    )
+    expect(second.vertical).toBe('digital')
+
+    // 再存一次不给 → 沿用上一次（改个名字不该把垂直悄悄改回实物）
+    const third = await data<{ vertical: string }>(
+      await m.call('PUT', '/v1/workspace/profile', { body: { legal_name: '一家 SaaS 公司' } }),
+    )
+    expect(third.vertical).toBe('digital')
+
+    // 非法值按"没选过"处理，不报错也不写坏
+    const bad = await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家 SaaS 公司', vertical: 'physical' },
+    })
+    expect(bad.status).toBe(400)
+
+    // 事件里带垂直（它不是秘密），全称仍然不进日志
+    const events = await data<{ events: { type: string; payload: Record<string, unknown> }[] }>(
+      await m.call('GET', '/v1/events?types=workspace.profile_set'),
+    )
+    const last = events.events.at(-1)
+    expect(last?.payload.vertical).toBe('digital')
+    expect(JSON.stringify(last?.payload)).not.toContain('SaaS')
+  })
+
   it('公司全称是空的 → 400，不落任何东西', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })

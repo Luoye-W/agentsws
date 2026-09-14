@@ -44,6 +44,7 @@
     "@agentsws/secretary": "workspace:*",
     "@agentsws/skills": "workspace:*",
     "@agentsws/stand-ins": "workspace:*",
+    "@agentsws/support-core": "workspace:*",
     "@agentsws/txn": "workspace:*",
     "@agentsws/work": "workspace:*",
     "@hono/node-server": "^2.1.1",

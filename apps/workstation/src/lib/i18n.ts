@@ -954,6 +954,9 @@ const zh: Table = {
   'onboarding.company.domain': '公司邮箱域名',
   'onboarding.company.domain.hint':
     '可以不填。填了的话"同一家公司"认得更准（名字对上、域名也对上才算强匹配）。',
+  'onboarding.company.vertical': '你卖的是',
+  'onboarding.company.vertical.hint':
+    '选错了 AI 会说外行话：实物那一套会张口就问订单号、背退货窗口；虚拟产品那一套问的是注册邮箱、讲的是套餐与扣费。随时能在设置页改。',
   'onboarding.company.discoverable': '让用同一个工具的同事找到我',
   'onboarding.company.discoverable.hint':
     '打开后只往局域网广播一串哈希，公司全称、成员名单、任何业务数据都不出去。关了就是独立使用，随时能再打开。',

@@ -33,6 +33,7 @@ import type {
   RuntimeAdapter,
   StartRun,
   TodoId,
+  WorkspaceVertical,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
 import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
@@ -119,6 +120,13 @@ export interface RuntimeOptions {
   hasModel?: () => boolean
   /** WP25：现在生效的默认模型（进 `RunRequest.runtime.model`）。 */
   modelRef?: () => ModelRef
+  /**
+   * WP54（48 v2 L2）：这个工作区卖的是什么（公司档案里的「你卖的是」）。
+   *
+   * 晚绑定的读法：档案在向导第 ① 步才写，而运行时比它先装配好；用户改了档案之后
+   * 下一次运行就该用新的那一套，不该等重启。不给就实物。
+   */
+  vertical?: () => WorkspaceVertical | undefined
   /**
    * WP29：技能库。给了就把 `resolve` 出来的技能正文当 persona 段拼进 prompt——
    * 学习回路采纳的那条 overlay 是靠这一步生效的（"下次运行用新版本"）。
@@ -440,6 +448,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...new Set([...config.grounding.map((g) => g.tool), ...DEFAULT_TOOLS, ...devToolNames()]),
     ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
+    const vertical = options.vertical?.()
     return {
       id: input.run_id,
       schema_version: 1,
@@ -489,6 +498,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : { provider: 'stub', model: 'default', region: 'cn' },
         seed,
       },
+      // 48 v2 L2：客服共享包按它取人设、词表、业务边界与追问措辞
+      ...(vertical === undefined ? {} : { vertical }),
       idempotency_key: `idem_${input.run_id}`,
     }
   }

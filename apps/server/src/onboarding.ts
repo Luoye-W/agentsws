@@ -49,9 +49,11 @@ import type {
   RoleId,
   WorkspaceId,
   WorkspaceProfile,
+  WorkspaceVertical,
 } from '@agentsws/contracts'
 import { companyKey, normalizeDomain } from '@agentsws/core'
 import type { RoleStore } from '@agentsws/roles'
+import { normalizeVertical, verticalChoices } from '@agentsws/support-core'
 import type BetterSqlite3 from 'better-sqlite3'
 import { catalogEntry, ROLE_CONNECTOR_KIND } from './catalog.js'
 import { createDiscovery, type Discovery, type MdnsFactory } from './discovery.js'
@@ -183,6 +185,13 @@ export interface OnboardingAssembly {
   port: OnboardingPort
   /** 46 §2 I1：这台机器的公司钥匙（没设过档案时是 undefined）。 */
   companyKey(): string | undefined
+  /**
+   * 48 v2 L2：公司档案里的「你卖的是」。没设过就是 `undefined`（= 实物）。
+   *
+   * 运行时装配比档案早，所以它是**被读的**而不是被传的：用户在设置页改完，
+   * 下一次运行就用新的那一套，不用重启。
+   */
+  vertical(): WorkspaceVertical | undefined
   discovery: Discovery
   invites: InvitesAssembly
   close(): void
@@ -254,6 +263,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     legal_name: p.legal_name,
     ...(p.domain === undefined ? {} : { domain: p.domain }),
     discoverable: p.discoverable,
+    // 48 v2 L2：没设过就是实物——存量档案里没有这个字段，它们的行为不许变
+    vertical: p.vertical ?? 'goods',
     set_at: p.set_at,
   })
 
@@ -402,6 +413,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           enabled: profile?.discoverable === true,
           ...(runtime.reason === undefined ? {} : { reason: runtime.reason }),
         },
+        // 46 §1 ①「你卖的是」：选项与 tooltip 都从垂直包读，界面不自己写一份文案
+        verticals: verticalChoices(),
       } satisfies OnboardingStateView
     },
 
@@ -410,10 +423,13 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       if (legal_name === '') throw new OnboardingError('invalid_input', '公司全称不能是空的')
       const previous = profileOf()
       const domain = normalizeDomain(input.domain)
+      // 48 v2 L2：不给就沿用上一次；从来没设过就是实物
+      const vertical = normalizeVertical(input.vertical) ?? previous?.vertical
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
         discoverable: input.discoverable ?? previous?.discoverable ?? true,
+        ...(vertical === undefined ? {} : { vertical }),
         set_at: clock.now(),
       }
       backend.put(next)
@@ -422,6 +438,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         company_key: companyKey(next.legal_name, next.domain),
         has_domain: next.domain !== undefined,
         discoverable: next.discoverable,
+        vertical: next.vertical ?? 'goods',
       })
       // 开关变了就真的开 / 关：关掉 = 停广播、停监听、清掉看见过的同伴
       if (previous?.discoverable !== next.discoverable || previous === undefined) {
@@ -535,6 +552,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   return {
     port,
     companyKey: keyOf,
+    vertical: () => profileOf()?.vertical,
     discovery,
     invites,
     close() {

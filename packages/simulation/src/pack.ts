@@ -7,7 +7,14 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
-import type { Iso8601, PersonId, RangeRef, RoleId, WorkspaceId } from '@agentsws/contracts'
+import type {
+  Iso8601,
+  PersonId,
+  RangeRef,
+  RoleId,
+  WorkspaceId,
+  WorkspaceVertical,
+} from '@agentsws/contracts'
 import type { MockOrder, MockProduct, MockState, MockThread } from '@agentsws/stand-ins'
 import { parse as parseYaml } from 'yaml'
 import { SimulationError } from './errors.js'
@@ -49,6 +56,11 @@ export interface PackWorkspace {
   locales: { customers: string; operators: string }
   markets: RangeRef[]
   company_md: string
+  /**
+   * 48 v2 L2：这个工作区卖的是什么（公司档案里的「你卖的是」）。
+   * 不写就是实物——既有 pack 的 `workspace.yml` 里没有这一行，它们一个字节都不变。
+   */
+  vertical?: WorkspaceVertical
 }
 
 export interface PackPerson {
