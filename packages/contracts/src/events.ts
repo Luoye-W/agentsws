@@ -59,6 +59,14 @@ export type KnownEventType =
   | 'text.delta'
   | 'tool.call'
   | 'tool.result'
+  /**
+   * WP53：真环境记录源真的跑了一次工具（17 §2 的 `tool.result` 之外多这一条）。
+   * payload 只有 `tool` / `status` / `duration_ms` / `provenance` 条数 / 失败原因码，
+   * **订单内容一个字节都不进**（21 §1）。
+   */
+  | 'tool.executed'
+  /** WP53：31 §3.3 的联系人台账里多认识了一个人；payload 只有不可逆的 id 与来路。 */
+  | 'contact.noted'
   | 'proposal.created'
   | 'ui'
   | 'ui.partial'
