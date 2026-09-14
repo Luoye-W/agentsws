@@ -91,17 +91,42 @@ interface WireTranscriptionResponse {
   segments?: { start?: number; end?: number; text?: string; speaker?: string }[]
 }
 
+/**
+ * OpenAI 兼容口对工具名只认 `^[a-zA-Z0-9_-]+$`（DeepSeek 实测 400：
+ * "Invalid 'tools[4].function.name': string does not match pattern"）。我们的工具名带点
+ * （`shopify.docs.search`、`orders.get`）。出站时把不合规字符换成 `__`，回来的 tool_call
+ * 再按本次请求的工具表映射回原名——模型看到的是合规名，运行时看到的永远是原名。
+ */
+export const wireToolName = (name: string): string => name.replace(/[^a-zA-Z0-9_-]/g, '__')
+
 const toWireMessage = (m: ChatMessage): Record<string, unknown> => ({
   role: m.role,
   content: m.content,
-  ...(m.name === undefined ? {} : { name: m.name }),
+  ...(m.name === undefined ? {} : { name: m.role === 'tool' ? wireToolName(m.name) : m.name }),
   ...(m.tool_call_id === undefined ? {} : { tool_call_id: m.tool_call_id }),
 })
 
 const toWireTool = (t: ToolDef): Record<string, unknown> => ({
   type: 'function',
-  function: { name: t.name, description: t.description, parameters: t.input_schema },
+  function: { name: wireToolName(t.name), description: t.description, parameters: t.input_schema },
 })
+
+/** 本次请求的 合规名 → 原名；两个原名撞成同一个合规名是调用方的错，当场拒。 */
+function toolNameMap(tools: ToolDef[] | undefined): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const t of tools ?? []) {
+    const wire = wireToolName(t.name)
+    const prior = map.get(wire)
+    if (prior !== undefined && prior !== t.name) {
+      throw new GatewayError('invalid_input', 'two tool names collapse to the same wire name', {
+        wire,
+        names: [prior, t.name],
+      })
+    }
+    map.set(wire, t.name)
+  }
+  return map
+}
 
 const cachedOf = (u: WireUsage | undefined): number =>
   u?.prompt_tokens_details?.cached_tokens ?? u?.prompt_cache_hit_tokens ?? 0
@@ -220,11 +245,13 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       if (message === undefined) {
         throw new ProviderError('provider response has no choices')
       }
+      const names = toolNameMap(req.tools)
       const calls = (message.tool_calls ?? []).map((c, i) => {
-        const name = c.function?.name
-        if (name === undefined) {
+        const wire = c.function?.name
+        if (wire === undefined) {
           throw new GatewayError('invalid_input', 'tool_call without function name', { index: i })
         }
+        const name = names.get(wire) ?? wire
         const args = c.function?.arguments ?? '{}'
         let input: unknown
         try {

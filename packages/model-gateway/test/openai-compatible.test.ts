@@ -67,16 +67,66 @@ describe('openaiCompatibleProvider（DeepSeek 形态，注入 fetch，不联网�
       { role: 'system', content: 'persona' },
       { role: 'user', content: 'where is my order' },
     ])
+    // 工具名出站转成 OpenAI 兼容口认的形式（DeepSeek 实测 400 才发现的）
     expect(sent.tools).toEqual([
       {
         type: 'function',
         function: {
-          name: 'orders.get',
+          name: 'orders__get',
           description: 'read one order',
           parameters: { type: 'object' },
         },
       },
     ])
+  })
+
+  it('带点的工具名：出站换成 __，回来的 tool_call 映射回原名；撞名当场拒', async () => {
+    const body = {
+      choices: [
+        {
+          message: {
+            content: '',
+            tool_calls: [
+              {
+                id: 'c1',
+                function: { name: 'shopify__docs__search', arguments: '{"q":"refund"}' },
+              },
+            ],
+          },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 2 },
+    }
+    const { fetch, calls } = mockFetch(body)
+    const provider = openaiCompatibleProvider({
+      apiKeyEnv: KEY_ENV,
+      model: 'deepseek-flash',
+      env,
+      fetch,
+    })
+    const out = await provider.complete({
+      messages: [userPrompt('q')],
+      tools: [
+        { name: 'shopify.docs.search', description: 'd', input_schema: { type: 'object' } },
+        { name: 'get_order', description: 'd', input_schema: { type: 'object' } },
+      ],
+    })
+    const sent = JSON.parse(String(calls[0]?.init.body ?? '{}')) as {
+      tools: { function: { name: string } }[]
+    }
+    expect(sent.tools.map((x) => x.function.name)).toEqual(['shopify__docs__search', 'get_order'])
+    for (const n of sent.tools.map((x) => x.function.name)) expect(n).toMatch(/^[a-zA-Z0-9_-]+$/)
+    expect(out.tool_calls?.[0]?.name).toBe('shopify.docs.search')
+
+    await expect(
+      provider.complete({
+        messages: [userPrompt('q')],
+        tools: [
+          { name: 'a.b', description: 'd', input_schema: { type: 'object' } },
+          { name: 'a__b', description: 'd', input_schema: { type: 'object' } },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_input' })
   })
 
   it('解析 usage 与 tool_calls', async () => {
