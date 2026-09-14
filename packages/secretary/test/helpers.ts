@@ -66,7 +66,7 @@ export function position(
 
 /** 售后 / 运营 / 投放三份职责的最小版本（字段取自 packs 里那三份真定义）。 */
 export const AFTERSALES = {
-  id: 'dtc.aftersales',
+  id: 'dtc.support',
   name: { zh: '独立站售后客服', en: 'DTC After-sales Support' },
   description: '订单状态与物流、退换货、退款、改地址、漏发错发破损、拒付争议',
   grounding: [

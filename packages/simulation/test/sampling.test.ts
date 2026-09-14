@@ -5,7 +5,7 @@
  * （31 §3.4，`refund` 是 medium 风险）。这里钉的是**另一半**：真的出现一条低风险、
  * 额度内、L2 的变更时，抽检到底有没有把它抽出来给人复核。
  *
- * 低风险的写动作（`discount_code`）不在 `dtc.aftersales` 的动作表里，运行时也不会提，
+ * 低风险的写动作（`discount_code`）不在 `dtc.support` 的动作表里，运行时也不会提，
  * 所以这里由测试**当宿主**直接调账本 stage 一条——这正是宿主该做的事（15 §5）。
  */
 import { describe, expect, it } from 'vitest'

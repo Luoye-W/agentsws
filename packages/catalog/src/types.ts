@@ -65,7 +65,7 @@ export interface CatalogEntry {
   /* ── 三把钥匙里的两把，来源给得出就给（给不出就只按语义匹配） ── */
   /** 同触发器：`cron:0 9 * * *` / `event:order.paid` / `manual`。 */
   trigger?: string
-  /** 同目标对象：`order:ord_1001` / `store:s_main` / `skill:dtc.aftersales`。 */
+  /** 同目标对象：`order:ord_1001` / `store:s_main` / `skill:dtc.support`。 */
   target?: string
 
   workspace_id: WorkspaceId

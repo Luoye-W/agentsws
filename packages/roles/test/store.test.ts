@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -24,7 +25,7 @@ describe('createRoleStore 内存后端', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: 'p_owner',
     })
     expect(s.effectiveConfig(a.id).ready).toBe(false)
@@ -43,7 +44,7 @@ describe('createRoleStore 内存后端', () => {
     const cs = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })
@@ -56,17 +57,17 @@ describe('createRoleStore 内存后端', () => {
     s.assignments.create({
       person_id: 'p_boss',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_b' }],
       granted_by: 'p_owner',
     })
 
     expect(s.assignments.listByPerson('p_cs')).toHaveLength(2)
-    expect(s.assignments.listByRole('dtc.aftersales')).toHaveLength(2)
+    expect(s.assignments.listByRole('dtc.support')).toHaveLength(2)
     s.assignments.revoke(cs.id, { handover_to: 'p_boss' })
     expect(s.assignments.listByPerson('p_cs')).toHaveLength(1)
-    expect(s.assignments.listByRole('dtc.aftersales')).toHaveLength(1)
-    expect(s.assignments.listByRole('dtc.aftersales', { include_revoked: true })).toHaveLength(2)
+    expect(s.assignments.listByRole('dtc.support')).toHaveLength(1)
+    expect(s.assignments.listByRole('dtc.support', { include_revoked: true })).toHaveLength(2)
     expect(s.assignments.get(cs.id)?.revoked_at).toBe('2026-09-09T00:00:00.000Z')
     s.close()
   })
@@ -99,9 +100,9 @@ describe('createRoleStore 内存后端', () => {
       s.assignments.create({
         person_id: 'p_cs',
         workspace_id: 'ws_1',
-        role_id: 'dtc.aftersales',
+        role_id: 'dtc.support',
         granted_by: 'p_owner',
-        role_version: '2.0.0',
+        role_version: '1.0.0',
       }),
     ).toThrow(/cannot grant/)
     s.close()
@@ -110,7 +111,6 @@ describe('createRoleStore 内存后端', () => {
   it('applies a position through the store', () => {
     const s = createRoleStore({ clock: fixedClock(), roles: roles() })
     for (const id of [
-      'dtc.presales',
       'dtc.store-config',
       'dtc.catalog',
       'dtc.content',
@@ -122,10 +122,10 @@ describe('createRoleStore 内存后端', () => {
     const created = s.assignments.applyPosition(dtcOps(), 'p_ops', 'ws_1', [], {
       granted_by: 'p_owner',
     })
-    expect(created).toHaveLength(8)
-    expect(s.assignments.listByPerson('p_ops')).toHaveLength(8)
-    expect(s.roles.list()).toHaveLength(10)
-    expect(s.roles.get('dtc.aftersales')?.version).toBe('1.0.0')
+    expect(created).toHaveLength(7)
+    expect(s.assignments.listByPerson('p_ops')).toHaveLength(7)
+    expect(s.roles.list()).toHaveLength(9)
+    expect(s.roles.get('dtc.support')?.version).toBe('2.0.0')
     s.close()
   })
 
@@ -150,7 +150,7 @@ describe('createRoleStore SQLite 后端', () => {
     const a = first.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })
@@ -199,5 +199,96 @@ describe('createRoleStore SQLite 后端', () => {
     expect(ids.size).toBe(5)
     expect([...ids].every((id) => id.startsWith('asg_'))).toBe(true)
     s.close()
+  })
+})
+
+// WP54（48 v2 L1）：职责改名 / 合并——旧 id 读得到，已有分配迁得动
+describe('旧职责 id 的别名与迁移（WP54 / 48 v2 L1）', () => {
+  it('用旧 id 建分配，落到新 id 上', () => {
+    const s = createRoleStore({ clock: fixedClock(), roles: roles() })
+    const a = s.assignments.create({
+      person_id: 'p_cs',
+      workspace_id: 'ws_1',
+      role_id: 'dtc.aftersales',
+      ranges: [{ kind: 'store', id: 'shop_a' }],
+      granted_by: 'p_owner',
+    })
+    expect(a.role_id).toBe('dtc.support')
+    expect(s.roles.get('dtc.presales')?.id).toBe('dtc.support')
+    expect(s.roles.require('dtc.aftersales').id).toBe('dtc.support')
+    s.close()
+  })
+
+  it('pack 自带的同名定义仍然优先于别名表', () => {
+    const own = { ...stubRole('dtc.aftersales'), domain: 'dtc' as const }
+    const s = createRoleStore({ clock: fixedClock(), roles: [...roles(), own] })
+    expect(s.roles.get('dtc.aftersales')?.description).toBe('stub dtc.aftersales')
+    s.close()
+  })
+
+  it('迁移改 role_id 与 role_version，别的一个字不动；已撤销的不动；幂等', () => {
+    const dbPath = tempDb()
+    const s = createRoleStore({ clock: fixedClock(), dbPath, roles: roles() })
+    // 造两条"老库里的"分配：直接写旧 id（建的时候会被别名归一，所以绕过 create）
+    const live = s.assignments.create({
+      person_id: 'p_cs',
+      workspace_id: 'ws_1',
+      role_id: 'dtc.support',
+      ranges: [{ kind: 'store', id: 'shop_a' }],
+      granted_by: 'p_owner',
+    })
+    const gone = s.assignments.create({
+      person_id: 'p_chen',
+      workspace_id: 'ws_1',
+      role_id: 'dtc.support',
+      granted_by: 'p_owner',
+    })
+    s.assignments.revoke(gone.id)
+    s.close()
+
+    // 伪造两条"改名前写下的"行：直接改库，因为 `create` 这一侧已经被别名归一过了
+    const require_ = createRequire(import.meta.url)
+    const Database = require_('better-sqlite3') as new (
+      path: string,
+    ) => {
+      prepare(sql: string): { run(...args: string[]): void }
+      close(): void
+    }
+    const raw = new Database(dbPath)
+    for (const id of [live.id, gone.id]) {
+      raw
+        .prepare(
+          'UPDATE assignments SET role_id = ?, doc = replace(replace(doc, \'"dtc.support"\', \'"dtc.aftersales"\'), \'"2.0.0"\', \'"1.0.0"\') WHERE id = ?',
+        )
+        .run('dtc.aftersales', id)
+    }
+    raw.close()
+
+    const reopened = createRoleStore({ clock: fixedClock(), dbPath, roles: roles() })
+    const before = reopened.assignments.require(live.id)
+    const migrated = reopened.assignments.migrateRoleIds()
+    expect(migrated).toHaveLength(1)
+    expect(migrated[0]).toMatchObject({
+      assignment_id: live.id,
+      person_id: 'p_cs',
+      from: 'dtc.aftersales',
+      to: 'dtc.support',
+      role_version: '2.0.0',
+    })
+    expect(before.role_id).toBe('dtc.aftersales')
+    expect(before.role_version).toBe('1.0.0')
+    expect(Object.keys(before.automation_state)).toContain('stage_refund')
+    const after = reopened.assignments.require(live.id)
+    expect(after.role_id).toBe('dtc.support')
+    expect(after.role_version).toBe('2.0.0')
+    // 范围、授予人、授予时间、自动化状态一个字没动
+    expect(after.ranges).toEqual(before.ranges)
+    expect(after.granted_at).toBe(before.granted_at)
+    expect(after.automation_state).toEqual(before.automation_state)
+    // 已撤销的那条不动（历史就是历史）
+    expect(reopened.assignments.require(gone.id).role_id).toBe('dtc.aftersales')
+    // 幂等：再跑一遍什么也不发生
+    expect(reopened.assignments.migrateRoleIds()).toEqual([])
+    reopened.close()
   })
 })

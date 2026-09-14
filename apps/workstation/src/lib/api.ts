@@ -2254,7 +2254,16 @@ export interface WorkspaceProfileView {
   legal_name: string
   domain?: string
   discoverable: boolean
+  /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
+  vertical: 'goods' | 'digital'
   set_at: string
+}
+
+/** 「你卖的是」那一步的选项：中文名 + 一句人话（进 tooltip）。 */
+export interface VerticalChoiceView {
+  key: 'goods' | 'digital'
+  label: string
+  hint: string
 }
 
 export interface OnboardingStateView {
@@ -2265,6 +2274,8 @@ export interface OnboardingStateView {
   other_assignments: number
   is_owner: boolean
   discovery: { available: boolean; enabled: boolean; reason?: string }
+  /** 48 v2 L2：「你卖的是」的选项与各自的一句人话（真源是客服共享包的垂直包）。 */
+  verticals: VerticalChoiceView[]
 }
 
 /** 向导第 ③ 步的候选：一个岗位与它包含的职责（每条带一句"它会干什么"）。 */
@@ -2359,7 +2370,13 @@ export const getOnboardingState = (assignment?: string): Promise<OnboardingState
   })
 
 export const setWorkspaceProfile = (
-  input: { legal_name: string; domain?: string; discoverable?: boolean },
+  input: {
+    legal_name: string
+    domain?: string
+    discoverable?: boolean
+    /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。 */
+    vertical?: 'goods' | 'digital'
+  },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>
   api<WorkspaceProfileView>('/v1/workspace/profile', {

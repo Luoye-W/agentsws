@@ -129,9 +129,18 @@ export async function runScenario(
 ): Promise<ScenarioReport> {
   const tier: Tier = options.tier ?? 'fast'
   const seed = options.seed ?? scenario.dataset.seed
-  const pack =
+  const loaded =
     options.pack ??
     loadPack(options.packDir ?? `${options.packsDir ?? 'packs'}/${scenario.dataset.pack}`)
+  // WP54（48 v2 L2）：`dataset.vertical` 只对这条场景覆盖工作区的「你卖的是」。
+  // 同一份合成公司（人、店、订单）在两个垂直下复用，不为一条回归题再生成一整套。
+  const pack =
+    scenario.dataset.vertical === undefined
+      ? loaded
+      : {
+          ...loaded,
+          workspace: { ...loaded.workspace, vertical: scenario.dataset.vertical },
+        }
 
   // realistic 档默认走 direct 运行时：stub 运行时压根不看模型说了什么，
   // 用真模型跑它等于花钱买一份规则草稿（26 §4 realistic = 真模型质量评测那一类）

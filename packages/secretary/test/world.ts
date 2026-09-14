@@ -73,7 +73,7 @@ export function fakeWorld(at?: Iso8601): FakeWorld {
       [
         {
           position_id: 'a_chen',
-          role_id: 'dtc.aftersales',
+          role_id: 'dtc.support',
           role_name: '独立站售后客服',
           ranges: [{ kind: 'store', id: 'store_main' }],
         },

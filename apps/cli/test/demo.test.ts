@@ -57,7 +57,7 @@ describe('agentsws demo（合成世界当后端）', () => {
       await call('/v1/positions', { assignment: demo.world.assignment.id }),
     )
     const roles = out.positions.map((p) => p.role_id).sort()
-    expect(roles).toContain('dtc.aftersales')
+    expect(roles).toContain('dtc.support')
     expect(roles).toContain('dtc.analytics')
   })
 

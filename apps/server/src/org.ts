@@ -223,12 +223,17 @@ const SEED_POSITIONS: readonly {
       ['dtc.analytics', true],
     ],
   },
+  // WP54（48 v2 L1 / 27 §1）：**客服**岗位 = 三条职责，默认全勾。
+  // 只做独立站的人去勾掉 Amazon 那条；还没上聊天 widget 的去勾掉在线客服那条。
+  // （`roles.roles.get` 解析不到的职责会在上面那一步被筛掉，所以装了几条就显示几条。）
   {
-    id: 'dtc-support',
-    zh: '独立站售后客服',
-    en: 'DTC After-sales Support',
+    id: 'customer-care',
+    zh: '客服',
+    en: 'Customer Care',
     roles: [
-      ['dtc.aftersales', true],
+      ['dtc.support', true],
+      ['dtc.live-chat', true],
+      ['amz.support', true],
       ['common.member', false],
     ],
   },

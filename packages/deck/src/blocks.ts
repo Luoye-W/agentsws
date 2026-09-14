@@ -171,7 +171,7 @@ const QUEUE_BLOCKS = (): BlockDef[] => [
 const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   // 售后客服的职责里没有 analytics 域（05 §5），所以它的面板只有店铺后台——
   // 无权的数据源连「去连接」都不该出（19 §3 过滤下推：不是先给再脱敏）。
-  'dtc.aftersales': () => SHOP_BLOCKS(),
+  'dtc.support': () => SHOP_BLOCKS(),
   'dtc.analytics': () => [...SHOP_BLOCKS(), ...GA4_BLOCKS(), ...GSC_BLOCKS()],
   'ads.meta': () => [...ADS_BLOCKS(), ...GA4_BLOCKS()],
 }

@@ -187,6 +187,7 @@ export type {
   OnboardingSkillItem,
   OnboardingStateView,
   SupersedeInput,
+  VerticalChoiceView,
   WorkspaceProfileInput,
   WorkspaceProfileView,
 } from './routes/onboarding.js'

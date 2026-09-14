@@ -7,7 +7,14 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
-import type { Iso8601, PersonId, RangeRef, RoleId, WorkspaceId } from '@agentsws/contracts'
+import type {
+  Iso8601,
+  PersonId,
+  RangeRef,
+  RoleId,
+  WorkspaceId,
+  WorkspaceVertical,
+} from '@agentsws/contracts'
 import type { MockOrder, MockProduct, MockState, MockThread } from '@agentsws/stand-ins'
 import { parse as parseYaml } from 'yaml'
 import { SimulationError } from './errors.js'
@@ -49,6 +56,11 @@ export interface PackWorkspace {
   locales: { customers: string; operators: string }
   markets: RangeRef[]
   company_md: string
+  /**
+   * 48 v2 L2：这个工作区卖的是什么（公司档案里的「你卖的是」）。
+   * 不写就是实物——既有 pack 的 `workspace.yml` 里没有这一行，它们一个字节都不变。
+   */
+  vertical?: WorkspaceVertical
 }
 
 export interface PackPerson {
@@ -151,7 +163,7 @@ export interface PackJudgeDoc {
  * pack 自带的职责定义（`roles/*.yml`）。
  *
  * 15 / 50 人 pack 要有投放、运营这些岗位，而 `packages/roles` 里目前只内置了
- * `dtc.aftersales` / `common.owner` / `common.member` 三份。让 pack 能自带职责定义，
+ * `dtc.support` / `common.owner` / `common.member` 三份。让 pack 能自带职责定义，
  * 合成公司的规模就不再被内置职责的数量卡住；同 id 时 pack 里这份优先（它更具体）。
  */
 export interface PackRoleFile {

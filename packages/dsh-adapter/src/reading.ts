@@ -5,6 +5,8 @@
  * 17 §4 的五种运行时是同一契约的独立实现，共享读逻辑会让"换运行时"变成"换分支"。
  */
 import type { ContextItem, Iso8601, ObjectRef, RunRequest } from '@agentsws/contracts'
+import type { Vertical } from '@agentsws/support-core'
+import { renderReplyBody } from '@agentsws/support-core'
 
 export const DAY_MS = 86_400_000
 
@@ -162,46 +164,37 @@ export interface DraftInput {
   refundAmount?: number
   signature: string
   customer: string
+  /** 退货窗口是从知识层真读到的（而不是兜底天数）。 */
+  windowFromFact?: boolean
+  /**
+   * 48 v2 L2（WP54）：这个工作区卖的是什么（`RunRequest.vertical`）。不给就实物。
+   */
+  vertical?: Vertical
 }
 
 /**
- * 固定模板：引用政策 + 订单状态；窗口内附带退款意图。
- * 不回显任何外部原文（围栏纪律），不发明补偿。
+ * 回信正文。
+ *
+ * **这一段不自己写模板**——句子是垂直包的数据（48 v2 L2），不是运行时的读逻辑。
+ * 这个文件抬头那句"各写各的"说的是怎么从 `RunRequest` 里读出订单与窗口；
+ * 而"实物说订单号、虚拟产品说注册邮箱"是同一份口径，四个运行时都得照它说话。
+ * 自己抄一份的后果在 WP54 的 `digital-vertical/account-issue` 上原形毕露：
+ * 工作区改成虚拟产品之后，只有这条路还在向一个没有订单的客户要订单号。
+ *
+ * 实物那一档的字节没变（`renderReplyBody` 的 goods 模板与这里原先的写法逐字相同）。
  */
 export function draftBody(d: DraftInput): string {
-  const lines: string[] = [`Hi ${d.customer},`, '']
-  if (d.order) {
-    lines.push(
-      `Thanks for reaching out about order ${d.order.name}. Its payment status is "${d.order.financial_status}" and its fulfillment status is "${d.order.fulfillment_status}".`,
-    )
-  } else {
-    lines.push('Thanks for reaching out.')
-  }
-  lines.push('')
-  lines.push(`Our return policy allows returns within ${d.windowDays} days of delivery.`)
-  if (d.order?.delivered_at !== undefined && d.daysSinceDelivery !== undefined) {
-    lines.push(
-      `Your order was delivered on ${d.order.delivered_at.slice(0, 10)}, ${d.daysSinceDelivery} day(s) ago.`,
-    )
-  }
-  lines.push('')
-  if (d.withinWindow && d.refundAmount !== undefined && d.order) {
-    lines.push(
-      `That is inside the ${d.windowDays}-day window, so we have prepared a refund of ${d.refundAmount} ${d.order.currency} to your original payment method. It is waiting for a colleague to confirm and will be issued right after.`,
-    )
-  } else if (d.withinWindow && d.order) {
-    lines.push(
-      `That is inside the ${d.windowDays}-day window, so a return is possible. A colleague will confirm the next step with you.`,
-    )
-  } else if (d.order) {
-    lines.push(
-      `That is outside the ${d.windowDays}-day window, so a refund is not available for this order. Tell us what went wrong and we will look at the options that do apply.`,
-    )
-  } else {
-    lines.push('Tell us the order number and we will check what applies.')
-  }
-  lines.push('', 'Kind regards,', d.signature)
-  return lines.join('\n')
+  return renderReplyBody({
+    windowDays: d.windowDays,
+    withinWindow: d.withinWindow,
+    signature: d.signature,
+    customer: d.customer,
+    ...(d.windowFromFact === undefined ? {} : { windowFromFact: d.windowFromFact }),
+    ...(d.vertical === undefined ? {} : { vertical: d.vertical }),
+    ...(d.order === undefined ? {} : { order: d.order }),
+    ...(d.daysSinceDelivery === undefined ? {} : { daysSinceDelivery: d.daysSinceDelivery }),
+    ...(d.refundAmount === undefined ? {} : { refundAmount: d.refundAmount }),
+  })
 }
 
 /** 工具入参：与 stub 运行时一致，保证同一条场景两种运行时的 `tool.call.input` 可比。 */

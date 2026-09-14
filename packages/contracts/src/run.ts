@@ -9,6 +9,7 @@ import type {
   Sensitivity,
   WorkspaceId,
 } from './common.js'
+import type { WorkspaceVertical } from './identity.js'
 
 /** 17 §1 RunRequest：协同服务 → 运行时适配器。无状态：运行自带全部上下文。 */
 export type RunKind =
@@ -90,6 +91,13 @@ export interface RunRequest {
     must_stage_if_change_requested: boolean
   }
   runtime: { preset: string; profile: string; plugins: string[]; model: ModelRef; seed?: number }
+  /**
+   * 48 v2 L2（WP54）：这个工作区卖的是什么（`WorkspaceProfile.vertical`）。
+   *
+   * 运行时拿它去 `getVerticalPack()` 取人设、词表、业务边界与追问措辞。
+   * 不给就实物——老的运行记录与回放包里没有这个字段，重放出来必须还是原来那一份。
+   */
+  vertical?: WorkspaceVertical
   idempotency_key: string
 }
 

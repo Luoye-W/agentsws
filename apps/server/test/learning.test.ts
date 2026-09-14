@@ -48,7 +48,7 @@ async function draft(n: number): Promise<ApprovalItem> {
     workspace_id: workspace(),
     schema_version: 1,
     kind: 'outbound_draft',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     subject: { object: { type: 'thread', id: `thr_${n}` } },
     dedupe_key: `${workspace()}:outbound_draft:thr_${n}`,
     title: `回复客户 ${n}`,
@@ -124,7 +124,7 @@ beforeEach(async () => {
   aftersales = server.roles.assignments.create({
     person_id: server.bootstrap.person.id,
     workspace_id: server.bootstrap.workspace.id,
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     granted_by: server.bootstrap.person.id,
     ranges: [{ kind: 'store', id: 'store_1' }],
   })

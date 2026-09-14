@@ -32,7 +32,7 @@ const read = (
 export const aftersales = (workspace_id = WS): GrantedActor => ({
   person_id: 'per_aftersales',
   assignment_id: 'asg_aftersales',
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   workspace_id,
   grants: [
     read('customer', 'internal', 'assigned'),

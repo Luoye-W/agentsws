@@ -227,7 +227,7 @@ function setup(opts: { connected?: boolean; hits?: RetrievalHit[] } = {}): Setup
 
 function request(allow: string[] = ['get_order', 'list_orders', 'get_product', 'search_policies']) {
   return {
-    actor: { person_id: 'per_1', assignment_id: 'asg_1', role_id: 'dtc.aftersales' },
+    actor: { person_id: 'per_1', assignment_id: 'asg_1', role_id: 'dtc.support' },
     tools: { allow, connect_token: '', side_effect_policy: 'executor' },
   } as unknown as RunRequest
 }

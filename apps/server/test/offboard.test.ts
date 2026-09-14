@@ -72,7 +72,7 @@ const hire = async (email: string, name: string): Promise<string> => {
   const ws = server.bootstrap.workspace.id
   const invite = await data<{ url?: string }>(
     await call('POST', `/v1/workspaces/${ws}/invitations`, {
-      body: { email, name, position_id: 'dtc-support' },
+      body: { email, name, position_id: 'customer-care' },
     }),
   )
   const token = (invite.url ?? '').split('/invite/')[1] ?? ''

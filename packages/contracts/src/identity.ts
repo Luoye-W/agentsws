@@ -115,11 +115,22 @@ export interface Invitation {
  * 46 §2 I1 的底线：发现阶段**只出哈希**（`companyKey` 算出来的那一串），
  * 全称与域名从不离开本机；名字一样也不等于同一家——连上必须有人申请、有人批准。
  */
+/**
+ * 48 v2 L2 / 46 §1：**你卖的是**实物商品还是虚拟产品与服务。
+ *
+ * 它不是两套代码，是**一个档案字段**：客服共享包按它取垂直包（人设、词表、意图、
+ * 业务边界、追问措辞）。非法值与缺省一律按实物处理——存量工作区与老的导出包里
+ * 没有这个字段，它们的行为必须与这一版上线前一模一样。
+ */
+export type WorkspaceVertical = 'goods' | 'digital'
+
 export interface WorkspaceProfile {
   legal_name: string
   domain?: string
   /** 默认 true（46 §1 表）。关了 = 独立使用，不广播、不监听、不登记。 */
   discoverable: boolean
+  /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
+  vertical?: WorkspaceVertical
   set_at: Iso8601
 }
 

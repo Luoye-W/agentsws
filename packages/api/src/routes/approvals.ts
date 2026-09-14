@@ -42,7 +42,7 @@ const DECIDE = {
  * **`approval.stage`**——提议 ≠ 决定，这正是 SoD 的前提。
  *
  * WP33 时三个职责包一条 `approval.stage` 都没给，真按 `stage` 判会让所有人 403，于是
- * 暂时沿用了 `read`；WP35 给 `common.owner` / `common.member` / `dtc.aftersales` 都补上了
+ * 暂时沿用了 `read`；WP35 给 `common.owner` / `common.member` / `dtc.support` 都补上了
  * stage（owner workspace、另两个 own），这里改回该有的那一条。范围要 `own` 就够：
  * 提议的是自己那一张，owner 的 workspace 覆盖它。
  *

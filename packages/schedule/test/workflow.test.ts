@@ -15,7 +15,7 @@ const def = (over: Partial<WorkflowDefinition> = {}): WorkflowDefinition => ({
   id: 'test.flow',
   version: '1.0.0',
   name: '测试流程',
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   steps: [
     { id: 's1', kind: 'run', params: { what: 'a' } },
     { id: 's2', kind: 'run', params: { what: 'b' } },

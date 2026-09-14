@@ -21,7 +21,7 @@ export function inbound(over: Partial<InboundEvent> = {}): InboundEvent {
     dedupe_key: 'dk_1',
     parts: [{ type: 'text', text: 'hello' }],
     raw_ref: 'raw://inbound/email/message/1',
-    routing: { role_id: 'dtc.aftersales', confidence: 0.6 },
+    routing: { role_id: 'dtc.support', confidence: 0.6 },
     secrets_scrubbed: false,
     ...over,
   } as InboundEvent
@@ -30,9 +30,9 @@ export function inbound(over: Partial<InboundEvent> = {}): InboundEvent {
 export function queueItem(over: Partial<QueueItem> = {}): QueueItem {
   return {
     id: 'q_1',
-    lane: 'ws_1:dtc.aftersales',
+    lane: 'ws_1:dtc.support',
     workspace_id: 'ws_1',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     event: inbound(),
     attempts: 0,
     next_at_ms: T0,

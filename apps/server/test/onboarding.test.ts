@@ -266,6 +266,53 @@ describe('46 §1 首次设置', () => {
     expect(JSON.stringify(set?.payload)).not.toContain('诺伏特')
   })
 
+  // WP54（48 v2 L2 / 46 §1）
+  it('「你卖的是」：默认实物、可改成虚拟产品、再存一次不给就沿用；选项与人话从垂直包来', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+
+    const state = await data<{
+      verticals: { key: string; label: string; hint: string }[]
+    }>(await m.call('GET', '/v1/onboarding/state'))
+    expect(state.verticals.map((v) => v.key)).toEqual(['goods', 'digital'])
+    expect(state.verticals[0]?.label).toBe('实物商品')
+    expect(state.verticals[1]?.hint.length).toBeGreaterThan(8)
+
+    // 不给 → 实物
+    const first = await data<{ vertical: string }>(
+      await m.call('PUT', '/v1/workspace/profile', { body: { legal_name: '一家 SaaS' } }),
+    )
+    expect(first.vertical).toBe('goods')
+
+    // 改成虚拟产品
+    const second = await data<{ vertical: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家 SaaS', vertical: 'digital' },
+      }),
+    )
+    expect(second.vertical).toBe('digital')
+
+    // 再存一次不给 → 沿用上一次（改个名字不该把垂直悄悄改回实物）
+    const third = await data<{ vertical: string }>(
+      await m.call('PUT', '/v1/workspace/profile', { body: { legal_name: '一家 SaaS 公司' } }),
+    )
+    expect(third.vertical).toBe('digital')
+
+    // 非法值按"没选过"处理，不报错也不写坏
+    const bad = await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家 SaaS 公司', vertical: 'physical' },
+    })
+    expect(bad.status).toBe(400)
+
+    // 事件里带垂直（它不是秘密），全称仍然不进日志
+    const events = await data<{ events: { type: string; payload: Record<string, unknown> }[] }>(
+      await m.call('GET', '/v1/events?types=workspace.profile_set'),
+    )
+    const last = events.events.at(-1)
+    expect(last?.payload.vertical).toBe('digital')
+    expect(JSON.stringify(last?.payload)).not.toContain('SaaS')
+  })
+
   it('公司全称是空的 → 400，不落任何东西', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
@@ -292,20 +339,27 @@ describe('46 §3 岗位与职责 → 清单', () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
 
-    const positions = await data<{ id: string; roles: { id: string; what_it_does: string }[] }[]>(
-      await m.call('GET', '/v1/onboarding/positions'),
-    )
-    const support = positions.find((p) => p.id === 'dtc-support')
-    expect(support?.roles.map((r) => r.id)).toContain('dtc.aftersales')
+    const positions = await data<
+      { id: string; roles: { id: string; default: boolean; what_it_does: string }[] }[]
+    >(await m.call('GET', '/v1/onboarding/positions'))
+    const support = positions.find((p) => p.id === 'customer-care')
+    // WP54（48 v2 L1）：勾"客服"= 三条职责全勾（+ 可选的 common.member）
+    expect(support?.roles.filter((r) => r.default).map((r) => r.id)).toEqual([
+      'dtc.support',
+      'dtc.live-chat',
+      'amz.support',
+    ])
     // 46 §1 表 ③：每条职责旁有一句"它会干什么"
-    expect(support?.roles.find((r) => r.id === 'dtc.aftersales')?.what_it_does).toContain('退款')
+    expect(support?.roles.find((r) => r.id === 'dtc.support')?.what_it_does).toContain('退款')
 
     const plan = await data<PlanView>(
-      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['dtc-support'] } }),
+      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['customer-care'] } }),
     )
     // 勾岗位 = 模板里的职责全进来（不只是默认包）
-    expect(plan.role_ids).toEqual(expect.arrayContaining(['dtc.aftersales', 'common.member']))
-    // dtc.aftersales 要邮箱与 Shopify，两条都 required
+    expect(plan.role_ids).toEqual(
+      expect.arrayContaining(['dtc.support', 'dtc.live-chat', 'amz.support', 'common.member']),
+    )
+    // dtc.support 要邮箱与 Shopify，两条都 required
     const services = plan.connectors.map((c) => c.service)
     expect(services).toContain('shopify_admin')
     expect(services).toContain('imap_smtp')
@@ -321,20 +375,20 @@ describe('46 §3 岗位与职责 → 清单', () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
     const plan = await data<PlanView>(
-      await m.call('POST', '/v1/onboarding/plan', { body: { role_ids: ['dtc.aftersales'] } }),
+      await m.call('POST', '/v1/onboarding/plan', { body: { role_ids: ['dtc.support'] } }),
     )
     expect(plan.positions).toEqual([
       {
         position_id: 'custom',
         name: '我的岗位',
-        role_ids: ['dtc.aftersales'],
+        role_ids: ['dtc.support'],
         already_held: false,
       },
     ])
 
     const named = await data<PlanView>(
       await m.call('POST', '/v1/onboarding/plan', {
-        body: { role_ids: ['dtc.aftersales'], custom_position_name: '一个人全干' },
+        body: { role_ids: ['dtc.support'], custom_position_name: '一个人全干' },
       }),
     )
     expect(named.positions[0]?.name).toBe('一个人全干')
@@ -347,16 +401,16 @@ describe('46 §3 岗位与职责 → 清单', () => {
       created_assignments: { role_id: string }[]
       skipped: string[]
       ranges: { id: string }[]
-    }>(await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['dtc-support'] } }))
-    expect(applied.created_assignments.map((a) => a.role_id)).toContain('dtc.aftersales')
+    }>(await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } }))
+    expect(applied.created_assignments.map((a) => a.role_id)).toContain('dtc.support')
     // 46 I6：一家 Shopify 都没连 → 范围挂空（面板照 05 §4 明说"查不到东西"）
     expect(applied.ranges).toEqual([])
 
     const again = await data<{ created_assignments: unknown[]; skipped: string[] }>(
-      await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['dtc-support'] } }),
+      await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } }),
     )
     expect(again.created_assignments).toEqual([])
-    expect(again.skipped).toContain('dtc.aftersales')
+    expect(again.skipped).toContain('dtc.support')
   })
 
   it('没这个岗位 → 404；plan 不写任何东西', async () => {

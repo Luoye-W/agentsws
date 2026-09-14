@@ -30,7 +30,7 @@ const POSITIONS: OnboardingPositionView[] = [
     name: '独立站售后客服',
     roles: [
       {
-        id: 'dtc.aftersales',
+        id: 'dtc.support',
         name: '售后处理',
         default: true,
         what_it_does: '看退款与投诉邮件，拟一份回复给你定。',
@@ -79,13 +79,13 @@ const PLAN: OnboardingPlanView = {
     {
       position_id: 'pos_cs',
       name: '独立站售后客服',
-      role_ids: ['dtc.aftersales', 'dtc.refund'],
+      role_ids: ['dtc.support', 'dtc.refund'],
       already_held: false,
     },
   ],
   model_configured: false,
   model_first: true,
-  role_ids: ['dtc.aftersales', 'dtc.refund'],
+  role_ids: ['dtc.support', 'dtc.refund'],
 }
 
 const STATE: OnboardingStateView = {
@@ -95,6 +95,15 @@ const STATE: OnboardingStateView = {
   other_assignments: 0,
   is_owner: true,
   discovery: { available: true, enabled: true },
+  // 48 v2 L2：选项与那一句人话都从服务端来（真源是客服共享包的垂直包）
+  verticals: [
+    { key: 'goods', label: '实物商品', hint: '要发货的东西，客户会问"到哪了""能不能退"。' },
+    {
+      key: 'digital',
+      label: '虚拟产品与服务',
+      hint: '不用发货的东西，客户会问"怎么用""为什么扣费"。',
+    },
+  ],
 }
 
 /** 公司档案已经存下来了的那一档（找同事这件事从这里才开始）。 */
@@ -104,6 +113,7 @@ const SAVED: OnboardingStateView = {
     legal_name: '深圳诺伏特科技',
     domain: 'nordvolt.cn',
     discoverable: true,
+    vertical: 'goods',
     set_at: '2026-09-07T09:00:00.000Z',
   },
   discovery: { available: true, enabled: true },
@@ -125,7 +135,12 @@ const PEERS: DiscoveryStateView = {
 }
 
 const state = {
-  profiles: [] as { legal_name: string; domain?: string; discoverable?: boolean }[],
+  profiles: [] as {
+    legal_name: string
+    domain?: string
+    discoverable?: boolean
+    vertical?: 'goods' | 'digital'
+  }[],
   plans: [] as OnboardingPlanInput[],
   applies: [] as OnboardingPlanInput[],
   joins: [] as { code?: string; peer_id?: string; name: string; email: string }[],
@@ -141,9 +156,14 @@ vi.mock('@/lib/api', async () => {
     getOnboardingState: async () => state.state,
     listOnboardingPositions: async () => POSITIONS,
     listDiscoveryPeers: async () => state.peers,
-    setWorkspaceProfile: async (input: { legal_name: string }) => {
+    setWorkspaceProfile: async (input: { legal_name: string; vertical?: 'goods' | 'digital' }) => {
       state.profiles.push(input)
-      return { ...input, discoverable: true, set_at: '2026-09-07T09:00:00.000Z' }
+      return {
+        ...input,
+        discoverable: true,
+        vertical: input.vertical ?? ('goods' as const),
+        set_at: '2026-09-07T09:00:00.000Z',
+      }
     },
     planOnboarding: async (input: OnboardingPlanInput) => {
       state.plans.push(input)
@@ -207,6 +227,32 @@ describe('46 §1 首次设置向导', () => {
       expect(state.profiles).toHaveLength(1)
     })
     expect(state.profiles[0]?.legal_name).toBe('深圳诺伏特科技有限公司')
+  })
+
+  // WP54（48 v2 L2 / 46 §1）
+  it('① 公司：「你卖的是」默认实物，改成虚拟产品会跟着公司档案一起存上去', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+
+    await user.type(await screen.findByTestId('company-legal-name'), '一家 SaaS')
+    const goods = screen.getByTestId('company-vertical-goods') as HTMLInputElement
+    const digital = screen.getByTestId('company-vertical-digital') as HTMLInputElement
+    expect(goods.checked).toBe(true)
+    expect(digital.checked).toBe(false)
+    // 那两句人话来自服务端（真源是垂直包），不是界面自己写的
+    expect(screen.getByText(/要发货的东西/)).toBeTruthy()
+    expect(screen.getByText(/不用发货的东西/)).toBeTruthy()
+    // "选错了 AI 会说外行话"这种解释进 tooltip（36 §7）
+    expect(screen.getByTestId('company-vertical-hint').getAttribute('data-hint')).toContain(
+      '外行话',
+    )
+
+    await user.click(digital)
+    await user.click(screen.getByTestId('company-save'))
+    await waitFor(() => {
+      expect(state.profiles).toHaveLength(1)
+    })
+    expect(state.profiles[0]?.vertical).toBe('digital')
   })
 
   it('① 公司全称还没存下来时，说的是"存完就开始找"，而不是"开关关着"（开关明明开着）', async () => {

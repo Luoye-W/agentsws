@@ -41,7 +41,7 @@ const action = (id: string, over: Partial<EffectiveAction> = {}): EffectiveActio
 /** 与 `packages/roles/roles/dtc/aftersales.yml` 同形（那一份才是真源，这里只是复述）。 */
 const AFTERSALES = {
   assignment_id: 'asg_1',
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   scopes: [
     scope('order', ['read'], 'assigned'),
     scope('shipment', ['read'], 'assigned'),
@@ -134,7 +134,7 @@ describe('47 J3 给模型的紧凑文本', () => {
   it('按工具面裁剪：只说这次运行真摆出来的那些口', () => {
     const text = runOntologyBrief({
       assignment_id: 'asg_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       tools: ['get_order', 'search_policies', 'stage_refund', 'draft_reply'],
     })
     expect(text).toContain('订单')
@@ -152,7 +152,7 @@ describe('47 J3 给模型的紧凑文本', () => {
   it('工具面裁剪不谈范围（RunRequest 里没有 scopes，编不出来就不说）', () => {
     const tailored = ontologyForRun({
       assignment_id: 'asg_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       tools: ['get_order'],
     })
     expect(tailored.objects.every((o) => o.read_range === undefined)).toBe(true)

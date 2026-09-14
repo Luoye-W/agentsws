@@ -91,8 +91,8 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     schema_version: 1,
     workspace_id: 'ws_test',
     kind: 'work_item',
-    actor: { person_id: 'p_agent', assignment_id: 'asg_1', role_id: 'dtc.aftersales' },
-    work_item: { id: 'wi_1', conversation_id: 'thr_1', role_id: 'dtc.aftersales' },
+    actor: { person_id: 'p_agent', assignment_id: 'asg_1', role_id: 'dtc.support' },
+    work_item: { id: 'wi_1', conversation_id: 'thr_1', role_id: 'dtc.support' },
     trigger: { event_id: 'evt_1', source: 'inbound' },
     context,
     grounding: [
@@ -131,7 +131,7 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     },
     expectations: { outputs: ['draft', 'staged_change'], must_stage_if_change_requested: true },
     runtime: {
-      preset: 'dtc.aftersales',
+      preset: 'dtc.support',
       profile: 'agentsws-executor',
       plugins: [],
       model: { provider: 'stub', model: 'stub-v1', region: 'cn' },

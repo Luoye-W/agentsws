@@ -24,7 +24,7 @@ describe('effectiveConfig 额度解析 (05 §3)', () => {
     const base = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })
@@ -37,7 +37,7 @@ describe('effectiveConfig 额度解析 (05 §3)', () => {
     const looser = s.assignments.create({
       person_id: 'p_cs2',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
       mandate_overrides: { stage_refund: { caps: { max_auto_refund_amount: 200 } } },
@@ -47,7 +47,7 @@ describe('effectiveConfig 额度解析 (05 §3)', () => {
     const tighter = s.assignments.create({
       person_id: 'p_cs3',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
       mandate_overrides: { stage_refund: { caps: { max_auto_refund_amount: 30 } } },
@@ -60,7 +60,7 @@ describe('effectiveConfig 额度解析 (05 §3)', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })
@@ -78,7 +78,7 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
     const cs = s.assignments.create({
       person_id: 'p_boss',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_boss',
     })
@@ -96,14 +96,17 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
       'approval',
       'customer',
       'discount',
+      // WP54：inventory / product 并自 `dtc.presales`
+      'inventory',
       'knowledge',
       'order',
+      'product',
       'shipment',
       'skill',
     ])
     expect(ownCfg.scopes.map((x) => x.domain)).not.toContain('order')
     expect(ownCfg.scopes.find((x) => x.domain === 'policy')?.max_sensitivity).toBe('restricted')
-    // 售后的 assignment 拿不到 owner 的 restricted 读权限
+    // 客服的 assignment 拿不到 owner 的 restricted 读权限
     expect(csCfg.scopes.every((x) => x.max_sensitivity === 'internal')).toBe(true)
     expect(csCfg.assignment_id).not.toBe(ownCfg.assignment_id)
   })
@@ -113,7 +116,7 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: 'p_owner',
     })
     const cfg = s.effectiveConfig(a.id, { connected: CONNECTED })
@@ -136,7 +139,7 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })
@@ -153,7 +156,7 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })
@@ -173,7 +176,7 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })
@@ -189,7 +192,7 @@ describe('automation 收紧 (31 §3.4)', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'shop_a' }],
       granted_by: 'p_owner',
     })

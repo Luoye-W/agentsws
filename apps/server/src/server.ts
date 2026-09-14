@@ -45,6 +45,7 @@ import type {
   StartRun,
   Workspace,
   WorkspaceId,
+  WorkspaceVertical,
 } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
@@ -202,7 +203,14 @@ export function bindHost(env: Record<string, string | undefined>): string {
   )
 }
 /** v1 自带的职责定义（roles 包 bundled）。 */
-export const BUNDLED_ROLES = ['common.owner', 'common.member', 'dtc.aftersales'] as const
+export const BUNDLED_ROLES = [
+  'common.owner',
+  'common.member',
+  // WP54（48 v2 L1）：客服岗位的三条职责
+  'dtc.support',
+  'dtc.live-chat',
+  'amz.support',
+] as const
 
 /**
  * 36 §5.7 的 demo：把一个已经跑过场景的模拟世界接进同一个进程。
@@ -558,6 +566,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       onRangeExpanded: (e) => rangeExpandedSink?.(e),
     })
 
+  // WP54（48 v2 L1）：职责改名 / 合并之后，库里已有的分配在**启动时迁一次**。
+  //
+  // 只在这里做，不在职责包里做：`packages/roles` 不认事件日志，而改名是一次变更，
+  // 15 §1 的底线是"变更必须留痕"。迁移本身幂等（没有旧 id 的库跑一遍什么也不发生），
+  // 所以每次起进程都跑得起，不需要一张"迁过没有"的标记表。
+  for (const migrated of roles.assignments.migrateRoleIds()) {
+    appendEvent({
+      schema_version: 1,
+      workspace_id: migrated.workspace_id,
+      type: 'assignment.role_migrated',
+      actor: { kind: 'system', id: 'server' },
+      correlation: { trace_id: `tr_role_migrate_${migrated.assignment_id}` },
+      payload: {
+        assignment_id: migrated.assignment_id,
+        person_id: migrated.person_id,
+        from: migrated.from,
+        to: migrated.to,
+        role_version: migrated.role_version,
+      },
+    })
+  }
+
   // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
   // 把它指到共享目录）或 S3 兼容（阿里 OSS / 腾讯 COS / R2 / MinIO）。
   // 加密接同一个主体密钥环：销毁一个主体的密钥，他的每一个对象当场读不出来（21 §4）。
@@ -869,6 +899,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 起它这件事不该拦着服务进程启动：后台起，起好之前 `toolNames()` 就是空的
   if (devMcp !== undefined) void devMcp.start()
 
+  // WP54（48 v2 L2）：公司档案在向导第 ① 步才写，而运行时比它先装配好——
+  // 用一个晚绑定的读法，用户改完「你卖的是」下一次运行就生效，不用重启。
+  let verticalOf: () => WorkspaceVertical | undefined = () => undefined
+
   // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
   const runtime: RuntimeAssembly | undefined =
     options.startRun === false || typeof options.startRun === 'function'
@@ -896,6 +930,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 },
               }),
           source: records,
+          vertical: () => verticalOf(),
         })
   const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -1332,6 +1367,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 懒取：`joinAssembly` 在下面几行才建出来。
     join: () => joinAssembly.port,
   })
+  // 档案建出来了，把上面那个晚绑定的读法接上（48 v2 L2）
+  verticalOf = () => onboarding.vertical()
 
   // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——
   // 它要读同一份职责层（品牌 / 产品线 / 分配），并往同一条审批总线上建 `join_mapping`。

@@ -120,7 +120,7 @@ describe('运行期急停（PUT /v1/halt）', () => {
     const aftersales = server.roles.assignments.create({
       person_id: server.bootstrap.person.id,
       workspace_id: server.bootstrap.workspace.id,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: server.bootstrap.person.id,
       ranges: [{ kind: 'store', id: 'store_1' }],
     })

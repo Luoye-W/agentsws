@@ -27,7 +27,7 @@ const T0 = '2026-09-10T09:00:00.000Z'
 const OWNER_ASSIGNMENT = 'asg_owner'
 
 const AFTERSALES: RoleSummaryView = {
-  id: 'dtc.aftersales',
+  id: 'dtc.support',
   name: '独立站售后客服',
   name_en: 'DTC After-sales Support',
   description: '订单状态与物流、退换货、退款、改地址',
@@ -54,7 +54,7 @@ const AFTERSALES: RoleSummaryView = {
 
 const CUSTOM: RoleSummaryView = {
   ...AFTERSALES,
-  id: 'dtc.aftersales-custom',
+  id: 'dtc.support-custom',
   name: '售后（本公司）',
   source: 'custom',
   editable: true,
@@ -68,7 +68,7 @@ const POSITIONS: OrgPositionView[] = [
     name_en: 'DTC After-sales Support',
     version: '1.0.0',
     source: 'bundled',
-    roles: [{ role_id: 'dtc.aftersales', name: '独立站售后客服', default: true, loaded: true }],
+    roles: [{ role_id: 'dtc.support', name: '独立站售后客服', default: true, loaded: true }],
     holders: [
       { person_id: 'per_wang', name: '王岚', ranges: [{ kind: 'store', id: 'store_main' }] },
     ],
@@ -97,7 +97,7 @@ const MEMBERS: OrgMemberView[] = [
         assignment_id: 'asg_1',
         person_id: 'per_wang',
         person_name: '王岚',
-        role_id: 'dtc.aftersales',
+        role_id: 'dtc.support',
         role_name: '独立站售后客服',
         role_version: '1.0.0',
         ranges: [{ kind: 'store', id: 'store_main' }],
@@ -119,7 +119,7 @@ const MEMBERS: OrgMemberView[] = [
         assignment_id: 'asg_2',
         person_id: 'per_li',
         person_name: '李默',
-        role_id: 'dtc.aftersales',
+        role_id: 'dtc.support',
         role_name: '独立站售后客服',
         role_version: '1.0.0',
         ranges: [],
@@ -304,7 +304,7 @@ describe('公司页：岗位', () => {
     renderWithProviders(<OrgPage />)
     await screen.findAllByTestId('position-card')
     const text = document.body.textContent ?? ''
-    expect(text).not.toContain('dtc.aftersales')
+    expect(text).not.toContain('dtc.support')
     expect(text).not.toContain('asg_')
     expect(text).not.toContain('common.member')
   })
@@ -565,7 +565,7 @@ describe('公司页：职责', () => {
 
     expect(await screen.findByTestId('role-submitted')).toBeTruthy()
     expect(proposed).toEqual([
-      { id: 'dtc.aftersales-custom', patch: { name: '售后（我们家的口径）' } },
+      { id: 'dtc.support-custom', patch: { name: '售后（我们家的口径）' } },
     ])
   })
 
@@ -583,7 +583,7 @@ describe('公司页：职责', () => {
       expect(proposed).toHaveLength(1)
     })
     expect(proposed[0]).toEqual({
-      id: 'dtc.aftersales-custom',
+      id: 'dtc.support-custom',
       patch: { actions: [{ id: 'stage_refund', caps: { max_auto_refund_amount: 30 } }] },
     })
   })

@@ -40,7 +40,7 @@ events:
   - at: '+12m'
     org.assign_range:
       who: p_zhou
-      role: dtc.aftersales
+      role: dtc.support
       ranges: []
       range_groups: [rg_brand_b]
   # 品牌乙新开一家店：只改品牌这一处

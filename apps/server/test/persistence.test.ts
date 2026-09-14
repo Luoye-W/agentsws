@@ -3,6 +3,7 @@
  * owner / 工作区 / 会话 token / 账本 / 审批项都还在，`unknown` 还在对账队列里。
  */
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ObjectRef, StageInput } from '@agentsws/contracts'
@@ -92,13 +93,57 @@ describe('AGENTSWS_DATA_DIR：整套落盘', () => {
     })
   })
 
+  // WP54（48 v2 L1）：老库里写的是旧职责 id，起进程时迁一次并留痕
+  it('重启：旧职责 id 的分配迁到新 id，并记一条 assignment.role_migrated', async () => {
+    const first = await boot(dir)
+    const person = first.bootstrap.person.id
+    const workspace = first.bootstrap.workspace.id
+    const assignment = first.roles.assignments.create({
+      person_id: person,
+      workspace_id: workspace,
+      role_id: 'dtc.support',
+      granted_by: person,
+      ranges: [{ kind: 'store', id: 'store_1' }],
+    })
+    await first.close()
+
+    // 伪造一条改名前写下的行（`create` 那一侧已经被别名归一过了）
+    const require_ = createRequire(import.meta.url)
+    const Database = require_('better-sqlite3') as new (
+      path: string,
+    ) => { prepare(sql: string): { run(...a: string[]): void }; close(): void }
+    const raw = new Database(join(dir, 'roles.db'))
+    raw
+      .prepare(
+        "UPDATE assignments SET role_id = 'dtc.aftersales', doc = replace(doc, '\"dtc.support\"', '\"dtc.aftersales\"') WHERE id = ?",
+      )
+      .run(assignment.id)
+    raw.close()
+
+    const second = await boot(dir)
+    expect(second.roles.assignments.require(assignment.id).role_id).toBe('dtc.support')
+    const events: { type: string; payload: unknown }[] = []
+    for await (const e of second.kernel.eventLog.read({
+      workspace_id: workspace,
+      types: ['assignment.role_migrated'],
+    }))
+      events.push({ type: e.type, payload: e.payload })
+    expect(events).toHaveLength(1)
+    expect(events[0]?.payload).toMatchObject({
+      assignment_id: assignment.id,
+      person_id: person,
+      from: 'dtc.aftersales',
+      to: 'dtc.support',
+    })
+  })
+
   it('重启：staged 的变更与它的审批项还在账本里，能接着批准与施行', async () => {
     const first = await boot(dir)
     const person = first.bootstrap.person.id
     const assignment = first.roles.assignments.create({
       person_id: person,
       workspace_id: first.bootstrap.workspace.id,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: person,
       ranges: [{ kind: 'store', id: 'store_1' }],
     })
@@ -140,7 +185,7 @@ describe('AGENTSWS_DATA_DIR：整套落盘', () => {
       id: 'chg_unknown',
       schema_version: 1,
       workspace_id: first.bootstrap.workspace.id,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       assignment_id: 'asg_x',
       run_id: 'run_x',
       change_set_id: 'cs_x',
@@ -167,7 +212,7 @@ describe('AGENTSWS_DATA_DIR：整套落盘', () => {
 function stageInput(server: Server, assignment_id: string, person: string): StageInput {
   return {
     workspace_id: server.bootstrap.workspace.id,
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     assignment_id,
     run_id: 'run_1',
     change_set_id: 'cs_1',

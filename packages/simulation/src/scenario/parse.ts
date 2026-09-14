@@ -5,7 +5,7 @@
  * 场景文件是回归基线，静默忽略一个拼错的键等于静默关掉一条断言。
  */
 import { readFileSync } from 'node:fs'
-import type { ChangeKind, ProductLineRule, RangeRef } from '@agentsws/contracts'
+import type { ChangeKind, ProductLineRule, RangeRef, WorkspaceVertical } from '@agentsws/contracts'
 import { parse as parseYaml } from 'yaml'
 import { ScenarioSchemaError } from '../errors.js'
 import { parseDuration, parseRange } from './duration.js'
@@ -1022,10 +1022,16 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
   if (doc.version !== 1) fail(source, 'version', '目前只支持 version: 1')
 
   if (!isRec(doc.dataset)) fail(source, 'dataset', '必须是对象')
-  known(source, 'dataset', doc.dataset, ['pack', 'seed'])
+  known(source, 'dataset', doc.dataset, ['pack', 'seed', 'vertical'])
+  const verticalRaw = optStr(source, 'dataset.vertical', doc.dataset.vertical)
+  if (verticalRaw !== undefined && verticalRaw !== 'goods' && verticalRaw !== 'digital') {
+    fail(source, 'dataset.vertical', '只认 goods / digital（不写 = 跟 pack 的 workspace.yml）')
+  }
+  const vertical: WorkspaceVertical | undefined = verticalRaw
   const dataset = {
     pack: str(source, 'dataset.pack', doc.dataset.pack),
     seed: num(source, 'dataset.seed', doc.dataset.seed),
+    ...(vertical === undefined ? {} : { vertical }),
   }
 
   const actors: Record<string, ScenarioActor> = {}

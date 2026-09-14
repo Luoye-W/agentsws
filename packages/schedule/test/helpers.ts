@@ -53,7 +53,7 @@ export function taskInput(over: Partial<ScheduleInput> = {}): ScheduleInput {
   return {
     workspace_id: 'ws_test',
     owner: 'p_owner',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     assignment_id: 'asg_1',
     trigger: { kind: 'once', at: '2026-09-10T09:00:00.000Z' },
     created_by: 'user',

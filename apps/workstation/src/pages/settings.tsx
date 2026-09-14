@@ -47,6 +47,8 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
           legal_name: draft.legal_name.trim(),
           ...(draft.domain.trim() === '' ? {} : { domain: draft.domain.trim() }),
           discoverable: draft.discoverable,
+          // 48 v2 L2：设置页也能改「你卖的是」（46 §1 末段：后续从公司页和设置页都能改）
+          vertical: draft.vertical,
         },
         ownerId,
       ),
@@ -116,6 +118,7 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
                 ? {}
                 : { profile: onboarding.data.profile })}
               emailHint={onboarding.data.person.email}
+              verticals={onboarding.data.verticals}
               busy={save.isPending}
               saved={saved}
               {...(failure === undefined ? {} : { error: failure })}

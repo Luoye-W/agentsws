@@ -16,7 +16,7 @@ export function draftCard(over: Partial<DeckCard> = {}): DeckCard {
       original: 'Hi, I want to return the jacket I got last week.',
     },
     position_id: 'asg_1',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     customer_label: 'Anna Meyer',
     channel: 'email',
     source: 'conversation',
@@ -83,7 +83,7 @@ export function questionCard(over: Partial<DeckCard> = {}): DeckCard {
 
 export const TILE_BAR: PositionTiles = {
   position_id: 'asg_1',
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   role_name: '独立站售后客服',
   range: 'yesterday',
   tiles: [

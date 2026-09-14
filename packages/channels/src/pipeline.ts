@@ -50,10 +50,10 @@ export interface RouteResult {
 
 /**
  * 默认路由（06 §2.4 同一路由器的 v1 形态）：按渠道映射到职责。
- * 邮件 = 英文客服邮件全接管的入口，落 `dtc.aftersales`。
+ * 邮件 = 英文客服邮件全接管的入口，落 `dtc.support`。
  */
 export function defaultRoute(input: RouteInput): RouteResult {
-  if (input.channel === 'email') return { role_id: 'dtc.aftersales', confidence: 0.6 }
+  if (input.channel === 'email') return { role_id: 'dtc.support', confidence: 0.6 }
   return { confidence: 0 }
 }
 

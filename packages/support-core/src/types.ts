@@ -7,6 +7,7 @@
  * 其余对象重写成 14（审批项）/ 19（知识对象）/ 24（技能与学习回路）的形状。
  */
 import type { ChangeKind, Iso8601, KnowledgeLayer, PersonId } from '@agentsws/contracts'
+import type { Vertical } from './verticals/types.js'
 
 /**
  * 入站意图。取自 KefuAgent `EmailTriageResult['category']` 的冻结面
@@ -28,6 +29,17 @@ export type SupportIntent =
   | 'platform_notification'
   | 'spam'
   | 'other'
+  /* ---- WP54（48 v2 L2）：虚拟产品与服务的意图（`digital` 垂直包用）---------
+   * 只加不删：`goods` 的分流表一条都不产出它们，所以对实物工作区是零影响。
+   * 名字对着 KefuAgent digital 包的聊天意图取（billing_credits → billing、
+   * integration_setup → integration），因为边界 registry 的 `applies_when` 按名字引用。 */
+  | 'billing'
+  | 'account_access'
+  | 'bug_report'
+  | 'how_to'
+  | 'integration'
+  | 'data_privacy'
+  | 'feature_request'
 
 /** 分流出来的语言（ISO 639-1 子集；判不出按 `en`）。 */
 export type SupportLanguage = 'zh' | 'en' | 'es' | 'fr' | 'de' | 'ja' | 'pt' | 'it'
@@ -80,6 +92,11 @@ export interface ModelClassification {
 export interface ClassifyContext {
   /** 时间经注入（不用 `Date.now()`）。目前只用于产出可复现的原因文本预留位。 */
   now: Iso8601
+  /**
+   * 48 v2 L2：这个工作区卖的是什么（实物 / 虚拟）。不给就实物——
+   * 存量工作区与老的导出包里没有这个字段，它们的行为必须与 WP54 之前一模一样。
+   */
+  vertical?: Vertical
   subject?: string
   /** 来信人地址（平台通知、供应商靠它兜底）。 */
   from?: string
@@ -105,6 +122,13 @@ export interface BoundaryTriggers {
   intents?: SupportIntent[]
   risk_terms?: string[]
   change_kinds?: ChangeKind[]
+  /**
+   * WP54：L3「永不自动发送」的类目（`refund` / `data_deletion_request` …）。
+   *
+   * 现在**还没有消费方**——自主发送门是 48 §4 第 3 项（WP55 的活）。先登记着，
+   * 接线那天不用回头改这几张表；`boundaryTriggered` 也已经认它，调用方给了就生效。
+   */
+  l3_categories?: string[]
 }
 
 export interface BoundaryItem {
@@ -197,6 +221,8 @@ export interface DraftReplyInput {
   now: Iso8601
   /** 政策与知识里都读不到窗口时的兜底天数。 */
   default_return_window_days?: number
+  /** 48 v2 L2：工作区卖的是什么。不给就实物。 */
+  vertical?: Vertical
 }
 
 export interface DraftedReply {

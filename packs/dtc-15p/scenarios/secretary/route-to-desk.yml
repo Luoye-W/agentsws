@@ -35,7 +35,7 @@ events:
     clock.advance: {}
 expected:
   # 两件活各出一张认领卡，都进了池；专业问题一张都没出
-  routed_to: [dtc.aftersales, ads.performance]
+  routed_to: [dtc.support, ads.performance]
   event_types:
     - todo.pooled
     - secretary.routed

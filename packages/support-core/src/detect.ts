@@ -225,9 +225,15 @@ export function detectAnsweredBoundaries(input: DetectInput): SupportPolicy[] {
 }
 
 /** 运行时已经从知识层解析出退货窗口时，直接把它当作"这条边界已答"。 */
-export function returnWindowPolicy(days: number, at: string, fact_card_id?: string): SupportPolicy {
+export function returnWindowPolicy(
+  days: number,
+  at: string,
+  fact_card_id?: string,
+  /** WP54：窗口边界的 id 按垂直取（虚拟产品是 `policy.subscription_refund`）。 */
+  boundary_id = 'policy.refund_window',
+): SupportPolicy {
   return {
-    boundary_id: 'policy.refund_window',
+    boundary_id,
     value: { days, ...(fact_card_id === undefined ? {} : { fact_card_id }) },
     statement: `退款/退货窗口：${days} 天`,
     answered_by: 'import',

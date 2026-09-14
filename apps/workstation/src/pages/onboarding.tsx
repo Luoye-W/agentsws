@@ -123,6 +123,8 @@ export function OnboardingPage(): React.ReactNode {
         legal_name: draft.legal_name.trim(),
         ...(draft.domain.trim() === '' ? {} : { domain: draft.domain.trim() }),
         discoverable: draft.discoverable,
+        // 48 v2 L2：你卖的是（客服 AI 按它取人设、词表与业务边界）
+        vertical: draft.vertical,
       }),
     onSuccess: async () => {
       setFailure(undefined)
@@ -207,6 +209,7 @@ export function OnboardingPage(): React.ReactNode {
               <ProfileForm
                 {...(state.data.profile === undefined ? {} : { profile: state.data.profile })}
                 emailHint={state.data.person.email}
+                verticals={state.data.verticals}
                 busy={saveProfile.isPending}
                 saved={saved}
                 {...(failure === undefined ? {} : { error: failure })}

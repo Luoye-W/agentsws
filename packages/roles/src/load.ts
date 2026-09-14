@@ -12,6 +12,30 @@ export const BUNDLED_ROLES_DIR = fileURLToPath(new URL('../roles/', import.meta.
 /** 本包自带的岗位模板目录（`positions/<id>.yml`）。 */
 export const BUNDLED_POSITIONS_DIR = fileURLToPath(new URL('../positions/', import.meta.url))
 
+/**
+ * WP54（48 v2 L1）：职责改名 / 合并后的旧 id。
+ *
+ * 职责 id 是**已经写进别人库里的东西**——分配、审批项的 `role_id`、pack 的
+ * `assignments.yml`、导出包。所以改名不是"把 yml 重命名"，而是"新 id 生效 +
+ * 旧 id 永远读得进来"：这张表只可加行，一行都不许删。
+ *
+ * - `dtc.presales` / `dtc.aftersales` → `dtc.support`（售前 + 售后合并成网站客服）
+ * - `amz.buyer-messages` → `amz.support`（只改名，语义不变）
+ *
+ * 读得到不等于迁移了：已有分配的真迁移由宿主在启动时做一次，并记一条
+ * `assignment.role_migrated`（`apps/server/src/roles-migrate.ts`）。
+ */
+export const ROLE_ID_ALIASES: Readonly<Record<string, RoleId>> = {
+  'dtc.presales': 'dtc.support',
+  'dtc.aftersales': 'dtc.support',
+  'amz.buyer-messages': 'amz.support',
+}
+
+/** 旧 id → 新 id；不是旧 id 就原样返回。 */
+export function resolveRoleId(id: RoleId): RoleId {
+  return ROLE_ID_ALIASES[id] ?? id
+}
+
 /** 深删 undefined：schemastery 会给未填的可选字段留下 undefined，exactOptionalPropertyTypes 不收。 */
 function stripUndefined(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripUndefined)
@@ -64,9 +88,12 @@ export function loadRole(file: string): RoleDefinitionFull {
   return parseRole(readFileSync(file, 'utf8'), file)
 }
 
-/** 读本包自带的职责定义：`dtc.aftersales` → `roles/dtc/aftersales.yml`。 */
+/**
+ * 读本包自带的职责定义：`dtc.support` → `roles/dtc/support.yml`。
+ * 旧 id（`dtc.aftersales` …）先过 `resolveRoleId` 换成新 id 再找文件。
+ */
 export function loadBundledRole(id: RoleId): RoleDefinitionFull {
-  const [domain, slug] = id.split('.')
+  const [domain, slug] = resolveRoleId(id).split('.')
   if (!domain || !slug) throw new RoleSchemaError(id, 'id', 'role id must be `<domain>.<slug>`')
   return loadRole(`${BUNDLED_ROLES_DIR}${domain}/${slug}.yml`)
 }

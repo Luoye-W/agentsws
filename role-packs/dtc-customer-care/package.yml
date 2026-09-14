@@ -1,21 +1,22 @@
-# 23 §1 应用包清单。官方职责包：独立站售后客服（钩子 A / 路线图 1c）。
+# 23 §1 应用包清单。官方职责包：网站客服（钩子 A / 路线图 1c）。
+# WP54（48 v2 L1）：`dtc.presales` + `dtc.aftersales` 合并成 `dtc.support`，包跟着改。
 # 声明类内容，不含任何可执行入口。
 id: agentsws/dtc-customer-care
 version: 1.0.0
 kind: role-pack
-name: { zh: 独立站售后客服, en: DTC After-sales Support }
+name: { zh: 网站客服, en: DTC Website Support }
 description:
-  zh: 订单与物流、退换货、退款、改地址、漏发错发破损、拒付争议。带客服技能、业务边界与模拟场景。
-  en: Orders and shipping, returns, refunds, address changes, damaged or missing items, disputes.
+  zh: 售前问答、订单与物流、退换货、退款、改地址、漏发错发破损、拒付争议。带客服技能、业务边界与模拟场景。
+  en: Pre-sales questions, orders and shipping, returns, refunds, address changes, damaged or missing items, disputes.
 category: [客服, 独立站]
-tags: [customer-care, aftersales, dtc, email]
+tags: [customer-care, presales, aftersales, dtc, email]
 publisher: { id: agentsws, tier: official }
 license: Apache-2.0
 homepage: https://github.com/agentsws/agentsws
 pricing: { model: free }
 
 provides:
-  roles: [dtc.aftersales]
+  roles: [dtc.support]
   skills: [customer-care]
   scenarios:
     - aftersales/return-within-window
@@ -39,7 +40,17 @@ requires:
   agentsws: '>=0.1.0'
   contracts: { approval: '1.x', changes: '1.x', knowledge: '1.x', skills: '1.x', roles: '1.x' }
   connectors: [email, shopify]
-  permissions: [order.read, shipment.read, customer.read, customer.stage, knowledge.read, discount.stage]
+  permissions:
+    [
+      order.read,
+      shipment.read,
+      customer.read,
+      customer.stage,
+      product.read,
+      inventory.read,
+      knowledge.read,
+      discount.stage,
+    ]
   packages:
     # 分类 / 起草 / 业务边界 / 知识引导的实现（33 §1 共享包；SaaS 侧装的是同一份）
     - { id: '@agentsws/support-core', range: 'workspace:*' }
@@ -50,7 +61,7 @@ upgrade: { breaking_permissions: false, migrations: [] }
 telemetry: { opt_in_health: true }
 
 files:
-  - roles/dtc.aftersales.yml
+  - roles/dtc.support.yml
   # 技能正文随共享包发布，两种交付形态装的是同一份文本（33 §1）
   - '@agentsws/support-core/skills/customer-care/SKILL.md'
   - '@agentsws/support-core/skills/customer-care/references/boundaries.md'

@@ -7,7 +7,7 @@ function seeded() {
   const a = s.assignments.create({
     person_id: 'p_cs',
     workspace_id: 'ws_1',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     ranges: [{ kind: 'store', id: 'shop_a' }],
     granted_by: 'p_owner',
   })
@@ -25,7 +25,8 @@ describe('compilePolicies (31 §3.1)', () => {
     expect(rows).toContainEqual([a.id, 'approval', 'stage', 'own', 'internal'])
     expect(rows).toContainEqual([a.id, 'knowledge', 'stage', 'workspace', 'internal'])
     // 7 个 scope；customer / knowledge 各两个 op，approval 三个
-    expect(rows).toHaveLength(11)
+    // WP54：9 条 scope（含并自售前的 product / inventory）× 各自的 ops = 13 行
+    expect(rows).toHaveLength(13)
     expect(rows.every((r) => r[0] === a.id)).toBe(true)
   })
 
@@ -34,7 +35,7 @@ describe('compilePolicies (31 §3.1)', () => {
     const a = s.assignments.create({
       person_id: 'p_cs',
       workspace_id: 'ws_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: 'p_owner',
     })
     const rows = s.compilePolicies(a.id)
@@ -51,13 +52,18 @@ describe('compilePolicies (31 §3.1)', () => {
 })
 
 describe('can (05 §1.1 完整元组)', () => {
-  it('refuses the after-sales role on confidential product fields', () => {
+  it('refuses the support role on confidential product fields', () => {
     const { s, a } = seeded()
     expect(s.can(a.id, 'product', 'read', { range: 'assigned', sensitivity: 'confidential' })).toBe(
       false,
     )
-    // 连 internal 的 product 也没有：域本身不在 scopes 里
+    // WP54：product 域并自售前了，所以 internal 读**可以**——但成本价那种
+    // confidential 字段仍然读不到（上一条），31 §3.3 的那条边界没有松
     expect(s.can(a.id, 'product', 'read', { range: 'assigned', sensitivity: 'internal' })).toBe(
+      true,
+    )
+    // 域本身不在 scopes 里的仍然一个字读不到
+    expect(s.can(a.id, 'ad_account', 'read', { range: 'assigned', sensitivity: 'internal' })).toBe(
       false,
     )
     // 有 order 域，但 confidential 超出 max_sensitivity

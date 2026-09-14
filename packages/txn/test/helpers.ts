@@ -18,7 +18,7 @@ import type {
 import { createTxn } from '../src/index.js'
 
 export const WS = 'ws_1'
-export const ROLE = 'dtc.aftersales'
+export const ROLE = 'dtc.support'
 export const ASG = 'asg_3'
 export const RUN = 'run_5'
 export const ORDER: ObjectRef = { type: 'order', id: 'ord_1042' }

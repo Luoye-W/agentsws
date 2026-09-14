@@ -59,7 +59,7 @@ describe('44 G1 品牌 = 范围组', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
@@ -82,7 +82,7 @@ describe('44 G1 品牌 = 范围组', () => {
       grant(s, {
         person_id: 'p_li',
         workspace_id: WS,
-        role_id: 'dtc.aftersales',
+        role_id: 'dtc.support',
         range_groups: ['rg_nope'],
         granted_by: 'p_wang',
       }),
@@ -92,7 +92,7 @@ describe('44 G1 品牌 = 范围组', () => {
       grant(s, {
         person_id: 'p_li',
         workspace_id: WS,
-        role_id: 'dtc.aftersales',
+        role_id: 'dtc.support',
         range_groups: [other.id],
         granted_by: 'p_wang',
       }),
@@ -110,7 +110,7 @@ describe('44 G1 品牌 = 范围组', () => {
     grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
@@ -142,7 +142,7 @@ describe('44 G3 一岗位多范围取并集', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [
         { kind: 'store', id: 'store_main' },
         { kind: 'product_line', id: line.id },
@@ -168,7 +168,7 @@ describe('44 G3 一岗位多范围取并集', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'store_main' }],
       range_groups: [brand.id],
       granted_by: 'p_wang',
@@ -185,7 +185,7 @@ describe('44 G3 一岗位多范围取并集', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'store_main' }],
       granted_by: 'p_wang',
     })
@@ -216,14 +216,14 @@ describe('44 G5 品牌变了自动跟、留痕', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
     const b = grant(s, {
       person_id: 'p_chen',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
@@ -260,14 +260,14 @@ describe('44 G5 品牌变了自动跟、留痕', () => {
     const attached = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
     const loner = grant(s, {
       person_id: 'p_chen',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'store_b2' }],
       granted_by: 'p_wang',
     })
@@ -294,7 +294,7 @@ describe('44 G5 品牌变了自动跟、留痕', () => {
     grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
@@ -318,7 +318,7 @@ describe('44 G5 品牌变了自动跟、留痕', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
@@ -346,7 +346,7 @@ describe('44 G2 产品线', () => {
     const a = grant(s, {
       person_id: 'p_zhao',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'product_line', id: line.id }],
       granted_by: 'p_wang',
     })
@@ -385,7 +385,7 @@ describe('44 G2 产品线', () => {
     const zhao = grant(s, {
       person_id: 'p_zhao',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'product_line', id: kitchen.id }],
       granted_by: 'p_wang',
     })
@@ -405,7 +405,7 @@ describe('44 G2 产品线', () => {
     const a = grant(s, {
       person_id: 'p_feng',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: 'p_wang',
     })
     expect(s.targetInRange(a.id, { platform: 'shopify', product_ids: ['prod_1'] })).toMatchObject({
@@ -423,7 +423,7 @@ describe('44 G2 产品线', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'store', id: 'store_main' }],
       granted_by: 'p_wang',
     })
@@ -450,7 +450,7 @@ describe('44 G2 产品线', () => {
     const a = grant(s, {
       person_id: 'p_zhao',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'product_line', id: line.id }],
       granted_by: 'p_wang',
     })
@@ -488,7 +488,7 @@ describe('44 G4 账号 ⊃ 市场', () => {
     const a = grant(s, {
       person_id: 'p_zhao',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'product_line', id: line.id }],
       granted_by: 'p_wang',
     })
@@ -616,7 +616,7 @@ describe('SQLite 后端', () => {
     const a = first.assignments.create({
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'product_line', id: line.id }],
       range_groups: [brand.id],
       granted_by: 'p_wang',
@@ -665,7 +665,7 @@ describe('外围守则', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [brand.id],
       granted_by: 'p_wang',
     })
@@ -711,7 +711,7 @@ describe('外围守则', () => {
       grant(s, {
         person_id: 'p_li',
         workspace_id: WS,
-        role_id: 'dtc.aftersales',
+        role_id: 'dtc.support',
         ranges: [{ kind: 'product_line', id: 'pl_nope' }],
         granted_by: 'p_wang',
       }),
@@ -777,7 +777,7 @@ describe('45 H3 别名解析：合并之后公司那份是真源', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       range_groups: [mine.id],
       granted_by: 'p_wang',
     })
@@ -811,7 +811,7 @@ describe('45 H3 别名解析：合并之后公司那份是真源', () => {
     const a = grant(s, {
       person_id: 'p_li',
       workspace_id: WS,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       ranges: [{ kind: 'product_line', id: mine.id }],
       granted_by: 'p_wang',
     })

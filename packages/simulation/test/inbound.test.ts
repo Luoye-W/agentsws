@@ -24,7 +24,7 @@ function pipeline(overrides: { resolveCustomer?: boolean; route?: boolean } = {}
       thread: (id: string) => ({ type: 'thread', id }),
       ...(overrides.route === false
         ? {}
-        : { route: () => ({ role_id: 'dtc.aftersales', confidence: 0.9 }) }),
+        : { route: () => ({ role_id: 'dtc.support', confidence: 0.9 }) }),
     },
   })
   return { clock, pipe }
@@ -122,7 +122,7 @@ describe('入站替身（18 §2.2 管线）', () => {
       external_id: 'thr_9',
       resolved: { type: 'thread', id: 'thr_9' },
     })
-    expect(event?.routing).toEqual({ role_id: 'dtc.aftersales', confidence: 0.9 })
+    expect(event?.routing).toEqual({ role_id: 'dtc.support', confidence: 0.9 })
     expect(event?.received_at).toBe(START)
   })
 

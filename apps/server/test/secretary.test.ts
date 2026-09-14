@@ -130,7 +130,7 @@ beforeEach(async () => {
   chen = server.roles.assignments.create({
     person_id: invited.person_id,
     workspace_id: server.bootstrap.workspace.id,
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     granted_by: server.bootstrap.person.id,
     ranges: [{ kind: 'store', id: 'store_1' }],
   })
@@ -183,7 +183,7 @@ describe('profile 与公开级别（41 §1.3）', () => {
   it('岗位从分配算；默认级别就是 41 §1.3 那一列', async () => {
     const me = await dataOf<ProfileView>(await chenCall('GET', '/v1/me/profile'))
     expect(me.name).toBe('陈晓')
-    expect(me.positions.map((p) => p.role_id)).toContain('dtc.aftersales')
+    expect(me.positions.map((p) => p.role_id)).toContain('dtc.support')
     expect(me.disclosure.positions).toBe('colleagues')
     expect(me.disclosure.agenda_detail).toBe('self')
   })
@@ -191,7 +191,7 @@ describe('profile 与公开级别（41 §1.3）', () => {
   it('别人那一份里没有公开级别本身', async () => {
     const seen = await dataOf<VisibleProfileView>(await call('GET', `/v1/people/${chenId}/profile`))
     expect(seen.relation).toBe('colleague')
-    expect(seen.positions?.map((p) => p.role_id)).toContain('dtc.aftersales')
+    expect(seen.positions?.map((p) => p.role_id)).toContain('dtc.support')
     expect(seen.disclosure).toBeUndefined()
     expect(seen.hidden_fields).toContain('agenda_detail')
   })
@@ -284,7 +284,7 @@ describe('代答（41 §1.2 第一行）', () => {
     )
     expect(out.kind).toBe('professional')
     expect(out.refused).toBe(true)
-    expect(out.refer_to?.role_id).toBe('dtc.aftersales')
+    expect(out.refer_to?.role_id).toBe('dtc.support')
   })
 })
 
@@ -388,11 +388,11 @@ describe('任务路由（41 §1.2 第三行）', () => {
       }),
     )
     expect(out.kind).toBe('task')
-    expect(out.role_id).toBe('dtc.aftersales')
+    expect(out.role_id).toBe('dtc.support')
     expect(out.owner).toBe(chenId)
     expect(out.owner_label).toBe('陈晓')
     expect(out.claim_item_id).toBeDefined()
-    expect(out.reason).toContain('售后')
+    expect(out.reason).toContain('客服')
 
     // 卡真的到了陈晓的队列
     const queue = await dataOf<{ id: string; kind: string; summary: string }[]>(
@@ -400,7 +400,7 @@ describe('任务路由（41 §1.2 第三行）', () => {
     )
     const card = queue.find((i) => i.id === out.claim_item_id)
     expect(card?.kind).toBe('claim')
-    expect(card?.summary).toContain('售后')
+    expect(card?.summary).toContain('客服')
 
     // 40 §3.2：这条活先进待认领池，谁点「我来」谁是主人——秘书没有替谁干活
     const { pool } = await dataOf<{ pool: { todo_id: string; title: string }[] }>(
@@ -416,7 +416,7 @@ describe('任务路由（41 §1.2 第三行）', () => {
       }),
     )
     expect(out.kind).toBe('question')
-    expect(out.role_id).toBe('dtc.aftersales')
+    expect(out.role_id).toBe('dtc.support')
     expect(out.claim_item_id).toBeUndefined()
     const { pool } = await dataOf<{ pool: unknown[] }>(await chenCall('GET', '/v1/todos/pool'))
     expect(pool).toEqual([])

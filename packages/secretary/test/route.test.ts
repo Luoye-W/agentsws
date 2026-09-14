@@ -43,7 +43,7 @@ describe('一件活该谁做', () => {
   it('客户投诉包裹破损要退款 → 售后，出的是一件活不是一个问题', () => {
     const v = routeTask({ text: '这个客户投诉说包裹破损，要退款，处理一下', roles: ROLES })
     expect(v.kind).toBe('task')
-    expect(v.role_id).toBe('dtc.aftersales')
+    expect(v.role_id).toBe('dtc.support')
     expect(v.owner).toBe('p_chen')
     expect(v.confidence).toBeGreaterThanOrEqual(MIN_CONFIDENCE)
     expect(v.reason).toContain('独立站售后客服')
@@ -73,7 +73,7 @@ describe('专业问题不是一件活', () => {
   it('「退货窗口外能不能退？」判成问题，转售后', () => {
     const v = routeTask({ text: '退货窗口外能不能退？', roles: ROLES })
     expect(v.kind).toBe('question')
-    expect(v.role_id).toBe('dtc.aftersales')
+    expect(v.role_id).toBe('dtc.support')
     expect(v.reason).toContain('专业问题')
   })
 
@@ -94,7 +94,7 @@ describe('通用职责不参赛', () => {
       },
     ]
     const v = routeTask({ text: '客户要退款', roles: withCommon })
-    expect(v.role_id).toBe('dtc.aftersales')
+    expect(v.role_id).toBe('dtc.support')
     expect(v.scores.some((s) => s.role_id === 'common.member')).toBe(false)
   })
 })

@@ -53,7 +53,8 @@ describe('adoptionRate', () => {
 describe('initialAutomationState (05 §1.4)', () => {
   it('starts every action at its declared initial level', () => {
     const state = initialAutomationState(role, '2026-09-09T00:00:00.000Z')
-    expect(Object.keys(state)).toHaveLength(5)
+    // WP54：并自售前的 stage_discount_code 让动作从 5 条变 6 条
+    expect(Object.keys(state)).toHaveLength(6)
     expect(state.reply_customer?.level).toBe('L1')
     expect(state.reply_customer?.last_change).toEqual({
       at: '2026-09-09T00:00:00.000Z',
@@ -66,7 +67,7 @@ describe('createPolicyEngine', () => {
   it('sets, reads and removes rows for one assignment', () => {
     const engine = createPolicyEngine()
     engine.set(assignment.id, compilePolicies(assignment, role))
-    expect(engine.rows(assignment.id)).toHaveLength(11)
+    expect(engine.rows(assignment.id)).toHaveLength(13)
     expect(
       engine.can(assignment.id, 'order', 'read', { range: 'assigned', sensitivity: 'internal' }),
     ).toBe(true)
@@ -91,12 +92,12 @@ describe('effectiveConfig 前置校验', () => {
 
   it('refuses an assignment granted at an older major version (05 §3)', () => {
     expect(() =>
-      effectiveConfig({ assignment: { ...assignment, role_version: '0.9.0' }, role }),
+      effectiveConfig({ assignment: { ...assignment, role_version: '1.0.0' }, role }),
     ).toThrow(/re-confirm/)
-    // 同 major 的小版本升级不需要重新确认
+    // 同 major 的小版本升级不需要重新确认（报的是当前加载的那一版）
     expect(
-      effectiveConfig({ assignment: { ...assignment, role_version: '1.0.0' }, role }).role_version,
-    ).toBe('1.0.0')
+      effectiveConfig({ assignment: { ...assignment, role_version: '2.0.1' }, role }).role_version,
+    ).toBe('2.0.0')
   })
 })
 

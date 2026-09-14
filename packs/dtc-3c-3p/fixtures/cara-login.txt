@@ -1,0 +1,9 @@
+Hi,
+
+I am locked out of my workspace. The login page keeps telling me my
+password is wrong, and the reset link never reaches my inbox
+(cara@example.com).
+
+I need to get back in before Monday. What should I do?
+
+Cara
