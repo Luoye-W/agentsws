@@ -104,6 +104,17 @@ const toWireMessage = (m: ChatMessage): Record<string, unknown> => ({
   content: m.content,
   ...(m.name === undefined ? {} : { name: m.role === 'tool' ? wireToolName(m.name) : m.name }),
   ...(m.tool_call_id === undefined ? {} : { tool_call_id: m.tool_call_id }),
+  // 上一轮模型发出的工具调用必须原样带回去，否则 provider 400：
+  // "Messages with role 'tool' must be a response to a preceding message with 'tool_calls'"
+  ...(m.role !== 'assistant' || m.tool_calls === undefined || m.tool_calls.length === 0
+    ? {}
+    : {
+        tool_calls: m.tool_calls.map((c) => ({
+          id: c.id,
+          type: 'function',
+          function: { name: wireToolName(c.name), arguments: JSON.stringify(c.input ?? {}) },
+        })),
+      }),
 })
 
 const toWireTool = (t: ToolDef): Record<string, unknown> => ({

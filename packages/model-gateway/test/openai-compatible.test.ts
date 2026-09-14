@@ -80,6 +80,54 @@ describe('openaiCompatibleProvider（DeepSeek 形态，注入 fetch，不联网�
     ])
   })
 
+  it('历史里 assistant 的 tool_calls 原样带回（wire 名），tool 消息才有出处', async () => {
+    const { fetch, calls } = mockFetch({
+      choices: [{ message: { content: 'done' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    })
+    const provider = openaiCompatibleProvider({
+      apiKeyEnv: KEY_ENV,
+      model: 'deepseek-flash',
+      env,
+      fetch,
+    })
+    await provider.complete({
+      messages: [
+        userPrompt('where is my order'),
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [{ id: 'call_1', name: 'orders.get', input: { id: 'ord_1' } }],
+        },
+        {
+          role: 'tool',
+          content: '{"status":"shipped"}',
+          name: 'orders.get',
+          tool_call_id: 'call_1',
+        },
+      ],
+    })
+    const sent = JSON.parse(String(calls[0]?.init.body ?? '{}')) as {
+      messages: Record<string, unknown>[]
+    }
+    expect(sent.messages[1]).toEqual({
+      role: 'assistant',
+      content: '',
+      tool_calls: [
+        {
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'orders__get', arguments: '{"id":"ord_1"}' },
+        },
+      ],
+    })
+    expect(sent.messages[2]).toMatchObject({
+      role: 'tool',
+      name: 'orders__get',
+      tool_call_id: 'call_1',
+    })
+  })
+
   it('带点的工具名：出站换成 __，回来的 tool_call 映射回原名；撞名当场拒', async () => {
     const body = {
       choices: [
