@@ -77,6 +77,33 @@ export class ApprovalBusImpl implements ApprovalBus {
     const now = this.rt.now()
     const pre = runPrecheck(input, ctx)
 
+    // WP55 / 48 §4 L3 #3：三道门的结论落一条事件。
+    //
+    // **只记录，不改状态**：这条事件不决定卡去哪，它只回答事后必然会被问到的那句
+    // 「当时用的是哪一版规则集、三道门各怎么说」。payload 里只有门名、结论、原因
+    // 与规则 id——被扫的客户原文与草稿正文一个字都不进日志。
+    if (pre.gate_decisions !== undefined && pre.gate_decisions.length > 0) {
+      await this.rt.emit('guardrail.gate_decided', {
+        workspace_id: input.workspace_id,
+        actor: {
+          kind: input.proposer.kind === 'person' ? 'person' : 'agent',
+          id: input.proposer.id,
+        },
+        correlation: { ...(input.evidence.run_id ? { run_id: input.evidence.run_id } : {}) },
+        payload: {
+          kind: input.kind,
+          autonomous: pre.autonomous === true,
+          ruleset_hash: pre.gate_decisions[0]?.ruleset_hash,
+          gates: pre.gate_decisions.map((g) => ({
+            gate: g.gate,
+            status: g.status,
+            ...(g.reason === undefined ? {} : { reason: g.reason }),
+            ...(g.evidence === undefined ? {} : { evidence: g.evidence }),
+          })),
+        },
+      })
+    }
+
     // §5 去重：同键在 pending / in_review / deferred → 更新原项
     const active = this.rt.store
       .listApprovals({

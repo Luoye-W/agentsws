@@ -65,6 +65,31 @@ export const TARGET_SCOPED_KINDS: ReadonlySet<ChangeKind> = new Set([
   'unpublish_product',
 ])
 
+/**
+ * 48 §4 L3 #3：15 guardrail 前置里三道「不自主」的门 + Amazon 出站硬闸。
+ *
+ * 名字集中在这里，是因为它们要在三处保持一致：`PrecheckResult` 的字段名、
+ * `guardrail.gate_decided` 事件的 `gate` 值、以及给人看的那句话的键。三处各写一遍
+ * 的话，改一处忘两处是迟早的事。
+ *
+ * 前三道**只记录不改状态**（门说「不自主」= 这张卡转人审，不是这张卡不该建）；
+ * `amazon_outbound` 不同，它是「这封信根本不能这样发出去」，命中就 blocked。
+ */
+export const PRECHECK_GATES = [
+  'l3_denylist',
+  'draft_origin',
+  'commitment_scan',
+  'amazon_outbound',
+] as const
+export type PrecheckGateId = (typeof PRECHECK_GATES)[number]
+
+/** 只记录、不改状态的那三道（`amazon_outbound` 不在其中：它会 block）。 */
+export const AUTONOMY_GATES: readonly PrecheckGateId[] = [
+  'l3_denylist',
+  'draft_origin',
+  'commitment_scan',
+]
+
 /** 09-08：受保护字段 = Agent 不得提议；人经 policy_change 可改。 */
 export const PROTECTED_FIELDS: Partial<Record<ChangeKind, string[]>> = {
   address_change: ['total', 'currency', 'customer_id'],
