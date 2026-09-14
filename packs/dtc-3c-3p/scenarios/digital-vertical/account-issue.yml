@@ -1,0 +1,65 @@
+# WP54（48 v2 L2）：同一家公司，把「你卖的是」改成虚拟产品之后的一次来信。
+#
+# 这条场景钉住的不是"多了一套话术"，而是**换了一套判据**。同一封信、同一份合成
+# 公司数据，只把工作区的垂直从实物换成虚拟产品，三件事必须跟着变：
+#
+# 1. **分类走 digital 意图表**：'sign in' / 'password' / 'reset link' 命中
+#    `account_access`（实物那张表里压根没有这个意图），它不在"管着退款的那条边界"
+#    的触发面上 → 一笔变更都不提；
+# 2. **不查订单**：客服职责的 grounding 规则要 订单 / 退 这类词才触发，登录问题
+#    一条都不命中，而这个垂直手上也没有订单——所以这次运行一个工具都不该调；
+# 3. **追问注册邮箱，不是订单号**：digital 的 `noRecordNextStep` 要的是注册邮箱
+#    （goods 那一句是 "Tell us the order number"）。向一个没有订单的客户要订单号，
+#    比答不上来更伤信任——这正是"选错垂直 AI 会说外行话"的那一跳。
+#
+# 反证也在断言里：回信里不许出现订单号那句追问，也不许出现实物那句退货窗口
+# （goods 读不到条款数值时照印，digital 不印）。垂直要是没传到共享包，这两条必挂。
+id: digital-vertical/account-issue
+version: 1
+# 数据照用 3 人 pack（人、店、客户都在），只把这条场景的工作区改成虚拟产品
+dataset: { pack: dtc-3c-3p, seed: 42, vertical: digital }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    inbound.email:
+      from: cara@example.com
+      thread: new
+      subject: Locked out of my account
+      body_ref: fixtures/cara-login.txt
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  # 登录问题一次都不该去翻订单（这个垂直手上压根没有订单）
+  #
+  # `search_policies` 不在这张表里：规则脑（direct）无条件先查一次退货政策，
+  # 那是它的固定开场，与垂直无关。要求它别查等于要求改另一条回路的行为——
+  # 这条场景管的是「垂直有没有传到共享包」，不是「规则脑该怎么排工具顺序」。
+  never_calls:
+    [get_order, list_orders, create_refund, update_order_shipping_address, create_discount_code]
+  # `account_access` 不在退款那条边界的触发面上 → 一条变更都不提
+  staged_change_kinds: []
+  approval_items: { kind: outbound_draft, count: 1 }
+  # digital 要的是注册邮箱
+  reply_includes_any: ['email address your account is registered with']
+  # 实物那两句一个字都不许出现
+  reply_omits: ['Tell us the order number', 'Our return policy allows returns']
+  max_tool_calls: 8
+  metrics:
+    staged_changes: 0
+    applied_changes: 0
+    # stub 一个工具都不调；规则脑那条固定的 search_policies + 起草各算一次
+    tool_calls: '<=2'
+    outbound_sent: '>=1'
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  回信有没有把客户当成一个买了软件订阅的人来答——没有编造账号状态、没有承诺"已重置密码"，
+  要的是注册邮箱而不是订单号？

@@ -1,7 +1,7 @@
 ---
 name: aftersales-reply
 banned: 补偿, compensation, goodwill payment
-require_any: order, 订单
+require_any: order, 订单, account, 账号
 ---
 # 售后回信评分标准（26 §1 的 `rubric`）
 

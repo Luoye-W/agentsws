@@ -44,6 +44,21 @@ describe('场景 DSL 解析（26 §1）', () => {
     expect(s.source).toBe('t.yml')
   })
 
+  // WP54（48 v2 L2）
+  it('dataset.vertical：不写 = 跟 pack 走；写了只认 goods / digital', () => {
+    expect(parseScenario(MINIMAL, 't.yml').dataset.vertical).toBeUndefined()
+
+    const digital = parseScenario(
+      MINIMAL.replace('seed: 42 }', 'seed: 42, vertical: digital }'),
+      't.yml',
+    )
+    expect(digital.dataset.vertical).toBe('digital')
+
+    expect(() =>
+      parseScenario(MINIMAL.replace('seed: 42 }', 'seed: 42, vertical: saas }'), 't.yml'),
+    ).toThrow(ScenarioSchemaError)
+  })
+
   it('pack 自带的六条场景全部能解析', () => {
     for (const rel of [
       'aftersales/return-within-window',

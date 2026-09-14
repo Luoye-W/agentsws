@@ -4,7 +4,13 @@
  * `state + events[] + expected` 的 Commerce Agents case 形状，扩展 `clock`（虚拟时间推进）、
  * `actors`（合成人策略）、`invariants`（全程不变量）、`rubric`（唯一主观键）。
  */
-import type { ChangeKind, Iso8601, ProductLineRule, RangeRef } from '@agentsws/contracts'
+import type {
+  ChangeKind,
+  Iso8601,
+  ProductLineRule,
+  RangeRef,
+  WorkspaceVertical,
+} from '@agentsws/contracts'
 
 /** 26 §4 三档。 */
 export type Tier = 'fast' | 'realistic' | 'soak'
@@ -23,6 +29,14 @@ export type InvariantName = (typeof INVARIANT_NAMES)[number]
 export interface ScenarioDataset {
   pack: string
   seed: number
+  /**
+   * WP54（48 v2 L2）：这条场景跑在一个「你卖的是 X」的工作区里。
+   *
+   * 缺省跟着 pack 的 `workspace.yml` 走（既有 pack 一个字节不变，全是实物）。
+   * 写了就**只对这条场景**覆盖——一个 pack 的数据（人、店、订单）在两个垂直下
+   * 复用，不用为了一条回归题再生成一整套合成公司。
+   */
+  vertical?: WorkspaceVertical
 }
 
 /** 合成人策略：`always_approve` / `edit_Npct` / `reject_rules` / `slow`（26 §3）。 */

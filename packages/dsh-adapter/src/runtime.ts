@@ -25,6 +25,7 @@ import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
 import { assemblePrompt, describeRun, promptHash } from '@agentsws/stand-ins'
+import { replySubject } from '@agentsws/support-core'
 import { createHarness } from './harness.js'
 import { writePreset } from './preset.js'
 import {
@@ -447,14 +448,16 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             order?.email?.split('@')[0] ??
             threadRecipient(scratch.threadItem) ??
             'there'
+          // 48 v2 L2：主题与正文的措辞都按垂直包取（实物说订单、虚拟产品说账户）
           const subject =
-            threadSubject(scratch.threadItem) ??
-            (order === undefined ? 'Re: your message' : `Re: order ${order.name}`)
+            threadSubject(scratch.threadItem) ?? replySubject(undefined, order, req.vertical)
           body = draftBody({
             windowDays: scratch.windowDays,
             withinWindow,
             signature,
             customer,
+            windowFromFact: scratch.policySource !== undefined,
+            ...(req.vertical === undefined ? {} : { vertical: req.vertical }),
             ...(order === undefined ? {} : { order }),
             ...(scratch.daysSinceDelivery === undefined
               ? {}
