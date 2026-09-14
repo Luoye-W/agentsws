@@ -195,6 +195,9 @@ const EXPECTED_KEYS = [
   'routed_to',
   'secretary_kinds',
   'scope_disjoint',
+  // WP55（48 §4 L3 #2 #3）
+  'sub_channel',
+  'gates_failed',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -825,6 +828,11 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)
   if (disjoint !== undefined) out.scope_disjoint = disjoint
+  if (raw.sub_channel !== undefined) {
+    out.sub_channel = str(source, 'expected.sub_channel', raw.sub_channel)
+  }
+  const gatesFailed = optStrList(source, 'expected.gates_failed', raw.gates_failed)
+  if (gatesFailed !== undefined) out.gates_failed = gatesFailed
   const eventTypes = optStrList(source, 'expected.event_types', raw.event_types)
   if (eventTypes !== undefined) out.event_types = eventTypes
   if (raw.approval_kinds !== undefined) {

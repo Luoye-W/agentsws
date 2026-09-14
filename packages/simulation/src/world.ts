@@ -88,7 +88,11 @@ import {
   SyntheticClock,
 } from '@agentsws/stand-ins'
 import {
+  AMAZON_CHANNEL,
+  buildAmazonChannelMeta,
   buildAmazonRewriteInstruction,
+  describeAmazonDetection,
+  detectAmazonChannel,
   evaluateAmazonOutbound,
   evaluateAutonomyGates,
   hasRewritableAmazonViolation,
@@ -1146,6 +1150,25 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     clock,
     workspace_id,
     resolver: {
+      // WP55 / 48 §4 L3 #2：渠道细分判定。判定规则全在 `support-core/amazon`
+      // （常量表与正则逐字节抄 KefuAgent）；这里只把邮件头喂进去。真环境那一份
+      // （`apps/server` 的 `classifyAmazonSubChannel`）还会按消息类型决定"起不起草"，
+      // 模拟回路只跑买家消息族那一条路，所以不复制那个分支。
+      sub_channel: (mail) => {
+        const detection = detectAmazonChannel({
+          from_email: mail.from,
+          subject: mail.subject ?? '',
+          body_text: mail.body,
+        })
+        if (detection === undefined) return undefined
+        return {
+          sub_channel: AMAZON_CHANNEL,
+          channel_meta: {
+            ...buildAmazonChannelMeta(detection, clock.now()),
+            summary: describeAmazonDetection(detection),
+          },
+        }
+      },
       customer: (email) => customerRefOf(email),
       thread: (id) => ({ type: 'thread', id }),
       order: (text) => {

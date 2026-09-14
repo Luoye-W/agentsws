@@ -393,6 +393,37 @@ export function checkExpectations(
         : `没路由到：${missing.join(', ')}（实际 [${[...roles].join(', ')}]）`,
     )
   }
+  // WP55 / 48 §4 L3 #2：入站被判成的渠道细分（`amazon`）
+  if (expected.sub_channel !== undefined) {
+    const seen = [...new Set(evidence.inbound.map((e) => e.sub_channel ?? e.channel))]
+    add(
+      'sub_channel',
+      seen.includes(expected.sub_channel),
+      `入站判成 [${seen.join(', ')}]，期望含 ${expected.sub_channel}`,
+    )
+  }
+  // WP55 / 48 §4 L3 #3：这几道门至少各判过一次「不自主」
+  if (expected.gates_failed !== undefined) {
+    const failed = new Set<string>()
+    for (const e of evidence.events) {
+      if (e.type !== 'guardrail.gate_decided') continue
+      const gates = payloadOf(e).gates
+      if (!Array.isArray(gates)) continue
+      for (const g of gates) {
+        const rec = g !== null && typeof g === 'object' ? (g as Record<string, unknown>) : undefined
+        if (rec === undefined) continue
+        if (rec.status !== 'pass' && typeof rec.gate === 'string') failed.add(rec.gate)
+      }
+    }
+    const missing = expected.gates_failed.filter((g) => !failed.has(g))
+    add(
+      'gates_failed',
+      missing.length === 0,
+      missing.length === 0
+        ? `判了不自主的门：[${[...failed].sort().join(', ')}]`
+        : `这几道门没说不自主：${missing.join(', ')}（实际 [${[...failed].sort().join(', ')}]）`,
+    )
+  }
   // WP47 / 44 G2：同一个账号的两条产品线，互相看不到对方的订单和商品
   if (expected.scope_disjoint !== undefined) {
     const seen = new Map<string, { orders: string[]; products: string[] }>()

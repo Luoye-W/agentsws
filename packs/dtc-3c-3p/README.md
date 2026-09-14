@@ -1,7 +1,7 @@
 # dtc-3c-3p
 
 `agentsws synth --size 3 --seed 42` 生成（26 §2）。
-家族 dtc-3c，3 人、1 家店、50 单。
+家族 dtc-3c，3 人、1 家店、51 单。
 
 同一份数据是 demo 数据、上手引导数据和回归基线。**验收另用隐藏场景集**
 （`packages/simulation/hidden/`，31 §1 I9），不在这里。

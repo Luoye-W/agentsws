@@ -8,9 +8,9 @@ sizes:
   people: 3
   assignments: 4
   products: 8
-  customers: 20
-  orders: 50
-  shipments: 45
+  customers: 21
+  orders: 51
+  shipments: 46
   threads: 4
   knowledge: 3
   stores: 1

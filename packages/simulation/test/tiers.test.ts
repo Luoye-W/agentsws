@@ -259,7 +259,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(out.files.has('roles/dtc.ops.yml')).toBe(true)
     const p = loadPack(dir)
     expect(p.people).toHaveLength(50)
-    expect(p.orders.length).toBe(300)
+    // 300 张生成订单 + WP55 追加的那张 Amazon 订单
+    expect(p.orders.length).toBe(301)
 
     // 烟测场景不随 pack 发布（50 人档不进门禁，26 §4），临时写一条进去
     mkdirSync(join(dir, 'scenarios', 'smoke'), { recursive: true })
