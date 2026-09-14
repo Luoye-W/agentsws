@@ -380,7 +380,7 @@ describe('WP20 §A 试连 / 断开 / 数据源回灌', () => {
     const aftersales = ctx.server.roles.assignments.create({
       person_id: ctx.server.bootstrap.person.id,
       workspace_id: ctx.server.bootstrap.workspace.id,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: ctx.server.bootstrap.person.id,
     })
     expect(ctx.server.roles.effectiveConfig(aftersales.id).missing_connectors).toEqual(['email'])
@@ -437,7 +437,7 @@ describe('WP20 §A 权限', () => {
     const aftersales = ctx.server.roles.assignments.create({
       person_id: ctx.server.bootstrap.person.id,
       workspace_id: ctx.server.bootstrap.workspace.id,
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       granted_by: ctx.server.bootstrap.person.id,
       ranges: [{ kind: 'store', id: 'store_1' }],
     })

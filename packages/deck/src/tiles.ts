@@ -50,12 +50,12 @@ export function tileSpec(id: string): TileSpec {
 /**
  * 36 §3「示例默认值」：
  * - 独立站运营（`dtc.analytics`）= 总销售额、订单数、退款额、转化率
- * - 独立站售后客服（`dtc.aftersales`）= 待回复、24h 内回复率、退款申请数、满意度
+ * - 独立站售后客服（`dtc.support`）= 待回复、24h 内回复率、退款申请数、满意度
  * - 投放-Meta（`ads.meta`）= 花费、ROAS、CPA、点击率
  */
 export const DEFAULT_HOME_TILES: Readonly<Record<RoleId, readonly string[]>> = {
   'dtc.analytics': ['sales_total', 'orders_count', 'refunds_total', 'conversion_rate'],
-  'dtc.aftersales': ['pending_replies', 'reply_rate_24h', 'refund_requests', 'csat'],
+  'dtc.support': ['pending_replies', 'reply_rate_24h', 'refund_requests', 'csat'],
   'ads.meta': ['ads_spend', 'ads_roas', 'ads_cpa', 'ads_ctr'],
 }
 

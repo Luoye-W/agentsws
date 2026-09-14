@@ -106,7 +106,7 @@ describe('CatalogIndex', () => {
     index.register(
       source('skill', [
         entry({
-          id: 'skill:dtc.aftersales',
+          id: 'skill:dtc.support',
           kind: 'skill',
           title: '售后客服',
           owner: 'p_li',
@@ -123,14 +123,14 @@ describe('CatalogIndex', () => {
     expect((await index.list({ workspace_id: WS })).map((e) => e.id)).toEqual([
       'schedule:s1',
       'schedule:s2',
-      'skill:dtc.aftersales',
+      'skill:dtc.support',
     ])
     expect((await index.list({ workspace_id: WS, kind: ['skill'] })).map((e) => e.id)).toEqual([
-      'skill:dtc.aftersales',
+      'skill:dtc.support',
     ])
     expect(
       (await index.list({ workspace_id: WS, position_id: 'asg_cs' })).map((e) => e.id),
-    ).toEqual(['skill:dtc.aftersales'])
+    ).toEqual(['skill:dtc.support'])
     expect((await index.list({ workspace_id: WS, layer: ['dept'] })).map((e) => e.id)).toEqual([
       'schedule:s2',
     ])
@@ -213,7 +213,7 @@ describe('CatalogIndex', () => {
   it('往上浮：跑得多没人反对 → 过 Wilson；只有两个岗位挂着不过', async () => {
     const index = build()
     const candidates = await index.promotionCandidates({ workspace_id: WS })
-    const skill = candidates.find((c) => c.entry.id === 'skill:dtc.aftersales')
+    const skill = candidates.find((c) => c.entry.id === 'skill:dtc.support')
     expect(skill?.card_kind).toBe('skill_promotion')
     expect(skill?.trigger).toBe('positions')
     expect(skill?.passed).toBe(true)

@@ -98,7 +98,7 @@ function manifest(id: string, version: string, kind: PackageManifest['kind']): P
     publisher: { id: 'agentsws', tier: 'official' },
     license: 'Apache-2.0',
     pricing: { model: 'free' },
-    provides: { roles: ['dtc.aftersales'] },
+    provides: { roles: ['dtc.support'] },
     requires: { contracts: { run: '^1.0.0' } },
     files: ['role.yml'],
   }
@@ -107,9 +107,9 @@ function manifest(id: string, version: string, kind: PackageManifest['kind']): P
 describe('假 registry（23 §3）', () => {
   it('search / get / download 三个方法', () => {
     const registry = new FakeRegistry()
-    registry.add({ manifest: manifest('dtc.aftersales', '1.0.0', 'role-pack'), dir: '/packs/a' })
+    registry.add({ manifest: manifest('dtc.support', '1.0.0', 'role-pack'), dir: '/packs/a' })
     registry.add({
-      manifest: manifest('dtc.aftersales', '1.2.0', 'role-pack'),
+      manifest: manifest('dtc.support', '1.2.0', 'role-pack'),
       dir: '/packs/a12',
       category: 'aftersales',
     })
@@ -130,16 +130,16 @@ describe('假 registry（23 §3）', () => {
     expect(registry.search({ q: 'Aftersales' })).toHaveLength(3)
     expect(registry.search()).toHaveLength(3)
 
-    expect(registry.versions('dtc.aftersales')).toEqual(['1.0.0', '1.2.0'])
-    expect(registry.get('dtc.aftersales')?.manifest.version).toBe('1.2.0')
-    expect(registry.get('dtc.aftersales', '1.0.0')?.dir).toBe('/packs/a')
+    expect(registry.versions('dtc.support')).toEqual(['1.0.0', '1.2.0'])
+    expect(registry.get('dtc.support')?.manifest.version).toBe('1.2.0')
+    expect(registry.get('dtc.support', '1.0.0')?.dir).toBe('/packs/a')
     expect(registry.get('nope')).toBeUndefined()
 
-    const dl = registry.download('dtc.aftersales')
-    expect(dl).toMatchObject({ id: 'dtc.aftersales', version: '1.2.0', dir: '/packs/a12' })
+    const dl = registry.download('dtc.support')
+    expect(dl).toMatchObject({ id: 'dtc.support', version: '1.2.0', dir: '/packs/a12' })
     expect(dl.sha256).toMatch(/^[0-9a-f]{64}$/)
     expect(dl.signature.startsWith('stand-in:')).toBe(true)
-    expect(registry.get('dtc.aftersales')?.downloads).toBe(1)
+    expect(registry.get('dtc.support')?.downloads).toBe(1)
     expect(() => registry.download('nope')).toThrowError(/registry/)
 
     registry.clear()

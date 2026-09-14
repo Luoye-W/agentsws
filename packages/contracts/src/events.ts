@@ -218,6 +218,9 @@ export type KnownEventType =
   | 'inbound.dead_letter'
   | 'delivery.sent'
   | 'delivery.failed'
+  // WP54（48 v2 L1）：职责改名 / 合并之后，已有分配在启动时迁到新 id。
+  // payload 只有分配 id、人、旧 id、新 id、迁过去的职责版本——改名也是一次变更，必须留痕。
+  | 'assignment.role_migrated'
 
 export interface EventLog {
   append<T extends string, P>(

@@ -16,7 +16,7 @@ import { renderWithProviders } from './helpers'
 
 const MAP: TailoredOntology = {
   assignment_id: 'asg_1',
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   objects: [
     {
       id: 'order',

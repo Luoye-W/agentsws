@@ -32,6 +32,7 @@ import {
   type StoreBackend,
 } from './backend.js'
 import { effectiveConfig as effectiveConfigPure, riskClassOf } from './effective.js'
+import { ROLE_ID_ALIASES, resolveRoleId } from './load.js'
 import { assertTighterOverrides } from './overrides.js'
 import { compilePolicies as compilePoliciesPure, createPolicyEngine } from './policy.js'
 import { applyPosition as applyPositionPure, buildAssignment } from './position.js'
@@ -206,6 +207,19 @@ export interface RoleRegistry {
   list(): RoleDefinitionFull[]
 }
 
+/** WP54：一条分配的职责改名迁移记录（调用方拿它记 `assignment.role_migrated`）。 */
+export interface RoleMigration {
+  assignment_id: AssignmentId
+  person_id: PersonId
+  workspace_id: WorkspaceId
+  /** 旧职责 id。 */
+  from: RoleId
+  /** 新职责 id。 */
+  to: RoleId
+  /** 迁过去之后记下的职责版本。 */
+  role_version: string
+}
+
 export interface AssignmentApi {
   create(input: CreateAssignmentInput): Assignment
   applyPosition(
@@ -222,6 +236,11 @@ export interface AssignmentApi {
   revoke(id: AssignmentId, input?: RevokeInput): Assignment
   listByPerson(person: PersonId, filter?: Omit<AssignmentFilter, 'person_id'>): Assignment[]
   listByRole(role: RoleId, filter?: Omit<AssignmentFilter, 'role_id'>): Assignment[]
+  /**
+   * WP54：把旧职责 id（`dtc.aftersales` / `dtc.presales` / `amz.buyer-messages`）
+   * 的活分配改写成新 id。幂等：没有旧 id 的库跑一遍返回空数组。
+   */
+  migrateRoleIds(filter?: { workspace_id?: WorkspaceId }): RoleMigration[]
   /** 44：整个工作区活着的分配（算范围下推 / 品牌影响面时用）。 */
   listByWorkspace(
     workspace: WorkspaceId,
@@ -275,11 +294,13 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
     register(role) {
       roleMap.set(role.id, role)
     },
+    // WP54：先按原样找（pack 里自带的同名定义仍然优先），找不到再走别名表。
+    // 顺序反过来会让"装一份自己的 dtc.aftersales"这件事静默失效。
     get(id) {
-      return roleMap.get(id)
+      return roleMap.get(id) ?? roleMap.get(resolveRoleId(id))
     },
     require(id) {
-      const role = roleMap.get(id)
+      const role = roleMap.get(id) ?? roleMap.get(resolveRoleId(id))
       if (!role) throw new RoleError('not_found', `role definition ${id} is not loaded`)
       return role
     },
@@ -644,7 +665,7 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       const created = applyPositionPure(position, person, workspace, ranges, {
         ...factory,
         granted_by: opts.granted_by,
-        roles: (id) => roleMap.get(id),
+        roles: (id) => roles.get(id),
         ...(opts.include ? { include: opts.include } : {}),
       })
       for (const assignment of created) persist(assignment)
@@ -710,6 +731,41 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
     },
     listByRole(role, filter) {
       return backend.listAssignments({ ...filter, role_id: role })
+    },
+    /**
+     * WP54：把旧职责 id 的**活**分配改写成新 id（48 v2 L1「已有分配在启动时迁移」）。
+     *
+     * 只改 `role_id` 与 `role_version`，别的一个字不动——范围、额度覆盖、自动化
+     * 状态（含采纳率与它的起算时间）全部留着：合并不是撤销重授，人身上那条队列
+     * 与它攒了几周的采纳率不该因为改个名字清零。
+     *
+     * 已撤销的不动（历史就是历史），新 id 的定义没加载就跳过（宁可不改也不改坏）。
+     * 记事件是调用方的事：这个包不认事件日志。
+     */
+    migrateRoleIds(filter) {
+      const out: RoleMigration[] = []
+      for (const [from, to] of Object.entries(ROLE_ID_ALIASES)) {
+        const role = roleMap.get(to)
+        if (role === undefined) continue
+        const found = backend.listAssignments({
+          ...(filter?.workspace_id === undefined ? {} : { workspace_id: filter.workspace_id }),
+          role_id: from,
+        })
+        for (const assignment of found) {
+          if (assignment.revoked_at !== undefined) continue
+          const next: Assignment = { ...assignment, role_id: to, role_version: role.version }
+          persist(next)
+          out.push({
+            assignment_id: assignment.id,
+            person_id: assignment.person_id,
+            workspace_id: assignment.workspace_id,
+            from,
+            to,
+            role_version: role.version,
+          })
+        }
+      }
+      return out
     },
     listByWorkspace(workspace, filter) {
       return backend.listAssignments({ ...filter, workspace_id: workspace })

@@ -595,7 +595,7 @@ describe('任务与职责绑定（13 §1.3）', () => {
     const task: ScheduleTask = await s.schedule(
       taskInput({
         assignment_id: 'asg_aftersales',
-        role_id: 'dtc.aftersales',
+        role_id: 'dtc.support',
         owner: 'p_wang',
         origin: { conversation_id: 'conv_1', run_id: 'run_1' },
         context_policy: 'resume_conversation',

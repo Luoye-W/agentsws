@@ -17,7 +17,7 @@ function change(over: Partial<StagedChange> = {}): StagedChange {
     id: 'chg_1',
     schema_version: 1,
     workspace_id: 'ws_1',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     assignment_id: 'asg_1',
     run_id: 'run_1',
     change_set_id: 'cs_1',

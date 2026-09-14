@@ -1,0 +1,122 @@
+# WP54（48 v2 L1 第二条）：网站在线客服。
+#
+# 它跟 `dtc.support` 的分工不是"售前 / 售后"，是**渠道的节奏**：
+# 邮件可以慢慢查、慢慢提一笔待批的退款；聊天窗里客户正盯着屏幕等，
+# 所以这条职责**只答不承诺**——写动作一条没有，涉钱（退款 / 补偿 / 折扣）
+# 一律转成邮件跟进或一张卡，交给 `dtc.support` 与人去办。
+#
+# 读的是同一套知识与同一批订单（只读），所以换人接手、换渠道接手，
+# 客户听到的口径是同一套；差别只在这一条能做什么、不能做什么。
+#
+# `chat_widget` 连接器在本体里**先登记**：聊天 widget 的脚本分发与公网端点
+# 天然要云上跑（48 §1.3 第一条），由托管档提供。没接上时岗位面板照 05 §4
+# 明说"缺连接器"，而不是假装它能用。
+id: dtc.live-chat
+version: 1.0.0
+domain: dtc
+name: { zh: 网站在线客服, en: DTC Live Chat }
+description: 网站聊天窗里的实时对话：秒回 FAQ、缺料追问、求助转人工、超时转邮件跟进；只答不承诺，涉钱转邮件
+
+scopes:
+  # 订单与物流只读：能说"记录显示什么"，不能改任何一格
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: shipment, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: customer, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: inventory, ops: [read], range: assigned, max_sensitivity: internal }
+  # 知识可读可提议（聊天里问出来的缺口最多，不许提议等于把缺口扔了）
+  - { domain: knowledge, ops: [read, stage], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+
+connectors:
+  - { kind: chat_widget, required: true, grants: [chat.read, chat.send], ownership: workspace }
+  # 超时转邮件跟进要发信；查单要店铺只读
+  - { kind: email, required: false, grants: [mail.send], ownership: workspace }
+  - {
+      kind: shopify,
+      required: false,
+      grants: [read_orders, read_fulfillments, read_products, read_inventory],
+      ownership: workspace,
+    }
+
+actions:
+  # 聊天里发的每一句。窗口开得比邮件大：一通会话就是十几条消息。
+  - id: reply_chat
+    target: customer
+    kind: outbound_message
+    mandate: { caps: { no_money_commitment: true }, window: { max_count: 500, per: day } }
+    route_to: role_holder
+  # 答不上来 / 涉钱 / 客户点了"找人工"：留个口子，把这通会话转成邮件跟进。
+  - id: handoff_to_email
+    target: customer
+    kind: outbound_message
+    mandate: { caps: {}, window: { max_count: 100, per: day } }
+    route_to: role_holder
+
+automation:
+  reply_chat:
+    ceiling: L3
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  handoff_to_email:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+grounding:
+  - {
+      name: order_status,
+      intent_terms: [订单, order, 包裹, package],
+      cue_terms: [哪, where, 什么时候, when, 到了, arrived],
+      tool: get_order,
+      prefetch: false,
+    }
+  - {
+      name: policy,
+      intent_terms: [退, return, refund, 换, exchange],
+      cue_terms: [可以, can, 能, 政策, policy],
+      tool: search_policies,
+      prefetch: true,
+    }
+
+skills:
+  - { name: customer-care, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: live-chat.waiting,
+      placement: queue,
+      component: approval_lane,
+      query: 'approvals.by_role(dtc.live-chat, reply_chat)',
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: live-chat.handoffs,
+      placement: alert,
+      component: alert_list,
+      query: events.escalations(dtc.live-chat),
+      default_order: 5,
+      pinnable: false,
+      adaptive: false,
+    }
+
+notifications:
+  - { event: chat.handoff_requested, mode: immediate, recipients: [role_holder] }
+  - {
+      event: 'approval.created:reply_chat',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 1,
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []

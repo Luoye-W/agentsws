@@ -296,16 +296,16 @@ describe('46 §3 岗位与职责 → 清单', () => {
       await m.call('GET', '/v1/onboarding/positions'),
     )
     const support = positions.find((p) => p.id === 'dtc-support')
-    expect(support?.roles.map((r) => r.id)).toContain('dtc.aftersales')
+    expect(support?.roles.map((r) => r.id)).toContain('dtc.support')
     // 46 §1 表 ③：每条职责旁有一句"它会干什么"
-    expect(support?.roles.find((r) => r.id === 'dtc.aftersales')?.what_it_does).toContain('退款')
+    expect(support?.roles.find((r) => r.id === 'dtc.support')?.what_it_does).toContain('退款')
 
     const plan = await data<PlanView>(
       await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['dtc-support'] } }),
     )
     // 勾岗位 = 模板里的职责全进来（不只是默认包）
-    expect(plan.role_ids).toEqual(expect.arrayContaining(['dtc.aftersales', 'common.member']))
-    // dtc.aftersales 要邮箱与 Shopify，两条都 required
+    expect(plan.role_ids).toEqual(expect.arrayContaining(['dtc.support', 'common.member']))
+    // dtc.support 要邮箱与 Shopify，两条都 required
     const services = plan.connectors.map((c) => c.service)
     expect(services).toContain('shopify_admin')
     expect(services).toContain('imap_smtp')
@@ -321,20 +321,20 @@ describe('46 §3 岗位与职责 → 清单', () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
     const plan = await data<PlanView>(
-      await m.call('POST', '/v1/onboarding/plan', { body: { role_ids: ['dtc.aftersales'] } }),
+      await m.call('POST', '/v1/onboarding/plan', { body: { role_ids: ['dtc.support'] } }),
     )
     expect(plan.positions).toEqual([
       {
         position_id: 'custom',
         name: '我的岗位',
-        role_ids: ['dtc.aftersales'],
+        role_ids: ['dtc.support'],
         already_held: false,
       },
     ])
 
     const named = await data<PlanView>(
       await m.call('POST', '/v1/onboarding/plan', {
-        body: { role_ids: ['dtc.aftersales'], custom_position_name: '一个人全干' },
+        body: { role_ids: ['dtc.support'], custom_position_name: '一个人全干' },
       }),
     )
     expect(named.positions[0]?.name).toBe('一个人全干')
@@ -348,7 +348,7 @@ describe('46 §3 岗位与职责 → 清单', () => {
       skipped: string[]
       ranges: { id: string }[]
     }>(await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['dtc-support'] } }))
-    expect(applied.created_assignments.map((a) => a.role_id)).toContain('dtc.aftersales')
+    expect(applied.created_assignments.map((a) => a.role_id)).toContain('dtc.support')
     // 46 I6：一家 Shopify 都没连 → 范围挂空（面板照 05 §4 明说"查不到东西"）
     expect(applied.ranges).toEqual([])
 
@@ -356,7 +356,7 @@ describe('46 §3 岗位与职责 → 清单', () => {
       await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['dtc-support'] } }),
     )
     expect(again.created_assignments).toEqual([])
-    expect(again.skipped).toContain('dtc.aftersales')
+    expect(again.skipped).toContain('dtc.support')
   })
 
   it('没这个岗位 → 404；plan 不写任何东西', async () => {

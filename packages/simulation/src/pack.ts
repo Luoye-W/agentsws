@@ -151,7 +151,7 @@ export interface PackJudgeDoc {
  * pack 自带的职责定义（`roles/*.yml`）。
  *
  * 15 / 50 人 pack 要有投放、运营这些岗位，而 `packages/roles` 里目前只内置了
- * `dtc.aftersales` / `common.owner` / `common.member` 三份。让 pack 能自带职责定义，
+ * `dtc.support` / `common.owner` / `common.member` 三份。让 pack 能自带职责定义，
  * 合成公司的规模就不再被内置职责的数量卡住；同 id 时 pack 里这份优先（它更具体）。
  */
 export interface PackRoleFile {

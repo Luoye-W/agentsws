@@ -159,7 +159,7 @@ export function approval(over: Partial<ApprovalItem> = {}): ApprovalItem {
     workspace_id: 'ws_1',
     kind: 'outbound_draft',
     revision: 1,
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     subject: { object: { type: 'thread', id: 'thr_1' } },
     dedupe_key: 'dk_1',
     title: '给 Anna 的回复草稿',

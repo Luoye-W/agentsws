@@ -19,7 +19,7 @@ const START = '2026-09-10T00:00:00.000Z'
 const CONTRACT_TASK: Omit<ScheduledTask, 'id' | 'fire_count'> = {
   workspace_id: 'ws_test',
   owner: 'p_wang',
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   assignment_id: 'asg_1',
   origin: { conversation_id: 'conv_1', run_id: 'run_1', message_ref: 'msg_1' },
   trigger: { kind: 'cron', expr: '0 9 * * *', tz: 'Asia/Shanghai' },
@@ -78,7 +78,7 @@ describe('契约一致性', () => {
       id: 'contract.flow',
       version: '1.0.0',
       name: '契约里那份',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       steps: [{ id: 's1', kind: 'run', params: {}, on_fail: 'skip' }],
     }
     const engine = createWorkflowEngine({ clock, handlers: { run: () => 'ok' } })

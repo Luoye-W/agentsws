@@ -112,7 +112,7 @@ const PEOPLE_15: PersonTemplate[] = [
     role: 'dtc.ops',
     scope_manager: true,
     // 兼售后：同一个人两个岗位，权限**各管各的**，不并集（05 §4）
-    extra: 'dtc.aftersales',
+    extra: 'dtc.support',
   },
   {
     id: 'p_zhao',
@@ -135,14 +135,14 @@ const PEOPLE_15: PersonTemplate[] = [
     name: '陈晓',
     email: 'chen@nordvolt.example',
     title: '售后客服',
-    role: 'dtc.aftersales',
+    role: 'dtc.support',
   },
   {
     id: 'p_sun',
     name: '孙洋',
     email: 'sun@nordvolt.example',
     title: '售后客服',
-    role: 'dtc.aftersales',
+    role: 'dtc.support',
     stores: ['store_main'],
   },
   {
@@ -150,7 +150,7 @@ const PEOPLE_15: PersonTemplate[] = [
     name: '周颖',
     email: 'zhou@nordvolt.example',
     title: '售后客服',
-    role: 'dtc.aftersales',
+    role: 'dtc.support',
     stores: ['store_eu'],
   },
   {
@@ -218,11 +218,11 @@ const PEOPLE_3: PersonTemplate[] = [
     name: '王岚',
     email: 'wang@nordvolt.example',
     title: '店主 / 售后',
-    role: 'dtc.aftersales',
+    role: 'dtc.support',
     owner: true,
     extra: 'common.owner',
   },
-  { id: 'p_li', name: '李默', email: 'li@nordvolt.example', title: '运营', role: 'dtc.aftersales' },
+  { id: 'p_li', name: '李默', email: 'li@nordvolt.example', title: '运营', role: 'dtc.support' },
   {
     id: 'p_chen',
     name: '陈晓',
@@ -239,7 +239,7 @@ const PEOPLE_3: PersonTemplate[] = [
 function people50(): PersonTemplate[] {
   const out = [...PEOPLE_15]
   const extra: { title: string; role: string }[] = [
-    { title: '售后客服', role: 'dtc.aftersales' },
+    { title: '售后客服', role: 'dtc.support' },
     { title: '运营', role: 'dtc.ops' },
     { title: '投放', role: 'ads.performance' },
     { title: '内容', role: 'common.member' },
@@ -271,7 +271,7 @@ function peopleFor(preset: SizePreset): PersonTemplate[] {
 /**
  * pack 自带的职责定义（05 §1 的 RoleDefinition）。
  *
- * `packages/roles` 只内置了 `dtc.aftersales` / `common.owner` / `common.member` 三份，
+ * `packages/roles` 只内置了 `dtc.support` / `common.owner` / `common.member` 三份，
  * 而 15 / 50 人公司必须有运营与投放这两个岗位（27 §2）。让 pack 带着自己的职责定义走，
  * 合成公司的规模就不再被内置职责的数量卡住——加载时 pack 里这一份按 id 覆盖内置。
  *
@@ -889,7 +889,7 @@ export function synth(options: SynthOptions): SynthResult {
       // 入站工作项默认落到第一条**主岗是售后**的分配。
       // 不能拿兼岗顶上：15 人公司里运营主管兼着售后，让他当 primary 的话
       // 「客服的卡没人理 → 升到运营主管」就变成升给他自己了，升级链看不出东西。
-      const isPrimary = !primaryTaken && role === 'dtc.aftersales' && role === p.role
+      const isPrimary = !primaryTaken && role === 'dtc.support' && role === p.role
       if (isPrimary) primaryTaken = true
       assignments.push({
         person_id: p.id,

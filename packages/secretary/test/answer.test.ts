@@ -105,12 +105,12 @@ describe('两类不答的', () => {
       visible: new Set(ALL),
       now: T0,
       tz_offset_minutes: TZ,
-      refer: { role_id: 'dtc.aftersales', role_name: '独立站售后客服' },
+      refer: { role_id: 'dtc.support', role_name: '独立站售后客服' },
     })
     expect(a.refused).toBe(true)
     expect(a.kind).toBe('professional')
     expect(a.answer).toContain('独立站售后客服')
-    expect(a.refer_to?.role_id).toBe('dtc.aftersales')
+    expect(a.refer_to?.role_id).toBe('dtc.support')
     // 不能顺口把答案说了
     expect(a.answer).not.toContain('可以退')
   })

@@ -1,27 +1,46 @@
-# 官方职责包 agentsws/dtc-customer-care 里的职责定义。
-# 与内置的 packages/roles/roles/dtc/aftersales.yml 同一份，差别只有 skills 的版本下限：
-# customer-care 的正文由共享包 @agentsws/support-core 提供（33 §1），装包时按 min_version 解析。
-# home_blocks / actions / automation / notifications 一个字都没动——1c 只装能力，不改职责形状。
-id: dtc.aftersales
-version: 1.0.0
+# 05 §5 的完整示例。
+# 注：05 §5 原文 customer scope 上的 `agent_max_sensitivity: confidential` 已于 31 §3.3 撤销
+# （v1 Agent 不持有高于 actor 的读权限），因此这里不再声明；加载器会把它当作未知字段拒绝。
+#
+# WP54（48 v2 L1）：本文件原来叫 `dtc/aftersales.yml`（`dtc.aftersales` 独立站售后客服）。
+# 09-14 Luoye 定：客服不按售前 / 售后拆，**网站客服一条**吃下客服邮箱里的一切，
+# 于是 `dtc.presales`（04 §1.1）与 `dtc.aftersales`（04 §1.2）合并成 `dtc.support`：
+# 数据域、连接器、写动作与额度全部取并集，**额度按动作分，不按售前 / 售后分**。
+# 售前 / 售后不再是模式，而是意图与知识的适用范围（stage）。
+# 旧 id 仍然读得进来（加载器的别名表 `ROLE_ID_ALIASES`），已有分配在启动时迁移。
+id: dtc.support
+version: 2.0.0
 domain: dtc
-name: { zh: 独立站售后客服, en: DTC After-sales Support }
-description: 订单状态与物流、退换货、退款、改地址、漏发错发破损、拒付争议
+name: { zh: 网站客服, en: DTC Website Support }
+description: 客服邮箱（和网站表单）里的一切：售前问答与推荐、订单状态与物流、退换货、退款、改地址、漏发错发破损、保修、投诉、拒付争议
 
 scopes:
   - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: shipment, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: customer, ops: [read, stage], range: assigned, max_sensitivity: internal }
-  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read, stage], range: workspace, max_sensitivity: internal }
   - { domain: discount, ops: [stage], range: assigned, max_sensitivity: internal }
-  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage, approve], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  # 并自 `dtc.presales`（04 §1.1 数据域：商品读、库存读）——售前要答"有没有货、配不配得上"，
+  # 而它跟售后读的是同一批商品，分成两条职责只会让同一个人身上挂两条一模一样的读权限。
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: inventory, ops: [read], range: assigned, max_sensitivity: internal }
 
 connectors:
   - { kind: email, required: true, grants: [mail.read, mail.send], ownership: workspace }
   - {
       kind: shopify,
       required: true,
-      grants: [read_orders, write_orders, read_fulfillments],
+      grants:
+        [
+          read_orders,
+          write_orders,
+          read_fulfillments,
+          read_products,
+          read_inventory,
+          write_discounts,
+        ],
       ownership: workspace,
     }
   - { kind: tracking, required: false, grants: [read], ownership: workspace }
@@ -57,6 +76,17 @@ actions:
     mandate: { caps: { unfulfilled_only: true } }
     protected_fields: [order.total, order.currency, order.customer_id]
     route_to: role_holder
+  # 并自 `dtc.presales`（04 §1.1 写操作）：折扣 ≤ 10%、单码单客单次。
+  # 额度写在这个动作上而不是写在职责上——这就是"额度按动作分"那句话的落点。
+  - id: stage_discount_code
+    target: discount
+    kind: staged_change
+    mandate:
+      caps: { max_presales_discount_pct: 10, single_use_per_customer: true }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
   - id: draft_chargeback_evidence
     target: finance
     kind: staged_change
@@ -84,6 +114,12 @@ automation:
     initial: L1
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [manual]
+  # 04 §1.1「发折扣码 L2 且必过额度」——上限按动作给，不因为它跟退款同在一条职责上就一起松。
+  stage_discount_code:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
   draft_chargeback_evidence:
     ceiling: L1
     initial: L1
@@ -108,31 +144,31 @@ grounding:
     }
 
 skills:
-  - { name: customer-care, min_version: 1.0.0, tier: open, load: always }
+  - { name: customer-care, tier: open, load: always }
   - { name: returns-policy-calc, tier: open, load: on_demand }
   - { name: chargeback-evidence, tier: open, load: on_demand }
 
 home_blocks:
   - {
-      id: aftersales.pending_replies,
+      id: support.pending_replies,
       placement: queue,
       component: approval_lane,
-      query: 'approvals.by_role(dtc.aftersales, reply_customer)',
+      query: 'approvals.by_role(dtc.support, reply_customer)',
       default_order: 10,
       pinnable: true,
       adaptive: true,
     }
   - {
-      id: aftersales.pending_refunds,
+      id: support.pending_refunds,
       placement: queue,
       component: staged_change_list,
-      query: changes.pending(dtc.aftersales),
+      query: changes.pending(dtc.support),
       default_order: 20,
       pinnable: true,
       adaptive: true,
     }
   - {
-      id: aftersales.overdue_orders,
+      id: support.overdue_orders,
       placement: focus,
       component: order_table,
       query: orders.overdue(assigned),
@@ -141,10 +177,10 @@ home_blocks:
       adaptive: true,
     }
   - {
-      id: aftersales.escalations,
+      id: support.escalations,
       placement: alert,
       component: alert_list,
-      query: events.escalations(dtc.aftersales),
+      query: events.escalations(dtc.support),
       default_order: 5,
       pinnable: false,
       adaptive: false,

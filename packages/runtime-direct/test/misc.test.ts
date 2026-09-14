@@ -56,7 +56,7 @@ describe('零碎件', () => {
     const meta = {
       workspace_id: 'ws_test',
       assignment_id: 'asg_1',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       run_id: 'run_test_1',
       purpose: 'run' as const,
     }

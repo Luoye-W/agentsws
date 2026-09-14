@@ -144,7 +144,7 @@ function harness(
     accounts: () => accounts,
     credentials: { password: () => PASS },
     work,
-    position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.aftersales' }),
+    position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.support' }),
     ...(over.resolveActor === undefined ? {} : { resolveActor: over.resolveActor }),
     ...(over.batch === undefined ? {} : { batch: over.batch }),
     startRun: (input) => {
@@ -280,7 +280,7 @@ describe('IMAP 轮询 → 入站管线 → 岗位事项 → 起 Run（39 待办 
       accounts: () => [account()],
       credentials: { password: () => PASS },
       work,
-      position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.aftersales' }),
+      position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.support' }),
       startRun: () => {
         attempts += 1
         if (attempts === 1) throw new Error('模型没起来')

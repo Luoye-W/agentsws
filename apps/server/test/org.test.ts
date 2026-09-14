@@ -159,7 +159,7 @@ describe('制度面：职责与岗位', () => {
         home_blocks: unknown[]
       }[]
     >(await call('GET', '/v1/roles'))
-    const aftersales = roles.find((r) => r.id === 'dtc.aftersales')
+    const aftersales = roles.find((r) => r.id === 'dtc.support')
     expect(aftersales?.source).toBe('bundled')
     expect(aftersales?.editable).toBe(false)
     expect(aftersales?.actions.length).toBeGreaterThan(0)
@@ -172,13 +172,13 @@ describe('制度面：职责与岗位', () => {
     )
     const support = positions.find((p) => p.id === 'dtc-support')
     expect(support?.name).toBe('独立站售后客服')
-    expect(support?.roles.map((r) => r.role_id)).toContain('dtc.aftersales')
+    expect(support?.roles.map((r) => r.role_id)).toContain('dtc.support')
   })
 
   it('新建岗位 → 分配 → 删岗位被拦（还有人在做）→ 撤销后能删', async () => {
     const created = await data<{ id: string }>(
       await call('POST', '/v1/org/positions', {
-        body: { name: '客服（夜班）', roles: [{ role_id: 'dtc.aftersales', default: true }] },
+        body: { name: '客服（夜班）', roles: [{ role_id: 'dtc.support', default: true }] },
       }),
     )
     const mate = await inviteColleague('night@example.com')
@@ -191,7 +191,7 @@ describe('制度面：职责与岗位', () => {
         },
       }),
     )
-    expect(granted.map((a) => a.role_id)).toEqual(['dtc.aftersales'])
+    expect(granted.map((a) => a.role_id)).toEqual(['dtc.support'])
     const blocked = await call('DELETE', `/v1/org/positions/${created.id}`)
     expect(blocked.status).toBe(409)
     expect((await call('DELETE', `/v1/assignments/${granted[0]?.assignment_id}`)).status).toBe(200)
@@ -199,7 +199,7 @@ describe('制度面：职责与岗位', () => {
   })
 })
 
-describe('把「独立站售后客服」分给一个同事（派工书的验收路径）', () => {
+describe('把「网站客服」分给一个同事（派工书的验收路径）', () => {
   it('邀请 → 接受 → 分配 → 同事自己登录后左栏就有这个岗位；owner 撤销后他 403', async () => {
     const mate = await inviteColleague('li@example.com', { name: '李默' })
 
@@ -207,7 +207,7 @@ describe('把「独立站售后客服」分给一个同事（派工书的验收�
     const before = await data<{ positions: { role_id: string }[] }>(
       await call('GET', '/v1/positions', { token: mate.token, assignment: '' }),
     ).catch(() => ({ positions: [] }))
-    expect(before.positions.some((p) => p.role_id === 'dtc.aftersales')).toBe(false)
+    expect(before.positions.some((p) => p.role_id === 'dtc.support')).toBe(false)
 
     const granted = await data<AssignmentView[]>(
       await call('POST', '/v1/assignments', {
@@ -218,9 +218,9 @@ describe('把「独立站售后客服」分给一个同事（派工书的验收�
         },
       }),
     )
-    const support = granted.find((a) => a.role_id === 'dtc.aftersales')
+    const support = granted.find((a) => a.role_id === 'dtc.support')
     expect(support).toBeDefined()
-    expect(support?.role_name).toBe('独立站售后客服')
+    expect(support?.role_name).toBe('网站客服')
 
     // 同事以自己的身份看：左栏（/v1/positions）里就是这个岗位
     const mine = await data<{ positions: { position_id: string; role_id: string }[] }>(
@@ -229,7 +229,7 @@ describe('把「独立站售后客服」分给一个同事（派工书的验收�
         assignment: support?.assignment_id ?? '',
       }),
     )
-    expect(mine.positions.map((p) => p.role_id)).toContain('dtc.aftersales')
+    expect(mine.positions.map((p) => p.role_id)).toContain('dtc.support')
 
     // 首页的数据条与卡片只按这一个岗位算（一次请求一个 Assignment）
     const home = await call('GET', '/v1/home?range=yesterday', {
@@ -274,7 +274,7 @@ describe('一致性用例', () => {
         body: { person_id: mate.person_id, position_id: 'dtc-support', ranges: [] },
       }),
     )
-    const support = granted.find((a) => a.role_id === 'dtc.aftersales')
+    const support = granted.find((a) => a.role_id === 'dtc.support')
     expect(support?.unassigned_range).toBe(true)
     const effective = await data<{ unassigned_range: boolean }>(
       await call('GET', `/v1/assignments/${support?.assignment_id}/effective`, {
@@ -339,7 +339,7 @@ describe('一致性用例', () => {
         },
       }),
     )
-    const support = granted.find((a) => a.role_id === 'dtc.aftersales')?.assignment_id ?? ''
+    const support = granted.find((a) => a.role_id === 'dtc.support')?.assignment_id ?? ''
     for (const [method, path] of [
       ['GET', '/v1/roles'],
       ['GET', '/v1/org/positions'],
@@ -358,9 +358,9 @@ describe('一致性用例', () => {
 
   it('改模板必经审批：PUT 只建卡；批准之后才生效', async () => {
     const copy = await data<{ id: string; name: string; version: string }>(
-      await call('POST', '/v1/roles', { body: { from: 'dtc.aftersales' } }),
+      await call('POST', '/v1/roles', { body: { from: 'dtc.support' } }),
     )
-    expect(copy.id).toBe('dtc.aftersales-custom')
+    expect(copy.id).toBe('dtc.support-custom')
 
     const receipt = await data<{ status: string; approval_item_id: string }>(
       await call('PUT', `/v1/roles/${copy.id}`, {
@@ -394,7 +394,7 @@ describe('一致性用例', () => {
 
   it('选「维持现状」= 不改：卡结了，职责定义还是原来那份', async () => {
     const copy = await data<{ id: string; name: string }>(
-      await call('POST', '/v1/roles', { body: { from: 'dtc.aftersales' } }),
+      await call('POST', '/v1/roles', { body: { from: 'dtc.support' } }),
     )
     const receipt = await data<{ approval_item_id: string }>(
       await call('PUT', `/v1/roles/${copy.id}`, { body: { name: '不该生效的名字' } }),
@@ -407,7 +407,7 @@ describe('一致性用例', () => {
   })
 
   it('内置职责不给直接改：先复制一份（409）', async () => {
-    const res = await call('PUT', '/v1/roles/dtc.aftersales', { body: { name: '改个名' } })
+    const res = await call('PUT', '/v1/roles/dtc.support', { body: { name: '改个名' } })
     expect(res.status).toBe(409)
   })
 
@@ -442,7 +442,7 @@ describe('一致性用例', () => {
         },
       }),
     )
-    const id = granted.find((a) => a.role_id === 'dtc.aftersales')?.assignment_id ?? ''
+    const id = granted.find((a) => a.role_id === 'dtc.support')?.assignment_id ?? ''
     const tighter = await call('PUT', `/v1/assignments/${id}`, {
       body: { mandate_overrides: { stage_refund: { caps: { max_auto_refund_amount: 20 } } } },
     })
@@ -549,7 +549,7 @@ describe('44 品牌与产品线', () => {
         },
       }),
     )
-    const mine = (await assignmentsOf(li.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    const mine = (await assignmentsOf(li.person_id)).find((a) => a.role_id === 'dtc.support')
     expect(mine?.ranges.map((r) => r.id).sort()).toEqual(['store_b1', 'store_b2'])
     expect(mine?.unassigned_range).toBe(false)
     const groups = await data<RangeGroupView[]>(await call('GET', '/v1/org/range-groups'))
@@ -582,7 +582,7 @@ describe('44 品牌与产品线', () => {
         },
       }),
     )
-    const mine = (await assignmentsOf(li.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    const mine = (await assignmentsOf(li.person_id)).find((a) => a.role_id === 'dtc.support')
     expect(mine?.ranges.map((r) => r.id).sort()).toEqual(['store_b1', 'store_b3'])
 
     const types: string[] = []
@@ -621,7 +621,7 @@ describe('44 品牌与产品线', () => {
     const res = await call('DELETE', `/v1/org/range-groups/${created.id}`)
     expect(res.status).toBe(409)
     // 摘掉之后就删得了
-    const mine = (await assignmentsOf(chen.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    const mine = (await assignmentsOf(chen.person_id)).find((a) => a.role_id === 'dtc.support')
     await data(
       await call('PUT', `/v1/assignments/${mine?.assignment_id}`, {
         body: { ranges: [], range_groups: [] },
@@ -684,7 +684,7 @@ describe('44 品牌与产品线', () => {
         },
       }),
     )
-    const mine = (await assignmentsOf(sun.person_id)).find((a) => a.role_id === 'dtc.aftersales')
+    const mine = (await assignmentsOf(sun.person_id)).find((a) => a.role_id === 'dtc.support')
     expect(mine?.ranges.map((r) => `${r.kind}:${r.id}`).sort()).toEqual(
       [`product_line:${line.id}`, 'store:store_b1', 'store:store_main'].sort(),
     )

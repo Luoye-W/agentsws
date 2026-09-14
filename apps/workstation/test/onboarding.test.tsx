@@ -30,7 +30,7 @@ const POSITIONS: OnboardingPositionView[] = [
     name: '独立站售后客服',
     roles: [
       {
-        id: 'dtc.aftersales',
+        id: 'dtc.support',
         name: '售后处理',
         default: true,
         what_it_does: '看退款与投诉邮件，拟一份回复给你定。',
@@ -79,13 +79,13 @@ const PLAN: OnboardingPlanView = {
     {
       position_id: 'pos_cs',
       name: '独立站售后客服',
-      role_ids: ['dtc.aftersales', 'dtc.refund'],
+      role_ids: ['dtc.support', 'dtc.refund'],
       already_held: false,
     },
   ],
   model_configured: false,
   model_first: true,
-  role_ids: ['dtc.aftersales', 'dtc.refund'],
+  role_ids: ['dtc.support', 'dtc.refund'],
 }
 
 const STATE: OnboardingStateView = {

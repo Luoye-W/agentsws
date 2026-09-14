@@ -53,7 +53,7 @@ describe('组件注册表（29 §7 用例 1）', () => {
 
 describe('岗位面板（36 §3 按数据源分块）', () => {
   it('售后客服只有店铺后台（它的职责里没有 analytics 域）', () => {
-    expect(assembleView('dtc.aftersales', queryContext()).map((s) => s.source)).toEqual(['shop'])
+    expect(assembleView('dtc.support', queryContext()).map((s) => s.source)).toEqual(['shop'])
   })
 
   it('独立站运营有店铺后台 / GA4 / Search Console 三块', () => {
@@ -107,7 +107,7 @@ describe('数字块（36 §3）', () => {
       'refunds_total',
       'conversion_rate',
     ])
-    expect(DEFAULT_HOME_TILES['dtc.aftersales']).toEqual([
+    expect(DEFAULT_HOME_TILES['dtc.support']).toEqual([
       'pending_replies',
       'reply_rate_24h',
       'refund_requests',
@@ -189,10 +189,10 @@ describe('数字块（36 §3）', () => {
 describe('首页装配（36 §3 三区 + 预计 X 分钟）', () => {
   const position = (over: Partial<HomePosition> = {}): HomePosition => ({
     position_id: 'asg_1',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     role_name: '独立站售后客服',
     items: [item(), refundItem()],
-    tile_ids: defaultTilesFor('dtc.aftersales'),
+    tile_ids: defaultTilesFor('dtc.support'),
     range: 'yesterday',
     query: queryContext(),
     ...over,

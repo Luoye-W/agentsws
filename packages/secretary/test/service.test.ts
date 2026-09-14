@@ -129,7 +129,7 @@ describe('代答（41 §1.2 第一行）', () => {
     })
     expect(out.kind).toBe('professional')
     expect(out.refused).toBe(true)
-    expect(out.refer_to?.role_id).toBe('dtc.aftersales')
+    expect(out.refer_to?.role_id).toBe('dtc.support')
   })
 })
 
@@ -235,7 +235,7 @@ describe('任务路由（41 §1.2 第三行）', () => {
       text: '这个客户投诉说包裹破损，要退款，处理一下',
     })
     expect(out.kind).toBe('task')
-    expect(out.role_id).toBe('dtc.aftersales')
+    expect(out.role_id).toBe('dtc.support')
     expect(out.owner).toBe('p_chen')
     expect(out.claim_item_id).toBeDefined()
     expect(out.todo_id).toBeDefined()
@@ -256,7 +256,7 @@ describe('任务路由（41 §1.2 第三行）', () => {
       text: '退货窗口外能不能退？',
     })
     expect(out.kind).toBe('question')
-    expect(out.role_id).toBe('dtc.aftersales')
+    expect(out.role_id).toBe('dtc.support')
     expect(out.claim_item_id).toBeUndefined()
     expect(w.claims).toEqual([])
   })

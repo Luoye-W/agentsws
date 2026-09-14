@@ -537,7 +537,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   // pack 自带的职责定义按 id 覆盖内置（WP32：15 / 50 人 pack 要有投放、运营这些岗位，
   // 而 `packages/roles` 只内置了三份；没有 `roles/` 的 pack 一个字都不变）
   const bundledRoles = [
-    loadBundledRole('dtc.aftersales'),
+    loadBundledRole('dtc.support'),
     loadBundledRole('common.owner'),
     loadBundledRole('common.member'),
     // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——

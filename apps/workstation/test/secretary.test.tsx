@@ -250,7 +250,7 @@ describe('我的代理页', () => {
   it('丢一件事给代理 → 界面写清楚判给了哪个岗位、为什么', async () => {
     routeToDesk.mockResolvedValueOnce({
       kind: 'task',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       role_name: '独立站售后客服',
       owner: 'p_chen',
       owner_label: '陈晓',
@@ -276,7 +276,7 @@ describe('我的代理页', () => {
   it('专业问题：界面说清"代理不答，转给岗位"', async () => {
     routeToDesk.mockResolvedValueOnce({
       kind: 'question',
-      role_id: 'dtc.aftersales',
+      role_id: 'dtc.support',
       role_name: '独立站售后客服',
       confidence: 0.7,
       reason: '代理判断：这是独立站售后客服的专业问题，代理不答，转给岗位',

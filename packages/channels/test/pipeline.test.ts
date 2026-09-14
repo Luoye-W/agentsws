@@ -158,14 +158,14 @@ describe('18 §5 一致性用例', () => {
 })
 
 describe('管线的六步', () => {
-  it('默认路由把邮件落到 dtc.aftersales', async () => {
+  it('默认路由把邮件落到 dtc.support', async () => {
     const rig = makeRig()
     const { event } = await rig.pipeline.ingest(
       'email',
       rawEmail(6, { from: 'ann@customer.com' }),
       WS,
     )
-    expect(event?.routing).toEqual({ role_id: 'dtc.aftersales', confidence: 0.6 })
+    expect(event?.routing).toEqual({ role_id: 'dtc.support', confidence: 0.6 })
     expect(defaultRoute({ channel: 'whatsapp', workspace_id: WS, text: '' })).toEqual({
       confidence: 0,
     })
@@ -176,7 +176,7 @@ describe('管线的六步', () => {
     const rig = makeRig({
       route: (input) => {
         seen.push(input.text)
-        return { role_id: 'dtc.aftersales', work_item_id: 'wi_1', confidence: 0.9 }
+        return { role_id: 'dtc.support', work_item_id: 'wi_1', confidence: 0.9 }
       },
     })
     const { event } = await rig.pipeline.ingest(
@@ -297,7 +297,7 @@ describe('队列与去重的零件', () => {
   })
 
   it('车道 = workspace × role，没有 role 走 owner', () => {
-    expect(laneOf('ws_1', 'dtc.aftersales')).toBe('ws_1:dtc.aftersales')
+    expect(laneOf('ws_1', 'dtc.support')).toBe('ws_1:dtc.support')
     expect(laneOf('ws_1', undefined)).toBe('ws_1:owner')
   })
 

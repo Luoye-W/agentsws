@@ -1,6 +1,6 @@
 ---
 name: customer-care
-description: 独立站售后客服的做事方式：怎么读一封来信、怎么判断能不能办、怎么写回信、遇到没答过的业务边界怎么办。装在 dtc.aftersales 职责上，always 加载。
+description: 网站客服的做事方式：怎么读一封来信、怎么判断能不能办、怎么写回信、遇到没答过的业务边界怎么办。装在 dtc.support 职责上，always 加载。
 license: Apache-2.0
 tier: open
 version: 1.0.0

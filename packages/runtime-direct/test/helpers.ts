@@ -94,8 +94,8 @@ export function makeRequest(over: Partial<RunRequest> = {}): RunRequest {
     schema_version: 1,
     workspace_id: 'ws_test',
     kind: 'work_item',
-    actor: { person_id: 'p_agent', assignment_id: 'asg_1', role_id: 'dtc.aftersales' },
-    work_item: { id: 'wi_1', conversation_id: 'thr_1', role_id: 'dtc.aftersales' },
+    actor: { person_id: 'p_agent', assignment_id: 'asg_1', role_id: 'dtc.support' },
+    work_item: { id: 'wi_1', conversation_id: 'thr_1', role_id: 'dtc.support' },
     trigger: { event_id: 'in_1', source: 'inbound' },
     grounding: [
       {
@@ -124,7 +124,7 @@ export function makeRequest(over: Partial<RunRequest> = {}): RunRequest {
       must_stage_if_change_requested: true,
     },
     runtime: {
-      preset: 'dtc.aftersales',
+      preset: 'dtc.support',
       profile: 'test',
       plugins: [],
       model: MODEL,

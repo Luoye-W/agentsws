@@ -228,7 +228,7 @@ const SEED_POSITIONS: readonly {
     zh: '独立站售后客服',
     en: 'DTC After-sales Support',
     roles: [
-      ['dtc.aftersales', true],
+      ['dtc.support', true],
       ['common.member', false],
     ],
   },

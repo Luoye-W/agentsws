@@ -1,0 +1,125 @@
+# WP54（48 v2 L1 第三条）：Amazon 客服 = 04 §2 的 `amz.buyer-messages` **改名**。
+#
+# 为什么改名而不是并进 `dtc.support`：04 §2 末段那句话没变——
+# 「Amazon 与独立站的售后客服**不合并**：平台规则、消息模板、可做的动作完全不同，
+# 硬合会让额度和 skill 都变成两套 if。共用的只有 `customer-care` 的说话纪律。」
+# 改名只是把"买家消息"这个 Amazon 内部叫法，换成用户嘴里的"Amazon 客服"。
+# 旧 id `amz.buyer-messages` 仍然读得进来（加载器的别名表）。
+#
+# 两条平台硬约束写在这里，不做成开关（48 §1.3 第三条）：
+# 1. **24h SLA**：买家消息超过 24 小时没回会掉账户指标，所以升级时限是 24 小时以内的三档；
+# 2. **出站硬闸**：站内信里不许出现外链、联系方式、营销语——它不是话术偏好，
+#    是平台规则，违反会被封信道。闸在出站守卫里（`packages/channels` 的出站侧），
+#    这里只把"这条职责受它管"标出来，让面板与审计看得见。
+id: amz.support
+version: 1.0.0
+domain: amz
+name: { zh: Amazon 客服, en: Amazon Buyer Support }
+description: 亚马逊买家消息（寄生在客服邮箱的 relay）：站内信问答、订单与物流、退货退款引导、售后；24 小时回复 SLA，出站受平台硬闸约束
+
+scopes:
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: shipment, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: customer, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read, stage], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage, approve], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+
+connectors:
+  # 现在就能用的那条：买家消息寄生在客服邮箱上（Amazon relay 地址），认域名识别。
+  - { kind: email, required: true, grants: [mail.read, mail.send], ownership: workspace }
+  # 后续的 SP-API Messaging（退款额度等它接上再给，见下面的注释）。
+  - {
+      kind: amazon,
+      required: false,
+      grants: [messaging.read, messaging.send, orders.read],
+      ownership: workspace,
+    }
+
+actions:
+  # 站内信回复。`outbound_gate: amazon` 不是本 schema 的字段，闸由出站守卫按渠道判；
+  # 这里用额度把"一天最多发多少封"钉住，其余交给闸。
+  - id: reply_buyer_message
+    target: customer
+    kind: outbound_message
+    mandate: { caps: { no_external_links: true, no_contact_details: true, no_marketing: true }, window: { max_count: 200, per: day } }
+    route_to: role_holder
+  # 48 §3 L1 表：「退款走 SP-API 时再给额度」——在那之前这条是纯提案，
+  # 没有金额上限可言，因此 caps 为空且永远人审（hard_ceiling 在 automation 里）。
+  - id: stage_refund
+    target: order
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 10, per: day } }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+
+automation:
+  reply_buyer_message:
+    ceiling: L3
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  stage_refund:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [guardrail_hit, manual]
+
+grounding:
+  - {
+      name: order_status,
+      intent_terms: [订单, order, 包裹, package, shipment],
+      cue_terms: [哪, where, 什么时候, when, 到了, arrived],
+      tool: get_order,
+      prefetch: true,
+    }
+  - {
+      name: policy,
+      intent_terms: [退, return, refund, 换, exchange],
+      cue_terms: [可以, can, 能, 政策, policy],
+      tool: search_policies,
+      prefetch: true,
+    }
+
+skills:
+  - { name: customer-care, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: amz.pending_replies,
+      placement: queue,
+      component: approval_lane,
+      query: 'approvals.by_role(amz.support, reply_buyer_message)',
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  # 24h SLA 的三档（48 §1.1 表：SLA 三档）——逾期的排在最前面
+  - {
+      id: amz.sla_due,
+      placement: alert,
+      component: alert_list,
+      query: 'sla.due(amz.support, 24h)',
+      default_order: 1,
+      pinnable: false,
+      adaptive: false,
+    }
+
+notifications:
+  - { event: amazon.sla_breach_imminent, mode: immediate, recipients: [role_holder, scope_manager] }
+  - {
+      event: 'approval.created:reply_buyer_message',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 8,
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []

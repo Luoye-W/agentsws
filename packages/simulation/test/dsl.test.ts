@@ -195,7 +195,7 @@ invariants: [prompt_replayable]
     org.personal:
       who: p_chen
       workspace: ws_chen
-      role: dtc.aftersales
+      role: dtc.support
       range_groups:
         - id: rg_chen_b
           name: 品牌乙

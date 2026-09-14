@@ -1,11 +1,12 @@
-# 04 §1.11 独立站运营岗位默认包：十个职责，默认包含八个，两个可选。
+# 04 §1.11 独立站运营岗位默认包：九个职责，默认包含七个，两个可选。
+# （WP54 起售前 / 售后合成 `dtc.support` 一条，原来的十个变九个。）
 # 岗位模板只在分配那一刻展开成一组 Assignment；之后改模板不影响已分配的人（05 §2）。
 id: dtc-ops
 version: 1.0.0
 name: { zh: 独立站运营, en: DTC Operations }
 roles:
-  - { role: dtc.presales, default: true }
-  - { role: dtc.aftersales, default: true }
+  # WP54：`dtc.presales` + `dtc.support` 已合并成 `dtc.support`（48 v2 L1）
+  - { role: dtc.support, default: true }
   - { role: dtc.store-config, default: true }
   - { role: dtc.catalog, default: true }
   - { role: dtc.content, default: true }

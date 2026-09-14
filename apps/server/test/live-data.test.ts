@@ -295,11 +295,11 @@ beforeEach(async () => {
     liveDataIntervalMs: 0,
   })
   const { url } = await server.listen(0)
-  // 售后客服岗位：它的面板就是「店铺后台」那一块（`VIEW_BY_ROLE['dtc.aftersales']`）
+  // 售后客服岗位：它的面板就是「店铺后台」那一块（`VIEW_BY_ROLE['dtc.support']`）
   const aftersales = server.roles.assignments.create({
     person_id: server.bootstrap.person.id,
     workspace_id: server.bootstrap.workspace.id,
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     granted_by: server.bootstrap.person.id,
     // 31 §3.1：范围为空的岗位不许用 `assigned` 范围查询，面板上一个块都出不来
     ranges: [{ kind: 'store', id: 'store_main' }],

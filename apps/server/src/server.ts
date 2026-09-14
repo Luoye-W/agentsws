@@ -182,7 +182,14 @@ export function bindHost(env: Record<string, string | undefined>): string {
   )
 }
 /** v1 自带的职责定义（roles 包 bundled）。 */
-export const BUNDLED_ROLES = ['common.owner', 'common.member', 'dtc.aftersales'] as const
+export const BUNDLED_ROLES = [
+  'common.owner',
+  'common.member',
+  // WP54（48 v2 L1）：客服岗位的三条职责
+  'dtc.support',
+  'dtc.live-chat',
+  'amz.support',
+] as const
 
 /**
  * 36 §5.7 的 demo：把一个已经跑过场景的模拟世界接进同一个进程。
@@ -535,6 +542,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connected: () => connectedKinds(),
       onRangeExpanded: (e) => rangeExpandedSink?.(e),
     })
+
+  // WP54（48 v2 L1）：职责改名 / 合并之后，库里已有的分配在**启动时迁一次**。
+  //
+  // 只在这里做，不在职责包里做：`packages/roles` 不认事件日志，而改名是一次变更，
+  // 15 §1 的底线是"变更必须留痕"。迁移本身幂等（没有旧 id 的库跑一遍什么也不发生），
+  // 所以每次起进程都跑得起，不需要一张"迁过没有"的标记表。
+  for (const migrated of roles.assignments.migrateRoleIds()) {
+    appendEvent({
+      schema_version: 1,
+      workspace_id: migrated.workspace_id,
+      type: 'assignment.role_migrated',
+      actor: { kind: 'system', id: 'server' },
+      correlation: { trace_id: `tr_role_migrate_${migrated.assignment_id}` },
+      payload: {
+        assignment_id: migrated.assignment_id,
+        person_id: migrated.person_id,
+        from: migrated.from,
+        to: migrated.to,
+        role_version: migrated.role_version,
+      },
+    })
+  }
 
   // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
   // 把它指到共享目录）或 S3 兼容（阿里 OSS / 腾讯 COS / R2 / MinIO）。

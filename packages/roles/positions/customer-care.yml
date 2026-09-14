@@ -1,0 +1,17 @@
+# WP54（48 v2 L1 / 27 §1）：**客服**岗位 = 三条职责，默认全勾，可去勾。
+#
+# 46 §1 表 ③「勾岗位 = 它包含的职责全勾上」。三条分开是因为它们各自满足 04 §0
+# 的四条（各有连接器、各有队列车道、各能单独交接）：
+#
+# - 网站客服：客服邮箱里的一切，能提退款 / 补发 / 改地址 / 折扣码（额度按动作分）；
+# - 网站在线客服：聊天窗里的实时对话，只答不承诺，涉钱转邮件；
+# - Amazon 客服：买家消息，24h SLA，出站受平台硬闸。
+#
+# 只做独立站的人去勾掉 Amazon 那条；还没上聊天 widget 的去勾掉在线客服那条。
+id: customer-care
+version: 1.0.0
+name: { zh: 客服, en: Customer Care }
+roles:
+  - { role: dtc.support, default: true }
+  - { role: dtc.live-chat, default: true }
+  - { role: amz.support, default: true }

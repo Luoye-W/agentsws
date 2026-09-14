@@ -9,7 +9,7 @@ export function stepClock(start = '2026-09-09T00:00:00.000Z'): Clock {
   }
 }
 
-/** 05 §5 dtc.aftersales 的密级样例：cost_price 是 confidential，售后客服看不到。 */
+/** 05 §5 dtc.support 的密级样例：cost_price 是 confidential，售后客服看不到。 */
 export const product = defineCollection({
   name: 'product',
   domain: 'product',
@@ -46,7 +46,7 @@ export const ALL_COLLECTIONS = [product, order, customer]
 export const SHOP_US: RangeRef = { kind: 'store', id: 'shop_us' }
 export const SHOP_EU: RangeRef = { kind: 'store', id: 'shop_eu' }
 
-/** 05 §5 dtc.aftersales 的 scopes（节选）：没有 product 域。 */
+/** 05 §5 dtc.support 的 scopes（节选）：没有 product 域。 */
 export const AFTERSALES_SCOPES: PermissionScope[] = [
   { domain: 'order', ops: ['read'], range: 'assigned', max_sensitivity: 'internal' },
   { domain: 'customer', ops: ['read', 'stage'], range: 'assigned', max_sensitivity: 'internal' },

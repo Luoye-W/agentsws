@@ -27,6 +27,8 @@ export {
   loadRole,
   parsePosition,
   parseRole,
+  ROLE_ID_ALIASES,
+  resolveRoleId,
 } from './load.js'
 export { assertTighterOverrides } from './overrides.js'
 export type { PolicyEngine } from './policy.js'
@@ -58,6 +60,7 @@ export type {
   RangeExpanded,
   RangeGroupApi,
   RevokeInput,
+  RoleMigration,
   RoleRegistry,
   RoleStore,
   RoleStoreOptions,

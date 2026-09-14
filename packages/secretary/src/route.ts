@@ -132,11 +132,24 @@ export function scoreRoles(text: string, roles: readonly RoleProfile[]): RouteSc
         score += term.weight
         matched.push(term.text)
       }
-      return { role_id: role.role_id, role_name: role.role_name, score, matched }
+      return {
+        role_id: role.role_id,
+        role_name: role.role_name,
+        score,
+        matched,
+        held: role.positions.length > 0,
+      }
     })
     .filter((s) => s.score > 0)
-  scored.sort((a, b) => b.score - a.score || (a.role_id < b.role_id ? -1 : 1))
-  return scored
+  // 分数相同时**先看有没有人在做**（WP54）：客服拆成三条职责之后，一句"退款、投诉、
+  // 包裹"对网站客服与 Amazon 客服打一样的分，而工作区里可能只有一个人做网站客服。
+  // 判给一条没人持有的职责，出来的是一张没人能认领的卡——那比判错更糟。
+  // 再相同才按 id 字典序，保证同一句话在两台机器上路由到同一条。
+  scored.sort(
+    (a, b) =>
+      b.score - a.score || Number(b.held) - Number(a.held) || (a.role_id < b.role_id ? -1 : 1),
+  )
+  return scored.map(({ held: _held, ...rest }) => rest)
 }
 
 /**

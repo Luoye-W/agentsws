@@ -14,7 +14,7 @@ import { renderWithProviders } from './helpers'
 
 const summary = (over: Partial<PositionSummary>): PositionSummary => ({
   position_id: 'asg_1',
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   role_name: '独立站售后客服',
   ranges: [],
   ready: true,

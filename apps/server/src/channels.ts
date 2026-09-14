@@ -101,7 +101,7 @@ export interface ChannelsOptions {
   startRun?: StartRun
   /** 入站事项挂谁名下（本人的那条岗位）。 */
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
-  /** 06 §2.4 路由器；缺省按渠道映射（邮件 → `dtc.aftersales`）。 */
+  /** 06 §2.4 路由器；缺省按渠道映射（邮件 → `dtc.support`）。 */
   route?(input: RouteInput): RouteResult | undefined
   /**
    * WP53：发件人 → 线程台账里的那条联系人（31 §3.3）。真环境接的是

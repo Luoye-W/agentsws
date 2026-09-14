@@ -15,7 +15,7 @@ export function fixedClock(
   }
 }
 
-export const aftersales = (): RoleDefinitionFull => loadBundledRole('dtc.aftersales')
+export const aftersales = (): RoleDefinitionFull => loadBundledRole('dtc.support')
 export const member = (): RoleDefinitionFull => loadBundledRole('common.member')
 export const owner = (): RoleDefinitionFull => loadBundledRole('common.owner')
 export const dtcOps = () => loadBundledPosition('dtc-ops')

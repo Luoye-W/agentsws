@@ -84,9 +84,11 @@ describe('47 J1 登记表：每一格都有出处', () => {
     expect(new Set(actions).size).toBe(actions.length)
   })
 
+  // WP54：客服三条职责各有自己的对外消息动作（reply_customer / reply_chat /
+  // reply_buyer_message / handoff_to_email），但产出工具本身仍然只有两个。
   it('产出工具只有两个（17 §1），且都挂在职责动作上', () => {
     const tools = registry.actions.flatMap((a) => (a.tool === undefined ? [] : [a]))
-    expect(tools.map((a) => a.tool).sort()).toEqual(['draft_reply', 'stage_refund'])
+    expect([...new Set(tools.map((a) => a.tool))].sort()).toEqual(['draft_reply', 'stage_refund'])
     for (const a of tools) expect(a.source).toBe('role')
   })
 

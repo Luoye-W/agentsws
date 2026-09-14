@@ -4,8 +4,8 @@ import { applyPosition, RoleError } from '../src/index.js'
 import { aftersales, dtcOps, fixedClock, stubRole } from './helpers.js'
 
 const DEFAULTS: RoleId[] = [
-  'dtc.presales',
-  'dtc.aftersales',
+  // WP54：`dtc.presales` + `dtc.aftersales` 并成一条
+  'dtc.support',
   'dtc.store-config',
   'dtc.catalog',
   'dtc.content',
@@ -31,7 +31,7 @@ function options(overrides: Partial<Parameters<typeof applyPosition>[4]> = {}) {
 }
 
 describe('applyPosition (05 §2 / 04 §1.11)', () => {
-  it('expands only the 8 default roles of the dtc-ops position', () => {
+  it('expands only the 7 default roles of the dtc-ops position', () => {
     const created = applyPosition(
       dtcOps(),
       'p_ops',
@@ -39,19 +39,19 @@ describe('applyPosition (05 §2 / 04 §1.11)', () => {
       [{ kind: 'store', id: 'shop_a' }],
       options(),
     )
-    expect(created).toHaveLength(8)
+    expect(created).toHaveLength(7)
     expect(created.map((a) => a.role_id)).toEqual(DEFAULTS)
     expect(created.every((a) => a.person_id === 'p_ops' && a.workspace_id === 'ws_1')).toBe(true)
     expect(created.every((a) => a.granted_by === 'p_owner')).toBe(true)
     expect(created.every((a) => a.granted_at === '2026-09-09T00:00:00.000Z')).toBe(true)
-    expect(new Set(created.map((a) => a.id)).size).toBe(8)
+    expect(new Set(created.map((a) => a.id)).size).toBe(7)
     expect(created[0]?.ranges).toEqual([{ kind: 'store', id: 'shop_a' }])
   })
 
   it('records the role version at grant time and the initial automation level', () => {
     const created = applyPosition(dtcOps(), 'p_ops', 'ws_1', [], options())
-    const after = created.find((a) => a.role_id === 'dtc.aftersales')
-    expect(after?.role_version).toBe('1.0.0')
+    const after = created.find((a) => a.role_id === 'dtc.support')
+    expect(after?.role_version).toBe('2.0.0')
     expect(after?.automation_state.stage_refund?.level).toBe('L1')
     expect(after?.automation_state.stage_refund?.adoption).toEqual({
       accepted: 0,
@@ -69,7 +69,7 @@ describe('applyPosition (05 §2 / 04 §1.11)', () => {
       [],
       options({ include: ['dtc.reviews'] }),
     )
-    expect(created).toHaveLength(9)
+    expect(created).toHaveLength(8)
     expect(created.map((a) => a.role_id)).toContain('dtc.reviews')
     expect(created.map((a) => a.role_id)).not.toContain('dtc.fulfillment')
   })

@@ -57,7 +57,7 @@ const data = async <T>(res: Response): Promise<T> => ((await res.json()) as { da
 
 const refundStage = (server: Server, assignment: Assignment): StageInput => ({
   workspace_id: server.bootstrap.workspace.id,
-  role_id: 'dtc.aftersales',
+  role_id: 'dtc.support',
   assignment_id: assignment.id,
   run_id: 'run_1',
   change_set_id: 'cs_1',
@@ -116,7 +116,7 @@ beforeEach(async () => {
   const aftersales = server.roles.assignments.create({
     person_id: server.bootstrap.person.id,
     workspace_id: server.bootstrap.workspace.id,
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     granted_by: server.bootstrap.person.id,
     ranges: [{ kind: 'store', id: 'store_1' }],
   })

@@ -26,12 +26,14 @@
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
+    "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
-    "packages/roles/roles/dtc/aftersales.yml",
+    "packages/roles/roles/dtc/live-chat.yml",
+    "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "132ba62c8a94b79f09ec7ca2ca4e38a8",
+  "source_digest": "9c448d084f407119a5c92b90fb2b24e2",
   "objects": [
     {
       "id": "ad_set",
@@ -4267,6 +4269,42 @@
       "what": "给人派一条岗位"
     },
     {
+      "id": "handoff_to_email",
+      "object": "customer",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["dtc.live-chat"],
+      "tool": "draft_reply",
+      "what": "handoff to email"
+    },
+    {
+      "id": "reply_buyer_message",
+      "object": "customer",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["amz.support"],
+      "tool": "draft_reply",
+      "what": "reply buyer message"
+    },
+    {
+      "id": "reply_chat",
+      "object": "customer",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["dtc.live-chat"],
+      "tool": "draft_reply",
+      "what": "reply chat"
+    },
+    {
       "id": "reply_customer",
       "object": "customer",
       "source": "role",
@@ -4274,7 +4312,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["dtc.aftersales"],
+      "roles": ["dtc.support"],
       "tool": "draft_reply",
       "what": "给客户回信（草稿，批了才发）"
     },
@@ -4287,7 +4325,7 @@
       "risk_class": "medium",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["dtc.aftersales"],
+      "roles": ["dtc.support"],
       "what": "改收件地址"
     },
     {
@@ -4300,6 +4338,18 @@
       "route_to": "role_holder",
       "roles": ["site.builder"],
       "what": "提一条建站任务"
+    },
+    {
+      "id": "stage_discount_code",
+      "object": "discount",
+      "source": "role",
+      "access": "write",
+      "change_kind": "discount_code",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.support"],
+      "what": "stage discount code"
     },
     {
       "id": "stage_page_edit",
@@ -4333,7 +4383,7 @@
       "risk_class": "medium",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.aftersales"],
+      "roles": ["amz.support", "dtc.support"],
       "tool": "stage_refund",
       "what": "提一笔退款"
     },
@@ -4346,7 +4396,7 @@
       "risk_class": "medium",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.aftersales"],
+      "roles": ["dtc.support"],
       "what": "提一次补发"
     },
     {

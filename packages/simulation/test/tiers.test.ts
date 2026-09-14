@@ -208,7 +208,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people).toHaveLength(15)
     expect(p.roles.map((r) => r.id).sort()).toEqual(['ads.performance', 'dtc.ops'])
     const roleIds = new Set(p.assignments.map((a) => a.role_id))
-    expect(roleIds).toContain('dtc.aftersales')
+    expect(roleIds).toContain('dtc.support')
     expect(roleIds).toContain('dtc.ops')
     expect(roleIds).toContain('ads.performance')
     expect(roleIds).toContain('common.owner')

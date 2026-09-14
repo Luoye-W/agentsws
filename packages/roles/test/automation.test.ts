@@ -9,7 +9,7 @@ function seeded() {
   const a = s.assignments.create({
     person_id: 'p_cs',
     workspace_id: 'ws_1',
-    role_id: 'dtc.aftersales',
+    role_id: 'dtc.support',
     ranges: [{ kind: 'store', id: 'shop_a' }],
     granted_by: 'p_owner',
   })
