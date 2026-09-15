@@ -2,5 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": "src", "outDir": "dist" },
   "include": ["src"],
-  "references": [{ "path": "../contracts" }, { "path": "../core" }, { "path": "../skills" }]
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../core" },
+    { "path": "../roles" },
+    { "path": "../skills" }
+  ]
 }

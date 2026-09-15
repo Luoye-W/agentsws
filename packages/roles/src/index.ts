@@ -51,6 +51,29 @@ export {
   shopifyLineQuery,
   targetInRange,
 } from './ranges.js'
+export type {
+  RouteCandidate,
+  RouteRoleLike,
+  RouteRoleProfile,
+  RouteRoleScore,
+  RouteTerm,
+  RouteWithinPositionResult,
+} from './route.js'
+export {
+  ACTION_TERMS,
+  containsRouteTerm,
+  DOMAIN_TERMS,
+  GENERIC_ROLES,
+  MIN_PICKED_SCORE,
+  MIN_SEPARATION,
+  normalizeRouteText,
+  ROUTE_WEIGHT,
+  roleRouteTerms,
+  routeWithinPosition,
+  SHORT_TERM_PENALTY,
+  scoreRouteRoles,
+  splitRoutePhrases,
+} from './route.js'
 export { collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'
 export type {
   AssignmentApi,
