@@ -120,6 +120,14 @@ export {
   sseResponse,
 } from './routes/chat.js'
 export type {
+  BeginCloudLinkInput,
+  BeginCloudLinkResult,
+  CloudAccountPort,
+  CloudAccountView,
+  CloudUnlinkResult,
+} from './routes/cloud-account.js'
+export { cloudAccountRoutes } from './routes/cloud-account.js'
+export type {
   BeginConnectResult,
   ConnectionOwnership,
   ConnectionStatus,

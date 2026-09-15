@@ -52,6 +52,17 @@ export {
   OUTBOUND_HALTED,
 } from './channels.js'
 export {
+  CLOUD_BASE_URL_ENV,
+  CLOUD_TOKEN_SECRET_ID,
+  type CloudAccountAssembly,
+  type CloudAccountOptions,
+  type CloudFetch,
+  cloudBaseUrl,
+  createCloudAccount,
+  DEFAULT_CLOUD_BASE_URL,
+  LINK_PENDING_TTL_MS,
+} from './cloud-account.js'
+export {
   CONNECT_URL_ENV,
   connectBaseUrl,
   DEFAULT_CONNECT_URL,

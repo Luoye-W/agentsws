@@ -19,6 +19,7 @@ import { catalogRoutes } from './routes/catalog.js'
 import { changeRoutes } from './routes/changes.js'
 // WP57（48 §4 L3 #11）：网站在线客服的本地 API（公开访客端点属于托管档）
 import { chatRoutes } from './routes/chat.js'
+import { cloudAccountRoutes } from './routes/cloud-account.js'
 import { connectionRoutes } from './routes/connections.js'
 import { eventRoutes } from './routes/events.js'
 import { haltRoutes } from './routes/halt.js'
@@ -74,6 +75,11 @@ export function collectRoutes(): Route[] {
     ...connectionRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
+    /*
+     * WP58（49 M1）：关联 agentsws 云账号。`/v1/cloud/account/*` 是独立前缀，
+     * 与别处都不撞；`callback` 是定值段，与 `link` / `unlink` 也不撞。
+     */
+    ...cloudAccountRoutes(),
     // WP40：数据后端（41 §2.4）。凭据只走 /v1/storage/backend 一条路，GET 永不含凭据。
     ...storageRoutes(),
     // WP34 21 §4「删这个人」（owner）：三个库一次清掉，独立路径不与别处撞

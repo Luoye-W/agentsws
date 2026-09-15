@@ -53,6 +53,7 @@ import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
 import type { CatalogPort } from './routes/catalog.js'
 import type { ChatPort } from './routes/chat.js'
+import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
@@ -583,6 +584,12 @@ export interface GatewayDeps {
   connections?: ConnectionsPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
+  /**
+   * WP58（49 M1）：这台机器上的工作区有没有关联 agentsws 云账号。
+   * 没装配时 `/v1/cloud/account/*` 回 not_implemented——云账号是加分项，
+   * 不接它的发行版照常能用（"用我的 key"那一档，49 M2 的默认）。
+   */
+  cloudAccount?: CloudAccountPort
   /** WP40 数据后端（41 §2.4 的三档与迁移向导）；没装配时 `/v1/storage/*` 回 not_implemented。 */
   storage?: StoragePort
   /** WP25 模型面（provider 配置 / 默认模型 / 预算 / 花费）；没装配时 `/v1/models/*` 回 not_implemented。 */

@@ -93,6 +93,7 @@ import {
   chatView,
   createChatLane,
 } from './chat.js'
+import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
 import { connectBaseUrl } from './connect-url.js'
 import {
   type ConnectionsAssembly,
@@ -277,6 +278,11 @@ export interface ServerOptions {
   /** WP42：抓各家价目页用的 fetch（测试回放固定页面 → 价目刷新全程不联网）。 */
   pricingFetch?: PageFetch
   /**
+   * WP58（49 M1）：往 agentsws 云发请求用的 fetch。生产不传（走 `globalThis.fetch`）；
+   * 测试传一个指向内存版 `createCloudServer()` 的替身 → 关联全程不联网。
+   */
+  cloudFetch?: CloudFetch
+  /**
    * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
    * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
    */
@@ -376,6 +382,8 @@ export interface Server {
   offboard: Offboard
   /** 本机加密秘密库：邮箱口令、Shopify 应用密钥、模型 key 都在这一个库里（前缀分开）。 */
   secrets: SecretStore
+  /** WP58（49 M1）：云账号关联（令牌在上面那个加密库里，key 名 `cloud.workspace_token`）。 */
+  cloudAccount: CloudAccountAssembly
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
   /**
@@ -1610,6 +1618,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let boundPort: number | undefined
 
   /**
+   * WP58（49 M1）：关联 agentsws 云账号。装在这儿是因为它要 `boundPort`
+   * ——回调地址是本机的回环口，端口要等 listen 之后才知道，所以传的是取值函数。
+   * 令牌进的是上面那个**同一个**加密库（前缀 `cloud.`）。
+   */
+  const cloudAccount: CloudAccountAssembly = createCloudAccount({
+    secrets,
+    clock,
+    env,
+    appendEvent,
+    workspace_id: () => workspace.id,
+    localBaseUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
+    ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+  })
+
+  /**
    * 41 §1 秘书 Agent。装在最后：它要用到工作模型、会议、工具箱、审批总线与调度器，
    * 自己不被任何人依赖——秘书是**加分项**，拆掉它工作台照常能用。
    */
@@ -1706,6 +1729,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     models: modelSettings.port,
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
     storage: storage.port,
+    // WP58（49 M1）：云账号关联（状态 / 起关联 / 回调 / 解除）
+    cloudAccount: cloudAccount.port,
     org: org.port,
     // WP51（46）：首次设置向导、同事发现、邀请码与申请加入
     onboarding: onboarding.port,
@@ -1950,6 +1975,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     secretary,
     offboard,
     secrets,
+    cloudAccount,
     schedule,
     reconcile,
     ...(runtime === undefined ? {} : { runtime }),
