@@ -22,7 +22,7 @@ import {
   mountEntryRoutes,
   type StripeConfig,
 } from '@agentsws/cloud-entry'
-import type { Clock, Pricing } from '@agentsws/contracts'
+import type { Clock, CloudTokenVerifier, Pricing } from '@agentsws/contracts'
 import {
   buildPricing,
   createSqliteWalletStore,
@@ -59,6 +59,14 @@ export interface MountEntryOptions {
   stripe?: StripeConfig
   onWalletEvent?: (e: WalletEvent) => void
   newRequestId?: () => string
+  /**
+   * 验令牌用哪一个。不给就是 WP58 的账号库那个。
+   *
+   * WP60 把它串成两个：先账号库（商家那把），再值守（子进程那把内部令牌）——
+   * 子进程也要用 `/v1/ai/*`，但它那把不在 `workspace_links` 里（见
+   * `packages/standby/src/child-token.ts` 的头注释）。
+   */
+  verifier?: CloudTokenVerifier
 }
 
 export interface MountedEntry {
@@ -110,7 +118,7 @@ export function mountEntry(server: CloudServer, options: MountEntryOptions = {})
     ...(publicUrl === undefined ? {} : { return_url: publicUrl }),
   }
   const deps: EntryDeps = {
-    verifier: server.verifyToken,
+    verifier: options.verifier ?? server.verifyToken,
     wallet,
     pricing,
     upstream: { ai: upstream },

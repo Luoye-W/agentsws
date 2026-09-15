@@ -1,0 +1,28 @@
+{
+  "name": "@agentsws/standby",
+  "version": "0.0.0",
+  "private": true,
+  "description": "49 §6 WP60 在线值守：一个工作区一个 apps/server 子进程（按租户独立库与密钥）、订阅计费、公网反向代理（路由包，不起服务）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/metering": "workspace:*",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^2.1.1"
+  }
+}

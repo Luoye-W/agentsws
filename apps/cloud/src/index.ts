@@ -39,6 +39,18 @@ export {
   HOST,
 } from './server.js'
 export {
+  chainVerifiers,
+  type MountedStandby,
+  type MountStandbyOptions,
+  mountStandby,
+  nodePackager,
+  resolveServerEntry,
+  STANDBY_CHILD_ENV,
+  STANDBY_SUBDIR,
+  STANDBY_TICK_MS,
+  standbyRootOf,
+} from './standby.js'
+export {
   CLOUD_LOGIN_TTL_MS,
   CLOUD_SESSION_TTL_MS,
   type CloudSessionRow,
@@ -55,20 +67,40 @@ export { sqliteTokenVerifier } from './verifier.js'
 export { linkView, type WorkspaceLinkView } from './views.js'
 
 import { pathToFileURL } from 'node:url'
+import type { CloudTokenVerifier } from '@agentsws/contracts'
 import { mountEntry } from './entry.js'
 import { CLOUD_DATA_DIR_ENV, createCloudServer } from './server.js'
+import { mountStandby } from './standby.js'
 
 export async function main(): Promise<void> {
   const server = createCloudServer()
-  // 49 M3：服务入口（模型转发 + 钱包）挂在同一个进程、同一份令牌验证上
   const dataDir = process.env[CLOUD_DATA_DIR_ENV]
-  mountEntry(server, dataDir === undefined ? {} : { dataDir })
+  /*
+   * 两个模块互相要对方的一样东西：入口要值守的子进程令牌验证器（子进程也用
+   * `/v1/ai/*`），值守要入口的钱包与价目。解法不是把它们合成一个模块，而是
+   * **晚绑定那一跳**：入口拿到的 verifier 是一个闭包，第一跳永远是账号库，
+   * 第二跳等值守装好了再有。装配期的先后不该逼着两个模块合并。
+   */
+  let childVerifier: CloudTokenVerifier | undefined
+  const entry = mountEntry(server, {
+    ...(dataDir === undefined ? {} : { dataDir }),
+    verifier: async (token) =>
+      (await server.verifyToken(token)) ?? (await childVerifier?.(token)) ?? undefined,
+  })
+  // 49 §6 WP60：值守（子进程编排 + 订阅 + 公网反向代理）
+  const standby = mountStandby(server, {
+    wallet: entry.wallet,
+    pricing: entry.pricing,
+    ...(dataDir === undefined ? {} : { dataDir }),
+  })
+  childVerifier = standby.childTokens.verifier()
   await server.listen()
   let closing = false
   const shutdown = (signal: string): void => {
     if (closing) return
     closing = true
     process.stdout.write(`\n${signal} received, closing…\n`)
+    void standby.close()
     server
       .close()
       .then(() => process.exit(0))
