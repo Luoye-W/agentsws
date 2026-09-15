@@ -23,6 +23,9 @@
       "path": "packages/catalog"
     },
     {
+      "path": "packages/cloud-entry"
+    },
+    {
       "path": "packages/channels"
     },
     {
