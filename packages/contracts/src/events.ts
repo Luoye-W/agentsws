@@ -180,6 +180,19 @@ export type KnownEventType =
   | 'membership.requested'
   | 'membership.approved'
   | 'membership.rejected'
+  /*
+   * WP65（52 O1）：品牌是顶层——公司 = 组织，品牌 = 工作区。
+   *
+   * `organization.created` 的 payload 与 `workspace.profile_set` 同一条纪律：
+   * 只记归一化后的 `company_key` 与有没有域名，公司全称不进日志。
+   * `brand.created` 只记新品牌的 `workspace_id` 与它挂在哪个组织下——品牌名是
+   * 用户起的名字，与公司名同级，一样不进日志。
+   *
+   * 切品牌（`brand.switched`）**不在这里**：它是客户端的一次导航，不改任何数据，
+   * 不该占内核日志的一行（52 §4）。
+   */
+  | 'organization.created'
+  | 'brand.created'
   // schedule / workflow (25 §5, WP27)
   | 'schedule.created'
   | 'schedule.updated'

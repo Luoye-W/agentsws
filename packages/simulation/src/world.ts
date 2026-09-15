@@ -139,6 +139,21 @@ const CUSTOMERS = defineCollection({
   },
 })
 
+/**
+ * 52 O1（WP65）：店铺连接的最小记录。
+ *
+ * 这里只需要它有一个 `workspace_id`——"A 品牌的连接在 B 品牌看不见"要靠的就是
+ * 数据层那一条过滤，不是这张表长什么样。
+ */
+const BRAND_CONNECTIONS = defineCollection({
+  name: 'connections',
+  domain: 'customer',
+  fields: {
+    service: { sensitivity: 'internal' },
+    label: { sensitivity: 'internal' },
+  },
+})
+
 const messageOfError = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 /** 05 §1 动作 id ↔ 15 §2 变更种类。 */
@@ -511,6 +526,28 @@ export interface OrgOps {
       name_choice?: 'company' | 'personal'
     }[]
   }): Promise<JoinRunResult>
+  /**
+   * 52 O1（WP65）：在同一个组织下开一个**品牌工作区**，并往里放几样真东西。
+   *
+   * 「开一个品牌」在这里就是"换一个 `workspace_id`"——20 之后所有数据本来就按它切，
+   * 所以隔离不用再造一层。这个方法一行"过滤 brand_id"都没有：要是有，
+   * 那就说明隔离是假的。
+   */
+  brand(input: {
+    /** 这个品牌的 `workspace_id`。 */
+    id: string
+    name: string
+    who: PersonId
+    role: RoleId
+    seed?: BrandSeed
+  }): Promise<BrandVisibility>
+  /**
+   * 这个人在**这个品牌**里现在看得到什么（四个库各问一遍）。
+   *
+   * 问的是同一个人、同一套库，只换 `workspace_id`——所以它答出来的东西就是
+   * 52 O2「两个品牌互相看不见」那句话本身。
+   */
+  brandVisible(brand: string, who: PersonId): Promise<BrandVisibility>
 }
 
 /**
@@ -529,6 +566,35 @@ export interface PlatformCheckResult {
    * 平台没有连接器时是空的——清单里干脆不出那张卡（点进去无处可点的条目就是噪音）。
    */
   shop_services: string[]
+}
+
+/**
+ * 52 O1（WP65）：往一个**品牌工作区**里放的那几样真东西。
+ *
+ * 四样各挑一个代表：一条岗位（职责层）、一张待审卡（审批总线）、一张事实卡（知识层）、
+ * 一条店铺连接记录（数据层）。它们分属四个不同的库——"两个品牌互相看不见"要是只在
+ * 一个库上成立，那就不算成立。
+ */
+export interface BrandSeed {
+  /** 这个品牌里的一张待审卡叫什么。 */
+  card?: string
+  /** 这个品牌里的一条事实（知识层）。 */
+  fact?: string
+  /** 这个品牌连的那家店（数据层的一条记录）。 */
+  connection?: string
+}
+
+/** 一个品牌里**这个人现在看得到什么**（场景里断言用；四个库各问一遍）。 */
+export interface BrandVisibility {
+  brand: string
+  /** 他在这个品牌里有哪几条职责。 */
+  positions: string[]
+  /** 队列上的卡（标题）。 */
+  cards: string[]
+  /** 知识层里的事实（statement）。 */
+  facts: string[]
+  /** 数据层里的店铺连接（id）。 */
+  connections: string[]
 }
 
 /** 一次 Join 跑完的样子（场景里断言用）。 */
@@ -747,7 +813,11 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   }
 
   // ── 数据层：客户记录（上下文里的客户经数据层按 actor 过滤）────────────
-  const data = createDataStore({ dbPath: ':memory:', clock, collections: [CUSTOMERS] })
+  const data = createDataStore({
+    dbPath: ':memory:',
+    clock,
+    collections: [CUSTOMERS, BRAND_CONNECTIONS],
+  })
   for (const c of pack.customers) {
     await data.put<{ name: string; email: string; market: string }>(
       'customers',
@@ -2373,6 +2443,167 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       // 不用 `${who}|${role}` 那把键：那是"他在公司的岗位"，别被个人那条盖掉
       created.set(`${who}|${role}@${workspace}`, asg)
       return { assignment_id: asg.id, ranges: [...asg.ranges] }
+    },
+
+    /*
+     * 52 O1（WP65）：开一个品牌 = 换一个 `workspace_id`。
+     *
+     * 下面四样各进一个**不同的真库**：职责层（分配）、审批总线（卡）、知识层（事实卡）、
+     * 数据层（店铺连接）。四个库都只按 `workspace_id` 切，所以这里一行过滤都不用写。
+     */
+    async brand({ id, name, who, role, seed }) {
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id: id,
+        type: 'brand.created',
+        actor: { kind: 'person', id: who },
+        correlation: { trace_id: traceId() },
+        // 品牌名是用户起的名字，与公司名同级——不进日志（21 §1）
+        payload: { workspace_id: id, organization_id: workspace_id },
+      })
+      const asg = roles.assignments.create({
+        person_id: who,
+        workspace_id: id,
+        role_id: role,
+        granted_by: who,
+      })
+      // 与 `personalWorkspace` 同一把键：别把"他在公司的岗位"盖掉
+      created.set(`${who}|${role}@${id}`, asg)
+
+      if (seed?.card !== undefined) {
+        const item = await txn.approvals.create({
+          workspace_id: id,
+          schema_version: 1,
+          kind: 'outbound_draft',
+          role_id: role,
+          subject: { object: { type: 'thread', id: `thr_${id}` } },
+          dedupe_key: `${id}:outbound_draft:${name}`,
+          title: seed.card,
+          summary: seed.card,
+          payload: {
+            channel: 'email',
+            to: { type: 'customer', id: `cus_${id}` },
+            body: { subject: seed.card, text: seed.card },
+          },
+          evidence: {
+            source_events: [],
+            // 14 §6 前置：卡上引用到的东西要真见过，收件人也得在里面（31 §3.3）
+            provenance: {
+              seen: [
+                { type: 'thread', id: `thr_${id}` },
+                { type: 'customer', id: `cus_${id}` },
+              ],
+            },
+            precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+          },
+          proposer: { kind: 'person', id: who },
+          automation: {
+            level_at_creation: 'L1',
+            auto_approved: false,
+            mandate_check: { within: true, caps_hit: [] },
+            sampling: { selected: false },
+          },
+          routing: {
+            recipients: [{ person: who, via: 'role_holder' }],
+            rule: 'role_holder',
+            escalation: {
+              after_hours: 72,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          priority: 'queue',
+          // 31 §3.3 收件人门禁：这位客户就是这条会话的原参与者
+          context: {
+            thread_participants: [`cus_${id}`],
+            verified_contacts: [`cus_${id}`],
+          },
+        })
+        void item
+      }
+
+      if (seed?.fact !== undefined) {
+        const card = await knowledge.store.propose({
+          schema_version: 1,
+          workspace_id: id,
+          layer: 'fact',
+          domain: 'company',
+          scope: [],
+          sensitivity: 'internal',
+          subject: { type: 'company', key: `brand.${id}` },
+          statement: seed.fact,
+          provenance: [{ source: 'document', ref: `${id}.md`, at: clock.now() }],
+          confidence: { value: 0.9, state: 'probable' },
+          valid: {},
+          owner: who,
+          created_by: { kind: 'person', id: who },
+        })
+        await knowledge.store.activate(card.id, who)
+      }
+
+      if (seed?.connection !== undefined) {
+        await data.put<{ service: string; label: string }>(
+          'connections',
+          {
+            id: `conn_${id}`,
+            schema_version: 1,
+            workspace_id: id,
+            owners: [who],
+            scope: [],
+            sensitivity: 'internal',
+            service: 'shopify_admin',
+            label: seed.connection,
+          },
+          { ...seedActor, workspace_id: id },
+        )
+      }
+
+      return this.brandVisible(id, who)
+    },
+
+    async brandVisible(brand, who) {
+      const positions = roles.assignments
+        .listByPerson(who, { workspace_id: brand })
+        .filter((a) => a.revoked_at === undefined)
+        .map((a) => a.role_id)
+      const cards = (
+        await txn.approvals.queue({
+          workspace_id: brand,
+          person_id: who,
+          lane: 'scope',
+          state: ['pending', 'in_review'],
+        })
+      ).map((i) => i.title)
+      const facts = (
+        await knowledge.store.list(
+          { workspace_id: brand },
+          {
+            person_id: who,
+            assignment_id: 'asg_seed',
+            role_id: 'common.owner',
+            workspace_id: brand,
+            grants: [
+              {
+                domain: 'knowledge',
+                ops: ['read'],
+                range: 'workspace',
+                max_sensitivity: 'restricted',
+              },
+            ],
+            ranges: [],
+          },
+        )
+      ).map((c) => c.statement)
+      const connections = (
+        await data.query<{ service: string; label: string }>(
+          'connections',
+          {},
+          { ...seedActor, workspace_id: brand },
+        )
+      ).items.map((r) => r.id)
+      return { brand, positions, cards, facts, connections }
     },
 
     async join({ who, from, decisions }) {

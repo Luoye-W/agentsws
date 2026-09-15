@@ -297,5 +297,147 @@ export function runIdentityConformance(h: IdentityHarness): void {
       expect(await svc.authenticate('')).toBeUndefined()
       expect(await svc.authenticate('sess_unknown')).toBeUndefined()
     })
+
+    // ── 52 O1 组织与品牌（WP65）────────────────────────────────────────
+
+    it('createWorkspace：品牌名默认等于工作区名（52 O1）', async () => {
+      const { workspace } = await seed()
+      expect(workspace.brand?.name).toBe('default')
+      expect(workspace.org_id).toBeUndefined()
+    })
+
+    it('一次性迁移：没挂组织的工作区建一个组织并回填品牌名；跑第二遍什么都不做', async () => {
+      const { svc, person, workspace } = await seed()
+      const first = await svc.migrateWorkspace({
+        workspace_id: workspace.id,
+        legal_name: '深圳诺伏特科技',
+        domain: 'nordvolt.cn',
+        discoverable: false,
+      })
+      expect(first.created).toBe(true)
+      expect(first.organization.legal_name).toBe('深圳诺伏特科技')
+      expect(first.organization.owner_id).toBe(person.id)
+      expect(first.organization.discoverable).toBe(false)
+      expect(first.workspace.org_id).toBe(first.organization.id)
+      expect(first.workspace.brand?.name).toBe('default')
+      // 幂等：第二遍不再建一个组织
+      const again = await svc.migrateWorkspace({ workspace_id: workspace.id })
+      expect(again.created).toBe(false)
+      expect(again.organization.id).toBe(first.organization.id)
+      expect(svc.listOrganizations()).toHaveLength(1)
+    })
+
+    it('没设过公司档案就用工作区名占位（迁移不许留一个空公司）', async () => {
+      const { svc, workspace } = await seed()
+      const migrated = await svc.migrateWorkspace({ workspace_id: workspace.id })
+      expect(migrated.organization.legal_name).toBe('default')
+      expect(migrated.organization.discoverable).toBe(true)
+    })
+
+    it('brandsOf：一个组织两个品牌；只回本人有成员资格的那几个（52 O2）', async () => {
+      const { svc, person, workspace } = await seed()
+      const org = (await svc.migrateWorkspace({ workspace_id: workspace.id })).organization
+      const other = await svc.createPerson({ email: 'li@example.com', name: '李默' })
+      await svc.addOrganizationMember({ org_id: org.id, person_id: other.id })
+      const b = await svc.createWorkspace({
+        name: '品牌乙',
+        owner_id: person.id,
+        kind: 'shared',
+        org_id: org.id,
+      })
+      expect(
+        svc
+          .brandsOf(org.id)
+          .map((w) => w.id)
+          .sort(),
+      ).toEqual([workspace.id, b.id].sort())
+      // 李默进了公司但一个品牌都还没进（52 O3 明确要有的中间态）
+      expect(svc.brandsOf(org.id, other.id)).toHaveLength(0)
+      await svc.addMember({ workspace_id: b.id, person_id: other.id, role: 'member', ranges: [] })
+      expect(svc.brandsOf(org.id, other.id).map((w) => w.id)).toEqual([b.id])
+    })
+
+    it('attachWorkspaceToOrg：挂一次就定了；挂到第二个组织下直接拒（45 H1 改写）', async () => {
+      const { svc, person, workspace } = await seed()
+      const a = await svc.createOrganization({ legal_name: 'A 公司', owner_id: person.id })
+      const b = await svc.createOrganization({ legal_name: 'B 公司', owner_id: person.id })
+      const attached = await svc.attachWorkspaceToOrg({ workspace_id: workspace.id, org_id: a.id })
+      expect(attached.org_id).toBe(a.id)
+      await expect(
+        svc.attachWorkspaceToOrg({ workspace_id: workspace.id, org_id: b.id }),
+      ).rejects.toThrow()
+      // 挂到同一个组织下是幂等的
+      await expect(
+        svc.attachWorkspaceToOrg({ workspace_id: workspace.id, org_id: a.id }),
+      ).resolves.toBeDefined()
+    })
+
+    it('离职一撤全撤：组织成员写 left_at，两个品牌的成员关系与 token 一起失效（40 E2）', async () => {
+      const { svc, person, workspace } = await seed()
+      const org = (await svc.migrateWorkspace({ workspace_id: workspace.id })).organization
+      const li = await svc.createPerson({ email: 'li@example.com', name: '李默' })
+      await svc.addOrganizationMember({ org_id: org.id, person_id: li.id })
+      const b = await svc.createWorkspace({
+        name: '品牌乙',
+        owner_id: person.id,
+        kind: 'shared',
+        org_id: org.id,
+      })
+      for (const ws of [workspace.id, b.id])
+        await svc.addMember({ workspace_id: ws, person_id: li.id, role: 'member', ranges: [] })
+      const tokenA = svc.issue('session', li.id, workspace.id)
+      const tokenB = svc.issue('session', li.id, b.id)
+
+      const removed = await svc.removeOrganizationMember(org.id, li.id)
+      expect(removed.brands.sort()).toEqual([workspace.id, b.id].sort())
+      expect(removed.organization.members.find((m) => m.person_id === li.id)?.left_at).toBeDefined()
+      // 不删行：名单上那一条还在，只是标了什么时候走的
+      expect(removed.organization.members).toHaveLength(2)
+      expect(svc.organizationsOf(li.id)).toHaveLength(0)
+      expect(svc.brandsOf(org.id, li.id)).toHaveLength(0)
+      expect(await svc.authenticate(tokenA.token)).toBeUndefined()
+      expect(await svc.authenticate(tokenB.token)).toBeUndefined()
+    })
+
+    it('组织所有者不能被移除（要先转所有权）', async () => {
+      const { svc, workspace } = await seed()
+      const org = (await svc.migrateWorkspace({ workspace_id: workspace.id })).organization
+      await expect(svc.removeOrganizationMember(org.id, org.owner_id)).rejects.toThrow()
+    })
+
+    it('改公司档案：空串域名 = 清掉；不给的字段一个都不动', async () => {
+      const { svc, person } = await seed()
+      const org = await svc.createOrganization({
+        legal_name: '诺伏特',
+        domain: 'nordvolt.cn',
+        owner_id: person.id,
+      })
+      const renamed = await svc.updateOrganization(org.id, { legal_name: '诺伏特科技' })
+      expect(renamed.legal_name).toBe('诺伏特科技')
+      expect(renamed.domain).toBe('nordvolt.cn')
+      expect(renamed.discoverable).toBe(true)
+      const cleared = await svc.updateOrganization(org.id, { domain: '  ' })
+      expect(cleared.domain).toBeUndefined()
+      expect(cleared.legal_name).toBe('诺伏特科技')
+    })
+
+    it('setBrand：改品牌名不动工作区名；空名字直接拒', async () => {
+      const { svc, workspace } = await seed()
+      const next = await svc.setBrand(workspace.id, { name: '诺伏特户外' })
+      expect(next.brand?.name).toBe('诺伏特户外')
+      expect(next.name).toBe('default')
+      await expect(svc.setBrand(workspace.id, { name: '  ' })).rejects.toThrow()
+    })
+
+    it('不存在的组织 / 工作区一律 not_found，不给探测的余地', async () => {
+      const { svc, person } = await seed()
+      expect(svc.getOrganization('org_nope')).toBeUndefined()
+      await expect(
+        svc.addOrganizationMember({ org_id: 'org_nope', person_id: person.id }),
+      ).rejects.toThrow()
+      await expect(
+        svc.attachWorkspaceToOrg({ workspace_id: 'ws_nope', org_id: 'org_nope' }),
+      ).rejects.toThrow()
+    })
   })
 }

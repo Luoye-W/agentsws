@@ -48,6 +48,7 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
+import { brandNameOf } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
@@ -117,6 +118,10 @@ import { createOffboard, type Offboard } from './offboard.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
+import {
+  createOrganizations as createOrganizationsAssembly,
+  type OrganizationsAssembly,
+} from './organizations.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -381,6 +386,8 @@ export interface Server {
   org: OrgAssembly
   /** WP51 首次设置与同事发现（公司档案 / 岗位清单 / 局域网发现 / 邀请码 / 申请加入）。 */
   onboarding: OnboardingAssembly
+  /** WP65 组织与品牌（52 O1：公司 = 组织，品牌 = 工作区；品牌一览 / 加品牌 / 切品牌）。 */
+  organizations: OrganizationsAssembly
   /** WP50 Join 向导（个人工作区并进公司：对照 / 合并 / 别名 / 退出）。 */
   join: JoinAssembly
   /** WP50 夜间扫描（45 H4：同唯一键 / 相似的组织对象出卡合并）。 */
@@ -674,6 +681,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 审批总线排在身份之前，owner 与工作区要等下面那一段装完才知道。
   let bootstrapOwner: PersonId | undefined
   let bootstrapWorkspace: WorkspaceId | undefined
+  /**
+   * WP65（52 O1）：当前这个品牌挂在哪个组织下。
+   *
+   * 空的那一段时间只有一处——启动时的一次性迁移之前；那会儿公司级三样从档案读，
+   * 与这一版上线前一模一样（`createOnboarding` 的 `organization` 钩子就是这么写的）。
+   */
+  let bootstrapOrg: string | undefined
+  /** 兜底的品牌名：身份服务里还查不到那一行时用它（装配途中的一小段）。 */
+  let bootstrapWorkspaceName: string | undefined
+
+  /**
+   * 52 O1：某个工作区的品牌名（没设过就是工作区名）。
+   *
+   * 走 `workspacesOf` 是因为本地档只有它是**同步**的——首次设置那一面要在
+   * 组装视图的时候就拿到名字，不该为一个名字把整条路由改成异步。
+   */
+  const brandNameOfWorkspace = (id: WorkspaceId): string => {
+    const owner = bootstrapOwner
+    const found =
+      owner === undefined ? undefined : identity.workspacesOf(owner).find((w) => w.id === id)
+    return found === undefined ? (bootstrapWorkspaceName ?? id) : brandNameOf(found)
+  }
+
+  /** 组织上的公司级三样（首次设置那一面读它，不直接拿整个 `Organization`）。 */
+  const organizationProfileOf = (
+    id: string,
+  ): { legal_name: string; domain?: string; discoverable: boolean } | undefined => {
+    const org = identity.getOrganization(id)
+    if (org === undefined) return undefined
+    return {
+      legal_name: org.legal_name,
+      ...(org.domain === undefined ? {} : { domain: org.domain }),
+      discoverable: org.discoverable,
+    }
+  }
   const approvalDirectory = createApprovalDirectory({
     roles,
     owner: () => bootstrapOwner,
@@ -765,6 +807,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 空壳填上：从这一刻起升级链知道该找谁（39 待办 A）
   bootstrapOwner = person.id
   bootstrapWorkspace = workspace.id
+  bootstrapWorkspaceName = workspace.name
 
   const rawApprovals = mount?.approvals ?? txn.approvals
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
@@ -1459,7 +1502,87 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP52：批准一条加入申请之后，直接交给 20 §4 的 Join（owner 当场收一张 join_mapping 卡）。
     // 懒取：`joinAssembly` 在下面几行才建出来。
     join: () => joinAssembly.port,
+    /*
+     * WP65（52 O1）：公司级那三样的真源是**组织**。
+     *
+     * 懒取的理由与 `join` 一样——组织在下面几行才装配好，而且第一次启动时
+     * 还要先靠档案把组织建出来（`organizations.migrate`），是个鸡生蛋：
+     * 迁移那一刻 `bootstrapOrg` 还是 `undefined`，`companyOf()` 正好退回读档案。
+     */
+    organization: () =>
+      bootstrapOrg === undefined ? undefined : organizationProfileOf(bootstrapOrg),
+    // 52 O1：品牌名（顶栏切换器显示的那一个）。没迁过的就是工作区名
+    brandName: () => brandNameOfWorkspace(workspace.id),
+    setBrandName: (name) => {
+      void identity.setBrand(workspace.id, { name }).catch(() => undefined)
+    },
+    updateOrganization: (patch) => {
+      if (bootstrapOrg === undefined) return
+      // 两档身份服务这一步都是同步落库的（Promise 只是签名）；唯一可能的失败是
+      // 空的公司全称，而那一条 `setProfile` 在更早的地方就挡掉了
+      void identity.updateOrganization(bootstrapOrg, patch).catch(() => undefined)
+    },
   })
+
+  /**
+   * WP65（52 O1）：组织（公司）与它下面的品牌工作区。
+   *
+   * 装在首次设置**之后**——启动时的一次性迁移要读公司档案里的三个字段
+   * （全称 / 域名 / 发现开关）才建得出第一个组织。之后这三样的真源就是组织，
+   * 档案里那三个位只是同步写下来的影子。
+   */
+  /**
+   * 品牌一览里的"今日销售"。
+   *
+   * 取的是**首页面板同一个数据源**（`workData`）——不是另起一条查询，也不是另一份缓存。
+   * 日界线按工作区时区偏移切（与 `@agentsws/deck` 的窗口算法同一条规矩）。
+   */
+  const salesTodayOf = (): { amount: number; currency: string } | undefined => {
+    const orders = workData.orders()
+    if (orders.length === 0) return undefined
+    const offset = workData.tz_offset_minutes * 60 * 1000
+    const dayOf = (ms: number): number => Math.floor((ms + offset) / 86_400_000)
+    const today = dayOf(Date.parse(clock.now()))
+    const amount = orders
+      .filter((o) => dayOf(Date.parse(o.created_at)) === today)
+      .reduce((sum, o) => sum + o.total_price, 0)
+    return { amount, currency: workData.base_currency }
+  }
+
+  const organizations = createOrganizationsAssembly({
+    clock,
+    identity,
+    roles,
+    approvals,
+    appendEvent,
+    currentWorkspace: () => workspace.id,
+    brandProfile: (ws) => onboarding.brandProfile(ws),
+    setBrandProfile: (ws, profile) => {
+      onboarding.setBrandProfile(ws, profile)
+    },
+    // 品牌一览那一格的"今日销售"：与首页面板同一个数据源（`workData`），
+    // 而且**只有当前品牌有**——别的品牌这会儿没有取数的通道
+    salesToday: () => salesTodayOf(),
+    // 发现开关的真源在组织上，但"开 / 关"这个动作在首次设置那一面——两边改都得生效
+    onCompanyChanged: ({ by, discoverable, key_changed }) => {
+      if (!discoverable) {
+        onboarding.discovery.disable(by)
+        return
+      }
+      onboarding.discovery.enable(by)
+      // 名字 / 域名变了 → 钥匙变了 → 用新钥匙重新广播，否则还在拿旧钥匙找同事
+      if (key_changed) onboarding.discovery.refresh()
+    },
+  })
+  const company = onboarding.companyProfile()
+  bootstrapOrg = (
+    await organizations.migrate({
+      workspace_id: workspace.id,
+      ...(company?.legal_name === undefined ? {} : { legal_name: company.legal_name }),
+      ...(company?.domain === undefined ? {} : { domain: company.domain }),
+      ...(company?.discoverable === undefined ? {} : { discoverable: company.discoverable }),
+    })
+  ).id
   // 档案建出来了，把上面那两个晚绑定的读法接上（48 v2 L2、51 §1 N0）
   verticalOf = () => onboarding.vertical()
   storefrontPlatformOf = () => onboarding.storefrontPlatform()
@@ -1768,6 +1891,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     org: org.port,
     // WP51（46）：首次设置向导、同事发现、邀请码与申请加入
     onboarding: onboarding.port,
+    // WP65（52 O1）：组织与品牌（`/v1/orgs/*`）
+    organizations: organizations.port,
     join: joinAssembly.port,
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
     secretary: secretary.port,
@@ -2004,6 +2129,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modelSettings,
     org,
     onboarding,
+    organizations,
     join: joinAssembly,
     orgDuplicates,
     secretary,

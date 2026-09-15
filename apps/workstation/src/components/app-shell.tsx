@@ -2,7 +2,8 @@
  * 36 §3 的布局：左栏（首页 / 岗位 / 知识库 / 连接 / 设置）+ 主区。
  *
  * 左栏按岗位分组——岗位就是一条 Assignment，点进去才展开它的面板（06 §1.3「被带过去」）。
- * 顶栏只有三样：深浅色、语言、⌘K。**没有全局聊天输入框**（36 §3 A4）。
+ * 顶栏只有四样：品牌切换器（52 O2，个人用户不出）、深浅色、语言、⌘K。
+ * **没有全局聊天输入框**（36 §3 A4）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import {
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -145,6 +147,11 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-1 border-b px-4 py-2">
+          {/*
+            52 O2：顶栏最左边是品牌切换器。个人用户（一个人一个品牌）它自己不渲染，
+            于是那些人的顶栏与这一版上线前一模一样。
+          */}
+          <BrandSwitcher />
           <Button
             variant="ghost"
             size="sm"

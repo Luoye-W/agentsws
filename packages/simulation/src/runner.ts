@@ -1097,6 +1097,45 @@ async function execute(
         await tick()
         return
       }
+      // ── WP65 品牌是顶层（52 O1 / O2）──────────────────────────────
+      case 'org.brand': {
+        const seen = await world.org.brand({
+          id: event.brand.id,
+          name: event.brand.name,
+          who: event.brand.who,
+          role: event.brand.role,
+          seed: {
+            ...(event.brand.card === undefined ? {} : { card: event.brand.card }),
+            ...(event.brand.fact === undefined ? {} : { fact: event.brand.fact }),
+            ...(event.brand.connection === undefined ? {} : { connection: event.brand.connection }),
+          },
+        })
+        world.appendEvent('simulation.brand_created', {
+          brand: seen.brand,
+          positions: seen.positions.length,
+          cards: seen.cards.length,
+          facts: seen.facts.length,
+          connections: seen.connections.length,
+        })
+        await tick()
+        return
+      }
+      case 'org.brand_check': {
+        const seen = await world.org.brandVisible(event.brand_check.brand, event.brand_check.who)
+        /*
+         * 报告里出的是**每个库各看得到几条**，不是内容本身：这条题要钉的是
+         * "换一个品牌就什么都看不到了"，而不是"那张卡上写了什么"。
+         */
+        world.appendEvent('simulation.brand_visibility', {
+          brand: seen.brand,
+          who: event.brand_check.who,
+          positions: seen.positions.length,
+          cards: seen.cards.length,
+          facts: seen.facts.length,
+          connections: seen.connections.length,
+        })
+        return
+      }
       // ── WP50 个人用 → 公司用（45 H1 / H2 / H3）────────────────────
       case 'org.personal': {
         const out = world.org.personalWorkspace({

@@ -1,0 +1,67 @@
+# 同一家公司的两个品牌，互相看不见对方的任何东西（52 O1 / O2）。
+#
+# 这条题钉的是 52 的那句"隔离不是加过滤器得来的，是根本不在同一个库里得来的"：
+#
+# 1. **开一个品牌 = 换一个 `workspace_id`**。品牌甲与品牌乙各自建出来之后，
+#    四样东西各进一个**不同的真库**——职责层的分配、审批总线的卡、知识层的事实卡、
+#    数据层的店铺连接。"两个品牌互相看不见"要是只在一个库上成立，那就不算成立。
+# 2. **同一个人两边都有岗位，队列还是各是各的**。李默在甲品牌做运营、在乙品牌做售后；
+#    站在甲品牌看，乙品牌那张卡一张都不出——不是"排在后面"，是**不存在**。
+#    52 O2 那句「不做跨品牌合并收件箱」在数据这一层就是这么落的。
+# 3. **一行过滤都没有**。`world.org.brand` / `brandVisible` 里没有一句 "filter by brand"：
+#    四个库本来就按 `workspace_id` 切（20），这条题验的就是那一刀真的切干净了。
+#
+# 反过来也验一条：**建品牌不动外面的世界**。跑完一封信没发、一条变更没提——
+# 组织上多了一个品牌，店铺、邮箱、账本一个字节都没动。
+id: org/two-brands-cannot-see-each-other
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-15T09:00:00+08:00' }
+events:
+  # 品牌甲：户外装备。李默在这里做运营
+  - at: '+0m'
+    org.brand:
+      id: ws_brand_a
+      name: 诺伏特户外
+      who: p_li
+      role: dtc.store
+      card: 甲品牌的一封回信
+      fact: 甲品牌德国站退货窗口 14 天
+      connection: 甲品牌的 Shopify 后台
+  # 品牌乙：线上课程。**同一个人**在这里做的是售后
+  - at: '+30m'
+    org.brand:
+      id: ws_brand_b
+      name: 诺伏特课程
+      who: p_li
+      role: dtc.support
+      card: 乙品牌的一封回信
+      fact: 乙品牌课程七天无理由
+      connection: 乙品牌的 Shopify 后台
+  # 站在甲品牌看：只有甲的那一套
+  - at: '+1h'
+    org.brand_check: { brand: ws_brand_a, who: p_li }
+  # 站在乙品牌看：只有乙的那一套
+  - at: '+1h'
+    org.brand_check: { brand: ws_brand_b, who: p_li }
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  event_types:
+    # 52 O1：两个品牌各记一条（payload 里只有 workspace_id 与它挂在哪个组织下）
+    - brand.created
+    # 每个品牌各体检一次，报告里出的是"各库各看得到几条"
+    - simulation.brand_visibility
+  metrics:
+    runs_failed: 0
+    # 建品牌不动外面的世界：一封信不发、一条变更不提、不施行
+    applied_changes: 0
+    outbound_sent: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

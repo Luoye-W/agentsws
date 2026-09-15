@@ -14,6 +14,7 @@ import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
+import { BrandsTab } from '@/components/org/brands-tab'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
@@ -49,6 +50,7 @@ import {
   listJoins,
   listMembers,
   listMembershipRequests,
+  listOrganizations,
   listOrgPositions,
   listProductLines,
   listRangeGroups,
@@ -69,7 +71,11 @@ export function OrgPage(): React.ReactNode {
   const client = useQueryClient()
   // ⌘K 的"工具箱"结果跳到这里：`/org?tab=toolbox&q=…`
   const [params] = useSearchParams()
-  const [tab, setTab] = useState(params.get('tab') === 'toolbox' ? 'toolbox' : 'positions')
+  // ⌘K 与顶栏切换器的"管理品牌"跳这里：`/org?tab=brands`
+  const initialTab = params.get('tab')
+  const [tab, setTab] = useState(
+    initialTab === 'toolbox' || initialTab === 'brands' ? initialTab : 'positions',
+  )
   const query = params.get('q')
   const [wizard, setWizard] = useState<string | null>(null)
   const [fresh, setFresh] = useState<OrgInvitationView | undefined>(undefined)
@@ -77,6 +83,9 @@ export function OrgPage(): React.ReactNode {
   const [failure, setFailure] = useState<string | undefined>(undefined)
 
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession })
+  // 52 O1：这个品牌挂在哪家公司下（品牌一览要它）
+  const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
+  const orgId = orgs.data?.[0]?.id
   const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   // 05：制度这一层是所有者的事；这一页不跟着左栏当前岗位走
   const owner = mine.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
@@ -435,6 +444,8 @@ export function OrgPage(): React.ReactNode {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
+          {/* 52 O2：品牌一览排在最前——公司页问的第一件事就是"这家公司有哪几个品牌" */}
+          <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
           <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
@@ -444,6 +455,13 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
           <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="brands" className="pt-3">
+          <BrandsTab
+            {...(orgId === undefined ? {} : { org_id: orgId })}
+            {...(owner === undefined ? {} : { assignment: owner })}
+          />
+        </TabsContent>
 
         <TabsContent value="positions" className="pt-3">
           {positions.data === undefined ? (

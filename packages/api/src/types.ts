@@ -62,6 +62,7 @@ import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
+import type { OrganizationsPort } from './routes/organizations.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
@@ -618,6 +619,12 @@ export interface GatewayDeps {
    * 回 not_implemented——向导是加分项，没有它工作台照常能用（只是第一次打开时没人带路）。
    */
   onboarding?: OnboardingPort
+  /**
+   * WP65（52 O1）：组织（公司）与它下面的品牌工作区。
+   * 没装配时 `/v1/orgs/*` 回 not_implemented——多品牌是加分项，
+   * 一个品牌的工作台不装它照常能用。
+   */
+  organizations?: OrganizationsPort
   /**
    * WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司的对照 / 合并 / 退出。
    * 没装配时 `/v1/join/*` 回 not_implemented。

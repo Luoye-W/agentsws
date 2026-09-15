@@ -127,6 +127,8 @@ export function OnboardingPage(): React.ReactNode {
         vertical: draft.vertical,
         // WP62（51 §1 N0）：网站是用什么搭的（店铺连接、面板取数、职责连接器按它解析）
         storefront_platform: draft.storefront_platform,
+        // WP65（52 O4）：第 ① 步下半块——品牌名进的是工作区，不是组织
+        ...(draft.brand_name.trim() === '' ? {} : { brand_name: draft.brand_name.trim() }),
       }),
     onSuccess: async () => {
       setFailure(undefined)
@@ -213,6 +215,8 @@ export function OnboardingPage(): React.ReactNode {
                 emailHint={state.data.person.email}
                 verticals={state.data.verticals}
                 storefrontPlatforms={state.data.storefront_platforms}
+                // 52 O4：向导里下半块说的是"**第一个**品牌"（之后在公司页还能加）
+                firstBrand
                 busy={saveProfile.isPending}
                 saved={saved}
                 {...(failure === undefined ? {} : { error: failure })}

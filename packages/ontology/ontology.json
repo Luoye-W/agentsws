@@ -38,7 +38,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "3a74a16e60f370e5381d942f4c5d0181",
+  "source_digest": "fae7078031a38c78597f94db3f92a7d9",
   "objects": [
     {
       "id": "ad_set",
@@ -2707,6 +2707,18 @@
           "type": "string",
           "sensitivity": "confidential",
           "optional": false
+        },
+        {
+          "name": "org_id",
+          "type": "OrganizationId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "brand",
+          "type": "Brand",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "profile",

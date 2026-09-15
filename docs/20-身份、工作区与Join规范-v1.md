@@ -13,10 +13,12 @@
 ```ts
 type Person = { id: string; email: string; name: string; identities: { provider: 'local' | 'feishu' | 'wecom' | 'dingtalk'; external_id: string }[]; created_at }
 
-type Workspace = {
+type Workspace = {                                // 52 O1 起：一个工作区 = 一个品牌
   id: string; schema_version: 1
   kind: 'personal' | 'shared'                    // shared = 部门 / 公司
   name: string; tz: string; base_currency: string
+  org_id?: OrganizationId                        // 52 O1：这个品牌挂在哪个组织（公司）下；见 §7
+  brand?: { name: string; logo?: string }        // 52 O1：品牌名默认 = name，迁移时回填
   parent_id?: string                             // 部门工作区 Join 进公司后指向公司；成为其一个 range
   runtime: { mode: 'local' | 'docker' | 'hosted'; endpoint: string }
   owner_id: person_id
@@ -139,3 +141,79 @@ type RangeRef = { kind: 'store' | 'department' | 'account' | 'market'; id: strin
 6. 人离开后 1 秒内其 token 全失效、其 Assignment 进交接
 7. 部门 Join 公司后，公司 owner 的范围含该 department；原部门 owner 只是该 range 的 manager
 8. 模拟：3 人合成工作区 Join 15 人合成工作区，断言去重数与未认领数
+9. 同一个组织下两个品牌工作区：同一个人两边都有岗位，**四个库（分配 / 卡 / 事实卡 /
+   店铺连接）各自按 `workspace_id` 切**，站在一边看另一边一条都查不到
+   （52 O2；模拟题 `org/two-brands-cannot-see-each-other`）
+10. 离职：组织成员写 `left_at`，两个品牌的成员关系、token 与分配一起收（40 E2）
+
+---
+
+## 7. 组织（公司）—— 工作区**上面**那一层（52 O1，WP65）
+
+> 2026-09-15 Luoye 拍板 52 O1–O5：**品牌是顶层**。这一节把它落在本规范里。
+
+### 7.1 一句话
+
+**品牌 = 工作区，公司 = 组织。** 一个品牌一个工作区，连接、知识、职责分配、面板、卡片、
+账本全部天然隔离——因为本文 §1 之后所有数据本来就按 `workspace_id` 切，不用再造一层
+`brand_id`。公司变成工作区**上面**的一个对象：
+
+```ts
+type Organization = {
+  id: string
+  legal_name: string                              // 46 §1 ①，从工作区档案上提到这里
+  domain?: string
+  discoverable: boolean                           // 46 §2 的发现开关
+  owner_id: person_id
+  members: { person_id; role: 'owner' | 'admin' | 'member'; joined_at; left_at? }[]
+  cloud_org_id?: string                           // 49 M1 的云侧组织（余额与订阅）
+  created_at
+}
+```
+
+### 7.2 组织级只放三样：人、钱、发现（52 O3）
+
+| 放哪 | 是什么 | 为什么 |
+|---|---|---|
+| **组织** | 成员名单、云账号与余额、公司名归一化钥匙与发现开关 | 它们本来就是"一家公司一份"的东西：邀请一次进公司，余额一个账户，同事找的是公司不是某个品牌 |
+| **品牌（工作区）** | 连接、知识、职责分配、面板、卡片、账本、事项、待办、复盘、模型设置、通知偏好 | 它们本来就按 `workspace_id` 切。隔离不是"加过滤器"得来的，是"根本不在同一个库里"得来的 |
+
+三条边界：
+
+1. **邀请进组织一次，品牌是勾出来的**。人进了公司但一个品牌都还没进，是一个正经的中间态。
+2. **离职按组织一次撤全部品牌**（40 E2）：组织成员写 `left_at`（不删行），他在这个组织
+   每一个品牌里的成员关系与 token 一起失效，分配由 roles 侧照单撤。
+3. **切品牌 = 换一张绑目标工作区的会话 token**，整个工作台重载（52 O2）。
+   它不改任何数据，所以**不发内核事件**——`brand.switched` 只是客户端的一次导航。
+
+### 7.3 一次性迁移
+
+每个没有 `org_id` 的工作区在启动时建一个组织（用 46 的公司档案三字段与 owner），
+并把 `brand.name` 回填成工作区名；没设过档案的用工作区名占位（不留一个空公司）。
+已经挂过的一个字节不动，跑第二遍什么都不做。
+
+**公司级三字段的真源从此是组织**：`WorkspaceProfile.legal_name / domain / discoverable`
+留着但已标 `@deprecated`（契约只加不删）——**读一律以组织为准，写的时候两边同步写**。
+
+### 7.4 路由
+
+| 路由 | 做什么 | 52 |
+|---|---|---|
+| `GET /v1/orgs` | 我在哪几家公司（个人用户 `solo: true`，界面上不显示组织） | O1 |
+| `POST /v1/orgs` | 建一家公司（首次设置第 ① 步上半块） | O4 |
+| `PATCH /v1/orgs/:id` | 改公司档案：全称 / 域名 / 发现开关 | O3 |
+| `GET /v1/orgs/:id/brands` | 品牌一览（只回**本人有成员资格**的品牌） | O2 |
+| `POST /v1/orgs/:id/brands` | 加一个品牌 = 建一个新工作区 | O4 |
+| `GET` / `POST /v1/orgs/:id/members` | 公司成员；邀请进公司一次 + 勾进哪几个品牌 | O3 |
+| `DELETE /v1/orgs/:id/members/:person_id` | 离职：按公司一次撤全部品牌 | O3 / 40 E2 |
+| `POST /v1/orgs/:id/brands/:ws/copy-from` | 从某个品牌复制设置（只复制职责分配） | O4 |
+| `POST /v1/orgs/:id/brands/:ws/switch` | 切到这个品牌：换一张绑它的会话 token | O2 |
+
+事件另加两条：`organization.created`、`brand.created`（payload 与
+`workspace.profile_set` 同一条纪律——只记归一化后的钥匙与有没有域名，全称与品牌名不进日志）。
+
+### 7.5 与 §4 Join 的关系
+
+45 H1 改写之后，**进公司的默认路径不是合并，是"把这个品牌工作区整个挂到组织下"**
+（`attachWorkspaceToOrg`，一步，里面的东西一个字节不动）。只有"两个人各自建了同一个品牌"
+（唯一键 = 品牌名归一化 + 店铺域名，契约的 `brandKey`）才走本文 §4 的对照合并。

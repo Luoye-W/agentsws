@@ -1056,10 +1056,56 @@ const zh: Table = {
   'onboarding.next': '下一步',
   'onboarding.done': '就这样，开始用',
   'onboarding.step': '第 {n} 步 / 共 4 步',
-  'onboarding.step1': '① 公司',
+  'onboarding.step1': '① 公司与第一个品牌',
   'onboarding.step2': '② 你',
   'onboarding.step3': '③ 你做什么',
   'onboarding.step4': '④ 要配的东西',
+  // ── WP65（52 O1–O4）品牌是顶层：公司 = 组织，品牌 = 工作区 ──────────
+  //
+  // 界面上**不说"组织"两个字**（52 O1 个人用户那一条）：一个人一个品牌的时候
+  // 这一摊整块不出现；真有第二个品牌或第二个人了，出现的也是"公司"与"品牌"
+  // 这两个用户自己会用的词，不是对象模型里的名字。
+  'onboarding.block.company': '公司',
+  'onboarding.block.first_brand': '第一个品牌',
+  'onboarding.block.brand': '这个品牌',
+  'onboarding.brand.name': '品牌名',
+  'onboarding.brand.name.placeholder': '诺伏特户外',
+  'onboarding.brand.name.hint':
+    '顶栏显示的就是它。一个品牌一套连接、一套知识、一套面板——互相看不见。以后要做第二个品牌，去"公司"页加一个，不用再装一遍。',
+  'brand.switch': '切换品牌',
+  'brand.switch.hint':
+    '换一个品牌 = 整个工作台换一套：首页、岗位、连接、知识、设置。两边的数据互相看不见。',
+  'brand.switch.manage': '管理品牌…',
+  'brand.switch.failed': '切不过去：你可能不在这个品牌里。',
+  'command.group.brands': '品牌',
+  'org.tab.brands': '品牌',
+  'org.brands.title': '品牌一览',
+  'org.brands.hint':
+    '一个品牌一个工作区：卡片、连接、知识、账本各是各的，互相看不见。点一行就切过去。',
+  'org.brands.current': '当前',
+  'org.brands.pending': '待审卡',
+  'org.brands.alerts': '告警',
+  'org.brands.sales': '今日销售',
+  'org.brands.sales_elsewhere': '切过去才看得到',
+  'org.brands.open': '切到这个品牌',
+  'org.brands.add': '加一个品牌',
+  'org.brands.add.hint': '建一个新的工作区，走一遍这个品牌自己的设置（连接与知识从零开始）。',
+  'org.brands.add.name': '新品牌叫什么',
+  'org.brands.add.copy_from': '从某个品牌复制设置',
+  'org.brands.add.copy_from.none': '不复制，空白开始',
+  'org.brands.add.copy_from.hint':
+    '只复制职责分配（谁做什么），**范围不跟着走**——那是原品牌的店。连接与知识一个字节都不复制。',
+  'org.brands.add.submit': '建这个品牌',
+  'org.brands.copied': '复制了 {n} 条职责分配。模型设置这台机器上本来就是共用的，不用复制。',
+  'org.brands.copy_none': '没有可复制的：那个品牌里现在没有别人的职责分配。',
+  'org.brands.solo':
+    '你现在只有一个品牌。要做第二个品牌就在这里加——两边的数据互相看不见，顶栏会多一个切换器。',
+  'settings.org': '公司',
+  'settings.org.hint':
+    '公司是品牌**上面**那一层：人、账号余额、同事发现在这里；连接、知识、岗位分配一律在各自的品牌里。',
+  'settings.org.brands': '{n} 个品牌',
+  'settings.org.members': '{n} 个人',
+  'settings.org.manage': '去公司页管品牌',
   'onboarding.company.legal_name': '公司全称',
   'onboarding.company.legal_name.placeholder': '深圳诺伏特科技有限公司',
   'onboarding.company.legal_name.hint':
@@ -2338,10 +2384,54 @@ const en: Table = {
   'onboarding.next': 'Next',
   'onboarding.done': 'Done, start using it',
   'onboarding.step': 'Step {n} of 4',
-  'onboarding.step1': '1. Company',
+  'onboarding.step1': '1. Company & first brand',
   'onboarding.step2': '2. You',
   'onboarding.step3': '3. What you do',
   'onboarding.step4': '4. What to set up',
+  // ── WP65 (52 O1–O4) brands on top: company = organization, brand = workspace ──
+  'onboarding.block.company': 'Company',
+  'onboarding.block.first_brand': 'Your first brand',
+  'onboarding.block.brand': 'This brand',
+  'onboarding.brand.name': 'Brand name',
+  'onboarding.brand.name.placeholder': 'NordVolt Outdoor',
+  'onboarding.brand.name.hint':
+    'This is what the top bar shows. One brand means one set of connections, knowledge and dashboards — brands never see each other. To add a second brand later, use the Company page; you do not install anything again.',
+  'brand.switch': 'Switch brand',
+  'brand.switch.hint':
+    'Switching swaps the whole workstation: home, positions, connections, knowledge, settings. Neither side can see the other brand\u2019s data.',
+  'brand.switch.manage': 'Manage brands…',
+  'brand.switch.failed': 'Could not switch: you may not be in that brand.',
+  'command.group.brands': 'Brands',
+  'org.tab.brands': 'Brands',
+  'org.brands.title': 'Brands',
+  'org.brands.hint':
+    'One brand, one workspace: cards, connections, knowledge and ledgers are separate and never visible to each other. Pick a row to switch to it.',
+  'org.brands.current': 'Current',
+  'org.brands.pending': 'Waiting on you',
+  'org.brands.alerts': 'Alerts',
+  'org.brands.sales': 'Sales today',
+  'org.brands.sales_elsewhere': 'Switch to it to see this',
+  'org.brands.open': 'Switch to this brand',
+  'org.brands.add': 'Add a brand',
+  'org.brands.add.hint':
+    'Creates a new workspace and walks through that brand\u2019s own setup. Connections and knowledge start from scratch.',
+  'org.brands.add.name': 'Name of the new brand',
+  'org.brands.add.copy_from': 'Copy settings from a brand',
+  'org.brands.add.copy_from.none': 'Do not copy, start blank',
+  'org.brands.add.copy_from.hint':
+    'Copies duty assignments (who does what) only. Ranges do not come along — those are the other brand\u2019s stores. Connections and knowledge are never copied.',
+  'org.brands.add.submit': 'Create this brand',
+  'org.brands.copied':
+    'Copied {n} duty assignments. Model settings are already shared on this machine, so there is nothing to copy.',
+  'org.brands.copy_none': 'Nothing to copy: that brand has no other people assigned right now.',
+  'org.brands.solo':
+    'You have one brand. Add a second one here — the two never see each other\u2019s data, and a switcher appears in the top bar.',
+  'settings.org': 'Company',
+  'settings.org.hint':
+    'The company sits above brands: people, account balance and colleague discovery live here. Connections, knowledge and duty assignments always live inside each brand.',
+  'settings.org.brands': '{n} brands',
+  'settings.org.members': '{n} people',
+  'settings.org.manage': 'Manage brands on the Company page',
   'onboarding.company.legal_name': 'Registered company name',
   'onboarding.company.legal_name.placeholder': 'NordVolt Technology Co., Ltd.',
   'onboarding.company.legal_name.hint':

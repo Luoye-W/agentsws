@@ -92,6 +92,7 @@ const PLAN: OnboardingPlanView = {
 const STATE: OnboardingStateView = {
   needs_setup: true,
   workspace_name: '王岚的工作区',
+  brand_name: '王岚的工作区',
   person: { name: '王岚', email: 'wang@nordvolt.cn' },
   other_assignments: 0,
   is_owner: true,
@@ -131,6 +132,7 @@ const SAVED: OnboardingStateView = {
     legal_name: '深圳诺伏特科技',
     domain: 'nordvolt.cn',
     discoverable: true,
+    brand_name: '王岚的工作区',
     vertical: 'goods',
     storefront_platform: 'shopify',
     set_at: '2026-09-07T09:00:00.000Z',
@@ -512,6 +514,7 @@ describe('设置页的公司档案：改成还接不上的平台', () => {
         profile={{
           legal_name: '一家店',
           discoverable: true,
+          brand_name: '一家店',
           vertical: 'goods',
           storefront_platform: 'shopify',
           set_at: '2026-09-07T09:00:00.000Z',
@@ -546,6 +549,7 @@ describe('设置页的公司档案：改成还接不上的平台', () => {
         profile={{
           legal_name: '一家店',
           discoverable: true,
+          brand_name: '一家店',
           vertical: 'goods',
           storefront_platform: 'shopify',
           set_at: '2026-09-07T09:00:00.000Z',
