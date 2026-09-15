@@ -692,7 +692,14 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "enum": ["ai", "wallet:read", "wallet:topup", "wallet:admin", "standby"]
+                      "enum": [
+                        "ai",
+                        "wallet:read",
+                        "wallet:topup",
+                        "wallet:admin",
+                        "standby",
+                        "data"
+                      ]
                     }
                   },
                   "ttl_days": {
@@ -975,7 +982,14 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "enum": ["ai", "wallet:read", "wallet:topup", "wallet:admin", "standby"]
+                      "enum": [
+                        "ai",
+                        "wallet:read",
+                        "wallet:topup",
+                        "wallet:admin",
+                        "standby",
+                        "data"
+                      ]
                     }
                   },
                   "ttl_days": {

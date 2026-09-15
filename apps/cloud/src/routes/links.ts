@@ -37,6 +37,7 @@ const SCOPE_VALUES = [
   'wallet:topup',
   'wallet:admin',
   'standby',
+  'data',
 ] as const satisfies readonly CloudScope[]
 
 export const ScopeSchema = z.enum(SCOPE_VALUES)

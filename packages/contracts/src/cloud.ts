@@ -54,10 +54,12 @@ export interface CloudOrg {
  * - `ai`：走服务入口的模型调用（`/v1/ai/*`，WP59）。
  * - `wallet:read`：**只读**余额与用量（`/v1/wallet/*` 的读面）。充值 / 退款不在令牌能做的事里。
  * - `standby`：在线值守（WP60）。
+ * - `data`：公共红人库服务（`/v1/data/*`，WP61）——浏览、体检、付费 reveal、插件配对。
  *
- * 本版五个（WP59 合并时把钱包拆成 read / topup / admin）；加能力就加成员（只加不删）。
+ * 本版六个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`）；
+ * 加能力就加成员（只加不删）。
  */
-export type CloudScope = 'ai' | 'wallet:read' | 'wallet:topup' | 'wallet:admin' | 'standby'
+export type CloudScope = 'ai' | 'wallet:read' | 'wallet:topup' | 'wallet:admin' | 'standby' | 'data'
 
 export const CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -65,10 +67,23 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
   'wallet:topup',
   'wallet:admin',
   'standby',
+  'data',
 ]
 
-/** 新签一把令牌时默认给的动作集：能用模型、能看余额，不能值守。 */
-export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = ['ai', 'wallet:read', 'wallet:topup']
+/**
+ * 新签一把令牌时默认给的动作集：能用模型、能看余额、能充值、能查公共红人库，
+ * 不能值守、不能看整个组织的账。
+ *
+ * `data` 进默认是有意的：公共库的浏览与体检**免费**（48 §5.3），
+ * 一把新令牌不该连"看看有哪些红人"都要用户先回云上改一次动作集；
+ * 真花钱的 reveal 与深度体检照样走钱包，余额不够就是 402。
+ */
+export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
+  'ai',
+  'wallet:read',
+  'wallet:topup',
+  'data',
+]
 
 /** 工作区服务令牌的前缀。一眼能认出来是什么，也方便在日志里做前缀级的屏蔽。 */
 export const WORKSPACE_TOKEN_PREFIX = 'wst_'

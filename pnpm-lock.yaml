@@ -65,6 +65,9 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@agentsws/kol-public':
+        specifier: workspace:*
+        version: link:../../packages/kol-public
       '@agentsws/metering':
         specifier: workspace:*
         version: link:../../packages/metering
@@ -581,6 +584,25 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
+
+  packages/kol-public:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/metering':
+        specifier: workspace:*
+        version: link:../metering
+      hono:
+        specifier: ^4.13.7
+        version: 4.13.7
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
 
   packages/learning:
     dependencies:

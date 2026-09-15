@@ -198,6 +198,52 @@ Luoye 09-15 定：红人营销**按渠道划分职责**，五个渠道：YouTube
 - k-匿名基准聚合、YouTube 配额池 + Apify 降级、邮箱抓取；TikTok / X 的采集只做插件汇聚（官方 API 申请制 / 付费）；
 - 本地的五条渠道职责通过 49 M2 的开关连它，用 agentsws 账号（不是另一把 API key）；用我的 token = 本地直连平台、不经我们、不扣积分。
 
+### 实现落点（WP61，2026-09-15 完成待审）
+
+**一个路由包 `packages/kol-public`**（风格同 WP59 的 `cloud-entry`、WP60 的 `standby`：
+不起服务，只导出 `mountKolPublicRoutes(app, deps)`），由 `apps/cloud/src/kol-public.ts`
+挂上去，`main()` 默认挂。路径前缀 `/v1/data/kol`，鉴权 = 工作区服务令牌 +
+**新动作集 `data`**（契约 `CloudScope` 只加不删；`CLOUD_SCOPES` / links 的 `ScopeSchema` /
+默认签发同步）。契约在 `packages/contracts/src/kol-public.ts`——**与 WP67 的 `kol.ts` 零 import**，
+指一个红人只用自足键 `{ channel, handle }`。
+
+| 路由 | 鉴权 | 计价 | 一句话 |
+|---|---|---|---|
+| `GET /creators?channel=&q=&min_followers=&category=&limit=` | `data` | 免费（记 0 积分计量） | 共享库浏览，回卡**不回邮箱**（只回 `has_contact`） |
+| `GET /creators/:channel/:handle/audit` | `data` | 免费（记 0 积分计量） | 免费体检：粉丝真实度、互动率分位、近 30 天活跃、风险标记；**样本不够就明说** |
+| `POST /creators/:channel/:handle/reveal` | `data` | `data.kol.lookup` | 解密邮箱，明文只在这一次响应里出现；库里没有联系方式**不收钱** |
+| `POST /creators/:channel/:handle/deep-audit` | `data` | `data.kol.audit` | 免费报告 + 基准分位，`depth: 'deep'`；**这一版是骨架**，报告的 `note` 里说明白 |
+| `POST /creators/:channel/:handle/refresh` | `data` | `social.fetch` | 去外部源取一次；驻留 / 配额挡住就**整笔释放不收钱** |
+| `GET /benchmarks?channel=&category=&followers_band=` | `data` | 免费（记 0 积分计量） | k-匿名基准，只回 p25 / p50 / p75 |
+| `POST /creators/:channel/:handle/observations` | `data` | 免费（有贡献奖励） | 登录态工作区手动加观察 |
+| `POST /creators/:channel/:handle/contact` | `data` | 免费（有贡献奖励） | 联系方式回填：进库就是哈希 + 密文 |
+| `POST /creators/:channel/:handle/disputes` | `data` | 免费 | 争议**只记不裁**，owner 后台看 |
+| `POST /plugins/pair` | `data` | 免费 | 换一把插件令牌 `plg_…`（30 天、只存哈希、可撤） |
+| `POST /plugins/:sha/revoke` | `data` | 免费 | 撤一把（写 `revoked_at`，不删行） |
+| `POST /plugins/observations` | **插件令牌** | 免费（有贡献奖励） | 插件上报一批观察——它只能往库里加事实，不能查库、不能花钱 |
+
+**七张表**（`<AGENTSWS_CLOUD_DATA_DIR>/kol-public.sqlite`）：`kol_creators` /
+`kol_observations` / `kol_contacts` / `kol_disputes` / `kol_plugin_tokens` /
+`kol_plugin_quota` / `kol_benchmarks_cache`。主键是 `(channel, handle)`——**库按渠道分区**
+在这一层就成立。两张表的形状是纪律：`kol_contacts` **没有明文邮箱这一列**（只有
+`email_sha256` 与 AES-256-GCM 的 `email_cipher`，密钥只从 `AGENTSWS_KOL_EMAIL_KEY` 读，
+**没配就一个字节都不存**）；`kol_plugin_tokens` **没有明文令牌这一列**。
+`kol_observations` 的列就是白名单 `PUBLIC_OBSERVATION_FIELDS` 那几个——**正文、评论、
+私信、视频文案收不进来**，白名单多一个键整批拒（一条带正文的观察是一个信号，
+悄悄丢掉它等于把信号也丢了）。
+
+**风控参数**（都在契约里，改它要改契约）：每个贡献者每天 500 条（超了 429）、
+100 条有效观察 1 积分（`granted` 类 90 天过期）、同一 handle 24h 内重复**不计奖励但照收**、
+单日奖励封顶 5 积分（**封顶之外的明天接着拿**：累计数只按真发出去的那部分前进）、
+回填一条新联系方式 1 积分、k = 20、出体检报告最少 3 条样本、插件令牌 30 天、
+YouTube 全站日配额 10000 单位。
+
+**外部源**：`sources/{youtube,apify}.ts` 两个接口 + 配额池 + 降级判定 + 假实现。
+顺序是**驻留 → 配额 → 降级**：`X-Agentsws-Region: cn` 一个境外源都不走（只查库，明说），
+官方口从全站日池子扣单位、扣不动就降级，没有 `APIFY_TOKEN` 就回"今天配额用完了"
+**而不是悄悄换一个别的源**。真的 HTTP 调用留给后续 WP——没有真 key 可验的地方
+照文档写解析，错的地方是所有人共用的那张公共库。
+
 ### 5.4 分期
 
 | WP | 做什么 | 前置 |

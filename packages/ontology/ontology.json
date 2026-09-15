@@ -18,6 +18,7 @@
     "packages/contracts/src/join.ts",
     "packages/contracts/src/kernel.ts",
     "packages/contracts/src/knowledge.ts",
+    "packages/contracts/src/kol-public.ts",
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/packages.ts",
@@ -40,7 +41,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "4328840133f19da5f1d4d1cf2ee04376",
+  "source_digest": "d1073f3626704688869c2b3664763676",
   "objects": [
     {
       "id": "ad_set",

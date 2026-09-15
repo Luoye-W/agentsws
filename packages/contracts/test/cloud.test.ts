@@ -27,9 +27,16 @@ describe('49 M1 云账号契约', () => {
     expect([linked, unlinked]).toEqual(['cloud.account_linked', 'cloud.account_unlinked'])
   })
 
-  it('最小动作集五个（钱包拆 read / topup / admin），默认签发不含值守与组织级看账', () => {
-    expect(CLOUD_SCOPES).toEqual(['ai', 'wallet:read', 'wallet:topup', 'wallet:admin', 'standby'])
-    expect(DEFAULT_CLOUD_SCOPES).toEqual(['ai', 'wallet:read', 'wallet:topup'])
+  it('最小动作集六个（钱包拆 read / topup / admin，WP61 加 data），默认签发不含值守与组织级看账', () => {
+    expect(CLOUD_SCOPES).toEqual([
+      'ai',
+      'wallet:read',
+      'wallet:topup',
+      'wallet:admin',
+      'standby',
+      'data',
+    ])
+    expect(DEFAULT_CLOUD_SCOPES).toEqual(['ai', 'wallet:read', 'wallet:topup', 'data'])
     expect(DEFAULT_CLOUD_SCOPES).not.toContain('standby')
     expect(DEFAULT_CLOUD_SCOPES).not.toContain('wallet:admin')
   })
