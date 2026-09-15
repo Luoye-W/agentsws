@@ -32,7 +32,25 @@ export type DeckAction = 'approve' | 'reject' | 'instruct' | 'snooze' | 'open'
 
 export type PriorityBand = 'P0' | 'P1' | 'P2' | 'P3'
 
-export type HighlightType = 'amount' | 'deadline' | 'commitment' | 'risk_term' | 'order_ref'
+export type HighlightType =
+  | 'amount'
+  | 'deadline'
+  | 'commitment'
+  | 'risk_term'
+  | 'order_ref'
+  /** WP64（51 §2.3）：这一封群发要发给多少人。人按下"发送"之前该看见的第一个数。 */
+  | 'audience'
+  /**
+   * WP64（51 §2.3）：抑制 / 退订名单里剔掉了几个人。
+   *
+   * 剔了要在卡上说，不剔也要在卡上说（`0`）——"这次没人被剔"与"这次没查"
+   * 在群发这件事上是两回事，卡面上必须分得开。
+   */
+  | 'suppressed'
+  /** WP64（51 §2.4）：这张单压了几天没发。 */
+  | 'overdue'
+  /** WP64（51 §2.4）：物流单号。标记发货的卡上没有它就不该被批准。 */
+  | 'tracking'
 
 export interface DeckHighlight {
   type: HighlightType

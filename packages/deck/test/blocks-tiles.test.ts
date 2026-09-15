@@ -71,6 +71,31 @@ describe('岗位面板（36 §3 按数据源分块）', () => {
     expect(assembleView('ads.meta', queryContext()).map((s) => s.source)).toEqual(['ads', 'ga4'])
   })
 
+  // WP64（51 §2.3 / §2.4）
+  it('邮件营销：自己那三块 + 店铺后台；没接的源照实说，不出空图', () => {
+    const sections = assembleView('dtc.email-marketing', queryContext())
+    // 待审发送读的是我们自己的审批库，所以它自成一块（工作队列永远算连上）
+    expect(sections.map((s) => s.source)).toEqual(['approvals', 'email_marketing', 'shop'])
+    expect(sections[0]?.blocks.map((b) => b.id)).toEqual(['email.pending_sends'])
+    expect(sections[0]?.connected).toBe(true)
+    // 连接器还是骨架 → 那两块永远走「去连接」那一支，一个编出来的数字都没有
+    expect(sections[1]?.connected).toBe(false)
+    expect(sections[1]?.report_url).toBeUndefined()
+    expect(sections[1]?.blocks.map((b) => b.id)).toEqual(['email.flows', 'email.performance_30d'])
+    expect(computeBlock('email.flows', queryContext(), 'last_7d').status).toBe('not_connected')
+  })
+
+  it('订单履约：待发货 / 超期未发 / 今日发货数走店铺与队列，物流异常单独一块', () => {
+    const sections = assembleView('dtc.fulfillment', queryContext())
+    expect(sections.map((s) => s.source)).toEqual(['shop', 'approvals', 'tracking'])
+    // 「超期未发」复用的就是 WP20 那条积木，不是另画一个
+    expect(sections[0]?.blocks.map((b) => b.id)).toEqual([
+      'fulfillment.unfulfilled',
+      'shop.overdue_orders',
+    ])
+    expect(sections[2]?.connected).toBe(false)
+  })
+
   it('没在表里的职责回落到店铺后台', () => {
     expect(blocksForRole('common.member').every((b) => b.source === 'shop')).toBe(true)
   })

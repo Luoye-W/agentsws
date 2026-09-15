@@ -97,6 +97,56 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
   for (const cap of item.automation.mandate_check.caps_hit) {
     out.push({ type: 'risk_term', text: cap })
   }
+  out.push(...wp64Highlights(item, ctx))
+  return out
+}
+
+/**
+ * WP64（51 §2.3 / §2.4）：三张卡上人最先要看的那几个数。
+ *
+ * 都从结构化字段里取，一个字不编（37 §1 第 4 行）——群发的受众规模与被剔除人数、
+ * 标记发货的单号、超期未发压了几天。
+ */
+function wp64Highlights(item: ApprovalItem, ctx: ProjectContext): DeckHighlight[] {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  const before = isRecord(payload.before) ? payload.before : {}
+  const out: DeckHighlight[] = []
+
+  if (payload.kind === 'campaign_send') {
+    const audience =
+      num(after.audience_size) ??
+      (Array.isArray(after.audience) ? after.audience.length : undefined)
+    if (audience !== undefined) out.push({ type: 'audience', text: `${audience}` })
+    // 名单查过就一定报一个数，哪怕是 0：这一行是"我查了，剔了几个"的凭据。
+    if (after.suppression_checked === true) {
+      const removed = Array.isArray(after.suppressed) ? after.suppressed.length : 0
+      out.push({ type: 'suppressed', text: `${removed}` })
+    }
+  }
+
+  if (payload.kind === 'create_fulfillment' || payload.kind === 'split_order') {
+    const tracking = str(after.tracking_number)
+    const carrier = str(after.carrier)
+    if (tracking !== undefined) {
+      out.push({
+        type: 'tracking',
+        text: carrier === undefined ? tracking : `${carrier} ${tracking}`,
+      })
+    }
+  }
+
+  // 超期未发：下单时间在 payload 的 before 上（标记发货那张卡），或直接由宿主报天数。
+  const days =
+    num(payload.overdue_days) ??
+    (() => {
+      const created = str(before.created_at) ?? str(before.ordered_at)
+      if (created === undefined) return undefined
+      const elapsed = Math.floor((Date.parse(ctx.now) - Date.parse(created)) / DAY)
+      return Number.isFinite(elapsed) && elapsed >= 1 ? elapsed : undefined
+    })()
+  if (days !== undefined) out.push({ type: 'overdue', text: `${days}` })
+
   return out
 }
 
