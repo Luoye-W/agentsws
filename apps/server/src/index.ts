@@ -51,6 +51,19 @@ export {
   type MailPollReport,
   OUTBOUND_HALTED,
 } from './channels.js'
+// WP60（48 §4 L3 #11 的云端一半）：聊天窗的公开访客面
+export {
+  type ChatWidgetAssembly,
+  type ChatWidgetOptions,
+  createChatWidget,
+  DEFAULT_ACCENT,
+  DEFAULT_GREETING,
+  originOf,
+  SESSION_RATE,
+  safeAccent,
+  WIDGET_CONFIG_FILE,
+  WIDGET_SECRET_ID,
+} from './chat-widget.js'
 export {
   CLOUD_BASE_URL_ENV,
   CLOUD_TOKEN_SECRET_ID,
@@ -288,6 +301,7 @@ export {
   THEME_TOKEN_ENV,
 } from './shopify-theme.js'
 export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
+export { CHAT_WIDGET_JS, mountChatWidget, WIDGET_API_PATH, WIDGET_PATH } from './widget.js'
 export {
   createWorkModel,
   createWorkPort,

@@ -94,6 +94,7 @@ import {
   chatView,
   createChatLane,
 } from './chat.js'
+import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
 import { type CloudAssembly, type CloudFetch as CloudEntryFetch, createCloud } from './cloud.js'
 import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
 import { connectBaseUrl } from './connect-url.js'
@@ -156,6 +157,8 @@ import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
+// WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
+import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
 import {
   createWorkstationPort,
@@ -1109,7 +1112,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 那一张去重表。两套区意味着 21 §4「删这个人」会漏掉一半，两张去重表意味着
    * 同一条消息从两处进来会产出两条事件。
    *
-   * 公网访客端点、widget 脚本与 Origin 白名单属于托管档（B 期），这里没有。
+   * 公网访客端点、widget 脚本与 Origin 白名单是托管档那一半（WP60），
+   * 装在下面的 `chatWidget` 里——**默认一个来源都不放行**，所以本地单机档
+   * 起一个服务进程不会因此多一个对外的写入口（WP57 那条理由一个字没变）。
    */
   chat = createChatLane({
     clock,
@@ -1146,6 +1151,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? undefined
         : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
     },
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
+
+  // WP60（48 §4 L3 #11 的云端一半）：聊天窗的公开访客面（白名单 + 限流 + 访客令牌）
+  const chatWidget = createChatWidget({
+    workspace_id: workspace.id,
+    clock,
+    chat,
+    secrets,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
 
@@ -1815,6 +1829,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         )
         return () => sub.stop()
       },
+      // WP60：公开访客那一面。四道门（白名单 / 限流 / 访客令牌 / 凭据不进 URL）
+      // 全在 `chat-widget.ts` 里，网关这一层只做投影
+      widgetConfig: () => chatWidget.config(),
+      setWidgetConfig: (input) => chatWidget.setConfig(input),
+      allowedOrigin: (origin) => chatWidget.allowedOrigin(origin),
+      publicWidgetConfig: (origin) =>
+        chatWidget.publicConfig(origin) ?? { enabled: false, accent: DEFAULT_ACCENT, greeting: '' },
+      openPublic: (input) => chatWidget.open(input),
+      verifyVisitor: (session_id, token) => chatWidget.verify(session_id, token),
+      widgetScript: () => CHAT_WIDGET_JS,
     },
     ask: createAskPort({
       models,
@@ -1969,6 +1993,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
 
   const gateway = createGateway(deps)
+  /*
+   * WP60：`/widget.js` 与公开访客那几条的 CORS 预检。
+   *
+   * 挂在网关路由之后、静态托管之前：它们不是 `/v1` 之下的 API（`/v1` 那套信封、
+   * 鉴权、幂等对一段 JavaScript 与一次 OPTIONS 都没有意义），但必须排在
+   * `mountStatic` 那个 `*` 前面，否则会被静态托管的 SPA fallback 吃掉。
+   */
+  mountChatWidget(gateway.app, { allowedOrigin: (origin) => chatWidget.allowedOrigin(origin) })
   // 静态托管必须在网关路由之后挂（Hono 按注册顺序匹配，`*` 放最后）
   if (options.staticDir !== undefined) {
     mountStatic(gateway.app, {
