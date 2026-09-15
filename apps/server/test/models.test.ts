@@ -251,11 +251,16 @@ describe('WP25 §C 模板与空状态', () => {
     expect(ctx.server.modelSettings.configured()).toBe(false)
   })
 
-  it('两种模板：DeepSeek 官方 + OpenAI 兼容自定义，各带 ≤ 5 步说明与外链', async () => {
+  // WP59（49 M2）起是**三种**：第三种「agentsws 云」不填 key，细节在 `cloud.test.ts`
+  it('三种模板：DeepSeek 官方 + OpenAI 兼容自定义 + agentsws 云，各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
-    expect(templates.map((t) => t.kind)).toEqual(['deepseek', 'openai_compatible'])
+    expect(templates.map((t) => t.kind)).toEqual([
+      'deepseek',
+      'openai_compatible',
+      'agentsws_cloud',
+    ])
     for (const t of templates) {
       expect(t.steps.length).toBeGreaterThan(0)
       expect(t.steps.length).toBeLessThanOrEqual(5)

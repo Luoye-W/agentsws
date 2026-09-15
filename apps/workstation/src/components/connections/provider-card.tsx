@@ -17,6 +17,7 @@ import { Hint, SafetyNote } from '@/components/ui/hint'
 import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+import { CapabilitySourceSwitch } from './capability-source-switch'
 import { SecureForm } from './secure-form'
 import { TestResultLine } from './test-result'
 
@@ -25,6 +26,7 @@ export type WizardPhase = 'idle' | 'form' | 'authorizing' | 'saving'
 export function ProviderCard({
   provider,
   highlighted,
+  connected,
   phase,
   fields,
   result,
@@ -37,6 +39,8 @@ export function ProviderCard({
   provider: ProviderView
   /** 从「去连接」跳过来时高亮这一张。 */
   highlighted: boolean
+  /** 这张卡用户自己连上没有（49 M2 的开关据此决定要不要多说一句）。 */
+  connected: boolean
   phase: WizardPhase
   /** `begin` 回来的字段描述；没走过 begin 就用目录里那份。 */
   fields: ProviderFieldSpec[] | undefined
@@ -176,6 +180,17 @@ export function ProviderCard({
         )}
 
         {result === undefined ? null : <TestResultLine result={result} />}
+
+        {/*
+          49 M2：每张**数据类**卡一个开关「用我的 / 用 agentsws 的」。
+          没有第二条路的卡（你自己店里的、你自己账号里的数据）不出这一行——
+          画一个灰着的开关等于在暗示"充钱就能用"。
+        */}
+        <CapabilitySourceSwitch
+          service={provider.service}
+          connected={connected}
+          {...(assignment === undefined ? {} : { assignment })}
+        />
       </CardContent>
     </Card>
   )

@@ -24,6 +24,8 @@ import type {
   Clock,
   CloudCreditsView,
   Pricing,
+  UsageGroup,
+  UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
 import { buildPricing } from '@agentsws/metering'
@@ -187,9 +189,34 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     ...(state.updated_at === undefined ? {} : { updated_at: state.updated_at }),
   })
 
+  /**
+   * 用量明细。**不缓存**：用户是特意点开"按天看一眼"的，给他一份 60 秒前的没有意义。
+   * 看得到多少由云上那把令牌的 scope 说了算，本地不做第二次裁剪。
+   */
+  const usageView = async (filter: {
+    group: UsageGroup
+    from?: string | undefined
+    to?: string | undefined
+  }): Promise<UsageReport | undefined> => {
+    const query = new URLSearchParams({
+      group: filter.group,
+      from: filter.from ?? monthStart(clock.now()),
+    })
+    /*
+     * **不给 `to` 就不传 `to`。**
+     *
+     * 本机的钟和云上的钟不是一个钟（时区、NTP 漂移、虚拟机挂起）。本地这一头
+     * 算一个"现在"发过去，等于用一个可能慢几秒到几小时的钟去裁云上的账——
+     * 最近那几笔会凭空消失，而用户看到的是"我明明刚用过"。上界由云侧自己定。
+     */
+    if (filter.to !== undefined) query.set('to', filter.to)
+    return callCloud<UsageReport>(`/v1/wallet/usage?${query.toString()}`)
+  }
+
   const port: CloudPort = {
     credits: () => creditsView(),
     pricing: () => pricingView(),
+    usage: (_actor, filter) => usageView(filter),
     capabilitySources: (actor) => settingsOf(actor),
     setCapabilitySources(actor, input) {
       /*

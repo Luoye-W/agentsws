@@ -1094,6 +1094,28 @@ export const getCloudCredits = (assignment?: string): Promise<CloudCreditsView> 
 export const getCloudPricing = (assignment?: string): Promise<PricingView> =>
   api('/v1/cloud/pricing', withAssignment(assignment))
 
+export interface UsageRowView {
+  key: string
+  credits: number
+  quantity: number
+  calls: number
+}
+
+export interface UsageReportView {
+  group: 'capability' | 'workspace' | 'day'
+  from: string
+  to: string
+  rows: UsageRowView[]
+  total_credits: number
+}
+
+/** 没关联账号 / 云上连不通时回 `null`——界面据此显示一句话，不是一张空表。 */
+export const getCloudUsage = (
+  group: 'capability' | 'workspace' | 'day',
+  assignment?: string,
+): Promise<UsageReportView | null> =>
+  api(`/v1/cloud/usage?group=${group}`, withAssignment(assignment))
+
 export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', withAssignment(assignment))
 

@@ -17,6 +17,8 @@ import type {
   CloudCreditsView,
   MaybePromise,
   Pricing,
+  UsageGroup,
+  UsageReport,
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
@@ -52,6 +54,16 @@ export interface CloudPort {
   credits(actor: CloudActor): MaybePromise<CloudCreditsView>
   /** 价目表（云上那份；取不到就回本地内置的那份）。 */
   pricing(actor: CloudActor): MaybePromise<Pricing>
+  /**
+   * 用量明细（按能力 / 按工作区 / 按天）。
+   *
+   * **看得到多少由云上那把令牌说了算**：owner 那把看整个组织，成员那把只看自己
+   * 那个工作区。本地这一层不做第二次裁剪——裁两次就会有一次是错的。
+   */
+  usage(
+    actor: CloudActor,
+    filter: { group: UsageGroup; from?: string | undefined; to?: string | undefined },
+  ): MaybePromise<UsageReport | undefined>
   capabilitySources(actor: CloudActor): MaybePromise<CapabilitySourceSettings>
   setCapabilitySources(
     actor: CloudActor,
@@ -117,6 +129,44 @@ export function cloudRoutes(): Route[] {
         returns: 'Pricing',
       },
       async (c, deps) => ok(c, await portOf(deps).pricing(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/usage',
+        operationId: 'getCloudUsage',
+        summary:
+          '积分用量明细（按能力 / 按工作区 / 按天）。**只聚合计量事件**，聚合不出任何正文。没关联账号时回 null',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          {
+            name: 'group',
+            in: 'query',
+            required: false,
+            description: 'capability（默认）/ workspace / day',
+          },
+          { name: 'from', in: 'query', required: false, description: 'ISO 时间；默认本月一号' },
+          { name: 'to', in: 'query', required: false, description: 'ISO 时间；默认现在' },
+        ],
+        returns: 'UsageReport | null',
+      },
+      async (c, deps) => {
+        const raw = c.req.query('group')
+        if (raw !== undefined && raw !== 'capability' && raw !== 'workspace' && raw !== 'day') {
+          throw new ApiError('invalid_input', 'group 只能是 capability / workspace / day')
+        }
+        const from = c.req.query('from')
+        const to = c.req.query('to')
+        const report = await portOf(deps).usage(actorOf(c), {
+          group: raw ?? 'capability',
+          ...(from === undefined ? {} : { from }),
+          ...(to === undefined ? {} : { to }),
+        })
+        return ok(c, report ?? null)
+      },
     ),
     route(
       {

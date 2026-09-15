@@ -77,7 +77,20 @@ const fakeUpstream = async (url, init) => {
     })
   }
   const body = JSON.parse(String(init.body ?? '{}'))
-  const usage = { prompt_tokens: 42, completion_tokens: 128, total_tokens: 170 }
+  /*
+   * usage 按请求长度算，不是一个写死的 42。
+   *
+   * 写死的话钱包永远只动最后一位小数，界面上看着像坏了——而"预扣按估算、结算按
+   * 真实 usage、差额退回"这条线恰恰只有在两个数字不一样的时候才看得出来。
+   */
+  const chars = JSON.stringify(body.messages ?? body.input ?? '').length
+  const prompt_tokens = Math.max(16, Math.ceil(chars / 4))
+  const completion_tokens = Math.max(8, Math.round(prompt_tokens / 3))
+  const usage = {
+    prompt_tokens,
+    completion_tokens,
+    total_tokens: prompt_tokens + completion_tokens,
+  }
   if (body.stream === true) {
     const chunks = [
       `data: ${JSON.stringify({ choices: [{ delta: { content: '你好，' } }] })}\n\n`,
