@@ -201,6 +201,14 @@ export type KnownEventType =
   | 'secrets.key_rotated'
   // WP42：价目表刷新（只记条数与来源）
   | 'pricing.refreshed'
+  /*
+   * WP58（49 M1）：本地工作区与云账号的关联。**本地事件**，不是云侧的。
+   *
+   * payload 只有邮箱**域名**与云侧组织 id（见 `CloudAccountLinkedPayload`）：
+   * 令牌明文与哈希、邮箱本地部分一个字节都不进（21 §1）。
+   */
+  | 'cloud.account_linked'
+  | 'cloud.account_unlinked'
   // privacy (21)
   | 'privacy.erased'
   // meetings (37 §4)：payload 只有摘要与条数，转写与音频永不进日志
