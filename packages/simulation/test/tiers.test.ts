@@ -220,7 +220,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十三条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十四条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       'ops/claim-pool',
@@ -242,6 +242,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'secretary/ask-colleague',
       'secretary/meet-conflict',
       'secretary/route-to-desk',
+      // WP63（51 §2.1 数据日报）：日报卡 L3 自动出、看完归档，一条变更都不提
+      'store/daily-report-card',
     ])
     for (const r of result.reports) {
       expect(

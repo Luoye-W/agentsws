@@ -1,0 +1,65 @@
+# 上架永远人审（51 §2.1）。
+#
+# 这条题**故意把等级报成 L3**——等于有人在设置里把"上架商品"开到了全自动。
+# `@agentsws/core` 的 `HARD_L1` 当场把它拉回 L1，记一条 `hard_ceiling`，卡进人的队列。
+#
+# 想让 Agent 自己把一件商品放到店里去，这条路走不通：这正是我们要的。
+# 上架 = 让顾客能买到，撤下 = 让顾客买不到——两件事的影响面都是整家店，
+# 跟改一句文案不是一个量级，所以它们不靠职责 yml 里那行 `ceiling: L1` 拦
+# （yml 是工作区策略可以放宽的），靠硬顶拦。
+#
+# 反证也在断言里：`auto_approved: 0`。报了 L3 也一张都自动批不了。
+id: store/publish-product-needs-approval
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 运营把一件商品提上架，等级**故意报 L3**（"这种小事让它自己来吧"）
+  - at: '+0m'
+    shop.publish_product:
+      who: p_li
+      product: prod_4
+      publish: true
+      level: L3
+      note: 新到的车载支架，上架卖
+  # 撤下也一样要人点头——多半是发现了合规或质量问题，更急，但一样要有人知道
+  - at: '+30m'
+    shop.publish_product:
+      who: p_li
+      product: prod_5
+      publish: false
+      level: L3
+      note: 这批充电宝有客诉，先撤下来
+  - at: '+6h'
+    clock.advance: {}
+expected:
+  staged_change_kinds: [publish_product, unpublish_product]
+  # 报了 L3 也自动批不了：这一条永远是 0
+  auto_approved: 0
+  approval_kinds: { staged_change: 2 }
+  # 上下架之前真读了商品（`before.published` 来自记录，不是谁记得的）
+  calls_tool: [get_product]
+  first_tool: get_product
+  no_applied_changes_before: $approve
+  event_types:
+    - change.staged
+    - change.applied
+  metrics:
+    staged_changes: 2
+    applied_changes: 2
+    # hard_ceiling 那两条
+    guardrail_hits: '>=2'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  上架那张卡说清楚"批了之后顾客马上就买得到"了吗？人是照着这句话点头的。

@@ -275,6 +275,33 @@ export interface ScenarioChatTakeover {
   on: boolean
 }
 
+/** WP63（51 §2.1 商品管理）：上架 / 撤下。 */
+export interface ScenarioShopPublishProduct {
+  who: string
+  product: string
+  /** `true` 上架、`false` 撤下；缺省上架。 */
+  publish?: boolean
+  /** 故意报高的自动化等级（回归"永远人审"用）。 */
+  level?: 'L1' | 'L2' | 'L3'
+  note?: string
+}
+
+/** WP63（51 §2.2 内容与博客）：写 / 发一篇文章。 */
+export interface ScenarioContentBlogPost {
+  who: string
+  title: string
+  /** `true` 是"发出去"（永远人审），缺省 `false`（草稿）。 */
+  publish?: boolean
+  /** 改已有那篇；不给就按标题算一个稳定 id。 */
+  article?: string
+  body?: string
+}
+
+/** WP63（51 §2.1 数据日报）：出一张日报卡。 */
+export interface ScenarioStoreDailyReport {
+  who: string
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -314,6 +341,12 @@ export type ScenarioEvent =
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
   | { at: string; type: 'shop.theme_publish'; theme_publish: ScenarioShopThemePublish }
+  /** WP63：上架 / 撤下一件商品（51 §2.1，永远人审）。 */
+  | { at: string; type: 'shop.publish_product'; publish_product: ScenarioShopPublishProduct }
+  /** WP63：写 / 发一篇博客文章（51 §2.2，草稿 L2、发布 L1）。 */
+  | { at: string; type: 'content.blog_post'; blog_post: ScenarioContentBlogPost }
+  /** WP63：出一张店铺日报卡（51 §2.1，L3 自动出、看完归档）。 */
+  | { at: string; type: 'store.daily_report'; daily_report: ScenarioStoreDailyReport }
   /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
   | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
   /** WP47：建 / 改一条产品线（44 G2）。 */
@@ -518,6 +551,15 @@ export interface ScenarioExpected {
    * 断言的是「门说了话」，不是「卡被拦了」——三道门只记录不改状态，卡照常进队列。
    */
   gates_failed?: string[]
+  /**
+   * WP63 / 51 §2.1：日报卡出了几张。
+   *
+   * 断言的是"人一下都没按就有了这张卡"——数据日报那一面没有写动作，它唯一的产出
+   * 就是这张卡；要是它也要人点一下才出，这一面就白做了。
+   */
+  daily_reports?: NumericAssertion
+  /** WP63：日报卡里那几个数（`sales` / `orders` / `low_stock` / `pending`）。 */
+  daily_report_figures?: Record<string, NumericAssertion>
 }
 
 export interface Scenario {

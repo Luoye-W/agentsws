@@ -165,6 +165,10 @@ const APPLY_ACTIONS = [
   // WP44：改价的施行口（只在 role-apply 令牌里，Agent 的读令牌拿不到）。
   // 主题不在这儿——它走 CLI，那条路根本不发连接器令牌。
   'shopify_admin.update_product_price',
+  // WP63（51 §2.1）：上下架的施行口。与改价同一条路——只有执行器拿得到，
+  // 而且只在批准之后（`publish_product` / `unpublish_product` 永远人审）
+  'shopify_admin.publish_product',
+  'shopify_admin.unpublish_product',
   'gmail.send_message',
 ]
 const CONNECTIONS = ['conn_shopify_admin', 'conn_gmail']
@@ -532,6 +536,48 @@ export interface ShopOps {
     theme_id: string
     theme_name: string
     preview_url?: string
+  }>
+  /**
+   * WP63（51 §2.1 商品管理）：上架 / 撤下一件商品。
+   *
+   * 先真读一次商品（`before.published` 必须来自记录），再 stage 一条
+   * `publish_product` / `unpublish_product`。这两条在 `HARD_L1` 里——
+   * `level` 报多高都会被拉回人审，这正是这条回归题要证的事。
+   */
+  publishProduct(input: {
+    who: PersonId
+    product: string
+    /** `true` 上架、`false` 撤下。 */
+    publish: boolean
+    /** 故意报高的自动化等级（回归"永远人审"用）。 */
+    level?: 'L1' | 'L2' | 'L3'
+    note?: string
+  }): Promise<ShopStageResult>
+  /**
+   * WP63（51 §2.2 内容与博客）：写一篇文章 / 把它发出去。
+   *
+   * 同一条 `publish_post`，两种后果：`publish: false` 是草稿（guardrail 判 allow），
+   * `publish: true` 是"让它出现在店里"（转人审）。所以一条场景先写后发，就能把
+   * 51 §2.2 那句「草稿 L2；发布 L1」整条走完。
+   */
+  blogPost(input: {
+    who: PersonId
+    title: string
+    publish: boolean
+    /** 改已有那篇（不给就按标题算一个稳定 id）。 */
+    article?: string
+    body?: string
+  }): Promise<ShopStageResult>
+  /**
+   * WP63（51 §2.1 数据日报）：出一张日报卡。
+   *
+   * 数据日报那一面**没有写动作**——它唯一的产出就是这张卡。所以它不进变更账本，
+   * 只进审批队列，而且是 L3 自动出、看完归档：人要做的只有"看一眼"。
+   */
+  dailyReport(input: { who: PersonId }): Promise<{
+    approval_item_id: string
+    /** 卡面上那几个数（全部从结构化行算出来，一个字不经模型手）。 */
+    figures: { sales: number; orders: number; low_stock: number; pending: number }
   }>
   /** 提一条"把这份副本发布上线"的变更（`publish_theme`，15 §2 永远 L1）。 */
   themePublish(input: {
@@ -1014,6 +1060,54 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           }
         } catch (err) {
           return { status: 'failed', error: { message: messageOfError(err) } }
+        }
+      }
+      // WP63（51 §2.1）：上下架。与改价同一条路，只是 Action 不一样。
+      if (change.kind === 'publish_product' || change.kind === 'unpublish_product') {
+        const action =
+          change.kind === 'publish_product'
+            ? 'shopify_admin.publish_product'
+            : 'shopify_admin.unpublish_product'
+        try {
+          const res = await connect.execute<{ product_id: string }>(
+            action,
+            { product_id: change.target.id },
+            {
+              token: await tokenFor('role-apply'),
+              connection: 'conn_shopify_admin',
+              idempotencyKey: change.id,
+            },
+          )
+          return {
+            status: 'ok',
+            execution_id: res.execution_id,
+            outcome_ref: { type: 'product', id: change.target.id },
+          }
+        } catch (err) {
+          return { status: 'failed', error: { message: messageOfError(err) } }
+        }
+      }
+      // WP63（51 §2.2）：博客文章。
+      //
+      // 合成世界没有博客连接器（真身是 `shopify_admin.create_article` /
+      // `update_article`，在写动作对照表里），所以这里写的是世界自己那份内存台账——
+      // 与主题那条同理：**不假装经过连接器**，免得出站观察表里凭空多出一条不存在的调用。
+      if (change.kind === 'publish_post') {
+        const after = change.after as { title?: unknown; published?: unknown }
+        const title = typeof after.title === 'string' ? after.title : change.target.id
+        articles.set(change.target.id, { title, published: after.published === true })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'content.post_written',
+          actor: { kind: 'system', id: 'sim.executor' },
+          correlation: { trace_id: traceId() },
+          payload: { article_id: change.target.id, published: after.published === true },
+        })
+        return {
+          status: 'ok',
+          execution_id: `content_${change.id}`,
+          outcome_ref: { type: 'article', id: change.target.id },
         }
       }
       if (change.kind === 'publish_theme') {
@@ -1748,6 +1842,17 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   // 主题那一侧多一条纪律：`shopify theme …` 走的是官方 CLI 自己那套登录，**不经连接器**
   // （真身在 `apps/server/src/shopify-theme.ts`）。所以这里用 `MockShopifyCli` 而不是
   // 一条 Action——让它冒充连接器调用，会在出站观察表里凭空多出一条不存在的记录。
+  /**
+   * WP63（51 §2.2）：合成世界里的文章与页面。
+   *
+   * 合成 pack 不带博客数据集（也不该带——博客是连接器那一侧的东西）。这里留一个
+   * 内存 Map，只为让「先写草稿、再发出去」这条链有一个真的 `before` 可读：
+   * 第二次提案时 `before.published` 来自第一次写下的那一条，不是凭空编的。
+   */
+  const articles = new Map<string, { title: string; published: boolean }>()
+  /** 日报看的是"过去一天"。 */
+  const REPORT_WINDOW_MS = 86_400_000
+
   const devMcp = new MockDevMcp()
   const themeCli = new MockShopifyCli({
     state: standIns.connect.state,
@@ -2664,6 +2769,234 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
       }
+    },
+
+    /**
+     * WP63（51 §2.1）：上架 / 撤下。
+     *
+     * 与改价共用同一条路（真读 → 提案 → 人审 → 施行），只有两处不同：
+     * ① 不查 Dev MCP——上下架没有要验的 GraphQL 文档（它就是一个发布状态的开关）；
+     * ② `HARD_L1` 会把 `level` 拉回人审，所以这条题里报 L3 也自动不了。
+     */
+    async publishProduct({ who, product, publish, level, note }) {
+      const asg = assignmentFor(who, 'dtc.store')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'product', id: product }
+
+      // 先真读一次：`before.published` 必须来自记录（15 §1）
+      let record: { id: string; title: string; status?: string; record_version: string }
+      try {
+        const res = await connect.execute<typeof record>(
+          'shopify_admin.get_product',
+          { product_id: product },
+          { token: await tokenFor('role-read', asg.id), connection: 'conn_shopify_admin' },
+        )
+        record = res.data
+        run.tool('get_product', { product_id: product }, [target])
+      } catch (err) {
+        blocked.push({
+          rule: 'record_read_failed',
+          at: now(clock),
+          run_id,
+          message: messageOfError(err),
+        })
+        run.finish({ seen: [], outputs: [], summary: '读不到这件商品，没提案' })
+        return { staged: false, reason: 'record_read_failed' }
+      }
+
+      const kind: ChangeKind = publish ? 'publish_product' : 'unpublish_product'
+      const actionId = publish ? 'stage_publish_product' : 'stage_unpublish_product'
+      const config = roles.effectiveConfig(asg.id)
+      const action = config.actions.find((a) => a.id === actionId)
+      const verb = publish ? '上架' : '撤下'
+      const provenance = run.finish({
+        seen: [target],
+        outputs: [],
+        summary: `提一条${verb}：${record.title}`,
+      })
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_shop_${run_id}`,
+        kind,
+        target,
+        before: { published: record.status === 'active', title: record.title },
+        after: { published: publish },
+        record_version: record.record_version,
+        notes: note === undefined ? [] : [note],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate: action?.mandate ?? { caps: {} },
+        // 故意允许报高：`HARD_L1` 会把它拉回人审，这正是要证的事
+        level: level ?? config.automation[actionId]?.level ?? 'L1',
+        provenance,
+        connection_id: 'conn_shopify_admin',
+        approval: {
+          title: `${verb}：${record.title}`,
+          summary:
+            note ??
+            (publish
+              ? `${record.title} 会出现在在线商店里，顾客马上买得到。`
+              : `${record.title} 会从在线商店撤下，顾客买不到。`),
+          recipients: [recipientOf(publish ? 'scope_manager' : 'role_holder')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: publish ? 'scope_manager' : 'role_holder',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    /**
+     * WP63（51 §2.2）：写 / 发一篇文章。
+     *
+     * 草稿与发布是**同一条 kind 的两次提案**，不是两条 kind——所以场景里"先写后发"
+     * 走的是同一条路，只有 `after.published` 不同，人看到的却是两种后果。
+     */
+    async blogPost({ who, title, publish, article, body }) {
+      const asg = assignmentFor(who, 'dtc.content')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const id = article ?? `art_${sha256(title).slice(0, 10)}`
+      const target: ObjectRef = { type: 'article', id }
+
+      // 改前必读：文章的 `before` 就是那段正文，没读全文就改等于拿摘要覆盖原文。
+      // 这里读的是**我们自己库里**那一份（合成世界没有博客连接器），读到就算读过。
+      const existing = articles.get(id)
+      run.tool('list_articles', { article_id: id }, [target])
+      const config = roles.effectiveConfig(asg.id)
+      const action = config.actions.find((a) => a.id === 'stage_publish_post')
+      const provenance = run.finish({
+        seen: [target],
+        outputs: [],
+        summary: publish ? `提一条发布：${title}` : `提一条草稿：${title}`,
+      })
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_content_${run_id}`,
+        kind: 'publish_post',
+        target,
+        before: { title: existing?.title ?? title, published: existing?.published ?? false },
+        after: { title, published: publish, ...(body === undefined ? {} : { body }) },
+        notes: [],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate: action?.mandate ?? { caps: {} },
+        level: config.automation.stage_publish_post?.level ?? 'L1',
+        provenance,
+        connection_id: 'conn_shopify_admin',
+        approval: {
+          title: publish ? `发布文章：${title}` : `文章草稿：${title}`,
+          summary: publish
+            ? `这篇会出现在店里的博客上。发布永远要人点一下（51 §2.2）。`
+            : `草稿存在后台，顾客看不到。`,
+          recipients: [recipientOf('scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'scope_manager',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      articles.set(id, { title, published: publish })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    /**
+     * WP63（51 §2.1 数据日报）：一张日报卡。
+     *
+     * 三件事值得说：
+     * 1. **不进变更账本**。数据日报那一面没有写动作——它不改店里的任何东西，
+     *    所以它是一张卡，不是一条变更。
+     * 2. **数不经模型手**（29 原则 ③）。销售额、订单数、库存告急、待审条数
+     *    全部从结构化行数出来，模型一个数都碰不到。
+     * 3. **L3 自动出、看完归档**。所以它建出来就是 `auto_approved`——人要做的
+     *    只有看一眼；它不该在谁的队列里压着等审批。
+     */
+    async dailyReport({ who }) {
+      const asg = assignmentFor(who, 'dtc.store')
+      const at = now(clock)
+      const dayStart = Date.parse(at) - REPORT_WINDOW_MS
+      const orders = connect.state.orders.filter(
+        (o) => Date.parse(o.created_at) >= dayStart && Date.parse(o.created_at) <= Date.parse(at),
+      )
+      const sales = Math.round(orders.reduce((n, o) => n + o.total_price, 0) * 100) / 100
+      // 阈值从职责 yml 来（51 §2.1）；职责没装就退回一个保守的默认
+      const lowStockLine = roles.roles.get('dtc.store')?.thresholds?.low_stock_quantity ?? 5
+      const low_stock = connect.state.products.filter(
+        (p) => typeof p.inventory === 'number' && p.inventory <= lowStockLine,
+      ).length
+      const pending = txn.runtime.store
+        .listApprovals({ workspace_id })
+        .filter(
+          (i) => i.kind === 'staged_change' && ['pending', 'in_review'].includes(i.state),
+        ).length
+      const figures = { sales, orders: orders.length, low_stock, pending }
+      const date = at.slice(0, 10)
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'daily_report',
+        role_id: asg.role_id,
+        subject: { object: { type: 'workspace', id: workspace_id } },
+        dedupe_key: `dk_${workspace_id}|daily_report|${date}`,
+        title: `店铺日报 ${date}`,
+        summary: `销售额 ${sales}、订单 ${orders.length} 笔；库存告急 ${low_stock} 个 SKU、待审改动 ${pending} 条。`,
+        payload: { date, ...figures },
+        evidence: {
+          run_id: `run_report_${date}`,
+          source_events: [],
+          provenance: { seen: [] },
+          precheck: {},
+        },
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        automation: {
+          // L3：日报是"看一眼就归档"的东西，不该在谁的队列里压着等审批
+          level_at_creation: 'L3',
+          auto_approved: true,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [recipientOf('role_holder')],
+          rule: 'role_holder',
+          escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'digest',
+      })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'digest.daily_report',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId() },
+        payload: { date, ...figures },
+      })
+      await flushCards()
+      return { approval_item_id: item.id, figures }
     },
 
     themePush({ who, name }) {

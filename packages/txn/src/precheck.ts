@@ -32,6 +32,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'ai_question',
   // WP51 / 46 §2 I3：有人申请加入这个工作区
   'membership',
+  // WP63 / 51 §2.1 数据日报：店铺日报卡（L3 自动出、看完归档）
+  'daily_report',
 ])
 
 export function isKnownKind(kind: string): boolean {

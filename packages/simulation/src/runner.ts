@@ -960,6 +960,50 @@ async function execute(
         })
         return
       }
+      // ── WP63 店铺管理与内容与博客（51 §2.1 / §2.2）─────────────────
+      case 'shop.publish_product': {
+        const e = event.publish_product
+        const out = await world.shop.publishProduct({
+          who: e.who,
+          product: e.product,
+          publish: e.publish ?? true,
+          ...(e.level === undefined ? {} : { level: e.level }),
+          ...(e.note === undefined ? {} : { note: e.note }),
+        })
+        world.appendEvent('simulation.shop_publish_product', {
+          product: e.product,
+          publish: e.publish ?? true,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
+      case 'content.blog_post': {
+        const e = event.blog_post
+        const out = await world.shop.blogPost({
+          who: e.who,
+          title: e.title,
+          publish: e.publish ?? false,
+          ...(e.article === undefined ? {} : { article: e.article }),
+          ...(e.body === undefined ? {} : { body: e.body }),
+        })
+        world.appendEvent('simulation.content_blog_post', {
+          title: e.title,
+          publish: e.publish ?? false,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
+      case 'store.daily_report': {
+        const out = await world.shop.dailyReport({ who: event.daily_report.who })
+        world.appendEvent('simulation.store_daily_report', {
+          who: event.daily_report.who,
+          item: out.approval_item_id,
+          ...out.figures,
+        })
+        return
+      }
       // ── WP47 范围模型（44 G1 / G2 / G3 / G5）──────────────────────
       case 'org.range_group': {
         const out = await world.org.rangeGroup({

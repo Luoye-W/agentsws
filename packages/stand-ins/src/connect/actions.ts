@@ -258,6 +258,47 @@ export function actionCatalog(): ActionDef[] {
         }
       },
     },
+    // WP63（51 §2.1 商品管理）：上下架。Admin GraphQL 那一侧叫
+    // `publishablePublish` / `publishableUnpublish`（写动作对照表里有对应）。
+    {
+      id: 'shopify_admin.publish_product',
+      service: 'shopify_admin',
+      side_effect: 'write',
+      required_scopes: ['write_products'],
+      input_schema: SCHEMA({ product_id: 'string' }, ['product_id']),
+      handler(input, ctx) {
+        const product = productOf(ctx, str(input, 'product_id'))
+        const before = product.status
+        product.status = 'active'
+        product.record_version = bumpVersion(product.record_version)
+        return {
+          product_id: product.id,
+          before,
+          after: product.status,
+          record_version: product.record_version,
+        }
+      },
+    },
+    {
+      id: 'shopify_admin.unpublish_product',
+      service: 'shopify_admin',
+      side_effect: 'write',
+      required_scopes: ['write_products'],
+      input_schema: SCHEMA({ product_id: 'string' }, ['product_id']),
+      handler(input, ctx) {
+        const product = productOf(ctx, str(input, 'product_id'))
+        const before = product.status
+        // 撤下 = 让顾客买不到。替身里"草稿态"就是这个意思
+        product.status = 'draft'
+        product.record_version = bumpVersion(product.record_version)
+        return {
+          product_id: product.id,
+          before,
+          after: product.status,
+          record_version: product.record_version,
+        }
+      },
+    },
     {
       id: 'shopify_admin.create_discount_code',
       service: 'shopify_admin',

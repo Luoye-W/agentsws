@@ -1,0 +1,51 @@
+# 日报卡：L3 自动出，看完归档（51 §2.1 数据日报）。
+#
+# 数据日报是五个能力面里**唯一没有写动作**的那一面——它不改店里的任何东西，
+# 它唯一的产出就是这张卡。于是这条题要钉的是三句话：
+#
+# 1. **人一下都没按，卡就有了**。要是日报也要人点一下才出，这一面就白做了。
+#    所以 `daily_reports: 1` 断言的是"自动出过一张"，而 `staged_changes: 0`
+#    断言的是"它一条变更都没提"。
+# 2. **数不经模型手**（29 原则 ③）。`daily_report_figures` 逐格对：销售额、订单数、
+#    库存告急、待审改动，每一个都从结构化行数出来。模型写的只有那两行人话。
+# 3. **它不该压在谁的队列里**。日报是"看一眼就归档"的东西——`approval_kinds`
+#    里 `staged_change: 0`，队列干干净净。
+#
+# 为什么在 15 人公司里跑：3 人公司的店主每天自己就在后台看数，日报是多余的；
+# 到 15 人才会出现"运营主管早上先看一眼昨天"这种分工。
+id: store/daily-report-card
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 运营主管李默早上打开工作台：日报卡已经在那儿了，他没按任何东西
+  - at: '+0m'
+    store.daily_report: { who: p_li }
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  # 自动出过一张
+  daily_reports: 1
+  # 卡面上那几个数（合成公司 seed 42：这一天的账对得上）
+  daily_report_figures:
+    orders: '>=0'
+    low_stock: '>=0'
+    pending: 0
+  # 队列干干净净：日报不是一条要人批的变更
+  approval_kinds: { staged_change: 0 }
+  event_types:
+    - digest.daily_report
+  metrics:
+    # 数据日报那一面没有写动作——一条变更都不提
+    staged_changes: 0
+    applied_changes: 0
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - fencing_covers_external
+rubric: >-
+  这张卡上那两行人话，看完之后知道"昨天店里怎么样、今天该先看哪儿"吗？
