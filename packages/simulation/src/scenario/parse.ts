@@ -186,6 +186,9 @@ const EVENT_KEYS = [
   // WP50 个人用 → 公司用（45）
   'org.personal',
   'org.join',
+  // WP65 品牌是顶层（52 O1 / O2）
+  'org.brand',
+  'org.brand_check',
   // WP56 知识溯源链（48 §4 #6）
   'knowledge.source_sync',
   // WP57 网站在线客服（48 §4 #11 的实时车道）
@@ -452,6 +455,46 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             ? {}
             : { ranges: rangeList(source, `${path}.${key}.ranges`, body.ranges) }),
           ...(groups === undefined ? {} : { range_groups: groups }),
+        },
+      }
+    }
+    // WP65（52 O1）：开一个品牌工作区，并往里放几样真东西
+    case 'org.brand': {
+      known(source, `${path}.${key}`, body, [
+        'id',
+        'name',
+        'who',
+        'role',
+        'card',
+        'fact',
+        'connection',
+      ])
+      const card = optStr(source, `${path}.${key}.card`, body.card)
+      const fact = optStr(source, `${path}.${key}.fact`, body.fact)
+      const connection = optStr(source, `${path}.${key}.connection`, body.connection)
+      return {
+        at,
+        type: 'org.brand',
+        brand: {
+          id: str(source, `${path}.${key}.id`, body.id),
+          name: str(source, `${path}.${key}.name`, body.name),
+          who: str(source, `${path}.${key}.who`, body.who),
+          role: str(source, `${path}.${key}.role`, body.role),
+          ...(card === undefined ? {} : { card }),
+          ...(fact === undefined ? {} : { fact }),
+          ...(connection === undefined ? {} : { connection }),
+        },
+      }
+    }
+    // WP65（52 O2）：这个人在这个品牌里看得到什么
+    case 'org.brand_check': {
+      known(source, `${path}.${key}`, body, ['brand', 'who'])
+      return {
+        at,
+        type: 'org.brand_check',
+        brand_check: {
+          brand: str(source, `${path}.${key}.brand`, body.brand),
+          who: str(source, `${path}.${key}.who`, body.who),
         },
       }
     }

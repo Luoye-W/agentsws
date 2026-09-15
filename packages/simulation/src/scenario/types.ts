@@ -245,6 +245,33 @@ export interface ScenarioOrgPersonal {
   product_lines?: ScenarioOrgProductLine[]
 }
 
+/**
+ * WP65 / 52 O1：在同一个组织下开一个**品牌工作区**，并往里放几样真东西。
+ *
+ * 「开一个品牌」= 换一个 `workspace_id`。放的那四样分属四个不同的库
+ * （分配 / 卡 / 事实卡 / 店铺连接）——"两个品牌互相看不见"要是只在一个库上成立，
+ * 那就不算成立。
+ */
+export interface ScenarioOrgBrand {
+  /** 这个品牌的 `workspace_id`（`ws_brand_a` 之类）。 */
+  id: string
+  name: string
+  who: string
+  role: string
+  /** 这个品牌里的一张待审卡叫什么。 */
+  card?: string
+  /** 这个品牌里的一条事实（知识层）。 */
+  fact?: string
+  /** 这个品牌连的那家店。 */
+  connection?: string
+}
+
+/** WP65 / 52 O2：记一笔"这个人在这个品牌里看得到什么"（四个库各问一遍）。 */
+export interface ScenarioOrgBrandCheck {
+  brand: string
+  who: string
+}
+
 /** WP50 / 45 H2 / H3：把个人工作区并进公司，owner 逐条选。 */
 export interface ScenarioOrgJoin {
   who: string
@@ -332,6 +359,10 @@ export type ScenarioEvent =
   | { at: string; type: 'org.personal'; personal: ScenarioOrgPersonal }
   /** WP50：把个人工作区并进公司（45 H2 / H3）。 */
   | { at: string; type: 'org.join'; join: ScenarioOrgJoin }
+  /** WP65：在同一个组织下开一个品牌工作区（52 O1）。 */
+  | { at: string; type: 'org.brand'; brand: ScenarioOrgBrand }
+  /** WP65：记一笔"这个人在这个品牌里看得到什么"（52 O2）。 */
+  | { at: string; type: 'org.brand_check'; brand_check: ScenarioOrgBrandCheck }
   /** WP56：一个知识源（网页 / 文档）同步了一次新正文（48 §4 #6）。 */
   | { at: string; type: 'knowledge.source_sync'; source_sync: ScenarioKnowledgeSourceSync }
   /** WP57：访客在网站聊天窗里说一句（48 §4 #11 的实时车道）。 */
