@@ -570,6 +570,22 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/metering:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
   packages/model-gateway:
     dependencies:
       '@agentsws/contracts':

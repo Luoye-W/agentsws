@@ -56,6 +56,9 @@
       "path": "packages/meetings"
     },
     {
+      "path": "packages/metering"
+    },
+    {
       "path": "packages/model-gateway"
     },
     {
