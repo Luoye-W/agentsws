@@ -15,6 +15,18 @@
     - kind: store
       id: store_main
   granted_by: p_wang
+- person_id: p_li
+  role_id: dtc.store
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_li
+  role_id: dtc.content
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
 - person_id: p_chen
   role_id: common.member
   ranges: []

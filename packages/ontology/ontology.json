@@ -30,12 +30,13 @@
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
+    "packages/roles/roles/dtc/content.yml",
     "packages/roles/roles/dtc/live-chat.yml",
     "packages/roles/roles/dtc/store.yml",
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "ff9887133f1a594ecb576ac391e91e25",
+  "source_digest": "d18a512184621a9051d8572480d5cf32",
   "objects": [
     {
       "id": "ad_set",
@@ -421,6 +422,18 @@
       "contract": "ApprovalItem"
     },
     {
+      "id": "article",
+      "label": "博客文章",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "content",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_article", "shopify_admin.list_articles"],
+      "platforms": ["shopify"]
+    },
+    {
       "id": "assignment",
       "label": "岗位",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -521,6 +534,18 @@
       "read_ranges": ["assigned"],
       "properties": [],
       "read_via": ["klaviyo.get_campaign", "klaviyo.list_campaigns", "meta.list_campaigns"]
+    },
+    {
+      "id": "collection",
+      "label": "集合",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "product",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_collection", "shopify_admin.list_collections"],
+      "platforms": ["shopify"]
     },
     {
       "id": "company",
@@ -1050,6 +1075,18 @@
       "contract": "Goal"
     },
     {
+      "id": "inventory_item",
+      "label": "库存项",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "inventory",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"],
+      "platforms": ["shopify"]
+    },
+    {
       "id": "matter",
       "label": "事项",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -1517,6 +1554,18 @@
       "contract": "InstalledPackage"
     },
     {
+      "id": "page",
+      "label": "页面",
+      "key_format": "平台给的 id，原样存、不解析",
+      "domain": "content",
+      "source_of_truth": "platform_api",
+      "freshness": "cached:300",
+      "read_ranges": ["assigned"],
+      "properties": [],
+      "read_via": ["shopify_admin.get_page", "shopify_admin.list_pages"],
+      "platforms": ["shopify"]
+    },
+    {
       "id": "person",
       "label": "人",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -1732,6 +1781,49 @@
       "read_ranges": ["assigned"],
       "properties": [],
       "read_via": []
+    },
+    {
+      "id": "review",
+      "label": "评价",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "review",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "ReviewId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "schema_version",
+          "type": "1",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "approval_item_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "Review"
     },
     {
       "id": "scheduled_task",
@@ -2772,6 +2864,14 @@
   "links": [
     {
       "from": "approval_item",
+      "to": "article",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_article", "shopify_admin.list_articles"]
+    },
+    {
+      "from": "approval_item",
       "to": "assignment",
       "direction": "out",
       "cardinality": "one",
@@ -2785,6 +2885,14 @@
       "cardinality": "one",
       "via": "subject.object",
       "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "approval_item",
+      "to": "collection",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_collection", "shopify_admin.list_collections"]
     },
     {
       "from": "approval_item",
@@ -2804,6 +2912,14 @@
     },
     {
       "from": "approval_item",
+      "to": "inventory_item",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "approval_item",
       "to": "matter",
       "direction": "out",
       "cardinality": "one",
@@ -2820,6 +2936,14 @@
     },
     {
       "from": "approval_item",
+      "to": "page",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
+    },
+    {
+      "from": "approval_item",
       "to": "policy",
       "direction": "out",
       "cardinality": "one",
@@ -2833,6 +2957,22 @@
       "cardinality": "one",
       "via": "subject.object",
       "lookup": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "from": "approval_item",
+      "to": "review",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "review.approval_item_id",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "review",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
     },
     {
       "from": "approval_item",
@@ -2888,6 +3028,38 @@
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "article",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "article",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "article",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "article",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -2956,6 +3128,38 @@
     },
     {
       "from": "campaign",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "collection",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "collection",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "collection",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "collection",
       "to": "workflow_instance",
       "direction": "in",
       "cardinality": "many",
@@ -3080,6 +3284,38 @@
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "inventory_item",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "inventory_item",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "inventory_item",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "inventory_item",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -3227,6 +3463,38 @@
       "lookup": []
     },
     {
+      "from": "page",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "page",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "page",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "page",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
       "from": "person",
       "to": "assignment",
       "direction": "in",
@@ -3323,6 +3591,62 @@
       "lookup": []
     },
     {
+      "from": "review",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "review",
+      "to": "approval_item",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "approval_item_id",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "review",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "review",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": []
+    },
+    {
+      "from": "review",
+      "to": "todo",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "todo.origin.review_id",
+      "lookup": []
+    },
+    {
+      "from": "review",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "review",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "scheduled_task",
       "to": "assignment",
       "direction": "out",
@@ -3356,6 +3680,22 @@
     },
     {
       "from": "staged_change",
+      "to": "article",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_article", "shopify_admin.list_articles"]
+    },
+    {
+      "from": "staged_change",
+      "to": "article",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_article", "shopify_admin.list_articles"]
+    },
+    {
+      "from": "staged_change",
       "to": "assignment",
       "direction": "out",
       "cardinality": "one",
@@ -3380,6 +3720,22 @@
     },
     {
       "from": "staged_change",
+      "to": "collection",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_collection", "shopify_admin.list_collections"]
+    },
+    {
+      "from": "staged_change",
+      "to": "collection",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_collection", "shopify_admin.list_collections"]
+    },
+    {
+      "from": "staged_change",
       "to": "customer",
       "direction": "out",
       "cardinality": "one",
@@ -3412,6 +3768,22 @@
     },
     {
       "from": "staged_change",
+      "to": "inventory_item",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "staged_change",
+      "to": "inventory_item",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "staged_change",
       "to": "order",
       "direction": "out",
       "cardinality": "one",
@@ -3425,6 +3797,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["get_order", "orders.count"]
+    },
+    {
+      "from": "staged_change",
+      "to": "page",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
+    },
+    {
+      "from": "staged_change",
+      "to": "page",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
     },
     {
       "from": "staged_change",
@@ -3457,6 +3845,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "from": "staged_change",
+      "to": "review",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "review",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
     },
     {
       "from": "staged_change",
@@ -3620,6 +4024,14 @@
     },
     {
       "from": "todo",
+      "to": "review",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "origin.review_id",
+      "lookup": []
+    },
+    {
+      "from": "todo",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -3684,11 +4096,27 @@
     },
     {
       "from": "workflow_instance",
+      "to": "article",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_article", "shopify_admin.list_articles"]
+    },
+    {
+      "from": "workflow_instance",
       "to": "campaign",
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
       "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "collection",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_collection", "shopify_admin.list_collections"]
     },
     {
       "from": "workflow_instance",
@@ -3708,11 +4136,27 @@
     },
     {
       "from": "workflow_instance",
+      "to": "inventory_item",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "workflow_instance",
       "to": "order",
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
       "lookup": ["get_order", "orders.count"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "page",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
     },
     {
       "from": "workflow_instance",
@@ -3729,6 +4173,14 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_product", "shopify_admin.list_products"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "review",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -3860,6 +4312,14 @@
     },
     {
       "from": "workspace",
+      "to": "review",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "review.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
       "to": "scheduled_task",
       "direction": "in",
       "cardinality": "many",
@@ -3963,6 +4423,26 @@
       "what": "读 campaign"
     },
     {
+      "id": "shopify_admin.add_products_to_collection",
+      "object": "collection",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "collection_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "往手动集合里加商品"
+    },
+    {
+      "id": "shopify_admin.adjust_inventory_quantities",
+      "object": "inventory_item",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "inventory_adjust",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "在现有数量上加减（收货、报损）。`after.mode: adjust`，额内（max_inventory_adjust）可自动"
+    },
+    {
       "id": "shopify_admin.cancel_order",
       "object": "order",
       "source": "connector",
@@ -3970,6 +4450,16 @@
       "risk_class": "high",
       "requires_approval": true,
       "what": "取消一笔订单（含退款与恢复库存的选项）"
+    },
+    {
+      "id": "shopify_admin.create_article",
+      "object": "article",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "publish_post",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "写一篇博客文章。`after.published: false` 是草稿（L2），`true` 才是上线（永远 L1）"
     },
     {
       "id": "shopify_admin.create_automatic_discount",
@@ -3980,6 +4470,16 @@
       "risk_class": "medium",
       "requires_approval": true,
       "what": "建一个自动折扣（全店活动，不用输码）"
+    },
+    {
+      "id": "shopify_admin.create_collection",
+      "object": "collection",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "collection_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "建一个商品集合（手动或按条件）"
     },
     {
       "id": "shopify_admin.create_discount_code",
@@ -4000,6 +4500,16 @@
       "risk_class": "medium",
       "requires_approval": true,
       "what": "给订单建一次发货（补发也走这一条）"
+    },
+    {
+      "id": "shopify_admin.create_page",
+      "object": "page",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "建一个独立页面（关于我们、尺码表、政策页）"
     },
     {
       "id": "shopify_admin.create_product",
@@ -4068,6 +4578,24 @@
       "what": "删掉一份主题"
     },
     {
+      "id": "shopify_admin.get_article",
+      "object": "article",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 article"
+    },
+    {
+      "id": "shopify_admin.get_collection",
+      "object": "collection",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 collection"
+    },
+    {
       "id": "shopify_admin.get_customer",
       "object": "customer",
       "source": "connector",
@@ -4086,6 +4614,15 @@
       "what": "读 discount"
     },
     {
+      "id": "shopify_admin.get_inventory_item",
+      "object": "inventory_item",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 inventory_item"
+    },
+    {
       "id": "shopify_admin.get_order",
       "object": "order",
       "source": "connector",
@@ -4093,6 +4630,15 @@
       "risk_class": "low",
       "requires_approval": false,
       "what": "读 order"
+    },
+    {
+      "id": "shopify_admin.get_page",
+      "object": "page",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 page"
     },
     {
       "id": "shopify_admin.get_product",
@@ -4122,6 +4668,24 @@
       "what": "读 variant"
     },
     {
+      "id": "shopify_admin.list_articles",
+      "object": "article",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 article"
+    },
+    {
+      "id": "shopify_admin.list_collections",
+      "object": "collection",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 collection"
+    },
+    {
       "id": "shopify_admin.list_customers",
       "object": "customer",
       "source": "connector",
@@ -4140,6 +4704,15 @@
       "what": "读 discount"
     },
     {
+      "id": "shopify_admin.list_inventory_items",
+      "object": "inventory_item",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 inventory_item"
+    },
+    {
       "id": "shopify_admin.list_orders",
       "object": "order",
       "source": "connector",
@@ -4147,6 +4720,15 @@
       "risk_class": "low",
       "requires_approval": false,
       "what": "读 order"
+    },
+    {
+      "id": "shopify_admin.list_pages",
+      "object": "page",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 page"
     },
     {
       "id": "shopify_admin.list_products",
@@ -4187,6 +4769,26 @@
       "what": "把一份未发布的主题副本设成线上主题。实际走的是 Shopify CLI（`theme publish`）——GraphQL 那条要向官方申请豁免"
     },
     {
+      "id": "shopify_admin.remove_products_from_collection",
+      "object": "collection",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "collection_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "把商品从手动集合里拿掉"
+    },
+    {
+      "id": "shopify_admin.set_inventory_quantities",
+      "object": "inventory_item",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "inventory_adjust",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "把某个仓的可售数量直接设成一个值（盘点后对账用）。`after.mode: set`，永远人审"
+    },
+    {
       "id": "shopify_admin.set_metafields",
       "object": "product",
       "source": "connector",
@@ -4207,6 +4809,16 @@
       "what": "把商品从销售渠道上撤下来"
     },
     {
+      "id": "shopify_admin.update_article",
+      "object": "article",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "publish_post",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "what": "改一篇博客文章（含把草稿翻成已发布——那一下就是 51 §2.2 里说的\"发布 L1\"）"
+    },
+    {
       "id": "shopify_admin.update_automatic_discount",
       "object": "campaign",
       "source": "connector",
@@ -4215,6 +4827,16 @@
       "risk_class": "medium",
       "requires_approval": true,
       "what": "改自动折扣的力度或期限"
+    },
+    {
+      "id": "shopify_admin.update_collection",
+      "object": "collection",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "collection_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "改集合的标题、描述、排序规则"
     },
     {
       "id": "shopify_admin.update_discount_code",
@@ -4244,6 +4866,16 @@
       "risk_class": "medium",
       "requires_approval": true,
       "what": "改一笔未发货订单的收货地址"
+    },
+    {
+      "id": "shopify_admin.update_page",
+      "object": "page",
+      "source": "connector",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "what": "改页面正文或标题"
     },
     {
       "id": "shopify_admin.update_product",
@@ -4379,6 +5011,18 @@
       "what": "改收件地址"
     },
     {
+      "id": "stage_collection_edit",
+      "object": "product",
+      "source": "role",
+      "access": "write",
+      "change_kind": "collection_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.store"],
+      "what": "往集合里加 / 删商品"
+    },
+    {
       "id": "stage_dev_task",
       "object": "theme",
       "source": "role",
@@ -4398,20 +5042,32 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.support"],
-      "what": "stage discount code"
+      "roles": ["dtc.store", "dtc.support"],
+      "what": "建 / 改一个优惠码（营销发码）"
+    },
+    {
+      "id": "stage_inventory_adjust",
+      "object": "inventory_item",
+      "source": "role",
+      "access": "write",
+      "change_kind": "inventory_adjust",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.store"],
+      "what": "调库存（直接设定永远人审）"
     },
     {
       "id": "stage_listing_edit",
-      "object": "product",
+      "object": "theme",
       "source": "role",
       "access": "write",
       "change_kind": "listing_edit",
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.store"],
-      "what": "stage listing edit"
+      "roles": ["dtc.content", "dtc.store"],
+      "what": "改商品 / 页面的文案、图与 SEO"
     },
     {
       "id": "stage_page_edit",
@@ -4434,11 +5090,11 @@
       "requires_approval": true,
       "route_to": "scope_manager",
       "roles": ["dtc.store"],
-      "what": "stage price change"
+      "what": "改一件商品的价（超 20% 转人审）"
     },
     {
       "id": "stage_promotion",
-      "object": "discount",
+      "object": "campaign",
       "source": "role",
       "access": "write",
       "change_kind": "promotion",
@@ -4446,7 +5102,19 @@
       "requires_approval": true,
       "route_to": "owner",
       "roles": ["dtc.store"],
-      "what": "stage promotion"
+      "what": "建 / 改全站活动（永远人审）"
+    },
+    {
+      "id": "stage_publish_post",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "change_kind": "publish_post",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.content"],
+      "what": "写 / 发一篇博客文章（发布永远人审）"
     },
     {
       "id": "stage_publish_product",
@@ -4458,7 +5126,7 @@
       "requires_approval": true,
       "route_to": "scope_manager",
       "roles": ["dtc.store"],
-      "what": "stage publish product"
+      "what": "把商品上架（永远人审）"
     },
     {
       "id": "stage_publish_theme",
@@ -4469,7 +5137,7 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "owner",
-      "roles": ["site.builder"],
+      "roles": ["dtc.store", "site.builder"],
       "what": "发布主题"
     },
     {
@@ -4498,6 +5166,29 @@
       "what": "提一次补发"
     },
     {
+      "id": "stage_review_invite",
+      "object": "review",
+      "source": "role",
+      "access": "write",
+      "change_kind": "review_invite",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.store"],
+      "what": "给订单发邀评"
+    },
+    {
+      "id": "stage_review_reply",
+      "object": "review",
+      "source": "role",
+      "access": "write",
+      "change_kind": "review_reply",
+      "risk_class": "low",
+      "requires_approval": true,
+      "roles": ["dtc.store"],
+      "what": "起草一条评价回复"
+    },
+    {
       "id": "stage_theme_preview",
       "object": "theme",
       "source": "role",
@@ -4518,7 +5209,7 @@
       "requires_approval": true,
       "route_to": "role_holder",
       "roles": ["dtc.store"],
-      "what": "stage unpublish product"
+      "what": "把商品撤下（永远人审）"
     }
   ]
 }

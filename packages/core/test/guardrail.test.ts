@@ -286,10 +286,15 @@ describe('44 G2 target_in_range', () => {
 
   it('哪几种变更该问范围写在一张表里（补货计划等有 ChangeKind 时再加）', () => {
     expect([...TARGET_SCOPED_KINDS].sort()).toEqual([
+      // WP63（51 §2.1）：集合 / 库存 / 评价也顺着目标问得出"这归不归你管"
+      'collection_edit',
+      'inventory_adjust',
       'listing_edit',
       'price_change',
       'promotion',
       'publish_product',
+      'review_invite',
+      'review_reply',
       'unpublish_product',
     ])
   })

@@ -427,7 +427,7 @@ describe('46 §3 岗位与职责 → 清单', () => {
   })
 
   // WP62（51 §2 / 46 §1 表 ③）
-  it('「网站运营」岗位模板：一条店铺管理；清单里的店铺卡按平台走，选了别的平台就不出', async () => {
+  it('「网站运营」岗位模板：店铺管理 + 内容与博客；店铺卡按平台走，选了别的平台就不出', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
 
@@ -436,8 +436,12 @@ describe('46 §3 岗位与职责 → 清单', () => {
     >(await m.call('GET', '/v1/onboarding/positions'))
     const webOps = positions.find((p) => p.id === 'web-ops')
     expect(webOps?.name).toBe('网站运营')
-    // 51 §2 定的是四条；WP62 只放得下店铺管理这一条（其余三条跟 WP63 / WP64 的定义一起加）
-    expect(webOps?.roles.filter((r) => r.default).map((r) => r.id)).toEqual(['dtc.store'])
+    // 51 §2 定的是四条；WP62 放进店铺管理、WP63 补上内容与博客
+    // （邮件营销 / 订单履约跟 WP64 的定义一起加）
+    expect(webOps?.roles.filter((r) => r.default).map((r) => r.id)).toEqual([
+      'dtc.store',
+      'dtc.content',
+    ])
 
     // 默认 Shopify → 清单里有店铺卡
     const shopify = await data<PlanView>(

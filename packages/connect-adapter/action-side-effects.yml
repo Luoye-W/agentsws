@@ -65,6 +65,22 @@ actions:
   shopify_admin.list_returns: read
   shopify_admin.get_market: read
   shopify_admin.list_markets: read
+  # WP63（51 §2.1 店铺设置 / 数据日报）：店铺设置那一面的**只读**动作。
+  # 51 §2.1 与 N2 定死了：结账 / 支付 / 税这些设置 Agent 只准看、不给写动作，
+  # 人自己在后台改。所以这一组只有 read，写侧对照表里一条对应的都不会有。
+  shopify_admin.get_shop_policy: read
+  shopify_admin.list_shop_policies: read
+  shopify_admin.get_menu: read
+  shopify_admin.list_menus: read
+  shopify_admin.get_shipping_zone: read
+  shopify_admin.list_shipping_zones: read
+  shopify_admin.list_delivery_profiles: read
+  shopify_admin.get_payment_settings: read
+  shopify_admin.get_tax_settings: read
+  shopify_admin.list_payment_terms_templates: read
+  # 数据日报那一面：销售 / 订单 / 转化 / 流量的汇总口（明细仍走 list_orders）
+  shopify_admin.run_analytics_query: read
+  shopify_admin.get_sales_summary: read
 
   # 写侧：与 `src/shopify-actions.ts` 的对照表一一对应（那张表还回答"对应哪条 ChangeKind"）。
   # 标在这里不是为了"允许"，恰恰相反——默认就是 write，写出来是为了让人一眼看全

@@ -203,6 +203,13 @@ export interface RoleDefinition {
   home_blocks: HomeBlockSpec[]
   notifications: NotificationRule[]
   grounding?: GroundingRule[]
+  /**
+   * WP63（51 §2.1）：异常卡的阈值（销售骤降 / 库存断货 / 转化异常）。
+   *
+   * 与 `Mandate.caps` 的分工：caps 越了就**拦**（那是权限），阈值过了只**出一张卡**
+   * （那是提醒）。所以它不进 `EffectiveAction`，也不参与 guardrail。
+   */
+  thresholds?: Record<string, number>
   persona?: string
   handover: {
     transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]

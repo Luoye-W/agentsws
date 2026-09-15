@@ -608,6 +608,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——
     // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效
     loadBundledRole('site.builder'),
+    // WP63（51 §2）：网站运营岗位的两条职责。`dtc.store` 从 WP62 起就是内置的，
+    // WP63 把 15 人 pack 自带的那份副本删了——两份真源迟早会各改各的。
+    loadBundledRole('dtc.store'),
+    loadBundledRole('dtc.content'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))

@@ -86,8 +86,13 @@ interface PersonTemplate {
   role: string
   owner?: boolean
   scope_manager?: boolean
-  /** 兼岗：同一个人的第二个分配（05 §4「不做跨 Assignment 并集」的活证据） */
-  extra?: string
+  /**
+   * 兼岗：同一个人的第二（及以后）个分配（05 §4「不做跨 Assignment 并集」的活证据）。
+   *
+   * WP63 起可以给一串：3 人公司里那个"运营"一个人要管店铺管理 + 内容与博客，
+   * 这在真实的 3 人公司里是常态——岗位是活儿，不是人头。
+   */
+  extra?: string | string[]
   /** 这个人管哪几家店（不写 = 全部） */
   stores?: string[]
 }
@@ -222,7 +227,16 @@ const PEOPLE_3: PersonTemplate[] = [
     owner: true,
     extra: 'common.owner',
   },
-  { id: 'p_li', name: '李默', email: 'li@nordvolt.example', title: '运营', role: 'dtc.support' },
+  {
+    id: 'p_li',
+    name: '李默',
+    email: 'li@nordvolt.example',
+    title: '运营',
+    role: 'dtc.support',
+    // WP63（51 §2）：3 人公司里"运营"一个人把网站运营岗位的两条职责都挑了——
+    // 店铺管理 + 内容与博客。主分配仍是售后，因为入站的信先落在客服那条线上。
+    extra: ['dtc.store', 'dtc.content'],
+  },
   {
     id: 'p_chen',
     name: '陈晓',
@@ -278,118 +292,6 @@ function peopleFor(preset: SizePreset): PersonTemplate[] {
  * 两份的动作都挑了**低风险**的写动作（`listing_edit` / `pause_ad` / `negative_keyword`），
  * 这样 31 §3.4 的"只有 low 风险才可能超过 L1"在 15 人 pack 里是**能被走到**的一条路。
  */
-const ROLE_OPS = `# pack 自带的职责定义（05 §1）：店铺管理。
-# \`agentsws synth --size 15\` 生成；pack 自带的按 id 覆盖内置那一份。
-#
-# WP62（51 §2）：旧 id 是 \`dtc.ops\`（独立站运营）。别名表里记着这一跳，
-# 老 pack 与老库里的 \`dtc.ops\` 照样读得进来、启动时迁一次。
-id: dtc.store
-version: 1.0.0
-domain: dtc
-name: { zh: 店铺管理, en: DTC Store Management }
-description: 商品与详情页、上下架、价格与促销、活动日历、店铺配置
-
-scopes:
-  - { domain: product, ops: [read, stage], range: assigned, max_sensitivity: internal }
-  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
-  - { domain: discount, ops: [read, stage], range: assigned, max_sensitivity: internal }
-  - { domain: campaign, ops: [read], range: assigned, max_sensitivity: internal }
-  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
-  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
-  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
-
-connectors:
-  # 51 §1 N0：平台中立的 \`shop\`——按公司档案解析成 shopify_admin / woocommerce
-  - { kind: shop, required: true, grants: [read_products, write_products], ownership: workspace }
-
-actions:
-  - id: stage_listing_edit
-    target: product
-    kind: staged_change
-    requires_record_read: true
-    mandate: { caps: {}, window: { max_count: 50, per: day } }
-    route_to: scope_manager
-  - id: stage_price_change
-    target: product
-    kind: staged_change
-    requires_record_read: true
-    mandate: { caps: { max_price_delta_pct: 20 }, window: { max_count: 20, per: day } }
-    review_cannot_be_disabled: true
-    route_to: scope_manager
-  - id: stage_promotion
-    target: discount
-    kind: staged_change
-    mandate: { caps: { max_promotion_discount_pct: 50 }, window: { max_count: 5, per: day } }
-    route_to: owner
-  # WP44：Admin GraphQL 的上下架写口对应 15 §2 的 publish_product / unpublish_product。
-  # 上架是"让顾客能买到"，撤下是"让顾客买不到"——两件事都要有人点头，
-  # 但撤下更急（多半是发现了合规或质量问题），所以给到 role_holder 手上，别卡在主管那儿。
-  - id: stage_publish_product
-    target: product
-    kind: staged_change
-    requires_record_read: true
-    mandate: { caps: {}, window: { max_count: 20, per: day } }
-    route_to: scope_manager
-  - id: stage_unpublish_product
-    target: product
-    kind: staged_change
-    requires_record_read: true
-    mandate: { caps: {}, window: { max_count: 20, per: day } }
-    route_to: role_holder
-
-automation:
-  stage_listing_edit:
-    ceiling: L2
-    initial: L2
-    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
-    demotion_triggers: [guardrail_hit, manual]
-  stage_price_change:
-    ceiling: L1
-    initial: L1
-    hard_ceiling: true
-    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
-    demotion_triggers: [manual]
-  stage_promotion:
-    ceiling: L1
-    initial: L1
-    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
-    demotion_triggers: [manual]
-  stage_publish_product:
-    ceiling: L2
-    initial: L1
-    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
-    demotion_triggers: [guardrail_hit, manual]
-  stage_unpublish_product:
-    ceiling: L2
-    initial: L1
-    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
-    demotion_triggers: [guardrail_hit, manual]
-
-skills: []
-home_blocks:
-  - {
-      id: ops.pending_listings,
-      placement: queue,
-      component: staged_change_list,
-      query: changes.pending(dtc.store),
-      default_order: 10,
-      pinnable: true,
-      adaptive: true,
-    }
-notifications:
-  - {
-      event: 'approval.created:stage_price_change',
-      mode: queue,
-      recipients: [scope_manager],
-      escalate_after_hours: 24,
-    }
-handover:
-  transfers: [open_work_items, context, home_blocks]
-  fallback: scope_manager
-  revoke_context_on_removal: true
-requires: []
-`
-
 const ROLE_ADS = `# pack 自带的职责定义（05 §1）：投放。
 # \`agentsws synth --size 15\` 生成；内置职责表里没有这一份，所以它跟着 pack 走。
 id: ads.performance
@@ -471,10 +373,15 @@ handover:
 requires: []
 `
 
-const EXTRA_ROLES: { id: string; yaml: string }[] = [
-  { id: 'ads.performance', yaml: ROLE_ADS },
-  { id: 'dtc.store', yaml: ROLE_OPS },
-]
+/**
+ * pack 自带的职责定义（05 §1）。
+ *
+ * WP63：这里**只剩投放**。店铺管理（`dtc.store`）在 WP62 已经搬成内置职责
+ * （`packages/roles/roles/dtc/store.yml`），pack 再带一份就是第二份真源——
+ * WP63 要给它补齐五个能力面，两份就得改两处，改一处忘一处是迟早的事。
+ * 世界装配时它跟着 `loadBundledRole('dtc.store')` 进来，15 人 pack 一个字都不用带。
+ */
+const EXTRA_ROLES: { id: string; yaml: string }[] = [{ id: 'ads.performance', yaml: ROLE_ADS }]
 
 export interface SynthResult {
   dir: string
@@ -961,7 +868,7 @@ export function synth(options: SynthOptions): SynthResult {
   }[] = []
   let primaryTaken = false
   for (const p of templates) {
-    for (const role of [p.role, ...(p.extra === undefined ? [] : [p.extra])]) {
+    for (const role of [p.role, ...(p.extra === undefined ? [] : [p.extra].flat())]) {
       // 入站工作项默认落到第一条**主岗是售后**的分配。
       // 不能拿兼岗顶上：15 人公司里运营主管兼着售后，让他当 primary 的话
       // 「客服的卡没人理 → 升到运营主管」就变成升给他自己了，升级链看不出东西。

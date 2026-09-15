@@ -197,6 +197,14 @@ export const ROLE_SCHEMA: Node = Schema.object({
   home_blocks: Schema.array(HOME_BLOCK).required(),
   notifications: Schema.array(NOTIFICATION).required(),
   grounding: Schema.array(GROUNDING),
+  /**
+   * WP63（51 §2.1 异常卡）：这条职责判「不正常」用的那几个数。
+   *
+   * 为什么不写死在代码里：什么叫「销售骤降」，卖家具的和卖快消的不是一个数。
+   * 为什么不放进 `mandate.caps`：caps 是**额度**（越权就拦），阈值只决定
+   * 要不要出一张提醒卡，拦不住任何人。
+   */
+  thresholds: Schema.dict(Schema.number()),
   persona: Schema.string(),
   handover: HANDOVER,
   requires: Schema.array(Schema.string()),

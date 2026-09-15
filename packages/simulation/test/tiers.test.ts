@@ -203,10 +203,12 @@ describe('soak 档（26 §4）', () => {
 // ── 更大的合成公司 ────────────────────────────────────────────────────────
 
 describe('15 / 50 人 pack（26 §2 / 27）', () => {
-  it('15 人 pack：4 个岗位含投放与运营、2 家店、自带两份职责定义', () => {
+  it('15 人 pack：4 个岗位含投放与运营、2 家店、自带一份职责定义', () => {
     const p = loadPack(PACK_15)
     expect(p.people).toHaveLength(15)
-    expect(p.roles.map((r) => r.id).sort()).toEqual(['ads.performance', 'dtc.store'])
+    // WP63：`dtc.store` 从 WP62 起就是内置职责，pack 不再带第二份
+    // （带着的话 WP63 补五个能力面就得改两处）——只剩投放这一份内置表里没有的
+    expect(p.roles.map((r) => r.id).sort()).toEqual(['ads.performance'])
     const roleIds = new Set(p.assignments.map((a) => a.role_id))
     expect(roleIds).toContain('dtc.support')
     expect(roleIds).toContain('dtc.store')
@@ -256,7 +258,9 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
   it('50 人 pack：`synth --size 50` 能生成，且一条烟测场景在 fast 档跑得通（不进门禁）', async () => {
     const dir = join(tempDir(), 'dtc-50p')
     const out = synth({ size: 50, seed: 42, out: dir })
-    expect(out.files.has('roles/dtc.store.yml')).toBe(true)
+    // 投放那一份内置表里没有，所以 50 人 pack 仍要自带它
+    expect(out.files.has('roles/ads.performance.yml')).toBe(true)
+    expect(out.files.has('roles/dtc.store.yml')).toBe(false)
     const p = loadPack(dir)
     expect(p.people).toHaveLength(50)
     // 300 张生成订单 + WP55 追加的那张 Amazon 订单

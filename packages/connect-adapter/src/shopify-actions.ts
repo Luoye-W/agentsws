@@ -114,38 +114,36 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
   // ── 库存 ─────────────────────────────────────────────────────────────
   {
     action_id: 'shopify_admin.set_inventory_quantities',
+    change_kind: 'inventory_adjust',
     target: 'inventory_item',
     graphql: 'inventorySetQuantities（旧的 inventorySetOnHandQuantities 已弃用）',
-    what: '把某个仓的可售数量直接设成一个值（盘点后对账用）',
-    not_stageable:
-      '15 §2 里没有库存类 kind。它既不是 listing_edit（不改商品信息）也不是 price_change，' +
-      '而且改错会直接超卖 —— 需要一条自己的 `inventory_change`（含"单次调整上限"这类额度）。',
+    what: '把某个仓的可售数量直接设成一个值（盘点后对账用）。`after.mode: set`，永远人审',
   },
   {
     action_id: 'shopify_admin.adjust_inventory_quantities',
+    change_kind: 'inventory_adjust',
     target: 'inventory_item',
     graphql: 'inventoryAdjustQuantities',
-    what: '在现有数量上加减（收货、报损）',
-    not_stageable: '同上，缺 `inventory_change` kind。',
+    what: '在现有数量上加减（收货、报损）。`after.mode: adjust`，额内（max_inventory_adjust）可自动',
   },
   // ── 集合 ─────────────────────────────────────────────────────────────
   {
     action_id: 'shopify_admin.create_collection',
-    change_kind: 'listing_edit',
+    change_kind: 'collection_edit',
     target: 'collection',
     graphql: 'collectionCreate',
     what: '建一个商品集合（手动或按条件）',
   },
   {
     action_id: 'shopify_admin.update_collection',
-    change_kind: 'listing_edit',
+    change_kind: 'collection_edit',
     target: 'collection',
     graphql: 'collectionUpdate',
     what: '改集合的标题、描述、排序规则',
   },
   {
     action_id: 'shopify_admin.add_products_to_collection',
-    change_kind: 'listing_edit',
+    change_kind: 'collection_edit',
     target: 'collection',
     graphql:
       'collectionUpdate.sourcesToUpdate…inclusion.selectionsToAdd（旧 collectionAddProducts 已弃用）',
@@ -153,7 +151,7 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
   },
   {
     action_id: 'shopify_admin.remove_products_from_collection',
-    change_kind: 'listing_edit',
+    change_kind: 'collection_edit',
     target: 'collection',
     graphql: 'collectionUpdate…inclusion.selectionsToRemove（旧 collectionRemoveProducts 已弃用）',
     what: '把商品从手动集合里拿掉',
@@ -303,18 +301,26 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
   },
   {
     action_id: 'shopify_admin.create_article',
-    change_kind: 'listing_edit',
+    change_kind: 'publish_post',
     target: 'article',
     graphql: 'articleCreate',
-    what: '发一篇博客文章',
+    what: '写一篇博客文章。`after.published: false` 是草稿（L2），`true` 才是上线（永远 L1）',
   },
   {
     action_id: 'shopify_admin.update_article',
-    change_kind: 'listing_edit',
+    change_kind: 'publish_post',
     target: 'article',
     graphql: 'articleUpdate',
-    what: '改一篇博客文章',
+    what: '改一篇博客文章（含把草稿翻成已发布——那一下就是 51 §2.2 里说的"发布 L1"）',
   },
+  // ── 评价（WP63 / 51 §2.1 评价管理）───────────────────────────────────
+  //
+  // 这一节**故意是空的**。Shopify 原生没有商品评价，评价住在第三方应用里
+  // （Judge.me / Loox），所以 `review_reply` / `review_invite` 这两条 kind 在这张
+  // Shopify 表里没有对应动作——它们等评价应用的连接器（连接目录里已登记为"待增加"）。
+  //
+  // 为什么 kind 先加、动作后到：kind 是**额度与门禁挂靠的地方**（回复要先读过那条
+  // 评价、邀评要过合规词表）。这些规矩与哪个应用无关，先立下来，接哪家应用都照此办理。
 ]
 
 const BY_ACTION = new Map(SHOPIFY_WRITE_ACTIONS.map((a) => [a.action_id, a]))
