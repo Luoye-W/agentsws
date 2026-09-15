@@ -15,11 +15,14 @@ import type {
   Clock,
   Iso8601,
   Membership,
+  Organization,
+  OrganizationId,
   Person,
   PersonId,
   Workspace,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { brandNameOf } from '@agentsws/contracts'
 import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { ApiError } from './errors.js'
@@ -35,6 +38,7 @@ import {
   nameFromEmail,
   type TokenKind,
 } from './identity.js'
+import { createOrganizations, type Organizations, type OrgBackend } from './organizations.js'
 import { type Migration, migrate, schemaVersion } from './sqlite-migrations.js'
 import type { TokenInfo } from './types.js'
 
@@ -102,6 +106,18 @@ CREATE TABLE IF NOT EXISTS invitations (
 CREATE INDEX IF NOT EXISTS invitations_by_ws ON invitations (workspace_id);
 `,
   },
+  {
+    // WP65（52 O1）：公司 = 组织，工作区**上面**那一层。
+    // 品牌工作区不另开一张表——`org_id` 与 `brand` 就在 `workspaces.json` 里，
+    // 于是"这个品牌挂在哪个组织下"与工作区本身永远是同一次写、同一次读。
+    version: 3,
+    sql: `
+CREATE TABLE IF NOT EXISTS organizations (
+  id   TEXT PRIMARY KEY NOT NULL,
+  json TEXT NOT NULL
+) STRICT;
+`,
+  },
 ]
 
 export interface SqliteIdentityOptions {
@@ -164,12 +180,23 @@ interface LoginRow {
   used: number
 }
 
+/**
+ * 52 O1：库里的老行没有 `brand`（它是 WP65 才有的）。读的时候补上一份
+ * `{ name: 工作区名 }`——**只补不写**：真要落盘的那一下是 `attachWorkspaceToOrg`
+ * 或 `setBrand`，读一次不该改库。于是存量库不迁也能用，行为与上线前一致。
+ */
+function hydrateWorkspace(workspace: Workspace): Workspace {
+  if (workspace.brand !== undefined) return workspace
+  return { ...workspace, brand: { name: brandNameOf(workspace) } }
+}
+
 export class SqliteIdentityService implements LocalIdentityService {
   readonly #db: Db
   readonly #clock: Clock
   readonly #random: () => number
   readonly #loginTtl: number
   readonly #sessionTtl: number
+  readonly #organizations: Organizations
   #closed = false
 
   constructor(options: SqliteIdentityOptions) {
@@ -180,7 +207,64 @@ export class SqliteIdentityService implements LocalIdentityService {
     this.#db = new Database(options.dbPath ?? ':memory:')
     this.#db.pragma('journal_mode = WAL')
     migrate(this.#db, MIGRATIONS, this.#clock.now())
+    const backend: OrgBackend = {
+      get: (id) => {
+        const row = this.#db
+          .prepare<[string], { json: string }>('SELECT json FROM organizations WHERE id = ?')
+          .get(id)
+        return row === undefined ? undefined : (JSON.parse(row.json) as Organization)
+      },
+      put: (org) => {
+        this.#db
+          .prepare(
+            `INSERT INTO organizations (id, json) VALUES (?,?)
+             ON CONFLICT(id) DO UPDATE SET json = excluded.json`,
+          )
+          .run(org.id, JSON.stringify(org))
+      },
+      all: () =>
+        this.#db
+          .prepare<[], { json: string }>('SELECT json FROM organizations ORDER BY rowid')
+          .all()
+          .map((r) => JSON.parse(r.json) as Organization),
+    }
+    this.#organizations = createOrganizations({
+      clock: this.#clock,
+      backend,
+      nextId: (prefix) => this.#id(prefix),
+      hasPerson: (id) => this.#getPersonRow(id) !== undefined,
+      getWorkspace: (id) => this.#getWorkspace(id),
+      putWorkspace: (w) => {
+        this.#putWorkspace(w)
+      },
+      listWorkspaces: () => this.#listWorkspaces(),
+      workspacesOf: (id) => this.workspacesOf(id),
+      leaveWorkspace: (ws, person) => this.leaveWorkspace(ws, person),
+    })
   }
+
+  // ── 52 O1 组织面（逻辑在 organizations.ts，两档共用一份）────────────────
+
+  createOrganization: Organizations['createOrganization'] = (input) =>
+    this.#organizations.createOrganization(input)
+  getOrganization: Organizations['getOrganization'] = (id) =>
+    this.#organizations.getOrganization(id)
+  listOrganizations: Organizations['listOrganizations'] = () =>
+    this.#organizations.listOrganizations()
+  organizationsOf: Organizations['organizationsOf'] = (id) =>
+    this.#organizations.organizationsOf(id)
+  updateOrganization: Organizations['updateOrganization'] = (id, patch) =>
+    this.#organizations.updateOrganization(id, patch)
+  addOrganizationMember: Organizations['addOrganizationMember'] = (input) =>
+    this.#organizations.addOrganizationMember(input)
+  removeOrganizationMember: Organizations['removeOrganizationMember'] = (org, person) =>
+    this.#organizations.removeOrganizationMember(org, person)
+  brandsOf: Organizations['brandsOf'] = (org, person) => this.#organizations.brandsOf(org, person)
+  attachWorkspaceToOrg: Organizations['attachWorkspaceToOrg'] = (input) =>
+    this.#organizations.attachWorkspaceToOrg(input)
+  setBrand: Organizations['setBrand'] = (id, brand) => this.#organizations.setBrand(id, brand)
+  migrateWorkspace: Organizations['migrateWorkspace'] = (input) =>
+    this.#organizations.migrateWorkspace(input)
 
   get schemaVersion(): number {
     return schemaVersion(this.#db)
@@ -263,7 +347,23 @@ export class SqliteIdentityService implements LocalIdentityService {
     const row = this.#db
       .prepare<[string], { json: string }>('SELECT json FROM workspaces WHERE id = ?')
       .get(id)
-    return row === undefined ? undefined : (JSON.parse(row.json) as Workspace)
+    return row === undefined ? undefined : hydrateWorkspace(JSON.parse(row.json) as Workspace)
+  }
+
+  #putWorkspace(workspace: Workspace): void {
+    this.#db
+      .prepare(
+        `INSERT INTO workspaces (id, json) VALUES (?,?)
+         ON CONFLICT(id) DO UPDATE SET json = excluded.json`,
+      )
+      .run(workspace.id, JSON.stringify(workspace))
+  }
+
+  #listWorkspaces(): Workspace[] {
+    return this.#db
+      .prepare<[], { json: string }>('SELECT json FROM workspaces ORDER BY rowid')
+      .all()
+      .map((r) => hydrateWorkspace(JSON.parse(r.json) as Workspace))
   }
 
   // ───────────────────────────── 人
@@ -314,6 +414,10 @@ export class SqliteIdentityService implements LocalIdentityService {
     kind: Workspace['kind']
     tz?: string
     base_currency?: string
+    /** 52 O1：建出来就挂在这个组织下（"加一个品牌"走的就是它）。 */
+    org_id?: OrganizationId
+    /** 52 O1：品牌名；不给就等于工作区名。 */
+    brand_name?: string
   }): Promise<Workspace> {
     if (this.#getPersonRow(input.owner_id) === undefined)
       throw new ApiError('not_found', `owner 不存在：${input.owner_id}`)
@@ -324,6 +428,9 @@ export class SqliteIdentityService implements LocalIdentityService {
       schema_version: 1,
       kind: input.kind,
       name: input.name,
+      ...(input.org_id === undefined ? {} : { org_id: input.org_id }),
+      // 52 O1：品牌名默认等于工作区名——顶栏切换器从建出来那一刻就有得显示
+      brand: { name: input.brand_name?.trim() || input.name },
       tz: input.tz ?? 'Asia/Shanghai',
       base_currency: input.base_currency ?? 'USD',
       runtime: { mode: 'local', endpoint: 'local' },
@@ -505,7 +612,7 @@ export class SqliteIdentityService implements LocalIdentityService {
           ORDER BY m.rowid`,
       )
       .all(person_id)
-      .map((r) => JSON.parse(r.json) as Workspace)
+      .map((r) => hydrateWorkspace(JSON.parse(r.json) as Workspace))
   }
 
   // ───────────────────────────── magic link（20 §2）

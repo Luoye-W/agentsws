@@ -12,6 +12,8 @@ import type {
   IdentityService,
   Iso8601,
   Membership,
+  Organization,
+  OrganizationId,
   Person,
   PersonId,
   RangeRef,
@@ -20,6 +22,7 @@ import type {
   WorkspacePolicy,
 } from '@agentsws/contracts'
 import { ApiError } from './errors.js'
+import { createOrganizations, type Organizations, type OrgBackend } from './organizations.js'
 import type { TokenInfo } from './types.js'
 
 export type TokenKind = 'session' | 'api_key' | 'runtime' | 'internal'
@@ -117,9 +120,30 @@ function constantTimeEqual(a: string, b: string): boolean {
  * 契约 `IdentityService` 之外，本地档还提供同步的 `issue` / `revoke` 与两个查询，
  * 一致性套件与 `apps/server` 都按这个接口写，换档不改调用方。
  */
-export interface LocalIdentityService extends IdentityService {
+/**
+ * 52 O1：本地档身份服务 = 20 的身份面 + WP65 的**组织面**。
+ *
+ * 组织面整份逻辑在 `organizations.ts`（两档共用一份），这里只是把它挂上来——
+ * 于是"换一档存储"这件事不需要把组织的规矩再想一遍。
+ */
+export interface LocalIdentityService extends IdentityService, Organizations {
   /** `id` 只给装配用（demo / 模拟世界要让身份的 person_id 与职责库里的人对上）。 */
   createPerson(input: { email: string; name: string; id?: PersonId }): Promise<Person>
+  /**
+   * 52 O1：本地档的建工作区多两样——`org_id`（建出来就挂在这个组织下，"加一个品牌"
+   * 走的就是它）与 `brand_name`（不给就等于工作区名）。契约的那一版没有它们，
+   * 于是这里把签名放宽，**只加不改**：老调用方一个字不用动。
+   */
+  createWorkspace(input: {
+    name: string
+    owner_id: PersonId
+    kind: Workspace['kind']
+    tz?: string
+    base_currency?: string
+    id?: WorkspaceId
+    org_id?: OrganizationId
+    brand_name?: string
+  }): Promise<Workspace>
   personByEmail(email: string): Person | undefined
   workspacesOf(person_id: PersonId): Workspace[]
   issue(
@@ -228,6 +252,9 @@ export class MemoryIdentityService implements LocalIdentityService {
   readonly #logins = new Map<string, LoginRow>()
   /** 邀请：键是 token 的 sha256，明文一次都不留 */
   readonly #invites = new Map<string, Invitation>()
+  /** 52 O1：组织（公司）。品牌工作区靠 `Workspace.org_id` 指回来。 */
+  readonly #orgs = new Map<OrganizationId, Organization>()
+  readonly #organizations: Organizations
   #seq = 0
 
   constructor(options: MemoryIdentityOptions) {
@@ -235,7 +262,50 @@ export class MemoryIdentityService implements LocalIdentityService {
     this.#random = options.random
     this.#loginTtl = options.loginTtlMs ?? DEFAULT_LOGIN_TTL
     this.#sessionTtl = options.sessionTtlMs ?? DEFAULT_SESSION_TTL
+    const backend: OrgBackend = {
+      get: (id) => this.#orgs.get(id),
+      put: (org) => {
+        this.#orgs.set(org.id, org)
+      },
+      all: () => [...this.#orgs.values()],
+    }
+    this.#organizations = createOrganizations({
+      clock: this.#clock,
+      backend,
+      nextId: (prefix) => this.#id(prefix),
+      hasPerson: (id) => this.#people.has(id),
+      getWorkspace: (id) => this.#workspaces.get(id),
+      putWorkspace: (w) => {
+        this.#workspaces.set(w.id, w)
+      },
+      listWorkspaces: () => [...this.#workspaces.values()],
+      workspacesOf: (id) => this.workspacesOf(id),
+      leaveWorkspace: (ws, person) => this.leaveWorkspace(ws, person),
+    })
   }
+
+  // ── 52 O1 组织面（逻辑在 organizations.ts，两档共用一份）────────────────
+
+  createOrganization: Organizations['createOrganization'] = (input) =>
+    this.#organizations.createOrganization(input)
+  getOrganization: Organizations['getOrganization'] = (id) =>
+    this.#organizations.getOrganization(id)
+  listOrganizations: Organizations['listOrganizations'] = () =>
+    this.#organizations.listOrganizations()
+  organizationsOf: Organizations['organizationsOf'] = (id) =>
+    this.#organizations.organizationsOf(id)
+  updateOrganization: Organizations['updateOrganization'] = (id, patch) =>
+    this.#organizations.updateOrganization(id, patch)
+  addOrganizationMember: Organizations['addOrganizationMember'] = (input) =>
+    this.#organizations.addOrganizationMember(input)
+  removeOrganizationMember: Organizations['removeOrganizationMember'] = (org, person) =>
+    this.#organizations.removeOrganizationMember(org, person)
+  brandsOf: Organizations['brandsOf'] = (org, person) => this.#organizations.brandsOf(org, person)
+  attachWorkspaceToOrg: Organizations['attachWorkspaceToOrg'] = (input) =>
+    this.#organizations.attachWorkspaceToOrg(input)
+  setBrand: Organizations['setBrand'] = (id, brand) => this.#organizations.setBrand(id, brand)
+  migrateWorkspace: Organizations['migrateWorkspace'] = (input) =>
+    this.#organizations.migrateWorkspace(input)
 
   #id(prefix: string): string {
     this.#seq += 1
@@ -298,6 +368,10 @@ export class MemoryIdentityService implements LocalIdentityService {
     base_currency?: string
     /** 同 `createPerson.id`：只给装配用。 */
     id?: WorkspaceId
+    /** 52 O1：建出来就挂在这个组织下（"加一个品牌"走的就是它）。 */
+    org_id?: OrganizationId
+    /** 52 O1：品牌名；不给就等于工作区名。 */
+    brand_name?: string
   }): Promise<Workspace> {
     if (!this.#people.has(input.owner_id))
       throw new ApiError('not_found', `owner 不存在：${input.owner_id}`)
@@ -308,6 +382,9 @@ export class MemoryIdentityService implements LocalIdentityService {
       schema_version: 1,
       kind: input.kind,
       name: input.name,
+      ...(input.org_id === undefined ? {} : { org_id: input.org_id }),
+      // 52 O1：品牌名默认等于工作区名——顶栏切换器从建出来那一刻就有得显示
+      brand: { name: input.brand_name?.trim() || input.name },
       tz: input.tz ?? 'Asia/Shanghai',
       base_currency: input.base_currency ?? 'USD',
       runtime: { mode: 'local', endpoint: 'local' },

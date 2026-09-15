@@ -76,6 +76,20 @@ export {
   type OpenApiDocument,
   toOpenApiPath,
 } from './openapi.js'
+export {
+  type AttachWorkspaceInput,
+  type CreateOrganizationInput,
+  canAdministerOrganization,
+  createOrganizations,
+  type MigratedWorkspace,
+  type OrganizationPatch,
+  type OrganizationRole,
+  type Organizations,
+  type OrganizationsOptions,
+  type OrgBackend,
+  organizationRoleOf,
+  type RemovedOrganizationMember,
+} from './organizations.js'
 export { DEFAULT_RATE_LIMITS, type RateLimitVerdict, TokenBucketLimiter } from './rate-limit.js'
 export {
   type AuthzSpec,
@@ -256,6 +270,20 @@ export type {
   WorkspacePolicyView,
 } from './routes/org.js'
 export { MIN_ORG_DUPLICATE_REASON, orgRoutes, positionName } from './routes/org.js'
+export type {
+  BrandCopyView,
+  BrandSwitchView,
+  BrandView,
+  CreateBrandInput,
+  OrganizationActor,
+  OrganizationInviteView,
+  OrganizationMemberView,
+  OrganizationOffboardView,
+  OrganizationProfileInput,
+  OrganizationsPort,
+  OrganizationView,
+} from './routes/organizations.js'
+export { organizationRoutes } from './routes/organizations.js'
 export {
   type PrivacyEraseStepView,
   type PrivacyEraseView,

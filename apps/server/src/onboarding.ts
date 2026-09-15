@@ -131,47 +131,77 @@ export function storefrontPlatformChoices(): {
 /* 档案存储                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * WP65（52 O1）：档案是**按品牌**存的。
+ *
+ * 52 之前一个服务进程只有一个工作区，于是档案是一张单行表（`id = 1`）。
+ * 品牌变成顶层之后，「你卖的是」与「网站是用什么搭的」是**每个品牌各一份**的
+ * （一个公司可以既卖实物又卖虚拟、既有 Shopify 站也有自己搭的站），所以这里
+ * 按 `workspace_id` 分行。公司级那三样（全称 / 域名 / 发现开关）已经上提到组织，
+ * 档案里那三个位只是同步写下来的一份影子（契约只加不删）。
+ */
 interface ProfileBackend {
-  get(): WorkspaceProfile | undefined
-  put(p: WorkspaceProfile): void
+  get(workspace_id: WorkspaceId): WorkspaceProfile | undefined
+  put(workspace_id: WorkspaceId, p: WorkspaceProfile): void
   close(): void
 }
 
 function createMemoryProfileBackend(): ProfileBackend {
-  let profile: WorkspaceProfile | undefined
+  const profiles = new Map<WorkspaceId, WorkspaceProfile>()
   return {
-    get: () => (profile === undefined ? undefined : { ...profile }),
-    put: (p) => {
-      profile = { ...p }
+    get: (ws) => {
+      const found = profiles.get(ws)
+      return found === undefined ? undefined : { ...found }
+    },
+    put: (ws, p) => {
+      profiles.set(ws, { ...p })
     },
     close: () => {
-      profile = undefined
+      profiles.clear()
     },
   }
 }
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS onboarding_profile (id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS onboarding_profiles (workspace_id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
 `
 
-function createSqliteProfileBackend(dbPath: string): ProfileBackend {
+/**
+ * `defaultWorkspace` 是**迁移用的**：老库里那一行（`id = 1`）不知道自己属于谁，
+ * 第一次打开时把它认到这个工作区名下。搬完老表**不删**——回滚到上一版还要读它。
+ */
+function createSqliteProfileBackend(dbPath: string, defaultWorkspace: WorkspaceId): ProfileBackend {
   const require = createRequire(import.meta.url)
   const Database = require('better-sqlite3') as typeof BetterSqlite3
   const db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.exec(SCHEMA)
   const put = db.prepare(
-    'INSERT INTO onboarding_profile (id, json) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json',
+    'INSERT INTO onboarding_profiles (workspace_id, json) VALUES (?, ?) ON CONFLICT(workspace_id) DO UPDATE SET json = excluded.json',
   )
+  const read = (ws: WorkspaceId): WorkspaceProfile | undefined => {
+    const row = db.prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?').get(ws) as
+      | { json: string }
+      | undefined
+    return row === undefined ? undefined : (JSON.parse(row.json) as WorkspaceProfile)
+  }
+  // 一次性搬家：老的单行表 → 这个工作区那一行（已经有就不覆盖）
+  if (read(defaultWorkspace) === undefined) {
+    const legacy = db.prepare('SELECT json FROM onboarding_profile WHERE id = 1').get() as
+      | { json: string }
+      | undefined
+    if (legacy !== undefined) put.run(defaultWorkspace, legacy.json)
+  }
   return {
-    get: () => {
-      const row = db.prepare('SELECT json FROM onboarding_profile WHERE id = 1').get() as
-        | { json: string }
-        | undefined
-      return row === undefined ? undefined : (JSON.parse(row.json) as WorkspaceProfile)
-    },
-    put: (p) => {
-      put.run(JSON.stringify(p))
+    get: read,
+    put: (ws, p) => {
+      put.run(ws, JSON.stringify(p))
+      // 老库回滚兜底：当前这个工作区的那一份照旧也写进单行表
+      if (ws === defaultWorkspace)
+        db.prepare(
+          'INSERT INTO onboarding_profile (id, json) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json',
+        ).run(JSON.stringify(p))
     },
     close: () => {
       db.close()
@@ -227,6 +257,23 @@ export interface OnboardingOptions {
    * **懒取**——Join 装在本模块之后，要到真用的时候才拿得到。不给就走兜底（只记事件）。
    */
   join?: () => JoinPort | undefined
+  /**
+   * WP65（52 O1 / O3）：这个品牌挂在哪个组织下。
+   *
+   * 公司级那三样（全称 / 域名 / 发现开关）**读以组织为准**——档案里那三个位
+   * 已经 `@deprecated`，留着只是为了契约只加不删。**懒取**：组织在本模块之后装配。
+   * 不给（还没迁过的机器）就退回读档案，行为与这一版上线前一模一样。
+   */
+  organization?: () => OrganizationProfile | undefined
+  /** 写公司档案时同步写组织（52 O1「写时同步写组织」）。 */
+  updateOrganization?: (patch: OrganizationProfile) => void
+}
+
+/** 52 O1：公司级那三样的最小面（组织与档案共用同一个形状）。 */
+export interface OrganizationProfile {
+  legal_name: string
+  domain?: string
+  discoverable: boolean
 }
 
 export interface OnboardingAssembly {
@@ -247,6 +294,32 @@ export interface OnboardingAssembly {
    * 所以它是**被读的**而不是被传的：用户在设置页改完，下一次刷新就用新的那一套。
    */
   storefrontPlatform(): StorefrontPlatform | undefined
+  /**
+   * WP65（52 O1）：**某个品牌**的品牌级档案（「你卖的是」「网站是用什么搭的」）。
+   *
+   * 与上面那两个的区别只有一条：那两个问的是"当前这个品牌"，这一个能问任何一个品牌
+   * ——组织页的品牌一览要一行一行地显示它们。
+   */
+  brandProfile(workspace_id: WorkspaceId): {
+    vertical?: WorkspaceVertical
+    storefront_platform?: StorefrontPlatform
+  }
+  /**
+   * WP65（52 O1）：公司级那三样的当前值（读以组织为准，还没迁过就是档案里那一份）。
+   *
+   * 启动时的一次性迁移用它——建组织要的正是档案里的全称、域名与发现开关。
+   */
+  companyProfile(): OrganizationProfile | undefined
+  /**
+   * 建一个新品牌时把品牌级那两样写下来（52 O4 第 ① 步的下半块）。
+   *
+   * 公司级三样从组织抄一份影子过来——档案里那三个位已经 `@deprecated`，
+   * 但它们仍是 `WorkspaceProfile` 的必填位，不能空着。
+   */
+  setBrandProfile(
+    workspace_id: WorkspaceId,
+    input: { vertical?: WorkspaceVertical; storefront_platform?: StorefrontPlatform },
+  ): void
   discovery: Discovery
   invites: InvitesAssembly
   close(): void
@@ -257,7 +330,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   const backend =
     options.dbDir === undefined
       ? createMemoryProfileBackend()
-      : createSqliteProfileBackend(join(options.dbDir, 'onboarding.sqlite'))
+      : createSqliteProfileBackend(join(options.dbDir, 'onboarding.sqlite'), options.workspace_id)
 
   const emit = (type: string, actor: PersonId, payload: Record<string, unknown>): void => {
     appendEvent({
@@ -270,10 +343,28 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     })
   }
 
-  const profileOf = (): WorkspaceProfile | undefined => backend.get()
-  const keyOf = (): string | undefined => {
+  /** 不给就是**当前这个品牌**的档案（`options.workspace_id`）。 */
+  const profileOf = (ws: WorkspaceId = workspace_id): WorkspaceProfile | undefined =>
+    backend.get(ws)
+  /**
+   * 52 O1：公司级那三样以**组织**为准，档案只是影子。
+   * 还没迁过（没装配组织）就退回读档案——存量机器的行为一个字节不变。
+   */
+  const companyOf = (): OrganizationProfile | undefined => {
+    const org = options.organization?.()
+    if (org !== undefined) return org
     const p = profileOf()
-    return p === undefined ? undefined : companyKey(p.legal_name, p.domain)
+    return p === undefined
+      ? undefined
+      : {
+          legal_name: p.legal_name,
+          ...(p.domain === undefined ? {} : { domain: p.domain }),
+          discoverable: p.discoverable,
+        }
+  }
+  const keyOf = (): string | undefined => {
+    const c = companyOf()
+    return c === undefined ? undefined : companyKey(c.legal_name, c.domain)
   }
 
   /** 对外的展示名："王岚的工作区 · 3 人"。owner 的名字 + 人数，没有名单。 */
@@ -289,7 +380,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     workspace_id,
     appendEvent,
     companyKey: keyOf,
-    enabled: () => profileOf()?.discoverable === true,
+    enabled: () => companyOf()?.discoverable === true,
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
     ...(options.helloFetch === undefined ? {} : { helloFetch: options.helloFetch }),
@@ -314,10 +405,14 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     ...(options.dbDir === undefined ? {} : { dbDir: options.dbDir }),
   })
 
+  /** 52 O1：展示用的公司级三样以组织为准（档案里那三个位只是影子）。 */
   const viewOf = (p: WorkspaceProfile): WorkspaceProfileView => ({
-    legal_name: p.legal_name,
-    ...(p.domain === undefined ? {} : { domain: p.domain }),
-    discoverable: p.discoverable,
+    legal_name: companyOf()?.legal_name ?? p.legal_name,
+    ...(() => {
+      const domain = companyOf()?.domain ?? p.domain
+      return domain === undefined ? {} : { domain }
+    })(),
+    discoverable: companyOf()?.discoverable ?? p.discoverable,
     // 48 v2 L2：没设过就是实物——存量档案里没有这个字段，它们的行为不许变
     vertical: p.vertical ?? 'goods',
     // WP62（51 §1 N0）：没设过就是 Shopify——存量档案里没有这个字段，它们的行为不许变
@@ -464,7 +559,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
 
   const port: OnboardingPort = {
     async state(actor) {
-      const profile = profileOf()
+      // 52 O1：档案是按品牌存的——看的是**这个人这会儿开着的那个品牌**
+      const profile = profileOf(actor.workspace_id)
       const members = await options.members()
       const me = members.find((m) => m.person_id === actor.person_id)
       // 46 §1 末段：向导只出现在"还没设过公司名"的时候；已经有别人的分配了就更不该弹
@@ -473,6 +569,12 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         .filter((a) => a.revoked_at === undefined && a.person_id !== options.owner).length
       const runtime = discovery.status()
       return {
+        /*
+         * 46 §1 末段的判据一个字没改：**这个品牌的档案设过没有**。
+         *
+         * 52 O1 之后每个工作区启动时都会挂上一个组织（迁移建的那个用工作区名占位），
+         * 所以"有没有组织"**不能**当判据——真正的判据仍然是有没有人填过第 ① 步。
+         */
         needs_setup: profile === undefined && others === 0,
         workspace_name: options.workspaceName(),
         ...(profile === undefined ? {} : { profile: viewOf(profile) }),
@@ -481,7 +583,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         is_owner: actor.person_id === options.owner,
         discovery: {
           available: runtime.available,
-          enabled: profile?.discoverable === true,
+          enabled: companyOf()?.discoverable === true,
           ...(runtime.reason === undefined ? {} : { reason: runtime.reason }),
         },
         // 46 §1 ①「你卖的是」：选项与 tooltip 都从垂直包读，界面不自己写一份文案
@@ -494,7 +596,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     setProfile(actor, input: WorkspaceProfileInput) {
       const legal_name = input.legal_name.trim()
       if (legal_name === '') throw new OnboardingError('invalid_input', '公司全称不能是空的')
-      const previous = profileOf()
+      const previous = profileOf(actor.workspace_id)
+      const company = companyOf()
       const domain = normalizeDomain(input.domain)
       // 48 v2 L2：不给就沿用上一次；从来没设过就是实物
       const vertical = normalizeVertical(input.vertical) ?? previous?.vertical
@@ -504,12 +607,21 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
-        discoverable: input.discoverable ?? previous?.discoverable ?? true,
+        discoverable: input.discoverable ?? company?.discoverable ?? previous?.discoverable ?? true,
         ...(vertical === undefined ? {} : { vertical }),
         ...(storefront_platform === undefined ? {} : { storefront_platform }),
         set_at: clock.now(),
       }
-      backend.put(next)
+      backend.put(actor.workspace_id, next)
+      /*
+       * 52 O1「写时同步写组织」：公司级那三样的真源是组织，档案里那一份只是影子。
+       * 两边一起写，于是无论谁先读到的都是同一套；读的时候一律以组织为准。
+       */
+      options.updateOrganization?.({
+        legal_name: next.legal_name,
+        ...(next.domain === undefined ? {} : { domain: next.domain }),
+        discoverable: next.discoverable,
+      })
       // 21 §5：日志里只有归一化后的哈希与"有没有域名"，**全称不进日志**
       emit('workspace.profile_set', actor.person_id, {
         company_key: companyKey(next.legal_name, next.domain),
@@ -519,8 +631,15 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // WP62（51 §1 N0）：平台不是秘密，进日志（换平台是一次会影响所有店铺读写的变更）
         storefront_platform: next.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
       })
-      // 开关变了就真的开 / 关：关掉 = 停广播、停监听、清掉看见过的同伴
-      if (previous?.discoverable !== next.discoverable || previous === undefined) {
+      /*
+       * 开关变了就真的开 / 关：关掉 = 停广播、停监听、清掉看见过的同伴。
+       *
+       * 比的是**档案上一次的值**，不是组织上的——迁移建出来的那个组织带着一个
+       * `discoverable: true` 的占位，拿它当"上一次"会让第一次设置不再触发开广播。
+       * 从组织那一侧改开关走的是另一条路（`/v1/orgs/:id` → `onCompanyChanged`）。
+       */
+      const before = previous?.discoverable
+      if (before !== next.discoverable || before === undefined) {
         if (next.discoverable) discovery.enable(actor.person_id)
         else discovery.disable(actor.person_id)
       } else if (next.discoverable) {
@@ -631,8 +750,32 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   return {
     port,
     companyKey: keyOf,
+    companyProfile: () => companyOf(),
     vertical: () => profileOf()?.vertical,
     storefrontPlatform: () => profileOf()?.storefront_platform,
+    brandProfile(ws) {
+      const p = profileOf(ws)
+      return {
+        ...(p?.vertical === undefined ? {} : { vertical: p.vertical }),
+        ...(p?.storefront_platform === undefined
+          ? {}
+          : { storefront_platform: p.storefront_platform }),
+      }
+    },
+    setBrandProfile(ws, input) {
+      const company = companyOf()
+      const previous = profileOf(ws)
+      backend.put(ws, {
+        legal_name: company?.legal_name ?? previous?.legal_name ?? options.workspaceName(),
+        ...(company?.domain === undefined ? {} : { domain: company.domain }),
+        discoverable: company?.discoverable ?? previous?.discoverable ?? true,
+        ...(input.vertical === undefined ? {} : { vertical: input.vertical }),
+        ...(input.storefront_platform === undefined
+          ? {}
+          : { storefront_platform: input.storefront_platform }),
+        set_at: clock.now(),
+      })
+    },
     discovery,
     invites,
     close() {
