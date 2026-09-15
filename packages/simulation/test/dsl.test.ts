@@ -59,6 +59,44 @@ describe('场景 DSL 解析（26 §1）', () => {
     ).toThrow(ScenarioSchemaError)
   })
 
+  // WP62（51 §1 N0）
+  it('dataset.storefront_platform：不写 = 跟 pack 走；只认那四个', () => {
+    expect(parseScenario(MINIMAL, 't.yml').dataset.storefront_platform).toBeUndefined()
+
+    const woo = parseScenario(
+      MINIMAL.replace('seed: 42 }', 'seed: 42, storefront_platform: woocommerce }'),
+      't.yml',
+    )
+    expect(woo.dataset.storefront_platform).toBe('woocommerce')
+
+    expect(() =>
+      parseScenario(
+        MINIMAL.replace('seed: 42 }', 'seed: 42, storefront_platform: bigcommerce }'),
+        't.yml',
+      ),
+    ).toThrow(ScenarioSchemaError)
+  })
+
+  // WP62（51 §1 N0）：一次问三处（面板 / 工具 / 清单）
+  it('org.platform_check 与 expected.platform_unsupported 解析得出来', () => {
+    const s = parseScenario(
+      `${MINIMAL}`.replace(
+        'invariants: [prompt_replayable]',
+        `  - at: '+2h'
+    org.platform_check: { who: p_wang, role: dtc.support }
+expected:
+  platform_unsupported: [p_wang]
+invariants: [prompt_replayable]`,
+      ),
+      't.yml',
+    )
+    expect(s.events.at(-1)).toMatchObject({
+      type: 'org.platform_check',
+      platform_check: { who: 'p_wang', role: 'dtc.support' },
+    })
+    expect(s.expected?.platform_unsupported).toEqual(['p_wang'])
+  })
+
   it('pack 自带的六条场景全部能解析', () => {
     for (const rel of [
       'aftersales/return-within-window',

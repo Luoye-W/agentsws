@@ -12,6 +12,7 @@ import type {
   PersonId,
   RangeRef,
   RoleId,
+  StorefrontPlatform,
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
@@ -61,6 +62,11 @@ export interface PackWorkspace {
    * 不写就是实物——既有 pack 的 `workspace.yml` 里没有这一行，它们一个字节都不变。
    */
   vertical?: WorkspaceVertical
+  /**
+   * WP62（51 §1 N0）：这个工作区的网站是用什么搭的（公司档案里那一格）。
+   * 不写就是 Shopify——既有 pack 的 `workspace.yml` 里没有这一行，它们一个字节都不变。
+   */
+  storefront_platform?: StorefrontPlatform
 }
 
 export interface PackPerson {

@@ -134,12 +134,21 @@ export async function runScenario(
     loadPack(options.packDir ?? `${options.packsDir ?? 'packs'}/${scenario.dataset.pack}`)
   // WP54（48 v2 L2）：`dataset.vertical` 只对这条场景覆盖工作区的「你卖的是」。
   // 同一份合成公司（人、店、订单）在两个垂直下复用，不为一条回归题再生成一整套。
+  // WP62（51 §1 N0）：`dataset.storefront_platform` 同理，只对这条场景覆盖网站平台。
   const pack =
-    scenario.dataset.vertical === undefined
+    scenario.dataset.vertical === undefined && scenario.dataset.storefront_platform === undefined
       ? loaded
       : {
           ...loaded,
-          workspace: { ...loaded.workspace, vertical: scenario.dataset.vertical },
+          workspace: {
+            ...loaded.workspace,
+            ...(scenario.dataset.vertical === undefined
+              ? {}
+              : { vertical: scenario.dataset.vertical }),
+            ...(scenario.dataset.storefront_platform === undefined
+              ? {}
+              : { storefront_platform: scenario.dataset.storefront_platform }),
+          },
         }
 
   // realistic 档默认走 direct 运行时：stub 运行时压根不看模型说了什么，
@@ -1080,6 +1089,24 @@ async function execute(
           role: event.scope_check.role,
           orders: seen.orders,
           products: seen.products,
+        })
+        return
+      }
+      // ── WP62 平台前置（51 §1 N0）──────────────────────────────────
+      case 'org.platform_check': {
+        const out = await world.org.platformCheck(
+          event.platform_check.who,
+          event.platform_check.role,
+        )
+        world.appendEvent('simulation.platform_checked', {
+          who: event.platform_check.who,
+          role: event.platform_check.role,
+          platform: out.platform,
+          panel_connected: out.panel.connected,
+          ...(out.panel.note === undefined ? {} : { panel_note: out.panel.note }),
+          tool_status: out.tool.status,
+          ...(out.tool.reason === undefined ? {} : { tool_reason: out.tool.reason }),
+          shop_services: out.shop_services,
         })
         return
       }

@@ -55,7 +55,7 @@ import type {
 import {
   DEFAULT_STOREFRONT_PLATFORM,
   STOREFRONT_PLATFORMS,
-  storefrontConnectorService,
+  storefrontUsableService,
 } from '@agentsws/contracts'
 import { companyKey, normalizeDomain } from '@agentsws/core'
 import type { RoleStore } from '@agentsws/roles'
@@ -365,9 +365,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
    */
   function providersOf(kind: string): string[] {
     if (SHOP_CONNECTOR_KINDS.has(kind)) {
-      const service = storefrontConnectorService(profileOf()?.storefront_platform)
-      // 平台有 provider 名、连接目录里却还没有那张卡（WooCommerce 现在就是）＝ 一样不进清单：
-      // 点进去无处可点的条目就是噪音，等目录里真有它的那天自然会出现
+      // `storefrontUsableService` 问的是"今天点得动的是哪一个"（`supported` 那几个）；
+      // 再对着连接目录核一次——目录才是"到底有没有这张卡"的真源。
+      // 点进去无处可点的条目就是噪音，等目录里真有它的那天自然会出现。
+      const service = storefrontUsableService(profileOf()?.storefront_platform)
       return service === undefined || catalogEntry(service) === undefined ? [] : [service]
     }
     const hits = Object.entries(ROLE_CONNECTOR_KIND)

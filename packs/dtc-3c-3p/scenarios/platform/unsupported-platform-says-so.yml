@@ -1,0 +1,51 @@
+# WP62（51 §1 N0）：这家公司的网站不是 Shopify 搭的，工具就得**照实说**。
+#
+# 它钉的不是"少了一块数据"，而是**没连**与**还没做**是两回事：
+#
+# 1. 没连 = 你还没去连，界面出「去连接」，点进去有卡可点；
+# 2. 还没做 = 这个平台我们压根没接，点「去连接」也找不到那张卡。
+#
+# 第二种如果也画成「去连接」，用户会在那一页反复点、以为自己哪里填错了。
+# 所以档案里选了 WooCommerce 之后，三处必须说同一句话：
+#
+# - **岗位面板**的「店铺后台」分块：不许说连上了，且带一句"这个平台还没接"；
+# - **查订单 / 查商品的工具**：回 `not_connected`（给机器的码）**并且**带人话
+#   （给人的那一句），模型不许拿着空数据往下编；
+# - **首次设置第 ④ 步的清单**：那张店铺卡干脆不出——点进去无处可点的条目就是噪音。
+#
+# 反证也在断言里：这条场景一封信不发、一条变更不提。选错平台是"看得见什么"的事，
+# 不是"做了什么"的事；要是它顺手改了外面世界的什么东西，那才是真出了问题。
+#
+# 数据照用 3 人 pack（人、店、订单都在），只把这条场景的工作区平台改成 WooCommerce——
+# 同一份合成公司在两个平台下复用，不为一条回归题再生成一整套。
+id: platform/unsupported-platform-says-so
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42, storefront_platform: woocommerce }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 王岚（店主兼售后）在面板上看一眼、顺手查一张订单
+  - at: '+0m'
+    org.platform_check: { who: p_wang, role: dtc.support }
+  # 李默也一样——这不是某一个人的权限问题，是整个工作区的平台问题
+  - at: '+10m'
+    org.platform_check: { who: p_li, role: dtc.support }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  # 面板 / 工具 / 清单三处都明说"这个平台还没接"
+  platform_unsupported: [p_wang, p_li]
+  event_types: [simulation.platform_checked]
+  metrics:
+    runs_failed: 0
+    # 选错平台是"看得见什么"的事，不该动外面世界分毫
+    staged_changes: 0
+    applied_changes: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  那一句"这个平台还没接"是不是人话——它说清了我们还没做，而不是让用户以为自己忘了连？

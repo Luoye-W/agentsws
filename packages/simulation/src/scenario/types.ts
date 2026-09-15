@@ -9,6 +9,7 @@ import type {
   Iso8601,
   ProductLineRule,
   RangeRef,
+  StorefrontPlatform,
   WorkspaceVertical,
 } from '@agentsws/contracts'
 
@@ -37,6 +38,14 @@ export interface ScenarioDataset {
    * 复用，不用为了一条回归题再生成一整套合成公司。
    */
   vertical?: WorkspaceVertical
+  /**
+   * WP62（51 §1 N0）：这条场景跑在一个「网站是用 X 搭的」工作区里。
+   *
+   * 与 `vertical` 同一个套路：缺省跟着 pack 的 `workspace.yml`（既有 pack 全是
+   * Shopify，一个字节不变），写了就**只对这条场景**覆盖——同一份合成公司在
+   * 两个平台下复用，不为一条回归题再生成一整套。
+   */
+  storefront_platform?: StorefrontPlatform
 }
 
 /** 合成人策略：`always_approve` / `edit_Npct` / `reject_rules` / `slow`（26 §3）。 */
@@ -188,6 +197,17 @@ export interface ScenarioOrgScopeCheck {
 }
 
 /**
+ * WP62 / 51 §1 N0：记一笔"在当前这个网站平台下，这个人这条职责看得见什么"。
+ *
+ * 一次问三处（它们必须**说同一句话**，不然用户会在三个地方读到三种解释）：
+ * 岗位面板的「店铺后台」分块、查订单 / 查商品的工具、首次设置第 ④ 步的清单。
+ */
+export interface ScenarioOrgPlatformCheck {
+  who: string
+  role: string
+}
+
+/**
  * WP51 / 46 §1 ①：某一边走完首次设置的第一步。
  *
  * `side` 是这条题里给这台机器起的名字（`solo_a` / `solo_b`），与工作区 id 无关——
@@ -304,6 +324,8 @@ export type ScenarioEvent =
   | { at: string; type: 'org.scope_check'; scope_check: ScenarioOrgScopeCheck }
   /** WP51：某一边走完首次设置（46 §1 ①：公司档案 + 发现开关）。 */
   | { at: string; type: 'org.first_run'; first_run: ScenarioOrgFirstRun }
+  /** WP62：记一笔"当前平台下面板 / 工具 / 清单各说了什么"（51 §1 N0）。 */
+  | { at: string; type: 'org.platform_check'; platform_check: ScenarioOrgPlatformCheck }
   /** WP51：一边朝另一边申请加入（46 §2 I3）。 */
   | { at: string; type: 'org.join_request'; join_request: ScenarioOrgJoinRequest }
   /** WP50：某人单干时在自己的工作区里攒下的东西（45 H1）。 */
@@ -464,6 +486,16 @@ export interface ScenarioExpected {
    * 而且各自都不是空的——"同一个账号的两条产品线，互相看不到对方的订单和商品"。
    */
   scope_disjoint?: string[]
+  /**
+   * WP62 / 51 §1 N0：这几个人（各自那一次 `org.platform_check`）在**三处**都被
+   * 明确告知"这个平台还没接"——岗位面板的「店铺后台」分块、查订单 / 查商品的工具、
+   * 首次设置第 ④ 步的清单（那张店铺卡干脆不出）。
+   *
+   * 为什么三处一起断言：选错平台这件事，用户是在哪一处撞上的说不准；
+   * 只要有一处含糊其辞（给一个点了也连不上的「去连接」、或者默默回空数据），
+   * 这一跳就白做了。
+   */
+  platform_unsupported?: string[]
   /**
    * WP57：这几轮聊天判成了哪几种动作（`answer` / `collect_info` / `human_review` /
    * `assist` / `handoff`），**按顺序**。

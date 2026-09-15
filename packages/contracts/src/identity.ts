@@ -187,6 +187,19 @@ export function storefrontConnectorService(id: StorefrontPlatform | undefined): 
   return storefrontPlatformSpec(id ?? DEFAULT_STOREFRONT_PLATFORM)?.connector_service
 }
 
+/**
+ * 现在**真有一张卡可点**的那个店铺 provider（首次设置第 ④ 步的清单、连接页）。
+ *
+ * 与 `storefrontConnectorService` 的区别只有一条：那一个回的是"这个平台将来走哪个
+ * provider"（WooCommerce 已经有 `woocommerce` 这个名字了），这一个回的是"今天点得动
+ * 的是哪一个"。`supported: false` 的平台一律 `undefined`——清单里出一张点进去
+ * 无处可点的卡，比没有它更糟。
+ */
+export function storefrontUsableService(id: StorefrontPlatform | undefined): string | undefined {
+  const spec = storefrontPlatformSpec(id ?? DEFAULT_STOREFRONT_PLATFORM)
+  return spec?.supported === true ? spec.connector_service : undefined
+}
+
 /** 连接目录里的这个 provider 是不是"某个平台的店铺卡"（是的话它要按档案过滤）。 */
 export function isStorefrontService(service: string): boolean {
   return STOREFRONT_PLATFORMS.some((p) => p.connector_service === service)

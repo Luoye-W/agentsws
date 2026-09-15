@@ -41,9 +41,15 @@ import type {
   RuntimeAdapter,
   RunUsage,
 } from '@agentsws/contracts'
+import {
+  DEFAULT_STOREFRONT_PLATFORM,
+  storefrontUnsupportedNote,
+  storefrontUsableService,
+} from '@agentsws/contracts'
 import { companyKey, sha256 } from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
 import { createDataStore, defineCollection } from '@agentsws/data'
+import { assembleView, dataSourcesFromConnections } from '@agentsws/deck'
 import type { DshRuntimeMode } from '@agentsws/dsh-adapter'
 import { createDshRuntime } from '@agentsws/dsh-adapter'
 import type { Kernel, Random } from '@agentsws/kernel'
@@ -406,6 +412,13 @@ export interface OrgOps {
   /** 这个人这条职责现在看得到哪几张订单、哪几件商品。 */
   visible(who: PersonId, role: RoleId): VisibleScope
   /**
+   * WP62 / 51 §1 N0：在当前这个网站平台下，**三处**各说了什么。
+   *
+   * 三处必须说同一句话——用户在哪一处撞上"平台还没接"说不准，有一处含糊
+   * （给一个点了也连不上的「去连接」、或者默默回空数据）这一跳就白做了。
+   */
+  platformCheck(who: PersonId, role: RoleId): Promise<PlatformCheckResult>
+  /**
    * 45 H1：某人单干时在**自己的工作区**里攒下的东西（品牌 / 产品线 / 一条岗位）。
    *
    * 个人工作区不是另一套界面，是同一套东西换了个 `workspace_id`——所以这里用的
@@ -432,6 +445,24 @@ export interface OrgOps {
       name_choice?: 'company' | 'personal'
     }[]
   }): Promise<JoinRunResult>
+}
+
+/**
+ * WP62 / 51 §1 N0：一次"平台看得见什么"的体检（场景里断言用）。
+ *
+ * 三格分别对应岗位面板、事项工具、首次设置第 ④ 步的清单。
+ */
+export interface PlatformCheckResult {
+  platform: string
+  /** 面板「店铺后台」那一块：连没连上、以及那一句"还没接"（接得上时没有）。 */
+  panel: { connected: boolean; note?: string }
+  /** 查一次订单：成没成、错误里那句人话。 */
+  tool: { status: string; reason?: string }
+  /**
+   * 首次设置清单里这条职责要连的**店铺** provider。
+   * 平台没有连接器时是空的——清单里干脆不出那张卡（点进去无处可点的条目就是噪音）。
+   */
+  shop_services: string[]
 }
 
 /** 一次 Join 跑完的样子（场景里断言用）。 */
@@ -1315,7 +1346,26 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       })),
     }
   }
+  /**
+   * WP62（51 §1 N0 ③）：这个工作区的网站平台我们还没接 → 店铺那几个工具当场回一句人话。
+   *
+   * 与服务进程（`apps/server/src/records.ts`）读的是契约里**同一张**平台表：
+   * 平台算不出 provider，就没有店铺后台可问；让模型对着一个连不上的连接器空转，
+   * 换来的只会是一封编出来的回信。
+   */
+  const SHOP_TOOL_NAMES = new Set(['get_order', 'list_orders', 'get_product', 'list_products'])
+  const platformNote = (): string | undefined =>
+    storefrontUnsupportedNote(pack.workspace.storefront_platform)
+
   holder.executeTool = async (call) => {
+    const bare = call.name.slice(call.name.lastIndexOf('.') + 1)
+    const note = platformNote()
+    if (note !== undefined && SHOP_TOOL_NAMES.has(bare)) {
+      return {
+        status: 'error',
+        reason: `not_connected：${note}查不到订单和商品——这次别猜，照实说查不了。`,
+      }
+    }
     if (call.name === 'search_policies' || call.name.endsWith('.search_policies')) {
       if (!call.request.tools.allow.includes('search_policies')) {
         return { status: 'blocked', reason: 'not_in_allowlist: search_policies' }
@@ -2430,6 +2480,69 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           .filter((o) => o.line_items.some((li) => hits(li.product_id)))
           .map((o) => o.id),
         products: state.products.filter((p) => hits(p.id)).map((p) => p.id),
+      }
+    },
+
+    async platformCheck(who, role) {
+      const platform = pack.workspace.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM
+      const note = storefrontUnsupportedNote(pack.workspace.storefront_platform)
+      const asg = assignmentFor(who, role)
+
+      // ① 岗位面板：走真的那一套（`@agentsws/deck` 的 `assembleView`），不是照着抄一份
+      const sources = dataSourcesFromConnections(
+        [
+          { service: 'shopify_admin', status: 'active' },
+          { service: 'imap_smtp', status: 'active' },
+        ],
+        { ...(note === undefined ? {} : { storefrontNote: note }) },
+      )
+      const section = assembleView(role, {
+        now: now(clock),
+        tz_offset_minutes: wallClock(clock.nowMs(), pack.workspace.tz).offset,
+        base_currency: pack.workspace.base_currency,
+        role_id: role,
+        position_id: asg.id,
+        orders: [],
+        approvals: [],
+        sources,
+      }).find((v) => v.source === 'shop')
+
+      // ② 事项工具：真调一次 `get_order`，走的是运行时用的同一个执行器
+      const run = await beginShopRun(asg)
+      let tool: { status: string; reason?: string }
+      try {
+        const out = await holder.executeTool?.({
+          name: 'get_order',
+          input: { order_id: 'ord_1' },
+          request: {
+            actor: { person_id: who, assignment_id: asg.id, role_id: role },
+            tools: { allow: ['get_order'], connect_token: '', side_effect_policy: 'executor' },
+          } as unknown as RunRequest,
+        })
+        tool = {
+          status: out?.status ?? 'error',
+          ...(out?.reason === undefined ? {} : { reason: out.reason }),
+        }
+      } finally {
+        run.finish({ seen: [], outputs: [], summary: '平台体检：只问了一次，没动任何东西' })
+      }
+
+      // ③ 首次设置第 ④ 步的清单：`kind: shop` 的连接器按档案解析（平台没有就是空）
+      const def = roles.roles.get(role)
+      // 清单问的是"今天点得动的是哪一个"，不是"将来走哪个 provider"
+      const shopService = storefrontUsableService(pack.workspace.storefront_platform)
+      const shop_services = (def?.connectors ?? [])
+        .filter((c) => c.kind === 'shop' || c.kind === 'shopify')
+        .flatMap(() => (shopService === undefined ? [] : [shopService]))
+
+      return {
+        platform,
+        panel: {
+          connected: section?.connected ?? false,
+          ...(section?.note === undefined ? {} : { note: section.note }),
+        },
+        tool,
+        shop_services: [...new Set(shop_services)],
       }
     },
   }

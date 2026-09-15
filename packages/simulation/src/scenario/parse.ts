@@ -5,7 +5,14 @@
  * 场景文件是回归基线，静默忽略一个拼错的键等于静默关掉一条断言。
  */
 import { readFileSync } from 'node:fs'
-import type { ChangeKind, ProductLineRule, RangeRef, WorkspaceVertical } from '@agentsws/contracts'
+import type {
+  ChangeKind,
+  ProductLineRule,
+  RangeRef,
+  StorefrontPlatform,
+  WorkspaceVertical,
+} from '@agentsws/contracts'
+import { STOREFRONT_PLATFORMS } from '@agentsws/contracts'
 import { parse as parseYaml } from 'yaml'
 import { ScenarioSchemaError } from '../errors.js'
 import { parseDuration, parseRange } from './duration.js'
@@ -174,6 +181,7 @@ const EVENT_KEYS = [
   'org.scope_check',
   // WP51 首次设置与同事发现（46）
   'org.first_run',
+  'org.platform_check',
   'org.join_request',
   // WP50 个人用 → 公司用（45）
   'org.personal',
@@ -215,6 +223,8 @@ const EXPECTED_KEYS = [
   'routed_to',
   'secretary_kinds',
   'scope_disjoint',
+  // WP62（51 §1 N0）
+  'platform_unsupported',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -569,6 +579,18 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    // WP62（51 §1 N0）：这个人这条职责在当前平台下"看得见什么、点得动什么"
+    case 'org.platform_check': {
+      known(source, `${path}.${key}`, body, ['who', 'role'])
+      return {
+        at,
+        type: 'org.platform_check',
+        platform_check: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          role: str(source, `${path}.${key}.role`, body.role),
+        },
+      }
+    }
     case 'org.join_request': {
       known(source, `${path}.${key}`, body, ['from', 'to', 'name', 'email'])
       return {
@@ -886,6 +908,13 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)
   if (disjoint !== undefined) out.scope_disjoint = disjoint
+  // WP62（51 §1 N0）：这几个人该在面板、工具、首次设置清单三处都被明确告知"平台还没接"
+  const platformUnsupported = optStrList(
+    source,
+    'expected.platform_unsupported',
+    raw.platform_unsupported,
+  )
+  if (platformUnsupported !== undefined) out.platform_unsupported = platformUnsupported
   // WP57：这几轮聊天各判成了什么（按顺序），以及求助超时各做了几次
   const chatActions = optStrList(source, 'expected.chat_actions', raw.chat_actions)
   if (chatActions !== undefined) {
@@ -1030,16 +1059,27 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
   if (doc.version !== 1) fail(source, 'version', '目前只支持 version: 1')
 
   if (!isRec(doc.dataset)) fail(source, 'dataset', '必须是对象')
-  known(source, 'dataset', doc.dataset, ['pack', 'seed', 'vertical'])
+  known(source, 'dataset', doc.dataset, ['pack', 'seed', 'vertical', 'storefront_platform'])
   const verticalRaw = optStr(source, 'dataset.vertical', doc.dataset.vertical)
   if (verticalRaw !== undefined && verticalRaw !== 'goods' && verticalRaw !== 'digital') {
     fail(source, 'dataset.vertical', '只认 goods / digital（不写 = 跟 pack 的 workspace.yml）')
   }
   const vertical: WorkspaceVertical | undefined = verticalRaw
+  // WP62（51 §1 N0）：这条场景跑在哪个网站平台上（不写 = 跟 pack 的 workspace.yml）
+  const platformRaw = optStr(source, 'dataset.storefront_platform', doc.dataset.storefront_platform)
+  if (platformRaw !== undefined && !STOREFRONT_PLATFORMS.some((p) => p.id === platformRaw)) {
+    fail(
+      source,
+      'dataset.storefront_platform',
+      `只认 ${STOREFRONT_PLATFORMS.map((p) => p.id).join(' / ')}（不写 = 跟 pack 的 workspace.yml）`,
+    )
+  }
+  const storefront_platform = platformRaw as StorefrontPlatform | undefined
   const dataset = {
     pack: str(source, 'dataset.pack', doc.dataset.pack),
     seed: num(source, 'dataset.seed', doc.dataset.seed),
     ...(vertical === undefined ? {} : { vertical }),
+    ...(storefront_platform === undefined ? {} : { storefront_platform }),
   }
 
   const actors: Record<string, ScenarioActor> = {}
