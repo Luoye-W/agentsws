@@ -30,12 +30,14 @@
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
+    "packages/roles/roles/dtc/email-marketing.yml",
+    "packages/roles/roles/dtc/fulfillment.yml",
     "packages/roles/roles/dtc/live-chat.yml",
     "packages/roles/roles/dtc/store.yml",
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "ff9887133f1a594ecb576ac391e91e25",
+  "source_digest": "c6e774c89ec2ad6f9d4e0a08bb6089bd",
   "objects": [
     {
       "id": "ad_set",
@@ -3967,6 +3969,7 @@
       "object": "order",
       "source": "connector",
       "access": "write",
+      "change_kind": "cancel_order",
       "risk_class": "high",
       "requires_approval": true,
       "what": "取消一笔订单（含退款与恢复库存的选项）"
@@ -3996,10 +3999,10 @@
       "object": "order",
       "source": "connector",
       "access": "write",
-      "change_kind": "reship",
-      "risk_class": "medium",
+      "change_kind": "create_fulfillment",
+      "risk_class": "low",
       "requires_approval": true,
-      "what": "给订单建一次发货（补发也走这一条）"
+      "what": "给订单建一次发货：标记发货 + 回填单号（补发与拆单的每一件包裹也走这一条）"
     },
     {
       "id": "shopify_admin.create_product",
@@ -4331,6 +4334,18 @@
       "what": "handoff to email"
     },
     {
+      "id": "notify_delay",
+      "object": "customer",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["dtc.fulfillment"],
+      "tool": "draft_reply",
+      "what": "notify delay"
+    },
+    {
       "id": "reply_buyer_message",
       "object": "customer",
       "source": "role",
@@ -4379,6 +4394,42 @@
       "what": "改收件地址"
     },
     {
+      "id": "stage_campaign_send",
+      "object": "campaign",
+      "source": "role",
+      "access": "write",
+      "change_kind": "campaign_send",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["dtc.email-marketing"],
+      "what": "stage campaign send"
+    },
+    {
+      "id": "stage_cancel_order",
+      "object": "order",
+      "source": "role",
+      "access": "write",
+      "change_kind": "cancel_order",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["dtc.fulfillment"],
+      "what": "stage cancel order"
+    },
+    {
+      "id": "stage_create_fulfillment",
+      "object": "order",
+      "source": "role",
+      "access": "write",
+      "change_kind": "create_fulfillment",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.fulfillment"],
+      "what": "stage create fulfillment"
+    },
+    {
       "id": "stage_dev_task",
       "object": "theme",
       "source": "role",
@@ -4400,6 +4451,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.support"],
       "what": "stage discount code"
+    },
+    {
+      "id": "stage_flow_edit",
+      "object": "campaign",
+      "source": "role",
+      "access": "write",
+      "change_kind": "flow_edit",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.email-marketing"],
+      "what": "stage flow edit"
     },
     {
       "id": "stage_listing_edit",
@@ -4496,6 +4559,30 @@
       "route_to": "scope_manager",
       "roles": ["dtc.support"],
       "what": "提一次补发"
+    },
+    {
+      "id": "stage_segment_edit",
+      "object": "campaign",
+      "source": "role",
+      "access": "write",
+      "change_kind": "segment_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.email-marketing"],
+      "what": "stage segment edit"
+    },
+    {
+      "id": "stage_split_order",
+      "object": "order",
+      "source": "role",
+      "access": "write",
+      "change_kind": "split_order",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.fulfillment"],
+      "what": "stage split order"
     },
     {
       "id": "stage_theme_preview",

@@ -11,6 +11,7 @@ import type {
 } from '@agentsws/contracts'
 import { capBool, capList, capNumber, mandateHash } from './mandate.js'
 import type { Provenance } from './provenance.js'
+import { suppressedRecipients } from './suppression.js'
 
 /** 15 §2：kind 的风险等级与"永远 L1"硬顶。 */
 export const KIND_RISK: Record<ChangeKind, RiskClass> = {
@@ -25,6 +26,12 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   unpublish_product: 'medium',
   promotion: 'medium',
   campaign_send: 'medium',
+  // WP64（51 §2.3 / §2.4）
+  segment_edit: 'low',
+  flow_edit: 'medium',
+  create_fulfillment: 'low',
+  split_order: 'low',
+  cancel_order: 'high',
   publish_post: 'medium',
   bid_change: 'medium',
   budget_change: 'medium',
@@ -40,6 +47,10 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   domain_config: 'high',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
+  // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
+  'campaign_send',
+  // WP64（51 §2.4）：取消订单连带退款与库存回补，不可逆。
+  'cancel_order',
   'publish_theme',
   'merge_pr',
   'deploy',
@@ -93,6 +104,8 @@ export const AUTONOMY_GATES: readonly PrecheckGateId[] = [
 /** 09-08：受保护字段 = Agent 不得提议；人经 policy_change 可改。 */
 export const PROTECTED_FIELDS: Partial<Record<ChangeKind, string[]>> = {
   address_change: ['total', 'currency', 'customer_id'],
+  // WP64（51 §2.3）：自动流的**触发条件**不许 Agent 动。见下面 `flow_edit` 那一条的注释。
+  flow_edit: ['trigger', 'trigger_conditions', 'trigger_filters', 'audience_filter'],
   price_change: ['sku', 'currency', 'tax_category'],
   listing_edit: ['listing_id', 'compliance_notes'],
 }
@@ -136,6 +149,9 @@ const num = (v: unknown): number | undefined => {
   const n = typeof v === 'string' ? Number(v) : v
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined
 }
+/** 从 `before` / `after` 里取一串字符串（不是数组或含非字符串 = 空）。 */
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
 const pct = (before: number, after: number) =>
   before === 0 ? Number.POSITIVE_INFINITY : (Math.abs(after - before) / Math.abs(before)) * 100
 
@@ -294,6 +310,70 @@ export function evaluateGuardrail(
       const n = num(after.audience_size)
       const cap = capNumber(mandate, 'max_campaign_audience')
       if (n !== undefined && cap !== undefined && n > cap) review('max_campaign_audience', cap, n)
+      // WP64 / 51 §2.3：退订与抑制名单**必查**。
+      //
+      // 判据是"这次提案报没报查过"而不是"名单里有没有人"——`suppression_checked` 不为真
+      // 就是 block：没问过与问过了没人，在群发这件事上必须分得开（18 §3 的老规矩）。
+      // 规则本身在 `suppression.ts`，与 WP55 客服出站那条是**同一份**，不在这里再写一遍。
+      if (after.suppression_checked !== true)
+        block('suppression_list_required', 'checked', String(after.suppression_checked ?? 'never'))
+      else {
+        const leaked = suppressedRecipients(strings(after.audience), strings(after.suppressed))
+        if (leaked.length > 0)
+          block('suppression_list', 0, `${leaked.length}: ${leaked.slice(0, 3).join(', ')}`)
+      }
+      break
+    }
+    case 'segment_edit': {
+      // 分群本身不发信，但它决定下一次发给谁。人群大小超额 = 转人审，不是拦。
+      const size = num(after.size) ?? num(after.audience_size)
+      const cap = capNumber(mandate, 'max_segment_size')
+      if (size !== undefined && cap !== undefined && size > cap)
+        review('max_segment_size', cap, size)
+      break
+    }
+    case 'flow_edit': {
+      // 51 §2.3 的那条硬规则：**流的触发条件不可由 Agent 放宽**。
+      //
+      // 上面的受保护字段（`PROTECTED_FIELDS.flow_edit`）已经拦住了"改触发字段"这一半；
+      // 这里补的是另一半——延迟改短、上限调大，字段名不同但效果一样是"发给更多人、发得更早"。
+      // 两条都是 block 而不是 review：转人审等于让人替 Agent 判断一条流会多发给几万人，
+      // 而卡面上根本看不出来。要放宽，人自己去后台改。
+      const beforeDelay = num(before.delay_minutes)
+      const afterDelay = num(after.delay_minutes)
+      if (beforeDelay !== undefined && afterDelay !== undefined && afterDelay < beforeDelay)
+        block('flow_trigger_not_loosened', beforeDelay, afterDelay)
+      const beforeCap = num(before.max_recipients)
+      const afterCap = num(after.max_recipients)
+      if (beforeCap !== undefined && afterCap !== undefined && afterCap > beforeCap)
+        block('flow_trigger_not_loosened', beforeCap, afterCap)
+      break
+    }
+    case 'create_fulfillment': {
+      // 51 §2.4：标记发货**必须带单号与承运商**。没单号的"已发货"比"未发货"更糟——
+      // 顾客查不到轨迹，客服也无从回答，而订单状态已经变了。
+      const tracking = typeof after.tracking_number === 'string' ? after.tracking_number.trim() : ''
+      const carrier = typeof after.carrier === 'string' ? after.carrier.trim() : ''
+      if (tracking === '') block('tracking_number_required')
+      if (carrier === '') block('carrier_required')
+      if (before.fulfillment_status !== undefined && before.fulfillment_status === 'fulfilled')
+        block('already_fulfilled', 'unfulfilled', String(before.fulfillment_status))
+      break
+    }
+    case 'split_order': {
+      // 拆单拆成一份 = 什么也没干却占了一次额度；拆过头则是包裹数失控（运费与体验都要人看）。
+      const parts = num(after.parts)
+      if (parts === undefined || parts < 2) block('split_needs_two_parts', 2, parts ?? 'unknown')
+      else {
+        const cap = capNumber(mandate, 'max_split_parts')
+        if (cap !== undefined && parts > cap) review('max_split_parts', cap, parts)
+      }
+      break
+    }
+    case 'cancel_order': {
+      // 已发货的订单取消不了（货在路上）——这是事实判断，不是额度，所以 block。
+      if (before.fulfillment_status === 'fulfilled')
+        block('fulfilled_cannot_cancel', 'unfulfilled', String(before.fulfillment_status))
       break
     }
     case 'bid_change':
