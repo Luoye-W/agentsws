@@ -3,6 +3,8 @@ export * from './blocks.js'
 export * from './changes.js'
 export * from './channels.js'
 export * from './cloud.js'
+// 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
+export * from './cloud-entry.js'
 export * from './common.js'
 export * from './connect.js'
 export * from './data.js'

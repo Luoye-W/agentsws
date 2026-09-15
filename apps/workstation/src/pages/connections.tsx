@@ -320,6 +320,7 @@ export function ConnectionsPage(): React.ReactNode {
               key={p.service}
               provider={p}
               highlighted={highlight === p.service}
+              connected={rows.some((c) => c.service === p.service)}
               phase={wizard?.service === p.service ? wizard.phase : 'idle'}
               fields={wizard?.service === p.service ? wizard.fields : undefined}
               result={results[p.service]}

@@ -55,14 +55,20 @@ export interface CloudOrg {
  * - `wallet:read`：**只读**余额与用量（`/v1/wallet/*` 的读面）。充值 / 退款不在令牌能做的事里。
  * - `standby`：在线值守（WP60）。
  *
- * 本版只有这三个；加能力就加成员（只加不删）。
+ * 本版五个（WP59 合并时把钱包拆成 read / topup / admin）；加能力就加成员（只加不删）。
  */
-export type CloudScope = 'ai' | 'wallet:read' | 'standby'
+export type CloudScope = 'ai' | 'wallet:read' | 'wallet:topup' | 'wallet:admin' | 'standby'
 
-export const CLOUD_SCOPES: readonly CloudScope[] = ['ai', 'wallet:read', 'standby']
+export const CLOUD_SCOPES: readonly CloudScope[] = [
+  'ai',
+  'wallet:read',
+  'wallet:topup',
+  'wallet:admin',
+  'standby',
+]
 
 /** 新签一把令牌时默认给的动作集：能用模型、能看余额，不能值守。 */
-export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = ['ai', 'wallet:read']
+export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = ['ai', 'wallet:read', 'wallet:topup']
 
 /** 工作区服务令牌的前缀。一眼能认出来是什么，也方便在日志里做前缀级的屏蔽。 */
 export const WORKSPACE_TOKEN_PREFIX = 'wst_'

@@ -16,6 +16,7 @@ import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { CreditsPanel } from '@/components/settings/credits-panel'
+import { ModelCloudCard } from '@/components/settings/model-cloud-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -147,6 +148,8 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
           </Card>
         )}
         {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
+        {/* 49 M5 第三张模型卡：agentsws 云（用积分）。不填 key，一键启用 */}
+        {ownerId === undefined ? null : <ModelCloudCard assignment={ownerId} />}
         {/*
         47 J1 数据地图：按**当前选中的那条岗位**裁剪（登记表是按岗位的，
         不像模型 key 那样统一走所有者）。左栏还没选岗位时这一块不出。

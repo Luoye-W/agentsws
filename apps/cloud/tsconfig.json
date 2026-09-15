@@ -10,7 +10,13 @@
       "path": "../../packages/api"
     },
     {
+      "path": "../../packages/cloud-entry"
+    },
+    {
       "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/metering"
     }
   ]
 }

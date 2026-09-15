@@ -45,7 +45,7 @@ function catalogServices(): string[] {
   return [...new Set(ids)]
 }
 
-/** 设置页两张模型卡的 `kind`（`ModelProviderKind`）。 */
+/** 设置页那几张模型卡的 `kind`（`ModelProviderKind`）。 */
 function modelKinds(): string[] {
   const source = read('packages/api/src/routes/models.ts')
   const line = /const KIND = z\.enum\(\[([^\]]+)\]\)/.exec(source)?.[1] ?? ''
@@ -71,7 +71,8 @@ describe('BrandIcon', () => {
 
   it('模型卡的每个 kind 也有专属图标', () => {
     const kinds = modelKinds()
-    expect(kinds).toEqual(['deepseek', 'openai_compatible'])
+    // WP59 起有第三种：`agentsws_cloud`（49 M2「用 agentsws 的」）
+    expect(kinds).toEqual(['deepseek', 'openai_compatible', 'agentsws_cloud'])
     for (const kind of kinds) {
       expect(hasBrandIcon(kind), `${kind} 还没配图标`).toBe(true)
       const { unmount } = render(<BrandIcon provider={kind} />)

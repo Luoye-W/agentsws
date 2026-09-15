@@ -31,7 +31,13 @@ import { linkView } from '../views.js'
  * 它不是第二份真源：`test/links.test.ts` 有一条断言钉住它与 `CLOUD_SCOPES` 逐字相同，
  * 契约里加一个动作而这里忘了加，测试当场红。
  */
-const SCOPE_VALUES = ['ai', 'wallet:read', 'standby'] as const satisfies readonly CloudScope[]
+const SCOPE_VALUES = [
+  'ai',
+  'wallet:read',
+  'wallet:topup',
+  'wallet:admin',
+  'standby',
+] as const satisfies readonly CloudScope[]
 
 export const ScopeSchema = z.enum(SCOPE_VALUES)
 

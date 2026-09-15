@@ -53,6 +53,7 @@ import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
 import type { CatalogPort } from './routes/catalog.js'
 import type { ChatPort } from './routes/chat.js'
+import type { CloudPort } from './routes/cloud.js'
 import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
@@ -594,6 +595,12 @@ export interface GatewayDeps {
   storage?: StoragePort
   /** WP25 模型面（provider 配置 / 默认模型 / 预算 / 花费）；没装配时 `/v1/models/*` 回 not_implemented。 */
   models?: ModelsPort
+  /**
+   * WP59（49 M2 / M5）：云上的余额与价目在本地的投影 + 每项能力"用我的 / 用 agentsws 的"。
+   * 没装配时 `/v1/cloud/*` 与 `/v1/settings/capability-sources` 回 not_implemented——
+   * 不接云也照常能用（那正是"用我的"那一档）。
+   */
+  cloud?: CloudPort
   /**
    * 41 §1 秘书面（profile 与公开级别 / 代答 / 日程与约时间 / 任务路由）；
    * 没装配时 `/v1/me/*` 的秘书那几条与 `/v1/people/*` 回 not_implemented。

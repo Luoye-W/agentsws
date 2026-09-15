@@ -25,7 +25,9 @@
   },
   "dependencies": {
     "@agentsws/api": "workspace:*",
+    "@agentsws/cloud-entry": "workspace:*",
     "@agentsws/contracts": "workspace:*",
+    "@agentsws/metering": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "better-sqlite3": "^12.0.0",
     "hono": "^4.13.7",

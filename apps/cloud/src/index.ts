@@ -7,6 +7,14 @@
  */
 export { type CallbackCheck, callbackWithToken, checkCallbackUrl } from './callback.js'
 export {
+  DEFAULT_NEWAPI_BASE_URL,
+  ENTRY_ENV,
+  type MountEntryOptions,
+  type MountedEntry,
+  mountEntry,
+  walletDbPath,
+} from './entry.js'
+export {
   type CloudMail,
   consoleMailSender,
   loginMail,
@@ -47,10 +55,14 @@ export { sqliteTokenVerifier } from './verifier.js'
 export { linkView, type WorkspaceLinkView } from './views.js'
 
 import { pathToFileURL } from 'node:url'
-import { createCloudServer } from './server.js'
+import { mountEntry } from './entry.js'
+import { CLOUD_DATA_DIR_ENV, createCloudServer } from './server.js'
 
 export async function main(): Promise<void> {
   const server = createCloudServer()
+  // 49 M3：服务入口（模型转发 + 钱包）挂在同一个进程、同一份令牌验证上
+  const dataDir = process.env[CLOUD_DATA_DIR_ENV]
+  mountEntry(server, dataDir === undefined ? {} : { dataDir })
   await server.listen()
   let closing = false
   const shutdown = (signal: string): void => {

@@ -692,7 +692,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "enum": ["ai", "wallet:read", "standby"]
+                      "enum": ["ai", "wallet:read", "wallet:topup", "wallet:admin", "standby"]
                     }
                   },
                   "ttl_days": {

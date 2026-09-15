@@ -1,0 +1,29 @@
+{
+  "name": "@agentsws/cloud-entry",
+  "version": "0.0.0",
+  "private": true,
+  "description": "49 M3 服务入口：OpenAI 兼容口 + 预扣结算 + 计量事件 + 驻留路由 + 钱包与充值（路由包，不起服务）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "node bin/dev.mjs",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/metering": "workspace:*",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^2.1.1"
+  }
+}

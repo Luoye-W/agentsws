@@ -26,6 +26,9 @@
       "path": "packages/catalog"
     },
     {
+      "path": "packages/cloud-entry"
+    },
+    {
       "path": "packages/channels"
     },
     {
@@ -57,6 +60,9 @@
     },
     {
       "path": "packages/meetings"
+    },
+    {
+      "path": "packages/metering"
     },
     {
       "path": "packages/model-gateway"
