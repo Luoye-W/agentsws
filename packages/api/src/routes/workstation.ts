@@ -57,6 +57,8 @@ const SOURCE_AUTHZ = {
   gsc: { domain: 'analytics', range: 'assigned' },
   ads: { domain: 'ad_account', range: 'assigned' },
   csat: { domain: 'review', range: 'assigned' },
+  // WP63（51 §2.1 评价管理）：评价应用的读走 `review` 域，与满意度同一格
+  reviews: { domain: 'review', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

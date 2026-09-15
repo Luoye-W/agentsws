@@ -344,6 +344,49 @@ export const CATALOG: readonly CatalogEntry[] = [
   },
 ]
 
+/**
+ * WP63（51 §2.1 / §3 N2）：**登记在目录里但还没做**的连接器。
+ *
+ * 51 N2 定的规矩是"缺的连接器按待增加排队，本期只把职责、动作、额度、面板骨架立
+ * 起来"。可是"排队"这件事得有人看得见——否则用户在连接页上找不到评价应用，
+ * 只能猜我们是不是不管评价。所以它出现在目录里，**明着标成还没做**：
+ * 点不动、没有表单、不发任何请求，只有一句说明与一个"它接上之后哪一块会亮"。
+ *
+ * 与 `available: false`（能连但这台机器现在连不了）分得开：那一个是环境问题，
+ * 用户修得好；这一个是我们还没写，用户修不好。
+ */
+export interface PlannedConnector {
+  service: string
+  label: string
+  /** 职责模板里的连接器 kind（`connectors[].kind`）。 */
+  kind: string
+  /** 接上之后哪几块工作台数据源会亮。 */
+  data_sources: string[]
+  /** 一句人话：这是什么、为什么还没有。 */
+  note: string
+}
+
+export const PLANNED_CONNECTORS: readonly PlannedConnector[] = [
+  {
+    service: 'judgeme',
+    label: 'Judge.me 评价',
+    kind: 'reviews',
+    data_sources: ['reviews'],
+    note: '独立站最常用的评价应用。接上之后店铺管理岗位的差评表与邀评就有数了——现在还没做，所以面板上那一块照实说"还没连"。',
+  },
+  {
+    service: 'loox',
+    label: 'Loox 评价',
+    kind: 'reviews',
+    data_sources: ['reviews'],
+    note: '带图评价那一派，与 Judge.me 二选一。排在 Judge.me 后面。',
+  },
+]
+
+export function plannedConnector(service: string): PlannedConnector | undefined {
+  return PLANNED_CONNECTORS.find((e) => e.service === service)
+}
+
 export function catalogEntry(service: string): CatalogEntry | undefined {
   return CATALOG.find((e) => e.service === service)
 }

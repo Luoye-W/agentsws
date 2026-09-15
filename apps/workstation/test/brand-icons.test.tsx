@@ -38,11 +38,25 @@ function manifest(): {
   return JSON.parse(readFileSync(join(brandDir, 'MANIFEST.json'), 'utf8'))
 }
 
-/** 连接目录里所有 provider 的 id（`CatalogEntry.service`）。 */
+/**
+ * 连接目录里所有**能连的** provider 的 id（`CatalogEntry.service`）。
+ *
+ * WP63：目录文件里还有一段 `PLANNED_CONNECTORS`（登记在册但还没做的那几个，
+ * 眼下是两家评价应用）。它们故意画成通用插头——灰的、点不动的东西配上人家的
+ * 官方标志，反而像"已经支持了"。所以从这里切开，只读上半段。
+ */
 function catalogServices(): string[] {
   const source = read('apps/server/src/catalog.ts')
-  const ids = [...source.matchAll(/^\s{4}service: '([a-z0-9_]+)',$/gm)].map((m) => m[1] as string)
+  const live = source.slice(0, source.indexOf('PLANNED_CONNECTORS'))
+  const ids = [...live.matchAll(/^\s{4}service: '([a-z0-9_]+)',$/gm)].map((m) => m[1] as string)
   return [...new Set(ids)]
+}
+
+/** WP63：登记为"待增加"的那几个（`PlannedConnector.service`）。 */
+function plannedServices(): string[] {
+  const source = read('apps/server/src/catalog.ts')
+  const planned = source.slice(source.indexOf('export const PLANNED_CONNECTORS'))
+  return [...planned.matchAll(/^\s{4}service: '([a-z0-9_]+)',$/gm)].map((m) => m[1] as string)
 }
 
 /** 设置页两张模型卡的 `kind`（`ModelProviderKind`）。 */
@@ -65,6 +79,18 @@ describe('BrandIcon', () => {
       const icon = screen.getByTestId('brand-icon')
       expect(icon.getAttribute('data-provider')).toBe(service)
       expect(icon.getAttribute('data-icon'), `${service} 落到了通用插头`).not.toBe('fallback')
+      unmount()
+    }
+  })
+
+  // WP63：还没做的那几个**故意**落通用插头
+  it('登记为"待增加"的连接器画通用插头，不借人家的标志', () => {
+    const planned = plannedServices()
+    expect(planned).toEqual(['judgeme', 'loox'])
+    for (const service of planned) {
+      const { unmount } = render(<BrandIcon provider={service} />)
+      const icon = screen.getByTestId('brand-icon')
+      expect(icon.getAttribute('data-icon'), `${service} 不该有专属图标`).toBe('fallback')
       unmount()
     }
   })

@@ -36,7 +36,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "b8d0a197ab383f6e8255456548205db0",
+  "source_digest": "1046217c16cab939f7e57eb43fecf34e",
   "objects": [
     {
       "id": "ad_set",
@@ -1822,7 +1822,7 @@
           "optional": false
         }
       ],
-      "read_via": [],
+      "read_via": ["reviews.negative"],
       "contract": "Review"
     },
     {
@@ -2351,7 +2351,13 @@
           "optional": false
         }
       ],
-      "read_via": [],
+      "read_via": [
+        "changes.pending_listing",
+        "changes.pending_price",
+        "changes.pending_promotion",
+        "changes.pending_publish",
+        "changes.pending_publish_post"
+      ],
       "contract": "StagedChange"
     },
     {
@@ -2964,7 +2970,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "review.approval_item_id",
-      "lookup": []
+      "lookup": ["reviews.negative"]
     },
     {
       "from": "approval_item",
@@ -2972,7 +2978,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "subject.object",
-      "lookup": []
+      "lookup": ["reviews.negative"]
     },
     {
       "from": "approval_item",
@@ -2980,7 +2986,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.approval.item_id",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "approval_item",
@@ -3044,7 +3050,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "article",
@@ -3052,7 +3058,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "article",
@@ -3092,7 +3098,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.assignment_id",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "assignment",
@@ -3116,7 +3122,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "campaign",
@@ -3124,7 +3130,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "campaign",
@@ -3148,7 +3154,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "collection",
@@ -3156,7 +3162,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "collection",
@@ -3188,7 +3194,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "customer",
@@ -3196,7 +3202,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "customer",
@@ -3220,7 +3226,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "discount",
@@ -3228,7 +3234,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "discount",
@@ -3300,7 +3306,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "inventory_item",
@@ -3308,7 +3314,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "inventory_item",
@@ -3436,7 +3442,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "order",
@@ -3444,7 +3450,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "order",
@@ -3476,7 +3482,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "page",
@@ -3484,7 +3490,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "page",
@@ -3524,7 +3530,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "policy",
@@ -3532,7 +3538,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "policy",
@@ -3556,7 +3562,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "product",
@@ -3564,7 +3570,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "product",
@@ -3612,7 +3618,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "review",
@@ -3620,7 +3626,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "review",
@@ -3852,7 +3858,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "apply.outcome_ref",
-      "lookup": []
+      "lookup": ["reviews.negative"]
     },
     {
       "from": "staged_change",
@@ -3860,7 +3866,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "target",
-      "lookup": []
+      "lookup": ["reviews.negative"]
     },
     {
       "from": "staged_change",
@@ -3932,7 +3938,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "store_config",
@@ -3940,7 +3946,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "store_config",
@@ -3964,7 +3970,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "theme",
@@ -3972,7 +3978,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "theme",
@@ -4028,7 +4034,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "origin.review_id",
-      "lookup": []
+      "lookup": ["reviews.negative"]
     },
     {
       "from": "todo",
@@ -4052,7 +4058,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "variant",
@@ -4060,7 +4066,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "variant",
@@ -4180,7 +4186,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
-      "lookup": []
+      "lookup": ["reviews.negative"]
     },
     {
       "from": "workflow_instance",
@@ -4316,7 +4322,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "review.workspace_id",
-      "lookup": []
+      "lookup": ["reviews.negative"]
     },
     {
       "from": "workspace",
@@ -4340,7 +4346,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.workspace_id",
-      "lookup": []
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
     },
     {
       "from": "workspace",

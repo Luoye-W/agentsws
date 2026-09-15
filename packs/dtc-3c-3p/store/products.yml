@@ -5,6 +5,7 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 40
 - id: prod_2
   title: GaN Travel Adapter
   price: 89
@@ -12,6 +13,7 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 47
 - id: prod_3
   title: Braided Cable 2m
   price: 22.5
@@ -19,6 +21,7 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 2
 - id: prod_4
   title: MagSafe Car Mount
   price: 45
@@ -26,6 +29,7 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 61
 - id: prod_5
   title: 10000mAh Power Bank
   price: 69
@@ -33,6 +37,7 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 68
 - id: prod_6
   title: USB-C Hub 7-in-1
   price: 99
@@ -40,6 +45,7 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 2
 - id: prod_7
   title: Laptop Stand Alu
   price: 59
@@ -47,6 +53,7 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 82
 - id: prod_8
   title: Desk Cable Tray
   price: 29
@@ -54,3 +61,4 @@
   currency: USD
   status: active
   record_version: v1
+  inventory: 89

@@ -117,6 +117,7 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   gsc: 'Search Console',
   ads: '广告后台',
   csat: '满意度调查',
+  reviews: '评价应用',
 }
 
 /** 「查看完整报告 →」外链（36 §3 三层链路的最后一层）。 */
@@ -148,6 +149,41 @@ const SHOP_BLOCKS = (): BlockDef[] => [
   block('shop.sales_total', 'stat_tile', '总销售额', 'sales.total'),
 ]
 
+/**
+ * WP63（51 §2.1 面板）：待审改动**四条车道**。
+ *
+ * 为什么分车道而不是一张大表：这四种卡该看的东西不一样——文案看 diff、改价看幅度、
+ * 上下架看影响面、促销看力度与限量。混成一张「待审 12 条」，人只能一张张点开看
+ * 它到底是哪一类。
+ */
+const STORE_QUEUE_BLOCKS = (): BlockDef[] => [
+  block('store.pending_listing', 'table', '待审：文案与详情页', 'changes.pending_listing'),
+  block('store.pending_price', 'table', '待审：改价', 'changes.pending_price'),
+  block('store.pending_publish', 'table', '待审：上下架', 'changes.pending_publish'),
+  block('store.pending_promotion', 'table', '待审：促销与折扣', 'changes.pending_promotion'),
+]
+
+/** WP63：库存告急表 + 日报卡（日报是 L3 自动出、看完归档的那一张）。 */
+const STORE_SHOP_BLOCKS = (): BlockDef[] => [
+  block('store.low_stock', 'table', '库存告急', 'inventory.low_stock'),
+  block('store.daily_report', 'kv', '今日日报', 'store.daily_report'),
+]
+
+/** WP63：差评表。评价应用连接器待增加 → 这一块永远出"还没连"，不出空表。 */
+const REVIEW_BLOCKS = (): BlockDef[] => [
+  block('store.bad_reviews', 'table', '差评', 'reviews.negative'),
+]
+
+/** WP63（51 §2.2 面板）：草稿队列、待发布、近 30 天发布与流量。 */
+const CONTENT_BLOCKS = (): BlockDef[] => [
+  block('content.drafts', 'table', '草稿队列', 'content.drafts'),
+  block('content.recent_posts', 'table', '近 30 天发布与流量', 'content.recent_posts'),
+]
+
+const CONTENT_QUEUE_BLOCKS = (): BlockDef[] => [
+  block('content.pending_publish', 'table', '待发布', 'changes.pending_publish_post'),
+]
+
 const GA4_BLOCKS = (): BlockDef[] => [
   block('ga4.active_users', 'stat_tile', '活跃用户', 'analytics.active_users'),
   block('ga4.events', 'table', '事件', 'analytics.events'),
@@ -174,6 +210,17 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'dtc.support': () => SHOP_BLOCKS(),
   'dtc.analytics': () => [...SHOP_BLOCKS(), ...GA4_BLOCKS(), ...GSC_BLOCKS()],
   'ads.meta': () => [...ADS_BLOCKS(), ...GA4_BLOCKS()],
+  // WP63（51 §2.1）：店铺管理的面板 = 店铺后台（含库存告急与日报）+ 待审四条车道
+  // + 转化那一格（GA4）+ 差评（评价应用，今天必然是"还没连"）
+  'dtc.store': () => [
+    ...SHOP_BLOCKS(),
+    ...STORE_SHOP_BLOCKS(),
+    ...STORE_QUEUE_BLOCKS(),
+    ...GA4_BLOCKS(),
+    ...REVIEW_BLOCKS(),
+  ],
+  // WP63（51 §2.2）：内容与博客的面板 = 草稿与发布（店铺后台）+ 待发布队列 + 流量（GSC）
+  'dtc.content': () => [...CONTENT_BLOCKS(), ...CONTENT_QUEUE_BLOCKS(), ...GSC_BLOCKS()],
 }
 
 export function blocksForRole(role_id: RoleId): BlockDef[] {

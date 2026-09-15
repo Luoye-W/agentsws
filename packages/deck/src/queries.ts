@@ -194,6 +194,84 @@ function orderPoints(
   return ctx.orders.map((o) => ({ at: Date.parse(o.created_at), v: value(o) }))
 }
 
+/**
+ * WP63（51 §2.1 面板）：待审改动的四条车道 —— 车道名 → 它收哪几种 `ChangeKind`。
+ *
+ * 顺序就是面板上的顺序。加一条车道只要在这里加一行，查询注册表自己就多一条。
+ */
+export const PENDING_LANES: readonly { lane: string; label: string; kinds: readonly string[] }[] = [
+  {
+    lane: 'listing',
+    label: '文案与详情页',
+    kinds: ['listing_edit', 'collection_edit'],
+  },
+  { lane: 'price', label: '改价', kinds: ['price_change'] },
+  { lane: 'publish', label: '上下架', kinds: ['publish_product', 'unpublish_product'] },
+  { lane: 'promotion', label: '促销与折扣', kinds: ['discount_code', 'promotion'] },
+  // 51 §2.2：内容那条职责自己的车道（博客发布）
+  { lane: 'publish_post', label: '待发布', kinds: ['publish_post'] },
+]
+
+const kindOfItem = (i: ApprovalItem): string | undefined => {
+  const p = i.payload
+  return isRecord(p) && typeof p.kind === 'string' ? p.kind : undefined
+}
+
+/** 一条车道的命名查询：同一份审批项按 `payload.kind` 切一刀，按建卡时间倒序。 */
+function laneQuery(spec: (typeof PENDING_LANES)[number]): QueryDef {
+  return {
+    name: `changes.pending_${spec.lane}`,
+    source: 'approvals',
+    returns: 'table',
+    run: (ctx) => {
+      const rows = ctx.approvals
+        .filter((i) => i.kind === 'staged_change' && PENDING.includes(i.state))
+        .filter((i) => {
+          const k = kindOfItem(i)
+          return k !== undefined && spec.kinds.includes(k)
+        })
+        .sort((a, b) => createdMs(b) - createdMs(a))
+        .slice(0, 20)
+        .map((i) => ({
+          title: i.title,
+          kind: kindOfItem(i) ?? '',
+          created_at: i.created_at,
+          state: i.state,
+        }))
+      return {
+        columns: [
+          { key: 'title', label: spec.label },
+          { key: 'kind', label: '种类' },
+          { key: 'created_at', label: '提上来的时间' },
+          { key: 'state', label: '状态' },
+        ],
+        rows,
+      }
+    },
+  }
+}
+
+/** 职责 yml 的 `thresholds`；宿主没传就用默认值（阈值不该硬写在积木里，也不该缺了就崩）。 */
+export const ANOMALY_DEFAULTS: Readonly<Record<string, number>> = {
+  low_stock_quantity: 5,
+  sales_drop_pct: 30,
+  conversion_drop_pct: 25,
+  bad_review_rating: 3,
+}
+
+export function thresholdOf(ctx: QueryContext, key: string): number {
+  return ctx.thresholds?.[key] ?? ANOMALY_DEFAULTS[key] ?? 0
+}
+
+const row = (id: string, at: string, kind: string, title: string): RecordRow => ({
+  id,
+  at,
+  kind,
+  title,
+  summary: title,
+  state: 'ok',
+})
+
 const QUERY_LIST: QueryDef[] = [
   {
     name: 'sales.total',
@@ -374,6 +452,203 @@ const QUERY_LIST: QueryDef[] = [
           ref: i.subject.object,
         }))
       return { rows }
+    },
+  },
+  // ── WP63（51 §2.1 / §2.2）：店铺管理与内容那几块 ───────────────────
+
+  // 待审改动的四条车道。每一条只是同一份审批项按 `payload.kind` 切一刀——
+  // 数从结构化字段来，`title` / `summary` 只当人话用（29 原则 ③）。
+  ...PENDING_LANES.map(laneQuery),
+  {
+    /**
+     * 「待发布」这个数字块（51 §2.2）：此刻有几篇压着等人点头。
+     *
+     * 与 `approvals.pending_replies` 分开：那一个数的是**回信**，这一个数的是**发文**。
+     * 同一个"待"字，压着不放的后果完全不同——回信压着客户在等，发文压着没人在等。
+     */
+    name: 'content.pending_count',
+    source: 'approvals',
+    returns: 'scalar',
+    run: (ctx, w) => {
+      const posts = ctx.approvals.filter(
+        (i) => i.kind === 'staged_change' && kindOfItem(i) === 'publish_post',
+      )
+      const value = posts.filter((i) => PENDING.includes(i.state)).length
+      const previous = posts.filter(
+        (i) => PENDING.includes(i.state) && createdMs(i) < w.current.from,
+      ).length
+      return {
+        value,
+        previous,
+        ...(previous === 0 ? {} : { delta_pct: round2(((value - previous) / previous) * 100) }),
+        spark: w.spark.map((b) => posts.filter((i) => inWindow(createdMs(i), b)).length),
+      }
+    },
+  },
+  {
+    name: 'inventory.low_stock',
+    source: 'shop',
+    returns: 'table',
+    run: (ctx) => {
+      const floor = thresholdOf(ctx, 'low_stock_quantity')
+      const rows = (ctx.inventory ?? [])
+        .filter((r) => r.quantity <= floor)
+        .sort((a, b) => a.quantity - b.quantity)
+        .slice(0, 50)
+        .map((r) => ({
+          sku: r.sku ?? r.id,
+          title: r.title,
+          quantity: r.quantity,
+          location: r.location ?? '',
+        }))
+      return {
+        columns: [
+          { key: 'sku', label: 'SKU' },
+          { key: 'title', label: '商品' },
+          { key: 'quantity', label: '可售', align: 'right' as const },
+          { key: 'location', label: '仓' },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    // 「库存告急数」这个数字块。存量指标：现在有几个 SKU 在线以下——
+    // 环比拿不到（我们只有此刻的库存快照，没有历史），所以 previous 与 spark 都按
+    // 当前值铺平，**不编一条假的走势**。
+    name: 'inventory.low_count',
+    source: 'shop',
+    returns: 'scalar',
+    run: (ctx) => {
+      const floor = thresholdOf(ctx, 'low_stock_quantity')
+      const value = (ctx.inventory ?? []).filter((r) => r.quantity <= floor).length
+      return { value, previous: value, spark: new Array(SPARK_BUCKETS).fill(value) }
+    },
+  },
+  {
+    name: 'reviews.negative',
+    source: 'reviews',
+    returns: 'table',
+    run: (ctx) => {
+      const floor = thresholdOf(ctx, 'bad_review_rating')
+      const rows = (ctx.reviews ?? [])
+        .filter((r) => r.rating < floor && r.replied !== true)
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+        .slice(0, 20)
+        .map((r) => ({
+          rating: r.rating,
+          product: r.product_title ?? r.product_id ?? '',
+          author: r.author ?? '',
+          at: r.created_at,
+          body: r.body.slice(0, 120),
+        }))
+      return {
+        columns: [
+          { key: 'rating', label: '评分', align: 'right' as const },
+          { key: 'product', label: '商品' },
+          { key: 'at', label: '时间' },
+          { key: 'body', label: '内容' },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    name: 'content.drafts',
+    source: 'shop',
+    returns: 'table',
+    run: (ctx) => {
+      const rows = (ctx.posts ?? [])
+        .filter((p) => !p.published)
+        .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+        .slice(0, 20)
+        .map((p) => ({
+          title: p.title,
+          kind: p.kind === 'article' ? '博客' : '页面',
+          updated_at: p.updated_at,
+          author: p.author ?? '',
+        }))
+      return {
+        columns: [
+          { key: 'title', label: '标题' },
+          { key: 'kind', label: '类型' },
+          { key: 'updated_at', label: '最后改动' },
+          { key: 'author', label: '谁写的' },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    // 近 30 天发布与流量。`clicks` 来自 Search Console——**没连就是没有这一格**，
+    // 表照出（发了哪几篇是店铺后台的事），流量那一列留空而不是填 0
+    // （填 0 会被读成"这篇没人看"，而事实是"我们不知道"）。
+    name: 'content.recent_posts',
+    source: 'shop',
+    returns: 'table',
+    run: (ctx) => {
+      const since = Date.parse(ctx.now) - 30 * DAY
+      const rows = (ctx.posts ?? [])
+        .filter((p) => p.published && p.published_at !== undefined)
+        .filter((p) => Date.parse(p.published_at as string) >= since)
+        .sort((a, b) => Date.parse(b.published_at as string) - Date.parse(a.published_at as string))
+        .slice(0, 30)
+        .map((p) => ({
+          title: p.title,
+          published_at: p.published_at ?? '',
+          clicks: p.clicks ?? '—',
+        }))
+      return {
+        columns: [
+          { key: 'title', label: '标题' },
+          { key: 'published_at', label: '发布时间' },
+          { key: 'clicks', label: '自然点击（30 天）', align: 'right' as const },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    /**
+     * 日报卡（51 §2.1 数据日报那一面唯一的产出，L3 自动出、看完归档）。
+     *
+     * 它是 `kv`：一行一个数，没有图。数全部从结构化行算出来——日报最容易变成
+     * "模型写的一段漂亮话"，而 29 原则 ③ 说数字不经模型手。
+     */
+    name: 'store.daily_report',
+    source: 'shop',
+    returns: 'records',
+    run: (ctx, w) => {
+      const money = (n: number) => `${ctx.base_currency} ${n.toFixed(2)}`
+      const sales = sum(
+        orderPoints(ctx, (o) => o.total_price),
+        w.current,
+      )
+      const prevSales = sum(
+        orderPoints(ctx, (o) => o.total_price),
+        w.previous,
+      )
+      const orders = sum(
+        orderPoints(ctx, () => 1),
+        w.current,
+      )
+      const floor = thresholdOf(ctx, 'low_stock_quantity')
+      const low = (ctx.inventory ?? []).filter((r) => r.quantity <= floor).length
+      const pending = ctx.approvals.filter(
+        (i) => i.kind === 'staged_change' && PENDING.includes(i.state),
+      ).length
+      const deltaText =
+        prevSales === 0 ? '没有对比期' : `${round2(((sales - prevSales) / prevSales) * 100)}%`
+      const at = dayLabel(w.current.from, ctx.tz_offset_minutes)
+      return {
+        rows: [
+          row(`${at}-sales`, at, '销售额', money(sales)),
+          row(`${at}-delta`, at, '环比', deltaText),
+          row(`${at}-orders`, at, '订单数', String(orders)),
+          row(`${at}-low`, at, '库存告急', `${low} 个 SKU`),
+          row(`${at}-pending`, at, '待审改动', `${pending} 条`),
+        ],
+      }
     },
   },
   // ── 没接的数据源：查询在册，执行时按连接状态短路（36 §3「显示去连接卡而不是空图」）

@@ -37,6 +37,13 @@ export const TILE_LIBRARY: readonly TileSpec[] = [
   tile('ads_roas', 'ROAS', 'ads.roas', 'ratio'),
   tile('ads_cpa', 'CPA', 'ads.cpa', 'money'),
   tile('ads_ctr', '点击率', 'ads.ctr', 'percent'),
+  // WP63（51 §2.1 数字块）：库存告急数。
+  // 它是**存量**不是流量：问的是"此刻有几个 SKU 快没货了"，所以时间窗对它没意义，
+  // 环比与迷你走势铺平（我们只有此刻的库存快照，没有历史——不编一条假的走势）。
+  tile('low_stock_count', '库存告急数', 'inventory.low_count', 'count'),
+  // WP63（51 §2.2）：压着等人点头的文章数。与「待回复」分开——同一个"待"字，
+  // 回信压着是客户在等，发文压着没人在等，混成一个数就看不出该先处理哪个。
+  tile('pending_posts', '待发布', 'content.pending_count', 'count'),
 ]
 
 const BY_ID = new Map(TILE_LIBRARY.map((t) => [t.id, t]))
@@ -57,6 +64,10 @@ export const DEFAULT_HOME_TILES: Readonly<Record<RoleId, readonly string[]>> = {
   'dtc.analytics': ['sales_total', 'orders_count', 'refunds_total', 'conversion_rate'],
   'dtc.support': ['pending_replies', 'reply_rate_24h', 'refund_requests', 'csat'],
   'ads.meta': ['ads_spend', 'ads_roas', 'ads_cpa', 'ads_ctr'],
+  // WP63（51 §2.1）：店铺管理 = 总销售额、订单数、转化率、库存告急数
+  'dtc.store': ['sales_total', 'orders_count', 'conversion_rate', 'low_stock_count'],
+  // WP63（51 §2.2）：内容与博客盯的是"有几篇压着没发"与它们带来的流量
+  'dtc.content': ['pending_posts', 'active_users'],
 }
 
 export function defaultTilesFor(role_id: RoleId): string[] {

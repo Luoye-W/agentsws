@@ -22,7 +22,8 @@ import type {
   RangeRef,
   RunEvent,
 } from '@agentsws/contracts'
-import type { DataSourceStatus, DeckCard, OrderRow } from '@agentsws/deck'
+import type { DataSourceStatus, DeckCard, InventoryRow, OrderRow, PostRow } from '@agentsws/deck'
+import { PLANNED_SOURCE_NOTES } from '@agentsws/deck'
 import { contentHashOf } from '@agentsws/knowledge'
 import { parseRole } from '@agentsws/roles'
 import type {
@@ -107,6 +108,44 @@ function ordersOf(world: World): OrderRow[] {
   }))
 }
 
+/**
+ * WP63：把合成世界里的商品摊成库存行。
+ *
+ * 没有 `inventory` 那一格的 pack（存量数据集）一行都不出——**不当成 0**，
+ * 那样整店都会被报成断货（36 §3：算不出就说没有，不是编一个数）。
+ */
+function inventoryOf(world: World): InventoryRow[] {
+  return world.connect.state.products
+    .filter((p) => typeof p.inventory === 'number')
+    .map((p) => ({
+      id: `inv_${p.id}`,
+      product_id: p.id,
+      sku: p.id.toUpperCase(),
+      title: p.title,
+      quantity: p.inventory as number,
+      location: '主仓',
+    }))
+}
+
+/**
+ * WP63（51 §2.2）：文章与页面。
+ *
+ * 合成公司里没有博客数据集，所以这里给一份**最小的、算得出来的**：每件商品
+ * 一篇写它的草稿。它只为让「草稿队列」这一块在 demo 里不是空的——真数据来自
+ * 店铺后台的 `list_articles`（连接器那条路，不在 demo 的范围里）。
+ */
+function postsOf(world: World, now: Iso8601): PostRow[] {
+  return world.connect.state.products.slice(0, 4).map((p, i) => ({
+    id: `art_${p.id}`,
+    title: `${p.title} 怎么挑`,
+    kind: 'article' as const,
+    published: i < 2,
+    updated_at: now,
+    ...(i < 2 ? { published_at: now } : {}),
+    author: '李默',
+  }))
+}
+
 function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
   const sources: DataSourceStatus[] = [
     // 店铺后台 = mock OpenConnector，接上了；其余三个 demo 里都没连
@@ -116,10 +155,21 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
     { id: 'gsc', label: 'Search Console', connected: false },
     { id: 'ads', label: '广告后台', connected: false },
     { id: 'csat', label: '满意度调查', connected: false },
+    // WP63：评价应用的连接器还没做 —— 永远没连，并带上那句人话（51 §3 N2）
+    {
+      id: 'reviews',
+      label: '评价应用',
+      connected: false,
+      note: PLANNED_SOURCE_NOTES.reviews ?? '',
+    },
   ]
   const alerts: DeckCard[] = []
   return {
     orders: () => ordersOf(world),
+    inventory: () => inventoryOf(world),
+    // 评价应用没接：一条评价都没有，差评那一块出的是"还没连"不是空表
+    reviews: () => [],
+    posts: () => postsOf(world, world.clock.now()),
     sources: () => sources,
     label: (ref: ObjectRef) => {
       if (ref.type === 'customer') return pack.customers.find((c) => c.id === ref.id)?.name

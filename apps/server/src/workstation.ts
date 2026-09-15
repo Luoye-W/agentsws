@@ -12,8 +12,16 @@ import type {
   WorkstationRange,
 } from '@agentsws/api'
 import type { ApprovalBus, ApprovalItem, Clock, ObjectRef } from '@agentsws/contracts'
-import type { DataSourceStatus, DeckCard, OrderRow, QueryContext } from '@agentsws/deck'
-import { defaultTilesFor } from '@agentsws/deck'
+import type {
+  DataSourceStatus,
+  DeckCard,
+  InventoryRow,
+  OrderRow,
+  PostRow,
+  QueryContext,
+  ReviewRow,
+} from '@agentsws/deck'
+import { defaultTilesFor, PLANNED_SOURCE_NOTES } from '@agentsws/deck'
 import type { RoleStore } from '@agentsws/roles'
 
 /** 工作台要的那点外部数据；接了连接器就换成真的，没接就 `connected: false`。 */
@@ -25,6 +33,18 @@ export interface WorkstationDataSource {
    * 产品线的订单两边都看得见，但金额只算自己那部分行项目。不给（老调用方）原样回全部。
    */
   orders(view?: { assignment_id?: string }): OrderRow[]
+  /**
+   * WP63：库存行（库存告急表、「库存告急数」、断货异常卡都从它算）。
+   * 不给 = 这台机器还拉不到库存，那几块自己就是空的——不编数。
+   */
+  inventory?(view?: { assignment_id?: string }): InventoryRow[]
+  /**
+   * WP63：评价行。评价应用连接器待增加，所以它今天一定不存在——
+   * 差评那一块照 36 §3 出"还没连"而不是空表。
+   */
+  reviews?(view?: { assignment_id?: string }): ReviewRow[]
+  /** WP63：文章与页面（草稿队列、近 30 天发布）。 */
+  posts?(view?: { assignment_id?: string }): PostRow[]
   /** 数据源连接状态（36 §3：没接的显示「去连接」而不是空图） */
   sources(): DataSourceStatus[]
   /** ObjectRef → 人话 */
@@ -122,6 +142,11 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
     async queryContext(actor, position, range): Promise<QueryContext> {
       // 活数据源在这里拉新（缓存还新就是个空操作）；写死的表没有这个方法
       await options.data.ensureFresh?.()
+      const view = { assignment_id: position.position_id }
+      const inventory = options.data.inventory?.(view)
+      const reviews = options.data.reviews?.(view)
+      const posts = options.data.posts?.(view)
+      const thresholds = options.roles.roles.get(position.role_id)?.thresholds
       return {
         now: options.clock.now(),
         tz_offset_minutes: options.data.tz_offset_minutes,
@@ -133,6 +158,12 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         // 记录 Tab 与几个「存量」指标要看全部状态，不只是队列里那几条
         approvals: await itemsFor(actor, position, ALL_STATES),
         sources: options.data.sources(),
+        ...(inventory === undefined ? {} : { inventory }),
+        ...(reviews === undefined ? {} : { reviews }),
+        ...(posts === undefined ? {} : { posts }),
+        // WP63（51 §2.1）：异常卡的阈值从**职责定义**来，不硬写在积木里——
+        // 什么叫"销售骤降"，卖家具的和卖快消的不是一个数
+        ...(thresholds === undefined ? {} : { thresholds }),
         ...(range === undefined ? {} : {}),
       }
     },
@@ -166,6 +197,13 @@ export function emptyDataSource(
     { id: 'gsc', label: 'Search Console', connected: false },
     { id: 'ads', label: '广告后台', connected: false },
     { id: 'csat', label: '满意度调查', connected: false },
+    // WP63：评价应用的连接器还没做——这一条永远 `connected: false`，并带那句人话
+    {
+      id: 'reviews',
+      label: '评价应用',
+      connected: false,
+      note: PLANNED_SOURCE_NOTES.reviews ?? '',
+    },
   ]
   return {
     orders: () => [],

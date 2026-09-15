@@ -5,6 +5,12 @@
  * 服务端用它算 payload（29 原则 ③「数字不经模型手」），前端用同一份类型渲染。
  */
 export {
+  type Anomaly,
+  type AnomalyInput,
+  type AnomalyKind,
+  detectAnomalies,
+} from './anomalies.js'
+export {
   allBlocks,
   assembleView,
   blockDef,
@@ -46,7 +52,9 @@ export {
   sourceOf,
 } from './project.js'
 export {
+  ANOMALY_DEFAULTS,
   dayLabel,
+  PENDING_LANES,
   QUERIES,
   type QueryDef,
   queryDef,
@@ -56,6 +64,7 @@ export {
   runQuery,
   sourceStatus,
   startOfDay,
+  thresholdOf,
   type Window,
 } from './queries.js'
 export {
@@ -84,6 +93,7 @@ export {
   dataSourcesFromConnections,
   dataSourcesOfService,
   mergeDataSources,
+  PLANNED_SOURCE_NOTES,
   SOURCES_BY_SERVICE,
 } from './sources.js'
 export {

@@ -711,6 +711,10 @@ export function synth(options: SynthOptions): SynthResult {
     currency: 'USD',
     status: 'active',
     record_version: 'v1',
+    // WP63（51 §2.1）：可售数量。**故意让第 3、6 件低**——不然"库存告急"这一块
+    // 在合成公司里永远是空的，截图与回归题都验不到它。
+    // 数是按下标算死的，不掷骰子：同一个 seed 两次生成仍然逐字节相同。
+    inventory: i % 3 === 2 ? 2 : 40 + i * 7,
   }))
 
   // ── 客户 ────────────────────────────────────────────────────────────
