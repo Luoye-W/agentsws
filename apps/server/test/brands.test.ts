@@ -508,3 +508,86 @@ describe('WP66 渠道按品牌', () => {
     expect(theirs.data?.allowed_origins).toEqual([])
   })
 })
+
+/**
+ * 52 O4「从某个品牌复制设置」：WP66 起**模型设置也复制得了**——
+ * 但复制的是"用哪家、哪个模型、哪个当默认"这些决定，API key 一个字节都不带。
+ */
+describe('WP66 / 52 O4 复制设置含模型', () => {
+  it('复制之后新品牌有同样的 provider，但没有 key，而且不再跟随公司默认', async () => {
+    const server = await boot()
+    const a = bootstrapWho(server)
+    await call(server, a, 'PUT', '/v1/models/providers/p_a', {
+      kind: 'openai_compatible',
+      base_url: 'https://api.a.example.com',
+      model: 'a-1',
+      api_key: 'sk-brand-a-never-copied',
+    })
+
+    const org = (await call<{ id: string }[]>(server, a, 'GET', '/v1/orgs')).data?.[0]
+    if (org === undefined) throw new Error('启动之后应该有一个组织')
+    const created = await call<{ workspace_id: string }>(
+      server,
+      a,
+      'POST',
+      `/v1/orgs/${org.id}/brands`,
+      { name: '诺伏特课程', copy_from: a.workspace_id },
+    )
+    expect(created.status).toBe(201)
+    const ws = created.data?.workspace_id
+    if (ws === undefined) throw new Error('建品牌应该有回执')
+
+    // 复制过设置 = 这个品牌要自己一套，所以不再跟随公司默认（52 O3）
+    expect(server.brands.inheritsOrg(ws)).toBe(false)
+
+    const switched = await call<{ session_token?: string }>(
+      server,
+      a,
+      'POST',
+      `/v1/orgs/${org.id}/brands/${ws}/switch`,
+    )
+    const token = switched.data?.session_token
+    if (token === undefined) throw new Error('切品牌应该回一张会话 token')
+    const assignment = server.roles.assignments
+      .listByPerson(server.bootstrap.person.id, { workspace_id: ws })
+      .find((x) => x.revoked_at === undefined)
+    if (assignment === undefined) throw new Error('新品牌里应该自带一条 owner 分配')
+    const b: Who = { workspace_id: ws, token, assignment: assignment.id }
+
+    const listB = await call<{ providers: ModelProviderView[] }>(
+      server,
+      b,
+      'GET',
+      '/v1/models/providers',
+    )
+    const copied = listB.data?.providers.find((p) => p.id === 'p_a')
+    expect(copied).toBeDefined()
+    expect(copied?.base_url).toBe('https://api.a.example.com')
+    // key 没跟着搬：这一条在新品牌里是"还没填 key"，去填一次才用得上
+    expect(copied?.has_key).toBe(false)
+    expect(copied?.active).toBe(false)
+    // 加密库里也确实没有它那一条
+    const vaultB = (await server.brands.forWorkspace(ws)).secrets.list().map((r) => r.connection_id)
+    expect(vaultB.some((id) => id.endsWith('p_a'))).toBe(false)
+  })
+
+  it('每个品牌的"今日销售"各算各的：没连店的那个明说没有，不画一个 0', async () => {
+    const server = await boot()
+    const a = bootstrapWho(server)
+    const b = await addBrand(server, '诺伏特课程')
+    const org = (await call<{ id: string }[]>(server, a, 'GET', '/v1/orgs')).data?.[0]
+    if (org === undefined) throw new Error('启动之后应该有一个组织')
+    const rows = await call<{ workspace_id: string; sales_today?: { amount: number } }[]>(
+      server,
+      a,
+      'GET',
+      `/v1/orgs/${org.id}/brands`,
+    )
+    expect(rows.status).toBe(200)
+    expect(rows.data?.map((r) => r.workspace_id).sort()).toEqual(
+      [a.workspace_id, b.workspace_id].sort(),
+    )
+    // 两个品牌都没连店：两行都是"没有数"，而不是一行 0 一行空
+    for (const row of rows.data ?? []) expect(row.sales_today).toBeUndefined()
+  })
+})

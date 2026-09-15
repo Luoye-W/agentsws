@@ -2945,7 +2945,10 @@ export interface BrandView {
   storefront_platform?: StorefrontPlatform
   pending_approvals: number
   alerts: number
-  /** 只有当前这个品牌有——别的品牌这会儿没有取数的通道（36 §3：没有就明说没有）。 */
+  /**
+   * WP66 起**每个品牌都算得出来**（各有各的活数据源）。
+   * 还没连店 / 今天还没有单时仍然没有这个字段——没有就明说没有，不画一个 0（36 §3）。
+   */
   sales_today?: { amount: number; currency: string }
 }
 
@@ -2964,7 +2967,12 @@ export interface BrandCopyView {
   to: string
   copied_assignments: number
   dropped_ranges: number
+  /** WP66 起恒为 false（模型设置按品牌各一份，不再是"本来就共用"）。 */
   models_shared: boolean
+  /** WP66（52 O4）：复制过来的模型 provider 条数（**不含 API key**）。 */
+  copied_model_providers?: number
+  /** 复制过设置的品牌从此不跟随公司默认（52 O3）。 */
+  inherit_org?: boolean
 }
 
 export interface BrandSwitchView {

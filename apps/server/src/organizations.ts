@@ -63,10 +63,22 @@ export interface OrganizationsAssemblyOptions {
   /** 建品牌时把这两样写进去。 */
   setBrandProfile(workspace_id: WorkspaceId, profile: BrandProfile): void
   /**
-   * 今日销售（面板已有的那条查询）。**只对当前品牌有**——别的品牌这会儿没有取数的
-   * 通道，返回 `undefined` 让界面明说"切过去才看得到"，而不是画一个 0（36 §3）。
+   * 今日销售（面板已有的那条查询）。
+   *
+   * WP66 起**按品牌各问一次**：一个进程装多套品牌模块之后，每个品牌各有自己的
+   * 活数据源。这个品牌一张订单都没拉到就回 `undefined`——照 36 §3 不画一个 0。
    */
-  salesToday?(): { amount: number; currency: string } | undefined
+  salesToday?(workspace_id: WorkspaceId): Promise<{ amount: number; currency: string } | undefined>
+  /**
+   * WP66（52 O4）：把源品牌的**模型设置**复制到新品牌（不含 key）。
+   *
+   * 回真复制了几条。不给 = 这个进程只有一套模型面（复制不了，回 0）。
+   */
+  copyModelSettings?(from: WorkspaceId, to: WorkspaceId): Promise<number>
+  /** WP66（52 O3）：新品牌从此跟不跟随公司默认（复制过设置就是"自己一套"）。 */
+  setInheritOrg?(workspace_id: WorkspaceId, inherit: boolean): Promise<void>
+  /** WP66（52 O3）：这个品牌现在跟不跟随公司默认（回执上那一位）。 */
+  inheritsOrg?(workspace_id: WorkspaceId): boolean
   /** 会话 token 的有效期；与身份服务默认一致（12h）。 */
   sessionTtlMs?: number
   /** 桌面壳走 HttpOnly cookie 时不把明文 token 回给前端（13 §5）。 */
@@ -196,7 +208,8 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
       lane: 'scope',
       state: [...ALERT_STATES] as ApprovalState[],
     })
-    const sales = current ? options.salesToday?.() : undefined
+    // WP66：每个品牌都算得出来（各有各的活数据源），不再是"切过去才看得到"
+    const sales = await options.salesToday?.(workspace.id)
     return {
       workspace_id: workspace.id,
       name: brandNameOf(workspace),
@@ -428,13 +441,31 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
         existing.add(`${a.person_id}|${a.role_id}`)
         copied += 1
       }
+      /*
+       * WP66（52 O4）：模型设置也复制。
+       *
+       * 复制的是"用哪家、哪个模型、哪个当默认、预算多少"这些**决定**；
+       * key 一个字节不带（13 §4.3：一条凭据不该因为复制而多放一处）。
+       * 复制过设置 = 这个品牌要自己一套，所以顺手关掉"跟随公司默认"。
+       */
+      //
+      // 顺序有讲究：**先关掉"跟随"再复制**。关这个开关会把目标品牌那一套模块丢掉
+      // 重建（不然运行时手上还是公司那个网关），复制在后面才不会被那一次重建抹掉。
+      // 一条都没搬成就把开关放回去——没有自己那一套的品牌该继续跟随。
+      await options.setInheritOrg?.(target.id, false)
+      const copiedModels = (await options.copyModelSettings?.(source.id, target.id)) ?? 0
+      if (copiedModels === 0) await options.setInheritOrg?.(target.id, true)
       return {
         from: source.id,
         to: target.id,
         copied_assignments: copied,
         dropped_ranges: dropped,
-        // 这台机器上模型 key 是共用的（49 M1 的余额也在公司级），没什么可复制的
-        models_shared: true,
+        // WP66 起模型设置按品牌各一份，不再是"本来就共用"
+        models_shared: false,
+        copied_model_providers: copiedModels,
+        ...(options.inheritsOrg === undefined
+          ? {}
+          : { inherit_org: options.inheritsOrg(target.id) }),
       }
     },
 

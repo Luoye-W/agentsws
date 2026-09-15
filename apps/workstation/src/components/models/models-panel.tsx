@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
+import { BrandScopeNote } from '@/components/brand-scope-note'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -204,6 +205,8 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
           {t('models.subtitle')}
           <Hint text={t('models.subtitle.hint')} />
         </p>
+        {/* WP66（52 O1）：模型设置按品牌各一份——多品牌时说一句这一页管的是谁 */}
+        <BrandScopeNote testId="models-brand-scope" />
 
         {/*
           52 O3「跟随公司默认」。**只有多品牌、而且不是公司默认那个品牌才出现**——

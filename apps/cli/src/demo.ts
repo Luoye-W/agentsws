@@ -79,6 +79,14 @@ export interface DemoOptions {
   quiet?: boolean
   /** 工作台构建产物；不给就按 `apps/workstation/dist` 找 */
   staticDir?: string
+  /**
+   * WP66（52 O1）：多造一个品牌，用来看"一个进程装多套品牌模块"长什么样。
+   *
+   * **默认不造**（`false`）：demo 的本分是把一个品牌的活演完整，多一个品牌只会
+   * 让第一眼看到的东西变多。`agentsws demo --two-brands` 打开它——
+   * 公司页的品牌一览就有两行、各有各的待审卡 / 告警 / 今日销售。
+   */
+  twoBrands?: boolean
 }
 
 export interface Demo {
@@ -759,11 +767,20 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   }
 
   const staticDir = options.staticDir ?? resolve(root, 'apps/workstation/dist')
+  /**
+   * WP66（52 O1）：第二个品牌那一份合成数据。
+   *
+   * 服务进程装配的时候这个品牌还不存在（它是启动之后建出来的），所以这里传的是
+   * 一张**会被填上的表**——装配层每次按 `workspace_id` 现查，查得到就用它，
+   * 查不到就走活数据源。生产路径一个字节不变（生产从不传 `brandData`）。
+   */
+  const extraBrandData = new Map<string, WorkstationDataSource>()
   const server = await createServer({
     clock: world.clock,
     random: world.random,
     mount,
     staticDir,
+    brandData: (ws) => extraBrandData.get(ws),
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
     records: recordSourceOf(world, pack),
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),
@@ -838,6 +855,10 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     analytics_id: analytics.id,
   })
 
+  // WP66（52 O1）：第二个品牌（默认不造，见 `DemoOptions.twoBrands`）
+  if (options.twoBrands === true)
+    await seedSecondBrand({ server, world, pack, data: extraBrandData })
+
   return {
     server,
     world,
@@ -848,4 +869,141 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       await world.close()
     },
   }
+}
+
+/** 第二个品牌的名字（截图与文档里都用它，别改来改去）。 */
+export const DEMO_SECOND_BRAND = '诺伏特课程'
+
+/**
+ * WP66（52 O1）：造第二个品牌，并给它自己的数据与自己的队列。
+ *
+ * 这一段**只证明一件事**：两个品牌各是各的。所以它刻意不复用第一个品牌的任何
+ * 东西——另一个数据源、另一批订单、另一张卡。品牌一览上那三个数因此是两行
+ * 各自算出来的，不是同一份数据显示两遍。
+ */
+async function seedSecondBrand(input: {
+  server: Server
+  world: World
+  pack: Pack
+  data: Map<string, WorkstationDataSource>
+}): Promise<void> {
+  const { server, world, pack } = input
+  const owner = server.bootstrap.person.id
+  const orgs = server.identity.organizationsOf(owner)
+  const org = orgs[0]
+  if (org === undefined) return
+  const actor = {
+    person_id: owner,
+    workspace_id: server.bootstrap.workspace.id,
+    assignment_id: server.bootstrap.ownerAssignment.id,
+    role_id: server.bootstrap.ownerAssignment.role_id,
+  }
+  const brand = await server.organizations.port.createBrand(actor, org.id, {
+    name: DEMO_SECOND_BRAND,
+    vertical: 'digital',
+    storefront_platform: 'other',
+  })
+
+  /*
+   * 这个品牌自己的订单：三张，都落在合成时钟的"今天"——品牌一览那一格才有数。
+   * 币种与第一个品牌一样（同一家公司），但金额与单号完全是另一批。
+   */
+  const today = world.clock.now().slice(0, 10)
+  const orders: OrderRow[] = [
+    {
+      id: 'ord_c_1',
+      name: '#C1001',
+      email: 'mika@example.com',
+      currency: 'USD',
+      total_price: 129,
+      refunded_amount: 0,
+      created_at: `${today}T02:10:00.000Z`,
+      financial_status: 'paid',
+      fulfillment_status: 'fulfilled',
+    },
+    {
+      id: 'ord_c_2',
+      name: '#C1002',
+      email: 'jonas@example.com',
+      currency: 'USD',
+      total_price: 249,
+      refunded_amount: 0,
+      created_at: `${today}T05:40:00.000Z`,
+      financial_status: 'paid',
+      fulfillment_status: 'unfulfilled',
+    },
+    {
+      id: 'ord_c_3',
+      name: '#C1003',
+      email: 'lena@example.com',
+      currency: 'USD',
+      total_price: 89,
+      refunded_amount: 0,
+      created_at: `${today}T07:55:00.000Z`,
+      financial_status: 'paid',
+      fulfillment_status: 'unfulfilled',
+    },
+  ]
+  input.data.set(brand.workspace_id, {
+    orders: () => orders,
+    inventory: () => [],
+    reviews: () => [],
+    posts: () => [],
+    sources: () => [
+      { id: 'shop', label: '店铺后台', connected: true },
+      { id: 'approvals', label: '工作队列', connected: true },
+    ],
+    label: (ref: ObjectRef) => orders.find((o) => o.id === ref.id)?.name,
+    tz_offset_minutes: 480,
+    base_currency: pack.workspace.base_currency,
+  })
+  /*
+   * 建品牌那一步已经把这个品牌的模块建出来了（品牌一览要算它那三个数），
+   * 而那会儿上面这份数据还没放进表里——丢掉重建一次，下一次请求才读得到它。
+   */
+  await server.brands.release(brand.workspace_id)
+
+  // 自己的队列：一张等人定的回信草稿（品牌一览的"待审卡"那一格）
+  const position = server.roles.assignments
+    .listByPerson(owner, { workspace_id: brand.workspace_id })
+    .find((a) => a.revoked_at === undefined)
+  if (position === undefined) return
+  // demo 里工作台读的是**世界**那条审批总线（`mount.approvals`），不是服务进程自己那条
+  await world.txn.approvals.create({
+    workspace_id: brand.workspace_id,
+    schema_version: 1,
+    kind: 'outbound_draft',
+    role_id: position.role_id,
+    subject: { object: { type: 'thread', id: 'thr_course_1' } },
+    dedupe_key: `${brand.workspace_id}:outbound_draft:thr_course_1`,
+    title: '课程学员问能不能换一门课',
+    summary: '开课前 7 天内换课要按政策走一次人工确认。',
+    payload: {
+      channel: 'email',
+      to: { type: 'customer', id: 'cus_course_1' },
+      body: { subject: 'Course swap', text: 'Happy to look into swapping your course.' },
+    },
+    evidence: {
+      source_events: [],
+      // 写类卡必查来源：草稿里提到的线程与收件人，这次运行都真读过（15 §3.1）
+      provenance: {
+        seen: [
+          { type: 'thread', id: 'thr_course_1' },
+          { type: 'customer', id: 'cus_course_1' },
+        ],
+      },
+      precheck: {},
+    },
+    proposer: { kind: 'agent', id: 'agent', assignment_id: position.id },
+    automation: { level_at_creation: 'L1' },
+    routing: {
+      recipients: [{ person: owner, via: 'role_holder' }],
+      rule: 'role_holder',
+      escalation: { after_hours: 8, business_hours: true, chain: ['owner'], escalated_at: [] },
+      separation_of_duties: false,
+    },
+    priority: 'queue',
+    // 31 §3.3 收件人门禁：只许回给线程里本来就在的人
+    context: { thread_participants: ['cus_course_1'], verified_contacts: ['cus_course_1'] },
+  })
 }

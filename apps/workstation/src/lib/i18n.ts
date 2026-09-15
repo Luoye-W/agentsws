@@ -1120,6 +1120,8 @@ const zh: Table = {
     '换一个品牌 = 整个工作台换一套：首页、岗位、连接、知识、设置。两边的数据互相看不见。',
   'brand.switch.manage': '管理品牌…',
   'brand.switch.failed': '切不过去：你可能不在这个品牌里。',
+  // WP66（52 O1）：连接页与设置页只管当前这个品牌
+  'brand.scope': '这一页只管当前品牌「{brand}」。别的品牌各有各的一套，切过去再设。',
   'command.group.brands': '品牌',
   'org.tab.brands': '品牌',
   'org.brands.title': '品牌一览',
@@ -1129,7 +1131,8 @@ const zh: Table = {
   'org.brands.pending': '待审卡',
   'org.brands.alerts': '告警',
   'org.brands.sales': '今日销售',
-  'org.brands.sales_elsewhere': '切过去才看得到',
+  // WP66：每个品牌都算得出今日销售了；剩下的"没有"只有一种——这个品牌还没连店 / 今天还没有单
+  'org.brands.sales_elsewhere': '还没有数（这个品牌还没连店铺，或者今天还没有单）',
   'org.brands.open': '切到这个品牌',
   'org.brands.add': '加一个品牌',
   'org.brands.add.hint': '建一个新的工作区，走一遍这个品牌自己的设置（连接与知识从零开始）。',
@@ -1137,9 +1140,10 @@ const zh: Table = {
   'org.brands.add.copy_from': '从某个品牌复制设置',
   'org.brands.add.copy_from.none': '不复制，空白开始',
   'org.brands.add.copy_from.hint':
-    '只复制职责分配（谁做什么），**范围不跟着走**——那是原品牌的店。连接与知识一个字节都不复制。',
+    '复制职责分配（谁做什么）与模型设置（用哪家、哪个模型、预算多少）。**范围不跟着走**——那是原品牌的店；**API key 也不复制**——去新品牌里填一次。连接与知识一个字节都不复制。',
   'org.brands.add.submit': '建这个品牌',
-  'org.brands.copied': '复制了 {n} 条职责分配。模型设置这台机器上本来就是共用的，不用复制。',
+  'org.brands.copied': '复制了 {n} 条职责分配。',
+  'org.brands.copied_models': '模型设置也复制了 {n} 条（API key 没复制，去新品牌里填一次）。',
   'org.brands.copy_none': '没有可复制的：那个品牌里现在没有别人的职责分配。',
   'org.brands.solo':
     '你现在只有一个品牌。要做第二个品牌就在这里加——两边的数据互相看不见，顶栏会多一个切换器。',
@@ -2487,6 +2491,9 @@ const en: Table = {
     'Switching swaps the whole workstation: home, positions, connections, knowledge, settings. Neither side can see the other brand\u2019s data.',
   'brand.switch.manage': 'Manage brands…',
   'brand.switch.failed': 'Could not switch: you may not be in that brand.',
+  // WP66 (doc 52 O1): connections and settings belong to the current brand only
+  'brand.scope':
+    'This page covers the current brand, \u201c{brand}\u201d, only. Every brand has its own set \u2014 switch over to set those up.',
   'command.group.brands': 'Brands',
   'org.tab.brands': 'Brands',
   'org.brands.title': 'Brands',
@@ -2496,7 +2503,8 @@ const en: Table = {
   'org.brands.pending': 'Waiting on you',
   'org.brands.alerts': 'Alerts',
   'org.brands.sales': 'Sales today',
-  'org.brands.sales_elsewhere': 'Switch to it to see this',
+  // WP66: every brand can compute this now; "no number" only means no store or no orders yet
+  'org.brands.sales_elsewhere': 'No number yet (no store connected, or no orders today)',
   'org.brands.open': 'Switch to this brand',
   'org.brands.add': 'Add a brand',
   'org.brands.add.hint':
@@ -2505,10 +2513,11 @@ const en: Table = {
   'org.brands.add.copy_from': 'Copy settings from a brand',
   'org.brands.add.copy_from.none': 'Do not copy, start blank',
   'org.brands.add.copy_from.hint':
-    'Copies duty assignments (who does what) only. Ranges do not come along — those are the other brand\u2019s stores. Connections and knowledge are never copied.',
+    'Copies duty assignments (who does what) and model settings (which provider, which model, what budget). Ranges do not come along — those are the other brand\u2019s stores — and API keys are never copied; fill one in on the new brand. Connections and knowledge are never copied.',
   'org.brands.add.submit': 'Create this brand',
-  'org.brands.copied':
-    'Copied {n} duty assignments. Model settings are already shared on this machine, so there is nothing to copy.',
+  'org.brands.copied': 'Copied {n} duty assignments.',
+  'org.brands.copied_models':
+    'Model settings copied too ({n} providers). API keys were not copied — fill one in on the new brand.',
   'org.brands.copy_none': 'Nothing to copy: that brand has no other people assigned right now.',
   'org.brands.solo':
     'You have one brand. Add a second one here — the two never see each other\u2019s data, and a switcher appears in the top bar.',

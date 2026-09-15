@@ -538,16 +538,19 @@ describe('52 O4 加品牌与"从某个品牌复制"', () => {
     expect(copied.flatMap((a) => a.ranges)).toHaveLength(0)
 
     // 再复制一次是幂等的：同一个人同一条职责不会出现第二份
-    const again = await call<{ copied_assignments: number; models_shared: boolean }>(
-      server,
-      'POST',
-      `/v1/orgs/${org.id}/brands/${brandB.workspace_id}/copy-from`,
-      { body: { from: server.bootstrap.workspace.id } },
-    )
+    const again = await call<{
+      copied_assignments: number
+      models_shared: boolean
+      copied_model_providers?: number
+    }>(server, 'POST', `/v1/orgs/${org.id}/brands/${brandB.workspace_id}/copy-from`, {
+      body: { from: server.bootstrap.workspace.id },
+    })
     expect(again.status).toBe(201)
     expect(again.data?.copied_assignments).toBe(0)
-    // 模型 key 这台机器上本来就共用，没什么可复制的——界面上要照实说
-    expect(again.data?.models_shared).toBe(true)
+    // WP66：模型设置按品牌各一份了（不再是"本来就共用"）；源品牌一条都没配，
+    // 所以这一次也没什么可搬的
+    expect(again.data?.models_shared).toBe(false)
+    expect(again.data?.copied_model_providers).toBe(0)
   })
 
   it('不能从自己复制到自己；也不能复制别家公司的品牌', async () => {

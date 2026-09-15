@@ -8,7 +8,7 @@
 import { resolve } from 'node:path'
 import type { DeckCard, PositionTiles, StatTile } from '@agentsws/deck'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createDemo, type Demo } from '../src/demo.js'
+import { createDemo, DEMO_SECOND_BRAND, type Demo } from '../src/demo.js'
 
 const ROOT = resolve(import.meta.dirname, '../../..')
 
@@ -226,5 +226,40 @@ describe('agentsws demo（合成世界当后端）', () => {
     const missing = await demo.server.gateway.fetch(new Request('http://127.0.0.1/v1/nope'))
     expect(missing.status).toBe(404)
     expect(((await missing.json()) as { code: string }).code).toBe('not_found')
+  })
+})
+
+/**
+ * WP66（52 O1）：`agentsws demo --two-brands` 把"一个进程装多套品牌模块"演出来。
+ *
+ * 这一档只钉两件事：两行**各自**算出自己的三个数，以及两边的数据互相看不见。
+ */
+describe('agentsws demo --two-brands（WP66）', () => {
+  it('品牌一览两行，各自的今日销售与待审卡都是自己算的', { timeout: 60_000 }, async () => {
+    const two = await createDemo({ root: ROOT, quiet: true, twoBrands: true })
+    try {
+      const actor = {
+        person_id: two.server.bootstrap.person.id,
+        workspace_id: two.server.bootstrap.workspace.id,
+        assignment_id: two.server.bootstrap.ownerAssignment.id,
+        role_id: two.server.bootstrap.ownerAssignment.role_id,
+      }
+      const org = two.server.identity.organizationsOf(actor.person_id)[0]
+      if (org === undefined) throw new Error('demo 里应该有一个组织')
+      const rows = await two.server.organizations.port.brands(actor, org.id)
+      expect(rows.map((r) => r.name).sort()).toEqual(['NordVolt Gear', DEMO_SECOND_BRAND].sort())
+      const first = rows.find((r) => r.current)
+      const second = rows.find((r) => r.name === DEMO_SECOND_BRAND)
+      if (first === undefined || second === undefined) throw new Error('两行都该在')
+      // 两个品牌各有各的数据源：第二个品牌今天真有三张单
+      expect(second.sales_today?.amount).toBe(467)
+      // 第一个品牌那一格也算得出来（合成世界那批订单不在"今天"，所以是 0）
+      expect(first.sales_today).toBeDefined()
+      // 待审卡是两条队列各自数出来的，不是同一份显示两遍
+      expect(first.pending_approvals).toBeGreaterThan(0)
+      expect(second.pending_approvals).toBe(1)
+    } finally {
+      await two.close()
+    }
   })
 })

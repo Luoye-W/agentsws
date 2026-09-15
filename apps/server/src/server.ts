@@ -305,6 +305,14 @@ export interface ServerOptions {
   /** 事项现场的记录来源（订单 / 客户 / 联系人 / 工具执行器）；demo 由合成世界提供。 */
   records?: MatterRecordSource
   /**
+   * WP66（52 O1）：给**某个品牌**接一份现成的数据源（demo 与测试用）。
+   *
+   * 与 `mount.data` 是同一个口子，只是按品牌问一次：`mount` 只接得了一个世界，
+   * 而这一版一个进程装得下多套品牌模块。回 `undefined` 就是这个品牌走活数据源
+   * （真实连接器）——生产路径从不传它，一个字节不变。
+   */
+  brandData?: (workspace_id: WorkspaceId) => WorkstationDataSource | undefined
+  /**
    * WP25 的三个测试注入点。生产路径一个都不传，各自走真实现：Shopify 换令牌用
    * `globalThis.fetch`、MX 用 `node:dns/promises`、模型试跑用网关自己的 fetch。
    *
@@ -1008,8 +1016,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 结果只进内存缓存）。接了模拟世界（`mount.data`）的 demo 路径一行不变——
      * 那一档只有 bootstrap 一个品牌。
      */
+    // demo / 测试可以给某个品牌接一份现成的数据（`mount.data` 是 bootstrap 那一份）
+    const injected = (isBootstrap ? mount?.data : undefined) ?? options.brandData?.(ws)
     let liveData: LiveDataSource | undefined
-    if (!(isBootstrap && mount?.data !== undefined)) {
+    if (injected === undefined) {
       liveData = createLiveDataSource({
         connections,
         connect: connections.connect,
@@ -1032,8 +1042,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })
     }
     const workData: WorkstationDataSource =
-      liveData ??
-      connections.wrapDataSource((isBootstrap ? mount?.data : undefined) ?? emptyDataSource())
+      liveData ?? connections.wrapDataSource(injected ?? emptyDataSource())
     // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
     connections.onConnectionChange(() => {
       liveData?.invalidate()
@@ -1795,19 +1804,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /**
    * 品牌一览里的"今日销售"。
    *
-   * 取的是**首页面板同一个数据源**（`workData`）——不是另起一条查询，也不是另一份缓存。
-   * 日界线按工作区时区偏移切（与 `@agentsws/deck` 的窗口算法同一条规矩）。
+   * 取的是**那个品牌首页面板同一个数据源**——不是另起一条查询，也不是另一份缓存。
+   * 日界线按那个品牌的时区偏移切（与 `@agentsws/deck` 的窗口算法同一条规矩）。
+   *
+   * WP66：按 `workspace_id` 取模块，所以**每个品牌都算得出来**；WP65 那句
+   * "切过去才看得到"到此为止。一张订单都没有就回 `undefined`——没有就明说没有，
+   * 不画一个 0（36 §3）。
    */
-  const salesTodayOf = (): { amount: number; currency: string } | undefined => {
-    const orders = workData.orders()
+  const salesTodayOf = async (
+    ws: WorkspaceId,
+  ): Promise<{ amount: number; currency: string } | undefined> => {
+    const source = (await brandModules.forWorkspace(ws)).workData
+    const orders = source.orders()
     if (orders.length === 0) return undefined
-    const offset = workData.tz_offset_minutes * 60 * 1000
+    const offset = source.tz_offset_minutes * 60 * 1000
     const dayOf = (ms: number): number => Math.floor((ms + offset) / 86_400_000)
     const today = dayOf(Date.parse(clock.now()))
     const amount = orders
       .filter((o) => dayOf(Date.parse(o.created_at)) === today)
       .reduce((sum, o) => sum + o.total_price, 0)
-    return { amount, currency: workData.base_currency }
+    return { amount, currency: source.base_currency }
   }
 
   const organizations = createOrganizationsAssembly({
@@ -1821,9 +1837,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     setBrandProfile: (ws, profile) => {
       onboarding.setBrandProfile(ws, profile)
     },
-    // 品牌一览那一格的"今日销售"：与首页面板同一个数据源（`workData`），
-    // 而且**只有当前品牌有**——别的品牌这会儿没有取数的通道
-    salesToday: () => salesTodayOf(),
+    // 品牌一览那一格的"今日销售"：与**那个品牌**首页面板同一个数据源
+    salesToday: (ws) => salesTodayOf(ws),
+    // 52 O4：从某个品牌复制设置——现在连模型设置也复制得了（key 不复制）
+    copyModelSettings: async (from, to) => {
+      const source = await brandModules.models(from)
+      const target = await brandModules.forWorkspace(to)
+      return target.ownModels.importSettings(source.exportSettings())
+    },
+    setInheritOrg: (ws, inherit) => brandModules.setInheritOrg(ws, inherit),
+    inheritsOrg: (ws) => brandModules.inheritsOrg(ws),
     // WP66：新品牌建完补签一把云令牌（这家公司关联过账号才有得签）
     onBrandCreated: async (ws) => {
       await cloudAccount.ensureBrandToken(ws)

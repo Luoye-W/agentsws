@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { BrandScopeNote } from '@/components/brand-scope-note'
 import { openExternal } from '@/components/connections/bridge'
 import { ConnectedRow } from '@/components/connections/connected-row'
 import { DataBackend } from '@/components/connections/data-backend'
@@ -274,6 +275,8 @@ export function ConnectionsPage(): React.ReactNode {
           {t('connections.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('connections.subtitle')}</p>
+        {/* WP66（52 O1）：连接按品牌各一份——多品牌时说一句这一页管的是谁 */}
+        <BrandScopeNote testId="connections-brand-scope" />
       </header>
 
       {runtime.data === undefined ? null : <RuntimeBar status={runtime.data} />}

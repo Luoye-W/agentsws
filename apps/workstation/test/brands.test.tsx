@@ -174,7 +174,7 @@ describe('52 O2 顶栏品牌切换器', () => {
 })
 
 describe('52 O2 / O4 公司页品牌一览', () => {
-  it('每个品牌一行：待审卡 / 告警 / 今日销售；别的品牌的销售明说"切过去才看得到"', async () => {
+  it('每个品牌一行：待审卡 / 告警 / 今日销售；没有数的品牌明说没有，不画 0', async () => {
     state.orgs = [COMPANY]
     state.brands = [BRAND_A, BRAND_B]
     renderWithProviders(<BrandsTab org_id="org_1" assignment="asg_owner" />)
@@ -183,8 +183,9 @@ describe('52 O2 / O4 公司页品牌一览', () => {
     expect(rowA.textContent).toContain('当前')
     expect(rowA.textContent).toContain('1280.50 USD')
     const rowB = screen.getByTestId('brand-row-ws_b')
-    // 活数据源是按当前工作区装配的：别的品牌不画一个 0，明说没有（36 §3）
-    expect(rowB.textContent).toContain('切过去才看得到')
+    // WP66：每个品牌都算得出来了；这一行没有数只有一种意思——还没连店 / 今天还没有单。
+    // 照 36 §3 明说没有，不画一个 0。
+    expect(rowB.textContent).toContain('还没有数')
     // 当前那一行没有"切到这个品牌"的按钮
     expect(screen.queryByTestId('brand-open-ws_a')).toBeNull()
     expect(screen.getByTestId('brand-open-ws_b')).not.toBeNull()
