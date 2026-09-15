@@ -2702,3 +2702,51 @@ export const teachChatSession = (
   input: { instruction: string; scope: 'single_reply' | 'similar_cases' | 'global_rule' },
 ): Promise<{ outcome: string; reply?: string; sediment: string }> =>
   api(`/v1/chat/sessions/${encodeURIComponent(id)}/teach`, { method: 'POST', body: input })
+
+/* ── 49 M1 云账号（WP58）──────────────────────────────────────────────── */
+
+export type CloudScopeName = 'ai' | 'wallet:read' | 'standby'
+
+/** 关联状态。**这里没有、也不会有令牌字段**——它只在本机加密库里。 */
+export interface CloudAccountView {
+  linked: boolean
+  email?: string
+  org_name?: string
+  expires_at?: string
+  scopes?: CloudScopeName[]
+  linked_at?: string
+  cloud_base_url: string
+  /** 现在还关联不了的原因（比如这台机器没有秘密库密钥）。 */
+  blocked_reason?: string
+}
+
+export interface CloudUnlinkResult {
+  unlinked: boolean
+  revoked_on_cloud: boolean
+  reason?: string
+}
+
+export const getCloudAccount = (assignment?: string): Promise<CloudAccountView> =>
+  api<CloudAccountView>('/v1/cloud/account', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/**
+ * 起一次关联：服务端往这个邮箱发一封登录邮件。
+ * 一次性 token **只进邮件**，前端从头到尾看不到它。
+ */
+export const linkCloudAccount = (
+  email: string,
+  assignment?: string,
+): Promise<{ expires_at: string; delivered: 'email' }> =>
+  api('/v1/cloud/account/link', {
+    method: 'POST',
+    body: { email },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const unlinkCloudAccount = (assignment?: string): Promise<CloudUnlinkResult> =>
+  api<CloudUnlinkResult>('/v1/cloud/account/unlink', {
+    method: 'POST',
+    ...(assignment === undefined ? {} : { assignment }),
+  })

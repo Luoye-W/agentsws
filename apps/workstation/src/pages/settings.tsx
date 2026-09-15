@@ -14,10 +14,13 @@ import { DataMapPanel } from '@/components/data-map'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
+import { CloudAccountCard } from '@/components/settings/cloud-account'
+import { CreditsPanel } from '@/components/settings/credits-panel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ApiClientError, getOnboardingState, getPositions, setWorkspaceProfile } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -63,78 +66,89 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
   })
 
   return (
-    <div className="flex flex-col gap-4">
-      <NoModelBanner />
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{t('settings.title')}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 text-sm">
-          <div className="flex items-center justify-between">
-            <span>{t('settings.theme')}</span>
-            <Button size="sm" variant="outline" onClick={toggleTheme}>
-              {theme === 'dark' ? t('theme.dark') : t('theme.light')}
-            </Button>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>{t('settings.lang')}</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setLang(lang === 'zh' ? 'en' : 'zh')
-              }}
-            >
-              {lang === 'zh' ? '中文' : 'English'}
-            </Button>
-          </div>
-          {identity === undefined ? null : (
-            <div className="flex items-center justify-between">
-              <span>{t('settings.identity')}</span>
-              <span className="font-mono text-xs text-muted-foreground">{identity}</span>
-            </div>
-          )}
-          <Separator />
-          <p className="text-muted-foreground">
-            {t('settings.placeholder')}{' '}
-            <Link to="/connections" className="text-primary underline-offset-4 hover:underline">
-              {t('nav.connections')}
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
-      {onboarding.data === undefined ? null : (
+    <Tabs defaultValue="general" className="flex flex-col gap-4">
+      <TabsList>
+        <TabsTrigger value="general">{t('settings.tab.general')}</TabsTrigger>
+        {/* 49 M5「设置 → 账号与积分」：上半张是账号卡（WP58），下半张是积分（WP59） */}
+        <TabsTrigger value="account">{t('settings.tab.account')}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="general" className="flex flex-col gap-4">
+        <NoModelBanner />
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-1 text-sm">
-              {t('settings.company')}
-              <Hint text={t('settings.company.hint')} />
-            </CardTitle>
+            <CardTitle className="text-sm">{t('settings.title')}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ProfileForm
-              key={onboarding.data.profile?.set_at ?? 'new'}
-              {...(onboarding.data.profile === undefined
-                ? {}
-                : { profile: onboarding.data.profile })}
-              emailHint={onboarding.data.person.email}
-              verticals={onboarding.data.verticals}
-              busy={save.isPending}
-              saved={saved}
-              {...(failure === undefined ? {} : { error: failure })}
-              onSave={(draft) => {
-                save.mutate(draft)
-              }}
-            />
+          <CardContent className="flex flex-col gap-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span>{t('settings.theme')}</span>
+              <Button size="sm" variant="outline" onClick={toggleTheme}>
+                {theme === 'dark' ? t('theme.dark') : t('theme.light')}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>{t('settings.lang')}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setLang(lang === 'zh' ? 'en' : 'zh')
+                }}
+              >
+                {lang === 'zh' ? '中文' : 'English'}
+              </Button>
+            </div>
+            {identity === undefined ? null : (
+              <div className="flex items-center justify-between">
+                <span>{t('settings.identity')}</span>
+                <span className="font-mono text-xs text-muted-foreground">{identity}</span>
+              </div>
+            )}
+            <Separator />
+            <p className="text-muted-foreground">
+              {t('settings.placeholder')}{' '}
+              <Link to="/connections" className="text-primary underline-offset-4 hover:underline">
+                {t('nav.connections')}
+              </Link>
+            </p>
           </CardContent>
         </Card>
-      )}
-      {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
-      {/*
+        {onboarding.data === undefined ? null : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-1 text-sm">
+                {t('settings.company')}
+                <Hint text={t('settings.company.hint')} />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProfileForm
+                key={onboarding.data.profile?.set_at ?? 'new'}
+                {...(onboarding.data.profile === undefined
+                  ? {}
+                  : { profile: onboarding.data.profile })}
+                emailHint={onboarding.data.person.email}
+                verticals={onboarding.data.verticals}
+                busy={save.isPending}
+                saved={saved}
+                {...(failure === undefined ? {} : { error: failure })}
+                onSave={(draft) => {
+                  save.mutate(draft)
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
+        {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
+        {/*
         47 J1 数据地图：按**当前选中的那条岗位**裁剪（登记表是按岗位的，
         不像模型 key 那样统一走所有者）。左栏还没选岗位时这一块不出。
       */}
-      {position === null ? null : <DataMapPanel position={position} />}
-    </div>
+        {position === null ? null : <DataMapPanel position={position} />}
+      </TabsContent>
+      <TabsContent value="account" className="flex flex-col gap-4">
+        <CloudAccountCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+        <CreditsPanel />
+      </TabsContent>
+    </Tabs>
   )
 }
