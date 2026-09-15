@@ -762,6 +762,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      '@agentsws/roles':
+        specifier: workspace:*
+        version: link:../roles
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../skills

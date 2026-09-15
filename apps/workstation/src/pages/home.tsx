@@ -21,7 +21,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { StatTileView } from '@/components/stat-tile'
@@ -30,11 +30,63 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ClaimPool } from '@/components/work/claim-pool'
 import { InProgressList } from '@/components/work/in-progress-list'
-import { getHome, listInProgress } from '@/lib/api'
+import { getHome, getPositions, listInProgress } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { daysLeftLabel, hhmm, matterUrl, todoUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
+
+/**
+ * WP69（54 §4）：**首页只有岗位，没有职责**。
+ *
+ * 一个人开着网站运营那四条职责的时候，照分配列就是四张卡（店铺管理 / 内容与博客 /
+ * 邮件营销 / 订单履约），而他心里只有一个"网站运营"。所以这里按岗位聚合：
+ * 一个岗位一张卡，计数是这个岗位下全部职责加起来的（"网站运营：3 张待审"），
+ * 点开才看得到是哪条职责的。
+ *
+ * 没装岗位面的服务进程没有 `instances`——那时候整块不出，首页退回老样子。
+ */
+function PositionCards(): React.ReactNode {
+  const { t } = useApp()
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  const instances = positions.data?.instances ?? []
+  if (instances.length === 0) return null
+  return (
+    <section data-testid="position-cards">
+      <h2 className="mb-2 text-sm font-medium">{t('home.positions')}</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {instances.map((p) => {
+          // 岗位页的地址用的是分配 id（36 §3 的"岗位"）：只能取**本人**那几条里的一条
+          const to = p.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
+          return (
+            <Link
+              key={p.position_id}
+              to={`/positions/${to}`}
+              className="rounded-lg border p-3 hover:bg-accent"
+              data-testid="position-card"
+              data-position={p.position_id}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-sm font-medium">{p.name.zh}</span>
+                {p.pending_cards === 0 ? null : (
+                  <span
+                    className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[11px]"
+                    data-testid="position-card-cards"
+                  >
+                    {t('home.positions.cards', { count: p.pending_cards })}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('position.counts', { cards: p.pending_cards, matters: p.open_matters })}
+              </p>
+            </Link>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
 
 const SOURCE_ICON = {
   meeting: Users,
@@ -205,8 +257,21 @@ export function HomePage(): React.ReactNode {
   const [range, setRange] = useState<RangeName>('yesterday')
 
   const home = useQuery({ queryKey: ['home', range], queryFn: () => getHome(range) })
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+
+  /*
+   * WP69（54 §4）：**一个人只有一个岗位时，首页直接就是那个岗位页**。
+   *
+   * 只有一个岗位的人，首页上那张唯一的岗位卡除了多点一下之外不提供任何信息。
+   * 有两个及以上才需要"先选一个"。等岗位清单真回来了才判——还在加载时就跳，
+   * 会把"其实有两个岗位"的人也甩进去。
+   */
+  const instances = positions.data?.instances
+  const only = instances?.length === 1 ? instances[0] : undefined
+  const onlyTo = only?.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
 
   if (home.isPending) return <Skeleton className="h-64 w-full" />
+  if (onlyTo !== undefined) return <Navigate to={`/positions/${onlyTo}`} replace />
   if (home.error !== null) {
     return (
       <p role="alert" className="text-sm text-destructive">
@@ -238,6 +303,9 @@ export function HomePage(): React.ReactNode {
           </div>
         </section>
       )}
+
+      {/* WP69（54 §4）：首页只列**岗位**卡，职责不出现 */}
+      <PositionCards />
 
       {/* 每岗位一条核心数据条（36 §3 保留） */}
       {data.tiles.map((bar) => (

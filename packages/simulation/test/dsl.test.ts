@@ -403,6 +403,42 @@ invariants: [prompt_replayable]`,
     ).toThrow(/true \/ false/)
   })
 
+  // ── WP69（54）：岗位是任务主入口 ──────────────────────────────────
+  it('两条岗位事件与 position_routed_to 断言解析得出来', () => {
+    const s = parseScenario(
+      MINIMAL.replace(
+        'invariants: [prompt_replayable]',
+        [
+          `  - at: '+2m'`,
+          '    position.staff: { who: p_wang, position: web-ops }',
+          `  - at: '+3m'`,
+          '    position.open: { who: p_wang, position: web-ops, text: 把 A 商品降价 10% }',
+          'expected:',
+          '  position_routed_to: [dtc.store]',
+          'invariants: [prompt_replayable]',
+        ].join('\n'),
+      ),
+      'x.yml',
+    )
+    const staff = s.events.find((e) => e.type === 'position.staff')
+    expect(staff?.type === 'position.staff' ? staff.staff.position : '').toBe('web-ops')
+    const open = s.events.find((e) => e.type === 'position.open')
+    expect(open?.type === 'position.open' ? open.open_at_position.text : '').toContain('降价')
+    expect(s.expected?.position_routed_to).toEqual(['dtc.store'])
+  })
+
+  it('岗位事件里写错键名会当场报出来（不是悄悄忽略）', () => {
+    expect(() =>
+      parseScenario(
+        MINIMAL.replace(
+          'invariants: [prompt_replayable]',
+          `  - at: '+2m'\n    position.open: { who: p_wang, positon: web-ops, text: hi }\ninvariants: [prompt_replayable]`,
+        ),
+        'x.yml',
+      ),
+    ).toThrow()
+  })
+
   it('globToRegExp', () => {
     const re = globToRegExp('scenarios/**/*.yml')
     expect(re.test('scenarios/ops/model-outage.yml')).toBe(true)

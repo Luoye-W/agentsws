@@ -170,6 +170,9 @@ const EVENT_KEYS = [
   'secretary.meet',
   'secretary.meet_decide',
   'secretary.route',
+  // WP69 岗位是任务主入口（54）
+  'position.staff',
+  'position.open',
   // WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）
   'shop.price_change',
   'shop.theme_push',
@@ -233,6 +236,8 @@ const EXPECTED_KEYS = [
   'judge_min_score',
   'assignments_not_unioned',
   'routed_to',
+  // WP69（54 §2）：岗位内路由落到了哪几条职责
+  'position_routed_to',
   'secretary_kinds',
   'scope_disjoint',
   // WP62（51 §1 N0）
@@ -887,6 +892,30 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    // ── WP69（54）：岗位是任务主入口 ──
+    case 'position.staff': {
+      known(source, `${path}.${key}`, body, ['who', 'position'])
+      return {
+        at,
+        type: 'position.staff',
+        staff: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          position: str(source, `${path}.${key}.position`, body.position),
+        },
+      }
+    }
+    case 'position.open': {
+      known(source, `${path}.${key}`, body, ['who', 'position', 'text'])
+      return {
+        at,
+        type: 'position.open',
+        open_at_position: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          position: str(source, `${path}.${key}.position`, body.position),
+          text: str(source, `${path}.${key}.text`, body.text),
+        },
+      }
+    }
     case 'chat.visitor_message': {
       known(source, `${path}.${key}`, body, ['visitor', 'text'])
       return {
@@ -1073,6 +1102,9 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (blocked !== undefined) out.blocked_rules = blocked
   const routedTo = optStrList(source, 'expected.routed_to', raw.routed_to)
   if (routedTo !== undefined) out.routed_to = routedTo
+  // WP69（54 §2）：岗位内路由落到了哪几条职责
+  const positionRoutedTo = optStrList(source, 'expected.position_routed_to', raw.position_routed_to)
+  if (positionRoutedTo !== undefined) out.position_routed_to = positionRoutedTo
   const secretaryKinds = optStrList(source, 'expected.secretary_kinds', raw.secretary_kinds)
   if (secretaryKinds !== undefined) out.secretary_kinds = secretaryKinds
   const disjoint = optStrList(source, 'expected.scope_disjoint', raw.scope_disjoint)

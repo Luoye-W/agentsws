@@ -238,6 +238,14 @@ export type KnownEventType =
   | 'matter.opened'
   | 'matter.closed'
   | 'matter.message'
+  /**
+   * WP69（54 §2）：岗位内路由判完了。payload 只有 `position_id` / `picked` /
+   * 候选的 `role_id` 与分数 / `ambiguous`——**判据词与原话不进日志**（21 §1），
+   * 那句话在事项时间线上。
+   */
+  | 'matter.routed'
+  /** WP69：人手动换了职责（`POST /v1/matters/:id/reroute`）；payload 只有前后两个 role_id。 */
+  | 'matter.rerouted'
   // 恢复先对账（WP34 B）：payload 只有条数与结论
   | 'reconcile.started'
   | 'reconcile.finished'

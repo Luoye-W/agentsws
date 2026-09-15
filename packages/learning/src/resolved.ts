@@ -14,16 +14,30 @@ import type { PersonId, PromptSection, SkillRef, WorkspaceId } from '@agentsws/c
 /** persona 段里技能正文的起始 order：排在公司（10）/ 职责（20）/ 围栏（30）之后。 */
 export const SKILL_SECTION_ORDER = 40
 
+/**
+ * 解析技能时的"我是谁"。
+ *
+ * WP69（54 §1）多了两格：`position_id` / `role_id`——六层叠加里中间那两层按它们取。
+ * 两个都可选：不给就是那一层没有东西可叠（老调用方一个字不用改）。
+ */
+export interface SkillPromptActor {
+  person_id: PersonId
+  workspace_id: WorkspaceId
+  department_id?: string
+  position_id?: string
+  role_id?: string
+}
+
 export interface SkillResolver {
   resolve(
     name: string,
-    actor: { person_id: PersonId; workspace_id: WorkspaceId; department_id?: string },
+    actor: SkillPromptActor,
   ): Promise<{ name: string; markdown: string } | undefined>
 }
 
 export interface SkillPromptInput {
   skills: readonly SkillRef[]
-  actor: { person_id: PersonId; workspace_id: WorkspaceId; department_id?: string }
+  actor: SkillPromptActor
   registry: SkillResolver
 }
 

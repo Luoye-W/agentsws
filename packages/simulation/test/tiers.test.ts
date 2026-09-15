@@ -220,7 +220,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十四条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十六条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       'ops/claim-pool',
@@ -235,6 +235,9 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'ops/two-desks-no-union',
       // WP47 范围模型（44 G1 / G5）：品牌新开一家店，挂它的岗位自动扩范围并留痕
       'org/brand-adds-store',
+      // WP69 岗位是任务主入口（54）：同一句话交给不同岗位落到不同职责；
+      // 起 Run 用的是被路由到的那条职责的分配（不并集）；拿不准出选择卡
+      'org/task-opened-at-position-routes-to-duty',
       // WP65 品牌是顶层（52 O1 / O2）：同一家公司两个品牌工作区，
       // 四个库（分配 / 卡 / 事实卡 / 店铺连接）各自按 `workspace_id` 切，互相看不见
       'org/two-brands-cannot-see-each-other',

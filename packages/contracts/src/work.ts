@@ -26,6 +26,8 @@ import type {
   ObjectRef,
   PersonId,
   PositionId,
+  PositionTemplateId,
+  RoleId,
   RunId,
   WorkspaceId,
 } from './common.js'
@@ -46,6 +48,16 @@ export type MatterEventId = string
  */
 export type MatterKind = 'conversation' | 'project' | 'meeting' | 'incident' | 'adhoc'
 export type MatterStatus = 'open' | 'waiting' | 'closed'
+
+/**
+ * WP69（54 §2）：这件事**从哪儿开的**。
+ *
+ * - `position`（主）：交给一个岗位，岗位内路由挑职责（{@link Matter.role_id} 由路由填、可换）；
+ * - `role`（次）：直接指定一条职责的规则来做，跳过路由。
+ *
+ * 缺省（老事项没有这个字段）按 `role` 读——存量事项本来就是带着 `X-Assignment` 开的。
+ */
+export type MatterEntry = 'position' | 'role'
 
 /** 时间线上的一条：人消息、Agent 运行、卡片、待办变化、会议——一条线，不分栏。 */
 export type MatterEventKind =
@@ -92,6 +104,21 @@ export interface Matter {
   kind: MatterKind
   title: string
   status: MatterStatus
+  /** WP69（54 §2）：从岗位开的还是从职责开的；缺省按 `role` 读。 */
+  entry?: MatterEntry
+  /**
+   * WP69：现在归哪条职责做。岗位入口由岗位内路由填，`POST /v1/matters/:id/reroute` 可换；
+   * 职责入口就是那条职责。换职责只影响**之后**起的 Run，旧 Run 不动。
+   */
+  role_id?: RoleId
+  /**
+   * WP69（54 §1）：这件事挂在哪个**岗位**下（`web-ops` / `customer-care`…）。
+   *
+   * 与 {@link Matter.position_id} 不是一回事：那一条是"用谁的哪条分配在做"
+   * （= Assignment，权限与额度从它来），这一条是"它属于哪个岗位"（岗位层上下文与
+   * 记忆从它来）。一条职责挂在多个岗位里时没有它就说不清是哪个岗位，所以单独记。
+   */
+  position_template_id?: PositionTemplateId
   goal_id?: GoalId
   context: MatterContext
   created_at: Iso8601

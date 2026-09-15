@@ -272,6 +272,51 @@ export interface Position {
   roles: { role: RoleId; default: boolean }[]
 }
 
+/**
+ * WP69（54 §1）：**岗位实体** = 一个工作区里"网站运营"这个岗位本身。
+ *
+ * 三条纪律，一条都不能松：
+ *
+ * 1. **算出来的，不是存出来的**。05 §2「岗位只在分配那一刻展开」一个字没改——
+ *    这里的 `holders` / `roles` 全是从分配表现算的视图，没有第二份真源，
+ *    也没有任何一条写口会往"岗位"上落东西。
+ * 2. **不是权限并集**（05 §4 / 31 §3.1）。`roles[].assignment_ids` 只是"这个岗位下
+ *    有哪几条分配"，每一次运行仍然只在**其中一条**下跑。
+ * 3. **只含本人看得见的**：`open_matters` / `pending_cards` 是按请求人过滤后的数。
+ */
+export interface PositionInstance {
+  /** 岗位模板 id（`web-ops`…），不是 Assignment id。 */
+  position_id: string
+  workspace_id: WorkspaceId
+  name: { zh: string; en: string }
+  /** 模板当时的版本（05 §2：之后改模板不影响已分配的人）。 */
+  template_version: string
+  /** 谁在做：默认包里的职责都在他名下才算（05 §2）。 */
+  holders: PersonId[]
+  /** 展开的职责 → 各自的分配（本工作区、未撤销的那些）。 */
+  roles: {
+    role_id: RoleId
+    role_name: string
+    /** 模板里这条是不是默认勾上的 */
+    default: boolean
+    /** 这个工作区里这条职责的全部分配（谁都算——这是岗位的视图，不是某个人的） */
+    assignment_ids: AssignmentId[]
+    /**
+     * **请求人自己**在这条职责上的那一条。没有 = 他不做这条活儿。
+     *
+     * 界面上的每一个入口都只能用它：跳到岗位页、用这条职责开一件事、换职责——
+     * 拿 `assignment_ids` 里别人那条去做，就是借岗位扩权。
+     */
+    my_assignment_id?: AssignmentId
+  }[]
+  /** 这个岗位下还没关的事项数（本人可见的） */
+  open_matters: number
+  /** 这个岗位下还等着人定的卡数（54 §4：通知按岗位聚合） */
+  pending_cards: number
+  /** 岗位层记忆的一句话（`position` 技能层 + 提到岗位层的教训条数） */
+  memory_summary: string
+}
+
 /** 05 §4 有效配置（单个 Assignment，不并集） */
 export interface EffectiveAction {
   id: ActionId

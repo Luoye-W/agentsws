@@ -163,6 +163,12 @@ export interface CreateMatterInput {
   pinned?: ObjectRef[] | undefined
   participants?: PersonId[] | undefined
   status?: Matter['status'] | undefined
+  /** WP69（54 §2）：从岗位开的还是从职责开的。不给就不写这个字段（存量事项的样子）。 */
+  entry?: Matter['entry'] | undefined
+  /** WP69：归哪条职责做（岗位入口由路由填、可换）。 */
+  role_id?: Matter['role_id'] | undefined
+  /** WP69（54 §1）：挂在哪个岗位下——与 `position_id`（那是分配）不是一回事。 */
+  position_template_id?: Matter['position_template_id'] | undefined
 }
 
 export interface CreateTodoInput {
@@ -354,6 +360,12 @@ export class Work {
       title: input.title,
       status: input.status ?? 'open',
       ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+      // WP69（54 §2）：这三样只在给了的时候才写——存量事项一个字段都不多
+      ...(input.entry === undefined ? {} : { entry: input.entry }),
+      ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+      ...(input.position_template_id === undefined
+        ? {}
+        : { position_template_id: input.position_template_id }),
       ...(input.goal_id === undefined ? {} : { goal_id: input.goal_id }),
       context: {
         summary: input.summary ?? '',
@@ -374,6 +386,12 @@ export class Work {
         title: matter.title,
         status: matter.status,
         participants: matter.context.participants.length,
+        // WP69（54 §2）：从哪儿开的、归哪条职责——两个 id，没有正文
+        ...(matter.entry === undefined ? {} : { entry: matter.entry }),
+        ...(matter.role_id === undefined ? {} : { role_id: matter.role_id }),
+        ...(matter.position_template_id === undefined
+          ? {}
+          : { position_template_id: matter.position_template_id }),
         ...(matter.goal_id === undefined ? {} : { goal_id: matter.goal_id }),
       },
     )

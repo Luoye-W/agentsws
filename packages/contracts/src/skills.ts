@@ -1,7 +1,31 @@
 import type { AssignmentId, Iso8601, PersonId, RunId, WorkspaceId } from './common.js'
 
-/** 24 §1 技能：Agent Skills 格式 + 段级元数据；三层叠加按段。 */
-export type SkillTier = 'package' | 'company' | 'department' | 'personal'
+/**
+ * 24 §1 技能：Agent Skills 格式 + 段级元数据；按段叠加。
+ *
+ * WP69（54 §1）把四层变六层，**只加不删**——原来那四层的语义与文件一个没动：
+ *
+ * `package → company → department → position → role → personal`
+ *
+ * 越靠后越具体、越优先。中间多出来的两层是 54 的核心：
+ * `position` 记"这家公司的网站运营怎么做事"，`role` 记"这条活儿的专业教训"。
+ * 叠加顺序见 `@agentsws/skills` 的 `TIER_ORDER`（那里是唯一一份顺序真源）。
+ */
+export type SkillTier = 'package' | 'company' | 'department' | 'position' | 'role' | 'personal'
+
+/**
+ * WP69（54 §3）：一条教训能被**提**到哪几层。
+ *
+ * `package` 不在里面（上游的东西不该被下游的教训改写），`personal` 也不在
+ * （它本来就在个人层，提到自己等于没提）。提升永远走提议 → 批准，不自动写。
+ */
+export type PromotionTier = 'company' | 'department' | 'position' | 'role'
+
+/** 提到 `position` / `role` 层时"提到哪一个"——岗位 id 或职责 id；另两层不需要。 */
+export interface PromotionTarget {
+  tier: PromotionTier
+  scope_id?: string
+}
 
 export interface SkillSection {
   id: string

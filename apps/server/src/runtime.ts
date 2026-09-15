@@ -146,10 +146,32 @@ export interface RuntimeOptions {
   }
 }
 
+/**
+ * WP69（54 §1 / §3）：岗位那一层从哪来。
+ *
+ * 与 `bind(work)` 同一个套路——岗位面要 `Work`，而 `Work` 要 `startRun`，
+ * 所以这一份也是**晚绑定**的（`bindPositions`）。不绑就是老行为：
+ * 六层里的 `position` 那一层没有东西可叠，岗位层上下文也不注入。
+ */
+export interface PositionLayerSource {
+  /**
+   * 这条职责属于哪个岗位。挂在多个岗位里、或者一个都没有时回 `{ note }`——
+   * 54 §3：**跳过 `position` 层并在时间线说明**，不猜一个。
+   */
+  positionOf(role_id: string): { position_id?: string; note?: string }
+  /** 岗位层上下文的三样：面板数字与告警摘要、岗位下进行中事项摘要、持有人可用时段。 */
+  layerContext(
+    position_id: string,
+    person_id: PersonId,
+  ): Promise<Record<string, unknown> | undefined> | Record<string, unknown> | undefined
+}
+
 export interface RuntimeAssembly {
   adapter: RuntimeAdapter
   /** 注入 `createWork`；工作模型与 startRun 互相需要，靠这一步打断环 */
   bind(work: Work): void
+  /** WP69：注入岗位面（岗位层技能与岗位层上下文靠它）。 */
+  bindPositions(source: PositionLayerSource): void
   startRun: StartRun
 }
 
@@ -191,6 +213,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   const source = options.source ?? {}
   const seed = options.seed ?? Math.floor(options.random() * 0x7fffffff)
   let work: Work | undefined
+  /** WP69：岗位面（晚绑定，见 `bindPositions`）。 */
+  let positions: PositionLayerSource | undefined
   let seq = 0
   const newId = (prefix: string): string => {
     seq += 1
@@ -421,8 +445,35 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       })
 
   /** 事项现场 → ContextItem[]（37 §2.2b：摘要 + pinned 记录，围栏与出处照旧）。 */
-  const contextOf = async (matter: Matter, brief: string): Promise<ContextItem[]> => {
+  const contextOf = async (
+    matter: Matter,
+    brief: string,
+    position: { position_id?: string; person_id: PersonId },
+  ): Promise<ContextItem[]> => {
     const items: ContextItem[] = []
+    /*
+     * WP69（54 §3）岗位层上下文，排在事项摘要**前面**：它是"这个岗位现在什么情况"，
+     * 是背景；事项摘要是"这件事到哪了"，是前景。三样都是摘要级——数字块与告警的
+     * 结论、岗位下进行中事项的标题与阶段、持有人忙不忙。
+     *
+     * 19 §3 的过滤照旧：`layerContext` 只看**这个岗位**下的分配，别的岗位的数据
+     * 一个字都进不来。
+     */
+    if (position.position_id !== undefined && positions !== undefined) {
+      const layer = await positions.layerContext(position.position_id, position.person_id)
+      if (layer !== undefined) {
+        const content = canonical(layer)
+        items.push({
+          id: `position_${position.position_id}`,
+          kind: 'summary',
+          source_ref: { type: 'position', id: position.position_id },
+          // 21 §3：岗位层只到 internal（54 安全纪律的最后一条）
+          sensitivity: 'internal',
+          content,
+          bytes: bytesOf(content),
+        })
+      }
+    }
     const summary = matter.context.summary.trim()
     if (summary !== '') {
       const content = canonical({ title: matter.title, status: matter.status, summary })
@@ -469,6 +520,26 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     assignment_id: AssignmentId
   }): Promise<RunRequest> => {
     const config = roles.effectiveConfig(input.assignment_id)
+    /*
+     * WP69（54 §1 / §3）：这次运行属于哪个岗位。
+     *
+     * 事项上显式记了就用它（岗位入口开的那些）；没记就按职责反查——
+     * **一条职责挂在多个岗位里、或者一个岗位都不挂时反查不出来**，那就跳过
+     * `position` 层并在时间线说一句（54 §3 原话）。不猜一个：猜错了等于把
+     * 别的岗位攒的规矩喂给这次运行。
+     */
+    const positionHit =
+      input.matter.position_template_id !== undefined
+        ? { position_id: input.matter.position_template_id }
+        : (positions?.positionOf(config.role_id) ?? {})
+    if (positionHit.position_id === undefined && positionHit.note !== undefined) {
+      work?.appendEvent(input.matter.id, {
+        kind: 'status',
+        text: positionHit.note,
+        actor: { kind: 'system', id: 'runtime' },
+        run_id: input.run_id,
+      })
+    }
     const allow = [
       ...new Set([...config.grounding.map((g) => g.tool), ...DEFAULT_TOOLS, ...devToolNames()]),
     ].sort()
@@ -491,7 +562,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         role_id: config.role_id,
       },
       trigger: { event_id: input.run_id, source: 'manual' },
-      context: await contextOf(input.matter, input.brief),
+      context: await contextOf(input.matter, input.brief, {
+        ...(positionHit.position_id === undefined ? {} : { position_id: positionHit.position_id }),
+        person_id: input.person_id,
+      }),
       grounding: config.grounding,
       // 16 §3：公司端 write_external 一律经执行器，运行时拿不到写口
       tools: { allow, connect_token, side_effect_policy: 'executor' },
@@ -501,12 +575,26 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           ...(config.persona === undefined
             ? []
             : [{ id: 'role', name: config.role_id, order: 20, text: config.persona }]),
-          // 24 §1：解析后的技能正文（包 → 公司 → 部门 → 个人叠加完的那一份）
+          /*
+           * 24 §1 + WP69（54 §1）：解析后的技能正文——**六层**叠加完的那一份
+           * （包 → 公司 → 部门 → 岗位 → 职责 → 个人）。
+           *
+           * 岗位入口的 Run 带岗位层 + 被路由到的那条职责层；职责入口的 Run 也带
+           * 它所属岗位的岗位层（`positionHit` 上面算好了）。哪一层没有东西，
+           * 那一层就是空的——`resolve` 查不到就跳过，不报错。
+           */
           ...(options.skills === undefined
             ? []
             : await skillPromptSections({
                 skills: config.skills,
-                actor: { person_id: input.person_id, workspace_id },
+                actor: {
+                  person_id: input.person_id,
+                  workspace_id,
+                  ...(positionHit.position_id === undefined
+                    ? {}
+                    : { position_id: positionHit.position_id }),
+                  role_id: config.role_id,
+                },
                 registry: options.skills,
               })),
         ],
@@ -607,6 +695,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     adapter,
     bind(w) {
       work = w
+    },
+    bindPositions(source) {
+      positions = source
     },
     startRun,
   }

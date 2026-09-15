@@ -41,7 +41,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "d1073f3626704688869c2b3664763676",
+  "source_digest": "034ec0c79453085d63fd34282f6a0161",
   "objects": [
     {
       "id": "ad_set",
@@ -1143,6 +1143,24 @@
           "optional": false
         },
         {
+          "name": "entry",
+          "type": "MatterEntry",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "position_template_id",
+          "type": "PositionTemplateId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
           "name": "goal_id",
           "type": "GoalId",
           "sensitivity": "internal",
@@ -1624,6 +1642,49 @@
       "read_ranges": ["workspace"],
       "properties": [],
       "read_via": []
+    },
+    {
+      "id": "position",
+      "label": "position",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "policy",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["workspace"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name.zh",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name.en",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "roles",
+          "type": "{ role: RoleId; default: boolean }[]",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "Position"
     },
     {
       "id": "product",
@@ -2639,6 +2700,24 @@
           "optional": false
         },
         {
+          "name": "entry",
+          "type": "MatterEntry",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "position_template_id",
+          "type": "PositionTemplateId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
           "name": "goal_id",
           "type": "GoalId",
           "sensitivity": "internal",
@@ -3288,6 +3367,14 @@
     },
     {
       "from": "goal",
+      "to": "position",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "position_id",
+      "lookup": []
+    },
+    {
+      "from": "goal",
       "to": "todo",
       "direction": "in",
       "cardinality": "many",
@@ -3368,6 +3455,14 @@
     },
     {
       "from": "matter",
+      "to": "position",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "position_id",
+      "lookup": []
+    },
+    {
+      "from": "matter",
       "to": "todo",
       "direction": "in",
       "cardinality": "many",
@@ -3396,6 +3491,14 @@
       "direction": "in",
       "cardinality": "many",
       "via": "meeting_record.meeting_id",
+      "lookup": []
+    },
+    {
+      "from": "meeting",
+      "to": "position",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "position_id",
       "lookup": []
     },
     {
@@ -3564,6 +3667,46 @@
       "direction": "in",
       "cardinality": "many",
       "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "position",
+      "to": "goal",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "goal.position_id",
+      "lookup": []
+    },
+    {
+      "from": "position",
+      "to": "matter",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "matter.position_id",
+      "lookup": []
+    },
+    {
+      "from": "position",
+      "to": "meeting",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "meeting.position_id",
+      "lookup": []
+    },
+    {
+      "from": "position",
+      "to": "todo",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "todo.position_id",
+      "lookup": []
+    },
+    {
+      "from": "position",
+      "to": "work_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "work_item.position_id",
       "lookup": []
     },
     {
@@ -4048,6 +4191,14 @@
     },
     {
       "from": "todo",
+      "to": "position",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "position_id",
+      "lookup": []
+    },
+    {
+      "from": "todo",
       "to": "review",
       "direction": "out",
       "cardinality": "one",
@@ -4108,6 +4259,14 @@
       "direction": "out",
       "cardinality": "one",
       "via": "goal_id",
+      "lookup": []
+    },
+    {
+      "from": "work_item",
+      "to": "position",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "position_id",
       "lookup": []
     },
     {

@@ -222,6 +222,43 @@ type Position = {
 
 岗位模板只在分配那一刻展开成一组 Assignment；之后改模板不影响已分配的人，"重新应用模板"需确认。
 
+### 2.1 PositionInstance（岗位实体，运行时视图；54 §1 / WP69）
+
+上面那段"岗位只在分配那一刻展开"一个字没改——但**用户面对的是岗位**（客服、网站运营），
+不是职责。开一件事 = 交给一个岗位（54 §2），于是"一个工作区里『网站运营』这个岗位本身"
+需要有一个说得出口的对象。它是**算出来的视图**，不是第三张表：
+
+```ts
+type PositionInstance = {
+  position_id: string          // 岗位模板 id（'web-ops'），不是 Assignment id
+  workspace_id: string
+  name: { zh: string; en: string }
+  template_version: string     // 模板当时的版本
+  holders: PersonId[]          // 默认包里的职责都在他名下才算（本节开头那条规则）
+  roles: {
+    role_id: string
+    role_name: string
+    default: boolean
+    assignment_ids: string[]   // 这个工作区里这条职责的全部分配
+    my_assignment_id?: string  // **请求人自己**那一条；界面上的每个入口只能用它
+  }[]
+  open_matters: number
+  pending_cards: number
+  memory_summary: string       // 岗位层记忆一句话（技能层 `position`）
+}
+```
+
+三条纪律：
+
+1. **不是第二份真源**：`holders` / `roles` 每次现算，没有任何写口往"岗位"上落东西。
+2. **不是权限并集**（§4）：`assignment_ids` 只说明"这个岗位下有哪几条分配"，
+   每一次运行仍然只在**其中一条**下跑。`PositionInstance` 上一个 scope 字段都没有。
+3. **别人的那条用不了**：所有入口（开事项、换职责、跳岗位页）只认 `my_assignment_id`——
+   拿 `assignment_ids` 里别人那条去做，就是借岗位扩权。
+
+落点：`packages/contracts/src/roles.ts`、`apps/server/src/positions.ts`、
+`GET /v1/positions/:id`（`:id` 收岗位模板 id，也收本人持有的一条分配 id）。
+
 ---
 
 ## 3. Assignment（分配）与 WorkspacePolicy
