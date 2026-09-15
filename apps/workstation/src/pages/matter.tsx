@@ -22,7 +22,9 @@ import {
   completeTodo,
   getMatter,
   getMatterTimeline,
+  getPosition,
   postMatterMessage,
+  rerouteMatter,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
@@ -37,6 +39,78 @@ const EVENT_ICON = {
   note: FileText,
   status: FileText,
 } as const
+
+/**
+ * WP69（54 §2）：**这件事现在归哪条职责做，以及怎么换**。
+ *
+ * 一行字，排在标题下面：「路由到 店铺管理 · 换」。点「换」展开的是**这个岗位下**
+ * 的职责清单——换职责不是扩权的口子，能换到的只有这个岗位里、而且本人名下有的那些
+ * （服务端还会再判一次）。换完只影响之后起的 Run，旧 Run 一条都不动。
+ */
+function RoutedLine({
+  matterId,
+  positionId,
+  roleId,
+}: {
+  matterId: string
+  positionId: string
+  roleId?: string
+}): React.ReactNode {
+  const { t } = useApp()
+  const client = useQueryClient()
+  const [picking, setPicking] = useState(false)
+  const position = useQuery({
+    queryKey: ['position-instance', positionId],
+    queryFn: () => getPosition(positionId),
+    enabled: positionId !== '' && picking,
+  })
+  const reroute = useMutation({
+    mutationFn: (next: string) => rerouteMatter(matterId, next),
+    onSettled: () => {
+      setPicking(false)
+      void client.invalidateQueries({ queryKey: ['matter', matterId] })
+    },
+  })
+  const current = position.data?.roles.find((r) => r.role_id === roleId)
+  return (
+    <div className="flex flex-col gap-1" data-testid="matter-routed" data-role={roleId ?? ''}>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>
+          {roleId === undefined
+            ? t('matter.routed.none')
+            : t('matter.routed', { role: current?.role_name ?? roleId })}
+        </span>
+        <Button
+          size="xs"
+          variant="ghost"
+          data-testid="matter-reroute"
+          onClick={() => {
+            setPicking((v) => !v)
+          }}
+        >
+          {t('matter.routed.change')}
+        </Button>
+      </div>
+      {picking ? (
+        <div className="flex flex-wrap gap-2" data-testid="reroute-options">
+          {(position.data?.roles ?? []).map((r) => (
+            <Button
+              key={r.role_id}
+              size="xs"
+              variant={r.role_id === roleId ? 'secondary' : 'outline'}
+              disabled={r.assignment_ids.length === 0 || reroute.isPending}
+              onClick={() => {
+                reroute.mutate(r.role_id)
+              }}
+            >
+              {r.role_name}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 function TimelineEvent({ event }: { event: MatterEvent }): React.ReactNode {
   const { lang } = useApp()
@@ -155,6 +229,14 @@ export function MatterPage(): React.ReactNode {
             )}
           </div>
         </div>
+        {/* WP69（54 §2）：这件事归哪条职责做，可以换 */}
+        {view.matter.position_id === undefined ? null : (
+          <RoutedLine
+            matterId={view.matter.id}
+            positionId={view.matter.position_id}
+            {...(view.matter.role_id === undefined ? {} : { roleId: view.matter.role_id })}
+          />
+        )}
         <p className="text-sm text-muted-foreground" data-testid="matter-summary">
           {view.matter.context.summary}
         </p>

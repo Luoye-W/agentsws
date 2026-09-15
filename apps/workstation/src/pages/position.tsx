@@ -17,7 +17,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { getPositionRecords, getPositions, getPositionView } from '@/lib/api'
+import { LayerMemory } from '@/components/work/layer-memory'
+import { PositionEntry } from '@/components/work/position-entry'
+import { getPosition, getPositionRecords, getPositions, getPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
 
@@ -162,6 +164,39 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
   )
 }
 
+/**
+ * WP69（54 §3）「记忆」tab：岗位层那一份在上，这个岗位下每条职责那一份在下。
+ *
+ * 两层分开列，不合成一份——合起来就说不清"这句话是这家公司的网站运营都这么做，
+ * 还是只有店铺管理这条活儿才这样"。
+ */
+function MemoryTab({ id }: { id: string }): React.ReactNode {
+  const { t } = useApp()
+  const position = useQuery({
+    queryKey: ['position-instance', id],
+    queryFn: () => getPosition(id),
+    enabled: id !== '',
+  })
+  if (position.isPending) return <Skeleton className="h-40 w-full" />
+  if (position.error !== null || position.data === undefined)
+    return <p className="text-sm text-muted-foreground">—</p>
+  const view = position.data
+  return (
+    <div className="flex flex-col gap-6" data-testid="position-memory">
+      <section>
+        <h3 className="mb-2 text-sm font-medium">{t('memory.position', { name: view.name.zh })}</h3>
+        <LayerMemory tier="position" scopeId={view.position_id} />
+      </section>
+      {view.roles.map((r) => (
+        <section key={r.role_id} data-testid="role-memory" data-role={r.role_id}>
+          <h3 className="mb-2 text-sm font-medium">{t('memory.role', { name: r.role_name })}</h3>
+          <LayerMemory tier="role" scopeId={r.role_id} />
+        </section>
+      ))}
+    </div>
+  )
+}
+
 function RecordsTab({ id }: { id: string }): React.ReactNode {
   return (
     <div className="flex flex-col gap-6">
@@ -209,6 +244,12 @@ export function PositionPage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4" data-testid="position-page" data-position={id}>
+      {/*
+        WP69（54 §2 / §4）：岗位页顶部那个按钮 + 折叠着的职责层。
+        它排在 Tab 之上，因为"交给这个岗位一件事"不属于任何一个 Tab——
+        卡片 / 面板 / 记录 / 记忆都是"看"，只有它是"做"。
+      */}
+      <PositionEntry id={id} />
       <Tabs
         value={tab}
         onValueChange={(next) => {
@@ -223,6 +264,8 @@ export function PositionPage(): React.ReactNode {
           <TabsTrigger value="cards">{t('position.tab.cards')}</TabsTrigger>
           <TabsTrigger value="view">{t('position.tab.view')}</TabsTrigger>
           <TabsTrigger value="records">{t('position.tab.records')}</TabsTrigger>
+          {/* WP69（54 §3）：这个岗位攒下来的规矩 */}
+          <TabsTrigger value="memory">{t('position.tab.memory')}</TabsTrigger>
         </TabsList>
         <TabsContent value="cards">
           {/* 37 §1：与首页同一副牌，只是钉死在这个岗位上 */}
@@ -233,6 +276,9 @@ export function PositionPage(): React.ReactNode {
         </TabsContent>
         <TabsContent value="records">
           <RecordsTab id={id} />
+        </TabsContent>
+        <TabsContent value="memory">
+          <MemoryTab id={id} />
         </TabsContent>
       </Tabs>
     </div>

@@ -2282,6 +2282,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }) as Promise<ApprovalItem[]>,
       orders: () => brand.workData.orders(),
       label: (ref) => brand.workData.label(ref),
+      // WP69（54 §2）：职责入口的事项记下它走的是哪条职责（`X-Assignment` 反查）
+      roleOf: (assignment_id) => roles.assignments.get(assignment_id)?.role_id,
       // 40 §2.2：周 / 月复盘里那一段"疑似重复"
       duplicates: async () =>
         (await catalog.duplicates(5)).map((d) => ({

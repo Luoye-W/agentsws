@@ -2530,7 +2530,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 本人持有的岗位（= 未撤销的 Assignment）与其职责 */
+    /** 本人持有的岗位（= 未撤销的 Assignment）与其职责；装了岗位面时多带一份 54 §1 的岗位实体（instances） */
     get: operations['listPositions']
     put?: never
     post?: never

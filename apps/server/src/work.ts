@@ -10,6 +10,7 @@
 import type { WorkActor, WorkHome, WorkPoolItem, WorkPort } from '@agentsws/api'
 import type {
   ApprovalItem,
+  AssignmentId,
   CalendarItem,
   ClaimPayload,
   Clock,
@@ -92,6 +93,11 @@ export interface WorkPortOptions {
     actor: WorkActor,
     range: { from: Iso8601; to: Iso8601 },
   ): Promise<CalendarItem[]> | CalendarItem[]
+  /**
+   * WP69（54 §2）：`X-Assignment` → 它是哪条职责。
+   * 不给就是"记不下职责入口的 role_id"——事项照常能开（存量事项本来就没有这个字段）。
+   */
+  roleOf?(assignment_id: AssignmentId): string | undefined
   /** 24 的 lesson，进复盘的「Agent 学到的」 */
   lessons?(actor: WorkActor): { id: string; text: string }[]
   /**
@@ -230,12 +236,23 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         })),
       }
     },
-    createMatter: (actor, input) =>
-      work.createMatter({
+    /**
+     * WP69（54 §2）**职责入口**：这条口子一个签名没改，但现在会记下"从哪儿开的"。
+     *
+     * `entry: 'role'` 与 `role_id` 都是从 `X-Assignment` 反查出来的——用户带着哪条
+     * 分配来，就是指定用那条职责的规矩做。所以它跳过岗位内路由（岗位入口才路由）。
+     * 反查不到职责（分配已撤销）时两个字段都不写：存量事项长什么样，它就长什么样。
+     */
+    createMatter: (actor, input) => {
+      const role_id = options.roleOf?.(actor.assignment_id)
+      return work.createMatter({
         ...input,
         position_id: actor.assignment_id,
         participants: [actor.person_id],
-      }),
+        entry: 'role',
+        ...(role_id === undefined ? {} : { role_id }),
+      })
+    },
     closeMatter: (actor, id, unfinished) =>
       work.closeMatter(id, { unfinished, by: actor.person_id }),
     timeline: (_actor, id, opts) => {

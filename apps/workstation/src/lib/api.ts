@@ -272,6 +272,11 @@ export interface HomeData {
 
 export interface PositionsData {
   positions: PositionSummary[]
+  /**
+   * WP69（54 §4）：按**岗位**聚合的那一份（首页岗位卡读它）。
+   * 没装岗位面的服务进程没有这个字段——首页退回按职责列（老行为）。
+   */
+  instances?: PositionInstanceData[]
   tile_library: TileSpec[]
   max_tiles: number
 }
@@ -511,6 +516,108 @@ export const getPositionView = (id: string, range: RangeName): Promise<ViewData>
 export const getPositionRecords = (id: string): Promise<RecordsData> =>
   api<RecordsData>(`/v1/positions/${encodeURIComponent(id)}/records`, { assignment: id })
 
+/* ── WP69（54）：岗位是任务主入口 ─────────────────────────────────────── */
+
+/** 54 §1 岗位实体：谁在做、展开了哪几条职责、下面有多少事项与待审卡。 */
+export interface PositionInstanceData {
+  position_id: string
+  workspace_id: string
+  name: { zh: string; en: string }
+  template_version: string
+  holders: string[]
+  roles: {
+    role_id: string
+    role_name: string
+    default: boolean
+    assignment_ids: string[]
+    /** 本人在这条职责上的那一条分配；没有 = 他不做这条活儿（界面上的入口只能用它） */
+    my_assignment_id?: string
+  }[]
+  open_matters: number
+  pending_cards: number
+  memory_summary: string
+}
+
+export interface RouteCandidateData {
+  role_id: string
+  role_name: string
+  score: number
+  why: string[]
+}
+
+export interface OpenAtPositionData {
+  matter: { id: string; title: string; entry?: string; role_id?: string }
+  picked?: { role_id: string; role_name: string; assignment_id: string }
+  candidates: RouteCandidateData[]
+  ambiguous: boolean
+  reason: string
+  approval_item_id?: string
+  run_id?: string
+}
+
+/** 岗位实体。`id` 是岗位模板 id，也收本人持有的一条分配 id（服务端换算）。 */
+export const getPosition = (id: string): Promise<PositionInstanceData> =>
+  api<PositionInstanceData>(`/v1/positions/${encodeURIComponent(id)}`, { assignment: id })
+
+/** 54 §2 主入口：交给这个岗位一件事（一句话 → 事项）。 */
+export const openMatterAtPosition = (
+  id: string,
+  input: { title: string; summary?: string },
+): Promise<OpenAtPositionData> =>
+  api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
+    method: 'POST',
+    body: input,
+    assignment: id,
+  })
+
+/** 54 §2：换一条职责来做这件事（换后新的 Run 走新职责，旧 Run 不动）。 */
+export const rerouteMatter = (
+  matter_id: string,
+  role_id: string,
+): Promise<{ matter: { id: string; role_id?: string }; assignment_id: string }> =>
+  api(`/v1/matters/${encodeURIComponent(matter_id)}/reroute`, {
+    method: 'POST',
+    body: { role_id },
+  })
+
+/** 54 §3：某一层的记忆（岗位页"记忆"tab 与职责层"记忆"小节各读自己那一层）。 */
+export interface LayerMemoryData {
+  tier: string
+  scope_id?: string
+  summary: string
+  entries: {
+    skill: string
+    section_id: string
+    heading?: string
+    body: string
+    origin: 'authored' | 'learned'
+    learned_from?: { lessons: string[]; at: string }
+  }[]
+}
+
+export const getLayerMemory = (tier: string, scope_id?: string): Promise<LayerMemoryData> =>
+  api<LayerMemoryData>(
+    `/v1/memory?tier=${encodeURIComponent(tier)}${
+      scope_id === undefined ? '' : `&scope_id=${encodeURIComponent(scope_id)}`
+    }`,
+  )
+
+/** 54 §3「提到这一层」：走提议 → 批准，不自动写。 */
+export const promoteSkillTo = (input: {
+  skill: string
+  section_ids: string[]
+  to_tier: 'company' | 'department' | 'position' | 'role'
+  scope_id?: string
+}): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }> =>
+  api(`/v1/skills/${encodeURIComponent(input.skill)}/promote`, {
+    method: 'POST',
+    body: {
+      section_ids: input.section_ids,
+      to_tier: input.to_tier,
+      ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+    },
+  })
+
 /** 25 定时任务（列表只读 + 暂停 / 恢复）。 */
 export interface ScheduledTaskRow {
   id: string
@@ -601,6 +708,20 @@ export interface MatterViewWithPeople extends MatterView {
 
 export const getMatter = (id: string): Promise<MatterViewWithPeople> =>
   api<MatterViewWithPeople>(`/v1/matters/${encodeURIComponent(id)}`)
+
+/**
+ * WP69（54 §2）**职责入口**：指定用这条职责的规矩做，跳过岗位内路由。
+ * `assignment` 就是那条职责的分配——权限、额度、动作面全是它的。
+ */
+export const createMatterWithRole = (
+  assignment: string,
+  input: { title: string; summary?: string },
+): Promise<{ matter: Matter }> =>
+  api(`/v1/matters`, {
+    method: 'POST',
+    body: { kind: 'adhoc', ...input },
+    assignment,
+  })
 
 export const getMatterTimeline = (id: string, limit: number): Promise<TimelineData> =>
   api<TimelineData>(`/v1/matters/${encodeURIComponent(id)}/timeline?limit=${limit}`)

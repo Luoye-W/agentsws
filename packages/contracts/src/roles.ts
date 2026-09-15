@@ -299,7 +299,15 @@ export interface PositionInstance {
     role_name: string
     /** 模板里这条是不是默认勾上的 */
     default: boolean
+    /** 这个工作区里这条职责的全部分配（谁都算——这是岗位的视图，不是某个人的） */
     assignment_ids: AssignmentId[]
+    /**
+     * **请求人自己**在这条职责上的那一条。没有 = 他不做这条活儿。
+     *
+     * 界面上的每一个入口都只能用它：跳到岗位页、用这条职责开一件事、换职责——
+     * 拿 `assignment_ids` 里别人那条去做，就是借岗位扩权。
+     */
+    my_assignment_id?: AssignmentId
   }[]
   /** 这个岗位下还没关的事项数（本人可见的） */
   open_matters: number

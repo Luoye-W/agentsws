@@ -210,6 +210,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
           holders.add(a.person_id)
       }
     }
+    // 本人在这个岗位下持有的那几条：界面上的每一个入口都只能用它们
+    const mine = new Map(minePerRole(template, person_id).map((m) => [m.role_id, m.assignment_id]))
     const assignmentIds = new Set([...byRole.values()].flat())
     const open_matters = work
       .listMatters({ status: ['open', 'waiting'] })
@@ -224,12 +226,16 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       name: { ...template.name },
       template_version: template.version,
       holders: [...holders].sort(),
-      roles: template.roles.map((r) => ({
-        role_id: r.role,
-        role_name: roleName(r.role),
-        default: r.default,
-        assignment_ids: byRole.get(r.role) ?? [],
-      })),
+      roles: template.roles.map((r) => {
+        const my = mine.get(r.role)
+        return {
+          role_id: r.role,
+          role_name: roleName(r.role),
+          default: r.default,
+          assignment_ids: byRole.get(r.role) ?? [],
+          ...(my === undefined ? {} : { my_assignment_id: my }),
+        }
+      }),
       open_matters,
       pending_cards,
       memory_summary: options.memorySummary?.(template.id) ?? '',

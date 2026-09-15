@@ -315,7 +315,8 @@ export function workstationRoutes(): Route[] {
         method: 'get',
         path: '/v1/positions',
         operationId: 'listPositions',
-        summary: '本人持有的岗位（= 未撤销的 Assignment）与其职责',
+        summary:
+          '本人持有的岗位（= 未撤销的 Assignment）与其职责；装了岗位面时多带一份 54 §1 的岗位实体（instances）',
         tag: 'workstation',
         auth: 'bearer',
         assignment: true,
@@ -325,11 +326,26 @@ export function workstationRoutes(): Route[] {
       async (c, deps) => {
         const p = principalOf(c)
         assignmentOf(c)
-        const positions = await workstationOf(deps).positions({
-          workspace_id: p.workspace_id,
-          person_id: p.person_id,
+        const actor = { workspace_id: p.workspace_id, person_id: p.person_id }
+        const positions = await workstationOf(deps).positions(actor)
+        /*
+         * WP69（54 §4）：**首页只列岗位卡，职责不出现**。
+         *
+         * 上面那份 `positions` 是"本人持有的每一条分配"——那是职责粒度的，首页照它列
+         * 就会出现"店铺管理 / 内容与博客 / 邮件营销 / 订单履约"四张卡，而用户心里只有
+         * 一个"网站运营"。所以这里多带一份按岗位聚合的：卡片计数、进行中事项、
+         * 岗位层记忆一句话都在它上面。**只加字段**，老前端照旧读 `positions`。
+         */
+        const instances =
+          deps.positions === undefined
+            ? undefined
+            : await deps.positions.mine({ ...actor, assignment_id: assignmentOf(c).id })
+        return ok(c, {
+          positions,
+          ...(instances === undefined ? {} : { instances }),
+          tile_library: TILE_LIBRARY,
+          max_tiles: MAX_TILES_PER_POSITION,
         })
-        return ok(c, { positions, tile_library: TILE_LIBRARY, max_tiles: MAX_TILES_PER_POSITION })
       },
     ),
     route(
