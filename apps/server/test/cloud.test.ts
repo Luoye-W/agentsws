@@ -16,11 +16,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ModelProviderTemplate, ModelProviderView } from '@agentsws/api'
 import type { CapabilitySourceSettings, CloudCreditsView, Pricing } from '@agentsws/contracts'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CloudFetch } from '../src/cloud.js'
 import { createServer, type Server } from '../src/index.js'
 import { CLOUD_BASE_URL_ENV, CLOUD_TOKEN_SECRET_ID } from '../src/models.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
+
+// 这一档每条都要起真服务进程 + 内存云 + 加密库：单跑 1–4 s，与模拟矩阵并跑时会撞 5 s 默认线
+vi.setConfig({ testTimeout: 20_000 })
 
 const T0 = '2026-09-15T09:00:00.000Z'
 const SECRETS_KEY = 'b'.repeat(64)
@@ -233,7 +236,7 @@ describe('第三张模型卡（49 M2）', () => {
     for (const f of plaintext) {
       expect(f.bytes.includes(WORKSPACE_TOKEN), `${f.name} 里出现了令牌`).toBe(false)
     }
-  }, 20_000)
+  })
 
   it('没关联时那条显示的是"去关联账号"，不是"还没填 API key"', async () => {
     linkAccount()
