@@ -426,6 +426,46 @@ describe('46 §3 岗位与职责 → 清单', () => {
     expect(plan.model_configured).toBe(false)
   })
 
+  // WP62（51 §2 / 46 §1 表 ③）
+  it('「网站运营」岗位模板：一条店铺管理；清单里的店铺卡按平台走，选了别的平台就不出', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+
+    const positions = await data<
+      { id: string; name: string; roles: { id: string; default: boolean }[] }[]
+    >(await m.call('GET', '/v1/onboarding/positions'))
+    const webOps = positions.find((p) => p.id === 'web-ops')
+    expect(webOps?.name).toBe('网站运营')
+    // 51 §2 定的是四条；WP62 只放得下店铺管理这一条（其余三条跟 WP63 / WP64 的定义一起加）
+    expect(webOps?.roles.filter((r) => r.default).map((r) => r.id)).toEqual(['dtc.store'])
+
+    // 默认 Shopify → 清单里有店铺卡
+    const shopify = await data<PlanView>(
+      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['web-ops'] } }),
+    )
+    expect(shopify.role_ids).toContain('dtc.store')
+    expect(shopify.connectors.map((c) => c.service)).toContain('shopify_admin')
+
+    // 改成"其它 / 自己搭的" → 没有店铺连接，清单里干脆不出那张卡（51 §1 N0）
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家自己搭的站', storefront_platform: 'other' },
+    })
+    const other = await data<PlanView>(
+      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['web-ops'] } }),
+    )
+    expect(other.role_ids).toContain('dtc.store')
+    expect(other.connectors.map((c) => c.service)).not.toContain('shopify_admin')
+
+    // WooCommerce 也一样：平台有 provider 名，但连接目录里还没有那张卡
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家自己搭的站', storefront_platform: 'woocommerce' },
+    })
+    const woo = await data<PlanView>(
+      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['web-ops'] } }),
+    )
+    expect(woo.connectors.map((c) => c.service)).not.toContain('woocommerce')
+  })
+
   it('只勾职责 → 一个自定义岗位；名字不给就是"我的岗位"', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })

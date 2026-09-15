@@ -182,11 +182,11 @@ invariants: [prompt_replayable]
   - at: '+2m'
     org.assign_range:
       who: p_zhao
-      role: dtc.ops
+      role: dtc.store
       ranges: [{ kind: product_line, id: pl_kitchen }]
       range_groups: [rg_b]
   - at: '+3m'
-    org.scope_check: { who: p_zhao, role: dtc.ops }`),
+    org.scope_check: { who: p_zhao, role: dtc.store }`),
       't.yml',
     )
     expect(s.events.map((e) => e.type)).toEqual([
@@ -289,14 +289,14 @@ invariants: [prompt_replayable]
     ).toThrow(ScenarioSchemaError)
     expect(
       bad(`  - at: '+0m'
-    org.assign_range: { who: p_zhao, role: dtc.ops, stores: [a] }`),
+    org.assign_range: { who: p_zhao, role: dtc.store, stores: [a] }`),
     ).toThrow(ScenarioSchemaError)
   })
 
   it('scope_disjoint 是一条断言键', () => {
     const s = parseScenario(
       `${ORG(`  - at: '+0m'
-    org.scope_check: { who: p_zhao, role: dtc.ops }`)}
+    org.scope_check: { who: p_zhao, role: dtc.store }`)}
 expected:
   scope_disjoint: [p_zhao, p_qian]
 `,

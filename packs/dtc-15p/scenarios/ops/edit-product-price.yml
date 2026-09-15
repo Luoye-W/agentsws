@@ -7,7 +7,7 @@
 # 2. **先验**：把要执行的那段 Admin GraphQL 交给 Shopify 官方的校验器过一遍。
 #    Admin GraphQL 有五百多个 mutation，模型编一个不存在的字段名太容易了——
 #    在提案进人的队列**之前**挡住，比让人在审批卡上发现"这条根本跑不通"便宜得多。
-# 3. **超额度不是禁止，是转人审**（15 §3.2）：`dtc.ops` 的 `max_price_delta_pct` 是 20，
+# 3. **超额度不是禁止，是转人审**（15 §3.2）：`dtc.store` 的 `max_price_delta_pct` 是 20，
 #    129 → 99 是降 23%，于是这条从"能自动"掉到 L1，进主管李默的队列。
 # 4. **批准后才施行**：执行器拿 `role-apply` 令牌调 `update_product_price`，
 #    幂等键就是变更 id。Agent 全程碰不到这个写口。
@@ -60,7 +60,7 @@ expected:
   metrics:
     staged_changes: 1
     applied_changes: 1
-    # 129 → 99 是降 23%，超过 dtc.ops 的 max_price_delta_pct: 20 → 命中一条 review
+    # 129 → 99 是降 23%，超过 dtc.store 的 max_price_delta_pct: 20 → 命中一条 review
     guardrail_hits: '>=1'
     runs_failed: 0
     outbound_sent: 0

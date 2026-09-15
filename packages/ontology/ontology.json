@@ -30,10 +30,11 @@
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
     "packages/roles/roles/dtc/live-chat.yml",
+    "packages/roles/roles/dtc/store.yml",
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "599d72dc258ae041b989bf43900c9279",
+  "source_digest": "a66ca1d25c73eb6f195f662382bee888",
   "objects": [
     {
       "id": "ad_set",
@@ -516,7 +517,7 @@
       "domain": "campaign",
       "source_of_truth": "platform_api",
       "freshness": "cached:300",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [],
       "read_via": ["klaviyo.get_campaign", "klaviyo.list_campaigns", "meta.list_campaigns"]
     },
@@ -675,7 +676,7 @@
       "domain": "discount",
       "source_of_truth": "platform_api",
       "freshness": "cached:300",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [],
       "read_via": ["shopify_admin.get_discount", "shopify_admin.list_discounts"],
       "platforms": ["shopify"]
@@ -687,7 +688,7 @@
       "domain": "campaign",
       "source_of_truth": "connector",
       "freshness": "cached:300",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [],
       "read_via": []
     },
@@ -4400,6 +4401,18 @@
       "what": "stage discount code"
     },
     {
+      "id": "stage_listing_edit",
+      "object": "product",
+      "source": "role",
+      "access": "write",
+      "change_kind": "listing_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.store"],
+      "what": "stage listing edit"
+    },
+    {
       "id": "stage_page_edit",
       "object": "theme",
       "source": "role",
@@ -4409,6 +4422,42 @@
       "route_to": "scope_manager",
       "roles": ["site.builder"],
       "what": "改一个页面"
+    },
+    {
+      "id": "stage_price_change",
+      "object": "product",
+      "source": "role",
+      "access": "write",
+      "change_kind": "price_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.store"],
+      "what": "stage price change"
+    },
+    {
+      "id": "stage_promotion",
+      "object": "discount",
+      "source": "role",
+      "access": "write",
+      "change_kind": "promotion",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["dtc.store"],
+      "what": "stage promotion"
+    },
+    {
+      "id": "stage_publish_product",
+      "object": "product",
+      "source": "role",
+      "access": "write",
+      "change_kind": "publish_product",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.store"],
+      "what": "stage publish product"
     },
     {
       "id": "stage_publish_theme",
@@ -4457,6 +4506,18 @@
       "route_to": "role_holder",
       "roles": ["site.builder"],
       "what": "出一份主题预览"
+    },
+    {
+      "id": "stage_unpublish_product",
+      "object": "product",
+      "source": "role",
+      "access": "write",
+      "change_kind": "unpublish_product",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["dtc.store"],
+      "what": "stage unpublish product"
     }
   ]
 }

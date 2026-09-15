@@ -1,9 +1,12 @@
-# pack 自带的职责定义（05 §1）：独立站运营。
-# `agentsws synth --size 15` 生成；内置职责表里没有这一份，所以它跟着 pack 走。
-id: dtc.ops
+# pack 自带的职责定义（05 §1）：店铺管理。
+# `agentsws synth --size 15` 生成；pack 自带的按 id 覆盖内置那一份。
+#
+# WP62（51 §2）：旧 id 是 `dtc.ops`（独立站运营）。别名表里记着这一跳，
+# 老 pack 与老库里的 `dtc.ops` 照样读得进来、启动时迁一次。
+id: dtc.store
 version: 1.0.0
 domain: dtc
-name: { zh: 独立站运营, en: DTC Store Operations }
+name: { zh: 店铺管理, en: DTC Store Management }
 description: 商品与详情页、上下架、价格与促销、活动日历、店铺配置
 
 scopes:
@@ -16,7 +19,7 @@ scopes:
   - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
 
 connectors:
-  - { kind: shopify, required: true, grants: [read_products, write_products], ownership: workspace }
+  - { kind: shop, required: true, grants: [read_products, write_products], ownership: workspace }
 
 actions:
   - id: stage_listing_edit
@@ -87,7 +90,7 @@ home_blocks:
       id: ops.pending_listings,
       placement: queue,
       component: staged_change_list,
-      query: changes.pending(dtc.ops),
+      query: changes.pending(dtc.store),
       default_order: 10,
       pinnable: true,
       adaptive: true,

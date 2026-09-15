@@ -42,24 +42,24 @@ events:
   - at: '+5m'
     org.assign_range:
       who: p_zhao
-      role: dtc.ops
+      role: dtc.store
       ranges:
         - { kind: product_line, id: pl_kitchen }
       range_groups: []
   - at: '+6m'
     org.assign_range:
       who: p_qian
-      role: dtc.ops
+      role: dtc.store
       ranges:
         - { kind: product_line, id: pl_outdoor }
       range_groups: []
   # 各看各的：这两笔记下他们此刻看得到的订单与商品
   - at: '+10m'
-    org.scope_check: { who: p_zhao, role: dtc.ops }
+    org.scope_check: { who: p_zhao, role: dtc.store }
   - at: '+11m'
-    org.scope_check: { who: p_qian, role: dtc.ops }
+    org.scope_check: { who: p_qian, role: dtc.store }
   # 赵宁改自己线里的商品：照常走"真读 → 查文档 → 过官方校验 → 提案"。
-  # 129 → 99 是降 23%，超过 dtc.ops 的 max_price_delta_pct: 20 → 掉到 L1 进主管队列
+  # 129 → 99 是降 23%，超过 dtc.store 的 max_price_delta_pct: 20 → 掉到 L1 进主管队列
   # （故意挑一个超额度的幅度：不然它会自动批掉，"批准后才施行"那一条就断言不了）
   - at: '+30m'
     shop.price_change:

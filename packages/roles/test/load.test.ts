@@ -178,6 +178,26 @@ describe('loadPosition (05 §2)', () => {
     expect(loadBundledRole('amz.buyer-messages').id).toBe('amz.support')
   })
 
+  // WP62（51 §2）：`dtc.ops` → `dtc.store`
+  it('旧的 `dtc.ops` 解析到内置的 `dtc.store`（店铺管理）', () => {
+    expect(resolveRoleId('dtc.ops')).toBe('dtc.store')
+    const role = loadBundledRole('dtc.ops')
+    expect(role.id).toBe('dtc.store')
+    expect(role.name.zh).toBe('店铺管理')
+    // 51 §2.1 的五个写动作，额度一个数都没改（WP62 只搬骨架）
+    expect(role.actions.map((a) => a.id)).toEqual([
+      'stage_listing_edit',
+      'stage_price_change',
+      'stage_promotion',
+      'stage_publish_product',
+      'stage_unpublish_product',
+    ])
+    expect(role.actions[1]?.mandate.caps).toMatchObject({ max_price_delta_pct: 20 })
+    expect(role.automation.stage_price_change?.hard_ceiling).toBe(true)
+    // 51 §1 N0：连接器是平台中立的 `shop`，不写死 Shopify
+    expect(role.connectors.map((c) => c.kind)).toEqual(['shop'])
+  })
+
   it('rejects a position without role defaults', () => {
     expect(() => parsePosition('id: x\nversion: 1.0.0\nname: {zh: a, en: b}\n', 'p.yml')).toThrow(
       /roles/,
@@ -224,7 +244,7 @@ describe('site.builder（12 §2 建站岗位）', () => {
     expect(builder().automation.stage_theme_preview?.ceiling).toBe('L3')
   })
 
-  it('商品只读：改价不是这个岗位的事（那是 dtc.ops）', () => {
+  it('商品只读：改价不是这个岗位的事（那是 dtc.store）', () => {
     const product = builder().scopes.find((s) => s.domain === 'product')
     expect(product?.ops).toEqual(['read'])
   })

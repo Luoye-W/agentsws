@@ -109,7 +109,7 @@ const PEOPLE_15: PersonTemplate[] = [
     name: '李默',
     email: 'li@nordvolt.example',
     title: '运营主管',
-    role: 'dtc.ops',
+    role: 'dtc.store',
     scope_manager: true,
     // 兼售后：同一个人两个岗位，权限**各管各的**，不并集（05 §4）
     extra: 'dtc.support',
@@ -119,7 +119,7 @@ const PEOPLE_15: PersonTemplate[] = [
     name: '赵宁',
     email: 'zhao@nordvolt.example',
     title: '运营',
-    role: 'dtc.ops',
+    role: 'dtc.store',
     stores: ['store_main'],
   },
   {
@@ -127,7 +127,7 @@ const PEOPLE_15: PersonTemplate[] = [
     name: '钱睿',
     email: 'qian@nordvolt.example',
     title: '运营',
-    role: 'dtc.ops',
+    role: 'dtc.store',
     stores: ['store_eu'],
   },
   {
@@ -240,7 +240,7 @@ function people50(): PersonTemplate[] {
   const out = [...PEOPLE_15]
   const extra: { title: string; role: string }[] = [
     { title: '售后客服', role: 'dtc.support' },
-    { title: '运营', role: 'dtc.ops' },
+    { title: '运营', role: 'dtc.store' },
     { title: '投放', role: 'ads.performance' },
     { title: '内容', role: 'common.member' },
     { title: '社媒', role: 'common.member' },
@@ -278,12 +278,15 @@ function peopleFor(preset: SizePreset): PersonTemplate[] {
  * 两份的动作都挑了**低风险**的写动作（`listing_edit` / `pause_ad` / `negative_keyword`），
  * 这样 31 §3.4 的"只有 low 风险才可能超过 L1"在 15 人 pack 里是**能被走到**的一条路。
  */
-const ROLE_OPS = `# pack 自带的职责定义（05 §1）：独立站运营。
-# \`agentsws synth --size 15\` 生成；内置职责表里没有这一份，所以它跟着 pack 走。
-id: dtc.ops
+const ROLE_OPS = `# pack 自带的职责定义（05 §1）：店铺管理。
+# \`agentsws synth --size 15\` 生成；pack 自带的按 id 覆盖内置那一份。
+#
+# WP62（51 §2）：旧 id 是 \`dtc.ops\`（独立站运营）。别名表里记着这一跳，
+# 老 pack 与老库里的 \`dtc.ops\` 照样读得进来、启动时迁一次。
+id: dtc.store
 version: 1.0.0
 domain: dtc
-name: { zh: 独立站运营, en: DTC Store Operations }
+name: { zh: 店铺管理, en: DTC Store Management }
 description: 商品与详情页、上下架、价格与促销、活动日历、店铺配置
 
 scopes:
@@ -296,7 +299,8 @@ scopes:
   - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
 
 connectors:
-  - { kind: shopify, required: true, grants: [read_products, write_products], ownership: workspace }
+  # 51 §1 N0：平台中立的 \`shop\`——按公司档案解析成 shopify_admin / woocommerce
+  - { kind: shop, required: true, grants: [read_products, write_products], ownership: workspace }
 
 actions:
   - id: stage_listing_edit
@@ -367,7 +371,7 @@ home_blocks:
       id: ops.pending_listings,
       placement: queue,
       component: staged_change_list,
-      query: changes.pending(dtc.ops),
+      query: changes.pending(dtc.store),
       default_order: 10,
       pinnable: true,
       adaptive: true,
@@ -469,7 +473,7 @@ requires: []
 
 const EXTRA_ROLES: { id: string; yaml: string }[] = [
   { id: 'ads.performance', yaml: ROLE_ADS },
-  { id: 'dtc.ops', yaml: ROLE_OPS },
+  { id: 'dtc.store', yaml: ROLE_OPS },
 ]
 
 export interface SynthResult {

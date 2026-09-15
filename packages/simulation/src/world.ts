@@ -2439,7 +2439,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     themeCli,
 
     async priceChange({ who, product, price, graphql, note }) {
-      const asg = assignmentFor(who, 'dtc.ops')
+      const asg = assignmentFor(who, 'dtc.store')
       const run = await beginShopRun(asg)
       const run_id = run.run_id
       const target: ObjectRef = { type: 'product', id: product }

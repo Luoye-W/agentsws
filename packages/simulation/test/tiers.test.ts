@@ -206,10 +206,10 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
   it('15 人 pack：4 个岗位含投放与运营、2 家店、自带两份职责定义', () => {
     const p = loadPack(PACK_15)
     expect(p.people).toHaveLength(15)
-    expect(p.roles.map((r) => r.id).sort()).toEqual(['ads.performance', 'dtc.ops'])
+    expect(p.roles.map((r) => r.id).sort()).toEqual(['ads.performance', 'dtc.store'])
     const roleIds = new Set(p.assignments.map((a) => a.role_id))
     expect(roleIds).toContain('dtc.support')
-    expect(roleIds).toContain('dtc.ops')
+    expect(roleIds).toContain('dtc.store')
     expect(roleIds).toContain('ads.performance')
     expect(roleIds).toContain('common.owner')
     const stores = new Set(p.assignments.flatMap((a) => a.ranges.map((r) => r.id)))
@@ -256,7 +256,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
   it('50 人 pack：`synth --size 50` 能生成，且一条烟测场景在 fast 档跑得通（不进门禁）', async () => {
     const dir = join(tempDir(), 'dtc-50p')
     const out = synth({ size: 50, seed: 42, out: dir })
-    expect(out.files.has('roles/dtc.ops.yml')).toBe(true)
+    expect(out.files.has('roles/dtc.store.yml')).toBe(true)
     const p = loadPack(dir)
     expect(p.people).toHaveLength(50)
     // 300 张生成订单 + WP55 追加的那张 Amazon 订单

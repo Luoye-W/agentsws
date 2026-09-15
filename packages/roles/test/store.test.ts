@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createRoleStore, RoleError } from '../src/index.js'
+import { createRoleStore, loadBundledRole, RoleError } from '../src/index.js'
 import { aftersales, dtcOps, fixedClock, member, owner, stubRole } from './helpers.js'
 
 const dirs: string[] = []
@@ -224,6 +224,54 @@ describe('旧职责 id 的别名与迁移（WP54 / 48 v2 L1）', () => {
     const s = createRoleStore({ clock: fixedClock(), roles: [...roles(), own] })
     expect(s.roles.get('dtc.aftersales')?.description).toBe('stub dtc.aftersales')
     s.close()
+  })
+
+  // WP62（51 §2）：`dtc.ops` → `dtc.store`
+  it('老库里的 `dtc.ops` 分配迁到 `dtc.store`，范围与自动化状态一个字不动', () => {
+    const dbPath = tempDb()
+    const store = loadBundledRole('dtc.store')
+    const s = createRoleStore({ clock: fixedClock(), dbPath, roles: [...roles(), store] })
+    const live = s.assignments.create({
+      person_id: 'p_ops',
+      workspace_id: 'ws_1',
+      role_id: 'dtc.store',
+      ranges: [{ kind: 'store', id: 'shop_a' }],
+      granted_by: 'p_owner',
+    })
+    s.close()
+
+    // 伪造一条"改名前写下的"行（`create` 那一侧已经被别名归一过了）
+    const require_ = createRequire(import.meta.url)
+    const Database = require_('better-sqlite3') as new (
+      path: string,
+    ) => {
+      prepare(sql: string): { run(...args: string[]): void }
+      close(): void
+    }
+    const raw = new Database(dbPath)
+    raw
+      .prepare(
+        'UPDATE assignments SET role_id = ?, doc = replace(doc, \'"dtc.store"\', \'"dtc.ops"\') WHERE id = ?',
+      )
+      .run('dtc.ops', live.id)
+    raw.close()
+
+    const reopened = createRoleStore({
+      clock: fixedClock(),
+      dbPath,
+      roles: [...roles(), store],
+    })
+    const before = reopened.assignments.require(live.id)
+    expect(before.role_id).toBe('dtc.ops')
+    const migrated = reopened.assignments.migrateRoleIds()
+    expect(migrated).toEqual([
+      expect.objectContaining({ from: 'dtc.ops', to: 'dtc.store', person_id: 'p_ops' }),
+    ])
+    const after = reopened.assignments.require(live.id)
+    expect(after.role_id).toBe('dtc.store')
+    expect(after.ranges).toEqual(before.ranges)
+    expect(after.automation_state).toEqual(before.automation_state)
+    reopened.close()
   })
 
   it('迁移改 role_id 与 role_version，别的一个字不动；已撤销的不动；幂等', () => {
