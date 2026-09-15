@@ -1,5 +1,67 @@
+import type { CloudOrgId } from './cloud.js'
 import type { Iso8601, MaybePromise, PersonId, RangeRef, WorkspaceId } from './common.js'
 import type { WorkspacePolicy } from './roles.js'
+
+/** 52 O1：一个组织（公司）的 id。 */
+export type OrganizationId = string
+
+/**
+ * 52 O1 / O3：组织里的一个人。
+ *
+ * 三档角色：`owner` 付钱、决定谁进哪些品牌；`admin` 能邀请人、能建品牌；
+ * `member` 只是"公司里的一个人"，进不进某个品牌由 owner / admin 勾。
+ *
+ * 离职**不删行**（40 §1 / E2）：写 `left_at`，于是"谁在什么时候走的"留得住。
+ */
+export interface OrganizationMember {
+  person_id: PersonId
+  role: 'owner' | 'admin' | 'member'
+  joined_at: Iso8601
+  left_at?: Iso8601
+}
+
+/**
+ * 52 O1：**公司 = 组织**，工作区**上面**的那一层。
+ *
+ * 组织级只放三样（52 O3）：
+ *
+ * - **人**：`members`——邀请进的是组织，进哪些品牌是组织里再勾的一件事。
+ * - **钱**：`cloud_org_id`——49 M1 的云侧组织（余额与订阅挂在它上面）。
+ * - **发现**：`legal_name` / `domain` / `discoverable`——46 §2 的 `company_key`
+ *   从这里算，同事申请加入的是**组织**，不是某个品牌。
+ *
+ * 其余一律品牌级（连接、知识、职责分配、模型设置、通知偏好），
+ * 因为它们本来就按 `workspace_id` 切（20），不用再造一层。
+ *
+ * 个人用户（46 I4 / 45 H1）：组织 = 一个人、一个品牌工作区——界面上不显示
+ * "组织"这个词，直到加第二个品牌或第二个人。
+ */
+export interface Organization {
+  id: OrganizationId
+  /** 营业执照上的全称（46 §1 ①，从工作区档案上提到这里）。 */
+  legal_name: string
+  /** 公司邮箱域名（可选，从登录邮箱带出）。 */
+  domain?: string
+  /** "让用同一个工具的同事找到我"（46 §1 表，默认 true）。 */
+  discoverable: boolean
+  owner_id: PersonId
+  members: OrganizationMember[]
+  /** 49 M1 / 52 O3「钱」：云侧那个计费主体。关联账号时写上。 */
+  cloud_org_id?: CloudOrgId
+  created_at: Iso8601
+}
+
+/**
+ * 52 O1：**品牌 = 工作区**，工作区身上"品牌"那一面。
+ *
+ * `name` 默认等于工作区名（迁移时回填），之后可以单独改——品牌名是给人看的，
+ * 工作区 id 是给机器用的，两件事。
+ */
+export interface Brand {
+  name: string
+  /** 品牌 logo（data URL 或本机路径）；没有就用首字母。 */
+  logo?: string
+}
 
 /** 20 身份与工作区（v1：local provider、单工作区；Join 只定类型） */
 export interface Person {
@@ -18,6 +80,20 @@ export interface Workspace {
   schema_version: 1
   kind: 'personal' | 'shared'
   name: string
+  /**
+   * 52 O1：这个**品牌工作区**挂在哪个组织（公司）下。
+   *
+   * 可选，因为存量工作区是在"组织"这个对象出现之前建的——启动时的一次性迁移
+   * 会给每个没有它的工作区建一个组织并写上（见 20 §7）。没有它 = 还没迁过，
+   * 行为与这一版上线前一模一样。
+   */
+  org_id?: OrganizationId
+  /**
+   * 52 O1：品牌（名字 + logo）。`brand.name` 默认等于 `name`，迁移时回填。
+   *
+   * 顶栏的品牌切换器显示的就是它。
+   */
+  brand?: Brand
   /** 46 §1 ①：公司档案（全称 / 域名 / 发现开关）。没设过 = 还没走过首次设置向导。 */
   profile?: WorkspaceProfile
   tz: string
@@ -29,6 +105,35 @@ export interface Workspace {
   registries: string[]
   status: 'active' | 'joined' | 'archived'
 }
+/**
+ * 品牌名的唯一读法：设过就用 `brand.name`，没设过（存量、还没迁）就用工作区名。
+ *
+ * 顶栏切换器、组织页品牌一览、⌘K 搜品牌全走它——不许谁再写一遍 `?? name`。
+ */
+export function brandNameOf(workspace: Pick<Workspace, 'name' | 'brand'>): string {
+  const name = workspace.brand?.name?.trim()
+  return name === undefined || name === '' ? workspace.name : name
+}
+
+/**
+ * 45 H2（52 O1 改写）：**同一个品牌**的唯一键 = 品牌名归一化 + 店铺域名。
+ *
+ * 两个人各自建了同一个品牌（键一样）才走 45 的对照合并；否则一律是
+ * "把这个品牌工作区整个挂到组织下"（`attachWorkspaceToOrg`）——不合并进别人的品牌。
+ *
+ * 归一化与公司名那一套（`@agentsws/core` 的 `normalizeCompanyName`）**不是**同一个函数：
+ * 品牌名没有"有限公司"这类后缀要剥，只做大小写、空白与全半角的归一。
+ */
+export function brandKey(brand_name: string, store_domain?: string): string {
+  const name = brand_name.normalize('NFKC').toLowerCase().replace(/\s+/g, '').trim()
+  const domain = (store_domain ?? '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .trim()
+    .replace(/^www\./, '')
+  return domain === '' ? name : `${name}@${domain}`
+}
+
 export interface Membership {
   workspace_id: WorkspaceId
   person_id: PersonId
@@ -235,10 +340,30 @@ export function storefrontUnsupportedNote(id: StorefrontPlatform | undefined): s
     : `这个平台还没接：你们的网站是用 ${spec.label} 搭的，它的店铺后台我们还没做。`
 }
 
+/**
+ * 46 §1 ①：这个工作区背后是哪家公司。
+ *
+ * 52 O1 之后这里只剩**品牌级**的三样：`vertical`（你卖的是）、
+ * `storefront_platform`（网站平台）、以及工作区自己的时区与币种（在 `Workspace` 上）。
+ * 公司级的三样（`legal_name` / `domain` / `discoverable`）已上提到 {@link Organization}
+ * ——位还留着（契约只加不删），但标了 `@deprecated`：读以组织为准，写时同步。
+ */
 export interface WorkspaceProfile {
+  /**
+   * @deprecated 52 O1：公司级字段已上提到 {@link Organization.legal_name}。
+   * 读**一律以组织为准**，写的时候两边一起写（契约只加不删，所以这个位还留着）。
+   */
   legal_name: string
+  /**
+   * @deprecated 52 O1：见 {@link Organization.domain}。
+   */
   domain?: string
-  /** 默认 true（46 §1 表）。关了 = 独立使用，不广播、不监听、不登记。 */
+  /**
+   * 默认 true（46 §1 表）。关了 = 独立使用，不广播、不监听、不登记。
+   *
+   * @deprecated 52 O1：见 {@link Organization.discoverable}。发现是**组织级**的一件事
+   * ——同事申请加入的是公司，不是某个品牌。
+   */
   discoverable: boolean
   /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
   vertical?: WorkspaceVertical
