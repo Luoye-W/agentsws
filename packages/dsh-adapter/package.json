@@ -39,5 +39,8 @@
     "@deepseek-ai/dsh-util-values": "0.1.6-alpha.1",
     "@deepseek-ai/schemastery": "^3.18.2",
     "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-browser-use": "0.1.6-alpha.1"
   }
 }

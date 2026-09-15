@@ -123,7 +123,10 @@ describe('WP70 会话日志不上报官方 API（31 §3 / docs/39 §3.3 d）', (
     const rows = parse(readFileSync(PATCH, 'utf8')) as PatchRow[]
     expect(Array.isArray(rows)).toBe(true)
     const row = rows.find((r) => r?.id === 'session-log-deepseek')
-    expect(row, 'profiles/agentsws/cordis.patch.yml 里必须有 session-log-deepseek 这一行').toBeDefined()
+    expect(
+      row,
+      'profiles/agentsws/cordis.patch.yml 里必须有 session-log-deepseek 这一行',
+    ).toBeDefined()
     expect(row?.config?.enabled).toBe(false)
   })
 })
