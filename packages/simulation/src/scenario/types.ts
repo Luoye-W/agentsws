@@ -299,6 +299,8 @@ export interface ScenarioOrgBrand {
   fact?: string
   /** 这个品牌连的那家店。 */
   connection?: string
+  /** WP66（52 O3）：这个品牌自己那一套模型设置（"用哪家、哪个模型"）。 */
+  model?: string
 }
 
 /** WP65 / 52 O2：记一笔"这个人在这个品牌里看得到什么"（四个库各问一遍）。 */

@@ -1152,6 +1152,7 @@ async function execute(
             ...(event.brand.card === undefined ? {} : { card: event.brand.card }),
             ...(event.brand.fact === undefined ? {} : { fact: event.brand.fact }),
             ...(event.brand.connection === undefined ? {} : { connection: event.brand.connection }),
+            ...(event.brand.model === undefined ? {} : { model: event.brand.model }),
           },
         })
         world.appendEvent('simulation.brand_created', {
@@ -1160,6 +1161,8 @@ async function execute(
           cards: seen.cards.length,
           facts: seen.facts.length,
           connections: seen.connections.length,
+          // WP66（52 O3）：模型设置也按品牌各一份了
+          models: seen.models.length,
         })
         await tick()
         return
@@ -1177,6 +1180,9 @@ async function execute(
           cards: seen.cards.length,
           facts: seen.facts.length,
           connections: seen.connections.length,
+          // WP66：模型设置与凭据 key 名也按品牌各一份（看得到几条，不看内容）
+          models: seen.models.length,
+          credential_keys: seen.credential_keys.length,
         })
         return
       }

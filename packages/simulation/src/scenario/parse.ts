@@ -483,10 +483,13 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         'card',
         'fact',
         'connection',
+        // WP66（52 O3）：这个品牌自己那一套模型设置
+        'model',
       ])
       const card = optStr(source, `${path}.${key}.card`, body.card)
       const fact = optStr(source, `${path}.${key}.fact`, body.fact)
       const connection = optStr(source, `${path}.${key}.connection`, body.connection)
+      const model = optStr(source, `${path}.${key}.model`, body.model)
       return {
         at,
         type: 'org.brand',
@@ -498,6 +501,7 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(card === undefined ? {} : { card }),
           ...(fact === undefined ? {} : { fact }),
           ...(connection === undefined ? {} : { connection }),
+          ...(model === undefined ? {} : { model }),
         },
       }
     }
