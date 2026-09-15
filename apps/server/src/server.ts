@@ -43,6 +43,7 @@ import type {
   Person,
   PersonId,
   StartRun,
+  StorefrontPlatform,
   Workspace,
   WorkspaceId,
   WorkspaceVertical,
@@ -795,6 +796,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // 两层包装：学习回路先落 overlay / 知识卡，目录再看是不是一张晋升卡
   const approvals = catalog.wrap(learning.wrap(rawApprovals))
+  /**
+   * WP62（51 §1 N0）：公司档案里的「网站是用什么搭的」。
+   *
+   * 与「你卖的是」同一个套路——连接面、活数据源、事项工具都比档案先装配好，
+   * 所以这里留一个晚绑定的读法，`createOnboarding` 之后接上。用户在设置页改完，
+   * 下一次刷新就用新的那一套，不用重启。
+   */
+  let storefrontPlatformOf: () => StorefrontPlatform | undefined = () => undefined
   // WP20 连接面：装配一次，`/v1/connections/*` 与工作台数据源共用同一份连接状态。
   const connections = await createConnections({
     clock,
@@ -807,6 +816,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP27：巡检交给调度器（`connect.shopify_refresh`，到期前一小时换新）；
     // 这里默认不起 setInterval，除非调用方显式要旧行为
     refreshIntervalMs: options.tokenRefreshIntervalMs ?? 0,
+    storefrontPlatform: () => storefrontPlatformOf(),
     ...(options.shopifyFetch === undefined ? {} : { shopifyFetch: options.shopifyFetch }),
     ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
     ...(options.connect === undefined ? {} : { connect: options.connect }),
@@ -1421,8 +1431,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 懒取：`joinAssembly` 在下面几行才建出来。
     join: () => joinAssembly.port,
   })
-  // 档案建出来了，把上面那个晚绑定的读法接上（48 v2 L2）
+  // 档案建出来了，把上面那两个晚绑定的读法接上（48 v2 L2、51 §1 N0）
   verticalOf = () => onboarding.vertical()
+  storefrontPlatformOf = () => onboarding.storefrontPlatform()
 
   // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——
   // 它要读同一份职责层（品牌 / 产品线 / 分配），并往同一条审批总线上建 `join_mapping`。

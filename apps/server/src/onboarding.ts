@@ -47,9 +47,15 @@ import type {
   Position,
   RangeRef,
   RoleId,
+  StorefrontPlatform,
   WorkspaceId,
   WorkspaceProfile,
   WorkspaceVertical,
+} from '@agentsws/contracts'
+import {
+  DEFAULT_STOREFRONT_PLATFORM,
+  STOREFRONT_PLATFORMS,
+  storefrontConnectorService,
 } from '@agentsws/contracts'
 import { companyKey, normalizeDomain } from '@agentsws/core'
 import type { RoleStore } from '@agentsws/roles'
@@ -78,6 +84,48 @@ export { OnboardingError } from './invites.js'
  * 这里照旧导出同样的三个名字——外面（测试、别的模块）的导入一个字都不用改。
  */
 export { companyKey, normalizeCompanyName, normalizeDomain } from '@agentsws/core'
+
+/* ------------------------------------------------------------------ */
+/* 51 §1 N0：网站平台                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 职责模板里"店铺后台"那条连接器的 kind。
+ *
+ * `shop` 是**平台中立**的新写法（`dtc.store` 用它），按公司档案解析成
+ * `shopify_admin` / `woocommerce`；`shopify` 是 WP62 之前就写在职责里的老写法，
+ * 一并按同一条路解析——职责 yml 是别人库里已经有的东西，不许改着改着就读不进来了。
+ */
+export const SHOP_CONNECTOR_KINDS: ReadonlySet<string> = new Set(['shop', 'shopify'])
+
+/** 非法值与缺省一律回 `undefined`（调用方按 Shopify 处理）。 */
+export function normalizeStorefrontPlatform(value: unknown): StorefrontPlatform | undefined {
+  return STOREFRONT_PLATFORMS.some((p) => p.id === value)
+    ? (value as StorefrontPlatform)
+    : undefined
+}
+
+/** 灰显那几个的 tooltip：说清"为什么现在选不了"，不是一句冷冰冰的 disabled。 */
+const PLATFORM_HINT = '待增加：现在只支持 Shopify，这个平台的店铺连接还没做'
+
+/**
+ * 首次设置第 ① 步「网站是用什么搭的」的四个选项。
+ *
+ * 真源是契约里的 `STOREFRONT_PLATFORMS`——界面不自己写一份清单，服务端也不写第二份。
+ */
+export function storefrontPlatformChoices(): {
+  key: StorefrontPlatform
+  label: string
+  supported: boolean
+  hint?: string
+}[] {
+  return STOREFRONT_PLATFORMS.map((p) => ({
+    key: p.id,
+    label: p.label,
+    supported: p.supported,
+    ...(p.supported ? {} : { hint: PLATFORM_HINT }),
+  }))
+}
 
 /* ------------------------------------------------------------------ */
 /* 档案存储                                                             */
@@ -192,6 +240,13 @@ export interface OnboardingAssembly {
    * 下一次运行就用新的那一套，不用重启。
    */
   vertical(): WorkspaceVertical | undefined
+  /**
+   * WP62（51 §1 N0）：公司档案里的「网站是用什么搭的」。没设过就是 `undefined`（= Shopify）。
+   *
+   * 与 `vertical()` 同一个道理——连接面、活数据源、事项工具都比档案先装配好，
+   * 所以它是**被读的**而不是被传的：用户在设置页改完，下一次刷新就用新的那一套。
+   */
+  storefrontPlatform(): StorefrontPlatform | undefined
   discovery: Discovery
   invites: InvitesAssembly
   close(): void
@@ -265,6 +320,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     discoverable: p.discoverable,
     // 48 v2 L2：没设过就是实物——存量档案里没有这个字段，它们的行为不许变
     vertical: p.vertical ?? 'goods',
+    // WP62（51 §1 N0）：没设过就是 Shopify——存量档案里没有这个字段，它们的行为不许变
+    storefront_platform: p.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
     set_at: p.set_at,
   })
 
@@ -299,8 +356,20 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     return out
   }
 
-  /** 职责的 `connectors[]` → 连接目录的 provider（46 §3 I5 的那一步归并）。 */
+  /**
+   * 职责的 `connectors[]` → 连接目录的 provider（46 §3 I5 的那一步归并）。
+   *
+   * WP62（51 §1 N0）：`kind: shop`（与老写法 `kind: shopify`）**按公司档案解析**——
+   * Shopify 的工作区解析成 `shopify_admin`，WooCommerce 的解析成 `woocommerce`，
+   * 选了 Magento / 其它的解析成空（清单里干脆不出店铺卡，而不是出一张连不上的）。
+   */
   function providersOf(kind: string): string[] {
+    if (SHOP_CONNECTOR_KINDS.has(kind)) {
+      const service = storefrontConnectorService(profileOf()?.storefront_platform)
+      // 平台有 provider 名、连接目录里却还没有那张卡（WooCommerce 现在就是）＝ 一样不进清单：
+      // 点进去无处可点的条目就是噪音，等目录里真有它的那天自然会出现
+      return service === undefined || catalogEntry(service) === undefined ? [] : [service]
+    }
     const hits = Object.entries(ROLE_CONNECTOR_KIND)
       .filter(([, k]) => k === kind)
       .map(([service]) => service)
@@ -331,7 +400,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
             service,
             label: catalogEntry(service)?.label ?? service,
             required: c.required,
-            connected: connected.has(c.kind),
+            // kind 是平台中立的（`shop`），连上没连上要按**解析出来的那个 provider** 算
+            connected: connected.has(ROLE_CONNECTOR_KIND[service] ?? c.kind),
             needed_by: [def.name.zh],
           })
         } else {
@@ -415,6 +485,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         },
         // 46 §1 ①「你卖的是」：选项与 tooltip 都从垂直包读，界面不自己写一份文案
         verticals: verticalChoices(),
+        // WP62（51 §1 N0）：四个都发下来，灰显的那三个带"待增加"的 tooltip
+        storefront_platforms: storefrontPlatformChoices(),
       } satisfies OnboardingStateView
     },
 
@@ -425,11 +497,15 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       const domain = normalizeDomain(input.domain)
       // 48 v2 L2：不给就沿用上一次；从来没设过就是实物
       const vertical = normalizeVertical(input.vertical) ?? previous?.vertical
+      // WP62（51 §1 N0）：同上——不给就沿用上一次；从来没设过就是 Shopify
+      const storefront_platform =
+        normalizeStorefrontPlatform(input.storefront_platform) ?? previous?.storefront_platform
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
         discoverable: input.discoverable ?? previous?.discoverable ?? true,
         ...(vertical === undefined ? {} : { vertical }),
+        ...(storefront_platform === undefined ? {} : { storefront_platform }),
         set_at: clock.now(),
       }
       backend.put(next)
@@ -439,6 +515,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         has_domain: next.domain !== undefined,
         discoverable: next.discoverable,
         vertical: next.vertical ?? 'goods',
+        // WP62（51 §1 N0）：平台不是秘密，进日志（换平台是一次会影响所有店铺读写的变更）
+        storefront_platform: next.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
       })
       // 开关变了就真的开 / 关：关掉 = 停广播、停监听、清掉看见过的同伴
       if (previous?.discoverable !== next.discoverable || previous === undefined) {
@@ -553,6 +631,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     port,
     companyKey: keyOf,
     vertical: () => profileOf()?.vertical,
+    storefrontPlatform: () => profileOf()?.storefront_platform,
     discovery,
     invites,
     close() {

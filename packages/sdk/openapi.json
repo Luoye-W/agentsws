@@ -19415,7 +19415,7 @@
     "/v1/workspace/profile": {
       "put": {
         "operationId": "setWorkspaceProfile",
-        "summary": "写公司档案：全称、可选域名、\"让同事找到我\"开关、\"你卖的是\"（46 §1 ①）",
+        "summary": "写公司档案：全称、可选域名、\"让同事找到我\"开关、\"你卖的是\"、\"网站是用什么搭的\"（46 §1 ①）",
         "tags": ["onboarding"],
         "parameters": [
           {
@@ -19535,6 +19535,10 @@
                   "vertical": {
                     "type": "string",
                     "enum": ["goods", "digital"]
+                  },
+                  "storefront_platform": {
+                    "type": "string",
+                    "enum": ["shopify", "woocommerce", "magento", "other"]
                   }
                 },
                 "required": ["legal_name"]

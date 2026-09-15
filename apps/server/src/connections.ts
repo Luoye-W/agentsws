@@ -49,8 +49,10 @@ import type {
   ExecuteResult,
   Iso8601,
   ProviderMeta,
+  StorefrontPlatform,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { isStorefrontService, storefrontConnectorService } from '@agentsws/contracts'
 import type { ConnectionLike, DataSourceStatus } from '@agentsws/deck'
 import { mergeDataSources } from '@agentsws/deck'
 import { seededRandom } from '@agentsws/kernel'
@@ -207,6 +209,15 @@ export interface ConnectionsOptions {
    * 测试与一次性任务不该有后台计时器；服务进程装配时传 15 分钟。
    */
   refreshIntervalMs?: number
+  /**
+   * WP62（51 §1 N0）：公司档案里的「网站是用什么搭的」。
+   *
+   * **晚绑定**：连接面比档案先装配好（档案是向导第 ① 步才写的），所以这里收的是
+   * 一个取值函数。不给就是 Shopify——存量装配一个字节不变。
+   *
+   * 它只影响**目录里显示哪张店铺卡**：别的平台的卡不渲染（51 §1 「它影响什么」①）。
+   */
+  storefrontPlatform?: () => StorefrontPlatform | undefined
 }
 
 export interface ConnectionsAssembly {
@@ -1133,7 +1144,12 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   const port: ConnectionsPort = {
     async providers(): Promise<ProviderView[]> {
       const usable = await connectUsable()
-      return CATALOG.map((entry) => {
+      // WP62（51 §1 N0 ①）：店铺卡按公司档案的平台过滤——别的平台那张**不渲染**。
+      // 只筛"某个平台的店铺卡"，邮箱 / GA4 / 广告这些与平台无关的一张不少。
+      const shopService = storefrontConnectorService(options.storefrontPlatform?.())
+      return CATALOG.filter(
+        (entry) => !isStorefrontService(entry.service) || entry.service === shopService,
+      ).map((entry) => {
         const local = entry.store === 'local_vault'
         const available = local ? secrets.available : usable.ok
         const unavailable_reason = available
@@ -1427,6 +1443,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         if (c.status !== 'active') continue
         const kind = ROLE_CONNECTOR_KIND[c.service]
         if (kind !== undefined) kinds.add(kind)
+        // WP62（51 §1 N0）：店铺后台连上了就同时算平台中立的 `shop` 那一条——
+        // `dtc.store` 写的是 `kind: shop`，不写死某一家平台的名字
+        if (isStorefrontService(c.service)) kinds.add('shop')
       }
       return [...kinds]
     },

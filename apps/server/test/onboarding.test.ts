@@ -313,6 +313,61 @@ describe('46 §1 首次设置', () => {
     expect(JSON.stringify(last?.payload)).not.toContain('SaaS')
   })
 
+  // WP62（51 §1 N0 / 46 §1）
+  it('「网站是用什么搭的」：默认 Shopify、四个选项只有 Shopify 可选、不给沿用上一次', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+
+    const state = await data<{
+      storefront_platforms: { key: string; label: string; supported: boolean; hint?: string }[]
+    }>(await m.call('GET', '/v1/onboarding/state'))
+    // 四个都发下来（不支持的**灰显**不是藏起来：用户得看得见下一个是谁）
+    expect(state.storefront_platforms.map((p) => p.key)).toEqual([
+      'shopify',
+      'woocommerce',
+      'magento',
+      'other',
+    ])
+    expect(state.storefront_platforms.filter((p) => p.supported).map((p) => p.key)).toEqual([
+      'shopify',
+    ])
+    for (const p of state.storefront_platforms.filter((x) => !x.supported)) {
+      expect(p.hint).toContain('待增加')
+    }
+
+    // 不给 → Shopify（存量档案里没有这个字段，它们的行为不许变）
+    const first = await data<{ storefront_platform: string }>(
+      await m.call('PUT', '/v1/workspace/profile', { body: { legal_name: '一家店' } }),
+    )
+    expect(first.storefront_platform).toBe('shopify')
+
+    const second = await data<{ storefront_platform: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家店', storefront_platform: 'woocommerce' },
+      }),
+    )
+    expect(second.storefront_platform).toBe('woocommerce')
+
+    // 再存一次不给 → 沿用上一次（改个公司名不该把平台悄悄改回 Shopify）
+    const third = await data<{ storefront_platform: string }>(
+      await m.call('PUT', '/v1/workspace/profile', { body: { legal_name: '一家店铺' } }),
+    )
+    expect(third.storefront_platform).toBe('woocommerce')
+
+    const bad = await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家店铺', storefront_platform: 'bigcommerce' },
+    })
+    expect(bad.status).toBe(400)
+
+    // 事件里带平台（换平台会让所有店铺读写换一条路，它该留痕）；全称仍然不进日志
+    const events = await data<{ events: { type: string; payload: Record<string, unknown> }[] }>(
+      await m.call('GET', '/v1/events?types=workspace.profile_set'),
+    )
+    const last = events.events.at(-1)
+    expect(last?.payload.storefront_platform).toBe('woocommerce')
+    expect(JSON.stringify(last?.payload)).not.toContain('一家店')
+  })
+
   it('公司全称是空的 → 400，不落任何东西', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
