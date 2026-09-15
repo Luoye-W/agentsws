@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
-import type { AskPort, ChatPort, WorkPort, WorkstationPort } from '@agentsws/api'
+import type { AskPort, ChatPort, PositionEntryPort, WorkPort, WorkstationPort } from '@agentsws/api'
 import {
   ApiError,
   createAsyncTraceScope,
@@ -98,6 +98,7 @@ import {
   brandCloudPort,
   brandConnectionsPort,
   brandModelsPort,
+  brandPositionPort,
   brandWorkPort,
   brandWorkstationPort,
 } from './brand-ports.js'
@@ -141,6 +142,7 @@ import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import { createPositions, type PositionsAssembly } from './positions.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -984,6 +986,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 装一个品牌的那一套。**这个函数里没有一个 `workspace.id`**——全部走参数 `ws`；
    * 有一个漏掉的就是一条串味的路（品牌 A 的数据出现在 B 的界面上）。
    */
+  /**
+   * WP69（54）岗位面：一个品牌一份。声明提到这里是为了**晚绑定**——
+   * 运行时（`createRuntime`）比它先建起来，而岗位层技能与岗位层上下文要问它；
+   * 下面 `runtime.bindPositions` 递进去的两个函数每次调用时才查这张表
+   * （与 `runtime.bind(work)` 打断 `Work ↔ startRun` 那个环是同一个套路）。
+   */
+  const positionAssemblies = new Map<WorkspaceId, PositionsAssembly>()
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -1169,6 +1179,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       emit: appendEvent,
     })
     runtime?.bind(work)
+    /*
+     * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
+     *
+     * 岗位模板、职责定义、分配表是**制度层**的，跨品牌共用一份——所以 `positions` 与
+     * `memorySummary` 都写成现查的闭包：制度层（`org`）与学习回路（`learning`）比
+     * 品牌容器晚一步装好，第一次真被调用时它们早就在了。
+     */
+    const positionsAssembly = createPositions({
+      workspace_id: ws,
+      clock,
+      roles,
+      work,
+      approvals,
+      positions: () => org.positions(),
+      cards: (person_id) =>
+        approvals.queue({
+          workspace_id: ws,
+          person_id,
+          lane: 'mine',
+          state: [...QUEUE_STATES],
+        }) as Promise<ApprovalItem[]>,
+      // 54 §3：岗位层记忆一句话（这一层攒下几段、其中几段是学来的）
+      memorySummary: (position_id) =>
+        learning.memorySummary({ tier: 'position', scope_id: position_id }),
+      appendEvent,
+    })
+    positionAssemblies.set(ws, positionsAssembly)
+    // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
+    runtime?.bindPositions({
+      positionOf: (role_id) => positionsAssembly.positionOf(role_id),
+      layerContext: (position_id, person_id) =>
+        positionsAssembly.layerContext(position_id, person_id) as Promise<
+          Record<string, unknown> | undefined
+        >,
+    })
     // 记录源要从工作模型里认线程（`record({ type: 'thread' })`）；到这一步才有得认
     workRef = work
 
@@ -2027,8 +2072,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         skill: input.skill,
         section_ids: input.section_ids,
         to_tier: input.to_tier,
+        ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
         by: input.actor.person_id,
       }),
+    // WP69（54 §3）：岗位页"记忆"tab 与职责层"记忆"小节各读自己那一层（只读）
+    memory: async (input) => ({
+      summary: learning.memorySummary({
+        tier: input.tier,
+        ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+      }),
+      entries: learning.memoryAt({
+        tier: input.tier,
+        ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+      }),
+    }),
   }
 
   /**
@@ -2268,6 +2325,77 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     askPorts.set(ws, port)
     return port
   }
+  /**
+   * WP69（54）岗位面：一个品牌一份（事项与 Run 落在这个品牌的 `Work` 里）。
+   *
+   * 岗位模板、职责定义、分配表是**制度层**的东西，跨品牌共用一份——所以这里递的是
+   * 同一个 `org.positions` 与同一个 `roles`；按品牌分开的只有 `work`。
+   */
+  const positionPorts = new Map<WorkspaceId, PositionEntryPort>()
+  const positionsFor = async (ws: WorkspaceId): Promise<PositionsAssembly> => {
+    // 建品牌容器时就把岗位面一起建好了（见 `assembleBrand` 里 `bindPositions` 那一段）
+    await brandModules.forWorkspace(ws)
+    const made = positionAssemblies.get(ws)
+    if (made === undefined) throw new ApiError('not_implemented', '这个品牌还没有装配岗位面')
+    return made
+  }
+  const positionPortFor = async (ws: WorkspaceId): Promise<PositionEntryPort> => {
+    const cached = positionPorts.get(ws)
+    if (cached !== undefined) return cached
+    const assembly = await positionsFor(ws)
+    /** `:id` 两种都收：岗位模板 id，或者本人持有的一条分配 id（换算成它所属的岗位）。 */
+    const resolveId = (actor: { person_id: string }, id: string): string => {
+      if (org.positions().some((p) => p.id === id)) return id
+      const assignment = roles.assignments.get(id)
+      if (assignment === undefined || assignment.person_id !== actor.person_id)
+        throw new ApiError('not_found', `没有这个岗位：${id}`)
+      const found = assembly.positionOf(assignment.role_id)
+      if (found.position_id === undefined)
+        throw new ApiError('not_found', found.note ?? `没有这个岗位：${id}`)
+      return found.position_id
+    }
+    const port: PositionEntryPort = {
+      instance: (actor, id) => assembly.instance(resolveId(actor, id), actor.person_id),
+      mine: (actor) => assembly.mine(actor.person_id),
+      open: async (actor, id, input) => {
+        const out = await assembly.open({
+          position_id: resolveId(actor, id),
+          person_id: actor.person_id,
+          title: input.title,
+          ...(input.summary === undefined ? {} : { summary: input.summary }),
+          ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
+        })
+        return {
+          matter: {
+            id: out.matter.id,
+            title: out.matter.title,
+            ...(out.matter.entry === undefined ? {} : { entry: out.matter.entry }),
+            ...(out.matter.role_id === undefined ? {} : { role_id: out.matter.role_id }),
+          },
+          ...(out.picked === undefined ? {} : { picked: out.picked }),
+          candidates: out.candidates.map((c) => ({ ...c, why: [...c.why] })),
+          ambiguous: out.ambiguous,
+          reason: out.reason,
+          ...(out.approval_item_id === undefined ? {} : { approval_item_id: out.approval_item_id }),
+          ...(out.run_id === undefined ? {} : { run_id: out.run_id }),
+        }
+      },
+      reroute: async (actor, matter_id, role_id) => {
+        const out = await assembly.reroute({ matter_id, role_id, person_id: actor.person_id })
+        return {
+          matter: {
+            id: out.matter.id,
+            ...(out.matter.role_id === undefined ? {} : { role_id: out.matter.role_id }),
+          },
+          assignment_id: out.assignment_id,
+        }
+      },
+    }
+    positionPorts.set(ws, port)
+    return port
+  }
+  const positionPortOf = brandPositionPort(brandModules, positionPortFor)
+
   const workPortOf = brandWorkPort(brandModules, workPortFor)
   const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
   const askPortOf = brandAskPort(brandModules, askPortFor)
@@ -2425,6 +2553,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP66：面板与工作模型都按品牌——首页数字块读的是**这个品牌**的店铺数据
     workstation: workstationPortOf,
     work: workPortOf,
+    // WP69（54）：岗位实体、交给岗位一件事、换职责
+    positions: positionPortOf,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

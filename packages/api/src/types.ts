@@ -34,6 +34,7 @@ import type {
   Operation,
   PermissionScope,
   PersonId,
+  PromotionTier,
   Range,
   RangeRef,
   RetrievalActor,
@@ -63,6 +64,7 @@ import type { ModelsPort } from './routes/models.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { OrganizationsPort } from './routes/organizations.js'
+import type { PositionEntryPort } from './routes/positions.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
@@ -272,6 +274,16 @@ export type {
   KnowledgeSourceInput,
 } from '@agentsws/contracts'
 
+/** WP69（54 §3）：某一层记忆里的一段（岗位页 / 职责层的"记忆"小节列的就是它们）。 */
+export interface SkillMemoryEntry {
+  skill: string
+  section_id: string
+  heading?: string
+  body: string
+  origin: 'authored' | 'learned'
+  learned_from?: { lessons: string[]; at: string }
+}
+
 /** 写个人层 overlay 的入参（24 §1 OverlayOp）。 */
 export interface OverlayInput {
   skill: string
@@ -309,13 +321,23 @@ export interface SkillsPort {
   }): Promise<SkillSummary[]>
   /** 24 §2 排除：个人不用某个技能，不影响别人。 */
   exclude?(name: string, person_id: PersonId, excluded: boolean): Promise<void>
-  /** 24 §2 晋升：产出一条 `skill_promotion` 审批项（不落任何一层）。 */
+  /**
+   * 24 §2 晋升：产出一条 `skill_promotion` 审批项（不落任何一层）。
+   * WP69（54 §3）目标层从两档变四档；提到岗位 / 职责层时 `scope_id` 说清楚是哪一个。
+   */
   promote?(input: {
     skill: string
     section_ids: string[]
-    to_tier: 'company' | 'department'
+    to_tier: PromotionTier
+    scope_id?: string
     actor: { person_id: PersonId; workspace_id: WorkspaceId }
   }): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }>
+  /** WP69（54 §3）：某一层记忆里有哪几段（岗位页 / 职责层的"记忆"小节；只读）。 */
+  memory?(input: {
+    tier: SkillTier
+    scope_id?: string
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<{ summary: string; entries: SkillMemoryEntry[] }>
   /** WP29：待审的 `skill_lesson` 提案卡（技能页上的"待审提案"）。 */
   proposals?(actor: {
     person_id: PersonId
@@ -579,6 +601,13 @@ export interface GatewayDeps {
   roles: RolesPort
   /** 36 工作台面（首页 / 岗位 / 积木）；没装配时那几条路由回 not_implemented。 */
   workstation?: WorkstationPort
+  /**
+   * WP69（54）岗位面：岗位实体、从岗位开一件事、换职责。
+   * 没装配时 `GET /v1/positions/:id`、`POST /v1/positions/:id/matters`、
+   * `POST /v1/matters/:id/reroute` 回 not_implemented——工作台照常能用，
+   * 只是少了"交给这个岗位一件事"那个按钮。
+   */
+  positions?: PositionEntryPort
   /** 37 工作模型（事项 / 目标 / 待办 / 日历 / 计划 / 复盘）；没装配时那几条路由回 not_implemented。 */
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */

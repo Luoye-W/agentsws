@@ -80,6 +80,11 @@ export type ObjectType =
   | 'article'
   | 'inventory_item'
   | 'review'
+  /**
+   * WP69（54 §1）：**岗位实体**。id 是岗位模板 id（`web-ops`），不是 Assignment id。
+   * 事项时间线上的路由记录、岗位层上下文、岗位层记忆都指着它。
+   */
+  | 'position'
   | (string & {})
 
 export interface ObjectRef {

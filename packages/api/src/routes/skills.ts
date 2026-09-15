@@ -36,9 +36,17 @@ const OverlayBody = z.object({
 
 const ExcludeBody = z.object({ excluded: z.boolean() })
 
+/**
+ * WP69（54 §3）：能单独看"记忆"的那四层。
+ * `package` 是上游的（不是这家公司攒的），`personal` 在个人设置里看（40 E1：管理员没有读）。
+ */
+const MEMORY_TIERS = ['company', 'department', 'position', 'role'] as const
+
 const PromoteBody = z.object({
   section_ids: z.array(z.string().min(1)).min(1),
-  to_tier: z.enum(['company', 'department']),
+  /** WP69（54 §3）：四档。提到岗位 / 职责层要 `scope_id` 说清楚是哪一个。 */
+  to_tier: z.enum(['company', 'department', 'position', 'role']),
+  scope_id: z.string().min(1).optional(),
 })
 
 export function skillRoutes(): Route[] {
@@ -223,9 +231,52 @@ export function skillRoutes(): Route[] {
             skill: param(c, 'name'),
             section_ids: input.section_ids,
             to_tier: input.to_tier,
+            ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
             actor: { person_id: p.person_id, workspace_id: p.workspace_id },
           }),
         )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/memory',
+        operationId: 'getLayerMemory',
+        summary:
+          '某一层的记忆（54 §3）：岗位页的"记忆"tab 与职责层的"记忆"小节各列自己那一层（只读）',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          {
+            name: 'tier',
+            in: 'query',
+            required: true,
+            description: 'company | department | position | role',
+          },
+          { name: 'scope_id', in: 'query', description: '岗位 id / 职责 id / 部门 id' },
+        ],
+        returns: '{ tier, scope_id?, summary, entries }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.memory === undefined) throw new ApiError('not_implemented', '技能面未装配')
+        const tier = c.req.query('tier') ?? ''
+        if (!MEMORY_TIERS.includes(tier as (typeof MEMORY_TIERS)[number]))
+          throw new ApiError('invalid_input', 'tier 只能是 company / department / position / role')
+        const scope_id = c.req.query('scope_id')
+        const out = await deps.skills.memory({
+          tier: tier as (typeof MEMORY_TIERS)[number],
+          ...(scope_id === undefined || scope_id === '' ? {} : { scope_id }),
+          actor: { person_id: p.person_id, workspace_id: p.workspace_id },
+        })
+        return ok(c, {
+          tier,
+          ...(scope_id === undefined || scope_id === '' ? {} : { scope_id }),
+          ...out,
+        })
       },
     ),
     route(

@@ -27,9 +27,11 @@ import type {
   Iso8601,
   LessonRecord,
   PersonId,
+  PromotionTier,
   RunEvent,
   RunId,
   RunResult,
+  SkillTier,
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { Knowledge } from '@agentsws/knowledge'
@@ -90,12 +92,25 @@ export interface SkillLessonPayload {
   run_ids: RunId[]
 }
 
+/** WP69（54 §3）：某一层记忆里的一段（岗位页 / 职责层的"记忆"小节列的就是它们）。 */
+export interface MemoryEntry {
+  skill: string
+  section_id: string
+  heading?: string
+  body: string
+  /** 人写的还是学来的（06 §3.4：学来的段在界面上有标记） */
+  origin: 'authored' | 'learned'
+  learned_from?: { lessons: string[]; at: Iso8601 }
+}
+
 export interface SkillPromotionPayload {
   form: 'skill_promotion'
   skill: string
   section_ids: string[]
   from: PromotionCard['from']
   to_tier: PromotionCard['to_tier']
+  /** WP69：提到岗位 / 职责层时，提到的是哪一个（另两层不需要） */
+  scope_id?: string
   proposed_text: string
   contributors: string[]
   criteria: PromotionCard['criteria']
@@ -149,17 +164,41 @@ export interface LearningAssembly {
   }): Promise<SkillSummary[]>
   /** 技能页：待审的「昨天学到的」。 */
   proposalSummaries(): Promise<SkillProposalSummary[]>
-  /** 手动晋升：产出一条 `skill_promotion` 审批项（不落任何一层）。 */
+  /**
+   * 手动晋升：产出一条 `skill_promotion` 审批项（不落任何一层）。
+   *
+   * WP69（54 §3）目标层从两档变四档：公司 / 部门 / **岗位** / **职责**。
+   * 提到岗位层或职责层时要 `scope_id`（哪个岗位 / 哪条职责）——没有它写不下去，
+   * 因为那两层的 owner 就是那个 id。
+   */
   promote(input: {
     skill: string
     section_ids: string[]
-    to_tier: 'company' | 'department'
+    to_tier: PromotionTier
+    scope_id?: string
     by: PersonId
   }): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }>
+  /**
+   * WP69（54 §3）：某一层记忆的一句话（岗位页"记忆"tab 的标题行）。
+   * 只数，不出正文——正文由 {@link LearningAssembly.memoryAt} 给。
+   */
+  memorySummary(target: { tier: SkillTier; scope_id?: string }): string
+  /** WP69：某一层记忆里有哪几段（只读；"提到这一层"走提议）。 */
+  memoryAt(target: { tier: SkillTier; scope_id?: string }): MemoryEntry[]
   close(): void
 }
 
 const CARD_KINDS = new Set(['skill_lesson', 'skill_promotion', 'knowledge_update'])
+
+/** 层的人话名（卡面上与"记忆"tab 上都用它，别在两处各写一份）。 */
+const TIER_LABEL: Readonly<Record<SkillTier, string>> = Object.freeze({
+  package: '包基础',
+  company: '公司',
+  department: '部门',
+  position: '岗位',
+  role: '职责',
+  personal: '个人',
+})
 
 export function createLearningAssembly(options: LearningOptions): LearningAssembly {
   const { clock, skills, workspace_id } = options
@@ -305,7 +344,14 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       origin: 'learned' as const,
       learned_from: { lessons: payload.lessons, at: item.decision?.at ?? clock.now() },
     }))
-    const owner = payload.to_tier === 'company' ? workspace_id : (item.role_id as string)
+    // WP69（54 §3）：岗位层与职责层的 owner 就是那个 id（`skills/positions/<id>` /
+    // `skills/roles/<id>`）；公司层是工作区，部门层沿用卡上的职责 id（老行为不动）。
+    const owner =
+      payload.to_tier === 'company'
+        ? workspace_id
+        : payload.to_tier === 'position' || payload.to_tier === 'role'
+          ? (payload.scope_id ?? (item.role_id as string))
+          : (item.role_id as string)
     const existing = skills.registry.getOverlay(payload.skill, payload.to_tier, owner)
     await skills.registry.setOverlay({
       skill: payload.skill,
@@ -513,6 +559,12 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
   }
 
   const promote: LearningAssembly['promote'] = async (input) => {
+    // WP69：岗位层 / 职责层的 owner 就是那个 id，没有它这条提议落不到任何地方
+    if ((input.to_tier === 'position' || input.to_tier === 'role') && input.scope_id === undefined)
+      return {
+        accepted: false,
+        reason: `提到${TIER_LABEL[input.to_tier]}层要说清楚是哪一个（scope_id）`,
+      }
     const overlay = skills.registry.getOverlay(input.skill, 'personal', input.by)
     const ops = (overlay?.ops ?? []).filter((o) => input.section_ids.includes(o.section_id))
     if (ops.length === 0) {
@@ -547,6 +599,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       section_ids: [...input.section_ids],
       from: { tier: 'personal', owner: input.by },
       to_tier: input.to_tier,
+      ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
       proposed_text,
       contributors,
       criteria,
@@ -556,8 +609,10 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       ...cardEnvelope('skill_promotion'),
       kind: 'skill_promotion',
       subject: { object: { type: 'skill', id: input.skill } },
-      dedupe_key: `${workspace_id}:skill_promotion:${input.skill}:${input.section_ids.join(',')}`,
-      title: `把「${input.skill}」的 ${input.section_ids.length} 段提到${input.to_tier === 'company' ? '公司' : '部门'}层`,
+      dedupe_key: `${workspace_id}:skill_promotion:${input.skill}:${input.to_tier}:${input.scope_id ?? ''}:${input.section_ids.join(',')}`,
+      title: `把「${input.skill}」的 ${input.section_ids.length} 段提到${TIER_LABEL[input.to_tier]}层${
+        input.scope_id === undefined ? '' : `（${input.scope_id}）`
+      }`,
       summary: '通过之后目标层版本 +1，个人层里已合并的那几段会被移除（24 §2）。',
       payload,
       evidence: {
@@ -687,12 +742,52 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
         assignments: [...l.assignments],
       }))
 
+  /**
+   * WP69（54 §3）：某一层记忆里有哪几段。
+   *
+   * 读的是**那一层的 overlay**（`owner` 就是 scope_id：岗位 id / 职责 id / 工作区 id）。
+   * 只读：岗位页的"记忆"tab 列它们，改要走"提到这一层"那条提议 → 批准的路。
+   */
+  const memoryAt: LearningAssembly['memoryAt'] = (target) => {
+    const owner = target.tier === 'company' ? workspace_id : (target.scope_id ?? '')
+    if (owner === '') return []
+    const out: MemoryEntry[] = []
+    for (const name of skills.registry.listSkillNames()) {
+      const overlay = skills.registry.getOverlay(name, target.tier, owner)
+      if (overlay === undefined) continue
+      for (const op of overlay.ops) {
+        if (op.op === 'remove') continue
+        const heading = skills.registry.sectionHeading(name, op.section_id)
+        out.push({
+          skill: name,
+          section_id: op.section_id,
+          ...(heading === undefined ? {} : { heading }),
+          body: op.body ?? '',
+          origin: op.origin ?? 'authored',
+          ...(op.learned_from === undefined ? {} : { learned_from: op.learned_from }),
+        })
+      }
+    }
+    return out.sort((a, b) =>
+      a.skill === b.skill ? a.section_id.localeCompare(b.section_id) : a.skill < b.skill ? -1 : 1,
+    )
+  }
+
+  const memorySummary: LearningAssembly['memorySummary'] = (target) => {
+    const entries = memoryAt(target)
+    if (entries.length === 0) return `${TIER_LABEL[target.tier]}层还没有攒下东西`
+    const learned = entries.filter((e) => e.origin === 'learned').length
+    return `${TIER_LABEL[target.tier]}层：${entries.length} 段（其中 ${learned} 段是学来的）`
+  }
+
   return {
     learning,
     proposeDaily,
     weeklyConsolidate,
     lessons,
     promote,
+    memoryAt,
+    memorySummary,
     summaries,
     proposalSummaries,
     onRunCompleted(input) {

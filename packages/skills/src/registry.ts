@@ -16,7 +16,48 @@ import { type KnownSection, type ParsedSection, parseSkill, renderSkill, toKnown
 import { mergeKnown, type Sidecar, type SidecarStore, sidecarToKnown } from './sidecar.js'
 import { bodyHash } from './text.js'
 
-export const TIER_ORDER: readonly SkillTier[] = ['package', 'company', 'department', 'personal']
+/**
+ * 叠加顺序的**唯一真源**：越靠后越具体、越优先。
+ *
+ * WP69（54 §1）从四层变六层，只在中间插了两层，前后四层的语义与文件一个没动：
+ * `position` 记"这家公司的网站运营怎么做事"，`role` 记"这条活儿的专业教训"。
+ * 岗位与职责之间谁更具体？职责——一个岗位里有好几条职责，职责那一层说的话
+ * 更贴着这件活，所以它压在岗位上面。
+ */
+export const TIER_ORDER: readonly SkillTier[] = [
+  'package',
+  'company',
+  'department',
+  'position',
+  'role',
+  'personal',
+]
+
+/** 按 scope 分层的那几层（`scope_id` 参与 key）：部门 / 岗位 / 职责。 */
+const SCOPED_TIERS: readonly SkillTier[] = ['department', 'position', 'role']
+
+/**
+ * WP69（54 §1）：这一层的技能文件放在哪个目录下。
+ *
+ * 只是一份**命名约定**（sidecar 与导入导出照它走），不是运行时的查找路径——
+ * 库本身按 `(name, tier, scope)` 索引，换目录不会换出第二份真源。
+ */
+export function skillScopeDir(tier: SkillTier, scope_id?: string): string {
+  switch (tier) {
+    case 'package':
+      return 'skills'
+    case 'company':
+      return 'skills/company'
+    case 'department':
+      return `skills/departments/${scope_id ?? ''}`
+    case 'position':
+      return `skills/positions/${scope_id ?? ''}`
+    case 'role':
+      return `skills/roles/${scope_id ?? ''}`
+    default:
+      return `skills/people/${scope_id ?? ''}`
+  }
+}
 
 export interface SkillScopeRef {
   workspace_id?: WorkspaceId
@@ -28,6 +69,13 @@ export interface Actor {
   person_id: PersonId
   workspace_id: WorkspaceId
   department_id?: string
+  /**
+   * WP69：这次运行属于哪个**岗位**（`web-ops`…）。不给就跳过 `position` 层——
+   * 一条职责挂在多个岗位里、而分配上没记岗位时就是这种情形（54 §3）。
+   */
+  position_id?: string
+  /** WP69：这次运行走的是哪条**职责**。不给就跳过 `role` 层。 */
+  role_id?: string
 }
 
 /** 契约 OverlayOp 已带 origin / learned_from（06 §3.4）；保留别名以免改动调用处。 */
@@ -503,6 +551,18 @@ export class MemorySkillRegistry {
           workspace_id: actor.workspace_id,
           ...(actor.department_id === undefined ? {} : { scope_id: actor.department_id }),
         }
+      // WP69（54 §1）：岗位层与职责层各按自己的 scope 取；actor 上没有那个 id 时
+      // `scope_id` 留空 → 查不到任何东西 → 这一层自然被跳过（不会误吃别人的那一份）。
+      case 'position':
+        return {
+          workspace_id: actor.workspace_id,
+          ...(actor.position_id === undefined ? {} : { scope_id: actor.position_id }),
+        }
+      case 'role':
+        return {
+          workspace_id: actor.workspace_id,
+          ...(actor.role_id === undefined ? {} : { scope_id: actor.role_id }),
+        }
       default:
         return { workspace_id: actor.workspace_id, owner: actor.person_id }
     }
@@ -516,6 +576,10 @@ export class MemorySkillRegistry {
         return actor.workspace_id
       case 'department':
         return actor.department_id ?? actor.workspace_id
+      case 'position':
+        return actor.position_id ?? actor.workspace_id
+      case 'role':
+        return actor.role_id ?? actor.workspace_id
       default:
         return actor.person_id
     }
@@ -523,7 +587,7 @@ export class MemorySkillRegistry {
 
   #keyOf(name: string, tier: SkillTier, scope: SkillScopeRef): string {
     const ws = scope.workspace_id ?? ''
-    const sc = tier === 'department' ? (scope.scope_id ?? '') : ''
+    const sc = SCOPED_TIERS.includes(tier) ? (scope.scope_id ?? '') : ''
     const ow = tier === 'personal' ? (scope.owner ?? '') : ''
     return [name, tier, ws, sc, ow].join(SEP)
   }

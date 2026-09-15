@@ -35,6 +35,7 @@ import { onboardingRoutes } from './routes/onboarding.js'
 import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
 import { organizationRoutes } from './routes/organizations.js'
+import { positionEntryRoutes } from './routes/positions.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { secretaryRoutes } from './routes/secretary.js'
@@ -126,6 +127,13 @@ export function collectRoutes(): Route[] {
     // WP52（47 J1）数据地图：`/v1/positions/:id/ontology`。排在 workstationRoutes 之后——
     // 它们共用 `/v1/positions/:id` 前缀，`ontology` 是定值段，与那边的段都不撞
     ...ontologyRoutes(),
+    /*
+     * WP69（54）岗位面：`GET /v1/positions/:id`、`POST /v1/positions/:id/matters`、
+     * `POST /v1/matters/:id/reroute`。排在 workstation 与 ontology 之后——
+     * 那两处的 `/v1/positions/:id/…` 后面都还跟着一段定值（cards / view / ontology …），
+     * 这里的是光秃秃的 `:id` 与 `:id/matters`，四条路径互不遮挡。
+     */
+    ...positionEntryRoutes(),
     // 37 工作模型：事项 / 目标 / 待办 / 日历 / 计划 / 复盘
     ...workRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）

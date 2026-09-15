@@ -288,6 +288,13 @@ export type {
   OrganizationView,
 } from './routes/organizations.js'
 export { organizationRoutes } from './routes/organizations.js'
+export type {
+  OpenAtPositionView,
+  PositionActor,
+  PositionEntryPort,
+  RouteCandidateView,
+} from './routes/positions.js'
+export { positionEntryRoutes } from './routes/positions.js'
 export {
   type PrivacyEraseStepView,
   type PrivacyEraseView,

@@ -19,6 +19,7 @@ import type {
   ConnectionsPort,
   ModelDefaultsView,
   ModelsPort,
+  PositionEntryPort,
   WorkPort,
   WorkstationPort,
 } from '@agentsws/api'
@@ -229,6 +230,17 @@ export function brandAskPort(
   make: (workspace_id: WorkspaceId) => Promise<AskPort>,
 ): AskPort {
   return scopedPort<AskPort>(make, () => brands.bootstrap)
+}
+
+/**
+ * WP69（54）岗位面：岗位实体、从岗位开一件事、换职责。
+ * 与工作模型一样按品牌——事项与 Run 都落在**这个品牌**的那一份 `Work` 里。
+ */
+export function brandPositionPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<PositionEntryPort>,
+): PositionEntryPort {
+  return scopedPort<PositionEntryPort>(make, () => brands.bootstrap)
 }
 
 /** 37 工作模型（事项 / 目标 / 待办 / 计划 / 复盘）：一个品牌一份 `Work`。 */
