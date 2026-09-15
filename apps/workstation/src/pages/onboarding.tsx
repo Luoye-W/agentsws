@@ -125,6 +125,8 @@ export function OnboardingPage(): React.ReactNode {
         discoverable: draft.discoverable,
         // 48 v2 L2：你卖的是（客服 AI 按它取人设、词表与业务边界）
         vertical: draft.vertical,
+        // WP62（51 §1 N0）：网站是用什么搭的（店铺连接、面板取数、职责连接器按它解析）
+        storefront_platform: draft.storefront_platform,
       }),
     onSuccess: async () => {
       setFailure(undefined)
@@ -210,6 +212,7 @@ export function OnboardingPage(): React.ReactNode {
                 {...(state.data.profile === undefined ? {} : { profile: state.data.profile })}
                 emailHint={state.data.person.email}
                 verticals={state.data.verticals}
+                storefrontPlatforms={state.data.storefront_platforms}
                 busy={saveProfile.isPending}
                 saved={saved}
                 {...(failure === undefined ? {} : { error: failure })}

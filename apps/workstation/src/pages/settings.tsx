@@ -49,6 +49,8 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
           discoverable: draft.discoverable,
           // 48 v2 L2：设置页也能改「你卖的是」（46 §1 末段：后续从公司页和设置页都能改）
           vertical: draft.vertical,
+          // WP62（51 §1 N0）：平台也能改；改成接不上的那几个之前，件里已经问过一次了
+          storefront_platform: draft.storefront_platform,
         },
         ownerId,
       ),
@@ -112,6 +114,10 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/*
+              46 §1 末段「后续从公司页和设置页都能改」——包括改成一个还接不上的平台
+              （`allowUnsupported`），但那一下要先过一次二次确认：店铺连接会失效。
+            */}
             <ProfileForm
               key={onboarding.data.profile?.set_at ?? 'new'}
               {...(onboarding.data.profile === undefined
@@ -119,6 +125,8 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
                 : { profile: onboarding.data.profile })}
               emailHint={onboarding.data.person.email}
               verticals={onboarding.data.verticals}
+              storefrontPlatforms={onboarding.data.storefront_platforms}
+              allowUnsupported
               busy={save.isPending}
               saved={saved}
               {...(failure === undefined ? {} : { error: failure })}

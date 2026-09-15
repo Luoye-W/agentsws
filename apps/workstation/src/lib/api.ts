@@ -2281,6 +2281,8 @@ export interface WorkspaceProfileView {
   discoverable: boolean
   /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
   vertical: 'goods' | 'digital'
+  /** WP62（51 §1 N0）：网站是用什么搭的。缺省 = `shopify`。 */
+  storefront_platform: StorefrontPlatform
   set_at: string
 }
 
@@ -2289,6 +2291,22 @@ export interface VerticalChoiceView {
   key: 'goods' | 'digital'
   label: string
   hint: string
+}
+
+/** WP62（51 §1 N0）：网站是用什么搭的——四个之一。 */
+export type StorefrontPlatform = 'shopify' | 'woocommerce' | 'magento' | 'other'
+
+/**
+ * 「网站是用什么搭的」那一步的一个选项。
+ *
+ * `supported: false` 的**照样渲染**，只是点不动并带一句"待增加"的 tooltip：
+ * 用户得看得见下一个是谁，也才知道自己那套现在接不上（51 §1 N0）。
+ */
+export interface StorefrontPlatformChoiceView {
+  key: StorefrontPlatform
+  label: string
+  supported: boolean
+  hint?: string
 }
 
 export interface OnboardingStateView {
@@ -2301,6 +2319,8 @@ export interface OnboardingStateView {
   discovery: { available: boolean; enabled: boolean; reason?: string }
   /** 48 v2 L2：「你卖的是」的选项与各自的一句人话（真源是客服共享包的垂直包）。 */
   verticals: VerticalChoiceView[]
+  /** WP62（51 §1 N0）：「网站是用什么搭的」四个选项（含灰显的那三个）。 */
+  storefront_platforms: StorefrontPlatformChoiceView[]
 }
 
 /** 向导第 ③ 步的候选：一个岗位与它包含的职责（每条带一句"它会干什么"）。 */
@@ -2401,6 +2421,8 @@ export const setWorkspaceProfile = (
     discoverable?: boolean
     /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。 */
     vertical?: 'goods' | 'digital'
+    /** WP62（51 §1 N0）：网站是用什么搭的。 */
+    storefront_platform?: StorefrontPlatform
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>
