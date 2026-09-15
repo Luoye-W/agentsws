@@ -757,6 +757,8 @@ const zh: Table = {
   'kind.ai_question': '缺资料提问',
   'kind.daily_plan': '今天的安排',
   'kind.review': '复盘',
+  // WP63（51 §2.1 数据日报）：店铺日报卡
+  'kind.daily_report': '店铺日报',
   'kind.membership': '有人想加入',
   'band.P0': '马上',
   'band.P1': '今天',
@@ -1973,6 +1975,7 @@ const en: Table = {
   'kind.ai_question': 'Missing info',
   'kind.daily_plan': "Today's plan",
   'kind.review': 'Review',
+  'kind.daily_report': 'Store daily report',
   'kind.membership': 'Someone wants to join',
   'band.P0': 'Now',
   'band.P1': 'Today',

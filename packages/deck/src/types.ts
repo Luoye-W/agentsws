@@ -346,7 +346,19 @@ export interface ScalarResult {
 }
 
 export interface TableResult {
-  columns: { key: string; label: string; align?: 'left' | 'right' }[]
+  columns: {
+    key: string
+    label: string
+    align?: 'left' | 'right'
+    /**
+     * WP63：这一列的数怎么念。
+     *
+     * 不给 = 按金额（前端一直是这么干的，老积木一个字不用改）。库存件数、
+     * 评分、条数这些**不是钱**——把 2 件货渲染成 `US$2.00` 不是小瑕疵，
+     * 是把一句真话说成了假话。
+     */
+    format?: 'money' | 'count' | 'percent'
+  }[]
   rows: Record<string, string | number>[]
 }
 

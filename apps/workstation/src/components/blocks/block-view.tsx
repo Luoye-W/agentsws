@@ -78,11 +78,13 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
             <tr key={rowKey(row, payload.columns)} className="border-b last:border-0">
               {payload.columns.map((c) => {
                 const value = row[c.key]
+                // WP63：列自己说它是什么（不说就按金额——老积木的行为一个字不变）。
+                // 件数 / 评分不是钱，渲染成 `US$2.00` 是把真话说成了假话。
                 const text =
                   c.key === 'created_at' && typeof value === 'string'
                     ? formatDate(value, lang)
                     : typeof value === 'number'
-                      ? formatValue(value, 'money', lang, String(row.currency ?? 'USD'))
+                      ? formatValue(value, c.format ?? 'money', lang, String(row.currency ?? 'USD'))
                       : String(value ?? '')
                 return (
                   <td

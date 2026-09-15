@@ -35,6 +35,10 @@ name: { zh: 店铺管理, en: DTC Store Management }
 description: 店铺设置、商品与库存、促销与折扣、数据日报、评价管理
 
 scopes:
+  # 数据日报那一面读的是销售与订单——没有这一条，19 §3 的过滤下推会把整个
+  # 「店铺后台」分块从面板上静默拿掉（面板上一个数都没有，也没人说得出为什么）。
+  # 只有 read：订单该由谁改是客服与订单履约那两条职责的事。
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: product, ops: [read, stage], range: assigned, max_sensitivity: internal }
   # WP63：库存是自己一个域——商品能看不等于仓里的数能改（`inventory_adjust` 挂在它上面）
   - { domain: inventory, ops: [read, stage], range: assigned, max_sensitivity: internal }
@@ -309,7 +313,7 @@ home_blocks:
   - {
       id: store.daily_report,
       placement: digest,
-      component: markdown,
+      component: table,
       query: store.daily_report,
       default_order: 30,
       pinnable: false,

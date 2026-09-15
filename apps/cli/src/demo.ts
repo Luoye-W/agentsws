@@ -183,6 +183,42 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
 }
 
 /**
+ * WP63（51 §2.1 / §2.2）：给 demo 的店铺管理面板铺几条真活。
+ *
+ * 四条车道各来一条、外加一张日报卡——全部走**真的**那条链（真读记录、真提案、
+ * 真过 guardrail），不是往队列里塞几张假卡。于是 demo 里看到的"待审 4 条"
+ * 与线上看到的是同一种东西：点开有 diff、有理由、有额度命中。
+ *
+ * 提案人是运营李默，卡落到店主手上——3 人公司里最常见的那种分工。
+ */
+async function seedStoreWork(world: World, pack: Pack): Promise<void> {
+  const ops = pack.people.find((p) => p.id === 'p_li')?.id
+  if (ops === undefined) return
+  // ① 改价车道：降 31%，超过 20% 的线 → 命中额度，卡上说得出超了多少
+  await world.shop.priceChange({
+    who: ops,
+    product: 'prod_2',
+    price: 61,
+    note: '清库存，力度大一点',
+  })
+  // ② 上下架车道：永远人审
+  await world.shop.publishProduct({
+    who: ops,
+    product: 'prod_4',
+    publish: true,
+    note: '新到的车载支架，上架卖',
+  })
+  // ③ 文案车道：改一篇博客（草稿，不惊动人；发布那一下才要人点头）
+  await world.shop.blogPost({
+    who: ops,
+    title: '快充头怎么挑：三个看得懂的参数',
+    publish: true,
+  })
+  // ④ 日报卡：L3 自动出、看完归档
+  await world.shop.dailyReport({ who: ops })
+}
+
+/**
  * 事项现场的记录来源（37 §2.2b）：委托与「在事项里说话」起 Run 时，
  * pinned 的订单 / 客户按本人身份取真记录注入，收件人只从这里解析（31 §3.3）。
  */
@@ -674,10 +710,26 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     ranges: [{ kind: 'store', id: 'store_main' }],
   })
 
+  // WP63（51 §2）：**网站运营**岗位也要在 demo 里看得见。
+  //
+  // 合成 pack 里挂店铺管理的是运营李默，而 demo 登录的是店主——于是给店主也挂一条
+  // （3 人公司里店主本来就什么都管一点）。不挂的话，51 §2.1 那一整页面板在 demo 里
+  // 一眼都看不到，截图与人工验收都无从谈起。
+  for (const role of ['dtc.store', 'dtc.content']) {
+    world.roles.assignments.create({
+      person_id: world.roleHolder,
+      workspace_id: world.workspace_id,
+      role_id: role,
+      granted_by: world.owner,
+      ranges: [{ kind: 'store', id: 'store_main' }],
+    })
+  }
+
   const body = pack.fixtures.get('fixtures/anna-return.txt')
   if (body === undefined) throw new Error('pack 里没有 fixtures/anna-return.txt')
   await runInbound(world, pack, seed, body)
   await seedPolicyQuestion(world)
+  await seedStoreWork(world, pack)
 
   const owner = pack.people.find((p) => p.id === world.roleHolder) ?? pack.people[0]
   if (owner === undefined) throw new Error('pack 里没有人')

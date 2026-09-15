@@ -166,7 +166,7 @@ const STORE_QUEUE_BLOCKS = (): BlockDef[] => [
 /** WP63：库存告急表 + 日报卡（日报是 L3 自动出、看完归档的那一张）。 */
 const STORE_SHOP_BLOCKS = (): BlockDef[] => [
   block('store.low_stock', 'table', '库存告急', 'inventory.low_stock'),
-  block('store.daily_report', 'kv', '今日日报', 'store.daily_report'),
+  block('store.daily_report', 'table', '今日日报', 'store.daily_report'),
 ]
 
 /** WP63：差评表。评价应用连接器待增加 → 这一块永远出"还没连"，不出空表。 */

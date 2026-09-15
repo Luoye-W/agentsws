@@ -204,7 +204,7 @@ describe('51 §2.1 数字块与日报卡', () => {
     ])
   })
 
-  it('日报卡是 kv：五行数全部从结构化行算出来，一个字不经模型手', () => {
+  it('日报卡五行数全部从结构化行算出来，一个字不经模型手', () => {
     const ctx = queryContext({
       role_id: 'dtc.store',
       inventory: INVENTORY,
@@ -212,10 +212,22 @@ describe('51 §2.1 数字块与日报卡', () => {
     })
     const data = computeBlock('store.daily_report', ctx, 'yesterday')
     expect(data.status).toBe('ok')
-    const rows = (data.payload as { rows: { kind: string; title: string }[] }).rows
-    expect(rows.map((r) => r.kind)).toEqual(['销售额', '环比', '订单数', '库存告急', '待审改动'])
-    expect(rows.find((r) => r.kind === '库存告急')?.title).toBe('2 个 SKU')
-    expect(rows.find((r) => r.kind === '待审改动')?.title).toBe('1 条')
+    const rows = rowsOf(data.payload)
+    expect(rows.map((r) => r.item)).toEqual(['销售额', '环比', '订单数', '库存告急', '待审改动'])
+    expect(rows.find((r) => r.item === '库存告急')?.value).toBe('2 个 SKU')
+    expect(rows.find((r) => r.item === '待审改动')?.value).toBe('1 条')
+  })
+
+  // WP63：件数不是钱。表格渲染层不给 `format` 就按金额念——所以库存那一列必须自己说
+  it('库存与评分那几列标了 `format: count`（2 件货不该渲染成 US$2.00）', () => {
+    const r = runQuery(
+      'inventory.low_stock',
+      queryContext({ role_id: 'dtc.store', inventory: INVENTORY }),
+      'yesterday',
+    )
+    if (r.status !== 'ok') throw new Error('unreachable')
+    const col = (r.data as TableResult).columns.find((c) => c.key === 'quantity')
+    expect(col?.format).toBe('count')
   })
 })
 

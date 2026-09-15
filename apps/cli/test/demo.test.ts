@@ -73,8 +73,10 @@ describe('agentsws demo（合成世界当后端）', () => {
     const draft = cards.find((c) => c.kind === 'outbound_draft')
     expect(draft?.action_labels?.approve).toBe('发送')
     expect(draft?.customer_label).toBe('Anna Meyer')
-    // 退款卡的金额来自结构化字段
-    const refund = cards.find((c) => c.kind === 'staged_change')
+    // 退款卡的金额来自结构化字段。
+    // WP63 起 demo 里还有几条店铺侧的变更卡（改价 / 上架），所以要**按目标挑**——
+    // 只按 kind 挑会随便拿到一张改价卡，那张上本来就没有金额高亮。
+    const refund = cards.find((c) => c.kind === 'staged_change' && c.title.includes('退款'))
     expect(refund?.highlights.some((h) => h.type === 'amount')).toBe(true)
     expect(home.estimated_minutes).toBeGreaterThan(0)
   })
@@ -129,7 +131,11 @@ describe('agentsws demo（合成世界当后端）', () => {
     const home = await data<{ queue: DeckCard[]; alerts: DeckCard[] }>(
       await call('/v1/home', { assignment: demo.world.assignment.id }),
     )
-    const refund = [...home.queue, ...home.alerts].find((c) => c.kind === 'staged_change')
+    // WP63 起首页上还有几条店铺侧的变更卡（首页是**跨岗位**的队列）——
+    // 只按 kind 挑会随手点掉一张改价卡，"退款真的被施行"就无从谈起
+    const refund = [...home.queue, ...home.alerts].find(
+      (c) => c.kind === 'staged_change' && c.title.includes('退款'),
+    )
     expect(refund).toBeDefined()
 
     const decided = await call(`/v1/approvals/${refund?.id}/decide`, {
@@ -159,8 +165,11 @@ describe('agentsws demo（合成世界当后端）', () => {
         assignment: demo.world.assignment.id,
       }),
     )
-    // 队列里已经没有那条退款卡了（它不在 pending / in_review）
-    expect(cards.cards.some((c) => c.kind === 'staged_change')).toBe(false)
+    // 队列里已经没有那条退款卡了（它不在 pending / in_review）。
+    // 店铺那几条待审改动仍在队列里——它们是另一回事，别被顺手算进来（WP63）
+    expect(cards.cards.some((c) => c.kind === 'staged_change' && c.title.includes('退款'))).toBe(
+      false,
+    )
   })
 
   it('岗位面板按数据源分块；未连接的数据源不给完整报告链接', async () => {

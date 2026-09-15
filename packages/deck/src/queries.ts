@@ -263,15 +263,6 @@ export function thresholdOf(ctx: QueryContext, key: string): number {
   return ctx.thresholds?.[key] ?? ANOMALY_DEFAULTS[key] ?? 0
 }
 
-const row = (id: string, at: string, kind: string, title: string): RecordRow => ({
-  id,
-  at,
-  kind,
-  title,
-  summary: title,
-  state: 'ok',
-})
-
 const QUERY_LIST: QueryDef[] = [
   {
     name: 'sales.total',
@@ -505,7 +496,7 @@ const QUERY_LIST: QueryDef[] = [
         columns: [
           { key: 'sku', label: 'SKU' },
           { key: 'title', label: '商品' },
-          { key: 'quantity', label: '可售', align: 'right' as const },
+          { key: 'quantity', label: '可售', align: 'right' as const, format: 'count' as const },
           { key: 'location', label: '仓' },
         ],
         rows,
@@ -544,7 +535,7 @@ const QUERY_LIST: QueryDef[] = [
         }))
       return {
         columns: [
-          { key: 'rating', label: '评分', align: 'right' as const },
+          { key: 'rating', label: '评分', align: 'right' as const, format: 'count' as const },
           { key: 'product', label: '商品' },
           { key: 'at', label: '时间' },
           { key: 'body', label: '内容' },
@@ -602,7 +593,12 @@ const QUERY_LIST: QueryDef[] = [
         columns: [
           { key: 'title', label: '标题' },
           { key: 'published_at', label: '发布时间' },
-          { key: 'clicks', label: '自然点击（30 天）', align: 'right' as const },
+          {
+            key: 'clicks',
+            label: '自然点击（30 天）',
+            align: 'right' as const,
+            format: 'count' as const,
+          },
         ],
         rows,
       }
@@ -617,7 +613,7 @@ const QUERY_LIST: QueryDef[] = [
      */
     name: 'store.daily_report',
     source: 'shop',
-    returns: 'records',
+    returns: 'table',
     run: (ctx, w) => {
       const money = (n: number) => `${ctx.base_currency} ${n.toFixed(2)}`
       const sales = sum(
@@ -641,12 +637,16 @@ const QUERY_LIST: QueryDef[] = [
         prevSales === 0 ? '没有对比期' : `${round2(((sales - prevSales) / prevSales) * 100)}%`
       const at = dayLabel(w.current.from, ctx.tz_offset_minutes)
       return {
+        columns: [
+          { key: 'item', label: at },
+          { key: 'value', label: '', align: 'right' as const },
+        ],
         rows: [
-          row(`${at}-sales`, at, '销售额', money(sales)),
-          row(`${at}-delta`, at, '环比', deltaText),
-          row(`${at}-orders`, at, '订单数', String(orders)),
-          row(`${at}-low`, at, '库存告急', `${low} 个 SKU`),
-          row(`${at}-pending`, at, '待审改动', `${pending} 条`),
+          { item: '销售额', value: money(sales) },
+          { item: '环比', value: deltaText },
+          { item: '订单数', value: String(orders) },
+          { item: '库存告急', value: `${low} 个 SKU` },
+          { item: '待审改动', value: `${pending} 条` },
         ],
       }
     },
