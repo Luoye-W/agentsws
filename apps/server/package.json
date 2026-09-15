@@ -37,6 +37,7 @@
     "@agentsws/knowledge": "workspace:*",
     "@agentsws/learning": "workspace:*",
     "@agentsws/meetings": "workspace:*",
+    "@agentsws/metering": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/roles": "workspace:*",
     "@agentsws/runtime-direct": "workspace:*",

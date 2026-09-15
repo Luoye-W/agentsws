@@ -102,6 +102,8 @@ export {
   chatRoutes,
   sseResponse,
 } from './routes/chat.js'
+export type { CloudActor, CloudPort } from './routes/cloud.js'
+export { cloudRoutes } from './routes/cloud.js'
 export type {
   BeginConnectResult,
   ConnectionOwnership,

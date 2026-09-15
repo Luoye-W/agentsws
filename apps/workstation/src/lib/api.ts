@@ -1029,6 +1029,85 @@ export const detectMailbox = (email: string, assignment?: string): Promise<Mailb
     withAssignment(assignment),
   )
 
+// ── WP59（49 M2 / M5）：云上的余额与价目 + 每项能力"用我的 / 用 agentsws 的" ──
+//
+// 本地不记账：这几条全是云上那一份的透传（服务进程那边缓存 60 秒）。
+// 工作台这一层更不该自己算——**一个数字都不算**，只画。
+
+export type CapabilitySource = 'mine' | 'agentsws'
+
+export interface WalletBalanceView {
+  org_id: string
+  purchased: number
+  granted: number
+  available: number
+  reserved: number
+  expiring: { credits: number; expires_at: string }[]
+  low_balance_threshold: number
+  low_balance: boolean
+  at: string
+}
+
+export interface CloudCreditsView {
+  linked: boolean
+  reason?: string
+  balance?: WalletBalanceView
+  month_credits?: number
+  fetched_at?: string
+}
+
+export interface PricingModelEntry {
+  model: string
+  in: number
+  out: number
+  cached?: number
+  cn?: boolean
+}
+
+export interface PricingEntry {
+  capability: string
+  unit: string
+  credits_per_unit: number
+  label_zh: string
+  label_en: string
+  models?: PricingModelEntry[]
+}
+
+export interface PricingView {
+  version: number
+  as_of: string
+  credit_cny: number
+  ai_multiplier: number
+  fx: Record<string, number>
+  entries: PricingEntry[]
+}
+
+export interface CapabilitySourceSettings {
+  workspace_id: string
+  capability_sources: Record<string, CapabilitySource>
+  updated_at?: string
+}
+
+export const getCloudCredits = (assignment?: string): Promise<CloudCreditsView> =>
+  api('/v1/cloud/credits', withAssignment(assignment))
+
+export const getCloudPricing = (assignment?: string): Promise<PricingView> =>
+  api('/v1/cloud/pricing', withAssignment(assignment))
+
+export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
+  api('/v1/settings/capability-sources', withAssignment(assignment))
+
+/** 整张表一次给全——两个标签页各改一项就不会互相覆盖。 */
+export const setCapabilitySources = (
+  capability_sources: Record<string, CapabilitySource>,
+  assignment?: string,
+): Promise<CapabilitySourceSettings> =>
+  api('/v1/settings/capability-sources', {
+    method: 'PUT',
+    body: { capability_sources },
+    ...withAssignment(assignment),
+  })
+
 // ── WP25 交付 C：模型 ───────────────────────────────────────────────────
 //
 // 同一条纪律：**API key 只经 `saveModelProvider` 这一条路出去**，原生 `<form>` 收集、

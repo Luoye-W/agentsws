@@ -93,6 +93,7 @@ import {
   chatView,
   createChatLane,
 } from './chat.js'
+import { type CloudAssembly, type CloudFetch, createCloud } from './cloud.js'
 import { connectBaseUrl } from './connect-url.js'
 import {
   type ConnectionsAssembly,
@@ -276,6 +277,8 @@ export interface ServerOptions {
   modelFetch?: FetchLike
   /** WP42：抓各家价目页用的 fetch（测试回放固定页面 → 价目刷新全程不联网）。 */
   pricingFetch?: PageFetch
+  /** WP59：打云侧服务入口用的 fetch（测试注入 → 余额与价目全程不联网）。 */
+  cloudFetch?: CloudFetch
   /**
    * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
    * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
@@ -627,6 +630,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     eventSink: (e) => {
       appendEvent(e)
     },
+  })
+  // WP59（49 M2 / M5）：云上余额与价目的本地投影 + 每项能力"用我的 / 用 agentsws 的"。
+  // 与模型面共用同一个加密库——工作区服务令牌是 WP58 存进去的那一条。
+  const cloud = createCloud({
+    clock,
+    secrets,
+    env,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
   })
   const modelSettings = createModels({
     clock,
@@ -1704,6 +1716,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     },
     models: modelSettings.port,
+    // WP59：`/v1/cloud/credits`、`/v1/cloud/pricing`、`/v1/settings/capability-sources`
+    cloud: cloud.port,
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
     storage: storage.port,
     org: org.port,

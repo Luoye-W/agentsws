@@ -120,6 +120,9 @@ importers:
       '@agentsws/meetings':
         specifier: workspace:*
         version: link:../../packages/meetings
+      '@agentsws/metering':
+        specifier: workspace:*
+        version: link:../../packages/metering
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway

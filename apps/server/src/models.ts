@@ -71,6 +71,25 @@ export const MODEL_KEY_PREFIX = 'model_provider:'
 /** 无界面时的兜底：这个环境变量还认（`scripts/dev-real.sh` / CI 靠它）。 */
 export const DEEPSEEK_KEY_ENV = 'DEEPSEEK_API_KEY'
 
+/**
+ * 49 M2「用 agentsws 的」那条 provider 的凭据在秘密库里叫什么。
+ *
+ * **不是 `model_provider:` 前缀**：它不是用户填的模型 key，而是 WP58 那把工作区服务
+ * 令牌——关联一次账号就有，撤销账号关联它就没了。一把令牌服务全部云上能力（模型、
+ * 红人库、社媒配额、值守），所以它属于账号那一面，不属于模型那一面。
+ */
+export const CLOUD_TOKEN_SECRET_ID = 'cloud.workspace_token'
+
+/** 云侧地址；自建 / 联调时用环境变量指到别处（`bin/dev.mjs` 就起在 4401）。 */
+export const CLOUD_BASE_URL_ENV = 'AGENTSWS_CLOUD_BASE_URL'
+export const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agentsws.app'
+
+/** `…/v1/ai`：服务入口的 OpenAI 兼容口（49 M3）。 */
+export function cloudAiBaseUrl(env: Record<string, string | undefined>): string {
+  const raw = env[CLOUD_BASE_URL_ENV]?.trim()
+  return `${raw === undefined || raw === '' ? DEFAULT_CLOUD_BASE_URL : raw.replace(/\/+$/, '')}/v1/ai`
+}
+
 /** 环境变量兜底出来的那条 provider 的固定 id。 */
 export const ENV_PROVIDER_ID = 'deepseek'
 
@@ -259,7 +278,42 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
       },
     ],
   },
+  /*
+   * 49 M2 第三张卡：**用 agentsws 的**。
+   *
+   * 与前两张唯一的差别是"要准备什么"那一栏——**什么都不用准备**：不填 key、
+   * 不去谁的控制台注册、不复制粘贴任何一串字符。关联一次账号（WP58），
+   * 这张卡就能用，按积分扣。
+   *
+   * 它照样是 OpenAI 兼容形态，所以复用同一个 provider 实现（49 M3 的理由）。
+   */
+  {
+    kind: 'agentsws_cloud',
+    label: 'agentsws 云（用积分）',
+    summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
+    default_base_url: `${DEFAULT_CLOUD_BASE_URL}/v1/ai`,
+    default_model: 'deepseek-flash',
+    region: 'cn',
+    steps: [
+      '在"设置 → 账号与积分"里关联 agentsws 账号',
+      '回到这里点"启用"',
+      '选一个模型（清单是云上给的，按积分价排）',
+      '用起来——每次调用扣多少积分，在"账号与积分"里看得到',
+      '想换回自己的 key，随时删掉这一条即可（切回后不再产生扣费）',
+    ],
+    links: [{ label: '价目表与余额', url: '/settings' }],
+  },
 ]
+
+/**
+ * 给界面的那份模板。与 {@link MODEL_TEMPLATES} 的差别只有一处：
+ * 云那张卡的地址跟着 `AGENTSWS_CLOUD_BASE_URL` 走（自建 / 联调时指到别处）。
+ */
+export function templatesFor(env: Record<string, string | undefined>): ModelProviderTemplate[] {
+  return MODEL_TEMPLATES.map((t) =>
+    t.kind === 'agentsws_cloud' ? { ...t, default_base_url: cloudAiBaseUrl(env) } : { ...t },
+  )
+}
 
 // ── 小工具 ─────────────────────────────────────────────────────────────
 
@@ -344,8 +398,22 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
   const keyOf = (id: string): string => `${MODEL_KEY_PREFIX}${id}`
 
+  /**
+   * 这条是不是"用 agentsws 的"那一种。
+   *
+   * 它的凭据不在 `model_provider:` 前缀下，而是 WP58 那把工作区服务令牌
+   * （{@link CLOUD_TOKEN_SECRET_ID}）——所以取 key 与判"有没有 key"都要先问这一句。
+   */
+  const isCloud = (id: string): boolean =>
+    state.providers.find((p) => p.id === id)?.kind === 'agentsws_cloud'
+
+  /** 关联过账号没有（不读值，只看在不在）。 */
+  const hasCloudToken = (): boolean =>
+    secrets.available && secrets.record(CLOUD_TOKEN_SECRET_ID) !== undefined
+
   /** 这条 provider 有没有 key（不读值，只看在不在）。 */
   const hasKey = (id: string): boolean => {
+    if (isCloud(id)) return hasCloudToken()
     if (id === ENV_PROVIDER_ID && envKey() !== undefined) return true
     if (!secrets.available) return false
     return secrets.record(keyOf(id)) !== undefined
@@ -361,6 +429,16 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * 而且 key 不在任何配置对象里长住。
    */
   const keySource = (id: string) => (): string | undefined => {
+    if (isCloud(id)) {
+      // 云那条取的是工作区服务令牌（WP58 关联账号时存进去的），不是用户填的 key
+      if (!secrets.available) return undefined
+      try {
+        const token = secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+        return token === undefined || token === '' ? undefined : token
+      } catch {
+        return undefined
+      }
+    }
     if (secrets.available) {
       try {
         const fields = secrets.get(keyOf(id))
@@ -420,6 +498,19 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(config.transcription_model === undefined
         ? {}
         : { transcriptionModel: config.transcription_model }),
+      /*
+       * 49 M3 数据驻留：云那条带上工作区选的驻留（22 §2）。
+       * 服务入口按它拦——选了"数据不出境"就只允许境内可用的模型，
+       * 打境外模型回 422 + 一句人话，而不是悄悄换一家。
+       */
+      ...(config.kind === 'agentsws_cloud'
+        ? {
+            extraHeaders: {
+              'X-Agentsws-Region':
+                (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
+            },
+          }
+        : {}),
     })
   }
 
@@ -713,9 +804,13 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(has_key
         ? {}
         : {
-            inactive_reason: secrets.available
-              ? '还没填 API key'
-              : `这台机器没有秘密库密钥（环境变量 ${SECRETS_KEY_ENV}），key 无处安全存放`,
+            inactive_reason:
+              // 云那条不是"没填 key"——它本来就不填 key，是还没关联账号
+              config.kind === 'agentsws_cloud'
+                ? '还没关联 agentsws 账号。去"设置 → 账号与积分"里关联一次就能用。'
+                : secrets.available
+                  ? '还没填 API key'
+                  : `这台机器没有秘密库密钥（环境变量 ${SECRETS_KEY_ENV}），key 无处安全存放`,
           }),
       ...(config.price_in === undefined ? {} : { price_in: config.price_in }),
       ...(config.price_out === undefined ? {} : { price_out: config.price_out }),
@@ -799,7 +894,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   }
 
   const port: ModelsPort = {
-    templates: () => MODEL_TEMPLATES.map((t) => ({ ...t })),
+    templates: () => templatesFor(env),
 
     providers: () => effectiveConfigs().map(viewOf),
 
@@ -818,8 +913,24 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(id)) {
         throw invalid('provider 的 id 只能是小写字母、数字、下划线和短横线（32 位以内）')
       }
-      const template = MODEL_TEMPLATES.find((t) => t.kind === input.kind)
+      const template = templatesFor(env).find((t) => t.kind === input.kind)
       if (template === undefined) throw invalid(`不认识的模型种类：${input.kind}`)
+      /*
+       * 49 M2：**"用 agentsws 的"这一条不填 key。**
+       *
+       * 它的凭据是关联账号时拿到的那把工作区服务令牌，由 WP58 存进秘密库。
+       * 这里显式拒掉而不是默默忽略——用户如果真往里填了什么，他该知道那没生效。
+       */
+      if (input.kind === 'agentsws_cloud') {
+        if (input.api_key !== undefined && input.api_key.trim() !== '') {
+          throw invalid(
+            '"agentsws 云"这一条不用填 key——它用的是关联账号时拿到的工作区令牌。去"设置 → 账号与积分"里关联一次即可。',
+          )
+        }
+        if (!hasCloudToken()) {
+          throw invalid('还没关联 agentsws 账号。先去"设置 → 账号与积分"里关联一次。')
+        }
+      }
       const key = input.api_key?.trim()
       if (key !== undefined && key !== '') {
         if (!secrets.available) {
