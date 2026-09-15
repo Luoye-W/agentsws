@@ -13,6 +13,8 @@ export * from './identity.js'
 export * from './join.js'
 export * from './kernel.js'
 export * from './knowledge.js'
+// 48 §5.2 红人营销的六个对象与五条渠道（WP67）
+export * from './kol.js'
 export * from './meetings.js'
 export * from './model.js'
 export * from './packages.js'

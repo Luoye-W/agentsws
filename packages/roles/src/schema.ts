@@ -35,6 +35,14 @@ const DATA_DOMAIN = Schema.union([
   'asset',
   'knowledge',
   'creator',
+  // WP67（48 §5.1）：红人营销的五个新域，与契约的 `DataDomain` 同步。
+  // 一个域一把闸：找人那一块谁都看得见（`platform_account`），联系方式只有建联
+  // 那一步碰得到（`creator_contact`，confidential），预算与条款是钱（`collaboration`）。
+  'platform_account',
+  'creator_contact',
+  'collaboration',
+  'deliverable',
+  'tracked_link',
   'ad_account',
   'social_account',
   'review',

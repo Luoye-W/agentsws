@@ -18,6 +18,7 @@
     "packages/contracts/src/join.ts",
     "packages/contracts/src/kernel.ts",
     "packages/contracts/src/knowledge.ts",
+    "packages/contracts/src/kol.ts",
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/packages.ts",
@@ -40,7 +41,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "4328840133f19da5f1d4d1cf2ee04376",
+  "source_digest": "c950e94bc48ba1aa33ea6bbe97828014",
   "objects": [
     {
       "id": "ad_set",
@@ -540,6 +541,73 @@
       "read_via": ["klaviyo.get_campaign", "klaviyo.list_campaigns", "meta.list_campaigns"]
     },
     {
+      "id": "collaboration",
+      "label": "collaboration",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "collaboration",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "creator_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "KolChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "stage",
+          "type": "CollaborationStage",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "budget",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "agreed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "terms_ref",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Collaboration"
+    },
+    {
       "id": "collection",
       "label": "集合",
       "key_format": "平台给的 id，原样存、不解析",
@@ -679,13 +747,82 @@
     {
       "id": "creator",
       "label": "达人",
-      "key_format": "连接器给的 id，原样存、不解析",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
       "domain": "creator",
-      "source_of_truth": "connector",
-      "freshness": "cached:300",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
       "read_ranges": [],
-      "properties": [],
-      "read_via": []
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "display_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "merged_from",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "Creator"
+    },
+    {
+      "id": "creator_contact",
+      "label": "creator_contact",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "creator_contact",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "creator_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "CreatorContactKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "value_ref",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "verified_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "CreatorContact"
     },
     {
       "id": "customer",
@@ -698,6 +835,67 @@
       "properties": [],
       "read_via": ["shopify_admin.get_customer", "shopify_admin.list_customers"],
       "platforms": ["shopify"]
+    },
+    {
+      "id": "deliverable",
+      "label": "deliverable",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "deliverable",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "collaboration_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "DeliverableKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "due_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "submitted_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "review",
+          "type": "DeliverableReview",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Deliverable"
     },
     {
       "id": "discount",
@@ -1612,6 +1810,85 @@
       ],
       "read_via": [],
       "contract": "Person"
+    },
+    {
+      "id": "platform_account",
+      "label": "platform_account",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "platform_account",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "creator_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "KolChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "followers",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "engagement_rate",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "PlatformAccount"
     },
     {
       "id": "policy",
@@ -2575,6 +2852,67 @@
       "contract": "Todo"
     },
     {
+      "id": "tracked_link",
+      "label": "tracked_link",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "tracked_link",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "collaboration_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "utm",
+          "type": "KolUtm",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "affiliate_code",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "clicks",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "orders",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "revenue",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "TrackedLink"
+    },
+    {
       "id": "variant",
       "label": "变体",
       "key_format": "平台给的 id，原样存、不解析",
@@ -3135,6 +3473,14 @@
     },
     {
       "from": "campaign",
+      "to": "collaboration",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "collaboration.campaign_id",
+      "lookup": []
+    },
+    {
+      "from": "campaign",
       "to": "staged_change",
       "direction": "in",
       "cardinality": "many",
@@ -3155,6 +3501,38 @@
       "direction": "in",
       "cardinality": "many",
       "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "collaboration",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "campaign_id",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "collaboration",
+      "to": "creator",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "creator_id",
+      "lookup": []
+    },
+    {
+      "from": "collaboration",
+      "to": "deliverable",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "deliverable.collaboration_id",
+      "lookup": []
+    },
+    {
+      "from": "collaboration",
+      "to": "tracked_link",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "tracked_link.collaboration_id",
       "lookup": []
     },
     {
@@ -3198,6 +3576,38 @@
       "lookup": []
     },
     {
+      "from": "creator",
+      "to": "collaboration",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "collaboration.creator_id",
+      "lookup": []
+    },
+    {
+      "from": "creator",
+      "to": "creator_contact",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "creator_contact.creator_id",
+      "lookup": []
+    },
+    {
+      "from": "creator",
+      "to": "platform_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "platform_account.creator_id",
+      "lookup": []
+    },
+    {
+      "from": "creator_contact",
+      "to": "creator",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "creator_id",
+      "lookup": []
+    },
+    {
       "from": "customer",
       "to": "approval_item",
       "direction": "in",
@@ -3227,6 +3637,14 @@
       "direction": "in",
       "cardinality": "many",
       "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "deliverable",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "collaboration_id",
       "lookup": []
     },
     {
@@ -3531,6 +3949,14 @@
       "direction": "in",
       "cardinality": "many",
       "via": "membership_request.person_id",
+      "lookup": []
+    },
+    {
+      "from": "platform_account",
+      "to": "creator",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "creator_id",
       "lookup": []
     },
     {
@@ -4059,6 +4485,14 @@
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "tracked_link",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "collaboration_id",
       "lookup": []
     },
     {
