@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/kol-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "红人营销共享包（48 §5.2）：阶段机、打分、开发信与禁承诺、回复分类、同一人合并、campaign 向导、UTM 与归因、导入、URL 解析、渠道适配器接口。纯函数，无 IO，无模型调用。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}
