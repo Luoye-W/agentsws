@@ -1,0 +1,56 @@
+# WP64（51 §2.4 / §4）：超期未发出异常卡 → 标记发货 L2。
+#
+# 这条题钉三件事：
+#
+# 1. **超期是判出来的，不是说出来的。** 巡检经 mock connect 真读一次 `list_orders`，
+#    按订单上的 `fulfillment_status` 与 `created_at` 算，门槛来自职责 yml 的
+#    `overdue_days`（3 天）。断言里对 `worst_days` 有数——数对得上，才说明它用的是
+#    订单上的那个日期，而不是谁转述的。
+# 2. **压了几天要有人知道。** 出一条 `simulation.fulfillment_overdue` 并通知到
+#    这条职责的持有人（51 §2.4 的 `order.overdue`），不是只在面板上躺着。
+# 3. **标记发货是 L2，但单号是硬的。** L2 = 额度之内自己办、不等人点头；
+#    可是 15 §2 的 guardrail 在 stage 那一刻就查承运商与单号——没有它们，
+#    这条变更根本进不了队列（`create_fulfillment` 那一条是 block 不是 review）。
+#
+# 一封信不发：履约改的是订单状态，不是跟顾客说话（延误通知走客服那条路）。
+id: fulfillment/overdue-alert-and-fulfill
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 10m..30m }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 李默（运营，兼着订单履约）早上先看一眼有没有压着的单
+  - at: '+0m'
+    fulfillment.sweep: { who: p_li }
+  # 最久的那一张交给云途，回填单号
+  - at: '+20m'
+    fulfillment.mark_shipped: { who: p_li, carrier: YunExpress, tracking: YT2026090701 }
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  overdue_orders: { count: '>=1', worst_days: '>=4' }
+  notifications_to: [p_li]
+  event_types:
+    - simulation.fulfillment_overdue
+    - simulation.fulfillment_staged
+  staged_change_kinds: [create_fulfillment]
+  approval_kinds: { staged_change: 1 }
+  # L2 = 额度之内自己办：没人点头也施行了（而这正是"发货"该有的样子）
+  auto_approved: 1
+  metrics:
+    staged_changes: 1
+    applied_changes: 1
+    # 履约不跟顾客说话——延误通知是客服那条路的事
+    outbound_sent: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  那条"超期未发 N 张"的通知说得清吗——压了几天、门槛是几天，人看完知不知道该干什么？

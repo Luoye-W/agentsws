@@ -212,8 +212,8 @@ describe('loadPosition (05 §2)', () => {
     expect(role.actions[0]?.mandate.window).toEqual({ max_count: 2, per: 'week' })
     expect(role.automation.stage_campaign_send?.hard_ceiling).toBe(true)
     expect(role.automation.stage_campaign_send?.ceiling).toBe('L1')
-    expect(role.automation.stage_segment_edit?.ceiling).toBe('L2')
-    expect(role.automation.stage_flow_edit?.ceiling).toBe('L2')
+    expect(role.automation.stage_segment_edit?.initial).toBe('L2')
+    expect(role.automation.stage_flow_edit?.initial).toBe('L2')
     // 自动流的触发条件 Agent 碰不得
     expect(role.actions[2]?.protected_fields).toContain('trigger')
     // 连接器平台中立：职责不写死 Klaviyo
@@ -237,8 +237,8 @@ describe('loadPosition (05 §2)', () => {
       overdue_days: 3,
     })
     expect(role.actions[0]?.mandate.window).toEqual({ max_count: 50, per: 'day' })
-    expect(role.automation.stage_create_fulfillment?.ceiling).toBe('L2')
-    expect(role.automation.stage_split_order?.ceiling).toBe('L2')
+    expect(role.automation.stage_create_fulfillment?.initial).toBe('L2')
+    expect(role.automation.stage_split_order?.initial).toBe('L2')
     expect(role.automation.stage_cancel_order?.hard_ceiling).toBe(true)
     expect(role.automation.notify_delay?.initial).toBe('L2')
     expect(role.automation.notify_delay?.ceiling).toBe('L3')

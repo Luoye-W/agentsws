@@ -80,14 +80,16 @@ automation:
     hard_ceiling: true
     promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
     demotion_triggers: [manual]
+  # 51 §2.3 写的是 L2，指的就是**初始**就在 L2。两条都改不动"发给谁、什么时候发"
+  # 这件事本身——分群超过 `max_segment_size` 转人审，自动流的触发条件 Agent 根本碰不得。
   stage_segment_edit:
     ceiling: L2
-    initial: L1
+    initial: L2
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [guardrail_hit, manual]
   stage_flow_edit:
     ceiling: L2
-    initial: L1
+    initial: L2
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [guardrail_hit, manual]
 

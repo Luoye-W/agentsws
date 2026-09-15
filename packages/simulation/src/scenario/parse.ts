@@ -174,6 +174,11 @@ const EVENT_KEYS = [
   'shop.price_change',
   'shop.theme_push',
   'shop.theme_publish',
+  // WP64 邮件营销与订单履约（51 §2.3 / §2.4）
+  'fulfillment.sweep',
+  'fulfillment.mark_shipped',
+  'email.unsubscribe',
+  'email.campaign_send',
   // WP47 范围模型（44）
   'org.range_group',
   'org.product_line',
@@ -225,6 +230,9 @@ const EXPECTED_KEYS = [
   'scope_disjoint',
   // WP62（51 §1 N0）
   'platform_unsupported',
+  // WP64（51 §2.3 / §2.4）
+  'overdue_orders',
+  'campaign_send',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -619,6 +627,63 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(body.note === undefined
             ? {}
             : { note: str(source, `${path}.${key}.note`, body.note) }),
+        },
+      }
+    }
+    // WP64（51 §2.4）：超期未发的巡检与标记发货
+    case 'fulfillment.sweep': {
+      known(source, `${path}.${key}`, body, ['who'])
+      return {
+        at,
+        type: 'fulfillment.sweep',
+        sweep: { who: str(source, `${path}.${key}.who`, body.who) },
+      }
+    }
+    case 'fulfillment.mark_shipped': {
+      known(source, `${path}.${key}`, body, ['who', 'order', 'carrier', 'tracking', 'level'])
+      const shipLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (shipLevel !== undefined && !['L1', 'L2', 'L3'].includes(shipLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'fulfillment.mark_shipped',
+        ship: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          carrier: str(source, `${path}.${key}.carrier`, body.carrier),
+          tracking: str(source, `${path}.${key}.tracking`, body.tracking),
+          ...(body.order === undefined
+            ? {}
+            : { order: str(source, `${path}.${key}.order`, body.order) }),
+          ...(shipLevel === undefined ? {} : { level: shipLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    // WP64（51 §2.3）：退订与群发
+    case 'email.unsubscribe': {
+      known(source, `${path}.${key}`, body, ['email'])
+      return {
+        at,
+        type: 'email.unsubscribe',
+        unsubscribe: { email: str(source, `${path}.${key}.email`, body.email) },
+      }
+    }
+    case 'email.campaign_send': {
+      known(source, `${path}.${key}`, body, ['who', 'campaign', 'note', 'level'])
+      const sendLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (sendLevel !== undefined && !['L1', 'L2', 'L3'].includes(sendLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'email.campaign_send',
+        campaign_send: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          campaign: str(source, `${path}.${key}.campaign`, body.campaign),
+          ...(body.note === undefined
+            ? {}
+            : { note: str(source, `${path}.${key}.note`, body.note) }),
+          ...(sendLevel === undefined ? {} : { level: sendLevel as 'L1' | 'L2' | 'L3' }),
         },
       }
     }

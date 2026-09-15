@@ -356,8 +356,10 @@ export function evaluateGuardrail(
       const carrier = typeof after.carrier === 'string' ? after.carrier.trim() : ''
       if (tracking === '') block('tracking_number_required')
       if (carrier === '') block('carrier_required')
-      if (before.fulfillment_status !== undefined && before.fulfillment_status === 'fulfilled')
-        block('already_fulfilled', 'unfulfilled', String(before.fulfillment_status))
+      // 记录层给的键名两种都有（`fulfillment` / `fulfillment_status`），认哪一个都行——
+      // 少认一个的后果是"已发货的单又发一次"，宁可两个都查。
+      const state = before.fulfillment_status ?? before.fulfillment
+      if (state === 'fulfilled') block('already_fulfilled', 'unfulfilled', String(state))
       break
     }
     case 'split_order': {
@@ -372,8 +374,8 @@ export function evaluateGuardrail(
     }
     case 'cancel_order': {
       // 已发货的订单取消不了（货在路上）——这是事实判断，不是额度，所以 block。
-      if (before.fulfillment_status === 'fulfilled')
-        block('fulfilled_cannot_cancel', 'unfulfilled', String(before.fulfillment_status))
+      const shipped = before.fulfillment_status ?? before.fulfillment
+      if (shipped === 'fulfilled') block('fulfilled_cannot_cancel', 'unfulfilled', String(shipped))
       break
     }
     case 'bid_change':

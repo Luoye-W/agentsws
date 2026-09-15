@@ -166,6 +166,41 @@ export interface ScenarioShopThemePublish {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/** WP64 / 51 §2.4：跑一次超期未发的巡检（读订单 → 出异常 → 通知到人）。 */
+export interface ScenarioFulfillmentSweep {
+  who: string
+}
+
+/** WP64 / 51 §2.4：标记发货 + 回填单号（`create_fulfillment`，L2）。 */
+export interface ScenarioFulfillmentShip {
+  who: string
+  /** 哪张单；不给就挑巡检里压得最久的那一张。 */
+  order?: string
+  carrier: string
+  tracking: string
+  /** 故意报的等级（默认按职责的生效配置走）。 */
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/** WP64 / 51 §2.3：某个顾客点了退订（世界里发生的一件事，不是场景递答案）。 */
+export interface ScenarioEmailUnsubscribe {
+  email: string
+}
+
+/** WP64 / 51 §2.3：提一条群发（`campaign_send`，发送永远 L1）。 */
+export interface ScenarioEmailCampaignSend {
+  who: string
+  campaign: string
+  note?: string
+  /**
+   * 提案时报的自动化等级。默认按职责的生效配置走（L1）。
+   *
+   * 场景填 `L3` 是**故意**的：等于有人在设置里把"群发"开到了全自动。
+   * 15 §2 的 hard_ceiling 应当当场把它拉回人审——这条题要钉的就是这一下。
+   */
+  level?: 'L1' | 'L2' | 'L3'
+}
+
 /** WP47 / 44 G1：建或改一个品牌（范围组）。改成员会重算挂了它的岗位范围并留痕。 */
 export interface ScenarioOrgRangeGroup {
   id: string
@@ -314,6 +349,14 @@ export type ScenarioEvent =
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
   | { at: string; type: 'shop.theme_publish'; theme_publish: ScenarioShopThemePublish }
+  /** WP64：跑一次超期未发巡检（51 §2.4）。 */
+  | { at: string; type: 'fulfillment.sweep'; sweep: ScenarioFulfillmentSweep }
+  /** WP64：标记发货 + 回填单号（51 §2.4）。 */
+  | { at: string; type: 'fulfillment.mark_shipped'; ship: ScenarioFulfillmentShip }
+  /** WP64：某个顾客点了退订（51 §2.3）。 */
+  | { at: string; type: 'email.unsubscribe'; unsubscribe: ScenarioEmailUnsubscribe }
+  /** WP64：提一条群发（51 §2.3，发送永远 L1）。 */
+  | { at: string; type: 'email.campaign_send'; campaign_send: ScenarioEmailCampaignSend }
   /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
   | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
   /** WP47：建 / 改一条产品线（44 G2）。 */
@@ -496,6 +539,26 @@ export interface ScenarioExpected {
    * 这一跳就白做了。
    */
   platform_unsupported?: string[]
+  /**
+   * WP64 / 51 §2.4：这一轮超期巡检应当找出几张单、最久的压了几天。
+   *
+   * 钉的是"**结构化字段判出来的**，不是模型说的"——`worst_days` 对得上，
+   * 说明用的是订单上的 `created_at`，不是谁转述的。
+   */
+  overdue_orders?: { count?: NumericAssertion; worst_days?: NumericAssertion }
+  /**
+   * WP64 / 51 §2.3：那一条群发提案的四件事。
+   *
+   * `requested_level` 报 L3 而 `auto_approved` 是假 = 硬顶把它按回人审了；
+   * `suppressed_removed` + `stated_on_card` = 名单里的人被剔掉了，而且卡上说了。
+   */
+  campaign_send?: {
+    requested_level?: string
+    auto_approved?: boolean
+    suppressed_removed?: NumericAssertion
+    audience_size?: NumericAssertion
+    stated_on_card?: boolean
+  }
   /**
    * WP57：这几轮聊天判成了哪几种动作（`answer` / `collect_info` / `human_review` /
    * `assist` / `handoff`），**按顺序**。

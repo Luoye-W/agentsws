@@ -87,14 +87,17 @@ actions:
     route_to: role_holder
 
 automation:
+  # 51 §2.4 写的是 L2，指的就是**初始**就在 L2：标记发货与拆单是"照着已经决定好的事
+  # 去执行"，额度（单日 50 张、单号必填、拆不过三件）替人守住了边界。
+  # 出事就降级（`demotion_triggers`），不是靠一开始卡在 L1。
   stage_create_fulfillment:
     ceiling: L2
-    initial: L1
+    initial: L2
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
     demotion_triggers: [guardrail_hit, manual]
   stage_split_order:
     ceiling: L2
-    initial: L1
+    initial: L2
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [guardrail_hit, manual]
   stage_cancel_order:
