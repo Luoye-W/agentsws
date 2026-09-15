@@ -25,6 +25,7 @@
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/skills.ts",
+    "packages/contracts/src/standby.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
@@ -36,7 +37,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "2b7be54f3966c058530f2683c4e25995",
+  "source_digest": "85925aed51918b5e4d61d2fe48067915",
   "objects": [
     {
       "id": "ad_set",

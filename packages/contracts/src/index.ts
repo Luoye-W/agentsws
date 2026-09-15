@@ -20,4 +20,6 @@ export * from './roles.js'
 export * from './run.js'
 export * from './schedule.js'
 export * from './skills.js'
+// 49 §6 WP60 / 48 L6：在线值守与聊天窗托管
+export * from './standby.js'
 export * from './work.js'
