@@ -304,3 +304,214 @@ describe('44 G2 target_in_range', () => {
     expect(out.verdict).toBe('block')
   })
 })
+
+/**
+ * WP64（51 §2.3 / §2.4）：邮件营销与订单履约的五条新 kind。
+ *
+ * 钉的是"这几条硬规则在 guardrail 这一层就说不"，而不是"面板上会提示"——
+ * 提示劝得住人，劝不住一个自动跑的 Agent。
+ */
+describe('WP64 邮件营销与订单履约（15 §2 + 51 §2.3 / §2.4）', () => {
+  const campaign = { type: 'campaign', id: 'cmp_1' } as const
+  const ord = { type: 'order', id: 'ord_2001' } as const
+  const seen = (ref: { type: string; id: string }) => {
+    const p = new Provenance('run_wp64')
+    p.see([ref], { full: true })
+    return p
+  }
+  const f = (ref: { type: string; id: string }, over = {}) => ({
+    now,
+    changeSet: [],
+    windowCount: 0,
+    provenance: seen(ref),
+    ...over,
+  })
+  const ruleOf = (r: ReturnType<typeof evaluateGuardrail>, rule: string) =>
+    r.hits.find((h) => h.rule === rule)
+
+  it('群发永远人审：就算额度、名单都干净，硬顶也把它按回 L1', () => {
+    const out = evaluateGuardrail(
+      {
+        kind: 'campaign_send',
+        target: campaign,
+        before: {},
+        after: {
+          audience_size: 3,
+          audience: ['a@x.com'],
+          suppressed: [],
+          suppression_checked: true,
+        },
+      },
+      { caps: { max_campaign_audience: 5000 } },
+      f(campaign),
+      'stage',
+    )
+    expect(out.verdict).toBe('require_review')
+    expect(ruleOf(out, 'hard_ceiling')?.cap).toBe('L1')
+  })
+
+  it('抑制名单没查过 = block（"没问过"与"问过了没人"分得开）', () => {
+    const out = evaluateGuardrail(
+      { kind: 'campaign_send', target: campaign, before: {}, after: { audience: ['a@x.com'] } },
+      { caps: {} },
+      f(campaign),
+      'stage',
+    )
+    expect(out.verdict).toBe('block')
+    expect(ruleOf(out, 'suppression_list_required')).toBeDefined()
+  })
+
+  it('剔干净了才放行；名单上的人还留在收件人里就 block', () => {
+    const leaky = evaluateGuardrail(
+      {
+        kind: 'campaign_send',
+        target: campaign,
+        before: {},
+        after: {
+          audience: ['Anna+promo@Example.com'],
+          suppressed: ['anna@example.com'],
+          suppression_checked: true,
+        },
+      },
+      { caps: {} },
+      f(campaign),
+      'stage',
+    )
+    expect(leaky.verdict).toBe('block')
+    expect(ruleOf(leaky, 'suppression_list')).toBeDefined()
+  })
+
+  it('自动流：触发条件动不得，延迟改短 / 上限调大一样是 block', () => {
+    const protectedField = evaluateGuardrail(
+      {
+        kind: 'flow_edit',
+        target: { type: 'campaign', id: 'flow_abandon' },
+        before: { trigger: 'checkout_abandoned_60m', body: '旧文案' },
+        after: { trigger: 'checkout_abandoned_10m', body: '新文案' },
+      },
+      { caps: {} },
+      f({ type: 'campaign', id: 'flow_abandon' }),
+      'stage',
+    )
+    expect(protectedField.verdict).toBe('block')
+    expect(ruleOf(protectedField, 'protected_field')).toBeDefined()
+
+    const loosened = evaluateGuardrail(
+      {
+        kind: 'flow_edit',
+        target: { type: 'campaign', id: 'flow_winback' },
+        before: { delay_minutes: 60, max_recipients: 500 },
+        after: { delay_minutes: 10, max_recipients: 5000 },
+      },
+      { caps: {} },
+      f({ type: 'campaign', id: 'flow_winback' }),
+      'stage',
+    )
+    expect(loosened.verdict).toBe('block')
+    expect(ruleOf(loosened, 'flow_trigger_not_loosened')).toBeDefined()
+  })
+
+  it('自动流只改开关与文案 → allow', () => {
+    const out = evaluateGuardrail(
+      {
+        kind: 'flow_edit',
+        target: { type: 'campaign', id: 'flow_winback' },
+        before: { enabled: false, body: '旧文案', delay_minutes: 60 },
+        after: { enabled: true, body: '新文案', delay_minutes: 60 },
+      },
+      { caps: {} },
+      f({ type: 'campaign', id: 'flow_winback' }),
+      'stage',
+    )
+    expect(out.verdict).toBe('allow')
+  })
+
+  it('标记发货必须带单号与承运商；已发货的不许再发一次', () => {
+    const naked = evaluateGuardrail(
+      {
+        kind: 'create_fulfillment',
+        target: ord,
+        before: { fulfillment_status: 'unfulfilled' },
+        after: {},
+      },
+      { caps: {} },
+      f(ord),
+      'stage',
+    )
+    expect(naked.verdict).toBe('block')
+    expect(ruleOf(naked, 'tracking_number_required')).toBeDefined()
+    expect(ruleOf(naked, 'carrier_required')).toBeDefined()
+
+    const ok = evaluateGuardrail(
+      {
+        kind: 'create_fulfillment',
+        target: ord,
+        before: { fulfillment_status: 'unfulfilled' },
+        after: { tracking_number: 'YT2026', carrier: 'YunExpress' },
+      },
+      { caps: {} },
+      f(ord),
+      'stage',
+    )
+    expect(ok.verdict).toBe('allow')
+
+    const again = evaluateGuardrail(
+      {
+        kind: 'create_fulfillment',
+        target: ord,
+        before: { fulfillment_status: 'fulfilled' },
+        after: { tracking_number: 'YT2026', carrier: 'YunExpress' },
+      },
+      { caps: {} },
+      f(ord),
+      'stage',
+    )
+    expect(again.verdict).toBe('block')
+  })
+
+  it('拆单至少两件；超过上限转人审', () => {
+    const one = evaluateGuardrail(
+      { kind: 'split_order', target: ord, before: {}, after: { parts: 1 } },
+      { caps: { max_split_parts: 3 } },
+      f(ord),
+      'stage',
+    )
+    expect(one.verdict).toBe('block')
+    const many = evaluateGuardrail(
+      { kind: 'split_order', target: ord, before: {}, after: { parts: 5 } },
+      { caps: { max_split_parts: 3 } },
+      f(ord),
+      'stage',
+    )
+    expect(many.verdict).toBe('require_review')
+  })
+
+  it('取消订单永远人审；已发货的取消不了', () => {
+    const pending = evaluateGuardrail(
+      {
+        kind: 'cancel_order',
+        target: ord,
+        before: { fulfillment_status: 'unfulfilled' },
+        after: { reason: 'customer_request' },
+      },
+      { caps: {} },
+      f(ord),
+      'stage',
+    )
+    expect(pending.verdict).toBe('require_review')
+    expect(ruleOf(pending, 'hard_ceiling')?.cap).toBe('L1')
+
+    const shipped = evaluateGuardrail(
+      {
+        kind: 'cancel_order',
+        target: ord,
+        before: { fulfillment_status: 'fulfilled' },
+        after: { reason: 'customer_request' },
+      },
+      { caps: {} },
+      f(ord),
+      'stage',
+    )
+    expect(shipped.verdict).toBe('block')
+  })
+})

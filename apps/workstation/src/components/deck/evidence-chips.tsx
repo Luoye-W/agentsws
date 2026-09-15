@@ -81,6 +81,12 @@ const TONE: Record<DeckHighlight['type'], string> = {
   commitment: 'border-chart-5/50 text-foreground',
   risk_term: 'border-destructive/50 text-destructive',
   order_ref: 'border-border text-muted-foreground',
+  // WP64：群发的受众规模与剔除人数是中性事实（不是风险词，别染成红的）；
+  // 超期天数是这张卡存在的理由，给它告警色。
+  audience: 'border-chart-2/40 text-foreground',
+  suppressed: 'border-border text-muted-foreground',
+  overdue: 'border-destructive/50 text-destructive',
+  tracking: 'border-border text-muted-foreground',
 }
 
 export function Highlights({

@@ -25,6 +25,28 @@ export type ChangeKind =
   | 'unpublish_product'
   | 'promotion'
   | 'campaign_send'
+  /**
+   * WP64（51 §2.3）：邮件营销的分群规则改动（谁进这个人群、谁出去）。
+   * 它自己不发信，所以不是 `campaign_send`；但改错了下一次发送就发给错的人，因此照样进账本。
+   */
+  | 'segment_edit'
+  /**
+   * WP64（51 §2.3）：自动流（弃购 / 复购）的开关与文案。
+   *
+   * **触发条件不在 Agent 手里**：放宽一次触发条件等于把一整条流悄悄发给多得多的人，
+   * 而它在账本上看起来只是"改了一条流"。硬规则在 `@agentsws/core` 的 guardrail 里。
+   */
+  | 'flow_edit'
+  /** WP64（51 §2.4）：标记发货 + 回填物流单号（Shopify `fulfillmentCreate`）。 */
+  | 'create_fulfillment'
+  /** WP64（51 §2.4）：拆单——一张订单分几个包裹分别发。 */
+  | 'split_order'
+  /**
+   * WP64（51 §2.4）：取消订单。
+   *
+   * 连带退款与库存回补，而且**不可逆**——15 §2 的 `HARD_L1` 里有它，永远人审。
+   */
+  | 'cancel_order'
   | 'publish_post'
   | 'bid_change'
   | 'budget_change'

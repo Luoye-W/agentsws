@@ -173,6 +173,10 @@ function refundAmount(i: ApprovalItem): number | undefined {
 const isRefund = (i: ApprovalItem): boolean =>
   i.kind === 'staged_change' && isRecord(i.payload) && i.payload.kind === 'refund'
 
+/** WP64：这张卡是不是某一条变更种类的 staged_change。 */
+const isChangeKind = (i: ApprovalItem, kind: string): boolean =>
+  i.kind === 'staged_change' && isRecord(i.payload) && i.payload.kind === kind
+
 const PENDING: readonly string[] = ['pending', 'in_review']
 
 // ── 注册表 ─────────────────────────────────────────────────────────────
@@ -376,6 +380,74 @@ const QUERY_LIST: QueryDef[] = [
       return { rows }
     },
   },
+  // ── WP64（51 §2.4）：订单履约 ────────────────────────────────────────
+  {
+    name: 'orders.unfulfilled',
+    source: 'shop',
+    returns: 'table',
+    run: (ctx) => {
+      // 「待发货」= 已付款但还没发货。按下单时间正序——先来的先发，这就是队列本身。
+      // 与「超期未发」用的是同一批结构化字段，差别只在那条 3 天的线。
+      const rows = ctx.orders
+        .filter((o) => o.fulfillment_status === 'unfulfilled')
+        .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+        .slice(0, 20)
+        .map((o) => ({
+          order: o.name,
+          created_at: o.created_at,
+          total: o.total_price,
+          currency: o.currency,
+          status: o.financial_status,
+        }))
+      return {
+        columns: [
+          { key: 'order', label: '订单' },
+          { key: 'created_at', label: '下单时间' },
+          { key: 'total', label: '金额', align: 'right' as const },
+          { key: 'status', label: '支付' },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    name: 'fulfillments.today',
+    source: 'approvals',
+    returns: 'scalar',
+    run: (ctx, w) => {
+      // 「今日发货数」是**我们标记发货了几单**，所以按施行时间从账本上数，
+      // 不从订单的 fulfillment_status 数（那是存量，昨天发的今天还在里面）。
+      const points: Point[] = []
+      for (const i of ctx.approvals) {
+        if (!isChangeKind(i, 'create_fulfillment')) continue
+        const at = appliedMs(i)
+        if (at === undefined) continue
+        points.push({ at, v: 1 })
+      }
+      return scalarFrom(points, w)
+    },
+  },
+  // ── WP64（51 §2.3）：邮件营销 ───────────────────────────────────────
+  {
+    name: 'email.pending_sends',
+    source: 'approvals',
+    returns: 'scalar',
+    run: (ctx, w) => {
+      // 待审发送是**存量**：现在还压着几条群发等人点头（发送永远 L1，所以这条永远有值）。
+      const sends = ctx.approvals.filter((i) => isChangeKind(i, 'campaign_send'))
+      const value = sends.filter((i) => PENDING.includes(i.state)).length
+      const previous = sends.filter(
+        (i) => PENDING.includes(i.state) && createdMs(i) < w.current.from,
+      ).length
+      const spark = w.spark.map((b) => sends.filter((i) => inWindow(createdMs(i), b)).length)
+      return {
+        value,
+        previous,
+        ...(previous === 0 ? {} : { delta_pct: round2(((value - previous) / previous) * 100) }),
+        spark,
+      }
+    },
+  },
   // ── 没接的数据源：查询在册，执行时按连接状态短路（36 §3「显示去连接卡而不是空图」）
   { name: 'analytics.conversion_rate', source: 'ga4', returns: 'scalar', run: () => EMPTY_SCALAR },
   { name: 'analytics.active_users', source: 'ga4', returns: 'scalar', run: () => EMPTY_SCALAR },
@@ -388,6 +460,17 @@ const QUERY_LIST: QueryDef[] = [
   { name: 'ads.cpa', source: 'ads', returns: 'scalar', run: () => EMPTY_SCALAR },
   { name: 'ads.ctr', source: 'ads', returns: 'scalar', run: () => EMPTY_SCALAR },
   { name: 'ads.trend', source: 'ads', returns: 'series', run: () => EMPTY_SERIES },
+  // WP64：邮件营销后台与物流追踪的连接器还是骨架（目录 + 只读动作 + 原生表单，
+  // 真调用没接）。查询先在册——积木、面板、权限都按它装配好；连上那天换的是 `run`，
+  // 不是面板。在此之前这几块一律走「去连接」那一支，一个编出来的数字都没有。
+  { name: 'email.flows', source: 'email_marketing', returns: 'table', run: () => EMPTY_TABLE },
+  {
+    name: 'email.campaign_performance',
+    source: 'email_marketing',
+    returns: 'table',
+    run: () => EMPTY_TABLE,
+  },
+  { name: 'shipments.exceptions', source: 'tracking', returns: 'table', run: () => EMPTY_TABLE },
 ]
 
 const EMPTY_SCALAR: ScalarResult = { value: 0, previous: 0, spark: [0, 0, 0, 0, 0, 0, 0] }

@@ -230,6 +230,9 @@ async function execute(
     }
   }
 
+  /** WP64：上一次超期巡检里压得最久的那张单（`fulfillment.mark_shipped` 不指名时用它）。 */
+  let lastOverdue: string | undefined
+
   const tick = async (): Promise<void> => {
     await standIns.actors.tick()
     // 25 §4：合成时钟每推进一步驱动一次调度器与流程引擎（真实进程里是 setInterval）
@@ -956,6 +959,56 @@ async function execute(
         })
         world.appendEvent('simulation.shop_theme_publish_staged', {
           staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
+      // ── WP64 邮件营销与订单履约（51 §2.3 / §2.4）──────────────────
+      case 'fulfillment.sweep': {
+        const out = await world.web.overdueSweep({ who: event.sweep.who })
+        lastOverdue = out.orders[0]?.id
+        return
+      }
+      case 'fulfillment.mark_shipped': {
+        // 不指名就挑巡检里压得最久的那一张——人在面板上点的也是最上面那条
+        const order = event.ship.order ?? lastOverdue
+        if (order === undefined) {
+          throw new SimulationError(
+            'invalid_input',
+            'fulfillment.mark_shipped 没给 order，前面也没跑过 fulfillment.sweep',
+          )
+        }
+        const out = await world.web.markShipped({
+          who: event.ship.who,
+          order,
+          carrier: event.ship.carrier,
+          tracking: event.ship.tracking,
+          ...(event.ship.level === undefined ? {} : { level: event.ship.level }),
+        })
+        world.appendEvent('simulation.fulfillment_staged', {
+          order,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'email.unsubscribe': {
+        world.web.unsubscribe({ email: event.unsubscribe.email })
+        return
+      }
+      case 'email.campaign_send': {
+        const out = await world.web.campaignSend({
+          who: event.campaign_send.who,
+          campaign: event.campaign_send.campaign,
+          ...(event.campaign_send.note === undefined ? {} : { note: event.campaign_send.note }),
+          ...(event.campaign_send.level === undefined ? {} : { level: event.campaign_send.level }),
+        })
+        world.appendEvent('simulation.campaign_send_requested', {
+          campaign: event.campaign_send.campaign,
+          staged: out.staged,
+          audience_size: out.audience.length,
+          suppressed_removed: out.suppressed.length,
           ...(out.reason === undefined ? {} : { reason: out.reason }),
         })
         return

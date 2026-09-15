@@ -14,6 +14,10 @@ const SERVICE_BY_SOURCE: Partial<Record<DataSourceId, string>> = {
   ga4: 'ga4',
   gsc: 'gsc',
   ads: 'meta_ads',
+  // WP64：这两张卡现在点不动（状态"还没接"），但「去连接」照样该落到它们身上——
+  // 到了那一页用户看到的是一句"还没接"，而不是在目录里翻找一个不存在的条目。
+  email_marketing: 'klaviyo',
+  tracking: 'aftership',
 }
 
 /** 数据源 → 连接页的地址（认不出来的就落到连接页首屏）。 */

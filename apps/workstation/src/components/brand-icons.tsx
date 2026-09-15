@@ -124,6 +124,15 @@ const ICONS: Record<string, IconChoice> = {
   meta_ads: { kind: 'glyph', glyph: 'meta' },
   // 「任意邮箱（IMAP / SMTP）」不是一家公司，给它挂任何一家的标志都是误导
   imap_smtp: { kind: 'lucide-mail' },
+  // WP64（51 §2.3 / §2.4）：四张还没接真服务的骨架卡。
+  //
+  // Shopify Email 是 Shopify 自家的功能，用同一条品牌图标；另外三家走**首字母单色徽标**——
+  // simple-icons v16.30.0 里没有它们，而"去别处扒一个标志回来"既不合 CC0 也不合
+  // 36 §8 的商标纪律。接上真服务那天再按抓官方图那条路补（`scripts/fetch-brand-icons.mjs`）。
+  shopify_email: { kind: 'glyph', glyph: 'shopify' },
+  klaviyo: { kind: 'letter', letter: 'K' },
+  aftership: { kind: 'letter', letter: 'A' },
+  track17: { kind: 'letter', letter: '17' },
   // ── 模型卡（设置页）─────────────────────────────────────────────────
   deepseek: { kind: 'glyph', glyph: 'deepseek' },
   // Simple Icons 里没有 OpenAI（品牌方要求下架）；这张卡说的也是"任何 OpenAI 兼容

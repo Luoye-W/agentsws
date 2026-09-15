@@ -43,6 +43,14 @@ export interface ShopifyWriteAction {
   action_id: string
   /** 15 §2 的变更种类；没有就是"暂时不能 stage"，见 {@link not_stageable}。 */
   change_kind?: ChangeKind
+  /**
+   * WP64：同一个上游动作还施行哪几条 kind。
+   *
+   * 一个动作只有一条**主**语义（`change_kind`，界面上"这个动作会改什么"照它说），
+   * 但反查"这条 kind 该调哪个动作"时这几条要一起认——`fulfillmentCreate` 就是例子：
+   * 正常发货、补发、拆单的每一件包裹，在 Shopify 那头是同一次调用。
+   */
+  also_change_kinds?: ChangeKind[]
   target: ShopifyTargetType
   /** Shopify Admin GraphQL 里对应的 mutation（对文档用；上游怎么实现是它的事）。 */
   graphql?: string
@@ -175,10 +183,14 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
   },
   {
     action_id: 'shopify_admin.create_fulfillment',
-    change_kind: 'reship',
+    // WP64（51 §2.4）：正常发货有自己的 kind 了。补发（`reship`）与拆单（`split_order`）
+    // 在 Shopify 那头是同一个 mutation——一次发货就是一次发货，区别在**为什么发**，
+    // 而"为什么"决定的是额度与审批路由，所以三条 kind 共用这一个动作。
+    change_kind: 'create_fulfillment',
+    also_change_kinds: ['reship', 'split_order'],
     target: 'order',
     graphql: 'fulfillmentCreate（旧的 fulfillmentCreateV2 已弃用，注意没有 V2）',
-    what: '给订单建一次发货（补发也走这一条）',
+    what: '给订单建一次发货：标记发货 + 回填单号（补发与拆单的每一件包裹也走这一条）',
   },
   {
     action_id: 'shopify_admin.update_order',
@@ -186,18 +198,19 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     graphql: 'orderUpdate',
     what: '改订单的备注、标签、联系邮箱这些非金额字段',
     not_stageable:
-      '15 §2 里只有 `address_change` 这一条订单写 kind（而且带 `unfulfilled_only` 与受保护字段）。' +
       '通用的"改订单任意字段"没有额度可套，等于给 Agent 一个绕过 protected 的口子——' +
-      '要做得按字段拆成具体 kind。',
+      '要做得按字段拆成具体 kind。订单这一侧已经拆出来的是 `address_change`（改地址）、' +
+      '`create_fulfillment`（标记发货 + 单号）、`split_order`（拆单）、`cancel_order`（取消），' +
+      '备注 / 标签这些还没有人要，先不给。',
   },
   {
     action_id: 'shopify_admin.cancel_order',
+    // WP64（51 §2.4）：`cancel_order` 这条 kind 现在有了，而且照当初写下的那句话办——
+    // 不可逆，所以进 15 §2 的 `HARD_L1`，永远人审。
+    change_kind: 'cancel_order',
     target: 'order',
     graphql: 'orderCancel',
     what: '取消一笔订单（含退款与恢复库存的选项）',
-    not_stageable:
-      '取消订单会连带退款与库存回补，影响面比 refund 大，15 §2 里没有对应 kind。' +
-      '要做得先定 `cancel_order`（不可逆、多半 L1 永远）。',
   },
   // ── 折扣与促销 ───────────────────────────────────────────────────────
   {
@@ -347,7 +360,9 @@ export function canStageAction(action_id: string): { ok: true } | { ok: false; r
   return { ok: true }
 }
 
-/** 按变更种类反查：这条 kind 施行时该调哪个 Action。 */
+/** 按变更种类反查：这条 kind 施行时该调哪个 Action（含 {@link ShopifyWriteAction.also_change_kinds}）。 */
 export function actionsOfChangeKind(kind: ChangeKind): ShopifyWriteAction[] {
-  return SHOPIFY_WRITE_ACTIONS.filter((a) => a.change_kind === kind)
+  return SHOPIFY_WRITE_ACTIONS.filter(
+    (a) => a.change_kind === kind || (a.also_change_kinds ?? []).includes(kind),
+  )
 }

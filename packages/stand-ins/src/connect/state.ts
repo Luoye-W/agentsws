@@ -36,6 +36,19 @@ export interface MockOrder {
   line_items: MockLineItem[]
   shipping_address: MockAddress
   record_version: string
+  /** WP64（51 §2.4）：已经建过的发货（标记发货 / 补发 / 拆单各留一条）。 */
+  fulfillments?: MockFulfillment[]
+}
+
+/** WP64（51 §2.4）：一次发货。单号与承运商是它存在的意义——没有它们不叫"已发货"。 */
+export interface MockFulfillment {
+  id: string
+  order_id: string
+  carrier: string
+  tracking_number: string
+  /** 这次发了几件（拆单时小于订单总件数）。 */
+  items: number
+  created_at: Iso8601
 }
 
 export interface MockProduct {

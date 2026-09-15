@@ -183,7 +183,7 @@ describe('WP20 §A 连接清单与目录', () => {
     expect((await data<{ connections: ConnectionView[] }>(res)).connections).toEqual([])
   })
 
-  it('目录里六个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
+  it('目录里十个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
@@ -194,6 +194,11 @@ describe('WP20 §A 连接清单与目录', () => {
       'ga4',
       'gsc',
       'meta_ads',
+      // WP64（51 §2.3 / §2.4）：四张骨架卡，状态都是"还没接"
+      'klaviyo',
+      'shopify_email',
+      'aftership',
+      'track17',
     ])
     for (const p of providers) {
       expect(p.setup_guide.steps.length).toBeGreaterThan(0)
@@ -234,6 +239,10 @@ describe('WP20 §A 连接清单与目录', () => {
       'ga4',
       'gsc',
       'meta_ads',
+      'klaviyo',
+      'shopify_email',
+      'aftership',
+      'track17',
     ])
 
     // 改回 Shopify，那张卡就回来了
@@ -243,6 +252,46 @@ describe('WP20 §A 连接清单与目录', () => {
     })
     const back = await data<{ providers: ProviderView[] }>(await api('/v1/connections/providers'))
     expect(back.providers.map((p) => p.service)).toContain('shopify_admin')
+  })
+
+  // WP64（51 §2.3 / §2.4）
+  it('四张骨架卡：点不动、说得出为什么，而且一条凭据都不收', async () => {
+    const { providers } = await data<{ providers: ProviderView[] }>(
+      await api('/v1/connections/providers'),
+    )
+    for (const service of ['klaviyo', 'shopify_email', 'aftership', 'track17']) {
+      const p = providers.find((x) => x.service === service)
+      expect(p, service).toBeDefined()
+      // 目录里有卡、状态是"还没接"——找不到这一类比点不动更让人以为是自己没找到
+      expect(p?.available, service).toBe(false)
+      expect(p?.unavailable_reason ?? '', service).toMatch(/还没接|待增加/)
+    }
+    // Klaviyo / AfterShip 的**原生表单**先立着：凭据只能在这台机器上自己填，永不经对话
+    const klaviyo = providers.find((p) => p.service === 'klaviyo')
+    expect(klaviyo?.fields.find((f) => f.name === 'private_api_key')?.secret).toBe(true)
+    expect(klaviyo?.data_sources).toEqual(['email_marketing'])
+    const aftership = providers.find((p) => p.service === 'aftership')
+    expect(aftership?.fields.find((f) => f.name === 'api_key')?.secret).toBe(true)
+    expect(aftership?.data_sources).toEqual(['tracking'])
+
+    // 开始连接：当场拒，不让人走到填密钥那一步
+    const begin = await api('/v1/connections/klaviyo/begin', {
+      method: 'POST',
+      body: JSON.stringify({ ownership: 'workspace', alias: 'klaviyo', mode: 'own_app' }),
+    })
+    expect(begin.status).toBe(503)
+
+    // 硬提交也不收：收下来也没地方用
+    const submit = await api('/v1/connections/aftership/submit', {
+      method: 'POST',
+      body: JSON.stringify({
+        ownership: 'workspace',
+        alias: 'aftership',
+        fields: { api_key: 'never-stored' },
+      }),
+    })
+    expect(submit.status).toBe(503)
+    expect(await submit.text()).not.toContain('never-stored')
   })
 
   it('runtime 状态条：没配 AGENTSWS_CONNECT_URL 就是替身档，秘密库有密钥', async () => {

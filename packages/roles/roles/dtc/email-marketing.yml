@@ -1,0 +1,146 @@
+# 51 §2.3 邮件营销（WP64）。
+#
+# 网站运营岗位的第三条职责。它跟店铺管理最大的不同在**收信的是顾客，不是同事**：
+# 一次群发出去，收不回来，也没有"撤回"这一说。所以这条职责的三件事都往紧了拧：
+#
+# 1. **发送永远 L1**（15 §2 的 `HARD_L1` 里有 `campaign_send`）。不是"初始 L1、
+#    采纳率够了升 L2"，是**永远**——采纳率证明的是"这个 Agent 写的文案人爱看"，
+#    证明不了"下一次的收件人名单是对的"。
+# 2. **退订 / 抑制名单必查**，而且是 fail-closed：提案里不报"查过了"就 block。
+#    规则本身在 `@agentsws/core` 的 `suppression.ts`，与 WP55 客服出站那条是**同一份**。
+# 3. **自动流的触发条件不可由 Agent 放宽**。改一条流在账本上只是一行 `flow_edit`，
+#    但把"弃购 60 分钟后发"改成"10 分钟后发"，等于当天多发出去几千封。
+#    guardrail 里这一条是 block 不是 review：卡面上看不出会多发给多少人，
+#    转人审等于让人替 Agent 拍脑袋。要放宽，人自己去 Klaviyo 后台改。
+#
+# 连接器写 `kind: email_marketing`，**平台中立**：今天只有 Klaviyo 一张卡，
+# 而且是骨架（目录 + 只读动作 + 原生表单，真调用还没接）。没连的时候面板与工具
+# 照 36 §3 明说"还没连"，不许拿空数据往下编。
+id: dtc.email-marketing
+version: 1.0.0
+domain: dtc
+name: { zh: 邮件营销, en: Email Marketing }
+description: 弃购挽回、复购与再营销、新品与活动邮件、分群与订阅状态
+
+scopes:
+  # 分群、活动、自动流都挂在 campaign 这个域上（分群是"下一次发给谁"，不是客户档案）
+  - { domain: campaign, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 订阅状态与抑制名单是客户身上的字段：只读，改订阅状态是顾客自己的事
+  - { domain: customer, ops: [read], range: assigned, max_sensitivity: internal }
+  # 邮件模板的正文与图（内容与博客那条职责也碰 content，两条职责各自按动作限额）
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # 51 §2.3：Klaviyo 首选，Shopify Email 待增加。职责不写死是哪一家——
+  # 写 `kind: email_marketing`，哪一张卡能用由连接目录说了算。
+  - { kind: email_marketing, required: true, grants: [read], ownership: workspace }
+  # 商品与订单读口（弃购挽回要知道购物车里是什么、复购要知道上次买了什么）
+  - { kind: shop, required: false, grants: [read_products, read_orders], ownership: workspace }
+
+actions:
+  # 51 §2.3：每周发送次数 `max_campaigns_per_week` 默认 2。
+  # 额度写在动作上，不写在职责上——"额度按动作分"那句话的落点。
+  - id: stage_campaign_send
+    target: campaign
+    kind: staged_change
+    mandate:
+      caps: { max_campaigns_per_week: 2, max_campaign_audience: 20000 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 2, per: week }
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: stage_segment_edit
+    target: campaign
+    kind: staged_change
+    mandate:
+      caps: { max_segment_size: 50000 }
+      window: { max_count: 10, per: day }
+    route_to: scope_manager
+  # 自动流：开关与文案能改，触发条件不能（受保护字段在 15 §2 的 `PROTECTED_FIELDS`）。
+  - id: stage_flow_edit
+    target: campaign
+    kind: staged_change
+    requires_record_read: true
+    mandate:
+      caps: { max_flows_touched_per_day: 3 }
+      window: { max_count: 5, per: day }
+    protected_fields: [trigger, trigger_conditions, trigger_filters, audience_filter]
+    route_to: scope_manager
+
+automation:
+  # 15 §2：`campaign_send` 在 `HARD_L1` 里。这里的 `hard_ceiling: true` 是把同一件事
+  # 在职责这一层也写出来——两处都说，改一处忘另一处的时候有人喊。
+  stage_campaign_send:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 51 §2.3 写的是 L2，指的就是**初始**就在 L2。两条都改不动"发给谁、什么时候发"
+  # 这件事本身——分群超过 `max_segment_size` 转人审，自动流的触发条件 Agent 根本碰不得。
+  stage_segment_edit:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_flow_edit:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+skills: []
+
+home_blocks:
+  # 51 §2.3 面板三块：待审发送、自动流状态、近 30 天效果。
+  - {
+      id: email.pending_sends,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(dtc.email-marketing),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: email.flow_status,
+      placement: focus,
+      component: table,
+      query: email.flows,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: email.performance_30d,
+      placement: role_view,
+      component: table,
+      query: email.campaign_performance,
+      default_order: 30,
+      pinnable: true,
+      adaptive: false,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_campaign_send',
+      mode: immediate,
+      recipients: [owner],
+      escalate_after_hours: 12,
+    }
+  - {
+      event: 'guardrail.hit:suppression_list',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []

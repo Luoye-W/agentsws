@@ -86,8 +86,13 @@ interface PersonTemplate {
   role: string
   owner?: boolean
   scope_manager?: boolean
-  /** 兼岗：同一个人的第二个分配（05 §4「不做跨 Assignment 并集」的活证据） */
-  extra?: string
+  /**
+   * 兼岗：同一个人的第二、第三个分配（05 §4「不做跨 Assignment 并集」的活证据）。
+   *
+   * WP64 起可以给一串：3 人公司里"运营"一个人同时管着邮件营销与订单履约，
+   * 这本来就是 51 §2「网站运营 = 四条职责」在小公司里的样子。
+   */
+  extra?: string | string[]
   /** 这个人管哪几家店（不写 = 全部） */
   stores?: string[]
 }
@@ -222,7 +227,16 @@ const PEOPLE_3: PersonTemplate[] = [
     owner: true,
     extra: 'common.owner',
   },
-  { id: 'p_li', name: '李默', email: 'li@nordvolt.example', title: '运营', role: 'dtc.support' },
+  {
+    id: 'p_li',
+    name: '李默',
+    email: 'li@nordvolt.example',
+    title: '运营',
+    role: 'dtc.support',
+    // WP64（51 §2.3 / §2.4）：3 人公司里没有专职的邮件营销与发货的人——运营顺手做了。
+    // 权限仍然**各管各的**：他手上三条分配，额度与等级一条一份，不并集。
+    extra: ['dtc.email-marketing', 'dtc.fulfillment'],
+  },
   {
     id: 'p_chen',
     name: '陈晓',
@@ -961,7 +975,8 @@ export function synth(options: SynthOptions): SynthResult {
   }[] = []
   let primaryTaken = false
   for (const p of templates) {
-    for (const role of [p.role, ...(p.extra === undefined ? [] : [p.extra])]) {
+    const extras = p.extra === undefined ? [] : Array.isArray(p.extra) ? p.extra : [p.extra]
+    for (const role of [p.role, ...extras]) {
       // 入站工作项默认落到第一条**主岗是售后**的分配。
       // 不能拿兼岗顶上：15 人公司里运营主管兼着售后，让他当 primary 的话
       // 「客服的卡没人理 → 升到运营主管」就变成升给他自己了，升级链看不出东西。

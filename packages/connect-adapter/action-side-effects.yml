@@ -186,12 +186,45 @@ actions:
   klaviyo.list_campaigns: read
   klaviyo.list_events: read
   klaviyo.validate_account: read
+  # WP64（51 §2.3）：邮件营销这条职责的"读"全在这几个上——分群、模板、活动效果、订阅状态。
+  # 连接器还是骨架（目录 + 表单 + 这张表，真调用没接），但副作用先标好：
+  # 这张表的默认是 write，漏标的读动作会被当成写而拿不到 role-read 令牌。
+  klaviyo.get_segment: read
+  klaviyo.list_segments: read
+  klaviyo.get_segment_profiles: read
+  klaviyo.get_list: read
+  klaviyo.list_lists: read
+  klaviyo.get_template: read
+  klaviyo.list_templates: read
+  klaviyo.get_flow: read
+  klaviyo.list_flows: read
+  klaviyo.get_flow_action: read
+  klaviyo.get_campaign_metrics: read
+  klaviyo.list_metrics: read
+  klaviyo.query_metric_aggregates: read
+  klaviyo.list_suppressions: read
+  klaviyo.get_subscription_status: read
+  # 写侧：这条职责不经连接器发信（`campaign_send` 是账本上的一条变更，永远人审），
+  # 标出来是为了让人一眼看全 Klaviyo 那头有哪些写口——漏标的按 default 仍是 write。
+  klaviyo.create_campaign: write
+  klaviyo.send_campaign: write
+  klaviyo.update_flow: write
+  klaviyo.update_segment: write
+  klaviyo.subscribe_profiles: write
+  klaviyo.unsubscribe_profiles: write
+  klaviyo.add_to_segment: write
   # create_event 会往 Klaviyo 里写一条事件（并可能触发 flow）→ write
   klaviyo.create_event: write
 
   # ---------- AfterShip ----------
   aftership.get_tracking: read
   aftership.detect_couriers: read
+  # WP64（51 §2.4）：物流轨迹只读。`list_*` 整族已经由上面的 patterns 兜住，
+  # 这几条单独写出来是因为它们不叫 list_（对着上游目录逐个核过的）。
+  aftership.get_tracking_by_slug: read
+  aftership.get_last_checkpoint: read
+  aftership.get_courier: read
+  aftership.get_notification: read
   aftership.create_tracking: write
   aftership.update_tracking: write
   aftership.delete_tracking: write

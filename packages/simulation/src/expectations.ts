@@ -470,6 +470,86 @@ export function checkExpectations(
         : problems.join('；'),
     )
   }
+  // WP64 / 51 §2.4：超期未发是**按订单上的结构化字段判出来的**，不是模型说的
+  if (expected.overdue_orders !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.fulfillment_overdue')
+    if (last === undefined) {
+      add('overdue_orders', false, '这一轮根本没跑过 fulfillment.sweep')
+    } else {
+      const p = payloadOf(last)
+      const count = Number(p.count ?? 0)
+      const worst = Number(p.worst_days ?? 0)
+      const problems: string[] = []
+      if (
+        expected.overdue_orders.count !== undefined &&
+        !matchNumeric(count, expected.overdue_orders.count)
+      ) {
+        problems.push(`找出 ${count} 张，不合期望`)
+      }
+      if (
+        expected.overdue_orders.worst_days !== undefined &&
+        !matchNumeric(worst, expected.overdue_orders.worst_days)
+      ) {
+        problems.push(`最久的压了 ${worst} 天，不合期望`)
+      }
+      add(
+        'overdue_orders',
+        problems.length === 0,
+        problems.length === 0
+          ? `超期 ${count} 张，最久 ${worst} 天（门槛 ${String(p.overdue_days ?? '?')} 天）`
+          : problems.join('；'),
+      )
+    }
+  }
+  // WP64 / 51 §2.3：群发永远 L1，而且抑制名单里的人被剔掉了、卡上说了
+  if (expected.campaign_send !== undefined) {
+    const last = [...evidence.events].reverse().find((e) => e.type === 'simulation.campaign_staged')
+    if (last === undefined) {
+      add('campaign_send', false, '这一轮没有一条群发提案进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.campaign_send
+      const problems: string[] = []
+      if (want.requested_level !== undefined && p.level_requested !== want.requested_level) {
+        problems.push(`提案报的是 ${String(p.level_requested)}，不是 ${want.requested_level}`)
+      }
+      // 「永远 L1」的落点：报了 L3 也不许自动放行
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push(
+          want.auto_approved
+            ? '这张卡没有自动放行'
+            : `报了 ${String(p.level_requested)} 居然自动发了出去`,
+        )
+      }
+      const removed = Number(p.suppressed_removed ?? 0)
+      if (
+        want.suppressed_removed !== undefined &&
+        !matchNumeric(removed, want.suppressed_removed)
+      ) {
+        problems.push(`名单只剔掉了 ${removed} 个人，不合期望`)
+      }
+      const size = Number(p.audience_size ?? 0)
+      if (want.audience_size !== undefined && !matchNumeric(size, want.audience_size)) {
+        problems.push(`收件人 ${size} 个，不合期望`)
+      }
+      // 剔了不说等于没剔：人在卡上看不见的事，等于没发生
+      if (
+        want.stated_on_card !== undefined &&
+        (p.stated_on_card === true) !== want.stated_on_card
+      ) {
+        problems.push('卡面上没说名单剔了谁')
+      }
+      add(
+        'campaign_send',
+        problems.length === 0,
+        problems.length === 0
+          ? `报 ${String(p.level_requested)} → 落 ${String(p.level_at_creation)}，等人点；${size} 人收，剔了 ${removed} 个，卡上说了`
+          : problems.join('；'),
+      )
+    }
+  }
   // WP62 / 51 §1 N0：面板、工具、清单三处都得明说"这个平台还没接"
   if (expected.platform_unsupported !== undefined) {
     const seen = new Map<

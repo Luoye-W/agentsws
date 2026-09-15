@@ -1,14 +1,18 @@
 # WP62（51 §2 / 27 §1）：**网站运营**岗位。
 #
 # 51 §2 定的是四条职责——店铺管理 + 内容与博客 + 邮件营销 + 订单履约。
-# WP62 只放得下第一条（`dtc.store`，旧 `dtc.ops` 迁过来的那一份）；
-# 另外三条（`dtc.content` / `dtc.email-marketing` / `dtc.fulfillment`）
-# 跟着 WP63 / WP64 的职责定义一起加进来。
+# WP62 放下第一条（`dtc.store`，旧 `dtc.ops` 迁过来的那一份），
+# WP64 补上邮件营销与订单履约；内容与博客（`dtc.content`）跟 WP63 一起加进来。
 #
 # 为什么不先把四行都写上：`org.ts` 种岗位时会把"这台机器上没有定义"的职责筛掉，
 # 写上去只会得到一个名字对不上内容的模板；界面上出现一条点不动的勾比没有它更糟。
+#
+# 默认全勾：一个人开店的时候这几件事本来就是他一个人做。分工是后来的事——
+# 在界面上去掉一个勾，比想起来"还该给他加一条"容易得多。
 id: web-ops
 version: 1.0.0
 name: { zh: 网站运营, en: Web Operations }
 roles:
   - { role: dtc.store, default: true }
+  - { role: dtc.email-marketing, default: true }
+  - { role: dtc.fulfillment, default: true }

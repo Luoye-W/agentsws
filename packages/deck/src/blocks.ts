@@ -117,6 +117,10 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   gsc: 'Search Console',
   ads: '广告后台',
   csat: '满意度调查',
+  // WP64（51 §2.3 / §2.4）：两个还没接真服务的源。连接目录里有卡、状态是"还没接"，
+  // 于是面板上这两块永远走「去连接」那一支——36 §3：明说，不出空图。
+  email_marketing: '邮件营销后台',
+  tracking: '物流追踪',
 }
 
 /** 「查看完整报告 →」外链（36 §3 三层链路的最后一层）。 */
@@ -125,6 +129,8 @@ export const SOURCE_REPORT_URLS: Partial<Record<DataSourceId, string>> = {
   ga4: 'https://analytics.google.com',
   gsc: 'https://search.google.com/search-console',
   ads: 'https://adsmanager.facebook.com',
+  email_marketing: 'https://www.klaviyo.com/dashboard',
+  tracking: 'https://admin.aftership.com/trackings',
 }
 
 const block = (id: string, component: ComponentName, title: string, query: string): BlockDef => {
@@ -163,6 +169,22 @@ const ADS_BLOCKS = (): BlockDef[] => [
   block('ads.trend', 'chart_line', '投放走势', 'ads.trend'),
 ]
 
+/** WP64（51 §2.3）：邮件营销面板——待审发送、自动流状态、近 30 天效果。 */
+const EMAIL_BLOCKS = (): BlockDef[] => [
+  block('email.pending_sends', 'stat_tile', '待审发送', 'email.pending_sends'),
+  block('email.flows', 'table', '自动流状态', 'email.flows'),
+  block('email.performance_30d', 'table', '近 30 天效果', 'email.campaign_performance'),
+]
+
+/** WP64（51 §2.4）：订单履约面板——待发货、超期未发（已有积木）、物流异常、今日发货数。 */
+const FULFILLMENT_BLOCKS = (): BlockDef[] => [
+  block('fulfillment.unfulfilled', 'table', '待发货', 'orders.unfulfilled'),
+  // 「超期未发」用的就是 WP20 那条 `orders.overdue`：同一个判据不写第二遍
+  block('shop.overdue_orders', 'table', '超期未发', 'orders.overdue'),
+  block('fulfillment.shipped_today', 'stat_tile', '今日发货数', 'fulfillments.today'),
+  block('fulfillment.exceptions', 'table', '物流异常', 'shipments.exceptions'),
+]
+
 const QUEUE_BLOCKS = (): BlockDef[] => [
   block('records.timeline', 'timeline', '记录', 'records.timeline'),
 ]
@@ -174,6 +196,12 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'dtc.support': () => SHOP_BLOCKS(),
   'dtc.analytics': () => [...SHOP_BLOCKS(), ...GA4_BLOCKS(), ...GSC_BLOCKS()],
   'ads.meta': () => [...ADS_BLOCKS(), ...GA4_BLOCKS()],
+  // WP64（51 §2.3 / §2.4）：两条新职责各自的面板。
+  //
+  // 邮件营销看得到店铺后台（弃购挽回要知道购物车里是什么），但看不到 GA4 / 广告——
+  // 职责的 scopes 里没有那两个域，无权的数据源连「去连接」都不该出（19 §3）。
+  'dtc.email-marketing': () => [...EMAIL_BLOCKS(), ...SHOP_BLOCKS()],
+  'dtc.fulfillment': () => [...FULFILLMENT_BLOCKS()],
 }
 
 export function blocksForRole(role_id: RoleId): BlockDef[] {

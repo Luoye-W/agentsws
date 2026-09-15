@@ -204,6 +204,53 @@ export function actionCatalog(): ActionDef[] {
       },
     },
     {
+      // WP64（51 §2.4）：标记发货 + 回填单号。**只有执行器在变更批准之后才该调它**——
+      // 与 create_refund 同一条路（替身不是门禁，门在 15 的账本与执行器那一层）。
+      id: 'shopify_admin.create_fulfillment',
+      service: 'shopify_admin',
+      side_effect: 'write',
+      required_scopes: ['write_orders'],
+      input_schema: SCHEMA(
+        { order_id: 'string', carrier: 'string', tracking_number: 'string', items: 'number' },
+        ['order_id', 'carrier', 'tracking_number'],
+      ),
+      handler(input, ctx) {
+        const order = orderOf(ctx, str(input, 'order_id'))
+        const carrier = str(input, 'carrier')
+        const tracking = str(input, 'tracking_number')
+        const items = optNum(input, 'items') ?? order.line_items.length
+        const existing = order.fulfillments ?? []
+        // 同一个单号提交两次就是同一次发货（施行重试撞上的正是这一条）
+        const already = existing.find((f) => f.tracking_number === tracking)
+        if (already !== undefined) return { ...already, deduplicated: true }
+        const shipped = existing.reduce((n, f) => n + f.items, 0)
+        if (shipped + items > order.line_items.length) {
+          throw new StandInError('invalid_input', '这张单要发的件数超过订单本身', {
+            order_id: order.id,
+            shipped,
+            items,
+          })
+        }
+        const fulfillment = {
+          id: ctx.nextId('ful'),
+          order_id: order.id,
+          carrier,
+          tracking_number: tracking,
+          items,
+          created_at: ctx.now,
+        }
+        order.fulfillments = [...existing, fulfillment]
+        // 全发完了才算 fulfilled；拆单发了一半仍然是 unfulfilled（顾客那头也确实还在等）
+        if (shipped + items >= order.line_items.length) order.fulfillment_status = 'fulfilled'
+        order.record_version = bumpVersion(order.record_version)
+        return {
+          ...fulfillment,
+          fulfillment_status: order.fulfillment_status,
+          record_version: order.record_version,
+        }
+      },
+    },
+    {
       id: 'shopify_admin.update_order_shipping_address',
       service: 'shopify_admin',
       side_effect: 'write',

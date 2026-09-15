@@ -57,11 +57,11 @@ describe('Shopify 写动作对照表', () => {
     expect(changeKindOfAction('shopify_admin.publish_theme')).toBe('publish_theme')
   })
 
-  it('缺 kind 的那几个：库存、取消订单、删除类 —— 说得出为什么', () => {
+  it('缺 kind 的那几个：库存、删除类 —— 说得出为什么', () => {
     for (const id of [
       'shopify_admin.set_inventory_quantities',
       'shopify_admin.adjust_inventory_quantities',
-      'shopify_admin.cancel_order',
+      'shopify_admin.update_order',
       'shopify_admin.delete_product',
       'shopify_admin.delete_theme',
     ]) {
@@ -84,6 +84,22 @@ describe('Shopify 写动作对照表', () => {
   it('GraphQL 直通永远不在表里：它的副作用由运行时传进来的文档决定', () => {
     expect(shopifyWriteAction('shopify_admin.execute_graphql')).toBeUndefined()
     expect(canStageAction('shopify_admin.execute_graphql').ok).toBe(false)
+  })
+
+  // WP64（51 §2.4）：订单履约把两条订单写口接上了——当初 `cancel_order` 那条
+  // not_stageable 的理由写的是"要做得先定 `cancel_order`（不可逆、多半 L1 永远）"，
+  // 现在正是照那句话做的，所以这两条从"说不出口"挪到"有 kind"。
+  it('订单履约的两个写口有 kind：标记发货、取消订单', () => {
+    expect(changeKindOfAction('shopify_admin.create_fulfillment')).toBe('create_fulfillment')
+    expect(changeKindOfAction('shopify_admin.cancel_order')).toBe('cancel_order')
+    expect(canStageAction('shopify_admin.cancel_order').ok).toBe(true)
+    // 一次发货就是一次发货：补发与拆单反查回来的是同一个动作
+    expect(actionsOfChangeKind('reship').map((a) => a.action_id)).toEqual([
+      'shopify_admin.create_fulfillment',
+    ])
+    expect(actionsOfChangeKind('split_order').map((a) => a.action_id)).toEqual([
+      'shopify_admin.create_fulfillment',
+    ])
   })
 
   it('按 kind 反查得到施行时该调哪个动作', () => {

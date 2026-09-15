@@ -1151,12 +1151,17 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         (entry) => !isStorefrontService(entry.service) || entry.service === shopService,
       ).map((entry) => {
         const local = entry.store === 'local_vault'
-        const available = local ? secrets.available : usable.ok
+        // WP64：骨架卡永远点不动，理由就是那句"还没接"——它跟"这台机器缺什么"
+        // 是两回事（51 §1 N0 里"没连"与"还没做"分得开的那条老规矩，同一条）。
+        const planned = entry.planned
+        const available = planned !== undefined ? false : local ? secrets.available : usable.ok
         const unavailable_reason = available
           ? undefined
-          : local
-            ? `这台机器没有秘密库密钥（${SECRETS_KEY_ENV}），邮箱账号密码无处安全存放`
-            : usable.reason
+          : planned !== undefined
+            ? planned
+            : local
+              ? `这台机器没有秘密库密钥（${SECRETS_KEY_ENV}），邮箱账号密码无处安全存放`
+              : usable.reason
         return {
           service: entry.service,
           label: entry.label,
@@ -1177,6 +1182,8 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     async begin(_actor: ConnectionsActor, service, input): Promise<BeginConnectResult> {
       const entry = catalogEntry(service)
       if (entry === undefined) throw notFound(`没有这个服务：${service}`)
+      // WP64：骨架卡在这里就拦下。让人填完密钥再发现连不上，比一开始就说点不动糟得多。
+      if (entry.planned !== undefined) throw unavailable(`${entry.label}：${entry.planned}`)
       if (entry.store === 'local_vault') {
         if (!secrets.available) {
           throw invalid(
@@ -1243,6 +1250,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     async submit(_actor, service, input: SubmitConnectionInput) {
       const entry = catalogEntry(service)
       if (entry === undefined) throw notFound(`没有这个服务：${service}`)
+      // WP64：骨架卡不收凭据。字段描述先在目录里立着（凭据只走原生表单、永不经对话），
+      // 但在真调用接上之前，收下来也没地方用——收了才是不负责任。
+      if (entry.planned !== undefined) throw unavailable(`${entry.label}：${entry.planned}`)
       if (entry.auth === 'oauth2') throw invalid(`${entry.label} 走授权页，不接受表单直填`)
       const required = entry.fields
       const missing = required

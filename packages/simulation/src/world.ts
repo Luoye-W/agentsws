@@ -46,7 +46,7 @@ import {
   storefrontUnsupportedNote,
   storefrontUsableService,
 } from '@agentsws/contracts'
-import { companyKey, sha256 } from '@agentsws/core'
+import { companyKey, sha256, suppressedRecipients, withoutSuppressed } from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
 import { createDataStore, defineCollection } from '@agentsws/data'
 import { assembleView, dataSourcesFromConnections } from '@agentsws/deck'
@@ -160,11 +160,16 @@ const READ_ACTIONS = [
   'shopify_admin.get_product',
   'gmail.list_threads',
 ]
+// 注：WP64 的两条职责读的也是这几个（超期巡检读 list_orders、群发的收件人从订单里来）——
+// 邮件营销与物流追踪的连接器还是骨架，所以它们那头一个读口都还没有。
 const APPLY_ACTIONS = [
   'shopify_admin.create_refund',
   // WP44：改价的施行口（只在 role-apply 令牌里，Agent 的读令牌拿不到）。
   // 主题不在这儿——它走 CLI，那条路根本不发连接器令牌。
   'shopify_admin.update_product_price',
+  // WP64（51 §2.4）：标记发货的施行口。与改价同理——只在 role-apply 令牌里，
+  // Agent 那把 role-read 拿不到它。
+  'shopify_admin.create_fulfillment',
   'gmail.send_message',
 ]
 const CONNECTIONS = ['conn_shopify_admin', 'conn_gmail']
@@ -355,6 +360,14 @@ export interface World {
    */
   shop: ShopOps
   /**
+   * WP64：邮件营销（51 §2.3）与订单履约（51 §2.4）。
+   *
+   * 走的也是真机制：先经 mock connect 真读一次（订单 / 收件人都有 provenance），
+   * 再过 `txn.ledger.stage`。两条职责各自的额度与等级来自**那个人那条分配**的
+   * 生效配置，不是主分配的——3 人公司里运营一个人挂三条职责，这一点才看得出来。
+   */
+  web: WebOps
+  /**
    * WP47 / 44：品牌（范围组）与产品线的组织动作。
    *
    * 也走真机制：品牌成员一变，职责层重算所有挂了它的岗位的范围，这里记一条
@@ -383,6 +396,59 @@ export interface ShopStageResult {
   change_id?: string
   approval_item_id?: string
   reason?: string
+}
+
+/** WP64（51 §2.4）：一次超期巡检的结论。 */
+export interface OverdueSweepResult {
+  /** 压了超过 `overdue_days` 天还没发的那几张单（按最早的排前面）。 */
+  orders: { id: string; name: string; days: number }[]
+  /** 判定用的那条线（来自职责 yml 的 caps，不写死在代码里）。 */
+  overdue_days: number
+}
+
+/** WP64（51 §2.3）：一次群发提案的结论——发给谁、剔了谁。 */
+export interface CampaignStageResult extends ShopStageResult {
+  /** 剔除之后真正会收到的人。 */
+  audience: string[]
+  /** 在抑制 / 退订名单上、因此被剔掉的人。 */
+  suppressed: string[]
+  /** 提案时报的等级（场景可以故意报高，看硬顶会不会把它按回来）。 */
+  level_requested: 'L1' | 'L2' | 'L3'
+}
+
+export interface WebOps {
+  /**
+   * 51 §2.4：跑一次超期未发的巡检。
+   *
+   * 这不是"查一张表"——它经 mock connect 真读一次 `list_orders`，按订单上的
+   * 结构化字段（`fulfillment_status` + `created_at`）判，然后给人发一条通知。
+   * 阈值从职责 yml 的 `overdue_days` 来。
+   */
+  overdueSweep(input: { who: PersonId }): Promise<OverdueSweepResult>
+  /** 51 §2.4：标记发货 + 回填单号（`create_fulfillment`，L2）。 */
+  markShipped(input: {
+    who: PersonId
+    order: string
+    carrier: string
+    tracking: string
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<ShopStageResult>
+  /**
+   * 51 §2.3：某个顾客点了退订。
+   *
+   * 这是**世界里发生的一件事**（和"预算没了""模型挂了"同一类），不是场景把答案
+   * 递给 Agent——退订之后这个人还在不在收件人里，由 `campaignSend` 自己按
+   * `@agentsws/core` 的那一份规则算。
+   */
+  unsubscribe(input: { email: string }): void
+  /** 51 §2.3：提一条群发（`campaign_send`，**发送永远 L1**）。 */
+  campaignSend(input: {
+    who: PersonId
+    campaign: string
+    note?: string
+    /** 故意报高的等级；15 §2 的 hard_ceiling 会把它按回人审（回归用）。 */
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<CampaignStageResult>
 }
 
 /** WP47：一个人在某条职责上现在看得到什么（44 G2 读那一半）。 */
@@ -608,6 +674,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——
     // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效
     loadBundledRole('site.builder'),
+    // WP64（51 §2.3 / §2.4）：网站运营岗位的邮件营销与订单履约。
+    // 3 人 pack 里"运营"这个人真挂着它们（`assignments.yml`），所以这两条不是躺着的。
+    loadBundledRole('dtc.email-marketing'),
+    loadBundledRole('dtc.fulfillment'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
@@ -1024,6 +1094,65 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           return { status: 'failed', error: { message: messageOfError(err) } }
         }
       }
+      // WP64（51 §2.4）：标记发货的施行口。补发与拆单在 Shopify 那头是同一个 mutation，
+      // 所以三条 kind 走同一段——区别在**为什么发**，那是额度与路由的事，不是执行器的事。
+      if (
+        change.kind === 'create_fulfillment' ||
+        change.kind === 'split_order' ||
+        change.kind === 'reship'
+      ) {
+        const after = change.after as {
+          carrier?: unknown
+          tracking_number?: unknown
+          items?: unknown
+        }
+        const carrier = typeof after.carrier === 'string' ? after.carrier : ''
+        const tracking = typeof after.tracking_number === 'string' ? after.tracking_number : ''
+        if (carrier === '' || tracking === '') {
+          return {
+            status: 'failed',
+            error: { message: '没有承运商与单号的"已发货"不叫已发货（51 §2.4）' },
+          }
+        }
+        try {
+          const res = await connect.execute<{ id: string }>(
+            'shopify_admin.create_fulfillment',
+            {
+              order_id: change.target.id,
+              carrier,
+              tracking_number: tracking,
+              ...(typeof after.items === 'number' ? { items: after.items } : {}),
+            },
+            {
+              token: await tokenFor('role-apply'),
+              connection: 'conn_shopify_admin',
+              idempotencyKey: change.id,
+            },
+          )
+          return {
+            status: 'ok',
+            execution_id: res.execution_id,
+            outcome_ref: { type: 'order', id: change.target.id },
+          }
+        } catch (err) {
+          return { status: 'failed', error: { message: messageOfError(err) } }
+        }
+      }
+      // WP64（51 §2.3）：邮件营销这一侧**没有施行口**，而且这是诚实的——
+      // 连接器还是骨架（目录 + 只读动作 + 表单，真调用没接）。批了也发不出去，
+      // 所以这里说的是"为什么发不出去"，不是一句 `未实现 kind`。
+      if (
+        change.kind === 'campaign_send' ||
+        change.kind === 'segment_edit' ||
+        change.kind === 'flow_edit'
+      ) {
+        return {
+          status: 'failed',
+          error: {
+            message: '邮件营销连接器还没接（51 §2.3）：这条变更批得下来，但现在没有地方施行它',
+          },
+        }
+      }
       if (change.kind !== 'refund') {
         return { status: 'failed', error: { message: `模拟执行器未实现 kind：${change.kind}` } }
       }
@@ -1410,6 +1539,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // 所以这里取值不是快照
     get shop() {
       return shop
+    },
+    // WP64：与 `shop` 同理，装在这个对象字面量之后（它要用 txn、flushCards 与 notify）
+    get web() {
+      return web
     },
     // 44：与 `shop` 同理，装在这个对象字面量之后
     get org() {
@@ -2761,6 +2894,269 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       }
       await flushCards()
       return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+  }
+
+  // ── WP64：邮件营销（51 §2.3）与订单履约（51 §2.4）────────────────────
+
+  /**
+   * 退订 / 抑制名单。
+   *
+   * 它在世界里，不在场景里：谁退订过是一件**已经发生的事**，群发时该不该剔他
+   * 由 `@agentsws/core` 的那一份规则算（客服出站用的是同一份）。
+   */
+  const unsubscribed: string[] = []
+
+  /** 这个人这条职责上某个动作的额度与等级（不是主分配的——三条职责三份）。 */
+  const actionOf = (asg: Assignment, id: string) => {
+    const config = roles.effectiveConfig(asg.id)
+    return {
+      mandate: config.actions.find((a) => a.id === id)?.mandate ?? { caps: {} },
+      level: config.automation[id]?.level ?? 'L1',
+    }
+  }
+
+  const web: WebOps = {
+    async overdueSweep({ who }) {
+      const asg = assignmentFor(who, 'dtc.fulfillment')
+      const run = await beginShopRun(asg)
+      const { mandate } = actionOf(asg, 'stage_create_fulfillment')
+      const cap = mandate.caps.overdue_days
+      const overdue_days = typeof cap === 'number' ? cap : 3
+      const res = await connect.execute<{
+        orders: { id: string; name: string; created_at: string; fulfillment_status: string }[]
+      }>(
+        'shopify_admin.list_orders',
+        { first: 200 },
+        { token: await tokenFor('role-read', asg.id), connection: 'conn_shopify_admin' },
+      )
+      const nowMs = Date.parse(now(clock))
+      const rows = res.data.orders
+        .filter((o) => o.fulfillment_status === 'unfulfilled')
+        .map((o) => ({
+          id: o.id,
+          name: o.name,
+          days: Math.floor((nowMs - Date.parse(o.created_at)) / 86_400_000),
+        }))
+        .filter((o) => Number.isFinite(o.days) && o.days > overdue_days)
+        .sort((a, b) => b.days - a.days)
+      run.tool('list_orders', { first: 200, unfulfilled: rows.length })
+      run.finish({
+        seen: rows.map((o) => ({ type: 'order', id: o.id })),
+        outputs: [],
+        summary: `超期未发 ${rows.length} 张（> ${overdue_days} 天）`,
+      })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.fulfillment_overdue',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId() },
+        payload: {
+          overdue_days,
+          count: rows.length,
+          orders: rows.slice(0, 10).map((o) => o.name),
+          worst_days: rows[0]?.days ?? 0,
+        },
+      })
+      // 51 §2.4 的 `order.overdue` 通知：压了几天要有人知道，不能只躺在面板上
+      if (rows.length > 0) {
+        world.notify({
+          to: asg.person_id,
+          channel: 'workstation',
+          title: `超期未发 ${rows.length} 张`,
+          at: now(clock),
+          reason: `最久的一张压了 ${rows[0]?.days ?? 0} 天（超过 ${overdue_days} 天就该有人看一眼）`,
+        })
+      }
+      return { orders: rows, overdue_days }
+    },
+
+    async markShipped({ who, order, carrier, tracking, level }) {
+      const asg = assignmentFor(who, 'dtc.fulfillment')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'order', id: order }
+
+      // ① 真读一次：`before` 必须来自记录（15 §1），而且 `requires_record_read` 查的就是它
+      let record: {
+        id: string
+        name: string
+        created_at: string
+        financial_status: string
+        fulfillment_status: string
+        record_version: string
+      }
+      try {
+        const res = await connect.execute<typeof record>(
+          'shopify_admin.get_order',
+          { order_id: order },
+          { token: await tokenFor('role-read', asg.id), connection: 'conn_shopify_admin' },
+        )
+        record = res.data
+        run.tool('get_order', { order_id: order }, [target])
+      } catch (err) {
+        blocked.push({
+          rule: 'record_read_failed',
+          at: now(clock),
+          run_id,
+          message: messageOfError(err),
+        })
+        run.finish({ seen: [], outputs: [], summary: '读不到这张订单，没提案' })
+        return { staged: false, reason: 'record_read_failed' }
+      }
+
+      const { mandate, level: configured } = actionOf(asg, 'stage_create_fulfillment')
+      // `before` 与 `record_version` 走**施行时也会用的那一份**读法（`readRecord`），
+      // 否则两处读出来的版本串形状不一样，每一条都会在施行那一步悄悄判成 stale_record。
+      // （WP44 的改价撞过同一个坑，见 `recordFacts` 的注释。）
+      const facts = recordFacts(target)
+      const provenance = run.finish({
+        seen: [target],
+        outputs: [],
+        summary: `标记发货：${record.name} ${carrier} ${tracking}`,
+      })
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_web_${run_id}`,
+        kind: 'create_fulfillment',
+        target,
+        before: { ...(facts.record as Record<string, unknown>), created_at: record.created_at },
+        after: { carrier, tracking_number: tracking },
+        ...(facts.record_version === undefined ? {} : { record_version: facts.record_version }),
+        notes: [`${carrier} ${tracking}`],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level ?? configured,
+        provenance,
+        connection_id: 'conn_shopify_admin',
+        approval: {
+          title: `标记发货：${record.name}`,
+          summary: `${record.name} 交给 ${carrier}，单号 ${tracking}。`,
+          recipients: [recipientOf('scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'scope_manager',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      return { staged: true, change_id: outcome.change.id, approval_item_id: outcome.approval.id }
+    },
+
+    unsubscribe({ email }) {
+      if (!unsubscribed.includes(email)) unsubscribed.push(email)
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.email_unsubscribed',
+        actor: { kind: 'system', id: 'simulation' },
+        correlation: { trace_id: traceId() },
+        // 名单上有几个人是要紧的；谁在名单上不进事件日志（那是顾客的隐私）
+        payload: { suppression_list_size: unsubscribed.length },
+      })
+    },
+
+    async campaignSend({ who, campaign, note, level }) {
+      const asg = assignmentFor(who, 'dtc.email-marketing')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'email_campaign', id: campaign }
+
+      // ① 收件人从**买过东西的人**里来（复购 / 再营销就是这么选的），
+      //    经 mock connect 真读一次订单——名单是查出来的，不是想出来的。
+      const res = await connect.execute<{ orders: { id: string; email: string }[] }>(
+        'shopify_admin.list_orders',
+        { first: 200 },
+        { token: await tokenFor('role-read', asg.id), connection: 'conn_shopify_admin' },
+      )
+      const everyone = [...new Set(res.data.orders.map((o) => o.email).filter((e) => e !== ''))]
+      run.tool('list_orders', { first: 200, audience: everyone.length })
+
+      // ② 抑制 / 退订名单必查。剔除用的是 `@agentsws/core` 的那一份规则——
+      //    WP55 的客服出站与这里调的是同一个函数，名单口径不许在两边各演化一套。
+      const suppressed = suppressedRecipients(everyone, unsubscribed)
+      const audience = withoutSuppressed(everyone, unsubscribed)
+      const suppressionNote =
+        suppressed.length === 0
+          ? '退订 / 抑制名单查过了，这一批里没有名单上的人。'
+          : `退订 / 抑制名单里的 ${suppressed.length} 个人已经剔除，不在这次的收件人里。`
+
+      const { mandate, level: configured } = actionOf(asg, 'stage_campaign_send')
+      const level_requested = level ?? configured
+      const provenance = run.finish({
+        seen: [target, ...res.data.orders.slice(0, 20).map((o) => ({ type: 'order', id: o.id }))],
+        outputs: [],
+        summary: `提一条群发：${campaign}，${audience.length} 人`,
+      })
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_web_${run_id}`,
+        kind: 'campaign_send',
+        target,
+        before: { status: 'draft' },
+        after: {
+          audience,
+          audience_size: audience.length,
+          suppressed,
+          // 15 §2：不报"查过了"就 block。fail-closed 在 guardrail 那一层，这里只是照实报。
+          suppression_checked: true,
+        },
+        notes: [...(note === undefined ? [] : [note]), suppressionNote],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        // 15 §2 hard_ceiling：这里就算报 L3，guardrail 也会把它按回人审
+        level: level_requested,
+        provenance,
+        approval: {
+          title: `群发：${campaign}（${audience.length} 人）`,
+          summary: `${audience.length} 个人会收到这封信。${suppressionNote}`,
+          recipients: [recipientOf('owner')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'owner',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      const base = { audience, suppressed, level_requested }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { ...base, staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.campaign_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          campaign,
+          audience_size: audience.length,
+          suppressed_removed: suppressed.length,
+          level_requested,
+          // 硬顶把它按回人审了没有：卡还在等人点 = 按回来了
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          stated_on_card: outcome.approval.summary.includes(suppressionNote),
+        },
+      })
+      return {
+        ...base,
         staged: true,
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,

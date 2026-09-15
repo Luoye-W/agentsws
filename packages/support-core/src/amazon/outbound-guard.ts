@@ -18,6 +18,7 @@
  * 让一封已经存在的 Amazon 线程绕过 Amazon 的社区规范）。
  */
 
+import { blocksProactiveOutbound } from '@agentsws/core'
 import { AMAZON_MARKETPLACE_TLDS, AMAZON_ORDER_ID_RE, isMarketplaceRelayAddress } from './detect.js'
 
 /** 接第二个卖家消息渠道（Walmart / eBay）时扩展这个联合。 */
@@ -498,7 +499,15 @@ function checkSubjectAndThread(input: AmazonOutboundInput, push: Push): void {
   }
 
   // opt-out 买家只能在原线程内回复。
-  if (input.recipient_opted_out === true && input.is_reply_to_buyer_thread !== true) {
+  //
+  // 判定本身在 `@agentsws/core` 的 `blocksProactiveOutbound`——WP64 的邮件营销要的是
+  // 同一条规则（名单上的人收不到主动外发），两处调同一个函数，不各写一份 if。
+  if (
+    blocksProactiveOutbound({
+      suppressed_hits: input.recipient_opted_out === true ? 1 : 0,
+      reply_in_original_thread: input.is_reply_to_buyer_thread === true,
+    })
+  ) {
     push({
       code: 'not_reply_thread',
       detail:

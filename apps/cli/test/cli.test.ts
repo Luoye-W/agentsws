@@ -53,7 +53,7 @@ describe('agentsws simulate（26 §5）', () => {
       '--report',
       report,
     )
-    expect(text()).toContain('22/22 场景通过')
+    expect(text()).toContain('24/24 场景通过')
     expect(text()).toContain('合并门禁：通过')
     expect(process.exitCode).toBeUndefined()
     expect(existsSync(join(report, 'summary.json'))).toBe(true)
@@ -62,7 +62,7 @@ describe('agentsws simulate（26 §5）', () => {
       scenarios: unknown[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(22)
+    expect(summary.scenarios).toHaveLength(24)
     expect(existsSync(join(report, 'aftersales__return-within-window.json'))).toBe(true)
   }, 60_000)
 

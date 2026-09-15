@@ -198,6 +198,63 @@ describe('loadPosition (05 §2)', () => {
     expect(role.connectors.map((c) => c.kind)).toEqual(['shop'])
   })
 
+  // WP64（51 §2.3 / §2.4）：邮件营销与订单履约
+  it('邮件营销：发送永远 L1、每周两次、触发条件是受保护字段', () => {
+    const role = loadBundledRole('dtc.email-marketing')
+    expect(role.name.zh).toBe('邮件营销')
+    expect(role.actions.map((a) => a.id)).toEqual([
+      'stage_campaign_send',
+      'stage_segment_edit',
+      'stage_flow_edit',
+    ])
+    // 51 §5 N5：每周发送次数默认 2，额度挂在动作上
+    expect(role.actions[0]?.mandate.caps).toMatchObject({ max_campaigns_per_week: 2 })
+    expect(role.actions[0]?.mandate.window).toEqual({ max_count: 2, per: 'week' })
+    expect(role.automation.stage_campaign_send?.hard_ceiling).toBe(true)
+    expect(role.automation.stage_campaign_send?.ceiling).toBe('L1')
+    expect(role.automation.stage_segment_edit?.initial).toBe('L2')
+    expect(role.automation.stage_flow_edit?.initial).toBe('L2')
+    // 自动流的触发条件 Agent 碰不得
+    expect(role.actions[2]?.protected_fields).toContain('trigger')
+    // 连接器平台中立：职责不写死 Klaviyo
+    expect(role.connectors.filter((c) => c.required).map((c) => c.kind)).toEqual([
+      'email_marketing',
+    ])
+  })
+
+  it('订单履约：发货 L2 / 单日 50、取消订单永远 L1、延误通知 L2 → L3', () => {
+    const role = loadBundledRole('dtc.fulfillment')
+    expect(role.name.zh).toBe('订单履约')
+    expect(role.actions.map((a) => a.id)).toEqual([
+      'stage_create_fulfillment',
+      'stage_split_order',
+      'stage_cancel_order',
+      'notify_delay',
+    ])
+    // 51 §5 N5：单日自动标记发货上限 50；超期阈值 3 天写在 yml 里不写死在查询里
+    expect(role.actions[0]?.mandate.caps).toMatchObject({
+      max_fulfill_per_day: 50,
+      overdue_days: 3,
+    })
+    expect(role.actions[0]?.mandate.window).toEqual({ max_count: 50, per: 'day' })
+    expect(role.automation.stage_create_fulfillment?.initial).toBe('L2')
+    expect(role.automation.stage_split_order?.initial).toBe('L2')
+    expect(role.automation.stage_cancel_order?.hard_ceiling).toBe(true)
+    expect(role.automation.notify_delay?.initial).toBe('L2')
+    expect(role.automation.notify_delay?.ceiling).toBe('L3')
+    expect(role.connectors.filter((c) => c.required).map((c) => c.kind)).toEqual(['shop'])
+  })
+
+  it('网站运营岗位模板：WP64 之后是三条职责（内容与博客跟 WP63）', () => {
+    const position = loadBundledPosition('web-ops')
+    expect(position.roles.map((r) => r.role)).toEqual([
+      'dtc.store',
+      'dtc.email-marketing',
+      'dtc.fulfillment',
+    ])
+    expect(position.roles.every((r) => r.default === true)).toBe(true)
+  })
+
   it('rejects a position without role defaults', () => {
     expect(() => parsePosition('id: x\nversion: 1.0.0\nname: {zh: a, en: b}\n', 'p.yml')).toThrow(
       /roles/,

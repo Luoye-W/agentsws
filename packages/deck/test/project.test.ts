@@ -374,3 +374,81 @@ describe('矩阵表本身', () => {
     expect(estimatedMinutes([])).toBe(0)
   })
 })
+
+/**
+ * WP64（51 §2.3 / §2.4）：三张卡上人最先要看的那几个数。
+ *
+ * 卡是审批项的投影（36 §2），所以这三张不是三个新 kind——发送与标记发货是
+ * `staged_change`、延误通知是 `outbound_draft`、超期异常是 `system_alert`。
+ * 这里钉的是**卡面上说不说得清**：发给多少人、剔掉了几个、单号是什么、压了几天。
+ */
+describe('WP64 的三张卡（51 §2.3 / §2.4）', () => {
+  const change = (payload: Record<string, unknown>) =>
+    item({ kind: 'staged_change', payload, subject: { object: { type: 'campaign', id: 'cmp_1' } } })
+  const textOf = (card: DeckCard, type: string) =>
+    card.highlights.find((h) => h.type === type)?.text
+
+  it('发送审批卡：发给多少人、名单剔掉了几个，都在卡面上', () => {
+    const card = projectCard(
+      change({
+        kind: 'campaign_send',
+        after: {
+          audience_size: 1180,
+          audience: ['a@x.com'],
+          suppressed: ['anna@example.com', 'bob@example.com'],
+          suppression_checked: true,
+        },
+      }),
+      ctx,
+    )
+    expect(textOf(card, 'audience')).toBe('1180')
+    expect(textOf(card, 'suppressed')).toBe('2')
+  })
+
+  it('一个都没剔也照样报 0 —— "没人被剔"与"没查"在卡面上分得开', () => {
+    const checked = projectCard(
+      change({
+        kind: 'campaign_send',
+        after: { audience_size: 12, suppressed: [], suppression_checked: true },
+      }),
+      ctx,
+    )
+    expect(textOf(checked, 'suppressed')).toBe('0')
+
+    const never = projectCard(change({ kind: 'campaign_send', after: { audience_size: 12 } }), ctx)
+    expect(textOf(never, 'suppressed')).toBeUndefined()
+  })
+
+  it('超期异常卡与标记发货卡：单号 + 压了几天', () => {
+    const card = projectCard(
+      item({
+        kind: 'staged_change',
+        subject: { object: { type: 'order', id: 'ord_1001' } },
+        payload: {
+          kind: 'create_fulfillment',
+          target: { type: 'order', id: 'ord_1001' },
+          before: { created_at: '2026-09-02T01:00:00.000Z', fulfillment_status: 'unfulfilled' },
+          after: { tracking_number: 'YT2026', carrier: 'YunExpress' },
+        },
+      }),
+      ctx,
+    )
+    expect(textOf(card, 'tracking')).toBe('YunExpress YT2026')
+    // NOW 是 09-07，单是 09-02 下的 → 压了 5 天
+    expect(textOf(card, 'overdue')).toBe('5')
+  })
+
+  it('宿主直接报天数时以它为准（异常卡不必带订单原文）', () => {
+    const card = projectCard(
+      item({
+        kind: 'system_alert',
+        subject: { object: { type: 'order', id: 'ord_1002' } },
+        payload: { kind: 'orders_overdue', overdue_days: 9 },
+      }),
+      ctx,
+    )
+    expect(textOf(card, 'overdue')).toBe('9')
+    // 系统卡只有「去处理 / 稍后」两个动作（36 §2.2），WP64 没改这一条
+    expect(card.available_actions).toEqual(['open', 'snooze'])
+  })
+})

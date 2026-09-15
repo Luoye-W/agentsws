@@ -217,6 +217,9 @@ export const BUNDLED_ROLES = [
   'amz.support',
   // WP62（51 §2.1）：网站运营岗位的第一条职责——店铺管理（旧 `dtc.ops`）
   'dtc.store',
+  // WP64（51 §2.3 / §2.4）：网站运营岗位的邮件营销与订单履约
+  'dtc.email-marketing',
+  'dtc.fulfillment',
 ] as const
 
 /**

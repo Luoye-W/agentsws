@@ -116,6 +116,9 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
     { id: 'gsc', label: 'Search Console', connected: false },
     { id: 'ads', label: '广告后台', connected: false },
     { id: 'csat', label: '满意度调查', connected: false },
+    // WP64：邮件营销后台与物流追踪的连接器还是骨架 —— demo 里也照实说没连
+    { id: 'email_marketing', label: '邮件营销后台', connected: false },
+    { id: 'tracking', label: '物流追踪', connected: false },
   ]
   const alerts: DeckCard[] = []
   return {
@@ -620,6 +623,17 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     person_id: world.roleHolder,
     workspace_id: world.workspace_id,
     role_id: 'dtc.analytics',
+    granted_by: world.owner,
+    ranges: [{ kind: 'store', id: 'store_main' }],
+  })
+
+  // WP64（51 §2.4）：订单履约也分给同一个人，好让 demo 的侧栏里有那条分块。
+  // 3 人 pack 里它挂在李默身上（`assignments.yml`），而 demo 只以王岚的身份登录——
+  // 不补这一条，"待发货 / 超期未发 / 物流异常 / 今日发货数"这四块在 demo 里根本看不见。
+  world.roles.assignments.create({
+    person_id: world.roleHolder,
+    workspace_id: world.workspace_id,
+    role_id: 'dtc.fulfillment',
     granted_by: world.owner,
     ranges: [{ kind: 'store', id: 'store_main' }],
   })
