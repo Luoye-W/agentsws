@@ -212,12 +212,15 @@ export function buildProgram(
     .option('--port <n>', '端口', '4317')
     .option('--root <dir>', '仓库根（packs/ 与 apps/workstation/dist 相对它找）')
     .option('--static <dir>', '工作台构建产物目录')
+    // WP66（52 O1）：多造一个品牌，看"一个进程装多套品牌模块"长什么样
+    .option('--two-brands', '再造一个品牌（公司页的品牌一览就有两行，各有各的数）')
     .action(async (opts: Record<string, unknown>) => {
       const root = opts.root === undefined ? baseDir() : fromCwd(String(opts.root))
       const demo = await createDemo({
         root,
         port: asInt(String(opts.port), '--port'),
         quiet: true,
+        ...(opts.twoBrands === true ? { twoBrands: true } : {}),
         ...(opts.static === undefined ? {} : { staticDir: fromCwd(String(opts.static)) }),
       })
       const { url } = await demo.server.listen()

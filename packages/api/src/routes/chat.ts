@@ -21,7 +21,7 @@
  * （20 §3 / 21 §5：URL 会进浏览器历史、反代日志与 Referer）——所以嵌入脚本
  * 用 `fetch` + `ReadableStream` 而不是 `EventSource`（后者塞不进 `Authorization` 头）。
  */
-import type { ChatWidgetConfig, ChatWidgetPublicConfig } from '@agentsws/contracts'
+import type { ChatWidgetConfig, ChatWidgetPublicConfig, WorkspaceId } from '@agentsws/contracts'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
@@ -132,6 +132,19 @@ export interface ChatPort {
   verifyVisitor(session_id: string, token: string | undefined): boolean
   /** 嵌入脚本本体（`GET /v1/chat/widget.js`）。 */
   widgetScript(): string
+
+  /**
+   * WP66（52 O1）：**按品牌取这一面**。
+   *
+   * 聊天这几条路由的端口方法都不带 actor（第一个参数是 `session_id` / `person_id`），
+   * 所以按 `actor.workspace_id` 分发这件事只能在这里做一次：鉴权过的那几条先
+   * `scoped(principal.workspace_id)`，公开访客那几条（widget.js / widget-config /
+   * public/*）没有主体可分发，照旧走进程装配的那一份——52 O5「一个值守子进程
+   * 一个品牌工作区」，公开聊天窗本来就是那一档。
+   *
+   * 不实现 = 这个进程只装了一套（单品牌），每一条都走它。
+   */
+  scoped?(workspace_id: WorkspaceId): Promise<ChatPort>
 }
 
 const SendBody = z.object({ text: z.string().min(1).max(4000) })
@@ -200,6 +213,19 @@ function portOf(deps: { chat?: ChatPort }): ChatPort {
   return deps.chat
 }
 
+/**
+ * WP66：鉴权过的那几条一律经这里取端口——**这是本文件里唯一一处按品牌分发的地方**。
+ *
+ * 装了多品牌就取这次请求那个品牌的；没装（单品牌）就是原来那一份，一行行为不变。
+ */
+async function scopedPortOf(
+  deps: { chat?: ChatPort },
+  c: Parameters<typeof principalOf>[0],
+): Promise<ChatPort> {
+  const port = portOf(deps)
+  return (await port.scoped?.(principalOf(c).workspace_id)) ?? port
+}
+
 async function requireSession(port: ChatPort, id: string): Promise<ChatSessionView> {
   const session = await port.session(id)
   if (session === undefined) throw new ApiError('not_found', `没有这条会话：${id}`)
@@ -223,7 +249,7 @@ export function chatRoutes(): Route[] {
       async (c, deps) => {
         const p = principalOf(c)
         // 同一个人重复开只拿回同一条（唯一键 `(workspace, source, external_session_id)`）
-        return ok(c, await portOf(deps).openSandbox(p.person_id), 201)
+        return ok(c, await (await scopedPortOf(deps, c)).openSandbox(p.person_id), 201)
       },
     ),
     route(
@@ -248,7 +274,10 @@ export function chatRoutes(): Route[] {
         if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
           throw new ApiError('invalid_input', 'limit 必须是正整数')
         }
-        return ok(c, await portOf(deps).sessions(limit === undefined ? {} : { limit }))
+        return ok(
+          c,
+          await (await scopedPortOf(deps, c)).sessions(limit === undefined ? {} : { limit }),
+        )
       },
     ),
     route(
@@ -266,7 +295,7 @@ export function chatRoutes(): Route[] {
       },
       async (c, deps) => {
         principalOf(c)
-        const port = portOf(deps)
+        const port = await scopedPortOf(deps, c)
         const id = param(c, 'id')
         const session = await requireSession(port, id)
         return ok(c, { session, messages: await port.messages(id) })
@@ -290,7 +319,7 @@ export function chatRoutes(): Route[] {
       },
       async (c, deps) => {
         principalOf(c)
-        const port = portOf(deps)
+        const port = await scopedPortOf(deps, c)
         const id = param(c, 'id')
         await requireSession(port, id)
         const input = await body(c, SendBody)
@@ -313,7 +342,7 @@ export function chatRoutes(): Route[] {
       },
       async (c, deps) => {
         principalOf(c)
-        const port = portOf(deps)
+        const port = await scopedPortOf(deps, c)
         const id = param(c, 'id')
         await requireSession(port, id)
         return ok(c, await port.advance(id))
@@ -335,7 +364,7 @@ export function chatRoutes(): Route[] {
       },
       async (c, deps) => {
         principalOf(c)
-        const port = portOf(deps)
+        const port = await scopedPortOf(deps, c)
         const id = param(c, 'id')
         await requireSession(port, id)
         const input = await body(c, TakeoverBody)
@@ -359,7 +388,7 @@ export function chatRoutes(): Route[] {
       },
       async (c, deps) => {
         const p = principalOf(c)
-        const port = portOf(deps)
+        const port = await scopedPortOf(deps, c)
         const id = param(c, 'id')
         await requireSession(port, id)
         const input = await body(c, TeachBody)
@@ -389,7 +418,7 @@ export function chatRoutes(): Route[] {
       },
       async (c, deps) => {
         principalOf(c)
-        const port = portOf(deps)
+        const port = await scopedPortOf(deps, c)
         const id = param(c, 'id')
         await requireSession(port, id)
         return sseResponse(port, id, c.get('rctx').trace_id)
@@ -414,7 +443,7 @@ export function chatRoutes(): Route[] {
       },
       async (c, deps) => {
         principalOf(c)
-        return ok(c, portOf(deps).widgetConfig())
+        return ok(c, (await scopedPortOf(deps, c)).widgetConfig())
       },
     ),
     route(
@@ -435,7 +464,7 @@ export function chatRoutes(): Route[] {
         const input = await body(c, WidgetBody)
         return ok(
           c,
-          portOf(deps).setWidgetConfig({
+          (await scopedPortOf(deps, c)).setWidgetConfig({
             allowed_origins: input.allowed_origins,
             ...(input.accent === undefined ? {} : { accent: input.accent }),
             ...(input.greeting === undefined ? {} : { greeting: input.greeting }),

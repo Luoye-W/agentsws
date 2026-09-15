@@ -151,6 +151,24 @@ const BRAND_CONNECTIONS = defineCollection({
   fields: {
     service: { sensitivity: 'internal' },
     label: { sensitivity: 'internal' },
+    /** WP66：这条连接的凭据在加密库里叫什么**名字**（值不在这儿，也不该在）。 */
+    credential_key: { sensitivity: 'internal' },
+  },
+})
+
+/**
+ * WP66（52 O3）：一个品牌自己那一套**模型设置**的最小记录。
+ *
+ * 与 {@link BRAND_CONNECTIONS} 同一条道理：这张表长什么样不重要，重要的是它
+ * 有一个 `workspace_id`——"甲品牌的模型设置在乙品牌看不见"靠的是数据层那一刀。
+ * 里面只有"用哪家"这个**决定**与凭据的 key 名，API key 一个字节都不进模拟世界。
+ */
+const BRAND_MODEL_PROVIDERS = defineCollection({
+  name: 'model_providers',
+  domain: 'customer',
+  fields: {
+    label: { sensitivity: 'internal' },
+    credential_key: { sensitivity: 'internal' },
   },
 })
 
@@ -586,9 +604,18 @@ export interface BrandSeed {
   fact?: string
   /** 这个品牌连的那家店（数据层的一条记录）。 */
   connection?: string
+  /**
+   * WP66（52 O3）：这个品牌自己那一套**模型设置**（"用哪家、哪个模型"）。
+   *
+   * 与连接是同一条道理：WP66 之前模型 key 是一台机器一份，所以这一格没得验；
+   * 现在它按 `workspace_id` 存了，"两个品牌互相看不见"才轮得到它。
+   * 这里放的只有**决定**（哪家 / 哪个模型）与那条凭据在库里叫什么名字——
+   * 值一个字节都不进模拟世界（13 §4.3）。
+   */
+  model?: string
 }
 
-/** 一个品牌里**这个人现在看得到什么**（场景里断言用；四个库各问一遍）。 */
+/** 一个品牌里**这个人现在看得到什么**（场景里断言用；五个库各问一遍）。 */
 export interface BrandVisibility {
   brand: string
   /** 他在这个品牌里有哪几条职责。 */
@@ -599,6 +626,15 @@ export interface BrandVisibility {
   facts: string[]
   /** 数据层里的店铺连接（id）。 */
   connections: string[]
+  /** WP66：这个品牌自己那一套模型设置（label）。 */
+  models: string[]
+  /**
+   * WP66：这个品牌的凭据在加密库里叫什么**名字**（连接的与模型的各一条）。
+   *
+   * 只有名字，没有值。名字上带着 `ws:<workspace_id>/` 前缀——真实现里也是这么隔的，
+   * 所以"甲的名字出现在乙的清单里"这件事在这里一眼看得见。
+   */
+  credential_keys: string[]
 }
 
 /** 一次 Join 跑完的样子（场景里断言用）。 */
@@ -866,7 +902,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const data = createDataStore({
     dbPath: ':memory:',
     clock,
-    collections: [CUSTOMERS, BRAND_CONNECTIONS],
+    collections: [CUSTOMERS, BRAND_CONNECTIONS, BRAND_MODEL_PROVIDERS],
   })
   for (const c of pack.customers) {
     await data.put<{ name: string; email: string; market: string }>(
@@ -2653,7 +2689,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       }
 
       if (seed?.connection !== undefined) {
-        await data.put<{ service: string; label: string }>(
+        await data.put<{ service: string; label: string; credential_key: string }>(
           'connections',
           {
             id: `conn_${id}`,
@@ -2664,6 +2700,31 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             sensitivity: 'internal',
             service: 'shopify_admin',
             label: seed.connection,
+            // WP66：凭据在加密库里的 key **名**（值不在这里，也不该在）
+            credential_key: `ws:${id}/conn:conn_${id}`,
+          },
+          { ...seedActor, workspace_id: id },
+        )
+      }
+
+      /*
+       * WP66（52 O3）：这个品牌自己那一套模型设置。
+       *
+       * 与上面四样一样，它进的是**按 `workspace_id` 切的那个库**——所以这里
+       * 照样一行"过滤 brand_id"都不用写。
+       */
+      if (seed?.model !== undefined) {
+        await data.put<{ label: string; credential_key: string }>(
+          'model_providers',
+          {
+            id: `mp_${id}`,
+            schema_version: 1,
+            workspace_id: id,
+            owners: [who],
+            scope: [],
+            sensitivity: 'internal',
+            label: seed.model,
+            credential_key: `ws:${id}/model_provider:mp_${id}`,
           },
           { ...seedActor, workspace_id: id },
         )
@@ -2705,14 +2766,31 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           },
         )
       ).map((c) => c.statement)
-      const connections = (
-        await data.query<{ service: string; label: string }>(
+      const connectionRows = (
+        await data.query<{ service: string; label: string; credential_key?: string }>(
           'connections',
           {},
           { ...seedActor, workspace_id: brand },
         )
-      ).items.map((r) => r.id)
-      return { brand, positions, cards, facts, connections }
+      ).items
+      const modelRows = (
+        await data.query<{ label: string; credential_key?: string }>(
+          'model_providers',
+          {},
+          { ...seedActor, workspace_id: brand },
+        )
+      ).items
+      return {
+        brand,
+        positions,
+        cards,
+        facts,
+        connections: connectionRows.map((r) => r.id),
+        models: modelRows.map((r) => r.label),
+        credential_keys: [...connectionRows, ...modelRows].flatMap((r) =>
+          r.credential_key === undefined ? [] : [r.credential_key],
+        ),
+      }
     },
 
     async join({ who, from, decisions }) {

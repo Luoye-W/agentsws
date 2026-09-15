@@ -7,10 +7,13 @@
  *
  * 三条：
  *
- * 1. **今日销售只有当前品牌有**。别的品牌这会儿没有取数的通道（活数据源是按当前
- *    工作区装配的），所以那一格明说"切过去才看得到"，不画一个 0（36 §3）。
- * 2. **复制不是共享**（52 O4）。"从某个品牌复制"只搬职责分配，范围不跟着走；
- *    连接与知识一个字节都不复制——那是这个品牌自己的凭据与自己的事实。
+ * 1. **三个数每个品牌都算得出来**（WP66）。一个进程装多套品牌模块之后，每个品牌
+ *    各有自己的活数据源，今日销售与它自己首页那个数字块读的是同一条查询。
+ *    没有数只有一种意思：这个品牌还没连店、或者今天还没有单——照 36 §3 明说，
+ *    不画一个 0。
+ * 2. **复制不是共享**（52 O4）。"从某个品牌复制"搬的是职责分配与模型设置；
+ *    范围不跟着走，**API key 不复制**，连接与知识一个字节都不复制——
+ *    那是这个品牌自己的凭据与自己的事实。
  * 3. **一个品牌的时候也要在**。个人用户看到的是一句"要做第二个品牌就在这里加"，
  *    而不是一张空表。
  */
@@ -135,23 +138,23 @@ export function BrandsTab({
    * 数照实说出来。合成一步的话用户只会看到"建好了"，不知道到底有没有搬成。
    */
   const add = useMutation({
-    mutationFn: async (): Promise<{ copied?: number }> => {
+    mutationFn: async (): Promise<{ copied?: number; models?: number }> => {
       const brand = await createBrand(org_id ?? '', { name: name.trim() }, assignment)
       if (copyFrom === '') return {}
       const copy = await copyBrandSettings(org_id ?? '', brand.workspace_id, copyFrom, assignment)
-      return { copied: copy.copied_assignments }
+      return { copied: copy.copied_assignments, models: copy.copied_model_providers ?? 0 }
     },
-    onSuccess: async ({ copied }) => {
+    onSuccess: async ({ copied, models }) => {
       setFailure(undefined)
       setName('')
       setCopyFrom('')
-      setReceipt(
-        copied === undefined
-          ? undefined
-          : copied === 0
-            ? t('org.brands.copy_none')
-            : t('org.brands.copied', { n: copied }),
-      )
+      // 回执照实说：职责分配搬了几条、模型设置搬了几条（key 没搬）
+      const lines: string[] = []
+      if (copied !== undefined)
+        lines.push(copied === 0 ? t('org.brands.copy_none') : t('org.brands.copied', { n: copied }))
+      if (models !== undefined && models > 0)
+        lines.push(t('org.brands.copied_models', { n: models }))
+      setReceipt(lines.length === 0 ? undefined : lines.join(' '))
       await client.invalidateQueries({ queryKey: ['orgs'] })
     },
     onError: (err: unknown) => {

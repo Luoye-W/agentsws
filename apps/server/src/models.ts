@@ -185,12 +185,34 @@ export interface ModelsOptions {
   workspace_id?: () => string | undefined
 }
 
+/**
+ * WP66（52 O4「从某个品牌复制设置」）：一份**不含任何 key** 的模型设置快照。
+ *
+ * 复制的是"我用哪家、哪个模型、哪个当默认、预算多少"这些**决定**；
+ * key 一个字节都不带——加密库里那一条是按品牌存的，复制一把过去等于把一条凭据
+ * 悄悄多放一处（13 §4.3）。复制出来的那几条在新品牌里显示"还没填 key"。
+ */
+export interface ModelSettingsSnapshot {
+  providers: ModelProviderConfig[]
+  defaults: ModelsStateFile['defaults']
+}
+
 export interface ModelsAssembly {
   port: ModelsPort
   /** 这台机器上有没有能用的模型（运行时与首页黄条问它，不再看环境变量）。 */
   configured(): boolean
   /** 现在生效的默认模型（运行时组 `RunRequest.runtime.model` 用）。 */
   defaultRef(): ModelRef
+  /** WP66：端一份可复制的设置快照（**没有 key**）。 */
+  exportSettings(): ModelSettingsSnapshot
+  /**
+   * WP66：把一份快照写进来（52 O4 建品牌时的"从某个品牌复制"）。
+   *
+   * **只往空的里写**：已经配过 provider 的品牌一条都不动，回 0——
+   * 复制是建品牌那一刻的一次性动作，不是同步（52 §3「不做品牌间的自动同步」）。
+   * 返回真的写进去几条。
+   */
+  importSettings(snapshot: ModelSettingsSnapshot): number
 }
 
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
@@ -614,6 +636,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   }
 
   reassemble()
+
+  /** WP66（52 O4）：端一份快照。深拷一遍，调用方改它不会动到这个品牌的状态。 */
+  const exportSettings = (): ModelSettingsSnapshot =>
+    JSON.parse(
+      JSON.stringify({ providers: state.providers, defaults: state.defaults }),
+    ) as ModelSettingsSnapshot
 
   /**
    * 去这家的 `/models` 拉一次清单（WP42）。
@@ -1258,6 +1286,19 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     port,
     configured: () => activeConfigs().length > 0,
     defaultRef,
+    exportSettings,
+    importSettings(snapshot) {
+      // 只往空的里写：已经配过的品牌一条都不动（复制是一次性的，不是同步）
+      if (state.providers.length > 0) return 0
+      const rows = snapshot.providers.filter((p) => p.id !== ENV_PROVIDER_ID)
+      if (rows.length === 0) return 0
+      state.providers = JSON.parse(JSON.stringify(rows)) as ModelProviderConfig[]
+      state.defaults = JSON.parse(JSON.stringify(snapshot.defaults)) as ModelsStateFile['defaults']
+      flush()
+      // key 还没填，所以这一轮多半只装得上 stub——填完 key 下一次保存自然就换过来
+      reassemble()
+      return state.providers.length
+    },
   }
 }
 

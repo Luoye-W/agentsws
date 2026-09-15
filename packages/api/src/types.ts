@@ -726,6 +726,14 @@ export interface WorkstationPort {
   systemCards(actor: WorkstationActor): MaybePromise<{ alerts: DeckCard[]; digest?: DeckCard }>
   /** ObjectRef → 人话（前端不猜、也不查库）。 */
   label(ref: ObjectRef): string | undefined
+  /**
+   * WP66（52 O1）：**按品牌**把 ObjectRef 翻成人话。
+   *
+   * `label` 没有 actor——它是同步的、在拼卡片时一条一条调的。装了多品牌的进程
+   * 必须知道翻的是哪个品牌的订单 / 客户，否则 A 的客户名会出现在 B 的卡片上。
+   * 不实现就退回 `label`（单品牌装配一行不变）。
+   */
+  labelFor?(actor: WorkstationActor, ref: ObjectRef): string | undefined
   /** 36 §3：换 / 增减数字块与时间范围，跟随岗位记忆。 */
   setHomeTiles(
     actor: WorkstationActor,

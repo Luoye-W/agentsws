@@ -309,3 +309,55 @@ export function sameKey(a: Buffer | undefined, b: Buffer | undefined): boolean {
   if (a.byteLength !== b.byteLength) return false
   return timingSafeEqual(a, b)
 }
+
+/**
+ * WP66（52 O1）：**按品牌隔开**同一个加密库。
+ *
+ * 一个进程装多套品牌模块之后，邮箱口令、Shopify 应用密钥、模型 key、云上那把
+ * 工作区服务令牌都必须按品牌分开——品牌 A 的连接在 B 的任何路由里都不该取得到。
+ * 做法是最小的那一种：**库还是同一个库、密钥还是同一把**（换机迁移与 `rotate`
+ * 一行不用改），只在 key 名前面加一段 `ws:<workspace_id>/`。
+ *
+ * 前缀为空 = **key 名原样透传**。这正是 bootstrap 品牌那一档：存量机器上的每一条
+ * 凭据都在没有前缀的名字下，加了前缀就等于全部失联——所以老品牌一个字节不搬家。
+ * 但"原样透传"不等于"什么都看得见"：带 {@link NAMESPACE_MARK} 前缀的行属于别的
+ * 品牌，在这一档里既不出现在 `list()` 里，也 `get` / `remove` 不到。
+ *
+ * AAD 绑的是完整 key 名（含前缀），所以把 A 的密文行改名成 B 的一样解不开。
+ */
+/** 带品牌前缀的 key 名一律以它开头（`ws:<workspace_id>/…`）。 */
+export const NAMESPACE_MARK = 'ws:'
+
+export function namespaceSecrets(base: SecretStore, prefix: string): SecretStore {
+  // 前缀为空 = bootstrap 品牌那一档：key 名一个字不动（存量凭据全在这些名字下），
+  // 但**别的品牌那些行不属于它**——`list()` 里看不到，`get` / `remove` 也够不着。
+  const owns = (id: string): boolean =>
+    prefix === '' ? !id.startsWith(NAMESPACE_MARK) : id.startsWith(prefix)
+  const full = (id: string): string => `${prefix}${id}`
+  const short = (id: string): string => id.slice(prefix.length)
+  const guard = (id: string): string => {
+    if (!owns(full(id))) throw new SecretStoreError('not_found', `这条凭据不属于这个品牌：${id}`)
+    return full(id)
+  }
+  return {
+    get available() {
+      return base.available
+    },
+    put: (id, fields) => ({ ...base.put(guard(id), fields), connection_id: id }),
+    get: (id) => base.get(guard(id)),
+    list: () =>
+      base
+        .list()
+        .filter((r) => owns(r.connection_id))
+        .map((r) => ({ ...r, connection_id: short(r.connection_id) })),
+    record: (id) => {
+      const row = base.record(guard(id))
+      return row === undefined ? undefined : { ...row, connection_id: id }
+    },
+    remove: (id) => base.remove(guard(id)),
+    // 轮换是**整库**的事（一把密钥管所有品牌）；不该按品牌各转一次
+    rotate: (newKey) => base.rotate(newKey),
+    // 库不是这一层开的，也不由这一层关
+    close: () => undefined,
+  }
+}

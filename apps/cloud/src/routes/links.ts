@@ -144,6 +144,60 @@ export function linkRoutes(deps: LinkRouteDeps): CloudRoute[] {
         })
       },
     ),
+    /*
+     * WP66（52 O1）：**同一家公司下的另一个品牌**补签一把。
+     *
+     * 为什么要有这一条：账号与余额在组织级（49 M1），而令牌是按工作区签的；
+     * 关联过之后再加一个品牌，本机手上**只剩这把工作区令牌**——关联时那张
+     * 云侧会话用完就注销了（本机不留第二把能管账号的钥匙）。没有这一条，
+     * 新品牌就只能让用户把整家公司重新关联一次。
+     *
+     * 它能做的**只有一件事**：在**调用者自己那条关联所属的组织里**多签一把。
+     * 读不到别的关联、撤不掉任何东西、换不出会话；工作区已经挂在别的账号下时
+     * 照旧 409。也就是说，一把泄漏的工作区令牌在这里拿不到它本来没有的东西
+     * ——它本来就能花这个组织的积分。
+     */
+    cloudRoute(
+      {
+        method: 'post',
+        path: '/v1/cloud/links/sibling',
+        operationId: 'createSiblingWorkspaceLink',
+        summary: '给同一组织下的另一个工作区补签一把服务令牌（明文只回一次）',
+        tag: 'cloud-links',
+        auth: 'workspace_token',
+        body: CreateLinkBody,
+        returns: '{ link, token }——`token` 之后哪儿都查不到',
+      },
+      async (c) => {
+        const token = cloudToken(c)
+        const mine = deps.store.activeLinkOfWorkspace(token.workspace_id)
+        if (mine === undefined) throw new ApiError('not_found', '没有这条关联')
+        const input = await cloudBody(c, CreateLinkBody)
+        if (input.workspace_id === token.workspace_id)
+          throw new ApiError('conflict', '这就是调用者自己那个工作区，它已经有一把了')
+        try {
+          const issued = deps.store.createLink({
+            workspace_id: input.workspace_id,
+            // 组织从**调用者那条关联**上取，不从请求体里读——请求体说了不算
+            cloud_org_id: mine.cloud_org_id,
+            created_by: mine.created_by,
+            ...(input.label === undefined ? {} : { label: input.label }),
+            // 补签出来的那一把与调用者同权，不多不少
+            scopes: [...mine.scopes],
+            ...(input.ttl_days === undefined ? {} : { ttlMs: input.ttl_days * DAY_MS }),
+          })
+          return cloudOk(
+            c,
+            { link: linkView(issued.link, deps.clock.now()), token: issued.token },
+            201,
+          )
+        } catch (err) {
+          if (err instanceof Error && err.message.startsWith('workspace_already_linked:'))
+            throw new ApiError('conflict', '这个工作区已经关联到另一个账号了，先在那边解除')
+          throw err
+        }
+      },
+    ),
     cloudRoute(
       {
         method: 'post',

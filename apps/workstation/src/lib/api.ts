@@ -1228,6 +1228,12 @@ export interface ModelDefaultsView {
     assignment_daily_base?: number
   }
   choices: { id: string; label: string }[]
+  /** WP66（52 O3）：这个品牌的模型设置跟不跟随公司默认（单品牌永远是 false）。 */
+  inherit_org?: boolean
+  /** 这个品牌**就是**公司默认那一个（开关不出现）。 */
+  org_default?: boolean
+  /** 公司默认品牌的名字（界面上那句"跟随「XX」的设置"）。 */
+  org_default_brand?: string
 }
 
 export interface ModelUsageRow {
@@ -1327,6 +1333,21 @@ export const setModelDefaults = (
   assignment?: string,
 ): Promise<ModelDefaultsView> =>
   api('/v1/models/defaults', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+/**
+ * WP66（52 O3）：改"跟随公司默认"。
+ *
+ * 开着的时候这个品牌读的是公司默认那一份，表单是只读的；关掉才有自己那一份。
+ */
+export const setModelInheritance = (
+  inherit_org: boolean,
+  assignment?: string,
+): Promise<ModelDefaultsView> =>
+  api('/v1/models/inheritance', {
+    method: 'PUT',
+    body: { inherit_org },
+    ...withAssignment(assignment),
+  })
 
 export const getModelUsage = (assignment?: string): Promise<ModelUsageView> =>
   api('/v1/models/usage', withAssignment(assignment))
@@ -2924,7 +2945,10 @@ export interface BrandView {
   storefront_platform?: StorefrontPlatform
   pending_approvals: number
   alerts: number
-  /** 只有当前这个品牌有——别的品牌这会儿没有取数的通道（36 §3：没有就明说没有）。 */
+  /**
+   * WP66 起**每个品牌都算得出来**（各有各的活数据源）。
+   * 还没连店 / 今天还没有单时仍然没有这个字段——没有就明说没有，不画一个 0（36 §3）。
+   */
   sales_today?: { amount: number; currency: string }
 }
 
@@ -2943,7 +2967,12 @@ export interface BrandCopyView {
   to: string
   copied_assignments: number
   dropped_ranges: number
+  /** WP66 起恒为 false（模型设置按品牌各一份，不再是"本来就共用"）。 */
   models_shared: boolean
+  /** WP66（52 O4）：复制过来的模型 provider 条数（**不含 API key**）。 */
+  copied_model_providers?: number
+  /** 复制过设置的品牌从此不跟随公司默认（52 O3）。 */
+  inherit_org?: boolean
 }
 
 export interface BrandSwitchView {

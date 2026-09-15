@@ -219,7 +219,12 @@ async function cardsOf(
   const now = deps.clock.now()
   return sortCards(
     items.map((i) =>
-      projectCard(i, { now, position_id: position.position_id, label: (r) => w.label(r) }),
+      projectCard(i, {
+        now,
+        position_id: position.position_id,
+        // WP66：翻的是**这个品牌**的订单 / 客户（没装多品牌就退回 `label`）
+        label: (r) => w.labelFor?.(actor, r) ?? w.label(r),
+      }),
     ),
   )
 }
@@ -287,7 +292,7 @@ export function workstationRoutes(): Route[] {
             range,
             // 29 §2 enrichment：ObjectRef → 展示名，以本人身份查；查不到的 ref 在
             // 投影时就被丢掉，只在 detail.enrichment.dropped_refs 上留个数。
-            label: (r) => w.label(r),
+            label: (r) => w.labelFor?.(actor, r) ?? w.label(r),
           })
           // 筛选 → 合并 → 一次一张。计数按张数（合并前），P0 被筛掉时回带置顶。
           const filtered = filterCards(assembled.queue, filters)

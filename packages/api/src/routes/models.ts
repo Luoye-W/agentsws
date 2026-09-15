@@ -234,6 +234,23 @@ export interface ModelDefaultsView {
   }
   /** 可选的模型清单（`provider_id/model`），给下拉框用。 */
   choices: { id: string; label: string }[]
+  /**
+   * WP66（52 O3）：这个品牌的模型设置**跟不跟随公司默认**。
+   *
+   * 跟随时上面那几项读的是公司默认品牌那一份，界面把表单画成只读；
+   * 关掉开关这个品牌才有自己的一份。装了多品牌之后才有这一位——
+   * 单品牌的机器上它永远是 `false`（自己就是公司默认那一个）。
+   */
+  inherit_org?: boolean
+  /** 这个品牌**就是**公司默认那一个（开关画成灰的、不给点）。 */
+  org_default?: boolean
+  /** 公司默认品牌的名字（界面上那句"跟随「XX」的设置"）。 */
+  org_default_brand?: string
+}
+
+/** WP66（52 O3）：改"跟随公司默认"。 */
+export interface SetModelInheritanceInput {
+  inherit_org: boolean
 }
 
 export interface ModelUsageRow {
@@ -320,6 +337,16 @@ export interface ModelsPort {
   refreshPricing(actor: ModelsActor): MaybePromise<ModelPricingRefreshResult>
   /** 这台机器上有没有能用的模型（首页那条黄条按它出现 / 消失）。 */
   configured(): boolean
+  /**
+   * WP66（52 O3）：改这个品牌的"跟随公司默认"。
+   *
+   * 不实现 = 这个进程只装了一套模型面（单品牌），
+   * `PUT /v1/models/inheritance` 回 not_implemented。
+   */
+  setInheritance?(
+    actor: ModelsActor,
+    input: SetModelInheritanceInput,
+  ): MaybePromise<ModelDefaultsView>
 }
 
 /** 装配方给网关的 ModelRef 拆解（`provider/model`）。 */
@@ -357,6 +384,9 @@ const SaveBody = z.object({
 })
 
 /** 拉模型列表的请求体。`api_key` 同 `SaveBody`：只限长度，值不进任何错误信封。 */
+/** WP66（52 O3）：一个布尔，别的什么都不收。 */
+const InheritanceBody = z.object({ inherit_org: z.boolean() })
+
 const DiscoverBody = z.object({
   base_url: z.string().min(1).max(512).optional(),
   api_key: z.string().min(1).max(4096).optional(),
@@ -459,6 +489,30 @@ export function modelRoutes(): Route[] {
       async (c, deps) => {
         const input = await body(c, DefaultsBody)
         return ok(c, await portOf(deps).setDefaults(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/models/inheritance',
+        operationId: 'setModelInheritance',
+        summary: '这个品牌的模型设置跟不跟随公司默认（52 O3）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: InheritanceBody,
+        returns: 'ModelDefaultsView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setInheritance === undefined)
+          throw new ApiError(
+            'not_implemented',
+            '这个服务进程只装了一套模型面（单品牌），没有"跟随公司默认"这个开关',
+          )
+        const input = await body(c, InheritanceBody)
+        return ok(c, await port.setInheritance(actorOf(c), input))
       },
     ),
     route(
