@@ -13,6 +13,8 @@ export * from './identity.js'
 export * from './join.js'
 export * from './kernel.js'
 export * from './knowledge.js'
+// 48 §5.3 / 49 §6 WP61：云上的公共红人库服务（本地那六个红人对象在 kol.ts，WP67）
+export * from './kol-public.js'
 export * from './meetings.js'
 export * from './model.js'
 export * from './packages.js'
