@@ -57,6 +57,11 @@ const SOURCE_AUTHZ = {
   gsc: { domain: 'analytics', range: 'assigned' },
   ads: { domain: 'ad_account', range: 'assigned' },
   csat: { domain: 'review', range: 'assigned' },
+  // WP64（51 §2.3 / §2.4）：邮件营销那两块要 campaign 域（分群 / 活动 / 自动流都挂它），
+  // 物流异常要 shipment 域。挂错域的后果是"别的岗位也看得见"，所以照职责 yml 的
+  // scopes 一格一格对，不图省事套 order。
+  email_marketing: { domain: 'campaign', range: 'assigned' },
+  tracking: { domain: 'shipment', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

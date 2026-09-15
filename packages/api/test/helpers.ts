@@ -371,6 +371,8 @@ export class MemoryWorkstation implements WorkstationPort {
         { id: 'gsc', label: 'Search Console', connected: false },
         { id: 'ads', label: '广告后台', connected: false },
         { id: 'csat', label: '满意度调查', connected: false },
+        { id: 'email_marketing', label: '邮件营销后台', connected: false },
+        { id: 'tracking', label: '物流追踪', connected: false },
       ],
     }
   }

@@ -165,7 +165,17 @@ export type RangeName = 'yesterday' | 'last_7d'
 export type TileFormat = 'money' | 'count' | 'percent' | 'ratio'
 
 /** 数据源（36 §3：面板 Tab 按数据源分块）。 */
-export type DataSourceId = 'shop' | 'approvals' | 'ga4' | 'gsc' | 'ads' | 'csat'
+export type DataSourceId =
+  | 'shop'
+  | 'approvals'
+  | 'ga4'
+  | 'gsc'
+  | 'ads'
+  | 'csat'
+  /** WP64（51 §2.3）：邮件营销后台（Klaviyo / Shopify Email）。 */
+  | 'email_marketing'
+  /** WP64（51 §2.4）：物流追踪（AfterShip / 17track）。 */
+  | 'tracking'
 
 export interface DataSourceStatus {
   id: DataSourceId

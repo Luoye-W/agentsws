@@ -28,6 +28,12 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   meta_ads: ['ads'],
   meta: ['ads'],
   googleads: ['ads'],
+  // WP64（51 §2.3 / §2.4）：连接器骨架。这两行现在没有一条真连接会命中——
+  // 目录里那几张卡的状态是"还没接"——但映射先立着：接上那天只改连接目录，不改 deck。
+  klaviyo: ['email_marketing'],
+  shopify_email: ['email_marketing'],
+  aftership: ['tracking'],
+  track17: ['tracking'],
 }
 
 /** 工作队列（审批项）是我们自己的库，永远算连上。 */
@@ -41,6 +47,8 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'gsc',
   'ads',
   'csat',
+  'email_marketing',
+  'tracking',
 ]
 
 /** 算连接状态时只认这个形状——**没有也不可能有凭据字段**。 */

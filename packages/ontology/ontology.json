@@ -37,7 +37,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "c6e774c89ec2ad6f9d4e0a08bb6089bd",
+  "source_digest": "d8baf77659ad4996d274e09417042e02",
   "objects": [
     {
       "id": "ad_set",
@@ -1470,6 +1470,7 @@
         "orders.count",
         "orders.overdue",
         "orders.recent",
+        "orders.unfulfilled",
         "shopify_admin.get_order",
         "shopify_admin.list_orders"
       ],
@@ -1919,7 +1920,7 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": []
+      "read_via": ["shipments.exceptions"]
     },
     {
       "id": "skill",

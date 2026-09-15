@@ -116,6 +116,9 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
     { id: 'gsc', label: 'Search Console', connected: false },
     { id: 'ads', label: '广告后台', connected: false },
     { id: 'csat', label: '满意度调查', connected: false },
+    // WP64：邮件营销后台与物流追踪的连接器还是骨架 —— demo 里也照实说没连
+    { id: 'email_marketing', label: '邮件营销后台', connected: false },
+    { id: 'tracking', label: '物流追踪', connected: false },
   ]
   const alerts: DeckCard[] = []
   return {

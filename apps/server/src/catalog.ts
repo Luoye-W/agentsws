@@ -21,6 +21,13 @@ export const ROLE_CONNECTOR_KIND: Readonly<Record<string, string>> = {
   ga4: 'ga4',
   gsc: 'gsc',
   meta_ads: 'meta',
+  // WP64（51 §2.3 / §2.4）：职责模板问的是"有没有一家邮件营销 / 物流追踪"，
+  // 不问是哪一家——`dtc.email-marketing` 写 `kind: email_marketing`，
+  // `dtc.fulfillment` 写 `kind: tracking`。
+  klaviyo: 'email_marketing',
+  shopify_email: 'email_marketing',
+  aftership: 'tracking',
+  track17: 'tracking',
 }
 
 export type CatalogAuth = 'oauth2' | 'api_key' | 'custom_credential'
@@ -52,6 +59,17 @@ export interface CatalogEntry {
   smoke_hints?: string[]
   /** 提交后走哪条装配路径；不写就是 `form`。 */
   flow?: CatalogFlow
+  /**
+   * WP64：**骨架卡**——目录里有它、表单画得出来，但真调用还没接上。
+   *
+   * 为什么要让它出现在目录里而不是等接完再加：51 §2.3 / §2.4 的两条职责现在就上线了，
+   * 用户在连接页上找不到"邮件营销"这一类，只会以为是自己没找到。所以卡照出，
+   * 状态照实说"还没接"，点不动——和 51 §1 N0 给非 Shopify 平台的待遇一样。
+   *
+   * 值是给人看的那一句（连接页上的灰字、面板上的 note）。有它 = `available: false`，
+   * 并且 `begin` / `submit` 当场拒绝：宁可点不动，也不能让人填完密钥之后发现连不上。
+   */
+  planned?: string
 }
 
 /** 这个 provider 的接法。**每个 provider 只有一条**（WP44 删掉了 Shopify 的第二条）。 */
@@ -341,6 +359,118 @@ export const CATALOG: readonly CatalogEntry[] = [
       ],
       links: [{ label: 'Meta for Developers', url: 'https://developers.facebook.com/apps' }],
     },
+  },
+  // ── WP64（51 §2.3 / §2.4）：连接器骨架 ──────────────────────────────
+  //
+  // 四张卡，四条都是"还没接"。目录 + 只读动作映射 + **原生表单**先立起来：
+  // 凭据只能由用户自己在这台机器的表单里填进加密库，永远不经过对话——
+  // 所以字段在接上真服务之前就要写死在这里，而不是等那天临时想。
+  {
+    service: 'klaviyo',
+    upstream: 'klaviyo',
+    label: 'Klaviyo（邮件营销）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['email_marketing'],
+    smoke_hints: ['validate_account', 'list_campaigns', 'list_profiles'],
+    fields: [
+      {
+        name: 'private_api_key',
+        label: '私有 API Key',
+        secret: true,
+        required: true,
+        kind: 'password',
+        placeholder: 'pk_…',
+        hint: 'Klaviyo 后台 Settings → API keys → Create Private API Key，只勾读权限就够',
+      },
+      {
+        name: 'public_api_key',
+        label: '站点 ID（Public API Key）',
+        secret: false,
+        required: false,
+        kind: 'text',
+        hint: '同一页上那串 6 位的站点 ID；不填也能用，填了报表里的链接能直接跳回去',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '分群、模板、活动效果**只读**。发送不走这条连接——群发永远是一张要人点头的卡（51 §2.3）。',
+      steps: [
+        '登录 Klaviyo，进 Settings → API keys',
+        '点 Create Private API Key，权限选"只读"（Read-only）',
+        '把这串密钥填进下面的表单——只存在这台电脑的加密库里，不上传、不进日志',
+      ],
+      links: [
+        { label: 'Klaviyo API keys', url: 'https://www.klaviyo.com/settings/account/api-keys' },
+      ],
+    },
+    planned:
+      '还没接：连接目录、只读动作与表单已经就位，真调用还没做。' +
+      '在此之前邮件营销面板的自动流与效果两块照实说"还没连"，不出编出来的数字。',
+  },
+  {
+    service: 'shopify_email',
+    upstream: 'local',
+    label: 'Shopify Email（邮件营销）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['email_marketing'],
+    fields: [],
+    setup_guide: {
+      summary: '51 §2.3 排在 Klaviyo 后面：独立站做邮件营销的多数人用 Klaviyo，先接它。',
+      steps: ['暂时没有步骤——这家还没接。要现在就用邮件营销，先连 Klaviyo（也还在做）'],
+      links: [{ label: 'Shopify Email', url: 'https://www.shopify.com/email-marketing' }],
+    },
+    planned: '待增加：先做 Klaviyo（51 §2.3 首选），这家排在它后面。',
+  },
+  {
+    service: 'aftership',
+    upstream: 'aftership',
+    label: 'AfterShip（物流追踪）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['tracking'],
+    smoke_hints: ['detect_couriers', 'list_couriers', 'get_tracking'],
+    fields: [
+      {
+        name: 'api_key',
+        label: 'API Key',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'AfterShip 后台 Settings → API keys 里新建一把，只勾读权限',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '只读物流轨迹：包裹到哪了、有没有异常。**不**回写单号——单号是标记发货那条变更的事（51 §2.4）。',
+      steps: [
+        '登录 AfterShip，进 Settings → API keys',
+        '新建一把 key，权限选只读',
+        '把它填进下面的表单——只存在这台电脑的加密库里',
+      ],
+      links: [
+        { label: 'AfterShip API keys', url: 'https://admin.aftership.com/settings/api-keys' },
+      ],
+    },
+    planned:
+      '还没接：连接目录、只读动作与表单已经就位，真调用还没做。' +
+      '在此之前订单履约面板的"物流异常"那一块照实说"还没连"。',
+  },
+  {
+    service: 'track17',
+    upstream: 'local',
+    label: '17TRACK（物流追踪）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['tracking'],
+    fields: [],
+    setup_guide: {
+      summary: '51 §2.4 里与 AfterShip 并列，先做 AfterShip。',
+      steps: ['暂时没有步骤——这家还没接'],
+      links: [{ label: '17TRACK API', url: 'https://api.17track.net' }],
+    },
+    planned: '待增加：物流追踪先做 AfterShip，这家排在它后面。',
   },
 ]
 

@@ -55,8 +55,10 @@ function modelKinds(): string[] {
 describe('BrandIcon', () => {
   it('连接目录里的每个 provider 都有专属图标（不是回落）', () => {
     const services = catalogServices()
-    // 目录本身别读空了：WP45 当时是六个（shopify_admin / imap_smtp / gmail / ga4 / gsc / meta_ads）
-    expect(services.length).toBeGreaterThanOrEqual(6)
+    // 目录本身别读空了：WP45 当时是六个（shopify_admin / imap_smtp / gmail / ga4 / gsc / meta_ads），
+    // WP64 加了四张骨架卡（klaviyo / shopify_email / aftership / track17）
+    expect(services.length).toBeGreaterThanOrEqual(10)
+    expect(services).toContain('klaviyo')
     expect(services).toContain('shopify_admin')
 
     for (const service of services) {
