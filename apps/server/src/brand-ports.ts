@@ -17,6 +17,7 @@ import type {
   AskPort,
   CloudPort,
   ConnectionsPort,
+  KolPort,
   ModelDefaultsView,
   ModelsPort,
   PositionEntryPort,
@@ -249,4 +250,17 @@ export function brandWorkPort(
   make: (workspace_id: WorkspaceId) => Promise<WorkPort>,
 ): WorkPort {
   return scopedPort<WorkPort>(make, () => brands.bootstrap)
+}
+
+/**
+ * WP68（48 §5.4）红人库：一个品牌一张库、一段加密库。
+ *
+ * 这一条尤其不能漏——品牌 A 的联系方式引用与合作预算，在 B 的任何路由里
+ * 都不该读得到（`BrandModuleSet.kol` 的注释里那句话，这里是它的落点）。
+ */
+export function brandKolPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<KolPort>,
+): KolPort {
+  return scopedPort<KolPort>(make, () => brands.bootstrap)
 }

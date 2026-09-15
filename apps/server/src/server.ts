@@ -98,6 +98,7 @@ import {
   brandAskPort,
   brandCloudPort,
   brandConnectionsPort,
+  brandKolPort,
   brandModelsPort,
   brandPositionPort,
   brandWorkPort,
@@ -133,6 +134,7 @@ import { createJoin, type JoinAssembly } from './join.js'
 import { importKnowledgePack } from './knowledge-pack.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
+import { createKolService } from './kol-service.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
@@ -1090,6 +1092,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 建在记录源之前：记录源要拿它读红人与合作（`kol: () => kol`）。
     const kol = createKolStore({ workspace_id: ws, ...(dir === undefined ? {} : { dbDir: dir }) })
 
+    /**
+     * WP68（48 §5.4）：红人库的 `/v1` 面。建在记录源之前没有讲究，
+     * 建在 `kol` 之后是必须的——它要那张库。
+     */
+    const kolService = createKolService({
+      workspace_id: ws,
+      store: kol,
+      // 联系方式的明文落在**这个品牌**那一段加密库里（key 名已按品牌加过前缀）
+      secrets: brandSecrets,
+      clock,
+      approvals: txn.approvals,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      appendEvent,
+      random,
+    })
+
     let workRef: Work | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
@@ -1390,6 +1409,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workData,
       records,
       kol,
+      kolService,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -2439,6 +2459,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
 
+  const kolPortOf = brandKolPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
+  )
+
   const workPortOf = brandWorkPort(brandModules, workPortFor)
   const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
   const askPortOf = brandAskPort(brandModules, askPortFor)
@@ -2598,6 +2623,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: workPortOf,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
+    // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
+    kol: kolPortOf,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

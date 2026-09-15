@@ -33,6 +33,7 @@ import type { ChatWidgetAssembly } from './chat-widget.js'
 import type { CloudAssembly } from './cloud.js'
 import type { ConnectionsAssembly } from './connections.js'
 import type { KolStore } from './kol.js'
+import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
 import type { ModelsAssembly } from './models.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
@@ -90,6 +91,13 @@ export interface BrandModuleSet {
    * 品牌 A 的红人、联系方式引用与合作预算，在 B 的任何路由里都读不到。
    */
   kol: KolStore
+  /**
+   * WP68（48 §5.4）：这个品牌红人库的 `/v1` 面（端口 + 起草那一跳取明文的口子）。
+   *
+   * 与 `kol` 分成两格：库是数据，服务是**带着加密库、审批总线与变更账本**
+   * 的那一层。品牌 A 的联系方式明文只有 A 这一份服务取得到。
+   */
+  kolService: KolServiceAssembly
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun
