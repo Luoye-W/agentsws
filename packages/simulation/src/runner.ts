@@ -27,6 +27,7 @@ import { judgeConfigOf, runModelJudge, runRuleJudge } from './judge.js'
 import { computeMetrics } from './metrics.js'
 import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
+import { installPositions, type PositionsLoop } from './positions.js'
 import type { ScenarioReport } from './report.js'
 import { buildReport } from './report.js'
 import type { RuntimeName } from './runtime-name.js'
@@ -34,6 +35,8 @@ import { parseDuration, parseRange, resolveAt } from './scenario/duration.js'
 import type {
   Scenario,
   ScenarioEvent,
+  ScenarioPositionOpen,
+  ScenarioPositionStaff,
   ScenarioSecretaryAsk,
   ScenarioSecretaryDecide,
   ScenarioSecretaryMeet,
@@ -731,6 +734,39 @@ async function execute(
     }
   }
 
+  /* ── WP69（54）：岗位是任务主入口 ────────────────────────────────── */
+
+  /**
+   * 惰性装配：场景里没有 `position.*` 就一个都不装（同 `secretary` / `chat`）。
+   */
+  let positions: PositionsLoop | undefined
+  const positionsLoop = (): PositionsLoop => {
+    positions ??= installPositions(world)
+    world.positions = positions
+    return positions
+  }
+
+  const positionStaff = (input: ScenarioPositionStaff): void => {
+    const made = positionsLoop().staff(input.who, input.position)
+    world.appendEvent('simulation.position_staffed', {
+      who: input.who,
+      position_id: input.position,
+      roles: made.map((r) => r.role_id),
+    })
+  }
+
+  const positionOpen = async (input: ScenarioPositionOpen): Promise<void> => {
+    try {
+      await positionsLoop().open({
+        who: input.who,
+        position_id: input.position,
+        text: input.text,
+      })
+    } catch (e) {
+      workBlocked(e, 'position_open_failed')
+    }
+  }
+
   const dispatch = async (event: ScenarioEvent): Promise<void> => {
     switch (event.type) {
       case 'inbound.email': {
@@ -930,6 +966,15 @@ async function execute(
       }
       case 'secretary.route': {
         await secretaryRoute(event.route)
+        return
+      }
+      // ── WP69（54）：岗位是任务主入口 ──
+      case 'position.staff': {
+        positionStaff(event.staff)
+        return
+      }
+      case 'position.open': {
+        await positionOpen(event.open_at_position)
         return
       }
       // ── WP44 店铺操作（08 §2.3 读走原生 Action、写走 Backend）──────

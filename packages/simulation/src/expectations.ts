@@ -393,6 +393,22 @@ export function checkExpectations(
         : `没路由到：${missing.join(', ')}（实际 [${[...roles].join(', ')}]）`,
     )
   }
+  // WP69（54 §2）：**岗位内**路由落到了哪几条职责（与秘书那条不是一回事）
+  if (expected.position_routed_to !== undefined) {
+    const roles = new Set(
+      evidence.events
+        .filter((e) => e.type === 'simulation.position_routed')
+        .map((e) => String(payloadOf(e).role_id ?? '')),
+    )
+    const missing = expected.position_routed_to.filter((r) => !roles.has(r))
+    add(
+      'position_routed_to',
+      missing.length === 0,
+      missing.length === 0
+        ? `岗位内路由到 [${[...roles].join(', ')}]`
+        : `没路由到：${missing.join(', ')}（实际 [${[...roles].join(', ')}]）`,
+    )
+  }
   // WP55 / 48 §4 L3 #2：入站被判成的渠道细分（`amazon`）
   if (expected.sub_channel !== undefined) {
     const seen = [...new Set(evidence.inbound.map((e) => e.sub_channel ?? e.channel))]

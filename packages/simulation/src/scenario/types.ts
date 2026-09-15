@@ -136,6 +136,21 @@ export interface ScenarioSecretaryRoute {
   text: string
 }
 
+/* ── WP69（54）：岗位是任务主入口 ─────────────────────────────────────── */
+
+/** WP69：把一个岗位模板的默认职责一次挂给一个人（46 §1 ③「勾岗位 = 职责全勾」）。 */
+export interface ScenarioPositionStaff {
+  who: string
+  position: string
+}
+
+/** WP69：交给一个岗位一件事（岗位内路由挑职责 → 用那条职责的分配起 Run）。 */
+export interface ScenarioPositionOpen {
+  who: string
+  position: string
+  text: string
+}
+
 /** WP44：运营 Agent 改一件商品的价（先查文档 → 过官方 GraphQL 校验 → 提一条变更）。 */
 export interface ScenarioShopPriceChange {
   who: string
@@ -399,6 +414,11 @@ export type ScenarioEvent =
   | { at: string; type: 'secretary.meet_decide'; decide_meet: ScenarioSecretaryDecide }
   /** WP39：把一件事丢给秘书（任务路由 → 认领卡）。 */
   | { at: string; type: 'secretary.route'; route: ScenarioSecretaryRoute }
+  /* ── WP69（54）：岗位是任务主入口 ── */
+  /** WP69：给一个人配上一个岗位（它的默认职责全挂上）。 */
+  | { at: string; type: 'position.staff'; staff: ScenarioPositionStaff }
+  /** WP69：交给这个岗位一件事（路由 → 起 Run，拿不准出选择卡）。 */
+  | { at: string; type: 'position.open'; open_at_position: ScenarioPositionOpen }
   /** WP44：运营改价（真读 → 官方校验 → staged price_change）。 */
   | { at: string; type: 'shop.price_change'; price_change: ScenarioShopPriceChange }
   /** WP44：推一份未发布主题副本（造预览）。 */
@@ -588,6 +608,12 @@ export interface ScenarioExpected {
   assignments_not_unioned?: string[]
   /** WP39：秘书把事路由给了这些职责（`role_id`）。 */
   routed_to?: string[]
+  /**
+   * WP69（54 §2）：**岗位内路由**落到了这些职责（`role_id`）。
+   * 与 `routed_to` 是两件事：那一条是秘书在全工作区里判"这属于哪个职责"，
+   * 这一条是在**一个岗位的职责集合内**判"该走哪条"。
+   */
+  position_routed_to?: string[]
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
   secretary_kinds?: string[]
   /**

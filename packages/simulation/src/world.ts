@@ -125,6 +125,7 @@ import type {
 } from './evidence.js'
 import { installLearningLoop, type LearningLoop, type LearningOptions } from './learning.js'
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
+import type { PositionsLoop } from './positions.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 import type { RuntimeName } from './runtime-name.js'
 import type { SecretaryLoop } from './secretary.js'
@@ -333,6 +334,11 @@ export interface World {
    */
   secretary?: SecretaryLoop
   /**
+   * WP69（54）：岗位入口（岗位内路由 → 用被路由到的那条职责的分配起 Run）。
+   * 场景里出现 `position.*` 才装；不装的世界一次路由都不跑，原有场景的指标一个不变。
+   */
+  positions?: PositionsLoop
+  /**
    * WP32：每一拍的审批总线例行公事——过期、升级链、抽检复核、把新投递刷成卡片。
    *
    * 这三件事在真实进程里是定时任务（14 §4.4 §7 §13.2）；模拟回路里合成时钟每推进一拍
@@ -370,6 +376,8 @@ export interface World {
   resolveKnowledgeRecheck(item: ApprovalItem, option: string | undefined): Promise<void>
   /** 05 §4：每个分配的有效配置快照（"不做跨 Assignment 并集"的断言读它）。 */
   assignmentSnapshots(): AssignmentSnapshot[]
+  /** WP69（54）：场景里现配出来的分配登记进快照（`position.staff` 用）。 */
+  registerAssignment(a: Assignment): void
   gateway(): ModelGatewayApi
   /** 场景 `inject.budget`：换一套预算重建网关（BudgetLedger 的 caps 在构造时固定）。 */
   setBudget(budget: ModelGatewayPolicy['budget']): void
@@ -1965,6 +1973,16 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       // 46 §2 I3：这一拍里被定了的 membership 卡，效果在这里落地
       await settleMemberships()
       return { expired: expired.length, escalated, sampled }
+    },
+    /**
+     * WP69（54）：场景里新配出来的分配也要进快照。
+     *
+     * `assignmentSnapshots` 数的是这个世界**建出来的**那些分配（05 §4 的"不做并集"
+     * 就是照它一条条比的）。岗位入口会在场景跑的过程中现配岗（`position.staff`），
+     * 不登记进来的话，那条断言会以为这个人只有一条分配、直接判"没有意义"。
+     */
+    registerAssignment(a) {
+      created.set(`${a.person_id}|${a.role_id}@${a.workspace_id}`, a)
     },
     assignmentSnapshots() {
       const out: AssignmentSnapshot[] = []
