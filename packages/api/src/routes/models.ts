@@ -58,6 +58,14 @@ export type ModelProviderKind =
   | 'deepseek'
   /** 任何 OpenAI 兼容网关：OpenAI 本身、Moonshot、通义、智谱、本地 Ollama…… */
   | 'openai_compatible'
+  /**
+   * 49 M2「用 agentsws 的」：走我们云上的服务入口（`/v1/ai`），按积分扣。
+   *
+   * 与前两种的差别只有一条——**`api_key` 不由用户填**。它是 WP58 那把工作区服务令牌，
+   * 运行时从本机加密库取（`cloud.workspace_token`）；还没关联账号就挂不上，
+   * 界面上显示"先在设置 → 账号与积分里关联账号"。
+   */
+  | 'agentsws_cloud'
 
 /**
  * 一个 provider 的对外形状。**这里没有、也不会有 key 字段。**
@@ -323,7 +331,7 @@ export function parseModelId(id: string): ModelRef | undefined {
 
 // ── 校验 ───────────────────────────────────────────────────────────────
 
-const KIND = z.enum(['deepseek', 'openai_compatible'])
+const KIND = z.enum(['deepseek', 'openai_compatible', 'agentsws_cloud'])
 const REGION = z.enum(['cn', 'global'])
 const PURPOSE = z.enum(['run', 'extraction', 'reflection', 'embedding', 'judge', 'transcription'])
 

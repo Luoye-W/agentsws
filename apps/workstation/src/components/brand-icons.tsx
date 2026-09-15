@@ -129,6 +129,9 @@ const ICONS: Record<string, IconChoice> = {
   // Simple Icons 里没有 OpenAI（品牌方要求下架）；这张卡说的也是"任何 OpenAI 兼容
   // 网关"，不是 OpenAI 这家公司，所以走首字母徽标而不是去别处扒一个标志回来。
   openai_compatible: { kind: 'letter', letter: 'O' },
+  // 49 M2「用 agentsws 的」那张卡。这一家是我们自己，没有第三方商标可用，
+  // 也不该去别处扒一个——首字母徽标跟着主题走，与 openai_compatible 同一档。
+  agentsws_cloud: { kind: 'letter', letter: 'A' },
 }
 
 /** 这个 id 有没有专属图标（`false` = 会落到通用插头）。 */

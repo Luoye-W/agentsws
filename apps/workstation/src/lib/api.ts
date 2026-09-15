@@ -1034,7 +1034,8 @@ export const detectMailbox = (email: string, assignment?: string): Promise<Mailb
 // 同一条纪律：**API key 只经 `saveModelProvider` 这一条路出去**，原生 `<form>` 收集、
 // 直接打到本机服务进程。`listModelProviders` 回来的只有 `has_key` 这个布尔值。
 
-export type ModelProviderKind = 'deepseek' | 'openai_compatible'
+/** 49 M2 起有第三种：`agentsws_cloud`（走我们云上的服务入口，按积分扣，不填 key）。 */
+export type ModelProviderKind = 'deepseek' | 'openai_compatible' | 'agentsws_cloud'
 
 export type ModelPurposeName =
   | 'run'

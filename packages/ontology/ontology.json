@@ -8,6 +8,7 @@
     "packages/contracts/src/blocks.ts",
     "packages/contracts/src/changes.ts",
     "packages/contracts/src/channels.ts",
+    "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/common.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/data.ts",
@@ -33,7 +34,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "317dbe57055788255638bdf31cdfaf40",
+  "source_digest": "12d8444065c206d76d1b3b8b7e95d2d9",
   "objects": [
     {
       "id": "ad_set",
