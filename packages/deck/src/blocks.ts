@@ -122,6 +122,10 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   email_marketing: '邮件营销后台',
   tracking: '物流追踪',
   reviews: '评价应用',
+  // WP67（48 §5.2）：红人库是我们自己的库，永远算连上；渠道那一侧五个连接器
+  // 都还是"待增加"，所以那一块永远走"还没连"那一支（36 §3）。
+  kol: '红人库',
+  kol_channel: '渠道数据',
 }
 
 /** 「查看完整报告 →」外链（36 §3 三层链路的最后一层）。 */
@@ -221,6 +225,25 @@ const FULFILLMENT_BLOCKS = (): BlockDef[] => [
   block('fulfillment.exceptions', 'table', '物流异常', 'shipments.exceptions'),
 ]
 
+/**
+ * WP67（48 §5.1 面板五个分块）：找人 / 建联 / 合作 / 审核 / 归因。
+ *
+ * 五条渠道职责共用这一组积木（骨架相同，48 §5.1）。分块**不按渠道再拆一遍**：
+ * 一个人手上挂着 YouTube 与 Instagram 两条职责时，他看到的是两个岗位视图，
+ * 每个视图里各五块——而不是一个视图里十块。
+ *
+ * 五块全走 `kol` 这个源（我们自己的库，永远算连上）。**渠道那一侧的数据一块都不放**：
+ * 五个连接器都还是"待增加"，放进来就是五块永远写着"还没连"的空表，
+ * 而这条职责没有连接器照样干得了活（导入 + 公共库）。
+ */
+const KOL_BLOCKS = (): BlockDef[] => [
+  block('kol.discovery', 'table', '找人清单', 'kol.discovery'),
+  block('kol.funnel', 'table', '建联漏斗', 'kol.outreach_funnel'),
+  block('kol.collaborations', 'table', '合作进行中', 'kol.collaborations'),
+  block('kol.pending_deliverables', 'table', '待审交付物', 'kol.pending_deliverables'),
+  block('kol.attribution', 'table', '归因', 'kol.attribution'),
+]
+
 const QUEUE_BLOCKS = (): BlockDef[] => [
   block('records.timeline', 'timeline', '记录', 'records.timeline'),
 ]
@@ -249,6 +272,16 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   ],
   // WP63（51 §2.2）：内容与博客的面板 = 草稿与发布（店铺后台）+ 待发布队列 + 流量（GSC）
   'dtc.content': () => [...CONTENT_BLOCKS(), ...CONTENT_QUEUE_BLOCKS(), ...GSC_BLOCKS()],
+  // WP67（48 §5.1）：五条渠道职责，面板骨架相同（找人 / 建联 / 合作 / 审核 / 归因）。
+  //
+  // 一块店铺后台的积木都不放：红人这条职责的 scopes 里订单是**只读**、没有
+  // store_config / inventory，19 §3 说无权的数据源连「去连接」都不该出。
+  // 归因要读订单，但那是 `kol.attribution` 自己算完之后的数，不是店铺面板。
+  'kol.youtube': () => KOL_BLOCKS(),
+  'kol.facebook': () => KOL_BLOCKS(),
+  'kol.instagram': () => KOL_BLOCKS(),
+  'kol.tiktok': () => KOL_BLOCKS(),
+  'kol.x': () => KOL_BLOCKS(),
 }
 
 export function blocksForRole(role_id: RoleId): BlockDef[] {

@@ -51,6 +51,22 @@ export type HighlightType =
   | 'overdue'
   /** WP64（51 §2.4）：物流单号。标记发货的卡上没有它就不该被批准。 */
   | 'tracking'
+  /**
+   * WP67（48 §5.1）：这条开发信 / 这次合作对着的是谁 + 他多少分。
+   *
+   * 卡面上第一眼要回答"为什么是他"。打分那五项的完整解释在卡里面（`scoring.ts`
+   * 的 `factors`），芯片上只放那个总分——芯片是索引，不是报告。
+   */
+  | 'creator'
+  /** WP67：合作现在走到哪一步了（阶段机的中文名）。 */
+  | 'stage'
+  /**
+   * WP67（48 §5.1 归因）：这条追踪链接带回来多少单 / 多少钱。
+   *
+   * 归不上的订单**不算进来**（`attribution.ts` 的 `unmatched`）——
+   * 这个数宁可小，不能是猜的。
+   */
+  | 'attribution'
 
 export interface DeckHighlight {
   type: HighlightType
@@ -202,6 +218,16 @@ export type DataSourceId =
   /** WP64（51 §2.4）：物流追踪（AfterShip / 17track）。 */
   | 'tracking'
   | 'reviews'
+  /**
+   * WP67（48 §5.2）：**我们自己的红人库**。永远算连上——它就在这台机器上，
+   * 没有"去连接"这回事（同 `approvals`）。
+   */
+  | 'kol'
+  /**
+   * WP67（48 §5.1）：渠道那一侧（YouTube Data / IG Graph / TikTok Research /
+   * FB Graph / X API）。五个连接器都还是"待增加"，所以这一块永远走"还没连"那一支。
+   */
+  | 'kol_channel'
 
 export interface DataSourceStatus {
   id: DataSourceId
@@ -341,6 +367,58 @@ export interface PostRow {
   clicks?: number
 }
 
+/**
+ * WP67：面板五块要的那几行（48 §5.1 找人 / 建联 / 合作 / 审核 / 归因）。
+ *
+ * 形状是**投影**不是对象本身：找人清单要的是"名字 + 渠道 + 粉丝 + 分"，
+ * 不是一整条 `PlatformAccount`；归因要的是"链接 → 点击 / 订单 / 收入"，
+ * 不是 UTM 五参数。数字全是算好的（29 §1「数字不经模型手」）。
+ */
+export interface KolDeckData {
+  /** 找人清单（已按分排序；`blocked` 有值的排在后面，见 `kol-core` 的 `rankCreators`）。 */
+  discovery: {
+    creator_id: string
+    display_name: string
+    channel: string
+    handle: string
+    followers?: number
+    score: number
+    /** 数据不可信时那一句（刷粉护栏）。 */
+    blocked?: string
+  }[]
+  /** 建联漏斗：阶段 → 人数（空的格子也在，形状不随数据变）。 */
+  funnel: { stage: string; label: string; count: number }[]
+  /** 进行中的合作。 */
+  collaborations: {
+    collaboration_id: string
+    display_name: string
+    channel: string
+    stage: string
+    stage_label: string
+    budget?: number
+    currency: string
+  }[]
+  /** 待审交付物。 */
+  pending_deliverables: {
+    deliverable_id: string
+    display_name: string
+    channel: string
+    kind: string
+    due_at: string
+    url?: string
+  }[]
+  /** 归因表：一条链接一行。 */
+  attribution: {
+    tracked_link_id: string
+    display_name: string
+    channel: string
+    clicks: number
+    orders: number
+    revenue: number
+    currency: string
+  }[]
+}
+
 export interface QueryContext {
   now: Iso8601
   /** 工作区时区偏移（分钟），日界线按它切 */
@@ -357,6 +435,13 @@ export interface QueryContext {
   reviews?: ReviewRow[]
   /** WP63：文章与页面。 */
   posts?: PostRow[]
+  /**
+   * WP67（48 §5.2）：红人库的五张投影（宿主从 `KolStore` 里读出来递进来）。
+   *
+   * 不给 = 这台机器上还没有红人岗位，五块积木一律空——**不是**"还没连"
+   * （红人库永远算连上），是真的一条都没有。界面上那两句话不一样。
+   */
+  kol?: KolDeckData
   /**
    * WP63：这个岗位判「不正常」用的那几个数（职责 yml 的 `thresholds`）。
    *

@@ -52,6 +52,7 @@ import type {
 import { brandNameOf } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
+import { withOwnSources } from '@agentsws/deck'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
 import {
   cardsToPack,
@@ -130,7 +131,7 @@ import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { importKnowledgePack } from './knowledge-pack.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
-import { createKolStore } from './kol.js'
+import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
@@ -256,6 +257,14 @@ export const BUNDLED_ROLES = [
   'dtc.fulfillment',
   // WP63（51 §2.2）：第二条——内容与博客
   'dtc.content',
+  // WP67（48 §5.1）：红人营销岗位的五条渠道职责。
+  // 种岗位那一步会把解析不到的职责筛掉，所以五条都得在这张表里——
+  // 少一条，首次设置向导里的"红人营销"就少一个勾。
+  'kol.youtube',
+  'kol.instagram',
+  'kol.tiktok',
+  'kol.facebook',
+  'kol.x',
 ] as const
 
 /**
@@ -1043,8 +1052,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           : { refreshIntervalMs: options.liveDataIntervalMs }),
       })
     }
-    const workData: WorkstationDataSource =
+    const baseWorkData: WorkstationDataSource =
       liveData ?? connections.wrapDataSource(injected ?? emptyDataSource())
+    /**
+     * WP67（48 §5.1）：红人面板那五块**永远**从这个品牌自己的红人库来。
+     *
+     * 包在最外层而不是塞进 `liveData` / `emptyDataSource` 各写一份：红人库不是
+     * 一个"连接"（它就在这台机器上），所以它与上游连没连、demo 挂没挂合成世界
+     * 都无关——哪一条路装配出来的数据源，红人那一块都是同一个来源。
+     */
+    const workData: WorkstationDataSource = {
+      ...baseWorkData,
+      kol: () => kolDeckData(kol, { now: clock.now() }),
+      // 红人库不是"连接"，所以它不在那两份写死的数据源表里（见 `withOwnSources`）
+      sources: () => withOwnSources(baseWorkData.sources()),
+    }
     // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
     connections.onConnectionChange(() => {
       liveData?.invalidate()
@@ -1383,6 +1405,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
   meetings.bind(boot.work)
+
+  /*
+   * WP67（48 §5.1）：demo 里给红人库放几行。
+   *
+   * 红人库是我们自己的库，合成 pack 里没有它的行——不放的话红人营销岗位的五块
+   * 面板在演示与截图里全是空的，"这个岗位长什么样"就无从谈起。
+   * 只在挂了合成世界时放（真环境的库该是用户自己导进去的）。
+   */
+  if (mount !== undefined) seedDemoKol(boot.kol, clock.now())
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {

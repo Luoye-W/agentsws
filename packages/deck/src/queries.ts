@@ -746,6 +746,123 @@ const QUERY_LIST: QueryDef[] = [
     run: () => EMPTY_TABLE,
   },
   { name: 'shipments.exceptions', source: 'tracking', returns: 'table', run: () => EMPTY_TABLE },
+  // ── WP67（48 §5.1）：红人营销面板五块 ────────────────────────────────
+  //
+  // 五条都走 `kol` 这个源（我们自己的库，永远算连上）。`ctx.kol` 不给 = 这台机器上
+  // 还没有红人岗位，五块一律空表——**与"还没连"不是一回事**（36 §3）：
+  // 前者是"还没有人，先导入一张表"，后者是"去连接页把 YouTube 连上"。
+  //
+  // 数字一个都不在这里现算：分是 `kol-core` 的 `rankCreators` 算完的，
+  // 点击 / 订单 / 收入是归因那一跳回填进库的（29 §1「数字不经模型手」）。
+  {
+    name: 'kol.discovery',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: '红人' },
+        { key: 'channel', label: '渠道' },
+        // 粉丝数与分**不是钱**：不标 `count` 的话前端会把 48000 渲染成 US$48,000.00
+        { key: 'followers', label: '粉丝', align: 'right' as const, format: 'count' as const },
+        { key: 'score', label: '分', align: 'right' as const, format: 'count' as const },
+        { key: 'note', label: '备注' },
+      ],
+      rows: (ctx.kol?.discovery ?? []).slice(0, 20).map((r) => ({
+        name: r.display_name,
+        channel: r.channel,
+        followers: r.followers ?? 0,
+        score: r.score,
+        // 刷粉护栏那句话就在清单上说——把人悄悄拿掉，用户会以为我们没搜到他
+        note: r.blocked ?? '',
+      })),
+    }),
+  },
+  {
+    name: 'kol.outreach_funnel',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'stage', label: '阶段' },
+        { key: 'count', label: '人数', align: 'right' as const, format: 'count' as const },
+      ],
+      // 空的格子也出（`collaborationFunnel` 那一条）：漏斗的形状不能随数据变
+      rows: (ctx.kol?.funnel ?? []).map((b) => ({ stage: b.label, count: b.count })),
+    }),
+  },
+  {
+    name: 'kol.collaborations',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: '红人' },
+        { key: 'channel', label: '渠道' },
+        { key: 'stage', label: '阶段' },
+        { key: 'budget', label: '预算', align: 'right' as const },
+      ],
+      rows: (ctx.kol?.collaborations ?? []).slice(0, 20).map((r) => ({
+        name: r.display_name,
+        channel: r.channel,
+        stage: r.stage_label,
+        budget: r.budget ?? 0,
+        currency: r.currency,
+      })),
+    }),
+  },
+  {
+    name: 'kol.pending_deliverables',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: '红人' },
+        { key: 'kind', label: '形态' },
+        { key: 'due_at', label: '交付期限' },
+        { key: 'url', label: '链接' },
+      ],
+      // 按期限正序：最急的在最上面，这就是队列本身（同 `orders.unfulfilled`）
+      rows: (ctx.kol?.pending_deliverables ?? [])
+        .slice()
+        .sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at))
+        .slice(0, 20)
+        .map((r) => ({
+          name: r.display_name,
+          kind: r.kind,
+          due_at: r.due_at,
+          url: r.url ?? '',
+        })),
+    }),
+  },
+  {
+    name: 'kol.attribution',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: '红人' },
+        { key: 'channel', label: '渠道' },
+        // 点击与订单是条数，只有收入是钱
+        { key: 'clicks', label: '点击', align: 'right' as const, format: 'count' as const },
+        { key: 'orders', label: '订单', align: 'right' as const, format: 'count' as const },
+        { key: 'revenue', label: '收入', align: 'right' as const, format: 'money' as const },
+      ],
+      // 按收入倒序。归不上的订单一分钱都不在这张表里（`attribution.ts` 的 `unmatched`）——
+      // 这个数宁可小，不能是猜的。
+      rows: (ctx.kol?.attribution ?? [])
+        .slice()
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 20)
+        .map((r) => ({
+          name: r.display_name,
+          channel: r.channel,
+          clicks: r.clicks,
+          orders: r.orders,
+          revenue: r.revenue,
+          currency: r.currency,
+        })),
+    }),
+  },
 ]
 
 const EMPTY_SCALAR: ScalarResult = { value: 0, previous: 0, spark: [0, 0, 0, 0, 0, 0, 0] }

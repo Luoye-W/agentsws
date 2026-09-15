@@ -24,10 +24,11 @@ describe('service → 数据源', () => {
 })
 
 describe('dataSourcesFromConnections', () => {
-  it('一条都没连：只有工作队列是连上的，其余全「去连接」', () => {
+  it('一条都没连：只有我们自己的那两个库是连上的，其余全「去连接」', () => {
     const rows = dataSourcesFromConnections([])
     expect(rows.map((r) => r.id)).toEqual([...ALL_DATA_SOURCES])
-    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual(['approvals'])
+    // WP67：红人库也在这台机器上（六张表），跟工作队列一样没有"去连接"这回事
+    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual(['approvals', 'kol'])
     // 没连上就别给「查看完整报告」外链
     expect(rows.find((r) => r.id === 'shop')?.report_url).toBeUndefined()
   })

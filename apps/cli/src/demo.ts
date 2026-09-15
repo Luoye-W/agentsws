@@ -736,7 +736,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 合成 pack 里挂店铺管理的是运营李默，而 demo 登录的是店主——于是给店主也挂一条
   // （3 人公司里店主本来就什么都管一点）。不挂的话，51 §2.1 那一整页面板在 demo 里
   // 一眼都看不到，截图与人工验收都无从谈起。
-  for (const role of ['dtc.store', 'dtc.content']) {
+  // WP67（48 §5.1）：红人营销岗位也给店主挂一条——理由与上面那两条逐字相同。
+  // 3 人 pack 的 `assignments.yml` 里 `kol.youtube` 挂在运营李默身上，
+  // 而 demo 只以王岚的身份登录；不挂这一条，找人 / 建联 / 合作 / 审核 / 归因
+  // 这五块在 demo 里一眼都看不到。
+  for (const role of ['dtc.store', 'dtc.content', 'kol.youtube']) {
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,

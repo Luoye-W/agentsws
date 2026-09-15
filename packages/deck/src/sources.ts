@@ -34,10 +34,23 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   shopify_email: ['email_marketing'],
   aftership: ['tracking'],
   track17: ['tracking'],
+  // WP67（48 §5.1）：五条渠道。同上——现在没有一条真连接会命中（目录里那五张卡
+  // 的状态是"还没接"），映射先立着：接上那天只改连接目录，不改 deck。
+  youtube_data: ['kol_channel'],
+  instagram_graph: ['kol_channel'],
+  tiktok_research: ['kol_channel'],
+  facebook_graph: ['kol_channel'],
+  x_api: ['kol_channel'],
 }
 
-/** 工作队列（审批项）是我们自己的库，永远算连上。 */
-export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals']
+/**
+ * 我们自己的库，永远算连上。
+ *
+ * WP67 加进 `kol`：红人库就在这台机器上（六张表，`apps/server/src/kol.ts`），
+ * 没有"去连接"这回事。**空的红人库与没连的渠道是两件事**——前者说"还没有人，
+ * 先导入一张表"，后者说"去连接页把 YouTube 连上"，界面上那两句话不能混。
+ */
+export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol']
 
 /** 全部数据源，按面板里的出场顺序。 */
 export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
@@ -50,6 +63,8 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'email_marketing',
   'tracking',
   'reviews',
+  'kol',
+  'kol_channel',
 ]
 
 /**
@@ -61,6 +76,10 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
 export const PLANNED_SOURCE_NOTES: Partial<Record<DataSourceId, string>> = {
   reviews:
     '评价应用（Judge.me / Loox）还没接上——连接目录里已经登记为"待增加"，接上了这一块自己就有数了。',
+  // WP67（48 §5.1）：五个渠道连接器都还是"待增加"。这一句的后半段要紧——
+  // 这条职责没有它照样干得了活，别让人以为岗位是坏的。
+  kol_channel:
+    '五个渠道的接口（YouTube / Instagram / TikTok / Facebook / X）都还没接上——连接目录里已经登记为"待增加"。红人营销这几条职责不靠它也能用：把你手上的红人表导进来，建联、合作、审核、归因一样不少。',
 }
 
 /** 算连接状态时只认这个形状——**没有也不可能有凭据字段**。 */
@@ -107,6 +126,26 @@ export function dataSourcesFromConnections(
       ...(note === undefined ? {} : { note }),
     }
   })
+}
+
+/**
+ * 把**我们自己的**那几个数据源补进一份既有的表里。
+ *
+ * WP67：demo 接进来的合成世界、`emptyDataSource()` 这两份写死的表是 WP20 之前
+ * 留下来的，它们列的是"有哪些连接"。红人库不是连接（它就在这台机器上），
+ * 所以那两份表里不会有它——不补的话，红人面板五块全显示「去连接」，
+ * 而那个按钮点进去无处可点。补进来的一律 `connected: true`（`ALWAYS_CONNECTED`）。
+ *
+ * 已经在表里的不动：调用方自己写了什么状态就是什么状态。
+ */
+export function withOwnSources(base: readonly DataSourceStatus[]): DataSourceStatus[] {
+  const have = new Set(base.map((s) => s.id))
+  const missing = ALWAYS_CONNECTED.filter((id) => !have.has(id)).map((id) => ({
+    id,
+    label: SOURCE_LABELS[id],
+    connected: true,
+  }))
+  return [...base, ...missing]
 }
 
 /**

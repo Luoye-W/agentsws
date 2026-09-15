@@ -830,6 +830,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP63 把 15 人 pack 自带的那份副本删了——两份真源迟早会各改各的。
     loadBundledRole('dtc.store'),
     loadBundledRole('dtc.content'),
+    // WP67（48 §5.1）：红人营销岗位的五条渠道职责。3 人 pack 里"运营"挂着
+    // `kol.youtube`（`assignments.yml`），另外四条躺在库里——躺着不产生任何行为，
+    // 装它们是为了首次设置向导里"红人营销"那个岗位显示五条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面客服那两条的理由）。
+    loadBundledRole('kol.youtube'),
+    loadBundledRole('kol.instagram'),
+    loadBundledRole('kol.tiktok'),
+    loadBundledRole('kol.facebook'),
+    loadBundledRole('kol.x'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))

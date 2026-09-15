@@ -32,7 +32,13 @@ import type {
   TrackedLink,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { applyMerge } from '@agentsws/kol-core'
+import type { KolDeckData } from '@agentsws/deck'
+import {
+  applyMerge,
+  collaborationFunnel,
+  collaborationStageName,
+  rankCreators,
+} from '@agentsws/kol-core'
 import type BetterSqlite3 from 'better-sqlite3'
 
 /** 库里的六张表。名字与对象类型一一对应，不另起别名。 */
@@ -245,4 +251,210 @@ export function createKolStore(options: KolStoreOptions): KolStore {
 
     close: () => backend.close(),
   }
+}
+
+/**
+ * `KolStore` → 面板五块要的那份投影（48 §5.1）。
+ *
+ * 放在这里而不是 deck 里：deck 是**纯**的（29 §1，它连库都不认识），
+ * 而这一步要查三张表把"这条合作是跟谁的"拼出来。deck 拿到的已经是算好的行。
+ *
+ * 三件事在这一跳定死：
+ *
+ * 1. **找人清单的分是当场算的，用同一份纯函数**（`kol-core` 的 `rankCreators`）。
+ *    算法是确定的：同样的账号 + 同样的条件 = 同样的分，所以"当场算"与"存一份"
+ *    在数值上没有差别，而存一份要多一张表和一条"什么时候重算"的规矩。
+ *    调用方按 campaign 定了条件（类目 / 语言 / 粉丝带）时用 `scores` 盖过去——
+ *    那才是"这次找人要什么样的人"，面板上的默认条件不知道这件事。
+ * 2. **归因的数字原样端出去**：`clicks` / `orders` / `revenue` 是归因那一跳回填的。
+ * 3. 阶段的中文名只有 `kol-core` 的 `stages.ts` 那一份翻译。
+ */
+export function kolDeckData(
+  store: Pick<KolStore, 'creators' | 'accounts' | 'collaborations' | 'deliverables' | 'links'>,
+  options: {
+    /** 算"数据新鲜度"那一项要的现在时刻。不给就当拿不到——那一项 0 分并说明白。 */
+    now?: string
+    /** 这次找人的条件算出来的分（按 `PlatformAccount.id`）。给了就盖过默认那一份。 */
+    scores?: ReadonlyMap<string, { score: number; blocked?: string }>
+  } = {},
+): KolDeckData {
+  const creators = new Map(store.creators().map((c) => [c.id, c]))
+  const nameOf = (creator_id: string): string =>
+    creators.get(creator_id)?.display_name ?? creator_id
+  const collaborations = store.collaborations()
+  const collabById = new Map(collaborations.map((c) => [c.id, c]))
+
+  const accounts = store.accounts()
+  // 排序（含"刷粉的排在后面而不是剔掉"那一条）也在 `rankCreators` 里，不在这儿重写
+  const ranked = rankCreators(accounts, { now: options.now ?? '' })
+  const discovery = ranked.map(({ account, score }) => {
+    const override = options.scores?.get(account.id)
+    const blocked = override === undefined ? score.blocked : override.blocked
+    return {
+      creator_id: account.creator_id,
+      display_name: nameOf(account.creator_id),
+      channel: account.channel as string,
+      handle: account.handle,
+      ...(account.followers === undefined ? {} : { followers: account.followers }),
+      score: override?.score ?? score.total,
+      ...(blocked === undefined ? {} : { blocked }),
+    }
+  })
+
+  return {
+    discovery,
+    funnel: collaborationFunnel(collaborations),
+    collaborations: collaborations
+      // 已结案与已谢绝的不在"进行中"里
+      .filter((c) => c.stage !== 'closed' && c.stage !== 'declined')
+      .map((c) => ({
+        collaboration_id: c.id,
+        display_name: nameOf(c.creator_id),
+        channel: c.channel as string,
+        stage: c.stage as string,
+        stage_label: collaborationStageName(c.stage),
+        ...(c.budget === undefined ? {} : { budget: c.budget }),
+        currency: c.currency,
+      })),
+    pending_deliverables: store.deliverables({ pending: true }).map((d) => {
+      const collab = collabById.get(d.collaboration_id)
+      return {
+        deliverable_id: d.id,
+        display_name: collab === undefined ? d.collaboration_id : nameOf(collab.creator_id),
+        channel: (collab?.channel ?? '') as string,
+        kind: d.kind as string,
+        due_at: d.due_at,
+        ...(d.url === undefined ? {} : { url: d.url }),
+      }
+    }),
+    attribution: store.links().map((l) => {
+      const collab = collabById.get(l.collaboration_id)
+      return {
+        tracked_link_id: l.id,
+        display_name: collab === undefined ? l.collaboration_id : nameOf(collab.creator_id),
+        channel: (collab?.channel ?? '') as string,
+        clicks: l.clicks,
+        orders: l.orders,
+        revenue: l.revenue,
+        currency: 'USD',
+      }
+    }),
+  }
+}
+
+/**
+ * `agentsws demo` 用的那几条红人数据。
+ *
+ * 为什么要有它：红人库是**我们自己的库**，不是连接器——所以合成世界（`packs/`）
+ * 里没有它的行，而 demo 里如果这五块全是空的，红人营销这个岗位在演示与截图里
+ * 就看不出任何东西。这与 `seedDemoMeetings` 是同一类东西：给一个空库放几行真实形状的数据。
+ *
+ * 数据本身是**演示数据**，不是假装的真数据：两个红人、两条合作、两条交付物、
+ * 两条追踪链接，数字都对得上（归因那两行的收入就是那两条链接回填的）。
+ * 一条联系方式都不放：那要经加密库，演示不该往加密库里塞东西。
+ */
+export function seedDemoKol(store: KolStore, now: string): void {
+  if (store.creators().length > 0) return
+  const observed_at = now
+
+  store.saveCreator({ id: 'cre_demo_1', display_name: 'Gadget Jonas', merged_from: [] })
+  store.saveCreator({ id: 'cre_demo_2', display_name: 'Desk Rosa', merged_from: [] })
+  store.saveCreator({ id: 'cre_demo_3', display_name: 'Cable Kevin', merged_from: [] })
+
+  store.saveAccount({
+    id: 'pa_demo_1',
+    creator_id: 'cre_demo_1',
+    channel: 'youtube',
+    handle: 'gadgetjonas',
+    url: 'https://www.youtube.com/@gadgetjonas',
+    followers: 48_000,
+    engagement_rate: 0.062,
+    category: '数码',
+    language: 'de',
+    region: 'DE',
+    observed_at,
+  })
+  store.saveAccount({
+    id: 'pa_demo_2',
+    creator_id: 'cre_demo_2',
+    channel: 'youtube',
+    handle: 'deskrosa',
+    url: 'https://www.youtube.com/@deskrosa',
+    followers: 31_000,
+    engagement_rate: 0.041,
+    category: '家居',
+    language: 'en',
+    region: 'GB',
+    observed_at,
+  })
+  // 刷粉护栏那一条：清单上要看得见"这个数不可信"，而不是悄悄少一行
+  store.saveAccount({
+    id: 'pa_demo_3',
+    creator_id: 'cre_demo_3',
+    channel: 'youtube',
+    handle: 'cablekevin',
+    url: 'https://www.youtube.com/@cablekevin',
+    followers: 620_000,
+    engagement_rate: 0.002,
+    category: '数码',
+    language: 'en',
+    region: 'US',
+    observed_at,
+  })
+
+  store.saveCollaboration({
+    id: 'col_demo_1',
+    creator_id: 'cre_demo_1',
+    channel: 'youtube',
+    stage: 'delivering',
+    budget: 400,
+    currency: 'USD',
+    agreed_at: now,
+  })
+  store.saveCollaboration({
+    id: 'col_demo_2',
+    creator_id: 'cre_demo_2',
+    channel: 'youtube',
+    stage: 'contacted',
+    currency: 'USD',
+  })
+
+  const day = 86_400_000
+  store.saveDeliverable({
+    id: 'dlv_demo_1',
+    collaboration_id: 'col_demo_1',
+    kind: 'video',
+    url: 'https://www.youtube.com/watch?v=demo1',
+    due_at: new Date(Date.parse(now) + 3 * day).toISOString(),
+    submitted_at: now,
+    review: 'pending',
+    notes: '正片交了，描述区的追踪链接还没加。',
+  })
+  store.saveDeliverable({
+    id: 'dlv_demo_2',
+    collaboration_id: 'col_demo_1',
+    kind: 'post',
+    due_at: new Date(Date.parse(now) + 7 * day).toISOString(),
+    review: 'pending',
+  })
+
+  store.saveLink({
+    id: 'tl_demo_1',
+    collaboration_id: 'col_demo_1',
+    url: 'https://nordvolt.example/p/charger-65w',
+    utm: { source: 'youtube', medium: 'kol', campaign: 'autumn-desk', content: 'col_demo_1' },
+    affiliate_code: 'GADGETJO10',
+    clicks: 318,
+    orders: 5,
+    revenue: 645.5,
+  })
+  store.saveLink({
+    id: 'tl_demo_2',
+    collaboration_id: 'col_demo_2',
+    url: 'https://nordvolt.example/p/desk-hub',
+    utm: { source: 'youtube', medium: 'kol', campaign: 'autumn-desk', content: 'col_demo_2' },
+    clicks: 41,
+    orders: 0,
+    revenue: 0,
+  })
 }

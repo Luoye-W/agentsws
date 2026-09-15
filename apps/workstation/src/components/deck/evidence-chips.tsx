@@ -87,6 +87,11 @@ const TONE: Record<DeckHighlight['type'], string> = {
   suppressed: 'border-border text-muted-foreground',
   overdue: 'border-destructive/50 text-destructive',
   tracking: 'border-border text-muted-foreground',
+  // WP67：红人是谁、合作走到哪一步、这条链接带回来多少——都是中性事实。
+  // 归因那一格给强调色：它是这个岗位存在的理由。
+  creator: 'border-chart-2/40 text-foreground',
+  stage: 'border-border text-muted-foreground',
+  attribution: 'border-chart-1/50 text-foreground',
 }
 
 export function Highlights({
