@@ -154,6 +154,9 @@ importers:
       '@agentsws/knowledge':
         specifier: workspace:*
         version: link:../../packages/knowledge
+      '@agentsws/kol-core':
+        specifier: workspace:*
+        version: link:../../packages/kol-core
       '@agentsws/learning':
         specifier: workspace:*
         version: link:../../packages/learning
@@ -585,6 +588,15 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/kol-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/kol-public:
     dependencies:
       '@agentsws/contracts':
@@ -802,6 +814,9 @@ importers:
       '@agentsws/knowledge':
         specifier: workspace:*
         version: link:../knowledge
+      '@agentsws/kol-core':
+        specifier: workspace:*
+        version: link:../kol-core
       '@agentsws/learning':
         specifier: workspace:*
         version: link:../learning

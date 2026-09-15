@@ -497,6 +497,52 @@ export interface PlannedConnector {
 }
 
 export const PLANNED_CONNECTORS: readonly PlannedConnector[] = [
+  /**
+   * WP67（48 §5.1）：红人营销的五条渠道。
+   *
+   * 为什么五张卡现在就要出：红人营销岗位已经上线，用户在岗位页上点得到
+   * 「YouTube 红人」这条职责。他去连接页找 YouTube 找不到的话，只会以为是
+   * 自己没找对地方。明着标成"待增加"，他知道那是我们还没做。
+   *
+   * 每一条的 `note` 里都写了**这条渠道为什么难**（配额 / 审核制 / 付费档），
+   * 以及**没连也能干什么**——后半句要紧：这五条职责没有连接器一样能用，
+   * 找人靠导入与公共库，建联、合作、审核、归因一样不少。
+   */
+  {
+    service: 'youtube_data',
+    label: 'YouTube Data API',
+    kind: 'youtube_data',
+    data_sources: ['kol_channel'],
+    note: 'YouTube 官方接口。全站一天 10000 单位配额（不是按工作区算的），所以它接上之后也不是无限搜。现在还没做——找人先用导入你手上那张表。',
+  },
+  {
+    service: 'instagram_graph',
+    label: 'Instagram Graph API',
+    kind: 'instagram_graph',
+    data_sources: ['kol_channel'],
+    note: 'Meta 的商业账号接口，权限要过审核。注意它**没有"按关键词搜人"这回事**——只能按名字查明确指名的账号，所以 IG 上找人的主力永远是导入与公共库。',
+  },
+  {
+    service: 'tiktok_research',
+    label: 'TikTok Research API',
+    kind: 'tiktok_research',
+    data_sources: ['kol_channel'],
+    note: '申请制：要向 TikTok 提交用途说明，批了才有数据。没批下来这条职责照常能用，只是找人那一块空着。',
+  },
+  {
+    service: 'facebook_graph',
+    label: 'Facebook Graph API',
+    kind: 'facebook_graph',
+    data_sources: ['kol_channel'],
+    note: '读主页与群组博主要 Meta 的主页权限，审核制。建联走主页私信而不是邮箱——很多主页压根没留邮箱。',
+  },
+  {
+    service: 'x_api',
+    label: 'X API',
+    kind: 'x_api',
+    data_sources: ['kol_channel'],
+    note: 'X 的官方接口是付费档，这条渠道的数据供给要花钱。接上之前找人走导入与公共库。',
+  },
   {
     service: 'judgeme',
     label: 'Judge.me 评价',

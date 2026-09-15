@@ -98,6 +98,56 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
     out.push({ type: 'risk_term', text: cap })
   }
   out.push(...wp64Highlights(item, ctx))
+  out.push(...kolHighlights(item))
+  return out
+}
+
+/**
+ * WP67（48 §5.1）：红人那五张卡上人最先要看的几个数。
+ *
+ * 五张卡不是五个新 kind（36 §2：卡是审批项的投影）——`kol_outreach` /
+ * `kol_collaboration` / `kol_deliverable_review` / `kol_affiliate_code` /
+ * `kol_tracked_link` 这几条 ChangeKind 各自在卡面上多几个芯片，仅此而已。
+ * 合并建议卡与陌生来信卡走的是同一条：它们是别的 kind 的审批项，
+ * 芯片里带上红人是谁。
+ *
+ * 全部从结构化字段里取，一个字不编（37 §1 第 4 行）。
+ */
+function kolHighlights(item: ApprovalItem): DeckHighlight[] {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  const out: DeckHighlight[] = []
+  const kind = str(payload.kind)
+
+  // 「这是谁」+「他多少分」：开发信卡、合作审批卡、合并建议卡、陌生来信卡都要这一行。
+  // 打分那五项的完整解释在卡里面，芯片上只放总分——芯片是索引，不是报告。
+  const who = str(after.creator_name) ?? str(payload.creator_name)
+  const score = num(after.creator_score) ?? num(payload.creator_score)
+  if (who !== undefined)
+    out.push({ type: 'creator', text: score === undefined ? who : `${who} · ${score}` })
+
+  // 合作与交付物：现在走到哪一步了（阶段机的中文名由宿主写进 payload，
+  // `stages.ts` 的 `collaborationStageName` 是唯一一份翻译）。
+  const stage = str(after.stage_label) ?? str(after.review_label)
+  if (stage !== undefined) out.push({ type: 'stage', text: stage })
+
+  // 开发信：抑制名单剔了几个。与群发那一条同一条纪律——查过就报一个数，**哪怕是 0**。
+  if (kind === 'kol_outreach' && after.suppression_checked === true) {
+    const removed = Array.isArray(after.suppressed) ? after.suppressed.length : 0
+    out.push({ type: 'suppressed', text: `${removed}` })
+  }
+
+  // 归因：这条链接带回来多少单 / 多少钱。归不上的订单一分钱都不在里面。
+  if (kind === 'kol_tracked_link') {
+    const orders = num(after.orders)
+    const revenue = num(after.revenue)
+    if (orders !== undefined && revenue !== undefined)
+      out.push({
+        type: 'attribution',
+        text: `${orders} 单 · ${moneyText(revenue, str(after.currency) ?? 'USD')}`,
+      })
+  }
+
   return out
 }
 

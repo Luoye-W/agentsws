@@ -51,6 +51,14 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   collection_edit: 'low',
   review_reply: 'low',
   review_invite: 'low',
+  // WP67（48 §5.1）：红人那五条。开发信对外但改不了钱（禁承诺词表把"改得了钱"
+  // 那一半直接拦死），按 low；合作是一笔钱和一纸条款，按 high；
+  // 审核结论与联盟码对外可见、额度在 mandate 上，按 low；追踪链接只是给链接加参数。
+  kol_outreach: 'low',
+  kol_collaboration: 'high',
+  kol_deliverable_review: 'low',
+  kol_affiliate_code: 'low',
+  kol_tracked_link: 'low',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -79,6 +87,15 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   'publish_product',
   'unpublish_product',
   'promotion',
+  /**
+   * WP67（48 §5.1）：**建合作 / 改预算永远人审**。
+   *
+   * 与群发同理但理由不同：群发是"收不回来"，合作是"这是一笔钱和一纸条款"。
+   * 采纳率再高也只能证明这个 Agent 挑人挑得准，证明不了这个价该给、这个条款该签。
+   * 放在硬顶而不是只写在职责 yml 的 `ceiling: L1` 里——yml 可以被工作区策略放宽，
+   * 硬顶不行（15 §2）。
+   */
+  'kol_collaboration',
 ])
 /**
  * 44 G2：这些变更的**目标是一件具体商品**，于是"目标在不在我管的范围里"这句话才有意义。
@@ -137,6 +154,53 @@ export const REVIEW_INVITE_FORBIDDEN: readonly string[] = [
   'five star',
   'positive review',
   'remove your review',
+]
+
+/**
+ * WP67（48 §5.1「开发信 L2 → L3 且禁承诺」）：开发信正文里**不许出现**的说法。
+ *
+ * 分三类，三类的理由不一样：
+ *
+ * 1. **钱**（"我们付你"/"报酬是"/"we will pay"）——给钱要走 `kol_collaboration`，
+ *    那条永远人审。一封信里写死一个数，等于绕过了那道门。
+ * 2. **白送**（"免费寄样"/"free sample"/"送你一台"）——样品也是成本，而且
+ *    "免费"这个词在这种信里是承诺不是描述。
+ * 3. **保证**（"保证出单"/"guaranteed"/"包爆"）——效果承诺在多数地区是广告法
+ *    直接管的东西，写了就是给商家埋雷。
+ *
+ * 大小写不敏感（调用方先 `toLowerCase()`）。这张表与 `@agentsws/kol-core` 的
+ * 起草那一步共用——那边 `import` 的就是这一个数组，不是抄一份。
+ * **只可加行**（15 §2 对规则集的老规矩）。
+ */
+export const KOL_OUTREACH_FORBIDDEN: readonly string[] = [
+  // 一、钱
+  '我们付你',
+  '报酬是',
+  '稿费',
+  '坑位费',
+  '预付',
+  'we will pay',
+  'we can pay',
+  'payment of',
+  'flat fee of',
+  'paid partnership of',
+  // 二、白送
+  '免费寄样',
+  '免费送',
+  '包邮送你',
+  '送你一台',
+  'free sample',
+  'free product',
+  'send you a free',
+  'no cost to you',
+  // 三、保证
+  '保证出单',
+  '保证销量',
+  '包爆',
+  '一定能',
+  'guaranteed sales',
+  'guaranteed results',
+  'we guarantee',
 ]
 
 /**
@@ -540,6 +604,95 @@ export function evaluateGuardrail(
       // 已发货的订单取消不了（货在路上）——这是事实判断，不是额度，所以 block。
       const shipped = before.fulfillment_status ?? before.fulfillment
       if (shipped === 'fulfilled') block('fulfilled_cannot_cancel', 'unfulfilled', String(shipped))
+      break
+    }
+    /**
+     * WP67（48 §5.1）：开发信。**禁承诺是 block，不是转人审。**
+     *
+     * 理由与 51 §2.1 的邀评合规词表逐字相同：一封写着"我们付你 800 美元、
+     * 样品免费寄"的信，不该存在"人点一下就发出去"的路径——人在一屏卡面上
+     * 判不出这句话有没有超出授权，而对方收到之后会当真。要给钱，去建一条合作
+     * （`kol_collaboration`，永远人审，48 §5.1）。
+     *
+     * 词表在 {@link KOL_OUTREACH_FORBIDDEN}，与 `@agentsws/kol-core` 的起草那一步
+     * 是**同一份**——起草时先自查一遍（尽早给模型反馈），这里是最后一道，
+     * 两边读的是同一个数组，不许各写一张。
+     */
+    case 'kol_outreach': {
+      const body = [after.body, after.subject]
+        .filter((v): v is string => typeof v === 'string')
+        .join('\n')
+        .toLowerCase()
+      const hit = KOL_OUTREACH_FORBIDDEN.find((w) => body.includes(w.toLowerCase()))
+      if (hit !== undefined) block('kol_outreach_commitment', hit, 'found')
+      // 退订 / 抑制名单必查，fail-closed：不报"查过了"就 block（同 `campaign_send`）。
+      // 开发信是**主动外发**，名单上的人一个都不许在里面。
+      if (after.suppression_checked !== true)
+        block('suppression_list_required', 'checked', String(after.suppression_checked ?? 'never'))
+      else {
+        const leaked = suppressedRecipients(strings(after.recipients), strings(after.suppressed))
+        if (leaked.length > 0)
+          block('suppression_list', 0, `${leaked.length}: ${leaked.slice(0, 3).join(', ')}`)
+      }
+      const cap = capNumber(mandate, 'max_outreach_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_outreach_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP67（48 §5.1）：合作。永远人审（`HARD_L1`），这里只判**超没超过人审线**——
+     * 两件事不一样：硬顶说的是"这张卡要人点"，`max_collab_budget` 说的是
+     * "这个价已经超出这条职责该谈的范围"，两条 hit 都要在卡面上看得见。
+     */
+    case 'kol_collaboration': {
+      const budget = change.amount_base ?? num(after.budget)
+      if (budget !== undefined && budget < 0) block('kol_budget_negative', 0, budget)
+      const cap = capNumber(mandate, 'max_collab_budget')
+      if (budget !== undefined && cap !== undefined && budget > cap)
+        review('max_collab_budget', cap, budget)
+      // 阶段机的合法迁移表在 `@agentsws/kol-core` 的 `stages.ts` 里（**只有那一份**）；
+      // 这里只认调用方带进来的结论，没带就不判（老调用方一个字不用改）。
+      if (after.stage_transition_ok === false)
+        block('kol_stage_transition', String(before.stage ?? '?'), String(after.stage ?? '?'))
+      break
+    }
+    /** WP67（48 §5.1）：交付物审核结论。额度是**每天审几条**，防的是"一口气全批了"。 */
+    case 'kol_deliverable_review': {
+      const verdictValue = after.review
+      const allowed = ['approved', 'changes_requested', 'rejected']
+      if (typeof verdictValue !== 'string' || !allowed.includes(verdictValue))
+        block('kol_review_verdict_required', allowed.join('|'), String(verdictValue ?? 'missing'))
+      const cap = capNumber(mandate, 'max_deliverable_reviews_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_deliverable_reviews_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP67（48 §5.1）：联盟折扣码。
+     *
+     * 折扣率与客服的安抚发码、营销的促销码**分账**：同样是"给一个码"，
+     * 红人那条职责只配 `max_affiliate_discount_pct`（默认 20），配了才判。
+     */
+    case 'kol_affiliate_code': {
+      const p = num(after.percent)
+      if (p !== undefined && p < 0) block('kol_discount_negative', 0, p)
+      const cap = capNumber(mandate, 'max_affiliate_discount_pct')
+      if (p !== undefined && cap !== undefined && p > cap)
+        review('max_affiliate_discount_pct', cap, p)
+      break
+    }
+    /**
+     * WP67（48 §5.1）：追踪链接。L3——它不动钱也不发信。
+     *
+     * 唯一的硬判断是 UTM 三个必填参数在不在：少一个，归因表上这条链接带回来的
+     * 订单就归不到任何一次合作头上，等于这条链接白建了。
+     */
+    case 'kol_tracked_link': {
+      const utm = rec(after.utm)
+      const missing = ['source', 'medium', 'campaign'].filter(
+        (k) => typeof utm[k] !== 'string' || (utm[k] as string).trim() === '',
+      )
+      if (missing.length > 0) block('kol_utm_required', 'source,medium,campaign', missing.join(','))
       break
     }
     case 'bid_change':

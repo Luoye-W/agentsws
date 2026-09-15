@@ -11,7 +11,7 @@
  * 3. **渠道与 handle 的形状**：渠道只有五个，handle 去掉 `@`、小写、长度有上限。
  */
 import type { KolChannel, PublicCreatorObservation } from '@agentsws/contracts'
-import { KOL_CHANNELS, MAX_CATEGORIES, PUBLIC_OBSERVATION_FIELDS } from '@agentsws/contracts'
+import { KOL_CHANNEL_IDS, MAX_CATEGORIES, PUBLIC_OBSERVATION_FIELDS } from '@agentsws/contracts'
 import { KolError } from './types.js'
 
 /** handle 的形状：字母、数字、`.`、`_`、`-`。 */
@@ -27,10 +27,10 @@ export const MAX_POSTS_30D = 10_000
 export const MAX_CATEGORY_LENGTH = 40
 
 export function assertChannel(raw: unknown): KolChannel {
-  if (typeof raw === 'string' && (KOL_CHANNELS as readonly string[]).includes(raw))
+  if (typeof raw === 'string' && (KOL_CHANNEL_IDS as readonly string[]).includes(raw))
     return raw as KolChannel
-  throw new KolError('invalid_input', `渠道只能是这五个之一：${KOL_CHANNELS.join(' / ')}。`, {
-    details: { channels: [...KOL_CHANNELS] },
+  throw new KolError('invalid_input', `渠道只能是这五个之一：${KOL_CHANNEL_IDS.join(' / ')}。`, {
+    details: { channels: [...KOL_CHANNEL_IDS] },
   })
 }
 

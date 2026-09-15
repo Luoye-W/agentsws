@@ -1,0 +1,246 @@
+# 48 §5.1 红人营销的第 1 条职责：**YouTube 红人**（WP67）。
+#
+# 五条渠道职责的骨架**完全相同**（48 §5.1 那张表），不同的只有三样：
+# 渠道连接器、grounding 的意图词、还有下面这一段"这条渠道特有的部分"。
+#
+# 为什么按渠道拆而不按功能拆（找人 / 建联 / 合作 / 审核 / 归因）：
+# 09-15 Luoye 定的。理由在使用上——**一条渠道就是一条完整的活儿**：
+# 在 YouTube 上找人、写信、谈、审片、算账是同一个人从头做到尾的一件事；
+# 而"所有渠道的找人"不是任何人的一件事。按功能拆出来的六条职责，
+# 每做成一次合作都要在六条职责之间来回跳，额度与等级还各算各的。
+#
+# 渠道之间**零共享数据**：同一个红人在两条渠道是两条 `platform_account`，
+# 把他们挂到一起的是 `creator`（"同一人合并"出建议卡，人点了才合）。
+#
+# 渠道特有的三件事（48 §5.1 那一列）：
+#
+# 1. **配额是全站的，不是我们的**。Data API 一天 10000 单位是**账号级**的数，
+#    一个进程里记不准，所以我们不自己算——上游说配额没了就照实说，
+#    并告诉用户明天重置、现在先用导入。装作算得出来只会算错。
+# 2. **频道"关于"页的邮箱要人去拿**。那一格要点一下"查看邮件地址"、还带验证码——
+#    所以 `contact_hint` 回的是"在哪儿找"，不是一个抓回来的地址。
+# 3. 交付物是**视频 + 描述区链接**：审核要同时看片子和那条链接（归因全靠它）。
+#
+# 54（岗位是任务主入口）：这条职责是"红人营销"岗位里的一条，主入口在岗位上。
+# 下面 `grounding` 的意图词不只是给检索用的——54 §2 的岗位路由靠**职责名 /
+# 描述短语 / grounding 意图词 / 动作 id / 数据域**这五样在一个岗位的职责集合内
+# 判"这件事该走哪条"。所以意图词写足是这条职责能不能被路由到的前提，
+# 不是可有可无的装饰。
+id: kol.youtube
+version: 1.0.0
+domain: kol
+name: { zh: YouTube 红人, en: YouTube Creators }
+description: YouTube 频道找人与打分、开发信建联、合作与交付物、视频审核、UTM 与联盟码归因
+
+scopes:
+  # 48 §5.1：六个对象域。一个域一把闸——找人那一块谁都看得见，
+  # 联系方式只有建联那一步碰得到（confidential），预算与条款是钱。
+  - { domain: creator, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: platform_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 联系方式的明文在加密库里（只存 `value_ref`），这条 scope 管的是"这条记录看不看得到"
+  - { domain: creator_contact, ops: [read, stage], range: assigned, max_sensitivity: confidential }
+  - { domain: collaboration, ops: [read, stage], range: assigned, max_sensitivity: confidential }
+  - { domain: deliverable, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: tracked_link, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 19：起草开发信要查产品事实卡与合作政策
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  # 归因要读订单（追踪链接的折扣码 / landing_site 去匹配订单）。**只读**：
+  # 红人这条职责一辈子不该改一张订单。
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # **required: false**：没连也能用——找人靠导入你手上那张表与公共红人库，
+  # 建联、合作、审核、归因一样不少。这一格写 true 的话，一个还没申请下来
+  # API 的用户会被挡在这条职责之外，而他本来完全用得起来。
+  - { kind: youtube_data, required: false, grants: [read], ownership: workspace }
+  # 建联那一步要发信（IG / FB 走私信时用不上它，所以也是可选）
+  - { kind: email, required: false, grants: [send], ownership: workspace }
+  # 归因要读订单
+  - { kind: shop, required: false, grants: [read_orders], ownership: workspace }
+
+actions:
+  # 48 §5.1 五个写动作与额度。额度写在**动作**上不写在职责上——
+  # "额度按动作分"那句话的落点（同 51 §2.3 的邮件营销）。
+  - id: stage_outreach
+    target: creator_contact
+    kind: outbound_message
+    mandate:
+      # 一天最多 30 封。这不是技术上限，是"别让人觉得被群发轰炸"的那条线。
+      caps: { max_outreach_per_day: 30 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 30, per: day }
+    route_to: scope_manager
+  - id: stage_collaboration
+    target: collaboration
+    kind: staged_change
+    mandate:
+      # 500 是**人审线**不是禁止线：超过它 guardrail 多报一条 hit，
+      # 卡面上看得见"这个价超出这条职责该谈的范围"。建合作本来就永远人审。
+      caps: { max_collab_budget: 500 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 10, per: day }
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: stage_deliverable_review
+    target: deliverable
+    kind: staged_change
+    mandate:
+      caps: { max_deliverable_reviews_per_day: 20 }
+      window: { max_count: 20, per: day }
+    route_to: scope_manager
+  - id: stage_affiliate_code
+    target: collaboration
+    kind: staged_change
+    mandate:
+      # 20% 与客服的安抚发码、营销的促销码**分账**：同样是"给一个码"，
+      # 三条职责各配各的 cap，配了哪一组就判哪一组。
+      caps: { max_affiliate_discount_pct: 20 }
+      window: { max_count: 20, per: day }
+    route_to: scope_manager
+  - id: stage_tracked_link
+    target: tracked_link
+    kind: staged_change
+    mandate:
+      caps: { max_tracked_links_per_day: 50 }
+      window: { max_count: 50, per: day }
+    route_to: role_holder
+
+automation:
+  # 开发信 L2 起，采纳率够了升 L3（48 §5.1「开发信 L2 → L3」）。
+  # 能升是因为它改不了钱——禁承诺那道闸把"改得了钱"的那一半直接 block 掉了。
+  stage_outreach:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, customer_complaint, manual]
+  # 建合作**永远 L1**。15 §2 的 `HARD_L1` 里有 `kol_collaboration`，
+  # 这里的 `hard_ceiling` 是把同一件事在职责这一层也写出来——
+  # 两处都说，改一处忘另一处的时候有人喊（同 51 §2.3 的群发）。
+  stage_collaboration:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_deliverable_review:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_affiliate_code:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  # 追踪链接 L3：它不动钱也不发信，只是给链接加参数。
+  stage_tracked_link:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 10 }
+    demotion_triggers: [guardrail_hit, manual]
+
+skills: []
+
+home_blocks:
+  # 48 §5.1 面板五个分块：找人 / 建联 / 合作 / 审核 / 归因。
+  # 顺序就是这条渠道上一件事的顺序——面板读下来就是这条职责在干什么。
+  - {
+      id: kol.youtube.discovery,
+      placement: focus,
+      component: table,
+      query: kol.discovery,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: kol.youtube.funnel,
+      placement: role_view,
+      component: table,
+      query: kol.outreach_funnel,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: kol.youtube.collaborations,
+      placement: role_view,
+      component: table,
+      query: kol.collaborations,
+      default_order: 30,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: kol.youtube.pending_deliverables,
+      placement: queue,
+      component: table,
+      query: kol.pending_deliverables,
+      default_order: 40,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: kol.youtube.attribution,
+      placement: role_view,
+      component: table,
+      query: kol.attribution,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：岗位路由在**一个岗位的职责集合内**按这几样判"这件事该走哪条"。
+  # 五条渠道职责的动作 id 与数据域完全一样，所以在红人这个岗位里，
+  # **意图词就是唯一分得开它们的东西**——写不足 = 路由不到。
+  - {
+      name: youtube_intent,
+      intent_terms: [频道, 视频, 订阅, 播放, YouTube, 油管, UP 主, channel, video, subscriber],
+      cue_terms: [粉丝, 订阅数, 互动率, 合作, 开发信, 报价, 交付, 联盟码],
+      tool: search_creators,
+      prefetch: false,
+    }
+  # 19：开发信里说到产品、政策、条款之前先查事实卡（承诺类知识永不自动发布）
+  - {
+      name: facts_before_outreach,
+      intent_terms: [开发信, 建联, 邀约, 合作意向, outreach, collab],
+      cue_terms: [价格, 佣金, 折扣, 样品, 寄样, 条款, 独家, commission, sample],
+      tool: search_policies,
+      prefetch: true,
+    }
+
+notifications:
+  # 建合作永远人审，卡压着不动 = 一次合作黄了，12 小时就催
+  - {
+      event: 'approval.created:stage_collaboration',
+      mode: immediate,
+      recipients: [owner],
+      escalate_after_hours: 12,
+    }
+  - {
+      event: 'approval.created:stage_deliverable_review',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 24,
+    }
+  # 禁承诺被拦下来：这条要立刻让人知道——它意味着起草那一跳写了不该写的话
+  - {
+      event: 'guardrail.hit:kol_outreach_commitment',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  - {
+      event: 'guardrail.hit:suppression_list',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []

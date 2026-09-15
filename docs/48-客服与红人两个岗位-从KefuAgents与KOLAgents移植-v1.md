@@ -186,9 +186,42 @@ Luoye 09-15 定：红人营销**按渠道划分职责**，五个渠道：YouTube
 
 岗位模板"红人营销"= 五条渠道职责，**默认只勾 YouTube 与 Instagram**（KOLAgents 的用户数据：这两条占 80% 用量），其余可勾。
 
+> **WP67 实现落点（§5.1）**
+>
+> | 件 | 在哪 | 关键判断 |
+> |---|---|---|
+> | 五条职责 | `packages/roles/roles/kol/{youtube,facebook,instagram,tiktok,x}.yml` | 骨架逐字相同，不同的只有渠道连接器、grounding 意图词、文件头那段"这条渠道特有的部分"。连接器 **`required: false`**——写 true 的话，一个 TikTok Research API 还没申请下来的用户会被挡在这条职责之外，而他本来完全用得起来（导入 + 公共库） |
+> | 岗位模板 | `packages/roles/positions/kol-marketing.yml` + `apps/server/src/org.ts` 的 `SEED_POSITIONS` | 默认只勾两条。勾上一条比去掉一条容易——去掉之前他得先弄明白那条是干什么的 |
+> | 路由判据 | 五个 yml 的 `grounding` | 54 §2 的岗位路由靠**职责名 / 描述短语 / 意图词 / 动作 id / 数据域**判"这件事走哪条"，而五条渠道职责的动作 id 与数据域**一模一样**——意图词是唯一分得开它们的东西。测试里逐对验证"任意两条之间不互为子集" |
+> | 契约 | `packages/contracts/src/kol.ts` | 六个对象 + `KOL_CHANNELS`；`ObjectType` / `DataDomain` 各加五个，五条新 ChangeKind |
+> | guardrail | `packages/core/src/guardrail.ts` | `kol_collaboration` 进 `HARD_L1`（yml 可以被工作区策略放宽，硬顶不行）；**禁承诺是 block 不是转人审**——一封写着"我们付你 800 美元"的信不该存在"人点一下就发出去"的路径。词表 `KOL_OUTREACH_FORBIDDEN` 分钱 / 白送 / 保证三类，只可加行 |
+> | 数据面 | `apps/server/src/kol.ts`（六张表，按品牌分目录）、`records.ts`（`creator` / `collaboration` 只读，**联系方式一格都不给**）、`catalog.ts` 五张"待增加"卡、`action-side-effects.yml` 五个渠道的读写动作 | 联系方式只存加密库 key 名——`saveContact` 的入参类型里就没有明文那一格 |
+> | 面板与卡 | `packages/deck`（`kol` / `kol_channel` 两个数据源、五块积木、五张卡的芯片） | `kol` 进 `ALWAYS_CONNECTED`（我们自己的库，没有"去连接"这回事）；`kol_channel` 永远"还没连"，那句话里写明"不靠它也能用" |
+> | 模拟 | `packs/dtc-3c-3p/scenarios/kol/*.yml`（三条）→ 30/30 | 禁承诺那条题钉的是 `simulation.kol_outreach_blocked` **真发生过**——出不来就说明起草那一跳自己扫一遍就绕过去了，而闸根本没被调用 |
+>
+> 截图 `docs/assets/workstation/kol-position.png`（红人营销岗位页：找人清单 + 建联漏斗 + 合作进行中 + 待审交付物 + 归因）。
+
 ### 5.2 本地（开源本体）：`@agentsws/kol-core` = 跨渠道共用的**能力**，不是职责
 
 同 `support-core` 纪律。十个模块同 v1，但按"能力"归类而不是按职责：阶段机（合作与交付物）、打分、开发信起草与禁承诺、回复分类与陌生来信、日配额 / 序列 / 合规、同一人合并、campaign 向导（一个 campaign 跨渠道挑人，但每个渠道的动作仍走各自职责的额度）、UTM 与归因、Excel 导入、URL 解析（认五个渠道的链接）。新对象类型进契约与登记表：`creator` / `platform_account`（带 `channel`）/ `creator_contact` / `collaboration` / `deliverable` / `tracked_link`。渠道适配器 `packages/kol-core/src/channels/{youtube,facebook,instagram,tiktok,x}.ts`：各自的搜索、资料读取、基准、私信 / 邮箱建联口；凭据（平台 token）由用户在原生表单自己填进本机加密库，或按 49 M2 开关"用 agentsws 的"走云上配额池。
+
+> **WP67 实现落点（§5.2）**：`packages/kol-core`，十个模块 + 五个渠道适配器接口 +
+> 公共库客户端接口，94 个单测。纪律同 `support-core`：纯逻辑 + 注入 IO，
+> 没有 `Date.now()`、没有 fetch、没有模型调用、碰不到一个凭据。
+>
+> | 模块 | 一句话 | 这个模块最要紧的那条判断 |
+> |---|---|---|
+> | `stages` | 合作与交付物阶段机 | **全仓唯一**一份合法迁移表；非法跳转抛人话（"还没建联就说交付完了"），不是 `invalid transition`——这句话最后会出现在卡面上。`closed` 是终态：再合作一次要新建一条，否则一条记录挂着两次合作的预算，归因永远算不清 |
+> | `scoring` | 五项打分，每一项带一句带数的"为什么" | 刷粉护栏出 `blocked`，**与低分分得开**：60 分是"不太合适"，`blocked` 是"这个数不可信"。排序时刷粉的排在后面而不是剔掉——悄悄拿掉会让人以为我们没搜到他 |
+> | `outreach` | 起草、禁承诺自查、序列、日配额 | 词表 `import` 的就是 core 里那一个数组；自查是为了早点给模型反馈，**不代替** guardrail 那道闸。挑今天发给谁时名单 / 重复 / 配额一起看——分三处调总有一处会漏（WP55 立的规矩） |
+> | `replies` | 封闭六类 | 分不出来就是 `unknown`；"这次不做"与"以后都别找我"分成 `declined` 与 `opt_out` 两格，只有后者进抑制名单 |
+> | `merge` | 同一人合并 | **只出建议卡，永远不自动合**；判断只看联系方式的**归一键**，明文一次都不进这个模块。`applyMerge` 把被合掉那条的 id 留在 `merged_from` 里，所以合错了拆得回来 |
+> | `campaign` | 向导骨架 | 只出挑人清单，**不出动作**——每条渠道的动作仍走各自职责的额度（05 §4「不做跨 Assignment 并集」在红人这边最容易破的地方） |
+> | `attribution` | UTM / 联盟码 / 订单归因 | 折扣码优先于 UTM（码是顾客主动输的，`landing_site` 会被跳转改掉）；两条都对不上就进 `unmatched`，**绝不按时间窗口猜**——归错比归不上糟 |
+> | `import` | Excel / CSV | 三条渠道的官方 API 是申请制或付费的，没批下来之前用户手上那张表**就是**他的红人库。渠道以链接为准，去重只按 渠道 + handle |
+> | `urls` | 五渠道链接解析 | 认不出来回 `undefined`，不猜一个渠道——猜错了这条记录会以另一个渠道的名义进库，而"渠道之间零共享数据"正是靠 `channel` 这一格成立的 |
+> | `channels/*` | 适配器接口 | YouTube / Instagram 走注入的 transport（真 HTTP 在 `apps/server`），其余三条回 `not_implemented` + 一句人话——与"没连"分得开：那个用户修得好，这个他修不好。IG 没有"按关键词搜人"这个接口，就明说，不返回空当搜不到 |
+> | `public-library` | 云端公共库客户端 | 接口按 WP61 的路由形状立好，默认实现回 `not_linked` + "没连也能用"。它不是占位符，它是本地档（免费）的**正确行为** |
 
 ### 5.3 云端（托管档增值：**公共红人库服务**，WP61）
 

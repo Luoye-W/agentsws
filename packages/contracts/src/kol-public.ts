@@ -23,17 +23,9 @@
  */
 
 import type { Iso8601, WorkspaceId } from './common.js'
+import type { KolChannel } from './kol.js'
 
 /** 48 §5.1 的五条渠道。库按它分区，同一个人在两个渠道是两条记录。 */
-export type KolChannel = 'youtube' | 'facebook' | 'instagram' | 'tiktok' | 'x'
-
-export const KOL_CHANNELS: readonly KolChannel[] = [
-  'youtube',
-  'facebook',
-  'instagram',
-  'tiktok',
-  'x',
-]
 
 /**
  * 指一个红人的**自足键**：渠道 + 该渠道上的 handle。

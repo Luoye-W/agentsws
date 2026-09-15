@@ -236,7 +236,9 @@ const PEOPLE_3: PersonTemplate[] = [
     // WP63 / WP64（51 §2）：3 人公司里"运营"一个人把网站运营岗位四条职责都挑了——
     // 店铺管理 + 内容与博客 + 邮件营销 + 订单履约。主分配仍是售后，因为入站的信先落在客服那条线上。
     // 权限仍然**各管各的**：他手上五条分配，额度与等级一条一份，不并集。
-    extra: ['dtc.store', 'dtc.content', 'dtc.email-marketing', 'dtc.fulfillment'],
+    // WP67（48 §5.1）：红人营销也归他——3 人公司里"运营"本来就什么都做一点，
+    // 而红人这条活儿的日常（找人、写信、审片、算账）与网站运营是同一个人的一天。
+    extra: ['dtc.store', 'dtc.content', 'dtc.email-marketing', 'dtc.fulfillment', 'kol.youtube'],
   },
   {
     id: 'p_chen',

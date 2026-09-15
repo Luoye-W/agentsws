@@ -88,7 +88,16 @@ describe('BrandIcon', () => {
   // WP63：还没做的那几个**故意**落通用插头
   it('登记为"待增加"的连接器画通用插头，不借人家的标志', () => {
     const planned = plannedServices()
-    expect(planned).toEqual(['judgeme', 'loox'])
+    // WP67（48 §5.1）：红人营销那五条渠道也登记在册、也还没做
+    expect(planned).toEqual([
+      'youtube_data',
+      'instagram_graph',
+      'tiktok_research',
+      'facebook_graph',
+      'x_api',
+      'judgeme',
+      'loox',
+    ])
     for (const service of planned) {
       const { unmount } = render(<BrandIcon provider={service} />)
       const icon = screen.getByTestId('brand-icon')

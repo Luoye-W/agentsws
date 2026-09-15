@@ -18,7 +18,7 @@ import {
   CONTRIBUTION_CREDIT_TTL_DAYS,
   followersBandOf,
   KOL_AUDIT_CAPABILITY,
-  KOL_CHANNELS,
+  KOL_CHANNEL_IDS,
   KOL_LOOKUP_CAPABILITY,
   KOL_PUBLIC_SCOPE,
   MAX_DAILY_REWARD_CREDITS,
@@ -32,7 +32,7 @@ import {
 
 describe('WP61 公共红人库契约', () => {
   it('五条渠道就是 48 §5.1 那五条', () => {
-    expect(KOL_CHANNELS).toEqual(['youtube', 'facebook', 'instagram', 'tiktok', 'x'])
+    expect(KOL_CHANNEL_IDS).toEqual(['youtube', 'facebook', 'instagram', 'tiktok', 'x'])
   })
 
   it('指一个红人用的是自足键，不是任何一侧的 id', () => {

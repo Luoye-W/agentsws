@@ -26,6 +26,7 @@
     "@agentsws/dsh-adapter": "workspace:*",
     "@agentsws/kernel": "workspace:*",
     "@agentsws/knowledge": "workspace:*",
+    "@agentsws/kol-core": "workspace:*",
     "@agentsws/learning": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/roles": "workspace:*",

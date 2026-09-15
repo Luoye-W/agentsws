@@ -35,6 +35,7 @@
     "@agentsws/deck": "workspace:*",
     "@agentsws/kernel": "workspace:*",
     "@agentsws/knowledge": "workspace:*",
+    "@agentsws/kol-core": "workspace:*",
     "@agentsws/learning": "workspace:*",
     "@agentsws/meetings": "workspace:*",
     "@agentsws/metering": "workspace:*",

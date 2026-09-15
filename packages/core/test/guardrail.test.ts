@@ -4,6 +4,7 @@ import {
   authorizationCheck,
   evaluateGuardrail,
   executionSnapshot,
+  KOL_OUTREACH_FORBIDDEN,
   Provenance,
   resolveMandate,
   snapshotMatches,
@@ -518,5 +519,250 @@ describe('WP64 邮件营销与订单履约（15 §2 + 51 §2.3 / §2.4）', () =
       'stage',
     )
     expect(shipped.verdict).toBe('block')
+  })
+})
+
+describe('WP67 红人营销那五条（15 §2 + 48 §5.1）', () => {
+  const creator = { type: 'creator', id: 'cre_1' } as const
+  const collab = { type: 'collaboration', id: 'col_1' } as const
+  const deliverable = { type: 'deliverable', id: 'dlv_1' } as const
+  const link = { type: 'tracked_link', id: 'tl_1' } as const
+  const seen = (ref: { type: string; id: string }) => {
+    const p = new Provenance('run_wp67')
+    p.see([ref], { full: true })
+    return p
+  }
+  const f = (ref: { type: string; id: string }, over = {}) => ({
+    now,
+    changeSet: [],
+    windowCount: 0,
+    provenance: seen(ref),
+    ...over,
+  })
+  const ruleOf = (r: ReturnType<typeof evaluateGuardrail>, rule: string) =>
+    r.hits.find((h) => h.rule === rule)
+  const outreach = (after: Record<string, unknown>) => ({
+    kind: 'kol_outreach' as const,
+    target: creator,
+    before: { stage: 'sourced' },
+    after: { suppression_checked: true, recipients: [], suppressed: [], ...after },
+  })
+
+  it('干净的开发信在额度内：放行', () => {
+    const out = evaluateGuardrail(
+      outreach({ subject: '想聊聊合作', body: '你好，我们是 Nordvolt，想寄一台样机给你试试。' }),
+      { caps: { max_outreach_per_day: 30 } },
+      f(creator),
+      'stage',
+    )
+    expect(out.verdict).toBe('allow')
+  })
+
+  it('禁承诺是 block 不是转人审：给钱要去建合作，不能在信里写死一个数', () => {
+    const money = evaluateGuardrail(
+      outreach({ subject: '合作', body: '我们付你 800 美元，这一条视频就发吧。' }),
+      { caps: { max_outreach_per_day: 30 } },
+      f(creator),
+      'stage',
+    )
+    expect(money.verdict).toBe('block')
+    expect(ruleOf(money, 'kol_outreach_commitment')?.cap).toBe('我们付你')
+
+    const free = evaluateGuardrail(
+      outreach({ body: 'We will send you a free unit, no cost to you.' }),
+      { caps: {} },
+      f(creator),
+      'stage',
+    )
+    expect(free.verdict).toBe('block')
+
+    const promise = evaluateGuardrail(
+      outreach({ body: '按我们的经验保证出单，放心做。' }),
+      { caps: {} },
+      f(creator),
+      'stage',
+    )
+    expect(promise.verdict).toBe('block')
+  })
+
+  it('禁承诺词表只可加行，且三类都在（钱 / 白送 / 保证）', () => {
+    for (const w of ['我们付你', '免费寄样', '保证出单', 'we will pay', 'free sample'])
+      expect(KOL_OUTREACH_FORBIDDEN).toContain(w)
+  })
+
+  it('抑制名单 fail-closed：不报"查过了"就 block，报了但名单上的人还在里面也 block', () => {
+    const never = evaluateGuardrail(
+      {
+        kind: 'kol_outreach',
+        target: creator,
+        before: {},
+        after: { body: '你好' },
+      },
+      { caps: {} },
+      f(creator),
+      'stage',
+    )
+    expect(never.verdict).toBe('block')
+    expect(ruleOf(never, 'suppression_list_required')?.actual).toBe('never')
+
+    const leaked = evaluateGuardrail(
+      outreach({
+        body: '你好',
+        recipients: ['Anna+kol@example.com'],
+        suppressed: ['anna@example.com'],
+      }),
+      { caps: {} },
+      f(creator),
+      'stage',
+    )
+    expect(leaked.verdict).toBe('block')
+    expect(ruleOf(leaked, 'suppression_list')?.actual).toContain('1')
+  })
+
+  it('日配额超了转人审（不是 block：多发一封不是安全事故）', () => {
+    const out = evaluateGuardrail(
+      outreach({ body: '你好' }),
+      { caps: { max_outreach_per_day: 30 } },
+      f(creator, { windowCount: 30 }),
+      'stage',
+    )
+    expect(out.verdict).toBe('require_review')
+    expect(ruleOf(out, 'max_outreach_per_day')?.actual).toBe(31)
+  })
+
+  it('建合作永远人审；超过人审线的预算另记一条 hit', () => {
+    const cheap = evaluateGuardrail(
+      {
+        kind: 'kol_collaboration',
+        target: collab,
+        before: { stage: 'negotiating' },
+        after: { stage: 'agreed', budget: 200, currency: 'USD' },
+      },
+      { caps: { max_collab_budget: 500 } },
+      f(collab),
+      'stage',
+    )
+    expect(cheap.verdict).toBe('require_review')
+    expect(ruleOf(cheap, 'hard_ceiling')?.cap).toBe('L1')
+    expect(ruleOf(cheap, 'max_collab_budget')).toBeUndefined()
+
+    const rich = evaluateGuardrail(
+      {
+        kind: 'kol_collaboration',
+        target: collab,
+        before: { stage: 'negotiating' },
+        after: { stage: 'agreed', budget: 900, currency: 'USD' },
+      },
+      { caps: { max_collab_budget: 500 } },
+      f(collab),
+      'stage',
+    )
+    expect(ruleOf(rich, 'max_collab_budget')?.actual).toBe(900)
+  })
+
+  it('阶段机说这一跳非法就 block（合法迁移表在 kol-core，这里只认结论）', () => {
+    const out = evaluateGuardrail(
+      {
+        kind: 'kol_collaboration',
+        target: collab,
+        before: { stage: 'sourced' },
+        after: { stage: 'delivered', stage_transition_ok: false },
+      },
+      { caps: {} },
+      f(collab),
+      'stage',
+    )
+    expect(out.verdict).toBe('block')
+    expect(ruleOf(out, 'kol_stage_transition')?.actual).toBe('delivered')
+  })
+
+  it('交付物审核：结论必须是三个之一；每天审几条有上限', () => {
+    const bad = evaluateGuardrail(
+      {
+        kind: 'kol_deliverable_review',
+        target: deliverable,
+        before: { review: 'pending' },
+        after: { review: 'pending' },
+      },
+      { caps: {} },
+      f(deliverable),
+      'stage',
+    )
+    expect(bad.verdict).toBe('block')
+
+    const many = evaluateGuardrail(
+      {
+        kind: 'kol_deliverable_review',
+        target: deliverable,
+        before: { review: 'pending' },
+        after: { review: 'approved' },
+      },
+      { caps: { max_deliverable_reviews_per_day: 20 } },
+      f(deliverable, { windowCount: 20 }),
+      'stage',
+    )
+    expect(many.verdict).toBe('require_review')
+  })
+
+  it('联盟码折扣率超 20 转人审，且与客服 / 营销那两组 cap 分账', () => {
+    const over = evaluateGuardrail(
+      {
+        kind: 'kol_affiliate_code',
+        target: collab,
+        before: {},
+        after: { code: 'JONAS25', percent: 25 },
+      },
+      { caps: { max_affiliate_discount_pct: 20 } },
+      f(collab),
+      'stage',
+    )
+    expect(over.verdict).toBe('require_review')
+    expect(ruleOf(over, 'max_affiliate_discount_pct')?.actual).toBe(25)
+
+    // 只配了客服那一组 cap 的老 mandate：红人这条一个都不多判
+    const unrelated = evaluateGuardrail(
+      {
+        kind: 'kol_affiliate_code',
+        target: collab,
+        before: {},
+        after: { code: 'JONAS25', percent: 25 },
+      },
+      { caps: { max_presales_discount_pct: 10 } },
+      f(collab),
+      'stage',
+    )
+    expect(unrelated.verdict).toBe('allow')
+  })
+
+  it('追踪链接缺 UTM 必填参数就 block（归不到合作头上等于白建）', () => {
+    const missing = evaluateGuardrail(
+      {
+        kind: 'kol_tracked_link',
+        target: link,
+        before: {},
+        after: { url: 'https://shop.example/p/1', utm: { source: 'youtube', medium: '' } },
+      },
+      { caps: {} },
+      f(link),
+      'stage',
+    )
+    expect(missing.verdict).toBe('block')
+    expect(ruleOf(missing, 'kol_utm_required')?.actual).toBe('medium,campaign')
+
+    const ok = evaluateGuardrail(
+      {
+        kind: 'kol_tracked_link',
+        target: link,
+        before: {},
+        after: {
+          url: 'https://shop.example/p/1',
+          utm: { source: 'youtube', medium: 'kol', campaign: 'autumn' },
+        },
+      },
+      { caps: {} },
+      f(link),
+      'stage',
+    )
+    expect(ok.verdict).toBe('allow')
   })
 })

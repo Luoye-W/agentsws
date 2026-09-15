@@ -129,7 +129,51 @@ export interface ConnectRecordSourceOptions {
   work?: () => Work | undefined
   /** WP46 的内存缓存；命中就不打上游。 */
   liveData?: RecordLiveDataPort
+  /**
+   * WP67（48 §5.2）：这个品牌的红人库（只读口）。
+   *
+   * **迟绑定**，理由与 `work` 那一格一样：红人库在 `assembleBrand` 里建，
+   * 比记录源晚一步。不给 = 这台机器上还没有红人岗位，`record` 对红人那几类
+   * 一律回 `undefined`（**不编造**，与文件头第 5 条同一条）。
+   */
+  kol?: () => RecordKolPort | undefined
   appendEvent?: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
+}
+
+/**
+ * WP67：记录源要的红人库那一面——**只读，而且只读得到该进模型上下文的那几格**。
+ *
+ * 注意这里**没有** `contacts`：联系方式（哪怕只是加密库的 key 名）不该被
+ * 塞进模型上下文——模型要发信是经出站那一跳，不是自己拿一个 key。
+ */
+export interface RecordKolPort {
+  creator(id: string): { id: string; display_name: string; merged_from: string[] } | undefined
+  accounts(filter: { creator_id: string }): {
+    channel: string
+    handle: string
+    url: string
+    followers?: number
+    engagement_rate?: number
+    observed_at: string
+  }[]
+  collaboration(id: string):
+    | {
+        id: string
+        creator_id: string
+        channel: string
+        stage: string
+        budget?: number
+        currency: string
+        agreed_at?: string
+      }
+    | undefined
+  deliverables(filter: { collaboration_id: string }): {
+    id: string
+    kind: string
+    url?: string
+    due_at: string
+    review: string
+  }[]
 }
 
 /** 起草要的订单事实（字段名与 support-core 的 `OrderFacts` 逐字一致，外加起草真用得上的三样）。 */
@@ -835,6 +879,27 @@ export function createConnectRecordSource(
       const hit = policies.get(ref.id)
       return hit === undefined ? undefined : { id: ref.id, ...hit }
     }
+    /*
+     * WP67（48 §5.2）：红人与合作的只读记录源。
+     *
+     * 一个人 = `creator` + 他名下的账号（**跨渠道一起给**：起草开发信时"他在
+     * IG 上也有 12 万粉"是要紧的一句；而渠道之间零共享数据说的是**数据**不共享，
+     * 不是"读的时候也不许一起看"）。
+     * 一条合作 = 阶段 + 预算 + 它下面的交付物（审核那一步要知道还差几条没交）。
+     *
+     * 联系方式一格都不给（见 `RecordKolPort` 的注释）。
+     */
+    const kol = options.kol?.()
+    if (ref.type === 'creator') {
+      const creator = kol?.creator(ref.id)
+      if (creator === undefined) return undefined
+      return { ...creator, accounts: kol?.accounts({ creator_id: ref.id }) ?? [] }
+    }
+    if (ref.type === 'collaboration') {
+      const collab = kol?.collaboration(ref.id)
+      if (collab === undefined) return undefined
+      return { ...collab, deliverables: kol?.deliverables({ collaboration_id: ref.id }) ?? [] }
+    }
     // 不认识的一律 undefined——**不编造**
     return undefined
   }
@@ -859,6 +924,16 @@ export function createConnectRecordSource(
         : statement.length > 40
           ? `${statement.slice(0, 39)}…`
           : statement
+    }
+    // WP67：红人的名字就是他的显示名；一条合作叫"某某（渠道）"——
+    // 卡面上只写一个 `col_xxx` 谁也认不出是跟谁的哪一次合作。
+    const kolPort = options.kol?.()
+    if (ref.type === 'creator') return kolPort?.creator(ref.id)?.display_name
+    if (ref.type === 'collaboration') {
+      const collab = kolPort?.collaboration(ref.id)
+      if (collab === undefined) return undefined
+      const who = kolPort?.creator(collab.creator_id)?.display_name ?? collab.creator_id
+      return `${who}（${collab.channel}）`
     }
     return undefined
   }

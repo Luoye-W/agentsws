@@ -95,6 +95,7 @@ export {
   mergeDataSources,
   PLANNED_SOURCE_NOTES,
   SOURCES_BY_SERVICE,
+  withOwnSources,
 } from './sources.js'
 export {
   computeTile,

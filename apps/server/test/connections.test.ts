@@ -228,15 +228,25 @@ describe('WP20 §A 连接清单与目录', () => {
       await api('/v1/connections/providers'),
     )
     const planned = providers.filter((p) => p.planned === true)
-    expect(planned.map((p) => p.service)).toEqual(['judgeme', 'loox'])
+    // WP67（48 §5.1）：红人营销那五条渠道也登记在册、也还没做
+    expect(planned.map((p) => p.service)).toEqual([
+      'youtube_data',
+      'instagram_graph',
+      'tiktok_research',
+      'facebook_graph',
+      'x_api',
+      'judgeme',
+      'loox',
+    ])
     for (const p of planned) {
       // 点不动：没有表单字段，也不"可用"
       expect(p.fields, p.service).toEqual([])
       expect(p.available, p.service).toBe(false)
       // 但说得出为什么——不是一句冷冰冰的 unavailable
       expect((p.unavailable_reason ?? '').length, p.service).toBeGreaterThan(10)
-      // 接上之后哪一块会亮，也写清楚
-      expect(p.data_sources, p.service).toEqual(['reviews'])
+      // 接上之后哪一块会亮，也写清楚（评价那两家亮评价，红人五条亮找人那一块）
+      expect(p.data_sources.length, p.service).toBe(1)
+      expect(['reviews', 'kol_channel'], p.service).toContain(p.data_sources[0])
     }
   })
 

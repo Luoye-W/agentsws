@@ -64,6 +64,14 @@ const SOURCE_AUTHZ = {
   tracking: { domain: 'shipment', range: 'assigned' },
   // WP63（51 §2.1 评价管理）：评价应用的读走 `review` 域，与满意度同一格
   reviews: { domain: 'review', range: 'assigned' },
+  // WP67（48 §5.1）：红人库那五块走 `creator` 域。
+  //
+  // 为什么不按分块各挂各的域（找人挂 platform_account、归因挂 tracked_link）：
+  // 五块是**同一条职责的同一个面板**，而五条渠道职责的 scopes 里这六个域是一起给的
+  // ——拆开挂只会让"某一块看得见另一块看不见"这种半截状态变得可能。
+  // 挂 `creator` 是因为它是那一组里最根的一个：没有它，另外五个域一格数据都指不到人。
+  kol: { domain: 'creator', range: 'assigned' },
+  kol_channel: { domain: 'creator', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

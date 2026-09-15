@@ -19,6 +19,7 @@
     "packages/contracts/src/kernel.ts",
     "packages/contracts/src/knowledge.ts",
     "packages/contracts/src/kol-public.ts",
+    "packages/contracts/src/kol.ts",
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/packages.ts",
@@ -39,9 +40,14 @@
     "packages/roles/roles/dtc/live-chat.yml",
     "packages/roles/roles/dtc/store.yml",
     "packages/roles/roles/dtc/support.yml",
+    "packages/roles/roles/kol/facebook.yml",
+    "packages/roles/roles/kol/instagram.yml",
+    "packages/roles/roles/kol/tiktok.yml",
+    "packages/roles/roles/kol/x.yml",
+    "packages/roles/roles/kol/youtube.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "034ec0c79453085d63fd34282f6a0161",
+  "source_digest": "6cd5b73fc77e17d889e15ccf5e957770",
   "objects": [
     {
       "id": "ad_set",
@@ -541,6 +547,73 @@
       "read_via": ["klaviyo.get_campaign", "klaviyo.list_campaigns", "meta.list_campaigns"]
     },
     {
+      "id": "collaboration",
+      "label": "collaboration",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "collaboration",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "creator_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "KolChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "stage",
+          "type": "CollaborationStage",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "budget",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "agreed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "terms_ref",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Collaboration"
+    },
+    {
       "id": "collection",
       "label": "集合",
       "key_format": "平台给的 id，原样存、不解析",
@@ -680,13 +753,82 @@
     {
       "id": "creator",
       "label": "达人",
-      "key_format": "连接器给的 id，原样存、不解析",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
       "domain": "creator",
-      "source_of_truth": "connector",
-      "freshness": "cached:300",
-      "read_ranges": [],
-      "properties": [],
-      "read_via": []
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "display_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "merged_from",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": ["search_creators"],
+      "contract": "Creator"
+    },
+    {
+      "id": "creator_contact",
+      "label": "creator_contact",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "creator_contact",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "creator_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "CreatorContactKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "value_ref",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "verified_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "CreatorContact"
     },
     {
       "id": "customer",
@@ -699,6 +841,67 @@
       "properties": [],
       "read_via": ["shopify_admin.get_customer", "shopify_admin.list_customers"],
       "platforms": ["shopify"]
+    },
+    {
+      "id": "deliverable",
+      "label": "deliverable",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "deliverable",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "collaboration_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "DeliverableKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "due_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "submitted_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "review",
+          "type": "DeliverableReview",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Deliverable"
     },
     {
       "id": "discount",
@@ -1586,7 +1789,12 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["shopify_admin.get_page", "shopify_admin.list_pages"],
+      "read_via": [
+        "facebook_graph.get_page",
+        "facebook_graph.search_pages",
+        "shopify_admin.get_page",
+        "shopify_admin.list_pages"
+      ],
       "platforms": ["shopify"]
     },
     {
@@ -1631,6 +1839,85 @@
       ],
       "read_via": [],
       "contract": "Person"
+    },
+    {
+      "id": "platform_account",
+      "label": "platform_account",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "platform_account",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "creator_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "KolChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "followers",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "engagement_rate",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "PlatformAccount"
     },
     {
       "id": "policy",
@@ -2637,6 +2924,67 @@
       "contract": "Todo"
     },
     {
+      "id": "tracked_link",
+      "label": "tracked_link",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "tracked_link",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "collaboration_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "utm",
+          "type": "KolUtm",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "affiliate_code",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "clicks",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "orders",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "revenue",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "TrackedLink"
+    },
+    {
       "id": "variant",
       "label": "变体",
       "key_format": "平台给的 id，原样存、不解析",
@@ -2991,6 +3339,14 @@
     },
     {
       "from": "approval_item",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
       "to": "collection",
       "direction": "out",
       "cardinality": "one",
@@ -2999,11 +3355,27 @@
     },
     {
       "from": "approval_item",
+      "to": "creator_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
       "to": "customer",
       "direction": "out",
       "cardinality": "one",
       "via": "subject.object",
       "lookup": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "from": "approval_item",
+      "to": "deliverable",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
     },
     {
       "from": "approval_item",
@@ -3043,7 +3415,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "subject.object",
-      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
+      "lookup": ["facebook_graph.get_page", "facebook_graph.search_pages"]
     },
     {
       "from": "approval_item",
@@ -3107,6 +3479,14 @@
       "direction": "out",
       "cardinality": "one",
       "via": "subject.todo_id",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "tracked_link",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
       "lookup": []
     },
     {
@@ -3215,6 +3595,14 @@
     },
     {
       "from": "campaign",
+      "to": "collaboration",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "collaboration.campaign_id",
+      "lookup": []
+    },
+    {
+      "from": "campaign",
       "to": "staged_change",
       "direction": "in",
       "cardinality": "many",
@@ -3231,6 +3619,70 @@
     },
     {
       "from": "campaign",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "collaboration",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "collaboration",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "campaign_id",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "collaboration",
+      "to": "creator",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "creator_id",
+      "lookup": ["search_creators"]
+    },
+    {
+      "from": "collaboration",
+      "to": "deliverable",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "deliverable.collaboration_id",
+      "lookup": []
+    },
+    {
+      "from": "collaboration",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "collaboration",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "collaboration",
+      "to": "tracked_link",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "tracked_link.collaboration_id",
+      "lookup": []
+    },
+    {
+      "from": "collaboration",
       "to": "workflow_instance",
       "direction": "in",
       "cardinality": "many",
@@ -3278,6 +3730,70 @@
       "lookup": []
     },
     {
+      "from": "creator",
+      "to": "collaboration",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "collaboration.creator_id",
+      "lookup": []
+    },
+    {
+      "from": "creator",
+      "to": "creator_contact",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "creator_contact.creator_id",
+      "lookup": []
+    },
+    {
+      "from": "creator",
+      "to": "platform_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "platform_account.creator_id",
+      "lookup": []
+    },
+    {
+      "from": "creator_contact",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "creator_contact",
+      "to": "creator",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "creator_id",
+      "lookup": ["search_creators"]
+    },
+    {
+      "from": "creator_contact",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "creator_contact",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "creator_contact",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
       "from": "customer",
       "to": "approval_item",
       "direction": "in",
@@ -3303,6 +3819,46 @@
     },
     {
       "from": "customer",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "deliverable",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "deliverable",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "collaboration_id",
+      "lookup": []
+    },
+    {
+      "from": "deliverable",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "deliverable",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "deliverable",
       "to": "workflow_instance",
       "direction": "in",
       "cardinality": "many",
@@ -3638,6 +4194,14 @@
       "lookup": []
     },
     {
+      "from": "platform_account",
+      "to": "creator",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "creator_id",
+      "lookup": ["search_creators"]
+    },
+    {
       "from": "policy",
       "to": "approval_item",
       "direction": "in",
@@ -3887,6 +4451,22 @@
     },
     {
       "from": "staged_change",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
       "to": "collection",
       "direction": "out",
       "cardinality": "one",
@@ -3903,6 +4483,22 @@
     },
     {
       "from": "staged_change",
+      "to": "creator_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "creator_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
       "to": "customer",
       "direction": "out",
       "cardinality": "one",
@@ -3916,6 +4512,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "from": "staged_change",
+      "to": "deliverable",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "deliverable",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
     },
     {
       "from": "staged_change",
@@ -3971,7 +4583,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "apply.outcome_ref",
-      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
+      "lookup": ["facebook_graph.get_page", "facebook_graph.search_pages"]
     },
     {
       "from": "staged_change",
@@ -3979,7 +4591,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "target",
-      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
+      "lookup": ["facebook_graph.get_page", "facebook_graph.search_pages"]
     },
     {
       "from": "staged_change",
@@ -4060,6 +4672,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+    },
+    {
+      "from": "staged_change",
+      "to": "tracked_link",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "tracked_link",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
     },
     {
       "from": "staged_change",
@@ -4214,6 +4842,46 @@
       "lookup": []
     },
     {
+      "from": "tracked_link",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "tracked_link",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "collaboration_id",
+      "lookup": []
+    },
+    {
+      "from": "tracked_link",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "tracked_link",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "tracked_link",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
       "from": "variant",
       "to": "approval_item",
       "direction": "in",
@@ -4295,6 +4963,14 @@
     },
     {
       "from": "workflow_instance",
+      "to": "collaboration",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
       "to": "collection",
       "direction": "out",
       "cardinality": "one",
@@ -4303,11 +4979,27 @@
     },
     {
       "from": "workflow_instance",
+      "to": "creator_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
       "to": "customer",
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "deliverable",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -4339,7 +5031,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
-      "lookup": ["shopify_admin.get_page", "shopify_admin.list_pages"]
+      "lookup": ["facebook_graph.get_page", "facebook_graph.search_pages"]
     },
     {
       "from": "workflow_instance",
@@ -4380,6 +5072,14 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "tracked_link",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -4551,6 +5251,24 @@
     }
   ],
   "actions": [
+    {
+      "id": "facebook_graph.get_page",
+      "object": "page",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 page"
+    },
+    {
+      "id": "facebook_graph.search_pages",
+      "object": "page",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 page"
+    },
     {
       "id": "gmail.get_message",
       "object": "message",
@@ -5207,6 +5925,17 @@
       "what": "改收件地址"
     },
     {
+      "id": "stage_affiliate_code",
+      "object": "collaboration",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
+      "what": "stage affiliate code"
+    },
+    {
       "id": "stage_campaign_send",
       "object": "campaign",
       "source": "role",
@@ -5231,6 +5960,17 @@
       "what": "stage cancel order"
     },
     {
+      "id": "stage_collaboration",
+      "object": "collaboration",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
+      "what": "stage collaboration"
+    },
+    {
       "id": "stage_collection_edit",
       "object": "product",
       "source": "role",
@@ -5253,6 +5993,17 @@
       "route_to": "scope_manager",
       "roles": ["dtc.fulfillment"],
       "what": "stage create fulfillment"
+    },
+    {
+      "id": "stage_deliverable_review",
+      "object": "deliverable",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
+      "what": "stage deliverable review"
     },
     {
       "id": "stage_dev_task",
@@ -5312,6 +6063,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.content", "dtc.store"],
       "what": "改商品 / 页面的文案、图与 SEO"
+    },
+    {
+      "id": "stage_outreach",
+      "object": "creator_contact",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
+      "tool": "draft_reply",
+      "what": "stage outreach"
     },
     {
       "id": "stage_page_edit",
@@ -5466,6 +6229,17 @@
       "route_to": "role_holder",
       "roles": ["site.builder"],
       "what": "出一份主题预览"
+    },
+    {
+      "id": "stage_tracked_link",
+      "object": "tracked_link",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
+      "what": "stage tracked link"
     },
     {
       "id": "stage_unpublish_product",

@@ -80,6 +80,31 @@ export type ChangeKind =
   | 'review_reply'
   /** WP63（51 §2.1 评价管理）：给订单发邀评（合规词表 + 每日上限）。 */
   | 'review_invite'
+  /**
+   * WP67（48 §5.1）：给红人发一封开发信（`outbound_message` 的一种）。
+   *
+   * **不进 `HARD_L1`**：开发信是 L2 起、采纳率够了可以升 L3——它是一封"你好，
+   * 我们想聊聊合作"，发错了道个歉就过去了，跟群发给几万顾客不是一个量级。
+   * 真正不许越的那条线是**禁承诺**：正文里不许出现"我们付你 X 美元"
+   * "样品免费寄"这类话，由 guardrail 的禁承诺词表当场 block
+   * （不是转人审——这种句子不该有"人点一下就发出去"的路径，同 51 §2.1 的邀评）。
+   * 日配额（`max_outreach_per_day`）与退订 / 抑制名单走的是与客服出站、
+   * 邮件营销**同一份**规则（`@agentsws/core` 的 suppression.ts）。
+   */
+  | 'kol_outreach'
+  /**
+   * WP67（48 §5.1）：建一条合作 / 改合作预算。
+   *
+   * **永远 L1**（15 §2 的 `HARD_L1` 里有它）。理由跟采纳率无关：合作是一笔钱和
+   * 一纸条款，采纳率证明得了"这个 Agent 挑人挑得准"，证明不了"这个价该给"。
+   */
+  | 'kol_collaboration'
+  /** WP67（48 §5.1）：交付物的审核结论（通过 / 要求改 / 拒收）。L2。 */
+  | 'kol_deliverable_review'
+  /** WP67（48 §5.1）：发一个联盟折扣码。L2，且折扣率有上限（`max_affiliate_discount_pct`）。 */
+  | 'kol_affiliate_code'
+  /** WP67（48 §5.1）：建一条带 UTM 的追踪链接。L3——它不动钱也不发信，只是给链接加参数。 */
+  | 'kol_tracked_link'
 
 export type ChangeStatus =
   | 'staged'

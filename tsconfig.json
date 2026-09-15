@@ -56,6 +56,9 @@
       "path": "packages/knowledge"
     },
     {
+      "path": "packages/kol-core"
+    },
+    {
       "path": "packages/kol-public"
     },
     {

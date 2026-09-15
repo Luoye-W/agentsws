@@ -16,6 +16,7 @@ import type {
   DataSourceStatus,
   DeckCard,
   InventoryRow,
+  KolDeckData,
   OrderRow,
   PostRow,
   QueryContext,
@@ -45,6 +46,13 @@ export interface WorkstationDataSource {
   reviews?(view?: { assignment_id?: string }): ReviewRow[]
   /** WP63：文章与页面（草稿队列、近 30 天发布）。 */
   posts?(view?: { assignment_id?: string }): PostRow[]
+  /**
+   * WP67（48 §5.1）：红人面板五块要的那几行。
+   *
+   * 不给 = 这台机器上还没有红人岗位，五块是空表。与"还没连"分得开：
+   * 红人库永远算连上（`ALWAYS_CONNECTED`），空的意思是"还没有人，先导入一张表"。
+   */
+  kol?(view?: { assignment_id?: string }): KolDeckData | undefined
   /** 数据源连接状态（36 §3：没接的显示「去连接」而不是空图） */
   sources(): DataSourceStatus[]
   /** ObjectRef → 人话 */
@@ -146,6 +154,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const inventory = options.data.inventory?.(view)
       const reviews = options.data.reviews?.(view)
       const posts = options.data.posts?.(view)
+      const kol = options.data.kol?.(view)
       const thresholds = options.roles.roles.get(position.role_id)?.thresholds
       return {
         now: options.clock.now(),
@@ -161,6 +170,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(inventory === undefined ? {} : { inventory }),
         ...(reviews === undefined ? {} : { reviews }),
         ...(posts === undefined ? {} : { posts }),
+        ...(kol === undefined ? {} : { kol }),
         // WP63（51 §2.1）：异常卡的阈值从**职责定义**来，不硬写在积木里——
         // 什么叫"销售骤降"，卖家具的和卖快消的不是一个数
         ...(thresholds === undefined ? {} : { thresholds }),

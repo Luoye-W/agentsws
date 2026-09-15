@@ -40,6 +40,9 @@
       "path": "../../packages/knowledge"
     },
     {
+      "path": "../../packages/kol-core"
+    },
+    {
       "path": "../../packages/learning"
     },
     {

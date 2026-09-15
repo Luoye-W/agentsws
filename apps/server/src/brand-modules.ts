@@ -32,6 +32,7 @@ import type { ChatLane } from './chat.js'
 import type { ChatWidgetAssembly } from './chat-widget.js'
 import type { CloudAssembly } from './cloud.js'
 import type { ConnectionsAssembly } from './connections.js'
+import type { KolStore } from './kol.js'
 import type { LiveDataSource } from './live-data.js'
 import type { ModelsAssembly } from './models.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
@@ -82,6 +83,13 @@ export interface BrandModuleSet {
   /** 工作台数据源（活数据源，或 demo 的合成世界）。 */
   workData: WorkstationDataSource
   records: MatterRecordSource
+  /**
+   * WP67（48 §5.2 数据面）：这个品牌的红人库。
+   *
+   * 与连接、活数据源同一条纪律（本文件第 2 条）：落盘按品牌分目录。
+   * 品牌 A 的红人、联系方式引用与合作预算，在 B 的任何路由里都读不到。
+   */
+  kol: KolStore
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun

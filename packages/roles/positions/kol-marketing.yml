@@ -1,0 +1,23 @@
+# WP67（48 §5.1 / 27 §1 / 54）：**红人营销**岗位 = 五条渠道职责。
+#
+# **默认只勾 YouTube 与 Instagram**，其余三条可勾。这不是"先做两条"的技术妥协——
+# 48 §5.1 写的是 KOLAgents 的用户数据：这两条占 80% 用量。
+# 默认全勾的后果是每个新用户一上来就看到五条他用不上的职责，
+# 而勾上一条比去掉一条容易（去掉之前他得先弄明白那条是干什么的）。
+#
+# 54：用户面对的是**岗位**，不是职责。开一件事 = 交给"红人营销"这个岗位，
+# 岗位里的 Agent 按 grounding 的意图词判该走哪条渠道职责（"那个油管的人回信了"
+# → `kol.youtube`）。职责入口保留给"我就要它按 TikTok 那套规则来"的人。
+#
+# 五条分开而不是一条"红人营销"职责，理由在 04 §0 的四条上：各有连接器
+# （五个渠道五张卡）、各有队列车道、各能单独交接（把 TikTok 那摊交给新来的人，
+# YouTube 那摊不动）、各有额度（一天 30 封开发信是**每条渠道**30 封）。
+id: kol-marketing
+version: 1.0.0
+name: { zh: 红人营销, en: Creator Marketing }
+roles:
+  - { role: kol.youtube, default: true }
+  - { role: kol.instagram, default: true }
+  - { role: kol.tiktok, default: false }
+  - { role: kol.facebook, default: false }
+  - { role: kol.x, default: false }

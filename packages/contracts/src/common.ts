@@ -85,6 +85,19 @@ export type ObjectType =
    * 事项时间线上的路由记录、岗位层上下文、岗位层记忆都指着它。
    */
   | 'position'
+  /**
+   * WP67（48 §5.2）：红人营销那一侧的五类（`creator` 上面早就有）。
+   *
+   * 为什么是五个对象而不是一个「红人」：同一个人在 YouTube 与在 Instagram 是两条
+   * `platform_account`（渠道之间零共享数据，48 §5.1 末句）；联系方式单独一条才能
+   * 把「明文不落库、只存加密库 key 名」写进类型里；合作与交付物各有阶段机与审批；
+   * 追踪链接的数字回填自订单，真源不在红人那一侧。**只加不删**。
+   */
+  | 'platform_account'
+  | 'creator_contact'
+  | 'collaboration'
+  | 'deliverable'
+  | 'tracked_link'
   | (string & {})
 
 export interface ObjectRef {
@@ -154,6 +167,19 @@ export type DataDomain =
   | 'event_log'
   /** 37 §4 会议对象与记录（WP23） */
   | 'meeting'
+  /**
+   * WP67（48 §5.1）：红人营销的五个新数据域（`creator` 上面早就有）。
+   *
+   * 分成五个而不是塞进 `creator` 一个，是因为**可读范围不一样**：找人那一块
+   * 谁都能看（`platform_account`），联系方式只有建联那一步碰得到
+   * （`creator_contact`，敏感级 confidential），预算与条款是钱
+   * （`collaboration`）。一个域一把闸，19 §3 的知识过滤下推才切得动。
+   */
+  | 'platform_account'
+  | 'creator_contact'
+  | 'collaboration'
+  | 'deliverable'
+  | 'tracked_link'
 
 export type Operation = 'read' | 'stage' | 'approve' | 'agent_auto'
 export type Range = 'own' | 'assigned' | 'workspace'
