@@ -173,6 +173,14 @@ export interface DataSourceStatus {
   connected: boolean
   /** 「查看完整报告 →」外链到对应后台 */
   report_url?: string
+  /**
+   * WP62（51 §1 N0 ③ / 36 §3）：**没连**与**还没做**是两回事。
+   *
+   * 没连 = 用户还没去连，界面出「去连接」；还没做 = 这个工作区的网站平台我们
+   * 压根还没接（档案里选了 WooCommerce / Magento / 其它），这时界面该照实说
+   * 那一句，而不是给一个点了也连不上的按钮。有 `note` 就显示它。
+   */
+  note?: string
 }
 
 export interface TileSpec {
@@ -327,6 +335,8 @@ export interface ViewSection {
   label: string
   connected: boolean
   report_url?: string
+  /** WP62：这个数据源"还没做"时那一句人话（见 `DataSourceStatus.note`）。 */
+  note?: string
   blocks: BlockDef[]
 }
 

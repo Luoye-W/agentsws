@@ -17,7 +17,12 @@
  * 4. **算不出就说没有**（36 §3）：断开连接 `orders()` 立刻回空、`sources()` 回
  *    `connected: false`，界面显示「去连接」而不是一排永远为 0 的数字块。
  */
-import type { Clock, EventEnvelope, WorkspaceId } from '@agentsws/contracts'
+import type { Clock, EventEnvelope, StorefrontPlatform, WorkspaceId } from '@agentsws/contracts'
+import {
+  storefrontConnectorService,
+  storefrontServiceMatches,
+  storefrontUnsupportedNote,
+} from '@agentsws/contracts'
 import type { ConnectionLike, DataSourceStatus, OrderLineItem, OrderRow } from '@agentsws/deck'
 import { dataSourcesFromConnections } from '@agentsws/deck'
 import { catalogEntry } from './catalog.js'
@@ -53,8 +58,13 @@ export const ORDER_LINE_ITEM_MAX_FETCH = 60
 
 const DAY = 86_400_000
 
-/** 喂「店铺后台」的 service（我们对外的 provider id，不是上游名）。 */
-const SHOP_SERVICES = new Set(['shopify_admin', 'shopify'])
+/**
+ * 喂「店铺后台」的 service。
+ *
+ * WP62（51 §1 N0 ③）：**不再写死 Shopify**——按公司档案里的「网站是用什么搭的」
+ * 算出该跟哪个 provider 要数（`shopify_admin` / `woocommerce`）。平台没有 provider
+ * （Magento / 其它）就是"这个工作区没有店铺连接"，面板照 36 §3 明说，不给空数据。
+ */
 /** 喂客服那几个数字块的邮箱 service。 */
 const MAIL_SERVICES = new Set(['imap_smtp', 'gmail'])
 
@@ -90,12 +100,22 @@ export interface LiveDataOptions {
    * （`orders()` 原样回全部，一次 `get_order` 都不多打）。
    */
   scope?: OrderScopePort
+  /**
+   * WP62（51 §1 N0 ③）：公司档案里的「网站是用什么搭的」。
+   *
+   * **晚绑定**（档案是向导第 ① 步才写的，活数据源比它先装配）。不给 = Shopify，
+   * 存量装配一个字节不变。它决定"活跃店铺连接"到底认哪个 service。
+   */
+  storefrontPlatform?: () => StorefrontPlatform | undefined
 }
 
 /** 一次刷新的结论（只有计数与原因码，没有任何订单内容）。 */
 export interface LiveRefreshReport {
   status: 'ok' | 'skipped' | 'failed'
-  /** 没有活跃的店铺连接时是 `no_connection`。 */
+  /**
+   * 没有活跃的店铺连接时是 `no_connection`；档案里的网站平台我们还没接时是
+   * `platform_unsupported`（51 §1 N0）——两回事，不该混成一个原因码。
+   */
   reason?: string
   orders: number
   pages?: number
@@ -522,10 +542,17 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
       .liveConnections()
       .map((c) => ({ service: c.service, status: c.status }) satisfies ConnectionLike)
 
-  const activeShop = (): LiveConnection | undefined =>
-    options.connections
+  /** 这个工作区的店铺后台走哪个 provider（平台接不上时是 `undefined`）。 */
+  const shopService = (): string | undefined =>
+    storefrontConnectorService(options.storefrontPlatform?.())
+
+  const activeShop = (): LiveConnection | undefined => {
+    const want = shopService()
+    if (want === undefined) return undefined
+    return options.connections
       .liveConnections()
-      .find((c) => SHOP_SERVICES.has(c.service) && c.status === 'active')
+      .find((c) => storefrontServiceMatches(want, c.service) && c.status === 'active')
+  }
 
   /**
    * 目录里这个只读动作叫什么（真身与替身都用 `service.动作名`，但别写死）。
@@ -677,7 +704,12 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
         cache = undefined
         stale = false
         dirty = false
-        return { status: 'skipped', reason: 'no_connection', orders: 0 }
+        // WP62：分清"你还没连"与"我们还没做"——后者点「去连接」也没有卡可点
+        const reason =
+          storefrontUnsupportedNote(options.storefrontPlatform?.()) === undefined
+            ? 'no_connection'
+            : 'platform_unsupported'
+        return { status: 'skipped', reason, orders: 0 }
       }
       let refreshed_token = false
       for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -802,7 +834,13 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
     orders: (view?: OrderView) =>
       activeShop() === undefined ? [] : scopedOrders(cache?.orders ?? [], options.scope, view),
 
-    sources: (): DataSourceStatus[] => dataSourcesFromConnections(connectionsOf()),
+    sources: (): DataSourceStatus[] => {
+      // WP62（51 §1 N0 ③）：平台我们还没接 → 「店铺后台」带一句"还没接"，不出「去连接」
+      const note = storefrontUnsupportedNote(options.storefrontPlatform?.())
+      return dataSourcesFromConnections(connectionsOf(), {
+        ...(note === undefined ? {} : { storefrontNote: note }),
+      })
+    },
 
     label: () => undefined,
 

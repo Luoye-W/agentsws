@@ -202,7 +202,14 @@ interface Setup {
   knowledge: ReturnType<typeof fakeKnowledge>
 }
 
-function setup(opts: { connected?: boolean; hits?: RetrievalHit[] } = {}): Setup {
+function setup(
+  opts: {
+    connected?: boolean
+    hits?: RetrievalHit[]
+    /** WP62（51 §1 N0）：公司档案里的「网站是用什么搭的」；不给 = Shopify。 */
+    platform?: 'shopify' | 'woocommerce' | 'magento' | 'other'
+  } = {},
+): Setup {
   const connect = fakeConnect()
   const events: EventEnvelope[] = []
   const knowledge = fakeKnowledge(opts.hits ?? [])
@@ -221,6 +228,7 @@ function setup(opts: { connected?: boolean; hits?: RetrievalHit[] } = {}): Setup
     appendEvent: (e) => {
       events.push({ id: `ev_${events.length}`, at: T0, ...e } as EventEnvelope)
     },
+    ...(opts.platform === undefined ? {} : { storefrontPlatform: () => opts.platform }),
   })
   return { source, connect, events, knowledge }
 }
@@ -422,6 +430,29 @@ describe('没连 Shopify 就说没连', () => {
     expect(out.reason).toContain('not_connected')
     expect(out.reason).toContain('连接')
     expect(connect.steps).toEqual([])
+  })
+
+  // WP62（51 §1 N0 ③）
+  it('平台是 WooCommerce：连着一条 Shopify 也不认，人话说的是"这个平台还没接"', async () => {
+    // 库里明明有一条活着的 shopify_admin 连接——但这个工作区的网站不是 Shopify 搭的，
+    // 拿它去查订单查出来的是**别人家的数据**，所以一张令牌都不签
+    const { source, connect } = setup({ platform: 'woocommerce' })
+    const out = await call(source, 'get_order', { order_id: 'o_1' })
+    expect(out.status).toBe('error')
+    // 对模型是同一个错误码
+    expect(out.reason).toContain('not_connected')
+    // 对人是两件事："你还没连"与"我们还没做"
+    expect(out.reason).toContain('这个平台还没接')
+    expect(out.reason).toContain('WooCommerce')
+    expect(out.reason).not.toContain('先去「连接」页')
+    expect(connect.steps).toEqual([])
+  })
+
+  it('平台是"其它 / 自己搭的"：说的是没有店铺后台可以连', async () => {
+    const { source } = setup({ platform: 'other' })
+    const out = await call(source, 'list_orders')
+    expect(out.status).toBe('error')
+    expect(out.reason).toContain('没有店铺后台可以连')
   })
 
   it('readToken 回空串（拿不到写口，也不瞎签）', async () => {

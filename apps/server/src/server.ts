@@ -838,6 +838,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     liveData = createLiveDataSource({
       connections,
       connect: connections.connect,
+      // WP62（51 §1 N0 ③）：跟哪个店铺后台要数按公司档案的平台算，不写死 Shopify
+      storefrontPlatform: () => storefrontPlatformOf(),
       clock,
       workspace_id: workspace.id,
       appendEvent,
@@ -877,6 +879,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 运行时装在工作模型之前（两者互相需要），所以这里收的是取值函数
       work: () => workRef,
       appendEvent,
+      // WP62（51 §1 N0 ③）：查订单 / 查商品跟哪个店铺后台要，按公司档案的平台算
+      storefrontPlatform: () => storefrontPlatformOf(),
       ...(liveData === undefined ? {} : { liveData }),
     })
 

@@ -216,6 +216,35 @@ describe('WP20 §A 连接清单与目录', () => {
     expect(providers.find((p) => p.service === 'ga4')?.data_note).toContain('下一版')
   })
 
+  // WP62（51 §1 N0 ①）
+  it('目录按档案的平台过滤：改成 WooCommerce → 店铺卡不渲染，别的卡一张不少', async () => {
+    const put = await api('/v1/workspace/profile', {
+      method: 'PUT',
+      body: JSON.stringify({ legal_name: '一家用 Woo 的店', storefront_platform: 'woocommerce' }),
+    })
+    expect(put.status, await put.clone().text()).toBe(200)
+
+    const { providers } = await data<{ providers: ProviderView[] }>(
+      await api('/v1/connections/providers'),
+    )
+    // 店铺卡没了（目录里还没有 woocommerce 那张）；邮箱 / GA4 / GSC / 广告与平台无关，一张不少
+    expect(providers.map((p) => p.service)).toEqual([
+      'imap_smtp',
+      'gmail',
+      'ga4',
+      'gsc',
+      'meta_ads',
+    ])
+
+    // 改回 Shopify，那张卡就回来了
+    await api('/v1/workspace/profile', {
+      method: 'PUT',
+      body: JSON.stringify({ legal_name: '一家用 Woo 的店', storefront_platform: 'shopify' }),
+    })
+    const back = await data<{ providers: ProviderView[] }>(await api('/v1/connections/providers'))
+    expect(back.providers.map((p) => p.service)).toContain('shopify_admin')
+  })
+
   it('runtime 状态条：没配 AGENTSWS_CONNECT_URL 就是替身档，秘密库有密钥', async () => {
     const status = await data<RuntimeStatusView>(await api('/v1/connections/runtime'))
     expect(status.state).toBe('stand_in')
@@ -375,8 +404,9 @@ describe('WP20 §A 试连 / 断开 / 数据源回灌', () => {
     expect(sources.sources().find((s) => s.id === 'shop')?.connected).toBe(true)
     expect(sources.sources().find((s) => s.id === 'ga4')?.connected).toBe(false)
 
-    // 职责的 ready 也从真实连接算：连上 Shopify 后 aftersales 岗位只剩邮箱没接
-    expect(ctx.server.connections.connectedKinds()).toEqual(['shopify'])
+    // 职责的 ready 也从真实连接算：连上 Shopify 后 aftersales 岗位只剩邮箱没接。
+    // WP62：同时算上平台中立的 `shop`（`dtc.store` 写的是 `kind: shop`，不写死平台名）
+    expect(ctx.server.connections.connectedKinds().sort()).toEqual(['shop', 'shopify'])
     const aftersales = ctx.server.roles.assignments.create({
       person_id: ctx.server.bootstrap.person.id,
       workspace_id: ctx.server.bootstrap.workspace.id,

@@ -33,7 +33,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "317dbe57055788255638bdf31cdfaf40",
+  "source_digest": "599d72dc258ae041b989bf43900c9279",
   "objects": [
     {
       "id": "ad_set",
@@ -665,7 +665,8 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["shopify_admin.get_customer", "shopify_admin.list_customers"]
+      "read_via": ["shopify_admin.get_customer", "shopify_admin.list_customers"],
+      "platforms": ["shopify"]
     },
     {
       "id": "discount",
@@ -676,7 +677,8 @@
       "freshness": "cached:300",
       "read_ranges": [],
       "properties": [],
-      "read_via": ["shopify_admin.get_discount", "shopify_admin.list_discounts"]
+      "read_via": ["shopify_admin.get_discount", "shopify_admin.list_discounts"],
+      "platforms": ["shopify"]
     },
     {
       "id": "email_campaign",
@@ -1466,7 +1468,8 @@
         "orders.recent",
         "shopify_admin.get_order",
         "shopify_admin.list_orders"
-      ]
+      ],
+      "platforms": ["shopify"]
     },
     {
       "id": "package",
@@ -1574,7 +1577,8 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["shopify_admin.get_product", "shopify_admin.list_products"]
+      "read_via": ["shopify_admin.get_product", "shopify_admin.list_products"],
+      "platforms": ["shopify"]
     },
     {
       "id": "product_line",
@@ -2276,7 +2280,8 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["shopify_admin.get_theme", "shopify_admin.list_themes"]
+      "read_via": ["shopify_admin.get_theme", "shopify_admin.list_themes"],
+      "platforms": ["shopify"]
     },
     {
       "id": "thread",
@@ -2473,7 +2478,8 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["shopify_admin.get_variant"]
+      "read_via": ["shopify_admin.get_variant"],
+      "platforms": ["shopify"]
     },
     {
       "id": "work_item",

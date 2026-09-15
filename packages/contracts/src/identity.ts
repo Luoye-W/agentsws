@@ -192,6 +192,36 @@ export function isStorefrontService(service: string): boolean {
   return STOREFRONT_PLATFORMS.some((p) => p.connector_service === service)
 }
 
+/**
+ * 同一个 provider 的别名：真实连接上报的 service 名不一定等于目录里的 id。
+ *
+ * Shopify 那条历史上有两种写法（真适配器报 `shopify_admin`，替身报 `shopify`），
+ * 两边都得认得——不然换个替身跑，店铺连接就"消失"了。只可加行，不许删。
+ */
+const STOREFRONT_SERVICE_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  shopify_admin: ['shopify_admin', 'shopify'],
+}
+
+/** 一条真实连接的 service 名算不算"这个平台的店铺后台"。 */
+export function storefrontServiceMatches(want: string, service: string): boolean {
+  if (service === want) return true
+  return STOREFRONT_SERVICE_ALIASES[want]?.includes(service) ?? false
+}
+
+/**
+ * 36 §3 / 51 §2 末条：这个平台现在根本接不上时，面板与工具该说的那一句人话。
+ *
+ * 支持的平台回 `undefined`（该说的是"去连接"，不是"还没接"——两回事：
+ * 前者是"你还没连"，后者是"我们还没做"）。
+ */
+export function storefrontUnsupportedNote(id: StorefrontPlatform | undefined): string | undefined {
+  const spec = storefrontPlatformSpec(id ?? DEFAULT_STOREFRONT_PLATFORM)
+  if (spec === undefined || spec.supported) return undefined
+  return spec.connector_service === undefined
+    ? `这个平台还没接：你们选的是「${spec.label}」，没有店铺后台可以连。`
+    : `这个平台还没接：你们的网站是用 ${spec.label} 搭的，它的店铺后台我们还没做。`
+}
+
 export interface WorkspaceProfile {
   legal_name: string
   domain?: string
