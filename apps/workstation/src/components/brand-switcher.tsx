@@ -103,57 +103,52 @@ export function BrandSwitcher(): React.ReactNode {
       {open ? (
         // 一个最朴素的下拉：一个按钮 + 一张列表。不用带浮层引擎的那一套——
         // 顶栏这一个下拉只有"列几个名字、点一个"这一件事，多一层机制就多一层会坏的东西。
-        <ul
+        <div
           role="menu"
           data-testid="brand-menu"
           className="absolute top-full left-0 z-50 mt-1 w-64 rounded-md border bg-popover p-1 shadow-md"
         >
-          <li className="px-2 py-1.5 text-xs text-muted-foreground">{t('brand.switch.hint')}</li>
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">{t('brand.switch.hint')}</p>
           <Separator className="my-1" />
           {brands.map((b) => (
-            <li key={b.workspace_id}>
-              <button
-                type="button"
-                role="menuitem"
-                data-testid={`brand-option-${b.workspace_id}`}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm',
-                  b.current ? 'font-medium' : 'hover:bg-accent',
-                )}
-                onClick={() => {
-                  go(b.workspace_id)
-                }}
-              >
-                {b.current ? (
-                  <Check aria-hidden className="size-4" />
-                ) : (
-                  <span aria-hidden className="size-4" />
-                )}
-                <span className="truncate">{b.name}</span>
-                {b.pending_approvals > 0 ? (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {b.pending_approvals}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-          <Separator className="my-1" />
-          <li>
             <button
+              key={b.workspace_id}
               type="button"
               role="menuitem"
-              data-testid="brand-manage"
-              className="w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+              data-testid={`brand-option-${b.workspace_id}`}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm',
+                b.current ? 'font-medium' : 'hover:bg-accent',
+              )}
               onClick={() => {
-                setOpen(false)
-                navigate('/org?tab=brands')
+                go(b.workspace_id)
               }}
             >
-              {t('brand.switch.manage')}
+              {b.current ? (
+                <Check aria-hidden className="size-4" />
+              ) : (
+                <span aria-hidden className="size-4" />
+              )}
+              <span className="truncate">{b.name}</span>
+              {b.pending_approvals > 0 ? (
+                <span className="ml-auto text-xs text-muted-foreground">{b.pending_approvals}</span>
+              ) : null}
             </button>
-          </li>
-        </ul>
+          ))}
+          <Separator className="my-1" />
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="brand-manage"
+            className="w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+            onClick={() => {
+              setOpen(false)
+              navigate('/org?tab=brands')
+            }}
+          >
+            {t('brand.switch.manage')}
+          </button>
+        </div>
       ) : null}
       {failed ? (
         <span role="alert" className="text-xs text-destructive" data-testid="brand-switch-failed">
