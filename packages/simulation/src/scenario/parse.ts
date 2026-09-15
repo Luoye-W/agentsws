@@ -179,6 +179,10 @@ const EVENT_KEYS = [
   'fulfillment.mark_shipped',
   'email.unsubscribe',
   'email.campaign_send',
+  // WP63 店铺管理与内容与博客（51 §2.1 / §2.2）
+  'shop.publish_product',
+  'content.blog_post',
+  'store.daily_report',
   // WP47 范围模型（44）
   'org.range_group',
   'org.product_line',
@@ -242,6 +246,9 @@ const EXPECTED_KEYS = [
   // WP55（48 §4 L3 #2 #3）
   'sub_channel',
   'gates_failed',
+  // WP63（51 §2.1 数据日报）
+  'daily_reports',
+  'daily_report_figures',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -730,6 +737,56 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'shop.publish_product': {
+      known(source, `${path}.${key}`, body, ['who', 'product', 'publish', 'level', 'note'])
+      const level = optStr(source, `${path}.${key}.level`, body.level)
+      if (level !== undefined && !['L1', 'L2', 'L3'].includes(level)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'shop.publish_product',
+        publish_product: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          product: str(source, `${path}.${key}.product`, body.product),
+          ...(body.publish === undefined
+            ? {}
+            : { publish: requireBool(source, `${path}.${key}.publish`, body.publish) }),
+          ...(level === undefined ? {} : { level: level as 'L1' | 'L2' | 'L3' }),
+          ...(body.note === undefined
+            ? {}
+            : { note: str(source, `${path}.${key}.note`, body.note) }),
+        },
+      }
+    }
+    case 'content.blog_post': {
+      known(source, `${path}.${key}`, body, ['who', 'title', 'publish', 'article', 'body'])
+      return {
+        at,
+        type: 'content.blog_post',
+        blog_post: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          title: str(source, `${path}.${key}.title`, body.title),
+          ...(body.publish === undefined
+            ? {}
+            : { publish: requireBool(source, `${path}.${key}.publish`, body.publish) }),
+          ...(body.article === undefined
+            ? {}
+            : { article: str(source, `${path}.${key}.article`, body.article) }),
+          ...(body.body === undefined
+            ? {}
+            : { body: str(source, `${path}.${key}.body`, body.body) }),
+        },
+      }
+    }
+    case 'store.daily_report': {
+      known(source, `${path}.${key}`, body, ['who'])
+      return {
+        at,
+        type: 'store.daily_report',
+        daily_report: { who: str(source, `${path}.${key}.who`, body.who) },
+      }
+    }
     case 'shop.theme_push': {
       known(source, `${path}.${key}`, body, ['who', 'name'])
       return {
@@ -1054,6 +1111,26 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   }
   const gatesFailed = optStrList(source, 'expected.gates_failed', raw.gates_failed)
   if (gatesFailed !== undefined) out.gates_failed = gatesFailed
+  // WP63（51 §2.1 数据日报）：出了几张日报卡、卡面上那几个数
+  if (raw.daily_reports !== undefined) {
+    out.daily_reports = numeric(source, 'expected.daily_reports', raw.daily_reports)
+  }
+  if (raw.daily_report_figures !== undefined) {
+    const f = raw.daily_report_figures
+    if (!isRec(f)) fail(source, 'expected.daily_report_figures', '必须是对象')
+    const figures: Record<string, number | string> = {}
+    for (const [name, v] of Object.entries(f)) {
+      if (!['sales', 'orders', 'low_stock', 'pending'].includes(name)) {
+        fail(
+          source,
+          'expected.daily_report_figures',
+          `只有 sales / orders / low_stock / pending：${name}`,
+        )
+      }
+      figures[name] = numeric(source, `expected.daily_report_figures.${name}`, v)
+    }
+    out.daily_report_figures = figures
+  }
   const eventTypes = optStrList(source, 'expected.event_types', raw.event_types)
   if (eventTypes !== undefined) out.event_types = eventTypes
   if (raw.approval_kinds !== undefined) {

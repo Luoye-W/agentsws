@@ -59,6 +59,19 @@ export type ObjectType =
   | 'product_line'
   | 'membership_request'
   | 'policy'
+  /**
+   * WP63（51 §2.1 / §2.2）：店铺那一侧**早就在用**的五类。
+   *
+   * `ShopifyTargetType`（`packages/connect-adapter`）里 collection / page / article /
+   * inventory_item 四个名字已经写了一年，只是一直靠 `(string & {})` 那道开口混进来；
+   * `review` 是 WP63 新加的评价管理那一面。名字不写出来，47 J1 的登记表就登记不上
+   * 「这类对象的真源是谁、谁读得到、能对它做什么」。**只加不删**。
+   */
+  | 'collection'
+  | 'page'
+  | 'article'
+  | 'inventory_item'
+  | 'review'
   | (string & {})
 
 export interface ObjectRef {

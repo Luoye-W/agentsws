@@ -187,7 +187,8 @@ describe('WP20 §A 连接清单与目录', () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
-    expect(providers.map((p) => p.service)).toEqual([
+    const live = providers.filter((p) => p.planned !== true)
+    expect(live.map((p) => p.service)).toEqual([
       'shopify_admin',
       'imap_smtp',
       'gmail',
@@ -200,7 +201,7 @@ describe('WP20 §A 连接清单与目录', () => {
       'aftership',
       'track17',
     ])
-    for (const p of providers) {
+    for (const p of live) {
       expect(p.setup_guide.steps.length).toBeGreaterThan(0)
       expect(p.setup_guide.steps.length).toBeLessThanOrEqual(5)
       expect(p.setup_guide.links.length).toBeGreaterThan(0)
@@ -221,6 +222,24 @@ describe('WP20 §A 连接清单与目录', () => {
     expect(providers.find((p) => p.service === 'ga4')?.data_note).toContain('下一版')
   })
 
+  // WP63（51 §2.1 评价管理 / §3 N2）
+  it('评价应用登记为"待增加"：出现在目录里、灰着、点不动，并说得出为什么', async () => {
+    const { providers } = await data<{ providers: ProviderView[] }>(
+      await api('/v1/connections/providers'),
+    )
+    const planned = providers.filter((p) => p.planned === true)
+    expect(planned.map((p) => p.service)).toEqual(['judgeme', 'loox'])
+    for (const p of planned) {
+      // 点不动：没有表单字段，也不"可用"
+      expect(p.fields, p.service).toEqual([])
+      expect(p.available, p.service).toBe(false)
+      // 但说得出为什么——不是一句冷冰冰的 unavailable
+      expect((p.unavailable_reason ?? '').length, p.service).toBeGreaterThan(10)
+      // 接上之后哪一块会亮，也写清楚
+      expect(p.data_sources, p.service).toEqual(['reviews'])
+    }
+  })
+
   // WP62（51 §1 N0 ①）
   it('目录按档案的平台过滤：改成 WooCommerce → 店铺卡不渲染，别的卡一张不少', async () => {
     const put = await api('/v1/workspace/profile', {
@@ -233,7 +252,7 @@ describe('WP20 §A 连接清单与目录', () => {
       await api('/v1/connections/providers'),
     )
     // 店铺卡没了（目录里还没有 woocommerce 那张）；邮箱 / GA4 / GSC / 广告与平台无关，一张不少
-    expect(providers.map((p) => p.service)).toEqual([
+    expect(providers.filter((p) => p.planned !== true).map((p) => p.service)).toEqual([
       'imap_smtp',
       'gmail',
       'ga4',

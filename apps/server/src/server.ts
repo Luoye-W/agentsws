@@ -225,6 +225,8 @@ export const BUNDLED_ROLES = [
   // WP64（51 §2.3 / §2.4）：网站运营岗位的邮件营销与订单履约
   'dtc.email-marketing',
   'dtc.fulfillment',
+  // WP63（51 §2.2）：第二条——内容与博客
+  'dtc.content',
 ] as const
 
 /**

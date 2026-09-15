@@ -183,6 +183,13 @@ const OBJECT_DOMAIN = {
   membership_request: 'policy',
   policy: 'policy',
   shipment: 'shipment',
+  // WP63（51 §2.1 / §2.2）：店铺那一侧新写进契约的五类。
+  // 集合是"一组商品"，归 product；页面与文章归 content；库存项归 inventory；
+  // 评价自己就是一个数据域（05 §1.1 的 `review`），不用别名。
+  collection: 'product',
+  page: 'content',
+  article: 'content',
+  inventory_item: 'inventory',
 }
 const domainOf = (id) => {
   const d = OBJECT_DOMAIN[id] ?? (DATA_DOMAINS.has(id) ? id : undefined)
@@ -363,6 +370,18 @@ const WHAT = {
   stage_page_edit: '改一个页面',
   stage_publish_theme: '发布主题',
   stage_theme_preview: '出一份主题预览',
+  // WP63（51 §2.1 / §2.2）
+  stage_listing_edit: '改商品 / 页面的文案、图与 SEO',
+  stage_price_change: '改一件商品的价（超 20% 转人审）',
+  stage_publish_product: '把商品上架（永远人审）',
+  stage_unpublish_product: '把商品撤下（永远人审）',
+  stage_collection_edit: '往集合里加 / 删商品',
+  stage_inventory_adjust: '调库存（直接设定永远人审）',
+  stage_discount_code: '建 / 改一个优惠码（营销发码）',
+  stage_promotion: '建 / 改全站活动（永远人审）',
+  stage_review_reply: '起草一条评价回复',
+  stage_review_invite: '给订单发邀评',
+  stage_publish_post: '写 / 发一篇博客文章（发布永远人审）',
 }
 
 // 5b. 职责里的写动作（05 §1.4）——这才是模型真正能提的那些
@@ -489,6 +508,11 @@ const LABEL = {
   workspace: '工作区',
   membership_request: '加入申请',
   policy: '策略',
+  collection: '集合',
+  page: '页面',
+  article: '博客文章',
+  inventory_item: '库存项',
+  review: '评价',
 }
 
 const objects = []

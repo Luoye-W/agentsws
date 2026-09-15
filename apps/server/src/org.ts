@@ -237,9 +237,8 @@ const SEED_POSITIONS: readonly {
       ['common.member', false],
     ],
   },
-  // WP62 / WP64（51 §2 / 27 §1）：**网站运营**岗位。51 §2 定的是四条职责，
-  // 现在有三条：店铺管理（`dtc.store`，旧 `dtc.ops` 迁过来的那一份）、
-  // 邮件营销、订单履约。内容与博客（`dtc.content`）跟着 WP63 一起加。
+  // WP62 / WP63 / WP64（51 §2 / 27 §1）：**网站运营**岗位，51 §2 定的四条职责齐了：
+  // 店铺管理（`dtc.store`，旧 `dtc.ops` 迁过来的那一份）、内容与博客、邮件营销、订单履约。
   //
   // 默认全勾：一个人开店的时候这四件事本来就是他一个人做；分工是后来的事，
   // 界面上去勾比想起来该加一条容易。
@@ -249,6 +248,7 @@ const SEED_POSITIONS: readonly {
     en: 'Web Operations',
     roles: [
       ['dtc.store', true],
+      ['dtc.content', true],
       ['dtc.email-marketing', true],
       ['dtc.fulfillment', true],
       ['common.member', false],

@@ -59,6 +59,13 @@ export interface MockProduct {
   currency: string
   status: 'active' | 'draft'
   record_version: string
+  /**
+   * WP63（51 §2.1 商品管理）：可售数量。
+   *
+   * 可选，因为**存量 pack 里没有这一格**——没有就是"这个数据集不带库存"，
+   * 库存那几块照 36 §3 空着，而不是当成 0 然后报一堆断货。
+   */
+  inventory?: number
 }
 
 /**

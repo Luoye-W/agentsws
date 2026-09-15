@@ -62,6 +62,8 @@ const SOURCE_AUTHZ = {
   // scopes 一格一格对，不图省事套 order。
   email_marketing: { domain: 'campaign', range: 'assigned' },
   tracking: { domain: 'shipment', range: 'assigned' },
+  // WP63（51 §2.1 评价管理）：评价应用的读走 `review` 域，与满意度同一格
+  reviews: { domain: 'review', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

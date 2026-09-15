@@ -132,6 +132,14 @@ export interface ProviderView {
   data_note?: string
   /** 有两种以上接法时给出来；WP44 起没有 provider 产出它（见 {@link ProviderAuthOption}）。 */
   auth_options?: ProviderAuthOption[]
+  /**
+   * WP63：这一条是**登记在册但还没做**的连接器（评价应用那两条）。
+   *
+   * 与 `available: false` 分得开：那个是"能连，但这台机器现在连不了"（环境问题，
+   * 用户修得好）；这个是"我们还没写"（用户修不好）。界面上它该是灰的、点不动、
+   * 不出表单，只显示 `unavailable_reason` 那句话。
+   */
+  planned?: boolean
 }
 
 export interface BeginConnectResult {

@@ -57,23 +57,64 @@ describe('Shopify 写动作对照表', () => {
     expect(changeKindOfAction('shopify_admin.publish_theme')).toBe('publish_theme')
   })
 
-  it('缺 kind 的那几个：库存、删除类 —— 说得出为什么', () => {
+  it('缺 kind 的那几个：改单、删除类 —— 说得出为什么', () => {
     for (const id of [
-      'shopify_admin.set_inventory_quantities',
-      'shopify_admin.adjust_inventory_quantities',
-      'shopify_admin.update_order',
       'shopify_admin.delete_product',
       'shopify_admin.delete_theme',
+      'shopify_admin.delete_discount_code',
+      'shopify_admin.update_order',
     ]) {
       const verdict = canStageAction(id)
       expect(verdict.ok, id).toBe(false)
       if (verdict.ok) throw new Error('unreachable')
       expect(verdict.reason.length, id).toBeGreaterThan(10)
     }
-    // 库存那两条要把"缺哪条 kind"说出来，报告与文档才知道要补什么
-    expect(shopifyWriteAction('shopify_admin.set_inventory_quantities')?.not_stageable).toContain(
-      'inventory_change',
+  })
+
+  // WP63（51 §2.1）：库存那两条从"缺 kind"变成有 kind 了
+  it('库存两条口都归 `inventory_adjust`；set 与 adjust 的分档在 after.mode 上', () => {
+    expect(changeKindOfAction('shopify_admin.set_inventory_quantities')).toBe('inventory_adjust')
+    expect(changeKindOfAction('shopify_admin.adjust_inventory_quantities')).toBe('inventory_adjust')
+    expect(canStageAction('shopify_admin.set_inventory_quantities').ok).toBe(true)
+    // 两条动作各自的说明里要写清楚 mode，不然调用方不知道该填哪一个
+    expect(shopifyWriteAction('shopify_admin.set_inventory_quantities')?.what).toContain('set')
+    expect(shopifyWriteAction('shopify_admin.adjust_inventory_quantities')?.what).toContain(
+      'adjust',
     )
+  })
+
+  // WP63：集合从 listing_edit 里分出来，文章归到 publish_post
+  it('集合归 `collection_edit`、文章归 `publish_post`（改的是不同量级的东西）', () => {
+    for (const id of [
+      'shopify_admin.create_collection',
+      'shopify_admin.update_collection',
+      'shopify_admin.add_products_to_collection',
+      'shopify_admin.remove_products_from_collection',
+    ]) {
+      expect(changeKindOfAction(id), id).toBe('collection_edit')
+    }
+    expect(changeKindOfAction('shopify_admin.create_article')).toBe('publish_post')
+    expect(changeKindOfAction('shopify_admin.update_article')).toBe('publish_post')
+    // 页面仍是 listing_edit：改一个 FAQ 页不等于发一篇博客
+    expect(changeKindOfAction('shopify_admin.update_page')).toBe('listing_edit')
+  })
+
+  // WP63（51 §3 N2）：结账 / 支付 / 税 / 域名——**根本没有可 stage 的动作**
+  it('结账 / 支付 / 税 / 域名：对照表里一条写口都没有，没有入口比有入口加一道门更稳', () => {
+    // 15 §2 的目录里有这四条 kind（别的岗位会用到），但 Shopify 这一侧一条动作都不映射
+    for (const kind of ['payment_config', 'tax_config', 'domain_config'] as const) {
+      expect(actionsOfChangeKind(kind), kind).toEqual([])
+    }
+    // 对照表里也没有任何落在店铺设置上的写动作
+    expect(SHOPIFY_WRITE_ACTIONS.filter((a) => a.target === 'store_config')).toEqual([])
+    // 于是"改一下就影响收款"的那几个动作名连查都查不到 → 未知即拒
+    for (const id of [
+      'shopify_admin.update_payment_settings',
+      'shopify_admin.update_tax_settings',
+      'shopify_admin.update_checkout_settings',
+    ]) {
+      expect(canStageAction(id).ok, id).toBe(false)
+    }
   })
 
   it('表里没有的动作一律不可 stage（未知即拒，和副作用表的 default: write 同一条纪律）', () => {

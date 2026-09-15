@@ -22,7 +22,8 @@ import type {
   RangeRef,
   RunEvent,
 } from '@agentsws/contracts'
-import type { DataSourceStatus, DeckCard, OrderRow } from '@agentsws/deck'
+import type { DataSourceStatus, DeckCard, InventoryRow, OrderRow, PostRow } from '@agentsws/deck'
+import { PLANNED_SOURCE_NOTES } from '@agentsws/deck'
 import { contentHashOf } from '@agentsws/knowledge'
 import { parseRole } from '@agentsws/roles'
 import type {
@@ -107,6 +108,44 @@ function ordersOf(world: World): OrderRow[] {
   }))
 }
 
+/**
+ * WP63：把合成世界里的商品摊成库存行。
+ *
+ * 没有 `inventory` 那一格的 pack（存量数据集）一行都不出——**不当成 0**，
+ * 那样整店都会被报成断货（36 §3：算不出就说没有，不是编一个数）。
+ */
+function inventoryOf(world: World): InventoryRow[] {
+  return world.connect.state.products
+    .filter((p) => typeof p.inventory === 'number')
+    .map((p) => ({
+      id: `inv_${p.id}`,
+      product_id: p.id,
+      sku: p.id.toUpperCase(),
+      title: p.title,
+      quantity: p.inventory as number,
+      location: '主仓',
+    }))
+}
+
+/**
+ * WP63（51 §2.2）：文章与页面。
+ *
+ * 合成公司里没有博客数据集，所以这里给一份**最小的、算得出来的**：每件商品
+ * 一篇写它的草稿。它只为让「草稿队列」这一块在 demo 里不是空的——真数据来自
+ * 店铺后台的 `list_articles`（连接器那条路，不在 demo 的范围里）。
+ */
+function postsOf(world: World, now: Iso8601): PostRow[] {
+  return world.connect.state.products.slice(0, 4).map((p, i) => ({
+    id: `art_${p.id}`,
+    title: `${p.title} 怎么挑`,
+    kind: 'article' as const,
+    published: i < 2,
+    updated_at: now,
+    ...(i < 2 ? { published_at: now } : {}),
+    author: '李默',
+  }))
+}
+
 function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
   const sources: DataSourceStatus[] = [
     // 店铺后台 = mock OpenConnector，接上了；其余三个 demo 里都没连
@@ -119,10 +158,21 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
     // WP64：邮件营销后台与物流追踪的连接器还是骨架 —— demo 里也照实说没连
     { id: 'email_marketing', label: '邮件营销后台', connected: false },
     { id: 'tracking', label: '物流追踪', connected: false },
+    // WP63：评价应用的连接器还没做 —— 永远没连，并带上那句人话（51 §3 N2）
+    {
+      id: 'reviews',
+      label: '评价应用',
+      connected: false,
+      note: PLANNED_SOURCE_NOTES.reviews ?? '',
+    },
   ]
   const alerts: DeckCard[] = []
   return {
     orders: () => ordersOf(world),
+    inventory: () => inventoryOf(world),
+    // 评价应用没接：一条评价都没有，差评那一块出的是"还没连"不是空表
+    reviews: () => [],
+    posts: () => postsOf(world, world.clock.now()),
     sources: () => sources,
     label: (ref: ObjectRef) => {
       if (ref.type === 'customer') return pack.customers.find((c) => c.id === ref.id)?.name
@@ -133,6 +183,42 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
     base_currency: pack.workspace.base_currency,
     systemCards: () => ({ alerts }),
   }
+}
+
+/**
+ * WP63（51 §2.1 / §2.2）：给 demo 的店铺管理面板铺几条真活。
+ *
+ * 四条车道各来一条、外加一张日报卡——全部走**真的**那条链（真读记录、真提案、
+ * 真过 guardrail），不是往队列里塞几张假卡。于是 demo 里看到的"待审 4 条"
+ * 与线上看到的是同一种东西：点开有 diff、有理由、有额度命中。
+ *
+ * 提案人是运营李默，卡落到店主手上——3 人公司里最常见的那种分工。
+ */
+async function seedStoreWork(world: World, pack: Pack): Promise<void> {
+  const ops = pack.people.find((p) => p.id === 'p_li')?.id
+  if (ops === undefined) return
+  // ① 改价车道：降 31%，超过 20% 的线 → 命中额度，卡上说得出超了多少
+  await world.shop.priceChange({
+    who: ops,
+    product: 'prod_2',
+    price: 61,
+    note: '清库存，力度大一点',
+  })
+  // ② 上下架车道：永远人审
+  await world.shop.publishProduct({
+    who: ops,
+    product: 'prod_4',
+    publish: true,
+    note: '新到的车载支架，上架卖',
+  })
+  // ③ 文案车道：改一篇博客（草稿，不惊动人；发布那一下才要人点头）
+  await world.shop.blogPost({
+    who: ops,
+    title: '快充头怎么挑：三个看得懂的参数',
+    publish: true,
+  })
+  // ④ 日报卡：L3 自动出、看完归档
+  await world.shop.dailyReport({ who: ops })
 }
 
 /**
@@ -637,11 +723,26 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     granted_by: world.owner,
     ranges: [{ kind: 'store', id: 'store_main' }],
   })
+  // WP63（51 §2）：**网站运营**岗位也要在 demo 里看得见。
+  //
+  // 合成 pack 里挂店铺管理的是运营李默，而 demo 登录的是店主——于是给店主也挂一条
+  // （3 人公司里店主本来就什么都管一点）。不挂的话，51 §2.1 那一整页面板在 demo 里
+  // 一眼都看不到，截图与人工验收都无从谈起。
+  for (const role of ['dtc.store', 'dtc.content']) {
+    world.roles.assignments.create({
+      person_id: world.roleHolder,
+      workspace_id: world.workspace_id,
+      role_id: role,
+      granted_by: world.owner,
+      ranges: [{ kind: 'store', id: 'store_main' }],
+    })
+  }
 
   const body = pack.fixtures.get('fixtures/anna-return.txt')
   if (body === undefined) throw new Error('pack 里没有 fixtures/anna-return.txt')
   await runInbound(world, pack, seed, body)
   await seedPolicyQuestion(world)
+  await seedStoreWork(world, pack)
 
   const owner = pack.people.find((p) => p.id === world.roleHolder) ?? pack.people[0]
   if (owner === undefined) throw new Error('pack 里没有人')

@@ -44,6 +44,15 @@ export type ApprovalKind =
    * payload = `{ request_id, person: { name, email }, via }`。
    */
   | 'membership'
+  /**
+   * WP63 / 51 §2.1 数据日报：**店铺日报卡**。
+   *
+   * 与 `daily_plan`（早上的计划）/ `review`（晚上的复盘）是三件事：那两张问的是
+   * "你今天打算干什么 / 今天干成了什么"，这一张问的是"店里昨天怎么样"。
+   * 它 L3 自动出、看完归档——数据日报那一面没有写动作，这张卡就是它唯一的产出。
+   * payload = `{ date, sales, orders, low_stock, pending }`。
+   */
+  | 'daily_report'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

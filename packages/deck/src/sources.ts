@@ -49,7 +49,19 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'csat',
   'email_marketing',
   'tracking',
+  'reviews',
 ]
+
+/**
+ * WP63（51 §2.1 评价管理 / §3 N2）：**还没做**的数据源那一句人话。
+ *
+ * 与"没连"分得开（`DataSourceStatus.note` 的注释里那一条）：评价应用不是用户忘了
+ * 去连，是连接目录里压根还没有这张卡。给一个「去连接」按钮才是骗人。
+ */
+export const PLANNED_SOURCE_NOTES: Partial<Record<DataSourceId, string>> = {
+  reviews:
+    '评价应用（Judge.me / Loox）还没接上——连接目录里已经登记为"待增加"，接上了这一块自己就有数了。',
+}
 
 /** 算连接状态时只认这个形状——**没有也不可能有凭据字段**。 */
 export interface ConnectionLike {
@@ -81,15 +93,18 @@ export function dataSourcesFromConnections(
     // WP62（51 §1 N0 ③）：这个工作区的网站平台我们还没接 → 「店铺后台」永远算没连，
     // 并带上那一句人话。给「去连接」按钮才是骗人：点进去也没有这个平台的卡。
     const unsupported = id === 'shop' && options.storefrontNote !== undefined
-    const on = !unsupported && connected.has(id)
+    // WP63：连接目录里还没有这张卡的数据源（评价应用）——永远算没连，并带上那句话
+    const planned = PLANNED_SOURCE_NOTES[id]
+    const on = !unsupported && planned === undefined && connected.has(id)
     const report_url = SOURCE_REPORT_URLS[id]
+    const note = unsupported ? options.storefrontNote : planned
     return {
       id,
       label: SOURCE_LABELS[id],
       connected: on,
       // 没连上就别给「查看完整报告」——点进去也是别人的后台登录页
       ...(on && report_url !== undefined ? { report_url } : {}),
-      ...(unsupported ? { note: options.storefrontNote } : {}),
+      ...(note === undefined ? {} : { note }),
     }
   })
 }

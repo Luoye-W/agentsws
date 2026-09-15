@@ -33,6 +33,9 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   // 复盘的产物是明天计划的草案，所以它也有「按建议排明天」这一路。
   daily_plan: ['approve', 'instruct', 'snooze', 'open'],
   review: ['approve', 'reject', 'snooze', 'open'],
+  // WP63 / 51 §2.1：日报卡是"看完归档"的东西——没有"驳回"可言（数就是那个数），
+  // 也没有"指导"（它不提议任何改动）。只剩打开细看与稍后再看。
+  daily_report: ['open', 'snooze'],
   // 46 I3：同意 / 拒绝，没有第三条路——「指导」在这里无从谈起（对方要么进来要么不进来）
   membership: ['approve', 'reject', 'open'],
 }
@@ -102,6 +105,7 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   digest: 'low',
   daily_plan: 'low',
   review: 'low',
+  daily_report: 'low',
 }
 
 export function riskClassFor(kind: DeckKind): RiskClass {
@@ -131,6 +135,8 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   digest: 3,
   daily_plan: 3,
   review: 4,
+  // 看一眼就归档
+  daily_report: 1,
 }
 
 export function minutesFor(kind: DeckKind): number {

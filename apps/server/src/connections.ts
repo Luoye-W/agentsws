@@ -62,6 +62,7 @@ import {
   type CatalogEntry,
   catalogEntry,
   flowOf,
+  PLANNED_CONNECTORS,
   ROLE_CONNECTOR_KIND,
   serviceOfUpstream,
 } from './catalog.js'
@@ -1147,7 +1148,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       // WP62（51 §1 N0 ①）：店铺卡按公司档案的平台过滤——别的平台那张**不渲染**。
       // 只筛"某个平台的店铺卡"，邮箱 / GA4 / 广告这些与平台无关的一张不少。
       const shopService = storefrontConnectorService(options.storefrontPlatform?.())
-      return CATALOG.filter(
+      const live: ProviderView[] = CATALOG.filter(
         (entry) => !isStorefrontService(entry.service) || entry.service === shopService,
       ).map((entry) => {
         const local = entry.store === 'local_vault'
@@ -1175,6 +1176,20 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           ...(entry.data_note === undefined ? {} : { data_note: entry.data_note }),
         }
       })
+      // WP63（51 §3 N2）：还没做的那几个明着登记在目录里，灰着、点不动。
+      // 不列出来的话，用户在连接页上找不到评价应用，只能猜我们是不是不管评价。
+      const planned: ProviderView[] = PLANNED_CONNECTORS.map((p) => ({
+        service: p.service,
+        label: p.label,
+        auth: 'api_key' as const,
+        fields: [],
+        available: false,
+        unavailable_reason: p.note,
+        data_sources: [...p.data_sources],
+        planned: true,
+        setup_guide: { summary: p.note, steps: [], links: [] },
+      }))
+      return [...live, ...planned]
     },
 
     list: () => listAll(),

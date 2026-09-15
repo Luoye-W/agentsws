@@ -1,5 +1,11 @@
 import type { ApprovalItem, ApprovalKind } from '@agentsws/contracts'
-import type { DataSourceStatus, OrderRow, QueryContext } from '../src/index.js'
+import type {
+  DataSourceStatus,
+  InventoryRow,
+  OrderRow,
+  PostRow,
+  QueryContext,
+} from '../src/index.js'
 
 export const NOW = '2026-09-07T01:00:00.000Z'
 /** Asia/Shanghai */
@@ -152,7 +158,60 @@ export const SOURCES: DataSourceStatus[] = [
   // WP64：连接器还是骨架，这两个永远没连
   { id: 'email_marketing', label: '邮件营销后台', connected: false },
   { id: 'tracking', label: '物流追踪', connected: false },
+  // WP63：评价应用的连接器还没做——永远没连，并带一句"待增加"
+  { id: 'reviews', label: '评价应用', connected: false, note: '评价应用还没接上。' },
 ]
+
+/** WP63：库存行。第二行故意在告急线以下、第三行故意断货。 */
+export const INVENTORY: InventoryRow[] = [
+  { id: 'inv_1', product_id: 'prod_1', sku: 'SKU-1', title: '快充头', quantity: 40 },
+  { id: 'inv_2', product_id: 'prod_2', sku: 'SKU-2', title: '旅行插头', quantity: 2 },
+  { id: 'inv_3', product_id: 'prod_3', sku: 'SKU-3', title: '编织线', quantity: 0 },
+]
+
+/** WP63：文章与页面。两篇发了、一篇还在草稿。 */
+export const POSTS: PostRow[] = [
+  {
+    id: 'art_1',
+    title: '快充头怎么挑',
+    kind: 'article',
+    published: true,
+    updated_at: '2026-09-05T02:00:00.000Z',
+    published_at: '2026-09-05T02:00:00.000Z',
+    clicks: 120,
+  },
+  {
+    id: 'art_2',
+    title: '半年前那篇',
+    kind: 'article',
+    published: true,
+    updated_at: '2026-01-05T02:00:00.000Z',
+    published_at: '2026-01-05T02:00:00.000Z',
+    clicks: 9,
+  },
+  {
+    id: 'page_1',
+    title: '退换货说明（改写中）',
+    kind: 'page',
+    published: false,
+    updated_at: '2026-09-06T02:00:00.000Z',
+  },
+]
+
+/** WP63：一条待审的店铺变更（车道断言用）。 */
+export function storeChangeItem(kind: string, over: Partial<ApprovalItem> = {}): ApprovalItem {
+  return item({
+    id: `ap_${kind}`,
+    kind: 'staged_change',
+    role_id: 'dtc.store',
+    title: `待审：${kind}`,
+    summary: `待审：${kind}`,
+    subject: { object: { type: 'product', id: 'prod_1' } },
+    payload: { change_id: `chg_${kind}`, kind, target: { type: 'product', id: 'prod_1' } },
+    state: 'pending',
+    ...over,
+  })
+}
 
 export function queryContext(over: Partial<QueryContext> = {}): QueryContext {
   return {

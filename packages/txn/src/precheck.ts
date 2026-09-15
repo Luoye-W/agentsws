@@ -32,6 +32,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'ai_question',
   // WP51 / 46 §2 I3：有人申请加入这个工作区
   'membership',
+  // WP63 / 51 §2.1 数据日报：店铺日报卡（L3 自动出、看完归档）
+  'daily_report',
 ])
 
 export function isKnownKind(kind: string): boolean {
@@ -173,7 +175,13 @@ export function runPrecheck<P>(
     }
   }
 
-  // 改前必读（listing_edit）
+  // 改前必读（listing_edit）。
+  //
+  // WP63 起「改前必读」的完整名单在 `@agentsws/core` 的 `RECORD_READ_KINDS` 里
+  // （文案 / 集合 / 评价回复），真正的强制在 **guardrail** 那一层——它看的是这次运行
+  // 的 provenance（读没读过全记录是**事实**）。这里这一条只认调用方自报的
+  // `evidence.precheck.record_read`，是给还没接 provenance 的老路径留的旧门，
+  // 所以**不跟着扩**：扩了等于让新 kind 一律 blocked（没人会去填那个自报字段）。
   if (input.kind === 'staged_change' && p.kind === 'listing_edit') {
     const target = asRef(p.target) ?? input.subject.object
     const full = new Set(ctx.precheck_overrides?.record_read === 'ok' ? [refKey(target)] : [])

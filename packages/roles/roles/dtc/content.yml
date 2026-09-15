@@ -1,0 +1,129 @@
+# 51 §2.2 内容与博客（WP63）。
+#
+# 网站运营岗位的第二条职责：博客文章、独立页面（FAQ / 关于 / 活动页）、页面 SEO 元字段。
+# 图片素材向设计岗（待做）下需求单——所以这里没有任何图片写动作。
+#
+# 三件事值得说清楚：
+#
+# 1. **草稿随便写，发布必须有人点头**（51 §2.2）。这不是靠 `ceiling: L1` 拦的——
+#    那样连草稿都自动不了。是 guardrail 看 `after.published`：`false` 是草稿（L2 自动），
+#    `true` 是"让它出现在店里"（转人审）。同一条 `publish_post`，两种后果。
+# 2. **内容可以引用事实卡，但不能编数字**（19）。`knowledge` 域给了读权限，
+#    grounding 里把「查事实卡」摆成写文之前的必经一步；正文里的价格、参数、政策
+#    必须指得回某一张卡，指不回的由人补。
+# 3. **每天最多发 2 篇**（51 §2.2 N5 `max_posts_per_day`）。这条额度只算**发布**，
+#    不算草稿——攒十篇草稿不伤人，一天推十篇到店里会把订阅的人推走。
+id: dtc.content
+version: 1.0.0
+domain: dtc
+name: { zh: 内容与博客, en: Content & Blog }
+description: 博客文章、独立页面、页面 SEO 元字段
+
+scopes:
+  # 文章与页面正文都在 content 域
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 商品只读：写商品详情页是店铺管理那条职责的事，这里只是引用商品信息写文
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  # 店铺设置只读：写文要知道政策页写了什么（退换货、配送），但不改它
+  - { domain: store_config, ops: [read], range: assigned, max_sensitivity: internal }
+  # 19：内容可以引用事实卡，但不能编数字——所以是 read，不是 stage
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  # 近 30 天发布与流量那一块（GSC / GA4 没连就照 36 §3 明说）
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # 51 §1 N0：平台中立的 `shop`（文章与页面住在店铺后台里）
+  - { kind: shop, required: true, grants: [read_content, write_content], ownership: workspace }
+  # Search Console：近 30 天发布与流量那一块要它。没连 = 面板上那一块明说"还没连"，
+  # 其余（草稿队列、待发布）照常——所以 `required: false`
+  - { kind: search_console, required: false, grants: [read_analytics], ownership: workspace }
+
+actions:
+  # 博客文章：草稿 L2、发布 L1（分档在 guardrail 的 `after.published`）
+  - id: stage_publish_post
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_posts_per_day: 2 }, window: { max_count: 20, per: day } }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  # 独立页面（FAQ / 关于 / 活动页）**与 SEO 元字段**：都是 L2，都走 `listing_edit`。
+  #
+  # 为什么元字段没有自己一条动作：动作 id 与 15 §2 的变更种类是一一对应的
+  # （`stage_<kind>`），而元字段在写动作对照表里对应的就是 `listing_edit`
+  # （`shopify_admin.set_metafields`）。硬给它一个 `stage_set_metafields`，
+  # 得到的是一条**没有变更种类**的动作——没有 kind 就没有风险级、没有额度、
+  # 没有执行器，等于一个提了也施行不了的口。要分开计额度得先给元字段一条自己的 kind。
+  - id: stage_listing_edit
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 50, per: day } }
+    route_to: scope_manager
+
+automation:
+  stage_publish_post:
+    # 上限 L2：草稿那一半够得着自动；发布那一半由 guardrail 每次拉回人审
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_listing_edit:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+skills: []
+home_blocks:
+  # 51 §2.2 面板：草稿队列、待发布、近 30 天发布与流量
+  - {
+      id: content.drafts,
+      placement: queue,
+      component: table,
+      query: content.drafts,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: content.pending_publish,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending_publish_post,
+      default_order: 11,
+      pinnable: true,
+      adaptive: true,
+    }
+  # GSC 没连的时候这一块照 36 §3 明说"还没连"，不出一张永远为空的图
+  - {
+      id: content.recent_posts,
+      placement: role_view,
+      component: table,
+      query: content.recent_posts,
+      default_order: 20,
+      pinnable: true,
+      adaptive: false,
+    }
+notifications:
+  - {
+      event: 'approval.created:stage_publish_post',
+      mode: queue,
+      recipients: [scope_manager],
+      escalate_after_hours: 24,
+    }
+grounding:
+  # 19：写文之前先查事实卡——正文里的价格、参数、政策必须指得回某一张卡
+  - {
+      name: facts_before_writing,
+      intent_terms: [写文章, 博客, 页面, FAQ, 活动页, blog, article, landing page],
+      cue_terms: [价格, 尺寸, 材质, 保修, 退换, 配送, warranty, shipping, return],
+      tool: search_policies,
+      prefetch: true,
+    }
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []

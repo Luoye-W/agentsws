@@ -60,6 +60,26 @@ export type ChangeKind =
   | 'payment_config'
   | 'tax_config'
   | 'domain_config'
+  /**
+   * WP63（51 §2.1 商品管理）：库存**直接设定或加减**。
+   *
+   * 它既不是 `listing_edit`（不改商品信息）也不是 `price_change`，而且改错会当场超卖——
+   * 所以它必须有自己的额度（`max_inventory_adjust`）。`after.mode` 分两种：
+   * `adjust` 是在现有数量上加减（收货 / 报损），额内可自动；`set` 是盘点后直接写一个数，
+   * **永远人审**（把一个仓写成 0 和写成 1000 在 API 上是同一次调用）。
+   */
+  | 'inventory_adjust'
+  /**
+   * WP63（51 §2.1 商品管理）：集合增删商品 / 改集合本身。
+   *
+   * 从 `listing_edit` 里分出来，因为影响面不同：改一件商品的文案只影响那一件，
+   * 往「首页精选」里塞或拿掉一件商品，改的是整家店的货架。
+   */
+  | 'collection_edit'
+  /** WP63（51 §2.1 评价管理）：公开回复一条评价（草稿，批了才发）。 */
+  | 'review_reply'
+  /** WP63（51 §2.1 评价管理）：给订单发邀评（合规词表 + 每日上限）。 */
+  | 'review_invite'
 
 export type ChangeStatus =
   | 'staged'

@@ -45,6 +45,12 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   payment_config: 'high',
   tax_config: 'high',
   domain_config: 'high',
+  // WP63（51 §2.1）：库存写错当场超卖、集合改的是整家店的货架，都按 medium；
+  // 评价那两条对外可见但改不了钱，按 low（额度与合规词表在 mandate 上）。
+  inventory_adjust: 'medium',
+  collection_edit: 'low',
+  review_reply: 'low',
+  review_invite: 'low',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -59,6 +65,20 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   'tax_config',
   'domain_config',
   'create_campaign',
+  /**
+   * WP63（51 §2.1）：**上下架与全站活动永远人审**。
+   *
+   * 上架 = 让顾客能买到，撤下 = 让顾客买不到，全站活动 = 全店的价都动了——
+   * 三件事都是"一按下去整家店的样子就变了"，跟改一句文案不是同一个量级。
+   * 把它们放进硬顶而不是只在职责 yml 里写 `ceiling: L1`：yml 是可以被工作区策略
+   * 放宽的，硬顶不行（15 §2）。
+   *
+   * `publish_post` **不在**这里：51 §2.2 明说博客草稿 L2、发布 L1，
+   * 所以它按 `after.published` 分档，见下面的 switch。
+   */
+  'publish_product',
+  'unpublish_product',
+  'promotion',
 ])
 /**
  * 44 G2：这些变更的**目标是一件具体商品**，于是"目标在不在我管的范围里"这句话才有意义。
@@ -74,7 +94,50 @@ export const TARGET_SCOPED_KINDS: ReadonlySet<ChangeKind> = new Set([
   'listing_edit',
   'publish_product',
   'unpublish_product',
+  // WP63（51 §2.1）：库存落在一个库存项上、集合落在一个集合上、评价落在一条评价上——
+  // 每一条都能顺着目标问出"这件货 / 这个货架 / 这条评价归不归你管"，所以都进这张表。
+  'inventory_adjust',
+  'collection_edit',
+  'review_reply',
+  'review_invite',
 ])
+
+/**
+ * 15 §1「改前必读」：这几种变更**必须**先把目标的全记录读回来才准提。
+ *
+ * 为什么不是所有写动作都要：退款的 `before` 来自订单金额，读一次订单就够了；
+ * 而改文案 / 改货架 / 回评价这三件事，`before` 就是那段**正文**——没读全文就改，
+ * 等于拿着摘要覆盖原文。
+ *
+ * 前置层（`packages/txn` 的 `runPrecheck`）与 guardrail 读的是同一张表，
+ * 免得"前置放过、guardrail 拦下"这种两头不一致。
+ */
+export const RECORD_READ_KINDS: ReadonlySet<ChangeKind> = new Set([
+  'listing_edit',
+  'collection_edit',
+  'review_reply',
+])
+
+/**
+ * WP63（51 §2.1 评价管理「邀评 L2 且合规词表」）：邀评正文里**不许出现**的说法。
+ *
+ * 这不是措辞偏好，是平台规则：拿好处换好评在 Shopify / Amazon / Google 都是封号级
+ * 违规。所以它是 `block` 而不是 `review`——这种句子不该有"人点一下就发出去"的路径。
+ */
+export const REVIEW_INVITE_FORBIDDEN: readonly string[] = [
+  '返现',
+  '好评返',
+  '五星好评',
+  '删差评',
+  '改评价',
+  'free gift',
+  'gift card',
+  'refund for',
+  '5-star',
+  'five star',
+  'positive review',
+  'remove your review',
+]
 
 /**
  * 48 §4 L3 #3：15 guardrail 前置里三道「不自主」的门 + Amazon 出站硬闸。
@@ -108,6 +171,10 @@ export const PROTECTED_FIELDS: Partial<Record<ChangeKind, string[]>> = {
   flow_edit: ['trigger', 'trigger_conditions', 'trigger_filters', 'audience_filter'],
   price_change: ['sku', 'currency', 'tax_category'],
   listing_edit: ['listing_id', 'compliance_notes'],
+  // WP63：换一个仓、换一个库存项 = 把数写到别的货上了，那不是"调库存"是"调错货"。
+  inventory_adjust: ['inventory_item_id', 'location_id', 'sku'],
+  // 集合 id 一变，改的就是另一个货架；智能集合的判据也不该由 Agent 动。
+  collection_edit: ['collection_id', 'rule_set'],
 }
 
 export interface ChangeLike {
@@ -226,6 +293,15 @@ export function evaluateGuardrail(
       facts.target_in_range.reason ?? 'out_of_range',
     )
 
+  // 15 §1 改前必读：这几种变更的 `before` 就是那段正文，没读全文就改等于拿摘要覆盖原文。
+  // 判据是这次运行的 provenance（读没读过是**事实**），不是调用方自报的一格。
+  if (
+    RECORD_READ_KINDS.has(change.kind) &&
+    facts.provenance &&
+    !facts.provenance.hasFull(change.target)
+  )
+    block('requires_record_read', 'get_full_record', change.target.id)
+
   switch (change.kind) {
     case 'refund': {
       const amount = change.amount_base ?? num(after.refund_amount)
@@ -274,6 +350,98 @@ export function evaluateGuardrail(
       const cap = capNumber(mandate, 'max_presales_discount_pct')
       if (p !== undefined && cap !== undefined && p > cap)
         review('max_presales_discount_pct', cap, p)
+      // WP63（51 §2.1 促销与折扣）：营销发码与客服的安抚发码**分账**——
+      // 同一条 kind，两组 cap：客服那条职责只配 `max_presales_discount_pct`，
+      // 店铺管理那条只配 `max_promo_discount_pct` + `max_promo_uses`。
+      // 配了哪一组就判哪一组，没配的一条都不多判（老调用方一个字不用改）。
+      const promoCap = capNumber(mandate, 'max_promo_discount_pct')
+      if (p !== undefined && promoCap !== undefined && p > promoCap)
+        review('max_promo_discount_pct', promoCap, p)
+      const usesCap = capNumber(mandate, 'max_promo_uses')
+      if (usesCap !== undefined) {
+        const uses = num(after.usage_limit)
+        // 「无上限码」= 谁都能无限次用的码，51 §2.1 明说它永远人审。
+        if (uses === undefined) review('max_promo_uses', usesCap, 'unlimited')
+        else if (uses > usesCap) review('max_promo_uses', usesCap, uses)
+      }
+      break
+    }
+    /**
+     * WP63（51 §2.1 商品管理）：库存。
+     *
+     * 两种写法在 API 上是同一次调用，在后果上不是：
+     * - `adjust` 在现有数量上加减（收货 / 报损）——额内可自动；
+     * - `set` 直接写一个数（盘点对账）——**永远人审**，因为写成 0 和写成 1000 一样容易。
+     */
+    case 'inventory_adjust': {
+      const beforeQty = num(before.quantity)
+      const mode = after.mode === 'set' ? 'set' : 'adjust'
+      const delta =
+        num(after.delta) ??
+        (beforeQty !== undefined && num(after.quantity) !== undefined
+          ? (num(after.quantity) as number) - beforeQty
+          : undefined)
+      if (beforeQty === undefined) block('inventory_before_ungrounded', 'quantity', 'missing')
+      if (mode === 'set') {
+        const target = num(after.quantity)
+        if (target === undefined) block('inventory_quantity_required')
+        else if (target < 0) block('inventory_negative', 0, target)
+        review('inventory_set_needs_review', 'L1', 'set')
+      } else {
+        if (delta === undefined) block('inventory_delta_required')
+        else {
+          if (beforeQty !== undefined && beforeQty + delta < 0)
+            block('inventory_negative', 0, beforeQty + delta)
+          const cap = capNumber(mandate, 'max_inventory_adjust')
+          if (cap !== undefined && Math.abs(delta) > cap)
+            review('max_inventory_adjust', cap, Math.abs(delta))
+        }
+      }
+      break
+    }
+    /** WP63（51 §2.1）：集合增删商品——改的是整家店的货架（"改之前先读全"见 switch 之前那一条）。 */
+    case 'collection_edit': {
+      const cap = capNumber(mandate, 'max_collection_products')
+      const touched = Array.isArray(after.products) ? after.products.length : num(after.count)
+      if (cap !== undefined && touched !== undefined && touched > cap)
+        review('max_collection_products', cap, touched)
+      break
+    }
+    /** WP63（51 §2.1 评价管理）：回复评价（"改之前先读全"见 switch 之前那一条）。 */
+    case 'review_reply': {
+      // 差评交给客服（`dtc.support`）处理，店铺管理这条职责不自己回——
+      // 评分低于这条线就不该由这里出稿，转人（转岗）由上层按这条 hit 决定。
+      const floor = capNumber(mandate, 'review_reply_min_rating')
+      const rating = num(before.rating)
+      if (floor !== undefined && rating !== undefined && rating < floor)
+        review('review_reply_min_rating', floor, rating)
+      break
+    }
+    /** WP63（51 §2.1 评价管理）：邀评——合规词表命中直接 block，不给"人点一下就发"的路。 */
+    case 'review_invite': {
+      const body = [after.body, after.subject]
+        .filter((v): v is string => typeof v === 'string')
+        .join('\n')
+        .toLowerCase()
+      const hit = REVIEW_INVITE_FORBIDDEN.find((w) => body.includes(w.toLowerCase()))
+      if (hit !== undefined) block('review_invite_compliance', hit, 'found')
+      const cap = capNumber(mandate, 'max_review_invites_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_review_invites_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP63（51 §2.2 内容与博客）：博客文章。
+     *
+     * 51 明说「新建 / 更新草稿 L2；**发布 L1**」，所以它不能进 `HARD_L1`
+     * （那样草稿也自动不了），而是按 `after.published` 分档：躺在后台的草稿随便写，
+     * 一旦要让它出现在店里，人必须点一下。
+     */
+    case 'publish_post': {
+      if (after.published === true) review('publish_post_needs_review', 'L1', 'published')
+      const cap = capNumber(mandate, 'max_posts_per_day')
+      if (cap !== undefined && after.published === true && facts.windowCount + 1 > cap)
+        review('max_posts_per_day', cap, facts.windowCount + 1)
       break
     }
     case 'price_change':
@@ -301,11 +469,7 @@ export function evaluateGuardrail(
         review('margin_floor_pct', floor, change.margin_after_pct)
       break
     }
-    case 'listing_edit': {
-      if (facts.provenance && !facts.provenance.hasFull(change.target))
-        block('requires_record_read', 'get_full_record', change.target.id)
-      break
-    }
+
     case 'campaign_send': {
       const n = num(after.audience_size)
       const cap = capNumber(mandate, 'max_campaign_audience')

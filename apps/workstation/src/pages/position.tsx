@@ -134,11 +134,25 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
                   {t('view.not_connected', { source: section.label })}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <Button size="sm" variant="outline" asChild>
-                  {/* WP20 §C：直接落到那一个 provider 的卡片上，不让用户自己找 */}
-                  <Link to={connectPathFor(section.source)}>{t('view.connect')}</Link>
-                </Button>
+              <CardContent className="flex flex-col gap-2">
+                {/*
+                  WP62 / WP63（36 §3）：**没连**与**还没做**是两回事。
+                  有 `note` 就是后者（这个平台我们还没接 / 这个连接器还没做）——
+                  照实说那句话，并且**不给「去连接」按钮**：点进去无处可点的按钮，
+                  会让人在连接页上反复找、以为是自己哪里填错了。
+                */}
+                {section.note === undefined ? (
+                  <div>
+                    <Button size="sm" variant="outline" asChild>
+                      {/* WP20 §C：直接落到那一个 provider 的卡片上，不让用户自己找 */}
+                      <Link to={connectPathFor(section.source)}>{t('view.connect')}</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground" data-testid="source-note">
+                    {section.note}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}

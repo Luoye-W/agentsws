@@ -1,0 +1,64 @@
+# 博客：草稿随便写，发出去要人点头（51 §2.2）。
+#
+# 同一条 `publish_post`，两种后果——分档不在 kind 上，在 `after.published` 上：
+#
+# 1. **草稿**（`publish: false`）：guardrail 一条 hit 都不记。躺在后台的东西顾客
+#    看不见，不该惊动人。这一半证明"发布 L1"不是把整条职责锁死了。
+# 2. **发布**（`publish: true`）：命中 `publish_post_needs_review`，卡进人的队列。
+#    让一篇文章出现在店里，是一次对外发布——人必须知道。
+#
+# 为什么不把 `publish_post` 放进 `HARD_L1`：那样连草稿都自动不了，内容这条职责
+# 就只剩"给人递笔"的份了。51 §2.2 明说的是"新建 / 更新草稿 L2；发布 L1"。
+id: content/blog-draft-then-publish
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 先写一篇草稿：存在后台，顾客看不到
+  - at: '+0m'
+    content.blog_post:
+      who: p_li
+      title: 快充头怎么挑：三个看得懂的参数
+      publish: false
+      body: PD 与 PPS 的区别、功率怎么看、线要配多粗
+  # ② 三小时后把它发出去：这一下必须有人点头。
+  #
+  # 为什么等三小时才发、而不是写完接着发：同一篇文章的两次提案共用一个去重键，
+  # 后一条会把前一条顶掉（14 §5 supersede）。等第一条走完再提第二条，
+  # "草稿归草稿、发布归发布"这两半才各自看得见。
+  - at: '+3h'
+    content.blog_post:
+      who: p_li
+      title: 快充头怎么挑：三个看得懂的参数
+      publish: true
+  - at: '+9h'
+    clock.advance: {}
+expected:
+  staged_change_kinds: [publish_post]
+  # 发文之前真读了那篇（`before` 来自库里那一份，不是凭空编的）
+  calls_tool: [list_articles]
+  no_applied_changes_before: $approve
+  event_types:
+    - change.staged
+    - change.applied
+    - content.post_written
+  metrics:
+    # 两次提案：一次草稿、一次发布
+    staged_changes: 2
+    applied_changes: 2
+    # 发布那一次命中 publish_post_needs_review
+    guardrail_hits: '>=1'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  "发布"那张卡与"草稿"那两张，人一眼分得出哪张按下去顾客就看得到吗？

@@ -184,18 +184,76 @@ describe('loadPosition (05 §2)', () => {
     const role = loadBundledRole('dtc.ops')
     expect(role.id).toBe('dtc.store')
     expect(role.name.zh).toBe('店铺管理')
-    // 51 §2.1 的五个写动作，额度一个数都没改（WP62 只搬骨架）
+    // 51 §1 N0：连接器是平台中立的 `shop`，不写死 Shopify；
+    // 评价应用（Judge.me / Loox）待增加，所以 `required: false`
+    expect(role.connectors.map((c) => c.kind)).toEqual(['shop', 'reviews'])
+    expect(role.connectors.find((c) => c.kind === 'reviews')?.required).toBe(false)
+  })
+
+  // WP63（51 §2.1）：五个能力面补齐 —— 额度**按动作**分，不按能力面分
+  it('`dtc.store` 五个能力面：十一条写动作，额度各挂各的', () => {
+    const role = loadBundledRole('dtc.store')
     expect(role.actions.map((a) => a.id)).toEqual([
       'stage_listing_edit',
       'stage_price_change',
-      'stage_promotion',
       'stage_publish_product',
       'stage_unpublish_product',
+      'stage_collection_edit',
+      'stage_inventory_adjust',
+      'stage_discount_code',
+      'stage_promotion',
+      'stage_publish_theme',
+      'stage_review_reply',
+      'stage_review_invite',
     ])
-    expect(role.actions[1]?.mandate.caps).toMatchObject({ max_price_delta_pct: 20 })
-    expect(role.automation.stage_price_change?.hard_ceiling).toBe(true)
-    // 51 §1 N0：连接器是平台中立的 `shop`，不写死 Shopify
-    expect(role.connectors.map((c) => c.kind)).toEqual(['shop'])
+    const caps = (id: string): Record<string, unknown> =>
+      role.actions.find((a) => a.id === id)?.mandate.caps ?? {}
+    // 51 §5 N5 那四个默认值，一个不少、一个不串
+    expect(caps('stage_price_change')).toMatchObject({ max_price_delta_pct: 20 })
+    expect(caps('stage_inventory_adjust')).toMatchObject({ max_inventory_adjust: 50 })
+    expect(caps('stage_discount_code')).toMatchObject({ max_promo_discount_pct: 30 })
+    // 改价那条里**没有**库存的额度：额度按动作分，不是一份套全部
+    expect(caps('stage_price_change').max_inventory_adjust).toBeUndefined()
+
+    // 自动化上限（51 §2.1 那张表的最后一栏）
+    expect(role.automation.stage_listing_edit?.ceiling).toBe('L2')
+    // 改价上限给到 L2：额内自动、超额由 guardrail 拉回人审
+    expect(role.automation.stage_price_change?.ceiling).toBe('L2')
+    expect(role.actions.find((a) => a.id === 'stage_price_change')?.review_cannot_be_disabled).toBe(
+      true,
+    )
+    // 上下架 / 全站活动 / 主题发布：永远 L1
+    for (const id of [
+      'stage_publish_product',
+      'stage_unpublish_product',
+      'stage_promotion',
+      'stage_publish_theme',
+    ]) {
+      expect(role.automation[id]?.ceiling, id).toBe('L1')
+      expect(role.automation[id]?.hard_ceiling, id).toBe(true)
+    }
+    // 差评转客服：回复那条动作路由到 `dtc.support`
+    expect(role.actions.find((a) => a.id === 'stage_review_reply')?.route_to).toEqual({
+      role: 'dtc.support',
+    })
+    // 结账 / 支付 / 税不给写动作：`store_config` 域只有 read
+    expect(role.scopes.find((s) => s.domain === 'store_config')?.ops).toEqual(['read'])
+    // 异常卡的阈值进职责 yml（51 §2.1）
+    expect(role.thresholds?.low_stock_quantity).toBe(5)
+    expect(role.thresholds?.sales_drop_pct).toBe(30)
+  })
+
+  // WP63（51 §2.2）：内容与博客
+  it('`dtc.content` 内容与博客：草稿 L2、发布 L1、每天两篇', () => {
+    const role = loadBundledRole('dtc.content')
+    expect(role.name.zh).toBe('内容与博客')
+    expect(role.actions.map((a) => a.id)).toEqual(['stage_publish_post', 'stage_listing_edit'])
+    expect(role.actions[0]?.mandate.caps).toMatchObject({ max_posts_per_day: 2 })
+    // 上限 L2 —— 草稿够得着自动；发布那一半由 guardrail 每次拉回人审
+    expect(role.automation.stage_publish_post?.ceiling).toBe('L2')
+    expect(role.actions[0]?.review_cannot_be_disabled).toBe(true)
+    // 19：能读知识库，但不能写（内容可以引用事实卡，不能编数字）
+    expect(role.scopes.find((s) => s.domain === 'knowledge')?.ops).toEqual(['read'])
   })
 
   // WP64（51 §2.3 / §2.4）：邮件营销与订单履约
@@ -245,10 +303,11 @@ describe('loadPosition (05 §2)', () => {
     expect(role.connectors.filter((c) => c.required).map((c) => c.kind)).toEqual(['shop'])
   })
 
-  it('网站运营岗位模板：WP64 之后是三条职责（内容与博客跟 WP63）', () => {
+  it('网站运营岗位模板：WP63 / WP64 之后是 51 §2 的四条职责', () => {
     const position = loadBundledPosition('web-ops')
     expect(position.roles.map((r) => r.role)).toEqual([
       'dtc.store',
+      'dtc.content',
       'dtc.email-marketing',
       'dtc.fulfillment',
     ])

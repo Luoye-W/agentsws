@@ -182,7 +182,14 @@ export interface ProjectContext {
 export type RangeName = 'yesterday' | 'last_7d'
 export type TileFormat = 'money' | 'count' | 'percent' | 'ratio'
 
-/** 数据源（36 §3：面板 Tab 按数据源分块）。 */
+/**
+ * 数据源（36 §3：面板 Tab 按数据源分块）。
+ *
+ * WP63：多一个 `reviews`（评价应用：Judge.me / Loox）。它**今天一定是没连的**——
+ * 连接目录里只把它登记成"待增加"。留着这个数据源不是为了将来好接，是为了让
+ * 差评表这一块在面板上**说得出那句话**：36 §3 的老规矩是缺连接器就明说，
+ * 不是把这一块从面板上抹掉（抹掉了用户以为我们不管评价）。
+ */
 export type DataSourceId =
   | 'shop'
   | 'approvals'
@@ -194,6 +201,7 @@ export type DataSourceId =
   | 'email_marketing'
   /** WP64（51 §2.4）：物流追踪（AfterShip / 17track）。 */
   | 'tracking'
+  | 'reviews'
 
 export interface DataSourceStatus {
   id: DataSourceId
@@ -294,6 +302,45 @@ export interface RecordRow {
   ref?: ObjectRef
 }
 
+/** 一条库存行（WP63 库存告急表与「库存告急数」都从它算）。 */
+export interface InventoryRow {
+  /** 库存项 id（`inventory_item`），不是商品 id。 */
+  id: string
+  product_id?: string
+  sku?: string
+  title: string
+  /** 可售数量。 */
+  quantity: number
+  location?: string
+}
+
+/** 一条评价（WP63 差评表）。评价应用连接器待增加，所以这一路今天永远是空的。 */
+export interface ReviewRow {
+  id: string
+  product_id?: string
+  product_title?: string
+  author?: string
+  rating: number
+  body: string
+  created_at: Iso8601
+  /** 已经回过了没有（回过的不再进差评表）。 */
+  replied?: boolean
+}
+
+/** 一篇文章 / 一个页面（WP63 内容与博客的草稿队列与近 30 天发布）。 */
+export interface PostRow {
+  id: string
+  title: string
+  /** `article`（博客）或 `page`（独立页面）。 */
+  kind: 'article' | 'page'
+  published: boolean
+  updated_at: Iso8601
+  published_at?: Iso8601
+  author?: string
+  /** 近 30 天的自然流量（GSC 没连就没有这一格）。 */
+  clicks?: number
+}
+
 export interface QueryContext {
   now: Iso8601
   /** 工作区时区偏移（分钟），日界线按它切 */
@@ -304,6 +351,19 @@ export interface QueryContext {
   orders: OrderRow[]
   approvals: ApprovalItem[]
   sources: DataSourceStatus[]
+  /** WP63：库存行（拉得到才有；没有 = 库存那几块算不出来，照 36 §3 出"还没连"）。 */
+  inventory?: InventoryRow[]
+  /** WP63：评价行。评价应用连接器待增加，所以它今天一定是空的。 */
+  reviews?: ReviewRow[]
+  /** WP63：文章与页面。 */
+  posts?: PostRow[]
+  /**
+   * WP63：这个岗位判「不正常」用的那几个数（职责 yml 的 `thresholds`）。
+   *
+   * 不给就用 `ANOMALY_DEFAULTS`——积木层不该因为宿主忘了传一格就算不出东西，
+   * 但也不该把阈值硬写在代码里（卖家具的和卖快消的不是一个数）。
+   */
+  thresholds?: Record<string, number>
 }
 
 export interface ScalarResult {
@@ -315,7 +375,19 @@ export interface ScalarResult {
 }
 
 export interface TableResult {
-  columns: { key: string; label: string; align?: 'left' | 'right' }[]
+  columns: {
+    key: string
+    label: string
+    align?: 'left' | 'right'
+    /**
+     * WP63：这一列的数怎么念。
+     *
+     * 不给 = 按金额（前端一直是这么干的，老积木一个字不用改）。库存件数、
+     * 评分、条数这些**不是钱**——把 2 件货渲染成 `US$2.00` 不是小瑕疵，
+     * 是把一句真话说成了假话。
+     */
+    format?: 'money' | 'count' | 'percent'
+  }[]
   rows: Record<string, string | number>[]
 }
 

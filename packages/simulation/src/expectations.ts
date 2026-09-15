@@ -424,6 +424,41 @@ export function checkExpectations(
         : `这几道门没说不自主：${missing.join(', ')}（实际 [${[...failed].sort().join(', ')}]）`,
     )
   }
+  // WP63 / 51 §2.1：日报卡出了几张、卡面上那几个数对不对
+  if (expected.daily_reports !== undefined || expected.daily_report_figures !== undefined) {
+    const reports = evidence.events.filter((e) => e.type === 'digest.daily_report')
+    if (expected.daily_reports !== undefined) {
+      const hit = matchNumeric(reports.length, expected.daily_reports)
+      add(
+        'daily_reports',
+        hit,
+        `日报卡 ${reports.length} 张（期望 ${String(expected.daily_reports)}）`,
+      )
+    }
+    if (expected.daily_report_figures !== undefined) {
+      const last = reports[reports.length - 1]
+      if (last === undefined) {
+        add('daily_report_figures', false, '一张日报卡都没有，这条断言没有意义')
+      } else {
+        const p = payloadOf(last)
+        const problems: string[] = []
+        for (const [key, assertion] of Object.entries(expected.daily_report_figures)) {
+          const value = p[key]
+          if (typeof value !== 'number') {
+            problems.push(`${key} 不在卡面上`)
+            continue
+          }
+          if (!matchNumeric(value, assertion))
+            problems.push(`${key}=${value}（期望 ${String(assertion)}）`)
+        }
+        add(
+          'daily_report_figures',
+          problems.length === 0,
+          problems.length === 0 ? '日报卡上的数都对得上' : problems.join('；'),
+        )
+      }
+    }
+  }
   // WP47 / 44 G2：同一个账号的两条产品线，互相看不到对方的订单和商品
   if (expected.scope_disjoint !== undefined) {
     const seen = new Map<string, { orders: string[]; products: string[] }>()
