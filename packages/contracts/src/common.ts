@@ -8,6 +8,14 @@ export type WorkspaceId = string
 export type AssignmentId = string
 /** 36 §3 / WP15：侧栏的「岗位」= 本人持有的 Assignment；Position 是模板不是持有。 */
 export type PositionId = AssignmentId
+/**
+ * WP69（54 §1）：**岗位模板本身**的 id（`web-ops` / `customer-care` …）。
+ *
+ * 与 {@link PositionId} 是两件事，别混：`PositionId` 是"某个人持有的那一条"
+ * （= Assignment），这一条是"公司里的那个岗位"。54 §1 的 `PositionInstance` 用的是
+ * 这一个——一个工作区里"网站运营"只有一个，持有它的人可以有好几个。
+ */
+export type PositionTemplateId = string
 export type RoleId = string
 export type RunId = string
 export type EventId = string

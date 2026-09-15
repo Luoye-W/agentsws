@@ -40,7 +40,7 @@
     "packages/roles/roles/dtc/support.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "4328840133f19da5f1d4d1cf2ee04376",
+  "source_digest": "82f051fbbdc016ddeedab4e4df1b62c3",
   "objects": [
     {
       "id": "ad_set",
@@ -1140,6 +1140,24 @@
           "type": "MatterStatus",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "entry",
+          "type": "MatterEntry",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "position_template_id",
+          "type": "PositionTemplateId",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "goal_id",
@@ -2636,6 +2654,24 @@
           "type": "MatterStatus",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "entry",
+          "type": "MatterEntry",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "role_id",
+          "type": "RoleId",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "position_template_id",
+          "type": "PositionTemplateId",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "goal_id",
