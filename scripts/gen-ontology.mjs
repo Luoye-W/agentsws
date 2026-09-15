@@ -13,6 +13,7 @@
  * | 变更种类与风险级 | `packages/contracts` 的 `ChangeKind` + `@agentsws/core` 的 `KIND_RISK`（15 §2） |
  * | 从哪查 | 29 的命名查询（`@agentsws/deck` 的注册表）+ 连接器读 Action |
  * | 新鲜度 | 活数据源的刷新周期（`apps/server` 的 `DEFAULT_REFRESH_SECONDS`） |
+ * | 真源在哪个平台 | `packages/contracts` 的 `STOREFRONT_PLATFORMS`（51 §1 N0） |
  *
  * 只有三样是**规则**而不是抄来的事实，规则写在下面并各带一条理由：
  * 对象 → 数据域的别名（`OBJECT_DOMAIN`）、属性名 → 敏感级（`SENSITIVITY_RULES`）、
@@ -269,6 +270,35 @@ const { queryNames } = await import(pathToFileURL(need('packages/deck/dist/index
 const { DEFAULT_REFRESH_SECONDS } = await import(
   pathToFileURL(need('apps/server/dist/live-data.js')).href
 )
+// WP62（51 §1 N0 ④）：平台常量表是契约里那一张，登记表**读**它，不抄第二份
+const { STOREFRONT_PLATFORMS } = await import(
+  pathToFileURL(need('packages/contracts/dist/index.js')).href
+)
+
+/**
+ * 51 §1 N0 ④：真源在**网站平台**那一侧的对象，标清楚是哪几个平台。
+ *
+ * 判据是这个对象的读动作里有没有某个平台的 provider 前缀（`shopify_admin.get_order`
+ * → shopify）。所以只有店铺那一侧的对象会被标上：活动（Klaviyo / Meta）、
+ * 会话（邮箱）这些真源在别处的对象一个字段都不多。
+ *
+ * 现在只有 Shopify 是 `supported`；WooCommerce 的动作对照表做完、那一行翻成 true
+ * 的那天，这里自己就多一个，不用改这个脚本。
+ */
+const STOREFRONT_BY_SERVICE = new Map(
+  STOREFRONT_PLATFORMS.filter((p) => p.supported && p.connector_service !== undefined).map((p) => [
+    p.connector_service,
+    p.id,
+  ]),
+)
+function platformsOf(readVia) {
+  const out = new Set()
+  for (const actionId of readVia) {
+    const hit = STOREFRONT_BY_SERVICE.get(actionId.slice(0, actionId.indexOf('.')))
+    if (hit !== undefined) out.add(hit)
+  }
+  return [...out].sort()
+}
 
 /** 命名查询前缀 → 对象。`orders.*` 自己对得上；另外两条抄自查询自己的 `source`。 */
 const QUERY_OBJECT = {
@@ -476,6 +506,9 @@ for (const id of OBJECT_TYPES) {
         : domain === 'policy'
           ? 'human'
           : 'connector'
+  // 51 §1 N0 ④：真源在网站平台那一侧的对象，标清楚是哪几个平台（只加字段）
+  const read_via = readViaOf(id)
+  const platforms = platformsOf(read_via)
   objects.push({
     id,
     label: LABEL[id] ?? id,
@@ -490,7 +523,8 @@ for (const id of OBJECT_TYPES) {
           : `cached:${DEFAULT_REFRESH_SECONDS}`,
     read_ranges: rangesOf(domain),
     properties: iface === undefined ? [] : membersOf(iface.file, iface.decl),
-    read_via: readViaOf(id),
+    read_via,
+    ...(platforms.length === 0 ? {} : { platforms }),
     ...(iface === undefined ? {} : { contract }),
   })
 }

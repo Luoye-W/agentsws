@@ -470,6 +470,64 @@ export function checkExpectations(
         : problems.join('；'),
     )
   }
+  // WP62 / 51 §1 N0：面板、工具、清单三处都得明说"这个平台还没接"
+  if (expected.platform_unsupported !== undefined) {
+    const seen = new Map<
+      string,
+      {
+        platform: string
+        panel_connected: boolean
+        panel_note?: string
+        tool_status: string
+        tool_reason?: string
+        shop_services: string[]
+      }
+    >()
+    for (const e of evidence.events) {
+      if (e.type !== 'simulation.platform_checked') continue
+      const p = payloadOf(e)
+      seen.set(String(p.who ?? ''), {
+        platform: String(p.platform ?? ''),
+        panel_connected: p.panel_connected === true,
+        ...(typeof p.panel_note === 'string' ? { panel_note: p.panel_note } : {}),
+        tool_status: String(p.tool_status ?? ''),
+        ...(typeof p.tool_reason === 'string' ? { tool_reason: p.tool_reason } : {}),
+        shop_services: Array.isArray(p.shop_services) ? (p.shop_services as string[]) : [],
+      })
+    }
+    const problems: string[] = []
+    for (const who of expected.platform_unsupported) {
+      const mine = seen.get(who)
+      if (mine === undefined) {
+        problems.push(`${who} 没有 org.platform_check，这条断言没有意义`)
+        continue
+      }
+      // ① 面板：不能说"连上了"，而且要有那一句人话（不是一个点了也没用的「去连接」）
+      if (mine.panel_connected) problems.push(`${who} 的「店铺后台」还说连上了`)
+      if (mine.panel_note === undefined || !mine.panel_note.includes('这个平台还没接')) {
+        problems.push(`${who} 的面板没明说"这个平台还没接"（${mine.panel_note ?? '一句话都没有'}）`)
+      }
+      // ② 工具：错误码给机器，人话给人——两样都要
+      if (mine.tool_status !== 'error') problems.push(`${who} 的查订单居然成了`)
+      if (mine.tool_reason === undefined || !mine.tool_reason.includes('not_connected')) {
+        problems.push(`${who} 的工具没回 not_connected（${mine.tool_reason ?? '没有原因'}）`)
+      }
+      if (mine.tool_reason !== undefined && !mine.tool_reason.includes('这个平台还没接')) {
+        problems.push(`${who} 的工具只有错误码、没有人话`)
+      }
+      // ③ 首次设置清单：这个平台没有连接器，那张店铺卡干脆别出
+      if (mine.shop_services.length > 0) {
+        problems.push(`${who} 的清单里还出了店铺卡：${mine.shop_services.join('、')}`)
+      }
+    }
+    add(
+      'platform_unsupported',
+      problems.length === 0,
+      problems.length === 0
+        ? `${expected.platform_unsupported.join(' / ')} 在面板 / 工具 / 清单三处都被告知平台还没接`
+        : problems.join('；'),
+    )
+  }
   // WP39：代答里出现过哪几类（doing / scope / busy / skills / private / professional）
   if (expected.secretary_kinds !== undefined) {
     const kinds = new Set(

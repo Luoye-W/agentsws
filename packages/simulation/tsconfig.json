@@ -19,6 +19,9 @@
       "path": "../data"
     },
     {
+      "path": "../deck"
+    },
+    {
       "path": "../dsh-adapter"
     },
     {

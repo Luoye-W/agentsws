@@ -1013,6 +1013,10 @@ const zh: Table = {
   'onboarding.company.vertical': '你卖的是',
   'onboarding.company.vertical.hint':
     '选错了 AI 会说外行话：实物那一套会张口就问订单号、背退货窗口；虚拟产品那一套问的是注册邮箱、讲的是套餐与扣费。随时能在设置页改。',
+  'onboarding.company.platform': '网站是用什么搭的',
+  'onboarding.company.platform.hint':
+    '现在只支持 Shopify：店铺的读与写全走它的后台接口。其它平台点不动，标了"待增加"——WooCommerce 是下一个，Magento 连接器那边还没有。选"其它 / 自己搭的" = 没有店铺连接，这个岗位只剩不依赖平台的那部分。随时能在设置页改。',
+  'onboarding.company.platform.unsupported': '待增加：现在只支持 Shopify',
   'onboarding.company.discoverable': '让用同一个工具的同事找到我',
   'onboarding.company.discoverable.hint':
     '打开后只往局域网广播一串哈希，公司全称、成员名单、任何业务数据都不出去。关了就是独立使用，随时能再打开。',
@@ -1083,6 +1087,8 @@ const zh: Table = {
   'onboarding.requests.approve': '同意',
   'onboarding.requests.reject': '拒绝',
   'onboarding.requests.card': '这条也在首页队列里等你定。',
+  'settings.company.platform_change':
+    '把网站平台换成「{label}」？这个平台现在还接不上：已经连上的店铺后台会失效，岗位面板的「店铺后台」与查订单 / 查商品的工具都会说"这个平台还没接"。',
   'settings.company': '公司档案',
   'settings.company.hint': '改公司全称等于换一把"同一家公司"的钥匙：改完要和同事对一下写法。',
 
@@ -2229,6 +2235,10 @@ const en: Table = {
   'onboarding.company.domain': 'Company email domain',
   'onboarding.company.domain.hint':
     'Optional. With it, "same company" is judged more precisely — name and domain both matching is a strong match.',
+  'onboarding.company.platform': 'What your site is built with',
+  'onboarding.company.platform.hint':
+    'Only Shopify works today — every read and write for the store goes through its admin API. The others are greyed out and marked "coming": WooCommerce is next, and Magento has no connector yet. Picking "Something else" means no store connection at all, so this position keeps only the parts that do not need the platform. You can change it later under Settings.',
+  'onboarding.company.platform.unsupported': 'Coming: only Shopify works today',
   'onboarding.company.discoverable': 'Let colleagues on the same tool find me',
   'onboarding.company.discoverable.hint':
     'When on, only a hash goes out on your local network. The company name, the member list and any business data stay here. Turn it off to work alone; you can turn it back on any time.',
@@ -2306,6 +2316,8 @@ const en: Table = {
   'onboarding.requests.approve': 'Approve',
   'onboarding.requests.reject': 'Reject',
   'onboarding.requests.card': 'This is also waiting in your home queue.',
+  'settings.company.platform_change':
+    'Switch the site platform to "{label}"? That platform cannot be connected yet: any store admin you already connected stops working, and both the "Store admin" panel section and the order / product lookup tools will say the platform is not connected.',
   'settings.company': 'Company details',
   'settings.company.hint':
     'Changing the registered name changes the "same company" key — line the spelling up with your colleagues afterwards.',

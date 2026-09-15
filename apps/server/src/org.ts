@@ -237,6 +237,18 @@ const SEED_POSITIONS: readonly {
       ['common.member', false],
     ],
   },
+  // WP62（51 §2 / 27 §1）：**网站运营**岗位。51 §2 定的是四条职责，
+  // 这一版只放得下店铺管理（`dtc.store`，旧 `dtc.ops` 迁过来的那一份）——
+  // 内容与博客 / 邮件营销 / 订单履约跟着 WP63 / WP64 的职责定义一起加。
+  {
+    id: 'web-ops',
+    zh: '网站运营',
+    en: 'Web Operations',
+    roles: [
+      ['dtc.store', true],
+      ['common.member', false],
+    ],
+  },
   { id: 'member', zh: '普通成员', en: 'Member', roles: [['common.member', true]] },
 ]
 

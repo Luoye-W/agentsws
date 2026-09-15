@@ -60,6 +60,14 @@ export interface ObjectTypeDef {
   properties: PropertyDef[]
   /** 从哪查：命名查询（29）或连接器读 Action（18）的名字。 */
   read_via: string[]
+  /**
+   * WP62（51 §1 N0 ④）：真源在**网站平台**那一侧的对象，是哪几个平台。
+   *
+   * 判据是读动作的 provider 前缀（`shopify_admin.get_order` → shopify），
+   * 所以只有店铺那一侧的对象有这一格；活动（Klaviyo / Meta）、会话（邮箱）
+   * 这些真源在别处的对象没有。真源是契约里的 `STOREFRONT_PLATFORMS`。
+   */
+  platforms?: string[]
   /** 生成它的契约接口名（没有接口的平台对象没有这一格）。 */
   contract?: string
 }

@@ -205,11 +205,15 @@ export function assembleView(role_id: RoleId, ctx: QueryContext): ViewSection[] 
     if (existing === undefined) {
       const connected = sourceStatus(ctx, b.source)
       const report_url = SOURCE_REPORT_URLS[b.source]
+      // WP62：数据源自带的那一句"还没做"（平台没接）原样端到面板上——
+      // 36 §3 的老规矩：缺连接器就明说，不出一块永远为空的图
+      const note = ctx.sources.find((s) => s.id === b.source)?.note
       sections.set(b.source, {
         source: b.source,
         label: SOURCE_LABELS[b.source],
         connected,
         ...(report_url === undefined || !connected ? {} : { report_url }),
+        ...(note === undefined ? {} : { note }),
         blocks: [b],
       })
     } else {

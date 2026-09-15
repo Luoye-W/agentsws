@@ -34,7 +34,7 @@ events:
   - at: '+10m'
     org.assign_range:
       who: p_qian
-      role: dtc.ops
+      role: dtc.store
       ranges: []
       range_groups: [rg_brand_b]
   - at: '+12m'

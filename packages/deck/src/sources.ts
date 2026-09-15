@@ -62,7 +62,7 @@ export function dataSourcesOfService(service: string): readonly DataSourceId[] {
  */
 export function dataSourcesFromConnections(
   connections: readonly ConnectionLike[],
-  options: { sources?: readonly DataSourceId[] } = {},
+  options: { sources?: readonly DataSourceId[]; storefrontNote?: string } = {},
 ): DataSourceStatus[] {
   const connected = new Set<DataSourceId>(ALWAYS_CONNECTED)
   for (const c of connections) {
@@ -70,7 +70,10 @@ export function dataSourcesFromConnections(
     for (const s of dataSourcesOfService(c.service)) connected.add(s)
   }
   return (options.sources ?? ALL_DATA_SOURCES).map((id) => {
-    const on = connected.has(id)
+    // WP62（51 §1 N0 ③）：这个工作区的网站平台我们还没接 → 「店铺后台」永远算没连，
+    // 并带上那一句人话。给「去连接」按钮才是骗人：点进去也没有这个平台的卡。
+    const unsupported = id === 'shop' && options.storefrontNote !== undefined
+    const on = !unsupported && connected.has(id)
     const report_url = SOURCE_REPORT_URLS[id]
     return {
       id,
@@ -78,6 +81,7 @@ export function dataSourcesFromConnections(
       connected: on,
       // 没连上就别给「查看完整报告」——点进去也是别人的后台登录页
       ...(on && report_url !== undefined ? { report_url } : {}),
+      ...(unsupported ? { note: options.storefrontNote } : {}),
     }
   })
 }

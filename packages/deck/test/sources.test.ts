@@ -32,6 +32,22 @@ describe('dataSourcesFromConnections', () => {
     expect(rows.find((r) => r.id === 'shop')?.report_url).toBeUndefined()
   })
 
+  // WP62（51 §1 N0 ③）：「没连」与「还没做」是两回事
+  it('平台我们还没接：店铺后台永远算没连、带一句人话、不给外链', () => {
+    const rows = dataSourcesFromConnections([{ service: 'shopify_admin', status: 'active' }], {
+      storefrontNote: '这个平台还没接：你们的网站是用 WooCommerce 搭的。',
+    })
+    const shop = rows.find((r) => r.id === 'shop')
+    // 库里明明连着一条 Shopify，但这个工作区的网站不是它搭的
+    expect(shop?.connected).toBe(false)
+    expect(shop?.note).toContain('还没接')
+    // 「还没做」不给「查看完整报告」：点进去也不是他们的后台
+    expect(shop?.report_url).toBeUndefined()
+    // 别的数据源一个字都不变
+    expect(rows.find((r) => r.id === 'approvals')?.connected).toBe(true)
+    expect(rows.find((r) => r.id === 'ga4')?.note).toBeUndefined()
+  })
+
   it('连上 Shopify：店铺后台亮起来并带上外链', () => {
     const rows = dataSourcesFromConnections([{ service: 'shopify_admin', status: 'active' }])
     expect(rows.find((r) => r.id === 'shop')?.connected).toBe(true)

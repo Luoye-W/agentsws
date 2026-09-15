@@ -17,7 +17,7 @@
  * 4. **自助豁免**：读"我这个工作区要不要走向导"、算"我勾了这些岗位要配什么"都是
  *    读自己的绑定，不要求策略层读权限；真改公司档案、发邀请码、批申请一律 owner 级。
  */
-import type { MaybePromise, MembershipRequestVia } from '@agentsws/contracts'
+import type { MaybePromise, MembershipRequestVia, StorefrontPlatform } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -61,6 +61,7 @@ export interface WorkspaceProfileInput {
   domain?: string | undefined
   discoverable?: boolean | undefined
   vertical?: 'goods' | 'digital' | undefined
+  storefront_platform?: StorefrontPlatform | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -70,6 +71,8 @@ export interface WorkspaceProfileView {
   discoverable: boolean
   /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
   vertical: 'goods' | 'digital'
+  /** WP62（51 §1 N0）：网站是用什么搭的。缺省 = `shopify`。 */
+  storefront_platform: StorefrontPlatform
   set_at: string
 }
 
@@ -78,6 +81,21 @@ export interface VerticalChoiceView {
   key: 'goods' | 'digital'
   label: string
   hint: string
+}
+
+/**
+ * WP62（51 §1 N0）：「网站是用什么搭的」那一步的四个选项。
+ *
+ * `supported: false` 的**照样发下来**——界面要把它们灰显并标"待增加"，
+ * 而不是藏起来：用户得看得见"下一个是谁"，也才知道自己那套现在接不上。
+ * 真源是契约里的 `STOREFRONT_PLATFORMS`，界面不自己写第二份清单。
+ */
+export interface StorefrontPlatformChoiceView {
+  key: StorefrontPlatform
+  label: string
+  supported: boolean
+  /** 灰显那几个的 tooltip 文案（"待增加"那一句）；能选的没有它。 */
+  hint?: string
 }
 
 /**
@@ -105,6 +123,11 @@ export interface OnboardingStateView {
    * 从客服共享包的垂直包读，界面上不再自己写一份文案。
    */
   verticals: VerticalChoiceView[]
+  /**
+   * WP62（51 §1 N0 / 46 §1）：「网站是用什么搭的」四个选项（含灰显的那三个）。
+   * 真源是契约里的 `STOREFRONT_PLATFORMS`。
+   */
+  storefront_platforms: StorefrontPlatformChoiceView[]
 }
 
 /** 向导第 ③ 步的候选：岗位与它包含的职责。 */
@@ -283,6 +306,8 @@ const ProfileBody = z.object({
   discoverable: z.boolean().optional(),
   // WP54（48 v2 L2）：你卖的是实物商品 / 虚拟产品与服务。不给 = 不改。
   vertical: z.enum(['goods', 'digital']).optional(),
+  // WP62（51 §1 N0）：网站是用什么搭的。不给 = 不改（第一次不给就是 Shopify）。
+  storefront_platform: z.enum(['shopify', 'woocommerce', 'magento', 'other']).optional(),
 })
 
 const PlanBody = z.object({
@@ -367,7 +392,8 @@ export function onboardingRoutes(): Route[] {
         method: 'put',
         path: '/v1/workspace/profile',
         operationId: 'setWorkspaceProfile',
-        summary: '写公司档案：全称、可选域名、"让同事找到我"开关、"你卖的是"（46 §1 ①）',
+        summary:
+          '写公司档案：全称、可选域名、"让同事找到我"开关、"你卖的是"、"网站是用什么搭的"（46 §1 ①）',
         tag: TAG,
         auth: 'bearer',
         assignment: true,
@@ -384,6 +410,9 @@ export function onboardingRoutes(): Route[] {
             ...(input.domain === undefined ? {} : { domain: input.domain }),
             ...(input.discoverable === undefined ? {} : { discoverable: input.discoverable }),
             ...(input.vertical === undefined ? {} : { vertical: input.vertical }),
+            ...(input.storefront_platform === undefined
+              ? {}
+              : { storefront_platform: input.storefront_platform }),
           }),
         )
       },

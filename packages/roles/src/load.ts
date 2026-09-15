@@ -21,6 +21,8 @@ export const BUNDLED_POSITIONS_DIR = fileURLToPath(new URL('../positions/', impo
  *
  * - `dtc.presales` / `dtc.aftersales` → `dtc.support`（售前 + 售后合并成网站客服）
  * - `amz.buyer-messages` → `amz.support`（只改名，语义不变）
+ * - `dtc.ops` → `dtc.store`（WP62 / 51 §2：独立站运营 → 网站运营岗位下的**店铺管理**；
+ *   职责定义从 15 人 pack 自带搬成内置一份，动作与额度一个数没改）
  *
  * 读得到不等于迁移了：已有分配的真迁移由宿主在启动时做一次，并记一条
  * `assignment.role_migrated`（`apps/server/src/roles-migrate.ts`）。
@@ -29,6 +31,7 @@ export const ROLE_ID_ALIASES: Readonly<Record<string, RoleId>> = {
   'dtc.presales': 'dtc.support',
   'dtc.aftersales': 'dtc.support',
   'amz.buyer-messages': 'amz.support',
+  'dtc.ops': 'dtc.store',
 }
 
 /** 旧 id → 新 id；不是旧 id 就原样返回。 */

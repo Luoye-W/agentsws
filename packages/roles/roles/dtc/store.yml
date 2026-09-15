@@ -1,0 +1,120 @@
+# 51 §2.1 店铺管理（WP62 立骨架）。
+#
+# 它是 15 人 pack 里那条 `dtc.ops`（独立站运营）的新身份：**内置**职责，不再跟着
+# 某一个 pack 走。WP62 只搬骨架——scopes、五个写动作、额度、面板那一块原样从
+# `packs/dtc-15p/roles/dtc.ops.yml` 搬过来，一个数都没改；51 §2.1 那张表里
+# 完整的五个能力面（店铺设置 / 商品管理 / 促销与折扣 / 数据日报 / 评价管理）
+# 由 WP63 补齐。
+#
+# 旧 id `dtc.ops` 永远读得进来（加载器的 `ROLE_ID_ALIASES`），已有分配在启动时
+# 迁移一次并记 `assignment.role_migrated`——职责 id 是别人库里已经有的东西。
+#
+# 连接器写的是 `kind: shop`，**不写死 Shopify**：这个工作区的店铺后台是哪一个，
+# 由公司档案里的「网站是用什么搭的」决定（51 §1 N0）。
+id: dtc.store
+version: 1.0.0
+domain: dtc
+name: { zh: 店铺管理, en: DTC Store Management }
+description: 商品与详情页、上下架、价格与促销、活动日历、店铺配置
+
+scopes:
+  - { domain: product, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: discount, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: campaign, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # 51 §1 N0：平台中立的 `shop`——按公司档案解析成 shopify_admin / woocommerce。
+  # 档案里选了没有连接器的平台（Magento / 其它）= 这条职责没有店铺连接，
+  # 面板与工具照 36 §3 明说"这个平台还没接"。
+  - { kind: shop, required: true, grants: [read_products, write_products], ownership: workspace }
+
+actions:
+  - id: stage_listing_edit
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 50, per: day } }
+    route_to: scope_manager
+  - id: stage_price_change
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_price_delta_pct: 20 }, window: { max_count: 20, per: day } }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: stage_promotion
+    target: discount
+    kind: staged_change
+    mandate: { caps: { max_promotion_discount_pct: 50 }, window: { max_count: 5, per: day } }
+    route_to: owner
+  # WP44：Admin GraphQL 的上下架写口对应 15 §2 的 publish_product / unpublish_product。
+  # 上架是"让顾客能买到"，撤下是"让顾客买不到"——两件事都要有人点头，
+  # 但撤下更急（多半是发现了合规或质量问题），所以给到 role_holder 手上，别卡在主管那儿。
+  - id: stage_publish_product
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: scope_manager
+  - id: stage_unpublish_product
+    target: product
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: role_holder
+
+automation:
+  stage_listing_edit:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_price_change:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_promotion:
+    ceiling: L1
+    initial: L1
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_publish_product:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_unpublish_product:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+skills: []
+home_blocks:
+  - {
+      id: ops.pending_listings,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(dtc.store),
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+notifications:
+  - {
+      event: 'approval.created:stage_price_change',
+      mode: queue,
+      recipients: [scope_manager],
+      escalate_after_hours: 24,
+    }
+handover:
+  transfers: [open_work_items, context, home_blocks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+requires: []

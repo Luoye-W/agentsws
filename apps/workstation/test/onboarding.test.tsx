@@ -14,6 +14,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ProfileForm } from '@/components/onboarding/profile-form'
 import type {
   DiscoveryStateView,
   OnboardingPlanInput,
@@ -104,6 +105,23 @@ const STATE: OnboardingStateView = {
       hint: '不用发货的东西，客户会问"怎么用""为什么扣费"。',
     },
   ],
+  // WP62（51 §1 N0）：四个都发下来，只有 Shopify 可选
+  storefront_platforms: [
+    { key: 'shopify', label: 'Shopify', supported: true },
+    {
+      key: 'woocommerce',
+      label: 'WooCommerce',
+      supported: false,
+      hint: '待增加：现在只支持 Shopify',
+    },
+    { key: 'magento', label: 'Magento', supported: false, hint: '待增加：现在只支持 Shopify' },
+    {
+      key: 'other',
+      label: '其它 / 自己搭的',
+      supported: false,
+      hint: '待增加：现在只支持 Shopify',
+    },
+  ],
 }
 
 /** 公司档案已经存下来了的那一档（找同事这件事从这里才开始）。 */
@@ -114,6 +132,7 @@ const SAVED: OnboardingStateView = {
     domain: 'nordvolt.cn',
     discoverable: true,
     vertical: 'goods',
+    storefront_platform: 'shopify',
     set_at: '2026-09-07T09:00:00.000Z',
   },
   discovery: { available: true, enabled: true },
@@ -140,6 +159,7 @@ const state = {
     domain?: string
     discoverable?: boolean
     vertical?: 'goods' | 'digital'
+    storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other'
   }[],
   plans: [] as OnboardingPlanInput[],
   applies: [] as OnboardingPlanInput[],
@@ -156,12 +176,17 @@ vi.mock('@/lib/api', async () => {
     getOnboardingState: async () => state.state,
     listOnboardingPositions: async () => POSITIONS,
     listDiscoveryPeers: async () => state.peers,
-    setWorkspaceProfile: async (input: { legal_name: string; vertical?: 'goods' | 'digital' }) => {
+    setWorkspaceProfile: async (input: {
+      legal_name: string
+      vertical?: 'goods' | 'digital'
+      storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other'
+    }) => {
       state.profiles.push(input)
       return {
         ...input,
         discoverable: true,
         vertical: input.vertical ?? ('goods' as const),
+        storefront_platform: input.storefront_platform ?? ('shopify' as const),
         set_at: '2026-09-07T09:00:00.000Z',
       }
     },
@@ -253,6 +278,45 @@ describe('46 §1 首次设置向导', () => {
       expect(state.profiles).toHaveLength(1)
     })
     expect(state.profiles[0]?.vertical).toBe('digital')
+  })
+
+  // WP62（51 §1 N0 / 46 §1 ①）
+  it('① 公司：「网站是用什么搭的」默认 Shopify，其余三个灰显且点不动，带"待增加" tooltip', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+
+    await user.type(await screen.findByTestId('company-legal-name'), '一家店')
+    const shopify = screen.getByTestId('company-platform-shopify') as HTMLInputElement
+    const woo = screen.getByTestId('company-platform-woocommerce') as HTMLInputElement
+    const magento = screen.getByTestId('company-platform-magento') as HTMLInputElement
+    const other = screen.getByTestId('company-platform-other') as HTMLInputElement
+
+    expect(shopify.checked).toBe(true)
+    expect(shopify.disabled).toBe(false)
+    // 51 §1：现在只开 Shopify，其余灰显——**画出来但点不动**，不是藏起来
+    for (const el of [woo, magento, other]) {
+      expect(el.disabled).toBe(true)
+      expect(el.checked).toBe(false)
+    }
+    expect(
+      screen.getByTestId('company-platform-woocommerce-hint').getAttribute('data-hint'),
+    ).toContain('待增加')
+    // "选了会怎样"这种解释进 tooltip（36 §7）
+    expect(screen.getByTestId('company-platform-hint').getAttribute('data-hint')).toContain(
+      'Shopify',
+    )
+
+    // 点一下点不动的那个：档案里的平台一个字都不许变
+    await user.click(woo)
+    expect((screen.getByTestId('company-platform-woocommerce') as HTMLInputElement).checked).toBe(
+      false,
+    )
+
+    await user.click(screen.getByTestId('company-save'))
+    await waitFor(() => {
+      expect(state.profiles).toHaveLength(1)
+    })
+    expect(state.profiles[0]?.storefront_platform).toBe('shopify')
   })
 
   it('① 公司全称还没存下来时，说的是"存完就开始找"，而不是"开关关着"（开关明明开着）', async () => {
@@ -429,5 +493,75 @@ describe('46 §1 首次设置向导', () => {
     expect(state.applies).toHaveLength(0)
     const { onboardingSkipped } = await import('@/pages/onboarding')
     expect(onboardingSkipped()).toBe(true)
+  })
+})
+
+/**
+ * WP62（51 §1 N0 / 46 §1 末段）：设置页用的是向导里同一个件，只多一个
+ * `allowUnsupported`——已经在用别的平台的人要改得动，但改之前要先说清代价。
+ */
+describe('设置页的公司档案：改成还接不上的平台', () => {
+  const platforms = STATE.storefront_platforms
+
+  it('点一个"待增加"的平台会先问一次；点"取消"就一个字不变', async () => {
+    const user = userEvent.setup()
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(false)
+    const saved: unknown[] = []
+    renderWithProviders(
+      <ProfileForm
+        profile={{
+          legal_name: '一家店',
+          discoverable: true,
+          vertical: 'goods',
+          storefront_platform: 'shopify',
+          set_at: '2026-09-07T09:00:00.000Z',
+        }}
+        storefrontPlatforms={platforms}
+        allowUnsupported
+        busy={false}
+        saved={false}
+        onSave={(d) => saved.push(d)}
+      />,
+    )
+
+    const woo = screen.getByTestId('company-platform-woocommerce') as HTMLInputElement
+    // 设置页里点得动（向导里点不动）
+    expect(woo.disabled).toBe(false)
+    await user.click(woo)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    // 那一句要把代价说明白：店铺连接会失效
+    expect(String(confirm.mock.calls[0]?.[0])).toContain('失效')
+    expect((screen.getByTestId('company-platform-woocommerce') as HTMLInputElement).checked).toBe(
+      false,
+    )
+    confirm.mockRestore()
+  })
+
+  it('点"确定"才真的改，存下去的是新平台', async () => {
+    const user = userEvent.setup()
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    const saved: { storefront_platform: string }[] = []
+    renderWithProviders(
+      <ProfileForm
+        profile={{
+          legal_name: '一家店',
+          discoverable: true,
+          vertical: 'goods',
+          storefront_platform: 'shopify',
+          set_at: '2026-09-07T09:00:00.000Z',
+        }}
+        storefrontPlatforms={platforms}
+        allowUnsupported
+        busy={false}
+        saved={false}
+        onSave={(d) => saved.push(d)}
+      />,
+    )
+
+    await user.click(screen.getByTestId('company-platform-woocommerce'))
+    await user.click(screen.getByTestId('company-save'))
+    expect(saved).toHaveLength(1)
+    expect(saved[0]?.storefront_platform).toBe('woocommerce')
+    confirm.mockRestore()
   })
 })

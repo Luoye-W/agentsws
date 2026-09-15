@@ -493,6 +493,59 @@ describe('WP46 §D 订单只在内存里', () => {
   })
 })
 
+// ── WP62：平台前置（51 §1 N0 ③）───────────────────────────────────────────
+
+describe('WP62 §F 档案换了平台 → 面板与工具都改口', () => {
+  it('连着 Shopify 的店，把档案改成 WooCommerce：分块明说"这个平台还没接"，不出「去连接」', async () => {
+    await connectShop()
+    const before = await data<{ sections: ViewSection[] }>(
+      await api(`/v1/positions/${ctx.assignment}/view`),
+    )
+    expect(shopSection(before.sections)?.connected).toBe(true)
+
+    // 改平台是所有者的活
+    const put = await api('/v1/workspace/profile', {
+      method: 'PUT',
+      assignment: ctx.server.bootstrap.ownerAssignment.id,
+      body: JSON.stringify({ legal_name: '一家用 Woo 的店', storefront_platform: 'woocommerce' }),
+    })
+    expect(put.status, await put.clone().text()).toBe(200)
+
+    const after = await data<{ sections: ViewSection[] }>(
+      await api(`/v1/positions/${ctx.assignment}/view`),
+    )
+    const shop = shopSection(after.sections)
+    // 连接还在库里，但它不是这个平台的店铺后台 → 面板照 36 §3 明说
+    expect(shop?.connected).toBe(false)
+    expect(shop?.note).toContain('这个平台还没接')
+    expect(shop?.note).toContain('WooCommerce')
+    // 「没连」才给「查看完整报告」；「还没做」一个按钮都不给
+    expect(shop?.report_url).toBeUndefined()
+
+    const tiles = await shopTiles()
+    expect(tiles.map((t) => t.status)).toEqual(['not_connected', 'not_connected'])
+  })
+
+  it('刷新时分得清"你还没连"与"我们还没做"（reason 两个码）', async () => {
+    const live = ctx.server.liveData
+    expect(live).toBeDefined()
+    // 一家店都没连：还是老的 no_connection
+    expect((await live?.refresh())?.reason).toBe('no_connection')
+
+    const put = await api('/v1/workspace/profile', {
+      method: 'PUT',
+      assignment: ctx.server.bootstrap.ownerAssignment.id,
+      body: JSON.stringify({ legal_name: '一家自己搭的站', storefront_platform: 'other' }),
+    })
+    expect(put.status).toBe(200)
+    const report = await live?.refresh()
+    expect(report?.status).toBe('skipped')
+    expect(report?.reason).toBe('platform_unsupported')
+    // 一条只读动作都没跑过：平台都没接，别去打上游
+    expect(ctx.connect.executed).toEqual([])
+  })
+})
+
 // ── 真身那一侧：只能对着形状写（真店碰不到）─────────────────────────────
 
 describe('WP46 §E 上游返回 → OrderRow（真身与替身两种形状）', () => {

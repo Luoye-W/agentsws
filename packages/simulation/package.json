@@ -22,6 +22,7 @@
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/data": "workspace:*",
+    "@agentsws/deck": "workspace:*",
     "@agentsws/dsh-adapter": "workspace:*",
     "@agentsws/kernel": "workspace:*",
     "@agentsws/knowledge": "workspace:*",

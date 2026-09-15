@@ -37,7 +37,13 @@ import type {
   RetrievalActor,
   RetrievalHit,
   RunRequest,
+  StorefrontPlatform,
   WorkspaceId,
+} from '@agentsws/contracts'
+import {
+  storefrontConnectorService,
+  storefrontServiceMatches,
+  storefrontUnsupportedNote,
 } from '@agentsws/contracts'
 import type { OrderLineItem, OrderRow } from '@agentsws/deck'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
@@ -53,8 +59,13 @@ export const TOOLS_ASSIGNMENT = 'asg_matter_tools'
 export const TOKEN_TTL_SECONDS = 120
 /** `readToken()` 那一张的寿命：一次运行的预算上限是 120 秒，给它留一倍余量。 */
 export const RUN_TOKEN_TTL_SECONDS = 300
-/** 喂订单 / 商品的那几条连接（我们对外的 provider id，不是上游名）。 */
-const SHOP_SERVICES = new Set(['shopify_admin', 'shopify'])
+/**
+ * 喂订单 / 商品的那条连接。
+ *
+ * WP62（51 §1 N0 ③）：**不再写死 Shopify**——按公司档案里的「网站是用什么搭的」
+ * 算出该跟哪个 provider 要数。平台我们还没接的话，工具当场回一句人话，
+ * 而不是让模型对着一个连不上的连接器空转。
+ */
 
 /** 裸工具名 → 连接器上那个只读 Action 的**光杆名**（前缀按连接的 service 现查）。 */
 export const TOOL_ACTIONS: Readonly<Record<string, string>> = {
@@ -104,6 +115,13 @@ export interface ConnectRecordSourceOptions {
   knowledge?: RecordKnowledgePort
   /** 检索要的岗位身份；不给就没有任何 grant，候选集为空（宁可零命中也不越权）。 */
   roles?: RecordRolesPort
+  /**
+   * WP62（51 §1 N0 ③）：公司档案里的「网站是用什么搭的」。
+   *
+   * **晚绑定**（档案是向导第 ① 步才写的，事项工具比它先装配）。不给 = Shopify，
+   * 存量装配一个字节不变。
+   */
+  storefrontPlatform?: () => StorefrontPlatform | undefined
   /**
    * 37 工作模型。**迟绑定**：服务进程里 `createRuntime` 在 `createWork` 之前
    * （运行时与工作模型互相需要），所以这里收的是一个取值函数，不是实例。
@@ -475,10 +493,13 @@ export function createConnectRecordSource(
   }
 
   // ── 连接器 ─────────────────────────────────────────────────────────
-  const activeShop = (): LiveConnection | undefined =>
-    options.connections
+  const activeShop = (): LiveConnection | undefined => {
+    const want = storefrontConnectorService(options.storefrontPlatform?.())
+    if (want === undefined) return undefined
+    return options.connections
       .liveConnections()
-      .find((c) => SHOP_SERVICES.has(c.service) && c.status === 'active')
+      .find((c) => storefrontServiceMatches(want, c.service) && c.status === 'active')
+  }
 
   /**
    * 目录里这个只读动作叫什么。查目录要用**上游的 service 名**（`catalog.ts` 的
@@ -527,9 +548,20 @@ export function createConnectRecordSource(
     }
   }
 
-  const NOT_CONNECTED =
-    'not_connected：这个工作区还没有连上店铺后台（Shopify），查不到订单和商品。' +
-    '先去「连接」页连一个，再来问这封信。'
+  /**
+   * 51 §1 N0：分清"你还没连"与"我们还没做"。
+   *
+   * 平台是 Shopify 而没连 → 让他去连；平台是 WooCommerce / Magento / 其它 →
+   * 去连也没用（目录里根本没有那张卡），照实说这个平台还没接。
+   * 两句都以 `not_connected：` 开头：对模型是同一个错误码，对人是两件事。
+   */
+  const notConnected = (): string => {
+    const note = storefrontUnsupportedNote(options.storefrontPlatform?.())
+    return note === undefined
+      ? 'not_connected：这个工作区还没有连上店铺后台（Shopify），查不到订单和商品。' +
+          '先去「连接」页连一个，再来问这封信。'
+      : `not_connected：${note}查不到订单和商品——这次别猜，照实说查不了。`
+  }
   const ACTION_UNAVAILABLE = (bare: string): string =>
     `action_unavailable：连上的这个店铺后台没有「${bare}」这个只读动作，这次查不了。`
 
@@ -622,7 +654,7 @@ export function createConnectRecordSource(
   ): Promise<ToolExecution> => {
     let bare = requestedBare
     const shop = activeShop()
-    if (shop === undefined) return { status: 'error', reason: NOT_CONNECTED }
+    if (shop === undefined) return { status: 'error', reason: notConnected() }
     // 真店实测（09-14）：模型拿着来信里的订单号 "#1001" 调 get_order，而 Shopify 的 get_order
     // 只认内部 id（gid 或长数字）。看着像订单号的先经 list_orders 按 name 查成 id，再拉那一张。
     let effectiveBare = bare

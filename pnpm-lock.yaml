@@ -718,6 +718,9 @@ importers:
       '@agentsws/data':
         specifier: workspace:*
         version: link:../data
+      '@agentsws/deck':
+        specifier: workspace:*
+        version: link:../deck
       '@agentsws/dsh-adapter':
         specifier: workspace:*
         version: link:../dsh-adapter

@@ -13,7 +13,12 @@ import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import type { VerticalChoiceView, WorkspaceProfileView } from '@/lib/api'
+import type {
+  StorefrontPlatform,
+  StorefrontPlatformChoiceView,
+  VerticalChoiceView,
+  WorkspaceProfileView,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export interface ProfileDraft {
@@ -22,12 +27,16 @@ export interface ProfileDraft {
   discoverable: boolean
   /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。默认实物。 */
   vertical: 'goods' | 'digital'
+  /** WP62（51 §1 N0）：网站是用什么搭的。默认 Shopify。 */
+  storefront_platform: StorefrontPlatform
 }
 
 export function ProfileForm({
   profile,
   emailHint,
   verticals,
+  storefrontPlatforms,
+  allowUnsupported = false,
   busy,
   saved,
   error,
@@ -42,6 +51,17 @@ export function ProfileForm({
    * 那两句话要跟 AI 实际被告知的口径是同一份。
    */
   verticals?: VerticalChoiceView[]
+  /**
+   * WP62（51 §1 N0）「网站是用什么搭的」四个选项。**从服务端来**（真源是契约里的
+   * `STOREFRONT_PLATFORMS`），界面不自己写一份清单——支持哪几个是一件会变的事，
+   * 变的时候只该改契约那一张表。
+   */
+  storefrontPlatforms?: StorefrontPlatformChoiceView[]
+  /**
+   * 能不能选"还接不上"的平台。首次设置里**不能**（51 §1：现在只开 Shopify）；
+   * 设置页里能，但要先过一次二次确认——已经连上的店铺后台会因此失效。
+   */
+  allowUnsupported?: boolean
   busy: boolean
   saved: boolean
   error?: string
@@ -54,6 +74,7 @@ export function ProfileForm({
     domain: profile?.domain ?? suggested,
     discoverable: profile?.discoverable ?? true,
     vertical: profile?.vertical ?? 'goods',
+    storefront_platform: profile?.storefront_platform ?? 'shopify',
   })
 
   return (
@@ -90,38 +111,109 @@ export function ProfileForm({
         />
       </div>
 
-      {/* 48 v2 L2：你卖的是——它决定客服 AI 用哪一套人设、词表与业务边界 */}
-      {verticals === undefined || verticals.length === 0 ? null : (
-        <div className="flex flex-col gap-1">
-          <Label className="flex items-center gap-1">
-            {t('onboarding.company.vertical')}
-            <Hint text={t('onboarding.company.vertical.hint')} testId="company-vertical-hint" />
-          </Label>
-          <div className="flex flex-col gap-1" role="radiogroup" data-testid="company-vertical">
-            {verticals.map((v) => (
-              <label
-                key={v.key}
-                htmlFor={`company-vertical-${v.key}`}
-                className="flex items-start gap-2"
-              >
-                <input
-                  id={`company-vertical-${v.key}`}
-                  data-testid={`company-vertical-${v.key}`}
-                  type="radio"
-                  name="company-vertical"
-                  className="mt-1"
-                  checked={draft.vertical === v.key}
-                  onChange={() => {
-                    setDraft({ ...draft, vertical: v.key })
-                  }}
-                />
-                <span>
-                  <span className="font-medium">{v.label}</span>
-                  <span className="block text-xs text-muted-foreground">{v.hint}</span>
-                </span>
-              </label>
-            ))}
-          </div>
+      {/*
+        两个"这家公司是什么样"的问题**并排**（46 §1 ①、51 §1 N0）：
+        左边「你卖的是」决定客服 AI 用哪一套人设、词表与业务边界；
+        右边「网站是用什么搭的」决定店铺连接、面板取数与职责连接器解析到哪个平台。
+        窄屏一列，宽屏两列——它们是同一层的两个选择，不该一个在上一个在下。
+      */}
+      {(verticals === undefined || verticals.length === 0) &&
+      (storefrontPlatforms === undefined || storefrontPlatforms.length === 0) ? null : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {verticals === undefined || verticals.length === 0 ? null : (
+            <div className="flex flex-col gap-1">
+              <Label className="flex items-center gap-1">
+                {t('onboarding.company.vertical')}
+                <Hint text={t('onboarding.company.vertical.hint')} testId="company-vertical-hint" />
+              </Label>
+              <div className="flex flex-col gap-1" role="radiogroup" data-testid="company-vertical">
+                {verticals.map((v) => (
+                  <label
+                    key={v.key}
+                    htmlFor={`company-vertical-${v.key}`}
+                    className="flex items-start gap-2"
+                  >
+                    <input
+                      id={`company-vertical-${v.key}`}
+                      data-testid={`company-vertical-${v.key}`}
+                      type="radio"
+                      name="company-vertical"
+                      className="mt-1"
+                      checked={draft.vertical === v.key}
+                      onChange={() => {
+                        setDraft({ ...draft, vertical: v.key })
+                      }}
+                    />
+                    <span>
+                      <span className="font-medium">{v.label}</span>
+                      <span className="block text-xs text-muted-foreground">{v.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {storefrontPlatforms === undefined || storefrontPlatforms.length === 0 ? null : (
+            <div className="flex flex-col gap-1">
+              <Label className="flex items-center gap-1">
+                {t('onboarding.company.platform')}
+                <Hint text={t('onboarding.company.platform.hint')} testId="company-platform-hint" />
+              </Label>
+              <div className="flex flex-col gap-1" role="radiogroup" data-testid="company-platform">
+                {storefrontPlatforms.map((p) => {
+                  // 接不上的那几个**照样画出来**，只是点不动并把"为什么"说在一句 tooltip 里：
+                  // 藏起来的话用户只会以为我们不知道有这个平台（51 §1 N0）。
+                  // 设置页（`allowUnsupported`）例外：已经在用别的平台的人要改得动，
+                  // 但改之前先说清代价——店铺连接会失效。
+                  const locked = !p.supported && !allowUnsupported
+                  return (
+                    <label
+                      key={p.key}
+                      htmlFor={`company-platform-${p.key}`}
+                      className={
+                        p.supported
+                          ? 'flex items-center gap-2'
+                          : 'flex items-center gap-2 text-muted-foreground'
+                      }
+                      title={
+                        p.supported
+                          ? undefined
+                          : (p.hint ?? t('onboarding.company.platform.unsupported'))
+                      }
+                    >
+                      <input
+                        id={`company-platform-${p.key}`}
+                        data-testid={`company-platform-${p.key}`}
+                        type="radio"
+                        name="company-platform"
+                        disabled={locked}
+                        checked={draft.storefront_platform === p.key}
+                        onChange={() => {
+                          if (
+                            !p.supported &&
+                            !globalThis.confirm(
+                              t('settings.company.platform_change', { label: p.label }),
+                            )
+                          ) {
+                            return
+                          }
+                          setDraft({ ...draft, storefront_platform: p.key })
+                        }}
+                      />
+                      <span className="font-medium">{p.label}</span>
+                      {p.supported ? null : (
+                        <Hint
+                          text={p.hint ?? t('onboarding.company.platform.unsupported')}
+                          testId={`company-platform-${p.key}-hint`}
+                        />
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
