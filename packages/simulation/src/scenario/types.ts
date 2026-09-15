@@ -366,6 +366,51 @@ export interface ScenarioStoreDailyReport {
   who: string
 }
 
+/** WP67 / 48 §5.1：起草并提一封开发信（第一稿故意可以带承诺词）。 */
+export interface ScenarioKolOutreach {
+  who: string
+  creator: string
+  /**
+   * 第一稿里模型"多写的那一段"。
+   *
+   * 场景写一句带承诺的话是**故意**的：禁承诺的最后一道闸在 guardrail，
+   * 这条题要钉的就是那一下 block，以及打回重写之后再过一遍闸才发出去。
+   */
+  draft: string
+}
+
+/** WP67 / 48 §5.1：建一条合作（`kol_collaboration`，**永远 L1**）。 */
+export interface ScenarioKolCollaboration {
+  who: string
+  creator: string
+  budget: number
+  /** 故意报高的等级；硬顶会把它按回人审。 */
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/** WP67 / 48 §5.1：建一条带联盟码的追踪链接。 */
+export interface ScenarioKolTrackedLink {
+  who: string
+  creator: string
+  code: string
+}
+
+/**
+ * WP67 / 48 §5.1：有人用这个联盟码下了一单。
+ *
+ * 与"顾客点了退订"同一类——**世界里发生的一件事**，不是场景把答案递给 Agent。
+ * 金额与币种归因那一跳自己去连接器读。
+ */
+export interface ScenarioKolAffiliateOrder {
+  order: string
+  code: string
+}
+
+/** WP67 / 48 §5.1：跑一次归因。 */
+export interface ScenarioKolAttribution {
+  who: string
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -413,6 +458,16 @@ export type ScenarioEvent =
   | { at: string; type: 'email.unsubscribe'; unsubscribe: ScenarioEmailUnsubscribe }
   /** WP64：提一条群发（51 §2.3，发送永远 L1）。 */
   | { at: string; type: 'email.campaign_send'; campaign_send: ScenarioEmailCampaignSend }
+  /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
+  | { at: string; type: 'kol.outreach'; outreach: ScenarioKolOutreach }
+  /** WP67：建一条合作（48 §5.1，永远 L1）。 */
+  | { at: string; type: 'kol.collaboration'; collaboration: ScenarioKolCollaboration }
+  /** WP67：建一条带联盟码的追踪链接（48 §5.1，L3）。 */
+  | { at: string; type: 'kol.tracked_link'; tracked_link: ScenarioKolTrackedLink }
+  /** WP67：有人用这个联盟码下了一单（48 §5.1）。 */
+  | { at: string; type: 'kol.affiliate_order'; affiliate_order: ScenarioKolAffiliateOrder }
+  /** WP67：跑一次归因（48 §5.1）。 */
+  | { at: string; type: 'kol.attribution'; attribution: ScenarioKolAttribution }
   /** WP63：上架 / 撤下一件商品（51 §2.1，永远人审）。 */
   | { at: string; type: 'shop.publish_product'; publish_product: ScenarioShopPublishProduct }
   /** WP63：写 / 发一篇博客文章（51 §2.2，草稿 L2、发布 L1）。 */
@@ -624,6 +679,39 @@ export interface ScenarioExpected {
     suppressed_removed?: NumericAssertion
     audience_size?: NumericAssertion
     stated_on_card?: boolean
+  }
+  /**
+   * WP67 / 48 §5.1：那一封开发信的四件事。
+   *
+   * `forbidden_hits` 非空 + `rewritten` 为真 = 第一稿被 guardrail 拦下来、
+   * 打回重写过；`auto_approved` 为真 = 改写之后那一封在 L2 上自己发出去了。
+   */
+  kol_outreach?: {
+    forbidden_hits?: string[]
+    rewritten?: boolean
+    auto_approved?: boolean
+    suppressed_removed?: NumericAssertion
+  }
+  /**
+   * WP67 / 48 §5.1：那一条合作提案。
+   *
+   * `requested_level` 报 L3 而 `auto_approved` 是假 = 硬顶把它按回人审了。
+   */
+  kol_collaboration?: {
+    requested_level?: string
+    auto_approved?: boolean
+    budget?: NumericAssertion
+  }
+  /**
+   * WP67 / 48 §5.1：那一次归因。
+   *
+   * `unmatched` 也要断言：归不上的订单**不猜**给谁，这个数不为 0 才是对的。
+   */
+  kol_attribution?: {
+    matched?: NumericAssertion
+    unmatched?: NumericAssertion
+    revenue?: NumericAssertion
+    basis?: string[]
   }
   /**
    * WP57：这几轮聊天判成了哪几种动作（`answer` / `collect_info` / `human_review` /

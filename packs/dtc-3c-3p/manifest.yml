@@ -6,7 +6,7 @@ anchor: 2026-09-07T01:00:00.000Z
 generator: agentsws synth
 sizes:
   people: 3
-  assignments: 8
+  assignments: 9
   products: 8
   customers: 21
   orders: 51

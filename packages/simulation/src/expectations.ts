@@ -585,6 +585,123 @@ export function checkExpectations(
       )
     }
   }
+  // WP67 / 48 §5.1：开发信的禁承诺被 guardrail 拦下、打回重写、改写后自动发
+  if (expected.kol_outreach !== undefined) {
+    const staged = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.kol_outreach_staged')
+    const blocked = [...evidence.events].find((e) => e.type === 'simulation.kol_outreach_blocked')
+    if (staged === undefined) {
+      add('kol_outreach', false, '这一轮没有一封开发信进队列')
+    } else {
+      const p = payloadOf(staged)
+      const want = expected.kol_outreach
+      const problems: string[] = []
+      const hits = (payloadOf(blocked ?? staged).forbidden_hits ?? []) as string[]
+      if (want.forbidden_hits !== undefined) {
+        // 禁承诺是 **block**：拦下那一条事件必须真发生过，不能是我们自己先绕过去
+        if (blocked === undefined && want.forbidden_hits.length > 0) {
+          problems.push('第一稿带承诺词，但 guardrail 没拦——那道闸没起作用')
+        }
+        for (const w of want.forbidden_hits) {
+          if (!hits.includes(w)) problems.push(`没扫到「${w}」`)
+        }
+      }
+      if (want.rewritten !== undefined && (p.rewritten === true) !== want.rewritten) {
+        problems.push(want.rewritten ? '没有打回重写' : '不该改写却改写了')
+      }
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push(
+          want.auto_approved ? '改写之后那一封没能自己发出去（L2）' : '这一封不该自动发',
+        )
+      }
+      const removed = Number(p.suppressed_removed ?? 0)
+      if (
+        want.suppressed_removed !== undefined &&
+        !matchNumeric(removed, want.suppressed_removed)
+      ) {
+        problems.push(`名单剔掉了 ${removed} 个人，不合期望`)
+      }
+      add(
+        'kol_outreach',
+        problems.length === 0,
+        problems.length === 0
+          ? `第一稿命中 ${hits.length} 条禁承诺被拦下，改写之后落 ${String(p.level_at_creation)}`
+          : problems.join('；'),
+      )
+    }
+  }
+  // WP67 / 48 §5.1：建合作永远 L1
+  if (expected.kol_collaboration !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.kol_collaboration_staged')
+    if (last === undefined) {
+      add('kol_collaboration', false, '这一轮没有一条合作提案进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.kol_collaboration
+      const problems: string[] = []
+      if (want.requested_level !== undefined && p.level_requested !== want.requested_level) {
+        problems.push(`提案报的是 ${String(p.level_requested)}，不是 ${want.requested_level}`)
+      }
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push(
+          want.auto_approved
+            ? '这张卡没有自动放行'
+            : `报了 ${String(p.level_requested)} 居然自己把钱定下来了`,
+        )
+      }
+      const budget = Number(p.budget ?? 0)
+      if (want.budget !== undefined && !matchNumeric(budget, want.budget)) {
+        problems.push(`预算 ${budget}，不合期望`)
+      }
+      add(
+        'kol_collaboration',
+        problems.length === 0,
+        problems.length === 0
+          ? `报 ${String(p.level_requested)} → 落 ${String(p.level_at_creation)}，等人点；预算 ${budget}`
+          : problems.join('；'),
+      )
+    }
+  }
+  // WP67 / 48 §5.1：归因——归上的有数，归不上的**不猜**
+  if (expected.kol_attribution !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.kol_attribution_ran')
+    if (last === undefined) {
+      add('kol_attribution', false, '这一轮没有跑过归因')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.kol_attribution
+      const problems: string[] = []
+      const matched = Number(p.matched ?? 0)
+      const unmatched = Number(p.unmatched ?? 0)
+      const revenue = Number(p.revenue ?? 0)
+      if (want.matched !== undefined && !matchNumeric(matched, want.matched)) {
+        problems.push(`归上 ${matched} 单，不合期望`)
+      }
+      // 这一条是反面：归不上的不能被悄悄算进来
+      if (want.unmatched !== undefined && !matchNumeric(unmatched, want.unmatched)) {
+        problems.push(`归不上 ${unmatched} 单，不合期望`)
+      }
+      if (want.revenue !== undefined && !matchNumeric(revenue, want.revenue)) {
+        problems.push(`归上的收入 ${revenue}，不合期望`)
+      }
+      const basis = (p.basis ?? []) as string[]
+      for (const w of want.basis ?? []) {
+        if (!basis.includes(w)) problems.push(`没有一单是凭「${w}」归的`)
+      }
+      add(
+        'kol_attribution',
+        problems.length === 0,
+        problems.length === 0
+          ? `${matched} 单归上（${basis.join(' / ')}），收入 ${revenue}；${unmatched} 单归不上，没猜`
+          : problems.join('；'),
+      )
+    }
+  }
   // WP62 / 51 §1 N0：面板、工具、清单三处都得明说"这个平台还没接"
   if (expected.platform_unsupported !== undefined) {
     const seen = new Map<

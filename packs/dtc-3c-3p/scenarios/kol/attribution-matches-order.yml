@@ -1,0 +1,52 @@
+# WP67（48 §5.1 归因）：联盟码匹配到一张真订单 → 归因表上有数；匹配不上的**不猜**。
+#
+# 这条题最要紧的一句在最后一行：归不上的订单进 `unmatched`，一分钱都不算进来。
+# 归错一单比归不上一单糟得多——下一次预算就按错的数字批。所以判据只有两条硬的
+# （订单用的折扣码、落地页带的 `utm_content`），两条都对不上就认了，不按时间
+# 窗口猜"这几天的单大概是他带来的"。
+#
+# "有人用这个码下了一单"是**世界里发生的一件事**（和"顾客点了退订"同一类），
+# 不是场景把答案递给 Agent：金额与币种归因那一跳自己去连接器读一次
+# `list_orders`，所以断言里的 129 是订单上真的那个数，不是这个文件里写死的。
+#
+# 判据的优先级（折扣码 > UTM）在这里看得见：这一单没有落地页，只有码。
+id: kol/attribution-matches-order
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 给这个红人建一条带联盟码的追踪链接（L3，它不动钱也不发信）
+  - at: '+0m'
+    kol.tracked_link:
+      who: p_li
+      creator: gadgetjonas
+      code: GADGETJO10
+  # ② 世界里发生的一件事：有人用这个码下了单（#1001，129 USD）
+  - at: '+1h'
+    kol.affiliate_order: { order: ord_1001, code: GADGETJO10 }
+  # ③ 跑一次归因
+  - at: '+2h'
+    kol.attribution: { who: p_li }
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  kol_attribution:
+    matched: 1
+    # 这一天店里别的订单一张都没归上——**它们本来就不该归上**
+    unmatched: '>=1'
+    revenue: 129
+    basis: [affiliate_code]
+  staged_change_kinds: [kol_tracked_link]
+  event_types:
+    - simulation.kol_affiliate_order_placed
+    - simulation.kol_attribution_ran
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  归因表上那一行"5 单 / 645 元"，人问得出"凭什么算给他"并且答得上来吗？

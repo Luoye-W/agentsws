@@ -1,0 +1,50 @@
+# WP67（48 §5.1）：建合作**永远** L1——报了 L3 也按回人审。
+#
+# 场景故意把提案的等级报成 L3，等于有人在设置里把"建合作"开到了全自动。
+# 15 §2 的 `HARD_L1` 里有 `kol_collaboration`，所以这一下必须被按住：
+# 卡进队列、等人点，一分钱也没定下来。
+#
+# 为什么它与开发信不同：开发信能升 L3（采纳率够了就升），合作不能。
+# 采纳率证明得了"这个 Agent 挑人挑得准"，证明不了"这个价该给、这个条款该签"。
+# 而且预算 900 超过了这条职责的人审线（`max_collab_budget` 默认 500）——
+# 这是**另一条** hit：硬顶说的是"这张卡要人点"，人审线说的是"这个价已经超出
+# 这条职责该谈的范围"。两条都要在卡面上看得见。
+#
+# 一个合成人都不装 = 没有人去点那张卡。合作要么有人点头，要么定不下来。
+id: kol/collab-budget-needs-approval
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    kol.collaboration:
+      who: p_li
+      creator: gadgetjonas
+      budget: 900
+      level: L3
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  kol_collaboration:
+    requested_level: L3
+    # 硬顶：报了 L3 也不许自动放行
+    auto_approved: false
+    budget: 900
+  staged_change_kinds: [kol_collaboration]
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.kol_collaboration_staged
+  auto_approved: 0
+  metrics:
+    staged_changes: 1
+    # 没人点头 = 这笔钱一分没定
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  卡面上"这条合作要付多少钱、超没超出这条职责该谈的范围"，人读完答得上来吗？

@@ -789,6 +789,9 @@ importers:
       '@agentsws/knowledge':
         specifier: workspace:*
         version: link:../knowledge
+      '@agentsws/kol-core':
+        specifier: workspace:*
+        version: link:../kol-core
       '@agentsws/learning':
         specifier: workspace:*
         version: link:../learning

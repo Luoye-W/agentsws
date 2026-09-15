@@ -25,6 +25,7 @@ import type {
   JoinExportBundle,
   JoinObjectComparison,
   JoinResolution,
+  KolUtm,
   Mandate,
   ModelGateway,
   ModelProvider,
@@ -61,6 +62,16 @@ import {
   describeFactKeyZh,
   RECHECK_OPTIONS,
 } from '@agentsws/knowledge'
+// WP67（48 §5.2）：红人那几件事用的是与本体**同一份**纯逻辑，场景里不另写一套
+import {
+  applyUtm,
+  attributeOrders,
+  buildUtm,
+  canAdvanceCollaboration,
+  collaborationStageName,
+  draftOutreach,
+  reviewOutreachBody,
+} from '@agentsws/kol-core'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
@@ -405,6 +416,14 @@ export interface World {
    */
   web: WebOps
   /**
+   * WP67：红人营销（48 §5.1）。
+   *
+   * 也走真机制：开发信的禁承诺由 **guardrail** 拦（不是场景自己判），
+   * 归因读的是 mock connect 真给的订单金额（场景只说"哪张单用了哪个码"），
+   * 额度与等级来自那个人 `kol.youtube` 那条分配的生效配置。
+   */
+  kol: KolOps
+  /**
    * WP47 / 44：品牌（范围组）与产品线的组织动作。
    *
    * 也走真机制：品牌成员一变，职责层重算所有挂了它的岗位的范围，这里记一条
@@ -486,6 +505,73 @@ export interface WebOps {
     /** 故意报高的等级；15 §2 的 hard_ceiling 会把它按回人审（回归用）。 */
     level?: 'L1' | 'L2' | 'L3'
   }): Promise<CampaignStageResult>
+}
+
+/** WP67（48 §5.1）：一次开发信提案的结论。 */
+export interface OutreachStageResult extends ShopStageResult {
+  /** 第一稿命中的禁承诺词（空 = 第一稿就干净）。 */
+  forbidden_hits: string[]
+  /** 改写过没有（第一稿被拦下来才会有第二稿）。 */
+  rewritten: boolean
+  /** 这一封会发给几个人（剔掉名单之后）。 */
+  recipients: number
+  /** 抑制 / 退订名单里剔掉了几个。 */
+  suppressed: number
+}
+
+/** WP67（48 §5.1）：一次合作提案的结论。 */
+export interface CollaborationStageResult extends ShopStageResult {
+  budget: number
+  currency: string
+  level_requested: 'L1' | 'L2' | 'L3'
+}
+
+/** WP67（48 §5.1）：一次归因的结论。 */
+export interface AttributionResultSummary {
+  /** 归上的订单数。 */
+  matched: number
+  /** 归不上的订单数（**不猜**：`attribution.ts` 的 `unmatched`）。 */
+  unmatched: number
+  /** 归上的收入。 */
+  revenue: number
+  /** 凭什么归的（`affiliate_code` / `utm_content`）。 */
+  basis: string[]
+}
+
+/** WP67（48 §5.1）：红人营销那几件事。 */
+export interface KolOps {
+  /**
+   * 起草并提一封开发信（`kol_outreach`）。
+   *
+   * 第一稿故意可以带承诺词——guardrail 的禁承诺是 **block**，于是这一跳会
+   * 先被拦一次；拦下之后按 `reviewOutreachBody` 给的那句话改写，再提一次。
+   * "拦下是打回重写，不是静默删改后照发"（同 WP55 的 Amazon 出站硬闸）。
+   */
+  outreach(input: {
+    who: PersonId
+    creator: string
+    /** 第一稿正文（场景写一句带承诺的话，看拦不拦得住）。 */
+    draft: string
+  }): Promise<OutreachStageResult>
+  /** 建一条合作（`kol_collaboration`，**永远 L1**）。 */
+  collaboration(input: {
+    who: PersonId
+    creator: string
+    budget: number
+    /** 故意报高的等级；15 §2 的 hard_ceiling 会把它按回人审。 */
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<CollaborationStageResult>
+  /** 建一条带 UTM 与联盟码的追踪链接（`kol_tracked_link`，L3）。 */
+  trackedLink(input: { who: PersonId; creator: string; code: string }): Promise<ShopStageResult>
+  /**
+   * 世界里发生的一件事：有人用这个联盟码下了一单。
+   *
+   * 与"顾客点了退订"同一类——它只记下"哪张订单用了哪个码"，
+   * 金额与币种归因那一跳自己去连接器读，不由场景递。
+   */
+  affiliateOrder(input: { order: string; code: string }): void
+  /** 跑一次归因：读订单 → 按码 / UTM 匹配 → 回填那三个数。 */
+  attribution(input: { who: PersonId }): Promise<AttributionResultSummary>
 }
 
 /** WP47：一个人在某条职责上现在看得到什么（44 G2 读那一半）。 */
@@ -1756,6 +1842,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP64：与 `shop` 同理，装在这个对象字面量之后（它要用 txn、flushCards 与 notify）
     get web() {
       return web
+    },
+    // WP67：同上（48 §5.1 红人营销那几件事）
+    get kol() {
+      return kol
     },
     // 44：与 `shop` 同理，装在这个对象字面量之后
     get org() {
@@ -3815,6 +3905,348 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         staged: true,
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
+      }
+    },
+  }
+
+  // ── WP67：红人营销（48 §5.1）────────────────────────────────────────
+
+  /**
+   * 世界里发生的事：哪张订单用了哪个联盟码。
+   *
+   * 与退订名单同一类——它是**已经发生的事实**，不是场景把答案递给 Agent。
+   * 金额与币种归因那一跳自己去连接器读，所以这张表里只有"码"，没有钱。
+   */
+  const affiliateOrders = new Map<string, string>()
+  /** 这个世界里建出来的追踪链接（归因那一跳按它匹配订单）。 */
+  const trackedLinks: {
+    id: string
+    collaboration_id: string
+    utm: KolUtm
+    affiliate_code?: string
+  }[] = []
+
+  const kol: KolOps = {
+    async outreach({ who, creator, draft }) {
+      const asg = assignmentFor(who, 'kol.youtube')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'creator', id: creator }
+      const { mandate, level } = actionOf(asg, 'stage_outreach')
+
+      // ① 起草。模板本身干净（`kol-core` 的三封模板里没有承诺的位置），
+      //    场景递进来的那一句是"模型自己多写的那一段"。
+      const base = draftOutreach('first', {
+        creator_name: creator,
+        brand: pack.workspace.name,
+        brand_pitch: '我们做桌面充电这一类东西。',
+        product: '65W 充电器',
+        reason: '你那条讲桌面收纳的视频里正好缺一个充电位，',
+        sender_name: who,
+        channel: 'youtube',
+      })
+      const first = { subject: base.subject, body: `${base.body}\n${draft}` }
+      const scan = reviewOutreachBody(first)
+
+      // ② 收件人：一个合成的红人邮箱，过一遍那**一份**抑制名单规则
+      const contact = `${creator}@creators.example`
+      const suppressed = suppressedRecipients([contact], unsubscribed)
+      const recipients = withoutSuppressed([contact], unsubscribed)
+
+      const stageOnce = async (body: { subject: string; body: string }) =>
+        txn.ledger.stage({
+          workspace_id,
+          role_id: asg.role_id,
+          assignment_id: asg.id,
+          run_id,
+          change_set_id: `cs_kol_${run_id}_${scan.ok ? 'a' : body === first ? 'a' : 'b'}`,
+          kind: 'kol_outreach',
+          target,
+          before: { stage: 'sourced' },
+          after: {
+            subject: body.subject,
+            body: body.body,
+            recipients,
+            suppressed,
+            // 15 §2：不报"查过了"就 block。这里照实报（真查过了，见上面那两行）。
+            suppression_checked: true,
+            creator_name: creator,
+          },
+          notes: [
+            suppressed.length === 0
+              ? '退订 / 抑制名单查过了，这个人不在名单上。'
+              : `这个人在退订 / 抑制名单上，已经剔除。`,
+          ],
+          created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+          mandate,
+          level,
+          provenance: run.finish({
+            seen: [target],
+            outputs: [],
+            summary: `给 ${creator} 起一封开发信`,
+          }),
+          approval: {
+            title: `开发信：${creator}`,
+            summary: body.body.slice(0, 120),
+            recipients: [recipientOf('scope_manager')],
+            proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+            rule: 'scope_manager',
+            separation_of_duties: true,
+            source_events: [],
+          },
+        })
+
+      // ③ 先提第一稿。带承诺词的话 guardrail 会 **block** ——这一下必须真发生，
+      //    不是我们自己先扫一遍就绕过去（禁承诺的最后一道闸在 guardrail，永远在）。
+      let outcome = await stageOnce(first)
+      let rewritten = false
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.kol_outreach_blocked',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          // 正文不进事件（21 §1）；进的是"命中了哪几条规则"
+          payload: { creator, forbidden_hits: scan.forbidden_hits, reason: outcome.reason },
+        })
+        // ④ 打回重写：把多出来的那一段去掉，模板那一部分原样留着。
+        //    "拦下是打回重写，不是静默删改后照发"——改写之后要**再过一遍闸**。
+        rewritten = true
+        const rerun = await beginShopRun(asg)
+        outcome = await (async () => {
+          const second = { subject: base.subject, body: base.body }
+          const again = reviewOutreachBody(second)
+          if (!again.ok) throw new Error('改写之后还带承诺词，模板本身有问题')
+          rerun.finish({ seen: [target], outputs: [], summary: `改写 ${creator} 的开发信` })
+          return stageOnce(second)
+        })()
+      }
+
+      const result = {
+        forbidden_hits: scan.forbidden_hits,
+        rewritten,
+        recipients: recipients.length,
+        suppressed: suppressed.length,
+      }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { ...result, staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.kol_outreach_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          creator,
+          rewritten,
+          recipients: recipients.length,
+          suppressed_removed: suppressed.length,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+        },
+      })
+      return {
+        ...result,
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async collaboration({ who, creator, budget, level }) {
+      const asg = assignmentFor(who, 'kol.youtube')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'collaboration', id: `col_${creator}` }
+      const { mandate, level: configured } = actionOf(asg, 'stage_collaboration')
+      const level_requested = level ?? configured
+      const currency = pack.workspace.base_currency
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_kol_${run_id}`,
+        kind: 'kol_collaboration',
+        target,
+        before: { stage: 'negotiating' },
+        after: {
+          stage: 'agreed',
+          // 阶段机的合法迁移表只有 `kol-core` 那一份；这里只带结论进去
+          stage_transition_ok: canAdvanceCollaboration('negotiating', 'agreed'),
+          stage_label: collaborationStageName('agreed'),
+          budget,
+          currency,
+          creator_name: creator,
+        },
+        notes: [`与 ${creator} 的合作，预算 ${budget} ${currency}。`],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        // 15 §2 hard_ceiling：报 L3 也会被按回人审
+        level: level_requested,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `建一条与 ${creator} 的合作`,
+        }),
+        approval: {
+          title: `合作：${creator}（${budget} ${currency}）`,
+          summary: `这条合作要付 ${budget} ${currency}。`,
+          recipients: [recipientOf('owner')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'owner',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      const base = { budget, currency, level_requested }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { ...base, staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.kol_collaboration_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          creator,
+          budget,
+          currency,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+        },
+      })
+      return {
+        ...base,
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async trackedLink({ who, creator, code }) {
+      const asg = assignmentFor(who, 'kol.youtube')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const collaboration_id = `col_${creator}`
+      const target: ObjectRef = { type: 'tracked_link', id: `tl_${creator}` }
+      const utm = buildUtm({ channel: 'youtube', campaign: 'autumn-desk', collaboration_id })
+      const { mandate, level } = actionOf(asg, 'stage_tracked_link')
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_kol_${run_id}`,
+        kind: 'kol_tracked_link',
+        target,
+        before: {},
+        after: {
+          url: applyUtm('https://nordvolt.example/p/charger-65w', utm),
+          utm,
+          affiliate_code: code,
+          collaboration_id,
+        },
+        notes: [`给 ${creator} 建一条追踪链接，联盟码 ${code}。`],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `建一条追踪链接：${code}`,
+        }),
+        approval: {
+          title: `追踪链接：${creator}`,
+          summary: `联盟码 ${code}。`,
+          recipients: [recipientOf('role_holder')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'role_holder',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      trackedLinks.push({ id: target.id, collaboration_id, utm, affiliate_code: code })
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    affiliateOrder({ order, code }) {
+      affiliateOrders.set(order, code)
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.kol_affiliate_order_placed',
+        actor: { kind: 'system', id: 'simulation' },
+        correlation: { trace_id: traceId() },
+        // 谁下的单不进事件；进的是"这个码被用了一次"
+        payload: { code },
+      })
+    },
+
+    async attribution({ who }) {
+      const asg = assignmentFor(who, 'kol.youtube')
+      const run = await beginShopRun(asg)
+      // 订单经 mock connect **真读一次**：金额与币种从这里来，不由场景递
+      const res = await connect.execute<{
+        orders: { id: string; total_price: number; currency: string }[]
+      }>(
+        'shopify_admin.list_orders',
+        { first: 200 },
+        { token: await tokenFor('role-read', asg.id), connection: 'conn_shopify_admin' },
+      )
+      run.tool('list_orders', { first: 200 })
+      const orders = res.data.orders.map((o) => ({
+        id: o.id,
+        total: o.total_price,
+        currency: o.currency,
+        ...(affiliateOrders.has(o.id)
+          ? { discount_codes: [affiliateOrders.get(o.id) as string] }
+          : {}),
+      }))
+      // 归因规则是 `kol-core` 那一份：匹配不上就进 `unmatched`，**不按时间窗口猜**
+      const out = attributeOrders(trackedLinks, orders)
+      run.finish({
+        seen: orders.slice(0, 20).map((o) => ({ type: 'order', id: o.id })),
+        outputs: [],
+        summary: `归因：${out.matched.length} 单归上，${out.unmatched.length} 单归不上`,
+      })
+      const revenue = out.by_link.reduce((a, r) => a + r.revenue, 0)
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.kol_attribution_ran',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id: run.run_id },
+        payload: {
+          matched: out.matched.length,
+          unmatched: out.unmatched.length,
+          revenue,
+          basis: [...new Set(out.matched.map((m) => m.basis))],
+        },
+      })
+      return {
+        matched: out.matched.length,
+        unmatched: out.unmatched.length,
+        revenue,
+        basis: [...new Set(out.matched.map((m) => m.basis))],
       }
     },
   }

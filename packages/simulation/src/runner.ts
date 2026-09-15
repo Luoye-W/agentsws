@@ -1013,6 +1013,63 @@ async function execute(
         })
         return
       }
+      // ── WP67 红人营销（48 §5.1）────────────────────────────────────
+      case 'kol.outreach': {
+        const out = await world.kol.outreach({
+          who: event.outreach.who,
+          creator: event.outreach.creator,
+          draft: event.outreach.draft,
+        })
+        world.appendEvent('simulation.kol_outreach_requested', {
+          creator: event.outreach.creator,
+          staged: out.staged,
+          // 正文与命中的词都不在这里重复（起草那一跳已经记过），只记"改写了没有"
+          rewritten: out.rewritten,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'kol.collaboration': {
+        const e = event.collaboration
+        const out = await world.kol.collaboration({
+          who: e.who,
+          creator: e.creator,
+          budget: e.budget,
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.kol_collaboration_requested', {
+          creator: e.creator,
+          budget: e.budget,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'kol.tracked_link': {
+        const e = event.tracked_link
+        const out = await world.kol.trackedLink({ who: e.who, creator: e.creator, code: e.code })
+        world.appendEvent('simulation.kol_tracked_link_requested', {
+          creator: e.creator,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'kol.affiliate_order': {
+        world.kol.affiliateOrder({
+          order: event.affiliate_order.order,
+          code: event.affiliate_order.code,
+        })
+        return
+      }
+      case 'kol.attribution': {
+        await world.kol.attribution({ who: event.attribution.who })
+        await tick()
+        return
+      }
       // ── WP63 店铺管理与内容与博客（51 §2.1 / §2.2）─────────────────
       case 'shop.publish_product': {
         const e = event.publish_product

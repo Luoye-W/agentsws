@@ -179,6 +179,12 @@ const EVENT_KEYS = [
   'fulfillment.mark_shipped',
   'email.unsubscribe',
   'email.campaign_send',
+  // WP67 红人营销（48 §5.1）
+  'kol.outreach',
+  'kol.collaboration',
+  'kol.tracked_link',
+  'kol.affiliate_order',
+  'kol.attribution',
   // WP63 店铺管理与内容与博客（51 §2.1 / §2.2）
   'shop.publish_product',
   'content.blog_post',
@@ -240,6 +246,10 @@ const EXPECTED_KEYS = [
   // WP64（51 §2.3 / §2.4）
   'overdue_orders',
   'campaign_send',
+  // WP67（48 §5.1）
+  'kol_outreach',
+  'kol_collaboration',
+  'kol_attribution',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -739,6 +749,67 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             : { note: str(source, `${path}.${key}.note`, body.note) }),
           ...(sendLevel === undefined ? {} : { level: sendLevel as 'L1' | 'L2' | 'L3' }),
         },
+      }
+    }
+    // WP67（48 §5.1）：红人营销那几件事
+    case 'kol.outreach': {
+      known(source, `${path}.${key}`, body, ['who', 'creator', 'draft'])
+      return {
+        at,
+        type: 'kol.outreach',
+        outreach: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          creator: str(source, `${path}.${key}.creator`, body.creator),
+          draft: str(source, `${path}.${key}.draft`, body.draft),
+        },
+      }
+    }
+    case 'kol.collaboration': {
+      known(source, `${path}.${key}`, body, ['who', 'creator', 'budget', 'level'])
+      const collabLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (collabLevel !== undefined && !['L1', 'L2', 'L3'].includes(collabLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'kol.collaboration',
+        collaboration: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          creator: str(source, `${path}.${key}.creator`, body.creator),
+          budget: num(source, `${path}.${key}.budget`, body.budget),
+          ...(collabLevel === undefined ? {} : { level: collabLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'kol.tracked_link': {
+      known(source, `${path}.${key}`, body, ['who', 'creator', 'code'])
+      return {
+        at,
+        type: 'kol.tracked_link',
+        tracked_link: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          creator: str(source, `${path}.${key}.creator`, body.creator),
+          code: str(source, `${path}.${key}.code`, body.code),
+        },
+      }
+    }
+    case 'kol.affiliate_order': {
+      known(source, `${path}.${key}`, body, ['order', 'code'])
+      return {
+        at,
+        type: 'kol.affiliate_order',
+        affiliate_order: {
+          order: str(source, `${path}.${key}.order`, body.order),
+          code: str(source, `${path}.${key}.code`, body.code),
+        },
+      }
+    }
+    case 'kol.attribution': {
+      known(source, `${path}.${key}`, body, ['who'])
+      return {
+        at,
+        type: 'kol.attribution',
+        attribution: { who: str(source, `${path}.${key}.who`, body.who) },
       }
     }
     case 'shop.publish_product': {
