@@ -168,19 +168,43 @@ API 测试里有一条断言钉着这个边界。
 `stub` / `direct` / `dsh-subprocess` 三个运行时下跑过，四档跑出来的草稿正文逐字节相同、
 门决策与规则集哈希也相同。
 
-## 5. 红人岗位：从零建（L4）
+## 5. 红人岗位：从零建（L4；**09-15 按 Luoye 定的"按渠道划分职责"重写**）
 
-### 本地（开源本体）
+### 5.1 职责按渠道，不按功能
 
-`@agentsws/kol-core`（同 `support-core` 纪律）+ `role-packs/kol-marketing`，十个模块同 v1：阶段机、打分、开发信、回复分类与陌生来信、日配额 / 序列 / 合规、同一人合并、campaign 向导、UTM 与归因、Excel 导入、URL 解析。新对象类型进契约与登记表：`creator` / `platform_account` / `creator_contact` / `collaboration` / `deliverable` / `tracked_link`。六条职责不变（`kol.discovery` / `outreach` / `campaign` / `content-review` / `affiliate` / `attribution`），岗位模板"红人营销"默认全勾。
+Luoye 09-15 定：红人营销**按渠道划分职责**，五个渠道：YouTube / Facebook / Instagram / TikTok / X。v1 按功能拆的六条（`kol.discovery` / `outreach` / `campaign` / `content-review` / `affiliate` / `attribution`）**不再作为职责**，改为每条渠道职责内部的动作与面板分块。
 
-### 云端（托管档增值：**公共红人库服务**）
+| 职责 | 渠道 | 一条职责里的整条链 | 渠道特有的部分 |
+|---|---|---|---|
+| `kol.youtube` | YouTube | 找人（官方 Data API 搜索 + 公共库）→ 打分 → 建联（邮箱 / 频道"关于"页邮箱抓取）→ 合作与交付物 → 内容审核（视频 / 描述区链接）→ 归因（UTM / 联盟码） | 配额池（10k 单位 / 天）、Apify 降级、频道基准（k-匿名） |
+| `kol.facebook` | Facebook | 同上（主页 / 群组博主） | Graph API 权限、主页私信建联 |
+| `kol.instagram` | Instagram | 同上 | IG DM 建联、Reels / 帖子审核、Basic Display 限制 |
+| `kol.tiktok` | TikTok | 同上（09-15 确认算一条） | Research API 申请制、TikTok Shop 联盟带货归因 |
+| `kol.x` | X | 同上（09-15 新加） | API 付费档、帖子 / 长文审核 |
 
-把 KOLAgents 的 `public_*` 那一层**原样重建成 agentsws 云上的一个服务**（不是远程连旧 SaaS）：
-- 插件采集汇聚（两组端点、配对流程、日配额预扣、贡献奖励风控）；插件改指向 agentsws 云；
-- 公共库读（免费体检报告、共享库浏览、付费 reveal 邮箱）、写（观察、联系方式回填、争议）；
-- k-匿名基准聚合、YouTube 配额池 + Apify 降级、邮箱抓取；
-- 本地的 `kol.discovery` 通过 08 §7.2 的远程 Backend 形态连它，用 agentsws 账号（不是另一把 API key）。
+每条渠道职责的骨架相同：`scopes`（`creator` / `platform_account` / `creator_contact` / `collaboration` / `deliverable` / `tracked_link` 六个对象域，范围挂品牌内的店铺 / 产品线）、写动作（`stage_outreach` 开发信 L2 → L3 且禁承诺、`stage_collaboration` 建合作 L1、`stage_deliverable_review` 审核结论 L2、`stage_affiliate_code` 发联盟码 L2 上限、`stage_tracked_link` UTM L3）、额度（`max_outreach_per_day` 默认 30、`max_affiliate_discount_pct` 默认 20、`max_collab_budget` 默认 500 人审线）、面板（找人 / 建联 / 合作 / 审核 / 归因五个分块）。渠道之间零共享数据：同一个红人在两个渠道是两条 `platform_account`，`creator` 用"同一人合并"能力挂到一起。
+
+岗位模板"红人营销"= 五条渠道职责，**默认只勾 YouTube 与 Instagram**（KOLAgents 的用户数据：这两条占 80% 用量），其余可勾。
+
+### 5.2 本地（开源本体）：`@agentsws/kol-core` = 跨渠道共用的**能力**，不是职责
+
+同 `support-core` 纪律。十个模块同 v1，但按"能力"归类而不是按职责：阶段机（合作与交付物）、打分、开发信起草与禁承诺、回复分类与陌生来信、日配额 / 序列 / 合规、同一人合并、campaign 向导（一个 campaign 跨渠道挑人，但每个渠道的动作仍走各自职责的额度）、UTM 与归因、Excel 导入、URL 解析（认五个渠道的链接）。新对象类型进契约与登记表：`creator` / `platform_account`（带 `channel`）/ `creator_contact` / `collaboration` / `deliverable` / `tracked_link`。渠道适配器 `packages/kol-core/src/channels/{youtube,facebook,instagram,tiktok,x}.ts`：各自的搜索、资料读取、基准、私信 / 邮箱建联口；凭据（平台 token）由用户在原生表单自己填进本机加密库，或按 49 M2 开关"用 agentsws 的"走云上配额池。
+
+### 5.3 云端（托管档增值：**公共红人库服务**，WP61）
+
+把 KOLAgents 的 `public_*` 那一层**原样重建成 agentsws 云上的一个服务**（不是远程连旧 SaaS），挂在 49 M3 服务入口的 `/v1/data/*` 下、按 49 M4 积分计价（`data.kol.lookup` / `data.kol.audit` / `social.fetch` 已在价目表）：
+- 插件采集汇聚（两组端点、配对流程、日配额预扣、贡献奖励风控）；插件改指向 agentsws 云，配对用 WP58 的工作区服务令牌（新 scope `data`）；
+- 公共库读（免费体检报告、共享库浏览、付费 reveal 邮箱）、写（观察、联系方式回填、争议）；库按 `channel` 分区；
+- k-匿名基准聚合、YouTube 配额池 + Apify 降级、邮箱抓取；TikTok / X 的采集只做插件汇聚（官方 API 申请制 / 付费）；
+- 本地的五条渠道职责通过 49 M2 的开关连它，用 agentsws 账号（不是另一把 API key）；用我的 token = 本地直连平台、不经我们、不扣积分。
+
+### 5.4 分期
+
+| WP | 做什么 | 前置 |
+|---|---|---|
+| WP61 公共红人库服务 | 5.3 云端；`data` scope；插件配对；`/v1/data/*` 路由包挂进 `apps/cloud` | 58 / 59 已合并 ✅ |
+| WP67 kol-core + 五条渠道职责骨架 | 5.1 五条职责 yml + 岗位模板、5.2 六个对象与能力模块、YouTube 与 Instagram 适配器先做、面板五分块、3 人 pack 场景 | 与 WP61 可并行 |
+| WP68 其余三渠道适配器 + campaign 向导 | Facebook / TikTok / X 适配器、跨渠道 campaign、Excel 导入 | 67 |
 
 ## 6. 知识库与"关机也在线"（L5–L6，取代 v1 的同步 / 交接）
 
