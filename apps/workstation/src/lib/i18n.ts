@@ -951,7 +951,14 @@ const zh: Table = {
   'connections.reason.invalid_shop': '店铺域名不对',
   'models.title': '模型',
   'models.subtitle': 'Agent 靠模型说话。',
-  'models.subtitle.hint': '填一把 API key，这台电脑上的所有岗位就都能用了。',
+  'models.subtitle.hint': '填一把 API key，这个品牌的所有岗位就都能用了。',
+  // WP66（52 O3）：一个品牌一套模型设置，也可以跟着公司默认走
+  'models.inherit': '跟随公司默认',
+  'models.inherit.hint':
+    '开着：这个品牌用公司默认品牌那一套模型与 key，改设置请去那个品牌。关掉：这个品牌单独设一套，花的钱也单独记。',
+  'models.inherit.following': '正在跟随「{brand}」的设置',
+  'models.inherit.own': '这个品牌单独设了一套',
+  'models.inherit.readonly': '跟随期间这一页是只读的。要单独设，把上面的开关关掉。',
   'models.banner': '还没接模型，Agent 跑不起来。',
   'models.banner.cta': '去设置里接一个 →',
   'models.configured': '已配的',
@@ -2307,7 +2314,14 @@ const en: Table = {
   'connections.reason.invalid_shop': 'Shop domain is wrong',
   'models.title': 'Models',
   'models.subtitle': 'Agents need a model to speak.',
-  'models.subtitle.hint': 'One API key covers every position on this machine.',
+  'models.subtitle.hint': 'One API key covers every position in this brand.',
+  // WP66 (doc 52 O3): each brand gets its own model settings, or follows the company default
+  'models.inherit': 'Follow company default',
+  'models.inherit.hint':
+    'On: this brand uses the default brand\u2019s models and keys; change them over there. Off: this brand gets its own set, billed separately.',
+  'models.inherit.following': 'Following \u201c{brand}\u201d',
+  'models.inherit.own': 'This brand has its own set',
+  'models.inherit.readonly': 'Read-only while following. Turn the switch off to set your own.',
   'models.banner': 'No model connected yet — agents cannot run.',
   'models.banner.cta': 'Connect one in Settings →',
   'models.configured': 'Configured',

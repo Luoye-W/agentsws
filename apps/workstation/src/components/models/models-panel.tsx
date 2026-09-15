@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import type {
   ModelDefaultsView,
   ModelPricingRefreshResult,
@@ -40,6 +41,7 @@ import {
   removeModelProvider,
   saveModelProvider,
   setModelDefaults,
+  setModelInheritance,
   testModelProvider,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -153,6 +155,23 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
     },
   })
 
+  /**
+   * WP66（52 O3）：这个品牌的模型设置跟不跟随公司默认。
+   *
+   * 改完要把整页的三条查询都刷一遍——跟随与不跟随读的根本是**两份**设置。
+   */
+  const setInherit = useMutation({
+    mutationFn: (on: boolean) => setModelInheritance(on, assignment),
+    onSuccess: () => {
+      setError(null)
+      void client.invalidateQueries({ queryKey: ['model-usage'] })
+      refresh()
+    },
+    onError: (e: Error) => {
+      setError(e.message)
+    },
+  })
+
   const saveDefaults = useMutation({
     mutationFn: (input: Parameters<typeof setModelDefaults>[0]) =>
       setModelDefaults(input, assignment),
@@ -185,6 +204,45 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
           {t('models.subtitle')}
           <Hint text={t('models.subtitle.hint')} />
         </p>
+
+        {/*
+          52 O3「跟随公司默认」。**只有多品牌、而且不是公司默认那个品牌才出现**——
+          单品牌的机器上没有可跟随的对象，多一个开关只是多一件要理解的事。
+        */}
+        {settings?.org_default !== false ? null : (
+          <section
+            className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+            data-testid="models-inherit"
+          >
+            <div className="flex flex-col gap-0.5">
+              <span className="flex items-center gap-1 font-medium">
+                {t('models.inherit')}
+                <Hint text={t('models.inherit.hint')} />
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {settings.inherit_org === true
+                  ? t('models.inherit.following', {
+                      brand: settings.org_default_brand ?? '',
+                    })
+                  : t('models.inherit.own')}
+              </span>
+            </div>
+            <Switch
+              checked={settings.inherit_org === true}
+              disabled={setInherit.isPending}
+              aria-label={t('models.inherit')}
+              data-testid="models-inherit-switch"
+              onCheckedChange={(on) => {
+                setInherit.mutate(on)
+              }}
+            />
+          </section>
+        )}
+        {settings?.inherit_org === true ? (
+          <p className="text-xs text-muted-foreground" data-testid="models-inherit-readonly">
+            {t('models.inherit.readonly')}
+          </p>
+        ) : null}
 
         {error === null ? null : (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">

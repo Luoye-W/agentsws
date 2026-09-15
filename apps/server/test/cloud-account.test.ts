@@ -304,3 +304,62 @@ describe('49 M1 本地云账号：关联 → 状态 → 解除', () => {
     expect((await data<CloudAccountView>(await api('/v1/cloud/account'))).linked).toBe(false)
   })
 })
+
+/**
+ * WP66（52 O1）：账号与余额在**组织级**（49 M1），而云上那把服务令牌是
+ * **按工作区签**的——所以一家公司下每个品牌各一把。
+ */
+describe('WP66 每个品牌各一把云令牌', () => {
+  /** 建一个品牌，回它的 `workspace_id`。 */
+  async function addBrand(name: string): Promise<string> {
+    const orgs = await data<{ id: string }[]>(await api('/v1/orgs'))
+    const org = orgs[0]
+    if (org === undefined) throw new Error('启动之后应该有一个组织')
+    const created = await api(`/v1/orgs/${org.id}/brands`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    })
+    expect(created.status).toBe(201)
+    return (await data<{ workspace_id: string }>(created)).workspace_id
+  }
+
+  it('关联时为组织下所有品牌各签一把；加品牌时补签；解除时一起撤', async () => {
+    const brandB = await addBrand('诺伏特课程')
+    await linkOnce()
+
+    // 两个品牌在云上各有一条**活着的**关联，而且不是同一条
+    const a = ctx.cloud.store.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)
+    const b = ctx.cloud.store.activeLinkOfWorkspace(brandB)
+    expect(a).toBeDefined()
+    expect(b).toBeDefined()
+    expect(a?.id).not.toBe(b?.id)
+
+    // 关联之后再加的品牌：当场补签一把
+    const brandC = await addBrand('诺伏特配件')
+    expect(ctx.cloud.store.activeLinkOfWorkspace(brandC)).toBeDefined()
+
+    // 解除是整家公司的事：三把一起撤
+    const res = await api('/v1/cloud/account/unlink', { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(ctx.cloud.store.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)).toBeUndefined()
+    expect(ctx.cloud.store.activeLinkOfWorkspace(brandB)).toBeUndefined()
+    expect(ctx.cloud.store.activeLinkOfWorkspace(brandC)).toBeUndefined()
+  })
+
+  it('令牌按品牌存在各自那一段加密库里（品牌甲的模型面取不到品牌乙那把）', async () => {
+    const brandB = await addBrand('诺伏特课程')
+    await linkOnce()
+    const vaultA = (await ctx.server.brands.forWorkspace(ctx.server.bootstrap.workspace.id)).secrets
+    const vaultB = (await ctx.server.brands.forWorkspace(brandB)).secrets
+    const tokenA = vaultA.get(CLOUD_TOKEN_SECRET_ID)?.token
+    const tokenB = vaultB.get(CLOUD_TOKEN_SECRET_ID)?.token
+    expect(tokenA).toBeDefined()
+    expect(tokenB).toBeDefined()
+    // 各是各的：一把令牌只对它自己那个工作区有效（云侧按 link 判范围）
+    expect(tokenA).not.toBe(tokenB)
+    // 落盘的是密文：两把令牌的明文都不在数据目录的任何一个字节里
+    const bytes = allBytes(ctx.dir)
+    for (const token of [tokenA as string, tokenB as string])
+      for (const file of bytes) expect(file.bytes.includes(token)).toBe(false)
+  })
+})

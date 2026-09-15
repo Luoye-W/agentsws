@@ -1228,6 +1228,12 @@ export interface ModelDefaultsView {
     assignment_daily_base?: number
   }
   choices: { id: string; label: string }[]
+  /** WP66（52 O3）：这个品牌的模型设置跟不跟随公司默认（单品牌永远是 false）。 */
+  inherit_org?: boolean
+  /** 这个品牌**就是**公司默认那一个（开关不出现）。 */
+  org_default?: boolean
+  /** 公司默认品牌的名字（界面上那句"跟随「XX」的设置"）。 */
+  org_default_brand?: string
 }
 
 export interface ModelUsageRow {
@@ -1327,6 +1333,21 @@ export const setModelDefaults = (
   assignment?: string,
 ): Promise<ModelDefaultsView> =>
   api('/v1/models/defaults', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+/**
+ * WP66（52 O3）：改"跟随公司默认"。
+ *
+ * 开着的时候这个品牌读的是公司默认那一份，表单是只读的；关掉才有自己那一份。
+ */
+export const setModelInheritance = (
+  inherit_org: boolean,
+  assignment?: string,
+): Promise<ModelDefaultsView> =>
+  api('/v1/models/inheritance', {
+    method: 'PUT',
+    body: { inherit_org },
+    ...withAssignment(assignment),
+  })
 
 export const getModelUsage = (assignment?: string): Promise<ModelUsageView> =>
   api('/v1/models/usage', withAssignment(assignment))

@@ -176,6 +176,8 @@ const OWNER_POSITION = {
 
 const state = {
   providers: [] as ModelProviderView[],
+  /** WP66（52 O3）：`getModelDefaults` 回哪一份（跟不跟随公司默认）。 */
+  defaults: DEFAULTS as ModelDefaultsView,
   templates: [DEEPSEEK_TEMPLATE, CUSTOM_TEMPLATE] as ModelProviderTemplate[],
   /** 清空就是"当前身份不是所有者"（面板与黄条都该静默）。 */
   positions: [OWNER_POSITION] as (typeof OWNER_POSITION)[],
@@ -196,6 +198,8 @@ const discovered: { id: string; input: Record<string, unknown> }[] = []
 const priceRefreshes: number[] = []
 const removed: string[] = []
 const tested: string[] = []
+/** WP66：「跟随公司默认」开关点过几次、点成了什么。 */
+const inherited: boolean[] = []
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -230,8 +234,13 @@ vi.mock('@/lib/api', async () => {
       discovered.push({ id, input })
       return state.listing
     },
-    getModelDefaults: async () => DEFAULTS,
-    setModelDefaults: async () => DEFAULTS,
+    getModelDefaults: async () => state.defaults,
+    setModelDefaults: async () => state.defaults,
+    setModelInheritance: async (on: boolean) => {
+      inherited.push(on)
+      state.defaults = { ...state.defaults, inherit_org: on }
+      return state.defaults
+    },
     getModelUsage: async () => USAGE,
     getModelPricing: async () => PRICING,
     refreshModelPricing: async () => {
@@ -247,6 +256,8 @@ const { NoModelBanner } = await import('@/components/models/no-model-banner')
 
 beforeEach(() => {
   state.providers = []
+  state.defaults = DEFAULTS
+  inherited.length = 0
   state.positions = [OWNER_POSITION]
   state.forbidden = false
   state.testResult = { ok: true, reason: 'ok', checked_at: T0 }
@@ -736,5 +747,59 @@ describe('WP42 §4 「编号」折进「高级」', () => {
     expect(suggestProviderId('https://api.deepseek.com', ['deepseek'])).toBe('deepseek-2')
     // 地址是空的 / 乱写的也得给出一个合法编号
     expect(suggestProviderId('', [])).toBe('model')
+  })
+})
+
+/**
+ * WP66（52 O1 / O3）：一个品牌一套模型设置，也可以跟着公司默认走。
+ *
+ * 界面上的判据只有一条：**这个品牌是不是公司默认那一个**。是（或者压根只有一个
+ * 品牌）就什么开关都不出——没有可跟随的对象。
+ */
+describe('WP66 §O3 跟随公司默认', () => {
+  it('单品牌 / 公司默认品牌：开关根本不出现', async () => {
+    state.providers = [ACTIVE]
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await screen.findByTestId('models-panel')
+    expect(screen.queryByTestId('models-inherit')).toBeNull()
+
+    state.defaults = { ...DEFAULTS, org_default: true, inherit_org: false }
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await screen.findAllByTestId('models-panel')
+    expect(screen.queryByTestId('models-inherit')).toBeNull()
+  })
+
+  it('跟随中：说清楚跟的是谁，并且明说这一页是只读的', async () => {
+    state.providers = [ACTIVE]
+    state.defaults = {
+      ...DEFAULTS,
+      org_default: false,
+      inherit_org: true,
+      org_default_brand: '诺伏特户外',
+    }
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const row = await screen.findByTestId('models-inherit')
+    expect(row.textContent).toContain('跟随公司默认')
+    expect(row.textContent).toContain('诺伏特户外')
+    expect((await screen.findByTestId('models-inherit-readonly')).textContent).toContain('只读')
+  })
+
+  it('关掉开关：发一次 PUT，之后这一页不再是只读的', async () => {
+    state.providers = [ACTIVE]
+    state.defaults = {
+      ...DEFAULTS,
+      org_default: false,
+      inherit_org: true,
+      org_default_brand: '诺伏特户外',
+    }
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const toggle = await screen.findByTestId('models-inherit-switch')
+    await userEvent.click(toggle)
+    await waitFor(() => {
+      expect(inherited).toEqual([false])
+    })
+    await waitFor(() => {
+      expect(screen.queryByTestId('models-inherit-readonly')).toBeNull()
+    })
   })
 })

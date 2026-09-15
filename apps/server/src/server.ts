@@ -1323,16 +1323,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
   }
 
+  /** 这个进程 bootstrap 出来的品牌所在那家公司下的全部品牌（没挂组织时就它自己）。 */
+  const brandsOfThisOrg = (): WorkspaceId[] => {
+    const org = identity
+      .listOrganizations()
+      .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace.id))
+    return org === undefined ? [workspace.id] : identity.brandsOf(org.id).map((w) => w.id)
+  }
+
   brands = createBrandModules({
     bootstrap: workspace.id,
     create: (ws) => assembleBrand(ws),
     orgDefault: (ws) => orgDefaultBrandOf(ws),
-    brands: () => {
-      const org = identity
-        .listOrganizations()
-        .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace.id))
-      return org === undefined ? [workspace.id] : identity.brandsOf(org.id).map((w) => w.id)
-    },
+    brands: () => brandsOfThisOrg(),
     ...(dbDir === undefined ? {} : { dbDir }),
   })
   const brandModules: BrandModules = brands
@@ -1821,6 +1824,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 品牌一览那一格的"今日销售"：与首页面板同一个数据源（`workData`），
     // 而且**只有当前品牌有**——别的品牌这会儿没有取数的通道
     salesToday: () => salesTodayOf(),
+    // WP66：新品牌建完补签一把云令牌（这家公司关联过账号才有得签）
+    onBrandCreated: async (ws) => {
+      await cloudAccount.ensureBrandToken(ws)
+    },
     // 发现开关的真源在组织上，但"开 / 关"这个动作在首次设置那一面——两边改都得生效
     onCompanyChanged: ({ by, discoverable, key_changed }) => {
       if (!discoverable) {
@@ -2041,6 +2048,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     env,
     appendEvent,
     workspace_id: () => workspace.id,
+    // WP66（52 O1）：账号在组织级，令牌按工作区签 —— 关联一次给每个品牌各签一把
+    brands: () => brandsOfThisOrg(),
+    secretsFor: (ws) => namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id)),
     localBaseUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
     ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
   })

@@ -67,6 +67,22 @@ export interface CloudAccountOptions {
   fetch?: CloudFetch
   appendEvent: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
   workspace_id: () => WorkspaceId
+  /**
+   * WP66（52 O1）：这家公司下**所有**品牌工作区。
+   *
+   * 云上那把令牌是**按工作区签**的（`POST /v1/cloud/links` 的 body 就是
+   * `workspace_id`），而 49 M1 的账号与余额在组织级——所以关联一次要给每个品牌
+   * 各签一把，解除时各撤一把。不给就只有当前这一个（单品牌，与这一版之前一样）。
+   */
+  brands?: () => WorkspaceId[]
+  /**
+   * WP66：某个品牌那一段加密库（key 名已按品牌加过前缀）。
+   *
+   * 每把令牌存进**自己那个品牌**的库位下：品牌 A 的模型面取不到 B 的令牌，
+   * 49 M2「用 agentsws 的」也就不会串着花另一个品牌的积分。
+   * 不给就全部落在 `options.secrets` 上（单品牌）。
+   */
+  secretsFor?: (workspace_id: WorkspaceId) => SecretStore
   /** 本机服务进程的对外地址（回调落点）。listen 之后才知道端口，所以是取值函数。 */
   localBaseUrl: () => string | undefined
   /** 一次性 state 的随机源（测试注入）。 */
@@ -77,6 +93,14 @@ export interface CloudAccountAssembly {
   port: CloudAccountPort
   /** 还没点的那次关联（测试与诊断用；**不含任何 token**）。 */
   pending(): { state: string; email: string; started_at: string } | undefined
+  /**
+   * WP66（52 O1）：给一个**新建的**品牌补签一把工作区服务令牌。
+   *
+   * 加品牌时调它：这家公司已经关联过账号的话，新品牌当场就能用积分；
+   * 没关联过（或者补签被云侧拒了）就什么也不发生——加品牌不该因为云不在而失败。
+   * 回 `true` 表示真签下来了一把。
+   */
+  ensureBrandToken(workspace_id: WorkspaceId): Promise<boolean>
 }
 
 interface StoredLink {
@@ -111,6 +135,15 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
     })
 
   let pending: { state: string; email: string; started_at: string } | undefined
+
+  /** 这家公司下有哪些品牌（不给就只有当前这一个）。 */
+  const brandsOf = (): WorkspaceId[] => {
+    const rows = options.brands?.() ?? []
+    const current = options.workspace_id()
+    return rows.length === 0 ? [current] : rows
+  }
+  /** 某个品牌那一段加密库（不给就是同一个库，单品牌那一档）。 */
+  const vaultOf = (ws: WorkspaceId): SecretStore => options.secretsFor?.(ws) ?? options.secrets
 
   /** 读加密库里那条；没有就是没关联。**返回值里有令牌明文，只在本模块内部流转。** */
   const stored = (): StoredLink | undefined => {
@@ -238,6 +271,12 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
 
       const workspace_id = options.workspace_id()
       try {
+        /*
+         * WP66（52 O1）：云上那把令牌是**按工作区签**的，而账号与余额在组织级
+         * （49 M1）——所以这家公司下**每个品牌各签一把**。当前这个品牌先签
+         * （它的那一把决定这次关联的回执长什么样）；别的品牌签不下来不算失败：
+         * 关联本身已经成了，补签走"加品牌"那条路（`ensureBrandToken`）。
+         */
         const issued = await call<{
           link: { expires_at: string; scopes: CloudScope[]; cloud_org_id: string }
           token: string
@@ -246,15 +285,38 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
           token: verified.session_token,
           body: { workspace_id, label: workspace_id },
         })
-        options.secrets.put(CLOUD_TOKEN_SECRET_ID, {
-          token: issued.token,
+        const fieldsOf = (t: string, expires_at: string, scopes: string) => ({
+          token: t,
           email: verified.account.email,
           org_id: verified.org.id,
           org_name: verified.org.name,
-          expires_at: issued.link.expires_at,
-          scopes: issued.link.scopes.join(','),
+          expires_at,
+          scopes,
           linked_at: options.clock.now(),
         })
+        vaultOf(workspace_id).put(
+          CLOUD_TOKEN_SECRET_ID,
+          fieldsOf(issued.token, issued.link.expires_at, issued.link.scopes.join(',')),
+        )
+        for (const ws of brandsOf()) {
+          if (ws === workspace_id) continue
+          try {
+            const extra = await call<{
+              link: { expires_at: string; scopes: CloudScope[] }
+              token: string
+            }>('/v1/cloud/links', {
+              method: 'POST',
+              token: verified.session_token,
+              body: { workspace_id: ws, label: ws },
+            })
+            vaultOf(ws).put(
+              CLOUD_TOKEN_SECRET_ID,
+              fieldsOf(extra.token, extra.link.expires_at, extra.link.scopes.join(',')),
+            )
+          } catch {
+            // 这个品牌没签上：它的"用 agentsws 的"暂时不可用，别的品牌照常
+          }
+        }
         const payload: CloudAccountLinkedPayload = {
           email_domain: emailDomain(verified.account.email),
           cloud_org_id: verified.org.id,
@@ -297,7 +359,29 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
             ? `本地已断开，云侧那条没撤掉：${err.message}`
             : '本地已断开，云侧那条没撤掉'
       }
-      options.secrets.remove(CLOUD_TOKEN_SECRET_ID)
+      /*
+       * WP66：解除是**整家公司**的事（账号在组织级），所以每个品牌那把也一起撤。
+       * 撤不掉的照样本地删——留一把本地读不出、云上还活着的令牌最糟。
+       */
+      for (const ws of brandsOf()) {
+        if (ws === workspace_id) continue
+        const other = vaultOf(ws)
+        let token: string | undefined
+        try {
+          token = other.get(CLOUD_TOKEN_SECRET_ID)?.token
+        } catch {
+          token = undefined
+        }
+        if (token !== undefined && token !== '') {
+          try {
+            await call('/v1/cloud/links/current/revoke', { method: 'POST', token })
+          } catch {
+            // 同上：本地照删，云侧那条等联网后再撤
+          }
+        }
+        other.remove(CLOUD_TOKEN_SECRET_ID)
+      }
+      vaultOf(workspace_id).remove(CLOUD_TOKEN_SECRET_ID)
       const payload: CloudAccountUnlinkedPayload = {
         email_domain: emailDomain(link.email),
         cloud_org_id: link.org_id,
@@ -319,5 +403,46 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
     },
   }
 
-  return { port, pending: () => pending }
+  return {
+    port,
+    pending: () => pending,
+    async ensureBrandToken(workspace_id): Promise<boolean> {
+      const current = stored()
+      // 这家公司还没关联过账号：没什么可补签的（新品牌跟着一起等关联）
+      if (current === undefined) return false
+      const vault = vaultOf(workspace_id)
+      try {
+        if (vault.record(CLOUD_TOKEN_SECRET_ID) !== undefined) return false
+      } catch {
+        // 读不出来（换过密钥）：当成没有，重新签一把
+      }
+      try {
+        /*
+         * 补签用**当前品牌那把工作区令牌**换一把新的：本机没有第二把能管账号的
+         * 钥匙（关联时那张云侧会话用完就注销了，见 `complete` 的 finally）。
+         * 云侧不认这条路就什么也不发生——加品牌不该因为云不在而失败。
+         */
+        const issued = await call<{
+          link: { expires_at: string; scopes: CloudScope[] }
+          token: string
+        }>('/v1/cloud/links/sibling', {
+          method: 'POST',
+          token: current.token,
+          body: { workspace_id, label: workspace_id },
+        })
+        vault.put(CLOUD_TOKEN_SECRET_ID, {
+          token: issued.token,
+          email: current.email,
+          org_id: current.org_id,
+          org_name: current.org_name,
+          expires_at: issued.link.expires_at,
+          scopes: issued.link.scopes.join(','),
+          linked_at: options.clock.now(),
+        })
+        return true
+      } catch {
+        return false
+      }
+    },
+  }
 }

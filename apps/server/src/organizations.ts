@@ -83,6 +83,13 @@ export interface OrganizationsAssemblyOptions {
     /** 全称或域名变了 = 钥匙变了，要用新钥匙重新广播。 */
     key_changed: boolean
   }): void
+  /**
+   * WP66（52 O1）：新品牌**建完之后**该顺手做的那几件装配上的事。
+   *
+   * 现在只有一件：给它补签一把云上的工作区服务令牌（49 M1 的账号在组织级，
+   * 令牌却是按工作区签的）。做不成不算建品牌失败——补签依赖云侧在不在。
+   */
+  onBrandCreated?(workspace_id: WorkspaceId): Promise<void> | void
 }
 
 export interface OrganizationsAssembly {
@@ -296,6 +303,12 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
       })
       if (input.copy_from !== undefined)
         await port.copyFrom(actor, org_id, workspace.id, input.copy_from)
+      // 云令牌补签之类的装配后事（失败不影响品牌已经建出来这件事）
+      try {
+        await options.onBrandCreated?.(workspace.id)
+      } catch {
+        // 补签不成：这个品牌的"用 agentsws 的"暂时不可用，别的一切照常
+      }
       return brandViewOf((await identity.getWorkspace(workspace.id)) ?? workspace, actor)
     },
 
