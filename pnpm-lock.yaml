@@ -65,6 +65,9 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@agentsws/kol-public':
+        specifier: workspace:*
+        version: link:../../packages/kol-public
       '@agentsws/metering':
         specifier: workspace:*
         version: link:../../packages/metering

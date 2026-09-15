@@ -15,6 +15,14 @@ export {
   walletDbPath,
 } from './entry.js'
 export {
+  KOL_DB_FILE,
+  kolDbPath,
+  type MountedKolPublic,
+  type MountKolPublicOptions,
+  mountKolPublic,
+  sourcesFromEnv,
+} from './kol-public.js'
+export {
   type CloudMail,
   consoleMailSender,
   loginMail,
@@ -69,6 +77,7 @@ export { linkView, type WorkspaceLinkView } from './views.js'
 import { pathToFileURL } from 'node:url'
 import type { CloudTokenVerifier } from '@agentsws/contracts'
 import { mountEntry } from './entry.js'
+import { mountKolPublic } from './kol-public.js'
 import { CLOUD_DATA_DIR_ENV, createCloudServer } from './server.js'
 import { mountStandby } from './standby.js'
 
@@ -94,6 +103,12 @@ export async function main(): Promise<void> {
     ...(dataDir === undefined ? {} : { dataDir }),
   })
   childVerifier = standby.childTokens.verifier()
+  // 48 §5.3 / WP61：公共红人库（`/v1/data/kol/*`，鉴权要 `data` 动作集）
+  const kol = mountKolPublic(server, {
+    wallet: entry.wallet,
+    pricing: entry.pricing,
+    ...(dataDir === undefined ? {} : { dataDir }),
+  })
   await server.listen()
   let closing = false
   const shutdown = (signal: string): void => {
@@ -101,6 +116,7 @@ export async function main(): Promise<void> {
     closing = true
     process.stdout.write(`\n${signal} received, closing…\n`)
     void standby.close()
+    kol.close()
     server
       .close()
       .then(() => process.exit(0))
