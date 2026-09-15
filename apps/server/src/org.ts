@@ -254,6 +254,22 @@ const SEED_POSITIONS: readonly {
       ['common.member', false],
     ],
   },
+  // WP67（48 §5.1 / 54）：**红人营销**岗位 = 五条渠道职责，
+  // 默认只勾 YouTube 与 Instagram（48 §5.1：这两条占 KOLAgents 80% 用量）。
+  // 其余三条在向导里勾得上——勾上一条比去掉一条容易（去掉之前他得先弄明白那条是干什么的）。
+  {
+    id: 'kol-marketing',
+    zh: '红人营销',
+    en: 'Creator Marketing',
+    roles: [
+      ['kol.youtube', true],
+      ['kol.instagram', true],
+      ['kol.tiktok', false],
+      ['kol.facebook', false],
+      ['kol.x', false],
+      ['common.member', false],
+    ],
+  },
   { id: 'member', zh: '普通成员', en: 'Member', roles: [['common.member', true]] },
 ]
 

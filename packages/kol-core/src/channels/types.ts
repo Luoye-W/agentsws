@@ -111,7 +111,7 @@ export interface KolChannelAdapter {
 }
 
 /** 没连时的那一句人话（五条渠道共用一个说法，界面上才一致）。 */
-export function notConnected(channel: KolChannel, label: string): ChannelError {
+export function notConnected(label: string): ChannelError {
   return {
     ok: false,
     reason: 'not_connected',

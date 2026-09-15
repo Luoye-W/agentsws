@@ -93,7 +93,7 @@ const HOST_RULES: readonly HostRule[] = [
       }
       if (head === 'shorts' && segs[1] !== undefined)
         return { handle: '', target: 'content', content_id: segs[1] }
-      if (head !== undefined && head.startsWith('@'))
+      if (head?.startsWith('@') === true)
         return { handle: normalizeHandle(head), target: 'profile' }
       if ((head === 'channel' || head === 'c' || head === 'user') && segs[1] !== undefined)
         return { handle: normalizeHandle(segs[1]), target: 'profile' }

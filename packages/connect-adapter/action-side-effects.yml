@@ -247,6 +247,61 @@ actions:
   aftership.retrack_tracking: write
   aftership.mark_tracking_completed: write
 
+  # ---------- 红人营销的五条渠道（WP67 / 48 §5.1）----------
+  #
+  # 五个连接器都还是**待增加**（`PLANNED_CONNECTORS`），真调用没接。副作用先标好的
+  # 理由与 WP64 的 Klaviyo 逐字相同：这张表默认 write，漏标的读动作拿不到 role-read
+  # 令牌——骨架期标好，接上那天不用再回来补一遍，也不会出现"接上了却读不了"。
+  #
+  # 写口也逐条列出来。红人这五条职责**不经连接器发信**（开发信是账本上的
+  # `kol_outreach`，走审批与出站流水线），所以下面的写口眼下一条都用不上；
+  # 写出来是为了让人一眼看全各平台那头有哪些写的动作。
+  youtube_data.search_channels: read
+  youtube_data.get_channel: read
+  youtube_data.list_channel_videos: read
+  youtube_data.get_video: read
+  youtube_data.get_video_statistics: read
+  youtube_data.get_benchmark: read
+  youtube_data.get_quota_usage: read
+  youtube_data.insert_comment: write
+  youtube_data.rate_video: write
+
+  instagram_graph.business_discovery: read
+  instagram_graph.get_user: read
+  instagram_graph.list_user_media: read
+  instagram_graph.get_media: read
+  instagram_graph.get_media_insights: read
+  instagram_graph.get_benchmark: read
+  instagram_graph.send_direct_message: write
+  instagram_graph.publish_media: write
+
+  facebook_graph.search_pages: read
+  facebook_graph.get_page: read
+  facebook_graph.get_page_insights: read
+  facebook_graph.list_page_posts: read
+  facebook_graph.get_post: read
+  facebook_graph.get_benchmark: read
+  facebook_graph.send_page_message: write
+  facebook_graph.publish_post: write
+
+  tiktok_research.search_users: read
+  tiktok_research.get_user: read
+  tiktok_research.list_user_videos: read
+  tiktok_research.get_video: read
+  tiktok_research.get_benchmark: read
+  # TikTok Shop 联盟那一侧（带货归因）：读佣金与订单，不写
+  tiktok_research.list_affiliate_orders: read
+  tiktok_research.get_affiliate_commission: read
+
+  x_api.search_users: read
+  x_api.get_user: read
+  x_api.list_user_tweets: read
+  x_api.get_tweet: read
+  x_api.get_tweet_metrics: read
+  x_api.get_benchmark: read
+  x_api.create_tweet: write
+  x_api.send_direct_message: write
+
   # ---------- Gotify（契约一致性套件对真 runtime 用的最小 provider） ----------
   gotify.get_version: read
   gotify.get_health: read

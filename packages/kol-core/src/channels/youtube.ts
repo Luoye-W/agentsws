@@ -67,7 +67,7 @@ function failureOf(e: unknown): ChannelResult<never> {
 
 export function createYouTubeAdapter(transport: KolChannelTransport): KolChannelAdapter {
   const guard = <T>(): ChannelResult<T> | undefined =>
-    transport.connected(CHANNEL) ? undefined : notConnected(CHANNEL, LABEL)
+    transport.connected(CHANNEL) ? undefined : notConnected(LABEL)
 
   return {
     channel: CHANNEL,

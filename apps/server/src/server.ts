@@ -129,6 +129,8 @@ import { createApprovalDirectory } from './housekeeping.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { importKnowledgePack } from './knowledge-pack.js'
+// WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
+import { createKolStore } from './kol.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
@@ -1052,6 +1054,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP53：真环境的事项记录源（订单 / 商品经连接器的只读 Action，政策经知识层，
      * 联系人进线程台账）。demo 与测试传了 `records` 就原样用那一份，一行不变。
      */
+    // WP67（48 §5.2）：这个品牌的红人库（六类对象，落在这个品牌自己的目录下）。
+    // 建在记录源之前：记录源要拿它读红人与合作（`kol: () => kol`）。
+    const kol = createKolStore({ workspace_id: ws, ...(dir === undefined ? {} : { dbDir: dir }) })
+
     let workRef: Work | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
@@ -1066,6 +1072,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         work: () => workRef,
         appendEvent,
         storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+        // WP67：红人与合作的只读记录（联系方式一格都不给，见 `RecordKolPort`）
+        kol: () => kol,
         ...(liveData === undefined ? {} : { liveData }),
       })
 
@@ -1314,6 +1322,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(liveData === undefined ? {} : { liveData }),
       workData,
       records,
+      kol,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -1328,6 +1337,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         await channels.close()
         liveData?.close()
         connections.close()
+        kol.close()
       },
     }
   }

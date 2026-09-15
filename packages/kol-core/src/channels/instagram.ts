@@ -72,7 +72,7 @@ function failureOf(e: unknown): ChannelResult<never> {
 
 export function createInstagramAdapter(transport: KolChannelTransport): KolChannelAdapter {
   const guard = <T>(): ChannelResult<T> | undefined =>
-    transport.connected(CHANNEL) ? undefined : notConnected(CHANNEL, LABEL)
+    transport.connected(CHANNEL) ? undefined : notConnected(LABEL)
 
   const lookup = async (handle: string): Promise<RawProfile> =>
     transport.call<RawProfile>({

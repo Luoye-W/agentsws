@@ -151,6 +151,9 @@ importers:
       '@agentsws/knowledge':
         specifier: workspace:*
         version: link:../../packages/knowledge
+      '@agentsws/kol-core':
+        specifier: workspace:*
+        version: link:../../packages/kol-core
       '@agentsws/learning':
         specifier: workspace:*
         version: link:../../packages/learning
