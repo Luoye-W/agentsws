@@ -1,0 +1,29 @@
+{
+  "name": "@agentsws/kol-public",
+  "version": "0.0.0",
+  "private": true,
+  "description": "48 §5.3 / 49 §6 WP61 公共红人库服务：插件采集汇聚、共享库读写、k-匿名基准、YouTube 配额池与 Apify 降级（路由包，不起服务）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/metering": "workspace:*",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.0.0"
+  }
+}
