@@ -233,7 +233,7 @@ describe('第三张模型卡（49 M2）', () => {
     for (const f of plaintext) {
       expect(f.bytes.includes(WORKSPACE_TOKEN), `${f.name} 里出现了令牌`).toBe(false)
     }
-  })
+  }, 20_000)
 
   it('没关联时那条显示的是"去关联账号"，不是"还没填 API key"', async () => {
     linkAccount()

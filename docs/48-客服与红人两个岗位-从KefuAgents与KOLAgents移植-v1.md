@@ -201,10 +201,66 @@ API 测试里有一条断言钉着这个边界。
 - 不存在"本地在线本地处理、离线 SaaS 接管"这种切换——同一时刻只有一个服务进程，永远是云上那个。
 - 想"数据不出家门又要在线"的公司走托管控制面：服务进程在我们这，库在他们 NAS 上，要求 NAS 对我们的进程可达（41 §2.3 第一行）。
 
+> **WP60 实现落点（值守）**：`packages/standby`（库 + 路由包，不起服务；风格同 WP59 的
+> `packages/cloud-entry`），挂进 `apps/cloud`（`src/standby.ts`，照 `entry.ts` 的写法）。
+>
+> **一个值守工作区 = 一个 `apps/server` 子进程**——`dist/index.js` 与用户本地跑的是
+> **同一份**。L6 那句"同一时刻只有一个服务进程"靠这一条成立：云上跑的要是另一套代码，
+> 那"搬家"就不是搬家，是迁移到另一个产品。
+>
+> | 件 | 在哪 | 关键判断 |
+> |---|---|---|
+> | 进程池 | `src/orchestrator.ts` | 起（分回环端口 → 取租户密钥 → 签子进程令牌 → spawn）/ 健康（`/v1/health` 过了才 `running`）/ 崩溃退避（1s→5s→15s→1m→5m 封顶）/ 停。**没有 `setInterval`、没有 `Date.now()`**：`tick()` 由装配方按节奏调，于是"崩了 8 秒之后重拉"在测试里是一行 advance 而不是一次真的等待 |
+> | 订阅 | `src/service.ts` | `standby.seat.month` × 座位数 → 钱包 `reserve → settle`（12 §4：钱包是结算层，订阅只是计价方式，账落 `org_id` / 52 O3）。余额不足**只拒这一次不冻结**（402 人话）；到期先试续期，钱不够才停成 `expired`——**数据不删，导出照常**（41 §2.3）；到期前 3 天一条 `standby.renewal_due`，一期只出一次 |
+> | 租户密钥 | `src/keyring.ts` | 每租户一把（21 按租户加密），只经环境变量传一次，落在**租户自己的目录**里（0600）。**不进编排层的库、不进日志、不进事件、不进导出包** |
+> | 子进程令牌 | `src/child-token.ts` | 值守自己签自己验，动作集**只有 `ai` + `wallet:read`**（没有 `standby`：被攻下来的租户进程最多花掉这个租户自己的积分）。与 WP58 的 `workspace_links` **分表**——那张表上有"一个工作区一条活着的关联"这条不变量 |
+> | 公网入口 | `src/proxy.ts` | `/w/:workspace_id/*` 原样代理到子进程。**流原样穿过去，不读不记正文**（SSE 因此是真的流式，49 M6 在这条路上也成立）；末端用户走**子进程自己的** magic link 会话，云进程不发、不存、不看 |
+> | 控制面 | `src/routes.ts` | 五条要 `standby` 动作集，且**只能管自己那个工作区**：列表 / 开通 / 状态 / 停 / `import`（上传 WP36 的包）/ `export`（反向搬家） |
+>
+> **先校验再解包**：`importWorkspace` 自己核 manifest + 每文件 sha256 + zip crc，
+> 任意一处对不上就抛，租户目录一个字节不动。反过来的话，坏包会先铺进去半个目录，
+> 那时这个租户的数据已经是"一半新一半旧"了。
+>
+> 传给子进程的基础环境是**白名单**（`PATH` / `HOME` / `TMPDIR` / `TZ` / `LANG` / `LC_ALL`）
+> 而不是 `...process.env`：云进程环境里有 New API 与 Stripe 的密钥，整份继承等于
+> 每个租户的进程里都有一份我们的钥匙。
+
 ## 7. 在 agentsws 里的呈现（L7）
 
 - 46 首次设置：岗位列表加"客服"（三条）与"红人营销"（六条）；公司档案加"你卖的是"。**客服三条与"你卖的是"WP54 已落地**（截图见 `docs/assets/workstation/roles-support-*.png`）；红人六条等 C 期。
-- 连接页"数据后端"三档下加一格 **"在线值守（agentsws 托管）"**：一句话说明关机后谁来接、点进去走切档；不再有"KefuAgents / KOLAgents 账号"卡。
+- 连接页"数据后端"三档下加一格 **"在线值守（agentsws 托管）"**：一句话说明关机后谁来接、点进去走切档；不再有"KefuAgents / KOLAgents 账号"卡。**WP60 已落地**（截图 `docs/assets/workstation/standby-wizard.png`）。
+
+> **WP60 实现落点（L7 与 L3 #11 的云端一半）**
+>
+> **本地那一面**：`packages/api/src/routes/standby.ts` + `apps/server/src/standby.ts`。
+> `GET /v1/standby`（状态 / 座位单价 / 嵌入脚本 / 桌面壳该指到哪儿——**一个数字都不自己算**，
+> 与 49 M5 逐字同一条纪律；没关联账号不是错，回 `linked: false` + 一句人话且**一跳都不打**）、
+> `POST /v1/standby/switch`（WP36 `export` → 上传 → 开通 → 云上起进程，一次走完）、
+> `POST /v1/standby/bring-home`（**先落包、后停云**——顺序反了，中间任何一步出错都会留下
+> "云上停了、本地没有包"的状态；落完包不自己 import，那是对着**没在跑**的数据目录做的运维动作）。
+> 界面在 `components/connections/standby-wizard.tsx`，挂在"数据后端"第三档底下；
+> 出口（接回本机）与入口在**同一格**里——41 §2.3 第一条是随时搬家，一个只能进不能出的入口，
+> 说多少遍"不锁定"都没用。
+>
+> **聊天窗托管**（L3 #11 的云端一半）：`apps/server/src/chat-widget.ts` + `src/widget.ts` +
+> `packages/api/src/routes/chat.ts` 的公开访客组。WP57 写的"公开访客端点不是还没做，是故意不做"
+> 那条理由**一个字没变**——它变成了四道门：来源域名白名单（**空 = 全拒**，不是全放）、
+> 限流（`ChatRateLimiter`，与 WP57 同一个模块；建会话按来源计、发消息按访客计）、
+> 访客令牌（`HMAC(secret, session_id)`，**不落库**，验就是重算一次）、
+> 凭据不进 URL（SSE 那条也走 `Authorization` 头，所以嵌入脚本用 `fetch` + `ReadableStream`
+> 而不是浏览器内建那个流式 API——它塞不进头）。变的是前提：值守起来之后这个进程本来就在
+> 公网后面（`/w/<ws>/*`），聊天窗是托管档卖的东西之一。
+> 嵌入脚本 `https://<云>/w/<ws>/widget.js`：vanilla JS、无依赖、无构建、约 7 KB，样式全内联
+> （它跑在别人的网站上，带进任何一个依赖就是在别人家里和别人的版本打架）。
+> 访客那条 SSE **过滤掉 `session` 帧**——它带的是"人工接管翻了没有"，访客不该知道现在
+> 回他的是 AI 还是人。截图 `docs/assets/workstation/chat-widget.png`。
+>
+> **桌面壳远程模式**：`apps/desktop/src/mode.ts` 的 `normalizeStandbyUrl` 让服务地址
+> **唯一**允许带一段 `/w/<ws>` 路径（一个云节点后面挂着很多工作区，区分它们的正是这段前缀）；
+> 源仍只有一个，所以 allowedOrigins / CSP 那三处改走 `originOfBaseUrl` 取源。
+> 托盘与顶栏角标按 `isStandby` 分叉成"值守中：云上运行"——判据是**地址的形状**，
+> 不是另存一个开关（存了就会出现"开关说在值守、地址指着本机"这种谁也解释不清的状态）。
+> 角标组件 `components/standby-badge.tsx`，`app-shell.tsx` 只多一行。
 - 连接页加"KOLAgents 插件"卡：配对指向 agentsws 云；未开托管档时提示"插件采集要托管档"。
 - 岗位面板：客服三块流水各一条待审车道 + 逾期 + 投诉；红人六块新增。
 - 卡片：两个 SaaS 的卡型全部映射到 deck 四段式。

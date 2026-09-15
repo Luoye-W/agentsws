@@ -33,6 +33,8 @@ import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
+// WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
+import { StandbyBadge } from '@/components/standby-badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { PositionSummary } from '@/lib/api'
@@ -152,6 +154,7 @@ export function AppShell({
             于是那些人的顶栏与这一版上线前一模一样。
           */}
           <BrandSwitcher />
+          <StandbyBadge />
           <Button
             variant="ghost"
             size="sm"

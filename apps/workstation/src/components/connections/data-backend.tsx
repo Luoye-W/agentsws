@@ -10,13 +10,17 @@
  * 3. 只打 `/v1/storage/test` 与 `/v1/storage/backend` 两条路，提交完立刻 `form.reset()`；
  * 4. 全程没有一次 `console.*`。
  *
- * 「用 agentsws 托管」这一档在 WP40 里**只有说明**，没有集群（41 §2.3）——
- * 按钮点开是一段实话，不是一个假的开通流程。
+ * 「用 agentsws 托管」这一档在 WP40 里**只有说明**，没有集群（41 §2.3）。
+ * WP60 之后它多了一格真的：**在线值守**——把整个工作区服务进程搬到云上跑
+ * （48 L6：同一时刻只有一个服务进程）。托管控制面那一半仍然是说明，
+ * 因为它要的是"我们的进程能连到你家的 NAS"，那件事还没有。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cloud, Database, ExternalLink, HardDrive, Server } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
+// WP60（49 §6 / 48 L7）：在线值守的切档向导（这一档底下那一格）
+import { StandbyWizard } from '@/components/connections/standby-wizard'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -272,26 +276,40 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
         </p>
       ) : null}
 
+      {/*
+        WP60（48 L7）：这一档从"一段实话"变成了一个真流程。
+        托管控制面（服务进程我们跑、数据还在你机器上）仍然是说明；
+        **在线值守**（工作区服务进程整个搬到云上跑）已经能走通了，就在下面那一格。
+      */}
       {selected === 'managed' ? (
-        <div
-          className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs"
-          data-testid="storage-managed"
-        >
-          <p className="flex items-center gap-1">
-            {t('storage.managed.note')}
-            <Hint text={t('storage.managed.more.hint')} />
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="mt-2 px-0"
-            onClick={() => openExternal('https://agentsws.com/hosting')}
+        <>
+          <div
+            className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs"
+            data-testid="storage-managed"
           >
-            {t('storage.managed.learn')}
-            <ExternalLink className="ml-1 size-3.5" aria-hidden />
-          </Button>
-        </div>
+            <p className="flex items-center gap-1">
+              {t('storage.managed.note')}
+              <Hint text={t('storage.managed.more.hint')} />
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="mt-2 px-0"
+              onClick={() => openExternal('https://agentsws.com/hosting')}
+            >
+              {t('storage.managed.learn')}
+              <ExternalLink className="ml-1 size-3.5" aria-hidden />
+            </Button>
+          </div>
+          <StandbyWizard
+            {...(assignment === undefined ? {} : { assignment })}
+            onGoToAccount={() => {
+              // WP58 的「账号与积分」在设置页的一个 tab 上
+              window.location.hash = '#/settings?tab=account'
+            }}
+          />
+        </>
       ) : null}
 
       {/* 接我的云：原生表单 */}

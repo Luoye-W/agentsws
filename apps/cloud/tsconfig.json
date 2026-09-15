@@ -17,6 +17,12 @@
     },
     {
       "path": "../../packages/metering"
+    },
+    {
+      "path": "../../packages/standby"
+    },
+    {
+      "path": "../server"
     }
   ]
 }

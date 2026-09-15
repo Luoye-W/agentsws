@@ -253,11 +253,38 @@ describe('边界', () => {
     }
   })
 
-  it('OpenAPI 里每条 /v1/chat 路由都声明了 bearer', async () => {
+  /**
+   * WP60 之后 `/v1/chat` 下面有两组，**各自的鉴权写死在这里**：
+   *
+   * - 登录态那几条（会话、接管、教 AI、widget 设置）一律 `bearer` + Assignment；
+   * - 公开访客那几条（建会话、发一句、SSE、widget 配置与脚本）一律 `public`
+   *   ——它们的门是 Origin 白名单 + 限流 + 访客令牌，不是工作区凭据。
+   *
+   * 这条断言的价值在于**一条新路由加错组就红**：把访客那条写成 bearer，
+   * widget 就永远连不上；把商家那条写成 public，白名单就成了摆设。
+   */
+  it('OpenAPI 里每条 /v1/chat 路由的鉴权分组都对得上', async () => {
     const r = await rig()
     const chat = r.gateway.specs.filter((s) => s.path.startsWith('/v1/chat'))
-    expect(chat).toHaveLength(8)
-    expect(chat.every((s) => s.auth === 'bearer' && s.assignment === true)).toBe(true)
+    const grouped = Object.fromEntries(chat.map((s) => [`${s.method} ${s.path}`, s.auth]))
+    expect(grouped).toEqual({
+      'post /v1/chat/sessions': 'bearer',
+      'get /v1/chat/sessions': 'bearer',
+      'get /v1/chat/sessions/:id/messages': 'bearer',
+      'post /v1/chat/sessions/:id/messages': 'bearer',
+      'post /v1/chat/sessions/:id/advance': 'bearer',
+      'put /v1/chat/sessions/:id/takeover': 'bearer',
+      'post /v1/chat/sessions/:id/teach': 'bearer',
+      'get /v1/chat/sessions/:id/stream': 'bearer',
+      'get /v1/chat/widget/settings': 'bearer',
+      'put /v1/chat/widget/settings': 'bearer',
+      'get /v1/chat/widget.js': 'public',
+      'get /v1/chat/widget-config': 'public',
+      'post /v1/chat/public/sessions': 'public',
+      'post /v1/chat/public/sessions/:id/messages': 'public',
+      'get /v1/chat/public/sessions/:id/stream': 'public',
+    })
+    expect(chat.every((s) => s.auth === 'public' || s.assignment === true)).toBe(true)
   })
 
   it('会让 AI 对外说话的那几条过出站急停', async () => {

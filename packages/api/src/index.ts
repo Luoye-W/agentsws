@@ -122,7 +122,7 @@ export {
   recordCatalogNote,
   triggerKeyOf,
 } from './routes/catalog.js'
-// WP57（48 §4 L3 #11）：网站在线客服的本地 API
+// WP57（48 §4 L3 #11）：网站在线客服的本地 API；WP60 加公开访客面与 widget 配置
 export {
   CHAT_SSE_HEARTBEAT_MS,
   type ChatFrame,
@@ -130,7 +130,9 @@ export {
   type ChatPort,
   type ChatSessionView,
   type ChatTurnView,
+  type ChatWidgetSettings,
   chatRoutes,
+  type PublicOpenResult,
   sseResponse,
 } from './routes/chat.js'
 export type { CloudActor, CloudPort } from './routes/cloud.js'
@@ -316,6 +318,14 @@ export type {
 export { PROFILE_FIELD_NAMES, secretaryRoutes } from './routes/secretary.js'
 export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
 export { secretRoutes } from './routes/secrets.js'
+// WP60（49 §6 / 48 L7）：在线值守的本地一面
+export type {
+  StandbyActor,
+  StandbyBringHomeView,
+  StandbyPort,
+  StandbySwitchView,
+} from './routes/standby.js'
+export { standbyRoutes } from './routes/standby.js'
 export {
   type StorageBackendInput,
   type StorageBackendView,

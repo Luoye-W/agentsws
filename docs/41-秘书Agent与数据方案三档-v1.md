@@ -85,7 +85,10 @@
 | 连接页「数据后端」三个按钮 + 原生表单 + 测试连接 + 迁移向导 | ✅ | `apps/workstation/src/components/connections/data-backend.tsx` |
 | `GET /v1/storage`（当前后端、大小、上次备份） | ✅ | `packages/api/src/routes/storage.ts` |
 | 迁移用的 `export` / `import` 同一包格式 | ⏳ 最小实现 + `TODO(WP36)` | `apps/server/src/storage.ts` |
-| 托管档（第三档） | ⏳ 只有说明页，不建集群（本来就是 WP40 的范围） | 连接页「用 agentsws 托管」按钮 |
+| 托管档：**值守**（工作区服务进程整个搬到云上跑） | ✅ **WP60** | `packages/standby` + `apps/cloud/src/standby.ts`；本地 `/v1/standby*` 与连接页第三档底下那一格（`components/connections/standby-wizard.tsx`） |
+| 托管档：**托管控制面**（进程我们跑、库在你家 NAS） | ⛔ 还没有 | 要的是"我们的进程能连到你家的 NAS"（§2.3 第一行），那件事没做；连接页那一档仍是一段实话 |
+| 托管档：**聊天窗托管**（公开访客端点 + widget 脚本分发） | ✅ **WP60** | `apps/server/src/{chat-widget,widget}.ts`；公网地址 `https://<云>/w/<ws>/widget.js` |
+| 随时搬家（两个方向同一个包格式，33） | ✅ **WP60** | `POST /v1/standby/switch` 与 `/bring-home`；到期停了也导得出来 |
 
 ### 2.1 第一档：本地自托管（免费，开源版默认）
 

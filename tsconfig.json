@@ -26,10 +26,10 @@
       "path": "packages/catalog"
     },
     {
-      "path": "packages/cloud-entry"
+      "path": "packages/channels"
     },
     {
-      "path": "packages/channels"
+      "path": "packages/cloud-entry"
     },
     {
       "path": "packages/connect-adapter"
@@ -93,6 +93,9 @@
     },
     {
       "path": "packages/stand-ins"
+    },
+    {
+      "path": "packages/standby"
     },
     {
       "path": "packages/support-core"

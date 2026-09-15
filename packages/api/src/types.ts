@@ -66,6 +66,7 @@ import type { OrganizationsPort } from './routes/organizations.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
+import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
 import type { WorkPort } from './routes/work.js'
 import type { WsOptions } from './routes/ws.js'
@@ -594,6 +595,11 @@ export interface GatewayDeps {
   cloudAccount?: CloudAccountPort
   /** WP40 数据后端（41 §2.4 的三档与迁移向导）；没装配时 `/v1/storage/*` 回 not_implemented。 */
   storage?: StoragePort
+  /**
+   * WP60（49 §6 / 48 L6）：在线值守。没装配时 `/v1/standby*` 回 not_implemented——
+   * 值守是托管档的一项增值能力，不是工作台的前提。
+   */
+  standby?: StandbyPort
   /** WP25 模型面（provider 配置 / 默认模型 / 预算 / 花费）；没装配时 `/v1/models/*` 回 not_implemented。 */
   models?: ModelsPort
   /**

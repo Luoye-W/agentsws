@@ -24,6 +24,8 @@ export interface Strings {
   version: string
   // WP36 / 40 §1.3：连公司服务器那一档
   connectedTo: string
+  /** WP60：值守中（工作区的服务进程在云上跑，这台电脑只是个窗口）。 */
+  standbyRunning: string
   remoteUnreachable: string
   wizardTitle: string
   wizardBody: string
@@ -57,6 +59,7 @@ const ZH: Strings = {
   paused: '已暂停',
   version: '版本',
   connectedTo: '已连接',
+  standbyRunning: '值守中：云上运行',
   remoteUnreachable: '连不上公司服务器',
   wizardTitle: '这台电脑怎么用？',
   wizardBody:
@@ -91,6 +94,7 @@ const EN: Strings = {
   paused: 'Paused',
   version: 'Version',
   connectedTo: 'Connected to',
+  standbyRunning: 'Standby: running in the cloud',
   remoteUnreachable: 'Cannot reach the company server',
   wizardTitle: 'How will this computer be used?',
   wizardBody:

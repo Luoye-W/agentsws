@@ -40,7 +40,9 @@ import {
   companyLabel,
   configPatchOf,
   type DesktopMode,
+  isStandby,
   needsWizard,
+  originOfBaseUrl,
   resolveMode,
   type WizardChoice,
 } from './mode.js'
@@ -344,7 +346,12 @@ async function bootstrap(): Promise<void> {
   let tray: Tray | undefined
   let window: BrowserWindow | undefined
 
-  const allowedOrigins = (): string[] => [serverUrl()]
+  /*
+   * WP60：值守档的服务地址带一段 `/w/<ws>` 前缀，但**源只有一个**。
+   * 这三处（导航白名单、开窗白名单、IPC 来源判定）判的都是源，所以取源不取全串——
+   * 把带路径的串塞进来，`url.origin === entry` 永远不成立，窗口一个链接都点不开。
+   */
+  const allowedOrigins = (): string[] => [originOfBaseUrl(serverUrl()) ?? serverUrl()]
 
   // ── 安全：CSP 只允许 self，覆盖服务端可能发的任何一份。
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -533,6 +540,8 @@ async function bootstrap(): Promise<void> {
     launchAtLogin: config.launchAtLogin,
     mode: runtimeMode.mode,
     company: companyLabel({ serverUrl: runtimeMode.serverUrl, workspaceName }),
+    // WP60：判据是服务地址的形状，不是另存的一个开关（见 `mode.isStandby`）
+    standby: isStandby(runtimeMode.serverUrl),
   })
 
   const model = (): MenuItemModel[] => buildTrayMenu(trayInput())

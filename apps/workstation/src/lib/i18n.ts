@@ -662,6 +662,40 @@ const zh: Table = {
   'storage.managed.more.hint':
     '开放了我们也只跑无状态的服务进程，数据仍在你自己的机器上。在那之前，「接我的云」已经能把数据放到你自己的阿里云 / AWS / 腾讯云账号里，我们不代持任何云账号。',
   'storage.managed.learn': '看看这一档会是什么样',
+  // WP60（49 §6 / 48 L6 / L7）：在线值守与聊天窗托管
+  'standby.title': '在线值守（agentsws 托管）',
+  'standby.note':
+    '关了电脑也有人接活：你的工作区服务进程搬到云上 7×24 跑，邮箱轮询、聊天窗、跟进都在云上。',
+  'standby.more.hint':
+    '同一时刻只有一个服务进程——开了值守，云上那个就是唯一那个，这台电脑变成它的一个窗口。没有"两边同步"这回事，因为只有一份。随时能接回本机，包格式两边一样。',
+  'standby.not_linked': '还没关联 agentsws 账号。',
+  'standby.go_link': '去关联账号',
+  'standby.seats': '座位数',
+  'standby.monthly': '这个月要扣',
+  'standby.balance': '余额',
+  'standby.credits': '{n} 积分',
+  'standby.steps':
+    '点一下会做三件事：本地导出一个包 → 传到云上 → 开通并起进程。全程不用你手动搬文件。',
+  'standby.start': '搬到云上并开通',
+  'standby.starting': '正在搬…',
+  'standby.status': '状态',
+  'standby.status.running': '值守中',
+  'standby.status.starting': '正在启动',
+  'standby.status.stopped': '已停（数据还在）',
+  'standby.status.expired': '已到期停了（数据还在，导出照常）',
+  'standby.status.off': '没开通',
+  'standby.period_end': '这一期到',
+  'standby.embed': '网站聊天窗：把这一行贴到你网站的 </body> 前面',
+  'standby.embed.hint':
+    '贴上去还不会出现——先在下面把你的网站域名加进"允许的网站"。空的白名单是全拒，不是全放：一条不要凭据就能写进工作区的路由，默认只能是关着的。',
+  'standby.copy': '复制',
+  'standby.copied': '已复制',
+  'standby.desktop.remote': '这台电脑已经是远程窗口（连着 {url}）。',
+  'standby.desktop.todo': '最后一步：把桌面壳切到"连接公司服务器"，地址填 {url}。',
+  'standby.bring_home': '接回本机',
+  'standby.badge': '值守中：云上运行',
+  'standby.badge.starting': '值守启动中',
+  'standby.badge.hint': '你的工作区服务进程在云上跑；这台电脑关了也照常接活。',
   'storage.never_ai': '这是网页原生表单：填的内容直接存进这台机器的加密库，不经过 AI，也不进日志。',
   'storage.field.database_url': 'Postgres 连接串',
   'storage.field.database_url.hint': '阿里云 RDS / AWS RDS / 腾讯云 / Supabase / Neon 都给这一串。',
@@ -1979,6 +2013,41 @@ const en: Table = {
   'storage.managed.more.hint':
     'Even then we would only run the stateless service — your data would stay on your own machine. Until then, "My own cloud" already puts the data in your own Alibaba Cloud / AWS / Tencent account, and we never hold your cloud credentials.',
   'storage.managed.learn': 'See what this tier would look like',
+  // WP60 (49 §6 / 48 L6 / L7): online standby and hosted chat widget
+  'standby.title': 'Online standby (hosted by agentsws)',
+  'standby.note':
+    'Someone is on duty after you shut the laptop: your workspace service moves to the cloud and runs 24/7 — mailbox polling, the chat widget, follow-ups, all of it.',
+  'standby.more.hint':
+    'There is only ever one service process. Turn standby on and the cloud one is it; this machine becomes a window onto it. Nothing to sync, because there is only one copy. You can bring it home any time — same package format both ways.',
+  'standby.not_linked': 'No agentsws account linked yet.',
+  'standby.go_link': 'Link an account',
+  'standby.seats': 'Seats',
+  'standby.monthly': 'Charged this month',
+  'standby.balance': 'Balance',
+  'standby.credits': '{n} credits',
+  'standby.steps':
+    'One click does three things: export a package locally, upload it, open the subscription and start the process. You never move a file by hand.',
+  'standby.start': 'Move to the cloud',
+  'standby.starting': 'Moving…',
+  'standby.status': 'Status',
+  'standby.status.running': 'On duty',
+  'standby.status.starting': 'Starting',
+  'standby.status.stopped': 'Stopped (data kept)',
+  'standby.status.expired': 'Expired and stopped (data kept, export still works)',
+  'standby.status.off': 'Not enabled',
+  'standby.period_end': 'Paid through',
+  'standby.embed': 'Website chat widget: paste this before </body>',
+  'standby.embed.hint':
+    'Pasting it is not enough yet — add your site to the allowed list below first. An empty list allows nobody, not everybody: a route that writes into your workspace without credentials can only default to closed.',
+  'standby.copy': 'Copy',
+  'standby.copied': 'Copied',
+  'standby.desktop.remote': 'This machine is already a remote window (connected to {url}).',
+  'standby.desktop.todo': 'Last step: point the desktop app at {url}.',
+  'standby.bring_home': 'Bring it home',
+  'standby.badge': 'On duty: running in the cloud',
+  'standby.badge.starting': 'Standby starting',
+  'standby.badge.hint':
+    'Your workspace service runs in the cloud; work keeps flowing after you shut this machine.',
   'storage.never_ai':
     'This is a plain web form. What you type goes straight into this machine\u2019s encrypted store \u2014 never through the AI, never into logs.',
   'storage.field.database_url': 'Postgres connection string',
