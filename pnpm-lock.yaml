@@ -54,6 +54,31 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
 
+  apps/cloud:
+    dependencies:
+      '@agentsws/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@hono/node-server':
+        specifier: ^2.1.1
+        version: 2.1.1(hono@4.13.7)
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+      hono:
+        specifier: ^4.13.7
+        version: 4.13.7
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
   apps/desktop:
     dependencies:
       '@agentsws/connect-adapter':

@@ -6,6 +6,23 @@
  */
 export { bearerToken, collectRoutes, createGateway, type Gateway, OPENAPI_PATH } from './app.js'
 export {
+  type CloudAuth,
+  type CloudEnv,
+  type CloudRequestContext,
+  type CloudRoute,
+  type CloudRouteHandler,
+  type CloudRouteSpec,
+  cloudBearer,
+  cloudBody,
+  cloudCtx,
+  cloudOk,
+  cloudParam,
+  cloudRoute,
+  cloudSession,
+  cloudToken,
+  toRouteSpec,
+} from './cloud-route.js'
+export {
   ApiError,
   type ApiErrorOptions,
   type ErrorBody,

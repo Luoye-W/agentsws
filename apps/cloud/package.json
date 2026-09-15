@@ -1,0 +1,37 @@
+{
+  "name": "@agentsws/cloud",
+  "version": "0.0.0",
+  "private": true,
+  "description": "agentsws 云：账号 / 组织 / 工作区服务令牌（49 M1）与服务入口的装配点（M3）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "agentsws-cloud": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b && node dist/index.js",
+    "start": "node dist/index.js",
+    "openapi": "node ../../scripts/gen-cloud-openapi.mjs",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/api": "workspace:*",
+    "@agentsws/contracts": "workspace:*",
+    "@hono/node-server": "^2.1.1",
+    "better-sqlite3": "^12.0.0",
+    "hono": "^4.13.7",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

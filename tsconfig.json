@@ -5,6 +5,9 @@
       "path": "apps/cli"
     },
     {
+      "path": "apps/cloud"
+    },
+    {
       "path": "apps/desktop"
     },
     {

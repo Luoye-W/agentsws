@@ -1,0 +1,1353 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "agentsws cloud",
+    "version": "0.0.0",
+    "description": "49 M1 / M3：云账号、云侧组织、工作区服务令牌，以及服务入口的挂载点。所有令牌只存 sha256，明文只在签发那一刻返回一次。"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:4317"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "会话 / API key / 内部凭据"
+      }
+    },
+    "schemas": {
+      "Envelope": {
+        "type": "object",
+        "required": ["data", "trace_id"],
+        "properties": {
+          "data": {},
+          "trace_id": {
+            "type": "string"
+          }
+        },
+        "description": "统一成功信封；`data` 的形状见每条路由的 `x-returns`"
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message", "trace_id"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid_input",
+              "unauthenticated",
+              "forbidden",
+              "sod_violation",
+              "not_found",
+              "conflict",
+              "idempotency_conflict",
+              "similar_exists",
+              "stale_record",
+              "snapshot_mismatch",
+              "budget_exhausted",
+              "halted",
+              "not_approved",
+              "connection_not_allowed",
+              "policy_tightened",
+              "authorization_check_failed",
+              "provenance_missing",
+              "unknown_outcome",
+              "provider_unavailable",
+              "residency_blocked",
+              "rate_limited",
+              "timeout",
+              "provider_error",
+              "internal",
+              "not_implemented"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {},
+          "trace_id": {
+            "type": "string"
+          }
+        }
+      },
+      "WsFrame": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "EventFrame",
+            "description": "**只有摘要，没有正文**：正文按本人身份去 /v1 取（19 §3 过滤下推）",
+            "required": ["type", "id", "name", "at"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["TEXT", "TOOL_CALL", "STATE", "CUSTOM"]
+              },
+              "id": {
+                "type": "string",
+                "description": "事件日志 id（ulid）；重连时当 since"
+              },
+              "name": {
+                "type": "string",
+                "description": "事件日志里的原始类型名，如 approval.decided"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "subject": {
+                "type": "object",
+                "required": ["type", "id"],
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                }
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "trace_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "title": "ControlFrame",
+            "required": ["type", "name", "at"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "CONTROL"
+              },
+              "name": {
+                "type": "string",
+                "enum": ["ready", "error", "halted", "dropped", "pong", "closing"]
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "detail": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "WsClientMessage": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "Subscribe",
+            "required": ["op", "assignment_id"],
+            "properties": {
+              "op": {
+                "type": "string",
+                "const": "subscribe"
+              },
+              "assignment_id": {
+                "type": "string",
+                "description": "31 §3.1：一次连接一个 Assignment"
+              },
+              "since": {
+                "type": "string",
+                "description": "断线重连补拉：上次收到的最后一条事件 id"
+              },
+              "types": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "事件类型前缀（approval. / change. …）；不给用默认集合"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "title": "Ping",
+            "required": ["op"],
+            "properties": {
+              "op": {
+                "type": "string",
+                "const": "ping"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "paths": {
+    "/v1/cloud/health": {
+      "get": {
+        "operationId": "cloudHealth",
+        "summary": "活着没有",
+        "tags": ["cloud-health"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ status, version, at }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "{ status, version, at }"
+      }
+    },
+    "/v1/cloud/auth/magic-link": {
+      "post": {
+        "operationId": "cloudMagicLink",
+        "summary": "发一封登录邮件（一次性 token 只进邮件，不进响应）",
+        "tags": ["cloud-auth"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ expires_at, delivered: \"email\" }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "{ expires_at, delivered: \"email\" }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "callback_url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["email"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/verify": {
+      "post": {
+        "operationId": "cloudVerifyMagicLink",
+        "summary": "验一次性 token，换云账号会话",
+        "tags": ["cloud-auth"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ account, org, session_token, expires_at }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "{ account, org, session_token, expires_at }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["token"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/me": {
+      "get": {
+        "operationId": "cloudMe",
+        "summary": "当前云账号：是谁、组织是哪个",
+        "tags": ["cloud-auth"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ account, org }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ account, org }"
+      }
+    },
+    "/v1/cloud/auth/logout": {
+      "post": {
+        "operationId": "cloudLogout",
+        "summary": "注销：撤销这一张会话 token",
+        "tags": ["cloud-auth"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ revoked: true }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ revoked: true }"
+      }
+    },
+    "/v1/cloud/links": {
+      "post": {
+        "operationId": "createWorkspaceLink",
+        "summary": "给一个工作区签一把服务令牌（明文只回一次）",
+        "tags": ["cloud-links"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ link, token }——`token` 之后哪儿都查不到",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ link, token }——`token` 之后哪儿都查不到",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "workspace_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "scopes": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": ["ai", "wallet:read", "standby"]
+                    }
+                  },
+                  "ttl_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  }
+                },
+                "required": ["workspace_id"]
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listWorkspaceLinks",
+        "summary": "本组织的全部关联（含已撤销的：撤过什么必须看得到）",
+        "tags": ["cloud-links"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ links: WorkspaceLinkView[] }（没有令牌，也没有哈希）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ links: WorkspaceLinkView[] }（没有令牌，也没有哈希）"
+      }
+    },
+    "/v1/cloud/links/current": {
+      "get": {
+        "operationId": "currentWorkspaceLink",
+        "summary": "这把令牌自己是谁（本地\"关联状态\"那一格靠它刷新）",
+        "tags": ["cloud-links"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ link, org, account }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ link, org, account }"
+      }
+    },
+    "/v1/cloud/links/current/revoke": {
+      "post": {
+        "operationId": "revokeCurrentWorkspaceLink",
+        "summary": "这台机器自己解除关联（本地\"解除关联\"按钮走这条）",
+        "tags": ["cloud-links"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WorkspaceLinkView（`revoked_at` 已写上）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "WorkspaceLinkView（`revoked_at` 已写上）"
+      }
+    },
+    "/v1/cloud/links/{id}/renew": {
+      "post": {
+        "operationId": "renewWorkspaceLink",
+        "summary": "续期 = 换一把新的（旧明文当场作废）",
+        "tags": ["cloud-links"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "关联 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ link, token }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ link, token }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "ttl_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/links/{id}/revoke": {
+      "post": {
+        "operationId": "revokeWorkspaceLink",
+        "summary": "撤掉一条关联（写 revoked_at，不删行）",
+        "tags": ["cloud-links"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "关联 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WorkspaceLinkView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "WorkspaceLinkView"
+      }
+    }
+  },
+  "x-asyncapi": {
+    "asyncapi": "2.6.0",
+    "info": {
+      "title": "agentsws 事件流",
+      "version": "0.0.0",
+      "description": "WebSocket，路径 `/v1/ws`，子协议 `agentsws.v1`。鉴权与 REST 同一套：同源浏览器靠 HttpOnly 会话 cookie（握手请求自带），其他调用方用 `Sec-WebSocket-Protocol: agentsws.v1, agentsws.bearer.<token>`——**token 一次都不进 URL**（20 §3 / 21 §5）。连上后先发一帧 subscribe，服务端回 `CONTROL/ready`，之后按 workspace + assignment 推摘要。急停 all 期间只推 `halt.changed`。每连接限速，超限合并成一帧 `CONTROL/dropped { count }`，客户端据此整体重取。"
+    },
+    "servers": {
+      "local": {
+        "url": "127.0.0.1:4317",
+        "protocol": "ws",
+        "description": "本地档只听回环口"
+      }
+    },
+    "channels": {
+      "/v1/ws": {
+        "description": "可见性与 `GET /v1/events` 完全一致：非 owner 只看得到与本岗位相关的。",
+        "publish": {
+          "operationId": "wsSubscribe",
+          "summary": "客户端 → 服务端",
+          "message": {
+            "name": "ClientMessage",
+            "payload": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "title": "Subscribe",
+                  "required": ["op", "assignment_id"],
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "subscribe"
+                    },
+                    "assignment_id": {
+                      "type": "string",
+                      "description": "31 §3.1：一次连接一个 Assignment"
+                    },
+                    "since": {
+                      "type": "string",
+                      "description": "断线重连补拉：上次收到的最后一条事件 id"
+                    },
+                    "types": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "事件类型前缀（approval. / change. …）；不给用默认集合"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "title": "Ping",
+                  "required": ["op"],
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "ping"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "subscribe": {
+          "operationId": "wsFrames",
+          "summary": "服务端 → 客户端",
+          "message": {
+            "name": "Frame",
+            "payload": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "title": "EventFrame",
+                  "description": "**只有摘要，没有正文**：正文按本人身份去 /v1 取（19 §3 过滤下推）",
+                  "required": ["type", "id", "name", "at"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["TEXT", "TOOL_CALL", "STATE", "CUSTOM"]
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "事件日志 id（ulid）；重连时当 since"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "事件日志里的原始类型名，如 approval.decided"
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "required": ["type", "id"],
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "run_id": {
+                      "type": "string"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "title": "ControlFrame",
+                  "required": ["type", "name", "at"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "CONTROL"
+                    },
+                    "name": {
+                      "type": "string",
+                      "enum": ["ready", "error", "halted", "dropped", "pong", "closing"]
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "detail": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
