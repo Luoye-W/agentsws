@@ -48,6 +48,7 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
+import { brandNameOf } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
@@ -672,6 +673,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 与这一版上线前一模一样（`createOnboarding` 的 `organization` 钩子就是这么写的）。
    */
   let bootstrapOrg: string | undefined
+  /** 兜底的品牌名：身份服务里还查不到那一行时用它（装配途中的一小段）。 */
+  let bootstrapWorkspaceName: string | undefined
+
+  /**
+   * 52 O1：某个工作区的品牌名（没设过就是工作区名）。
+   *
+   * 走 `workspacesOf` 是因为本地档只有它是**同步**的——首次设置那一面要在
+   * 组装视图的时候就拿到名字，不该为一个名字把整条路由改成异步。
+   */
+  const brandNameOfWorkspace = (id: WorkspaceId): string => {
+    const owner = bootstrapOwner
+    const found =
+      owner === undefined ? undefined : identity.workspacesOf(owner).find((w) => w.id === id)
+    return found === undefined ? (bootstrapWorkspaceName ?? id) : brandNameOf(found)
+  }
 
   /** 组织上的公司级三样（首次设置那一面读它，不直接拿整个 `Organization`）。 */
   const organizationProfileOf = (
@@ -776,6 +792,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 空壳填上：从这一刻起升级链知道该找谁（39 待办 A）
   bootstrapOwner = person.id
   bootstrapWorkspace = workspace.id
+  bootstrapWorkspaceName = workspace.name
 
   const rawApprovals = mount?.approvals ?? txn.approvals
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
@@ -1479,6 +1496,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     organization: () =>
       bootstrapOrg === undefined ? undefined : organizationProfileOf(bootstrapOrg),
+    // 52 O1：品牌名（顶栏切换器显示的那一个）。没迁过的就是工作区名
+    brandName: () => brandNameOfWorkspace(workspace.id),
+    setBrandName: (name) => {
+      void identity.setBrand(workspace.id, { name }).catch(() => undefined)
+    },
     updateOrganization: (patch) => {
       if (bootstrapOrg === undefined) return
       // 两档身份服务这一步都是同步落库的（Promise 只是签名）；唯一可能的失败是

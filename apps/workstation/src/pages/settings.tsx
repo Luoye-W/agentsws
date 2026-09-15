@@ -21,7 +21,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ApiClientError, getOnboardingState, getPositions, setWorkspaceProfile } from '@/lib/api'
+import {
+  ApiClientError,
+  getOnboardingState,
+  getPositions,
+  listOrganizations,
+  setWorkspaceProfile,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export function SettingsPage({ identity }: { identity?: string }): React.ReactNode {
@@ -43,6 +49,15 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
     queryFn: () => getOnboardingState(),
     retry: false,
   })
+  /**
+   * 52 O1「公司」卡。
+   *
+   * **个人用户看不到它**（一个人、一个品牌 → `solo`）：对他来说"公司"这一层不存在，
+   * 多一张卡只是多一件要理解的事。真有第二个品牌或第二个人了它才出现，
+   * 而且只说三句：这家公司叫什么、有几个品牌几个人、去哪管品牌。
+   */
+  const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
+  const org = orgs.data?.[0]
   const save = useMutation({
     mutationFn: (draft: ProfileDraft) =>
       setWorkspaceProfile(
@@ -54,6 +69,8 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
           vertical: draft.vertical,
           // WP62（51 §1 N0）：平台也能改；改成接不上的那几个之前，件里已经问过一次了
           storefront_platform: draft.storefront_platform,
+          // WP65（52 O1）：品牌名（顶栏切换器显示的那一个）也从这里改
+          ...(draft.brand_name.trim() === '' ? {} : { brand_name: draft.brand_name.trim() }),
         },
         ownerId,
       ),
@@ -143,6 +160,32 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
                   save.mutate(draft)
                 }}
               />
+            </CardContent>
+          </Card>
+        )}
+        {org === undefined || org.solo ? null : (
+          <Card data-testid="settings-org">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-1 text-sm">
+                {t('settings.org')}
+                <Hint text={t('settings.org.hint')} testId="settings-org-hint" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">{org.legal_name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t('settings.org.brands', { n: org.brands })} ·{' '}
+                  {t('settings.org.members', { n: org.members })}
+                </span>
+              </div>
+              <Link
+                to="/org?tab=brands"
+                className="text-primary underline-offset-4 hover:underline"
+                data-testid="settings-org-manage"
+              >
+                {t('settings.org.manage')}
+              </Link>
             </CardContent>
           </Card>
         )}

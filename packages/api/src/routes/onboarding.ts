@@ -62,6 +62,13 @@ export interface WorkspaceProfileInput {
   discoverable?: boolean | undefined
   vertical?: 'goods' | 'digital' | undefined
   storefront_platform?: StorefrontPlatform | undefined
+  /**
+   * WP65（52 O4）：第 ① 步下半块「第一个品牌」的名字。
+   *
+   * 不给 = 不改（品牌名默认等于工作区名）。它与上面那三个公司级字段落在**两个地方**：
+   * 公司的进组织，这一个进 `Workspace.brand`——第 ① 步问的是两件事，不是一件。
+   */
+  brand_name?: string | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -69,6 +76,8 @@ export interface WorkspaceProfileView {
   legal_name: string
   domain?: string
   discoverable: boolean
+  /** WP65（52 O1）：这个工作区的品牌名（没设过就等于工作区名）。 */
+  brand_name: string
   /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
   vertical: 'goods' | 'digital'
   /** WP62（51 §1 N0）：网站是用什么搭的。缺省 = `shopify`。 */
@@ -109,6 +118,8 @@ export interface OnboardingStateView {
   needs_setup: boolean
   /** 工作区名字（人话，不是 id）。 */
   workspace_name: string
+  /** WP65（52 O1）：当前这个品牌叫什么（没设过就等于工作区名）。 */
+  brand_name: string
   profile?: WorkspaceProfileView
   /** 当前这个人的名字与登录邮箱（向导第 ② 步直接带出来）。 */
   person: { name: string; email: string }
@@ -308,6 +319,8 @@ const ProfileBody = z.object({
   vertical: z.enum(['goods', 'digital']).optional(),
   // WP62（51 §1 N0）：网站是用什么搭的。不给 = 不改（第一次不给就是 Shopify）。
   storefront_platform: z.enum(['shopify', 'woocommerce', 'magento', 'other']).optional(),
+  // WP65（52 O4）：第 ① 步下半块「第一个品牌」的名字。不给 = 不改。
+  brand_name: z.string().min(1).max(64).optional(),
 })
 
 const PlanBody = z.object({
@@ -393,7 +406,7 @@ export function onboardingRoutes(): Route[] {
         path: '/v1/workspace/profile',
         operationId: 'setWorkspaceProfile',
         summary:
-          '写公司档案：全称、可选域名、"让同事找到我"开关、"你卖的是"、"网站是用什么搭的"（46 §1 ①）',
+          '写第 ① 步：公司（全称 / 域名 / 发现开关 → 组织）+ 这个品牌（品牌名 / 你卖的是 / 网站平台）',
         tag: TAG,
         auth: 'bearer',
         assignment: true,
@@ -413,6 +426,7 @@ export function onboardingRoutes(): Route[] {
             ...(input.storefront_platform === undefined
               ? {}
               : { storefront_platform: input.storefront_platform }),
+            ...(input.brand_name === undefined ? {} : { brand_name: input.brand_name }),
           }),
         )
       },

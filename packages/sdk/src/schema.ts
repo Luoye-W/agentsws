@@ -1930,7 +1930,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    /** 写公司档案：全称、可选域名、"让同事找到我"开关、"你卖的是"、"网站是用什么搭的"（46 §1 ①） */
+    /** 写第 ① 步：公司（全称 / 域名 / 发现开关 → 组织）+ 这个品牌（品牌名 / 你卖的是 / 网站平台） */
     put: operations['setWorkspaceProfile']
     post?: never
     delete?: never
@@ -16296,6 +16296,7 @@ export interface operations {
           vertical?: 'goods' | 'digital'
           /** @enum {string} */
           storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other'
+          brand_name?: string
         }
       }
     }

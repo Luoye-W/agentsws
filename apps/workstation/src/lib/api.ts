@@ -327,6 +327,16 @@ export function assignmentId(): string | null {
 }
 
 /**
+ * 忘掉当前岗位（52 O2 切品牌时用）。
+ *
+ * 岗位就是一条 Assignment，而 Assignment 是**品牌级**的：换一个品牌之后那个 id
+ * 一定不成立（网关会 403）。切换之后整站要重载，重载时左栏会按新品牌重新选一条。
+ */
+export function clearAssignment(): void {
+  currentAssignment = null
+}
+
+/**
  * 存过的 bearer（普通浏览器里上次登录留下的）。
  *
  * 桌面壳里是 `null`——那条路走 HttpOnly 会话 cookie，前端看不到 token（13 §5）。
@@ -2279,6 +2289,8 @@ export interface WorkspaceProfileView {
   legal_name: string
   domain?: string
   discoverable: boolean
+  /** WP65（52 O1）：这个工作区的品牌名（没设过就等于工作区名）。 */
+  brand_name: string
   /** 48 v2 L2：你卖的是实物商品 / 虚拟产品与服务。缺省 = `goods`。 */
   vertical: 'goods' | 'digital'
   /** WP62（51 §1 N0）：网站是用什么搭的。缺省 = `shopify`。 */
@@ -2312,6 +2324,8 @@ export interface StorefrontPlatformChoiceView {
 export interface OnboardingStateView {
   needs_setup: boolean
   workspace_name: string
+  /** WP65（52 O1）：当前这个品牌叫什么（顶栏切换器显示的那一个）。 */
+  brand_name: string
   profile?: WorkspaceProfileView
   person: { name: string; email: string }
   other_assignments: number
@@ -2423,6 +2437,8 @@ export const setWorkspaceProfile = (
     vertical?: 'goods' | 'digital'
     /** WP62（51 §1 N0）：网站是用什么搭的。 */
     storefront_platform?: StorefrontPlatform
+    /** WP65（52 O4）：第 ① 步下半块「这个品牌」的名字。 */
+    brand_name?: string
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>
@@ -2772,3 +2788,151 @@ export const unlinkCloudAccount = (assignment?: string): Promise<CloudUnlinkResu
     method: 'POST',
     ...(assignment === undefined ? {} : { assignment }),
   })
+
+// ── WP65（52 O1–O4）组织与品牌 ─────────────────────────────────────────
+//
+// 品牌 = 工作区，公司 = 组织。这一摊只有三件事：我在哪几家公司（`listOrganizations`）、
+// 每家有哪几个品牌（`listBrands`）、切过去（`switchBrand`）。
+//
+// **没有跨品牌的合并视图**（52 O2「不混」）：这里没有一个函数会同时回两个品牌的卡片、
+// 队列或知识——那些一律按当前 `workspace_id` 走各自已有的路由。
+
+export interface OrganizationView {
+  id: string
+  legal_name: string
+  domain?: string
+  discoverable: boolean
+  owner_id: string
+  role: 'owner' | 'admin' | 'member'
+  cloud_org_id?: string
+  brands: number
+  members: number
+  /** 一个人、一个品牌 = 个人用户：界面上一律不显示"组织"这两个字（52 O1）。 */
+  solo: boolean
+  created_at: string
+}
+
+export interface BrandView {
+  workspace_id: string
+  name: string
+  logo?: string
+  /** 这一行是不是当前正开着的品牌。 */
+  current: boolean
+  vertical?: 'goods' | 'digital'
+  storefront_platform?: StorefrontPlatform
+  pending_approvals: number
+  alerts: number
+  /** 只有当前这个品牌有——别的品牌这会儿没有取数的通道（36 §3：没有就明说没有）。 */
+  sales_today?: { amount: number; currency: string }
+}
+
+export interface OrganizationMemberView {
+  person_id: string
+  name: string
+  email: string
+  role: 'owner' | 'admin' | 'member'
+  joined_at: string
+  left_at?: string
+  brands: string[]
+}
+
+export interface BrandCopyView {
+  from: string
+  to: string
+  copied_assignments: number
+  dropped_ranges: number
+  models_shared: boolean
+}
+
+export interface BrandSwitchView {
+  workspace_id: string
+  name: string
+  session_token?: string
+  expires_at?: string
+}
+
+export const listOrganizations = (assignment?: string): Promise<OrganizationView[]> =>
+  api<OrganizationView[]>('/v1/orgs', { ...(assignment === undefined ? {} : { assignment }) })
+
+export const createOrganization = (
+  input: { legal_name: string; domain?: string; discoverable?: boolean },
+  assignment?: string,
+): Promise<OrganizationView> =>
+  api<OrganizationView>('/v1/orgs', {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const updateOrganization = (
+  id: string,
+  input: { legal_name?: string; domain?: string; discoverable?: boolean },
+  assignment?: string,
+): Promise<OrganizationView> =>
+  api<OrganizationView>(`/v1/orgs/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listBrands = (org_id: string, assignment?: string): Promise<BrandView[]> =>
+  api<BrandView[]>(`/v1/orgs/${encodeURIComponent(org_id)}/brands`, {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const createBrand = (
+  org_id: string,
+  input: {
+    name: string
+    vertical?: 'goods' | 'digital'
+    storefront_platform?: StorefrontPlatform
+    copy_from?: string
+  },
+  assignment?: string,
+): Promise<BrandView> =>
+  api<BrandView>(`/v1/orgs/${encodeURIComponent(org_id)}/brands`, {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listOrganizationMembers = (
+  org_id: string,
+  assignment?: string,
+): Promise<OrganizationMemberView[]> =>
+  api<OrganizationMemberView[]>(`/v1/orgs/${encodeURIComponent(org_id)}/members`, {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const copyBrandSettings = (
+  org_id: string,
+  workspace_id: string,
+  from: string,
+  assignment?: string,
+): Promise<BrandCopyView> =>
+  api<BrandCopyView>(
+    `/v1/orgs/${encodeURIComponent(org_id)}/brands/${encodeURIComponent(workspace_id)}/copy-from`,
+    { method: 'POST', body: { from }, ...(assignment === undefined ? {} : { assignment }) },
+  )
+
+/**
+ * 52 O2 切品牌：换一张绑目标工作区的会话 token，**整个工作台重载**。
+ *
+ * 重载不是偷懒——首页、岗位、连接、知识、设置全都要换成另一个品牌的，
+ * 与其一页一页去失效缓存，不如让浏览器从头拉一遍：少一处漏掉就少一次串味。
+ * 桌面壳走 HttpOnly cookie 那条路没有 `session_token`，`Set-Cookie` 已经换好了。
+ */
+export async function switchBrand(
+  org_id: string,
+  workspace_id: string,
+  assignment?: string,
+): Promise<BrandSwitchView> {
+  const switched = await api<BrandSwitchView>(
+    `/v1/orgs/${encodeURIComponent(org_id)}/brands/${encodeURIComponent(workspace_id)}/switch`,
+    { method: 'POST', ...(assignment === undefined ? {} : { assignment }) },
+  )
+  if (switched.session_token !== undefined) storeToken(switched.session_token)
+  // 当前岗位是上一个品牌的 assignment_id，换品牌之后它一定不成立——先忘掉它
+  clearAssignment()
+  return switched
+}

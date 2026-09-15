@@ -8,6 +8,7 @@ import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useBrands } from '@/components/brand-switcher'
 import {
   Command,
   CommandDialog,
@@ -17,7 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { listCatalog, type PositionSummary } from '@/lib/api'
+import { listCatalog, type PositionSummary, switchBrand } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export function CommandPalette({
@@ -46,6 +47,13 @@ export function CommandPalette({
     enabled: open,
     queryFn: () => listCatalog({}),
   })
+  /**
+   * 52 O2：⌘K 里可以搜品牌名切换。
+   *
+   * 与顶栏切换器同一个数据源、同一条判据——个人用户（一个人一个品牌）这一组不出，
+   * 进不去的品牌也不出（服务端已经筛过）。
+   */
+  const { org_id, brands, solo } = useBrands()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -105,6 +113,32 @@ export function CommandPalette({
               {t('nav.settings')}
             </CommandItem>
           </CommandGroup>
+          {solo || org_id === undefined || brands.length <= 1 ? null : (
+            <CommandGroup heading={t('command.group.brands')}>
+              {brands.map((b) => (
+                <CommandItem
+                  key={b.workspace_id}
+                  value={`${b.name} ${t('brand.switch')}`}
+                  disabled={b.current}
+                  onSelect={() => {
+                    onOpenChange(false)
+                    if (b.current) return
+                    // 切过去之后整站重载（与顶栏切换器同一条路）
+                    switchBrand(org_id, b.workspace_id)
+                      .then(() => globalThis.location?.reload())
+                      .catch(() => undefined)
+                  }}
+                >
+                  {b.name}
+                  {b.current ? (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {t('org.brands.current')}
+                    </span>
+                  ) : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           {cards.length === 0 ? null : (
             <CommandGroup heading={t('command.group.cards')}>
               {cards.slice(0, 20).map((card) => (

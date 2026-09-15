@@ -267,6 +267,10 @@ export interface OnboardingOptions {
   organization?: () => OrganizationProfile | undefined
   /** 写公司档案时同步写组织（52 O1「写时同步写组织」）。 */
   updateOrganization?: (patch: OrganizationProfile) => void
+  /** WP65（52 O1）：这个品牌叫什么（没设过就等于工作区名）。 */
+  brandName?: () => string
+  /** 52 O4 第 ① 步下半块：改这个工作区的品牌名。 */
+  setBrandName?: (name: string) => void
 }
 
 /** 52 O1：公司级那三样的最小面（组织与档案共用同一个形状）。 */
@@ -406,8 +410,12 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   })
 
   /** 52 O1：展示用的公司级三样以组织为准（档案里那三个位只是影子）。 */
+  /** 52 O1：品牌名的唯一读法（没装配就退回工作区名）。 */
+  const brandNameOf = (): string => options.brandName?.() ?? options.workspaceName()
+
   const viewOf = (p: WorkspaceProfile): WorkspaceProfileView => ({
     legal_name: companyOf()?.legal_name ?? p.legal_name,
+    brand_name: brandNameOf(),
     ...(() => {
       const domain = companyOf()?.domain ?? p.domain
       return domain === undefined ? {} : { domain }
@@ -577,6 +585,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
          */
         needs_setup: profile === undefined && others === 0,
         workspace_name: options.workspaceName(),
+        brand_name: brandNameOf(),
         ...(profile === undefined ? {} : { profile: viewOf(profile) }),
         person: { name: me?.name ?? '', email: me?.email ?? '' },
         other_assignments: others,
@@ -622,6 +631,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(next.domain === undefined ? {} : { domain: next.domain }),
         discoverable: next.discoverable,
       })
+      // 52 O4：第 ① 步下半块。品牌名与公司名落在两个地方——它们是两件事
+      const brand_name = input.brand_name?.trim()
+      if (brand_name !== undefined && brand_name !== '') options.setBrandName?.(brand_name)
       // 21 §5：日志里只有归一化后的哈希与"有没有域名"，**全称不进日志**
       emit('workspace.profile_set', actor.person_id, {
         company_key: companyKey(next.legal_name, next.domain),
