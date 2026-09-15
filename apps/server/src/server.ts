@@ -8,6 +8,7 @@ import { mkdirSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
+import type { AskPort, ChatPort, WorkPort, WorkstationPort } from '@agentsws/api'
 import {
   ApiError,
   createAsyncTraceScope,
@@ -83,6 +84,23 @@ import { WebSocketServer } from 'ws'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
+// WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
+import {
+  type BrandModuleSet,
+  type BrandModules,
+  brandDirOf,
+  createBrandModules,
+  secretsPrefixOf,
+} from './brand-modules.js'
+// WP66：按 `actor.workspace_id` 取模块的**那一处**适配层（不散落到每条路由）
+import {
+  brandAskPort,
+  brandCloudPort,
+  brandConnectionsPort,
+  brandModelsPort,
+  brandWorkPort,
+  brandWorkstationPort,
+} from './brand-ports.js'
 import { createCatalogIndex } from './catalog-index.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
@@ -106,7 +124,7 @@ import {
   createMailProbe,
 } from './connections.js'
 import type { MdnsFactory } from './discovery.js'
-import { createPrivacyErase } from './erase.js'
+import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
@@ -156,7 +174,12 @@ import {
   type ScheduleAssembly,
   type SchedulePosition,
 } from './schedule.js'
-import { createSecretStore, type SecretStore, SecretStoreError } from './secret-store.js'
+import {
+  createSecretStore,
+  namespaceSecrets,
+  type SecretStore,
+  SecretStoreError,
+} from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
@@ -394,6 +417,14 @@ export interface Server {
   onboarding: OnboardingAssembly
   /** WP65 组织与品牌（52 O1：公司 = 组织，品牌 = 工作区；品牌一览 / 加品牌 / 切品牌）。 */
   organizations: OrganizationsAssembly
+  /**
+   * WP66（52 O1）：这个进程里的**多套品牌模块**。
+   *
+   * 上面那几个按名字端出来的（`connections` / `channels` / `chat` / `modelSettings` /
+   * `liveData` / `runtime` / `work` / `models`）都是 **bootstrap 品牌**那一份；
+   * 要别的品牌那一套，走 `brands.forWorkspace(workspace_id)`。
+   */
+  brands: BrandModules
   /** WP50 Join 向导（个人工作区并进公司：对照 / 合并 / 别名 / 退出）。 */
   join: JoinAssembly
   /** WP50 夜间扫描（45 H4：同唯一键 / 相似的组织对象出卡合并）。 */
@@ -581,7 +612,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const data = createDataStore({ dbPath: file('data.db'), clock, collections: [] })
 
-  let connectedKinds: () => string[] = () => []
   /**
    * 44 G5：品牌成员一变，挂它的岗位范围跟着变——记事件 + 给 owner 发卡的那一段
    * 住在 `createOrg`（它才有审批总线），而职责层比它先建起来，所以这里留一个晚绑定的钩子。
@@ -593,8 +623,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       ...(dbDir === undefined ? {} : { dbPath: join(dbDir, 'roles.db') }),
       roles: BUNDLED_ROLES.map((id) => loadBundledRole(id)),
-      // 连接表在下面才建；用一个晚绑定的读法，岗位 ready 从真实连接算
-      connected: () => connectedKinds(),
+      /*
+       * 连接表在下面才建；用一个晚绑定的读法，岗位 ready 从真实连接算。
+       *
+       * WP66：**按品牌问**——一条分配属于哪个品牌，就看那个品牌连了什么。
+       * 少了这一层，品牌 B 的客服岗位会因为品牌 A 连了邮箱而显示"已就绪"。
+       * 那个品牌的模块还没建出来时回空（岗位显示"缺连接器"）：
+       * 任何一条走这个品牌的请求都会先把它建出来，下一次读就是真的。
+       */
+      connectedOf: (ws) => brands?.peek(ws)?.connections.connectedKinds() ?? [],
       onRangeExpanded: (e) => rangeExpandedSink?.(e),
     })
 
@@ -644,44 +681,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 模型面（API key）共用同一个库，靠 key 前缀分开。谁建的谁关——这里建，这里关。
   const secrets = createSecretStore({ dbPath: file('secrets.sqlite'), clock, env })
 
-  // 网关先按 stub 起来，`createModels` 装配好之后立刻 `reconfigure` 成真配置。
-  // 之所以不在这里判断有没有 key：**有没有模型这件事现在由模型面说了算**
-  // （加密库里的配置 + 环境变量兜底），不再是"看一个环境变量在不在"。
-  const models = createModelGateway({
-    providers: [stubProvider({ seed: 7 })],
-    policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
-    clock,
-    env,
-    halt: kernel.halt,
-    trace: kernel.trace,
-    eventSink: (e) => {
-      appendEvent(e)
-    },
-  })
-  // WP59（49 M2 / M5）：云上余额与价目的本地投影 + 每项能力"用我的 / 用 agentsws 的"。
-  // 与模型面共用同一个加密库——工作区服务令牌是 WP58 存进去的那一条。
-  const cloud = createCloud({
-    clock,
-    secrets,
-    env,
-    ...(dbDir === undefined ? {} : { dbDir }),
-    ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
-  })
-  const modelSettings = createModels({
-    clock,
-    gateway: models,
-    secrets,
-    env,
-    // WP42：价目刷新是一次普通出站 HTTP GET，照 28 §1 的 outbound 档管
-    halt: kernel.halt,
-    appendEvent: (e) => {
-      appendEvent(e)
-    },
-    workspace_id: () => bootstrapWorkspace,
-    ...(dbDir === undefined ? {} : { dbDir }),
-    ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
-    ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
-  })
+  /**
+   * WP66（52 O1）：模型网关**按品牌各一个**（装配在 `assembleBrand` 里）。
+   *
+   * 网关先按 stub 起来，`createModels` 装好之后立刻 `reconfigure` 成真配置；
+   * 之所以不在这里判断有没有 key：**有没有模型这件事由模型面说了算**
+   * （加密库里的配置 + 环境变量兜底），不是"看一个环境变量在不在"。
+   *
+   * 一个品牌一个网关、而不是一个进程一个：`reconfigure` 换的是**整份** provider
+   * 清单，两个品牌各填各的 key 就会互相把对方顶掉。账（预算、并发预留、usage）
+   * 随网关走，于是 52 O3「每个品牌的积分消耗分开记」也就是自然的。
+   */
+  const makeGateway = (): ModelGatewayApi =>
+    createModelGateway({
+      providers: [stubProvider({ seed: 7 })],
+      policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
+      clock,
+      env,
+      halt: kernel.halt,
+      trace: kernel.trace,
+      eventSink: (e) => {
+        appendEvent(e)
+      },
+    })
 
   // 14 §7 升级链要问的两件事（范围管理者是谁 / owner 是谁）。取值函数，不是值——
   // 审批总线排在身份之前，owner 与工作区要等下面那一段装完才知道。
@@ -728,11 +750,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workspace_id: () => bootstrapWorkspace,
   })
 
-  // 渠道排在 txn 之后装（它要 work / connections / startRun），但执行器的出站回调
-  // 现在就要指向它——所以先留一个空壳引用，装到那一步再填。
-  let channels: ChannelsAssembly | undefined
-  // WP57：聊天车道（装在 channels 之后——它要共用同一个受控原始材料区）
-  let chat: ChatLane | undefined
+  /*
+   * 渠道与聊天车道排在 txn 之后装（它们要 work / connections / startRun），而执行器的
+   * 出站回调现在就要指向它们——所以先留一个空壳引用，品牌容器建好之后再填。
+   *
+   * WP66（52 O1）：这两样现在**按品牌各一套**，所以回调收的是一个按
+   * `item.workspace_id` 取模块的函数，而不是一个装配期就定死的对象。
+   */
+  let brands: BrandModules | undefined
 
   const backend = new MemoryBackend()
   // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
@@ -761,11 +786,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     backendApply: (change, opts) => backend.apply(change, opts),
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
     // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
-    deliverOutbound: async (item, opts) =>
+    deliverOutbound: async (item, opts) => {
+      // WP66：卡片自己写着属于哪个品牌，就从那个品牌的渠道发——**不是**进程装配的那一套
+      const brand = await brands?.forWorkspace(item.workspace_id)
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
-      (await chat?.deliver(item, opts)) ??
-      (await channels?.deliver(item, opts)) ??
-      backend.deliver(item, opts),
+      return (
+        (await brand?.chat.deliver(item, opts)) ??
+        (await brand?.channels.deliver(item, opts)) ??
+        backend.deliver(item, opts)
+      )
+    },
   })
 
   const identity: LocalIdentityService =
@@ -870,106 +900,59 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // 两层包装：学习回路先落 overlay / 知识卡，目录再看是不是一张晋升卡
   const approvals = catalog.wrap(learning.wrap(rawApprovals))
-  /**
-   * WP62（51 §1 N0）：公司档案里的「网站是用什么搭的」。
-   *
-   * 与「你卖的是」同一个套路——连接面、活数据源、事项工具都比档案先装配好，
-   * 所以这里留一个晚绑定的读法，`createOnboarding` 之后接上。用户在设置页改完，
-   * 下一次刷新就用新的那一套，不用重启。
-   */
-  let storefrontPlatformOf: () => StorefrontPlatform | undefined = () => undefined
-  // WP20 连接面：装配一次，`/v1/connections/*` 与工作台数据源共用同一份连接状态。
-  const connections = await createConnections({
-    clock,
-    workspace_id: workspace.id,
-    env,
-    random,
-    appendEvent,
-    mailProbe: createMailProbe(),
-    secrets,
-    // WP27：巡检交给调度器（`connect.shopify_refresh`，到期前一小时换新）；
-    // 这里默认不起 setInterval，除非调用方显式要旧行为
-    refreshIntervalMs: options.tokenRefreshIntervalMs ?? 0,
-    storefrontPlatform: () => storefrontPlatformOf(),
-    ...(options.shopifyFetch === undefined ? {} : { shopifyFetch: options.shopifyFetch }),
-    ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
-    ...(options.connect === undefined ? {} : { connect: options.connect }),
-    ...(dbDir === undefined ? {} : { dbDir }),
-  })
-  connectedKinds = () => connections.connectedKinds()
-  /**
-   * WP46：岗位面板吃**真实**店铺数据。
-   *
-   * 以前这里挂的是 `emptyDataSource()`——Shopify 连上了、岗位也 ready 了，数字块与
-   * 「店铺后台」分块却全是空的，因为没有任何真实读动作在喂它。现在没有接进来的
-   * 模拟世界（`mount.data`）时就挂活数据源：定时经连接器跑 `list_orders` / `get_shop`，
-   * 结果只进内存缓存。接了模拟世界的 demo / 测试路径一行不变。
-   *
-   * 36 §3：数据源接没接从真实连接算——连上 Shopify，首页数字块就不再是「去连接」。
-   */
-  let liveData: LiveDataSource | undefined
-  if (mount?.data === undefined) {
-    liveData = createLiveDataSource({
-      connections,
-      connect: connections.connect,
-      // WP62（51 §1 N0 ③）：跟哪个店铺后台要数按公司档案的平台算，不写死 Shopify
-      storefrontPlatform: () => storefrontPlatformOf(),
-      clock,
-      workspace_id: workspace.id,
-      appendEvent,
-      env,
-      // 44 G2：产品线切分要认制度那边的范围与判据（一条产品线都没有时整条路短路）
-      scope: {
-        rangesOf: (assignment_id) => roles.assignments.get(assignment_id)?.ranges ?? [],
-        productLine: (id) => roles.productLines.get(id),
-        productLines: () => roles.productLines.list(workspace.id),
-        activeRanges: () => roles.assignments.listByWorkspace(workspace.id).map((a) => a.ranges),
-      },
-      ...(options.liveDataIntervalMs === undefined
-        ? {}
-        : { refreshIntervalMs: options.liveDataIntervalMs }),
-    })
-  }
-  /**
-   * WP53：真环境的事项记录源。
-   *
-   * 09-14 真店验收撞上的那个洞：`options.records` 只有 `agentsws demo` 会传（接的是
-   * 合成世界），真环境是空的——于是模型调 `get_order` 回 `no_tool_executor`，
-   * `contactOf` 也拿不到，一封客户来信走完运行时什么卡都建不出来。这里把真源接上：
-   * 订单 / 商品经连接器的只读 Action，政策经知识层，联系人进线程台账。
-   *
-   * demo 与测试传了 `records` 就原样用那一份，一行不变。
-   */
-  let workRef: Work | undefined
-  const records: MatterRecordSource =
-    options.records ??
-    createConnectRecordSource({
-      connections,
-      connect: connections.connect,
-      clock,
-      workspace_id: workspace.id,
-      knowledge: knowledge.retrieval,
-      roles,
-      // 运行时装在工作模型之前（两者互相需要），所以这里收的是取值函数
-      work: () => workRef,
-      appendEvent,
-      // WP62（51 §1 N0 ③）：查订单 / 查商品跟哪个店铺后台要，按公司档案的平台算
-      storefrontPlatform: () => storefrontPlatformOf(),
-      ...(liveData === undefined ? {} : { liveData }),
-    })
+  // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
+  //
+  // 从这里开始，连接、活数据源、记录源、工作模型、运行时、渠道、聊天车道与聊天窗、
+  // 模型面、能力开关**一律按品牌各一套**，由 `brand-modules.ts` 的容器按
+  // `workspace_id` 懒建并缓存。装配期闭包里只剩真正全进程共享的东西
+  // （内核与事件日志、身份与组织、加密库主密钥、职责库、审批总线、调度器本体）。
+  //
+  // 落盘与凭据怎么分见 `brand-modules.ts` 的头注释：**bootstrap 品牌的目录与 key 名
+  // 一个字节不变**，所以存量单品牌用户零感知，一次文件搬家都不用做。
 
-  const workData: WorkstationDataSource =
-    liveData ?? connections.wrapDataSource(mount?.data ?? emptyDataSource())
-  // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
-  connections.onConnectionChange(() => {
-    liveData?.invalidate()
-  })
+  /** 首次设置那一面（品牌级档案）比这里晚装配，所以档案是**被读的**（WP62 / WP65）。 */
+  let onboardingRef: OnboardingAssembly | undefined
+  const brandProfileOf = (
+    ws: WorkspaceId,
+  ): { vertical?: WorkspaceVertical; storefront_platform?: StorefrontPlatform } =>
+    onboardingRef?.brandProfile(ws) ?? {}
+
+  /**
+   * 52 O3「跟随公司默认」读的是哪个品牌那一份。
+   *
+   * 这个进程 bootstrap 出来的品牌只要还在这家公司里，它就是公司默认——存量机器上
+   * "公司默认"必须还是原来那一份，否则老用户的模型设置会凭空换成另一个品牌的。
+   */
+  const orgDefaultBrandOf = (ws: WorkspaceId): WorkspaceId => {
+    const org = identity
+      .listOrganizations()
+      .find((o) => identity.brandsOf(o.id).some((w) => w.id === ws))
+    if (org === undefined) return workspace.id
+    // `brandsOf` 按建的先后回（身份层的插入序）：第一条就是这家公司的第一个品牌
+    const siblings = identity.brandsOf(org.id)
+    if (siblings.some((w) => w.id === workspace.id)) return workspace.id
+    return siblings[0]?.id ?? ws
+  }
+
+  /** 这个人在这个品牌里的第一条岗位（入站事项挂谁名下、知识检索用谁的授权）。 */
+  const firstPositionOf = (
+    ws: WorkspaceId,
+  ): { person_id: PersonId; assignment_id: string; role_id: string } | undefined => {
+    const first = roles.assignments
+      .listByPerson(person.id, { workspace_id: ws })
+      .find((a) => a.revoked_at === undefined)
+    return first === undefined
+      ? undefined
+      : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
+  }
 
   // WP44：Shopify 官方 Dev MCP 作为**只读**工具源（查文档 / 看 schema / 校验 GraphQL）。
   //
   // 默认**不起**：它要 `npx` 去网上拉一个包，装在别人机器上的进程不该悄悄这么干。
   // `AGENTSWS_SHOPIFY_DEVMCP=1` 打开。起不来就是空工具面（`toolNames()` 回空数组），
   // 写类变更照常能 stage——校验是加固，不是门禁。
+  //
+  // 它是**全进程一个**：一个只读的文档 / schema 工具源，与是哪个品牌无关。
   const devMcp =
     env.AGENTSWS_SHOPIFY_DEVMCP === '1'
       ? createShopifyDevMcp({
@@ -989,57 +972,379 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 起它这件事不该拦着服务进程启动：后台起，起好之前 `toolNames()` 就是空的
   if (devMcp !== undefined) void devMcp.start()
 
-  // WP54（48 v2 L2）：公司档案在向导第 ① 步才写，而运行时比它先装配好——
-  // 用一个晚绑定的读法，用户改完「你卖的是」下一次运行就生效，不用重启。
-  let verticalOf: () => WorkspaceVertical | undefined = () => undefined
+  /**
+   * 装一个品牌的那一套。**这个函数里没有一个 `workspace.id`**——全部走参数 `ws`；
+   * 有一个漏掉的就是一条串味的路（品牌 A 的数据出现在 B 的界面上）。
+   */
+  const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
+    const isBootstrap = ws === workspace.id
+    const dir = brandDirOf(dbDir, ws, workspace.id)
+    // 新品牌的目录第一次用的时候才建（`better-sqlite3` 不会替我们 mkdir）
+    if (dir !== undefined) mkdirSync(dir, { recursive: true })
+    // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
+    const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
 
-  // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
-  const runtime: RuntimeAssembly | undefined =
-    options.startRun === false || typeof options.startRun === 'function'
-      ? undefined
-      : createRuntime({
-          workspace_id: workspace.id,
-          clock,
-          random,
-          env,
-          models,
-          approvals,
-          roles,
-          appendEvent,
-          // WP25：有没有模型问模型面（加密库里的配置 + 环境变量兜底），不再只看环境变量
-          hasModel: () => modelSettings.configured(),
-          modelRef: () => modelSettings.defaultRef(),
-          // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
-          skills: skills.registry,
-          ...(devMcp === undefined
-            ? {}
-            : {
-                devTools: {
-                  toolNames: () => Object.keys(devMcp.status().mapped),
-                  call: (name: string, input: Record<string, unknown>) => devMcp.call(name, input),
-                },
-              }),
-          source: records,
-          vertical: () => verticalOf(),
+    // WP20 连接面：`/v1/connections/*` 与工作台数据源共用同一份连接状态
+    const connections = await createConnections({
+      clock,
+      workspace_id: ws,
+      env,
+      random,
+      appendEvent,
+      mailProbe: createMailProbe(),
+      secrets: brandSecrets,
+      // WP27：巡检交给调度器（`connect.shopify_refresh`，到期前一小时换新）；
+      // 这里默认不起 setInterval，除非调用方显式要旧行为
+      refreshIntervalMs: options.tokenRefreshIntervalMs ?? 0,
+      storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+      ...(options.shopifyFetch === undefined ? {} : { shopifyFetch: options.shopifyFetch }),
+      ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
+      ...(options.connect === undefined ? {} : { connect: options.connect }),
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+
+    /**
+     * WP46：岗位面板吃**真实**店铺数据（定时经连接器跑 `list_orders` / `get_shop`，
+     * 结果只进内存缓存）。接了模拟世界（`mount.data`）的 demo 路径一行不变——
+     * 那一档只有 bootstrap 一个品牌。
+     */
+    let liveData: LiveDataSource | undefined
+    if (!(isBootstrap && mount?.data !== undefined)) {
+      liveData = createLiveDataSource({
+        connections,
+        connect: connections.connect,
+        // WP62（51 §1 N0 ③）：跟哪个店铺后台要数按**这个品牌**的档案算，不写死 Shopify
+        storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+        clock,
+        workspace_id: ws,
+        appendEvent,
+        env,
+        // 44 G2：产品线切分要认制度那边的范围与判据（一条产品线都没有时整条路短路）
+        scope: {
+          rangesOf: (assignment_id) => roles.assignments.get(assignment_id)?.ranges ?? [],
+          productLine: (id) => roles.productLines.get(id),
+          productLines: () => roles.productLines.list(ws),
+          activeRanges: () => roles.assignments.listByWorkspace(ws).map((a) => a.ranges),
+        },
+        ...(options.liveDataIntervalMs === undefined
+          ? {}
+          : { refreshIntervalMs: options.liveDataIntervalMs }),
+      })
+    }
+    const workData: WorkstationDataSource =
+      liveData ??
+      connections.wrapDataSource((isBootstrap ? mount?.data : undefined) ?? emptyDataSource())
+    // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
+    connections.onConnectionChange(() => {
+      liveData?.invalidate()
+    })
+
+    /**
+     * WP53：真环境的事项记录源（订单 / 商品经连接器的只读 Action，政策经知识层，
+     * 联系人进线程台账）。demo 与测试传了 `records` 就原样用那一份，一行不变。
+     */
+    let workRef: Work | undefined
+    const records: MatterRecordSource =
+      (isBootstrap ? options.records : undefined) ??
+      createConnectRecordSource({
+        connections,
+        connect: connections.connect,
+        clock,
+        workspace_id: ws,
+        knowledge: knowledge.retrieval,
+        roles,
+        // 运行时装在工作模型之前（两者互相需要），所以这里收的是取值函数
+        work: () => workRef,
+        appendEvent,
+        storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+        ...(liveData === undefined ? {} : { liveData }),
+      })
+
+    // ── 模型面：一个品牌一个网关、一份 provider 配置、一份能力开关（52 O3）
+    const ownGateway = makeGateway()
+    const ownCloud = createCloud({
+      clock,
+      secrets: brandSecrets,
+      env,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+      ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+    })
+    const ownModels = createModels({
+      clock,
+      gateway: ownGateway,
+      secrets: brandSecrets,
+      env,
+      // WP42：价目刷新是一次普通出站 HTTP GET，照 28 §1 的 outbound 档管
+      halt: kernel.halt,
+      appendEvent: (e) => {
+        appendEvent(e)
+      },
+      workspace_id: () => ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+      ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
+      ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
+    })
+
+    /**
+     * 跟随公司默认（52 O3）时，运行时与聊天车道要用的是**公司那一份**网关。
+     *
+     * 转发而不是复制：复制一份配置就会有两份漂移，而"跟随"的意思正是没有第二份。
+     * 公司默认品牌本身永远不跟随任何人（`inheritsOrg` 恒 false），不会绕成环。
+     */
+    const effectiveGateway = (): ModelGatewayApi =>
+      brands?.inheritsOrg(ws) === true
+        ? (brands.peek(orgDefaultBrandOf(ws))?.ownGateway ?? ownGateway)
+        : ownGateway
+    const effectiveModels = (): ModelsAssembly =>
+      brands?.inheritsOrg(ws) === true
+        ? (brands.peek(orgDefaultBrandOf(ws))?.ownModels ?? ownModels)
+        : ownModels
+    const gatewayProxy: ModelGatewayApi = {
+      complete: (req) => effectiveGateway().complete(req),
+      transcribe: (req, meta, model) => effectiveGateway().transcribe(req, meta, model),
+      usage: (filter) => effectiveGateway().usage(filter),
+      records: () => effectiveGateway().records(),
+      reconfigure: (next) => {
+        effectiveGateway().reconfigure(next)
+      },
+      providers: () => effectiveGateway().providers(),
+      budget: (filter) => effectiveGateway().budget(filter),
+      embed: (req, meta) => effectiveGateway().embed(req, meta),
+    }
+
+    // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
+    const runtime: RuntimeAssembly | undefined =
+      options.startRun === false || typeof options.startRun === 'function'
+        ? undefined
+        : createRuntime({
+            workspace_id: ws,
+            clock,
+            random,
+            env,
+            models: gatewayProxy,
+            approvals,
+            roles,
+            appendEvent,
+            // WP25：有没有模型问模型面（加密库里的配置 + 环境变量兜底）
+            hasModel: () => effectiveModels().configured(),
+            modelRef: () => effectiveModels().defaultRef(),
+            // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
+            skills: skills.registry,
+            ...(devMcp === undefined
+              ? {}
+              : {
+                  devTools: {
+                    toolNames: () => Object.keys(devMcp.status().mapped),
+                    call: (name: string, input: Record<string, unknown>) =>
+                      devMcp.call(name, input),
+                  },
+                }),
+            source: records,
+            vertical: () => brandProfileOf(ws).vertical,
+          })
+    const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
+
+    /**
+     * 37 工作模型。**一个品牌一个** `Work`，但共用同一个 SQLite 库——
+     * `Work` 把自己那个 `workspace_id` 钉在每一次查询上（`listMatters` 等），
+     * 所以两个品牌的事项、待办、目标、计划、复盘从一开始就不在同一批行里。
+     */
+    const work = createWork({
+      workspace_id: ws,
+      clock,
+      random,
+      tz_offset_minutes: workData.tz_offset_minutes,
+      ...(workStore === undefined ? {} : { store: workStore }),
+      ...(startRun === undefined ? {} : { startRun }),
+      // WP35：待办 / 事项变化发一条摘要进同一条事件日志
+      emit: appendEvent,
+    })
+    runtime?.bind(work)
+    // 记录源要从工作模型里认线程（`record({ type: 'thread' })`）；到这一步才有得认
+    workRef = work
+
+    // ── 18 渠道：IMAP 轮询 + 入站管线 + 出站发信（39 待办 C）────────────
+    // 位置有讲究：要在 connections（拿邮箱参数与口令来源）、work（入站落成事项）、
+    // runtime（起 Run）之后。轮询由调度器驱动，而调度器是**共享**的——
+    // 它每一拍把这个进程认识的每个品牌各跑一轮（见 `registerMailPoll` 那一段）。
+    const channels = createChannels({
+      clock,
+      workspace_id: ws,
+      appendEvent,
+      halt: kernel.halt,
+      // 18 §2.1 第一条纪律：受控原始材料区加密。与会议档共用同一个密钥环，
+      // **但不共用它的表**（35 §2）。漏了这一行，邮件原文就是明文落盘。
+      cipher: data.keyring,
+      // WP40：附件字节落对象存储；邮件原文是文本，照旧留库加密
+      ...(blobs === undefined ? {} : { blobs }),
+      accounts: () => connections.mailAccounts(),
+      credentials: connections.credentialSource(),
+      work,
+      // WP53 / 31 §3.3：发件人解析成线程台账里的那条联系人，并钉在事项上
+      ...(records.contactOf === undefined
+        ? {}
+        : { resolveActor: (email: string) => records.contactOf?.(email) }),
+      // 入站事项挂谁名下：本人在**这个品牌**里现在持有的第一条岗位。
+      // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
+      position: () => firstPositionOf(ws),
+      /**
+       * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
+       *
+       * 复用 `policy_change` 而不是新造一个 kind：14 §1 的规矩是「新增 kind 必须能
+       * 回答通过后施行什么」，而这张卡通过之后要施行的是**人的判断**（去客户那边
+       * 确认收没收到、然后决定重发还是作罢），不是一个执行器。payload 里只有
+       * outbox id 与次数，没有正文。
+       */
+      escalateUnresolvedDelivery: async (input) => {
+        await approvals.create({
+          workspace_id: ws,
+          schema_version: 1,
+          kind: 'policy_change',
+          role_id: 'dtc.aftersales',
+          proposer: { kind: 'agent', id: 'channel:outbox' },
+          automation: { level_at_creation: 'L1' },
+          priority: 'queue',
+          routing: {
+            recipients: [{ person: person.id, via: 'owner' }],
+            rule: 'owner',
+            escalation: {
+              after_hours: 24,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          subject: { object: { type: 'outbox', id: input.outbox_id } },
+          dedupe_key: `${ws}:outbox_unresolved:${input.outbox_id}`,
+          title: '这封回信到底发出去没有，需要人确认一次',
+          summary: `对账找了 ${input.attempts} 轮，已发送与归档文件夹里都没搜到它。系统**不会**自动重发（重发一封可能已经发出去的信，客户会收到两封）。请去客户那边确认一次，再决定重发还是作罢。`,
+          payload: {
+            form: 'outbox_unresolved',
+            outbox_id: input.outbox_id,
+            thread_ref: input.thread_ref,
+            reconcile_attempts: input.attempts,
+            ...(input.approval_item_id === undefined
+              ? {}
+              : { approval_item_id: input.approval_item_id }),
+            ...(input.last_error === undefined ? {} : { last_error: input.last_error }),
+          },
+          evidence: {
+            source_events: [],
+            provenance: { seen: [] },
+            precheck: {},
+          },
         })
-  const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
+      },
+      ...(dir === undefined ? {} : { dbDir: dir }),
+      ...(startRun === undefined ? {} : { startRun }),
+      ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
+      ...(options.mailer === undefined ? {} : { makeMailer: options.mailer }),
+    })
+    // 连接页新增 / 断开邮箱 → 下一轮轮询就换成新的那一份，不必重启
+    connections.onMailChange(() => {
+      channels.refresh()
+      // 邮箱连接变了，客服那几个数字块的前提也变了：让活数据源重新算一次连接状态
+      liveData?.invalidate()
+    })
 
-  const work = createWork({
-    workspace_id: workspace.id,
-    clock,
-    random,
-    tz_offset_minutes: workData.tz_offset_minutes,
-    ...(workStore === undefined ? {} : { store: workStore }),
-    ...(startRun === undefined ? {} : { startRun }),
-    // WP35：待办 / 事项变化发一条摘要进同一条事件日志（WS 与工作台失效映射已就位）
-    emit: appendEvent,
+    /*
+     * WP57（48 §4 L3 #11 的本地部分）：在线聊天的实时车道。
+     *
+     * 位置有讲究：**必须在 channels 之后**——它共用那一个受控原始材料区、那一张队列、
+     * 那一张去重表。两套区意味着 21 §4「删这个人」会漏掉一半，两张去重表意味着
+     * 同一条消息从两处进来会产出两条事件。
+     */
+    const chat = createChatLane({
+      clock,
+      workspace_id: ws,
+      appendEvent,
+      halt: kernel.halt,
+      raw: channels.raw,
+      work,
+      approvals,
+      models: gatewayProxy,
+      // 同一套知识与订单只读：记录源就是运行时那一个
+      source: records,
+      searchKnowledge: async (text, limit) => {
+        const position = firstPositionOf(ws)
+        if (position === undefined) return []
+        const config = roles.effectiveConfig(position.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text,
+          k: limit,
+          actor: {
+            person_id: position.person_id,
+            workspace_id: ws,
+            assignment_id: position.assignment_id,
+            role_id: position.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        })
+        return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
+      },
+      position: () => firstPositionOf(ws),
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+
+    // WP60（48 §4 L3 #11 的云端一半）：聊天窗的公开访客面（白名单 + 限流 + 访客令牌）
+    const chatWidget = createChatWidget({
+      workspace_id: ws,
+      clock,
+      chat,
+      secrets: brandSecrets,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+
+    return {
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dir }),
+      secrets: brandSecrets,
+      connections,
+      ...(liveData === undefined ? {} : { liveData }),
+      workData,
+      records,
+      work,
+      ...(runtime === undefined ? {} : { runtime }),
+      ...(startRun === undefined ? {} : { startRun }),
+      channels,
+      chat,
+      chatWidget,
+      ownModels,
+      ownGateway,
+      ownCloud,
+      async dispose() {
+        await chat.close()
+        await channels.close()
+        liveData?.close()
+        connections.close()
+      },
+    }
+  }
+
+  brands = createBrandModules({
+    bootstrap: workspace.id,
+    create: (ws) => assembleBrand(ws),
+    orgDefault: (ws) => orgDefaultBrandOf(ws),
+    brands: () => {
+      const org = identity
+        .listOrganizations()
+        .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace.id))
+      return org === undefined ? [workspace.id] : identity.brandsOf(org.id).map((w) => w.id)
+    },
+    ...(dbDir === undefined ? {} : { dbDir }),
   })
-  runtime?.bind(work)
-  // 记录源要从工作模型里认线程（`record({ type: 'thread' })`）；到这一步才有得认
-  workRef = work
+  const brandModules: BrandModules = brands
+  /** bootstrap 品牌那一套：进程自己要用的那几处（会议 ASR、秘书、问 AI）取它。 */
+  const boot = await brandModules.forWorkspace(workspace.id)
+  const models = boot.ownGateway
 
   // 37 §4：会议内核。ASR 走同一个模型网关（没装 ASR provider 时管线出系统卡，不炸）；
-  // 产出的认领卡进同一条审批队列（14 §1），挂在本人的岗位下，所以装在 txn 与 Assignment 之后。
+  // 产出的认领卡进同一条审批队列（14 §1），挂在本人的岗位下。
+  //
+  // 会议是**全进程一份**（35 §2 一个库）：它按 `workspace_id` 存，两个品牌的会议
+  // 从一开始就不在同一批行里，但录音管线与 ASR 只装一套。
   const meetings = createMeetings({
     ...(dbDir === undefined ? {} : { dbDir }),
     clock,
@@ -1055,7 +1360,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(blobs === undefined ? {} : { blobs }),
   })
   // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
-  meetings.bind(work)
+  meetings.bind(boot.work)
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {
@@ -1067,148 +1372,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   }
 
-  // ── 18 渠道：IMAP 轮询 + 入站管线 + 出站发信（39 待办 C）────────────────
-  // 位置有讲究：要在 connections（拿邮箱参数与口令来源）、work（入站落成事项）、
-  // runtime（起 Run）之后；在调度器之前，因为轮询是调度器的一个消费者。
-  channels = createChannels({
-    clock,
-    workspace_id: workspace.id,
-    appendEvent,
-    halt: kernel.halt,
-    // 18 §2.1 第一条纪律：受控原始材料区加密。与会议档共用同一个密钥环，
-    // **但不共用它的表**（35 §2）。漏了这一行，邮件原文就是明文落盘。
-    cipher: data.keyring,
-    // WP40：附件字节落对象存储；邮件原文是文本，照旧留库加密
-    ...(blobs === undefined ? {} : { blobs }),
-    accounts: () => connections.mailAccounts(),
-    credentials: connections.credentialSource(),
-    work,
-    // WP53 / 31 §3.3：发件人解析成线程台账里的那条联系人，并钉在事项上——
-    // 没有这一步，运行时里的"这次读过谁"就没有收件人，回信草稿卡永远建不出来
-    ...(records.contactOf === undefined
-      ? {}
-      : { resolveActor: (email: string) => records.contactOf?.(email) }),
-    // 入站事项挂谁名下：本人现在持有的第一条岗位（v1 单人单工作区）。
-    // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
-    position: () => {
-      const first = roles.assignments
-        .listByPerson(person.id, { workspace_id: workspace.id })
-        .find((a) => a.revoked_at === undefined)
-      return first === undefined
-        ? undefined
-        : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
-    },
-    /**
-     * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
-     *
-     * 复用 `policy_change` 而不是新造一个 kind：14 §1 的规矩是「新增 kind 必须能
-     * 回答通过后施行什么」，而这张卡通过之后要施行的是**人的判断**（去客户那边
-     * 确认收没收到、然后决定重发还是作罢），不是一个执行器。等这类卡多起来、
-     * 施行动作稳定了再正名。payload 里只有 outbox id 与次数，没有正文。
-     */
-    escalateUnresolvedDelivery: async (input) => {
-      await approvals.create({
-        workspace_id: workspace.id,
-        schema_version: 1,
-        kind: 'policy_change',
-        role_id: 'dtc.aftersales',
-        proposer: { kind: 'agent', id: 'channel:outbox' },
-        automation: { level_at_creation: 'L1' },
-        priority: 'queue',
-        routing: {
-          recipients: [{ person: person.id, via: 'owner' }],
-          rule: 'owner',
-          escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
-          separation_of_duties: false,
-        },
-        subject: { object: { type: 'outbox', id: input.outbox_id } },
-        dedupe_key: `${workspace.id}:outbox_unresolved:${input.outbox_id}`,
-        title: '这封回信到底发出去没有，需要人确认一次',
-        summary: `对账找了 ${input.attempts} 轮，已发送与归档文件夹里都没搜到它。系统**不会**自动重发（重发一封可能已经发出去的信，客户会收到两封）。请去客户那边确认一次，再决定重发还是作罢。`,
-        payload: {
-          form: 'outbox_unresolved',
-          outbox_id: input.outbox_id,
-          thread_ref: input.thread_ref,
-          reconcile_attempts: input.attempts,
-          ...(input.approval_item_id === undefined
-            ? {}
-            : { approval_item_id: input.approval_item_id }),
-          ...(input.last_error === undefined ? {} : { last_error: input.last_error }),
-        },
-        evidence: {
-          source_events: [],
-          provenance: { seen: [] },
-          precheck: {},
-        },
-      })
-    },
-    ...(dbDir === undefined ? {} : { dbDir }),
-    ...(startRun === undefined ? {} : { startRun }),
-    ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
-    ...(options.mailer === undefined ? {} : { makeMailer: options.mailer }),
-  })
-  // 连接页新增 / 断开邮箱 → 下一轮轮询就换成新的那一份，不必重启
-  connections.onMailChange(() => {
-    channels?.refresh()
-    // 邮箱连接变了，客服那几个数字块的前提也变了：让活数据源重新算一次连接状态
-    liveData?.invalidate()
-  })
-
-  /*
-   * WP57（48 §4 L3 #11 的本地部分）：在线聊天的实时车道。
-   *
-   * 位置有讲究：**必须在 channels 之后**——它共用那一个受控原始材料区、那一张队列、
-   * 那一张去重表。两套区意味着 21 §4「删这个人」会漏掉一半，两张去重表意味着
-   * 同一条消息从两处进来会产出两条事件。
-   *
-   * 公网访客端点、widget 脚本与 Origin 白名单是托管档那一半（WP60），
-   * 装在下面的 `chatWidget` 里——**默认一个来源都不放行**，所以本地单机档
-   * 起一个服务进程不会因此多一个对外的写入口（WP57 那条理由一个字没变）。
-   */
-  chat = createChatLane({
-    clock,
-    workspace_id: workspace.id,
-    appendEvent,
-    halt: kernel.halt,
-    raw: (channels as ChannelsAssembly).raw,
-    work,
-    approvals,
-    models,
-    // 同一套知识与订单只读：记录源就是运行时那一个
-    source: records,
-    searchKnowledge: async (text, limit) => {
-      const config = roles.effectiveConfig(ownerAssignment.id)
-      const { hits } = await knowledge.retrieval.search({
-        text,
-        k: limit,
-        actor: {
-          person_id: person.id,
-          workspace_id: workspace.id,
-          assignment_id: ownerAssignment.id,
-          role_id: ownerAssignment.role_id,
-          grants: config.scopes,
-          ranges: config.ranges,
-        },
-      })
-      return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
-    },
-    position: () => {
-      const first = roles.assignments
-        .listByPerson(person.id, { workspace_id: workspace.id })
-        .find((a) => a.revoked_at === undefined)
-      return first === undefined
-        ? undefined
-        : { person_id: first.person_id, assignment_id: first.id, role_id: first.role_id }
-    },
-    ...(dbDir === undefined ? {} : { dbDir }),
-  })
-
   /*
    * WP60（49 §6 / 48 L6）：在线值守的**本地**那一面——切档向导与"接回本机"。
    *
-   * 值守本身在云上跑；这一层只负责搬家与透传状态。`remoteUrl` 读的是
-   * `AGENTSWS_SERVER_URL`：桌面壳切到远程模式时由它指到 `https://<云>/w/<ws>`，
-   * 界面据此显示"值守中：云上运行"那个角标。
+   * 52 O5：一个值守子进程 = 一个品牌工作区，所以这一面仍然只管**当前这个进程**
+   * bootstrap 出来的那个品牌；别的品牌的值守由它们自己那个子进程管。
    */
   const standby = createStandby({
     workspace_id: workspace.id,
@@ -1218,25 +1386,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     remoteUrl: () => env.AGENTSWS_SERVER_URL,
   })
-
-  // WP60（48 §4 L3 #11 的云端一半）：聊天窗的公开访客面（白名单 + 限流 + 访客令牌）
-  const chatWidget = createChatWidget({
-    workspace_id: workspace.id,
-    clock,
-    chat,
-    secrets,
-    ...(dbDir === undefined ? {} : { dbDir }),
-  })
-
-  // 21 §4「删这个人」的跨库编排（39 待办 I）：数据层 + 邮件原始区 + 会议原始区
-  const privacy = createPrivacyErase({
-    workspace_id: workspace.id,
-    clock,
-    appendEvent,
-    data,
-    channels,
-    meetings,
-  })
+  /**
+   * 21 §4「删这个人」的跨库编排（39 待办 I）：数据层 + 邮件原始区 + 会议原始区。
+   *
+   * WP66：邮件原始区按品牌各一个，所以编排也按品牌取一次——这个对象本身不开库、
+   * 不起定时器，现取现用比缓存一张表干净。
+   */
+  const privacyFor = async (ws: WorkspaceId): Promise<PrivacyErase> =>
+    createPrivacyErase({
+      workspace_id: ws,
+      clock,
+      appendEvent,
+      data,
+      channels: (await brandModules.forWorkspace(ws)).channels,
+      meetings,
+    })
 
   // WP40 / 41 §2.4：数据后端面。凭据进本机加密库（与连接面、模型面同一个库，
   // 靠 key 前缀分开）；`GET /v1/storage` 端出去的永远是脱敏后的描述。
@@ -1259,6 +1423,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.scheduleIntervalMs === undefined ? {} : { intervalMs: options.scheduleIntervalMs }),
   })
+  // 计划 / 复盘 / 战报这几条仍按 bootstrap 品牌那一套跑（52 O5：值守子进程一个品牌一个）
+  const workData = boot.workData
+  const work = boot.work
   const scheduleTz = offsetToTz(workData.tz_offset_minutes)
   const positionsOf = (): SchedulePosition[] =>
     roles.assignments
@@ -1324,11 +1491,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     registerIdempotencySweep(schedule.scheduler, { clock, store: idempotencyStore })
   }
   // ⑤ Shopify 令牌刷新：到期前一小时
+  // WP66：每个品牌各有一套 Shopify 客户端凭据，所以换令牌要一个品牌一个品牌地换
   registerTokenRefresh({
     clock,
     scheduler: schedule.scheduler,
-    refreshTokens: () => connections.refreshTokens(),
-    expiries: () => connections.shopify.list().map((r) => r.expires_at),
+    refreshTokens: async () => {
+      for (const brand of await brandModules.all()) await brand.connections.refreshTokens()
+    },
+    expiries: () =>
+      brandModules.loaded().flatMap((b) => b.connections.shopify.list().map((r) => r.expires_at)),
   })
   // ⑥ 技能周合并
   registerSkillsWeekly(schedule.scheduler, {
@@ -1341,8 +1512,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // ⑧ 审批过期与升级（39 待办 A）：模拟回路每 tick 调一次，真机器每分钟调一次。
   //    预占的「过期释放」也挂在这条上——15 §3.2 (d) 的释放是跟着审批项过期走的。
   registerApprovalHousekeeping(schedule.scheduler, { approvals })
-  // ⑨ 邮箱轮询 + 入站管线的重试推进（39 待办 C）
-  registerMailPoll(schedule.scheduler, { poll: () => (channels as ChannelsAssembly).poll() })
+  /*
+   * ⑨ 邮箱轮询 + 入站管线的重试推进（39 待办 C）。
+   *
+   * WP66（52 O1）：调度器本体共享，**任务按品牌各跑一轮**——品牌 A 的信只能从 A 的
+   * 邮箱进 A 的队列。走 `all()` 而不是 `loaded()`：一个今天没人点开过的品牌
+   * 照样要收信，不能等到有人切过去才开始收。
+   */
+  registerMailPoll(schedule.scheduler, {
+    poll: async () => {
+      const out = { accounts: 0, messages: 0, retried: 0, failed: [] as string[] }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.channels.poll()
+        out.accounts += one.accounts
+        out.messages += one.messages
+        out.retried += one.retried
+        // 哪个品牌的哪个账号拉不动要看得出来（一个坏了不该拖垮别的）
+        out.failed.push(...one.failed.map((f) => `${brand.workspace_id}:${f}`))
+      }
+      return out
+    },
+  })
   // ⑩ 受控原始材料区的保留期（39 待办 H）：两个库各清各的，表不共享（35 §2）
   registerRawPrune(schedule.scheduler, {
     clock,
@@ -1356,16 +1546,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         DEFAULT_RAW_RETENTION_DAYS
       )
     },
-    channels: (retentionMs) => (channels as ChannelsAssembly).prune(retentionMs, clock.now()),
+    channels: async (retentionMs) => {
+      let pruned = 0
+      for (const brand of await brandModules.all())
+        pruned += await brand.channels.prune(retentionMs, clock.now())
+      return pruned
+    },
     meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
   })
   // WP55 / 48 §4 L3 #2：Amazon 24h 响应线三档 sweep（每 5 分钟，幂等三字段）
   registerAmazonSla(schedule.scheduler, {
-    sweep: () => (channels as ChannelsAssembly).amazonSlaSweep(),
+    sweep: async () => {
+      const out = { scanned: 0, reminders: 0, criticals: 0, accounted: 0 }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.channels.amazonSlaSweep()
+        out.scanned += one.scanned
+        out.reminders += one.reminders
+        out.criticals += one.criticals
+        out.accounted += one.accounted
+      }
+      return out
+    },
   })
   // WP55 / 48 §4 L3 #4：出站对账（每分钟）。`sent_unknown` 绝不自动重发
   registerReconcileDeliveries(schedule.scheduler, {
-    reconcile: () => (channels as ChannelsAssembly).reconcileDeliveries(),
+    reconcile: async () => {
+      const out = { scanned: 0, confirmed: 0, still_unknown: 0, escalated: 0 }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.channels.reconcileDeliveries()
+        out.scanned += one.scanned
+        out.confirmed += one.confirmed
+        out.still_unknown += one.still_unknown
+        out.escalated += one.escalated
+      }
+      return out
+    },
   })
   // ⑫ WP36 40 §1.3：每天一份备份。**只有落盘档有**——内存档没有可导的库文件。
   const runWorkspaceBackup = (): BackupRunResult => {
@@ -1397,7 +1612,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP42：每周一 05:00 去各家官网看一眼模型价（抓不到就保留内置价，不算失败）
   registerPricingRefresh(schedule.scheduler, {
     run: async () => {
-      const result = await modelSettings.port.refreshPricing({
+      const result = await boot.ownModels.port.refreshPricing({
         workspace_id: workspace.id,
         person_id: person.id,
         assignment_id: ownerAssignment.id,
@@ -1413,9 +1628,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 登记与排期放在一起，是为了不让调度装配那边多认识一个业务概念——
    * `createScheduleAssembly` 的消费者清单是注册表，注册表只追加（35 §2）。
    */
-  schedule.scheduler.register(CHAT_ASSIST_TIMEOUT_HANDLER, async () =>
-    (chat as ChatLane).sweepAssistTimeouts(),
-  )
+  schedule.scheduler.register(CHAT_ASSIST_TIMEOUT_HANDLER, async () => {
+    const out = { scanned: 0, reminded: 0, demoted: 0 }
+    for (const brand of await brandModules.all()) {
+      const one = await brand.chat.sweepAssistTimeouts()
+      out.scanned += one.scanned
+      out.reminded += one.reminded
+      out.demoted += one.demoted
+    }
+    return out
+  })
   await ensureTask(
     schedule.scheduler,
     CHAT_ASSIST_TASK_ID,
@@ -1522,11 +1744,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return people
     },
     positions: () => org.positions(),
-    connectedKinds: () => connections.connectedKinds(),
+    // WP66：首次设置这一面仍然只问 bootstrap 品牌那一套（52 O5：一个值守子进程
+    // 一个品牌；向导本来就是"把当前这台机器上的这个品牌设起来"）
+    connectedKinds: () => boot.connections.connectedKinds(),
     installedSkills: () => skills.registry.listSkillNames(),
-    modelConfigured: () => modelSettings.configured(),
+    modelConfigured: () => boot.ownModels.configured(),
     // 46 I6：连上 Shopify 的店自动挂上岗位的范围；一家没连就挂空
-    shopifyStores: () => connections.shopify.list().map((r) => ({ id: r.shop, label: r.alias })),
+    shopifyStores: () =>
+      boot.connections.shopify.list().map((r) => ({ id: r.shop, label: r.alias })),
     port: () => boundPort,
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
@@ -1616,9 +1841,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(company?.discoverable === undefined ? {} : { discoverable: company.discoverable }),
     })
   ).id
-  // 档案建出来了，把上面那两个晚绑定的读法接上（48 v2 L2、51 §1 N0）
-  verticalOf = () => onboarding.vertical()
-  storefrontPlatformOf = () => onboarding.storefrontPlatform()
+  // 档案建出来了，把品牌级档案那个晚绑定的读法接上（48 v2 L2、51 §1 N0、WP66）
+  onboardingRef = onboarding
 
   // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——
   // 它要读同一份职责层（品牌 / 产品线 / 分配），并往同一条审批总线上建 `join_mapping`。
@@ -1628,7 +1852,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles,
     approvals,
     appendEvent,
-    connect: connections.connect,
+    // Join 向导只在 bootstrap 品牌那一档跑（20 §4：个人工作区并进公司）
+    connect: boot.connections.connect,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
 
@@ -1864,6 +2089,156 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ),
   })
 
+  /*
+   * WP57：在线客服面。`ChatPort` 只做投影——判定、卡片、模型都在 `./chat.ts` 里，
+   * 网关这一层不写业务（28 §2）。
+   *
+   * 端出去的会话**不带 `visitor_id`**：那是受控原始材料区的加密主体键
+   * （21 §4 随主体删除按它走），没有任何界面需要它。
+   *
+   * WP66：一个品牌一份投影。鉴权过的那几条路由经 `scoped()` 取自己品牌那一份；
+   * 公开访客那几条（widget.js / widget-config / public/*）没有主体可分发，
+   * 走 bootstrap 那一份——52 O5「一个值守子进程一个品牌工作区」，公开聊天窗
+   * 本来就是那一档。
+   */
+  const chatPortOf = (brand: BrandModuleSet): ChatPort => {
+    const lane = brand.chat
+    const widget = brand.chatWidget
+    return {
+      openSandbox: async (person_id) => chatView(await lane.openSandbox(person_id)),
+      sessions: async (filter) => (await lane.sessions(filter)).map((s) => chatView(s)),
+      session: async (id) => {
+        const found = await lane.session(id)
+        return found === undefined ? undefined : chatView(found)
+      },
+      messages: async (session_id, limit) =>
+        (await lane.messages(session_id, limit)).map((m) => ({
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          at: m.at,
+          ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
+        })),
+      send: async (input) => chatTurnView(await lane.receive(input)),
+      // `force`：这条路由就是"这一轮我说完了，现在就判"（沙盒页那颗「发」按钮）。
+      // 只跳过 2 秒静默窗口，别的一个不跳。真访客那一路由车道自己的定时器驱动。
+      advance: async (session_id) =>
+        chatTurnView(await lane.advanceTurn(session_id, { force: true })),
+      setTakeover: async (id, on) => chatView(await lane.setTakeover(id, on)),
+      teach: async (input) => {
+        const out = await lane.teach({ ...input, taught_by: input.taught_by })
+        return {
+          outcome: out.outcome,
+          sediment: out.sediment,
+          ...(out.reply === undefined ? {} : { reply: out.reply }),
+        }
+      },
+      touch: async (session_id) => {
+        await lane.touch(session_id)
+      },
+      subscribe: (session_id, listener) => {
+        const sub = lane.stream.subscribe(session_id, (frame) =>
+          listener(frame as unknown as Record<string, unknown> & { type: string }),
+        )
+        return () => sub.stop()
+      },
+      // WP60：公开访客那一面。四道门（白名单 / 限流 / 访客令牌 / 凭据不进 URL）
+      // 全在 `chat-widget.ts` 里，网关这一层只做投影
+      widgetConfig: () => widget.config(),
+      setWidgetConfig: (input) => widget.setConfig(input),
+      allowedOrigin: (origin) => widget.allowedOrigin(origin),
+      publicWidgetConfig: (origin) =>
+        widget.publicConfig(origin) ?? { enabled: false, accent: DEFAULT_ACCENT, greeting: '' },
+      openPublic: (input) => widget.open(input),
+      verifyVisitor: (session_id, token) => widget.verify(session_id, token),
+      widgetScript: () => CHAT_WIDGET_JS,
+      scoped: async (ws) => chatPortOf(await brandModules.forWorkspace(ws)),
+    }
+  }
+
+  /**
+   * WP66：三个"按品牌现取"的端口。
+   *
+   * 每个品牌的这三样都很轻（一个投影对象，不开库、不起定时器），所以按品牌建一次
+   * 之后缓存在这张表里；真正的重活（连接、活数据源、渠道）在 `BrandModules` 里，
+   * 这里只是把它们接到网关上。
+   */
+  const workPorts = new Map<WorkspaceId, WorkPort>()
+  const workstationPorts = new Map<WorkspaceId, WorkstationPort>()
+  const askPorts = new Map<WorkspaceId, AskPort>()
+
+  const workPortFor = async (ws: WorkspaceId): Promise<WorkPort> => {
+    const cached = workPorts.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const port = createWorkPort({
+      clock,
+      work: brand.work,
+      // 37 §2 表第三行：会议一定有时间，一定上日历
+      meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
+      /**
+       * 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）。
+       *
+       * 状态要全的——`queue` 默认只回 pending / in_review，而今日战报数的正是
+       * 「今天**已经**处理掉的」（37 §1 第 9 行）。等待类的计数在 work 端自己过滤，
+       * 所以这里放全不会把「还有几张等你定」算多。
+       */
+      approvals: (actor) =>
+        approvals.queue({
+          workspace_id: actor.workspace_id,
+          person_id: actor.person_id,
+          lane: 'mine',
+          state: [...QUEUE_STATES],
+        }) as Promise<ApprovalItem[]>,
+      orders: () => brand.workData.orders(),
+      label: (ref) => brand.workData.label(ref),
+      // 40 §2.2：周 / 月复盘里那一段"疑似重复"
+      duplicates: async () =>
+        (await catalog.duplicates(5)).map((d) => ({
+          a: { id: d.a.id, title: d.a.title, owner: d.a.owner, kind: d.a.kind },
+          b: { id: d.b.id, title: d.b.title, owner: d.b.owner, kind: d.b.kind },
+          similarity: d.similarity,
+          both_in_use: d.both_in_use,
+          reasons: d.reasons,
+        })),
+    })
+    workPorts.set(ws, port)
+    return port
+  }
+  const workstationPortFor = async (ws: WorkspaceId): Promise<WorkstationPort> => {
+    const cached = workstationPorts.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const port = createWorkstationPort({ clock, roles, approvals, data: brand.workData })
+    workstationPorts.set(ws, port)
+    return port
+  }
+  const askPortFor = async (ws: WorkspaceId): Promise<AskPort> => {
+    const cached = askPorts.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const port = createAskPort({
+      models: brand.ownGateway,
+      work: brand.work,
+      roles,
+      appendEvent,
+      label: (ref) => brand.workData.label(ref),
+      card: async (actor, id) => {
+        const items = (await approvals.queue({
+          workspace_id: actor.workspace_id,
+          person_id: actor.person_id,
+          lane: 'mine',
+        })) as ApprovalItem[]
+        return items.find((i) => i.id === id)
+      },
+    })
+    askPorts.set(ws, port)
+    return port
+  }
+  const workPortOf = brandWorkPort(brandModules, workPortFor)
+  const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
+  const askPortOf = brandAskPort(brandModules, askPortFor)
+
   const deps: GatewayDeps = {
     identity,
     halt: kernel.halt,
@@ -1879,23 +2254,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     skills: skillsPort,
     roles: rolesPort,
     meetings: meetings.port,
-    // WP55 / 18 §2.2：连接页上的死信与重投。包一层而不是改连接面本身——
-    // 死信是渠道的事，连接面只是它在界面上的落脚点。
-    connections: {
-      ...connections.port,
-      deadLetters: async () =>
-        (await (channels as ChannelsAssembly).deadLetters()).map((d) => ({
-          id: d.id,
-          channel: d.event.channel,
-          reason: d.reason,
-          attempts: d.attempts,
-          at: new Date(d.at_ms).toISOString(),
-          // 列表里只有"是谁 / 何时 / 为什么"：正文永远不进这一层
-          ...(d.event.actor?.display === undefined ? {} : { from: d.event.actor.display }),
-          ...(d.last_error === undefined ? {} : { last_error: d.last_error }),
-        })),
-      requeueDeadLetter: (_actor, id) => (channels as ChannelsAssembly).requeueDeadLetter(id),
-    },
+    // WP20 / WP66：连接面按品牌（死信与重投也按品牌，见 `brand-ports.ts`）
+    connections: brandConnectionsPort(brandModules),
     // WP31：本机秘密库的密钥轮换（owner）。密钥只在请求体里出现一次，
     // 网关这一层不碰库、也不碰值，只把「换了几条」端出去。
     secrets: {
@@ -1914,9 +2274,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       },
     },
-    models: modelSettings.port,
-    // WP59：`/v1/cloud/credits`、`/v1/cloud/pricing`、`/v1/settings/capability-sources`
-    cloud: cloud.port,
+    // WP25 / WP66：模型面按品牌（52 O3 的"跟随公司默认"也在这一层解析）
+    models: brandModelsPort({ brands: brandModules, brandName: brandNameOfWorkspace }),
+    // WP59 / WP66：`/v1/cloud/*` 与 `/v1/settings/capability-sources`，按品牌
+    cloud: brandCloudPort(brandModules),
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
     storage: storage.port,
     // WP60（49 §6 / 48 L7）：在线值守的切档向导与"接回本机"
@@ -1932,78 +2293,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
     secretary: secretary.port,
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
-    /*
-     * WP57：在线客服面。`ChatPort` 只做投影——判定、卡片、模型都在 `./chat.ts` 里，
-     * 网关这一层不写业务（28 §2）。
-     *
-     * 端出去的会话**不带 `visitor_id`**：那是受控原始材料区的加密主体键
-     * （21 §4 随主体删除按它走），没有任何界面需要它。
-     */
-    chat: {
-      openSandbox: async (person_id) => chatView(await (chat as ChatLane).openSandbox(person_id)),
-      sessions: async (filter) =>
-        (await (chat as ChatLane).sessions(filter)).map((s) => chatView(s)),
-      session: async (id) => {
-        const found = await (chat as ChatLane).session(id)
-        return found === undefined ? undefined : chatView(found)
-      },
-      messages: async (session_id, limit) =>
-        (await (chat as ChatLane).messages(session_id, limit)).map((m) => ({
-          id: m.id,
-          role: m.role,
-          text: m.text,
-          at: m.at,
-          ...(m.plan_action === undefined ? {} : { plan_action: m.plan_action }),
-        })),
-      send: async (input) => chatTurnView(await (chat as ChatLane).receive(input)),
-      // `force`：这条路由就是"这一轮我说完了，现在就判"（沙盒页那颗「发」按钮）。
-      // 只跳过 2 秒静默窗口，别的一个不跳。真访客那一路由车道自己的定时器驱动。
-      advance: async (session_id) =>
-        chatTurnView(await (chat as ChatLane).advanceTurn(session_id, { force: true })),
-      setTakeover: async (id, on) => chatView(await (chat as ChatLane).setTakeover(id, on)),
-      teach: async (input) => {
-        const out = await (chat as ChatLane).teach({ ...input, taught_by: input.taught_by })
-        return {
-          outcome: out.outcome,
-          sediment: out.sediment,
-          ...(out.reply === undefined ? {} : { reply: out.reply }),
-        }
-      },
-      touch: async (session_id) => {
-        await (chat as ChatLane).touch(session_id)
-      },
-      subscribe: (session_id, listener) => {
-        const sub = (chat as ChatLane).stream.subscribe(session_id, (frame) =>
-          listener(frame as unknown as Record<string, unknown> & { type: string }),
-        )
-        return () => sub.stop()
-      },
-      // WP60：公开访客那一面。四道门（白名单 / 限流 / 访客令牌 / 凭据不进 URL）
-      // 全在 `chat-widget.ts` 里，网关这一层只做投影
-      widgetConfig: () => chatWidget.config(),
-      setWidgetConfig: (input) => chatWidget.setConfig(input),
-      allowedOrigin: (origin) => chatWidget.allowedOrigin(origin),
-      publicWidgetConfig: (origin) =>
-        chatWidget.publicConfig(origin) ?? { enabled: false, accent: DEFAULT_ACCENT, greeting: '' },
-      openPublic: (input) => chatWidget.open(input),
-      verifyVisitor: (session_id, token) => chatWidget.verify(session_id, token),
-      widgetScript: () => CHAT_WIDGET_JS,
-    },
-    ask: createAskPort({
-      models,
-      work,
-      roles,
-      appendEvent,
-      label: (ref) => workData.label(ref),
-      card: async (actor, id) => {
-        const items = (await approvals.queue({
-          workspace_id: actor.workspace_id,
-          person_id: actor.person_id,
-          lane: 'mine',
-        })) as ApprovalItem[]
-        return items.find((i) => i.id === id)
-      },
-    }),
+    // WP57 / WP66：在线客服面（按品牌各一份，见 `chatPortOf`）
+    chat: chatPortOf(boot),
+    // WP66：问 AI 用**这个品牌**的模型与事项（问的是"我这个品牌现在怎么样"）
+    ask: askPortOf,
     // 25 §5 定时与流程面
     schedules: createSchedulePort({
       workspace_id: workspace.id,
@@ -2022,6 +2315,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     privacy: {
       erase: async (input, actor) => {
         const config = roles.effectiveConfig(actor.assignment_id)
+        const privacy = await privacyFor(actor.workspace_id)
         return privacy.erase(input, {
           person_id: actor.person_id,
           assignment_id: actor.assignment_id,
@@ -2095,38 +2389,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             },
           },
         }),
-    workstation: createWorkstationPort({ clock, roles, approvals, data: workData }),
-    work: createWorkPort({
-      clock,
-      work,
-      // 37 §2 表第三行：会议一定有时间，一定上日历
-      meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
-      /**
-       * 只给本人这条队列里的卡（14 §7：别人的 token 与内容不出现在这里）。
-       *
-       * 状态要全的——`queue` 默认只回 pending / in_review，而今日战报数的正是
-       * 「今天**已经**处理掉的」（37 §1 第 9 行）。等待类的计数在 work 端自己过滤，
-       * 所以这里放全不会把「还有几张等你定」算多。
-       */
-      approvals: (actor) =>
-        approvals.queue({
-          workspace_id: actor.workspace_id,
-          person_id: actor.person_id,
-          lane: 'mine',
-          state: [...QUEUE_STATES],
-        }) as Promise<ApprovalItem[]>,
-      orders: () => workData.orders(),
-      label: (ref) => workData.label(ref),
-      // 40 §2.2：周 / 月复盘里那一段"疑似重复"
-      duplicates: async () =>
-        (await catalog.duplicates(5)).map((d) => ({
-          a: { id: d.a.id, title: d.a.title, owner: d.a.owner, kind: d.a.kind },
-          b: { id: d.b.id, title: d.b.title, owner: d.b.owner, kind: d.b.kind },
-          similarity: d.similarity,
-          both_in_use: d.both_in_use,
-          reasons: d.reasons,
-        })),
-    }),
+    // WP66：面板与工作模型都按品牌——首页数字块读的是**这个品牌**的店铺数据
+    workstation: workstationPortOf,
+    work: workPortOf,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',
@@ -2149,7 +2414,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 鉴权、幂等对一段 JavaScript 与一次 OPTIONS 都没有意义），但必须排在
    * `mountStatic` 那个 `*` 前面，否则会被静态托管的 SPA fallback 吃掉。
    */
-  mountChatWidget(gateway.app, { allowedOrigin: (origin) => chatWidget.allowedOrigin(origin) })
+  mountChatWidget(gateway.app, {
+    // 公开访客那一面照 52 O5 走 bootstrap 品牌（一个值守子进程一个品牌工作区）
+    allowedOrigin: (origin) => boot.chatWidget.allowedOrigin(origin),
+  })
   // 静态托管必须在网关路由之后挂（Hono 按注册顺序匹配，`*` 放最后）
   if (options.staticDir !== undefined) {
     mountStatic(gateway.app, {
@@ -2174,12 +2442,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     txn,
     work,
     meetings,
-    connections,
-    ...(liveData === undefined ? {} : { liveData }),
-    channels,
+    /*
+     * WP66：这几样现在**按品牌各一套**，这里端出去的是 bootstrap 品牌那一份。
+     *
+     * 为什么还留着：桌面壳、CLI 与测试都按名字拿过它们，而 `Server` 是公共接口
+     * （只加不删）。要别的品牌那一套走 `server.brands.forWorkspace(ws)`。
+     */
+    connections: boot.connections,
+    ...(boot.liveData === undefined ? {} : { liveData: boot.liveData }),
+    channels: boot.channels,
     // WP57：在线聊天车道
-    chat,
-    modelSettings,
+    chat: boot.chat,
+    modelSettings: boot.ownModels,
+    // WP66（52 O1）：一个进程里的多套品牌模块
+    brands: brandModules,
     org,
     onboarding,
     organizations,
@@ -2191,7 +2467,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cloudAccount,
     schedule,
     reconcile,
-    ...(runtime === undefined ? {} : { runtime }),
+    ...(boot.runtime === undefined ? {} : { runtime: boot.runtime }),
     identity,
     backend,
     traceScope,
@@ -2257,10 +2533,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       schedule.close()
       catalog.close()
       secretary.close()
-      await chat?.close() // WP57
-      await channels?.close()
-      liveData?.close()
-      connections.close()
+      // WP66：每个品牌那一套各关各的（聊天车道 / 渠道 / 活数据源 / 连接面）
+      await brandModules.dispose()
       await devMcp?.close()
       org.close()
       onboarding.close()

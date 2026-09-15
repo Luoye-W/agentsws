@@ -555,10 +555,22 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
   }
 
+  /**
+   * 本地连接（IMAP / SMTP）的 id。
+   *
+   * WP66：**带上品牌的那一段**。一个进程装多套品牌模块之后，每套连接面都从
+   * `seq = 0` 开始数，时钟又可能是注入的固定值——两个品牌会各生成一条
+   * `conn_mail_<同一个时间戳>_1`。id 撞了，加密库里的 key、事件里的 id、
+   * 界面上"断开哪一条"就全跟着撞。
+   */
+  const brandTag = workspace_id
+    .replace(/[^0-9a-zA-Z]/g, '')
+    .slice(-6)
+    .toLowerCase()
   let seq = 0
   const nextLocalId = (): string => {
     seq += 1
-    return `conn_mail_${Date.parse(clock.now()).toString(36)}_${seq}`
+    return `conn_mail_${brandTag}_${Date.parse(clock.now()).toString(36)}_${seq}`
   }
 
   /** 后台作业自己的 trace 根（没有请求可挂靠时用它）。 */

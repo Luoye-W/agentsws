@@ -71,6 +71,16 @@ export interface RoleStoreOptions {
    */
   connected?: () => Iterable<string>
   /**
+   * WP66（52 O1）：**按品牌**问"现在接上了哪些连接器"。
+   *
+   * 一个服务进程装多套品牌模块之后，连接表不再是一台机器一份——岗位的
+   * `ready` / `missing_connectors` 必须按这条分配所属的品牌算，否则品牌 B 的
+   * 客服岗位会因为品牌 A 连了邮箱而显示"已就绪"。
+   *
+   * 给了它就优先用它（`connected` 留着，单品牌装配与测试一个字不用改）。
+   */
+  connectedOf?: (workspace_id: WorkspaceId) => Iterable<string>
+  /**
    * 44 G5：范围组（品牌）的成员变了、挂了它的岗位范围跟着变时喊一声。
    *
    * 这个包不认事件日志也不认审批总线（它只管制度），所以"记一条
@@ -794,9 +804,17 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
         assignment,
         role,
         policy: backend.getPolicy(assignment.workspace_id),
-        ...((opts?.connected ?? options.connected?.()) === undefined
+        ...((opts?.connected ??
+          options.connectedOf?.(assignment.workspace_id) ??
+          options.connected?.()) === undefined
           ? {}
-          : { connected: opts?.connected ?? options.connected?.() ?? [] }),
+          : {
+              connected:
+                opts?.connected ??
+                options.connectedOf?.(assignment.workspace_id) ??
+                options.connected?.() ??
+                [],
+            }),
       })
     },
     compilePolicies(id) {
