@@ -627,6 +627,17 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     ranges: [{ kind: 'store', id: 'store_main' }],
   })
 
+  // WP64（51 §2.4）：订单履约也分给同一个人，好让 demo 的侧栏里有那条分块。
+  // 3 人 pack 里它挂在李默身上（`assignments.yml`），而 demo 只以王岚的身份登录——
+  // 不补这一条，"待发货 / 超期未发 / 物流异常 / 今日发货数"这四块在 demo 里根本看不见。
+  world.roles.assignments.create({
+    person_id: world.roleHolder,
+    workspace_id: world.workspace_id,
+    role_id: 'dtc.fulfillment',
+    granted_by: world.owner,
+    ranges: [{ kind: 'store', id: 'store_main' }],
+  })
+
   const body = pack.fixtures.get('fixtures/anna-return.txt')
   if (body === undefined) throw new Error('pack 里没有 fixtures/anna-return.txt')
   await runInbound(world, pack, seed, body)
