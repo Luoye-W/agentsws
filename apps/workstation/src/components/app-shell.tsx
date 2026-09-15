@@ -31,6 +31,8 @@ import {
 import { type ReactNode, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { CommandPalette } from '@/components/command-palette'
+// WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
+import { StandbyBadge } from '@/components/standby-badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { PositionSummary } from '@/lib/api'
@@ -145,6 +147,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-1 border-b px-4 py-2">
+          <StandbyBadge />
           <Button
             variant="ghost"
             size="sm"

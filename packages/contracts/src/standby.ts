@@ -127,7 +127,12 @@ export interface StandbyLocalView {
   reason?: string
   /** 这台机器现在是不是"远程窗口"（本地服务进程已经让位给云上那个）。 */
   remote: boolean
-  /** 远程模式下工作台连的那个地址（`https://<云>/w/<ws>`）。 */
+  /**
+   * 桌面壳**该**指到的地址（`https://<云>/w/<ws>`）。
+   *
+   * 与 `remote` 是两件事：这一格是"该填什么"，那一格是"填过没有"。
+   * 合成一格的话，还没切过去的人就看不到该填什么——而那正是他这一刻唯一需要的信息。
+   */
   remote_url?: string
   /** 云上那一份的状态（没开通就没有这一格）。 */
   cloud?: StandbyWorkspace

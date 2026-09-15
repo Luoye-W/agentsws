@@ -56,11 +56,61 @@ export function normalizeServerUrl(raw: string | undefined): string | undefined 
   return url.origin
 }
 
+/**
+ * WP60 值守：云上那个工作区的公网前缀（`https://<云>/w/<ws>`）。
+ *
+ * 这是**唯一**允许带路径的服务地址，而且路径只能是这一种形状。
+ * 为什么要破一次"只留源"的规矩：值守档里一个云节点后面挂着很多工作区，
+ * 区分它们的正是这一段前缀——去掉它，这台电脑就连到了"云"而不是"我的工作区"。
+ *
+ * 源仍然只有一个（云的源），所以 allowedOrigins / CSP 那三处判定照旧按
+ * {@link originOfBaseUrl} 取源，一个字都没变。
+ */
+export const STANDBY_PATH_RE = /^\/w\/([A-Za-z0-9_:.-]{1,64})$/
+
+export function normalizeStandbyUrl(raw: string | undefined): string | undefined {
+  const text = raw?.trim()
+  if (text === undefined || text === '') return undefined
+  let url: URL
+  try {
+    url = new URL(text)
+  } catch {
+    return undefined
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+  const path = url.pathname.replace(/\/+$/, '')
+  return STANDBY_PATH_RE.test(path) ? `${url.origin}${path}` : undefined
+}
+
+/** 值守地址里的那个工作区 id（角标上要显示它）；不是值守地址就 `undefined`。 */
+export function standbyWorkspaceOf(raw: string | undefined): string | undefined {
+  const normalized = normalizeStandbyUrl(raw)
+  if (normalized === undefined) return undefined
+  return STANDBY_PATH_RE.exec(new URL(normalized).pathname)?.[1]
+}
+
+/**
+ * 服务地址：值守那种（带 `/w/<ws>` 前缀）优先，否则只留源。
+ *
+ * `resolveMode` 与 `configPatchOf` 都走这一个，于是"哪种地址算数"这件事
+ * 只有一处定义。
+ */
+export function normalizeBaseUrl(raw: string | undefined): string | undefined {
+  return normalizeStandbyUrl(raw) ?? normalizeServerUrl(raw)
+}
+
+/** 拿它当**源**用的那三处（allowedOrigins、cookie 的 url、CSP）按这个取。 */
+export function originOfBaseUrl(raw: string | undefined): string | undefined {
+  const normalized = normalizeBaseUrl(raw)
+  if (normalized === undefined) return undefined
+  return new URL(normalized).origin
+}
+
 /** 从环境变量表里取公司服务器地址。 */
 export function serverUrlFrom(
   env: Readonly<Record<string, string | undefined>>,
 ): string | undefined {
-  return normalizeServerUrl(env[SERVER_URL_ENV])
+  return normalizeBaseUrl(env[SERVER_URL_ENV])
 }
 
 /**
@@ -77,7 +127,7 @@ export function resolveMode(
   const fromEnv = serverUrlFrom(env)
   if (fromEnv !== undefined) return { mode: 'remote', serverUrl: fromEnv, from: 'env' }
   if (config.mode === 'remote') {
-    const url = normalizeServerUrl(config.serverUrl)
+    const url = normalizeBaseUrl(config.serverUrl)
     if (url !== undefined) return { mode: 'remote', serverUrl: url, from: 'config' }
     return { mode: 'local', from: 'config' }
   }
@@ -111,7 +161,7 @@ export function configPatchOf(
 ): { mode: DesktopMode; serverUrl: string } | undefined {
   if (choice.mode === 'cancelled') return undefined
   if (choice.mode === 'local') return { mode: 'local', serverUrl: '' }
-  const url = normalizeServerUrl(choice.serverUrl)
+  const url = normalizeBaseUrl(choice.serverUrl)
   return url === undefined ? undefined : { mode: 'remote', serverUrl: url }
 }
 
@@ -127,7 +177,18 @@ export function companyLabel(input: {
 }): string {
   const name = input.workspaceName?.trim()
   if (name !== undefined && name !== '') return name
-  const url = normalizeServerUrl(input.serverUrl)
+  const url = normalizeBaseUrl(input.serverUrl)
   if (url === undefined) return ''
   return new URL(url).host
+}
+
+/**
+ * 托盘与顶栏上的那句「值守中：云上运行」。
+ *
+ * 判据是**服务地址的形状**，不是一个另存的开关：这台电脑连到
+ * `https://<云>/w/<ws>` 上，它就是一个远程窗口——存第二个布尔只会出现
+ * "开关说在值守、地址指着本机"这种谁也解释不清的状态。
+ */
+export function isStandby(serverUrl: string | undefined): boolean {
+  return normalizeStandbyUrl(serverUrl) !== undefined
 }

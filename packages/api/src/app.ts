@@ -39,6 +39,8 @@ import { scheduleRoutes } from './routes/schedules.js'
 import { secretaryRoutes } from './routes/secretary.js'
 import { secretRoutes } from './routes/secrets.js'
 import { skillRoutes } from './routes/skills.js'
+// WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
+import { standbyRoutes } from './routes/standby.js'
 import { storageRoutes } from './routes/storage.js'
 import { workRoutes } from './routes/work.js'
 import { workstationRoutes } from './routes/workstation.js'
@@ -86,6 +88,8 @@ export function collectRoutes(): Route[] {
     ...cloudRoutes(),
     // WP40：数据后端（41 §2.4）。凭据只走 /v1/storage/backend 一条路，GET 永不含凭据。
     ...storageRoutes(),
+    // WP60：`/v1/standby*` 是新前缀，与别处都不撞（`switch` / `bring-home` 是定值段）
+    ...standbyRoutes(),
     // WP34 21 §4「删这个人」（owner）：三个库一次清掉，独立路径不与别处撞
     ...privacyRoutes(),
     // WP36 40 §1.3 备份（owner）：`/v1/backup/export` 独立路径，不与别处撞

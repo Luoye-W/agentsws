@@ -41,6 +41,13 @@ export interface TrayModelInput {
   mode?: DesktopMode
   /** 公司名（登录前退到主机名，见 `mode.companyLabel`）。 */
   company?: string
+  /**
+   * WP60：这台电脑是不是"值守中的远程窗口"（服务地址是 `https://<云>/w/<ws>`）。
+   *
+   * 与 `mode: 'remote'` 的差别在于用户看到的那句话：连公司 NAS 是"已连接 NAS"，
+   * 值守是"值守中：云上运行"——后者要回答的是"我关了电脑还有人接活吗"。
+   */
+  standby?: boolean
 }
 
 const separator: MenuItemModel = { id: 'separator', type: 'separator', label: '', enabled: false }
@@ -50,9 +57,10 @@ export function serverStateLabel(input: TrayModelInput): string {
   // remote：这台电脑没有 sidecar，`server.state` 永远是 `stopped`——
   // 把那句"服务已停止"端给用户是错的，他要看的是"连上公司了没有"。
   if (input.mode === 'remote') {
-    return input.health?.ok === true
-      ? `${t.connectedTo} ${input.company ?? ''}`.trim()
-      : t.remoteUnreachable
+    if (input.health?.ok !== true) return t.remoteUnreachable
+    // WP60 值守：这台电脑关了也照常接活——这是用户唯一真正关心的一句
+    if (input.standby === true) return t.standbyRunning
+    return `${t.connectedTo} ${input.company ?? ''}`.trim()
   }
   switch (input.server.state) {
     case 'running':

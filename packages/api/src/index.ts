@@ -290,6 +290,14 @@ export type {
 export { PROFILE_FIELD_NAMES, secretaryRoutes } from './routes/secretary.js'
 export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
 export { secretRoutes } from './routes/secrets.js'
+// WP60（49 §6 / 48 L7）：在线值守的本地一面
+export type {
+  StandbyActor,
+  StandbyBringHomeView,
+  StandbyPort,
+  StandbySwitchView,
+} from './routes/standby.js'
+export { standbyRoutes } from './routes/standby.js'
 export {
   type StorageBackendInput,
   type StorageBackendView,

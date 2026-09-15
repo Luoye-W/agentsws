@@ -155,6 +155,7 @@ import { createSecretStore, type SecretStore, SecretStoreError } from './secret-
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
+import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
@@ -1154,6 +1155,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
   })
 
+  /*
+   * WP60（49 §6 / 48 L6）：在线值守的**本地**那一面——切档向导与"接回本机"。
+   *
+   * 值守本身在云上跑；这一层只负责搬家与透传状态。`remoteUrl` 读的是
+   * `AGENTSWS_SERVER_URL`：桌面壳切到远程模式时由它指到 `https://<云>/w/<ws>`，
+   * 界面据此显示"值守中：云上运行"那个角标。
+   */
+  const standby = createStandby({
+    workspace_id: workspace.id,
+    clock,
+    secrets,
+    env,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    remoteUrl: () => env.AGENTSWS_SERVER_URL,
+  })
+
   // WP60（48 §4 L3 #11 的云端一半）：聊天窗的公开访客面（白名单 + 限流 + 访客令牌）
   const chatWidget = createChatWidget({
     workspace_id: workspace.id,
@@ -1774,6 +1791,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cloud: cloud.port,
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
     storage: storage.port,
+    // WP60（49 §6 / 48 L7）：在线值守的切档向导与"接回本机"
+    standby: standby.port,
     // WP58（49 M1）：云账号关联（状态 / 起关联 / 回调 / 解除）
     cloudAccount: cloudAccount.port,
     org: org.port,

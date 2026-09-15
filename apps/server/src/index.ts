@@ -300,6 +300,17 @@ export {
   THEME_STORE_ENV,
   THEME_TOKEN_ENV,
 } from './shopify-theme.js'
+// WP60（49 §6 / 48 L7）：在线值守的本地一面
+export {
+  createStandby,
+  embedSnippet,
+  publicUrlOf,
+  STANDBY_READ_TIMEOUT_MS,
+  STANDBY_TIMEOUT_MS,
+  type StandbyAssembly,
+  type StandbyFetch,
+  type StandbyOptions,
+} from './standby.js'
 export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
 export { CHAT_WIDGET_JS, mountChatWidget, WIDGET_API_PATH, WIDGET_PATH } from './widget.js'
 export {

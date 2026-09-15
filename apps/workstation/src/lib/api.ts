@@ -2874,3 +2874,56 @@ export const unlinkCloudAccount = (assignment?: string): Promise<CloudUnlinkResu
     method: 'POST',
     ...(assignment === undefined ? {} : { assignment }),
   })
+
+/* ------------------------------------------------------------------ */
+/* WP60（49 §6 / 48 L7 / 41 §2.4）在线值守                             */
+/* ------------------------------------------------------------------ */
+
+export interface StandbyWorkspaceView {
+  workspace_id: string
+  org_id: string
+  status: 'starting' | 'running' | 'stopped' | 'expired'
+  seats: number
+  period_end: string
+  last_health_at?: string
+}
+
+/** 连接页"在线值守"那一格要的全部东西。**每个数字都是云上那一份的透传。** */
+export interface StandbyView {
+  linked: boolean
+  reason?: string
+  remote: boolean
+  remote_url?: string
+  cloud?: StandbyWorkspaceView
+  seat_price?: number
+  embed_snippet?: string
+}
+
+export interface StandbySwitchResult {
+  status: string
+  remote_url: string
+  bytes: number
+  period_end: string
+  embed_snippet: string
+}
+
+export interface StandbyBringHomeResult {
+  out: string
+  bytes: number
+  stopped: boolean
+  next: string
+}
+
+export const getStandby = (assignment?: string): Promise<StandbyView> =>
+  api<StandbyView>('/v1/standby', withAssignment(assignment))
+
+/** ④ 本地导出 → 上传到云 → 开通 → 云上起进程。一次调用走完，中间不落半步。 */
+export const switchToStandby = (
+  input: { seats: number; force?: boolean },
+  assignment?: string,
+): Promise<StandbySwitchResult> =>
+  api('/v1/standby/switch', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** 反向：云上导出 → 落到本机备份目录 → 停云上那个进程。 */
+export const bringStandbyHome = (assignment?: string): Promise<StandbyBringHomeResult> =>
+  api('/v1/standby/bring-home', { method: 'POST', ...withAssignment(assignment) })

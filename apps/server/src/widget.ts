@@ -45,6 +45,21 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
   var store = 'agentsws.chat.' + base
   var NS = 'agentsws-chat'
 
+  /*
+   * 界面上那几个词跟着**宿主页面的语言**走（<html lang>），不跟着服务端配置走。
+   * 理由很实际：这个气泡是长在商家网站上的一块，它该说那个网站的语言；
+   * 而招呼语是商家自己写的（配置里那条），那是内容，不是界面。
+   */
+  var zh = (document.documentElement.lang || 'zh').toLowerCase().indexOf('zh') === 0
+  var TXT = zh
+    ? { title: '在线客服', send: '发送', tooFast: '发得有点快，稍等一下再说。', offline: '网络好像断了，稍后再试。' }
+    : {
+        title: 'Chat with us',
+        send: 'Send',
+        tooFast: 'A bit too fast — give it a second.',
+        offline: 'Looks like the network dropped. Try again in a moment.',
+      }
+
   function saved() {
     try {
       var raw = localStorage.getItem(store)
@@ -121,7 +136,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
     var head = el(
       'div',
       'padding:12px 14px;background:' + cfg.accent + ';color:#fff;font-size:14px;font-weight:600;',
-      cfg.title,
+      TXT.title,
     )
     panel.appendChild(head)
 
@@ -138,13 +153,13 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
         'font:inherit;font-size:14px;height:38px;outline:none;color:#16181d;background:#fff;',
     )
     input.setAttribute('rows', '1')
-    input.setAttribute('aria-label', cfg.title)
+    input.setAttribute('aria-label', TXT.title)
     var send = el(
       'button',
       'border:0;border-radius:9px;padding:0 14px;background:' +
         cfg.accent +
         ';color:#fff;font:inherit;font-size:14px;cursor:pointer;',
-      cfg.send_label,
+      TXT.send,
     )
     bar.appendChild(input)
     bar.appendChild(send)
@@ -157,7 +172,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
         ';color:#fff;font-size:24px;box-shadow:0 6px 20px rgba(0,0,0,.22);float:right;',
       '💬',
     )
-    launcher.setAttribute('aria-label', cfg.title)
+    launcher.setAttribute('aria-label', TXT.title)
 
     root.appendChild(panel)
     root.appendChild(launcher)
@@ -215,7 +230,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
       body: JSON.stringify({ text: text }),
     })
       .then(function (r) {
-        if (r.status === 429) say(cfg.too_fast, false)
+        if (r.status === 429) say(TXT.tooFast, false)
         else if (r.status === 401 || r.status === 404) {
           // 会话没了（服务端换过 / 被清过）：下一句重开一条
           session = null
@@ -223,7 +238,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
         }
       })
       .catch(function () {
-        say(cfg.offline, false)
+        say(TXT.offline, false)
       })
   }
 
