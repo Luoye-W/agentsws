@@ -92,6 +92,22 @@ export const TARGET_SCOPED_KINDS: ReadonlySet<ChangeKind> = new Set([
 ])
 
 /**
+ * 15 §1「改前必读」：这几种变更**必须**先把目标的全记录读回来才准提。
+ *
+ * 为什么不是所有写动作都要：退款的 `before` 来自订单金额，读一次订单就够了；
+ * 而改文案 / 改货架 / 回评价这三件事，`before` 就是那段**正文**——没读全文就改，
+ * 等于拿着摘要覆盖原文。
+ *
+ * 前置层（`packages/txn` 的 `runPrecheck`）与 guardrail 读的是同一张表，
+ * 免得"前置放过、guardrail 拦下"这种两头不一致。
+ */
+export const RECORD_READ_KINDS: ReadonlySet<ChangeKind> = new Set([
+  'listing_edit',
+  'collection_edit',
+  'review_reply',
+])
+
+/**
  * WP63（51 §2.1 评价管理「邀评 L2 且合规词表」）：邀评正文里**不许出现**的说法。
  *
  * 这不是措辞偏好，是平台规则：拿好处换好评在 Shopify / Amazon / Google 都是封号级
@@ -261,6 +277,15 @@ export function evaluateGuardrail(
       facts.target_in_range.reason ?? 'out_of_range',
     )
 
+  // 15 §1 改前必读：这几种变更的 `before` 就是那段正文，没读全文就改等于拿摘要覆盖原文。
+  // 判据是这次运行的 provenance（读没读过是**事实**），不是调用方自报的一格。
+  if (
+    RECORD_READ_KINDS.has(change.kind) &&
+    facts.provenance &&
+    !facts.provenance.hasFull(change.target)
+  )
+    block('requires_record_read', 'get_full_record', change.target.id)
+
   switch (change.kind) {
     case 'refund': {
       const amount = change.amount_base ?? num(after.refund_amount)
@@ -358,20 +383,16 @@ export function evaluateGuardrail(
       }
       break
     }
-    /** WP63（51 §2.1）：集合增删商品——改的是整家店的货架，所以改之前必须真读过它。 */
+    /** WP63（51 §2.1）：集合增删商品——改的是整家店的货架（"改之前先读全"见 switch 之前那一条）。 */
     case 'collection_edit': {
-      if (facts.provenance && !facts.provenance.hasFull(change.target))
-        block('requires_record_read', 'get_full_record', change.target.id)
       const cap = capNumber(mandate, 'max_collection_products')
       const touched = Array.isArray(after.products) ? after.products.length : num(after.count)
       if (cap !== undefined && touched !== undefined && touched > cap)
         review('max_collection_products', cap, touched)
       break
     }
-    /** WP63（51 §2.1 评价管理）：回复评价——必须真读过那条评价，不能凭摘要回。 */
+    /** WP63（51 §2.1 评价管理）：回复评价（"改之前先读全"见 switch 之前那一条）。 */
     case 'review_reply': {
-      if (facts.provenance && !facts.provenance.hasFull(change.target))
-        block('requires_record_read', 'get_full_record', change.target.id)
       // 差评交给客服（`dtc.support`）处理，店铺管理这条职责不自己回——
       // 评分低于这条线就不该由这里出稿，转人（转岗）由上层按这条 hit 决定。
       const floor = capNumber(mandate, 'review_reply_min_rating')
@@ -432,11 +453,7 @@ export function evaluateGuardrail(
         review('margin_floor_pct', floor, change.margin_after_pct)
       break
     }
-    case 'listing_edit': {
-      if (facts.provenance && !facts.provenance.hasFull(change.target))
-        block('requires_record_read', 'get_full_record', change.target.id)
-      break
-    }
+
     case 'campaign_send': {
       const n = num(after.audience_size)
       const cap = capNumber(mandate, 'max_campaign_audience')

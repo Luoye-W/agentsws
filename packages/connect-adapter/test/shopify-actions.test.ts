@@ -100,6 +100,24 @@ describe('Shopify 写动作对照表', () => {
     expect(changeKindOfAction('shopify_admin.update_page')).toBe('listing_edit')
   })
 
+  // WP63（51 §3 N2）：结账 / 支付 / 税 / 域名——**根本没有可 stage 的动作**
+  it('结账 / 支付 / 税 / 域名：对照表里一条写口都没有，没有入口比有入口加一道门更稳', () => {
+    // 15 §2 的目录里有这四条 kind（别的岗位会用到），但 Shopify 这一侧一条动作都不映射
+    for (const kind of ['payment_config', 'tax_config', 'domain_config'] as const) {
+      expect(actionsOfChangeKind(kind), kind).toEqual([])
+    }
+    // 对照表里也没有任何落在店铺设置上的写动作
+    expect(SHOPIFY_WRITE_ACTIONS.filter((a) => a.target === 'store_config')).toEqual([])
+    // 于是"改一下就影响收款"的那几个动作名连查都查不到 → 未知即拒
+    for (const id of [
+      'shopify_admin.update_payment_settings',
+      'shopify_admin.update_tax_settings',
+      'shopify_admin.update_checkout_settings',
+    ]) {
+      expect(canStageAction(id).ok, id).toBe(false)
+    }
+  })
+
   it('表里没有的动作一律不可 stage（未知即拒，和副作用表的 default: write 同一条纪律）', () => {
     const verdict = canStageAction('shopify_admin.some_new_thing')
     expect(verdict.ok).toBe(false)
