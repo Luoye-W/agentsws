@@ -1117,14 +1117,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
 
   // ── 模型网关：stub provider + 可注入的"模型挂了" ──────────────────────
   let outageUntilMs = 0
-  // `direct` 分支：stub provider 只出文本、不出 tool_calls，turn loop 跑不起来；
-  // 换成同样确定性的"规则脑" provider（判定逻辑与 stub 运行时同一套，只是用工具协议表达）
+  // `direct` 与 `dsh` 两条分支：22 的 stub provider 只出文本、不出 tool_calls，
+  // **回合就跑不起来**——direct 的 turn loop 空转，dsh 的 agent-loop 一轮就 idle。
+  // 换成同样确定性的"规则脑" provider（判定逻辑与 stub 运行时同一套，只是用工具协议表达）。
+  // WP81：dsh 这一档的回合改由官方 agent-loop 驱动，从此与 direct 同一个前提，
+  // 所以它也换到规则脑——两条路对着**同一个"模型"**跑，parity 比的才是运行时。
   // realistic 档给了真模型就用它；否则按运行时选确定性的替身 provider
   const modelRef: ModelRef = opts.model?.ref ?? MODEL
+  const modelDrivesTools = opts.runtime === 'direct' || opts.runtime?.startsWith('dsh') === true
   const base =
     opts.model !== undefined
       ? opts.model.provider
-      : opts.runtime === 'direct'
+      : modelDrivesTools
         ? aftersalesBrainProvider({
             clock,
             seed,
