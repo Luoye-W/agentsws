@@ -71,6 +71,9 @@
     },
     {
       "path": "../work"
+    },
+    {
+      "path": "../social-core"
     }
   ]
 }

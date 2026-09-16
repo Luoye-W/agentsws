@@ -182,6 +182,10 @@ const EVENT_KEYS = [
   'fulfillment.mark_shipped',
   'email.unsubscribe',
   'email.campaign_send',
+  // WP72 社媒运营（56 §2 / §4）
+  'social.post',
+  'social.reply',
+  'community.broadcast',
   // WP67 红人营销（48 §5.1）
   'kol.outreach',
   'kol.collaboration',
@@ -263,6 +267,11 @@ const EXPECTED_KEYS = [
   // WP68（48 §5.2 / §5.3）
   'kol_campaign',
   'kol_reveal',
+  // WP72（56 §2 / §4）
+  'social_post',
+  'social_reply',
+  'community_handoff',
+  'community_broadcast',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -764,6 +773,77 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    // WP72（56 §2 / §4）：社媒运营那三件事
+    case 'social.post': {
+      known(source, `${path}.${key}`, body, ['who', 'channel', 'body', 'scheduled_at', 'level'])
+      const postLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (postLevel !== undefined && !['L1', 'L2', 'L3'].includes(postLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'social.post',
+        post: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          body: str(source, `${path}.${key}.body`, body.body),
+          ...(body.scheduled_at === undefined
+            ? {}
+            : { scheduled_at: str(source, `${path}.${key}.scheduled_at`, body.scheduled_at) }),
+          ...(postLevel === undefined ? {} : { level: postLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'social.reply': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'channel',
+        'author',
+        'text',
+        'draft',
+        'surface',
+        'level',
+      ])
+      const surface = optStr(source, `${path}.${key}.surface`, body.surface)
+      if (surface !== undefined && !['comment', 'thread', 'dm'].includes(surface)) {
+        fail(source, `${path}.${key}.surface`, 'surface 只能是 comment / thread / dm')
+      }
+      const replyLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (replyLevel !== undefined && !['L1', 'L2', 'L3'].includes(replyLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'social.reply',
+        reply: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          author: str(source, `${path}.${key}.author`, body.author),
+          text: str(source, `${path}.${key}.text`, body.text),
+          draft: str(source, `${path}.${key}.draft`, body.draft),
+          ...(surface === undefined ? {} : { surface: surface as 'comment' | 'thread' | 'dm' }),
+          ...(replyLevel === undefined ? {} : { level: replyLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'community.broadcast': {
+      known(source, `${path}.${key}`, body, ['who', 'channel', 'body', 'members', 'level'])
+      const bcLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (bcLevel !== undefined && !['L1', 'L2', 'L3'].includes(bcLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'community.broadcast',
+        broadcast: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          body: str(source, `${path}.${key}.body`, body.body),
+          members: strList(source, `${path}.${key}.members`, body.members),
+          ...(bcLevel === undefined ? {} : { level: bcLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
     // WP67（48 §5.1）：红人营销那几件事
     case 'kol.outreach': {
       known(source, `${path}.${key}`, body, ['who', 'creator', 'draft'])
@@ -1223,6 +1303,44 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
   }
 }
 
+/**
+ * 一块**结构化断言**（`expected.kol_outreach` 那一类）的通用解析。
+ *
+ * WP72 补的这一刀修的是一个**真洞**：这几块的键早就在 `EXPECTED_KEYS` 里
+ * （所以 `known()` 放行），却从来没有人把它们抄进 `out`——于是场景里写的
+ * `kol_outreach: { rewritten: true }` 一路被静默丢掉，断言等于没写。
+ * 一条永远为真的断言比没有断言更糟：它让人以为那件事验过了。
+ *
+ * `spec` 说每一格是什么形状：`bool` / `str` / `strs` / `num`（数值断言，
+ * 允许 `'>=1'` 这种写法）。不认识的键当场报错——拼错一个字段名不该被忽略。
+ */
+function shaped(
+  source: string,
+  key: string,
+  raw: unknown,
+  spec: Record<string, 'bool' | 'str' | 'strs' | 'num'>,
+): Record<string, unknown> | undefined {
+  if (raw === undefined) return undefined
+  const path = `expected.${key}`
+  if (!isRec(raw)) fail(source, path, '必须是对象')
+  known(source, path, raw, Object.keys(spec))
+  const out: Record<string, unknown> = {}
+  for (const [name, kind] of Object.entries(spec)) {
+    const v = raw[name]
+    if (v === undefined) continue
+    const at = `${path}.${name}`
+    out[name] =
+      kind === 'bool'
+        ? requireBool(source, at, v)
+        : kind === 'str'
+          ? str(source, at, v)
+          : kind === 'strs'
+            ? strList(source, at, v)
+            : numeric(source, at, v)
+  }
+  return out
+}
+
 function parseExpected(source: string, raw: unknown): ScenarioExpected {
   if (raw === undefined || raw === null) return {}
   if (!isRec(raw)) fail(source, 'expected', '必须是对象')
@@ -1387,6 +1505,79 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     raw.assignments_not_unioned,
   )
   if (notUnioned !== undefined) out.assignments_not_unioned = notUnioned
+
+  /*
+   * 结构化断言（WP64 / WP67 / WP68 / WP72 那几块）。
+   *
+   * WP72 之前这几块**一个都没抄进来**（见 {@link shaped} 的注释）——写了等于没写。
+   * 现在一次补齐，顺序照 `EXPECTED_KEYS`。
+   */
+  const shapes: Record<string, Record<string, 'bool' | 'str' | 'strs' | 'num'>> = {
+    overdue_orders: { count: 'num', worst_days: 'num' },
+    campaign_send: {
+      requested_level: 'str',
+      auto_approved: 'bool',
+      audience_size: 'num',
+      suppressed_removed: 'num',
+      stated_on_card: 'bool',
+    },
+    kol_outreach: {
+      forbidden_hits: 'strs',
+      rewritten: 'bool',
+      auto_approved: 'bool',
+      suppressed_removed: 'num',
+    },
+    kol_collaboration: { requested_level: 'str', auto_approved: 'bool', budget: 'num' },
+    kol_attribution: { matched: 'num', unmatched: 'num', revenue: 'num', basis: 'strs' },
+    kol_campaign: {
+      picks: 'num',
+      allowed_channels: 'strs',
+      blocked_channels: 'strs',
+      created: 'num',
+    },
+    /*
+     * `kol_reveal` **故意还没接上**。
+     *
+     * 接上去当场红一条：`public-library-reveal-charges-credits.yml` 写着
+     * `first_refused: true`（一分钱没充那一次该被拦），而世界里那一次**取到了**
+     * ——钱包有免费额度，所以"钱不够"根本没发生。
+     *
+     * 那是 WP68 的语义问题（该不该有免费额度、免费额度下这条题要验什么），
+     * 不是 WP72 能定的。所以这一条原地留着，记进 docs/35 等 Luoye 定：
+     * 是钱包该拦，还是那句断言该改。改完把这一格接上来，一行的事。
+     */
+    // WP72（56 §2 / §4）
+    social_post: {
+      requested_level: 'str',
+      auto_approved: 'bool',
+      scheduled_at: 'str',
+      stated_on_card: 'bool',
+    },
+    social_reply: {
+      triage: 'str',
+      commitment_hits: 'strs',
+      rewritten: 'bool',
+      auto_approved: 'bool',
+    },
+    community_handoff: {
+      triage: 'str',
+      routed_to: 'str',
+      answered_by_social: 'bool',
+      held: 'bool',
+    },
+    community_broadcast: {
+      requested_level: 'str',
+      auto_approved: 'bool',
+      audience: 'num',
+      suppressed_removed: 'num',
+      stated_on_card: 'bool',
+    },
+  }
+  const bag = out as unknown as Record<string, unknown>
+  for (const [key, spec] of Object.entries(shapes)) {
+    const parsed = shaped(source, key, raw[key], spec)
+    if (parsed !== undefined) bag[key] = parsed
+  }
   return out
 }
 

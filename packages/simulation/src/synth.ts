@@ -177,7 +177,11 @@ const PEOPLE_15: PersonTemplate[] = [
     name: '冯萱',
     email: 'feng@nordvolt.example',
     title: '社媒',
+    // WP72（56 §2）：15 人公司里"社媒"是**专职**的，所以两条都挂：
+    // 内容账号组一条、社群组一条。主分配仍是 `common.member`（他还是个普通成员），
+    // 权限**各管各的**，不并集（05 §4）。
     role: 'common.member',
+    extra: ['social.meta', 'social.discord'],
   },
   {
     id: 'p_chu',
@@ -225,7 +229,10 @@ const PEOPLE_3: PersonTemplate[] = [
     title: '店主 / 售后',
     role: 'dtc.support',
     owner: true,
-    extra: 'common.owner',
+    // WP72（56 §4）：客服岗位新加的第四条「社群管理」也挂在店主身上——
+    // 3 人公司里客服就是他。**这一条不是可有可无的**：社媒运营那边判成客户问题的
+    // 留言要转给它，没人持有的话那张卡只能落到 owner 头上（如实报，但那不是设计）。
+    extra: ['common.owner', 'dtc.community-support'],
   },
   {
     id: 'p_li',
@@ -238,7 +245,18 @@ const PEOPLE_3: PersonTemplate[] = [
     // 权限仍然**各管各的**：他手上五条分配，额度与等级一条一份，不并集。
     // WP67（48 §5.1）：红人营销也归他——3 人公司里"运营"本来就什么都做一点，
     // 而红人这条活儿的日常（找人、写信、审片、算账）与网站运营是同一个人的一天。
-    extra: ['dtc.store', 'dtc.content', 'dtc.email-marketing', 'dtc.fulfillment', 'kol.youtube'],
+    // WP72（56 §2）：社媒运营也归他——3 人公司里"运营"就是那个又排内容又管群的人。
+    // 两条：一条内容账号组（`social.meta`）、一条社群组（`social.discord`）。
+    // 两组的动作与面板骨架不一样，只挂一条就只演示得了一半。
+    extra: [
+      'dtc.store',
+      'dtc.content',
+      'dtc.email-marketing',
+      'dtc.fulfillment',
+      'kol.youtube',
+      'social.meta',
+      'social.discord',
+    ],
   },
   {
     id: 'p_chen',

@@ -1,0 +1,61 @@
+# WP72（56 §4）：**群里的客户问题不归社媒运营，转客服。**
+#
+# 这是 56 那条边界在机制上的落点，也是这整个 WP 最要紧的一条断言：
+# Discord 里有人问"我上周下的单还没发货"，社媒运营**一个字都不答**——
+# 它出的是一张转客服卡，路由到客服岗位新加的那条职责「社群管理」
+# （`dtc.community-support`）。
+#
+# 三件事都是真发生的：
+#
+# 1. **判类不是场景说了算**：`@agentsws/social-core` 的 `triageThread` 判成
+#    `customer_question`，`handoffOf` 才给出那张卡。想让社媒运营自己答，
+#    得先改 56 的那条边界，不是改这条场景。
+# 2. **卡真的落到持有那条职责的人头上**：3 人公司里客服是店主王岚
+#    （`assignments.yml` 里他挂着 `dtc.community-support`）。没人持有的话
+#    这张卡会落到 owner 头上——那时 `held` 是假，也要照实报，而不是假装有人接。
+# 3. **社媒运营那一侧一条出站都没有**：`answered_by_social` 是假。
+#    它一旦为真，这条边界就名存实亡了。
+#
+# 为什么不让社媒运营顺手答一句"我帮你查查"：它手上根本没有订单域
+# （九条社媒职责的 scopes 里一个 `order` 都没有）。答得出口的只有编的。
+id: community/customer-question-routes-to-support
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 店主王岚既是客服也是点卡的人：转过来的这张卡要有人接得住
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 10m..1h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    social.reply:
+      who: p_li
+      channel: discord
+      author: linaw
+      surface: thread
+      text: 我上周下的单到现在还没发货，单号 #10231，什么时候能寄出？
+      # 起草那一跳写了什么都不要紧：判成客户问题之后这一稿根本不会被提上去
+      draft: 这个我看看。
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  community_handoff:
+    triage: customer_question
+    routed_to: dtc.community-support
+    # **社媒运营没答**——56 的那条边界就是这一格
+    answered_by_social: false
+    # 有人真持有社群管理那条职责（3 人公司里是店主）
+    held: true
+  approval_kinds: { claim: 1 }
+  event_types:
+    - simulation.social_handoff_staged
+  # 一条出站都没有：社媒运营不答客户的问题
+  metrics:
+    outbound_sent: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  这张卡上"为什么归客服答、原话是什么、在哪条渠道"，接手的人读完就能动手吗？

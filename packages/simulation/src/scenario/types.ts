@@ -394,6 +394,56 @@ export interface ScenarioKolOutreach {
   draft: string
 }
 
+/**
+ * WP72 / 56 §2：提一条内容（`social_post`，**永远 L1**）。
+ *
+ * `level` 是**故意报高的**那一格：15 §2 的 `HARD_L1` 会把它按回人审。
+ * `scheduled_at` 给了 = 到点自己出去，所以门在**排**的这一下——到点之后没有第二道门。
+ */
+export interface ScenarioSocialPost {
+  who: string
+  /** 渠道 id（`meta` / `discord` …，契约 `SocialChannel`）。 */
+  channel: string
+  body: string
+  /** 排期时刻（ISO）。不给 = 批了就发。 */
+  scheduled_at?: string
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * WP72 / 56 §2 / §4：处理一条留言（评论 / 帖子 / 私信）。
+ *
+ * `text` 是**对方说的那句话**——它决定这条走哪一路（`social-core` 的 `triageThread`
+ * 判，不是场景说了算）：判成客户问题就出转客服卡、社媒运营不答；否则按 `draft`
+ * 起草一条回复，过承诺扫描。
+ *
+ * `draft` 可以故意写一句带承诺的话：扫到就打回重写，重写之后那一封再扫一遍才提上去。
+ */
+export interface ScenarioSocialReply {
+  who: string
+  channel: string
+  /** 说话的那个人在平台上的名字。 */
+  author: string
+  text: string
+  draft: string
+  surface?: 'comment' | 'thread' | 'dm'
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * WP72 / 56 §2：提一条群发（`community_broadcast`，**永远 L1** + 抑制名单必查）。
+ *
+ * `members` 是群里 / 名单上的全部人；**抑制名单不在这里**——它从世界里那一份
+ * 退订记录来（`email.unsubscribe` 那个事件写进去的），所以"剔了几个"是真算出来的。
+ */
+export interface ScenarioCommunityBroadcast {
+  who: string
+  channel: string
+  body: string
+  members: string[]
+  level?: 'L1' | 'L2' | 'L3'
+}
+
 /** WP67 / 48 §5.1：建一条合作（`kol_collaboration`，**永远 L1**）。 */
 export interface ScenarioKolCollaboration {
   who: string
@@ -532,6 +582,12 @@ export type ScenarioEvent =
   | { at: string; type: 'email.unsubscribe'; unsubscribe: ScenarioEmailUnsubscribe }
   /** WP64：提一条群发（51 §2.3，发送永远 L1）。 */
   | { at: string; type: 'email.campaign_send'; campaign_send: ScenarioEmailCampaignSend }
+  /** WP72：提一条内容（56 §2，发布永远 L1）。 */
+  | { at: string; type: 'social.post'; post: ScenarioSocialPost }
+  /** WP72：处理一条留言（56 §2 / §4，先判类：客户问题转客服）。 */
+  | { at: string; type: 'social.reply'; reply: ScenarioSocialReply }
+  /** WP72：提一条群发（56 §2，群发永远 L1 + 抑制名单必查）。 */
+  | { at: string; type: 'community.broadcast'; broadcast: ScenarioCommunityBroadcast }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
   | { at: string; type: 'kol.outreach'; outreach: ScenarioKolOutreach }
   /** WP67：建一条合作（48 §5.1，永远 L1）。 */
@@ -766,6 +822,57 @@ export interface ScenarioExpected {
     auto_approved?: boolean
     suppressed_removed?: NumericAssertion
     audience_size?: NumericAssertion
+    stated_on_card?: boolean
+  }
+  /**
+   * WP72 / 56 §2：那一条内容提案。
+   *
+   * `requested_level` 报 L3 而 `auto_approved` 是假 = 硬顶把它按回人审了。
+   * `scheduled_at` 要在卡面上写出来（`stated_on_card`）——批了之后它会在那个时刻
+   * 自己出去，人按下那一下之前必须看得见。
+   */
+  social_post?: {
+    requested_level?: string
+    auto_approved?: boolean
+    scheduled_at?: string
+    stated_on_card?: boolean
+  }
+  /**
+   * WP72 / 56 §2：那一条回复。
+   *
+   * `triage` 是判出来的类（六类之一）。`commitment_hits` 非空 + `rewritten` 为真 =
+   * 第一稿被承诺扫描拦下、打回重写过；`auto_approved` 为真 = 改写之后那一封
+   * 在额度内自己发出去了。
+   */
+  social_reply?: {
+    triage?: string
+    commitment_hits?: string[]
+    rewritten?: boolean
+    auto_approved?: boolean
+  }
+  /**
+   * WP72 / 56 §4：那一张转客服卡。
+   *
+   * `answered_by_social` 必须是假——**社媒运营不答客户的问题**，那是 56 的边界；
+   * 它一旦为真，这条边界就名存实亡了。
+   */
+  community_handoff?: {
+    triage?: string
+    routed_to?: string
+    answered_by_social?: boolean
+    held?: boolean
+  }
+  /**
+   * WP72 / 56 §2：那一条群发。
+   *
+   * `suppressed_removed` 查过就有一个数，**哪怕是 0**——"没查"与"查了没人"
+   * 在群发这件事上必须分得开（同 `campaign_send`）。
+   */
+  community_broadcast?: {
+    requested_level?: string
+    auto_approved?: boolean
+    audience?: NumericAssertion
+    suppressed_removed?: NumericAssertion
     stated_on_card?: boolean
   }
   /**

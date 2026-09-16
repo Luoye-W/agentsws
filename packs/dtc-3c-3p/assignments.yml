@@ -9,6 +9,12 @@
   role_id: common.owner
   ranges: []
   granted_by: p_wang
+- person_id: p_wang
+  role_id: dtc.community-support
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
 - person_id: p_li
   role_id: dtc.support
   ranges:
@@ -41,6 +47,18 @@
   granted_by: p_wang
 - person_id: p_li
   role_id: kol.youtube
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_li
+  role_id: social.meta
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_li
+  role_id: social.discord
   ranges:
     - kind: store
       id: store_main

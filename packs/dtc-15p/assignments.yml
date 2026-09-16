@@ -72,6 +72,18 @@
   role_id: common.member
   ranges: []
   granted_by: p_wang
+- person_id: p_feng
+  role_id: social.meta
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_feng
+  role_id: social.discord
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
 - person_id: p_chu
   role_id: common.member
   ranges: []

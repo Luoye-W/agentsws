@@ -220,9 +220,11 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十六条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十七条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
+      // WP72（56 §2）：群发永远人审 + 抑制名单必查（15 人公司里社媒是专职的）
+      'community/broadcast-respects-suppression',
       'ops/claim-pool',
       'ops/collision-two-people',
       'ops/cross-desk-handover',

@@ -136,7 +136,23 @@ export function runRuleJudge(
     r.request.context.some((c) => c.kind === 'fact_card'),
   )
 
-  for (const item of evidence.approvals.filter((i) => i.kind === 'outbound_draft')) {
+  /*
+   * WP72（56 §2）：**社媒的回复不走这五条。**
+   *
+   * 这五条是给**一封邮件**写的：要有主题、要有落款、要提到订单号。群里的一条
+   * 评论回复三条都不该有——没有主题这回事、落款是社媒上的怪东西、而对方多半
+   * 连订单都还没下。拿邮件的尺子量它，量出来的分数没有任何意义，
+   * 还会把"这条回得好不好"淹没在三条必然不合格里。
+   *
+   * 判据是 `payload.form`（提案那一跳自己写的），不是猜的：`social_reply` 才跳过。
+   */
+  const isSocialReply = (item: (typeof evidence.approvals)[number]): boolean => {
+    const p = item.payload
+    return typeof p === 'object' && p !== null && (p as { form?: unknown }).form === 'social_reply'
+  }
+  for (const item of evidence.approvals.filter(
+    (i) => i.kind === 'outbound_draft' && !isSocialReply(i),
+  )) {
     const body = bodyOf(item)
     const subject = subjectOf(item)
     const lower = body.toLowerCase()
