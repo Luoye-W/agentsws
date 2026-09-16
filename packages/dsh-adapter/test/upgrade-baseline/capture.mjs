@@ -32,6 +32,8 @@ function installedVersions() {
   const names = [
     '@deepseek-ai/cordis',
     '@deepseek-ai/dsh',
+    '@deepseek-ai/dsh-agent',
+    '@deepseek-ai/dsh-agent-loop',
     '@deepseek-ai/dsh-base',
     '@deepseek-ai/dsh-headless',
     '@deepseek-ai/dsh-llm',
@@ -39,6 +41,7 @@ function installedVersions() {
     '@deepseek-ai/dsh-sdk-client',
     '@deepseek-ai/dsh-sdk-protocol',
     '@deepseek-ai/dsh-session',
+    '@deepseek-ai/dsh-session-projection',
     '@deepseek-ai/dsh-system-prompt',
     '@deepseek-ai/dsh-tools',
     '@deepseek-ai/dsh-user-approval',

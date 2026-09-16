@@ -24,6 +24,15 @@
 # 而是**即使哪天真的起了完整 profile 也不上报**。
 # 钉住它的测试：`packages/dsh-adapter/test/telemetry.test.ts`。
 # 自检条目：docs/39 §3.3 (d)。
+#
+# WP81 补一条查证（54（将改号 55）§1 第 0 行 Q1）：这个插件的"请求字段"**只对官方
+# `dsh-llm-deepseek` 适配器生效**——它 `inject` 的 `deepseekLlmApiExtensions` 服务只由
+# `dsh-deepseek-llm-api-extensions` 提供，而全仓唯一读它的地方是
+# `packages/llm/llm-deepseek/src/index.ts` 里 `DeepSeekAdapter` 的 `prepareExtensions`。
+# 我们的模型调用走 `packages/dsh-adapter/src/llm.ts` 自己的 `LlmAdapter`，
+# **上传通路根本不存在**，所以不做 RunRequest 级的 `share_session_log` 开关
+# （做一个没效果的开关比没有开关更糟）。这一行留着是另一道保险：哪天真起了完整
+# profile、真接了官方 provider，它也还是关的。详见 `packages/dsh-adapter/AGENT-LAYER.md` §7。
 - id: session-log-deepseek
   config:
     enabled: false

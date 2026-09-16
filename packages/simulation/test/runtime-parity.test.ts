@@ -3,7 +3,17 @@
  *
  * `stub` / `direct` / `dsh(in-process)` / `dsh(subprocess)` 走的是同一份 pack、
  * 同一份不变量检查、同一套证据来源。全过 = 17 §4「运行时可替换」在场景级别成立
- * （31 §1 I6）。dsh 两档还要**逐条相等**：换宿主进程不换语义。
+ * （31 §1 I6）。
+ *
+ * ## WP81：一致性的定义改了（54（将改号 55）§2.2 第一条）
+ *
+ * dsh 这一档的回合改由官方 agent-loop 驱动之后，**跨运行时的事件序列不可能再逐条相同**：
+ * 调几次工具、分几轮调，是模型 + 底座的事，不是我们排的。所以一致性拆成两层：
+ *
+ * | 比什么 | 在谁之间比 |
+ * |---|---|
+ * | **结果一致**：六条不变量 + 场景 expectations + 卡片 / staged_changes / 对外发件**逐条相等** | 四个运行时之间 |
+ * | **事件序列逐条相等** | 只在 dsh 两档之间（in-process vs subprocess）——换宿主进程不换语义 |
  *
  * 这里也是 dsh 场景级端到端的新家——以前它在 `packages/dsh-adapter/test/e2e.test.ts` 里，
  * 那条 import 让 dsh-adapter 反向依赖 simulation，构成 devDependency 环（38 §1）。
@@ -73,6 +83,62 @@ describe('WP30：同一批场景 × 四个运行时', () => {
         expect(report.runtime).toBe(runtime)
       }
       expect(failures).toEqual([])
+    })
+  }
+})
+
+/**
+ * 一次运行的**结果**（WP81 的 parity 判定）。
+ *
+ * 只取"business 上看得见"的东西，不取 id、时刻、事件序列——那些本来就随运行时走。
+ * 金额、目标对象、卡片种类、发没发信，这几样跨运行时必须一模一样。
+ */
+interface Outcome {
+  invariants: Record<string, boolean>
+  expectations: Record<string, boolean>
+  cards: string[]
+  staged_changes: string[]
+  outbound: string[]
+}
+
+function outcomeOf(report: ScenarioReport, evidence: Evidence): Outcome {
+  const invariants: Record<string, boolean> = {}
+  for (const inv of report.invariants) invariants[inv.name] = inv.ok
+  const expectations: Record<string, boolean> = {}
+  for (const exp of report.expectations) expectations[exp.key] = exp.ok
+  return {
+    invariants,
+    expectations,
+    cards: evidence.approvals.map((a) => `${a.kind}|${a.dedupe_key}`).sort(),
+    staged_changes: evidence.changes
+      .map(
+        (c) =>
+          `${c.kind}|${c.target.type}:${c.target.id}|${c.field ?? ''}|${JSON.stringify(c.before)}→${JSON.stringify(c.after)}|${c.money?.amount ?? ''}${c.money?.currency ?? ''}|${c.status}`,
+      )
+      .sort(),
+    // 真的发出去的对外邮件 + 每一次写外部的观测（16 §3）
+    outbound: [
+      ...evidence.emails.map((d) => `email|${d.channel}|${d.item.kind}`),
+      ...evidence.observations
+        .filter((o) => o.category === 'write_external')
+        .map((o) => `action|${o.service}.${o.action_id}|${o.status}`),
+    ].sort(),
+  }
+}
+
+describe('WP81 B：四个运行时**结果一致**（不再比事件序列）', () => {
+  for (const rel of [
+    'aftersales/return-within-window.yml',
+    'aftersales/boundary-first-time.yml',
+    'security/injected-instruction.yml',
+  ]) {
+    it(`${rel}：六条不变量 / 场景断言 / 卡片 / 变更 / 对外发件逐条相等`, async () => {
+      const base = await run(rel, 'stub')
+      const expected = outcomeOf(base.report, base.evidence)
+      for (const runtime of RUNTIMES.filter((r) => r !== 'stub')) {
+        const other = await run(rel, runtime)
+        expect(outcomeOf(other.report, other.evidence), `${rel} @ ${runtime}`).toEqual(expected)
+      }
     })
   }
 })

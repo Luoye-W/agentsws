@@ -6,10 +6,10 @@
  */
 
 export { DshAdapterError } from './errors.js'
-export type { AskedBoundary, GateApi, GateInput } from './gate.js'
+export type { AskedBoundary, DraftArgs, GateApi, GateInput, StageArgs } from './gate.js'
 export { CONTEXT_PREFIX, installGate, PERSONA_SECTION } from './gate.js'
 export type { DshHarness, HarnessInput } from './harness.js'
-export { createHarness } from './harness.js'
+export { createHarness, DEFAULT_MAX_STEPS } from './harness.js'
 export {
   createDshRuntime,
   createSubprocessDshRuntime,
@@ -18,12 +18,18 @@ export {
   subprocessAvailable,
 } from './headless/index.js'
 export * from './headless/protocol.js'
-export type { GatewayAdapterOptions } from './llm.js'
-export { GATEWAY_PROVIDER, GatewayLlmAdapter, toChatMessages, toToolDefs } from './llm.js'
+export type { GatewayAdapterOptions, GatewayBudget } from './llm.js'
+export {
+  GATEWAY_PROVIDER,
+  GatewayLlmAdapter,
+  splitSystemText,
+  toChatMessages,
+  toToolDefs,
+} from './llm.js'
 export type { PresetComposition, PresetPaths } from './preset.js'
 export { GATE_PLUGIN_MODULE, presetComposition, writePreset } from './preset.js'
 export * from './reading.js'
-export { createInProcessDshRuntime } from './runtime.js'
+export { createInProcessDshRuntime, TASK_MESSAGE } from './runtime.js'
 export type { ReadToolHooks, StageToolHooks } from './tools.js'
 export { buildToolDefinitions, classifySideEffect, DRAFT_TOOL, STAGE_TOOL } from './tools.js'
 export type {

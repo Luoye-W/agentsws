@@ -114,6 +114,15 @@ export type RunEvent =
       source?: 'request' | 'prefetch'
     }
   | { type: 'prompt.assembled'; hash: string; static_prefix_hash: string; total_tokens: number }
+  /**
+   * WP81：除了"运行时自己排回合"那条路，还有"回合由底座排"这一路（dsh 的 Agent 层）。
+   * 一次 `run()` 里可能有多个回合、每个回合多步，而 17 §2 以前只有"一次运行"一个粒度——
+   * 排障时看不出模型是在第几轮上停的。这两条把回合边界显式记下来。
+   * 自排回合的运行时（stub / direct-llm / replay）不发它们。
+   */
+  | { type: 'turn.started'; turn: number }
+  /** `reason` 是底座报的终止原因（`completed` / `aborted` / `error` / …）。 */
+  | { type: 'turn.ended'; turn: number; reason: string }
   | { type: 'text.delta'; text: string }
   | { type: 'tool.call'; call_id: string; tool: string; input: unknown }
   | {

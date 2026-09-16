@@ -3,11 +3,14 @@ import type {
   Completion,
   ContextItem,
   Iso8601,
+  ModelRef,
   ObjectRef,
   RunEvent,
   RunRequest,
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
+import { staticPrefixHash } from '@agentsws/model-gateway'
+import { aftersalesBrainProvider } from '@agentsws/runtime-direct'
 import type { CreateDraftFn, DraftPayload, StageFn, StageIntent } from '@agentsws/stand-ins'
 import type { DshRuntimeOptions, ModelGatewayLike } from '../src/index.js'
 
@@ -141,7 +144,40 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
   }
 }
 
-/** 固定补全的假网关（真实模拟里是 model-gateway 的 stub provider）。 */
+export const MODEL: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
+
+/**
+ * 模拟档的模型替身（26 §3）：售后"规则脑"，判定逻辑与 stub 运行时同一套，只是用**工具协议**表达。
+ *
+ * WP81 起 dsh 这一档的回合由 agent-loop 驱动——模型不说"我要调 X"，一个工具都不会跑。
+ * 22 的 stub provider 只出文本、不出 `tool_calls`，所以这里换成与 `direct` 同一个 provider
+ * （`@agentsws/runtime-direct` 的 `aftersalesBrainProvider`），两个运行时因此对着同一个"模型"跑。
+ */
+export function brainGateway(
+  clock: Clock = new FixedClock(),
+): ModelGatewayLike & { calls: number } {
+  const provider = aftersalesBrainProvider({ clock, seed: 42, ref: MODEL })
+  const g = {
+    calls: 0,
+    async complete(req: Parameters<ModelGatewayLike['complete']>[0]): Promise<Completion> {
+      g.calls += 1
+      const raw = await provider.complete({
+        messages: req.messages,
+        ...(req.tools === undefined ? {} : { tools: req.tools }),
+        ...(req.seed === undefined ? {} : { seed: req.seed }),
+      })
+      return {
+        ...raw,
+        model: MODEL,
+        static_prefix_hash: staticPrefixHash(req.messages, req.tools),
+        usage: { ...raw.usage, cost_base: raw.usage.cost_base ?? 0 },
+      }
+    },
+  }
+  return g
+}
+
+/** 固定补全的假网关（只出文本、不出工具调用；`complete()` 这条 seam 的测试用）。 */
 export function fakeGateway(text = 'stub reply'): ModelGatewayLike & { calls: number } {
   const g = {
     calls: 0,
@@ -208,9 +244,10 @@ export function toolExecutor(): DshRuntimeOptions['executeTool'] {
 
 export function baseOptions(over: Partial<DshRuntimeOptions> = {}): DshRuntimeOptions {
   const rec = recorder()
+  const clock = (over.clock as Clock | undefined) ?? new FixedClock()
   return {
-    clock: new FixedClock(),
-    gateway: fakeGateway(),
+    clock,
+    gateway: brainGateway(clock),
     seed: 42,
     executeTool: toolExecutor(),
     stage: rec.stage,

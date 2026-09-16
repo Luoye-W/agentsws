@@ -14,16 +14,22 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 /**
- * 升级前后的两版。换版本时改这三行 + 采一份新基线。
+ * 升级前后的两版。换版本时改这四行 + 采一份新基线。
  *
  * `FROM_FILE` 与 `FROM` 分开写是 WP70 的教训：基线必须是**升级前那棵代码树**上采的。
  * WP41 留下的 `0.1.5-rc.1.json` 是 WP41 当时的代码树（pack 只有 13 条场景），
  * WP42–WP69 之后再拿它当 FROM，diff 出来的是我们自己的改动，不是上游的。
- * 所以 WP70 在还没动版本号的分支上另采了一份 `0.1.5-rc.1-wp70.json`——
- * 同一版 dsh、当前代码树。旧的两份不删：下一次升级时它们是"上上版"。
+ *
+ * **WP81 的特例：自比。** 这一棒换的是**我们自己的回合逻辑**（回合改由 dsh 的
+ * Agent 层驱动），不是 dsh 的版本——指纹必然全变，拿 0.1.5 那份当 FROM 比出来的
+ * 全是本棒的改动，一条也说明不了上游。所以重采一份 `0.1.6-alpha.1-wp81.json`，
+ * FROM / TO 都指向它：这一版是**下一次 dsh 升级的起点**，比对本身退化成
+ * "采集器是确定的、两档仍然逐条相等"两条。旧的三份一个不删（历史刻度）。
+ * 理由与逐条解释见 `packages/dsh-adapter/AGENT-LAYER.md` §6。
  */
-const FROM_FILE = '0.1.5-rc.1-wp70'
-const FROM = '0.1.5-rc.1'
+const FROM_FILE = '0.1.6-alpha.1-wp81'
+const TO_FILE = '0.1.6-alpha.1-wp81'
+const FROM = '0.1.6-alpha.1'
 const TO = '0.1.6-alpha.1'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
@@ -66,7 +72,7 @@ function load(version: string): Baseline {
 }
 
 const before = load(FROM_FILE)
-const after = load(TO)
+const after = load(TO_FILE)
 
 /** 事件类型序列（把 `@at` 切掉）。 */
 const types = (fp: ScenarioFingerprint): string[] =>
@@ -123,7 +129,7 @@ describe('升级基线：两份都在，说的是同一件事', () => {
   })
 })
 
-describe(`升级 ${FROM} → ${TO}：行为不变`, () => {
+describe(`升级 ${FROM} → ${TO}：行为不变（WP81 起是自比，见文件头）`, () => {
   for (const { runtime, id, a, b } of each()) {
     describe(`${runtime} ${id}`, () => {
       it('事件类型序列相同', () => {
