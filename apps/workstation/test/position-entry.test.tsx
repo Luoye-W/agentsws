@@ -144,6 +144,27 @@ describe('54 §2 / §4 岗位页顶部：交给这个岗位一件事', () => {
     expect(navigate).toHaveBeenCalledWith('/matters/mat_2')
   })
 
+  it('只有一条职责的岗位不出第二层：那一条的名字直接摆在岗位下面（WP70）', async () => {
+    getPosition.mockResolvedValueOnce({
+      ...INSTANCE,
+      roles: [INSTANCE.roles[0] as (typeof INSTANCE.roles)[number]],
+    })
+    renderWithProviders(<PositionEntry id="asg_store" />)
+    await screen.findByTestId('position-entry')
+    // 没有折叠条（点开一层去看一条，白花认知成本），那一条直接看得见
+    expect(screen.queryByTestId('position-roles-toggle')).toBeNull()
+    expect(screen.getByTestId('position-roles-single')).toBeDefined()
+    expect(screen.getByText('店铺管理')).toBeDefined()
+    // 入口照样在：一句话之后「用这条职责开」走的还是本人那条分配
+    type('把 A 商品降价 10%')
+    fireEvent.click(screen.getByTestId('open-with-role'))
+    await waitFor(() => {
+      expect(createMatterWithRole).toHaveBeenCalledWith('asg_store', {
+        title: '把 A 商品降价 10%',
+      })
+    })
+  })
+
   it('展开第二层：每条职责旁一个「用这条职责开」，走的是那条职责的分配', async () => {
     renderWithProviders(<PositionEntry id="asg_store" />)
     await screen.findByTestId('position-entry')

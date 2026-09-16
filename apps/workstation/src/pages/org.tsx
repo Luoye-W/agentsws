@@ -1,5 +1,9 @@
 /**
- * 公司页（WP28 交付 C）：左栏「公司」指向这里，三个 Tab——岗位 / 成员 / 职责。
+ * 公司页（WP28 交付 C）：左栏「公司」指向这里。
+ *
+ * WP70（54 §4，Luoye 09-16）：顶层**没有「职责」tab 了**——职责一律归在岗位下面，
+ * 默认折叠收纳。原「职责」tab 那张说明卡（复制一份 / 改名与额度 / 已提交审批）
+ * 现在长在「岗位」tab 里每个岗位的折叠层下面（`RoleDetail`，组件本身没动）。
  *
  * 这一页做的就是 38 §1 里缺的那一块："真实模式只有工作区所有者，建不了岗位、
  * 分不了人、邀请不了同事"。现在非技术用户可以在界面上把「独立站售后客服」分给一个同事。
@@ -20,7 +24,6 @@ import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
 import { PositionsTab } from '@/components/org/positions-tab'
 import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/components/org/ranges-tab'
-import { RolesTab } from '@/components/org/roles-tab'
 import { ToolboxTab } from '@/components/org/toolbox-tab'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -448,7 +451,6 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
-          <TabsTrigger value="roles">{t('org.tab.roles')}</TabsTrigger>
           <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
           <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
           <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
@@ -471,6 +473,7 @@ export function OrgPage(): React.ReactNode {
               positions={positions.data}
               roles={roles.data ?? []}
               busy={busy}
+              {...(submitted === undefined ? {} : { submitted })}
               {...(failure === undefined || wizard !== null ? {} : { error: failure })}
               onAssign={(id) => {
                 setFailure(undefined)
@@ -484,6 +487,12 @@ export function OrgPage(): React.ReactNode {
               }}
               onDelete={(id) => {
                 drop.mutate(id)
+              }}
+              onCopyRole={(id) => {
+                copy.mutate(id)
+              }}
+              onProposeRole={(id, patch) => {
+                propose.mutate({ id, patch })
               }}
             />
           )}
@@ -513,24 +522,6 @@ export function OrgPage(): React.ReactNode {
           )}
         </TabsContent>
 
-        <TabsContent value="roles" className="pt-3">
-          {roles.data === undefined ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <RolesTab
-              roles={roles.data}
-              busy={busy}
-              {...(submitted === undefined ? {} : { submitted })}
-              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
-              onCopy={(id) => {
-                copy.mutate(id)
-              }}
-              onPropose={(id, patch) => {
-                propose.mutate({ id, patch })
-              }}
-            />
-          )}
-        </TabsContent>
         {/* 44：品牌与产品线（G1 / G2） */}
         <TabsContent value="ranges" className="pt-3">
           {brands.data === undefined || lines.data === undefined ? (

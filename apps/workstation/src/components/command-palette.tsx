@@ -3,6 +3,10 @@
  *
  * 它不是聊天框：每一项都是一个确定的动作（跳到某张卡 / 某个岗位，或往首页加一个数字块），
  * 没有自由文本会被送去问模型。工作台**没有全局聊天框**（36 §3 A4）。
+ *
+ * WP70（54 §4）：**岗位名排在前**；职责名也搜得到，但结果显示成「岗位 › 职责」——
+ * 搜"邮件营销"跳的还是网站运营那一页，只是这一行告诉你它归在哪个岗位下。
+ * 没装岗位面的服务进程退回按分配列（老样子）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
@@ -18,13 +22,20 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { listCatalog, type PositionSummary, switchBrand } from '@/lib/api'
+import {
+  listCatalog,
+  type PositionInstanceData,
+  type PositionSummary,
+  switchBrand,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { myAssignments } from '@/lib/positions'
 
 export function CommandPalette({
   open,
   onOpenChange,
   positions,
+  instances,
   cards,
   tileLibrary,
   onAddTile,
@@ -32,12 +43,16 @@ export function CommandPalette({
   open: boolean
   onOpenChange: (open: boolean) => void
   positions: PositionSummary[]
+  /** WP70：按岗位聚合的那一份。有它就先列岗位、再列「岗位 › 职责」。 */
+  instances?: PositionInstanceData[]
   cards: DeckCard[]
   tileLibrary: TileSpec[]
   onAddTile: (position_id: string, tile_id: string) => void
 }): React.ReactNode {
-  const { t, position } = useApp()
+  const { t, lang, position } = useApp()
   const navigate = useNavigate()
+  // 岗位面装着就按岗位列（岗位在前、职责跟在后面）；没装退回按分配列
+  const byPosition = (instances ?? []).filter((p) => myAssignments(p).length > 0)
   /**
    * 40 §2.2 第 1 条：⌘K 里也搜工具箱——"建之前先查"不能只在建的时候才想得起来。
    * 与工具箱页同源：都打 `GET /v1/catalog`。面板没打开就不拉（它不是首页的一部分）。
@@ -87,17 +102,55 @@ export function CommandPalette({
             >
               {t('nav.home')}
             </CommandItem>
-            {positions.map((p) => (
-              <CommandItem
-                key={p.position_id}
-                value={`${p.role_name} ${p.role_id}`}
-                onSelect={() => {
-                  go(`/positions/${p.position_id}`)
-                }}
-              >
-                {p.role_name}
-              </CommandItem>
-            ))}
+            {/* WP70：岗位排在职责前面 */}
+            {byPosition.map((p) => {
+              const first = myAssignments(p)[0] as string
+              return (
+                <CommandItem
+                  key={p.position_id}
+                  value={`${lang === 'en' ? p.name.en : p.name.zh} ${p.position_id}`}
+                  data-testid="command-position"
+                  onSelect={() => {
+                    go(`/positions/${first}`)
+                  }}
+                >
+                  {lang === 'en' ? p.name.en : p.name.zh}
+                </CommandItem>
+              )
+            })}
+            {byPosition.flatMap((p) =>
+              p.roles
+                .filter((r) => r.my_assignment_id !== undefined)
+                .map((r) => (
+                  <CommandItem
+                    key={`${p.position_id}/${r.role_id}`}
+                    value={`${r.role_name} ${r.role_id}`}
+                    data-testid="command-duty"
+                    onSelect={() => {
+                      go(`/positions/${r.my_assignment_id as string}`)
+                    }}
+                  >
+                    {t('duty.of_position', {
+                      position: lang === 'en' ? p.name.en : p.name.zh,
+                      duty: r.role_name,
+                    })}
+                  </CommandItem>
+                )),
+            )}
+            {byPosition.length > 0
+              ? null
+              : positions.map((p) => (
+                  <CommandItem
+                    key={p.position_id}
+                    value={`${p.role_name} ${p.role_id}`}
+                    data-testid="command-position"
+                    onSelect={() => {
+                      go(`/positions/${p.position_id}`)
+                    }}
+                  >
+                    {p.role_name}
+                  </CommandItem>
+                ))}
             <CommandItem
               onSelect={() => {
                 go('/knowledge')

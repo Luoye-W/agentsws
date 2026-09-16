@@ -1,6 +1,10 @@
 /**
  * 成员页：谁在这个工作区、各拿着什么岗位、管哪几个店，以及邀请与撤销。
  *
+ * WP70（54 §4，Luoye 09-16）：每人**先岗位、后职责**——一排岗位徽章，职责折在
+ * 徽章下面那个折叠层里，点开才看得到具体是哪几条（以及各自的范围与「撤销」）。
+ * 只挂零散职责、不属于任何岗位的人（历史数据）归到「未归岗位 · N 条职责」一堆。
+ *
  * 邀请在本地档是**一条链接**：这台机器没有邮箱通道时不假装"已发送"，
  * 而是把链接摆出来让你自己转发给同事（20 §5）。链接里那把 token 只出现这一次。
  */
@@ -10,6 +14,7 @@ import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DutyFold } from '@/components/ui/duty-fold'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +26,7 @@ import type {
 } from '@/lib/api'
 import { ensureSession, getPositions, offboardMember } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { groupDutiesByPosition } from '@/lib/positions'
 
 export function MembersTab({
   members,
@@ -327,11 +333,6 @@ export function MembersTab({
                 <span className="ml-2 font-normal text-muted-foreground text-xs">{m.email}</span>
               </CardTitle>
               <div className="flex items-center gap-2">
-                {m.positions.map((p) => (
-                  <Badge key={p.id} variant="secondary">
-                    {p.name}
-                  </Badge>
-                ))}
                 {m.role === 'owner' ? null : (
                   <>
                     <Button
@@ -365,36 +366,69 @@ export function MembersTab({
               {m.assignments.length === 0 ? (
                 <span className="text-muted-foreground">{t('org.members.no_position')}</span>
               ) : (
-                m.assignments.map((a) => (
+                /* WP70：先岗位（徽章），职责折在它下面 */
+                groupDutiesByPosition(
+                  m.assignments,
+                  positions.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    roles: p.roles.map((r) => ({ role_id: r.role_id })),
+                  })),
+                ).map((group) => (
                   <div
-                    key={a.assignment_id}
-                    className="flex items-center justify-between gap-2 rounded-md border px-2 py-1"
-                    data-testid="member-assignment"
+                    key={group.position_id ?? 'loose'}
+                    className="flex flex-col gap-1"
+                    data-testid="member-position"
+                    data-position={group.position_id ?? ''}
                   >
-                    <span>
-                      {a.role_name}
-                      <span className="ml-2 text-muted-foreground text-xs">
-                        {a.ranges.length === 0
-                          ? t('org.assign.range.none')
-                          : a.ranges.map((r) => r.id).join('、')}
-                      </span>
-                      {a.unassigned_range ? (
-                        <Badge variant="destructive" className="ml-2">
-                          {t('org.members.unassigned_range')}
-                        </Badge>
-                      ) : null}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-testid="assignment-revoke"
-                      disabled={busy}
-                      onClick={() => {
-                        onRevoke(a.assignment_id)
-                      }}
+                    <Badge
+                      variant={group.name === undefined ? 'outline' : 'secondary'}
+                      className="w-fit"
                     >
-                      {t('org.members.revoke')}
-                    </Button>
+                      {group.name ?? t('duty.none_position', { count: group.duties.length })}
+                    </Badge>
+                    <DutyFold
+                      testId={`member-duties-${group.position_id ?? 'loose'}`}
+                      duties={group.duties.map((a) => ({
+                        id: a.assignment_id,
+                        name: a.role_name,
+                      }))}
+                      renderDuty={(duty) => {
+                        const a = group.duties.find((x) => x.assignment_id === duty.id)
+                        if (a === undefined) return null
+                        return (
+                          <div
+                            className="flex items-center justify-between gap-2 rounded-md border px-2 py-1"
+                            data-testid="member-assignment"
+                          >
+                            <span>
+                              {a.role_name}
+                              <span className="ml-2 text-muted-foreground text-xs">
+                                {a.ranges.length === 0
+                                  ? t('org.assign.range.none')
+                                  : a.ranges.map((r) => r.id).join('、')}
+                              </span>
+                              {a.unassigned_range ? (
+                                <Badge variant="destructive" className="ml-2">
+                                  {t('org.members.unassigned_range')}
+                                </Badge>
+                              ) : null}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              data-testid="assignment-revoke"
+                              disabled={busy}
+                              onClick={() => {
+                                onRevoke(a.assignment_id)
+                              }}
+                            >
+                              {t('org.members.revoke')}
+                            </Button>
+                          </div>
+                        )
+                      }}
+                    />
                   </div>
                 ))
               )}

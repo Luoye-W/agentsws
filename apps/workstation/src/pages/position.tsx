@@ -22,6 +22,7 @@ import { PositionEntry } from '@/components/work/position-entry'
 import { getPosition, getPositionRecords, getPositions, getPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
+import { assignmentForPosition } from '@/lib/positions'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
 
@@ -231,16 +232,26 @@ function RecordRows({ id }: { id: string }): React.ReactNode {
 }
 
 export function PositionPage(): React.ReactNode {
-  const { t, selectPosition } = useApp()
+  const { t, selectPosition, position } = useApp()
   const params = useParams<{ id: string }>()
   const [search, setSearch] = useSearchParams()
   const id = params.id ?? ''
   const tab = search.get('tab') ?? 'cards'
+  // WP70：当前分配跟着**岗位**走，所以要知道这条 id 属于哪个岗位（左栏那份就够）
+  const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
 
-  // 进岗位页就把当前 Assignment 切过去（31 §3.1 一次请求一个 Assignment）
+  /*
+   * 进岗位页就把当前 Assignment 切过去（31 §3.1 一次请求一个 Assignment）。
+   *
+   * WP70（54 §4）：切的粒度是**岗位**——当前分配已经属于这个岗位就不动它
+   * （职责层的切换只在岗位页折叠层里做，点一下左栏不该把人顶回第一条职责）；
+   * 不属于就换成地址栏这条。
+   */
   useEffect(() => {
-    if (id !== '') selectPosition(id)
-  }, [id, selectPosition])
+    if (id === '') return
+    const next = assignmentForPosition(mine.data?.instances, id, position)
+    if (next !== position) selectPosition(next)
+  }, [id, mine.data?.instances, position, selectPosition])
 
   return (
     <div className="flex flex-col gap-4" data-testid="position-page" data-position={id}>

@@ -7,11 +7,12 @@
  * - 拿不准的时候界面不替人选：把候选摆出来，让人点一下。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Send, Split } from 'lucide-react'
+import { Send, Split } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DutyFold } from '@/components/ui/duty-fold'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -34,7 +35,6 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
   const client = useQueryClient()
   const navigate = useNavigate()
   const [text, setText] = useState('')
-  const [openRoles, setOpenRoles] = useState(false)
   const [choice, setChoice] = useState<OpenAtPositionData | undefined>(undefined)
 
   const position = useQuery({
@@ -151,56 +151,41 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
           </fieldset>
         )}
 
-        {/* 职责是第二层：默认折叠（54 §4） */}
-        <div>
-          <button
-            type="button"
-            className="flex items-center gap-1 text-xs text-muted-foreground"
-            aria-expanded={openRoles}
-            data-testid="position-roles-toggle"
-            onClick={() => {
-              setOpenRoles((v) => !v)
-            }}
-          >
-            {openRoles ? (
-              <ChevronDown className="size-3.5" aria-hidden />
-            ) : (
-              <ChevronRight className="size-3.5" aria-hidden />
-            )}
-            {t('position.roles.toggle', { count: view.roles.length })}
-          </button>
-          {openRoles ? (
-            <ul className="mt-2 flex flex-col gap-1" data-testid="position-roles">
-              {view.roles.map((r) => (
-                <li
-                  key={r.role_id}
-                  className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm"
-                  data-role={r.role_id}
+        {/* 职责是第二层：默认折叠（54 §4 / WP70 的共用折叠件） */}
+        <DutyFold
+          testId="position-roles"
+          label={t('position.roles.toggle', { count: view.roles.length })}
+          duties={view.roles.map((r) => ({ id: r.role_id, name: r.role_name }))}
+          renderDuty={(duty) => {
+            const role = view.roles.find((r) => r.role_id === duty.id)
+            return (
+              <div
+                className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm"
+                data-role={duty.id}
+              >
+                <span className="truncate">{duty.name}</span>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  disabled={
+                    role?.my_assignment_id === undefined || text.trim() === '' || withRole.isPending
+                  }
+                  title={text.trim() === '' ? t('position.roles.open_with.need_text') : undefined}
+                  data-testid="open-with-role"
+                  onClick={() => {
+                    // 只能用**本人**那一条：拿别人那条去开，就是借岗位扩权
+                    const assignment = role?.my_assignment_id
+                    if (assignment === undefined) return
+                    withRole.mutate({ assignment, title: text.trim() })
+                  }}
                 >
-                  <span className="truncate">{r.role_name}</span>
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    disabled={
-                      r.my_assignment_id === undefined || text.trim() === '' || withRole.isPending
-                    }
-                    title={text.trim() === '' ? t('position.roles.open_with.need_text') : undefined}
-                    data-testid="open-with-role"
-                    onClick={() => {
-                      // 只能用**本人**那一条：拿别人那条去开，就是借岗位扩权
-                      const assignment = r.my_assignment_id
-                      if (assignment === undefined) return
-                      withRole.mutate({ assignment, title: text.trim() })
-                    }}
-                  >
-                    <Split className="size-3.5" aria-hidden />
-                    {t('position.roles.open_with')}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+                  <Split className="size-3.5" aria-hidden />
+                  {t('position.roles.open_with')}
+                </Button>
+              </div>
+            )
+          }}
+        />
       </CardContent>
     </Card>
   )
