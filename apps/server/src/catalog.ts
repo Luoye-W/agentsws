@@ -19,7 +19,10 @@ export const ROLE_CONNECTOR_KIND: Readonly<Record<string, string>> = {
   imap_smtp: 'email',
   gmail: 'email',
   ga4: 'ga4',
-  gsc: 'gsc',
+  // WP83：职责模板写的是 `search_console`（`dtc/content.yml`），provider 叫 `gsc`。
+  // 这里归并成职责那一侧的名字，否则连上 Search Console 之后 `missing_connectors`
+  // 还会一直说缺——连接目录（契约 `connection-directory.ts`）把两个名字都认作同一条。
+  gsc: 'search_console',
   meta_ads: 'meta',
   // WP64（51 §2.3 / §2.4）：职责模板问的是"有没有一家邮件营销 / 物流追踪"，
   // 不问是哪一家——`dtc.email-marketing` 写 `kind: email_marketing`，

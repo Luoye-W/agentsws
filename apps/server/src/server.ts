@@ -8,7 +8,14 @@ import { mkdirSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
-import type { AskPort, ChatPort, PositionEntryPort, WorkPort, WorkstationPort } from '@agentsws/api'
+import type {
+  AskPort,
+  ChatPort,
+  ConnectionDirectoryPort,
+  PositionEntryPort,
+  WorkPort,
+  WorkstationPort,
+} from '@agentsws/api'
 import {
   ApiError,
   createAsyncTraceScope,
@@ -97,6 +104,7 @@ import {
 import {
   brandAskPort,
   brandCloudPort,
+  brandConnectionDirectoryPort,
   brandConnectionsPort,
   brandKolPort,
   brandModelsPort,
@@ -120,6 +128,8 @@ import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
 import { type CloudAssembly, type CloudFetch as CloudEntryFetch, createCloud } from './cloud.js'
 import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
 import { connectBaseUrl } from './connect-url.js'
+// WP83（54 §4）：连接目录 + 岗位连接清单 + 自定义 MCP 服务器（保存 / 校验 / 探测）
+import { createConnectionDirectory } from './connection-directory.js'
 import {
   type ConnectionsAssembly,
   type ConnectLike,
@@ -2548,6 +2558,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
   )
+  /**
+   * WP83（54（将改号 55）§4 前两层）：连接目录与岗位连接清单——**一个品牌一份**。
+   *
+   * 与连接面同一条理由（52 O1）：目录上的"已连 / 未连"是这个品牌的连接算出来的，
+   * 岗位清单也一样。制度层那三样（岗位模板、职责定义、分配表）跨品牌共用，
+   * 所以 `positions` 与 `roles` 都是现查的同一份。
+   *
+   * MCP 那张表跟着品牌走：登记文件落在这个品牌的目录下，请求头进这个品牌那一段
+   * 加密库——品牌 A 登记的那台服务器与它的 token，在 B 的任何路由里都读不到。
+   */
+  const directoryPorts = new Map<WorkspaceId, ConnectionDirectoryPort>()
+  const directoryPortFor = async (ws: WorkspaceId): Promise<ConnectionDirectoryPort> => {
+    const cached = directoryPorts.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const assembly = createConnectionDirectory({
+      clock,
+      workspace_id: ws,
+      ...(brand.dir === undefined ? {} : { dir: brand.dir }),
+      secrets: brand.secrets,
+      roles,
+      positions: () => org.positions(),
+      connectedKinds: () => brand.connections.connectedKinds(),
+      connections: () => brand.connections.liveConnections(),
+      storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+    })
+    const port: ConnectionDirectoryPort = {
+      directory: () => assembly.directory(),
+      positionConnections: (actor, id) => assembly.positionConnections(actor.person_id, id),
+      listMcpServers: () => assembly.listMcp(),
+      // 请求头的值只在这一次调用里往下传，网关与这一层都不读、不记、不回显
+      saveMcpServer: (_actor, input) => assembly.saveMcp(input),
+      probeMcpServer: (_actor, name) => assembly.probeMcp(name),
+      removeMcpServer: (_actor, name) => assembly.removeMcp(name),
+    }
+    directoryPorts.set(ws, port)
+    return port
+  }
+  const connectionDirectoryOf = brandConnectionDirectoryPort(brandModules, directoryPortFor)
 
   const workPortOf = brandWorkPort(brandModules, workPortFor)
   const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
@@ -2570,6 +2619,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     meetings: meetings.port,
     // WP20 / WP66：连接面按品牌（死信与重投也按品牌，见 `brand-ports.ts`）
     connections: brandConnectionsPort(brandModules),
+    // WP83（54 §4）：连接目录（按 kind 的总表）与岗位连接清单，也按品牌
+    connectionDirectory: connectionDirectoryOf,
     // WP31：本机秘密库的密钥轮换（owner）。密钥只在请求体里出现一次，
     // 网关这一层不碰库、也不碰值，只把「换了几条」端出去。
     secrets: {

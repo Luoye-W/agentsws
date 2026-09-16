@@ -9,6 +9,12 @@
  * 2. `openapi-typescript` → `packages/sdk/src/schema.ts`
  * 3. `biome check --write` 把两份产物按仓库风格格式化
  *
+ *    **注意 `biome.json` 的 `files.maxSize`**（WP83 踩到）：biome 默认只处理 1 MiB 以内的
+ *    文件，超了**不报错、只跳过**。第 1 步写出去的是 `JSON.stringify(doc, null, 2)`，
+ *    数组一律展开，比格式化之后大一截——路由一多它就悄悄越过 1 MiB，于是产物不再被
+ *    格式化，`git diff --exit-code` 当场红，而错误信息里一个字都不提格式化被跳过了。
+ *    所以 `biome.json` 把上限提到了 4 MiB；哪天又撞上，先看这一条。
+ *
  * 产物是**签进仓库**的：CI 里跑一遍再 `git diff --exit-code`，
  * 于是「改了路由但忘了重生成 SDK」会红在 CI 上，而不是等第三方接的时候才发现。
  *

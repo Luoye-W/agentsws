@@ -22,6 +22,7 @@ import { chatRoutes } from './routes/chat.js'
 // WP59（49 M2 / M5）：云上余额与价目的本地投影 + 每项能力的"用我的 / 用 agentsws 的"开关
 import { cloudRoutes } from './routes/cloud.js'
 import { cloudAccountRoutes } from './routes/cloud-account.js'
+import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
 import { eventRoutes } from './routes/events.js'
 import { haltRoutes } from './routes/halt.js'
@@ -81,6 +82,15 @@ export function collectRoutes(): Route[] {
     ...changeRoutes(),
     // WP20 连接面：`providers` / `runtime` / `requests/:id` 是定值段，与 `/v1/connections/:service/...` 不撞
     ...connectionRoutes(),
+    /*
+     * WP83（54（将改号 55）§4）：连接目录与岗位连接清单。
+     *
+     * `/v1/connection-directory*` 是新前缀，与别处都不撞。`/v1/positions/:id/connections`
+     * 与 workstation / ontology / 岗位面那几条共用 `/v1/positions/:id` 前缀，`connections`
+     * 是定值段——与 `cards` / `view` / `records` / `ontology` / `matters` 都不同，
+     * 也遮不住岗位面那条光秃秃的 `:id`（它后面没有第三段）。
+     */
+    ...connectionDirectoryRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
     /*

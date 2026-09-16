@@ -1,0 +1,822 @@
+/**
+ * 连接目录（54（将改号 55）§4 第一层；18 §1 之外的那张"总表"）。
+ *
+ * 三层里的**第一层**：所有能接的东西的登记表。另外两层是
+ * 「岗位连接清单」（岗位页那张"连上这 N 个就能开工"的卡，只列这个岗位要的）
+ * 与「职责 preset」（官方 `agent-presets` 承载，本期不做）。
+ *
+ * 为什么这张表住在契约里而不是服务进程里：
+ *
+ * - 职责模板（05 §1.2 `ConnectorDependency`）写的是 `kind`（`email` / `shop` / `youtube_data`），
+ *   岗位清单、向导清单、连接页、面板的"去连接"四处都要把同一个 kind 翻成同一句人话。
+ *   翻译表只能有一份，否则四处各写各的，改一个名字要改四处。
+ * - `apps/server/src/catalog.ts` 那张表是**按 provider（service）**列的——它回答的是
+ *   "这张卡怎么填、字段是什么、凭据存哪"，是连接页那一侧的事实。这张表是**按 kind** 列的，
+ *   回答的是"职责问的这个 kind 是什么东西、现在有没有、点哪张卡"。两张表按
+ *   {@link ConnectionDirectoryEntry.service} 对上，谁也不抄谁。
+ *
+ * **这张表里永远没有凭据、也没有任何一条真实连接。** `fields` 只有字段**描述**
+ * （名字、要不要、是不是密码），值只走 13 §4.3 的原生表单那一条路。
+ * 运行时状态（已连 / 未连 / 出错）由服务进程在返回前贴上来，不写死在这里。
+ *
+ * 36 §2：条目里不出现任何原始店铺 id / 账号 id——目录说的是"哪一类东西"，
+ * 具体连了哪家店是 `Connection.identity` 的事。
+ */
+
+/** 目录分类（连接页"添加连接"按它分组；顺序即出场顺序）。 */
+export type ConnectionCategory =
+  | 'storefront'
+  | 'mailbox'
+  | 'marketplace'
+  | 'analytics'
+  | 'ads'
+  | 'social'
+  | 'marketing'
+  | 'logistics'
+  | 'payment'
+  | 'reviews'
+  | 'im'
+  | 'dev'
+  | 'custom'
+
+/**
+ * 鉴权方式。
+ *
+ * - `oauth`：去平台的授权页点同意（Google / Meta / Amazon SP-API）。
+ * - `api_key`：后台生成一串密钥，粘进原生表单。
+ * - `client_credentials`：客户端 id + 密钥换令牌（Shopify Dev Dashboard、企业微信）。
+ * - `qr`：扫码（微信 ClawBot）。
+ * - `password`：账号 + 密码 / 授权码（IMAP / SMTP）。
+ * - `none`：不用鉴权（本机 stdio MCP 服务器、内建聊天窗）。
+ */
+export type ConnectionAuth = 'oauth' | 'api_key' | 'client_credentials' | 'qr' | 'password' | 'none'
+
+/**
+ * 接法（54（将改号 55）§4 那一列"模式"）。
+ *
+ * - `openconnector_provider`：走 OpenConnector 的 provider（08）。
+ * - `mcp_server`：一台 MCP 服务器（官方 / 自定义）。
+ * - `channel_adapter`：对话渠道适配器（18 §2 入站管线；dsh 没有这一层，我们自己做）。
+ * - `browser`：靠官方 `dsh-browser-use` 在浏览器里干（54（将改号 55）§3）。
+ * - `builtin`：这个进程自己就是那一头（内建聊天窗）。
+ */
+export type ConnectionMode =
+  | 'openconnector_provider'
+  | 'mcp_server'
+  | 'channel_adapter'
+  | 'browser'
+  | 'builtin'
+
+/**
+ * 读写分类（54（将改号 55）§3 那一栏、`gate.ts` 的 `classifySideEffect` 同一套词）。
+ *
+ * 取这条连接**能做到的最重的那一件事**：能发信 / 能改单 = `write_external`，
+ * 只读 = `read_external`，根本不出这台机器 = `local`。拿不准一律按写
+ * （与浏览器工具的未知名兜底同一条纪律）。
+ */
+export type ConnectionSideEffect = 'read_external' | 'write_external' | 'local'
+
+/**
+ * 这一条现在有没有。
+ *
+ * - `available`：点得动，能连上。
+ * - `planned`：登记在册、还没做。**明着列出来**而不是藏起来——用户在目录里找不到
+ *   「评价应用」时只会以为是自己没找到（与 `apps/server/src/catalog.ts` 的
+ *   `planned` 同一条理由）。
+ */
+export type ConnectionAvailability = 'available' | 'planned'
+
+/** 原生表单的一个字段**描述**。值永远不经这里（13 §4.3）。 */
+export interface ConnectionFieldSpec {
+  name: string
+  label: { zh: string; en: string }
+  /** `true` = 界面上一律 `type=password` + `autocomplete=off`，且只进加密库。 */
+  secret: boolean
+  required: boolean
+  kind?: 'text' | 'password' | 'email' | 'number' | 'url' | 'select' | 'headers'
+  placeholder?: string
+  /** `kind: 'select'` 的可选值。 */
+  options?: readonly string[]
+  hint?: { zh: string; en: string }
+}
+
+/** 连接目录的一条。 */
+export interface ConnectionDirectoryEntry {
+  /** 职责模板 `connectors[].kind` 用的那个名字（05 §1.2）。全表唯一。 */
+  kind: string
+  name: { zh: string; en: string }
+  category: ConnectionCategory
+  auth: ConnectionAuth
+  mode: ConnectionMode
+  fields: readonly ConnectionFieldSpec[]
+  side_effect: ConnectionSideEffect
+  /** 外链（平台文档）或站内路由（`/im-channels`）。 */
+  docs_url?: string
+  status: ConnectionAvailability
+  /**
+   * 连接页上对应那张卡的 provider id（`apps/server/src/catalog.ts` 的 `service`）。
+   * 没有 = 目录里有它、连接页上还没有卡（`status: 'planned'` 的多数是这种）。
+   */
+  service?: string
+  /**
+   * 同一件事的**别名 kind**：职责模板里历史上写过的另一个名字。
+   *
+   * 只加不删。`amazon`（`amz/support.yml` 写的）与 `amazon_sp`（SP-API 的正名）、
+   * `gsc`（连接目录里 provider 的名字）与 `search_console`（职责模板写的）都是这么对上的。
+   */
+  aliases?: readonly string[]
+  /**
+   * `true` = 这个 kind 不直接对应一张卡，要**按公司档案解析**（51 §1 N0）。
+   * 只有平台中立的 `shop`：Shopify 的工作区解析成 Shopify 店铺，WooCommerce 的解析成 WooCommerce。
+   */
+  resolved_by_profile?: boolean
+  /** 一句人话：这是什么 / 为什么还没做。界面上的灰字。 */
+  note?: { zh: string; en: string }
+}
+
+// ── 几组复用的字段描述 ────────────────────────────────────────────────
+
+const OAUTH_NO_FIELDS: readonly ConnectionFieldSpec[] = []
+
+/** 只要一串 API key 的那一类。 */
+const apiKeyField = (hintZh: string, hintEn: string): readonly ConnectionFieldSpec[] => [
+  {
+    name: 'api_key',
+    label: { zh: 'API 密钥', en: 'API key' },
+    secret: true,
+    required: true,
+    kind: 'password',
+    hint: { zh: hintZh, en: hintEn },
+  },
+]
+
+/**
+ * 自定义 MCP 服务器的字段（54（将改号 55）§4「自定义 MCP 服务器也是一个条目」）。
+ *
+ * 本期只做**保存、校验与探测**：连一次、把它报的 tools 列表存下来。
+ * **不接进运行时**——把 MCP 服务器挂到 Agent 上是官方 `mcp-client` 按 preset 的事
+ * （54（将改号 55）§2 / §4 第三层），那要等官方 Agent 层引进来。
+ */
+const MCP_FIELDS: readonly ConnectionFieldSpec[] = [
+  {
+    name: 'name',
+    label: { zh: '名字', en: 'Name' },
+    secret: false,
+    required: true,
+    kind: 'text',
+    placeholder: 'my-tools',
+    hint: {
+      zh: '你自己起的名字，全局唯一；只能用小写字母、数字、短横线',
+      en: 'Your own name for it; globally unique; lower-case letters, digits and dashes only',
+    },
+  },
+  {
+    name: 'transport',
+    label: { zh: '连法', en: 'Transport' },
+    secret: false,
+    required: true,
+    kind: 'select',
+    options: ['stdio', 'streamable-http'],
+    hint: {
+      zh: '本机跑一个命令就选 stdio；连一台远端服务器就选 streamable-http',
+      en: 'Pick stdio to run a local command, streamable-http to reach a remote server',
+    },
+  },
+  {
+    name: 'command',
+    label: { zh: '命令', en: 'Command' },
+    secret: false,
+    required: false,
+    kind: 'text',
+    placeholder: 'npx',
+    hint: { zh: 'stdio 才要：要跑的那个可执行文件', en: 'stdio only: the executable to run' },
+  },
+  {
+    name: 'args',
+    label: { zh: '参数', en: 'Arguments' },
+    secret: false,
+    required: false,
+    kind: 'text',
+    placeholder: '-y @scope/some-mcp-server',
+    hint: { zh: '空格分隔；stdio 才要', en: 'Space separated; stdio only' },
+  },
+  {
+    name: 'url',
+    label: { zh: '地址', en: 'URL' },
+    secret: false,
+    required: false,
+    kind: 'url',
+    placeholder: 'https://example.com/mcp',
+    hint: {
+      zh: 'streamable-http 才要；必须是 https（本机 127.0.0.1 除外）',
+      en: 'streamable-http only; must be https (except 127.0.0.1)',
+    },
+  },
+  {
+    name: 'headers',
+    label: { zh: '请求头', en: 'Headers' },
+    secret: true,
+    required: false,
+    kind: 'headers',
+    hint: {
+      zh: '一行一个 `名字: 值`。值当凭据看：只进本机加密库，不进日志、不进模型',
+      en: 'One `Name: value` per line. Treated as credentials: encrypted vault only, never logged or shown to the model',
+    },
+  },
+]
+
+// ── 登记表 ────────────────────────────────────────────────────────────
+
+/**
+ * **连接目录**。一条 = 职责模板问得出来的一个 `kind`。
+ *
+ * 覆盖三样，一样不能少（否则岗位清单上会出现一条查不到名字的行）：
+ * ① 所有职责模板 `connectors[].kind`（`packages/roles/roles/**.yml` 与 `packs/`、`role-packs/`）；
+ * ② 红人五条渠道的 `connector_kind`（`kol.ts` 的 `KOL_CHANNELS`）；
+ * ③ 已经有 OpenConnector provider 的那几家（邮箱 / Shopify / WooCommerce / GA4 / Search Console / Meta）。
+ *
+ * 顺序 = 连接页"添加连接"里的出场顺序（先分类、类内按重要性）。
+ */
+export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
+  // ── 店铺后台 ────────────────────────────────────────────────────────
+  {
+    kind: 'shop',
+    name: { zh: '店铺后台', en: 'Storefront' },
+    category: 'storefront',
+    auth: 'none',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    status: 'available',
+    resolved_by_profile: true,
+    note: {
+      zh: '平台中立的那一条：职责写 `shop`，具体连哪一家看公司档案里的「网站是用什么搭的」。',
+      en: 'Platform-neutral: roles ask for `shop`; which platform it resolves to comes from the workspace profile.',
+    },
+  },
+  {
+    kind: 'shopify',
+    name: { zh: 'Shopify 店铺', en: 'Shopify' },
+    category: 'storefront',
+    auth: 'client_credentials',
+    mode: 'openconnector_provider',
+    service: 'shopify_admin',
+    aliases: ['shopify_admin'],
+    fields: [
+      {
+        name: 'shop_domain',
+        label: { zh: '店铺域名', en: 'Shop domain' },
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: 'your-store.myshopify.com',
+      },
+      {
+        name: 'client_id',
+        label: { zh: '客户端 ID', en: 'Client ID' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+      {
+        name: 'client_secret',
+        label: { zh: '客户端密钥', en: 'Client secret' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials',
+    status: 'available',
+  },
+  {
+    kind: 'woocommerce',
+    name: { zh: 'WooCommerce 店铺', en: 'WooCommerce' },
+    category: 'storefront',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    service: 'woocommerce',
+    fields: [
+      {
+        name: 'site_url',
+        label: { zh: '网站地址', en: 'Site URL' },
+        secret: false,
+        required: true,
+        kind: 'url',
+      },
+      {
+        name: 'consumer_key',
+        label: { zh: 'Consumer key', en: 'Consumer key' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+      {
+        name: 'consumer_secret',
+        label: { zh: 'Consumer secret', en: 'Consumer secret' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://woocommerce.github.io/woocommerce-rest-api-docs/',
+    status: 'planned',
+    note: {
+      zh: 'OpenConnector 容器里已经有这个 provider，缺的是动作对照表（51 §1「下一个平台」）。',
+      en: 'The OpenConnector provider exists; the action mapping is what is still missing.',
+    },
+  },
+  // ── 邮箱 ────────────────────────────────────────────────────────────
+  {
+    kind: 'email',
+    name: { zh: '邮箱', en: 'Mailbox' },
+    category: 'mailbox',
+    auth: 'password',
+    mode: 'openconnector_provider',
+    service: 'imap_smtp',
+    fields: [
+      {
+        name: 'email',
+        label: { zh: '邮箱地址', en: 'Email address' },
+        secret: false,
+        required: true,
+        kind: 'email',
+      },
+      {
+        name: 'password',
+        label: { zh: '密码 / 授权码', en: 'Password / app password' },
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: {
+          zh: '国内邮箱一律用「授权码」，不是平时登录那个密码',
+          en: 'Most mail providers want an app password, not your login password',
+        },
+      },
+    ],
+    side_effect: 'write_external',
+    status: 'available',
+    note: {
+      zh: '任意 IMAP / SMTP 邮箱；Gmail 走 Google 授权那张卡也算这一条。',
+      en: 'Any IMAP / SMTP mailbox; the Gmail OAuth card satisfies this one too.',
+    },
+  },
+  // ── 平台电商 ────────────────────────────────────────────────────────
+  {
+    kind: 'amazon_sp',
+    name: { zh: '亚马逊 SP-API', en: 'Amazon SP-API' },
+    category: 'marketplace',
+    aliases: ['amazon'],
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url: 'https://developer-docs.amazon.com/sp-api/',
+    status: 'planned',
+    note: {
+      zh: '还没接：亚马逊客服现在靠买家消息寄生在客服邮箱上（Amazon relay 地址），退款额度等 SP-API 接上再给。',
+      en: 'Not wired yet: Amazon buyer messages arrive through the support mailbox relay for now.',
+    },
+  },
+  // ── 数据分析 ────────────────────────────────────────────────────────
+  {
+    kind: 'ga4',
+    name: { zh: 'Google Analytics 4', en: 'Google Analytics 4' },
+    category: 'analytics',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    service: 'ga4',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'read_external',
+    docs_url: 'https://developers.google.com/analytics/devguides/reporting/data/v1',
+    status: 'available',
+  },
+  {
+    kind: 'search_console',
+    name: { zh: 'Google Search Console', en: 'Google Search Console' },
+    category: 'analytics',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    service: 'gsc',
+    // 职责模板写 `search_console`，连接目录里 provider 叫 `gsc`——两个名字都要认得
+    aliases: ['gsc'],
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'read_external',
+    docs_url: 'https://developers.google.com/webmaster-tools',
+    status: 'available',
+  },
+  // ── 广告 ────────────────────────────────────────────────────────────
+  {
+    kind: 'meta',
+    name: { zh: 'Meta 广告', en: 'Meta Ads' },
+    category: 'ads',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    service: 'meta_ads',
+    aliases: ['meta_ads'],
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url: 'https://developers.facebook.com/apps',
+    status: 'available',
+  },
+  // ── 社媒与红人（48 §5.1 五条渠道）────────────────────────────────────
+  {
+    kind: 'youtube_data',
+    name: { zh: 'YouTube Data API', en: 'YouTube Data API' },
+    category: 'social',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField(
+      'Google Cloud 里启用 YouTube Data API v3 之后生成的那串 key',
+      'The key you get after enabling YouTube Data API v3 in Google Cloud',
+    ),
+    side_effect: 'read_external',
+    docs_url: 'https://developers.google.com/youtube/v3',
+    status: 'planned',
+    note: {
+      zh: '全站一天 10000 单位配额，不是按工作区算的。没连也能干活——找人先用导入你手上那张表。',
+      en: 'A site-wide 10k unit daily quota. Sourcing works without it via imports and the public library.',
+    },
+  },
+  {
+    kind: 'facebook_graph',
+    name: { zh: 'Facebook Graph API', en: 'Facebook Graph API' },
+    category: 'social',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'read_external',
+    docs_url: 'https://developers.facebook.com/docs/graph-api',
+    status: 'planned',
+    note: {
+      zh: '读主页与群组博主要 Meta 的主页权限，审核制。',
+      en: 'Reading pages and group creators needs reviewed Meta page permissions.',
+    },
+  },
+  {
+    kind: 'instagram_graph',
+    name: { zh: 'Instagram Graph API', en: 'Instagram Graph API' },
+    category: 'social',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'read_external',
+    docs_url: 'https://developers.facebook.com/docs/instagram-platform',
+    status: 'planned',
+    note: {
+      zh: '它没有「按关键词搜人」这回事，只能按名字查指名的账号。',
+      en: 'It has no keyword creator search — only lookups of accounts you already name.',
+    },
+  },
+  {
+    kind: 'tiktok_research',
+    name: { zh: 'TikTok Research API', en: 'TikTok Research API' },
+    category: 'social',
+    auth: 'client_credentials',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'client_key',
+        label: { zh: 'Client key', en: 'Client key' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+      {
+        name: 'client_secret',
+        label: { zh: 'Client secret', en: 'Client secret' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+    ],
+    side_effect: 'read_external',
+    docs_url: 'https://developers.tiktok.com/doc/about-research-api',
+    status: 'planned',
+    note: {
+      zh: '申请制：要向 TikTok 提交用途说明，批了才有数据。',
+      en: 'Application-gated: TikTok must approve your stated research use.',
+    },
+  },
+  {
+    kind: 'x_api',
+    name: { zh: 'X API', en: 'X API' },
+    category: 'social',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField(
+      'X 开发者后台里那串 Bearer token',
+      'The bearer token from the X developer portal',
+    ),
+    side_effect: 'read_external',
+    docs_url: 'https://developer.x.com/en/docs/x-api',
+    status: 'planned',
+    note: { zh: '官方接口是付费档，数据供给要花钱。', en: 'The official API is a paid tier.' },
+  },
+  // ── 营销 ────────────────────────────────────────────────────────────
+  {
+    kind: 'email_marketing',
+    name: { zh: '邮件营销', en: 'Email marketing' },
+    category: 'marketing',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    service: 'klaviyo',
+    fields: apiKeyField(
+      'Klaviyo 后台 Settings → API keys，只勾读权限就够',
+      'Klaviyo Settings → API keys; read-only scope is enough',
+    ),
+    side_effect: 'read_external',
+    docs_url: 'https://developers.klaviyo.com/en/reference/api_overview',
+    status: 'planned',
+    note: {
+      zh: '只读分群、模板与活动效果。群发永远是一张要人点头的卡（51 §2.3），不走这条连接。',
+      en: 'Read-only segments, templates and campaign results; sending always goes through an approval card.',
+    },
+  },
+  // ── 物流 ────────────────────────────────────────────────────────────
+  {
+    kind: 'tracking',
+    name: { zh: '物流追踪', en: 'Shipment tracking' },
+    category: 'logistics',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    service: 'aftership',
+    fields: apiKeyField(
+      'AfterShip 后台 Settings → API keys，只勾读权限',
+      'AfterShip Settings → API keys, read-only',
+    ),
+    side_effect: 'read_external',
+    docs_url: 'https://www.aftership.com/docs/tracking/quickstart/api-quick-start',
+    status: 'planned',
+    note: {
+      zh: '只读轨迹：包裹到哪了、有没有异常。不回写单号——那是标记发货那条变更的事（51 §2.4）。',
+      en: 'Read-only tracking; writing tracking numbers back belongs to the fulfilment change, not here.',
+    },
+  },
+  // ── 支付与纠纷 ──────────────────────────────────────────────────────
+  {
+    kind: 'payment_dispute',
+    name: { zh: '支付纠纷', en: 'Payment disputes' },
+    category: 'payment',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField(
+      '支付服务商后台生成的只读密钥',
+      'A read-only key from your payment provider',
+    ),
+    side_effect: 'read_external',
+    status: 'planned',
+    note: {
+      zh: '还没接：拒付与争议先靠店铺后台那一份，客服岗位没有它照样能干活。',
+      en: 'Not wired yet: chargebacks come from the storefront for now.',
+    },
+  },
+  // ── 评价 ────────────────────────────────────────────────────────────
+  {
+    kind: 'reviews',
+    name: { zh: '评价应用', en: 'Reviews app' },
+    category: 'reviews',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    service: 'judgeme',
+    fields: apiKeyField('Judge.me 后台里的 API token', 'The API token from the Judge.me admin'),
+    side_effect: 'write_external',
+    docs_url: 'https://judge.me/api/docs',
+    status: 'planned',
+    note: {
+      zh: '接上之后店铺管理岗位的差评表与邀评就有数了；Loox 排在它后面。',
+      en: 'Once wired, the store role gets its bad-review list and review invites; Loox comes after.',
+    },
+  },
+  // ── 聊天渠道 ────────────────────────────────────────────────────────
+  {
+    kind: 'chat_widget',
+    name: { zh: '网站在线聊天窗', en: 'Website chat widget' },
+    category: 'im',
+    auth: 'none',
+    mode: 'builtin',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    status: 'available',
+    note: {
+      zh: '这个进程自己就是那一头：把一段代码贴进网站就通了，不用连任何第三方。',
+      en: 'This process is the other end: paste one snippet into your site and it works.',
+    },
+  },
+  {
+    kind: 'wechat_clawbot',
+    name: { zh: '个人微信（ClawBot）', en: 'Personal WeChat (ClawBot)' },
+    category: 'im',
+    auth: 'qr',
+    mode: 'channel_adapter',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    // WP85 定的路由名；那一页做出来之前点过去是一页"还没做"
+    docs_url: '/im-channels',
+    status: 'planned',
+    note: {
+      zh: '「我的代理」的微信入口：本人问自己的代理、收自己的卡片。同事加不了、不能进群、收不到别人发给你的消息。',
+      en: 'A personal line to your own agent only: colleagues cannot add it, it cannot join groups.',
+    },
+  },
+  {
+    kind: 'wecom_bot',
+    name: { zh: '企业微信机器人', en: 'WeCom bot' },
+    category: 'im',
+    auth: 'client_credentials',
+    mode: 'channel_adapter',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url: '/im-channels',
+    status: 'planned',
+    note: {
+      zh: '团队渠道：审批卡推送、同事在群里 @ 代理。',
+      en: 'The team channel: approval cards and @-mentions in group chats.',
+    },
+  },
+  // ── 开发 ────────────────────────────────────────────────────────────
+  {
+    kind: 'github',
+    name: { zh: 'GitHub', en: 'GitHub' },
+    category: 'dev',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField(
+      '一枚只读的 fine-grained personal access token',
+      'A read-only fine-grained personal access token',
+    ),
+    side_effect: 'read_external',
+    docs_url: 'https://docs.github.com/en/rest',
+    status: 'planned',
+    note: {
+      zh: '建站岗位读主题仓库用；没有它主题读写照样走 Shopify 那条。',
+      en: 'Used by the site-builder role to read a theme repo; theme editing itself goes through Shopify.',
+    },
+  },
+  // ── 自定义 ──────────────────────────────────────────────────────────
+  {
+    kind: 'mcp_server',
+    name: { zh: '自定义 MCP 服务器', en: 'Custom MCP server' },
+    category: 'custom',
+    auth: 'none',
+    mode: 'mcp_server',
+    fields: MCP_FIELDS,
+    // 一台 MCP 服务器能干什么我们事先不知道，按 54（将改号 55）§3 的兜底规矩算写
+    side_effect: 'write_external',
+    docs_url: 'https://modelcontextprotocol.io/docs/concepts/transports',
+    status: 'available',
+    note: {
+      zh: '本期只做保存、校验与探测（连一次、把它报的工具列出来）；还不会挂到 Agent 上。',
+      en: 'This release only saves, validates and probes it (listing its tools); it is not wired into the agent yet.',
+    },
+  },
+]
+
+/** 分类 → 中英名（连接页"添加连接"的分组标题）。顺序即出场顺序。 */
+export const CONNECTION_CATEGORIES: readonly {
+  id: ConnectionCategory
+  name: { zh: string; en: string }
+}[] = [
+  { id: 'storefront', name: { zh: '店铺后台', en: 'Storefront' } },
+  { id: 'mailbox', name: { zh: '邮箱', en: 'Mailbox' } },
+  { id: 'marketplace', name: { zh: '平台电商', en: 'Marketplaces' } },
+  { id: 'analytics', name: { zh: '数据分析', en: 'Analytics' } },
+  { id: 'ads', name: { zh: '广告', en: 'Ads' } },
+  { id: 'social', name: { zh: '社媒与红人', en: 'Social & creators' } },
+  { id: 'marketing', name: { zh: '营销', en: 'Marketing' } },
+  { id: 'logistics', name: { zh: '物流', en: 'Logistics' } },
+  { id: 'payment', name: { zh: '支付', en: 'Payments' } },
+  { id: 'reviews', name: { zh: '评价', en: 'Reviews' } },
+  { id: 'im', name: { zh: '聊天渠道', en: 'Chat channels' } },
+  { id: 'dev', name: { zh: '开发', en: 'Developer' } },
+  { id: 'custom', name: { zh: '自定义', en: 'Custom' } },
+]
+
+/**
+ * 按 kind 查一条（认别名）。认不出来的回 `undefined`——**不编一条出来**：
+ * 目录上多一行查不到来源的假条目，比缺一行更难查。
+ */
+export function connectionDirectoryEntry(kind: string): ConnectionDirectoryEntry | undefined {
+  return CONNECTION_DIRECTORY.find((e) => e.kind === kind || (e.aliases?.includes(kind) ?? false))
+}
+
+/** 这个 kind 在目录里的规范名（认别名；认不出来就原样回去）。 */
+export function canonicalConnectionKind(kind: string): string {
+  return connectionDirectoryEntry(kind)?.kind ?? kind
+}
+
+/** 目录里能点得动的那些（`status: 'available'`）。 */
+export function availableConnectionKinds(): string[] {
+  return CONNECTION_DIRECTORY.filter((e) => e.status === 'available').map((e) => e.kind)
+}
+
+/** 按分类分组（顺序照 {@link CONNECTION_CATEGORIES}；空分类不出现）。 */
+export function connectionDirectoryByCategory(): {
+  category: ConnectionCategory
+  name: { zh: string; en: string }
+  entries: ConnectionDirectoryEntry[]
+}[] {
+  const out: {
+    category: ConnectionCategory
+    name: { zh: string; en: string }
+    entries: ConnectionDirectoryEntry[]
+  }[] = []
+  for (const c of CONNECTION_CATEGORIES) {
+    const entries = CONNECTION_DIRECTORY.filter((e) => e.category === c.id)
+    if (entries.length > 0) out.push({ category: c.id, name: c.name, entries })
+  }
+  return out
+}
+
+// ── 自定义 MCP 服务器（保存 / 校验 / 探测）────────────────────────────
+
+export type McpTransport = 'stdio' | 'streamable-http'
+
+/**
+ * 一台已登记的自定义 MCP 服务器。
+ *
+ * **这里没有请求头的值**：`header_names` 只有名字，值在本机加密库里
+ * （13 §4.3 同一条纪律——Bearer token 与密码一个待遇）。
+ */
+export interface McpServerRecord {
+  name: string
+  transport: McpTransport
+  /** stdio：可执行文件与参数。 */
+  command?: string
+  args?: readonly string[]
+  /** streamable-http：服务器地址。 */
+  url?: string
+  /** 存了哪几个请求头（**只有名字**）。 */
+  header_names: readonly string[]
+  /** 最近一次探测的结果；从没探测过就没有。 */
+  probe?: McpProbeResult
+  created_at: string
+  updated_at: string
+}
+
+/** 探测一次的结果：连上了没有、它报了哪些工具。 */
+export interface McpProbeResult {
+  ok: boolean
+  at: string
+  /** 它报的工具（只留名字与一句说明，入参 schema 不进这里——那是运行时的事）。 */
+  tools: readonly { name: string; description?: string }[]
+  /** 没连上时机器读的原因码。 */
+  reason?: string
+  /** 没连上时给人看的那一句。 */
+  detail?: string
+}
+
+/** 名字的规矩：小写字母、数字、短横线，1–64 位。`serverName` 全局唯一（54 §4）。 */
+export const MCP_SERVER_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
+
+/** 一条自定义 MCP 服务器的登记入参（`headers` 的值是凭据，只走这一次）。 */
+export interface McpServerInput {
+  name: string
+  transport: McpTransport
+  command?: string
+  args?: readonly string[]
+  url?: string
+  headers?: Readonly<Record<string, string>>
+}
+
+/**
+ * 校验一条登记（**纯函数，不联网**）。回一串问题；空数组 = 没问题。
+ *
+ * 为什么校验住在契约里：服务进程要用它挡住坏的登记，工作台要用它在用户还没点
+ * 保存之前就说清楚缺什么。两边各写一份的话，界面放过去的东西服务端会拒，
+ * 用户只会看到一句没头没尾的报错。
+ */
+export function validateMcpServer(input: McpServerInput): string[] {
+  const problems: string[] = []
+  if (!MCP_SERVER_NAME_RE.test(input.name))
+    problems.push('名字只能用小写字母、数字与短横线，且不能以短横线开头')
+  if (input.transport === 'stdio') {
+    if ((input.command ?? '').trim() === '') problems.push('stdio 要填「命令」')
+    if ((input.url ?? '').trim() !== '') problems.push('stdio 不要填「地址」')
+  } else {
+    const url = (input.url ?? '').trim()
+    if (url === '') problems.push('streamable-http 要填「地址」')
+    else {
+      let parsed: URL | undefined
+      try {
+        parsed = new URL(url)
+      } catch {
+        problems.push('「地址」不是一个合法的 URL')
+      }
+      if (parsed !== undefined) {
+        const local = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+        // 请求头里多半是一枚 token；明文 http 发出去等于把它交给同一个网络里的任何人
+        if (parsed.protocol !== 'https:' && !local)
+          problems.push('「地址」必须是 https（本机 127.0.0.1 / localhost 除外）')
+      }
+    }
+    if ((input.command ?? '').trim() !== '') problems.push('streamable-http 不要填「命令」')
+  }
+  for (const name of Object.keys(input.headers ?? {})) {
+    // HTTP 头名字的字符集（RFC 9110 token）；放宽会让人把整行 `a: b` 当名字填进来
+    if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(name)) problems.push(`请求头的名字不合法：${name}`)
+  }
+  return problems
+}

@@ -11,6 +11,8 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
 import { connectPathFor } from '@/components/connections/links'
+// WP83（54（将改号 55）§4 第二层）：「连上这 N 个就能开工」
+import { PositionConnections } from '@/components/connections/position-connections'
 import { DeckSection } from '@/components/deck'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { ScheduleList } from '@/components/schedule-list'
@@ -269,6 +271,12 @@ export function PositionPage(): React.ReactNode {
         卡片 / 面板 / 记录 / 记忆都是"看"，只有它是"做"。
       */}
       <PositionEntry id={id} />
+      {/*
+        WP83（54 §4 第二层）：这个岗位还缺哪几个连接。
+        排在入口按钮之下、Tab 之上——它既不属于"看"（那四个 Tab），也不是"做"，
+        而是"还开不了工"；连完最后一个它自己消失，不占地方。
+      */}
+      <PositionConnections id={id} />
       <Tabs
         value={tab}
         onValueChange={(next) => {
