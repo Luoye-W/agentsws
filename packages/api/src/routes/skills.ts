@@ -42,6 +42,25 @@ const ExcludeBody = z.object({ excluded: z.boolean() })
  */
 const MEMORY_TIERS = ['company', 'department', 'position', 'role'] as const
 
+/**
+ * WP71（36 §10）：手动加一条记忆。
+ *
+ * `tier` 只开这四层：包层是上游的、个人层在个人设置里改（40 E1 管理员没有读）。
+ * 正文 2000 字封顶——记忆是"一句能照着做的规矩"，写成一篇文档就该进知识库（19）。
+ */
+const MemoryCreateBody = z.object({
+  tier: z.enum(['company', 'department', 'position', 'role']),
+  scope_id: z.string().min(1).max(200).optional(),
+  text: z.string().min(1).max(2000),
+  heading: z.string().min(1).max(120).optional(),
+  skill: z.string().min(1).max(120).optional(),
+})
+
+const MemoryPatchBody = z.object({
+  text: z.string().min(1).max(2000),
+  heading: z.string().min(1).max(120).optional(),
+})
+
 const PromoteBody = z.object({
   section_ids: z.array(z.string().min(1)).min(1),
   /** WP69（54 §3）：四档。提到岗位 / 职责层要 `scope_id` 说清楚是哪一个。 */
@@ -277,6 +296,96 @@ export function skillRoutes(): Route[] {
           ...(scope_id === undefined || scope_id === '' ? {} : { scope_id }),
           ...out,
         })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/memory',
+        operationId: 'addMemoryEntry',
+        summary: 'WP71（36 §10）手动往本层加一条记忆。越层一律 403——改得动哪一层，看你在哪一层干活',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: MemoryCreateBody,
+        returns: 'SkillMemoryEntry',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.addMemory === undefined)
+          throw new ApiError('not_implemented', '记忆面未装配')
+        const input = await body(c, MemoryCreateBody)
+        return ok(
+          c,
+          await deps.skills.addMemory({
+            tier: input.tier,
+            ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+            text: input.text,
+            ...(input.heading === undefined ? {} : { heading: input.heading }),
+            ...(input.skill === undefined ? {} : { skill: input.skill }),
+            actor: { person_id: p.person_id, workspace_id: p.workspace_id },
+          }),
+          201,
+        )
+      },
+    ),
+    route(
+      {
+        method: 'patch',
+        path: '/v1/memory/:id',
+        operationId: 'updateMemoryEntry',
+        summary: 'WP71：改本层的一条记忆（正文，可带标题）',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '记忆条目 id' }],
+        body: MemoryPatchBody,
+        returns: 'SkillMemoryEntry',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.updateMemory === undefined)
+          throw new ApiError('not_implemented', '记忆面未装配')
+        const input = await body(c, MemoryPatchBody)
+        return ok(
+          c,
+          await deps.skills.updateMemory({
+            id: param(c, 'id'),
+            text: input.text,
+            ...(input.heading === undefined ? {} : { heading: input.heading }),
+            actor: { person_id: p.person_id, workspace_id: p.workspace_id },
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/memory/:id',
+        operationId: 'deleteMemoryEntry',
+        summary: 'WP71：删本层的一条记忆',
+        tag: 'skill',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '记忆条目 id' }],
+        returns: '{ id, deleted }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        if (deps.skills.deleteMemory === undefined)
+          throw new ApiError('not_implemented', '记忆面未装配')
+        const id = param(c, 'id')
+        await deps.skills.deleteMemory({
+          id,
+          actor: { person_id: p.person_id, workspace_id: p.workspace_id },
+        })
+        return ok(c, { id, deleted: true })
       },
     ),
     route(

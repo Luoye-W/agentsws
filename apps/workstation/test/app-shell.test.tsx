@@ -46,7 +46,7 @@ function renderShell(): void {
 describe('左栏（WP43 §1 图标）', () => {
   it('每个导航项都有一个 svg 图标', () => {
     renderShell()
-    const nav = screen.getByRole('navigation')
+    const nav = screen.getByTestId('main-nav')
     const links = Array.from(nav.querySelectorAll('a'))
     // 固定 12 条（WP85 加了「消息渠道」）+ 岗位 2 条
     expect(links).toHaveLength(14)
@@ -57,7 +57,7 @@ describe('左栏（WP43 §1 图标）', () => {
 
   it('岗位按职责给图标，认不出的也有一个', () => {
     renderShell()
-    const nav = screen.getByRole('navigation')
+    const nav = screen.getByTestId('main-nav')
     for (const href of ['/positions/asg_1', '/positions/asg_2']) {
       const link = nav.querySelector(`a[href="${href}"]`)
       expect(link?.querySelector('svg')).not.toBeNull()

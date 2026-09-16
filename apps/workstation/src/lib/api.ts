@@ -608,19 +608,29 @@ export const rerouteMatter = (
     body: { role_id },
   })
 
-/** 54 §3：某一层的记忆（岗位页"记忆"tab 与职责层"记忆"小节各读自己那一层）。 */
+/** 54 §3 / WP71：某一层的记忆（第三栏「记忆」面板读的就是它）。 */
+export interface MemoryEntryData {
+  /** WP71：改 / 删这一条用的地址（服务端给，前端不拼）。老服务进程不回它 → 只读。 */
+  id?: string
+  skill: string
+  section_id: string
+  heading?: string
+  body: string
+  origin: 'authored' | 'learned'
+  learned_from?: { lessons: string[]; at: string }
+  /** WP71：手动加的，还是从事项 / 复盘提升上来的。 */
+  source?: 'manual' | 'promoted'
+  added_by?: string
+  added_at?: string
+}
+
 export interface LayerMemoryData {
   tier: string
   scope_id?: string
   summary: string
-  entries: {
-    skill: string
-    section_id: string
-    heading?: string
-    body: string
-    origin: 'authored' | 'learned'
-    learned_from?: { lessons: string[]; at: string }
-  }[]
+  entries: MemoryEntryData[]
+  /** WP71：本人能不能手改这一层。**判据在服务端**，界面照它出按钮。 */
+  can_edit?: boolean
 }
 
 export const getLayerMemory = (tier: string, scope_id?: string): Promise<LayerMemoryData> =>
@@ -629,6 +639,34 @@ export const getLayerMemory = (tier: string, scope_id?: string): Promise<LayerMe
       scope_id === undefined ? '' : `&scope_id=${encodeURIComponent(scope_id)}`
     }`,
   )
+
+/** WP71（36 §10）：手动往本层加一条记忆（越层服务端 403）。 */
+export const addMemoryEntry = (input: {
+  tier: string
+  scope_id?: string
+  text: string
+  heading?: string
+}): Promise<MemoryEntryData> =>
+  api<MemoryEntryData>('/v1/memory', {
+    method: 'POST',
+    body: {
+      tier: input.tier,
+      ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+      text: input.text,
+      ...(input.heading === undefined ? {} : { heading: input.heading }),
+    },
+  })
+
+/** WP71：改本层的一条。 */
+export const updateMemoryEntry = (
+  id: string,
+  input: { text: string; heading?: string },
+): Promise<MemoryEntryData> =>
+  api<MemoryEntryData>(`/v1/memory/${encodeURIComponent(id)}`, { method: 'PATCH', body: input })
+
+/** WP71：删本层的一条。 */
+export const deleteMemoryEntry = (id: string): Promise<{ id: string; deleted: boolean }> =>
+  api(`/v1/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 /** 54 §3「提到这一层」：走提议 → 批准，不自动写。 */
 export const promoteSkillTo = (input: {

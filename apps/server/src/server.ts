@@ -50,6 +50,7 @@ import type {
   EventEnvelope,
   Person,
   PersonId,
+  SkillTier,
   StartRun,
   StorefrontPlatform,
   Workspace,
@@ -148,7 +149,13 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import { createKolService } from './kol-service.js'
-import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
+import {
+  canEditMemory,
+  createLearningAssembly,
+  type LearningAssembly,
+  parseMemoryRef,
+  seedDefaultSkill,
+} from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
@@ -2213,6 +2220,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
 
+  /**
+   * WP71（36 §10）：**改记忆的那道门**。
+   *
+   * 判据在 `learning.ts` 的 `canEditMemory`（纯函数、单测钉住）；这里只把它要的三样
+   * 现查出来：本人名下没撤销的那几条职责、岗位模板、是不是 owner。
+   * 读那一条（`GET /v1/memory`）不过门，但会把结论带回去（`can_edit`）——
+   * 界面照服务端的结论出按钮，不自己判第二遍。
+   */
+  const memoryGate = (
+    actor: { person_id: PersonId; workspace_id: WorkspaceId },
+    target: { tier: SkillTier; scope_id?: string },
+  ): { ok: boolean; reason?: string } => {
+    const held = roles.assignments
+      .listByPerson(actor.person_id, { workspace_id: actor.workspace_id })
+      .filter((a) => a.revoked_at === undefined)
+    return canEditMemory({
+      tier: target.tier,
+      ...(target.scope_id === undefined ? {} : { scope_id: target.scope_id }),
+      held_roles: held.map((a) => a.role_id),
+      positions: org.positions(),
+      is_owner: held.some((a) => a.role_id === 'common.owner'),
+    })
+  }
+
+  const assertMemory = (
+    actor: { person_id: PersonId; workspace_id: WorkspaceId },
+    target: { tier: SkillTier; scope_id?: string },
+  ): void => {
+    const verdict = memoryGate(actor, target)
+    if (!verdict.ok) throw new ApiError('forbidden', verdict.reason ?? '改不了这一层的记忆')
+  }
+
+  /** 条目 id → 它落在哪一层（`m:role:dtc.store:…`）。认不出就是 400。 */
+  const refOf = (id: string): { tier: SkillTier; scope_id?: string } => {
+    const ref = parseMemoryRef(id)
+    if (ref === undefined) throw new ApiError('invalid_input', `认不出这条记忆：${id}`)
+    return { tier: ref.tier, ...(ref.tier === 'company' ? {} : { scope_id: ref.owner }) }
+  }
+
   const skillsPort: SkillsPort = {
     resolve: (name, actor) => skills.registry.resolve(name, actor),
     setOverlay: (overlay) => skills.registry.setOverlay(overlay),
@@ -2230,7 +2276,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
         by: input.actor.person_id,
       }),
-    // WP69（54 §3）：岗位页"记忆"tab 与职责层"记忆"小节各读自己那一层（只读）
+    // WP69（54 §3）：第三栏「记忆」面板按层读；WP71 多回一格"能不能改"
     memory: async (input) => ({
       summary: learning.memorySummary({
         tier: input.tier,
@@ -2240,7 +2286,37 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         tier: input.tier,
         ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
       }),
+      can_edit: memoryGate(input.actor, {
+        tier: input.tier,
+        ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+      }).ok,
     }),
+    // WP71（36 §10）：手动加 / 改 / 删本层的一条。越层一律 403
+    addMemory: async (input) => {
+      assertMemory(input.actor, {
+        tier: input.tier,
+        ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+      })
+      return learning.addMemory({
+        tier: input.tier,
+        ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+        text: input.text,
+        ...(input.heading === undefined ? {} : { heading: input.heading }),
+        ...(input.skill === undefined ? {} : { skill: input.skill }),
+        by: input.actor.person_id,
+      })
+    },
+    updateMemory: async (input) => {
+      assertMemory(input.actor, refOf(input.id))
+      return learning.updateMemory(input.id, {
+        text: input.text,
+        ...(input.heading === undefined ? {} : { heading: input.heading }),
+      })
+    },
+    deleteMemory: async (input) => {
+      assertMemory(input.actor, refOf(input.id))
+      await learning.removeMemory(input.id)
+    },
   }
 
   /**

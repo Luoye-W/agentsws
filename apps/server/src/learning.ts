@@ -52,7 +52,7 @@ import {
   weeklyPromotions,
 } from '@agentsws/learning'
 import type { RoleStore } from '@agentsws/roles'
-import type { Skills } from '@agentsws/skills'
+import { type SkillScopeRef, type Skills, TIER_ORDER } from '@agentsws/skills'
 import type { CreateApprovalInput } from '@agentsws/txn'
 
 /** 本机自带的入门技能：技能库为空时先给一份，学习回路才有落脚的段落。 */
@@ -94,6 +94,14 @@ export interface SkillLessonPayload {
 
 /** WP69（54 §3）：某一层记忆里的一段（岗位页 / 职责层的"记忆"小节列的就是它们）。 */
 export interface MemoryEntry {
+  /**
+   * WP71：这一条的地址，改 / 删用它（`<来源>:<层>:<owner>:<技能>:<段>`）。
+   *
+   * 来源那一格只有两种：`m` = 手动加的（住在这一层自己的技能记录里），
+   * `p` = 提升批下来的（是这一层 overlay 上的一条 op）。两种都能改能删，但
+   * **来龙去脉不一样**，界面上要分得开，id 里就先分开。
+   */
+  id: string
   skill: string
   section_id: string
   heading?: string
@@ -101,6 +109,99 @@ export interface MemoryEntry {
   /** 人写的还是学来的（06 §3.4：学来的段在界面上有标记） */
   origin: 'authored' | 'learned'
   learned_from?: { lessons: string[]; at: Iso8601 }
+  /** WP71：手动加的，还是从事项 / 复盘提升上来的。 */
+  source: 'manual' | 'promoted'
+  /** WP71：手动加的那些记得是谁加的、什么时候加的（提升上来的看 `learned_from`）。 */
+  added_by?: PersonId
+  added_at?: Iso8601
+}
+
+/** WP71：手动加 / 改一条记忆的入参。 */
+export interface MemoryWriteInput {
+  tier: SkillTier
+  scope_id?: string
+  text: string
+  heading?: string
+  /** 写进哪个技能；不给就是本机自带那一份（`customer-care`）。 */
+  skill?: string
+  by: PersonId
+}
+
+/** WP71：记忆条目 id 拆开之后的样子。 */
+export interface MemoryRef {
+  source: 'manual' | 'promoted'
+  tier: SkillTier
+  owner: string
+  skill: string
+  section_id: string
+}
+
+const MEMORY_SOURCE: Readonly<Record<string, 'manual' | 'promoted'>> = Object.freeze({
+  m: 'manual',
+  p: 'promoted',
+})
+
+/** `m:role:dtc.store:customer-care:01J…` → 五格。任何一格不对就回 undefined（路由据此 400）。 */
+export function parseMemoryRef(id: string): MemoryRef | undefined {
+  const parts = id.split(':')
+  if (parts.length !== 5) return undefined
+  const [src, tier, owner, skill, section_id] = parts as [string, string, string, string, string]
+  const source = MEMORY_SOURCE[src]
+  if (source === undefined) return undefined
+  if (!(TIER_ORDER as readonly string[]).includes(tier)) return undefined
+  if (owner === '' || skill === '' || section_id === '') return undefined
+  return { source, tier: tier as SkillTier, owner, skill, section_id }
+}
+
+export function memoryRefId(ref: MemoryRef): string {
+  return [ref.source === 'manual' ? 'm' : 'p', ref.tier, ref.owner, ref.skill, ref.section_id].join(
+    ':',
+  )
+}
+
+/**
+ * WP71（36 §10）：**这一层的记忆，本人能不能手改**。
+ *
+ * 一句话：**你在哪一层干活，才改得动哪一层**。
+ *
+ * - **职责层**：本人持有这条职责（名下有一条没撤销的分配）；
+ * - **岗位层**：本人在这个岗位下至少持有一条职责——岗位层记的是"这家公司的这个岗位
+ *   怎么做事"，在这个岗位里干活的人都该记得下一笔。`holders` 那条"默认包全在名下"
+ *   的严规则是用来算**谁在做这个岗位**这张名单的，不是权限判据（05 §2）；
+ * - **公司层 / 部门层**：owner。它们是制度层的东西（14 §13.3）；
+ * - **包层 / 个人层**：这条路不开。包层是上游的，个人层在个人设置里改
+ *   （而且管理员对个人数据没有读，40 E1）。
+ *
+ * 提升（把一条提到上一层）**不走这里**：那是提议 → 批准（24 §3），
+ * 走 `POST /v1/skills/:name/promote`。这里管的只有"改自己这一层"。
+ */
+export function canEditMemory(input: {
+  tier: SkillTier
+  scope_id?: string
+  /** 本人名下没撤销的那几条职责。 */
+  held_roles: readonly string[]
+  /** 岗位模板（只用来查"这个岗位下有哪几条职责"）。 */
+  positions: readonly { id: string; roles: readonly { role: string }[] }[]
+  is_owner: boolean
+}): { ok: boolean; reason?: string } {
+  const { tier, scope_id } = input
+  if (tier === 'package') return { ok: false, reason: '内置包那一层是上游的，改不了' }
+  if (tier === 'personal') return { ok: false, reason: '个人层在个人设置里改，不从这里改' }
+  if (tier === 'company' || tier === 'department')
+    return input.is_owner
+      ? { ok: true }
+      : { ok: false, reason: '公司层与部门层是制度层的东西，只有所有者能改（14 §13.3）' }
+  if (scope_id === undefined || scope_id === '')
+    return { ok: false, reason: `改${tier === 'position' ? '岗位' : '职责'}层要说清楚是哪一个` }
+  if (tier === 'role')
+    return input.held_roles.includes(scope_id)
+      ? { ok: true }
+      : { ok: false, reason: '这条职责不在你名下，改不了它那一层的记忆' }
+  const template = input.positions.find((p) => p.id === scope_id)
+  if (template === undefined) return { ok: false, reason: `没有这个岗位：${scope_id}` }
+  return template.roles.some((r) => input.held_roles.includes(r.role))
+    ? { ok: true }
+    : { ok: false, reason: '你不在这个岗位里，改不了它那一层的记忆' }
 }
 
 export interface SkillPromotionPayload {
@@ -183,8 +284,20 @@ export interface LearningAssembly {
    * 只数，不出正文——正文由 {@link LearningAssembly.memoryAt} 给。
    */
   memorySummary(target: { tier: SkillTier; scope_id?: string }): string
-  /** WP69：某一层记忆里有哪几段（只读；"提到这一层"走提议）。 */
+  /** WP69：某一层记忆里有哪几段。WP71 起每条带 `id`，可改可删。 */
   memoryAt(target: { tier: SkillTier; scope_id?: string }): MemoryEntry[]
+  /**
+   * WP71（36 §10）：**手动加一条**。
+   *
+   * 落在这一层自己的技能记录里（`skills/positions/<id>` / `skills/roles/<id>` 那份），
+   * 不是 overlay——overlay 是"在上游某一段上打的补丁"，而手动加的这句话上游没有对应段。
+   * 下一次这一层被解析时它作为新的一段并进去（`resolve` 里"base 里没有的段就 push"）。
+   */
+  addMemory(input: MemoryWriteInput): Promise<MemoryEntry>
+  /** WP71：改一条（正文，可带标题）。只改本层那一条，别的层一个字不动。 */
+  updateMemory(id: string, input: { text: string; heading?: string }): Promise<MemoryEntry>
+  /** WP71：删一条。手动加的从这一层的技能记录里删；提升来的从 overlay 的 ops 里摘掉。 */
+  removeMemory(id: string): Promise<void>
   close(): void
 }
 
@@ -748,29 +861,203 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
    * 读的是**那一层的 overlay**（`owner` 就是 scope_id：岗位 id / 职责 id / 工作区 id）。
    * 只读：岗位页的"记忆"tab 列它们，改要走"提到这一层"那条提议 → 批准的路。
    */
+  /**
+   * 这一层的 owner：公司层是工作区，其余几层就是那个 id（岗位 id / 职责 id / 部门 id）。
+   * 与 `applyPromotion` 里那段同一条规则——记忆读写两侧必须对上，否则手动加的那条
+   * 与提升上来的那条会落在两个不同的 owner 下。
+   */
+  const ownerOf = (target: { tier: SkillTier; scope_id?: string }): string =>
+    target.tier === 'company' ? workspace_id : (target.scope_id ?? '')
+
+  /** 技能记录按 `(workspace, scope)` 索引；公司层不带 scope。 */
+  const scopeRefOf = (target: { tier: SkillTier; scope_id?: string }): SkillScopeRef => ({
+    workspace_id,
+    ...(target.tier === 'company' || target.scope_id === undefined || target.scope_id === ''
+      ? {}
+      : { scope_id: target.scope_id }),
+  })
+
+  /** 手动加的那条是谁、什么时候加的。与 overlay 一样是内存档（`packages/skills` 没有落盘层）。 */
+  const manualMeta = new Map<string, { by: PersonId; at: Iso8601 }>()
+
+  /** 没给标题就从正文头一句里取一截当标题（段落要有标题才在技能文档里立得住）。 */
+  const headingOf = (text: string): string => {
+    const first = text.split('\n')[0]?.trim() ?? text
+    return first.length <= 24 ? first : `${first.slice(0, 24)}…`
+  }
+
   const memoryAt: LearningAssembly['memoryAt'] = (target) => {
-    const owner = target.tier === 'company' ? workspace_id : (target.scope_id ?? '')
+    const owner = ownerOf(target)
     if (owner === '') return []
     const out: MemoryEntry[] = []
     for (const name of skills.registry.listSkillNames()) {
+      // WP71：手动加的那些——住在这一层自己的技能记录里，每一段就是一条记忆
+      const own = skills.registry.peek(name, target.tier, scopeRefOf(target))
+      for (const section of own?.sections ?? []) {
+        const ref: MemoryRef = {
+          source: 'manual',
+          tier: target.tier,
+          owner,
+          skill: name,
+          section_id: section.id,
+        }
+        const meta = manualMeta.get(memoryRefId(ref))
+        out.push({
+          id: memoryRefId(ref),
+          skill: name,
+          section_id: section.id,
+          heading: section.heading,
+          body: section.body,
+          origin: section.origin,
+          ...(section.learned_from === undefined ? {} : { learned_from: section.learned_from }),
+          source: 'manual',
+          ...(meta === undefined ? {} : { added_by: meta.by, added_at: meta.at }),
+        })
+      }
+      // 提升批下来的那些——这一层 overlay 上的 op（WP69 起就是这样）
       const overlay = skills.registry.getOverlay(name, target.tier, owner)
       if (overlay === undefined) continue
       for (const op of overlay.ops) {
         if (op.op === 'remove') continue
         const heading = skills.registry.sectionHeading(name, op.section_id)
         out.push({
+          id: memoryRefId({
+            source: 'promoted',
+            tier: target.tier,
+            owner,
+            skill: name,
+            section_id: op.section_id,
+          }),
           skill: name,
           section_id: op.section_id,
           ...(heading === undefined ? {} : { heading }),
           body: op.body ?? '',
           origin: op.origin ?? 'authored',
           ...(op.learned_from === undefined ? {} : { learned_from: op.learned_from }),
+          source: 'promoted',
         })
       }
     }
     return out.sort((a, b) =>
       a.skill === b.skill ? a.section_id.localeCompare(b.section_id) : a.skill < b.skill ? -1 : 1,
     )
+  }
+
+  /**
+   * WP71：手动加一条。
+   *
+   * 写进**这一层自己的技能记录**（不是 overlay，理由见 `LearningAssembly.addMemory`）。
+   * 这一层还没有记录就当场建一份最小的：名字沿用同一个技能名，`base` 指着当前上游版本，
+   * 这样之后上游出新版时 `rebase` 那条路对它一样管用。
+   */
+  const addMemory: LearningAssembly['addMemory'] = async (input) => {
+    const owner = ownerOf(input)
+    if (owner === '') throw new Error('这一层要说清楚是哪一个（scope_id）')
+    const text = input.text.trim()
+    if (text === '') throw new Error('记忆条目不能是空的')
+    const name = input.skill ?? DEFAULT_SKILL_NAME
+    const scope = scopeRefOf(input)
+    const existing = skills.registry.peek(name, input.tier, scope)
+    const section = {
+      id: skills.nextId(),
+      heading: (input.heading ?? '').trim() === '' ? headingOf(text) : (input.heading as string),
+      body: text,
+      origin: 'authored' as const,
+    }
+    await skills.registry.put({
+      name,
+      tier: input.tier,
+      owner,
+      version: existing?.version ?? '1.0.0',
+      evals: existing?.evals ?? [],
+      sections: [...(existing?.sections ?? []), section],
+      ...(existing?.base === undefined ? {} : { base: existing.base }),
+      workspace_id,
+      ...(scope.scope_id === undefined ? {} : { scope_id: scope.scope_id }),
+    })
+    const ref: MemoryRef = {
+      source: 'manual',
+      tier: input.tier,
+      owner,
+      skill: name,
+      section_id: section.id,
+    }
+    const at = clock.now()
+    manualMeta.set(memoryRefId(ref), { by: input.by, at })
+    emit('memory.added', { tier: input.tier, scope_id: owner, skill: name })
+    return {
+      id: memoryRefId(ref),
+      skill: name,
+      section_id: section.id,
+      heading: section.heading,
+      body: section.body,
+      origin: 'authored',
+      source: 'manual',
+      added_by: input.by,
+      added_at: at,
+    }
+  }
+
+  const updateMemory: LearningAssembly['updateMemory'] = async (id, input) => {
+    const ref = parseMemoryRef(id)
+    if (ref === undefined) throw new Error(`认不出这条记忆：${id}`)
+    const text = input.text.trim()
+    if (text === '') throw new Error('记忆条目不能是空的')
+    const scope = scopeRefOf({ tier: ref.tier, scope_id: ref.owner })
+    if (ref.source === 'manual') {
+      const own = skills.registry.peek(ref.skill, ref.tier, scope)
+      const hit = own?.sections.find((s) => s.id === ref.section_id)
+      if (own === undefined || hit === undefined) throw new Error(`没有这条记忆：${id}`)
+      const heading = (input.heading ?? '').trim() === '' ? hit.heading : (input.heading as string)
+      await skills.registry.put({
+        ...own,
+        sections: own.sections.map((s) =>
+          s.id === ref.section_id ? { ...s, heading, body: text } : s,
+        ),
+      })
+    } else {
+      const overlay = skills.registry.getOverlay(ref.skill, ref.tier, ref.owner)
+      const hit = overlay?.ops.find((o) => o.section_id === ref.section_id)
+      if (overlay === undefined || hit === undefined) throw new Error(`没有这条记忆：${id}`)
+      await skills.registry.setOverlay({
+        ...overlay,
+        ops: overlay.ops.map((o) =>
+          o.section_id === ref.section_id ? { ...o, body: text } : { ...o },
+        ),
+      })
+    }
+    emit('memory.updated', { tier: ref.tier, scope_id: ref.owner, skill: ref.skill })
+    const found = memoryAt({
+      tier: ref.tier,
+      ...(ref.tier === 'company' ? {} : { scope_id: ref.owner }),
+    }).find((e) => e.id === id)
+    if (found === undefined) throw new Error(`没有这条记忆：${id}`)
+    return found
+  }
+
+  const removeMemory: LearningAssembly['removeMemory'] = async (id) => {
+    const ref = parseMemoryRef(id)
+    if (ref === undefined) throw new Error(`认不出这条记忆：${id}`)
+    const scope = scopeRefOf({ tier: ref.tier, scope_id: ref.owner })
+    if (ref.source === 'manual') {
+      const own = skills.registry.peek(ref.skill, ref.tier, scope)
+      if (own === undefined || !own.sections.some((s) => s.id === ref.section_id))
+        throw new Error(`没有这条记忆：${id}`)
+      await skills.registry.put({
+        ...own,
+        sections: own.sections.filter((s) => s.id !== ref.section_id),
+      })
+      manualMeta.delete(id)
+    } else {
+      const overlay = skills.registry.getOverlay(ref.skill, ref.tier, ref.owner)
+      if (overlay === undefined || !overlay.ops.some((o) => o.section_id === ref.section_id))
+        throw new Error(`没有这条记忆：${id}`)
+      await skills.registry.setOverlay({
+        ...overlay,
+        ops: overlay.ops.filter((o) => o.section_id !== ref.section_id),
+      })
+    }
+    emit('memory.removed', { tier: ref.tier, scope_id: ref.owner, skill: ref.skill })
   }
 
   const memorySummary: LearningAssembly['memorySummary'] = (target) => {
@@ -788,6 +1075,9 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     promote,
     memoryAt,
     memorySummary,
+    addMemory,
+    updateMemory,
+    removeMemory,
     summaries,
     proposalSummaries,
     onRunCompleted(input) {

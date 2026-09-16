@@ -32,6 +32,11 @@ const ALLOWED_KEYS = [
   'agentsws.theme', // 偏好：深浅色
   'agentsws.lang', // 偏好：界面语言
   'agentsws.session_token', // 会话凭据：不是业务对象，且本来就只该活在本机
+  // WP71（36 §9 / §10）：三个**纯界面折叠态**。存的是"左栏哪几个岗位展开着""右栏
+  // 开着哪个面板、多宽"——没有一条是业务对象，丢了最坏的结果是下次打开回默认值。
+  'agentsws.rail.expanded',
+  'agentsws.rightrail.panel',
+  'agentsws.rightrail.width',
 ]
 /** 未发送的草稿走这个前缀（40 §1.2 明确允许的那一类）。 */
 const DRAFT_PREFIX = 'agentsws.draft.'
@@ -60,13 +65,14 @@ describe('40 §1.2 第一条规则：个人电脑上不存真源', () => {
     expect(offenders.map((p) => p.slice(SRC.length + 1))).toEqual([])
   })
 
-  it('只有两个文件碰得到 localStorage / sessionStorage', () => {
+  it('只有三个文件碰得到 localStorage / sessionStorage', () => {
     const touching = files
       .filter((path) => /\b(localStorage|sessionStorage)\b/.test(readFileSync(path, 'utf8')))
       .map((p) => p.slice(SRC.length + 1))
       .sort()
-    // 一个存偏好，一个存会话凭据；多出第三个就要在这里说清它存的是什么
-    expect(touching).toEqual(['lib/api.ts', 'lib/app-context.tsx'])
+    // 一个存偏好、一个存会话凭据、一个存界面折叠态（WP71）；
+    // 多出第四个就要在这里说清它存的是什么，以及它为什么不是业务对象
+    expect(touching).toEqual(['lib/api.ts', 'lib/app-context.tsx', 'lib/ui-state.ts'])
   })
 
   it('源码里出现的每一个 agentsws.* 存储键都在白名单里', () => {
