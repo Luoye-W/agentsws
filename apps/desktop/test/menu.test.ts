@@ -160,6 +160,25 @@ describe('WP31：轮换本机密钥', () => {
   })
 })
 
+describe('WP82（55 §3 末段）：打开工作用的浏览器', () => {
+  it('菜单里有这一项，且服务健康时才点得动（起完要把地址 PUT 进设置）', () => {
+    const up = buildTrayMenu(input()).find((i) => i.id === 'open-work-browser')
+    expect(up).toMatchObject({ type: 'normal', enabled: true, label: '打开工作用的浏览器' })
+
+    const down = buildTrayMenu(input({ health: undefined })).find(
+      (i) => i.id === 'open-work-browser',
+    )
+    expect(down?.enabled).toBe(false)
+  })
+
+  it('英文档也有文案', () => {
+    const item = buildTrayMenu(input({ language: 'en-US' })).find(
+      (i) => i.id === 'open-work-browser',
+    )
+    expect(item?.label).toBe('Open the work browser')
+  })
+})
+
 describe('trayTooltip', () => {
   it('版本 + 状态；暂停时补一句', () => {
     expect(trayTooltip(input())).toBe('agentsws 0.1.0 · 服务运行中')
@@ -188,10 +207,12 @@ describe('WP36 / 40 §1.3：连公司服务器那一档', () => {
     expect(serverStateLabel(remote({ health: undefined }))).toBe(t.remoteUnreachable)
   })
 
-  it('「重启服务」「轮换本机密钥」不出现——那两样都不在这台电脑上', () => {
+  it('「重启服务」「轮换本机密钥」「打开工作用的浏览器」都不出现——那几样都不在这台电脑上', () => {
     const ids = buildTrayMenu(remote()).map((i) => i.id)
     expect(ids).not.toContain('restart-server')
     expect(ids).not.toContain('rotate-secrets-key')
+    // WP82：服务在公司那台机器上，起在这儿的浏览器它连不到（127.0.0.1 各指各的）
+    expect(ids).not.toContain('open-work-browser')
     expect(ids).toContain('open-workstation')
     expect(ids).toContain('toggle-pause')
     expect(ids).toContain('quit')

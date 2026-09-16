@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   type MenuItemConstructorOptions,
@@ -56,6 +57,7 @@ import {
   systemClock,
 } from './node-runtime.js'
 import { desktopPaths } from './paths.js'
+import type { FetchLike } from './ports.js'
 import { createRedactor } from './redact.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
 import {
@@ -67,6 +69,7 @@ import {
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
 import { TRAY_ICON_2X_DATA_URL, TRAY_ICON_DATA_URL } from './tray-icon.js'
 import { createUpdateGate, type UpdaterPort } from './updater.js'
+import { openWorkBrowser } from './work-browser.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const require_ = createRequire(import.meta.url)
@@ -622,6 +625,51 @@ async function bootstrap(): Promise<void> {
     refreshTray()
   }
 
+  /**
+   * WP82（55 §3 末段）：「打开工作用的浏览器」。
+   *
+   * 三步：起一个**单独 Profile** 的 Chrome（带调试口）→ 把地址 `PUT` 进设置 →
+   * 刷新托盘。起不来（没装 Chrome、端口被占）就弹一句人话，不静默失败——
+   * 用户点了菜单什么都不发生是最糟的那种。
+   */
+  async function openWorkBrowserAndSave(): Promise<void> {
+    const result = await openWorkBrowser({
+      files,
+      spawner: nodeSpawner(),
+      fetch: (url, init) => fetch(url, init) as ReturnType<FetchLike>,
+      userDataDir: paths.userData,
+      platform: process.platform,
+      sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+      now: () => Date.now(),
+      /*
+       * Chrome 装在别处（绿色版、自编译、e2e 里指一个不存在的路径）时的口子。
+       * 不给就按平台的常见位置找；找不到就如实说"没装"，不去下载（16 §3）。
+       */
+      ...(process.env.AGENTSWS_DESKTOP_BROWSER_EXECUTABLE === undefined
+        ? {}
+        : { executablePath: process.env.AGENTSWS_DESKTOP_BROWSER_EXECUTABLE }),
+    })
+    if (!result.ok) {
+      logger.warn('打开工作用的浏览器失败', { reason: result.reason })
+      dialog.showMessageBox({ type: 'warning', message: result.detail }).catch(() => undefined)
+      return
+    }
+    logger.info('工作用的浏览器已就绪', {
+      endpoint: result.endpoint,
+      reused: result.reused,
+      profileDir: result.profileDir,
+    })
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) {
+      logger.warn('浏览器起来了，但地址没能写进设置：换不到会话')
+      return
+    }
+    const saved = await api.setBrowserEndpoint(s, assignment, result.endpoint)
+    if (!saved.ok) logger.warn('浏览器地址没能写进设置', { reason: saved.reason })
+    refreshTray()
+  }
+
   function invoke(action: MenuAction): void {
     switch (action) {
       case 'open-workstation':
@@ -635,6 +683,10 @@ async function bootstrap(): Promise<void> {
         break
       case 'rotate-secrets-key':
         void rotateSecretsKey()
+        break
+      case 'open-work-browser':
+        if (remote) break
+        void openWorkBrowserAndSave()
         break
       case 'restart-server':
         if (remote) break
