@@ -127,3 +127,36 @@ handover:
   fallback: scope_manager
   revoke_context_on_removal: true
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: draft_post
+    label: { zh: "起草一篇博客", en: "Draft a blog post" }
+    prompt: "按这个主题起草一篇博客初稿，结尾带一个自然的商品链接"
+    kind: start_task
+  - id: seo_gaps
+    label: { zh: "谁缺 SEO 描述", en: "Pages missing SEO fields" }
+    prompt: "哪些页面和文章缺标题或描述，列出来"
+    kind: ask
+  - id: review_queue
+    label: { zh: "看一遍待发的稿", en: "Review what is queued" }
+    prompt: "把等着发的稿子给我看一遍，指出哪些说法没有出处"
+    kind: review
+  - id: refresh_old
+    label: { zh: "翻新一篇旧文", en: "Refresh an old post" }
+    prompt: "把这篇一年前的文章按现在的商品和价格更新一遍，改动的地方标出来"
+    kind: start_task
+
+task_examples:
+  - id: weekly_post
+    title: { zh: "每周稳定一篇", en: "One post a week" }
+    description: "想每周稳定发一篇和产品相关的文章。"
+    expected_output: "一篇结构完整的初稿，配好标题与描述；发出去永远要你点一下，Agent 自己不发。"
+  - id: seo_cleanup
+    title: { zh: "把元字段补齐", en: "Fill in the missing SEO fields" }
+    description: "店里一堆页面没写 SEO 标题和描述。"
+    expected_output: "一份缺字段清单，外加按页面内容拟好的标题与描述草稿，逐条等你批。"

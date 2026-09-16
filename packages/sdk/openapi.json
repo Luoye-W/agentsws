@@ -26817,6 +26817,10 @@
                       },
                       "required": ["type", "id"]
                     }
+                  },
+                  "role_id": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": ["title"]

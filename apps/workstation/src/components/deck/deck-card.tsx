@@ -12,6 +12,7 @@
  */
 import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { FactChip } from '@/components/chips'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
@@ -28,6 +29,7 @@ import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/
 import { EntityChips, EvidenceChips, Highlights } from '@/components/deck/evidence-chips'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 
@@ -117,6 +119,22 @@ function Countdown({ expiresAt }: { expiresAt: string }): React.ReactNode {
   )
 }
 
+/**
+ * WP84：这张卡那条职责的示例任务（指导抽屉顶部用）。
+ *
+ * 真源只有一处：职责 yml → `GET /v1/positions` 的 `roles[].task_examples`。这里读的是
+ * 首页那把 `['positions']` 的缓存，所以岗位卡与指导抽屉看到的永远是同一份；
+ * 没装岗位面的服务进程查不到，那就什么都不出（`undefined`），指导框照旧能用。
+ */
+function useTaskExamples(role_id: string): RoleTaskExampleData[] | undefined {
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  for (const p of positions.data?.instances ?? []) {
+    const hit = p.roles.find((r) => r.role_id === role_id)
+    if (hit?.task_examples !== undefined && hit.task_examples.length > 0) return hit.task_examples
+  }
+  return undefined
+}
+
 export function DeckCardView({
   card,
   mode,
@@ -150,6 +168,7 @@ export function DeckCardView({
   }, [card.id])
 
   const isQuestion = card.options !== undefined && card.options.length > 0
+  const examples = useTaskExamples(card.role_id)
   const content = pickContent(card.content_variants, mode)
   const decidable = card.available_actions.some((a) => a !== 'open')
 
@@ -338,6 +357,7 @@ export function DeckCardView({
             mode={panel}
             busy={busy === true}
             ask={{ card_id: card.id }}
+            {...(examples === undefined ? {} : { examples })}
             onCancel={() => {
               setPanel(null)
             }}

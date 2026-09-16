@@ -139,3 +139,36 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: preview_change
+    label: { zh: "先改副本再看", en: "Change it on a preview copy" }
+    prompt: "这处改动在未发布的主题副本上做，做完给我一个预览链接"
+    kind: start_task
+  - id: speed_check
+    label: { zh: "页面慢在哪", en: "What is making it slow" }
+    prompt: "首页和商品页加载慢在哪几项，按影响从大到小列"
+    kind: ask
+  - id: landing_page
+    label: { zh: "做一个落地页", en: "Build a landing page" }
+    prompt: "按这次活动做一个落地页草稿，先放在草稿状态别发布"
+    kind: start_task
+  - id: publish_diff
+    label: { zh: "发布前看差异", en: "See the diff before publishing" }
+    prompt: "把主题副本和线上那版的差异列出来，我看完再决定发不发"
+    kind: review
+
+task_examples:
+  - id: theme_tweak
+    title: { zh: "改一处样式", en: "Tweak one thing on the theme" }
+    description: "想把商品页的加购按钮做得更显眼。"
+    expected_output: "一份改在未发布副本上的改动 + 预览链接 + 改了哪几处的清单；发布永远要你点。"
+  - id: speed_work
+    title: { zh: "手机上太慢", en: "It is slow on phones" }
+    description: "客户反映手机上打开很慢。"
+    expected_output: "一份按影响排序的拖慢项清单，每一项配一个具体改法；动手的部分仍然只在副本上做。"

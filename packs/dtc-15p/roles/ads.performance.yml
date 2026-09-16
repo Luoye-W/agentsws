@@ -77,3 +77,36 @@ handover:
   fallback: scope_manager
   revoke_context_on_removal: true
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: wasted_spend
+    label: { zh: "花了钱没成单的", en: "Spend with nothing to show" }
+    prompt: "最近 7 天花了钱但一单都没成的广告组有哪些"
+    kind: ask
+  - id: pause_losers
+    label: { zh: "关掉不行的", en: "Pause what is not working" }
+    prompt: "连续三天成本高出目标两倍的广告，出一张暂停卡等我批"
+    kind: review
+  - id: negative_keywords
+    label: { zh: "加否词", en: "Add negative keywords" }
+    prompt: "把最近的无效搜索词整理成否词清单，出卡等我批"
+    kind: review
+  - id: budget_move
+    label: { zh: "挪预算", en: "Move budget around" }
+    prompt: "把预算从表现最差的计划挪到最好的那条，幅度别超过额度，出卡"
+    kind: review
+
+task_examples:
+  - id: weekly_prune
+    title: { zh: "每周清理一次", en: "The weekly prune" }
+    description: "想定期把不挣钱的广告关掉。"
+    expected_output: "一份按花费与转化排的清单，外加一批待批的暂停卡；开新的花钱口子永远要人点。"
+  - id: keyword_cleanup
+    title: { zh: "搜索词里一堆不相关的", en: "The search-term report is full of junk" }
+    description: "搜索词报告里一堆和产品无关的词在花钱。"
+    expected_output: "一份按浪费金额排序的否词候选，每条写明为什么判定不相关。"

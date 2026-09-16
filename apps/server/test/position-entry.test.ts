@@ -318,3 +318,53 @@ describe('54 §3 记忆：提到岗位 / 职责层走提议，不自动写', () 
     expect(out.reason).toContain('scope_id')
   })
 })
+
+describe('WP84 快捷提示：职责已经定好了，就别让路由再猜一遍', () => {
+  it('岗位实体把每条职责的 quick_prompts / task_examples 原样带出来（真源只有 yml 一份）', async () => {
+    const view = await dataOf<PositionInstance>(await call('GET', '/v1/positions/customer-care'))
+    const support = view.roles.find((r) => r.role_id === 'dtc.support')
+    const prompts = support?.quick_prompts ?? []
+    expect(prompts.length).toBeGreaterThanOrEqual(3)
+    expect(prompts.map((p) => p.id)).toContain('draft_return_reply')
+    // 与职责定义逐字一致：界面读到的就是 yml 里那一份
+    expect(prompts).toEqual(server.roles.roles.get('dtc.support')?.quick_prompts)
+    expect(support?.task_examples).toEqual(server.roles.roles.get('dtc.support')?.task_examples)
+  })
+
+  it('带 role_id 开：跳过路由，仍然是岗位入口（entry=position + position_template_id）', async () => {
+    // 这句话本身像客服也像履约——不指定就会拿不准；指定了就一步到位
+    const out = await dataOf<OpenView>(
+      await call('POST', '/v1/positions/web-ops/matters', {
+        body: { title: '看昨天订单里哪些还没发货', role_id: 'dtc.fulfillment' },
+      }),
+    )
+    expect(out.ambiguous).toBe(false)
+    expect(out.picked?.role_id).toBe('dtc.fulfillment')
+    expect(out.picked?.assignment_id).toBe(idOf('dtc.fulfillment'))
+    expect(out.candidates).toEqual([])
+    expect(out.reason).toContain('快捷提示')
+    expect(out.run_id).toBeDefined()
+
+    const matter = server.work.getMatter(out.matter.id) as Matter
+    expect(matter.entry).toBe('position')
+    expect(matter.position_template_id).toBe('web-ops')
+    expect(matter.role_id).toBe('dtc.fulfillment')
+    // 权限仍然只在那一条分配上：不是 X-Assignment 带的那条（owner）
+    expect(matter.position_id).toBe(idOf('dtc.fulfillment'))
+  })
+
+  it('指定这个岗位里没有的职责 → 400（和换职责同一把尺子）', async () => {
+    const res = await call('POST', '/v1/positions/web-ops/matters', {
+      body: { title: '客户问退货', role_id: 'dtc.support' },
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('指定不是自己名下的职责 → 403（快捷提示不是扩权的口子）', async () => {
+    server.roles.assignments.revoke(idOf('dtc.content'), {})
+    const res = await call('POST', '/v1/positions/web-ops/matters', {
+      body: { title: '起草一篇博客', role_id: 'dtc.content' },
+    })
+    expect(res.status).toBe(403)
+  })
+})

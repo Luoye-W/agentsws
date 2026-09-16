@@ -351,3 +351,44 @@ handover:
   fallback: scope_manager
   revoke_context_on_removal: true
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: yesterday_numbers
+    label: { zh: "昨天卖得怎么样", en: "Yesterday's numbers" }
+    prompt: "把昨天的销售额、订单数、转化率和前一天比一比，只说变化大的那几项"
+    kind: ask
+  - id: low_stock
+    label: { zh: "快断货的商品", en: "What is running out" }
+    prompt: "按最近 7 天的卖法，哪些商品快断货了，给我一份补货清单"
+    kind: ask
+  - id: price_change
+    label: { zh: "改一个价", en: "Change a price" }
+    prompt: "把这个商品降价 10%，出一张待我批的改价卡，附上它最近 7 天的销量"
+    kind: review
+  - id: new_discount
+    label: { zh: "做一个折扣码", en: "Create a discount code" }
+    prompt: "做一个 8 折折扣码，限单客一次、下周日到期，出卡等我批"
+    kind: review
+  - id: reply_reviews
+    label: { zh: "回一轮评价", en: "Reply to this week reviews" }
+    prompt: "这周还没回的评价按好评差评分开，差评先给我起草回复"
+    kind: start_task
+
+task_examples:
+  - id: daily_check
+    title: { zh: "每天早上看一眼", en: "The morning check" }
+    description: "开店一天下来，想知道昨天有没有出岔子。"
+    expected_output: "一张日报卡：销售额、订单数、转化、异常项各一行；哪一项过了阈值会单独出一张异常卡，不用你自己盯。"
+  - id: price_adjust
+    title: { zh: "给一批商品调价", en: "Adjust prices on a batch" }
+    description: "季末想给一批商品统一降价。"
+    expected_output: "一张待批的改价卡，列出每个商品改前改后的价、影响多少个变体；你批了才写回店铺。"
+  - id: restock
+    title: { zh: "算下周补多少货", en: "Work out next week restock" }
+    description: "想知道下周该补哪些货、各补多少。"
+    expected_output: "一份按最近销量算出来的补货清单，断货风险最高的排最前面，每条附上估计能撑几天。"

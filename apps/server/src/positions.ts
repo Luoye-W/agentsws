@@ -70,6 +70,17 @@ export interface OpenAtPositionInput {
   summary?: string
   /** 关联对象引用（订单 / 客户 / 文件…），原样钉在事项上 */
   pinned?: { type: string; id: string }[]
+  /**
+   * WP84：**这件事已经知道该归哪条职责**，跳过岗位内路由。
+   *
+   * 唯一的来源是职责自己的 `quick_prompts`——那一条提示就写在那条职责的 yml 里，
+   * 点它的人等于已经选了职责，再让路由去猜一遍只会猜错。
+   *
+   * 它**不是**扩权的口子：和 `reroute` 同一把尺子——必须在这个岗位的模板里，
+   * 而且必须是**请求人自己名下**的那一条，否则拒（岗位仍然没有任何权限）。
+   * 入口仍是岗位入口：事项照样 `entry: 'position'` + `position_template_id`（54 §2）。
+   */
+  role_id?: RoleId
 }
 
 export interface OpenAtPositionResult {
@@ -228,12 +239,18 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       holders: [...holders].sort(),
       roles: template.roles.map((r) => {
         const my = mine.get(r.role)
+        // WP84：快捷提示与示例任务原样从职责定义抄来（改 yml 这里就变，没有第二份）
+        const def = roles.roles.get(r.role)
+        const prompts = def?.quick_prompts ?? []
+        const examples = def?.task_examples ?? []
         return {
           role_id: r.role,
           role_name: roleName(r.role),
           default: r.default,
           assignment_ids: byRole.get(r.role) ?? [],
           ...(my === undefined ? {} : { my_assignment_id: my }),
+          ...(prompts.length === 0 ? {} : { quick_prompts: prompts }),
+          ...(examples.length === 0 ? {} : { task_examples: examples }),
         }
       }),
       open_matters,
@@ -374,7 +391,31 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         `你名下没有「${template.name.zh}」这个岗位下的任何一条职责，开不了这里的事`,
       )
     const text = input.summary === undefined ? input.title : `${input.title} ${input.summary}`
-    const routed = routeWithinPosition(text, profilesOf(held))
+    /*
+     * WP84：从快捷提示点进来的，职责是**已经定好的**，不跑路由。
+     *
+     * 两道判定和 `reroute` 逐字一样，一道都不省：不在这个岗位的模板里 → 拒；
+     * 不在请求人自己名下 → 拒。指定得成立，路由就不掺和（拿不准的那条路也就走不到）。
+     */
+    const pinned = input.role_id
+    if (pinned !== undefined) {
+      if (!template.roles.some((r) => r.role === pinned))
+        throw POSITION_ERROR(
+          'invalid_input',
+          `「${roleName(pinned)}」不在「${template.name.zh}」这个岗位里`,
+        )
+      if (!held.some((h) => h.role_id === pinned))
+        throw POSITION_ERROR('forbidden', `你名下没有「${roleName(pinned)}」这条职责，开不了`)
+    }
+    const routed =
+      pinned === undefined
+        ? routeWithinPosition(text, profilesOf(held))
+        : {
+            picked: pinned,
+            candidates: [],
+            ambiguous: false,
+            reason: `按「${roleName(pinned)}」这条职责的快捷提示开的，没走岗位内路由`,
+          }
     const pickedEntry =
       routed.picked === undefined ? undefined : held.find((h) => h.role_id === routed.picked)
 

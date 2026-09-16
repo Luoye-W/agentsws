@@ -49,6 +49,8 @@ type Role = {
   automation: Record<ActionId, AutomationSpec>  // 三项约束 3：每个动作的自动化上限
 
   grounding?: GroundingRule[]        // 某类问题必须先读工具
+  quick_prompts?: QuickPrompt[]      // 首页岗位卡下面的「点一下就开干」（≤ 8 条，WP84）
+  task_examples?: TaskExample[]      // 指导抽屉顶部的「示例任务」（≤ 6 条，WP84）
   persona?: string                   // 覆盖 dsh 的 deployment:persona 分节
   handover: HandoverSpec             // 交接时转移什么
   requires?: string[]                // 隐含依赖的职责 id（只借其 read scopes，不借写）
@@ -197,7 +199,48 @@ type GroundingRule = {
 }
 ```
 
-### 1.9 HandoverSpec
+### 1.9 QuickPrompt 与 TaskExample（WP84；53 §3「217 张角色卡」/ 54 §1 第 6 行）
+
+两个**可选**字段，回答的是同一个问题：**空白的工作台不会告诉人这个岗位能替我干什么**。
+同类项目（Octop）给 217 张角色卡各配了一组 `quick_prompts` 与 `task_examples`；
+我们借这个形，**不借它的聊天框与 MBTI 人设**（36 定的"卡片优先、不聊天"）。
+
+```ts
+type QuickPrompt = {
+  id: string                   // 本职责内唯一，如 'draft_return_reply'
+  label: { zh: string; en: string }   // 按钮上那几个字
+  prompt: string               // 点下去送进事项的那句话（与 description 同规矩：一份中文）
+  kind: 'start_task' | 'ask' | 'review'  // 只影响排序与分组，不参与任何权限判定
+}
+
+type TaskExample = {
+  id: string
+  title: { zh: string; en: string }
+  description: string          // 这件事要做什么（一两句人话）
+  expected_output: string      // 做完你会拿到什么（一句话；不是保证，是形状）
+}
+```
+
+四条纪律：
+
+1. **不是权限**。能不能做仍由 `actions` 与额度说了算；点一条快捷提示开出来的事项
+   照样绑在本人那条 Assignment 上，`scopes` / `automation` 一个字都不因为它而变。
+2. **具体到这条职责的动作**。"帮我分析一下"放哪条职责上都成立，等于没写；
+   要写成"把这封来信按退货政策起草回复"、"看昨天订单里哪些还没发货"。
+3. **上限与唯一在加载时就拒**：`quick_prompts` ≤ 8、`task_examples` ≤ 6（契约里的
+   `MAX_QUICK_PROMPTS` / `MAX_TASK_EXAMPLES`），id 在本职责内唯一——重名不会报错，
+   只会让两条里的一条静默消失（和 05 §5 那个拼错的键一样的毛病）。
+4. **真源只有 yml 一份**。`PositionInstance.roles[]` 上那两个同名字段是**抄**出来的
+   （`apps/server/src/positions.ts`），改 yml 界面就变，没有第二处可改。
+
+界面上的两个落点（36 §3 的对话入口一个都没多）：
+
+| 在哪 | 用哪个 | 点一下发生什么 |
+|---|---|---|
+| 首页岗位卡下方，按职责分组、默认露前 3 条 | `quick_prompts` | 走 §2 的**岗位任务入口**（`POST /v1/positions/:id/matters`，body 带 `role_id`）：事项 `entry: 'position'` + `position_template_id` + 那条职责，跳过岗位内路由——那句话本来就写在那条职责的 yml 里，再猜一遍只会猜错。只能用**本人**那条分配，别人在做的职责连按钮都不出 |
+| 卡片「指导」折叠区顶部 | `task_examples` | 把 `description` 填进指导框（选择题优先，36 §1），**不直接提交**；`expected_output` 挂在按钮的 title 上 |
+
+### 1.10 HandoverSpec
 
 ```ts
 type HandoverSpec = {

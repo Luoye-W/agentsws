@@ -123,3 +123,36 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: sla_due_soon
+    label: { zh: "快超 24 小时的", en: "Close to the 24h deadline" }
+    prompt: "买家消息里离 24 小时回复期限不到 4 小时的有哪些"
+    kind: ask
+  - id: draft_buyer_reply
+    label: { zh: "起草站内信回复", en: "Draft a buyer message" }
+    prompt: "这条买家消息问订单到哪了：查订单与配送状态，按平台规矩起草一条站内信（不留站外联系方式）"
+    kind: start_task
+  - id: return_guidance
+    label: { zh: "退货怎么走", en: "Walk a buyer through a return" }
+    prompt: "买家要退货：按亚马逊退货规则起草一条引导回复，说清退货窗口和运费谁出"
+    kind: start_task
+  - id: refund_card
+    label: { zh: "退款先出卡", en: "Stage a refund" }
+    prompt: "这条消息要求退款：按订单金额和政策出一张待我批的退款卡"
+    kind: review
+
+task_examples:
+  - id: where_is_it
+    title: { zh: "买家问物流", en: "A buyer asks where the parcel is" }
+    description: "买家发站内信问「我的包裹几天到」。"
+    expected_output: "一条 24 小时内可发出的站内信草稿，带真实配送状态；不含站外链接与联系方式（平台硬闸会拦）。"
+  - id: return_request_amz
+    title: { zh: "买家要退货退款", en: "A buyer wants to return and refund" }
+    description: "买家说商品与描述不符，要退货退款。"
+    expected_output: "一条按平台退货规则写的引导回复，加一张待你批的退款卡；金额超额度的不会自动发。"

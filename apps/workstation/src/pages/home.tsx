@@ -10,7 +10,7 @@
  */
 import type { CalendarItem, GoalProgress, Todo } from '@agentsws/contracts'
 import type { RangeName } from '@agentsws/deck'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   AlarmClock,
   CalendarDays,
@@ -30,7 +30,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ClaimPool } from '@/components/work/claim-pool'
 import { InProgressList } from '@/components/work/in-progress-list'
-import { getHome, getPositions, listInProgress } from '@/lib/api'
+import {
+  getHome,
+  getPositions,
+  listInProgress,
+  openMatterAtPosition,
+  type PositionInstanceData,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { daysLeftLabel, hhmm, matterUrl, todoUrl } from '@/lib/work'
 
@@ -59,32 +65,123 @@ function PositionCards(): React.ReactNode {
           // 岗位页的地址用的是分配 id（36 §3 的"岗位"）：只能取**本人**那几条里的一条
           const to = p.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
           return (
-            <Link
+            <div
               key={p.position_id}
-              to={`/positions/${to}`}
-              className="rounded-lg border p-3 hover:bg-accent"
+              className="flex flex-col gap-2 rounded-lg border p-3"
               data-testid="position-card"
               data-position={p.position_id}
             >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-sm font-medium">{p.name.zh}</span>
-                {p.pending_cards === 0 ? null : (
-                  <span
-                    className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[11px]"
-                    data-testid="position-card-cards"
-                  >
-                    {t('home.positions.cards', { count: p.pending_cards })}
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t('position.counts', { cards: p.pending_cards, matters: p.open_matters })}
-              </p>
-            </Link>
+              {/* 卡头整块可点：进岗位页。快捷提示是按钮，所以卡不能整张包在 <Link> 里 */}
+              <Link to={`/positions/${to}`} className="-m-1 rounded p-1 hover:bg-accent">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-sm font-medium">{p.name.zh}</span>
+                  {p.pending_cards === 0 ? null : (
+                    <span
+                      className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[11px]"
+                      data-testid="position-card-cards"
+                    >
+                      {t('home.positions.cards', { count: p.pending_cards })}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t('position.counts', { cards: p.pending_cards, matters: p.open_matters })}
+                </p>
+              </Link>
+              <QuickPrompts position={p} />
+            </div>
           )
         })}
       </div>
     </section>
+  )
+}
+
+/** 默认先露几条；一张卡读不完就等于没有（54 §4 认知成本）。 */
+const QUICK_PROMPTS_SHOWN = 3
+
+/**
+ * WP84（53 §3 / 54 §1 第 6 行）：岗位卡下面的**快捷提示**，按职责分组。
+ *
+ * 三条纪律：
+ * 1. **不是聊天框**（36 §3：对话入口只有指导 / 问 AI / ⌘K / 事项页）。点一条就是用
+ *    这条职责在这个岗位下开一件事，走的还是 54 §2 那个岗位入口
+ *    （`entry: 'position'` + `position_template_id`），只是把"该归哪条职责"这件
+ *    已经知道的事直接告诉服务端——那句话本来就写在那条职责的 yml 里，让路由再猜一遍
+ *    只会猜错。
+ * 2. **只用本人那条分配**。没有 `my_assignment_id` 的职责（别人在做、我没有）
+ *    连按钮都不出——拿别人那条去开就是借岗位扩权（54 §1 第三条纪律）。
+ * 3. **一职责一组、默认只露前 3 条**；一个岗位只有一条职责时连职责名那行小字都不出。
+ */
+function QuickPrompts({ position }: { position: PositionInstanceData }): React.ReactNode {
+  const { t, lang } = useApp()
+  const navigate = useNavigate()
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  const open = useMutation({
+    mutationFn: (input: { assignment: string; role_id: string; prompt: string }) =>
+      openMatterAtPosition(input.assignment, { title: input.prompt, role_id: input.role_id }),
+    onSuccess: (out) => {
+      navigate(`/matters/${out.matter.id}`)
+    },
+  })
+
+  const groups = position.roles.filter(
+    (r) => r.my_assignment_id !== undefined && (r.quick_prompts ?? []).length > 0,
+  )
+  if (groups.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-2 border-t pt-2" data-testid="quick-prompts">
+      {groups.map((role) => {
+        const prompts = role.quick_prompts ?? []
+        const assignment = role.my_assignment_id
+        const isOpen = expanded[role.role_id] === true
+        const shown = isOpen ? prompts : prompts.slice(0, QUICK_PROMPTS_SHOWN)
+        const rest = prompts.length - shown.length
+        return (
+          <div key={role.role_id} data-testid="quick-prompt-group" data-role={role.role_id}>
+            {groups.length === 1 ? null : (
+              <p className="mb-1 text-[11px] text-muted-foreground">{role.role_name}</p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {shown.map((q) => (
+                <button
+                  key={q.id}
+                  type="button"
+                  className="rounded-full border px-2.5 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
+                  data-testid="quick-prompt"
+                  data-prompt={q.id}
+                  data-kind={q.kind}
+                  title={q.prompt}
+                  disabled={assignment === undefined || open.isPending}
+                  onClick={() => {
+                    if (assignment === undefined) return
+                    open.mutate({ assignment, role_id: role.role_id, prompt: q.prompt })
+                  }}
+                >
+                  {lang === 'en' ? q.label.en : q.label.zh}
+                </button>
+              ))}
+              {rest <= 0 && !isOpen ? null : (
+                <button
+                  type="button"
+                  className="rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                  data-testid="quick-prompt-more"
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    setExpanded((v) => ({ ...v, [role.role_id]: !isOpen }))
+                  }}
+                >
+                  {isOpen ? t('home.quick.less') : t('home.quick.more', { count: rest })}
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      })}
+      <p className="text-[11px] text-muted-foreground">{t('home.quick.hint')}</p>
+    </div>
   )
 }
 

@@ -103,3 +103,36 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: pending_approvals
+    label: { zh: "等我批的有哪些", en: "What is waiting on me" }
+    prompt: "现在等着我批的有哪些，按风险和等了多久排"
+    kind: ask
+  - id: who_does_what
+    label: { zh: "谁在做什么", en: "Who does what here" }
+    prompt: "这个工作区里谁持有哪些岗位和职责，有没有人的负责范围是空的"
+    kind: ask
+  - id: review_caps
+    label: { zh: "看一遍额度", en: "Review the limits" }
+    prompt: "把现在各条职责的自动化等级和额度列出来，指出松得不合适的"
+    kind: review
+  - id: connector_gaps
+    label: { zh: "还差哪些连接", en: "What is still not connected" }
+    prompt: "现在勾着的岗位里，还有哪些必需的连接没接上"
+    kind: ask
+
+task_examples:
+  - id: weekly_governance
+    title: { zh: "每周看一眼授权", en: "The weekly look at permissions" }
+    description: "想知道这周有没有谁被放开了不该放开的口子。"
+    expected_output: "一份按职责列的额度与自动化等级清单，标出和上周的差异；改动本身永远走待批卡。"
+  - id: onboard_teammate
+    title: { zh: "新人进来要开岗位", en: "A new teammate joins" }
+    description: "招了一个人，要给他开客服岗位。"
+    expected_output: "一份要建的分配清单（岗位默认勾的职责、负责范围、额度），逐条等你批，一条都不会自动生效。"

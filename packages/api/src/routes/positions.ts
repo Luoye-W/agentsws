@@ -62,6 +62,13 @@ const OpenBody = z.object({
     .array(z.object({ type: z.string().min(1), id: z.string().min(1) }))
     .max(20)
     .optional(),
+  /**
+   * WP84：从职责自己的 `quick_prompts` 点进来的——职责已经定了，跳过岗位内路由。
+   *
+   * 入口仍然是岗位入口（事项照样 `entry: 'position'`）；它只是省掉"再猜一遍"。
+   * 仍然只能是**这个岗位里、本人名下**的那一条，与 `reroute` 同一把尺子（端口里判）。
+   */
+  role_id: z.string().min(1).optional(),
 })
 
 const RerouteBody = z.object({ role_id: z.string().min(1) })

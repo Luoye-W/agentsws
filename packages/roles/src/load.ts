@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { RoleId } from '@agentsws/contracts'
 import Schema from '@deepseek-ai/schemastery'
 import { parse as parseYaml } from 'yaml'
-import { collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'
+import { checkRoleExtras, collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'
 import { type Position, type RoleDefinitionFull, RoleSchemaError } from './types.js'
 
 /** 本包自带的职责定义目录（`roles/<domain>/<slug>.yml`）。 */
@@ -83,7 +83,16 @@ function parseDocument(text: string, source: string): unknown {
 
 /** 从 YAML 文本解析一个职责定义。 */
 export function parseRole(text: string, source = '<string>'): RoleDefinitionFull {
-  return validate<RoleDefinitionFull>(parseDocument(text, source), ROLE_SCHEMA, source, 'role')
+  const role = validate<RoleDefinitionFull>(
+    parseDocument(text, source),
+    ROLE_SCHEMA,
+    source,
+    'role',
+  )
+  // WP84：条数上限归 schemastery，id 重名归这一刀（schemastery 看不见"这几条之间"）
+  const dup = checkRoleExtras(role)
+  if (dup !== undefined) throw new RoleSchemaError(source, dup.field, dup.message)
+  return role
 }
 
 /** 从 YAML 文件读取一个职责定义。 */

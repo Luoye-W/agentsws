@@ -120,3 +120,36 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: waiting_now
+    label: { zh: "现在等着回的", en: "Chats waiting right now" }
+    prompt: "聊天窗里现在还等着回复的对话有哪些，等最久的排前面"
+    kind: ask
+  - id: quick_faq
+    label: { zh: "秒回常见问题", en: "Answer a common question" }
+    prompt: "这条聊天问的是运费和时效：按店铺设置里的真数据起草一句回复，不承诺具体日期"
+    kind: start_task
+  - id: handoff_email
+    label: { zh: "转成邮件跟进", en: "Hand off to email" }
+    prompt: "这条聊天涉及退款，聊天窗里不承诺：转成邮件跟进，并写一句交接说明"
+    kind: start_task
+  - id: ask_missing
+    label: { zh: "缺资料就追问", en: "Ask for what is missing" }
+    prompt: "这条聊天没给订单号也没给邮箱：起草一句追问，把要的信息一次问全"
+    kind: start_task
+
+task_examples:
+  - id: shipping_question
+    title: { zh: "访客问运费与时效", en: "A visitor asks about shipping" }
+    description: "访客在商品页问「寄到德国多少钱、几天能到」。"
+    expected_output: "一句可以直接发出去的回复，运费与时效都来自店铺设置；给不出准日期就说区间，不编。"
+  - id: refund_in_chat
+    title: { zh: "聊天里张口要退款", en: "Someone asks for a refund in chat" }
+    description: "访客在聊天窗里要求退款，而且催着要答复。"
+    expected_output: "一句先安抚、不承诺的回复，加一条转邮件跟进的记录；退款本身留给网站客服那条职责按额度处理。"

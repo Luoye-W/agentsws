@@ -12,6 +12,7 @@ import { AskAiPanel, type AskAiScope } from '@/components/deck/ask-ai-panel'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
+import type { RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export type NoteMode = 'instruct' | 'reject'
@@ -20,6 +21,7 @@ export function DeckNotePanel({
   mode,
   busy,
   ask,
+  examples,
   onCancel,
   onSubmit,
 }: {
@@ -27,17 +29,52 @@ export function DeckNotePanel({
   busy: boolean
   /** 问 AI 的边界（这张卡 / 这个事项）；不给就是禁用态 */
   ask?: AskAiScope | undefined
+  /**
+   * WP84：这张卡那条职责的**示例任务**（54 §1 第 6 行）。
+   *
+   * 只在「指导」里出，而且只在顶部——第一次面对这条职责的人不知道该写什么，
+   * 与其给他一个空框，不如先摆出"这条职责典型能接什么活"让他点一条
+   * （36 §1 选择题优先）。点了 = 把那件事的说法填进下面的框，**不是**直接提交。
+   */
+  examples?: RoleTaskExampleData[] | undefined
   onCancel: () => void
   onSubmit: (input: { text: string; scope?: InstructionScope }) => void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const [text, setText] = useState('')
   const [scope, setScope] = useState<InstructionScope>('single_reply')
   // 指导必须有话；驳回也必须写原因（14 §4：它是最强的学习信号）。
   const ready = text.trim() !== ''
+  const showExamples = mode === 'instruct' && examples !== undefined && examples.length > 0
 
   return (
     <div className="flex flex-col gap-2" data-testid={`deck-panel-${mode}`}>
+      {/* WP84：示例任务在最顶上，点一条填进下面的框（选择题优先，不加第二个输入口） */}
+      {showExamples ? (
+        <div className="flex flex-col gap-1" data-testid="task-examples">
+          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            {t('card.examples.title')}
+            <Hint text={t('card.examples.hint')} />
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {examples.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className="rounded-full border px-2.5 py-0.5 text-xs hover:bg-accent"
+                data-testid="task-example"
+                data-example={e.id}
+                title={e.expected_output}
+                onClick={() => {
+                  setText(e.description)
+                }}
+              >
+                {lang === 'en' ? e.title.en : e.title.zh}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {/* WP43 ③：提示进问号；输入框自己的 aria-label 照旧 */}
       <p className="flex items-center gap-1 text-xs font-medium">
         {mode === 'instruct' ? t('card.instruct.title') : t('action.reject')}
