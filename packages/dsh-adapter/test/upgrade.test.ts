@@ -13,9 +13,18 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-/** 升级前后的两版。换版本时改这两行 + 采一份新基线。 */
-const FROM = '0.1.3-alpha.2'
-const TO = '0.1.5-rc.1'
+/**
+ * 升级前后的两版。换版本时改这三行 + 采一份新基线。
+ *
+ * `FROM_FILE` 与 `FROM` 分开写是 WP70 的教训：基线必须是**升级前那棵代码树**上采的。
+ * WP41 留下的 `0.1.5-rc.1.json` 是 WP41 当时的代码树（pack 只有 13 条场景），
+ * WP42–WP69 之后再拿它当 FROM，diff 出来的是我们自己的改动，不是上游的。
+ * 所以 WP70 在还没动版本号的分支上另采了一份 `0.1.5-rc.1-wp70.json`——
+ * 同一版 dsh、当前代码树。旧的两份不删：下一次升级时它们是"上上版"。
+ */
+const FROM_FILE = '0.1.5-rc.1-wp70'
+const FROM = '0.1.5-rc.1'
+const TO = '0.1.6-alpha.1'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
 const MAX_TOKEN_DRIFT_PCT = 5
@@ -56,7 +65,7 @@ function load(version: string): Baseline {
   return JSON.parse(readFileSync(file, 'utf8')) as Baseline
 }
 
-const before = load(FROM)
+const before = load(FROM_FILE)
 const after = load(TO)
 
 /** 事件类型序列（把 `@at` 切掉）。 */

@@ -34,6 +34,21 @@
  * 换的是宿主进程，不是组合。等上游把 server→client 请求补上、且 headless 的 loop 能被
  * 我们的 seam 完全接管时，这一层可以整块换成官方 SDK client，方法集不用动。
  * 完整评估见 `packages/dsh-adapter/UPGRADE.md` §5。
+ *
+ * ── WP70（0.1.6-alpha.1）的重判：上面三条里第 2 / 3 条仍然成立 ──
+ *
+ * - 第 2 条：`@deepseek-ai/dsh-sdk-jsonrpc-server@0.1.6-alpha.1` 的 `lib/index.js` 里
+ *   `transport.request(` 仍然是 **0 处**；往回只有四个 `transport.notify`
+ *   （`session.event` / `session.status` / `subagent.started` / `subagent.finished`）。
+ *   上游源码里 `packages/sdk/protocol/src` 与 0.1.5-rc.1 **逐字节相同**，
+ *   `packages/sdk/server/src/server.ts` 只改了一行（`ctx.plugin(LlmDeepSeek, {})` → `ctx.plugin(LlmDeepSeek)`）。
+ * - 第 3 条：`dsh-headless` 这一版新增了 `--json`（逐行 JSON 事件流）、
+ *   `--session-id` 与 stdin 任务（`lib/types/{index,startup,json-stream}.d.ts`）。
+ *   `--json` **替不了这一档**：`projectJsonRun(ctx, agent, sink)` 是对
+ *   “一个 Agent 的持久 Session 事件”的**单向 stdout 投影**（`json-stream.d.ts` 首段：
+ *   “Every projected event is a commit point”），没有任何回调宿主的方向。
+ *   而我们这条桥上子进程→宿主的请求有五条（见下面 `M_HOST_*`），
+ *   `--json` 一条都盖不了。
  */
 import type { ObjectRef, RunEvent, RunRequest, RunResult } from '@agentsws/contracts'
 import type { CreatePolicyQuestionFn, DraftPayload, StageIntent } from '@agentsws/stand-ins'

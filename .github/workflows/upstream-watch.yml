@@ -301,6 +301,17 @@ jobs:
               `- [ ] ⑥ 指标若真变了，逐条解释之后才可以 \`--rewrite-baseline\``,
               `- [ ] ⑦ 全仓验证：四运行时 × 场景矩阵 + 15 人 pack`,
               ``,
+              `## 这一版特别盯什么（wishlist；每次升级完更新这一段）`,
+              ``,
+              `- **官方 SDK 的 server→client 请求**：\`dsh-sdk-jsonrpc-server\` 里出现 \`transport.request(...)\` 的调用点，`,
+              `  或 \`dsh-sdk-protocol\` 的类型里出现 server 发起的 method。WP70 复核：\`lib/index.js\` 仍是 0 处，`,
+              `  只有 4 个 \`transport.notify\`（session.event / session.status / subagent.started / subagent.finished）。`,
+              `- **headless 的 turn 驱动能不能被宿主接管**：0.1.6-alpha.1 的 \`--json\` 只是 stdout 单向投影，不算。`,
+              `- **browser-use 转正 / 进 rc**：现在 \`@deepseek-ai/dsh-browser-use\` + 三个后端都还挂在 \`experimental\` 下，`,
+              `  且 playwright 后端要 \`@playwright/mcp\` → Chromium 下载（16 §3 不给开构建）。`,
+              `  信号是：包名从 \`dsh-experimental-browser-use-*\` 去掉 experimental，或后端能在不开原生构建的前提下起。`,
+              `  我们这一侧的门禁已经证明挡得住（\`packages/dsh-adapter/test/browser-seam.test.ts\`，WP70）。`,
+              ``,
               `> 17 §4：**任一红 = 不升级**。自动化只负责把事实摆出来。`,
             ].join('\n')
             await github.rest.issues.create({

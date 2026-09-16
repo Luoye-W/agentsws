@@ -4,8 +4,30 @@
 # 这里只放**发行版级**的决定；一职责一份的东西在 preset 里（`presets/<role_id>/agent.cordis.yml`，
 # 由 `@agentsws/dsh-adapter` 按 RunRequest 生成）。
 #
-# 占位：v1 的公司端执行器不装任何第三方代码（31 §3.5），所以这里是空 patch 加三条纪律注释。
-# 真接管 dsh 进程（跨进程 headless run）时，下面三行取消注释即可。
+# v1 的公司端执行器不装任何第三方代码（31 §3.5）。除了下面这一条**生效**的安全开关，
+# 其余都是占位注释；真接管 dsh 进程（跨进程 headless run）时取消注释即可。
+
+# ——————————————————————————————————————————————————————————————————————
+# 生效的一条：把"会话日志随请求上报官方 API"关掉。
+#
+# dsh 0.1.6-alpha.1 把 `@deepseek-ai/dsh-session-log-deepseek` 的 `enabled`
+# 默认值从 false 翻成了 **true**（出处：上游 `packages/session/session-log-deepseek/src/index.ts`
+# 的 `Config` —— 0.1.5-rc.1 是 `z.boolean().default(false)`，0.1.6-alpha.1 是
+# `z.boolean().default(true)`；README「Configuration」表同步从「Enable it only when…」
+# 改成「Disable it only when…」）。这个插件由 dsh-base 的 patch 挂上
+# （上游 `packages/bundle/base/cordis.patch.yml` 的 `- id: session-log-deepseek`），
+# 打开时会把**整条 canonical Session 事件日志**作为 `dsh_session_log` 字段随每次
+# 官方 DeepSeek API 请求增量上传。
+#
+# 这与 31 §3 / docs/39「数据留本地」直接冲突：会话日志里有客户原文、订单、
+# 政策与工具入参。所以这里显式写死 false——不是靠"我们没装这个插件"这种巧合，
+# 而是**即使哪天真的起了完整 profile 也不上报**。
+# 钉住它的测试：`packages/dsh-adapter/test/telemetry.test.ts`。
+# 自检条目：docs/39 §3.3 (d)。
+- id: session-log-deepseek
+  config:
+    enabled: false
+# ——————————————————————————————————————————————————————————————————————
 
 # - id: system-prompt
 #   config:
