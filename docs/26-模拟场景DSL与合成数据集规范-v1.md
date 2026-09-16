@@ -87,6 +87,23 @@ packs/dtc-3c-3p/            # 3 人 3C 配件独立站，英文客户，中文�
 3. 注入 model 故障 → `freeze_on_model_outage` 不变量可被验证为通过
 4. 报告里的每个指标都能追溯到事件查询
 
+### 修订（WP81）：跨运行时的"一致"是**结果一致**，不是逐字节一致
+
+dsh 这一档的回合改由官方 Agent 层驱动之后（54（将改号 55）§2.2 第一条），
+调几次工具、分几轮调是模型 + 底座的事，stub / direct 两条自排回合的路
+**不可能**自然产生同一条事件序列。所以一致性拆成两层：
+
+| 比什么 | 在谁之间比 | 钉在哪 |
+|---|---|---|
+| **结果一致**：六条不变量 + 场景 `expectations` + 卡片 / `staged_changes` / 对外发件**逐条相等** | 四个运行时之间（stub / direct / dsh 两档） | `packages/simulation/test/runtime-parity.test.ts` → `WP81 B` |
+| **事件序列逐条相等** | 只在 dsh 两档之间（进程内 vs 子进程）——换宿主进程不换语义 | 同文件 → `WP30 A` |
+| **同 seed 两次跑逐条相同** | 同一个运行时自己 | 上面第 1 条，未变 |
+
+配套：模拟档给 dsh 两档换上与 `direct` 同一个"规则脑" provider
+（`aftersalesBrainProvider`）——22 的 `stubProvider` 只出文本、不出 `tool_calls`，
+agent-loop 一轮就 idle，一个工具都不会跑。换过之后两条路对着**同一个"模型"**跑，
+parity 比的才是运行时本身。`stub` 运行时不受影响（它自己就是规则脑，不打模型）。
+
 ## 7. 实现状态（2026-09-10，WP9 + WP30 + WP32）
 
 **通了的**

@@ -532,3 +532,26 @@ devDependency；它自己只依赖 cordis + dsh-brand，两个都已在树里，
 5. **`upstream-watch.yml` 的自动对比盖不住 §5 那类改动**：它只看基线指纹，而默认值翻转
    既不改类型也不改指纹（因为我们的组合里本来就没装那个插件），全绿的报告会整条漏掉它。
    docs/42 §3 因此把启用 `schedule:` 的条件改了一条：先给 job 加上 ④bis 的默认值扫描。
+
+---
+
+## WP81（2026-09-16）：不是升级，但动了组合——引入官方 Agent 层
+
+dsh 版本没动（仍是 `0.1.6-alpha.1`）。改的是**我们自己的回合逻辑**：
+回合改由官方 `dsh-agent` + `dsh-agent-loop` 驱动，我们不再自排。
+设计记录、挂载清单、事件映射表、指标解释、给 WP82 的接口都在
+**`packages/dsh-adapter/AGENT-LAYER.md`**，这里只记与"下次升级"直接相关的三条：
+
+1. **升级基线换了一份自比的**：`test/upgrade-baseline/0.1.6-alpha.1-wp81.json`，
+   `upgrade.test.ts` 的 `FROM_FILE` / `TO_FILE` 都指它。下次升 dsh 时
+   `FROM_FILE` 用它、`TO_FILE` 用新版本，docs/42 的流程一步不变。旧的四份一个没删。
+2. **上一节 §7 第 3 条（`dsh-session` 的三个同步读接口被弃用）现在真的碰到了**：
+   `harness.ts` 的 `summarizeTurn()` 用 `session.eventAt(seq)` 取这一轮的最后一段
+   assistant 文本与终止原因——官方 `bundle/headless/src/index.ts` 的 `summarize()`
+   也是这么写的（带着一条 `oxlint-disable … no-deprecated`）。上游哪天真删了它，
+   这一处要改成 projection 路（`SessionMessageProjection`）。**这是升级时第一个会红的地方。**
+3. **新增三个直接依赖**：`dsh-agent` / `dsh-agent-loop` / `dsh-session-projection`，
+   精确版本，`minimumReleaseAgeExclude` 里 WP70 就已逐包写死、无需新增行。
+   下次升级这三个也要一起换版本号，而且 `AgentLoop` 的 `static inject`
+   （`agents` / `sessions` / `llm` / `tools` / `systemPrompt` / `sessionProjections`）
+   是"最小挂载"的判据——它变了，`createHarness()` 的插件列表就得跟着变。

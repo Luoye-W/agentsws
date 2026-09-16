@@ -24,12 +24,15 @@
  *    `subagent.*`），全包一次 `transport.request(...)` 都没有，也没有审批 answerer 的位置。
  *    我们的五个 seam 有四个要从子进程回调宿主（工具出口、模型网关、stage / 起草、边界卡），
  *    走官方 server 就得另开一条我们自己的旁路（socket 或额外 fd），并不比现在这条干净。
- * 3. **语义会变**：官方 `sdk` 档由 dsh 自己的 agent loop 驱动 turn，而 17 §4 要求
- *    `run()` 的事件序列与进程内档逐条一致（同一份契约测试跑两遍）。模拟档的 stub provider
- *    不产 tool_calls，dsh 的 loop 一轮就 idle，事件序列必然对不上。
+ * 3. ~~**语义会变**：官方 `sdk` 档由 dsh 自己的 agent loop 驱动 turn~~ —— **WP81 已不成立**。
+ *    我们现在就是用官方 agent-loop 驱动 turn 的（`harness.ts`），模拟档的模型替身也换成了
+ *    会产 `tool_calls` 的规则脑。这一条剩下的只有"两档事件序列必须逐条一致"这个要求本身，
+ *    而它由 `runtime-parity.test.ts` 的 `WP30 A` 守着，与走不走官方 SDK 无关。
  *
- * 所以这一档的形态是：**dsh 的 Cordis 树整棵跑在子进程里**（`SystemPrompt` / `ToolRuntime` /
- * `ApprovalService` / `LlmRuntime` + 我们的门禁插件），宿主用 dsh 官方的传输驱动它。
+ * 所以这一档的形态是：**dsh 的 Cordis 树整棵跑在子进程里**（WP81 起还包含官方 Agent 层：
+ * `SessionStore` / `SessionProjectionRegistry` / `AgentRegistry` / `AgentLoop`，
+ * 加上 `SystemPrompt` / `ToolRuntime` / `ApprovalService` / `LlmRuntime` + 我们的门禁插件），
+ * 宿主用 dsh 官方的传输驱动它。
  * 组合与进程内档共用 `harness.ts` + `gate.ts` 一份代码，preset 也仍然按 `preset.ts` 生成——
  * 换的是宿主进程，不是组合。等上游把 server→client 请求补上、且 headless 的 loop 能被
  * 我们的 seam 完全接管时，这一层可以整块换成官方 SDK client，方法集不用动。
