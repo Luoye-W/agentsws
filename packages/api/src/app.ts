@@ -29,6 +29,8 @@ import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
 import { joinRoutes } from './routes/join.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
+// WP68（48 §5.4）：本地红人库 `/v1/kol/*`
+import { kolRoutes } from './routes/kol.js'
 import { meetingRoutes } from './routes/meetings.js'
 import { modelRoutes } from './routes/models.js'
 import { onboardingRoutes } from './routes/onboarding.js'
@@ -146,6 +148,12 @@ export function collectRoutes(): Route[] {
     ...secretaryRoutes(),
     // WP57：在线客服。`/v1/chat/*` 是独立前缀，与已有路径都不撞
     ...chatRoutes(),
+    /*
+     * WP68（48 §5.4）：本地红人库。`/v1/kol/*` 是独立前缀，与已有路径都不撞；
+     * 内部次序也不讲究——`/v1/kol/creators/:id` 与 `/v1/kol/merge-suggestions/:id/accept`
+     * 的第一段就分得开。
+     */
+    ...kolRoutes(),
   ]
 }
 

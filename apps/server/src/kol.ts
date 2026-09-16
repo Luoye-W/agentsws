@@ -360,6 +360,10 @@ export function seedDemoKol(store: KolStore, now: string): void {
   store.saveCreator({ id: 'cre_demo_1', display_name: 'Gadget Jonas', merged_from: [] })
   store.saveCreator({ id: 'cre_demo_2', display_name: 'Desk Rosa', merged_from: [] })
   store.saveCreator({ id: 'cre_demo_3', display_name: 'Cable Kevin', merged_from: [] })
+  // WP68：一条 Instagram 的账号。**为了 campaign 那张清单**——跨渠道挑人时，
+  // 本人只有 YouTube 那条职责，Instagram 这一组要在清单上看得见、灰着、
+  // 并说得出为什么（05 §4）。一组空的挑人清单演示不出这件事。
+  store.saveCreator({ id: 'cre_demo_4', display_name: 'Studio Mia', merged_from: [] })
 
   store.saveAccount({
     id: 'pa_demo_1',
@@ -397,6 +401,20 @@ export function seedDemoKol(store: KolStore, now: string): void {
     followers: 620_000,
     engagement_rate: 0.002,
     category: '数码',
+    language: 'en',
+    region: 'US',
+    observed_at,
+  })
+
+  store.saveAccount({
+    id: 'pa_demo_4',
+    creator_id: 'cre_demo_4',
+    channel: 'instagram',
+    handle: 'studiomia',
+    url: 'https://www.instagram.com/studiomia',
+    followers: 26_000,
+    engagement_rate: 0.055,
+    category: '家居',
     language: 'en',
     region: 'US',
     observed_at,

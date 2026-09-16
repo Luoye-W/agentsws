@@ -124,17 +124,19 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
     }
   })
 
-  it('红人库永远算连上；渠道那一侧永远"还没连"并说清楚没它也能用', () => {
+  it('红人库永远算连上；渠道那一侧连上哪条就亮哪条（WP68 起五张卡可连）', () => {
     expect([...ALWAYS_CONNECTED]).toContain('kol')
     const rows = dataSourcesFromConnections([])
     expect(rows.find((r) => r.id === 'kol')?.connected).toBe(true)
     const channel = rows.find((r) => r.id === 'kol_channel')
     expect(channel?.connected).toBe(false)
-    expect(channel?.note).toBe(PLANNED_SOURCE_NOTES.kol_channel)
-    // 后半段要紧：别让人以为岗位是坏的
-    expect(channel?.note).toContain('不靠它也能用')
-    // 没连就别给外链
-    expect(channel?.report_url).toBeUndefined()
+    // WP68：它不再是"还没做"，而是"你还没连"——所以没有 planned 那句话，
+    // 界面照常给「去连接」按钮（"还没做"的那一档才不给，见 PLANNED_SOURCE_NOTES）
+    expect(PLANNED_SOURCE_NOTES.kol_channel).toBeUndefined()
+    expect(channel?.note).toBeUndefined()
+    // 连上任意一条渠道，这一块就亮
+    const connected = dataSourcesFromConnections([{ service: 'tiktok_research' }])
+    expect(connected.find((r) => r.id === 'kol_channel')?.connected).toBe(true)
   })
 
   it('找人清单按分排序，刷粉那条的理由写在清单上（不悄悄拿掉）', () => {

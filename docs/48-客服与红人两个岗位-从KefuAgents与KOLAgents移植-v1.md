@@ -283,7 +283,25 @@ YouTube 全站日配额 10000 单位。
 |---|---|---|
 | WP61 公共红人库服务 | 5.3 云端；`data` scope；插件配对；`/v1/data/*` 路由包挂进 `apps/cloud` | 58 / 59 已合并 ✅ |
 | WP67 kol-core + 五条渠道职责骨架 | 5.1 五条职责 yml + 岗位模板、5.2 六个对象与能力模块、YouTube 与 Instagram 适配器先做、面板五分块、3 人 pack 场景 | 与 WP61 可并行 |
-| WP68 其余三渠道适配器 + campaign 向导 | Facebook / TikTok / X 适配器、跨渠道 campaign、Excel 导入 | 67 |
+| WP68 红人岗位收口 ✅ | Facebook / TikTok / X 适配器、跨渠道 campaign、导入、本地红人库路由与界面、本地接公共库 | 67 |
+
+> **WP68 实现落点（§5.4）**：**2026-09-16 完成待审**，六个提交。
+>
+> | 件 | 在哪 | 关键判断 |
+> |---|---|---|
+> | 红人库 `/v1` 面 | `packages/api/src/routes/kol.ts`（16 条路由）、`apps/server/src/kol-service.ts` | 六个对象域各一把闸；`X-Assignment` 语义不变。WP67 留的洞是"红人库没有门"——面板读得到它，只因为服务进程在装配期直接把投影塞给了 deck |
+> | 联系方式真进加密库 | 同上 + `apps/server/src/secret-store.ts` | 明文只走两跳：进来那一跳（`value_ref = kol.contact.<id>`，走 WP66 的品牌视图）与发信那一跳（`revealContact`）。读回来只有 `a***@x.com`——`KolContactView` 这个类型上**根本没有明文那一格**，所以它漏不进响应体、事件或模型上下文 |
+> | 合并建议卡的调用方 | `kol-service.ts` 的 `mergeSuggestions` | 建议 id 是**算出来的**（`kms_<keep>__<merge>`），不落第二张表：建议是库当前状态的一个函数，存一份就要回答"什么时候重算" |
+> | 三条渠道适配器 | `packages/kol-core/src/channels/{facebook,tiktok,x}.ts`（`pending.ts` 删掉）、`apps/server/src/kol-channels.ts` | 真 HTTP 形状照公开文档写（Graph v21.0 / Research API v2 / X API v2），凭据只从本机加密库按连接取。**TikTok / X 没有"按关键词搜人"这回事**，所以 `search` 收的是账号名——硬做成搜索，用户会以为搜不到就是没有这个人。YouTube 搜人是**两跳**（`search.list` 拿 id + `channels.list` 补粉丝数）：少了第二跳，打分那一项直接 0 分 |
+> | 五张卡可连 | `apps/server/src/catalog.ts` 的 `KOL_CONNECTORS` | 从 `PLANNED_CONNECTORS` 搬进 `CATALOG`，各带原生表单与 ≤ 5 步说明。**代价写在第一句**：Meta 要过审、TikTok 要申请、X 要买档；每条都补一句"没有它这条职责照样能用" |
+> | campaign 向导 | `POST /v1/kol/campaigns` + `/:id/accept`，新 ApprovalKind `kol_campaign` | **不并集权限**（05 §4）：本人没有 `kol.<channel>` 的整组灰显并说清楚；接受时**重新查一次**——卡可能是昨天出的，而职责昨天分出去今天收回来是一件正常的事 |
+> | 导入 | `kol-service.ts` 的 `readTable` / `importTable` | 这一版**只认 CSV / TSV**：仓库的 pnpm 里没有 xlsx 依赖，与其做半个不如照实说一句"另存为 CSV 再传一次" |
+> | 序列跟进的定时方 | `HANDLERS.kolSequence`（每天 09:00，按品牌各跑一轮） | `misfire_policy: skip`——关机三天再开机不该把欠的三封一次性全提出来，那正是"别让人觉得被群发轰炸"要挡的事。每一封仍是一张 `kol_outreach` staged change 走 guardrail |
+> | 本地接云端公共库 | `apps/server/src/kol-public-client.ts` | 49 M2 的开关 `kol.<channel>`；浏览免费、reveal 扣 `data.kol.lookup`，**价在点之前就说出来**。403 + `required_scope: data` 翻成"去设置 → 账号与积分重新关联"，不是一个 403 |
+> | 工作台 | `apps/workstation/src/components/kol/kol-panel.tsx` | 找人 / 详情 / 建联 / 阶段 / 导入 / campaign 六件事；截图拍出来两处"把真话说成假话"（编出来的 `brand_pitch`、接句时多一个句号）顺手修了 |
+> | 模拟 | `packs/dtc-3c-3p/scenarios/kol/{campaign-wizard-respects-channel-duties,public-library-reveal-charges-credits}.yml` → 32/32 | 第二条跑的是 `packages/kol-public` 那一份**真服务**（真钱包、真价目、真加密）：这道题要钉的三件事全是那一份代码算出来的，换成替身就只是在验场景自己写的数 |
+>
+> 截图 `docs/assets/workstation/{kol-campaign,kol-creator-detail}.png`。
 
 ## 6. 知识库与"关机也在线"（L5–L6，取代 v1 的同步 / 交接）
 

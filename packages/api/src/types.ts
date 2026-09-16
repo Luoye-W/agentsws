@@ -59,6 +59,7 @@ import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
+import type { KolPort } from './routes/kol.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { ModelsPort } from './routes/models.js'
 import type { OnboardingPort } from './routes/onboarding.js'
@@ -608,6 +609,12 @@ export interface GatewayDeps {
    * 只是少了"交给这个岗位一件事"那个按钮。
    */
   positions?: PositionEntryPort
+  /**
+   * WP68（48 §5.4）：本地红人库。没装配时 `/v1/kol/*` 回 not_implemented——
+   * 红人营销那五条职责的面板照常读得到（投影是装配期塞进去的），
+   * 只是没有任何增删改的入口。
+   */
+  kol?: KolPort
   /** 37 工作模型（事项 / 目标 / 待办 / 日历 / 计划 / 复盘）；没装配时那几条路由回 not_implemented。 */
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */

@@ -34,6 +34,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'membership',
   // WP63 / 51 §2.1 数据日报：店铺日报卡（L3 自动出、看完归档）
   'daily_report',
+  // WP68 / 48 §5.2：campaign 挑人清单卡（接受才按渠道分别建合作）
+  'kol_campaign',
 ])
 
 export function isKnownKind(kind: string): boolean {

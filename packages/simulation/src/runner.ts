@@ -1115,6 +1115,44 @@ async function execute(
         await tick()
         return
       }
+      // ── WP68 campaign 向导与云端公共库（48 §5.2 / §5.3）──────────────
+      case 'kol.creator': {
+        world.kol.creator(event.creator)
+        return
+      }
+      case 'kol.campaign': {
+        const e = event.campaign
+        const out = await world.kol.campaign({
+          who: e.who,
+          goal: e.goal,
+          budget: e.budget,
+          channels: e.channels,
+          headcount: e.headcount,
+        })
+        world.appendEvent('simulation.kol_campaign_requested', {
+          goal: e.goal,
+          channels: e.channels,
+          picks: out.picks,
+          created: out.created,
+        })
+        await tick()
+        return
+      }
+      case 'kol.public_creator': {
+        world.kol.publicCreator(event.public_creator)
+        return
+      }
+      case 'kol.public_reveal': {
+        const e = event.public_reveal
+        await world.kol.revealFromPublicLibrary({
+          who: e.who,
+          channel: e.channel,
+          handle: e.handle,
+          ...(e.topup === undefined ? {} : { topup: e.topup }),
+        })
+        await tick()
+        return
+      }
       // ── WP63 店铺管理与内容与博客（51 §2.1 / §2.2）─────────────────
       case 'shop.publish_product': {
         const e = event.publish_product

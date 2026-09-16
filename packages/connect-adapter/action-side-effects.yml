@@ -247,17 +247,21 @@ actions:
   aftership.retrack_tracking: write
   aftership.mark_tracking_completed: write
 
-  # ---------- 红人营销的五条渠道（WP67 / 48 §5.1）----------
+  # ---------- 红人营销的五条渠道（WP67 骨架 / WP68 真调用）----------
   #
-  # 五个连接器都还是**待增加**（`PLANNED_CONNECTORS`），真调用没接。副作用先标好的
-  # 理由与 WP64 的 Klaviyo 逐字相同：这张表默认 write，漏标的读动作拿不到 role-read
-  # 令牌——骨架期标好，接上那天不用再回来补一遍，也不会出现"接上了却读不了"。
+  # WP68 起这五个连接器在目录里是**可连**的，真 HTTP 在
+  # `apps/server/src/kol-channels.ts`。WP67 骨架期就把副作用标好的理由在这里
+  # 兑现了：这张表默认 write，漏标的读动作拿不到 role-read 令牌——
+  # 接上那天不用回来补一遍，也不会出现"接上了却读不了"。
   #
   # 写口也逐条列出来。红人这五条职责**不经连接器发信**（开发信是账本上的
   # `kol_outreach`，走审批与出站流水线），所以下面的写口眼下一条都用不上；
   # 写出来是为了让人一眼看全各平台那头有哪些写的动作。
   youtube_data.search_channels: read
   youtube_data.get_channel: read
+  # WP68：搜人是**两跳**——`search.list` 只给标题与频道 id，粉丝数在 `channels.list` 里。
+  # 合成一跳给适配器，否则"搜出来的人没有粉丝数"会让打分那一项直接 0 分
+  youtube_data.list_channels: read
   youtube_data.list_channel_videos: read
   youtube_data.get_video: read
   youtube_data.get_video_statistics: read

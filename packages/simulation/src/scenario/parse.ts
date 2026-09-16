@@ -188,6 +188,11 @@ const EVENT_KEYS = [
   'kol.tracked_link',
   'kol.affiliate_order',
   'kol.attribution',
+  // WP68 campaign 向导与公共库（48 §5.2 / §5.3）
+  'kol.creator',
+  'kol.campaign',
+  'kol.public_creator',
+  'kol.public_reveal',
   // WP63 店铺管理与内容与博客（51 §2.1 / §2.2）
   'shop.publish_product',
   'content.blog_post',
@@ -255,6 +260,9 @@ const EXPECTED_KEYS = [
   'kol_outreach',
   'kol_collaboration',
   'kol_attribution',
+  // WP68（48 §5.2 / §5.3）
+  'kol_campaign',
+  'kol_reveal',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -815,6 +823,101 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         at,
         type: 'kol.attribution',
         attribution: { who: str(source, `${path}.${key}.who`, body.who) },
+      }
+    }
+    // WP68（48 §5.2 / §5.3）：campaign 向导与云端公共库
+    case 'kol.creator': {
+      known(source, `${path}.${key}`, body, [
+        'channel',
+        'handle',
+        'followers',
+        'engagement_rate',
+        'category',
+      ])
+      return {
+        at,
+        type: 'kol.creator',
+        creator: {
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          handle: str(source, `${path}.${key}.handle`, body.handle),
+          followers: num(source, `${path}.${key}.followers`, body.followers),
+          ...(body.engagement_rate === undefined
+            ? {}
+            : {
+                engagement_rate: num(
+                  source,
+                  `${path}.${key}.engagement_rate`,
+                  body.engagement_rate,
+                ),
+              }),
+          ...(body.category === undefined
+            ? {}
+            : { category: str(source, `${path}.${key}.category`, body.category) }),
+        },
+      }
+    }
+    case 'kol.campaign': {
+      known(source, `${path}.${key}`, body, ['who', 'goal', 'budget', 'channels', 'headcount'])
+      const channels = body.channels
+      if (!Array.isArray(channels) || channels.length === 0)
+        fail(source, `${path}.${key}.channels`, 'channels 要是一个非空数组')
+      return {
+        at,
+        type: 'kol.campaign',
+        campaign: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          goal: str(source, `${path}.${key}.goal`, body.goal),
+          budget: num(source, `${path}.${key}.budget`, body.budget),
+          channels: (channels as unknown[]).map((c, i) =>
+            str(source, `${path}.${key}.channels[${i}]`, c),
+          ),
+          headcount: num(source, `${path}.${key}.headcount`, body.headcount),
+        },
+      }
+    }
+    case 'kol.public_creator': {
+      known(source, `${path}.${key}`, body, [
+        'channel',
+        'handle',
+        'followers',
+        'engagement_rate',
+        'email',
+      ])
+      return {
+        at,
+        type: 'kol.public_creator',
+        public_creator: {
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          handle: str(source, `${path}.${key}.handle`, body.handle),
+          followers: num(source, `${path}.${key}.followers`, body.followers),
+          ...(body.engagement_rate === undefined
+            ? {}
+            : {
+                engagement_rate: num(
+                  source,
+                  `${path}.${key}.engagement_rate`,
+                  body.engagement_rate,
+                ),
+              }),
+          ...(body.email === undefined
+            ? {}
+            : { email: str(source, `${path}.${key}.email`, body.email) }),
+        },
+      }
+    }
+    case 'kol.public_reveal': {
+      known(source, `${path}.${key}`, body, ['who', 'channel', 'handle', 'topup'])
+      return {
+        at,
+        type: 'kol.public_reveal',
+        public_reveal: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          handle: str(source, `${path}.${key}.handle`, body.handle),
+          ...(body.topup === undefined
+            ? {}
+            : { topup: num(source, `${path}.${key}.topup`, body.topup) }),
+        },
       }
     }
     case 'shop.publish_product': {

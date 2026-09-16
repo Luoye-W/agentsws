@@ -183,7 +183,7 @@ describe('WP20 §A 连接清单与目录', () => {
     expect((await data<{ connections: ConnectionView[] }>(res)).connections).toEqual([])
   })
 
-  it('目录里十个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
+  it('目录里十五个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
@@ -200,6 +200,12 @@ describe('WP20 §A 连接清单与目录', () => {
       'shopify_email',
       'aftership',
       'track17',
+      // WP68（48 §5.1 / §5.4）：红人那五条渠道从"待增加"改成**可连**（各家一把令牌）
+      'youtube_data',
+      'instagram_graph',
+      'facebook_graph',
+      'tiktok_research',
+      'x_api',
     ])
     for (const p of live) {
       expect(p.setup_guide.steps.length).toBeGreaterThan(0)
@@ -228,16 +234,8 @@ describe('WP20 §A 连接清单与目录', () => {
       await api('/v1/connections/providers'),
     )
     const planned = providers.filter((p) => p.planned === true)
-    // WP67（48 §5.1）：红人营销那五条渠道也登记在册、也还没做
-    expect(planned.map((p) => p.service)).toEqual([
-      'youtube_data',
-      'instagram_graph',
-      'tiktok_research',
-      'facebook_graph',
-      'x_api',
-      'judgeme',
-      'loox',
-    ])
+    // WP68：红人那五条已经可连了，"待增加"这一档现在只剩评价应用两家
+    expect(planned.map((p) => p.service)).toEqual(['judgeme', 'loox'])
     for (const p of planned) {
       // 点不动：没有表单字段，也不"可用"
       expect(p.fields, p.service).toEqual([])
@@ -246,7 +244,7 @@ describe('WP20 §A 连接清单与目录', () => {
       expect((p.unavailable_reason ?? '').length, p.service).toBeGreaterThan(10)
       // 接上之后哪一块会亮，也写清楚（评价那两家亮评价，红人五条亮找人那一块）
       expect(p.data_sources.length, p.service).toBe(1)
-      expect(['reviews', 'kol_channel'], p.service).toContain(p.data_sources[0])
+      expect(['reviews'], p.service).toContain(p.data_sources[0])
     }
   })
 
@@ -272,6 +270,12 @@ describe('WP20 §A 连接清单与目录', () => {
       'shopify_email',
       'aftership',
       'track17',
+      // WP68（48 §5.1 / §5.4）：红人那五条渠道从"待增加"改成**可连**（各家一把令牌）
+      'youtube_data',
+      'instagram_graph',
+      'facebook_graph',
+      'tiktok_research',
+      'x_api',
     ])
 
     // 改回 Shopify，那张卡就回来了

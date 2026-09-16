@@ -49,7 +49,7 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { brandNameOf } from '@agentsws/contracts'
+import { brandNameOf, KOL_CHANNEL_IDS } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
@@ -98,6 +98,7 @@ import {
   brandAskPort,
   brandCloudPort,
   brandConnectionsPort,
+  brandKolPort,
   brandModelsPort,
   brandPositionPort,
   brandWorkPort,
@@ -131,8 +132,11 @@ import { createApprovalDirectory } from './housekeeping.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { importKnowledgePack } from './knowledge-pack.js'
-// WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
+// WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
+import { createKolChannels, type KolFetch } from './kol-channels.js'
+import { createKolPublicClient } from './kol-public-client.js'
+import { createKolService } from './kol-service.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
@@ -165,6 +169,7 @@ import {
   registerBackup,
   registerDailyPlan,
   registerIdempotencySweep,
+  registerKolSequence,
   registerLearning,
   registerMailPoll,
   registerMeetingPoll,
@@ -346,6 +351,13 @@ export interface ServerOptions {
    * 两边各自只用到 Response 的一小面（`text()` / `json()`），所以这里收一个交集。
    */
   cloudFetch?: CloudFetch & CloudEntryFetch
+  /**
+   * WP68（48 §5.4）：五条渠道适配器打出去用的 fetch。
+   *
+   * 生产不传（走 `globalThis.fetch`）；测试传一个假的，对着**真 URL 形状**断言——
+   * 这五家的接口没有可以随便调的沙箱，所以"形状对不对"只能这么验。
+   */
+  kolFetch?: KolFetch
   /**
    * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
    * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
@@ -1090,6 +1102,70 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 建在记录源之前：记录源要拿它读红人与合作（`kol: () => kol`）。
     const kol = createKolStore({ workspace_id: ws, ...(dir === undefined ? {} : { dbDir: dir }) })
 
+    /**
+     * WP68（48 §5.4）：红人库的 `/v1` 面。建在记录源之前没有讲究，
+     * 建在 `kol` 之后是必须的——它要那张库。
+     */
+    /**
+     * WP68：五条渠道适配器真打出去的那一跳（凭据按连接从这个品牌那一段加密库取）。
+     * 生产路径不传 `kolFetch`，走全局 fetch；测试塞一个假的对着真 URL 断言。
+     */
+    const kolChannels = createKolChannels({
+      workspace_id: ws,
+      clock,
+      connections: () => connections.liveConnections(),
+      secrets: brandSecrets,
+      ...(options.kolFetch === undefined ? {} : { fetch: options.kolFetch }),
+    })
+    /**
+     * WP68（49 M2）：云端公共红人库的客户端。
+     *
+     * 与模型那一项同一条路：地址由 `AGENTSWS_CLOUD_BASE_URL` 决定，
+     * 令牌是**这个品牌那一把** `cloud.workspace_token`（WP66 每品牌一把）。
+     * 用不用它由连接页那五个开关说了算（`kol.<channel>`）。
+     */
+    const kolPublic = createKolPublicClient({
+      workspace_id: ws,
+      clock,
+      secrets: brandSecrets,
+      env,
+      newContactId: () => `ctc_${Math.floor(random() * 0xffffffff).toString(36)}`,
+      ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+    })
+    const kolService = createKolService({
+      workspace_id: ws,
+      store: kol,
+      channels: kolChannels,
+      publicLibrary: kolPublic,
+      /*
+       * 49 M2 的开关：`kol.<channel>` 拨到 agentsws 就查公共库，默认用我的。
+       *
+       * 递的是取值函数而不是 `ownCloud` 本身——它在下面几十行才建出来
+       * （同 `work: () => workRef` 那一处：打断装配期的环，取值时才查）。
+       */
+      capabilitySource: (capability) => ownCloud.sourceOf(capability),
+      // 价目从云上那一份来（49 M4），本地一个数字都不自己算
+      priceOf: (capability) => ownCloud.priceOf(capability),
+      // 联系方式的明文落在**这个品牌**那一段加密库里（key 名已按品牌加过前缀）
+      secrets: brandSecrets,
+      clock,
+      approvals: txn.approvals,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      // 05 §4：campaign 那一条按渠道挑**本人自己**那条职责，不做并集
+      assignmentsOf: (person_id) => roles.assignments.listByPerson(person_id),
+      // 序列跟进那条定时用持有人那条分配去提（定时任务没有"当前用户"）
+      holdersOf: (role_id) =>
+        roles.assignments
+          .listByRole(role_id)
+          .filter((a) => a.workspace_id === ws && a.revoked_at === undefined),
+      // 52 O1 那一份真源：品牌名与工作区名是同一件事，不在这里拼第二次
+      brandName: () => brandNameOfWorkspace(ws),
+      personName: async (person_id) => (await identity.getPerson(person_id))?.name ?? person_id,
+      appendEvent,
+      random,
+    })
+
     let workRef: Work | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
@@ -1390,6 +1466,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workData,
       records,
       kol,
+      kolService,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -1666,6 +1743,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return out
     },
   })
+  /*
+   * WP68 / 48 §5.2：红人开发信的序列跟进，每天一轮，**按品牌各跑一轮**
+   * （照 WP66 的写法）。一个品牌的跟进信只能用那个品牌的红人库与那个品牌的额度。
+   */
+  registerKolSequence(schedule.scheduler, {
+    sweep: async () => {
+      const out = { scanned: 0, staged: 0, skipped: [] as unknown[] }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.kolService.sweepSequences()
+        out.scanned += one.scanned
+        out.staged += one.staged
+        // 哪个品牌的哪一条没提要看得出来（一个坏了不该拖垮别的）
+        out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
+      }
+      return out
+    },
+  })
   // WP55 / 48 §4 L3 #4：出站对账（每分钟）。`sent_unknown` 绝不自动重发
   registerReconcileDeliveries(schedule.scheduler, {
     reconcile: async () => {
@@ -1767,6 +1861,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       backup: dbDir !== undefined,
       pricing: true,
       orgDuplicates: true,
+      /*
+       * WP68：有人持有红人那几条渠道职责时才建这一条。
+       *
+       * 没人做红人营销的机器上建一条每天都跑一遍空库的任务，只是给 25 §3 的
+       * "机器在替你定时做哪几件事"那张清单添一行看不懂的东西。
+       */
+      kol: KOL_CHANNEL_IDS.some(
+        (channel) => roles.assignments.listByRole(`kol.${channel}`).length > 0,
+      ),
     },
   })
 
@@ -2439,6 +2542,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
 
+  const kolPortOf = brandKolPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
+  )
+
   const workPortOf = brandWorkPort(brandModules, workPortFor)
   const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
   const askPortOf = brandAskPort(brandModules, askPortFor)
@@ -2598,6 +2706,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: workPortOf,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
+    // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
+    kol: kolPortOf,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

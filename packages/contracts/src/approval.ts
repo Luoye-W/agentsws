@@ -53,6 +53,15 @@ export type ApprovalKind =
    * payload = `{ date, sales, orders, low_stock, pending }`。
    */
   | 'daily_report'
+  /**
+   * WP68 / 48 §5.2：**campaign 挑人清单卡**。
+   *
+   * 为什么不复用 `staged_change`：一次 campaign 的产出是**一张清单**（跨渠道的
+   * 一批人），不是一条字段变更。接受它等于按渠道分别建一批合作——每条动作仍走
+   * 各自渠道职责的额度（05 §4「不做跨 Assignment 并集」），所以这张卡本身
+   * 不改任何东西，它只是"这批人你认不认"。payload = `{ campaign_id, brief, by_channel }`。
+   */
+  | 'kol_campaign'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

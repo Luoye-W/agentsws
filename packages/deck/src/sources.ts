@@ -34,8 +34,8 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   shopify_email: ['email_marketing'],
   aftership: ['tracking'],
   track17: ['tracking'],
-  // WP67（48 §5.1）：五条渠道。同上——现在没有一条真连接会命中（目录里那五张卡
-  // 的状态是"还没接"），映射先立着：接上那天只改连接目录，不改 deck。
+  // WP67（48 §5.1）/ WP68：五条渠道。WP68 起这五张卡在连接目录里是**可连**的，
+  // 所以这张映射现在真的会命中——连上哪一条，面板那一块就亮哪一条。
   youtube_data: ['kol_channel'],
   instagram_graph: ['kol_channel'],
   tiktok_research: ['kol_channel'],
@@ -76,10 +76,6 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
 export const PLANNED_SOURCE_NOTES: Partial<Record<DataSourceId, string>> = {
   reviews:
     '评价应用（Judge.me / Loox）还没接上——连接目录里已经登记为"待增加"，接上了这一块自己就有数了。',
-  // WP67（48 §5.1）：五个渠道连接器都还是"待增加"。这一句的后半段要紧——
-  // 这条职责没有它照样干得了活，别让人以为岗位是坏的。
-  kol_channel:
-    '五个渠道的接口（YouTube / Instagram / TikTok / Facebook / X）都还没接上——连接目录里已经登记为"待增加"。红人营销这几条职责不靠它也能用：把你手上的红人表导进来，建联、合作、审核、归因一样不少。',
 }
 
 /** 算连接状态时只认这个形状——**没有也不可能有凭据字段**。 */

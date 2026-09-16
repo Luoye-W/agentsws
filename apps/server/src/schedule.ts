@@ -110,6 +110,8 @@ export const HANDLERS = {
   amazonSla: 'support.amazon_sla',
   /** WP55 / 48 §4 L3 #4：出站 outbox 的对账（每分钟）。 */
   reconcileDeliveries: 'channels.reconcile_deliveries',
+  /** WP68 / 48 §5.2：红人开发信的序列跟进（首封 / 3 天 / 7 天），每天一轮。 */
+  kolSequence: 'kol.outreach_sequence',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -124,6 +126,15 @@ export const MAIL_POLL_INTERVAL_MS = 2 * 60_000
  * 更疏会让「只剩十几分钟」的线程根本来不及提醒。
  */
 export const AMAZON_SLA_SWEEP_INTERVAL_MS = 5 * 60_000
+/**
+ * WP68：序列跟进一天一轮，早上 09:00。
+ *
+ * 为什么不是按小时：`nextInSequence` 的节奏是**天**（首封 / +3 天 / +7 天），
+ * 一天跑一轮就够；跑得更密只会把同一封信反复算一遍。为什么是早上：
+ * 一封跟进信当天就该有人看一眼——L2 自动发的那一档也一样，出了问题要来得及拦。
+ */
+export const KOL_SEQUENCE_CRON = '0 9 * * *'
+
 /**
  * WP55：出站对账的节奏。一分钟一轮——`sent_unknown` 的每一分钟都是「这封信到底
  * 发出去没有」的悬而未决，而对账本身只是去已发 / 归档文件夹搜一个 Message-ID。
@@ -771,6 +782,24 @@ export function registerAmazonSla(scheduler: Scheduler, deps: AmazonSlaDeps): vo
 }
 
 /* ------------------------------------------------------------------ */
+/* WP68 / 48 §5.2：红人开发信的序列跟进：每天 09:00                        */
+/* ------------------------------------------------------------------ */
+
+export interface KolSequenceDeps {
+  /**
+   * 扫一轮"已建联但还没回音"的合作，该跟进的提一封。
+   *
+   * **每一封仍是一张 `kol_outreach` staged change 走 guardrail**——
+   * 定时的只是"什么时候该提"，提出来之后那条路与人手点的那一封一个字不差。
+   */
+  sweep(): Promise<{ scanned: number; staged: number; skipped: unknown[] }>
+}
+
+export function registerKolSequence(scheduler: Scheduler, deps: KolSequenceDeps): void {
+  scheduler.register(HANDLERS.kolSequence, () => deps.sweep())
+}
+
+/* ------------------------------------------------------------------ */
 /* ⑯ WP55 / 48 §4 L3 #4：出站 outbox 对账：每分钟                          */
 /* ------------------------------------------------------------------ */
 
@@ -926,6 +955,8 @@ export interface SchedulePlanOptions {
     pricing?: boolean
     /** WP50：每天夜里扫一遍重复的组织对象（45 H4）。 */
     orgDuplicates?: boolean
+    /** WP68：红人开发信的序列跟进（有人持有红人那几条职责时才建）。 */
+    kol?: boolean
   }
 }
 
@@ -1117,6 +1148,24 @@ export async function ensureSystemTasks(
         handler: HANDLERS.reconcileDeliveries,
         trigger: { kind: 'interval', every_ms: RECONCILE_INTERVAL_MS },
         misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  /*
+   * WP68 / 48 §5.2：红人开发信的序列跟进，每天 09:00。
+   *
+   * **错过了不补跑**（`skip`）：关机三天再开机，不该把这三天欠的跟进信一次性
+   * 全提出来——收信的人看到的是同一天三封信，那正是"别让人觉得被群发轰炸"
+   * 那条线要挡的事。今天该发的今天发，昨天的就过去了。
+   */
+  if (options.has.kol === true) {
+    await add(
+      'sched_kol_sequence',
+      systemTask(base, {
+        title: '每天看一眼哪几封开发信该跟进了',
+        handler: HANDLERS.kolSequence,
+        trigger: { kind: 'cron', expr: KOL_SEQUENCE_CRON, tz },
+        misfire_policy: 'skip',
       }),
     )
   }

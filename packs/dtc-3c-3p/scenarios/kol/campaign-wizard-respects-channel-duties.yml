@@ -1,0 +1,80 @@
+# WP68（48 §5.2 / 05 §4）：一次 campaign 跨两条渠道挑人，
+# 而本人只有 YouTube 那条职责 → Instagram 那几条**在清单上看得见、建不了**。
+#
+# 这条题的题眼在 `blocked_channels` 那一格**不为空**。
+#
+# 为什么这件事值得单独一道题：campaign 是"一件事"，而一件事跨了两条职责，
+# 是 05 §4「不做跨 Assignment 并集」最容易破的地方——写代码的人很自然会想
+# "这一次是同一个人发起的，就都建了吧"。但那等于用一次 campaign 把他没有的
+# 权限并给了他：他名下没有 `kol.instagram`，就意味着这家公司没有把 Instagram
+# 那摊交给他，而不是"他只是还没点过那个按钮"。
+#
+# **挑到了人却建不了，比挑都不挑给他看要好**：后者会让他以为 Instagram 上
+# 没有合适的人，而事实是有，只是不该由他去谈。所以清单上照样列出来，灰着，
+# 旁边写清楚"去让 owner 把这条职责分给你"。
+#
+# 三个人是场景自己放进世界的（`kol.creator`），不是藏在 world 里的一份夹带——
+# 挑的是谁、为什么挑他，读这个文件的人一眼看得出来。
+id: kol/campaign-wizard-respects-channel-duties
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 建合作永远 L1，得有人点头才落得下去；不装人 = 一条都建不成，题就变味了
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 世界里已经知道的三个红人：两个 YouTube、一个 Instagram
+  - at: '+0m'
+    kol.creator:
+      channel: youtube
+      handle: gadgetjonas
+      followers: 48000
+      engagement_rate: 0.062
+      category: 数码
+  - at: '+0m'
+    kol.creator:
+      channel: youtube
+      handle: deskrosa
+      followers: 31000
+      engagement_rate: 0.041
+      category: 数码
+  - at: '+0m'
+    kol.creator:
+      channel: instagram
+      handle: studiomia
+      followers: 26000
+      engagement_rate: 0.055
+      category: 数码
+  # ② 李默（挂着 `kol.youtube`，没有 `kol.instagram`）发起一次跨两条渠道的 campaign
+  - at: '+10m'
+    kol.campaign:
+      who: p_li
+      goal: 秋季桌面季：找人做开箱
+      budget: 1200
+      channels: [youtube, instagram]
+      headcount: 3
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  kol_campaign:
+    # 三个人都在清单上（Instagram 那个也在）
+    picks: 3
+    allowed_channels: [youtube]
+    # 题眼：挑到了人，但建不了
+    blocked_channels: [instagram]
+    # 只建了 YouTube 那两条——一次 campaign 不会把别人的权限并给你
+    created: 2
+  staged_change_kinds: [kol_collaboration]
+  event_types:
+    - simulation.kol_campaign_planned
+    - simulation.kol_collaboration_staged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  清单上那条 Instagram 的人为什么点不动，人读完这一屏答得上来吗？
+  （答案该是"这条渠道没分给你"，不是"系统坏了"）

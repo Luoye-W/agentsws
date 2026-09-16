@@ -186,6 +186,30 @@ export {
   joinRoutes,
 } from './routes/join.js'
 export type {
+  KolActor,
+  KolCampaignAcceptView,
+  KolCampaignBrief,
+  KolCampaignGroup,
+  KolCampaignPick,
+  KolCampaignView,
+  KolCollaborationInput,
+  KolContactView,
+  KolCreatorDetail,
+  KolCreatorInput,
+  KolCreatorPatch,
+  KolCreatorRow,
+  KolImportView,
+  KolMergeSuggestionView,
+  KolOutreachView,
+  KolPort,
+  KolRevealPrice,
+  KolSearchHit,
+  KolSearchResult,
+  KolStagedView,
+  KolTrackedLinkInput,
+} from './routes/kol.js'
+export { kolRoutes } from './routes/kol.js'
+export type {
   MeetingIngestInput,
   MeetingProcessOutcome,
   MeetingSendCardInput,

@@ -3241,3 +3241,292 @@ export const switchToStandby = (
 /** 反向：云上导出 → 落到本机备份目录 → 停云上那个进程。 */
 export const bringStandbyHome = (assignment?: string): Promise<StandbyBringHomeResult> =>
   api('/v1/standby/bring-home', { method: 'POST', ...withAssignment(assignment) })
+
+/* ── WP68（48 §5.4）：红人库 ─────────────────────────────────────────── */
+
+export type KolChannelId = 'youtube' | 'facebook' | 'instagram' | 'tiktok' | 'x'
+
+/** 找人清单上的一行。`blocked` 有值就是"这个数不可信"（与低分分得开）。 */
+export interface KolCreatorRowData {
+  creator_id: string
+  display_name: string
+  channel: KolChannelId
+  handle: string
+  url: string
+  followers?: number
+  engagement_rate?: number
+  category?: string
+  observed_at: string
+  score: number
+  blocked?: string
+  has_contact: boolean
+}
+
+/** 一条联系方式。**没有明文那一格**——脱敏形态够认出是哪一个，不够拿去发信。 */
+export interface KolContactData {
+  id: string
+  creator_id: string
+  kind: 'email' | 'dm' | 'form'
+  source: string
+  verified_at?: string
+  masked: string
+}
+
+export interface KolCreatorDetailData {
+  creator: { id: string; display_name: string; merged_from: string[] }
+  accounts: {
+    id: string
+    channel: KolChannelId
+    handle: string
+    url: string
+    followers?: number
+    engagement_rate?: number
+    category?: string
+    language?: string
+    region?: string
+    observed_at: string
+  }[]
+  contacts: KolContactData[]
+  collaborations: KolCollaborationData[]
+  deliverables: KolDeliverableData[]
+  tracked_links: { id: string; url: string; clicks: number; orders: number; revenue: number }[]
+}
+
+export interface KolCollaborationData {
+  id: string
+  creator_id: string
+  channel: KolChannelId
+  stage: string
+  budget?: number
+  currency: string
+  campaign_id?: string
+  agreed_at?: string
+}
+
+export interface KolDeliverableData {
+  id: string
+  collaboration_id: string
+  kind: string
+  url?: string
+  due_at: string
+  review: string
+  notes?: string
+}
+
+/** 去渠道 / 公共库找人的结果。**"拿不到"与"搜到 0 个"分得开**。 */
+export interface KolSearchData {
+  ok: boolean
+  source: 'channel' | 'public_library'
+  rows: {
+    channel: KolChannelId
+    handle: string
+    url: string
+    display_name: string
+    followers?: number
+    engagement_rate?: number
+    category?: string
+    has_contact?: boolean
+    in_library?: boolean
+  }[]
+  message?: string
+  reason?: string
+  observed_at?: string
+  reveal_price?: { capability: string; credits: number; unit: string; note: string }
+}
+
+export interface KolStagedData {
+  staged: boolean
+  change_id?: string
+  approval_item_id?: string
+  message?: string
+  auto_approved?: boolean
+}
+
+export interface KolOutreachData extends KolStagedData {
+  step: 'first' | 'follow_up' | 'final'
+  subject: string
+  body: string
+  forbidden_hits: string[]
+  missing_vars: string[]
+  quota: { cap: number; sent_today: number; remaining: number; allowed: boolean }
+}
+
+export interface KolImportData {
+  summary: string
+  created_creators: number
+  created_accounts: number
+  updated_accounts: number
+  created_contacts: number
+  duplicates: { source_row: number; same_as_row: number; handle: string; channel: string }[]
+  rejected: { source_row: number; reason: string }[]
+  unmapped: string[]
+  note?: string
+}
+
+export interface KolCampaignData {
+  campaign_id: string
+  ready: boolean
+  gaps: string[]
+  message: string
+  budget_per_creator: number
+  approval_item_id?: string
+  by_channel: {
+    channel: KolChannelId
+    role_id: string
+    allowed: boolean
+    assignment_id?: string
+    reason?: string
+    picks: {
+      creator_id: string
+      display_name: string
+      channel: KolChannelId
+      handle: string
+      followers?: number
+      score: number
+      why: string[]
+      already: boolean
+    }[]
+  }[]
+}
+
+export interface KolCampaignAcceptData {
+  campaign_id: string
+  created: { channel: string; creator_id: string; collaboration_id: string }[]
+  skipped: { channel: string; creator_id?: string; reason: string }[]
+}
+
+export interface KolMergeSuggestionData {
+  id: string
+  keep: { creator_id: string; display_name: string }
+  merge: { creator_id: string; display_name: string }
+  reasons: { id: string; text: string }[]
+  confidence: number
+  approval_item_id?: string
+}
+
+export const getKolCreators = (
+  filter: { channel?: KolChannelId; q?: string } = {},
+  assignment?: string,
+): Promise<{ rows: KolCreatorRowData[] }> => {
+  const q = new URLSearchParams()
+  if (filter.channel !== undefined) q.set('channel', filter.channel)
+  if (filter.q !== undefined && filter.q !== '') q.set('q', filter.q)
+  const s = q.toString()
+  return api(`/v1/kol/creators${s === '' ? '' : `?${s}`}`, withAssignment(assignment))
+}
+
+export const getKolCreator = (id: string, assignment?: string): Promise<KolCreatorDetailData> =>
+  api(`/v1/kol/creators/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+export const searchKolCreators = (
+  input: { channel: KolChannelId; q: string },
+  assignment?: string,
+): Promise<KolSearchData> =>
+  api(
+    `/v1/kol/search?channel=${encodeURIComponent(input.channel)}&q=${encodeURIComponent(input.q)}`,
+    withAssignment(assignment),
+  )
+
+export const addKolCreator = (
+  input: { display_name: string; channel: KolChannelId; handle?: string; url?: string },
+  assignment?: string,
+): Promise<KolCreatorDetailData> =>
+  api('/v1/kol/creators', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const addKolContact = (
+  creator_id: string,
+  input: { kind: 'email' | 'dm' | 'form'; value: string; source?: string },
+  assignment?: string,
+): Promise<KolContactData> =>
+  api(`/v1/kol/creators/${encodeURIComponent(creator_id)}/contacts`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 付费从公共库取回一个邮箱（49 M4 `data.kol.lookup`）。 */
+export const revealKolContact = (
+  input: { channel: KolChannelId; handle: string; creator_id?: string },
+  assignment?: string,
+): Promise<{
+  ok: boolean
+  contact?: KolContactData
+  creator_id?: string
+  credits_spent?: number
+  message?: string
+}> => api('/v1/kol/public/reveal', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const draftKolOutreach = (
+  input: {
+    creator_id: string
+    channel: KolChannelId
+    product: string
+    /** 一句话说我们是做什么的。**服务端不编一个**，缺了就不起草。 */
+    brand_pitch?: string
+    reason?: string
+    step?: 'first' | 'follow_up' | 'final'
+  },
+  assignment?: string,
+): Promise<KolOutreachData> =>
+  api('/v1/kol/outreach', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const getKolCollaborations = (
+  filter: { channel?: KolChannelId } = {},
+  assignment?: string,
+): Promise<{ rows: KolCollaborationData[] }> => {
+  const q = filter.channel === undefined ? '' : `?channel=${encodeURIComponent(filter.channel)}`
+  return api(`/v1/kol/collaborations${q}`, withAssignment(assignment))
+}
+
+export const advanceKolCollaboration = (
+  id: string,
+  stage: string,
+  assignment?: string,
+): Promise<KolCollaborationData> =>
+  api(`/v1/kol/collaborations/${encodeURIComponent(id)}/stage`, {
+    method: 'PATCH',
+    body: { stage },
+    ...withAssignment(assignment),
+  })
+
+export const importKolTable = (
+  input: { filename?: string; content: string },
+  assignment?: string,
+): Promise<KolImportData> =>
+  api('/v1/kol/import', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const planKolCampaign = (
+  input: {
+    goal: string
+    budget: number
+    channels: KolChannelId[]
+    headcount: number
+    criteria?: { category?: string }
+  },
+  assignment?: string,
+): Promise<KolCampaignData> =>
+  api('/v1/kol/campaigns', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const acceptKolCampaign = (
+  approval_item_id: string,
+  assignment?: string,
+): Promise<KolCampaignAcceptData> =>
+  api(`/v1/kol/campaigns/${encodeURIComponent(approval_item_id)}/accept`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+export const getKolMergeSuggestions = (
+  assignment?: string,
+): Promise<{ rows: KolMergeSuggestionData[] }> =>
+  api('/v1/kol/merge-suggestions', withAssignment(assignment))
+
+export const decideKolMerge = (
+  id: string,
+  decision: 'accept' | 'reject',
+  assignment?: string,
+): Promise<unknown> =>
+  api(`/v1/kol/merge-suggestions/${encodeURIComponent(id)}/${decision}`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })

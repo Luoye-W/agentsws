@@ -22,9 +22,22 @@ import type { CapabilitySource } from '@/lib/api'
 import { getCapabilitySources, setCapabilitySources } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-/** 连接目录里的 `service` → 价目表里的能力名。没有对应项的卡不出开关。 */
+/**
+ * 连接目录里的 `service` → 价目表里的能力名。没有对应项的卡不出开关。
+ *
+ * WP68 加了红人那五条渠道（49 M2 表里「公共红人库 / 邮箱抓取 / 体检报告」那一行）：
+ * 拨到"用 agentsws 的"之后，这条渠道的**找人**改查云端公共红人库——
+ * 浏览免费，取回一个邮箱才扣积分（`data.kol.lookup`），而且**在点之前就把数说出来**。
+ * 键用 `kol.<channel>` 而不是 `data.kol.lookup`：五条渠道各拨各的
+ * （只有 TikTok 没申请下来、只想那一条走公共库，是个很正常的用法）。
+ */
 export const CAPABILITY_BY_SERVICE: Record<string, string> = {
   meta_ads: 'social.fetch',
+  youtube_data: 'kol.youtube',
+  instagram_graph: 'kol.instagram',
+  facebook_graph: 'kol.facebook',
+  tiktok_research: 'kol.tiktok',
+  x_api: 'kol.x',
 }
 
 export function capabilityOf(service: string): string | undefined {
