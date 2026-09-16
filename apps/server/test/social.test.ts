@@ -148,7 +148,7 @@ describe('56 §1 连接目录：八张卡', () => {
     expect(wa).toContain('24 小时')
   })
 
-  it('凭据只进本机加密库；还没接的三张明着标出来、点不动', () => {
+  it('凭据只进本机加密库；WP73 起八张全可连（没有一张标着"还没接"）', () => {
     for (const service of [
       'meta_graph',
       'tiktok_content',
@@ -161,11 +161,26 @@ describe('56 §1 连接目录：八张卡', () => {
       expect(entry?.store, service).toBe('local_vault')
       expect(entry?.upstream, service).toBe('local')
     }
-    // ② 里有真适配器的三张是可连的，另外三张照实说"还没接"
-    for (const s of ['meta_graph', 'discord_bot', 'telegram_bot'])
+    /*
+     * WP73：TikTok / Reddit / WhatsApp 三张原来标着 `planned`（"目录里有、点不动"），
+     * 现在适配器都有真调用了，所以八张全可连、一张 `planned` 都不剩。
+     *
+     * **平台那一侧的门槛不算"还没接"**：TikTok 没批下来是 403、X 免费档是 403、
+     * WhatsApp 少模板名是 block——那三句话都由适配器照实说，用户看得懂也修得了。
+     * `planned` 说的是"我们还没写"，那是他修不好的一种，两者不能混。
+     */
+    for (const s of [
+      'meta_graph',
+      'tiktok_content',
+      'reddit',
+      'discord_bot',
+      'telegram_bot',
+      'whatsapp_business',
+    ])
       expect(catalogEntry(s)?.planned, s).toBeUndefined()
+    // 可连 = 表单上真有格子可填（`planned` 那三张原来是空数组）
     for (const s of ['tiktok_content', 'reddit', 'whatsapp_business'])
-      expect(catalogEntry(s)?.planned, s).toBeDefined()
+      expect(catalogEntry(s)?.fields.length ?? 0, s).toBeGreaterThan(0)
   })
 
   it('数据源：社媒库永远算连上；渠道那八个各连各的', () => {

@@ -184,6 +184,9 @@ importers:
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills
+      '@agentsws/social-core':
+        specifier: workspace:*
+        version: link:../../packages/social-core
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../../packages/stand-ins

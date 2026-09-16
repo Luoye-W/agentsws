@@ -67,6 +67,8 @@ describe('内置职责填了什么（55 §3）', () => {
     'kol.instagram': ['instagram.com', '*.instagram.com'],
     'kol.tiktok': ['tiktok.com', '*.tiktok.com'],
     'kol.x': ['x.com', '*.x.com', 'twitter.com', '*.twitter.com'],
+    // WP73（56 §6）：Facebook 群组走浏览器，只开自己的群所在的那个域
+    'social.facebook-group': ['*.facebook.com', 'facebook.com'],
     'amz.support': [
       'sellercentral.amazon.com',
       'sellercentral-europe.amazon.com',

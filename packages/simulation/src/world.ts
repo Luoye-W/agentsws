@@ -111,7 +111,15 @@ import { wallClock } from '@agentsws/schedule'
  * `buildAudience` 里的抑制名单规则与邮件群发是**同一个函数**。
  * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
  */
-import { buildAudience, checkOutbound, handoffOf, triageThread } from '@agentsws/social-core'
+import {
+  ACTION_WORDS,
+  buildAudience,
+  checkOutbound,
+  handoffOf,
+  type ScheduleConflict,
+  scheduleConflicts,
+  triageThread,
+} from '@agentsws/social-core'
 import type {
   CreateDraftResult,
   CreatePolicyQuestionFn,
@@ -720,6 +728,81 @@ export interface SocialOps {
     members: string[]
     level?: 'L1' | 'L2' | 'L3'
   }): Promise<SocialBroadcastResult>
+  /**
+   * WP73（56 §6）：批一条入群申请（`community_membership`，L2）。
+   *
+   * **一次一个人**（职责 yml 的 `max_members_per_change: 1`）：批错一个踢出去
+   * 就是了，批错三百个这个群就不是原来那个群了。他填的申请答案要在卡面上——
+   * 人就是靠那几句判"这是不是广告号"。
+   */
+  approveMember(input: {
+    who: PersonId
+    channel: string
+    /** 递申请的那个人（平台 id / handle）。 */
+    member: string
+    /** 他填的申请答案（外部文本，原样进卡、不进事件日志）。 */
+    answers?: string[]
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<SocialMembershipResult>
+  /**
+   * WP73（56 §6）：一个管理动作（`community_moderation`）。
+   *
+   * 删帖 / 禁言 L2，**封禁 L1**——分档在 guardrail 里按 `after.action` 判，
+   * 不在职责上写第二遍（`COMMUNITY_MODERATION_L1_ACTIONS`）。
+   */
+  moderate(input: {
+    who: PersonId
+    channel: string
+    /** 冲谁来的（帖子 id 或人的 id）。 */
+    target: string
+    action: 'warn' | 'delete_post' | 'mute' | 'ban' | 'permanent_ban'
+    reason?: string
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<SocialModerationResult>
+  /**
+   * WP73（56 §6）：改群规（`community_rules`，**永远 L1**）。
+   *
+   * 群规是这个群的法律，放宽一条等于把垃圾闸门打开——所以它与群发一样，
+   * 报什么等级都会被按回人审。
+   */
+  rulesEdit(input: {
+    who: PersonId
+    channel: string
+    /** 改成什么（整段新群规）。 */
+    rules: string
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<SocialRulesResult>
+}
+
+/** WP73：一条入群审核提案的结果。 */
+export interface SocialMembershipResult {
+  channel: string
+  staged: boolean
+  level_requested: 'L1' | 'L2' | 'L3'
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+/** WP73：一个管理动作提案的结果。 */
+export interface SocialModerationResult {
+  channel: string
+  action: string
+  staged: boolean
+  level_requested: 'L1' | 'L2' | 'L3'
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+/** WP73：一次群规改动提案的结果。 */
+export interface SocialRulesResult {
+  channel: string
+  staged: boolean
+  level_requested: 'L1' | 'L2' | 'L3'
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
 }
 
 /** 一条内容提案的结果。 */
@@ -729,6 +812,13 @@ export interface SocialPostResult {
   level_requested: 'L1' | 'L2' | 'L3'
   scheduled_at?: string
   commitment_hits: string[]
+  /**
+   * WP73：这条排期撞了什么（`social-core` 的 `scheduleConflicts` 判的）。
+   *
+   * 空数组 = 没撞。撞了的那几句**原样进卡面**——同渠道同一小时两条，
+   * 平台会把后一条压下去，而关注的人只会觉得被刷屏。
+   */
+  conflicts: string[]
   change_id?: string
   approval_item_id?: string
   reason?: string
@@ -4727,6 +4817,22 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   }
   const socialLabelOf = (channel: string): string => socialChannelSpec(channel)?.zh ?? channel
 
+  /**
+   * WP73：这一轮里已经排出去的那些内容（撞车判据要它）。
+   *
+   * 世界里没有社媒库（那是服务进程那一侧的东西），所以这里留一份最小的：
+   * 只有"哪个号、什么时候、正文是什么"三格——`scheduleConflicts` 要的就是这三格。
+   */
+  const socialScheduled: {
+    id: string
+    account_id: string
+    channel: string
+    kind: 'post'
+    status: 'scheduled'
+    body: string
+    scheduled_at: string
+  }[] = []
+
   const social: SocialOps = {
     async post({ who, channel, body, scheduled_at, level }) {
       const role_id = socialRoleOf(channel)
@@ -4738,6 +4844,20 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       const level_requested = level ?? configured
       // 起草那一跳自查一遍（早点给模型反馈）；真正的拦在 guardrail
       const scan = checkOutbound(body)
+      /*
+       * WP73：撞车当场判（`social-core` 的那一份判据，世界里不写第二份）。
+       *
+       * 同渠道同一小时两条 = 后一条会被平台压下去，而关注的人只觉得被刷屏。
+       * 判出来的那几句**原样写进卡面**——人按下那一下之前要看得见。
+       */
+      const account_id = `sa_${channel}`
+      const conflictHits: ScheduleConflict[] =
+        scheduled_at === undefined
+          ? []
+          : scheduleConflicts({ account_id, scheduled_at, body }, socialScheduled as never, {
+              now: now(clock),
+            })
+      const conflicts = conflictHits.map((c) => c.message)
       const outcome = await txn.ledger.stage({
         workspace_id,
         role_id: asg.role_id,
@@ -4758,6 +4878,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           scheduled_at === undefined
             ? '没排时间：批了就发。'
             : `排在 ${scheduled_at} 自己出去——到点之后没有第二道门，所以门在这一下。`,
+          ...conflicts,
         ],
         created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
         mandate,
@@ -4773,7 +4894,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           summary:
             scheduled_at === undefined
               ? body.slice(0, 120)
-              : `${body.slice(0, 100)}（排在 ${scheduled_at}）`,
+              : `${body.slice(0, 100)}（排在 ${scheduled_at}）${
+                  conflicts.length === 0 ? '' : ` ⚠ ${conflicts.join(' ')}`
+                }`,
           recipients: [recipientOf('scope_manager')],
           proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
           rule: 'scope_manager',
@@ -4786,6 +4909,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         level_requested,
         ...(scheduled_at === undefined ? {} : { scheduled_at }),
         commitment_hits: scan.commitment_hits,
+        conflicts,
       }
       if (!outcome.ok) {
         blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
@@ -4808,8 +4932,23 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           // 卡面上有没有把"什么时候发出去"写出来（36 §2：人按下那一下之前要看得见）
           stated_on_card:
             scheduled_at === undefined || outcome.approval.summary.includes(scheduled_at),
+          // WP73：撞了哪几种，以及撞车那句话在不在卡面上
+          conflict_kinds: conflictHits.map((c) => c.kind),
+          conflict_stated_on_card:
+            conflicts.length === 0 || conflicts.every((c) => outcome.approval.summary.includes(c)),
         },
       })
+      // 排进去了才算占位：被 guardrail 拦下的那一条不占下一条的时间
+      if (scheduled_at !== undefined)
+        socialScheduled.push({
+          id: outcome.change.id,
+          account_id,
+          channel,
+          kind: 'post',
+          status: 'scheduled',
+          body,
+          scheduled_at,
+        })
       return {
         ...base,
         staged: true,
@@ -5158,6 +5297,218 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       return {
         ...base,
         staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    /* ── WP73（56 §6）：社群组那三条写动作 ───────────────────────────── */
+
+    async approveMember({ who, channel, member, answers, level }) {
+      const asg = assignmentFor(who, socialRoleOf(channel))
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'community_member', id: `cm_${channel}_${member}` }
+      const { mandate, level: configured } = actionOf(asg, 'approve_member')
+      const level_requested = level ?? configured
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_member_${run_id}`,
+        kind: 'community_membership',
+        target,
+        before: { status: 'pending' },
+        after: {
+          channel,
+          decision: 'approve',
+          status: 'active',
+          member_external_id: member,
+          // 一次一个人（职责 yml 的 `max_members_per_change: 1`）
+          members: 1,
+        },
+        notes: [
+          answers === undefined || answers.length === 0
+            ? '他没填申请答案。'
+            : `他填的答案：${answers.join('；')}`,
+        ],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `判一条 ${socialLabelOf(channel)} 的入群申请`,
+        }),
+        approval: {
+          title: `批准入群：${member}（${socialLabelOf(channel)}）`,
+          // 申请答案**原样进卡**：人就是靠那几句判"这是不是广告号"
+          summary:
+            answers === undefined || answers.length === 0
+              ? `${member} 递了入群申请，没填答案。`
+              : `${member} 递了入群申请。答案：${answers.join('；')}`,
+          recipients: [recipientOf('role_holder')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'role_holder',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { channel, staged: false, level_requested, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.social_membership_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          channel,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          // 申请答案在不在卡面上（**答案原文不进事件日志**，只报在不在）
+          answers_on_card:
+            answers === undefined ||
+            answers.length === 0 ||
+            answers.every((a) => outcome.approval.summary.includes(a)),
+        },
+      })
+      return {
+        channel,
+        staged: true,
+        level_requested,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async moderate({ who, channel, target: subject, action, reason, level }) {
+      const asg = assignmentFor(who, socialRoleOf(channel))
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'community_thread', id: `ct_${channel}_${subject}` }
+      const { mandate, level: configured } = actionOf(asg, 'moderate')
+      const level_requested = level ?? configured
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_mod_${run_id}`,
+        kind: 'community_moderation',
+        target,
+        before: { status: 'open' },
+        // 分档看的就是这一格：`ban` / `permanent_ban` 由 guardrail 升到 L1
+        after: { channel, action, target_external_id: subject },
+        notes: [reason ?? `${ACTION_WORDS[action]}：${subject}`],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `对 ${subject} 下一个管理动作`,
+        }),
+        approval: {
+          title: `${ACTION_WORDS[action]}：${subject}（${socialLabelOf(channel)}）`,
+          summary: reason ?? `按群规处理：${ACTION_WORDS[action]}。`,
+          recipients: [recipientOf('role_holder')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'role_holder',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { channel, action, staged: false, level_requested, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.social_moderation_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          channel,
+          action,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+        },
+      })
+      return {
+        channel,
+        action,
+        staged: true,
+        level_requested,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async rulesEdit({ who, channel, rules, level }) {
+      const asg = assignmentFor(who, socialRoleOf(channel))
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'social_account', id: `sa_${channel}` }
+      const { mandate, level: configured } = actionOf(asg, 'stage_rules_edit')
+      const level_requested = level ?? configured
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_rules_${run_id}`,
+        kind: 'community_rules',
+        target,
+        before: { rules: '（原来的群规）' },
+        after: { channel, rules },
+        notes: ['群规是这个群的法律：放宽一条等于把垃圾闸门打开，所以这一条永远要人点。'],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        provenance: run.finish({ seen: [target], outputs: [], summary: '改一次群规' }),
+        approval: {
+          title: `改群规：${socialLabelOf(channel)}`,
+          summary: rules.slice(0, 160),
+          recipients: [recipientOf('owner')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'owner',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { channel, staged: false, level_requested, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.social_rules_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          channel,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          // 新群规的正文在卡面上（人要读完那一段才点得下去）
+          stated_on_card: outcome.approval.summary.length > 0,
+        },
+      })
+      return {
+        channel,
+        staged: true,
+        level_requested,
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
       }

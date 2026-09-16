@@ -260,6 +260,19 @@ notifications:
   # 抑制名单：群发提案里混进了退订过的人
   - { event: 'guardrail.hit:suppression_list', mode: immediate, recipients: [role_holder] }
 
+# WP73（55 §3「域名白名单」）：这条职责的浏览器只能开 Facebook。
+#
+# 真闸在 `dsh-adapter` 的 `checkBrowserNavigation`（这一份 → `EffectiveConfig.browser_scope`
+# → `RunRequest.allowed_hosts`），只看 `browser_navigate` 与 `browser_tabs{new}` 的 URL；
+# `@agentsws/social-core` 的 `FACEBOOK_GROUP_HOSTS` 是适配器自己那第二道，两处写的
+# 是同一份（对不上的时候 `social-core/test/facebook-group.test.ts` 会喊）。
+#
+# **不与红人那条 `kol.facebook` 共用**：那条要开 `fb.com` 的短链去看别人的主页，
+# 这条只进我们自己的群。白名单是"允许"表，多开一个域就是多开一扇门。
+browser_scope:
+  - '*.facebook.com'
+  - facebook.com
+
 handover:
   transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
   fallback: scope_manager

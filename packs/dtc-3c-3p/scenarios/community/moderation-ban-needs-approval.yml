@@ -1,0 +1,62 @@
+# WP73（56 §6）：**删帖 L2、封禁 L1——分档由 guardrail 按动作判，不由职责说了算。**
+#
+# 同一条职责、同一个动作 id（`moderate`）、同一条分配，只因为 `after.action`
+# 从 `delete_post` 变成 `permanent_ban`，等级就从"自己走"变成"必须人点"。
+# 判据在 `@agentsws/core` 的 `COMMUNITY_MODERATION_L1_ACTIONS` 那一张表里，
+# **职责 yml 上没有第二份**——两份迟早各改各的。
+#
+# 为什么封禁要人点：删一条帖子，发的人再发一条就是了；把一个人从群里永久赶出去
+# 是不可逆的，而且他多半会去别处说这件事。
+#
+# 场景故意把等级报成 L3（等于有人在设置里把管理动作开到了全自动）：
+# 删帖那一下照走，封禁那一下照样被按回人审。
+id: community/moderation-ban-needs-approval
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 一个合成人都不装 = 没有人去点那张卡。封禁要么有人点头，要么封不了。
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 先删一条广告帖：L2，额度内自己走
+  - at: '+0m'
+    community.moderate:
+      who: p_li
+      channel: discord
+      target: dc_msg_1
+      action: delete_post
+      reason: 违反「群里不发外部推广链接」，第一次
+  # ② 同一个人接着刷屏 → 永久封禁。**报 L3 也按回人审**
+  - at: '+30m'
+    community.moderate:
+      who: p_li
+      channel: discord
+      target: cheap_cables_24h
+      action: permanent_ban
+      reason: 同一个号连发六条外链广告
+      level: L3
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  community_moderation:
+    action: permanent_ban
+    requested_level: L3
+    # 硬顶：把人永久赶出去这件事只能人点
+    auto_approved: false
+  staged_change_kinds: [community_moderation]
+  event_types:
+    - simulation.social_moderation_staged
+  metrics:
+    staged_changes: 2
+    # 没人点头 = 两条都没生效。删帖那一下在 yml 上写的是 L2，但 31 §3.4 只让
+    # low 风险超过 L1，而 `community_moderation` 是 medium——所以它也等人点。
+    # 封禁那一下**另外**还被 guardrail 按 `after.action` 钉死在 L1：
+    # 哪天有人把风险级放宽了，这一条照样拦得住。
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  卡面上"要把谁赶出去、因为什么、这是第几次"，人读完答得上来吗？

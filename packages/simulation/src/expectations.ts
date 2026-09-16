@@ -780,6 +780,156 @@ export function checkExpectations(
       )
     }
   }
+  /*
+   * WP73 / 56 §6：入群审核那一条。
+   *
+   * 两件事：L2 那一档（批错一个踢出去就是了），以及**他填的那几句在卡面上**——
+   * 没有它，人只看得到一个陌生 id，那就不是"审核"，是随手点两下。
+   */
+  if (expected.community_membership !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.social_membership_staged')
+    if (last === undefined) {
+      add('community_membership', false, '这一轮没有一条入群审核进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.community_membership
+      const problems: string[] = []
+      if (
+        want.requested_level !== undefined &&
+        String(p.level_requested) !== want.requested_level
+      ) {
+        problems.push(`报的等级是 ${String(p.level_requested)}，不合期望`)
+      }
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push(want.auto_approved ? '这一条没能自己走' : '入群审核不该自动放行')
+      }
+      if (
+        want.answers_on_card !== undefined &&
+        (p.answers_on_card === true) !== want.answers_on_card
+      ) {
+        problems.push('卡面上没有他填的申请答案')
+      }
+      add(
+        'community_membership',
+        problems.length === 0,
+        problems.length === 0
+          ? `报 ${String(p.level_requested)} → 落 ${String(p.level_at_creation)}；申请答案在卡上`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP73 / 56 §6：管理动作那一条。
+   *
+   * 分档由 guardrail 按 `after.action` 判：删帖 / 禁言 L2，**封禁 L1**。
+   * 场景报什么等级都改变不了后者——那正是这条题要钉的。
+   */
+  if (expected.community_moderation !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.social_moderation_staged')
+    if (last === undefined) {
+      add('community_moderation', false, '这一轮没有一个管理动作进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.community_moderation
+      const problems: string[] = []
+      if (want.action !== undefined && String(p.action) !== want.action) {
+        problems.push(`做的是 ${String(p.action)}，不合期望`)
+      }
+      if (
+        want.requested_level !== undefined &&
+        String(p.level_requested) !== want.requested_level
+      ) {
+        problems.push(`报的等级是 ${String(p.level_requested)}，不合期望`)
+      }
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push(want.auto_approved ? '这一条没能自己走' : '这一档不该自动放行')
+      }
+      add(
+        'community_moderation',
+        problems.length === 0,
+        problems.length === 0
+          ? `${String(p.action)}：报 ${String(p.level_requested)} → 落 ${String(p.level_at_creation)}`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP73 / 56 §6：群规改动那一条（**永远 L1**，新群规正文要在卡面上）。
+   */
+  if (expected.community_rules !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.social_rules_staged')
+    if (last === undefined) {
+      add('community_rules', false, '这一轮没有一次群规改动进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.community_rules
+      const problems: string[] = []
+      if (
+        want.requested_level !== undefined &&
+        String(p.level_requested) !== want.requested_level
+      ) {
+        problems.push(`报的等级是 ${String(p.level_requested)}，不合期望`)
+      }
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push(want.auto_approved ? '这一条没能自己走' : '改群规不该自动放行')
+      }
+      if (
+        want.stated_on_card !== undefined &&
+        (p.stated_on_card === true) !== want.stated_on_card
+      ) {
+        problems.push('卡面上没有新群规的正文')
+      }
+      add(
+        'community_rules',
+        problems.length === 0,
+        problems.length === 0
+          ? `报 ${String(p.level_requested)} → 落 ${String(p.level_at_creation)}，等人点；新群规在卡上`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP73 / 56 §6：那一条排期撞车了没有，以及**撞车那句话在不在卡面上**。
+   *
+   * 只在返回值里说"撞了"而卡面上不写，等于没说：人按下那一下之前看不见的东西，
+   * 在 36 §2 里就不算说过。
+   */
+  if (expected.social_calendar !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.social_post_staged')
+    if (last === undefined) {
+      add('social_calendar', false, '这一轮没有一条内容进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.social_calendar
+      const kinds = Array.isArray(p.conflict_kinds) ? p.conflict_kinds.map(String) : []
+      const problems: string[] = []
+      if (want.conflict_kinds !== undefined) {
+        const missing = want.conflict_kinds.filter((k) => !kinds.includes(k))
+        if (missing.length > 0) problems.push(`没判出这几种撞车：${missing.join('、')}`)
+      }
+      if (
+        want.stated_on_card !== undefined &&
+        (p.conflict_stated_on_card === true) !== want.stated_on_card
+      ) {
+        problems.push('撞车那句话没写在卡面上')
+      }
+      add(
+        'social_calendar',
+        problems.length === 0,
+        problems.length === 0
+          ? `撞车判出 ${kinds.length === 0 ? '无' : kinds.join('、')}，卡上说了`
+          : problems.join('；'),
+      )
+    }
+  }
   // WP67 / 48 §5.1：开发信的禁承诺被 guardrail 拦下、打回重写、改写后自动发
   if (expected.kol_outreach !== undefined) {
     const staged = [...evidence.events]

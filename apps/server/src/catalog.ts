@@ -366,7 +366,18 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
         secret: true,
         required: true,
         kind: 'password',
-        hint: 'X 开发者后台里那个 App-only Bearer Token',
+        hint: 'X 开发者后台里那个令牌。只读用 App-only Bearer 就够；要发推得换成用户上下文的那一把',
+      },
+      {
+        // WP73：社媒运营那一侧要它——v2 没有"我的通知"，读提及只能搜
+        // `to:<我> OR @<我>`，没有这一格就不知道该搜谁（红人那一侧用不上，所以选填）
+        name: 'handle',
+        label: '我们自己的账号名',
+        secret: false,
+        required: false,
+        kind: 'text',
+        placeholder: '@nordvolt',
+        hint: '只有社媒运营那条职责用得上：读"谁提到了我们"要靠搜自己的 @，没有它就搜不了',
       },
     ],
     setup_guide: {
@@ -388,8 +399,9 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
     },
     data_note:
       '没买档这条职责照样能用：找人靠导入与公共库，建联、合作、审核、归因一样不少。' +
-      '社媒运营的 X 那条职责用同一张卡，但**发推要的是用户上下文的 OAuth**，这把 App-only ' +
-      'Bearer 只读得了、发不了——那一跳排在 WP73。',
+      '社媒运营的 X 那条职责用同一张卡。WP73 起发推与回复都接上了（`POST /2/tweets`，' +
+      '回复是同一个口子加一格 `reply`）——但**发推要的是用户上下文的 OAuth**，' +
+      '填一把 App-only Bearer 只读得了、发不了，那时上游回 403，我们照实说"这个档买不到这个口子"。',
   },
 ]
 
@@ -405,10 +417,11 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
  * Meta 发布要过 App Review、TikTok 申请制、Reddit 的 User-Agent 格式、
  * WhatsApp 要商业验证 + 模板 + opt-in + 24h 窗口。说在前面，比让人填完之后撞墙强。
  *
- * 三张标了 `planned`：适配器在 `@agentsws/social-core` 里还是"说清为什么没有"那一档
- * （TikTok 申请制、Reddit 要注册应用、WhatsApp 要商业验证），真调用排在 WP73。
- * 与 WP64 那几张骨架卡同一条规矩：卡照出、状态照实说、点不动——宁可点不动，
- * 也不能让人填完密钥之后发现连不上。
+ * **WP73 起八张全可连**：TikTok / Reddit / WhatsApp 三张原来是"目录里有、点不动"，
+ * 现在适配器在 `@agentsws/social-core` 里都有真调用了，所以表单补齐、状态改成可连。
+ * 平台那一侧的门槛照实说在准备说明里，**不当成连接失败**：TikTok 没批下来是 403 →
+ * "这个接口要先申请"；X 免费档是 403 → "这个档买不到这个口子"；WhatsApp 少模板名
+ * 或没核过 opt-in → 当场 block，不给"点一下就发"的路径。
  */
 export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
   {
@@ -471,11 +484,34 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
     auth: 'api_key',
     store: 'local_vault',
     data_sources: ['social_tiktok'],
-    fields: [],
+    smoke_hints: ['creator_info', 'list_videos'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '用 client key / secret 换出来的那一把（scope 要有 video.publish 与 video.list）',
+      },
+      {
+        name: 'client_key',
+        label: 'Client key',
+        secret: false,
+        required: false,
+        kind: 'text',
+        hint: '选填，只是为了在连接页上认出这是哪一个应用',
+      },
+    ],
     setup_guide: {
       summary:
-        '**申请制**，而且与红人那条用的 Research API **要分别申请**。批下来之后发布是两跳：init 拿一个 publish_id 与上传地址，素材传上去再轮询状态——一跳发完这件事在 TikTok 上不存在。另外它**没有开放的评论读写接口**，待回评论那一块在这条渠道上是空的。',
-      steps: ['暂时没有步骤——真调用还没接（WP73）'],
+        '**申请制**，而且与红人那条用的 Research API **要分别申请**。发布是两跳：init 拿一个 publish_id，TikTok 自己去抓素材，再轮询状态——一跳发完这件事在 TikTok 上不存在，所以"发出去了"要等状态变成 `PUBLISH_COMPLETE`。另外它**没有开放的评论读写接口**，待回评论那一块在这条渠道上是空的。',
+      steps: [
+        '到 TikTok 开发者后台建一个应用，申请 Content Posting API（要写用途说明，审核制）',
+        '把要发视频的那个域名加进应用的 URL 白名单（我们用 PULL_FROM_URL，TikTok 自己去抓）',
+        '用 client key / secret 走 OAuth 换一把带 video.publish 的访问令牌',
+        '把令牌填进下面的表单——只存在这台电脑上',
+      ],
       links: [
         {
           label: 'Content Posting API 文档',
@@ -483,9 +519,10 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
         },
       ],
     },
-    planned:
-      '还没接：目录、表单骨架与职责都已就位，真调用排在 WP73。' +
-      '在此之前 TikTok 那条职责照样能排期、写文案、走审批，到点提醒你去后台手工发。',
+    data_note:
+      '申请没批下来的时候上游回 403——我们说的是"这个接口要先申请"，不是"连接失败"，' +
+      '免得你在这张卡上反复重填一把根本没问题的令牌。在此之前排期、草稿、审批照常，' +
+      '到点提醒你去后台手工发。',
   },
   {
     service: 'reddit',
@@ -494,16 +531,50 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
     auth: 'api_key',
     store: 'local_vault',
     data_sources: ['social_reddit'],
-    fields: [],
+    smoke_hints: ['about_subreddit', 'list_new'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '用 client id / secret 换出来的那一把（scope 要有 submit、edit、modposts）',
+      },
+      {
+        name: 'user_agent',
+        label: 'User-Agent',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: 'macos:agentsws:1.0 (by /u/yourname)',
+        hint: 'Reddit 只认这个格式：`平台:应用 id:版本 (by /u/你的用户名)`。写错一律 429——连不上最常见的原因是这一格，不是密钥',
+      },
+      {
+        name: 'subreddit',
+        label: '版块名',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: 'nordvolt',
+        hint: '不用写 r/，写版块名本身就行',
+      },
+    ],
     setup_guide: {
       summary:
-        '要先在 Reddit 注册一个 script / web 应用，拿 client id + secret 换令牌。**User-Agent 必须是 Reddit 认的格式**（`平台:应用 id:版本 (by /u/你的用户名)`），写错一律 429——连不上最常见的原因是这一格，不是密钥。',
-      steps: ['暂时没有步骤——真调用还没接（WP73）'],
+        '要先在 Reddit 注册一个 script / web 应用，拿 client id + secret 换令牌。**User-Agent 必须是 Reddit 认的格式**，写错一律 429。这条渠道上的"群发"= 发一条**置顶帖**：给每个订阅者发私信是明令禁止的（会被举报成垃圾信，封的是这个号）。一分钟最多 60 次调用，超了我们自己先排队，而不是等它 429。',
+      steps: [
+        '到 https://www.reddit.com/prefs/apps 建一个应用（选 script 或 web app）',
+        '复制 client id 与 secret，走 OAuth 换一把访问令牌',
+        '把 User-Agent 按 `平台:应用 id:版本 (by /u/你的用户名)` 写好',
+        '把令牌、User-Agent 与版块名填进下面的表单——只存在这台电脑上',
+      ],
       links: [{ label: 'Reddit API 文档', url: 'https://www.reddit.com/dev/api' }],
     },
-    planned:
-      '还没接：目录与职责已就位，真调用排在 WP73。' +
-      '在此之前 Reddit 那条职责能整理版规、攒公告草稿与审批，发不出去的那一跳会照实说。',
+    data_note:
+      'subreddit **没有成员名册、也没有入群审批**（关注是单向的），所以「待审入群」那一块' +
+      '在这条渠道上永远是空的——那不是没连，是这件事在 Reddit 上不存在。' +
+      '读得到的是版务名单（谁说了算）。',
   },
   {
     service: 'discord_bot',
@@ -601,11 +672,54 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
     auth: 'api_key',
     store: 'local_vault',
     data_sources: ['social_whatsapp'],
-    fields: [],
+    smoke_hints: ['get_business_profile'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'Meta 开发者后台里那个长期有效的系统用户令牌',
+      },
+      {
+        name: 'phone_number_id',
+        label: '号码 id',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '106540352242922',
+        hint: '不是电话号码本身，是后台里那串数字 id',
+      },
+      {
+        name: 'display_phone_number',
+        label: '显示的号码',
+        secret: false,
+        required: false,
+        kind: 'text',
+        placeholder: '+86 138 0000 0000',
+        hint: '只用来在界面上认出是哪个号',
+      },
+      {
+        name: 'template_language',
+        label: '模板语言',
+        secret: false,
+        required: false,
+        kind: 'text',
+        placeholder: 'zh_CN',
+        hint: '留空就按 zh_CN。要与后台那个模板批下来时的语言**一字不差**，否则上游拒发',
+      },
+    ],
     setup_guide: {
       summary:
-        '**三条规矩都是 Meta 的，不是我们的**：要过商业验证；主动发消息只能用审批过的模板，且收件人必须先 opt-in；对方来过消息之后才有 24 小时窗口能自由回复。违反了封的是这个品牌的号——所以少模板 id 或没 opt-in 时我们**当场 block**，不是让你点一下就发。',
-      steps: ['暂时没有步骤——真调用还没接（WP73）'],
+        '**三条规矩都是 Meta 的，不是我们的**：要过商业验证；主动发消息只能用审批过的模板（`template.name` 必填），且收件人必须先 opt-in；对方来过消息之后才有 24 小时窗口能自由回复。违反了封的是这个品牌的号——所以少模板名或没核过 opt-in 时我们**当场 block**，不是让你点一下就发；窗口过了的自由文本也发不出去，会让你改成选一个模板。',
+      steps: [
+        '在 Meta 商务管理平台过商业验证，并把号码接进 WhatsApp Business 平台',
+        '在开发者后台建一个应用，加 WhatsApp 产品，拿号码 id',
+        '建一个系统用户并生成长期访问令牌（权限要有 whatsapp_business_messaging）',
+        '在后台建好要用的消息模板并等它审核通过——模板名与语言就是这里要对上的那两格',
+        '把令牌与号码 id 填进下面的表单——只存在这台电脑上',
+      ],
       links: [
         {
           label: 'WhatsApp Cloud API 文档',
@@ -613,9 +727,10 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
         },
       ],
     },
-    planned:
-      '还没接：目录、职责与那两道硬闸（模板 + opt-in）都已就位，真调用排在 WP73。' +
-      '在此之前 WhatsApp 那条职责能整理群规、攒模板草稿与审批。',
+    data_note:
+      '群发是**一个一个发**的（Cloud API 没有批量接口），所以卡面上那个"发给多少人"' +
+      '就是要打多少跳；中途被限流或者掉线我们**停下来**，不接着发也不重试——' +
+      '重试一条可能已经送达的模板消息，代价是对方收到两条一样的。',
   },
 ]
 

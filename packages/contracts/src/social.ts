@@ -332,6 +332,14 @@ export interface CommunityMember {
   application_answers?: string[]
   /** 最后一次发言。判"活跃度"用它。 */
   last_active_at?: Iso8601
+  /**
+   * WP73：群里给这个人打的标签（"老客""内测""只看不说话"）。
+   *
+   * 群发向导的"发给带这个标签的人"读它。**不是顾客画像**——标签是运营在群里
+   * 自己打的一串字，与订单、消费额、客服工单一个字都不挂钩（这条职责的 scopes
+   * 里根本没有 `customer` 域，见这个接口开头那一段）。
+   */
+  tags?: string[]
 }
 
 /**

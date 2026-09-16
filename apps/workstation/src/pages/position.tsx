@@ -107,6 +107,12 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
    * 与在线客服那一张同一个道理：这条职责的产出不在图表里，在这些动作里。
    */
   const kolChannel = channelOfRole(here?.role_id)
+  /*
+   * WP73（56 §6）：社媒那两块（内容日历周视图 + 群发向导）**不在这一页**，
+   * 在职责页（`pages/duty.tsx`）。理由是这个岗位下面有九条渠道职责——
+   * 日历是"这条渠道这周发什么"，摆在岗位这一层就得先问"哪条渠道"，
+   * 而那正是职责页已经回答过的问题（54：岗位是入口、职责各有各的上下文）。
+   */
   if (view.isPending) return <Skeleton className="h-64 w-full" />
   if (here !== undefined && here.ranges.length === 0)
     return <NoRangeNotice id={id} isOwner={isOwner} />
