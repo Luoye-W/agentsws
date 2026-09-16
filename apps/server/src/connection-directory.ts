@@ -32,6 +32,7 @@ import type {
   PersonId,
   Position,
   RoleId,
+  RunConnection,
   StorefrontPlatform,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -39,6 +40,8 @@ import {
   CONNECTION_DIRECTORY,
   canonicalConnectionKind,
   connectionDirectoryEntry,
+  customMcpServerOfKind,
+  mcpServerNameFor,
   storefrontUsableService,
   validateMcpServer,
 } from '@agentsws/contracts'
@@ -141,6 +144,25 @@ export interface ConnectionDirectoryAssembly {
   probeMcp(name: string): Promise<McpServerRecord>
   /** 删掉一台（加密库里那几个请求头一起删）。 */
   removeMcp(name: string): boolean
+  /**
+   * WP86（55 §4 第三层）：**这条职责挂哪几台 MCP 服务器**（`RunRequest.connections`）。
+   *
+   * 职责模板的 `connectors[]` ∩ 已登记的 MCP 服务器。里面**没有任何凭据值**——
+   * 请求头只有"名字 → 凭据引用名"，值由运行时经 `ctx.credentials` 解析（13 §4）。
+   */
+  roleConnections(role_id: string): RunConnection[]
+}
+
+/**
+ * 一个 MCP 请求头在 `ctx.credentials` 里的**引用名**（一个 POSIX 环境变量名）。
+ *
+ * 生成的 preset 文件里出现的就是这个名字（`!!js process.env.<REF> ?? ''`），
+ * 值一个字节都不进文件。名字本身不是秘密：它说的是"这台服务器的这个头"，
+ * 不是"这个头的值是什么"。
+ */
+export function mcpHeaderRef(server_name: string, header: string): string {
+  const seg = (v: string): string => v.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
+  return `AGENTSWS_MCP_${seg(server_name)}_${seg(header)}`
 }
 
 /** 这个模块自己的错误（网关把 code 翻成 HTTP 状态）。 */
@@ -470,25 +492,88 @@ export function createConnectionDirectory(
     }
   }
 
+  /**
+   * WP86（55 §4 第三层）：这条职责挂哪几台 MCP 服务器。
+   *
+   * 两处来源，都从**职责模板**出发（55 §4：preset 由模板生成、用户不手编）：
+   *
+   * 1. `connectors[].kind` 写成 `mcp:<名字>` —— 指名一台已登记的自定义服务器；
+   * 2. `connectors[].kind` 对上的目录条目 `mode === 'mcp_server'` 且**同名**有一台
+   *    已登记的服务器 —— 给将来"官方 MCP 服务器"那些条目留的口子（目录里那条
+   *    通用的 `mcp_server` 不算：它说的是"可以接自定义服务器"这件事本身）。
+   *
+   * 探测失败过的不挂：`probe.ok !== true` 说明上一次连不上，它报的工具清单也不可信。
+   */
+  const roleConnections = (role_id: string): RunConnection[] => {
+    const def = roles.roles.get(role_id)
+    if (def === undefined) return []
+    const out: RunConnection[] = []
+    const seen = new Set<string>()
+    for (const dep of def.connectors) {
+      const custom = customMcpServerOfKind(dep.kind)
+      const entry = custom === undefined ? connectionDirectoryEntry(dep.kind) : undefined
+      const serverName =
+        custom ??
+        (entry?.mode === 'mcp_server' && entry.kind !== 'mcp_server' ? entry.kind : undefined)
+      if (serverName === undefined || seen.has(serverName)) continue
+      const row = findMcp(serverName)
+      if (row === undefined || row.probe?.ok !== true) continue
+      seen.add(serverName)
+      const header_refs = Object.fromEntries(
+        row.header_names.map((h) => [h, mcpHeaderRef(row.name, h)]),
+      )
+      out.push({
+        kind: dep.kind,
+        // 全局唯一：一个进程装得下多个品牌，不带 workspace 会撞名（52 O1）
+        server_name: mcpServerNameFor(options.workspace_id, row.name),
+        transport: row.transport,
+        ...(row.command === undefined ? {} : { command: row.command }),
+        ...(row.args === undefined ? {} : { args: [...row.args] }),
+        ...(row.url === undefined ? {} : { url: row.url }),
+        ...(Object.keys(header_refs).length === 0 ? {} : { header_refs }),
+        read_tools: [...(row.read_tools ?? [])],
+        tools: (row.probe?.tools ?? []).map((t) => t.name),
+      })
+    }
+    return out.sort((a, b) => a.server_name.localeCompare(b.server_name))
+  }
+
   return {
     directory,
     positionConnections,
-    listMcp: () => state.servers.map((s) => ({ ...s, header_names: [...s.header_names] })),
+    roleConnections,
+    listMcp: () =>
+      state.servers.map((s) => ({
+        ...s,
+        header_names: [...s.header_names],
+        ...(s.read_tools === undefined ? {} : { read_tools: [...s.read_tools] }),
+      })),
     async saveMcp(input) {
       const problems = validateMcpServer(input)
       if (problems.length > 0)
         throw new ConnectionDirectoryError('invalid_input', problems.join('；'), {
           problems,
         })
+      const existingRow = findMcp(input.name)
+      /*
+       * WP86：**不传 `headers` ≠ 清空**。
+       *
+       * 只改"哪几个工具只读"的那一次提交不会把 token 再发一遍（界面上也不该让人
+       * 为了勾一个复选框重新粘一次 Bearer token）。所以 `undefined` = 沿用，
+       * `{}` = 明确清空。这两件事以前是同一个意思，现在分开了。
+       */
+      const keepHeaders = input.headers === undefined && existingRow !== undefined
       const headers = input.headers ?? {}
-      const header_names = Object.keys(headers).sort()
-      if (header_names.length > 0 && !secrets.available)
+      const header_names = keepHeaders
+        ? [...(existingRow?.header_names ?? [])]
+        : Object.keys(headers).sort()
+      if (Object.keys(headers).length > 0 && !secrets.available)
         throw new ConnectionDirectoryError(
           'invalid_input',
           '这台电脑还没有秘密库密钥，带请求头的 MCP 服务器暂时存不了',
         )
       const now = clock.now()
-      const existing = findMcp(input.name)
+      const existing = existingRow
       const row: McpServerRecord = {
         name: input.name,
         transport: input.transport,
@@ -499,12 +584,21 @@ export function createConnectionDirectory(
             }
           : { url: input.url ?? '' }),
         header_names,
+        // WP86：只读清单是**人勾的**，没勾就沿用上一次勾过的那份（改个请求头不该
+        // 把"哪些工具只读"清空——清空 = 这台服务器在公司端一个工具都调不动）
+        ...(input.read_tools === undefined
+          ? existing?.read_tools === undefined
+            ? {}
+            : { read_tools: [...existing.read_tools] }
+          : { read_tools: [...new Set(input.read_tools)].sort() }),
         created_at: existing?.created_at ?? now,
         updated_at: now,
       }
       // 值进加密库、名字留在这张表上——两者从这一行起就分开了
-      if (header_names.length > 0) secrets.put(secretIdOf(row.name), { ...headers })
-      else secrets.remove(secretIdOf(row.name))
+      if (!keepHeaders) {
+        if (header_names.length > 0) secrets.put(secretIdOf(row.name), { ...headers })
+        else secrets.remove(secretIdOf(row.name))
+      }
       state.servers = [...state.servers.filter((s) => s.name !== row.name), row].sort((a, b) =>
         a.name.localeCompare(b.name),
       )

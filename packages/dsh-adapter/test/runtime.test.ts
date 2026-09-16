@@ -5,6 +5,9 @@
  * `subprocess` = 起一个 headless 子进程、经 stdio JSON-RPC 驱动。两档的语义、
  * `capabilities()`、事件序列必须逐条一致——这就是"运行时可替换"的第二层证据。
  */
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { RuntimeAdapter } from '@agentsws/contracts'
 import { assemblePromptHash, contextItemHash } from '@agentsws/stand-ins'
 import { describe, expect, it, vi } from 'vitest'
@@ -169,5 +172,64 @@ describe.each(MODES)('dsh 运行时（%s）：无状态（17 §5.1）', (mode) =
     const runtime = make()
     const health = await runtime.health()
     expect(health.ok).toBe(true)
+  })
+})
+
+/**
+ * WP86（55 §4 第三层）：带 preset 的一次运行，**两档各跑一遍**。
+ *
+ * 子进程那一档是关键：`RunRequest.connections` 要经 JSON-RPC 过一趟，
+ * preset 目录要在子进程里生成、由子进程里那棵树挂上。换宿主不换语义（17 §4）。
+ */
+describe.each(MODES)('dsh 运行时（%s）：带职责 preset 的运行（WP86）', (mode) => {
+  const FAKE = join(import.meta.dirname, 'fixtures', 'fake-mcp-server.mjs')
+
+  const withPreset = (): ReturnType<typeof makeRequest> =>
+    makeRequest({
+      connections: [
+        {
+          kind: 'mcp:my-tools',
+          server_name: 'ws_test_my-tools',
+          transport: 'stdio',
+          command: process.execPath,
+          args: [FAKE],
+          read_tools: ['look'],
+          tools: ['look', 'touch'],
+        },
+      ],
+    })
+
+  it('照常跑完，并记下 preset 生成了没有（progress{preset.generated}）', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'agentsws-preset-run-'))
+    const runtime = createDshRuntime({ ...baseOptions({ presetRoot: root }), mode })
+    const { sink, events } = collect()
+    const result = await runtime.run(withPreset(), sink, NO_ABORT())
+
+    expect(result.status).toBe('completed')
+    const note = events.find((e) => e.type === 'progress' && e.step === 'preset.generated') as
+      | { note?: string }
+      | undefined
+    expect(note?.note).toContain('conns=1')
+    expect(note?.note).toContain('written')
+    // 第二次同一条职责：内容没变 → reused（上游不起新一代，也就不漏子树）
+    const second = collect()
+    await runtime.run(withPreset(), second.sink, NO_ABORT())
+    const again = second.events.find(
+      (e) => e.type === 'progress' && e.step === 'preset.generated',
+    ) as { note?: string } | undefined
+    expect(again?.note).toContain('reused')
+  })
+
+  it('一条连接都没有的运行：事件里说 conns=0，工具面上不会多出任何 mcp__*', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'agentsws-preset-run-'))
+    const runtime = createDshRuntime({ ...baseOptions({ presetRoot: root }), mode })
+    const { sink, events } = collect()
+    await runtime.run(makeRequest(), sink, NO_ABORT())
+    const note = events.find((e) => e.type === 'progress' && e.step === 'preset.generated') as
+      | { note?: string }
+      | undefined
+    expect(note?.note).toContain('conns=0')
+    const called = events.filter((e) => e.type === 'tool.call') as { tool: string }[]
+    expect(called.every((e) => !e.tool.startsWith('mcp__'))).toBe(true)
   })
 })

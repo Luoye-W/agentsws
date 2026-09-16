@@ -37,12 +37,14 @@ import type { PostToolDecision, PreToolDecision, ToolExecutionResult } from '@de
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { browserBrief, checkBrowserNavigation } from './browser.js'
+import { presetToolNames } from './preset.js'
 import { inferRefs, plainText } from './reading.js'
 import {
   browserToolName,
   buildToolDefinitions,
   classifySideEffect,
   DRAFT_TOOL,
+  mcpReadToolMap,
   STAGE_TOOL,
 } from './tools.js'
 import type { DshRuntimeOptions, GateRecord } from './types.js'
@@ -193,8 +195,20 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
    * 公司端因此拒）、注 JS 公司端硬拒。新来的工具默认落到"按写"，方向是对的。
    */
   const browserOn = request.browser !== undefined
+  /*
+   * WP86（55 §4 第三层）：preset 挂上来的 MCP 工具（`mcp__<workspace>_<kind>__<tool>`）。
+   *
+   * 与浏览器那一整组不同，**这些是逐个列名的**：名字来自连接目录里那台服务器
+   * 探测出来的工具清单（`RunConnection.tools`），不是运行时猜的。列名的好处是
+   * 「这条职责能用哪台服务器的哪几个工具」在 RunRequest 里看得见、回放得出来；
+   * 而且 preset 的工具**确实受** `tools.restrict` 管（实测，见 `preset-seam.test.ts`），
+   * 不列就一个都到不了模型面前。
+   */
+  const presetTools = new Set(presetToolNames(request))
+  /** `server_name` → 那台服务器上被人勾成"只读"的工具（`McpServerRecord.read_tools`）。 */
+  const mcpReadTools = mcpReadToolMap(request)
   const allowed = (name: string): boolean =>
-    allow.has(name) || (browserOn && browserToolName(name) !== undefined)
+    allow.has(name) || presetTools.has(name) || (browserOn && browserToolName(name) !== undefined)
 
   // Agent 层在场时用真 Agent 当 scope key（官方语义）；没有时退回一个占位键 + 自开 scope。
   const agent: object = input.agent ?? { preset: request.runtime.preset, run_id: request.id }
@@ -367,7 +381,18 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   // MCP 工具的（scoped registration），本来就不受这张白名单影响。真列进去反而会抛
   // ——restrict 只认调用当刻**已经全局注册**的名字，而 provider 是在 `agent/created`
   // 之后才挂的，比 `setup` 晚一步。
-  const visible = definitions.map((d) => d.name).filter((n) => allow.has(n))
+  //
+  // WP86 补一条相反的事实：**preset 挂上来的 MCP 工具反过来必须列进来**。
+  // 它们是 `mount()` 在 `setup` 里注册的（比 `restrict` 早一步），所以 `restrict`
+  // 认得它们；不列的话整组被这张白名单挡掉。名单按"这一刻真的注册上来了的"取交集
+  // ——一台连不上的服务器不会让 `restrict` 抛（抛了整张白名单都装不上，反而更松）。
+  const registered = new Set(
+    input.agent === undefined ? [] : ctx.tools.schemas(input.agent).map((sc) => sc.name),
+  )
+  const visible = [
+    ...definitions.map((d) => d.name).filter((n) => allow.has(n)),
+    ...[...presetTools].filter((n) => registered.has(n)),
+  ]
   if (visible.length > 0) scopedCtx.tools.restrict({ allow: visible })
 
   // ── `tools/pre-execute`：预算 + 三道门（17 §6.3）────────────────────────
@@ -415,7 +440,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     })
     if (browserDenial !== undefined) return deny(browserDenial)
 
-    const effect = classifySideEffect(exec.name, options.sideEffects, args)
+    const effect = classifySideEffect(exec.name, options.sideEffects, args, mcpReadTools)
     if (effect === 'write_external' && request.tools.side_effect_policy === 'executor') {
       return deny(`write_external_requires_executor: ${exec.name}`)
     }

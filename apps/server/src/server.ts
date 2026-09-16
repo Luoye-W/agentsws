@@ -131,6 +131,7 @@ import { type CloudAssembly, type CloudFetch as CloudEntryFetch, createCloud } f
 import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
 import { connectBaseUrl } from './connect-url.js'
 // WP83（54 §4）：连接目录 + 岗位连接清单 + 自定义 MCP 服务器（保存 / 校验 / 探测）
+import type { ConnectionDirectoryAssembly } from './connection-directory.js'
 import { createConnectionDirectory } from './connection-directory.js'
 import {
   type ConnectionsAssembly,
@@ -1309,6 +1310,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
+            /*
+             * WP86（55 §4 第三层）：这条职责登记了哪几台 MCP 服务器。
+             *
+             * 目录装配是按品牌懒建的（`directoryPortFor`），而这里要的是**同步**回答
+             * ——`buildRequest` 那一跳不等 IO。所以只读已经建好的那一份：这个品牌的
+             * 连接页开过一次（或跑过一次目录接口）之后就有；没有就是空数组，
+             * 与"这条职责一台 MCP 服务器都没登记"同一个结果。
+             */
+            connections: (role_id) => directoryAssemblies.get(ws)?.roleConnections(role_id) ?? [],
           })
     const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -2701,6 +2711,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 加密库——品牌 A 登记的那台服务器与它的 token，在 B 的任何路由里都读不到。
    */
   const directoryPorts = new Map<WorkspaceId, ConnectionDirectoryPort>()
+  /** WP86：装配本体也留一份（运行时要同步问"这条职责挂哪几台 MCP 服务器"）。 */
+  const directoryAssemblies = new Map<WorkspaceId, ConnectionDirectoryAssembly>()
   const directoryPortFor = async (ws: WorkspaceId): Promise<ConnectionDirectoryPort> => {
     const cached = directoryPorts.get(ws)
     if (cached !== undefined) return cached
@@ -2716,6 +2728,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connections: () => brand.connections.liveConnections(),
       storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
     })
+    directoryAssemblies.set(ws, assembly)
     const port: ConnectionDirectoryPort = {
       directory: () => assembly.directory(),
       positionConnections: (actor, id) => assembly.positionConnections(actor.person_id, id),

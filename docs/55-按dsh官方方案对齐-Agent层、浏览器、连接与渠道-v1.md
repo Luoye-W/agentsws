@@ -136,6 +136,46 @@ provider 照常起——它只要 `cli.js` 那段 JS。attach 与 `executable_pa
 
 凭据：官方 `ctx.credentials` 是一个 provider 抽象（默认 `credentials-local` 存 `$DSH_HOME/.credentials.yaml`，OS keychain 官方推迟未发）。我们写一个 **`credentials-openconnector` provider**：把 OpenConnector 里的 token 当 `records` 暴露，refresh 放在官方的 `modifyRecord`（跨进程锁的读改写）里。这样 dsh 侧的任何插件要凭据都从 OpenConnector 拿，13 §4 的"凭据不经模型"不变。**未验证**：官方 seam 是单 provider，本机凭据（模型 key）与 OpenConnector 能否分层，做的时候实测。
 
+### 落点（WP86，已实现）
+
+三层里的**第三层**与凭据段落地在哪，以及**实测到的四件与预判不同的事**。
+
+| 件 | 落点 | 实测 |
+|---|---|---|
+| 职责 preset 由模板生成 | `dsh-adapter/src/preset.ts` 的 `writePreset()`：`<root>/<workspace>/<preset_id>/{agent,host}.cordis.yml + preset.yml`；`harness.ts` 在 `setup` 里 `ctx.agentPresets.mount()` | 挂得上，而且**不用** `PluginPackages`；只要 `cordis-plugin-loader` + `builtins.include`（见下 ①） |
+| 一职责一套连接 | `apps/server/src/connection-directory.ts` 的 `roleConnections()`：职责模板 `connectors[]` 里写 `mcp:<名字>` → `RunRequest.connections[]` | 隔离成立：另一条职责的 Agent 看不到那个 `serverName`（用例钉着） |
+| 自定义 MCP 接进运行时 | 同上 → preset 里一条连接一行 `@deepseek-ai/dsh-mcp-client`；工具名 `mcp__<workspace>_<kind>__<tool>` | 走现有 `classifySideEffect`，兜底 `write_external`；`read_tools` 勾出来的才按读 |
+| 凭据引用 | preset 里写 `!!js process.env.<REF> ?? ''`；`harness.ts` 在 `mount()` 前一跳经 `ctx.credentials.resolve()` 放进 `process.env`，挂完还原 | `?? ''` 不能省（见下 ③） |
+| `credentials-openconnector` | **新包** `packages/credentials-openconnector`（不放进 connect-adapter：那个包不依赖 dsh，`apps/server` 也不该因此拖进整棵 cordis） | seam 是**单 provider**（见下 ②），所以做的是**组合 provider** |
+
+四件与预判不同的事：
+
+① **preset 这一层要 `loader`，但不要整个 app-boot。** `AgentPresets` 的 `inject` 是
+`['loader', 'sessionProjections']`，`mount()` 走 `cordis-plugin-include` 的子树。
+所以最小挂载只多两个包：`cordis-plugin-loader`（服务）+ `cordis-plugin-include`
+（`ctx.loader.builtins.include`）。官方测试里那个 `@deepseek-ai/dsh-app-boot` 的
+`PluginPackages` **实测不需要**。`ctx.baseUrl` 必须指回 `dsh-adapter` 这个包——
+preset 目录在数据目录下，Node 的 `node_modules` 上溯到不了我们的依赖。
+
+② **`ctx.credentials` 是单 provider，本机与 OpenConnector 分不了层。**
+`CredentialProvider extends Service`，服务名 `credentials`；一棵树上挂第二个当场抛
+`service "credentials" has been registered at <…>`，先挂的那个继续有效。
+所以 55 §4 那句"未验证"的答案是**不能分层**，改做一个组合 provider：
+`CredentialRef`（环境变量名）走本机、`CredentialKey`（`<workspace>/<kind>` 记录）走
+OpenConnector。
+
+③ **解析不出来的凭据引用会让整份 preset 挂不上。** `!!js process.env.X` 求值成
+`undefined` 时，上游 `mcp-client` 的 config 校验直接拒（`env` 要
+`{ [key: string]: string }`），`mount()` 抛，这次运行整个失败。补上 `?? ''` 之后，
+没配凭据的后果退回它该有的样子：那台服务器连不上、它的工具不出现，运行照常。
+
+④ **preset 挂上来的工具受 `ctx.tools.restrict` 管——与浏览器 provider 正好相反。**
+浏览器那一组是 `agent/created` 里的 scoped registration，白名单遮不住、列进去还会抛
+（AGENT-LAYER §9.4）；preset 是 `setup` 里 `mount()` 的，**不列就整组被白名单挡掉**。
+而且 `restrict` 只认调用当刻已注册的名字，所以顺序是硬的：**先 mount 后 restrict**，
+反过来抛 `tools.restrict() names unknown global tools`，抛完整张白名单都没装上（更松）。
+白名单的来源是那台服务器**探测出来的**工具清单（`RunConnection.tools`）。
+
 ---
 
 ## 5. 渠道：没有官方 seam，按官方形状自己做（Q5）

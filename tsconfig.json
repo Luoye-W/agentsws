@@ -41,6 +41,9 @@
       "path": "packages/core"
     },
     {
+      "path": "packages/credentials-openconnector"
+    },
+    {
       "path": "packages/data"
     },
     {

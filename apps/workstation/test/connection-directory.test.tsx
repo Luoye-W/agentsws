@@ -112,6 +112,7 @@ const state = {
 const saved: {
   name: string
   headers?: Record<string, string>
+  read_tools?: string[]
 }[] = []
 const probed: string[] = []
 const removedServers: string[] = []
@@ -128,10 +129,12 @@ vi.mock('@/lib/api', async () => {
       transport: 'stdio' | 'streamable-http'
       command?: string
       headers?: Record<string, string>
+      read_tools?: string[]
     }) => {
       saved.push({
         name: input.name,
         ...(input.headers === undefined ? {} : { headers: input.headers }),
+        ...(input.read_tools === undefined ? {} : { read_tools: input.read_tools }),
       })
       const row: McpServerRecord = {
         name: input.name,
@@ -372,5 +375,60 @@ describe('自定义 MCP 服务器（凭据零泄漏）', () => {
     await userEvent.click(screen.getByTestId('mcp-transport-streamable-http'))
     expect(screen.queryByLabelText('命令')).toBeNull()
     expect(screen.getByLabelText('地址')).toBeTruthy()
+  })
+})
+
+/**
+ * WP86（55 §4 第三层）：只读工具的勾选列表。
+ *
+ * 两条：勾了之后发上去的是**原始工具名**；这一次提交**不带请求头**
+ * （值已经在加密库里，为了勾一个复选框再发一遍 token 是没必要的经手，13 §4.3）。
+ */
+describe('自定义 MCP：勾出只读工具（WP86）', () => {
+  it('勾上之后保存，发的是原始工具名，且这一次不带请求头', async () => {
+    state.servers = [
+      {
+        name: 'my-tools',
+        transport: 'stdio',
+        command: 'npx',
+        header_names: ['Authorization'],
+        read_tools: ['echo'],
+        probe: { ok: true, at: T0, tools: [{ name: 'echo' }, { name: 'add' }] },
+        created_at: T0,
+        updated_at: T0,
+      },
+    ]
+    renderWithProviders(<ConnectionDirectorySection assignment="asg_owner" />)
+    await userEvent.click(screen.getByTestId('directory-toggle'))
+    const form = await screen.findByTestId('mcp-read-tools')
+    const boxes = within(form).getAllByTestId('mcp-read-tool') as HTMLInputElement[]
+    // 已经勾过的那一个默认是勾上的
+    expect(boxes.map((b) => [b.dataset.tool, b.checked])).toEqual([
+      ['echo', true],
+      ['add', false],
+    ])
+    await userEvent.click(boxes[1] as HTMLInputElement)
+    await userEvent.click(within(form).getByTestId('mcp-read-tools-save'))
+    await waitFor(() => {
+      expect(saved.at(-1)).toEqual({ name: 'my-tools', read_tools: ['echo', 'add'] })
+    })
+  })
+
+  it('还没探测成功的那一台不出这张勾选表（没有工具可勾）', async () => {
+    state.servers = [
+      {
+        name: 'broken',
+        transport: 'stdio',
+        command: 'nope',
+        header_names: [],
+        probe: { ok: false, at: T0, tools: [], reason: 'probe_failed', detail: '连接超时' },
+        created_at: T0,
+        updated_at: T0,
+      },
+    ]
+    renderWithProviders(<ConnectionDirectorySection assignment="asg_owner" />)
+    await userEvent.click(screen.getByTestId('directory-toggle'))
+    await screen.findByTestId('mcp-row')
+    expect(screen.queryByTestId('mcp-read-tools')).toBeNull()
   })
 })

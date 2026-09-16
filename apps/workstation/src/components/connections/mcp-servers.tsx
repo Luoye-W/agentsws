@@ -1,10 +1,15 @@
 /**
  * 自定义 MCP 服务器（54（将改号 55）§4 目录里的那一条，WP83）。
  *
- * 本期只做**保存、校验与探测**：登记一台、连一次、把它报的工具列出来。
- * **不接进运行时**——把 MCP 服务器挂到 Agent 上是官方 `mcp-client` 按 preset 的事，
- * 那要等官方 Agent 层引进来（WP81）。界面上把这句话明写出来，
- * 免得有人登记完等着 AI 会用它。
+ * 保存、校验、探测（登记一台、连一次、把它报的工具列出来），外加 WP86 的一件事：
+ * **勾出哪几个工具是只读的**。
+ *
+ * 为什么非得人来勾：MCP 协议没有读写标注，一台服务器能干什么我们事先不知道，
+ * 所以门禁对 `mcp__*` 的兜底是"按写处理"，公司端一调就拒。勾进只读清单的那几个
+ * 才放行。不勾 = 这台服务器在公司端一个工具都调不动——这是有意的最严默认。
+ *
+ * 挂给谁：**职责模板说了算**（`connectors[]` 里写 `mcp:<名字>`），界面上不做这件事
+ * ——55 §4 定的是"职责 preset 由模板生成，用户不手编"。
  *
  * 凭据这条线与 `SecureForm` 同一条纪律（13 §4.3）：请求头的值多半是一枚 Bearer token，
  * 所以它走**原生 `<form>` + `FormData`**——值不进 React state、不进 query 缓存、
@@ -105,6 +110,25 @@ export function McpServers({ assignment }: { assignment?: string }): React.React
 
   const rows = servers.data?.servers ?? []
 
+  /**
+   * 勾"这几个是只读的"→ 保存。
+   *
+   * **不带 `headers`**：服务端把"没说"当成沿用，所以已经存好的那枚 token 不必
+   * 为了勾一个复选框再发一遍（13 §4.3：凭据经手越少越好）。
+   */
+  const saveReadTools = (row: (typeof rows)[number], form: HTMLFormElement): void => {
+    const picked = new FormData(form).getAll('read_tools').map(String)
+    setBusy(row.name)
+    save.mutate({
+      name: row.name,
+      transport: row.transport,
+      ...(row.command === undefined ? {} : { command: row.command }),
+      ...(row.args === undefined ? {} : { args: [...row.args] }),
+      ...(row.url === undefined ? {} : { url: row.url }),
+      read_tools: picked,
+    })
+  }
+
   return (
     <div
       className="mt-2 flex flex-col gap-2 rounded-md border border-dashed p-2"
@@ -163,6 +187,47 @@ export function McpServers({ assignment }: { assignment?: string }): React.React
                     {/* 只说存了哪几个头的**名字**——值在本机加密库里 */}
                     {t('connections.mcp.headers_stored', { names: row.header_names.join('、') })}
                   </p>
+                )}
+                {row.probe?.ok !== true || row.probe.tools.length === 0 ? null : (
+                  <form
+                    className="mt-2 flex flex-col gap-1"
+                    data-testid="mcp-read-tools"
+                    data-name={row.name}
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      saveReadTools(row, event.currentTarget)
+                    }}
+                  >
+                    <p className="text-xs text-muted-foreground">
+                      {t('connections.mcp.read_tools.hint')}
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {row.probe.tools.map((tool) => (
+                        <label key={tool.name} className="flex items-center gap-1 text-xs">
+                          <input
+                            type="checkbox"
+                            name="read_tools"
+                            value={tool.name}
+                            data-testid="mcp-read-tool"
+                            data-tool={tool.name}
+                            defaultChecked={(row.read_tools ?? []).includes(tool.name)}
+                          />
+                          {tool.name}
+                        </label>
+                      ))}
+                    </div>
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="submit"
+                        disabled={save.isPending}
+                        data-testid="mcp-read-tools-save"
+                      >
+                        {t('connections.mcp.read_tools.save')}
+                      </Button>
+                    </div>
+                  </form>
                 )}
               </div>
               <div className="flex gap-2">

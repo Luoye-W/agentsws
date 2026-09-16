@@ -415,3 +415,61 @@ describe('自定义 MCP 服务器：保存 / 校验 / 探测（不接进运行�
     expect(again.probe?.ok).toBe(true)
   })
 })
+
+describe('WP86（55 §4 第三层）：只读清单与接进运行时', () => {
+  it('勾出只读工具：保存时不必把请求头再发一遍，加密库里那把照样在', async () => {
+    await post('/v1/connection-directory/mcp-servers', {
+      name: 'fake-tools',
+      transport: 'stdio',
+      command: process.execPath,
+      args: [FAKE_MCP],
+      headers: { Authorization: MCP_TOKEN },
+    })
+    // 第二次提交只带 read_tools —— **不带 headers**
+    const row = await data<McpServerRecord>(
+      await post('/v1/connection-directory/mcp-servers', {
+        name: 'fake-tools',
+        transport: 'stdio',
+        command: process.execPath,
+        args: [FAKE_MCP],
+        read_tools: ['echo'],
+      }),
+    )
+    expect(row.read_tools).toEqual(['echo'])
+    // 头还在（名字还在 = 加密库里那把没被清掉；探测能跑通更是硬证据）
+    expect(row.header_names).toEqual(['Authorization'])
+    expect(row.probe?.ok).toBe(true)
+    // 还是一个字节都查不到
+    expect(JSON.stringify(row)).not.toContain('mcp-Zq7-never-logged-token')
+  })
+
+  it('只读清单里带前缀的名字当场被拒（方向填反了会静默地更严）', async () => {
+    const res = await post('/v1/connection-directory/mcp-servers', {
+      name: 'fake-tools',
+      transport: 'stdio',
+      command: process.execPath,
+      args: [FAKE_MCP],
+      read_tools: ['mcp__fake-tools__echo'],
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('改了别的字段不会把勾好的只读清单清空', async () => {
+    await post('/v1/connection-directory/mcp-servers', {
+      name: 'fake-tools',
+      transport: 'stdio',
+      command: process.execPath,
+      args: [FAKE_MCP],
+      read_tools: ['echo', 'add'],
+    })
+    const row = await data<McpServerRecord>(
+      await post('/v1/connection-directory/mcp-servers', {
+        name: 'fake-tools',
+        transport: 'stdio',
+        command: process.execPath,
+        args: [FAKE_MCP],
+      }),
+    )
+    expect(row.read_tools).toEqual(['add', 'echo'])
+  })
+})

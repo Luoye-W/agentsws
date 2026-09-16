@@ -34,7 +34,7 @@ import { replySubject } from '@agentsws/support-core'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { DraftArgs, StageArgs } from './gate.js'
 import { createHarness } from './harness.js'
-import { writePreset } from './preset.js'
+import { presetDigest, writePreset } from './preset.js'
 import {
   DAY_MS,
   hitsRule,
@@ -125,6 +125,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
       let modelError: string | undefined
 
       const preset = writePreset(req, options.presetRoot)
+      const hasConnections = (req.connections ?? []).length > 0
       const session_id = sha256(canonicalJson({ run: req.id, seed, preset: preset.dir })).slice(
         0,
         26,
@@ -178,6 +179,22 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         request_id: req.id,
         runtime: RUNTIME_NAME,
         model: req.runtime.model,
+      })
+      /*
+       * WP86：职责 preset 生成了没有（55 §4 第三层）。
+       *
+       * 17 §2 的 `RunEvent` 里**没有** `preset.generated` 这个类型，本棒不新增——
+       * 这是一条"装配发生了什么"的记录，不是运行时产出的新东西，`progress` 正是
+       * 为这类事准备的那一格。`note` 里记三件排障要的：preset id、内容指纹、
+       * 这次写没写文件（`reused` = 内容没变、mtime 没动、上游不会起新一代）。
+       * **凭据一个字都不进这条事件**——里面只有名字都没有。
+       */
+      emit({
+        type: 'progress',
+        step: 'preset.generated',
+        note: `${preset.id} ${presetDigest(req)} ${preset.written ? 'written' : 'reused'} conns=${
+          (req.connections ?? []).length
+        }`,
       })
       if (signal.aborted) {
         emit({ type: 'run.cancelled' })
@@ -282,6 +299,12 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
           buildDraftPayload,
           model: req.runtime.model.model,
           sessionId: `agentsws-${session_id}`,
+          /*
+           * WP86（55 §4 第三层）：**这条职责有连接才挂 preset**。
+           * 没连接就不装 Loader / Include / AgentPresets，工具面里一个 `mcp__*` 都没有
+           * ——与 WP82 的浏览器同一条纪律（不用的东西不挂）。
+           */
+          ...(hasConnections ? { preset: { root: preset.root, id: preset.id } } : {}),
           onToolResult: (_tool, value) => {
             if (scratch.order === undefined) {
               const found = orderView(value)

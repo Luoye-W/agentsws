@@ -1223,6 +1223,8 @@ export interface McpServerRecord {
   url?: string
   /** 只有请求头的**名字**；值在本机加密库里，永远不经这条路。 */
   header_names: string[]
+  /** WP86：勾成"只是看、不动东西"的那几个工具（原始名，不带 `mcp__…__` 前缀）。 */
+  read_tools?: string[]
   probe?: {
     ok: boolean
     at: string
@@ -1272,6 +1274,13 @@ export const saveMcpServer = (
     args?: string[]
     url?: string
     headers?: Record<string, string>
+    /**
+     * WP86：这台服务器上哪几个工具是只读的（原始工具名）。
+     *
+     * **不传 ≠ 清空**：服务端按"没说就沿用上一次勾过的那份"处理，`headers` 同理
+     * ——只改只读清单的那一次提交因此不必把 token 再发一遍。
+     */
+    read_tools?: string[]
   },
   assignment?: string,
 ): Promise<McpServerRecord> =>

@@ -456,6 +456,18 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/credentials-openconnector:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@deepseek-ai/cordis':
+        specifier: 4.0.2
+        version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
+      '@deepseek-ai/dsh-credentials':
+        specifier: 0.1.6-alpha.1
+        version: 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))
+
   packages/data:
     dependencies:
       '@agentsws/contracts':
@@ -504,6 +516,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: 4.0.2
         version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: 1.0.7
+        version: 1.0.7(@deepseek-ai/cordis-plugin-loader@1.0.3)(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: 1.0.3
+        version: 1.0.3(@deepseek-ai/cordis@4.0.2)(node-addon-require-builtin@0.1.6)
       '@deepseek-ai/dsh':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(ae882ae26a5e1fbae27de7383936673c)
@@ -513,12 +531,18 @@ importers:
       '@deepseek-ai/dsh-agent-loop':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(f15f8b6b6376bed1daa27a2ece65584c)
+      '@deepseek-ai/dsh-agent-presets':
+        specifier: 0.1.6-alpha.1
+        version: 0.1.6-alpha.1(fd2475137cb271df7701c4cbb4ef9e2c)
       '@deepseek-ai/dsh-base':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(832a3c3b2d601aa02b6f080e4ca1586f)
       '@deepseek-ai/dsh-browser-use':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))
+      '@deepseek-ai/dsh-credentials':
+        specifier: 0.1.6-alpha.1
+        version: 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))
       '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(2f38f8c2d1cf7f11ac6ef22c668138d9)
@@ -531,6 +555,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: 0.1.6-alpha.1
+        version: 0.1.6-alpha.1(94992de6e2e4a2b9ef71764c06db2b07)
       '@deepseek-ai/dsh-scope':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))
@@ -565,6 +592,9 @@ importers:
         specifier: ^2.5.0
         version: 2.9.0
     devDependencies:
+      '@agentsws/credentials-openconnector':
+        specifier: workspace:*
+        version: link:../credentials-openconnector
       '@agentsws/runtime-direct':
         specifier: workspace:*
         version: link:../runtime-direct

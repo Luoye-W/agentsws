@@ -7,6 +7,7 @@
  * - 写外部工具（`create_refund` 之类）→ 注册但由 `tools/pre-execute` 在 executor 策略下一律拒
  */
 import type { ObjectRef, RunRequest } from '@agentsws/contracts'
+import { parseMcpToolName } from '@agentsws/contracts'
 import { EXTERNAL_FENCE, redactOutbound } from '@agentsws/core'
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
@@ -143,12 +144,30 @@ export function browserToolName(tool: string): string | undefined {
   return tool.startsWith(BROWSER_TOOL_PREFIX) ? tool.slice(BROWSER_TOOL_PREFIX.length) : undefined
 }
 
+/**
+ * WP86：这次运行挂的每台 MCP 服务器上，**被人勾成只读**的那些原始工具名。
+ *
+ * `server_name` → `Set<rawName>`。没登记 `read_tools` 的服务器在这张表里是空集合，
+ * 于是它的每一个工具都落到 {@link classifySideEffect} 的兜底（`write_external`）——
+ * 公司端（`executor`）一调就拒。**这是有意的最严默认**：MCP 协议本身没有读写标注，
+ * 一台服务器能干什么我们事先不知道，不勾就当它什么都能干。
+ */
+export function mcpReadToolMap(req: RunRequest): Map<string, ReadonlySet<string>> {
+  const out = new Map<string, ReadonlySet<string>>()
+  for (const conn of req.connections ?? []) {
+    out.set(conn.server_name, new Set(conn.read_tools ?? []))
+  }
+  return out
+}
+
 /** 16 §3：判定不了的按 `write_external` 处理（最严）。 */
 export function classifySideEffect(
   tool: string,
   overrides?: Record<string, ToolSideEffect>,
   /** WP82：`browser_tabs` 这种"一个名字多件事"的工具要看入参才判得出来。 */
   args?: Record<string, unknown>,
+  /** WP86：{@link mcpReadToolMap} 的结果；不给 = 每个 `mcp__*` 工具都按写。 */
+  mcpReadTools?: ReadonlyMap<string, ReadonlySet<string>>,
 ): ToolSideEffect {
   const bare = tool.includes('.') ? tool.slice(tool.indexOf('.') + 1) : tool
   const explicit = overrides?.[tool] ?? overrides?.[bare]
@@ -164,6 +183,18 @@ export function classifySideEffect(
         : 'write_external'
     }
     return BROWSER_READ_TOOLS.has(browser) ? 'read_external' : 'write_external'
+  }
+  /*
+   * WP86（55 §4 第三层）：preset 挂上来的 MCP 工具。
+   *
+   * 名字形状 `mcp__<serverName>__<rawName>`（上游 `mcp-client` 的命名规则）。
+   * 判定只认连接目录里那张**人勾出来的只读清单**——MCP 协议没有读写标注，
+   * 名字前缀也不可信（一台服务器叫 `get_everything` 的工具照样可以下单）。
+   * 勾了的按 `read_external`，没勾的落到函数末尾的兜底 `write_external`。
+   */
+  const mcp = parseMcpToolName(tool)
+  if (mcp !== undefined && mcpReadTools?.has(mcp.server) === true) {
+    return mcpReadTools.get(mcp.server)?.has(mcp.tool) === true ? 'read_external' : 'write_external'
   }
   // WP44：Shopify 官方 Dev MCP 的三个工具**永远只读**（查文档 / 看 schema / 校验 GraphQL，
   // 碰不到任何店铺数据）。要显式列出来：它们既不是 `get_` 也不是 `list_` 开头，

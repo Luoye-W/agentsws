@@ -406,3 +406,123 @@ Chrome、真的打开一个网页**这一段只能手工（步骤见 `scripts/de
 
 一个副作用值得记：官方 MCP 服务器把截图 / 快照落在 **Agent 的 `cwd` 下的
 `.playwright-mcp/`**（`--output-dir` 的默认值，上游薄壳没透出这个参数）。已进 `.gitignore`。
+
+---
+
+## 10. 职责 preset 与凭据（WP86，55 §4）
+
+§9 是"这次运行开不开浏览器"，这一节是"**这条职责有哪些连接**"。两件事共用同一条纪律：
+**不用的东西不挂**——没有连接的运行里连 Loader / AgentPresets 都不装。
+
+### 10.1 一次带 preset 的运行
+
+```
+run(req)  —— req.connections 非空才有这一层
+  ├─ writePreset(req, options.presetRoot)
+  │    → <root>/<workspace>/<preset_id>/{agent,host}.cordis.yml + preset.yml
+  │    → 内容没变就一个字节不写（见 10.4）
+  ├─ emit progress{step:'preset.generated', note:'<id> <digest> written|reused conns=N'}
+  └─ createHarness
+       ├─ ctx.baseUrl = <dsh-adapter 的 src 目录>      ← 包名从这里解析
+       ├─ root.plugin(Loader); loader.builtins.include = Include
+       ├─ root.plugin(<options.credentials>)            ← 官方 ctx.credentials 的那一个
+       ├─ root.plugin(AgentPresets, { default, roots:[{path, trust:'system'}],
+       │                              includeShippedRoot:false, includeUserRoot:false })
+       └─ ctx.agents.create({ setup: async (agentCtx, agent) => {
+            ① await withPresetCredentials(… ctx.agentPresets.mount(agentCtx, presetId))
+            ② installGate(ctx, { …, agent, agentCtx })   ← 它里面调 restrict
+            ③ await agentCtx.plugin(PlaywrightMcpProvider, …)  ← WP82，不变
+          }})
+```
+
+**①②③ 的顺序是硬的**，两条实测：
+
+- preset 挂上来的 `mcp__*` 工具**受** `ctx.tools.restrict({ allow })` 管（与 §9.4 第 1 条
+  说的浏览器**正好相反**）。不列进白名单，整组被挡掉。
+- `restrict` 只认调用当刻**已经注册**的名字。先 restrict 后 mount 会抛
+  `tools.restrict() names unknown global tools`，而且抛完**整张白名单都没装上**——
+  比不装还松。所以必须 mount 在前。
+
+白名单的来源是那台服务器**探测出来的**工具清单（`RunConnection.tools`，由连接目录
+在保存时探测一次存下来）：清单里没有的那个，即使服务器真的报了，也到不了模型面前。
+
+### 10.2 preset 目录里有什么
+
+| 文件 | 谁读它 | 内容 |
+|---|---|---|
+| `agent.cordis.yml` | 官方 `mount()` | 一条连接一行 `@deepseek-ai/dsh-mcp-client` |
+| `host.cordis.yml` | 跨进程宿主（`dsh --profile agentsws-executor`） | 门禁与模型网关那两行 |
+| `preset.yml` | 官方 roster | `name` / `description`，外加一段给排障看的 `agentsws` |
+
+**为什么分两份**：`mount()` 会把组合里每一行真的 import 起来，一行起不来整份 preset 就是
+broken。门禁那一行（`@agentsws/dsh-adapter/preset-gate`）是"这份组合在另一个进程里长什么样"
+的**描述**，同进程里它是直接 `installGate` 装的，没有可 import 的模块名。
+WP81 之前这两份在同一个文件里（那时候没人挂它），`seams.test.ts` 的两条断言因此改了落点
+——**不是删用例，是记下差异**。
+
+**浏览器 provider 不在 preset 里**，`preset.yml` 的 `agentsws.browser` 只是记一笔它去哪了：
+`browserUse` 是一棵树一个的独占槽、provider 自己挂在 `agent/created` 上（§8.1 / §9.1），
+写成 preset 的一行既过不了 mount 那道"不许往 root realm 发服务"的审计，也拿不到只有宿主
+知道的 CDP 地址。
+
+### 10.3 凭据：文件里只有名字
+
+生成的行里，请求头与 stdio 子进程的环境变量写成 `!!js process.env.<REF> ?? ''`
+（官方 `mcp-client` README 的写法）。链条：
+
+```
+ctx.credentials.resolve(credentialRef(REF))
+  → （只在 mount 那一跳里）process.env[REF]
+  → MCP 子进程的 env / HTTP 请求头
+  → finally 里逐个还原
+```
+
+三条纪律写在 `harness.ts` 的 `withPresetCredentials` 上：只在这一跳里存在、
+不覆盖启动环境已有的同名变量、不发任何事件也不记日志。
+**`?? ''` 不能省**：求值成 `undefined` 时上游 config 校验直接拒（`env` 要
+`{ [key: string]: string }`），`mount()` 抛，整次运行失败。补上空串之后，没配凭据的后果
+退回它该有的样子：那台服务器连不上、它的工具不出现，运行照常。
+
+`options.credentials` 的类型是 `unknown`（一个 cordis 插件）：这一层不该知道它是本机的、
+OpenConnector 的，还是两者的组合。实现见 `@agentsws/credentials-openconnector`——
+官方这个 seam 是**单 provider**（一棵树上第二个 `CredentialProvider` 当场抛），所以
+"分层"只能在一个 provider 内部做。
+
+### 10.4 幂等：为什么"内容没变就不写"是硬要求
+
+上游 `agent-presets` 把"代"（generation）钉在组合文件的 **mtime + size** 上，而
+**被顶掉的那一代永远不回收**（上游 Known Limitations 原话：superseded generation is
+never reclaimed）。每次运行重写一遍文件 = 每次多挂一棵永不释放的子树，外加把上一代的
+MCP 子进程晾在那儿。所以 `writePreset()` 先读再比，一样就**一个字节都不写**，
+`PresetPaths.written` 把这件事报上来，事件里记 `written` / `reused`。
+
+同理，`preset_id` = 目录名必须稳定且过得了上游的 `[a-z0-9][a-z0-9-]*`：职责 id 带点
+（`dtc.support`），换成短横线；**凡是换过字符的**都挂一段职责 id 的哈希，免得 `a.b`
+与 `a_b` 共用一个 preset（那等于把 A 的连接挂给 B）。
+
+### 10.5 读写分类：`read_tools`
+
+MCP 协议**没有**读写标注，名字前缀也不可信（一台服务器叫 `get_everything` 的工具照样
+能下单）。所以 `classifySideEffect` 对 `mcp__<server>__<tool>` 只认连接目录里那张
+**人勾出来的**只读清单（`McpServerRecord.read_tools` → `RunConnection.read_tools`）：
+勾了的 `read_external`，**其余一律 `write_external`**，公司端（`executor`）一调就拒。
+不勾 = 这台服务器在公司端一个工具都调不动——有意的最严默认（16 §3）。
+
+### 10.6 回归证据（用例名）
+
+| 事 | 用例 |
+|---|---|
+| 幂等（两次生成逐字节相同、mtime 没动） | `preset-seam.test.ts` → `(a) …同一条职责两次生成…` |
+| 连接变了才变 | 同上 → `连接变了才变：加一台服务器 → 内容变、这次真的写了` |
+| 凭据只有名字 | 同上 → `(b) 请求头与环境变量的值一个字节都不在生成的文件里，只有引用名` |
+| 按职责隔离 | 同上 → `(c) 两条职责各挂各的：另一条的 Agent 看不到这个 serverName` |
+| `read_tools` 判定 + 公司端拒 | 同上 → `(d) …公司端（executor）一调没勾的那个就被门禁拒…` |
+| restrict 与探测清单 | 同上 → `(e) 探测清单里没有的那个到不了模型面前` |
+| 凭据真的送到子进程、挂完即还原 | 同上 → `(f) 引用解析出来的值到得了 MCP 子进程…` |
+| 两档 headless 各跑一遍 | `runtime.test.ts` → `dsh 运行时（%s）：带职责 preset 的运行（WP86）` ×2 |
+| provider 边界（单 provider / 跨工作区 / refresh 不出境） | `packages/credentials-openconnector/test/provider.test.ts` 12 条 |
+| 职责模板说了算 | `apps/server/test/role-connections.test.ts` 5 条 |
+| 只读清单端到端 | `apps/server/test/connection-directory.test.ts` → `WP86（55 §4 第三层）…` |
+
+`test/seams.test.ts` 的 30 条**一条没删**，两条断言改了落点（见 §10.2）。
+`browser-seam.test.ts` 23 条一条没动。

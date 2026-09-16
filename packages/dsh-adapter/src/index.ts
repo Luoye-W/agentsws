@@ -33,7 +33,17 @@ export {
   toToolDefs,
 } from './llm.js'
 export type { PresetComposition, PresetPaths } from './preset.js'
-export { GATE_PLUGIN_MODULE, presetComposition, writePreset } from './preset.js'
+export {
+  GATE_PLUGIN_MODULE,
+  MCP_CLIENT_MODULE,
+  presetComposition,
+  presetConnections,
+  presetCredentialRefs,
+  presetDigest,
+  presetIdOf,
+  presetToolNames,
+  writePreset,
+} from './preset.js'
 export * from './reading.js'
 export { createInProcessDshRuntime, TASK_MESSAGE } from './runtime.js'
 export type { ReadToolHooks, StageToolHooks } from './tools.js'
@@ -45,6 +55,7 @@ export {
   buildToolDefinitions,
   classifySideEffect,
   DRAFT_TOOL,
+  mcpReadToolMap,
   STAGE_TOOL,
 } from './tools.js'
 export type {
