@@ -26,6 +26,8 @@ import type {
   SocialAccountInput,
   SocialAccountRow,
   SocialActor,
+  SocialBroadcastInput,
+  SocialBroadcastView,
   SocialCalendarCell,
   SocialCalendarView,
   SocialMemberRow,
@@ -62,6 +64,9 @@ import { SOCIAL_CHANNELS } from '@agentsws/contracts'
 import type { CommunityRule, ModerationAction } from '@agentsws/social-core'
 import {
   ACTION_WORDS,
+  buildAudience,
+  checkBroadcast,
+  checkOutbound,
   contentCalendar,
   handoffOf,
   moderate,
@@ -149,6 +154,22 @@ export interface SocialServiceOptions {
    */
   channels?: SocialChannelsAssembly
   /**
+   * 抑制名单（退订过、投诉过、手工加的）。
+   *
+   * 不给就按库里那份保守的一份：**自己退群 / 被封的那些人**
+   * （`status: 'left' | 'banned'`）。规则本身一个字都不在这里——
+   * `@agentsws/core` 的 `suppression.ts` 是全仓唯一一份（客服出站、邮件营销、
+   * 开发信、群发，四处同一份）。
+   */
+  suppressionList?(): readonly string[]
+  /**
+   * 分批之间等一下（毫秒）。测试塞一个不等的。
+   *
+   * 为什么要等：平台那一侧看的是"一分钟里来了多少条"，一口气打三百跳
+   * 与分六批慢慢打，在对方眼里是两件事。
+   */
+  sleep?(ms: number): Promise<void>
+  /**
    * 日界线的时区偏移（分钟；东八区是 480）。
    *
    * 不是装饰：一条排在北京时间 09-10 07:30 的帖子在 UTC 上是 09-09，按 UTC 分日
@@ -160,6 +181,14 @@ export interface SocialServiceOptions {
 export interface SocialServiceAssembly {
   port: SocialPort
   /**
+   * 群发那一跳（56 §6：批准之后**分批**发出去，每批 50、间隔 2 秒、失败即停）。
+   *
+   * 调度器按品牌各跑一轮。失败即停而不是跳过继续：一条群发发到一半断了，
+   * 人要知道断在哪儿；接着发下去只会把同一个错重复几百遍，而每一遍都在
+   * 这个号上记一笔。
+   */
+  broadcastDue(): Promise<SocialBroadcastSweep>
+  /**
    * 定时发布那一跳（56 §6：到点把**已批准**的帖子经适配器发出去）。
    *
    * 调度器**按品牌各跑一轮**（照 WP66 / WP68 的写法）。发失败就写回
@@ -168,6 +197,22 @@ export interface SocialServiceAssembly {
    */
   publishDue(): Promise<SocialPublishSweep>
 }
+
+/** {@link SocialServiceAssembly.broadcastDue} 回的那一份。 */
+export interface SocialBroadcastSweep {
+  /** 批过、还没发的有几条。 */
+  due: number
+  /** 真发出去了几条群发（不是几个人）。 */
+  sent: number
+  failed: number
+  /** 这一轮一共打到多少个收件人。 */
+  recipients: number
+  skipped: { post_id: string; reason: string }[]
+}
+
+/** 每批多少个收件人（56 §6：每批 50，间隔 2 秒）。 */
+export const BROADCAST_BATCH_SIZE = 50
+export const BROADCAST_BATCH_GAP_MS = 2_000
 
 /** {@link SocialServiceAssembly.publishDue} 回的那一份。 */
 export interface SocialPublishSweep {
@@ -741,6 +786,133 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       })
     },
 
+    async broadcast(actor, input: SocialBroadcastInput): Promise<SocialBroadcastView> {
+      const account = accountOr404(input.account_id)
+      const all = store.members({ account_id: account.id })
+      const nowMs = Date.parse(clock.now())
+
+      /*
+       * ① 受众三选一。三条都只看**群里那份名册**——标签是运营自己打的，
+       *    活跃是"最近说过话"。一格顾客数据都不碰（这条职责没有 `customer` 域）。
+       */
+      const pool = all
+        .filter((m) => m.status === 'active')
+        .filter((m) =>
+          input.audience === 'tagged'
+            ? (m.tags ?? []).includes(input.tag ?? '')
+            : input.audience === 'active_30d'
+              ? m.last_active_at !== undefined &&
+                nowMs - Date.parse(m.last_active_at) <= 30 * 86_400_000
+              : true,
+        )
+        .map((m) => m.external_id)
+
+      /*
+       * ② 抑制名单（全仓那一份规则）。不给注入就按库里那份保守的：
+       *    自己退群 / 被封的那些人。
+       */
+      const suppression =
+        options.suppressionList?.() ??
+        all.filter((m) => m.status === 'left' || m.status === 'banned').map((m) => m.external_id)
+      const audience = buildAudience({
+        members: pool,
+        suppression_list: suppression,
+        now: clock.now(),
+        // `last_sent_at` 这条渠道上还没记过——**不假装判过**（见 `buildAudience` 的注释）
+      })
+
+      /*
+       * ③ 文案过承诺扫描（与客服回信、开发信同一份词表），再过一遍
+       *    `checkBroadcast`（WhatsApp 的模板与 opt-in 两道硬闸在里面）。
+       */
+      const scan = checkOutbound(input.body)
+      const proposal = {
+        channel: account.channel,
+        account_id: account.id,
+        body: input.body,
+        audience: audience.recipients,
+        suppressed: audience.suppressed,
+        audience_size: audience.recipients.length,
+        suppression_checked: true as const,
+        ...(input.template_id === undefined ? {} : { template_id: input.template_id }),
+        ...(input.opt_in_verified === undefined ? {} : { opt_in_verified: input.opt_in_verified }),
+      }
+      const check = checkBroadcast(proposal)
+      const problems = [...check.problems, ...(scan.ok ? [] : [scan.rewrite_instruction])]
+
+      const view: SocialBroadcastView = {
+        channel: account.channel,
+        account_id: account.id,
+        audience_size: audience.recipients.length,
+        suppressed: audience.suppressed.length,
+        too_soon: audience.too_soon.length,
+        note: audience.note,
+        problems,
+        staged: { staged: false },
+      }
+      if (problems.length > 0) {
+        // 自查没过就**不提**：早点给反馈，真正的拦在 guardrail（18 §3 fail-closed）
+        emit('social.broadcast_blocked', actor.person_id, {
+          account_id: account.id,
+          channel: account.channel,
+          problems,
+        })
+        return { ...view, staged: { staged: false, message: problems.join(' ') } }
+      }
+
+      /*
+       * ④ 群发本身在库里也是一条帖子（面板上「群发队列」那一块读的就是它），
+       *    收件人名单留在**卡上**（`after.audience`）——guardrail 认的是那几格。
+       */
+      const post: SocialPost = {
+        id: nextId('sb'),
+        account_id: account.id,
+        channel: account.channel,
+        kind: 'post',
+        status: 'scheduled',
+        body: input.body,
+        scheduled_at: clock.now(),
+      }
+      store.savePost(post)
+      const staged = await stageOne({
+        actor,
+        action: SOCIAL_ACTIONS.stageBroadcast,
+        kind: 'community_broadcast',
+        target: { type: 'community_member', id: account.id },
+        before: null,
+        after: {
+          post_id: post.id,
+          channel: account.channel,
+          account_id: account.id,
+          body: input.body,
+          audience: audience.recipients,
+          suppressed: audience.suppressed,
+          audience_size: audience.recipients.length,
+          // guardrail 认的就是这一格：没报就 block（"没问过"与"问过了没人"分得开）
+          suppression_checked: true,
+          ...(input.template_id === undefined ? {} : { template_id: input.template_id }),
+          ...(input.opt_in_verified === undefined
+            ? {}
+            : { opt_in_verified: input.opt_in_verified }),
+        },
+        notes: [audience.note],
+        title: `群发：${account.display_name}`,
+        // 受众数与剔除数**写在卡面上**（56 §2 那一行）
+        summary: `${input.body.slice(0, 100)}（${audience.note}）`,
+        seen: [{ type: 'social_account', id: account.id }],
+        rule: 'scope_manager',
+      })
+      if (!staged.staged) store.savePost({ ...post, status: 'draft' })
+      emit('social.broadcast_staged', actor.person_id, {
+        post_id: post.id,
+        channel: account.channel,
+        audience_size: audience.recipients.length,
+        suppressed_removed: audience.suppressed.length,
+        staged: staged.staged,
+      })
+      return { ...view, staged }
+    },
+
     members: (_actor, filter) => ({
       rows: store.members({
         ...(filter.channel === undefined ? {} : { channel: filter.channel }),
@@ -876,5 +1048,93 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     return out
   }
 
-  return { port, publishDue }
+  /**
+   * 批过的群发**分批**发出去（56 §6：每批 50、间隔 2 秒、失败即停）。
+   *
+   * 收件人名单从**卡上**来（`after.audience`），不从库里现算——卡面上人看到的
+   * 是哪一批人，发出去的就必须是那一批。中间群里进了新人不算数：他没在那张卡上。
+   */
+  const broadcastDue = async (): Promise<SocialBroadcastSweep> => {
+    const out: SocialBroadcastSweep = { due: 0, sent: 0, failed: 0, recipients: 0, skipped: [] }
+    const changes = await ledger.list({ workspace_id, kind: 'community_broadcast' })
+    const approved = changes.filter(
+      (ch) => ch.status === 'approved' || ch.status === 'auto_approved' || ch.status === 'applied',
+    )
+    const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
+
+    for (const change of approved) {
+      const after = (change.after ?? {}) as {
+        post_id?: string
+        audience?: string[]
+        body?: string
+        template_id?: string
+        opt_in_verified?: boolean
+      }
+      const post = after.post_id === undefined ? undefined : store.post(after.post_id)
+      // 已经发过 / 已经失败过的不再碰（状态就是"这条群发到哪一步了"的真源）
+      if (post === undefined || post.status !== 'scheduled') continue
+      out.due += 1
+
+      const account = store.account(post.account_id)
+      const adapter = options.channels?.adapters[post.channel]
+      if (account === undefined || adapter?.broadcast === undefined) {
+        out.skipped.push({
+          post_id: post.id,
+          reason: `${post.channel} 这条渠道现在群发不出去（还没接上，或者这条渠道没有群发接口）。`,
+        })
+        continue
+      }
+
+      const recipients = after.audience ?? []
+      let sent = 0
+      let stopped: string | undefined
+      for (let i = 0; i < recipients.length; i += BROADCAST_BATCH_SIZE) {
+        const batch = recipients.slice(i, i + BROADCAST_BATCH_SIZE)
+        const result = await adapter.broadcast({
+          account_external_id: account.external_id,
+          body: after.body ?? post.body,
+          recipients: batch,
+          ...(after.template_id === undefined ? {} : { template_id: after.template_id }),
+          ...(after.opt_in_verified === undefined
+            ? {}
+            : { opt_in_verified: after.opt_in_verified }),
+        })
+        if (!result.ok) {
+          // **失败即停**（见 `broadcastDue` 的注释）
+          stopped = result.message
+          break
+        }
+        sent += result.data.sent
+        if (i + BROADCAST_BATCH_SIZE < recipients.length) await sleep(BROADCAST_BATCH_GAP_MS)
+      }
+
+      if (stopped !== undefined) {
+        store.savePost({
+          ...post,
+          status: 'failed',
+          // 发到第几个停的要看得见——接着手工补发那几个人时要用
+          failure_reason: `发到第 ${sent} 个的时候停下来了：${stopped}`,
+        })
+        out.failed += 1
+        out.recipients += sent
+        emit('social.broadcast_failed', 'system' as never, {
+          post_id: post.id,
+          channel: post.channel,
+          sent,
+        })
+        continue
+      }
+      store.savePost({ ...post, status: 'published', published_at: clock.now() })
+      out.sent += 1
+      out.recipients += sent
+      emit('social.broadcast_sent', 'system' as never, {
+        post_id: post.id,
+        channel: post.channel,
+        recipients: sent,
+      })
+    }
+    return out
+  }
+
+  return { port, publishDue, broadcastDue }
 }

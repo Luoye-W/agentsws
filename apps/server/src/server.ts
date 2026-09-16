@@ -202,6 +202,7 @@ import {
   registerReconcileDeliveries,
   registerReview,
   registerSkillsWeekly,
+  registerSocialBroadcast,
   registerSocialPublish,
   registerTokenRefresh,
   type ScheduleAssembly,
@@ -1922,6 +1923,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         out.published += one.published
         out.failed += one.failed
         // 哪个品牌的哪一条没发要看得出来（一个坏了不该拖垮别的）
+        out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
+      }
+      return out
+    },
+  })
+  /*
+   * WP73 / 56 §6：批过的群发分批发出去，每分钟一轮，**按品牌各跑一轮**。
+   */
+  registerSocialBroadcast(schedule.scheduler, {
+    sweep: async () => {
+      const out = { due: 0, sent: 0, failed: 0, recipients: 0, skipped: [] as unknown[] }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.socialService.broadcastDue()
+        out.due += one.due
+        out.sent += one.sent
+        out.failed += one.failed
+        out.recipients += one.recipients
         out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
       }
       return out

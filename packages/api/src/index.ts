@@ -361,6 +361,9 @@ export { secretRoutes } from './routes/secrets.js'
 export type {
   SocialAccountInput,
   SocialAccountRow,
+  SocialBroadcastAudience,
+  SocialBroadcastInput,
+  SocialBroadcastView,
   SocialCalendarCell,
   SocialCalendarView,
   SocialMemberRow,

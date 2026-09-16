@@ -59,7 +59,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "71ee98793e669d3645a738ac3fa03283",
+  "source_digest": "a29e3c387267b89dbad85990ee5c865e",
   "objects": [
     {
       "id": "ad_set",
@@ -703,6 +703,12 @@
         {
           "name": "last_active_at",
           "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "tags",
+          "type": "string[]",
           "sensitivity": "internal",
           "optional": true
         }

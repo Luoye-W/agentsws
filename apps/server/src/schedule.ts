@@ -114,6 +114,8 @@ export const HANDLERS = {
   kolSequence: 'kol.outreach_sequence',
   /** WP73 / 56 §6：到点把**已批准**的帖子经适配器发出去（每 5 分钟一轮）。 */
   socialPublish: 'social.publish_due',
+  /** WP73 / 56 §6：批过的群发**分批**发出去（每批 50、间隔 2 秒、失败即停）。 */
+  socialBroadcast: 'social.broadcast_due',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -145,6 +147,15 @@ export const KOL_SEQUENCE_CRON = '0 9 * * *'
  * 查一遍"有没有到点的"，而多数时候答案是没有。
  */
 export const SOCIAL_PUBLISH_INTERVAL_MS = 5 * 60_000
+
+/**
+ * WP73：群发的巡检节奏。
+ *
+ * 比发布密一档（1 分钟）是有意的：群发是人刚在卡上点完头的那一下，
+ * 他多半正等着看"发出去了没有"。而这一轮在没有批过的群发时什么都不做——
+ * 它只去账本里问一句。
+ */
+export const SOCIAL_BROADCAST_INTERVAL_MS = 60_000
 
 /**
  * WP55：出站对账的节奏。一分钟一轮——`sent_unknown` 的每一分钟都是「这封信到底
@@ -834,6 +845,26 @@ export function registerSocialPublish(scheduler: Scheduler, deps: SocialPublishD
   scheduler.register(HANDLERS.socialPublish, () => deps.sweep())
 }
 
+export interface SocialBroadcastDeps {
+  /**
+   * 把批过的群发**分批**发出去（每批 50、间隔 2 秒）。
+   *
+   * 收件人名单从卡上来，不从库里现算——卡面上人看到的是哪一批人，发出去的
+   * 就必须是那一批。**失败即停**：发到一半断了，人要知道断在哪儿。
+   */
+  sweep(): Promise<{
+    due: number
+    sent: number
+    failed: number
+    recipients: number
+    skipped: unknown[]
+  }>
+}
+
+export function registerSocialBroadcast(scheduler: Scheduler, deps: SocialBroadcastDeps): void {
+  scheduler.register(HANDLERS.socialBroadcast, () => deps.sweep())
+}
+
 /* ------------------------------------------------------------------ */
 /* ⑯ WP55 / 48 §4 L3 #4：出站 outbox 对账：每分钟                          */
 /* ------------------------------------------------------------------ */
@@ -1226,6 +1257,24 @@ export async function ensureSystemTasks(
         handler: HANDLERS.socialPublish,
         trigger: { kind: 'interval', every_ms: SOCIAL_PUBLISH_INTERVAL_MS },
         misfire_policy: 'skip',
+      }),
+    )
+  }
+  /*
+   * ⑱ WP73：群发分批发出去，每分钟一轮。
+   *
+   * **错过了补跑一次**（`run_once_now`）：一条群发是人点过头的，
+   * 关机期间没发出去的那一条该在开机后发出去——它与"三天欠的帖子"不同，
+   * 群发只有一条，而且人已经决定过了。
+   */
+  if (options.has.social === true) {
+    await add(
+      'sched_social_broadcast',
+      systemTask(base, {
+        title: '每分钟看一眼有没有批过的群发要发',
+        handler: HANDLERS.socialBroadcast,
+        trigger: { kind: 'interval', every_ms: SOCIAL_BROADCAST_INTERVAL_MS },
+        misfire_policy: 'run_once_now',
       }),
     )
   }

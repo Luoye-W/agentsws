@@ -17,6 +17,7 @@ import { DeckSection } from '@/components/deck'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { ScheduleList } from '@/components/schedule-list'
 // WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
+import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,6 +31,15 @@ import { formatDate } from '@/lib/format'
 import { assignmentForPosition } from '@/lib/positions'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
+
+/** 社群组五条（56 §0）。真源是契约的 `SOCIAL_CHANNELS[].group`，这里照抄一份。 */
+const COMMUNITY_CHANNELS: string[] = [
+  'facebook_group',
+  'reddit',
+  'discord',
+  'telegram_group',
+  'whatsapp',
+]
 
 /**
  * 44 / 09-11 真店验收的后置项：**没挂范围的岗位要明说**。
@@ -126,6 +136,13 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
       {socialChannel === undefined ? null : (
         <SocialCalendar assignment={id} channel={socialChannel} />
       )}
+      {/*
+       * 群发向导只给**社群组那五条**（56 §0 的两组分法）：内容组四条上没有
+       * "群里的人"这回事，画一个点不动的向导比不画更糟。
+       */}
+      {socialChannel !== undefined && COMMUNITY_CHANNELS.includes(socialChannel) ? (
+        <SocialBroadcast assignment={id} channel={socialChannel} />
+      ) : null}
       <div className="flex items-center gap-1">
         {RANGES.map((r) => (
           <Button

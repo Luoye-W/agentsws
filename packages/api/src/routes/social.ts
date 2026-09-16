@@ -164,6 +164,31 @@ export interface SocialPostView {
   staged: SocialStagedView
 }
 
+/** 群发向导三步里的第二步（56 §2「群发」那一行）。 */
+export type SocialBroadcastAudience = 'all' | 'tagged' | 'active_30d'
+
+/** 群发向导算完之后回来的那一份（卡面上那几个数就是它）。 */
+export interface SocialBroadcastView {
+  channel: SocialChannel
+  account_id: string
+  /** 真要发给的人数（已剔除名单上的与频率疲劳的）。 */
+  audience_size: number
+  /** 因为在抑制名单上被剔掉的人数。 */
+  suppressed: number
+  /** 因为离上一条太近被剔掉的人数。 */
+  too_soon: number
+  /** 一句人话，原样进卡面（"342 人收，退订 / 抑制名单剔了 18 个"）。 */
+  note: string
+  /**
+   * 提交前的自查（`social-core` 的 `checkBroadcast` + 承诺扫描）。
+   *
+   * 不为空 = **没提上去**：先把这些解决掉。真正的拦在 guardrail，
+   * 这里只是早点给人反馈（18 §3 fail-closed 的形状）。
+   */
+  problems: string[]
+  staged: SocialStagedView
+}
+
 /* ── 端口 ─────────────────────────────────────────────────────────────── */
 
 export interface SocialAccountInput {
@@ -182,6 +207,19 @@ export interface SocialPostInput {
   /** 排期时刻；不给 = 批了就发。 */
   scheduled_at?: Iso8601 | undefined
   media_refs?: string[] | undefined
+}
+
+export interface SocialBroadcastInput {
+  account_id: string
+  /** 群发正文（过承诺扫描）。 */
+  body: string
+  audience: SocialBroadcastAudience
+  /** `audience: 'tagged'` 才有：发给带这个标签的人。 */
+  tag?: string | undefined
+  /** WhatsApp 才有：后台批过的模板名。少了它一律不发。 */
+  template_id?: string | undefined
+  /** WhatsApp 才有：这批人都 opt-in 过吗。不为真一律不发。 */
+  opt_in_verified?: boolean | undefined
 }
 
 export interface SocialThreadInput {
@@ -257,6 +295,14 @@ export interface SocialPort {
     id: string,
     input: { action: string; reason?: string | undefined },
   ): MaybePromise<SocialStagedView>
+
+  /**
+   * 群发向导那一下：算受众 → 自查 → 出一张 `community_broadcast` 卡（**永远 L1**）。
+   *
+   * 一次群发出去收不回来，而且收的是群里的人不是同事——所以它在 `HARD_L1` 里，
+   * 职责 yml 放宽不了。
+   */
+  broadcast(actor: SocialActor, input: SocialBroadcastInput): MaybePromise<SocialBroadcastView>
 
   members(
     actor: SocialActor,
@@ -355,6 +401,15 @@ const PostBody = z.object({
 
 const ScheduleBody = z.object({
   scheduled_at: z.string().min(1).max(40),
+})
+
+const BroadcastBody = z.object({
+  account_id: z.string().min(1),
+  body: z.string().min(1).max(20_000),
+  audience: z.enum(['all', 'tagged', 'active_30d']),
+  tag: z.string().min(1).max(100).optional(),
+  template_id: z.string().min(1).max(200).optional(),
+  opt_in_verified: z.boolean().optional(),
 })
 
 const ModerateBody = z.object({
@@ -600,6 +655,23 @@ export function socialRoutes(): Route[] {
             await body(c, ModerateBody),
           ),
         ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/broadcasts',
+        operationId: 'createSocialBroadcast',
+        summary:
+          '群发向导：选群 → 选受众（全员 / 标签 / 最近 30 天活跃）→ 写文案 → 算受众数与抑制剔除数 → 出一张群发卡（**永远 L1**）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MEMBER,
+        body: BroadcastBody,
+        returns: 'SocialBroadcastView',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).broadcast(actorOf(c), await body(c, BroadcastBody)), 201),
     ),
     route(
       {
