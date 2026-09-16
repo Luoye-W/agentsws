@@ -67,6 +67,28 @@ export type HighlightType =
    * 这个数宁可小，不能是猜的。
    */
   | 'attribution'
+  /**
+   * WP72（56 §2）：这条卡对着的是哪条渠道（`Meta` / `Discord` …）。
+   *
+   * 九条职责的卡长得一模一样，唯一分得开的就是这一格——一个人同时挂着 Meta 与
+   * Discord 时，队列里两张发布卡不写渠道等于让他猜这条要发到哪儿去。
+   */
+  | 'channel'
+  /**
+   * WP72（56 §2）：这条内容**什么时候**发出去。
+   *
+   * 与 `deadline` 分开：`deadline` 是"再不处理就晚了"，这一格是"批了之后它会在
+   * 这个时刻自己出去"。排期与立发是同一条 kind，门在**排**的时候——所以人按下
+   * 那一下之前必须看见这个时刻（15 §2 / 56 §2）。
+   */
+  | 'scheduled'
+  /** WP72（56 §2 社群组）：入群审核卡上这一条是谁递的申请。 */
+  | 'member'
+  /**
+   * WP72（56 §4）：转客服卡——这条线程判成了客户问题，要交给
+   * `dtc.community-support`。文字是那条职责的名字，不是分类器的结论代号。
+   */
+  | 'handoff'
 
 export interface DeckHighlight {
   type: HighlightType
@@ -466,6 +488,8 @@ export interface SocialDeckData {
     kind: string
     status: string
     scheduled_at?: string
+    /** 已经发出去的那一刻（`status: 'published'` 才有）。 */
+    published_at?: string
     excerpt: string
     /** 平台退回来的原话（`status: 'failed'` 才有）。原样显示，不翻译成"出错了"。 */
     failure_reason?: string

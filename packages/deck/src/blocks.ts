@@ -255,6 +255,69 @@ const KOL_BLOCKS = (): BlockDef[] => [
   block('kol.attribution', 'table', '归因', 'kol.attribution'),
 ]
 
+/**
+ * WP72（56 §2 面板）：**内容账号组**四块 + 转客服计数。
+ *
+ * 前三块与最后一块走 `social` 这个源（我们自己的库，永远算连上）；
+ * "近 30 天表现"走**这条渠道自己的源**——TikTok 没连时它照 36 §3 出「去连接」，
+ * 而内容日历照样有数：那是我们自己排的。两件事分得开，是这一层存在的理由。
+ *
+ * 按渠道传入而不是九条各写一遍：九条职责的面板骨架完全相同（56 §2），
+ * 不同的只有"表现"那一块读哪个源。
+ */
+const SOCIAL_CONTENT_BLOCKS = (channel: string): BlockDef[] => [
+  block(`social.${channel}.calendar`, 'table', '内容日历', 'social.content_calendar'),
+  block(`social.${channel}.queue`, 'table', '待发布', 'social.publish_queue'),
+  block(
+    `social.${channel}.performance`,
+    'table',
+    '近 30 天表现',
+    `social.performance_30d.${channel}`,
+  ),
+  block(`social.${channel}.comments`, 'table', '待回评论', 'social.pending_comments'),
+  block(`social.${channel}.handoffs`, 'table', '转客服', 'social.support_handoffs'),
+]
+
+/**
+ * WP72（56 §2 面板）：**社群组**五块。
+ *
+ * 四块走我们自己的库，"活跃度"走这条渠道自己的源（同上一条的理由）。
+ *
+ * Facebook 群组没有自己的源（Groups API 已停，走受控浏览器），所以它的面板上
+ * **没有活跃度那一块**——不是漏了：给它一块永远写着"还没连"的空表，比没有更糟
+ * （36 §3）。那一块的数要等 WP73 的浏览器执行器。
+ */
+const SOCIAL_COMMUNITY_BLOCKS = (channel: string, source?: string): BlockDef[] => [
+  block(`social.${channel}.pending_members`, 'table', '待审入群', 'social.pending_members'),
+  block(`social.${channel}.threads`, 'table', '待处理', 'social.pending_threads'),
+  block(`social.${channel}.broadcasts`, 'table', '群发队列', 'social.broadcast_queue'),
+  ...(source === undefined
+    ? []
+    : [
+        block(
+          `social.${channel}.activity`,
+          'table',
+          '活跃度',
+          `social.community_activity.${channel}`,
+        ),
+      ]),
+  block(`social.${channel}.handoffs`, 'table', '转客服', 'social.support_handoffs'),
+]
+
+/**
+ * WP72（56 §4）：客服的「社群管理」面板。
+ *
+ * 第一块就是转客服卡——这条职责的活多数从那里来。后面跟着店铺后台那几块：
+ * 答订单、物流、退换货离不开它们（这条职责的 scopes 里订单是只读的）。
+ *
+ * **一块社媒运营的积木都不放**：内容日历、群发队列、待审入群不是它的事
+ * （56 边界行），而且它的 scopes 里没有 `social_account` 域——19 §3 说无权的
+ * 数据源连「去连接」都不该出。
+ */
+const COMMUNITY_SUPPORT_BLOCKS = (): BlockDef[] => [
+  block('community_support.handoffs', 'table', '转过来的客户问题', 'social.support_handoffs'),
+]
+
 const QUEUE_BLOCKS = (): BlockDef[] => [
   block('records.timeline', 'timeline', '记录', 'records.timeline'),
 ]
@@ -293,6 +356,24 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'kol.instagram': () => KOL_BLOCKS(),
   'kol.tiktok': () => KOL_BLOCKS(),
   'kol.x': () => KOL_BLOCKS(),
+  /*
+   * WP72（56 §2）：九条社媒渠道职责，两组骨架各自相同。
+   *
+   * 一块店铺后台的积木都不放：社媒运营的 scopes 里没有 order / store_config
+   * （产品是只读的，也不该有面板），19 §3 说无权的数据源连「去连接」都不该出。
+   */
+  'social.meta': () => SOCIAL_CONTENT_BLOCKS('meta'),
+  'social.tiktok': () => SOCIAL_CONTENT_BLOCKS('tiktok'),
+  'social.x': () => SOCIAL_CONTENT_BLOCKS('x'),
+  'social.youtube': () => SOCIAL_CONTENT_BLOCKS('youtube'),
+  // Facebook 群组没有渠道源（没有连接器）：少一块活跃度，不出空表
+  'social.facebook-group': () => SOCIAL_COMMUNITY_BLOCKS('facebook_group'),
+  'social.reddit': () => SOCIAL_COMMUNITY_BLOCKS('reddit', 'social_reddit'),
+  'social.discord': () => SOCIAL_COMMUNITY_BLOCKS('discord', 'social_discord'),
+  'social.telegram-group': () => SOCIAL_COMMUNITY_BLOCKS('telegram_group', 'social_telegram'),
+  'social.whatsapp': () => SOCIAL_COMMUNITY_BLOCKS('whatsapp', 'social_whatsapp'),
+  // WP72（56 §4）：客服的社群管理——转客服卡 + 店铺后台（答订单离不开它）
+  'dtc.community-support': () => [...COMMUNITY_SUPPORT_BLOCKS(), ...SHOP_BLOCKS()],
 }
 
 export function blocksForRole(role_id: RoleId): BlockDef[] {

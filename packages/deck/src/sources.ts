@@ -54,6 +54,28 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
 }
 
 /**
+ * WP72（56 §1）：渠道 id（契约 `SocialChannel`）→ 那条渠道的数据源。
+ *
+ * 多数是 `social_` 加渠道 id，但**不是全部**：`telegram_group` 的源叫
+ * `social_telegram`（源说的是"连的是哪家平台"，不是"这条职责管的是群还是频道"）。
+ * 所以这张表显式写出来，不靠字符串拼——拼出来的 `social_telegram_group`
+ * 在别处一个都对不上，而这种错不会报，只会让那一块永远显示"还没连"。
+ *
+ * Facebook 群组不在表里：它没有连接器（Groups API 已停），平台那一侧的数要等
+ * WP73 的浏览器执行器。
+ */
+export const SOCIAL_SOURCE_BY_CHANNEL: Readonly<Record<string, DataSourceId>> = {
+  meta: 'social_meta',
+  tiktok: 'social_tiktok',
+  x: 'social_x',
+  youtube: 'social_youtube',
+  reddit: 'social_reddit',
+  discord: 'social_discord',
+  telegram_group: 'social_telegram',
+  whatsapp: 'social_whatsapp',
+}
+
+/**
  * 我们自己的库，永远算连上。
  *
  * WP67 加进 `kol`：红人库就在这台机器上（六张表，`apps/server/src/kol.ts`），

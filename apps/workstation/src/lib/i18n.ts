@@ -563,6 +563,13 @@ const zh: Table = {
   'highlight.creator': '红人',
   'highlight.stage': '阶段',
   'highlight.attribution': '带回来',
+  // WP72（56 §2 / §4）：社媒那五张卡上的芯片。
+  // 渠道那一格是九条职责的卡唯一分得开的东西；排期那一格是"批了之后它会在这个
+  // 时刻自己出去"，与"期限"不是一回事。
+  'highlight.channel': '渠道',
+  'highlight.scheduled': '发布时间',
+  'highlight.member': '申请人',
+  'highlight.handoff': '转给',
   'nav.skills': '技能',
   'skills.title': '技能',
   'skills.empty': '还没有技能。装了职责包或自带技能之后，这里会列出来。',
@@ -2144,6 +2151,10 @@ const en: Table = {
   'highlight.creator': 'Creator',
   'highlight.stage': 'Stage',
   'highlight.attribution': 'Attributed',
+  'highlight.channel': 'Channel',
+  'highlight.scheduled': 'Goes out',
+  'highlight.member': 'Applicant',
+  'highlight.handoff': 'Hand off to',
   'nav.skills': 'Skills',
   'skills.title': 'Skills',
   'skills.empty': 'No skills yet.',

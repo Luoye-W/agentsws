@@ -99,7 +99,91 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
   }
   out.push(...wp64Highlights(item, ctx))
   out.push(...kolHighlights(item))
+  out.push(...socialHighlights(item))
+  const handoff = handoffHighlight(item)
+  if (handoff !== undefined) out.push(handoff)
   return out
+}
+
+/**
+ * WP72（56 §2 / §4）：社媒那**五张卡**上人最先要看的几个数。
+ *
+ * 五张卡同样不是五个新 kind（36 §2：卡是审批项的投影）——发布卡、回评论草稿卡、
+ * 群发卡、入群审核卡、转客服卡都是 `staged_change` / `outbound_draft` 的投影，
+ * 差别只在这几个芯片上。
+ *
+ * 一条纪律：**全部从结构化字段里取**（37 §1 第 4 行）。渠道名、排期时刻、受众数、
+ * 抑制剔除数，都是提案那一跳算完写进 `after` 的，不在这儿现算、更不由模型现编。
+ *
+ * 群发那两格（受众 / 抑制）复用 WP64 `campaign_send` 的同一段代码：一次群发要
+ * 看的东西不因为它发去 Discord 而变（见 {@link wp64Highlights}）。
+ */
+function socialHighlights(item: ApprovalItem): DeckHighlight[] {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  const out: DeckHighlight[] = []
+  const kind = str(payload.kind)
+  const SOCIAL_KINDS = [
+    'social_post',
+    'social_profile_edit',
+    'community_membership',
+    'community_broadcast',
+    'community_rules',
+    'community_moderation',
+  ]
+  if (kind === undefined || !SOCIAL_KINDS.includes(kind)) return out
+
+  // 这条卡对着哪条渠道。九条职责的卡长得一样，这一格是唯一分得开它们的东西。
+  const channel = str(after.channel_label) ?? str(after.channel)
+  if (channel !== undefined) out.push({ type: 'channel', text: channel })
+
+  /*
+   * 发布卡：排期时刻。**批了之后它会在这个时刻自己出去**——所以人按下那一下之前
+   * 必须看见它（排期与立发是同一条 kind，门在排的时候，15 §2 / 56 §2）。
+   * 没有这一格 = 立即发，那也是一句要说出口的话，由渲染层按"没有排期"显示。
+   */
+  if (kind === 'social_post') {
+    const when = str(after.scheduled_at)
+    if (when !== undefined) out.push({ type: 'scheduled', text: when })
+  }
+
+  // 群发卡：排期时刻同理（群公告也排期）。受众与抑制两格在 `wp64Highlights` 里。
+  if (kind === 'community_broadcast') {
+    const when = str(after.scheduled_at)
+    if (when !== undefined) out.push({ type: 'scheduled', text: when })
+  }
+
+  // 入群审核卡：这一条是谁递的申请。一次一个人（额度 `max_members_per_change`），
+  // 所以这里是一个名字不是一个数——批错一个人，人得知道自己批的是谁。
+  if (kind === 'community_membership') {
+    const who = str(after.member_handle) ?? str(after.handle)
+    if (who !== undefined) out.push({ type: 'member', text: who })
+  }
+
+  // 管理动作卡：删帖 / 禁言 / 封禁分档在 guardrail 里，卡面上要写清是哪一种
+  if (kind === 'community_moderation') {
+    const action = str(after.action_label) ?? str(after.action)
+    if (action !== undefined) out.push({ type: 'stage', text: action })
+  }
+
+  return out
+}
+
+/**
+ * WP72（56 §4）：**转客服卡**上那一格。
+ *
+ * 它不是社媒那六条 ChangeKind 里的任何一条——转客服是一张
+ * `outbound_draft` / `staged_change` 的审批项，由社媒运营那边的 triage 判成
+ * `customer_question` 之后开出来，路由到 `dtc.community-support`。
+ * 卡面上要说的是"这条归谁答"，所以芯片里放的是**那条职责的名字**，
+ * 不是分类器的结论代号（`customer_question` 不是给人看的）。
+ */
+function handoffHighlight(item: ApprovalItem): DeckHighlight | undefined {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  if (str(after.triage) !== 'customer_question') return undefined
+  const to = str(after.route_to_label) ?? str(after.route_to_role)
+  return to === undefined ? undefined : { type: 'handoff', text: to }
 }
 
 /**
@@ -163,7 +247,9 @@ function wp64Highlights(item: ApprovalItem, ctx: ProjectContext): DeckHighlight[
   const before = isRecord(payload.before) ? payload.before : {}
   const out: DeckHighlight[] = []
 
-  if (payload.kind === 'campaign_send') {
+  // WP72（56 §2）：群发卡与 `campaign_send` 看的是同一件事——发给多少人、剔了几个。
+  // 一次群发要看的东西不因为它发去 Discord 而变，所以这里是**同一段代码**，不另写一份。
+  if (payload.kind === 'campaign_send' || payload.kind === 'community_broadcast') {
     const audience =
       num(after.audience_size) ??
       (Array.isArray(after.audience) ? after.audience.length : undefined)

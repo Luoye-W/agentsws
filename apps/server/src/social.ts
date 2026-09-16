@@ -293,6 +293,8 @@ export function socialDeckData(
       kind: p.kind as string,
       status: p.status as string,
       ...(p.scheduled_at === undefined ? {} : { scheduled_at: p.scheduled_at }),
+      // 已发的那条没有排期时间也要有个时刻——日历上"什么时候"那一列不能空着
+      ...(p.published_at === undefined ? {} : { published_at: p.published_at }),
       excerpt: excerpt(p.body),
       // 平台退回来的原因原样显示，不翻译成"出错了"（契约 `SocialPost.failure_reason`）
       ...(p.failure_reason === undefined ? {} : { failure_reason: p.failure_reason }),

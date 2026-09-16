@@ -92,6 +92,13 @@ const TONE: Record<DeckHighlight['type'], string> = {
   creator: 'border-chart-2/40 text-foreground',
   stage: 'border-border text-muted-foreground',
   attribution: 'border-chart-1/50 text-foreground',
+  // WP72：渠道、申请人、管理动作都是中性事实；**发布时间**给强调色——
+  // 批了之后这条内容会在那个时刻自己出去，它是人按下那一下之前最该看清的一格。
+  channel: 'border-border text-muted-foreground',
+  scheduled: 'border-chart-1/50 text-foreground',
+  member: 'border-border text-muted-foreground',
+  // 转客服：这条不归我答。给它一个能一眼扫到的边，免得压在队列里没人接
+  handoff: 'border-chart-4/50 text-foreground',
 }
 
 export function Highlights({
