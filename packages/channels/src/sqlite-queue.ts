@@ -21,6 +21,7 @@ import type { ConfirmationSource, OutboxRecord, OutboxStore } from './outbox.js'
 import { ACCEPTED_RECONCILE_GRACE_MS, MAX_RECONCILE_ATTEMPTS } from './outbox.js'
 import type { DedupeStore, Seen } from './pipeline.js'
 import type { DeadLetterRecord, QueueItem, QueueStore } from './queue.js'
+import type { CachedContextToken, ClawBotStateStore } from './wechat-clawbot/state.js'
 
 const MIGRATIONS: readonly Migration[] = [
   {
@@ -119,6 +120,33 @@ CREATE TABLE IF NOT EXISTS scan_leases (
   account        TEXT PRIMARY KEY NOT NULL,
   owner          TEXT NOT NULL,
   expires_at_ms  INTEGER NOT NULL
+) STRICT;
+`,
+  },
+  {
+    /*
+     * WP85（54 §5）：微信 ClawBot 的两样持久状态。
+     *
+     * `im_cursors` = `get_updates_buf`。不落盘的后果与邮箱 UID 游标一样：
+     * 进程一重启就从头拉。
+     *
+     * `im_context_tokens` = 回信要用的会话上下文。**它不是凭据**——没有它只是
+     * 回不了这一条（等本人再说一句就有新的），拿到它也发不出第二条会话之外的消息。
+     * 真凭据（`bot_token`）在秘密库里，一个字节都不在这张库。
+     */
+    version: 4,
+    sql: `
+CREATE TABLE IF NOT EXISTS im_cursors (
+  account         TEXT PRIMARY KEY NOT NULL,
+  get_updates_buf TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS im_context_tokens (
+  account       TEXT NOT NULL,
+  user_id       TEXT NOT NULL,
+  token         TEXT NOT NULL,
+  expires_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (account, user_id)
 ) STRICT;
 `,
   },
@@ -722,12 +750,99 @@ export class SqliteMailboxStateStore implements MailboxStateStore {
   }
 }
 
+/**
+ * WP85：微信 ClawBot 的游标与 `context_token` 的 SQLite 档。
+ *
+ * 与内存档（`wechat-clawbot/state.ts`）同一个接口，同一份用例跑两遍：
+ * 「重启之后游标还在」这条不变量只有落盘档才证得了。
+ */
+export class SqliteClawBotStateStore implements ClawBotStateStore {
+  readonly #db: Db
+  readonly #owned: boolean
+  #closed = false
+
+  constructor(options: SqliteChannelStoreOptions | { database: Db } = {}) {
+    if ('database' in options) {
+      this.#db = options.database
+      this.#owned = false
+    } else {
+      this.#db = openDb(options)
+      this.#owned = true
+    }
+  }
+
+  cursor(account: string): string | undefined {
+    const row = this.#db
+      .prepare<[string], { get_updates_buf: string }>(
+        'SELECT get_updates_buf FROM im_cursors WHERE account = ?',
+      )
+      .get(account)
+    return row?.get_updates_buf
+  }
+
+  setCursor(account: string, get_updates_buf: string): void {
+    this.#db
+      .prepare(
+        `INSERT INTO im_cursors (account, get_updates_buf) VALUES (?, ?)
+         ON CONFLICT(account) DO UPDATE SET get_updates_buf = excluded.get_updates_buf`,
+      )
+      .run(account, get_updates_buf)
+  }
+
+  contextToken(account: string, user_id: string, now_ms: number): string | undefined {
+    const row = this.#db
+      .prepare<[string, string], { token: string; expires_at_ms: number }>(
+        'SELECT token, expires_at_ms FROM im_context_tokens WHERE account = ? AND user_id = ?',
+      )
+      .get(account, user_id)
+    if (row === undefined) return undefined
+    if (row.expires_at_ms <= now_ms) {
+      this.clearContextToken(account, user_id)
+      return undefined
+    }
+    return row.token
+  }
+
+  setContextToken(account: string, user_id: string, value: CachedContextToken): void {
+    this.#db
+      .prepare(
+        `INSERT INTO im_context_tokens (account, user_id, token, expires_at_ms) VALUES (?,?,?,?)
+         ON CONFLICT(account, user_id) DO UPDATE SET
+           token = excluded.token, expires_at_ms = excluded.expires_at_ms`,
+      )
+      .run(account, user_id, value.token, value.expires_at_ms)
+  }
+
+  clearContextToken(account: string, user_id: string): void {
+    this.#db
+      .prepare('DELETE FROM im_context_tokens WHERE account = ? AND user_id = ?')
+      .run(account, user_id)
+  }
+
+  /** 解绑：这个账号的游标与上下文一起没（token 由秘密库那边销毁）。 */
+  clear(account: string): void {
+    const wipe = this.#db.transaction((id: string) => {
+      this.#db.prepare('DELETE FROM im_cursors WHERE account = ?').run(id)
+      this.#db.prepare('DELETE FROM im_context_tokens WHERE account = ?').run(id)
+    })
+    wipe(account)
+  }
+
+  close(): void {
+    if (this.#closed || !this.#owned) return
+    this.#closed = true
+    this.#db.close()
+  }
+}
+
 /** 一张库、一个连接，同时给队列与去重表用（`apps/server` 的装配走这条）。 */
 export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {}): {
   queue: SqliteQueueStore
   dedupe: SqliteDedupeStore
   outbox: SqliteOutboxStore
   mailbox: SqliteMailboxStateStore
+  /** WP85：微信 ClawBot 的游标与会话上下文。 */
+  clawbot: SqliteClawBotStateStore
   close(): void
 } {
   const database = openDb(options)
@@ -735,12 +850,14 @@ export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {
   const dedupe = new SqliteDedupeStore({ database })
   const outbox = new SqliteOutboxStore({ database })
   const mailbox = new SqliteMailboxStateStore({ database })
+  const clawbot = new SqliteClawBotStateStore({ database })
   let closed = false
   return {
     queue,
     dedupe,
     outbox,
     mailbox,
+    clawbot,
     close(): void {
       if (closed) return
       closed = true

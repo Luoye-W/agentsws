@@ -3241,3 +3241,75 @@ export const switchToStandby = (
 /** 反向：云上导出 → 落到本机备份目录 → 停云上那个进程。 */
 export const bringStandbyHome = (assignment?: string): Promise<StandbyBringHomeResult> =>
   api('/v1/standby/bring-home', { method: 'POST', ...withAssignment(assignment) })
+
+/* ── WP85（54 §5）消息渠道：微信 ClawBot（个人）与企业微信机器人（团队）──── */
+
+/**
+ * 这五条不在 `packages/sdk` 生成的那一份里：它们还没进 `collectRoutes()`
+ * 那份路由声明（见 WP85 报告的「契约改动」），所以这里直接用 `api()` 打。
+ * 形状与服务端 `apps/server/src/im-channels.ts` 的那几个视图一一对应。
+ */
+export interface ImStatusView {
+  wechat: {
+    bound: boolean
+    account_id?: string
+    live: boolean
+    paused_until?: string
+    allowed: boolean
+    reason?: string
+  }
+  wecom: { configured: boolean; connected: boolean; bot_id?: string }
+}
+
+export interface ImLoginStart {
+  login_id: string
+  qrcode_url: string
+  expires_at: string
+}
+
+export type ImLoginStatus =
+  | 'waiting'
+  | 'scanned'
+  | 'need_verify_code'
+  | 'verify_code_blocked'
+  | 'confirmed'
+  | 'already_connected'
+  | 'expired'
+  | 'failed'
+
+export interface ImLoginPoll {
+  login_id: string
+  status: ImLoginStatus
+  qrcode_url?: string
+  account_id?: string
+  user_id?: string
+  message: string
+}
+
+export const getImStatus = (): Promise<ImStatusView> => api<ImStatusView>('/v1/im/status')
+
+export const startWechatLogin = (): Promise<ImLoginStart> =>
+  api<ImLoginStart>('/v1/im/wechat/login', { method: 'POST' })
+
+export const pollWechatLogin = (id: string, verify_code?: string): Promise<ImLoginPoll> =>
+  api<ImLoginPoll>(
+    `/v1/im/wechat/login/${encodeURIComponent(id)}${
+      verify_code === undefined ? '' : `?verify_code=${encodeURIComponent(verify_code)}`
+    }`,
+  )
+
+/** 解绑 = 销毁本机那枚 token。 */
+export const unbindWechat = (): Promise<{ unbound: boolean; account_id?: string }> =>
+  api('/v1/im/wechat', { method: 'DELETE' })
+
+/**
+ * 企业微信的 BotID + Secret。
+ *
+ * **值只在这一次调用里存在**：调用方用原生 `<form>` 的 `FormData` 收，
+ * 不进 React state、不进任何全局变量，提交完立刻 `form.reset()`（13 §4.3）。
+ */
+export const saveWecomBot = (values: {
+  bot_id: string
+  secret: string
+}): Promise<{ configured: boolean; bot_id: string }> =>
+  api('/v1/im/wecom', { method: 'PUT', body: values })
