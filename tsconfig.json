@@ -98,6 +98,9 @@
       "path": "packages/skills"
     },
     {
+      "path": "packages/social-core"
+    },
+    {
       "path": "packages/stand-ins"
     },
     {
