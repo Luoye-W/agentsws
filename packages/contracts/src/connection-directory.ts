@@ -515,6 +515,205 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     status: 'planned',
     note: { zh: '官方接口是付费档，数据供给要花钱。', en: 'The official API is a paid tier.' },
   },
+  /*
+   * WP72（56 §1）：**社媒运营那八张卡**。
+   *
+   * 与红人那五条的关系：`youtube_data` 与 `x_api` **就是上面那两条**，不新建
+   * （56 §1「YouTube 与红人岗位的是同一张卡」）——一把 key 管两条职责，写成两个
+   * kind 的后果是用户在连接页上看到两张 YouTube，连了一张另一张还说没连。
+   *
+   * Facebook 群组**在这张表里没有一条**：Groups API 已经停了，它走第三栏的受控
+   * 浏览器（职责 yml 里那格 `mode: browser`）。目录里给它一张点不动的卡，
+   * 比不给更糟——点进去无处可点。
+   *
+   * 每一条的 `note` 写的是**接口现实**（56 §1 末行）：申请制、付费档、模板 +
+   * opt-in + 24h 窗口。说在前面，比让人填完之后撞一堵墙强。
+   */
+  {
+    kind: 'meta_graph',
+    name: { zh: 'Meta Graph API（FB 主页 + IG）', en: 'Meta Graph API (Page + Instagram)' },
+    category: 'social',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    // 这条是**发内容**用的，不是读别人的号：与上面那条 `facebook_graph` 分得开
+    side_effect: 'write_external',
+    docs_url: 'https://developers.facebook.com/docs/pages-api',
+    status: 'planned',
+    note: {
+      zh: '一把 token 管 FB 主页 + IG 商业号。连上就能读，**能发要过 App Review**——那是两件事。',
+      en: 'One token covers the FB Page and the IG business account. Reading works at once; publishing needs App Review.',
+    },
+  },
+  {
+    kind: 'tiktok_content',
+    name: { zh: 'TikTok Content Posting API', en: 'TikTok Content Posting API' },
+    category: 'social',
+    auth: 'client_credentials',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'client_key',
+        label: { zh: 'Client key', en: 'Client key' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+      {
+        name: 'client_secret',
+        label: { zh: 'Client secret', en: 'Client secret' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://developers.tiktok.com/doc/content-posting-api-get-started',
+    status: 'planned',
+    note: {
+      zh: '申请制，且与红人那条用的 Research API **要分别申请**。没批下来之前排期、草稿、审批照常。',
+      en: 'Application-gated, and applied for separately from the Research API. Scheduling and drafts work without it.',
+    },
+  },
+  {
+    kind: 'reddit',
+    name: { zh: 'Reddit API', en: 'Reddit API' },
+    category: 'social',
+    auth: 'client_credentials',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'client_id',
+        label: { zh: 'Client ID', en: 'Client ID' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+      {
+        name: 'client_secret',
+        label: { zh: 'Client secret', en: 'Client secret' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+      {
+        name: 'user_agent',
+        label: { zh: 'User-Agent', en: 'User-Agent' },
+        secret: false,
+        required: true,
+        kind: 'text',
+        hint: {
+          zh: 'Reddit 只认这个格式：`平台:应用 id:版本 (by /u/你的用户名)`。写错一律 429。',
+          en: 'Reddit only accepts `platform:app-id:version (by /u/you)`. Anything else gets 429.',
+        },
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://www.reddit.com/dev/api',
+    status: 'planned',
+    note: {
+      zh: '要先注册一个 script / web 应用。连不上最常见的原因是 User-Agent 写错了，不是密钥错了。',
+      en: 'Register a script or web app first. A malformed User-Agent — not a bad key — is the usual cause of failures.',
+    },
+  },
+  {
+    kind: 'discord_bot',
+    name: { zh: 'Discord 机器人', en: 'Discord bot' },
+    category: 'social',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'bot_token',
+        label: { zh: '机器人令牌', en: 'Bot token' },
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: {
+          zh: '开发者后台 Bot 页那串令牌。请求头写的是 `Bot <token>`，不是 `Bearer`。',
+          en: 'The token from the Bot page. The header is `Bot <token>`, not `Bearer`.',
+        },
+      },
+      {
+        name: 'guild_id',
+        label: { zh: '服务器 id', en: 'Server (guild) id' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://discord.com/developers/docs/intro',
+    status: 'planned',
+    note: {
+      zh: '建一个应用、加一个 Bot、把它邀请进你的服务器。禁言是设一个到期时刻，到点自动解除。',
+      en: 'Create an app, add a bot, invite it to your server. Timeouts are an expiry instant, cleared automatically.',
+    },
+  },
+  {
+    kind: 'telegram_bot',
+    name: { zh: 'Telegram 机器人', en: 'Telegram bot' },
+    category: 'social',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'bot_token',
+        label: { zh: '机器人令牌', en: 'Bot token' },
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: {
+          zh: '跟 @BotFather 说 /newbot 就给你。**这串东西在 URL 的路径上**，所以我们的日志会专门抹掉它。',
+          en: 'Ask @BotFather for /newbot. It travels in the URL path, so our logs redact it explicitly.',
+        },
+      },
+      {
+        name: 'chat_id',
+        label: { zh: '群 / 频道 id', en: 'Chat or channel id' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://core.telegram.org/bots/api',
+    status: 'planned',
+    note: {
+      zh: '把机器人拉进群并给管理员权限，否则删消息与禁言都做不了。业务错误在 200 里，看的是 `ok` 那一格。',
+      en: 'Add the bot to the group as an admin, or moderation calls do nothing. Business errors come back inside a 200 with `ok: false`.',
+    },
+  },
+  {
+    kind: 'whatsapp_business',
+    name: { zh: 'WhatsApp Business API', en: 'WhatsApp Business API' },
+    category: 'social',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'access_token',
+        label: { zh: '访问令牌', en: 'Access token' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+      {
+        name: 'phone_number_id',
+        label: { zh: '号码 id', en: 'Phone number id' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
+    status: 'planned',
+    note: {
+      zh: '要过商业验证。主动发消息**只能用审批过的模板，且收件人必须先 opt-in**；对方来过消息之后有 24 小时窗口能自由回复。这三条是 Meta 的规矩，违反了封的是这个号。',
+      en: 'Business verification required. Outbound messages need an approved template and prior opt-in; free-form replies only inside the 24-hour customer window. These are Meta rules — breaking them gets the number banned.',
+    },
+  },
   // ── 营销 ────────────────────────────────────────────────────────────
   {
     kind: 'email_marketing',

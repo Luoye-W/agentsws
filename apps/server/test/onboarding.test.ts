@@ -398,11 +398,12 @@ describe('46 §3 岗位与职责 → 清单', () => {
       { id: string; roles: { id: string; default: boolean; what_it_does: string }[] }[]
     >(await m.call('GET', '/v1/onboarding/positions'))
     const support = positions.find((p) => p.id === 'customer-care')
-    // WP54（48 v2 L1）：勾"客服"= 三条职责全勾（+ 可选的 common.member）
+    // WP54（48 v2 L1）+ WP72（56 §4）：勾"客服"= 四条职责全勾（+ 可选的 common.member）
     expect(support?.roles.filter((r) => r.default).map((r) => r.id)).toEqual([
       'dtc.support',
       'dtc.live-chat',
       'amz.support',
+      'dtc.community-support',
     ])
     // 46 §1 表 ③：每条职责旁有一句"它会干什么"
     expect(support?.roles.find((r) => r.id === 'dtc.support')?.what_it_does).toContain('退款')
@@ -412,7 +413,13 @@ describe('46 §3 岗位与职责 → 清单', () => {
     )
     // 勾岗位 = 模板里的职责全进来（不只是默认包）
     expect(plan.role_ids).toEqual(
-      expect.arrayContaining(['dtc.support', 'dtc.live-chat', 'amz.support', 'common.member']),
+      expect.arrayContaining([
+        'dtc.support',
+        'dtc.live-chat',
+        'amz.support',
+        'dtc.community-support',
+        'common.member',
+      ]),
     )
     // dtc.support 要邮箱与 Shopify，两条都 required
     const services = plan.connectors.map((c) => c.service)

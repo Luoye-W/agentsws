@@ -1008,6 +1008,21 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('kol.tiktok'),
     loadBundledRole('kol.facebook'),
     loadBundledRole('kol.x'),
+    // WP72（56 §2 / §4）：社媒运营岗位的九条渠道职责 + 客服岗位的社群管理。
+    // 3 人 pack 里"运营"真挂着 `social.meta`（`assignments.yml`），客服真挂着
+    // `dtc.community-support`；其余八条躺在库里——躺着不产生任何行为，
+    // 装它们是为了首次设置向导里"社媒运营"那个岗位显示九条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面红人那五条的理由）。
+    loadBundledRole('social.meta'),
+    loadBundledRole('social.tiktok'),
+    loadBundledRole('social.x'),
+    loadBundledRole('social.youtube'),
+    loadBundledRole('social.facebook-group'),
+    loadBundledRole('social.reddit'),
+    loadBundledRole('social.discord'),
+    loadBundledRole('social.telegram-group'),
+    loadBundledRole('social.whatsapp'),
+    loadBundledRole('dtc.community-support'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))

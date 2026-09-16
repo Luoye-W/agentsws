@@ -283,6 +283,20 @@ export const BUNDLED_ROLES = [
   'kol.tiktok',
   'kol.facebook',
   'kol.x',
+  // WP72（56 §2）：社媒运营岗位的九条渠道职责 + 客服岗位新加的第四条。
+  // 与红人那五条同一条理由：种岗位那一步会把解析不到的职责筛掉，
+  // 少一条，首次设置向导里的"社媒运营"就少一个勾。
+  'social.meta',
+  'social.tiktok',
+  'social.x',
+  'social.youtube',
+  'social.facebook-group',
+  'social.reddit',
+  'social.discord',
+  'social.telegram-group',
+  'social.whatsapp',
+  // WP72（56 §4）：客服岗位的社群管理
+  'dtc.community-support',
 ] as const
 
 /**

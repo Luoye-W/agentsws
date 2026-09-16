@@ -223,8 +223,10 @@ const SEED_POSITIONS: readonly {
       ['dtc.analytics', true],
     ],
   },
-  // WP54（48 v2 L1 / 27 §1）：**客服**岗位 = 三条职责，默认全勾。
+  // WP54（48 v2 L1 / 27 §1）+ WP72（56 §4）：**客服**岗位 = 四条职责，默认全勾。
   // 只做独立站的人去勾掉 Amazon 那条；还没上聊天 widget 的去勾掉在线客服那条。
+  // 第四条「社群管理」（`dtc.community-support`）也默认勾上：群与私信里的客户问题
+  // 不需要先有一个群才会发生——评论区与私信本来就有（56 §4）。
   // （`roles.roles.get` 解析不到的职责会在上面那一步被筛掉，所以装了几条就显示几条。）
   {
     id: 'customer-care',
@@ -234,6 +236,7 @@ const SEED_POSITIONS: readonly {
       ['dtc.support', true],
       ['dtc.live-chat', true],
       ['amz.support', true],
+      ['dtc.community-support', true],
       ['common.member', false],
     ],
   },
@@ -267,6 +270,27 @@ const SEED_POSITIONS: readonly {
       ['kol.tiktok', false],
       ['kol.facebook', false],
       ['kol.x', false],
+      ['common.member', false],
+    ],
+  },
+  // WP72（56 §2 / 54）：**社媒运营**岗位 = 九条渠道职责（内容组四条在前、社群组
+  // 五条在后，顺序 = 契约 `SOCIAL_CHANNELS`）。默认只勾 Meta / TikTok / YouTube
+  // （56 §6）：多数品牌一开始一个群都没有，先把内容发起来才是第一步。
+  // 其余六条在向导里勾得上——勾上一条比去掉一条容易。
+  {
+    id: 'social-media',
+    zh: '社媒运营',
+    en: 'Social Media',
+    roles: [
+      ['social.meta', true],
+      ['social.tiktok', true],
+      ['social.x', false],
+      ['social.youtube', true],
+      ['social.facebook-group', false],
+      ['social.reddit', false],
+      ['social.discord', false],
+      ['social.telegram-group', false],
+      ['social.whatsapp', false],
       ['common.member', false],
     ],
   },

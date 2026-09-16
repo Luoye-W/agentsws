@@ -46,6 +46,11 @@ const DATA_DOMAIN = Schema.union([
   'tracked_link',
   'ad_account',
   'social_account',
+  // WP72（56 §2）：社群那两个域，与契约的 `DataDomain` 同步。
+  // 账号与帖子走**早就有的** `social_account`；成员名册与线程各一把闸——
+  // 内容组四条读不到成员，客服的「社群管理」读得到线程、读不到成员名册。
+  'community_member',
+  'community_thread',
   'review',
   'finance',
   'approval',
@@ -239,6 +244,11 @@ export const ROLE_SCHEMA: Node = Schema.object({
   quick_prompts: Schema.array(QUICK_PROMPT).max(MAX_QUICK_PROMPTS),
   /** WP84：指导抽屉顶部的示例任务（≤ MAX_TASK_EXAMPLES 条，id 在本职责内唯一）。 */
   task_examples: Schema.array(TASK_EXAMPLE).max(MAX_TASK_EXAMPLES),
+  /**
+   * WP72（56 §1）：这条职责靠什么干活。不写 = `api`。
+   * `browser` = 这条渠道没有可用的接口，动作走第三栏受控浏览器。
+   */
+  mode: Schema.union(['api', 'browser'] as const),
   persona: Schema.string(),
   handover: HANDOVER,
   requires: Schema.array(Schema.string()),

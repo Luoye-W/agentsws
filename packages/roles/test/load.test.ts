@@ -136,14 +136,16 @@ describe('loadPosition (05 §2)', () => {
     ])
   })
 
-  // WP54（48 v2 L1）：客服岗位 = 三条职责，默认全勾
-  it('loads the customer-care position with all three support roles ticked (48 v2 L1)', () => {
+  // WP54（48 v2 L1）：客服岗位默认全勾。WP72（56 §4）加第四条「社群管理」——
+  // 群与私信里的客户问题不需要先建一个群才会发生，评论区与私信本来就有。
+  it('loads the customer-care position with all four support roles ticked (48 v2 L1 / 56 §4)', () => {
     const position = loadBundledPosition('customer-care')
     expect(position.name.zh).toBe('客服')
     expect(position.roles.map((r) => r.role)).toEqual([
       'dtc.support',
       'dtc.live-chat',
       'amz.support',
+      'dtc.community-support',
     ])
     expect(position.roles.every((r) => r.default)).toBe(true)
   })

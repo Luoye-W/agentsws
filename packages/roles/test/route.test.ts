@@ -44,18 +44,45 @@ describe('54 §2 同一句话，不同岗位，不同职责', () => {
     expect(out.candidates[0]?.why.length).toBeGreaterThan(0)
   })
 
-  it('同一句话在客服岗位里是网站客服的活', () => {
+  /**
+   * WP72（56 §4）：客服岗位多了第四条「社群管理」之后，**一句不提渠道的客户问题
+   * 在这个岗位里判不准了**——这不是退步，是 54 §2「拿不准就问一句，不猜」。
+   *
+   * 理由摆在职责定义上：`dtc.community-support` 与 `dtc.support` 的动作 id、额度、
+   * 数据域**逐字相同**（56 §4「同一份 caps，不另起」），两条职责真正的差别只有
+   * 渠道——邮箱，还是群里。所以"客户问退货"这句话本身确实不带答案，
+   * 判给谁都是猜。带上渠道那个词，它立刻判得准（下面两条）。
+   */
+  it('同一句话在客服岗位里判不准：网站客服与社群管理只差一个渠道（WP72）', () => {
     const out = routeWithinPosition('客户问退货，改价', CUSTOMER_CARE)
-    expect(out.picked).toBe('dtc.support')
+    expect(out.picked).toBeUndefined()
+    expect(out.ambiguous).toBe(true)
+    expect(
+      out.candidates
+        .slice(0, 2)
+        .map((c) => c.role_id)
+        .sort(),
+    ).toEqual(['dtc.community-support', 'dtc.support'])
+    expect(out.reason).toContain('你定')
+  })
+
+  it('补上渠道就判得准：「Discord 群里」→ 社群管理（WP72）', () => {
+    const out = routeWithinPosition('Discord 群里有人问退货', CUSTOMER_CARE)
+    expect(out.picked).toBe('dtc.community-support')
     expect(out.ambiguous).toBe(false)
+    // 判据说得出口：命中的就是那条职责 grounding 里的渠道词
+    expect(out.candidates[0]?.why.join('')).toContain('Discord')
   })
 
   it('「把 A 商品降价 10%」→ 店铺管理（54 §5 那条模拟题的第一句）', () => {
     expect(routeWithinPosition('把 A 商品降价 10%', WEB_OPS).picked).toBe('dtc.store')
   })
 
-  it('「客户问退货」→ 网站客服（同一条模拟题的第二句）', () => {
-    expect(routeWithinPosition('客户问退货', CUSTOMER_CARE).picked).toBe('dtc.support')
+  it('「客户问退货」在网站运营里仍然只有一条像：店铺管理答不了它', () => {
+    // 同一条模拟题的第二句。网站运营岗位里没有客服那几条，所以这句话在这个岗位下
+    // 一条都不像——54 §2：看不出来就问一句，不硬塞给店铺管理
+    const out = routeWithinPosition('客户问退货', WEB_OPS)
+    expect(out.picked).not.toBe('dtc.store')
   })
 })
 
