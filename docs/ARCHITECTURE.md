@@ -115,8 +115,9 @@ Three rules fall out of the picture, and all three are enforced in code:
 ## 3. The contracts
 
 All of them live in `packages/contracts/src/` as pure TypeScript — types, events, error
-codes, no implementation. Numbers `#1`–`#18` are doc 09 §2's; `#19` and the meetings
-kernel were added during implementation. **The interfaces are frozen** (`docs/32` §2):
+codes, no implementation. Numbers `#1`–`#20` are doc 09 §2's; `#19` (work model) and
+`#20` (browser policy) were added during implementation and back-filled into that table;
+the meetings kernel has no number. **The interfaces are frozen** (`docs/32` §2):
 adding fields, kinds, events and error codes is allowed; changing the meaning of an
 existing one requires a major version and a migrator.
 
@@ -141,6 +142,7 @@ existing one requires a major version and a migrator.
 | 17 | Workflow | `schedule.ts` | Durable workflows over the same scheduler. Contract only — see §7. |
 | 18 | Marketplace & licensing | `packages.ts` | Registry, signing, review, publishing. Contract only — see §7. |
 | 19 | Work model | `work.ts` | Matter (the one context container), goal, todo, daily plan, review, calendar item. |
+| 20 | Browser policy | `run.ts` | Not a tool surface: the tools come from the official `dsh-browser-use` + Playwright MCP provider. What is ours is the policy — `RunRequest.browser` (attach to the user's own Chrome, or launch a separate one), `RunRequest.allowed_hosts` / `RoleDefinition.browser_scope` (per-role host allowlist), read/write classification by tool name, no JS injection on the company profile, and one browser per session. |
 | — | Meetings kernel | `meetings.ts` | Meeting, six record sources, controlled raw-material store, transcript → outputs pipeline. |
 | — | Kernel & events | `kernel.ts`, `events.ts`, `common.ts` | Module manifest and signing, halt, trace; the append-only event envelope; shared id and actor types. |
 

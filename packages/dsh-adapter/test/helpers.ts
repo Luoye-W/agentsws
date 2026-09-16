@@ -5,6 +5,7 @@ import type {
   Iso8601,
   ModelRef,
   ObjectRef,
+  RunBrowser,
   RunEvent,
   RunRequest,
 } from '@agentsws/contracts'
@@ -59,6 +60,10 @@ export interface RequestOverrides {
   id?: string
   withOrderContext?: boolean
   threadText?: string
+  /** WP82：这次运行开不开浏览器、怎么开。 */
+  browser?: RunBrowser
+  /** WP82：允许打开的站（不给 = 不给这个字段 = 一律拒）。 */
+  allowed_hosts?: string[]
 }
 
 /** 一条最小但完整的"退货窗口内"RunRequest。 */
@@ -140,6 +145,8 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
       model: { provider: 'stub', model: 'stub-v1', region: 'cn' },
       seed: 42,
     },
+    ...(o.browser === undefined ? {} : { browser: o.browser }),
+    ...(o.allowed_hosts === undefined ? {} : { allowed_hosts: o.allowed_hosts }),
     idempotency_key: 'idem_test',
   }
 }

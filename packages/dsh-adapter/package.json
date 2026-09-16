@@ -29,6 +29,9 @@
     "@deepseek-ai/dsh-agent": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-agent-loop": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-base": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-browser-use": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-experimental-browser-use-runtime": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-headless": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-llm": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-scope": "0.1.6-alpha.1",
@@ -44,7 +47,6 @@
     "yaml": "^2.5.0"
   },
   "devDependencies": {
-    "@agentsws/runtime-direct": "workspace:*",
-    "@deepseek-ai/dsh-browser-use": "0.1.6-alpha.1"
+    "@agentsws/runtime-direct": "workspace:*"
   }
 }

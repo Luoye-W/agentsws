@@ -1462,6 +1462,50 @@ export const setCapabilitySources = (
     ...withAssignment(assignment),
   })
 
+// ── WP82：浏览器（55 §3 末段）────────────────────────────────────────────
+//
+// 这条路上**没有任何凭据**：CDP 地址不是密码，登录态在用户自己的 Chrome 里。
+// 探测是 `GET` 且不带参数时自动试常见端口——界面上那个"自动找一下"按钮。
+
+/** 这台机器上的浏览器怎么配（`GET`/`PUT /v1/settings/browser` 的形状）。 */
+export interface BrowserSettings {
+  mode: 'off' | 'attach' | 'launch'
+  endpoint?: string
+  executable_path?: string
+  headless?: boolean
+}
+
+export interface BrowserSettingsView extends BrowserSettings {
+  /** 只有个人档（服务跑在你自己电脑上）才允许接你的 Chrome。 */
+  attach_allowed: boolean
+  attach_blocked_reason?: string
+}
+
+export interface BrowserProbeResult {
+  ok: boolean
+  endpoint: string
+  browser?: string
+  detail?: string
+}
+
+export const getBrowserSettings = (assignment?: string): Promise<BrowserSettingsView> =>
+  api('/v1/settings/browser', withAssignment(assignment))
+
+export const setBrowserSettings = (
+  input: BrowserSettings,
+  assignment?: string,
+): Promise<BrowserSettingsView> =>
+  api('/v1/settings/browser', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+/** 不给 endpoint = 自动探测 127.0.0.1 上的常见端口。 */
+export const probeBrowser = (endpoint?: string, assignment?: string): Promise<BrowserProbeResult> =>
+  api(
+    endpoint === undefined || endpoint === ''
+      ? '/v1/settings/browser/probe'
+      : `/v1/settings/browser/probe?endpoint=${encodeURIComponent(endpoint)}`,
+    withAssignment(assignment),
+  )
+
 // ── WP25 交付 C：模型 ───────────────────────────────────────────────────
 //
 // 同一条纪律：**API key 只经 `saveModelProvider` 这一条路出去**，原生 `<form>` 收集、

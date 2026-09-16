@@ -15,6 +15,7 @@ import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { backupRoutes } from './routes/backup.js'
+import { browserRoutes } from './routes/browser.js'
 import { catalogRoutes } from './routes/catalog.js'
 import { changeRoutes } from './routes/changes.js'
 // WP57（48 §4 L3 #11）：网站在线客服的本地 API（公开访客端点属于托管档）
@@ -91,6 +92,12 @@ export function collectRoutes(): Route[] {
      * 也遮不住岗位面那条光秃秃的 `:id`（它后面没有第三段）。
      */
     ...connectionDirectoryRoutes(),
+    /*
+     * WP82（55 §3 末段）：浏览器设置。`/v1/settings/browser` 与它下面的 `probe`
+     * 是新路径；`/v1/settings/capability-sources`（WP59）是同级的另一个定值段，
+     * 两条都没有路径参数，撞不上。
+     */
+    ...browserRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
     /*

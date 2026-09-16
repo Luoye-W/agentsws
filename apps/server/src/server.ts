@@ -113,6 +113,7 @@ import {
   brandWorkPort,
   brandWorkstationPort,
 } from './brand-ports.js'
+import { BrowserSettingsError, createBrowserSettings } from './browser-settings.js'
 import { createCatalogIndex } from './catalog-index.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
@@ -733,6 +734,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 模型面（API key）共用同一个库，靠 key 前缀分开。谁建的谁关——这里建，这里关。
   const secrets = createSecretStore({ dbPath: file('secrets.sqlite'), clock, env })
 
+  /*
+   * WP82（55 §3 末段）：浏览器设置——**一台机器一份**，不按品牌分。
+   *
+   * 与连接、模型那些"按品牌各一份"的东西不同：attach 接的是用户自己电脑上那个
+   * Chrome，它与卖哪个品牌无关；同一台机器上的所有品牌用同一个浏览器。
+   *
+   * `runtimeMode` 决定允不允许 attach（只有个人档允许）。今天工作区的
+   * `runtime.mode` 一律是 `local`（`identity` 建的时候就写死了），所以这里另给
+   * `AGENTSWS_RUNTIME_MODE` 一个口子：Docker / 托管档的部署把它设成 `docker` /
+   * `hosted`，attach 那一项在设置页上就会灰掉、`PUT` 也会拒。
+   */
+  const browserSettings = createBrowserSettings({
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    runtimeMode: () => {
+      const declared = env.AGENTSWS_RUNTIME_MODE?.trim()
+      return declared === 'docker' || declared === 'hosted' || declared === 'local'
+        ? declared
+        : 'local'
+    },
+  })
+
   /**
    * WP66（52 O1）：模型网关**按品牌各一个**（装配在 `assembleBrand` 里）。
    *
@@ -1285,6 +1307,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 }),
             source: records,
             vertical: () => brandProfileOf(ws).vertical,
+            // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
+            browser: () => browserSettings.forRun(),
           })
     const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -2729,6 +2753,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     connections: brandConnectionsPort(brandModules),
     // WP83（54 §4）：连接目录（按 kind 的总表）与岗位连接清单，也按品牌
     connectionDirectory: connectionDirectoryOf,
+    /*
+     * WP82（55 §3 末段）：浏览器设置。**不按品牌**（见上面 `browserSettings` 那段）。
+     * 这条路上没有任何凭据：CDP 地址不是密码，登录态在用户自己的 Chrome 里。
+     */
+    browser: {
+      settings: () => browserSettings.get(),
+      setSettings: (_actor, input) => {
+        try {
+          return browserSettings.set(input)
+        } catch (err) {
+          if (err instanceof BrowserSettingsError) throw new ApiError(err.code, err.message)
+          throw err
+        }
+      },
+      probe: (_actor, endpoint) => {
+        try {
+          return browserSettings.probe(endpoint)
+        } catch (err) {
+          if (err instanceof BrowserSettingsError) throw new ApiError(err.code, err.message)
+          throw err
+        }
+      },
+    },
     // WP31：本机秘密库的密钥轮换（owner）。密钥只在请求体里出现一次，
     // 网关这一层不碰库、也不碰值，只把「换了几条」端出去。
     secrets: {

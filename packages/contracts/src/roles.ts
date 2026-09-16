@@ -270,6 +270,21 @@ export interface RoleDefinition {
    * WP84：指导抽屉顶部的"示例任务"（最多 {@link MAX_TASK_EXAMPLES} 条，id 唯一）。
    */
   task_examples?: RoleTaskExample[]
+  /**
+   * WP82（55 §3「域名白名单」那一行）：**这条职责的浏览器只许打开哪些站**。
+   *
+   * 一条 = 一个域名，`*.youtube.com` 这种通配也认（判定见 `hostAllowed`）。
+   * 岗位带多条职责时取并集，进 `RunRequest.allowed_hosts`。
+   *
+   * 三条纪律：
+   * 1. **不填 = 这条职责不能开浏览器**。缺省为空，空表示一律拒——
+   *    白名单是"允许"表不是"禁止"表，忘了填的后果是不能用，不是随便逛。
+   * 2. 它**不是权限**：能不能改东西仍由 `actions` 与额度说了算。它管的是
+   *    "这条职责的浏览器会不会跑到别的站上去"。
+   * 3. 只写这条职责真正要看的站。红人五条各写各的平台，Amazon 那条只开
+   *    卖家后台——不是"顺手多开几个以后可能用得上"。
+   */
+  browser_scope?: string[]
   persona?: string
   handover: {
     transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]
@@ -421,6 +436,11 @@ export interface EffectiveConfig {
   automation: Record<ActionId, EffectiveAutomation>
   skills: RoleDefinition['skills']
   grounding: GroundingRule[]
+  /**
+   * WP82：这条职责的浏览器域名白名单（`RoleDefinition.browser_scope`，没填就是空数组）。
+   * 服务端组 `RunRequest.allowed_hosts` 时读它；空 = 这条职责开不了浏览器。
+   */
+  browser_scope: string[]
   persona?: string
   /** 展开后的范围（挂的范围组已摊平）。 */
   ranges: RangeRef[]

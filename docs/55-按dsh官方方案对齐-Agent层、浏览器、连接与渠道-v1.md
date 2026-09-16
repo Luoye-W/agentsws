@@ -92,6 +92,36 @@ handle.dispose()                                                            // 1
 
 个人端安装形态：桌面壳（Electron）里"连接浏览器"一步 = 用带 `--remote-debugging-port` 的方式为用户起一个**单独的 Chrome Profile**（工作账号用），provider 以 attach 接它。不用用户日常那个 Profile，避免 ego-lite #319 那类跨 Profile 泄漏。
 
+### 落点（WP82，已实现）
+
+上面那张表逐行落在哪，以及**实测到的三件与预判不同的事**。
+
+| 策略 | 落点 | 实测 |
+|---|---|---|
+| 工具面 | `harness.ts`：`RunRequest.browser` 在场才 `root.plugin(BrowserUseRegistry)` + 在 `setup()` 里 `agentCtx.plugin(PlaywrightMcpProvider, …)` | 真 provider **挂得上**（见下 ①）；默认报 **24 个**工具（Core automation 23 + Tab management 1，provider 没传 `--caps`） |
+| 读写分类 | `tools.ts` 的 `classifySideEffect`：只读 9 个显式列名，其余按写；`browser_tabs` 按 `action` 分 | 与上游 README 的 `Read-only` 标注**有意不同**两处：`browser_navigate` 我们判读（55 §3 原话），`browser_wait_for` / `browser_resize` 我们判读（它们碰不到外面） |
+| 域名白名单 | `browser.ts` 的 `checkBrowserNavigation`；来源 = 职责模板 `browser_scope` → `RunRequest.allowed_hosts` | `browser_tabs action=new` **也带 `url`**，一起查（预判里漏了这一个） |
+| 注 JS | 同上，公司端（`executor`）对 `browser_evaluate` / `browser_run_code_unsafe` 硬拒 | 上游 0.0.80 新增了 `browser_run_code_unsafe`（自称 "RCE-equivalent"），一起拒 |
+| 人接管 | `browser.ts` 的 `browserBrief` 写进 persona 的 `complete` 段 | 官方自己那段 `mcp:playwright-mcp` 被 `complete` 段遮掉，所以"能开哪些站 / 登录页怎么办"**只能由我们写**，不写模型就不知道 |
+| 一 Session 一浏览器 | provider 的 `exclusive: mode === 'attach'`，随 `handle.dispose()` 一起走 | 与 17 §5.1 天然一致 |
+| 个人端单独 Profile | 桌面壳托盘「打开工作用的浏览器」→ `~/Library/Application Support/agentsws/browser-profile` + `--remote-debugging-port=9333` → 地址 `PUT /v1/settings/browser` | 已实现（`apps/desktop/src/work-browser.ts`） |
+
+三件与预判不同的事：
+
+① **真 provider 在 CI 里挂得上，不用假 MCP 服务器。** `@playwright/mcp` 的 `cli.js`
+启动时不碰浏览器（连接推迟到第一次真调工具），所以 attach 指一个**没人监听**的回环
+端口，provider 照样把 24 个工具报上来——`browser-seam.test.ts` 因此用的是真 provider。
+
+② **浏览器工具不能列进 `ctx.tools.restrict({ allow })`。** 上游原话是 "Restrictions
+intersect; scoped registrations remain visible"：provider 在自己那个 agent scope 里注册
+工具，本来就不受职责白名单影响；真列进去还会抛，因为 `restrict` 只认调用当刻**已经
+全局注册**的名字，而 provider 挂在 `agent/created` 上、比 `setup` 晚一步。
+
+③ **`playwright` 的 postinstall 不用开构建也能装。** `allowBuilds` 里写死
+`playwright: false` / `playwright-core: false`，`pnpm install --frozen-lockfile` 照常通过，
+provider 照常起——它只要 `cli.js` 那段 JS。attach 与 `executable_path` 两条路都不需要
+它下载的那份 Chromium（16 §3 因此一行没破）。
+
 ---
 
 ## 4. 连接：目录 + 岗位清单 + 职责 preset（Q4）

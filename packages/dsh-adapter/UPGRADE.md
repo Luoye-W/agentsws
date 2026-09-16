@@ -498,6 +498,20 @@ devDependency；它自己只依赖 cordis + dsh-brand，两个都已在树里，
 > 我们的组合两样都没有。要用它，得先决定"引入 dsh 的 Agent 这一层"——那是另一个 WP，
 > 不是升级能顺手带出来的。
 
+> **WP82 后记（2026-09-16）：上面那两个"硬原因"现在一个都不成立了。**
+>
+> 1. WP81 引进了官方 Agent 层 —— `agents` 与活的 `Agent` 都有了；
+> 2. **实测**：`@playwright/mcp` 的 `cli.js` **启动时不碰浏览器**（连接推迟到第一次真调
+>    工具），所以不给 `playwright` 开构建照样能起 provider；而我们两条路都不需要它下载
+>    的那份 Chromium（attach 接用户自己的 Chrome，`launch` 一律带 `executable_path`）。
+>    `allowBuilds` 里写死 `playwright: false` / `playwright-core: false`，
+>    `pnpm install --frozen-lockfile` 通过。
+>
+> 于是 `browser-seam.test.ts` 从"仿真 provider 的 spike"升级成**真 provider 的回归**
+> （23 条），契约 #20 落地见 `AGENT-LAYER.md` §9 与 docs/55 §3「落点（WP82）」。
+> 这一条留在原地不改，是因为它记的是**当时**的判断——判断错在哪、为什么错，
+> 比把它抹掉有用。
+
 #### 第 4 条：`dsh-mcp-resources` 与 MCP SDK v2——**只记录，零影响**
 
 - 我们的"MCP"面**全是我们自己的**：`packages/dsh-adapter/src/tools.ts` 里唯一一处是

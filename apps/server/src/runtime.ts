@@ -28,6 +28,7 @@ import type {
   ModelRef,
   ObjectRef,
   PersonId,
+  RunBrowser,
   RunEvent,
   RunRequest,
   RuntimeAdapter,
@@ -144,6 +145,14 @@ export interface RuntimeOptions {
     toolNames(): readonly string[]
     call(name: string, input: Record<string, unknown>): Promise<{ text: string }>
   }
+  /**
+   * WP82（55 §3）：这台机器上的浏览器怎么配（`browser-settings.ts` 的 `forRun()`）。
+   *
+   * 晚绑定的读法与 `vertical` 同一条理由：用户在设置页里改了浏览器，下一次运行就该
+   * 用新的那一套，不该等重启。**不给 / 回 `undefined` = 这次运行不开浏览器**——
+   * 工具面里一个 `browser_*` 都不会有（`dsh-adapter` 的 `harness.ts` 连 provider 都不挂）。
+   */
+  browser?: () => RunBrowser | undefined
 }
 
 /**
@@ -545,6 +554,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
     const vertical = options.vertical?.()
+    // WP82：这条职责的域名白名单（职责模板的 `browser_scope`）。岗位路由已经把
+    // 这次运行落到**一条**职责上了，所以这里就是那一条的白名单，不做并集。
+    const allowed_hosts = [...new Set(config.browser_scope)]
+    const browser = allowed_hosts.length === 0 ? undefined : options.browser?.()
     return {
       id: input.run_id,
       schema_version: 1,
@@ -613,6 +626,17 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       },
       // 48 v2 L2：客服共享包按它取人设、词表、业务边界与追问措辞
       ...(vertical === undefined ? {} : { vertical }),
+      /*
+       * WP82（55 §3）：浏览器。两件事都得成立才真开——
+       *
+       * 1. **这台机器配了浏览器**（设置页那一节；没配就是 `undefined`）；
+       * 2. **这条职责填了 `browser_scope`**（白名单是"允许"表，空 = 开不了）。
+       *
+       * 少一件就不给 `browser`，于是 provider 根本不挂、工具面里一个 `browser_*`
+       * 都没有。这比"挂上了但每次都拒"好：模型看不见调不动的工具（同 WP44 的
+       * Dev MCP 那条纪律）。
+       */
+      ...(browser === undefined || allowed_hosts.length === 0 ? {} : { browser, allowed_hosts }),
       idempotency_key: `idem_${input.run_id}`,
     }
   }

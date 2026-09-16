@@ -15,6 +15,8 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
+import * as PlaywrightMcpProvider from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
 import type { GenerateOptions, Message, ToolSchema } from '@deepseek-ai/dsh-llm'
 import LlmRuntime, { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
@@ -23,6 +25,7 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
+import { browserProviderConfig } from './browser.js'
 import { DshAdapterError } from './errors.js'
 import type { GateApi, GateInput } from './gate.js'
 import { installGate } from './gate.js'
@@ -150,10 +153,27 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   root.plugin(ToolRuntime, {})
   root.plugin(ApprovalService, {})
   root.plugin(LlmRuntime)
+  /*
+   * WP82（55 §3）：**只有这次运行真要开浏览器才有浏览器这一层**。
+   *
+   * `browserUse` 是官方的独占 provider 槽（一棵树一个 provider）；provider 本身
+   * 按职责挂在 Agent 的 scoped ctx 上（`setup` 里，AGENT-LAYER §8.1 第 ② 条）。
+   * 不给 `RunRequest.browser` 的运行里连这个服务都不存在——没有工具、没有提示词段、
+   * 也不会起任何 MCP 子进程。
+   */
+  const browser = input.request.browser
+  if (browser !== undefined) root.plugin(BrowserUseRegistry)
   // 串行：并行工具调用会让两档的事件顺序不可比（17 §4「换宿主不换语义」）
   root.plugin(AgentLoop, { maxParallelToolCalls: 1, agents: [] })
 
-  const ctx = await inject(root, ['tools', 'systemPrompt', 'llm', 'agents', 'sessions'])
+  const ctx = await inject(root, [
+    'tools',
+    'systemPrompt',
+    'llm',
+    'agents',
+    'sessions',
+    ...(browser === undefined ? [] : ['browserUse']),
+  ])
 
   let lastCompletion: Completion | undefined
   const budget: GatewayBudget | undefined =
@@ -188,10 +208,21 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
       sessionId,
       meta: { cwd: process.cwd() },
       agentOptions: { provider: GATEWAY_PROVIDER, model: input.model },
-      setup: (agentCtx: Context, agent: Agent) => {
+      setup: async (agentCtx: Context, agent: Agent) => {
         // 工具与 hook 装在宿主 ctx 上（scope-filtered dispatch 按 `exec.agent` 路由），
         // `tools.restrict` 则必须在 Agent 的 scoped ctx 上调——全局 ctx 会抛。
         gate = installGate(ctx, { ...input, agent, agentCtx })
+        if (browser === undefined) return
+        /*
+         * 官方 Playwright MCP provider。`setup` 是**只装配**的一跳（官方 `dsh-agent`
+         * 的原话：setup composes, it never drives），而且它跑在 `agent/created`
+         * **之前**——provider 整个挂在那个事件上，所以必须在这里 await 装完，
+         * 晚一步这个 Agent 就拿不到浏览器工具。
+         *
+         * 一个 Agent 一个 MCP 客户端、attach 模式独占（`exclusive: mode === 'attach'`），
+         * `handle.dispose()` 时跟着走 —— 与 17 §5.1「一次运行一棵树」天然一致。
+         */
+        await agentCtx.plugin(PlaywrightMcpProvider, browserProviderConfig(browser) as never)
       },
     })
   } catch (e) {

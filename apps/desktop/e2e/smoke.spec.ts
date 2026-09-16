@@ -62,6 +62,9 @@ test('托盘常驻，打开工作台能拿到 /v1/health 的 ok', async () => {
       AGENTSWS_DESKTOP_USER_DATA: userData,
       // 别去戳真的 OpenConnector：那条路径另有单测。
       AGENTSWS_CONNECT_URL: `http://127.0.0.1:${port + 1}`,
+      // WP82：万一有人手滑点了「打开工作用的浏览器」，指向一个不存在的可执行文件——
+      // 冒烟里绝不真起一个 Chrome。
+      AGENTSWS_DESKTOP_BROWSER_EXECUTABLE: join(userData, 'no-such-chrome'),
     },
   })
 
@@ -106,6 +109,16 @@ test('托盘常驻，打开工作台能拿到 /v1/health 的 ok', async () => {
     await page.waitForLoadState('domcontentloaded')
     const body = await page.evaluate(() => document.body.innerText)
     expect(JSON.parse(body).data.status).toBe('ok')
+
+    // 4.5 WP82（55 §3 末段）：托盘上有「打开工作用的浏览器」，且服务健康之后可点。
+    //     **这里不点它**——点下去会在开发机上真起一个 Chrome。起浏览器那段逻辑
+    //     （单独 Profile、调试口只听回环、已开着就复用、没装 Chrome 就如实说）
+    //     由 `test/work-browser.test.ts` 用假 spawn + 假可执行文件测满。
+    const workBrowser = await app.evaluate(() => {
+      const handle = (globalThis as MainGlobal).__agentsws__
+      return handle?.menu().find((item) => item.id === 'open-work-browser') ?? null
+    })
+    expect(workBrowser).toMatchObject({ id: 'open-work-browser', enabled: true })
 
     // 5. 服务健康之后，两个"打开"都可点了
     const openable = await app.evaluate(() => {

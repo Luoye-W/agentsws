@@ -110,6 +110,8 @@ export function effectiveConfig(input: EffectiveConfigInput): EffectiveConfig {
     automation,
     skills: role.skills.map((s) => ({ ...s })),
     grounding: role.grounding ?? [],
+    // WP82：没填 = 空 = 这条职责开不了浏览器（55 §3 的白名单是"允许"表）
+    browser_scope: [...(role.browser_scope ?? [])],
     ...(role.persona !== undefined ? { persona: role.persona } : {}),
     ranges: [...assignment.ranges],
     ...(assignment.range_groups === undefined || assignment.range_groups.length === 0

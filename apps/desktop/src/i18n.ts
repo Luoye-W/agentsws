@@ -17,6 +17,8 @@ export interface Strings {
   connectUnhardened: string
   restartServer: string
   rotateSecretsKey: string
+  /** WP82（55 §3 末段）：给 AI 起一个**单独的**工作用 Chrome（带调试口）。 */
+  openWorkBrowser: string
   openLogs: string
   launchAtLogin: string
   quit: string
@@ -53,6 +55,7 @@ const ZH: Strings = {
   connectUnhardened: '连接器 runtime：未加固，已拒绝接入',
   restartServer: '重启服务',
   rotateSecretsKey: '轮换本机密钥',
+  openWorkBrowser: '打开工作用的浏览器',
   openLogs: '打开日志目录',
   launchAtLogin: '开机自启',
   quit: '退出',
@@ -88,6 +91,7 @@ const EN: Strings = {
   connectUnhardened: 'Connector runtime: not hardened, refused',
   restartServer: 'Restart service',
   rotateSecretsKey: 'Rotate local key',
+  openWorkBrowser: 'Open the work browser',
   openLogs: 'Open log folder',
   launchAtLogin: 'Launch at login',
   quit: 'Quit',

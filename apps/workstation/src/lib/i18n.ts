@@ -1509,6 +1509,33 @@ const zh: Table = {
   'settings.company': '公司档案',
   'settings.company.hint': '改公司全称等于换一把"同一家公司"的钥匙：改完要和同事对一下写法。',
 
+  // WP82（55 §3 末段）：设置 → 浏览器
+  'settings.browser': '浏览器',
+  'settings.browser.hint':
+    '有些活只能在网页上干（YouTube 的频道页、Amazon 卖家后台）。这一节告诉工作台用哪个浏览器去干。不配 = 谁都开不了浏览器。',
+  'settings.browser.summary':
+    '每条岗位只能打开它自己那几个网站（职责里写死的），别的站一律打不开。密码永远是你自己在浏览器里输的，AI 看不到。',
+  'settings.browser.off': '不开浏览器',
+  'settings.browser.off.note': '默认。没有哪条岗位能打开网页。',
+  'settings.browser.attach': '连接我电脑上的 Chrome',
+  'settings.browser.attach.note':
+    '用你自己那个已经登录好的 Chrome：不用再登一次，验证码也是你自己过。一次只有一个任务用得上它。',
+  'settings.browser.attach.blocked': '这一档用不了（服务不在你自己的电脑上）。',
+  'settings.browser.find': '自动找一下',
+  'settings.browser.test': '试一下',
+  'settings.browser.how':
+    '还没开调试口？用桌面版托盘里的「打开工作用的浏览器」——它会单独开一个工作用的 Chrome，不动你日常那个。',
+  'settings.browser.launch': '用独立的 Chrome',
+  'settings.browser.launch.note': '每次任务起一个干净的浏览器，什么都没登录。',
+  'settings.browser.launch.hint':
+    '指一个你电脑上已经装好的 Chrome / Chromium 可执行文件。我们不替你下载浏览器。',
+  'settings.browser.probe.ok': '连上了：{browser}（{endpoint}）',
+  'settings.browser.probe.fail': '没连上：{detail}',
+  'settings.browser.save': '保存',
+  'settings.browser.saved': '已保存',
+  'settings.browser.scope':
+    '能打开哪些站由岗位的职责说了算：红人各自的平台、Amazon 客服只开卖家后台，其余岗位一个站都开不了。',
+
   // WP52（47 J2 / J3）：对象引用 vs 知识引用、设置页的数据地图
   'chip.object': '对象',
   'chip.object.hint': '这是一个具体的东西（订单、客户、商品），显示的是它现在的状态；点开看详情。',
@@ -3202,6 +3229,34 @@ const en: Table = {
   'settings.company': 'Company details',
   'settings.company.hint':
     'Changing the registered name changes the "same company" key — line the spelling up with your colleagues afterwards.',
+
+  // WP82 (55 §3): Settings → Browser
+  'settings.browser': 'Browser',
+  'settings.browser.hint':
+    'Some work only exists on a web page (a YouTube channel page, Amazon Seller Central). This section says which browser the workstation uses. Leave it off and no role can open a page at all.',
+  'settings.browser.summary':
+    'Each role can only open the sites its job description lists; everything else is refused. Passwords are always typed by you in the browser — the AI never sees them.',
+  'settings.browser.off': 'No browser',
+  'settings.browser.off.note': 'The default. No role can open a web page.',
+  'settings.browser.attach': 'Use the Chrome on my computer',
+  'settings.browser.attach.note':
+    'Uses the Chrome you are already signed in to: no second login, and you clear the captchas yourself. One task at a time can use it.',
+  'settings.browser.attach.blocked':
+    'Not available in this setup (the service is not on your computer).',
+  'settings.browser.find': 'Find it',
+  'settings.browser.test': 'Test',
+  'settings.browser.how':
+    'No debugging port open yet? Use "Open the work browser" in the desktop app tray — it opens a separate work Chrome and leaves your everyday one alone.',
+  'settings.browser.launch': 'Use a separate Chrome',
+  'settings.browser.launch.note': 'Starts a clean browser for each task, signed in to nothing.',
+  'settings.browser.launch.hint':
+    'Point at a Chrome / Chromium executable already installed on this machine. We do not download a browser for you.',
+  'settings.browser.probe.ok': 'Connected: {browser} ({endpoint})',
+  'settings.browser.probe.fail': 'Not connected: {detail}',
+  'settings.browser.save': 'Save',
+  'settings.browser.saved': 'Saved',
+  'settings.browser.scope':
+    'Which sites can be opened is decided by the role: each creator channel its own platform, Amazon support only Seller Central, and every other role none at all.',
 
   // WP52 (47 J2 / J3): object vs knowledge references, and the settings data map
   'chip.object': 'Object',

@@ -117,6 +117,19 @@ notifications:
       escalate_after_hours: 8,
     }
 
+# WP82（55 §3「域名白名单」那一行）：这条职责的浏览器只许打开哪些站。
+#
+# 不填 = 这条职责开不了浏览器（空白名单一律拒）。白名单是"允许"表不是"禁止"表，
+# 忘了填的后果是不能用，不是随便逛。`*.example.com` 通配一切子域（www / m / 各语言站），
+# 也通配 `example.com` 本身。真正打开哪一页仍由模型决定，我们只管"不许出这几个域"。
+# **只开卖家后台**：这条职责是在 Amazon 卖家后台里处理买家消息与退货，
+# 不需要、也不该打开 amazon.com 的前台（那是购物站，开了只会让 AI 在商品页上乱逛）。
+# 三个区域各一个域名：北美 / 欧洲 / 日本，卖多区的卖家换区就换域名。
+browser_scope:
+  - sellercentral.amazon.com
+  - sellercentral-europe.amazon.com
+  - sellercentral-japan.amazon.com
+
 handover:
   transfers: [open_work_items, context, home_blocks, queue_lane]
   fallback: scope_manager

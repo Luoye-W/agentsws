@@ -36,14 +36,135 @@ export const DRAFT_TOOL = 'draft_reply'
 const WRITE_PREFIXES = ['create_', 'update_', 'delete_', 'send_', 'apply_', 'cancel_']
 const READ_PREFIXES = ['get_', 'list_', 'search_', 'read_', 'find_']
 
+/**
+ * WP82：官方浏览器 provider 的工具名前缀（上游 `browser-use-runtime/src/mcp.ts` 的
+ * `` const toolPrefix = `mcp__${options.name}__` ``，provider 的 `name` 是 `playwright-mcp`）。
+ */
+export const BROWSER_TOOL_PREFIX = 'mcp__playwright-mcp__'
+
+/**
+ * WP82：**只读的浏览器工具**（55 §3 第一行"读写分类"）。
+ *
+ * 为什么非得逐个写死：官方工具对 hook **不透明**——`tools/pre-execute` 只看得见名字与
+ * 入参，没有任何读写标注，而下面 `classifySideEffect` 的兜底是 `write_external`。
+ * 不列的话公司端一调就拒，连看一眼网页都做不到。
+ *
+ * 名字来自实测的上游 `@playwright/mcp@0.0.80`（不带 `--caps`，默认只有 Core
+ * automation + Tab management 两组共 24 个工具；provider 拼参数时确实没有 `--caps`，
+ * 见上游 `browser-use-playwright-mcp/src/index.ts`）。
+ *
+ * 我们的分类与上游 README 的 `Read-only` 标注**不完全一样**，两处差异都是有意的：
+ * - `browser_navigate` 上游标 `Read-only: false`（它换了页面）；对我们它是**读外部**——
+ *   打开一个网页就是"去外面读一份东西"，55 §3 那一行明写它是 `read_external`。
+ *   真正管住它的是域名白名单（`gate.ts`），不是读写分类。
+ * - `browser_wait_for` / `browser_resize` 上游标 `false`（它们改浏览器自己的状态），
+ *   但它们碰不到外面任何东西：等一段文字出现、把窗口调大，跟外部世界无关。
+ *
+ * `browser_tabs` 不在这张表里：它一个工具管四件事（list / select / new / close），
+ * 得按 `action` 入参判——见 {@link classifySideEffect} 的第三个参数。
+ */
+const BROWSER_READ_TOOLS: ReadonlySet<string> = new Set([
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_take_screenshot',
+  'browser_find',
+  'browser_console_messages',
+  'browser_network_requests',
+  'browser_network_request',
+  'browser_wait_for',
+  'browser_resize',
+])
+
+/**
+ * WP82：`browser_tabs` 里**只读**的两个动作（其余 new / close 是写；`action` 缺了也算写）。
+ * 上游参数：`action` = list / new / close / select，`url` 只在 new 时有意义。
+ */
+const BROWSER_TABS_READ_ACTIONS: ReadonlySet<string> = new Set(['list', 'select'])
+
+/**
+ * WP82：**注 JS 的两个**。它们能绕开我们判得出来的一切——白名单、读写分类、
+ * 审批——直接在页面里跑任意代码（`browser_run_code_unsafe` 上游自己写着
+ * "RCE-equivalent"）。所以除了按写处理之外，公司端另有一条硬拒（`gate.ts`）。
+ */
+export const BROWSER_SCRIPT_TOOLS: ReadonlySet<string> = new Set([
+  'browser_evaluate',
+  'browser_run_code_unsafe',
+])
+
+/**
+ * WP82：上游 `@playwright/mcp@0.0.80` **默认**报出来的 24 个工具（短名，按字母序）。
+ *
+ * "默认"是关键：provider 拼参数时没有 `--caps`（上游
+ * `browser-use-playwright-mcp/src/index.ts` 只加 `--browser chromium` 与
+ * attach / launch 那几个），所以只有 Core automation（23 个）+ Tab management（1 个）
+ * 两组会挂上来；storage / network / devtools / vision / pdf / testing 那几组都不在。
+ * 这张表是**实测**出来的（`browser-seam.test.ts` 用真 provider 连一次假 endpoint、
+ * 把它报的名字逐条比对），不是抄文档。
+ *
+ * 用途只有一个：`ctx.tools.restrict({ allow })` 的白名单里要列出它们，否则
+ * 职责 allowlist 会把整组浏览器工具挡在 Agent 的 scope 之外（restrict 是默认拒）。
+ * 上游哪天新增一个工具，它**不会**自动出现在模型面前——要先进这张表、
+ * 同时决定它是读还是写。这正是我们要的方向。
+ */
+export const BROWSER_DEFAULT_TOOLS: readonly string[] = [
+  'browser_click',
+  'browser_close',
+  'browser_console_messages',
+  'browser_drag',
+  'browser_drop',
+  'browser_evaluate',
+  'browser_file_upload',
+  'browser_fill_form',
+  'browser_find',
+  'browser_handle_dialog',
+  'browser_hover',
+  'browser_navigate',
+  'browser_navigate_back',
+  'browser_network_request',
+  'browser_network_requests',
+  'browser_press_key',
+  'browser_resize',
+  'browser_run_code_unsafe',
+  'browser_select_option',
+  'browser_snapshot',
+  'browser_tabs',
+  'browser_take_screenshot',
+  'browser_type',
+  'browser_wait_for',
+]
+
+/** 上面那 24 个的全名（带 `mcp__playwright-mcp__` 前缀）。 */
+export const BROWSER_DEFAULT_TOOL_NAMES: readonly string[] = BROWSER_DEFAULT_TOOLS.map(
+  (n) => `${BROWSER_TOOL_PREFIX}${n}`,
+)
+
+/** 去掉 provider 前缀之后的短名；不是浏览器工具就回 `undefined`。 */
+export function browserToolName(tool: string): string | undefined {
+  return tool.startsWith(BROWSER_TOOL_PREFIX) ? tool.slice(BROWSER_TOOL_PREFIX.length) : undefined
+}
+
 /** 16 §3：判定不了的按 `write_external` 处理（最严）。 */
 export function classifySideEffect(
   tool: string,
   overrides?: Record<string, ToolSideEffect>,
+  /** WP82：`browser_tabs` 这种"一个名字多件事"的工具要看入参才判得出来。 */
+  args?: Record<string, unknown>,
 ): ToolSideEffect {
   const bare = tool.includes('.') ? tool.slice(tool.indexOf('.') + 1) : tool
   const explicit = overrides?.[tool] ?? overrides?.[bare]
   if (explicit !== undefined) return explicit
+  // WP82：浏览器工具走自己那张显式表；表外的一律按写（上游随时会加新工具，
+  // 新来的那个默认进不了公司端——这正是我们要的方向）。
+  const browser = browserToolName(tool)
+  if (browser !== undefined) {
+    if (browser === 'browser_tabs') {
+      const action = args?.action
+      return typeof action === 'string' && BROWSER_TABS_READ_ACTIONS.has(action)
+        ? 'read_external'
+        : 'write_external'
+    }
+    return BROWSER_READ_TOOLS.has(browser) ? 'read_external' : 'write_external'
+  }
   // WP44：Shopify 官方 Dev MCP 的三个工具**永远只读**（查文档 / 看 schema / 校验 GraphQL，
   // 碰不到任何店铺数据）。要显式列出来：它们既不是 `get_` 也不是 `list_` 开头，
   // 落到下面的兜底就会被当成"写外部"，在 executor 策略下一调就拒。

@@ -52,6 +52,7 @@ import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
+import type { BrowserPort } from './routes/browser.js'
 import type { CatalogPort } from './routes/catalog.js'
 import type { ChatPort } from './routes/chat.js'
 import type { CloudPort } from './routes/cloud.js'
@@ -682,6 +683,12 @@ export interface GatewayDeps {
    * 与岗位页那张"连上这 N 个就能开工"的卡。
    */
   connectionDirectory?: ConnectionDirectoryPort
+  /**
+   * WP82（55 §3 末段）：这台机器上的浏览器怎么配。
+   * 没装配时 `/v1/settings/browser*` 回 not_implemented——不配浏览器照常能用，
+   * 只是没有哪条职责开得了浏览器（`RunRequest.browser` 一直是空的）。
+   */
+  browser?: BrowserPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
   /**

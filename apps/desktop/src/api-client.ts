@@ -80,6 +80,17 @@ export interface ApiClient {
     assignment: string,
     newKey: string,
   ): Promise<ApiResult<{ rotated: number }>>
+  /**
+   * WP82（55 §3 末段）：把刚起好的工作用浏览器地址写进设置
+   * （`PUT /v1/settings/browser`，`mode: 'attach'`）。
+   *
+   * 这条路上**没有凭据**：CDP 地址不是密码。浏览器里的登录是用户自己做的。
+   */
+  setBrowserEndpoint(
+    session: DesktopSession,
+    assignment: string,
+    endpoint: string,
+  ): Promise<ApiResult<{ mode: string }>>
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -179,6 +190,15 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         body: { new_key: newKey },
       })
       return out.ok ? { ok: true, value: { rotated: out.value.value.rotated } } : out
+    },
+
+    async setBrowserEndpoint(session, assignment, endpoint) {
+      const out = await call<{ mode: string }>('/v1/settings/browser', {
+        method: 'PUT',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+        body: { mode: 'attach', endpoint },
+      })
+      return out.ok ? { ok: true, value: { mode: out.value.value.mode } } : out
     },
   }
 }

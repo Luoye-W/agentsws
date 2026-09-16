@@ -14,6 +14,7 @@ import { DataMapPanel } from '@/components/data-map'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
+import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { ModelCloudCard } from '@/components/settings/model-cloud-card'
@@ -190,6 +191,12 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
             </CardContent>
           </Card>
         )}
+        {/*
+          WP82（55 §3 末段）：浏览器。与模型 key 同一档权限（05 owner）——
+          配浏览器是所有者的事，客服岗位看不到也改不了。放在模型前面：
+          它比模型更"一次性"（配一次，之后基本不看），而模型那几张卡下面还挂着花费。
+        */}
+        {ownerId === undefined ? null : <BrowserCard assignment={ownerId} />}
         {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
         {/* 49 M5 第三张模型卡：agentsws 云（用积分）。不填 key，一键启用 */}
         {ownerId === undefined ? null : <ModelCloudCard assignment={ownerId} />}

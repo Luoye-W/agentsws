@@ -18,6 +18,8 @@ export type MenuAction =
   | 'toggle-launch-at-login'
   | 'restart-server'
   | 'rotate-secrets-key'
+  /** WP82（55 §3 末段）：起一个单独 Profile 的工作用 Chrome，并把地址写进设置。 */
+  | 'open-work-browser'
   | 'quit'
 
 export interface MenuItemModel {
@@ -129,6 +131,19 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
         id: 'rotate-secrets-key',
         type: 'normal',
         label: t.rotateSecretsKey,
+        enabled: input.health?.ok === true,
+      },
+      /*
+       * WP82（55 §3 末段）：「打开工作用的浏览器」。
+       *
+       * 只在本机档出现，与上面两项同一条理由：`remote` 档下服务不在这台电脑上，
+       * 起在这儿的浏览器那边根本连不到（`127.0.0.1` 指的是各自那一台）。
+       * 服务得活着才点得动——起完浏览器要把地址 `PUT` 回设置，服务不在就写不进去。
+       */
+      {
+        id: 'open-work-browser',
+        type: 'normal',
+        label: t.openWorkBrowser,
         enabled: input.health?.ok === true,
       },
     )
