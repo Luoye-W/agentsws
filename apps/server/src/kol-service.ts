@@ -23,11 +23,16 @@
  */
 
 import type {
+  KolCampaignAcceptView,
+  KolCampaignGroup,
+  KolCampaignPick,
+  KolCampaignView,
   KolContactView,
   KolCreatorDetail,
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
+  KolOutreachView,
   KolPort,
   KolSearchHit,
   KolSearchResult,
@@ -36,7 +41,9 @@ import type {
 import { ApiError } from '@agentsws/api'
 import type {
   ApprovalBus,
+  Assignment,
   AssignmentId,
+  ChangeKind,
   Clock,
   Collaboration,
   CollaborationStage,
@@ -49,10 +56,12 @@ import type {
   KolChannel,
   KolUtm,
   Mandate,
+  MaybePromise,
   ObjectRef,
   PersonId,
   PlatformAccount,
   ProvenanceState,
+  StagedChange,
   TrackedLink,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -63,16 +72,24 @@ import {
   affiliateCode,
   applyUtm,
   buildUtm,
+  type CampaignBrief,
   collaborationStageName,
   deliverableReviewName,
+  draftOutreach,
   type ImportedAccount,
   importAccounts,
   importSummary,
   type MergeProfile,
+  nextInSequence,
   normalizeHandle,
+  type OutreachStep,
+  outreachQuota,
   parseCreatorUrl,
+  planCampaign,
   rankCreators,
+  roleIdOfChannel,
   StageTransitionError,
+  scoreCreator,
   suggestMerges,
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
@@ -204,8 +221,16 @@ export interface KolServiceOptions {
   secrets: SecretStore
   clock: Clock
   approvals: ApprovalBus
-  /** 15 §5 变更账本的 stage 口（审核结论与合作走它）。 */
-  ledger: { stage(input: StageInput): Promise<StageOutcome> }
+  /**
+   * 15 §5 变更账本的 stage / list 口。
+   *
+   * `list` 是日配额与序列跟进用的：**"今天发了几封"与"这个人发到第几封了"都只有
+   * 账本知道**——另记一张表就是第二本账，两本账必然对不上。
+   */
+  ledger: {
+    stage(input: StageInput): Promise<StageOutcome>
+    list(filter: { workspace_id: WorkspaceId; kind?: ChangeKind }): Promise<StagedChange[]>
+  }
   /** 05 §4 生效配置：额度与等级从本次那条分配来。 */
   effectiveConfig(id: AssignmentId): EffectiveConfig
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
@@ -215,6 +240,23 @@ export interface KolServiceOptions {
    * 其余的路（导入、公共库、建联、合作、审核、归因）一条都不少。
    */
   channels?: KolChannelsAssembly
+  /**
+   * 这个人在这个品牌里持有的分配（campaign 那一条按渠道挑本人自己那条职责用）。
+   *
+   * **不做并集**（05 §4）：同一个人只勾了 YouTube，就只能建 YouTube 那几条合作。
+   */
+  assignmentsOf(person_id: PersonId): Assignment[]
+  /**
+   * 现在谁持有某条职责（序列跟进那条定时用它找"用谁的分配去提"）。
+   *
+   * 定时任务没有"当前用户"——一封跟进信总得挂在某个人的额度与队列上，
+   * 而那个人只能是这条渠道职责的持有人。
+   */
+  holdersOf(role_id: string): Assignment[]
+  /** 品牌名（开发信模板里的 `brand`）。 */
+  brandName(): string
+  /** 一个人的显示名（开发信的署名）。取不到就用 id。 */
+  personName(person_id: PersonId): MaybePromise<string>
 }
 
 export interface KolServiceAssembly {
@@ -226,10 +268,39 @@ export interface KolServiceAssembly {
    * "联系方式的 key 名长什么样"就多一份真源。
    */
   revealContact(contact_id: string): string | undefined
+  /**
+   * 序列跟进的定时方（48 §5.2「首封 / 3 天 / 7 天」）。
+   *
+   * 调度器**按品牌各跑一轮**（照 WP66 的写法）。每一封仍是一张 `kol_outreach`
+   * staged change 走 guardrail——定时的只是"什么时候该提"，提出来之后那条路
+   * 与人手点的那一封一个字不差。
+   */
+  sweepSequences(): Promise<KolSequenceSweep>
+}
+
+/** 一轮序列跟进的结果（调度器把它写进任务的 `last_result`）。 */
+export interface KolSequenceSweep {
+  /** 看了几条"已建联但还没回音"的合作。 */
+  scanned: number
+  /** 提了几封跟进信。 */
+  staged: number
+  /** 没提的那几条与为什么（卡面上说不出来的事，日志里要说得出来）。 */
+  skipped: { collaboration_id: string; reason: string }[]
 }
 
 const COLLAB_ACTION = 'stage_collaboration'
 const REVIEW_ACTION = 'stage_deliverable_review'
+const OUTREACH_ACTION = 'stage_outreach'
+
+/** 开发信的日配额默认值（职责 yml 的 `max_outreach_per_day`）。 */
+export const DEFAULT_OUTREACH_CAP = 30
+
+/** 三封信在卡面上的说法。 */
+const SEQUENCE_LABEL: Readonly<Record<OutreachStep, string>> = {
+  first: '一封',
+  follow_up: '二封（跟进）',
+  final: '三封（收尾）',
+}
 
 export function createKolService(options: KolServiceOptions): KolServiceAssembly {
   const { store, secrets, clock, approvals, ledger, appendEvent } = options
@@ -343,6 +414,205 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         }
       }),
     }))
+
+  /* ── WP68：开发信、序列跟进、campaign 向导 ─────────────────────────── */
+
+  /**
+   * 这个人首选的联系方式（邮箱优先）。
+   *
+   * 返回的是**那条记录**，不是地址——地址只有发信那一跳从加密库取。
+   */
+  const contactOf = (creator_id: string): CreatorContact | undefined => {
+    const all = store.contacts(creator_id)
+    return all.find((c) => c.kind === 'email') ?? all[0]
+  }
+
+  /**
+   * 抑制名单：在这条渠道上明确谢绝过的那些人的联系方式 **key 名**。
+   *
+   * 放 key 名而不是地址是要紧的一条：guardrail 比的是
+   * `suppressionKey(收件人) ∈ suppressionKey(名单)`，而 `suppressionKey` 对一个
+   * 没有 `@` 的字符串就是原样小写——于是比对照样成立，而**账本里一个真地址都没有**。
+   */
+  const suppressedRefs = (): string[] =>
+    store
+      .collaborations({ stage: 'declined' })
+      .flatMap((c) => store.contacts(c.creator_id).map((ct) => ct.value_ref))
+
+  /** 这条分配今天发了几封（**只问账本**，不另记一张表）。 */
+  const outreachQuotaOf = async (
+    assignment_id: AssignmentId,
+  ): Promise<ReturnType<typeof outreachQuota>> => {
+    const { mandate } = actionOf(assignment_id, OUTREACH_ACTION)
+    const cap =
+      typeof mandate.caps.max_outreach_per_day === 'number'
+        ? mandate.caps.max_outreach_per_day
+        : DEFAULT_OUTREACH_CAP
+    const changes = await ledger.list({ workspace_id, kind: 'kol_outreach' })
+    return outreachQuota({
+      cap,
+      sent_at: changes.filter((c) => c.assignment_id === assignment_id).map((c) => c.created_at),
+      now: clock.now(),
+    })
+  }
+
+  /** 这个人在这条渠道职责上的那一条分配（没有 = 他不做这条活儿）。 */
+  const assignmentForChannel = (person_id: PersonId, channel: KolChannel): Assignment | undefined =>
+    options
+      .assignmentsOf(person_id)
+      .find(
+        (a) =>
+          a.role_id === roleIdOfChannel(channel) &&
+          a.workspace_id === workspace_id &&
+          a.revoked_at === undefined,
+      )
+
+  /**
+   * 现在谁持有这条渠道职责（定时跟进用他那条分配去提）。
+   *
+   * 没人持有就不提——一封没有主人的信，没人负责、也没人点。
+   */
+  const ownerOfChannel = (channel: KolChannel): Assignment | undefined =>
+    options.holdersOf(roleIdOfChannel(channel))[0]
+
+  /** 起草并提一封开发信。`step` 不给就按序列算下一封。 */
+  const stageOutreach = async (input: {
+    actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: string }
+    creator: Creator
+    channel: KolChannel
+    step: OutreachStep
+    vars: { product: string; reason: string; brand_pitch: string; sender_name: string }
+  }): Promise<KolOutreachView> => {
+    const quota = await outreachQuotaOf(input.actor.assignment_id)
+    const contact = contactOf(input.creator.id)
+    const empty = { step: input.step, subject: '', body: '', forbidden_hits: [], missing_vars: [] }
+    if (contact === undefined)
+      return {
+        ...empty,
+        quota,
+        staged: false,
+        message:
+          '这个红人名下还没有联系方式。先在详情页加一条（邮箱直接写进本机加密库），或者从渠道的"在哪儿能找到"那一步拿一个。',
+      }
+    if (!quota.allowed)
+      return {
+        ...empty,
+        quota,
+        staged: false,
+        message: `今天这条职责的开发信配额用完了（上限 ${quota.cap} 封）。明天再发——一天多过这个数，收信的人会觉得是群发轰炸。`,
+      }
+    const suppressed = suppressedRefs()
+    if (suppressed.some((ref) => ref === contact.value_ref))
+      return {
+        ...empty,
+        quota,
+        staged: false,
+        message: '这个人在这条渠道上已经明确谢绝过了。名单上的人一封都不再发。',
+      }
+
+    const draft = draftOutreach(input.step, {
+      creator_name: input.creator.display_name,
+      brand: options.brandName(),
+      channel: input.channel,
+      ...input.vars,
+    })
+    if (!draft.ok)
+      return {
+        step: draft.step,
+        subject: draft.subject,
+        body: draft.body,
+        forbidden_hits: draft.forbidden_hits,
+        missing_vars: draft.missing_vars,
+        quota,
+        staged: false,
+        message:
+          draft.forbidden_hits.length > 0
+            ? `这封信里写了「${draft.forbidden_hits.join('」「')}」这类承诺。给钱、白送样品、保证效果都要走"建一条合作"那条路（那一步永远要人点头），不能在信里写死。`
+            : `还差几格没填：${draft.missing_vars.join('、')}。缺了就不起草——拿一封写着 {{product}} 的信去问人要不要发，比不起草更糟。`,
+      }
+
+    const run_id = `run_kol_${nextId('o')}`
+    const target: ObjectRef = { type: 'creator_contact', id: contact.id }
+    const { mandate, level } = actionOf(input.actor.assignment_id, OUTREACH_ACTION)
+    const outcome = await ledger.stage({
+      workspace_id,
+      role_id: input.actor.role_id,
+      assignment_id: input.actor.assignment_id,
+      run_id,
+      change_set_id: `cs_${run_id}`,
+      kind: 'kol_outreach',
+      target,
+      before: null,
+      after: {
+        step: draft.step,
+        channel: input.channel,
+        creator_id: input.creator.id,
+        subject: draft.subject,
+        body: draft.body,
+        // 收件人与名单里放的都是加密库 key 名（见 `suppressedRefs` 的注释）
+        recipients: [contact.value_ref],
+        suppressed,
+        suppression_checked: true,
+        // 跟进那一封要用首封同一组变量——跟进信提到的产品必须和首封是同一个
+        vars: input.vars,
+      },
+      notes: [`给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`],
+      created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
+      mandate,
+      level,
+      provenance: provenanceOf(run_id, [target, { type: 'creator', id: input.creator.id }]),
+      approval: {
+        title: `开发信：${input.creator.display_name}（${SEQUENCE_LABEL[draft.step]}）`,
+        summary: draft.subject,
+        recipients: [{ person: input.actor.person_id, via: 'role_holder' }],
+        proposer: {
+          kind: 'agent',
+          id: `agent_${input.actor.role_id}`,
+          assignment_id: input.actor.assignment_id,
+        },
+        rule: 'role_holder',
+        separation_of_duties: false,
+        source_events: [],
+      },
+    })
+    if (!outcome.ok)
+      return {
+        step: draft.step,
+        subject: draft.subject,
+        body: draft.body,
+        forbidden_hits: draft.forbidden_hits,
+        missing_vars: [],
+        quota,
+        staged: false,
+        message: outcome.message,
+      }
+    emit('kol.outreach_staged', input.actor.person_id, {
+      creator_id: input.creator.id,
+      channel: input.channel,
+      step: draft.step,
+      change_id: outcome.change.id,
+      approval_item_id: outcome.approval.id,
+      auto_approved: outcome.approval.automation.auto_approved,
+    })
+    // 首封提上去 = 这条合作进了"已建联"（序列跟进靠这一格找人）
+    const collab = store
+      .collaborations({ channel: input.channel })
+      .find((c) => c.creator_id === input.creator.id && c.stage === 'sourced')
+    if (draft.step === 'first' && collab !== undefined)
+      store.saveCollaboration({ ...collab, stage: 'contacted' })
+    return {
+      step: draft.step,
+      subject: draft.subject,
+      body: draft.body,
+      forbidden_hits: [],
+      missing_vars: [],
+      quota: { ...quota, sent_today: quota.sent_today + 1, remaining: quota.remaining - 1 },
+      staged: true,
+      change_id: outcome.change.id,
+      approval_item_id: outcome.approval.id,
+      auto_approved: outcome.approval.automation.auto_approved,
+    }
+  }
 
   const port: KolPort = {
     creators(_actor, filter) {
@@ -864,6 +1134,232 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       } satisfies KolImportView
     },
 
+    async outreach(actor, input) {
+      const creator = creatorOr404(input.creator_id)
+      // `reason` 不给就用打分里最高那一项的那句带数的话——那正是"为什么找他"
+      const account = store.accounts({ creator_id: creator.id, channel: input.channel })[0]
+      const top =
+        account === undefined
+          ? undefined
+          : [...scoreCreator(account, { now: clock.now() }).factors].sort(
+              (a, b) => b.score - a.score,
+            )[0]
+      return stageOutreach({
+        actor,
+        creator,
+        channel: input.channel,
+        step: input.step ?? 'first',
+        vars: {
+          product: input.product,
+          reason: input.reason ?? (top === undefined ? '' : `${top.why}，`),
+          brand_pitch: input.brand_pitch ?? `我们是 ${options.brandName()}。`,
+          sender_name: input.sender_name ?? (await options.personName(actor.person_id)),
+        },
+      })
+    },
+
+    async planCampaign(actor, input) {
+      const brief: CampaignBrief = {
+        goal: input.goal,
+        budget: input.budget,
+        currency: input.currency ?? 'USD',
+        channels: input.channels,
+        headcount: input.headcount,
+        ...(input.criteria === undefined
+          ? {}
+          : {
+              criteria: {
+                ...(input.criteria.category === undefined
+                  ? {}
+                  : { category: input.criteria.category }),
+                ...(input.criteria.language === undefined
+                  ? {}
+                  : { language: input.criteria.language }),
+                ...(input.criteria.region === undefined ? {} : { region: input.criteria.region }),
+                ...(input.criteria.followers_band === undefined
+                  ? {}
+                  : { followers_band: input.criteria.followers_band }),
+              },
+            }),
+      }
+      const plan = planCampaign(brief, store.accounts(), clock.now())
+      const campaign_id = nextId('cmp')
+      const existing = store.collaborations()
+      const by_channel: KolCampaignGroup[] = plan.by_channel.map((group) => {
+        const mine = assignmentForChannel(actor.person_id, group.channel)
+        const picks: KolCampaignPick[] = group.picks.map((pick) => ({
+          creator_id: pick.account.creator_id,
+          display_name:
+            store.creator(pick.account.creator_id)?.display_name ?? pick.account.creator_id,
+          channel: group.channel,
+          handle: pick.account.handle,
+          ...(pick.account.followers === undefined ? {} : { followers: pick.account.followers }),
+          score: pick.score.total,
+          why: [...pick.score.factors]
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 2)
+            .map((f) => f.why),
+          already: existing.some(
+            (c) => c.creator_id === pick.account.creator_id && c.channel === group.channel,
+          ),
+        }))
+        return {
+          channel: group.channel,
+          role_id: group.role_id,
+          allowed: mine !== undefined,
+          ...(mine === undefined ? {} : { assignment_id: mine.id }),
+          ...(mine === undefined
+            ? {
+                reason: `你名下没有「${group.role_id}」这条职责，所以这一组只能看不能建。要做这条渠道，让 owner 把这条职责分给你——一次 campaign 不会把别人的权限并给你（05 §4）。`,
+              }
+            : {}),
+          picks,
+        }
+      })
+
+      const view: KolCampaignView = {
+        campaign_id,
+        ready: plan.ready,
+        gaps: plan.gaps,
+        message: plan.message,
+        by_channel,
+        budget_per_creator: plan.budget_per_creator,
+      }
+      if (!plan.ready) return view
+
+      const total = by_channel.reduce((n, g) => n + g.picks.length, 0)
+      const blocked = by_channel.filter((g) => !g.allowed)
+      const item = await approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'kol_campaign',
+        role_id: actor.role_id,
+        subject: { object: { type: 'campaign', id: campaign_id } },
+        dedupe_key: `${workspace_id}:kol_campaign:${campaign_id}`,
+        title: `campaign 挑人清单：${input.goal}（${total} 人）`,
+        summary:
+          `按 ${input.channels.join(' / ')} 分组，人均预算 ${plan.budget_per_creator} ${brief.currency}。` +
+          `接受就为每个人建一条合作（阶段从"已找到"开始），每条动作走各自渠道职责的额度。` +
+          (blocked.length === 0
+            ? ''
+            : `其中 ${blocked.map((g) => g.channel).join(' / ')} 这 ${blocked.length} 组你名下没有对应职责，灰着不建。`),
+        payload: { campaign_id, brief, by_channel },
+        evidence: {
+          source_events: [],
+          provenance: {
+            seen: by_channel.flatMap((g) =>
+              g.picks.map((p): ObjectRef => ({ type: 'creator', id: p.creator_id })),
+            ),
+          },
+          diff: {
+            before: null,
+            after: { collaborations: by_channel.filter((g) => g.allowed).length },
+            summary: '接受后按渠道分别建一批合作',
+          },
+          precheck: {},
+        },
+        proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+        // L2：清单本身不改任何东西，它只是"这批人你认不认"
+        automation: { level_at_creation: 'L2' },
+        routing: {
+          recipients: [{ person: actor.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 48,
+            business_hours: true,
+            chain: ['scope_manager'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+      })
+      if (item.state !== 'blocked') view.approval_item_id = item.id
+      emit('kol.campaign_planned', actor.person_id, {
+        campaign_id,
+        channels: input.channels,
+        picks: total,
+        blocked_channels: blocked.map((g) => g.channel),
+        ...(view.approval_item_id === undefined ? {} : { approval_item_id: view.approval_item_id }),
+      })
+      return view
+    },
+
+    async acceptCampaign(actor, approval_item_id) {
+      const item = await approvals.get(approval_item_id)
+      if (item === undefined || item.kind !== 'kol_campaign' || item.workspace_id !== workspace_id)
+        throw new ApiError('not_found', '没有这张 campaign 清单卡')
+      const payload = item.payload as {
+        campaign_id?: string
+        by_channel?: KolCampaignGroup[]
+      }
+      const campaign_id = payload.campaign_id ?? approval_item_id
+      const created: KolCampaignAcceptView['created'] = []
+      const skipped: KolCampaignAcceptView['skipped'] = []
+
+      for (const group of payload.by_channel ?? []) {
+        /*
+         * **每一组重新查一次本人有没有这条职责**，不信卡上那一格。
+         * 卡可能是昨天出的，而职责昨天分出去今天收回来是一件正常的事——
+         * 按卡面上的旧结论去建，就是拿一张过期的授权在写库。
+         */
+        const mine = assignmentForChannel(actor.person_id, group.channel)
+        if (mine === undefined) {
+          skipped.push({
+            channel: group.channel,
+            reason: `你名下没有「${group.role_id}」这条职责。一次 campaign 不并集权限（05 §4）。`,
+          })
+          continue
+        }
+        for (const pick of group.picks) {
+          if (store.creator(pick.creator_id) === undefined) {
+            skipped.push({
+              channel: group.channel,
+              creator_id: pick.creator_id,
+              reason: '这个人已经不在库里了（可能刚被合并过）。',
+            })
+            continue
+          }
+          const already = store
+            .collaborations({ channel: group.channel })
+            .find((c) => c.creator_id === pick.creator_id)
+          if (already !== undefined) {
+            skipped.push({
+              channel: group.channel,
+              creator_id: pick.creator_id,
+              reason: '这条渠道上已经有一条合作了，不重复建。',
+            })
+            continue
+          }
+          const out = await port.createCollaboration(
+            // 用**那条渠道职责自己的分配**去建（额度、等级、权限全从它来）
+            { ...actor, assignment_id: mine.id, role_id: mine.role_id },
+            { creator_id: pick.creator_id, channel: group.channel, campaign_id },
+          )
+          if (out.collaboration === undefined) {
+            skipped.push({
+              channel: group.channel,
+              creator_id: pick.creator_id,
+              reason: out.message ?? '被 guardrail 拦下了。',
+            })
+            continue
+          }
+          created.push({
+            channel: group.channel,
+            creator_id: pick.creator_id,
+            collaboration_id: out.collaboration.id,
+          })
+        }
+      }
+      emit('kol.campaign_accepted', actor.person_id, {
+        campaign_id,
+        approval_item_id,
+        created: created.length,
+        skipped: skipped.length,
+      })
+      return { campaign_id, created, skipped }
+    },
+
     async mergeSuggestions(actor) {
       const names = new Map(store.creators().map((c) => [c.id, c.display_name]))
       const rows: KolMergeSuggestionView[] = []
@@ -980,6 +1476,96 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     return true
   }
 
+  /**
+   * 序列跟进（48 §5.2「首封 / 3 天 / 7 天」）。
+   *
+   * 三条判断都不在这里写第二遍：**该不该有下一封**由 `kol-core` 的
+   * `nextInSequence` 说（回过信的不跟、收尾发过的不跟、名单上的不跟），
+   * **今天还能发几封**由 `outreachQuota` 说，**这一封能不能提**由 guardrail 说。
+   * 这个函数只回答"现在轮到谁了"。
+   */
+  const sweepSequences = async (): Promise<KolSequenceSweep> => {
+    const now = clock.now()
+    const nowMs = Date.parse(now)
+    const suppressed = suppressedRefs()
+    const changes = await ledger.list({ workspace_id, kind: 'kol_outreach' })
+    const out: KolSequenceSweep = { scanned: 0, staged: 0, skipped: [] }
+
+    // 只看"已建联但还没回音"的——回过信的人接下来是人在谈，不是机器在跟
+    for (const collab of store.collaborations({ stage: 'contacted' })) {
+      out.scanned += 1
+      const creator = store.creator(collab.creator_id)
+      const contact = contactOf(collab.creator_id)
+      if (creator === undefined || contact === undefined) {
+        out.skipped.push({ collaboration_id: collab.id, reason: '这个人名下没有联系方式' })
+        continue
+      }
+      const sent = changes
+        .filter((c) => c.target.type === 'creator_contact' && c.target.id === contact.id)
+        .map((c) => ({
+          step: ((c.after as { step?: OutreachStep }).step ?? 'first') as OutreachStep,
+          at: c.created_at,
+          vars: (c.after as { vars?: Record<string, string> }).vars,
+        }))
+        .sort((a, b) => a.at.localeCompare(b.at))
+      const next = nextInSequence({
+        sent: sent.map(({ step, at }) => ({ step, at })),
+        replied: false,
+        contact: contact.value_ref,
+        suppressed,
+      })
+      if (next === undefined) {
+        out.skipped.push({ collaboration_id: collab.id, reason: '序列走完了，或者这个人在名单上' })
+        continue
+      }
+      if (next.due_at === '' || Date.parse(next.due_at) > nowMs) {
+        out.skipped.push({ collaboration_id: collab.id, reason: `还没到时候（${next.why}）` })
+        continue
+      }
+      // 跟进那一封用**首封那一封的变量**：跟进信提到的产品必须和首封是同一个
+      const vars = sent.find((x) => x.step === 'first')?.vars
+      if (vars === undefined || typeof vars.product !== 'string') {
+        out.skipped.push({
+          collaboration_id: collab.id,
+          reason: '找不到首封那一封的变量，跟进信提到的产品会对不上，所以不提',
+        })
+        continue
+      }
+      // 用**这条渠道职责的持有人**那条分配去提（额度与等级从它来）
+      const holder = ownerOfChannel(collab.channel)
+      if (holder === undefined) {
+        out.skipped.push({
+          collaboration_id: collab.id,
+          reason: `现在没有人持有「${roleIdOfChannel(collab.channel)}」这条职责`,
+        })
+        continue
+      }
+      const view = await stageOutreach({
+        actor: {
+          person_id: holder.person_id,
+          assignment_id: holder.id,
+          role_id: holder.role_id,
+        },
+        creator,
+        channel: collab.channel,
+        step: next.step,
+        vars: {
+          product: vars.product,
+          reason: vars.reason ?? '',
+          brand_pitch: vars.brand_pitch ?? '',
+          sender_name: vars.sender_name ?? '',
+        },
+      })
+      if (view.staged) out.staged += 1
+      else
+        out.skipped.push({
+          collaboration_id: collab.id,
+          reason: view.message ?? '这一封没提上去',
+        })
+    }
+    return out
+  }
+
   return {
     port,
     revealContact(contact_id) {
@@ -989,6 +1575,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         return undefined
       }
     },
+    sweepSequences,
   }
 }
 

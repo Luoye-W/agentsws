@@ -49,7 +49,7 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { brandNameOf } from '@agentsws/contracts'
+import { brandNameOf, KOL_CHANNEL_IDS } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
@@ -168,6 +168,7 @@ import {
   registerBackup,
   registerDailyPlan,
   registerIdempotencySweep,
+  registerKolSequence,
   registerLearning,
   registerMailPoll,
   registerMeetingPoll,
@@ -1125,6 +1126,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       approvals: txn.approvals,
       ledger: txn.ledger,
       effectiveConfig: (id) => roles.effectiveConfig(id),
+      // 05 §4：campaign 那一条按渠道挑**本人自己**那条职责，不做并集
+      assignmentsOf: (person_id) => roles.assignments.listByPerson(person_id),
+      // 序列跟进那条定时用持有人那条分配去提（定时任务没有"当前用户"）
+      holdersOf: (role_id) =>
+        roles.assignments
+          .listByRole(role_id)
+          .filter((a) => a.workspace_id === ws && a.revoked_at === undefined),
+      // 52 O1 那一份真源：品牌名与工作区名是同一件事，不在这里拼第二次
+      brandName: () => brandNameOfWorkspace(ws),
+      personName: async (person_id) => (await identity.getPerson(person_id))?.name ?? person_id,
       appendEvent,
       random,
     })
@@ -1706,6 +1717,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return out
     },
   })
+  /*
+   * WP68 / 48 §5.2：红人开发信的序列跟进，每天一轮，**按品牌各跑一轮**
+   * （照 WP66 的写法）。一个品牌的跟进信只能用那个品牌的红人库与那个品牌的额度。
+   */
+  registerKolSequence(schedule.scheduler, {
+    sweep: async () => {
+      const out = { scanned: 0, staged: 0, skipped: [] as unknown[] }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.kolService.sweepSequences()
+        out.scanned += one.scanned
+        out.staged += one.staged
+        // 哪个品牌的哪一条没提要看得出来（一个坏了不该拖垮别的）
+        out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
+      }
+      return out
+    },
+  })
   // WP55 / 48 §4 L3 #4：出站对账（每分钟）。`sent_unknown` 绝不自动重发
   registerReconcileDeliveries(schedule.scheduler, {
     reconcile: async () => {
@@ -1807,6 +1835,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       backup: dbDir !== undefined,
       pricing: true,
       orgDuplicates: true,
+      /*
+       * WP68：有人持有红人那几条渠道职责时才建这一条。
+       *
+       * 没人做红人营销的机器上建一条每天都跑一遍空库的任务，只是给 25 §3 的
+       * "机器在替你定时做哪几件事"那张清单添一行看不懂的东西。
+       */
+      kol: KOL_CHANNEL_IDS.some(
+        (channel) => roles.assignments.listByRole(`kol.${channel}`).length > 0,
+      ),
     },
   })
 

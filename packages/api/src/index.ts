@@ -187,6 +187,11 @@ export {
 } from './routes/join.js'
 export type {
   KolActor,
+  KolCampaignAcceptView,
+  KolCampaignBrief,
+  KolCampaignGroup,
+  KolCampaignPick,
+  KolCampaignView,
   KolCollaborationInput,
   KolContactView,
   KolCreatorDetail,
@@ -195,6 +200,7 @@ export type {
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
+  KolOutreachView,
   KolPort,
   KolSearchHit,
   KolSearchResult,

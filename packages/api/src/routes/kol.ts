@@ -210,6 +210,77 @@ export interface KolSearchHit {
   in_library?: boolean
 }
 
+/**
+ * 一封开发信起草完的样子（`POST /v1/kol/outreach`）。
+ *
+ * **禁承诺是 block 不是转人审**：`staged: false` + `forbidden_hits` 时这一封
+ * 根本没进队列——一封写着"我们付你 800 美元"的信不该存在"人点一下就发出去"的路径。
+ */
+export interface KolOutreachView extends KolStagedView {
+  step: 'first' | 'follow_up' | 'final'
+  subject: string
+  body: string
+  forbidden_hits: string[]
+  /** 变量缺了哪几格（缺了就不起草——拿一封写着 {{product}} 的信去问人更糟）。 */
+  missing_vars: string[]
+  /** 今天还能发几封（职责 yml 的 `max_outreach_per_day`）。 */
+  quota: { cap: number; sent_today: number; remaining: number; allowed: boolean }
+}
+
+/** campaign 清单里的一条。 */
+export interface KolCampaignPick {
+  creator_id: string
+  display_name: string
+  channel: KolChannel
+  handle: string
+  followers?: number
+  score: number
+  /** 为什么挑他（打分里最高那一项的一句带数的话）。 */
+  why: string[]
+  /** 已经有这条渠道的合作了（接受时跳过，不重复建）。 */
+  already: boolean
+}
+
+/**
+ * 一条渠道那一组。
+ *
+ * **`allowed: false` 的那几组在卡面上灰显**（05 §4「不做跨 Assignment 并集」）：
+ * 同一个人只勾了 YouTube 那条职责，就只能建 YouTube 那几条合作，
+ * Instagram 那几条摆在那里给他看，但点不动，并说清楚为什么。
+ */
+export interface KolCampaignGroup {
+  channel: KolChannel
+  role_id: string
+  /** 本人有没有这条渠道职责的分配（有才建得了）。 */
+  allowed: boolean
+  /** 建的时候用的是这条分配（额度、等级、权限全从它来）。 */
+  assignment_id?: string
+  /** `allowed: false` 时那一句人话。 */
+  reason?: string
+  picks: KolCampaignPick[]
+}
+
+export interface KolCampaignView {
+  campaign_id: string
+  /** 四格齐了没有；没齐时 `by_channel` 是空的。 */
+  ready: boolean
+  gaps: string[]
+  /** 缺格时那一句人话。 */
+  message: string
+  by_channel: KolCampaignGroup[]
+  budget_per_creator: number
+  /** 这张清单卡（`kol_campaign`）。 */
+  approval_item_id?: string
+}
+
+/** 接受一张清单卡之后真建出来了什么。 */
+export interface KolCampaignAcceptView {
+  campaign_id: string
+  created: { channel: KolChannel; creator_id: string; collaboration_id: string }[]
+  /** 没建的那几条与为什么（没这条职责 / 已经有合作了 / 额度到顶）。 */
+  skipped: { channel: KolChannel; creator_id?: string; reason: string }[]
+}
+
 /** 提了一条变更之后回给界面的那一份（卡在哪、拦没拦）。 */
 export interface KolStagedView {
   staged: boolean
@@ -265,6 +336,24 @@ export interface KolTrackedLinkInput {
   campaign: string
   affiliate_code?: string | undefined
   utm?: Partial<Record<keyof KolUtm, string | undefined>> | undefined
+}
+
+/** campaign 向导那四格（48 §5.2：目标 / 预算 / 渠道 / 人数）。 */
+export interface KolCampaignBrief {
+  goal: string
+  budget: number
+  currency?: string | undefined
+  channels: KolChannel[]
+  headcount: number
+  /** 打分条件（类目 / 语言 / 地区 / 粉丝带）。 */
+  criteria?:
+    | {
+        category?: string | undefined
+        language?: string | undefined
+        region?: string | undefined
+        followers_band?: { min: number; max: number } | undefined
+      }
+    | undefined
 }
 
 /**
@@ -344,6 +433,25 @@ export interface KolPort {
     actor: KolActor,
     input: { filename?: string | undefined; content: string },
   ): MaybePromise<KolImportView>
+
+  /** 起草一封开发信并提上去（L2 起；禁承诺当场 block）。 */
+  outreach(
+    actor: KolActor,
+    input: {
+      creator_id: string
+      channel: KolChannel
+      step?: 'first' | 'follow_up' | 'final' | undefined
+      product: string
+      reason?: string | undefined
+      brand_pitch?: string | undefined
+      sender_name?: string | undefined
+    },
+  ): MaybePromise<KolOutreachView>
+
+  /** campaign 向导：四格 → 一份按渠道分好组的挑人清单 + 一张清单卡。 */
+  planCampaign(actor: KolActor, input: KolCampaignBrief): MaybePromise<KolCampaignView>
+  /** 接受一张清单卡：按渠道分别建合作，**每条走各自渠道职责的额度**。 */
+  acceptCampaign(actor: KolActor, approval_item_id: string): MaybePromise<KolCampaignAcceptView>
 
   mergeSuggestions(actor: KolActor): MaybePromise<{ rows: KolMergeSuggestionView[] }>
   acceptMerge(actor: KolActor, id: string): MaybePromise<{ creator: Creator }>
@@ -456,6 +564,35 @@ const TrackedLinkBody = z.object({
       campaign: z.string().max(100).optional(),
       term: z.string().max(60).optional(),
       content: z.string().max(100).optional(),
+    })
+    .optional(),
+})
+
+const OutreachBody = z.object({
+  creator_id: z.string().min(1),
+  channel: ChannelSchema,
+  step: z.enum(['first', 'follow_up', 'final']).optional(),
+  /** 想聊的那个产品。**必填**：缺了就不起草（拿一封写着 {{product}} 的信去问人更糟）。 */
+  product: z.string().min(1).max(200),
+  reason: z.string().max(500).optional(),
+  brand_pitch: z.string().max(500).optional(),
+  sender_name: z.string().max(100).optional(),
+})
+
+const CampaignBody = z.object({
+  goal: z.string().min(1).max(200),
+  budget: z.number().positive(),
+  currency: z.string().length(3).optional(),
+  channels: z.array(ChannelSchema).min(1).max(5),
+  headcount: z.number().int().positive().max(200),
+  criteria: z
+    .object({
+      category: z.string().max(100).optional(),
+      language: z.string().max(20).optional(),
+      region: z.string().max(10).optional(),
+      followers_band: z
+        .object({ min: z.number().int().nonnegative(), max: z.number().int().positive() })
+        .optional(),
     })
     .optional(),
 })
@@ -855,6 +992,58 @@ export function kolRoutes(): Route[] {
         ok(c, await portOf(deps).importTable(actorOf(c), await body(c, ImportBody)), 201),
     ),
 
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/outreach',
+        operationId: 'draftKolOutreach',
+        summary:
+          '起草一封开发信并提上去（L2 起）。禁承诺是 **block 不是转人审**——写了给钱 / 白送 / 保证的话，这一封根本不进队列',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTACT,
+        body: OutreachBody,
+        returns: 'KolOutreachView',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).outreach(actorOf(c), await body(c, OutreachBody)), 201),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/campaigns',
+        operationId: 'planKolCampaign',
+        summary:
+          'campaign 向导（48 §5.2）：目标 / 预算 / 渠道 / 人数 → 一份按渠道分好组的挑人清单 + 一张清单卡。**只出清单，不出动作**',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CREATOR,
+        body: CampaignBody,
+        returns: 'KolCampaignView',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).planCampaign(actorOf(c), await body(c, CampaignBody)), 201),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/campaigns/:id/accept',
+        operationId: 'acceptKolCampaign',
+        summary:
+          '接受一张清单卡：为清单上每个人建一条合作（`sourced`）。**每条走各自渠道职责的额度**，本人没有那条职责的整组跳过并说明',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '清单卡的 approval_item_id' },
+        ],
+        returns: 'KolCampaignAcceptView',
+      },
+      async (c, deps) => ok(c, await portOf(deps).acceptCampaign(actorOf(c), param(c, 'id'))),
+    ),
     route(
       {
         method: 'get',
