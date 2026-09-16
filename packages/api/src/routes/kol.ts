@@ -173,6 +173,43 @@ export interface KolImportView {
   note?: string
 }
 
+/**
+ * 找人的结果（`GET /v1/kol/search`）。
+ *
+ * **"拿不到"与"搜到 0 个"必须分得开**（36 §3）：`ok: false` 时 `message` 是一句
+ * 人话（没连 / 要申请 / 要买档 / 配额用完），界面照它说；`ok: true` 而
+ * `rows` 是空的，才是真的"这个条件下没人"。
+ */
+export interface KolSearchResult {
+  ok: boolean
+  /** 这一份是从哪儿来的：`channel` = 你自己的平台连接；`public_library` = agentsws 的公共库。 */
+  source: 'channel' | 'public_library'
+  rows: KolSearchHit[]
+  /** `ok: false` 时那一句人话。 */
+  message?: string
+  /** 机器可读的原因（`not_connected` / `needs_approval` / `quota_exhausted` / …）。 */
+  reason?: string
+  /** 这份数据什么时候看到的。 */
+  observed_at?: Iso8601
+}
+
+/** 搜出来的一条（还没进库——进库是"加到红人库"那一下的事）。 */
+export interface KolSearchHit {
+  channel: KolChannel
+  handle: string
+  url: string
+  display_name: string
+  followers?: number
+  engagement_rate?: number
+  category?: string
+  language?: string
+  region?: string
+  /** 公共库那一档才有：库里有没有这个人的联系方式（reveal 要花积分）。 */
+  has_contact?: boolean
+  /** 这个人已经在本地库里了（别重复加）。 */
+  in_library?: boolean
+}
+
 /** 提了一条变更之后回给界面的那一份（卡在哪、拦没拦）。 */
 export interface KolStagedView {
   staged: boolean
@@ -245,6 +282,16 @@ export interface KolPort {
       limit?: number | undefined
     },
   ): MaybePromise<{ rows: KolCreatorRow[] }>
+  /**
+   * 去渠道上找人（48 §5.1 那条链的第一步）。
+   *
+   * 走哪条路由由 49 M2 的开关定：用我的 = 打这条渠道自己的接口；
+   * 用 agentsws 的 = 查云端公共库。两条路回的是同一个形状。
+   */
+  search(
+    actor: KolActor,
+    input: { channel: KolChannel; q: string; limit?: number | undefined },
+  ): MaybePromise<KolSearchResult>
   creator(actor: KolActor, id: string): MaybePromise<KolCreatorDetail | undefined>
   createCreator(actor: KolActor, input: KolCreatorInput): MaybePromise<KolCreatorDetail>
   patchCreator(actor: KolActor, id: string, input: KolCreatorPatch): MaybePromise<KolCreatorDetail>
@@ -456,6 +503,47 @@ export function kolRoutes(): Route[] {
           await portOf(deps).creators(actorOf(c), {
             ...(channel === undefined ? {} : { channel }),
             ...(q === undefined || q === '' ? {} : { q }),
+            ...(limit === undefined ? {} : { limit }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/search',
+        operationId: 'searchKolCreators',
+        summary:
+          '去渠道上找人：没连 / 要申请 / 要买档 / 配额用完各有一句人话，**与"搜到 0 个"分得开**',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CREATOR,
+        params: [
+          { name: 'channel', in: 'query', required: true, description: '哪条渠道' },
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            description:
+              '关键词（YouTube / Facebook）或者一串账号名（Instagram / TikTok / X 没有按关键词搜人这回事）',
+          },
+          { name: 'limit', in: 'query', description: '最多几条', schema: { type: 'integer' } },
+        ],
+        returns: 'KolSearchResult',
+      },
+      async (c, deps) => {
+        const channel = channelQuery(c)
+        if (channel === undefined) throw new ApiError('invalid_input', '得说清楚是哪条渠道')
+        const q = c.req.query('q')
+        if (q === undefined || q.trim() === '')
+          throw new ApiError('invalid_input', '得给一个关键词或者账号名')
+        const limit = intParam(c, 'limit')
+        return ok(
+          c,
+          await portOf(deps).search(actorOf(c), {
+            channel,
+            q: q.trim(),
             ...(limit === undefined ? {} : { limit }),
           }),
         )

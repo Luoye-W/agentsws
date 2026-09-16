@@ -133,6 +133,17 @@ const ICONS: Record<string, IconChoice> = {
   klaviyo: { kind: 'letter', letter: 'K' },
   aftership: { kind: 'letter', letter: 'A' },
   track17: { kind: 'letter', letter: '17' },
+  // WP68（48 §5.1 / §5.4）：红人那五条渠道从"待增加"改成可连。
+  //
+  // 五家都**走首字母单色徽标**，理由与 Klaviyo 那三条逐字相同：仓库里那份
+  // simple-icons 子集（v16.30.0，手抄进 GLYPHS 的那几条）里没有它们，而
+  // "去别处扒一个标志回来"既不合 CC0 也不合 36 §8 的商标纪律。抓官方图那条路
+  // （`pnpm icons:fetch`）是手动跑、人看过再提交的，不在这个 WP 的范围里。
+  youtube_data: { kind: 'letter', letter: 'Y' },
+  instagram_graph: { kind: 'letter', letter: 'I' },
+  facebook_graph: { kind: 'letter', letter: 'F' },
+  tiktok_research: { kind: 'letter', letter: 'T' },
+  x_api: { kind: 'letter', letter: 'X' },
   // ── 模型卡（设置页）─────────────────────────────────────────────────
   deepseek: { kind: 'glyph', glyph: 'deepseek' },
   // Simple Icons 里没有 OpenAI（品牌方要求下架）；这张卡说的也是"任何 OpenAI 兼容

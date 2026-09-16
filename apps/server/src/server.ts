@@ -132,8 +132,9 @@ import { createApprovalDirectory } from './housekeeping.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { importKnowledgePack } from './knowledge-pack.js'
-// WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
+// WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
+import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolService } from './kol-service.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
@@ -348,6 +349,13 @@ export interface ServerOptions {
    * 两边各自只用到 Response 的一小面（`text()` / `json()`），所以这里收一个交集。
    */
   cloudFetch?: CloudFetch & CloudEntryFetch
+  /**
+   * WP68（48 §5.4）：五条渠道适配器打出去用的 fetch。
+   *
+   * 生产不传（走 `globalThis.fetch`）；测试传一个假的，对着**真 URL 形状**断言——
+   * 这五家的接口没有可以随便调的沙箱，所以"形状对不对"只能这么验。
+   */
+  kolFetch?: KolFetch
   /**
    * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
    * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
@@ -1096,9 +1104,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP68（48 §5.4）：红人库的 `/v1` 面。建在记录源之前没有讲究，
      * 建在 `kol` 之后是必须的——它要那张库。
      */
+    /**
+     * WP68：五条渠道适配器真打出去的那一跳（凭据按连接从这个品牌那一段加密库取）。
+     * 生产路径不传 `kolFetch`，走全局 fetch；测试塞一个假的对着真 URL 断言。
+     */
+    const kolChannels = createKolChannels({
+      workspace_id: ws,
+      clock,
+      connections: () => connections.liveConnections(),
+      secrets: brandSecrets,
+      ...(options.kolFetch === undefined ? {} : { fetch: options.kolFetch }),
+    })
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
+      channels: kolChannels,
       // 联系方式的明文落在**这个品牌**那一段加密库里（key 名已按品牌加过前缀）
       secrets: brandSecrets,
       clock,

@@ -28,6 +28,13 @@ export const ROLE_CONNECTOR_KIND: Readonly<Record<string, string>> = {
   shopify_email: 'email_marketing',
   aftership: 'tracking',
   track17: 'tracking',
+  // WP68（48 §5.1）：红人的五条渠道。service 名与 kind 同名（职责 yml 问的就是
+  // "有没有 YouTube"，不存在"是哪一家 YouTube"这回事）。
+  youtube_data: 'youtube_data',
+  facebook_graph: 'facebook_graph',
+  instagram_graph: 'instagram_graph',
+  tiktok_research: 'tiktok_research',
+  x_api: 'x_api',
 }
 
 export type CatalogAuth = 'oauth2' | 'api_key' | 'custom_credential'
@@ -145,6 +152,221 @@ const SHOPIFY_DEV_APP_GUIDE: ProviderSetupGuide = {
     { label: 'Shopify Dev Dashboard', url: 'https://dev.shopify.com/dashboard' },
   ],
 }
+
+/**
+ * WP68（48 §5.1 / §5.4）：红人营销的五条渠道，从"待增加"改成**可连**。
+ *
+ * 每一条都是"凭据原生表单直填"（31 §3 / 07 P1 那条路）：各家一把令牌，
+ * 用户自己去开发者后台拿，填进来只存在这台电脑的加密库里。字段名与
+ * `kol-channels.ts` 的 `KOL_TOKEN_FIELD` **必须一致**——那边取、这边填，
+ * 对不上的表现是"填完了还是说没连"，最难查。
+ *
+ * 三条渠道的准备步骤里都明说了**代价**：Facebook / Instagram 要过 Meta 审核、
+ * TikTok 是申请制、X 要买付费档。说在前面，比让人填完之后撞一堵墙强。
+ * 而且每一条都补一句"没有它这条职责照样能用"——那是真的（48 §5.1）。
+ */
+export const KOL_CONNECTORS: readonly CatalogEntry[] = [
+  {
+    service: 'youtube_data',
+    upstream: 'local',
+    label: 'YouTube Data API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['kol_channel'],
+    smoke_hints: ['search_channels', 'get_channel'],
+    fields: [
+      {
+        name: 'api_key',
+        label: 'API 密钥',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'Google Cloud 控制台里那把 API key。只存在这台电脑的加密库里，不上传、不进日志',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '按关键词搜频道、读频道的订阅数与主题。**配额是全站一天 10000 单位**（不是按工作区算的），搜一次 100 单位、读一个频道 1 单位——所以搜人不是可以随便点的按钮。',
+      steps: [
+        '打开 Google Cloud 控制台，新建（或选一个）项目',
+        '在「API 和服务 → 库」里启用 YouTube Data API v3',
+        '到「凭据」页点「创建凭据 → API 密钥」，复制那串密钥',
+        '（建议）给这把密钥加限制：只允许 YouTube Data API v3',
+        '把密钥填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'Google Cloud 凭据页', url: 'https://console.cloud.google.com/apis/credentials' },
+        {
+          label: 'YouTube Data API 配额说明',
+          url: 'https://developers.google.com/youtube/v3/determine_quota_cost',
+        },
+      ],
+    },
+    data_note:
+      '没有它这条职责照样能用：找人靠导入你手上那张表与公共红人库，建联、合作、审核、归因一样不少。',
+  },
+  {
+    service: 'instagram_graph',
+    upstream: 'local',
+    label: 'Instagram Graph API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['kol_channel'],
+    smoke_hints: ['business_discovery'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'Meta 开发者后台里那个长期有效的 Page / IG 访问令牌',
+      },
+      {
+        name: 'ig_user_id',
+        label: '你自己的 IG 商业账号 id',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '17841400000000000',
+        hint: 'business_discovery 是挂在**你自己**那个商业账号下去查别人的，所以这一格必填',
+      },
+    ],
+    setup_guide: {
+      summary:
+        'Instagram **没有"按关键词搜人"这回事**：官方只让你按名字查明确指名的商业账号（business_discovery）。所以 IG 上找人的主力永远是导入与公共库，这条连接补的是"这个人现在多少粉、互动怎么样"。',
+      steps: [
+        '把你的 Instagram 账号切成「商业账号」，并关联一个 Facebook 主页',
+        '在 Meta 开发者后台建一个应用，加上 Instagram Graph API',
+        '申请权限 instagram_basic 与 instagram_manage_insights（**要过审核**）',
+        '用图形 API 浏览器换一个长期令牌，并抄下你自己的 IG 商业账号 id',
+        '把令牌和 id 填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'Meta 开发者后台', url: 'https://developers.facebook.com/apps' },
+        {
+          label: 'business_discovery 文档',
+          url: 'https://developers.facebook.com/docs/instagram-api/guides/business-discovery',
+        },
+      ],
+    },
+    data_note:
+      '权限没批下来之前这条职责照样能用，只是"按名字查资料"那一块空着；找人靠导入与公共库。',
+  },
+  {
+    service: 'facebook_graph',
+    upstream: 'local',
+    label: 'Facebook Graph API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['kol_channel'],
+    smoke_hints: ['search_pages', 'get_page'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'Meta 开发者后台里那个应用 / 主页访问令牌',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '搜主页、读主页的关注数与类目。**搜主页要「主页公开内容访问」权限，那是审核制的**——没批下来时我们会照实说"要过审核"，不会给你一个空列表假装没搜到。建联走主页私信，不走邮箱：很多主页压根没留邮箱。',
+      steps: [
+        '在 Meta 开发者后台建一个应用（类型选「商务」）',
+        '申请权限 Page Public Content Access（要写清楚用途，**审核制**）',
+        '用图形 API 浏览器换一个长期访问令牌',
+        '把令牌填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'Meta 开发者后台', url: 'https://developers.facebook.com/apps' },
+        {
+          label: '主页搜索文档',
+          url: 'https://developers.facebook.com/docs/graph-api/reference/page/',
+        },
+      ],
+    },
+    data_note: '没有它这条职责照样能用：找人靠导入与公共库，建联靠人工到主页发私信。',
+  },
+  {
+    service: 'tiktok_research',
+    upstream: 'local',
+    label: 'TikTok Research API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['kol_channel'],
+    smoke_hints: ['get_user'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '客户端访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '用 client key / client secret 换来的那个 client access token',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '**申请制**：要向 TikTok 提交研究用途说明，批了才有数据。批下来之后能按账号名查粉丝数、获赞数与作品数（互动率是我们按人均获赞 ÷ 粉丝数估的，三个数缺一个就不给这一格）。TikTok 也没有"按关键词搜人"的接口。',
+      steps: [
+        '到 TikTok for Developers 注册开发者账号',
+        '申请 Research API 访问权限，写清楚用途（审核要几天到几周）',
+        '批下来之后在应用详情页拿到 client key 与 client secret',
+        '用它们换一个 client access token（有效期两小时，过期再换一次）',
+        '把令牌填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'TikTok for Developers', url: 'https://developers.tiktok.com' },
+        {
+          label: 'Research API 文档',
+          url: 'https://developers.tiktok.com/doc/research-api-get-started',
+        },
+      ],
+    },
+    data_note:
+      '没批下来这条职责照样能用，只是找人那一块空着；TikTok Shop 的带货归因走追踪链接与联盟码，不靠这条连接。',
+  },
+  {
+    service: 'x_api',
+    upstream: 'local',
+    label: 'X API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['kol_channel'],
+    smoke_hints: ['get_user', 'search_users'],
+    fields: [
+      {
+        name: 'bearer_token',
+        label: 'Bearer 令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'X 开发者后台里那个 App-only Bearer Token',
+      },
+    ],
+    setup_guide: {
+      summary:
+        'X 的官方接口是**付费**的：免费档读不了用户资料。接上之后一跳能批量查最多 100 个账号名的粉丝数。**互动率这一格我们不给**——单个用户接口拿不到近期帖子的互动数，编一个不如空着。',
+      steps: [
+        '到 X 开发者后台注册开发者账号',
+        '买一个能读 users 接口的档位（Basic 起；这一步花钱）',
+        '在项目里建一个 App，复制它的 Bearer Token',
+        '把令牌填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'X 开发者后台', url: 'https://developer.x.com/en/portal/dashboard' },
+        {
+          label: 'users 接口文档',
+          url: 'https://docs.x.com/x-api/users/user-lookup-by-username',
+        },
+      ],
+    },
+    data_note: '没买档这条职责照样能用：找人靠导入与公共库，建联、合作、审核、归因一样不少。',
+  },
+]
 
 export const CATALOG: readonly CatalogEntry[] = [
   {
@@ -472,6 +694,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     },
     planned: '待增加：物流追踪先做 AfterShip，这家排在它后面。',
   },
+  ...KOL_CONNECTORS,
 ]
 
 /**
@@ -497,52 +720,6 @@ export interface PlannedConnector {
 }
 
 export const PLANNED_CONNECTORS: readonly PlannedConnector[] = [
-  /**
-   * WP67（48 §5.1）：红人营销的五条渠道。
-   *
-   * 为什么五张卡现在就要出：红人营销岗位已经上线，用户在岗位页上点得到
-   * 「YouTube 红人」这条职责。他去连接页找 YouTube 找不到的话，只会以为是
-   * 自己没找对地方。明着标成"待增加"，他知道那是我们还没做。
-   *
-   * 每一条的 `note` 里都写了**这条渠道为什么难**（配额 / 审核制 / 付费档），
-   * 以及**没连也能干什么**——后半句要紧：这五条职责没有连接器一样能用，
-   * 找人靠导入与公共库，建联、合作、审核、归因一样不少。
-   */
-  {
-    service: 'youtube_data',
-    label: 'YouTube Data API',
-    kind: 'youtube_data',
-    data_sources: ['kol_channel'],
-    note: 'YouTube 官方接口。全站一天 10000 单位配额（不是按工作区算的），所以它接上之后也不是无限搜。现在还没做——找人先用导入你手上那张表。',
-  },
-  {
-    service: 'instagram_graph',
-    label: 'Instagram Graph API',
-    kind: 'instagram_graph',
-    data_sources: ['kol_channel'],
-    note: 'Meta 的商业账号接口，权限要过审核。注意它**没有"按关键词搜人"这回事**——只能按名字查明确指名的账号，所以 IG 上找人的主力永远是导入与公共库。',
-  },
-  {
-    service: 'tiktok_research',
-    label: 'TikTok Research API',
-    kind: 'tiktok_research',
-    data_sources: ['kol_channel'],
-    note: '申请制：要向 TikTok 提交用途说明，批了才有数据。没批下来这条职责照常能用，只是找人那一块空着。',
-  },
-  {
-    service: 'facebook_graph',
-    label: 'Facebook Graph API',
-    kind: 'facebook_graph',
-    data_sources: ['kol_channel'],
-    note: '读主页与群组博主要 Meta 的主页权限，审核制。建联走主页私信而不是邮箱——很多主页压根没留邮箱。',
-  },
-  {
-    service: 'x_api',
-    label: 'X API',
-    kind: 'x_api',
-    data_sources: ['kol_channel'],
-    note: 'X 的官方接口是付费档，这条渠道的数据供给要花钱。接上之前找人走导入与公共库。',
-  },
   {
     service: 'judgeme',
     label: 'Judge.me 评价',

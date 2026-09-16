@@ -71,7 +71,10 @@ describe('BrandIcon', () => {
     const services = catalogServices()
     // 目录本身别读空了：WP45 当时是六个（shopify_admin / imap_smtp / gmail / ga4 / gsc / meta_ads），
     // WP64 加了四张骨架卡（klaviyo / shopify_email / aftership / track17）
-    expect(services.length).toBeGreaterThanOrEqual(10)
+    // WP68 又加了红人那五条渠道（youtube_data / instagram_graph / facebook_graph /
+    // tiktok_research / x_api），从"待增加"改成可连
+    expect(services.length).toBeGreaterThanOrEqual(15)
+    expect(services).toContain('tiktok_research')
     expect(services).toContain('klaviyo')
     expect(services).toContain('shopify_admin')
 
@@ -88,16 +91,8 @@ describe('BrandIcon', () => {
   // WP63：还没做的那几个**故意**落通用插头
   it('登记为"待增加"的连接器画通用插头，不借人家的标志', () => {
     const planned = plannedServices()
-    // WP67（48 §5.1）：红人营销那五条渠道也登记在册、也还没做
-    expect(planned).toEqual([
-      'youtube_data',
-      'instagram_graph',
-      'tiktok_research',
-      'facebook_graph',
-      'x_api',
-      'judgeme',
-      'loox',
-    ])
+    // WP68：红人那五条已经可连了，"待增加"这一档现在只剩评价应用两家
+    expect(planned).toEqual(['judgeme', 'loox'])
     for (const service of planned) {
       const { unmount } = render(<BrandIcon provider={service} />)
       const icon = screen.getByTestId('brand-icon')

@@ -187,13 +187,19 @@ export {
 } from './routes/join.js'
 export type {
   KolActor,
+  KolCollaborationInput,
   KolContactView,
   KolCreatorDetail,
+  KolCreatorInput,
+  KolCreatorPatch,
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
   KolPort,
+  KolSearchHit,
+  KolSearchResult,
   KolStagedView,
+  KolTrackedLinkInput,
 } from './routes/kol.js'
 export { kolRoutes } from './routes/kol.js'
 export type {

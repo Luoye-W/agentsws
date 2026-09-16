@@ -29,6 +29,8 @@ import type {
   KolImportView,
   KolMergeSuggestionView,
   KolPort,
+  KolSearchHit,
+  KolSearchResult,
   KolStagedView,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
@@ -75,6 +77,7 @@ import {
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { KolStore } from './kol.js'
+import type { KolChannelsAssembly } from './kol-channels.js'
 import type { SecretStore } from './secret-store.js'
 
 /** 加密库里联系方式那一段的 key 前缀。**全仓只有这一处拼它**。 */
@@ -207,6 +210,11 @@ export interface KolServiceOptions {
   effectiveConfig(id: AssignmentId): EffectiveConfig
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   random(): number
+  /**
+   * 五条渠道的适配器（WP68）。不给的话"去渠道上找人"那一条照实说没装配——
+   * 其余的路（导入、公共库、建联、合作、审核、归因）一条都不少。
+   */
+  channels?: KolChannelsAssembly
 }
 
 export interface KolServiceAssembly {
@@ -366,6 +374,49 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         has_contact: hasContact.has(account.creator_id),
       }))
       return { rows: rows.slice(0, filter.limit ?? 100) }
+    },
+
+    async search(actor, input) {
+      const adapter = options.channels?.adapters[input.channel]
+      if (adapter === undefined)
+        return {
+          ok: false,
+          source: 'channel',
+          rows: [],
+          reason: 'not_connected',
+          message:
+            '这个服务进程没有装配渠道适配器，所以去平台上找人这一条现在走不通。导入你手上那张表照常能用。',
+        }
+      const out = await adapter.search({
+        q: input.q,
+        ...(input.limit === undefined ? {} : { limit: input.limit }),
+      })
+      if (!out.ok) {
+        emit('kol.search_failed', actor.person_id, { channel: input.channel, reason: out.reason })
+        return { ok: false, source: 'channel', rows: [], reason: out.reason, message: out.message }
+      }
+      // 已经在库里的那几个标出来：清单上要看得见"这个人你已经有了"
+      const known = new Set(
+        store.accounts({ channel: input.channel }).map((a) => normalizeHandle(a.handle)),
+      )
+      const rows: KolSearchHit[] = out.data.map((hit) => ({
+        channel: hit.channel,
+        handle: hit.handle,
+        url: hit.url,
+        display_name: hit.display_name,
+        ...(hit.followers === undefined ? {} : { followers: hit.followers }),
+        ...(hit.engagement_rate === undefined ? {} : { engagement_rate: hit.engagement_rate }),
+        ...(hit.category === undefined ? {} : { category: hit.category }),
+        ...(hit.language === undefined ? {} : { language: hit.language }),
+        ...(hit.region === undefined ? {} : { region: hit.region }),
+        in_library: known.has(normalizeHandle(hit.handle)),
+      }))
+      return {
+        ok: true,
+        source: 'channel',
+        rows,
+        observed_at: out.observed_at,
+      } satisfies KolSearchResult
     },
 
     creator(_actor, id) {
