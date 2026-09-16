@@ -355,6 +355,11 @@ export interface SkillsPort {
    *
    * 与"提到上一层"是两件事：提升产的是一张待审的卡（24 §3），这条是**当场写进本层**——
    * 因为本层就是本人自己的活儿那一层，没有第二个人要为它点头。越层一律 403。
+   *
+   * **WP71b 起这三条写是这道门本身**：网关不再用 `skill.stage@workspace` 拦
+   * （职责模板里没有那个域，留着它等于"非 owner 一律改不动"），所以**实现方必须
+   * 自己先过 `canEditMemory` 再落笔**，越层抛 `forbidden`。判据与 `memoryAccess().write`
+   * 是同一份，界面上的 `can_edit` 也从那里来——三处永远说同一句话。
    */
   addMemory?(input: {
     tier: SkillTier

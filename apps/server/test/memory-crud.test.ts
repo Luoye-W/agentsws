@@ -65,10 +65,11 @@ interface MemoryView {
 const call = async (
   method: string,
   path: string,
-  options: { body?: unknown; assignment?: string } = {},
+  /** WP71b：`token` 不给就是 owner 自己——普通成员那一组用例要带他自己那张。 */
+  options: { body?: unknown; assignment?: string; token?: string } = {},
 ): Promise<Response> => {
   const headers = new Headers()
-  headers.set('Authorization', `Bearer ${server.bootstrap.internalToken}`)
+  headers.set('Authorization', `Bearer ${options.token ?? server.bootstrap.internalToken}`)
   headers.set('X-Assignment', options.assignment ?? server.bootstrap.ownerAssignment.id)
   if (options.body !== undefined) headers.set('content-type', 'application/json')
   return server.gateway.fetch(
@@ -285,5 +286,89 @@ describe('WP71 canEditMemory 判据', () => {
   it('岗位 / 职责层没给 scope_id：不猜，直接拒', () => {
     expect(canEditMemory({ ...base, tier: 'role' }).ok).toBe(false)
     expect(canEditMemory({ ...base, tier: 'position' }).ok).toBe(false)
+  })
+})
+
+/**
+ * WP71b 第二步：**写那一侧也跟上**。
+ *
+ * 读换判据之后有半天时间是"看得见、改不动"——`POST` / `PATCH` / `DELETE /v1/memory`
+ * 仍要 `skill.stage@workspace`，而职责模板里没有那个域。这一组用的是**真的普通成员**
+ * （邀请 → 接受 → 他自己的会话 token，不是 owner 的），钉住三条：
+ *
+ * - 切到自己持有的 `dtc.store`：加 / 改 / 删**三样都成**；
+ * - 切到不持有的那条职责：仍然 403（换判据不是拆门）；
+ * - 公司层：仍然 403（制度层的东西只有 owner 改得动，14 §13.3）。
+ */
+describe('WP71b 普通成员改自己那一层（写也换成 canEditMemory）', () => {
+  let member: { token: string; assignment: string }
+
+  const asMember = (method: string, path: string, body?: unknown): Promise<Response> =>
+    call(method, path, {
+      ...(body === undefined ? {} : { body }),
+      assignment: member.assignment,
+      token: member.token,
+    })
+
+  beforeEach(async () => {
+    const ws = server.bootstrap.workspace.id
+    const invitation = await dataOf<{ url: string }>(
+      await call('POST', `/v1/workspaces/${ws}/invitations`, {
+        body: { email: 'li@example.com', name: '李默' },
+      }),
+    )
+    const invite = invitation.url.slice(invitation.url.lastIndexOf('/') + 1)
+    const accepted = await dataOf<{ person_id: string }>(
+      await call('POST', `/v1/invitations/${encodeURIComponent(invite)}/accept`, { body: {} }),
+    )
+    const link = await dataOf<{ token: string }>(
+      await call('POST', '/v1/auth/magic-link', { body: { email: 'li@example.com' } }),
+    )
+    const session = await dataOf<{ session_token: string }>(
+      await call('POST', '/v1/auth/verify', { body: { token: link.token } }),
+    )
+    const assignment = server.roles.assignments.create({
+      person_id: accepted.person_id,
+      workspace_id: ws,
+      role_id: HELD_ROLE,
+      granted_by: server.bootstrap.person.id,
+      ranges: [{ kind: 'store', id: 'store_1' }],
+    })
+    member = { token: session.session_token, assignment: assignment.id }
+  })
+
+  it('自己持有的那条职责：加 / 改 / 删三样都成', async () => {
+    const created = await asMember('POST', '/v1/memory', {
+      tier: 'role',
+      scope_id: HELD_ROLE,
+      text: '上架新品先留草稿，等图片齐了再人审发布。',
+    })
+    expect(created.status).toBe(201)
+    const entry = await dataOf<{ id?: string; added_by?: string }>(created)
+    const id = entry.id ?? ''
+    expect(id).not.toBe('')
+
+    const patched = await asMember('PATCH', `/v1/memory/${encodeURIComponent(id)}`, {
+      text: '上架新品一律先留草稿。',
+    })
+    expect(patched.status).toBe(200)
+    expect((await dataOf<{ body: string }>(patched)).body).toBe('上架新品一律先留草稿。')
+
+    expect((await asMember('DELETE', `/v1/memory/${encodeURIComponent(id)}`)).status).toBe(200)
+  })
+
+  it('不持有的那条职责：仍然 403（换判据不是拆门）', async () => {
+    const res = await asMember('POST', '/v1/memory', {
+      tier: 'role',
+      scope_id: NOT_HELD_ROLE,
+      text: '不该写进去的一句话',
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('公司层：普通成员看得见，但仍然改不动（14 §13.3）', async () => {
+    expect((await asMember('GET', '/v1/memory?tier=company')).status).toBe(200)
+    const res = await asMember('POST', '/v1/memory', { tier: 'company', text: '公司层的一句话' })
+    expect(res.status).toBe(403)
   })
 })

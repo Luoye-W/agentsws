@@ -350,6 +350,15 @@ export function skillRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        /*
+         * WP71b：**判定挪进 `deps.skills.{add,update,delete}Memory`**（它们一律先过
+         * `canEditMemory`）。理由与那条读一样：元组判定答不了"这一层是不是我干活的那一层"，
+         * 而 `skill.stage@workspace` 职责模板里根本没有——留着它，"每条职责的记忆用户可手改"
+         * 对**每一个非 owner** 都不成立（36 §10）。
+         *
+         * 收窄的部分一条没少：公司 / 部门层仍只有 owner 写得动，包层与个人层这条路不开。
+         */
+        authzBypass: () => true,
         body: MemoryCreateBody,
         returns: 'SkillMemoryEntry',
       },
@@ -383,6 +392,15 @@ export function skillRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        /*
+         * WP71b：**判定挪进 `deps.skills.{add,update,delete}Memory`**（它们一律先过
+         * `canEditMemory`）。理由与那条读一样：元组判定答不了"这一层是不是我干活的那一层"，
+         * 而 `skill.stage@workspace` 职责模板里根本没有——留着它，"每条职责的记忆用户可手改"
+         * 对**每一个非 owner** 都不成立（36 §10）。
+         *
+         * 收窄的部分一条没少：公司 / 部门层仍只有 owner 写得动，包层与个人层这条路不开。
+         */
+        authzBypass: () => true,
         params: [{ name: 'id', in: 'path', required: true, description: '记忆条目 id' }],
         body: MemoryPatchBody,
         returns: 'SkillMemoryEntry',
@@ -414,6 +432,15 @@ export function skillRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        /*
+         * WP71b：**判定挪进 `deps.skills.{add,update,delete}Memory`**（它们一律先过
+         * `canEditMemory`）。理由与那条读一样：元组判定答不了"这一层是不是我干活的那一层"，
+         * 而 `skill.stage@workspace` 职责模板里根本没有——留着它，"每条职责的记忆用户可手改"
+         * 对**每一个非 owner** 都不成立（36 §10）。
+         *
+         * 收窄的部分一条没少：公司 / 部门层仍只有 owner 写得动，包层与个人层这条路不开。
+         */
+        authzBypass: () => true,
         params: [{ name: 'id', in: 'path', required: true, description: '记忆条目 id' }],
         returns: '{ id, deleted }',
       },
