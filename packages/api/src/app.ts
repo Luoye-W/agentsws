@@ -274,7 +274,7 @@ export function createGateway(deps: GatewayDeps): Gateway {
         throw new ApiError('forbidden', 'X-Assignment 不属于当前主体或已撤销')
       const next_ctx = { ...rctx, assignment }
       c.set('rctx', next_ctx)
-      if (spec.authz && !(spec.authzBypass?.(c, next_ctx) ?? false)) {
+      if (spec.authz && !(spec.authzBypass?.(c, next_ctx, deps) ?? false)) {
         const { domain, op, range, sensitivity } = spec.authz
         if (!deps.roles.can(assignment.id, domain, op, { range, sensitivity }))
           throw new ApiError('forbidden', `无权限：${domain}.${op}（range=${range}）`, {

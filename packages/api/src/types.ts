@@ -355,6 +355,11 @@ export interface SkillsPort {
    *
    * 与"提到上一层"是两件事：提升产的是一张待审的卡（24 §3），这条是**当场写进本层**——
    * 因为本层就是本人自己的活儿那一层，没有第二个人要为它点头。越层一律 403。
+   *
+   * **WP71b 起这三条写是这道门本身**：网关不再用 `skill.stage@workspace` 拦
+   * （职责模板里没有那个域，留着它等于"非 owner 一律改不动"），所以**实现方必须
+   * 自己先过 `canEditMemory` 再落笔**，越层抛 `forbidden`。判据与 `memoryAccess().write`
+   * 是同一份，界面上的 `can_edit` 也从那里来——三处永远说同一句话。
    */
   addMemory?(input: {
     tier: SkillTier
@@ -376,6 +381,18 @@ export interface SkillsPort {
     id: string
     actor: { person_id: PersonId; workspace_id: WorkspaceId }
   }): Promise<void>
+  /**
+   * WP71b：**这一层的记忆，本人看不看得见 / 改不改得动**。
+   *
+   * 网关拿它替代原来那条 `skill.read@workspace` 元组判定——职责模板里根本没有
+   * `skill` 这个域，那条判定的实际效果是"除了 owner 谁都读不到自己干活那一层"。
+   * 判据在服务端一份（`canReadMemory` / `canEditMemory`），网关只问结论。
+   */
+  memoryAccess?(input: {
+    tier: SkillTier
+    scope_id?: string
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<{ read: boolean; write: boolean; reason?: string }>
   /** WP29：待审的 `skill_lesson` 提案卡（技能页上的"待审提案"）。 */
   proposals?(actor: {
     person_id: PersonId
