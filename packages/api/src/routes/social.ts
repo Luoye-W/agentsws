@@ -1,0 +1,507 @@
+/**
+ * WP73（56 §6 第三项）：**社媒库的 `/v1` 面**。
+ *
+ * WP72 把四类对象、六个模块与九条职责都建了起来，可是工作台上一个增删改的
+ * 入口都没有——面板读得到社媒，只是因为服务进程在装配期直接把投影塞给了 deck。
+ * 这个文件补的就是那条缺口：**社媒库从此有门**（照 `kol.ts` 的写法）。
+ *
+ * 四条纪律，每条都在类型上看得见：
+ *
+ * 1. **一个对象域一把闸**。`social_account` / `community_member` /
+ *    `community_thread` 三条各自判权。这一条不是形式主义：56 §4 定了
+ *    **客服的「社群管理」读不到成员名册**，而它与社媒运营那九条的动作 id
+ *    几乎一样——分得开它们的正是这三把闸（`dtc.community-support.yml` 的
+ *    scopes 里没有 `community_member`）。所以 `GET /v1/social/members`
+ *    对客服那条职责天然是 403，不用在路由里写一行 if。
+ * 2. **写动作永远先出卡**。入群审核 → `community_membership`（L2）、
+ *    管理动作 → `community_moderation`（封禁那一档 guardrail 升 L1）。
+ *    这里一条都不直接改库——改库是执行器在卡被批准之后做的事。
+ * 3. **线程只读 + 手动标转客服**。`POST /v1/social/threads` 收的是一条
+ *    **新入站**的帖子 / 私信：落库 → `social-core` 的 `triageThread` 判类 →
+ *    客户问题出一张转客服卡（社媒运营**不答**，56 的边界），其余按群规匹配
+ *    出审核卡。判类不是路由参数——调用方递不进来一个 `triage`。
+ * 4. **正文是外部文本**。线程的 `text` 原样存、原样端出去，不在这一层改写，
+ *    也不当指令读（21 §1 / 39）。
+ */
+import type {
+  CommunityMember,
+  CommunityThread,
+  CommunityTriage,
+  MaybePromise,
+  SocialAccount,
+  SocialChannel,
+  SocialPost,
+  SocialPostStatus,
+} from '@agentsws/contracts'
+import { SOCIAL_CHANNELS } from '@agentsws/contracts'
+import { z } from 'zod'
+import { ApiError } from '../errors.js'
+import { assignmentOf, body, intParam, ok, param, principalOf } from '../helpers.js'
+import { type Route, route } from '../route-spec.js'
+import type { GatewayDeps } from '../types.js'
+import type { SocialActor } from './social-types.js'
+
+/* ── 鉴权元组：三个对象域各一把闸（31 §3.1 完整元组） ─────────────────── */
+
+const READ_ACCOUNT = {
+  domain: 'social_account',
+  op: 'read',
+  range: 'assigned',
+  sensitivity: 'internal',
+} as const
+const STAGE_ACCOUNT = { ...READ_ACCOUNT, op: 'stage' } as const
+/**
+ * 成员名册那一把（文件头第 1 条）。
+ *
+ * **只有社群组五条读得到**：内容组四条的 yml 里没有这个域，客服的「社群管理」
+ * 也没有。56 §4 那句"与它真正不同的只有三处：读的是社群线程（读不到成员名册）"
+ * 就靠这一把闸兑现。
+ */
+const READ_MEMBER = {
+  domain: 'community_member',
+  op: 'read',
+  range: 'assigned',
+  sensitivity: 'internal',
+} as const
+const STAGE_MEMBER = { ...READ_MEMBER, op: 'stage' } as const
+const READ_THREAD = {
+  domain: 'community_thread',
+  op: 'read',
+  range: 'assigned',
+  sensitivity: 'internal',
+} as const
+const STAGE_THREAD = { ...READ_THREAD, op: 'stage' } as const
+
+/* ── 视图 ─────────────────────────────────────────────────────────────── */
+
+/** 清单上的一行账号（就是契约里那个对象——这一层不加工）。 */
+export type SocialAccountRow = SocialAccount
+/** 清单上的一行帖子。 */
+export type SocialPostRow = SocialPost
+/** 清单上的一行成员。 */
+export type SocialMemberRow = CommunityMember
+
+/** 清单上的一行线程。多一格账号名——卡面与表格上要认得出是哪个号。 */
+export interface SocialThreadRow extends CommunityThread {
+  account_name: string
+}
+
+/**
+ * 提了一条变更之后回来的那一份（照 `KolStagedView`）。
+ *
+ * `staged` 为假 = guardrail 拦了，`message` 是那句人话。**不抛异常**：
+ * 被拦下来是正常结果之一，界面要照实显示而不是弹一个红框。
+ */
+export interface SocialStagedView {
+  staged: boolean
+  change_id?: string
+  approval_item_id?: string
+  /** 被拦下来 / 自动放行的那句话。 */
+  message?: string
+  /** 这次提上去时的等级（硬顶按回来的话这里就是 L1）。 */
+  level?: string
+}
+
+/** 一条新入站线程处理完之后回来的那一份。 */
+export interface SocialThreadView {
+  thread: SocialThreadRow
+  /** 判成六类里的哪一类（`social-core` 的 `triageThread` 判的，不是调用方给的）。 */
+  triage: CommunityTriage
+  /** 判据名（**不含原句**——原句在卡上给人看，不进事件日志）。 */
+  signals: string[]
+  /** 转出去了没有：`support` = 出了转客服卡；`kol` = 只提示；`social` = 自己处理。 */
+  route: 'social' | 'support' | 'kol'
+  /** 转客服卡 / 审核卡的 id（有的话）。 */
+  approval_item_id?: string
+  /** 群规匹配的结论（没违反就是 `none`）。 */
+  moderation?: {
+    action: string
+    needs_approval: boolean
+    reason: string
+    matched_rules: string[]
+  }
+}
+
+/* ── 端口 ─────────────────────────────────────────────────────────────── */
+
+export interface SocialAccountInput {
+  channel: SocialChannel
+  handle: string
+  display_name: string
+  url: string
+  external_id: string
+  connection_id?: string | undefined
+}
+
+export interface SocialThreadInput {
+  account_id: string
+  external_id: string
+  surface: 'thread' | 'comment' | 'dm'
+  author_external_id: string
+  author_handle: string
+  /** 对方说的那句话。**外部文本**，原样存。 */
+  text: string
+  created_at?: string | undefined
+}
+
+export interface SocialPort {
+  accounts(
+    actor: SocialActor,
+    filter: { channel?: SocialChannel | undefined },
+  ): MaybePromise<{ rows: SocialAccountRow[] }>
+  createAccount(actor: SocialActor, input: SocialAccountInput): MaybePromise<SocialAccountRow>
+
+  posts(
+    actor: SocialActor,
+    filter: {
+      channel?: SocialChannel | undefined
+      account_id?: string | undefined
+      status?: SocialPostStatus | undefined
+      limit?: number | undefined
+    },
+  ): MaybePromise<{ rows: SocialPostRow[] }>
+
+  threads(
+    actor: SocialActor,
+    filter: {
+      channel?: SocialChannel | undefined
+      account_id?: string | undefined
+      open?: boolean | undefined
+      surface?: 'thread' | 'comment' | 'dm' | undefined
+    },
+  ): MaybePromise<{ rows: SocialThreadRow[] }>
+  /**
+   * 一条**新入站**的帖子 / 评论 / 私信进来了。
+   *
+   * 落库 → triage → 客户问题出转客服卡、其余按群规出审核卡（文件头第 3 条）。
+   * 判类由 `social-core` 做，这个口子收不下一个 `triage` 参数。
+   */
+  ingestThread(actor: SocialActor, input: SocialThreadInput): MaybePromise<SocialThreadView>
+  /** 手动对一条线程下一个管理动作（出卡，不改库）。 */
+  moderateThread(
+    actor: SocialActor,
+    id: string,
+    input: { action: string; reason?: string | undefined },
+  ): MaybePromise<SocialStagedView>
+
+  members(
+    actor: SocialActor,
+    filter: {
+      channel?: SocialChannel | undefined
+      account_id?: string | undefined
+      pending?: boolean | undefined
+    },
+  ): MaybePromise<{ rows: SocialMemberRow[] }>
+  /** 批 / 拒一条入群申请（`community_membership` L2 的卡）。 */
+  decideMember(
+    actor: SocialActor,
+    id: string,
+    input: { decision: 'approve' | 'reject'; reason?: string | undefined },
+  ): MaybePromise<SocialStagedView>
+}
+
+/* ── 装配 ─────────────────────────────────────────────────────────────── */
+
+function portOf(deps: GatewayDeps): SocialPort {
+  const p = deps.social
+  if (p === undefined)
+    throw new ApiError(
+      'not_implemented',
+      '这个服务进程没有装配社媒库（GatewayDeps.social）。社媒运营那九条职责要它才动得了。',
+    )
+  return p
+}
+
+function actorOf(c: Parameters<typeof principalOf>[0]): SocialActor {
+  const p = principalOf(c)
+  const a = assignmentOf(c)
+  return {
+    workspace_id: p.workspace_id,
+    person_id: p.person_id,
+    assignment_id: a.id,
+    role_id: a.role_id,
+  }
+}
+
+const CHANNEL_IDS = SOCIAL_CHANNELS.map((c) => c.id)
+
+const channelQuery = (c: Parameters<typeof param>[0]): SocialChannel | undefined => {
+  const raw = c.req.query('channel')
+  if (raw === undefined || raw.trim() === '') return undefined
+  const found = CHANNEL_IDS.find((x) => x === raw.trim())
+  if (found === undefined) throw new ApiError('invalid_input', `不认识这条渠道：${raw}`)
+  return found
+}
+
+const STATUSES = ['draft', 'scheduled', 'published', 'failed'] as const
+const SURFACES = ['thread', 'comment', 'dm'] as const
+/** 群规允许的动作（与 `social-core` 的 `ModerationAction` 一字不差）。 */
+const MODERATION_ACTIONS = [
+  'warn',
+  'delete_post',
+  'mute',
+  'unmute',
+  'ban',
+  'permanent_ban',
+  'unban',
+] as const
+
+const ChannelSchema = z.enum(CHANNEL_IDS as [SocialChannel, ...SocialChannel[]])
+
+const AccountBody = z.object({
+  channel: ChannelSchema,
+  handle: z.string().min(1).max(200),
+  display_name: z.string().min(1).max(200),
+  url: z.string().url().max(500),
+  /** 平台那一侧的 id（页面 id / 频道 id / 群 id）。发布与群发按它打。 */
+  external_id: z.string().min(1).max(200),
+  connection_id: z.string().min(1).max(200).optional(),
+})
+
+const ThreadBody = z.object({
+  account_id: z.string().min(1),
+  external_id: z.string().min(1).max(200),
+  surface: z.enum(SURFACES),
+  author_external_id: z.string().min(1).max(200),
+  author_handle: z.string().min(1).max(200),
+  /** 对方说的那句话（外部文本，原样存）。 */
+  text: z.string().min(1).max(20_000),
+  created_at: z.string().min(1).max(40).optional(),
+})
+
+const ModerateBody = z.object({
+  action: z.enum(MODERATION_ACTIONS),
+  reason: z.string().max(500).optional(),
+})
+
+const MemberDecisionBody = z.object({
+  decision: z.enum(['approve', 'reject']),
+  reason: z.string().max(500).optional(),
+})
+
+export function socialRoutes(): Route[] {
+  return [
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/accounts',
+        operationId: 'listSocialAccounts',
+        summary: '我们自己的社媒账号 / 社群（56 §2）。九条渠道之间零共享——按 channel 筛出自己那条',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ACCOUNT,
+        params: [{ name: 'channel', in: 'query', description: '只看这条渠道' }],
+        returns: '{ rows: SocialAccountRow[] }',
+      },
+      async (c, deps) => {
+        const channel = channelQuery(c)
+        return ok(
+          c,
+          await portOf(deps).accounts(actorOf(c), {
+            ...(channel === undefined ? {} : { channel }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/accounts',
+        operationId: 'createSocialAccount',
+        summary: '登记一个我们自己的号 / 群（凭据不在这里：token 走连接页那条路）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        body: AccountBody,
+        returns: 'SocialAccountRow',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).createAccount(actorOf(c), await body(c, AccountBody)), 201),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/posts',
+        operationId: 'listSocialPosts',
+        summary:
+          '帖子清单（草稿 / 排期 / 已发 / 退回四态分得开——退回混进排期里就再也没人发现它没发出去）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ACCOUNT,
+        params: [
+          { name: 'channel', in: 'query', description: '只看这条渠道' },
+          { name: 'account_id', in: 'query', description: '只看这个号' },
+          { name: 'status', in: 'query', description: 'draft / scheduled / published / failed' },
+          { name: 'limit', in: 'query', description: '最多几行', schema: { type: 'integer' } },
+        ],
+        returns: '{ rows: SocialPostRow[] }',
+      },
+      async (c, deps) => {
+        const channel = channelQuery(c)
+        const account_id = c.req.query('account_id')
+        const rawStatus = c.req.query('status')
+        const status = STATUSES.find((s) => s === rawStatus)
+        if (rawStatus !== undefined && rawStatus !== '' && status === undefined)
+          throw new ApiError('invalid_input', `不认识这个状态：${rawStatus}`)
+        const limit = intParam(c, 'limit')
+        return ok(
+          c,
+          await portOf(deps).posts(actorOf(c), {
+            ...(channel === undefined ? {} : { channel }),
+            ...(account_id === undefined || account_id === '' ? {} : { account_id }),
+            ...(status === undefined ? {} : { status }),
+            ...(limit === undefined ? {} : { limit }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/threads',
+        operationId: 'listSocialThreads',
+        summary:
+          '群里的帖子 / 评论 / 私信（**只读**）。转给客服的那些不算社媒运营的待处理——球在客服那边',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_THREAD,
+        params: [
+          { name: 'channel', in: 'query', description: '只看这条渠道' },
+          { name: 'account_id', in: 'query', description: '只看这个号 / 群' },
+          {
+            name: 'open',
+            in: 'query',
+            description: '只要还没处理完的',
+            schema: { type: 'boolean' },
+          },
+          { name: 'surface', in: 'query', description: 'thread / comment / dm' },
+        ],
+        returns: '{ rows: SocialThreadRow[] }',
+      },
+      async (c, deps) => {
+        const channel = channelQuery(c)
+        const account_id = c.req.query('account_id')
+        const rawSurface = c.req.query('surface')
+        const surface = SURFACES.find((s) => s === rawSurface)
+        if (rawSurface !== undefined && rawSurface !== '' && surface === undefined)
+          throw new ApiError('invalid_input', `不认识这个位置：${rawSurface}`)
+        return ok(
+          c,
+          await portOf(deps).threads(actorOf(c), {
+            ...(channel === undefined ? {} : { channel }),
+            ...(account_id === undefined || account_id === '' ? {} : { account_id }),
+            ...(c.req.query('open') === 'true' ? { open: true } : {}),
+            ...(surface === undefined ? {} : { surface }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/threads',
+        operationId: 'ingestSocialThread',
+        summary:
+          '一条新入站的帖子 / 私信进来了：落库 → triage → **客户问题出转客服卡**（社媒运营不答，56 边界），其余按群规出审核卡',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        body: ThreadBody,
+        returns: 'SocialThreadView',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).ingestThread(actorOf(c), await body(c, ThreadBody)), 201),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/threads/:id/moderate',
+        operationId: 'moderateSocialThread',
+        summary:
+          '对一条线程下一个管理动作：出一张 `community_moderation` 卡（删帖 / 禁言 L2，**封禁 L1**——分档在 guardrail 里按动作判）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        params: [{ name: 'id', in: 'path', required: true, description: 'thread_id' }],
+        body: ModerateBody,
+        returns: 'SocialStagedView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await portOf(deps).moderateThread(
+            actorOf(c),
+            param(c, 'id'),
+            await body(c, ModerateBody),
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/members',
+        operationId: 'listCommunityMembers',
+        summary:
+          '社群成员与入群申请。**只有社群组五条读得到**——客服的「社群管理」在这条路上是 403（56 §4 那条边界）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_MEMBER,
+        params: [
+          { name: 'channel', in: 'query', description: '只看这条渠道' },
+          { name: 'account_id', in: 'query', description: '只看这个群' },
+          {
+            name: 'pending',
+            in: 'query',
+            description: '只要待审入群的',
+            schema: { type: 'boolean' },
+          },
+        ],
+        returns: '{ rows: SocialMemberRow[] }',
+      },
+      async (c, deps) => {
+        const channel = channelQuery(c)
+        const account_id = c.req.query('account_id')
+        return ok(
+          c,
+          await portOf(deps).members(actorOf(c), {
+            ...(channel === undefined ? {} : { channel }),
+            ...(account_id === undefined || account_id === '' ? {} : { account_id }),
+            ...(c.req.query('pending') === 'true' ? { pending: true } : {}),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/members/:id/approve',
+        operationId: 'decideCommunityMember',
+        summary:
+          '批 / 拒一条入群申请：出一张 `community_membership` 卡（L2；**一次一个人**——批错一个踢出去就是了，批错三百个这个群就不是原来那个群了）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_MEMBER,
+        params: [{ name: 'id', in: 'path', required: true, description: 'member_id' }],
+        body: MemberDecisionBody,
+        returns: 'SocialStagedView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await portOf(deps).decideMember(
+            actorOf(c),
+            param(c, 'id'),
+            await body(c, MemberDecisionBody),
+          ),
+        ),
+    ),
+  ]
+}

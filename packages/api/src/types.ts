@@ -71,6 +71,7 @@ import type { PositionEntryPort } from './routes/positions.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
+import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
 import type { WorkPort } from './routes/work.js'
@@ -670,6 +671,12 @@ export interface GatewayDeps {
    * 只是没有任何增删改的入口。
    */
   kol?: KolPort
+  /**
+   * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
+   * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），
+   * 只是没有任何增删改的入口。
+   */
+  social?: SocialPort
   /** 37 工作模型（事项 / 目标 / 待办 / 日历 / 计划 / 复盘）；没装配时那几条路由回 not_implemented。 */
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */

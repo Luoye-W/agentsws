@@ -39,6 +39,8 @@ import type { ModelsAssembly } from './models.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SecretStore } from './secret-store.js'
 import type { SocialStore } from './social.js'
+import type { SocialChannelsAssembly } from './social-channels.js'
+import type { SocialServiceAssembly } from './social-service.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 品牌落盘目录在 `dbDir` 下的那一级。 */
@@ -107,6 +109,17 @@ export interface BrandModuleSet {
    * 串了品牌等于发错号。
    */
   social: SocialStore
+  /**
+   * WP73（56 §6）：这个品牌社媒库的 `/v1` 面（端口 + 九条渠道的适配器）。
+   *
+   * 与 `social` 分成两格，理由与红人那两格逐字相同：库是数据，服务是**带着
+   * 加密库、审批总线与变更账本**的那一层。判类（triage）与群规匹配
+   * （moderation）的调用方就在这里——56 那条"群里的客户问题不归社媒运营"
+   * 的边界，在服务进程里的落点是它。
+   */
+  socialService: SocialServiceAssembly
+  /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */
+  socialChannels: SocialChannelsAssembly
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun

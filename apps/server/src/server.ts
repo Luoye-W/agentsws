@@ -110,6 +110,7 @@ import {
   brandKolPort,
   brandModelsPort,
   brandPositionPort,
+  brandSocialPort,
   brandWorkPort,
   brandWorkstationPort,
 } from './brand-ports.js'
@@ -215,6 +216,9 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
+// WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
+import { createSocialChannels, type SocialFetch } from './social-channels.js'
+import { createSocialService } from './social-service.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
@@ -394,6 +398,11 @@ export interface ServerOptions {
    * 这五家的接口没有可以随便调的沙箱，所以"形状对不对"只能这么验。
    */
   kolFetch?: KolFetch
+  /**
+   * WP73：社媒那九条渠道打出去的那一跳（测试塞一个假的对着真 URL 断言）。
+   * 生产路径不传它，走全局 fetch。
+   */
+  socialFetch?: SocialFetch
   /**
    * WP46：OpenConnector 那一面的注入点（测试用替身 + 计数壳；生产不传，
    * 由 `connections.ts` 按 `AGENTSWS_CONNECT_URL` 自己选真适配器或替身）。
@@ -1234,6 +1243,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       random,
     })
 
+    /**
+     * WP73（56 §6）：九条渠道的适配器与 transport。
+     *
+     * 与红人那一份并排建，凭据取法逐字相同：按连接 id 从**这个品牌那一段**
+     * 加密库取，取出来直接交给适配器放进请求头。Facebook 群组没有连接卡——
+     * 它的"连上了"看的是第三栏那个受控浏览器（55 §3），这里先不装，
+     * 装配在浏览器设置那一侧（`browser-settings.ts`）落地之后再接。
+     */
+    const socialChannels = createSocialChannels({
+      workspace_id: ws,
+      clock,
+      connections: () => connections.liveConnections(),
+      secrets: brandSecrets,
+      ...(options.socialFetch === undefined ? {} : { fetch: options.socialFetch }),
+    })
+    /**
+     * WP73：社媒库的 `/v1` 面。
+     *
+     * `triage.ts` 与 `moderation.ts` 的调用方就在它里面——56 那条
+     * "群里的客户问题不归社媒运营"的边界，从这一跳起是真会发生的事。
+     */
+    const socialService = createSocialService({
+      workspace_id: ws,
+      store: social,
+      clock,
+      approvals: txn.approvals,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      // 转客服卡要落到**真持有社群管理的那个人**头上；没人持有就落到 owner
+      holdersOf: (role_id) =>
+        roles.assignments
+          .listByRole(role_id)
+          .filter((a) => a.workspace_id === ws && a.revoked_at === undefined)
+          .map((a) => ({ person_id: a.person_id })),
+      owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      appendEvent,
+      random,
+    })
+
     let workRef: Work | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
@@ -1549,6 +1597,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kol,
       kolService,
       social,
+      socialService,
+      socialChannels,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -2738,6 +2788,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
   )
+  /** WP73（56 §6）：社媒库 `/v1/social/*`（一个品牌一张库、一段加密库）。 */
+  const socialPortOf = brandSocialPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).socialService.port,
+  )
   /**
    * WP83（54（将改号 55）§4 前两层）：连接目录与岗位连接清单——**一个品牌一份**。
    *
@@ -2967,6 +3022,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     positions: positionPortOf,
     // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
     kol: kolPortOf,
+    // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
+    social: socialPortOf,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

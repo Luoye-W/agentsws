@@ -45,6 +45,7 @@ import { scheduleRoutes } from './routes/schedules.js'
 import { secretaryRoutes } from './routes/secretary.js'
 import { secretRoutes } from './routes/secrets.js'
 import { skillRoutes } from './routes/skills.js'
+import { socialRoutes } from './routes/social.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
 import { standbyRoutes } from './routes/standby.js'
 import { storageRoutes } from './routes/storage.js'
@@ -171,6 +172,12 @@ export function collectRoutes(): Route[] {
      * 的第一段就分得开。
      */
     ...kolRoutes(),
+    /*
+     * WP73（56 §6）：社媒库。`/v1/social/*` 同样是独立前缀；
+     * `/v1/social/threads/:id/moderate` 与 `/v1/social/members/:id/approve`
+     * 的第二段就分得开，内部次序不讲究。
+     */
+    ...socialRoutes(),
   ]
 }
 

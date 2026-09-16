@@ -358,6 +358,19 @@ export type {
 export { PROFILE_FIELD_NAMES, secretaryRoutes } from './routes/secretary.js'
 export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
 export { secretRoutes } from './routes/secrets.js'
+export type {
+  SocialAccountInput,
+  SocialAccountRow,
+  SocialMemberRow,
+  SocialPort,
+  SocialPostRow,
+  SocialStagedView,
+  SocialThreadInput,
+  SocialThreadRow,
+  SocialThreadView,
+} from './routes/social.js'
+export { socialRoutes } from './routes/social.js'
+export type { SocialActor } from './routes/social-types.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面
 export type {
   StandbyActor,

@@ -22,6 +22,7 @@ import type {
   ModelDefaultsView,
   ModelsPort,
   PositionEntryPort,
+  SocialPort,
   WorkPort,
   WorkstationPort,
 } from '@agentsws/api'
@@ -272,6 +273,19 @@ export function brandWorkPort(
  * 这一条尤其不能漏——品牌 A 的联系方式引用与合作预算，在 B 的任何路由里
  * 都不该读得到（`BrandModuleSet.kol` 的注释里那句话，这里是它的落点）。
  */
+/**
+ * WP73（56 §6）社媒库：一个品牌一张库、一段加密库。
+ *
+ * 与红人那一条同理，而且更要紧——九条渠道是九个**真账号**：品牌 A 的群成员、
+ * 排期与线程串到 B 去，等于用 B 的号发 A 的东西。
+ */
+export function brandSocialPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<SocialPort>,
+): SocialPort {
+  return scopedPort<SocialPort>(make, () => brands.bootstrap)
+}
+
 export function brandKolPort(
   brands: BrandModules,
   make: (workspace_id: WorkspaceId) => Promise<KolPort>,
