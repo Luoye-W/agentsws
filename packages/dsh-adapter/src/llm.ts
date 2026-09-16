@@ -59,7 +59,10 @@ function messageText(message: Message): string {
  * `[kind:id]` 标记开一条新消息，`thread` 那一段是 `user`（与 `assemblePrompt` 同一条规则），
  * 其余是 `system`。
  */
-export function splitSystemText(text: string, baseRole: ChatMessage['role'] = 'system'): ChatMessage[] {
+export function splitSystemText(
+  text: string,
+  baseRole: ChatMessage['role'] = 'system',
+): ChatMessage[] {
   const out: ChatMessage[] = []
   let role: ChatMessage['role'] = baseRole
   let buffer: string[] = []

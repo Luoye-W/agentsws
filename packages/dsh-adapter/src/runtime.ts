@@ -197,7 +197,8 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         daysSinceDelivery: undefined,
       }
       const sinceDelivery = (order: OrderView | undefined): number | undefined => {
-        const delivered = order?.delivered_at === undefined ? undefined : Date.parse(order.delivered_at)
+        const delivered =
+          order?.delivered_at === undefined ? undefined : Date.parse(order.delivered_at)
         return delivered === undefined
           ? undefined
           : Math.floor((Date.parse(clock.now()) - delivered) / DAY_MS)
@@ -257,8 +258,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
           subject:
             args.subject.length > 0
               ? args.subject
-              : (threadSubject(scratch.threadItem) ??
-                replySubject(undefined, order, req.vertical)),
+              : (threadSubject(scratch.threadItem) ?? replySubject(undefined, order, req.vertical)),
           // 正文原样用模型写的那一版：WP55 的出站硬闸在 `createDraft` 那一跳判，
           // 判下来了就打回重写（`gate.ts` 的 answerer），绝不在这里静默改字。
           body: args.body,
@@ -419,9 +419,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
           drafted: harness.gate.drafted,
           askedBoundaries,
           ...(scratch.order === undefined ? {} : { orderName: scratch.order.name }),
-          ...(harness.gate.stagedMoney === undefined
-            ? {}
-            : { staged: harness.gate.stagedMoney }),
+          ...(harness.gate.stagedMoney === undefined ? {} : { staged: harness.gate.stagedMoney }),
           ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
         })
         if (turn.text.length > 0 && req.expectations.outputs.includes('answer')) {

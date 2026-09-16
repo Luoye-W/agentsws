@@ -178,7 +178,8 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
 
   // Agent 层在场时用真 Agent 当 scope key（官方语义）；没有时退回一个占位键 + 自开 scope。
   const agent: object = input.agent ?? { preset: request.runtime.preset, run_id: request.id }
-  const scope: Scope | undefined = input.agentCtx === undefined ? createScope(ctx, agent) : undefined
+  const scope: Scope | undefined =
+    input.agentCtx === undefined ? createScope(ctx, agent) : undefined
   const scopedCtx: Context = input.agentCtx ?? (scope as Scope).ctx
 
   // 36 §2.2：管着这次变更的边界答过没有。三个运行时同一份判定。

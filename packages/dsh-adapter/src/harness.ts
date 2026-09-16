@@ -12,13 +12,13 @@ import { randomUUID } from 'node:crypto'
 import type { ChatMessage, Completion, ModelMeta, RunEvent, ToolDef } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
 import { Context } from '@deepseek-ai/cordis'
-import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import type { GenerateOptions, Message, ToolSchema } from '@deepseek-ai/dsh-llm'
 import LlmRuntime, { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import SessionStore from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
@@ -273,8 +273,10 @@ function summarizeTurn(session: Session, firstSeq: number): { text: string; reas
     const event = session.eventAt(seq as never) as SessionEvent | undefined
     if (event === undefined) continue
     if (event.type === 'assistant/message') {
-      const joined = (event.data as { message: { content: { type: string; text?: string }[] } })
-        .message.content.filter((b) => b.type === 'text')
+      const joined = (
+        event.data as { message: { content: { type: string; text?: string }[] } }
+      ).message.content
+        .filter((b) => b.type === 'text')
         .map((b) => b.text ?? '')
         .join('')
       if (joined !== '') text = joined
