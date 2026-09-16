@@ -1708,6 +1708,38 @@ const zh: Table = {
   'chat.teach.outcome.blocked_verbatim_leak':
     'AI 差点把你这段中文原样发给访客，已经拦下——换个说法再教一次。',
   'chat.teach.outcome.archived_only': '这条会话已经关了：指导留着，没有对外说话。',
+
+  // ── WP73（56 §6）：社媒运营岗位页上的内容日历与群发向导 ──────────────
+  'social.calendar.title': '内容日历',
+  'social.calendar.this_week': '本周',
+  'social.calendar.next_week': '下周',
+  'social.calendar.prev': '上一周',
+  'social.calendar.next': '下一周',
+  'social.calendar.failed': '没发出去',
+  'social.calendar.moved': '排期改了，已经提上去等人点头——换个时间发也是一次发布。',
+  'social.calendar.staged': '草稿建好了，已经提上去等人点头。',
+  'social.calendar.always_l1': '发内容永远要人点一下：批了之后它会在你排的那个时刻自己出去。',
+  'social.calendar.no_account':
+    '这条渠道还没登记任何一个号，所以日历上是空的。去连接页连上之后再登记一个号。',
+  'social.calendar.compose.placeholder': '写这条要发的正文。价格、时效、保修只写事实卡里有的。',
+  'social.calendar.compose.submit': '提上去',
+  'social.calendar.compose.cancel': '算了',
+  'social.broadcast.title': '群发',
+  'social.broadcast.step.channel': '① 发到哪儿',
+  'social.broadcast.step.audience': '② 发给谁',
+  'social.broadcast.step.copy': '③ 写什么',
+  'social.broadcast.audience.all': '全员',
+  'social.broadcast.audience.tagged': '带这个标签的',
+  'social.broadcast.audience.active_30d': '最近 30 天活跃的',
+  'social.broadcast.tag.placeholder': '标签名',
+  'social.broadcast.template.placeholder': 'WhatsApp 的模板名（后台批过的那一个）',
+  'social.broadcast.opt_in': '这批人都 opt-in 过，而且我举证得出来',
+  'social.broadcast.copy.placeholder': '群发正文。承诺类的话（"一定""保证""包退"）会被当场拦下来。',
+  'social.broadcast.submit': '算一下受众并提上去',
+  'social.broadcast.always_l1': '群发永远要人点一下：一次发出去收不回来，收的是群里的人。',
+  'social.broadcast.no_account': '这条渠道还没登记任何一个号 / 群，群发没有去处。',
+  'social.broadcast.whatsapp_note':
+    'WhatsApp 只能按后台批过的模板发，而且收件人必须先 opt-in——少一格就不许发（封的是这个品牌的号）。',
 }
 
 const en: Table = {
@@ -3451,6 +3483,43 @@ const en: Table = {
     'The draft quoted your note back at the visitor, so it was refused — reword and teach again.',
   'chat.teach.outcome.archived_only':
     'This conversation is closed: the note was kept, nothing was said.',
+
+  // ── WP73 (56 §6): content calendar and broadcast wizard ──────────────
+  'social.calendar.title': 'Content calendar',
+  'social.calendar.this_week': 'This week',
+  'social.calendar.next_week': 'Next week',
+  'social.calendar.prev': 'Previous week',
+  'social.calendar.next': 'Next week',
+  'social.calendar.failed': 'Not published',
+  'social.calendar.moved':
+    'Rescheduled and sent for approval — publishing at a different time is still publishing.',
+  'social.calendar.staged': 'Draft created and sent for approval.',
+  'social.calendar.always_l1':
+    'Publishing always needs a human tap. Once approved it goes out at the time you set.',
+  'social.calendar.no_account':
+    'No account is registered on this channel yet, so the calendar is empty. Connect it, then register an account.',
+  'social.calendar.compose.placeholder':
+    'Write the post. Prices, delivery times and warranties: only what the fact cards say.',
+  'social.calendar.compose.submit': 'Send for approval',
+  'social.calendar.compose.cancel': 'Cancel',
+  'social.broadcast.title': 'Broadcast',
+  'social.broadcast.step.channel': '① Where',
+  'social.broadcast.step.audience': '② Who',
+  'social.broadcast.step.copy': '③ What',
+  'social.broadcast.audience.all': 'Everyone',
+  'social.broadcast.audience.tagged': 'Tagged',
+  'social.broadcast.audience.active_30d': 'Active in the last 30 days',
+  'social.broadcast.tag.placeholder': 'Tag name',
+  'social.broadcast.template.placeholder': 'WhatsApp template name (an approved one)',
+  'social.broadcast.opt_in': 'Everyone here opted in, and I can prove it',
+  'social.broadcast.copy.placeholder':
+    'Broadcast copy. Commitment wording ("guaranteed", "always", "full refund") is blocked on the spot.',
+  'social.broadcast.submit': 'Count the audience and send for approval',
+  'social.broadcast.always_l1':
+    'Broadcasts always need a human tap: once sent it cannot be taken back, and the recipients are your community.',
+  'social.broadcast.no_account': 'No account or group is registered on this channel yet.',
+  'social.broadcast.whatsapp_note':
+    'WhatsApp only sends pre-approved templates, and recipients must have opted in — either missing and nothing goes out (the number gets banned).',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

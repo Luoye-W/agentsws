@@ -16,6 +16,8 @@ import { PositionConnections } from '@/components/connections/position-connectio
 import { DeckSection } from '@/components/deck'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { ScheduleList } from '@/components/schedule-list'
+// WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
+import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -107,6 +109,12 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
    * 与在线客服那一张同一个道理：这条职责的产出不在图表里，在这些动作里。
    */
   const kolChannel = channelOfRole(here?.role_id)
+  /*
+   * WP73（56 §6）：社媒运营那九条渠道职责的面板上多两块**能动手的**——
+   * 内容日历（周视图，拖得动）与群发向导。与红人那一块同一个道理：
+   * 这条职责的产出不在数字里，在"这周发什么、发给谁"这两件事上。
+   */
+  const socialChannel = socialChannelOfRole(here?.role_id)
   if (view.isPending) return <Skeleton className="h-64 w-full" />
   if (here !== undefined && here.ranges.length === 0)
     return <NoRangeNotice id={id} isOwner={isOwner} />
@@ -115,6 +123,9 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
       {/* WP57：在线客服的入口排在最前——它的产出在对话里，不在数字块里 */}
       {isLiveChat ? <ChatSandboxEntry /> : null}
       {kolChannel === undefined ? null : <KolPanel assignment={id} channel={kolChannel} />}
+      {socialChannel === undefined ? null : (
+        <SocialCalendar assignment={id} channel={socialChannel} />
+      )}
       <div className="flex items-center gap-1">
         {RANGES.map((r) => (
           <Button

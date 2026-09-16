@@ -112,6 +112,8 @@ export const HANDLERS = {
   reconcileDeliveries: 'channels.reconcile_deliveries',
   /** WP68 / 48 §5.2：红人开发信的序列跟进（首封 / 3 天 / 7 天），每天一轮。 */
   kolSequence: 'kol.outreach_sequence',
+  /** WP73 / 56 §6：到点把**已批准**的帖子经适配器发出去（每 5 分钟一轮）。 */
+  socialPublish: 'social.publish_due',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -134,6 +136,15 @@ export const AMAZON_SLA_SWEEP_INTERVAL_MS = 5 * 60_000
  * 一封跟进信当天就该有人看一眼——L2 自动发的那一档也一样，出了问题要来得及拦。
  */
 export const KOL_SEQUENCE_CRON = '0 9 * * *'
+
+/**
+ * WP73：到点发布的巡检节奏。
+ *
+ * 5 分钟一轮是"排期精度"与"空转"之间的那条线：内容排期是按小时排的，
+ * 最坏情况下一条帖子晚 5 分钟出去，没人看得出来；更密只是每分钟去账本里
+ * 查一遍"有没有到点的"，而多数时候答案是没有。
+ */
+export const SOCIAL_PUBLISH_INTERVAL_MS = 5 * 60_000
 
 /**
  * WP55：出站对账的节奏。一分钟一轮——`sent_unknown` 的每一分钟都是「这封信到底
@@ -800,6 +811,30 @@ export function registerKolSequence(scheduler: Scheduler, deps: KolSequenceDeps)
 }
 
 /* ------------------------------------------------------------------ */
+/* ⑰ WP73 / 56 §6：社媒定时发布：每 5 分钟                                  */
+/* ------------------------------------------------------------------ */
+
+export interface SocialPublishDeps {
+  /**
+   * 扫一轮到点了的排期，**已批准**的经适配器发出去。
+   *
+   * 门在"排"那一下（`social_post` 在 `HARD_L1` 里，排期时就要人点头），
+   * 到点之后**没有第二道门**——所以这里只发已经批过的，没批的照实记一句。
+   * 发失败写回 `failed` + 平台原话，**绝不重试**。
+   */
+  sweep(): Promise<{
+    due: number
+    published: number
+    failed: number
+    skipped: unknown[]
+  }>
+}
+
+export function registerSocialPublish(scheduler: Scheduler, deps: SocialPublishDeps): void {
+  scheduler.register(HANDLERS.socialPublish, () => deps.sweep())
+}
+
+/* ------------------------------------------------------------------ */
 /* ⑯ WP55 / 48 §4 L3 #4：出站 outbox 对账：每分钟                          */
 /* ------------------------------------------------------------------ */
 
@@ -957,6 +992,13 @@ export interface SchedulePlanOptions {
     orgDuplicates?: boolean
     /** WP68：红人开发信的序列跟进（有人持有红人那几条职责时才建）。 */
     kol?: boolean
+    /**
+     * WP73：社媒定时发布（有人持有社媒那九条职责之一时才建）。
+     *
+     * 没人做社媒的机器上建一条每 5 分钟跑一遍空库的任务，只是给 25 §3 的
+     * "机器在替你定时做哪几件事"那张清单添一行看不懂的东西。
+     */
+    social?: boolean
   }
 }
 
@@ -1165,6 +1207,24 @@ export async function ensureSystemTasks(
         title: '每天看一眼哪几封开发信该跟进了',
         handler: HANDLERS.kolSequence,
         trigger: { kind: 'cron', expr: KOL_SEQUENCE_CRON, tz },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
+  /*
+   * ⑰ WP73 / 56 §6：社媒定时发布，每 5 分钟一轮。
+   *
+   * **错过了不补跑**（`skip`）：关机三天再开机，不该把这三天欠的帖子一次性
+   * 全发出去——那是九条渠道上同时刷屏。今天该发的今天发，昨天的就过去了
+   * （那一条会留在"排期中"里，人看得见，可以自己决定改时间还是撤掉）。
+   */
+  if (options.has.social === true) {
+    await add(
+      'sched_social_publish',
+      systemTask(base, {
+        title: '每 5 分钟看一眼有没有到点该发的内容',
+        handler: HANDLERS.socialPublish,
+        trigger: { kind: 'interval', every_ms: SOCIAL_PUBLISH_INTERVAL_MS },
         misfire_policy: 'skip',
       }),
     )

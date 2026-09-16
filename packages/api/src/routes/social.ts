@@ -27,10 +27,12 @@ import type {
   CommunityMember,
   CommunityThread,
   CommunityTriage,
+  Iso8601,
   MaybePromise,
   SocialAccount,
   SocialChannel,
   SocialPost,
+  SocialPostKind,
   SocialPostStatus,
 } from '@agentsws/contracts'
 import { SOCIAL_CHANNELS } from '@agentsws/contracts'
@@ -122,6 +124,46 @@ export interface SocialThreadView {
   }
 }
 
+/**
+ * 周视图上的一格（WP73 内容日历）。
+ *
+ * `conflicts` 是 `social-core` 的 `scheduleConflicts` 当场算的，**不落库**：
+ * 撞车是"这一屏排期的一个函数"，存一份就要回答"什么时候重算"。
+ */
+export interface SocialCalendarCell {
+  post_id: string
+  account_id: string
+  account_name: string
+  channel: SocialChannel
+  kind: SocialPostKind
+  status: SocialPostStatus
+  scheduled_at: Iso8601
+  /** 文案的前 60 字（格子里显示的那一截）。 */
+  preview: string
+  /** 撞车说明（空数组 = 没撞）。原样进卡面与格子上那个角标。 */
+  conflicts: string[]
+}
+
+/** `GET /v1/social/calendar` 回的那一份。 */
+export interface SocialCalendarView {
+  from: Iso8601
+  to: Iso8601
+  /** 周视图的**行**：这一屏里出现过的渠道（按 `SOCIAL_CHANNELS` 的顺序）。 */
+  channels: SocialChannel[]
+  cells: SocialCalendarCell[]
+}
+
+/** 建一条草稿 / 改一次排期之后回来的那一份。 */
+export interface SocialPostView {
+  post: SocialPostRow
+  /** 这条排期撞了什么（`social-core` 的 `scheduleConflicts` 算的）。 */
+  conflicts: string[]
+  /** 撞了的话下一个空档在什么时候（找不到就没有这一格，**不硬塞一个**）。 */
+  next_free_slot?: Iso8601
+  /** 那张发布卡（`social_post` **永远 L1**）。 */
+  staged: SocialStagedView
+}
+
 /* ── 端口 ─────────────────────────────────────────────────────────────── */
 
 export interface SocialAccountInput {
@@ -131,6 +173,15 @@ export interface SocialAccountInput {
   url: string
   external_id: string
   connection_id?: string | undefined
+}
+
+export interface SocialPostInput {
+  account_id: string
+  kind: SocialPostKind
+  body: string
+  /** 排期时刻；不给 = 批了就发。 */
+  scheduled_at?: Iso8601 | undefined
+  media_refs?: string[] | undefined
 }
 
 export interface SocialThreadInput {
@@ -160,6 +211,29 @@ export interface SocialPort {
       limit?: number | undefined
     },
   ): MaybePromise<{ rows: SocialPostRow[] }>
+
+  /** 内容日历（周视图那一屏）。 */
+  calendar(
+    actor: SocialActor,
+    filter: { from?: Iso8601 | undefined; to?: Iso8601 | undefined },
+  ): MaybePromise<SocialCalendarView>
+  /**
+   * 建一条草稿并提上去（`stage_post` → `social_post` 卡，**永远 L1**）。
+   *
+   * 排期时间要写在卡面上：批了之后它会在那个时刻自己出去，人按下那一下之前
+   * 必须看得见（36 §2）。
+   */
+  createPost(actor: SocialActor, input: SocialPostInput): MaybePromise<SocialPostView>
+  /**
+   * 改一条的排期（周视图上拖一下）。
+   *
+   * 改时间 = **重新提一张卡**：发布永远 L1，换个时间发也是一次要人点头的发布。
+   */
+  reschedulePost(
+    actor: SocialActor,
+    id: string,
+    input: { scheduled_at: Iso8601 },
+  ): MaybePromise<SocialPostView>
 
   threads(
     actor: SocialActor,
@@ -269,6 +343,20 @@ const ThreadBody = z.object({
   created_at: z.string().min(1).max(40).optional(),
 })
 
+const KINDS = ['post', 'image', 'video', 'short', 'story', 'thread', 'poll'] as const
+
+const PostBody = z.object({
+  account_id: z.string().min(1),
+  kind: z.enum(KINDS),
+  body: z.string().min(1).max(20_000),
+  scheduled_at: z.string().min(1).max(40).optional(),
+  media_refs: z.array(z.string().min(1).max(500)).max(20).optional(),
+})
+
+const ScheduleBody = z.object({
+  scheduled_at: z.string().min(1).max(40),
+})
+
 const ModerateBody = z.object({
   action: z.enum(MODERATION_ACTIONS),
   reason: z.string().max(500).optional(),
@@ -357,6 +445,77 @@ export function socialRoutes(): Route[] {
           }),
         )
       },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/calendar',
+        operationId: 'getSocialCalendar',
+        summary:
+          '内容日历（56 §2 面板那一块的周视图）：一行一条渠道、一列一天；撞车当场算，**不落库**',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ACCOUNT,
+        params: [
+          { name: 'from', in: 'query', description: '从哪天起（ISO）；不给就是本周一' },
+          { name: 'to', in: 'query', description: '到哪天止（ISO，左闭右开）；不给就是两周后' },
+        ],
+        returns: 'SocialCalendarView',
+      },
+      async (c, deps) => {
+        const from = c.req.query('from')
+        const to = c.req.query('to')
+        return ok(
+          c,
+          await portOf(deps).calendar(actorOf(c), {
+            ...(from === undefined || from === '' ? {} : { from }),
+            ...(to === undefined || to === '' ? {} : { to }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/posts',
+        operationId: 'createSocialPost',
+        summary:
+          '建一条草稿并提上去：一张 `social_post` 发布卡（**永远 L1**），卡面上带预览与排期时间；撞车在卡上说明',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        body: PostBody,
+        returns: 'SocialPostView',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).createPost(actorOf(c), await body(c, PostBody)), 201),
+    ),
+    route(
+      {
+        method: 'patch',
+        path: '/v1/social/posts/:id/schedule',
+        operationId: 'rescheduleSocialPost',
+        summary:
+          '改一条的排期（周视图上拖一下）。换个时间发也是一次发布，所以**重新出一张卡**；同渠道同一小时两条会在卡上说撞了',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        params: [{ name: 'id', in: 'path', required: true, description: 'post_id' }],
+        body: ScheduleBody,
+        returns: 'SocialPostView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await portOf(deps).reschedulePost(
+            actorOf(c),
+            param(c, 'id'),
+            await body(c, ScheduleBody),
+          ),
+        ),
     ),
     route(
       {

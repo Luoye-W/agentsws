@@ -26,9 +26,13 @@ import type {
   SocialAccountInput,
   SocialAccountRow,
   SocialActor,
+  SocialCalendarCell,
+  SocialCalendarView,
   SocialMemberRow,
   SocialPort,
+  SocialPostInput,
   SocialPostRow,
+  SocialPostView,
   SocialStagedView,
   SocialThreadInput,
   SocialThreadRow,
@@ -44,16 +48,32 @@ import type {
   CommunityThread,
   EffectiveConfig,
   EventEnvelope,
+  Iso8601,
   Mandate,
   ObjectRef,
   ProvenanceState,
   SocialAccount,
+  SocialChannel,
+  SocialPost,
+  StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { SOCIAL_CHANNELS } from '@agentsws/contracts'
 import type { CommunityRule, ModerationAction } from '@agentsws/social-core'
-import { ACTION_WORDS, handoffOf, moderate, triageThread } from '@agentsws/social-core'
+import {
+  ACTION_WORDS,
+  contentCalendar,
+  handoffOf,
+  moderate,
+  nextFreeSlot,
+  type ScheduleConflict,
+  scheduleConflicts,
+  triageThread,
+  weekStart,
+} from '@agentsws/social-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { SocialStore } from './social.js'
+import type { SocialChannelsAssembly } from './social-channels.js'
 
 /**
  * 群规的默认一份（56 §2「群规」那一格还没有界面，所以先给一份能用的）。
@@ -99,8 +119,16 @@ export interface SocialServiceOptions {
   store: SocialStore
   clock: Clock
   approvals: ApprovalBus
-  /** 15 §5 变更账本的 stage 口。 */
-  ledger: { stage(input: StageInput): Promise<StageOutcome> }
+  /**
+   * 15 §5 变更账本的 stage / list 口。
+   *
+   * `list` 是定时发布那一跳用的：**"这条排期批了没有"只有账本知道**——
+   * 在社媒库那张表上另记一格 `approved` 就是第二本账，两本账必然对不上。
+   */
+  ledger: {
+    stage(input: StageInput): Promise<StageOutcome>
+    list(filter: { workspace_id: WorkspaceId; kind?: ChangeKind }): Promise<StagedChange[]>
+  }
   /** 05 §4 生效配置：额度与等级从本次那条分配来。 */
   effectiveConfig(id: AssignmentId): EffectiveConfig
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
@@ -115,10 +143,40 @@ export interface SocialServiceOptions {
   owner(): Promise<string | undefined>
   /** 这个群用的群规。不给就按 {@link DEFAULT_COMMUNITY_RULES}。 */
   rulesOf?(account_id: string): readonly CommunityRule[]
+  /**
+   * 九条渠道的适配器（WP73）。不给的话"到点真发出去"那一跳照实说没装配——
+   * 其余的路（排期、草稿、审批、日历）一条都不少。
+   */
+  channels?: SocialChannelsAssembly
+  /**
+   * 日界线的时区偏移（分钟；东八区是 480）。
+   *
+   * 不是装饰：一条排在北京时间 09-10 07:30 的帖子在 UTC 上是 09-09，按 UTC 分日
+   * "今天三条"会算成两天各一条半，日额度就形同虚设（`social-core/calendar.ts`）。
+   */
+  tzOffsetMinutes?: number
 }
 
 export interface SocialServiceAssembly {
   port: SocialPort
+  /**
+   * 定时发布那一跳（56 §6：到点把**已批准**的帖子经适配器发出去）。
+   *
+   * 调度器**按品牌各跑一轮**（照 WP66 / WP68 的写法）。发失败就写回
+   * `failed` + 平台原话，**不重试**——一条可能已经发出去的帖子重发一次，
+   * 代价是关注的人看到两条一样的。
+   */
+  publishDue(): Promise<SocialPublishSweep>
+}
+
+/** {@link SocialServiceAssembly.publishDue} 回的那一份。 */
+export interface SocialPublishSweep {
+  /** 到点了的有几条。 */
+  due: number
+  published: number
+  failed: number
+  /** 没发的那些与为什么（哪个品牌的哪一条没发要看得出来）。 */
+  skipped: { post_id: string; reason: string }[]
 }
 
 export function createSocialService(options: SocialServiceOptions): SocialServiceAssembly {
@@ -237,6 +295,81 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     }
   }
 
+  const tz = options.tzOffsetMinutes ?? 0
+
+  /** 撞车说明（`conflict` 在前，`notice` 在后；原样进卡面与格子上那个角标）。 */
+  const conflictLines = (hits: readonly ScheduleConflict[]): string[] => hits.map((h) => h.message)
+
+  /** 排期撞了什么（`social-core` 的那一份判据，这里不写第二份）。 */
+  const conflictsFor = (candidate: {
+    id?: string
+    account_id: string
+    scheduled_at: Iso8601
+    body: string
+  }): ScheduleConflict[] =>
+    scheduleConflicts(candidate, store.posts(), { now: clock.now(), tz_offset_minutes: tz })
+
+  /** 提一张发布卡（`social_post` 在 `HARD_L1` 里，**永远人审**）。 */
+  const stagePost = async (
+    actor: SocialActor,
+    post: SocialPost,
+    hits: readonly ScheduleConflict[],
+  ): Promise<SocialStagedView> => {
+    const account = accountOr404(post.account_id)
+    const when =
+      post.scheduled_at === undefined
+        ? '没排时间：批了就发。'
+        : `排在 ${post.scheduled_at} 自己出去——到点之后没有第二道门，所以门在这一下。`
+    return stageOne({
+      actor,
+      action: SOCIAL_ACTIONS.stagePost,
+      kind: 'social_post',
+      target: { type: 'social_account', id: account.id },
+      before: { status: 'draft' },
+      after: {
+        post_id: post.id,
+        channel: post.channel,
+        account_id: account.id,
+        kind: post.kind,
+        body: post.body,
+        ...(post.scheduled_at === undefined ? {} : { scheduled_at: post.scheduled_at }),
+        status: post.scheduled_at === undefined ? 'draft' : 'scheduled',
+      },
+      notes: [when, ...conflictLines(hits)],
+      title: `发布：${account.display_name}`,
+      // 排期时间要**写在卡面上**：批了之后它会在那个时刻自己出去（36 §2）
+      summary:
+        post.scheduled_at === undefined
+          ? post.body.slice(0, 120)
+          : `${post.body.slice(0, 100)}（排在 ${post.scheduled_at}）` +
+            (hits.length === 0 ? '' : ` ⚠ ${conflictLines(hits).join(' ')}`),
+      seen: [{ type: 'social_account', id: account.id }],
+      rule: 'scope_manager',
+    })
+  }
+
+  const postView = (
+    post: SocialPost,
+    hits: readonly ScheduleConflict[],
+    staged: SocialStagedView,
+  ): SocialPostView => {
+    const blocking = hits.filter((h) => h.severity === 'conflict')
+    const slot =
+      blocking.length === 0 || post.scheduled_at === undefined
+        ? undefined
+        : nextFreeSlot({ account_id: post.account_id, body: post.body }, store.posts(), {
+            now: clock.now(),
+            from: post.scheduled_at,
+            tz_offset_minutes: tz,
+          })
+    return {
+      post: post as SocialPostRow,
+      conflicts: conflictLines(hits),
+      ...(slot === undefined ? {} : { next_free_slot: slot }),
+      staged,
+    }
+  }
+
   const port: SocialPort = {
     accounts: (_actor, filter) => ({
       rows: store.accounts(
@@ -276,6 +409,110 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       return {
         rows: (filter.limit === undefined ? rows : rows.slice(0, filter.limit)) as SocialPostRow[],
       }
+    },
+
+    calendar: (_actor, filter): SocialCalendarView => {
+      const now = clock.now()
+      const from = filter.from ?? weekStart(now, tz)
+      const to = filter.to ?? new Date(Date.parse(from) + 14 * 86_400_000).toISOString()
+      const fromMs = Date.parse(from)
+      const toMs = Date.parse(to)
+      const all = store.posts()
+      // 两周那两格由 `social-core` 算（面板与这一屏读的是同一份判据）
+      const weeks = contentCalendar(all, { now, tz_offset_minutes: tz })
+      const inRange = [...weeks.this_week.entries, ...weeks.next_week.entries].filter((e) => {
+        const t = Date.parse(e.scheduled_at)
+        return !Number.isNaN(t) && t >= fromMs && t < toMs
+      })
+      const cells: SocialCalendarCell[] = inRange.map((e) => {
+        const post = store.post(e.post_id)
+        const hits =
+          post === undefined
+            ? []
+            : conflictsFor({
+                id: post.id,
+                account_id: post.account_id,
+                scheduled_at: e.scheduled_at,
+                body: post.body,
+              })
+        return {
+          post_id: e.post_id,
+          account_id: e.account_id,
+          account_name: accountName(e.account_id),
+          channel: e.channel as SocialChannel,
+          kind: e.kind as SocialCalendarCell['kind'],
+          status: e.status,
+          scheduled_at: e.scheduled_at,
+          preview: e.preview,
+          conflicts: conflictLines(hits),
+        }
+      })
+      // 行的顺序按 `SOCIAL_CHANNELS`（内容组在前，56 §0），不按这一屏碰巧的出现顺序
+      const seen = new Set(cells.map((c) => c.channel))
+      return {
+        from,
+        to,
+        channels: SOCIAL_CHANNELS.map((c) => c.id).filter((c) => seen.has(c)),
+        cells,
+      }
+    },
+
+    async createPost(actor, input: SocialPostInput): Promise<SocialPostView> {
+      const account = accountOr404(input.account_id)
+      const post: SocialPost = {
+        id: nextId('sp'),
+        account_id: account.id,
+        channel: account.channel,
+        kind: input.kind,
+        status: input.scheduled_at === undefined ? 'draft' : 'scheduled',
+        body: input.body,
+        ...(input.scheduled_at === undefined ? {} : { scheduled_at: input.scheduled_at }),
+        ...(input.media_refs === undefined ? {} : { media_refs: input.media_refs }),
+      }
+      const hits =
+        input.scheduled_at === undefined
+          ? []
+          : conflictsFor({
+              account_id: account.id,
+              scheduled_at: input.scheduled_at,
+              body: input.body,
+            })
+      store.savePost(post)
+      const staged = await stagePost(actor, post, hits)
+      emit('social.post_staged', actor.person_id, {
+        post_id: post.id,
+        channel: post.channel,
+        ...(post.scheduled_at === undefined ? {} : { scheduled_at: post.scheduled_at }),
+        conflicts: hits.map((h) => h.kind),
+        staged: staged.staged,
+      })
+      return postView(post, hits, staged)
+    },
+
+    async reschedulePost(actor, id, input): Promise<SocialPostView> {
+      const post = store.post(id)
+      if (post === undefined) throw new ApiError('not_found', `没有这条帖子：${id}`)
+      if (post.status === 'published')
+        throw new ApiError('invalid_input', '这一条已经发出去了，改不了排期。')
+      const hits = conflictsFor({
+        id: post.id,
+        account_id: post.account_id,
+        scheduled_at: input.scheduled_at,
+        body: post.body,
+      })
+      const moved: SocialPost = { ...post, scheduled_at: input.scheduled_at, status: 'scheduled' }
+      store.savePost(moved)
+      // 换个时间发也是一次发布：**重新出一张卡**（`social_post` 永远 L1）
+      const staged = await stagePost(actor, moved, hits)
+      emit('social.post_rescheduled', actor.person_id, {
+        post_id: post.id,
+        channel: post.channel,
+        from: post.scheduled_at ?? null,
+        to: input.scheduled_at,
+        conflicts: hits.map((h) => h.kind),
+        staged: staged.staged,
+      })
+      return postView(moved, hits, staged)
     },
 
     threads: (_actor, filter) => ({
@@ -551,5 +788,93 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     },
   }
 
-  return { port }
+  /**
+   * 到点了的那些真发出去（56 §6 定时方）。
+   *
+   * 三条：
+   *
+   * 1. **只发批准过的**。"这条排期批了没有"只有账本知道——所以这里去
+   *    `ledger.list({ kind: 'social_post' })` 里找这条帖子那一条变更，
+   *    状态是 `approved` / `auto_approved` / `applied` 才发。没批的到点了也不发，
+   *    照实记一句（`skipped`）。
+   * 2. **发失败不重试**。写回 `failed` + 平台原话（不翻译成"出错了"），
+   *    面板上那条会单独摆着，人看得见。重试一条可能已经发出去的帖子，
+   *    代价是关注的人看到两条一样的。
+   * 3. **没装适配器就照实说**。排期、草稿、审批照常，只是最后那一跳说
+   *    "这条渠道还没接上"。
+   */
+  const publishDue = async (): Promise<SocialPublishSweep> => {
+    const now = clock.now()
+    const nowMs = Date.parse(now)
+    const due = store
+      .posts({ status: 'scheduled' })
+      .filter((p) => p.scheduled_at !== undefined && Date.parse(p.scheduled_at) <= nowMs)
+    const out: SocialPublishSweep = { due: due.length, published: 0, failed: 0, skipped: [] }
+    if (due.length === 0) return out
+
+    const changes = await ledger.list({ workspace_id, kind: 'social_post' })
+    const approvedPosts = new Set(
+      changes
+        .filter(
+          (ch) =>
+            ch.status === 'approved' || ch.status === 'auto_approved' || ch.status === 'applied',
+        )
+        .map((ch) => (ch.after as { post_id?: string } | null)?.post_id)
+        .filter((x): x is string => typeof x === 'string'),
+    )
+
+    for (const post of due) {
+      if (!approvedPosts.has(post.id)) {
+        // 没批的到点了也不发（发布永远人审；门在"排"那一下，不是"到点"那一下）
+        out.skipped.push({ post_id: post.id, reason: '这条排期还没人点头，到点了也不发。' })
+        continue
+      }
+      const adapter = options.channels?.adapters[post.channel]
+      if (adapter?.publish === undefined) {
+        out.skipped.push({
+          post_id: post.id,
+          reason: `${post.channel} 这条渠道现在发不出去（还没接上，或者这条渠道没有发布接口）。到点了，去后台手工发一下。`,
+        })
+        continue
+      }
+      const account = store.account(post.account_id)
+      if (account === undefined) {
+        out.skipped.push({ post_id: post.id, reason: '这条帖子挂的那个号已经不在了。' })
+        continue
+      }
+      const result = await adapter.publish({
+        account_external_id: account.external_id,
+        kind: post.kind,
+        body: post.body,
+        ...(post.media_refs === undefined ? {} : { media_urls: post.media_refs }),
+        // **到点了才调这一跳**，所以不带 `scheduled_at`：排期是我们自己的调度器管的
+      })
+      if (result.ok) {
+        store.savePost({
+          ...post,
+          status: 'published',
+          published_at: now,
+          external_id: result.data.external_id,
+        })
+        out.published += 1
+        emit('social.post_published', 'system' as never, {
+          post_id: post.id,
+          channel: post.channel,
+          external_id: result.data.external_id,
+        })
+        continue
+      }
+      // 纪律 2：平台原话原样留着，**不重试**
+      store.savePost({ ...post, status: 'failed', failure_reason: result.message })
+      out.failed += 1
+      emit('social.post_failed', 'system' as never, {
+        post_id: post.id,
+        channel: post.channel,
+        reason: result.reason,
+      })
+    }
+    return out
+  }
+
+  return { port, publishDue }
 }

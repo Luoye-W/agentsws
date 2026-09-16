@@ -57,7 +57,7 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { brandNameOf, KOL_CHANNEL_IDS } from '@agentsws/contracts'
+import { brandNameOf, KOL_CHANNEL_IDS, SOCIAL_ROLE_IDS } from '@agentsws/contracts'
 import { evaluateGuardrail } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
@@ -202,6 +202,7 @@ import {
   registerReconcileDeliveries,
   registerReview,
   registerSkillsWeekly,
+  registerSocialPublish,
   registerTokenRefresh,
   type ScheduleAssembly,
   type SchedulePosition,
@@ -1267,6 +1268,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const socialService = createSocialService({
       workspace_id: ws,
       store: social,
+      // WP73：到点真发出去那一跳走这九条适配器
+      channels: socialChannels,
+      // 日界线按**这个品牌的数据源**报的时区（与定时任务那一份同一个真源，
+      // 不去读本机时区——那在测试与服务器上都不是用户所在的那个时区）
+      tzOffsetMinutes: workData.tz_offset_minutes,
       clock,
       approvals: txn.approvals,
       ledger: txn.ledger,
@@ -1901,6 +1907,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return out
     },
   })
+  /*
+   * WP73 / 56 §6：社媒定时发布，每 5 分钟一轮，**按品牌各跑一轮**。
+   *
+   * 一个品牌的内容只能用那个品牌的连接与那个品牌的号发出去——串了品牌
+   * 等于用 B 的号发 A 的东西，而那件事在平台那边是收不回来的。
+   */
+  registerSocialPublish(schedule.scheduler, {
+    sweep: async () => {
+      const out = { due: 0, published: 0, failed: 0, skipped: [] as unknown[] }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.socialService.publishDue()
+        out.due += one.due
+        out.published += one.published
+        out.failed += one.failed
+        // 哪个品牌的哪一条没发要看得出来（一个坏了不该拖垮别的）
+        out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
+      }
+      return out
+    },
+  })
   // WP55 / 48 §4 L3 #4：出站对账（每分钟）。`sent_unknown` 绝不自动重发
   registerReconcileDeliveries(schedule.scheduler, {
     reconcile: async () => {
@@ -2011,6 +2037,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kol: KOL_CHANNEL_IDS.some(
         (channel) => roles.assignments.listByRole(`kol.${channel}`).length > 0,
       ),
+      /*
+       * WP73：有人持有社媒那九条渠道职责之一时才建那条巡检。
+       * 与红人那一条同理——没人做社媒的机器上不该有这一行。
+       */
+      social: SOCIAL_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
     },
   })
 

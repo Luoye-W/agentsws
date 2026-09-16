@@ -361,9 +361,13 @@ export { secretRoutes } from './routes/secrets.js'
 export type {
   SocialAccountInput,
   SocialAccountRow,
+  SocialCalendarCell,
+  SocialCalendarView,
   SocialMemberRow,
   SocialPort,
+  SocialPostInput,
   SocialPostRow,
+  SocialPostView,
   SocialStagedView,
   SocialThreadInput,
   SocialThreadRow,

@@ -3855,3 +3855,138 @@ export const saveWecomBot = (values: {
   secret: string
 }): Promise<{ configured: boolean; bot_id: string }> =>
   api('/v1/im/wecom', { method: 'PUT', body: values })
+
+/* ── WP73（56 §6）：社媒库 `/v1/social/*` ───────────────────────────────── */
+
+/** 九条渠道（真源是契约的 `SOCIAL_CHANNELS`；工作台不依赖服务端包，这里照抄一份）。 */
+export type SocialChannelId =
+  | 'meta'
+  | 'tiktok'
+  | 'x'
+  | 'youtube'
+  | 'facebook_group'
+  | 'reddit'
+  | 'discord'
+  | 'telegram_group'
+  | 'whatsapp'
+
+/** 周视图上的一格。 */
+export interface SocialCalendarCellData {
+  post_id: string
+  account_id: string
+  account_name: string
+  channel: SocialChannelId
+  kind: string
+  status: 'draft' | 'scheduled' | 'published' | 'failed'
+  scheduled_at: string
+  preview: string
+  /** 撞车说明（空数组 = 没撞）。服务端当场算的，界面不自己判。 */
+  conflicts: string[]
+}
+
+export interface SocialCalendarData {
+  from: string
+  to: string
+  channels: SocialChannelId[]
+  cells: SocialCalendarCellData[]
+}
+
+export interface SocialAccountData {
+  id: string
+  channel: SocialChannelId
+  handle: string
+  display_name: string
+  url: string
+  external_id: string
+  followers?: number
+  member_count?: number
+}
+
+export interface SocialStagedData {
+  staged: boolean
+  change_id?: string
+  approval_item_id?: string
+  message?: string
+  level?: string
+}
+
+export interface SocialPostData {
+  post: {
+    id: string
+    account_id: string
+    channel: SocialChannelId
+    kind: string
+    status: string
+    body: string
+    scheduled_at?: string
+  }
+  conflicts: string[]
+  next_free_slot?: string
+  staged: SocialStagedData
+}
+
+export interface SocialBroadcastData {
+  channel: SocialChannelId
+  account_id: string
+  audience_size: number
+  suppressed: number
+  too_soon: number
+  /** 卡面上那一句（"342 人收，剔了 18 个"）。 */
+  note: string
+  /** 提交前的自查：不为空 = 别提交，先把这些解决掉。 */
+  problems: string[]
+  staged: SocialStagedData
+}
+
+export const getSocialCalendar = (
+  range: { from?: string; to?: string } = {},
+  assignment?: string,
+): Promise<SocialCalendarData> => {
+  const q = new URLSearchParams()
+  if (range.from !== undefined) q.set('from', range.from)
+  if (range.to !== undefined) q.set('to', range.to)
+  const s = q.toString()
+  return api(`/v1/social/calendar${s === '' ? '' : `?${s}`}`, withAssignment(assignment))
+}
+
+export const getSocialAccounts = (
+  filter: { channel?: SocialChannelId } = {},
+  assignment?: string,
+): Promise<{ rows: SocialAccountData[] }> => {
+  const q = new URLSearchParams()
+  if (filter.channel !== undefined) q.set('channel', filter.channel)
+  const s = q.toString()
+  return api(`/v1/social/accounts${s === '' ? '' : `?${s}`}`, withAssignment(assignment))
+}
+
+export const createSocialPost = (
+  input: { account_id: string; kind: string; body: string; scheduled_at?: string },
+  assignment?: string,
+): Promise<SocialPostData> =>
+  api('/v1/social/posts', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** 周视图上拖一下 = 改排期。换个时间发也是一次发布，所以服务端会重新出一张卡。 */
+export const rescheduleSocialPost = (
+  id: string,
+  scheduled_at: string,
+  assignment?: string,
+): Promise<SocialPostData> =>
+  api(`/v1/social/posts/${encodeURIComponent(id)}/schedule`, {
+    method: 'PATCH',
+    body: { scheduled_at },
+    ...withAssignment(assignment),
+  })
+
+/** 群发向导那一下：算受众 → 出群发卡（**永远 L1**）。 */
+export const createSocialBroadcast = (
+  input: {
+    account_id: string
+    body: string
+    audience: 'all' | 'tagged' | 'active_30d'
+    tag?: string
+    template_id?: string
+    opt_in_verified?: boolean
+  },
+  assignment?: string,
+): Promise<SocialBroadcastData> =>
+  api('/v1/social/broadcasts', { method: 'POST', body: input, ...withAssignment(assignment) })
