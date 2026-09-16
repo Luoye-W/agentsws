@@ -12,6 +12,7 @@
     "packages/contracts/src/cloud.ts",
     "packages/contracts/src/common.ts",
     "packages/contracts/src/connect.ts",
+    "packages/contracts/src/connection-directory.ts",
     "packages/contracts/src/data.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/identity.ts",
@@ -47,7 +48,7 @@
     "packages/roles/roles/kol/youtube.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "6cd5b73fc77e17d889e15ccf5e957770",
+  "source_digest": "da3a85a0275241253112db683ae6bdcf",
   "objects": [
     {
       "id": "ad_set",

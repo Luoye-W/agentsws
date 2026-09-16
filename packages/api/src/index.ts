@@ -146,6 +146,14 @@ export type {
 } from './routes/cloud-account.js'
 export { cloudAccountRoutes } from './routes/cloud-account.js'
 export type {
+  ConnectionDirectoryItemView,
+  ConnectionDirectoryPort,
+  ConnectionRuntimeState,
+  PositionConnectionItemView,
+  PositionConnectionsView,
+} from './routes/connection-directory.js'
+export { connectionDirectoryRoutes } from './routes/connection-directory.js'
+export type {
   BeginConnectResult,
   ConnectionOwnership,
   ConnectionStatus,

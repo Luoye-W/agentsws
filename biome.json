@@ -1,6 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
   "files": {
+    "maxSize": 4194304,
     "includes": [
       "**",
       "!node_modules",

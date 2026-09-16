@@ -56,6 +56,7 @@ import type { CatalogPort } from './routes/catalog.js'
 import type { ChatPort } from './routes/chat.js'
 import type { CloudPort } from './routes/cloud.js'
 import type { CloudAccountPort } from './routes/cloud-account.js'
+import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
@@ -614,6 +615,13 @@ export interface GatewayDeps {
   meetings?: MeetingsPort
   /** WP20 连接面（连接向导 / 凭据原生表单直填）；没装配时 `/v1/connections/*` 回 not_implemented。 */
   connections?: ConnectionsPort
+  /**
+   * WP83（54（将改号 55）§4）：连接目录与岗位连接清单。
+   * 没装配时 `/v1/connection-directory*` 与 `GET /v1/positions/:id/connections`
+   * 回 not_implemented——连接页与岗位页照常能用，只是少了"添加连接"那一屏
+   * 与岗位页那张"连上这 N 个就能开工"的卡。
+   */
+  connectionDirectory?: ConnectionDirectoryPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
   /**

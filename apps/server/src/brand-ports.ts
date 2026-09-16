@@ -16,6 +16,7 @@
 import type {
   AskPort,
   CloudPort,
+  ConnectionDirectoryPort,
   ConnectionsPort,
   ModelDefaultsView,
   ModelsPort,
@@ -241,6 +242,19 @@ export function brandPositionPort(
   make: (workspace_id: WorkspaceId) => Promise<PositionEntryPort>,
 ): PositionEntryPort {
   return scopedPort<PositionEntryPort>(make, () => brands.bootstrap)
+}
+
+/**
+ * WP83（54（将改号 55）§4）：连接目录与岗位连接清单。
+ *
+ * 按品牌取，和连接面同一条理由（52 O1）：目录上的"已连 / 未连"是**这个品牌**的
+ * 连接算出来的；品牌 B 的岗位不能因为品牌 A 连了邮箱就显示"已就绪"。
+ */
+export function brandConnectionDirectoryPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<ConnectionDirectoryPort>,
+): ConnectionDirectoryPort {
+  return scopedPort<ConnectionDirectoryPort>(make, () => brands.bootstrap)
 }
 
 /** 37 工作模型（事项 / 目标 / 待办 / 计划 / 复盘）：一个品牌一份 `Work`。 */
