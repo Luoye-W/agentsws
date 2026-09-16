@@ -2,10 +2,11 @@
  * 公司页（WP28 交付 C）。
  *
  * 四组断言：
- * 1. **岗位卡片**：名字、含哪些职责、分给了谁——三样都在卡上；
+ * 1. **岗位一行**：名字、职责数、分给了谁；职责默认折叠（WP70 / 54 §4）；
  * 2. **分配向导**：选成员 → 选岗位 → 选范围 → 确认，发出去的就是那三样；
  * 3. **邀请**：本地档把链接摆出来（token 只出现在这一处，不进别的地方）；
- * 4. **改职责必经审批**：提交之后界面说的是"已提交审批"，不是"已保存"。
+ * 4. **改职责必经审批**：提交之后界面说的是"已提交审批"，不是"已保存"——
+ *    WP70 之后这一套在「岗位」tab 的折叠层里，顶层没有「职责」tab 了。
  *
  * 另外一条贯穿的：**页面上不出现 role_id / assignment_id 裸串**（36 §3）。
  */
@@ -68,7 +69,10 @@ const POSITIONS: OrgPositionView[] = [
     name_en: 'DTC After-sales Support',
     version: '1.0.0',
     source: 'bundled',
-    roles: [{ role_id: 'dtc.support', name: '独立站售后客服', default: true, loaded: true }],
+    roles: [
+      { role_id: 'dtc.support', name: '独立站售后客服', default: true, loaded: true },
+      { role_id: 'dtc.support-custom', name: '售后（本公司）', default: true, loaded: true },
+    ],
     holders: [
       { person_id: 'per_wang', name: '王岚', ranges: [{ kind: 'store', id: 'store_main' }] },
     ],
@@ -129,6 +133,40 @@ const MEMBERS: OrgMemberView[] = [
     ],
   },
 ]
+
+/** WP70：一个人在同一个岗位下拿着两条职责——成员 tab 那一层折叠靠它验。 */
+const TWO_DUTIES: OrgMemberView = {
+  person_id: 'per_chen',
+  name: '陈舟',
+  email: 'chen@nordvolt.example',
+  role: 'member',
+  joined_at: T0,
+  positions: [{ id: 'dtc-support', name: '独立站售后客服' }],
+  assignments: [
+    {
+      assignment_id: 'asg_3',
+      person_id: 'per_chen',
+      person_name: '陈舟',
+      role_id: 'dtc.support',
+      role_name: '独立站售后客服',
+      role_version: '1.0.0',
+      ranges: [{ kind: 'store', id: 'store_main' }],
+      granted_at: T0,
+      unassigned_range: false,
+    },
+    {
+      assignment_id: 'asg_4',
+      person_id: 'per_chen',
+      person_name: '陈舟',
+      role_id: 'dtc.support-custom',
+      role_name: '售后（本公司）',
+      role_version: '1.0.0',
+      ranges: [{ kind: 'store', id: 'store_main' }],
+      granted_at: T0,
+      unassigned_range: false,
+    },
+  ],
+}
 
 const INVITE: OrgInvitationView = {
   id: 'inv_1',
@@ -215,7 +253,7 @@ vi.mock('@/lib/api', async () => {
     }),
     listOrgPositions: async () => POSITIONS,
     listRoleDefinitions: async () => state.roles,
-    listMembers: async () => MEMBERS,
+    listMembers: async () => [...MEMBERS, TWO_DUTIES],
     listInvitations: async () => [],
     listRangeOptions: async () => [
       { kind: 'store', id: 'store_main', label: 'store_main' },
@@ -290,14 +328,38 @@ beforeEach(() => {
 })
 
 describe('公司页：岗位', () => {
-  it('一个岗位一张卡：名字、含哪些职责、分给了谁', async () => {
+  it('一个岗位一行：名字、职责数、分给了谁；职责默认折叠（WP70）', async () => {
+    const user = userEvent.setup()
     renderWithProviders(<OrgPage />)
     const cards = await screen.findAllByTestId('position-card')
     expect(cards).toHaveLength(2)
     const support = cards[0] as HTMLElement
     expect(within(support).getAllByText('独立站售后客服').length).toBeGreaterThan(0)
+    expect(within(support).getByTestId('position-duty-count').textContent).toBe('2 条职责')
     expect(within(support).getByTestId('position-holders').textContent).toContain('王岚')
     expect(within(support).getByTestId('position-holders').textContent).toContain('store_main')
+    // 收着的时候一条职责都看不见
+    expect(within(support).queryByTestId('position-duty')).toBeNull()
+    expect(within(support).queryByText('售后（本公司）')).toBeNull()
+    // 点开才是那两条
+    await user.click(within(support).getByTestId('position-duties-toggle'))
+    expect(within(support).getAllByTestId('position-duty')).toHaveLength(2)
+    expect(within(support).getByText('售后（本公司）')).toBeDefined()
+  })
+
+  it('一个岗位只有一条职责时不折叠：那一条直接摆在岗位下面（WP70）', async () => {
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    const member = cards[1] as HTMLElement
+    expect(within(member).queryByTestId('position-duties-toggle')).toBeNull()
+    expect(within(member).getByTestId('position-duties-single')).toBeDefined()
+    expect(within(member).getByText('工作区成员')).toBeDefined()
+  })
+
+  it('顶层没有「职责」tab 了（职责一律归在岗位下面）', async () => {
+    renderWithProviders(<OrgPage />)
+    await screen.findAllByTestId('position-card')
+    expect(screen.queryByRole('tab', { name: '职责' })).toBeNull()
   })
 
   it('页面上没有 role_id / assignment_id 裸串', async () => {
@@ -530,12 +592,32 @@ describe('公司页：成员与邀请', () => {
     expect(li.textContent).toContain('没给范围，现在什么都查不到')
   })
 
+  it('一个人在一个岗位下拿着两条职责：先出岗位徽章，职责折起来（WP70）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    await user.click(await screen.findByRole('tab', { name: '成员' }))
+    const rows = await screen.findAllByTestId('member-row')
+    const chen = rows[2] as HTMLElement
+    // 岗位在外
+    const group = within(chen).getByTestId('member-position')
+    expect(group.textContent).toContain('独立站售后客服')
+    // 两条职责收着：点开之前一条分配行都没有
+    expect(within(chen).queryByTestId('member-assignment')).toBeNull()
+    await user.click(within(chen).getByTestId('member-duties-dtc-support-toggle'))
+    expect(within(chen).getAllByTestId('member-assignment')).toHaveLength(2)
+    // 撤销打的还是那条分配
+    await user.click(within(chen).getAllByTestId('assignment-revoke')[1] as HTMLElement)
+    await waitFor(() => {
+      expect(revoked).toEqual(['asg_4'])
+    })
+  })
+
   it('每个人名下的岗位与范围都看得见，撤销打的是那条分配', async () => {
     const user = userEvent.setup()
     renderWithProviders(<OrgPage />)
     await user.click(await screen.findByRole('tab', { name: '成员' }))
     const rows = await screen.findAllByTestId('member-row')
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(3)
     const wang = rows[0] as HTMLElement
     expect(within(wang).getByTestId('member-assignment').textContent).toContain('独立站售后客服')
     await user.click(within(wang).getByTestId('assignment-revoke'))
@@ -545,25 +627,41 @@ describe('公司页：成员与邀请', () => {
   })
 })
 
-describe('公司页：职责', () => {
+describe('公司页：岗位下面那一层职责（WP70）', () => {
+  /** 展开第一个岗位的折叠层，点开某条职责的「这条职责的规矩」。 */
+  const openDuty = async (
+    user: ReturnType<typeof userEvent.setup>,
+    name: string,
+  ): Promise<HTMLElement> => {
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    const support = cards[0] as HTMLElement
+    await user.click(within(support).getByTestId('position-duties-toggle'))
+    const row = within(support)
+      .getAllByTestId('position-duty')
+      .find((x) => (x.textContent ?? '').includes(name)) as HTMLElement
+    await user.click(within(row).getByTestId('position-duty-detail'))
+    return row
+  }
+
   it('内置模板只给"复制一份"；自定义副本改完显示「已提交审批」', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<OrgPage />)
-    await user.click(await screen.findByRole('tab', { name: '职责' }))
+    const bundled = await openDuty(user, '独立站售后客服')
+    // 内置那条：只有复制，没有提交
+    expect(within(bundled).getByTestId('role-copy')).toBeTruthy()
+    expect(within(bundled).queryByTestId('role-submit')).toBeNull()
 
-    // 默认选中第一条（内置）：只有复制，没有提交
-    expect(await screen.findByTestId('role-copy')).toBeTruthy()
-    expect(screen.queryByTestId('role-submit')).toBeNull()
-
-    // 换到自定义那一条：可以改名字与额度，提交之后是"已提交审批"
-    const rows = await screen.findAllByTestId('role-row')
-    await user.click(rows[1] as HTMLElement)
-    const name = await screen.findByLabelText('这个职责在你们公司叫什么')
+    // 自定义那条：可以改名字与额度，提交之后是"已提交审批"
+    const custom = within(screen.getAllByTestId('position-card')[0] as HTMLElement)
+      .getAllByTestId('position-duty')
+      .find((x) => (x.textContent ?? '').includes('售后（本公司）')) as HTMLElement
+    await user.click(within(custom).getByTestId('position-duty-detail'))
+    const name = await within(custom).findByLabelText('这个职责在你们公司叫什么')
     await user.clear(name)
     await user.type(name, '售后（我们家的口径）')
-    await user.click(screen.getByTestId('role-submit'))
+    await user.click(within(custom).getByTestId('role-submit'))
 
-    expect(await screen.findByTestId('role-submitted')).toBeTruthy()
+    expect(await within(custom).findByTestId('role-submitted')).toBeTruthy()
     expect(proposed).toEqual([
       { id: 'dtc.support-custom', patch: { name: '售后（我们家的口径）' } },
     ])
@@ -571,14 +669,11 @@ describe('公司页：职责', () => {
 
   it('额度是可以改的数字，改完随提交一起走审批', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<OrgPage />)
-    await user.click(await screen.findByRole('tab', { name: '职责' }))
-    const rows = await screen.findAllByTestId('role-row')
-    await user.click(rows[1] as HTMLElement)
-    const cap = await screen.findByLabelText('max_auto_refund_amount')
+    const custom = await openDuty(user, '售后（本公司）')
+    const cap = await within(custom).findByLabelText('max_auto_refund_amount')
     await user.clear(cap)
     await user.type(cap, '30')
-    await user.click(screen.getByTestId('role-submit'))
+    await user.click(within(custom).getByTestId('role-submit'))
     await waitFor(() => {
       expect(proposed).toHaveLength(1)
     })

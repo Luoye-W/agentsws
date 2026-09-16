@@ -242,6 +242,7 @@ export function AppShell({
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         positions={positions}
+        {...(instances === undefined ? {} : { instances })}
         cards={cards}
         tileLibrary={tileLibrary}
         onAddTile={onAddTile}

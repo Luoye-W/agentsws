@@ -3,6 +3,9 @@
  *
  * `/people` 是名单（公司页成员点进来的落点），`/people/:id` 是一个人的 profile。
  *
+ * WP70（54 §4）：两处"他在做什么"都**先岗位、后职责**——职责折在岗位徽章下面
+ * （`DutyBadges`），点开才看得到具体是哪几条。
+ *
  * 一条纪律：**藏起来的字段照实说藏了**。服务端回的 `hidden_fields` 里有哪一格，
  * 界面上就在那一格写"这个要问本人"，而不是假装那个字段不存在——后者会让人以为
  * "他没有岗位"，而真相是"他不想让你看"。
@@ -12,10 +15,10 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AskSecretary } from '@/components/secretary/ask-secretary'
 import { MeetDialog } from '@/components/secretary/meet-dialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DutyBadges } from '@/components/work/duty-badges'
 import { getPersonProfile, listPeople, type ProfileFieldName } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -39,13 +42,8 @@ export function PeoplePage(): React.ReactNode {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-sm">
-              <div className="flex flex-wrap gap-1.5">
-                {p.positions.map((r) => (
-                  <Badge key={r.role_id} variant="secondary">
-                    {r.role_name}
-                  </Badge>
-                ))}
-              </div>
+              {/* WP70：先岗位，职责折在下面 */}
+              <DutyBadges duties={p.positions} testId="person-card-duties" />
               {p.in_progress === undefined ? null : (
                 <span className="text-muted-foreground text-xs">
                   {t('people.in_progress', { n: p.in_progress })}
@@ -123,13 +121,7 @@ export function PersonPage(): React.ReactNode {
             {hidden.has('positions') ? (
               <Hidden />
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {(p.positions ?? []).map((x) => (
-                  <Badge key={x.position_id} variant="secondary">
-                    {x.role_name}
-                  </Badge>
-                ))}
-              </div>
+              <DutyBadges duties={p.positions ?? []} testId="person-duties" />
             )}
           </div>
           <div className="flex flex-col gap-1">
