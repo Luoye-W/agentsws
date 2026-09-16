@@ -426,6 +426,60 @@ export interface ScenarioKolAttribution {
   who: string
 }
 
+/**
+ * WP68 / 48 §5.2：往世界的红人库里放一个人。
+ *
+ * 数据写在场景里而不是藏在 world 里：campaign 挑的是谁、为什么挑他，
+ * 读场景的人应该一眼看得出来。
+ */
+export interface ScenarioKolCreator {
+  channel: string
+  handle: string
+  followers: number
+  engagement_rate?: number
+  category?: string
+}
+
+/**
+ * WP68 / 48 §5.2：跑一次 campaign 向导（四格 → 挑人清单 → 按渠道建合作）。
+ *
+ * **不并集权限**（05 §4）：`channels` 里那个人没有对应职责的，清单上有、
+ * 合作不建。这条题钉的就是这一下。
+ */
+export interface ScenarioKolCampaign {
+  who: string
+  goal: string
+  budget: number
+  channels: string[]
+  headcount: number
+}
+
+/**
+ * WP68 / 48 §5.3：往**云端公共库**里放一个人（模拟别的工作区 / 插件贡献过）。
+ *
+ * `email` 给了就等于库里有联系方式——`reveal` 才收得到钱；没有就不收钱。
+ */
+export interface ScenarioKolPublicCreator {
+  channel: string
+  handle: string
+  followers: number
+  engagement_rate?: number
+  email?: string
+}
+
+/**
+ * WP68 / 49 M2：开关拨到"用 agentsws 的"之后，浏览一次 + 取一次邮箱。
+ *
+ * 浏览免费、reveal 扣积分；余额不够回 402 与一句人话（这条题的另一半）。
+ */
+export interface ScenarioKolReveal {
+  who: string
+  channel: string
+  handle: string
+  /** 先给钱包充这么多积分；不给就是一分不充（用来验余额不足那一半）。 */
+  topup?: number
+}
+
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
@@ -488,6 +542,14 @@ export type ScenarioEvent =
   | { at: string; type: 'kol.affiliate_order'; affiliate_order: ScenarioKolAffiliateOrder }
   /** WP67：跑一次归因（48 §5.1）。 */
   | { at: string; type: 'kol.attribution'; attribution: ScenarioKolAttribution }
+  /** WP68：往世界的红人库里放一个人（48 §5.2）。 */
+  | { at: string; type: 'kol.creator'; creator: ScenarioKolCreator }
+  /** WP68：跑一次 campaign 向导（48 §5.2，不并集权限）。 */
+  | { at: string; type: 'kol.campaign'; campaign: ScenarioKolCampaign }
+  /** WP68：往云端公共库里放一个人（48 §5.3）。 */
+  | { at: string; type: 'kol.public_creator'; public_creator: ScenarioKolPublicCreator }
+  /** WP68：浏览公共库 + 付费取一个邮箱（49 M2 / M4）。 */
+  | { at: string; type: 'kol.public_reveal'; public_reveal: ScenarioKolReveal }
   /** WP63：上架 / 撤下一件商品（51 §2.1，永远人审）。 */
   | { at: string; type: 'shop.publish_product'; publish_product: ScenarioShopPublishProduct }
   /** WP63：写 / 发一篇博客文章（51 §2.2，草稿 L2、发布 L1）。 */
@@ -738,6 +800,41 @@ export interface ScenarioExpected {
     unmatched?: NumericAssertion
     revenue?: NumericAssertion
     basis?: string[]
+  }
+  /**
+   * WP68 / 48 §5.2：那一次 campaign 向导。
+   *
+   * `picks` 是清单上一共几个人，`blocked_channels` 是**挑到了人却建不了合作**
+   * 的那几条渠道——它不为空，才说明"跨渠道的清单不并集权限"真的成立
+   * （05 §4）。`created` 是真建出来的合作数：只该等于 allowed 那几组的人数。
+   */
+  kol_campaign?: {
+    picks?: NumericAssertion
+    allowed_channels?: string[]
+    blocked_channels?: string[]
+    created?: NumericAssertion
+  }
+  /**
+   * WP68 / 49 M2 / M4：那一次"浏览 + reveal"。
+   *
+   * `browse_credits` 必须是 0——**浏览免费**那句话不是文案，是账上的数。
+   * `ok` 为假时 `reason` 说的是为什么（余额不够 / 库里没有联系方式），
+   * 而且那一次 `reveal_credits` 也必须是 0（没取到就不收钱）。
+   */
+  kol_reveal?: {
+    ok?: boolean
+    reason?: string
+    browse_credits?: NumericAssertion
+    reveal_credits?: NumericAssertion
+    /** 取回来的那一条在本地库里是不是只留了加密库 key 名。 */
+    stored_as_ref?: boolean
+    /**
+     * 第一次那一下被拦下来了没有（余额不够 / 库里没有联系方式）。
+     *
+     * 断言里要有它，是因为 `kol_reveal` 的其余几格读的是**最后一次**——
+     * 不单独钉一句，"钱不够那一半"就永远跑在一个已经充过值的钱包上，等于没测。
+     */
+    first_refused?: boolean
   }
   /**
    * WP57：这几轮聊天判成了哪几种动作（`answer` / `collect_info` / `human_review` /

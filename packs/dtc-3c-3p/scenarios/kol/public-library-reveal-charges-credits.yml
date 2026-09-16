@@ -1,0 +1,55 @@
+# WP68（49 M2 / M4、48 §5.3）：开关拨到「用 agentsws 的」之后，
+# **浏览免费，取回一个邮箱才扣积分**；余额不够回一句人话，而且一分不扣。
+#
+# 这条题跑的是 `packages/kol-public` 那一份**真服务**（真钱包、真价目、真加密），
+# 不是一个替身。理由很实在：这道题要钉的三件事——浏览免费、reveal 扣多少、
+# 钱不够怎么说——全是那一份代码算出来的。换成替身，断言就只是在验场景自己写的数。
+#
+# 顺序是**故意**的：先在一分钱都没充的时候取一次（该被拦），再充值取一次（该成功）。
+# 反过来写的话，"钱不够"那一半就永远跑在一个已经有余额的钱包上，等于没测。
+#
+# 最后一条断言是隐私那一条：取回来的明文进本机加密库，库里那一行只留 key 名。
+id: kol/public-library-reveal-charges-credits
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 公共库里已经有这个人（别的工作区 / 插件贡献过），而且有联系方式
+  - at: '+0m'
+    kol.public_creator:
+      channel: youtube
+      handle: cablekevin
+      followers: 120000
+      engagement_rate: 0.035
+      email: kevin@creators.example
+  # ② 一分钱没充就去取：浏览照样免费，reveal 被拦下，**不收钱**
+  - at: '+10m'
+    kol.public_reveal: { who: p_li, channel: youtube, handle: cablekevin }
+  - at: '+20m'
+    clock.advance: {}
+  # ③ 充 100 积分再取一次：这一次取得到，扣的是 `data.kol.lookup` 那个价
+  - at: '+30m'
+    kol.public_reveal: { who: p_li, channel: youtube, handle: cablekevin, topup: 100 }
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  kol_reveal:
+    # 第一次（一分钱没充）被拦下来，而且**没收钱**
+    first_refused: true
+    # 第二次（充过 100 积分）取得到
+    ok: true
+    # **浏览免费**不是一句文案，是账上的数
+    browse_credits: 0
+    # 取回一个邮箱要花钱（具体几分由 49 M4 的价目表说了算，这里只断言"不是 0"）
+    reveal_credits: '>0'
+  event_types:
+    - simulation.kol_public_revealed
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  "这一步要花多少钱、为什么这一次没花钱"，人从这两次的结果里读得出来吗？

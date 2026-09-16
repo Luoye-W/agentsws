@@ -25,6 +25,7 @@ import type {
   JoinExportBundle,
   JoinObjectComparison,
   JoinResolution,
+  KolChannel,
   KolUtm,
   Mandate,
   ModelGateway,
@@ -32,6 +33,7 @@ import type {
   ModelRef,
   ObjectRef,
   PersonId,
+  PlatformAccount,
   ProductLineRule,
   ProvenanceState,
   RangeRef,
@@ -70,8 +72,17 @@ import {
   canAdvanceCollaboration,
   collaborationStageName,
   draftOutreach,
+  planCampaign,
   reviewOutreachBody,
 } from '@agentsws/kol-core'
+/*
+ * WP68（48 §5.3）：云端公共红人库在世界里**真的跑一份**。
+ *
+ * 用那一份真服务（真钱包、真价目、真加密）而不是一个替身：这条题要钉的是
+ * "浏览免费、reveal 扣积分、余额不够回人话"，而这三件事全是那一份代码算出来的。
+ */
+import { KolPublicService, MemoryKolStore, nodeKolSecrets } from '@agentsws/kol-public'
+import { buildPricing, MemoryWalletStore, Wallet } from '@agentsws/metering'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
@@ -580,6 +591,70 @@ export interface KolOps {
   affiliateOrder(input: { order: string; code: string }): void
   /** 跑一次归因：读订单 → 按码 / UTM 匹配 → 回填那三个数。 */
   attribution(input: { who: PersonId }): Promise<AttributionResultSummary>
+
+  /* ── WP68（48 §5.2 / §5.3）──────────────────────────────────────── */
+
+  /** 往世界的红人库里放一个人（数据写在场景里，不藏在这里）。 */
+  creator(input: {
+    channel: string
+    handle: string
+    followers: number
+    engagement_rate?: number
+    category?: string
+  }): void
+  /**
+   * 跑一次 campaign 向导：挑人 → 按渠道建合作。
+   *
+   * **不并集权限**（05 §4）：`channels` 里那个人没有 `kol.<channel>` 分配的，
+   * 清单上有、合作不建。判的是 `roles.assignments` 里真有没有那条，
+   * 不是场景说了算。
+   */
+  campaign(input: {
+    who: PersonId
+    goal: string
+    budget: number
+    channels: string[]
+    headcount: number
+  }): Promise<CampaignResultSummary>
+  /** 往**云端公共库**里放一个人（模拟别的工作区 / 插件贡献过）。 */
+  publicCreator(input: {
+    channel: string
+    handle: string
+    followers: number
+    engagement_rate?: number
+    email?: string
+  }): void
+  /** 浏览公共库（免费）+ 付费取一个邮箱（`data.kol.lookup`）。 */
+  revealFromPublicLibrary(input: {
+    who: PersonId
+    channel: string
+    handle: string
+    topup?: number
+  }): Promise<RevealResultSummary>
+}
+
+/** WP68：一次 campaign 向导的结果。 */
+export interface CampaignResultSummary {
+  /** 清单上一共几个人。 */
+  picks: number
+  /** 建得了合作的那几条渠道（本人名下有对应职责）。 */
+  allowed_channels: string[]
+  /** 挑到了人却建不了合作的那几条（05 §4：不并集权限）。 */
+  blocked_channels: string[]
+  /** 真建出来的合作数。 */
+  created: number
+}
+
+/** WP68：一次"浏览 + reveal"的结果。 */
+export interface RevealResultSummary {
+  ok: boolean
+  reason?: string
+  /** 浏览花了多少积分（**永远是 0**）。 */
+  browse_credits: number
+  /** reveal 花了多少积分（没取到就是 0）。 */
+  reveal_credits: number
+  /** 取回来的那一条在本地只留了加密库 key 名。 */
+  stored_as_ref: boolean
 }
 
 /** WP47：一个人在某条职责上现在看得到什么（44 G2 读那一半）。 */
@@ -3944,6 +4019,56 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     affiliate_code?: string
   }[] = []
 
+  /**
+   * WP68：这个世界的红人库（campaign 向导挑人的池子）。
+   *
+   * 场景往里放人（`kol.creator`），世界只负责存与算——挑的是谁、为什么挑他，
+   * 读场景的人一眼看得出来。
+   */
+  const kolPool: PlatformAccount[] = []
+  /** 建出来的合作（campaign 接受之后每人一条）。 */
+  const kolCollaborations: { id: string; creator: string; channel: KolChannel }[] = []
+  /** 本地那一侧的联系方式：**只有加密库 key 名**（明文在下面那个 map 里，不出这个闭包）。 */
+  const kolContactRefs: { creator: string; value_ref: string }[] = []
+  const kolContactPlain = new Map<string, string>()
+
+  /**
+   * WP68：云端公共红人库（48 §5.3）——在世界里**真的跑一份**。
+   *
+   * 用的是 `packages/kol-public` 那一份真服务（真钱包、真价目、真加密），
+   * 不是一个替身：这条题要钉的是"浏览免费、reveal 扣积分、余额不够回人话"，
+   * 而这三件事全是那一份代码算出来的。少了它，断言就只是在验场景自己写的数。
+   */
+  const kolWallet = new Wallet({
+    store: new MemoryWalletStore(),
+    now: () => now(clock),
+    newId: (prefix) => `${prefix}_${kolPublicSeq()}`,
+  })
+  let kolSeq = 0
+  const kolPublicSeq = (): string => {
+    kolSeq += 1
+    return `${now(clock).replace(/\D/g, '').slice(0, 14)}_${kolSeq}`
+  }
+  const kolPublicService = new KolPublicService({
+    store: new MemoryKolStore(),
+    wallet: kolWallet,
+    pricing: buildPricing(),
+    // 测试用的一把邮箱密钥（32 字节全 7）：仓库里没有真 key，这是世界自己造的
+    secrets: nodeKolSecrets({
+      env: { AGENTSWS_KOL_EMAIL_KEY: Buffer.alloc(32, 7).toString('base64url') },
+    }),
+    now: () => now(clock),
+    newId: (prefix) => `${prefix}_${kolPublicSeq()}`,
+  })
+  /** 这个工作区在云上的那一份主体（一个账号一个余额，49 §0）。 */
+  const kolPrincipal = {
+    account_id: 'acc_sim',
+    org_id: 'org_sim',
+    workspace_id,
+    scopes: ['data'],
+    region: 'global' as const,
+  }
+
   const kol: KolOps = {
     async outreach({ who, creator, draft }) {
       const asg = assignmentFor(who, 'kol.youtube')
@@ -4265,6 +4390,167 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         unmatched: out.unmatched.length,
         revenue,
         basis: [...new Set(out.matched.map((m) => m.basis))],
+      }
+    },
+
+    /* ── WP68（48 §5.2 / §5.3）──────────────────────────────────────── */
+
+    creator({ channel, handle, followers, engagement_rate, category }) {
+      kolPool.push({
+        id: `pa_${handle}`,
+        creator_id: `cre_${handle}`,
+        channel: channel as KolChannel,
+        handle,
+        url: `https://example.com/${handle}`,
+        followers,
+        ...(engagement_rate === undefined ? {} : { engagement_rate }),
+        ...(category === undefined ? {} : { category }),
+        observed_at: now(clock),
+      })
+    },
+
+    async campaign({ who, goal, budget, channels, headcount }) {
+      // 挑人那一步是 `kol-core` 的纯函数，世界不自己排一遍序
+      const plan = planCampaign(
+        { goal, budget, channels: channels as KolChannel[], headcount },
+        kolPool,
+        now(clock),
+      )
+      const allowed: string[] = []
+      const blocked: string[] = []
+      let created = 0
+      for (const group of plan.by_channel) {
+        /*
+         * **判的是这个人名下真有没有那条职责**（05 §4「不做跨 Assignment 并集」），
+         * 不是场景说了算。一次 campaign 不会把别人的权限并给他。
+         */
+        const mine = roles.assignments
+          .listByPerson(who)
+          .find((a) => a.role_id === `kol.${group.channel}` && a.revoked_at === undefined)
+        if (mine === undefined) {
+          if (group.picks.length > 0) blocked.push(group.channel)
+          continue
+        }
+        allowed.push(group.channel)
+        for (const pick of group.picks) {
+          // 每条合作用**那条渠道职责自己的分配**去建（额度、等级、权限全从它来）
+          const out = await kol.collaboration({
+            who,
+            creator: pick.account.handle,
+            budget: Math.round(plan.budget_per_creator),
+          })
+          if (out.staged) {
+            created += 1
+            kolCollaborations.push({
+              id: `col_${pick.account.handle}`,
+              creator: pick.account.handle,
+              channel: group.channel,
+            })
+          }
+        }
+      }
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.kol_campaign_planned',
+        actor: { kind: 'person', id: who },
+        correlation: { trace_id: traceId() },
+        payload: {
+          goal,
+          picks: plan.picks.length,
+          allowed_channels: allowed,
+          blocked_channels: blocked,
+          created,
+        },
+      })
+      return {
+        picks: plan.picks.length,
+        allowed_channels: allowed,
+        blocked_channels: blocked,
+        created,
+      }
+    },
+
+    publicCreator({ channel, handle, followers, engagement_rate, email }) {
+      const subject = {
+        id: `ws:${workspace_id}`,
+        workspace_id,
+        org_id: kolPrincipal.org_id,
+        kind: 'workspace' as const,
+      }
+      kolPublicService.contributeAs(kolPrincipal, [
+        {
+          channel,
+          handle,
+          followers,
+          posts_30d: 6,
+          engagement_rate: engagement_rate ?? 0.035,
+          categories: ['3c'],
+          observed_at: now(clock),
+        },
+      ])
+      // 有邮箱才等于"库里有联系方式"——没有的话 reveal 一分不收
+      if (email !== undefined)
+        kolPublicService.saveContact(subject, { channel: channel as KolChannel, handle }, { email })
+    },
+
+    async revealFromPublicLibrary({ who, channel, handle, topup }) {
+      if (topup !== undefined && topup > 0)
+        kolWallet.topup({ org_id: kolPrincipal.org_id, credits: topup, kind: 'purchased' })
+      const before = kolWallet.balance(kolPrincipal.org_id).available
+
+      // ① 浏览：**免费**。这一行之后余额一分不少，是这条题的一半
+      kolPublicService.browse(kolPrincipal, { channel: channel as KolChannel, limit: 10 })
+      const afterBrowse = kolWallet.balance(kolPrincipal.org_id).available
+      const browse_credits = Math.round((before - afterBrowse) * 100) / 100
+
+      // ② reveal：扣 `data.kol.lookup`。取不到 / 钱不够都回一句人话，并且不收钱
+      let ok = true
+      let reason: string | undefined
+      let reveal_credits = 0
+      let stored_as_ref = false
+      try {
+        const revealed = kolPublicService.reveal(kolPrincipal, {
+          channel: channel as KolChannel,
+          handle,
+        })
+        reveal_credits = revealed.credits
+        /*
+         * 明文在这一行落进"本机加密库"（世界里用一个闭包里的 map 替身），
+         * 库里那一条只留 key 名——与服务进程那一跳逐字同一条纪律（48 §5.2）。
+         */
+        const value_ref = `kol.contact.ctc_${handle}`
+        kolContactPlain.set(value_ref, revealed.email)
+        kolContactRefs.push({ creator: handle, value_ref })
+        stored_as_ref = !JSON.stringify(kolContactRefs).includes('@')
+      } catch (e) {
+        ok = false
+        reason = e instanceof Error ? e.message : String(e)
+      }
+      const afterReveal = kolWallet.balance(kolPrincipal.org_id).available
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.kol_public_revealed',
+        actor: { kind: 'person', id: who },
+        correlation: { trace_id: traceId() },
+        // 邮箱明文一个字节都不进事件（21 §5）
+        payload: {
+          channel,
+          handle,
+          ok,
+          browse_credits,
+          reveal_credits,
+          balance_after: afterReveal,
+          ...(reason === undefined ? {} : { reason }),
+        },
+      })
+      return {
+        ok,
+        ...(reason === undefined ? {} : { reason }),
+        browse_credits,
+        reveal_credits,
+        stored_as_ref,
       }
     },
   }

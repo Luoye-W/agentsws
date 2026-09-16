@@ -820,9 +820,15 @@ importers:
       '@agentsws/kol-core':
         specifier: workspace:*
         version: link:../kol-core
+      '@agentsws/kol-public':
+        specifier: workspace:*
+        version: link:../kol-public
       '@agentsws/learning':
         specifier: workspace:*
         version: link:../learning
+      '@agentsws/metering':
+        specifier: workspace:*
+        version: link:../metering
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway

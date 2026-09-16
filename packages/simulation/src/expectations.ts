@@ -682,6 +682,94 @@ export function checkExpectations(
     }
   }
   // WP67 / 48 §5.1：归因——归上的有数，归不上的**不猜**
+  // ── WP68（48 §5.2）：campaign 向导不并集权限 ────────────────────────
+  if (expected.kol_campaign !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.kol_campaign_planned')
+    if (last === undefined) {
+      add('kol_campaign', false, '这一轮没有跑过 campaign 向导')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.kol_campaign
+      const problems: string[] = []
+      const picks = Number(p.picks ?? 0)
+      const created = Number(p.created ?? 0)
+      const allowed = (p.allowed_channels ?? []) as string[]
+      const blocked = (p.blocked_channels ?? []) as string[]
+      if (want.picks !== undefined && !matchNumeric(picks, want.picks)) {
+        problems.push(`清单上 ${picks} 个人，不合期望`)
+      }
+      if (want.created !== undefined && !matchNumeric(created, want.created)) {
+        problems.push(`真建出来 ${created} 条合作，不合期望`)
+      }
+      for (const w of want.allowed_channels ?? []) {
+        if (!allowed.includes(w)) problems.push(`${w} 那一组本该建得了，实际没建`)
+      }
+      /*
+       * **这一条是整道题的题眼**：挑到了人却建不了合作的那几条渠道要真的出现。
+       * 它为空就说明"跨渠道的清单并了权限"——那正是 05 §4 要挡的事。
+       */
+      for (const w of want.blocked_channels ?? []) {
+        if (!blocked.includes(w)) problems.push(`${w} 那一组本该只能看不能建，实际建了`)
+      }
+      add(
+        'kol_campaign',
+        problems.length === 0,
+        problems.length === 0
+          ? `清单 ${picks} 人：${allowed.join(' / ')} 建了 ${created} 条，${blocked.join(' / ') || '无'} 只能看`
+          : problems.join('；'),
+      )
+    }
+  }
+
+  // ── WP68（49 M2 / M4）：浏览免费、reveal 才花钱 ─────────────────────
+  if (expected.kol_reveal !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.kol_public_revealed')
+    if (last === undefined) {
+      add('kol_reveal', false, '这一轮没有查过公共红人库')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.kol_reveal
+      const problems: string[] = []
+      const ok = p.ok === true
+      const browse = Number(p.browse_credits ?? 0)
+      const reveal = Number(p.reveal_credits ?? 0)
+      if (want.ok !== undefined && ok !== want.ok) {
+        problems.push(ok ? '本该取不到，却取到了' : '本该取到，却没取到')
+      }
+      if (want.reason !== undefined && !String(p.reason ?? '').includes(want.reason)) {
+        problems.push(`那句话里没有「${want.reason}」：${String(p.reason ?? '（没有）')}`)
+      }
+      // **浏览免费**不是一句文案，是账上的数
+      if (want.browse_credits !== undefined && !matchNumeric(browse, want.browse_credits)) {
+        problems.push(`浏览扣了 ${browse} 积分，不合期望`)
+      }
+      if (want.reveal_credits !== undefined && !matchNumeric(reveal, want.reveal_credits)) {
+        problems.push(`reveal 扣了 ${reveal} 积分，不合期望`)
+      }
+      if (want.first_refused !== undefined) {
+        const first = [...evidence.events].find((e) => e.type === 'simulation.kol_public_revealed')
+        const fp = first === undefined ? {} : payloadOf(first)
+        const refused = first !== undefined && fp.ok !== true
+        if (refused !== want.first_refused)
+          problems.push(refused ? '第一次本该取得到，却被拦了' : '第一次本该被拦，却取到了')
+        // 没取到就不收钱——被拦的那一次账上必须一分没动
+        if (refused && Number(fp.reveal_credits ?? 0) !== 0)
+          problems.push(`被拦的那一次却扣了 ${String(fp.reveal_credits)} 积分`)
+      }
+      add(
+        'kol_reveal',
+        problems.length === 0,
+        problems.length === 0
+          ? `浏览 ${browse} 积分，reveal ${reveal} 积分${ok ? '' : `（没取到：${String(p.reason ?? '')}）`}`
+          : problems.join('；'),
+      )
+    }
+  }
+
   if (expected.kol_attribution !== undefined) {
     const last = [...evidence.events]
       .reverse()

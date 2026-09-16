@@ -65,8 +65,9 @@ describe('合成公司生成器（26 §2）', () => {
     expect([...fresh.files.keys()].some((f) => f.startsWith('scenarios/'))).toBe(false)
     expect(fresh.files.has('baseline.json')).toBe(false)
     // 而仓库里的 pack 两样都有
-    // WP64 + WP63：22 + 邮件营销与订单履约各一条 + 店铺管理与内容三条
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(30)
+    // WP64 + WP63：22 + 邮件营销与订单履约各一条 + 店铺管理与内容三条；
+    // WP67 加红人三条（30）；WP68 再加两条（campaign 不并集权限 / 公共库计费）
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(32)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
