@@ -376,6 +376,18 @@ export interface SkillsPort {
     id: string
     actor: { person_id: PersonId; workspace_id: WorkspaceId }
   }): Promise<void>
+  /**
+   * WP71b：**这一层的记忆，本人看不看得见 / 改不改得动**。
+   *
+   * 网关拿它替代原来那条 `skill.read@workspace` 元组判定——职责模板里根本没有
+   * `skill` 这个域，那条判定的实际效果是"除了 owner 谁都读不到自己干活那一层"。
+   * 判据在服务端一份（`canReadMemory` / `canEditMemory`），网关只问结论。
+   */
+  memoryAccess?(input: {
+    tier: SkillTier
+    scope_id?: string
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<{ read: boolean; write: boolean; reason?: string }>
   /** WP29：待审的 `skill_lesson` 提案卡（技能页上的"待审提案"）。 */
   proposals?(actor: {
     person_id: PersonId

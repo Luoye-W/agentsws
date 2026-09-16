@@ -172,15 +172,22 @@ describe('WP71 手动加 / 改 / 删本层的记忆', () => {
 })
 
 describe('WP71 越层改被拒（改得动哪一层，看你在哪一层干活）', () => {
-  it('不在本人名下的那条职责：加 / 改都是 403', async () => {
+  it('不在本人名下的那条职责：加是 403，连读都读不到（WP71b 起）', async () => {
     const res = await call('POST', '/v1/memory', {
       body: { tier: 'role', scope_id: NOT_HELD_ROLE, text: '不该写进去的一句话' },
     })
     expect(res.status).toBe(403)
-    // 真的一个字都没写进去
-    const view = await memoryAt('role', NOT_HELD_ROLE)
-    expect(view.entries.some((e) => e.body === '不该写进去的一句话')).toBe(false)
-    expect(view.can_edit).toBe(false)
+    /*
+     * WP71b 把读也收进同一条线：**你在哪一层干活，就看得见哪一层**。
+     * 所以这里不再是"读得到但 can_edit 是假"，而是这一层整个读不到。
+     * 「真的一个字都没写进去」改成直接问库——它不经过那道门，问的是事实本身。
+     */
+    expect((await call('GET', `/v1/memory?tier=role&scope_id=${NOT_HELD_ROLE}`)).status).toBe(403)
+    const layer = server.skills.registry.peek('customer-care', 'role', {
+      workspace_id: server.bootstrap.workspace.id,
+      scope_id: NOT_HELD_ROLE,
+    })
+    expect(layer?.sections ?? []).toHaveLength(0)
   })
 
   it('本人名下那一条：can_edit 为真，写得进去', async () => {

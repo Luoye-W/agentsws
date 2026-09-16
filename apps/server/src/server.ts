@@ -151,6 +151,7 @@ import { createKolPublicClient } from './kol-public-client.js'
 import { createKolService } from './kol-service.js'
 import {
   canEditMemory,
+  canReadMemory,
   createLearningAssembly,
   type LearningAssembly,
   parseMemoryRef,
@@ -2221,28 +2222,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
 
   /**
-   * WP71（36 §10）：**改记忆的那道门**。
+   * WP71（36 §10）/ WP71b：**记忆的那两道门**——看得见（read）与改得动（write）。
    *
-   * 判据在 `learning.ts` 的 `canEditMemory`（纯函数、单测钉住）；这里只把它要的三样
-   * 现查出来：本人名下没撤销的那几条职责、岗位模板、是不是 owner。
-   * 读那一条（`GET /v1/memory`）不过门，但会把结论带回去（`can_edit`）——
-   * 界面照服务端的结论出按钮，不自己判第二遍。
+   * 判据在 `learning.ts` 的 `canReadMemory` / `canEditMemory`（纯函数、单测钉住）；
+   * 这里只把它们要的三样现查出来：本人名下没撤销的那几条职责、岗位模板、是不是 owner。
+   * 两道门共用同一份事实，所以界面上的 `can_edit` 与网关上的 403 永远说的是同一件事。
    */
-  const memoryGate = (
-    actor: { person_id: PersonId; workspace_id: WorkspaceId },
-    target: { tier: SkillTier; scope_id?: string },
-  ): { ok: boolean; reason?: string } => {
+  const memoryFacts = (actor: {
+    person_id: PersonId
+    workspace_id: WorkspaceId
+  }): { held_roles: string[]; positions: ReturnType<typeof org.positions>; is_owner: boolean } => {
     const held = roles.assignments
       .listByPerson(actor.person_id, { workspace_id: actor.workspace_id })
       .filter((a) => a.revoked_at === undefined)
-    return canEditMemory({
-      tier: target.tier,
-      ...(target.scope_id === undefined ? {} : { scope_id: target.scope_id }),
+    return {
       held_roles: held.map((a) => a.role_id),
       positions: org.positions(),
       is_owner: held.some((a) => a.role_id === 'common.owner'),
-    })
+    }
   }
+
+  const memoryGate = (
+    actor: { person_id: PersonId; workspace_id: WorkspaceId },
+    target: { tier: SkillTier; scope_id?: string },
+  ): { ok: boolean; reason?: string } =>
+    canEditMemory({
+      tier: target.tier,
+      ...(target.scope_id === undefined ? {} : { scope_id: target.scope_id }),
+      ...memoryFacts(actor),
+    })
+
+  const memoryReadGate = (
+    actor: { person_id: PersonId; workspace_id: WorkspaceId },
+    target: { tier: SkillTier; scope_id?: string },
+  ): { ok: boolean; reason?: string } =>
+    canReadMemory({
+      tier: target.tier,
+      ...(target.scope_id === undefined ? {} : { scope_id: target.scope_id }),
+      ...memoryFacts(actor),
+    })
 
   const assertMemory = (
     actor: { person_id: PersonId; workspace_id: WorkspaceId },
@@ -2316,6 +2334,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     deleteMemory: async (input) => {
       assertMemory(input.actor, refOf(input.id))
       await learning.removeMemory(input.id)
+    },
+    // WP71b：网关问"这一层看不看得见 / 改不改得动"，判据仍是服务端这一份
+    memoryAccess: async (input) => {
+      const target = {
+        tier: input.tier,
+        ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
+      }
+      const read = memoryReadGate(input.actor, target)
+      return {
+        read: read.ok,
+        write: memoryGate(input.actor, target).ok,
+        ...(read.reason === undefined ? {} : { reason: read.reason }),
+      }
     },
   }
 

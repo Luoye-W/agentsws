@@ -852,6 +852,25 @@ export function orgRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        /*
+         * WP71b：**本人持有的职责，本人看得见它的定义**。
+         *
+         * 原来这条要 `policy.read@workspace`（制度层的读，owner 才有），于是职责页的
+         * 「概览」与第三栏的「额度」面板对所有非 owner 都是 403 —— 而它们要看的只是
+         * "我正在做的这条活儿能看什么、能做什么、额度多少"，那是本人自己的说明书。
+         *
+         * 判的是**名下有没有这条职责**，不是"我现在正用着它"：岗位层的知识面板会在
+         * 一次请求里问到本人在这个岗位下的另外几条职责，光看 `rctx.assignment.role_id`
+         * 会把那几条误判成越权。改它仍然要 `policy.stage`（`PUT` 那条一个字没动）。
+         */
+        authzBypass: (c, rctx, deps) => {
+          const p = rctx.principal
+          if (p === undefined) return false
+          const wanted = param(c, 'id')
+          return deps.roles
+            .listAssignments(p.person_id, { workspace_id: p.workspace_id })
+            .some((a) => a.revoked_at === undefined && a.role_id === wanted)
+        },
         params: [{ name: 'id', in: 'path', required: true, description: 'role_id' }],
         returns: 'RoleDetailView',
       },

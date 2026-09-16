@@ -160,6 +160,21 @@ export function memoryRefId(ref: MemoryRef): string {
 }
 
 /**
+ * WP71b：**判"在不在这个岗位里"时不算这一条。**
+ *
+ * `common.member` 是"你加入了这个工作区"这件事本身（04 §7 原话：加入工作区自动获得，
+ * **不属于任何岗位**），而 `org.positions()` 会把它追加进每个岗位模板的 `roles`。
+ * 不把它摘掉，"本人在这个岗位下至少持有一条职责"对**每一个成员**都成立——
+ * 那道门就等于没有：刚进公司的人也能读写客服岗位那一层的记忆。
+ */
+const WORKSPACE_WIDE_ROLES: readonly string[] = ['common.member']
+
+/** 这个岗位下、真正算数的那几条职责（摘掉全员自带的那一条）。 */
+function dutiesOf(position: { roles: readonly { role: string }[] }): string[] {
+  return position.roles.map((r) => r.role).filter((r) => !WORKSPACE_WIDE_ROLES.includes(r))
+}
+
+/**
  * WP71（36 §10）：**这一层的记忆，本人能不能手改**。
  *
  * 一句话：**你在哪一层干活，才改得动哪一层**。
@@ -199,9 +214,61 @@ export function canEditMemory(input: {
       : { ok: false, reason: '这条职责不在你名下，改不了它那一层的记忆' }
   const template = input.positions.find((p) => p.id === scope_id)
   if (template === undefined) return { ok: false, reason: `没有这个岗位：${scope_id}` }
-  return template.roles.some((r) => input.held_roles.includes(r.role))
+  return dutiesOf(template).some((r) => input.held_roles.includes(r))
     ? { ok: true }
     : { ok: false, reason: '你不在这个岗位里，改不了它那一层的记忆' }
+}
+
+/** {@link canEditMemory} 与 {@link canReadMemory} 共用的一份入参。 */
+export interface MemoryAccessInput {
+  tier: SkillTier
+  scope_id?: string
+  /** 本人名下没撤销的那几条职责。 */
+  held_roles: readonly string[]
+  /** 岗位模板（只用来查"这个岗位下有哪几条职责"）。 */
+  positions: readonly { id: string; roles: readonly { role: string }[] }[]
+  is_owner: boolean
+}
+
+/**
+ * WP71b（36 §10.1 那个洞的修法）：**这一层的记忆，本人看不看得见**。
+ *
+ * 判据与 {@link canEditMemory} 同源，只在"上面几层"这一处比它松：
+ *
+ * | 层 | 读 | 写（`canEditMemory`） |
+ * |---|---|---|
+ * | 内置包 | 任何成员 | 谁都不行（上游的） |
+ * | 公司 / 部门 | 任何成员 | 只有 owner（14 §13.3） |
+ * | 岗位 | 本人在这个岗位下至少持有一条职责 | 同左 |
+ * | 职责 | 本人持有这条职责 | 同左 |
+ * | 个人 | 本人（这条路由只回本人那一份） | 在个人设置里改 |
+ *
+ * **为什么读要比写松**：公司层记的是"这家公司怎么做事"——它本来就是给所有人看的，
+ * 上一次运行时模型也是照着它做的；不让人看，人就没法理解 Agent 为什么那样做，
+ * 而"看得见机器凭什么这么干"是这整个产品的地基（36 §7）。写仍然是 owner 的事。
+ *
+ * **为什么不是原来那条 `skill.read@workspace`**：职责模板里根本没有 `skill` 这个域
+ * （只有 `common.owner` 有），所以那条元组判定的实际效果是"除了 owner 谁都读不到
+ * 自己干活那一层的记忆"——这不是一条安全边界，是一个漏配（WP71 在真 demo 上打出来的）。
+ * 换成这一份之后，判据说的才是它想说的那句话：**你在哪一层干活，就看得见哪一层**。
+ */
+export function canReadMemory(input: MemoryAccessInput): { ok: boolean; reason?: string } {
+  const { tier, scope_id } = input
+  // 上面那几层是"给所有人看的"：内置包是上游带来的，公司 / 部门是这家公司的明规矩
+  if (tier === 'package' || tier === 'company' || tier === 'department') return { ok: true }
+  // 个人层这条路由只回本人那一份（40 E1：管理员对个人数据没有读）
+  if (tier === 'personal') return { ok: true }
+  if (scope_id === undefined || scope_id === '')
+    return { ok: false, reason: `看${tier === 'position' ? '岗位' : '职责'}层要说清楚是哪一个` }
+  if (tier === 'role')
+    return input.held_roles.includes(scope_id)
+      ? { ok: true }
+      : { ok: false, reason: '这条职责不在你名下，看不了它那一层的记忆' }
+  const here = input.positions.find((p) => p.id === scope_id)
+  if (here === undefined) return { ok: false, reason: `没有这个岗位：${scope_id}` }
+  return dutiesOf(here).some((r) => input.held_roles.includes(r))
+    ? { ok: true }
+    : { ok: false, reason: '你不在这个岗位里，看不了它那一层的记忆' }
 }
 
 export interface SkillPromotionPayload {

@@ -44,8 +44,13 @@ export interface RouteSpec {
   /**
    * 自助豁免：读自己的绑定（本人的 Assignment / 本人的清单）时不再要求策略层读权限。
    * 只有它返回 true 时才跳过 `can`，其余一律走完整元组判定。
+   *
+   * WP71b 多给一个 `deps`：**"这条职责在不在我名下"要查分配表才知道**
+   * （`deps.roles.listAssignments`），光看 `rctx.assignment` 只答得出"我现在正用着它"。
+   * 岗位页与第三栏在一次请求里会问到本人持有的**另外几条**职责，那时前者是假、后者是真。
+   * 老的回调只取前两个参数，多一个尾参一个都不用改。
    */
-  authzBypass?: (c: Context<GatewayEnv>, rctx: RequestContext) => boolean
+  authzBypass?: (c: Context<GatewayEnv>, rctx: RequestContext, deps: GatewayDeps) => boolean
   /** send / apply 类：`AGENTSWS_HALT=outbound` 时 503（28 §4 用例 3）。 */
   outbound?: boolean
   params?: ParamSpec[]

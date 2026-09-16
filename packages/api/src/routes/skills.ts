@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
+import type { GatewayDeps } from '../types.js'
 import { DuplicateAck, guardSimilar, recordCatalogNote } from './catalog.js'
 
 const READ = { domain: 'skill', op: 'read', range: 'workspace', sensitivity: 'internal' } as const
@@ -68,6 +69,25 @@ const PromoteBody = z.object({
   scope_id: z.string().min(1).optional(),
 })
 
+/**
+ * WP71b：读一层记忆之前先问一句"这一层是不是我干活的那一层"。
+ *
+ * 装配没给 `memoryAccess`（老服务进程）时**不拦**——那时这条路由的行为与 WP71 一样，
+ * 由处理函数后面的 `memory()` 自己决定回什么。新装配一律走这道门。
+ */
+async function assertMemoryRead(
+  deps: GatewayDeps,
+  input: {
+    tier: (typeof MEMORY_TIERS)[number]
+    scope_id?: string
+    actor: { person_id: string; workspace_id: string }
+  },
+): Promise<void> {
+  if (deps.skills.memoryAccess === undefined) return
+  const verdict = await deps.skills.memoryAccess(input)
+  if (!verdict.read) throw new ApiError('forbidden', verdict.reason ?? '看不了这一层的记忆')
+}
+
 export function skillRoutes(): Route[] {
   return [
     route(
@@ -80,6 +100,10 @@ export function skillRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP71b：这条**只回本人自己那一份**（WP36 修掉了"端出每个人的个人层"那处泄漏），
+        // 所以任何成员都读得。原来的 `skill.read@workspace` 在职责模板里根本不存在，
+        // 效果是"除了 owner 谁都打不开技能页"——那是漏配，不是边界。
+        authzBypass: () => true,
         params: [{ name: 'department', in: 'query', description: '部门 id（可选）' }],
         returns: 'SkillSummary[]',
       },
@@ -131,6 +155,9 @@ export function skillRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP71b：解析用的就是**调用者自己**的身份（`resolve(name, actor)`），
+        // 回的是"我这次运行会吃到的那一份"。同上，任何成员都读得。
+        authzBypass: () => true,
         params: [
           { name: 'name', in: 'path', required: true, description: '技能名' },
           { name: 'department', in: 'query', description: '部门 id（可选）' },
@@ -277,6 +304,15 @@ export function skillRoutes(): Route[] {
           { name: 'scope_id', in: 'query', description: '岗位 id / 职责 id / 部门 id' },
         ],
         returns: '{ tier, scope_id?, summary, entries }',
+        /*
+         * WP71b：**判定挪到处理函数里**（`deps.skills.memoryAccess`）。
+         *
+         * 元组判定答不了这条路由真正要问的问题——"这一层是不是我干活的那一层"，
+         * 那要看 `tier` / `scope_id` 与本人名下的分配对不对得上，不是一个域上的读位。
+         * 原来那条 `skill.read@workspace` 职责模板里没有，于是非 owner 一律 403
+         * （WP71 在真 demo 上打出来的洞）。
+         */
+        authzBypass: () => true,
       },
       async (c, deps) => {
         const p = principalOf(c)
@@ -286,6 +322,12 @@ export function skillRoutes(): Route[] {
         if (!MEMORY_TIERS.includes(tier as (typeof MEMORY_TIERS)[number]))
           throw new ApiError('invalid_input', 'tier 只能是 company / department / position / role')
         const scope_id = c.req.query('scope_id')
+        // WP71b：能不能看这一层，判据在服务端一份（与 can_edit 同源）
+        await assertMemoryRead(deps, {
+          tier: tier as (typeof MEMORY_TIERS)[number],
+          ...(scope_id === undefined || scope_id === '' ? {} : { scope_id }),
+          actor: { person_id: p.person_id, workspace_id: p.workspace_id },
+        })
         const out = await deps.skills.memory({
           tier: tier as (typeof MEMORY_TIERS)[number],
           ...(scope_id === undefined || scope_id === '' ? {} : { scope_id }),
