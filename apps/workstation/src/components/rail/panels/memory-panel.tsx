@@ -21,6 +21,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpFromLine, Check, ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
+import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -322,8 +323,7 @@ export function MemoryPanel({ scope }: { scope: RailScope }): React.ReactNode {
   })
 
   if (memory.isPending) return <Skeleton className="h-40 w-full" />
-  if (memory.error !== null || memory.data === undefined)
-    return <p className="text-muted-foreground">{t('error.generic')}</p>
+  if (memory.error !== null || memory.data === undefined) return <PanelError error={memory.error} />
   const view = memory.data
   // 老服务进程不回 `can_edit`，那时整面板只读（少一个按钮，好过一个按下去 404 的按钮）
   const canEdit = view.can_edit === true

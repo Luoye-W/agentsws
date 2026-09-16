@@ -19,6 +19,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -94,8 +95,7 @@ function OverviewTab({ role_id }: { role_id: string }): React.ReactNode {
     queryFn: () => getRoleDefinition(role_id),
   })
   if (role.isPending) return <Skeleton className="h-48 w-full" />
-  if (role.error !== null || role.data === undefined)
-    return <p className="text-sm text-muted-foreground">{t('error.generic')}</p>
+  if (role.error !== null || role.data === undefined) return <PanelError error={role.error} />
   const view = role.data
   return (
     <div className="flex flex-col gap-4" data-testid="duty-overview">

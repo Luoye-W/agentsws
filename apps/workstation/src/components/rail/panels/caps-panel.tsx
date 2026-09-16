@@ -21,6 +21,7 @@ import { Copy } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { dutyHref } from '@/components/app-shell'
+import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -138,8 +139,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
   })
 
   if (role.isPending) return <Skeleton className="h-40 w-full" />
-  if (role.error !== null || role.data === undefined)
-    return <p className="text-muted-foreground">{t('error.generic')}</p>
+  if (role.error !== null || role.data === undefined) return <PanelError error={role.error} />
   const view = role.data
   const dirty = Object.keys(draft).length > 0
 

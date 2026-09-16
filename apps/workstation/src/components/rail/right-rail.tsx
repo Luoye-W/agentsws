@@ -240,7 +240,7 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
         <div
           className={cn(
             'z-40 flex shrink-0 border-l bg-background',
-            narrow ? 'fixed inset-y-0 right-11 shadow-lg' : 'relative',
+            narrow ? 'fixed inset-y-0 right-11 shadow-lg' : 'sticky top-0 h-screen',
           )}
           style={{ width }}
           data-testid="rail-panel-frame"
@@ -290,7 +290,8 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
         </div>
       )}
       <nav
-        className="z-50 flex w-11 shrink-0 flex-col items-center gap-1 border-l bg-sidebar py-2"
+        // 与左栏同一条理由：图标轨钉在视口上，滚主区的时候它不该跟着走
+        className="sticky top-0 z-50 flex h-screen w-11 shrink-0 flex-col items-center gap-1 border-l bg-sidebar py-2"
         aria-label={t('rail.title')}
         data-testid="right-rail"
         data-open={open ?? ''}

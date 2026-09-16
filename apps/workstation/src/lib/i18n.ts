@@ -502,6 +502,8 @@ const zh: Table = {
   'rail.expand': '展开 {name} 的职责',
   'rail.not_yet': '这个面板还没做。图标先占着位——位置定了就不再挪。',
   'rail.no_scope': '先进一个岗位，这一栏才知道该看哪一层。',
+  'rail.no_permission':
+    '这条职责的分配上没有 {scope} 这一项，所以这一栏看不了。不是坏了——是这一层的读权限还没给到这条职责（要改得动制度层那一份）。',
   'rail.tier.package': '内置包',
   'rail.tier.company': '公司',
   'rail.tier.department': '部门',
@@ -1992,6 +1994,8 @@ const en: Table = {
   'rail.not_yet':
     "This panel isn't built yet. The icon holds its place — once fixed, it won't move.",
   'rail.no_scope': 'Open a position first so this panel knows which layer to show.',
+  'rail.no_permission':
+    "This duty's assignment does not carry {scope}, so this panel cannot read it. Nothing is broken — that read has simply not been granted to this duty yet.",
   'rail.tier.package': 'Bundled pack',
   'rail.tier.company': 'Company',
   'rail.tier.department': 'Department',

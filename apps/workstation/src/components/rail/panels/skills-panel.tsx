@@ -17,6 +17,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpFromLine, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -109,8 +110,7 @@ export function SkillsPanel({ scope }: { scope: RailScope }): React.ReactNode {
   }
 
   if (skills.isPending) return <Skeleton className="h-40 w-full" />
-  if (skills.error !== null || skills.data === undefined)
-    return <p className="text-muted-foreground">{t('error.generic')}</p>
+  if (skills.error !== null || skills.data === undefined) return <PanelError error={skills.error} />
   const rows = skills.data
 
   return (

@@ -11,6 +11,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPosition, getRoleDefinition, listKnowledgeCards, type RoleDetailView } from '@/lib/api'
@@ -45,8 +46,7 @@ export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode
   const active = (cards.data ?? []).filter((c) => c.status === 'active').length
 
   if (duties.isPending) return <Skeleton className="h-40 w-full" />
-  if (duties.error !== null || duties.data === undefined)
-    return <p className="text-muted-foreground">{t('error.generic')}</p>
+  if (duties.error !== null || duties.data === undefined) return <PanelError error={duties.error} />
 
   return (
     <div className="flex flex-col gap-3" data-testid="knowledge-panel" data-scope={scope.scope_id}>

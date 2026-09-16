@@ -204,7 +204,12 @@ export function AppShell({
   return (
     <RailStateProvider>
       <div className="flex min-h-screen bg-background text-foreground">
-        <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar p-3 md:flex">
+        {/*
+          WP71：左栏**钉在视口上**（`sticky` + `h-screen`）。
+          账号块在最下面，而主区经常比一屏长——不钉住的话它会跟着页面滚走，
+          "最下面"就成了"文档的最下面"，滚三屏才见得到。
+        */}
+        <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r bg-sidebar p-3 md:flex">
           <div className="px-2 pb-3 text-sm font-semibold">{t('app.title')}</div>
           <nav
             className="flex flex-1 flex-col gap-0.5 overflow-y-auto"
