@@ -122,6 +122,11 @@ export interface EffectiveConfig {
   automation: Record<string, EffectiveAutomation>
   skills: RoleDefinition['skills']
   grounding: GroundingRule[]
+  /**
+   * WP82（55 §3）：这条职责的浏览器只许打开哪些站（`RoleDefinition.browser_scope`）。
+   * 没填 = 空数组 = 这条职责开不了浏览器。服务端据它算 `RunRequest.allowed_hosts`。
+   */
+  browser_scope: string[]
   persona?: string
   /** 展开后的范围（44 G1：挂的范围组已经摊平进来了）。 */
   ranges: RangeRef[]

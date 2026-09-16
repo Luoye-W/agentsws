@@ -68,6 +68,71 @@ export interface ModelRef {
   region?: 'cn' | 'global'
 }
 
+/**
+ * 55 §3 / WP82：这次运行怎么开浏览器。工具面全部来自官方
+ * `dsh-browser-use` + Playwright MCP provider，我们这一侧只剩**策略**——
+ * 这个字段就是策略的前半截（开不开、怎么开），后半截是 {@link RunRequest.allowed_hosts}。
+ *
+ * 两种方式，对应上游 provider 的两种 `mode`：
+ * - `attach`：接用户自己电脑上已经开着的那个 Chrome（`--remote-debugging-port` 开出来的
+ *   CDP 地址）。登录态、标签都是用户自己的，密码只在他自己的浏览器里输（13 §4：
+ *   凭据不经模型）；收尾只断连不关浏览器。**只有个人档（本机运行）允许**。
+ * - `launch`：起一个独立的 Chromium。`executable_path` 指本机已装的 Chrome / Chromium——
+ *   必须指，因为我们没给 playwright 的 postinstall 开构建（16 §3），它自己下不到浏览器。
+ */
+export type RunBrowser =
+  | {
+      mode: 'attach'
+      /** CDP 地址：`http(s)://…` 或 `ws(s)://…`（上游 `validateBrowserMcpConfig` 的口径）。 */
+      endpoint: string
+    }
+  | {
+      mode: 'launch'
+      /** 本机 Chrome / Chromium 的可执行文件路径。 */
+      executable_path?: string
+      /** 不给 = `true`（上游默认）。 */
+      headless?: boolean
+    }
+
+/**
+ * WP82（55 §3 末段）：**这台机器上**的浏览器怎么配（`/v1/settings/browser` 的形状）。
+ *
+ * 为什么是"这台机器"而不是"这个品牌"：attach 接的是用户自己电脑上那个 Chrome，
+ * 它与卖哪个品牌无关；同一台机器上的所有品牌用同一个浏览器设置。
+ */
+export interface BrowserSettings {
+  /** `off` = 谁都不许开浏览器（缺省）。 */
+  mode: 'off' | 'attach' | 'launch'
+  /** `attach`：本机 Chrome 的 CDP 地址（`http://127.0.0.1:9222`）。 */
+  endpoint?: string
+  /** `launch`：本机 Chrome / Chromium 的可执行文件路径。 */
+  executable_path?: string
+  /** `launch`：不给 = `true`。 */
+  headless?: boolean
+}
+
+/** 设置页读到的那一份：设置本身 + 这个部署允不允许 attach。 */
+export interface BrowserSettingsView extends BrowserSettings {
+  /**
+   * 只有**个人档**（本机运行）才允许 attach（55 §3 末段）。
+   * Docker 档 / 托管档上服务不在用户那台电脑上，`127.0.0.1` 指的是容器自己——
+   * 接过去只会接到一个不存在的浏览器，所以那两档只给 `launch`。
+   */
+  attach_allowed: boolean
+  /** 不允许时说给人听的那一句。 */
+  attach_blocked_reason?: string
+}
+
+/** 探一次 CDP 地址（`GET /json/version`）的结果。 */
+export interface BrowserProbeResult {
+  ok: boolean
+  endpoint: string
+  /** 探到了就是浏览器自己报的版本串（`Chrome/140.0.0.0`）。 */
+  browser?: string
+  /** 没探到时说给人听的那一句。 */
+  detail?: string
+}
+
 export interface RunRequest {
   id: RunId
   schema_version: 1
@@ -98,7 +163,45 @@ export interface RunRequest {
    * 不给就实物——老的运行记录与回放包里没有这个字段，重放出来必须还是原来那一份。
    */
   vertical?: WorkspaceVertical
+  /**
+   * WP82（55 §3）：这次运行的浏览器。**不给 = 这条职责不开浏览器**——
+   * 运行时不挂 provider，一个 `browser_*` 工具都不存在。
+   */
+  browser?: RunBrowser
+  /**
+   * WP82（55 §3「域名白名单」那一行）：这次运行**允许打开**的站点。
+   *
+   * 由职责模板的 `RoleDefinition.browser_scope` 算出来（岗位可能带多条职责，取并集）。
+   * 支持 `*.youtube.com` 这种通配（只通配最左一段之前的部分）。
+   *
+   * **不给 ≡ 空数组 ≡ 一个站都不许开**：门禁看的是"在不在这张表里"，
+   * 表是空的就一律拒。老的运行记录里没有这个字段，回放出来照样是"一律拒"，
+   * 与它们当初根本没有浏览器工具的事实一致（所以这里是可选字段，不是必填）。
+   */
+  allowed_hosts?: string[]
   idempotency_key: string
+}
+
+/**
+ * 一个 host 在不在白名单里（`*.youtube.com` 通配 `www.youtube.com` 也通配 `youtube.com` 本身）。
+ *
+ * 三个运行时与门禁共用这一份，免得"通配怎么算"在两处各写一遍。
+ * 大小写与末尾的点都归一；端口不参与判定（`new URL(...).hostname` 本来就不带端口）。
+ */
+export function hostAllowed(host: string, allowed: readonly string[] | undefined): boolean {
+  const h = host.toLowerCase().replace(/\.$/, '')
+  if (h === '') return false
+  for (const raw of allowed ?? []) {
+    const pattern = raw.trim().toLowerCase().replace(/\.$/, '')
+    if (pattern === '') continue
+    if (pattern.startsWith('*.')) {
+      const suffix = pattern.slice(2)
+      if (h === suffix || h.endsWith(`.${suffix}`)) return true
+      continue
+    }
+    if (h === pattern) return true
+  }
+  return false
 }
 
 /** 17 §2 事件流。运行时只产出这些；协同服务落事件日志。 */

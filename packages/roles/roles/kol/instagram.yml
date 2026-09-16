@@ -240,6 +240,16 @@ notifications:
       recipients: [role_holder, scope_manager],
     }
 
+# WP82（55 §3「域名白名单」那一行）：这条职责的浏览器只许打开哪些站。
+#
+# 不填 = 这条职责开不了浏览器（空白名单一律拒）。白名单是"允许"表不是"禁止"表，
+# 忘了填的后果是不能用，不是随便逛。`*.example.com` 通配一切子域（www / m / 各语言站），
+# 也通配 `example.com` 本身。真正打开哪一页仍由模型决定，我们只管"不许出这几个域"。
+# 个人主页、Reels、合作交付的贴文都在 instagram.com 站内。
+browser_scope:
+  - instagram.com
+  - '*.instagram.com'
+
 handover:
   transfers: [open_work_items, context, home_blocks, queue_lane]
   fallback: scope_manager

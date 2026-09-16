@@ -239,6 +239,14 @@ export const ROLE_SCHEMA: Node = Schema.object({
   quick_prompts: Schema.array(QUICK_PROMPT).max(MAX_QUICK_PROMPTS),
   /** WP84：指导抽屉顶部的示例任务（≤ MAX_TASK_EXAMPLES 条，id 在本职责内唯一）。 */
   task_examples: Schema.array(TASK_EXAMPLE).max(MAX_TASK_EXAMPLES),
+  /**
+   * WP82（55 §3）：这条职责的浏览器只许打开哪些站（`*.youtube.com` 这种通配也认）。
+   *
+   * 不填 = 这条职责开不了浏览器（空白名单一律拒）。格式在 `checkRoleExtras` 里
+   * 再查一道：schemastery 只知道"是一串字符串"，判不出"youtube.com/channels"
+   * 这种带路径的写法——而那种写法永远匹配不上任何 host，等于静默失效。
+   */
+  browser_scope: Schema.array(Schema.string()),
   persona: Schema.string(),
   handover: HANDOVER,
   requires: Schema.array(Schema.string()),
@@ -274,6 +282,33 @@ export function checkRoleExtras(data: unknown): { field: string; message: string
       seen.add(id)
     }
   }
+  const scope = data.browser_scope
+  if (Array.isArray(scope)) {
+    for (const [i, item] of scope.entries()) {
+      if (typeof item !== 'string') continue
+      const bad = badBrowserScope(item)
+      if (bad !== undefined) return { field: `browser_scope[${i}]`, message: bad }
+    }
+  }
+  return undefined
+}
+
+/**
+ * WP82：一条 `browser_scope` 写得对不对。
+ *
+ * 只允许 `example.com` 与 `*.example.com` 两种形状。写成 `https://example.com`、
+ * `example.com/channels`、`example.com:443` 都拒——它们永远匹配不上
+ * `hostAllowed()` 拿到的那个 hostname，加载时不拒的话就是**静默失效**：
+ * 白名单看着填了，实际上这条职责一个站都打不开（05 §5 那个拼错的键同一个毛病）。
+ */
+function badBrowserScope(raw: string): string | undefined {
+  const value = raw.trim()
+  if (value === '') return 'browser_scope 里不能有空串'
+  if (value.includes('/') || value.includes(':')) return `只写域名，不要协议 / 路径 / 端口：${raw}`
+  const host = value.startsWith('*.') ? value.slice(2) : value
+  if (host === '' || host.includes('*')) return `通配只能写在最前面（*.example.com）：${raw}`
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host))
+    return `不是一个域名：${raw}`
   return undefined
 }
 
