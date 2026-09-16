@@ -1,0 +1,270 @@
+# 56 §2 社媒运营的第 1 条职责：**Meta 社媒运营**（FB 主页 + IG）（WP72）。
+#
+# 内容账号组四条职责的骨架**完全相同**（56 §2 上半行），不同的只有三样：
+# 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
+#
+# 为什么 FB 主页与 IG 是**一条**不是两条：它们共用同一把 Graph API token、
+# 同一套发布接口、同一个后台。拆成两条等于让人为同一件事连两次、批两次，
+# 而真正的差别（这条发到哪儿）是一条帖子上的一格，不是一条职责。
+#
+# 这条渠道特有的三件事：
+#
+# 1. **发布权限要过 App Review**。连上就能读，能发要审——所以连不上与发不出去
+#    是两句不同的话，界面上不许混成"连接失败"。
+# 2. **排期那两格必须一起写**（`published: false` + `scheduled_publish_time`）。
+#    只写时间不写 `published: false`，这条会立即发出去。落点在
+#    `@agentsws/social-core` 的 `channels/meta.ts`。
+# 3. **IG 没有"按关键词搜"这回事**，只能按名字查指名的账号——找人是红人那条职责
+#    的事，这条职责管的是**我们自己的号**。
+#
+# 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
+# **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
+# `grounding` 的意图词就是 54 §2 岗位路由判这件事的依据——写不足 = 路由不到。
+id: social.meta
+version: 1.0.0
+domain: social
+name: { zh: Meta 社媒运营, en: Meta Social }
+description: 我们自己的 FB 主页与 IG 账号：内容排期与发布、回评论、账号资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
+
+scopes:
+  # 56 §2：账号资料、帖子与表现、评论、私信（只读）、粉丝数
+  - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 评论与私信落在线程上。**只读 + 提议**：回一条评论是提议一条出站，不是直接发
+  - { domain: community_thread, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 19：起草文案要查产品事实卡与品牌话术（承诺类知识永不自动发布）
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  # 24：品牌话术是**公司层技能**，这条职责只读不编（`social-core` 的 voice.ts）
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  # 写文案要知道在卖什么。**只读**：社媒运营一辈子不该改一件商品
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # 一把 token 管主页 + IG（56 §1）。`required: false`：没连也能排内容、写草稿、
+  # 攒审批——真发出去那一跳才需要它。写 true 会把一个还在等 App Review 的用户
+  # 整条职责挡在门外，而他本来用得起来。
+  - {
+      kind: meta_graph,
+      required: false,
+      grants: [read_pages, read_insights, publish_posts, manage_comments],
+      ownership: workspace,
+    }
+
+actions:
+  # 56 §2 内容组的三个写动作。额度写在**动作**上不写在职责上（同 51 §2.3）。
+  - id: stage_post
+    target: social_account
+    kind: staged_change
+    mandate:
+      # 一天 3 条（56 §7）。这不是技术上限，是"别把关注的人刷走"的那条线。
+      # 与 `social-core` 的 `SCHEDULE_RULES.max_per_day` 是同一个数的两个位置：
+      # 那边排的时候提前说，这边提交的时候真拦。
+      caps: { max_posts_per_day: 3 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 3, per: day }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: reply_comment
+    target: community_thread
+    kind: outbound_message
+    mandate:
+      caps: { max_comment_replies_per_day: 50 }
+      window: { max_count: 50, per: day }
+    route_to: role_holder
+  - id: stage_profile_edit
+    target: social_account
+    kind: staged_change
+    mandate:
+      caps: {}
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: week }
+    # 改 handle 连提都不许提（`@agentsws/core` 的 `PROTECTED_FIELDS`）：
+    # 一改，旧帖里的链接、名片上印的那一行全断
+    protected_fields: [handle, username, account_id, external_id]
+    review_cannot_be_disabled: true
+    route_to: owner
+
+automation:
+  # **发布永远 L1**（56 §2）。15 §2 的 `HARD_L1` 里有 `social_post`，
+  # 这里的 `hard_ceiling` 是把同一件事在职责这一层也写出来——两处都说，
+  # 改一处忘另一处的时候有人喊（同 51 §2.3 的群发）。
+  stage_post:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 回评论 L2 → L3（56 §2）：能升是因为它改不了钱——承诺扫描把"改得了钱"
+  # 那一半直接拦死（`social-core` 的 `checkOutbound`，用的是全仓那一份词表）。
+  reply_comment:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  # 改资料 L1：所有人点进来第一眼看到的东西，改完没有撤回
+  stage_profile_edit:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  # 24：品牌话术从公司层技能取，这条职责不编（`social-core` 的 voice.ts）
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  # 56 §2 内容组四块：内容日历 / 待发布队列 / 近 30 天表现 / 待回评论。
+  # 顺序就是一天的顺序——面板读下来就是这条职责在干什么。
+  - {
+      id: social.meta.calendar,
+      placement: focus,
+      component: table,
+      query: social.content_calendar,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.meta.queue,
+      placement: queue,
+      component: table,
+      query: social.publish_queue,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.meta.performance,
+      placement: role_view,
+      component: table,
+      query: social.performance_30d,
+      default_order: 30,
+      pinnable: true,
+      adaptive: false,
+    }
+  - {
+      id: social.meta.comments,
+      placement: queue,
+      component: table,
+      query: social.pending_comments,
+      default_order: 40,
+      pinnable: true,
+      adaptive: true,
+    }
+  # 转客服计数：这条职责**没有**答客户问题，但它要看得见自己转出去了多少
+  - {
+      id: social.meta.handoffs,
+      placement: role_view,
+      component: table,
+      query: social.support_handoffs,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
+  # 动作 id / 数据域这五样判"这件事该走哪条"。九条社媒职责的动作 id 与数据域
+  # 完全一样，所以在社媒运营这个岗位里，**意图词就是唯一分得开它们的东西**。
+  - {
+      name: meta_intent,
+      intent_terms:
+        [
+          Meta,
+          Facebook,
+          FB,
+          脸书,
+          主页,
+          Instagram,
+          IG,
+          ins,
+          图文,
+          快拍,
+          Reels,
+          story,
+          page,
+          post,
+        ],
+      cue_terms: [发, 排期, 定时, 帖子, 评论, 回复, 粉丝, 曝光, 互动, 涨粉, 简介, 置顶],
+      tool: list_social_posts,
+      prefetch: false,
+    }
+  # 19：文案里说到产品、价格、时效、政策之前先查事实卡
+  - {
+      name: facts_before_post,
+      intent_terms: [文案, 发帖, 起草, 上新, 活动, post, caption, announce],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, 库存, price, discount, warranty],
+      tool: search_policies,
+      prefetch: true,
+    }
+  # 56 的边界：客户的问题不归我。意图词写足，54 的路由才判得到"转客服"
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_community_support,
+      prefetch: false,
+    }
+
+notifications:
+  # 发布永远人审，卡压着不动 = 这条内容错过了它的时间点
+  - {
+      event: 'approval.created:stage_post',
+      mode: immediate,
+      recipients: [role_holder],
+      escalate_after_hours: 4,
+    }
+  - {
+      event: 'approval.created:reply_comment',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 12,
+    }
+  # 承诺扫描拦下来：立刻让人知道——它意味着起草那一跳写了不该写的话
+  - {
+      event: 'guardrail.hit:commitment_scan',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  # 排期撞车
+  - { event: 'social.schedule_conflict', mode: queue, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: week_plan
+    label: { zh: "排下周的内容", en: "Plan next week" }
+    prompt: "按这周的表现和手上的素材，给 FB 主页和 IG 排下周的内容，一天不超过一条，撞车的说清楚"
+    kind: start_task
+  - id: draft_post
+    label: { zh: "起草一条", en: "Draft a post" }
+    prompt: "给这次上新起一条 FB 和一条 IG 的文案，按品牌话术来，价格和时效只写事实卡里有的"
+    kind: start_task
+  - id: comments_waiting
+    label: { zh: "有哪些评论等着回", en: "Comments waiting" }
+    prompt: "现在有哪些评论还没回？哪些是客户的问题该转客服、哪些我自己回，分开列"
+    kind: ask
+  - id: last_30d
+    label: { zh: "这个月发得怎么样", en: "How did the last 30 days go" }
+    prompt: "近 30 天发的内容里，曝光和互动最好的三条是哪几条，它们有什么共同点"
+    kind: ask
+
+task_examples:
+  - id: weekly_calendar
+    title: { zh: "排一周的内容", en: "Fill a week of the calendar" }
+    description: "下周有一次上新，手上有几张图和一段视频，不知道怎么摊到一周里。"
+    expected_output: "一份按天排好的日历（每条写清发到哪个号、什么时间、文案是什么），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
+  - id: comment_triage
+    title: { zh: "把评论分一分", en: "Sort the comments" }
+    description: "一条爆了的帖子下面有几十条评论，来不及一条条看。"
+    expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销，夸和投诉给出回复草稿，垃圾按群规处理。"
+  - id: profile_refresh
+    title: { zh: "改一下账号简介", en: "Refresh the profile" }
+    description: "品牌换了新的一句话介绍，主页和 IG 的简介要跟着改。"
+    expected_output: "一张带前后对比的改资料卡，要你点一下才生效；账号名那一格一个字都不会动（改了旧帖里的链接会全断）。"

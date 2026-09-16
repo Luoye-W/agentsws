@@ -766,3 +766,287 @@ describe('WP67 红人营销那五条（15 §2 + 48 §5.1）', () => {
     expect(ok.verdict).toBe('allow')
   })
 })
+
+describe('WP72 社媒运营那六条（15 §2 + 56 §2）', () => {
+  const account = { type: 'social_account', id: 'sa_1' } as const
+  const post = { type: 'social_post', id: 'sp_1' } as const
+  const thread = { type: 'community_thread', id: 'ct_1' } as const
+  const member = { type: 'community_member', id: 'cm_1' } as const
+  const seen = (ref: { type: string; id: string }) => {
+    const p = new Provenance('run_wp72')
+    p.see([ref], { full: true })
+    return p
+  }
+  const f = (ref: { type: string; id: string }, over = {}) => ({
+    now,
+    changeSet: [],
+    windowCount: 0,
+    provenance: seen(ref),
+    ...over,
+  })
+  const ruleOf = (r: ReturnType<typeof evaluateGuardrail>, rule: string) =>
+    r.hits.find((h) => h.rule === rule)
+
+  it('发内容永远人审——排期与立发同一条门', () => {
+    const r = evaluateGuardrail(
+      {
+        kind: 'social_post',
+        target: post,
+        before: {},
+        after: { body: '新的 65W 充电器上架了。', scheduled_at: '2026-09-09T08:00:00Z' },
+      },
+      { caps: { max_posts_per_day: 3 } },
+      f(post),
+      'stage',
+    )
+    expect(r.verdict).toBe('require_review')
+    expect(ruleOf(r, 'hard_ceiling')?.actual).toBe('social_post')
+  })
+
+  it('排期时间在过去 = block：人在卡面上看不出那个时刻已经过去了', () => {
+    const r = evaluateGuardrail(
+      {
+        kind: 'social_post',
+        target: post,
+        before: {},
+        after: { body: '迟到的公告', scheduled_at: '2026-09-01T08:00:00Z' },
+      },
+      { caps: {} },
+      f(post),
+      'stage',
+    )
+    expect(r.verdict).toBe('block')
+    expect(ruleOf(r, 'social_post_schedule_in_past')).toBeDefined()
+  })
+
+  it('既没文案也没素材 = block（平台发得出去，所以不能靠平台挡）', () => {
+    const r = evaluateGuardrail(
+      { kind: 'social_post', target: post, before: {}, after: { body: '   ' } },
+      { caps: {} },
+      f(post),
+      'stage',
+    )
+    expect(ruleOf(r, 'social_post_empty')?.severity).toBe('block')
+  })
+
+  it('发帖超日额：多一条 hit，卡面上看得见', () => {
+    const r = evaluateGuardrail(
+      { kind: 'social_post', target: post, before: {}, after: { body: '第四条' } },
+      { caps: { max_posts_per_day: 3 } },
+      f(post, { windowCount: 3 }),
+      'stage',
+    )
+    expect(ruleOf(r, 'max_posts_per_day')?.actual).toBe(4)
+  })
+
+  it('改账号资料要人点；改 handle 连提都不许提', () => {
+    const bio = evaluateGuardrail(
+      {
+        kind: 'social_profile_edit',
+        target: account,
+        before: { bio: '旧简介' },
+        after: { bio: '新简介' },
+      },
+      { caps: {} },
+      f(account, { provenance: seen(account) }),
+      'stage',
+    )
+    expect(bio.verdict).toBe('require_review')
+    expect(ruleOf(bio, 'social_profile_edit_needs_review')).toBeDefined()
+
+    const handle = evaluateGuardrail(
+      {
+        kind: 'social_profile_edit',
+        target: account,
+        field: 'handle',
+        before: { handle: 'nordvolt' },
+        after: { handle: 'nordvolt-official' },
+      },
+      { caps: {} },
+      f(account),
+      'stage',
+    )
+    expect(handle.verdict).toBe('block')
+    expect(ruleOf(handle, 'protected_field')).toBeDefined()
+  })
+
+  it('改群规没读全就改 = block（before 就是那段正文）', () => {
+    const p = new Provenance('run_wp72_rules')
+    p.see([account], { full: false })
+    const r = evaluateGuardrail(
+      {
+        kind: 'community_rules',
+        target: account,
+        before: { rules: '不许发链接' },
+        after: { rules: '可以发链接' },
+      },
+      { caps: {} },
+      { now, changeSet: [], windowCount: 0, provenance: p },
+      'stage',
+    )
+    expect(r.verdict).toBe('block')
+    expect(ruleOf(r, 'requires_record_read')).toBeDefined()
+  })
+
+  it('入群审核：说不清是批还是拒的卡，人点不下去', () => {
+    const r = evaluateGuardrail(
+      { kind: 'community_membership', target: member, before: {}, after: {} },
+      { caps: {} },
+      f(member),
+      'stage',
+    )
+    expect(r.verdict).toBe('block')
+    expect(ruleOf(r, 'community_membership_decision_required')).toBeDefined()
+
+    const okOne = evaluateGuardrail(
+      { kind: 'community_membership', target: member, before: {}, after: { decision: 'approve' } },
+      { caps: { max_member_approvals_per_day: 50 } },
+      f(member),
+      'stage',
+    )
+    expect(okOne.verdict).toBe('allow')
+  })
+
+  it('群发：不报「查过抑制名单」就 block——没问过与问过了没人必须分得开', () => {
+    const never = evaluateGuardrail(
+      {
+        kind: 'community_broadcast',
+        target: account,
+        before: {},
+        after: { channel: 'discord', audience: ['u1', 'u2'], audience_size: 2 },
+      },
+      { caps: { max_broadcasts_per_week: 1 } },
+      f(account),
+      'stage',
+    )
+    expect(never.verdict).toBe('block')
+    expect(ruleOf(never, 'suppression_list_required')?.actual).toBe('never')
+  })
+
+  it('群发：名单上的人漏在受众里 = block（规则是 suppression.ts 那一份）', () => {
+    const leak = evaluateGuardrail(
+      {
+        kind: 'community_broadcast',
+        target: account,
+        before: {},
+        after: {
+          channel: 'telegram_group',
+          suppression_checked: true,
+          audience: ['A+promo@x.com', 'b@x.com'],
+          suppressed: ['a@x.com'],
+        },
+      },
+      { caps: {} },
+      f(account),
+      'stage',
+    )
+    expect(leak.verdict).toBe('block')
+    expect(ruleOf(leak, 'suppression_list')?.actual).toContain('A+promo@x.com')
+  })
+
+  it('群发：查过了、名单上一个人都不在 → 只剩「永远人审」那一条', () => {
+    const clean = evaluateGuardrail(
+      {
+        kind: 'community_broadcast',
+        target: account,
+        before: {},
+        after: {
+          channel: 'discord',
+          suppression_checked: true,
+          audience: ['b@x.com'],
+          suppressed: ['a@x.com'],
+          audience_size: 1,
+        },
+      },
+      { caps: { max_broadcasts_per_week: 1 } },
+      f(account),
+      'stage',
+    )
+    expect(clean.verdict).toBe('require_review')
+    expect(clean.hits.map((h) => h.rule)).toEqual(['hard_ceiling'])
+  })
+
+  it('WhatsApp：没 opt-in / 没模板 id 一律 block，不是转人审', () => {
+    const r = evaluateGuardrail(
+      {
+        kind: 'community_broadcast',
+        target: account,
+        before: {},
+        after: {
+          channel: 'whatsapp',
+          suppression_checked: true,
+          audience: ['+4915112345678'],
+          suppressed: [],
+          audience_size: 1,
+        },
+      },
+      { caps: { max_template_messages_per_day: 100 } },
+      f(account),
+      'stage',
+    )
+    expect(r.verdict).toBe('block')
+    expect(ruleOf(r, 'whatsapp_template_required')).toBeDefined()
+    expect(ruleOf(r, 'whatsapp_opt_in_required')?.actual).toBe('never')
+
+    const withBoth = evaluateGuardrail(
+      {
+        kind: 'community_broadcast',
+        target: account,
+        before: {},
+        after: {
+          channel: 'whatsapp',
+          template_id: 'order_update_v3',
+          opt_in_verified: true,
+          suppression_checked: true,
+          audience: ['+4915112345678'],
+          suppressed: [],
+          audience_size: 1,
+        },
+      },
+      { caps: { max_template_messages_per_day: 100 } },
+      f(account),
+      'stage',
+    )
+    expect(withBoth.verdict).toBe('require_review')
+  })
+
+  it('管理动作按 after.action 分档：删帖 L2 自动得了，封禁升 L1', () => {
+    const del = evaluateGuardrail(
+      {
+        kind: 'community_moderation',
+        target: thread,
+        before: {},
+        after: { action: 'delete_post', reason: '广告' },
+      },
+      { caps: { max_moderations_per_day: 20 } },
+      f(thread),
+      'stage',
+    )
+    expect(del.verdict).toBe('allow')
+
+    const ban = evaluateGuardrail(
+      {
+        kind: 'community_moderation',
+        target: thread,
+        before: {},
+        after: { action: 'ban', reason: '反复刷广告' },
+      },
+      { caps: { max_moderations_per_day: 20 } },
+      f(thread),
+      'stage',
+    )
+    expect(ban.verdict).toBe('require_review')
+    expect(ruleOf(ban, 'community_moderation_ban')?.actual).toBe('ban')
+  })
+
+  it('认不出的管理动作 = block（不猜它想干什么）', () => {
+    const r = evaluateGuardrail(
+      { kind: 'community_moderation', target: thread, before: {}, after: { action: 'shadowban' } },
+      { caps: {} },
+      f(thread),
+      'stage',
+    )
+    expect(r.verdict).toBe('block')
+    expect(ruleOf(r, 'community_moderation_action_required')?.actual).toBe('shadowban')
+  })
+})

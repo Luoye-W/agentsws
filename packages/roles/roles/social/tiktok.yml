@@ -1,0 +1,218 @@
+# 56 §2 社媒运营的第 2 条职责：**TikTok 运营**（WP72）。
+#
+# 内容账号组四条职责的骨架**完全相同**（56 §2 上半行），不同的只有三样：
+# 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
+# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里，不在这里抄第二遍。
+#
+# 这条渠道特有的三件事：
+#
+# 1. **发布接口是申请制**（Content Posting API，与红人那条职责用的 Research API
+#    不是同一个东西，要分别申请）。没批下来之前，排期、草稿、审批照常能用，
+#    只是最后那一跳发不出去——界面上说的是"要先申请"，不是"连接失败"。
+# 2. **发布是两跳**：init 拿一个 publish_id 与上传地址，素材传上去之后轮询状态。
+#    一跳发完这件事在 TikTok 上不存在，所以"发出去了"要等轮询回来才算数。
+# 3. **没有开放的评论读写接口**。待回评论这一块在这条渠道上是空的——
+#    空的理由要说出来（36 §3），不是假装我们漏了。
+#
+# 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
+# **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
+# `grounding` 的意图词就是 54 §2 岗位路由判这件事的依据——写不足 = 路由不到。
+id: social.tiktok
+version: 1.0.0
+domain: social
+name: { zh: TikTok 运营, en: TikTok }
+description: 我们自己的 TikTok 账号：视频排期与发布、回评论、账号资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
+
+scopes:
+  - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: community_thread, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # `required: false`：没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。
+  - { kind: tiktok_content, required: false, grants: [read_profile, read_videos, publish_video], ownership: workspace }
+
+actions:
+  - id: stage_post
+    target: social_account
+    kind: staged_change
+    mandate:
+      caps: { max_posts_per_day: 3 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 3, per: day }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: reply_comment
+    target: community_thread
+    kind: outbound_message
+    mandate:
+      caps: { max_comment_replies_per_day: 50 }
+      window: { max_count: 50, per: day }
+    route_to: role_holder
+  - id: stage_profile_edit
+    target: social_account
+    kind: staged_change
+    mandate:
+      caps: {}
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: week }
+    protected_fields: [handle, username, account_id, external_id]
+    review_cannot_be_disabled: true
+    route_to: owner
+
+automation:
+  # **发布永远 L1**（56 §2 / 15 §2 的 `HARD_L1`）。
+  stage_post:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 回评论 L2 → L3：能升是因为承诺扫描把"改得了钱"那一半直接拦死。
+  reply_comment:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  stage_profile_edit:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: social.tiktok.calendar,
+      placement: focus,
+      component: table,
+      query: social.content_calendar,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.tiktok.queue,
+      placement: queue,
+      component: table,
+      query: social.publish_queue,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.tiktok.performance,
+      placement: role_view,
+      component: table,
+      query: social.performance_30d,
+      default_order: 30,
+      pinnable: true,
+      adaptive: false,
+    }
+  - {
+      id: social.tiktok.comments,
+      placement: queue,
+      component: table,
+      query: social.pending_comments,
+      default_order: 40,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.tiktok.handoffs,
+      placement: role_view,
+      component: table,
+      query: social.support_handoffs,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：九条社媒职责的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  - {
+      name: tiktok_intent,
+      intent_terms: [TikTok, 抖音国际版, 短视频, 视频, dou, 合拍, 挑战赛, video, short],
+      cue_terms: [发, 排期, 定时, 播放, 完播, 点赞, 评论, 粉丝, 涨粉, 话题, 标签],
+      tool: list_social_posts,
+      prefetch: false,
+    }
+  - {
+      name: facts_before_post,
+      intent_terms: [文案, 发帖, 起草, 上新, 活动, post, caption, announce],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, 库存, price, discount, warranty],
+      tool: search_policies,
+      prefetch: true,
+    }
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_community_support,
+      prefetch: false,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_post',
+      mode: immediate,
+      recipients: [role_holder],
+      escalate_after_hours: 4,
+    }
+  - {
+      event: 'approval.created:reply_comment',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 12,
+    }
+  - {
+      event: 'guardrail.hit:commitment_scan',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  - { event: 'social.schedule_conflict', mode: queue, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: week_plan
+    label: { zh: "排下周的视频", en: "Plan next week" }
+    prompt: "按这周的播放和手上的素材，给 TikTok 排下周的视频，一天不超过一条，撞车的说清楚"
+    kind: start_task
+  - id: draft_post
+    label: { zh: "起草一条", en: "Draft a post" }
+    prompt: "给这条视频起一段文案和话题标签，按品牌话术来，价格和时效只写事实卡里有的"
+    kind: start_task
+  - id: comments_waiting
+    label: { zh: "有哪些评论等着回", en: "Comments waiting" }
+    prompt: "现在有哪些评论还没回？哪些是客户的问题该转客服、哪些我自己回，分开列"
+    kind: ask
+  - id: last_30d
+    label: { zh: "这个月发得怎么样", en: "How did the last 30 days go" }
+    prompt: "近 30 天发的视频里，播放和完播最好的三条是哪几条，它们有什么共同点"
+    kind: ask
+
+task_examples:
+  - id: weekly_calendar
+    title: { zh: "排一周的视频", en: "Fill a week of the calendar" }
+    description: "下周有一次上新，手上有几段素材，不知道怎么摊到一周里。"
+    expected_output: "一份按天排好的日历（每条写清什么时间发、文案与话题标签是什么），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
+  - id: not_approved_yet
+    title: { zh: "接口还没批下来怎么办", en: "What if the API is not approved yet" }
+    description: "发布接口还在申请中，但内容不能停。"
+    expected_output: "排期与文案照样做完，到点了提醒你去后台手工发一下——不会假装已经发出去了，也不会把这条从日历上抹掉。"
+  - id: comment_triage
+    title: { zh: "把评论分一分", en: "Sort the comments" }
+    description: "一条爆了的视频下面有几十条评论。"
+    expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销；这条渠道的评论要人工贴进来（TikTok 没有开放的评论接口）。"

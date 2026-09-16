@@ -1,0 +1,219 @@
+# 56 §2 社媒运营的第 4 条职责：**YouTube 运营**（WP72）。
+#
+# 内容账号组四条职责的骨架**完全相同**（56 §2 上半行），不同的只有三样：
+# 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
+# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里，不在这里抄第二遍。
+#
+# 这条渠道特有的三件事：
+#
+# 1. **连接卡与红人岗位的 `kol.youtube` 是同一张**（56 §1）：一把 key 管两条职责。
+#    两边读写的东西不同——红人那条读**别人的**频道，这条读写**我们自己的**——
+#    但连接页上只有一张 YouTube，连一次就够了。
+# 2. **配额是全站的，不是我们的**。一天 10000 单位是账号级的数，一个进程里记不准，
+#    所以我们不自己算：上游说配额没了就照实说，并告诉用户明天重置。
+# 3. **上传视频不走这条路**。resumable upload 是多段 HTTP + 二进制，不是一次
+#    JSON 调用——所以这条职责上"发布"出的是一张排期卡与一句提醒，
+#    真正的上传在后台做。排期与审批照常，不假装能替你传。
+#
+# 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
+# **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
+# `grounding` 的意图词就是 54 §2 岗位路由判这件事的依据——写不足 = 路由不到。
+id: social.youtube
+version: 1.0.0
+domain: social
+name: { zh: YouTube 运营, en: YouTube }
+description: 我们自己的 YouTube 频道：视频与短片的排期、回评论、频道资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
+
+scopes:
+  - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: community_thread, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # `required: false`：没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。
+  - { kind: youtube_data, required: false, grants: [read_channel, read_videos, manage_comments], ownership: workspace }
+
+actions:
+  - id: stage_post
+    target: social_account
+    kind: staged_change
+    mandate:
+      caps: { max_posts_per_day: 3 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 3, per: day }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: reply_comment
+    target: community_thread
+    kind: outbound_message
+    mandate:
+      caps: { max_comment_replies_per_day: 50 }
+      window: { max_count: 50, per: day }
+    route_to: role_holder
+  - id: stage_profile_edit
+    target: social_account
+    kind: staged_change
+    mandate:
+      caps: {}
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: week }
+    protected_fields: [handle, username, account_id, external_id]
+    review_cannot_be_disabled: true
+    route_to: owner
+
+automation:
+  # **发布永远 L1**（56 §2 / 15 §2 的 `HARD_L1`）。
+  stage_post:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 回评论 L2 → L3：能升是因为承诺扫描把"改得了钱"那一半直接拦死。
+  reply_comment:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  stage_profile_edit:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: social.youtube.calendar,
+      placement: focus,
+      component: table,
+      query: social.content_calendar,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.youtube.queue,
+      placement: queue,
+      component: table,
+      query: social.publish_queue,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.youtube.performance,
+      placement: role_view,
+      component: table,
+      query: social.performance_30d,
+      default_order: 30,
+      pinnable: true,
+      adaptive: false,
+    }
+  - {
+      id: social.youtube.comments,
+      placement: queue,
+      component: table,
+      query: social.pending_comments,
+      default_order: 40,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.youtube.handoffs,
+      placement: role_view,
+      component: table,
+      query: social.support_handoffs,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：九条社媒职责的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  - {
+      name: youtube_intent,
+      intent_terms: [YouTube, 油管, 频道, 视频, 短片, Shorts, 字幕, 播放列表, channel, video],
+      cue_terms: [发, 排期, 定时, 播放, 点赞, 评论, 订阅, 涨粉, 标题, 描述, 缩略图],
+      tool: list_social_posts,
+      prefetch: false,
+    }
+  - {
+      name: facts_before_post,
+      intent_terms: [文案, 发帖, 起草, 上新, 活动, post, caption, announce],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, 库存, price, discount, warranty],
+      tool: search_policies,
+      prefetch: true,
+    }
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_community_support,
+      prefetch: false,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_post',
+      mode: immediate,
+      recipients: [role_holder],
+      escalate_after_hours: 4,
+    }
+  - {
+      event: 'approval.created:reply_comment',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 12,
+    }
+  - {
+      event: 'guardrail.hit:commitment_scan',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  - { event: 'social.schedule_conflict', mode: queue, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: week_plan
+    label: { zh: "排下周的视频", en: "Plan next week" }
+    prompt: "按这周的播放和手上的素材，给 YouTube 排下周的视频与短片，撞车的说清楚"
+    kind: start_task
+  - id: draft_post
+    label: { zh: "起草标题和描述", en: "Draft title and description" }
+    prompt: "给这条视频起一个标题和一段描述，按品牌话术来，参数和时效只写事实卡里有的"
+    kind: start_task
+  - id: comments_waiting
+    label: { zh: "有哪些评论等着回", en: "Comments waiting" }
+    prompt: "现在有哪些评论还没回？哪些是客户的问题该转客服、哪些我自己回，分开列"
+    kind: ask
+  - id: last_30d
+    label: { zh: "这个月发得怎么样", en: "How did the last 30 days go" }
+    prompt: "近 30 天发的视频里，播放和点赞最好的三条是哪几条，它们有什么共同点"
+    kind: ask
+
+task_examples:
+  - id: weekly_calendar
+    title: { zh: "排一周的视频", en: "Fill a week of the calendar" }
+    description: "下周有一条长片和两条短片，不知道怎么摊开。"
+    expected_output: "一份按天排好的日历（每条写清什么时间发、标题与描述是什么），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
+  - id: comment_triage
+    title: { zh: "把评论分一分", en: "Sort the comments" }
+    description: "一条视频下面有几十条评论，来不及一条条看。"
+    expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销，夸和投诉给出回复草稿。"
+  - id: shared_key
+    title: { zh: "和红人岗位共用一把 key", en: "One key, two duties" }
+    description: "已经为红人营销连过 YouTube，社媒这边还要不要再连一次。"
+    expected_output: "不用。连接页上只有一张 YouTube 卡，两条职责读同一把 key；这条职责能不能发，仍由它自己的额度与审批说了算。"

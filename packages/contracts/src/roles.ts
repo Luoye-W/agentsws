@@ -285,6 +285,18 @@ export interface RoleDefinition {
    *    卖家后台——不是"顺手多开几个以后可能用得上"。
    */
   browser_scope?: string[]
+  /**
+   * WP72（56 §1）：这条职责靠什么干活。不写 = `api`（走连接器）。
+   *
+   * 写 `browser` = 这条渠道**没有可用的接口**，动作要走第三栏的受控浏览器
+   * （36 §9 / 55 §3）。`social.facebook-group` 是第一个——Groups API 已停。
+   *
+   * 为什么要单立这一格而不是只看 `connectors` 空不空：空的 `connectors` 有两种
+   * 含义——"这条职责不需要连接器"（红人那五条：没连也能靠导入干活）与
+   * "这条渠道根本没有连接器可连"。界面上这两句话完全不同：前者不该出「去连接」，
+   * 后者要出「这条走浏览器」。
+   */
+  mode?: 'api' | 'browser'
   persona?: string
   handover: {
     transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]

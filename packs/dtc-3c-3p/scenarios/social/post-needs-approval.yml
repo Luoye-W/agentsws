@@ -1,0 +1,55 @@
+# WP72（56 §2）：**发内容永远人审**——报了 L3 也按回人审，而且排期时刻要在卡面上。
+#
+# 场景故意把提案的等级报成 L3，等于有人在设置里把"发帖"开到了全自动。
+# 15 §2 的 `HARD_L1` 里有 `social_post`，所以这一下必须被按住：卡进队列、等人点，
+# 一个字都没发出去。
+#
+# 为什么门在**排**的这一下而不是到点那一下：一条排在后天早上的帖子，到点之后
+# 没有第二道门——那时候没人在场，卡也早就不在队列里了。所以排期时刻必须写在
+# 这张卡的卡面上（`stated_on_card`），人按下那一下之前看得见"它会在什么时候自己出去"。
+#
+# 与 `content/*` 那条博客发布的差别：那一条发到**我们自己的站上**，这一条发给
+# **外人看**——一条发错的帖子在被删掉之前已经被截图了。所以它是硬顶，不是 L2 上限。
+#
+# 一个合成人都不装 = 没有人去点那张卡。发布要么有人点头，要么发不出去。
+id: social/post-needs-approval
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 李默（运营，兼着社媒运营的 Meta 那条职责）排一条周四的内容
+  - at: '+0m'
+    social.post:
+      who: p_li
+      channel: meta
+      body: 周四晚八点开一场桌面收纳直播，来的人送线材收纳夹。
+      scheduled_at: '2026-09-10T12:00:00.000Z'
+      level: L3
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  social_post:
+    requested_level: L3
+    # 硬顶：报了 L3 也不许自动放行
+    auto_approved: false
+    scheduled_at: '2026-09-10T12:00:00.000Z'
+    # 排期时刻写在卡面上：批了之后它会在那个时刻自己出去
+    stated_on_card: true
+  staged_change_kinds: [social_post]
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.social_post_staged
+  auto_approved: 0
+  metrics:
+    staged_changes: 1
+    # 没人点头 = 一个字都没发出去
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  卡面上"这条会在什么时候、发到哪个号上去"，人读完答得上来吗？

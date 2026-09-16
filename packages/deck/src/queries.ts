@@ -10,7 +10,9 @@
  * GA4 / Search Console / 广告后台没接连接，一律回 `not_connected`（界面显示「去连接」而不是空图）。
  */
 import type { ApprovalItem, Iso8601 } from '@agentsws/contracts'
+import { SOCIAL_CHANNELS, socialChannelOfRole } from '@agentsws/contracts'
 import { DeckError } from './errors.js'
+import { SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
 import type {
   DataSourceId,
   QueryContext,
@@ -265,6 +267,251 @@ export const ANOMALY_DEFAULTS: Readonly<Record<string, number>> = {
 
 export function thresholdOf(ctx: QueryContext, key: string): number {
   return ctx.thresholds?.[key] ?? ANOMALY_DEFAULTS[key] ?? 0
+}
+
+/* ── WP72（56 §2）：社媒运营面板的九块 ──────────────────────────────────
+ *
+ * 分两层，因为"没连就明说"这句话只对得上其中一层（36 §3）：
+ *
+ * - **我们自己库里那七块**（内容日历 / 待发布队列 / 待回评论 / 待审入群 /
+ *   待处理帖子 / 群发队列 / 转客服）走 `social` 这个源——它永远算连上。
+ *   一个平台都没连，内容日历上那几条照样在那儿摆着：**那是我们自己排的**。
+ * - **平台那一侧那两块**（近 30 天表现 / 活跃度）走这条渠道自己的源
+ *   （`social_meta` / `social_discord` …）。连上 Discord 不会把 TikTok 那一块
+ *   点亮——那正是不合成一个 `social_channel` 的理由。
+ *
+ * 两层都按 `ctx.role_id` 那条渠道筛：九条职责共用一份投影（`socialDeckData`），
+ * 面板这一层各看各的——一个人同时挂着 Meta 与 Discord 时，他看到的是两个岗位视图，
+ * 每个视图里各几块，而不是一个视图里十几块（同 48 §5.1 红人那条）。
+ */
+
+/** 这条职责是哪条渠道；不是社媒职责就没有——那时一行都不出。 */
+function channelOfRole(role_id: string): string | undefined {
+  return socialChannelOfRole(role_id)?.id
+}
+
+/** 只留这条职责自己那条渠道的行。 */
+function ofChannel<T extends { channel: string }>(rows: readonly T[], ctx: QueryContext): T[] {
+  const channel = channelOfRole(ctx.role_id)
+  // 认不出渠道（不是社媒职责）就一行不出——**不是**把九条渠道全端出来
+  return channel === undefined ? [] : rows.filter((r) => r.channel === channel)
+}
+
+/** 时刻那一列拿不到就留空串，不写"未知"——空着本身就说明了问题。 */
+const when = (iso: string | undefined): string => iso ?? ''
+
+const SOCIAL_QUERIES: QueryDef[] = [
+  {
+    name: 'social.content_calendar',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'scheduled_at', label: '什么时候' },
+        { key: 'account', label: '账号' },
+        { key: 'kind', label: '形态' },
+        { key: 'status', label: '状态' },
+        { key: 'body', label: '内容' },
+      ],
+      rows: ofChannel(ctx.social?.calendar ?? [], ctx).map((r) => ({
+        // 排期的看排期，已发的看发出去那一刻——日历上"什么时候"那一列不该空着
+        scheduled_at: when(r.scheduled_at ?? r.published_at),
+        account: r.account,
+        kind: r.kind,
+        status: r.status,
+        // 被平台退回来的那条要把原话带上——混进"排期中"里就再也没人发现它没发出去
+        body: r.failure_reason === undefined ? r.excerpt : `${r.excerpt}（${r.failure_reason}）`,
+      })),
+    }),
+  },
+  {
+    name: 'social.publish_queue',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'scheduled_at', label: '排在' },
+        { key: 'account', label: '账号' },
+        { key: 'status', label: '状态' },
+        { key: 'body', label: '内容' },
+      ],
+      rows: ofChannel(ctx.social?.queue ?? [], ctx).map((r) => ({
+        scheduled_at: when(r.scheduled_at),
+        account: r.account,
+        status: r.status,
+        body: r.excerpt,
+      })),
+    }),
+  },
+  {
+    name: 'social.pending_comments',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'created_at', label: '什么时候' },
+        { key: 'author', label: '谁说的' },
+        { key: 'triage', label: '归类' },
+        { key: 'body', label: '内容' },
+      ],
+      // 判成客户问题的那些已经转出去了，不在这张表里（56 边界行，投影那一层就切了）
+      rows: ofChannel(ctx.social?.pending_comments ?? [], ctx).map((r) => ({
+        created_at: r.created_at,
+        author: r.author,
+        triage: r.triage ?? '',
+        body: r.excerpt,
+      })),
+    }),
+  },
+  {
+    name: 'social.pending_members',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'applied_at', label: '什么时候递的' },
+        { key: 'handle', label: '谁' },
+        { key: 'account', label: '哪个群' },
+        { key: 'answers', label: '答了几题', align: 'right' as const, format: 'count' as const },
+      ],
+      rows: ofChannel(ctx.social?.pending_members ?? [], ctx).map((r) => ({
+        applied_at: when(r.applied_at),
+        handle: r.display_name === undefined ? r.handle : `${r.display_name}（${r.handle}）`,
+        account: r.account,
+        // 答案原文不上面板（外部文本，21 §1）——只报条数
+        answers: r.answers,
+      })),
+    }),
+  },
+  {
+    name: 'social.pending_threads',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'created_at', label: '什么时候' },
+        { key: 'author', label: '谁说的' },
+        { key: 'surface', label: '在哪儿' },
+        { key: 'triage', label: '归类' },
+        { key: 'body', label: '内容' },
+      ],
+      rows: ofChannel(ctx.social?.pending_threads ?? [], ctx).map((r) => ({
+        created_at: r.created_at,
+        author: r.author,
+        surface: r.surface,
+        triage: r.triage ?? '',
+        body: r.excerpt,
+      })),
+    }),
+  },
+  {
+    name: 'social.broadcast_queue',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'scheduled_at', label: '排在' },
+        { key: 'account', label: '发到哪儿' },
+        // 受众数**不是钱**：不标 `count` 的话前端会把 860 渲染成 US$860.00
+        { key: 'audience', label: '发给', align: 'right' as const, format: 'count' as const },
+        { key: 'body', label: '内容' },
+      ],
+      rows: ofChannel(ctx.social?.broadcasts ?? [], ctx).map((r) => ({
+        scheduled_at: when(r.scheduled_at),
+        account: r.account,
+        audience: r.audience ?? 0,
+        body: r.excerpt,
+      })),
+    }),
+  },
+  {
+    name: 'social.support_handoffs',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'created_at', label: '什么时候' },
+        { key: 'author', label: '谁问的' },
+        { key: 'status', label: '到哪一步了' },
+        { key: 'body', label: '问的是什么' },
+      ],
+      // 这条职责**没有**答客户问题，但它要看得见自己转出去了多少（56 边界行）
+      rows: ofChannel(ctx.social?.handoffs ?? [], ctx).map((r) => ({
+        created_at: r.created_at,
+        author: r.author,
+        status: r.status,
+        body: r.excerpt,
+      })),
+    }),
+  },
+]
+
+/*
+ * 平台那一侧的两块：**一条渠道一个查询**，因为它们各自的"连没连"不一样。
+ *
+ * 查询名带渠道后缀（`social.performance_30d.meta`），积木那一层按职责挑对应那一条
+ * （`blocks.ts` 的 `SOCIAL_CONTENT_BLOCKS` / `SOCIAL_COMMUNITY_BLOCKS`）。
+ * Facebook 群组不在这里——它没有连接器（Groups API 已停），平台那一侧的数要等
+ * WP73 的浏览器执行器；在那之前它的面板上只有我们自己库里那几块，**不出一块
+ * 永远写着"还没连"的空表**（36 §3：说不出所以然的空图比没有更糟）。
+ */
+for (const spec of SOCIAL_CHANNELS) {
+  const source = SOCIAL_SOURCE_BY_CHANNEL[spec.id]
+  if (source === undefined) continue
+  SOCIAL_QUERIES.push({
+    name: `social.performance_30d.${spec.id}`,
+    source,
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'published_at', label: '什么时候发的' },
+        { key: 'body', label: '内容' },
+        // 五个数都不是钱。拿不到的一律空着——**不补 0**：
+        // "这个平台不给这个数"与"这个数是 0"在面板上必须分得开
+        { key: 'impressions', label: '曝光', align: 'right' as const, format: 'count' as const },
+        { key: 'views', label: '播放', align: 'right' as const, format: 'count' as const },
+        { key: 'likes', label: '互动', align: 'right' as const, format: 'count' as const },
+        { key: 'new_followers', label: '涨粉', align: 'right' as const, format: 'count' as const },
+      ],
+      rows: ofChannel(ctx.social?.performance ?? [], ctx).map((r) => ({
+        published_at: when(r.published_at),
+        body: r.excerpt,
+        impressions: r.impressions ?? '',
+        views: r.views ?? '',
+        likes: r.likes ?? '',
+        new_followers: r.new_followers ?? '',
+      })),
+    }),
+  })
+  SOCIAL_QUERIES.push({
+    name: `social.community_activity.${spec.id}`,
+    source,
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'account', label: '群' },
+        { key: 'members', label: '成员', align: 'right' as const, format: 'count' as const },
+        {
+          key: 'active_7d',
+          label: '近 7 天发过言',
+          align: 'right' as const,
+          format: 'count' as const,
+        },
+        { key: 'pending', label: '等着进群', align: 'right' as const, format: 'count' as const },
+        { key: 'open', label: '没处理的', align: 'right' as const, format: 'count' as const },
+        { key: 'observed_at', label: '看到于' },
+      ],
+      // 三个数各是各的，不合成一个"健康分"——合了没人答得上到底哪儿不对
+      rows: ofChannel(ctx.social?.activity ?? [], ctx).map((r) => ({
+        account: r.account,
+        members: r.member_count ?? r.followers ?? '',
+        active_7d: r.active_7d,
+        pending: r.pending_members,
+        open: r.open_threads,
+        observed_at: r.observed_at,
+      })),
+    }),
+  })
 }
 
 const QUERY_LIST: QueryDef[] = [
@@ -863,6 +1110,7 @@ const QUERY_LIST: QueryDef[] = [
         })),
     }),
   },
+  ...SOCIAL_QUERIES,
 ]
 
 const EMPTY_SCALAR: ScalarResult = { value: 0, previous: 0, spark: [0, 0, 0, 0, 0, 0, 0] }

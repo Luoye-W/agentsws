@@ -1,0 +1,59 @@
+# WP72（56 §2）：回评论**额度内自己发**，但**承诺词先被拦下来改写**。
+#
+# 这条题要钉三件事，每一件都是真发生的，不是场景自己判的：
+#
+# 1. **判类在先**。这条评论是"夸"（`praise`），不是客户问题——所以它归社媒运营自己回。
+#    判的是 `@agentsws/social-core` 的 `triageThread`，封闭六类，判不准落 `other` 不猜。
+# 2. **承诺扫描是打回重写，不是静默删改后照发**。第一稿故意多写了一句"我们保证下次
+#    补发一个"——词表是 `@agentsws/support-core` 那一份，**与客服回信、与 Amazon
+#    出站硬闸读的是同一套**。在这里另写一张"社媒版词表"的后果是：同一句话客服那边
+#    拦得住，社群这边发出去了。
+# 3. **改写干净之后那一条进队列，等人点一下**。回评论的**上限**是 L3、**初始是 L2**
+#    （56 §2 那一栏写的就是 `L2 → L3`）——升到 L3 要采纳率够了才行，那是 24 的
+#    学习回路的事，不是这条题。所以这里看到的是 L2 那一档：一天 50 条的额度还远没到，
+#    但它仍然落在队列里。
+#
+# 为什么回评论不走变更账本：56 §2 那一列写的是 `outbound_message` ——它不是一条变更，
+# 是一封出站。所以这条题看的是**出站那三道门**里的 `commitment_scan`（48 §4 L3 #3），
+# 不是 guardrail 的 `HARD_L1`。两条路各管各的，别混着看。
+id: social/comment-reply-within-quota
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 装一个人来点卡：改写之后那一条是自动发的，他本来也不用点它——
+# 但队列里要是压了别的卡，没人点就看不出"自动发"与"压着"的差别。
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    social.reply:
+      who: p_li
+      channel: meta
+      author: tinaq
+      surface: comment
+      text: 这个充电器太好用了，已经推荐给我同事了。
+      draft: 谢谢喜欢！这一款主页精选里就有。下次上新我给您补发一个。
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  social_reply:
+    # 夸，不是客户问题——所以社媒运营自己回
+    triage: praise
+    # 承诺扫描命中的规则名（`support-core` 那一份，与客服共用）
+    commitment_hits: ['l3:replacement_reship#t3:zh']
+    rewritten: true
+    # 初始 L2：改写干净之后那一条进队列等人点（升 L3 是学习回路的事，见文件头）
+    auto_approved: false
+  approval_kinds: { outbound_draft: 1 }
+  event_types:
+    - simulation.social_reply_blocked
+    - simulation.social_reply_staged
+  blocked_rules: [commitment_scan]
+  metrics:
+    runs_failed: 0
+invariants:
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  第一稿被拦下来之后，人从事件与卡面上看得出"拦的是哪一句、改成了什么"吗？

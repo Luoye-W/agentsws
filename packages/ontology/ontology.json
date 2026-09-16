@@ -28,6 +28,7 @@
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/skills.ts",
+    "packages/contracts/src/social.ts",
     "packages/contracts/src/standby.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
@@ -35,6 +36,7 @@
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
+    "packages/roles/roles/dtc/community-support.yml",
     "packages/roles/roles/dtc/content.yml",
     "packages/roles/roles/dtc/email-marketing.yml",
     "packages/roles/roles/dtc/fulfillment.yml",
@@ -46,9 +48,18 @@
     "packages/roles/roles/kol/tiktok.yml",
     "packages/roles/roles/kol/x.yml",
     "packages/roles/roles/kol/youtube.yml",
-    "packages/roles/roles/site/builder.yml"
+    "packages/roles/roles/site/builder.yml",
+    "packages/roles/roles/social/discord.yml",
+    "packages/roles/roles/social/facebook-group.yml",
+    "packages/roles/roles/social/meta.yml",
+    "packages/roles/roles/social/reddit.yml",
+    "packages/roles/roles/social/telegram-group.yml",
+    "packages/roles/roles/social/tiktok.yml",
+    "packages/roles/roles/social/whatsapp.yml",
+    "packages/roles/roles/social/x.yml",
+    "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "4bb49511afc4c12faa623c9b49d04599",
+  "source_digest": "2d26de5b8faa3ca40c67424569be20bf",
   "objects": [
     {
       "id": "ad_set",
@@ -625,6 +636,170 @@
       "properties": [],
       "read_via": ["shopify_admin.get_collection", "shopify_admin.list_collections"],
       "platforms": ["shopify"]
+    },
+    {
+      "id": "community_member",
+      "label": "community_member",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "community_member",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "display_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "CommunityMemberStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "joined_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "application_answers",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_active_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "CommunityMember"
+    },
+    {
+      "id": "community_thread",
+      "label": "community_thread",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "community_thread",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "surface",
+          "type": "'thread' | 'comment' | 'dm'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "author_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "author_handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "CommunityThreadStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "triage",
+          "type": "CommunityTriage",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "routed_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "reply_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": ["list_community_threads"],
+      "contract": "CommunityThread"
     },
     {
       "id": "company",
@@ -1716,7 +1891,11 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["gmail.get_message"]
+      "read_via": [
+        "discord_bot.get_message",
+        "gmail.get_message",
+        "whatsapp_business.list_messages"
+      ]
     },
     {
       "id": "order",
@@ -1793,6 +1972,7 @@
       "read_via": [
         "facebook_graph.get_page",
         "facebook_graph.search_pages",
+        "meta_graph.get_page",
         "shopify_admin.get_page",
         "shopify_admin.list_pages"
       ],
@@ -2452,15 +2632,174 @@
       "contract": "Skill"
     },
     {
+      "id": "social_account",
+      "label": "social_account",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "social_account",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "display_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "connection_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "followers",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "member_count",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "SocialAccount"
+    },
+    {
       "id": "social_post",
       "label": "社媒帖子",
-      "key_format": "连接器给的 id，原样存、不解析",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
       "domain": "social_account",
-      "source_of_truth": "connector",
-      "freshness": "cached:300",
-      "read_ranges": [],
-      "properties": [],
-      "read_via": []
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "SocialPostKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "SocialPostStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "media_refs",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "scheduled_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "failure_reason",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "metrics",
+          "type": "SocialPostMetrics",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "metrics_observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": ["list_social_posts"],
+      "contract": "SocialPost"
     },
     {
       "id": "staged_change",
@@ -3356,6 +3695,22 @@
     },
     {
       "from": "approval_item",
+      "to": "community_member",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "community_thread",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_community_threads"]
+    },
+    {
+      "from": "approval_item",
       "to": "creator_contact",
       "direction": "out",
       "cardinality": "one",
@@ -3449,6 +3804,14 @@
       "cardinality": "one",
       "via": "subject.object",
       "lookup": ["reviews.negative"]
+    },
+    {
+      "from": "approval_item",
+      "to": "social_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
     },
     {
       "from": "approval_item",
@@ -3720,6 +4083,78 @@
       "direction": "in",
       "cardinality": "many",
       "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "community_member",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "community_member",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "community_member",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "community_member",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "community_thread",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "community_thread",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "community_thread",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "community_thread",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "connection",
+      "to": "social_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "social_account.connection_id",
       "lookup": []
     },
     {
@@ -4403,6 +4838,54 @@
       "lookup": []
     },
     {
+      "from": "social_account",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "social_account",
+      "to": "connection",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "connection_id",
+      "lookup": []
+    },
+    {
+      "from": "social_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "social_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "social_account",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "social_account",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "staged_change",
       "to": "approval_item",
       "direction": "out",
@@ -4484,6 +4967,38 @@
     },
     {
       "from": "staged_change",
+      "to": "community_member",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "community_member",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "community_thread",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_community_threads"]
+    },
+    {
+      "from": "staged_change",
+      "to": "community_thread",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_community_threads"]
+    },
+    {
+      "from": "staged_change",
       "to": "creator_contact",
       "direction": "out",
       "cardinality": "one",
@@ -4641,6 +5156,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["reviews.negative"]
+    },
+    {
+      "from": "staged_change",
+      "to": "social_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "social_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
     },
     {
       "from": "staged_change",
@@ -4980,6 +5511,22 @@
     },
     {
       "from": "workflow_instance",
+      "to": "community_member",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "community_thread",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_community_threads"]
+    },
+    {
+      "from": "workflow_instance",
       "to": "creator_contact",
       "direction": "out",
       "cardinality": "one",
@@ -5057,6 +5604,14 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": ["reviews.negative"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "social_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -5220,6 +5775,14 @@
     },
     {
       "from": "workspace",
+      "to": "social_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "social_account.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
       "to": "staged_change",
       "direction": "in",
       "cardinality": "many",
@@ -5252,6 +5815,15 @@
     }
   ],
   "actions": [
+    {
+      "id": "discord_bot.get_message",
+      "object": "message",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 message"
+    },
     {
       "id": "facebook_graph.get_page",
       "object": "page",
@@ -5314,6 +5886,15 @@
       "risk_class": "low",
       "requires_approval": false,
       "what": "读 campaign"
+    },
+    {
+      "id": "meta_graph.get_page",
+      "object": "page",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 page"
     },
     {
       "id": "meta.list_campaigns",
@@ -5821,6 +6402,32 @@
       "what": "往主题里写文件。**只允许写未发布的副本**，写线上主题等于绕过发布门禁"
     },
     {
+      "id": "whatsapp_business.list_messages",
+      "object": "message",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 message"
+    },
+    {
+      "id": "approve_member",
+      "object": "community_member",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": [
+        "social.discord",
+        "social.facebook-group",
+        "social.reddit",
+        "social.telegram-group",
+        "social.whatsapp"
+      ],
+      "what": "approve member"
+    },
+    {
       "id": "authorize_connector",
       "object": "store_config",
       "source": "role",
@@ -5866,6 +6473,23 @@
       "what": "handoff to email"
     },
     {
+      "id": "moderate",
+      "object": "community_thread",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": [
+        "social.discord",
+        "social.facebook-group",
+        "social.reddit",
+        "social.telegram-group",
+        "social.whatsapp"
+      ],
+      "what": "moderate"
+    },
+    {
       "id": "notify_delay",
       "object": "customer",
       "source": "role",
@@ -5902,6 +6526,18 @@
       "what": "reply chat"
     },
     {
+      "id": "reply_comment",
+      "object": "community_thread",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["social.meta", "social.tiktok", "social.x", "social.youtube"],
+      "tool": "draft_reply",
+      "what": "reply comment"
+    },
+    {
       "id": "reply_customer",
       "object": "customer",
       "source": "role",
@@ -5909,9 +6545,27 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["dtc.support"],
+      "roles": ["dtc.community-support", "dtc.support"],
       "tool": "draft_reply",
       "what": "给客户回信（草稿，批了才发）"
+    },
+    {
+      "id": "reply_thread",
+      "object": "community_thread",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": [
+        "social.discord",
+        "social.facebook-group",
+        "social.reddit",
+        "social.telegram-group",
+        "social.whatsapp"
+      ],
+      "tool": "draft_reply",
+      "what": "reply thread"
     },
     {
       "id": "stage_address_change",
@@ -5922,7 +6576,7 @@
       "risk_class": "medium",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["dtc.support"],
+      "roles": ["dtc.community-support", "dtc.support"],
       "what": "改收件地址"
     },
     {
@@ -5935,6 +6589,23 @@
       "route_to": "scope_manager",
       "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
       "what": "stage affiliate code"
+    },
+    {
+      "id": "stage_broadcast",
+      "object": "community_member",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": [
+        "social.discord",
+        "social.facebook-group",
+        "social.reddit",
+        "social.telegram-group",
+        "social.whatsapp"
+      ],
+      "what": "stage broadcast"
     },
     {
       "id": "stage_campaign_send",
@@ -6026,7 +6697,7 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.store", "dtc.support"],
+      "roles": ["dtc.community-support", "dtc.store", "dtc.support"],
       "what": "建 / 改一个优惠码（营销发码）"
     },
     {
@@ -6089,6 +6760,17 @@
       "what": "改一个页面"
     },
     {
+      "id": "stage_post",
+      "object": "social_account",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["social.meta", "social.tiktok", "social.x", "social.youtube"],
+      "what": "stage post"
+    },
+    {
       "id": "stage_price_change",
       "object": "product",
       "source": "role",
@@ -6099,6 +6781,17 @@
       "route_to": "scope_manager",
       "roles": ["dtc.store"],
       "what": "改一件商品的价（超 20% 转人审）"
+    },
+    {
+      "id": "stage_profile_edit",
+      "object": "social_account",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["social.meta", "social.tiktok", "social.x", "social.youtube"],
+      "what": "stage profile edit"
     },
     {
       "id": "stage_promotion",
@@ -6157,7 +6850,7 @@
       "risk_class": "medium",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["amz.support", "dtc.support"],
+      "roles": ["amz.support", "dtc.community-support", "dtc.support"],
       "tool": "stage_refund",
       "what": "提一笔退款"
     },
@@ -6170,7 +6863,7 @@
       "risk_class": "medium",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["dtc.support"],
+      "roles": ["dtc.community-support", "dtc.support"],
       "what": "提一次补发"
     },
     {
@@ -6195,6 +6888,23 @@
       "requires_approval": true,
       "roles": ["dtc.store"],
       "what": "起草一条评价回复"
+    },
+    {
+      "id": "stage_rules_edit",
+      "object": "social_account",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": [
+        "social.discord",
+        "social.facebook-group",
+        "social.reddit",
+        "social.telegram-group",
+        "social.whatsapp"
+      ],
+      "what": "stage rules edit"
     },
     {
       "id": "stage_segment_edit",

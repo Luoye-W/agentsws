@@ -1,0 +1,295 @@
+# 56 §2 社媒运营的第 9 条职责：**WhatsApp 运营**（WP72）。
+#
+# 社群组五条职责的骨架**完全相同**（56 §2 下半行），不同的只有三样：
+# 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
+# 骨架为什么长这样，写在 `social/facebook-group.yml` 的文件头里，不在这里抄第二遍。
+#
+# 这条渠道特有的三件事——**三件都不是我们的洁癖，是 Meta 的规矩**（56 §1）：
+#
+# 1. **主动发消息只能用审批过的模板**。所以这条职责的群发多两格额度：
+#    `max_template_messages_per_day` 100（56 §7）与 `opt_in_required: true`。
+#    没有 `template_id` 或 `opt_in_verified !== true`，guardrail 直接 **block**
+#    ——不是转人审：人在一屏卡面上判不出三千个号里有没有没 opt-in 的，
+#    而发错了封的是这个品牌的号。
+# 2. **24 小时客服窗口**。对方主动来过消息之后的 24 小时内可以自由回复，
+#    出了窗口又只能发模板。所以"这条能不能直接回"是有时效的，卡面上要写清楚
+#    还剩多久——落点在 `@agentsws/social-core` 的 `channels/whatsapp.ts`。
+# 3. **群与 1:1 是两件事**。WhatsApp 的群管理接口一直很薄，真正能规模化做的是
+#    1:1 的模板消息；所以这条职责上"群发"多数时候是**一批 1:1**，
+#    受众数与抑制剔除数因此必须逐个算，不能按"一个群 = 一次发送"糊过去。
+#
+# 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
+# **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
+# `grounding` 的意图词就是 54 §2 岗位路由判这件事的依据——写不足 = 路由不到。
+id: social.whatsapp
+version: 1.0.0
+domain: social
+name: { zh: WhatsApp 运营, en: WhatsApp }
+description: 我们自己的 WhatsApp 商业号与群：入群审核、群规、模板消息群发、群里的讨论与私信、移出禁言。内容、氛围、活动、群规归我；客户的问题不归我，转客服
+
+scopes:
+  # 群本身是一条 `social_account`（我们自己开的号 / 群，见契约 `SocialAccount`）
+  - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 成员名册。**只有社群组五条读得到它**——内容组四条与客服的社群管理都读不到
+  - { domain: community_member, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 帖子、评论、私信都落在线程上
+  - { domain: community_thread, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 19：群公告里说到产品、价格、时效、政策之前先查事实卡
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  # 24：品牌话术是**公司层技能**，这条职责只读不编（`social-core` 的 voice.ts）
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # `required: false`：没连也能整理群规、攒模板草稿、攒审批——真发出去那一跳才需要它。
+  # 商业验证没过之前这条渠道一条消息都发不出去，但排、写、批照常。
+  - {
+      kind: whatsapp_business,
+      required: false,
+      grants: [read_messages, send_messages, manage_templates, manage_groups],
+      ownership: workspace,
+    }
+
+actions:
+  # 56 §2 社群组的五个写动作。额度写在**动作**上不写在职责上（同 51 §2.3）。
+  - id: approve_member
+    target: community_member
+    kind: staged_change
+    mandate:
+      # 一次一个人。挡的是"一口气把 300 个申请全批了"那一下——
+      # 批错一个踢出去就是了，批错三百个这个群就不是原来那个群了
+      caps: { max_members_per_change: 1 }
+      per_change_limits: { max_items: 1 }
+    route_to: role_holder
+  - id: stage_broadcast
+    target: community_member
+    kind: staged_change
+    mandate:
+      # 56 §2 / §7：WhatsApp 多两格——模板消息一天 100 条，且**必须先 opt-in**。
+      # 这两格不是"超了转人审"：没模板 id、没 opt-in，guardrail 当场 block。
+      caps:
+        { max_broadcasts_per_week: 1, max_template_messages_per_day: 100, opt_in_required: true }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 1, per: week }
+    # 群发换收件群 = 发给了另一批人（`@agentsws/core` 的 `PROTECTED_FIELDS`）
+    protected_fields: [account_id, external_id]
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: reply_thread
+    target: community_thread
+    kind: outbound_message
+    mandate:
+      caps: { max_dm_per_day: 30 }
+      window: { max_count: 30, per: day }
+    route_to: role_holder
+  - id: stage_rules_edit
+    target: social_account
+    kind: staged_change
+    # 15 §2 `RECORD_READ_KINDS`：改群规之前先把那段正文读全。
+    # 拿一份摘要覆盖这个群的法律，与拿摘要改商品文案是同一件事
+    requires_record_read: true
+    mandate:
+      caps: {}
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 2, per: week }
+    protected_fields: [account_id, external_id]
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: moderate
+    target: community_thread
+    kind: staged_change
+    mandate:
+      # 一天 20 个动作（56 §7）。超了转人审，不拦——刷屏那天本来就该多删几条
+      caps: { max_moderations_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+
+automation:
+  # 入群审核 L2：批错一个人，踢出去就是了
+  approve_member:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  # **群发永远 L1**（56 §2 / §0）。15 §2 的 `HARD_L1` 里有 `community_broadcast`，
+  # 这里的 `hard_ceiling` 是把同一件事在职责这一层也写出来——两处都说，
+  # 改一处忘另一处的时候有人喊（同 51 §2.3 的 `campaign_send`）。
+  stage_broadcast:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 私信 / 回帖 L2 → L3（56 §2）：能升是因为它改不了钱——承诺扫描把"改得了钱"
+  # 那一半直接拦死（`social-core` 的 `checkOutbound`，用的是全仓那一份词表）。
+  reply_thread:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  # 改群规 L1：群规是这个群的法律，放宽一条等于把垃圾闸门打开
+  stage_rules_edit:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 删帖 / 禁言 L2；**封禁那一档由 guardrail 按 `after.action` 升到 L1**，
+  # 不在这里写第二遍——写两份迟早各改各的
+  moderate:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  # 56 §2 社群组五块：待审入群 / 活跃度 / 待处理帖子 / 群发队列 / 转客服计数。
+  # 顺序就是一天的顺序——面板读下来就是这条职责在干什么。
+  - {
+      id: social.whatsapp.pending_members,
+      placement: queue,
+      component: table,
+      query: social.pending_members,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.whatsapp.activity,
+      placement: role_view,
+      component: table,
+      query: social.community_activity,
+      default_order: 20,
+      pinnable: true,
+      adaptive: false,
+    }
+  - {
+      id: social.whatsapp.threads,
+      placement: queue,
+      component: table,
+      query: social.pending_threads,
+      default_order: 30,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.whatsapp.broadcasts,
+      placement: focus,
+      component: table,
+      query: social.broadcast_queue,
+      default_order: 40,
+      pinnable: true,
+      adaptive: true,
+    }
+  # 转客服计数：这条职责**没有**答客户问题，但它要看得见自己转出去了多少
+  - {
+      id: social.whatsapp.handoffs,
+      placement: role_view,
+      component: table,
+      query: social.support_handoffs,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
+  # 动作 id / 数据域这五样判"这件事该走哪条"。九条社媒职责的动作 id 与数据域
+  # 完全一样，所以在社媒运营这个岗位里，**意图词就是唯一分得开它们的东西**。
+  - {
+      name: whatsapp_intent,
+      intent_terms: [WhatsApp, WA, 瓦次艾普, 模板消息, template, opt-in, 商业号],
+      cue_terms: [入群, 审核, 群规, 公告, 群发, 模板, 私信, 24 小时, 窗口, 移出, 禁言],
+      tool: list_community_threads,
+      prefetch: false,
+    }
+  # 19：群公告里说到产品、价格、时效、政策之前先查事实卡
+  - {
+      name: facts_before_broadcast,
+      intent_terms: [公告, 群发, 广播, 通知, broadcast, announce],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, 库存, price, discount, warranty],
+      tool: search_policies,
+      prefetch: true,
+    }
+  # 56 的边界：客户的问题不归我。意图词写足，54 的路由才判得到"转客服"
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_community_support,
+      prefetch: false,
+    }
+
+notifications:
+  # 群发永远人审，卡压着不动 = 这条公告错过了它的时间点
+  - {
+      event: 'approval.created:stage_broadcast',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+      escalate_after_hours: 4,
+    }
+  - {
+      event: 'approval.created:approve_member',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 24,
+    }
+  # 封禁要人点，而且要让人知道是谁被封了
+  - {
+      event: 'approval.created:moderate',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 8,
+    }
+  # 承诺扫描拦下来：立刻让人知道——它意味着起草那一跳写了不该写的话
+  - {
+      event: 'guardrail.hit:commitment_scan',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  # 抑制名单：群发提案里混进了退订过的人
+  - { event: 'guardrail.hit:suppression_list', mode: immediate, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: pending_members
+    label: { zh: "有谁在等着进群", en: "Who is waiting to join" }
+    prompt: "现在有哪些入群申请没处理？按他们填的答案判一下哪些像广告号，分开列"
+    kind: ask
+  - id: draft_broadcast
+    label: { zh: "起草一条模板消息", en: "Draft a template message" }
+    prompt: "给这次活动起一条模板消息，说清用的是哪个审批过的模板，按品牌话术来，价格和时效只写事实卡里有的；受众、抑制剔除数和有几个号没 opt-in 都要写在卡上"
+    kind: start_task
+  - id: threads_waiting
+    label: { zh: "群里有哪些帖子要处理", en: "Threads waiting" }
+    prompt: "现在有哪些私信和群里的消息没处理？哪些还在 24 小时窗口内能直接回、哪些只能发模板，哪些是客户的问题该转客服，分开列"
+    kind: ask
+  - id: group_health
+    label: { zh: "这个群还活着吗", en: "How is the group doing" }
+    prompt: "近 30 天这个群的发帖数、回帖数、活跃人数怎么样，比上个月是涨是跌"
+    kind: ask
+
+task_examples:
+  - id: join_requests
+    title: { zh: "一批入群申请", en: "A batch of join requests" }
+    description: "一夜之间来了四十个入群申请，不知道哪些是真人。"
+    expected_output: "一张按「像真人 / 像广告号 / 判不准」分好的表，每条写清判据；批与拒都要你一条条点，不会一口气全批。"
+  - id: announcement
+    title: { zh: "发一条群公告", en: "Send an announcement" }
+    description: "周末有一次限时活动，想给关注过的人发一条。"
+    expected_output: "一张群发卡：用哪个模板、发给多少人、剔掉了几个退订过的人、有几个号还没 opt-in（这几个直接发不出去，不是等你点）；要你点一下才发得出去，一天最多 100 条模板消息。"
+  - id: spam_wave
+    title: { zh: "群里刷起了广告", en: "A wave of spam" }
+    description: "有几个号在群里连发外链广告。"
+    expected_output: "按群规分好级的一张表：删消息与禁言你点一下就生效，移出与封禁单独出一张卡（把人从群里永久赶出去这件事只能人点）。"

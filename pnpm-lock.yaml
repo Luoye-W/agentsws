@@ -902,6 +902,9 @@ importers:
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../skills
+      '@agentsws/social-core':
+        specifier: workspace:*
+        version: link:../social-core
       '@agentsws/stand-ins':
         specifier: workspace:*
         version: link:../stand-ins
@@ -923,6 +926,18 @@ importers:
       '@agentsws/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/social-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
 
   packages/stand-ins:
     dependencies:

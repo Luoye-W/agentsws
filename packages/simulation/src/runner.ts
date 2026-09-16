@@ -1058,6 +1058,65 @@ async function execute(
         })
         return
       }
+      // ── WP72 社媒运营（56 §2 / §4）─────────────────────────────────
+      case 'social.post': {
+        const e = event.post
+        const out = await world.social.post({
+          who: e.who,
+          channel: e.channel,
+          body: e.body,
+          ...(e.scheduled_at === undefined ? {} : { scheduled_at: e.scheduled_at }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.social_post_requested', {
+          channel: e.channel,
+          staged: out.staged,
+          // 正文不在这里重复（提案那一跳已经记过），只记结论
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'social.reply': {
+        const e = event.reply
+        const out = await world.social.reply({
+          who: e.who,
+          channel: e.channel,
+          author: e.author,
+          text: e.text,
+          draft: e.draft,
+          ...(e.surface === undefined ? {} : { surface: e.surface }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.social_reply_requested', {
+          channel: e.channel,
+          // 判成了哪一类、社媒运营答没答——56 那条边界就是这两格
+          triage: out.triage,
+          answered: out.answered,
+          ...(out.routed_to === undefined ? {} : { routed_to: out.routed_to }),
+        })
+        await tick()
+        return
+      }
+      case 'community.broadcast': {
+        const e = event.broadcast
+        const out = await world.social.broadcast({
+          who: e.who,
+          channel: e.channel,
+          body: e.body,
+          members: e.members,
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.social_broadcast_requested', {
+          channel: e.channel,
+          staged: out.staged,
+          audience_size: out.audience.length,
+          suppressed_removed: out.suppressed.length,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
       // ── WP67 红人营销（48 §5.1）────────────────────────────────────
       case 'kol.outreach': {
         const out = await world.kol.outreach({

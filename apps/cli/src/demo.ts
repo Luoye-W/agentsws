@@ -740,7 +740,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 3 人 pack 的 `assignments.yml` 里 `kol.youtube` 挂在运营李默身上，
   // 而 demo 只以王岚的身份登录；不挂这一条，找人 / 建联 / 合作 / 审核 / 归因
   // 这五块在 demo 里一眼都看不到。
-  for (const role of ['dtc.store', 'dtc.content', 'kol.youtube']) {
+  // WP72（56 §2）：**社媒运营**岗位同理，挂两条——一条内容账号组（`social.meta`）、
+  // 一条社群组（`social.discord`）。两组的面板骨架不一样（内容日历 / 待发布 /
+  // 近 30 天表现 / 待回评论 vs 待审入群 / 待处理 / 群发队列 / 活跃度），
+  // 只挂一条就只看得见一半，56 §2 那张表在 demo 里就演示不完整。
+  // 社媒库那几行由 `seedDemoSocial` 放（`apps/server/src/social.ts`）。
+  for (const role of ['dtc.store', 'dtc.content', 'kol.youtube', 'social.meta', 'social.discord']) {
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,

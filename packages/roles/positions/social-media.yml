@@ -1,0 +1,37 @@
+# WP72（56 §2 / 27 §1 / 54）：**社媒运营**岗位 = 九条渠道职责。
+#
+# 九条的顺序 = 契约里 `SOCIAL_CHANNELS` 的顺序（内容账号组四条在前、社群组五条在后，
+# 56 §0）。那张表是全仓唯一一份渠道清单，这里不另排一遍。
+#
+# **默认只勾 Meta / TikTok / YouTube**（56 §6 WP72 那一行）。理由与红人营销岗位
+# 那条一样：默认全勾的后果是每个新用户一上来就看到九条他用不上的职责，
+# 而勾上一条比去掉一条容易——去掉之前他得先弄明白那条是干什么的。
+# 社群那五条尤其如此：多数品牌一开始一个群都没有，先把内容发起来才是第一步。
+#
+# 54：用户面对的是**岗位**，不是职责。开一件事 = 交给"社媒运营"这个岗位，
+# 岗位里的 Agent 按 grounding 的意图词判该走哪条渠道职责（"IG 那条帖子下面有人问价"
+# → `social.meta`）。九条职责的动作 id 与数据域完全一样，所以**意图词是唯一
+# 分得开它们的东西**——每条 yml 的 `grounding` 第一条就是干这个的。
+#
+# 九条分开而不是一条"社媒运营"职责，理由在 04 §0 的四条上：各有连接器
+# （八张卡 + Facebook 群组那条走浏览器）、各有队列车道、各能单独交接
+# （把 TikTok 那摊交给新来的人，Discord 那摊不动）、各有额度
+# （一天 3 条是**每条渠道** 3 条）。
+#
+# 边界（56 表头）：社群 / 私信里的**客户问题不在这个岗位里**——那是客服岗位的
+# `dtc.community-support`（社群管理）。这个岗位管内容、氛围、活动、群规。
+id: social-media
+version: 1.0.0
+name: { zh: 社媒运营, en: Social Media }
+roles:
+  # 内容账号组（56 §2 上半行）：发布、排期、回评论；发布永远人审
+  - { role: social.meta, default: true }
+  - { role: social.tiktok, default: true }
+  - { role: social.x, default: false }
+  - { role: social.youtube, default: true }
+  # 社群组（56 §2 下半行）：入群审核、群规、群发、私信；群发永远人审
+  - { role: social.facebook-group, default: false }
+  - { role: social.reddit, default: false }
+  - { role: social.discord, default: false }
+  - { role: social.telegram-group, default: false }
+  - { role: social.whatsapp, default: false }

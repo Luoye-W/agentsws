@@ -166,8 +166,8 @@ describe('制度面：职责与岗位', () => {
     expect(aftersales?.home_blocks.length).toBeGreaterThan(0)
   })
 
-  // WP54（48 v2 L1 / 46 §1 表 ③）：勾"客服"这个岗位 = 三条职责全勾
-  it('首批岗位里有「客服」，岗位 = 三条客服职责的默认包', async () => {
+  // WP54（48 v2 L1 / 46 §1 表 ③）+ WP72（56 §4）：勾"客服"这个岗位 = 四条职责全勾
+  it('首批岗位里有「客服」，岗位 = 四条客服职责的默认包', async () => {
     const positions = await data<{ id: string; name: string; roles: { role_id: string }[] }[]>(
       await call('GET', '/v1/org/positions'),
     )
@@ -177,6 +177,23 @@ describe('制度面：职责与岗位', () => {
       'dtc.support',
       'dtc.live-chat',
       'amz.support',
+      // WP72：群与私信里的客户问题（56 §4）
+      'dtc.community-support',
+    ])
+  })
+
+  // WP72（56 §2 / 54）：社媒运营岗位 = 九条渠道职责，默认勾三条
+  it('首批岗位里有「社媒运营」，九条渠道职责，默认勾 Meta / TikTok / YouTube', async () => {
+    const positions = await data<{ id: string; name: string; roles: { role_id: string }[] }[]>(
+      await call('GET', '/v1/org/positions'),
+    )
+    const social = positions.find((p) => p.id === 'social-media')
+    expect(social?.name).toBe('社媒运营')
+    expect(social?.roles.map((r) => r.role_id)).toContain('social.facebook-group')
+    expect(social?.roles.filter((r) => r.default).map((r) => r.role_id)).toEqual([
+      'social.meta',
+      'social.tiktok',
+      'social.youtube',
     ])
   })
 
@@ -558,8 +575,8 @@ describe('44 品牌与产品线', () => {
     expect(mine?.ranges.map((r) => r.id).sort()).toEqual(['store_b1', 'store_b2'])
     expect(mine?.unassigned_range).toBe(false)
     const groups = await data<RangeGroupView[]>(await call('GET', '/v1/org/range-groups'))
-    // WP54：「客服」岗位一次建三条分配，三条都挂着这个品牌
-    expect(groups[0]?.holders).toBe(3)
+    // WP54 + WP72：「客服」岗位一次建四条分配（56 §4 加了社群管理），四条都挂着这个品牌
+    expect(groups[0]?.holders).toBe(4)
   })
 
   it('G5：品牌新开一家店 → 挂它的岗位自动多这家店，留一条事件 + 一张给 owner 的 L3 卡', async () => {

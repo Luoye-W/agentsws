@@ -46,6 +46,8 @@ import type {
 } from '@agentsws/contracts'
 import {
   DEFAULT_STOREFRONT_PLATFORM,
+  // WP72：渠道 id → 职责 id 与中文名。**全仓唯一**那张渠道清单，不在这里拼字符串
+  socialChannelSpec,
   storefrontUnsupportedNote,
   storefrontUsableService,
 } from '@agentsws/contracts'
@@ -101,6 +103,15 @@ import {
   withToolChoice,
 } from '@agentsws/runtime-direct'
 import { wallClock } from '@agentsws/schedule'
+/*
+ * WP72（56 §2 / §3）：社媒那三件事共用的能力。
+ *
+ * `triageThread` / `handoffOf` 是 56 那条边界的落点（客户问题转客服）；
+ * `checkOutbound` 里的承诺扫描与客服回信读的是**同一份词表**；
+ * `buildAudience` 里的抑制名单规则与邮件群发是**同一个函数**。
+ * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
+ */
+import { buildAudience, checkOutbound, handoffOf, triageThread } from '@agentsws/social-core'
 import type {
   CreateDraftResult,
   CreatePolicyQuestionFn,
@@ -443,6 +454,14 @@ export interface World {
    */
   kol: KolOps
   /**
+   * WP72：社媒运营（56 §2）与客服的社群管理（56 §4）。
+   *
+   * 走的也是真机制：发内容的"永远人审"由 guardrail 的 `HARD_L1` 按回来、
+   * 回评论的承诺扫描由 guardrail 拦、"这是不是客户的问题"由 `social-core` 的
+   * `triageThread` 判——三件事都不是场景自己写的答案。
+   */
+  social: SocialOps
+  /**
    * WP47 / 44：品牌（范围组）与产品线的组织动作。
    *
    * 也走真机制：品牌成员一变，职责层重算所有挂了它的岗位的范围，这里记一条
@@ -631,6 +650,116 @@ export interface KolOps {
     handle: string
     topup?: number
   }): Promise<RevealResultSummary>
+}
+
+/**
+ * WP72（56 §2）：把第一稿里带承诺的那几句去掉，别的原样留着。
+ *
+ * **不是"改写"，是"删掉不该说的那一句"**：按句切开，逐句过同一份承诺扫描
+ * （`social-core` 的 `checkOutbound` → `support-core` 的词表），过不了的那句丢掉。
+ * 这样做的理由与开发信那一条逐字相同——拦下是打回重写，重写的结果必须能再过一遍闸；
+ * 一个会"稍微改一改再发"的重写器，等于把那道闸变成了摆设。
+ *
+ * 一句都不剩时回一句最保守的话：宁可少说，不可乱许。
+ */
+function rewriteWithoutCommitment(text: string): string {
+  const parts = text
+    .split(/(?<=[。！？!?])/g)
+    .map((s) => s.trim())
+    .filter((s) => s !== '')
+  const kept = parts.filter((s) => checkOutbound(s).ok)
+  const joined = kept.join('')
+  return checkOutbound(joined).ok && joined !== '' ? joined : '这个我去确认一下再回你。'
+}
+
+/**
+ * WP72（56 §2 / §4）：社媒运营那三件事。
+ *
+ * 三条 op 覆盖 56 §5 的四条模拟题：发内容（永远人审）、回一条留言（先判类：
+ * 是客户问题就转客服、不是就自己回且过承诺扫描）、群发（受众减抑制名单，永远人审）。
+ */
+export interface SocialOps {
+  /**
+   * 提一条内容（`social_post`）。
+   *
+   * `level` 是**故意报高的**那一格：15 §2 的 `HARD_L1` 会把它按回人审。
+   * `scheduled_at` 不给 = 立即发；给了 = 到点自己出去，所以门在这一下
+   * （到点之后没有第二道门）。
+   */
+  post(input: {
+    who: PersonId
+    channel: string
+    body: string
+    scheduled_at?: string
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<SocialPostResult>
+  /**
+   * 处理一条留言（评论 / 帖子 / 私信）。
+   *
+   * 先判类（`social-core` 的 `triageThread`）：判成客户问题 → **出一张转客服卡，
+   * 社媒运营不答**；否则按 `draft` 起草一条回复，过承诺扫描（第一稿故意可以带
+   * 承诺词，guardrail 会拦，拦下是打回重写）。
+   */
+  reply(input: {
+    who: PersonId
+    channel: string
+    author: string
+    /** 对方说的那句话（外部文本，判类用它）。 */
+    text: string
+    /** 我们这边起的第一稿（场景可以故意写一句带承诺的话）。 */
+    draft: string
+    surface?: 'comment' | 'thread' | 'dm'
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<SocialReplyResult>
+  /** 提一条群发（`community_broadcast`，**永远 L1** + 抑制名单必查）。 */
+  broadcast(input: {
+    who: PersonId
+    channel: string
+    body: string
+    /** 群里 / 名单上的全部人（抑制名单从世界里那一份退订记录来，不由场景递）。 */
+    members: string[]
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<SocialBroadcastResult>
+}
+
+/** 一条内容提案的结果。 */
+export interface SocialPostResult {
+  channel: string
+  staged: boolean
+  level_requested: 'L1' | 'L2' | 'L3'
+  scheduled_at?: string
+  commitment_hits: string[]
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+/** 一条留言处理完之后的结果（转客服与自己回两条路共用）。 */
+export interface SocialReplyResult {
+  channel: string
+  /** 判成了六类里的哪一类。 */
+  triage: string
+  /** 转出去了就有（`dtc.community-support`）。 */
+  routed_to?: string
+  /** 社媒运营自己回了没有。转客服那一路恒为 `false`——那正是 56 的边界。 */
+  answered: boolean
+  commitment_hits?: string[]
+  rewritten?: boolean
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+/** 一条群发提案的结果。 */
+export interface SocialBroadcastResult {
+  channel: string
+  staged: boolean
+  audience: string[]
+  suppressed: string[]
+  level_requested: 'L1' | 'L2' | 'L3'
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
 }
 
 /** WP68：一次 campaign 向导的结果。 */
@@ -1008,6 +1137,21 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('kol.tiktok'),
     loadBundledRole('kol.facebook'),
     loadBundledRole('kol.x'),
+    // WP72（56 §2 / §4）：社媒运营岗位的九条渠道职责 + 客服岗位的社群管理。
+    // 3 人 pack 里"运营"真挂着 `social.meta`（`assignments.yml`），客服真挂着
+    // `dtc.community-support`；其余八条躺在库里——躺着不产生任何行为，
+    // 装它们是为了首次设置向导里"社媒运营"那个岗位显示九条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面红人那五条的理由）。
+    loadBundledRole('social.meta'),
+    loadBundledRole('social.tiktok'),
+    loadBundledRole('social.x'),
+    loadBundledRole('social.youtube'),
+    loadBundledRole('social.facebook-group'),
+    loadBundledRole('social.reddit'),
+    loadBundledRole('social.discord'),
+    loadBundledRole('social.telegram-group'),
+    loadBundledRole('social.whatsapp'),
+    loadBundledRole('dtc.community-support'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
@@ -1933,6 +2077,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP67：同上（48 §5.1 红人营销那几件事）
     get kol() {
       return kol
+    },
+    // WP72：同上（56 §2 社媒运营 / §4 社群管理）
+    get social() {
+      return social
     },
     // 44：与 `shop` 同理，装在这个对象字面量之后
     get org() {
@@ -4555,6 +4703,463 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         browse_credits,
         reveal_credits,
         stored_as_ref,
+      }
+    },
+  }
+
+  /* ── WP72：社媒运营（56 §2 / §4）────────────────────────────────────
+   *
+   * 走的也是真机制，三条都不是场景自己判的：
+   *
+   * - 发内容的"永远人审"由 **guardrail 的 `HARD_L1`** 按回来（场景故意报 L3）；
+   * - 回评论的承诺扫描由 **guardrail** 拦（起草那一跳先自查一遍只是早点给反馈，
+   *   `social-core` 的 `checkOutbound` 与客服回信读的是同一份词表）；
+   * - "这是不是客户的问题"由 **`social-core` 的 `triageThread`** 判，判成客户问题
+   *   就出一张转客服卡（`handoffOf`）——社媒运营**不答**，那是 56 的边界，
+   *   不是这条场景的设定。
+   *
+   * 额度与等级来自那个人 `social.<channel>` 那条分配的生效配置，不是主分配的。
+   */
+  const socialRoleOf = (channel: string): RoleId => {
+    const spec = socialChannelSpec(channel)
+    if (spec === undefined) throw new SimulationError('invalid_input', `没有这条渠道：${channel}`)
+    return spec.role_id
+  }
+  const socialLabelOf = (channel: string): string => socialChannelSpec(channel)?.zh ?? channel
+
+  const social: SocialOps = {
+    async post({ who, channel, body, scheduled_at, level }) {
+      const role_id = socialRoleOf(channel)
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'social_account', id: `sa_${channel}` }
+      const { mandate, level: configured } = actionOf(asg, 'stage_post')
+      const level_requested = level ?? configured
+      // 起草那一跳自查一遍（早点给模型反馈）；真正的拦在 guardrail
+      const scan = checkOutbound(body)
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_social_${run_id}`,
+        kind: 'social_post',
+        target,
+        before: { status: 'draft' },
+        after: {
+          channel,
+          channel_label: socialLabelOf(channel),
+          body,
+          ...(scheduled_at === undefined ? {} : { scheduled_at }),
+          status: scheduled_at === undefined ? 'draft' : 'scheduled',
+        },
+        notes: [
+          scheduled_at === undefined
+            ? '没排时间：批了就发。'
+            : `排在 ${scheduled_at} 自己出去——到点之后没有第二道门，所以门在这一下。`,
+        ],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        // 15 §2 hard_ceiling：报 L3 也会被按回人审
+        level: level_requested,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `提一条 ${socialLabelOf(channel)} 的内容`,
+        }),
+        approval: {
+          title: `发布：${socialLabelOf(channel)}`,
+          summary:
+            scheduled_at === undefined
+              ? body.slice(0, 120)
+              : `${body.slice(0, 100)}（排在 ${scheduled_at}）`,
+          recipients: [recipientOf('scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'scope_manager',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      const base = {
+        channel,
+        level_requested,
+        ...(scheduled_at === undefined ? {} : { scheduled_at }),
+        commitment_hits: scan.commitment_hits,
+      }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { ...base, staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.social_post_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          channel,
+          role_id: asg.role_id,
+          ...(scheduled_at === undefined ? {} : { scheduled_at }),
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          // 卡面上有没有把"什么时候发出去"写出来（36 §2：人按下那一下之前要看得见）
+          stated_on_card:
+            scheduled_at === undefined || outcome.approval.summary.includes(scheduled_at),
+        },
+      })
+      return {
+        ...base,
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async reply({ who, channel, author, text, draft, surface, level }) {
+      const role_id = socialRoleOf(channel)
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const thread_id = `ct_${channel}_${author}`
+      const target: ObjectRef = { type: 'community_thread', id: thread_id }
+
+      /*
+       * ① 先判类。**封闭六类**，判不准落 `other` 不猜（`social-core/triage.ts`）。
+       *    结论里只有判据名，没有原句——评论正文是外部文本，会进事件日志。
+       */
+      const verdict = triageThread({
+        text,
+        is_dm: surface === 'dm',
+        mentions_us: true,
+      })
+      const handoff = handoffOf(verdict, { channel: socialLabelOf(channel), author_handle: author })
+
+      /*
+       * ② 判成客户问题 → **出一张转客服卡，社媒运营不答**（56 的边界行）。
+       *
+       * 卡是 `claim`（"接 / 不接"）：它不是一条变更，是一件活儿交给另一条职责。
+       * 收件人是**真持有那条职责的人**——没人持有就落到 owner 身上，
+       * 而不是悄悄没人接。
+       */
+      if (handoff !== undefined && verdict.route === 'support') {
+        const holderOf = roles.assignments
+          .listByRole(handoff.to_role)
+          .find((a) => a.workspace_id === workspace_id && a.revoked_at === undefined)
+        run.finish({ seen: [target], outputs: [], summary: `判一条 ${author} 的留言` })
+        const item = await txn.approvals.create({
+          workspace_id,
+          schema_version: 1,
+          kind: 'claim',
+          role_id: handoff.to_role,
+          subject: { object: target },
+          dedupe_key: `${workspace_id}:social_handoff:${thread_id}`,
+          title: handoff.title,
+          summary: handoff.reason,
+          payload: {
+            form: 'support_handoff',
+            channel,
+            thread_id,
+            author,
+            // 分类结论进卡，**原句不进事件日志**（21 §1）——正文在卡上给人看，
+            // 那是他本来就要读的东西；进日志的只有判据名。
+            triage: verdict.klass,
+            route_to_role: handoff.to_role,
+            route_to_label: '社群管理',
+            text,
+          },
+          evidence: {
+            source_events: [],
+            run_id,
+            provenance: { seen: [target] },
+            precheck: { fencing: 'ok' },
+          },
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          automation: {
+            level_at_creation: 'L1',
+            auto_approved: false,
+            mandate_check: { within: true, caps_hit: [] },
+            sampling: { selected: false },
+          },
+          routing: {
+            recipients: [{ person: holderOf?.person_id ?? owner, via: 'explicit' }],
+            explicit: holderOf?.person_id ?? owner,
+            rule: 'explicit',
+            escalation: {
+              after_hours: 4,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          priority: 'queue',
+        })
+        await flushCards()
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.social_handoff_staged',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          payload: {
+            channel,
+            triage: verdict.klass,
+            signals: verdict.signals,
+            to_role: handoff.to_role,
+            // 有人真持有那条职责没有：没人持有 = 这张卡落到 owner 头上，如实报
+            held_by: holderOf?.person_id ?? null,
+            answered_by_social: false,
+          },
+        })
+        return {
+          channel,
+          triage: verdict.klass,
+          routed_to: handoff.to_role,
+          answered: false,
+          ...(item.state === 'blocked' ? {} : { approval_item_id: item.id }),
+        }
+      }
+
+      /*
+       * ③ 不是客户问题 → 社媒运营自己回。
+       *
+       * 回一条评论**不是一条变更**（56 §2 那一列写的是 `outbound_message`），
+       * 所以它不走变更账本，走出站那条路：一张 `outbound_draft` 卡 + 三道门里的
+       * `commitment_scan`（48 §4 L3 #3）。词表是 `support-core` 那一份——
+       * 与客服回信、与 Amazon 出站硬闸读的是同一套，不另写一张社媒版。
+       *
+       * 第一稿故意可以带承诺词：扫到就**打回重写**，不是静默删改后照发
+       * （同开发信与 Amazon 那两条）。改写之后那一封再扫一遍才提上去。
+       */
+      const { mandate, level: configured } = actionOf(asg, 'reply_comment')
+      const first = draft
+      const scan = checkOutbound(first)
+      let rewritten = false
+      let body = first
+      if (!scan.ok) {
+        blocked.push({
+          rule: 'commitment_scan',
+          at: now(clock),
+          run_id,
+          message: scan.rewrite_instruction,
+        })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.social_reply_blocked',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          // 正文不进事件（21 §1）；进的是"命中了哪几条规则"
+          payload: { channel, commitment_hits: scan.commitment_hits },
+        })
+        rewritten = true
+        body = rewriteWithoutCommitment(first)
+        const again = checkOutbound(body)
+        if (!again.ok) throw new Error('改写之后还带承诺词，改写规则本身有问题')
+      }
+
+      const level_used = level ?? configured
+      run.finish({ seen: [target], outputs: [], summary: `回 ${author} 的一条留言` })
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'outbound_draft',
+        role_id: asg.role_id,
+        subject: { object: target },
+        dedupe_key: `${workspace_id}:social_reply:${thread_id}`,
+        title: `回评论：${author}（${socialLabelOf(channel)}）`,
+        summary: body.slice(0, 120),
+        payload: {
+          form: 'social_reply',
+          channel,
+          channel_label: socialLabelOf(channel),
+          to: target,
+          body,
+          author,
+          triage: verdict.klass,
+        },
+        evidence: {
+          source_events: [],
+          run_id,
+          provenance: { seen: [target] },
+          precheck: {},
+        },
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        automation: {
+          level_at_creation: level_used,
+          auto_approved: false,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [{ person: roleHolder, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 12,
+            business_hours: true,
+            chain: ['scope_manager'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+        context: {
+          // 31 §3.3 收件人门禁：回的是**这条线程里的人**，不是一个我们自己挑的地址
+          thread_participants: [target.id],
+          /*
+           * 48 §4 L3 #3 的三道门。这里只挂 `commitment_scan` 那一条：
+           * 提上去的这一稿已经扫干净了（上面那一段），所以它 `pass`——
+           * 门的结论进 `precheck.commitment_scan`，是这封能不能自主发的凭据。
+           */
+          gates: [
+            {
+              gate: 'commitment_scan' as const,
+              status: 'pass' as const,
+              ruleset_hash: 'support-core/commitment',
+              evidence: { hits: 0 },
+            },
+          ],
+        },
+      })
+
+      const base = {
+        channel,
+        triage: verdict.klass,
+        commitment_hits: scan.commitment_hits,
+        rewritten,
+      }
+      if (item.state === 'blocked') {
+        blocked.push({
+          rule: 'precheck',
+          at: now(clock),
+          run_id,
+          message: `前置挡下：${Object.entries(item.evidence.precheck)
+            .filter(([, v]) => v !== 'ok')
+            .map(([k, v]) => `${k}=${String(v)}`)
+            .join('、')}`,
+        })
+        return { ...base, answered: false, reason: 'precheck' }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.social_reply_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          channel,
+          triage: verdict.klass,
+          rewritten,
+          commitment_hits: scan.commitment_hits,
+          level_at_creation: item.automation.level_at_creation,
+          auto_approved: item.automation.auto_approved,
+          // 额度：回评论一天 50 条（56 §7）。卡上要看得见它，超了才知道是被什么拦的
+          cap:
+            typeof mandate.caps.max_comment_replies_per_day === 'number'
+              ? mandate.caps.max_comment_replies_per_day
+              : null,
+        },
+      })
+      return { ...base, answered: true, approval_item_id: item.id }
+    },
+
+    async broadcast({ who, channel, body, members, level }) {
+      const role_id = socialRoleOf(channel)
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'social_account', id: `sa_${channel}` }
+      const { mandate, level: configured } = actionOf(asg, 'stage_broadcast')
+      const level_requested = level ?? configured
+
+      /*
+       * 受众 = 成员 − 抑制名单。用的是 `social-core` 的 `buildAudience`，
+       * 而它里面调的是 `@agentsws/core` 的那一份抑制规则——与客服出站、与邮件
+       * 群发是**同一个函数**。名单口径不许在两边各演化一套（51 §2.3 那一条）。
+       */
+      const audience = buildAudience({
+        members,
+        suppression_list: [...unsubscribed],
+        now: now(clock),
+      })
+      run.tool('list_members', { channel, members: members.length })
+
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_social_${run_id}`,
+        kind: 'community_broadcast',
+        target,
+        before: { status: 'draft' },
+        after: {
+          channel,
+          channel_label: socialLabelOf(channel),
+          body,
+          audience: audience.recipients,
+          audience_size: audience.recipients.length,
+          suppressed: audience.suppressed,
+          // 15 §2：不报"查过了"就 block。这里照实报（真查过了，见上面那一跳）
+          suppression_checked: true,
+        },
+        notes: [audience.note],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        // 15 §2 hard_ceiling：报 L3 也会被按回人审
+        level: level_requested,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `提一条 ${socialLabelOf(channel)} 的群发，${audience.recipients.length} 人`,
+        }),
+        approval: {
+          title: `群发：${socialLabelOf(channel)}（${audience.recipients.length} 人）`,
+          summary: `${body.slice(0, 80)}。${audience.note}。`,
+          recipients: [recipientOf('scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'scope_manager',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      const base = {
+        channel,
+        audience: audience.recipients,
+        suppressed: audience.suppressed,
+        level_requested,
+      }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { ...base, staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.social_broadcast_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          channel,
+          audience_size: audience.recipients.length,
+          // 查过就报一个数，**哪怕是 0**（没查与查了没人是两回事）
+          suppressed_removed: audience.suppressed.length,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          stated_on_card: outcome.approval.summary.includes(audience.note),
+        },
+      })
+      return {
+        ...base,
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
       }
     },
   }

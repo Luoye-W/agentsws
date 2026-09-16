@@ -11,6 +11,7 @@ import {
   connectionDirectoryEntry,
   KOL_CHANNELS,
   MCP_SERVER_NAME_RE,
+  SOCIAL_CHANNELS,
   validateMcpServer,
 } from '../src/index.js'
 
@@ -117,6 +118,29 @@ describe('54（将改号 55）§4 第一层：连接目录（WP83）', () => {
 
   it('覆盖②：红人五条渠道的 connector_kind 都在目录里', () => {
     for (const c of KOL_CHANNELS) expect(connectionDirectoryEntry(c.connector_kind)).toBeDefined()
+  })
+
+  // WP72（56 §1）：社媒运营那九条。Facebook 群组没有 `connector_kind`——
+  // Groups API 已停，它走受控浏览器；目录里给它一张点不动的卡比不给更糟。
+  it('覆盖③：九条社媒渠道的 connector_kind 都在目录里（Facebook 群组没有卡）', () => {
+    for (const c of SOCIAL_CHANNELS) {
+      if (c.connector_kind === undefined) {
+        expect(c.id, 'Facebook 群组之外的渠道都该有一张卡').toBe('facebook_group')
+        expect(c.mode).toBe('browser')
+        continue
+      }
+      expect(connectionDirectoryEntry(c.connector_kind), c.id).toBeDefined()
+    }
+    // 56 §1：YouTube 与红人岗位共用同一张卡——目录里只有一条 `youtube_data`
+    expect(CONNECTION_DIRECTORY.filter((e) => e.kind === 'youtube_data')).toHaveLength(1)
+    // 社媒那几张卡是**发东西**的，不是只读的（与红人那几条分得开）
+    for (const kind of ['meta_graph', 'tiktok_content', 'reddit', 'discord_bot', 'telegram_bot'])
+      expect(connectionDirectoryEntry(kind)?.side_effect, kind).toBe('write_external')
+    // WhatsApp 的三条规矩要写在准备说明里（56 §1 末行），不能等人撞墙
+    const wa = connectionDirectoryEntry('whatsapp_business')
+    expect(wa?.note?.zh).toContain('模板')
+    expect(wa?.note?.zh).toContain('opt-in')
+    expect(wa?.note?.zh).toContain('24 小时')
   })
 
   it('覆盖③：已经有 provider 的那几家都在，且各自指得到连接页的卡', () => {

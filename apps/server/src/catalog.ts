@@ -38,6 +38,19 @@ export const ROLE_CONNECTOR_KIND: Readonly<Record<string, string>> = {
   instagram_graph: 'instagram_graph',
   tiktok_research: 'tiktok_research',
   x_api: 'x_api',
+  // WP72（56 §1）：社媒运营那八张卡。service 名与 kind 同名（职责 yml 问的就是
+  // "有没有 Discord"，不存在"是哪一家 Discord"这回事）。
+  //
+  // `youtube_data` 与 `x_api` **就是上面那两行**——56 §1「YouTube 与红人岗位的是
+  // 同一张卡」：一把 key 管两条职责，连接页上只有一张 YouTube。不为社媒再建一行。
+  // Facebook 群组一行都没有：Groups API 已停，它走第三栏受控浏览器（职责 yml 的
+  // `mode: browser`），目录里给它一张点不动的卡比不给更糟。
+  meta_graph: 'meta_graph',
+  tiktok_content: 'tiktok_content',
+  reddit: 'reddit',
+  discord_bot: 'discord_bot',
+  telegram_bot: 'telegram_bot',
+  whatsapp_business: 'whatsapp_business',
 }
 
 export type CatalogAuth = 'oauth2' | 'api_key' | 'custom_credential'
@@ -175,7 +188,9 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
     label: 'YouTube Data API',
     auth: 'api_key',
     store: 'local_vault',
-    data_sources: ['kol_channel'],
+    // WP72（56 §1）：**这一张卡喂两条职责**——红人那条读别人的频道，社媒运营那条
+    // 读写我们自己的。连一次就够，所以这里是两个数据源，不是两张卡。
+    data_sources: ['kol_channel', 'social_youtube'],
     smoke_hints: ['search_channels', 'get_channel'],
     fields: [
       {
@@ -206,7 +221,8 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
       ],
     },
     data_note:
-      '没有它这条职责照样能用：找人靠导入你手上那张表与公共红人库，建联、合作、审核、归因一样不少。',
+      '没有它这条职责照样能用：找人靠导入你手上那张表与公共红人库，建联、合作、审核、归因一样不少。' +
+      'WP72 起同一把 key 也供社媒运营的 YouTube 那条职责（读写我们自己的频道）——连一次，两处都亮。',
   },
   {
     service: 'instagram_graph',
@@ -338,7 +354,10 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
     label: 'X API',
     auth: 'api_key',
     store: 'local_vault',
-    data_sources: ['kol_channel'],
+    // WP72：与 YouTube 同一条道理——红人那条读别人的号，社媒运营那条发我们自己的。
+    // **发推要的是用户上下文的 OAuth，不是这把 App-only Bearer**，所以社媒那一侧
+    // 的真调用还没接（WP73），这一格先把数据源挂上。
+    data_sources: ['kol_channel', 'social_x'],
     smoke_hints: ['get_user', 'search_users'],
     fields: [
       {
@@ -367,7 +386,236 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
         },
       ],
     },
-    data_note: '没买档这条职责照样能用：找人靠导入与公共库，建联、合作、审核、归因一样不少。',
+    data_note:
+      '没买档这条职责照样能用：找人靠导入与公共库，建联、合作、审核、归因一样不少。' +
+      '社媒运营的 X 那条职责用同一张卡，但**发推要的是用户上下文的 OAuth**，这把 App-only ' +
+      'Bearer 只读得了、发不了——那一跳排在 WP73。',
+  },
+]
+
+/**
+ * WP72（56 §1）：**社媒运营的六张新卡**。
+ *
+ * 加上共用的 `youtube_data` 与 `x_api`（在 `KOL_CONNECTORS` 里，不重复一张），
+ * 九条渠道职责里的八条各有一张卡；第九条 Facebook 群组没有卡——Groups API 已停，
+ * 它走第三栏受控浏览器（职责 yml 的 `mode: browser`）。
+ *
+ * 与红人那五张同一条路：凭据原生表单直填，只存在这台电脑的加密库里（31 §3 / 07 P1），
+ * 不走任何平台的审核跳转。每一张的准备说明里**先说代价**（56 §1 末行）：
+ * Meta 发布要过 App Review、TikTok 申请制、Reddit 的 User-Agent 格式、
+ * WhatsApp 要商业验证 + 模板 + opt-in + 24h 窗口。说在前面，比让人填完之后撞墙强。
+ *
+ * 三张标了 `planned`：适配器在 `@agentsws/social-core` 里还是"说清为什么没有"那一档
+ * （TikTok 申请制、Reddit 要注册应用、WhatsApp 要商业验证），真调用排在 WP73。
+ * 与 WP64 那几张骨架卡同一条规矩：卡照出、状态照实说、点不动——宁可点不动，
+ * 也不能让人填完密钥之后发现连不上。
+ */
+export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
+  {
+    service: 'meta_graph',
+    upstream: 'local',
+    label: 'Meta Graph API（FB 主页 + IG）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_meta'],
+    smoke_hints: ['get_page', 'list_page_posts'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '主页访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'Meta 开发者后台里那个长期有效的主页访问令牌。只存在这台电脑的加密库里',
+      },
+      {
+        name: 'page_id',
+        label: 'FB 主页 id',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '100000000000000',
+      },
+      {
+        name: 'ig_user_id',
+        label: 'IG 商业账号 id',
+        secret: false,
+        required: false,
+        kind: 'text',
+        placeholder: '17841400000000000',
+        hint: '只发 FB 主页就留空。填了这一格，同一把令牌也管 IG',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '一把 token 管 FB 主页 + IG 商业号：读帖子与表现、发布与排期、回评论。**连上就能读，能发要过 App Review**——这是两件事，别把"还没批"当成"连接失败"。排期要两格一起写（`published: false` + 时间），只写时间那条会当场发出去。',
+      steps: [
+        '把 IG 切成商业账号并关联你的 FB 主页（只发 FB 可跳过）',
+        '在 Meta 开发者后台建一个应用，加上 Facebook 登录与 Instagram Graph API',
+        '申请 pages_manage_posts / pages_read_engagement / instagram_content_publish（**要过审核**）',
+        '用图形 API 浏览器换一个长期主页令牌，并抄下主页 id 与 IG 账号 id',
+        '把令牌与 id 填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'Meta 开发者后台', url: 'https://developers.facebook.com/apps' },
+        { label: '主页发布文档', url: 'https://developers.facebook.com/docs/pages-api' },
+      ],
+    },
+    data_note:
+      '没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。发布权限还在审核里的时候，到点了我们提醒你去后台手工发一下，不会假装已经发出去了。',
+  },
+  {
+    service: 'tiktok_content',
+    upstream: 'local',
+    label: 'TikTok Content Posting API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_tiktok'],
+    fields: [],
+    setup_guide: {
+      summary:
+        '**申请制**，而且与红人那条用的 Research API **要分别申请**。批下来之后发布是两跳：init 拿一个 publish_id 与上传地址，素材传上去再轮询状态——一跳发完这件事在 TikTok 上不存在。另外它**没有开放的评论读写接口**，待回评论那一块在这条渠道上是空的。',
+      steps: ['暂时没有步骤——真调用还没接（WP73）'],
+      links: [
+        {
+          label: 'Content Posting API 文档',
+          url: 'https://developers.tiktok.com/doc/content-posting-api-get-started',
+        },
+      ],
+    },
+    planned:
+      '还没接：目录、表单骨架与职责都已就位，真调用排在 WP73。' +
+      '在此之前 TikTok 那条职责照样能排期、写文案、走审批，到点提醒你去后台手工发。',
+  },
+  {
+    service: 'reddit',
+    upstream: 'local',
+    label: 'Reddit API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_reddit'],
+    fields: [],
+    setup_guide: {
+      summary:
+        '要先在 Reddit 注册一个 script / web 应用，拿 client id + secret 换令牌。**User-Agent 必须是 Reddit 认的格式**（`平台:应用 id:版本 (by /u/你的用户名)`），写错一律 429——连不上最常见的原因是这一格，不是密钥。',
+      steps: ['暂时没有步骤——真调用还没接（WP73）'],
+      links: [{ label: 'Reddit API 文档', url: 'https://www.reddit.com/dev/api' }],
+    },
+    planned:
+      '还没接：目录与职责已就位，真调用排在 WP73。' +
+      '在此之前 Reddit 那条职责能整理版规、攒公告草稿与审批，发不出去的那一跳会照实说。',
+  },
+  {
+    service: 'discord_bot',
+    upstream: 'local',
+    label: 'Discord 机器人',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_discord'],
+    smoke_hints: ['get_guild', 'list_channel_messages'],
+    fields: [
+      {
+        name: 'bot_token',
+        label: '机器人令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '开发者后台 Bot 页那串令牌。请求头写的是 `Bot <token>` 不是 `Bearer`——这一点我们替你处理了',
+      },
+      {
+        name: 'guild_id',
+        label: '服务器 id',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '900000000000000000',
+        hint: '在 Discord 里打开开发者模式，右键服务器 →「复制服务器 ID」',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '读频道消息与成员、发公告、删消息、禁言。**禁言是设一个到期时刻**（到点自动解除，上限 28 天），不是一个开关；封禁永远要人点。发公告必须说清发到哪个频道——没有"全服务器广播"这个选项。',
+      steps: [
+        '到 Discord 开发者后台建一个应用，在 Bot 页添加一个 Bot 并复制令牌',
+        '在 OAuth2 → URL Generator 里勾 bot 与要用的权限（读消息、发消息、管理消息、超时成员）',
+        '用生成的链接把这个 Bot 邀请进你的服务器',
+        '打开 Discord 的开发者模式，右键服务器复制它的 id',
+        '把令牌与服务器 id 填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'Discord 开发者后台', url: 'https://discord.com/developers/applications' },
+        { label: 'Bot 文档', url: 'https://discord.com/developers/docs/intro' },
+      ],
+    },
+    data_note:
+      '没连也能整理规则、攒公告草稿、攒审批——真发出去那一跳才需要它。Bot 没有管理员权限时删消息与禁言会失败，我们会把平台原话端出来，不翻译成"出错了"。',
+  },
+  {
+    service: 'telegram_bot',
+    upstream: 'local',
+    label: 'Telegram 机器人',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_telegram'],
+    smoke_hints: ['get_me', 'get_chat'],
+    fields: [
+      {
+        name: 'bot_token',
+        label: '机器人令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '跟 @BotFather 说 /newbot 就给你。这串东西在请求 URL 的路径上，所以我们的日志会专门抹掉它',
+      },
+      {
+        name: 'chat_id',
+        label: '群 / 频道 id',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '-1001234567890',
+        hint: '群 id 是负数；频道也可以写 @频道用户名',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '读群里的消息、发公告、删消息、禁言封禁。**业务错误在 200 里**（`{"ok": false, ...}`），所以"发出去了"看的是 `ok` 那一格不是状态码——这一点我们替你判了。机器人必须是群管理员，否则删与禁都做不了。',
+      steps: [
+        '在 Telegram 里找 @BotFather，发 /newbot，按提示起名字',
+        '复制它给你的那串令牌',
+        '把机器人拉进你的群，并设成管理员（要删消息与禁言就必须这一步）',
+        '拿到群 id（把机器人加进群后发一条消息，或用 @userinfobot）',
+        '把令牌与群 id 填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'BotFather', url: 'https://t.me/botfather' },
+        { label: 'Bot API 文档', url: 'https://core.telegram.org/bots/api' },
+      ],
+    },
+    data_note: '没连也能整理群规、攒公告草稿、攒审批——真发出去那一跳才需要它。',
+  },
+  {
+    service: 'whatsapp_business',
+    upstream: 'local',
+    label: 'WhatsApp Business API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_whatsapp'],
+    fields: [],
+    setup_guide: {
+      summary:
+        '**三条规矩都是 Meta 的，不是我们的**：要过商业验证；主动发消息只能用审批过的模板，且收件人必须先 opt-in；对方来过消息之后才有 24 小时窗口能自由回复。违反了封的是这个品牌的号——所以少模板 id 或没 opt-in 时我们**当场 block**，不是让你点一下就发。',
+      steps: ['暂时没有步骤——真调用还没接（WP73）'],
+      links: [
+        {
+          label: 'WhatsApp Cloud API 文档',
+          url: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
+        },
+      ],
+    },
+    planned:
+      '还没接：目录、职责与那两道硬闸（模板 + opt-in）都已就位，真调用排在 WP73。' +
+      '在此之前 WhatsApp 那条职责能整理群规、攒模板草稿与审批。',
   },
 ]
 
@@ -698,6 +946,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     planned: '待增加：物流追踪先做 AfterShip，这家排在它后面。',
   },
   ...KOL_CONNECTORS,
+  ...SOCIAL_CONNECTORS,
 ]
 
 /**

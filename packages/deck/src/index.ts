@@ -94,6 +94,7 @@ export {
   dataSourcesOfService,
   mergeDataSources,
   PLANNED_SOURCE_NOTES,
+  SOCIAL_SOURCE_BY_CHANNEL,
   SOURCES_BY_SERVICE,
   withOwnSources,
 } from './sources.js'

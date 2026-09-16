@@ -105,6 +105,55 @@ export type ChangeKind =
   | 'kol_affiliate_code'
   /** WP67（48 §5.1）：建一条带 UTM 的追踪链接。L3——它不动钱也不发信，只是给链接加参数。 */
   | 'kol_tracked_link'
+  /**
+   * WP72（56 §2 内容组）：发一条内容 / 排一条内容。
+   *
+   * **永远 L1**（15 §2 的 `HARD_L1` 里有它）。理由与 `campaign_send` 同一条：
+   * 发出去收不回来，而且看的是**外人**不是同事——一条发错的帖子在被删掉之前
+   * 已经被截图了。排期与立发是同一条 kind：一条排在明天早上八点的帖子，
+   * 到点之后没有第二道门，所以门必须在**排**的时候。
+   */
+  | 'social_post'
+  /**
+   * WP72（56 §2 内容组）：改账号资料（简介、头像、置顶、主页链接）。L1。
+   *
+   * 它不发内容，但它改的是**所有人点进来第一眼看到的东西**，而且改完没有"撤回"。
+   * 账号名（handle）更狠：一改，旧帖里的链接与所有外部引用一起断——
+   * 所以它在受保护字段里，Agent 提都不许提。
+   */
+  | 'social_profile_edit'
+  /**
+   * WP72（56 §2 社群组）：批 / 拒一条入群申请，或把人移出群。L2。
+   *
+   * L2 而不是 L1：批错一个人，踢出去就是了；额度（`max_member_approvals_per_day`）
+   * 挡的是"一口气把 300 个申请全批了"那一下。
+   */
+  | 'community_membership'
+  /**
+   * WP72（56 §2 社群组）：群发 / 广播（群公告、频道推送、WhatsApp 模板消息）。
+   *
+   * **永远 L1**（15 §2 的 `HARD_L1` 里有它）。与 `campaign_send` 逐字同理，
+   * 外加两条社群特有的硬闸（`@agentsws/core` 的 guardrail）：不报
+   * `suppression_checked` 就 block；WhatsApp 少 `template_id` 或
+   * `opt_in_verified !== true` 就 block——那两条不是额度，是平台会封号的事。
+   */
+  | 'community_broadcast'
+  /**
+   * WP72（56 §2 社群组）：改群规。L1。
+   *
+   * 群规是这个群的法律。放宽一条（"允许发链接"）等于把垃圾闸门打开，
+   * 而它在账本上看起来只是"改了一段文字"——同 `flow_edit` 那条理由。
+   */
+  | 'community_rules'
+  /**
+   * WP72（56 §2 社群组）：管理动作——删帖 / 禁言 / 封禁。
+   *
+   * **按 `after.action` 分档**（56 §2 那一格）：删帖与禁言 L2（做错了改得回来），
+   * 封禁 L1（把一个人从你自己的社群里永久赶出去，这件事该由人点）。分档在
+   * guardrail 的 switch 里，不在这条 kind 上——同 `publish_post` 按
+   * `after.published` 分档的老办法。
+   */
+  | 'community_moderation'
 
 export type ChangeStatus =
   | 'staged'

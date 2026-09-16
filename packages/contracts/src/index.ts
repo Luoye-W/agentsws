@@ -26,6 +26,9 @@ export * from './roles.js'
 export * from './run.js'
 export * from './schedule.js'
 export * from './skills.js'
+// 56 §1 / §2 社媒运营的九条渠道与四个对象（WP72）。与 kol.ts 一条都不共用：
+// 那边的主语是别人的账号（`Creator`），这边是我们自己的号（`SocialAccount`）。
+export * from './social.js'
 // 49 §6 WP60 / 48 L6：在线值守与聊天窗托管
 export * from './standby.js'
 export * from './work.js'

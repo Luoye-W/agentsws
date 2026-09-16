@@ -310,3 +310,105 @@ actions:
   gotify.get_version: read
   gotify.get_health: read
   gotify.send_message: write
+
+  # ---------- 社媒运营的八条渠道（WP72 骨架 / 真调用见 social-core）----------
+  #
+  # 与红人那五条同一条纪律：**这张表默认 write**，漏标的读动作拿不到 role-read
+  # 令牌。所以骨架期就把两侧都标齐——接上那天不用回来补，也不会出现"接上了却读不了"。
+  #
+  # 与红人那五条的区别在写口：红人那边的写口眼下一条都用不上（开发信走审批与
+  # 出站流水线），社媒这边的写口**是这几条职责的主业**——发帖、回评论、群发、
+  # 删禁封都真要打出去。所以每一个写口都对应账本上的一条 ChangeKind，
+  # 先出卡、批了才走（15 §2）。
+  #
+  # `youtube_data` 与 `x_api` 的读口在上面红人那一段里已经列过（同一张卡、
+  # 同一个 service 名），这里只补社媒那一侧新用到的那几个。
+
+  # Meta（FB 主页 + IG）：一把 token 两个面
+  meta_graph.get_page: read
+  meta_graph.get_page_insights: read
+  meta_graph.list_page_posts: read
+  meta_graph.get_post: read
+  meta_graph.get_post_insights: read
+  meta_graph.list_post_comments: read
+  meta_graph.get_ig_user: read
+  meta_graph.list_ig_media: read
+  meta_graph.get_ig_media_insights: read
+  # 排期与立发是**同一个写口**：差别只在 `published: false` + `scheduled_publish_time`
+  # 那两格（少写一格会当场发出去）。账本上都是 `social_post`，永远人审。
+  meta_graph.publish_post: write
+  meta_graph.schedule_post: write
+  meta_graph.publish_ig_media: write
+  meta_graph.reply_comment: write
+  meta_graph.hide_comment: write
+  meta_graph.delete_comment: write
+  meta_graph.update_page_profile: write
+
+  # TikTok 内容发布（申请制；真调用 WP73）
+  tiktok_content.get_creator_info: read
+  tiktok_content.list_videos: read
+  tiktok_content.get_video: read
+  tiktok_content.get_publish_status: read
+  # 发布是两跳：init 拿 publish_id 与上传地址，传完再轮询状态
+  tiktok_content.init_publish: write
+  tiktok_content.complete_publish: write
+
+  # Reddit（真调用 WP73）
+  reddit.get_subreddit: read
+  reddit.get_subreddit_rules: read
+  reddit.list_posts: read
+  reddit.get_post: read
+  reddit.list_comments: read
+  reddit.list_modqueue: read
+  reddit.list_join_requests: read
+  reddit.submit_post: write
+  reddit.reply_comment: write
+  reddit.send_message: write
+  reddit.approve_member: write
+  reddit.remove_post: write
+  reddit.ban_user: write
+  reddit.update_subreddit_rules: write
+
+  # Discord
+  discord_bot.get_guild: read
+  discord_bot.list_channels: read
+  discord_bot.list_channel_messages: read
+  discord_bot.get_message: read
+  discord_bot.list_members: read
+  discord_bot.get_member: read
+  discord_bot.send_message: write
+  discord_bot.reply_message: write
+  discord_bot.delete_message: write
+  # 禁言是设一个到期时刻（`communication_disabled_until`），不是一个开关
+  discord_bot.timeout_member: write
+  discord_bot.kick_member: write
+  discord_bot.ban_member: write
+
+  # Telegram（令牌在 URL 路径上——`redactUrl` 专门抹它；业务错误在 200 里）
+  telegram_bot.get_me: read
+  telegram_bot.get_chat: read
+  telegram_bot.get_chat_member: read
+  telegram_bot.get_chat_member_count: read
+  telegram_bot.get_updates: read
+  telegram_bot.send_message: write
+  telegram_bot.delete_message: write
+  telegram_bot.pin_message: write
+  telegram_bot.approve_chat_join_request: write
+  telegram_bot.decline_chat_join_request: write
+  telegram_bot.restrict_chat_member: write
+  telegram_bot.ban_chat_member: write
+
+  # WhatsApp Business（真调用 WP73）。模板与 opt-in 那两道闸在 guardrail 里，
+  # 不在这张表里——这张表只回答"这个动作改不改上游状态"。
+  whatsapp_business.get_business_profile: read
+  whatsapp_business.list_templates: read
+  whatsapp_business.get_template: read
+  whatsapp_business.list_messages: read
+  whatsapp_business.send_template_message: write
+  whatsapp_business.send_message: write
+  whatsapp_business.mark_read: write
+
+  # 社媒运营那一侧新用到的两个口（卡与 service 名与红人共用，见上一段）
+  youtube_data.list_my_videos: read
+  youtube_data.update_video_metadata: write
+  youtube_data.reply_comment: write

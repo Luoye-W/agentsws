@@ -41,6 +41,46 @@ describe('action-side-effects.yml（18 §1 覆盖表）', () => {
     }
   })
 
+  // WP72（56 §1）：社媒运营那八条渠道的读写口。这张表默认 write，
+  // 所以**漏标的读口拿不到 role-read 令牌**——骨架期就标齐，接上那天不用回来补。
+  it('社媒八条渠道：读口标了 read，写口标了 write', () => {
+    const reads = [
+      'meta_graph.list_page_posts',
+      'meta_graph.list_post_comments',
+      'meta_graph.get_ig_media_insights',
+      'tiktok_content.get_publish_status',
+      'reddit.get_subreddit_rules',
+      'reddit.list_modqueue',
+      'discord_bot.list_channel_messages',
+      'discord_bot.list_members',
+      'telegram_bot.get_chat_member',
+      'whatsapp_business.list_templates',
+      'youtube_data.list_my_videos',
+    ]
+    const writes = [
+      // 排期与立发是同一个写口：差别只在那两格（少写一格会当场发出去）
+      'meta_graph.publish_post',
+      'meta_graph.schedule_post',
+      'meta_graph.reply_comment',
+      'tiktok_content.init_publish',
+      'reddit.ban_user',
+      'discord_bot.send_message',
+      'discord_bot.timeout_member',
+      'telegram_bot.approve_chat_join_request',
+      'telegram_bot.ban_chat_member',
+      'whatsapp_business.send_template_message',
+      'youtube_data.reply_comment',
+    ]
+    for (const id of reads) {
+      expect(table.covers(id), id).toBe(true)
+      expect(table.resolve(id), id).toBe('read')
+    }
+    for (const id of writes) {
+      expect(table.covers(id), id).toBe(true)
+      expect(table.resolve(id), id).toBe('write')
+    }
+  })
+
   it('未标的按 write —— 这一条是安全默认', () => {
     expect(table.covers('shopify_admin.some_brand_new_action')).toBe(false)
     expect(table.resolve('shopify_admin.some_brand_new_action')).toBe('write')
