@@ -59,6 +59,18 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   kol_deliverable_review: 'low',
   kol_affiliate_code: 'low',
   kol_tracked_link: 'low',
+  // WP72（56 §2）：社媒运营那六条。
+  //
+  // 发内容与群发按 medium：对外、收不回来，但改不了钱（两条都在 `HARD_L1` 里，
+  // 所以"永远人审"这件事不靠风险级说话）。改资料与改群规按 medium——它们不发
+  // 一句话出去，却把所有人看到的那一屏与这个群的规矩改了。入群审核按 low
+  // （批错一个踢出去就是了），管理动作按 medium（封禁那一档在 switch 里升 L1）。
+  social_post: 'medium',
+  social_profile_edit: 'medium',
+  community_membership: 'low',
+  community_broadcast: 'medium',
+  community_rules: 'medium',
+  community_moderation: 'medium',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -96,6 +108,21 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    * 硬顶不行（15 §2）。
    */
   'kol_collaboration',
+  /**
+   * WP72（56 §2 / §0）：**发内容与群发永远人审**。
+   *
+   * `social_post`：发出去收不回来，而且看的是外人不是同事——一条发错的帖子
+   * 在被删掉之前已经被截图了。排期与立发是同一条 kind，门在**排**的时候：
+   * 一条排在明天早上八点的帖子，到点之后没有第二道门。
+   *
+   * `community_broadcast`：与 `campaign_send` 逐字同理——一次群发出去收不回来，
+   * 收的是**群里的人**不是同事。
+   *
+   * 放在硬顶而不是只写在职责 yml 的 `ceiling: L1` 里：yml 可以被工作区策略放宽，
+   * 硬顶不行（15 §2）。
+   */
+  'social_post',
+  'community_broadcast',
 ])
 /**
  * 44 G2：这些变更的**目标是一件具体商品**，于是"目标在不在我管的范围里"这句话才有意义。
@@ -133,7 +160,20 @@ export const RECORD_READ_KINDS: ReadonlySet<ChangeKind> = new Set([
   'listing_edit',
   'collection_edit',
   'review_reply',
+  // WP72（56 §2）：账号简介与群规的 `before` 也是那段**正文**。没读全就改一条群规，
+  // 等于拿一份摘要覆盖这个群的法律——与改商品文案是同一件事，同一道门。
+  'social_profile_edit',
+  'community_rules',
 ])
+
+/**
+ * WP72（56 §2 社群组）：管理动作里**要人点**的那一档。
+ *
+ * 删帖与禁言做错了改得回来（恢复、解禁）；封禁改不回来——把一个人从你自己的
+ * 社群里永久赶出去，这件事该由人点。名字集中在这里而不是散在 switch 里，
+ * 是因为界面上"哪几种动作会变成一张卡"要与这张表一个字不差。
+ */
+export const COMMUNITY_MODERATION_L1_ACTIONS: readonly string[] = ['ban', 'permanent_ban']
 
 /**
  * WP63（51 §2.1 评价管理「邀评 L2 且合规词表」）：邀评正文里**不许出现**的说法。
@@ -239,6 +279,18 @@ export const PROTECTED_FIELDS: Partial<Record<ChangeKind, string[]>> = {
   inventory_adjust: ['inventory_item_id', 'location_id', 'sku'],
   // 集合 id 一变，改的就是另一个货架；智能集合的判据也不该由 Agent 动。
   collection_edit: ['collection_id', 'rule_set'],
+  /**
+   * WP72（56 §2）：账号名与账号本身，Agent 提都不许提。
+   *
+   * 改 handle = 所有旧帖里的链接、所有外部引用、所有名片上印的那一行一起断，
+   * 而它在卡面上看起来只是"改了一个字符串"。换 `account_id` 更直接：那是
+   * **改到别人的号上去了**（同 `inventory_adjust` 的"调错货"）。
+   */
+  social_profile_edit: ['handle', 'username', 'account_id', 'external_id'],
+  /** 换一个群 = 改的是另一个群的规矩。 */
+  community_rules: ['account_id', 'external_id'],
+  /** 群发换收件群 / 换模板 id 之外的那些：换群 = 发给了另一批人。 */
+  community_broadcast: ['account_id', 'external_id'],
 }
 
 export interface ChangeLike {
@@ -693,6 +745,137 @@ export function evaluateGuardrail(
         (k) => typeof utm[k] !== 'string' || (utm[k] as string).trim() === '',
       )
       if (missing.length > 0) block('kol_utm_required', 'source,medium,campaign', missing.join(','))
+      break
+    }
+    /**
+     * WP72（56 §2 内容组）：发一条内容。永远人审（`HARD_L1`），这里判的是**另外**两件事。
+     *
+     * 1. **空正文不是"还没写完"，是"别发"**。一条只有素材没有文案的帖子在多数
+     *    平台是发得出去的，所以这一条不能靠平台挡。
+     * 2. 排期时间在过去 = 这条排期到点之后不会再触发，它会永远躺在"待发布"里。
+     *    这是 block 不是 review：人在卡面上看不出"2026-09-10 08:00"已经过去了。
+     */
+    case 'social_post': {
+      const bodyText = typeof after.body === 'string' ? after.body.trim() : ''
+      const media = Array.isArray(after.media_refs) ? after.media_refs.length : 0
+      if (bodyText === '' && media === 0) block('social_post_empty', 'body|media', 'both missing')
+      const scheduled =
+        typeof after.scheduled_at === 'string' ? Date.parse(after.scheduled_at) : Number.NaN
+      if (!Number.isNaN(scheduled) && scheduled < Date.parse(facts.now))
+        block('social_post_schedule_in_past', facts.now, String(after.scheduled_at))
+      const cap = capNumber(mandate, 'max_posts_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_posts_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP72（56 §2 内容组）：改账号资料。L1。
+     *
+     * handle / account_id 那几格已经在受保护字段里（switch 之前那一段）；
+     * 这里补的是"改资料这件事本身要人点"——它没有 `HARD_L1`（工作区策略可以
+     * 把它放宽到 L2，例如只让改简介里的营业时间），所以写在这里而不是硬顶里。
+     */
+    case 'social_profile_edit': {
+      review('social_profile_edit_needs_review', 'L1', 'profile')
+      break
+    }
+    /**
+     * WP72（56 §2 社群组）：入群审核。L2，额度挡的是"一口气全批了"。
+     *
+     * `after.decision` 必须是三个里的一个：一张说不清是批还是拒的卡，人点不下去。
+     */
+    case 'community_membership': {
+      const decision = after.decision
+      const allowed = ['approve', 'reject', 'remove']
+      if (typeof decision !== 'string' || !allowed.includes(decision))
+        block(
+          'community_membership_decision_required',
+          allowed.join('|'),
+          String(decision ?? 'missing'),
+        )
+      const count = Array.isArray(after.members) ? after.members.length : 1
+      const perChange = capNumber(mandate, 'max_members_per_change')
+      if (perChange !== undefined && count > perChange)
+        review('max_members_per_change', perChange, count)
+      const cap = capNumber(mandate, 'max_member_approvals_per_day')
+      if (cap !== undefined && facts.windowCount + count > cap)
+        review('max_member_approvals_per_day', cap, facts.windowCount + count)
+      break
+    }
+    /**
+     * WP72（56 §2 社群组）：群发。永远人审（`HARD_L1`）+ 三道硬闸。
+     *
+     * 一、**退订 / 抑制名单必查**，判据是"这次提案报没报查过"而不是"名单里有没有人"
+     *     ——没问过与问过了没人，在群发这件事上必须分得开（照 WP64 `campaign_send`
+     *     那一条逐字来）。规则本身在 `suppression.ts`，全仓**同一份**。
+     *
+     * 二、**WhatsApp 的两格**（56 §1 / §2）：没有 `template_id` 或
+     *     `opt_in_verified !== true` 就 block。这不是我们的洁癖，是 Meta 的规矩——
+     *     没 opt-in 往 WhatsApp 上推一条主动消息，封的是这个品牌的号。
+     *     所以它不是 review（"人点一下就发"）而是 block：人在卡面上判不出
+     *     这 3000 个号里有没有没 opt-in 的。
+     *
+     * 三、频率（`max_broadcasts_per_week`）默认一周一条——超了转人审，不拦。
+     */
+    case 'community_broadcast': {
+      if (after.suppression_checked !== true)
+        block('suppression_list_required', 'checked', String(after.suppression_checked ?? 'never'))
+      else {
+        const leaked = suppressedRecipients(strings(after.audience), strings(after.suppressed))
+        if (leaked.length > 0)
+          block('suppression_list', 0, `${leaked.length}: ${leaked.slice(0, 3).join(', ')}`)
+      }
+      if (after.channel === 'whatsapp') {
+        const template = typeof after.template_id === 'string' ? after.template_id.trim() : ''
+        if (template === '') block('whatsapp_template_required', 'template_id', 'missing')
+        if (after.opt_in_verified !== true)
+          block(
+            'whatsapp_opt_in_required',
+            'opt_in_verified',
+            String(after.opt_in_verified ?? 'never'),
+          )
+        const templateCap = capNumber(mandate, 'max_template_messages_per_day')
+        const size = num(after.audience_size) ?? strings(after.audience).length
+        if (templateCap !== undefined && facts.windowCount + size > templateCap)
+          review('max_template_messages_per_day', templateCap, facts.windowCount + size)
+      }
+      const audience = num(after.audience_size) ?? strings(after.audience).length
+      const audienceCap = capNumber(mandate, 'max_broadcast_audience')
+      if (audienceCap !== undefined && audience > audienceCap)
+        review('max_broadcast_audience', audienceCap, audience)
+      const cap = capNumber(mandate, 'max_broadcasts_per_week')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_broadcasts_per_week', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP72（56 §2 社群组）：改群规。L1。
+     *
+     * "改之前先读全"在 switch 之前那一条（`RECORD_READ_KINDS`）。这里只把
+     * "要人点"记上——群规是这个群的法律，放宽一条等于把垃圾闸门打开，
+     * 而账本上它看起来只是改了一段文字（同 `flow_edit` 的理由）。
+     */
+    case 'community_rules': {
+      review('community_rules_needs_review', 'L1', 'rules')
+      break
+    }
+    /**
+     * WP72（56 §2 社群组）：管理动作。**按 `after.action` 分档**。
+     *
+     * 删帖 / 禁言 L2（做错了改得回来，额度挡"一口气清场"）；封禁 L1——
+     * 把一个人从你自己的社群里永久赶出去，这件事该由人点。
+     * 名单在 {@link COMMUNITY_MODERATION_L1_ACTIONS}，界面上那句话读同一张表。
+     */
+    case 'community_moderation': {
+      const action = typeof after.action === 'string' ? after.action : ''
+      const allowed = ['delete_post', 'mute', 'unmute', 'ban', 'permanent_ban', 'unban']
+      if (!allowed.includes(action))
+        block('community_moderation_action_required', allowed.join('|'), action || 'missing')
+      if (COMMUNITY_MODERATION_L1_ACTIONS.includes(action))
+        review('community_moderation_ban', 'L1', action)
+      const cap = capNumber(mandate, 'max_moderations_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_moderations_per_day', cap, facts.windowCount + 1)
       break
     }
     case 'bid_change':

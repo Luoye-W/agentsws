@@ -28,6 +28,7 @@
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/skills.ts",
+    "packages/contracts/src/social.ts",
     "packages/contracts/src/standby.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
@@ -48,7 +49,7 @@
     "packages/roles/roles/kol/youtube.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "82a6a49d8efaf1398c6853e48ce4d022",
+  "source_digest": "8d7f41b438653aff058528adc3402cb7",
   "objects": [
     {
       "id": "ad_set",
@@ -625,6 +626,170 @@
       "properties": [],
       "read_via": ["shopify_admin.get_collection", "shopify_admin.list_collections"],
       "platforms": ["shopify"]
+    },
+    {
+      "id": "community_member",
+      "label": "community_member",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "community_member",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "display_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "CommunityMemberStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "joined_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "application_answers",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_active_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "CommunityMember"
+    },
+    {
+      "id": "community_thread",
+      "label": "community_thread",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "community_thread",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "surface",
+          "type": "'thread' | 'comment' | 'dm'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "author_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "author_handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "CommunityThreadStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "triage",
+          "type": "CommunityTriage",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "routed_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "reply_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "CommunityThread"
     },
     {
       "id": "company",
@@ -2452,15 +2617,174 @@
       "contract": "Skill"
     },
     {
+      "id": "social_account",
+      "label": "social_account",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "social_account",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "handle",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "display_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "connection_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "followers",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "member_count",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "SocialAccount"
+    },
+    {
       "id": "social_post",
       "label": "社媒帖子",
-      "key_format": "连接器给的 id，原样存、不解析",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
       "domain": "social_account",
-      "source_of_truth": "connector",
-      "freshness": "cached:300",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
       "read_ranges": [],
-      "properties": [],
-      "read_via": []
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "channel",
+          "type": "SocialChannel",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "SocialPostKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "SocialPostStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "media_refs",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "scheduled_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "failure_reason",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "metrics",
+          "type": "SocialPostMetrics",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "metrics_observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "SocialPost"
     },
     {
       "id": "staged_change",
@@ -3724,6 +4048,14 @@
     },
     {
       "from": "connection",
+      "to": "social_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "social_account.connection_id",
+      "lookup": []
+    },
+    {
+      "from": "connection",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -4396,6 +4728,22 @@
     },
     {
       "from": "skill",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "social_account",
+      "to": "connection",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "connection_id",
+      "lookup": []
+    },
+    {
+      "from": "social_account",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -5216,6 +5564,14 @@
       "direction": "in",
       "cardinality": "many",
       "via": "skill.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "social_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "social_account.workspace_id",
       "lookup": []
     },
     {

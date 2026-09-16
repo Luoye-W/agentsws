@@ -98,6 +98,19 @@ export type ObjectType =
   | 'collaboration'
   | 'deliverable'
   | 'tracked_link'
+  /**
+   * WP72（56 §2）：社媒运营那一侧的三类（`social_post` 上面早就有）。
+   *
+   * 为什么不是一个「社媒」对象：`social_account` 是**我们自己的号**（一条渠道上
+   * 可以有好几个）；`community_member` 是群里的一个人——**不是**顾客档案，
+   * 认不认得出他是哪个订单的买家是客服那一侧的事（56 边界行）；
+   * `community_thread` 是群里 / 评论区 / 私信里的一条线程，它带着分类结论
+   * （六类，56 §3）。三类各有各的可读范围，一个域一把闸（19 §3 的过滤下推
+   * 才切得动）。**只加不删**。
+   */
+  | 'social_account'
+  | 'community_member'
+  | 'community_thread'
   | (string & {})
 
 export interface ObjectRef {
@@ -180,6 +193,15 @@ export type DataDomain =
   | 'collaboration'
   | 'deliverable'
   | 'tracked_link'
+  /**
+   * WP72（56 §2）：社群那两个域（账号与帖子走**早就有的** `social_account`）。
+   *
+   * 分出来而不是塞进 `social_account`，理由与红人那五个一样：**可读范围不一样**。
+   * 内容组四条职责读得到账号与帖子，读不到群成员；客服的「社群管理」读得到
+   * 线程（客户的问题在那里），读不到成员名册。一个域一把闸。
+   */
+  | 'community_member'
+  | 'community_thread'
 
 export type Operation = 'read' | 'stage' | 'approve' | 'agent_auto'
 export type Range = 'own' | 'assigned' | 'workspace'
