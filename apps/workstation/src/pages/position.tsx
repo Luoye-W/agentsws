@@ -12,6 +12,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
 import { connectPathFor } from '@/components/connections/links'
 import { DeckSection } from '@/components/deck'
+import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { ScheduleList } from '@/components/schedule-list'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -97,6 +98,12 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
   const here = mine.data?.positions.find((p) => p.position_id === id)
   const isOwner = (mine.data?.positions ?? []).some((p) => p.role_id === 'common.owner')
   const isLiveChat = here?.role_id === 'dtc.live-chat'
+  /*
+   * WP68（48 §5.1）：红人那五条渠道职责的面板上多一块**能动手的**——
+   * 找人 / 建联 / 合作三件事在 deck 的只读表格里做不了。它排在数字块之前，
+   * 与在线客服那一张同一个道理：这条职责的产出不在图表里，在这些动作里。
+   */
+  const kolChannel = channelOfRole(here?.role_id)
   if (view.isPending) return <Skeleton className="h-64 w-full" />
   if (here !== undefined && here.ranges.length === 0)
     return <NoRangeNotice id={id} isOwner={isOwner} />
@@ -104,6 +111,7 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
     <div className="flex flex-col gap-6">
       {/* WP57：在线客服的入口排在最前——它的产出在对话里，不在数字块里 */}
       {isLiveChat ? <ChatSandboxEntry /> : null}
+      {kolChannel === undefined ? null : <KolPanel assignment={id} channel={kolChannel} />}
       <div className="flex items-center gap-1">
         {RANGES.map((r) => (
           <Button

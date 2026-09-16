@@ -122,6 +122,7 @@ describe('WP68 开发信', () => {
         creator_id: id,
         channel: 'youtube',
         product: '65W 氮化镓充电器',
+        brand_pitch: '我们做桌面周边的充电与理线。',
       }),
     )
     expect(out.staged).toBe(true)
@@ -146,6 +147,7 @@ describe('WP68 开发信', () => {
         creator_id: await creatorWithEmail('Desk Rosa'),
         channel: 'youtube',
         product: '65W 氮化镓充电器',
+        brand_pitch: '我们做桌面周边的充电与理线。',
       }),
     )
     expect(again.quota.sent_today).toBe(2)
@@ -159,6 +161,7 @@ describe('WP68 开发信', () => {
         creator_id: id,
         channel: 'youtube',
         product: '65W 氮化镓充电器',
+        brand_pitch: '我们做桌面周边的充电与理线。',
         reason: '我们付你 800 美元，这一条视频就发吧。',
       }),
     )
@@ -171,6 +174,34 @@ describe('WP68 开发信', () => {
         kind: 'kol_outreach',
       }),
     ).toHaveLength(0)
+  })
+
+  it('"我们是做什么的"没给就不起草——服务端不替用户编一句自我介绍', async () => {
+    const id = await creatorWithEmail('Gadget Jonas')
+    const out = await data<{ staged: boolean; missing_vars: string[]; message?: string }>(
+      await post('/v1/kol/outreach', {
+        creator_id: id,
+        channel: 'youtube',
+        product: '65W 氮化镓充电器',
+      }),
+    )
+    expect(out.staged).toBe(false)
+    expect(out.missing_vars).toEqual(['brand_pitch'])
+    expect(out.message).toContain('brand_pitch')
+  })
+
+  it('打分那句"为什么找他"接进正文时不会写出「……里。，所以」这种句子', async () => {
+    const id = await creatorWithEmail('Gadget Jonas')
+    const out = await data<{ staged: boolean; body: string }>(
+      await post('/v1/kol/outreach', {
+        creator_id: id,
+        channel: 'youtube',
+        product: '65W 氮化镓充电器',
+        brand_pitch: '我们做桌面周边的充电与理线。',
+      }),
+    )
+    expect(out.staged).toBe(true)
+    expect(out.body).not.toMatch(/[。．.][，,]/u)
   })
 
   it('没有联系方式就不起草，并说清楚下一步做什么', async () => {
@@ -186,6 +217,7 @@ describe('WP68 开发信', () => {
         creator_id: detail.creator.id,
         channel: 'youtube',
         product: '充电器',
+        brand_pitch: '我们做桌面周边的充电与理线。',
       }),
     )
     expect(out.staged).toBe(false)
@@ -306,6 +338,7 @@ describe('WP68 序列跟进：定时提，不是定时发', () => {
         creator_id: id,
         channel: 'youtube',
         product: '65W 氮化镓充电器',
+        brand_pitch: '我们做桌面周边的充电与理线。',
       }),
     )
     expect(first.staged).toBe(true)
@@ -347,6 +380,7 @@ describe('WP68 序列跟进：定时提，不是定时发', () => {
       creator_id: id,
       channel: 'youtube',
       product: '65W 氮化镓充电器',
+      brand_pitch: '我们做桌面周边的充电与理线。',
     })
     await api(`/v1/kol/collaborations/${staged.collaboration?.id}/stage`, {
       method: 'PATCH',

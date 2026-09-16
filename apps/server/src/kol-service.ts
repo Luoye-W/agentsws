@@ -314,6 +314,9 @@ const OUTREACH_ACTION = 'stage_outreach'
 /** 开发信的日配额默认值（职责 yml 的 `max_outreach_per_day`）。 */
 export const DEFAULT_OUTREACH_CAP = 30
 
+/** 去掉一句话末尾的标点（接下一句之前）。 */
+const trimTail = (text: string): string => text.replace(/[。．.，,；;：:]+$/u, '')
+
 /** 公共库那一行的主页地址（库里只有 渠道 + handle，链接是拼出来的）。 */
 function urlOfPublicRow(channel: KolChannel, handle: string): string {
   switch (channel) {
@@ -516,7 +519,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     creator: Creator
     channel: KolChannel
     step: OutreachStep
-    vars: { product: string; reason: string; brand_pitch: string; sender_name: string }
+    vars: { product: string; reason: string; brand_pitch?: string; sender_name: string }
   }): Promise<KolOutreachView> => {
     const quota = await outreachQuotaOf(input.actor.assignment_id)
     const contact = contactOf(input.creator.id)
@@ -1262,8 +1265,19 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         step: input.step ?? 'first',
         vars: {
           product: input.product,
-          reason: input.reason ?? (top === undefined ? '' : `${top.why}，`),
-          brand_pitch: input.brand_pitch ?? `我们是 ${options.brandName()}。`,
+          /*
+           * `reason` 不给就用打分里最高那一项的那句带数的话——那正是"为什么找他"。
+           * 末尾的标点要去掉再接一个逗号：模板后面紧跟着"所以想问问你对 X 有没有兴趣"，
+           * 不去掉就会写出"正好在想要的区间里。，所以想问问……"这种句子。
+           */
+          reason: input.reason ?? (top === undefined ? '' : `${trimTail(top.why)}，`),
+          /*
+           * **`brand_pitch` 没有默认值**。"我们是做什么的"这句话只有用户自己知道，
+           * 编一个出来最好的情况也是废话（"我是 NordVolt 的王岚。我们是 NordVolt。"），
+           * 最坏的情况是替他向红人说了一句不实的话。缺了就照 `draftOutreach`
+           * 的规矩走：不起草，把缺的那一格说出来。
+           */
+          ...(input.brand_pitch === undefined ? {} : { brand_pitch: input.brand_pitch }),
           sender_name: input.sender_name ?? (await options.personName(actor.person_id)),
         },
       })
