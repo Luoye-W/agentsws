@@ -38,6 +38,7 @@ import type { LiveDataSource } from './live-data.js'
 import type { ModelsAssembly } from './models.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SecretStore } from './secret-store.js'
+import type { SocialStore } from './social.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 品牌落盘目录在 `dbDir` 下的那一级。 */
@@ -98,6 +99,14 @@ export interface BrandModuleSet {
    * 的那一层。品牌 A 的联系方式明文只有 A 这一份服务取得到。
    */
   kolService: KolServiceAssembly
+  /**
+   * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象）。
+   *
+   * 与红人库同一条纪律（本文件第 2 条）：落盘按品牌分目录。品牌 A 的帖子、
+   * 排期、群成员与线程，在 B 的任何路由里都读不到——九条渠道是九个真账号，
+   * 串了品牌等于发错号。
+   */
+  social: SocialStore
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun

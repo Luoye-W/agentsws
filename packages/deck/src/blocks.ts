@@ -126,6 +126,17 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   // 都还是"待增加"，所以那一块永远走"还没连"那一支（36 §3）。
   kol: '红人库',
   kol_channel: '渠道数据',
+  // WP72（56 §2）：我们自己的社媒库永远算连上；八条渠道各一个源，
+  // 名字就是用户在连接页上看到的那个名字——"去连接"点过去要对得上。
+  social: '社媒库',
+  social_meta: 'Meta（FB 主页 + IG）',
+  social_tiktok: 'TikTok',
+  social_x: 'X',
+  social_youtube: 'YouTube',
+  social_reddit: 'Reddit',
+  social_discord: 'Discord',
+  social_telegram: 'Telegram',
+  social_whatsapp: 'WhatsApp',
 }
 
 /** 「查看完整报告 →」外链（36 §3 三层链路的最后一层）。 */

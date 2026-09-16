@@ -87,8 +87,12 @@ actions:
   # 56 §4：**动作与额度沿用 `dtc.support` 那一份，不另起**。
   # 下面每条的 `mandate` 与 `roles/dtc/support.yml` 里同名那条逐字相同。
   - id: reply_customer
-    # 回的是社群里的一条线程（群里的帖子 / 评论 / 私信），不是一封邮件
-    target: community_thread
+    # `target` 与 `dtc.support` 那条**一模一样**（`customer`），不是 `community_thread`。
+    # 理由不是偷懒：47 的对象登记表按动作 id 归并，同一个 `reply_customer` 在两条职责上
+    # 指向两个对象的话，登记表上就只剩一个——网站客服会莫名其妙丢掉这条动作。
+    # 而这条动作要写的确实是"给这个客户的一句回复"；回到**哪条线程**去是
+    # `community_thread` 那个读域的事（上面 scopes 里有它），不是这条动作的目标。
+    target: customer
     kind: outbound_message
     mandate: { caps: {}, window: { max_count: 200, per: day } }
     route_to: role_holder

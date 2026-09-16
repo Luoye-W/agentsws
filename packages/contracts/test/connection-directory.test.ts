@@ -10,8 +10,8 @@ import {
   connectionDirectoryByCategory,
   connectionDirectoryEntry,
   KOL_CHANNELS,
-  SOCIAL_CHANNELS,
   MCP_SERVER_NAME_RE,
+  SOCIAL_CHANNELS,
   validateMcpServer,
 } from '../src/index.js'
 

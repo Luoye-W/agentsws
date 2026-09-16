@@ -232,8 +232,11 @@ describe('56 §4 客服的第四条职责：社群管理', () => {
   it('回复 L2 → L3（群里的一条回复所有人都看得见）', () => {
     expect(role().automation.reply_customer?.initial).toBe('L2')
     expect(role().automation.reply_customer?.ceiling).toBe('L3')
-    // 回的是社群线程，不是一封邮件
-    expect(role().actions.find((a) => a.id === 'reply_customer')?.target).toBe('community_thread')
+    // `target` 与 `dtc.support` 那条一模一样（47 的登记表按动作 id 归并，
+    // 同一个 id 指向两个对象的话，网站客服会莫名其妙丢掉这条动作）
+    expect(role().actions.find((a) => a.id === 'reply_customer')?.target).toBe('customer')
+    // 回到哪条线程去是**读域**的事：`community_thread` 在 scopes 里
+    expect(role().scopes.map((s) => s.domain)).toContain('community_thread')
   })
 
   it('description 里写清两边的分界（54 §2 的路由判据）', () => {

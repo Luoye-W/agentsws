@@ -36,11 +36,21 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   track17: ['tracking'],
   // WP67（48 §5.1）/ WP68：五条渠道。WP68 起这五张卡在连接目录里是**可连**的，
   // 所以这张映射现在真的会命中——连上哪一条，面板那一块就亮哪一条。
-  youtube_data: ['kol_channel'],
+  youtube_data: ['kol_channel', 'social_youtube'],
   instagram_graph: ['kol_channel'],
   tiktok_research: ['kol_channel'],
   facebook_graph: ['kol_channel'],
-  x_api: ['kol_channel'],
+  // WP72：`youtube_data` 与 `x_api` **一张卡喂两条职责**（56 §1）——红人那条读别人的，
+  // 社媒运营那条读写我们自己的。连一次，两处都亮；写成两张卡的话用户会连两遍。
+  x_api: ['kol_channel', 'social_x'],
+  // WP72（56 §1）：社媒运营那六张新卡，一张喂一个渠道源。
+  // Facebook 群组不在这里——它没有连接器（Groups API 已停），走受控浏览器。
+  meta_graph: ['social_meta'],
+  tiktok_content: ['social_tiktok'],
+  reddit: ['social_reddit'],
+  discord_bot: ['social_discord'],
+  telegram_bot: ['social_telegram'],
+  whatsapp_business: ['social_whatsapp'],
 }
 
 /**
@@ -49,8 +59,11 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
  * WP67 加进 `kol`：红人库就在这台机器上（六张表，`apps/server/src/kol.ts`），
  * 没有"去连接"这回事。**空的红人库与没连的渠道是两件事**——前者说"还没有人，
  * 先导入一张表"，后者说"去连接页把 YouTube 连上"，界面上那两句话不能混。
+ *
+ * WP72 加进 `social`：社媒库同理（四张表，`apps/server/src/social.ts`）。
+ * 内容日历上那几条是**我们自己排的**，一个平台都没连也照样在那儿摆着。
  */
-export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol']
+export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social']
 
 /** 全部数据源，按面板里的出场顺序。 */
 export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
@@ -65,6 +78,16 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'reviews',
   'kol',
   'kol_channel',
+  // WP72（56 §2）：我们自己的社媒库 + 八条渠道各一个源（Facebook 群组没有连接器）
+  'social',
+  'social_meta',
+  'social_tiktok',
+  'social_x',
+  'social_youtube',
+  'social_reddit',
+  'social_discord',
+  'social_telegram',
+  'social_whatsapp',
 ]
 
 /**

@@ -183,7 +183,7 @@ describe('WP20 §A 连接清单与目录', () => {
     expect((await data<{ connections: ConnectionView[] }>(res)).connections).toEqual([])
   })
 
-  it('目录里十五个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
+  it('目录里二十一个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
@@ -206,6 +206,16 @@ describe('WP20 §A 连接清单与目录', () => {
       'facebook_graph',
       'tiktok_research',
       'x_api',
+      // WP72（56 §1）：社媒运营那六张新卡。`youtube_data` 与 `x_api` 就是红人那两张
+      // （一把 key 管两条职责），不重复登记；Facebook 群组一张都没有（走受控浏览器）。
+      // 其中 TikTok / Reddit / WhatsApp 三张标着"还没接"（`planned`），照 WP64 那几张
+      // 骨架卡的老规矩：卡照出、状态照实说、点不动。
+      'meta_graph',
+      'tiktok_content',
+      'reddit',
+      'discord_bot',
+      'telegram_bot',
+      'whatsapp_business',
     ])
     for (const p of live) {
       expect(p.setup_guide.steps.length).toBeGreaterThan(0)
@@ -276,6 +286,16 @@ describe('WP20 §A 连接清单与目录', () => {
       'facebook_graph',
       'tiktok_research',
       'x_api',
+      // WP72（56 §1）：社媒运营那六张新卡。`youtube_data` 与 `x_api` 就是红人那两张
+      // （一把 key 管两条职责），不重复登记；Facebook 群组一张都没有（走受控浏览器）。
+      // 其中 TikTok / Reddit / WhatsApp 三张标着"还没接"（`planned`），照 WP64 那几张
+      // 骨架卡的老规矩：卡照出、状态照实说、点不动。
+      'meta_graph',
+      'tiktok_content',
+      'reddit',
+      'discord_bot',
+      'telegram_bot',
+      'whatsapp_business',
     ])
 
     // 改回 Shopify，那张卡就回来了

@@ -137,6 +137,8 @@ export interface ConnectRecordSourceOptions {
    * 一律回 `undefined`（**不编造**，与文件头第 5 条同一条）。
    */
   kol?: () => RecordKolPort | undefined
+  /** WP72（56 §2）：社媒账号与社群线程的只读面（见 {@link RecordSocialPort}）。 */
+  social?: () => RecordSocialPort | undefined
   appendEvent?: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
 }
 
@@ -174,6 +176,45 @@ export interface RecordKolPort {
     due_at: string
     review: string
   }[]
+}
+
+/**
+ * WP72（56 §2）：记录源要的社媒库那一面——**只读，而且只有两类**。
+ *
+ * 两类是 `social_account`（我们自己的号）与 `community_thread`（群里 / 评论区 /
+ * 私信里的一条）。**没有 `member`**：群成员名册不该被塞进模型上下文——
+ * 那是一份人名单，起草一条回复用不着它，而它一旦进了上下文就会进事件日志
+ * （同 `RecordKolPort` 不给联系方式的那条理由）。
+ *
+ * 线程的正文**是外部文本**：读得到，但进模型之前要围栏（21 §1 / 39）。
+ * 这一层只负责把它原样端出来，围不围栏是运行时那一跳的事——两处都做才叫做了。
+ */
+export interface RecordSocialPort {
+  account(id: string):
+    | {
+        id: string
+        channel: string
+        handle: string
+        display_name: string
+        url: string
+        followers?: number
+        member_count?: number
+        observed_at: string
+      }
+    | undefined
+  thread(id: string):
+    | {
+        id: string
+        account_id: string
+        channel: string
+        surface: string
+        author_handle: string
+        text: string
+        created_at: string
+        status: string
+        triage?: string
+      }
+    | undefined
 }
 
 /** 起草要的订单事实（字段名与 support-core 的 `OrderFacts` 逐字一致，外加起草真用得上的三样）。 */
@@ -900,6 +941,20 @@ export function createConnectRecordSource(
       if (collab === undefined) return undefined
       return { ...collab, deliverables: kol?.deliverables({ collaboration_id: ref.id }) ?? [] }
     }
+    /*
+     * WP72（56 §2）：社媒账号与社群线程的只读记录源。
+     *
+     * 一条线程连它所在的号一起给：起草一条回复要知道"这是在哪个号下面说的"
+     * （同一句话在 Discord 群里和在 FB 主页评论区，回法不一样）。
+     * 群成员名册一格都不给（见 `RecordSocialPort` 的注释）。
+     */
+    const socialPort = options.social?.()
+    if (ref.type === 'social_account') return socialPort?.account(ref.id)
+    if (ref.type === 'community_thread') {
+      const thread = socialPort?.thread(ref.id)
+      if (thread === undefined) return undefined
+      return { ...thread, account: socialPort?.account(thread.account_id) }
+    }
     // 不认识的一律 undefined——**不编造**
     return undefined
   }
@@ -934,6 +989,19 @@ export function createConnectRecordSource(
       if (collab === undefined) return undefined
       const who = kolPort?.creator(collab.creator_id)?.display_name ?? collab.creator_id
       return `${who}（${collab.channel}）`
+    }
+    // WP72：一个号叫"显示名（渠道）"，一条线程叫"谁在哪儿说的"——
+    // 卡面上只写一个 `ct_xxx` 谁也认不出这是哪条评论
+    const socialLabel = options.social?.()
+    if (ref.type === 'social_account') {
+      const account = socialLabel?.account(ref.id)
+      return account === undefined ? undefined : `${account.display_name}（${account.channel}）`
+    }
+    if (ref.type === 'community_thread') {
+      const thread = socialLabel?.thread(ref.id)
+      if (thread === undefined) return undefined
+      const where = socialLabel?.account(thread.account_id)?.display_name ?? thread.channel
+      return `${thread.author_handle}（${where}）`
     }
     return undefined
   }

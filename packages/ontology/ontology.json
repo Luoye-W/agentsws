@@ -59,7 +59,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "1e935f1ff361b11f2e8b61e24f7d042e",
+  "source_digest": "5691b01d35e7b3e14c9aa3fb93ae8678",
   "objects": [
     {
       "id": "ad_set",
@@ -1891,7 +1891,11 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["gmail.get_message"]
+      "read_via": [
+        "discord_bot.get_message",
+        "gmail.get_message",
+        "whatsapp_business.list_messages"
+      ]
     },
     {
       "id": "order",
@@ -1968,6 +1972,7 @@
       "read_via": [
         "facebook_graph.get_page",
         "facebook_graph.search_pages",
+        "meta_graph.get_page",
         "shopify_admin.get_page",
         "shopify_admin.list_pages"
       ],
@@ -5811,6 +5816,15 @@
   ],
   "actions": [
     {
+      "id": "discord_bot.get_message",
+      "object": "message",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 message"
+    },
+    {
       "id": "facebook_graph.get_page",
       "object": "page",
       "source": "connector",
@@ -5872,6 +5886,15 @@
       "risk_class": "low",
       "requires_approval": false,
       "what": "读 campaign"
+    },
+    {
+      "id": "meta_graph.get_page",
+      "object": "page",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 page"
     },
     {
       "id": "meta.list_campaigns",
@@ -6379,6 +6402,15 @@
       "what": "往主题里写文件。**只允许写未发布的副本**，写线上主题等于绕过发布门禁"
     },
     {
+      "id": "whatsapp_business.list_messages",
+      "object": "message",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 message"
+    },
+    {
       "id": "approve_member",
       "object": "community_member",
       "source": "role",
@@ -6507,7 +6539,7 @@
     },
     {
       "id": "reply_customer",
-      "object": "community_thread",
+      "object": "customer",
       "source": "role",
       "access": "write",
       "risk_class": "low",

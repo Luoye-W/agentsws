@@ -50,9 +50,15 @@ describe('47 J1 GET /v1/positions/:id/ontology', () => {
     const h = await harness()
     const res = await h.get(`/v1/positions/${h.assignment.id}/ontology`)
     const text = await res.text()
-    // 登记表里只有对象类型与动作 id，不该出现任何具体记录的 id
-    expect(text).not.toContain('ord_')
-    expect(text).not.toContain('ap_')
+    /*
+     * 登记表里只有对象类型与动作 id，不该出现任何具体记录的 id。
+     *
+     * 判的是**前缀本身**（`ord_1` / `ap_7`），所以要卡词边界：WP72 之后登记表里
+     * 有 `discord_bot.get_message` 这样的 Action 名，裸 `toContain('ord_')` 会被
+     * "disc·ord_·bot" 撞上——那是个动作名，不是一条订单。
+     */
+    expect(text).not.toMatch(/(^|[^a-z])ord_[a-z0-9]/)
+    expect(text).not.toMatch(/(^|[^a-z])ap_[a-z0-9]/)
   })
 
   it('不存在的分配是 404', async () => {

@@ -144,6 +144,18 @@ const ICONS: Record<string, IconChoice> = {
   facebook_graph: { kind: 'letter', letter: 'F' },
   tiktok_research: { kind: 'letter', letter: 'T' },
   x_api: { kind: 'letter', letter: 'X' },
+  // WP72（56 §1）：社媒运营那六张新卡。理由与上面红人那五条逐字相同——
+  // 仓库里那份 simple-icons 子集里没有它们，扒一个标志回来既不合 CC0 也不合
+  // 36 §8 的商标纪律，所以一律首字母单色徽标（跟着主题走，本来就不是谁家的标志）。
+  //
+  // `youtube_data` 与 `x_api` 不在这里再写一遍：那**就是**上面红人那两条
+  // （56 §1 一把 key 管两条职责）。Facebook 群组一行都没有——它没有卡。
+  meta_graph: { kind: 'glyph', glyph: 'meta' },
+  tiktok_content: { kind: 'letter', letter: 'T' },
+  reddit: { kind: 'letter', letter: 'R' },
+  discord_bot: { kind: 'letter', letter: 'D' },
+  telegram_bot: { kind: 'letter', letter: 'T' },
+  whatsapp_business: { kind: 'letter', letter: 'W' },
   // ── 模型卡（设置页）─────────────────────────────────────────────────
   deepseek: { kind: 'glyph', glyph: 'deepseek' },
   // Simple Icons 里没有 OpenAI（品牌方要求下架）；这张卡说的也是"任何 OpenAI 兼容

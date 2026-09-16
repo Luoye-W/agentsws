@@ -72,6 +72,24 @@ const SOURCE_AUTHZ = {
   // 挂 `creator` 是因为它是那一组里最根的一个：没有它，另外五个域一格数据都指不到人。
   kol: { domain: 'creator', range: 'assigned' },
   kol_channel: { domain: 'creator', range: 'assigned' },
+  /*
+   * WP72（56 §2）：社媒那九个源。
+   *
+   * 全部挂 `social_account` 域，理由与红人那两行逐字相同：九条渠道职责的
+   * scopes 里 `social_account` 是最根的一个——没有它，帖子、线程、成员一格都指不到号。
+   * 而客服的「社群管理」读得到 `community_thread` 却**没有** `social_account`，
+   * 于是它天然看不到这几块面板（19 §3 过滤下推：无权的数据源连「去连接」都不该出）
+   * ——那正是我们要的：内容与氛围是社媒运营的事，客户的问题才是它的事（56 边界行）。
+   */
+  social: { domain: 'social_account', range: 'assigned' },
+  social_meta: { domain: 'social_account', range: 'assigned' },
+  social_tiktok: { domain: 'social_account', range: 'assigned' },
+  social_x: { domain: 'social_account', range: 'assigned' },
+  social_youtube: { domain: 'social_account', range: 'assigned' },
+  social_reddit: { domain: 'social_account', range: 'assigned' },
+  social_discord: { domain: 'social_account', range: 'assigned' },
+  social_telegram: { domain: 'social_account', range: 'assigned' },
+  social_whatsapp: { domain: 'social_account', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

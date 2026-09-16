@@ -21,6 +21,7 @@ import type {
   PostRow,
   QueryContext,
   ReviewRow,
+  SocialDeckData,
 } from '@agentsws/deck'
 import { defaultTilesFor, PLANNED_SOURCE_NOTES } from '@agentsws/deck'
 import type { RoleStore } from '@agentsws/roles'
@@ -53,6 +54,14 @@ export interface WorkstationDataSource {
    * 红人库永远算连上（`ALWAYS_CONNECTED`），空的意思是"还没有人，先导入一张表"。
    */
   kol?(view?: { assignment_id?: string }): KolDeckData | undefined
+  /**
+   * WP72（56 §2）：社媒面板那几块要的行。
+   *
+   * 不给 = 这台机器上还没有社媒岗位，那几块是空表。与"还没连"分得开：
+   * 社媒库永远算连上（`ALWAYS_CONNECTED`），空的意思是"还没排内容，先排一条"；
+   * "还没连"说的是渠道那八个源（一条渠道一个，连哪条亮哪条）。
+   */
+  social?(view?: { assignment_id?: string }): SocialDeckData | undefined
   /** 数据源连接状态（36 §3：没接的显示「去连接」而不是空图） */
   sources(): DataSourceStatus[]
   /** ObjectRef → 人话 */
@@ -155,6 +164,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const reviews = options.data.reviews?.(view)
       const posts = options.data.posts?.(view)
       const kol = options.data.kol?.(view)
+      const social = options.data.social?.(view)
       const thresholds = options.roles.roles.get(position.role_id)?.thresholds
       return {
         now: options.clock.now(),
@@ -171,6 +181,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(reviews === undefined ? {} : { reviews }),
         ...(posts === undefined ? {} : { posts }),
         ...(kol === undefined ? {} : { kol }),
+        ...(social === undefined ? {} : { social }),
         // WP63（51 §2.1）：异常卡的阈值从**职责定义**来，不硬写在积木里——
         // 什么叫"销售骤降"，卖家具的和卖快消的不是一个数
         ...(thresholds === undefined ? {} : { thresholds }),

@@ -228,6 +228,33 @@ export type DataSourceId =
    * FB Graph / X API）。五个连接器都还是"待增加"，所以这一块永远走"还没连"那一支。
    */
   | 'kol_channel'
+  /**
+   * WP72（56 §2）：**我们自己的社媒库**（帖子、排期、线程、群成员）。
+   * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `approvals`）。
+   *
+   * 内容日历、待发布队列、待回评论、待审入群、群发队列、转客服计数六块全走它：
+   * 那些行是**我们排的、我们攒的**，平台没连也照样存在。
+   */
+  | 'social'
+  /**
+   * WP72（56 §1）：八条渠道**各一个**数据源，不是一个 `social_channel`。
+   *
+   * 与红人那边只有一个 `kol_channel` 的差别是真实的：红人五条职责共用一张找人清单，
+   * 连哪条渠道都能往里填；社媒这九条是**九个互不相干的号**，"近 30 天表现"这一块
+   * 在 Discord 连上、TikTok 没连的时候，要能分别说出"这一块有数"与"这一块去连 TikTok"。
+   * 合成一个源的话，连上一条别的渠道就会把没连的那几块也点亮（36 §3 最忌讳的那种空图）。
+   *
+   * Facebook 群组**没有**自己的源：它没有连接器（Groups API 已停），面板上它只有
+   * 我们自己库里那几块，平台那一侧的数要等 WP73 的浏览器执行器。
+   */
+  | 'social_meta'
+  | 'social_tiktok'
+  | 'social_x'
+  | 'social_youtube'
+  | 'social_reddit'
+  | 'social_discord'
+  | 'social_telegram'
+  | 'social_whatsapp'
 
 export interface DataSourceStatus {
   id: DataSourceId
@@ -419,6 +446,107 @@ export interface KolDeckData {
   }[]
 }
 
+/**
+ * WP72（56 §2）：社媒面板那几块要的行（内容组四块 + 社群组五块）。
+ *
+ * 形状是**投影**不是对象本身（同 `KolDeckData`）：内容日历要的是"哪个号、什么时候、
+ * 正文头一句"，不是一整条 `SocialPost`；活跃度要的是三个数，不是一份成员名册。
+ * 数字全是算好的（29 §1「数字不经模型手」），拿不到的一律没有这一格——**不补 0**：
+ * "这个平台不给这个数"与"这个数是 0"在面板上必须分得开。
+ *
+ * 每一行都带 `channel`：九条职责共用同一份投影，面板那一层按自己那条渠道筛
+ * （`socialChannelOfRole(ctx.role_id)`），不是算九遍。
+ */
+export interface SocialDeckData {
+  /** 内容日历：排好期的与已发的，按时间正序。 */
+  calendar: {
+    post_id: string
+    channel: string
+    account: string
+    kind: string
+    status: string
+    scheduled_at?: string
+    excerpt: string
+    /** 平台退回来的原话（`status: 'failed'` 才有）。原样显示，不翻译成"出错了"。 */
+    failure_reason?: string
+  }[]
+  /** 待发布队列：草稿与排期，最急的在最上面。 */
+  queue: {
+    post_id: string
+    channel: string
+    account: string
+    status: string
+    scheduled_at?: string
+    excerpt: string
+  }[]
+  /** 近 30 天表现：只算已发的。 */
+  performance: {
+    post_id: string
+    channel: string
+    account: string
+    published_at?: string
+    excerpt: string
+    impressions?: number
+    views?: number
+    likes?: number
+    comments?: number
+    new_followers?: number
+    /** 这份数字什么时候看到的（没有它的行等于没有数）。 */
+    observed_at?: string
+  }[]
+  /** 待回评论（评论区那一面）。 */
+  pending_comments: SocialThreadRow[]
+  /** 待处理帖子与私信（群里那一面）。 */
+  pending_threads: SocialThreadRow[]
+  /** 待审入群。 */
+  pending_members: {
+    member_id: string
+    channel: string
+    account: string
+    handle: string
+    display_name?: string
+    applied_at?: string
+    /** 申请答案**只报条数**：原文是外部文本，不往面板上端（21 §1）。 */
+    answers: number
+  }[]
+  /** 活跃度：一个号一行。三个数不合成"健康分"——合了没人答得上哪儿不对。 */
+  activity: {
+    account_id: string
+    channel: string
+    account: string
+    member_count?: number
+    followers?: number
+    active_7d: number
+    pending_members: number
+    open_threads: number
+    observed_at: string
+  }[]
+  /** 群发队列（受众数从账号的成员数来；抑制剔除数由群发那一跳算完写在卡上）。 */
+  broadcasts: {
+    post_id: string
+    channel: string
+    account: string
+    scheduled_at?: string
+    excerpt: string
+    audience?: number
+  }[]
+  /** 转客服：判成客户问题、已经出了卡的那些（56 边界行）。 */
+  handoffs: (SocialThreadRow & { status: string; approval_id?: string })[]
+}
+
+/** 一条线程在面板上的样子（待回评论 / 待处理帖子 / 转客服三块共用）。 */
+export interface SocialThreadRow {
+  thread_id: string
+  channel: string
+  account: string
+  surface: string
+  author: string
+  excerpt: string
+  created_at: string
+  /** 分类结论（六类之一，`social-core` 的 `triage` 判的）。没判过就没有。 */
+  triage?: string
+}
+
 export interface QueryContext {
   now: Iso8601
   /** 工作区时区偏移（分钟），日界线按它切 */
@@ -442,6 +570,14 @@ export interface QueryContext {
    * （红人库永远算连上），是真的一条都没有。界面上那两句话不一样。
    */
   kol?: KolDeckData
+  /**
+   * WP72（56 §2）：社媒库那几张投影（宿主从 `SocialStore` 里读出来递进来）。
+   *
+   * 不给 = 这台机器上还没有社媒岗位，那几块一律空——**不是**"还没连"
+   * （社媒库永远算连上）。界面上那两句话不一样：前者说"还没排内容，先排一条"，
+   * 后者说"去连接页把 Discord 连上"。
+   */
+  social?: SocialDeckData
   /**
    * WP63：这个岗位判「不正常」用的那几个数（职责 yml 的 `thresholds`）。
    *

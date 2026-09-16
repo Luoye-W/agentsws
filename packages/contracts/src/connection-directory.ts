@@ -539,7 +539,8 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     // 这条是**发内容**用的，不是读别人的号：与上面那条 `facebook_graph` 分得开
     side_effect: 'write_external',
     docs_url: 'https://developers.facebook.com/docs/pages-api',
-    status: 'planned',
+    status: 'available',
+    service: 'meta_graph',
     note: {
       zh: '一把 token 管 FB 主页 + IG 商业号。连上就能读，**能发要过 App Review**——那是两件事。',
       en: 'One token covers the FB Page and the IG business account. Reading works at once; publishing needs App Review.',
@@ -570,6 +571,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     side_effect: 'write_external',
     docs_url: 'https://developers.tiktok.com/doc/content-posting-api-get-started',
     status: 'planned',
+    service: 'tiktok_content',
     note: {
       zh: '申请制，且与红人那条用的 Research API **要分别申请**。没批下来之前排期、草稿、审批照常。',
       en: 'Application-gated, and applied for separately from the Research API. Scheduling and drafts work without it.',
@@ -611,6 +613,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     side_effect: 'write_external',
     docs_url: 'https://www.reddit.com/dev/api',
     status: 'planned',
+    service: 'reddit',
     note: {
       zh: '要先注册一个 script / web 应用。连不上最常见的原因是 User-Agent 写错了，不是密钥错了。',
       en: 'Register a script or web app first. A malformed User-Agent — not a bad key — is the usual cause of failures.',
@@ -644,7 +647,8 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     ],
     side_effect: 'write_external',
     docs_url: 'https://discord.com/developers/docs/intro',
-    status: 'planned',
+    status: 'available',
+    service: 'discord_bot',
     note: {
       zh: '建一个应用、加一个 Bot、把它邀请进你的服务器。禁言是设一个到期时刻，到点自动解除。',
       en: 'Create an app, add a bot, invite it to your server. Timeouts are an expiry instant, cleared automatically.',
@@ -678,7 +682,8 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     ],
     side_effect: 'write_external',
     docs_url: 'https://core.telegram.org/bots/api',
-    status: 'planned',
+    status: 'available',
+    service: 'telegram_bot',
     note: {
       zh: '把机器人拉进群并给管理员权限，否则删消息与禁言都做不了。业务错误在 200 里，看的是 `ok` 那一格。',
       en: 'Add the bot to the group as an admin, or moderation calls do nothing. Business errors come back inside a 200 with `ok: false`.',
@@ -709,6 +714,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     side_effect: 'write_external',
     docs_url: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
     status: 'planned',
+    service: 'whatsapp_business',
     note: {
       zh: '要过商业验证。主动发消息**只能用审批过的模板，且收件人必须先 opt-in**；对方来过消息之后有 24 小时窗口能自由回复。这三条是 Meta 的规矩，违反了封的是这个号。',
       en: 'Business verification required. Outbound messages need an approved template and prior opt-in; free-form replies only inside the 24-hour customer window. These are Meta rules — breaking them gets the number banned.',

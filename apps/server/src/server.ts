@@ -204,6 +204,7 @@ import {
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
+import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
@@ -1111,7 +1112,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const workData: WorkstationDataSource = {
       ...baseWorkData,
       kol: () => kolDeckData(kol, { now: clock.now() }),
-      // 红人库不是"连接"，所以它不在那两份写死的数据源表里（见 `withOwnSources`）
+      // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
+      // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
+      social: () => socialDeckData(social, { now: clock.now() }),
+      // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
       sources: () => withOwnSources(baseWorkData.sources()),
     }
     // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
@@ -1126,6 +1130,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP67（48 §5.2）：这个品牌的红人库（六类对象，落在这个品牌自己的目录下）。
     // 建在记录源之前：记录源要拿它读红人与合作（`kol: () => kol`）。
     const kol = createKolStore({ workspace_id: ws, ...(dir === undefined ? {} : { dbDir: dir }) })
+    /**
+     * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象，落在这个品牌自己的目录下）。
+     * 与红人库并排建，理由一样：记录源要拿它读账号与线程（`social: () => social`）。
+     */
+    const social = createSocialStore({
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
 
     /**
      * WP68（48 §5.4）：红人库的 `/v1` 面。建在记录源之前没有讲究，
@@ -1207,6 +1219,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
         // WP67：红人与合作的只读记录（联系方式一格都不给，见 `RecordKolPort`）
         kol: () => kol,
+        // WP72：社媒账号与社群线程的**只读**记录（见 `RecordSocialPort`）
+        social: () => social,
         ...(liveData === undefined ? {} : { liveData }),
       })
 
@@ -1492,6 +1506,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       records,
       kol,
       kolService,
+      social,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -1561,6 +1576,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 只在挂了合成世界时放（真环境的库该是用户自己导进去的）。
    */
   if (mount !== undefined) seedDemoKol(boot.kol, clock.now())
+
+  /**
+   * WP72（56 §2）：demo 里给社媒库放几行，理由与上面那一条逐字相同。
+   *
+   * 里面有一条**客户的问题**（Discord 里问"我的单什么时候到"）——56 那条边界
+   * 在演示里的落点：社媒运营不答它，它变成一张转客服卡。演示里看不见这一条，
+   * 这个岗位最要紧的那句话就说不出来。
+   */
+  if (mount !== undefined) seedDemoSocial(boot.social, clock.now())
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {
