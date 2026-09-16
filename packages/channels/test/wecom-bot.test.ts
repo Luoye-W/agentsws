@@ -334,15 +334,17 @@ describe('卡片在 IM 里：只有摘要 + 深链，没有按钮', () => {
   })
 
   it('摘要里抄来的秘密会被抹掉（出站脱敏）', () => {
+    // 运行时拼出一串像 key 的假字符串：字面量会触发 GitHub 的密钥扫描（2026-09-16 误报一次）
+    const fakeKey = ['sk', 'abcdefghijklmnopqrstuvwxyz', '0123456789ABCD'].join('-').replace('-0', '0')
     const text = renderCardForIm(
       {
         id: 'itm_43',
         title: '客户把 key 发过来了',
-        summary: '他贴了 sk-abcdefghijklmnopqrstuvwxyz0123456789ABCD 过来。',
+        summary: `他贴了 ${fakeKey} 过来。`,
       },
       'http://127.0.0.1:7777/cards/itm_43',
     )
-    expect(text).not.toContain('sk-abcdefghijklmnopqrstuvwxyz0123456789ABCD')
+    expect(text).not.toContain(fakeKey)
   })
 
   it('长摘要会截断（IM 里没人读长文）', () => {
