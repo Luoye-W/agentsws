@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| 状态 | **已定案（2026-09-16 Luoye 同意 Q1–Q6）**；派出 WP81（Agent 层）/ WP83（连接目录 + 岗位清单）/ WP84（quick_prompts）/ WP85（微信）；WP82 浏览器等 WP81 合并后派。编号说明：本文原为 54，与另一会话的「54 岗位是任务主入口」撞号后改为 55；WP 编号同理从 71–75 改为 81–85 |
+| 状态 | **已定案并全部落地（2026-09-16）**：Q2 WP81 官方 Agent 层、Q3 WP82 浏览器、Q4 WP83（目录 + 岗位清单）+ WP86（职责 preset 承载 + `credentials-openconnector`）、Q5 WP85 微信 / 企业微信 + Q5a 改口、P6 WP84 快捷提示，均已合并进 main；Q1 查证后不做开关（上传通路不存在，见 `packages/dsh-adapter/AGENT-LAYER.md` §7）。编号说明：本文原为 54，与另一会话的「54 岗位是任务主入口」撞号后改为 55；WP 编号从 71–75 改为 81–86。后置项见 docs/35 各条 |
 | 日期 | 2026-09-16 |
 | 起因 | Luoye 看完 docs/53 的 P1–P7 后定方向：**能用 dsh 官方方案的都用官方方案，不然以后兼容性会很差**；浏览器按官方来、作为个人端；会话日志上报"优先按官方"；连接要有统一目录但又怕太大、希望按岗位 / 职责能快速知道连哪些；个人微信可以做（微信有官方的 Agent bot 入口）；P5 没看懂 |
 | 事实来源 | dsh 0.1.6-alpha.1 源码走读（Agent 层嵌入、preset、credentials、browser-use、webhook；细节引用在 §2–§5）；微信 ClawBot / iLink 官方仓库 `Tencent/openclaw-weixin` 与使用条款；WP70 的浏览器 seam spike（`packages/dsh-adapter/test/browser-seam.test.ts`） |
