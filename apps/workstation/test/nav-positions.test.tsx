@@ -104,7 +104,7 @@ function renderShell(instances?: PositionInstanceData[]): void {
 }
 
 describe('左栏：岗位在外，职责不出现（WP70 / 54 §4）', () => {
-  it('四条分配两个岗位 → 左栏只出两行岗位，职责名一条都不出现', () => {
+  it('四条分配两个岗位 → 左栏只出两行岗位；职责默认折着，一条都不出现（WP71 仍默认折叠）', () => {
     renderShell(INSTANCES)
     const rows = screen.getAllByTestId('nav-position')
     expect(rows).toHaveLength(2)
@@ -112,7 +112,7 @@ describe('左栏：岗位在外，职责不出现（WP70 / 54 §4）', () => {
       expect.stringContaining('网站运营'),
       expect.stringContaining('客服'),
     ])
-    const nav = screen.getByRole('navigation')
+    const nav = screen.getByTestId('main-nav')
     for (const duty of ['店铺管理', '内容与博客', '邮件营销', '独立站售后客服']) {
       expect(within(nav).queryByText(duty)).toBeNull()
     }

@@ -24,6 +24,7 @@ import { CalendarPage } from '@/pages/calendar'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
 import { ChatSandboxPage } from '@/pages/chat-sandbox'
 import { ConnectionsPage } from '@/pages/connections'
+import { DutyPage } from '@/pages/duty'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 import { KnowledgePage } from '@/pages/knowledge'
@@ -160,6 +161,7 @@ function Workspace(): ReactNode {
       {...(positions.data.instances === undefined ? {} : { instances: positions.data.instances })}
       cards={home.data?.queue ?? []}
       tileLibrary={positions.data.tile_library}
+      {...(session.data === undefined ? {} : { me: session.data })}
       onAddTile={(position_id, tile_id) => {
         addTile.mutate({ position_id, tile_id })
       }}
@@ -169,6 +171,8 @@ function Workspace(): ReactNode {
         {/* 46 §1：首次设置向导（公司 → 你 → 你做什么 → 要配的东西） */}
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/positions/:id" element={<PositionPage />} />
+        {/* WP71（36 §10）职责页：只从左栏展开层或岗位页折叠层进，首页上没有它 */}
+        <Route path="/positions/:assignment/duties/:role_id" element={<DutyPage />} />
         {/* 37 工作模型：事项 / 待办 / 日历 / 目标 */}
         <Route path="/matters/:id" element={<MatterPage />} />
         <Route path="/todos" element={<TodosPage />} />
