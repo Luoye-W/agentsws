@@ -1456,6 +1456,47 @@ const zh: Table = {
   'datamap.freshness.cached': '缓存 {n} 分钟',
   'datamap.order': '调用顺序',
   'datamap.order.hint': '这段话与 Agent 看到的那一份是同一处生成的——改了登记表，两边一起变。',
+  // ── WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）────
+  'nav.im': '消息渠道',
+  'im.title': '消息渠道',
+  'im.intro':
+    '把代理接到聊天软件上。两条通道是两件事：微信那条是「你和你自己的代理的私聊」，企业微信那条才是团队用的。',
+  'im.state.live': '在收信',
+  'im.state.paused': '要重连',
+  'im.state.unbound': '没绑',
+  'im.state.connecting': '连接中',
+  'im.state.unconfigured': '没配',
+  'im.wechat.title': '微信（你自己的）',
+  'im.wechat.what':
+    '扫一次码，之后你可以直接在微信里问自己的代理：今天有什么要定的、这件事到哪了、帮我看一下日程。它答的内容和你在工作台上看到的是同一份。',
+  'im.wechat.not.colleagues': '同事加不了这个号——它只认你一个人，别人发来的消息一条都不处理。',
+  'im.wechat.not.group': '它不能进群，也不会替你回任何客户。这不是客服渠道。',
+  'im.wechat.not.approve': '要你定的事，微信里只给一段摘要和一条链接；按「通过」要回工作台。',
+  'im.wechat.terms':
+    '微信官方条款（6.1 / 6.4）规定：拿它去做客服、群发或对外应答，违规会牵连你的主微信账号。所以这条通道只做「你问自己的代理」这一件事。登录凭据只存在你这台机器上，不经 AI、不进日志。',
+  'im.wechat.scan': '扫码连上微信',
+  'im.wechat.rescan': '重新扫码',
+  'im.wechat.unbind': '解绑',
+  'im.wechat.unbind.why': '解绑会把这台机器上的微信登录凭据直接销毁，不是只停掉收信。',
+  'im.wechat.bound': '已连上（微信账号 {account}）。去微信里跟它说句话试试。',
+  'im.wechat.stale': '微信那边的登录失效了，要重新扫一次码才能继续收信。',
+  'im.wechat.qr.alt': '微信登录二维码',
+  'im.wechat.qr.hint': '用手机微信扫一下这个码。',
+  'im.wechat.verify': '手机上显示的数字',
+  'im.wechat.cancel': '先不连',
+  'im.wecom.title': '企业微信机器人（公司的）',
+  'im.wecom.what':
+    '团队那一条：在群里 @ 它，它按「提问人自己的身份」去问那个人的代理，所以每个人看到的答案都只到他该看到的那一层。',
+  'im.wecom.where':
+    'BotID 与 Secret 在企业微信管理后台的「智能机器人」里；Secret 只显示一次，记得当场复制。',
+  'im.wecom.bot_id': 'BotID',
+  'im.wecom.secret': 'Secret',
+  'im.wecom.safety': 'Secret 直接进本机加密库，不经 AI、不进日志、不会再显示出来。',
+  'im.wecom.save': '保存并连接',
+  'im.wecom.saved': '已配好（BotID {bot}）。',
+  'im.wecom.done': '存好了，正在连。',
+  'im.cards.note':
+    '两条通道都只投「摘要 + 去工作台处理」的链接，不放通过 / 驳回按钮——决策和凭据不经聊天软件。',
   // ── WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒 ─────────────────
   'nav.chat': '聊天沙盒',
   'chat.title': '聊天沙盒',
@@ -3020,6 +3061,51 @@ const en: Table = {
   'datamap.order.hint':
     'This paragraph and the one the agent sees are generated from the same place — change the registry and both change.',
 
+  // ── WP85 (54 §5): messaging channels ───────────────────────────
+  'nav.im': 'Messaging',
+  'im.title': 'Messaging channels',
+  'im.intro':
+    'Put your agent inside a chat app. The two are different things: WeChat is a private chat between you and your own agent; WeCom is the one your team uses.',
+  'im.state.live': 'Receiving',
+  'im.state.paused': 'Needs reconnect',
+  'im.state.unbound': 'Not linked',
+  'im.state.connecting': 'Connecting',
+  'im.state.unconfigured': 'Not set up',
+  'im.wechat.title': 'WeChat (yours)',
+  'im.wechat.what':
+    'Scan once, then ask your own agent straight from WeChat: what needs deciding today, where something stands, what your day looks like. Same answers as the workstation.',
+  'im.wechat.not.colleagues':
+    'Colleagues cannot add it — it only answers you, and drops anything anyone else sends.',
+  'im.wechat.not.group': 'It cannot join group chats and never replies to customers. Not support.',
+  'im.wechat.not.approve':
+    'Anything that needs your decision arrives as a summary and a link; approving happens in the workstation.',
+  'im.wechat.terms':
+    "WeChat's terms (6.1 / 6.4) say that using it for support, broadcasts or replying to outsiders can get your main WeChat account penalised. So this channel does one thing only: you asking your own agent. The login credential stays on this machine, never reaches the model and never hits a log.",
+  'im.wechat.scan': 'Link WeChat',
+  'im.wechat.rescan': 'Scan again',
+  'im.wechat.unbind': 'Unlink',
+  'im.wechat.unbind.why':
+    'Unlinking destroys the WeChat credential on this machine — not just stops polling.',
+  'im.wechat.bound': 'Linked (WeChat account {account}). Go say something to it.',
+  'im.wechat.stale': 'The WeChat login expired; scan again to keep receiving.',
+  'im.wechat.qr.alt': 'WeChat login QR code',
+  'im.wechat.qr.hint': 'Scan this with WeChat on your phone.',
+  'im.wechat.verify': 'Digits shown on your phone',
+  'im.wechat.cancel': 'Not now',
+  'im.wecom.title': 'WeCom bot (company)',
+  'im.wecom.what':
+    "The team one: @ it in a group and it asks the asker's own agent, so everyone only ever sees what they are allowed to see.",
+  'im.wecom.where':
+    'BotID and Secret come from the WeCom admin console under smart robots; the Secret is shown once.',
+  'im.wecom.bot_id': 'BotID',
+  'im.wecom.secret': 'Secret',
+  'im.wecom.safety':
+    'The Secret goes straight into the encrypted store on this machine: never to the model, never to a log, never shown again.',
+  'im.wecom.save': 'Save and connect',
+  'im.wecom.saved': 'Configured (BotID {bot}).',
+  'im.wecom.done': 'Saved, connecting.',
+  'im.cards.note':
+    'Both channels only carry a summary plus a link back to the workstation — no approve/reject buttons, because decisions and credentials do not travel through chat apps.',
   // ── WP57 (48 §4 L3 #11): live chat sandbox ───────────────────────
   'nav.chat': 'Chat sandbox',
   'chat.title': 'Chat sandbox',

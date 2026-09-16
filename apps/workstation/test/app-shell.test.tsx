@@ -48,8 +48,8 @@ describe('左栏（WP43 §1 图标）', () => {
     renderShell()
     const nav = screen.getByRole('navigation')
     const links = Array.from(nav.querySelectorAll('a'))
-    // 固定 11 条 + 岗位 2 条
-    expect(links).toHaveLength(13)
+    // 固定 12 条（WP85 加了「消息渠道」）+ 岗位 2 条
+    expect(links).toHaveLength(14)
     for (const link of links) {
       expect(link.querySelector('svg'), `「${link.textContent ?? ''}」少了图标`).not.toBeNull()
     }

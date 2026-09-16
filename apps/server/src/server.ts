@@ -139,6 +139,7 @@ import {
 import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
+import { createImChannels } from './im-channels.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { importKnowledgePack } from './knowledge-pack.js'
@@ -2787,6 +2788,61 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 公开访客那一面照 52 O5 走 bootstrap 品牌（一个值守子进程一个品牌工作区）
     allowedOrigin: (origin) => boot.chatWidget.allowedOrigin(origin),
   })
+
+  /*
+   * WP85（54 §5）：微信 ClawBot（个人）与企业微信智能机器人（团队）。
+   *
+   * 挂在这儿的理由与 `mountChatWidget` 一样：网关的路由表是从 `collectRoutes()`
+   * 那份声明生成的（OpenAPI 与 SDK 也从同一份生成），而这五条路由还没进契约
+   * （见 WP85 报告的「契约改动」）。所以它们自带鉴权，排在网关之后、
+   * `mountStatic` 那个 `*` 之前。
+   *
+   * 走 bootstrap 品牌：个人微信是**这台机器上这个人**的事，与品牌无关。
+   */
+  const imChannels = createImChannels({
+    clock,
+    workspace_id: workspace.id,
+    secrets,
+    identity,
+    rawStore: boot.channels.raw,
+    makePipeline: (input) => boot.channels.imPipeline(input),
+    // 游标与会话上下文跟渠道库走：落盘档重启之后不从头拉
+    clawbotState: boot.channels.clawbotState,
+    appendEvent,
+    newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
+    random,
+    askAgent: async (input) => {
+      // 本人问**自己的**代理：41 §1.3 的公开级别在 secretary 那一层照常生效，
+      // 这里不放大任何权限（viewer === person_id 时他本来就看得见自己那一份）。
+      const out = await secretary.secretary.ask({
+        viewer: input.viewer,
+        person_id: input.viewer,
+        question: input.question,
+        assignment_id: input.assignment_id,
+      })
+      return { answer: out.answer }
+    },
+    assignmentOf: (person_id) =>
+      roles.assignments
+        .listByPerson(person_id, { workspace_id: workspace.id })
+        .find((a) => a.revoked_at === undefined)?.id,
+    deepLinkBase: () =>
+      env.AGENTSWS_SERVER_URL ??
+      (boundPort === undefined ? 'http://127.0.0.1:7777' : `http://127.0.0.1:${boundPort}`),
+    onError: (e) => {
+      appendEvent({
+        schema_version: 1,
+        workspace_id: workspace.id,
+        type: 'connection.changed',
+        actor: { kind: 'system', id: 'im-channels' },
+        correlation: { trace_id: 'trc_im_error' },
+        // 只有原因，没有凭据、没有正文
+        payload: { im_event: 'im.error', detail: String(e) },
+      })
+    },
+  })
+  imChannels.mount(gateway.app)
+
   // 静态托管必须在网关路由之后挂（Hono 按注册顺序匹配，`*` 放最后）
   if (options.staticDir !== undefined) {
     mountStatic(gateway.app, {
@@ -2863,6 +2919,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })
       // 25 §4：进程真的起来了才开始巡检（测试里 `scheduleIntervalMs: 0` 关掉）
       schedule.start()
+      /*
+       * WP85：上次绑好的微信 / 企业微信自己接着跑（游标在库里，不从头拉）。
+       * 起不来不拦住整个进程——一条 IM 通道不是服务的前提，界面上会显示成「没连上」。
+       */
+      await imChannels.resume().catch(() => undefined)
       const address = started.address()
       const bound = typeof address === 'object' && address !== null ? address.port : wanted
       boundPort = bound
@@ -2893,6 +2954,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
         httpServer = undefined
       }
+      // WP85：先把两条 IM 长连接收掉（长轮询与 WebSocket 都会拦着进程退出）
+      await imChannels.close()
       learning.close()
       knowledge.close()
       data.close()

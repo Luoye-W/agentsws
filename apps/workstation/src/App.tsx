@@ -26,6 +26,8 @@ import { ChatSandboxPage } from '@/pages/chat-sandbox'
 import { ConnectionsPage } from '@/pages/connections'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
+// WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）
+import { ImChannelsPage } from '@/pages/im-channels'
 import { KnowledgePage } from '@/pages/knowledge'
 import { LoginPage } from '@/pages/login'
 import { MatterPage } from '@/pages/matter'
@@ -189,6 +191,8 @@ function Workspace(): ReactNode {
         <Route path="/org" element={<OrgPage />} />
         {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}
         <Route path="/connections" element={<ConnectionsPage />} />
+        {/* WP85（54 §5）：微信 ClawBot（个人）与企业微信机器人（团队） */}
+        <Route path="/im-channels" element={<ImChannelsPage />} />
         <Route
           path="/settings"
           element={

@@ -27,6 +27,7 @@ import {
   ARCHIVE_MARK_READ_DEFAULT,
   BlobBackedRawStore,
   ChannelInboundPipeline,
+  type ClawBotStateStore,
   type CredentialSource,
   classifySendFailure,
   createSqliteChannelStores,
@@ -38,6 +39,7 @@ import {
   ImapMailSource,
   type Mailer,
   type MailSource,
+  MemoryClawBotStateStore,
   MemoryDedupeStore,
   MemoryMailboxStateStore,
   MemoryOutboxStore,
@@ -58,6 +60,8 @@ import {
 } from '@agentsws/channels'
 import type {
   ApprovalItem,
+  ChannelAdapter,
+  ChannelName,
   Clock,
   EventEnvelope,
   Halt,
@@ -256,9 +260,36 @@ export interface UnresolvedDelivery {
   last_error?: string
 }
 
+/** WP85：IM 渠道（微信 / 企业微信）要的那条入站管线的最小面。 */
+export interface ImInboundPipeline {
+  ingest(
+    channel: ChannelName,
+    raw: unknown,
+    workspace_id: WorkspaceId,
+  ): Promise<{ event?: InboundEvent; deduped: boolean }>
+}
+
 export interface ChannelsAssembly {
   /** 受控原始材料区（保留期与随主体删除都从这里进）。 */
   raw: RawStore
+  /**
+   * WP85（54 §5）：给 IM 渠道用的入站管线。
+   *
+   * **共用**受控原始材料区、队列与去重表——与邮件那几条是同一份（18 §2.2）：
+   * 「同一条消息只该产出一条事件」这条纪律对渠道一视同仁，各开各的去重表就作废了。
+   * 路由不走 `defaultRoute`（那一份是按渠道落客服岗位的）：IM 的入站是
+   * 「本人问自己的代理」，一律落 `common.member`，由调用方给。
+   */
+  imPipeline(input: {
+    adapters: readonly ChannelAdapter[]
+    route(input: RouteInput): RouteResult | undefined
+    onEvent(event: InboundEvent): Promise<void>
+  }): ImInboundPipeline
+  /**
+   * WP85：微信 ClawBot 的长轮询游标与 `context_token` 缓存。
+   * 落盘档（有 `dbDir`）在渠道库里，内存档只在进程里——重启从头拉是内存档才有的事。
+   */
+  clawbotState: ClawBotStateStore
   /** 现在装着哪几个邮箱地址。 */
   addresses(): string[]
   /** 调度器消费者：拉一轮所有邮箱 + 推一轮重试队列。 */
@@ -355,6 +386,8 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
    */
   /** WP55 / 48 §4 L3 #5：每文件夹 UID 游标、毒消息隔离、扫描租约。 */
   const mailboxState = sqliteStores?.mailbox ?? new MemoryMailboxStateStore()
+  /** WP85：微信 ClawBot 的游标与会话上下文（落盘档与队列同一张库）。 */
+  const clawbotState: ClawBotStateStore = sqliteStores?.clawbot ?? new MemoryClawBotStateStore()
   const outbox = new Outbox({
     store: sqliteStores?.outbox ?? new MemoryOutboxStore(),
     workspace_id,
@@ -601,8 +634,23 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
 
   return {
     raw,
+    clawbotState,
     addresses: () => channels.map((c) => c.account.address),
     refresh,
+
+    // WP85（54 §5）：IM 那两条渠道的入站管线。共用 raw / queue / dedupe（见接口注释）。
+    imPipeline: (input) =>
+      new ChannelInboundPipeline({
+        clock,
+        adapters: input.adapters,
+        workspace_id,
+        events: { append: (e) => options.appendEvent(e as Omit<EventEnvelope, 'id' | 'at'>) },
+        rawStore: raw,
+        queue,
+        dedupe,
+        route: input.route,
+        onEvent: input.onEvent,
+      }),
 
     async poll(): Promise<MailPollReport> {
       refresh()

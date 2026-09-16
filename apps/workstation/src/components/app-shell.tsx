@@ -24,6 +24,7 @@ import {
   ListTodo,
   type LucideIcon,
   Megaphone,
+  MessageSquare,
   Moon,
   Plug,
   Settings,
@@ -189,6 +190,11 @@ export function AppShell({
           <NavLink to="/connections" className={navClass}>
             <NavIcon icon={Plug} />
             {t('nav.connections')}
+          </NavLink>
+          {/* WP85（54 §5）：微信 / 企业微信——把代理接到聊天软件上 */}
+          <NavLink to="/im-channels" className={navClass}>
+            <NavIcon icon={MessageSquare} />
+            {t('nav.im')}
           </NavLink>
           <NavLink to="/settings" className={navClass}>
             <NavIcon icon={Settings} />
