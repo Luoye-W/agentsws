@@ -508,6 +508,9 @@ const zh: Table = {
   'card.detail': '详情',
   'card.options.hint': '选一个，答案会沉淀成策略',
   'card.instruct.title': '指导',
+  // WP84：指导抽屉顶部的示例任务（选择题优先，36 §1）
+  'card.examples.title': '示例任务',
+  'card.examples.hint': '这条职责典型能接的活。点一条会填进下面的框，还要你改完再发。',
   'card.instruct.scope': '这条指导管到哪里？',
   'card.instruct.scope.single_reply': '只这一条',
   'card.instruct.scope.similar_cases': '类似情况都这样',
@@ -892,6 +895,10 @@ const zh: Table = {
   // WP69（54 §4）：首页只列岗位卡，职责不出现
   'home.positions': '我的岗位',
   'home.positions.cards': '{count} 张待审',
+  // WP84（54 §1 第 6 行）：岗位卡下面的快捷提示——点一条就是开一件事，不是聊天框
+  'home.quick.more': '还有 {count} 条',
+  'home.quick.less': '收起',
+  'home.quick.hint': '点一条 = 用这条职责在这个岗位下开一件事',
   'home.goals.empty': '还没有定目标。',
   'home.today': '今天',
   'home.today.timeline': '时间轴',
@@ -1903,6 +1910,10 @@ const en: Table = {
   'card.detail': 'Details',
   'card.options.hint': 'Pick one; the answer becomes policy',
   'card.instruct.title': 'Instruct',
+  // WP84: example tasks at the top of the instruct panel (pick one, do not type from scratch)
+  'card.examples.title': 'Example tasks',
+  'card.examples.hint':
+    'What this duty typically takes on. Picking one fills the box below; you still edit and send.',
   'card.instruct.scope': 'How far does this apply?',
   'card.instruct.scope.single_reply': 'This one only',
   'card.instruct.scope.similar_cases': 'Similar cases',
@@ -2290,6 +2301,10 @@ const en: Table = {
   // WP69 (54 §4): the home page lists positions only — duties stay one level down
   'home.positions': 'My positions',
   'home.positions.cards': '{count} waiting',
+  // WP84 (54 §1 line 6): quick starts under each position card — a click opens a matter
+  'home.quick.more': '{count} more',
+  'home.quick.less': 'Show fewer',
+  'home.quick.hint': 'One click opens a matter for this position, using that duty',
   'home.goals.empty': 'No goals yet.',
   'home.today': 'Today',
   'home.today.timeline': 'Timeline',

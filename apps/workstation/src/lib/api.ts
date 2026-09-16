@@ -518,6 +518,25 @@ export const getPositionRecords = (id: string): Promise<RecordsData> =>
 
 /* ── WP69（54）：岗位是任务主入口 ─────────────────────────────────────── */
 
+/**
+ * WP84：职责自带的一条快捷提示（首页岗位卡上那个按钮）。
+ * 点一下 = 用这条职责在这个岗位下开一件事，**不是**往聊天框里塞一句话（36 §3）。
+ */
+export interface RoleQuickPromptData {
+  id: string
+  label: { zh: string; en: string }
+  prompt: string
+  kind: 'start_task' | 'ask' | 'review'
+}
+
+/** WP84：职责自带的一条示例任务（指导抽屉顶部）。 */
+export interface RoleTaskExampleData {
+  id: string
+  title: { zh: string; en: string }
+  description: string
+  expected_output: string
+}
+
 /** 54 §1 岗位实体：谁在做、展开了哪几条职责、下面有多少事项与待审卡。 */
 export interface PositionInstanceData {
   position_id: string
@@ -532,6 +551,10 @@ export interface PositionInstanceData {
     assignment_ids: string[]
     /** 本人在这条职责上的那一条分配；没有 = 他不做这条活儿（界面上的入口只能用它） */
     my_assignment_id?: string
+    /** WP84：这条职责的快捷提示（首页岗位卡按职责折叠着显示）。 */
+    quick_prompts?: RoleQuickPromptData[]
+    /** WP84：这条职责的示例任务（指导抽屉顶部的选择题）。 */
+    task_examples?: RoleTaskExampleData[]
   }[]
   open_matters: number
   pending_cards: number
@@ -559,10 +582,15 @@ export interface OpenAtPositionData {
 export const getPosition = (id: string): Promise<PositionInstanceData> =>
   api<PositionInstanceData>(`/v1/positions/${encodeURIComponent(id)}`, { assignment: id })
 
-/** 54 §2 主入口：交给这个岗位一件事（一句话 → 事项）。 */
+/**
+ * 54 §2 主入口：交给这个岗位一件事（一句话 → 事项）。
+ *
+ * WP84：从快捷提示点进来时带 `role_id`——那句话本来就写在那条职责的 yml 里，
+ * 再让岗位内路由猜一遍只会猜错。入口还是岗位入口（事项照样 `entry: 'position'`）。
+ */
 export const openMatterAtPosition = (
   id: string,
-  input: { title: string; summary?: string },
+  input: { title: string; summary?: string; role_id?: string },
 ): Promise<OpenAtPositionData> =>
   api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
     method: 'POST',
