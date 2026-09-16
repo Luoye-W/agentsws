@@ -250,7 +250,7 @@ describe('WP73 写动作永远先出卡', () => {
       status: 'pending',
       application_answers: ['在用 Nordvolt 的 65W'],
     })
-    const view = await data<{ staged: boolean; change_id?: string }>(
+    const view = await data<{ staged: boolean; change_id?: string; approval_item_id?: string }>(
       await post('/v1/social/members/cm_t1/approve', { decision: 'approve' }),
     )
     expect(view.staged).toBe(true)
@@ -261,12 +261,14 @@ describe('WP73 写动作永远先出卡', () => {
     expect(changes).toHaveLength(1)
     // 库里那条成员**还是 pending**：改状态是执行器的事
     expect(brand.social.members()[0]?.status).toBe('pending')
-    const items = await server.txn.approvals.queue({
-      workspace_id: server.bootstrap.workspace.id,
-      person_id: server.bootstrap.person.id,
-      lane: 'mine',
-    })
-    const card = items.find((i) => String(i.title).includes('入群'))
+    /*
+     * 按 id 取那张卡，不去队列里翻：入群审核是 **L2**（`community_membership`
+     * 在 `KIND_RISK` 里是 low，31 §3.4 只让 low 超过 L1），所以它在额度内
+     * 自己走完，"待我点"的队列里本来就不该还有它。
+     */
+    const card = await server.txn.approvals.get(view.approval_item_id as string)
+    expect(String(card?.title)).toContain('入群')
+    // 申请答案原样在卡面上——人就是靠那几句判"这是不是广告号"
     expect(String(card?.summary)).toContain('在用 Nordvolt 的 65W')
   })
 

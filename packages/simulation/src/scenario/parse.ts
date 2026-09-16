@@ -186,6 +186,10 @@ const EVENT_KEYS = [
   'social.post',
   'social.reply',
   'community.broadcast',
+  // WP73 社群组那三条写动作（56 §6）
+  'community.approve_member',
+  'community.moderate',
+  'community.rules_edit',
   // WP67 红人营销（48 §5.1）
   'kol.outreach',
   'kol.collaboration',
@@ -272,6 +276,11 @@ const EXPECTED_KEYS = [
   'social_reply',
   'community_handoff',
   'community_broadcast',
+  // WP73（56 §6）
+  'community_membership',
+  'community_moderation',
+  'community_rules',
+  'social_calendar',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -841,6 +850,80 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           body: str(source, `${path}.${key}.body`, body.body),
           members: strList(source, `${path}.${key}.members`, body.members),
           ...(bcLevel === undefined ? {} : { level: bcLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    // WP73（56 §6）：社群组那三条写动作
+    case 'community.approve_member': {
+      known(source, `${path}.${key}`, body, ['who', 'channel', 'member', 'answers', 'level'])
+      const lvl = optStr(source, `${path}.${key}.level`, body.level)
+      if (lvl !== undefined && !['L1', 'L2', 'L3'].includes(lvl)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'community.approve_member',
+        approve_member: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          member: str(source, `${path}.${key}.member`, body.member),
+          ...(body.answers === undefined
+            ? {}
+            : { answers: strList(source, `${path}.${key}.answers`, body.answers) }),
+          ...(lvl === undefined ? {} : { level: lvl as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'community.moderate': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'channel',
+        'target',
+        'action',
+        'reason',
+        'level',
+      ])
+      const action = str(source, `${path}.${key}.action`, body.action)
+      if (!['warn', 'delete_post', 'mute', 'ban', 'permanent_ban'].includes(action)) {
+        fail(
+          source,
+          `${path}.${key}.action`,
+          'action 只能是 warn / delete_post / mute / ban / permanent_ban',
+        )
+      }
+      const modLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (modLevel !== undefined && !['L1', 'L2', 'L3'].includes(modLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'community.moderate',
+        moderate: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          target: str(source, `${path}.${key}.target`, body.target),
+          action: action as 'warn' | 'delete_post' | 'mute' | 'ban' | 'permanent_ban',
+          ...(body.reason === undefined
+            ? {}
+            : { reason: str(source, `${path}.${key}.reason`, body.reason) }),
+          ...(modLevel === undefined ? {} : { level: modLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'community.rules_edit': {
+      known(source, `${path}.${key}`, body, ['who', 'channel', 'rules', 'level'])
+      const rulesLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (rulesLevel !== undefined && !['L1', 'L2', 'L3'].includes(rulesLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'community.rules_edit',
+        rules_edit: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          channel: str(source, `${path}.${key}.channel`, body.channel),
+          rules: str(source, `${path}.${key}.rules`, body.rules),
+          ...(rulesLevel === undefined ? {} : { level: rulesLevel as 'L1' | 'L2' | 'L3' }),
         },
       }
     }
@@ -1570,6 +1653,26 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       auto_approved: 'bool',
       audience: 'num',
       suppressed_removed: 'num',
+      stated_on_card: 'bool',
+    },
+    // WP73（56 §6）
+    community_membership: {
+      requested_level: 'str',
+      auto_approved: 'bool',
+      answers_on_card: 'bool',
+    },
+    community_moderation: {
+      action: 'str',
+      requested_level: 'str',
+      auto_approved: 'bool',
+    },
+    community_rules: {
+      requested_level: 'str',
+      auto_approved: 'bool',
+      stated_on_card: 'bool',
+    },
+    social_calendar: {
+      conflict_kinds: 'strs',
       stated_on_card: 'bool',
     },
   }

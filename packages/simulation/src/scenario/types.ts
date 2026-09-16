@@ -444,6 +444,42 @@ export interface ScenarioCommunityBroadcast {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/**
+ * WP73 / 56 §6：批一条入群申请（`community_membership`，L2）。
+ *
+ * `answers` 是他在入群问题里填的那几句——**外部文本**，原样进卡（人靠它判
+ * "这是不是广告号"），不进事件日志。
+ */
+export interface ScenarioCommunityApproveMember {
+  who: string
+  channel: string
+  member: string
+  answers?: string[]
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * WP73 / 56 §6：一个管理动作（`community_moderation`）。
+ *
+ * 删帖 / 禁言 L2，**封禁 L1**——分档由 guardrail 按 `action` 判，不由场景说了算。
+ */
+export interface ScenarioCommunityModerate {
+  who: string
+  channel: string
+  target: string
+  action: 'warn' | 'delete_post' | 'mute' | 'ban' | 'permanent_ban'
+  reason?: string
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/** WP73 / 56 §6：改群规（`community_rules`，**永远 L1**）。 */
+export interface ScenarioCommunityRulesEdit {
+  who: string
+  channel: string
+  rules: string
+  level?: 'L1' | 'L2' | 'L3'
+}
+
 /** WP67 / 48 §5.1：建一条合作（`kol_collaboration`，**永远 L1**）。 */
 export interface ScenarioKolCollaboration {
   who: string
@@ -588,6 +624,13 @@ export type ScenarioEvent =
   | { at: string; type: 'social.reply'; reply: ScenarioSocialReply }
   /** WP72：提一条群发（56 §2，群发永远 L1 + 抑制名单必查）。 */
   | { at: string; type: 'community.broadcast'; broadcast: ScenarioCommunityBroadcast }
+  | {
+      at: string
+      type: 'community.approve_member'
+      approve_member: ScenarioCommunityApproveMember
+    }
+  | { at: string; type: 'community.moderate'; moderate: ScenarioCommunityModerate }
+  | { at: string; type: 'community.rules_edit'; rules_edit: ScenarioCommunityRulesEdit }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
   | { at: string; type: 'kol.outreach'; outreach: ScenarioKolOutreach }
   /** WP67：建一条合作（48 §5.1，永远 L1）。 */
@@ -861,6 +904,45 @@ export interface ScenarioExpected {
     routed_to?: string
     answered_by_social?: boolean
     held?: boolean
+  }
+  /**
+   * WP73 / 56 §6：那一条入群审核提案。
+   *
+   * `answers_on_card` 为真 = 他填的那几句在卡面上。没有它，人只看得到一个
+   * 陌生 id，那就不是"审核"，是随手点两下。
+   */
+  community_membership?: {
+    requested_level?: string
+    auto_approved?: boolean
+    answers_on_card?: boolean
+  }
+  /**
+   * WP73 / 56 §6：那一个管理动作。
+   *
+   * `auto_approved` 在删帖 / 禁言那一档可以为真（L2 在额度内自己走），
+   * 封禁那一档**永远**是假——guardrail 按 `after.action` 把它升到 L1。
+   */
+  community_moderation?: {
+    action?: string
+    requested_level?: string
+    auto_approved?: boolean
+  }
+  /** WP73 / 56 §6：那一次群规改动（**永远 L1**，新群规正文要在卡面上）。 */
+  community_rules?: {
+    requested_level?: string
+    auto_approved?: boolean
+    stated_on_card?: boolean
+  }
+  /**
+   * WP73 / 56 §6：那一条排期**撞车**了没有。
+   *
+   * `conflict_kinds` 是判出来的种类（`too_close` / `over_daily_cap` / …）；
+   * `stated_on_card` 为真 = 撞车那句话真的在卡面上——只在返回值里说"撞了"
+   * 而卡面上不写，等于没说。
+   */
+  social_calendar?: {
+    conflict_kinds?: string[]
+    stated_on_card?: boolean
   }
   /**
    * WP72 / 56 §2：那一条群发。

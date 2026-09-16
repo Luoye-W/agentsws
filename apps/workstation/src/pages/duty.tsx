@@ -21,6 +21,9 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
+// WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
+import { SocialBroadcast } from '@/components/social/social-broadcast'
+import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -187,6 +190,15 @@ function RecordsTab({ assignment }: { assignment: string }): React.ReactNode {
   )
 }
 
+/** 社群组五条（56 §0）。真源是契约的 `SOCIAL_CHANNELS[].group`，这里照抄一份。 */
+const COMMUNITY_CHANNELS: string[] = [
+  'facebook_group',
+  'reddit',
+  'discord',
+  'telegram_group',
+  'whatsapp',
+]
+
 export function DutyPage(): React.ReactNode {
   const { t, lang, selectPosition, position } = useApp()
   const params = useParams<{ assignment: string; role_id: string }>()
@@ -219,6 +231,8 @@ export function DutyPage(): React.ReactNode {
   const here = instance?.roles.find((r) => r.role_id === role_id)
   const positionName =
     instance === undefined ? '' : lang === 'en' ? instance.name.en : instance.name.zh
+  /** 这条职责是不是九条社媒渠道之一（`social.facebook-group` → `facebook_group`）。 */
+  const socialChannel = socialChannelOfRole(role_id)
 
   /** 头部四个按钮 = 把第三栏打开到那一格。第三栏自己会认出这一页是职责层。 */
   const rail = useRailState()
@@ -281,6 +295,21 @@ export function DutyPage(): React.ReactNode {
           <TabsTrigger value="records">{t('duty.tab.records')}</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
+          {/*
+            WP73（56 §6）：社媒那九条渠道职责的职责页上多两块**能动手的**——
+            内容日历（周视图，拖得动）与群发向导。排在概览之前，与红人那一块
+            同一个道理：这条职责的产出不在"它是什么"里，在"这周发什么、发给谁"上。
+            群发向导只给社群组五条（56 §0 的两组分法）——内容组四条上没有
+            "群里的人"这回事，画一个点不动的向导比不画更糟。
+          */}
+          {socialChannel === undefined ? null : (
+            <div className="mb-4 flex flex-col gap-4">
+              <SocialCalendar assignment={assignment} channel={socialChannel} />
+              {COMMUNITY_CHANNELS.includes(socialChannel) ? (
+                <SocialBroadcast assignment={assignment} channel={socialChannel} />
+              ) : null}
+            </div>
+          )}
           <OverviewTab role_id={role_id} />
         </TabsContent>
         <TabsContent value="records">

@@ -16,9 +16,6 @@ import { PositionConnections } from '@/components/connections/position-connectio
 import { DeckSection } from '@/components/deck'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { ScheduleList } from '@/components/schedule-list'
-// WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
-import { SocialBroadcast } from '@/components/social/social-broadcast'
-import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -31,15 +28,6 @@ import { formatDate } from '@/lib/format'
 import { assignmentForPosition } from '@/lib/positions'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
-
-/** 社群组五条（56 §0）。真源是契约的 `SOCIAL_CHANNELS[].group`，这里照抄一份。 */
-const COMMUNITY_CHANNELS: string[] = [
-  'facebook_group',
-  'reddit',
-  'discord',
-  'telegram_group',
-  'whatsapp',
-]
 
 /**
  * 44 / 09-11 真店验收的后置项：**没挂范围的岗位要明说**。
@@ -120,11 +108,11 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
    */
   const kolChannel = channelOfRole(here?.role_id)
   /*
-   * WP73（56 §6）：社媒运营那九条渠道职责的面板上多两块**能动手的**——
-   * 内容日历（周视图，拖得动）与群发向导。与红人那一块同一个道理：
-   * 这条职责的产出不在数字里，在"这周发什么、发给谁"这两件事上。
+   * WP73（56 §6）：社媒那两块（内容日历周视图 + 群发向导）**不在这一页**，
+   * 在职责页（`pages/duty.tsx`）。理由是这个岗位下面有九条渠道职责——
+   * 日历是"这条渠道这周发什么"，摆在岗位这一层就得先问"哪条渠道"，
+   * 而那正是职责页已经回答过的问题（54：岗位是入口、职责各有各的上下文）。
    */
-  const socialChannel = socialChannelOfRole(here?.role_id)
   if (view.isPending) return <Skeleton className="h-64 w-full" />
   if (here !== undefined && here.ranges.length === 0)
     return <NoRangeNotice id={id} isOwner={isOwner} />
@@ -133,16 +121,6 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
       {/* WP57：在线客服的入口排在最前——它的产出在对话里，不在数字块里 */}
       {isLiveChat ? <ChatSandboxEntry /> : null}
       {kolChannel === undefined ? null : <KolPanel assignment={id} channel={kolChannel} />}
-      {socialChannel === undefined ? null : (
-        <SocialCalendar assignment={id} channel={socialChannel} />
-      )}
-      {/*
-       * 群发向导只给**社群组那五条**（56 §0 的两组分法）：内容组四条上没有
-       * "群里的人"这回事，画一个点不动的向导比不画更糟。
-       */}
-      {socialChannel !== undefined && COMMUNITY_CHANNELS.includes(socialChannel) ? (
-        <SocialBroadcast assignment={id} channel={socialChannel} />
-      ) : null}
       <div className="flex items-center gap-1">
         {RANGES.map((r) => (
           <Button

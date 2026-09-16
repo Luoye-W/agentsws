@@ -1117,6 +1117,60 @@ async function execute(
         await tick()
         return
       }
+      // ── WP73 社群组那三条写动作（56 §6）──────────────────────────
+      case 'community.approve_member': {
+        const e = event.approve_member
+        const out = await world.social.approveMember({
+          who: e.who,
+          channel: e.channel,
+          member: e.member,
+          ...(e.answers === undefined ? {} : { answers: e.answers }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.social_membership_requested', {
+          channel: e.channel,
+          staged: out.staged,
+          // 申请答案的**原文不进事件日志**（它在卡上给人看，21 §1）
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'community.moderate': {
+        const e = event.moderate
+        const out = await world.social.moderate({
+          who: e.who,
+          channel: e.channel,
+          target: e.target,
+          action: e.action,
+          ...(e.reason === undefined ? {} : { reason: e.reason }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.social_moderation_requested', {
+          channel: e.channel,
+          action: e.action,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'community.rules_edit': {
+        const e = event.rules_edit
+        const out = await world.social.rulesEdit({
+          who: e.who,
+          channel: e.channel,
+          rules: e.rules,
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.social_rules_requested', {
+          channel: e.channel,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
       // ── WP67 红人营销（48 §5.1）────────────────────────────────────
       case 'kol.outreach': {
         const out = await world.kol.outreach({

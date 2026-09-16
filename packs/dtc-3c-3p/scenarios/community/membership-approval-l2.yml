@@ -1,0 +1,57 @@
+# WP73（56 §6）：**入群审核是 L2，而且他填的答案要在卡面上。**
+#
+# 这条题钉的是两件事，第二件比第一件要紧：
+#
+# 1. **L2 不是 L1**。批错一个人，踢出去就是了——把入群审核也做成"每一个都要
+#    老板点头"，结果是四十个申请压三天，然后有人一口气全批了。
+# 2. **他填的那几句在卡面上**。人就是靠那几句判"这是不是广告号"；卡上只有一个
+#    陌生 id 的话，点头这件事就没有内容——那不是审核，是随手点两下。
+#
+# 一次一个人（职责 yml 的 `max_members_per_change: 1`）：批错三百个的时候，
+# 这个群就不是原来那个群了。
+#
+# 申请答案是**外部文本**：它原样进卡（人本来就要读它），但**不进事件日志**——
+# 日志里只报"在不在卡上"这一格（21 §1）。
+id: community/membership-approval-l2
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 一个合成人都不装：L2 那一档不需要有人点，卡该自己走完
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    community.approve_member:
+      who: p_li
+      channel: discord
+      member: deskhero
+      answers:
+        - 在用 Nordvolt 的 65W
+        - 想看别人的桌面
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  auto_approved: 1
+  community_membership:
+    # 职责 yml 写的 initial 就是 L2，而且这一档真的生效了——
+    # `community_membership` 在 `KIND_RISK` 里是 low，31 §3.4 只让 low 超过 L1
+    requested_level: L2
+    # L2 = 额度内自己走（一次一个人 + 采样复核）。批错一个踢出去就是了，
+    # 所以它不必像群发那样是硬顶——但卡照样留着，采样抽到了人会回头看
+    auto_approved: true
+    # 他填的那几句在卡面上——没有它，点头这件事就没有内容
+    answers_on_card: true
+  staged_change_kinds: [community_membership]
+  event_types:
+    - simulation.social_membership_staged
+  metrics:
+    staged_changes: 1
+    # 不断言 applied：合成世界里没有"把人放进群"那一跳的执行器
+    # （那是服务进程那一侧的事）。这条题要钉的是**等级与卡面**，不是落地。
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  卡面上"这个人是谁、他填了什么"，人读完判得出这是不是广告号吗？

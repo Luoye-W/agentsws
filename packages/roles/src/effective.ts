@@ -16,8 +16,30 @@ const LEVEL_ORDER: readonly Level[] = ['L1', 'L2', 'L3']
 const levelIndex = (l: Level) => LEVEL_ORDER.indexOf(l)
 const minLevel = (a: Level, b: Level): Level => (levelIndex(a) <= levelIndex(b) ? a : b)
 
+/**
+ * 动作 id 与 ChangeKind **名字对不上**的那几个（WP73）。
+ *
+ * 去前缀那一招对 `stage_post` / `stage_broadcast` 这种名字管用，对
+ * `approve_member`（→ `community_membership`）与 `moderate`
+ * （→ `community_moderation`）不管用：它们是动词，kind 是名词。
+ *
+ * 对不上的后果不是"报错"，是**悄悄降级**：`riskClassOf` 兜底成 `high`，
+ * 于是职责 yml 里写着 `initial: L2` 的入群审核实际上永远落在 L1
+ * （31 §3.4 只让 low 风险超过 L1）。56 §2 那一行"入群审核 L2"因此成了一句
+ * 写在文件里、机器不认的话。这张表把它接上。
+ *
+ * **只加不删**：加一条等于承认"这个动作改的是那一类东西"，删一条会把一个
+ * 动作悄悄推回 high。
+ */
+const KIND_ALIAS: Readonly<Record<string, ChangeKind>> = {
+  approve_member: 'community_membership',
+  moderate: 'community_moderation',
+}
+
 /** 动作 id → 15 §2 的 ChangeKind：去掉 `stage_` / `draft_` / `propose_` 前缀后对表。 */
 export function changeKindOf(actionId: string): ChangeKind | undefined {
+  const alias = KIND_ALIAS[actionId]
+  if (alias !== undefined) return alias
   const base = actionId.replace(/^(stage|draft|propose|apply)_/, '')
   return base in KIND_RISK ? (base as ChangeKind) : undefined
 }

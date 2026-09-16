@@ -1,0 +1,52 @@
+# WP73（56 §6）：**改群规永远 L1，而且新群规的正文要在卡面上。**
+#
+# 群规是这个群的法律。放宽一条——比如把"外链只能发在 #资源 频道"改成
+# "外链随便发"——等于把垃圾闸门打开，而且改完之后没有任何一条动作会再报警：
+# 从那一刻起，刷广告的帖子**不违反群规**了。
+#
+# 所以它与群发一样是硬顶：报 L3 也按回人审。而且要人读完那一段才点得下去，
+# 所以新群规的正文必须在卡面上（`stated_on_card`）——只写"改了群规"四个字的
+# 卡，人点下去的时候不知道自己批了什么。
+#
+# 15 §2 的 `RECORD_READ_KINDS`：改群规之前先把那段正文读全（职责 yml 上那格
+# `requires_record_read: true`）。拿一份摘要覆盖这个群的法律，与拿摘要改商品
+# 文案是同一件事。
+id: community/rules-edit-needs-approval
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    community.rules_edit:
+      who: p_li
+      channel: discord
+      rules: >-
+        1. 外链只允许发在 #资源 频道；2. 不人身攻击；3. 转卖与代购一律移出。
+      level: L3
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  community_rules:
+    requested_level: L3
+    # 硬顶：报了 L3 也不许自动放行
+    auto_approved: false
+    # 新群规的正文在卡面上——人要读完那一段才点得下去
+    stated_on_card: true
+  staged_change_kinds: [community_rules]
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.social_rules_staged
+  auto_approved: 0
+  metrics:
+    staged_changes: 1
+    # 没人点头 = 群规一个字都没改
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  卡面上"新群规是什么、跟原来差在哪"，人读完答得上来吗？

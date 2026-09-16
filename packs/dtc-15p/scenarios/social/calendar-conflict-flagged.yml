@@ -1,0 +1,60 @@
+# WP73（56 §6）：**同渠道同一小时两条 → 撞车，而且那句话要在卡面上。**
+#
+# 这条题钉的不是"我们能算出撞车"（那是 `social-core` 的单元测试的事），
+# 而是**撞出来的那句话真的走到了人要按的那张卡上**。只在返回值里说"撞了"
+# 而卡面上不写，等于没说：人按下那一下之前看不见的东西，在 36 §2 里就不算说过。
+#
+# 为什么同一小时两条是问题：平台会把后一条压下去（触达直接腰斩），而关注的人
+# 看到的是连续两条——那正是"取关"最集中的一下。所以它是 `conflict` 不是 `notice`。
+#
+# 15 人公司里社媒是**专职**的（冯萱）：一个人一天排四五条是常态，
+# 撞车这件事在这里才真的会天天发生。
+id: social/calendar-conflict-flagged
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+# 一个合成人都不装 = 没有人去点那两张卡。发布永远人审。
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-15T09:00:00+08:00' }
+events:
+  # ① 第一条：排在周四下午两点
+  - at: '+0m'
+    social.post:
+      who: p_feng
+      channel: meta
+      body: 周四晚八点开一场桌面收纳直播，来的人送线材收纳夹。
+      scheduled_at: '2026-09-17T06:00:00.000Z'
+  # ② 第二条：同一个号、半小时之后 —— 撞了
+  - at: '+10m'
+    social.post:
+      who: p_feng
+      channel: meta
+      body: 新到的桌面支架，三个角度都能调。
+      scheduled_at: '2026-09-17T06:30:00.000Z'
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  social_calendar:
+    # 同一个号 90 分钟内两条：挨得太近
+    conflict_kinds: [too_close]
+    # 撞车那句话真的在卡面上
+    stated_on_card: true
+  social_post:
+    # 发布永远人审（这一条与撞车无关，两件事都要成立）
+    auto_approved: false
+    scheduled_at: '2026-09-17T06:30:00.000Z'
+    stated_on_card: true
+  staged_change_kinds: [social_post]
+  event_types:
+    - simulation.social_post_staged
+  auto_approved: 0
+  metrics:
+    staged_changes: 2
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  第二张卡上"这条跟哪一条撞了、撞在什么时候"，人读完答得上来吗？
