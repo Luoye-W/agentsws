@@ -7,6 +7,7 @@
  * - 写外部工具（`create_refund` 之类）→ 注册但由 `tools/pre-execute` 在 executor 策略下一律拒
  */
 import type { ObjectRef, RunRequest } from '@agentsws/contracts'
+import { EXTERNAL_FENCE, redactOutbound } from '@agentsws/core'
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
 import { isMcpReadTool } from '@agentsws/stand-ins'
@@ -14,7 +15,19 @@ import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { DshAdapterError } from './errors.js'
+import type { DraftArgs, StageArgs } from './gate.js'
 import type { ToolSideEffect } from './types.js'
+
+/**
+ * 工具结果的**模型可见**投影（`ToolOutputDefinition.render`）。
+ *
+ * WP81：回合由 dsh 驱动之后，工具结果是经这条 render 回到模型的对话里的——
+ * 所以围栏必须在这里（31 §3.3：外部文本进模型之前先围起来、先脱敏），
+ * 与 direct-llm 往 `messages` 里塞工具结果时那一行逐字一致。
+ */
+function renderToolResult(value: unknown): { type: 'text'; text: string }[] {
+  return [{ type: 'text', text: EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', value)) }]
+}
 
 /** 我们自己的 staging 工具：不写外部，只提审批项。 */
 export const STAGE_TOOL = 'stage_refund'
@@ -54,8 +67,17 @@ const STAGE_PARAMS = {
   amount: { type: 'number', description: 'Refund amount in the order currency.', required: true },
   currency: { type: 'string', description: 'ISO currency code.' },
   reason: { type: 'string', description: 'Why this refund is proposed.' },
+  notes: {
+    type: 'array',
+    description: 'Why this refund is proposed (one line per reason).',
+    items: { type: 'string' },
+  },
 } as const
 
+/**
+ * 收件人与引用**不进模型面**：13 §4「凭据与地址不经模型」，引用由宿主按知识层的命中补
+ * （`runtime.ts` 的 `buildDraftPayload`）。模型多给的键 dsh 会忽略（对象根是开放的）。
+ */
 const DRAFT_PARAMS = {
   subject: { type: 'string', description: 'Reply subject.', required: true },
   body: { type: 'string', description: 'Reply body.', required: true },
@@ -80,11 +102,8 @@ export interface ReadToolHooks {
 
 export interface StageToolHooks {
   /** 走 dsh 的审批 seam；返回 undefined = 没批下来（fail-closed）。 */
-  stage(
-    callId: string,
-    args: { amount: number; currency?: string; reason?: string },
-  ): Promise<{ change_id: string } | undefined>
-  draft(callId: string, args: { subject: string; body: string }): Promise<CreateDraftResult>
+  stage(callId: string, args: StageArgs): Promise<{ change_id: string } | undefined>
+  draft(callId: string, args: Omit<DraftArgs, 'child_change_ids'>): Promise<CreateDraftResult>
 }
 
 function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
@@ -94,7 +113,7 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
     parameters: READ_PARAMS,
     output: {
       schema: { type: 'json' },
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+      render: (_args, value) => renderToolResult(value),
     },
     async execute(args, exec) {
       const input = Object.fromEntries(
@@ -124,13 +143,17 @@ function stageTool(hooks: StageToolHooks): ToolDefinition {
     parameters: STAGE_PARAMS,
     output: {
       schema: { type: 'json' },
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+      render: (_args, value) => renderToolResult(value),
     },
     async execute(args, exec) {
       const res = await hooks.stage(String(exec.callId), {
         amount: args.amount,
+        ...(args.order_id === undefined ? {} : { order_id: args.order_id }),
         ...(args.currency === undefined ? {} : { currency: args.currency }),
         ...(args.reason === undefined ? {} : { reason: args.reason }),
+        ...(Array.isArray(args.notes)
+          ? { notes: args.notes.filter((n): n is string => typeof n === 'string') }
+          : {}),
       })
       if (res === undefined) {
         throw new DshAdapterError('not_approved', 'stage_refund 未获批准（fail-closed）')
@@ -147,10 +170,13 @@ function draftTool(hooks: StageToolHooks): ToolDefinition {
     parameters: DRAFT_PARAMS,
     output: {
       schema: { type: 'json' },
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+      render: (_args, value) => renderToolResult(value),
     },
     async execute(args, exec) {
-      const res = await hooks.draft(String(exec.callId), { subject: args.subject, body: args.body })
+      const res = await hooks.draft(String(exec.callId), {
+        subject: args.subject,
+        body: args.body,
+      })
       if (res === undefined) {
         throw new DshAdapterError('not_approved', 'draft_reply 未获批准（fail-closed）')
       }

@@ -388,9 +388,13 @@ describe('seam: systemPrompt.section / context 落成持久快照', () => {
     const { harness, events } = await build()
     try {
       const sections = await harness.contextSections()
-      expect(sections.map((s) => s.name)).toEqual(
-        req.context.map((c) => `${CONTEXT_PREFIX}${c.id}`),
-      )
+      const ours = sections.filter((s) => s.name.startsWith(CONTEXT_PREFIX))
+      // 我们的段：一个 ContextItem 一段，顺序与 RunRequest.context 一致
+      expect(ours.map((s) => s.name)).toEqual(req.context.map((c) => `${CONTEXT_PREFIX}${c.id}`))
+      // WP81 已知差异：Agent 层在场时，dsh 自己也往快照里放段（审批口径那一条）。
+      // 它排在我们前面（order 更小），也是模型可见的一段——所以必须有事件可查
+      // （`runtime.ts` 把它投影成 `progress{step:'model_context'}`）。
+      expect(sections.map((s) => s.name)).toContain('approval:policy')
       const injected = events.flatMap((e) => (e.type === 'context.injected' ? [e.item_id] : []))
       expect(injected).toEqual(req.context.map((c) => c.id))
     } finally {

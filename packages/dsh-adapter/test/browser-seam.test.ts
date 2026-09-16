@@ -23,9 +23,9 @@
  * 2. 它的 `inject` 是 `['browserUse', 'agents', 'tools', 'systemPrompt']`，而
  *    `mountSessionMcp` 整个挂在 `ctx.on('agent/created')` 上、按 `Agent` 分配资源
  *    （出处：上游 `packages/experimental/browser-use-runtime/src/mcp.ts`）。
- *    **我们的组合里根本没有 `agents`，也没有 `Agent`**——`harness.ts` 只挂
- *    SystemPrompt / ToolRuntime / ApprovalService / LlmRuntime 四个。这一条本身
- *    就是 (c) 的答案，见文件末尾那组断言。
+ *    WP70 当时我们的组合里根本没有 `agents`、也没有 `Agent`。**WP81 已经补上**
+ *    （`harness.ts` 挂了官方 Agent 层），所以今天只差一个 `browserUse` provider——
+ *    文件末尾那组断言记的就是这个差量，见 docs/54（将改号 55）§3。
  *
  * 所以：`@deepseek-ai/dsh-browser-use` 是**真的**（devDependency，只依赖 cordis +
  * dsh-brand，两个都已在树里），provider 槽的独占语义按真实现测；工具与提示词段则由
@@ -301,7 +301,7 @@ describe('spike (c)：一个组合一个 provider；与"一工作区一 runtime"
     await second()
   })
 
-  it('我们的组合里没有 `agents`，所以真 provider 今天挂不进来（这是结论，不是缺陷）', async () => {
+  it('WP81 之后组合里有 `agents` 了：真 provider 还缺的只剩 `browserUse`（WP82 的活）', async () => {
     const req = makeRequest()
     const { sink } = collect()
     const harness = await createHarness({
@@ -321,10 +321,13 @@ describe('spike (c)：一个组合一个 provider；与"一工作区一 runtime"
       },
     })
     try {
-      // 上游 playwright-mcp 的 inject 是 ['browserUse', 'agents', 'tools', 'systemPrompt']
+      // 上游 playwright-mcp 的 inject 是 ['browserUse', 'agents', 'tools', 'systemPrompt']。
+      // WP70 时四个里缺两个（`agents` / `browserUse`）；WP81 引进官方 Agent 层之后
+      // 只缺 `browserUse` —— 挂上 provider 就能用，这正是 WP82 的入口。
       expect(harness.ctx.get('tools')).toBeDefined()
       expect(harness.ctx.get('systemPrompt')).toBeDefined()
-      expect(harness.ctx.get('agents')).toBeUndefined()
+      expect(typeof harness.ctx.get('agents')).toBe('object')
+      expect(harness.agent.ctx).toBeDefined()
       expect(harness.ctx.get('browserUse')).toBeUndefined()
     } finally {
       await harness.dispose()
