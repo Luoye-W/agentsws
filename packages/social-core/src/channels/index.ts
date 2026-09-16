@@ -12,7 +12,7 @@
 
 import type { SocialChannel } from '@agentsws/contracts'
 import { createDiscordAdapter } from './discord.js'
-import { createFacebookGroupAdapter } from './facebook-group.js'
+import { type BrowserExecutor, createFacebookGroupAdapter } from './facebook-group.js'
 import { createMetaAdapter } from './meta.js'
 import { createRedditAdapter } from './reddit.js'
 import { createTelegramAdapter } from './telegram.js'
@@ -36,13 +36,21 @@ export * from './youtube.js'
 /** 一个 transport → 九条渠道的适配器。 */
 export function createSocialAdapters(
   transport: SocialTransport,
+  /**
+   * WP73：受控浏览器执行器（55 §3）。**只有 Facebook 群组用得上**——
+   * 另外八条走 HTTP，给不给它都一样。不给 = 那条渠道还是"只出脚本描述"。
+   */
+  options: { browser?: BrowserExecutor } = {},
 ): Record<SocialChannel, SocialChannelAdapter> {
   return {
     meta: createMetaAdapter(transport),
     tiktok: createTikTokAdapter(transport),
     x: createXAdapter(transport),
     youtube: createYouTubeSocialAdapter(transport),
-    facebook_group: createFacebookGroupAdapter(transport),
+    facebook_group: createFacebookGroupAdapter(
+      transport,
+      options.browser === undefined ? {} : { browser: options.browser },
+    ),
     reddit: createRedditAdapter(transport),
     discord: createDiscordAdapter(transport),
     telegram_group: createTelegramAdapter(transport),
