@@ -154,8 +154,10 @@ function Workspace(): ReactNode {
   }
 
   return (
+    // WP70（54 §4）：左栏按**岗位**列；老服务进程没有 instances，那时退回按分配列
     <AppShell
       positions={positions.data.positions}
+      {...(positions.data.instances === undefined ? {} : { instances: positions.data.instances })}
       cards={home.data?.queue ?? []}
       tileLibrary={positions.data.tile_library}
       onAddTile={(position_id, tile_id) => {

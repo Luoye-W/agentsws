@@ -1,7 +1,11 @@
 /**
  * 36 §3 的布局：左栏（首页 / 岗位 / 知识库 / 连接 / 设置）+ 主区。
  *
- * 左栏按岗位分组——岗位就是一条 Assignment，点进去才展开它的面板（06 §1.3「被带过去」）。
+ * 左栏「岗位」那一栏列的是**岗位**（WP70 / 54 §4）：以前列的是一条条分配，也就是
+ * 职责——做网站运营的人在左栏看到四行（店铺管理 / 内容与博客 / 邮件营销 / 订单履约），
+ * 而他心里只有一个"网站运营"。现在一个岗位一行、待审数按岗位聚合，职责只在岗位页
+ * 那个折叠层里看得见。没装岗位面的服务进程（没有 `instances`）退回按分配列的老样子。
+ *
  * 顶栏只有四样：品牌切换器（52 O2，个人用户不出）、深浅色、语言、⌘K。
  * **没有全局聊天输入框**（36 §3 A4）。
  */
@@ -37,8 +41,9 @@ import { CommandPalette } from '@/components/command-palette'
 import { StandbyBadge } from '@/components/standby-badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import type { PositionSummary } from '@/lib/api'
+import type { PositionInstanceData, PositionSummary } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { myAssignments } from '@/lib/positions'
 import { cn } from '@/lib/utils'
 
 function navClass({ isActive }: { isActive: boolean }): string {
@@ -68,21 +73,59 @@ function NavIcon({ icon: Icon }: { icon: LucideIcon }): ReactNode {
   return <Icon aria-hidden className="size-4 shrink-0" />
 }
 
+/**
+ * 左栏「岗位」那一栏的一行：一个岗位（WP70）。
+ *
+ * 待审数按岗位聚合（"网站运营 3"）——点进去才看得到是哪条职责的（54 §4）。
+ * 地址用本人在这个岗位下的第一条分配（36 §3 的"岗位"= 一条 Assignment）。
+ */
+function PositionNav({ instance }: { instance: PositionInstanceData }): ReactNode {
+  const { lang, t } = useApp()
+  const first = myAssignments(instance)[0]
+  if (first === undefined) return null
+  const name = lang === 'en' ? instance.name.en : instance.name.zh
+  return (
+    <NavLink
+      to={`/positions/${first}`}
+      className={navClass}
+      data-testid="nav-position"
+      data-position={instance.position_id}
+    >
+      <NavIcon icon={positionIcon(instance.roles[0]?.role_id ?? '')} />
+      <span className="truncate">{name}</span>
+      {instance.pending_cards === 0 ? null : (
+        <span
+          className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums"
+          data-testid="nav-position-pending"
+          title={t('home.positions.cards', { count: instance.pending_cards })}
+        >
+          {instance.pending_cards}
+        </span>
+      )}
+    </NavLink>
+  )
+}
+
 export function AppShell({
   children,
   positions,
+  instances,
   cards,
   tileLibrary,
   onAddTile,
 }: {
   children: ReactNode
   positions: PositionSummary[]
+  /** WP70：按岗位聚合的那一份。没有它（老服务进程）就退回按分配列。 */
+  instances?: PositionInstanceData[]
   cards: DeckCard[]
   tileLibrary: TileSpec[]
   onAddTile: (position_id: string, tile_id: string) => void
 }): ReactNode {
   const { t, theme, toggleTheme, lang, setLang } = useApp()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // 岗位面装着就按岗位列；没装（或一个岗位都算不出来）退回老样子
+  const byPosition = (instances ?? []).filter((p) => myAssignments(p).length > 0)
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -107,12 +150,19 @@ export function AppShell({
             {t('nav.goals')}
           </NavLink>
           <div className="px-2 pt-3 pb-1 text-xs text-muted-foreground">{t('nav.positions')}</div>
-          {positions.map((p) => (
-            <NavLink key={p.position_id} to={`/positions/${p.position_id}`} className={navClass}>
-              <NavIcon icon={positionIcon(p.role_id)} />
-              <span className="truncate">{p.role_name}</span>
-            </NavLink>
-          ))}
+          {byPosition.length > 0
+            ? byPosition.map((p) => <PositionNav key={p.position_id} instance={p} />)
+            : positions.map((p) => (
+                <NavLink
+                  key={p.position_id}
+                  to={`/positions/${p.position_id}`}
+                  className={navClass}
+                  data-testid="nav-position"
+                >
+                  <NavIcon icon={positionIcon(p.role_id)} />
+                  <span className="truncate">{p.role_name}</span>
+                </NavLink>
+              ))}
           <Separator className="my-2" />
           {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程 */}
           <NavLink to="/secretary" className={navClass}>
