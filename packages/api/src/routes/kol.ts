@@ -191,6 +191,22 @@ export interface KolSearchResult {
   reason?: string
   /** 这份数据什么时候看到的。 */
   observed_at?: Iso8601
+  /**
+   * 公共库那一档才有：**reveal 一个邮箱要花多少积分**（起草开发信之前先说）。
+   *
+   * 浏览是免费的，所以这一格与 `rows` 一起回来——人在决定"要不要花这笔钱"之前
+   * 就该看得见数，而不是点下去之后才知道。
+   */
+  reveal_price?: KolRevealPrice
+}
+
+/** 公共库那一档要花多少积分（49 M4 的价目；本地一个数字都不自己算）。 */
+export interface KolRevealPrice {
+  capability: string
+  credits: number
+  unit: string
+  /** 一句人话：「这一步扣 N 积分」。 */
+  note: string
 }
 
 /** 搜出来的一条（还没进库——进库是"加到红人库"那一下的事）。 */
@@ -448,6 +464,24 @@ export interface KolPort {
     },
   ): MaybePromise<KolOutreachView>
 
+  /**
+   * 付费 reveal 一个公共库里的联系方式（49 M4 `data.kol.lookup`）。
+   *
+   * 明文**当场写进本机加密库**，回来的只有脱敏形态——与手工加一条联系方式
+   * 走的是同一条路。库里没有联系方式**不收钱**。
+   */
+  revealFromPublicLibrary(
+    actor: KolActor,
+    input: { channel: KolChannel; handle: string; creator_id?: string | undefined },
+  ): MaybePromise<{
+    ok: boolean
+    contact?: KolContactView
+    creator_id?: string
+    credits_spent?: number
+    reason?: string
+    message?: string
+  }>
+
   /** campaign 向导：四格 → 一份按渠道分好组的挑人清单 + 一张清单卡。 */
   planCampaign(actor: KolActor, input: KolCampaignBrief): MaybePromise<KolCampaignView>
   /** 接受一张清单卡：按渠道分别建合作，**每条走各自渠道职责的额度**。 */
@@ -577,6 +611,13 @@ const OutreachBody = z.object({
   reason: z.string().max(500).optional(),
   brand_pitch: z.string().max(500).optional(),
   sender_name: z.string().max(100).optional(),
+})
+
+const RevealBody = z.object({
+  channel: ChannelSchema,
+  handle: z.string().min(1).max(200),
+  /** 挂到已有的那个红人身上；不给就按 渠道 + handle 建一条新的。 */
+  creator_id: z.string().min(1).optional(),
 })
 
 const CampaignBody = z.object({
@@ -1008,6 +1049,23 @@ export function kolRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).outreach(actorOf(c), await body(c, OutreachBody)), 201),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/public/reveal',
+        operationId: 'revealKolContact',
+        summary:
+          '花积分从公共红人库取回一个邮箱（49 M4 `data.kol.lookup`）。明文当场写进本机加密库，回来的只有脱敏形态；库里没有联系方式不收钱',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTACT,
+        body: RevealBody,
+        returns: '{ ok, contact?, creator_id?, credits_spent?, reason?, message? }',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).revealFromPublicLibrary(actorOf(c), await body(c, RevealBody))),
     ),
     route(
       {

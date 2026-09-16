@@ -215,6 +215,9 @@ importers:
       '@agentsws/cloud':
         specifier: workspace:*
         version: link:../cloud
+      '@agentsws/kol-public':
+        specifier: workspace:*
+        version: link:../../packages/kol-public
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13

@@ -202,6 +202,7 @@ export type {
   KolMergeSuggestionView,
   KolOutreachView,
   KolPort,
+  KolRevealPrice,
   KolSearchHit,
   KolSearchResult,
   KolStagedView,

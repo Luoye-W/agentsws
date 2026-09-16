@@ -19,6 +19,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { CloudActor, CloudPort } from '@agentsws/api'
 import type {
+  CapabilitySource,
   CapabilitySourceSettings,
   CapabilitySources,
   Clock,
@@ -63,6 +64,16 @@ export interface CloudAssembly {
   port: CloudPort
   /** 这台机器关联过 agentsws 账号没有（首页与模型卡问它）。 */
   linked(): boolean
+  /**
+   * WP68：某项能力现在用谁的（49 M2）。
+   *
+   * 端出来是因为**真的有模块要按它路由了**——WP59 那一版只有模型那一项按开关走，
+   * 其余只存偏好；红人那五条渠道是第二处（`kol.<channel>`）。同步：路由那一跳
+   * 要在拼请求之前就知道走哪条路，为一个本地文件里的布尔位加一次 await 不值当。
+   */
+  sourceOf(capability: string): CapabilitySource
+  /** 一项能力的价目（49 M4）。取不到就回 `undefined`——不编一个数。 */
+  priceOf(capability: string): Promise<{ credits: number; unit: string } | undefined>
 }
 
 export function cloudBaseUrl(env: Record<string, string | undefined>): string {
@@ -235,5 +246,13 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     },
   }
 
-  return { port, linked: () => tokenOf() !== undefined }
+  return {
+    port,
+    linked: () => tokenOf() !== undefined,
+    sourceOf: (capability) => state.capability_sources[capability] ?? 'mine',
+    priceOf: async (capability) => {
+      const found = (await pricingView()).entries.find((e) => e.capability === capability)
+      return found === undefined ? undefined : { credits: found.credits_per_unit, unit: found.unit }
+    },
+  }
 }

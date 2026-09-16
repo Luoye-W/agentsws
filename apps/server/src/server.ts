@@ -135,6 +135,7 @@ import { importKnowledgePack } from './knowledge-pack.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
+import { createKolPublicClient } from './kol-public-client.js'
 import { createKolService } from './kol-service.js'
 import { createLearningAssembly, type LearningAssembly, seedDefaultSkill } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
@@ -1116,10 +1117,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       secrets: brandSecrets,
       ...(options.kolFetch === undefined ? {} : { fetch: options.kolFetch }),
     })
+    /**
+     * WP68（49 M2）：云端公共红人库的客户端。
+     *
+     * 与模型那一项同一条路：地址由 `AGENTSWS_CLOUD_BASE_URL` 决定，
+     * 令牌是**这个品牌那一把** `cloud.workspace_token`（WP66 每品牌一把）。
+     * 用不用它由连接页那五个开关说了算（`kol.<channel>`）。
+     */
+    const kolPublic = createKolPublicClient({
+      workspace_id: ws,
+      clock,
+      secrets: brandSecrets,
+      env,
+      newContactId: () => `ctc_${Math.floor(random() * 0xffffffff).toString(36)}`,
+      ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+    })
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
       channels: kolChannels,
+      publicLibrary: kolPublic,
+      /*
+       * 49 M2 的开关：`kol.<channel>` 拨到 agentsws 就查公共库，默认用我的。
+       *
+       * 递的是取值函数而不是 `ownCloud` 本身——它在下面几十行才建出来
+       * （同 `work: () => workRef` 那一处：打断装配期的环，取值时才查）。
+       */
+      capabilitySource: (capability) => ownCloud.sourceOf(capability),
+      // 价目从云上那一份来（49 M4），本地一个数字都不自己算
+      priceOf: (capability) => ownCloud.priceOf(capability),
       // 联系方式的明文落在**这个品牌**那一段加密库里（key 名已按品牌加过前缀）
       secrets: brandSecrets,
       clock,

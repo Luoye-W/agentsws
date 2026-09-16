@@ -84,6 +84,8 @@ import {
   normalizeHandle,
   type OutreachStep,
   outreachQuota,
+  type PublicCreatorRow,
+  type PublicLibraryClient,
   parseCreatorUrl,
   planCampaign,
   rankCreators,
@@ -95,6 +97,7 @@ import {
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { KolStore } from './kol.js'
 import type { KolChannelsAssembly } from './kol-channels.js'
+import { REVEAL_CAPABILITY } from './kol-public-client.js'
 import type { SecretStore } from './secret-store.js'
 
 /** 加密库里联系方式那一段的 key 前缀。**全仓只有这一处拼它**。 */
@@ -241,6 +244,22 @@ export interface KolServiceOptions {
    */
   channels?: KolChannelsAssembly
   /**
+   * 云端公共红人库的客户端（49 M2「用 agentsws 的」那一档）。
+   *
+   * 不给 = 这台机器永远走"用我的"。这不是降级——本地档（免费）用户拿到的
+   * 就是它，而那是正确行为（`kol-core` 的 `public-library.ts` 文件头第 2 条）。
+   */
+  publicLibrary?: PublicLibraryClient
+  /**
+   * 49 M2 的那个开关：这项能力用我的还是用 agentsws 的。
+   *
+   * 键是 `kol.<channel>`（连接页那五张卡上各一个开关）。不给就一律"用我的"——
+   * 默认是本地优先（40 §1），把"默认"也写进设置文件是另一回事（见 `cloud.ts`）。
+   */
+  capabilitySource?(capability: string): 'mine' | 'agentsws'
+  /** 一项能力的价目（49 M4；价从云上那一份来，本地一个数字都不自己算）。 */
+  priceOf?(capability: string): MaybePromise<{ credits: number; unit: string } | undefined>
+  /**
    * 这个人在这个品牌里持有的分配（campaign 那一条按渠道挑本人自己那条职责用）。
    *
    * **不做并集**（05 §4）：同一个人只勾了 YouTube，就只能建 YouTube 那几条合作。
@@ -294,6 +313,22 @@ const OUTREACH_ACTION = 'stage_outreach'
 
 /** 开发信的日配额默认值（职责 yml 的 `max_outreach_per_day`）。 */
 export const DEFAULT_OUTREACH_CAP = 30
+
+/** 公共库那一行的主页地址（库里只有 渠道 + handle，链接是拼出来的）。 */
+function urlOfPublicRow(channel: KolChannel, handle: string): string {
+  switch (channel) {
+    case 'youtube':
+      return `https://www.youtube.com/@${handle}`
+    case 'instagram':
+      return `https://www.instagram.com/${handle}`
+    case 'facebook':
+      return `https://www.facebook.com/${handle}`
+    case 'tiktok':
+      return `https://www.tiktok.com/@${handle}`
+    default:
+      return `https://x.com/${handle}`
+  }
+}
 
 /** 三封信在卡面上的说法。 */
 const SEQUENCE_LABEL: Readonly<Record<OutreachStep, string>> = {
@@ -614,6 +649,78 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     }
   }
 
+  /** 已经在库里的那几个标出来（清单上要看得见"这个人你已经有了"）。 */
+  const knownHandles = (channel: KolChannel): Set<string> =>
+    new Set(store.accounts({ channel }).map((a) => normalizeHandle(a.handle)))
+
+  /** 「用 agentsws 的」那一档：查云端公共库（浏览免费）。 */
+  const publicSearch = async (input: {
+    channel: KolChannel
+    q: string
+    limit?: number | undefined
+  }): Promise<KolSearchResult> => {
+    const library = options.publicLibrary
+    if (library === undefined || !library.linked())
+      return {
+        ok: false,
+        source: 'public_library',
+        rows: [],
+        reason: 'not_linked',
+        message:
+          '这条渠道的开关拨到了"用 agentsws 的"，但这台机器还没关联 agentsws 账号。去"设置 → 账号与积分"关联一次，或者把开关拨回"用我的"。',
+      }
+    const out = await library.browse({
+      channel: input.channel,
+      q: input.q,
+      ...(input.limit === undefined ? {} : { limit: input.limit }),
+    })
+    if (!out.ok)
+      return {
+        ok: false,
+        source: 'public_library',
+        rows: [],
+        reason: out.reason,
+        message: out.message,
+      }
+    const known = knownHandles(input.channel)
+    const price = await revealPrice()
+    return {
+      ok: true,
+      source: 'public_library',
+      rows: out.data.rows.map((row: PublicCreatorRow) => ({
+        channel: row.channel,
+        handle: row.handle,
+        url: urlOfPublicRow(row.channel, row.handle),
+        display_name: row.display_name,
+        ...(row.followers === undefined ? {} : { followers: row.followers }),
+        ...(row.engagement_rate === undefined ? {} : { engagement_rate: row.engagement_rate }),
+        ...(row.category === undefined ? {} : { category: row.category }),
+        ...(row.language === undefined ? {} : { language: row.language }),
+        ...(row.region === undefined ? {} : { region: row.region }),
+        has_contact: row.has_contact,
+        in_library: known.has(normalizeHandle(row.handle)),
+      })),
+      ...(price === undefined ? {} : { reveal_price: price }),
+    }
+  }
+
+  /**
+   * reveal 一次要花多少积分（49 M4）。
+   *
+   * **起草开发信之前就说**：人在决定"要不要花这笔钱"之前该看得见数，
+   * 而不是点下去之后才知道。取不到价目就不编一个——那一格干脆不出现。
+   */
+  const revealPrice = async (): Promise<KolSearchResult['reveal_price']> => {
+    const found = await options.priceOf?.(REVEAL_CAPABILITY)
+    if (found === undefined) return undefined
+    return {
+      capability: REVEAL_CAPABILITY,
+      credits: found.credits,
+      unit: found.unit,
+      note: `浏览是免费的；取回一个邮箱这一步扣 ${found.credits} 积分。库里没有联系方式不收钱。`,
+    }
+  }
+
   const port: KolPort = {
     creators(_actor, filter) {
       const now = clock.now()
@@ -647,6 +754,13 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     },
 
     async search(actor, input) {
+      /*
+       * 49 M2 的开关决定走哪条路：**用我的** = 打这条渠道自己的接口（本地直连、
+       * 不扣一分）；**用 agentsws 的** = 查云端公共库（浏览免费，reveal 才花钱）。
+       * 两条路回的是同一个形状，所以界面上只有"这一份是从哪儿来的"那一个差别。
+       */
+      if (options.capabilitySource?.(`kol.${input.channel}`) === 'agentsws')
+        return publicSearch(input)
       const adapter = options.channels?.adapters[input.channel]
       if (adapter === undefined)
         return {
@@ -665,10 +779,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         emit('kol.search_failed', actor.person_id, { channel: input.channel, reason: out.reason })
         return { ok: false, source: 'channel', rows: [], reason: out.reason, message: out.message }
       }
-      // 已经在库里的那几个标出来：清单上要看得见"这个人你已经有了"
-      const known = new Set(
-        store.accounts({ channel: input.channel }).map((a) => normalizeHandle(a.handle)),
-      )
+      const known = knownHandles(input.channel)
       const rows: KolSearchHit[] = out.data.map((hit) => ({
         channel: hit.channel,
         handle: hit.handle,
@@ -1358,6 +1469,78 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         skipped: skipped.length,
       })
       return { campaign_id, created, skipped }
+    },
+
+    async revealFromPublicLibrary(actor, input) {
+      const library = options.publicLibrary
+      if (library === undefined || !library.linked())
+        return {
+          ok: false,
+          reason: 'not_linked',
+          message: '还没关联 agentsws 账号，用不了公共红人库。去"设置 → 账号与积分"关联一次。',
+        }
+      const handle = normalizeHandle(input.handle)
+      const out = await library.reveal({ public_id: `${input.channel}:${handle}` })
+      if (!out.ok) return { ok: false, reason: out.reason, message: out.message }
+      const contact = out.data.contacts[0]
+      if (contact === undefined)
+        return {
+          ok: false,
+          reason: 'not_found',
+          message: '库里还没有这个人的联系方式。没有取到就不收钱。',
+        }
+
+      /*
+       * 挂到哪个人身上：给了 `creator_id` 就挂那个；没给就按 渠道 + handle 找，
+       * 找不到才建一条新的。**不按名字找**——公共库里没有显示名（去标识化），
+       * 按名字找会把两个真不同的人并成一个。
+       */
+      let creator_id = input.creator_id
+      if (creator_id === undefined) {
+        const existing = store
+          .accounts({ channel: input.channel })
+          .find((a) => normalizeHandle(a.handle) === handle)
+        if (existing !== undefined) creator_id = existing.creator_id
+        else {
+          const created: Creator = { id: nextId('cre'), display_name: handle, merged_from: [] }
+          store.saveCreator(created)
+          store.saveAccount({
+            id: nextId('pa'),
+            creator_id: created.id,
+            channel: input.channel,
+            handle,
+            url: urlOfPublicRow(input.channel, handle),
+            observed_at: clock.now(),
+          })
+          creator_id = created.id
+        }
+      }
+      if (store.creator(creator_id) === undefined)
+        throw new ApiError('not_found', '库里没有这个红人')
+
+      // 明文已经在加密库里了（`reveal` 那一跳写的）；这里只落 key 名
+      const row: CreatorContact = {
+        // `value_ref` 长这样：`kol.contact.<id>`，所以 id 从它身上反解出来
+        id: contact.value_ref.slice(CONTACT_SECRET_PREFIX.length),
+        creator_id,
+        kind: contact.kind,
+        value_ref: contact.value_ref,
+        source: contact.source,
+        ...(contact.verified_at === undefined ? {} : { verified_at: contact.verified_at }),
+      }
+      store.saveContact(row)
+      emit('kol.contact_revealed', actor.person_id, {
+        creator_id,
+        channel: input.channel,
+        contact_id: row.id,
+        credits_spent: out.credits_spent,
+      })
+      return {
+        ok: true,
+        creator_id,
+        contact: contactView(row),
+        credits_spent: out.credits_spent,
+      }
     },
 
     async mergeSuggestions(actor) {
