@@ -159,6 +159,14 @@ export interface ReplyInput {
   parent_external_id: string
   text: string
   account_external_id?: string
+  /**
+   * WP73：**对方最近一条入站消息**的时刻。
+   *
+   * 只有 WhatsApp 用得上：它的自由文本只能在 24 小时客服窗口里发，窗口的起点
+   * 就是这一格。不给 = 当成窗口关着（把"没记过"当成"还开着"等于把这一闸悄悄
+   * 打开，而闸后面是账号被封）。别的渠道忽略它。
+   */
+  last_inbound_at?: string
 }
 
 export interface BroadcastInput {
@@ -166,9 +174,16 @@ export interface BroadcastInput {
   body: string
   /** 收件人（群发到群里的渠道不需要它）。 */
   recipients?: readonly string[]
-  /** WhatsApp 才有。 */
+  /** WhatsApp 才有：预先审过的模板名（Cloud API 的 `template.name`）。 */
   template_id?: string
   template_variables?: Readonly<Record<string, string>>
+  /**
+   * WP73：这批人是不是都 opt-in 过（WhatsApp 才有）。
+   *
+   * **不为真就不发**。与 `BroadcastProposal.opt_in_verified` 是同一件事的
+   * 两个位置：那边 guardrail 拦，这边适配器再拦一次（执行器有可能被别的路径调到）。
+   */
+  opt_in_verified?: boolean
 }
 
 export interface ModerateInput {

@@ -344,7 +344,7 @@ actions:
   meta_graph.delete_comment: write
   meta_graph.update_page_profile: write
 
-  # TikTok 内容发布（申请制；真调用 WP73）
+  # TikTok 内容发布（申请制；**WP73 接上了真调用**）
   tiktok_content.get_creator_info: read
   tiktok_content.list_videos: read
   tiktok_content.get_video: read
@@ -353,7 +353,9 @@ actions:
   tiktok_content.init_publish: write
   tiktok_content.complete_publish: write
 
-  # Reddit（真调用 WP73）
+  # Reddit（**WP73 接上了真调用**）。名字对不上它干的事的那几个记在这里：
+  # `approve` 是"把被删的内容放回去"、`friend` 加 `type=banned` 才是封人、
+  # `distinguish` 加 `sticky` 才是置顶（这条渠道上的"群发"就是它）。
   reddit.get_subreddit: read
   reddit.get_subreddit_rules: read
   reddit.list_posts: read
@@ -361,12 +363,21 @@ actions:
   reddit.list_comments: read
   reddit.list_modqueue: read
   reddit.list_join_requests: read
+  # WP73：版务名单（`/r/<sub>/about/moderators`）——subreddit 没有成员名册，
+  # 这是"谁说了算"那一份，不是"群里有谁"
+  reddit.list_moderators: read
   reddit.submit_post: write
   reddit.reply_comment: write
   reddit.send_message: write
   reddit.approve_member: write
+  # WP73：`/api/approve` 把被删的帖子 / 评论放回去（与上面那条 approve_member 不是一回事）
+  reddit.approve_post: write
   reddit.remove_post: write
   reddit.ban_user: write
+  reddit.unban_user: write
+  reddit.mute_user: write
+  # WP73：`/api/distinguish`（加管理员标记 + 置顶）。这条渠道上的"群发"= 一条置顶帖
+  reddit.distinguish_post: write
   reddit.update_subreddit_rules: write
 
   # Discord
@@ -398,8 +409,10 @@ actions:
   telegram_bot.restrict_chat_member: write
   telegram_bot.ban_chat_member: write
 
-  # WhatsApp Business（真调用 WP73）。模板与 opt-in 那两道闸在 guardrail 里，
-  # 不在这张表里——这张表只回答"这个动作改不改上游状态"。
+  # WhatsApp Business（**WP73 接上了真调用**）。模板与 opt-in 那两道闸在 guardrail 与
+  # 适配器里，不在这张表里——这张表只回答"这个动作改不改上游状态"。
+  # `send_message`（自由文本）与 `send_template_message` 分成两条不是重复：
+  # 前者只在 24 小时客服窗口里发得出去，后者才是主动消息那一条路。
   whatsapp_business.get_business_profile: read
   whatsapp_business.list_templates: read
   whatsapp_business.get_template: read
@@ -412,3 +425,15 @@ actions:
   youtube_data.list_my_videos: read
   youtube_data.update_video_metadata: write
   youtube_data.reply_comment: write
+
+  # X 的社媒那一侧（**WP73 接上了真调用**；卡与 service 名与红人共用）。
+  # 发推与回复是**同一个** endpoint（`POST /2/tweets`，回复多一格 `reply`），
+  # 但在这张表里分成两条：账本上它们是两条 ChangeKind（`social_post` / `outbound_message`）。
+  # `search_recent_mentions` 的搜索词是写死限定在自己账号上的——这条渠道上没有
+  # "去 X 上搜点什么"这回事（那是红人那条职责的事）。
+  x_api.get_me: read
+  x_api.list_my_tweets: read
+  x_api.search_recent_mentions: read
+  # `create_tweet` 已经在上面红人那一段里了（同一张卡、同一个 service 名），
+  # 这里不再写一遍——同一个 key 写两遍 YAML 直接解析失败
+  x_api.reply_tweet: write

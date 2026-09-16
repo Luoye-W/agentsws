@@ -570,11 +570,13 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     ],
     side_effect: 'write_external',
     docs_url: 'https://developers.tiktok.com/doc/content-posting-api-get-started',
-    status: 'planned',
+    // WP73：适配器接上了真调用（两跳发布 + 状态轮询），所以这张卡点得动了。
+    // 申请没批下来的后果退回它该有的样子：上游回 403，我们说"要先申请"。
+    status: 'available',
     service: 'tiktok_content',
     note: {
-      zh: '申请制，且与红人那条用的 Research API **要分别申请**。没批下来之前排期、草稿、审批照常。',
-      en: 'Application-gated, and applied for separately from the Research API. Scheduling and drafts work without it.',
+      zh: '申请制，且与红人那条用的 Research API **要分别申请**。发布是两跳（init 拿 publish_id，再轮询状态）。没批下来之前排期、草稿、审批照常。',
+      en: 'Application-gated, and applied for separately from the Research API. Publishing takes two hops (init, then poll status). Scheduling and drafts work without it.',
     },
   },
   {
@@ -612,11 +614,12 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     ],
     side_effect: 'write_external',
     docs_url: 'https://www.reddit.com/dev/api',
-    status: 'planned',
+    // WP73：适配器接上了真调用（发帖 / 回帖 / 版务动作 / 置顶公告）。
+    status: 'available',
     service: 'reddit',
     note: {
-      zh: '要先注册一个 script / web 应用。连不上最常见的原因是 User-Agent 写错了，不是密钥错了。',
-      en: 'Register a script or web app first. A malformed User-Agent — not a bad key — is the usual cause of failures.',
+      zh: '要先注册一个 script / web 应用。连不上最常见的原因是 User-Agent 写错了，不是密钥错了。一分钟最多 60 次调用，超了我们自己先排队。',
+      en: 'Register a script or web app first. A malformed User-Agent — not a bad key — is the usual cause of failures. 60 calls per minute; we queue beyond that ourselves.',
     },
   },
   {
@@ -713,7 +716,9 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     ],
     side_effect: 'write_external',
     docs_url: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
-    status: 'planned',
+    // WP73：适配器接上了真调用（模板消息群发 + 24h 窗口内的自由文本回复）。
+    // 两道硬闸（模板名必填、opt-in 必须核过）在适配器这一层再查一遍。
+    status: 'available',
     service: 'whatsapp_business',
     note: {
       zh: '要过商业验证。主动发消息**只能用审批过的模板，且收件人必须先 opt-in**；对方来过消息之后有 24 小时窗口能自由回复。这三条是 Meta 的规矩，违反了封的是这个号。',

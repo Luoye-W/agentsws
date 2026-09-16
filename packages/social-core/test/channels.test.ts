@@ -36,7 +36,18 @@ function fakeTransport(
           ? { bot_token: '12345:TELEGRAM-SECRET' }
           : c === 'youtube'
             ? { api_key: 'YT-KEY', access_token: 'YT-OAUTH' }
-            : { access_token: 'META-SECRET' },
+            : c === 'x'
+              ? { bearer_token: 'X-SECRET', handle: '@nordvolt' }
+              : c === 'reddit'
+                ? {
+                    access_token: 'REDDIT-SECRET',
+                    user_agent: 'macos:agentsws:1.0 (by /u/nordvolt)',
+                  }
+                : c === 'whatsapp'
+                  ? { access_token: 'WA-SECRET', phone_number_id: '1065' }
+                  : c === 'tiktok'
+                    ? { access_token: 'TT-SECRET' }
+                    : { access_token: 'META-SECRET' },
     fetch: async (url, init): Promise<SocialHttpResponse> => {
       calls.push({
         url,
@@ -285,8 +296,9 @@ describe('56 §3 九条适配器（WP72）', () => {
     expect(t.calls[0]?.body).toContain('"can_send_messages":true')
   })
 
-  it('TikTok 申请制、X 付费档：说的是这两句人话，不是 401', async () => {
-    const a = createSocialAdapters(fakeTransport())
+  it('TikTok 申请制、X 付费档：403 在这两条渠道上说的是这两句人话，不是"授权掉了"', async () => {
+    const t = fakeTransport({ reply: () => ({ status: 403, body: '{}' }) })
+    const a = createSocialAdapters(t)
     const tt = asError(
       await must(
         a.tiktok.publish,
@@ -295,9 +307,11 @@ describe('56 §3 九条适配器（WP72）', () => {
         account_external_id: 'x',
         kind: 'video',
         body: 'hi',
+        media_urls: ['https://cdn.example.com/a.mp4'],
       }),
     )
     expect(tt.reason).toBe('needs_approval')
+    expect(tt.message).toContain('申请制')
     const x = asError(
       await must(a.x.publish, 'publish')({ account_external_id: 'x', kind: 'post', body: 'hi' }),
     )
@@ -306,15 +320,27 @@ describe('56 §3 九条适配器（WP72）', () => {
   })
 
   it('WhatsApp 的硬闸在适配器这一层再查一遍（执行器有可能被别的路径调到）', () => {
+    // ① 没模板名
     expect(
       whatsappBroadcastGate({ account_external_id: 'p1', body: 'hi', recipients: ['+49'] })?.reason,
     ).toBe('needs_approval')
+    // ② 有模板名、**没核过 opt-in** —— 照样不许发（封的是这个品牌的号）
+    const noOptIn = whatsappBroadcastGate({
+      account_external_id: 'p1',
+      body: 'hi',
+      recipients: ['+49'],
+      template_id: 'order_update_v3',
+    })
+    expect(noOptIn?.reason).toBe('needs_approval')
+    expect(noOptIn?.message).toContain('opt-in')
+    // ③ 两格都齐了才放行
     expect(
       whatsappBroadcastGate({
         account_external_id: 'p1',
         body: 'hi',
         recipients: ['+49'],
         template_id: 'order_update_v3',
+        opt_in_verified: true,
       }),
     ).toBeUndefined()
   })
