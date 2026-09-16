@@ -316,3 +316,93 @@ hook 的入参是 `exec`，字段：
   得先想清楚两档的事件序列还相不相等。
 - 一次运行一棵树、一个 Agent：attach 模式"一个 Session 独占用户的 Chrome"与
   17 §5.1 天然一致，收尾只断连不关浏览器。
+
+---
+
+## 9. 浏览器（WP82，55 §3）
+
+§8 写的是"怎么挂"，这一节记**挂上之后长什么样**。
+
+### 9.1 一次带浏览器的运行
+
+```
+run(req)  —— req.browser 给了才有这一层
+  └─ createHarness
+       ├─ root.plugin(BrowserUseRegistry)                 ← 只在 req.browser 在场时挂
+       └─ ctx.agents.create({ setup: async (agentCtx, agent) => {
+            installGate(ctx, { …, agent, agentCtx })       ← 五个门禁照旧
+            await agentCtx.plugin(PlaywrightMcpProvider, browserProviderConfig(req.browser))
+          }})
+              └─ agent/created（比 setup 晚一步）→ provider 起一个 @playwright/mcp 子进程
+                 → 24 个 mcp__playwright-mcp__browser_* 进这个 Agent 的 scope
+  …
+  └─ handle.dispose() → MCP 子进程与 provider 槽一起走（attach 只断连，不关用户的浏览器）
+```
+
+`setup` 里必须 `await` 那一跳：provider 整个挂在 `agent/created` 上，而 `agent/created`
+在 setup **之后**才广播（官方 `dsh-agent` 的 `announce`）——晚一步这个 Agent 就拿不到工具。
+
+### 9.2 工具名与读写分类
+
+上游 `@playwright/mcp@0.0.80`，provider 不传 `--caps`，所以默认只有 Core automation
+（23 个）+ Tab management（1 个）共 **24 个**。`BROWSER_DEFAULT_TOOLS`（`tools.ts`）是
+实测出来的那一份，`browser-seam.test.ts` 用真 provider 逐条比对——上游改了名字当场红。
+
+| 我们的判定 | 工具 |
+|---|---|
+| `read_external` | `browser_navigate` / `browser_snapshot` / `browser_take_screenshot` / `browser_find` / `browser_console_messages` / `browser_network_requests` / `browser_network_request` / `browser_wait_for` / `browser_resize`，外加 `browser_tabs` 的 `action: list` / `select` |
+| `write_external` | `browser_click` / `browser_type` / `browser_fill_form` / `browser_select_option` / `browser_press_key` / `browser_hover` / `browser_drag` / `browser_drop` / `browser_file_upload` / `browser_handle_dialog` / `browser_navigate_back` / `browser_close` / `browser_evaluate` / `browser_run_code_unsafe`，`browser_tabs` 的 `new` / `close`，**以及任何不在表里的名字** |
+
+两处与上游 README 的 `Read-only` 标注**有意不同**，理由写在 `tools.ts` 的注释里：
+`browser_navigate` 上游标 false（它换了页面），对我们它是"去外面读一份东西"（55 §3
+原话），真正管住它的是域名白名单；`browser_wait_for` / `browser_resize` 上游标 false，
+但它们改的是浏览器自己的状态，碰不到外面。
+
+`browser_navigate_back` 我们判**写**，理由是它没有 URL 可查——白名单看不见的导航，
+在公司端一律不放行。
+
+### 9.3 四道门的顺序（`gate.ts` 的 `tools/pre-execute`）
+
+```
+预算 → allowlist（浏览器整个命名空间在 req.browser 在场时放行）
+     → 注 JS 硬拒（executor 档）
+     → 域名白名单（只看 browser_navigate.url 与 browser_tabs{action:new}.url）
+     → 读写分类（write_external + executor → 拒；personal → 放行并发 progress{step:'browser_write'}）
+```
+
+拒绝理由是**人话**（"这个岗位只能打开 youtube.com、*.youtube.com，www.amazon.com 不在
+里面"），门禁把它物化成 `tool.result{blocked}` 进事件日志——模型看得见，人也查得到。
+
+### 9.4 两条容易踩的上游语义
+
+1. **别把浏览器工具列进 `ctx.tools.restrict({ allow })`。** 上游："Restrictions
+   intersect; scoped registrations remain visible" —— provider 在它自己的 agent scope 里
+   注册，本来就不受职责白名单影响；列进去还会抛（restrict 只认调用当刻已全局注册的名字）。
+2. **官方自己那段提示词（`mcp:playwright-mcp`）被我们的 `complete` 段遮掉。** 所以
+   "能打开哪些站 / 遇到登录页怎么办"必须由 `browserBrief()` 写进 persona 段——
+   不写的话模型对这两件事一无所知。
+
+### 9.5 依赖与构建
+
+`@deepseek-ai/dsh-browser-use` 从 devDependency 升为 dependency；新增
+`dsh-experimental-browser-use-runtime` 与 `-playwright-mcp`，都锁 `0.1.6-alpha.1`。
+它们拖来 `@playwright/mcp@0.0.80` → `playwright` → `playwright-core`，后者的 postinstall
+会下载浏览器：`pnpm-workspace.yaml` 的 `allowBuilds` 里写死 `playwright: false` /
+`playwright-core: false`。**实测在不开构建的情况下 `pnpm install --frozen-lockfile` 通过、
+provider 照常起**——attach 接用户自己的 Chrome，`launch` 一律带 `executable_path`，
+两条路都不需要它下载的那份 Chromium（16 §3 一行没破）。
+
+### 9.6 本机实测（手工，2026-09-16）
+
+CI 里那 23 条用的是"真 provider + 死 endpoint"，证明的是装配与策略；**真的连上一个
+Chrome、真的打开一个网页**这一段只能手工（步骤见 `scripts/dev-browser.md`）。这次实测：
+
+- Chrome `152.0.7977.83`，`--headless=new` + 单独 `--user-data-dir` + `--remote-debugging-port`；
+- provider `mode: 'attach'` 接上去 → `ctx.tools.schemas(agent)` 里 **24 个**
+  `mcp__playwright-mcp__*`，与 `BROWSER_DEFAULT_TOOLS` 逐条相同；
+- `browser_navigate` → `isError: false`，页面真的跳了（返回里带 Page URL / Title）；
+- `browser_snapshot` → 一棵可读的无障碍树；
+- `handle.dispose()` 之后浏览器**还开着**（attach 只断连）。
+
+一个副作用值得记：官方 MCP 服务器把截图 / 快照落在 **Agent 的 `cwd` 下的
+`.playwright-mcp/`**（`--output-dir` 的默认值，上游薄壳没透出这个参数）。已进 `.gitignore`。

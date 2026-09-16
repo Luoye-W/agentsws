@@ -36,8 +36,15 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import type { PostToolDecision, PreToolDecision, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { browserBrief, checkBrowserNavigation } from './browser.js'
 import { inferRefs, plainText } from './reading.js'
-import { buildToolDefinitions, classifySideEffect, DRAFT_TOOL, STAGE_TOOL } from './tools.js'
+import {
+  browserToolName,
+  buildToolDefinitions,
+  classifySideEffect,
+  DRAFT_TOOL,
+  STAGE_TOOL,
+} from './tools.js'
 import type { DshRuntimeOptions, GateRecord } from './types.js'
 
 /** dsh 的审批 seam 词汇（我们只用它的四个结果值，其余靠 answerer 自己判断）。 */
@@ -175,6 +182,19 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   // staging 工具是我们自己的出口，不在 Connect 的 allowlist 里，但必须可调
   allow.add(STAGE_TOOL)
   allow.add(DRAFT_TOOL)
+  /*
+   * WP82（55 §3）：浏览器工具不是 Connect 发的，也不在职责的 `tools.allow` 里——
+   * 它们由官方 provider 按 Agent 注册（`harness.ts` 的 `setup`）。**这一整组在不在，
+   * 只取决于 `RunRequest.browser` 给没给**：不给就连 provider 都不挂，一个都不存在。
+   *
+   * 给了就整个命名空间（`mcp__playwright-mcp__*`）过 allowlist 这一关——不逐个列名，
+   * 理由是上游随时会增删工具，写死一张名单只会让新工具变成"不在 allowlist"这种
+   * 看不懂的拒绝。**真正管着它们的是后面三道**：域名白名单、读写分类（表外一律按写，
+   * 公司端因此拒）、注 JS 公司端硬拒。新来的工具默认落到"按写"，方向是对的。
+   */
+  const browserOn = request.browser !== undefined
+  const allowed = (name: string): boolean =>
+    allow.has(name) || (browserOn && browserToolName(name) !== undefined)
 
   // Agent 层在场时用真 Agent 当 scope key（官方语义）；没有时退回一个占位键 + 自开 scope。
   const agent: object = input.agent ?? { preset: request.runtime.preset, run_id: request.id }
@@ -340,6 +360,13 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   for (const def of definitions) ctx.tools.register(def)
 
   // ── `ctx.tools.restrict`：preset 的工具集按 RunRequest.tools.allow ───────
+  //
+  // WP82 查证：**浏览器工具不用（也不能）列进这里**。`restrict` 只遮"继承下来的
+  // 全局工具"，上游原话是 "Restrictions intersect; scoped registrations remain
+  // visible"；而官方 provider 是在它自己那个 `createScope(ctx, agent)` 里注册
+  // MCP 工具的（scoped registration），本来就不受这张白名单影响。真列进去反而会抛
+  // ——restrict 只认调用当刻**已经全局注册**的名字，而 provider 是在 `agent/created`
+  // 之后才挂的，比 `setup` 晚一步。
   const visible = definitions.map((d) => d.name).filter((n) => allow.has(n))
   if (visible.length > 0) scopedCtx.tools.restrict({ allow: visible })
 
@@ -365,7 +392,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     }
     api.toolCalls += 1
 
-    if (!allow.has(exec.name)) return deny(`not_in_allowlist: ${exec.name}`)
+    if (!allowed(exec.name)) return deny(`not_in_allowlist: ${exec.name}`)
     // 36 §2.2：没答过的边界挡着变更——拒掉这次 stage，同时把选择题发给商家
     if (exec.name === STAGE_TOOL && !boundary.allowed) {
       await api.askBoundaries()
@@ -378,9 +405,28 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
         return deny('provenance_missing')
       }
     }
-    const effect = classifySideEffect(exec.name, options.sideEffects)
+    const args = asRecord(exec.arguments)
+    // WP82（55 §3）：注 JS 公司端一律拒 + 域名白名单（只看要打开的那个地址）
+    const browserDenial = checkBrowserNavigation({
+      tool: exec.name,
+      args,
+      allowedHosts: request.allowed_hosts,
+      policy: request.tools.side_effect_policy,
+    })
+    if (browserDenial !== undefined) return deny(browserDenial)
+
+    const effect = classifySideEffect(exec.name, options.sideEffects, args)
     if (effect === 'write_external' && request.tools.side_effect_policy === 'executor') {
       return deny(`write_external_requires_executor: ${exec.name}`)
+    }
+    /*
+     * WP82：个人档放行浏览器的写操作（点击、输入、提交）——那是用户自己的浏览器、
+     * 自己的登录态。放行归放行，**得留下痕迹**：这一条 `progress` 就是
+     * 「AI 在我的浏览器里动了手」在时间线上的那一行，与 `tool.call` / `tool.result`
+     * 一起构成 16 §2 的 Model-visible ⟺ logged。
+     */
+    if (effect === 'write_external' && browserToolName(exec.name) !== undefined) {
+      sink({ type: 'progress', step: 'browser_write', note: exec.name })
     }
     return next()
   })
@@ -491,7 +537,23 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
     .map((s) => `## ${s.id} ${s.name}\n${s.text}`)
     .join('\n\n')
-  const brief = ontologyBriefOf(request)
+  //
+  // WP82：浏览器那一段也进**这一个**段。官方 provider 自己加的 `mcp:playwright-mcp`
+  // 段会被 complete 段遮掉（WP70 实测），所以"能打开哪些站、遇到登录页怎么办"
+  // 只能由我们自己写进来——不写的话模型对这两件事一无所知。
+  const brief = [
+    ontologyBriefOf(request),
+    ...(browserOn
+      ? [
+          browserBrief({
+            allowedHosts: request.allowed_hosts,
+            policy: request.tools.side_effect_policy,
+          }),
+        ]
+      : []),
+  ]
+    .filter((t) => t !== '')
+    .join('\n\n')
   ctx.systemPrompt.section({
     name: PERSONA_SECTION,
     order: 0,

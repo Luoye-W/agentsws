@@ -32,6 +32,15 @@ allowBuilds:
   # - @deepseek-ai/node-addon-landlock-run：Linux 沙箱 addon，被 node-addon-system 取代
   # squirrel.windows 打包器（electron-builder 的可选依赖）；Windows 我们出 NSIS，不需要它
   electron-winstaller: false
+  # WP82：官方浏览器 provider（`dsh-experimental-browser-use-playwright-mcp`）拖
+  # `@playwright/mcp` → `playwright` → `playwright-core`。playwright 的 postinstall
+  # 会下载几百 MB 的浏览器二进制（16 §3 最严解释：不给原生 / 下载型依赖开构建）。
+  # 我们两条路都不需要它下载：
+  # - `attach`：接用户自己电脑上已经开着的 Chrome（`--cdp-endpoint`），根本不起浏览器；
+  # - `launch`：一律带 `--executable-path` 指本机已装的 Chrome / Chromium。
+  # 所以这两个写死 false —— 下载脚本没跑过，provider 照样能起（它只要 `cli.js` 那段 JS）。
+  playwright: false
+  playwright-core: false
 minimumReleaseAgeExclude:
   - '@oomol-lab/connector@1.2.0'
   - electron@44.3.0
@@ -66,9 +75,9 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-bash-local@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-bash-sandbox@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-brand@0.1.6-alpha.1'
-  # 只在 packages/dsh-adapter 的 devDependencies 里，给 WP70 的浏览器 seam spike 用
-  # （test/browser-seam.test.ts）。它自己只依赖 cordis + dsh-brand，两个都已在树里；
-  # **不进任何 runtime 依赖**，也没有引入 @playwright/mcp / playwright（那会拖 Chromium 下载）。
+  # WP82：从 devDependency（WP70 的 seam spike）升到 **runtime 依赖** —— 浏览器策略
+  # 落地之后，`harness.ts` 在 `RunRequest.browser` 存在时真的挂 provider（55 §3）。
+  # 它自己只依赖 cordis + dsh-brand，两个都已在树里。
   - '@deepseek-ai/dsh-browser-use@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-chunked-list@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-client-connection@0.1.6-alpha.1'
@@ -135,6 +144,13 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-credentials@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-deepseek-llm-api-extensions@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-deque@0.1.6-alpha.1'
+  # WP82：官方浏览器的两个实验包。`-runtime` 是 seam 本体（`mountSessionMcp`：一个
+  # Agent 一个 MCP 客户端、attach 独占、`agent/created` 挂载）；`-playwright-mcp` 只是
+  # 拼参数的薄壳（`--browser chromium` + attach 的 `--cdp-endpoint` / launch 的
+  # `--isolated [--headless] [--executable-path]`）。后者 dependencies 里有
+  # `@playwright/mcp`，见 allowBuilds 段对 playwright 的处理。
+  - '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp@0.1.6-alpha.1'
+  - '@deepseek-ai/dsh-experimental-browser-use-runtime@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-file-reference-local@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-file-reference@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-fs-local@0.1.6-alpha.1'

@@ -5,6 +5,12 @@
  * 业务代码只见 `RuntimeAdapter`，升级 dsh 只看 `test/` 里的 seam 契约测试红不红。
  */
 
+export {
+  type BrowserProviderConfig,
+  browserBrief,
+  browserProviderConfig,
+  checkBrowserNavigation,
+} from './browser.js'
 export { DshAdapterError } from './errors.js'
 export type { AskedBoundary, DraftArgs, GateApi, GateInput, StageArgs } from './gate.js'
 export { CONTEXT_PREFIX, installGate, PERSONA_SECTION } from './gate.js'
@@ -31,7 +37,16 @@ export { GATE_PLUGIN_MODULE, presetComposition, writePreset } from './preset.js'
 export * from './reading.js'
 export { createInProcessDshRuntime, TASK_MESSAGE } from './runtime.js'
 export type { ReadToolHooks, StageToolHooks } from './tools.js'
-export { buildToolDefinitions, classifySideEffect, DRAFT_TOOL, STAGE_TOOL } from './tools.js'
+export {
+  BROWSER_DEFAULT_TOOL_NAMES,
+  BROWSER_DEFAULT_TOOLS,
+  BROWSER_TOOL_PREFIX,
+  browserToolName,
+  buildToolDefinitions,
+  classifySideEffect,
+  DRAFT_TOOL,
+  STAGE_TOOL,
+} from './tools.js'
 export type {
   DshRuntimeMode,
   DshRuntimeOptions,
