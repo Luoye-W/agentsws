@@ -128,6 +128,9 @@ const McpBody = z.object({
   args: z.array(z.string().max(512)).max(64).optional(),
   url: z.string().min(1).max(2048).optional(),
   headers: z.record(z.string().min(1).max(128), z.string().max(4096)).optional(),
+  // WP86（55 §4 第三层）：这台服务器上哪几个工具是只读的。**原始工具名**，不带
+  // `mcp__<serverName>__` 前缀；不勾 = 一个只读的都没有 = 公司端一个都调不动。
+  read_tools: z.array(z.string().min(1).max(128)).max(256).optional(),
 })
 
 function portOf(deps: GatewayDeps): ConnectionDirectoryPort {
@@ -189,7 +192,7 @@ export function connectionDirectoryRoutes(): Route[] {
         path: '/v1/connection-directory/mcp-servers',
         operationId: 'saveMcpServer',
         summary:
-          '登记一台自定义 MCP 服务器：校验 → 存（请求头进本机加密库）→ 探测一次并记下它报的工具。**本期不接进运行时**',
+          '登记一台自定义 MCP 服务器：校验 → 存（请求头进本机加密库）→ 探测一次并记下它报的工具；`read_tools` 记下哪几个是只读的（门禁按它判读写）。职责模板写 `mcp:<名字>` 即进该职责的 preset',
         tag: TAG,
         auth: 'bearer',
         assignment: true,
@@ -209,6 +212,7 @@ export function connectionDirectoryRoutes(): Route[] {
             ...(input.args === undefined ? {} : { args: input.args }),
             ...(input.url === undefined ? {} : { url: input.url }),
             ...(input.headers === undefined ? {} : { headers: input.headers }),
+            ...(input.read_tools === undefined ? {} : { read_tools: input.read_tools }),
           }),
           201,
         )

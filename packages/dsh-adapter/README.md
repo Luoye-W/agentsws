@@ -8,8 +8,10 @@
 
 ```
 RunRequest
-  → writePreset()            一职责一目录：presets/<role_id>/agent.cordis.yml
+  → writePreset()            一职责一目录：<root>/<workspace>/<preset_id>/agent.cordis.yml
+                             （WP86：里面是这条职责的 mcp-client 行；内容没变就不写）
   → createHarness()          一棵全新的 Cordis 树（headless、无状态，结束即 dispose）
+       agentPresets.mount    WP86：这条职责的连接（**先挂它，再 restrict**）
        systemPrompt.section  persona（complete 段，遮蔽 dsh 自带的 persona 前后缀）
        systemPrompt.context  每个 ContextItem 一段 → 发 context.injected
        tools.register        allowlist 的读工具 + stage_refund / draft_reply
@@ -39,6 +41,9 @@ RunRequest
 | SDK `run()` / `subscribe()` | `initialize` → `session/prompt` → inbox 收据 → `assistant/message` → `session.status: idle` |
 | preset | 一目录一 `agent.cordis.yml`，具名插件行；组合只由 RunRequest 决定 |
 
+WP86 之后 preset 这一层还有 `test/preset-seam.test.ts`（生成幂等、凭据只有名字、按职责隔离、
+`read_tools` 判定、`restrict` 顺序），细节见 `AGENT-LAYER.md` §10。
+
 SDK 那组用 `test/fake-runtime.mjs`（只说线协议、不跑模型）——我们要钉的是协议，不是模型。
 
 ## 与 dsh 0.1.3-alpha.2 的已知差异
@@ -52,4 +57,9 @@ SDK 那组用 `test/fake-runtime.mjs`（只说线协议、不跑模型）——�
    `createProcessHarnessClient`，但运行时入口没有导出它们。
 4. 本适配器跑的是**同进程** headless 组合，不是 `dsh --profile headless` 子进程：
    `stage` / `createDraft` / 合成时钟都是进程内回调，跨进程要先有一层 IPC。
-   跨进程形态的组合由 `writePreset()` 生成，两边是同一份定义。
+   跨进程形态的组合由 `writePreset()` 生成到同目录的 `host.cordis.yml`，两边是同一份定义。
+5. （WP86）官方 `ctx.credentials` 是**单 provider**：一棵树上挂第二个 `CredentialProvider`
+   当场抛 `service "credentials" has been registered`。本机凭据与 OpenConnector 的分层
+   只能在一个 provider 内部做（`@agentsws/credentials-openconnector`）。
+6. （WP86）`agent-presets` 挂上来的工具**受** `ctx.tools.restrict` 管，且 `restrict` 必须
+   在 `mount()` **之后**调——与官方浏览器 provider 的语义正好相反（AGENT-LAYER §9.4 / §10.1）。

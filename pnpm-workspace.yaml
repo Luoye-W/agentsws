@@ -55,6 +55,10 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-agent-default-model@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-agent-instructions@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-agent-loop@0.1.6-alpha.1'
+  # WP86：从"传递依赖"升为 `dsh-adapter` 的**直接依赖**（55 §4 第三层：职责 preset
+  # 承载连接）。它的 `inject` 是 `['loader','sessionProjections']`，所以一起升上来的
+  # 还有 `@deepseek-ai/cordis-plugin-loader@1.0.3` 与 `-include@1.0.7`——那两个是
+  # cordis 侧的包（不跟 dsh 的版本走），本来就在树里，不需要排除静默期。
   - '@deepseek-ai/dsh-agent-presets@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-agent-tool-presentation@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-agent@0.1.6-alpha.1'
@@ -141,6 +145,11 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-cordis-client-runner@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-cordis-host-runner@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-credentials-local@0.1.6-alpha.1'
+  # WP86：官方 `ctx.credentials` 的 seam 定义。实测是**单 provider**（一棵树上第二个
+  # `CredentialProvider` 当场抛），所以本机凭据与 OpenConnector 的分层做在
+  # `@agentsws/credentials-openconnector` 的组合 provider 内部。
+  # `dsh-credentials-local` **没有**升为直接依赖：它自己就是一个 Service，挂上去会和
+  # 我们的组合 provider 抢 `credentials` 这个名字。
   - '@deepseek-ai/dsh-credentials@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-deepseek-llm-api-extensions@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-deque@0.1.6-alpha.1'
@@ -181,6 +190,7 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-llm-pi-ai@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-llm-retry@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-llm@0.1.6-alpha.1'
+  # WP86：preset 里一条连接一行的那个官方插件（`mcp__<serverName>__<tool>`）。
   - '@deepseek-ai/dsh-mcp-client@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-mcp-resources@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-message-feedback@0.1.6-alpha.1'

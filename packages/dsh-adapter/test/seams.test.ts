@@ -7,6 +7,7 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { RunEvent } from '@agentsws/contracts'
 import { EXTERNAL_FENCE, Provenance } from '@agentsws/core'
@@ -26,6 +27,7 @@ import {
   GATE_PLUGIN_MODULE,
   PERSONA_SECTION,
   presetComposition,
+  presetIdOf,
   STAGE_TOOL,
   writePreset,
 } from '../src/index.js'
@@ -521,15 +523,30 @@ describe('seam: SDK 的 run() / subscribe() 事件形状', () => {
 
 // ── seam 7：preset 挂载与继承 ───────────────────────────────────────────────
 describe('seam: preset 挂载与继承', () => {
-  it('一职责一目录：<root>/<role_id>/agent.cordis.yml + preset.yml', () => {
+  /*
+   * WP86 记下的两处**事实变化**（不是删用例，是改断言）：
+   *
+   * 1. 目录从 `<root>/<role_id>` 变成 `<root>/<workspace>/<preset_id>`。
+   *    `preset_id` 要过上游的 `[a-z0-9][a-z0-9-]*`，而职责 id 带点（`dtc.support`）；
+   *    多一层 workspace 是因为 roster 的一个 root 就是一个品牌那一层（52 O1）。
+   * 2. `agent.cordis.yml` 从"门禁 + 网关那两行"变成**能挂的那一份**（`mcp-client` 行）。
+   *    `mount()` 会把每一行真的 import 起来，门禁那一行没有可 import 的模块名，
+   *    留在里面 preset 一挂就 broken。跨进程那一份搬到同目录的 `host.cordis.yml`。
+   */
+  it('一职责一目录：<root>/<workspace>/<preset_id>/{agent,host}.cordis.yml + preset.yml', () => {
     const req = makeRequest()
     const paths = writePreset(req)
-    expect(paths.dir.endsWith(`/${req.actor.role_id}`)).toBe(true)
+    expect(paths.id).toBe(presetIdOf(req.actor.role_id))
+    expect(paths.dir).toBe(join(paths.root, paths.id))
+    expect(paths.root.endsWith(`/${req.workspace_id}`)).toBe(true)
+    // 上游的 preset id 规矩：目录名就是 id
+    expect(/^[a-z0-9][a-z0-9-]*$/.test(paths.id)).toBe(true)
     const rows: unknown = parse(readFileSync(paths.composition, 'utf8'))
     expect(Array.isArray(rows)).toBe(true)
-    const list = rows as { id: string; name: string; config?: unknown }[]
+    const host: unknown = parse(readFileSync(paths.host, 'utf8'))
+    const list = host as { id: string; name: string; config?: unknown }[]
     // dsh-agent-presets 要求组合是"一列具名插件行"，否则整份 preset 被标 broken
-    for (const row of list) {
+    for (const row of [...(rows as typeof list), ...list]) {
       expect(typeof row.id).toBe('string')
       expect(typeof row.name).toBe('string')
     }
@@ -550,7 +567,8 @@ describe('seam: preset 挂载与继承', () => {
   it('工具集写进 preset 的 config（tools.restrict 的来源）', () => {
     const req = makeRequest({ allow: ['get_order', 'search_policies'] })
     const comp = presetComposition(req)
-    const gate = comp.rows[0] as {
+    // WP86：门禁那一行搬到 `hostRows`（跨进程那一份），内容一个字没改
+    const gate = comp.hostRows[0] as {
       config: { tools: { allow: string[]; side_effect_policy: string } }
     }
     expect(gate.config.tools.allow).toEqual(['get_order', 'search_policies'])

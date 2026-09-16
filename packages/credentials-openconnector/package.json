@@ -1,0 +1,25 @@
+{
+  "name": "@agentsws/credentials-openconnector",
+  "version": "0.0.0",
+  "private": true,
+  "description": "官方 ctx.credentials 的 provider：环境变量引用走本机，凭据记录走 OpenConnector（55 §4 凭据段）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-credentials": "0.1.6-alpha.1"
+  }
+}

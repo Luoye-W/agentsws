@@ -6,6 +6,7 @@ import type {
   ModelRef,
   ObjectRef,
   RunBrowser,
+  RunConnection,
   RunEvent,
   RunRequest,
 } from '@agentsws/contracts'
@@ -64,6 +65,11 @@ export interface RequestOverrides {
   browser?: RunBrowser
   /** WP82：允许打开的站（不给 = 不给这个字段 = 一律拒）。 */
   allowed_hosts?: string[]
+  /** WP86：这条职责挂哪几台 MCP 服务器（不给 = 一台都不挂）。 */
+  connections?: RunConnection[]
+  /** 换一条职责（preset id 与目录名跟着它走）。 */
+  role_id?: string
+  workspace_id?: string
 }
 
 /** 一条最小但完整的"退货窗口内"RunRequest。 */
@@ -97,10 +103,10 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
   return {
     id: o.id ?? 'run_0001',
     schema_version: 1,
-    workspace_id: 'ws_test',
+    workspace_id: o.workspace_id ?? 'ws_test',
     kind: 'work_item',
-    actor: { person_id: 'p_agent', assignment_id: 'asg_1', role_id: 'dtc.support' },
-    work_item: { id: 'wi_1', conversation_id: 'thr_1', role_id: 'dtc.support' },
+    actor: { person_id: 'p_agent', assignment_id: 'asg_1', role_id: o.role_id ?? 'dtc.support' },
+    work_item: { id: 'wi_1', conversation_id: 'thr_1', role_id: o.role_id ?? 'dtc.support' },
     trigger: { event_id: 'evt_1', source: 'inbound' },
     context,
     grounding: [
@@ -139,7 +145,7 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     },
     expectations: { outputs: ['draft', 'staged_change'], must_stage_if_change_requested: true },
     runtime: {
-      preset: 'dtc.support',
+      preset: o.role_id ?? 'dtc.support',
       profile: 'agentsws-executor',
       plugins: [],
       model: { provider: 'stub', model: 'stub-v1', region: 'cn' },
@@ -147,6 +153,7 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     },
     ...(o.browser === undefined ? {} : { browser: o.browser }),
     ...(o.allowed_hosts === undefined ? {} : { allowed_hosts: o.allowed_hosts }),
+    ...(o.connections === undefined ? {} : { connections: o.connections }),
     idempotency_key: 'idem_test',
   }
 }

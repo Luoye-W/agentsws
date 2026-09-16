@@ -668,8 +668,8 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     docs_url: 'https://modelcontextprotocol.io/docs/concepts/transports',
     status: 'available',
     note: {
-      zh: '本期只做保存、校验与探测（连一次、把它报的工具列出来）；还不会挂到 Agent 上。',
-      en: 'This release only saves, validates and probes it (listing its tools); it is not wired into the agent yet.',
+      zh: '保存、校验、探测（连一次、把它报的工具列出来），并按职责挂到 Agent 上：职责模板写 `mcp:<名字>` 就进那条职责的 preset。',
+      en: "Saved, validated, probed, and mounted per role: a role template naming `mcp:<name>` gets it in that role's preset.",
     },
   },
 ]
@@ -750,6 +750,17 @@ export interface McpServerRecord {
   url?: string
   /** 存了哪几个请求头（**只有名字**）。 */
   header_names: readonly string[]
+  /**
+   * WP86（55 §4 第三层）：这台服务器上**哪几个工具是只读的**（原始工具名，不带
+   * `mcp__<serverName>__` 前缀）。
+   *
+   * 为什么要人来勾：MCP 协议**没有**读写标注，一台自定义服务器能干什么我们事先
+   * 不知道（目录条目因此整条按 `write_external` 兜底）。门禁的读写分类
+   * （`dsh-adapter` 的 `classifySideEffect`）只认这张表：**列进来的按 `read_external`，
+   * 表外的一律按 `write_external`**——公司端（`executor`）因此一调就拒。
+   * 空数组 ≡ 没有只读工具 ≡ 这台服务器在公司端一个工具都调不动，这是有意的最严默认。
+   */
+  read_tools?: readonly string[]
   /** 最近一次探测的结果；从没探测过就没有。 */
   probe?: McpProbeResult
   created_at: string
@@ -779,6 +790,8 @@ export interface McpServerInput {
   args?: readonly string[]
   url?: string
   headers?: Readonly<Record<string, string>>
+  /** WP86：哪几个工具是只读的（见 {@link McpServerRecord.read_tools}）。 */
+  read_tools?: readonly string[]
 }
 
 /**
@@ -818,5 +831,85 @@ export function validateMcpServer(input: McpServerInput): string[] {
     // HTTP 头名字的字符集（RFC 9110 token）；放宽会让人把整行 `a: b` 当名字填进来
     if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(name)) problems.push(`请求头的名字不合法：${name}`)
   }
+  // WP86：只读清单里放的是**这台服务器报出来的原始工具名**，不是带前缀的全名。
+  // 让人填错方向（把 `mcp__x__echo` 粘进来）的话门禁会一条都对不上，静默地更严——
+  // 与其让它静默，不如在保存这一刻说清楚。
+  for (const tool of input.read_tools ?? []) {
+    if (tool.trim() === '') problems.push('只读工具名不能是空的')
+    else if (tool.startsWith(MCP_TOOL_PREFIX))
+      problems.push(`只读工具填原始名字就行，不要带 ${MCP_TOOL_PREFIX} 前缀：${tool}`)
+  }
   return problems
+}
+
+// ── WP86（55 §4 第三层）：职责 ↔ MCP 服务器 ↔ 工具名 ─────────────────────
+
+/**
+ * 职责模板里指名一台**自定义 MCP 服务器**的 `connectors[].kind` 前缀。
+ *
+ * 目录里的 `mcp_server` 那一条说的是"可以接自定义 MCP 服务器"这件事本身；
+ * 一条职责要用**哪一台**，写成 `mcp:<name>`（`name` 就是登记时起的那个）。
+ * 这样"谁用哪台"仍然由职责模板说了算（55 §4：preset 由模板生成、用户不手编），
+ * 界面上不需要再来一张"这台服务器给哪些职责用"的勾选表。
+ */
+export const MCP_CONNECTOR_PREFIX = 'mcp:'
+
+/** `mcp:my-tools` → `my-tools`；不是这种 kind 就回 `undefined`。 */
+export function customMcpServerOfKind(kind: string): string | undefined {
+  if (!kind.startsWith(MCP_CONNECTOR_PREFIX)) return undefined
+  const name = kind.slice(MCP_CONNECTOR_PREFIX.length)
+  return MCP_SERVER_NAME_RE.test(name) ? name : undefined
+}
+
+/** 官方 `mcp-client` 给工具起名的前缀（`mcp__<serverName>__<rawName>`）。 */
+export const MCP_TOOL_PREFIX = 'mcp__'
+
+/** 上游 `mcp-client` 的 `serverName` 字符集与长度（`[A-Za-z0-9_-]{1,32}`）。 */
+export const MCP_SERVER_NAME_MAX = 32
+
+/** FNV-1a 32 位；只用来在名字太长时给一个稳定的短后缀（不是密码学用途）。 */
+function shortHash(value: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  return h.toString(16).padStart(8, '0')
+}
+
+/**
+ * 一条连接在 dsh 那边的 `serverName`：`<workspace>_<kind>`。
+ *
+ * 上游要求 `serverName` 在**一个注册作用域内全局唯一**，而我们一个进程装得下多个
+ * 品牌（52 O1）：不带 workspace 的话，品牌 A 的 `shopify` 与品牌 B 的 `shopify`
+ * 会撞名，后挂的那个直接加载失败。字符集与 32 位长度限制也在这里守住——
+ * 超了就截断 + 挂一个稳定的短哈希，**不**悄悄截成两个一样的名字。
+ */
+export function mcpServerNameFor(workspace_id: string, kind: string): string {
+  const clean = (v: string): string => v.replace(/[^A-Za-z0-9_-]/g, '_')
+  const joined = `${clean(workspace_id)}_${clean(kind)}`
+  if (joined.length <= MCP_SERVER_NAME_MAX) return joined
+  return `${joined.slice(0, MCP_SERVER_NAME_MAX - 9)}_${shortHash(joined)}`
+}
+
+/** `(serverName, rawName)` → 模型看见的那个名字（上游 `mcp-client` 的命名规则）。 */
+export function mcpToolName(serverName: string, rawName: string): string {
+  return `${MCP_TOOL_PREFIX}${serverName}__${rawName}`
+}
+
+/**
+ * 反过来：`mcp__ws_local_shopify__get_order` → `{ server: 'ws_local_shopify', tool: 'get_order' }`。
+ *
+ * 分隔符是**第一个** `__`：`serverName` 的字符集里没有 `__`（`_` 有、连着两个没有
+ * 意义），而工具名里可能有。认不出来的回 `undefined`（例如官方浏览器那组
+ * `mcp__playwright-mcp__*` 会认出来，调用方自己按 server 名再分流）。
+ */
+export function parseMcpToolName(name: string): { server: string; tool: string } | undefined {
+  if (!name.startsWith(MCP_TOOL_PREFIX)) return undefined
+  const rest = name.slice(MCP_TOOL_PREFIX.length)
+  const at = rest.indexOf('__')
+  if (at <= 0) return undefined
+  const tool = rest.slice(at + 2)
+  if (tool === '') return undefined
+  return { server: rest.slice(0, at), tool }
 }

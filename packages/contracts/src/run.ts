@@ -179,7 +179,59 @@ export interface RunRequest {
    * 与它们当初根本没有浏览器工具的事实一致（所以这里是可选字段，不是必填）。
    */
   allowed_hosts?: string[]
+  /**
+   * WP86（55 §4 第三层）：**这条职责连了哪些 MCP 服务器**。
+   *
+   * 由服务进程从「连接目录」算出来：职责模板的 `connectors[]` ∩ 已登记的
+   * MCP 服务器（目录里 `mode: 'mcp_server'` 的那些，加上职责用 `mcp:<name>`
+   * 指名的自定义服务器）。运行时据它生成这条职责的 `agent-presets` 目录，
+   * 一行一个官方 `@deepseek-ai/dsh-mcp-client`。
+   *
+   * **里面没有任何凭据值**：请求头与环境变量只有**名字**（`header_refs` /
+   * `env_refs`），值由 `ctx.credentials` 在运行时解析（13 §4）。
+   *
+   * 不给 ≡ 空数组 ≡ 这条职责一台 MCP 服务器都不挂——preset 里没有 `mcp-client` 行，
+   * 工具面里一个 `mcp__*` 都不存在。老的运行记录里没有这个字段，回放出来照样是空。
+   */
+  connections?: RunConnection[]
   idempotency_key: string
+}
+
+/**
+ * 一条挂给这次运行的 MCP 服务器（官方 `dsh-mcp-client` 的一行配置 + 我们的读写分类）。
+ *
+ * 形状照上游 `StdioConfig` / `StreamableHttpConfig` 抄，只把凭据那两处换成**引用**。
+ */
+export interface RunConnection {
+  /** 职责模板里的 `connectors[].kind`（`shopify` / `mcp:my-tools`）。 */
+  kind: string
+  /** 上游 `serverName`，全局唯一（`mcpServerNameFor(workspace_id, kind)`）。 */
+  server_name: string
+  transport: 'stdio' | 'streamable-http'
+  /** stdio：可执行文件与参数。 */
+  command?: string
+  args?: string[]
+  /** streamable-http：服务器地址。 */
+  url?: string
+  /**
+   * 请求头名 → **凭据引用名**（`CredentialRef`，一个 POSIX 环境变量名）。
+   * 值不在这里、也不在生成的 preset 文件里；运行时经 `ctx.credentials` 解析。
+   */
+  header_refs?: Record<string, string>
+  /** stdio 子进程的环境变量名 → 凭据引用名，同上。 */
+  env_refs?: Record<string, string>
+  /**
+   * 这台服务器上**只读**的原始工具名（`McpServerRecord.read_tools`）。
+   * 门禁按它判读写；表外的一律 `write_external`（16 §3 最严兜底）。
+   */
+  read_tools?: string[]
+  /**
+   * 探测时它报出来的**全部**原始工具名。用途只有一个：算出
+   * `mcp__<server_name>__<tool>` 放进 `ctx.tools.restrict({ allow })`——
+   * preset 挂上来的工具**受**职责白名单管（实测；与官方浏览器 provider 相反）。
+   * 不给的话这台服务器的工具一个都进不了模型面。
+   */
+  tools?: string[]
 }
 
 /**

@@ -633,7 +633,7 @@ export interface paths {
     /** 已登记的自定义 MCP 服务器（**只有请求头的名字，没有值**） */
     get: operations['listMcpServers']
     put?: never
-    /** 登记一台自定义 MCP 服务器：校验 → 存（请求头进本机加密库）→ 探测一次并记下它报的工具。**本期不接进运行时** */
+    /** 登记一台自定义 MCP 服务器：校验 → 存（请求头进本机加密库）→ 探测一次并记下它报的工具；`read_tools` 记下哪几个是只读的（门禁按它判读写）。职责模板写 `mcp:<名字>` 即进该职责的 preset */
     post: operations['saveMcpServer']
     delete?: never
     options?: never
@@ -7700,6 +7700,7 @@ export interface operations {
           headers?: {
             [key: string]: string
           }
+          read_tools?: string[]
         }
       }
     }

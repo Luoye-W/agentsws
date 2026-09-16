@@ -51,8 +51,19 @@ export interface DshRuntimeOptions {
   /** 读不到政策时的默认退货窗口天数。 */
   defaultReturnWindowDays?: number
   signature?: string
-  /** preset 目录根（`<root>/<role_id>/agent.cordis.yml`）；缺省写临时目录。 */
+  /** preset 目录根（`<root>/<workspace>/<preset_id>/agent.cordis.yml`）；缺省写临时目录。 */
   presetRoot?: string
+  /**
+   * WP86（55 §4 凭据段）：官方 `ctx.credentials` 的 provider **插件**。
+   *
+   * 给了就挂在这次运行的树上，生成的 preset 里那些 `!!js process.env.<REF>` 引用
+   * 经它解析（13 §4：值不进文件、不进事件、不进模型）。不给 = 引用解析不出来 =
+   * 那台 MCP 服务器连不上、它的工具不出现——**不**退化成"从进程环境里随便捡一个"。
+   *
+   * 类型故意留成 `unknown`：这一层不该知道 provider 是本机的、OpenConnector 的，
+   * 还是两者的组合（`@agentsws/credentials-openconnector`）。
+   */
+  credentials?: unknown
   /** 会话日志根；`session_ref.log_uri` 指向它。 */
   sessionLogRoot?: string
   /** 覆盖工具的副作用分类（16 §3 未标的按最严处理）。 */

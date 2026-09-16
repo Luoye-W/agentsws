@@ -773,7 +773,7 @@ const zh: Table = {
   'connections.category.dev': '开发',
   'connections.category.custom': '自定义',
   'connections.mcp.hint':
-    '自己跑的工具服务器可以登记在这里。这一版只做"存下来、连一次、看看它有哪些工具"——还不会交给 AI 用。',
+    '自己跑的工具服务器可以登记在这里。登记完勾一下"哪几个工具只是看、不动东西"，再在职责模板里写上 mcp:名字，那条职责的 AI 同事就能用它了。',
   'connections.mcp.add': '登记一台',
   'connections.mcp.empty': '还没登记过。',
   'connections.mcp.name': '名字',
@@ -791,6 +791,9 @@ const zh: Table = {
   'connections.mcp.remove.confirm': '删掉之后它的请求头也会从加密库里删掉。继续？',
   'connections.mcp.tools': '连上了，{n} 个工具：{names}',
   'connections.mcp.failed': '没连上',
+  'connections.mcp.read_tools.hint':
+    '勾出"只是看、不动东西"的那几个。没勾的一律当成会改外面的东西——公司档里 AI 调不动它们，要先有人批。',
+  'connections.mcp.read_tools.save': '保存只读清单',
   'position.connections.title': '连上这 {n} 个就能开工',
   'position.connections.subtitle':
     '这些是这个岗位的活儿要用到的。连一个少一条，连完这张卡就不见了。',
@@ -2477,7 +2480,7 @@ const en: Table = {
   'connections.category.dev': 'Developer',
   'connections.category.custom': 'Custom',
   'connections.mcp.hint':
-    'Register a tool server you run yourself. This release only saves it, connects once and lists its tools — the AI cannot use it yet.',
+    'Register a tool server you run yourself. After registering, tick which of its tools only read, then name it as mcp:<name> in a role template so that role can use it.',
   'connections.mcp.add': 'Register one',
   'connections.mcp.empty': 'None registered yet.',
   'connections.mcp.name': 'Name',
@@ -2497,6 +2500,9 @@ const en: Table = {
     'Removing it also deletes its headers from the vault. Continue?',
   'connections.mcp.tools': 'Connected, {n} tool(s): {names}',
   'connections.mcp.failed': 'Could not connect',
+  'connections.mcp.read_tools.hint':
+    'Tick the tools that only look at things. Anything unticked counts as changing the outside world — on a company workspace the AI cannot call those without approval.',
+  'connections.mcp.read_tools.save': 'Save read-only list',
   'position.connections.title': 'Connect these {n} and this role can start',
   'position.connections.subtitle':
     'This role needs them for its work. Each one you connect drops off; connect them all and this card disappears.',
