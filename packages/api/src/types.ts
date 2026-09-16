@@ -276,12 +276,18 @@ export type {
 
 /** WP69（54 §3）：某一层记忆里的一段（岗位页 / 职责层的"记忆"小节列的就是它们）。 */
 export interface SkillMemoryEntry {
+  /** WP71：改 / 删这一条用的地址（服务端给，前端不拼）。 */
+  id?: string
   skill: string
   section_id: string
   heading?: string
   body: string
   origin: 'authored' | 'learned'
   learned_from?: { lessons: string[]; at: string }
+  /** WP71：手动加的，还是从事项 / 复盘提升上来的。 */
+  source?: 'manual' | 'promoted'
+  added_by?: string
+  added_at?: string
 }
 
 /** 写个人层 overlay 的入参（24 §1 OverlayOp）。 */
@@ -332,12 +338,42 @@ export interface SkillsPort {
     scope_id?: string
     actor: { person_id: PersonId; workspace_id: WorkspaceId }
   }): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }>
-  /** WP69（54 §3）：某一层记忆里有哪几段（岗位页 / 职责层的"记忆"小节；只读）。 */
+  /**
+   * WP69（54 §3）：某一层记忆里有哪几段（第三栏「记忆」面板列的就是它们）。
+   * WP71 起多回一格 `can_edit`——**能不能改由服务端说了算**，界面照着它决定出不出
+   * 改 / 删 / 手动加那三个按钮（前端自己判等于把判据抄了第二份）。
+   */
   memory?(input: {
     tier: SkillTier
     scope_id?: string
     actor: { person_id: PersonId; workspace_id: WorkspaceId }
-  }): Promise<{ summary: string; entries: SkillMemoryEntry[] }>
+  }): Promise<{ summary: string; entries: SkillMemoryEntry[]; can_edit?: boolean }>
+  /**
+   * WP71（36 §10）：手动加一条记忆（写本层）。
+   *
+   * 与"提到上一层"是两件事：提升产的是一张待审的卡（24 §3），这条是**当场写进本层**——
+   * 因为本层就是本人自己的活儿那一层，没有第二个人要为它点头。越层一律 403。
+   */
+  addMemory?(input: {
+    tier: SkillTier
+    scope_id?: string
+    text: string
+    heading?: string
+    skill?: string
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<SkillMemoryEntry>
+  /** WP71：改本层的一条。 */
+  updateMemory?(input: {
+    id: string
+    text: string
+    heading?: string
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<SkillMemoryEntry>
+  /** WP71：删本层的一条。 */
+  deleteMemory?(input: {
+    id: string
+    actor: { person_id: PersonId; workspace_id: WorkspaceId }
+  }): Promise<void>
   /** WP29：待审的 `skill_lesson` 提案卡（技能页上的"待审提案"）。 */
   proposals?(actor: {
     person_id: PersonId

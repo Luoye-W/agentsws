@@ -217,6 +217,18 @@ export class MemorySkillRegistry {
     return this.#lookup(name, tier, scope ?? {})
   }
 
+  /**
+   * WP71：同 {@link get}，但**同步**。
+   *
+   * 记忆面板那句话摘要（"岗位层：6 段，其中 2 段是学来的"）长在同步路径上
+   * （`createPositions` 的 `memorySummary` 闭包），而手动加的记忆就住在这一层
+   * 自己的技能记录里——没有同步读就得把那条闭包整条改成异步，牵动岗位实体一整条线。
+   * 库本来就是内存的，这里只是把 `#lookup` 露出来。
+   */
+  peek(name: string, tier: SkillTier, scope?: SkillScopeRef): Skill | undefined {
+    return this.#lookup(name, tier, scope ?? {})
+  }
+
   /** 契约 parse()：段 id 由系统分配（隐藏 ULID），按标题切段。 */
   parse(markdown: string, existing?: SkillSection[]): ParsedSection[] {
     return this.parseDocument(markdown, existing).sections
