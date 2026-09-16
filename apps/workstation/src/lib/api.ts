@@ -1092,6 +1092,141 @@ export const removeConnection = (id: string, assignment?: string): Promise<{ rem
     ...withAssignment(assignment),
   })
 
+// ── WP83（54（将改号 55）§4）：连接目录与岗位连接清单 ──────────────────
+//
+// 与上面那一组的分工：上面按 **provider** 问"这张卡怎么填"，这一组按职责模板的
+// **kind** 问"有哪些东西可以接、这个岗位要接哪几个"。目录里只有字段**描述**，
+// 没有任何值，也没有任何一条真实连接的账号 id。
+
+export type ConnectionRuntimeState = 'connected' | 'not_connected' | 'error'
+
+export interface ConnectionFieldSpec {
+  name: string
+  label: { zh: string; en: string }
+  secret: boolean
+  required: boolean
+  kind?: 'text' | 'password' | 'email' | 'number' | 'url' | 'select' | 'headers'
+  placeholder?: string
+  options?: string[]
+  hint?: { zh: string; en: string }
+}
+
+export interface ConnectionDirectoryItem {
+  kind: string
+  name: { zh: string; en: string }
+  category: string
+  auth: 'oauth' | 'api_key' | 'client_credentials' | 'qr' | 'password' | 'none'
+  mode: 'openconnector_provider' | 'mcp_server' | 'channel_adapter' | 'browser' | 'builtin'
+  fields: ConnectionFieldSpec[]
+  side_effect: 'read_external' | 'write_external' | 'local'
+  docs_url?: string
+  status: 'available' | 'planned'
+  service?: string
+  aliases?: string[]
+  resolved_by_profile?: boolean
+  note?: { zh: string; en: string }
+  state: ConnectionRuntimeState
+  state_detail?: string
+  connect_service?: string
+}
+
+export interface PositionConnectionItem {
+  kind: string
+  name: { zh: string; en: string }
+  required: boolean
+  connected: boolean
+  needed_by: string[]
+  status: 'available' | 'planned'
+  connect_service?: string
+  note?: { zh: string; en: string }
+}
+
+export interface PositionConnectionsView {
+  position_id: string
+  position_name: string
+  ready: boolean
+  missing_required: string[]
+  items: PositionConnectionItem[]
+}
+
+export interface McpServerRecord {
+  name: string
+  transport: 'stdio' | 'streamable-http'
+  command?: string
+  args?: string[]
+  url?: string
+  /** 只有请求头的**名字**；值在本机加密库里，永远不经这条路。 */
+  header_names: string[]
+  probe?: {
+    ok: boolean
+    at: string
+    tools: { name: string; description?: string }[]
+    reason?: string
+    detail?: string
+  }
+  created_at: string
+  updated_at: string
+}
+
+export const getConnectionDirectory = (
+  assignment?: string,
+): Promise<{ entries: ConnectionDirectoryItem[] }> =>
+  api<{ entries: ConnectionDirectoryItem[] }>(
+    '/v1/connection-directory',
+    withAssignment(assignment),
+  )
+
+export const getPositionConnections = (
+  id: string,
+  assignment?: string,
+): Promise<PositionConnectionsView> =>
+  api<PositionConnectionsView>(
+    `/v1/positions/${encodeURIComponent(id)}/connections`,
+    withAssignment(assignment),
+  )
+
+export const listMcpServers = (assignment?: string): Promise<{ servers: McpServerRecord[] }> =>
+  api<{ servers: McpServerRecord[] }>(
+    '/v1/connection-directory/mcp-servers',
+    withAssignment(assignment),
+  )
+
+/**
+ * 登记一台自定义 MCP 服务器。
+ *
+ * `headers` 的值是凭据（多半是一枚 Bearer token）：与 `submitConnection` 同一条纪律——
+ * 从原生 `<form>` 的 FormData 里来，在这里组装一次、发出去，函数返回后没人引用它。
+ * 不写 localStorage、不进 query 缓存、不打 console。
+ */
+export const saveMcpServer = (
+  input: {
+    name: string
+    transport: 'stdio' | 'streamable-http'
+    command?: string
+    args?: string[]
+    url?: string
+    headers?: Record<string, string>
+  },
+  assignment?: string,
+): Promise<McpServerRecord> =>
+  api<McpServerRecord>('/v1/connection-directory/mcp-servers', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const probeMcpServer = (name: string, assignment?: string): Promise<McpServerRecord> =>
+  api<McpServerRecord>(`/v1/connection-directory/mcp-servers/${encodeURIComponent(name)}/probe`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+export const removeMcpServer = (name: string, assignment?: string): Promise<{ removed: boolean }> =>
+  api<{ removed: boolean }>(`/v1/connection-directory/mcp-servers/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })
+
 /** WP55 / 18 §2.2：进了死信的入站消息。正文不在这里——只有"是谁 / 何时 / 为什么"。 */
 export interface DeadLetterView {
   id: string

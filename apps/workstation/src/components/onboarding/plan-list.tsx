@@ -7,11 +7,76 @@
  *
  * 模型没接时第一条固定是"接模型"：平台连得再全也没人替你干活。
  */
+import { useQuery } from '@tanstack/react-query'
 import { Circle, CircleCheck } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import type { OnboardingPlanView } from '@/lib/api'
+import { getConnectionDirectory, type OnboardingPlanView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+
+/**
+ * WP83（54（将改号 55）§4）：**这一步只列勾的岗位需要的**，其余收进「更多连接」。
+ *
+ * 为什么不干脆不给：用户在这一步会想"我的 Klaviyo 呢"。一个都不给他会以为我们不支持；
+ * 二十多条全铺开又会把"你现在真正要连的这三个"淹掉。所以折叠起来，默认关着。
+ *
+ * 目录拉不动（还没建好分配、网络抖了）就**整块不出现**——向导不该因为一个加分项卡住。
+ */
+function MoreConnections({ planned }: { planned: string[] }): React.ReactNode {
+  const { t, lang } = useApp()
+  const [open, setOpen] = useState(false)
+  const directory = useQuery({
+    queryKey: ['connection-directory', 'onboarding'],
+    enabled: open,
+    retry: false,
+    queryFn: () => getConnectionDirectory(),
+  })
+  // 清单里已经有的那几条不再重复出现
+  const rest = (directory.data?.entries ?? []).filter(
+    (e) =>
+      e.status === 'available' &&
+      e.connect_service !== undefined &&
+      !planned.includes(e.connect_service),
+  )
+  return (
+    <section className="flex flex-col gap-2" data-testid="onboarding-more-connections">
+      <div>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-expanded={open}
+          data-testid="onboarding-more-toggle"
+          onClick={() => {
+            setOpen((v) => !v)
+          }}
+        >
+          {open ? t('onboarding.plan.more.close') : t('onboarding.plan.more')}
+        </Button>
+      </div>
+      {!open || rest.length === 0 ? null : (
+        <ul className="flex flex-col gap-1">
+          {rest.map((entry) => (
+            <li
+              key={entry.kind}
+              className="flex items-center justify-between gap-3 rounded-md border p-2 text-sm"
+              data-testid="onboarding-more-entry"
+            >
+              <span>{lang === 'zh' ? entry.name.zh : entry.name.en}</span>
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  to={`/connections?service=${encodeURIComponent(entry.connect_service ?? '')}`}
+                >
+                  {t('onboarding.plan.connect')}
+                </Link>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
 
 export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNode {
   const { t } = useApp()
@@ -111,6 +176,9 @@ export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNod
           ))}
         </section>
       )}
+
+      {/* WP83：勾的岗位要的在上面；其余收在这里，默认关着 */}
+      <MoreConnections planned={plan.connectors.map((c) => c.service)} />
 
       {plan.positions.length === 0 ? null : (
         <section className="flex flex-col gap-2">
