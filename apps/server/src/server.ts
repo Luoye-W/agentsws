@@ -2407,6 +2407,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           title: input.title,
           ...(input.summary === undefined ? {} : { summary: input.summary }),
           ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
+          // WP84：快捷提示点进来时带着职责；端口里再判一次"是不是他自己名下的那一条"
+          ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
         })
         return {
           matter: {

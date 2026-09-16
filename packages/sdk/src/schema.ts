@@ -21113,6 +21113,7 @@ export interface operations {
             type: string
             id: string
           }[]
+          role_id?: string
         }
       }
     }
