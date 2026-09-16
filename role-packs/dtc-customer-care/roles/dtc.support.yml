@@ -211,3 +211,44 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: draft_return_reply
+    label: { zh: "起草退货回复", en: "Draft a return reply" }
+    prompt: "把这封退货来信按退货政策起草一封回复，先算清楚这一单还在不在退货期内"
+    kind: start_task
+  - id: where_is_order
+    label: { zh: "查这单到哪了", en: "Where is this order" }
+    prompt: "客户问包裹到哪了：查订单和物流轨迹，把结论和预计到达时间写成一封回信"
+    kind: start_task
+  - id: unanswered_mail
+    label: { zh: "超时没回的来信", en: "Mail nobody answered" }
+    prompt: "超过 8 小时还没回的客户来信有哪些，急的排前面"
+    kind: ask
+  - id: refund_check
+    label: { zh: "退款算一算", en: "Work out the refund" }
+    prompt: "这一单要退款：按退货政策算能退多少、运费扣不扣，出一张待我批的退款卡"
+    kind: review
+  - id: chargeback_evidence
+    label: { zh: "拒付举证材料", en: "Chargeback evidence" }
+    prompt: "这笔拒付：把订单、物流签收记录和往来邮件凑成一份举证材料草稿"
+    kind: start_task
+
+task_examples:
+  - id: return_request
+    title: { zh: "一封退货来信", en: "A return request" }
+    description: "客户来信说尺码不合适想退货，东西还没寄回来。"
+    expected_output: "一封写好的回信草稿，附上「这单在不在退货期内」的判断依据；退款金额超额度的会变成一张待你批的卡，不会自己发出去。"
+  - id: damaged_parcel
+    title: { zh: "破损或漏发", en: "Damaged or missing item" }
+    description: "客户说收到时盒子压坏了、还少了一件配件，附了两张照片。"
+    expected_output: "一张补发或退款的待批卡，带订单、物流签收记录和客户发来的照片；回信草稿一起给你。"
+  - id: presale_fit
+    title: { zh: "售前问能不能用", en: "A pre-sale fit question" }
+    description: "客户问 A 型号配不配得上他家那台设备、现在有没有货。"
+    expected_output: "一封带商品参数与当前库存的回信草稿；没货就顺手写清楚什么时候能到，不编日期。"

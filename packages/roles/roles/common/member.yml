@@ -53,3 +53,32 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: my_today
+    label: { zh: "我今天要做什么", en: "What is on me today" }
+    prompt: "我今天到期的待办和等我定的卡有哪些"
+    kind: ask
+  - id: policy_lookup
+    label: { zh: "查一条规定", en: "Look up a policy" }
+    prompt: "退货政策里对超过 30 天的订单是怎么写的，把原文给我"
+    kind: ask
+  - id: my_in_progress
+    label: { zh: "我手上在做的", en: "What I am in the middle of" }
+    prompt: "我手上还没结的事项有哪些，各到哪一步了"
+    kind: ask
+
+task_examples:
+  - id: daily_start
+    title: { zh: "一天开始", en: "Starting the day" }
+    description: "早上想知道今天该先干哪一件。"
+    expected_output: "今天到期的待办加上等你定的卡，按到期时间排；一件都没有会直接告诉你没有。"
+  - id: policy_lookup_ex
+    title: { zh: "查公司怎么规定的", en: "Check what the company rule says" }
+    description: "不确定公司对某件事是怎么规定的。"
+    expected_output: "原文摘录加出处；库里查不到会直说查不到，不替你编一条出来。"

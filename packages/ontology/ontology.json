@@ -47,7 +47,7 @@
     "packages/roles/roles/kol/youtube.yml",
     "packages/roles/roles/site/builder.yml"
   ],
-  "source_digest": "6cd5b73fc77e17d889e15ccf5e957770",
+  "source_digest": "aa57e820a426cfb021e82fa9c3572a8c",
   "objects": [
     {
       "id": "ad_set",

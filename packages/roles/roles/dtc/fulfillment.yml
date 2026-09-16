@@ -185,3 +185,40 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: unshipped_yesterday
+    label: { zh: "昨天还没发的单", en: "Yesterday orders not shipped yet" }
+    prompt: "看昨天订单里哪些还没发货，按下单时间从早到晚列"
+    kind: ask
+  - id: overdue_orders
+    label: { zh: "超期未发的", en: "Past the promised time" }
+    prompt: "超过承诺时效还没发出去的单有哪些，各卡在哪一步"
+    kind: ask
+  - id: fill_tracking
+    label: { zh: "回填单号", en: "Fill in tracking numbers" }
+    prompt: "把仓库刚给的这批单号回填到对应订单上，出一张待我批的发货卡"
+    kind: review
+  - id: notify_delay
+    label: { zh: "通知延误", en: "Tell customers about a delay" }
+    prompt: "这几单要延误三天：起草一封通知信，说清新的预计时间和补偿口径"
+    kind: start_task
+  - id: split_order
+    label: { zh: "拆单先发有货的", en: "Split an order" }
+    prompt: "这一单里有一件缺货：拆成两单先发有货的，出卡等我批"
+    kind: review
+
+task_examples:
+  - id: morning_shipping
+    title: { zh: "早上过一遍待发", en: "The morning shipping pass" }
+    description: "每天早上想知道有哪些单还没发、有没有卡住的。"
+    expected_output: "一张待发清单：按下单时间排，卡住的单标出卡在哪一步（缺货 / 地址有问题 / 等仓库）。"
+  - id: delay_notice
+    title: { zh: "延误要提前告诉客户", en: "Warn customers about a delay" }
+    description: "供货晚了三天，要提前告诉受影响的客户。"
+    expected_output: "受影响的订单清单，外加一封通知信草稿；真发出去会变成一张待你批的卡。"

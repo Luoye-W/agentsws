@@ -6,6 +6,7 @@
  * 2. `collectUnknownKeys` 负责拒绝未声明字段——权限配置里一个拼错的键被静默忽略比报错危险得多。
  *    05 §5 示例里的 `agent_max_sensitivity` 已于 31 §3.3 撤销，因此它现在会被当作未知字段拒掉。
  */
+import { MAX_QUICK_PROMPTS, MAX_TASK_EXAMPLES } from '@agentsws/contracts'
 import Schema from '@deepseek-ai/schemastery'
 
 type Node = Schemastery
@@ -167,6 +168,27 @@ const GROUNDING = Schema.object({
   prefetch: bool(),
 })
 
+/**
+ * WP84（54 §1 第 6 行）：快捷提示与示例任务。
+ *
+ * 两个都是**可选**字段：不填的职责一切照旧，首页那张卡上只是没有这几个按钮。
+ * 条数上限由 `Schema.array(...).max(n)` 挡；**id 唯一**由 `checkRoleExtras` 在
+ * schemastery 之后补一刀——schemastery 管得了"每一条长什么样"，管不了"这几条之间别重名"。
+ */
+const QUICK_PROMPT = Schema.object({
+  id: str().pattern(/^[a-z][a-z0-9_]*$/),
+  label: NAME,
+  prompt: str(),
+  kind: Schema.union(['start_task', 'ask', 'review'] as const).required(),
+})
+
+const TASK_EXAMPLE = Schema.object({
+  id: str().pattern(/^[a-z][a-z0-9_]*$/),
+  title: NAME,
+  description: str(),
+  expected_output: str(),
+})
+
 const HANDOVER = Schema.object({
   transfers: Schema.array(
     Schema.union([
@@ -213,6 +235,10 @@ export const ROLE_SCHEMA: Node = Schema.object({
    * 要不要出一张提醒卡，拦不住任何人。
    */
   thresholds: Schema.dict(Schema.number()),
+  /** WP84：首页岗位卡下的快捷提示（≤ MAX_QUICK_PROMPTS 条，id 在本职责内唯一）。 */
+  quick_prompts: Schema.array(QUICK_PROMPT).max(MAX_QUICK_PROMPTS),
+  /** WP84：指导抽屉顶部的示例任务（≤ MAX_TASK_EXAMPLES 条，id 在本职责内唯一）。 */
+  task_examples: Schema.array(TASK_EXAMPLE).max(MAX_TASK_EXAMPLES),
   persona: Schema.string(),
   handover: HANDOVER,
   requires: Schema.array(Schema.string()),
@@ -225,6 +251,31 @@ export const POSITION_SCHEMA: Node = Schema.object({
   name: NAME,
   roles: Schema.array(Schema.object({ role: str(), default: bool() })).required(),
 }).required()
+
+/**
+ * WP84：schemastery 之后的那一刀——**`quick_prompts` / `task_examples` 的 id 在本职责内唯一**。
+ *
+ * 为什么非查不可：这两个 id 是界面上的 React key，也是以后"这条快捷提示被点了几次"
+ * 的统计口径。重名不会报错，只会让两条里的一条静默消失——和 05 §5 那个拼错的键
+ * 一样的毛病，所以照 `collectUnknownKeys` 的办法，宁可加载时就拒。
+ *
+ * 回 `undefined` = 没问题；回一条 `{ field, message }` = 第一处重名（字段路径照 schemastery 的写法）。
+ */
+export function checkRoleExtras(data: unknown): { field: string; message: string } | undefined {
+  if (!isPlainObject(data)) return undefined
+  for (const key of ['quick_prompts', 'task_examples'] as const) {
+    const list = data[key]
+    if (!Array.isArray(list)) continue
+    const seen = new Set<string>()
+    for (const [i, item] of list.entries()) {
+      const id = isPlainObject(item) ? item.id : undefined
+      if (typeof id !== 'string') continue
+      if (seen.has(id)) return { field: `${key}[${i}].id`, message: `duplicate id: ${id}` }
+      seen.add(id)
+    }
+  }
+  return undefined
+}
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)

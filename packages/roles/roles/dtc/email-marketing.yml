@@ -144,3 +144,36 @@ handover:
   revoke_context_on_removal: true
 
 requires: []
+
+# WP84（54 §1 第 6 行）：冷启动用的两样。**不是权限**——能不能做仍由上面的
+# actions 与额度说了算；点一条只是用这条职责在这个岗位下开一件事（54 §2）。
+# quick_prompts：首页岗位卡下面那几个按钮，点一下就开干。
+# task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
+
+quick_prompts:
+  - id: abandoned_cart
+    label: { zh: "弃购挽回怎么样", en: "How abandoned-cart mail is doing" }
+    prompt: "最近 7 天弃购挽回邮件收回来多少单，打开率和点击率是多少"
+    kind: ask
+  - id: draft_campaign
+    label: { zh: "起草一封活动邮件", en: "Draft a campaign email" }
+    prompt: "按下周的活动起草一封邮件：主题行给三个备选，正文写一版"
+    kind: start_task
+  - id: segment_size
+    label: { zh: "这个分群多少人", en: "How big is this segment" }
+    prompt: "「90 天没下过单的老客」这个分群现在多少人，和上个月比多了还是少了"
+    kind: ask
+  - id: pre_send_check
+    label: { zh: "发之前看一遍", en: "Check before it goes out" }
+    prompt: "这封邮件发之前检查一遍：抑制名单、退订链接、分群人数、发送时间"
+    kind: review
+
+task_examples:
+  - id: winback
+    title: { zh: "做一次复购召回", en: "Run a win-back" }
+    description: "想给 90 天没下单的老客发一封召回邮件。"
+    expected_output: "分群人数、一封写好的邮件、一张待批的发送卡；发送永远要人点，抑制名单每次必查。"
+  - id: cart_flow
+    title: { zh: "弃购流程调一调", en: "Tune the abandoned-cart flow" }
+    description: "弃购挽回的三封邮件效果不好，想改。"
+    expected_output: "每一封的打开、点击、收回订单各一行，加一版改写建议；改动本身走待批卡。"

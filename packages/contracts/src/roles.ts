@@ -184,6 +184,57 @@ export interface NotificationRule {
   digest_schedule?: string
 }
 
+/**
+ * WP84（53 §3「217 张角色卡」那一行 / 54 §1 第 6 行）：**冷启动用的一句话**。
+ *
+ * 为什么要有它：空白的工作台不会告诉人"这个岗位能替我干什么"。别人的做法是给每个
+ * 角色配一堆 `quick_prompts`，我们借这个形、不借它的聊天框——36 §3 的对话入口只有
+ * 指导 / 问 AI / ⌘K / 事项页四处，所以一条快捷提示点下去是**开一件事**（54 §2 的岗位
+ * 任务入口），不是往一个聊天框里塞一句话。
+ *
+ * 三条纪律：
+ * 1. **它不是权限**。快捷提示只是一句预写好的话，能不能做仍由 `actions` 与额度说了算；
+ *    点它开出来的事项照样绑在本人那条分配上。
+ * 2. **具体到这条职责的动作**，不写"帮我分析一下"这种放哪儿都成立的话。
+ * 3. `label` 是按钮上那几个字（中英各一份），`prompt` 是真正送进事项的那句话
+ *    （与 {@link RoleDefinition.description} 同一条规矩：一份中文，不双份维护）。
+ */
+export interface RoleQuickPrompt {
+  /** 这条职责内唯一（`draft_return_reply`…）。 */
+  id: string
+  /** 按钮上的几个字。 */
+  label: { zh: string; en: string }
+  /** 点下去送进事项的那句话。 */
+  prompt: string
+  /**
+   * 这一条是哪种活：`start_task` 真去做一件事、`ask` 只问不动、`review` 看一遍再定。
+   * 界面按它排序与分组（做事的排在前面），不参与任何权限判定。
+   */
+  kind: 'start_task' | 'ask' | 'review'
+}
+
+/**
+ * WP84：**这条职责典型能接什么活**——指导抽屉顶部的"示例任务"选择题（36 §1 选择题优先）。
+ *
+ * 与 {@link RoleQuickPrompt} 的分工：快捷提示是"点一下就开干"，示例任务是"它长这样"——
+ * 后者带 `expected_output`，回答的是新人第一次看见这条职责时真正想问的那句话：
+ * 交给它之后我会拿到什么。
+ */
+export interface RoleTaskExample {
+  /** 这条职责内唯一。 */
+  id: string
+  title: { zh: string; en: string }
+  /** 这件事要做什么（一两句人话）。 */
+  description: string
+  /** 做完你会拿到什么（一句话；不是保证，是形状）。 */
+  expected_output: string
+}
+
+/** 一条职责最多几条快捷提示（再多首页那张卡就读不完了）。 */
+export const MAX_QUICK_PROMPTS = 8
+/** 一条职责最多几条示例任务。 */
+export const MAX_TASK_EXAMPLES = 6
+
 export interface RoleDefinition {
   id: RoleId
   version: string
@@ -210,6 +261,15 @@ export interface RoleDefinition {
    * （那是提醒）。所以它不进 `EffectiveAction`，也不参与 guardrail。
    */
   thresholds?: Record<string, number>
+  /**
+   * WP84：首页岗位卡下面那几条"点一下就开干"（最多 {@link MAX_QUICK_PROMPTS} 条，id 唯一）。
+   * 不填 = 这条职责在卡上不出快捷提示，别的一切照旧。
+   */
+  quick_prompts?: RoleQuickPrompt[]
+  /**
+   * WP84：指导抽屉顶部的"示例任务"（最多 {@link MAX_TASK_EXAMPLES} 条，id 唯一）。
+   */
+  task_examples?: RoleTaskExample[]
   persona?: string
   handover: {
     transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]
@@ -308,6 +368,15 @@ export interface PositionInstance {
      * 拿 `assignment_ids` 里别人那条去做，就是借岗位扩权。
      */
     my_assignment_id?: AssignmentId
+    /**
+     * WP84：这条职责的快捷提示（首页岗位卡按职责折叠着显示）。
+     *
+     * 从职责定义原样抄来的，不是第二份真源——改 yml 这里就变。没有 `my_assignment_id`
+     * 的那几条职责（别人在做、我没有）照样带着它们，但界面上点不动：开事项只能用本人那条。
+     */
+    quick_prompts?: RoleQuickPrompt[]
+    /** WP84：这条职责的示例任务（指导抽屉顶部的选择题）。同样是原样抄来的。 */
+    task_examples?: RoleTaskExample[]
   }[]
   /** 这个岗位下还没关的事项数（本人可见的） */
   open_matters: number
