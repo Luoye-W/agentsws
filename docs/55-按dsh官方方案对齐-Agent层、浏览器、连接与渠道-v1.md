@@ -1,8 +1,8 @@
-# 54 · 按 dsh 官方方案对齐：Agent 层、浏览器、连接与渠道 v1（方案稿）
+# 55 · 按 dsh 官方方案对齐：Agent 层、浏览器、连接与渠道 v1（方案稿）
 
 | | |
 |---|---|
-| 状态 | **方案稿，等拍板 Q1–Q6** |
+| 状态 | **已定案（2026-09-16 Luoye 同意 Q1–Q6）**；派出 WP81（Agent 层）/ WP83（连接目录 + 岗位清单）/ WP84（quick_prompts）/ WP85（微信）；WP82 浏览器等 WP81 合并后派。编号说明：本文原为 54，与另一会话的「54 岗位是任务主入口」撞号后改为 55；WP 编号同理从 71–75 改为 81–85 |
 | 日期 | 2026-09-16 |
 | 起因 | Luoye 看完 docs/53 的 P1–P7 后定方向：**能用 dsh 官方方案的都用官方方案，不然以后兼容性会很差**；浏览器按官方来、作为个人端；会话日志上报"优先按官方"；连接要有统一目录但又怕太大、希望按岗位 / 职责能快速知道连哪些；个人微信可以做（微信有官方的 Agent bot 入口）；P5 没看懂 |
 | 事实来源 | dsh 0.1.6-alpha.1 源码走读（Agent 层嵌入、preset、credentials、browser-use、webhook；细节引用在 §2–§5）；微信 ClawBot / iLink 官方仓库 `Tencent/openclaw-weixin` 与使用条款；WP70 的浏览器 seam spike（`packages/dsh-adapter/test/browser-seam.test.ts`） |
@@ -129,11 +129,11 @@ dsh 0.1.6 仍没有渠道 / IM 这一层（全仓文档零命中）。官方入�
 | # | 事项 | 我的建议 |
 |---|---|---|
 | Q1 | 会话日志上报 | 默认跟官方：个人端 + DeepSeek 官方端点时**开**，设置页白话开关；公司端 / 托管档**关**；README 改口 |
-| Q2 | 引入官方 Agent 层，接受 §2.2 三个变化（模拟 parity 改按结果、会话不落 dsh JSONL、提示词经 dsh 装配） | 同意，**WP71**，其余 WP 的前提 |
-| Q3 | 浏览器 = 官方 browser-use + Playwright provider；个人端 attach 用户单独 Profile 的 Chrome；契约 #20 瘦成 §3 的策略；ego-lite 不做 | 同意，**WP72**，依赖 WP71；首用途红人 YouTube 只读 |
-| Q4 | 连接三层（目录 / 岗位清单 / 职责 preset）+ `credentials-openconnector` provider | 同意，**WP73**（目录与岗位清单可与 WP71 并行；preset 承载与 credentials provider 依赖 WP71） |
-| Q5 | a) 文档改口 dsh-channels；b) 微信 ClawBot 做"本人 ↔ 代理"，企业微信机器人做团队渠道 | a) 我直接改；b) **WP75**，可并行（`packages/channels`） |
-| Q6 | 派工顺序 | WP71 先单独派（大、碰底层）；WP73（目录 + 岗位清单部分）、WP74（quick_prompts / task_examples）、WP75（微信）三个与它并行——它们不碰 `dsh-adapter`；WP72 与 WP73 后半等 WP71 合并 |
+| Q2 | 引入官方 Agent 层，接受 §2.2 三个变化（模拟 parity 改按结果、会话不落 dsh JSONL、提示词经 dsh 装配） | 同意，**WP81**，其余 WP 的前提 |
+| Q3 | 浏览器 = 官方 browser-use + Playwright provider；个人端 attach 用户单独 Profile 的 Chrome；契约 #20 瘦成 §3 的策略；ego-lite 不做 | 同意，**WP82**，依赖 WP81；首用途红人 YouTube 只读 |
+| Q4 | 连接三层（目录 / 岗位清单 / 职责 preset）+ `credentials-openconnector` provider | 同意，**WP83**（目录与岗位清单可与 WP81 并行；preset 承载与 credentials provider 依赖 WP81） |
+| Q5 | a) 文档改口 dsh-channels；b) 微信 ClawBot 做"本人 ↔ 代理"，企业微信机器人做团队渠道 | a) 我直接改；b) **WP85**，可并行（`packages/channels`） |
+| Q6 | 派工顺序 | WP81 先单独派（大、碰底层）；WP83（目录 + 岗位清单部分）、WP84（quick_prompts / task_examples）、WP85（微信）三个与它并行——它们不碰 `dsh-adapter`；WP82 与 WP83 后半等 WP81 合并 |
 
 ## 7. 对既有文档的改动（拍板后）
 

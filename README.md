@@ -41,8 +41,8 @@ Agent 只**提议**，写操作一律进人审队列。
 - 另有一个 `direct-llm` 运行时完全不经过 dsh。它存在的唯一理由是证明 dsh 可替换——
   同一批场景在 `stub` / `dsh` / `direct` 三个运行时下都要过同样的不变量。
 
-上游贡献分两条线：对话渠道（WhatsApp、IMAP / SMTP 适配器）回 dsh-channels，系统动作
-provider 回 OpenConnector。两者不是一回事，为什么见 `docs/09` §7。
+上游贡献分两条线：对话渠道适配器（IMAP / SMTP、企业微信、微信 ClawBot……）按 dsh 插件规矩独立发布
+（dsh 官方没有渠道 seam，渠道契约是本仓自己的），系统动作 provider 回 OpenConnector。两者不是一回事，为什么见 `docs/09` §7。
 
 ---
 
