@@ -15,6 +15,12 @@
     - kind: store
       id: store_main
   granted_by: p_wang
+- person_id: p_wang
+  role_id: pr.monitoring
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
 - person_id: p_li
   role_id: dtc.support
   ranges:
@@ -59,6 +65,18 @@
   granted_by: p_wang
 - person_id: p_li
   role_id: social.discord
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_li
+  role_id: pr.press
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_li
+  role_id: pr.reddit
   ranges:
     - kind: store
       id: store_main

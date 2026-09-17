@@ -328,6 +328,22 @@ export type {
   RouteCandidateView,
 } from './routes/positions.js'
 export { positionEntryRoutes } from './routes/positions.js'
+// WP78（60 §5）：公关库的最小一套
+export type {
+  PrActor,
+  PrContactRow,
+  PrExternalPostInput,
+  PrExternalPostRow,
+  PrExternalPostView,
+  PrMentionInput,
+  PrMentionRow,
+  PrMentionView,
+  PrPort,
+  PrReleaseInput,
+  PrReleaseRow,
+  PrStagedView,
+} from './routes/pr.js'
+export { prRoutes } from './routes/pr.js'
 export {
   type PrivacyEraseStepView,
   type PrivacyEraseView,

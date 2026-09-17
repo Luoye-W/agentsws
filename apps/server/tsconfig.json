@@ -43,6 +43,9 @@
       "path": "../../packages/kol-core"
     },
     {
+      "path": "../../packages/pr-core"
+    },
+    {
       "path": "../../packages/social-core"
     },
     {

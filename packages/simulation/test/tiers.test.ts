@@ -318,7 +318,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十八条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十九条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       // WP72（56 §2）：群发永远人审 + 抑制名单必查（15 人公司里社媒是专职的）
@@ -344,6 +344,9 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       // WP51 首次设置与同事发现（46 §2 I1 / I3）：两个各自单干的人，
       // 公司名写法不同但算出同一把钥匙 → 局域网互见 → 一方申请 → 对方 owner 批
       'org/two-solo-users-discover',
+      // WP78（60 §1 / §4）：同一个版 72 小时内再发一条 → 冷却那道门拦下，
+      // 换一个版才放行（15 人公司里公关归内容，p_zheng 持 `pr.reddit`）
+      'pr/subreddit-cooldown',
       // WP39 秘书 Agent（41 §1）
       'secretary/ask-colleague',
       'secretary/meet-conflict',

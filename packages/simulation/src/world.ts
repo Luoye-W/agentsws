@@ -47,11 +47,19 @@ import type {
 import {
   DEFAULT_STOREFRONT_PLATFORM,
   // WP72：渠道 id → 职责 id 与中文名。**全仓唯一**那张渠道清单，不在这里拼字符串
+  PR_ROLE_IDS,
   socialChannelSpec,
   storefrontUnsupportedNote,
   storefrontUsableService,
 } from '@agentsws/contracts'
-import { companyKey, sha256, suppressedRecipients, withoutSuppressed } from '@agentsws/core'
+import {
+  companyKey,
+  extractFigures,
+  sha256,
+  suppressedRecipients,
+  uncitedFigures,
+  withoutSuppressed,
+} from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
 import { createDataStore, defineCollection } from '@agentsws/data'
 import { assembleView, dataSourcesFromConnections } from '@agentsws/deck'
@@ -87,6 +95,22 @@ import { KolPublicService, MemoryKolStore, nodeKolSecrets } from '@agentsws/kol-
 import { buildPricing, MemoryWalletStore, Wallet } from '@agentsws/metering'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
+/*
+ * WP72（56 §2 / §3）：社媒那三件事共用的能力。
+ *
+ * `triageThread` / `handoffOf` 是 56 那条边界的落点（客户问题转客服）；
+ * `checkOutbound` 里的承诺扫描与客服回信读的是**同一份词表**；
+ * `buildAudience` 里的抑制名单规则与邮件群发是**同一个函数**。
+ * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
+ */
+import {
+  checkSubredditRules,
+  explainRuleCheck,
+  handoffOfMention,
+  hoursSinceLastPost,
+  parseSubredditRules,
+  triageMention,
+} from '@agentsws/pr-core'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
 import {
   createRoleStore,
@@ -103,14 +127,6 @@ import {
   withToolChoice,
 } from '@agentsws/runtime-direct'
 import { wallClock } from '@agentsws/schedule'
-/*
- * WP72（56 §2 / §3）：社媒那三件事共用的能力。
- *
- * `triageThread` / `handoffOf` 是 56 那条边界的落点（客户问题转客服）；
- * `checkOutbound` 里的承诺扫描与客服回信读的是**同一份词表**；
- * `buildAudience` 里的抑制名单规则与邮件群发是**同一个函数**。
- * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
- */
 import {
   ACTION_WORDS,
   buildAudience,
@@ -478,6 +494,18 @@ export interface World {
    */
   social: SocialOps
   /**
+   * WP78 / 60：公共关系那三件事。
+   *
+   * 走的也是真机制，三条都不是场景自己判的：
+   *
+   * - 一条提及是好话还是坏话、归谁，由 **`pr-core` 的 `triageMention`** 判
+   *   （客户问题那一档复用 `social-core` 的 `triageThread`，全仓同一份词表）；
+   * - 新闻稿里的数字有没有出处，由 **guardrail** 按（场景改不了那条门）；
+   * - 在别人的版里发得了发不了，由 **`pr-core` 的 `checkSubredditRules`** 判，
+   *   结论原样递给 guardrail——两处是同一份结论，不是各判一次。
+   */
+  pr: PrOps
+  /**
    * WP47 / 44：品牌（范围组）与产品线的组织动作。
    *
    * 也走真机制：品牌成员一变，职责层重算所有挂了它的岗位的范围，这里记一条
@@ -808,6 +836,111 @@ export interface SocialRulesResult {
   channel: string
   staged: boolean
   level_requested: 'L1' | 'L2' | 'L3'
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+/* ── WP78（60）：公共关系那三件事 ──────────────────────────────────── */
+
+export interface PrOps {
+  /**
+   * 收一条**外面说的话**（新闻 / Reddit / 论坛 / 评测）。
+   *
+   * 情绪与归属由 `pr-core` 的 `triageMention` 判，场景递不进来一个结论。
+   * 判成客户问题 → **出一张转客服卡，公关不答**（60 分界行）；
+   * 判成负面舆情 → 出一张负面预警卡；媒体询问 → 出一张回应草稿卡。
+   */
+  mention(input: {
+    who: PersonId
+    source: 'news' | 'reddit' | 'forum' | 'review' | 'social' | 'blog' | 'other'
+    /** 在哪儿说的（`r/gadgets` / 某个站的域名）。 */
+    origin: string
+    title?: string
+    /** 对方说的那句话（外部文本，判类用它）。 */
+    text: string
+    author?: string
+  }): Promise<PrMentionResult>
+  /**
+   * 提一篇新闻稿（`press_release`）。
+   *
+   * `facts_cited` 是这篇稿子声明的引用；**正文里多一个没出处的数就提不上去**
+   * （guardrail block，理由原样是"这个数字没有出处：47%"）。
+   * `distribute` 为真 = 要发出去，guardrail 把它升到 L1。
+   */
+  release(input: {
+    who: PersonId
+    headline: string
+    dek: string
+    /** 事实段（里面的每个数字都要在 `facts_cited` 里找得到）。 */
+    body: string
+    facts_cited: { figure: string; fact_card_id: string }[]
+    /** 引语。**`provided_by` 空着就提不上去**——模型不替创始人说话。 */
+    quotes?: { speaker: string; text: string; provided_by: string }[]
+    distribute?: boolean
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<PrReleaseResult>
+  /**
+   * 在**别人的**社区里提一条帖子（`community_post`，**永远 L1**）。
+   *
+   * `rules` 是那个版的版规原文（一条一行）：解析与判定走 `pr-core`，
+   * 禁自我推广的版当场 block。`last_post_hours_ago` 给了就判冷却。
+   */
+  externalPost(input: {
+    who: PersonId
+    /** `pr.reddit` 还是 `pr.forums`（两条职责的动作与额度逐字相同）。 */
+    role?: 'pr.reddit' | 'pr.forums'
+    platform: string
+    /** 版块名（`BuyItForLife`）。 */
+    venue: string
+    title?: string
+    body: string
+    /** 那个版的版规原文，一条一行。不给 = 查不到规矩，按**禁**处理（fail-closed）。 */
+    rules?: string[]
+    flair?: string
+    /** 我们上一条在**这个版**是几小时前发的。不给 = 没发过（第一帖不该被冷却拦）。 */
+    last_post_hours_ago?: number
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<PrExternalPostResult>
+}
+
+/** WP78：一条提及判完之后的结果。 */
+export interface PrMentionResult {
+  triage: string
+  sentiment: string
+  /** 转给了哪条职责；公关自己处理就没有这一格。 */
+  routed_to?: string
+  /** 出的是哪一种卡（`archive` = 没出卡）。 */
+  card: string
+  /** **公关有没有自己答**。判成客户问题时它必须是假（60 分界行）。 */
+  answered_by_pr: boolean
+  approval_item_id?: string
+}
+
+/** WP78：一篇新闻稿提案的结果。 */
+export interface PrReleaseResult {
+  staged: boolean
+  level_requested: 'L1' | 'L2' | 'L3'
+  /** 正文里一共几个数字。 */
+  figures: number
+  /** 其中**没有出处**的那几个（原样，卡面与 block 消息里就是它们）。 */
+  uncited: string[]
+  distributed: boolean
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+/** WP78：一条外部发帖提案的结果。 */
+export interface PrExternalPostResult {
+  platform: string
+  venue: string
+  staged: boolean
+  level_requested: 'L1' | 'L2' | 'L3'
+  /** 版规检查过了没有。 */
+  rules_ok: boolean
+  /** 拦下来的理由（与 guardrail 那一侧的 hit 名逐字相同）。 */
+  rules_reasons: string[]
   change_id?: string
   approval_item_id?: string
   reason?: string
@@ -1250,6 +1383,14 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('social.telegram-group'),
     loadBundledRole('social.whatsapp'),
     loadBundledRole('dtc.community-support'),
+    // WP78（60 §1）：公共关系岗位的四条职责。3 人 pack 里店主真挂着
+    // `pr.monitoring`（`assignments.yml`）；另外三条躺在库里——躺着不产生任何
+    // 行为，装它们是为了首次设置向导里"公共关系"那个岗位显示四条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面社媒那九条的理由）。
+    loadBundledRole('pr.press'),
+    loadBundledRole('pr.reddit'),
+    loadBundledRole('pr.forums'),
+    loadBundledRole('pr.monitoring'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
@@ -2192,6 +2333,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP72：同上（56 §2 社媒运营 / §4 社群管理）
     get social() {
       return social
+    },
+    // WP78：同上（60 公共关系那三件事）
+    get pr() {
+      return pr
     },
     // 44：与 `shop` 同理，装在这个对象字面量之后
     get org() {
@@ -5530,6 +5675,422 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         channel,
         staged: true,
         level_requested,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+  }
+
+  /* ── WP78：公共关系（60 §1 / §2）────────────────────────────────────
+   *
+   * 三条都走真机制，一条都不是场景自己判的：
+   *
+   * - **"这条归谁"** 由 `pr-core` 的 `triageMention` 判（客户问题那一档复用
+   *   `social-core` 的 `triageThread`，全仓同一份词表）。判成客户问题就出一张
+   *   **转客服卡**，公关**不答**——它手上根本没有订单域（60 分界行）。
+   * - **"这个数有没有出处"** 由 guardrail 按（`uncitedFigures`）。起草那一跳
+   *   先自查一遍只是早点给反馈，真正拦下来的是那道门。
+   * - **"这个版发得了发不了"** 由 `pr-core` 的 `checkSubredditRules` 判，
+   *   结论原样递给 guardrail——两处是同一份结论。
+   *
+   * 额度与等级来自那个人那条分配的生效配置，不是主分配的。
+   */
+  const prRoleOf = (role: string): RoleId => {
+    if (!PR_ROLE_IDS.includes(role))
+      throw new SimulationError('invalid_input', `没有这条公关职责：${role}`)
+    return role
+  }
+
+  /** 这个世界里我们在各个版上一条帖子是什么时候发的（冷却那一道要它）。 */
+  const prLastPostAt = new Map<string, string>()
+
+  const pr: PrOps = {
+    async mention({ who, source, origin, title, text, author }) {
+      const role_id = prRoleOf('pr.monitoring')
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const mention_id = `mn_${sha256(`${origin}:${text}`).slice(0, 12)}`
+      const target: ObjectRef = { type: 'mention', id: mention_id }
+
+      const verdict = triageMention({
+        ...(title === undefined ? {} : { title }),
+        text,
+        source,
+      })
+      const card = handoffOfMention(verdict, {
+        origin,
+        ...(author === undefined ? {} : { author }),
+      })
+      run.finish({ seen: [target], outputs: [], summary: `判一条来自 ${origin} 的提及` })
+
+      /*
+       * 归档那一路不出卡：一条好话、一条判不准的闲话，出一张卡只会让队列变长。
+       * 情绪与归属照样记进事件——面板上"今天外面说了什么"读的就是它。
+       */
+      if (card.kind === 'archive') {
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.pr_mention_triaged',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          // 原句不进事件日志（21 §1）；进的是判据名
+          payload: {
+            source,
+            triage: verdict.triage,
+            sentiment: verdict.sentiment,
+            signals: verdict.signals,
+            card: card.kind,
+            to_role: null,
+            held_by: null,
+            answered_by_pr: false,
+          },
+        })
+        return {
+          triage: verdict.triage,
+          sentiment: verdict.sentiment,
+          card: card.kind,
+          answered_by_pr: false,
+        }
+      }
+
+      /*
+       * 转客服那一路：收件人是**真持有客服职责的人**。没人持有就落到 owner 身上，
+       * 而不是悄悄没人接（同 56 §4 的转客服卡）。
+       */
+      const toRole = card.to_role
+      const holderOf =
+        toRole === undefined
+          ? undefined
+          : roles.assignments
+              .listByRole(toRole)
+              .find((a) => a.workspace_id === workspace_id && a.revoked_at === undefined)
+      const recipient = card.kind === 'support_handoff' ? (holderOf?.person_id ?? owner) : who
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'claim',
+        role_id: toRole ?? asg.role_id,
+        subject: { object: target },
+        dedupe_key: `${workspace_id}:pr_mention:${mention_id}`,
+        title: card.title,
+        summary: card.reason,
+        payload: {
+          form: card.kind,
+          kind: 'mention_triage',
+          after: {
+            triage: verdict.triage,
+            sentiment: verdict.sentiment,
+            sentiment_label:
+              verdict.sentiment === 'negative'
+                ? '负面'
+                : verdict.sentiment === 'positive'
+                  ? '正面'
+                  : '中性',
+            origin,
+            ...(toRole === undefined ? {} : { route_to_role: toRole }),
+            ...(card.kind === 'support_handoff' ? { route_to_label: '客服' } : {}),
+            // 正文原样进卡（人本来就要读它），**不进事件日志**
+            text,
+          },
+        },
+        evidence: {
+          source_events: [],
+          run_id,
+          provenance: { seen: [target] },
+          precheck: { fencing: 'ok' },
+        },
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        automation: {
+          level_at_creation: card.kind === 'support_handoff' ? 'L1' : 'L3',
+          auto_approved: false,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [{ person: recipient, via: 'explicit' }],
+          explicit: recipient,
+          rule: 'explicit',
+          escalation: {
+            after_hours: card.kind === 'negative_alert' ? 2 : 4,
+            business_hours: true,
+            chain: ['owner'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        priority: card.kind === 'negative_alert' ? 'immediate' : 'queue',
+      })
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.pr_mention_triaged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          source,
+          triage: verdict.triage,
+          sentiment: verdict.sentiment,
+          signals: verdict.signals,
+          card: card.kind,
+          to_role: toRole ?? null,
+          // 有人真持有客服那条职责没有：没人持有 = 这张卡落到 owner 头上，如实报
+          held_by: holderOf?.person_id ?? null,
+          // **公关不答客户的问题**——这一格一旦为真，60 的那条分界就破了
+          answered_by_pr: false,
+        },
+      })
+      return {
+        triage: verdict.triage,
+        sentiment: verdict.sentiment,
+        ...(toRole === undefined ? {} : { routed_to: toRole }),
+        card: card.kind,
+        answered_by_pr: false,
+        ...(item.state === 'blocked' ? {} : { approval_item_id: item.id }),
+      }
+    },
+
+    async release({ who, headline, dek, body, facts_cited, quotes, distribute, level }) {
+      const role_id = prRoleOf('pr.press')
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const release_id = `prl_${sha256(headline).slice(0, 12)}`
+      const target: ObjectRef = { type: 'press_release', id: release_id }
+      const { mandate, level: configured } = actionOf(asg, 'draft_release')
+      const level_requested = level ?? configured
+
+      // 起草那一跳先自查一遍（早点给反馈）；真正拦下来的是 guardrail
+      const figures = extractFigures(body)
+      const uncited = uncitedFigures(
+        body,
+        facts_cited.map((c) => c.figure),
+      )
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_pr_${run_id}`,
+        kind: 'press_release',
+        target,
+        before: { status: 'draft' },
+        after: {
+          headline,
+          body,
+          quotes: quotes ?? [],
+          facts_cited,
+          figure_count: figures.length,
+          cited_count: figures.length - uncited.length,
+          ...(distribute === true ? { distributed: true } : {}),
+        },
+        notes: [
+          `正文里有 ${figures.length} 个数字，${figures.length - uncited.length} 个能指出是哪张事实卡。`,
+          ...(distribute === true
+            ? ['分发服务还没接：批准之后这里给你一份可以直接复制的正文，你自己发出去。']
+            : []),
+        ],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `提一篇新闻稿：${headline}`,
+        }),
+        approval: {
+          title: distribute === true ? `发新闻稿：${headline}` : `新闻稿草稿：${headline}`,
+          summary: `${dek.slice(0, 160)}（${figures.length} 个数字，${figures.length - uncited.length} 个有出处）`,
+          recipients: [recipientOf(distribute === true ? 'owner' : 'scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: distribute === true ? 'owner' : 'scope_manager',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      const base = {
+        level_requested,
+        figures: figures.length,
+        uncited,
+        distributed: distribute === true,
+      }
+      if (!outcome.ok) {
+        /*
+         * 挡下来的规则名原样进 `blocked`（不是笼统的 `guardrail`）：
+         * 场景里断言的那一条与人在卡面上读到的那句话是同一件事。
+         */
+        const rule =
+          outcome.guardrail?.hits.find((h) => h.severity === 'block')?.rule ?? 'guardrail'
+        blocked.push({ rule, at: now(clock), run_id, message: outcome.message })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.pr_release_blocked',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          payload: { rule, figures: figures.length, uncited },
+        })
+        return { ...base, staged: false, reason: outcome.message }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.pr_release_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          figures: figures.length,
+          uncited,
+          distributed: distribute === true,
+          // 卡面上有没有把"几个数、几个有出处"写出来（36 §2：人按下那一下之前要看得见）
+          stated_on_card: outcome.approval.summary.includes(`${figures.length} 个数字`),
+        },
+      })
+      return {
+        ...base,
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async externalPost({
+      who,
+      role,
+      platform,
+      venue,
+      title,
+      body,
+      rules,
+      flair,
+      last_post_hours_ago,
+      level,
+    }) {
+      const role_id = prRoleOf(role ?? 'pr.reddit')
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const post_id = `ep_${sha256(`${platform}:${venue}:${body}`).slice(0, 12)}`
+      const target: ObjectRef = { type: 'external_post', id: post_id }
+      const { mandate, level: configured } = actionOf(asg, 'stage_external_post')
+      const level_requested = level ?? configured
+      const at = now(clock)
+
+      /*
+       * 版规：**判不准就当禁**（`pr-core` 的 fail-closed）。不给 `rules` = 查不到
+       * 那个版的规矩，于是 `parseSubredditRules` 按默认值禁——在别人的地盘上，
+       * 少发一条的代价比被永久赶走小得多。
+       */
+      const policy = parseSubredditRules({ name: venue, raw_rules: rules ?? [], observed_at: at })
+      const key = `${platform}:${venue}`
+      const lastAt = prLastPostAt.get(key)
+      const since =
+        last_post_hours_ago ??
+        hoursSinceLastPost({ ...(lastAt === undefined ? {} : { last_post_at: lastAt }), now: at })
+      const rules_checked = checkSubredditRules({
+        policy,
+        ...(flair === undefined ? {} : { flair }),
+        ...(since === undefined
+          ? {}
+          : { last_post_at: new Date(Date.parse(at) - since * 3_600_000).toISOString() }),
+        now: at,
+      })
+      const explained = explainRuleCheck(rules_checked, venue)
+      run.tool('read_subreddit_rules', { platform, venue, rules: (rules ?? []).length })
+
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_pr_${run_id}`,
+        kind: 'community_post',
+        target,
+        before: {},
+        after: {
+          platform,
+          venue,
+          venue_label: `${platform}／${venue}`,
+          ...(title === undefined ? {} : { title }),
+          body,
+          rules_checked,
+          rules_summary: explained,
+          ...(since === undefined ? {} : { hours_since_last_post: since }),
+          // 承诺扫描报没报跑过（fail-closed，照 `campaign_send` 的 suppression_checked）
+          commitment_checked: true,
+        },
+        notes: [explained, '我们在别人的地盘上：这一条永远要你点一下才发得出去。'],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        // 15 §2 hard_ceiling：报 L3 也会被按回人审
+        level: level_requested,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `提一条发到 ${platform}／${venue} 的帖子`,
+        }),
+        approval: {
+          title: `外部发帖：${platform}／${venue}`,
+          summary: `${(title ?? body).slice(0, 100)}　｜　${explained}`,
+          recipients: [recipientOf('scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'scope_manager',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      const base = {
+        platform,
+        venue,
+        level_requested,
+        rules_ok: rules_checked.ok,
+        rules_reasons: [...rules_checked.reasons],
+      }
+      if (!outcome.ok) {
+        const rule =
+          outcome.guardrail?.hits.find((h) => h.severity === 'block')?.rule ?? 'guardrail'
+        blocked.push({ rule, at, run_id, message: outcome.message })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.pr_external_post_blocked',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          payload: { platform, venue, rule, rules_reasons: rules_checked.reasons },
+        })
+        return { ...base, staged: false, reason: outcome.message }
+      }
+      await flushCards()
+      // 提上去了才算占位：被拦下的那一条不占下一条的冷却
+      prLastPostAt.set(key, at)
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.pr_external_post_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          platform,
+          venue,
+          role_id: asg.role_id,
+          rules_ok: rules_checked.ok,
+          rules_reasons: rules_checked.reasons,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          // 版规那句话在不在卡面上（人按下那一下之前要看得见）
+          stated_on_card: outcome.approval.summary.includes(explained),
+        },
+      })
+      return {
+        ...base,
+        staged: true,
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
       }

@@ -190,6 +190,10 @@ const EVENT_KEYS = [
   'community.approve_member',
   'community.moderate',
   'community.rules_edit',
+  // WP78 公共关系（60 §1 / §2）
+  'pr.mention',
+  'pr.release',
+  'pr.external_post',
   // WP67 红人营销（48 §5.1）
   'kol.outreach',
   'kol.collaboration',
@@ -281,6 +285,10 @@ const EXPECTED_KEYS = [
   'community_moderation',
   'community_rules',
   'social_calendar',
+  // WP78（60）
+  'pr_mention',
+  'pr_release',
+  'pr_external_post',
   // WP57
   'chat_actions',
   'chat_assist',
@@ -924,6 +932,139 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           channel: str(source, `${path}.${key}.channel`, body.channel),
           rules: str(source, `${path}.${key}.rules`, body.rules),
           ...(rulesLevel === undefined ? {} : { level: rulesLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    // WP78（60）：公共关系那三件事
+    case 'pr.mention': {
+      known(source, `${path}.${key}`, body, ['who', 'source', 'origin', 'title', 'text', 'author'])
+      const src = str(source, `${path}.${key}.source`, body.source)
+      const SOURCES = ['news', 'reddit', 'forum', 'review', 'social', 'blog', 'other']
+      if (!SOURCES.includes(src)) {
+        fail(source, `${path}.${key}.source`, `source 只能是：${SOURCES.join(' / ')}`)
+      }
+      const title = optStr(source, `${path}.${key}.title`, body.title)
+      const author = optStr(source, `${path}.${key}.author`, body.author)
+      return {
+        at,
+        type: 'pr.mention',
+        mention: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          source: src as 'news',
+          origin: str(source, `${path}.${key}.origin`, body.origin),
+          ...(title === undefined ? {} : { title }),
+          text: str(source, `${path}.${key}.text`, body.text),
+          ...(author === undefined ? {} : { author }),
+        },
+      }
+    }
+    case 'pr.release': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'headline',
+        'dek',
+        'body',
+        'facts_cited',
+        'quotes',
+        'distribute',
+        'level',
+      ])
+      const relLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (relLevel !== undefined && !['L1', 'L2', 'L3'].includes(relLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      const cited = body.facts_cited
+      if (!Array.isArray(cited)) fail(source, `${path}.${key}.facts_cited`, '必须是数组')
+      const facts_cited = cited.map((c, i) => {
+        const at2 = `${path}.${key}.facts_cited[${i}]`
+        if (!isRec(c)) fail(source, at2, '必须是对象')
+        known(source, at2, c, ['figure', 'fact_card_id'])
+        return {
+          figure: str(source, `${at2}.figure`, c.figure),
+          fact_card_id: str(source, `${at2}.fact_card_id`, c.fact_card_id),
+        }
+      })
+      const rawQuotes = body.quotes
+      if (rawQuotes !== undefined && !Array.isArray(rawQuotes)) {
+        fail(source, `${path}.${key}.quotes`, '必须是数组')
+      }
+      const quotes = (rawQuotes ?? []).map((q, i) => {
+        const at2 = `${path}.${key}.quotes[${i}]`
+        if (!isRec(q)) fail(source, at2, '必须是对象')
+        known(source, at2, q, ['speaker', 'text', 'provided_by'])
+        return {
+          speaker: str(source, `${at2}.speaker`, q.speaker),
+          text: str(source, `${at2}.text`, q.text),
+          /*
+           * **必填**（60 §2）：引语必须是人给的。写成可选的话，场景就能造出
+           * 一句"模型替创始人说的话"而 DSL 一声不吭——那正是这条规矩要挡的事。
+           */
+          provided_by: str(source, `${at2}.provided_by`, q.provided_by),
+        }
+      })
+      return {
+        at,
+        type: 'pr.release',
+        release: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          headline: str(source, `${path}.${key}.headline`, body.headline),
+          dek: str(source, `${path}.${key}.dek`, body.dek),
+          body: str(source, `${path}.${key}.body`, body.body),
+          facts_cited,
+          ...(rawQuotes === undefined ? {} : { quotes }),
+          ...(body.distribute === undefined
+            ? {}
+            : { distribute: requireBool(source, `${path}.${key}.distribute`, body.distribute) }),
+          ...(relLevel === undefined ? {} : { level: relLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'pr.external_post': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'role',
+        'platform',
+        'venue',
+        'title',
+        'body',
+        'rules',
+        'flair',
+        'last_post_hours_ago',
+        'level',
+      ])
+      const postRole = optStr(source, `${path}.${key}.role`, body.role)
+      if (postRole !== undefined && !['pr.reddit', 'pr.forums'].includes(postRole)) {
+        fail(source, `${path}.${key}.role`, 'role 只能是 pr.reddit / pr.forums')
+      }
+      const epLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (epLevel !== undefined && !['L1', 'L2', 'L3'].includes(epLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      const title2 = optStr(source, `${path}.${key}.title`, body.title)
+      const flair = optStr(source, `${path}.${key}.flair`, body.flair)
+      const rules = optStrList(source, `${path}.${key}.rules`, body.rules)
+      return {
+        at,
+        type: 'pr.external_post',
+        external_post: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(postRole === undefined ? {} : { role: postRole as 'pr.reddit' | 'pr.forums' }),
+          platform: str(source, `${path}.${key}.platform`, body.platform),
+          venue: str(source, `${path}.${key}.venue`, body.venue),
+          ...(title2 === undefined ? {} : { title: title2 }),
+          body: str(source, `${path}.${key}.body`, body.body),
+          ...(rules === undefined ? {} : { rules }),
+          ...(flair === undefined ? {} : { flair }),
+          ...(body.last_post_hours_ago === undefined
+            ? {}
+            : {
+                last_post_hours_ago: num(
+                  source,
+                  `${path}.${key}.last_post_hours_ago`,
+                  body.last_post_hours_ago,
+                ),
+              }),
+          ...(epLevel === undefined ? {} : { level: epLevel as 'L1' | 'L2' | 'L3' }),
         },
       }
     }
@@ -1673,6 +1814,30 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     },
     social_calendar: {
       conflict_kinds: 'strs',
+      stated_on_card: 'bool',
+    },
+    // WP78（60）
+    pr_mention: {
+      triage: 'str',
+      sentiment: 'str',
+      routed_to: 'str',
+      answered_by_pr: 'bool',
+      held: 'bool',
+      card: 'str',
+    },
+    pr_release: {
+      blocked: 'bool',
+      uncited: 'strs',
+      requested_level: 'str',
+      auto_approved: 'bool',
+      stated_on_card: 'bool',
+    },
+    pr_external_post: {
+      blocked: 'bool',
+      rules_ok: 'bool',
+      reasons: 'strs',
+      requested_level: 'str',
+      auto_approved: 'bool',
       stated_on_card: 'bool',
     },
   }

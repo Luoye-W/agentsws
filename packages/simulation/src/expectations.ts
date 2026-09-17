@@ -930,6 +930,161 @@ export function checkExpectations(
       )
     }
   }
+  /*
+   * WP78 / 60 分界行：那一条提及判成了什么、转给了谁。
+   *
+   * `answered_by_pr` 必须是假——**公关不答客户的问题**。它一旦为真，
+   * 60 的那条分界就名存实亡了，而这几条题存在的全部理由就是钉住它。
+   */
+  if (expected.pr_mention !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_mention_triaged')
+    if (last === undefined) {
+      add('pr_mention', false, '这一轮没有一条提及被判过')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.pr_mention
+      const problems: string[] = []
+      if (want.triage !== undefined && String(p.triage) !== want.triage) {
+        problems.push(`判成了「${String(p.triage)}」，不是「${want.triage}」`)
+      }
+      if (want.sentiment !== undefined && String(p.sentiment) !== want.sentiment) {
+        problems.push(`情绪判成了「${String(p.sentiment)}」，不是「${want.sentiment}」`)
+      }
+      if (want.card !== undefined && String(p.card) !== want.card) {
+        problems.push(`出的是「${String(p.card)}」，不是「${want.card}」`)
+      }
+      if (want.routed_to !== undefined && String(p.to_role ?? '') !== want.routed_to) {
+        problems.push(`转给了 ${String(p.to_role ?? '没转')}，不是 ${want.routed_to}`)
+      }
+      if (
+        want.answered_by_pr !== undefined &&
+        (p.answered_by_pr === true) !== want.answered_by_pr
+      ) {
+        problems.push('公关自己答了客户的问题——60 的那条分界破了')
+      }
+      if (want.held !== undefined && (p.held_by !== null) !== want.held) {
+        problems.push(
+          want.held ? '没人持有客服那条职责，这张卡落到了 owner 头上' : '不该有人持有它',
+        )
+      }
+      add(
+        'pr_mention',
+        problems.length === 0,
+        problems.length === 0
+          ? `判成「${String(p.triage)}」（${String(p.sentiment)}）→ ${String(p.card)}，公关没答`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP78 / 60 §2：那一篇新闻稿。
+   *
+   * `blocked` 为真 = 数字没出处 / 引语是编的，**那条 block 事件必须真发生过**
+   * ——不能是我们自己先绕过去。
+   */
+  if (expected.pr_release !== undefined) {
+    const want = expected.pr_release
+    const staged = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_release_staged')
+    const blockedOne = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_release_blocked')
+    const problems: string[] = []
+    if (want.blocked === true) {
+      if (blockedOne === undefined) problems.push('这一篇该被拦下，但那道门没起作用')
+    } else if (want.blocked === false && blockedOne !== undefined && staged === undefined) {
+      problems.push('这一篇不该被拦下')
+    }
+    /*
+     * 断言的是**期望里说的那一条**：想看拦下来的，就读拦下来那条事件；
+     * 想看提上去的，就读提上去那条。一条场景里两种都发生过是常态
+     * （先拦一篇、改完再提一篇），按"有 staged 就读 staged"会读错对象。
+     */
+    const source = want.blocked === true ? (blockedOne ?? staged) : (staged ?? blockedOne)
+    const p = source === undefined ? {} : payloadOf(source)
+    if (want.uncited !== undefined) {
+      const uncited = Array.isArray(p.uncited) ? p.uncited.map(String) : []
+      for (const w of want.uncited) {
+        if (!uncited.includes(w)) problems.push(`没挑出这个没出处的数：${w}`)
+      }
+    }
+    if (staged === undefined && want.blocked !== true) {
+      problems.push('这一轮没有一篇稿子进队列')
+    }
+    if (staged !== undefined) {
+      const sp = payloadOf(staged)
+      if (want.requested_level !== undefined && String(sp.level_requested) !== want.requested_level)
+        problems.push(`报的等级是 ${String(sp.level_requested)}，不合期望`)
+      if (want.auto_approved !== undefined && (sp.auto_approved === true) !== want.auto_approved)
+        problems.push(want.auto_approved ? '这一篇没能自己出去' : '新闻稿不该自动放行')
+      if (want.stated_on_card !== undefined && (sp.stated_on_card === true) !== want.stated_on_card)
+        problems.push('卡面上没写清楚这篇稿子里有几个数、几个有出处')
+    }
+    add(
+      'pr_release',
+      problems.length === 0,
+      problems.length === 0
+        ? blockedOne !== undefined && staged === undefined
+          ? `拦下了：${(Array.isArray(p.uncited) ? p.uncited : []).join('、')} 没有出处`
+          : `${String(p.figures ?? '?')} 个数字全有出处，落 ${String(staged === undefined ? '?' : payloadOf(staged).level_at_creation)}`
+        : problems.join('；'),
+    )
+  }
+  /*
+   * WP78 / 60 §1：那一条外部发帖。
+   *
+   * 两件事：版规不让 / 冷却没过是 **block**（不是转人审）；能发的那一条
+   * **永远人审**（`HARD_L1`，报 L3 也会被按回来）。
+   */
+  if (expected.pr_external_post !== undefined) {
+    const want = expected.pr_external_post
+    const staged = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_external_post_staged')
+    const blockedOne = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.pr_external_post_blocked')
+    const problems: string[] = []
+    if (want.blocked === true && blockedOne === undefined) {
+      problems.push('这一条该被版规 / 冷却拦下，但那道门没起作用')
+    }
+    if (want.blocked === false && staged === undefined) {
+      problems.push('这一轮没有一条外部发帖进队列')
+    }
+    // 同上：想看拦下来的就读拦下来那条（先拦一条、再提一条是常态）
+    const postSource = want.blocked === true ? (blockedOne ?? staged) : (staged ?? blockedOne)
+    const p = postSource === undefined ? {} : payloadOf(postSource)
+    if (want.rules_ok !== undefined && (p.rules_ok === true) !== want.rules_ok) {
+      problems.push(want.rules_ok ? '版规检查没过' : '版规检查不该过')
+    }
+    if (want.reasons !== undefined) {
+      const reasons = Array.isArray(p.rules_reasons) ? p.rules_reasons.map(String) : []
+      for (const w of want.reasons) {
+        if (!reasons.includes(w)) problems.push(`没判出这条版规：${w}`)
+      }
+    }
+    if (staged !== undefined) {
+      const sp = payloadOf(staged)
+      if (want.requested_level !== undefined && String(sp.level_requested) !== want.requested_level)
+        problems.push(`报的等级是 ${String(sp.level_requested)}，不合期望`)
+      if (want.auto_approved !== undefined && (sp.auto_approved === true) !== want.auto_approved)
+        problems.push(want.auto_approved ? '这一条没能自己出去' : '在别人的版里发帖不该自动放行')
+      if (want.stated_on_card !== undefined && (sp.stated_on_card === true) !== want.stated_on_card)
+        problems.push('版规那句话没写在卡面上')
+    }
+    add(
+      'pr_external_post',
+      problems.length === 0,
+      problems.length === 0
+        ? staged === undefined
+          ? `拦下了：${(Array.isArray(p.rules_reasons) ? p.rules_reasons : []).join('、')}`
+          : `版规过了，落 ${String(payloadOf(staged).level_at_creation)}，等人点`
+        : problems.join('；'),
+    )
+  }
   // WP67 / 48 §5.1：开发信的禁承诺被 guardrail 拦下、打回重写、改写后自动发
   if (expected.kol_outreach !== undefined) {
     const staged = [...evidence.events]

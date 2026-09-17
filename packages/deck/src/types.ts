@@ -89,6 +89,30 @@ export type HighlightType =
    * `dtc.community-support`。文字是那条职责的名字，不是分类器的结论代号。
    */
   | 'handoff'
+  /**
+   * WP78（60 §1）：外部发帖卡上的**版规检查结论**。
+   *
+   * 这是这张卡上第一眼要看的东西：我们在别人的地盘上，版规不让就不该发。
+   * 文字是 `pr-core` 的 `explainRuleCheck` 那一句人话——与 guardrail 拦下来
+   * 时用的规则名（`no_self_promotion` / `cooldown`）是同一件事的两个面，
+   * 卡面上给人看的永远是那句人话。
+   */
+  | 'venue_rules'
+  /**
+   * WP78（60 §2）：新闻稿发布卡上的**数字出处**。
+   *
+   * 「6 个数，6 个有出处」——两个数不等的稿子根本提不上来（guardrail block），
+   * 所以这一格上永远是相等的两个数。它存在的意义是让人**看见这件事被查过了**：
+   * 一篇稿子被登出去之前，人要知道里面的数不是编的。
+   */
+  | 'facts_cited'
+  /**
+   * WP78（60 §1）：负面预警卡上的**情绪与传播量**（"负面 · 被转了 12 次"）。
+   *
+   * 传播量是去重那一步算出来的（`pr-core` 的 `dedupeMentions`），不在卡上现算——
+   * 它决定的是"要不要现在就回"，而那是人要判的事。
+   */
+  | 'sentiment'
 
 export interface DeckHighlight {
   type: HighlightType
@@ -277,6 +301,24 @@ export type DataSourceId =
   | 'social_discord'
   | 'social_telegram'
   | 'social_whatsapp'
+  /**
+   * WP78（60 §3）：**我们自己的公关库**（媒体名单、新闻稿、提及、外部露出）。
+   * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `social`）。
+   *
+   * 待发新闻稿、pitch 漏斗、外部露出记录三块全走它：那些行是**我们写的、
+   * 我们攒的**，一个平台都没连也照样存在。
+   */
+  | 'pr'
+  /**
+   * WP78（60 §1 `pr.monitoring`）：**外面那一侧**（Google Alerts 的 RSS +
+   * Reddit 全站搜）。
+   *
+   * 单列出来而不是并进 `pr`，理由与社媒那八条渠道源一样：没连的时候
+   * "提及流"这一块要能照 36 §3 说"去连接页把 Google Alerts 填上"，
+   * 而同一屏上的"待发新闻稿"照样有数。合成一个源的话，写了一篇稿子就会把
+   * 一个根本没连的监控块点亮——36 §3 最忌讳的那种空图。
+   */
+  | 'google_alerts'
 
 export interface DataSourceStatus {
   id: DataSourceId
@@ -558,6 +600,69 @@ export interface SocialDeckData {
   handoffs: (SocialThreadRow & { status: string; approval_id?: string })[]
 }
 
+/**
+ * WP78（60 §3）：公关面板那五块要的行。
+ *
+ * 形状是**投影**不是对象本身（同 `KolDeckData` / `SocialDeckData`）：提及流要的是
+ * "谁在哪儿说了什么、什么情绪、归谁"，不是一整条 `Mention`。数字全是算好的
+ * （29 §1「数字不经模型手」），拿不到的一律没有这一格——**不补 0**。
+ *
+ * 每一行都带 `role_id` 或不带：四条职责共用同一份投影，面板那一层按职责挑块
+ * （`blocksForRole`），**不在这里按职责切**——切了就得算四遍。
+ */
+export interface PrDeckData {
+  /** 提及流（按情绪；最新的在最上面）。 */
+  mentions: PrMentionRow[]
+  /** 负面预警：判成舆情且情绪是负面的那些，**按被转了几次排**。 */
+  negative_alerts: (PrMentionRow & { seen_count?: number })[]
+  /** 待发新闻稿：草稿与批过还没发的。 */
+  releases: {
+    release_id: string
+    status: string
+    headline: string
+    /** 正文里引了几张事实卡（"这篇稿子的数有没有出处"那一列）。 */
+    facts_cited: number
+    /** 正文里一共有几个数字。两个数不等 = 有数没出处。 */
+    figures: number
+    embargo_until?: string
+    updated_at: string
+  }[]
+  /** pitch 漏斗：六个阶段各有几个人（没有人的那一档也出一行）。 */
+  pitch_funnel: { stage: string; label: string; count: number }[]
+  /** 外部露出记录与反馈（Reddit / 论坛）。 */
+  external_posts: {
+    post_id: string
+    platform: string
+    venue: string
+    status: string
+    excerpt: string
+    /** 版规检查过了没有、拦下来的理由（原样，与 guardrail 那一侧同一个字符串）。 */
+    rules_ok: boolean
+    rules_reasons?: string
+    published_at?: string
+    score?: number
+    replies?: number
+    removed?: boolean
+  }[]
+  /** 转客服：判成客户问题、已经出了卡的那些（60 分界行）。 */
+  handoffs: (PrMentionRow & { approval_id?: string })[]
+}
+
+/** 一条提及在面板上的样子（提及流 / 负面预警 / 转客服三块共用）。 */
+export interface PrMentionRow {
+  mention_id: string
+  source: string
+  origin: string
+  url: string
+  /** 标题或正文头一句。**原样截断，不改写**（外部文本，21 §1）。 */
+  excerpt: string
+  author?: string
+  published_at: string
+  sentiment?: string
+  triage?: string
+  status: string
+}
+
 /** 一条线程在面板上的样子（待回评论 / 待处理帖子 / 转客服三块共用）。 */
 export interface SocialThreadRow {
   thread_id: string
@@ -602,6 +707,14 @@ export interface QueryContext {
    * 后者说"去连接页把 Discord 连上"。
    */
   social?: SocialDeckData
+  /**
+   * WP78（60 §3）：公关库那几张投影（宿主从 `PrStore` 里读出来递进来）。
+   *
+   * 不给 = 这台机器上还没有公关岗位，那几块一律空——**不是**"还没连"
+   * （公关库永远算连上）。界面上那两句话不一样：前者说"还没有稿子，先写一篇"，
+   * 后者说"去连接页把 Google Alerts 填上"。
+   */
+  pr?: PrDeckData
   /**
    * WP63：这个岗位判「不正常」用的那几个数（职责 yml 的 `thresholds`）。
    *

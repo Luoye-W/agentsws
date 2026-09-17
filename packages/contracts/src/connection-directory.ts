@@ -32,6 +32,8 @@ export type ConnectionCategory =
   | 'ads'
   | 'social'
   | 'marketing'
+  /** WP78（60 §5）：公共关系——品牌监控的 RSS 与新闻稿分发。 */
+  | 'pr'
   | 'logistics'
   | 'payment'
   | 'reviews'
@@ -622,6 +624,66 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
       en: 'Register a script or web app first. A malformed User-Agent — not a bad key — is the usual cause of failures. 60 calls per minute; we queue beyond that ourselves.',
     },
   },
+  // ── 公共关系（WP78 / 60 §5）─────────────────────────────────────────
+  //
+  // Reddit **不在这里**：`pr.reddit` 用的就是上面那张 `reddit` 卡（60 分界行——
+  // 社媒管我们自己的版、公关管别人的版，一把 key 管两条职责）。
+  // 论坛（Quora / 知乎）也不在：它们没有公开写接口，走第三栏受控浏览器，
+  // 职责 yml 里标的是 `mode: browser`——目录里给它一张点不动的卡比不给更糟。
+  {
+    kind: 'google_alerts',
+    name: { zh: 'Google Alerts（品牌监控）', en: 'Google Alerts' },
+    category: 'pr',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'feed_url',
+        label: { zh: 'RSS 地址', en: 'RSS feed URL' },
+        secret: false,
+        required: true,
+        kind: 'url',
+        hint: {
+          zh: '在 Google Alerts 里把这条提醒的「投递方式」改成 RSS，再复制那个地址。**这个地址本身就是密钥**（谁拿到谁看得见这条提醒）。',
+          en: 'Switch the alert delivery to RSS in Google Alerts, then copy the feed URL. **The URL is the secret** — anyone holding it can read the alert.',
+        },
+      },
+      {
+        name: 'brand_terms',
+        label: { zh: '要盯的词', en: 'Terms to watch' },
+        secret: false,
+        required: false,
+        kind: 'text',
+        hint: {
+          zh: '选填。Reddit 那一侧的全站搜索用它；Google Alerts 那边盯什么是你自己设的，我们改不了。',
+          en: 'Optional; used for the Reddit-wide search. What Google Alerts watches is set on their side.',
+        },
+      },
+    ],
+    // 只读一条 feed，不改外面任何东西
+    side_effect: 'read_external',
+    docs_url: 'https://www.google.com/alerts',
+    status: 'available',
+    service: 'google_alerts',
+    note: {
+      zh: '免费、不用申请、不要 key——这是唯一一个不违反谁的条款的新闻监控入口。它有延迟（几小时到一天）也会漏，所以它**不是**全网监控；拉不到的时候面板会照实说"这条 feed 没拉到"，不会显示今天 0 条。',
+      en: "Free, no application, no key — the only news-monitoring entry point that breaks nobody's terms. It lags (hours to a day) and misses things, so it is not full-web monitoring. When a pull fails the panel says so rather than showing zero mentions.",
+    },
+  },
+  {
+    kind: 'press_distribution',
+    name: { zh: '新闻稿分发', en: 'Press distribution' },
+    category: 'pr',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: [],
+    side_effect: 'write_external',
+    status: 'planned',
+    note: {
+      zh: '把稿子一次发给一批媒体的那类服务（美通社 / 商业资讯这一派）。它们要合同、要企业账号、按条收费——现在给一张表单是骗人。在接上之前，分发那一跳出的是一张卡 + 一份可以直接复制的稿件正文，你自己发出去；**不假装已经发出去了**。',
+      en: 'Newswire services that blast a release to a media list. They need contracts, corporate accounts and per-release fees — a form here today would be a lie. Until then, distribution produces an approval card plus a copy-ready release body that you send yourself.',
+    },
+  },
   {
     kind: 'discord_bot',
     name: { zh: 'Discord 机器人', en: 'Discord bot' },
@@ -896,6 +958,7 @@ export const CONNECTION_CATEGORIES: readonly {
   { id: 'ads', name: { zh: '广告', en: 'Ads' } },
   { id: 'social', name: { zh: '社媒与红人', en: 'Social & creators' } },
   { id: 'marketing', name: { zh: '营销', en: 'Marketing' } },
+  { id: 'pr', name: { zh: '公共关系', en: 'Public relations' } },
   { id: 'logistics', name: { zh: '物流', en: 'Logistics' } },
   { id: 'payment', name: { zh: '支付', en: 'Payments' } },
   { id: 'reviews', name: { zh: '评价', en: 'Reviews' } },

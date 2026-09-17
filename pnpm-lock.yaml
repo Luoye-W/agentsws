@@ -171,6 +171,9 @@ importers:
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
+      '@agentsws/pr-core':
+        specifier: workspace:*
+        version: link:../../packages/pr-core
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../../packages/roles
@@ -788,6 +791,21 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/pr-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/social-core':
+        specifier: workspace:*
+        version: link:../social-core
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
+
   packages/roles:
     dependencies:
       '@agentsws/contracts':
@@ -919,6 +937,9 @@ importers:
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@agentsws/pr-core':
+        specifier: workspace:*
+        version: link:../pr-core
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../roles

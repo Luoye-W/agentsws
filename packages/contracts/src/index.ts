@@ -22,6 +22,9 @@ export * from './kol-public.js'
 export * from './meetings.js'
 export * from './model.js'
 export * from './packages.js'
+// 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
+// `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
+export * from './pr.js'
 export * from './roles.js'
 export * from './run.js'
 export * from './schedule.js'

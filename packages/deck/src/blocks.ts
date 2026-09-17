@@ -137,6 +137,10 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   social_discord: 'Discord',
   social_telegram: 'Telegram',
   social_whatsapp: 'WhatsApp',
+  // WP78（60 §3）：我们自己的公关库永远算连上；外面那一侧是 Google Alerts，
+  // 名字就是用户在连接页上看到的那个名字——"去连接"点过去要对得上。
+  pr: '公关库',
+  google_alerts: 'Google Alerts',
 }
 
 /** 「查看完整报告 →」外链（36 §3 三层链路的最后一层）。 */
@@ -318,6 +322,39 @@ const COMMUNITY_SUPPORT_BLOCKS = (): BlockDef[] => [
   block('community_support.handoffs', 'table', '转过来的客户问题', 'social.support_handoffs'),
 ]
 
+/**
+ * WP78（60 §3 面板）：公关那五块。
+ *
+ * 分两层，理由与社媒那九块逐字相同（36 §3「没连就明说」只对得上其中一层）：
+ *
+ * - **我们自己库里那四块**（待发新闻稿 / pitch 漏斗 / 外部露出 / 负面预警）
+ *   走 `pr` 这个源——它永远算连上。一个平台都没连，稿子照样写得出来：
+ *   **那是我们自己写的**；一条预警也是我们自己判出来并开出来的卡。
+ * - **外面那一侧那一块**（提及流）走 `google_alerts`。没连的时候它照 36 §3
+ *   出「去连接」——一张空的提及流等于说"今天没人提我们"，而那是这条职责上
+ *   最贵的一种谎。同一屏上的待发新闻稿照样有数。
+ *
+ * 四条职责各挑自己那几块（`VIEW_BY_ROLE` 里那四行），不是四条都摆五块：
+ * 一个人同时挂着新闻稿与品牌监控时，他看到的是**两个岗位视图**，
+ * 每个视图里各几块（同 56 / 48 §5.1 的那条）。
+ */
+const PR_PRESS_BLOCKS = (): BlockDef[] => [
+  block('pr.press.releases', 'table', '待发新闻稿', 'pr.release_queue'),
+  block('pr.press.funnel', 'table', 'pitch 漏斗', 'pr.pitch_funnel'),
+  block('pr.press.mentions', 'table', '外面在说什么', 'pr.mentions'),
+]
+
+const PR_OUTREACH_BLOCKS = (): BlockDef[] => [
+  block('pr.external.posts', 'table', '外部露出与反馈', 'pr.external_posts'),
+  block('pr.external.mentions', 'table', '外面在说什么', 'pr.mentions'),
+]
+
+const PR_MONITORING_BLOCKS = (): BlockDef[] => [
+  block('pr.monitoring.alerts', 'table', '负面预警', 'pr.negative_alerts'),
+  block('pr.monitoring.mentions', 'table', '提及流', 'pr.mentions'),
+  block('pr.monitoring.handoffs', 'table', '转客服', 'pr.support_handoffs'),
+]
+
 const QUEUE_BLOCKS = (): BlockDef[] => [
   block('records.timeline', 'timeline', '记录', 'records.timeline'),
 ]
@@ -374,6 +411,18 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'social.whatsapp': () => SOCIAL_COMMUNITY_BLOCKS('whatsapp', 'social_whatsapp'),
   // WP72（56 §4）：客服的社群管理——转客服卡 + 店铺后台（答订单离不开它）
   'dtc.community-support': () => [...COMMUNITY_SUPPORT_BLOCKS(), ...SHOP_BLOCKS()],
+  /*
+   * WP78（60 §3）：公关四条职责。
+   *
+   * 一块店铺后台的积木都不放：公关的 scopes 里没有 order / customer
+   * （60 分界行——客户的问题转客服），19 §3 说无权的数据源连「去连接」都不该出。
+   * `pr.reddit` 与 `pr.forums` 的面板一模一样：它们干的是同一件事，
+   * 只是一个有接口、一个走浏览器。
+   */
+  'pr.press': () => PR_PRESS_BLOCKS(),
+  'pr.reddit': () => PR_OUTREACH_BLOCKS(),
+  'pr.forums': () => PR_OUTREACH_BLOCKS(),
+  'pr.monitoring': () => PR_MONITORING_BLOCKS(),
 }
 
 export function blocksForRole(role_id: RoleId): BlockDef[] {

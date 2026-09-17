@@ -116,6 +116,8 @@ export const HANDLERS = {
   socialPublish: 'social.publish_due',
   /** WP73 / 56 §6：批过的群发**分批**发出去（每批 50、间隔 2 秒、失败即停）。 */
   socialBroadcast: 'social.broadcast_due',
+  /** WP78 / 60 §5：品牌监控一轮（拉提及 → 判类 → 出卡），按品牌各跑一轮。 */
+  prMonitor: 'pr.monitor_sweep',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -866,6 +868,43 @@ export function registerSocialBroadcast(scheduler: Scheduler, deps: SocialBroadc
 }
 
 /* ------------------------------------------------------------------ */
+/* ⑰ WP78 / 60 §5：品牌监控一轮：每 15 分钟                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * WP78：监控轮询的节奏。
+ *
+ * 15 分钟是"负面预警要多快"与"别把 Google 的 feed 打烂"之间那条线：
+ * Google Alerts 自己的延迟就是几小时到一天，拉得再密也变不出新东西；
+ * 而 Reddit 那一侧一分钟 60 跳的配额要留给别的口子。
+ *
+ * **不是每分钟**：一条负面早 14 分钟看到，救不了什么；而每分钟拉一轮 RSS
+ * 在一天里就是 1440 跳打在同一个地址上。
+ */
+export const PR_MONITOR_INTERVAL_MS = 15 * 60_000
+
+export interface PrMonitorDeps {
+  /**
+   * 拉一轮提及 → 判类 → 出卡（按品牌各跑一轮）。
+   *
+   * **拉不到要照实报**：`skipped` 里那句话会一路走到面板上。
+   * "这条 feed 404 了"与"今天没人提我们"是两件事，混成一个 0
+   * 是品牌监控这条职责上最贵的一种谎。
+   */
+  sweep(): Promise<{
+    pulled: number
+    created: number
+    carded: number
+    routed: number
+    skipped: unknown[]
+  }>
+}
+
+export function registerPrMonitor(scheduler: Scheduler, deps: PrMonitorDeps): void {
+  scheduler.register(HANDLERS.prMonitor, () => deps.sweep())
+}
+
+/* ------------------------------------------------------------------ */
 /* ⑯ WP55 / 48 §4 L3 #4：出站 outbox 对账：每分钟                          */
 /* ------------------------------------------------------------------ */
 
@@ -1023,6 +1062,14 @@ export interface SchedulePlanOptions {
     orgDuplicates?: boolean
     /** WP68：红人开发信的序列跟进（有人持有红人那几条职责时才建）。 */
     kol?: boolean
+    /**
+     * WP78：品牌监控（有人持有公关那四条职责之一时才建）。
+     *
+     * 与社媒那一条同一条理由：没人做公关的机器上建一条每 15 分钟拉一遍空
+     * feed 的任务，只是给 25 §3 的"机器在替你定时做哪几件事"那张清单添一行
+     * 看不懂的东西。
+     */
+    pr?: boolean
     /**
      * WP73：社媒定时发布（有人持有社媒那九条职责之一时才建）。
      *
@@ -1256,6 +1303,24 @@ export async function ensureSystemTasks(
         title: '每 5 分钟看一眼有没有到点该发的内容',
         handler: HANDLERS.socialPublish,
         trigger: { kind: 'interval', every_ms: SOCIAL_PUBLISH_INTERVAL_MS },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
+  /*
+   * ⑱ WP78 / 60 §5：品牌监控，每 15 分钟一轮。
+   *
+   * **错过了不补跑**（`skip`）：关机三天再开机，不该把这三天的提及当成
+   * "刚刚发生的"一次性推成几十张预警卡。下一轮照样会把还在的那些拉回来
+   * （去重那一步认的是 `dedupe_key`，不是"这一轮见过没有"）。
+   */
+  if (options.has.pr === true) {
+    await add(
+      'sched_pr_monitor',
+      systemTask(base, {
+        title: '每 15 分钟看一眼外面有没有人提我们',
+        handler: HANDLERS.prMonitor,
+        trigger: { kind: 'interval', every_ms: PR_MONITOR_INTERVAL_MS },
         misfire_policy: 'skip',
       }),
     )

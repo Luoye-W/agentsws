@@ -51,6 +51,14 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   discord_bot: ['social_discord'],
   telegram_bot: ['social_telegram'],
   whatsapp_business: ['social_whatsapp'],
+  // WP78（60 §5）：品牌监控那一张新卡。
+  //
+  // `reddit` 那一行在上面——它现在喂**两个**源不是一个吗？不是：Reddit 上的
+  // 提及走 `google_alerts` 这个"外面那一侧"的源（`pr.monitoring` 面板上那两块
+  // 是一起亮还是一起暗，取决于**有没有一条监控进料**，而不是取决于连了哪一家）。
+  // 拆得更细的话，用户会看到"Reddit 亮了但 Alerts 没连"这种半亮半暗的面板，
+  // 而那两块说的是同一句话。
+  google_alerts: ['google_alerts'],
 }
 
 /**
@@ -84,8 +92,11 @@ export const SOCIAL_SOURCE_BY_CHANNEL: Readonly<Record<string, DataSourceId>> = 
  *
  * WP72 加进 `social`：社媒库同理（四张表，`apps/server/src/social.ts`）。
  * 内容日历上那几条是**我们自己排的**，一个平台都没连也照样在那儿摆着。
+ *
+ * WP78 加进 `pr`：公关库同理（四张表，`apps/server/src/pr.ts`）。一篇还没发的
+ * 新闻稿、一份自己攒的媒体名单，与"连没连 Google Alerts"没有半点关系。
  */
-export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social']
+export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social', 'pr']
 
 /** 全部数据源，按面板里的出场顺序。 */
 export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
@@ -110,6 +121,9 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'social_discord',
   'social_telegram',
   'social_whatsapp',
+  // WP78（60 §3）：我们自己的公关库 + 外面那一侧（Google Alerts / Reddit 搜索）
+  'pr',
+  'google_alerts',
 ]
 
 /**

@@ -659,6 +659,15 @@ const zh: Table = {
   'highlight.scheduled': '发布时间',
   'highlight.member': '申请人',
   'highlight.handoff': '转给',
+  // WP78（60 §1 / §3）：公关那五张卡上的三个芯片。
+  //
+  // 「版规」是外部发帖卡上第一眼要看的东西——我们在别人的地盘上，版主说了算。
+  // 「数字出处」是新闻稿卡上那句"这篇稿子里的数不是编的"。
+  // 「舆情」把情绪与传播量放在一格：一条被转了 30 次的负面，与一条孤零零的
+  // 抱怨，要不要现在就回是两个答案。
+  'highlight.venue_rules': '版规',
+  'highlight.facts_cited': '数字出处',
+  'highlight.sentiment': '舆情',
   'nav.skills': '技能',
   'skills.title': '技能',
   'skills.empty': '还没有技能。装了职责包或自带技能之后，这里会列出来。',
@@ -2435,6 +2444,9 @@ const en: Table = {
   'highlight.scheduled': 'Goes out',
   'highlight.member': 'Applicant',
   'highlight.handoff': 'Hand off to',
+  'highlight.venue_rules': 'Venue rules',
+  'highlight.facts_cited': 'Sourced figures',
+  'highlight.sentiment': 'Sentiment',
   'nav.skills': 'Skills',
   'skills.title': 'Skills',
   'skills.empty': 'No skills yet.',

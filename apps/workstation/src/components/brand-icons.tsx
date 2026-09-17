@@ -156,6 +156,14 @@ const ICONS: Record<string, IconChoice> = {
   discord_bot: { kind: 'letter', letter: 'D' },
   telegram_bot: { kind: 'letter', letter: 'T' },
   whatsapp_business: { kind: 'letter', letter: 'W' },
+  // WP78（60 §5）：公共关系那一张新卡。理由与上面两组逐字相同——仓库里那份
+  // simple-icons 子集里没有它，去别处扒一个回来既不合 CC0 也不合 36 §8 的商标纪律。
+  //
+  // Reddit 一行都没有：公关用的就是上面社媒那张（一把 key 管两条职责）。
+  // 新闻稿分发（`press_distribution`）也没有，而且**故意**没有——它登记在
+  // `PLANNED_CONNECTORS` 里，照 WP63 那条老规矩落通用插头：还没接上的东西
+  // 不借人家的标志。
+  google_alerts: { kind: 'letter', letter: 'G' },
   // ── 模型卡（设置页）─────────────────────────────────────────────────
   deepseek: { kind: 'glyph', glyph: 'deepseek' },
   // Simple Icons 里没有 OpenAI（品牌方要求下架）；这张卡说的也是"任何 OpenAI 兼容

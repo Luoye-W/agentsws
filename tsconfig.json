@@ -80,6 +80,9 @@
       "path": "packages/ontology"
     },
     {
+      "path": "packages/pr-core"
+    },
+    {
       "path": "packages/roles"
     },
     {

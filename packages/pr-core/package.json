@@ -1,0 +1,26 @@
+{
+  "name": "@agentsws/pr-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "公共关系共享包（60 §2）：结构化新闻稿与事实卡对照、媒体名单与 pitch 序列、版规解析、提及归一与情绪分级、三条渠道口。纯逻辑，注入 fetch，碰不到凭据。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/social-core": "workspace:*",
+    "@agentsws/support-core": "workspace:*"
+  }
+}

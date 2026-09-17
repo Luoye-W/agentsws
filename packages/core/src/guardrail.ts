@@ -71,6 +71,16 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   community_broadcast: 'medium',
   community_rules: 'medium',
   community_moderation: 'medium',
+  // WP78（60 §1）：公共关系那三条。
+  //
+  // 新闻稿按 medium：它不动钱，但发出去收不回来，而且会被媒体**原样登出去**
+  // （分发那一档由 `after.distributed` 在 switch 里升到人审）。
+  // 在别人的社区里发一条按 high：我们在人家的地盘上，版主说了算——
+  // 发错了不是一条帖子被删，是整个品牌被那个版永久封禁（它在 `HARD_L1` 里）。
+  // 提及定性按 low：它不发一句话出去，只是贴个标签然后交给下一个人。
+  press_release: 'medium',
+  community_post: 'high',
+  mention_triage: 'low',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -123,6 +133,18 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    */
   'social_post',
   'community_broadcast',
+  /**
+   * WP78（60 §1）：**在别人的社区里发一条，永远人审**。
+   *
+   * 与 `social_post` 的差别不是程度，是性质：自己号上发错了，删掉、道歉、
+   * 下不为例；**别人的版**里发错了，版主一键把这个品牌的域名加进自动删除
+   * 名单，从此我们在那个版说的每一句话都不存在。采纳率再高也证明不了
+   * "这一条不会踩到那个版的雷"——版规是人家随时在改的东西。
+   *
+   * 放在硬顶而不是只写在职责 yml 的 `ceiling: L1` 里：yml 可以被工作区策略
+   * 放宽，硬顶不行（15 §2）。
+   */
+  'community_post',
 ])
 /**
  * 44 G2：这些变更的**目标是一件具体商品**，于是"目标在不在我管的范围里"这句话才有意义。
@@ -243,6 +265,65 @@ export const KOL_OUTREACH_FORBIDDEN: readonly string[] = [
   'we guarantee',
 ]
 
+/* ── WP78（60 §2）：新闻稿里的数字 ↔ 事实卡 ───────────────────────────── */
+
+/**
+ * 正文里**看起来像一个数字**的每一段，原样抽出来。
+ *
+ * 为什么是"原样"而不是解析成 number：卡面上要指着正文里那一串说"这个数字
+ * 没有出处"，`3,200` 与 `3200` 在读者眼里是同一件事、在这句话里必须是同一串。
+ *
+ * 三条取舍，每条都为了少冤枉人：
+ *
+ * 1. **年份不算**（`2026`、`2026-09-17`）：日期不是宣称，是时间戳。
+ * 2. **序号不算**（`第 3 代`里的 3 会被抽出来，但一位数一律放过）——
+ *    一位数在中文里多半是"三件套""两年"这类说法，逐个要出处只会让人
+ *    放弃引事实卡。真正会被媒体登出去的是"增长 180%""售出 3,200 台"。
+ * 3. **百分比与带单位的数一定算**：它们是这篇稿子里最容易被引用、
+ *    也最容易被编的东西。
+ *
+ * 大小写与全角半角不处理——事实卡上的写法与正文里的写法本来就该一致，
+ * 归一化只会把"两个不同的数"悄悄并成一个。
+ */
+export function extractFigures(body: string): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  // 先把 ISO 日期与四位年份挖掉（第 1 条）
+  const masked = body
+    .replace(/\d{4}-\d{2}-\d{2}/g, ' ')
+    .replace(/\d{4}\s*年/g, ' ')
+    .replace(/(?<![\d.,])(19|20)\d{2}(?![\d.,%])/g, ' ')
+  const re = /\d[\d,._]*\d\s*%?|\d\s*%/g
+  for (const m of masked.matchAll(re)) {
+    const raw = m[0].replace(/\s+/g, '')
+    // 第 2 条：一位数（且不带百分号）放过
+    if (/^\d$/.test(raw)) continue
+    if (seen.has(raw)) continue
+    seen.add(raw)
+    out.push(raw)
+  }
+  return out
+}
+
+/** 引用里那个数字的写法归一到"只剩数位"，好让 `3,200` 与 `3200` 对得上。 */
+function figureKey(value: string): string {
+  return value.replace(/[,\s_]/g, '')
+}
+
+/**
+ * 正文里**没有出处**的那些数字（60 §2 / 19 §3）。
+ *
+ * `cited` 是这篇稿子声明的引用（`PressRelease.facts_cited` 里每条的 `figure`）。
+ * 返回空数组 = 每个数字都指得出是哪张事实卡上的哪一句。
+ *
+ * **判据是覆盖，不是数量**：引了十张卡但正文里多写了一个数，照样拦——
+ * 被媒体登出去的是那个多出来的数，不是那十张卡。
+ */
+export function uncitedFigures(body: string, cited: readonly string[]): string[] {
+  const have = new Set(cited.map(figureKey))
+  return extractFigures(body).filter((f) => !have.has(figureKey(f)))
+}
+
 /**
  * 48 §4 L3 #3：15 guardrail 前置里三道「不自主」的门 + Amazon 出站硬闸。
  *
@@ -291,6 +372,20 @@ export const PROTECTED_FIELDS: Partial<Record<ChangeKind, string[]>> = {
   community_rules: ['account_id', 'external_id'],
   /** 群发换收件群 / 换模板 id 之外的那些：换群 = 发给了另一批人。 */
   community_broadcast: ['account_id', 'external_id'],
+  /**
+   * WP78（60 §1）：**换一个版 = 发到另一个人的地盘上去了**。
+   *
+   * 卡面上"发到 r/BuyItForLife"与"发到 r/gadgets"看起来只差一个字符串，
+   * 后果差的是两套版规、两个版主、两份冷却计时。批的是哪一个版，发出去的
+   * 就必须是那一个（同 `inventory_adjust` 的"调错货"）。
+   */
+  community_post: ['platform', 'venue', 'parent_external_id'],
+  /**
+   * WP78（60 §2）：联系方式那一格 Agent 不许动——新闻稿底下印的是**真人**
+   * 的邮箱与电话，媒体照着它打过来。改成一个自动回复邮箱等于把这条路堵死，
+   * 而卡面上看起来只是"改了一行联系方式"。
+   */
+  press_release: ['contact'],
 }
 
 export interface ChangeLike {
@@ -876,6 +971,105 @@ export function evaluateGuardrail(
       const cap = capNumber(mandate, 'max_moderations_per_day')
       if (cap !== undefined && facts.windowCount + 1 > cap)
         review('max_moderations_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP78（60 §1 `pr.press`）：新闻稿。**按 `after.distributed` 分档**。
+     *
+     * 三道门，三条理由都不一样：
+     *
+     * 1. **数字必须有出处**（19 §3）。一篇新闻稿会被媒体**原样登出去**，
+     *    里面每一个数都会变成"某某公司称"。所以对不上事实卡的数字是 block
+     *    而不是 review——人在一屏卡面上判不出"增长 180%"这个数是哪来的，
+     *    而这正是他要被保护的地方。理由原样带出去："这个数字没有出处"。
+     * 2. **引语必须是人给的**（60 §2）。`provided_by` 空着 = 这句话是模型
+     *    替创始人说的。同样 block：没有"人点一下就登出去"的路径。
+     * 3. **分发要人点**。草稿 L2（躺在草稿箱里随便改），
+     *    `after.distributed === true` 升 L1——发出去收不回来。
+     */
+    case 'press_release': {
+      const body = typeof after.body === 'string' ? after.body : ''
+      const cited = Array.isArray(after.facts_cited)
+        ? after.facts_cited
+            .map((c) => (rec(c).figure === undefined ? '' : String(rec(c).figure)))
+            .filter((f) => f !== '')
+        : []
+      const uncited = uncitedFigures(body, cited)
+      if (uncited.length > 0)
+        block('press_release_facts_required', 'facts_cited', `这个数字没有出处：${uncited[0]}`)
+      const quotes = Array.isArray(after.quotes) ? after.quotes.map(rec) : []
+      const madeUp = quotes.find(
+        (q) => typeof q.provided_by !== 'string' || (q.provided_by as string).trim() === '',
+      )
+      if (madeUp !== undefined)
+        block(
+          'press_release_quote_needs_human',
+          'provided_by',
+          String(madeUp.speaker ?? 'unknown speaker'),
+        )
+      if (after.distributed === true) review('press_release_distribute', 'L1', 'distributed')
+      const cap = capNumber(mandate, 'max_releases_per_week')
+      if (cap !== undefined && after.distributed === true && facts.windowCount + 1 > cap)
+        review('max_releases_per_week', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP78（60 §1 `pr.reddit` / `pr.forums`）：在**别人的**社区里发一条。
+     *
+     * 永远人审（`HARD_L1`），外加三道 block——三条都不是额度，是
+     * "会被整版赶走"的事：
+     *
+     * 1. **版规禁自我推广的版，一条都不发**。判据是这次提案报没报查过
+     *    （`rules_checked`），与 `campaign_send` 的 `suppression_checked`
+     *    逐字同一条纪律：没问过与问过了没事，必须分得开。
+     * 2. **同一个版的冷却**。72 小时内在同一个版再发一条，在多数版是
+     *    自动删除 + 警告。调用方把"上一条是什么时候发的"算进来递给我们
+     *    （`hours_since_last_post`），没算过就当没发过——**不猜**。
+     * 3. **承诺扫描**（48 §4 L3 #3 那份全仓唯一的词表）。它在
+     *    `@agentsws/pr-core` 的起草那一跳跑，这里查的是"报没报跑过"。
+     */
+    case 'community_post': {
+      const check = rec(after.rules_checked)
+      if (after.rules_checked === undefined)
+        block('subreddit_rules_required', 'rules_checked', 'never')
+      else if (check.ok !== true) {
+        const reasons = strings(check.reasons)
+        block(
+          'subreddit_rules',
+          reasons.join(',') || 'not_allowed',
+          reasons[0] ?? '版规不让在这里发',
+        )
+      }
+      const cooldown = capNumber(mandate, 'cooldown_per_subreddit_hours')
+      const since = num(after.hours_since_last_post)
+      if (cooldown !== undefined && since !== undefined && since < cooldown)
+        block('cooldown_per_subreddit_hours', cooldown, Math.round(since))
+      if (after.commitment_checked !== true)
+        block('commitment_scan_required', 'checked', String(after.commitment_checked ?? 'never'))
+      const cap = capNumber(mandate, 'max_external_posts_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_external_posts_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP78（60 §1 `pr.monitoring`）：给一条提及定性。L3。
+     *
+     * 它不发一句话出去，所以这里只有两条形状上的硬判断：类必须是封闭那五个
+     * 里的一个，情绪必须是三档里的一档。一条说不清"负面还是正面、该谁接"的
+     * 分类结论，下游没有任何一条路走得下去（同 `community_membership.decision`）。
+     */
+    case 'mention_triage': {
+      const klass = after.triage
+      const allowedTriage = ['customer_issue', 'reputation', 'media_inquiry', 'praise', 'noise']
+      if (typeof klass !== 'string' || !allowedTriage.includes(klass))
+        block('mention_triage_class_required', allowedTriage.join('|'), String(klass ?? 'missing'))
+      const mood = after.sentiment
+      const allowedMood = ['negative', 'neutral', 'positive']
+      if (typeof mood !== 'string' || !allowedMood.includes(mood))
+        block('mention_sentiment_required', allowedMood.join('|'), String(mood ?? 'missing'))
+      const cap = capNumber(mandate, 'max_alerts_per_day')
+      if (cap !== undefined && mood === 'negative' && facts.windowCount + 1 > cap)
+        review('max_alerts_per_day', cap, facts.windowCount + 1)
       break
     }
     case 'bid_change':

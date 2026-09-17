@@ -90,6 +90,16 @@ const SOURCE_AUTHZ = {
   social_discord: { domain: 'social_account', range: 'assigned' },
   social_telegram: { domain: 'social_account', range: 'assigned' },
   social_whatsapp: { domain: 'social_account', range: 'assigned' },
+  /*
+   * WP78（60 §3）：公关那两个源。
+   *
+   * 两个都挂 `mention` 域，理由与上面那几行同一条：四条公关职责的 scopes 里
+   * `mention` 是**唯一四条都有**的那一个（新闻稿要知道上一波舆情、外部露出要
+   * 知道答哪条、监控本来就是它）。挂 `press_release` 的话，`pr.reddit` 与
+   * `pr.forums` 会看不见提及流那一块——而它们正是靠那一块决定去答什么。
+   */
+  pr: { domain: 'mention', range: 'assigned' },
+  google_alerts: { domain: 'mention', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

@@ -480,6 +480,60 @@ export interface ScenarioCommunityRulesEdit {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/* ── WP78（60）：公共关系那三件事 ──────────────────────────────────── */
+
+/**
+ * 收一条**外面说的话**。
+ *
+ * `text` 决定这条走哪一路（`pr-core` 的 `triageMention` 判，场景递不进来一个
+ * 结论）。判成客户问题 → 转客服卡，**公关不答**（60 分界行）。
+ */
+export interface ScenarioPrMention {
+  who: string
+  source: 'news' | 'reddit' | 'forum' | 'review' | 'social' | 'blog' | 'other'
+  origin: string
+  title?: string
+  text: string
+  author?: string
+}
+
+/**
+ * 提一篇新闻稿。
+ *
+ * `facts_cited` 是这篇稿子声明的引用；正文里多一个没出处的数就提不上去
+ * （guardrail block）。`distribute` 为真 = 要发出去 → 升 L1。
+ */
+export interface ScenarioPrRelease {
+  who: string
+  headline: string
+  dek: string
+  body: string
+  facts_cited: { figure: string; fact_card_id: string }[]
+  quotes?: { speaker: string; text: string; provided_by: string }[]
+  distribute?: boolean
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * 在**别人的**社区里提一条帖子。
+ *
+ * `rules` 是那个版的版规原文，一条一行。**不给 = 查不到规矩，按禁处理**——
+ * 在别人的地盘上 fail-closed 的代价是少发一条，fail-open 的代价是被永久赶走。
+ */
+export interface ScenarioPrExternalPost {
+  who: string
+  role?: 'pr.reddit' | 'pr.forums'
+  platform: string
+  venue: string
+  title?: string
+  body: string
+  rules?: string[]
+  flair?: string
+  /** 我们上一条在**这个版**是几小时前发的。不给 = 这一轮里没发过。 */
+  last_post_hours_ago?: number
+  level?: 'L1' | 'L2' | 'L3'
+}
+
 /** WP67 / 48 §5.1：建一条合作（`kol_collaboration`，**永远 L1**）。 */
 export interface ScenarioKolCollaboration {
   who: string
@@ -631,6 +685,12 @@ export type ScenarioEvent =
     }
   | { at: string; type: 'community.moderate'; moderate: ScenarioCommunityModerate }
   | { at: string; type: 'community.rules_edit'; rules_edit: ScenarioCommunityRulesEdit }
+  /** WP78：收一条外面说的话（60，判类不是参数：客户问题转客服）。 */
+  | { at: string; type: 'pr.mention'; mention: ScenarioPrMention }
+  /** WP78：提一篇新闻稿（60 §2，数字没出处就 block）。 */
+  | { at: string; type: 'pr.release'; release: ScenarioPrRelease }
+  /** WP78：在别人的社区里提一条帖子（60 §1，**永远 L1** + 版规 + 冷却）。 */
+  | { at: string; type: 'pr.external_post'; external_post: ScenarioPrExternalPost }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
   | { at: string; type: 'kol.outreach'; outreach: ScenarioKolOutreach }
   /** WP67：建一条合作（48 §5.1，永远 L1）。 */
@@ -940,6 +1000,40 @@ export interface ScenarioExpected {
    * `stated_on_card` 为真 = 撞车那句话真的在卡面上——只在返回值里说"撞了"
    * 而卡面上不写，等于没说。
    */
+  /**
+   * WP78（60 分界行）：那一条提及判成了什么、转给了谁。
+   *
+   * `answered_by_pr` 必须是假——**公关不答客户的问题**；它一旦为真，
+   * 60 的那条分界就名存实亡了，而这几条题存在的全部理由就是钉住它。
+   */
+  pr_mention?: {
+    triage?: string
+    sentiment?: string
+    routed_to?: string
+    answered_by_pr?: boolean
+    /** 有人真持有客服那条职责没有（没人持有 = 这张卡落到 owner 头上）。 */
+    held?: boolean
+    card?: string
+  }
+  /** WP78（60 §2）：那一篇新闻稿。`blocked` 为真 = 数字没出处 / 引语是编的。 */
+  pr_release?: {
+    blocked?: boolean
+    /** 正文里没出处的那几个数（原样）。 */
+    uncited?: string[]
+    requested_level?: string
+    auto_approved?: boolean
+    stated_on_card?: boolean
+  }
+  /** WP78（60 §1）：那一条外部发帖。`blocked` 为真 = 版规不让 / 冷却没过。 */
+  pr_external_post?: {
+    blocked?: boolean
+    rules_ok?: boolean
+    /** 拦下来的理由（与 guardrail 那一侧的 hit 名逐字相同）。 */
+    reasons?: string[]
+    requested_level?: string
+    auto_approved?: boolean
+    stated_on_card?: boolean
+  }
   social_calendar?: {
     conflict_kinds?: string[]
     stated_on_card?: boolean

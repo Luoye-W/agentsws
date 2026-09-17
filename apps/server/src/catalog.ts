@@ -51,6 +51,11 @@ export const ROLE_CONNECTOR_KIND: Readonly<Record<string, string>> = {
   discord_bot: 'discord_bot',
   telegram_bot: 'telegram_bot',
   whatsapp_business: 'whatsapp_business',
+  // WP78（60 §5）：品牌监控的 RSS 入口。service 名与 kind 同名。
+  //
+  // `reddit` **就是上面那一行**——60 分界行：`social.reddit` 是我们自己的版、
+  // `pr.reddit` 是别人的版，两条职责一把 key。不为公关再建一张 Reddit 卡。
+  google_alerts: 'google_alerts',
 }
 
 export type CatalogAuth = 'oauth2' | 'api_key' | 'custom_credential'
@@ -734,6 +739,64 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
   },
 ]
 
+/**
+ * WP78（60 §5）：**公共关系**这一侧新加的连接卡——只有一张。
+ *
+ * 另外三条渠道各有各的去处，都不在这里：
+ *
+ * - Reddit 用的是 `SOCIAL_CONNECTORS` 里**那一张** `reddit`（60 分界行：
+ *   `social.reddit` 管我们自己的版、`pr.reddit` 管别人的版，一把 key 管两条）；
+ * - 论坛（Quora / 知乎）**一张卡都没有**：没有公开写接口，走第三栏受控浏览器
+ *   （职责 yml 的 `mode: browser`），目录里给它一张点不动的卡比不给更糟；
+ * - 新闻稿**分发**登记在 `PLANNED_CONNECTORS` 里（"待增加"）——那一类服务
+ *   要合同、要账号、要钱，现在给一张表单是骗人。
+ */
+export const PR_CONNECTORS: readonly CatalogEntry[] = [
+  {
+    service: 'google_alerts',
+    upstream: 'local',
+    label: 'Google Alerts（品牌监控）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['google_alerts'],
+    fields: [
+      {
+        name: 'feed_url',
+        label: 'RSS 地址',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: 'https://www.google.com/alerts/feeds/1234567890/1234567890',
+        hint: '在 Google Alerts 里把这条提醒的「投递方式」改成 RSS，然后复制那个地址。**这个地址本身就是密钥**（谁拿到谁能看这条提醒），所以它只存在这台电脑上',
+      },
+      {
+        name: 'brand_terms',
+        label: '要盯的词',
+        secret: false,
+        required: false,
+        kind: 'text',
+        placeholder: 'Nordvolt, 诺德电源',
+        hint: '选填。Reddit 那一侧的全站搜索用它；Google Alerts 那一侧盯什么是你在 Google 那边设的，我们改不了',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '免费、不用申请、不要 key：在 Google Alerts 里建一条提醒，把投递方式改成 RSS，把地址贴过来就行。这是**唯一**一个不用申请、不要钱、也不违反谁的条款的新闻监控入口。它给的是新闻、博客与评测；Reddit 上的讨论由 Reddit 那张卡的全站搜索补上。',
+      steps: [
+        '打开 https://www.google.com/alerts，用你的 Google 账号登录',
+        '建一条提醒，关键词填品牌名（中英文各建一条更稳）',
+        '点提醒右边的铅笔 → 「投递到」选 **RSS 源**',
+        '复制那个 feed 地址，填进下面的表单——只存在这台电脑上',
+      ],
+      links: [{ label: 'Google Alerts', url: 'https://www.google.com/alerts' }],
+    },
+    data_note:
+      'Google Alerts 有延迟（几小时到一天），也漏东西——它不是全网监控。' +
+      '拉不到的时候面板上会照实说"这条 feed 没拉到"，**不会显示今天 0 条提及**：' +
+      '那两件事在品牌监控这条职责上必须分得开。',
+  },
+]
+
 export const CATALOG: readonly CatalogEntry[] = [
   {
     service: 'shopify_admin',
@@ -1062,6 +1125,7 @@ export const CATALOG: readonly CatalogEntry[] = [
   },
   ...KOL_CONNECTORS,
   ...SOCIAL_CONNECTORS,
+  ...PR_CONNECTORS,
 ]
 
 /**
@@ -1087,6 +1151,17 @@ export interface PlannedConnector {
 }
 
 export const PLANNED_CONNECTORS: readonly PlannedConnector[] = [
+  {
+    service: 'press_distribution',
+    label: '新闻稿分发',
+    kind: 'press_distribution',
+    data_sources: ['pr'],
+    note:
+      '把稿子一次发给一批媒体的那类服务（美通社 / 商业资讯这一派）。' +
+      '它们要合同、要企业账号、按条收费——现在给一张表单是骗人。' +
+      '在接上之前，分发那一跳出的是一张卡 + 一份可以直接复制的稿件正文，' +
+      '你自己发出去；**不假装已经发出去了**。',
+  },
   {
     service: 'judgeme',
     label: 'Judge.me 评价',

@@ -24,6 +24,7 @@
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/packages.ts",
+    "packages/contracts/src/pr.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
@@ -48,6 +49,10 @@
     "packages/roles/roles/kol/tiktok.yml",
     "packages/roles/roles/kol/x.yml",
     "packages/roles/roles/kol/youtube.yml",
+    "packages/roles/roles/pr/forums.yml",
+    "packages/roles/roles/pr/monitoring.yml",
+    "packages/roles/roles/pr/press.yml",
+    "packages/roles/roles/pr/reddit.yml",
     "packages/roles/roles/site/builder.yml",
     "packages/roles/roles/social/discord.yml",
     "packages/roles/roles/social/facebook-group.yml",
@@ -59,7 +64,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "df7da2f76205ed6b343ac44433bd34cf",
+  "source_digest": "b43582b9c8d9779981716b025956a222",
   "objects": [
     {
       "id": "ad_set",
@@ -1109,6 +1114,133 @@
       "read_via": []
     },
     {
+      "id": "external_post",
+      "label": "external_post",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "external_post",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "role_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "ExternalPostKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "venue",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "ExternalPostStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "rules_checked",
+          "type": "ExternalPostRuleCheck",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "parent_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.score",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.replies",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.removed",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": ["list_external_posts"],
+      "contract": "ExternalPost"
+    },
+    {
       "id": "fact_card",
       "label": "事实卡",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -1580,6 +1712,103 @@
       "contract": "Matter"
     },
     {
+      "id": "media_contact",
+      "label": "media_contact",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "media_contact",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "MediaContactKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "outlet",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "beats",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "email_ref",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "email_masked",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "stage",
+          "type": "MediaPitchStage",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "last_pitched_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_covered_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "notes",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "MediaContact"
+    },
+    {
       "id": "meeting",
       "label": "会议",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -1889,6 +2118,115 @@
       "contract": "MembershipRequest"
     },
     {
+      "id": "mention",
+      "label": "mention",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "mention",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source",
+          "type": "MentionSource",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "origin",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "author",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "sentiment",
+          "type": "MentionSentiment",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "triage",
+          "type": "MentionTriage",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "MentionStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "dedupe_key",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routed_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "alert_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": ["list_mentions"],
+      "contract": "Mention"
+    },
+    {
       "id": "message",
       "label": "消息",
       "key_format": "平台给的 id，原样存、不解析",
@@ -2159,6 +2497,115 @@
       ],
       "read_via": [],
       "contract": "Position"
+    },
+    {
+      "id": "press_release",
+      "label": "press_release",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "press_release",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "PressReleaseStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "headline",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "dek",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "quotes",
+          "type": "PressQuote[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "boilerplate",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "contact.name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "contact.email",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "contact.phone",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "facts_cited",
+          "type": "PressFactCitation[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "embargo_until",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "distributed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": ["list_press_releases"],
+      "contract": "PressRelease"
     },
     {
       "id": "product",
@@ -3749,6 +4196,14 @@
     },
     {
       "from": "approval_item",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "approval_item",
       "to": "inventory_item",
       "direction": "out",
       "cardinality": "one",
@@ -3762,6 +4217,22 @@
       "cardinality": "one",
       "via": "subject.matter_id",
       "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_mentions"]
     },
     {
       "from": "approval_item",
@@ -3786,6 +4257,14 @@
       "cardinality": "one",
       "via": "subject.object",
       "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "approval_item",
@@ -4340,6 +4819,46 @@
       "lookup": []
     },
     {
+      "from": "external_post",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "external_post",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "external_post",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "external_post",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "external_post",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "fact_card",
       "to": "todo",
       "direction": "in",
@@ -4476,6 +4995,46 @@
       "lookup": []
     },
     {
+      "from": "media_contact",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "media_contact",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "media_contact",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "media_contact",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "media_contact",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "meeting",
       "to": "matter",
       "direction": "out",
@@ -4541,6 +5100,46 @@
     },
     {
       "from": "membership_request",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "mention",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "mention",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "mention",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "mention",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "mention",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -4713,6 +5312,46 @@
       "direction": "in",
       "cardinality": "many",
       "via": "work_item.position_id",
+      "lookup": []
+    },
+    {
+      "from": "press_release",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "press_release",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "press_release",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "press_release",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "press_release",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
       "lookup": []
     },
     {
@@ -5069,6 +5708,22 @@
     },
     {
       "from": "staged_change",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "staged_change",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "staged_change",
       "to": "inventory_item",
       "direction": "out",
       "cardinality": "one",
@@ -5082,6 +5737,38 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "staged_change",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_mentions"]
+    },
+    {
+      "from": "staged_change",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_mentions"]
     },
     {
       "from": "staged_change",
@@ -5130,6 +5817,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_press_releases"]
+    },
+    {
+      "from": "staged_change",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "staged_change",
@@ -5565,11 +6268,35 @@
     },
     {
       "from": "workflow_instance",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "workflow_instance",
       "to": "inventory_item",
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_mentions"]
     },
     {
       "from": "workflow_instance",
@@ -5594,6 +6321,14 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "workflow_instance",
@@ -5685,6 +6420,14 @@
     },
     {
       "from": "workspace",
+      "to": "external_post",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "external_post.workspace_id",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "workspace",
       "to": "fact_card",
       "direction": "in",
       "cardinality": "many",
@@ -5705,6 +6448,14 @@
       "direction": "in",
       "cardinality": "many",
       "via": "matter.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "media_contact",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "media_contact.workspace_id",
       "lookup": []
     },
     {
@@ -5733,11 +6484,27 @@
     },
     {
       "from": "workspace",
+      "to": "mention",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "mention.workspace_id",
+      "lookup": ["list_mentions"]
+    },
+    {
+      "from": "workspace",
       "to": "package",
       "direction": "in",
       "cardinality": "many",
       "via": "package.workspace_id",
       "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "press_release",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "press_release.workspace_id",
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "workspace",
@@ -6456,6 +7223,40 @@
       "what": "改工作区策略"
     },
     {
+      "id": "draft_release",
+      "object": "press_release",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["pr.press"],
+      "what": "draft release"
+    },
+    {
+      "id": "draft_response",
+      "object": "mention",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.monitoring"],
+      "tool": "draft_reply",
+      "what": "draft response"
+    },
+    {
+      "id": "flag_mention",
+      "object": "mention",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.monitoring"],
+      "what": "flag mention"
+    },
+    {
       "id": "grant_assignment",
       "object": "policy",
       "source": "role",
@@ -6508,6 +7309,18 @@
       "what": "notify delay"
     },
     {
+      "id": "pitch_media",
+      "object": "media_contact",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.press"],
+      "tool": "draft_reply",
+      "what": "pitch media"
+    },
+    {
       "id": "reply_buyer_message",
       "object": "customer",
       "source": "role",
@@ -6557,13 +7370,15 @@
     },
     {
       "id": "reply_thread",
-      "object": "community_thread",
+      "object": "external_post",
       "source": "role",
       "access": "write",
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "role_holder",
       "roles": [
+        "pr.forums",
+        "pr.reddit",
         "social.discord",
         "social.facebook-group",
         "social.reddit",
@@ -6705,6 +7520,17 @@
       "route_to": "scope_manager",
       "roles": ["dtc.community-support", "dtc.store", "dtc.support"],
       "what": "建 / 改一个优惠码（营销发码）"
+    },
+    {
+      "id": "stage_external_post",
+      "object": "external_post",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["pr.forums", "pr.reddit"],
+      "what": "stage external post"
     },
     {
       "id": "stage_flow_edit",

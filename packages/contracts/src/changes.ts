@@ -154,6 +154,39 @@ export type ChangeKind =
    * `after.published` 分档的老办法。
    */
   | 'community_moderation'
+  /**
+   * WP78（60 §1 `pr.press`）：一篇新闻稿。
+   *
+   * **按 `after.distributed` 分档**（同 `publish_post` 按 `after.published`
+   * 那一招）：躺在草稿箱里的稿子 L2 随便改，一旦要发出去 / 分发给媒体，
+   * 人必须点一下——新闻稿发出去是**收不回来**的，而且它会被原样登出去，
+   * 连同里面每一个数字。所以它不能整条进 `HARD_L1`（那样草稿也自动不了）。
+   *
+   * 两道这条 kind 特有的门（`@agentsws/core` 的 guardrail）：
+   * 正文里的每个数字都要在 `facts_cited` 里有出处（没有就 block，
+   * 理由原样是"这个数字没有出处"），引语必须带 `provided_by`
+   * （模型编不出一句"我们的 CEO 说"）。
+   */
+  | 'press_release'
+  /**
+   * WP78（60 §1 `pr.reddit` / `pr.forums`）：在**别人的**社区里发一条。
+   *
+   * **永远人审**（15 §2 的 `HARD_L1` 里有它）。理由与 `social_post` 不同：
+   * 那一条是"发错了会被截图"，这一条是"发错了整个品牌会被那个版永久封禁"——
+   * 我们在人家的地盘上，版主说了算。所以它比自己号上的发布还紧一档：
+   * 除了人审，还有两道 block（版规禁自我推广、同一个版 72 小时内重复发）。
+   *
+   * 与 `community_broadcast` 分得开：那一条是**我们自己群里**的群发。
+   */
+  | 'community_post'
+  /**
+   * WP78（60 §1 `pr.monitoring`）：给一条提及定性并决定它归谁。
+   *
+   * L3——它不发一句话出去，只是给一条外部提及贴上"负面 / 客户问题 / 舆情"
+   * 的标签然后交给下一个人。真正要人点的是它**触发**的那些卡
+   * （转客服卡、回应草稿卡），不是这一下分类本身。
+   */
+  | 'mention_triage'
 
 export type ChangeStatus =
   | 'staged'

@@ -1,0 +1,76 @@
+# WP78（60 §2 / 19 §3）：**新闻稿里的数字只能来自事实卡。**
+#
+# 一篇新闻稿会被媒体**原样登出去**，里面每一个数都会变成"某某公司称"。
+# 所以对不上事实卡的数字是 **block** 而不是转人审——人在一屏卡面上判不出
+# "复购率 41%"这个数是哪来的，而那正是他要被保护的地方。
+#
+# 两条路各走一遍：
+#
+# ① 正文里多写了一个没出处的数 → block，理由原样是"这个数字没有出处：41%"；
+# ② 把那句话去掉（或者补上出处）之后 → 提得上去，卡面上写着
+#    "几个数字、几个有出处"。
+#
+# 数字抽取与覆盖判定在 `@agentsws/core` 的 `uncitedFigures`——guardrail 与
+# `pr-core` 的起草自查**读的是同一份代码**，不存在"面板说 3 个、门说 4 个"。
+#
+# 引语那一条在 DSL 上就钉死了：`provided_by` 是必填的，所以这条场景里
+# 造不出一句"模型替创始人说的话"。
+id: pr/press-release-facts-only
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 10m..1h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 多了一个没出处的数（复购率 41%）→ 提不上去
+  - at: '+0m'
+    pr.release:
+      who: p_li
+      headline: Nordvolt 发布第二代户外电源
+      dek: Nordvolt 今天发布第二代户外电源，续航与充电速度都有提升。
+      body: 第二代机型续航提升 18%，快充功率提高到 140 瓦，复购率 41%。
+      facts_cited:
+        - { figure: '18%', fact_card_id: fc_battery_life }
+        - { figure: '140', fact_card_id: fc_charge_watt }
+      quotes:
+        - speaker: 王岚，Nordvolt 创始人
+          text: 我们把电池管理重做了一遍，这一代能陪你多撑一个晚上。
+          provided_by: 王岚
+  # ② 把那句没出处的话去掉之后：提得上去（草稿 L2）
+  - at: '+1h'
+    pr.release:
+      who: p_li
+      headline: Nordvolt 二代户外电源上市
+      dek: Nordvolt 今天发布第二代户外电源，续航与充电速度都有提升。
+      body: 第二代机型续航提升 18%，快充功率提高到 140 瓦。
+      facts_cited:
+        - { figure: '18%', fact_card_id: fc_battery_life }
+        - { figure: '140', fact_card_id: fc_charge_watt }
+      quotes:
+        - speaker: 王岚，Nordvolt 创始人
+          text: 我们把电池管理重做了一遍，这一代能陪你多撑一个晚上。
+          provided_by: 王岚
+  - at: '+3h'
+    clock.advance: {}
+expected:
+  pr_release:
+    # 第二篇提上去了；第一篇被那道门拦下（下面 `blocked_rules` 钉的就是它）
+    blocked: false
+    auto_approved: false
+    stated_on_card: true
+  # **那道门真的响了**：不是我们自己先绕过去
+  blocked_rules:
+    - press_release_facts_required
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.pr_release_blocked
+    - simulation.pr_release_staged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  被拦下那一条的理由，是不是直接指着正文里那个数说"这个数字没有出处"？
+  提上去那一条的卡面上，"几个数字、几个有出处"说清楚了吗？

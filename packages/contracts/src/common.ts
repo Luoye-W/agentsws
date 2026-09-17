@@ -111,6 +111,20 @@ export type ObjectType =
   | 'social_account'
   | 'community_member'
   | 'community_thread'
+  /**
+   * WP78（60 §2）：公共关系那一侧的四类。
+   *
+   * 为什么不复用社媒那三类：`external_post` 是**别人地盘上**的一条帖子
+   * （我们既不是版主也删不掉它），`community_thread` 是我们自己群里的；
+   * `media_contact` 与 `creator` 更是两回事——红人是我们花钱请他说话，
+   * 记者是我们请他自己判断。`press_release` 与 `mention` 在别处一个对得上的
+   * 对象都没有。四类各有各的可读范围，一个域一把闸（19 §3 的过滤下推才切得动）。
+   * **只加不删**。
+   */
+  | 'media_contact'
+  | 'press_release'
+  | 'mention'
+  | 'external_post'
   | (string & {})
 
 export interface ObjectRef {
@@ -202,6 +216,19 @@ export type DataDomain =
    */
   | 'community_member'
   | 'community_thread'
+  /**
+   * WP78（60 §1）：公共关系那四个域。
+   *
+   * 分成四个而不是塞进一个 `pr`，理由与红人那五个、社群那两个一样：
+   * **可读范围不一样**。媒体联系方式只有 `pr.press` 碰得到
+   * （`media_contact`，敏感级 confidential）；提及流四条职责都读得到
+   * （`mention`）；在别人地盘上发的那条只有 `pr.reddit` / `pr.forums` 写得了
+   * （`external_post`）。一个域一把闸。
+   */
+  | 'media_contact'
+  | 'press_release'
+  | 'mention'
+  | 'external_post'
 
 export type Operation = 'read' | 'stage' | 'approve' | 'agent_auto'
 export type Range = 'own' | 'assigned' | 'workspace'

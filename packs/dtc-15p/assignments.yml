@@ -72,6 +72,15 @@
   role_id: common.member
   ranges: []
   granted_by: p_wang
+# WP78（60 §1）：15 人公司里**公关归内容**（这个 pack 手工维护、不整包重生成——
+# 理由见 docs/35 的 WP63 那一条）。挂 `pr.reddit` 是为了 `pr/subreddit-cooldown`
+# 那条题有人真持有它：同一个版 72 小时内再发一条，会被冷却那道门拦下。
+- person_id: p_zheng
+  role_id: pr.reddit
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
 - person_id: p_feng
   role_id: social.meta
   ranges:

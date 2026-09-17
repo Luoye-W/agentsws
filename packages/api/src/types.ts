@@ -68,6 +68,7 @@ import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { OrganizationsPort } from './routes/organizations.js'
 import type { PositionEntryPort } from './routes/positions.js'
+import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
@@ -677,6 +678,11 @@ export interface GatewayDeps {
    * 只是没有任何增删改的入口。
    */
   social?: SocialPort
+  /**
+   * WP78（60 §5）：本地公关库。没装配时 `/v1/pr/*` 回 not_implemented——
+   * 公共关系那四条职责要它才动得了。
+   */
+  pr?: PrPort
   /** 37 工作模型（事项 / 目标 / 待办 / 日历 / 计划 / 复盘）；没装配时那几条路由回 not_implemented。 */
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */

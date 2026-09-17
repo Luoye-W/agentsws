@@ -294,6 +294,23 @@ const SEED_POSITIONS: readonly {
       ['common.member', false],
     ],
   },
+  // WP78（60 §1 / 54）：**公共关系**岗位 = 四条职责（顺序 = Luoye 09-17 手写
+  // 那句话的顺序，也是契约 `PR_ROLES`）。**默认全勾**：公关这四件事在一家小公司
+  // 里本来就是一个人做的一天——写稿的人顺手盯舆情，盯舆情的人顺手去 Reddit
+  // 答一句。与社媒那九条只勾三条的差别是真实的：多数品牌一开始一个群都没有，
+  // 而"外面有人说我们"从第一天就在发生。
+  {
+    id: 'pr',
+    zh: '公共关系',
+    en: 'Public Relations',
+    roles: [
+      ['pr.press', true],
+      ['pr.reddit', true],
+      ['pr.forums', true],
+      ['pr.monitoring', true],
+      ['common.member', false],
+    ],
+  },
   { id: 'member', zh: '普通成员', en: 'Member', roles: [['common.member', true]] },
 ]
 

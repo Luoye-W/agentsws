@@ -1,0 +1,218 @@
+# 60 §1 公共关系的第 1 条职责：**新闻稿**（WP78，Luoye 09-17 手写四条里的第一条）。
+#
+# 四条职责的骨架相同，不同的只有三样：读什么、写什么、以及各自那一段
+# "这条活儿特有的部分"。骨架为什么长这样写在这里，另外三条不抄第二遍。
+#
+# **骨架**（60 §1 那张表）：
+#
+# - 每条职责两个写动作：一个进变更账本（`staged_change`），一个是出站
+#   （`outbound_message`，走承诺扫描那三道门，不走 guardrail）；
+# - 额度写在**动作**上不写在职责上（同 51 §2.3 / 56 §2）；
+# - 面板两到三块，其中"我们自己库里那几块"走 `pr` 这个源（永远算连上），
+#   "外面那一侧"走 `google_alerts`（没连就照 36 §3 明说）。
+#
+# 这条职责特有的三件事：
+#
+# 1. **新闻稿里的数字只能来自事实卡**（19 §3）。一篇稿子会被媒体**原样登出去**，
+#    里面每个数都变成"某某公司称"。所以 `facts_cited` 覆盖不全是 block 不是
+#    转人审——人在一屏卡面上判不出"增长 180%"这个数是哪来的，而那正是他要被
+#    保护的地方。判定在 `@agentsws/core` 的 `uncitedFigures`（起草那一跳先自查
+#    一遍只是早点给反馈，最后一道在 guardrail）。
+# 2. **引语必须是人给的**。`PressQuote.provided_by` 是必填；`pr-core` 里**没有**
+#    一个"生成一句引语"的函数。一句"我们的 CEO 说这是行业的里程碑"如果是模型
+#    写的，它既不是事实也不是引语，而它会被登出去。
+# 3. **分发还没有渠道**。美通社那一类服务要合同、要账号、要钱，连接目录里它是
+#    "待增加"（`press_distribution`）。在接上之前，分发那一跳出的是一张卡 +
+#    一份可复制的稿件正文——**不假装发出去了**（同 56 的 Facebook 群组）。
+#
+# 分界（60 表头）：舆情与媒体询问归公关自己答；**客户的问题不归我，转客服**。
+id: pr.press
+version: 1.0.0
+domain: pr
+name: { zh: 新闻稿, en: Press Releases }
+description: 写新闻稿并发给媒体：媒体名单、pitch 与跟进、稿件起草与分发。稿子里的数字只引事实卡，引语只用人给的原话；客户的问题不归我，转客服
+
+scopes:
+  # 稿件本身
+  - { domain: press_release, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 媒体联系方式是 confidential：明文只在加密库里，名单上存的是 key 名
+  - { domain: media_contact, ops: [read, stage], range: assigned, max_sensitivity: confidential }
+  # 外面在说什么（写稿要知道上一波舆情是什么）——只读
+  - { domain: mention, ops: [read], range: assigned, max_sensitivity: internal }
+  # 19 §3：稿子里的每个数字都要在事实卡里找得到
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  # 24：品牌话术是**公司层技能**，这条职责只读不编
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # 分发服务还没接（连接目录里是"待增加"），所以 `required: false`：
+  # 没连也能写稿、攒审批、把正文复制出去——真发到通稿网那一跳才需要它。
+  - { kind: press_distribution, required: false, grants: [distribute], ownership: workspace }
+  # pitch 是一封邮件，走的是全仓那一条邮件通路（WP55 的日配额与抑制名单）
+  - { kind: email, required: false, grants: [send], ownership: workspace }
+
+actions:
+  - id: draft_release
+    target: press_release
+    kind: staged_change
+    # 15 §1 `RECORD_READ_KINDS` 之外的另一条理由：改一篇已经在评审里的稿子之前
+    # 要把它读全——半份稿子上改一个数，改的是另一篇稿子。
+    requires_record_read: true
+    mandate:
+      # 一周两条（60 §6）。这不是技术上限，是"别让媒体把你当成群发机器"那条线
+      caps: { max_releases_per_week: 2 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 2, per: week }
+    # 联系方式 Agent 提都不许提（`@agentsws/core` 的 `PROTECTED_FIELDS`）
+    protected_fields: [contact]
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: pitch_media
+    target: media_contact
+    kind: outbound_message
+    mandate:
+      # 一天 20 封（60 §6）。日配额与抑制名单复用建联那一套（48 §5.2 / WP55）
+      caps: { max_pitches_per_day: 20 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+
+automation:
+  # 草稿 L2；**分发那一档由 guardrail 按 `after.distributed` 升到 L1**，
+  # 不在这里写第二遍——写两份迟早各改各的（同 56 的封禁那一档）
+  draft_release:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  # pitch L2 → L3：它改不了钱，承诺扫描把"改得了钱"那一半拦死
+  pitch_media:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: pr.press.releases,
+      placement: queue,
+      component: table,
+      query: pr.release_queue,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: pr.press.funnel,
+      placement: role_view,
+      component: table,
+      query: pr.pitch_funnel,
+      default_order: 20,
+      pinnable: true,
+      adaptive: false,
+    }
+  # 写稿之前先看一眼外面在说什么（只读）
+  - {
+      id: pr.press.mentions,
+      placement: role_view,
+      component: table,
+      query: pr.mentions,
+      default_order: 30,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
+  # 动作 id / 数据域这五样判"这件事该走哪条"。四条公关职责里 `pr.press` 是
+  # 唯一一条与"稿""媒体""记者"有关的，意图词写足才路由得到。
+  - {
+      name: press_release_intent,
+      intent_terms: [新闻稿, 通稿, 发布会, 媒体, 记者, 发稿, press release, pitch, journalist, media],
+      cue_terms: [写一篇, 发出去, 名单, 跟进, 禁发, 引语, embargo, outlet, beat],
+      tool: list_press_releases,
+      prefetch: false,
+    }
+  # 19：稿子里说到数字之前先查事实卡。**这一条是 prefetch**——
+  # 等模型先写完再去查，它已经把数编出来了
+  - {
+      name: facts_before_release,
+      intent_terms: [新闻稿, 通稿, 数据, 增长, 销量, 融资, release, growth, units, revenue],
+      cue_terms: ['%', 万, 台, 倍, 同比, 环比, percent, units, times],
+      tool: search_facts,
+      prefetch: true,
+    }
+  # 60 的分界：客户的问题不归我
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_support,
+      prefetch: false,
+    }
+
+notifications:
+  # 分发是 L1，卡压着不动 = 这条新闻错过了它的时间点
+  - {
+      event: 'approval.created:draft_release',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+      escalate_after_hours: 8,
+    }
+  # 数字没出处：立刻让人知道——它意味着起草那一跳编了一个数
+  - {
+      event: 'guardrail.hit:press_release_facts_required',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  # 引语是模型写的：同上，而且更糟（它会被原样登出去）
+  - {
+      event: 'guardrail.hit:press_release_quote_needs_human',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  - { event: 'guardrail.hit:commitment_scan', mode: immediate, recipients: [role_holder] }
+  - { event: 'guardrail.hit:suppression_list', mode: immediate, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: draft_release
+    label: { zh: "起草一篇新闻稿", en: "Draft a press release" }
+    prompt: "给这次发布起一篇新闻稿。里面每一个数字都要指出是哪张事实卡上的，找不到出处的就别写；引语先空着，我一会儿给你一句"
+    kind: start_task
+  - id: who_to_pitch
+    label: { zh: "这条该发给谁", en: "Who should we pitch" }
+    prompt: "这条新闻该发给名单上的哪些人？按他们写的领域挑，把退订过的和已经在序列里的剔掉，告诉我今天还能发几封"
+    kind: ask
+  - id: funnel
+    label: { zh: "pitch 进展怎么样", en: "How is the pitch funnel" }
+    prompt: "现在发出去多少封、回了几个、谁真写了我们、谁明说不写"
+    kind: ask
+  - id: check_numbers
+    label: { zh: "查一遍稿子里的数", en: "Check the numbers" }
+    prompt: "把这篇稿子里的每一个数字挑出来，逐个说清它出自哪张事实卡；没有出处的单独列出来"
+    kind: review
+
+task_examples:
+  - id: launch
+    title: { zh: "新品发布要发稿", en: "A launch announcement" }
+    description: "下周发新品，想给几家媒体发一条消息。"
+    expected_output: "一篇分好段的稿子（标题 / 导语 / 事实段 / 引语 / 关于我们 / 联系方式），事实段里每个数字后面都标着出自哪张事实卡；引语那一段空着等你给一句话。分发是一张要你点的卡。"
+  - id: made_up_number
+    title: { zh: "稿子里有个数编出来了", en: "A made-up number" }
+    description: "稿子里写着「复购率 47%」，可是没人知道这个数哪来的。"
+    expected_output: "这一条提不上去：卡上直接写「这个数字没有出处：47%」。要么找到写着这个数的那张事实卡，要么把这句话去掉。"
+  - id: media_list
+    title: { zh: "攒一份媒体名单", en: "Build a media list" }
+    description: "想给这个品类的几家媒体建个名单。"
+    expected_output: "一张按「写什么领域、上次写我们是什么时候、发到第几封」排的表；邮箱在表上是脱敏的（a***@x.com），明文只在本机加密库里。"

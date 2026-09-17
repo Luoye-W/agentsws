@@ -514,6 +514,183 @@ for (const spec of SOCIAL_CHANNELS) {
   })
 }
 
+/* ── WP78（60 §3）：公关面板的五块 ─────────────────────────────────────
+ *
+ * 与社媒那九块同一种分层（36 §3「没连就明说」只对得上其中一层）：
+ *
+ * - **我们自己库里那三块**（待发新闻稿 / pitch 漏斗 / 外部露出）走 `pr`
+ *   这个源——它永远算连上。一个平台都没连，稿子照样写得出来。
+ * - **外面那一侧两块**（提及流 / 负面预警）走 `google_alerts`。
+ *
+ * 不按职责筛行：四条职责挑的是**不同的块**（`blocks.ts` 的三组），
+ * 而不是同一块里各看各的行——公关这四条职责看的是同一批提及、同一批稿子。
+ * 社媒那边要按渠道筛，是因为九条职责对着九个互不相干的号。
+ */
+/**
+ * 面板上那几列的**人话**。
+ *
+ * 枚举值（`routed_to_support` / `blocked`）是给机器看的；面板上印一个下划线
+ * 拼起来的英文词，等于让人自己去猜。这张表只管"怎么念"，不改任何判断——
+ * 认不出来的原样端出去（**不编一个词**）。
+ */
+const MENTION_STATUS_WORDS: Readonly<Record<string, string>> = {
+  new: '刚看到',
+  triaged: '判过了',
+  routed_to_support: '转给客服了',
+  responded: '回过了',
+  archived: '归档',
+}
+const EXTERNAL_POST_WORDS: Readonly<Record<string, string>> = {
+  draft: '草稿',
+  approved: '批了，等发',
+  published: '发出去了',
+  blocked: '版规不让',
+  removed: '被删了',
+}
+const word = (table: Readonly<Record<string, string>>, value: string): string =>
+  table[value] ?? value
+
+const PR_QUERIES: QueryDef[] = [
+  {
+    name: 'pr.mentions',
+    source: 'google_alerts',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'published_at', label: '什么时候' },
+        { key: 'origin', label: '在哪儿' },
+        { key: 'sentiment', label: '情绪' },
+        { key: 'triage', label: '归谁' },
+        { key: 'body', label: '说了什么' },
+      ],
+      rows: (ctx.pr?.mentions ?? []).map((r) => ({
+        published_at: r.published_at,
+        origin: r.origin,
+        // 没判过就空着——**不写"中性"**：没判与判成中性是两件事
+        sentiment: r.sentiment ?? '',
+        triage: r.triage ?? '',
+        body: r.excerpt,
+      })),
+    }),
+  },
+  {
+    name: 'pr.negative_alerts',
+    /*
+     * 这一块走 `pr` 而不是 `google_alerts`，与上面那一块**故意不一样**：
+     *
+     * 提及流是**外面那一侧**——没连 feed 的时候它必须说"去连接"，因为
+     * 一张空表在这里等于说"今天没人提我们"，而那是这条职责上最贵的一种谎。
+     * 负面预警不同：一条预警是**我们自己判出来并开出来的卡**，空的意思就是
+     * "现在没有着火的"——那句话是真的，不需要加条件。
+     */
+    source: 'pr',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'published_at', label: '什么时候' },
+        { key: 'origin', label: '谁在说' },
+        // 被转了几次 = 要不要升级的判据（去重那一步算出来的，不在这儿现算）
+        {
+          key: 'seen_count',
+          label: '被转了几次',
+          align: 'right' as const,
+          format: 'count' as const,
+        },
+        { key: 'body', label: '说了什么' },
+      ],
+      rows: (ctx.pr?.negative_alerts ?? []).map((r) => ({
+        published_at: r.published_at,
+        origin: r.author === undefined ? r.origin : `${r.author}（${r.origin}）`,
+        seen_count: r.seen_count ?? '',
+        body: r.excerpt,
+      })),
+    }),
+  },
+  {
+    name: 'pr.release_queue',
+    source: 'pr',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'headline', label: '标题' },
+        { key: 'status', label: '状态' },
+        // 两个数不等 = 稿子里有数没出处（19 §3）。合成一个"合规"钩子的话，
+        // 人看不出差在哪儿
+        { key: 'figures', label: '有几个数', align: 'right' as const, format: 'count' as const },
+        { key: 'cited', label: '有出处的', align: 'right' as const, format: 'count' as const },
+        { key: 'embargo_until', label: '禁发至' },
+      ],
+      rows: (ctx.pr?.releases ?? []).map((r) => ({
+        headline: r.headline,
+        status: r.status,
+        figures: r.figures,
+        cited: r.facts_cited,
+        embargo_until: when(r.embargo_until),
+      })),
+    }),
+  },
+  {
+    name: 'pr.pitch_funnel',
+    source: 'pr',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'label', label: '到哪一步了' },
+        { key: 'count', label: '几个人', align: 'right' as const, format: 'count' as const },
+      ],
+      // 六档都出一行，没有人的那一档也是 0——"这一档没人"本身就是一句话
+      rows: (ctx.pr?.pitch_funnel ?? []).map((r) => ({ label: r.label, count: r.count })),
+    }),
+  },
+  {
+    name: 'pr.external_posts',
+    source: 'pr',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'venue', label: '发到哪儿' },
+        { key: 'status', label: '状态' },
+        { key: 'rules', label: '版规' },
+        { key: 'score', label: '赞', align: 'right' as const, format: 'count' as const },
+        { key: 'replies', label: '回复', align: 'right' as const, format: 'count' as const },
+        { key: 'body', label: '内容' },
+      ],
+      rows: (ctx.pr?.external_posts ?? []).map((r) => ({
+        venue: `${r.platform}／${r.venue}`,
+        // 被删掉的那一条要看得见——混进"已发布"里就再也没人知道它没了
+        status:
+          r.removed === true
+            ? word(EXTERNAL_POST_WORDS, 'removed')
+            : word(EXTERNAL_POST_WORDS, r.status),
+        // 版规拦下来的理由**原样**显示：与 guardrail 那一侧是同一个字符串
+        rules: r.rules_ok ? '过了' : (r.rules_reasons ?? '没过'),
+        score: r.score ?? '',
+        replies: r.replies ?? '',
+        body: r.excerpt,
+      })),
+    }),
+  },
+  {
+    name: 'pr.support_handoffs',
+    source: 'pr',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'published_at', label: '什么时候' },
+        { key: 'origin', label: '在哪儿说的' },
+        { key: 'status', label: '到哪一步了' },
+        { key: 'body', label: '说了什么' },
+      ],
+      rows: (ctx.pr?.handoffs ?? []).map((r) => ({
+        published_at: r.published_at,
+        origin: r.author === undefined ? r.origin : `${r.author}（${r.origin}）`,
+        status: word(MENTION_STATUS_WORDS, r.status),
+        body: r.excerpt,
+      })),
+    }),
+  },
+]
+
 const QUERY_LIST: QueryDef[] = [
   {
     name: 'sales.total',
@@ -1111,6 +1288,8 @@ const QUERY_LIST: QueryDef[] = [
     }),
   },
   ...SOCIAL_QUERIES,
+  // WP78（60 §3）：公关五块
+  ...PR_QUERIES,
 ]
 
 const EMPTY_SCALAR: ScalarResult = { value: 0, previous: 0, spark: [0, 0, 0, 0, 0, 0, 0] }

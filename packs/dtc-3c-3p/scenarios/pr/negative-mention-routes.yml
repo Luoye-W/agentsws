@@ -1,0 +1,74 @@
+# WP78（60 分界行）：**外面的客户投诉转客服，舆情公关自己接。**
+#
+# 这是 60 那条分界在机制上的落点，也是这整个 WP 最要紧的一条断言：
+# Quora 上有人说"我上周下的单还没发货"，公共关系**一个字都不答**——
+# 它出的是一张转客服卡，路由到真持有客服那条职责的人（3 人公司里是店主自己）。
+#
+# 三件事都是真发生的：
+#
+# 1. **判类不是场景说了算**：`@agentsws/pr-core` 的 `triageMention` 判成
+#    `customer_issue`，`handoffOfMention` 才给出那张卡。客户问题那一档用的是
+#    `social-core` 的 `triageThread`——同一句话在 Discord 里与在 Quora 上是
+#    同一个意思，两份词表迟早各改各的。
+# 2. **卡真的落到持有那条职责的人头上**：没人持有的话它会落到 owner 头上，
+#    那时 `held` 是假，也要照实报，而不是假装有人接。
+# 3. **公关那一侧一条出站都没有**：`answered_by_pr` 是假。它一旦为真，
+#    这条分界就名存实亡了。
+#
+# 为什么不让公关顺手答一句"我帮你查查"：它手上根本没有订单域
+# （`pr/monitoring.yml` 的 scopes 里一个 `order` 都没有）。答得出口的只有编的。
+#
+# 第二条提及（真舆情）跟在后面，是为了把**另一条路**也走一遍：同样是负面，
+# 一条归客服、一条归公关，分水岭是"这是不是一个买家在等一个答复"。
+id: pr/negative-mention-routes
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 店主王岚既是客服也是点卡的人：转过来的这张卡要有人接得住
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 10m..1h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 一个买家在外面等一个答复 → 转客服，公关不答
+  - at: '+0m'
+    pr.mention:
+      who: p_wang
+      source: forum
+      origin: quora.com
+      author: mikec
+      title: 这个牌子的订单一般多久发货
+      text: 我上周下的单到现在还没发货，单号 #10231，什么时候能寄出？
+  # ② 同样是负面，但它是舆情不是工单 → 公关自己接（出一张预警卡）
+  - at: '+30m'
+    pr.mention:
+      who: p_wang
+      source: reddit
+      origin: r/gadgets
+      author: linaw
+      title: 这个牌子的电源用两周就漏电
+      text: 买了一个月就开始发烫，这家虚假宣传，大家避雷。
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  # 断言看的是**最后一条**：舆情那一路归公关，出的是负面预警卡
+  pr_mention:
+    triage: reputation
+    sentiment: negative
+    card: negative_alert
+    # 公关自己接，不转出去
+    answered_by_pr: false
+  # 两条提及各出一张卡：转客服那张 + 负面预警那张
+  approval_kinds: { claim: 2 }
+  event_types:
+    - simulation.pr_mention_triaged
+  # 一条出站都没有：公关不答客户的问题，预警也只是"让你看见"
+  metrics:
+    outbound_sent: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  这两张卡上"为什么一条归客服、一条归公关，原话是什么，在哪儿说的"，
+  接手的人读完就能动手吗？
