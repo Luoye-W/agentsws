@@ -1,0 +1,362 @@
+{
+  "id": "ops/budget-exhausted",
+  "pack": "dtc-3c-3p",
+  "tier": "fast",
+  "seed": 42,
+  "runtime": "dsh-subprocess",
+  "passed": true,
+  "clock": {
+    "start": "2026-09-07T01:00:00.000Z",
+    "end": "2026-09-07T04:00:00.000Z",
+    "virtual_ms": 10800000
+  },
+  "counts": {
+    "events": 24,
+    "runs": 1,
+    "inbound": 1,
+    "approvals": 1,
+    "changes": 0,
+    "outbound_observations": 0,
+    "emails_sent": 0
+  },
+  "invariants": [
+    {
+      "name": "no_write_without_stage",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    },
+    {
+      "name": "apply_only_after_approved",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    },
+    {
+      "name": "provenance_respected",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    },
+    {
+      "name": "fencing_covers_external",
+      "ok": true,
+      "checked": 2,
+      "violations": []
+    },
+    {
+      "name": "prompt_replayable",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    },
+    {
+      "name": "freeze_on_model_outage",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    }
+  ],
+  "expectations": [
+    {
+      "key": "never_calls",
+      "ok": true,
+      "detail": "一次没调"
+    },
+    {
+      "key": "staged_change_kinds",
+      "ok": true,
+      "detail": "实际 []，期望 []"
+    },
+    {
+      "key": "metrics.applied_changes",
+      "ok": true,
+      "detail": "0（期望 0；来源 change.applied × 0）"
+    },
+    {
+      "key": "metrics.outbound_sent",
+      "ok": true,
+      "detail": "0（期望 0；来源 delivery.sent × 0）"
+    },
+    {
+      "key": "metrics.runs_failed",
+      "ok": true,
+      "detail": "1（期望 1；来源 run.failed × 1）"
+    },
+    {
+      "key": "run_failed_codes",
+      "ok": true,
+      "detail": "[budget_exhausted]"
+    },
+    {
+      "key": "notifications_to",
+      "ok": true,
+      "detail": "通知到 [p_wang]"
+    }
+  ],
+  "metrics": {
+    "adoption_rate": {
+      "value": 1,
+      "event_types": [
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "accepted=0 edited=0 rejected=0"
+    },
+    "intervention_rate": {
+      "value": 0,
+      "event_types": [
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "guardrail_hits": {
+      "value": 0,
+      "event_types": [
+        "guardrail.hit"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "queue_latency_ms": {
+      "value": 0,
+      "event_types": [
+        "approval.created",
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "tokens_per_item": {
+      "value": 0,
+      "event_types": [
+        "model.usage",
+        "run.started"
+      ],
+      "event_count": 0,
+      "direction": "lower_better",
+      "note": "tokens=0 work_items=0"
+    },
+    "cost_base": {
+      "value": 0,
+      "event_types": [
+        "model.usage"
+      ],
+      "event_count": 0,
+      "direction": "lower_better",
+      "note": "22 §3 按价格表换算的基准货币；realistic 档的预算上限就是它的和"
+    },
+    "staged_changes": {
+      "value": 0,
+      "event_types": [
+        "change.staged"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "按 change_id 去重（运行时与账本各发一条）"
+    },
+    "applied_changes": {
+      "value": 0,
+      "event_types": [
+        "change.applied"
+      ],
+      "event_count": 0,
+      "direction": "higher_better"
+    },
+    "outbound_sent": {
+      "value": 0,
+      "event_types": [
+        "delivery.sent"
+      ],
+      "event_count": 0,
+      "direction": "higher_better"
+    },
+    "blocked_proposals": {
+      "value": 0,
+      "event_types": [
+        "change.blocked",
+        "approval.blocked"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "runs_failed": {
+      "value": 1,
+      "event_types": [
+        "run.failed"
+      ],
+      "event_count": 1,
+      "direction": "lower_better"
+    },
+    "tool_calls": {
+      "value": 0,
+      "event_types": [
+        "tool.call"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "knowledge_gaps": {
+      "value": 0,
+      "event_types": [
+        "knowledge.gap.opened"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "escalations": {
+      "value": 0,
+      "event_types": [
+        "approval.escalated"
+      ],
+      "event_count": 0,
+      "direction": "lower_better",
+      "note": "升级 = 没人在时限内理（14 §7），越少越健康"
+    },
+    "expired_approvals": {
+      "value": 0,
+      "event_types": [
+        "approval.expired"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "sampling_reviews": {
+      "value": 0,
+      "event_types": [
+        "simulation.sampling_review"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "L2 自动批被抽出来复核的条数（14 §13.2）；掉到 0 说明抽检没在跑"
+    },
+    "judge_rule_score": {
+      "value": 1,
+      "event_types": [
+        "approval.created",
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "0/0 条检查通过"
+    }
+  },
+  "judge": {
+    "rule": {
+      "score": 1,
+      "passed": 0,
+      "total": 0,
+      "checks": []
+    },
+    "rubric_ref": "judge/aftersales-reply.md"
+  },
+  "notes": [
+    "notify[p_wang] 模型预算耗尽，队列已冻结"
+  ],
+  "delta": {
+    "adoption_rate": {
+      "baseline": 1,
+      "current": 1,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "intervention_rate": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "guardrail_hits": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "queue_latency_ms": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "tokens_per_item": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "cost_base": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "staged_changes": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "applied_changes": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "outbound_sent": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "blocked_proposals": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "runs_failed": {
+      "baseline": 1,
+      "current": 1,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "tool_calls": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "knowledge_gaps": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "escalations": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "expired_approvals": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "sampling_reviews": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "judge_rule_score": {
+      "baseline": 1,
+      "current": 1,
+      "change_pct": 0,
+      "regressed": false
+    }
+  }
+}

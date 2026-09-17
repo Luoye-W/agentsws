@@ -1,0 +1,89 @@
+{
+  "pack": "dtc-15p",
+  "tier": "fast",
+  "generated_at": "2026-09-07T04:00:00.000Z",
+  "passed": true,
+  "scenarios": [
+    {
+      "id": "community/broadcast-respects-suppression",
+      "passed": true
+    },
+    {
+      "id": "ops/claim-pool",
+      "passed": true
+    },
+    {
+      "id": "ops/collision-two-people",
+      "passed": true
+    },
+    {
+      "id": "ops/cross-desk-handover",
+      "passed": true
+    },
+    {
+      "id": "ops/edit-product-price",
+      "passed": true
+    },
+    {
+      "id": "ops/multi-desk-concurrency",
+      "passed": true
+    },
+    {
+      "id": "ops/product-line-isolation",
+      "passed": true
+    },
+    {
+      "id": "ops/theme-publish-needs-approval",
+      "passed": true
+    },
+    {
+      "id": "ops/two-desks-no-union",
+      "passed": true
+    },
+    {
+      "id": "org/brand-adds-store",
+      "passed": true
+    },
+    {
+      "id": "org/task-opened-at-position-routes-to-duty",
+      "passed": true
+    },
+    {
+      "id": "org/two-brands-cannot-see-each-other",
+      "passed": true
+    },
+    {
+      "id": "org/two-solo-users-discover",
+      "passed": true
+    },
+    {
+      "id": "pr/subreddit-cooldown",
+      "passed": true
+    },
+    {
+      "id": "secretary/ask-colleague",
+      "passed": true
+    },
+    {
+      "id": "secretary/meet-conflict",
+      "passed": true
+    },
+    {
+      "id": "secretary/route-to-desk",
+      "passed": true
+    },
+    {
+      "id": "social/calendar-conflict-flagged",
+      "passed": true
+    },
+    {
+      "id": "store/daily-report-card",
+      "passed": true
+    }
+  ],
+  "gate": {
+    "ok": true,
+    "failures": [],
+    "scenarios": 19
+  }
+}

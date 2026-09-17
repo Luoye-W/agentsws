@@ -1171,6 +1171,80 @@ async function execute(
         await tick()
         return
       }
+      // ── WP78 公共关系（60 §1 / §2）────────────────────────────────
+      case 'pr.mention': {
+        const e = event.mention
+        const out = await world.pr.mention({
+          who: e.who,
+          source: e.source,
+          origin: e.origin,
+          ...(e.title === undefined ? {} : { title: e.title }),
+          text: e.text,
+          ...(e.author === undefined ? {} : { author: e.author }),
+        })
+        world.appendEvent('simulation.pr_mention_requested', {
+          source: e.source,
+          origin: e.origin,
+          // 原句**不进事件日志**（它在卡上给人看，21 §1）；进的是判类结论
+          triage: out.triage,
+          sentiment: out.sentiment,
+          card: out.card,
+          ...(out.routed_to === undefined ? {} : { routed_to: out.routed_to }),
+        })
+        await tick()
+        return
+      }
+      case 'pr.release': {
+        const e = event.release
+        const out = await world.pr.release({
+          who: e.who,
+          headline: e.headline,
+          dek: e.dek,
+          body: e.body,
+          facts_cited: e.facts_cited,
+          ...(e.quotes === undefined ? {} : { quotes: e.quotes }),
+          ...(e.distribute === undefined ? {} : { distribute: e.distribute }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.pr_release_requested', {
+          headline: e.headline,
+          staged: out.staged,
+          figures: out.figures,
+          // 没出处的那几个数原样记下来——卡面与 block 消息里就是它们
+          uncited: out.uncited,
+          distributed: out.distributed,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'pr.external_post': {
+        const e = event.external_post
+        const out = await world.pr.externalPost({
+          who: e.who,
+          ...(e.role === undefined ? {} : { role: e.role }),
+          platform: e.platform,
+          venue: e.venue,
+          ...(e.title === undefined ? {} : { title: e.title }),
+          body: e.body,
+          ...(e.rules === undefined ? {} : { rules: e.rules }),
+          ...(e.flair === undefined ? {} : { flair: e.flair }),
+          ...(e.last_post_hours_ago === undefined
+            ? {}
+            : { last_post_hours_ago: e.last_post_hours_ago }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.pr_external_post_requested', {
+          platform: e.platform,
+          venue: e.venue,
+          staged: out.staged,
+          rules_ok: out.rules_ok,
+          rules_reasons: out.rules_reasons,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
       // ── WP67 红人营销（48 §5.1）────────────────────────────────────
       case 'kol.outreach': {
         const out = await world.kol.outreach({

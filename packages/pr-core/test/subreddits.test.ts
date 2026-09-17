@@ -32,6 +32,15 @@ describe('parseSubredditRules', () => {
     expect(parse(['Be civil', 'No politics']).no_self_promotion).toBe(true)
   })
 
+  it('版规明写着欢迎厂商 → 不禁（否则这条职责一条都发不出去）', () => {
+    expect(parse(['Vendors welcome. Once per 7 days.']).no_self_promotion).toBe(false)
+    expect(parse(['欢迎厂商帖，但请带上实测数据']).no_self_promotion).toBe(false)
+  })
+
+  it('既写着欢迎厂商又写着禁广告 → **按禁**（禁优先）', () => {
+    expect(parse(['Vendors welcome', 'No advertising links']).no_self_promotion).toBe(true)
+  })
+
   it('调用方明确说了可以，才按不禁', () => {
     const p = parse(['Be civil'], { assume_no_self_promotion: false })
     expect(p.no_self_promotion).toBe(false)

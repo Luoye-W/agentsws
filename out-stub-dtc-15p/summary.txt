@@ -1,0 +1,76 @@
+PASS  community/broadcast-respects-suppression  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=1 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=1 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=1 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  ops/claim-pool  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  ops/collision-two-people  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  ops/cross-desk-handover  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=1 queue_latency_ms=0 tokens_per_item=629 cost_base=0.000651 staged_changes=1 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=2 knowledge_gaps=0 escalations=4 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（5/5）
+PASS  ops/edit-product-price  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=2 queue_latency_ms=900000 tokens_per_item=0 cost_base=0 staged_changes=1 applied_changes=1 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=6 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  ops/multi-desk-concurrency  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable ✓freeze_on_model_outage
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=3 queue_latency_ms=2520000 tokens_per_item=624 cost_base=0.001937 staged_changes=2 applied_changes=1 outbound_sent=3 blocked_proposals=0 runs_failed=0 tool_calls=6 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（15/15）
+PASS  ops/product-line-isolation  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=3 queue_latency_ms=1200000 tokens_per_item=0 cost_base=0 staged_changes=1 applied_changes=1 outbound_sent=0 blocked_proposals=1 runs_failed=0 tool_calls=6 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  ops/theme-publish-needs-approval  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=2 queue_latency_ms=2700000 tokens_per_item=0 cost_base=0 staged_changes=1 applied_changes=1 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=1 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  ops/two-desks-no-union  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=2 queue_latency_ms=1650000 tokens_per_item=629 cost_base=0.000651 staged_changes=1 applied_changes=1 outbound_sent=1 blocked_proposals=0 runs_failed=0 tool_calls=2 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（5/5）
+PASS  org/brand-adds-store  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=2400000 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  org/task-opened-at-position-routes-to-duty  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=2 queue_latency_ms=1200000 tokens_per_item=0 cost_base=0 staged_changes=1 applied_changes=1 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=3 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  org/two-brands-cannot-see-each-other  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  org/two-solo-users-discover  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=2400000 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  pr/subreddit-cooldown  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓provenance_respected
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=4 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=1 applied_changes=0 outbound_sent=0 blocked_proposals=1 runs_failed=0 tool_calls=2 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  secretary/ask-colleague  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  secretary/meet-conflict  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  secretary/route-to-desk  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected ✓fencing_covers_external ✓prompt_replayable
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  social/calendar-conflict-flagged  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓provenance_respected
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=2 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=2 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）
+PASS  store/daily-report-card  [fast, stub, seed 42]
+  invariants: ✓no_write_without_stage ✓apply_only_after_approved ✓fencing_covers_external
+  metrics: adoption_rate=1 intervention_rate=0 guardrail_hits=0 queue_latency_ms=0 tokens_per_item=0 cost_base=0 staged_changes=0 applied_changes=0 outbound_sent=0 blocked_proposals=0 runs_failed=0 tool_calls=0 knowledge_gaps=0 escalations=0 expired_approvals=0 sampling_reviews=0 judge_rule_score=1
+  judge: 规则 1.000（0/0）

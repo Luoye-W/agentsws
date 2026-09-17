@@ -43,6 +43,28 @@ export const SELF_PROMOTION_TERMS: readonly string[] = [
   '禁止引流',
 ]
 
+/**
+ * **明写着欢迎厂商帖**的那几种写法。**只可加行**。
+ *
+ * 为什么非有这一张不可：文件头第 2 条说"判不准就当禁"，而多数版规里根本没有
+ * 一句与推广有关的话——没有这张表的话，`no_self_promotion` 永远是真，
+ * 这条职责一条帖子都发不出去，那不是保守，那是坏了。
+ *
+ * 它比 {@link SELF_PROMOTION_TERMS} **优先级低**：一份既写着"欢迎厂商"
+ * 又写着"禁外链广告"的版规，按**禁**处理。
+ */
+export const SELF_PROMOTION_ALLOWED_TERMS: readonly string[] = [
+  'vendors welcome',
+  'vendor posts are welcome',
+  'self-promotion is allowed',
+  'self promotion is allowed',
+  'promo thread',
+  'promotion thread',
+  '欢迎厂商',
+  '允许自我推广',
+  '厂商帖',
+]
+
 /** "必须带 flair"的各种写法。 */
 export const FLAIR_TERMS: readonly string[] = [
   'flair required',
@@ -102,6 +124,7 @@ export function parseSubredditRules(
   const joined = input.raw_rules.join('\n')
   const lower = joined.toLowerCase()
   const promo = has(lower, SELF_PROMOTION_TERMS)
+  const allowed = has(lower, SELF_PROMOTION_ALLOWED_TERMS)
   const flair = has(lower, FLAIR_TERMS)
 
   let cooldown: number | undefined
@@ -124,8 +147,16 @@ export function parseSubredditRules(
   const flairs = flairList(input.raw_rules)
   return {
     name: input.name.replace(/^\/?r\//, ''),
-    // 命中词表 = 明写着禁；没命中就按调用方的默认值，而默认值是**禁**（文件头第 2 条）
-    no_self_promotion: promo !== undefined ? true : (options.assume_no_self_promotion ?? true),
+    /*
+     * 三档，顺序是硬的：
+     *
+     * 1. 明写着**禁** → 禁（哪怕同一份版规里也写着"欢迎厂商"——那多半是
+     *    "欢迎来答疑，但别发广告"）；
+     * 2. 明写着**欢迎厂商** → 不禁；
+     * 3. 一句都没写 → 按调用方的默认值，而默认值是**禁**（文件头第 2 条）。
+     */
+    no_self_promotion:
+      promo !== undefined ? true : allowed !== undefined ? false : (options.assume_no_self_promotion ?? true),
     flair_required: flair !== undefined,
     ...(flairs.length === 0 ? {} : { flairs }),
     cooldown_per_subreddit_hours:

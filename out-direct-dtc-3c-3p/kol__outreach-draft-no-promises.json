@@ -1,0 +1,243 @@
+{
+  "id": "kol/outreach-draft-no-promises",
+  "pack": "dtc-3c-3p",
+  "tier": "fast",
+  "seed": 42,
+  "runtime": "direct",
+  "passed": true,
+  "clock": {
+    "start": "2026-09-07T01:00:00.000Z",
+    "end": "2026-09-07T04:00:00.000Z",
+    "virtual_ms": 10800000
+  },
+  "counts": {
+    "events": 31,
+    "runs": 3,
+    "inbound": 0,
+    "approvals": 1,
+    "changes": 1,
+    "outbound_observations": 0,
+    "emails_sent": 0
+  },
+  "invariants": [
+    {
+      "name": "no_write_without_stage",
+      "ok": true,
+      "checked": 1,
+      "violations": []
+    },
+    {
+      "name": "apply_only_after_approved",
+      "ok": true,
+      "checked": 1,
+      "violations": []
+    },
+    {
+      "name": "provenance_respected",
+      "ok": true,
+      "checked": 1,
+      "violations": []
+    },
+    {
+      "name": "fencing_covers_external",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    }
+  ],
+  "expectations": [
+    {
+      "key": "staged_change_kinds",
+      "ok": true,
+      "detail": "实际 [kol_outreach]，期望 [kol_outreach]"
+    },
+    {
+      "key": "metrics.runs_failed",
+      "ok": true,
+      "detail": "0（期望 0；来源 run.failed × 0）"
+    },
+    {
+      "key": "event_types",
+      "ok": true,
+      "detail": "都出现过"
+    },
+    {
+      "key": "kol_outreach",
+      "ok": true,
+      "detail": "第一稿命中 1 条禁承诺被拦下，改写之后落 L2"
+    },
+    {
+      "key": "blocked_rules",
+      "ok": true,
+      "detail": "挡下 [kol_outreach_commitment, guardrail]"
+    }
+  ],
+  "metrics": {
+    "adoption_rate": {
+      "value": 1,
+      "event_types": [
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "accepted=0 edited=0 rejected=0"
+    },
+    "intervention_rate": {
+      "value": 0,
+      "event_types": [
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "guardrail_hits": {
+      "value": 1,
+      "event_types": [
+        "guardrail.hit"
+      ],
+      "event_count": 1,
+      "direction": "lower_better"
+    },
+    "queue_latency_ms": {
+      "value": 0,
+      "event_types": [
+        "approval.created",
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "tokens_per_item": {
+      "value": 0,
+      "event_types": [
+        "model.usage",
+        "run.started"
+      ],
+      "event_count": 0,
+      "direction": "lower_better",
+      "note": "tokens=0 work_items=2"
+    },
+    "cost_base": {
+      "value": 0,
+      "event_types": [
+        "model.usage"
+      ],
+      "event_count": 0,
+      "direction": "lower_better",
+      "note": "22 §3 按价格表换算的基准货币；realistic 档的预算上限就是它的和"
+    },
+    "staged_changes": {
+      "value": 1,
+      "event_types": [
+        "change.staged"
+      ],
+      "event_count": 1,
+      "direction": "higher_better",
+      "note": "按 change_id 去重（运行时与账本各发一条）"
+    },
+    "applied_changes": {
+      "value": 0,
+      "event_types": [
+        "change.applied"
+      ],
+      "event_count": 0,
+      "direction": "higher_better"
+    },
+    "outbound_sent": {
+      "value": 0,
+      "event_types": [
+        "delivery.sent"
+      ],
+      "event_count": 0,
+      "direction": "higher_better"
+    },
+    "blocked_proposals": {
+      "value": 1,
+      "event_types": [
+        "change.blocked",
+        "approval.blocked"
+      ],
+      "event_count": 1,
+      "direction": "lower_better"
+    },
+    "runs_failed": {
+      "value": 0,
+      "event_types": [
+        "run.failed"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "tool_calls": {
+      "value": 0,
+      "event_types": [
+        "tool.call"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "knowledge_gaps": {
+      "value": 0,
+      "event_types": [
+        "knowledge.gap.opened"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "escalations": {
+      "value": 0,
+      "event_types": [
+        "approval.escalated"
+      ],
+      "event_count": 0,
+      "direction": "lower_better",
+      "note": "升级 = 没人在时限内理（14 §7），越少越健康"
+    },
+    "expired_approvals": {
+      "value": 0,
+      "event_types": [
+        "approval.expired"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "sampling_reviews": {
+      "value": 1,
+      "event_types": [
+        "simulation.sampling_review"
+      ],
+      "event_count": 1,
+      "direction": "higher_better",
+      "note": "L2 自动批被抽出来复核的条数（14 §13.2）；掉到 0 说明抽检没在跑"
+    },
+    "judge_rule_score": {
+      "value": 1,
+      "event_types": [
+        "approval.created",
+        "approval.decided"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "0/0 条检查通过"
+    }
+  },
+  "judge": {
+    "rule": {
+      "score": 1,
+      "passed": 0,
+      "total": 0,
+      "checks": []
+    },
+    "rubric_ref": "judge/aftersales-reply.md"
+  },
+  "rubric": {
+    "scored": false,
+    "reason": "没跑模型 judge（fast / soak 档或没有 key）：rubric 留着离线重打分",
+    "prompt": "第一稿被拦下来之后，人从事件与卡面上看得出\"拦的是哪一句、改成了什么\"吗？"
+  },
+  "notes": [
+    "blocked[kol_outreach_commitment] change.blocked: kol_outreach_commitment",
+    "blocked[guardrail] kol_outreach_commitment",
+    "notify[p_wang] 抽检复核：开发信：gadgetjonas"
+  ]
+}

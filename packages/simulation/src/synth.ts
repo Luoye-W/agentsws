@@ -232,7 +232,10 @@ const PEOPLE_3: PersonTemplate[] = [
     // WP72（56 §4）：客服岗位新加的第四条「社群管理」也挂在店主身上——
     // 3 人公司里客服就是他。**这一条不是可有可无的**：社媒运营那边判成客户问题的
     // 留言要转给它，没人持有的话那张卡只能落到 owner 头上（如实报，但那不是设计）。
-    extra: ['common.owner', 'dtc.community-support'],
+    // WP78（60 §1）：**品牌监控**也挂在店主身上——3 人公司里"外面有人说我们"
+    // 这件事没有别人看。挑 `pr.monitoring` 而不是别的三条，是因为它是唯一一条
+    // 与客服有交接的（判成客户问题 → 转客服，而客服就是他自己）。
+    extra: ['common.owner', 'dtc.community-support', 'pr.monitoring'],
   },
   {
     id: 'p_li',
@@ -256,6 +259,11 @@ const PEOPLE_3: PersonTemplate[] = [
       'kol.youtube',
       'social.meta',
       'social.discord',
+      // WP78（60 §1）：**公关那两条写动作**也归他——3 人公司里"运营"就是那个
+      // 又写稿又去别人的版里露出的人。品牌监控挂在店主身上（见上面那一条）：
+      // 判成客户问题的提及要转给客服，而客服就是店主自己。
+      'pr.press',
+      'pr.reddit',
     ],
   },
   {

@@ -801,6 +801,69 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "pr/external-post-needs-approval-and-rules": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 4,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 2
+          }
+        },
+        "pr/negative-mention-routes": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1950000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "pr/press-release-facts-only": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -1371,6 +1434,300 @@
             "staged_changes": 2,
             "tokens_per_item": 0,
             "tool_calls": 2
+          }
+        },
+        "community/customer-question-routes-to-support": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "community/membership-approval-l2": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "community/moderation-ban-needs-approval": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 2,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "community/rules-edit-needs-approval": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "kol/attribution-matches-order": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 2400000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 1
+          }
+        },
+        "kol/campaign-wizard-respects-channel-duties": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 4,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 4350000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 2,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "kol/collab-budget-needs-approval": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "kol/outreach-draft-no-promises": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "kol/public-library-reveal-charges-credits": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "pr/external-post-needs-approval-and-rules": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 4,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 2
+          }
+        },
+        "pr/negative-mention-routes": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1950000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "pr/press-release-facts-only": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "social/comment-reply-within-quota": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 2400000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "social/post-needs-approval": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
           }
         }
       }
@@ -2002,6 +2359,237 @@
             "queue_latency_ms": 0,
             "runs_failed": 0,
             "sampling_reviews": 1,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "community/customer-question-routes-to-support": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "community/membership-approval-l2": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "community/moderation-ban-needs-approval": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 2,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "community/rules-edit-needs-approval": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "kol/campaign-wizard-respects-channel-duties": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 4,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 4350000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 2,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "kol/public-library-reveal-charges-credits": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "pr/external-post-needs-approval-and-rules": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 4,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 2
+          }
+        },
+        "pr/negative-mention-routes": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 1950000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "pr/press-release-facts-only": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 900000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "social/comment-reply-within-quota": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 2400000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "social/post-needs-approval": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
             "staged_changes": 1,
             "tokens_per_item": 0,
             "tool_calls": 0

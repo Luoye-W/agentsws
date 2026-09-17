@@ -1,0 +1,521 @@
+{
+  "id": "learning/reject-once",
+  "pack": "dtc-3c-3p",
+  "tier": "fast",
+  "seed": 42,
+  "runtime": "direct",
+  "passed": true,
+  "clock": {
+    "start": "2026-09-07T01:00:00.000Z",
+    "end": "2026-09-09T00:35:00.000Z",
+    "virtual_ms": 171300000
+  },
+  "counts": {
+    "events": 217,
+    "runs": 4,
+    "inbound": 4,
+    "approvals": 10,
+    "changes": 0,
+    "outbound_observations": 4,
+    "emails_sent": 0
+  },
+  "invariants": [
+    {
+      "name": "no_write_without_stage",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    },
+    {
+      "name": "apply_only_after_approved",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    },
+    {
+      "name": "provenance_respected",
+      "ok": true,
+      "checked": 4,
+      "violations": []
+    },
+    {
+      "name": "fencing_covers_external",
+      "ok": true,
+      "checked": 8,
+      "violations": []
+    },
+    {
+      "name": "prompt_replayable",
+      "ok": true,
+      "checked": 4,
+      "violations": []
+    },
+    {
+      "name": "freeze_on_model_outage",
+      "ok": true,
+      "checked": 0,
+      "violations": []
+    }
+  ],
+  "expectations": [
+    {
+      "key": "never_calls",
+      "ok": true,
+      "detail": "一次没调"
+    },
+    {
+      "key": "staged_change_kinds",
+      "ok": true,
+      "detail": "实际 []，期望 []"
+    },
+    {
+      "key": "metrics.applied_changes",
+      "ok": true,
+      "detail": "0（期望 0；来源 change.applied × 0）"
+    },
+    {
+      "key": "metrics.staged_changes",
+      "ok": true,
+      "detail": "0（期望 0；来源 change.staged × 0）"
+    },
+    {
+      "key": "event_types",
+      "ok": true,
+      "detail": "都出现过"
+    },
+    {
+      "key": "approval_kinds.skill_lesson",
+      "ok": true,
+      "detail": "skill_lesson × 1（期望 1）"
+    },
+    {
+      "key": "approval_kinds.outbound_draft",
+      "ok": true,
+      "detail": "outbound_draft × 4（期望 4）"
+    },
+    {
+      "key": "lessons_filtered",
+      "ok": true,
+      "detail": "拦下的原因 [rejected_before]"
+    }
+  ],
+  "metrics": {
+    "adoption_rate": {
+      "value": 0,
+      "event_types": [
+        "approval.decided"
+      ],
+      "event_count": 5,
+      "direction": "higher_better",
+      "note": "accepted=0 edited=0 rejected=5"
+    },
+    "intervention_rate": {
+      "value": 1,
+      "event_types": [
+        "approval.decided"
+      ],
+      "event_count": 5,
+      "direction": "lower_better"
+    },
+    "guardrail_hits": {
+      "value": 0,
+      "event_types": [
+        "guardrail.hit"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "queue_latency_ms": {
+      "value": 1560000,
+      "event_types": [
+        "approval.created",
+        "approval.decided"
+      ],
+      "event_count": 5,
+      "direction": "lower_better"
+    },
+    "tokens_per_item": {
+      "value": 6248,
+      "event_types": [
+        "model.usage",
+        "run.started"
+      ],
+      "event_count": 20,
+      "direction": "lower_better",
+      "note": "tokens=24993 work_items=4"
+    },
+    "cost_base": {
+      "value": 0.025086,
+      "event_types": [
+        "model.usage"
+      ],
+      "event_count": 20,
+      "direction": "lower_better",
+      "note": "22 §3 按价格表换算的基准货币；realistic 档的预算上限就是它的和"
+    },
+    "staged_changes": {
+      "value": 0,
+      "event_types": [
+        "change.staged"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "按 change_id 去重（运行时与账本各发一条）"
+    },
+    "applied_changes": {
+      "value": 0,
+      "event_types": [
+        "change.applied"
+      ],
+      "event_count": 0,
+      "direction": "higher_better"
+    },
+    "outbound_sent": {
+      "value": 0,
+      "event_types": [
+        "delivery.sent"
+      ],
+      "event_count": 0,
+      "direction": "higher_better"
+    },
+    "blocked_proposals": {
+      "value": 0,
+      "event_types": [
+        "change.blocked",
+        "approval.blocked"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "runs_failed": {
+      "value": 0,
+      "event_types": [
+        "run.failed"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "tool_calls": {
+      "value": 12,
+      "event_types": [
+        "tool.call"
+      ],
+      "event_count": 12,
+      "direction": "lower_better"
+    },
+    "knowledge_gaps": {
+      "value": 0,
+      "event_types": [
+        "knowledge.gap.opened"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "escalations": {
+      "value": 0,
+      "event_types": [
+        "approval.escalated"
+      ],
+      "event_count": 0,
+      "direction": "lower_better",
+      "note": "升级 = 没人在时限内理（14 §7），越少越健康"
+    },
+    "expired_approvals": {
+      "value": 0,
+      "event_types": [
+        "approval.expired"
+      ],
+      "event_count": 0,
+      "direction": "lower_better"
+    },
+    "sampling_reviews": {
+      "value": 0,
+      "event_types": [
+        "simulation.sampling_review"
+      ],
+      "event_count": 0,
+      "direction": "higher_better",
+      "note": "L2 自动批被抽出来复核的条数（14 §13.2）；掉到 0 说明抽检没在跑"
+    },
+    "judge_rule_score": {
+      "value": 1,
+      "event_types": [
+        "approval.created",
+        "approval.decided"
+      ],
+      "event_count": 25,
+      "direction": "higher_better",
+      "note": "25/25 条检查通过"
+    }
+  },
+  "judge": {
+    "rule": {
+      "score": 1,
+      "passed": 25,
+      "total": 25,
+      "checks": [
+        {
+          "id": "required_fields",
+          "target": "apr_01M1WPB9K0WTRNS99WDZ9",
+          "ok": true,
+          "detail": "subject=19 body=427 signature=true"
+        },
+        {
+          "id": "tone",
+          "target": "apr_01M1WPB9K0WTRNS99WDZ9",
+          "ok": true,
+          "detail": "没有禁用词"
+        },
+        {
+          "id": "no_overreach",
+          "target": "apr_01M1WPB9K0WTRNS99WDZ9",
+          "ok": true,
+          "detail": "claims=[] promises=[] applied=false"
+        },
+        {
+          "id": "cites_facts",
+          "target": "apr_01M1WPB9K0WTRNS99WDZ9",
+          "ok": true,
+          "detail": "citations=1"
+        },
+        {
+          "id": "require_any",
+          "target": "apr_01M1WPB9K0WTRNS99WDZ9",
+          "ok": true,
+          "detail": "命中 order"
+        },
+        {
+          "id": "required_fields",
+          "target": "apr_01M1WWXVW0NQKH0X2KYKM",
+          "ok": true,
+          "detail": "subject=19 body=427 signature=true"
+        },
+        {
+          "id": "tone",
+          "target": "apr_01M1WWXVW0NQKH0X2KYKM",
+          "ok": true,
+          "detail": "没有禁用词"
+        },
+        {
+          "id": "no_overreach",
+          "target": "apr_01M1WWXVW0NQKH0X2KYKM",
+          "ok": true,
+          "detail": "claims=[] promises=[] applied=false"
+        },
+        {
+          "id": "cites_facts",
+          "target": "apr_01M1WWXVW0NQKH0X2KYKM",
+          "ok": true,
+          "detail": "citations=1"
+        },
+        {
+          "id": "require_any",
+          "target": "apr_01M1WWXVW0NQKH0X2KYKM",
+          "ok": true,
+          "detail": "命中 order"
+        },
+        {
+          "id": "required_fields",
+          "target": "apr_01M1ZBWQ80NQS2SW8AEXP",
+          "ok": true,
+          "detail": "subject=19 body=427 signature=true"
+        },
+        {
+          "id": "tone",
+          "target": "apr_01M1ZBWQ80NQS2SW8AEXP",
+          "ok": true,
+          "detail": "没有禁用词"
+        },
+        {
+          "id": "no_overreach",
+          "target": "apr_01M1ZBWQ80NQS2SW8AEXP",
+          "ok": true,
+          "detail": "claims=[] promises=[] applied=false"
+        },
+        {
+          "id": "cites_facts",
+          "target": "apr_01M1ZBWQ80NQS2SW8AEXP",
+          "ok": true,
+          "detail": "citations=1"
+        },
+        {
+          "id": "require_any",
+          "target": "apr_01M1ZBWQ80NQS2SW8AEXP",
+          "ok": true,
+          "detail": "命中 order"
+        },
+        {
+          "id": "required_fields",
+          "target": "apr_01M1ZJREG08AHF7S0ARQ1",
+          "ok": true,
+          "detail": "subject=19 body=427 signature=true"
+        },
+        {
+          "id": "tone",
+          "target": "apr_01M1ZJREG08AHF7S0ARQ1",
+          "ok": true,
+          "detail": "没有禁用词"
+        },
+        {
+          "id": "no_overreach",
+          "target": "apr_01M1ZJREG08AHF7S0ARQ1",
+          "ok": true,
+          "detail": "claims=[] promises=[] applied=false"
+        },
+        {
+          "id": "cites_facts",
+          "target": "apr_01M1ZJREG08AHF7S0ARQ1",
+          "ok": true,
+          "detail": "citations=1"
+        },
+        {
+          "id": "require_any",
+          "target": "apr_01M1ZJREG08AHF7S0ARQ1",
+          "ok": true,
+          "detail": "命中 order"
+        },
+        {
+          "id": "decision_reason",
+          "target": "decision:apr_01M1WPB9K0WTRNS99WDZ9",
+          "ok": true,
+          "detail": "有原因"
+        },
+        {
+          "id": "decision_reason",
+          "target": "decision:apr_01M1WWXVW0NQKH0X2KYKM",
+          "ok": true,
+          "detail": "有原因"
+        },
+        {
+          "id": "decision_reason",
+          "target": "decision:apr_01M1Z3A2608YZ15K1FH14",
+          "ok": true,
+          "detail": "有原因"
+        },
+        {
+          "id": "decision_reason",
+          "target": "decision:apr_01M1ZBWQ80NQS2SW8AEXP",
+          "ok": true,
+          "detail": "有原因"
+        },
+        {
+          "id": "decision_reason",
+          "target": "decision:apr_01M1ZJREG08AHF7S0ARQ1",
+          "ok": true,
+          "detail": "有原因"
+        }
+      ]
+    },
+    "rubric_ref": "judge/aftersales-reply.md"
+  },
+  "rubric": {
+    "scored": false,
+    "reason": "没跑模型 judge（fast / soak 档或没有 key）：rubric 留着离线重打分",
+    "prompt": "被驳回之后，界面上还能不能说清\"这条以后不再提\"是因为你驳回过？"
+  },
+  "notes": [],
+  "delta": {
+    "adoption_rate": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "intervention_rate": {
+      "baseline": 1,
+      "current": 1,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "guardrail_hits": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "queue_latency_ms": {
+      "baseline": 1560000,
+      "current": 1560000,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "tokens_per_item": {
+      "baseline": 6248,
+      "current": 6248,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "cost_base": {
+      "baseline": 0.025086,
+      "current": 0.025086,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "staged_changes": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "applied_changes": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "outbound_sent": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "blocked_proposals": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "runs_failed": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "tool_calls": {
+      "baseline": 12,
+      "current": 12,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "knowledge_gaps": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "escalations": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "expired_approvals": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "sampling_reviews": {
+      "baseline": 0,
+      "current": 0,
+      "change_pct": 0,
+      "regressed": false
+    },
+    "judge_rule_score": {
+      "baseline": 1,
+      "current": 1,
+      "change_pct": 0,
+      "regressed": false
+    }
+  }
+}

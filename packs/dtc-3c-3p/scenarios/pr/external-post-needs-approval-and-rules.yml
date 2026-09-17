@@ -1,0 +1,74 @@
+# WP78（60 §1）：**在别人的地盘上，版主说了算。**
+#
+# 两条路各走一遍：
+#
+# ① 版规明写着禁自我推广的版 → **block**，不是转人审。人在一屏卡面上判不出
+#    "这一条会不会让整个品牌被这个版永久赶走"，而那正是他要被保护的地方。
+#    判定走 `@agentsws/pr-core` 的 `checkSubredditRules`，结论原样递给 guardrail
+#    ——**两处是同一份结论**，不是各判一次。
+# ② 允许厂商帖的版 → 提得上去，但**永远人审**（`community_post` 在 `HARD_L1` 里）。
+#    场景故意报 L3，看硬顶会不会把它按回来。
+#
+# 第三件事顺带钉住：版规那句话**在卡面上**。批准这一下的人要看见"这个版让不让发、
+# 上一条隔了多久"，而不是只看见一段正文。
+id: pr/external-post-needs-approval-and-rules
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 3 人公司里"运营"李默兼着公关那两条写动作；店主点卡
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 10m..1h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 禁自我推广的版：一条都不发
+  - at: '+0m'
+    pr.external_post:
+      who: p_li
+      platform: reddit
+      venue: BuyItForLife
+      title: 三年后拆开我们自己的一代产品
+      body: 把我们一代的机器拆了，说说哪几处设计撑住了三年、哪几处没撑住。
+      rules:
+        - 'Rule 1：No self-promotion — 含外链的厂商帖一律删'
+        - 'Be civil'
+      # 故意报 L3：这一条连人审都到不了，它在版规那一道就被拦下了
+      level: L3
+  # ② 允许厂商帖的版：提得上去，但要人点
+  - at: '+1h'
+    pr.external_post:
+      who: p_li
+      platform: reddit
+      venue: OutdoorGear
+      title: 二代户外电源的拆解与实测
+      body: 电芯换了型号，循环次数从 500 提到 800。数据来自我们自己的测试。
+      rules:
+        - 'Vendors welcome: one post per month, flair required: Review, Discussion'
+      flair: Review
+      level: L3
+  - at: '+3h'
+    clock.advance: {}
+expected:
+  # 断言看的是**最后一条**（允许的那个版）：版规过了，但照样等人点
+  pr_external_post:
+    blocked: false
+    rules_ok: true
+    requested_level: L3
+    # **HARD_L1**：报 L3 也落回人审
+    auto_approved: false
+    stated_on_card: true
+  # 禁推广那一条是被**版规**拦下的，不是被别的门
+  blocked_rules:
+    - subreddit_rules
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.pr_external_post_blocked
+    - simulation.pr_external_post_staged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  这张卡上"发到哪个版、那个版的规矩是什么、为什么这一条发得了"，
+  点它的人读完心里有数吗？被拦下的那一条，理由说得像人话吗？
