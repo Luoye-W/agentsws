@@ -46,6 +46,22 @@ import type { World } from './world.js'
 /** 设计岗位的模板 id（`packages/roles/positions/design.yml`）。**只有这一处拼它**。 */
 const DESIGN_POSITION = 'design'
 
+/**
+ * WP76（58 §1）：**人手动开的那一张单**的来源。
+ *
+ * 五条职责里 `design.exhibition` 的"需求来源"那一栏写的就是「人手动」——
+ * 展会要两版易拉宝这件事不从任何一个上游岗位来，是人自己想起来的。
+ *
+ * 这时候**一条 `design_request` 都不提**：那条 ChangeKind 说的是
+ * "**Agent** 想向设计岗下一张单"，要的是那条上游职责的权限与额度（05 §4 不并集）。
+ * 人自己开的单不需要谁批——把它也提成一条变更，队列里就会多出一张
+ * "请批准：你刚才自己填的那张单"，而那是把人当 Agent 审。
+ *
+ * 它是**写死的一个词**而不是"分配查不到就当手动"：查不到通常是场景写错了
+ * 职责 id，悄悄当手动的后果是那条题从此再也发现不了这个错。
+ */
+const MANUAL_SOURCE = 'human'
+
 export interface DesignRequestRecord {
   request_id: string
   /** 谁下的（来源职责）。 */
@@ -318,26 +334,33 @@ export function installDesign(world: World): DesignLoop {
   }
 
   const request: DesignLoop['request'] = async ({ who, from, title, need, specs }) => {
-    const source = assignmentFor(who, from)
+    /** 人自己填的那张单（`from: human`）——没有上游职责，见 {@link MANUAL_SOURCE}。 */
+    const manual = from === MANUAL_SOURCE
+    const source = manual ? undefined : assignmentFor(who, from)
     const request_id = nextId('dreq')
     const target: ObjectRef = { type: 'design_request', id: request_id }
 
     /*
      * ① 下单那一条（`design_request`，L3）。**从来源职责的那条分配提**——
      * 权限、额度、等级全是它的（05 §4 不并集）。
+     *
+     * 人手动开的单跳过这一整跳：没有上游职责可提，也没有谁该批它。
      */
-    const staged = await stageOne({
-      assignment_id: source.id,
-      role_id: source.role_id,
-      action: 'request_design',
-      kind: 'design_request',
-      target,
-      before: {},
-      after: { title, need, from_role_id: from },
-      notes: ['开一件事并按 54 路由到设计岗。'],
-      title: `给设计岗下一张单：${title}`,
-      summary: need.slice(0, 120),
-    })
+    const staged =
+      source === undefined
+        ? undefined
+        : await stageOne({
+            assignment_id: source.id,
+            role_id: source.role_id,
+            action: 'request_design',
+            kind: 'design_request',
+            target,
+            before: {},
+            after: { title, need, from_role_id: from },
+            notes: ['开一件事并按 54 路由到设计岗。'],
+            title: `给设计岗下一张单：${title}`,
+            summary: need.slice(0, 120),
+          })
 
     /*
      * ② 岗位路由：在**设计岗这个人持有的那几条职责之间**判。
@@ -370,7 +393,7 @@ export function installDesign(world: World): DesignLoop {
       request_id,
       from_role_id: from,
       ambiguous: verdict.ambiguous && fallback === undefined,
-      request_staged: staged.ok,
+      request_staged: staged?.ok === true,
       questions: [],
       brand_note: '',
       brand_system_missing: false,
@@ -394,7 +417,8 @@ export function installDesign(world: World): DesignLoop {
      * 纯函数，这里只给 id、给时间、提卡。
      */
     const duty = designDutySpec(picked.role_id.replace(/^design\./, ''))?.id
-    if (duty === undefined) throw new SimulationError('invalid_input', `不是设计职责：${picked.role_id}`)
+    if (duty === undefined)
+      throw new SimulationError('invalid_input', `不是设计职责：${picked.role_id}`)
     const cards = brandCards()
     const result = draftBrief({
       request: {
@@ -466,9 +490,7 @@ export function installDesign(world: World): DesignLoop {
       ...(n === undefined
         ? {}
         : {
-            only_plan_item_ids: entry.result.brief.variant_plan
-              .slice(0, n)
-              .map((item) => item.id),
+            only_plan_item_ids: entry.result.brief.variant_plan.slice(0, n).map((item) => item.id),
           }),
     })
 
@@ -496,7 +518,9 @@ export function installDesign(world: World): DesignLoop {
       after: {
         brief_id,
         n: plan.n,
-        prompts: plan.prompts.map((one) => one.prompt),
+        // 与服务进程同一条：报**正向那一半**，禁忌行不报（不然每次出图都自己
+        // 撞 guardrail 的 `brand_forbidden_term`）
+        prompts: plan.prompts.map((one) => one.positive_prompt),
         must_avoid: entry.result.brief.must_avoid,
         ...(available ? {} : { no_image_model_reason: reason }),
       },

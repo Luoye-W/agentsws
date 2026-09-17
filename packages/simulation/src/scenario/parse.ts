@@ -846,7 +846,9 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(pLevel === undefined ? {} : { level: pLevel as 'L1' | 'L2' | 'L3' }),
           ...(body.without_pick === undefined
             ? {}
-            : { without_pick: requireBool(source, `${path}.${key}.without_pick`, body.without_pick) }),
+            : {
+                without_pick: requireBool(source, `${path}.${key}.without_pick`, body.without_pick),
+              }),
         },
       }
     }

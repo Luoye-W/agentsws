@@ -155,6 +155,7 @@ import {
 import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
 import { createWork, type Work } from '@agentsws/work'
+import type { DesignLoop } from './design.js'
 import { SimulationError } from './errors.js'
 import type {
   AssignmentSnapshot,
@@ -166,7 +167,6 @@ import type {
 } from './evidence.js'
 import { installLearningLoop, type LearningLoop, type LearningOptions } from './learning.js'
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
-import type { DesignLoop } from './design.js'
 import type { PositionsLoop } from './positions.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 import type { RuntimeName } from './runtime-name.js'

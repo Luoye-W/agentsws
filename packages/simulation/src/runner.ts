@@ -18,6 +18,7 @@ import type { ActorPolicy } from '@agentsws/stand-ins'
 import type { ChatLoop } from './chat.js'
 import { installChat } from './chat.js'
 import { buildRunRequest } from './context.js'
+import { type DesignLoop, installDesign } from './design.js'
 import { SimulationError } from './errors.js'
 import type { BlockedRecord, Evidence, RunRecord } from './evidence.js'
 import { checkExpectations } from './expectations.js'
@@ -27,7 +28,6 @@ import { judgeConfigOf, runModelJudge, runRuleJudge } from './judge.js'
 import { computeMetrics } from './metrics.js'
 import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
-import { type DesignLoop, installDesign } from './design.js'
 import { installPositions, type PositionsLoop } from './positions.js'
 import type { ScenarioReport } from './report.js'
 import { buildReport } from './report.js'
@@ -35,11 +35,11 @@ import type { RuntimeName } from './runtime-name.js'
 import { parseDuration, parseRange, resolveAt } from './scenario/duration.js'
 import type {
   Scenario,
-  ScenarioEvent,
-  ScenarioPositionOpen,
   ScenarioDesignPick,
   ScenarioDesignRequest,
   ScenarioDesignVariants,
+  ScenarioEvent,
+  ScenarioPositionOpen,
   ScenarioPositionStaff,
   ScenarioSecretaryAsk,
   ScenarioSecretaryDecide,
@@ -832,7 +832,10 @@ async function execute(
     const loop = designLoop()
     const asset_id = input.asset_id ?? loop.variantRuns.at(-1)?.asset_ids[0]
     if (asset_id === undefined) {
-      workBlocked(new Error('没有可挑的素材：先来一条 design.variants'), 'design_pick_without_asset')
+      workBlocked(
+        new Error('没有可挑的素材：先来一条 design.variants'),
+        'design_pick_without_asset',
+      )
       return
     }
     const out = await loop.pick({
