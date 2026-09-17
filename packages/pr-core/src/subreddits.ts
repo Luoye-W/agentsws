@@ -156,7 +156,11 @@ export function parseSubredditRules(
      * 3. 一句都没写 → 按调用方的默认值，而默认值是**禁**（文件头第 2 条）。
      */
     no_self_promotion:
-      promo !== undefined ? true : allowed !== undefined ? false : (options.assume_no_self_promotion ?? true),
+      promo !== undefined
+        ? true
+        : allowed !== undefined
+          ? false
+          : (options.assume_no_self_promotion ?? true),
     flair_required: flair !== undefined,
     ...(flairs.length === 0 ? {} : { flairs }),
     cooldown_per_subreddit_hours:
