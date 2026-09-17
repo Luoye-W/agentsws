@@ -1,6 +1,6 @@
 {
   "$comment": "构建期抓一次入库的第三方品牌图标（WP48）。手动跑 `pnpm icons:fetch` 更新，跑完人自己看一眼再提交。运行时不联网。规矩见 docs/36 §8。",
-  "fetched_at": "2026-09-11",
+  "fetched_at": "2026-09-17",
   "min_png": 64,
   "icons": {
     "shopify_admin": {
@@ -14,7 +14,7 @@
       "source_url": "https://cdn.shopify.com/b/shopify-brochure2-assets/b13486e5693b246af63c66ab047a6b6b.png",
       "source_page": "https://www.shopify.com",
       "note": "官网首页的 apple-touch-icon",
-      "fetched_at": "2026-09-11"
+      "fetched_at": "2026-09-17"
     },
     "gmail": {
       "brand": "Gmail",
@@ -27,7 +27,7 @@
       "source_url": "https://www.gstatic.com/images/branding/product/2x/gmail_2020q4_64dp.png",
       "source_page": "https://mail.google.com",
       "note": "Google 品牌资源目录 gstatic branding/product（2020 版多色 M）；mail.google.com 本身是登录墙",
-      "fetched_at": "2026-09-11"
+      "fetched_at": "2026-09-17"
     },
     "ga4": {
       "brand": "Google Analytics",
@@ -40,7 +40,7 @@
       "source_url": "https://www.gstatic.com/images/branding/product/2x/google_analytics_64dp.png",
       "source_page": "https://analytics.google.com",
       "note": "Google 品牌资源目录 gstatic branding/product（GA4 的黄橙柱状图标）；analytics.google.com 是登录墙",
-      "fetched_at": "2026-09-11"
+      "fetched_at": "2026-09-17"
     },
     "gsc": {
       "brand": "Google Search Console",
@@ -53,7 +53,46 @@
       "source_url": "https://www.gstatic.com/images/branding/product/2x/search_console_64dp.png",
       "source_page": "https://search.google.com/search-console",
       "note": "Google 品牌资源目录 gstatic branding/product；与 search-console/about 页上那张 logo_search_console.svg 是同一个标志的方形版",
-      "fetched_at": "2026-09-11"
+      "fetched_at": "2026-09-17"
+    },
+    "bailian": {
+      "brand": "阿里云百炼",
+      "file": "bailian.png",
+      "format": "png",
+      "width": 64,
+      "height": 64,
+      "bytes": 2519,
+      "sha256": "9e20727fd7f2a713560c8b4eed774a9ef3548067962f5deafebe632b6b2bf40d",
+      "source_url": "https://img.alicdn.com/imgextra/i1/O1CN01Es0c28049TL083Vo_!!6000000002263-2-tps-64-64.png",
+      "source_page": "https://bailian.console.aliyun.com/",
+      "note": "百炼控制台 <link rel=icon>",
+      "fetched_at": "2026-09-17"
+    },
+    "openai": {
+      "brand": "OpenAI / ChatGPT",
+      "file": "openai.svg",
+      "format": "svg",
+      "width": null,
+      "height": null,
+      "bytes": 2466,
+      "sha256": "ed615b8fd9703863918daae6106396a42926fd167abc1bcad4aca860ff0f7ba6",
+      "source_url": "https://openai.com/favicon.svg",
+      "source_page": "https://openai.com",
+      "note": "官网首页 <link rel=icon>",
+      "fetched_at": "2026-09-17"
+    },
+    "anthropic": {
+      "brand": "Anthropic / Claude",
+      "file": "anthropic.png",
+      "format": "png",
+      "width": 256,
+      "height": 256,
+      "bytes": 3175,
+      "sha256": "c91922918edeef31af5e969413c0eecf583707d14588de3fecc1d649b4303bf7",
+      "source_url": "https://cdn.prod.website-files.com/67ce28cfec624e2b733f8a52/67d31dd7aa394792257596c5_webclip.png",
+      "source_page": "https://www.anthropic.com",
+      "note": "官网首页 <link rel=icon>",
+      "fetched_at": "2026-09-17"
     },
     "deepseek": {
       "brand": "DeepSeek",
@@ -66,7 +105,7 @@
       "source_url": "https://api-docs.deepseek.com/img/favicon.svg",
       "source_page": "https://api-docs.deepseek.com/",
       "note": "DeepSeek 官方 API 文档站的 <link rel=icon>（矢量）",
-      "fetched_at": "2026-09-11"
+      "fetched_at": "2026-09-17"
     }
   },
   "fallbacks": {
