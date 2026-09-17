@@ -21,7 +21,7 @@ import type { MaybePromise, MembershipRequestVia, StorefrontPlatform } from '@ag
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
-import { type Route, route } from '../route-spec.js'
+import { type Route, type RouteSpec, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
 /** 改公司档案 / 发邀请码 / 批申请：05 owner 的策略层写权限。 */
@@ -33,6 +33,26 @@ const WRITE = {
 } as const
 
 /** 看别人的成员申请 = 策略层读权限；看自己要不要走向导走自助豁免。 */
+/**
+ * 09-17 Luoye 真机打出来的洞：WP69 / WP71 之后 `X-Assignment` = **当前岗位**，所有者站在
+ * "网站客服"那条分配上打开向导，保存公司档案就 403（`policy.stage` 是所有者层的）。
+ * 向导是所有者的活，与 WP71b 读那一侧同一把尺子——**本人在这个工作区持有任何一条能
+ * `policy.stage@workspace` 的、未撤销的分配**就放行。不是扩权：只看本人名下的分配，
+ * 没有所有者层的成员照样 403；请求上的 `X-Assignment` 仍按 31 §3.1 绑定与记账。
+ */
+const holdsOwnerWrite: NonNullable<RouteSpec['authzBypass']> = (_c, rctx, deps) => {
+  const p = rctx.principal
+  if (!p) return false
+  return deps.roles.listAssignments(p.person_id, { workspace_id: p.workspace_id }).some(
+    (a) =>
+      a.revoked_at === undefined &&
+      deps.roles.can(a.id, WRITE.domain, WRITE.op, {
+        range: WRITE.range,
+        sensitivity: WRITE.sensitivity,
+      }),
+  )
+}
+
 const READ = {
   domain: 'policy',
   op: 'read',
@@ -411,6 +431,7 @@ export function onboardingRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        authzBypass: holdsOwnerWrite,
         body: ProfileBody,
         returns: 'WorkspaceProfileView（**不含**归一化哈希）',
       },
@@ -475,6 +496,7 @@ export function onboardingRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        authzBypass: holdsOwnerWrite,
         body: PlanBody,
         returns: 'OnboardingApplyView',
       },

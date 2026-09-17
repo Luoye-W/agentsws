@@ -104,7 +104,7 @@ async function machine(input: {
   call: (
     method: string,
     path: string,
-    options?: { body?: unknown; anonymous?: boolean },
+    options?: { body?: unknown; anonymous?: boolean; assignment?: string },
   ) => Promise<Response>
 }> {
   const server = await createServer({
@@ -145,7 +145,7 @@ async function machine(input: {
       const headers = new Headers()
       if (options.anonymous !== true) {
         headers.set('Authorization', `Bearer ${server.bootstrap.internalToken}`)
-        headers.set('X-Assignment', server.bootstrap.ownerAssignment.id)
+        headers.set('X-Assignment', options.assignment ?? server.bootstrap.ownerAssignment.id)
       }
       if (options.body !== undefined) headers.set('content-type', 'application/json')
       return server.gateway.fetch(
@@ -499,6 +499,30 @@ describe('46 §3 岗位与职责 → 清单', () => {
       }),
     )
     expect(named.positions[0]?.name).toBe('一个人全干')
+  })
+
+  it('所有者站在客服那条分配上也能保存公司档案（09-17 真机 403 的回归；WP71b 同一把尺子）', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+    const applied = await data<{
+      created_assignments: { role_id: string; id?: string; assignment_id?: string }[]
+    }>(await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } }))
+    const support = applied.created_assignments.find((a) => a.role_id === 'dtc.support')
+    const supportId = support?.assignment_id ?? support?.id
+    expect(supportId).toBeDefined()
+    // 这条分配自己没有 policy.stage（客服岗位看不到公司档案的写口）……
+    expect(
+      m.server.roles.can(supportId as never, 'policy', 'stage', {
+        range: 'workspace',
+        sensitivity: 'restricted',
+      }),
+    ).toBe(false)
+    // ……但持有它的人同时是所有者：向导照样能保存，不再 403
+    const res = await m.call('PUT', '/v1/workspace/profile', {
+      assignment: supportId as string,
+      body: { legal_name: '北方伏特（深圳）有限公司', domain: 'nordvolt.cn' },
+    })
+    expect(res.status).toBe(200)
   })
 
   it('apply 真建分配：一条职责一条 Assignment；再来一次不重复建', async () => {

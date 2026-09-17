@@ -19,6 +19,7 @@ import { BrandScopeNote } from '@/components/brand-scope-note'
 import { openExternal } from '@/components/connections/bridge'
 import { ConnectedRow } from '@/components/connections/connected-row'
 import { DataBackend } from '@/components/connections/data-backend'
+import { deadLettersFor } from '@/components/connections/dead-letters'
 // WP83（54（将改号 55）§4 第一层）：按分类 + 搜索的「添加连接」，默认收起
 import { ConnectionDirectorySection } from '@/components/connections/directory'
 import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
@@ -305,7 +306,7 @@ export function ConnectionsPage(): React.ReactNode {
                   setBusyId({ id: c.id, kind: 'remove' })
                   disconnect.mutate(c.id)
                 }}
-                deadLetters={deadLetters.data?.dead_letters ?? []}
+                deadLetters={deadLettersFor(c, deadLetters.data?.dead_letters ?? [])}
                 {...(requeueing === undefined ? {} : { requeueing })}
                 onRequeue={(id) => {
                   setRequeueing(id)
