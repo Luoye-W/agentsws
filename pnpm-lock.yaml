@@ -496,6 +496,15 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/design-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/dsh-adapter:
     dependencies:
       '@agentsws/contracts':

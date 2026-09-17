@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/design-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "设计岗位共享包（58 §2）：需求单 → brief、尺寸与印刷规格表、变体计划与提示词组装、素材库索引、品牌系统。纯逻辑，不碰凭据、不调模型、不落盘。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}
