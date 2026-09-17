@@ -151,3 +151,60 @@ describe('探测', () => {
     expect(result.detail).toBeDefined()
   })
 })
+
+/**
+ * WP92（55 §10）：第三种方式——**我正在用的浏览器**（腾讯 BrowserSkill）。
+ *
+ * 与 attach 同一条判据（只有个人档），外加一条它独有的：**装好了才给**。
+ */
+describe('我正在用的浏览器（browserskill）', () => {
+  const withBsk = (
+    over: Partial<Parameters<typeof createBrowserSettings>[0]> = {},
+    installed = true,
+  ) =>
+    createBrowserSettings({
+      runtimeMode: () => 'local',
+      probe: probeOf([]),
+      defaultBskPath: () => '/data/bin/bsk',
+      bskExists: () => installed,
+      ...over,
+    })
+
+  it('个人档：选得了，`forRun()` 给的是 bsk 的路径', () => {
+    const s = withBsk()
+    expect(s.get().browserskill_allowed).toBe(true)
+    expect(s.set({ mode: 'browserskill' })).toMatchObject({ mode: 'browserskill' })
+    expect(s.forRun()).toEqual({ mode: 'browserskill', bsk_path: '/data/bin/bsk' })
+  })
+
+  it('用户自己填了路径就用他填的那个', () => {
+    const s = withBsk()
+    s.set({ mode: 'browserskill', bsk_path: '/opt/bsk' })
+    expect(s.bskPath()).toBe('/opt/bsk')
+    expect(s.forRun()).toEqual({ mode: 'browserskill', bsk_path: '/opt/bsk' })
+  })
+
+  it('**还没装 bsk 就当这次运行没有浏览器**（给一个指不到文件的路径更糟）', () => {
+    const s = withBsk({}, false)
+    s.set({ mode: 'browserskill' })
+    expect(s.get().mode).toBe('browserskill')
+    expect(s.forRun()).toBeUndefined()
+  })
+
+  it('Docker / 托管档：界面上灰掉，`PUT` 也拒（不是只灰一下）', () => {
+    const s = withBsk({ runtimeMode: () => 'docker' })
+    const view = s.get()
+    expect(view.browserskill_allowed).toBe(false)
+    expect(view.browserskill_blocked_reason).toContain('不在你自己的电脑上')
+    expect(() => s.set({ mode: 'browserskill' })).toThrow(BrowserSettingsError)
+  })
+
+  it('档位变了（本机档的库被搬进 Docker）立刻失效', () => {
+    let mode: 'local' | 'docker' = 'local'
+    const s = withBsk({ runtimeMode: () => mode })
+    s.set({ mode: 'browserskill' })
+    expect(s.forRun()).toBeDefined()
+    mode = 'docker'
+    expect(s.forRun()).toBeUndefined()
+  })
+})

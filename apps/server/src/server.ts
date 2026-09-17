@@ -117,6 +117,13 @@ import {
   brandWorkstationPort,
 } from './brand-ports.js'
 import { BrowserSettingsError, createBrowserSettings } from './browser-settings.js'
+import {
+  BrowserSkillInstallError,
+  browserSkillDoctor,
+  bskPathIn,
+  installBrowserSkillCli,
+  readLock,
+} from './browserskill-install.js'
 import { createCatalogIndex } from './catalog-index.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
@@ -774,15 +781,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * `AGENTSWS_RUNTIME_MODE` 一个口子：Docker / 托管档的部署把它设成 `docker` /
    * `hosted`，attach 那一项在设置页上就会灰掉、`PUT` 也会拒。
    */
+  const runtimeModeOf = (): 'local' | 'docker' | 'hosted' => {
+    const declared = env.AGENTSWS_RUNTIME_MODE?.trim()
+    return declared === 'docker' || declared === 'hosted' || declared === 'local'
+      ? declared
+      : 'local'
+  }
   const browserSettings = createBrowserSettings({
     ...(dbDir === undefined ? {} : { dir: dbDir }),
-    runtimeMode: () => {
-      const declared = env.AGENTSWS_RUNTIME_MODE?.trim()
-      return declared === 'docker' || declared === 'hosted' || declared === 'local'
-        ? declared
-        : 'local'
-    },
+    runtimeMode: runtimeModeOf,
+    /*
+     * WP92（55 §10）：`bsk` 装在数据目录下的 `bin/bsk`——**不进 PATH**。
+     * PATH 上有 `bsk` 的话，有 shell 的职责就能直接 `bsk evaluate` 在页面里跑脚本；
+     * 那条路归 shell 的命令 allowlist 管（WP89），这里先不给它这个方便。
+     * 没有数据目录（全内存档）= 装不了，那一项就一直是"还没装"。
+     */
+    defaultBskPath: () => (dbDir === undefined ? undefined : bskPathIn(dbDir)),
   })
+  /** WP92：我们钉的那一版 `bsk`（仓库根的 `browserskill.lock.json`）；发行版里没带就没有。 */
+  const lockVersion = (): string | undefined => {
+    try {
+      return readLock().cli.version
+    } catch {
+      return undefined
+    }
+  }
 
   /**
    * WP66（52 O1）：模型网关**按品牌各一个**（装配在 `assembleBrand` 里）。
@@ -2973,6 +2996,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           return browserSettings.probe(endpoint)
         } catch (err) {
           if (err instanceof BrowserSettingsError) throw new ApiError(err.code, err.message)
+          throw err
+        }
+      },
+      /*
+       * WP92（55 §10）：「我正在用的浏览器」那两条。装 `bsk` 与跑 `bsk doctor` 都是
+       * **本机**的事（下载 + 校验 sha256 + 起一个子进程），所以留在服务进程这一侧；
+       * 设置页只管按钮与结果。
+       */
+      browserSkillStatus: async () => {
+        const path = browserSettings.bskPath()
+        if (path === undefined) {
+          return {
+            installed: false,
+            checks: [],
+            ok: false,
+            detail: '这台服务没有数据目录（全内存档），装不了 bsk',
+          }
+        }
+        const pinned = lockVersion()
+        return browserSkillDoctor({
+          bskPath: path,
+          allowed: runtimeModeOf() === 'local',
+          ...(pinned === undefined ? {} : { pinnedVersion: pinned }),
+        })
+      },
+      installBrowserSkill: async () => {
+        if (runtimeModeOf() !== 'local') {
+          throw new ApiError(
+            'forbidden',
+            '这一档不能用你正在用的浏览器（bsk 与扩展都在用户那台电脑上）',
+          )
+        }
+        if (dbDir === undefined) {
+          throw new ApiError('not_implemented', '这台服务没有数据目录（全内存档），装不了 bsk')
+        }
+        try {
+          const res = await installBrowserSkillCli({ dataDir: dbDir })
+          return await browserSkillDoctor({
+            bskPath: res.path,
+            pinnedVersion: res.version,
+            allowed: true,
+          })
+        } catch (err) {
+          if (err instanceof BrowserSkillInstallError) throw new ApiError(err.code, err.message)
           throw err
         }
       },
