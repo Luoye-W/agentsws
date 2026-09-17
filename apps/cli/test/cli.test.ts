@@ -53,7 +53,8 @@ describe('agentsws simulate（26 §5）', () => {
       '--report',
       report,
     )
-    expect(text()).toContain('38/38 场景通过')
+    // WP89 加了 `site/theme-edit-then-publish`（3 人 pack 的建站题）之后是 39 条
+    expect(text()).toContain('39/39 场景通过')
     expect(text()).toContain('合并门禁：通过')
     expect(process.exitCode).toBeUndefined()
     expect(existsSync(join(report, 'summary.json'))).toBe(true)
@@ -62,9 +63,11 @@ describe('agentsws simulate（26 §5）', () => {
       scenarios: unknown[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(38)
+    expect(summary.scenarios).toHaveLength(39)
     expect(existsSync(join(report, 'aftersales__return-within-window.json'))).toBe(true)
-  }, 60_000)
+    // 跑一整个 pack 不是 60 秒的活（并行跑别的项目时还要抢 CPU）；
+    // `report.test.ts` 那条同形的题一直给的是 120s，这里对齐它
+  }, 120_000)
 
   it('指标劣化阈值收到 0 且拿一份假基线比 → 门禁红，退出码 1', async () => {
     const dir = tempDir()

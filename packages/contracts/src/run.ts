@@ -95,6 +95,50 @@ export type RunBrowser =
     }
 
 /**
+ * WP89（55 §8 Q7）：这次运行**在沙箱里跑命令**的那一层。
+ *
+ * 与 {@link RunBrowser} 同一条纪律：**不给 = 这条职责没有终端**——运行时连
+ * `dsh-tool-bash` / `dsh-sandbox` 都不挂，工具面里一个 `bash` 都不存在。
+ * 只有建站与主题这条职责（`site.shopify-theme`，别名 `site.builder`）才给。
+ *
+ * 工具面一个字都不是我们写的：官方 `dsh-tool-bash` + `dsh-bash-sandbox` +
+ * `dsh-sandbox-local`（macOS Seatbelt / Linux bwrap→Landlock / Windows 受限令牌）。
+ * 我们这一侧只剩三样：**档位**（这里）、**命令 allowlist**（`dsh-adapter` 的
+ * `shell.ts`）、**凭据怎么进子进程**（`token_record` / `env_refs`，13 §4）。
+ */
+export interface RunShell {
+  /**
+   * 沙箱根 = 这个品牌这家店的**主题工作副本目录**（绝对路径，不存在就由运行时建）。
+   * 它同时是 dsh 会话的 `cwd`——官方 `sandbox-policy` 按会话 cwd 定 `workspace-write`
+   * 的可写边界，所以这两个必须是同一个路径。
+   */
+  workspace_root: string
+  /**
+   * 档位。**故意没有 `danger-full-access`**（55 §8 那一行）：契约里根本拼不出来，
+   * 就不会有人在配置里手滑打开它。升档的路也堵死了——`bash` 工具的
+   * `sandbox_permissions` 由门禁一律拒。
+   */
+  mode: 'read-only' | 'workspace-write'
+  /** 店铺域名（`xxx.myshopify.com`）：进子进程的 `SHOPIFY_FLAG_STORE`。 */
+  store?: string
+  /**
+   * CLI 令牌在 `ctx.credentials` 里的**记录地址**（`<owner>/<id>`，由服务端用
+   * `connectionCredentialKey(workspace_id, 'shopify')` 算好）。
+   *
+   * **这里只有地址，没有值**（13 §4）：运行时在真要跑那条命令的前一跳
+   * `readRecord()` 取出来，直接交给那一条命令的子进程（经执行器的显式 `env`，
+   * 见 `dsh-adapter` 的 `shell.ts`——**值一次都不进宿主进程的环境**），命令跑完即清。
+   * 地址写在契约里、值不写，于是回放包、事件日志、模型面三处都只看得见一个 `<owner>/<id>`。
+   */
+  token_record?: string
+  /**
+   * 额外的**环境变量名 → 凭据引用名**（本机引用层，`ctx.credentials.resolve()`）。
+   * 同样只有名字。
+   */
+  env_refs?: Record<string, string>
+}
+
+/**
  * WP82（55 §3 末段）：**这台机器上**的浏览器怎么配（`/v1/settings/browser` 的形状）。
  *
  * 为什么是"这台机器"而不是"这个品牌"：attach 接的是用户自己电脑上那个 Chrome，
@@ -168,6 +212,14 @@ export interface RunRequest {
    * 运行时不挂 provider，一个 `browser_*` 工具都不存在。
    */
   browser?: RunBrowser
+  /**
+   * WP89（55 §8 Q7）：这次运行的**终端与沙箱**。不给 = 这条职责没有 `bash` 工具。
+   *
+   * 给了也还要过第二道：运行时只给建站与主题那条职责挂（`SHELL_ROLE_IDS`）——
+   * 契约是"怎么跑"，"谁能跑"不由请求方说了算。老的运行记录里没有这个字段，
+   * 回放出来照样是"一个命令都跑不了"。
+   */
+  shell?: RunShell
   /**
    * WP82（55 §3「域名白名单」那一行）：这次运行**允许打开**的站点。
    *

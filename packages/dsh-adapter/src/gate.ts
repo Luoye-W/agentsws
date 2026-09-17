@@ -39,6 +39,16 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { browserBrief, checkBrowserNavigation } from './browser.js'
 import { presetToolNames } from './preset.js'
 import { inferRefs, plainText } from './reading.js'
+import type { ShellCheck } from './shell.js'
+import {
+  type AgentswsBashExecutor,
+  BASH_TOOL,
+  checkShellCommand,
+  resolveShellEnv,
+  runShell,
+  shellBrief,
+  shellCredentialPlan,
+} from './shell.js'
 import {
   browserToolName,
   buildToolDefinitions,
@@ -207,8 +217,17 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   const presetTools = new Set(presetToolNames(request))
   /** `server_name` → 那台服务器上被人勾成"只读"的工具（`McpServerRecord.read_tools`）。 */
   const mcpReadTools = mcpReadToolMap(request)
+  /*
+   * WP89（55 §8 Q7）：官方 `bash` 工具。与浏览器同一条纪律——**在不在只取决于
+   * 这次运行挂没挂终端**（`runShell()` 两道都过才有），不在职责的 `tools.allow` 里。
+   * 真正管着它的是 {@link checkShellCommand} 那张命令表。
+   */
+  const shell = runShell(request)
   const allowed = (name: string): boolean =>
-    allow.has(name) || presetTools.has(name) || (browserOn && browserToolName(name) !== undefined)
+    allow.has(name) ||
+    presetTools.has(name) ||
+    (browserOn && browserToolName(name) !== undefined) ||
+    (shell !== undefined && name === BASH_TOOL)
 
   // Agent 层在场时用真 Agent 当 scope key（官方语义）；没有时退回一个占位键 + 自开 scope。
   const agent: object = input.agent ?? { preset: request.runtime.preset, run_id: request.id }
@@ -223,6 +242,20 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     defaultReturnWindowDays: options.defaultReturnWindowDays ?? 14,
   })
   let askedOnce: Promise<AskedBoundary[]> | undefined
+
+  /*
+   * WP89：这次运行要往子进程交的那几个名字（**只有名字**，值是跑命令那一跳现取的）。
+   * `clearShellEnv()` 把执行器上那一跳的值清空——`tools/post-execute` 与 `dispose()`
+   * 两处都会调它，保证凭据活不过"这一条命令"。
+   */
+  const shellPlan = shell === undefined ? undefined : shellCredentialPlan(shell)
+  const bashExecutor = (): AgentswsBashExecutor | undefined =>
+    shell === undefined ? undefined : (ctx.get('shell') as AgentswsBashExecutor | undefined)
+  const clearShellEnv = (): void => {
+    bashExecutor()?.clearCommandEnv()
+  }
+  /** 同一条发布命令只发一张卡（模型会重试；重试不该变成第二张卡）。 */
+  const publishedCommands = new Set<string>()
 
   const pendingStage = new Map<string, StageIntent>()
   const pendingDraft = new Map<string, DraftPayload>()
@@ -270,6 +303,8 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       })
     },
     async dispose() {
+      // 兜底：工具体抛异常时 `tools/post-execute` 未必走到，凭据不能跟着运行一起留下
+      clearShellEnv()
       await scope?.dispose()
     },
   }
@@ -291,6 +326,44 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       api.outputs.push({ kind: 'proposal', approval_item_id: asked.approval_item_id })
     }
     return out
+  }
+
+  /**
+   * WP89（55 §8「门禁」那一行）：把一条发布命令**物化成一张卡**，而不是简单拒掉。
+   *
+   * 43 的流程一个字没变：改的是副本 → `theme push --unpublished` → 审批卡 → 批了才发布。
+   * 变的只是"提出发布"这一跳的来源——以前是服务端的几条写死的调用，现在是 Agent
+   * 在沙箱里想跑 `shopify theme publish`，被这里接住。
+   *
+   * **`before` 这里填不出来**（15 §1：字段必须来自真读）：Agent 没读过线上那一份主题，
+   * 我们也不该替它编一个。真正的 `before` 由服务端 `shopify-theme.ts` 的
+   * `proposePublish()` 在渲染这张卡之前用一次真的 `theme list` 补上——那一跳本来就在。
+   * 所以这里的 `after` 只带"Agent 想发布哪一份、用的哪条命令"。
+   */
+  async function materializePublish(theme_id: string | undefined, command: string): Promise<void> {
+    const stage: StageFn | undefined = options.stage
+    if (stage === undefined) return
+    if (publishedCommands.has(command)) return
+    publishedCommands.add(command)
+    const res = await stage({
+      request,
+      kind: 'publish_theme',
+      target: { type: 'theme', id: theme_id ?? 'pending' },
+      field: 'live_theme',
+      // 线上那一份是什么，由服务端在渲染卡之前真读一次补上（见上面那段注释）
+      before: null,
+      after: { theme_id: theme_id ?? 'pending', command },
+      notes: [
+        'AI 想把一份主题副本设成线上主题。',
+        `它打算跑的命令：\`${command}\``,
+        '发布之前请先点开这份副本的预览看一眼——按下去顾客立刻就看得到。',
+      ],
+    })
+    if (res === undefined) return
+    api.staged = true
+    api.stagedChangeIds.push(res.change_id)
+    sink({ type: 'change.staged', change_id: res.change_id })
+    api.outputs.push({ kind: 'staged_change', change_id: res.change_id })
   }
 
   // ── 工具：注册进 dsh 的注册表，读走注入的出口，写走审批 seam ────────────
@@ -392,6 +465,9 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   const visible = [
     ...definitions.map((d) => d.name).filter((n) => allow.has(n)),
     ...[...presetTools].filter((n) => registered.has(n)),
+    // WP89：`bash` 与 preset 的工具同类——它是 `harness.ts` 在 `agents.create` 之前
+    // 全局注册的，所以 `restrict` 认得它，不列就被职责白名单挡掉。
+    ...(shell !== undefined && registered.has(BASH_TOOL) ? [BASH_TOOL] : []),
   ]
   if (visible.length > 0) scopedCtx.tools.restrict({ allow: visible })
 
@@ -440,6 +516,47 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     })
     if (browserDenial !== undefined) return deny(browserDenial)
 
+    /*
+     * WP89（55 §8 Q7）：命令 allowlist。**放在读写分类之前**——`bash` 这一个工具名
+     * 底下藏着几十条不同的命令，读写分类按名字判是判不出来的（`classifySideEffect`
+     * 的兜底会把它整个当成写外部，那样公司端连 `shopify theme list` 都跑不了）。
+     * 所以这一关先把命令拆开判，判完直接给出副作用分类，不再走下面那一关。
+     */
+    if (exec.name === BASH_TOOL) {
+      if (shell === undefined) {
+        return deny('shell_not_enabled: 这个岗位没有终端，跑不了命令')
+      }
+      const check: ShellCheck = checkShellCommand({
+        command: typeof args.command === 'string' ? args.command : '',
+        ...(typeof args.workdir === 'string' ? { workdir: args.workdir } : {}),
+        root: shell.workspace_root,
+        ...(typeof args.sandbox_permissions === 'string'
+          ? { sandboxPermissions: args.sandbox_permissions }
+          : {}),
+        ...(args.run_in_background === true ? { background: true } : {}),
+      })
+      if (check.verdict === 'deny') return deny(check.reason)
+      if (check.verdict === 'publish') {
+        // 公司端**不直接拒**：物化成 43 的 `publish_theme` 提案（永远 L1），批了才由
+        // 服务端真跑。这次调用本身仍然不执行——卡出去了，命令就不该再跑一遍。
+        await materializePublish(check.theme_id, String(args.command ?? ''))
+        return deny(check.reason)
+      }
+      if (check.effect === 'read_external' && request.tools.side_effect_policy === 'executor') {
+        // 读外部在公司端是放行的（与别的读工具同档）；这一行只是把 16 §3 的分类写清楚
+        sink({ type: 'progress', step: 'shell_command', note: check.note })
+      }
+      // 13 §4：CLI 的凭据只在这一条命令的前后存在（post-execute 里还原）
+      bashExecutor()?.setCommandEnv(
+        await resolveShellEnv(
+          ctx,
+          shellPlan ?? { literals: {}, refs: {}, records: {} },
+          options.credentials !== undefined,
+        ),
+      )
+      return next()
+    }
+
     const effect = classifySideEffect(exec.name, options.sideEffects, args, mcpReadTools)
     if (effect === 'write_external' && request.tools.side_effect_policy === 'executor') {
       return deny(`write_external_requires_executor: ${exec.name}`)
@@ -459,6 +576,8 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   // ── `tools/post-execute`：围栏 + provenance + 事件 ───────────────────────
   ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
     const call_id = String(exec.callId)
+    // WP89：命令跑完了，CLI 凭据立刻从执行器上撤掉（13 §4：窗口越窄越好）
+    if (exec.name === BASH_TOOL) clearShellEnv()
     const decision = await next()
     if (decision.kind === 'block') {
       note(api, {
@@ -576,6 +695,21 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
           }),
         ]
       : []),
+    /*
+     * WP89：终端那一段也进**这一个**段，理由与浏览器逐字一致——官方 `tool-bash`
+     * 自己注册的 `tool:bash` 是独立段（不受 complete 段遮蔽，那一句留着），
+     * 但"能跑哪几条命令、只能在哪个目录里写、为什么 publish 按不下去"这三件
+     * 官方不知道，只能我们写进来。不写的话模型会一条一条去试，试一条被拦一条。
+     */
+    ...(shell === undefined
+      ? []
+      : [
+          shellBrief({
+            root: shell.workspace_root,
+            mode: shell.mode,
+            ...(shell.store === undefined ? {} : { store: shell.store }),
+          }),
+        ]),
   ]
     .filter((t) => t !== '')
     .join('\n\n')

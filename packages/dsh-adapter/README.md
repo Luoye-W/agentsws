@@ -4,25 +4,27 @@
 **唯一允许 import `@deepseek-ai/dsh-*` 的包**：业务代码只见 `RuntimeAdapter`，
 升级 dsh 只看这里的 seam 契约测试红不红。
 
-## 一次运行做了什么
+## 先读哪一份
 
-```
-RunRequest
-  → writePreset()            一职责一目录：<root>/<workspace>/<preset_id>/agent.cordis.yml
-                             （WP86：里面是这条职责的 mcp-client 行；内容没变就不写）
-  → createHarness()          一棵全新的 Cordis 树（headless、无状态，结束即 dispose）
-       agentPresets.mount    WP86：这条职责的连接（**先挂它，再 restrict**）
-       systemPrompt.section  persona（complete 段，遮蔽 dsh 自带的 persona 前后缀）
-       systemPrompt.context  每个 ContextItem 一段 → 发 context.injected
-       tools.register        allowlist 的读工具 + stage_refund / draft_reply
-       tools.restrict        在 preset 的 agent scope 里按 tools.allow 收窄（默认拒绝）
-       tools/pre-execute     不在 allow → deny；executor 下 write_external → deny
-       tools/post-execute    结果过 EXTERNAL_FENCE、实体 id 进 Provenance → 发 tool.result
-       approval/request      answerer：把 dsh 的审批请求转成我们的审批项，fail-closed
-       llm.registerAdapter   LlmAdapter → ModelGateway.complete
-  → 装配 prompt → prompt.assembled → 经 ctx.llm 补全 → grounding 工具 → stage → draft
-  → RunResult
-```
+**一次运行到底发生了什么，看 [`AGENT-LAYER.md`](./AGENT-LAYER.md)**——它跟着代码走，
+一节一件事；这份 README 只说"这个包是什么、怎么验它"。
+
+| 想知道 | 去 AGENT-LAYER.md 的 |
+|---|---|
+| 挂了哪些官方包、为什么不挂 `dsh-base` | §1 |
+| 一次运行的形状（`agents.create` → `followup` → `whenIdle` → `dispose`） | §2 |
+| dsh 的 `session/event` 怎么变成我们的 `RunEvent` | §3 |
+| 五个门禁在官方 Agent 层下怎么落地 | §4 |
+| 模拟 parity 与指标变动 | §5 |
+| 升级基线（`test/upgrade-baseline/`） | §6 |
+| 会话日志上报（Q1）的查证结论 | §7 |
+| 浏览器：官方 provider + 我们这一侧的策略 | §8–§9 |
+| 职责 preset 与凭据 | §10 |
+| 终端与沙箱（`bash` + 命令 allowlist） | §11 |
+
+这一节以前是一张"一次运行做了什么"的流程图。WP81 把回合交给官方 Agent 层之后
+那张图就不准了（它画的还是我们自己排回合的样子），所以撤掉，换成上面这张索引——
+**一件事只在一个地方说**，免得代码改了图没改。
 
 哈希用 `@agentsws/stand-ins` 导出的 `assemblePromptHash` / `contextItemHash`：
 **一处定义**，运行时发事件与回放重组共用它，`prompt_replayable` 才有意义（17 §6.1）。
@@ -41,12 +43,17 @@ RunRequest
 | SDK `run()` / `subscribe()` | `initialize` → `session/prompt` → inbox 收据 → `assistant/message` → `session.status: idle` |
 | preset | 一目录一 `agent.cordis.yml`，具名插件行；组合只由 RunRequest 决定 |
 
-WP86 之后 preset 这一层还有 `test/preset-seam.test.ts`（生成幂等、凭据只有名字、按职责隔离、
-`read_tools` 判定、`restrict` 顺序），细节见 `AGENT-LAYER.md` §10。
+后挂上来的三层各有自己的 seam 用例：
+
+| 层 | 用例 | 钉的是 | 细节 |
+|---|---|---|---|
+| 浏览器（WP82） | `test/browser-seam.test.ts` | 真 provider 报的 24 个工具名、域名白名单、读写分类、注 JS 硬拒 | §9 |
+| 职责 preset（WP86） | `test/preset-seam.test.ts` | 生成幂等、凭据只有名字、按职责隔离、`read_tools` 判定、`restrict` 顺序 | §10 |
+| 终端与沙箱（WP89） | `test/shell-seam.test.ts` | 命令 allowlist 逐条、沙箱真起一次、发布物化成卡、凭据不进事件 | §11 |
 
 SDK 那组用 `test/fake-runtime.mjs`（只说线协议、不跑模型）——我们要钉的是协议，不是模型。
 
-## 与 dsh 0.1.3-alpha.2 的已知差异
+## 与上游的已知差异
 
 见 `test/seams.test.ts` 里带「已知差异」的用例：
 
@@ -63,3 +70,8 @@ SDK 那组用 `test/fake-runtime.mjs`（只说线协议、不跑模型）——�
    只能在一个 provider 内部做（`@agentsws/credentials-openconnector`）。
 6. （WP86）`agent-presets` 挂上来的工具**受** `ctx.tools.restrict` 管，且 `restrict` 必须
    在 `mount()` **之后**调——与官方浏览器 provider 的语义正好相反（AGENT-LAYER §9.4 / §10.1）。
+7. （WP89）`dsh-subprocess` 对**继承来的**环境有一道清洗：`/KEY|PASSWORD|SECRET|TOKEN/i`
+   的名字一律不往子进程传。所以 Shopify CLI 的令牌不能经 `process.env`，得经执行器的
+   显式 `env`（AGENT-LAYER §11.2 第 ③ 条）。
+8. （WP89）`sandbox-policy` 的 `workspaceRoot` 只是"没有会话时的兜底"；Agent 那次调用的
+   可写边界是**会话的 `cwd`**，两处必须一致（AGENT-LAYER §11.2 第 ① 条）。

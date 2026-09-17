@@ -231,6 +231,118 @@ Clash / Surge 这类代理开着 fake-IP 时，把外网域名解析成 `198.18.
 
 ---
 
+## 5b. 沙箱里跑 CLI（WP89，2026-09-17）
+
+§2 的主题那一段（"主题走官方 CLI"）落地时是**服务端写死的几条调用**——
+`apps/server/src/shopify-theme.ts` 里的 `list` / `pull` / `pushUnpublished` / `publish`。
+55 §8 Q7 定案之后，**"跑 `shopify theme` 命令"这一步搬到了 Agent 手里**：
+它在一个只能写主题工作副本目录的沙箱里按需跑，而不是我们替它排好四条。
+
+**流程一个字没变**（12 §2 那句话仍然成立：未发布副本就是 stage，预览链接就是审批材料，
+发布就是 apply）。变的只有"谁跑命令"：
+
+| 这一跳 | 谁做 | 用什么 |
+|---|---|---|
+| `theme_edit`：改副本 | **Agent** | 在沙箱里改 `AGENTSWS_DATA_DIR/themes/<workspace>/<store>/` 下的文件（**"改文件"这一手还差一个后置件**，见本节末尾） |
+| 推一份未发布主题 | **Agent** | `shopify theme push --unpublished`（线上一个字节不动） |
+| 提议发布 | **Agent 只能提议** | 它跑 `shopify theme publish` 会被门禁接住，物化成一条 `publish_theme` 的 staged change |
+| 真发布 | **服务端** | 审批过了，执行器调 `shopify-theme.ts` 的 `publish()`——**整条路上唯一**换线上主题的地方 |
+
+### 挂了哪些官方包
+
+一个字都不是我们写的（`@agentsws/dsh-adapter` 的 `harness.ts`，只在这条职责 +
+`RunRequest.shell` 都在场时才挂——**不是写进职责 preset**：实测上游拒绝在 preset 的
+子树里发布 `shell` / `sandbox` 这类进程级服务，见 55 §8 落点的"偏离一件"）：
+
+| 包 | 干什么 |
+|---|---|
+| `@deepseek-ai/dsh-tool-bash` | 模型面的 `bash` 工具（`enableRunInBackground: false`：不挂 jobs，也不要长驻进程） |
+| `@deepseek-ai/dsh-bash-sandbox` | 一条命令 = 一个经沙箱包起来的 `bash -c` 子进程（我们挂的是它的子类，见"凭据"一段） |
+| `@deepseek-ai/dsh-sandbox-local` | 按平台选笼子：macOS Seatbelt / Linux bwrap→Landlock / Windows 受限令牌。选不出来 `SANDBOX_UNAVAILABLE` **fail-closed** |
+| `@deepseek-ai/dsh-sandbox-policy` | 档位与可写根。**`workspace-write`，不给 `danger-full-access`** |
+| `@deepseek-ai/dsh-shell-env` / `-subprocess-local` | 管理的 `DSH_*` 环境与真正 fork 进程的那一层 |
+
+**实测（macOS 26，arm64，0.1.6-alpha.1）**：`workspace-write` 起得来，上游把"管住了多少"
+当事实报出来，Seatbelt 这一档是 `enforcement: 'full'`；副本目录外的写回
+`Operation not permitted`。Linux / Windows 按上游文档（未在本机实测）。
+`pnpm install --frozen-lockfile` 不开任何构建——沙箱那条线拖进来的
+`@deepseek-ai/node-addon-system` 是**预编译平台包**（`optionalDependencies`），本来就不构建，
+`pnpm-workspace.yaml` 的 `allowBuilds` 里也早写死了 `false`。
+
+### 命令白名单（表外拒）
+
+只放行五个前缀，各带子命令表。判定在 `dsh-adapter` 的 `src/shell.ts`
+（`checkShellCommand`），排在读写分类**之前**——一个 `bash` 名字底下几十条命令，
+按工具名是判不出读写的。
+
+| 命令 | 判成 | 说明 |
+|---|---|---|
+| `shopify theme list / pull / check / info` | `read_external` | 读店里的主题 |
+| `shopify theme push --unpublished` | `read_external` | 推一份副本，线上不动。**这是 `theme_edit` 落地的唯一方式** |
+| `shopify --version` / `shopify theme --help` | `local` | — |
+| `git status / diff / log / show / add / commit / init / branch / checkout / switch / restore / stash / rev-parse / ls-files` | `local` | 只有本地的。没有 `push` / `pull` / `fetch` / `clone` / `remote` / `config`（前五个通网络，`config` 能设 `core.sshCommand` 那种"下次顺手跑一条命令"的字段） |
+| `node --version` / `node <副本里的脚本>` | `local` | `-e` / `-p` / `-r` / `--import` 一律拒（那是"把一段没检查过的代码交给 node 跑"） |
+| `npx shopify …` / `npx @shopify/cli …` | `read_external` | 后面的参数按 `shopify` 那张表**重判一次** |
+| `pnpm install / i / list / ls / --version` | `read_external` | 没有 `run` / `exec` / `dlx` / `add`——那四个等于跑任意东西 |
+| `shopify theme publish / delete / rename` | **`publish_theme` 卡** | 见下 |
+| `shopify theme push`（不带 `--unpublished`）、任何带 `--live` / `--allow-live` 的 | **`publish_theme` 卡** | 见下 |
+| `shopify theme dev / console / language-server / open / share` | 拒 | 长驻进程（一次运行一棵树，跑完即销毁，长驻的东西没有主人）或把预览抛到外面 |
+| 别的一切（`rm`、`curl`、`cat`、`echo`…） | 拒 | 表外 |
+| 管道 `\|`、命令替换 `` ` `` / `$(…)`、进程替换、后台 `&` | 拒 | 整类写法不放行：它们能把一条没过白名单的命令接进来 |
+| 重定向 / 路径 / `workdir` 落到副本目录之外 | 拒 | 人话理由："这个岗位只能动那一份副本里的文件" |
+| `sandbox_permissions`（升档）、`run_in_background` | 拒 | 档位没有第三档；后台进程没有主人 |
+
+`;` / `&&` / `||` 是放行的，但**每一段各自再过一遍这张表**；只要有一段是发布，
+整条命令就是发布——不允许把 `publish` 藏在一串正经命令后面。
+
+**拒绝怎么出现**：与浏览器策略同一套——物化成 `tool.result{blocked}` 进事件日志（17 §2），
+`reason` 就是给人看的那一句。
+
+### 发布物化成卡，而不是简单拒掉
+
+公司端遇到发布类命令**不直接拒**：门禁调 `stage()` 造一条 `publish_theme` 的变更
+（15 §2：high 风险、hard_ceiling、**永远 L1**），发 `change.staged`，再把这次工具调用拒掉
+（卡已经出去了，命令不该再跑一遍）。同一条命令重试不会变成第二张卡。
+
+卡上的 `before`（"从哪一份换过来"）**这里填不出来**——Agent 没读过线上那一份，
+15 §1 不许我们替它编一个。它由服务端 `proposePublish()` 在渲染卡之前跑一次真的
+`theme list` 补上；那一跳本来就在。
+
+### 凭据（13 §4）
+
+`SHOPIFY_CLI_THEME_TOKEN` 的来源是 OpenConnector 里这家店的 Shopify 连接
+（`credentials-openconnector` 的 record），`SHOPIFY_FLAG_STORE` 是店铺域名。
+契约（`RunRequest.shell`）里**只有名字与记录地址**，没有值。
+
+**实测到的一件与预判不同的事**：官方 `dsh-subprocess` 对**继承来的**环境有一道自己的
+清洗——`/KEY|PASSWORD|SECRET|TOKEN/i` 的名字一律不往子进程传（上游原话：the harness's own
+`DEEPSEEK_API_KEY`/secrets must not leak into a spawned process implicitly）。
+`SHOPIFY_CLI_THEME_TOKEN` 正好撞这条，所以 WP86 那条"放进 `process.env` 再还原"的路
+**在这里走不通**。上游给的路是"显式 env 在清洗之后合进去"，而显式 env 来自
+`ShellExecSpec.env`——官方 `tool-bash` 有意不把 `env` 开给模型。于是我们继承执行器
+（`AgentswsBashExecutor`），在 `resolve()` 里把这一跳要用的几个名字合进去。
+
+结果比 preset 那条路更紧：**令牌一次都不进这个进程的环境**，它只在"这一条命令"里活着，
+`tools/post-execute` 一到就清空。事件日志、模型面两处都只看得见名字。
+
+### 不做，与一件后置
+
+**不做**：用户面的终端窗口；给非建站职责开 shell；`danger-full-access`（契约里拼不出来）。
+
+**后置一件（诚实记一笔）**：白名单只有那五个前缀，所以 `cat` / `echo` / `sed` 这些
+"直接写文件"的命令一条都不在里面——**Agent 现在还没有"在副本目录里改文件"的手**。
+`theme_edit` 这一步真正落地，要的是官方的文件工具：`@deepseek-ai/dsh-tool-fs` +
+`@deepseek-ai/dsh-fs-sandbox`（它读的是**同一个** `ctx.sandboxPolicy`，所以可写边界
+与这里逐字一致，不会多开一个口子）。那两个包没在这一轮里挂，因为 Q7 的交付单只说
+shell 与沙箱。挂它们要做的事：mount 两个包、给三个 `read` / `write` / `edit` 工具
+各写一行读写分类、把路径越界那一道接到同一个 `insideRoot()`。
+
+为什么不用"放行 `cat > file`"顶一下：那等于把重定向变成通用写口，而重定向的目标
+是一个字符串——判得出 `../`，判不出 symlink。留给文件工具做是对的，它走的是
+`ctx.fs`，路径由沙箱的 provider 在它自己的文件系统上 canonicalize。
+
+---
+
 ## 6. 落地清单
 
 | | 状态 |
@@ -239,6 +351,8 @@ Clash / Surge 这类代理开着 fake-IP 时，把外网域名解析成 `198.18.
 | 出站防护人话 + `runtime` 状态里的 `egress` + NAS 排障 §9.1 | ✅ |
 | 33 条 Admin 写动作 → ChangeKind 对照表（8 条明说不给） | ✅ |
 | 主题走官方 CLI + `site.builder` 职责 | ✅ |
+| 主题 CLI 改由 Agent 在官方 shell + 沙箱里跑（§5b，WP89） | ✅ |
+| Agent 在副本目录里**改文件**的工具（`dsh-tool-fs` + `dsh-fs-sandbox`） | ⬜ 后置，见 §5b 末尾 |
 | Dev MCP 三个只读工具 + 写类 stage 前先校验 | ✅ |
 | 15 人 pack 两条回归题 × 四个运行时 | ✅ |
 | 真店实机（真 Dev Dashboard 应用 / 真 CLI / 真 `npx @shopify/dev-mcp`） | ⬜ 未跑 |

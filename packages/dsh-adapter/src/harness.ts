@@ -9,6 +9,7 @@
  * 上面那段注释；我们的五个门禁仍然是插件，装在 Agent 的 scoped ctx 上（`gate.ts`）。
  */
 import { randomUUID } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import type { ChatMessage, Completion, ModelMeta, RunEvent, ToolDef } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
@@ -24,10 +25,15 @@ import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials
 import * as PlaywrightMcpProvider from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
 import type { GenerateOptions, Message, ToolSchema } from '@deepseek-ai/dsh-llm'
 import LlmRuntime, { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import SandboxLocal from '@deepseek-ai/dsh-sandbox-local'
+import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import SessionStore from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import * as ShellEnv from '@deepseek-ai/dsh-shell-env'
+import SubprocessLocal from '@deepseek-ai/dsh-subprocess-local'
 import SystemPrompt, { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
+import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { browserProviderConfig } from './browser.js'
@@ -37,6 +43,7 @@ import { installGate } from './gate.js'
 import type { GatewayBudget } from './llm.js'
 import { GATEWAY_PROVIDER, GatewayLlmAdapter } from './llm.js'
 import { presetCredentialRefs, presetToolNames } from './preset.js'
+import { AgentswsBashExecutor, runShell } from './shell.js'
 
 /** 装配 dsh 服务时等注入就绪的上限（毫秒）。 */
 const READY_TIMEOUT_MS = 5000
@@ -242,6 +249,58 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    */
   const browser = input.request.browser
   if (browser !== undefined) root.plugin(BrowserUseRegistry)
+  /*
+   * WP89（55 §8 Q7）：**只有建站与主题那条职责、而且请求里真给了 `shell`，才有终端**。
+   *
+   * 挂的是官方那一摞，一个都不是我们写的（顺序就是依赖顺序）：
+   * - `dsh-subprocess-local` → `ctx.subprocess`：真正 fork 进程的那一层；
+   * - `dsh-sandbox-local` → `ctx.sandbox`：按平台选笼子（macOS Seatbelt / Linux
+   *   bwrap→Landlock / Windows 受限令牌）。选不出来就 `SANDBOX_UNAVAILABLE` **fail-closed**
+   *   ——命令不会"没关笼子就跑"，这正是我们要的；
+   * - `dsh-sandbox-policy` → `ctx.sandboxPolicy`：档位与可写根。**`workspaceRoot` 只是
+   *   "没有会话时的兜底"**；真正管着 Agent 那次调用的是**会话的 cwd**（上游原话：
+   *   normal agent calls use their session cwd instead），所以下面 `agents.create`
+   *   的 `meta.cwd` 必须是同一个目录，少一处就会写到别的地方去；
+   * - `dsh-bash-sandbox` → `ctx.shell`：一条命令 = 一个 `bash -c` 子进程，经沙箱包一层。
+   *   **一棵树只许有一个执行器**，所以 `dsh-bash-local` 不单独挂（它是前者的父类）。
+   *   挂的是它的子类 {@link AgentswsBashExecutor}——多的那一点见 `shell.ts` 的注释：
+   *   凭据经 `resolve()` 的显式 `env` 直接进子进程，一次都不进这个进程的环境。
+   *
+   * 档位从契约来，而契约里只有 `read-only` / `workspace-write`——
+   * `danger-full-access` 在这条路上根本拼不出来（`contracts/run.ts` 的 `RunShell`）。
+   */
+  /*
+   * **为什么不写进职责 preset**（WP89 的取舍，实测过，不是猜的）。
+   *
+   * Q7 的交付单原话是"在这条职责的 preset 里挂"。试了：把这六行写进
+   * `agent.cordis.yml` 再 `mount()`，上游当场拒——
+   *
+   * > agent-presets: preset "…" failed to mount: row(s) published process-global
+   * > service(s) [sandbox, sandboxPolicy, shell, shellEnv, subprocess];
+   * > a preset service must sit behind an `isolate` realm or move to the host composition
+   *
+   * 这与 WP82 的浏览器 provider 是同一条纪律（`preset.ts` 的 manifest 注释已经写过
+   * "不许往 root realm 发服务"），只是那次没撞上、这次撞上了。上游给的两条路里
+   * ——`isolate` realm、或者搬到宿主组合——我们选后者：沙箱根是**一次运行一个值**
+   * （这家店的副本目录），写进 preset 文件等于每次运行都重写它，而上游把"代"钉在
+   * 组合文件的 mtime + size 上、被顶掉的那一代永不回收（`preset.ts` 文件头那段）。
+   *
+   * 所以职责 preset 那一层只管 MCP 连接；终端与沙箱按职责在这里挂——
+   * "谁有终端"仍然是职责说了算（`runShell()`），只是挂的地方在宿主。
+   */
+  const shell = runShell(input.request)
+  if (shell !== undefined) {
+    // 副本目录不存在就建出来：沙箱要 canonicalize 这个根，不存在会当场 fail-closed
+    mkdirSync(shell.workspace_root, { recursive: true })
+    root.plugin(SubprocessLocal, {} as never)
+    root.plugin(SandboxLocal, {} as never)
+    root.plugin(SandboxPolicy, {
+      mode: shell.mode,
+      workspaceRoot: shell.workspace_root,
+    } as never)
+    root.plugin(AgentswsBashExecutor, { cwd: shell.workspace_root } as never)
+    root.plugin(ShellEnv, {} as never)
+  }
   // 串行：并行工具调用会让两档的事件顺序不可比（17 §4「换宿主不换语义」）
   root.plugin(AgentLoop, { maxParallelToolCalls: 1, agents: [] })
   /*
@@ -273,9 +332,20 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     'sessions',
     ...(browser === undefined ? [] : ['browserUse']),
     ...(preset === undefined ? [] : ['agentPresets']),
+    ...(shell === undefined ? [] : ['shell', 'sandbox', 'sandboxPolicy', 'shellEnv', 'subprocess']),
     // Cordis 的规矩：没 `inject` 过的服务连读都读不到（"cannot get property … without inject"）
     ...(credentials === undefined ? [] : ['credentials']),
   ])
+
+  /*
+   * WP89：官方 `bash` 工具。**必须在 `agents.create` 之前挂完**——`installGate` 里的
+   * `tools.restrict({ allow })` 只认调用当刻**已经全局注册**的名字（与 WP86 的 preset
+   * 同一条实测），晚一步 `bash` 就会被职责白名单挡在 Agent 的 scope 之外。
+   *
+   * `enableRunInBackground: false`：不挂 `dsh-jobs`，而且 17 §5.1 一次运行一棵树、
+   * 跑完即销毁——后台进程在这条路上没有主人。关掉之后模型连这个参数都看不见。
+   */
+  if (shell !== undefined) await ctx.plugin(ToolBash, { enableRunInBackground: false } as never)
 
   let lastCompletion: Completion | undefined
   const budget: GatewayBudget | undefined =
@@ -308,7 +378,12 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   try {
     handle = await ctx.agents.create({
       sessionId,
-      meta: { cwd: process.cwd() },
+      /*
+       * WP89：会话的 `cwd` **就是沙箱的可写边界**（`sandbox-policy` 按它解析
+       * `workspace-write`，见上面挂那一摞时的注释）。没有终端的运行照旧用进程 cwd
+       * ——那时候没人读它。
+       */
+      meta: { cwd: shell?.workspace_root ?? process.cwd() },
       agentOptions: { provider: GATEWAY_PROVIDER, model: input.model },
       setup: async (agentCtx: Context, agent: Agent) => {
         /*

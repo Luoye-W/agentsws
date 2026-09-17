@@ -46,6 +46,22 @@ export {
 } from './preset.js'
 export * from './reading.js'
 export { createInProcessDshRuntime, TASK_MESSAGE } from './runtime.js'
+export type { ShellCheck, ShellCredentialPlan, ShellEffect, ShellPolicyInput } from './shell.js'
+export {
+  AgentswsBashExecutor,
+  BASH_TOOL,
+  checkShellCommand,
+  insideRoot,
+  resolveShellEnv,
+  runShell,
+  SHELL_ROLE_IDS,
+  shellBrief,
+  shellCredentialPlan,
+  shellRoleAllowed,
+  THEME_STORE_ENV,
+  THEME_TOKEN_ENV,
+  themeWorkspaceRoot,
+} from './shell.js'
 export type { ReadToolHooks, StageToolHooks } from './tools.js'
 export {
   BROWSER_DEFAULT_TOOL_NAMES,

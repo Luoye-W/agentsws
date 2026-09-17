@@ -30,6 +30,9 @@ function renderToolResult(value: unknown): { type: 'text'; text: string }[] {
   return [{ type: 'text', text: EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', value)) }]
 }
 
+/** WP89：官方 `dsh-tool-bash` 的工具名（分类由 `gate.ts` 那一关先给出，见下）。 */
+const SHELL_TOOL = 'bash'
+
 /** 我们自己的 staging 工具：不写外部，只提审批项。 */
 export const STAGE_TOOL = 'stage_refund'
 export const DRAFT_TOOL = 'draft_reply'
@@ -196,6 +199,16 @@ export function classifySideEffect(
   if (mcp !== undefined && mcpReadTools?.has(mcp.server) === true) {
     return mcpReadTools.get(mcp.server)?.has(mcp.tool) === true ? 'read_external' : 'write_external'
   }
+  /*
+   * WP89（55 §8 Q7）：官方 `bash` 工具**不在这里判**。
+   *
+   * 一个工具名底下藏着几十条命令，按名字判是判不出来的——判得出来的是
+   * `gate.ts` 那一关（`checkShellCommand` 把命令拆开、按 allowlist 给出分类），
+   * 而那一关**排在这个函数前面**。走到这里还是 `bash`，只有一种可能：
+   * 有人绕过门禁直接调了这个函数。那就按最严的兜底走（`write_external`），
+   * 于是公司端一调就拒——这正是我们要的方向。
+   */
+  if (bare === SHELL_TOOL) return 'write_external'
   // WP44：Shopify 官方 Dev MCP 的三个工具**永远只读**（查文档 / 看 schema / 校验 GraphQL，
   // 碰不到任何店铺数据）。要显式列出来：它们既不是 `get_` 也不是 `list_` 开头，
   // 落到下面的兜底就会被当成"写外部"，在 executor 策略下一调就拒。

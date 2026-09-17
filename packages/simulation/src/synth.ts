@@ -232,7 +232,12 @@ const PEOPLE_3: PersonTemplate[] = [
     // WP72（56 §4）：客服岗位新加的第四条「社群管理」也挂在店主身上——
     // 3 人公司里客服就是他。**这一条不是可有可无的**：社媒运营那边判成客户问题的
     // 留言要转给它，没人持有的话那张卡只能落到 owner 头上（如实报，但那不是设计）。
-    extra: ['common.owner', 'dtc.community-support'],
+    // WP89（55 §8 Q7）：建站与主题也挂店主。3 人公司没有专职建站——壳是店主自己
+    // 按模板凑的，所以这是他身上多出来的一顶帽子，不是一个岗位。加这一条是为了
+    // `site/theme-edit-then-publish` 那条题跑得起来：发布主题 `route_to: owner`，
+    // 提的人与批的人是同一个，但**那一次点头仍然是一次真的点头**（hard_ceiling，
+    // 报多高的自动化等级都会被拉回 L1）——3 人公司里这一点比 15 人那边更要紧。
+    extra: ['common.owner', 'dtc.community-support', 'site.builder'],
   },
   {
     id: 'p_li',

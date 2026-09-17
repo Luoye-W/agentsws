@@ -26,6 +26,24 @@
  *    {@link ShopifyTheme.status} 就是给界面用的。
  * 4. 子进程的 stdout / stderr 在进事件与返回值之前先经 {@link scrubCliOutput} 抹一遍：
  *    CLI 出错时很爱把令牌回显在 URL 里。
+ *
+ * ## WP89（55 §8 Q7）之后，这个模块与 Agent 的分工
+ *
+ * 09-17 Luoye 拍板：`site.shopify-theme` 这条职责在**官方 shell + 沙箱**里自己跑
+ * `shopify theme …`（`@agentsws/dsh-adapter` 的 `src/shell.ts`，档位 `workspace-write`，
+ * 沙箱根 = 主题工作副本目录）。所以下面这几条方法里，有一半**Agent 现在也能自己做**。
+ *
+ * **它们一条都没删**，因为两边不是一回事：
+ *
+ * | 这一跳 | Agent（沙箱里） | 这个模块（服务端） | 为什么两边都要 |
+ * |---|---|---|---|
+ * | `list` / `pull` / `check` | ✅ 按需跑 | ✅ 保留 | 服务端这一份是**审批卡的取数口**：`proposePublish()` 的 `before` 必须来自一次真读（15 §1），而那一跳发生在运行之外、卡渲染之前 |
+ * | `push --unpublished` | ✅ 这是 `theme_edit` 的落地方式 | ✅ 保留 | 界面上"帮我推一份预览"的按钮、以及没有 Agent 的场合（`apps/cli`、修复流程）仍走服务端 |
+ * | `publish` | ❌ **按不下去** | ✅ **只有它能跑** | 15 §2：`publish_theme` 是 high 风险、hard_ceiling、永远 L1。Agent 想跑就被门禁物化成一张卡（`gate.ts` 的 `materializePublish`），批了才由执行器调这里的 {@link ShopifyTheme.publish} |
+ * | `dev`（{@link ShopifyTheme.startDev}） | ❌ 门禁一律拒 | ✅ 保留 | 它是个长驻进程；一次运行一棵树、跑完即销毁（17 §5.1），长驻的东西在 Agent 那条路上没有主人。人在界面上起的本地预览仍走这里 |
+ *
+ * 一句话：**Agent 那条路负责"改与看"，这个模块负责"发与长驻"**；`ThemePublishProposal`
+ * 这个形状是两边的接缝——Agent 只提议，人点头，服务端执行。
  */
 import { execFile, spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -410,6 +428,9 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
       return { path: workspaceOf(shop) }
     },
 
+    // WP89：Agent 现在也能自己跑 `shopify theme push --unpublished`（沙箱里）。
+    // 这一份保留给**没有 Agent 的场合**：界面上的"推一份预览"按钮、CLI、修复流程。
+    // 两边推出来的都是未发布副本，线上一个字节不动——12 §2「副本就是 stage」。
     async pushUnpublished({ shop, name }) {
       if (name.trim() === '') {
         throw new ShopifyThemeError('invalid_input', '未发布主题得有个名字，人在后台要认得出它')
@@ -443,6 +464,11 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
     async publish({ shop, theme_id }) {
       // `-f --force` 跳过那句"确认要发布吗"——我们没有终端可以回答它。
       // 人的那一次点头发生在**审批项**上，不在这个子进程里。
+      //
+      // WP89：这是**整条路上唯一**真的换线上主题的地方。Agent 在沙箱里跑
+      // `shopify theme publish` 会被门禁接住、物化成一张 `publish_theme` 的卡
+      // （`dsh-adapter` 的 `gate.ts`），批下来之后由执行器调到这里。所以这一行
+      // 既是"发布"也是"人点过头了"这件事的落点——别给它加第二个入口。
       await runAuthed(shop, ['theme', 'publish', '--theme', theme_id, '--force'])
       emit('shopify.theme_published', { shop, theme_id })
       return { theme_id }
@@ -477,6 +503,10 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
       return { url, stop: () => child.stop() }
     },
 
+    // WP89：**这一跳只在服务端**。Agent 那一侧物化出来的 `publish_theme` 变更里
+    // `before` 是空的（15 §1：字段必须来自真读，而 Agent 没读过线上那一份）；
+    // 真正的 `before` 由这里跑一次 `theme list` 补上，卡上"从哪一份换到哪一份"
+    // 因此永远是真的。
     async proposePublish({ shop, pushed }) {
       const themes = await list(shop)
       const live = themes.find((t) => t.role === 'main')

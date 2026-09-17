@@ -18,6 +18,11 @@ allowBuilds:
   # （`@deepseek-ai/node-addon-system-<platform>` 是 optionalDependencies，装的是二进制）。
   # 它没有 install / postinstall，本来就不会触发构建；写死 false 是把纪律记在案上：
   # 上游哪天给它加回构建脚本，也不会因为默认值而悄悄跑起来。
+  # WP89 复核：沙箱那条线（`dsh-sandbox-local`）把它列成 dependency，但 Linux 的
+  # Landlock launcher 才用得上；macOS 走 Seatbelt（一个 `sandbox-exec` 命令，不碰 addon）。
+  # 它仍然是预编译平台包（`@deepseek-ai/node-addon-system-<platform>` 走
+  # optionalDependencies），没有 install / postinstall，`pnpm install --frozen-lockfile`
+  # 一次构建都不跑——实测过。这一行保持 false。
   '@deepseek-ai/node-addon-system': false
   # WP70 补列：`node-addon-require-builtin` 家族（`cordis-plugin-loader` 的依赖，
   # 给插件加载器做 require-builtin 的 Node-API addon；0.1.5 → 0.1.6 跟着 dsh 一起动）。
@@ -76,6 +81,11 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-attachment@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-authorization@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-base@0.1.6-alpha.1'
+  # WP89（55 §8 Q7）：从"传递依赖"升为 `dsh-adapter` 的**直接依赖**——建站职责在沙箱里
+  # 跑 Shopify CLI。一棵树只许有一个执行器，所以挂的是 `bash-sandbox`（`bash-local` 是它
+  # 的父类，跟着进树但不单独挂）。同一批升上来的还有 shell / shell-env / sandbox /
+  # sandbox-local / sandbox-policy / subprocess / subprocess-local / tool-bash /
+  # timeout / settings / home-paths / jobs，都在本表里（一包一条、写死版本）。
   - '@deepseek-ai/dsh-bash-local@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-bash-sandbox@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-brand@0.1.6-alpha.1'
@@ -257,6 +267,9 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-subagent-in-process-driver@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-subagent-spawn-in-process@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-subagent@0.1.6-alpha.1'
+  # WP89：它是 `ctx.subprocess`（真 fork 的那一层）。`allowBuilds` 里写着 false：
+  # 它的 postinstall 只是给 node-pty 的 prebuilt spawn-helper 补一个可执行位，
+  # 而我们只走普通 spawn（不开 PTY），不跑那一步照样起得来——实测过。
   - '@deepseek-ai/dsh-subprocess-local@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-subprocess@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-system-prompt@0.1.6-alpha.1'
