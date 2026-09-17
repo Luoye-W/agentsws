@@ -172,7 +172,7 @@ export function UnifiedCalendar({
   onPickDate,
   heightClass = 'h-[70vh]',
 }: UnifiedCalendarProps): React.ReactNode {
-  const { t, theme } = useApp()
+  const { t, theme, lang } = useApp()
   const client = useQueryClient()
   const tz = useMemo(() => browserTz(), [])
   const [note, setNote] = useState<string | undefined>(undefined)
@@ -257,6 +257,14 @@ export function UnifiedCalendar({
       defaultView: VIEW_NAME[view],
       timezone: tz,
       firstDayOfWeek: 1,
+      locale: lang === 'en' ? 'en-US' : 'zh-CN',
+      /**
+       * 日 / 周视图只画 07:00–23:00。
+       *
+       * 整整 24 小时的格子里，凌晨那八行永远是空的，而它们把真正有事的时段挤到了
+       * 屏幕外面——打开周视图第一眼看到的是 1AM 到 8AM 的空白。做生意的一天从早上开始。
+       */
+      dayBoundaries: { start: '07:00', end: '23:00' },
       isDark: theme === 'dark',
       events: [],
       // 七个图层各一个 shadcn token：深浅色由浏览器在上色那一刻算，不在这里监听主题
@@ -324,6 +332,12 @@ export function UnifiedCalendar({
   useEffect(() => {
     app?.setTheme(theme === 'dark' ? 'dark' : 'light')
   }, [app, theme])
+
+  // 中英切换：星期名与钟点跟着换（日历只建一次，所以走 controls）
+  useEffect(() => {
+    if (app === null) return
+    controls.setLocale(lang === 'en' ? 'en-US' : 'zh-CN')
+  }, [app, controls, lang])
 
   if (calendar.isPending) return <Skeleton className={`w-full ${heightClass}`} />
   if (calendar.error !== null)
