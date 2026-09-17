@@ -232,3 +232,20 @@ Luoye：Shopify 之后要用官方 CLI 改主题等，"终端"这种集成要考
 **与另一会话 WP77（建站，docs/59）的分工（09-17 已对齐）**：WP77 不引入 shell / 沙箱、不做命令门禁，它把 `site.builder` 改名 `site.shopify-theme`（yml 在 `packages/roles/roles/site/shopify-theme.yml`），写动作 `theme_edit`（副本）/ `publish_theme`（永远 L1）已在，主题那一跳仍是 43 的 `apps/server/src/shopify-theme.ts` CLI 封装。Q7 落点沿用它：职责 id 用 `site.shopify-theme`；allowlist 把 `theme publish` / `--live` 归到 `publish_theme` 那张卡；合并顺序 WP77 先进 main、Q7 的 WP 再合。
 
 **待拍板 Q7**：同意的话派 WP（`site.shopify-theme` preset 挂官方 shell + 沙箱、命令 allowlist 门禁、主题流程改由 Agent 在沙箱里跑 CLI），依赖 WP86 的 preset 机制与 WP77 合并。
+
+## 9. Q8（2026-09-17 补）：用 ChatGPT / Claude 订阅登录（官方 `dsh-llm-pi-ai`）
+
+Luoye：很多客户在用 ChatGPT 的套餐，官方连接器好像能直接用订阅，把它也连上。已核实（上游 0.1.6-alpha.1 + 已装的 `@earendil-works/pi-ai@0.85.1`）：
+
+| 项 | 事实 |
+|---|---|
+| 机制 | dsh 不自己写 OAuth，全交给 `pi-ai`：provider `openai-codex`（"OpenAI (ChatGPT Plus/Pro)"，`isSubscription: true`），client id 是 OpenAI 给 Codex CLI 的公开 id（`app_EMoamEEZ73f0CkXaXp7hrann`），浏览器 PKCE（回调固定 `localhost:1455`）或设备码两种登录；请求打 `https://chatgpt.com/backend-api/codex/responses`，带 `chatgpt-account-id`；流式 + 工具调用都支持；模型 gpt-5.x 系列 |
+| 凭据 | 记录键 `llm-pi-ai/openai-codex`，`{ kind: 'grant', payload: { access, refresh, expires, accountId } }`；到期前 5 分钟在 `modifyRecord` 里刷新（跨进程锁）；官方存 `~/.dsh` 下 0600 文件 |
+| 登录入口 | `dsh-authorization` 的 `registerFlow` 已自动注册（`llm-pi-ai/src/login.ts`），但 0.1.6 的 web / desktop **没有任何 UI 调 `begin()`**——种子在、界面没接 |
+| 计费 | dsh 只记 token 不记钱；订阅在我们这边 = `cost_base` 0、只显示 token 与"订阅额度" |
+| 同类可登 | `pi-ai` 还带 **Anthropic (Claude Pro/Max)**、GitHub Copilot、OpenRouter、Kimi Coding、xAI 的 OAuth；**Gemini 没有** |
+| 风险 | OpenAI 官方只授权自家 Codex 工具用订阅登录，对第三方客户端至今未表态；2026-03 起有第三方被 429 限流、2026-04 起 `chatgpt.com/backend-api` 对 headless 客户端 Cloudflare 403 的记录；Plus 有每周额度 + 5 小时滚动窗。账号是个人的 → **只能个人端登录**，公司档 / 托管档代持 = 共享账号，违反条款 |
+
+**方案（按官方，路 ①）**：组合里加 `@deepseek-ai/dsh-llm-pi-ai`（只开 `openai-codex` 与 `anthropic` 两个订阅 provider）+ `dsh-authorization`；`ctx.llm` 按 provider 名并存：`openai-codex/*`、`anthropic/*` 归官方适配器，其余仍归 `agentsws-gateway`；网关那一侧对订阅路由只做记账（会话 usage 事件里的 token）、预算按 token 算、`cost_base` 记 0；凭据记录 `llm-pi-ai/*` 由 WP86 的组合 provider 路由到**本机加密秘密库**（不是 OpenConnector；这是个人身份类凭据，20 的规则），刷新沿用官方 `modifyRecord`；设置页模型一节加"用 ChatGPT 订阅登录 / 用 Claude 订阅登录"两张卡（设备码优先，浏览器流次之），**只在个人档出现**，卡上写明"第三方工具用订阅登录未获 OpenAI / Anthropic 明文授权，可能被限流或封禁；账号只属于你本人"。不做路 ②（自己复刻 Codex 协议）。
+
+**落地**：WP90，排在 WP88（百炼模板）合并之后（同改设置页模型一节）。
