@@ -109,7 +109,14 @@ export function normalizeStorefrontPlatform(value: unknown): StorefrontPlatform 
 const PLATFORM_HINT = '待增加：现在只支持 Shopify，这个平台的店铺连接还没做'
 
 /**
- * 首次设置第 ① 步「网站是用什么搭的」的四个选项。
+ * WP79「还没开始搭建」那一条的 tooltip。
+ *
+ * 它**选得动**（不灰显），所以那一句说的不是"为什么选不了"，而是"选了会怎样"。
+ */
+const NO_SITE_HINT = '选它就先不连店铺；网站搭好了回设置页改。'
+
+/**
+ * 首次设置第 ① 步「网站是用什么搭的」的几个选项。
  *
  * 真源是契约里的 `STOREFRONT_PLATFORMS`——界面不自己写一份清单，服务端也不写第二份。
  */
@@ -123,7 +130,12 @@ export function storefrontPlatformChoices(): {
     key: p.id,
     label: p.label,
     supported: p.supported,
-    ...(p.supported ? {} : { hint: PLATFORM_HINT }),
+    ...(p.supported
+      ? // 选得动、却没有店铺连接的那一条（`none`）：说清选了会怎样
+        p.connector_service === undefined
+        ? { hint: NO_SITE_HINT }
+        : {}
+      : { hint: PLATFORM_HINT }),
   }))
 }
 

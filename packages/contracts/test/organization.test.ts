@@ -15,7 +15,16 @@ import type {
   Workspace,
   WorkspaceProfile,
 } from '../src/index.js'
-import { brandKey, brandNameOf } from '../src/index.js'
+import {
+  brandKey,
+  brandNameOf,
+  DEFAULT_STOREFRONT_PLATFORM,
+  isStorefrontService,
+  STOREFRONT_PLATFORMS,
+  storefrontNotBuilt,
+  storefrontUnsupportedNote,
+  storefrontUsableService,
+} from '../src/index.js'
 
 const ORG: Organization = {
   id: 'org_1',
@@ -94,5 +103,59 @@ describe('52 O1 组织与品牌', () => {
     // @ts-expect-error 52 §4：brand.switched 只是客户端事件，不在 KnownEventType 里
     const clientOnly: KnownEventType = 'brand.switched'
     expect(clientOnly).toBe('brand.switched')
+  })
+})
+
+/**
+ * 51 §1 N0 + WP79：「网站是用什么搭的」那一张表。
+ *
+ * 三档说的是三件不同的事，别混：
+ *
+ * - **你还没连**（Shopify）：有卡可点，该说"去连接"；
+ * - **你还没搭网站**（`none`，WP79 新增）：选得动，但根本没有店铺后台可连；
+ * - **我们还没接**（WooCommerce / Magento / 其它）：灰显标"待增加"，你在等我们。
+ */
+describe('51 §1 N0 / WP79 网站是用什么搭的', () => {
+  it('`none`「还没开始搭建」选得动，却没有连接器——它不是"待增加"', () => {
+    const none = STOREFRONT_PLATFORMS.find((p) => p.id === 'none')
+    expect(none).toBeDefined()
+    // 选得动：界面上不灰显、不标"待增加"
+    expect(none?.supported).toBe(true)
+    // 却没有店铺后台可连——与 Shopify 的分水岭就在这一个字段上
+    expect(none?.connector_service).toBeUndefined()
+    // 契约只加不删：原来那四条一条没少，而且默认值还是 Shopify
+    expect(STOREFRONT_PLATFORMS.map((p) => p.id)).toEqual(
+      expect.arrayContaining(['shopify', 'woocommerce', 'magento', 'other', 'none']),
+    )
+    expect(DEFAULT_STOREFRONT_PLATFORM).toBe('shopify')
+  })
+
+  it('storefrontNotBuilt 只对 `none` 为真：它问的是用户的状态，不是我们的缺口', () => {
+    expect(storefrontNotBuilt('none')).toBe(true)
+    expect(storefrontNotBuilt('shopify')).toBe(false)
+    // 「我们还没接」的那三个都不算"还没搭网站"——他有网站，是我们没做
+    expect(storefrontNotBuilt('woocommerce')).toBe(false)
+    expect(storefrontNotBuilt('magento')).toBe(false)
+    expect(storefrontNotBuilt('other')).toBe(false)
+    // 存量工作区没有这个字段 → 按 Shopify 算，行为与这一版上线前一模一样
+    expect(storefrontNotBuilt(undefined)).toBe(false)
+  })
+
+  it('`none` 没有点得动的店铺连接：`storefrontUsableService` 回 undefined', () => {
+    expect(storefrontUsableService('shopify')).toBe('shopify_admin')
+    expect(storefrontUsableService('none')).toBeUndefined()
+    // 连接目录那一侧也不该把 `none` 当成"某个平台的店铺卡"
+    expect(isStorefrontService('shopify_admin')).toBe(true)
+  })
+
+  it('那一句人话：`none` 说"还没搭网站"，不许说成"这个平台还没接"', () => {
+    const note = storefrontUnsupportedNote('none')
+    expect(note).toContain('还没搭网站')
+    expect(note).not.toContain('这个平台还没接')
+    // Shopify 仍然回 undefined（该说的是"去连接"，不是"还没接"）
+    expect(storefrontUnsupportedNote('shopify')).toBeUndefined()
+    expect(storefrontUnsupportedNote(undefined)).toBeUndefined()
+    // 不支持的那几个照旧
+    expect(storefrontUnsupportedNote('magento')).toContain('这个平台还没接')
   })
 })

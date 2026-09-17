@@ -268,9 +268,11 @@ describe('52 O4 第 ① 步拆两块', () => {
         }}
       />,
     )
-    // 两块各有标题，公司那三样在上面，品牌那三样在下面
-    expect(screen.getByText('公司')).not.toBeNull()
-    expect(screen.getByText('第一个品牌')).not.toBeNull()
+    // 还是两块——公司那三样在上面，品牌那三样在下面。
+    // WP79 ⑤：**向导里**这两个灰色小标题不画出来（步骤名已经说过一遍了），
+    // 拆成两块这件事因此只看字段落在哪一块，不看标题在不在。
+    expect(screen.queryByText('公司')).toBeNull()
+    expect(screen.queryByText('第一个品牌')).toBeNull()
     const company = screen.getByTestId('profile-company-block')
     expect(company.contains(screen.getByTestId('company-legal-name'))).toBe(true)
     expect(company.contains(screen.getByTestId('company-domain'))).toBe(true)

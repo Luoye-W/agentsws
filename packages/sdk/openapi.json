@@ -22668,7 +22668,7 @@
                   },
                   "storefront_platform": {
                     "type": "string",
-                    "enum": ["shopify", "woocommerce", "magento", "other"]
+                    "enum": ["shopify", "woocommerce", "magento", "other", "none"]
                   },
                   "brand_name": {
                     "type": "string",
@@ -24614,7 +24614,7 @@
                   },
                   "storefront_platform": {
                     "type": "string",
-                    "enum": ["shopify", "woocommerce", "magento", "other"]
+                    "enum": ["shopify", "woocommerce", "magento", "other", "none"]
                   },
                   "copy_from": {
                     "type": "string",

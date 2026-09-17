@@ -18,7 +18,8 @@ import { GOODS_TRIAGE } from './triage.js'
 export const goodsPack: VerticalPack = {
   key: 'goods',
   labelZh: '实物商品',
-  hintZh: '要发货的东西：3C 配件、服饰、家居……客户会问"到哪了""能不能退"。',
+  // WP79 ⑤：这一句会原样铺在首次设置第 ① 步「你卖的是」下面，一行放得下才行
+  hintZh: '要发货的东西，客户会问"到哪了""能不能退"。',
   persona: GOODS_PERSONA,
   chatRules: GOODS_CHAT_RULES,
   emailRules: GOODS_EMAIL_RULES,

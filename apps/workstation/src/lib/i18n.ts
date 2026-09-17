@@ -1396,18 +1396,21 @@ const zh: Table = {
   //
   // 36 §7：解释性文字（"为什么""怎么来的""填什么格式"）一律进 tooltip，
   // 所以这里带 `.hint` 后缀的都是给 `<Hint>` 用的；可见的只有承诺、状态与空态。
-  'onboarding.title': '先把这三件事说清楚',
-  'onboarding.subtitle':
-    '你们公司叫什么、你是谁、你做什么。答完，该连的平台和该装的技能就都列出来了。',
+  //
+  // WP79（09-17 Luoye 看真机截图）：这一页的规矩是**每个字段最多一行说明，
+  // 能不写就不写**。导语整段去掉——第一次打开的人要的是开始填，不是先读一段话；
+  // 四步的名字统一成"…设置 / 配置"，一眼看得出这是一件件要办的事。
+  'onboarding.title': '初始化设置',
   'onboarding.skip': '先跳过',
   'onboarding.back': '上一步',
-  'onboarding.next': '下一步',
-  'onboarding.done': '就这样，开始用',
-  'onboarding.step': '第 {n} 步 / 共 4 步',
-  'onboarding.step1': '① 公司与第一个品牌',
-  'onboarding.step2': '② 你',
-  'onboarding.step3': '③ 你做什么',
-  'onboarding.step4': '④ 要配的东西',
+  // 往前走的那个按钮四步统一这一句（WP79 ⑥：按了就真的存下来再继续）
+  'onboarding.next': '保存并继续',
+  'onboarding.done': '完成',
+  'onboarding.step.done': '已完成',
+  'onboarding.step1': '公司设置',
+  'onboarding.step2': '个人设置',
+  'onboarding.step3': '岗位设置',
+  'onboarding.step4': '初始配置',
   // ── WP65（52 O1–O4）品牌是顶层：公司 = 组织，品牌 = 工作区 ──────────
   //
   // 界面上**不说"组织"两个字**（52 O1 个人用户那一条）：一个人一个品牌的时候
@@ -1475,8 +1478,11 @@ const zh: Table = {
   'onboarding.company.discoverable': '让用同一个工具的同事找到我',
   'onboarding.company.discoverable.hint':
     '打开后只往局域网广播一串哈希，公司全称、成员名单、任何业务数据都不出去。关了就是独立使用，随时能再打开。',
-  'onboarding.company.promise': '发现阶段只交换一串哈希：公司全称与成员名单从不离开这台机器。',
+  // WP79 ⑤：压成一行短句（原来那一句在真机上折成了两行）
+  'onboarding.company.promise': '只交换一串哈希，公司名与成员名单不出这台机器。',
   'onboarding.company.save': '保存公司档案',
+  // WP79 ⑥：向导里存完自己进下一步，所以按钮说的是这一句
+  'onboarding.company.save_next': '保存并继续',
   'onboarding.company.saved': '已保存',
   'onboarding.company.empty': '公司全称还没填。',
   'onboarding.person.name': '你的名字',
@@ -1510,6 +1516,8 @@ const zh: Table = {
   'onboarding.plan.ranges': '管：{ranges}',
   'onboarding.plan.ranges.none': '还没挂店铺——连上 Shopify 之后回"公司"页补上。',
   'onboarding.plan.applied': '建好了 {n} 个岗位。',
+  // WP79 ⑤：向导第 ① 步这一整块默认折叠成这一行（局域网上真看见同伴了才自己展开）
+  'onboarding.join.toggle': '已有邀请码？',
   'onboarding.join.title': '加入一家公司',
   'onboarding.join.subtitle': '贴一个同事发的邀请码，或者从下面的局域网同伴里挑一位。',
   'onboarding.join.code': '邀请码',
@@ -3183,18 +3191,16 @@ const en: Table = {
   'models.usage.tokens': 'Tokens',
   'models.usage.cost': 'Cost',
   // ── 46 first-run setup and finding colleagues (WP51) ──────────────
-  'onboarding.title': 'Three things first',
-  'onboarding.subtitle':
-    'What your company is called, who you are, what you do. Answer those and the platforms to connect and packs to install list themselves.',
+  'onboarding.title': 'Initial setup',
   'onboarding.skip': 'Skip for now',
   'onboarding.back': 'Back',
-  'onboarding.next': 'Next',
-  'onboarding.done': 'Done, start using it',
-  'onboarding.step': 'Step {n} of 4',
-  'onboarding.step1': '1. Company & first brand',
-  'onboarding.step2': '2. You',
-  'onboarding.step3': '3. What you do',
-  'onboarding.step4': '4. What to set up',
+  'onboarding.next': 'Save and continue',
+  'onboarding.done': 'Finish',
+  'onboarding.step.done': 'Done',
+  'onboarding.step1': 'Company',
+  'onboarding.step2': 'You',
+  'onboarding.step3': 'Positions',
+  'onboarding.step4': 'What to set up',
   // ── WP65 (52 O1–O4) brands on top: company = organization, brand = workspace ──
   'onboarding.block.company': 'Company',
   'onboarding.block.first_brand': 'Your first brand',
@@ -3259,8 +3265,9 @@ const en: Table = {
   'onboarding.company.discoverable.hint':
     'When on, only a hash goes out on your local network. The company name, the member list and any business data stay here. Turn it off to work alone; you can turn it back on any time.',
   'onboarding.company.promise':
-    'Discovery only exchanges a hash: the company name and member list never leave this machine.',
+    'Only a hash goes out — the company name and member list stay on this machine.',
   'onboarding.company.save': 'Save company details',
+  'onboarding.company.save_next': 'Save and continue',
   'onboarding.company.saved': 'Saved',
   'onboarding.company.empty': 'The company name is still empty.',
   'onboarding.person.name': 'Your name',
@@ -3296,6 +3303,7 @@ const en: Table = {
   'onboarding.plan.ranges.none':
     'No store attached yet — connect Shopify, then add it from the Company page.',
   'onboarding.plan.applied': '{n} positions created.',
+  'onboarding.join.toggle': 'Have an invite code?',
   'onboarding.join.title': 'Join a company',
   'onboarding.join.subtitle':
     'Paste an invite code from a colleague, or pick one of the machines found on your network.',

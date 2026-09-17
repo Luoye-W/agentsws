@@ -2815,7 +2815,7 @@ export interface VerticalChoiceView {
 }
 
 /** WP62（51 §1 N0）：网站是用什么搭的——四个之一。 */
-export type StorefrontPlatform = 'shopify' | 'woocommerce' | 'magento' | 'other'
+export type StorefrontPlatform = 'shopify' | 'woocommerce' | 'magento' | 'other' | 'none'
 
 /**
  * 「网站是用什么搭的」那一步的一个选项。

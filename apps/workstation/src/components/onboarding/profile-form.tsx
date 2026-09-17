@@ -93,12 +93,24 @@ export function ProfileForm({
     vertical: profile?.vertical ?? 'goods',
     storefront_platform: profile?.storefront_platform ?? 'shopify',
   })
+  /** 选中的那一条「你卖的是」——它那一句人话是这一栏**唯一**出的解释（WP79 ⑤）。 */
+  const pickedVertical = verticals?.find((v) => v.key === draft.vertical)
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="onboarding-profile">
       {/* ── 上半块：公司（→ 组织；52 O1 / O3「人、钱、发现」都挂在它上面）── */}
       <section className="flex flex-col gap-3" data-testid="profile-company-block">
-        <p className="text-xs font-medium text-muted-foreground">{t('onboarding.block.company')}</p>
+        {/*
+          WP79 ② / ③：**向导里这两个灰色小标题都不出**。
+          第 ① 步的标题已经是「公司设置」了，下面再写一遍"公司"是同一句话说两次；
+          品牌那三样直接接在公司字段下面，一步一张表比两个分组更省事。
+          设置页里它们还在——那一页上下文多，分组是有用的。
+        */}
+        {firstBrand ? null : (
+          <p className="text-xs font-medium text-muted-foreground">
+            {t('onboarding.block.company')}
+          </p>
+        )}
         <div className="flex flex-col gap-1">
           <Label htmlFor="company-legal-name" className="flex items-center gap-1">
             {t('onboarding.company.legal_name')}
@@ -150,9 +162,9 @@ export function ProfileForm({
 
       {/* ── 下半块：品牌（→ 这个工作区；52 O1「品牌 = 工作区」）── */}
       <section className="flex flex-col gap-3" data-testid="profile-brand-block">
-        <p className="text-xs font-medium text-muted-foreground">
-          {t(firstBrand ? 'onboarding.block.first_brand' : 'onboarding.block.brand')}
-        </p>
+        {firstBrand ? null : (
+          <p className="text-xs font-medium text-muted-foreground">{t('onboarding.block.brand')}</p>
+        )}
         <div className="flex flex-col gap-1">
           <Label htmlFor="brand-name" className="flex items-center gap-1">
             {t('onboarding.brand.name')}
@@ -189,7 +201,7 @@ export function ProfileForm({
                   />
                 </Label>
                 <div
-                  className="flex flex-col gap-1"
+                  className="flex flex-wrap gap-x-4 gap-y-1"
                   role="radiogroup"
                   data-testid="company-vertical"
                 >
@@ -197,26 +209,32 @@ export function ProfileForm({
                     <label
                       key={v.key}
                       htmlFor={`company-vertical-${v.key}`}
-                      className="flex items-start gap-2"
+                      className="flex items-center gap-2"
                     >
                       <input
                         id={`company-vertical-${v.key}`}
                         data-testid={`company-vertical-${v.key}`}
                         type="radio"
                         name="company-vertical"
-                        className="mt-1"
                         checked={draft.vertical === v.key}
                         onChange={() => {
                           setDraft({ ...draft, vertical: v.key })
                         }}
                       />
-                      <span>
-                        <span className="font-medium">{v.label}</span>
-                        <span className="block text-xs text-muted-foreground">{v.hint}</span>
-                      </span>
+                      <span className="font-medium">{v.label}</span>
                     </label>
                   ))}
                 </div>
+                {/*
+                  WP79 ⑤：两个选项各一行解释 → **只出选中那一条的**。
+                  那句话仍然从服务端来（真源是客服共享包的垂直包，界面不自己写一份），
+                  只是同一时刻最多占一行：没选中的那条解释，看的人这会儿并不需要。
+                */}
+                {pickedVertical?.hint === undefined ? null : (
+                  <p className="text-xs text-muted-foreground" data-testid="company-vertical-note">
+                    {pickedVertical.hint}
+                  </p>
+                )}
               </div>
             )}
 
@@ -275,7 +293,11 @@ export function ProfileForm({
                           }}
                         />
                         <span className="font-medium">{p.label}</span>
-                        {p.supported ? null : (
+                        {/*
+                          WP79 ④：`none`（还没开始搭建）是**选得动**的，但它也有一句
+                          "选了会怎样"——所以这里的判据从"支不支持"改成"服务端给没给这一句"。
+                        */}
+                        {p.supported && p.hint === undefined ? null : (
                           <Hint
                             text={p.hint ?? t('onboarding.company.platform.unsupported')}
                             testId={`company-platform-${p.key}-hint`}
@@ -311,7 +333,8 @@ export function ProfileForm({
             onSave(draft)
           }}
         >
-          {t('onboarding.company.save')}
+          {/* WP79 ⑥：向导里保存完就进下一步，所以按钮说的是「保存并继续」 */}
+          {t(firstBrand ? 'onboarding.company.save_next' : 'onboarding.company.save')}
         </Button>
       </div>
     </div>

@@ -42,6 +42,7 @@ import {
   connectionDirectoryEntry,
   customMcpServerOfKind,
   mcpServerNameFor,
+  storefrontNotBuilt,
   storefrontUsableService,
   validateMcpServer,
 } from '@agentsws/contracts'
@@ -305,11 +306,14 @@ export function createConnectionDirectory(
   const connectedSet = (): Set<string> =>
     new Set([...options.connectedKinds()].map((k) => canonicalConnectionKind(k)))
 
+  /** 公司档案里的「网站是用什么搭的」（不给 = Shopify）。 */
+  const platformOf = (): StorefrontPlatform | undefined => options.storefrontPlatform?.()
+
   /** 这个 kind 点"去连接"落到哪张卡上。 */
   const connectServiceOf = (entry: ConnectionDirectoryEntry): string | undefined => {
     if (entry.resolved_by_profile === true) {
       // 51 §1 N0：`shop` 按公司档案解析；解析出来的那一个还得在连接目录里真有卡
-      const service = storefrontUsableService(options.storefrontPlatform?.())
+      const service = storefrontUsableService(platformOf())
       return service === undefined || catalogEntry(service) === undefined ? undefined : service
     }
     return entry.service
@@ -418,6 +422,15 @@ export function createConnectionDirectory(
       for (const dep of def.connectors) {
         const entry = connectionDirectoryEntry(dep.kind)
         const kind = entry?.kind ?? dep.kind
+        /*
+         * WP79：选了「还没开始搭建」的人**看不到店铺卡**——网站运营岗位照勾，
+         * 清单里只列不依赖平台的那几条（邮箱、GA4……）。
+         *
+         * 与"这个平台我们还没接"（WooCommerce / Magento）不同：那一条留在清单里
+         * 且算进 `missing_required`（他在等我们），这一条根本不该出现，也不该把
+         * 岗位卡在 `ready: false` 上——他还没有网站，不是少连了一个东西。
+         */
+        if (entry?.resolved_by_profile === true && storefrontNotBuilt(platformOf())) continue
         const existing = merged.get(kind)
         if (existing === undefined)
           merged.set(kind, {

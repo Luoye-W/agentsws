@@ -314,26 +314,36 @@ describe('46 §1 首次设置', () => {
   })
 
   // WP62（51 §1 N0 / 46 §1）
-  it('「网站是用什么搭的」：默认 Shopify、四个选项只有 Shopify 可选、不给沿用上一次', async () => {
+  it('「网站是用什么搭的」：默认 Shopify、「还没开始搭建」选得动、不给沿用上一次', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
 
     const state = await data<{
       storefront_platforms: { key: string; label: string; supported: boolean; hint?: string }[]
     }>(await m.call('GET', '/v1/onboarding/state'))
-    // 四个都发下来（不支持的**灰显**不是藏起来：用户得看得见下一个是谁）
+    // 五个都发下来（不支持的**灰显**不是藏起来：用户得看得见下一个是谁）
     expect(state.storefront_platforms.map((p) => p.key)).toEqual([
       'shopify',
+      'none',
       'woocommerce',
       'magento',
       'other',
     ])
+    // WP79：「还没开始搭建」与 Shopify 一样选得动——还没有网站的人也得能往下走
     expect(state.storefront_platforms.filter((p) => p.supported).map((p) => p.key)).toEqual([
       'shopify',
+      'none',
     ])
     for (const p of state.storefront_platforms.filter((x) => !x.supported)) {
       expect(p.hint).toContain('待增加')
     }
+    // 它那一句说的不是"为什么选不了"（它选得动），是"选了会怎样"
+    const none = state.storefront_platforms.find((p) => p.key === 'none')
+    expect(none?.label).toBe('还没开始搭建')
+    expect(none?.hint).toContain('先不连店铺')
+    expect(none?.hint).not.toContain('待增加')
+    // Shopify 选得动、也有卡可点 → 一个字都不用多说
+    expect(state.storefront_platforms.find((p) => p.key === 'shopify')?.hint).toBeUndefined()
 
     // 不给 → Shopify（存量档案里没有这个字段，它们的行为不许变）
     const first = await data<{ storefront_platform: string }>(
@@ -354,10 +364,23 @@ describe('46 §1 首次设置', () => {
     )
     expect(third.storefront_platform).toBe('woocommerce')
 
+    // WP79：「还没开始搭建」是个合法的存法，不是"没填"
+    const built = await data<{ storefront_platform: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家店', storefront_platform: 'none' },
+      }),
+    )
+    expect(built.storefront_platform).toBe('none')
+
     const bad = await m.call('PUT', '/v1/workspace/profile', {
       body: { legal_name: '一家店铺', storefront_platform: 'bigcommerce' },
     })
     expect(bad.status).toBe(400)
+
+    // 存回 WooCommerce，下面那几条断言接着用它
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家店', storefront_platform: 'woocommerce' },
+    })
 
     // 事件里带平台（换平台会让所有店铺读写换一条路，它该留痕）；全称仍然不进日志
     const events = await data<{ events: { type: string; payload: Record<string, unknown> }[] }>(
@@ -476,6 +499,18 @@ describe('46 §3 岗位与职责 → 清单', () => {
       await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['web-ops'] } }),
     )
     expect(woo.connectors.map((c) => c.service)).not.toContain('woocommerce')
+
+    // WP79「还没开始搭建」：岗位照勾、职责一条不少，只是清单里没有店铺卡
+    await m.call('PUT', '/v1/workspace/profile', {
+      body: { legal_name: '一家还没建站的公司', storefront_platform: 'none' },
+    })
+    const none = await data<PlanView>(
+      await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['web-ops'] } }),
+    )
+    expect(none.role_ids).toContain('dtc.store')
+    expect(none.connectors.map((c) => c.service)).not.toContain('shopify_admin')
+    // 不依赖平台的那几条照样在（他现在能配的就是这些）
+    expect(none.connectors.length).toBeGreaterThan(0)
   })
 
   it('只勾职责 → 一个自定义岗位；名字不给就是"我的岗位"', async () => {

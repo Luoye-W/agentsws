@@ -86,6 +86,7 @@ export function RolePicker({
 
   return (
     <div className="flex flex-col gap-3 text-sm" data-testid="onboarding-roles">
+      {/* WP79 ⑤：这一步只留一行说明——那一行就是这条规则本身 */}
       <p className="text-xs text-muted-foreground">{t('onboarding.roles.pick_position')}</p>
 
       <div className="flex flex-col gap-2">
