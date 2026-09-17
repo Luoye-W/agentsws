@@ -50,7 +50,11 @@ describe('realistic 档（26 §4）', () => {
 
     const deepseek = resolveSimModel({ DEEPSEEK_API_KEY: 'sk-fake' })
     expect(deepseek?.ref.provider).toBe('deepseek')
-    expect(deepseek?.prices['deepseek/deepseek-chat']).toBeDefined()
+    // WP87：默认档换成 deepseek-flash（deepseek-chat 已不在官方 GET /models 的清单里），
+    // 价钱查内置价目表（catalog.json 里 2026-09-10 那份），不再在 realistic.ts 里写第二遍
+    expect(deepseek?.ref.model).toBe('deepseek-flash')
+    expect(deepseek?.prices['deepseek/deepseek-flash']?.in).toBe(0.3)
+    expect(deepseek?.prices['deepseek/deepseek-flash']?.out).toBe(1.2)
     // 报告里写的是"key 来自哪个环境变量"，**不是 key 本身**
     expect(deepseek?.describe).toContain('DEEPSEEK_API_KEY')
     expect(deepseek?.describe).not.toContain('sk-fake')
