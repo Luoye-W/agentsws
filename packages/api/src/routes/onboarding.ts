@@ -338,7 +338,7 @@ const ProfileBody = z.object({
   // WP54（48 v2 L2）：你卖的是实物商品 / 虚拟产品与服务。不给 = 不改。
   vertical: z.enum(['goods', 'digital']).optional(),
   // WP62（51 §1 N0）：网站是用什么搭的。不给 = 不改（第一次不给就是 Shopify）。
-  storefront_platform: z.enum(['shopify', 'woocommerce', 'magento', 'other']).optional(),
+  storefront_platform: z.enum(['shopify', 'woocommerce', 'magento', 'other', 'none']).optional(),
   // WP65（52 O4）：第 ① 步下半块「第一个品牌」的名字。不给 = 不改。
   brand_name: z.string().min(1).max(64).optional(),
 })

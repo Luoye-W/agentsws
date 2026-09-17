@@ -29,7 +29,7 @@ export interface JoinSubmit {
 export function JoinPanel({
   discovery,
   configured,
-  me,
+  collapsed = false,
   invites,
   requests,
   busy,
@@ -46,7 +46,14 @@ export function JoinPanel({
    * 该说的是"先把公司全称存下来"。
    */
   configured?: boolean
-  me: { name: string; email: string }
+  /**
+   * WP79 ⑤：整块**默认折叠**，只留一行"已有邀请码？"（首次设置第 ① 步就是这一档）。
+   *
+   * 绝大多数人第一次打开是自己开一家，不是来加入谁的——把这一整块摊在第 ① 步下面，
+   * 等于让每个人都读一遍他用不上的东西。**局域网上真看见同伴时自动展开**：
+   * 那会儿它不再是一个可能性，是一件正在发生的事。
+   */
+  collapsed?: boolean
   /** 不给 = 不显示"邀请同事"那一块（向导第 ① 步就不给）。 */
   invites?: InviteView[]
   /** 不给 = 不显示"谁申请过加入"。 */
@@ -61,7 +68,10 @@ export function JoinPanel({
   const { t, lang } = useApp()
   const [code, setCode] = useState('')
   const [peer, setPeer] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
   const peers = discovery?.peers ?? []
+  /** 折叠着的时候只出那一行；看见同伴了就自己打开。 */
+  const shown = !collapsed || open || peers.length > 0
 
   const when = (iso: string): string =>
     new Date(iso).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')
@@ -70,9 +80,24 @@ export function JoinPanel({
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="join-panel">
+      {/* WP79 ⑤：折叠着的时候整块就这一行 */}
+      {collapsed && !shown ? (
+        <button
+          type="button"
+          aria-expanded={false}
+          data-testid="join-toggle"
+          className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          onClick={() => {
+            setOpen(true)
+          }}
+        >
+          {t('onboarding.join.toggle')}
+        </button>
+      ) : null}
+
+      {!shown ? null : (
       <section className="flex flex-col gap-2">
-        <p className="font-medium">{t('onboarding.join.title')}</p>
-        <p className="text-xs text-muted-foreground">{t('onboarding.join.subtitle')}</p>
+        {collapsed ? null : <p className="font-medium">{t('onboarding.join.title')}</p>}
 
         <div className="flex items-end gap-2">
           <div className="flex flex-1 flex-col gap-1">
@@ -151,10 +176,12 @@ export function JoinPanel({
             {error}
           </p>
         )}
-        <p className="text-xs text-muted-foreground">
-          {me.name === '' ? me.email : `${me.name}（${me.email}）`}
-        </p>
+        {/*
+          WP79 ⑤：这里原来还有一行"王岚（wang@nordvolt.cn）"。去掉——
+          申请人就是登录的这个人，他不需要被告知自己是谁。
+        */}
       </section>
+      )}
 
       {invites === undefined ? null : (
         <>

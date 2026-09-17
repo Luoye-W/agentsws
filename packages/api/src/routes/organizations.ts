@@ -260,7 +260,7 @@ const PatchOrgBody = z.object({
 const CreateBrandBody = z.object({
   name: z.string().min(1).max(64),
   vertical: z.enum(['goods', 'digital']).optional(),
-  storefront_platform: z.enum(['shopify', 'woocommerce', 'magento', 'other']).optional(),
+  storefront_platform: z.enum(['shopify', 'woocommerce', 'magento', 'other', 'none']).optional(),
   copy_from: z.string().min(1).max(64).optional(),
 })
 

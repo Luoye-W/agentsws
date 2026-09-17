@@ -20,6 +20,7 @@
 import type { Clock, EventEnvelope, StorefrontPlatform, WorkspaceId } from '@agentsws/contracts'
 import {
   storefrontConnectorService,
+  storefrontNotBuilt,
   storefrontServiceMatches,
   storefrontUnsupportedNote,
 } from '@agentsws/contracts'
@@ -114,7 +115,8 @@ export interface LiveRefreshReport {
   status: 'ok' | 'skipped' | 'failed'
   /**
    * 没有活跃的店铺连接时是 `no_connection`；档案里的网站平台我们还没接时是
-   * `platform_unsupported`（51 §1 N0）——两回事，不该混成一个原因码。
+   * `platform_unsupported`（51 §1 N0）；用户自己说还没搭网站时是 `no_storefront`
+   * （WP79）——三回事，不该混成一个原因码。
    */
   reason?: string
   orders: number
@@ -704,9 +706,12 @@ export function createLiveDataSource(options: LiveDataOptions): LiveDataSource {
         cache = undefined
         stale = false
         dirty = false
-        // WP62：分清"你还没连"与"我们还没做"——后者点「去连接」也没有卡可点
-        const reason =
-          storefrontUnsupportedNote(options.storefrontPlatform?.()) === undefined
+        // WP62：分清"你还没连"与"我们还没做"——后者点「去连接」也没有卡可点。
+        // WP79 再分出第三档"你还没搭网站"：既不是你没连，也不是我们没做。
+        const platform = options.storefrontPlatform?.()
+        const reason = storefrontNotBuilt(platform)
+          ? 'no_storefront'
+          : storefrontUnsupportedNote(platform) === undefined
             ? 'no_connection'
             : 'platform_unsupported'
         return { status: 'skipped', reason, orders: 0 }

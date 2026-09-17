@@ -239,7 +239,7 @@ export type WorkspaceVertical = 'goods' | 'digital'
  * 非法值与缺省一律按 `shopify` 处理——存量工作区与老的导出包里没有这个字段，
  * 它们的行为必须与这一版上线前一模一样。
  */
-export type StorefrontPlatform = 'shopify' | 'woocommerce' | 'magento' | 'other'
+export type StorefrontPlatform = 'shopify' | 'woocommerce' | 'magento' | 'other' | 'none'
 
 /** 没设过 `storefront_platform` 的工作区按它算（51 §1：现在只开 Shopify）。 */
 export const DEFAULT_STOREFRONT_PLATFORM: StorefrontPlatform = 'shopify'
@@ -254,6 +254,10 @@ export const DEFAULT_STOREFRONT_PLATFORM: StorefrontPlatform = 'shopify'
  * `supported: false` = 界面上灰显并标"待增加"，不是藏起来——用户要看得见"下一个是谁"。
  * Magento 没有 `connector_service`：OpenConnector 容器里根本没有这个 provider
  * （09-15 `ls /app/src/providers` 核过），先写 provider 才谈得上接。
+ *
+ * WP79：`none`（还没开始搭建）是**选得动**的（`supported: true`）而且**没有**
+ * `connector_service`——"我还没有网站"不是"我们还没做这个平台"。两件事在界面上
+ * 说的是两句话：前者"你还没搭网站"，后者"这个平台我们还没接"。
  */
 export interface StorefrontPlatformSpec {
   id: StorefrontPlatform
@@ -267,6 +271,9 @@ export interface StorefrontPlatformSpec {
 
 export const STOREFRONT_PLATFORMS: readonly StorefrontPlatformSpec[] = [
   { id: 'shopify', label: 'Shopify', supported: true, connector_service: 'shopify_admin' },
+  // WP79：还没有网站的人也得能往下走。选得动（不灰显、不带"待增加"），
+  // 只是没有店铺连接——清单里不出店铺卡，面板上那一块说的是"还没搭网站"。
+  { id: 'none', label: '还没开始搭建', supported: true },
   // OpenConnector 容器里已经有 `woocommerce` provider，缺的是动作对照表（51 §1「下一个平台」）
   { id: 'woocommerce', label: 'WooCommerce', supported: false, connector_service: 'woocommerce' },
   { id: 'magento', label: 'Magento', supported: false },
@@ -305,6 +312,18 @@ export function storefrontUsableService(id: StorefrontPlatform | undefined): str
   return spec?.supported === true ? spec.connector_service : undefined
 }
 
+/**
+ * WP79：这个工作区**自己说还没搭网站**（第 ① 步选了「还没开始搭建」）。
+ *
+ * 判据就是表里那一行——选得动（`supported`）却没有 `connector_service`。
+ * 与"我们还没接这个平台"分开报：前者是用户的状态（他自己会去搭），
+ * 后者是我们的缺口（他等我们）。原因码、面板那一句、清单出不出店铺卡都靠它分档。
+ */
+export function storefrontNotBuilt(id: StorefrontPlatform | undefined): boolean {
+  const spec = storefrontPlatformSpec(id ?? DEFAULT_STOREFRONT_PLATFORM)
+  return spec?.supported === true && spec.connector_service === undefined
+}
+
 /** 连接目录里的这个 provider 是不是"某个平台的店铺卡"（是的话它要按档案过滤）。 */
 export function isStorefrontService(service: string): boolean {
   return STOREFRONT_PLATFORMS.some((p) => p.connector_service === service)
@@ -327,14 +346,24 @@ export function storefrontServiceMatches(want: string, service: string): boolean
 }
 
 /**
- * 36 §3 / 51 §2 末条：这个平台现在根本接不上时，面板与工具该说的那一句人话。
+ * 36 §3 / 51 §2 末条：这个工作区**没有店铺后台可连**时，面板与工具该说的那一句人话。
  *
- * 支持的平台回 `undefined`（该说的是"去连接"，不是"还没接"——两回事：
- * 前者是"你还没连"，后者是"我们还没做"）。
+ * 三档，说的是三件不同的事：
+ *
+ * - 平台支持、有连接器（Shopify）→ `undefined`。该说的是"去连接"（你还没连），
+ *   不是"还没接"（我们还没做）。
+ * - 平台支持、没有连接器（WP79 的 `none`「还没开始搭建」）→ **你还没搭网站**。
+ *   这不是我们的缺口，是用户自己的状态，所以不许说成"这个平台还没接"。
+ * - 平台不支持（WooCommerce / Magento / 其它）→ **这个平台还没接**。
  */
 export function storefrontUnsupportedNote(id: StorefrontPlatform | undefined): string | undefined {
   const spec = storefrontPlatformSpec(id ?? DEFAULT_STOREFRONT_PLATFORM)
-  if (spec === undefined || spec.supported) return undefined
+  if (spec === undefined) return undefined
+  if (spec.supported) {
+    return spec.connector_service === undefined
+      ? '还没搭网站：你们选的是「还没开始搭建」，所以没有店铺后台可以连。'
+      : undefined
+  }
   return spec.connector_service === undefined
     ? `这个平台还没接：你们选的是「${spec.label}」，没有店铺后台可以连。`
     : `这个平台还没接：你们的网站是用 ${spec.label} 搭的，它的店铺后台我们还没做。`

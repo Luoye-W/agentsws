@@ -169,45 +169,30 @@ export function OnboardingPage(): React.ReactNode {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-sm font-semibold">{t('onboarding.title')}</h1>
-          <p className="text-xs text-muted-foreground">{t('onboarding.subtitle')}</p>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
+      {/*
+        WP79 ①：顶上只留一个标题。原来那一段"先把这三件事说清楚 / 你们公司叫什么、
+        你是谁……"整段去掉——第一次打开的人要的是开始填，不是先读一段导语。
+        「先跳过」留在右上，但压成一行弱化的小字：它是退路，不是主动作。
+      */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-sm font-semibold">{t('onboarding.title')}</h1>
+        <button
+          type="button"
           data-testid="onboarding-skip"
+          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           onClick={() => {
             markSkipped()
             navigate('/')
           }}
         >
           {t('onboarding.skip')}
-        </Button>
+        </button>
       </div>
 
-      <ol className="flex flex-wrap gap-1 text-xs" data-testid="onboarding-steps">
-        {STEPS.map((key, i) => (
-          <li
-            key={key}
-            aria-current={i === step ? 'step' : undefined}
-            className={cn(
-              'rounded-md border px-2 py-1',
-              i === step && 'border-primary bg-primary/10',
-              i > step && 'text-muted-foreground',
-            )}
-          >
-            {t(key)}
-          </li>
-        ))}
-      </ol>
+      <StepProgress step={step} />
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{t(STEPS[step] ?? STEPS[0])}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-4 pt-6">
           {step === 0 ? (
             <div className="flex flex-col gap-4">
               <ProfileForm
