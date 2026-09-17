@@ -734,6 +734,157 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
   },
 ]
 
+/**
+ * WP75（57 §1）：**投放岗位那四张卡**。
+ *
+ * 与社媒那八张同一条路：凭据原生表单直填，只存在这台电脑的加密库里（31 §3 / 07 P1）。
+ * 每一张的准备说明里**先说代价**：Meta 要 `ads_management`（与主页管理是两件事）、
+ * Google 要单独申请一个 developer token、X 是申请制、TikTok 要 Business Center 授权。
+ *
+ * **Meta / Google 可连**（`@agentsws/ads-core` 里有真调用）；X / TikTok 照 WP64
+ * 骨架卡的老规矩标着"还没接"、点不动——给一张能填的表单、填完撞一堵墙，
+ * 比明说"还没接"糟得多。
+ */
+export const ADS_CONNECTORS: readonly CatalogEntry[] = [
+  {
+    service: 'meta_marketing',
+    upstream: 'local',
+    label: 'Meta Marketing API（投放）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['ads_meta'],
+    smoke_hints: ['list_ad_accounts', 'list_campaigns'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '要带 ads_management 权限的那一把。与社媒那张卡可以是同一次授权换出来的，但那条权限要另加',
+      },
+      {
+        name: 'business_id',
+        label: '商务管理平台 id',
+        secret: false,
+        required: false,
+        kind: 'text',
+        placeholder: '100000000000000',
+        hint: '填了就按商务管理平台列账户；留空就列这把 token 自己能看到的广告账户',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '读账户与 campaign 表现、改预算与出价、暂停、换素材。**与社媒那张 Meta 卡是两张**：这条要 `ads_management`（能动预算），那条要 `pages_manage_posts`（能发帖）。同一次授权可以一起授下来，但别把两把钥匙做成一把。',
+      steps: [
+        '在 Meta 开发者后台建一个应用，加上 Marketing API',
+        '申请 ads_management 与 ads_read 权限（**要过审核**）',
+        '用图形 API 浏览器换一个长期令牌，并抄下商务管理平台 id（可选）',
+        '把令牌填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        { label: 'Meta 开发者后台', url: 'https://developers.facebook.com/apps' },
+        { label: 'Marketing API 文档', url: 'https://developers.facebook.com/docs/marketing-apis' },
+      ],
+    },
+    data_note:
+      '没连也能看提案、攒审批、排计划——真正动到账户那一跳才需要它。权限还在审核里的时候，我们照实说"还没批"，不会假装改过了。',
+  },
+  {
+    service: 'google_ads',
+    upstream: 'local',
+    label: 'Google Ads API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['ads_google'],
+    smoke_hints: ['search_customer', 'list_campaigns'],
+    fields: [
+      { name: 'access_token', label: '访问令牌', secret: true, required: true, kind: 'password' },
+      {
+        name: 'developer_token',
+        label: 'Developer token',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '在 Google Ads 后台的 API Center 单独申请并过审。与 OAuth 授权是两件事——缺它的时候上游回 401，但"重新连一次"解决不了',
+      },
+      {
+        name: 'customer_id',
+        label: '客户 id',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '1234567890',
+        hint: '后台右上角那串十位数字，不带横杠',
+      },
+      {
+        name: 'login_customer_id',
+        label: '经理账户 id',
+        secret: false,
+        required: false,
+        kind: 'text',
+        hint: '用 MCC 管别人的账户时填；自己管自己的留空',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '搜索 / 购物 / PMax / YouTube 广告：读表现、改预算与出价、暂停。**三样东西缺一不可**：OAuth 令牌、developer token、客户 id。读走 GAQL，写要带 updateMask——这些我们都处理好了，你只要把三格填对。',
+      steps: [
+        '在 Google Cloud 建一个项目，启用 Google Ads API 并做 OAuth 授权',
+        '在 Google Ads 后台 → 工具 → API Center 申请 developer token（基础访问权限够用），**等审核**',
+        '抄下右上角那串十位客户 id（去掉横杠）',
+        '三格填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        {
+          label: 'Google Ads API 快速开始',
+          url: 'https://developers.google.com/google-ads/api/docs/start',
+        },
+        { label: 'API Center（申请 developer token）', url: 'https://ads.google.com' },
+      ],
+    },
+    data_note:
+      'Merchant Center 的商品 feed 也归投放这条职责（04 §5），但那一侧还没接——现在这张卡只管广告。',
+  },
+  {
+    service: 'x_ads',
+    upstream: 'local',
+    label: 'X Ads API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['ads_x'],
+    fields: [],
+    setup_guide: {
+      summary: '申请制：要先有广告账户、提交 Ads API 申请、说明用途、等人工审核。',
+      steps: ['暂时没有步骤——这家还没接'],
+      links: [{ label: 'X Ads API', url: 'https://developer.x.com/en/docs/x-ads-api' }],
+    },
+    planned:
+      '还没接：连接目录、职责、额度与面板骨架已经就位，真调用还没做。' +
+      '社媒那条买的 X API **付费档管不到广告这一侧**——是两套授权。' +
+      '在此之前投放面板上 X 那一块照实说"还没接"。',
+  },
+  {
+    service: 'tiktok_ads',
+    upstream: 'local',
+    label: 'TikTok Ads（Business API）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['ads_tiktok'],
+    fields: [],
+    setup_guide: {
+      summary:
+        '要先在 Business Center 里把广告账户授权给一个过了审的开发者应用；与社媒那条的 Content Posting API 是两套申请。',
+      steps: ['暂时没有步骤——这家还没接'],
+      links: [{ label: 'TikTok Business API', url: 'https://business-api.tiktok.com/portal/docs' }],
+    },
+    planned:
+      '还没接：连接目录、职责、额度与面板骨架已经就位，真调用还没做。' +
+      'Spark Ads（投自己发过的视频）还要有机账号那一侧再给一次授权码，' +
+      '所以它接上那天要与 `social.tiktok` 一起做。',
+  },
+]
+
 export const CATALOG: readonly CatalogEntry[] = [
   {
     service: 'shopify_admin',
@@ -1062,6 +1213,7 @@ export const CATALOG: readonly CatalogEntry[] = [
   },
   ...KOL_CONNECTORS,
   ...SOCIAL_CONNECTORS,
+  ...ADS_CONNECTORS,
 ]
 
 /**

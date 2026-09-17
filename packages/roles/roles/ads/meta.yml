@@ -1,0 +1,276 @@
+# 57 §1 投放岗位的第 1 条职责：**Meta Ads**（Facebook / Instagram 广告）（WP75）。
+#
+# 四条平台职责的骨架**完全相同**（57 §1 那张表），不同的只有三样：
+# 平台连接器、grounding 的意图词、还有下面那一段"这个平台特有的部分"。
+#
+# 为什么按平台拆而不是一条"投放"职责，理由比社媒那九条更硬（04 §5）：
+# **每个平台是一个独立的花钱账户、独立的计费与风控**。一条职责管着四个账户，
+# 等于四个钱包共用一把锁——而这把锁一旦配错，错的不是一条文案，是一天的预算。
+#
+# 这个平台特有的三件事：
+#
+# 1. **与社媒那张 `meta_graph` 是两张卡**。现实里同一次 OAuth 可以把两边的权限
+#    一起授，但连接卡分开：这条要 `ads_management`，社媒那条要 `pages_manage_posts`。
+#    做成一张的后果是"想发个帖子"要先授权"能动广告预算"。
+# 2. **钱的单位是「分」**。Meta 接口上 `daily_budget: 100` 不是一百块，是一块。
+#    转换在 `@agentsws/ads-core` 的 `channels/meta.ts` 里进出各做一次，
+#    面板与卡面上看到的一律是元。
+# 3. **暂停是 `status: PAUSED` 不是删**。删掉的 campaign 连历史数据一起带走，
+#    而止损要的是"先别花钱"——两件事。
+#
+# 额度纪律（04 §5 原文，四条职责一字不差）：**减少花钱的动作可以到 L3，
+# 增加花钱的动作最高 L2，新开花钱口子永远 L1。** `max_daily_spend` 是
+# **岗位级总闸**——四条职责的 caps 里写的是同一个数、同一个名字，guardrail
+# 按岗位把四个平台的当日花费**加起来**再判（`@agentsws/core` 的 guardrail）。
+# 各判各的等于四条一起把总闸撑爆而谁都没越自己那条线。
+#
+# 边界：像素与转化事件**只读**（`pixel_event` 域里没有 `stage`）——改追踪代码
+# 是建站的事，而且永远 L1（04 §5 `ads.tracking` 那一行）。
+id: ads.meta
+version: 1.0.0
+domain: ads
+name: { zh: Meta Ads, en: Meta Ads }
+description: Facebook / Instagram 广告：账户与 campaign 表现、预算与出价、受众与素材、像素健康。花钱的事归我；发帖子不归我（那是社媒运营）
+
+scopes:
+  # 57 §1 读那一列：账户 / campaign / 广告组 / 广告列表与表现、预算与出价、素材
+  - { domain: ad_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 像素 / 转化事件**只读**（边界那一行）：看得见掉了，改不动一行代码
+  - { domain: pixel_event, ops: [read], range: assigned, max_sensitivity: internal }
+  # 归因要读订单那一侧的数（`ads-core` 的 attribution）。**只读**：投放一辈子不该改一张订单
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  # 素材来自素材库（设计岗出的）。**只读**：换哪一版是投放定的，那一版长什么样是设计定的
+  - { domain: asset, ops: [read], range: workspace, max_sensitivity: internal }
+  # 写文案要知道在卖什么，以及事实卡里的价格 / 时效怎么说（19）
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # `required: false`：没连也能看提案、攒审批、排计划——真正动到账户那一跳才需要它。
+  # 写 true 会把一个还在等 `ads_management` 审核的用户整条职责挡在门外
+  - {
+      kind: meta_marketing,
+      required: false,
+      grants: [read_insights, manage_campaigns, manage_ads, read_pixels],
+      ownership: workspace,
+    }
+
+actions:
+  # 57 §1 写那一列的五个动作。额度写在**动作**上不写在职责上（同 51 §2.3）。
+  #
+  # `stage_campaign` → `create_campaign`（契约 `ADS_KIND_ALIASES`；动作 id 与 kind
+  # 的对照在 `packages/roles/src/effective.ts` 的 `KIND_ALIAS` 里，对不上会悄悄降级）
+  - id: stage_campaign
+    target: ad_account
+    kind: staged_change
+    mandate:
+      # 总闸也挂在这一条上：总闸满了还要新开一个花钱口子，guardrail 直接 block
+      # （不是让人点一下——那等于把今天的预算上限就地作废，04 §5「超过即熔断」）
+      caps: { max_daily_spend: 1000 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    review_cannot_be_disabled: true
+    route_to: owner
+  - id: stage_budget_change
+    target: ad_account
+    kind: staged_change
+    mandate:
+      # 57 §6：一次提预算最多 20%；超了升 L1。调低预算不受这条卡（04 §5 减少花钱从宽）
+      caps: { max_budget_delta_pct: 20, max_daily_spend: 1000, max_changes_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    route_to: scope_manager
+  - id: stage_bid_change
+    target: ad_account
+    kind: staged_change
+    mandate:
+      caps: { max_bid_delta_pct: 15, max_changes_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    route_to: scope_manager
+  # `pause_ads` → `pause_ad`。**投放岗位唯一一条能到 L3 的写动作**（04 §5：
+  # 止损是保护性动作）。代价是"止损"两个字必须名副其实：guardrail 会核对
+  # ROAS 与花费两格真的越了线，报了 `stop_loss` 却不成立的那一条转人审
+  - id: pause_ads
+    target: ad_account
+    kind: staged_change
+    mandate:
+      caps: { stop_loss_roas_below: 1, stop_loss_spend_pct: 30, max_changes_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+  - id: stage_creative_swap
+    target: ad_account
+    kind: staged_change
+    mandate:
+      caps: { max_changes_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    # 换素材不许顺手换**投给谁**：批的人看的是素材，改掉的是投放对象。
+    # 与 guardrail 的 `PROTECTED_FIELDS.creative_swap` 是同一份的两个位置
+    protected_fields: [account_id, campaign_id, ad_set_id, targeting, audience]
+    requires_record_read: true
+    route_to: scope_manager
+
+automation:
+  # 04 §5：**开花钱口子永远 L1，不可关闭**。15 §2 的 `HARD_L1` 里有
+  # `create_campaign`，这里的 `hard_ceiling` 是把同一件事在职责这一层也写出来——
+  # 两处都说，改一处忘另一处的时候有人喊（同 51 §2.3 的群发）
+  stage_campaign:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 04 §5：额度内调整 L2，**最高 L2**——增加花钱的动作再高的采纳率也不该到 L3。
+  # 采纳率证明得了"这个 Agent 调得准"，证明不了"今天该多花这一笔"
+  stage_budget_change:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_bid_change:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
+  # 04 §5：止损 L3（保护性动作）。它是这个岗位里唯一一条从第一天起就自动的写动作——
+  # 广告在烧钱的时候等人点头才能踩刹车，那道审批就是在花钱
+  pause_ads:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [guardrail_hit, manual]
+  # 换素材 L2：它对外可见但改不了钱（花的还是原来那笔）。
+  # 真正不许越的那条线是文案里的承诺，由 guardrail 的 `AD_COPY_FORBIDDEN` 拦死
+  stage_creative_swap:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 0.9, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+skills:
+  - { name: ad-copywriting, tier: open, load: on_demand }
+  - { name: audience-research, tier: open, load: on_demand }
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  # 57 §3：数字块四个 + 分块五个。顺序就是一天的顺序——
+  # 先看今天花了多少、再看待审的、最后看像素还活着没有
+  - { id: ads.meta.spend_today, placement: focus, component: stat_tile, query: ads.spend_today, default_order: 10, pinnable: true, adaptive: true }
+  - { id: ads.meta.roas, placement: focus, component: stat_tile, query: ads.roas_two_views, default_order: 20, pinnable: true, adaptive: true }
+  - { id: ads.meta.conversions, placement: focus, component: stat_tile, query: ads.conversions, default_order: 30, pinnable: true, adaptive: false }
+  - { id: ads.meta.stop_losses, placement: focus, component: stat_tile, query: ads.stop_loss_count, default_order: 40, pinnable: true, adaptive: false }
+  - { id: ads.meta.campaigns, placement: role_view, component: table, query: ads.campaigns, default_order: 50, pinnable: true, adaptive: true }
+  - { id: ads.meta.pending, placement: queue, component: table, query: ads.pending_budget, default_order: 60, pinnable: true, adaptive: true }
+  - { id: ads.meta.stop_loss_log, placement: role_view, component: table, query: ads.stop_loss_log, default_order: 70, pinnable: true, adaptive: false }
+  - { id: ads.meta.pixels, placement: role_view, component: table, query: ads.pixel_health, default_order: 80, pinnable: true, adaptive: true }
+
+grounding:
+  # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
+  # 动作 id / 数据域这五样判"这件事该走哪条"。四条投放职责的动作 id 与数据域
+  # 完全一样，所以**意图词就是唯一分得开它们的东西**
+  - {
+      name: meta_ads_intent,
+      intent_terms: [Meta, Facebook, FB, 脸书, Instagram, IG, ins, Reels, 广告管理工具, ads manager, 像素, pixel],
+      cue_terms: [投放, 广告, 预算, 出价, 花费, 受众, 素材, ROAS, CPA, 转化, 止损, 暂停],
+      tool: list_ad_campaigns,
+      prefetch: false,
+    }
+  # 04 §5 的额度纪律：提预算之前先看总闸还剩多少。**这一条 prefetch**——
+  # 人问"能不能加点预算"的时候，第一句话就该是"今天还剩多少"
+  - {
+      name: spend_gate_before_increase,
+      intent_terms: [加预算, 提预算, 涨预算, 加钱, 放量, increase budget, scale],
+      cue_terms: [多少, 能不能, 上限, 总闸, 还剩, budget, cap],
+      tool: read_spend_gate,
+      prefetch: true,
+    }
+  # 19：文案里说到价格、折扣、时效、保修之前先查事实卡
+  - {
+      name: facts_before_ad_copy,
+      intent_terms: [文案, 素材, 广告语, 标题, creative, copy, headline],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, price, discount, warranty, free shipping],
+      tool: search_policies,
+      prefetch: true,
+    }
+  # 边界：像素代码那件事不归我。写足意图词，54 的路由才判得到"转建站"
+  - {
+      name: pixel_code_goes_to_site,
+      intent_terms: [像素代码, 埋点, GTM, 标签管理, 主题代码, theme, script, tag],
+      cue_terms: [装, 改, 加一段, 部署, install, deploy, add],
+      tool: route_to_site_builder,
+      prefetch: false,
+    }
+
+notifications:
+  # 开花钱口子永远人审，卡压着不动 = 这次活动错过了它的时间点
+  - {
+      event: 'approval.created:stage_campaign',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+      escalate_after_hours: 8,
+    }
+  - {
+      event: 'approval.created:stage_budget_change',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 12,
+    }
+  # 04 §5 末行：日花费总闸熔断**即时通知**，而且抄送老板——这是一整个岗位的闸
+  - {
+      event: 'guardrail.hit:max_daily_spend',
+      mode: immediate,
+      recipients: [role_holder, owner],
+    }
+  # 止损是自动做的，所以做完必须有人知道（57 §1：回头出一张"已止损"卡）
+  - { event: 'ads.stop_loss_applied', mode: immediate, recipients: [role_holder] }
+  # 像素掉了：转化数会跟着掉，而那时候人多半先去怀疑广告
+  - { event: 'ads.pixel_unhealthy', mode: immediate, recipients: [role_holder] }
+  # 文案里写了承诺 / 极限词：立刻让人知道——它意味着起草那一跳写了不该写的话
+  - {
+      event: 'guardrail.hit:ad_copy_commitment',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: today_spend
+    label: { zh: "今天花了多少", en: "Today's spend" }
+    prompt: "今天四个平台一共花了多少？总闸还剩多少？哪条 campaign 花得最多"
+    kind: ask
+  - id: who_to_cut
+    label: { zh: "该关掉哪几条", en: "What should I cut" }
+    prompt: "现在有哪几条 campaign 该止损？把 ROAS、今天花了多少、占日预算多少列出来，两条判据分开说"
+    kind: ask
+  - id: raise_budget
+    label: { zh: "给跑得好的加预算", en: "Scale the winners" }
+    prompt: "把 ROAS 最好的那几条的预算提一提，超过 20% 的那些单独出卡，别撞今天的总闸"
+    kind: start_task
+  - id: attribution_gap
+    label: { zh: "两个口径差多少", en: "Attribution gap" }
+    prompt: "平台报的转化和订单表里找到的差多少？哪几条差得最离谱，是不是 UTM 没挂对"
+    kind: ask
+
+task_examples:
+  - id: stop_loss_round
+    title: { zh: "跑一轮止损", en: "Run a stop-loss pass" }
+    description: "这周有几条广告一直在花钱，不知道哪些该关。"
+    expected_output: "一张表：每条 campaign 的 ROAS、今天花了多少、占日预算多少，两条判据分开打勾；真的越线的已经自动停了并出了一张「已止损」卡，差一条判据的留着跑并写清差在哪。"
+  - id: new_campaign
+    title: { zh: "开一条新 campaign", en: "Open a new campaign" }
+    description: "新品上架，想投一轮看看。"
+    expected_output: "一张要你点的卡：预算多少、投给谁、素材是哪几版、今天的总闸还剩多少。批了之后它是「停着」建出来的——让它开始花钱是另一张卡。"
+  - id: attribution_review
+    title: { zh: "对一遍归因", en: "Reconcile attribution" }
+    description: "平台说这个月带了 120 单，财务说没看到这么多。"
+    expected_output: "一张两列并排的表（平台口径 / 订单口径），差多少算给你看但**不合并成一个数**；归不上的那些单独一块，每一条写清为什么归不上。"

@@ -421,6 +421,167 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     docs_url: 'https://developers.facebook.com/apps',
     status: 'available',
   },
+  /*
+   * WP75（57 §1）：**投放岗位那四张卡**。
+   *
+   * 与上面那条 `meta`（旧的"Meta 广告"只读数据源）的关系：那一条喂的是首页
+   * `ads` 那个数据源；这四条是**四条平台职责各自的连接**，要的是能动预算的权限。
+   *
+   * 与社媒那张 `meta_graph` 的关系（57 §1）：**分两张卡，可复用同一次授权**。
+   * 现实里同一次 OAuth 能把两边的权限一起授下来，但卡分开——这条要
+   * `ads_management`，那条要 `pages_manage_posts`。做成一张的后果是
+   * "想发个帖子"要先授权"能动广告预算"（04 §5 那条分离理由）。
+   *
+   * Meta / Google **可连**（`@agentsws/ads-core` 里有真调用），X / TikTok
+   * 照 WP64 骨架卡的老规矩标着"还没接"、点不动——每一条的 `note` 写的是
+   * **接口现实**（申请制 / developer token / Business Center 授权），
+   * 说在前面，比让人填完之后撞一堵墙强。
+   */
+  {
+    kind: 'meta_marketing',
+    name: { zh: 'Meta Marketing API（投放）', en: 'Meta Marketing API (Ads)' },
+    category: 'ads',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    service: 'meta_marketing',
+    fields: [
+      {
+        name: 'access_token',
+        label: { zh: '访问令牌', en: 'Access token' },
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: {
+          zh: '要带 `ads_management` 权限的那一把。与社媒那张卡可以是同一次授权换出来的，但权限要另加。',
+          en: 'Must carry `ads_management`. It can come from the same OAuth grant as the social card, but that scope is extra.',
+        },
+      },
+      {
+        name: 'business_id',
+        label: { zh: '商务管理平台 id', en: 'Business Manager id' },
+        secret: false,
+        required: false,
+        kind: 'text',
+        hint: {
+          zh: '填了就按商务管理平台列账户；留空就列这把 token 自己能看到的广告账户。',
+          en: 'With it we list the Business Manager’s accounts; without it, the accounts this token owns.',
+        },
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://developers.facebook.com/docs/marketing-apis',
+    status: 'available',
+    note: {
+      zh: '与社媒那张 `meta_graph` 是**两张卡**：这条要 `ads_management`（能动预算），那条要 `pages_manage_posts`（能发帖）。同一次授权可以一起授，但别把两把钥匙做成一把。',
+      en: 'Separate from the `meta_graph` social card: this one needs `ads_management`, that one `pages_manage_posts`. One grant can cover both, but they stay two keys.',
+    },
+  },
+  {
+    kind: 'google_ads',
+    name: { zh: 'Google Ads API', en: 'Google Ads API' },
+    category: 'ads',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    service: 'google_ads',
+    fields: [
+      {
+        name: 'access_token',
+        label: { zh: '访问令牌', en: 'Access token' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+      {
+        name: 'developer_token',
+        label: { zh: 'Developer token', en: 'Developer token' },
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: {
+          zh: '在 Google Ads 后台的 API Center 单独申请并过审（基础访问权限够用）。**与 OAuth 授权是两件事**——缺它的时候上游回 401，但"重新连一次"解决不了。',
+          en: 'Applied for separately in the Ads API Center. Missing it returns 401, and re-authorising will not fix that.',
+        },
+      },
+      {
+        name: 'customer_id',
+        label: { zh: '客户 id', en: 'Customer id' },
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '1234567890',
+        hint: {
+          zh: '后台右上角那串十位数字，**不带横杠**。',
+          en: 'The ten digits in the top-right of the Ads UI, without dashes.',
+        },
+      },
+      {
+        name: 'login_customer_id',
+        label: { zh: '经理账户 id', en: 'Manager (MCC) id' },
+        secret: false,
+        required: false,
+        kind: 'text',
+        hint: {
+          zh: '用 MCC 管别人的账户时填；自己管自己的留空。',
+          en: 'Only when managing accounts through an MCC.',
+        },
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://developers.google.com/google-ads/api/docs/start',
+    status: 'available',
+    note: {
+      zh: '三样东西缺一不可：OAuth 令牌、**developer token**（要单独申请过审）、客户 id。Merchant Center 的商品 feed 也归这条职责，但那一侧还没接。',
+      en: 'Three things are required: the OAuth token, a reviewed developer token, and the customer id. Merchant Center feeds belong to this role but are not wired yet.',
+    },
+  },
+  {
+    kind: 'x_ads',
+    name: { zh: 'X Ads API', en: 'X Ads API' },
+    category: 'ads',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField(
+      '批下来之后在 X 广告后台拿的那把 token',
+      'The token issued after your Ads API application is approved',
+    ),
+    side_effect: 'write_external',
+    docs_url: 'https://developer.x.com/en/docs/x-ads-api',
+    status: 'planned',
+    note: {
+      zh: '申请制：要先有广告账户、提交 Ads API 申请、说明用途、等人工审核。社媒那条买的 X API **付费档管不到这一侧**——两套授权。没接上之前排计划、攒提案、看额度照常。',
+      en: 'Application-gated and separate from the paid X API tier used by the social role. Planning and approvals work without it.',
+    },
+  },
+  {
+    kind: 'tiktok_ads',
+    name: { zh: 'TikTok Ads（Business API）', en: 'TikTok Ads (Business API)' },
+    category: 'ads',
+    auth: 'client_credentials',
+    mode: 'openconnector_provider',
+    fields: [
+      {
+        name: 'app_id',
+        label: { zh: 'App id', en: 'App id' },
+        secret: false,
+        required: true,
+        kind: 'text',
+      },
+      {
+        name: 'secret',
+        label: { zh: 'App secret', en: 'App secret' },
+        secret: true,
+        required: true,
+        kind: 'password',
+      },
+    ],
+    side_effect: 'write_external',
+    docs_url: 'https://business-api.tiktok.com/portal/docs',
+    status: 'planned',
+    note: {
+      zh: '要先在 Business Center 里把广告账户授权给一个过了审的开发者应用；与社媒那条的 Content Posting API 是**两套申请**。Spark Ads 还要有机账号那一侧再给一次授权码。',
+      en: 'Requires Business Center authorisation of a reviewed developer app, separately from the Content Posting API. Spark Ads needs one more grant from the organic account.',
+    },
+  },
   // ── 社媒与红人（48 §5.1 五条渠道）────────────────────────────────────
   {
     kind: 'youtube_data',

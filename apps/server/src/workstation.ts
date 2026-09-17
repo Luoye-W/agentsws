@@ -13,6 +13,7 @@ import type {
 } from '@agentsws/api'
 import type { ApprovalBus, ApprovalItem, Clock, ObjectRef } from '@agentsws/contracts'
 import type {
+  AdsDeckData,
   DataSourceStatus,
   DeckCard,
   InventoryRow,
@@ -62,6 +63,14 @@ export interface WorkstationDataSource {
    * "还没连"说的是渠道那八个源（一条渠道一个，连哪条亮哪条）。
    */
   social?(view?: { assignment_id?: string }): SocialDeckData | undefined
+  /**
+   * WP75（57 §3）：投放面板那几块要的行。
+   *
+   * 不给 = 这台机器上还没有投放岗位，那几块是空表。与"还没连"分得开：
+   * campaign 表与止损记录是**我们自己库里**的行，空的意思是"还没有广告账户，
+   * 先连一个平台"；"还没连"说的是四个平台那四个源（连哪个亮哪个）。
+   */
+  ads?(view?: { assignment_id?: string }): AdsDeckData | undefined
   /** 数据源连接状态（36 §3：没接的显示「去连接」而不是空图） */
   sources(): DataSourceStatus[]
   /** ObjectRef → 人话 */
@@ -165,6 +174,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const posts = options.data.posts?.(view)
       const kol = options.data.kol?.(view)
       const social = options.data.social?.(view)
+      const ads = options.data.ads?.(view)
       const thresholds = options.roles.roles.get(position.role_id)?.thresholds
       return {
         now: options.clock.now(),
@@ -182,6 +192,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(posts === undefined ? {} : { posts }),
         ...(kol === undefined ? {} : { kol }),
         ...(social === undefined ? {} : { social }),
+        ...(ads === undefined ? {} : { ads }),
         // WP63（51 §2.1）：异常卡的阈值从**职责定义**来，不硬写在积木里——
         // 什么叫"销售骤降"，卖家具的和卖快消的不是一个数
         ...(thresholds === undefined ? {} : { thresholds }),

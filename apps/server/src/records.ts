@@ -139,6 +139,8 @@ export interface ConnectRecordSourceOptions {
   kol?: () => RecordKolPort | undefined
   /** WP72（56 §2）：社媒账号与社群线程的只读面（见 {@link RecordSocialPort}）。 */
   social?: () => RecordSocialPort | undefined
+  /** WP75（57 §1）：广告账户与 campaign 的只读面（见 {@link RecordAdsPort}）。 */
+  ads?: () => RecordAdsPort | undefined
   appendEvent?: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
 }
 
@@ -218,6 +220,42 @@ export interface RecordSocialPort {
 }
 
 /** 起草要的订单事实（字段名与 support-core 的 `OrderFacts` 逐字一致，外加起草真用得上的三样）。 */
+/**
+ * WP75（57 §1）：记录源要的广告库那一面——**只读，而且只有两类**。
+ *
+ * 两类是 `ad_account`（一个独立的计费主体）与 `campaign`（一条在花钱的广告）。
+ * **没有 `pixel`**：像素与转化事件不该被塞进模型上下文——它是"投放看得见、
+ * 改不动"的那一类（改追踪代码是建站的事，04 §5 `ads.tracking`），
+ * 起草一条改预算的提案用不着它（同 `RecordKolPort` 不给联系方式的那条理由）。
+ *
+ * `spend_today` 与 `metrics` 是**拉数那一跳写回来的数**，这一层原样端出去——
+ * 不在这里现算，也不补 0（29 §1「数字不经模型手」）。
+ */
+export interface RecordAdsPort {
+  account(id: string):
+    | {
+        id: string
+        platform: string
+        name: string
+        currency: string
+        status: string
+        spend_today?: number
+        observed_at: string
+      }
+    | undefined
+  campaign(id: string):
+    | {
+        id: string
+        account_id: string
+        platform: string
+        name: string
+        status: string
+        daily_budget?: number
+        metrics?: { spend?: number; roas?: number; conversions?: number; observed_at: string }
+      }
+    | undefined
+}
+
 export interface OrderRecord {
   id: string
   name: string
@@ -955,6 +993,20 @@ export function createConnectRecordSource(
       if (thread === undefined) return undefined
       return { ...thread, account: socialPort?.account(thread.account_id) }
     }
+    /*
+     * WP75（57 §1）：广告账户与 campaign 的只读记录源。
+     *
+     * 一条 campaign 连它所在的账户一起给：判一条改预算之前要知道"这是在哪个
+     * 计费主体下面"（同一个数在两个币种的账户里不是同一笔钱）。
+     * 像素一格都不给（见 `RecordAdsPort` 的注释）。
+     */
+    const adsPort = options.ads?.()
+    if (ref.type === 'ad_account') return adsPort?.account(ref.id)
+    if (ref.type === 'campaign') {
+      const campaign = adsPort?.campaign(ref.id)
+      if (campaign === undefined) return undefined
+      return { ...campaign, account: adsPort?.account(campaign.account_id) }
+    }
     // 不认识的一律 undefined——**不编造**
     return undefined
   }
@@ -1002,6 +1054,19 @@ export function createConnectRecordSource(
       if (thread === undefined) return undefined
       const where = socialLabel?.account(thread.account_id)?.display_name ?? thread.channel
       return `${thread.author_handle}（${where}）`
+    }
+    // WP75：一个账户叫"名字（平台）"，一条 campaign 叫"名字（在哪个账户下）"——
+    // 卡面上只写一个 `cmp_xxx` 谁也认不出这是哪条在花钱的广告
+    const adsLabel = options.ads?.()
+    if (ref.type === 'ad_account') {
+      const account = adsLabel?.account(ref.id)
+      return account === undefined ? undefined : `${account.name}（${account.platform}）`
+    }
+    if (ref.type === 'campaign') {
+      const campaign = adsLabel?.campaign(ref.id)
+      if (campaign === undefined) return undefined
+      const where = adsLabel?.account(campaign.account_id)?.name ?? campaign.platform
+      return `${campaign.name}（${where}）`
     }
     return undefined
   }

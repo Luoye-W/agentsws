@@ -100,6 +100,7 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
   out.push(...wp64Highlights(item, ctx))
   out.push(...kolHighlights(item))
   out.push(...socialHighlights(item))
+  out.push(...adsHighlights(item))
   const handoff = handoffHighlight(item)
   if (handoff !== undefined) out.push(handoff)
   return out
@@ -164,6 +165,49 @@ function socialHighlights(item: ApprovalItem): DeckHighlight[] {
   if (kind === 'community_moderation') {
     const action = str(after.action_label) ?? str(after.action)
     if (action !== undefined) out.push({ type: 'stage', text: action })
+  }
+
+  return out
+}
+
+/**
+ * WP75（57 §3）：投放那**五张卡**上人最先要看的几个数。
+ *
+ * 五张卡同样不是五个新 kind（36 §2：卡是审批项的投影）——新建 campaign 卡、
+ * 预算 / 出价改动卡、已止损通知卡、素材变体卡、像素异常卡都是 `staged_change`
+ * 的投影，差别只在这几个芯片上。
+ *
+ * 一条纪律与社媒那一段逐字相同：**全部从结构化字段里取**（37 §1 第 4 行）。
+ * 平台名、总闸剩余、止损判据、新旧预算，都是提案那一跳算完写进 `after` / `notes`
+ * 的，不在这儿现算、更不由模型现编。
+ */
+function adsHighlights(item: ApprovalItem): DeckHighlight[] {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  const out: DeckHighlight[] = []
+  const kind = str(payload.kind)
+  const ADS_KINDS = ['create_campaign', 'budget_change', 'bid_change', 'pause_ad', 'creative_swap']
+  if (kind === undefined || !ADS_KINDS.includes(kind)) return out
+
+  // 这条卡对着哪个平台。四条职责的卡长得一样，这一格是唯一分得开它们的东西。
+  const platform = str(after.platform_label) ?? str(after.platform)
+  if (platform !== undefined) out.push({ type: 'platform', text: platform })
+
+  /*
+   * 总闸还剩多少——**每一张投放的卡上都有**（04 §5）。
+   *
+   * 不只放在提预算那一张上：新建一条 campaign、换一版素材，都发生在"今天还能
+   * 花多少"这个前提下。人点头之前看得见它，是这条额度纪律唯一真正生效的地方。
+   */
+  const gate = str(after.spend_gate_note)
+  if (gate !== undefined) out.push({ type: 'spend_gate', text: gate })
+
+  /*
+   * 止损卡：**判据那句话**，不是"止损"两个字（见 `HighlightType.stop_loss`）。
+   */
+  if (kind === 'pause_ad') {
+    const why = str(after.stop_loss_reason) ?? str(after.reason_label) ?? str(after.reason)
+    if (why !== undefined) out.push({ type: 'stop_loss', text: why })
   }
 
   return out

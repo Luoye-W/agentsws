@@ -34,6 +34,10 @@
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
+    "packages/roles/roles/ads/google.yml",
+    "packages/roles/roles/ads/meta.yml",
+    "packages/roles/roles/ads/tiktok.yml",
+    "packages/roles/roles/ads/x.yml",
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
@@ -60,7 +64,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "d7a7ef65e8983a74dacd1ce7a29e7e3a",
+  "source_digest": "d7ee1a139da7edb81d244a9fe849924a",
   "objects": [
     {
       "id": "ad",
@@ -69,7 +73,7 @@
       "domain": "ad_account",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -144,7 +148,28 @@
           "optional": true
         }
       ],
-      "read_via": ["ads.cpa", "ads.ctr", "ads.roas", "ads.spend", "ads.trend"],
+      "read_via": [
+        "ads.campaigns",
+        "ads.conversions.google",
+        "ads.conversions.meta",
+        "ads.conversions.tiktok",
+        "ads.conversions.x",
+        "ads.cpa",
+        "ads.ctr",
+        "ads.daily_report",
+        "ads.pending_changes",
+        "ads.pixel_health.google",
+        "ads.pixel_health.meta",
+        "ads.pixel_health.tiktok",
+        "ads.pixel_health.x",
+        "ads.roas",
+        "ads.roas_two_views",
+        "ads.spend",
+        "ads.spend_today",
+        "ads.stop_loss_count",
+        "ads.stop_loss_log",
+        "ads.trend"
+      ],
       "contract": "Ad"
     },
     {
@@ -154,7 +179,7 @@
       "domain": "ad_account",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -227,7 +252,7 @@
       "domain": "ad_account",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -2267,7 +2292,7 @@
       "domain": "pixel_event",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -3983,10 +4008,42 @@
     },
     {
       "from": "ad_account",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "ad_account",
       "to": "connection",
       "direction": "out",
       "cardinality": "one",
       "via": "connection_id",
+      "lookup": []
+    },
+    {
+      "from": "ad_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "ad_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "ad_account",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -4003,7 +4060,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "ad.ad_set_id",
-      "lookup": ["ads.cpa", "ads.ctr"]
+      "lookup": ["ads.campaigns", "ads.conversions.google"]
     },
     {
       "from": "ad_set",
@@ -4012,6 +4069,14 @@
       "cardinality": "one",
       "via": "campaign_id",
       "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "approval_item",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["meta.list_ad_accounts"]
     },
     {
       "from": "approval_item",
@@ -4315,7 +4380,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "ad.campaign_id",
-      "lookup": ["ads.cpa", "ads.ctr"]
+      "lookup": ["ads.campaigns", "ads.conversions.google"]
     },
     {
       "from": "campaign",
@@ -5271,6 +5336,22 @@
     },
     {
       "from": "staged_change",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["meta.list_ad_accounts"]
+    },
+    {
+      "from": "staged_change",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["meta.list_ad_accounts"]
+    },
+    {
+      "from": "staged_change",
       "to": "approval_item",
       "direction": "out",
       "cardinality": "one",
@@ -5860,6 +5941,14 @@
       "cardinality": "one",
       "via": "workspace_id",
       "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["meta.list_ad_accounts"]
     },
     {
       "from": "workflow_instance",
@@ -6903,6 +6992,17 @@
       "what": "notify delay"
     },
     {
+      "id": "pause_ads",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "pause ads"
+    },
+    {
       "id": "reply_buyer_message",
       "object": "customer",
       "source": "role",
@@ -6992,6 +7092,18 @@
       "what": "stage affiliate code"
     },
     {
+      "id": "stage_bid_change",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "bid_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage bid change"
+    },
+    {
       "id": "stage_broadcast",
       "object": "community_member",
       "source": "role",
@@ -7007,6 +7119,29 @@
         "social.whatsapp"
       ],
       "what": "stage broadcast"
+    },
+    {
+      "id": "stage_budget_change",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "budget_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage budget change"
+    },
+    {
+      "id": "stage_campaign",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage campaign"
     },
     {
       "id": "stage_campaign_send",
@@ -7066,6 +7201,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.fulfillment"],
       "what": "stage create fulfillment"
+    },
+    {
+      "id": "stage_creative_swap",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "creative_swap",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage creative swap"
     },
     {
       "id": "stage_deliverable_review",

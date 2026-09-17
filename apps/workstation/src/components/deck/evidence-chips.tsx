@@ -99,6 +99,11 @@ const TONE: Record<DeckHighlight['type'], string> = {
   member: 'border-border text-muted-foreground',
   // 转客服：这条不归我答。给它一个能一眼扫到的边，免得压在队列里没人接
   handoff: 'border-chart-4/50 text-foreground',
+  // WP75：平台是中性事实；**总闸**给告警色——它是"今天还能不能再花钱"那一格，
+  // 而这张卡正要花钱；止损判据给强调色：那是人真正要判的内容（不是"止损"两个字）。
+  platform: 'border-border text-muted-foreground',
+  spend_gate: 'border-destructive/50 text-destructive',
+  stop_loss: 'border-chart-1/50 text-foreground',
 }
 
 export function Highlights({

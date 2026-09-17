@@ -67,8 +67,27 @@ describe('岗位面板（36 §3 按数据源分块）', () => {
     expect(sections[1]?.label).toBe(SOURCE_LABELS.ga4)
   })
 
-  it('投放岗位是广告后台 + GA4', () => {
-    expect(assembleView('ads.meta', queryContext()).map((s) => s.source)).toEqual(['ads', 'ga4'])
+  /*
+   * WP75（57 §3）：投放岗位从"广告后台 + GA4"两块变成**三块**。
+   *
+   * 多出来的 `ads_meta` 是**这条职责自己那个平台的源**：转化数与像素健康走它，
+   * 而我们自己算出来的那几块（campaign 表、待审四车道、止损记录、日报）走 `ads`。
+   * 分两层的理由与社媒那九块逐字相同——连上 Meta 不该把 Google 的像素点亮。
+   */
+  it('投放岗位：我们自己那一块 + 这个平台自己那一块 + GA4', () => {
+    expect(assembleView('ads.meta', queryContext()).map((s) => s.source)).toEqual([
+      'ads',
+      'ads_meta',
+      'ga4',
+    ])
+    // 换一条职责就换一个平台源（四条职责的骨架相同，不同的只有这一格）
+    expect(assembleView('ads.google', queryContext()).map((s) => s.source)).toEqual([
+      'ads',
+      'ads_google',
+      'ga4',
+    ])
+    // X / TikTok 今天连不上，所以它们没有 GA4 那一块也不该有别人的平台源
+    expect(assembleView('ads.x', queryContext()).map((s) => s.source)).toEqual(['ads', 'ads_x'])
   })
 
   // WP64（51 §2.3 / §2.4）

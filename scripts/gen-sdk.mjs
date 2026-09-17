@@ -57,7 +57,19 @@ if (check && before !== json) {
 
 // openapi-typescript 是 packages/sdk 自己的 devDependency（不进根 package.json）
 const cli = join(SDK, 'node_modules/.bin/openapi-typescript')
-const generated = execFileSync(cli, [OPENAPI_JSON], { encoding: 'utf8', cwd: ROOT })
+/*
+ * WP75：`maxBuffer` 要显式给。
+ *
+ * Node 的默认值是 1 MiB，而生成出来的那份 `schema.d.ts` 已经接近 1 MB——
+ * 再加几条路由就会撞上去，而撞上去的表现是 `ENOBUFS` + `SIGTERM`：
+ * 看起来像"生成器崩了"，其实是**输出太长被截断**。给 64 MiB，
+ * 于是下一次加路由的人不会花半小时去查一个假的崩溃。
+ */
+const generated = execFileSync(cli, [OPENAPI_JSON], {
+  encoding: 'utf8',
+  cwd: ROOT,
+  maxBuffer: 64 * 1024 * 1024,
+})
 
 const banner = `/**
  * **自动生成，别手改。** 来源：\`/v1\` 的路由声明（\`packages/api/src/routes/*\`）。

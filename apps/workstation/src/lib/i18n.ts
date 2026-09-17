@@ -659,6 +659,12 @@ const zh: Table = {
   'highlight.scheduled': '发布时间',
   'highlight.member': '申请人',
   'highlight.handoff': '转给',
+  // WP75（57 §3）：投放那五张卡上的芯片。
+  // 平台那一格是四条职责的卡唯一分得开的东西；**总闸剩余每一张卡上都有**——
+  // 人点头之前要看得见今天还能花多少（04 §5）；止损那一格放的是判据不是结论。
+  'highlight.platform': '平台',
+  'highlight.spend_gate': '总闸',
+  'highlight.stop_loss': '止损判据',
   'nav.skills': '技能',
   'skills.title': '技能',
   'skills.empty': '还没有技能。装了职责包或自带技能之后，这里会列出来。',
@@ -2399,6 +2405,9 @@ const en: Table = {
   'highlight.scheduled': 'Goes out',
   'highlight.member': 'Applicant',
   'highlight.handoff': 'Hand off to',
+  'highlight.platform': 'Platform',
+  'highlight.spend_gate': 'Daily cap',
+  'highlight.stop_loss': 'Stop-loss check',
   'nav.skills': 'Skills',
   'skills.title': 'Skills',
   'skills.empty': 'No skills yet.',

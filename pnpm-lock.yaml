@@ -121,6 +121,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@agentsws/ads-core':
+        specifier: workspace:*
+        version: link:../../packages/ads-core
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api

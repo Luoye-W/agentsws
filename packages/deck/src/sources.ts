@@ -51,6 +51,26 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   discord_bot: ['social_discord'],
   telegram_bot: ['social_telegram'],
   whatsapp_business: ['social_whatsapp'],
+  // WP75（57 §1）：投放那四张卡，一张喂一个平台源。
+  // 旧的 `meta_ads` / `meta` / `googleads` 三行（上面）喂的是首页那个 `ads` 源，
+  // 不动——那是"广告后台只读"，与这四条"能动预算"的连接是两件事。
+  meta_marketing: ['ads_meta', 'ads'],
+  google_ads: ['ads_google', 'ads'],
+  x_ads: ['ads_x'],
+  tiktok_ads: ['ads_tiktok'],
+}
+
+/**
+ * WP75（57 §1）：平台 id（契约 `AdsPlatform`）→ 那个平台的数据源。
+ *
+ * 与 {@link SOCIAL_SOURCE_BY_CHANNEL} 同一条理由显式写出来、不靠字符串拼：
+ * 拼错了不会报错，只会让那一块永远显示"还没连"。
+ */
+export const ADS_SOURCE_BY_PLATFORM: Readonly<Record<string, DataSourceId>> = {
+  meta: 'ads_meta',
+  google: 'ads_google',
+  x: 'ads_x',
+  tiktok: 'ads_tiktok',
 }
 
 /**
@@ -110,6 +130,11 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'social_discord',
   'social_telegram',
   'social_whatsapp',
+  // WP75（57 §1）：四个平台各一个源
+  'ads_meta',
+  'ads_google',
+  'ads_x',
+  'ads_tiktok',
 ]
 
 /**

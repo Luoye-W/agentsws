@@ -101,6 +101,10 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+// WP75（57 §5）：广告库那一面
+export type { AdsAccountRow, AdsCampaignRow, AdsPort, AdsStagedView } from './routes/ads.js'
+export { adsRoutes } from './routes/ads.js'
+export type { AdsActor } from './routes/ads-types.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
 export type { BackupExportView, BackupPort } from './routes/backup.js'
 export { backupRoutes } from './routes/backup.js'
