@@ -752,6 +752,8 @@ export interface CalendarData {
   items: CalendarItem[]
   from: string
   to: string
+  /** 回声：这一份是按哪几个图层给的（没传 `sources` 时没有这一格） */
+  sources?: string[]
 }
 export interface TimelineData {
   events: MatterEvent[]
@@ -900,8 +902,17 @@ export const delegateTodo = (id: string, brief?: string): Promise<{ todo: Todo }
     body: brief === undefined ? {} : { brief },
   })
 
-export const getCalendar = (from: string, to: string): Promise<CalendarData> =>
-  api<CalendarData>(`/v1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+/**
+ * 日历（WP74：一个日历，多图层）。
+ *
+ * `sources` 是逗号分隔的图层名，**不传 = 全部**——日历那一页要全部，因为图层开关
+ * 旁边那个数字得把关掉的层也数出来。
+ */
+export const getCalendar = (from: string, to: string, sources?: string): Promise<CalendarData> =>
+  api<CalendarData>(
+    `/v1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+      (sources === undefined || sources === '' ? '' : `&sources=${encodeURIComponent(sources)}`),
+  )
 
 export const getTodayPlan = (): Promise<PlanData> => api<PlanData>('/v1/plans/today')
 

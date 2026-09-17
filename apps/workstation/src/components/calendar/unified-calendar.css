@@ -1,0 +1,86 @@
+/*
+ * Schedule-X 贴 shadcn 的 token（WP74）。
+ *
+ * 一条纪律：**这里只把库自己的变量接到我们的 token 上**，不写第二套颜色。
+ * Schedule-X 全部颜色都走 `--sx-color-*` 这一组变量，所以覆盖这一组就够了——
+ * 深色浅色是 `.dark` 那一层换 token 时浏览器自己算的，这个文件不需要写两遍。
+ */
+
+.sx-host {
+  min-width: 0;
+}
+
+.sx-host .sx-react-calendar-wrapper {
+  height: 100%;
+  width: 100%;
+}
+
+.sx-host .sx__calendar-wrapper {
+  height: 100%;
+  border-radius: var(--radius);
+}
+
+.sx-host {
+  --sx-color-primary: var(--primary);
+  --sx-color-on-primary: var(--primary-foreground);
+  --sx-color-primary-container: color-mix(in oklab, var(--primary) 18%, var(--card));
+  --sx-color-on-primary-container: var(--card-foreground);
+
+  --sx-color-secondary: var(--secondary);
+  --sx-color-on-secondary: var(--secondary-foreground);
+  --sx-color-secondary-container: var(--secondary);
+  --sx-color-on-secondary-container: var(--secondary-foreground);
+
+  --sx-color-surface: var(--card);
+  --sx-color-surface-dim: var(--card);
+  --sx-color-surface-bright: var(--card);
+  --sx-color-on-surface: var(--card-foreground);
+  --sx-color-surface-container: var(--card);
+  --sx-color-surface-container-low: var(--background);
+  --sx-color-surface-container-high: var(--muted);
+  --sx-color-on-surface-variant: var(--muted-foreground);
+
+  --sx-color-background: var(--background);
+  --sx-color-on-background: var(--foreground);
+  --sx-color-outline: var(--border);
+  --sx-color-outline-variant: var(--border);
+
+  --sx-color-error: var(--destructive);
+  --sx-color-on-error: var(--primary-foreground);
+  --sx-color-error-container: color-mix(in oklab, var(--destructive) 16%, var(--card));
+  --sx-color-on-error-container: var(--card-foreground);
+
+  --sx-color-neutral: var(--muted);
+  --sx-color-neutral-variant: var(--muted);
+
+  --sx-internal-color-text: var(--foreground);
+  font-family: inherit;
+}
+
+/* 工作台其余部分的字号是 13–14px，日历不该自成一格 */
+.sx-host .sx__calendar {
+  font-size: 0.8125rem;
+}
+
+/*
+ * 库自己那一条 header（Today / 前后翻页 / 视图下拉 / 日期选择器）整条藏起来：
+ * 我们在页面上已经有同样四样东西，而且是中英双语的。两条并排出现会让人不知道
+ * 该点哪一个——留一条就够，留的是我们自己那条。
+ */
+.sx-host .sx__calendar-header {
+  display: none;
+}
+
+/*
+ * 只读的那几层画成虚线框：看得出来"这一条不是你能挪的"。
+ *
+ * Schedule-X 的 DOM 上只有 `data-event-id`，没有图层名，所以认的是 id 前缀
+ * （`@agentsws/work` 那一份生成规则：`cal_<来源>_<id>`）。
+ */
+.sx-host .sx__event[data-event-id^="cal_deliverable_"],
+.sx-host .sx__event[data-event-id^="cal_standby_"],
+.sx-host .sx__event[data-event-id^="cal_card_"],
+.sx-host .sx__event[data-event-id^="cal_task_"] {
+  border-style: dashed;
+  opacity: 0.85;
+}
