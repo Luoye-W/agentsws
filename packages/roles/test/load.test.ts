@@ -207,6 +207,9 @@ describe('loadPosition (05 §2)', () => {
       'stage_publish_theme',
       'stage_review_reply',
       'stage_review_invite',
+      // WP76（58 §1）：向设计岗下需求单。**独立段落加在末尾**，
+      // 上面十一条一行没动（店铺要图的时候不用人再去设计岗手动开一件事）。
+      'request_design',
     ])
     const caps = (id: string): Record<string, unknown> =>
       role.actions.find((a) => a.id === id)?.mandate.caps ?? {}

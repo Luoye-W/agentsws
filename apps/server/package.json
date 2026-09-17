@@ -36,6 +36,7 @@
     "@agentsws/kernel": "workspace:*",
     "@agentsws/knowledge": "workspace:*",
     "@agentsws/kol-core": "workspace:*",
+    "@agentsws/design-core": "workspace:*",
     "@agentsws/social-core": "workspace:*",
     "@agentsws/learning": "workspace:*",
     "@agentsws/meetings": "workspace:*",

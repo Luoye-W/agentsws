@@ -37,6 +37,11 @@
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
+    "packages/roles/roles/design/ads.yml",
+    "packages/roles/roles/design/amazon.yml",
+    "packages/roles/roles/design/dtc.yml",
+    "packages/roles/roles/design/exhibition.yml",
+    "packages/roles/roles/design/social.yml",
     "packages/roles/roles/dtc/community-support.yml",
     "packages/roles/roles/dtc/content.yml",
     "packages/roles/roles/dtc/email-marketing.yml",
@@ -60,7 +65,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "6a1f160713b1209227d919d63cbd9ce0",
+  "source_digest": "eac51ed49b37bdb4cabb673a1e2a037c",
   "objects": [
     {
       "id": "ad_set",
@@ -1093,7 +1098,7 @@
       "domain": "design_asset",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1202,7 +1207,7 @@
       "domain": "design_brief",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1293,7 +1298,7 @@
       "domain": "design_request",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1386,7 +1391,7 @@
           "optional": true
         }
       ],
-      "read_via": [],
+      "read_via": ["list_design_requests"],
       "contract": "DesignRequest"
     },
     {
@@ -4045,6 +4050,30 @@
     },
     {
       "from": "approval_item",
+      "to": "design_asset",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "design_brief",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "design_request",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_design_requests"]
+    },
+    {
+      "from": "approval_item",
       "to": "discount",
       "direction": "out",
       "cardinality": "one",
@@ -4613,10 +4642,74 @@
     },
     {
       "from": "design_asset",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "design_asset",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "design_asset",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "design_asset",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "design_asset",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "design_brief",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "design_brief",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "design_brief",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "design_brief",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -4629,10 +4722,42 @@
     },
     {
       "from": "design_request",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "design_request",
       "to": "matter",
       "direction": "out",
       "cardinality": "one",
       "via": "matter_id",
+      "lookup": []
+    },
+    {
+      "from": "design_request",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "design_request",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "design_request",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -4777,7 +4902,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "design_request.matter_id",
-      "lookup": []
+      "lookup": ["list_design_requests"]
     },
     {
       "from": "matter",
@@ -5397,6 +5522,54 @@
     },
     {
       "from": "staged_change",
+      "to": "design_asset",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "design_asset",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "design_brief",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "design_brief",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "design_request",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_design_requests"]
+    },
+    {
+      "from": "staged_change",
+      "to": "design_request",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_design_requests"]
+    },
+    {
+      "from": "staged_change",
       "to": "discount",
       "direction": "out",
       "cardinality": "one",
@@ -5901,6 +6074,30 @@
     },
     {
       "from": "workflow_instance",
+      "to": "design_asset",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "design_brief",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "design_request",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_design_requests"]
+    },
+    {
+      "from": "workflow_instance",
       "to": "discount",
       "direction": "out",
       "cardinality": "one",
@@ -6049,7 +6246,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "design_request.workspace_id",
-      "lookup": []
+      "lookup": ["list_design_requests"]
     },
     {
       "from": "workspace",
@@ -6824,6 +7021,28 @@
       "what": "改工作区策略"
     },
     {
+      "id": "draft_brief",
+      "object": "design_brief",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["design.ads", "design.amazon", "design.dtc", "design.exhibition", "design.social"],
+      "what": "draft brief"
+    },
+    {
+      "id": "generate_variants",
+      "object": "design_asset",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["design.ads", "design.amazon", "design.dtc", "design.exhibition", "design.social"],
+      "what": "generate variants"
+    },
+    {
       "id": "grant_assignment",
       "object": "policy",
       "source": "role",
@@ -6942,6 +7161,17 @@
       "what": "reply thread"
     },
     {
+      "id": "request_design",
+      "object": "design_request",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["dtc.store", "kol.youtube", "social.meta"],
+      "what": "request design"
+    },
+    {
       "id": "stage_address_change",
       "object": "order",
       "source": "role",
@@ -6963,6 +7193,17 @@
       "route_to": "scope_manager",
       "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
       "what": "stage affiliate code"
+    },
+    {
+      "id": "stage_asset",
+      "object": "design_asset",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["design.ads", "design.amazon", "design.dtc", "design.exhibition", "design.social"],
+      "what": "stage asset"
     },
     {
       "id": "stage_broadcast",

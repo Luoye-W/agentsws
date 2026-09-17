@@ -90,6 +90,17 @@ const SOURCE_AUTHZ = {
   social_discord: { domain: 'social_account', range: 'assigned' },
   social_telegram: { domain: 'social_account', range: 'assigned' },
   social_whatsapp: { domain: 'social_account', range: 'assigned' },
+  /*
+   * WP76（58 §3）：设计那一个源。
+   *
+   * 挂 `design_request` 域，理由与上面两组同一条：五块是**同一条职责的同一个
+   * 面板**，而 `design_request` 是那三个域里最根的一个——没有需求单，
+   * brief 与素材一格都指不到事。
+   *
+   * 下需求单的岗位（网站运营 / 社媒 / 红人）的 scopes 里也有 `design_request`，
+   * 但它们的面板上没有这几块积木（`blocksForRole` 里没给），所以不会串。
+   */
+  design: { domain: 'design_request', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

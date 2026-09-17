@@ -18,6 +18,7 @@ import type {
   CloudPort,
   ConnectionDirectoryPort,
   ConnectionsPort,
+  DesignPort,
   KolPort,
   ModelDefaultsView,
   ModelsPort,
@@ -284,6 +285,14 @@ export function brandSocialPort(
   make: (workspace_id: WorkspaceId) => Promise<SocialPort>,
 ): SocialPort {
   return scopedPort<SocialPort>(make, () => brands.bootstrap)
+}
+
+/** WP76（58 §5）：设计库 `/v1/design/*`——一个品牌一张库、一段 blob 前缀。 */
+export function brandDesignPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<DesignPort>,
+): DesignPort {
+  return scopedPort<DesignPort>(make, () => brands.bootstrap)
 }
 
 export function brandKolPort(

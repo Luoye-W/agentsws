@@ -167,6 +167,22 @@ actions:
     kind: staged_change
     mandate: { caps: { max_review_invites_per_day: 50 }, window: { max_count: 50, per: day } }
     route_to: scope_manager
+  # ── WP76（58 §1）：向设计岗下需求单 ──────────────────────────────────
+  # 这一条与上面每一条都无关，是**新加的独立段落**：它不改这条职责的任何
+  # 既有行为，只多一个出口——店铺要图的时候，不用人再去设计岗手动开一件事（`design.dtc`）。
+  #
+  # 动作 = 开一件事并按 54 路由到**设计岗**（不是直接指定哪条设计职责：
+  # 该走五条里的哪一条由设计岗自己的意图词判，54 §2）。
+  # ChangeKind 是 `design_request`，**L3 自动**——它不出图、不花钱、
+  # 不对外发一个字，下错了设计岗那边关掉就是了。
+  - id: request_design
+    target: design_request
+    kind: staged_change
+    mandate:
+      caps: { max_design_requests_per_day: 5 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    route_to: role_holder
 
 automation:
   # 文案 L2（51 §2.1）
@@ -235,6 +251,14 @@ automation:
     initial: L2
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  # ── WP76（58 §1）：向设计岗下需求单 ──────────────────────────────────
+  # L3 自动：下一张需求单不产生任何外部可见的东西。真正要人点的在设计岗
+  # 那一侧（变体 L2 出卡给人挑、入库 L1 永远人定）。
+  request_design:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [manual]
 
 # 51 §2.1 异常卡的阈值（销售骤降 / 库存断货 / 转化异常）。
 # 数字在这里而不是在代码里：什么叫"骤降"，卖家具的和卖快消的不是一个数。

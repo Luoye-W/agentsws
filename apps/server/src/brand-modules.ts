@@ -32,6 +32,7 @@ import type { ChatLane } from './chat.js'
 import type { ChatWidgetAssembly } from './chat-widget.js'
 import type { CloudAssembly } from './cloud.js'
 import type { ConnectionsAssembly } from './connections.js'
+import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { KolStore } from './kol.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
@@ -118,6 +119,23 @@ export interface BrandModuleSet {
    * 的边界，在服务进程里的落点是它。
    */
   socialService: SocialServiceAssembly
+  /**
+   * WP76（58 §5 数据面）：这个品牌的设计库（三类对象）。
+   *
+   * 与社媒库同一条纪律（本文件第 2 条）：落盘按品牌分目录，素材字节按品牌
+   * 分 blob 前缀（`design/<workspace_id>/…`）。品牌 A 的需求单、brief 与素材，
+   * 在 B 的任何路由里都读不到——一张图串了品牌等于用错了牌子的视觉。
+   */
+  design: DesignStore
+  /**
+   * WP76（58 §5）：这个品牌设计库的 `/v1` 面（端口 + 图片槽 + blob store）。
+   *
+   * 与 `design` 分成两格，理由与红人 / 社媒那两对逐字相同：库是数据，
+   * 服务是**带着模型网关、对象存储、审批总线与变更账本**的那一层。
+   * 04 §6 那条"视觉决定永远是人"在服务进程里的落点就是它——
+   * `picked_by` 由它按请求人盖，Agent 填不了。
+   */
+  designService: DesignServiceAssembly
   /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */
   socialChannels: SocialChannelsAssembly
   work: Work

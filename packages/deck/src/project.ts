@@ -100,8 +100,53 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
   out.push(...wp64Highlights(item, ctx))
   out.push(...kolHighlights(item))
   out.push(...socialHighlights(item))
+  out.push(...designHighlights(item))
   const handoff = handoffHighlight(item)
   if (handoff !== undefined) out.push(handoff)
+  return out
+}
+
+/**
+ * WP76（58 §3）：设计那**四张卡**上人最先要看的几个数。
+ *
+ * 四张卡（brief 卡 L3、变体挑选卡 L2、定稿入库卡 L1、缺品牌系统卡）同样不是
+ * 四个新 kind（36 §2：卡是审批项的投影）——它们是 `design_brief` /
+ * `design_variant` / `asset_publish` 的投影，差别只在这几个芯片上。
+ *
+ * 一条纪律：**全部从结构化字段里取**（37 §1 第 4 行）。规格名、张数、
+ * 谁点的头，都是提案那一跳写进 `after` 的，不在这儿现算、更不由模型现编。
+ *
+ * `picked_by` 那一格是 04 §6 那条纪律在界面上唯一看得见的地方：
+ * 批的人要看得出这一张**有人挑过**。没有它 guardrail 会当场 block，
+ * 所以卡面上永远不会出现一张"没人挑过的定稿卡"。
+ */
+function designHighlights(item: ApprovalItem): DeckHighlight[] {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  const out: DeckHighlight[] = []
+  const kind = str(payload.kind)
+  const DESIGN_KINDS = ['design_request', 'design_brief', 'design_variant', 'asset_publish']
+  if (kind === undefined || !DESIGN_KINDS.includes(kind)) return out
+
+  // 这张卡画在哪个规格上。五条职责的卡长得一样，这一格是分得开它们的那一个。
+  const spec = str(after.spec_label) ?? str(after.spec_id)
+  if (spec !== undefined) out.push({ type: 'spec', text: spec })
+
+  // 变体卡：这次出几张（额度 6，超了转人审——这一格是人判断的依据）
+  if (kind === 'design_variant') {
+    const n = after.n
+    if (typeof n === 'number') out.push({ type: 'variants', text: String(n) })
+    // 没有图片模型时那句人话进卡面（58 §1：没有就明说，不是"生成失败"）
+    const why = str(after.no_image_model_reason)
+    if (why !== undefined) out.push({ type: 'no_image_model', text: why })
+  }
+
+  // 入库卡：**谁点的头**。没有它 guardrail 会当场 block（`human_pick_required`）
+  if (kind === 'asset_publish') {
+    const who = str(after.picked_by_label) ?? str(after.picked_by)
+    if (who !== undefined) out.push({ type: 'picked_by', text: who })
+  }
+
   return out
 }
 

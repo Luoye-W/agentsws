@@ -84,8 +84,13 @@ export const SOCIAL_SOURCE_BY_CHANNEL: Readonly<Record<string, DataSourceId>> = 
  *
  * WP72 加进 `social`：社媒库同理（四张表，`apps/server/src/social.ts`）。
  * 内容日历上那几条是**我们自己排的**，一个平台都没连也照样在那儿摆着。
+ *
+ * WP76 加进 `design`：设计库同理（三张表，`apps/server/src/design.ts`）。
+ * 而且设计岗位**一个渠道源都没有**——出图走模型网关的图片槽（22），
+ * 那不是一条连接：连接页上根本没有一张"图片模型"的卡可以点。
+ * 所以"没有图片模型"那句话出现在变体卡上，不是一块写着"去连接"的空表。
  */
-export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social']
+export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social', 'design']
 
 /** 全部数据源，按面板里的出场顺序。 */
 export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
@@ -110,6 +115,8 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'social_discord',
   'social_telegram',
   'social_whatsapp',
+  // WP76（58 §3）：我们自己的设计库。设计岗位没有渠道源（见上面那段注释）
+  'design',
 ]
 
 /**

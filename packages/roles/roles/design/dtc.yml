@@ -1,0 +1,250 @@
+# 58 §1 设计岗位的第 1 条职责：**独立站设计**（WP76）。
+#
+# 五条职责的骨架**完全相同**（58 §1 第一句），不同的只有三样：
+# **规格表**（这条职责画在什么画布上）、**需求来源**（谁给它下单）、
+# 还有下面 `grounding` 里那一串意图词。
+#
+# # 为什么独立站单独一条而不是和 Amazon 合成"电商设计"：画布不一样
+# （首页主视觉 1920×800 与 Amazon 主图 2000 见方连比例都不同），硬规矩也不一样
+# （Amazon 主图一个字都不许有，落地页 Banner 就是靠那句话在卖）。
+# 需求来源也不同：这条的单从网站运营与建站来，那条从 Amazon 运营来。
+#
+# 纪律（04 §6 / 58 表头，Luoye 原话，五条逐字相同）：
+# **Agent 出 brief、尺寸规格、变体与初稿，视觉决定永远是人。**
+# 这一条在三个地方硬着：`stage_asset` 的 `hard_ceiling: true`、
+# `@agentsws/core` 的 `HARD_L1` 里有 `asset_publish`（yml 放宽不了）、
+# 还有 guardrail 里那条「没有 `picked_by` 就 block」——
+# **人没点「就这张」之前，什么都不算定稿**。
+#
+# 需求单不是这条职责自己发明的（54）：别的岗位的「向设计岗下需求单」动作
+# 开一件事、路由到设计岗，岗位里的 Agent 再按意图词判该走五条里的哪一条。
+# 所以下面 `description` 与 `grounding` 写不足 = 路由不到 = 这条职责收不到单。
+id: design.dtc
+version: 1.0.0
+domain: design
+name: { zh: 独立站设计, en: DTC Site Design }
+description: 独立站的视觉：首页与产品页主视觉、落地页、活动 Banner、图标。需求单从网站运营与建站来；我出 brief、尺寸、变体与初稿，**挑哪一张、用不用，永远你定**
+
+scopes:
+  # 58 §1 读的那一列：需求单、品牌系统、素材库、规格表、参考图
+  # 三个域各一把闸（契约 `DataDomain` 的注释）：下单的岗位读得到自己那张需求单
+  # 与交付回来的素材，读不到设计岗的 brief。
+  - { domain: design_request, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: design_brief, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: design_asset, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 参考图与既有素材（通用附件域；素材本身的字节在 blob store，41 §2）
+  - { domain: asset, ops: [read], range: workspace, max_sensitivity: internal }
+  # 24：品牌系统（色 / 字 / 版式 / 禁忌）是**公司层技能**，这条职责只读不编
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  # 给哪件商品做。**只读**：设计一辈子不该改一件商品
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  # 19：图上要写参数、材质、尺寸之前先查事实卡（写错一个参数，印出来一千份）
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # **空的**，而且是故意的（58 §1 连接器那一行）：
+  # 出图走模型网关的图片槽（22），那不是一条连接——它跟着工作区的模型设置走，
+  # 没有单独一张连接卡可连。Figma / Canva 在连接目录里登记为「待增加」
+  # （`figma` / `canva`，`status: 'planned'`），做出来之后在这里加一行。
+  []
+
+actions:
+  # 58 §1 写的那一列。额度写在**动作**上不写在职责上（同 51 §2.3）。
+  - id: draft_brief
+    target: design_brief
+    kind: staged_change
+    mandate:
+      # 一天 10 份（58 §6）。挡的是"把队列里两百张单一口气全变成 brief"那一下
+      # ——每一份都要烧模型的钱。
+      caps: { max_brief_per_day: 10 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 10, per: day }
+    route_to: role_holder
+  - id: generate_variants
+    target: design_asset
+    kind: staged_change
+    mandate:
+      # 58 §6 的两个数。与 `@agentsws/design-core` 的 `planGeneration` 是
+      # **同一个数的两个位置**：那边出计划的时候提前说，这边提交的时候真拦。
+      caps: { max_variants_per_brief: 6, max_generations_per_day: 30 }
+      window: { max_count: 30, per: day }
+    review_cannot_be_disabled: true
+    route_to: role_holder
+  - id: stage_asset
+    target: design_asset
+    kind: staged_change
+    mandate:
+      caps: { max_asset_publish_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    # 人点头那两格 Agent 提都不许提——提得了就等于它能自己定稿；
+    # 提示词哈希与 blob 引用同理：改了它们，这张素材的来源就对不上了（58 §1 末行）
+    protected_fields: [picked_by, picked_at, prompt_sha256, blob_uri]
+    review_cannot_be_disabled: true
+    route_to: role_holder
+
+automation:
+  # brief **L3 自动**（58 §1 上限那一列）：它不产生任何外部可见的东西，
+  # 是一段给人看的文字，看完不合适改一句就是了。
+  draft_brief:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [manual]
+  # 变体 **L2**：出卡给人挑。**升不上 L3**——"自动出图并自动用上"正是
+  # 04 §6 那条纪律要防的事。禁忌词命中由 guardrail 当场 block，不是转人审。
+  generate_variants:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [guardrail_hit, manual]
+  # 入库 **L1 永远人定**。`hard_ceiling: true` 是把 `HARD_L1` 那一条在职责这一层
+  # 也写出来——两处都说，改一处忘另一处的时候有人喊（同 56 §2 的发布）。
+  stage_asset:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  # 24：品牌系统从公司层技能取，这条职责不编（`design-core` 的 brand.ts）。
+  # 取不到就出「先设品牌系统」卡，而不是编一套默认配色。
+  - { name: brand-system, tier: open, load: always }
+
+home_blocks:
+  # 58 §3 五分块：需求单队列（按来源岗位）/ 进行中 / 待定稿 / 素材库 / 本周产出。
+  # 顺序就是一件事的顺序——面板读下来就是这条职责在干什么。
+  - {
+      id: design.dtc.requests,
+      placement: queue,
+      component: table,
+      query: design.request_queue,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: design.dtc.in_progress,
+      placement: focus,
+      component: table,
+      query: design.in_progress,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: design.dtc.awaiting_pick,
+      placement: queue,
+      component: table,
+      query: design.awaiting_pick,
+      default_order: 30,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: design.dtc.library,
+      placement: role_view,
+      component: table,
+      query: design.asset_library,
+      default_order: 40,
+      pinnable: true,
+      adaptive: false,
+    }
+  - {
+      id: design.dtc.weekly,
+      placement: role_view,
+      component: table,
+      query: design.weekly_output,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
+  # 动作 id / 数据域这五样判"这件事该走哪条"。五条设计职责的动作 id 与数据域
+  # 完全一样，所以在设计这个岗位里，**意图词就是唯一分得开它们的东西**。
+  - {
+      name: dtc_intent,
+      intent_terms: [独立站, 官网, 网站, 首页, 产品页, 落地页, 活动页, banner, 横幅, 图标, icon, hero, landing, homepage, 主题, 建站],
+      cue_terms: [改版, 上新, 活动, 促销, 视觉, 配图, 出图, 设计, 尺寸, 切图, 手机端, 桌面端],
+      tool: list_design_requests,
+      prefetch: false,
+    }
+  # 58 §2：出 brief 之前先把品牌系统取出来；没有就出「先设品牌系统」卡
+  - {
+      name: brand_system_first,
+      intent_terms: [品牌, 配色, 色, 字体, 版式, 风格, brand, palette, font, style],
+      cue_terms: [统一, 规范, 一致, 禁忌, 不许, consistent, guideline],
+      tool: get_brand_system,
+      prefetch: true,
+    }
+  # 19：图上要写参数 / 材质 / 尺寸之前先查事实卡（写错一个参数，印出来一千份）
+  - {
+      name: facts_before_copy,
+      intent_terms: [文案, 卖点, 参数, 规格, 材质, copy, spec, claim],
+      cue_terms: [容量, 重量, 尺寸, 续航, 保修, 认证, 防水, warranty, certified],
+      tool: search_policies,
+      prefetch: true,
+    }
+
+notifications:
+  # 变体卡压着不动 = 这张图错过了它要用的那一天（上新、投放、展会开幕）
+  - {
+      event: 'approval.created:generate_variants',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 12,
+    }
+  # 定稿入库永远人审，而且它是**下游在等的那一下**（上架 / 发布 / 投放 / 送印）
+  - {
+      event: 'approval.created:stage_asset',
+      mode: immediate,
+      recipients: [role_holder],
+      escalate_after_hours: 4,
+    }
+  # 禁忌词把提示词拦下来：立刻让人知道——它意味着组装那一跳写了不该写的话
+  - {
+      event: 'guardrail.hit:brand_forbidden_term',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  # 需求单过期 = 这件事没做成，不是"逾期"
+  - { event: 'design.request_overdue', mode: queue, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: hero_for_launch
+    label: { zh: "上新要一组首页图", en: "Home visuals for a launch" }
+    prompt: "下周上新，首页主视觉桌面和手机各要一张。按品牌系统来，先给我 brief 和几版初稿，我来挑"
+    kind: start_task
+  - id: banner_set
+    label: { zh: "出一组活动 Banner", en: "A set of campaign banners" }
+    prompt: "这次促销要一组 Banner。文案短一点，价格只写事实卡里有的，出四版让我挑"
+    kind: start_task
+  - id: what_is_waiting
+    label: { zh: "有哪些单等着我", en: "What is waiting on me" }
+    prompt: "现在有哪些需求单还没动、哪些在等我挑图、哪些等我定稿，分开列"
+    kind: ask
+  - id: reuse_check
+    label: { zh: "这个尺寸有现成的吗", en: "Anything reusable in this size" }
+    prompt: "素材库里这个尺寸已经定过稿的有哪些？先看看能不能改一改用，别重出一遍"
+    kind: ask
+
+task_examples:
+  - id: launch_hero
+    title: { zh: "上新的首页主视觉", en: "Home hero for a launch" }
+    description: "下周上新，首页要换一组主视觉，桌面和手机都要，还没想好怎么拍。"
+    expected_output: "一份 brief（目标 / 受众 / 一句话 / 两个尺寸 / 不许出现什么）+ 每个尺寸几版初稿摆在一张卡上；点「就这张」才入库，点「都不行再来」就说一句哪儿不对，下一轮带着改。"
+  - id: icon_set
+    title: { zh: "产品页要一套图标", en: "An icon set for the product page" }
+    description: "产品页上六个卖点各要一个图标，风格得统一。"
+    expected_output: "六个 512×512 的图标初稿，同一套风格；图标上一个字都不会有（那一行硬规矩写在规格里）。选中的入库并按用途打好标，下次直接从素材库取。"

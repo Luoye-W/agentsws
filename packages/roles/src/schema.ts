@@ -51,6 +51,12 @@ const DATA_DOMAIN = Schema.union([
   // 内容组四条读不到成员，客服的「社群管理」读得到线程、读不到成员名册。
   'community_member',
   'community_thread',
+  // WP76（58 §1）：设计那三个域，与契约的 `DataDomain` 同步。
+  // 一个域一把闸：下单的岗位读得到自己那张 `design_request` 与交付回来的
+  // `design_asset`，读不到设计岗的 `design_brief`。
+  'design_request',
+  'design_brief',
+  'design_asset',
   'review',
   'finance',
   'approval',

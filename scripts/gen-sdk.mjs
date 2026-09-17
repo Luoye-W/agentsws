@@ -57,7 +57,14 @@ if (check && before !== json) {
 
 // openapi-typescript 是 packages/sdk 自己的 devDependency（不进根 package.json）
 const cli = join(SDK, 'node_modules/.bin/openapi-typescript')
-const generated = execFileSync(cli, [OPENAPI_JSON], { encoding: 'utf8', cwd: ROOT })
+// WP76：`maxBuffer` 不是装饰。默认是 1MB，而生成出来的 `schema.ts` 在加上
+// 设计那几条路由之后刚好越过这条线，于是脚本以 ENOBUFS 死掉——报出来的错
+// 长得像 openapi-typescript 崩了，其实只是输出接不住。给一个够大的数。
+const generated = execFileSync(cli, [OPENAPI_JSON], {
+  encoding: 'utf8',
+  cwd: ROOT,
+  maxBuffer: 64 * 1024 * 1024,
+})
 
 const banner = `/**
  * **自动生成，别手改。** 来源：\`/v1\` 的路由声明（\`packages/api/src/routes/*\`）。

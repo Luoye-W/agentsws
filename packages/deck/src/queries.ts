@@ -10,7 +10,7 @@
  * GA4 / Search Console / 广告后台没接连接，一律回 `not_connected`（界面显示「去连接」而不是空图）。
  */
 import type { ApprovalItem, Iso8601 } from '@agentsws/contracts'
-import { SOCIAL_CHANNELS, socialChannelOfRole } from '@agentsws/contracts'
+import { designDutyOfRole, SOCIAL_CHANNELS, socialChannelOfRole } from '@agentsws/contracts'
 import { DeckError } from './errors.js'
 import { SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
 import type {
@@ -299,6 +299,134 @@ function ofChannel<T extends { channel: string }>(rows: readonly T[], ctx: Query
 
 /** 时刻那一列拿不到就留空串，不写"未知"——空着本身就说明了问题。 */
 const when = (iso: string | undefined): string => iso ?? ''
+
+/* ── WP76（58 §3）：设计岗位五块 ─────────────────────────────────────── */
+
+/**
+ * 五条设计职责共用**一份**投影（`designDeckData`），面板这一层各看各的那一条。
+ *
+ * 与社媒那一层逐字同理：一个人同时挂着「独立站设计」与「Amazon 设计」时，
+ * 他看到的是两个岗位视图、每个视图里五块，而不是一个视图里十块。
+ *
+ * 认不出职责（不是设计职责）就一行不出——**不是**把五条全端出来。
+ */
+function dutyOfRole(role_id: string): string | undefined {
+  return designDutyOfRole(role_id)?.id
+}
+
+function ofDuty<T extends { duty: string }>(rows: readonly T[], ctx: QueryContext): T[] {
+  const duty = dutyOfRole(ctx.role_id)
+  return duty === undefined ? [] : rows.filter((r) => r.duty === duty)
+}
+
+const DESIGN_QUERIES: QueryDef[] = [
+  {
+    name: 'design.request_queue',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'from', label: '谁下的' },
+        { key: 'title', label: '要什么' },
+        { key: 'need', label: '需求原文' },
+        { key: 'due_at', label: '什么时候要' },
+      ],
+      rows: ofDuty(ctx.design?.request_queue ?? [], ctx).map((r) => ({
+        from: r.from,
+        title: r.title,
+        // 原样截断，不改写（外部文本，21 §1）
+        need: r.excerpt,
+        // 过期的那一行把话说出来：**这件事没做成**，不是"逾期"，也不靠颜色表达
+        due_at: r.overdue ? `${when(r.due_at)}（已经过了）` : when(r.due_at),
+      })),
+    }),
+  },
+  {
+    name: 'design.in_progress',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'title', label: '要什么' },
+        { key: 'from', label: '谁下的' },
+        { key: 'status', label: '到哪一步' },
+        { key: 'progress', label: '出了几张' },
+      ],
+      rows: ofDuty(ctx.design?.in_progress ?? [], ctx).map((r) => ({
+        title: r.title,
+        from: r.from,
+        status: r.status,
+        // 「计划几张 / 出了几张」写成一格给人看，但两个数在投影里是分开的——
+        // 合成一个百分比就再也看不出"计划了六张、一张没出"与"计划三张、出了三张"
+        progress: `${r.generated} / ${r.planned}`,
+      })),
+    }),
+  },
+  {
+    name: 'design.awaiting_pick',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'stage', label: '球在谁那儿' },
+        { key: 'spec', label: '尺寸' },
+        { key: 'goal', label: '这张图要干什么' },
+        { key: 'created_at', label: '什么时候出的' },
+      ],
+      rows: ofDuty(ctx.design?.awaiting_pick ?? [], ctx).map((r) => ({
+        // 04 §6：待挑 = 等你看一眼；待定稿 = 你点过了、在等那张 L1 卡。
+        // 两句话不一样，所以不缩写成一个状态词。
+        stage: r.stage === 'waiting_pick' ? '等你挑一张' : '你挑好了，等你点入库',
+        spec: r.spec,
+        goal: r.goal ?? '',
+        created_at: r.created_at,
+      })),
+    }),
+  },
+  {
+    name: 'design.asset_library',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'use', label: '用途' },
+        { key: 'final', label: '定稿' },
+        { key: 'count', label: '一共' },
+      ],
+      // 素材库按用途分组；没打标的归「没打标」，**不藏起来**——
+      // 藏起来的结果是三个月后有人把同一张图重做一遍
+      rows: (ctx.design?.library ?? []).map((g) => ({
+        use: g.use,
+        final: g.final,
+        count: g.count,
+      })),
+    }),
+  },
+  {
+    name: 'design.weekly_output',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => {
+      const week = ctx.design?.weekly
+      return {
+        columns: [
+          { key: 'metric', label: '这一周' },
+          { key: 'value', label: '几张' },
+        ],
+        rows:
+          week === undefined
+            ? []
+            : [
+                // **产出 = 定稿**。出图张数只是分母——把它当产出的结果是
+                // 这个数永远好看，而没有一张图真的上线了。
+                { metric: '定稿（真能用的）', value: week.final },
+                { metric: '出了多少张变体', value: week.variants },
+                ...week.by_use.map((u) => ({ metric: `定稿 · ${u.use}`, value: u.count })),
+              ],
+      }
+    },
+  },
+]
 
 const SOCIAL_QUERIES: QueryDef[] = [
   {
@@ -1111,6 +1239,8 @@ const QUERY_LIST: QueryDef[] = [
     }),
   },
   ...SOCIAL_QUERIES,
+  // WP76（58 §3）：设计岗位五块
+  ...DESIGN_QUERIES,
 ]
 
 const EMPTY_SCALAR: ScalarResult = { value: 0, previous: 0, spark: [0, 0, 0, 0, 0, 0, 0] }

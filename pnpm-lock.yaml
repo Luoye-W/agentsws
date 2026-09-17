@@ -148,6 +148,9 @@ importers:
       '@agentsws/deck':
         specifier: workspace:*
         version: link:../../packages/deck
+      '@agentsws/design-core':
+        specifier: workspace:*
+        version: link:../../packages/design-core
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
