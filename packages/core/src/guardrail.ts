@@ -71,6 +71,19 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   community_broadcast: 'medium',
   community_rules: 'medium',
   community_moderation: 'medium',
+  // WP77（59 §1）：建站那六条。
+  //
+  // 装主题与装 App 按 high：前者要么花钱要么把店里的主题列表换了个样，后者是
+  // 把店里的数据交给另一家公司（两条都在 `HARD_L1` 里，所以"永远人审"这件事
+  // 不靠风险级说话）。设置批与改 App 配置按 medium——它们改的是整家店的骨架，
+  // 但做错了改得回来。邮件模板按 medium：草稿改不坏任何东西，启用那一下的门
+  // 在下面的 switch 里（按 `after.enabled` 分档）。上线检查单按 low：只读巡检。
+  store_setup: 'medium',
+  theme_install: 'high',
+  launch_check: 'low',
+  email_template_edit: 'medium',
+  app_install: 'high',
+  app_config: 'medium',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -123,7 +136,93 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    */
   'social_post',
   'community_broadcast',
+  /**
+   * WP77（59 §1 整站搭建 / 插件）：**装主题与装 / 卸 App 永远人审**。
+   *
+   * `theme_install`：装一份主题要么花钱（付费主题动辄两三百美元），要么把店里
+   * 的主题列表换成另一个样子。它与 `publish_theme` 是两件事，但两件都该由人点。
+   *
+   * `app_install`：装一个 App = 把店里的订单与客户数据交给另一家公司，而且多数
+   * 按月收钱。理由与 `kol_collaboration` 逐字相同——采纳率证明得了"挑得准"，
+   * 证明不了"这笔钱该花、这份数据该给"。卸载同理：一个正在往前台注脚本的 App
+   * 被卸掉，店面会当场少一块。
+   *
+   * 放在硬顶而不是只写在职责 yml 的 `ceiling: L1` 里：yml 可以被工作区策略放宽，
+   * 硬顶不行（15 §2）。
+   */
+  'theme_install',
+  'app_install',
 ])
+
+/**
+ * WP77（59 §1 整站搭建）：`store_setup` **碰都不许碰**的那几类字段。
+ *
+ * 51 §1 N0 / §3 N2 的那条线：**结账、支付、税不给写动作**。理由不是"还没做"，
+ * 是这三样一旦配错，顾客付不了钱或者商家少缴了税——两种后果都不是"改回来"能了结的。
+ * 它们各自早有自己的 kind（`payment_config` / `tax_config`），而这一版**没有任何
+ * 职责给得出那两条的入口**。所以这里是 `block` 而不是 `review`：不该存在
+ * "人在一张设置批的卡上顺手点了一下税率"这条路径。
+ *
+ * 匹配按**前缀**（`payment_provider` / `tax_rates` / `checkout_settings` 都算），
+ * 大小写不敏感。**只可加行**。
+ */
+export const STORE_SETUP_FORBIDDEN_FIELD_PREFIXES: readonly string[] = [
+  'checkout',
+  'payment',
+  'tax',
+  'gateway',
+  'billing',
+]
+
+/**
+ * WP77（59 §1 邮件模板）：每种 Shopify 通知邮件**必须**出现的 Liquid 变量。
+ *
+ * 为什么是 block 不是 review：一封订单确认信里没有 `order.name`，客户收到的是一封
+ * 认不出是哪一单的信；一封发货通知里没有 `fulfillment.tracking_numbers`，客户拿不到
+ * 单号还要来问客服。人在一屏审批卡上看一段 Liquid **判不出少了哪个变量**——
+ * 这件事机器判得准，那就不该让人替机器背这个锅（同 51 §2.1 邀评合规词表的理由）。
+ *
+ * 键是 Shopify 通知类型的官方 handle。表里没有的类型**不判**（新通知类型随时会加，
+ * 判不了的宁可放过也不能凭空拦下）。**只可加行**，与 `@agentsws/site-core` 的
+ * `email-templates.ts` 是**同一份**——那边 `import` 的就是这张表，不是抄一份。
+ */
+export const EMAIL_TEMPLATE_REQUIRED_VARS: Readonly<Record<string, readonly string[]>> = {
+  order_confirmation: ['order.name', 'order.order_status_url'],
+  shipping_confirmation: ['order.name', 'fulfillment.tracking_numbers'],
+  shipping_update: ['order.name', 'fulfillment.tracking_numbers'],
+  out_for_delivery: ['order.name'],
+  order_cancelled: ['order.name'],
+  order_refund: ['order.name', 'refund.amount'],
+  abandoned_checkout: ['checkout.url'],
+  customer_account_activation: ['customer.account_activation_url'],
+  customer_account_password_reset: ['customer.reset_password_url'],
+  gift_card_created: ['gift_card.code'],
+  pos_and_mobile_receipt: ['order.name'],
+}
+
+/** Liquid 正文里出现的变量名（`{{ order.name }}` / `{{ order.name | upcase }}` 都算）。 */
+export function liquidVariables(body: string): string[] {
+  const out = new Set<string>()
+  for (const m of body.matchAll(/\{\{-?\s*([^}|]+?)\s*(?:\|[^}]*)?-?\}\}/g)) {
+    const raw = (m[1] ?? '').trim()
+    if (raw !== '') out.add(raw)
+  }
+  return [...out]
+}
+
+/**
+ * 这份 Liquid 正文缺了哪几个必需变量（按通知类型）。表里没有的类型回空数组。
+ *
+ * 判"出现过"而不是"整串相等"：`{{ order.name }}` 与
+ * `{% if order.name %}…{{ order.name }}{% endif %}` 都算写了，
+ * 而 `{{ order.name_was_here }}` 不算——所以比的是变量名本身，不是子串。
+ */
+export function missingEmailTemplateVars(notification_type: string, body: string): string[] {
+  const required = EMAIL_TEMPLATE_REQUIRED_VARS[notification_type]
+  if (required === undefined) return []
+  const present = new Set(liquidVariables(body))
+  return required.filter((name) => !present.has(name))
+}
 /**
  * 44 G2：这些变更的**目标是一件具体商品**，于是"目标在不在我管的范围里"这句话才有意义。
  *
@@ -876,6 +975,100 @@ export function evaluateGuardrail(
       const cap = capNumber(mandate, 'max_moderations_per_day')
       if (cap !== undefined && facts.windowCount + 1 > cap)
         review('max_moderations_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP77（59 §1 整站搭建）：一批店铺基础设置。L2 + 一道硬闸。
+     *
+     * 硬闸是 51 §1 N0 / §3 N2 那条线：**结账 / 支付 / 税不给写动作**。
+     * 名单在 {@link STORE_SETUP_FORBIDDEN_FIELD_PREFIXES}，命中就 block——
+     * 不给"人在一张设置批的卡上顺手点了一下税率"这条路径。
+     */
+    case 'store_setup': {
+      const forbidden = (name: string): boolean =>
+        STORE_SETUP_FORBIDDEN_FIELD_PREFIXES.some((p) => name.toLowerCase().startsWith(p))
+      if (change.field !== undefined && forbidden(change.field))
+        block('store_setup_no_checkout_payment_tax', 'checkout|payment|tax', change.field)
+      for (const key of Object.keys(after))
+        if (forbidden(key))
+          block('store_setup_no_checkout_payment_tax', 'checkout|payment|tax', key)
+      const cap = capNumber(mandate, 'max_setup_batches_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_setup_batches_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP77（59 §1 整站搭建）：装一个主题。永远人审（`HARD_L1`）。
+     *
+     * 这里只补一条事实判断：装哪一份主题得说得出名字 / id——一张写着"装一个主题"
+     * 却说不出装的是哪一份的卡，人点不下去。
+     */
+    case 'theme_install': {
+      const named =
+        (typeof after.theme_name === 'string' && after.theme_name.trim() !== '') ||
+        (typeof after.theme_id === 'string' && after.theme_id.trim() !== '')
+      if (!named) block('theme_install_target_required', 'theme_name|theme_id', 'missing')
+      break
+    }
+    /**
+     * WP77（59 §1 整站搭建）：跑一次上线检查单。L3——它什么都不改。
+     *
+     * 唯一的判断是"这次巡检真跑了没有"：一张 `items` 为空的检查单卡，看起来像
+     * "全都过了"，其实是"一项都没查"。两者在界面上长得一样，所以在这里分开。
+     */
+    case 'launch_check': {
+      const items = Array.isArray(after.items) ? after.items.length : num(after.checked)
+      if (items === undefined || items === 0) block('launch_check_empty', '>=1', items ?? 'missing')
+      break
+    }
+    /**
+     * WP77（59 §1 邮件模板）：通知邮件模板。**草稿 L2，启用 L1** + 一道硬闸。
+     *
+     * 分档照 `publish_post` 的老办法（按 `after.enabled`）而不是进 `HARD_L1`：
+     * 进硬顶的话连草稿都自动不了，而躺在后台的草稿改不坏任何东西。
+     * 启用那一下不一样——发错模板不是发给一个人，是发给**之后每一个**下单的客户。
+     *
+     * 硬闸是缺变量（{@link EMAIL_TEMPLATE_REQUIRED_VARS}）：block 不是 review，
+     * 理由与邀评合规词表逐字相同——人在一屏卡上看一段 Liquid 判不出少了哪个变量。
+     */
+    case 'email_template_edit': {
+      const type = typeof after.notification_type === 'string' ? after.notification_type : ''
+      const body = typeof after.body === 'string' ? after.body : ''
+      if (type === '') block('email_template_type_required', 'notification_type', 'missing')
+      else {
+        const missing = missingEmailTemplateVars(type, body)
+        if (missing.length > 0)
+          block(
+            'email_template_missing_variable',
+            (EMAIL_TEMPLATE_REQUIRED_VARS[type] ?? []).join(','),
+            missing.join(','),
+          )
+      }
+      if (after.enabled === true) review('email_template_enable_needs_review', 'L1', 'enabled')
+      const cap = capNumber(mandate, 'max_template_edits_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_template_edits_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP77（59 §1 插件）：装 / 卸 App（永远人审）与改 App 配置（L2）。
+     *
+     * 两条共用一条额度（`max_app_changes_per_day`）：在店主那里"今天动了几次插件"
+     * 就是一个数，拆成两个数只会让他要在两处各看一眼。
+     */
+    case 'app_install':
+    case 'app_config': {
+      const appId = typeof after.app_id === 'string' ? after.app_id.trim() : ''
+      if (appId === '') block('app_id_required', 'app_id', 'missing')
+      if (change.kind === 'app_install') {
+        const op = typeof after.operation === 'string' ? after.operation : ''
+        const allowed = ['install', 'uninstall']
+        if (!allowed.includes(op))
+          block('app_operation_required', allowed.join('|'), op || 'missing')
+      }
+      const cap = capNumber(mandate, 'max_app_changes_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_app_changes_per_day', cap, facts.windowCount + 1)
       break
     }
     case 'bid_change':

@@ -37,6 +37,10 @@ export type ShopifyTargetType =
   | 'page'
   | 'article'
   | 'store_config'
+  // WP77（59 §1）：建站那一侧新加的三类目标
+  | 'email_template'
+  | 'shop_app'
+  | 'launch_item'
 
 export interface ShopifyWriteAction {
   /** OpenConnector 目录里的 Action id（`shopify_admin.` 开头）。 */
@@ -325,6 +329,96 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     target: 'article',
     graphql: 'articleUpdate',
     what: '改一篇博客文章（含把草稿翻成已发布——那一下就是 51 §2.2 里说的"发布 L1"）',
+  },
+  // ── 建站：店铺设置、导航、主题安装（WP77 / 59 §1 整站搭建）──────────
+  //
+  // 结账 / 支付 / 税的写口**故意一条都没有**（51 §1 N0 / §3 N2）：Shopify 那头
+  // 要么没给，要么给了也不该给 Agent。guardrail 里还有第二道（`store_setup`
+  // 碰到这几类字段直接 block）——两道都要，因为这张表管的是"有没有入口"，
+  // guardrail 管的是"提案里有没有夹带"。
+  {
+    action_id: 'shopify_admin.update_shop_settings',
+    change_kind: 'store_setup',
+    target: 'store_config',
+    graphql: 'shopUpdate（店铺名、联系邮箱、地址、单位）',
+    what: '改店铺的基础信息（不含结账 / 支付 / 税——那三样没有入口）',
+  },
+  {
+    action_id: 'shopify_admin.update_menu',
+    change_kind: 'store_setup',
+    target: 'store_config',
+    graphql: 'menuUpdate',
+    what: '改一条导航菜单（主菜单、页脚菜单）',
+  },
+  {
+    action_id: 'shopify_admin.create_menu',
+    change_kind: 'store_setup',
+    target: 'store_config',
+    graphql: 'menuCreate',
+    what: '新建一条导航菜单',
+  },
+  {
+    action_id: 'shopify_admin.update_shop_policy',
+    change_kind: 'store_setup',
+    target: 'store_config',
+    graphql: 'shopPolicyUpdate',
+    what: '改政策页正文（退换货、隐私、服务条款）——上线检查单上的必备项之一',
+  },
+  {
+    action_id: 'shopify_admin.install_theme',
+    change_kind: 'theme_install',
+    target: 'theme',
+    graphql: 'themeCreate（source 指向主题包；付费主题走后台购买流程）',
+    what: '把一份新主题装进店里。**永远 L1**——要么花钱，要么把主题列表换了个样',
+  },
+  {
+    action_id: 'shopify_admin.update_payment_settings',
+    target: 'store_config',
+    graphql: '（Admin API 未提供；后台手工）',
+    what: '改支付方式与收款账户',
+    not_stageable:
+      '51 §1 N0 / §3 N2：**结账 / 支付 / 税不给写动作**。配错了顾客付不了钱，' +
+      '而这不是"改回来"能了结的。目录里的 `payment_config` 这一版没有任何职责给得出入口——' +
+      '要改请店主自己去后台点。',
+  },
+  {
+    action_id: 'shopify_admin.update_tax_settings',
+    target: 'store_config',
+    graphql: '（Admin API 未提供；后台手工）',
+    what: '改税率与征税规则',
+    not_stageable:
+      '同上一条（51 §3 N2）。少缴的税是商家自己扛，这件事不该有一条' +
+      '"Agent 提、人点一下"的路径。目录里的 `tax_config` 这一版同样没有入口。',
+  },
+  // ── 建站：邮件模板（WP77 / 59 §1）────────────────────────────────────
+  {
+    action_id: 'shopify_admin.update_email_template',
+    change_kind: 'email_template_edit',
+    target: 'email_template',
+    graphql: '（通知模板走 Admin 后台 / Theme CLI 的 notifications 目录）',
+    what: '改一份通知邮件模板的 Liquid 正文。`after.enabled: false` 是草稿（L2），`true` 是启用（L1）',
+  },
+  // ── 建站：插件（WP77 / 59 §1）────────────────────────────────────────
+  {
+    action_id: 'shopify_admin.install_app',
+    change_kind: 'app_install',
+    target: 'shop_app',
+    graphql: '（App 安装走 OAuth 授权页，不是一条 mutation）',
+    what: '给店里装一个第三方 App。**永远 L1**——把店里的数据交给另一家公司，多数还按月收钱',
+  },
+  {
+    action_id: 'shopify_admin.uninstall_app',
+    change_kind: 'app_install',
+    target: 'shop_app',
+    graphql: 'appUninstall',
+    what: '卸掉一个已装 App（`after.operation: uninstall`）。同样永远 L1——前台会当场少一块',
+  },
+  {
+    action_id: 'shopify_admin.update_app_config',
+    change_kind: 'app_config',
+    target: 'shop_app',
+    graphql: '（各家 App 自己的设置口；元字段的那部分走 metafieldsSet）',
+    what: '改一个已装 App 的配置参数。L2——做错了改回来就是了',
   },
   // ── 评价（WP63 / 51 §2.1 评价管理）───────────────────────────────────
   //

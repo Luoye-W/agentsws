@@ -193,6 +193,12 @@ const OBJECT_DOMAIN = {
   // WP69（54 §1）：岗位实体与 assignment / person 一样是**制度层**的东西 —— 归 policy。
   // 它没有自己的数据域：岗位没有任何权限，权限一律在职责那一条分配上（05 §4）。
   position: 'policy',
+  // WP77（59 §1）：建站那一侧新写进契约的三类。
+  // 通知邮件模板是一份 Liquid 正文 —— 与主题、页面、文章同一个域（content）；
+  // 已装 App 与上线检查单上的一格说的都是"这家店现在是什么样"，归 store_config。
+  email_template: 'content',
+  shop_app: 'store_config',
+  launch_item: 'store_config',
 }
 const domainOf = (id) => {
   const d = OBJECT_DOMAIN[id] ?? (DATA_DOMAINS.has(id) ? id : undefined)
