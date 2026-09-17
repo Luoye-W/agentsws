@@ -32,6 +32,7 @@ import {
   claimOf,
   createWork,
   DAY_MS,
+  type DeliverableLike,
   ms,
   type PoolItem,
   planSummary,
@@ -42,6 +43,8 @@ import {
   reviewSummary,
   reviewTitle,
   type ScheduledTaskLike,
+  type SocialPostLike,
+  type StandbyRenewalLike,
   type Work,
 } from '@agentsws/work'
 
@@ -88,6 +91,17 @@ export interface WorkPortOptions {
   label(ref: { type: string; id: string }): string | undefined
   /** 25 的定时任务；不给就是没有 */
   scheduledTasks?(actor: WorkActor): ScheduledTaskLike[]
+  /**
+   * WP74 的三条新图层（37 §2.5）。三条都是 `?`：不给就是这个部署没有那一摊东西，
+   * 日历少一层而已，别的照常。
+   *
+   * 品牌隔离由**调用方**负责：这三个回调是在 `workPortFor(ws)` 里按品牌闭包起来的，
+   * 所以这一层拿到的永远只是这个品牌自己那一份（社媒帖子尤其——56 §2 一个号只属于一个品牌）。
+   */
+  socialPosts?(actor: WorkActor): SocialPostLike[]
+  kolDeliverables?(actor: WorkActor): DeliverableLike[]
+  /** 值守续期日；一个工作区最多一条，没开通值守就是空 */
+  standbyRenewals?(actor: WorkActor): StandbyRenewalLike[]
   /** WP23 的会议；不给就是没有（会议上日历，37 §2 表第三行） */
   meetings?(
     actor: WorkActor,
@@ -184,6 +198,11 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     cards: cards.filter((i) => WAITING_STATES.has(i.state)),
     ...(options.scheduledTasks === undefined ? {} : { tasks: options.scheduledTasks(actor) }),
     ...(options.meetings === undefined ? {} : { meetings: await options.meetings(actor, range) }),
+    ...(options.socialPosts === undefined ? {} : { social_posts: options.socialPosts(actor) }),
+    ...(options.kolDeliverables === undefined
+      ? {}
+      : { deliverables: options.kolDeliverables(actor) }),
+    ...(options.standbyRenewals === undefined ? {} : { standby: options.standbyRenewals(actor) }),
   })
 
   const runnerFor = (cards: readonly ApprovalItem[]): QueryRunner =>

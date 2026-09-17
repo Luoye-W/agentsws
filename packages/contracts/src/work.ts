@@ -8,7 +8,8 @@
  * - **待办** {@link Todo}：人的承诺，指向事项某处的一条**指针**（`matter_id` + `anchor`）。
  *   它自己不装上下文——上下文在事项里。
  * - **卡片** = 14 的审批项：事项里 Agent 回头问人的一句话，也只是指向事项的指针。
- * - **日历** {@link CalendarItem}：时间索引的**视图 + 排期面**，不是对象；四类来源合并成一份。
+ * - **日历** {@link CalendarItem}：时间索引的**视图 + 排期面**，不是对象；
+ *   **一个日历，多图层**（WP74）：七类来源合并成一份，开关在界面上（{@link CalendarSource}）。
  *
  * 加上 {@link Goal}（目标，指标复用 29 命名查询）、{@link DailyPlan}（早上的建议）、
  * {@link Review}（晚上的复盘），就是 37 §2.4 的每日循环。
@@ -241,8 +242,48 @@ export interface Todo {
 
 // ── 日历（37 §2 表 + C3）───────────────────────────────────────────────
 
-/** 四类来源：会议、有排期的待办、定时任务（25）、卡片到期（叠层可关）。 */
-export type CalendarSource = 'meeting' | 'todo' | 'scheduled_task' | 'card_due'
+/**
+ * 日历的来源（= 图层）。WP74：**一个日历，多图层**——不是"再开一个日历"。
+ *
+ * 前四条是 37 §2 表里那四类：会议、有排期的待办、定时任务（25）、卡片到期（叠层可关）。
+ * 后三条是 WP74 加的，加的理由都一样：它们**本来就有时间**，却只在各自那一页里能看到，
+ * 于是"这周四晚上到底堆了多少事"没有任何一屏答得出来。
+ *
+ * - `social_post` 社媒排期（56 §2 的 `SocialPost.scheduled_at`）
+ * - `kol_deliverable` 红人交付物到期（`Deliverable.due_at`）
+ * - `standby` 在线值守的续期日（`StandbyWorkspace.period_end`）
+ *
+ * **只加不删**：老的四条一个字没动，不传 {@link CalendarRange.sources} 时的行为与以前逐条相同。
+ */
+export type CalendarSource =
+  | 'meeting'
+  | 'todo'
+  | 'scheduled_task'
+  | 'card_due'
+  | 'social_post'
+  | 'kol_deliverable'
+  | 'standby'
+
+/** 全部图层，按界面上从上到下的顺序（图层开关那一列照这个排）。 */
+export const CALENDAR_SOURCES: readonly CalendarSource[] = [
+  'todo',
+  'meeting',
+  'social_post',
+  'kol_deliverable',
+  'scheduled_task',
+  'card_due',
+  'standby',
+] as const
+
+/**
+ * 这一条**能不能拖**，以及拖了之后走哪条路（WP74）。
+ *
+ * 判据在服务端给，不在界面上猜：界面只认这三个词。
+ * - `reschedule` 拖了直接改（待办排期、社媒排期）
+ * - `propose` 拖了**不改**，出一张"改时间"卡请对方点头（会议走秘书那条约时间）
+ * - `readonly` 拖不动，回弹并说为什么（交付物、值守、卡片到期、定时任务）
+ */
+export type CalendarDragMode = 'reschedule' | 'propose' | 'readonly'
 
 export interface CalendarItem {
   id: string
@@ -258,6 +299,17 @@ export interface CalendarItem {
   matter_id?: MatterId
   /** 各来源自己的状态（待办 status、审批项 state……），只用于着色 */
   status?: string
+  /** 社媒排期的渠道（`meta` / `tiktok`…）：同一图层里按渠道分色用，别的来源没有这一格 */
+  channel?: string
+  /**
+   * 服务端算好的提示行（社媒排期的撞车说明就走这里）。
+   *
+   * 界面**一条判据都不自己写**（WP73 纪律 1）：格子上那个 ⚠ 与它的说明来自这里，
+   * 否则迟早与卡面上那句话对不上。
+   */
+  notes?: string[]
+  /** 拖拽语义（WP74）。缺省按 `readonly` 读——不知道怎么改的东西不该被拖动。 */
+  drag?: CalendarDragMode
 }
 
 export interface CalendarRange {
@@ -266,6 +318,12 @@ export interface CalendarRange {
   to: Iso8601
   /** 关掉「卡片到期」叠层 */
   include_card_due?: boolean
+  /**
+   * 只要这几个图层（WP74）。**不传 = 全部**——老调用方一个字不用改。
+   *
+   * 传空数组与不传不是一回事：空数组 = 一个图层都不开 = 一条都不回。
+   */
+  sources?: readonly CalendarSource[]
 }
 
 // ── 每日计划（37 §2.4 早上）────────────────────────────────────────────

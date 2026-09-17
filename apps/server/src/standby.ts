@@ -26,7 +26,14 @@ import type {
   StandbySwitchView,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
-import type { Clock, StandbyLocalView, StandbyWorkspace, WorkspaceId } from '@agentsws/contracts'
+import type {
+  Clock,
+  Iso8601,
+  StandbyLocalView,
+  StandbyStatus,
+  StandbyWorkspace,
+  WorkspaceId,
+} from '@agentsws/contracts'
 import { backupDirOf, exportWorkspace } from './backup.js'
 import { cloudBaseUrl } from './cloud.js'
 import { CLOUD_TOKEN_SECRET_ID } from './models.js'
@@ -73,6 +80,23 @@ export interface StandbyOptions {
 
 export interface StandbyAssembly {
   port: StandbyPort
+  /**
+   * WP74：续期日上日历（图层 `standby`）。
+   *
+   * **只回最近一次真的从云上读到的那一份**，一个字节的网络都不打。日历那一屏
+   * 每翻一页都会问一次来源，而值守状态在云上——在那条路上加一次带令牌的 HTTP
+   * 请求，等于把一个"看看这周有什么"的动作变成会超时的动作。没读到过就没有，
+   * 界面上那一层空着；打开一次"设置 → 在线值守"它就有了。
+   */
+  renewal(): StandbyRenewal | undefined
+}
+
+/** 值守续期日那一条（{@link StandbyAssembly.renewal}）。 */
+export interface StandbyRenewal {
+  workspace_id: WorkspaceId
+  status: StandbyStatus
+  period_end: Iso8601
+  seats: number
 }
 
 /** `https://<云>/w/<ws>`：桌面壳与 widget 都指这个。 */
@@ -195,6 +219,18 @@ export function createStandby(options: StandbyOptions): StandbyAssembly {
     }
   }
 
+  /** 最近一次真的读到的云上那一份（WP74 的续期日图层从它取；不打网络）。 */
+  let lastKnown: StandbyRenewal | undefined
+
+  const remember = (view: StandbyWorkspace): void => {
+    lastKnown = {
+      workspace_id: view.workspace_id,
+      status: view.status,
+      period_end: view.period_end,
+      seats: view.seats,
+    }
+  }
+
   const port: StandbyPort = {
     async view(_actor: StandbyActor): Promise<StandbyLocalView> {
       const remote_url = options.remoteUrl?.()
@@ -206,6 +242,7 @@ export function createStandby(options: StandbyOptions): StandbyAssembly {
           remote: false,
         }
       const [cloud, seat_price] = await Promise.all([cloudView(token), seatPrice(token)])
+      if (cloud !== undefined) remember(cloud)
       /*
        * `remote_url` 与 `remote` 是两件事：前者是"桌面壳该指到哪儿"，后者是
        * "这台电脑现在是不是已经指过去了"。合成一格的话，还没切过去的人就看不到
@@ -248,6 +285,7 @@ export function createStandby(options: StandbyOptions): StandbyAssembly {
       })
       if (!res.ok) await humanize(res, '云上没能开起来。')
       const view = (await res.json()) as StandbyWorkspace
+      remember(view)
       return {
         status: view.status,
         remote_url: publicUrlOf(base, workspace_id),
@@ -285,6 +323,8 @@ export function createStandby(options: StandbyOptions): StandbyAssembly {
         token,
       })
 
+      // 接回本机了就没有"下一次续期"这回事——那一层该当场空掉，不是继续画一个过时的日子
+      if (stop.ok) lastKnown = undefined
       return {
         out,
         bytes: buffer.byteLength,
@@ -297,5 +337,5 @@ export function createStandby(options: StandbyOptions): StandbyAssembly {
     },
   }
 
-  return { port }
+  return { port, renewal: () => lastKnown }
 }

@@ -8,16 +8,16 @@
  * 硬约束照旧：**首页无图表无表格**（36 §5.2），数字全从服务端来（29 原则 ③），
  * 没有全局聊天框（对话只在卡片指导、问 AI、⌘K、事项页四处）。
  */
-import type { CalendarItem, GoalProgress, Todo } from '@agentsws/contracts'
+import type { CalendarItem, CalendarSource, GoalProgress, Todo } from '@agentsws/contracts'
 import type { RangeName } from '@agentsws/deck'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  AlarmClock,
   CalendarDays,
   CheckSquare,
   Clock,
   HandHeart,
   ListTodo,
+  type LucideIcon,
   Users,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -38,6 +38,7 @@ import {
   type PositionInstanceData,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { LAYER_ICON } from '@/lib/calendar-layers'
 import { daysLeftLabel, hhmm, matterUrl, todoUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
@@ -185,12 +186,8 @@ function QuickPrompts({ position }: { position: PositionInstanceData }): React.R
   )
 }
 
-const SOURCE_ICON = {
-  meeting: Users,
-  todo: CheckSquare,
-  scheduled_task: AlarmClock,
-  card_due: ListTodo,
-} as const
+/** 七个图层各一个图标（WP74）；与日历页那一列用的是同一张表（`lib/calendar-layers`）。 */
+const SOURCE_ICON: Record<CalendarSource, LucideIcon> = LAYER_ICON
 
 /** ① 一个目标：值 / 目标 / 进度 / 剩余天数。没有图表。 */
 function GoalRow({ goal }: { goal: GoalProgress }): React.ReactNode {

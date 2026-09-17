@@ -459,6 +459,28 @@ describe('37 工作模型路由', () => {
     ).toBe(400)
   })
 
+  it('日历图层（WP74）：不传 sources = 全部；传了原样递到端口；认不出来的名字 400', async () => {
+    const t = await workHarness()
+    const window = 'from=2026-09-07T00:00:00.000Z&to=2026-09-08T00:00:00.000Z'
+
+    // 不传 = 全部：端口拿到的 range 上**没有** sources 这一格（行为与以前逐字相同）
+    await t.get(`/v1/calendar?${window}`)
+    expect(t.work.last('calendar')?.[0]).not.toHaveProperty('sources')
+    // 空串按不传读：浏览器把空的查询参数留在 URL 上太常见了
+    await t.get(`/v1/calendar?${window}&sources=`)
+    expect(t.work.last('calendar')?.[0]).not.toHaveProperty('sources')
+
+    const res = await t.get(`/v1/calendar?${window}&sources=social_post,todo,social_post`)
+    expect(res.status).toBe(200)
+    // 去重，但顺序照人写的来（端口那一侧只做包含判断）
+    expect(t.work.last('calendar')?.[0]).toMatchObject({ sources: ['social_post', 'todo'] })
+    expect((await data(res)).sources).toEqual(['social_post', 'todo'])
+
+    // 认不出来的图层是错，不是"悄悄忽略"——悄悄忽略的话少一层没人知道为什么
+    const bad = await t.get(`/v1/calendar?${window}&sources=todo,birthdays`)
+    expect(bad.status).toBe(400)
+  })
+
   it('每日计划：拿今天的、采纳 / 调整 / 稍后；调整必须带勾选清单', async () => {
     const t = await workHarness()
     expect((await data(await t.get('/v1/plans/today'))).plan).toMatchObject({ state: 'drafted' })
