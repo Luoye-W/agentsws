@@ -60,7 +60,9 @@ describe('56 §2 内容账号组四条（发布永远 L1）', () => {
   it('三个写动作、额度是 56 §7 那两个数', () => {
     for (const role of CONTENT) {
       expect(
-        role.actions.map((a) => a.id),
+        // WP76（58 §1）：`social.meta` 上多了一条「向设计岗下需求单」——
+        // 独立段落，与这三条一条都不冲突，所以这里把它剔掉再比。
+        role.actions.map((a) => a.id).filter((id) => id !== 'request_design'),
         role.id,
       ).toEqual(['stage_post', 'reply_comment', 'stage_profile_edit'])
       // 发帖 3 / 天、回评论 50 / 天（56 §7）

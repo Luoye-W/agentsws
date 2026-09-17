@@ -764,6 +764,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'site.shopify-theme',
     'site.shopify-email',
     'site.shopify-apps',
+    // WP76（58 §3）：设计岗位挂一条 `design.dtc`（五条骨架相同，只挂一条就够）
+    'design.dtc',
   ]) {
     world.roles.assignments.create({
       person_id: world.roleHolder,

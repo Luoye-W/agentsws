@@ -90,6 +90,38 @@ export type HighlightType =
    */
   | 'handoff'
   /**
+   * WP76（58 §3）：这张卡对着的是哪个**规格**（`Amazon 主图` / `易拉宝`）。
+   *
+   * 与 `channel` 同一条理由：五条设计职责的卡长得一模一样，而"2000 见方纯白底"
+   * 与"90×54mm CMYK 出血 3mm"是完全不同的两件事。写不出规格的卡，
+   * 人得点进去才知道自己在批什么。
+   */
+  | 'spec'
+  /**
+   * WP76（58 §3）：这次出**几张**变体。
+   *
+   * 与 `audience` 同形：人按下那一下之前该看见的第一个数。额度是 6
+   * （`max_variants_per_brief`），超了 guardrail 会转人审——而卡面上这一格
+   * 就是他判断"这次是不是要多了"的依据。
+   */
+  | 'variants'
+  /**
+   * WP76（58 §1 / 04 §6）：**这张稿是谁点的头**。
+   *
+   * 入库卡上没有它 = guardrail 会当场 block（`human_pick_required`）。
+   * 放在卡面上不是为了好看：它是"视觉决定永远是人"这条纪律在界面上唯一
+   * 看得见的地方——批的人要看得出，这一张是**有人挑过**的，不是机器自己选的。
+   */
+  | 'picked_by'
+  /**
+   * WP76（58 §1）：**没有图片模型**那句话。
+   *
+   * 不是错误，是一句人话（"DeepSeek 不出图；去设置页填一个 OpenAI 兼容口的 key"）。
+   * 它出现在变体卡上，而不是一块写着"去连接"的空面板——连接页上根本没有
+   * 一张"图片模型"的卡可以点。
+   */
+  | 'no_image_model'
+  /**
    * WP77（59 §3）：**主题发布卡上的预览链接**。
    *
    * 12 §2 那句"预览链接就是审批材料"在卡面上的落点。没有它的发布卡根本提不出去
@@ -344,6 +376,15 @@ export type DataSourceId =
   | 'social_discord'
   | 'social_telegram'
   | 'social_whatsapp'
+  /**
+   * WP76（58 §3）：**我们自己的设计库**（需求单、brief、素材）。
+   * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `social`）。
+   *
+   * 出图走模型网关的**图片槽**（22），那不是一条连接：它跟着工作区的模型设置走，
+   * 没有单独一张卡可连。所以设计岗位的面板上**一个渠道源都没有**——
+   * 五块全走这一个。没有图片模型的时候说的那句话在卡上（58 §1），不在面板分块上。
+   */
+  | 'design'
   /**
    * WP77（59 §2 / §3）：**我们自己的建站库**（上一次巡检、邮件模板、已装 App）。
    * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `social`）。
@@ -886,6 +927,70 @@ export interface SocialThreadRow {
   triage?: string
 }
 
+/**
+ * WP76（58 §3）：设计岗位面板那五块要的投影。
+ *
+ * 宿主（`apps/server/src/design.ts` 的 `designDeckData`）从三张表里读出来递进来；
+ * deck 这一层**不认识库**（29 §1），拿到的已经是算好的行。
+ *
+ * 两件事写在类型里：
+ *
+ * 1. **待挑与待定稿分得开**（`awaiting_pick[].stage`）。待挑 = 机器出完了在等人
+ *    看一眼；待定稿 = 人已经点过「就这张」、在等那张 L1 卡。混成一块，
+ *    面板上就再也看不出球在谁那儿。
+ * 2. **「本周产出」数的是定稿**（`weekly.final`），出图张数只是分母
+ *    （`weekly.variants`）。一天出三十张变体、一张都没定，这一周的产出是 0——
+ *    把出图张数当产出的结果是这个数永远好看，而没有一张图真的上线了。
+ */
+export interface DesignDeckData {
+  /** 需求单队列（按来源岗位；等最久的在最上面）。 */
+  request_queue: {
+    request_id: string
+    duty: string
+    /** 谁下的单（"人手动开的"也是一种来源）。 */
+    from: string
+    title: string
+    /** 需求原文的前 60 字。**原样截断，不改写**（外部文本，21 §1）。 */
+    excerpt: string
+    due_at?: string
+    /** 过期 = 这件事没做成，不是"逾期"——单独一格，不靠颜色表达。 */
+    overdue: boolean
+    created_at: string
+  }[]
+  /** 进行中：出了 brief、还没定稿的那些。 */
+  in_progress: {
+    request_id: string
+    duty: string
+    from: string
+    title: string
+    status: string
+    brief_id?: string
+    /** 计划出几张 / 已经出了几张（两个数分开，才看得出卡在哪一步）。 */
+    planned: number
+    generated: number
+  }[]
+  /** 待挑 + 待定稿（`stage` 分得开这两件事）。 */
+  awaiting_pick: {
+    asset_id: string
+    duty: string
+    /** 规格的中文名（认不出的原样显示 id，不丢）。 */
+    spec: string
+    stage: 'waiting_pick' | 'waiting_publish'
+    brief_id?: string
+    goal?: string
+    created_at: string
+  }[]
+  /** 素材库：按用途分组（没打标的归「没打标」，不藏起来）。 */
+  library: { use: string; count: number; final: number }[]
+  /** 本周产出：`final` 是定稿数，`variants` 是出图张数（分母）。 */
+  weekly: {
+    since: string
+    final: number
+    variants: number
+    by_use: { use: string; count: number }[]
+  }
+}
+
 export interface QueryContext {
   now: Iso8601
   /** 工作区时区偏移（分钟），日界线按它切 */
@@ -917,6 +1022,13 @@ export interface QueryContext {
    * 后者说"去连接页把 Discord 连上"。
    */
   social?: SocialDeckData
+  /**
+   * WP76（58 §3）：设计库那几张投影（宿主从 `DesignStore` 里读出来递进来）。
+   *
+   * 不给 = 这台机器上还没有设计岗位，那五块一律空——**不是**"还没连"
+   * （设计库永远算连上，出图走模型网关的图片槽，那不是一条连接）。
+   */
+  design?: DesignDeckData
   /** WP77（59 §3）：建站面板那几块。 */
   site?: SiteDeckData
   /**

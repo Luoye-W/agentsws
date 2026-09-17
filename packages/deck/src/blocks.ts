@@ -137,6 +137,9 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   social_discord: 'Discord',
   social_telegram: 'Telegram',
   social_whatsapp: 'WhatsApp',
+  // WP76（58 §3）：设计库也是我们自己的库，永远算连上。设计岗位没有渠道源——
+  // 出图走模型网关的图片槽，那不是一条连接（没有一张卡可连，所以也没有"去连接"）。
+  design: '设计库',
   // WP77（59 §2）：建站库也是我们自己的，永远算连上
   site: '建站',
   // WP75（57 §1）：四个平台各一个源。名字就是用户在连接页上看到的那个名字——
@@ -426,6 +429,26 @@ const SITE_APP_BLOCKS = (): BlockDef[] => [
   block('site.apps.pending', 'table', '待装 App', 'changes.pending_app_install'),
 ]
 
+/**
+ * WP76（58 §3 面板）：设计岗位**五块**——需求单队列 / 进行中 / 待定稿 /
+ * 素材库 / 本周产出。
+ *
+ * 五块全走 `design` 这一个源（我们自己的库，永远算连上）。与社媒那两组
+ * 最大的不同是**这里一个渠道源都没有**：出图走模型网关的图片槽，那不是一条
+ * 连接。"没有图片模型"那句话出现在变体卡上（58 §1），不是一块写着"去连接"
+ * 的空表——用户去连接页也找不到一张"图片模型"的卡，那才是骗人。
+ *
+ * 按职责传入而不是五条各写一遍：五条职责的面板骨架**完全相同**（58 §1 第一句），
+ * 不同的只有规格表与需求来源，而那两样都在行里，不在块上。
+ */
+const DESIGN_BLOCKS = (duty: string): BlockDef[] => [
+  block(`design.${duty}.requests`, 'table', '需求单队列', 'design.request_queue'),
+  block(`design.${duty}.in_progress`, 'table', '进行中', 'design.in_progress'),
+  block(`design.${duty}.awaiting_pick`, 'table', '待挑与待定稿', 'design.awaiting_pick'),
+  block(`design.${duty}.library`, 'table', '素材库', 'design.asset_library'),
+  block(`design.${duty}.weekly`, 'table', '本周产出', 'design.weekly_output'),
+]
+
 const QUEUE_BLOCKS = (): BlockDef[] => [
   block('records.timeline', 'timeline', '记录', 'records.timeline'),
 ]
@@ -492,6 +515,18 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'social.whatsapp': () => SOCIAL_COMMUNITY_BLOCKS('whatsapp', 'social_whatsapp'),
   // WP72（56 §4）：客服的社群管理——转客服卡 + 店铺后台（答订单离不开它）
   'dtc.community-support': () => [...COMMUNITY_SUPPORT_BLOCKS(), ...SHOP_BLOCKS()],
+  /*
+   * WP76（58 §3）：五条设计职责，面板骨架**完全相同**（58 §1 第一句）。
+   *
+   * 一块店铺后台的积木都不放：设计的 scopes 里商品是**只读**、没有 order /
+   * store_config / analytics，19 §3 说无权的数据源连「去连接」都不该出。
+   * 也没有任何渠道源——出图走模型网关的图片槽，那不是一条连接。
+   */
+  'design.dtc': () => DESIGN_BLOCKS('dtc'),
+  'design.amazon': () => DESIGN_BLOCKS('amazon'),
+  'design.social': () => DESIGN_BLOCKS('social'),
+  'design.ads': () => DESIGN_BLOCKS('ads'),
+  'design.exhibition': () => DESIGN_BLOCKS('exhibition'),
   /*
    * WP77（59 §3）：建站那四条职责，各看自己那几块。
    *

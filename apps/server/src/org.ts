@@ -343,6 +343,23 @@ const SEED_POSITIONS: readonly {
       ['common.member', false],
     ],
   },
+  // WP76（58 §1 / 54）：**设计**岗位 = 五条按用途拆的职责（独立站 / Amazon /
+  // 社媒 / 广告 / 展会，顺序 = 契约 `DESIGN_DUTIES`）。**默认全勾**（58 §5）：
+  // 与社媒 / 红人相反——那两个岗位的每一条对应一个真账号，这五条不对应任何
+  // 账号，一个人做设计，这五样他本来就都会碰到。
+  {
+    id: 'design',
+    zh: '设计',
+    en: 'Design',
+    roles: [
+      ['design.dtc', true],
+      ['design.amazon', true],
+      ['design.social', true],
+      ['design.ads', true],
+      ['design.exhibition', true],
+      ['common.member', false],
+    ],
+  },
   { id: 'member', zh: '普通成员', en: 'Member', roles: [['common.member', true]] },
 ]
 

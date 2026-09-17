@@ -5,6 +5,7 @@ import type {
   Completion,
   CompletionUsage,
   Halt,
+  ImageProvider,
   Iso8601,
   ModelGateway,
   ModelMeta,
@@ -19,6 +20,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
+import { unavailableImageProvider } from './images.js'
 import type { BudgetCtx, CapSpec, Reservation } from './ledger.js'
 import { BudgetLedger } from './ledger.js'
 import { staticPrefixHash } from './prefix.js'
@@ -54,6 +56,12 @@ export interface ModelGatewayOptions {
   halt?: Halt
   env: Record<string, string | undefined>
   trace?: Trace
+  /**
+   * WP76（22 图片槽 / 58 §1）：图片能力。**可选**——不给就是"这台机器不出图"，
+   * 调用方看 `gateway.images` 是不是 `undefined` 或 `available === false`，
+   * 然后说人话（`NO_IMAGE_MODEL_ZH`），而不是显示一句"生成失败"。
+   */
+  images?: ImageProvider
 }
 
 export interface UsageReport {
@@ -110,10 +118,20 @@ export interface ModelGatewayApi extends ModelGateway {
 const HALT_ENV = 'AGENTSWS_MODEL_HALT'
 
 class Gateway implements ModelGatewayApi {
+  /**
+   * WP76（22 图片槽）：装配时给什么就是什么；**没给也有一条**——
+   * {@link unavailableImageProvider}，它 `available: false` 并带一句
+   * 人话（`NO_IMAGE_MODEL_ZH`）。
+   *
+   * 为什么不是 `undefined`：调用方要说的那句话（58 §1「没有就明说」）
+   * 得有地方放。留成 `undefined` 的结果是每个调用点自己编一句"生成失败"。
+   */
+  readonly images: ImageProvider
   private readonly ledger: BudgetLedger
   private readonly usageRecords: UsageRecord[] = []
 
   constructor(private readonly opts: ModelGatewayOptions) {
+    this.images = opts.images ?? unavailableImageProvider()
     this.ledger = new BudgetLedger(opts.policy.budget ?? {}, {
       onFrozen: (cap, used, ctx) => this.emitFrozen(cap, used, ctx),
       onRunExhausted: (used, cap, ctx) => this.emitRunExhausted(used, cap, ctx),

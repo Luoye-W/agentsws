@@ -43,7 +43,13 @@ describe('48 §5.1 五条渠道职责（WP67）', () => {
   it('五个写动作与额度（48 §5.1 那几个数）', () => {
     for (const role of ROLES) {
       const byId = new Map(role.actions.map((a) => [a.id, a]))
-      expect([...byId.keys()].sort(), role.id).toEqual([
+      expect(
+        // WP76（58 §1）：`kol.youtube` 上多了一条「向设计岗下需求单」
+        // （合作内容要一张封面时不用人再去设计岗手动开一件事）。
+        // 它是独立段落，与上面这五条一条都不冲突——所以这里把它剔掉再比。
+        [...byId.keys()].filter((id) => id !== 'request_design').sort(),
+        role.id,
+      ).toEqual([
         'stage_affiliate_code',
         'stage_collaboration',
         'stage_deliverable_review',

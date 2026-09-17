@@ -602,6 +602,151 @@ export function checkExpectations(
     }
   }
   /*
+   * WP76 / 58 §1：那一张需求单。
+   *
+   * 三件事：路由**真判**到哪条设计职责（不是场景指定的）、brief 出没出、
+   * 以及"整理不出来的那几件事"有没有被记下来（`questions_at_least`——
+   * 那是"不编默认值"在断言里的样子）。
+   */
+  if (expected.design_request !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.design_brief_drafted')
+    const routed = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.design_request_routed')
+    const want = expected.design_request
+    const problems: string[] = []
+    if (routed === undefined) problems.push('这一轮没有一张需求单被路由过')
+    else {
+      const r = payloadOf(routed)
+      if (want.routed_to !== undefined && String(r.role_id) !== want.routed_to) {
+        problems.push(`路由到了 ${String(r.role_id ?? '（谁也没有）')}，不合期望`)
+      }
+    }
+    if (want.brief_drafted === true && last === undefined) problems.push('没有出 brief')
+    if (want.brief_drafted === false && last !== undefined) problems.push('不该出 brief')
+    if (last !== undefined) {
+      const p = payloadOf(last)
+      if (
+        want.questions_at_least !== undefined &&
+        Number(p.questions ?? 0) < want.questions_at_least
+      ) {
+        problems.push(`brief 上只记了 ${String(p.questions ?? 0)} 句问，比期望的少`)
+      }
+      if (
+        want.brand_system_missing !== undefined &&
+        (p.brand_system_missing === true) !== want.brand_system_missing
+      ) {
+        problems.push(
+          want.brand_system_missing
+            ? '这家公司明明还没设品牌系统，卡上却没说'
+            : '品牌系统取到了，不该出「先设品牌系统」卡',
+        )
+      }
+    }
+    if (want.brief_auto_approved !== undefined) {
+      const auto = evidence.approvals.some(
+        (a) => a.kind === 'staged_change' && a.automation.auto_approved,
+      )
+      if (auto !== want.brief_auto_approved) {
+        problems.push(want.brief_auto_approved ? 'brief 没能 L3 自动出' : 'brief 不该自动放行')
+      }
+    }
+    add(
+      'design_request',
+      problems.length === 0,
+      problems.length === 0
+        ? `路由到 ${routed === undefined ? '?' : String(payloadOf(routed).role_id ?? '?')}，brief 出了`
+        : problems.join('；'),
+    )
+  }
+  /*
+   * WP76 / 58 §1：那一次出变体。
+   *
+   * `image_model: false` 时 `generated` 必须是 0，而且那句人话必须真写出来
+   * （`reason_stated`）——58 §1 要的是"没有就明说"，不是一句"生成失败"。
+   */
+  if (expected.design_variants !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.design_variants_staged')
+    if (last === undefined) {
+      add('design_variants', false, '这一轮没有出过变体')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.design_variants
+      const problems: string[] = []
+      if (want.n !== undefined && Number(p.n ?? -1) !== want.n) {
+        problems.push(`这次要出 ${String(p.n)} 张，不合期望`)
+      }
+      if (want.generated !== undefined && Number(p.generated ?? -1) !== want.generated) {
+        problems.push(`真出了 ${String(p.generated)} 张，不合期望`)
+      }
+      if (want.image_model !== undefined && (p.image_model === true) !== want.image_model) {
+        problems.push('有没有图片模型这件事与期望不符')
+      }
+      if (want.reason_stated !== undefined) {
+        const said = typeof p.reason === 'string' && p.reason.length > 0
+        if (said !== want.reason_stated) {
+          problems.push(said ? '不该有"没有图片模型"那句话' : '没有图片模型，却没说出为什么')
+        }
+      }
+      if (want.auto_approved !== undefined) {
+        const auto = evidence.approvals.some(
+          (a) => a.kind === 'staged_change' && a.automation.auto_approved,
+        )
+        if (auto !== want.auto_approved) {
+          problems.push(want.auto_approved ? '变体没能自动出' : '出变体不该自动放行')
+        }
+      }
+      add(
+        'design_variants',
+        problems.length === 0,
+        problems.length === 0
+          ? `${String(p.n)} 张计划、真出 ${String(p.generated)} 张${p.image_model === true ? '' : '（没有图片模型，已明说）'}`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP76 / 58 §1 / 04 §6：那一下定稿。
+   *
+   * `auto_approved` 永远是假（`asset_publish` 在 `HARD_L1` 里）；
+   * `blocked` 为真 = 没写"谁点的"，guardrail 当场拦下——那不是"要不要人批"，
+   * 是这张卡本身不该存在。
+   */
+  if (expected.design_pick !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.design_asset_picked')
+    if (last === undefined) {
+      add('design_pick', false, '这一轮没有人挑过图')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.design_pick
+      const problems: string[] = []
+      if (want.staged !== undefined && (p.staged === true) !== want.staged) {
+        problems.push(want.staged ? '这一张没能进队列' : '这一张不该进队列')
+      }
+      if (want.blocked !== undefined && (p.staged !== true) !== want.blocked) {
+        problems.push(want.blocked ? '没写"谁点的"却照样进了队列' : '不该被拦下来')
+      }
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved) {
+        problems.push('入库永远要人点，不该自动放行')
+      }
+      add(
+        'design_pick',
+        problems.length === 0,
+        problems.length === 0
+          ? p.staged === true
+            ? '人挑过了，卡在队列里等他点入库'
+            : `拦下来了：${String(p.reason ?? '')}`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
    * WP72 / 56 §2：那一条内容提案。
    *
    * 两件事：报 L3 也落回人审（`HARD_L1`），以及**排期时刻要在卡面上**——

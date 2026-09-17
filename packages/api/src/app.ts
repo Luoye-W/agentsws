@@ -26,6 +26,7 @@ import { cloudRoutes } from './routes/cloud.js'
 import { cloudAccountRoutes } from './routes/cloud-account.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
+import { designRoutes } from './routes/design.js'
 import { eventRoutes } from './routes/events.js'
 import { haltRoutes } from './routes/halt.js'
 import { healthRoutes } from './routes/health.js'
@@ -181,6 +182,8 @@ export function collectRoutes(): Route[] {
      * 的第二段就分得开，内部次序不讲究。
      */
     ...socialRoutes(),
+    // WP76（58 §5）：设计库——需求单 / brief / 变体 / 定稿
+    ...designRoutes(),
     // WP77（59 §1 / §2）：建站那一侧最小一组（检查单 / 邮件模板 / App）
     ...siteRoutes(),
     // WP75（57 §5）：广告库 `/v1/ads/*`（读两条、写五条；写全部先出卡）

@@ -60,6 +60,7 @@ import type { CloudPort } from './routes/cloud.js'
 import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
+import type { DesignPort } from './routes/design.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
 import type { KolPort } from './routes/kol.js'
@@ -680,6 +681,12 @@ export interface GatewayDeps {
    * 只是没有任何增删改的入口。
    */
   social?: SocialPort
+  /**
+   * WP76（58 §5）：本地设计库。没装配时 `/v1/design/*` 回 not_implemented——
+   * 设计岗位那五条职责的面板照常读得到（投影是装配期塞进去的），
+   * 只是没有任何增删改的入口。
+   */
+  design?: DesignPort
   /**
    * WP77（59 §1 / §2）：建站数据面。没装配时 `/v1/site/*` 回 not_implemented——
    * 建站那四条职责的检查单、邮件模板与 App 清单要它才动得了。

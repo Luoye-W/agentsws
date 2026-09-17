@@ -1,0 +1,251 @@
+# 58 §1 设计岗位的第 2 条职责：**Amazon 设计**（WP76）。
+#
+# 五条职责的骨架**完全相同**（58 §1 第一句），不同的只有三样：
+# **规格表**（这条职责画在什么画布上）、**需求来源**（谁给它下单）、
+# 还有下面 `grounding` 里那一串意图词。
+#
+# # 这条职责特有的是**平台的硬规矩**：主图必须纯白底、商品占 85%、
+# 不许有文字 / 水印 / 边框。这不是审美偏好，是违规会被下架的事——
+# 所以规格表里 `amazon.main` 的 `max_text_chars` 是 **0**，
+# 而 `design-core` 的 `brief.ts` 会把它翻成禁忌词"文字""水印"塞进 brief 的
+# `must_avoid`，再由 guardrail 拿去查提示词。三处是同一条规矩的三个位置。
+#
+# 纪律（04 §6 / 58 表头，Luoye 原话，五条逐字相同）：
+# **Agent 出 brief、尺寸规格、变体与初稿，视觉决定永远是人。**
+# 这一条在三个地方硬着：`stage_asset` 的 `hard_ceiling: true`、
+# `@agentsws/core` 的 `HARD_L1` 里有 `asset_publish`（yml 放宽不了）、
+# 还有 guardrail 里那条「没有 `picked_by` 就 block」——
+# **人没点「就这张」之前，什么都不算定稿**。
+#
+# 需求单不是这条职责自己发明的（54）：别的岗位的「向设计岗下需求单」动作
+# 开一件事、路由到设计岗，岗位里的 Agent 再按意图词判该走五条里的哪一条。
+# 所以下面 `description` 与 `grounding` 写不足 = 路由不到 = 这条职责收不到单。
+id: design.amazon
+version: 1.0.0
+domain: design
+name: { zh: Amazon 设计, en: Amazon Design }
+description: Amazon 的视觉：主图、A+ 模块、品牌旗舰店、视频封面，一律按 Amazon 的硬规矩（主图纯白底、不许有文字水印）。需求单从 Amazon 运营来；我出 brief、尺寸、变体与初稿，**挑哪一张、用不用，永远你定**
+
+scopes:
+  # 58 §1 读的那一列：需求单、品牌系统、素材库、规格表、参考图
+  # 三个域各一把闸（契约 `DataDomain` 的注释）：下单的岗位读得到自己那张需求单
+  # 与交付回来的素材，读不到设计岗的 brief。
+  - { domain: design_request, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: design_brief, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: design_asset, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 参考图与既有素材（通用附件域；素材本身的字节在 blob store，41 §2）
+  - { domain: asset, ops: [read], range: workspace, max_sensitivity: internal }
+  # 24：品牌系统（色 / 字 / 版式 / 禁忌）是**公司层技能**，这条职责只读不编
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  # 给哪件商品做。**只读**：设计一辈子不该改一件商品
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  # 19：图上要写参数、材质、尺寸之前先查事实卡（写错一个参数，印出来一千份）
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # **空的**，而且是故意的（58 §1 连接器那一行）：
+  # 出图走模型网关的图片槽（22），那不是一条连接——它跟着工作区的模型设置走，
+  # 没有单独一张连接卡可连。Figma / Canva 在连接目录里登记为「待增加」
+  # （`figma` / `canva`，`status: 'planned'`），做出来之后在这里加一行。
+  []
+
+actions:
+  # 58 §1 写的那一列。额度写在**动作**上不写在职责上（同 51 §2.3）。
+  - id: draft_brief
+    target: design_brief
+    kind: staged_change
+    mandate:
+      # 一天 10 份（58 §6）。挡的是"把队列里两百张单一口气全变成 brief"那一下
+      # ——每一份都要烧模型的钱。
+      caps: { max_brief_per_day: 10 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 10, per: day }
+    route_to: role_holder
+  - id: generate_variants
+    target: design_asset
+    kind: staged_change
+    mandate:
+      # 58 §6 的两个数。与 `@agentsws/design-core` 的 `planGeneration` 是
+      # **同一个数的两个位置**：那边出计划的时候提前说，这边提交的时候真拦。
+      caps: { max_variants_per_brief: 6, max_generations_per_day: 30 }
+      window: { max_count: 30, per: day }
+    review_cannot_be_disabled: true
+    route_to: role_holder
+  - id: stage_asset
+    target: design_asset
+    kind: staged_change
+    mandate:
+      caps: { max_asset_publish_per_day: 20 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    # 人点头那两格 Agent 提都不许提——提得了就等于它能自己定稿；
+    # 提示词哈希与 blob 引用同理：改了它们，这张素材的来源就对不上了（58 §1 末行）
+    protected_fields: [picked_by, picked_at, prompt_sha256, blob_uri]
+    review_cannot_be_disabled: true
+    route_to: role_holder
+
+automation:
+  # brief **L3 自动**（58 §1 上限那一列）：它不产生任何外部可见的东西，
+  # 是一段给人看的文字，看完不合适改一句就是了。
+  draft_brief:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [manual]
+  # 变体 **L2**：出卡给人挑。**升不上 L3**——"自动出图并自动用上"正是
+  # 04 §6 那条纪律要防的事。禁忌词命中由 guardrail 当场 block，不是转人审。
+  generate_variants:
+    ceiling: L2
+    initial: L2
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [guardrail_hit, manual]
+  # 入库 **L1 永远人定**。`hard_ceiling: true` 是把 `HARD_L1` 那一条在职责这一层
+  # 也写出来——两处都说，改一处忘另一处的时候有人喊（同 56 §2 的发布）。
+  stage_asset:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  # 24：品牌系统从公司层技能取，这条职责不编（`design-core` 的 brand.ts）。
+  # 取不到就出「先设品牌系统」卡，而不是编一套默认配色。
+  - { name: brand-system, tier: open, load: always }
+
+home_blocks:
+  # 58 §3 五分块：需求单队列（按来源岗位）/ 进行中 / 待定稿 / 素材库 / 本周产出。
+  # 顺序就是一件事的顺序——面板读下来就是这条职责在干什么。
+  - {
+      id: design.amazon.requests,
+      placement: queue,
+      component: table,
+      query: design.request_queue,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: design.amazon.in_progress,
+      placement: focus,
+      component: table,
+      query: design.in_progress,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: design.amazon.awaiting_pick,
+      placement: queue,
+      component: table,
+      query: design.awaiting_pick,
+      default_order: 30,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: design.amazon.library,
+      placement: role_view,
+      component: table,
+      query: design.asset_library,
+      default_order: 40,
+      pinnable: true,
+      adaptive: false,
+    }
+  - {
+      id: design.amazon.weekly,
+      placement: role_view,
+      component: table,
+      query: design.weekly_output,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
+  # 动作 id / 数据域这五样判"这件事该走哪条"。五条设计职责的动作 id 与数据域
+  # 完全一样，所以在设计这个岗位里，**意图词就是唯一分得开它们的东西**。
+  - {
+      name: amazon_intent,
+      intent_terms: [Amazon, 亚马逊, 主图, 副图, A+, A加, 旗舰店, 品牌旗舰店, storefront, listing, 视频封面, ASIN, 白底图],
+      cue_terms: [上架, 改图, 侵权, 被下架, 合规, 白底, 占比, 出图, 设计, 尺寸, 变体],
+      tool: list_design_requests,
+      prefetch: false,
+    }
+  # 58 §2：出 brief 之前先把品牌系统取出来；没有就出「先设品牌系统」卡
+  - {
+      name: brand_system_first,
+      intent_terms: [品牌, 配色, 色, 字体, 版式, 风格, brand, palette, font, style],
+      cue_terms: [统一, 规范, 一致, 禁忌, 不许, consistent, guideline],
+      tool: get_brand_system,
+      prefetch: true,
+    }
+  # 19：图上要写参数 / 材质 / 尺寸之前先查事实卡（写错一个参数，印出来一千份）
+  - {
+      name: facts_before_copy,
+      intent_terms: [文案, 卖点, 参数, 规格, 材质, copy, spec, claim],
+      cue_terms: [容量, 重量, 尺寸, 续航, 保修, 认证, 防水, warranty, certified],
+      tool: search_policies,
+      prefetch: true,
+    }
+
+notifications:
+  # 变体卡压着不动 = 这张图错过了它要用的那一天（上新、投放、展会开幕）
+  - {
+      event: 'approval.created:generate_variants',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 12,
+    }
+  # 定稿入库永远人审，而且它是**下游在等的那一下**（上架 / 发布 / 投放 / 送印）
+  - {
+      event: 'approval.created:stage_asset',
+      mode: immediate,
+      recipients: [role_holder],
+      escalate_after_hours: 4,
+    }
+  # 禁忌词把提示词拦下来：立刻让人知道——它意味着组装那一跳写了不该写的话
+  - {
+      event: 'guardrail.hit:brand_forbidden_term',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  # 需求单过期 = 这件事没做成，不是"逾期"
+  - { event: 'design.request_overdue', mode: queue, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: main_image
+    label: { zh: "这个 ASIN 要一组主图", en: "Main images for this ASIN" }
+    prompt: "这个 ASIN 要换主图。按 Amazon 的规矩来（纯白底、不许有字），先给我 brief 和几版初稿"
+    kind: start_task
+  - id: aplus_modules
+    label: { zh: "排一组 A+ 模块", en: "Lay out A+ modules" }
+    prompt: "给这个产品排一组 A+ 模块图，卖点分块讲；参数只写事实卡里有的"
+    kind: start_task
+  - id: compliance_check
+    label: { zh: "这几张图合规吗", en: "Are these images compliant" }
+    prompt: "素材库里这个 ASIN 的图，哪几张不符合 Amazon 的主图规矩？按规格表一条条说"
+    kind: ask
+  - id: what_is_waiting
+    label: { zh: "有哪些单等着我", en: "What is waiting on me" }
+    prompt: "现在有哪些需求单还没动、哪些在等我挑图、哪些等我定稿，分开列"
+    kind: ask
+
+task_examples:
+  - id: main_image_refresh
+    title: { zh: "换一组主图", en: "Refresh the main images" }
+    description: "这个 ASIN 的主图是三年前拍的，想重做，又怕做出来违规。"
+    expected_output: "一份 brief 里直接写着这条规矩（2000 见方、纯白底、商品占 85%、一个字都不许有）+ 几版初稿；提示词里但凡出现「加一行促销文案」这种话，提交时会被当场拦下而不是转给你点头。"
+  - id: storefront_hero
+    title: { zh: "旗舰店首屏", en: "Storefront hero" }
+    description: "品牌旗舰店首屏那张超宽图，手机上总是被裁得只剩中间。"
+    expected_output: "按 3000×600 出，并且把两侧各 600px 当作会被裁掉的安全区写进 brief 与提示词；初稿上重点都在中间那一段。"

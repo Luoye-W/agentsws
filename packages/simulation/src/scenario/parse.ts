@@ -194,6 +194,10 @@ const EVENT_KEYS = [
   'community.approve_member',
   'community.moderate',
   'community.rules_edit',
+  // WP76 设计岗位（58 §1）
+  'design.request',
+  'design.variants',
+  'design.pick',
   // WP75 投放（57 §1 / §4）
   'ads.campaign',
   'ads.budget_change',
@@ -284,6 +288,10 @@ const EXPECTED_KEYS = [
   // WP68（48 §5.2 / §5.3）
   'kol_campaign',
   'kol_reveal',
+  // WP76（58 §1）
+  'design_request',
+  'design_variants',
+  'design_pick',
   // WP72（56 §2 / §4）
   'social_post',
   'social_reply',
@@ -801,6 +809,68 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             ? {}
             : { note: str(source, `${path}.${key}.note`, body.note) }),
           ...(sendLevel === undefined ? {} : { level: sendLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    // WP76（58 §1）：设计岗位那三件事
+    case 'design.request': {
+      known(source, `${path}.${key}`, body, ['who', 'from', 'title', 'need', 'specs'])
+      return {
+        at,
+        type: 'design.request',
+        design_request: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          from: str(source, `${path}.${key}.from`, body.from),
+          title: str(source, `${path}.${key}.title`, body.title),
+          need: str(source, `${path}.${key}.need`, body.need),
+          ...(body.specs === undefined
+            ? {}
+            : { specs: strList(source, `${path}.${key}.specs`, body.specs) }),
+        },
+      }
+    }
+    case 'design.variants': {
+      known(source, `${path}.${key}`, body, ['who', 'brief_id', 'n', 'image_model', 'level'])
+      const vLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (vLevel !== undefined && !['L1', 'L2', 'L3'].includes(vLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'design.variants',
+        design_variants: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(body.brief_id === undefined
+            ? {}
+            : { brief_id: str(source, `${path}.${key}.brief_id`, body.brief_id) }),
+          ...(body.n === undefined ? {} : { n: num(source, `${path}.${key}.n`, body.n) }),
+          ...(body.image_model === undefined
+            ? {}
+            : { image_model: requireBool(source, `${path}.${key}.image_model`, body.image_model) }),
+          ...(vLevel === undefined ? {} : { level: vLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'design.pick': {
+      known(source, `${path}.${key}`, body, ['who', 'asset_id', 'level', 'without_pick'])
+      const pLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (pLevel !== undefined && !['L1', 'L2', 'L3'].includes(pLevel)) {
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      }
+      return {
+        at,
+        type: 'design.pick',
+        design_pick: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(body.asset_id === undefined
+            ? {}
+            : { asset_id: str(source, `${path}.${key}.asset_id`, body.asset_id) }),
+          ...(pLevel === undefined ? {} : { level: pLevel as 'L1' | 'L2' | 'L3' }),
+          ...(body.without_pick === undefined
+            ? {}
+            : {
+                without_pick: requireBool(source, `${path}.${key}.without_pick`, body.without_pick),
+              }),
         },
       }
     }

@@ -83,6 +83,22 @@ actions:
     protected_fields: [handle, username, account_id, external_id]
     review_cannot_be_disabled: true
     route_to: owner
+  # ── WP76（58 §1）：向设计岗下需求单 ──────────────────────────────────
+  # 这一条与上面每一条都无关，是**新加的独立段落**：它不改这条职责的任何
+  # 既有行为，只多一个出口——要一张帖子图 / 故事封面的时候，不用人再去设计岗手动开一件事（→ `design.social`）。
+  #
+  # 动作 = 开一件事并按 54 路由到**设计岗**（不是直接指定哪条设计职责：
+  # 该走五条里的哪一条由设计岗自己的意图词判，54 §2）。
+  # ChangeKind 是 `design_request`，**L3 自动**——它不出图、不花钱、
+  # 不对外发一个字，下错了设计岗那边关掉就是了。
+  - id: request_design
+    target: design_request
+    kind: staged_change
+    mandate:
+      caps: { max_design_requests_per_day: 5 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    route_to: role_holder
 
 automation:
   # **发布永远 L1**（56 §2）。15 §2 的 `HARD_L1` 里有 `social_post`，
@@ -107,6 +123,14 @@ automation:
     initial: L1
     hard_ceiling: true
     promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # ── WP76（58 §1）：向设计岗下需求单 ──────────────────────────────────
+  # L3 自动：下一张需求单不产生任何外部可见的东西。真正要人点的在设计岗
+  # 那一侧（变体 L2 出卡给人挑、入库 L1 永远人定）。
+  request_design:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
     demotion_triggers: [manual]
 
 skills:

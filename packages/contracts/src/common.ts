@@ -112,6 +112,19 @@ export type ObjectType =
   | 'community_member'
   | 'community_thread'
   /**
+   * WP76（58 §1 / §5）：设计岗位那一侧的三类。
+   *
+   * 为什么是三个而不是一个「设计稿」：`design_request` 是**别的岗位**下过来的
+   * 一张需求单（它的真源在需求方那一侧，设计岗只是收件人）；`design_brief` 是
+   * 把需求变成目标 / 受众 / 尺寸 / 文案 / 禁忌的那一份，L3 自动出；
+   * `design_asset` 是素材库里的一张图，它带**来源**（brief id、模型、提示词哈希、
+   * 人定稿时间，58 §1 末行）。三类各有各的可读范围——需求方看得到自己那张单与
+   * 交付的素材，看不到别人的 brief。**只加不删**。
+   */
+  | 'design_request'
+  | 'design_brief'
+  | 'design_asset'
+  /**
    * WP77（59 §1）：建站那一侧的三类（`theme` / `store_config` / `page` 上面早就有）。
    *
    * 为什么不把它们塞进已有的名字里：`email_template` 是**通知邮件模板**（订单 / 发货 /
@@ -240,6 +253,17 @@ export type DataDomain =
    */
   | 'community_member'
   | 'community_thread'
+  /**
+   * WP76（58 §1）：设计那三个数据域。
+   *
+   * 分成三个而不是塞进一个 `asset`（那个域早就有，指的是通用附件），理由与
+   * 红人那五个一样：**可读范围不一样**。下需求单的岗位读得到自己那张
+   * `design_request` 与交付回来的 `design_asset`，读不到设计岗的 `design_brief`；
+   * 设计岗读得到全部三类。一个域一把闸，19 §3 的过滤下推才切得动。
+   */
+  | 'design_request'
+  | 'design_brief'
+  | 'design_asset'
   /**
    * WP75（57 §1）：投放那一侧的新域（`ad_account` / `campaign` / `analytics`
    * 上面早就有，四条投放职责的 scopes 读那三个）。

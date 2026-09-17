@@ -13,6 +13,8 @@ export * from './connect.js'
 // 54（将改号 55）§4 第一层：连接目录（按职责模板的 `kind` 登记的总表，WP83）
 export * from './connection-directory.js'
 export * from './data.js'
+// 58 §1 / §2 设计岗位的五条职责、三个对象与规格表（WP76）
+export * from './design.js'
 export * from './events.js'
 export * from './identity.js'
 export * from './join.js'

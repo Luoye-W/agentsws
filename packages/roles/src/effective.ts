@@ -34,6 +34,15 @@ const minLevel = (a: Level, b: Level): Level => (levelIndex(a) <= levelIndex(b) 
 const KIND_ALIAS: Readonly<Record<string, ChangeKind>> = {
   approve_member: 'community_membership',
   moderate: 'community_moderation',
+  // WP76（58 §1）：设计那四个动作的名字与 kind 也对不上——动作是动词
+  // （"出一份 brief""出几版""入库""下一张单"），kind 是名词。
+  // 不接上的后果与上面两条逐字相同：`riskClassOf` 兜底成 `high`，
+  // 于是 yml 里写着 `initial: L3` 的 brief 实际上永远落在 L1，
+  // 58 §1 上限那一列"brief L3 自动"成了一句机器不认的话。
+  draft_brief: 'design_brief',
+  generate_variants: 'design_variant',
+  stage_asset: 'asset_publish',
+  request_design: 'design_request',
   /*
    * WP75（57 §1）：投放那两个。与上面两条是同一种错，只是成因不同——
    * 这两个动作 id 与 kind 名字对不上是因为 57 §1 写的是 `campaign_create` /

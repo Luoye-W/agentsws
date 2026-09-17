@@ -34,6 +34,7 @@
     "@agentsws/core": "workspace:*",
     "@agentsws/data": "workspace:*",
     "@agentsws/deck": "workspace:*",
+    "@agentsws/design-core": "workspace:*",
     "@agentsws/kernel": "workspace:*",
     "@agentsws/knowledge": "workspace:*",
     "@agentsws/kol-core": "workspace:*",

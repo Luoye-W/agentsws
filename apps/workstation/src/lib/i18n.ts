@@ -659,6 +659,37 @@ const zh: Table = {
   'highlight.scheduled': '发布时间',
   'highlight.member': '申请人',
   'highlight.handoff': '转给',
+  // WP76（58 §3）：设计那四张卡上的芯片。
+  // 规格那一格是五条职责的卡唯一分得开的东西；「谁挑的」那一格是 04 §6
+  // 「视觉决定永远是人」在界面上唯一看得见的地方。
+  'highlight.spec': '尺寸',
+  'highlight.variants': '出几张',
+  'highlight.picked_by': '谁挑的',
+  'highlight.no_image_model': '没有图片模型',
+  // 四张卡的标题与那两个按钮（58 §3）。
+  // 「都不行再来」必须与「就这张」并排：只给一个「选一张」的界面，
+  // 人会挑一张最不差的——那张后来会真的上架。
+  'design.card.brief': '出了一份 brief',
+  'design.card.brief.hint': '看完即用。缺的那几样在下面列着——补一句，下一版就带上。',
+  'design.card.variants': '挑一张',
+  'design.card.variants.pick': '就这张',
+  'design.card.variants.reject': '都不行再来',
+  'design.card.variants.reject.hint': '说一句哪儿不对，下一轮带着改。',
+  'design.card.publish': '定稿入库',
+  'design.card.publish.hint':
+    '入库之后下游（上架 / 发布 / 投放 / 送印）直接拿它去用，所以这一下永远要你点。',
+  'design.card.brand_missing': '先设品牌系统',
+  'design.card.brand_missing.hint':
+    '没有色 / 字 / 版式 / 禁忌，出来的图每一张都是另一种风格。不挡路，但值得花十分钟。',
+  'design.no_image_model':
+    '现在没有接图片模型：默认的 DeepSeek 不出图。brief、尺寸规格和变体计划照样出。',
+  // 面板五块（58 §3）
+  'design.block.requests': '需求单队列',
+  'design.block.in_progress': '进行中',
+  'design.block.awaiting_pick': '待挑与待定稿',
+  'design.block.library': '素材库',
+  'design.block.weekly': '本周产出',
+  'design.source': '设计库',
   // WP77（59 §3）：建站那四张卡上的芯片。
   // 预览那一格就是审批材料本身（12 §2）；缺项写成两档而不是一个总分。
   'highlight.preview': '预览',
@@ -2455,6 +2486,32 @@ const en: Table = {
   'highlight.scheduled': 'Goes out',
   'highlight.member': 'Applicant',
   'highlight.handoff': 'Hand off to',
+  // WP76 (58 §3): the chips on the four design cards.
+  'highlight.spec': 'Spec',
+  'highlight.variants': 'Variants',
+  'highlight.picked_by': 'Picked by',
+  'highlight.no_image_model': 'No image model',
+  'design.card.brief': 'Brief is ready',
+  'design.card.brief.hint':
+    'Use it as is. Anything missing is listed below — answer one line and the next pass has it.',
+  'design.card.variants': 'Pick one',
+  'design.card.variants.pick': 'This one',
+  'design.card.variants.reject': 'None of these, try again',
+  'design.card.variants.reject.hint': 'Say what is off and the next round carries it.',
+  'design.card.publish': 'Publish to the library',
+  'design.card.publish.hint':
+    'Once published, listing, posting, ads and print pick it up directly — so this one is always yours to click.',
+  'design.card.brand_missing': 'Set up the brand system first',
+  'design.card.brand_missing.hint':
+    'Without colour, type, layout and taboos, every image comes out in a different style. Not blocking, but worth ten minutes.',
+  'design.no_image_model':
+    'No image model is connected: the default DeepSeek cannot generate images. Briefs, specs and the variant plan still work.',
+  'design.block.requests': 'Incoming requests',
+  'design.block.in_progress': 'In progress',
+  'design.block.awaiting_pick': 'Waiting on you',
+  'design.block.library': 'Asset library',
+  'design.block.weekly': 'This week',
+  'design.source': 'Design library',
   // WP77 (59 §3): the four site-building cards.
   'highlight.preview': 'Preview',
   'highlight.gaps': 'Gaps',

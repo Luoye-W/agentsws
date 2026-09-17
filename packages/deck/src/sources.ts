@@ -125,6 +125,8 @@ export const ALWAYS_CONNECTED: readonly DataSourceId[] = [
   'ads',
   // WP77：建站库同理（三张表）——检查单是我们自己跑出来的结论
   'site',
+  // WP76：设计库同理（三张表）——出图走模型网关的图片槽，不是一条连接
+  'design',
 ]
 
 /** 全部数据源，按面板里的出场顺序。 */
@@ -150,6 +152,8 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'social_discord',
   'social_telegram',
   'social_whatsapp',
+  // WP76（58 §3）：我们自己的设计库。设计岗位没有渠道源（见上面那段注释）
+  'design',
   // WP77（59 §2）：我们自己的建站库（巡检结论、邮件模板、已装 App）
   'site',
   // WP75（57 §1）：四个平台各一个源

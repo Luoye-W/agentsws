@@ -74,6 +74,7 @@ import {
   type FetchLike,
   type ModelGatewayApi,
   type PageFetch,
+  stubImageProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
 import {
@@ -112,6 +113,7 @@ import {
   brandCloudPort,
   brandConnectionDirectoryPort,
   brandConnectionsPort,
+  brandDesignPort,
   brandKolPort,
   brandModelsPort,
   brandPositionPort,
@@ -147,6 +149,7 @@ import {
   createConnections,
   createMailProbe,
 } from './connections.js'
+import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
 import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createApprovalDirectory } from './housekeeping.js'
@@ -295,6 +298,16 @@ export function bindHost(env: Record<string, string | undefined>): string {
       '要限制谁能连，用 compose 的端口绑定或 NAS 防火墙，不要在这里写内网地址。',
   )
 }
+/**
+ * WP76（58 §2 / 24）：品牌系统那张**公司层技能**叫什么。
+ *
+ * 写在这里而不是散在调用点：职责 yml 的 `skills` 里写的是同一个名字
+ * （`roles/design/*.yml` 的 `- { name: brand-system, … }`），
+ * 两处对不上的后果是设计岗读不到品牌系统，然后**每张图一个风格**——
+ * 而界面上会说"这个品牌还没设过品牌系统"，看起来像用户没写。
+ */
+export const BRAND_SYSTEM_SKILL_NAME = 'brand-system'
+
 /** v1 自带的职责定义（roles 包 bundled）。 */
 export const BUNDLED_ROLES = [
   'common.owner',
@@ -332,6 +345,14 @@ export const BUNDLED_ROLES = [
   'social.whatsapp',
   // WP72（56 §4）：客服岗位的社群管理
   'dtc.community-support',
+  // WP76（58 §1）：设计岗位的五条职责。与红人 / 社媒那两批同一条理由：
+  // 种岗位那一步会把解析不到的职责筛掉，少一条，首次设置向导里的"设计"
+  // 就少一个勾——而这个岗位默认全勾，少一个勾就是少一条本来该有的职责。
+  'design.dtc',
+  'design.amazon',
+  'design.social',
+  'design.ads',
+  'design.exhibition',
   // WP77（59 §1）：建站岗位的四条职责。第二条（`site.shopify-theme`）就是
   // WP44 的 `site.builder` 改了个名字，内容一个字没动。
   // 与红人 / 社媒同一条理由：种岗位那一步会把解析不到的职责筛掉，
@@ -835,6 +856,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const makeGateway = (): ModelGatewayApi =>
     createModelGateway({
       providers: [stubProvider({ seed: 7 })],
+      /*
+       * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
+       *
+       * 生产上不挂是故意的：不挂的时候网关自己兜一条
+       * `unavailableImageProvider`，它 `available: false` 并带一句人话
+       * （"DeepSeek 不出图，去设置页填一个 OpenAI 兼容口的 key"）——
+       * 那正是 58 §1 要的"没有就明说"。挂一个出色块的替身上去，
+       * 用户会以为自己有图片模型，然后拿一张纯色块去上架。
+       *
+       * demo 里反过来：不挂的话"待挑"那一块永远是空的，58 §3 的变体挑选卡
+       * 在演示里一次都出不来。
+       */
+      ...(options.mount === undefined ? {} : { images: stubImageProvider({ seed: 7 }) }),
       policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
       clock,
       env,
@@ -1196,6 +1230,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
       social: () => socialDeckData(social, { now: clock.now() }),
+      // WP76（58 §3）：设计那五块同理——需求单、brief、待挑、素材库、本周产出
+      // 都在这台机器上，出图走模型网关的图片槽（那不是一条连接）。
+      design: () =>
+        designDeckData(design, {
+          now: clock.now(),
+          // 36 §2：面板上不摆裸 id——"谁下的"那一格显示职责的中文名
+          roleName: (id) => roles.roles.get(id)?.name.zh,
+        }),
       // WP77（59 §3）：建站那五块同理——上线检查单上那几行是**我们自己跑出来的结论**，
       // 店没连上的时候它照实说"这几项没读到"，那与"去连接"不是一回事。
       site: () => siteService.deckData(),
@@ -1256,6 +1298,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * （`site: () => siteService`——15 §1 改前必读，改一份模板之前要先读回来）。
      */
     const site = createSiteStore({
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    /**
+     * WP76（58 §5 数据面）：这个品牌的设计库（三类对象，落在这个品牌自己的目录下）。
+     * 与社媒库并排建，理由一样：面板那五块要从它读。
+     */
+    const design = createDesignStore({
       workspace_id: ws,
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
@@ -1453,6 +1503,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connectedKinds: () => connections.connectedKinds(),
       appendEvent,
       random,
+    })
+
+    /**
+     * WP76（58 §5）：设计库的 `/v1` 面。
+     *
+     * 图片槽从**这个品牌的**网关取（52 O3：一个品牌一个网关）；没有就只出
+     * brief 与规格并明说（58 §1）。素材字节进 blob store，库里只留 `blob://…`。
+     * 品牌系统从公司层技能取（24），取不到就出「先设品牌系统」卡。
+     */
+    const designService = createDesignService({
+      workspace_id: ws,
+      store: design,
+      clock,
+      approvals: txn.approvals,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      appendEvent,
+      random,
+      images: () => ownGateway.images,
+      ...(blobs === undefined ? {} : { blobs }),
+      roleName: (id) => roles.roles.get(id)?.name.zh,
+      brandCards: () => {
+        const sections = skills.registry.listSections(BRAND_SYSTEM_SKILL_NAME)
+        if (sections.length === 0) return []
+        return [
+          {
+            name: BRAND_SYSTEM_SKILL_NAME,
+            scope: 'org' as const,
+            body: sections.map((sec) => `## ${sec.heading}\n${sec.body}`).join('\n'),
+          },
+        ]
+      },
     })
 
     let workRef: Work | undefined
@@ -1877,6 +1959,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       social,
       socialService,
       socialChannels,
+      design,
+      designService,
       site,
       siteService,
       ads,
@@ -1990,6 +2074,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * "缺项高亮"是什么意思。支付与税配好了：那两项建站岗位改不了（51 §3 N2）。
    */
   if (mount !== undefined) seedDemoSite(boot.site, clock.now())
+
+  /**
+   * WP76（58 §3）：demo 里给设计库放几行，理由与上面那两条逐字相同。
+   *
+   * 三张需求单分别停在三个状态上——一张在队列里、一张出了 brief、一张有几版
+   * 变体在等人挑。都塞在"待挑"里的面板看起来很满，却回答不了"球在谁那儿"。
+   */
+  if (mount !== undefined) seedDemoDesign(boot.design, clock.now())
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {
@@ -3231,6 +3323,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).siteService.port,
   )
+  /** WP76（58 §5）：设计库 `/v1/design/*`（一个品牌一张库、一段 blob 前缀）。 */
+  const designPortOf = brandDesignPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).designService.port,
+  )
   /**
    * WP83（54（将改号 55）§4 前两层）：连接目录与岗位连接清单——**一个品牌一份**。
    *
@@ -3462,6 +3559,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
+    // WP76（58 §5）：本地设计库 `/v1/design/*`（同上；素材按品牌进 blob store）
+    design: designPortOf,
     // WP77（59 §2）：建站数据面 `/v1/site/*`（检查单 / 邮件模板 / App，一个品牌一张库）
     site: sitePortOf,
     // WP75（57 §5）：本地广告库 `/v1/ads/*`（同上；五个写口子全部先出卡）

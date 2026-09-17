@@ -105,7 +105,79 @@ export type ProviderTranscription = Omit<Transcription, 'model' | 'audio' | 'usa
   usage: Omit<CompletionUsage, 'cost_base'> & { cost_base?: number }
 }
 
+/* ------------------------------------------------------------------ */
+/* 图片槽（22 + 58 §1）                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 出图入参（WP76）。
+ *
+ * `size` 是 `"<宽>x<高>"`（`"1024x1024"`）——**不是** `DesignSpec` 的 id：
+ * 图片模型只认画布，认不出"Amazon 主图"。规格 → 画布的换算在
+ * `@agentsws/design-core` 的 `variants.ts` 里，网关不认识设计那一侧的概念。
+ */
+export interface ImageGenerateRequest {
+  /**
+   * 提示词。**进模型之前已经由 guardrail 查过品牌禁忌词**（`design_variant`
+   * 那条 kind）——网关这一层不重复判，它判不了"这个品牌忌讳什么"。
+   */
+  prompt: string
+  /** `"1024x1024"`。provider 不支持这个尺寸时自己就近取，并在返回里报真实尺寸。 */
+  size?: string
+  /** 要几张。上限由 guardrail 按 `max_variants_per_brief` 判，不在这里。 */
+  n?: number
+  meta: ModelMeta
+  model?: ModelRef
+  seed?: number
+}
+
+/**
+ * 出来的一张图。
+ *
+ * **字节与 URL 二选一**：本地 / stub 档直接给 `bytes`，云端 provider 多数给一条
+ * 限时 URL。两种都由**宿主**负责落进 blob store（41 §2）——
+ * 图片字节永不进事件日志，同 `TranscriptionAudioDigest` 那条纪律。
+ */
+export interface GeneratedImage {
+  bytes?: Uint8Array
+  url?: string
+  content_type: string
+  width: number
+  height: number
+  /** 提示词哈希（素材来源那一格，58 §1 末行：**存哈希不存原文**）。 */
+  prompt_sha256: string
+}
+
+export interface ImageGeneration {
+  assets: GeneratedImage[]
+  usage: CompletionUsage
+  model: ModelRef
+}
+
+/**
+ * 22 的图片能力槽（58 §1：图片生成走模型网关）。
+ *
+ * **可选**：DeepSeek 没有图片模型，所以多数发行版装不上真的这一条
+ * （走 OpenAI 兼容口或 agentsws 云按积分才有）。装不上时挂一个
+ * `available: false` 的实现，它的 `generate` 会抛，而 `unavailable_reason`
+ * 是**给人看的那句话**——58 §1：没有就明说"只出 brief 与规格，不出图"，
+ * 而不是让界面显示"生成失败"。
+ */
+export interface ImageProvider {
+  ref: ModelRef
+  /** 现在出不出得了图。`false` 时 `generate` 一定抛。 */
+  available: boolean
+  /** 出不了图的原因，人话一句（`available: false` 时必有）。 */
+  unavailable_reason?: string
+  generate(req: ImageGenerateRequest): Promise<ImageGeneration>
+}
+
 export interface ModelGateway {
+  /**
+   * 22 图片槽：提示词 → 图（WP76）。可选——没装图片 provider 的发行版不实现它。
+   * 记账与驻留同 `complete`。
+   */
+  images?: ImageProvider
   complete(req: {
     model?: ModelRef
     messages: ChatMessage[]

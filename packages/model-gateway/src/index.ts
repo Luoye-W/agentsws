@@ -6,6 +6,16 @@ export type {
   UsageReport,
 } from './gateway.js'
 export { createModelGateway } from './gateway.js'
+// WP76（22 图片槽 / 58 §1）：图片能力的两个实现 + 「没有图片模型」那句人话
+export type { StubImageProviderOptions } from './images.js'
+export {
+  NO_IMAGE_MODEL_EN,
+  NO_IMAGE_MODEL_ZH,
+  parseImageSize,
+  placeholderPng,
+  stubImageProvider,
+  unavailableImageProvider,
+} from './images.js'
 export type { BudgetCtx, BudgetScopeState, CapSpec, Reservation } from './ledger.js'
 export { BudgetLedger } from './ledger.js'
 export { staticPrefixHash, staticPrefixLength, truncateToHour } from './prefix.js'

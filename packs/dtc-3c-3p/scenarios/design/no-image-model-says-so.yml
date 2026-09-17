@@ -1,0 +1,59 @@
+# WP76（58 §1）：**没有图片模型就明说**，而不是一句"生成失败"。
+#
+# 现实是这样的：工作区默认模型是 DeepSeek，DeepSeek 没有图片生成接口。
+# 要真出图得走 OpenAI 兼容口（用户自己的 key）或 agentsws 云按积分，两条
+# 都还没接（58 §5「后置：真图片模型」）。
+#
+# 所以这条题证的是**这条职责在没有图片模型的时候照样有用**：
+#
+# - brief 出得来（目标 / 受众 / 尺寸 / 文案 / 禁忌都在）；
+# - 变体**计划**出得来（画多大、试哪几个角度、提示词长什么样）；
+# - 只是一张图都不出，而那句话是**人话**，原样进卡面：
+#   "默认的 DeepSeek 不出图；要出图去设置页填一个 OpenAI 兼容口的 key。"
+#
+# 为什么不做成面板上一块写着「去连接」的空表：连接页上根本没有一张
+# "图片模型"的卡可以点——给一个点不动的按钮比不给更糟（36 §3 那条老规矩）。
+id: design/no-image-model-says-so
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    design.request:
+      who: p_li
+      from: dtc.store
+      title: 首页主视觉换一版
+      need: 首页 Banner 想换一版。目标：把新的一句话介绍说清楚。受众：第一次来的人。
+      specs: [web.hero.desktop]
+  # 这台机器上没有图片模型
+  - at: '+30m'
+    design.variants:
+      who: p_li
+      n: 3
+      image_model: false
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  design_request:
+    routed_to: design.dtc
+    brief_drafted: true
+  design_variants:
+    # 计划照出（画多大、试哪几个角度都在）
+    n: 3
+    # 图一张都没出
+    generated: 0
+    image_model: false
+    # 那句人话真写出来了——这一格就是 58 §1「没有就明说」
+    reason_stated: true
+  event_types:
+    - simulation.design_brief_drafted
+    - simulation.design_variants_staged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  卡面上那句话，读完知道"为什么没有图"和"怎么才能有图"吗？还是只说了一句"生成失败"？

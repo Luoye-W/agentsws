@@ -179,6 +179,22 @@ export type {
   SubmitConnectionInput,
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
+// WP76（58 §5）：设计库的 `/v1` 面
+export type {
+  DesignAssetInput,
+  DesignAssetRow,
+  DesignAssetView,
+  DesignBriefRow,
+  DesignBriefView,
+  DesignPort,
+  DesignRequestInput,
+  DesignRequestRow,
+  DesignRequestView,
+  DesignStagedView,
+  DesignVariantView,
+} from './routes/design.js'
+export { designRoutes } from './routes/design.js'
+export type { DesignActor } from './routes/design-types.js'
 export {
   AssignmentVisibility,
   canReadAll,

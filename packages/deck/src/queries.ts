@@ -13,6 +13,7 @@ import type { ApprovalItem, Iso8601 } from '@agentsws/contracts'
 import {
   ADS_PLATFORMS,
   adsPlatformOfRole,
+  designDutyOfRole,
   SOCIAL_CHANNELS,
   socialChannelOfRole,
 } from '@agentsws/contracts'
@@ -417,6 +418,154 @@ const SITE_QUERIES: QueryDef[] = [
         draft: r.has_draft ? '有一份等你点' : '',
       })),
     }),
+  },
+]
+
+/* ── WP76（58 §3）：设计岗位五块 ─────────────────────────────────────── */
+
+/**
+ * 五条设计职责共用**一份**投影（`designDeckData`），面板这一层各看各的那一条。
+ *
+ * 与社媒那一层逐字同理：一个人同时挂着「独立站设计」与「Amazon 设计」时，
+ * 他看到的是两个岗位视图、每个视图里五块，而不是一个视图里十块。
+ *
+ * 认不出职责（不是设计职责）就一行不出——**不是**把五条全端出来。
+ */
+function dutyOfRole(role_id: string): string | undefined {
+  return designDutyOfRole(role_id)?.id
+}
+
+function ofDuty<T extends { duty: string }>(rows: readonly T[], ctx: QueryContext): T[] {
+  const duty = dutyOfRole(ctx.role_id)
+  return duty === undefined ? [] : rows.filter((r) => r.duty === duty)
+}
+
+/** 只取到天（`2026-09-21`）。设计的期限从来不是"下午三点"，时分秒只是噪音。 */
+const day = (iso: string | undefined): string => (iso ?? '').slice(0, 10)
+
+/**
+ * 需求单的状态 → 人话。
+ *
+ * 英文状态名在面板上没有意义（`generating` 对用户是一个谜），而翻译这件事
+ * 只该做一次——所以这张表在这里，不在渲染层。
+ */
+const DESIGN_STATUS_ZH: Record<string, string> = {
+  queued: '排着队',
+  briefed: '出了 brief',
+  generating: '正在出图',
+  awaiting_pick: '等你挑',
+  delivered: '交付了',
+  cancelled: '取消了',
+}
+
+const DESIGN_QUERIES: QueryDef[] = [
+  {
+    name: 'design.request_queue',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'from', label: '谁下的' },
+        { key: 'title', label: '要什么' },
+        { key: 'need', label: '需求原文' },
+        { key: 'due_at', label: '什么时候要' },
+      ],
+      rows: ofDuty(ctx.design?.request_queue ?? [], ctx).map((r) => ({
+        from: r.from,
+        title: r.title,
+        // 原样截断，不改写（外部文本，21 §1）
+        need: r.excerpt,
+        // 过期的那一行把话说出来：**这件事没做成**，不是"逾期"，也不靠颜色表达。
+        // 只取到天：设计的期限从来不是"下午三点"，写出时分秒只是噪音。
+        due_at: r.overdue ? `${day(r.due_at)}（已经过了）` : day(r.due_at),
+      })),
+    }),
+  },
+  {
+    name: 'design.in_progress',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'title', label: '要什么' },
+        { key: 'from', label: '谁下的' },
+        { key: 'status', label: '到哪一步' },
+        { key: 'progress', label: '出了几张' },
+      ],
+      rows: ofDuty(ctx.design?.in_progress ?? [], ctx).map((r) => ({
+        title: r.title,
+        from: r.from,
+        status: DESIGN_STATUS_ZH[r.status] ?? r.status,
+        // 「计划几张 / 出了几张」写成一格给人看，但两个数在投影里是分开的——
+        // 合成一个百分比就再也看不出"计划了六张、一张没出"与"计划三张、出了三张"
+        progress: `${r.generated} / ${r.planned}`,
+      })),
+    }),
+  },
+  {
+    name: 'design.awaiting_pick',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'stage', label: '球在谁那儿' },
+        { key: 'spec', label: '尺寸' },
+        { key: 'goal', label: '这张图要干什么' },
+        { key: 'created_at', label: '什么时候出的' },
+      ],
+      rows: ofDuty(ctx.design?.awaiting_pick ?? [], ctx).map((r) => ({
+        // 04 §6：待挑 = 等你看一眼；待定稿 = 你点过了、在等那张 L1 卡。
+        // 两句话不一样，所以不缩写成一个状态词。
+        stage: r.stage === 'waiting_pick' ? '等你挑一张' : '你挑好了，等你点入库',
+        spec: r.spec,
+        goal: r.goal ?? '',
+        created_at: r.created_at,
+      })),
+    }),
+  },
+  {
+    name: 'design.asset_library',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'use', label: '用途' },
+        // 张数不是钱：不说 `count` 的列按金额渲染，`4` 会变成 `US$4.00`（WP63 那条）
+        { key: 'final', label: '定稿', format: 'count', align: 'right' },
+        { key: 'count', label: '一共', format: 'count', align: 'right' },
+      ],
+      // 素材库按用途分组；没打标的归「没打标」，**不藏起来**——
+      // 藏起来的结果是三个月后有人把同一张图重做一遍
+      rows: (ctx.design?.library ?? []).map((g) => ({
+        use: g.use,
+        final: g.final,
+        count: g.count,
+      })),
+    }),
+  },
+  {
+    name: 'design.weekly_output',
+    source: 'design',
+    returns: 'table',
+    run: (ctx) => {
+      const week = ctx.design?.weekly
+      return {
+        columns: [
+          { key: 'metric', label: '这一周' },
+          { key: 'value', label: '几张', format: 'count', align: 'right' },
+        ],
+        rows:
+          week === undefined
+            ? []
+            : [
+                // **产出 = 定稿**。出图张数只是分母——把它当产出的结果是
+                // 这个数永远好看，而没有一张图真的上线了。
+                { metric: '定稿（真能用的）', value: week.final },
+                { metric: '出了多少张变体', value: week.variants },
+                ...week.by_use.map((u) => ({ metric: `定稿 · ${u.use}`, value: u.count })),
+              ],
+      }
+    },
   },
 ]
 
@@ -1659,6 +1808,8 @@ const QUERY_LIST: QueryDef[] = [
     }),
   },
   ...SOCIAL_QUERIES,
+  // WP76（58 §3）：设计岗位五块
+  ...DESIGN_QUERIES,
   ...SITE_QUERIES,
   ...ADS_QUERIES,
   // WP78（60 §3）：公关五块

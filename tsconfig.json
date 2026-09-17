@@ -53,6 +53,9 @@
       "path": "packages/deck"
     },
     {
+      "path": "packages/design-core"
+    },
+    {
       "path": "packages/dsh-adapter"
     },
     {

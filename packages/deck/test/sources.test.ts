@@ -37,6 +37,7 @@ describe('dataSourcesFromConnections', () => {
       'ads',
       'kol',
       'social',
+      'design',
       'site',
       'pr',
     ])

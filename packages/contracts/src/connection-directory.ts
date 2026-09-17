@@ -39,6 +39,8 @@ export type ConnectionCategory =
   | 'reviews'
   | 'im'
   | 'dev'
+  /** WP76（58 §1）：设计工具（Figma / Canva）。两条现在都是「待增加」。 */
+  | 'design'
   | 'custom'
 
 /**
@@ -1088,6 +1090,50 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
       en: 'Used by the site-builder role to read a theme repo; theme editing itself goes through Shopify.',
     },
   },
+  // ── 设计（WP76，58 §1 末行「Figma / Canva 登记待增加」）──────────────
+  //
+  // 两条都是 `planned`，而且短期内不会变。明着列出来而不是藏起来的理由与
+  // 「评价应用」那几条逐字相同：用户在目录里找不到 Figma 时只会以为是自己
+  // 没找到，然后去问一遍。
+  //
+  // **没有这两条，设计岗位照样能用**：出图走模型网关的图片槽（22），
+  // 素材存 blob store（41 §2），需求单与 brief 在自己的库里。
+  // Figma / Canva 接上之后多的是"把定稿的那一张同步过去""从现成的模板起稿"，
+  // 不是"没有它就出不了图"。
+  {
+    kind: 'figma',
+    name: { zh: 'Figma', en: 'Figma' },
+    category: 'design',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField(
+      '一枚 Figma personal access token（设置页 → Security → Personal access tokens）',
+      'A Figma personal access token (Settings → Security → Personal access tokens)',
+    ),
+    // 接上之后要往文件里写（同步定稿、建 frame），按最重的那件事算
+    side_effect: 'write_external',
+    docs_url: 'https://www.figma.com/developers/api',
+    status: 'planned',
+    note: {
+      zh: '设计岗位用：把定稿的那一张同步进设计文件，或者从现成的模板起稿。没有它照样出 brief、出图、入库。',
+      en: 'For the design position: sync a finished asset into a design file, or start from an existing template. Everything else works without it.',
+    },
+  },
+  {
+    kind: 'canva',
+    name: { zh: 'Canva', en: 'Canva' },
+    category: 'design',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url: 'https://www.canva.dev/docs/connect/',
+    status: 'planned',
+    note: {
+      zh: '设计岗位用：套现成模板出一版，或者把定稿导出成各平台尺寸。没有它照样出 brief、出图、入库。',
+      en: 'For the design position: lay out a version from a template, or export a finished asset to each platform size. Everything else works without it.',
+    },
+  },
   // ── 自定义 ──────────────────────────────────────────────────────────
   {
     kind: 'mcp_server',
@@ -1125,6 +1171,8 @@ export const CONNECTION_CATEGORIES: readonly {
   { id: 'reviews', name: { zh: '评价', en: 'Reviews' } },
   { id: 'im', name: { zh: '聊天渠道', en: 'Chat channels' } },
   { id: 'dev', name: { zh: '开发', en: 'Developer' } },
+  // WP76（58 §1）
+  { id: 'design', name: { zh: '设计', en: 'Design' } },
   { id: 'custom', name: { zh: '自定义', en: 'Custom' } },
 ]
 

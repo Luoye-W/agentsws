@@ -196,6 +196,7 @@ import {
 import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
 import { createWork, type Work } from '@agentsws/work'
+import type { DesignLoop } from './design.js'
 import type { ModelTrace } from './diagnostics.js'
 import { traceGateway } from './diagnostics.js'
 import { SimulationError } from './errors.js'
@@ -428,6 +429,13 @@ export interface World {
    * 场景里出现 `position.*` 才装；不装的世界一次路由都不跑，原有场景的指标一个不变。
    */
   positions?: PositionsLoop
+  /**
+   * WP76（58）：设计岗位。**惰性**——场景里没有 `design.*` 就一个都不装
+   * （同 `positions`）。判据一个字都不在模拟层：路由走 `routeWithinPosition`、
+   * brief 走 `design-core` 的 `draftBrief`、入库的"永远人审"走 guardrail 的
+   * `HARD_L1`。
+   */
+  design?: DesignLoop
   /**
    * WP32：每一拍的审批总线例行公事——过期、升级链、抽检复核、把新投递刷成卡片。
    *
@@ -1586,6 +1594,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('social.telegram-group'),
     loadBundledRole('social.whatsapp'),
     loadBundledRole('dtc.community-support'),
+    // WP76（58 §1）：设计岗位的五条职责。3 人 pack 里"运营"真挂着 `design.dtc`
+    // （`assignments.yml`），其余四条躺在库里——躺着不产生任何行为，
+    // 装它们是为了首次设置向导里"设计"那个岗位显示五条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面社媒那九条的理由）。
+    loadBundledRole('design.dtc'),
+    loadBundledRole('design.amazon'),
+    loadBundledRole('design.social'),
+    loadBundledRole('design.ads'),
+    loadBundledRole('design.exhibition'),
     // WP77（59 §1）：建站岗位另外三条（网页模板那条在上面 WP44 那一行）。
     // 3 人 pack 里"店主"真挂着 `site.shopify-build`（`assignments.yml`），
     // 另外两条躺在库里——装它们是为了首次设置向导里"建站"那个岗位显示四条而不是一条

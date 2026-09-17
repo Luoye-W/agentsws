@@ -51,6 +51,12 @@ const DATA_DOMAIN = Schema.union([
   // 内容组四条读不到成员，客服的「社群管理」读得到线程、读不到成员名册。
   'community_member',
   'community_thread',
+  // WP76（58 §1）：设计那三个域，与契约的 `DataDomain` 同步。
+  // 一个域一把闸：下单的岗位读得到自己那张 `design_request` 与交付回来的
+  // `design_asset`，读不到设计岗的 `design_brief`。
+  'design_request',
+  'design_brief',
+  'design_asset',
   // WP75（57 §1）：投放的像素与转化事件，与契约的 `DataDomain` 同步。
   // 单独一把闸是因为**投放只读得动它、改不动它**：改追踪代码是建站的事，
   // 而且永远 L1（04 §5 `ads.tracking` 那一行）。塞进 `ad_account` 里的话，

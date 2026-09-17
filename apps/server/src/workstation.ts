@@ -16,6 +16,7 @@ import type {
   AdsDeckData,
   DataSourceStatus,
   DeckCard,
+  DesignDeckData,
   InventoryRow,
   KolDeckData,
   OrderRow,
@@ -65,6 +66,14 @@ export interface WorkstationDataSource {
    * "还没连"说的是渠道那八个源（一条渠道一个，连哪条亮哪条）。
    */
   social?(view?: { assignment_id?: string }): SocialDeckData | undefined
+  /**
+   * WP76（58 §3）：设计面板那五块要的行。
+   *
+   * 不给 = 这台机器上还没有设计岗位，那五块是空表。与"还没连"分得开：
+   * 设计库永远算连上（出图走模型网关的图片槽，那不是一条连接），
+   * 空的意思是"还没有需求单，去别的岗位下一张"。
+   */
+  design?(view?: { assignment_id?: string }): DesignDeckData | undefined
   /**
    * WP77（59 §3）：建站面板那五块要的行。
    *
@@ -192,6 +201,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const posts = options.data.posts?.(view)
       const kol = options.data.kol?.(view)
       const social = options.data.social?.(view)
+      const design = options.data.design?.(view)
       const site = options.data.site?.(view)
       const ads = options.data.ads?.(view)
       const pr = options.data.pr?.(view)
@@ -212,6 +222,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(posts === undefined ? {} : { posts }),
         ...(kol === undefined ? {} : { kol }),
         ...(social === undefined ? {} : { social }),
+        ...(design === undefined ? {} : { design }),
         ...(site === undefined ? {} : { site }),
         ...(ads === undefined ? {} : { ads }),
         ...(pr === undefined ? {} : { pr }),

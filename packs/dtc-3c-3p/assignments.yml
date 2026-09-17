@@ -82,6 +82,12 @@
       id: store_main
   granted_by: p_wang
 - person_id: p_li
+  role_id: design.dtc
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
+- person_id: p_li
   role_id: pr.press
   ranges:
     - kind: store

@@ -859,6 +859,59 @@ export type ScenarioEvent =
   | { at: string; type: 'chat.visitor_message'; chat_message: ScenarioChatMessage }
   /** WP57：人工接管这条会话（AI 停口）。 */
   | { at: string; type: 'chat.human_takeover'; chat_takeover: ScenarioChatTakeover }
+  /* ── WP76（58）：设计岗位 ── */
+  /** WP76：别的岗位下一张需求单（路由到设计岗 → brief L3 自动出）。 */
+  | { at: string; type: 'design.request'; design_request: ScenarioDesignRequest }
+  /** WP76：出变体初稿（L2 出卡给人挑；没有图片模型就只出计划并明说）。 */
+  | { at: string; type: 'design.variants'; design_variants: ScenarioDesignVariants }
+  /** WP76：人挑了一张 → 定稿入库卡（`asset_publish`，**L1 硬顶**）。 */
+  | { at: string; type: 'design.pick'; design_pick: ScenarioDesignPick }
+
+/**
+ * WP76（58 §1）：**别的岗位**下一张需求单。
+ *
+ * `from` 是来源职责（`dtc.store` / `social.meta` / `kol.youtube`）——这条动作
+ * 是从**那一条**分配上提的，权限与额度是它的（05 §4 不并集）。落到哪条设计
+ * 职责由 `routeWithinPosition` 真判，场景不指定。
+ */
+export interface ScenarioDesignRequest {
+  who: string
+  from: string
+  title: string
+  /** 需求原文（**外部文本**：brief 的整理靠它，但它不当指令读）。 */
+  need: string
+  /** 要哪几个规格（不给就由 brief 那一跳按职责给默认那一条并记一句问）。 */
+  specs?: string[]
+}
+
+/**
+ * WP76（58 §1）：出变体初稿。
+ *
+ * `image_model: false` = 这台机器上没有图片模型——**一张图都不出，但 brief、
+ * 尺寸与变体计划照样有**，那句人话进卡面（58 §1：没有就明说）。
+ */
+export interface ScenarioDesignVariants {
+  who: string
+  brief_id?: string
+  /** 这次出几张（不给就按 brief 的变体计划；上限由 guardrail 按额度判）。 */
+  n?: number
+  image_model?: boolean
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * WP76（58 §1 / 04 §6）：人点了「就这张」。
+ *
+ * `level` 是**故意报高的**那一格：`asset_publish` 在 `HARD_L1` 里，会被按回人审。
+ * `without_pick: true` 是另一条题：**不写"谁点的"**——那时 guardrail 直接 block，
+ * 因为那不是"要不要人批"，是那张卡本身不该存在。
+ */
+export interface ScenarioDesignPick {
+  who: string
+  asset_id?: string
+  level?: 'L1' | 'L2' | 'L3'
+  without_pick?: boolean
+}
 
 /**
  * WP56（48 §4 #6）：源页 / 文档同步了一次。
@@ -954,6 +1007,49 @@ export interface ScenarioExpected {
   first_tool?: string
   never_calls?: string[]
   staged_change_kinds?: ChangeKind[]
+  /**
+   * WP76（58 §1）：那一张需求单。
+   *
+   * `routed_to` 是**岗位路由真判出来的**那条设计职责（不是场景指定的）；
+   * `brief_auto_approved` 为真 = brief 在 L3 上自动出了（它只产生一段给人看
+   * 的文字）；`brand_system_missing` 为真 = 这家公司还没设过品牌系统，
+   * 于是出了「先设品牌系统」卡（**不挡路**，但 brief 上会记一句）。
+   */
+  design_request?: {
+    routed_to?: string
+    brief_drafted?: boolean
+    brief_auto_approved?: boolean
+    brief_level?: string
+    /** brief 整理不出来的那几件事至少有几条（**不编默认值**的证据）。 */
+    questions_at_least?: number
+    brand_system_missing?: boolean
+  }
+  /**
+   * WP76（58 §1）：那一次出变体。
+   *
+   * `image_model` 为假时 `generated` 必须是 0，而 `reason_stated` 必须为真
+   * ——58 §1 要的是"没有就明说"，不是一句"生成失败"。
+   */
+  design_variants?: {
+    n?: number
+    generated?: number
+    image_model?: boolean
+    reason_stated?: boolean
+    auto_approved?: boolean
+    level?: string
+  }
+  /**
+   * WP76（58 §1 / 04 §6）：那一下定稿。
+   *
+   * `auto_approved` 永远是假（`asset_publish` 在 `HARD_L1` 里）；
+   * `blocked` 为真 = 没写"谁点的"，guardrail 当场拦下。
+   */
+  design_pick?: {
+    staged?: boolean
+    auto_approved?: boolean
+    level?: string
+    blocked?: boolean
+  }
   /** `$approve` = 第一条 `approval.decided`；断言此前没有 `change.applied`。 */
   no_applied_changes_before?: string
   approval_items?: ScenarioApprovalItems
