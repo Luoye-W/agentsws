@@ -924,6 +924,15 @@ importers:
         specifier: ^2.5.0
         version: 2.9.0
 
+  packages/site-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/skills:
     dependencies:
       '@agentsws/contracts':

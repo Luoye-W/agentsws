@@ -98,6 +98,9 @@
       "path": "packages/simulation"
     },
     {
+      "path": "packages/site-core"
+    },
+    {
       "path": "packages/skills"
     },
     {
