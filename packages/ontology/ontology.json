@@ -14,6 +14,7 @@
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
     "packages/contracts/src/data.ts",
+    "packages/contracts/src/design.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/identity.ts",
     "packages/contracts/src/join.ts",
@@ -59,7 +60,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a29e3c387267b89dbad85990ee5c865e",
+  "source_digest": "6a1f160713b1209227d919d63cbd9ce0",
   "objects": [
     {
       "id": "ad_set",
@@ -1084,6 +1085,309 @@
       ],
       "read_via": [],
       "contract": "Deliverable"
+    },
+    {
+      "id": "design_asset",
+      "label": "design_asset",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "design_asset",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "duty",
+          "type": "DesignDuty",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "brief_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "request_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "spec_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "DesignAssetStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "blob_uri",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "content_type",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "width",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "height",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "bytes",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "tags",
+          "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "provenance",
+          "type": "DesignAssetProvenance",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "DesignAsset"
+    },
+    {
+      "id": "design_brief",
+      "label": "design_brief",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "design_brief",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "request_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "duty",
+          "type": "DesignDuty",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "goal",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "audience",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "key_message",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "copy",
+          "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "spec_ids",
+          "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "must_avoid",
+          "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "brand_system",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "variant_plan",
+          "type": "readonly DesignVariantPlanItem[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "DesignBrief"
+    },
+    {
+      "id": "design_request",
+      "label": "design_request",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "design_request",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "duty",
+          "type": "DesignDuty",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "from_role_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "from_position_template_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "matter_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "need",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "spec_ids",
+          "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "due_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "product_refs",
+          "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "reference_asset_ids",
+          "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "DesignRequestStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "DesignRequest"
     },
     {
       "id": "discount",
@@ -4308,6 +4612,38 @@
       "lookup": []
     },
     {
+      "from": "design_asset",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "design_brief",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "design_request",
+      "to": "matter",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "matter_id",
+      "lookup": []
+    },
+    {
+      "from": "design_request",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "discount",
       "to": "approval_item",
       "direction": "in",
@@ -4434,6 +4770,14 @@
       "cardinality": "many",
       "via": "approval_item.subject.matter_id",
       "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "matter",
+      "to": "design_request",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "design_request.matter_id",
+      "lookup": []
     },
     {
       "from": "matter",
@@ -5681,6 +6025,30 @@
       "direction": "in",
       "cardinality": "many",
       "via": "connection.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "design_asset",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "design_asset.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "design_brief",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "design_brief.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "design_request",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "design_request.workspace_id",
       "lookup": []
     },
     {

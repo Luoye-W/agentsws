@@ -71,6 +71,17 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   community_broadcast: 'medium',
   community_rules: 'medium',
   community_moderation: 'medium',
+  // WP76（58 §1）：设计那四条。
+  //
+  // 下需求单与出 brief 按 low：两件事都只产生**给同事看的文字**，改一句就是了。
+  // 出变体按 low——它花的是模型的钱不是广告的钱，而且出来的东西只进待挑队列，
+  // 一张都不会自己跑到顾客面前。入库按 medium：它在 `HARD_L1` 里，
+  // 所以"永远人审"这件事不靠风险级说话（同 `social_post`）；medium 是为了让
+  // 31 §3.4 那条"只有 low 能超过 L1"顺手把它钉在 L1 上，两道锁一个方向。
+  design_request: 'low',
+  design_brief: 'low',
+  design_variant: 'low',
+  asset_publish: 'medium',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -123,7 +134,37 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    */
   'social_post',
   'community_broadcast',
+  /**
+   * WP76（58 §1 / 04 §6）：**素材入库永远人审**。
+   *
+   * 这一条就是 04 §6 那句纪律本身——"Agent 出 brief、规格、变体与初稿，
+   * **视觉决定永远是人**"。入库 = 这张图从此代表这个品牌，而且下游
+   * （Amazon 上架、社媒发布、投放）直接拿它去用；人没点"就这张"之前
+   * 什么都不算定稿（58 §1 上限那一列）。
+   *
+   * 放在硬顶而不是只写在职责 yml 的 `ceiling: L1` 里：yml 可以被工作区策略
+   * 放宽，硬顶不行（15 §2）。采纳率再高也升不了级——那是这条纪律的全部意义。
+   */
+  'asset_publish',
 ])
+
+/**
+ * WP76（58 §1）：变体提示词里的**品牌禁忌词**从哪来。
+ *
+ * 与邀评词表（{@link REVIEW_INVITE_FORBIDDEN}）、开发信禁承诺
+ * （{@link KOL_OUTREACH_FORBIDDEN}）不同，这一份**不是**写死的常量：
+ * 每个品牌忌讳的东西不一样（有人不许出现竞品名，有人不许出现真人脸，
+ * 有人不许把产品放在水边）。所以它从两个地方来，两处合成一张表：
+ *
+ * 1. 品牌系统（公司层技能，`design-core` 的 `brand.ts` 取）→ 落在 brief 的
+ *    `must_avoid` 上 → 提交变体时由调用方原样带进 `after.must_avoid`；
+ * 2. 职责 / 分配上的额度 `brand_forbidden`（工作区策略可以再加，不能减）。
+ *
+ * 命中是 **block** 不是 review：这种提示词不该有"人点一下就发给模型"的路径
+ * （同邀评词表那条理由）。真出了一张带竞品 logo 的图，删掉也晚了——
+ * 它已经进过一次第三方模型。
+ */
+export const DESIGN_PROMPT_FORBIDDEN_CAP = 'brand_forbidden'
 /**
  * 44 G2：这些变更的**目标是一件具体商品**，于是"目标在不在我管的范围里"这句话才有意义。
  *
@@ -876,6 +917,83 @@ export function evaluateGuardrail(
       const cap = capNumber(mandate, 'max_moderations_per_day')
       if (cap !== undefined && facts.windowCount + 1 > cap)
         review('max_moderations_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP76（58 §1）：向设计岗下一张需求单。L3，只有一条额度。
+     *
+     * 为什么连"需求写没写清楚"都不判：判不了。写得糊涂的需求单，设计岗那边
+     * 出 brief 的时候会问回来（58 §3 的 brief 卡就是那一问），
+     * 让 guardrail 去猜"这段话够不够具体"只会拦掉真需求。
+     */
+    case 'design_request': {
+      const cap = capNumber(mandate, 'max_design_requests_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_design_requests_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP76（58 §1 / §6）：需求单 → brief。L3 自动，一天 10 份。
+     *
+     * brief 不产生任何外部可见的东西，所以这里只有一条频率线——它挡的是
+     * "一口气把队列里 200 张单全变成 brief"那一下（每一份都要烧模型的钱）。
+     */
+    case 'design_brief': {
+      const cap = capNumber(mandate, 'max_brief_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_brief_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP76（58 §1 / §6）：出变体初稿。L2 —— 出卡给人挑。三道门：
+     *
+     * 一、**一次要几张**（`n` ≤ `max_variants_per_brief`，默认 6）。超了转人审，
+     *     不拦——"这次想多看几版"是正当需求，只是该有人知道。
+     * 二、**每天出几张**（`max_generations_per_day`，默认 30）。同上。
+     * 三、**提示词里的品牌禁忌词** → **block**。词表从 brief 的 `must_avoid`
+     *     与额度 `brand_forbidden` 两处合成（见 {@link DESIGN_PROMPT_FORBIDDEN_CAP}）。
+     *     命中就当场拦死，不给"人点一下就发给模型"的路径：提示词一旦发出去，
+     *     就已经进过一次第三方模型了，事后删图删不掉那一次。
+     */
+    case 'design_variant': {
+      const n = num(after.n) ?? strings(after.prompts).length
+      const perBrief = capNumber(mandate, 'max_variants_per_brief')
+      if (n !== undefined && perBrief !== undefined && n > perBrief)
+        review('max_variants_per_brief', perBrief, n)
+      const daily = capNumber(mandate, 'max_generations_per_day')
+      if (daily !== undefined && facts.windowCount + (n ?? 1) > daily)
+        review('max_generations_per_day', daily, facts.windowCount + (n ?? 1))
+      // 提示词可以是一段（`prompt`）或一串（`prompts`）；两种都查，查的是同一张表
+      const prompts = [
+        ...(typeof after.prompt === 'string' ? [after.prompt] : []),
+        ...strings(after.prompts),
+      ]
+      const forbidden = [
+        ...strings(after.must_avoid),
+        ...capList(mandate, DESIGN_PROMPT_FORBIDDEN_CAP),
+      ]
+        .map((t) => t.trim().toLowerCase())
+        .filter((t) => t.length > 0)
+      const haystack = prompts.join('\n').toLowerCase()
+      const hitTerms = [...new Set(forbidden.filter((t) => haystack.includes(t)))]
+      if (hitTerms.length > 0) block('brand_forbidden_term', hitTerms.join(','), hitTerms[0])
+      break
+    }
+    /**
+     * WP76（58 §1）：把人选定的那一张入素材库并回给需求方。
+     *
+     * "永远人审"在 switch 之前那一条（`HARD_L1`）。这里判的是另一件事：
+     * **人真的点过吗**。`picked_by` 是服务端按请求人盖的一格，Agent 填不了
+     * （契约 `DesignAssetProvenance` 的注释）；没有它就等于 Agent 自己定了稿，
+     * 所以是 block 不是 review——这不是"要不要人批"的问题，是这张卡本身
+     * 不该存在。
+     */
+    case 'asset_publish': {
+      const picked = typeof after.picked_by === 'string' ? after.picked_by.trim() : ''
+      if (picked === '') block('human_pick_required', 'picked_by', 'missing')
+      const cap = capNumber(mandate, 'max_asset_publish_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_asset_publish_per_day', cap, facts.windowCount + 1)
       break
     }
     case 'bid_change':
