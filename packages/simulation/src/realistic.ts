@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { ApprovalItem, DecisionAction, ModelProvider, ModelRef } from '@agentsws/contracts'
 import type { PriceTable } from '@agentsws/model-gateway'
-import { openaiCompatibleProvider } from '@agentsws/model-gateway'
+import { catalogPrice, openaiCompatibleProvider } from '@agentsws/model-gateway'
 import type { Pack } from './pack.js'
 import type { RealisticHooks } from './runner.js'
 import type { World } from './world.js'
@@ -38,13 +38,22 @@ export const SIM_MODEL_ENV = {
   priceCached: 'AGENTSWS_SIM_MODEL_PRICE_CACHED',
 } as const
 
-/** DeepSeek 的默认档（22 §2 的默认模型）；价格是每百万 token 的基准货币。 */
+/**
+ * DeepSeek 的默认档（22 §2 的默认模型）；价格是每百万 token 的基准货币。
+ *
+ * WP87：模型名从 `deepseek-chat` 改成 `deepseek-flash`——`deepseek-chat` 已经不在官方
+ * `GET /models` 的清单里（WP42 那次对着官网真页面核过，见 docs/35 2026-09-10 那条），
+ * 拿它去跑 realistic 档只会在第一次调用上 404。价钱**不再写死在这里**，改成查
+ * `PRICE_CATALOG`（`packages/model-gateway/src/pricing/catalog.json`，每条带 `source_url`
+ * 与 `as_of`，每周一自动刷）：一处价一份出处，不再有第二份会过期的数字。
+ * 下面这三个数只是查不到时的兜底，与 catalog 里 2026-09-10 那份 deepseek-flash 一致。
+ */
 const DEEPSEEK = {
   provider: 'deepseek',
-  model: 'deepseek-chat',
+  model: 'deepseek-flash',
   baseUrl: 'https://api.deepseek.com',
   region: 'cn' as const,
-  price: { in: 0.27, out: 1.1, cached: 0.07 },
+  price: { in: 0.3, out: 1.2, cached: 0.006 },
 }
 
 export interface ResolvedSimModel {
@@ -75,6 +84,8 @@ export function resolveSimModel(env: Env = process.env): ResolvedSimModel | unde
     const v = Number.parseFloat(raw ?? '')
     return Number.isFinite(v) ? v : fallback
   }
+  // 环境变量没写价就查内置价目表（按接口地址认家、按模型名认价；认不出来才用兜底）
+  const listed = catalogPrice(baseUrl, model)
   const ref: ModelRef = { provider: provider as ModelRef['provider'], model, region }
   return {
     ref,
@@ -89,9 +100,9 @@ export function resolveSimModel(env: Env = process.env): ResolvedSimModel | unde
     }),
     prices: {
       [`${provider}/${model}`]: {
-        in: num(env[SIM_MODEL_ENV.priceIn], DEEPSEEK.price.in),
-        out: num(env[SIM_MODEL_ENV.priceOut], DEEPSEEK.price.out),
-        cached: num(env[SIM_MODEL_ENV.priceCached], DEEPSEEK.price.cached),
+        in: num(env[SIM_MODEL_ENV.priceIn], listed?.in ?? DEEPSEEK.price.in),
+        out: num(env[SIM_MODEL_ENV.priceOut], listed?.out ?? DEEPSEEK.price.out),
+        cached: num(env[SIM_MODEL_ENV.priceCached], listed?.cached ?? DEEPSEEK.price.cached),
       },
     },
     describe: `${provider}/${model} @ ${baseUrl}（key 来自环境变量 ${hasOwnKey ? keyEnv : 'DEEPSEEK_API_KEY'}）`,
