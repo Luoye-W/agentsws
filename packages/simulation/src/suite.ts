@@ -4,7 +4,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Iso8601 } from '@agentsws/contracts'
+import type { ModelTrace, ScenarioDiagnostic, SuiteDiagnostics } from './diagnostics.js'
+import {
+  diagnoseScenario,
+  diagnosticsMarkdown,
+  errorReport,
+  summarizeDiagnostics,
+  writeEventsJsonl,
+  writeModelJsonl,
+} from './diagnostics.js'
 import { SimulationError } from './errors.js'
+import type { Evidence } from './evidence.js'
 import type { Pack } from './pack.js'
 import { listFiles, loadPack } from './pack.js'
 import type { Env } from './realistic.js'
@@ -108,6 +118,11 @@ export interface SuiteResult {
   cost?: { spent: number; cap: number; stopped_at?: string; model: string }
   /** 声明了 `tiers` 而这一档不跑的场景。 */
   not_in_tier: string[]
+  /**
+   * WP87 realistic 档的诊断汇总：每条通过 / 失败 / 原因、真模型调用次数、token 与花费。
+   * 明细在报告目录的 `<场景>.events.jsonl` 与 `<场景>.model.jsonl`。
+   */
+  diagnostics?: SuiteDiagnostics
 }
 
 export function readBaseline(file: string): Baseline | undefined {
@@ -162,14 +177,22 @@ export async function runSuite(options: SuiteOptions): Promise<SuiteResult> {
   )
 
   const reports: ScenarioReport[] = []
+  // WP87：realistic 档的诊断落盘目录 = 报告目录本身（`out/` 已在 .gitignore 里）
+  const dumpDir = options.reportDir === undefined ? undefined : resolve(options.reportDir)
+  if (sim !== undefined && dumpDir !== undefined) mkdirSync(dumpDir, { recursive: true })
+  const diagnostics: ScenarioDiagnostic[] = []
   let stoppedAt: string | undefined
   for (const scenario of scenarios) {
     if (sim !== undefined && guard.exhausted) {
       stoppedAt = scenario.id
       break
     }
-    reports.push(
-      await runScenario(scenario, {
+    // WP87：每条场景一份模型往返摘要 + 一份证据，用来回答"这条为什么这样"
+    const trace: ModelTrace = { records: [] }
+    let evidence: Evidence | undefined
+    let report: ScenarioReport
+    try {
+      report = await runScenario(scenario, {
         tier,
         pack,
         ...(options.seed === undefined ? {} : { seed: options.seed }),
@@ -180,15 +203,52 @@ export async function runSuite(options: SuiteOptions): Promise<SuiteResult> {
               model: { provider: sim.provider, ref: sim.ref, prices: sim.prices },
               modelJudge: true,
               realistic: (world) => createRealisticHooks({ world, pack, cache, guard }),
+              // realistic 档：一条错只算一条失败，后面的照跑
+              tolerateScenarioError: true,
+              modelTrace: trace,
+              captureEvidence: (e) => {
+                evidence = e
+              },
             }),
-      }),
-    )
-    // 一条场景真花了多少，以**事件日志**为准（22 §3 每次调用一条 model.usage）——
-    // 钩子在场景内部自己累的那份只是为了让 `max_cost_base` 实时收紧，跑完以账为准
+      })
+    } catch (err) {
+      // fast / soak 档照旧：抛出就是整次运行失败（基线与门禁的语义不变）
+      if (sim === undefined) throw err
+      // realistic 档：连报告都没出来（起世界失败、judge 抛错…）也只算这一条失败
+      report = errorReport({
+        scenario,
+        tier,
+        seed: options.seed ?? scenario.dataset.seed,
+        runtime: options.runtime ?? 'direct',
+        error: err,
+      })
+    }
+    reports.push(report)
     if (sim !== undefined) {
-      guard.spent = reports.reduce((n, r) => n + (r.metrics.cost_base?.value ?? 0), 0)
+      let events_file: string | undefined
+      let model_file: string | undefined
+      if (dumpDir !== undefined) {
+        if (evidence !== undefined) events_file = writeEventsJsonl(dumpDir, report.id, evidence)
+        model_file = writeModelJsonl(dumpDir, report.id, trace.records)
+      }
+      diagnostics.push(
+        diagnoseScenario({
+          report,
+          records: trace.records,
+          ...(events_file === undefined ? {} : { events_file }),
+          ...(model_file === undefined ? {} : { model_file }),
+        }),
+      )
+      // 一条场景真花了多少，以**事件日志**为准（22 §3 每次调用一条 model.usage）——
+      // 钩子在场景内部自己累的那份只是为了让 `max_cost_base` 实时收紧，跑完以账为准。
+      // 抛错的那条没有 metrics，用模型往返摘要里的 cost_base 补上（钱照样花了）
+      guard.spent = reports.reduce(
+        (n, r, i) => n + (r.metrics.cost_base?.value ?? diagnostics[i]?.cost_base ?? 0),
+        0,
+      )
     }
   }
+  const diag = sim === undefined ? undefined : summarizeDiagnostics(diagnostics)
 
   const baselineFile = resolve(options.baselineFile ?? join(packDir, 'baseline.json'))
   const baseline = readBaseline(baselineFile)
@@ -247,6 +307,12 @@ export async function runSuite(options: SuiteOptions): Promise<SuiteResult> {
               ...(stoppedAt === undefined ? {} : { stopped_at: stoppedAt }),
             },
           }),
+      ...(diag === undefined ? {} : { diagnostics: diag }),
+    }
+    if (diag !== undefined) {
+      const dfile = join(dir, 'diagnostics.json')
+      writeFileSync(dfile, `${JSON.stringify(diag, null, 2)}\n`, 'utf8')
+      written.push(dfile)
     }
     writeFileSync(md, suiteMarkdown(view), 'utf8')
     written.push(md)
@@ -282,6 +348,7 @@ export async function runSuite(options: SuiteOptions): Promise<SuiteResult> {
             ...(stoppedAt === undefined ? {} : { stopped_at: stoppedAt }),
           },
         }),
+    ...(diag === undefined ? {} : { diagnostics: diag }),
   }
 }
 
@@ -293,6 +360,8 @@ export interface SuiteView {
   reports: readonly ScenarioReport[]
   gate: GateResult
   cost?: { spent: number; cap: number; model: string; stopped_at?: string }
+  /** WP87 realistic 档：报告末尾那一段诊断。 */
+  diagnostics?: SuiteDiagnostics
 }
 
 /** 26 §4 的报告：人看的那一份。 */
@@ -371,6 +440,10 @@ export function suiteMarkdown(view: SuiteView): string {
       }
       lines.push('')
     }
+  }
+  if (view.diagnostics !== undefined) {
+    lines.push(diagnosticsMarkdown(view.diagnostics))
+    lines.push('')
   }
   return `${lines.join('\n')}\n`
 }

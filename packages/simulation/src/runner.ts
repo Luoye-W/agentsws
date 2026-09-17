@@ -18,6 +18,7 @@ import type { ActorPolicy } from '@agentsws/stand-ins'
 import type { ChatLoop } from './chat.js'
 import { installChat } from './chat.js'
 import { buildRunRequest } from './context.js'
+import type { ModelTrace } from './diagnostics.js'
 import { SimulationError } from './errors.js'
 import type { BlockedRecord, Evidence, RunRecord } from './evidence.js'
 import { checkExpectations } from './expectations.js'
@@ -80,6 +81,17 @@ export interface RunScenarioOptions {
   realistic?: (world: World) => RealisticHooks
   /** WP32：跑不跑模型 judge（规则 judge 一直跑）。 */
   modelJudge?: boolean
+  /**
+   * WP87 realistic 档：每次模型往返记一条**摘要**（不含正文与凭据）进这个收集器，
+   * 套件跑完落成 `<场景>.model.jsonl`。不给就不记（fast 档语义不变）。
+   */
+  modelTrace?: ModelTrace
+  /**
+   * WP87 realistic 档：一条场景里抛出的 `SimulationError` / 运行时错误不再让整次运行中止，
+   * 而是记成这条场景的一条没过的断言（`expected.scenario_error`），证据与报告照常产出。
+   * 缺省 false——fast / soak 档"抛出即失败"的语义不变。
+   */
+  tolerateScenarioError?: boolean
 }
 
 /** realistic 档的两个钩子：客户来信怎么写、人怎么决定。 */
@@ -167,6 +179,7 @@ export async function runScenario(
     ...(options.dbPath === undefined ? {} : { dbPath: options.dbPath }),
     ...(scenario.policy === undefined ? {} : { txnPolicy: scenario.policy }),
     ...(options.model === undefined ? {} : { model: options.model }),
+    ...(options.modelTrace === undefined ? {} : { modelTrace: options.modelTrace }),
   })
 
   try {
@@ -1537,11 +1550,29 @@ async function execute(
   }
 
   const start = clock.now()
-  for (const event of scenario.events) {
-    await advanceTo(resolveAt(event.at, scenario.clock.start))
-    await dispatch(event)
+  /**
+   * WP87：realistic 档里一条场景抛错只算**这一条**失败——把错记成一条没过的断言，
+   * 证据照样收完、报告照样出（`--report` 目录里还留着事件与模型往返，才诊断得动）。
+   * fast / soak 档不开这个开关：那两档"抛出即整次失败"的语义一个字节不变。
+   */
+  let aborted: { code: string; message: string } | undefined
+  try {
+    for (const event of scenario.events) {
+      await advanceTo(resolveAt(event.at, scenario.clock.start))
+      await dispatch(event)
+    }
+  } catch (err) {
+    if (options.tolerateScenarioError !== true) throw err
+    const e = err as { code?: string; message?: string }
+    aborted = { code: e.code ?? 'error', message: e.message ?? String(err) }
   }
-  await advanceTo(new Date(clock.nowMs() + SETTLE_MS).toISOString())
+  // 出错也让世界再转一会儿：批准后的施行、投递、升级都在这一段里落地，
+  // 事件日志因此仍然是"到出错为止的完整一段"，而不是半截
+  try {
+    await advanceTo(new Date(clock.nowMs() + SETTLE_MS).toISOString())
+  } catch (err) {
+    if (aborted === undefined) throw err
+  }
 
   const evidence: Evidence = {
     workspace_id: world.workspace_id,
@@ -1606,6 +1637,13 @@ async function execute(
   const metrics = computeMetrics(evidence, judge)
   const invariants = checkInvariants(scenario.invariants, { evidence, writeActions })
   const expectations = checkExpectations(scenario.expected, evidence, metrics, judge)
+  if (aborted !== undefined) {
+    expectations.push({
+      key: 'scenario_error',
+      ok: false,
+      detail: `[${aborted.code}] ${aborted.message}`,
+    })
+  }
 
   return buildReport({
     scenario,

@@ -8,6 +8,7 @@
  * **替身跑通不等于上线可靠**（26 原则 ④）。
  */
 export * from './context.js'
+export * from './diagnostics.js'
 export * from './errors.js'
 export * from './evidence.js'
 export * from './expectations.js'
