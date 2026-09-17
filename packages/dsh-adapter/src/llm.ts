@@ -100,8 +100,17 @@ function parseArguments(raw: string): unknown {
  * `system` 槽（一次性调用）在前；loop 建的请求没有 `system` 字段，系统提示词是
  * `messages` 里的第一条 system 消息。工具结果在 dsh 里是**带 `tool-result` 块的 user 消息**，
  * 这里还原成我们的 `tool` 角色并补回工具名（从上一条 assistant 的 `tool-call` 块取）。
+ *
+ * WP87：`reasoningByCallId` 把**思考模型上一轮的推理**接回 assistant 消息。dsh 的
+ * `Message` 里没有这一格（它的块只有 text / tool-call / tool-result），推理在流协议这一层
+ * 就掉了；而 `ChatMessage.reasoning` 的契约注释写得很清楚——DeepSeek thinking 模式多轮时
+ * 不原样带回就 400（09-14 真店实测）。键取这一轮 assistant 的第一个 tool-call id：
+ * 有工具调用的 assistant 才会出现在下一轮的历史里，没有的那一轮 loop 已经结束了。
  */
-export function toChatMessages(options: GenerateOptions): ChatMessage[] {
+export function toChatMessages(
+  options: GenerateOptions,
+  reasoningByCallId?: ReadonlyMap<string, string>,
+): ChatMessage[] {
   const messages: ChatMessage[] = []
   if (options.system !== undefined && options.system.length > 0) {
     messages.push(...splitSystemText(options.system))
@@ -120,6 +129,8 @@ export function toChatMessages(options: GenerateOptions): ChatMessage[] {
         .map((b) => (b.type === 'tool-call' ? `[calling ${b.name} ${b.arguments}]` : blockText(b)))
         .filter((s) => s.length > 0)
         .join('\n')
+      const reasoning =
+        calls[0] === undefined ? undefined : reasoningByCallId?.get(String(calls[0].id))
       messages.push({
         role: 'assistant',
         content,
@@ -132,6 +143,7 @@ export function toChatMessages(options: GenerateOptions): ChatMessage[] {
                 input: parseArguments(c.arguments),
               })),
             }),
+        ...(reasoning === undefined || reasoning.length === 0 ? {} : { reasoning }),
       })
       continue
     }
@@ -195,6 +207,11 @@ export interface GatewayAdapterOptions {
  */
 export class GatewayLlmAdapter extends LlmAdapter {
   private steps = 0
+  /**
+   * WP87：这次运行里每一轮的推理，按该轮 assistant 的**每一个** tool-call id 记一份。
+   * 下一轮 `toChatMessages` 据此把 `reasoning_content` 原样带回（思考模型的硬要求）。
+   */
+  private readonly reasoningByCallId = new Map<string, string>()
 
   constructor(private readonly options: GatewayAdapterOptions) {
     super()
@@ -224,7 +241,7 @@ export class GatewayLlmAdapter extends LlmAdapter {
         return
       }
     }
-    const messages = toChatMessages(options)
+    const messages = toChatMessages(options, this.reasoningByCallId)
     const tools = toToolDefs(options.tools)
     this.options.onRequest?.({ messages, tools })
     let completion: Completion
@@ -254,6 +271,10 @@ export class GatewayLlmAdapter extends LlmAdapter {
     const calls = completion.tool_calls ?? []
     for (const call of calls) {
       const id = (call.id.length > 0 ? call.id : `call_${index + 1}`) as ToolCallId
+      // 推理跟着这一轮的调用 id 走：下一轮历史里认得出是哪一条 assistant
+      if (completion.reasoning !== undefined && completion.reasoning.length > 0) {
+        this.reasoningByCallId.set(String(id), completion.reasoning)
+      }
       const args = JSON.stringify(call.input ?? {})
       yield { type: 'block-start', index, blockType: 'tool-call' }
       yield { type: 'tool-call-delta', index, id, name: call.name, argumentsDelta: args }
