@@ -757,6 +757,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'social.discord',
     'pr.monitoring',
     'pr.reddit',
+    // WP75（57 §3）：投放挂一条 `ads.meta`，四条平台职责的面板骨架相同
+    'ads.meta',
   ]) {
     world.roles.assignments.create({
       person_id: world.roleHolder,

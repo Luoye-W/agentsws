@@ -53,7 +53,7 @@ describe('agentsws simulate（26 §5）', () => {
       '--report',
       report,
     )
-    expect(text()).toContain('41/41 场景通过')
+    expect(text()).toContain('44/44 场景通过')
     expect(text()).toContain('合并门禁：通过')
     expect(process.exitCode).toBeUndefined()
     expect(existsSync(join(report, 'summary.json'))).toBe(true)
@@ -62,9 +62,12 @@ describe('agentsws simulate（26 §5）', () => {
       scenarios: unknown[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(41)
+    expect(summary.scenarios).toHaveLength(44)
     expect(existsSync(join(report, 'aftersales__return-within-window.json'))).toBe(true)
-  }, 60_000)
+    // WP75：60 秒是 38 条场景时定的，pack 一路在长（这一轮 +3 到 41，还有三个
+    // 并行的 WP 各自 +3）。跑一整个 pack 本来就不是一分钟的活，并行跑别的项目
+    // 时还要抢 CPU——与 `packages/simulation/test/report.test.ts` 那条对齐到 120 秒。
+  }, 120_000)
 
   it('指标劣化阈值收到 0 且拿一份假基线比 → 门禁红，退出码 1', async () => {
     const dir = tempDir()

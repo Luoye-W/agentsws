@@ -659,6 +659,12 @@ const zh: Table = {
   'highlight.scheduled': '发布时间',
   'highlight.member': '申请人',
   'highlight.handoff': '转给',
+  // WP75（57 §3）：投放那五张卡上的芯片。
+  // 平台那一格是四条职责的卡唯一分得开的东西；**总闸剩余每一张卡上都有**——
+  // 人点头之前要看得见今天还能花多少（04 §5）；止损那一格放的是判据不是结论。
+  'highlight.platform': '平台',
+  'highlight.spend_gate': '总闸',
+  'highlight.stop_loss': '止损判据',
   // WP78（60 §1 / §3）：公关那五张卡上的三个芯片。
   //
   // 「版规」是外部发帖卡上第一眼要看的东西——我们在别人的地盘上，版主说了算。
@@ -2444,6 +2450,9 @@ const en: Table = {
   'highlight.scheduled': 'Goes out',
   'highlight.member': 'Applicant',
   'highlight.handoff': 'Hand off to',
+  'highlight.platform': 'Platform',
+  'highlight.spend_gate': 'Daily cap',
+  'highlight.stop_loss': 'Stop-loss check',
   'highlight.venue_rules': 'Venue rules',
   'highlight.facts_cited': 'Sourced figures',
   'highlight.sentiment': 'Sentiment',

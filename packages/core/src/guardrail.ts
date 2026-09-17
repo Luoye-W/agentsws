@@ -71,6 +71,16 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   community_broadcast: 'medium',
   community_rules: 'medium',
   community_moderation: 'medium',
+  /*
+   * WP75（57 §1）：投放那五条里**只有换素材是新的**（另外四条
+   * `bid_change` / `budget_change` / `create_campaign` / `pause_ad` 上面早就有，
+   * 一个数都没动）。
+   *
+   * 按 low：它对外可见，但**改不了钱**——预算与出价各有各的 kind，换素材那一下
+   * 花的还是原来那笔。真正不许越的那条线是文案里的承诺（`AD_COPY_FORBIDDEN`），
+   * 由 switch 里那道 block 拦死，不靠风险级说话（同 `kol_outreach`）。
+   */
+  creative_swap: 'low',
   // WP78（60 §1）：公共关系那三条。
   //
   // 新闻稿按 medium：它不动钱，但发出去收不回来，而且会被媒体**原样登出去**
@@ -186,6 +196,12 @@ export const RECORD_READ_KINDS: ReadonlySet<ChangeKind> = new Set([
   // 等于拿一份摘要覆盖这个群的法律——与改商品文案是同一件事，同一道门。
   'social_profile_edit',
   'community_rules',
+  /*
+   * WP75（57 §1）：换文案的 `before` 也是那段**正文**。没读全就改一条正在花钱
+   * 跑着的广告，等于拿一份摘要覆盖了投放中的文案——与改商品文案是同一件事，
+   * 同一道门。
+   */
+  'creative_swap',
 ])
 
 /**
@@ -266,6 +282,70 @@ export const KOL_OUTREACH_FORBIDDEN: readonly string[] = [
 ]
 
 /* ── WP78（60 §2）：新闻稿里的数字 ↔ 事实卡 ───────────────────────────── */
+
+/**
+ * WP75（57 §1「换素材 / 文案过 `commitment_scan`」）：广告文案里**不许出现**的说法。
+ *
+ * 与开发信那张表分开，因为**读的人不一样**：开发信是写给一个红人看的，广告是
+ * 挂在付费流量上给所有人看的。所以这张表多了一整类——**极限词**。三类：
+ *
+ * 1. **效果保证**（"保证出单"/"稳赚"/"guaranteed results"）——多数地区的广告法
+ *    直接管这件事，写了就是给商家埋雷。
+ * 2. **极限词**（"全网最低"/"第一品牌"/"世界领先"）——中国大陆《广告法》第九条
+ *    点名的那一类，罚款起步二十万。
+ * 3. **没人批准过的促销**（"买一送一"/"免费送"/"全场 X 折"）——一条促销要走
+ *    `promotion`，那条永远人审（`HARD_L1`）。把它写进广告文案里，等于绕开那道门
+ *    直接对着付费流量承诺出去了。
+ *
+ * 命中就 `block` 而不是转人审：与邀评、开发信逐字同理——这种句子不该有
+ * "人点一下就发出去"的路径。大小写不敏感（调用方先 `toLowerCase()`）。
+ * **只可加行**（15 §2 对规则集的老规矩）。
+ */
+export const AD_COPY_FORBIDDEN: readonly string[] = [
+  // 一、效果保证
+  '保证出单',
+  '保证效果',
+  '稳赚',
+  '包爆单',
+  '无效退款',
+  'guaranteed results',
+  'guaranteed sales',
+  'risk free',
+  'money back guaranteed',
+  // 二、极限词（广告法第九条）
+  '全网最低',
+  '最低价',
+  '第一品牌',
+  '国家级',
+  '世界领先',
+  '绝无仅有',
+  '史上最',
+  'best in the world',
+  'number one brand',
+  // 三、没人批准过的促销
+  '买一送一',
+  '免费送',
+  '全场免单',
+  '一折',
+  'buy one get one free',
+  'free gift with every',
+]
+
+/**
+ * WP75（57 §1 / 04 §5）：**暂停的理由**（`pause_ad` 的 `after.reason`）。
+ *
+ * 封闭是因为只有 `stop_loss` 那一档能到 L3（04 §5：止损是保护性动作，
+ * 减少花钱的动作可以自动）。开着让人随便填的后果是每一条暂停都写着"止损"，
+ * 于是那一档等于没有——所以下面 switch 里那道门还要核对**判据真的成立**
+ * （ROAS 低于线 **且** 花费超过日预算那个比例，两格都要给），不成立就转人审。
+ */
+export const AD_PAUSE_REASONS: readonly string[] = [
+  'stop_loss',
+  'budget_exhausted',
+  'creative_fatigue',
+  'campaign_ended',
+  'manual',
+]
 
 /**
  * 正文里**看起来像一个数字**的每一段，原样抽出来。
@@ -372,6 +452,13 @@ export const PROTECTED_FIELDS: Partial<Record<ChangeKind, string[]>> = {
   community_rules: ['account_id', 'external_id'],
   /** 群发换收件群 / 换模板 id 之外的那些：换群 = 发给了另一批人。 */
   community_broadcast: ['account_id', 'external_id'],
+  /**
+   * WP75（57 §1）：换素材不许顺手换**投给谁**，也不许换到另一个账户上去。
+   *
+   * 受众与账户一变，卡面上那句"给这条广告换一版图"就名不副实了——批的人看的是
+   * 素材，改掉的是投放对象（同 `inventory_adjust` 的"调错货"）。
+   */
+  creative_swap: ['account_id', 'campaign_id', 'ad_set_id', 'targeting', 'audience'],
   /**
    * WP78（60 §1）：**换一个版 = 发到另一个人的地盘上去了**。
    *
@@ -1087,6 +1174,122 @@ export function evaluateGuardrail(
         facts.dailySpendTotal + Math.max(0, (a ?? 0) - (b ?? 0)) > total
       )
         block('max_daily_spend_total', total, facts.dailySpendTotal)
+      /*
+       * WP75（57 §1 / §6）：投放岗位那两条 delta 与**岗位级日花费总闸**。
+       *
+       * 与上面那两行并存而不是替换：15 §2 第一版的 cap 名是
+       * `max_bid_change_pct` / `max_budget_change_pct` / `max_daily_spend_total`
+       * （04 §5 那张表用的就是它们，15 人 pack 的 `ads.performance.yml` 里写着），
+       * 57 §6 用的是 `max_bid_delta_pct` / `max_budget_delta_pct` /
+       * `max_daily_spend`。契约只加不删，所以**两套名字都认**：配哪一个就判哪一个，
+       * 两个都配就两个都判（严的那个自然先响）。
+       *
+       * 总闸这一条是 `review`（升 L1）不是 `block`，与上面那条老的分得开：
+       * 57 §1 写的是"提预算超额 / 提日花费总闸**永远 L1**"——L1 是人点一下就能过，
+       * 而 `block` 是连卡都不建。真正 `block` 的只有"总闸已经满了还要**新开**
+       * 一个花钱口子"那一下（见下面 `create_campaign` 那一段）。
+       */
+      const deltaCapName =
+        change.kind === 'bid_change' ? 'max_bid_delta_pct' : 'max_budget_delta_pct'
+      const deltaCap = capNumber(mandate, deltaCapName)
+      if (b !== undefined && a !== undefined && deltaCap !== undefined && pct(b, a) > deltaCap)
+        review(deltaCapName, deltaCap, Math.round(pct(b, a)))
+      const gate = capNumber(mandate, 'max_daily_spend')
+      // 增量按**提上去的那一截**算：调低预算永远不该撞总闸（04 §5：减少花钱的动作从宽）
+      const added = Math.max(0, (a ?? 0) - (b ?? 0))
+      if (
+        gate !== undefined &&
+        facts.dailySpendTotal !== undefined &&
+        facts.dailySpendTotal + added > gate
+      )
+        review('max_daily_spend', gate, facts.dailySpendTotal + added)
+      break
+    }
+    /**
+     * WP75（57 §1 / 04 §5「开花钱口子永远 L1」）：新建 / 复制 campaign。
+     *
+     * `create_campaign` 已经在 {@link HARD_L1} 里（15 §2 第一版就有），所以
+     * "永远人审"这件事这里一个字都不用写。这一段只多判一件事：
+     * **总闸已经满了的时候，新开一个花钱口子是 `block` 不是 L1**。
+     *
+     * 为什么这一下比"提预算超额"狠：提预算是把已经在跑的那条调大，人看着那个数
+     * 点一下是有意义的；总闸满了还新建，等于人点的那一下是"把今天的预算上限
+     * 就地作废"——那不是审批该承担的判断（04 §5：超过即熔断并即时通知）。
+     * 要做只有一条路：先去把总闸那个数改了（`policy_change`，另一张卡）。
+     */
+    case 'create_campaign': {
+      const gate = capNumber(mandate, 'max_daily_spend')
+      const budget = num(after.daily_budget) ?? num(after.budget) ?? 0
+      if (
+        gate !== undefined &&
+        facts.dailySpendTotal !== undefined &&
+        facts.dailySpendTotal + budget > gate
+      )
+        block('max_daily_spend', gate, facts.dailySpendTotal + budget)
+      break
+    }
+    /**
+     * WP75（57 §1 / 04 §5「止损 L3」）：暂停。
+     *
+     * 止损是**保护性动作**，所以它是投放岗位里唯一能到 L3 的写动作。代价是
+     * "止损"这两个字必须名副其实：不核对判据的话，每一条暂停都会写着 `stop_loss`，
+     * 而那一档就等于没有。
+     *
+     * 两道：① 理由必须在 {@link AD_PAUSE_REASONS} 里（写不出理由的暂停 block）；
+     * ② 报 `stop_loss` 的，ROAS 与花费两格都要给、而且真的越了线，否则 `review`
+     * ——**不是 block**：这一下不是"不该做"，是"它不是止损，按普通暂停请人点一下"。
+     *
+     * 判据两格没配（老调用方）就不判第二道：一个字都不用改。
+     */
+    case 'pause_ad': {
+      const reason = typeof after.reason === 'string' ? after.reason : ''
+      if (!AD_PAUSE_REASONS.includes(reason))
+        block('ad_pause_reason_required', AD_PAUSE_REASONS.join('|'), reason || 'missing')
+      const roasLine = capNumber(mandate, 'stop_loss_roas_below')
+      const spendPct = capNumber(mandate, 'stop_loss_spend_pct')
+      if (reason === 'stop_loss' && roasLine !== undefined && spendPct !== undefined) {
+        const roas = num(after.roas) ?? num(before.roas)
+        const spend = num(after.spend) ?? num(before.spend)
+        const dailyBudget = num(after.daily_budget) ?? num(before.daily_budget)
+        const met =
+          roas !== undefined &&
+          spend !== undefined &&
+          dailyBudget !== undefined &&
+          dailyBudget > 0 &&
+          roas < roasLine &&
+          spend > (dailyBudget * spendPct) / 100
+        if (!met)
+          review(
+            'stop_loss_conditions_unmet',
+            `roas<${roasLine} & spend>${spendPct}%`,
+            roas === undefined || spend === undefined || dailyBudget === undefined
+              ? 'roas / spend / daily_budget 没给全'
+              : `roas=${roas} spend=${spend} daily_budget=${dailyBudget}`,
+          )
+      }
+      break
+    }
+    /**
+     * WP75（57 §1「换素材 / 文案过 `commitment_scan`」）：换素材 / 换文案。
+     *
+     * 一道 block：新文案里不许有效果保证、极限词、没人批准过的促销
+     * （{@link AD_COPY_FORBIDDEN}）。命中 block 而不是转人审，与邀评、开发信
+     * 逐字同理：这种句子不该有"人点一下就发出去"的路径——何况它是挂在
+     * **付费流量**上给所有人看的。
+     *
+     * 一道 review：一天改多少条（`max_changes_per_day`）。素材轮换本身是 L2
+     * 可自动的事（04 §5），但"一下午换了四十版"该有人看一眼。
+     */
+    case 'creative_swap': {
+      const copy = [after.primary_text, after.headline, after.body, after.text]
+        .filter((v): v is string => typeof v === 'string')
+        .join(' ')
+        .toLowerCase()
+      const hit = AD_COPY_FORBIDDEN.find((w) => copy.includes(w.toLowerCase()))
+      if (hit !== undefined) block('ad_copy_commitment', hit, 'found')
+      const cap = capNumber(mandate, 'max_changes_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_changes_per_day', cap, facts.windowCount + 1)
       break
     }
     default:

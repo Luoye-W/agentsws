@@ -51,6 +51,13 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   discord_bot: ['social_discord'],
   telegram_bot: ['social_telegram'],
   whatsapp_business: ['social_whatsapp'],
+  // WP75（57 §1）：投放那四张卡，一张喂一个平台源。
+  // 旧的 `meta_ads` / `meta` / `googleads` 三行（上面）喂的是首页那个 `ads` 源，
+  // 不动——那是"广告后台只读"，与这四条"能动预算"的连接是两件事。
+  meta_marketing: ['ads_meta', 'ads'],
+  google_ads: ['ads_google', 'ads'],
+  x_ads: ['ads_x'],
+  tiktok_ads: ['ads_tiktok'],
   // WP78（60 §5）：品牌监控那一张新卡。
   //
   // `reddit` 那一行在上面——它现在喂**两个**源不是一个吗？不是：Reddit 上的
@@ -59,6 +66,19 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   // 拆得更细的话，用户会看到"Reddit 亮了但 Alerts 没连"这种半亮半暗的面板，
   // 而那两块说的是同一句话。
   google_alerts: ['google_alerts'],
+}
+
+/**
+ * WP75（57 §1）：平台 id（契约 `AdsPlatform`）→ 那个平台的数据源。
+ *
+ * 与 {@link SOCIAL_SOURCE_BY_CHANNEL} 同一条理由显式写出来、不靠字符串拼：
+ * 拼错了不会报错，只会让那一块永远显示"还没连"。
+ */
+export const ADS_SOURCE_BY_PLATFORM: Readonly<Record<string, DataSourceId>> = {
+  meta: 'ads_meta',
+  google: 'ads_google',
+  x: 'ads_x',
+  tiktok: 'ads_tiktok',
 }
 
 /**
@@ -96,7 +116,14 @@ export const SOCIAL_SOURCE_BY_CHANNEL: Readonly<Record<string, DataSourceId>> = 
  * WP78 加进 `pr`：公关库同理（四张表，`apps/server/src/pr.ts`）。一篇还没发的
  * 新闻稿、一份自己攒的媒体名单，与"连没连 Google Alerts"没有半点关系。
  */
-export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social', 'pr']
+export const ALWAYS_CONNECTED: readonly DataSourceId[] = [
+  'approvals',
+  'kol',
+  'social',
+  'pr',
+  // WP75：广告库同理（五张表）——总闸那一格是这台机器上算的，一个平台都没连也成立
+  'ads',
+]
 
 /** 全部数据源，按面板里的出场顺序。 */
 export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
@@ -121,6 +148,11 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'social_discord',
   'social_telegram',
   'social_whatsapp',
+  // WP75（57 §1）：四个平台各一个源
+  'ads_meta',
+  'ads_google',
+  'ads_x',
+  'ads_tiktok',
   // WP78（60 §3）：我们自己的公关库 + 外面那一侧（Google Alerts / Reddit 搜索）
   'pr',
   'google_alerts',

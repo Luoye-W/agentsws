@@ -1,0 +1,68 @@
+# WP75（57 §4 / §1）：**平台口径与订单口径不一样 → 面板上两列并排，不合并。**
+#
+# 这条题钉的是一句话：**两个数不一样是常态，不是 bug。**
+#
+# 场景里 Meta 报了 6 单，订单表里按 UTM 只找得到 3 单。两个数都是真的：
+# 平台按点击后 7 天 / 浏览后 1 天算、跨设备靠登录态串；订单那一侧只认落地页上
+# 那串 UTM——清了 cookie 的、从收藏夹进来的、直接搜品牌名下单的，UTM 里一个字都没有。
+#
+# 合成一个"真实转化数"要么偏袒平台（于是每次都该加预算），要么偏袒订单
+# （于是每条广告看起来都在亏），而做这个判断的人本来就该看见差多少。
+# 所以 `merged` 必须是假——它一旦为真，这条纪律就名存实亡了。
+#
+# 三张归不上的单各有各的理由，一条都不许被猜给这条 campaign：
+# 一张没有落地页链接、一张 UTM 不全、一张写的是**红人那条口径**
+# （`utm_medium=kol`）——认了它就等于把红人带来的单算到广告头上，
+# 下一次预算按错的数批。
+#
+# 15 人公司里投放是**专职**的（吴迪）：归因对账这件事在这里才真的每天发生。
+id: ads/attribution-two-views
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-17T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    ads.attribution:
+      who: p_wu
+      platform: meta
+      campaign: sep-desk
+      spend: 400
+      # 平台自己报的
+      platform_conversions: 6
+      platform_value: 1800
+      orders:
+        # 三张挂着我们自己那串 UTM 的单
+        - { id: ord_1, url: 'https://nordvolt.example/desk?utm_source=meta&utm_medium=cpc&utm_campaign=sep-desk', amount: 299 }
+        - { id: ord_2, url: 'https://nordvolt.example/desk?utm_source=meta&utm_medium=cpc&utm_campaign=sep-desk', amount: 259 }
+        - { id: ord_3, url: 'https://nordvolt.example/desk?utm_source=instagram&utm_medium=cpc&utm_campaign=sep-desk', amount: 320 }
+        # ① 没有落地页链接：直接进店 / 从收藏夹来
+        - { id: ord_4, amount: 199 }
+        # ② UTM 不全（缺 campaign）：半份 UTM 归不了因
+        - { id: ord_5, url: 'https://nordvolt.example/desk?utm_source=meta', amount: 210 }
+        # ③ 红人那条口径：**不认**——认了就把别人带来的单算到广告头上
+        - { id: ord_6, url: 'https://nordvolt.example/desk?utm_source=youtube&utm_medium=kol&utm_campaign=sep-desk', amount: 350 }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  ads_attribution:
+    platform_conversions: '== 6'
+    # 只有前三张对得上（`instagram` 也算 Meta：同一把授权、同一个后台）
+    order_conversions: '== 3'
+    unmatched: '== 3'
+    # **两列没有被合成一个数**
+    merged: false
+  event_types:
+    - simulation.ads_attribution
+  metrics:
+    # 归因只读不写：一条变更都不该有
+    staged_changes: 0
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  面板上"平台说 6 单、订单表里找到 3 单、3 张归不上"，三个数分得开吗？
+  有没有哪一处把它们合成了一个"真实转化数"？

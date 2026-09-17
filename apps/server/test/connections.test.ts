@@ -183,7 +183,7 @@ describe('WP20 §A 连接清单与目录', () => {
     expect((await data<{ connections: ConnectionView[] }>(res)).connections).toEqual([])
   })
 
-  it('目录里二十二个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
+  it('目录里二十六个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
@@ -216,6 +216,11 @@ describe('WP20 §A 连接清单与目录', () => {
       'discord_bot',
       'telegram_bot',
       'whatsapp_business',
+      // WP75（57 §1）：投放那四张（`meta_marketing` 与社媒的 `meta_graph` 是两张卡）
+      'meta_marketing',
+      'google_ads',
+      'x_ads',
+      'tiktok_ads',
       // WP78（60 §5）：品牌监控那一张。Reddit 不在这里——公关用的就是上面
       // 那张 `reddit`（一把 key 管两条职责）；新闻稿分发是"待增加"，在下面那条用例里
       'google_alerts',
@@ -300,6 +305,11 @@ describe('WP20 §A 连接清单与目录', () => {
       'discord_bot',
       'telegram_bot',
       'whatsapp_business',
+      // WP75（57 §1）：投放那四张（`meta_marketing` 与社媒的 `meta_graph` 是两张卡）
+      'meta_marketing',
+      'google_ads',
+      'x_ads',
+      'tiktok_ads',
       // WP78（60 §5）：品牌监控那一张，与店铺平台无关，换成 Woo 也照出
       'google_alerts',
     ])

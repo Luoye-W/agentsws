@@ -67,8 +67,27 @@ describe('岗位面板（36 §3 按数据源分块）', () => {
     expect(sections[1]?.label).toBe(SOURCE_LABELS.ga4)
   })
 
-  it('投放岗位是广告后台 + GA4', () => {
-    expect(assembleView('ads.meta', queryContext()).map((s) => s.source)).toEqual(['ads', 'ga4'])
+  /*
+   * WP75（57 §3）：投放岗位从"广告后台 + GA4"两块变成**三块**。
+   *
+   * 多出来的 `ads_meta` 是**这条职责自己那个平台的源**：转化数与像素健康走它，
+   * 而我们自己算出来的那几块（campaign 表、待审四车道、止损记录、日报）走 `ads`。
+   * 分两层的理由与社媒那九块逐字相同——连上 Meta 不该把 Google 的像素点亮。
+   */
+  it('投放岗位：我们自己那一块 + 这个平台自己那一块 + GA4', () => {
+    expect(assembleView('ads.meta', queryContext()).map((s) => s.source)).toEqual([
+      'ads',
+      'ads_meta',
+      'ga4',
+    ])
+    // 换一条职责就换一个平台源（四条职责的骨架相同，不同的只有这一格）
+    expect(assembleView('ads.google', queryContext()).map((s) => s.source)).toEqual([
+      'ads',
+      'ads_google',
+      'ga4',
+    ])
+    // X / TikTok 今天连不上，所以它们没有 GA4 那一块也不该有别人的平台源
+    expect(assembleView('ads.x', queryContext()).map((s) => s.source)).toEqual(['ads', 'ads_x'])
   })
 
   // WP64（51 §2.3 / §2.4）
@@ -138,7 +157,19 @@ describe('数字块（36 §3）', () => {
       'refund_requests',
       'csat',
     ])
-    expect(DEFAULT_HOME_TILES['ads.meta']).toEqual(['ads_spend', 'ads_roas', 'ads_cpa', 'ads_ctr'])
+    /*
+     * WP75（57 §3）：投放那一行从"花费 / ROAS / CPA / 点击率"（36 §3 举例时的
+     * 四个占位，值永远是 0）换成**真算出来的三个**。
+     *
+     * 少的那一个是"转化数"：它是平台那一侧的数（一个平台一个查询、各有各的
+     * "连没连"），首页这一条跨岗位摆在一起，放它会因为某个平台没连就变成
+     * "去连接"——那一格摆在首页上没用。它在岗位面板里。
+     */
+    expect(DEFAULT_HOME_TILES['ads.meta']).toEqual([
+      'ads_spend_today',
+      'ads_roas_views',
+      'ads_stop_losses',
+    ])
     expect(defaultTilesFor('common.member')).toEqual([])
   })
 

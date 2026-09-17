@@ -395,6 +395,78 @@ export interface ScenarioKolOutreach {
 }
 
 /**
+ * WP75 / 57 §1：提一条新建 campaign（`create_campaign`，**永远 L1**）。
+ *
+ * `level` 是**故意报高的**那一格：15 §2 的 `HARD_L1` 会把它按回人审。
+ * `spend_today` 是"这个平台今天到此刻为止花了多少"——总闸判的时候四个平台
+ * 加起来（04 §5 的岗位级总闸）。总闸已经满了的时候 guardrail **直接 block**：
+ * 那不是"人点一下就能过"的事。
+ */
+export interface ScenarioAdsCampaign {
+  who: string
+  /** 平台 id（`meta` / `google` …，契约 `AdsPlatform`）。 */
+  platform: string
+  name: string
+  daily_budget: number
+  /** 投给谁，一句话。卡面上人要看得见。 */
+  audience?: string
+  /** 这个平台今天到此刻为止花了多少。 */
+  spend_today?: number
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/** WP75 / 57 §1：提一条改预算（`budget_change`）。超 20% 或会破总闸 → 升 L1。 */
+export interface ScenarioAdsBudgetChange {
+  who: string
+  platform: string
+  /** 改的是哪条 campaign。 */
+  campaign: string
+  /** 原来多少。 */
+  before: number
+  /** 改成多少。 */
+  after: number
+  spend_today?: number
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * WP75 / 57 §1：提一条暂停（`pause_ad`）。
+ *
+ * 只有 `reason: 'stop_loss'` **且判据真的成立**才走 L3 那一档——判据由
+ * `ads-core` 的 `stopLossVerdict` 按下面三格算，不是场景说了算。
+ */
+export interface ScenarioAdsPause {
+  who: string
+  platform: string
+  campaign: string
+  /** 封闭的一组（契约 `AD_PAUSE_REASONS`）。 */
+  reason: string
+  roas?: number
+  spend?: number
+  daily_budget?: number
+  spend_today?: number
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/**
+ * WP75 / 57 §1：跑一次归因（**两个口径两列，永不合并**）。
+ *
+ * `orders` 里那几张单的 `url` 是落地页链接——`ads-core` 从它上面的 UTM 认平台与
+ * campaign。没有 url、UTM 不全、或者写的是别人的口径（`utm_medium=kol`），
+ * 一律进 `unmatched`：**绝不按时间窗口猜给谁**。
+ */
+export interface ScenarioAdsAttribution {
+  who: string
+  platform: string
+  campaign: string
+  spend?: number
+  /** 平台自己报的转化数 / 转化额。 */
+  platform_conversions?: number
+  platform_value?: number
+  orders: { id: string; url?: string; amount?: number }[]
+}
+
+/**
  * WP72 / 56 §2：提一条内容（`social_post`，**永远 L1**）。
  *
  * `level` 是**故意报高的**那一格：15 §2 的 `HARD_L1` 会把它按回人审。
@@ -685,6 +757,14 @@ export type ScenarioEvent =
     }
   | { at: string; type: 'community.moderate'; moderate: ScenarioCommunityModerate }
   | { at: string; type: 'community.rules_edit'; rules_edit: ScenarioCommunityRulesEdit }
+  /** WP75：提一条新建 campaign（57 §1，开花钱口子永远 L1）。 */
+  | { at: string; type: 'ads.campaign'; ads_campaign: ScenarioAdsCampaign }
+  /** WP75：提一条改预算（57 §1，超额度或破总闸升 L1）。 */
+  | { at: string; type: 'ads.budget_change'; ads_budget_change: ScenarioAdsBudgetChange }
+  /** WP75：提一条暂停（57 §1，止损那一档要判据真的成立）。 */
+  | { at: string; type: 'ads.pause'; ads_pause: ScenarioAdsPause }
+  /** WP75：跑一次归因（57 §1，两个口径两列不合并）。 */
+  | { at: string; type: 'ads.attribution'; ads_attribution: ScenarioAdsAttribution }
   /** WP78：收一条外面说的话（60，判类不是参数：客户问题转客服）。 */
   | { at: string; type: 'pr.mention'; mention: ScenarioPrMention }
   /** WP78：提一篇新闻稿（60 §2，数字没出处就 block）。 */
@@ -939,6 +1019,60 @@ export interface ScenarioExpected {
     auto_approved?: boolean
     scheduled_at?: string
     stated_on_card?: boolean
+  }
+  /**
+   * WP75 / 57 §1：那一条新建 campaign 的提案。
+   *
+   * `requested_level` 报 L3 而 `auto_approved` 是假 = 硬顶把它按回人审了。
+   * `blocked` 为真 = 总闸满了、连卡都没建（04 §5 熔断）——那时 `stated_on_card`
+   * 说的是**拦下来那句话里有没有把数摆出来**。
+   * `gate_stated_on_card` = 总闸那句话在不在卡面上（每一张投放的卡上都该有）。
+   */
+  ads_campaign?: {
+    requested_level?: string
+    auto_approved?: boolean
+    blocked?: boolean
+    stated_on_card?: boolean
+    gate_stated_on_card?: boolean
+  }
+  /**
+   * WP75 / 57 §1：那一条改预算。
+   *
+   * `within` 为假 + `caps_hit` 里有 `max_budget_delta_pct` = 超了额度、升 L1。
+   * `delta_pct` 是算出来那个数（卡面上人读到的就是它）。
+   */
+  ads_budget?: {
+    delta_pct?: NumericAssertion
+    within?: boolean
+    auto_approved?: boolean
+    caps_hit?: string[]
+    stated_on_card?: boolean
+  }
+  /**
+   * WP75 / 57 §1 / 04 §5：那一条止损。
+   *
+   * `outcome` 是 `ads-core` 算的三态之一（`trigger` / `hold` / `unknown`）。
+   * `auto_approved` 为真 = 止损那一档真的到了 L3；`stated_on_card` 说的是
+   * **判据那句话**在不在卡面上——卡上只写"止损"的话，点头这件事就没有内容。
+   */
+  ads_stop_loss?: {
+    outcome?: string
+    requested_level?: string
+    auto_approved?: boolean
+    caps_hit?: string[]
+    stated_on_card?: boolean
+  }
+  /**
+   * WP75 / 57 §1：那一次归因。
+   *
+   * `merged` **必须是假**——两个口径合成一个数在 57 §1 里是明令禁止的；
+   * 它一旦为真，这条纪律就名存实亡了（同 `community_handoff.answered_by_social`）。
+   */
+  ads_attribution?: {
+    platform_conversions?: NumericAssertion
+    order_conversions?: NumericAssertion
+    unmatched?: NumericAssertion
+    merged?: boolean
   }
   /**
    * WP72 / 56 §2：那一条回复。

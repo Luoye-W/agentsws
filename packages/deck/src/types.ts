@@ -90,6 +90,29 @@ export type HighlightType =
    */
   | 'handoff'
   /**
+   * WP75（57 §3）：这条卡对着的是哪个平台（`Meta Ads` / `Google Ads` …）。
+   *
+   * 与 `channel` 分开：那一格说的是"发到哪个号"，这一格说的是"花哪个账户的钱"。
+   * 四条投放职责的卡长得一模一样，唯一分得开的就是这一格。
+   */
+  | 'platform'
+  /**
+   * WP75（57 §3）：**岗位级日花费总闸当时还剩多少**。
+   *
+   * 每一张投放的卡上都有它，不只是提预算那一张。理由是 04 §5 那条纪律的全部
+   * 重点：人点头之前要看得见"今天还剩多少"——而那个数与他正在批的这一条
+   * 必须是同一时刻算的，不能是他点开卡之后自己去面板上再看一眼。
+   */
+  | 'spend_gate'
+  /**
+   * WP75（57 §1）：止损那张卡上的**判据**。
+   *
+   * 不是"止损"两个字，是"ROAS 0.6（线是 1），今天花了 400，占日预算的 40%"。
+   * 卡上只写结论的话，点头这件事就没有内容——那不是审核，是随手点两下
+   * （同 56 §6 入群审核那条"他填的答案要在卡面上"）。
+   */
+  | 'stop_loss'
+  /**
    * WP78（60 §1）：外部发帖卡上的**版规检查结论**。
    *
    * 这是这张卡上第一眼要看的东西：我们在别人的地盘上，版规不让就不该发。
@@ -301,6 +324,18 @@ export type DataSourceId =
   | 'social_discord'
   | 'social_telegram'
   | 'social_whatsapp'
+  /**
+   * WP75（57 §1）：四个平台**各一个**数据源，理由与社媒那八个逐字相同——
+   * 连上 Meta 不该把 Google 那一块点亮。
+   *
+   * 早就有的 `ads` 那个源留着不动：它喂的是首页"广告后台"那两块（旧的只读连接）。
+   * 投放岗位面板上**我们自己算出来的**那几块（campaign 表、待审改动、止损记录）
+   * 走的也是它——广告库是这台机器上的一张表，而不是"要去连接的一个后台"。
+   */
+  | 'ads_meta'
+  | 'ads_google'
+  | 'ads_x'
+  | 'ads_tiktok'
   /**
    * WP78（60 §3）：**我们自己的公关库**（媒体名单、新闻稿、提及、外部露出）。
    * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `social`）。
@@ -521,6 +556,102 @@ export interface KolDeckData {
  * 每一行都带 `channel`：九条职责共用同一份投影，面板那一层按自己那条渠道筛
  * （`socialChannelOfRole(ctx.role_id)`），不是算九遍。
  */
+/**
+ * WP75（57 §3）：投放面板那九块要的投影。
+ *
+ * 四条平台职责共用这一份（骨架相同，57 §1），面板那一层按自己那个平台筛
+ * （`adsPlatformOfRole(ctx.role_id)`），不是算四遍。
+ *
+ * 三件事在这份形状里定死：
+ *
+ * 1. **每一行都带 `platform`**（同 `SocialDeckData` 的 `channel`）。
+ * 2. **两个口径两列**（{@link AdsDeckData.attribution}）——面板上并排摆着，
+ *    差多少一眼看得见；`gap_pct` 是算给人看的，不是修正值。
+ * 3. **总闸那一格带着"哪个平台还没拉到数"**：不说的话，"还剩 800"会让人
+ *    以为很宽裕，而真相是有两个平台压根没数。
+ */
+export interface AdsDeckData {
+  /** 今日花费与总闸（一个岗位一份，不是一个平台一份——钱只有一份）。 */
+  spend_gate: {
+    /** 四个平台加起来今天花了多少。 */
+    spent: number
+    /** 岗位级总闸那个数（57 §6 默认 1000）。 */
+    cap: number
+    /** 还剩多少（已经负了就是负数：面板上那一格要显示真实差额）。 */
+    remaining: number
+    currency?: string
+    /** 各平台今天各花了多少（点开看的就是这几行）。 */
+    by_platform: { platform: string; spend: number; observed_at?: string }[]
+    /** 哪几个平台今天还没拉到数（按 0 算了，但要说出来）。 */
+    missing: string[]
+  }
+  /** campaign 表：一条一行。 */
+  campaigns: {
+    campaign_id: string
+    platform: string
+    account: string
+    name: string
+    status: string
+    daily_budget?: number
+    spend?: number
+    roas?: number
+    conversions?: number
+    observed_at?: string
+  }[]
+  /** 待审改动**四条车道**（57 §3：预算 / 出价 / 新建 / 素材各一条）。 */
+  pending: {
+    approval_id: string
+    platform: string
+    /** 哪条车道（`budget` / `bid` / `campaign` / `creative`）。 */
+    lane: string
+    target: string
+    /** 一句话摘要（卡面上那一句，原样端出去）。 */
+    summary: string
+    created_at?: string
+  }[]
+  /** 止损记录：自动停过哪些、为什么。 */
+  stop_losses: {
+    campaign_id: string
+    platform: string
+    name: string
+    at: string
+    roas?: number
+    spend?: number
+    daily_budget?: number
+    /** 判据那句话（`ads-core` 的 `stopLossVerdict.reason`，原样）。 */
+    reason: string
+  }[]
+  /** 像素健康：一条事件一行。 */
+  pixels: {
+    pixel_id: string
+    platform: string
+    event_name: string
+    status: string
+    count_24h?: number
+    last_fired_at?: string
+    note?: string
+    observed_at?: string
+  }[]
+  /** 归因两列（文件头第 2 条）。 */
+  attribution: {
+    platform: string
+    campaign: string
+    platform_conversions?: number
+    order_conversions?: number
+    platform_roas?: number
+    order_roas?: number
+    /** 差多少（给人看的一个数，**不是**修正值）。 */
+    gap_pct?: number
+    observed_at?: string
+  }[]
+  /** 归不上的订单数（面板上那一行"对不上的"）。 */
+  unmatched_orders?: number
+  /** 今天的转化数（平台口径合计）。 */
+  conversions_today?: number
+  /** 今天止损了几次。 */
+  stop_loss_count?: number
+}
+
 export interface SocialDeckData {
   /** 内容日历：排好期的与已发的，按时间正序。 */
   calendar: {
@@ -707,6 +838,14 @@ export interface QueryContext {
    * 后者说"去连接页把 Discord 连上"。
    */
   social?: SocialDeckData
+  /**
+   * WP75（57 §3）：投放那几张投影（宿主从 `AdsStore` 里读出来递进来）。
+   *
+   * 不给 = 这台机器上还没有投放岗位，那几块一律空——**不是**"还没连"。
+   * 界面上那两句话不一样：前者说"还没有广告账户，先连一个平台"，
+   * 后者说"去连接页把 Google Ads 连上"。
+   */
+  ads?: AdsDeckData
   /**
    * WP78（60 §3）：公关库那几张投影（宿主从 `PrStore` 里读出来递进来）。
    *

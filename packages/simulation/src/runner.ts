@@ -1258,6 +1258,97 @@ async function execute(
         await tick()
         return
       }
+      // ── WP75 投放（57 §1 / §4、04 §5）──────────────────────────────
+      case 'ads.campaign': {
+        const e = event.ads_campaign
+        const out = await world.ads.createCampaign({
+          who: e.who,
+          platform: e.platform,
+          name: e.name,
+          daily_budget: e.daily_budget,
+          ...(e.audience === undefined ? {} : { audience: e.audience }),
+          ...(e.spend_today === undefined ? {} : { spend_today: e.spend_today }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.ads_campaign_requested', {
+          platform: e.platform,
+          staged: out.staged,
+          // 总闸那几个数进日志（那句人话在卡面上，不在这里重复一遍）
+          spend_gate_spent: out.spend_gate.spent,
+          spend_gate_cap: out.spend_gate.cap,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'ads.budget_change': {
+        const e = event.ads_budget_change
+        const out = await world.ads.budgetChange({
+          who: e.who,
+          platform: e.platform,
+          campaign: e.campaign,
+          before: e.before,
+          after: e.after,
+          ...(e.spend_today === undefined ? {} : { spend_today: e.spend_today }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.ads_budget_requested', {
+          platform: e.platform,
+          campaign: e.campaign,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'ads.pause': {
+        const e = event.ads_pause
+        const out = await world.ads.pause({
+          who: e.who,
+          platform: e.platform,
+          campaign: e.campaign,
+          reason: e.reason,
+          ...(e.roas === undefined ? {} : { roas: e.roas }),
+          ...(e.spend === undefined ? {} : { spend: e.spend }),
+          ...(e.daily_budget === undefined ? {} : { daily_budget: e.daily_budget }),
+          ...(e.spend_today === undefined ? {} : { spend_today: e.spend_today }),
+          ...(e.level === undefined ? {} : { level: e.level }),
+        })
+        world.appendEvent('simulation.ads_pause_requested', {
+          platform: e.platform,
+          campaign: e.campaign,
+          staged: out.staged,
+          // 三态之一（`trigger` / `hold` / `unknown`）；判据那句话在卡面上
+          outcome: out.outcome,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'ads.attribution': {
+        const e = event.ads_attribution
+        const out = await world.ads.attribution({
+          who: e.who,
+          platform: e.platform,
+          campaign: e.campaign,
+          ...(e.spend === undefined ? {} : { spend: e.spend }),
+          ...(e.platform_conversions === undefined
+            ? {}
+            : { platform_conversions: e.platform_conversions }),
+          ...(e.platform_value === undefined ? {} : { platform_value: e.platform_value }),
+          orders: e.orders,
+        })
+        world.appendEvent('simulation.ads_attribution_requested', {
+          platform: e.platform,
+          campaign: e.campaign,
+          // **两个数各记各的**，这里也不合并
+          platform_conversions: out.platform_conversions,
+          order_conversions: out.order_conversions,
+          unmatched: out.unmatched,
+        })
+        await tick()
+        return
+      }
       // ── WP67 红人营销（48 §5.1）────────────────────────────────────
       case 'kol.outreach': {
         const out = await world.kol.outreach({

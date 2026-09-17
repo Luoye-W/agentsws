@@ -864,6 +864,69 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "ads/budget-change-over-cap": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "ads/daily-cap-blocks-new-campaign": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "ads/stop-loss-auto-pause": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -1729,6 +1792,69 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "ads/budget-change-over-cap": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "ads/daily-cap-blocks-new-campaign": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "ads/stop-loss-auto-pause": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -1739,7 +1865,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007467,
+            "cost_base": 0.007787,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1751,7 +1877,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7442,
+            "tokens_per_item": 7762,
             "tool_calls": 3
           }
         },
@@ -1760,7 +1886,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007471,
+            "cost_base": 0.007793,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1772,7 +1898,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7451,
+            "tokens_per_item": 7772,
             "tool_calls": 3
           }
         },
@@ -1781,7 +1907,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.016971,
+            "cost_base": 0.017701,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1793,7 +1919,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 8464,
+            "tokens_per_item": 8826,
             "tool_calls": 7
           }
         },
@@ -1823,7 +1949,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009462,
+            "cost_base": 0.009866,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1835,7 +1961,7 @@
             "runs_failed": 1,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9441,
+            "tokens_per_item": 9843,
             "tool_calls": 4
           }
         },
@@ -1865,7 +1991,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 2,
-            "cost_base": 0.009759,
+            "cost_base": 0.010153,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -1877,7 +2003,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 9735,
+            "tokens_per_item": 10132,
             "tool_calls": 4
           }
         },
@@ -1886,7 +2012,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009554,
+            "cost_base": 0.009958,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1898,7 +2024,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9530,
+            "tokens_per_item": 9932,
             "tool_calls": 4
           }
         },
@@ -1907,7 +2033,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.009736,
+            "cost_base": 0.010136,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -1919,7 +2045,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9710,
+            "tokens_per_item": 10110,
             "tool_calls": 4
           }
         },
@@ -1928,7 +2054,7 @@
             "adoption_rate": 0.3333333333333333,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.023341,
+            "cost_base": 0.024307,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1940,7 +2066,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7759,
+            "tokens_per_item": 8080,
             "tool_calls": 9
           }
         },
@@ -1949,7 +2075,7 @@
             "adoption_rate": 0,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.031096,
+            "cost_base": 0.032378,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1961,7 +2087,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7752,
+            "tokens_per_item": 8072,
             "tool_calls": 12
           }
         },
@@ -1970,7 +2096,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.00946,
+            "cost_base": 0.009866,
             "escalations": 5,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -1982,7 +2108,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9440,
+            "tokens_per_item": 9843,
             "tool_calls": 4
           }
         },
@@ -1991,7 +2117,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.00946,
+            "cost_base": 0.009866,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2003,7 +2129,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9440,
+            "tokens_per_item": 9843,
             "tool_calls": 4
           }
         },
@@ -2033,7 +2159,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007511,
+            "cost_base": 0.007837,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2045,7 +2171,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7489,
+            "tokens_per_item": 7812,
             "tool_calls": 3
           }
         },
@@ -2054,7 +2180,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009524,
+            "cost_base": 0.009928,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2066,7 +2192,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9503,
+            "tokens_per_item": 9905,
             "tool_calls": 4
           }
         },
@@ -2075,7 +2201,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009457,
+            "cost_base": 0.009851,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2087,7 +2213,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9429,
+            "tokens_per_item": 9826,
             "tool_calls": 4
           }
         },
@@ -2138,7 +2264,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.00574,
+            "cost_base": 0.005986,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2150,7 +2276,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 5724,
+            "tokens_per_item": 5967,
             "tool_calls": 2
           }
         },
@@ -2590,6 +2716,69 @@
             "queue_latency_ms": 0,
             "runs_failed": 0,
             "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "ads/budget-change-over-cap": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 1,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "ads/daily-cap-blocks-new-campaign": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 1,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "ads/stop-loss-auto-pause": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
             "staged_changes": 1,
             "tokens_per_item": 0,
             "tool_calls": 0

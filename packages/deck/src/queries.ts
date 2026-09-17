@@ -10,9 +10,14 @@
  * GA4 / Search Console / 广告后台没接连接，一律回 `not_connected`（界面显示「去连接」而不是空图）。
  */
 import type { ApprovalItem, Iso8601 } from '@agentsws/contracts'
-import { SOCIAL_CHANNELS, socialChannelOfRole } from '@agentsws/contracts'
+import {
+  ADS_PLATFORMS,
+  adsPlatformOfRole,
+  SOCIAL_CHANNELS,
+  socialChannelOfRole,
+} from '@agentsws/contracts'
 import { DeckError } from './errors.js'
-import { SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
+import { ADS_SOURCE_BY_PLATFORM, SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
 import type {
   DataSourceId,
   QueryContext,
@@ -691,6 +696,257 @@ const PR_QUERIES: QueryDef[] = [
   },
 ]
 
+/* ── WP75（57 §3）：投放面板那九块 ──────────────────────────────────────
+ *
+ * 分两层，理由与社媒那九块逐字相同（36 §3）：
+ *
+ * - **我们自己算出来的那几块**（今日花费 / 总闸剩余、ROAS 两口径、止损次数、
+ *   campaign 表、待审四车道、止损记录、归因、日报）走 `ads` 这个源。
+ * - **平台那一侧那两块**（转化数、像素健康）走**这条职责自己的平台源**——
+ *   连上 Meta 不会把 Google 的像素那一块点亮。
+ *
+ * 除了"今日花费 / 总闸剩余"，每一块都按 `ctx.role_id` 那个平台筛：
+ * 四条职责共用一份投影（宿主算的），面板这一层各看各的。
+ *
+ * **总闸那一块不筛**：它是岗位级的（04 §5），四个平台加起来算的那一个数。
+ * 按平台筛的话，挂着 Meta 的人看到的"还剩多少"会是一个偏大的数——
+ * 而他正要拿这个数去决定加不加预算。
+ */
+
+/** 这条职责是哪个平台；不是投放职责就没有——那时一行都不出。 */
+function platformOfRole(role_id: string): string | undefined {
+  return adsPlatformOfRole(role_id)?.id
+}
+
+/** 只留这条职责自己那个平台的行。 */
+function ofPlatform<T extends { platform: string }>(rows: readonly T[], ctx: QueryContext): T[] {
+  const platform = platformOfRole(ctx.role_id)
+  // 认不出平台（不是投放职责）就一行不出——**不是**把四个平台全端出来
+  return platform === undefined ? [] : rows.filter((r) => r.platform === platform)
+}
+
+/** 数字块拿不到数就空着（**不补 0**：没拉到数与真的是 0 要分得开）。 */
+const numOrBlank = (v: number | undefined): number | string => v ?? ''
+
+const ADS_QUERIES: QueryDef[] = [
+  {
+    /*
+     * 今日花费 / 总闸剩余。**一个岗位一份**，不按平台筛（见本节开头）。
+     *
+     * `value` 是今天花了多少、`previous` 是总闸那个数——于是面板上那一格
+     * 天然读成"花了 X / 上限 Y"。`spark` 是四个平台各花了多少（最多四根），
+     * 一眼看得出钱花在哪一边。
+     */
+    name: 'ads.spend_today',
+    source: 'ads',
+    returns: 'scalar',
+    run: (ctx) => {
+      const gate = ctx.ads?.spend_gate
+      if (gate === undefined) return { value: 0, previous: 0, spark: [] }
+      return {
+        value: gate.spent,
+        previous: gate.cap,
+        spark: gate.by_platform.map((r) => r.spend),
+        ...(gate.currency === undefined ? {} : { currency: gate.currency }),
+      }
+    },
+  },
+  {
+    /*
+     * ROAS 两口径。**一格里放不下两个数**，所以这一格放的是**订单口径**
+     * （`value`）与**平台口径**（`previous`）——面板上那一格读成
+     * "订单口径 X（平台说 Y）"。合成一个数在 57 §1 里是明令禁止的。
+     */
+    name: 'ads.roas_two_views',
+    source: 'ads',
+    returns: 'scalar',
+    run: (ctx) => {
+      const rows = ofPlatform(ctx.ads?.attribution ?? [], ctx)
+      if (rows.length === 0) return { value: 0, previous: 0, spark: [] }
+      const avg = (pick: (r: (typeof rows)[number]) => number | undefined): number => {
+        const got = rows.map(pick).filter((v): v is number => v !== undefined)
+        return got.length === 0
+          ? 0
+          : Math.round((got.reduce((a, b) => a + b, 0) / got.length) * 100) / 100
+      }
+      return {
+        value: avg((r) => r.order_roas),
+        previous: avg((r) => r.platform_roas),
+        spark: rows.map((r) => r.order_roas ?? 0),
+      }
+    },
+  },
+  {
+    name: 'ads.stop_loss_count',
+    source: 'ads',
+    returns: 'scalar',
+    run: (ctx) => {
+      const rows = ofPlatform(ctx.ads?.stop_losses ?? [], ctx)
+      return { value: rows.length, previous: 0, spark: [] }
+    },
+  },
+  {
+    name: 'ads.campaigns',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: 'campaign' },
+        { key: 'account', label: '账户' },
+        { key: 'status', label: '状态' },
+        { key: 'daily_budget', label: '日预算', align: 'right' as const, format: 'money' as const },
+        { key: 'spend', label: '今天花了', align: 'right' as const, format: 'money' as const },
+        { key: 'roas', label: 'ROAS（平台口径）', align: 'right' as const },
+        { key: 'observed_at', label: '看到于' },
+      ],
+      rows: ofPlatform(ctx.ads?.campaigns ?? [], ctx).map((r) => ({
+        name: r.name,
+        account: r.account,
+        status: r.status,
+        daily_budget: numOrBlank(r.daily_budget),
+        spend: numOrBlank(r.spend),
+        roas: numOrBlank(r.roas),
+        observed_at: r.observed_at ?? '',
+      })),
+    }),
+  },
+  {
+    /*
+     * 待审改动**四条车道**（57 §3）。
+     *
+     * 为什么分车道而不是一张"待审 6 条"：这四种卡该看的东西不一样——
+     * 新建看预算与受众、改预算看幅度与总闸、改出价看幅度、换素材看文案与图。
+     * 混成一张，人只能一张张点开看它到底是哪一类（同 51 §2.1 店铺那四条车道）。
+     */
+    name: 'ads.pending_changes',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'lane', label: '车道' },
+        { key: 'target', label: '改哪条' },
+        { key: 'summary', label: '改成什么' },
+        { key: 'created_at', label: '提于' },
+      ],
+      rows: ofPlatform(ctx.ads?.pending ?? [], ctx).map((r) => ({
+        lane: r.lane,
+        target: r.target,
+        summary: r.summary,
+        created_at: r.created_at ?? '',
+      })),
+    }),
+  },
+  {
+    name: 'ads.stop_loss_log',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'at', label: '什么时候停的' },
+        { key: 'name', label: 'campaign' },
+        { key: 'roas', label: 'ROAS', align: 'right' as const },
+        { key: 'spend', label: '停之前花了', align: 'right' as const, format: 'money' as const },
+        // 判据那句话原样端出去：人要看的是"为什么停"，不是"停了"
+        { key: 'reason', label: '判据' },
+      ],
+      rows: ofPlatform(ctx.ads?.stop_losses ?? [], ctx).map((r) => ({
+        at: r.at,
+        name: r.name,
+        roas: numOrBlank(r.roas),
+        spend: numOrBlank(r.spend),
+        reason: r.reason,
+      })),
+    }),
+  },
+  {
+    /*
+     * 归因：**两列并排，永不合并**（57 §1）。
+     *
+     * `gap_pct` 那一列是算给人看的差距，不是修正值——它旁边的两列一个数都没动。
+     */
+    name: 'ads.daily_report',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'campaign', label: 'campaign' },
+        {
+          key: 'platform_conversions',
+          label: '平台口径转化',
+          align: 'right' as const,
+          format: 'count' as const,
+        },
+        {
+          key: 'order_conversions',
+          label: '订单口径转化',
+          align: 'right' as const,
+          format: 'count' as const,
+        },
+        { key: 'gap_pct', label: '差多少', align: 'right' as const },
+        { key: 'observed_at', label: '看到于' },
+      ],
+      rows: ofPlatform(ctx.ads?.attribution ?? [], ctx).map((r) => ({
+        campaign: r.campaign,
+        platform_conversions: numOrBlank(r.platform_conversions),
+        order_conversions: numOrBlank(r.order_conversions),
+        gap_pct: r.gap_pct === undefined ? '' : `${r.gap_pct}%`,
+        observed_at: r.observed_at ?? '',
+      })),
+    }),
+  },
+]
+
+/*
+ * 平台那一侧的两块：**一个平台一个查询**，因为它们各自的"连没连"不一样
+ * （同社媒那两块）。查询名带平台后缀（`ads.pixel_health.meta`），
+ * 积木那一层按职责挑对应那一条。
+ */
+for (const spec of ADS_PLATFORMS) {
+  const source = ADS_SOURCE_BY_PLATFORM[spec.id]
+  if (source === undefined) continue
+  ADS_QUERIES.push({
+    name: `ads.conversions.${spec.id}`,
+    source,
+    returns: 'scalar',
+    run: (ctx) => {
+      const rows = ofPlatform(ctx.ads?.campaigns ?? [], ctx)
+      const got = rows.map((r) => r.conversions).filter((v): v is number => v !== undefined)
+      return {
+        value: got.reduce((a, b) => a + b, 0),
+        previous: 0,
+        spark: got,
+      }
+    },
+  })
+  ADS_QUERIES.push({
+    name: `ads.pixel_health.${spec.id}`,
+    source,
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'event_name', label: '事件' },
+        { key: 'status', label: '状态' },
+        {
+          key: 'count_24h',
+          label: '近 24 小时',
+          align: 'right' as const,
+          format: 'count' as const,
+        },
+        { key: 'last_fired_at', label: '上次收到' },
+        // 平台说的原话原样显示，不翻译成"出错了"
+        { key: 'note', label: '平台怎么说' },
+      ],
+      rows: ofPlatform(ctx.ads?.pixels ?? [], ctx).map((r) => ({
+        event_name: r.event_name,
+        status: r.status,
+        count_24h: numOrBlank(r.count_24h),
+        last_fired_at: r.last_fired_at ?? '',
+        note: r.note ?? '',
+      })),
+    }),
+  })
+}
+
 const QUERY_LIST: QueryDef[] = [
   {
     name: 'sales.total',
@@ -1288,6 +1544,7 @@ const QUERY_LIST: QueryDef[] = [
     }),
   },
   ...SOCIAL_QUERIES,
+  ...ADS_QUERIES,
   // WP78（60 §3）：公关五块
   ...PR_QUERIES,
 ]

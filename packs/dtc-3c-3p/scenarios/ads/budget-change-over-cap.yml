@@ -1,0 +1,58 @@
+# WP75（57 §4 / §6、04 §5）：**提预算超 20% → 升 L1**，而且幅度那句话要在卡面上。
+#
+# 这条题钉的不是"我们能算出 30%"（那是 `ads-core` 单元测试的事），而是
+# **算出来的那条额度真的在 guardrail 里响了**。只写在职责 yml 里而 guardrail 不报，
+# 那一行等于没写——WP73 的入群审核就栽在这上面（`changeKindOf` 对不上 kind，
+# 于是"L2"在机器眼里一直是 L1，而没有任何地方会喊）。
+#
+# 为什么提预算超额要人点而不是拦死：它与"新开花钱口子"不一样——那条是**开一个
+# 今天没有的口子**，这条是把已经在跑的调大。人看着那个幅度点一下是有意义的
+# （04 §5：额度内调整 L2，超了升 L1）。
+#
+# 一个合成人都不装 = 没有人去点那张卡。超了额度就得有人点头。
+id: ads/budget-change-over-cap
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-17T09:00:00+08:00' }
+events:
+  # 王岚（店主，兼着投放的 Meta 那条职责）把一条跑得还行的 campaign 预算提上去
+  - at: '+0m'
+    ads.budget_change:
+      who: p_wang
+      platform: meta
+      campaign: cmp_desk_sep
+      before: 1000
+      after: 1300
+      # 今天这个平台已经花了 200，离总闸（1000）还远——响的只该是幅度那一条
+      spend_today: 200
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  ads_budget:
+    # 1000 → 1300 是 +30%，超过 57 §6 的 20%
+    delta_pct: '>= 30'
+    within: false
+    # 超了额度就不该自己走
+    auto_approved: false
+    # 这一条是机器眼里唯一的凭据：yml 上写的那个额度真的响了
+    caps_hit: [max_budget_delta_pct]
+    # 幅度那句话在卡面上——人点头之前要看得见"提了百分之多少"
+    stated_on_card: true
+  staged_change_kinds: [budget_change]
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.ads_budget_staged
+  auto_approved: 0
+  metrics:
+    staged_changes: 1
+    # 没人点头 = 一分钱都没多花
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  卡面上"这条预算从多少提到多少、超了额度多少"，人读完答得上来吗？

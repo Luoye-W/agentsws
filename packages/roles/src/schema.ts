@@ -51,6 +51,11 @@ const DATA_DOMAIN = Schema.union([
   // 内容组四条读不到成员，客服的「社群管理」读得到线程、读不到成员名册。
   'community_member',
   'community_thread',
+  // WP75（57 §1）：投放的像素与转化事件，与契约的 `DataDomain` 同步。
+  // 单独一把闸是因为**投放只读得动它、改不动它**：改追踪代码是建站的事，
+  // 而且永远 L1（04 §5 `ads.tracking` 那一行）。塞进 `ad_account` 里的话，
+  // "能改广告预算"与"能改网站上的像素代码"就变成同一把钥匙了。
+  'pixel_event',
   // WP78（60 §1）：公共关系那四个域，与契约的 `DataDomain` 同步。
   // 一个域一把闸：媒体联系方式只有 `pr.press` 碰得到（confidential）；
   // 提及流四条职责都读得到；在别人地盘上发的那条只有 `pr.reddit` / `pr.forums` 写得了。

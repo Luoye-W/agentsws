@@ -235,7 +235,7 @@ const PEOPLE_3: PersonTemplate[] = [
     // WP78（60 §1）：**品牌监控**也挂在店主身上——3 人公司里"外面有人说我们"
     // 这件事没有别人看。挑 `pr.monitoring` 而不是别的三条，是因为它是唯一一条
     // 与客服有交接的（判成客户问题 → 转客服，而客服就是他自己）。
-    extra: ['common.owner', 'dtc.community-support', 'pr.monitoring'],
+    extra: ['common.owner', 'dtc.community-support', 'pr.monitoring', 'ads.meta'],
   },
   {
     id: 'p_li',

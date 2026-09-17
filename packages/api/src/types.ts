@@ -50,6 +50,7 @@ import type {
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
+import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
 import type { BrowserPort } from './routes/browser.js'
@@ -678,6 +679,13 @@ export interface GatewayDeps {
    * 只是没有任何增删改的入口。
    */
   social?: SocialPort
+  /**
+   * WP75（57 §5）：这个品牌的广告库那一面（`/v1/ads/*`）。
+   *
+   * 不给 = 这个服务进程没装投放岗位，那几条路由一律 `not_implemented`
+   * ——**不是** 404：路由在那儿，只是这台机器上没有广告库。
+   */
+  ads?: AdsPort
   /**
    * WP78（60 §5）：本地公关库。没装配时 `/v1/pr/*` 回 not_implemented——
    * 公共关系那四条职责要它才动得了。

@@ -4,6 +4,7 @@
     "apps/server/src/live-data.ts",
     "packages/connect-adapter/action-side-effects.yml",
     "packages/connect-adapter/src/shopify-actions.ts",
+    "packages/contracts/src/ads.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/blocks.ts",
     "packages/contracts/src/changes.ts",
@@ -34,6 +35,10 @@
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
+    "packages/roles/roles/ads/google.yml",
+    "packages/roles/roles/ads/meta.yml",
+    "packages/roles/roles/ads/tiktok.yml",
+    "packages/roles/roles/ads/x.yml",
     "packages/roles/roles/amz/support.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
@@ -64,18 +69,271 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "b43582b9c8d9779981716b025956a222",
+  "source_digest": "0018133589b3e730e6e08b91d772fd60",
   "objects": [
+    {
+      "id": "ad",
+      "label": "ad",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "ad_account",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "ad_set_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "platform",
+          "type": "AdsPlatform",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "AdDeliveryStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "creative_refs",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "primary_text",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "headline",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "metrics",
+          "type": "AdMetrics",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [
+        "ads.campaigns",
+        "ads.conversions.google",
+        "ads.conversions.meta",
+        "ads.conversions.tiktok",
+        "ads.conversions.x",
+        "ads.cpa",
+        "ads.ctr",
+        "ads.daily_report",
+        "ads.pending_changes",
+        "ads.pixel_health.google",
+        "ads.pixel_health.meta",
+        "ads.pixel_health.tiktok",
+        "ads.pixel_health.x",
+        "ads.roas",
+        "ads.roas_two_views",
+        "ads.spend",
+        "ads.spend_today",
+        "ads.stop_loss_count",
+        "ads.stop_loss_log",
+        "ads.trend"
+      ],
+      "contract": "Ad"
+    },
+    {
+      "id": "ad_account",
+      "label": "ad_account",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "ad_account",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "platform",
+          "type": "AdsPlatform",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "AdAccountStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "connection_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "spend_today",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": ["meta.list_ad_accounts"],
+      "contract": "AdAccount"
+    },
     {
       "id": "ad_set",
       "label": "广告组",
-      "key_format": "连接器给的 id，原样存、不解析",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
       "domain": "ad_account",
-      "source_of_truth": "connector",
-      "freshness": "cached:300",
-      "read_ranges": [],
-      "properties": [],
-      "read_via": []
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "platform",
+          "type": "AdsPlatform",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "AdDeliveryStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "bid_amount",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "bid_strategy",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "daily_budget",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "audience_summary",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "metrics",
+          "type": "AdMetrics",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "AdSet"
     },
     {
       "id": "approval_item",
@@ -2366,6 +2624,79 @@
       "contract": "Person"
     },
     {
+      "id": "pixel_event",
+      "label": "pixel_event",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "pixel_event",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "platform",
+          "type": "AdsPlatform",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "event_name",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "count_24h",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_fired_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "PixelHealth",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "PixelEvent"
+    },
+    {
       "id": "platform_account",
       "label": "platform_account",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -4107,6 +4438,94 @@
   ],
   "links": [
     {
+      "from": "ad",
+      "to": "ad_set",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "ad_set_id",
+      "lookup": []
+    },
+    {
+      "from": "ad",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "campaign_id",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "ad_account",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "ad_account",
+      "to": "connection",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "connection_id",
+      "lookup": []
+    },
+    {
+      "from": "ad_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "ad_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "ad_account",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "ad_account",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "ad_set",
+      "to": "ad",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "ad.ad_set_id",
+      "lookup": ["ads.campaigns", "ads.conversions.google"]
+    },
+    {
+      "from": "ad_set",
+      "to": "campaign",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "campaign_id",
+      "lookup": ["klaviyo.get_campaign", "klaviyo.list_campaigns"]
+    },
+    {
+      "from": "approval_item",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["meta.list_ad_accounts"]
+    },
+    {
       "from": "approval_item",
       "to": "article",
       "direction": "out",
@@ -4436,6 +4855,22 @@
     },
     {
       "from": "campaign",
+      "to": "ad",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "ad.campaign_id",
+      "lookup": ["ads.campaigns", "ads.conversions.google"]
+    },
+    {
+      "from": "campaign",
+      "to": "ad_set",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "ad_set.campaign_id",
+      "lookup": []
+    },
+    {
+      "from": "campaign",
       "to": "approval_item",
       "direction": "in",
       "cardinality": "many",
@@ -4633,6 +5068,14 @@
       "cardinality": "many",
       "via": "workflow_instance.subject",
       "lookup": []
+    },
+    {
+      "from": "connection",
+      "to": "ad_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "ad_account.connection_id",
+      "lookup": ["meta.list_ad_accounts"]
     },
     {
       "from": "connection",
@@ -5532,6 +5975,22 @@
     },
     {
       "from": "staged_change",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["meta.list_ad_accounts"]
+    },
+    {
+      "from": "staged_change",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["meta.list_ad_accounts"]
+    },
+    {
+      "from": "staged_change",
       "to": "approval_item",
       "direction": "out",
       "cardinality": "one",
@@ -6188,6 +6647,14 @@
     },
     {
       "from": "workflow_instance",
+      "to": "ad_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["meta.list_ad_accounts"]
+    },
+    {
+      "from": "workflow_instance",
       "to": "article",
       "direction": "out",
       "cardinality": "one",
@@ -6393,6 +6860,14 @@
       "cardinality": "one",
       "via": "workspace_id",
       "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "ad_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "ad_account.workspace_id",
+      "lookup": ["meta.list_ad_accounts"]
     },
     {
       "from": "workspace",
@@ -6668,6 +7143,15 @@
       "risk_class": "low",
       "requires_approval": false,
       "what": "读 page"
+    },
+    {
+      "id": "meta.list_ad_accounts",
+      "object": "ad_account",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 ad_account"
     },
     {
       "id": "meta.list_campaigns",
@@ -7309,6 +7793,17 @@
       "what": "notify delay"
     },
     {
+      "id": "pause_ads",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "pause ads"
+    },
+    {
       "id": "pitch_media",
       "object": "media_contact",
       "source": "role",
@@ -7412,6 +7907,18 @@
       "what": "stage affiliate code"
     },
     {
+      "id": "stage_bid_change",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "bid_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage bid change"
+    },
+    {
       "id": "stage_broadcast",
       "object": "community_member",
       "source": "role",
@@ -7427,6 +7934,29 @@
         "social.whatsapp"
       ],
       "what": "stage broadcast"
+    },
+    {
+      "id": "stage_budget_change",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "budget_change",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage budget change"
+    },
+    {
+      "id": "stage_campaign",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage campaign"
     },
     {
       "id": "stage_campaign_send",
@@ -7486,6 +8016,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.fulfillment"],
       "what": "stage create fulfillment"
+    },
+    {
+      "id": "stage_creative_swap",
+      "object": "ad_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "creative_swap",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
+      "what": "stage creative swap"
     },
     {
       "id": "stage_deliverable_review",

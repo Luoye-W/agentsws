@@ -59,6 +59,18 @@
     - kind: store
       id: store_eu
   granted_by: p_wang
+# WP75（57 §1）：15 人公司里"投放"是专职的，所以他手上还有 `ads.meta` 这条**平台**职责。
+# 与上面那条 `ads.performance`（这个 pack 自带的老职责）并存：权限**各管各的**、
+# 不并集（05 §4）。手加在这里而不是重跑生成器——那份 pack 已经与生成器有别的漂移，
+# 整体重生成会连订单与商品一起改（WP73 加社媒那两行时的同一条理由）。
+- person_id: p_wu
+  role_id: ads.meta
+  ranges:
+    - kind: store
+      id: store_main
+    - kind: store
+      id: store_eu
+  granted_by: p_wang
 # WP44：27 §2 的 15 人里本来就有一个"建站"，这里把职责真的挂上去（12 §2 site.builder）
 - person_id: p_zheng
   role_id: site.builder

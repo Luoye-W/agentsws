@@ -1,0 +1,58 @@
+# WP75（57 §4、04 §5「止损 L3」）：**ROAS 跌破且花够了 → 自动暂停，回头出一张卡。**
+#
+# 这条题钉两件事，第二件比第一件要紧：
+#
+# 1. **止损真的到了 L3**。投放岗位里唯一一条从第一天起就自动的写动作就是它——
+#    广告在烧钱的时候还要等人点头才能踩刹车，那道审批本身就在花钱。
+#    机器上的凭据是 `changeKindOf('pause_ads')` 对得上 `pause_ad`（`KIND_ALIAS`）：
+#    对不上就兜底成 high 风险，而 31 §3.4 只让 low 超过 L1——那一档会**静悄悄**没有。
+# 2. **判据那句话在卡面上**。自动做完了要回头告诉人为什么做（57 §1 末行）。
+#    卡上只写"止损"两个字，点头 / 复核这件事就没有内容——那不是通知，是一行日志。
+#
+# 两条判据是「且」不是「或」：ROAS 0.6 < 1（线），今天花了 400 > 日预算 1000 的 30%。
+# 只低不花（样本还不够）或只花不低（那正是该加预算的时候）都不该停。
+#
+# 一个合成人都不装：L3 那一档不需要有人点，卡该自己走完。
+id: ads/stop-loss-auto-pause
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-17T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    ads.pause:
+      who: p_wang
+      platform: meta
+      campaign: cmp_desk_sep
+      reason: stop_loss
+      # 两条判据都成立
+      roas: 0.6
+      spend: 400
+      daily_budget: 1000
+      spend_today: 400
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  auto_approved: 1
+  ads_stop_loss:
+    # `ads-core` 的 `stopLossVerdict` 算出来的三态之一
+    outcome: trigger
+    # 职责 yml 写的 initial 就是 L3，而且这一档真的生效了
+    requested_level: L3
+    auto_approved: true
+    # 判据那句话在卡面上（"ROAS 0.6（线是 1），今天花了 400，占日预算的 40%"）
+    stated_on_card: true
+  staged_change_kinds: [pause_ad]
+  event_types:
+    - simulation.ads_stop_loss_staged
+  metrics:
+    staged_changes: 1
+    # 不断言 applied：合成世界里没有"真去平台上按暂停"那一跳的执行器
+    # （那是服务进程那一侧的事）。这条题钉的是**等级与卡面**，不是落地。
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  那张"已止损"卡上"为什么停的、停之前花了多少、ROAS 是多少"，人读完答得上来吗？

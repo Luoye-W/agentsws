@@ -17,6 +17,9 @@
       "path": "apps/workstation"
     },
     {
+      "path": "packages/ads-core"
+    },
+    {
       "path": "packages/api"
     },
     {

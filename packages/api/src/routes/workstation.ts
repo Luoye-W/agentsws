@@ -91,6 +91,22 @@ const SOURCE_AUTHZ = {
   social_telegram: { domain: 'social_account', range: 'assigned' },
   social_whatsapp: { domain: 'social_account', range: 'assigned' },
   /*
+   * WP75（57 §1）：投放那五个源。
+   *
+   * 全部挂 `ad_account` 域，理由与红人 / 社媒那两组逐字相同：四条平台职责的
+   * scopes 里 `ad_account` 是最根的一个——没有它，campaign、广告组、广告一格
+   * 都指不到账户。
+   *
+   * **像素那一块也挂 `ad_account` 不挂 `pixel_event`**：`pixel_event` 是"改不改得动"
+   * 那把闸（投放只读、建站能写），而"看不看得见这块面板"要的是"读不读得到这个
+   * 广告账户"。挂 `pixel_event` 的话，将来建站那条职责会连带看见投放的面板——
+   * 那不是我们要的（19 §3：无权的数据源连「去连接」都不该出）。
+   */
+  ads_meta: { domain: 'ad_account', range: 'assigned' },
+  ads_google: { domain: 'ad_account', range: 'assigned' },
+  ads_x: { domain: 'ad_account', range: 'assigned' },
+  ads_tiktok: { domain: 'ad_account', range: 'assigned' },
+  /*
    * WP78（60 §3）：公关那两个源。
    *
    * 两个都挂 `mention` 域，理由与上面那几行同一条：四条公关职责的 scopes 里

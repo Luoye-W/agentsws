@@ -321,6 +321,9 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
   it('15 人 pack 的十九条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
+      // WP75（57 §4）：平台口径与订单口径不一样 → 面板上两列并排，不合并
+      // （15 人公司里投放是专职的，归因对账在这里才真的每天发生）
+      'ads/attribution-two-views',
       // WP72（56 §2）：群发永远人审 + 抑制名单必查（15 人公司里社媒是专职的）
       'community/broadcast-respects-suppression',
       'ops/claim-pool',

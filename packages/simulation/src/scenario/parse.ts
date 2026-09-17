@@ -190,6 +190,11 @@ const EVENT_KEYS = [
   'community.approve_member',
   'community.moderate',
   'community.rules_edit',
+  // WP75 投放（57 §1 / §4）
+  'ads.campaign',
+  'ads.budget_change',
+  'ads.pause',
+  'ads.attribution',
   // WP78 公共关系（60 §1 / §2）
   'pr.mention',
   'pr.release',
@@ -285,6 +290,11 @@ const EXPECTED_KEYS = [
   'community_moderation',
   'community_rules',
   'social_calendar',
+  // WP75（57 §1 / §4）
+  'ads_campaign',
+  'ads_budget',
+  'ads_stop_loss',
+  'ads_attribution',
   // WP78（60）
   'pr_mention',
   'pr_release',
@@ -1068,6 +1078,161 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    // WP75（57 §1 / §4）：投放那四件事
+    case 'ads.campaign': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'platform',
+        'name',
+        'daily_budget',
+        'audience',
+        'spend_today',
+        'level',
+      ])
+      const lvl = optStr(source, `${path}.${key}.level`, body.level)
+      if (lvl !== undefined && !['L1', 'L2', 'L3'].includes(lvl))
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      return {
+        at,
+        type: 'ads.campaign',
+        ads_campaign: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          platform: str(source, `${path}.${key}.platform`, body.platform),
+          name: str(source, `${path}.${key}.name`, body.name),
+          daily_budget: num(source, `${path}.${key}.daily_budget`, body.daily_budget),
+          ...(body.audience === undefined
+            ? {}
+            : { audience: str(source, `${path}.${key}.audience`, body.audience) }),
+          ...(body.spend_today === undefined
+            ? {}
+            : { spend_today: num(source, `${path}.${key}.spend_today`, body.spend_today) }),
+          ...(lvl === undefined ? {} : { level: lvl as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'ads.budget_change': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'platform',
+        'campaign',
+        'before',
+        'after',
+        'spend_today',
+        'level',
+      ])
+      const lvl = optStr(source, `${path}.${key}.level`, body.level)
+      if (lvl !== undefined && !['L1', 'L2', 'L3'].includes(lvl))
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      return {
+        at,
+        type: 'ads.budget_change',
+        ads_budget_change: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          platform: str(source, `${path}.${key}.platform`, body.platform),
+          campaign: str(source, `${path}.${key}.campaign`, body.campaign),
+          before: num(source, `${path}.${key}.before`, body.before),
+          after: num(source, `${path}.${key}.after`, body.after),
+          ...(body.spend_today === undefined
+            ? {}
+            : { spend_today: num(source, `${path}.${key}.spend_today`, body.spend_today) }),
+          ...(lvl === undefined ? {} : { level: lvl as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'ads.pause': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'platform',
+        'campaign',
+        'reason',
+        'roas',
+        'spend',
+        'daily_budget',
+        'spend_today',
+        'level',
+      ])
+      const lvl = optStr(source, `${path}.${key}.level`, body.level)
+      if (lvl !== undefined && !['L1', 'L2', 'L3'].includes(lvl))
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      return {
+        at,
+        type: 'ads.pause',
+        ads_pause: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          platform: str(source, `${path}.${key}.platform`, body.platform),
+          campaign: str(source, `${path}.${key}.campaign`, body.campaign),
+          reason: str(source, `${path}.${key}.reason`, body.reason),
+          ...(body.roas === undefined
+            ? {}
+            : { roas: num(source, `${path}.${key}.roas`, body.roas) }),
+          ...(body.spend === undefined
+            ? {}
+            : { spend: num(source, `${path}.${key}.spend`, body.spend) }),
+          ...(body.daily_budget === undefined
+            ? {}
+            : { daily_budget: num(source, `${path}.${key}.daily_budget`, body.daily_budget) }),
+          ...(body.spend_today === undefined
+            ? {}
+            : { spend_today: num(source, `${path}.${key}.spend_today`, body.spend_today) }),
+          ...(lvl === undefined ? {} : { level: lvl as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'ads.attribution': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'platform',
+        'campaign',
+        'spend',
+        'platform_conversions',
+        'platform_value',
+        'orders',
+      ])
+      const rawOrders = body.orders
+      if (!Array.isArray(rawOrders)) fail(source, `${path}.${key}.orders`, '必须是数组')
+      const orders = (rawOrders as unknown[]).map((row, i) => {
+        if (typeof row !== 'object' || row === null)
+          fail(source, `${path}.${key}.orders[${i}]`, '必须是对象')
+        const o = row as Record<string, unknown>
+        known(source, `${path}.${key}.orders[${i}]`, o, ['id', 'url', 'amount'])
+        return {
+          id: str(source, `${path}.${key}.orders[${i}].id`, o.id),
+          ...(o.url === undefined
+            ? {}
+            : { url: str(source, `${path}.${key}.orders[${i}].url`, o.url) }),
+          ...(o.amount === undefined
+            ? {}
+            : { amount: num(source, `${path}.${key}.orders[${i}].amount`, o.amount) }),
+        }
+      })
+      return {
+        at,
+        type: 'ads.attribution',
+        ads_attribution: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          platform: str(source, `${path}.${key}.platform`, body.platform),
+          campaign: str(source, `${path}.${key}.campaign`, body.campaign),
+          ...(body.spend === undefined
+            ? {}
+            : { spend: num(source, `${path}.${key}.spend`, body.spend) }),
+          ...(body.platform_conversions === undefined
+            ? {}
+            : {
+                platform_conversions: num(
+                  source,
+                  `${path}.${key}.platform_conversions`,
+                  body.platform_conversions,
+                ),
+              }),
+          ...(body.platform_value === undefined
+            ? {}
+            : {
+                platform_value: num(source, `${path}.${key}.platform_value`, body.platform_value),
+              }),
+          orders,
+        },
+      }
+    }
     // WP67（48 §5.1）：红人营销那几件事
     case 'kol.outreach': {
       known(source, `${path}.${key}`, body, ['who', 'creator', 'draft'])
@@ -1839,6 +2004,34 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       requested_level: 'str',
       auto_approved: 'bool',
       stated_on_card: 'bool',
+    },
+    // WP75（57 §1 / §4）
+    ads_campaign: {
+      requested_level: 'str',
+      auto_approved: 'bool',
+      blocked: 'bool',
+      stated_on_card: 'bool',
+      gate_stated_on_card: 'bool',
+    },
+    ads_budget: {
+      delta_pct: 'num',
+      within: 'bool',
+      auto_approved: 'bool',
+      caps_hit: 'strs',
+      stated_on_card: 'bool',
+    },
+    ads_stop_loss: {
+      outcome: 'str',
+      requested_level: 'str',
+      auto_approved: 'bool',
+      caps_hit: 'strs',
+      stated_on_card: 'bool',
+    },
+    ads_attribution: {
+      platform_conversions: 'num',
+      order_conversions: 'num',
+      unmatched: 'num',
+      merged: 'bool',
     },
   }
   const bag = out as unknown as Record<string, unknown>

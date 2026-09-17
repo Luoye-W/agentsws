@@ -123,6 +123,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@agentsws/ads-core':
+        specifier: workspace:*
+        version: link:../../packages/ads-core
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -350,6 +353,21 @@ importers:
       vite:
         specifier: ^7.0.0
         version: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+
+  packages/ads-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/kol-core':
+        specifier: workspace:*
+        version: link:../kol-core
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
 
   packages/api:
     dependencies:
@@ -898,6 +916,9 @@ importers:
 
   packages/simulation:
     dependencies:
+      '@agentsws/ads-core':
+        specifier: workspace:*
+        version: link:../ads-core
       '@agentsws/catalog':
         specifier: workspace:*
         version: link:../catalog

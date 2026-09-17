@@ -24,6 +24,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@agentsws/ads-core": "workspace:*",
     "@agentsws/api": "workspace:*",
     "@agentsws/blob": "workspace:*",
     "@agentsws/catalog": "workspace:*",

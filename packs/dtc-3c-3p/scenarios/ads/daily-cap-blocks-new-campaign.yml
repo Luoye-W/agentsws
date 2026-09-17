@@ -1,0 +1,65 @@
+# WP75（57 §4、04 §5「全岗位总闸」）：**日花费总闸满了 → 新建被拦，并且说清为什么。**
+#
+# 这条题是整个投放岗位最要紧的一道门，而它有两个容易写歪的地方：
+#
+# 1. **总闸是岗位级的，不是平台级的。** 场景里 Meta 花了 600、Google 花了 350，
+#    **每个平台都没越自己那条线**，可加起来 950 已经贴着 1000 了。各判各的话，
+#    这一下会顺利通过——四条职责一起把总闸撑爆而谁都没越线，正是 04 §5 要防的事。
+# 2. **这一下是 `block` 不是 L1。** 提预算超额是"人看着那个幅度点一下"，
+#    总闸满了还新开口子是"人点的那一下等于把今天的预算上限就地作废"——
+#    那不是审批该承担的判断。要做只有一条路：先去把总闸那个数改了（另一张卡）。
+#
+# 而且拦下来必须**说清为什么**：36 §2 里，人看不见的东西不算说过。
+#
+# 一个合成人都不装：被拦下来的那一条连卡都没有，没人可点。
+id: ads/daily-cap-blocks-new-campaign
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-17T09:00:00+08:00' }
+events:
+  # ① 先让 Google 那一侧记上今天花了 350（一条额度内的调预算，顺带把数带进来）
+  - at: '+0m'
+    ads.budget_change:
+      who: p_wang
+      platform: google
+      campaign: cmp_brand
+      before: 400
+      after: 420
+      spend_today: 350
+  # ② Meta 那一侧今天花了 600——两边都没越自己那条线，加起来 950
+  - at: '+10m'
+    ads.campaign:
+      who: p_wang
+      platform: meta
+      name: 十月新品 · 泛投
+      daily_budget: 300
+      audience: 25-44 岁，居家办公 / 数码配件兴趣
+      spend_today: 600
+      # 故意报 L3：硬顶与总闸这两道门谁先响都行，反正它出不去
+      level: L3
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  ads_campaign:
+    # 950 + 300 > 1000：总闸把它拦死，连卡都没建
+    blocked: true
+    # 拦下来那句话里把总闸那个数摆出来了
+    stated_on_card: true
+  ads_budget:
+    # 第一条（+5%）在额度里，自己走
+    within: true
+  # 账本上只有那一条改预算——新建**连一条 staged 都没有**
+  staged_change_kinds: [budget_change]
+  event_types:
+    - simulation.ads_campaign_blocked
+  metrics:
+    staged_changes: 1
+    applied_changes: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  被拦下来那句话里"今天一共花了多少、总闸是多少、还差多少"，人读完答得上来吗？

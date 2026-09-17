@@ -277,7 +277,9 @@ describe('15 §8 变更账本一致性用例', () => {
         kind: 'pause_ad',
         target: ADSET,
         before: { status: 'active' },
-        after: { status: 'paused' },
+        // WP75（57 §1）：暂停必须写得出理由（`AD_PAUSE_REASONS`），写不出的 block；
+        // `manual` 不带止损判据，仍走 L3
+        after: { status: 'paused', reason: 'manual' },
         money: undefined,
         record_version: undefined,
         provenance: prov([ADSET]),

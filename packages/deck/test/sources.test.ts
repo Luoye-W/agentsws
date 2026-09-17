@@ -34,6 +34,7 @@ describe('dataSourcesFromConnections', () => {
     // 与"连没连 Google Alerts"没有半点关系。
     expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual([
       'approvals',
+      'ads',
       'kol',
       'social',
       'pr',

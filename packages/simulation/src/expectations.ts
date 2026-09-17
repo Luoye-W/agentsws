@@ -1085,6 +1085,183 @@ export function checkExpectations(
         : problems.join('；'),
     )
   }
+  /*
+   * WP75 / 57 §1 / 04 §5：**开花钱口子永远 L1**，总闸满了直接拦。
+   *
+   * 两种结局各有各的事件：提上去了看 `..._staged`，被总闸拦下了看 `..._blocked`。
+   * `blocked: true` 的那一条要连"拦下来那句话里有没有把数摆出来"一起判——
+   * 拦了却说不清为什么，在 36 §2 里与没拦一样糟。
+   */
+  if (expected.ads_campaign !== undefined) {
+    const staged = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.ads_campaign_staged')
+    const blocked = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.ads_campaign_blocked')
+    const want = expected.ads_campaign
+    const problems: string[] = []
+    if (want.blocked === true) {
+      if (blocked === undefined) problems.push('总闸该把这条新建拦下来，可它进了队列')
+      else {
+        const p = payloadOf(blocked)
+        if (
+          want.stated_on_card !== undefined &&
+          (p.stated_on_card === true) !== want.stated_on_card
+        )
+          problems.push('拦下来那句话里没把总闸那个数摆出来')
+      }
+      add(
+        'ads_campaign',
+        problems.length === 0,
+        problems.length === 0 ? '总闸满了，新建被拦下并说清了为什么' : problems.join('；'),
+      )
+    } else if (staged === undefined) {
+      add('ads_campaign', false, '这一轮没有一条新建 campaign 进队列')
+    } else {
+      const p = payloadOf(staged)
+      if (want.requested_level !== undefined && String(p.level_requested) !== want.requested_level)
+        problems.push(`报的等级是 ${String(p.level_requested)}，不合期望`)
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved)
+        problems.push(want.auto_approved ? '这一条没能自己走' : '新开花钱口子不该自动放行')
+      if (
+        want.gate_stated_on_card !== undefined &&
+        (p.gate_stated_on_card === true) !== want.gate_stated_on_card
+      )
+        problems.push('卡面上没写今天的总闸还剩多少')
+      add(
+        'ads_campaign',
+        problems.length === 0,
+        problems.length === 0
+          ? `报 ${String(p.level_requested)} → 落 ${String(p.level_at_creation)}，等人点；总闸 ${String(p.spend_gate_spent)}/${String(p.spend_gate_cap)}`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP75 / 57 §6：**提预算超 20% 升 L1**，而且幅度那句话要在卡面上。
+   *
+   * `caps_hit` 里有没有 `max_budget_delta_pct`，是这条纪律在机器眼里唯一的凭据——
+   * 只写在 yml 里、guardrail 不响，那一行等于没写（同 WP73 的入群审核那次）。
+   */
+  if (expected.ads_budget !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.ads_budget_staged')
+    if (last === undefined) {
+      add('ads_budget', false, '这一轮没有一条改预算进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.ads_budget
+      const hits = Array.isArray(p.caps_hit) ? p.caps_hit.map(String) : []
+      const problems: string[] = []
+      if (want.delta_pct !== undefined) {
+        const actual = typeof p.delta_pct === 'number' ? p.delta_pct : Number.NaN
+        if (!matchNumeric(actual, want.delta_pct))
+          problems.push(`算出来的幅度是 ${String(p.delta_pct)}%，不合期望`)
+      }
+      if (want.within !== undefined && (p.within === true) !== want.within)
+        problems.push(want.within ? '这一下该在额度里，判成了超额' : '超了额度却判成在额度里')
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved)
+        problems.push(want.auto_approved ? '额度内这一条没能自己走' : '超额度的改预算不该自动放行')
+      if (want.caps_hit !== undefined) {
+        const missing = want.caps_hit.filter((c) => !hits.includes(c))
+        if (missing.length > 0) problems.push(`guardrail 没报这几条额度：${missing.join('、')}`)
+      }
+      if (want.stated_on_card !== undefined && (p.stated_on_card === true) !== want.stated_on_card)
+        problems.push('幅度那句话没写在卡面上')
+      add(
+        'ads_budget',
+        problems.length === 0,
+        problems.length === 0
+          ? `${String(p.direction)} ${String(p.delta_pct)}%，额度${p.within === true ? '内' : '外'}；${hits.length === 0 ? '没撞额度' : `撞了 ${hits.join('、')}`}`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP75 / 04 §5：**止损是保护性动作，L3**——但"止损"两个字必须名副其实。
+   *
+   * `outcome` 是 `ads-core` 按 ROAS 与花费两格算出来的三态；`stated_on_card`
+   * 说的是**判据那句话**在不在卡面上——卡上只写"止损"的话，点头这件事就没有内容。
+   */
+  if (expected.ads_stop_loss !== undefined) {
+    const last = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.ads_stop_loss_staged')
+    if (last === undefined) {
+      add('ads_stop_loss', false, '这一轮没有一条暂停进队列')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.ads_stop_loss
+      const hits = Array.isArray(p.caps_hit) ? p.caps_hit.map(String) : []
+      const problems: string[] = []
+      if (want.outcome !== undefined && String(p.outcome) !== want.outcome)
+        problems.push(`止损判据算出来是 ${String(p.outcome)}，不合期望`)
+      if (want.requested_level !== undefined && String(p.level_requested) !== want.requested_level)
+        problems.push(`报的等级是 ${String(p.level_requested)}，不合期望`)
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved)
+        problems.push(
+          want.auto_approved
+            ? '止损没能自己走——广告烧钱的时候等人点头才能踩刹车，那道审批本身就在花钱'
+            : '判据不成立的暂停不该自动放行',
+        )
+      if (want.caps_hit !== undefined) {
+        const missing = want.caps_hit.filter((c) => !hits.includes(c))
+        if (missing.length > 0) problems.push(`guardrail 没报这几条：${missing.join('、')}`)
+      }
+      if (
+        want.stated_on_card !== undefined &&
+        (p.verdict_stated_on_card === true) !== want.stated_on_card
+      )
+        problems.push('判据那句话没写在卡面上（卡上只写"止损"等于没说）')
+      add(
+        'ads_stop_loss',
+        problems.length === 0,
+        problems.length === 0
+          ? `判据 ${String(p.outcome)}，落 ${String(p.level_at_creation)}${p.auto_approved === true ? '（自己走）' : '（等人点）'}`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
+   * WP75 / 57 §1：**两个口径两列，永不合并**。
+   *
+   * `merged` 必须是假——它一旦为真，这条纪律就名存实亡了（同 56 §4 那条
+   * `answered_by_social`）。归不上的订单进 `unmatched`，**绝不按时间窗口猜**。
+   */
+  if (expected.ads_attribution !== undefined) {
+    const last = [...evidence.events].reverse().find((e) => e.type === 'simulation.ads_attribution')
+    if (last === undefined) {
+      add('ads_attribution', false, '这一轮没有跑过归因')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.ads_attribution
+      const problems: string[] = []
+      const numOf = (v: unknown): number => (typeof v === 'number' ? v : Number.NaN)
+      if (
+        want.platform_conversions !== undefined &&
+        !matchNumeric(numOf(p.platform_conversions), want.platform_conversions)
+      )
+        problems.push(`平台口径是 ${String(p.platform_conversions)}，不合期望`)
+      if (
+        want.order_conversions !== undefined &&
+        !matchNumeric(numOf(p.order_conversions), want.order_conversions)
+      )
+        problems.push(`订单口径是 ${String(p.order_conversions)}，不合期望`)
+      if (want.unmatched !== undefined && !matchNumeric(numOf(p.unmatched), want.unmatched))
+        problems.push(`归不上的订单是 ${String(p.unmatched)} 张，不合期望`)
+      if (want.merged !== undefined && (p.merged === true) !== want.merged)
+        problems.push('两个口径被合成了一个数——57 §1 明令禁止')
+      add(
+        'ads_attribution',
+        problems.length === 0,
+        problems.length === 0
+          ? `平台说 ${String(p.platform_conversions)}，订单表里找到 ${String(p.order_conversions)}，差 ${String(p.gap_pct)}%，${String(p.unmatched)} 张归不上——两列没合并`
+          : problems.join('；'),
+      )
+    }
+  }
   // WP67 / 48 §5.1：开发信的禁承诺被 guardrail 拦下、打回重写、改写后自动发
   if (expected.kol_outreach !== undefined) {
     const staged = [...evidence.events]

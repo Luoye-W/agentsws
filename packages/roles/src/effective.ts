@@ -34,6 +34,19 @@ const minLevel = (a: Level, b: Level): Level => (levelIndex(a) <= levelIndex(b) 
 const KIND_ALIAS: Readonly<Record<string, ChangeKind>> = {
   approve_member: 'community_membership',
   moderate: 'community_moderation',
+  /*
+   * WP75（57 §1）：投放那两个。与上面两条是同一种错，只是成因不同——
+   * 这两个动作 id 与 kind 名字对不上是因为 57 §1 写的是 `campaign_create` /
+   * `ad_pause`，而仓里那两个 kind 从第一版起就叫 `create_campaign` / `pause_ad`
+   * （契约 `ADS_KIND_ALIASES` 里有对照）。
+   *
+   * 不接上的后果与入群审核那一条逐字相同：`pause_ads` 对不上 kind →
+   * `riskClassOf` 兜底 `high` → 31 §3.4 只让 low 超过 L1 → **止损永远落在 L1**。
+   * 而止损是 04 §5 里唯一一条"该自动"的写动作：广告在烧钱的时候，Agent 反而
+   * 要等人点头才能踩刹车。
+   */
+  stage_campaign: 'create_campaign',
+  pause_ads: 'pause_ad',
   // WP78（60 §1）：公关那三个写动作的名字与 kind 也对不上（同样是动词 vs 名词）。
   //
   // `stage_external_post` 没写成 `stage_post`，是因为 `stage_post` 这个动作 id

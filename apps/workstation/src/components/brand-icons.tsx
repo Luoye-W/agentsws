@@ -164,6 +164,11 @@ const ICONS: Record<string, IconChoice> = {
   // `PLANNED_CONNECTORS` 里，照 WP63 那条老规矩落通用插头：还没接上的东西
   // 不借人家的标志。
   google_alerts: { kind: 'letter', letter: 'G' },
+  // WP75（57 §1）：投放四张卡——Meta / Google / X / TikTok 沿用各自平台已有的图标
+  meta_marketing: { kind: 'glyph', glyph: 'meta' },
+  google_ads: { kind: 'glyph', glyph: 'googleanalytics' },
+  x_ads: { kind: 'letter', letter: 'X' },
+  tiktok_ads: { kind: 'letter', letter: 'T' },
   // ── 模型卡（设置页）─────────────────────────────────────────────────
   deepseek: { kind: 'glyph', glyph: 'deepseek' },
   // Simple Icons 里没有 OpenAI（品牌方要求下架）；这张卡说的也是"任何 OpenAI 兼容

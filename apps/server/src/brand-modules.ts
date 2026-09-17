@@ -27,6 +27,8 @@ import { join } from 'node:path'
 import type { StartRun, WorkspaceId } from '@agentsws/contracts'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
+import type { AdsStore } from './ads.js'
+import type { AdsServiceAssembly } from './ads-service.js'
 import type { ChannelsAssembly } from './channels.js'
 import type { ChatLane } from './chat.js'
 import type { ChatWidgetAssembly } from './chat-widget.js'
@@ -137,6 +139,22 @@ export interface BrandModuleSet {
   prService: PrServiceAssembly
   /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */
   socialChannels: SocialChannelsAssembly
+  /**
+   * WP75（57 §5 数据面）：这个品牌的广告库（五类对象）。
+   *
+   * 与红人库、社媒库同一条纪律（本文件第 2 条）：落盘按品牌分目录。
+   * 这一条是三条里后果最直接的——**广告账户是花钱的**：品牌 A 的 campaign
+   * 串到 B 去，等于用 B 的钱包给 A 投广告。
+   */
+  ads: AdsStore
+  /**
+   * WP75：这个品牌广告库的 `/v1` 面（端口 + 五个写口子的出卡那一跳）。
+   *
+   * 与 `ads` 分成两格，理由与红人 / 社媒那两组逐字相同：库是数据，服务是
+   * **带着变更账本与生效配置**的那一层。04 §5 那条额度纪律（止损 L3、
+   * 额度内 L2、开花钱口子永远 L1）在服务进程里的落点就是它。
+   */
+  adsService: AdsServiceAssembly
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun

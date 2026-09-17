@@ -311,6 +311,22 @@ const SEED_POSITIONS: readonly {
       ['common.member', false],
     ],
   },
+  // WP75（57 §1 / 54）：**投放**岗位 = 四条平台职责（顺序 = 契约 `ADS_PLATFORMS`）。
+  // 默认只勾 Meta / Google（57 §5）：不是"用得多"，是**只有这两条今天真连得上**
+  // ——X 还在申请制、TikTok 要 Business Center 授权，勾上去就是两条永远显示
+  // "还没接"的职责。批下来那天在向导里勾一下就有了。
+  {
+    id: 'ads',
+    zh: '投放',
+    en: 'Paid Ads',
+    roles: [
+      ['ads.meta', true],
+      ['ads.google', true],
+      ['ads.x', false],
+      ['ads.tiktok', false],
+      ['common.member', false],
+    ],
+  },
   { id: 'member', zh: '普通成员', en: 'Member', roles: [['common.member', true]] },
 ]
 

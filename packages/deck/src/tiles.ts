@@ -44,6 +44,21 @@ export const TILE_LIBRARY: readonly TileSpec[] = [
   // WP63（51 §2.2）：压着等人点头的文章数。与「待回复」分开——同一个"待"字，
   // 回信压着是客户在等，发文压着没人在等，混成一个数就看不出该先处理哪个。
   tile('pending_posts', '待发布', 'content.pending_count', 'count'),
+  /*
+   * WP75（57 §3）：投放那四个数字块。
+   *
+   * 与上面那四个老的（`ads_spend` / `ads_roas` / `ads_cpa` / `ads_ctr`，值永远是 0）
+   * 并存不删：它们是 36 §3 举例时留下的占位，别的岗位模板里可能还挑着。
+   * 新的这四个读的是**真算出来的数**。
+   *
+   * `ads_spend_today` 的 `value` 是今天花了多少、`previous` 是总闸那个数——
+   * 于是那一格天然读成"花了 X / 上限 Y"；`ads_roas_views` 同理，
+   * `value` 是订单口径、`previous` 是平台口径（**一格里放不下两个数**，
+   * 但也绝不合并成一个：57 §1）。
+   */
+  tile('ads_spend_today', '今日花费 / 总闸剩余', 'ads.spend_today', 'money'),
+  tile('ads_roas_views', 'ROAS（两口径）', 'ads.roas_two_views', 'ratio'),
+  tile('ads_stop_losses', '止损次数', 'ads.stop_loss_count', 'count'),
 ]
 
 const BY_ID = new Map(TILE_LIBRARY.map((t) => [t.id, t]))
@@ -63,7 +78,18 @@ export function tileSpec(id: string): TileSpec {
 export const DEFAULT_HOME_TILES: Readonly<Record<RoleId, readonly string[]>> = {
   'dtc.analytics': ['sales_total', 'orders_count', 'refunds_total', 'conversion_rate'],
   'dtc.support': ['pending_replies', 'reply_rate_24h', 'refund_requests', 'csat'],
-  'ads.meta': ['ads_spend', 'ads_roas', 'ads_cpa', 'ads_ctr'],
+  /*
+   * WP75（57 §3）：四条平台职责的默认数字块。
+   *
+   * 三个而不是四个：57 §3 那四个里的"转化数"是**平台那一侧**的数
+   * （`ads.conversions.<platform>`，一个平台一个查询、各有各的"连没连"），
+   * 首页这一条是跨岗位摆在一起的，放一个会因为某个平台没连就变成"去连接"——
+   * 那一格摆在首页上没用。它在岗位面板里（`ADS_POSITION_BLOCKS`）。
+   */
+  'ads.meta': ['ads_spend_today', 'ads_roas_views', 'ads_stop_losses'],
+  'ads.google': ['ads_spend_today', 'ads_roas_views', 'ads_stop_losses'],
+  'ads.x': ['ads_spend_today', 'ads_roas_views', 'ads_stop_losses'],
+  'ads.tiktok': ['ads_spend_today', 'ads_roas_views', 'ads_stop_losses'],
   // WP63（51 §2.1）：店铺管理 = 总销售额、订单数、转化率、库存告急数
   'dtc.store': ['sales_total', 'orders_count', 'conversion_rate', 'low_stock_count'],
   // WP63（51 §2.2）：内容与博客盯的是"有几篇压着没发"与它们带来的流量

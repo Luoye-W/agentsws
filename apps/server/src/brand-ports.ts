@@ -14,6 +14,7 @@
  * 写清楚为什么走 bootstrap。
  */
 import type {
+  AdsPort,
   AskPort,
   CloudPort,
   ConnectionDirectoryPort,
@@ -293,6 +294,19 @@ export function brandPrPort(
   make: (workspace_id: WorkspaceId) => Promise<PrPort>,
 ): PrPort {
   return scopedPort<PrPort>(make, () => brands.bootstrap)
+}
+
+/**
+ * WP75（57 §5）广告库：一个品牌一张库、一段加密库。
+ *
+ * 与社媒那一条同理，而且是这几条里后果最直接的一条——**广告账户是花钱的**：
+ * 品牌 A 的 campaign 串到 B 去，等于用 B 的钱包给 A 投广告。
+ */
+export function brandAdsPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<AdsPort>,
+): AdsPort {
+  return scopedPort<AdsPort>(make, () => brands.bootstrap)
 }
 
 export function brandKolPort(

@@ -137,6 +137,12 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   social_discord: 'Discord',
   social_telegram: 'Telegram',
   social_whatsapp: 'WhatsApp',
+  // WP75（57 §1）：四个平台各一个源。名字就是用户在连接页上看到的那个名字——
+  // "去连接"点过去要对得上
+  ads_meta: 'Meta Ads',
+  ads_google: 'Google Ads',
+  ads_x: 'X Ads',
+  ads_tiktok: 'TikTok Ads',
   // WP78（60 §3）：我们自己的公关库永远算连上；外面那一侧是 Google Alerts，
   // 名字就是用户在连接页上看到的那个名字——"去连接"点过去要对得上。
   pr: '公关库',
@@ -151,6 +157,11 @@ export const SOURCE_REPORT_URLS: Partial<Record<DataSourceId, string>> = {
   ads: 'https://adsmanager.facebook.com',
   email_marketing: 'https://www.klaviyo.com/dashboard',
   tracking: 'https://admin.aftership.com/trackings',
+  // WP75：各平台的后台首页（36 §3 三层链路的最后一层）
+  ads_meta: 'https://adsmanager.facebook.com',
+  ads_google: 'https://ads.google.com',
+  ads_x: 'https://ads.x.com',
+  ads_tiktok: 'https://ads.tiktok.com',
 }
 
 const block = (id: string, component: ComponentName, title: string, query: string): BlockDef => {
@@ -219,9 +230,34 @@ const GSC_BLOCKS = (): BlockDef[] => [
   block('gsc.landing_pages', 'table', '落地页', 'gsc.landing_pages'),
 ]
 
-const ADS_BLOCKS = (): BlockDef[] => [
-  block('ads.spend', 'stat_tile', '花费', 'ads.spend'),
-  block('ads.trend', 'chart_line', '投放走势', 'ads.trend'),
+/**
+ * WP75（57 §3 面板）：投放那**四个数字块 + 五个分块**。
+ *
+ * 四条平台职责共用这一组积木（骨架相同，57 §1）。分块**不按平台再拆一遍**：
+ * 一个人手上挂着 Meta 与 Google 两条职责时，他看到的是两个岗位视图、每个视图里
+ * 各九块——而不是一个视图里十八块（同 48 §5.1 红人那条）。
+ *
+ * 分两层，因为"没连就明说"这句话只对得上其中一层（36 §3）：
+ *
+ * - **我们自己算出来的那几块**（今日花费 / 总闸剩余、campaign 表、待审四车道、
+ *   止损记录、归因、日报）走 `ads` 这个源。
+ * - **平台那一侧那两块**（转化数、像素健康）走**这条职责自己的平台源**
+ *   （`ads_meta` / `ads_google`…）：连上 Meta 不会把 Google 的像素那一块点亮。
+ *
+ * 为什么"今日花费"走 `ads` 而不是平台源：它是**岗位级总闸**的那一格，
+ * 四个平台加起来算的（04 §5）。挂到某一个平台源上，那个平台没连就整格没了——
+ * 而总闸这件事恰恰在只连了一个平台的时候也成立。
+ */
+const ADS_POSITION_BLOCKS = (platform: string): BlockDef[] => [
+  block(`ads.${platform}.spend_today`, 'stat_tile', '今日花费 / 总闸剩余', 'ads.spend_today'),
+  block(`ads.${platform}.roas`, 'stat_tile', 'ROAS（两口径）', 'ads.roas_two_views'),
+  block(`ads.${platform}.conversions`, 'stat_tile', '转化数', `ads.conversions.${platform}`),
+  block(`ads.${platform}.stop_losses`, 'stat_tile', '止损次数', 'ads.stop_loss_count'),
+  block(`ads.${platform}.campaigns`, 'table', 'campaign', 'ads.campaigns'),
+  block(`ads.${platform}.pending`, 'table', '待审改动', 'ads.pending_changes'),
+  block(`ads.${platform}.stop_loss_log`, 'table', '止损记录', 'ads.stop_loss_log'),
+  block(`ads.${platform}.pixels`, 'table', '像素健康', `ads.pixel_health.${platform}`),
+  block(`ads.${platform}.daily_report`, 'table', '日报', 'ads.daily_report'),
 ]
 
 /** WP64（51 §2.3）：邮件营销面板——待审发送、自动流状态、近 30 天效果。 */
@@ -365,7 +401,17 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   // 无权的数据源连「去连接」都不该出（19 §3 过滤下推：不是先给再脱敏）。
   'dtc.support': () => SHOP_BLOCKS(),
   'dtc.analytics': () => [...SHOP_BLOCKS(), ...GA4_BLOCKS(), ...GSC_BLOCKS()],
-  'ads.meta': () => [...ADS_BLOCKS(), ...GA4_BLOCKS()],
+  /*
+   * WP75（57 §3）：四条平台职责，面板骨架相同（四个数字块 + 五个分块）。
+   *
+   * 一块店铺后台的积木都不放：投放的 scopes 里订单是**只读**的（归因要它），
+   * 没有 store_config / inventory / product 的写——19 §3 说无权的数据源连
+   * 「去连接」都不该出。GA4 留着：转化与落地页那一侧的数在它那儿。
+   */
+  'ads.meta': () => [...ADS_POSITION_BLOCKS('meta'), ...GA4_BLOCKS()],
+  'ads.google': () => [...ADS_POSITION_BLOCKS('google'), ...GA4_BLOCKS()],
+  'ads.x': () => ADS_POSITION_BLOCKS('x'),
+  'ads.tiktok': () => ADS_POSITION_BLOCKS('tiktok'),
   // WP64（51 §2.3 / §2.4）：两条新职责各自的面板。
   //
   // 邮件营销看得到店铺后台（弃购挽回要知道购物车里是什么），但看不到 GA4 / 广告——

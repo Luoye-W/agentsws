@@ -11,6 +11,7 @@ import { readCookie, SESSION_COOKIE } from './identity.js'
 import { buildOpenApi, type OpenApiDocument } from './openapi.js'
 import { TokenBucketLimiter } from './rate-limit.js'
 import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
+import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
@@ -179,6 +180,8 @@ export function collectRoutes(): Route[] {
      * 的第二段就分得开，内部次序不讲究。
      */
     ...socialRoutes(),
+    // WP75（57 §5）：广告库 `/v1/ads/*`（读两条、写五条；写全部先出卡）
+    ...adsRoutes(),
     // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
     ...prRoutes(),
   ]

@@ -92,6 +92,8 @@ import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type ServerType, serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
+import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
+import { createAdsService } from './ads-service.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
@@ -105,6 +107,7 @@ import {
 } from './brand-modules.js'
 // WP66：按 `actor.workspace_id` 取模块的**那一处**适配层（不散落到每条路由）
 import {
+  brandAdsPort,
   brandAskPort,
   brandCloudPort,
   brandConnectionDirectoryPort,
@@ -320,6 +323,12 @@ export const BUNDLED_ROLES = [
   'social.whatsapp',
   // WP72（56 §4）：客服岗位的社群管理
   'dtc.community-support',
+  // WP75（57 §1）：投放岗位的四条平台职责。与红人 / 社媒那两组同一条理由：
+  // 种岗位那一步会把解析不到的职责筛掉，少一条，首次设置向导里的"投放"就少一个勾。
+  'ads.meta',
+  'ads.google',
+  'ads.x',
+  'ads.tiktok',
   // WP78（60 §1）：公共关系岗位的四条职责。与红人 / 社媒那两组同一条理由：
   // 种岗位那一步会把解析不到的职责筛掉，少一条，首次设置向导里的
   // "公共关系"就少一个勾。
@@ -1170,6 +1179,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
       social: () => socialDeckData(social, { now: clock.now() }),
+      /*
+       * WP75（57 §3）：投放那几块同理——campaign 表与止损记录是**我们自己库里**的行，
+       * 一个平台都没连也照样在那儿摆着。四个平台那四个源才是"连没连"的事。
+       */
+      ads: () => adsDeckData(ads, { now: clock.now() }),
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
       // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。
@@ -1203,6 +1217,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 在 B 的任何路由里都读不到——媒体名单是这家公司攒了很多年的东西。
      */
     const pr = createPrStore({
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    /**
+     * WP75（57 §5 数据面）：这个品牌的广告库（五类对象）。
+     *
+     * 与红人库、社媒库并排建，理由一样：记录源要拿它读账户与 campaign
+     * （`ads: () => ads`），面板那一层要拿它算总闸。
+     */
+    const ads = createAdsStore({
       workspace_id: ws,
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
@@ -1357,6 +1381,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent,
       random,
     })
+    /**
+     * WP75（57 §5）：广告库的 `/v1` 面。
+     *
+     * 04 §5 那条额度纪律（止损 L3、额度内 L2、开花钱口子永远 L1）在服务进程里的
+     * 落点就是它：五个写口子全部经变更账本，一条都不直接改库、不直接打平台。
+     */
+    const adsService = createAdsService({
+      workspace_id: ws,
+      store: ads,
+      clock,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      appendEvent,
+      random,
+    })
 
     let workRef: Work | undefined
     const records: MatterRecordSource =
@@ -1376,6 +1415,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kol: () => kol,
         // WP72：社媒账号与社群线程的**只读**记录（见 `RecordSocialPort`）
         social: () => social,
+        // WP75：广告账户与 campaign 的**只读**记录（见 `RecordAdsPort`）
+        ads: () => ads,
         /*
          * WP78：稿子、提及与外部露出的**只读**记录（见 `RecordPrPort`）。
          *
@@ -1739,6 +1780,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       social,
       socialService,
       socialChannels,
+      ads,
+      adsService,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -1754,6 +1797,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        ads.close()
         pr.close()
       },
     }
@@ -1828,6 +1872,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （我们在别人的地盘上这件事长什么样）。
    */
   if (mount !== undefined) seedDemoPr(boot.pr, clock.now())
+
+  /**
+   * WP75（57 §3）：demo 里给广告库放几行，理由与上面两条逐字相同。
+   *
+   * 里面有一条 **ROAS 0.6 且已经花掉日预算 40%** 的 campaign——那正是止损该
+   * 触发的那一条；还有一条 ROAS 4.2 的爆款，止损不该碰它。演示里看不见这两条
+   * 摆在一起，"两条判据是且不是或"这句话就说不出来。
+   */
+  if (mount !== undefined) seedDemoAds(boot.ads, clock.now())
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {
@@ -3059,6 +3112,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).prService.port,
   )
+  /** WP75（57 §5）：广告库 `/v1/ads/*`（一个品牌一张库——广告账户是花钱的，串不得）。 */
+  const adsPortOf = brandAdsPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).adsService.port,
+  )
   /**
    * WP83（54（将改号 55）§4 前两层）：连接目录与岗位连接清单——**一个品牌一份**。
    *
@@ -3290,6 +3348,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
+    // WP75（57 §5）：本地广告库 `/v1/ads/*`（同上；五个写口子全部先出卡）
+    ads: adsPortOf,
     // WP78（60 §5）：本地公关库 `/v1/pr/*`
     pr: prPortOf,
     traceScope,
