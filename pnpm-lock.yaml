@@ -142,12 +142,18 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/credentials-openconnector':
+        specifier: workspace:*
+        version: link:../../packages/credentials-openconnector
       '@agentsws/data':
         specifier: workspace:*
         version: link:../../packages/data
       '@agentsws/deck':
         specifier: workspace:*
         version: link:../../packages/deck
+      '@agentsws/dsh-adapter':
+        specifier: workspace:*
+        version: link:../../packages/dsh-adapter
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -199,6 +205,9 @@ importers:
       '@agentsws/work':
         specifier: workspace:*
         version: link:../../packages/work
+      '@deepseek-ai/cordis':
+        specifier: 4.0.2
+        version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.7)
@@ -537,6 +546,9 @@ importers:
       '@deepseek-ai/dsh-agent-presets':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(fd2475137cb271df7701c4cbb4ef9e2c)
+      '@deepseek-ai/dsh-authorization':
+        specifier: 0.1.6-alpha.1
+        version: 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-credentials@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-invariants@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-llm@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))
       '@deepseek-ai/dsh-base':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(832a3c3b2d601aa02b6f080e4ca1586f)
@@ -558,6 +570,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-llm-pi-ai':
+        specifier: 0.1.6-alpha.1
+        version: 0.1.6-alpha.1(c845702db398b861200392e5e7086170)
       '@deepseek-ai/dsh-mcp-client':
         specifier: 0.1.6-alpha.1
         version: 0.1.6-alpha.1(94992de6e2e4a2b9ef71764c06db2b07)
