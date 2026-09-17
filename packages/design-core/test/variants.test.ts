@@ -89,6 +89,27 @@ describe('58 §2 变体计划与提示词组装', () => {
     expect(one.prompt.trimEnd().endsWith('【绝对不许出现】竞品 logo、真人脸')).toBe(true)
   })
 
+  /*
+   * WP76 ⑤ 的回归：**报上去的那一份不带禁忌行**。
+   *
+   * 全量提示词收尾那一行写的就是禁忌词的原文，而 guardrail 的
+   * `brand_forbidden_term` 是拿同一张表去搜提示词的。报全量上去，
+   * 每一次出图都会自己撞自己的门——一张图都出不来，报出来的原因还是
+   * "提示词里有品牌禁忌词"。
+   */
+  it('positive_prompt：正向那一半，禁忌两行都不在里头', () => {
+    const one = composePrompt(brief(1).variant_plan[0] as never, brand)
+    expect(one.positive_prompt.startsWith('角度 1')).toBe(true)
+    expect(one.positive_prompt).toContain('【品牌系统')
+    expect(one.positive_prompt).toContain('留白多。')
+    // 禁忌那两行（品牌系统里的「不许出现」与收尾的「绝对不许出现」）都不在
+    expect(one.positive_prompt).not.toContain('不许出现')
+    for (const term of ['竞品 logo', '真人脸']) {
+      expect(one.prompt).toContain(term)
+      expect(one.positive_prompt).not.toContain(term)
+    }
+  })
+
   it('印刷规格按 dpi 换算成像素画布', () => {
     const card = resolveSpec('print.namecard')
     expect(card?.unit).toBe('mm')

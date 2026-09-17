@@ -192,15 +192,24 @@ export function brandSystemMissingCard(): BrandSystemMissingCard {
  *
  * `layout` **原样引用**，一个字不改写（同 `voicePrompt`）。没有系统的时候
  * 回的是"没有"那句话，而不是一段我们编的默认风格。
+ *
+ * WP76 ⑤ 补的 `include_forbidden`：禁忌那一行**要不要一起写出来**。默认写
+ * （喂模型的那一段当然要带上"不许出现什么"）。`false` 是给**报账**那一侧用的
+ * ——提交 `design_variant` 时报上去的提示词不带禁忌行，见 `variants.ts` 的
+ * `positive_prompt`。
  */
-export function brandPrompt(resolved: ResolvedBrandSystem): string {
+export function brandPrompt(
+  resolved: ResolvedBrandSystem,
+  options?: { include_forbidden?: boolean },
+): string {
   const s = resolved.system
   if (s === undefined) return `【品牌系统】${resolved.note}`
   const lines = [`【品牌系统｜${s.name}${s.updated_at === undefined ? '' : ` · ${s.updated_at}`}】`]
   if (s.colors.length > 0) lines.push(`色：${s.colors.join('、')}`)
   if (s.fonts.length > 0) lines.push(`字：${s.fonts.join('、')}`)
   if (s.layout !== undefined) lines.push(`版式：${s.layout}`)
-  if (s.forbidden.length > 0) lines.push(`【不许出现】${s.forbidden.join('、')}`)
+  if (s.forbidden.length > 0 && options?.include_forbidden !== false)
+    lines.push(`【不许出现】${s.forbidden.join('、')}`)
   return lines.join('\n')
 }
 

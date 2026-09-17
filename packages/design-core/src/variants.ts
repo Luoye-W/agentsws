@@ -27,8 +27,21 @@ export interface VariantPrompt {
   spec_id: string
   /** `"1080x1920"`（印刷规格已按 dpi 换算成像素）。 */
   size: string
-  /** 组装好的提示词：角度 + 规格硬规矩 + 品牌系统 + 禁忌。 */
+  /** 组装好的提示词：角度 + 规格硬规矩 + 品牌系统 + 禁忌。**喂模型的是它**。 */
   prompt: string
+  /**
+   * 同一段，但**去掉禁忌那两行**（品牌系统里的「不许出现」与收尾的
+   * 「绝对不许出现」）。提交 `design_variant` 时报上去的是它。
+   *
+   * 为什么要分两份：guardrail 的 `brand_forbidden_term` 那条 block 是拿
+   * 「禁忌词表」去**搜提示词**的。禁忌行本身就是那几个词的原文，报全量提示词
+   * 上去等于每一次出图都自己撞自己的门——一张图都出不来，而报出来的原因
+   * 是"提示词里有品牌禁忌词"，人只会以为是 Agent 写坏了。
+   *
+   * 要查的本来就是**正向那一半**：这一版想画的东西里有没有禁忌。
+   * 「别画竞品 logo」不是「画竞品 logo」。
+   */
+  positive_prompt: string
 }
 
 export interface GenerationPlan {
@@ -111,9 +124,11 @@ export function composePrompt(
   brand: ResolvedBrandSystem,
 ): VariantPrompt {
   const spec = resolveSpec(item.spec_id)
-  const parts = [item.angle_zh]
-  if (spec !== undefined) parts.push(`【规格】${specNoteZh(spec)}`)
-  parts.push(brandPrompt(brand))
+  /** 正向那一半：角度 + 规格硬规矩 + 品牌系统（**不含禁忌行**）。 */
+  const positive = [item.angle_zh]
+  if (spec !== undefined) positive.push(`【规格】${specNoteZh(spec)}`)
+  const positive_prompt = [...positive, brandPrompt(brand, { include_forbidden: false })].join('\n')
+  const parts = [...positive, brandPrompt(brand)]
   const forbidden = brand.system?.forbidden ?? []
   if (forbidden.length > 0) parts.push(`【绝对不许出现】${forbidden.join('、')}`)
   return {
@@ -121,6 +136,7 @@ export function composePrompt(
     spec_id: item.spec_id,
     size: spec === undefined ? '1024x1024' : canvasOf(spec),
     prompt: parts.join('\n'),
+    positive_prompt,
   }
 }
 

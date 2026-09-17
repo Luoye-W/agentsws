@@ -783,7 +783,9 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
         after: {
           brief_id: brief.id,
           n: plan.n,
-          prompts: plan.prompts.map((p) => p.prompt),
+          // 报的是**正向那一半**（`positive_prompt`）：禁忌行本身就是那几个词的
+          // 原文，报全量提示词上去等于每次出图都自己撞 `brand_forbidden_term` 那道门
+          prompts: plan.prompts.map((p) => p.positive_prompt),
           must_avoid: brief.must_avoid,
           ...(specLabel(brief.spec_ids) === undefined
             ? {}
