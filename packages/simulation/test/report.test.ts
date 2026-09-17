@@ -260,7 +260,8 @@ describe('套件与报告落盘（26 §5）', () => {
       reportDir: out,
       seed: 42,
     })
-    expect(result.reports).toHaveLength(38)
+    // WP77（59 §4）：建站三条（38 + 3）。三个并行 WP 各 +3，合并时求和。
+    expect(result.reports).toHaveLength(41)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {
@@ -268,7 +269,7 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(38)
+    expect(summary.scenarios).toHaveLength(41)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
     // 跑一整个 pack（17 条场景）不是 5 秒的活，而且并行跑别的项目时还要抢 CPU
   }, 120_000)

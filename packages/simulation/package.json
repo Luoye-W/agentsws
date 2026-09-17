@@ -35,6 +35,7 @@
     "@agentsws/runtime-direct": "workspace:*",
     "@agentsws/schedule": "workspace:*",
     "@agentsws/secretary": "workspace:*",
+    "@agentsws/site-core": "workspace:*",
     "@agentsws/skills": "workspace:*",
     "@agentsws/social-core": "workspace:*",
     "@agentsws/stand-ins": "workspace:*",

@@ -181,6 +181,38 @@ export interface ScenarioShopThemePublish {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/** WP77（59 §2）：跑一次上线检查单（只读巡检，出一张 L3 的卡）。 */
+export interface ScenarioSiteChecklist {
+  who: string
+}
+
+/** WP77（59 §2）：改一份通知邮件模板（草稿 L2 / 启用 L1；缺变量 guardrail 当场 block）。 */
+export interface ScenarioSiteEmailTemplate {
+  who: string
+  /** Shopify 的通知类型 handle（`order_confirmation` …）。 */
+  notification_type: string
+  subject: string
+  /** Liquid 正文。故意少写一个必需变量就是在验"缺变量拦得住"。 */
+  body: string
+  /** `true` = 提的是"以后就发这一份"。 */
+  enabled: boolean
+  /**
+   * 提案时报的自动化等级。场景填 `L3` 是**故意**的：等于有人把"改模板"开到了全自动。
+   * 启用那一档由 guardrail 按 `after.enabled` 拉回人审——这条题要钉的就是这一下。
+   */
+  level?: 'L1' | 'L2' | 'L3'
+}
+
+/** WP77（59 §2）：提一条装 / 卸 App（`app_install`，永远 L1）。 */
+export interface ScenarioSiteAppInstall {
+  who: string
+  app: string
+  operation?: 'install' | 'uninstall'
+  reason?: string
+  /** 故意报高的等级；hard_ceiling 会把它拉回人审（回归用）。 */
+  level?: 'L1' | 'L2' | 'L3'
+}
+
 /** WP64 / 51 §2.4：跑一次超期未发的巡检（读订单 → 出异常 → 通知到人）。 */
 export interface ScenarioFulfillmentSweep {
   who: string
@@ -610,6 +642,10 @@ export type ScenarioEvent =
   | { at: string; type: 'shop.theme_push'; theme_push: ScenarioShopThemePush }
   /** WP44：提一条主题发布变更（15 §2 永远 L1）。 */
   | { at: string; type: 'shop.theme_publish'; theme_publish: ScenarioShopThemePublish }
+  // WP77（59 §4）：建站那三条
+  | { at: string; type: 'site.checklist'; checklist: ScenarioSiteChecklist }
+  | { at: string; type: 'site.email_template'; email_template: ScenarioSiteEmailTemplate }
+  | { at: string; type: 'site.app_install'; app_install: ScenarioSiteAppInstall }
   /** WP64：跑一次超期未发巡检（51 §2.4）。 */
   | { at: string; type: 'fulfillment.sweep'; sweep: ScenarioFulfillmentSweep }
   /** WP64：标记发货 + 回填单号（51 §2.4）。 */

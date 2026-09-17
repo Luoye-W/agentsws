@@ -232,7 +232,11 @@ const PEOPLE_3: PersonTemplate[] = [
     // WP72（56 §4）：客服岗位新加的第四条「社群管理」也挂在店主身上——
     // 3 人公司里客服就是他。**这一条不是可有可无的**：社媒运营那边判成客户问题的
     // 留言要转给它，没人持有的话那张卡只能落到 owner 头上（如实报，但那不是设计）。
-    extra: ['common.owner', 'dtc.community-support'],
+    // WP77（59 §1）：建站也挂在店主身上——3 人公司里店是**他自己搭的**。
+    // 只挂 `site.shopify-build`（整站搭建）这一条：另外三条（网页模板 / 邮件模板 /
+    // 插件）在这个规模上是同一个人的同一件事，而"挂几条职责"决定的是额度与队列，
+    // 不是能力。真要分工是 15 人以后的事（那边 `site.shopify-theme` 有专人）。
+    extra: ['common.owner', 'dtc.community-support', 'site.shopify-build'],
   },
   {
     id: 'p_li',

@@ -1,0 +1,62 @@
+# WP77（59 §1 / §4）：**`site.builder` 改名成 `site.shopify-theme` 之后，发布仍然 L1。**
+#
+# 这条题是一条**改名回归**，不是一条新功能。它要回答的只有一句话：
+# 把一条职责改了名、把它归进"建站"这个岗位的四条之一之后，WP44 定下的那道门
+# 还在不在——`publish_theme` 的 hard_ceiling 不因为职责换了个名字而松一格。
+#
+# 三件事与 `ops/theme-publish-needs-approval` 逐字相同（那条题验的是同一道门，
+# 用的是旧 id 那一版）：推副本不动线上、发布永远要人点、主题不经连接器。
+# **这一条与它并存而不是取代它**：一条钉"门在"，一条钉"改名之后门还在"，
+# 哪天有人把别名表删了，坏的会是这一条。
+#
+# 15 人公司里郑立（`p_zheng`）挂的就是这条职责——15 人 pack 的 `assignments.yml`
+# 里那一行已经从 `site.builder` 改到 `site.shopify-theme`，分配条数一个没变。
+id: site/theme-publish-still-l1
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  # 发布主题 route_to: owner——这张卡只可能落在店主王岚手上
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 郑立推一份未发布副本（改名之后他这条分配的 role_id 是 `site.shopify-theme`）
+  - at: '+0m'
+    shop.theme_push:
+      who: p_zheng
+      name: 政策页挂进页脚 + 商品页加尺码表
+  # 提"把它发上线"，等级**故意报 L3**——改名之后 hard_ceiling 一样要把它拉回来
+  - at: '+40m'
+    shop.theme_publish:
+      who: p_zheng
+      level: L3
+  - at: '+6h'
+    clock.advance: {}
+expected:
+  staged_change_kinds: [publish_theme]
+  no_applied_changes_before: $approve
+  # 改了名也一样：报了 L3 也自动批不了
+  auto_approved: 0
+  approval_kinds: { staged_change: 1 }
+  calls_tool: [theme_list]
+  event_types:
+    - shopify.theme_pushed
+    - shopify.theme_cli
+    - change.staged
+    - change.applied
+  metrics:
+    staged_changes: 1
+    applied_changes: 1
+    guardrail_hits: '>=1'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  卡上写的职责名是"Shopify 网页模板"而不是一个谁也认不出的 `site.builder` 吗？
+  改名的意义就在这里——用户看到的是岗位与职责的名字，不是 id。

@@ -220,7 +220,7 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十八条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十九条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       // WP72（56 §2）：群发永远人审 + 抑制名单必查（15 人公司里社媒是专职的）
@@ -250,6 +250,10 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'secretary/ask-colleague',
       'secretary/meet-conflict',
       'secretary/route-to-desk',
+      // WP77（59 §1 / §4）：`site.builder` 改名成 `site.shopify-theme` 之后，发布仍然 L1。
+      // 它与 `ops/theme-publish-needs-approval` **并存**：一条钉"门在"，
+      // 一条钉"改名之后门还在"——哪天有人把别名表删了，坏的会是这一条。
+      'site/theme-publish-still-l1',
       // WP73（56 §6）：同渠道同一小时两条 → 撞车，而且那句话真的在卡面上
       'social/calendar-conflict-flagged',
       // WP63（51 §2.1 数据日报）：日报卡 L3 自动出、看完归档，一条变更都不提

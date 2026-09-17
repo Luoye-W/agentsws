@@ -177,6 +177,10 @@ const EVENT_KEYS = [
   'shop.price_change',
   'shop.theme_push',
   'shop.theme_publish',
+  // WP77 建站（59 §1 / §2）
+  'site.checklist',
+  'site.email_template',
+  'site.app_install',
   // WP64 邮件营销与订单履约（51 §2.3 / §2.4）
   'fulfillment.sweep',
   'fulfillment.mark_shipped',
@@ -1159,6 +1163,66 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             ? {}
             : { theme: str(source, `${path}.${key}.theme`, body.theme) }),
           ...(themeLevel === undefined ? {} : { level: themeLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    // ── WP77（59 §4）：建站那三条 ────────────────────────────────────
+    case 'site.checklist': {
+      known(source, `${path}.${key}`, body, ['who'])
+      return {
+        at,
+        type: 'site.checklist',
+        checklist: { who: str(source, `${path}.${key}.who`, body.who) },
+      }
+    }
+    case 'site.email_template': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'notification_type',
+        'subject',
+        'body',
+        'enabled',
+        'level',
+      ])
+      const tplLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (tplLevel !== undefined && !['L1', 'L2', 'L3'].includes(tplLevel))
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      return {
+        at,
+        type: 'site.email_template',
+        email_template: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          notification_type: str(
+            source,
+            `${path}.${key}.notification_type`,
+            body.notification_type,
+          ),
+          subject: str(source, `${path}.${key}.subject`, body.subject),
+          body: str(source, `${path}.${key}.body`, body.body),
+          enabled: body.enabled === true,
+          ...(tplLevel === undefined ? {} : { level: tplLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    case 'site.app_install': {
+      known(source, `${path}.${key}`, body, ['who', 'app', 'operation', 'reason', 'level'])
+      const op = optStr(source, `${path}.${key}.operation`, body.operation)
+      if (op !== undefined && !['install', 'uninstall'].includes(op))
+        fail(source, `${path}.${key}.operation`, 'operation 只能是 install / uninstall')
+      const appLevel = optStr(source, `${path}.${key}.level`, body.level)
+      if (appLevel !== undefined && !['L1', 'L2', 'L3'].includes(appLevel))
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      return {
+        at,
+        type: 'site.app_install',
+        app_install: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          app: str(source, `${path}.${key}.app`, body.app),
+          ...(op === undefined ? {} : { operation: op as 'install' | 'uninstall' }),
+          ...(body.reason === undefined
+            ? {}
+            : { reason: str(source, `${path}.${key}.reason`, body.reason) }),
+          ...(appLevel === undefined ? {} : { level: appLevel as 'L1' | 'L2' | 'L3' }),
         },
       }
     }
