@@ -139,6 +139,8 @@ export interface ConnectRecordSourceOptions {
   kol?: () => RecordKolPort | undefined
   /** WP72（56 §2）：社媒账号与社群线程的只读面（见 {@link RecordSocialPort}）。 */
   social?: () => RecordSocialPort | undefined
+  /** WP78（60 §5）：新闻稿、提及与外部露出的只读面（见 {@link RecordPrPort}）。 */
+  pr?: () => RecordPrPort | undefined
   appendEvent?: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
 }
 
@@ -213,6 +215,65 @@ export interface RecordSocialPort {
         created_at: string
         status: string
         triage?: string
+      }
+    | undefined
+}
+
+/**
+ * WP78（60 §5）：记录源要的公关库那一面——**只读，而且只有三类**。
+ *
+ * 三类是 `press_release`（稿子）、`mention`（外面说的一句）、`external_post`
+ * （我们在别人地盘上发的一条）。**没有 `media_contact`**：媒体名单（哪怕只是
+ * 加密库的 key 名）不该被塞进模型上下文——模型要发 pitch 是经出站那一跳，
+ * 不是自己拿一个 key（与 `RecordKolPort` 不给联系方式是同一条理由）。
+ *
+ * 提及的正文**是外部文本**：读得到，但进模型之前要围栏（21 §1 / 39）。
+ * 这一层只负责把它原样端出来，围不围栏是运行时那一跳的事——两处都做才叫做了。
+ *
+ * 稿子那一格额外给两个数（`figures` / `cited`）而不是给一份 `facts_cited`：
+ * 模型要知道的是"这篇稿子里还有几个数没出处"，不是那几张卡的 id。
+ */
+export interface RecordPrPort {
+  release(id: string):
+    | {
+        id: string
+        status: string
+        headline: string
+        dek: string
+        body: string
+        figures: number
+        cited: number
+        embargo_until?: string
+      }
+    | undefined
+  mention(id: string):
+    | {
+        id: string
+        source: string
+        origin: string
+        url: string
+        title?: string
+        text: string
+        author?: string
+        published_at: string
+        sentiment?: string
+        triage?: string
+        status: string
+        seen_count: number
+      }
+    | undefined
+  externalPost(id: string):
+    | {
+        id: string
+        platform: string
+        venue: string
+        kind: string
+        status: string
+        body: string
+        rules_ok: boolean
+        rules_reasons: string[]
+        url?: string
+        published_at?: string
       }
     | undefined
 }
@@ -955,6 +1016,16 @@ export function createConnectRecordSource(
       if (thread === undefined) return undefined
       return { ...thread, account: socialPort?.account(thread.account_id) }
     }
+    /*
+     * WP78（60 §5）：稿子、提及与外部露出的只读记录源。
+     *
+     * 一条外部露出连版规结论一起给：起草下一条的时候要知道"上一条为什么发不出去"。
+     * 媒体名单一格都不给（见 `RecordPrPort` 的注释）。
+     */
+    const prPort = options.pr?.()
+    if (ref.type === 'press_release') return prPort?.release(ref.id)
+    if (ref.type === 'mention') return prPort?.mention(ref.id)
+    if (ref.type === 'external_post') return prPort?.externalPost(ref.id)
     // 不认识的一律 undefined——**不编造**
     return undefined
   }
@@ -1002,6 +1073,19 @@ export function createConnectRecordSource(
       if (thread === undefined) return undefined
       const where = socialLabel?.account(thread.account_id)?.display_name ?? thread.channel
       return `${thread.author_handle}（${where}）`
+    }
+    // WP78：一篇稿子叫它的标题，一条提及叫"谁在哪儿说的"，一条外部露出叫
+    // "平台／版块"——卡面上只写一个 `mn_xxx` 谁也认不出这是外面哪一句话
+    const prLabel = options.pr?.()
+    if (ref.type === 'press_release') return prLabel?.release(ref.id)?.headline
+    if (ref.type === 'mention') {
+      const m = prLabel?.mention(ref.id)
+      if (m === undefined) return undefined
+      return m.author === undefined ? m.origin : `${m.author}（${m.origin}）`
+    }
+    if (ref.type === 'external_post') {
+      const p = prLabel?.externalPost(ref.id)
+      return p === undefined ? undefined : `${p.platform}／${p.venue}`
     }
     return undefined
   }

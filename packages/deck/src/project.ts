@@ -100,6 +100,7 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
   out.push(...wp64Highlights(item, ctx))
   out.push(...kolHighlights(item))
   out.push(...socialHighlights(item))
+  out.push(...prHighlights(item))
   const handoff = handoffHighlight(item)
   if (handoff !== undefined) out.push(handoff)
   return out
@@ -170,6 +171,71 @@ function socialHighlights(item: ApprovalItem): DeckHighlight[] {
 }
 
 /**
+ * WP78（60 §1 / §3）：公关那**五张卡**上人最先要看的几个数。
+ *
+ * 五张卡同样不是五个新 kind（36 §2：卡是审批项的投影）——新闻稿发布卡、
+ * 外部发帖卡、负面预警卡、转客服卡、回应草稿卡都是 `staged_change` /
+ * `outbound_draft` 的投影，差别只在这几个芯片上。
+ *
+ * 一条纪律：**全部从结构化字段里取**（37 §1 第 4 行）。版规结论、数字出处、
+ * 传播量都是提案那一跳算完写进 `after` 的，不在这儿现算、更不由模型现编。
+ *
+ * 转客服卡那一格在 {@link handoffHighlight} 里——公关转出去的那张与社媒转出去的
+ * 那张是**同一种卡**（都是"这条归客服答"），所以不在这里写第二遍。
+ */
+function prHighlights(item: ApprovalItem): DeckHighlight[] {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  const out: DeckHighlight[] = []
+  const kind = str(payload.kind)
+  const PR_KINDS = ['press_release', 'community_post', 'mention_triage']
+  if (kind === undefined || !PR_KINDS.includes(kind)) return out
+
+  /*
+   * 外部发帖卡：**版规结论**。这是第一眼要看的东西——我们在别人的地盘上，
+   * 发错一条不是这条帖子被删，是整个品牌被那个版赶走（60 §1）。
+   * 版名也一起放上：同一条职责一天可能对着两个版，卡面上不写等于让人猜。
+   */
+  if (kind === 'community_post') {
+    const venue = str(after.venue_label) ?? str(after.venue)
+    if (venue !== undefined) out.push({ type: 'channel', text: venue })
+    const rules = str(after.rules_summary)
+    if (rules !== undefined) out.push({ type: 'venue_rules', text: rules })
+  }
+
+  /*
+   * 新闻稿卡：**几个数、几个有出处**。两个数不等的稿子提不上来（guardrail
+   * block），所以这里永远相等——它存在的意义是让人看见这件事被查过了。
+   */
+  if (kind === 'press_release') {
+    const figures = num(after.figure_count)
+    const cited = num(after.cited_count)
+    if (figures !== undefined && cited !== undefined)
+      out.push({ type: 'facts_cited', text: `${figures} 个数字，${cited} 个有出处` })
+    const embargo = str(after.embargo_until)
+    if (embargo !== undefined) out.push({ type: 'scheduled', text: embargo })
+  }
+
+  /*
+   * 负面预警卡：**情绪 + 被转了几次**。传播量决定"要不要现在就回"，
+   * 而那是人要判的事——所以它必须在卡面上，不能藏在详情里。
+   */
+  if (kind === 'mention_triage') {
+    const mood = str(after.sentiment_label) ?? str(after.sentiment)
+    const seen = num(after.seen_count)
+    if (mood !== undefined)
+      out.push({
+        type: 'sentiment',
+        text: seen === undefined ? mood : `${mood} · 被转了 ${seen} 次`,
+      })
+    const origin = str(after.origin)
+    if (origin !== undefined) out.push({ type: 'channel', text: origin })
+  }
+
+  return out
+}
+
+/**
  * WP72（56 §4）：**转客服卡**上那一格。
  *
  * 它不是社媒那六条 ChangeKind 里的任何一条——转客服是一张
@@ -181,7 +247,11 @@ function socialHighlights(item: ApprovalItem): DeckHighlight[] {
 function handoffHighlight(item: ApprovalItem): DeckHighlight | undefined {
   const payload = isRecord(item.payload) ? item.payload : {}
   const after = isRecord(payload.after) ? payload.after : {}
-  if (str(after.triage) !== 'customer_question') return undefined
+  // WP78（60 分界行）：公关那一侧判成客户问题的结论代号叫 `customer_issue`
+  // （契约 `MentionTriage`），社媒那一侧叫 `customer_question`（`CommunityTriage`）。
+  // 两个名字，同一件事：**这条归客服答**。两处都认，卡面上说的话是同一句。
+  const triage = str(after.triage)
+  if (triage !== 'customer_question' && triage !== 'customer_issue') return undefined
   const to = str(after.route_to_label) ?? str(after.route_to_role)
   return to === undefined ? undefined : { type: 'handoff', text: to }
 }

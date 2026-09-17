@@ -22,6 +22,7 @@ import type {
   ModelDefaultsView,
   ModelsPort,
   PositionEntryPort,
+  PrPort,
   SocialPort,
   WorkPort,
   WorkstationPort,
@@ -284,6 +285,14 @@ export function brandSocialPort(
   make: (workspace_id: WorkspaceId) => Promise<SocialPort>,
 ): SocialPort {
   return scopedPort<SocialPort>(make, () => brands.bootstrap)
+}
+
+/** WP78（60 §5）：公关库 `/v1/pr/*`（一个品牌一张库——媒体名单串不得）。 */
+export function brandPrPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<PrPort>,
+): PrPort {
+  return scopedPort<PrPort>(make, () => brands.bootstrap)
 }
 
 export function brandKolPort(

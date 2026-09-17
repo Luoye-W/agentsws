@@ -34,6 +34,14 @@ const minLevel = (a: Level, b: Level): Level => (levelIndex(a) <= levelIndex(b) 
 const KIND_ALIAS: Readonly<Record<string, ChangeKind>> = {
   approve_member: 'community_membership',
   moderate: 'community_moderation',
+  // WP78（60 §1）：公关那三个写动作的名字与 kind 也对不上（同样是动词 vs 名词）。
+  //
+  // `stage_external_post` 没写成 `stage_post`，是因为 `stage_post` 这个动作 id
+  // 社媒九条职责已经在用了（→ `social_post`），而这张表是**按动作 id 全局查的**：
+  // 写成同一个名字，两条职责里必有一条判错。名字不同不是洁癖，是这张表的形状要求。
+  draft_release: 'press_release',
+  stage_external_post: 'community_post',
+  flag_mention: 'mention_triage',
 }
 
 /** 动作 id → 15 §2 的 ChangeKind：去掉 `stage_` / `draft_` / `propose_` 前缀后对表。 */

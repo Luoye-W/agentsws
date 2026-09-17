@@ -1,0 +1,192 @@
+# 60 §1 公共关系的第 4 条职责：**品牌监控**（WP78）。
+#
+# 骨架为什么长这样写在 `pr/press.yml` 的文件头里，这里不抄第二遍。
+#
+# 这条职责与另外三条**方向相反**：那三条是"我们往外说什么"，这一条是
+# "外面在说我们什么"。所以它的读面最宽（新闻、Reddit、论坛、评测、社媒），
+# 写面最窄（定性，加一封回应草稿）。
+#
+# 这条职责特有的三件事：
+#
+# 1. **定性本身不发一句话出去**，所以 `mention_triage` 是 L3、自动跑。
+#    真正要人点的是它**触发**的那些卡：转客服卡、回应草稿卡。定性判错了
+#    改一下就是了；这一档要是也压着等人点，那"负面预警"就永远晚一天。
+# 2. **客户的问题转客服，公关不答**（60 分界行）。一条"我的单还没到"出现在
+#    Reddit 上，它仍然是一张工单——而这条职责的 scopes 里**一个 `order` 都没有**，
+#    答得出口的只有编的。判类在 `@agentsws/pr-core` 的 `triageMention`，
+#    客户问题那一档复用 `social-core` 的 `triageThread`（全仓同一份词表）。
+# 3. **拉不到 ≠ 今天没人提我们。** Google Alerts 的 feed 404 了、Reddit 搜索
+#    401 了，面板上要照实说"这一块没拉到"，不能显示一个 0
+#    （`pr-core` 的 `channels/alerts.ts` 文件头第 3 条）。
+#
+# 分界（60 表头）：舆情与媒体询问归公关自己答；**客户的问题不归我，转客服**。
+id: pr.monitoring
+version: 1.0.0
+domain: pr
+name: { zh: 品牌监控, en: Brand Monitoring }
+description: 盯着外面在说我们什么：新闻、Reddit、论坛、评测、社媒的提及归一去重、定情绪、分归属。负面出预警、媒体询问出回应草稿、客户的问题转客服——那不归我答
+
+scopes:
+  # 提及是这条职责的主对象
+  - { domain: mention, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 外部露出与新闻稿只读：出预警的时候要知道"这条负面是不是冲着我们上周那篇稿子来的"
+  - { domain: external_post, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: press_release, ops: [read], range: assigned, max_sensitivity: internal }
+  # 19：写回应之前先查事实卡（回应里的数字与新闻稿同一条规矩）
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+  # **没有 `order` / `customer`**：客户的问题转客服，这条职责答不了也不该答
+
+connectors:
+  # 60 §5：Google Alerts 的 RSS（新卡，原生表单填一个 feed 地址）
+  - { kind: google_alerts, required: false, grants: [read_feed], ownership: workspace }
+  # Reddit 全站搜（与 `pr.reddit` / `social.reddit` **同一张卡**，不新建）
+  - { kind: reddit, required: false, grants: [search], ownership: workspace }
+
+actions:
+  - id: flag_mention
+    target: mention
+    kind: staged_change
+    mandate:
+      # 一天 50 条预警（60 §6）。超了转人审，不拦——出大事那天本来就该多几条
+      caps: { max_alerts_per_day: 50 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 50, per: day }
+    route_to: role_holder
+  - id: draft_response
+    target: mention
+    kind: outbound_message
+    mandate:
+      caps: { max_replies_per_day: 20 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+
+automation:
+  # L3 自动跑（文件头第 1 条）：定性不发一句话出去，压着它只会让预警晚一天
+  flag_mention:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [guardrail_hit, manual]
+  # 回应发出去是 L2 起：它是对着外面说的一句话
+  draft_response:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  # 顺序就是一天的顺序：先看有没有着火的，再看今天外面都说了什么
+  - {
+      id: pr.monitoring.alerts,
+      placement: alert,
+      component: table,
+      query: pr.negative_alerts,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: pr.monitoring.mentions,
+      placement: queue,
+      component: table,
+      query: pr.mentions,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  # 这条职责**没有**答客户的问题，但它要看得见自己转出去了多少
+  - {
+      id: pr.monitoring.handoffs,
+      placement: role_view,
+      component: table,
+      query: pr.support_handoffs,
+      default_order: 30,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  - {
+      name: monitoring_intent,
+      intent_terms: [监控, 舆情, 提及, 口碑, negative, mention, sentiment, alert, brand watch],
+      cue_terms: [有人说, 外面, 差评, 爆料, 负面, 转载, 情绪, 预警, buzz, trending],
+      tool: list_mentions,
+      prefetch: false,
+    }
+  # 60 的分界：客户的问题不归我。意图词写足，54 的路由才判得到"转客服"
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_support,
+      prefetch: false,
+    }
+  # 19：写回应之前先查事实卡——回应里编一个数，与新闻稿里编一个数一样糟
+  - {
+      name: facts_before_response,
+      intent_terms: [回应, 澄清, 声明, 答记者, response, statement, clarify],
+      cue_terms: [数据, 批次, 比例, 召回, 检测, percent, batch, units],
+      tool: search_facts,
+      prefetch: true,
+    }
+
+notifications:
+  # 负面预警：立刻。这条职责存在的全部理由就是这一下
+  - {
+      event: 'approval.created:flag_mention',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+      escalate_after_hours: 2,
+    }
+  - {
+      event: 'approval.created:draft_response',
+      mode: immediate,
+      recipients: [role_holder],
+      escalate_after_hours: 4,
+    }
+  - { event: 'guardrail.hit:commitment_scan', mode: immediate, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: today
+    label: { zh: "今天外面说了什么", en: "What's being said today" }
+    prompt: "把今天的提及按情绪分三档列出来，重复的合并成一条并标出被转了几次；拉不到的源照实说，别显示 0"
+    kind: ask
+  - id: negatives
+    label: { zh: "有没有着火的", en: "Anything on fire" }
+    prompt: "最近有没有负面在扩散？按传播量排，每条说清是谁在说、说的是什么、要不要回"
+    kind: ask
+  - id: draft_response
+    label: { zh: "起草一份回应", en: "Draft a response" }
+    prompt: "给这条负面起一份回应草稿。先说事实再说我们做了什么，里面的数字只写事实卡里有的；不确定的事就说不确定"
+    kind: start_task
+  - id: what_routed
+    label: { zh: "转出去多少", en: "What got routed out" }
+    prompt: "这周从提及流里转给客服多少条？都是些什么问题"
+    kind: ask
+
+task_examples:
+  - id: complaint_thread
+    title: { zh: "外面有人抱怨订单", en: "An order complaint out there" }
+    description: "Reddit 上有人说「下单两周了还没发货」。"
+    expected_output: "一张转客服卡，卡上写清楚这条归客服答、原话是什么、在哪儿；公关这边一个字都不回——这条职责手上根本没有订单。"
+  - id: negative_wave
+    title: { zh: "一条负面被转了很多次", en: "A negative post spreading" }
+    description: "某条测评说我们的产品用两周就坏了，被好几个站转载。"
+    expected_output: "去重之后是一条，标着「被转了 N 次」；一张负面预警卡立刻推给你，附一份回应草稿的入口。回应发出去要你点。"
+  - id: alerts_down
+    title: { zh: "Google Alerts 拉不到了", en: "Alerts feed is down" }
+    description: "那条 RSS 突然 404 了。"
+    expected_output: "面板上那一块照实说「这条 feed 不存在（404），多半是提醒被删了」，而不是显示今天 0 条提及。"

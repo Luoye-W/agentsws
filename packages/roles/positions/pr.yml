@@ -1,0 +1,29 @@
+# WP78（60 §1 / 27 §1 / 54）：**公共关系**岗位 = 四条职责。
+#
+# 四条的顺序 = Luoye 09-17 手写那句话的顺序（新闻稿、Reddit 营销、论坛营销、
+# 品牌监控），也是契约里 `PR_ROLES` 的顺序。那张表是全仓唯一一份公关职责清单，
+# 这里不另排一遍。
+#
+# **默认全勾**（与社媒运营、红人营销那两个岗位的做法不同，理由也不同）：
+# 公关这四件事在一家小公司里本来就是一个人做的一天——写稿的人顺手盯舆情，
+# 盯舆情的人顺手去 Reddit 答一句。把它们默认勾上，是因为**勾掉一条比想起来
+# 该加一条容易**；社媒那九条默认只勾三条，是因为多数品牌一开始一个群都没有，
+# 而"外面有人说我们"这件事从第一天就在发生。
+#
+# 54：用户面对的是**岗位**，不是职责。开一件事 = 交给"公共关系"这个岗位，
+# 岗位里的 Agent 按 grounding 的意图词判该走哪条职责（"去 r/… 发一条"
+# → `pr.reddit`；"外面有人在骂我们" → `pr.monitoring`）。
+#
+# 边界（60 表头，Luoye 09-17 定）：
+#
+# - `social.reddit`（社媒运营）= **我们自己的** subreddit；
+#   `pr.reddit`（这个岗位）= **别人的** subreddit。
+# - 监控发现的**客户投诉转客服**；舆情与媒体询问公关自己答。
+id: pr
+version: 1.0.0
+name: { zh: 公共关系, en: Public Relations }
+roles:
+  - { role: pr.press, default: true }
+  - { role: pr.reddit, default: true }
+  - { role: pr.forums, default: true }
+  - { role: pr.monitoring, default: true }

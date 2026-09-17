@@ -379,6 +379,18 @@ actions:
   # WP73：`/api/distinguish`（加管理员标记 + 置顶）。这条渠道上的"群发"= 一条置顶帖
   reddit.distinguish_post: write
   reddit.update_subreddit_rules: write
+  # WP78（60 §1 `pr.reddit`）：**别人的**版那三口。
+  # 前两口是纯读（搜版、读版规），第三口与上面的 `submit_post` 是同一个
+  # `/api/submit`——只是发到别人的版里，所以照样 write。
+  reddit.search_subreddits: read
+  reddit.search_posts: read
+  reddit.get_subreddit_about: read
+  reddit.submit_to_subreddit: write
+
+  # WP78（60 §5）：Google Alerts 的 RSS。**整族只读**——它只有一个口子，
+  # 就是把那条 feed 拉回来；在 Google 那边盯什么词是用户自己设的，我们改不了。
+  google_alerts.fetch_feed: read
+  google_alerts.list_entries: read
 
   # Discord
   discord_bot.get_guild: read

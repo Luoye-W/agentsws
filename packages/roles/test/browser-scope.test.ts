@@ -69,6 +69,19 @@ describe('内置职责填了什么（55 §3）', () => {
     'kol.x': ['x.com', '*.x.com', 'twitter.com', '*.twitter.com'],
     // WP73（56 §6）：Facebook 群组走浏览器，只开自己的群所在的那个域
     'social.facebook-group': ['*.facebook.com', 'facebook.com'],
+    // WP78（60 §1）：论坛营销走浏览器（Quora / 知乎没有公开写接口）。
+    // 这一份与 `@agentsws/pr-core` 的 `FORUM_HOSTS` 是同一批域名，
+    // 对不上的时候 `pr-core` 的 `channels.test.ts` 会喊。
+    'pr.forums': [
+      '*.quora.com',
+      'quora.com',
+      '*.zhihu.com',
+      'zhihu.com',
+      '*.stackexchange.com',
+      '*.discourse.org',
+      '*.xda-developers.com',
+      '*.reddit.com',
+    ],
     'amz.support': [
       'sellercentral.amazon.com',
       'sellercentral-europe.amazon.com',

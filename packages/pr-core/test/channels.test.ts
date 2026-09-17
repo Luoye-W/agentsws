@@ -5,6 +5,8 @@
  * 2. 论坛：读走白名单、写先出卡、失效人接管（照 56 的 Facebook 群组）。
  * 3. Alerts：RSS 注入 fetch；**拉不到 ≠ 今天没人提我们**。
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { BrowserAction, BrowserExecutor, SocialTransport } from '@agentsws/social-core'
 import { describe, expect, it } from 'vitest'
 import {
@@ -262,9 +264,19 @@ describe('论坛：浏览器模式三条', () => {
     expect(res.reason).toBe('browser_required')
   })
 
-  it('白名单默认值与职责 yml 那一份是同一批域名', () => {
-    expect(FORUM_HOSTS).toContain('*.quora.com')
-    expect(FORUM_HOSTS).toContain('*.zhihu.com')
+  it('白名单两处写的是同一份（`roles/pr/forums.yml` 的 browser_scope）', () => {
+    const yml = readFileSync(join(import.meta.dirname, '../../roles/roles/pr/forums.yml'), 'utf8')
+    const block = /\nbrowser_scope:\n((?:\s+-\s+.*\n)+)/.exec(yml)?.[1] ?? ''
+    const hosts = block
+      .split('\n')
+      .map((line) =>
+        line
+          .replace(/^\s*-\s*/, '')
+          .trim()
+          .replace(/^'|'$/g, ''),
+      )
+      .filter((x) => x !== '')
+    expect(hosts).toEqual([...FORUM_HOSTS])
     expect(searchScript({ site: 'www.quora.com', query: 'x', limit: 5 }).writes).toBe(false)
   })
 })

@@ -57,7 +57,19 @@ if (check && before !== json) {
 
 // openapi-typescript 是 packages/sdk 自己的 devDependency（不进根 package.json）
 const cli = join(SDK, 'node_modules/.bin/openapi-typescript')
-const generated = execFileSync(cli, [OPENAPI_JSON], { encoding: 'utf8', cwd: ROOT })
+/*
+ * WP78：`maxBuffer` 不能省。
+ *
+ * `execFileSync` 的默认上限是 1 MB，而生成出来的 `schema.d.ts` 在 WP78 加了
+ * `/v1/pr/*` 那几条之后正好越过这条线——表现是 `ENOBUFS` + `SIGTERM`，
+ * 看起来像"openapi-typescript 崩了"，其实是我们自己把它掐了。
+ * 32 MB 是一个不会再被撞到的数（今天这份 1 MB 出头）。
+ */
+const generated = execFileSync(cli, [OPENAPI_JSON], {
+  encoding: 'utf8',
+  cwd: ROOT,
+  maxBuffer: 32 * 1024 * 1024,
+})
 
 const banner = `/**
  * **自动生成，别手改。** 来源：\`/v1\` 的路由声明（\`packages/api/src/routes/*\`）。

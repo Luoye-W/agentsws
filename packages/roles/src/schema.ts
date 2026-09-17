@@ -51,6 +51,13 @@ const DATA_DOMAIN = Schema.union([
   // 内容组四条读不到成员，客服的「社群管理」读得到线程、读不到成员名册。
   'community_member',
   'community_thread',
+  // WP78（60 §1）：公共关系那四个域，与契约的 `DataDomain` 同步。
+  // 一个域一把闸：媒体联系方式只有 `pr.press` 碰得到（confidential）；
+  // 提及流四条职责都读得到；在别人地盘上发的那条只有 `pr.reddit` / `pr.forums` 写得了。
+  'media_contact',
+  'press_release',
+  'mention',
+  'external_post',
   'review',
   'finance',
   'approval',
@@ -221,6 +228,8 @@ export const ROLE_SCHEMA: Node = Schema.object({
     'design',
     'dev',
     'common',
+    // WP78（60）：公共关系。四条职责 `pr.press` / `pr.reddit` / `pr.forums` / `pr.monitoring`
+    'pr',
   ] as const).required(),
   name: NAME,
   description: str(),

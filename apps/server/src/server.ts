@@ -57,8 +57,8 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { brandNameOf, KOL_CHANNEL_IDS, SOCIAL_ROLE_IDS } from '@agentsws/contracts'
-import { evaluateGuardrail } from '@agentsws/core'
+import { brandNameOf, KOL_CHANNEL_IDS, PR_ROLE_IDS, SOCIAL_ROLE_IDS } from '@agentsws/contracts'
+import { evaluateGuardrail, extractFigures, uncitedFigures } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
@@ -110,6 +110,7 @@ import {
   brandKolPort,
   brandModelsPort,
   brandPositionPort,
+  brandPrPort,
   brandSocialPort,
   brandWorkPort,
   brandWorkstationPort,
@@ -172,6 +173,8 @@ import {
   type OrganizationsAssembly,
 } from './organizations.js'
 import { createPositions, type PositionsAssembly } from './positions.js'
+import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
+import { createPrService } from './pr-service.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -198,6 +201,7 @@ import {
   registerOrgDuplicateScan,
   registerPlanRelay,
   registerPricingRefresh,
+  registerPrMonitor,
   registerRawPrune,
   registerReconcileDeliveries,
   registerReview,
@@ -314,6 +318,13 @@ export const BUNDLED_ROLES = [
   'social.whatsapp',
   // WP72（56 §4）：客服岗位的社群管理
   'dtc.community-support',
+  // WP78（60 §1）：公共关系岗位的四条职责。与红人 / 社媒那两组同一条理由：
+  // 种岗位那一步会把解析不到的职责筛掉，少一条，首次设置向导里的
+  // "公共关系"就少一个勾。
+  'pr.press',
+  'pr.reddit',
+  'pr.forums',
+  'pr.monitoring',
 ] as const
 
 /**
@@ -1157,6 +1168,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
       social: () => socialDeckData(social, { now: clock.now() }),
+      // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
+      // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
+      // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。
+      pr: () => prDeckData(pr),
       // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
       sources: () => withOwnSources(baseWorkData.sources()),
     }
@@ -1177,6 +1192,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 与红人库并排建，理由一样：记录源要拿它读账号与线程（`social: () => social`）。
      */
     const social = createSocialStore({
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    /**
+     * WP78（60 §5 数据面）：这个品牌的公关库（四类对象，落在这个品牌自己的目录下）。
+     * 与红人库、社媒库并排建，理由一样：品牌 A 的媒体名单、稿子与提及，
+     * 在 B 的任何路由里都读不到——媒体名单是这家公司攒了很多年的东西。
+     */
+    const pr = createPrStore({
       workspace_id: ws,
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
@@ -1289,6 +1313,49 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       random,
     })
 
+    /**
+     * WP78（60 §5）：公关库的 `/v1` 面。
+     *
+     * `triageMention` 与 `checkSubredditRules` 的调用方就在它里面——60 那条
+     * "监控发现的客户投诉转客服"的分界，以及"在别人的地盘上版主说了算"这件事，
+     * 从这一跳起是真会发生的事。
+     *
+     * `pullMentions` 暂时不给：进料那两条（Google Alerts 的 RSS、Reddit 全站搜）
+     * 要这个品牌连接页上那两张卡真连上才有东西可拉。没配的时候
+     * `monitorSweep()` 照实说"还没配监控源"，**不是**"今天没人提我们"。
+     */
+    const prService = createPrService({
+      workspace_id: ws,
+      store: pr,
+      clock,
+      approvals: txn.approvals,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      // 转客服卡要落到**真持有客服**的那个人头上；没人持有就落到 owner
+      holdersOf: (role_id) =>
+        roles.assignments
+          .listByRole(role_id)
+          .filter((a) => a.workspace_id === ws && a.revoked_at === undefined)
+          .map((a) => ({ person_id: a.person_id })),
+      owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      // 定时那一轮用**真持有品牌监控**的那个人的分配去提（定时任务没有"当前用户"）
+      monitorActor: () => {
+        const holder = roles.assignments
+          .listByRole('pr.monitoring')
+          .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+        return holder === undefined
+          ? undefined
+          : {
+              workspace_id: ws,
+              person_id: holder.person_id,
+              assignment_id: holder.id,
+              role_id: holder.role_id,
+            }
+      },
+      appendEvent,
+      random,
+    })
+
     let workRef: Work | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
@@ -1307,6 +1374,68 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kol: () => kol,
         // WP72：社媒账号与社群线程的**只读**记录（见 `RecordSocialPort`）
         social: () => social,
+        /*
+         * WP78：稿子、提及与外部露出的**只读**记录（见 `RecordPrPort`）。
+         *
+         * 稿子那两个数在这里当场算，用的是 guardrail 那一份代码
+         * （`extractFigures` / `uncitedFigures`）——模型看到的"还有几个数没出处"
+         * 与门拦下来时说的必须是同一个数。
+         */
+        pr: () => ({
+          release: (id) => {
+            const r = pr.release(id)
+            if (r === undefined) return undefined
+            const figures = extractFigures(r.body)
+            const uncited = uncitedFigures(
+              r.body,
+              r.facts_cited.map((c) => c.figure),
+            )
+            return {
+              id: r.id,
+              status: r.status,
+              headline: r.headline,
+              dek: r.dek,
+              body: r.body,
+              figures: figures.length,
+              cited: figures.length - uncited.length,
+              ...(r.embargo_until === undefined ? {} : { embargo_until: r.embargo_until }),
+            }
+          },
+          mention: (id) => {
+            const m = pr.mention(id)
+            if (m === undefined) return undefined
+            return {
+              id: m.id,
+              source: m.source,
+              origin: m.origin,
+              url: m.url,
+              ...(m.title === undefined ? {} : { title: m.title }),
+              text: m.text,
+              ...(m.author === undefined ? {} : { author: m.author }),
+              published_at: m.published_at,
+              ...(m.sentiment === undefined ? {} : { sentiment: m.sentiment }),
+              ...(m.triage === undefined ? {} : { triage: m.triage }),
+              status: m.status,
+              seen_count: m.seen_count,
+            }
+          },
+          externalPost: (id) => {
+            const p = pr.post(id)
+            if (p === undefined) return undefined
+            return {
+              id: p.id,
+              platform: p.platform,
+              venue: p.venue,
+              kind: p.kind,
+              status: p.status,
+              body: p.body,
+              rules_ok: p.rules_checked.ok,
+              rules_reasons: [...p.rules_checked.reasons],
+              ...(p.url === undefined ? {} : { url: p.url }),
+              ...(p.published_at === undefined ? {} : { published_at: p.published_at }),
+            }
+          },
+        }),
         ...(liveData === undefined ? {} : { liveData }),
       })
 
@@ -1603,6 +1732,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       records,
       kol,
       kolService,
+      pr,
+      prService,
       social,
       socialService,
       socialChannels,
@@ -1621,6 +1752,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        pr.close()
       },
     }
   }
@@ -1684,6 +1816,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 这个岗位最要紧的那句话就说不出来。
    */
   if (mount !== undefined) seedDemoSocial(boot.social, clock.now())
+
+  /**
+   * WP78（60 §3）：demo 里给公关库放几行，理由与上面那两条逐字相同。
+   *
+   * 里面有三条演示里少不了的东西：一条**客户的问题**出现在论坛上
+   * （60 分界行的落点——公关不答它，它变成一张转客服卡）、一篇**少一个数字
+   * 出处**的稿子（那道门长什么样）、一条**被版规拦下**的外部发帖
+   * （我们在别人的地盘上这件事长什么样）。
+   */
+  if (mount !== undefined) seedDemoPr(boot.pr, clock.now())
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {
@@ -1914,6 +2056,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 一个品牌的内容只能用那个品牌的连接与那个品牌的号发出去——串了品牌
    * 等于用 B 的号发 A 的东西，而那件事在平台那边是收不回来的。
    */
+  /*
+   * WP78 / 60 §5：品牌监控，每 15 分钟一轮，**按品牌各跑一轮**。
+   *
+   * 一个品牌的提及只能进那个品牌的库——媒体名单与舆情记录串了品牌，
+   * 等于把一家公司攒了很多年的东西端给另一家。
+   */
+  registerPrMonitor(schedule.scheduler, {
+    sweep: async () => {
+      const out = { pulled: 0, created: 0, carded: 0, routed: 0, skipped: [] as unknown[] }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.prService.monitorSweep()
+        out.pulled += one.pulled
+        out.created += one.created
+        out.carded += one.carded
+        out.routed += one.routed
+        // 哪个品牌的哪个源没拉到要看得出来（一个坏了不该拖垮别的，
+        // 而且"没拉到"这句话要一路走到面板上）
+        out.skipped.push(...one.skipped)
+      }
+      return out
+    },
+  })
   registerSocialPublish(schedule.scheduler, {
     sweep: async () => {
       const out = { due: 0, published: 0, failed: 0, skipped: [] as unknown[] }
@@ -2060,6 +2224,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 与红人那一条同理——没人做社媒的机器上不该有这一行。
        */
       social: SOCIAL_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
+      // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
+      pr: PR_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
     },
   })
 
@@ -2842,6 +3008,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).socialService.port,
   )
+  /** WP78（60 §5）：公关库 `/v1/pr/*`（同上；媒体名单是一家公司攒了很多年的东西）。 */
+  const prPortOf = brandPrPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).prService.port,
+  )
   /**
    * WP83（54（将改号 55）§4 前两层）：连接目录与岗位连接清单——**一个品牌一份**。
    *
@@ -3073,6 +3244,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
+    // WP78（60 §5）：本地公关库 `/v1/pr/*`
+    pr: prPortOf,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

@@ -49,6 +49,10 @@
     "packages/roles/roles/kol/tiktok.yml",
     "packages/roles/roles/kol/x.yml",
     "packages/roles/roles/kol/youtube.yml",
+    "packages/roles/roles/pr/forums.yml",
+    "packages/roles/roles/pr/monitoring.yml",
+    "packages/roles/roles/pr/press.yml",
+    "packages/roles/roles/pr/reddit.yml",
     "packages/roles/roles/site/builder.yml",
     "packages/roles/roles/social/discord.yml",
     "packages/roles/roles/social/facebook-group.yml",
@@ -60,7 +64,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "8b175927666aecd73938c8acdfcd0fb8",
+  "source_digest": "0f6e0c8c09c368aa105206a10240ce81",
   "objects": [
     {
       "id": "ad_set",
@@ -1116,7 +1120,7 @@
       "domain": "external_post",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1233,7 +1237,7 @@
           "optional": false
         }
       ],
-      "read_via": [],
+      "read_via": ["list_external_posts"],
       "contract": "ExternalPost"
     },
     {
@@ -1714,7 +1718,7 @@
       "domain": "media_contact",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -2120,7 +2124,7 @@
       "domain": "mention",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -2219,7 +2223,7 @@
           "optional": true
         }
       ],
-      "read_via": [],
+      "read_via": ["list_mentions"],
       "contract": "Mention"
     },
     {
@@ -2501,7 +2505,7 @@
       "domain": "press_release",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -2600,7 +2604,7 @@
           "optional": false
         }
       ],
-      "read_via": [],
+      "read_via": ["list_press_releases"],
       "contract": "PressRelease"
     },
     {
@@ -4192,6 +4196,14 @@
     },
     {
       "from": "approval_item",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "approval_item",
       "to": "inventory_item",
       "direction": "out",
       "cardinality": "one",
@@ -4205,6 +4217,22 @@
       "cardinality": "one",
       "via": "subject.matter_id",
       "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_mentions"]
     },
     {
       "from": "approval_item",
@@ -4229,6 +4257,14 @@
       "cardinality": "one",
       "via": "subject.object",
       "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "approval_item",
@@ -4784,6 +4820,38 @@
     },
     {
       "from": "external_post",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "external_post",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "external_post",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "external_post",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "external_post",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -4928,6 +4996,38 @@
     },
     {
       "from": "media_contact",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "media_contact",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "media_contact",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "media_contact",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "media_contact",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -5004,6 +5104,38 @@
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "mention",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "mention",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "mention",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "mention",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -5180,6 +5312,38 @@
       "direction": "in",
       "cardinality": "many",
       "via": "work_item.position_id",
+      "lookup": []
+    },
+    {
+      "from": "press_release",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "press_release",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "press_release",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_listing", "changes.pending_price"]
+    },
+    {
+      "from": "press_release",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -5544,6 +5708,22 @@
     },
     {
       "from": "staged_change",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "staged_change",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "staged_change",
       "to": "inventory_item",
       "direction": "out",
       "cardinality": "one",
@@ -5557,6 +5737,38 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "staged_change",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_mentions"]
+    },
+    {
+      "from": "staged_change",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_mentions"]
     },
     {
       "from": "staged_change",
@@ -5605,6 +5817,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": ["list_press_releases"]
+    },
+    {
+      "from": "staged_change",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "staged_change",
@@ -6040,11 +6268,35 @@
     },
     {
       "from": "workflow_instance",
+      "to": "external_post",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_external_posts"]
+    },
+    {
+      "from": "workflow_instance",
       "to": "inventory_item",
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_inventory_item", "shopify_admin.list_inventory_items"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "media_contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "mention",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_mentions"]
     },
     {
       "from": "workflow_instance",
@@ -6069,6 +6321,14 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "press_release",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "workflow_instance",
@@ -6164,7 +6424,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "external_post.workspace_id",
-      "lookup": []
+      "lookup": ["list_external_posts"]
     },
     {
       "from": "workspace",
@@ -6228,7 +6488,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "mention.workspace_id",
-      "lookup": []
+      "lookup": ["list_mentions"]
     },
     {
       "from": "workspace",
@@ -6244,7 +6504,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "press_release.workspace_id",
-      "lookup": []
+      "lookup": ["list_press_releases"]
     },
     {
       "from": "workspace",
@@ -6963,6 +7223,40 @@
       "what": "改工作区策略"
     },
     {
+      "id": "draft_release",
+      "object": "press_release",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["pr.press"],
+      "what": "draft release"
+    },
+    {
+      "id": "draft_response",
+      "object": "mention",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.monitoring"],
+      "tool": "draft_reply",
+      "what": "draft response"
+    },
+    {
+      "id": "flag_mention",
+      "object": "mention",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.monitoring"],
+      "what": "flag mention"
+    },
+    {
       "id": "grant_assignment",
       "object": "policy",
       "source": "role",
@@ -7015,6 +7309,18 @@
       "what": "notify delay"
     },
     {
+      "id": "pitch_media",
+      "object": "media_contact",
+      "source": "role",
+      "access": "write",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["pr.press"],
+      "tool": "draft_reply",
+      "what": "pitch media"
+    },
+    {
       "id": "reply_buyer_message",
       "object": "customer",
       "source": "role",
@@ -7064,13 +7370,15 @@
     },
     {
       "id": "reply_thread",
-      "object": "community_thread",
+      "object": "external_post",
       "source": "role",
       "access": "write",
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "role_holder",
       "roles": [
+        "pr.forums",
+        "pr.reddit",
         "social.discord",
         "social.facebook-group",
         "social.reddit",
@@ -7212,6 +7520,17 @@
       "route_to": "scope_manager",
       "roles": ["dtc.community-support", "dtc.store", "dtc.support"],
       "what": "建 / 改一个优惠码（营销发码）"
+    },
+    {
+      "id": "stage_external_post",
+      "object": "external_post",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["pr.forums", "pr.reddit"],
+      "what": "stage external post"
     },
     {
       "id": "stage_flow_edit",

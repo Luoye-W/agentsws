@@ -1,0 +1,219 @@
+# 60 §1 公共关系的第 2 条职责：**Reddit 营销**（WP78）。
+#
+# 骨架为什么长这样写在 `pr/press.yml` 的文件头里，这里不抄第二遍。
+#
+# **这条职责与 `social.reddit` 的分界，是这个 WP 最要紧的一句话**（60 表头，
+# Luoye 09-17 定）：
+#
+# | | 管的是 | 发东西的门 |
+# |---|---|---|
+# | `social.reddit`（社媒运营，56） | **我们自己的** subreddit | `social_post` / `community_broadcast` |
+# | `pr.reddit`（这一条） | **别人的** subreddit | `community_post`（**HARD_L1** + 版规 + 冷却） |
+#
+# 54 §2 的岗位路由靠 `description` 与 `grounding` 判这件事——写不足 = 路由不到，
+# 于是"去 r/BuyItForLife 发一条"会被送去社媒运营那条职责，而那条职责在别人的版里
+# 一个动作都做不了。
+#
+# 这条职责特有的三件事：
+#
+# 1. **我们在人家的地盘上，版主说了算。** 发错一条的后果不是这条帖子被删，
+#    是这个品牌的域名被加进那个版的自动删除名单——从此我们在那里说的每一句话
+#    都不存在。所以 `community_post` 在 `HARD_L1` 里，而且版规禁自我推广的版
+#    是 **block** 不是转人审。
+# 2. **版规不是一段文字，是一条条规则。** `@agentsws/pr-core` 的
+#    `parseSubredditRules` 把它读成三件事（禁不禁推广、要不要 flair、几小时冷却）；
+#    **一条相关的话都没写的版按禁处理**——fail-closed 的代价是少发一条。
+# 3. **连接卡复用 56 §1 那一张 `reddit`**，不新建。一把 key 管两条职责，
+#    连接页上只有一张 Reddit（写成两张的后果是用户连两遍、其中一遍永远显示没连）。
+#
+# 分界（60 表头）：舆情与媒体询问归公关自己答；**客户的问题不归我，转客服**。
+id: pr.reddit
+version: 1.0.0
+domain: pr
+name: { zh: Reddit 营销, en: Reddit Marketing }
+description: 在**别人的** subreddit 里露出：找版、读版规、答别人的问题、在允许的版里发一条。我们自己的 subreddit 不归我（那是社媒运营的 Reddit 运营）；客户的问题不归我，转客服
+
+scopes:
+  # 在别人地盘上发的那条帖子
+  - { domain: external_post, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 外面在说什么（要答的问题多半是从提及流里来的）——只读
+  - { domain: mention, ops: [read], range: assigned, max_sensitivity: internal }
+  # 19：答别人的问题之前先查事实卡（说到价格、时效、参数）
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+  # **没有 `media_contact`**：媒体名单归 `pr.press`，这条职责碰不到一个邮箱
+  # **没有 `social_account` / `community_member`**：那是我们自己的号与群，归社媒运营
+
+connectors:
+  # 56 §1 那张卡（文件头第 3 条）。`required: false`：没连也能整理版规、攒草稿、
+  # 攒审批——真发出去那一跳才需要它。
+  - {
+      kind: reddit,
+      required: false,
+      grants: [read_subreddit, read_rules, search, submit],
+      ownership: workspace,
+    }
+
+actions:
+  # 动作 id 是 `stage_external_post` 不是 `stage_post`：后者社媒九条职责已经在用
+  # （→ `social_post`），而 `changeKindOf` 那张表是**按动作 id 全局查的**
+  # （`packages/roles/src/effective.ts` 的 `KIND_ALIAS`）。
+  - id: stage_external_post
+    target: external_post
+    kind: staged_change
+    mandate:
+      # 一天两条、同一个版 72 小时（60 §6）。冷却那一条是 **block**，不是额度：
+      # 同一个版连着发，多数版会自动删并警告
+      caps: { max_external_posts_per_day: 2, cooldown_per_subreddit_hours: 72 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 2, per: day }
+    # 换一个版 = 发到另一个人的地盘上去了（`@agentsws/core` 的 `PROTECTED_FIELDS`）
+    protected_fields: [platform, venue, parent_external_id]
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: reply_thread
+    target: external_post
+    kind: outbound_message
+    mandate:
+      # 一天 20 条（60 §6）。答别人的问题比发自己的帖子安全得多——
+      # 多数版欢迎厂商来答疑，讨厌厂商来发广告
+      caps: { max_replies_per_day: 20 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+
+automation:
+  # **永远 L1**（60 §1）。15 §2 的 `HARD_L1` 里有 `community_post`，
+  # 这里的 `hard_ceiling` 是把同一件事在职责这一层也写出来——两处都说，
+  # 改一处忘另一处的时候有人喊（同 56 的 `stage_broadcast`）
+  stage_external_post:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 答别人的问题 L2 → L3：能升是因为它改不了钱
+  reply_thread:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: pr.reddit.posts,
+      placement: queue,
+      component: table,
+      query: pr.external_posts,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: pr.reddit.mentions,
+      placement: role_view,
+      component: table,
+      query: pr.mentions,
+      default_order: 20,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：**"别人的版"与"我们自己的版"靠意图词分**。两条职责在两个岗位里，
+  # 但一个人可能两个岗位都挂着——那时这几个词就是唯一分得开它们的东西。
+  - {
+      name: external_subreddit_intent,
+      intent_terms:
+        [
+          reddit,
+          subreddit,
+          r/,
+          版,
+          帖子,
+          别人的版,
+          社区露出,
+          外部社区,
+          post to reddit,
+          answer on reddit,
+        ],
+      cue_terms: [版规, 自我推广, flair, 冷却, 发一条, 答一下, 露出, rules, self-promotion, karma],
+      tool: list_external_posts,
+      prefetch: false,
+    }
+  # 19：答别人的问题时说到价格、时效、参数之前先查事实卡
+  - {
+      name: facts_before_reply,
+      intent_terms: [回答, 回帖, 答疑, 评论, answer, reply, comment],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, 续航, price, warranty, battery],
+      tool: search_facts,
+      prefetch: true,
+    }
+  # 60 的分界：客户的问题不归我
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_support,
+      prefetch: false,
+    }
+
+notifications:
+  # 外部发帖永远人审，而且卡上要带着版规检查结果
+  - {
+      event: 'approval.created:stage_external_post',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+      escalate_after_hours: 8,
+    }
+  # 版规拦下来：立刻说——它意味着我们差一点在一个禁推广的版里发了广告
+  - {
+      event: 'guardrail.hit:subreddit_rules',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  - { event: 'guardrail.hit:cooldown_per_subreddit_hours', mode: queue, recipients: [role_holder] }
+  - { event: 'guardrail.hit:commitment_scan', mode: immediate, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: find_subreddits
+    label: { zh: "哪些版适合我们", en: "Which subreddits fit us" }
+    prompt: "按我们这个品类搜一圈 subreddit，每个版说清订阅数、版规让不让自我推广、要不要 flair、几小时冷却，分成「能发」「只能答不能发」「别去」三档"
+    kind: ask
+  - id: check_rules
+    label: { zh: "这个版的规矩是什么", en: "What are this sub's rules" }
+    prompt: "把这个版的版规读一遍，告诉我这一条发得了发不了、为什么"
+    kind: ask
+  - id: draft_post
+    label: { zh: "在这个版里发一条", en: "Draft a post for this sub" }
+    prompt: "给这个版起草一条帖子。先查版规，禁推广的版直接告诉我别发；能发的话按那个版的习惯写，别写成广告"
+    kind: start_task
+  - id: questions_to_answer
+    label: { zh: "有哪些问题值得答", en: "Questions worth answering" }
+    prompt: "最近有哪些帖子在问我们这个品类的事？挑出真值得答的，每条说清答什么、为什么是我们该答的"
+    kind: ask
+
+task_examples:
+  - id: promo_ban
+    title: { zh: "想去一个禁推广的版发帖", en: "A sub that bans promotion" }
+    description: "看到一个很对口的版，想去发一条产品介绍。"
+    expected_output: "提不上去：卡上写着「r/… 的版规明写着禁自我推广——我们在人家的地盘上，这一条不发」，并给你另一条路：去答别人的问题，不发自己的帖子。"
+  - id: allowed_post
+    title: { zh: "在允许的版里发一条", en: "Post where it's allowed" }
+    description: "有个版每周允许一条厂商帖，想发一次拆解。"
+    expected_output: "一张要你点的卡，卡面上带着版规检查的结论（禁不禁推广、要不要 flair、上一条隔了多久）。这一条永远不会自己发出去。"
+  - id: answer_thread
+    title: { zh: "有人在问我们这类产品", en: "Someone is asking about this category" }
+    description: "有个帖子在问「哪个户外电源耐用」。"
+    expected_output: "一份回帖草稿：先答问题再提我们，价格与参数只写事实卡里有的；带承诺词的第一稿会被打回重写。"

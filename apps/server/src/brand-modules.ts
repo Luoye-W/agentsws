@@ -36,6 +36,8 @@ import type { KolStore } from './kol.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
 import type { ModelsAssembly } from './models.js'
+import type { PrStore } from './pr.js'
+import type { PrServiceAssembly } from './pr-service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SecretStore } from './secret-store.js'
 import type { SocialStore } from './social.js'
@@ -118,6 +120,21 @@ export interface BrandModuleSet {
    * 的边界，在服务进程里的落点是它。
    */
   socialService: SocialServiceAssembly
+  /**
+   * WP78（60 §5 数据面）：这个品牌的公关库（四类对象）。
+   *
+   * 与红人库、社媒库同一条纪律（本文件第 2 条）：落盘按品牌分目录。
+   * 品牌 A 的媒体名单、稿子与提及，在 B 的任何路由里都读不到——
+   * 媒体名单是一家公司攒了很多年的东西，串了品牌等于把它送人。
+   */
+  pr: PrStore
+  /**
+   * WP78（60 §5）：这个品牌公关库的 `/v1` 面（端口 + 那一轮监控）。
+   *
+   * 与 `kol` / `social` 分成两格，理由逐字相同：库是数据，服务是**带着审批总线
+   * 与变更账本**的那一层。60 那条"客户投诉转客服"的分界，在服务进程里的落点是它。
+   */
+  prService: PrServiceAssembly
   /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */
   socialChannels: SocialChannelsAssembly
   work: Work

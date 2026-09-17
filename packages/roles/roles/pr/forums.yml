@@ -1,0 +1,194 @@
+# 60 §1 公共关系的第 3 条职责：**论坛营销**（WP78）。
+#
+# 骨架为什么长这样写在 `pr/press.yml` 的文件头里，这里不抄第二遍。
+# 动作、额度与上限与 `pr/reddit.yml` **逐字相同**（都是"在别人的地盘上发东西"），
+# 不同的只有两样：`mode: browser`，以及能去哪些站（`browser_scope`）。
+#
+# 这条职责特有的三件事：
+#
+# 1. **它没有连接卡。** Quora、知乎与绝大多数行业论坛没有公开写接口（知乎的
+#    开放平台早就不发新 key 了），所以 `connectors: []` 且 `mode: browser`：
+#    动作走第三栏的受控浏览器（36 §9 / 55 §3）。界面上"去连接"与"这条走浏览器"
+#    是两句不同的话，所以空的 `connectors` 不够用，得有 `mode` 这一格才分得开。
+# 2. **浏览器只是手，不是授权。** 走浏览器的写动作**照样先出卡**：
+#    `community_post` 在 `HARD_L1` 里，不因为"反正是人自己的浏览器"就松一档。
+#    读走白名单（下面 `browser_scope` 是真闸，`@agentsws/pr-core` 的 `FORUM_HOSTS`
+#    是适配器自己那第二道，两处写同一份；对不上的时候 `pr-core` 的
+#    `channels.test.ts` 会喊）。
+# 3. **失效即停。** 执行器回 `handover`（登录态掉了、页面改版了）就说
+#    "请你接管"，**不重试**——重试一个不知道点到哪儿的动作比不做危险。
+#
+# 分界（60 表头）：舆情与媒体询问归公关自己答；**客户的问题不归我，转客服**。
+id: pr.forums
+version: 1.0.0
+domain: pr
+name: { zh: 论坛营销, en: Forum Marketing }
+description: 在论坛与问答站（Quora / 知乎 / 行业论坛）里露出：找问题、读板块规矩、答问题、在允许的板块里发一条。没有官方接口，走受控浏览器；客户的问题不归我，转客服
+
+# 60 §1：Quora / 知乎没有公开写接口，动作走第三栏受控浏览器。
+mode: browser
+
+scopes:
+  - { domain: external_post, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: mention, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+# 60 §1：**这条渠道没有连接器可连**（不是"这条职责不需要连接器"）。
+# 空数组 + `mode: browser` 两格一起读，界面上才说得出那句对的话。
+connectors: []
+
+actions:
+  - id: stage_external_post
+    target: external_post
+    kind: staged_change
+    mandate:
+      caps: { max_external_posts_per_day: 2, cooldown_per_subreddit_hours: 72 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 2, per: day }
+    protected_fields: [platform, venue, parent_external_id]
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: reply_thread
+    target: external_post
+    kind: outbound_message
+    mandate:
+      caps: { max_replies_per_day: 20 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+
+automation:
+  stage_external_post:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  reply_thread:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: pr.forums.posts,
+      placement: queue,
+      component: table,
+      query: pr.external_posts,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: pr.forums.mentions,
+      placement: role_view,
+      component: table,
+      query: pr.mentions,
+      default_order: 20,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  - {
+      name: forum_intent,
+      intent_terms: [论坛, 知乎, quora, 问答, 贴吧, 社区, 板块, forum, thread, answer],
+      cue_terms: [版规, 发帖须知, 回答, 提问, 置顶, 精华, rules, ask, answer, upvote],
+      tool: list_forum_threads,
+      prefetch: false,
+    }
+  - {
+      name: facts_before_reply,
+      intent_terms: [回答, 回帖, 答疑, answer, reply],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, 续航, price, warranty, battery],
+      tool: search_facts,
+      prefetch: true,
+    }
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_support,
+      prefetch: false,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_external_post',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+      escalate_after_hours: 8,
+    }
+  - {
+      event: 'guardrail.hit:subreddit_rules',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  - { event: 'guardrail.hit:commitment_scan', mode: immediate, recipients: [role_holder] }
+
+# WP78（55 §3「域名白名单」）：这条职责的浏览器只能开这几个站。
+#
+# 真闸在 `dsh-adapter` 的 `checkBrowserNavigation`（这一份 → `EffectiveConfig.browser_scope`
+# → `RunRequest.allowed_hosts`），只看 `browser_navigate` 与 `browser_tabs{new}` 的 URL；
+# `@agentsws/pr-core` 的 `FORUM_HOSTS` 是适配器自己那第二道，两处写的是同一份。
+#
+# **这张表 Luoye 可以改**：它是"我们允许这条职责去哪儿"，不是一条技术事实。
+# 白名单是"允许"表，多开一个域就是多开一扇门——加一个站之前先想清楚
+# 那个站上我们要做什么。
+#
+# `*.reddit.com` 也在里面，但那**不是**为了在 Reddit 上发东西（那条走
+# `pr.reddit` 的官方接口）：论坛这条职责有时要顺着一条外链读到 Reddit 上的讨论。
+browser_scope:
+  - '*.quora.com'
+  - quora.com
+  - '*.zhihu.com'
+  - zhihu.com
+  - '*.stackexchange.com'
+  - '*.discourse.org'
+  - '*.xda-developers.com'
+  - '*.reddit.com'
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: find_threads
+    label: { zh: "哪些问题值得答", en: "Questions worth answering" }
+    prompt: "在知乎和 Quora 上搜一圈我们这个品类，挑出真值得答的问题；每条说清答什么、为什么是我们该答的"
+    kind: ask
+  - id: read_rules
+    label: { zh: "这个板块的规矩", en: "This board's rules" }
+    prompt: "把这个板块的发帖须知读回来，原样列出来，然后告诉我我们这一条发得了发不了"
+    kind: ask
+  - id: draft_answer
+    label: { zh: "起草一条回答", en: "Draft an answer" }
+    prompt: "给这条问题起草一个回答。先真答问题，再提我们；参数和价格只写事实卡里有的"
+    kind: start_task
+  - id: our_posts
+    label: { zh: "我们在外面发过什么", en: "What we've posted" }
+    prompt: "我们在论坛上发过哪些、反馈怎么样、有没有被删的"
+    kind: ask
+
+task_examples:
+  - id: answer_question
+    title: { zh: "知乎上有人问这个品类", en: "A question on Zhihu" }
+    description: "有人问「户外电源怎么挑」，我们想答一条。"
+    expected_output: "一份回答草稿 + 一张要你点的卡。浏览器不会自己去发——批了之后它才去点，点完还会回来说一句「刷新之后看见了 / 我不确定发出去没有」。"
+  - id: login_expired
+    title: { zh: "浏览器里登录掉了", en: "The session expired" }
+    description: "执行到一半，知乎要求重新登录。"
+    expected_output: "停下来说「要你自己在浏览器里接一下」，并且明说没有重试——重试一个不知道点到哪儿的动作比不做危险。"
+  - id: off_scope
+    title: { zh: "要去一个白名单外的站", en: "A site outside the allowlist" }
+    description: "看到一个小论坛很对口，但它不在白名单里。"
+    expected_output: "那个地址一个字节都不会打开，并告诉你现在允许去哪几个站；要加一个站，是你去改这条职责的 browser_scope。"

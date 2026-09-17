@@ -169,6 +169,9 @@ importers:
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
+      '@agentsws/pr-core':
+        specifier: workspace:*
+        version: link:../../packages/pr-core
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../../packages/roles

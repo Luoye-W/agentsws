@@ -40,6 +40,7 @@ import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
 import { organizationRoutes } from './routes/organizations.js'
 import { positionEntryRoutes } from './routes/positions.js'
+import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { secretaryRoutes } from './routes/secretary.js'
@@ -178,6 +179,8 @@ export function collectRoutes(): Route[] {
      * 的第二段就分得开，内部次序不讲究。
      */
     ...socialRoutes(),
+    // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
+    ...prRoutes(),
   ]
 }
 

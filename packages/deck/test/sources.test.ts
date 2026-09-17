@@ -24,13 +24,20 @@ describe('service → 数据源', () => {
 })
 
 describe('dataSourcesFromConnections', () => {
-  it('一条都没连：只有我们自己的那三个库是连上的，其余全「去连接」', () => {
+  it('一条都没连：只有我们自己的那四个库是连上的，其余全「去连接」', () => {
     const rows = dataSourcesFromConnections([])
     expect(rows.map((r) => r.id)).toEqual([...ALL_DATA_SOURCES])
     // WP67：红人库也在这台机器上（六张表），跟工作队列一样没有"去连接"这回事。
     // WP72：社媒库同理（四张表）——内容日历上那几条是我们自己排的，
     // 一个平台都没连也照样在那儿摆着；渠道那八个源才是"连没连"的事。
-    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual(['approvals', 'kol', 'social'])
+    // WP78：公关库也一样（四张表）——一篇还没发的稿子、一份自己攒的媒体名单，
+    // 与"连没连 Google Alerts"没有半点关系。
+    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual([
+      'approvals',
+      'kol',
+      'social',
+      'pr',
+    ])
     // 没连上就别给「查看完整报告」外链
     expect(rows.find((r) => r.id === 'shop')?.report_url).toBeUndefined()
   })
