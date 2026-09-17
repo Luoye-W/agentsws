@@ -203,9 +203,22 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
     const create =
       options.createLogin ??
       (async (o: { credentials: unknown }) => {
-        // 懒加载：没人点登录，这个进程里就没有 dsh 被 import 进来
-        const mod = await import('@agentsws/dsh-adapter')
-        return mod.createSubscriptionLogin(o)
+        /*
+         * 懒加载：没人点登录，这个进程里就没有 dsh 被 import 进来。
+         *
+         * 装不上就如实说一句人话，而不是抛一个堆栈：公司档的镜像将来可能把
+         * `@agentsws/dsh-adapter` 整个剪掉（那里这一块本来就不可用），
+         * 到那时这条路要退化成"这个安装里没有这个模块"，不是 500。
+         */
+        try {
+          const mod = await import('@agentsws/dsh-adapter')
+          return mod.createSubscriptionLogin(o)
+        } catch {
+          throw new SubscriptionInvalid(
+            '这个安装里没有订阅登录模块（@agentsws/dsh-adapter 没装）；' +
+              '个人端的桌面壳与源码安装都带着它，公司档的精简镜像可能剪掉了。',
+          )
+        }
       })
     const handle = await create({ credentials })
     const state: PersonState = { handle, attempts: new Map() }
