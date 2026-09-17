@@ -136,7 +136,8 @@ describe('agentsws synth', () => {
       '--out',
       dir,
     )
-    expect(text()).toContain('生成 27 个文件')
+    // WP76：3 人 pack 多一份公司层技能 `skills/brand-system.md`（27 → 28）
+    expect(text()).toContain('生成 28 个文件')
     expect(existsSync(join(dir, 'manifest.yml'))).toBe(true)
     expect(existsSync(join(dir, 'store', 'orders.yml'))).toBe(true)
     expect(text().indexOf('  README.md')).toBeLessThan(text().indexOf('  workspace.yml'))

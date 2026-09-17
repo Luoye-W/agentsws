@@ -220,11 +220,15 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
     expect(p.people.find((x) => x.scope_manager === true)?.id).toBe('p_li')
   })
 
-  it('15 人 pack 的十八条场景在 fast 档全过', async () => {
+  it('15 人 pack 的十九条场景在 fast 档全过', async () => {
     const result = await runSuite({ packDir: PACK_15, seed: 42 })
     expect(result.reports.map((r) => r.id).sort()).toEqual([
       // WP72（56 §2）：群发永远人审 + 抑制名单必查（15 人公司里社媒是专职的）
       'community/broadcast-respects-suppression',
+      // WP76（58 §2 / §3）：这家公司**真的没设过品牌系统**（15 人 pack 里没有
+      // `skills/brand-system.md`，3 人 pack 里有）→ brief 照出，外加一张
+      // 「先设品牌系统」卡；不编一套默认配色
+      'design/brand-system-missing-card',
       'ops/claim-pool',
       'ops/collision-two-people',
       'ops/cross-desk-handover',
