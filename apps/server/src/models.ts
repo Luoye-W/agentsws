@@ -367,18 +367,26 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
   {
     kind: 'openai_compatible',
     label: 'OpenAI 兼容（自定义）',
-    summary:
-      '任何"OpenAI 格式"的服务都能接：OpenAI、Moonshot、通义千问、智谱，以及这台电脑上跑的 Ollama。',
+    summary: '任何"OpenAI 格式"的服务都能接：Moonshot、通义千问、智谱，以及这台电脑上跑的 Ollama。',
     vendor: 'openai-compatible',
     vendor_label: 'OpenAI 兼容（自定义）',
     vendor_summary:
-      '任何"OpenAI 格式"的服务都能接：OpenAI、Moonshot、通义千问、智谱，以及这台电脑上跑的 Ollama。',
+      '任何"OpenAI 格式"的服务都能接：Moonshot、通义千问、智谱，以及这台电脑上跑的 Ollama。',
     plan_label: '自己填地址与 key',
     plan_order: 1,
     auth: 'api_key',
-    default_base_url: 'https://api.openai.com/v1',
-    default_model: 'gpt-4o-mini',
-    region: 'global',
+    /*
+     * WP90：默认地址从 `api.openai.com/v1` 改成 Moonshot。
+     *
+     * **不是口味问题**：OpenAI 从这一版起有了自己的卡（订阅登录 + API key 两个方案），
+     * 这张"任何 OpenAI 兼容网关"的卡再默认指向 OpenAI，就变成同一家有两处能加、
+     * 而且两处的"编号"建议一模一样（`templateSlug` 按接口地址认卡，撞了就等于
+     * 两个方案共用一个身份）。同理，下面的预设里那条 `openai` 也去掉了——
+     * 要接 OpenAI 就去 OpenAI 那张卡，那里还顺带告诉你订阅登录这条路。
+     */
+    default_base_url: 'https://api.moonshot.cn/v1',
+    default_model: 'moonshot-v1-8k',
+    region: 'cn',
     steps: [
       '去你要用的那家的控制台，创建一个 API key',
       '找到它文档里写的"接口地址"（一般以 /v1 结尾）',
@@ -393,13 +401,6 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
       { label: 'Ollama（本地跑）', url: 'https://ollama.com' },
     ],
     presets: [
-      {
-        id: 'openai',
-        label: 'OpenAI',
-        base_url: 'https://api.openai.com/v1',
-        model: 'gpt-4o-mini',
-        region: 'global',
-      },
       {
         id: 'moonshot',
         label: 'Moonshot / Kimi',
