@@ -110,6 +110,7 @@ import {
   brandKolPort,
   brandModelsPort,
   brandPositionPort,
+  brandSitePort,
   brandSocialPort,
   brandWorkPort,
   brandWorkstationPort,
@@ -217,6 +218,8 @@ import {
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
+// WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
+import { createConnectSiteFacts, createSiteService, createSiteStore, siteDeckData } from './site.js'
 import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
 import { createSocialChannels, type SocialFetch } from './social-channels.js'
@@ -314,6 +317,14 @@ export const BUNDLED_ROLES = [
   'social.whatsapp',
   // WP72（56 §4）：客服岗位的社群管理
   'dtc.community-support',
+  // WP77（59 §1）：建站岗位的四条职责。第二条（`site.shopify-theme`）就是
+  // WP44 的 `site.builder` 改了个名字，内容一个字没动。
+  // 与红人 / 社媒同一条理由：种岗位那一步会把解析不到的职责筛掉，
+  // 少一条，首次设置向导里的"建站"就少一个勾。
+  'site.shopify-build',
+  'site.shopify-theme',
+  'site.shopify-email',
+  'site.shopify-apps',
 ] as const
 
 /**
@@ -1157,6 +1168,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
       social: () => socialDeckData(social, { now: clock.now() }),
+      // WP77（59 §3）：建站那五块同理——上线检查单上那几行是**我们自己跑出来的结论**，
+      // 店没连上的时候它照实说"这几项没读到"，那与"去连接"不是一回事。
+      site: () => siteService.deckData(),
       // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
       sources: () => withOwnSources(baseWorkData.sources()),
     }
@@ -1177,6 +1191,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 与红人库并排建，理由一样：记录源要拿它读账号与线程（`social: () => social`）。
      */
     const social = createSocialStore({
+      workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    /**
+     * WP77（59 §2 数据面）：这个品牌的建站库（三类对象）。
+     * 与红人库 / 社媒库并排建，理由一样：记录源要拿它读邮件模板与已装 App
+     * （`site: () => siteService`——15 §1 改前必读，改一份模板之前要先读回来）。
+     */
+    const site = createSiteStore({
       workspace_id: ws,
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
@@ -1289,6 +1312,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       random,
     })
 
+    /**
+     * WP77（59 §2）：建站库的 `/v1` 面。
+     *
+     * 事实经**只读** Action 读回来（`createConnectSiteFacts`），判断在
+     * `@agentsws/site-core` 的纯函数里，出卡走变更账本——三段各在各的地方。
+     * 一条 Action 读不到就那一格留空，检查单照 `unknown` 记：一次令牌过期，
+     * 不该在卡面上写成"这家店没有收款方式"。
+     */
+    const siteService = createSiteService({
+      workspace_id: ws,
+      store: site,
+      clock,
+      approvals: txn.approvals,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      facts: createConnectSiteFacts({
+        connect: connections.connect as never,
+        // 店铺那条连接（没有 = 整次巡检全是"没读到"，而不是"全缺"）
+        connection: () =>
+          connections
+            .liveConnections()
+            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+      }),
+      // 装上了却还没连上 API 的那几条要指得出来（59 §2 那条接缝）
+      connectedKinds: () => connections.connectedKinds(),
+      appendEvent,
+      random,
+    })
+
     let workRef: Work | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
@@ -1307,6 +1359,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         kol: () => kol,
         // WP72：社媒账号与社群线程的**只读**记录（见 `RecordSocialPort`）
         social: () => social,
+        /*
+         * WP77：邮件模板与已装 App 的**只读**记录（见 `RecordSitePort`）。
+         *
+         * 15 §1 改前必读：改一份模板之前要先把它读回来——`before` 就是那段正文。
+         * 巡检结论不给：它已经原样在那张检查单卡上了（见 `RecordSitePort` 的注释）。
+         */
+        site: () => ({
+          template: (id) => {
+            const row = site.template(id)
+            return row === undefined
+              ? undefined
+              : {
+                  id: row.id,
+                  notification_type: row.notification_type,
+                  name: row.name.zh,
+                  subject: row.subject,
+                  body: row.body,
+                  enabled: row.enabled,
+                  missing_variables: row.missing_variables,
+                  updated_at: row.updated_at,
+                }
+          },
+          app: (id) => {
+            const row = site.app(id)
+            return row === undefined
+              ? undefined
+              : {
+                  id: row.id,
+                  name: row.name,
+                  installed: row.installed,
+                  known: row.known,
+                  ...(row.scopes === undefined ? {} : { scopes: row.scopes }),
+                  ...(row.directory_kind === undefined
+                    ? {}
+                    : { directory_kind: row.directory_kind }),
+                  ...(row.installed_at === undefined ? {} : { installed_at: row.installed_at }),
+                }
+          },
+        }),
         ...(liveData === undefined ? {} : { liveData }),
       })
 
@@ -1606,6 +1697,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       social,
       socialService,
       socialChannels,
+      site,
+      siteService,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -1621,6 +1714,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        site.close()
       },
     }
   }
@@ -2842,6 +2936,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).socialService.port,
   )
+  /** WP77（59 §2）：建站数据面 `/v1/site/*`（一个品牌一张库）。 */
+  const sitePortOf = brandSitePort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).siteService.port,
+  )
   /**
    * WP83（54（将改号 55）§4 前两层）：连接目录与岗位连接清单——**一个品牌一份**。
    *
@@ -3073,6 +3172,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     kol: kolPortOf,
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
+    // WP77（59 §2）：建站数据面 `/v1/site/*`（检查单 / 邮件模板 / App，一个品牌一张库）
+    site: sitePortOf,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

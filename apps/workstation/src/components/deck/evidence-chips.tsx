@@ -99,6 +99,12 @@ const TONE: Record<DeckHighlight['type'], string> = {
   member: 'border-border text-muted-foreground',
   // 转客服：这条不归我答。给它一个能一眼扫到的边，免得压在队列里没人接
   handoff: 'border-chart-4/50 text-foreground',
+  // WP77：**预览链接**给强调色——12 §2「预览链接就是审批材料」，
+  // 它是人按下"发布"之前最该点开的一格。缺项数给告警色（那是这张卡存在的理由）；
+  // 这张卡对着哪一封信 / 哪一个 App 是中性事实。
+  preview: 'border-chart-1/50 text-foreground',
+  gaps: 'border-destructive/50 text-destructive',
+  site_target: 'border-border text-muted-foreground',
 }
 
 export function Highlights({

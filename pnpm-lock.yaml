@@ -181,6 +181,9 @@ importers:
       '@agentsws/secretary':
         specifier: workspace:*
         version: link:../../packages/secretary
+      '@agentsws/site-core':
+        specifier: workspace:*
+        version: link:../../packages/site-core
       '@agentsws/skills':
         specifier: workspace:*
         version: link:../../packages/skills

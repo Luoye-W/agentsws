@@ -24,13 +24,20 @@ describe('service → 数据源', () => {
 })
 
 describe('dataSourcesFromConnections', () => {
-  it('一条都没连：只有我们自己的那三个库是连上的，其余全「去连接」', () => {
+  it('一条都没连：只有我们自己的那几个库是连上的，其余全「去连接」', () => {
     const rows = dataSourcesFromConnections([])
     expect(rows.map((r) => r.id)).toEqual([...ALL_DATA_SOURCES])
     // WP67：红人库也在这台机器上（六张表），跟工作队列一样没有"去连接"这回事。
     // WP72：社媒库同理（四张表）——内容日历上那几条是我们自己排的，
     // 一个平台都没连也照样在那儿摆着；渠道那八个源才是"连没连"的事。
-    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual(['approvals', 'kol', 'social'])
+    // WP77：建站库同理（三张表）——上线检查单上那几行是我们自己跑出来的结论，
+    // 店没连上的时候它照实说"这几项没读到"，那与"去连接"不是一回事。
+    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual([
+      'approvals',
+      'kol',
+      'social',
+      'site',
+    ])
     // 没连上就别给「查看完整报告」外链
     expect(rows.find((r) => r.id === 'shop')?.report_url).toBeUndefined()
   })

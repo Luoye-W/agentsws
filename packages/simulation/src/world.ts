@@ -1208,8 +1208,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('dtc.live-chat'),
     loadBundledRole('amz.support'),
     // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——
-    // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效
-    loadBundledRole('site.builder'),
+    // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效。
+    // WP77（59 §1）：改名为 `site.shopify-theme`（建站岗位四条里的网页模板），
+    // 内容一个字没动；另外三条见下面 WP77 那一段。
+    loadBundledRole('site.shopify-theme'),
     // WP64（51 §2.3 / §2.4）：网站运营岗位的邮件营销与订单履约。
     // 3 人 pack 里"运营"这个人真挂着它们（`assignments.yml`），所以这两条不是躺着的。
     loadBundledRole('dtc.email-marketing'),
@@ -1242,6 +1244,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('social.telegram-group'),
     loadBundledRole('social.whatsapp'),
     loadBundledRole('dtc.community-support'),
+    // WP77（59 §1）：建站岗位另外三条（网页模板那条在上面 WP44 那一行）。
+    // 3 人 pack 里"店主"真挂着 `site.shopify-build`（`assignments.yml`），
+    // 另外两条躺在库里——装它们是为了首次设置向导里"建站"那个岗位显示四条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面社媒那八条的理由）。
+    loadBundledRole('site.shopify-build'),
+    loadBundledRole('site.shopify-email'),
+    loadBundledRole('site.shopify-apps'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
@@ -3876,7 +3885,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
 
     themePush({ who, name }) {
-      const asg = assignmentFor(who, 'site.builder')
+      const asg = assignmentFor(who, 'site.shopify-theme')
       // 造一份未发布副本对线上没有任何影响，所以它不进账本（见
       // `connect-adapter/src/shopify-actions.ts` 里 create_theme 那一条的理由）。
       // 走的是 CLI 那条路，不是连接器——预览链接就是给人看的审批材料。
@@ -3897,7 +3906,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
 
     async themePublish({ who, theme, level }) {
-      const asg = assignmentFor(who, 'site.builder')
+      const asg = assignmentFor(who, 'site.shopify-theme')
       const run = await beginShopRun(asg)
       const run_id = run.run_id
 

@@ -90,6 +90,18 @@ const SOURCE_AUTHZ = {
   social_discord: { domain: 'social_account', range: 'assigned' },
   social_telegram: { domain: 'social_account', range: 'assigned' },
   social_whatsapp: { domain: 'social_account', range: 'assigned' },
+  /*
+   * WP77（59 §3）：建站那一个源。
+   *
+   * 挂 `store_config` 域：上线检查单、主题副本、已装 App 说的都是"这家店现在是
+   * 什么样"，而建站那四条职责的 scopes 里 `store_config` 是最根的一个。
+   * 邮件模板那一块也在这个源下——它与检查单在同一屏面板上，拆成两个源只会让
+   * "某一块看得见另一块看不见"这种半截状态变得可能（同上面红人那两行的理由）。
+   *
+   * 这一挂的后果是真的：客服、社媒、红人那几条职责的 scopes 里没有 `store_config`，
+   * 于是它们天然看不到建站面板（19 §3 过滤下推：无权的数据源连「去连接」都不该出）。
+   */
+  site: { domain: 'store_config', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

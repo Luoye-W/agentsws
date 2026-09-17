@@ -1,0 +1,138 @@
+# WP77（59 §1）：建站岗位四条里的**邮件模板**。
+#
+# 一句话定位：**店里那几封自动发出去的信长什么样。**
+# 订单确认、发货通知、退款、弃购提醒——这些信不是某个人写给某个人的，
+# 是**模板**：改一次，之后每一个下单的客户收到的都是这一份。
+#
+# 与网站运营的邮件营销（`dtc.email-marketing`）的分界，写在 description 里给 54 读：
+# **建站改模板，运营发活动。** 这条职责改的是"订单确认信长什么样"，
+# 一封都不发；运营那条决定"这周给这 3000 个人发一次促销"，一个模板都不改。
+# 两条职责的 ChangeKind 也不一样（`email_template_edit` / `campaign_send`）。
+#
+# 为什么启用那一下永远人审：发错模板不是发给一个人，是发给**之后每一个**下单的
+# 客户，而且没有"撤回"。草稿随便改（L2），启用要人点（L1）——分档在 guardrail 的
+# `after.enabled` 上，不在这份 yml 里（yml 可以被工作区策略放宽）。
+#
+# 还有一道更硬的：Liquid 正文里缺必需变量**直接拦**。一封订单确认信里没有
+# `order.name`，客户收到的是一封认不出是哪一单的信——这件事机器判得准，
+# 那就不该让人在一屏卡上替机器背这个锅。
+id: site.shopify-email
+version: 1.0.0
+domain: dev
+name: { zh: Shopify 邮件模板, en: Shopify Email Templates }
+description: Shopify 通知邮件模板的正文与主题行（订单确认、发货、退款、弃购…）。改的是**模板**不是一次群发——给谁发、这周发什么活动是网站运营岗位的邮件营销那条职责的事。草稿可自动，启用永远人审；Liquid 缺必需变量直接拦。
+
+scopes:
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: store_config, ops: [read], range: assigned, max_sensitivity: internal }
+  # 起草一封信要看得见一张真订单长什么样（变量填进去读起来通不通顺）
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+
+connectors:
+  - {
+      kind: shopify,
+      required: true,
+      grants: [read_themes, write_themes, read_content, write_content, read_orders],
+      ownership: workspace,
+    }
+
+actions:
+  # 改一份通知邮件模板。**草稿 L2，启用 L1**——分档在 guardrail 的 `after.enabled` 上。
+  # `review_cannot_be_disabled` 不写在这里：写了草稿也自动不了。
+  - id: stage_email_template
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_template_edits_per_day: 10 }, window: { max_count: 10, per: day } }
+    route_to: scope_manager
+
+automation:
+  stage_email_template:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+grounding:
+  - {
+      name: email_templates,
+      intent_terms: [邮件模板, email template, 通知邮件, notification, 订单确认, 发货通知],
+      cue_terms: [改, change, 写, write, 启用, enable, 预览, preview],
+      tool: site.email.list,
+      prefetch: true,
+    }
+  - {
+      name: sample_order,
+      intent_terms: [变量, variable, liquid, 预览, preview],
+      cue_terms: [填, fill, 看看, show, 长什么样, looks like],
+      tool: shopify.order.get,
+      prefetch: false,
+    }
+
+skills: []
+
+home_blocks:
+  - {
+      id: site.email_templates,
+      placement: focus,
+      component: card_list,
+      query: 'changes.by_kind(site.shopify-email, email_template_edit)',
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: site.pending_email,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(site.shopify-email),
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_email_template',
+      mode: digest,
+      recipients: [scope_manager],
+      escalate_after_hours: 24,
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, scheduled_tasks]
+  fallback: owner
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: review_templates
+    label: { zh: "这几封信现在长什么样", en: "What do these emails look like" }
+    prompt: "把订单确认、发货通知、退款这三封通知邮件的现状列一下，带渲染预览"
+    kind: ask
+  - id: rewrite_confirmation
+    label: { zh: "改一封订单确认信", en: "Rewrite the order confirmation" }
+    prompt: "订单确认信写得太干，按我们的语气重写一版，先放草稿别启用"
+    kind: start_task
+  - id: check_variables
+    label: { zh: "有没有缺变量", en: "Any missing variables" }
+    prompt: "这几封信的 Liquid 有没有缺必需变量，缺哪几个"
+    kind: ask
+  - id: preview_before_enable
+    label: { zh: "启用前先看一眼", en: "Preview before enabling" }
+    prompt: "把这份草稿用一张真订单的数据渲染出来给我看，我看完再决定启不启用"
+    kind: review
+
+task_examples:
+  - id: tone_pass
+    title: { zh: "把几封信的语气统一", en: "Make the emails sound like us" }
+    description: "通知邮件还是 Shopify 出厂那几句话。"
+    expected_output: "每封一份草稿 + 渲染预览；必需变量一个不少；启用那一下仍然要你点。"
+  - id: missing_tracking
+    title: { zh: "客户说收不到单号", en: "Customers say there is no tracking number" }
+    description: "发货通知里好像没有单号。"
+    expected_output: "先查这封信的 Liquid 缺了哪几个变量，再给一版补上的草稿；缺变量的稿提上去会被当场拦下，不会悄悄发出去。"

@@ -38,6 +38,7 @@ import type { LiveDataSource } from './live-data.js'
 import type { ModelsAssembly } from './models.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SecretStore } from './secret-store.js'
+import type { SiteServiceAssembly, SiteStore } from './site.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
@@ -120,6 +121,16 @@ export interface BrandModuleSet {
   socialService: SocialServiceAssembly
   /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */
   socialChannels: SocialChannelsAssembly
+  /**
+   * WP77（59 §2 数据面）：这个品牌的建站库（三类对象）。
+   *
+   * 与红人库 / 社媒库同一条纪律（本文件第 2 条）：落盘按品牌分目录。品牌 A 的
+   * 上线检查单结论、邮件模板正文与已装 App 清单，在 B 的任何路由里都读不到——
+   * 一个品牌一家店，串了品牌等于把别人店的缺项报给这家店的店主。
+   */
+  site: SiteStore
+  /** WP77：这个品牌建站库的 `/v1` 面（端口 + 面板投影）。 */
+  siteService: SiteServiceAssembly
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun

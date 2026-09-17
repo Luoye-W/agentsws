@@ -327,12 +327,12 @@ describe('loadPosition (05 §2)', () => {
 /* WP44：建站与主题职责（12 §2）                                        */
 /* ------------------------------------------------------------------ */
 
-describe('site.builder（12 §2 建站岗位）', () => {
-  const builder = () => loadBundledRole('site.builder')
+describe('site.shopify-theme（12 §2 建站；WP77 改名，内容照旧）', () => {
+  const builder = () => loadBundledRole('site.shopify-theme')
 
   it('装得进来，八个 scope、四条写动作', () => {
     const role = builder()
-    expect(role.id).toBe('site.builder')
+    expect(role.id).toBe('site.shopify-theme')
     expect(role.domain).toBe('dev')
     expect(role.scopes).toHaveLength(8)
     expect(role.actions.map((a) => a.id)).toEqual([

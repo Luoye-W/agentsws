@@ -139,6 +139,8 @@ export interface ConnectRecordSourceOptions {
   kol?: () => RecordKolPort | undefined
   /** WP72（56 §2）：社媒账号与社群线程的只读面（见 {@link RecordSocialPort}）。 */
   social?: () => RecordSocialPort | undefined
+  /** WP77（59 §2）：邮件模板与已装 App 的只读面（见 {@link RecordSitePort}）。 */
+  site?: () => RecordSitePort | undefined
   appendEvent?: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
 }
 
@@ -213,6 +215,43 @@ export interface RecordSocialPort {
         created_at: string
         status: string
         triage?: string
+      }
+    | undefined
+}
+
+/**
+ * WP77（59 §2）：记录源要的建站库那一面——**只读，而且只有两类**。
+ *
+ * 两类是 `email_template`（一封通知邮件现在长什么样）与 `shop_app`（一个 App
+ * 装在店上没有）。**没有 `launch_item`**：一次巡检的结论是**这次巡检的产物**，
+ * 它已经原样在那张检查单卡上了；再让模型从记录源里把它读一遍，只会得到
+ * 一份可能比卡面旧的副本（15 §1 那条"`before` 只能来自读回来的记录"反过来的一面）。
+ *
+ * 模板正文**是外部文本**：读得到，但进模型之前要围栏（21 §1 / 39）——
+ * 一段 Liquid 里可以写任何字，与线程正文是同一条纪律。
+ */
+export interface RecordSitePort {
+  template(id: string):
+    | {
+        id: string
+        notification_type: string
+        name: string
+        subject: string
+        body: string
+        enabled: boolean
+        missing_variables: string[]
+        updated_at: string
+      }
+    | undefined
+  app(id: string):
+    | {
+        id: string
+        name: string
+        installed: boolean
+        known: boolean
+        scopes?: string[]
+        directory_kind?: string
+        installed_at?: string
       }
     | undefined
 }
@@ -955,6 +994,15 @@ export function createConnectRecordSource(
       if (thread === undefined) return undefined
       return { ...thread, account: socialPort?.account(thread.account_id) }
     }
+    /*
+     * WP77（59 §2）：邮件模板与已装 App 的只读记录源。
+     *
+     * 改一份模板之前要先把它读回来（15 §1 改前必读：`before` 就是那段正文），
+     * 这一条就是那个读口。巡检结论不给（见 `RecordSitePort` 的注释）。
+     */
+    const sitePort = options.site?.()
+    if (ref.type === 'email_template') return sitePort?.template(ref.id)
+    if (ref.type === 'shop_app') return sitePort?.app(ref.id)
     // 不认识的一律 undefined——**不编造**
     return undefined
   }
@@ -1003,6 +1051,11 @@ export function createConnectRecordSource(
       const where = socialLabel?.account(thread.account_id)?.display_name ?? thread.channel
       return `${thread.author_handle}（${where}）`
     }
+    // WP77：一封信叫它的中文名（"订单确认"），一个 App 叫它在店里显示的名字——
+    // 卡面上只写一个 `order_confirmation` 非技术用户认不出那是哪一封
+    const siteLabel = options.site?.()
+    if (ref.type === 'email_template') return siteLabel?.template(ref.id)?.name
+    if (ref.type === 'shop_app') return siteLabel?.app(ref.id)?.name
     return undefined
   }
 

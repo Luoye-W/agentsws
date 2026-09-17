@@ -27,6 +27,7 @@
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
+    "packages/contracts/src/site.ts",
     "packages/contracts/src/skills.ts",
     "packages/contracts/src/social.ts",
     "packages/contracts/src/standby.ts",
@@ -48,7 +49,10 @@
     "packages/roles/roles/kol/tiktok.yml",
     "packages/roles/roles/kol/x.yml",
     "packages/roles/roles/kol/youtube.yml",
-    "packages/roles/roles/site/builder.yml",
+    "packages/roles/roles/site/shopify-apps.yml",
+    "packages/roles/roles/site/shopify-build.yml",
+    "packages/roles/roles/site/shopify-email.yml",
+    "packages/roles/roles/site/shopify-theme.yml",
     "packages/roles/roles/social/discord.yml",
     "packages/roles/roles/social/facebook-group.yml",
     "packages/roles/roles/social/meta.yml",
@@ -59,7 +63,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "0633189d0147c2ec18103e5f63eb6a68",
+  "source_digest": "94eef57c4abecb1ee4c61340ca17d1c0",
   "objects": [
     {
       "id": "ad_set",
@@ -3086,11 +3090,14 @@
         }
       ],
       "read_via": [
+        "changes.pending_app_install",
+        "changes.pending_email_enable",
         "changes.pending_listing",
         "changes.pending_price",
         "changes.pending_promotion",
         "changes.pending_publish",
-        "changes.pending_publish_post"
+        "changes.pending_publish_post",
+        "changes.pending_theme_publish"
       ],
       "contract": "StagedChange"
     },
@@ -3875,7 +3882,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.approval.item_id",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "approval_item",
@@ -3947,7 +3954,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "article",
@@ -3955,7 +3962,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "article",
@@ -3995,7 +4002,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.assignment_id",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "assignment",
@@ -4027,7 +4034,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "campaign",
@@ -4035,7 +4042,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "campaign",
@@ -4083,7 +4090,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "collaboration",
@@ -4091,7 +4098,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "collaboration",
@@ -4123,7 +4130,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "collection",
@@ -4131,7 +4138,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "collection",
@@ -4155,7 +4162,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "community_member",
@@ -4163,7 +4170,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "community_member",
@@ -4187,7 +4194,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "community_thread",
@@ -4195,7 +4202,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "community_thread",
@@ -4267,7 +4274,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "creator_contact",
@@ -4275,7 +4282,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "creator_contact",
@@ -4299,7 +4306,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "customer",
@@ -4307,7 +4314,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "customer",
@@ -4339,7 +4346,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "deliverable",
@@ -4347,7 +4354,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "deliverable",
@@ -4371,7 +4378,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "discount",
@@ -4379,7 +4386,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "discount",
@@ -4403,7 +4410,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "email_template",
@@ -4411,7 +4418,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "email_template",
@@ -4491,7 +4498,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "inventory_item",
@@ -4499,7 +4506,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "inventory_item",
@@ -4643,7 +4650,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "order",
@@ -4651,7 +4658,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "order",
@@ -4683,7 +4690,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "page",
@@ -4691,7 +4698,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "page",
@@ -4739,7 +4746,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "policy",
@@ -4747,7 +4754,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "policy",
@@ -4811,7 +4818,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "product",
@@ -4819,7 +4826,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "product",
@@ -4867,7 +4874,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "review",
@@ -4875,7 +4882,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "review",
@@ -4931,7 +4938,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "shop_app",
@@ -4939,7 +4946,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "shop_app",
@@ -4979,7 +4986,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "social_account",
@@ -4987,7 +4994,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "social_account",
@@ -5411,7 +5418,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "store_config",
@@ -5419,7 +5426,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "store_config",
@@ -5443,7 +5450,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "theme",
@@ -5451,7 +5458,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "theme",
@@ -5547,7 +5554,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "tracked_link",
@@ -5555,7 +5562,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "tracked_link",
@@ -5579,7 +5586,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.apply.outcome_ref",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "variant",
@@ -5587,7 +5594,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.target",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "variant",
@@ -5955,7 +5962,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "staged_change.workspace_id",
-      "lookup": ["changes.pending_listing", "changes.pending_price"]
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
     },
     {
       "from": "workspace",
@@ -6862,6 +6869,17 @@
       "what": "reply thread"
     },
     {
+      "id": "run_launch_checklist",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["site.shopify-build"],
+      "what": "run launch checklist"
+    },
+    {
       "id": "stage_address_change",
       "object": "order",
       "source": "role",
@@ -6883,6 +6901,30 @@
       "route_to": "scope_manager",
       "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
       "what": "stage affiliate code"
+    },
+    {
+      "id": "stage_app_config",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "change_kind": "app_config",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["site.shopify-apps"],
+      "what": "stage app config"
+    },
+    {
+      "id": "stage_app_install",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "change_kind": "app_install",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["site.shopify-apps"],
+      "what": "stage app install"
     },
     {
       "id": "stage_broadcast",
@@ -6979,7 +7021,7 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["site.builder"],
+      "roles": ["site.shopify-theme"],
       "what": "提一条建站任务"
     },
     {
@@ -6993,6 +7035,17 @@
       "route_to": "scope_manager",
       "roles": ["dtc.community-support", "dtc.store", "dtc.support"],
       "what": "建 / 改一个优惠码（营销发码）"
+    },
+    {
+      "id": "stage_email_template",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["site.shopify-email"],
+      "what": "stage email template"
     },
     {
       "id": "stage_flow_edit",
@@ -7050,7 +7103,7 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["site.builder"],
+      "roles": ["site.shopify-theme"],
       "what": "改一个页面"
     },
     {
@@ -7132,7 +7185,7 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "owner",
-      "roles": ["dtc.store", "site.builder"],
+      "roles": ["dtc.store", "site.shopify-theme"],
       "what": "发布主题"
     },
     {
@@ -7225,6 +7278,30 @@
       "what": "stage split order"
     },
     {
+      "id": "stage_store_setup",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "change_kind": "store_setup",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["site.shopify-build"],
+      "what": "stage store setup"
+    },
+    {
+      "id": "stage_theme_install",
+      "object": "store_config",
+      "source": "role",
+      "access": "write",
+      "change_kind": "theme_install",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["site.shopify-build"],
+      "what": "stage theme install"
+    },
+    {
       "id": "stage_theme_preview",
       "object": "theme",
       "source": "role",
@@ -7232,7 +7309,7 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["site.builder"],
+      "roles": ["site.shopify-theme"],
       "what": "出一份主题预览"
     },
     {

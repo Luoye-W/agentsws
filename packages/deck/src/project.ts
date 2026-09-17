@@ -100,6 +100,7 @@ export function highlightsOf(item: ApprovalItem, ctx: ProjectContext): DeckHighl
   out.push(...wp64Highlights(item, ctx))
   out.push(...kolHighlights(item))
   out.push(...socialHighlights(item))
+  out.push(...siteHighlights(item))
   const handoff = handoffHighlight(item)
   if (handoff !== undefined) out.push(handoff)
   return out
@@ -165,6 +166,73 @@ function socialHighlights(item: ApprovalItem): DeckHighlight[] {
     const action = str(after.action_label) ?? str(after.action)
     if (action !== undefined) out.push({ type: 'stage', text: action })
   }
+
+  return out
+}
+
+/**
+ * WP77（59 §3）：建站那**四张卡**上人最先要看的几个数。
+ *
+ * 四张卡同样不是四个新 kind（36 §2：卡是审批项的投影）——检查单卡、主题发布卡、
+ * 邮件模板启用卡、装 App 卡都是 `staged_change` 的投影，差别只在这几个芯片上。
+ *
+ * 一条纪律与社媒那段逐字相同：**全部从结构化字段里取**（37 §1 第 4 行）。
+ * 预览链接是 CLI 真推上去之后拿回来的，缺项数是检查单纯函数算出来的，
+ * 两样都不在这儿现算、更不由模型现编。
+ */
+function siteHighlights(item: ApprovalItem): DeckHighlight[] {
+  const payload = isRecord(item.payload) ? item.payload : {}
+  const after = isRecord(payload.after) ? payload.after : {}
+  const out: DeckHighlight[] = []
+  const kind = str(payload.kind)
+  const SITE_KINDS = [
+    'launch_check',
+    'store_setup',
+    'theme_install',
+    'publish_theme',
+    'email_template_edit',
+    'app_install',
+    'app_config',
+  ]
+  if (kind === undefined || !SITE_KINDS.includes(kind)) return out
+
+  /*
+   * 检查单卡：**还差几项**，而且分两档写。
+   *
+   * 不合成一个"健康分"——合了没人答得上哪儿不对（同社群活跃度那三个数）。
+   * 一个 blocker 都没有的时候这一格照样出（"0 项拦路"是一句要说出口的话）。
+   */
+  if (kind === 'launch_check') {
+    const blockers = num(after.blockers)
+    const warnings = num(after.warnings)
+    if (blockers !== undefined)
+      out.push({
+        type: 'gaps',
+        text: `${blockers} 项买不成 · ${warnings ?? 0} 项迟早出事`,
+      })
+  }
+
+  /*
+   * 主题发布卡：**预览链接**。12 §2 那句"预览链接就是审批材料"在卡面上的落点——
+   * 没有它的发布卡根本提不出去（`site-core` 的 `publishReadiness`），
+   * 所以这一格只要该出就一定有值。
+   */
+  const preview = str(after.preview_url)
+  if (preview !== undefined) out.push({ type: 'preview', text: preview })
+
+  /*
+   * 邮件模板卡与装 App 卡：**这张卡对着的是哪一封信 / 哪一个 App**。
+   *
+   * 建站那四张卡长得很像（都是"改了店里一样东西"），这一格是第一眼分得开
+   * 它们的东西——同社媒九条职责靠 `channel` 分得开的那一条理由。
+   */
+  const target =
+    str(after.template_label) ??
+    str(after.notification_type) ??
+    str(after.app_name) ??
+    str(after.app_id) ??
+    str(after.theme_name)
+  if (target !== undefined) out.push({ type: 'site_target', text: target })
 
   return out
 }

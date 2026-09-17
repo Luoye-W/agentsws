@@ -44,6 +44,7 @@ import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { secretaryRoutes } from './routes/secretary.js'
 import { secretRoutes } from './routes/secrets.js'
+import { siteRoutes } from './routes/site.js'
 import { skillRoutes } from './routes/skills.js'
 import { socialRoutes } from './routes/social.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
@@ -178,6 +179,8 @@ export function collectRoutes(): Route[] {
      * 的第二段就分得开，内部次序不讲究。
      */
     ...socialRoutes(),
+    // WP77（59 §1 / §2）：建站那一侧最小一组（检查单 / 邮件模板 / App）
+    ...siteRoutes(),
   ]
 }
 

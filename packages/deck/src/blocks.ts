@@ -137,6 +137,8 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   social_discord: 'Discord',
   social_telegram: 'Telegram',
   social_whatsapp: 'WhatsApp',
+  // WP77（59 §2）：建站库也是我们自己的，永远算连上
+  site: '建站',
 }
 
 /** 「查看完整报告 →」外链（36 §3 三层链路的最后一层）。 */
@@ -318,6 +320,39 @@ const COMMUNITY_SUPPORT_BLOCKS = (): BlockDef[] => [
   block('community_support.handoffs', 'table', '转过来的客户问题', 'social.support_handoffs'),
 ]
 
+/**
+ * WP77（59 §3 面板）：建站那五块。
+ *
+ * 五块全走 `site` 这个源（我们自己的库，永远算连上）——**一块店铺后台的积木都不放**：
+ * 建站四条职责的 scopes 里没有 order / analytics 的写口，19 §3 说无权的数据源
+ * 连「去连接」都不该出。检查单上那几行会照实说"这几项没读到"，那与"去连接"
+ * 不是一回事（36 §3）。
+ *
+ * 四条职责各看自己那几块：整站搭建看检查单（还有主题与 App，因为它要判"缺不缺"），
+ * 网页模板看副本与发布车道，邮件模板看模板状态与启用车道，插件看已装与装 App 车道。
+ * 一个人同时挂着两条时看到的是两个岗位视图，不是一个视图里十块（同 48 §5.1）。
+ */
+const SITE_CHECKLIST_BLOCKS = (): BlockDef[] => [
+  block('site.checklist', 'table', '上线检查单', 'site.launch_checklist'),
+  block('site.themes', 'table', '主题副本与预览', 'site.theme_copies'),
+  block('site.apps', 'table', '已装 App', 'site.installed_apps'),
+]
+
+const SITE_THEME_BLOCKS = (): BlockDef[] => [
+  block('site.theme.copies', 'table', '主题副本与预览', 'site.theme_copies'),
+  block('site.theme.pending', 'table', '待发布', 'changes.pending_theme_publish'),
+]
+
+const SITE_EMAIL_BLOCKS = (): BlockDef[] => [
+  block('site.email.templates', 'table', '邮件模板状态', 'site.email_templates'),
+  block('site.email.pending', 'table', '待启用', 'changes.pending_email_enable'),
+]
+
+const SITE_APP_BLOCKS = (): BlockDef[] => [
+  block('site.apps.installed', 'table', '已装 App', 'site.installed_apps'),
+  block('site.apps.pending', 'table', '待装 App', 'changes.pending_app_install'),
+]
+
 const QUEUE_BLOCKS = (): BlockDef[] => [
   block('records.timeline', 'timeline', '记录', 'records.timeline'),
 ]
@@ -374,6 +409,18 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'social.whatsapp': () => SOCIAL_COMMUNITY_BLOCKS('whatsapp', 'social_whatsapp'),
   // WP72（56 §4）：客服的社群管理——转客服卡 + 店铺后台（答订单离不开它）
   'dtc.community-support': () => [...COMMUNITY_SUPPORT_BLOCKS(), ...SHOP_BLOCKS()],
+  /*
+   * WP77（59 §3）：建站那四条职责，各看自己那几块。
+   *
+   * `site.shopify-theme` 就是 WP44 的 `site.builder`——它在这张表里**原来一行都没有**
+   * （走的是 `SHOP_BLOCKS` 那条兜底），于是建站的人打开面板看到的是一屏店铺后台。
+   * 这一版把它补上：一块店铺后台的积木都不放，因为这四条职责的 scopes 里
+   * 商品与订单是只读的、没有 analytics 写口（19 §3）。
+   */
+  'site.shopify-build': () => SITE_CHECKLIST_BLOCKS(),
+  'site.shopify-theme': () => SITE_THEME_BLOCKS(),
+  'site.shopify-email': () => SITE_EMAIL_BLOCKS(),
+  'site.shopify-apps': () => SITE_APP_BLOCKS(),
 }
 
 export function blocksForRole(role_id: RoleId): BlockDef[] {

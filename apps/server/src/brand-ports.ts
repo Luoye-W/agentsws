@@ -22,6 +22,7 @@ import type {
   ModelDefaultsView,
   ModelsPort,
   PositionEntryPort,
+  SitePort,
   SocialPort,
   WorkPort,
   WorkstationPort,
@@ -284,6 +285,14 @@ export function brandSocialPort(
   make: (workspace_id: WorkspaceId) => Promise<SocialPort>,
 ): SocialPort {
   return scopedPort<SocialPort>(make, () => brands.bootstrap)
+}
+
+/** WP77（59 §2）：建站数据面按品牌取（检查单、邮件模板与 App 三张表各在各的品牌下）。 */
+export function brandSitePort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<SitePort>,
+): SitePort {
+  return scopedPort<SitePort>(make, () => brands.bootstrap)
 }
 
 export function brandKolPort(

@@ -57,7 +57,13 @@ if (check && before !== json) {
 
 // openapi-typescript 是 packages/sdk 自己的 devDependency（不进根 package.json）
 const cli = join(SDK, 'node_modules/.bin/openapi-typescript')
-const generated = execFileSync(cli, [OPENAPI_JSON], { encoding: 'utf8', cwd: ROOT })
+// WP77：`maxBuffer` 要显式给——默认 1 MB，而生成出来的 `schema.d.ts` 09-17 起
+// 已经越过那条线了（再加一组路由就 ENOBUFS，而且报出来的是一条看不懂的 spawnSync 错）。
+const generated = execFileSync(cli, [OPENAPI_JSON], {
+  encoding: 'utf8',
+  cwd: ROOT,
+  maxBuffer: 64 * 1024 * 1024,
+})
 
 const banner = `/**
  * **自动生成，别手改。** 来源：\`/v1\` 的路由声明（\`packages/api/src/routes/*\`）。

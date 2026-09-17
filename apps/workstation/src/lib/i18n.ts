@@ -659,6 +659,11 @@ const zh: Table = {
   'highlight.scheduled': '发布时间',
   'highlight.member': '申请人',
   'highlight.handoff': '转给',
+  // WP77（59 §3）：建站那四张卡上的芯片。
+  // 预览那一格就是审批材料本身（12 §2）；缺项写成两档而不是一个总分。
+  'highlight.preview': '预览',
+  'highlight.gaps': '还差',
+  'highlight.site_target': '对着',
   'nav.skills': '技能',
   'skills.title': '技能',
   'skills.empty': '还没有技能。装了职责包或自带技能之后，这里会列出来。',
@@ -2399,6 +2404,10 @@ const en: Table = {
   'highlight.scheduled': 'Goes out',
   'highlight.member': 'Applicant',
   'highlight.handoff': 'Hand off to',
+  // WP77 (59 §3): the four site-building cards.
+  'highlight.preview': 'Preview',
+  'highlight.gaps': 'Gaps',
+  'highlight.site_target': 'For',
   'nav.skills': 'Skills',
   'skills.title': 'Skills',
   'skills.empty': 'No skills yet.',

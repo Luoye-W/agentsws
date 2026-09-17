@@ -84,8 +84,12 @@ export const SOCIAL_SOURCE_BY_CHANNEL: Readonly<Record<string, DataSourceId>> = 
  *
  * WP72 加进 `social`：社媒库同理（四张表，`apps/server/src/social.ts`）。
  * 内容日历上那几条是**我们自己排的**，一个平台都没连也照样在那儿摆着。
+ *
+ * WP77 加进 `site`：建站库同理（三张表，`apps/server/src/site.ts`）。上线检查单上
+ * 那几行是**我们自己跑出来的结论**——店没连上的时候它照实说"这几项没读到"，
+ * 那与"去连接"不是一回事（`unknown` 与 `missing` 在面板上是两种颜色）。
  */
-export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social']
+export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social', 'site']
 
 /** 全部数据源，按面板里的出场顺序。 */
 export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
@@ -110,6 +114,8 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'social_discord',
   'social_telegram',
   'social_whatsapp',
+  // WP77（59 §2）：我们自己的建站库（巡检结论、邮件模板、已装 App）
+  'site',
 ]
 
 /**
