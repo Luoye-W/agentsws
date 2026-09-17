@@ -745,7 +745,19 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 近 30 天表现 / 待回评论 vs 待审入群 / 待处理 / 群发队列 / 活跃度），
   // 只挂一条就只看得见一半，56 §2 那张表在 demo 里就演示不完整。
   // 社媒库那几行由 `seedDemoSocial` 放（`apps/server/src/social.ts`）。
-  for (const role of ['dtc.store', 'dtc.content', 'kol.youtube', 'social.meta', 'social.discord']) {
+  // WP78（60 §1）：**公共关系**岗位也挂两条——`pr.monitoring`（提及流 / 负面预警 /
+  // 转客服）与 `pr.reddit`（外部露出 + 版规检查）。挑这两条是因为它们各自演示了
+  // 60 里最要紧的两句话：**客户的问题转客服，公关不答**，以及**在别人的地盘上
+  // 版主说了算**。公关库那几行由 `seedDemoPr` 放（`apps/server/src/pr.ts`）。
+  for (const role of [
+    'dtc.store',
+    'dtc.content',
+    'kol.youtube',
+    'social.meta',
+    'social.discord',
+    'pr.monitoring',
+    'pr.reddit',
+  ]) {
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,

@@ -526,6 +526,30 @@ for (const spec of SOCIAL_CHANNELS) {
  * 而不是同一块里各看各的行——公关这四条职责看的是同一批提及、同一批稿子。
  * 社媒那边要按渠道筛，是因为九条职责对着九个互不相干的号。
  */
+/**
+ * 面板上那几列的**人话**。
+ *
+ * 枚举值（`routed_to_support` / `blocked`）是给机器看的；面板上印一个下划线
+ * 拼起来的英文词，等于让人自己去猜。这张表只管"怎么念"，不改任何判断——
+ * 认不出来的原样端出去（**不编一个词**）。
+ */
+const MENTION_STATUS_WORDS: Readonly<Record<string, string>> = {
+  new: '刚看到',
+  triaged: '判过了',
+  routed_to_support: '转给客服了',
+  responded: '回过了',
+  archived: '归档',
+}
+const EXTERNAL_POST_WORDS: Readonly<Record<string, string>> = {
+  draft: '草稿',
+  approved: '批了，等发',
+  published: '发出去了',
+  blocked: '版规不让',
+  removed: '被删了',
+}
+const word = (table: Readonly<Record<string, string>>, value: string): string =>
+  table[value] ?? value
+
 const PR_QUERIES: QueryDef[] = [
   {
     name: 'pr.mentions',
@@ -551,7 +575,15 @@ const PR_QUERIES: QueryDef[] = [
   },
   {
     name: 'pr.negative_alerts',
-    source: 'google_alerts',
+    /*
+     * 这一块走 `pr` 而不是 `google_alerts`，与上面那一块**故意不一样**：
+     *
+     * 提及流是**外面那一侧**——没连 feed 的时候它必须说"去连接"，因为
+     * 一张空表在这里等于说"今天没人提我们"，而那是这条职责上最贵的一种谎。
+     * 负面预警不同：一条预警是**我们自己判出来并开出来的卡**，空的意思就是
+     * "现在没有着火的"——那句话是真的，不需要加条件。
+     */
+    source: 'pr',
     returns: 'table',
     run: (ctx) => ({
       columns: [
@@ -626,7 +658,10 @@ const PR_QUERIES: QueryDef[] = [
       rows: (ctx.pr?.external_posts ?? []).map((r) => ({
         venue: `${r.platform}／${r.venue}`,
         // 被删掉的那一条要看得见——混进"已发布"里就再也没人知道它没了
-        status: r.removed === true ? `${r.status}（被删了）` : r.status,
+        status:
+          r.removed === true
+            ? word(EXTERNAL_POST_WORDS, 'removed')
+            : word(EXTERNAL_POST_WORDS, r.status),
         // 版规拦下来的理由**原样**显示：与 guardrail 那一侧是同一个字符串
         rules: r.rules_ok ? '过了' : (r.rules_reasons ?? '没过'),
         score: r.score ?? '',
@@ -649,7 +684,7 @@ const PR_QUERIES: QueryDef[] = [
       rows: (ctx.pr?.handoffs ?? []).map((r) => ({
         published_at: r.published_at,
         origin: r.author === undefined ? r.origin : `${r.author}（${r.origin}）`,
-        status: r.status,
+        status: word(MENTION_STATUS_WORDS, r.status),
         body: r.excerpt,
       })),
     }),

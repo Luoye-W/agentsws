@@ -99,6 +99,13 @@ const TONE: Record<DeckHighlight['type'], string> = {
   member: 'border-border text-muted-foreground',
   // 转客服：这条不归我答。给它一个能一眼扫到的边，免得压在队列里没人接
   handoff: 'border-chart-4/50 text-foreground',
+  // WP78：**版规**给告警色——我们在别人的地盘上，那一格说的是"这一条会不会
+  // 让整个品牌被那个版赶走"，它是外部发帖卡上最该先看清的一格。
+  // 数字出处是中性事实（提得上来的稿子那两个数永远相等）；舆情给强调色：
+  // 一条被转了 30 次的负面与一条孤零零的抱怨，要不要现在就回是两个答案。
+  venue_rules: 'border-destructive/50 text-destructive',
+  facts_cited: 'border-border text-muted-foreground',
+  sentiment: 'border-chart-1/50 text-foreground',
 }
 
 export function Highlights({
