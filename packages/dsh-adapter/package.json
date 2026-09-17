@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./subscription-facts": {
+      "types": "./dist/subscription-facts.d.ts",
+      "import": "./dist/subscription-facts.js"
     }
   },
   "scripts": {
@@ -31,6 +35,7 @@
     "@deepseek-ai/dsh-agent": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-agent-loop": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-agent-presets": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-authorization": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-base": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-browser-use": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-credentials": "0.1.6-alpha.1",
@@ -38,6 +43,7 @@
     "@deepseek-ai/dsh-experimental-browser-use-runtime": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-headless": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-llm": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-mcp-client": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-scope": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-sdk-client": "0.1.6-alpha.1",

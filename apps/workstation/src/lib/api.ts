@@ -1532,7 +1532,14 @@ export const probeBrowser = (endpoint?: string, assignment?: string): Promise<Br
 // 直接打到本机服务进程。`listModelProviders` 回来的只有 `has_key` 这个布尔值。
 
 /** 49 M2 起有第三种：`agentsws_cloud`（走我们云上的服务入口，按积分扣，不填 key）。 */
-export type ModelProviderKind = 'deepseek' | 'openai_compatible' | 'agentsws_cloud'
+export type ModelProviderKind =
+  | 'deepseek'
+  | 'openai_compatible'
+  | 'agentsws_cloud'
+  /** WP90：用 ChatGPT 的订阅登录（没有 key 可填，走登录流）。 */
+  | 'openai-codex'
+  /** WP90：用 Claude 的订阅登录。 */
+  | 'anthropic'
 
 export type ModelPurposeName =
   | 'run'
@@ -1590,6 +1597,21 @@ export interface ModelProviderTemplate {
   kind: ModelProviderKind
   label: string
   summary: string
+  /**
+   * WP90：同一家厂商 / 渠道的几个方案合成**一张卡**，这是那张卡的 id
+   * （也是品牌图标按哪个名字找图的那个 id）。不填 = 自己独占一张卡。
+   */
+  vendor?: string
+  vendor_label?: string
+  vendor_summary?: string
+  /** 卡里那一排单选按钮上的字。 */
+  plan_label?: string
+  /** 方案排序；小的在前，卡打开时默认选第一个。 */
+  plan_order?: number
+  /** 这个方案怎么认证：填 key（默认），还是用订阅登录（没有表单，只有一个登录按钮）。 */
+  auth?: 'api_key' | 'subscription'
+  /** `auth: 'subscription'` 时走哪一家。 */
+  subscription_provider?: SubscriptionProviderId
   default_base_url: string
   default_model: string
   region: 'cn' | 'global'
@@ -4001,3 +4023,93 @@ export const createSocialBroadcast = (
   assignment?: string,
 ): Promise<SocialBroadcastData> =>
   api('/v1/social/broadcasts', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+// ── WP90（55 §9 Q8）：用 ChatGPT / Claude 的订阅登录 ─────────────────────
+
+/** 能用订阅登录的两家。 */
+export type SubscriptionProviderId = 'openai-codex' | 'anthropic'
+
+/** 登录方式：设备码（在手机上输一串码）或浏览器（本机回调）。 */
+export type SubscriptionMethod = 'device' | 'browser'
+
+/**
+ * 一家订阅登录现在的样子。
+ *
+ * **这里没有、也不会有 token 字段**——服务端只给四样：登没登录、账号**脱敏后**
+ * 的样子、什么时候过期、现在进行到哪一步。
+ */
+export interface SubscriptionData {
+  provider: SubscriptionProviderId
+  label: string
+  summary: string
+  methods: SubscriptionMethod[]
+  /** 固定的白话风险提示（卡上一定要显示，不在前端重写一遍）。 */
+  risk_note: string
+  available: boolean
+  unavailable_reason?: string
+  signed_in: boolean
+  account?: string
+  expires_at?: string
+  in_flight: boolean
+  notice?: { message: string; url?: string; code?: string }
+  question?: { kind: 'text' | 'secret'; message: string; placeholder?: string }
+  last_error?: string
+  models: { id: string; name: string }[]
+  selected_model?: string
+}
+
+export const listModelSubscriptions = (
+  assignment?: string,
+): Promise<{ providers: SubscriptionData[] }> =>
+  api('/v1/settings/models/subscription', withAssignment(assignment))
+
+export const getModelSubscription = (
+  provider: SubscriptionProviderId,
+  assignment?: string,
+): Promise<SubscriptionData> =>
+  api(
+    `/v1/settings/models/subscription/${encodeURIComponent(provider)}`,
+    withAssignment(assignment),
+  )
+
+export const startModelSubscriptionLogin = (
+  input: { provider: SubscriptionProviderId; method: SubscriptionMethod },
+  assignment?: string,
+): Promise<SubscriptionData> =>
+  api('/v1/settings/models/subscription/login', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 把浏览器里的授权码贴回来。值只走这一次——不进 state、不进 query key。 */
+export const answerModelSubscriptionLogin = (
+  provider: SubscriptionProviderId,
+  value: string,
+  assignment?: string,
+): Promise<SubscriptionData> =>
+  api(`/v1/settings/models/subscription/${encodeURIComponent(provider)}/answer`, {
+    method: 'POST',
+    body: { value },
+    ...withAssignment(assignment),
+  })
+
+export const selectModelSubscriptionModel = (
+  provider: SubscriptionProviderId,
+  model: string,
+  assignment?: string,
+): Promise<SubscriptionData> =>
+  api(`/v1/settings/models/subscription/${encodeURIComponent(provider)}/model`, {
+    method: 'PUT',
+    body: { model },
+    ...withAssignment(assignment),
+  })
+
+export const signOutModelSubscription = (
+  provider: SubscriptionProviderId,
+  assignment?: string,
+): Promise<{ signed_out: true }> =>
+  api(`/v1/settings/models/subscription/${encodeURIComponent(provider)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })

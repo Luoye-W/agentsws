@@ -245,6 +245,7 @@ import { createSocialService } from './social-service.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
+import { createSubscription, type SubscriptionOptions } from './subscription.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
@@ -446,6 +447,12 @@ export interface ServerOptions {
   modelFetch?: FetchLike
   /** WP42：抓各家价目页用的 fetch（测试回放固定页面 → 价目刷新全程不联网）。 */
   pricingFetch?: PageFetch
+  /**
+   * WP90（55 §9 Q8）：起订阅登录那棵 dsh 树的工厂（测试注入替身 → 全程不联网、
+   * 也不真的装一棵 Cordis 树）。生产不传：第一次有人点"用订阅登录"时才
+   * `await import('@agentsws/dsh-adapter')`。
+   */
+  subscriptionLogin?: SubscriptionOptions['createLogin']
   /**
    * WP58（49 M1）/ WP59（49 M3）：往 agentsws 云发请求用的 fetch——关联账号那条
    * 与余额 / 价目那条共用同一个注入点。生产不传（走 `globalThis.fetch`）；
@@ -832,14 +839,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * `AGENTSWS_RUNTIME_MODE` 一个口子：Docker / 托管档的部署把它设成 `docker` /
    * `hosted`，attach 那一项在设置页上就会灰掉、`PUT` 也会拒。
    */
+  const runtimeMode = (): 'local' | 'docker' | 'hosted' => {
+    const declared = env.AGENTSWS_RUNTIME_MODE?.trim()
+    return declared === 'docker' || declared === 'hosted' || declared === 'local'
+      ? declared
+      : 'local'
+  }
   const browserSettings = createBrowserSettings({
     ...(dbDir === undefined ? {} : { dir: dbDir }),
-    runtimeMode: () => {
-      const declared = env.AGENTSWS_RUNTIME_MODE?.trim()
-      return declared === 'docker' || declared === 'hosted' || declared === 'local'
-        ? declared
-        : 'local'
-    },
+    runtimeMode,
+  })
+
+  /*
+   * WP90（55 §9 Q8）：用 ChatGPT / Claude 的**订阅**登录——也是"一台机器一份"，
+   * 而且**按人分开**（账号是人的，不是工作区的，也不是品牌的）。
+   *
+   * 所以它用的是**没按品牌命名空间**的那个秘密库：换个品牌不该要求你重登一次
+   * ChatGPT。只有个人档才开（`runtimeMode`），公司档 / 托管档上整块不可用。
+   */
+  const subscription = createSubscription({
+    clock,
+    secrets,
+    runtimeMode,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    ...(options.subscriptionLogin === undefined ? {} : { createLogin: options.subscriptionLogin }),
   })
 
   /**
@@ -3436,7 +3459,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     },
     // WP25 / WP66：模型面按品牌（52 O3 的"跟随公司默认"也在这一层解析）
-    models: brandModelsPort({ brands: brandModules, brandName: brandNameOfWorkspace }),
+    models: brandModelsPort({
+      brands: brandModules,
+      brandName: brandNameOfWorkspace,
+      // WP90：订阅登录按人、按机器——每个品牌看到的是同一份
+      subscription: subscription.port,
+    }),
     // WP59 / WP66：`/v1/cloud/*` 与 `/v1/settings/capability-sources`，按品牌
     cloud: brandCloudPort(brandModules),
     // WP40 数据后端（41 §2.4 的三档与迁移向导）
@@ -3778,6 +3806,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       joinAssembly.close()
       orgDuplicates.close()
       offboard.close()
+      await subscription.close()
       secrets.close()
       txnStore?.close()
       workStore?.close()

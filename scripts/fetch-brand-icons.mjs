@@ -116,6 +116,33 @@ const SOURCES = {
       },
     ],
   },
+  /*
+   * WP90：设置页模型一节改成"一家一张卡、点进去选方案"之后，图标按**卡的 id**
+   * （`ModelProviderTemplate.vendor`）认，不再按 `kind` 认——同一个 `kind` 现在可能
+   * 分属几张卡（百炼三个方案与通用 OpenAI 兼容都是 `openai_compatible`）。
+   */
+  bailian: {
+    brand: '阿里云百炼',
+    sources: [
+      { page: 'https://bailian.console.aliyun.com/', note: '百炼控制台 <link rel=icon>' },
+      { page: 'https://help.aliyun.com/zh/model-studio/', note: '百炼官方文档站' },
+      { page: 'https://www.aliyun.com', note: '兜底：阿里云官网首页' },
+    ],
+  },
+  openai: {
+    brand: 'OpenAI / ChatGPT',
+    sources: [
+      { page: 'https://openai.com', note: '官网首页 <link rel=icon>' },
+      { page: 'https://platform.openai.com/docs/overview', note: '兜底：开放平台文档站' },
+    ],
+  },
+  anthropic: {
+    brand: 'Anthropic / Claude',
+    sources: [
+      { page: 'https://www.anthropic.com', note: '官网首页 <link rel=icon>' },
+      { page: 'https://docs.anthropic.com/en/home', note: '兜底：官方文档站' },
+    ],
+  },
   deepseek: {
     brand: 'DeepSeek',
     sources: [

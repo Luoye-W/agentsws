@@ -46,6 +46,33 @@ export {
 } from './preset.js'
 export * from './reading.js'
 export { createInProcessDshRuntime, TASK_MESSAGE } from './runtime.js'
+export type {
+  SubscriptionBeginRequest,
+  SubscriptionCallWatch,
+  SubscriptionLoginHandle,
+  SubscriptionLoginMethod,
+  SubscriptionLoginOptions,
+  SubscriptionNotice,
+  SubscriptionProviderFacts,
+  SubscriptionProviderId,
+  SubscriptionQuestion,
+  SubscriptionStatus,
+} from './subscription.js'
+export {
+  createSubscriptionLogin,
+  installSubscriptionLlm,
+  isSubscriptionProvider,
+  maskAccount,
+  SUBSCRIPTION_FACTS,
+  SUBSCRIPTION_PROVIDERS,
+  SUBSCRIPTION_RECORD_SCOPE,
+  SUBSCRIPTION_RISK_NOTE,
+  subscriptionFactsOf,
+  subscriptionPiAiConfig,
+  subscriptionProviderOf,
+  subscriptionRecordKey,
+  watchSubscriptionCalls,
+} from './subscription.js'
 export type { ReadToolHooks, StageToolHooks } from './tools.js'
 export {
   BROWSER_DEFAULT_TOOL_NAMES,

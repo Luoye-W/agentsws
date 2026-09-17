@@ -63,12 +63,12 @@ const cli = join(SDK, 'node_modules/.bin/openapi-typescript')
  * `execFileSync` 的默认上限是 1 MB，而生成出来的 `schema.d.ts` 在 WP78 加了
  * `/v1/pr/*` 那几条之后正好越过这条线——表现是 `ENOBUFS` + `SIGTERM`，
  * 看起来像"openapi-typescript 崩了"，其实是我们自己把它掐了。
- * 32 MB 是一个不会再被撞到的数（今天这份 1 MB 出头）。
+ * 64 MB 是一个不会再被撞到的数（今天这份 1 MB 出头；WP90 六条路由后再抬了一档）。
  */
 const generated = execFileSync(cli, [OPENAPI_JSON], {
   encoding: 'utf8',
   cwd: ROOT,
-  maxBuffer: 32 * 1024 * 1024,
+  maxBuffer: 64 * 1024 * 1024,
 })
 
 const banner = `/**

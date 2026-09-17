@@ -174,19 +174,38 @@ const ICONS: Record<string, IconChoice> = {
   // Simple Icons 里没有 OpenAI（品牌方要求下架）；这张卡说的也是"任何 OpenAI 兼容
   // 网关"，不是 OpenAI 这家公司，所以走首字母徽标而不是去别处扒一个标志回来。
   openai_compatible: { kind: 'letter', letter: 'O' },
+  /*
+   * WP90：模型一节改成"一家一张卡、点进去选方案"之后，图标按**卡的 id**
+   * （`ModelProviderTemplate.vendor`）认。`openai` / `anthropic` / `bailian` 三张卡
+   * 有抓回来的官方图（`assets/brand/`，OFFICIAL 那一层自动认），这里只补两张
+   * **不属于任何一家**的：通用 OpenAI 兼容网关、我们自己的云。
+   */
+  'openai-compatible': { kind: 'letter', letter: 'O' },
+  'agentsws-cloud': { kind: 'letter', letter: 'A' },
   // 49 M2「用 agentsws 的」那张卡。这一家是我们自己，没有第三方商标可用，
   // 也不该去别处扒一个——首字母徽标跟着主题走，与 openai_compatible 同一档。
   agentsws_cloud: { kind: 'letter', letter: 'A' },
 }
 
+/**
+ * 同一张官方图的别名（WP90）。
+ *
+ * `openai-codex` 是 `pi-ai` 给"用 ChatGPT 订阅登录"那条路的 provider id，
+ * 标志还是 OpenAI 那一个——抓两份一模一样的图进仓库没有意义。
+ */
+const ALIAS: Record<string, string> = {
+  'openai-codex': 'openai',
+}
+
 /** 这个 id 有没有专属图标（`false` = 会落到通用插头）。 */
 export function hasBrandIcon(provider: string): boolean {
-  return provider in OFFICIAL || provider in ICONS
+  const id = ALIAS[provider] ?? provider
+  return id in OFFICIAL || id in ICONS
 }
 
 /** 这个 id 用的是抓回来的官方图（`false` = 走矢量兜底或通用图标）。测试与排查用。 */
 export function hasOfficialIcon(provider: string): boolean {
-  return provider in OFFICIAL
+  return (ALIAS[provider] ?? provider) in OFFICIAL
 }
 
 /**
@@ -204,7 +223,8 @@ export function BrandIcon({
   size?: number
   className?: string
 }): React.ReactNode {
-  const choice = ICONS[provider]
+  const id = ALIAS[provider] ?? provider
+  const choice = ICONS[id]
   const common = {
     'data-testid': 'brand-icon',
     'data-provider': provider,
@@ -216,7 +236,7 @@ export function BrandIcon({
 
   // 官网自己现在在用的那张图（构建期抓回来的，见文件头）。非正方的图按原比例放进
   // 方格里（`contain`），不拉伸——商标不能变形；圆角留给外层，这里不裁图。
-  const official = OFFICIAL[provider]
+  const official = OFFICIAL[id]
   if (official !== undefined) {
     return (
       <img

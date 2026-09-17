@@ -31,10 +31,16 @@
       "path": "../../packages/core"
     },
     {
+      "path": "../../packages/credentials-openconnector"
+    },
+    {
       "path": "../../packages/data"
     },
     {
       "path": "../../packages/deck"
+    },
+    {
+      "path": "../../packages/dsh-adapter"
     },
     {
       "path": "../../packages/design-core"

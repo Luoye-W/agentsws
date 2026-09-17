@@ -37,6 +37,11 @@ import { installGate } from './gate.js'
 import type { GatewayBudget } from './llm.js'
 import { GATEWAY_PROVIDER, GatewayLlmAdapter } from './llm.js'
 import { presetCredentialRefs, presetToolNames } from './preset.js'
+import {
+  installSubscriptionLlm,
+  subscriptionProviderOf,
+  watchSubscriptionCalls,
+} from './subscription.js'
 
 /** 装配 dsh 服务时等注入就绪的上限（毫秒）。 */
 const READY_TIMEOUT_MS = 5000
@@ -233,6 +238,16 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   root.plugin(ApprovalService, {})
   root.plugin(LlmRuntime)
   /*
+   * WP90（55 §9 Q8）：**这次运行走不走订阅登录那条路**。
+   *
+   * `RunRequest.runtime.model.provider` 是 `openai-codex` / `anthropic` 才挂官方
+   * `dsh-llm-pi-ai`；它按 provider 名注册自己的适配器，与我们的 `agentsws-gateway`
+   * 在同一棵树上并存、互不知道对方。不走这条路的运行里连这个插件都不装
+   * ——与浏览器、preset 同一条纪律（不用的东西不挂）。
+   */
+  const subscription = subscriptionProviderOf(input.request.runtime.model.provider)
+  if (subscription !== undefined) await installSubscriptionLlm(root)
+  /*
    * WP82（55 §3）：**只有这次运行真要开浏览器才有浏览器这一层**。
    *
    * `browserUse` 是官方的独占 provider 槽（一棵树一个 provider）；provider 本身
@@ -301,6 +316,23 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     },
   })
   const releaseAdapter = ctx.llm.registerAdapter([GATEWAY_PROVIDER], adapter)
+  /*
+   * 订阅路由的记账（55 §9「网关只记 token、`cost_base` 0」）。官方适配器不经我们的
+   * 网关，所以请求事件、用量投影、预算三件事在 `llm/stream` 这道 waterfall 上补回来。
+   */
+  const releaseSubscription =
+    subscription === undefined
+      ? () => undefined
+      : watchSubscriptionCalls(ctx, {
+          provider: subscription,
+          model: input.model,
+          ...(budget === undefined ? {} : { budget }),
+          ...(input.onModelRequest === undefined ? {} : { onRequest: input.onModelRequest }),
+          onCompletion: (c) => {
+            lastCompletion = c
+            input.onCompletion?.(c)
+          },
+        })
 
   const sessionId = (input.sessionId ?? `agentsws-${randomUUID()}`) as SessionId
   let gate: GateApi | undefined
@@ -309,7 +341,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     handle = await ctx.agents.create({
       sessionId,
       meta: { cwd: process.cwd() },
-      agentOptions: { provider: GATEWAY_PROVIDER, model: input.model },
+      agentOptions: { provider: subscription ?? GATEWAY_PROVIDER, model: input.model },
       setup: async (agentCtx: Context, agent: Agent) => {
         /*
          * ① preset 先挂（WP86）。**顺序是硬的**，实测两条：
@@ -343,12 +375,14 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
       },
     })
   } catch (e) {
+    releaseSubscription()
     releaseAdapter()
     await root.fiber.dispose()
     throw e
   }
   if (gate === undefined) {
     await handle.dispose()
+    releaseSubscription()
     releaseAdapter()
     await root.fiber.dispose()
     throw new DshAdapterError('internal', 'Agent setup 没有装上门禁插件')
@@ -404,6 +438,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
       agent.cancel({ kind: 'user' } as never)
     },
     async dispose() {
+      releaseSubscription()
       releaseAdapter()
       await installed.dispose()
       await handle.dispose()

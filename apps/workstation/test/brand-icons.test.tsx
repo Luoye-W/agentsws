@@ -62,11 +62,17 @@ function plannedServices(): string[] {
   return [...planned.matchAll(/^\s{4}service: '([a-z0-9_]+)',$/gm)].map((m) => m[1] as string)
 }
 
-/** 设置页那几张模型卡的 `kind`（`ModelProviderKind`）。 */
+/**
+ * 设置页那几张模型卡的 `kind`（`ModelProviderKind`）。
+ *
+ * **id 里可以有短横线**（WP90 起：`openai-codex` / `anthropic` 用的是 `pi-ai` 自己的
+ * provider id，那是订阅登录那条路的三处同一个串）。以前这条正则只认下划线，
+ * 新加的带横线的 kind 会被悄悄漏掉——漏掉就等于"没配图标也不会红"。
+ */
 function modelKinds(): string[] {
   const source = read('packages/api/src/routes/models.ts')
   const line = /const KIND = z\.enum\(\[([^\]]+)\]\)/.exec(source)?.[1] ?? ''
-  return [...line.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1] as string)
+  return [...line.matchAll(/'([a-z0-9_-]+)'/g)].map((m) => m[1] as string)
 }
 
 describe('BrandIcon', () => {
@@ -107,8 +113,16 @@ describe('BrandIcon', () => {
 
   it('模型卡的每个 kind 也有专属图标', () => {
     const kinds = modelKinds()
-    // WP59 起有第三种：`agentsws_cloud`（49 M2「用 agentsws 的」）
-    expect(kinds).toEqual(['deepseek', 'openai_compatible', 'agentsws_cloud'])
+    // WP59 起有第三种：`agentsws_cloud`（49 M2「用 agentsws 的」）；
+    // WP90 再加两种订阅登录（55 §9 Q8）：`openai-codex`（ChatGPT）与 `anthropic`（Claude）。
+    // 这两种**没有 key 可填**，但卡照样要戴各家自己的标志。
+    expect(kinds).toEqual([
+      'deepseek',
+      'openai_compatible',
+      'agentsws_cloud',
+      'openai-codex',
+      'anthropic',
+    ])
     for (const kind of kinds) {
       expect(hasBrandIcon(kind), `${kind} 还没配图标`).toBe(true)
       const { unmount } = render(<BrandIcon provider={kind} />)

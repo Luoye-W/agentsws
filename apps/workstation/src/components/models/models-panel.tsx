@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
+import { SubscriptionPlan } from '@/components/models/subscription-plan'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -27,7 +28,9 @@ import { Switch } from '@/components/ui/switch'
 import type {
   ModelDefaultsView,
   ModelPricingRefreshResult,
+  ModelPricingView,
   ModelProviderKind,
+  ModelProviderTemplate,
   ModelProviderView,
   ModelPurposeName,
   ModelTestResult,
@@ -340,72 +343,28 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
           )}
         </section>
 
-        {/* ② 加一个 */}
+        {/* ② 加一个：**一家一张卡**，点进去再选方案（WP90，Luoye 定） */}
         <section className="flex flex-col gap-2">
           <h4 className="text-xs font-medium text-muted-foreground">{t('models.add')}</h4>
           <div className="grid gap-2 lg:grid-cols-2">
-            {templates.map((tpl) => (
-              <div
-                key={templateSlug(tpl.kind, tpl.default_base_url)}
-                className="rounded-lg border p-2.5"
-                data-testid="model-template"
-                data-kind={tpl.kind}
-                data-template={templateSlug(tpl.kind, tpl.default_base_url)}
-              >
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  {/* WP45：加模型那两张卡也戴各家自己的标志 */}
-                  <BrandIcon provider={tpl.kind} />
-                  {tpl.label}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{tpl.summary}</p>
-                <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-                  {tpl.steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  {tpl.links.map((link) => (
-                    <a
-                      key={link.url}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="inline-flex items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline"
-                    >
-                      {link.label}
-                      <ExternalLink className="size-3" aria-hidden />
-                    </a>
-                  ))}
-                </div>
-                {adding === templateSlug(tpl.kind, tpl.default_base_url) ? (
-                  <ModelForm
-                    template={tpl}
-                    busy={save.isPending}
-                    onDiscover={discover}
-                    takenIds={rows.map((p) => p.id)}
-                    {...(pricing.data === undefined ? {} : { pricing: pricing.data })}
-                    onCancel={() => {
-                      setAdding(null)
-                    }}
-                    onSubmit={(values) => {
-                      save.mutate({ ...values, kind: tpl.kind })
-                    }}
-                  />
-                ) : (
-                  <Button
-                    className="mt-2"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setError(null)
-                      setAdding(templateSlug(tpl.kind, tpl.default_base_url))
-                    }}
-                  >
-                    <Plus aria-hidden />
-                    {t('models.add.button')}
-                  </Button>
-                )}
-              </div>
+            {groupTemplates(templates).map((card) => (
+              <VendorCard
+                key={card.id}
+                card={card}
+                busy={save.isPending}
+                takenIds={rows.map((p) => p.id)}
+                onDiscover={discover}
+                {...(assignment === undefined ? {} : { assignment })}
+                {...(pricing.data === undefined ? {} : { pricing: pricing.data })}
+                openPlan={adding}
+                onOpenPlan={(slug) => {
+                  setError(null)
+                  setAdding(slug)
+                }}
+                onSubmit={(values, kind) => {
+                  save.mutate({ ...values, kind })
+                }}
+              />
             ))}
           </div>
         </section>
@@ -758,5 +717,168 @@ function BudgetInput({
         }}
       />
     </label>
+  )
+}
+
+/**
+ * WP90（Luoye 定）：**同一家厂商 / 渠道的几个方案合成一张卡**，点进去再选方案。
+ *
+ * 在这之前是一个方案一张卡——阿里云百炼三张并排（按量 / Token Plan / Coding Plan），
+ * 第一眼的问题变成"这三张有什么区别"，而那恰恰是用户还不知道的事。合成一张之后，
+ * 第一眼是"阿里云百炼"，第二眼才是"你买的是哪个方案"——那个他答得上来。
+ *
+ * 分组键是服务端给的 `vendor`；没给的（老模板、第三方加的）自己独占一张卡，
+ * 界面不用改。方案按 `plan_order` 排，默认选第一个。
+ */
+export interface VendorCardData {
+  id: string
+  label: string
+  summary: string
+  plans: ModelProviderTemplate[]
+}
+
+export function groupTemplates(templates: ModelProviderTemplate[]): VendorCardData[] {
+  const cards: VendorCardData[] = []
+  const byId = new Map<string, VendorCardData>()
+  for (const tpl of templates) {
+    const id = tpl.vendor ?? templateSlug(tpl.kind, tpl.default_base_url)
+    let card = byId.get(id)
+    if (card === undefined) {
+      card = {
+        id,
+        label: tpl.vendor_label ?? tpl.label,
+        summary: tpl.vendor_summary ?? tpl.summary,
+        plans: [],
+      }
+      byId.set(id, card)
+      cards.push(card)
+    }
+    card.plans.push(tpl)
+  }
+  for (const card of cards) {
+    card.plans.sort((a, b) => (a.plan_order ?? 99) - (b.plan_order ?? 99))
+  }
+  return cards
+}
+
+/** 一张厂商卡：图标 + 卡名 + 方案单选 + 选中那个方案的说明与动作。 */
+function VendorCard({
+  card,
+  busy,
+  takenIds,
+  assignment,
+  pricing,
+  openPlan,
+  onOpenPlan,
+  onDiscover,
+  onSubmit,
+}: {
+  card: VendorCardData
+  busy: boolean
+  takenIds: string[]
+  assignment?: string
+  pricing?: ModelPricingView
+  openPlan: string | null
+  onOpenPlan: (slug: string | null) => void
+  onDiscover: React.ComponentProps<typeof ModelForm>['onDiscover']
+  onSubmit: (values: ModelFormValues, kind: ModelProviderKind) => void
+}): React.ReactNode {
+  const { t } = useApp()
+  const [planIndex, setPlanIndex] = useState(0)
+  const plan = card.plans[planIndex] ?? card.plans[0]
+  if (plan === undefined) return null
+  const slug = templateSlug(plan.kind, plan.default_base_url)
+
+  return (
+    <div
+      className="rounded-lg border p-2.5"
+      data-testid="model-template"
+      data-kind={plan.kind}
+      data-vendor={card.id}
+      data-template={slug}
+    >
+      <p className="flex items-center gap-2 text-sm font-medium">
+        {/* WP45 / WP90：图标按**卡的 id** 认（官网抓回来的官方图，运行时不联网） */}
+        <BrandIcon provider={card.id} />
+        {card.label}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{card.summary}</p>
+
+      {card.plans.length < 2 ? null : (
+        <fieldset className="mt-2 flex flex-wrap gap-1.5" data-testid="model-plans">
+          <legend className="sr-only">{t('models.plan')}</legend>
+          {card.plans.map((p, i) => (
+            <label
+              key={`${p.kind}:${p.plan_label ?? p.label}`}
+              className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
+                i === planIndex
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'text-muted-foreground'
+              }`}
+              data-testid="model-plan"
+              data-selected={i === planIndex}
+            >
+              <input
+                type="radio"
+                className="sr-only"
+                name={`plan-${card.id}`}
+                checked={i === planIndex}
+                onChange={() => {
+                  setPlanIndex(i)
+                  onOpenPlan(null)
+                }}
+              />
+              {p.plan_label ?? p.label}
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+        {plan.steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+      <div className="mt-1.5 flex flex-wrap gap-2">
+        {plan.links.map((link) => (
+          <a
+            key={link.url}
+            href={link.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline"
+          >
+            {link.label}
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
+        ))}
+      </div>
+
+      {/*
+        订阅登录那种方案**没有表单**——没有 key 可填，只有一个登录按钮。
+        其余方案照旧：一个"填 API key"按钮展开原生表单。
+      */}
+      {plan.auth === 'subscription' && plan.subscription_provider !== undefined ? (
+        <SubscriptionPlan
+          provider={plan.subscription_provider}
+          {...(assignment === undefined ? {} : { assignment })}
+        />
+      ) : openPlan === slug ? (
+        <ModelForm
+          template={plan}
+          busy={busy}
+          onDiscover={onDiscover}
+          takenIds={takenIds}
+          {...(pricing === undefined ? {} : { pricing })}
+          onCancel={() => onOpenPlan(null)}
+          onSubmit={(values) => onSubmit(values, plan.kind)}
+        />
+      ) : (
+        <Button className="mt-2" size="sm" variant="outline" onClick={() => onOpenPlan(slug)}>
+          <Plus aria-hidden />
+          {t('models.add.button')}
+        </Button>
+      )}
+    </div>
   )
 }

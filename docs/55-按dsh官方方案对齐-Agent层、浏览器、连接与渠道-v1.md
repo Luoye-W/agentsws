@@ -250,6 +250,29 @@ Luoye：很多客户在用 ChatGPT 的套餐，官方连接器好像能直接用
 
 **落地**：WP90，排在 WP88（百炼模板）合并之后（同改设置页模型一节）。
 
+### 9.1 落点（WP90，2026-09-17）
+
+方案按路 ① 全部落地，外加 Luoye 中途追加的两条 UI 规矩。实测到哪一步、与预判差在哪：
+
+| 事 | 落点 | 与 §9 表里的预判 |
+|---|---|---|
+| 组合 | `packages/dsh-adapter/src/subscription.ts`（新文件）+ `harness.ts` 五处挂载行。`RunRequest.runtime.model.provider` 是 `openai-codex` / `anthropic` 才 `root.plugin(PiAiLlm, { providers: { 'openai-codex': {}, anthropic: {} } })`；与 `agentsws-gateway` 按 provider 名并存（`ctx.llm.listProviders()` 三个都在） | 一致。profile **全空**是有意的：路由键命中 pi-ai 装着的 provider 时端点 / 协议 / 模型目录全继承它的，覆盖一个字段就等于把上游目录抄了一份进我们仓库 |
+| 记账 | **`llm/stream` 这道 waterfall**（上游给的环绕钩子）：进去之前判预算 + 发 `progress{model_request}`，出来时把 `usage` chunk 投影成 `Completion`、`cost_base` 恒 0 | **与预判不同**：原以为要再包一个 `LlmAdapter`，但 `ctx.llm` 的 provider 名是独占的，官方插件已经占了这两个名字，第二次注册会被拒。waterfall 是唯一不改上游又能两头各切一刀的地方 |
+| 凭据 | `credentials-openconnector` 的组合 provider 第三条路：owner 为 `llm-pi-ai` 的记录读写**本机加密秘密库**；`modifyRecord` 是真读改写（官方 `pi-ai` 的刷新就跑在里面），写完发 `credentials/record-updated`——**少发这一条，官方 `begin()` 会判 `NOT_COMMITTED`，登录报失败** | 一致，外加上面那条实测细节 |
+| 登录流 | `POST /v1/settings/models/subscription/login` → `ctx.authorization.begin()`。设备码：用户码与验证页原样回给前端、后台轮询；浏览器：把授权页地址回给前端用 `openExternal` 打开，人在别的机器上就把授权码贴回来（`POST …/answer`） | **与预判不同一处**：`method: 'device' \| 'browser'` 不是官方 seam 的方法 id。官方 flow 只报 `oauth` / `api-key`，设备码与浏览器是 `pi-ai` 在流**里面**用一个 `select` 问的——我们在 `prompt` 里代答那一问（只答它自己列出来的 id，上游改了选项当场报错而不是瞎答） |
+| Claude 没有设备码 | 实测：`pi-ai` 的 `anthropic` OAuth 只有浏览器 + 贴授权码。所以两张卡能点的按钮不一样，清单由服务端给（`SUBSCRIPTION_FACTS.methods`），前端不写死 | §9 表里没提，是这次查出来的 |
+| 档位 | 公司档 / 托管档（`AGENTSWS_RUNTIME_MODE=docker\|hosted`）整块不可用：读一律"不存在"（不是"没权限"——报权限会泄漏"这台机器上有人登过"）、写一律拒、`login` 403 + 人话 | 一致 |
+| 卡怎么摆 | **Luoye 中途定**：一家一张卡、点进去选方案。百炼三张收成一张（Token Plan 默认第一）、OpenAI / Anthropic 各一张（订阅登录是方案一、API key 是方案二）。承载方式是给 `ModelProviderTemplate` 加 `vendor` / `plan_label` / `plan_order` / `auth` 四个**可选**字段，不填的照旧一条一张卡 | §9 原本写的是"加两张订阅卡"，改口了 |
+| 图标 | `pnpm icons:fetch` 按 WP48 那条路抓官网 favicon 入库：`bailian.png`（64×64，百炼控制台）、`openai.svg`（矢量，openai.com）、`anthropic.png`（256×256，anthropic.com）。图标按**卡的 id**（`vendor`）认，不再按 `kind` 认 | §9 没提，是追加项 |
+
+**实测到哪一步（假服务器）**：`packages/dsh-adapter/test/fixtures/fake-openai.ts` 拦
+`globalThis.fetch`，替身认这四条——设备码 usercode、设备码 token（第一次回 403 = 还没点）、
+`oauth/token`（换票与刷新同一条）、`chatgpt.com/backend-api/codex/responses`（Responses
+API 的 SSE）。**认不出的请求当场抛，CI 一个包都不出网**。跑通的是**整条真路**：
+设备码登录 → 记录落库 → 一次带工具调用的运行真的经官方适配器打到 `/codex/responses`
+→ 用量投影 → `cost_base` 0 → 到期前刷新经 `modifyRecord` 换了一把新的、请求头跟着换。
+**没有用真账号登录过，也没向任何人要过账号。**
+
 ## 10. Q9（2026-09-17 补）：腾讯 BrowserSkill 作个人端第二执行器
 
 已核实（`Tencent/BrowserSkill`，MIT，3.3k★，2026-06 开源，两周一版，0.3.0 于 09-17）：Rust `bsk` CLI + 本机 daemon + Chrome / Edge MV3 扩展，在**用户自己的浏览器**里 `chrome.debugger` 附加（不带 Chromium、不开调试端口），每 session 一个独立 Agent 窗口、借用户标签要确认；页面感知是自研 VOM（压缩 DOM + ref + 悬浮探测 + 分页）也有无障碍树；内置人接管弹层（`request-help`）；**远程模式**（Agent 在服务器、扩展在本机，WSS 配对）；操作录制成 trace（非录成 Skill）；无基准数据。它的 dsh 插件 `@wxg-prc-cpg/browser-skill-dsh-plugin` **直接注册 `ctx.tools`、不走官方 `dsh-browser-use` seam**，6 个多态工具（动作在 `action` 参数里，读写混），不暴露 evaluate；无原生构建、不下载浏览器；无腾讯云绑定、无遥测（daemon 每 30 分钟查 GitHub 更新，`BSK_AUTO_UPDATE=off` 可关）。

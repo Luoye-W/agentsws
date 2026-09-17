@@ -251,10 +251,17 @@ describe('WP25 §C 模板与空状态', () => {
     expect(ctx.server.modelSettings.configured()).toBe(false)
   })
 
-  // WP59（49 M2）起第三种「agentsws 云」不填 key，细节在 `cloud.test.ts`；
-  // WP88 起百炼占三张卡（按量 / Token Plan / Coding Plan）——形态仍是
-  // `openai_compatible`，卡分开是因为**三套的地址与 key 互不通用**
-  it('六张模板卡：DeepSeek / OpenAI 兼容 / 百炼三档 / agentsws 云，各带 ≤ 5 步说明', async () => {
+  /*
+   * WP59（49 M2）起第三种「agentsws 云」不填 key，细节在 `cloud.test.ts`；
+   * WP88 起百炼占三条（按量 / Token Plan / Coding Plan）——形态仍是
+   * `openai_compatible`，分开是因为**三套的地址与 key 互不通用**；
+   * WP90 再加四条：OpenAI 与 Anthropic 各两条（订阅登录 + API key）。
+   *
+   * **模板条数 ≠ 卡数**（WP90，Luoye 定）：同一个 `vendor` 的几条合成一张卡、
+   * 点进去再选方案。眼下十条模板 → 六张卡（DeepSeek / OpenAI 兼容 / 阿里云百炼 /
+   * OpenAI / Anthropic / agentsws 云）。所以这条用例既钉模板清单，也钉分组结果。
+   */
+  it('十条模板 → 六张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
@@ -264,6 +271,12 @@ describe('WP25 §C 模板与空状态', () => {
       'openai_compatible',
       'openai_compatible',
       'openai_compatible',
+      // WP90：OpenAI 那张卡的两个方案（订阅登录在前）
+      'openai-codex',
+      'openai_compatible',
+      // Anthropic 那张卡的两个方案
+      'anthropic',
+      'openai_compatible',
       'agentsws_cloud',
     ])
     for (const t of templates) {
@@ -272,10 +285,42 @@ describe('WP25 §C 模板与空状态', () => {
       expect(t.links.length).toBeGreaterThan(0)
       expect(t.default_model).not.toBe('')
     }
-    // 卡的标题与默认地址都各不相同——界面按地址认卡（templateSlug），
-    // 撞了两张卡会共用一个 key，点开一张另一张跟着展开
+    // 每条模板的标题与默认地址都各不相同——界面按地址认"是哪个方案"（templateSlug），
+    // 撞了两条会共用一个 key，点开一条另一条跟着展开
     expect(new Set(templates.map((t) => t.label)).size).toBe(templates.length)
     expect(new Set(templates.map((t) => t.default_base_url)).size).toBe(templates.length)
+
+    // WP90：分组成六张卡，每张卡里的方案有排序、第一个是默认选中的那个
+    const vendors = [...new Set(templates.map((t) => t.vendor ?? t.label))]
+    expect(vendors).toEqual([
+      'deepseek',
+      'openai-compatible',
+      'bailian',
+      'openai',
+      'anthropic',
+      'agentsws-cloud',
+    ])
+    const planOf = (vendor: string): ModelProviderTemplate[] =>
+      templates
+        .filter((t) => t.vendor === vendor)
+        .sort((a, b) => (a.plan_order ?? 99) - (b.plan_order ?? 99))
+    // 百炼一张卡三个方案，**Token Plan（订阅）默认第一**（Luoye 定）
+    expect(planOf('bailian').map((t) => t.plan_label)).toEqual([
+      'Token Plan（订阅）',
+      '按量计费（标准）',
+      'Coding Plan（订阅）',
+    ])
+    // OpenAI / Anthropic 各一张卡，订阅登录排第一、API key 第二
+    for (const vendor of ['openai', 'anthropic'] as const) {
+      const plans = planOf(vendor)
+      expect(plans).toHaveLength(2)
+      expect(plans[0]?.auth).toBe('subscription')
+      expect(plans[0]?.subscription_provider).toBe(
+        vendor === 'openai' ? 'openai-codex' : 'anthropic',
+      )
+      expect(plans[1]?.auth).toBe('api_key')
+    }
+
     // 自定义那条带一组"点一下就填好"的预设（Moonshot / 通义 / 本地 Ollama…）
     const custom = templates.find((t) => t.label.startsWith('OpenAI 兼容'))
     expect((custom?.presets ?? []).length).toBeGreaterThan(2)

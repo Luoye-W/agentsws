@@ -45,7 +45,21 @@ import {
   credentialKeyScope,
   isCredentialKeySegment,
 } from '@deepseek-ai/dsh-credentials'
-import type { CredentialRefSource, OpenConnectorGrant, OpenConnectorSource } from './source.js'
+import type {
+  CredentialRefSource,
+  OpenConnectorGrant,
+  OpenConnectorSource,
+  SubscriptionRecordSource,
+} from './source.js'
+
+/**
+ * WP90（55 §9 Q8）：订阅登录那一族记录的 owner 段。
+ *
+ * 这个串不是我们起的——是上游 `dsh-llm-pi-ai` 的 `RECORD_SCOPE`
+ * （`auth.ts`：「the plugin's registered name」）。官方按它写、我们按它认，
+ * 写死一个常量就是为了**它哪天改了，这里立刻对不上**，而不是悄悄少存一条。
+ */
+export const SUBSCRIPTION_RECORD_SCOPE = 'llm-pi-ai'
 
 /** 这个 provider 自己的错误（调用方按 code 分流；message 是人话）。 */
 export class CredentialsBoundaryError extends Error {
@@ -100,6 +114,13 @@ export interface CompositeCredentialsConfig {
   refs: CredentialRefSource
   /** 记录半边（OpenConnector）。不给 = 这棵树上没有外部连接的凭据可读。 */
   connector?: OpenConnectorSource
+  /**
+   * WP90：记录半边的**第三条路**——`llm-pi-ai/<provider>`（ChatGPT / Claude 订阅登录）
+   * 走本机加密秘密库，不走 OpenConnector（20：个人身份类凭据留本机）。
+   *
+   * 不给 = 这棵树上没有订阅登录：读一律"不存在"、写一律拒，与公司档同一个答案。
+   */
+  subscriptions?: SubscriptionRecordSource
 }
 
 /**
@@ -113,6 +134,8 @@ export interface CompositeCredentialsConfig {
 export class CompositeCredentials extends CredentialProvider {
   private readonly refs: CredentialRefSource
   private readonly connector: OpenConnectorSource | undefined
+  /** WP90：订阅登录那一族记录（`llm-pi-ai/*`）的本机库。 */
+  private readonly subscriptions: SubscriptionRecordSource | undefined
   /** OpenConnector 那个工作区在 `<owner>/<id>` 里的那一段。 */
   private readonly owner: string | undefined
 
@@ -120,8 +143,31 @@ export class CompositeCredentials extends CredentialProvider {
     super(ctx)
     this.refs = config.refs
     this.connector = config.connector
+    this.subscriptions = config.subscriptions
     this.owner =
       config.connector === undefined ? undefined : credentialSegment(config.connector.workspace_id)
+  }
+
+  // ── 记录半边之三：订阅登录（WP90，55 §9）────────────────────────────
+
+  /**
+   * 这个 key 是不是"一条订阅登录记录"，而且**现在允许碰**。
+   *
+   * 两件事一起判，返回 `undefined` 就是"这条路不通"：既包括"这不是订阅记录"，
+   * 也包括"是，但这台机器 / 这个人不该读它"。调用方据此一律回"不存在"——
+   * 分开报会泄漏"这台机器上有人登录过 ChatGPT"。
+   */
+  private subscriptionIdOf(key: CredentialKey): string | undefined {
+    if (this.subscriptions === undefined) return undefined
+    if (credentialKeyScope(key) !== SUBSCRIPTION_RECORD_SCOPE) return undefined
+    if (!this.subscriptions.enabled()) return undefined
+    const id = credentialKeyId(key)
+    return isCredentialKeySegment(id) ? id : undefined
+  }
+
+  /** 这个 key 落在订阅那一族里（不管现在允不允许碰）。写那一半要区分它。 */
+  private isSubscriptionKey(key: CredentialKey): boolean {
+    return credentialKeyScope(key) === SUBSCRIPTION_RECORD_SCOPE
   }
 
   // ── 引用半边（本机）─────────────────────────────────────────────────
@@ -173,6 +219,13 @@ export class CompositeCredentials extends CredentialProvider {
   }
 
   async readRecord(key: CredentialKey): Promise<CredentialRecord | undefined> {
+    const subscription = this.subscriptionIdOf(key)
+    if (subscription !== undefined) {
+      const payload = await this.subscriptions?.read(subscription)
+      // payload 是 pi-ai 的格式，我们一个字段都不解释、不改写（原样进原样出）
+      return payload === undefined ? undefined : { kind: 'grant', payload }
+    }
+    if (this.isSubscriptionKey(key)) return undefined
     const id = this.kindOf(key)
     if (id === undefined) return undefined
     const kind = await this.rawKindOf(id)
@@ -183,6 +236,15 @@ export class CompositeCredentials extends CredentialProvider {
   }
 
   async describeRecord(key: CredentialKey): Promise<CredentialRecordInfo> {
+    const subscription = this.subscriptionIdOf(key)
+    if (subscription !== undefined) {
+      const payload = await this.subscriptions?.read(subscription)
+      // 值一个字都不在这个返回里——登没登录、能不能改，就是全部
+      return payload === undefined
+        ? { configured: false, writable: true }
+        : { configured: true, kind: 'grant', writable: true }
+    }
+    if (this.isSubscriptionKey(key)) return { configured: false, writable: false }
     const id = this.kindOf(key)
     if (id === undefined) return { configured: false, writable: false }
     const kind = await this.rawKindOf(id)
@@ -195,15 +257,25 @@ export class CompositeCredentials extends CredentialProvider {
   }
 
   async listRecords(): Promise<readonly CredentialRecordEntry[]> {
-    if (this.connector === undefined) return []
-    const kinds = await this.connector.kinds()
-    // 只列这一个工作区的（`owner` 段就是它）——别的工作区在这个 provider 上不存在
-    return kinds
-      .map((k) => ({
-        key: connectionCredentialKey(this.connector?.workspace_id ?? '', k),
-        kind: 'grant' as const,
-      }))
-      .sort((a, b) => String(a.key).localeCompare(String(b.key)))
+    const entries: CredentialRecordEntry[] = []
+    // WP90：订阅登录那一族（公司档 / 托管档 / 非本人一条都不列）
+    if (this.subscriptions?.enabled() === true) {
+      for (const id of await this.subscriptions.list()) {
+        if (!isCredentialKeySegment(id)) continue
+        entries.push({ key: credentialKey(SUBSCRIPTION_RECORD_SCOPE, id), kind: 'grant' as const })
+      }
+    }
+    if (this.connector !== undefined) {
+      const kinds = await this.connector.kinds()
+      // 只列这一个工作区的（`owner` 段就是它）——别的工作区在这个 provider 上不存在
+      for (const k of kinds) {
+        entries.push({
+          key: connectionCredentialKey(this.connector.workspace_id, k),
+          kind: 'grant' as const,
+        })
+      }
+    }
+    return entries.sort((a, b) => String(a.key).localeCompare(String(b.key)))
   }
 
   /**
@@ -220,6 +292,37 @@ export class CompositeCredentials extends CredentialProvider {
     key: CredentialKey,
     mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>,
   ): Promise<CredentialRecord | undefined> {
+    const subscription = this.subscriptionIdOf(key)
+    if (subscription !== undefined) {
+      /*
+       * WP90：**这一条是真的读改写**——官方 `pi-ai` 的 token 刷新就跑在这里面
+       * （`auth.ts` 的 `modify()`：read → mutate → 提交，一次往返里含一次网络请求）。
+       * 上面 OpenConnector 那一半之所以"只能触发刷新、不能写"，是因为那边的
+       * refresh token 不归我们；这边归——它就存在本机加密库里，除了这里没有第二个写入方。
+       *
+       * `mutate` 回 `undefined` = 什么都不做（官方语义）；回一条 `grant` = 原样落盘。
+       * `api-key` 不收：订阅登录产不出 api key，收了只会让格式变脏。
+       */
+      const current = await this.readRecord(key)
+      const wanted = await mutate(current)
+      if (wanted === undefined) return current
+      if (wanted.kind !== 'grant') {
+        throw new CredentialsBoundaryError(
+          'not_supported',
+          '订阅登录只存授权记录，这里写不了 API key（55 §9）',
+        )
+      }
+      await this.subscriptions?.write(subscription, wanted.payload)
+      // 官方 `authorization.begin()` 靠这条事件确认"这一次真的提交了"，少发一次登录就报 NOT_COMMITTED
+      this.notifyRecordUpdated(key)
+      return wanted
+    }
+    if (this.isSubscriptionKey(key)) {
+      throw new CredentialsBoundaryError(
+        'forbidden',
+        '这台机器不允许用个人订阅账号登录（公司档 / 托管档；账号只属于你本人）',
+      )
+    }
     const id = this.kindOf(key)
     if (id === undefined) {
       throw new CredentialsBoundaryError('forbidden', `这条记录不属于这个工作区：${String(key)}`)
@@ -251,6 +354,15 @@ export class CompositeCredentials extends CredentialProvider {
    * OpenConnector 侧删掉）。从这里删只会删掉我们这一侧的影子，人以为断了，其实没断。
    */
   async deleteRecord(key: CredentialKey): Promise<void> {
+    const subscription = this.subscriptionIdOf(key)
+    if (subscription !== undefined) {
+      // 登出 = 把记录销毁。这一条**必须能删**（上面那半不能删是因为删了会骗人：
+      // 连接其实还连着。订阅这边删掉就是真的退出登录，下一次运行连不上，正是本意）
+      await this.subscriptions?.remove(subscription)
+      this.notifyRecordUpdated(key)
+      return
+    }
+    if (this.isSubscriptionKey(key)) return
     const existing = await this.readRecord(key)
     if (existing === undefined) return
     throw new CredentialsBoundaryError(
