@@ -759,6 +759,21 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/pr-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsws/social-core':
+        specifier: workspace:*
+        version: link:../social-core
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
+
   packages/roles:
     dependencies:
       '@agentsws/contracts':
