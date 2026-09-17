@@ -219,7 +219,13 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 // WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
-import { createConnectSiteFacts, createSiteService, createSiteStore, siteDeckData } from './site.js'
+import {
+  createConnectSiteFacts,
+  createSiteService,
+  createSiteStore,
+  seedDemoSite,
+  siteDeckData,
+} from './site.js'
 import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
 import { createSocialChannels, type SocialFetch } from './social-channels.js'
@@ -1778,6 +1784,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 这个岗位最要紧的那句话就说不出来。
    */
   if (mount !== undefined) seedDemoSocial(boot.social, clock.now())
+
+  /**
+   * WP77（59 §3）：demo 里给建站库放几行，理由与上面那两条逐字相同。
+   *
+   * 那一份故意是**一家刚开起来、还差几项**的店（运费一条没配、政策页缺两张、
+   * 页脚菜单是空的）——检查单在这样的店上才有话可说，全绿的清单演示不出
+   * "缺项高亮"是什么意思。支付与税配好了：那两项建站岗位改不了（51 §3 N2）。
+   */
+  if (mount !== undefined) seedDemoSite(boot.site, clock.now())
 
   // demo：把三份合成会议跑完整管线，工作台上的会议页才有真产出可看
   if (mount !== undefined) {

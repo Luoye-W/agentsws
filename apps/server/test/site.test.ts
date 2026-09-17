@@ -17,6 +17,7 @@ import {
   createConnectSiteFacts,
   createSiteService,
   createSiteStore,
+  seedDemoSite,
   siteDeckData,
 } from '../src/site.js'
 
@@ -346,5 +347,62 @@ describe('WP77 事实经只读 Action 读回来（59 §2）', () => {
       'shopify_admin.get_shop',
       'shopify_admin.list_themes',
     ])
+  })
+})
+
+/**
+ * WP77（59 §3）：demo 的那几行。
+ *
+ * 钉的是**截图与人工验收里那一屏不是空的**，外加一条纪律：种子只在库空的时候放
+ * （同 `seedDemoKol` / `seedDemoSocial`）——demo 重启一次就多一份巡检记录的话，
+ * "上次什么时候查的"当场就说不清了。
+ */
+describe('demo 的那几行建站数据（59 §3）', () => {
+  it('放完之后检查单有话可说：1 项买不成、2 项迟早出事，支付与税都过了', () => {
+    const store = createSiteStore({ workspace_id: WS })
+    seedDemoSite(store, NOW)
+    const run = store.lastRun()
+    expect(run).toBeDefined()
+    // 运费（区域配了、一条费率都没有）= 唯一那个 blocker
+    expect(run?.blockers).toBe(1)
+    expect(run?.items.find((i) => i.id === 'shipping')?.state).toBe('missing')
+    // 政策页缺两张 + 页脚菜单是空的……导航那一项只看主菜单，所以 warning 是政策页那一条
+    expect(run?.warnings).toBe(1)
+    expect(run?.missing_policies).toEqual(['terms_of_service', 'shipping'])
+    expect(run?.ready).toBe(false)
+    // 支付与税配好了：那两项建站岗位改不了（51 §3 N2），留成缺口只会让整张单
+    // 都在重复同一句"去后台自己点"
+    expect(run?.items.find((i) => i.id === 'payment')?.state).toBe('ok')
+    expect(run?.items.find((i) => i.id === 'tax')?.state).toBe('ok')
+    // 一格凭据都没有
+    expect(JSON.stringify(run)).not.toContain('token')
+  })
+
+  it('已装 App 与邮件模板各有两行，其中一份模板是**还没启用**的草稿', () => {
+    const store = createSiteStore({ workspace_id: WS })
+    seedDemoSite(store, NOW)
+    expect(
+      store
+        .apps()
+        .map((a) => a.id)
+        .sort(),
+    ).toEqual(['judge-me', 'klaviyo'])
+    expect(store.apps().every((a) => a.installed)).toBe(true)
+    // 装上了 ≠ 我们连得上它的 API（59 §2 那条接缝）：这里只有 directory_kind，没有连接
+    expect(store.apps().every((a) => a.connection_id === undefined)).toBe(true)
+    const enabled = store.template('shipping_confirmation')
+    const draft = store.template('order_confirmation')
+    expect(enabled?.enabled).toBe(true)
+    expect(draft?.enabled).toBe(false)
+    // 两份都不缺必需变量（缺变量那条题在模拟里，不在 demo 里）
+    expect(enabled?.missing_variables).toEqual([])
+    expect(draft?.missing_variables).toEqual([])
+  })
+
+  it('只在库空的时候放：跑两次还是一条巡检记录', () => {
+    const store = createSiteStore({ workspace_id: WS })
+    seedDemoSite(store, NOW)
+    seedDemoSite(store, '2026-09-18T04:00:00.000Z')
+    expect(store.runs()).toHaveLength(1)
   })
 })

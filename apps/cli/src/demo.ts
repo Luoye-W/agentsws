@@ -745,7 +745,24 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 近 30 天表现 / 待回评论 vs 待审入群 / 待处理 / 群发队列 / 活跃度），
   // 只挂一条就只看得见一半，56 §2 那张表在 demo 里就演示不完整。
   // 社媒库那几行由 `seedDemoSocial` 放（`apps/server/src/social.ts`）。
-  for (const role of ['dtc.store', 'dtc.content', 'kol.youtube', 'social.meta', 'social.discord']) {
+  // WP77（59 §3）：**建站**岗位挂**四条**（岗位模板 `positions/site.yml` 默认就是全勾）。
+  // 3 人 pack 的 `assignments.yml` 里整站搭建那一条本来就挂在店主身上（3 人公司里
+  // 店是他自己搭的），而 demo 只以王岚的身份登录，所以这里补齐。
+  // 四条各看自己那几块，合起来才是 59 §3 那一屏：上线检查单（缺项高亮）/
+  // 主题副本与预览 / 待审改动三车道 / 已装 App / 邮件模板状态。只挂一条的话
+  // 后面那三块在演示与截图里一眼都看不到。
+  // 建站库那几行由 `seedDemoSite` 放（`apps/server/src/site.ts`）。
+  for (const role of [
+    'dtc.store',
+    'dtc.content',
+    'kol.youtube',
+    'social.meta',
+    'social.discord',
+    'site.shopify-build',
+    'site.shopify-theme',
+    'site.shopify-email',
+    'site.shopify-apps',
+  ]) {
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,

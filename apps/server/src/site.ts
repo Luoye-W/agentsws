@@ -842,3 +842,119 @@ export function createConnectSiteFacts(options: {
     shop: () => options.shop?.(),
   }
 }
+
+/* ── demo 的那几行（59 §3 截图与人工验收） ───────────────────────────── */
+
+/**
+ * `agentsws demo` 用的那几行建站数据。
+ *
+ * 为什么要有它：建站库是**我们自己的库**（三张表），合成 pack（`packs/`）里没有
+ * 它的行——而 demo 里如果这几块全是空的，建站这个岗位在演示与截图里就看不出
+ * 任何东西（同 `seedDemoKol` / `seedDemoSocial`，逐字同一条理由）。
+ *
+ * 数据本身是**演示数据**，不是假装的真数据。这一份故意造成一家**刚开起来、
+ * 还差几项**的店：运费一条都没配（blocker，顾客结不了账）、四张政策页缺两张、
+ * 页脚菜单还是空的（warning）。检查单在这样的店上才有话可说——全绿的清单
+ * 演示不出"缺项高亮"是什么意思。
+ *
+ * 支付与税**配好了**：那两项建站岗位改不了（51 §3 N2），留成缺口只会让整张单
+ * 都在重复同一句"去后台自己点"。
+ *
+ * 一格凭据都没有：App 那两行只写"装了没有"，API key 是连接页那条路的事。
+ */
+export function seedDemoSite(store: SiteStore, now: string): void {
+  if (store.runs().length > 0) return
+  const nowMs = Date.parse(now)
+  const iso = (offsetMs: number): string => new Date(nowMs + offsetMs).toISOString()
+  const DAY = 86_400_000
+
+  const facts: LaunchCheckFacts = {
+    domain: { primary: 'https://nordvolt.com', custom: true, ssl: true },
+    payment: { providers: ['shopify_payments', 'paypal'], test_mode: false },
+    tax: { configured: true, regions: ['US', 'CA'] },
+    // 区域配了、一条费率都没有——这一条就是 demo 里那个 blocker
+    shipping: { zones: 2, rates: 0 },
+    policies: { present: ['refund', 'privacy'] },
+    navigation: { main_menu_items: 5, footer_menu_items: 0 },
+    apps: { installed: ['judge-me', 'klaviyo'] },
+    theme: { published: { id: 'thm_live', name: 'Dawn — Nordvolt 改' } },
+  }
+  const result = runLaunchChecklist(facts, { at: iso(-2 * 3_600_000) })
+  store.saveRun({
+    id: 'lc_demo_1',
+    schema_version: 1,
+    workspace_id: store.workspace_id,
+    shop: 'nordvolt.myshopify.com',
+    items: result.items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      state: i.state,
+      severity: i.severity,
+      detail: i.detail,
+      fix: i.fix,
+      ...(i.fixable_by === undefined ? {} : { fixable_by: i.fixable_by }),
+    })),
+    blockers: result.blockers,
+    warnings: result.warnings,
+    ready: result.ready,
+    missing_policies: [...result.missing_policies],
+    missing_apps: [...result.missing_apps],
+    checked_at: result.checked_at,
+  })
+
+  // 装了两个（目录里认识的那两个），其中 Judge.me 装上了却还没把 API key 给我们——
+  // 59 §2 那条接缝在演示里的落点：「装上它」与「我们连不连得上它」是两件事。
+  store.saveApp({
+    id: 'judge-me',
+    schema_version: 1,
+    workspace_id: store.workspace_id,
+    name: 'Judge.me',
+    installed: true,
+    known: true,
+    scopes: ['read_products', 'write_content'],
+    directory_kind: 'reviews',
+    installed_at: iso(-30 * DAY),
+    updated_at: iso(-30 * DAY),
+  })
+  store.saveApp({
+    id: 'klaviyo',
+    schema_version: 1,
+    workspace_id: store.workspace_id,
+    name: 'Klaviyo',
+    installed: true,
+    known: true,
+    scopes: ['read_customers', 'read_orders'],
+    directory_kind: 'email_marketing',
+    installed_at: iso(-12 * DAY),
+    updated_at: iso(-12 * DAY),
+  })
+
+  // 一份改过、已经在用的（发货通知），一份改过但**还没启用**的草稿（订单确认）。
+  // 后者在面板上就是"待启用"那一车道里那张卡的来源——启用那一下永远人审。
+  const shipping = notificationType('shipping_confirmation')
+  store.saveTemplate({
+    id: 'shipping_confirmation',
+    schema_version: 1,
+    workspace_id: store.workspace_id,
+    notification_type: 'shipping_confirmation',
+    name: shipping?.name ?? { zh: '发货通知', en: 'Shipping confirmation' },
+    subject: '你的 Nordvolt 包裹已经发出（{{ order.name }}）',
+    body: '{{ customer.first_name }}，{{ order.name }} 已经发出。\n运单号：{{ fulfillment.tracking_number }}\n{{ fulfillment.tracking_url }}',
+    enabled: true,
+    missing_variables: [],
+    updated_at: iso(-9 * DAY),
+  })
+  const confirmation = notificationType('order_confirmation')
+  store.saveTemplate({
+    id: 'order_confirmation',
+    schema_version: 1,
+    workspace_id: store.workspace_id,
+    notification_type: 'order_confirmation',
+    name: confirmation?.name ?? { zh: '订单确认', en: 'Order confirmation' },
+    subject: '收到你的订单啦（{{ order.name }}）',
+    body: '{{ customer.first_name }}，我们收到了 {{ order.name }}。\n合计 {{ order.total_price }}，稍后发出。',
+    enabled: false,
+    missing_variables: [],
+    updated_at: iso(-1 * DAY),
+  })
+}
