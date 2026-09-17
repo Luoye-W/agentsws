@@ -19,6 +19,18 @@ packageExtensions:
     peerDependencies:
       preact: '^10.19.2'
       '@preact/signals': '^2.0.2'
+# WP92（55 §10）：腾讯 BrowserSkill 的 dsh 插件把 peer 写成 `^0.1.0-rc.6`，而我们整棵树
+# 是 `0.1.6-alpha.1`——semver 的预发布规则下这两个**不相交**（预发布版只满足同一组
+# major.minor.patch 上带预发布的比较符）。不管的话 pnpm 会去 registry 另找一份 dsh
+# 装进插件自己的 node_modules，那等于同一棵组合里出现两份 `dsh-tools`，服务与 hook
+# 全都对不上。所以把这三个 peer 的范围**钉到树里已经有的那一版**（作用域只到这个包，
+# `包>peer` 的选择器写法），让它链现成的那一份。剩下三个 `dsh-client-ui-*` 与 react 是
+# optional peer：插件那层 React 悬浮层是给 dsh 自己的 web 客户端用的，headless 组合里
+# 一个都不加载，所以一个都不装。
+overrides:
+  '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-attachment': '0.1.6-alpha.1'
+  '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-tools': '0.1.6-alpha.1'
+  '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-llm': '0.1.6-alpha.1'
 
 allowBuilds:
   esbuild: true
@@ -326,3 +338,12 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-workflow@0.1.6-alpha.1'
   - '@deepseek-ai/dsh-workspace@0.1.6-alpha.1'
   - '@deepseek-ai/dsh@0.1.6-alpha.1'
+  # WP92（55 §10）：腾讯 BrowserSkill 的**官方** dsh 插件（MIT，`Tencent/BrowserSkill`）。
+  # 写死 0.3.0 一个版本：排除的是这一版，不是这个包——下一版出来还得再决定一次。
+  # 核实过的三件（做的时候逐个看的，不是抄 README）：
+  # - 没有 postinstall / install / prepare 脚本，所以**不需要**进 allowBuilds；
+  # - 没有原生模块、不下载任何二进制（`bsk` 由我们自己钉版本 + sha256 装，见
+  #   `browserskill.lock.json`）；
+  # - 运行时只 import `@deepseek-ai/cordis` / `-dsh-tools` / `-schemastery`（都已在树里），
+  #   React 那几个 peer 是 optional 的客户端 UI，headless 组合里一个都不加载。
+  - '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0'

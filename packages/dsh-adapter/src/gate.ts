@@ -36,11 +36,11 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import type { PostToolDecision, PreToolDecision, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import { browserBrief, checkBrowserNavigation } from './browser.js'
+import { anyBrowserToolName, browserBrief, checkBrowserNavigation } from './browser.js'
+import { browserSkillToolName, isBrowserSkillHandoff } from './browserskill.js'
 import { presetToolNames } from './preset.js'
 import { inferRefs, plainText } from './reading.js'
 import {
-  browserToolName,
   buildToolDefinitions,
   classifySideEffect,
   DRAFT_TOOL,
@@ -207,8 +207,15 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   const presetTools = new Set(presetToolNames(request))
   /** `server_name` → 那台服务器上被人勾成"只读"的工具（`McpServerRecord.read_tools`）。 */
   const mcpReadTools = mcpReadToolMap(request)
+  /*
+   * WP92（55 §10）：第二种浏览器（BrowserSkill）的工具是**六个裸名**（`browser_page` …），
+   * 没有前缀，所以"是不是浏览器工具"这一问由 `anyBrowserToolName` 回答（两张表各认各的；
+   * 一次运行只挂一种，不会同时命中）。这一整组在不在，照旧只取决于 `RunRequest.browser`。
+   */
   const allowed = (name: string): boolean =>
-    allow.has(name) || presetTools.has(name) || (browserOn && browserToolName(name) !== undefined)
+    allow.has(name) ||
+    presetTools.has(name) ||
+    (browserOn && anyBrowserToolName(name) !== undefined)
 
   // Agent 层在场时用真 Agent 当 scope key（官方语义）；没有时退回一个占位键 + 自开 scope。
   const agent: object = input.agent ?? { preset: request.runtime.preset, run_id: request.id }
@@ -450,8 +457,18 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
      * 「AI 在我的浏览器里动了手」在时间线上的那一行，与 `tool.call` / `tool.result`
      * 一起构成 16 §2 的 Model-visible ⟺ logged。
      */
-    if (effect === 'write_external' && browserToolName(exec.name) !== undefined) {
+    if (effect === 'write_external' && anyBrowserToolName(exec.name) !== undefined) {
       sink({ type: 'progress', step: 'browser_write', note: exec.name })
+    }
+    /*
+     * WP92（55 §10「人接管」）：`browser_assist{action:'request-help'}` 是 BrowserSkill
+     * 自带的人接管——它不替用户动手，只是在他自己的浏览器里弹一层"请你来做这一步"。
+     * 所以**两档都放行**（公司端也放行：让人来做正是公司端想要的那条路），
+     * 但要在时间线上留一行——"AI 卡住了，把活交回给人"这件事，人应该看得见。
+     */
+    const bskShort = browserSkillToolName(exec.name)
+    if (bskShort !== undefined && isBrowserSkillHandoff(bskShort, args)) {
+      sink({ type: 'progress', step: 'browser_handoff', note: exec.name })
     }
     return next()
   })
@@ -573,6 +590,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
           browserBrief({
             allowedHosts: request.allowed_hosts,
             policy: request.tools.side_effect_policy,
+            ...(request.browser === undefined ? {} : { mode: request.browser.mode }),
           }),
         ]
       : []),

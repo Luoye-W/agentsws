@@ -15,6 +15,7 @@ import { isMcpReadTool } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { browserSkillToolName, classifyBrowserSkillEffect } from './browserskill.js'
 import { DshAdapterError } from './errors.js'
 import type { DraftArgs, StageArgs } from './gate.js'
 import type { ToolSideEffect } from './types.js'
@@ -184,6 +185,15 @@ export function classifySideEffect(
     }
     return BROWSER_READ_TOOLS.has(browser) ? 'read_external' : 'write_external'
   }
+  /*
+   * WP92（55 §10）：第二种浏览器（腾讯 BrowserSkill）的六个工具。
+   *
+   * 它们是**裸名**（`browser_page` / `browser_inspect` …，没有 `mcp__…__` 前缀），
+   * 而且一个名字管好几件事，所以判定只能看 `args.action`——表在
+   * `browserskill.ts` 的 `BROWSERSKILL_READ_ACTIONS` 里，表外一律按写。
+   */
+  const bsk = browserSkillToolName(tool)
+  if (bsk !== undefined) return classifyBrowserSkillEffect(bsk, args)
   /*
    * WP86（55 §4 第三层）：preset 挂上来的 MCP 工具。
    *

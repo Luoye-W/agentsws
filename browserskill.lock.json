@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "WP92（55 §10）：腾讯 BrowserSkill 的钉版本表。上游哨兵盯的是这个文件。",
+    "`cli` 那一段逐字抄自上游 release 的 version.json（cli-v0.3.0，2026-09-17）——",
+    "我们自己下载 + 校验 sha256 + 装到 AGENTSWS_DATA_DIR/bin/bsk，不用它的 install.sh",
+    "（那个脚本会改用户的 ~/.zshrc，而且校验失败只是警告）。",
+    "升版本 = 改这个文件里的 version / tag / sha256 + `packages/dsh-adapter` 的插件版本，",
+    "两边一起改、一起过测试；daemon 的自动更新一律关（BSK_AUTO_UPDATE=off）。"
+  ],
+  "cli": {
+    "version": "0.3.0",
+    "tag": "cli-v0.3.0",
+    "released_at": "2026-09-17T02:22:15.692Z",
+    "release_url": "https://github.com/Tencent/BrowserSkill/releases/tag/cli-v0.3.0",
+    "assets": {
+      "darwin-arm64": {
+        "url": "https://github.com/Tencent/BrowserSkill/releases/download/cli-v0.3.0/bsk-v0.3.0-aarch64-apple-darwin.tar.gz",
+        "sha256": "f85b2d463d1928f79850ec95c7f812c1dfb844bb1d5d6bbf961e813f28d00df2"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/Tencent/BrowserSkill/releases/download/cli-v0.3.0/bsk-v0.3.0-x86_64-apple-darwin.tar.gz",
+        "sha256": "887ac94f43f3896e25843ca055d4fb163f60dccdd3eed1db27fbe0d6c518e483"
+      },
+      "linux-x64": {
+        "url": "https://github.com/Tencent/BrowserSkill/releases/download/cli-v0.3.0/bsk-v0.3.0-x86_64-unknown-linux-musl.tar.gz",
+        "sha256": "0eb2b40aff955898d21c1adfc70a3d6c84da9730b39b6fd4d5c12457274d0260"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/Tencent/BrowserSkill/releases/download/cli-v0.3.0/bsk-v0.3.0-aarch64-unknown-linux-musl.tar.gz",
+        "sha256": "60c61f740ae820a085425e65e914ea0d68c21ce87f7038a29a372fd8d63896db"
+      },
+      "windows-x64": {
+        "url": "https://github.com/Tencent/BrowserSkill/releases/download/cli-v0.3.0/bsk-v0.3.0-x86_64-pc-windows-msvc.zip",
+        "sha256": "cd31665559d0faae2cfb79ab1c3cb6854bce10b4fde510be015456e8370f629e"
+      }
+    }
+  },
+  "plugin": {
+    "name": "@wxg-prc-cpg/browser-skill-dsh-plugin",
+    "version": "0.3.0"
+  },
+  "extension": {
+    "chrome": "https://chromewebstore.google.com/detail/hhcmgoofomhgciiibhipgmgkgnoenaoi",
+    "edge": "https://microsoftedge.microsoft.com/addons/detail/browserskill/emacgiaaaiojkkpkddmmdfhmokgmnikg"
+  }
+}

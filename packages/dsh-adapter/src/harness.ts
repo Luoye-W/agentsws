@@ -30,7 +30,9 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
+import * as BrowserSkillPlugin from '@wxg-prc-cpg/browser-skill-dsh-plugin'
 import { browserProviderConfig } from './browser.js'
+import { applyBskEnv, browserSkillPluginConfig, bskBinaryUsable } from './browserskill.js'
 import { DshAdapterError } from './errors.js'
 import type { GateApi, GateInput } from './gate.js'
 import { installGate } from './gate.js'
@@ -241,7 +243,13 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * 也不会起任何 MCP 子进程。
    */
   const browser = input.request.browser
-  if (browser !== undefined) root.plugin(BrowserUseRegistry)
+  /*
+   * WP92（55 §10）：**一次运行只挂一种浏览器**。第二种（腾讯 BrowserSkill）走的不是
+   * 官方 `dsh-browser-use` seam——那个插件直接 `ctx.tools.register` 六个工具，
+   * 所以这一档连 `browserUse` 这个服务都不挂（挂了也没人注册 provider，白占一个槽）。
+   */
+  const browserSkill = browser?.mode === 'browserskill'
+  if (browser !== undefined && !browserSkill) root.plugin(BrowserUseRegistry)
   // 串行：并行工具调用会让两档的事件顺序不可比（17 §4「换宿主不换语义」）
   root.plugin(AgentLoop, { maxParallelToolCalls: 1, agents: [] })
   /*
@@ -271,7 +279,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     'llm',
     'agents',
     'sessions',
-    ...(browser === undefined ? [] : ['browserUse']),
+    ...(browser === undefined || browserSkill ? [] : ['browserUse']),
     ...(preset === undefined ? [] : ['agentPresets']),
     // Cordis 的规矩：没 `inject` 过的服务连读都读不到（"cannot get property … without inject"）
     ...(credentials === undefined ? [] : ['credentials']),
@@ -330,6 +338,34 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
         // `tools.restrict` 则必须在 Agent 的 scoped ctx 上调——全局 ctx 会抛。
         gate = installGate(ctx, { ...input, agent, agentCtx })
         if (browser === undefined) return
+        if (browserSkill) {
+          /*
+           * WP92：腾讯官方的 dsh 插件（`@wxg-prc-cpg/browser-skill-dsh-plugin`）。
+           * 挂的位置与官方 provider **一模一样**：同一个 `setup`、同一步（mount →
+           * installGate → 浏览器），挂在 Agent 的 scoped ctx 上——实测它注册的六个工具
+           * 因此是 **scoped registration**（`ctx.tools.restrict` 遮不住、也不能列进
+           * 白名单，列了当场抛 `unknown global tools`）。详见 AGENT-LAYER §9.7。
+           */
+          const config = browserSkillPluginConfig(browser)
+          if (!bskBinaryUsable(config.bskPath)) {
+            /*
+             * **装好了才挂**。`bskPath` 指到一个不存在的文件时，插件加载时那次
+             * `bsk --version` 探活 spawn 失败却仍被记进 in-flight 表，卸载时
+             * `killAll()` 对一个没有 pid 的子进程发 SIGINT——信号落到**我们自己
+             * 这个进程组**上，整个服务进程当场退出（实测，AGENT-LAYER §9.7）。
+             * 所以这里宁可让这次运行明明白白地失败。
+             */
+            throw new DshAdapterError(
+              'invalid_input',
+              `BrowserSkill 没装好：${config.bskPath} 不在，或者不能执行（设置页的第 ② 步「装 bsk」）`,
+            )
+          }
+          // 两个更新开关（55 §10）：不自己换版本，也不去 GitHub 查——实测 `off`
+          // 只关掉"装"，"查"要另设清单地址（`applyBskEnv` 的注释里有复现结论）。
+          applyBskEnv()
+          await agentCtx.plugin(BrowserSkillPlugin, config as never)
+          return
+        }
         /*
          * 官方 Playwright MCP provider。`setup` 是**只装配**的一跳（官方 `dsh-agent`
          * 的原话：setup composes, it never drives），而且它跑在 `agent/created`
