@@ -67,6 +67,24 @@ EOT
 fi
 set -a; . "$ENV_FILE"; set +a
 
+# ── realistic 档的真模型（26 §4 / 22 §5）────────────────────────────────────
+# `pnpm simulate --tier realistic` 从**同一个** $ENV_FILE 取模型，key 只经环境变量名传进网关，
+# 业务代码里 grep 不到 key。下面这几行是变量名与**占位符**，值自己填进 $ENV_FILE，别写进仓库：
+#
+#   AGENTSWS_SIM_MODEL_PROVIDER=<provider>        # deepseek / openai / qwen …（只是记账与路由用的名字）
+#   AGENTSWS_SIM_MODEL_NAME=<model>               # 拿 `GET {base}/models` 列出来的名字，别手编
+#   AGENTSWS_SIM_MODEL_BASE_URL=<https://…/v1>    # OpenAI 兼容口的根地址
+#   AGENTSWS_SIM_MODEL_API_KEY=<key>              # 只放这里；想换个变量名就设 _API_KEY_ENV
+#   AGENTSWS_SIM_MODEL_REGION=cn|global           # 22 §2 数据出境：cn 驻留下禁 global
+#   AGENTSWS_SIM_MODEL_PRICE_IN/_OUT/_CACHED=<每百万 token>   # 不设就查内置价目表（catalog.json）
+#
+# 阿里云百炼 **Token Plan**（按套餐 Credits 抵扣，不按 token 计费）：
+#   - base_url 是 token-plan 那一口（`…/compatible-mode/v1`），与百炼按量付费的那一口不是同一个；
+#   - key 是这个套餐**专属**的（`sk-sp-` 开头），拿按量付费的 key 打这一口不通；
+#   - 三个价格变量一律填 `0`：钱在套餐里已经付过，记账记 0 才不会把 `--max-cost-base` 算重。
+#     **代价是 `--max-cost-base` 这道闸门在这一档形同虚设**（花费恒为 0，永远不会触顶），
+#     跑之前自己按场景条数估一下 token，别指望预算闸门拦你。
+
 # 代理 fake-IP 模式（Clash / Surge 的 198.18.0.0/15）会把外网域名解析成保留段地址，
 # OpenConnector 的出站防护会把它当内网拦下（"must not resolve to private or reserved IP"）。
 # 实测容器加 --dns 也绕不开（代理在系统层劫持了 DNS），所以检测到就给一份常见 SaaS 域名白名单；

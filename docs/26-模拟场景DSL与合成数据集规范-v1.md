@@ -71,6 +71,29 @@ packs/dtc-3c-3p/            # 3 人 3C 配件独立站，英文客户，中文�
 
 报告：每场景通过 / 失败 + 不变量违反明细 + 指标表（采纳率、干预率、guardrail、队列时延、token / 工作项、缺口数、L 变化）+ 与基线的 delta；合并门禁 = fast 全过且指标不劣化（阈值可配，默认 5%）。
 
+### realistic 档的报告目录里有什么、怎么读（WP87）
+
+fast 档只需要"过没过"；realistic 档拿真模型跑，"没过"本身没有信息量——要能回答**为什么**。
+所以这一档在 `--report <dir>` 里多落三样东西（`out/` 已在 `.gitignore` 里，都不进仓库）：
+
+| 文件 | 是什么 | 什么时候看它 |
+|---|---|---|
+| `<场景>.events.jsonl` | 第一行是这条场景的运行摘要（起止、几次运行、有哪些审批卡、发了几封信、被挡下的规则），之后每行一条 `RunEvent`：`turn.started` / `tool.call` / `tool.result`（含 `status: blocked` 与原因）/ `text.delta` / `turn.ended`；每条运行前有一行 `kind: "run"`（预算、这次给了哪些工具、结束状态） | 想知道**模型到底做了什么**：调了哪些工具、参数是什么、工具回了什么错、哪一步被预算或门禁挡下 |
+| `<场景>.model.jsonl` | 每次模型往返一行**摘要**：`request`（消息条数与角色分布、总字数、这一轮手上有哪些工具、带回去了几条 `tool_calls` 与几条 `reasoning`）、`response`（`tool_calls` 的名字、`stop` = `tool_calls` / `text` / `empty`、`reasoning_chars`、`usage`、耗时）、`error`（上游 400 / 超时的原话，已遮罩凭据）。**不含消息正文、不含凭据** | 想知道**模型为什么没调工具**：是这一轮压根没给它工具（`request.tools` 空）、还是它回了纯文本（`stop: "text"`）、还是上游直接报错；思考模型的多轮有没有把 `reasoning` 带回去看 `request.carried_reasoning` |
+| `diagnostics.json` + `summary.md` 末尾的「realistic 诊断」段 | 每条场景：通过 / 失败、失败原因（不变量 / 断言 / 抛错各一句）、真模型调用次数、in/out token、`cost_base`、模型**点过的工具**、停法分布；最后一行是整次运行的合计 | 想一眼看完"这一轮 38 条里哪几条红、各自卡在哪、一共花了多少" |
+
+两条纪律：
+
+1. **一条场景出错不再让整次运行停。** realistic 档里一条场景抛出的 `SimulationError`（例如
+   `$last_outbound_draft` 找不到）记成这条场景的一条没过的断言 `expected.scenario_error`，
+   证据照收、报告照出、后面的场景照跑。fast / soak 档不变——那两档"抛出即整次失败"的语义是门禁的底。
+2. **摘要里没有正文与凭据。** `model.jsonl` 只有形状与计数；上游错误体会被遮罩（`sk-***`）。
+   带正文的那一份是 `events.jsonl`，它只写进 `out/`，不进仓库、不进事件日志之外的任何地方。
+
+读法（一条场景红了怎么查）：先在 `diagnostics.json` 里看它的 `reasons` 与 `tools_called`；
+要是"模型没调某个工具"，翻 `<场景>.model.jsonl` 看那一轮 `request.tools` 里有没有它、`stop` 是什么；
+要是"调了但没成事"，翻 `<场景>.events.jsonl` 里那条 `tool.result` 的 `status` 与 `reason`。
+
 ## 5. API / CLI
 
 `agentsws simulate --tier fast|realistic|soak --scenario <glob> --pack <id> --seed N --report out/`；
@@ -117,7 +140,7 @@ parity 比的才是运行时本身。`stub` 运行时不受影响（它自己就
 | §4 fast | `ci.yml` | 13 条场景 × 六条不变量 × 三个运行时（stub / direct / dsh-subprocess） |
 | §4 realistic | `nightly.yml` job `realistic` | 真模型经网关，key 只从环境变量（`DEEPSEEK_API_KEY` 或 `AGENTSWS_SIM_MODEL_API_KEY`）；**没有 key 整档跳过并说明，不红**；同 seed 下客户来信内容固定（`out/realistic-cache/` 写一次、之后回放）；花费按 `model.usage` 记账，超 `--max-cost-base` 就停 |
 | §4 soak | `nightly.yml` job `soak` | 同一个世界连着过 N 天：按到达率来信、注入连接器故障 / 模型停机 / 关库再开、每天一次对账；按天断言队列不涨、预占收口、`unknown` 清零、SQLite 有上界；报告带按天曲线 |
-| §4 报告 | `--report out/` | `summary.json` / `.txt` / **`.md`** / **`.html`**（judge 分数、指标表与基线 delta）；soak 另出 `soak.json` / `soak.md` |
+| §4 报告 | `--report out/` | `summary.json` / `.txt` / **`.md`** / **`.html`**（judge 分数、指标表与基线 delta）；soak 另出 `soak.json` / `soak.md`；realistic 档另出 `diagnostics.json` 与每场景的 `.events.jsonl` / `.model.jsonl`（WP87，见 §4 那一段） |
 | §4 合并门禁 | `report.ts` `gate()` | fast 全过 + 指标不劣化（默认 5%）；基线按运行时分档（`runtimes.stub|direct|dsh`） |
 | §5 CLI | `apps/cli` | `simulate` / `synth` / `replay` / `demo` |
 | §6 一致性用例 | `packages/simulation/test/` | 四条都有测试；另加 WP32 的 15 条（三档、judge、15 / 50 人 pack） |
