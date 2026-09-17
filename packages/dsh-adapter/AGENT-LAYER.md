@@ -526,3 +526,67 @@ MCP 协议**没有**读写标注，名字前缀也不可信（一台服务器叫
 
 `test/seams.test.ts` 的 30 条**一条没删**，两条断言改了落点（见 §10.2）。
 `browser-seam.test.ts` 23 条一条没动。
+
+## 12. 订阅登录：ChatGPT / Claude（WP90，55 §9 Q8）
+
+§10 是"这条职责有哪些连接"，这一节是"**这次运行用谁的模型额度**"。同一条纪律：
+**不用的东西不挂**——不走订阅的运行里连 `dsh-llm-pi-ai` 都不装。
+
+### 12.1 一次走订阅的运行
+
+```
+RunRequest.runtime.model.provider === 'openai-codex' | 'anthropic'
+  └─ createHarness
+       ├─ root.plugin(LlmRuntime)
+       ├─ installSubscriptionLlm(root)            ← @deepseek-ai/dsh-llm-pi-ai，只开这两个 provider
+       ├─ root.plugin(<options.credentials>)      ← 第三条路指向本机加密秘密库
+       ├─ ctx.llm.registerAdapter(['agentsws-gateway'], GatewayLlmAdapter)   ← 照旧，两边并存
+       ├─ watchSubscriptionCalls(ctx, …)          ← llm/stream waterfall：预算 / 请求事件 / 用量
+       └─ ctx.agents.create({ agentOptions: { provider: <订阅 provider>, model } })
+```
+
+五个门禁一个不少（工具、提示词、审批、上下文、预算），因为它们挂的是 Agent 与
+`ctx.tools`，与模型走哪条路无关。提示词仍然是我们那一整段 `complete: true`。
+
+### 12.2 三件实测出来的事
+
+1. **`ctx.llm` 的 provider 名是独占的。** 官方 pi-ai 插件 `registerAdapter(routes, adapter)`
+   占了 `openai-codex` / `anthropic` 两个名字；想在它外面再包一个 `LlmAdapter` 会被拒。
+   所以记账走 `llm/stream` 这道 **waterfall**（上游原话："call `next()` to reach the
+   resolved adapter's stream"）——进去之前一刀（预算 + `progress{model_request}`），
+   出来之后一刀（`usage` chunk → `Completion`，`cost_base` **恒 0**）。
+2. **`modifyRecord` 必须发 `credentials/record-updated`。** 官方 `authorization.begin()`
+   靠这条事件确认"这一次尝试里真的提交了记录"；不发就抛 `NOT_COMMITTED`，
+   登录明明成功了却报失败。
+3. **设备码 / 浏览器不是官方 seam 的方法 id。** flow 只报 `oauth` / `api-key`；
+   两种登录方式是 `pi-ai` 在流**里面**用一个 `select` 问的。我们在 `AuthorizationInteraction.prompt`
+   里代答那一问，**只答它自己列出来的 id**——上游改了选项就当场报错，不瞎答一个。
+   顺带查出来：`anthropic` 那条流**没有设备码**，只有浏览器 + 贴授权码。
+
+### 12.3 凭据在哪
+
+记录键是官方的 `llm-pi-ai/<provider>`（`dsh-llm-pi-ai` 的 `RECORD_SCOPE`），
+payload 是 `pi-ai` 自己的 OAuth 凭据，**我们一个字段都不解释、不改写**（上游把它定义成
+opaque JSON 正是为了让拥有格式的那个库继续拥有它）。落点是
+`@agentsws/credentials-openconnector` 组合 provider 的**第三条路**：
+
+| 半边 | 谁答 |
+|---|---|
+| `CredentialRef`（环境变量名） | 本机引用层 |
+| `CredentialKey`，owner = 工作区 | OpenConnector（只能触发刷新，写不进来） |
+| `CredentialKey`，owner = `llm-pi-ai` | **本机加密秘密库**（真读改写；公司档 / 托管档一律"不存在"） |
+
+### 12.4 回归证据（用例名）
+
+| 事 | 用例 |
+|---|---|
+| 三个 provider 并存、不走订阅就不挂 | `subscription.test.ts` → `(a) 组合…` |
+| 设备码登录 → 落库 → 脱敏 → 登出 | 同上 → `(b) 设备码登录…` |
+| 到期前刷新经 `modifyRecord`，请求头换新 | 同上 → `(c) 刷新…` |
+| 公司档读不到、写被拒 | 同上 → `(d) 公司档…` |
+| 一次带工具调用的运行真的走官方适配器、`cost_base` 0 | 同上 → `(e) 运行…` |
+| token 不进事件 / 结果 / 状态 | 同上 → `(f) 零泄漏…` |
+| 服务端装配与边界 | `apps/server/test/subscription.test.ts`（8 条） |
+
+对手方是 `test/fixtures/fake-openai.ts`——拦 `globalThis.fetch` 的替身（设备码端点 +
+token 端点 + 刷新 + `/codex/responses` 的 SSE）。**它不认识的请求当场抛，CI 一个包都不出网。**
