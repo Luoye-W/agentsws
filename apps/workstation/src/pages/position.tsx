@@ -10,6 +10,7 @@ import { Link2Off, ScanSearch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
+import { CalendarLink } from '@/components/calendar/calendar-link'
 import { connectPathFor } from '@/components/connections/links'
 // WP83（54（将改号 55）§4 第二层）：「连上这 N 个就能开工」
 import { PositionConnections } from '@/components/connections/position-connections'
@@ -283,6 +284,10 @@ export function PositionPage(): React.ReactNode {
         而是"还开不了工"；连完最后一个它自己消失，不占地方。
       */}
       <PositionConnections id={id} />
+      {/* WP74：从岗位进日历，默认开"待办 + 会议 + 卡片到期"那三层（任何岗位都成立） */}
+      <div className="flex">
+        <CalendarLink />
+      </div>
       <Tabs
         value={tab}
         onValueChange={(next) => {
