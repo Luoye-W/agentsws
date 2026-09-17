@@ -16,6 +16,7 @@ import type {
   AssignmentId,
   BattleReport,
   CalendarItem,
+  CalendarSource,
   DailyPlan,
   Goal,
   GoalLevel,
@@ -33,6 +34,7 @@ import type {
   TodoStatus,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { CALENDAR_SOURCES } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -234,6 +236,27 @@ function requiredQuery(c: Ctx, name: string): string {
   return raw
 }
 
+/**
+ * `?sources=todo,social_post` → 图层清单（WP74，37 §2.5）。
+ *
+ * 三条：**不传 = 全部**（`undefined`，老调用方行为一个字不变）；认不出来的名字是
+ * `invalid_input`，不是"悄悄忽略"——悄悄忽略的话，界面上少了一层没人知道是为什么；
+ * `sources=` 空串按不传读（浏览器把空的查询参数留在 URL 上太常见了）。
+ */
+function parseSources(raw: string | undefined): CalendarSource[] | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined
+  const names = raw
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x !== '')
+  const bad = names.filter((n) => !(CALENDAR_SOURCES as readonly string[]).includes(n))
+  if (bad.length > 0)
+    throw new ApiError('invalid_input', `认不出这些图层：${bad.join(', ')}`, {
+      details: { allowed: [...CALENDAR_SOURCES] },
+    })
+  return [...new Set(names)] as CalendarSource[]
+}
+
 export interface MatterListFilter {
   kind?: MatterKind
   status?: Matter['status'][]
@@ -313,7 +336,10 @@ export interface WorkPort {
     children: z.infer<typeof SplitBody>['children'],
   ): MaybePromise<{ parent: Todo; children: Todo[] }>
 
-  calendar(actor: WorkActor, range: { from: string; to: string }): MaybePromise<CalendarItem[]>
+  calendar(
+    actor: WorkActor,
+    range: { from: string; to: string; sources?: readonly CalendarSource[] },
+  ): MaybePromise<CalendarItem[]>
 
   todayPlan(actor: WorkActor, refresh: boolean): MaybePromise<DailyPlan>
   decidePlan(
@@ -885,7 +911,7 @@ export function workRoutes(): Route[] {
         method: 'get',
         path: '/v1/calendar',
         operationId: 'getCalendar',
-        summary: '日历：会议 / 有排期的待办 / 定时任务 / 卡片到期，四类合一份',
+        summary: '日历：一个日历多图层（会议 / 待办 / 定时 / 卡片到期 / 社媒排期 / 交付物 / 值守）',
         tag: 'work',
         auth: 'bearer',
         assignment: true,
@@ -893,8 +919,13 @@ export function workRoutes(): Route[] {
         params: [
           { name: 'from', in: 'query', required: true, description: '起（含）' },
           { name: 'to', in: 'query', required: true, description: '止（不含）' },
+          {
+            name: 'sources',
+            in: 'query',
+            description: '图层，逗号分隔；**不传 = 全部**（WP74，37 §2.5）',
+          },
         ],
-        returns: '{ items: CalendarItem[], from, to }',
+        returns: '{ items: CalendarItem[], from, to, sources? }',
       },
       async (c, deps) => {
         const from = requiredQuery(c, 'from')
@@ -903,7 +934,17 @@ export function workRoutes(): Route[] {
           throw new ApiError('invalid_input', 'from / to 必须是 ISO8601 时间')
         if (Date.parse(to) <= Date.parse(from))
           throw new ApiError('invalid_input', 'to 必须晚于 from')
-        return ok(c, { items: await workOf(deps).calendar(actorOf(c), { from, to }), from, to })
+        const sources = parseSources(c.req.query('sources'))
+        return ok(c, {
+          items: await workOf(deps).calendar(actorOf(c), {
+            from,
+            to,
+            ...(sources === undefined ? {} : { sources }),
+          }),
+          from,
+          to,
+          ...(sources === undefined ? {} : { sources }),
+        })
       },
     ),
 

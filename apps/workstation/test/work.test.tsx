@@ -354,7 +354,7 @@ describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）'
   })
 })
 
-describe('日历（37 C3：视图 + 排期面）', () => {
+describe('日历（37 C3 + §2.5：一个日历，多图层）', () => {
   // 日历按真实"今天"定周 / 月锚点；用例的 fixture 都在 2026-09-09 那一周，所以把系统时间钉住
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -363,54 +363,132 @@ describe('日历（37 C3：视图 + 排期面）', () => {
   afterEach(() => {
     vi.useRealTimers()
   })
+  /**
+   * Node 25 自带一个实验性的全局 `localStorage`，没给 `--localstorage-file` 时它是残的
+   * （连 `clear()` 都没有）。日历的"记住上次"就落在这上面，所以这一档自己换一个能用的。
+   */
+  let store: Map<string, string>
   beforeEach(() => {
     scheduleTodo.mockClear()
     getCalendar.mockClear()
+    store = new Map()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v)
+      },
+      removeItem: (k: string) => {
+        store.delete(k)
+      },
+      clear: () => {
+        store.clear()
+      },
+      key: () => null,
+      length: 0,
+    })
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
-  it('周视图 7 格、月视图 42 格，四类来源都画得出来', async () => {
+  const host = (): Promise<HTMLElement> => screen.findByTestId('calendar-host')
+
+  it('壳是 Schedule-X：周格与事件都画得出来（不是我们自己那张表格）', async () => {
+    const { container } = renderWithProviders(<CalendarPage />)
+    const el = await host()
+    await waitFor(() => {
+      expect(el.querySelector('.sx__calendar')).not.toBeNull()
+    })
+    // 事件按 id 画进去（`cal_<来源>_<id>`，与服务端那一份生成规则同一套）
+    await waitFor(() => {
+      expect(el.querySelector('[data-event-id="cal_meet_1"]')).not.toBeNull()
+    })
+    // 自己画的那张月格表已经没有了
+    expect(container.querySelectorAll('[data-testid="calendar-day"]')).toHaveLength(0)
+  })
+
+  it('图层开关七层都在；勾掉一层这一屏就不画它，但数字还在', async () => {
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
     renderWithProviders(<CalendarPage />)
-    expect(await screen.findAllByTestId('calendar-day')).toHaveLength(7)
-    expect(screen.getAllByTestId('calendar-item')[0]?.getAttribute('data-source')).toBe('meeting')
-    await user.click(screen.getByRole('button', { name: '月' }))
-    expect(await screen.findAllByTestId('calendar-day')).toHaveLength(42)
+    const el = await host()
+    expect(screen.getAllByTestId('calendar-layer')).toHaveLength(7)
+
+    const meetingLayer = screen
+      .getAllByTestId('calendar-layer')
+      .find((n) => n.getAttribute('data-layer') === 'meeting')
+    if (meetingLayer === undefined) throw new Error('没有会议这一层')
+    await waitFor(() => {
+      expect(meetingLayer.querySelector('[data-testid="calendar-layer-count"]')?.textContent).toBe(
+        '1',
+      )
+    })
+    await waitFor(() => {
+      expect(el.querySelector('[data-event-id="cal_meet_1"]')).not.toBeNull()
+    })
+
+    await user.click(meetingLayer.querySelector('input') as HTMLInputElement)
+    await waitFor(() => {
+      expect(el.querySelector('[data-event-id="cal_meet_1"]')).toBeNull()
+    })
+    // 勾掉的那一层还在：数字照数（看不出"关掉的那层里有东西"的开关是没用的）
+    expect(meetingLayer.querySelector('[data-testid="calendar-layer-count"]')?.textContent).toBe(
+      '1',
+    )
+    // 勾掉一层不该重新请求：过滤在客户端做
+    expect(getCalendar.mock.calls).toHaveLength(1)
   })
 
-  it('把待办拖到某一天 = 写 scheduled', async () => {
-    renderWithProviders(<CalendarPage />)
-    const cell = (await screen.findAllByTestId('calendar-day'))[3]
-    if (cell === undefined) throw new Error('没有日历格子')
-    const data = new Map<string, string>([['application/x-agentsws-todo', 'td_1']])
-    const dataTransfer = {
-      getData: (type: string) => data.get(type) ?? '',
-      setData: (type: string, value: string) => data.set(type, value),
-      dropEffect: 'none',
-      effectAllowed: 'move',
+  it('日 / 周 / 月 / 议程四个视图；选过的记下来', async () => {
+    const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    const { unmount } = renderWithProviders(<CalendarPage />)
+    await host()
+    for (const label of ['日', '月', '议程']) {
+      await user.click(screen.getByRole('button', { name: label }))
     }
-    const { fireEvent } = await import('@testing-library/react')
-    fireEvent.dragOver(cell, { dataTransfer })
-    expect(cell.getAttribute('data-over')).toBe('true')
-    fireEvent.drop(cell, { dataTransfer })
-    await waitFor(() => {
-      expect(scheduleTodo).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('calendar').getAttribute('data-view')).toBe('agenda')
+    expect(store.get('agentsws.calendar.view')).toBe('agenda')
+
+    unmount()
+    renderWithProviders(<CalendarPage />)
+    await host()
+    // 左栏"日历"点开 = 上次那个视图
+    expect(screen.getByTestId('calendar').getAttribute('data-view')).toBe('agenda')
+  })
+
+  it('?layers= 决定默认开哪几层（从职责页跳进来的那一下）', async () => {
+    renderWithProviders(<CalendarPage />, '/calendar?layers=social_post,todo')
+    await host()
+    const on = screen
+      .getAllByTestId('calendar-layer')
+      .filter((n) => n.getAttribute('data-on') === 'true')
+      .map((n) => n.getAttribute('data-layer'))
+    expect(on).toEqual(['todo', 'social_post'])
+  })
+
+  it('点开一条 = 一张小卡（来源、状态、在事项里打开）', async () => {
+    const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    renderWithProviders(<CalendarPage />)
+    const el = await host()
+    const event = await waitFor(() => {
+      const node = el.querySelector('[data-event-id="cal_meet_1"]')
+      if (node === null) throw new Error('会议那一条还没画出来')
+      return node as HTMLElement
     })
-    const [id, slot] = scheduleTodo.mock.calls[0] as unknown as [
-      string,
-      { start: string; end: string },
-    ]
-    expect(id).toBe('td_1')
-    expect(new Date(slot.start).getHours()).toBe(9)
+    await user.click(event)
+    const card = await screen.findByTestId('calendar-event-card')
+    expect(card.getAttribute('data-source')).toBe('meeting')
+    expect(card.textContent).toContain('会议')
   })
 
   it('翻页会重新取数（窗口在服务端算）', async () => {
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
     renderWithProviders(<CalendarPage />)
-    await screen.findAllByTestId('calendar-day')
+    await host()
     const first = getCalendar.mock.calls.length
     await user.click(screen.getByRole('button', { name: '下一页' }))
-    await screen.findAllByTestId('calendar-day')
-    expect(getCalendar.mock.calls.length).toBeGreaterThan(first)
+    await waitFor(() => {
+      expect(getCalendar.mock.calls.length).toBeGreaterThan(first)
+    })
   })
 })
 

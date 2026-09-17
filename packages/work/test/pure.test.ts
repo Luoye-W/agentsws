@@ -3,7 +3,14 @@
  * 都不碰 IO，所以给同样的输入永远出同样的输出。
  */
 import { describe, expect, it } from 'vitest'
-import { buildCalendar, sortCalendar, todoCalendarItem } from '../src/calendar.js'
+import {
+  buildCalendar,
+  deliverableCalendarItem,
+  socialPostCalendarItem,
+  sortCalendar,
+  standbyCalendarItem,
+  todoCalendarItem,
+} from '../src/calendar.js'
 import { notFound, WorkError } from '../src/errors.js'
 import {
   BEHIND_THRESHOLD_PCT,
@@ -287,6 +294,131 @@ describe('日历（37 C3）', () => {
       ],
     })
     expect(items[0]?.matter_id).toBe('mat_9')
+  })
+
+  // ── WP74：一个日历，多图层 ────────────────────────────────────────
+
+  it('社媒排期上日历：草稿不上（还没有时间）、已发的拖不动、撞车说明原样带过来', () => {
+    expect(
+      socialPostCalendarItem({ id: 'p0', account_id: 'a1', channel: 'meta', status: 'draft' }),
+    ).toBeUndefined()
+    const scheduled = socialPostCalendarItem({
+      id: 'p1',
+      account_id: 'a1',
+      channel: 'meta',
+      status: 'scheduled',
+      scheduled_at: T0,
+      body: '  新品 上线  了 ',
+      conflicts: ['这个号 90 分钟内已经有一条了。'],
+    })
+    expect(scheduled).toMatchObject({
+      source: 'social_post',
+      channel: 'meta',
+      all_day: false,
+      drag: 'reschedule',
+      title: '新品 上线 了',
+      notes: ['这个号 90 分钟内已经有一条了。'],
+    })
+    // 一个时刻画不出来，所以给半小时的块（只为画得出来，不写回任何一张表）
+    expect(scheduled?.end).toBe(plusMs(T0, 30 * 60_000))
+    expect(
+      socialPostCalendarItem({
+        id: 'p2',
+        account_id: 'a1',
+        channel: 'meta',
+        status: 'published',
+        scheduled_at: T0,
+      }),
+    ).toMatchObject({ drag: 'readonly' })
+  })
+
+  it('红人交付物：没交的挂到期那天且拖不动；交了的不再占日历', () => {
+    expect(
+      deliverableCalendarItem({ id: 'dl_1', collaboration_id: 'c1', kind: 'video', due_at: T0 }),
+    ).toMatchObject({ source: 'kol_deliverable', all_day: true, drag: 'readonly' })
+    expect(
+      deliverableCalendarItem({
+        id: 'dl_2',
+        collaboration_id: 'c1',
+        kind: 'video',
+        due_at: T0,
+        submitted_at: T0,
+      }),
+    ).toBeUndefined()
+    expect(
+      deliverableCalendarItem({ id: 'dl_3', collaboration_id: 'c1', kind: 'video', due_at: '' }),
+    ).toBeUndefined()
+  })
+
+  it('值守续期日：一个工作区一条，拖不动', () => {
+    expect(
+      standbyCalendarItem({ workspace_id: 'ws_a', status: 'running', period_end: T0, seats: 2 }),
+    ).toMatchObject({ id: 'cal_standby_ws_a', source: 'standby', all_day: true, drag: 'readonly' })
+    expect(
+      standbyCalendarItem({ workspace_id: 'ws_a', status: 'running', period_end: 'x' }),
+    ).toBeUndefined()
+  })
+
+  it('不传 sources = 全部（老调用方行为一个字不变）；传了只回那几层；空数组一条都不回', () => {
+    const input = {
+      todos: [todo({ id: 'td_s', scheduled: { start: T0, end: plusMs(T0, 3_600_000) } })],
+      social_posts: [
+        {
+          id: 'p1',
+          account_id: 'a1',
+          channel: 'meta' as const,
+          status: 'scheduled' as const,
+          scheduled_at: '2026-09-09T02:00:00.000Z',
+          body: '新品',
+        },
+      ],
+      deliverables: [
+        {
+          id: 'dl_1',
+          collaboration_id: 'c1',
+          kind: 'video' as const,
+          due_at: '2026-09-09T03:00:00.000Z',
+        },
+      ],
+      standby: [
+        {
+          workspace_id: 'ws_a',
+          status: 'running' as const,
+          period_end: '2026-09-09T04:00:00.000Z',
+        },
+      ],
+      cards: [approval({ id: 'apr_due', expires_at: '2026-09-09T06:00:00.000Z' })],
+    }
+    expect(buildCalendar({ range, ...input }).map((i) => i.source)).toEqual([
+      'todo',
+      'social_post',
+      'kol_deliverable',
+      'standby',
+      'card_due',
+    ])
+    expect(
+      buildCalendar({ range: { ...range, sources: ['social_post'] }, ...input }).map((i) => i.id),
+    ).toEqual(['cal_social_p1'])
+    expect(buildCalendar({ range: { ...range, sources: [] }, ...input })).toEqual([])
+  })
+
+  it('会议拖了不直接改：没给 drag 的会议默认按「提改时间」读', () => {
+    const items = buildCalendar({
+      range,
+      todos: [],
+      meetings: [
+        {
+          id: 'cal_meet_1',
+          source: 'meeting',
+          title: '周会',
+          start: '2026-09-09T02:00:00.000Z',
+          end: '2026-09-09T03:00:00.000Z',
+          all_day: false,
+          ref: { type: 'meeting', id: 'mtg_1' },
+        },
+      ],
+    })
+    expect(items[0]?.drag).toBe('propose')
   })
 
   it('排序：同一时刻先占时段的，再全天的，再按 id', () => {

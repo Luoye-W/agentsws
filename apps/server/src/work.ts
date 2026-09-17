@@ -12,6 +12,7 @@ import type {
   ApprovalItem,
   AssignmentId,
   CalendarItem,
+  CalendarSource,
   ClaimPayload,
   Clock,
   Goal,
@@ -32,6 +33,7 @@ import {
   claimOf,
   createWork,
   DAY_MS,
+  type DeliverableLike,
   ms,
   type PoolItem,
   planSummary,
@@ -42,6 +44,8 @@ import {
   reviewSummary,
   reviewTitle,
   type ScheduledTaskLike,
+  type SocialPostLike,
+  type StandbyRenewalLike,
   type Work,
 } from '@agentsws/work'
 
@@ -88,6 +92,17 @@ export interface WorkPortOptions {
   label(ref: { type: string; id: string }): string | undefined
   /** 25 的定时任务；不给就是没有 */
   scheduledTasks?(actor: WorkActor): ScheduledTaskLike[]
+  /**
+   * WP74 的三条新图层（37 §2.5）。三条都是 `?`：不给就是这个部署没有那一摊东西，
+   * 日历少一层而已，别的照常。
+   *
+   * 品牌隔离由**调用方**负责：这三个回调是在 `workPortFor(ws)` 里按品牌闭包起来的，
+   * 所以这一层拿到的永远只是这个品牌自己那一份（社媒帖子尤其——56 §2 一个号只属于一个品牌）。
+   */
+  socialPosts?(actor: WorkActor): SocialPostLike[]
+  kolDeliverables?(actor: WorkActor): DeliverableLike[]
+  /** 值守续期日；一个工作区最多一条，没开通值守就是空 */
+  standbyRenewals?(actor: WorkActor): StandbyRenewalLike[]
   /** WP23 的会议；不给就是没有（会议上日历，37 §2 表第三行） */
   meetings?(
     actor: WorkActor,
@@ -176,15 +191,40 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
   const waitingCount = (items: readonly ApprovalItem[]): number =>
     items.filter((i) => WAITING_STATES.has(i.state)).length
 
+  /**
+   * 装配日历的各路来源。
+   *
+   * `wanted` 是这一次要的图层（WP74；不给 = 全部）。**关掉的层就不去取**——
+   * 社媒那一层每条都要算一次撞车（`social-core` 的 `scheduleConflicts`），
+   * 职责页上只开社媒的那一屏没有理由顺带把红人交付物也捞一遍。
+   * 过滤本身仍然在 `buildCalendar` 的最后一步做，这里只是省掉白取的那几次。
+   */
   const sourcesFor = async (
     actor: WorkActor,
     range: { from: Iso8601; to: Iso8601 },
     cards: readonly ApprovalItem[],
-  ): Promise<CalendarSources> => ({
-    cards: cards.filter((i) => WAITING_STATES.has(i.state)),
-    ...(options.scheduledTasks === undefined ? {} : { tasks: options.scheduledTasks(actor) }),
-    ...(options.meetings === undefined ? {} : { meetings: await options.meetings(actor, range) }),
-  })
+    wanted?: readonly CalendarSource[],
+  ): Promise<CalendarSources> => {
+    const want = (s: CalendarSource): boolean => wanted === undefined || wanted.includes(s)
+    return {
+      cards: want('card_due') ? cards.filter((i) => WAITING_STATES.has(i.state)) : [],
+      ...(options.scheduledTasks === undefined || !want('scheduled_task')
+        ? {}
+        : { tasks: options.scheduledTasks(actor) }),
+      ...(options.meetings === undefined || !want('meeting')
+        ? {}
+        : { meetings: await options.meetings(actor, range) }),
+      ...(options.socialPosts === undefined || !want('social_post')
+        ? {}
+        : { social_posts: options.socialPosts(actor) }),
+      ...(options.kolDeliverables === undefined || !want('kol_deliverable')
+        ? {}
+        : { deliverables: options.kolDeliverables(actor) }),
+      ...(options.standbyRenewals === undefined || !want('standby')
+        ? {}
+        : { standby: options.standbyRenewals(actor) }),
+    }
+  }
 
   const runnerFor = (cards: readonly ApprovalItem[]): QueryRunner =>
     periodQueryRunner(options.orders, () => [...cards], 'USD')
@@ -345,7 +385,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       return work.calendar(
         range,
         { person_id: actor.person_id },
-        await sourcesFor(actor, range, cards),
+        await sourcesFor(actor, range, cards, range.sources),
       )
     },
 

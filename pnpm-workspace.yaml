@@ -2,6 +2,24 @@ packages:
   - packages/*
   - apps/*
   - role-packs/*
+# WP74：Schedule-X 的插件包（drag-and-drop / resize / calendar-controls）忘了声明
+# preact 这一组 peer——`@schedule-x/calendar` 自己声明了，三个插件没有。pnpm 的严格
+# 链接照着 package.json 建目录，于是插件在自己的 node_modules 里找不到
+# `preact/jsx-runtime`，一 import 就炸。这里替上游补上那三行声明，不改代码、不放宽链接。
+packageExtensions:
+  '@schedule-x/drag-and-drop':
+    peerDependencies:
+      preact: '^10.19.2'
+      '@preact/signals': '^2.0.2'
+  '@schedule-x/resize':
+    peerDependencies:
+      preact: '^10.19.2'
+      '@preact/signals': '^2.0.2'
+  '@schedule-x/calendar-controls':
+    peerDependencies:
+      preact: '^10.19.2'
+      '@preact/signals': '^2.0.2'
+
 allowBuilds:
   esbuild: true
   # Electron 的 postinstall 下载平台二进制；桌面壳（WP16）必须允许

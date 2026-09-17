@@ -3183,7 +3183,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 日历：会议 / 有排期的待办 / 定时任务 / 卡片到期，四类合一份 */
+    /** 日历：一个日历多图层（会议 / 待办 / 定时 / 卡片到期 / 社媒排期 / 交付物 / 值守） */
     get: operations['getCalendar']
     put?: never
     post?: never
@@ -25038,6 +25038,8 @@ export interface operations {
         from: string
         /** @description 止（不含） */
         to: string
+        /** @description 图层，逗号分隔；**不传 = 全部**（WP74，37 §2.5） */
+        sources?: string
       }
       header: {
         /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
@@ -25048,7 +25050,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { items: CalendarItem[], from, to } */
+      /** @description { items: CalendarItem[], from, to, sources? } */
       200: {
         headers: {
           [name: string]: unknown

@@ -1,40 +1,38 @@
 /**
- * WP73（56 §6 第四项）：社媒运营岗位页上的**内容日历周视图**。
+ * 社媒运营职责页上的**内容日历周视图**（56 §6 第四项）。
  *
- * WP72 的"内容日历"只是 deck 上一张按时间排的只读表——看得出"接下来会发什么"，
- * 看不出"周四晚上是不是堆了三条"。这个组件把它换成七列 × 渠道行的一屏，
- * 并且让人**拖得动**。
+ * WP74 之后这个文件只剩一层薄封装：**日历只有一个**（`components/calendar/unified-calendar`），
+ * 这里做的是"把它固定在社媒排期那一层、并且只看这条渠道"。WP73 那份独立实现
+ * （七列 × 自己画的格子）删掉了——两份日历意味着两套拖拽语义、两套撞车提示、
+ * 两套深浅色，而它们迟早会不一样。
  *
- * 四条界面纪律：
+ * WP73 的四条界面纪律一条没丢，只是落点换了：
  *
- * 1. **撞车是服务端算的**。格子上那个 ⚠ 与它的说明来自
- *    `SocialCalendarCellData.conflicts`（`social-core` 的 `scheduleConflicts`）——
- *    界面一条判据都不自己写，否则迟早与卡面上那句话对不上。
- * 2. **拖一下 = 重新出一张卡**。换个时间发也是一次发布（`social_post` 永远 L1），
- *    所以拖完之后显示的是"已经提上去了，等人点头"，**不是**"改好了"。
- * 3. **四态看得出来**。草稿 / 排期 / 已发 / 退回各有各的样子；退回那一条**不隐藏**，
- *    它混进排期里就再也没人发现它没发出去。
- * 4. **空列也画出来**。周四一条都没有 ≠ 周四不存在——七列永远在，
- *    看得出"这周后半段是空的"才有排期这回事。
+ * 1. **撞车是服务端算的**。格子上那个 ⚠ 与它的说明现在走 `CalendarItem.notes`
+ *    （服务端用 `social-core` 的 `scheduleConflicts` 算好），界面一条判据都不自己写。
+ * 2. **拖一下 = 重新出一张卡**。拖完显示的是"已经提上去了，等人点头"，不是"改好了"
+ *    ——这条在统一日历的社媒分支里（`lib/calendar-drag` → `rescheduleSocialPost`）。
+ * 3. **四态看得出来**。状态在事件小卡上，退回那一条不隐藏。
+ * 4. **空的那几天也画出来**。周视图本来就画满七天。
+ *
+ * 留在这个文件里的只有一样统一日历不该管的东西：**在某一天新建一条**。
+ * 那是社媒自己的动作（要选号、要写正文、要提一张 L1 卡），不是日历的动作。
  */
+import type { CalendarSource } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { UnifiedCalendar } from '@/components/calendar/unified-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  createSocialPost,
-  getSocialAccounts,
-  getSocialCalendar,
-  rescheduleSocialPost,
-  type SocialCalendarCellData,
-  type SocialChannelId,
-} from '@/lib/api'
+import { createSocialPost, getSocialAccounts, type SocialChannelId } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 const DAY_MS = 86_400_000
+
+/** 这一块固定只开社媒排期那一层。 */
+const SOCIAL_LAYER: readonly CalendarSource[] = ['social_post']
 
 /** 职责 id → 渠道（`social.facebook-group` → `facebook_group`）。 */
 export function socialChannelOfRole(role_id: string | undefined): SocialChannelId | undefined {
@@ -54,70 +52,6 @@ export function socialChannelOfRole(role_id: string | undefined): SocialChannelI
   return all.find((c) => c === id)
 }
 
-/** 这一周的周一零点（本地时区；周一开始，不是周日——与服务端 `weekStart` 同一条约定）。 */
-function mondayOf(at: Date): Date {
-  const d = new Date(at)
-  d.setHours(0, 0, 0, 0)
-  const dow = (d.getDay() + 6) % 7
-  d.setTime(d.getTime() - dow * DAY_MS)
-  return d
-}
-
-const sameDay = (a: Date, b: Date): boolean =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate()
-
-/** 四态各有各的样子（纪律 3）。 */
-const STATUS_CLASS: Record<string, string> = {
-  draft: 'border-dashed border-muted-foreground/40 bg-muted/40',
-  scheduled: 'border-primary/30 bg-primary/5',
-  published: 'border-emerald-500/30 bg-emerald-500/5',
-  failed: 'border-destructive/50 bg-destructive/10',
-}
-
-function Cell({
-  cell,
-  onDragStart,
-}: {
-  cell: SocialCalendarCellData
-  onDragStart: (post_id: string) => void
-}): React.ReactNode {
-  const { t } = useApp()
-  const at = new Date(cell.scheduled_at)
-  const hh = String(at.getHours()).padStart(2, '0')
-  const mm = String(at.getMinutes()).padStart(2, '0')
-  return (
-    <button
-      type="button"
-      draggable
-      data-testid="social-calendar-cell"
-      data-post={cell.post_id}
-      data-status={cell.status}
-      data-conflict={cell.conflicts.length > 0 ? 'true' : 'false'}
-      onDragStart={() => {
-        onDragStart(cell.post_id)
-      }}
-      className={`w-full rounded border px-1.5 py-1 text-left text-[11px] leading-tight ${
-        STATUS_CLASS[cell.status] ?? 'border-muted bg-muted/30'
-      }`}
-      // 撞车那句话原样当成 tooltip：卡面上写的是同一句
-      title={cell.conflicts.length === 0 ? cell.preview : cell.conflicts.join('\n')}
-    >
-      <span className="flex items-center gap-1 font-medium">
-        {`${hh}:${mm}`}
-        {cell.conflicts.length > 0 ? (
-          <AlertTriangle className="size-3 text-destructive" aria-hidden />
-        ) : null}
-      </span>
-      <span className="block truncate text-muted-foreground">{cell.preview}</span>
-      {cell.status === 'failed' ? (
-        <span className="block text-destructive">{t('social.calendar.failed')}</span>
-      ) : null}
-    </button>
-  )
-}
-
 export function SocialCalendar({
   assignment,
   channel,
@@ -129,43 +63,17 @@ export function SocialCalendar({
   const client = useQueryClient()
   /** 往前 / 往后翻几周（0 = 本周）。 */
   const [offset, setOffset] = useState(0)
-  const [dragging, setDragging] = useState<string | undefined>(undefined)
-  const [note, setNote] = useState<string | undefined>(undefined)
   const [composing, setComposing] = useState<string | undefined>(undefined)
   const [draft, setDraft] = useState('')
+  const [note, setNote] = useState<string | undefined>(undefined)
 
-  const start = new Date(mondayOf(new Date()).getTime() + offset * 7 * DAY_MS)
-  const end = new Date(start.getTime() + 7 * DAY_MS)
-  const days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * DAY_MS))
+  const anchor = new Date(Date.now() + offset * 7 * DAY_MS)
 
-  const calendar = useQuery({
-    queryKey: ['social-calendar', assignment, start.toISOString()],
-    queryFn: () =>
-      getSocialCalendar({ from: start.toISOString(), to: end.toISOString() }, assignment),
-  })
   const accounts = useQuery({
     queryKey: ['social-accounts', assignment, channel],
     queryFn: () => getSocialAccounts({ channel }, assignment),
   })
-
-  const refresh = (): void => {
-    void client.invalidateQueries({ queryKey: ['social-calendar'] })
-    void client.invalidateQueries({ queryKey: ['deck'] })
-  }
-
-  const move = useMutation({
-    mutationFn: (input: { post_id: string; at: string }) =>
-      rescheduleSocialPost(input.post_id, input.at, assignment),
-    onSuccess: (res) => {
-      // 纪律 2：拖完不是"改好了"，是"提上去了，等人点头"
-      setNote(
-        res.conflicts.length > 0
-          ? `${t('social.calendar.moved')} ${res.conflicts.join(' ')}`
-          : t('social.calendar.moved'),
-      )
-      refresh()
-    },
-  })
+  const accountRows = accounts.data?.rows ?? []
 
   const compose = useMutation({
     mutationFn: (input: { account_id: string; at: string }) =>
@@ -181,22 +89,10 @@ export function SocialCalendar({
           ? `${t('social.calendar.staged')} ${res.conflicts.join(' ')}`
           : t('social.calendar.staged'),
       )
-      refresh()
+      void client.invalidateQueries({ queryKey: ['calendar'] })
+      void client.invalidateQueries({ queryKey: ['deck'] })
     },
   })
-
-  // 这条渠道自己那些格子（一条职责只看它自己那条渠道，56 §2）
-  const cells = (calendar.data?.cells ?? []).filter((c) => c.channel === channel)
-  const accountRows = accounts.data?.rows ?? []
-
-  /** 拖到某一天的默认时刻：**保持原来的钟点**，只换日子（人拖的是"哪天"不是"几点"）。 */
-  const dropAt = (day: Date, post_id: string): string => {
-    const cell = cells.find((c) => c.post_id === post_id)
-    const at = new Date(day)
-    const was = cell === undefined ? undefined : new Date(cell.scheduled_at)
-    at.setHours(was?.getHours() ?? 10, was?.getMinutes() ?? 0, 0, 0)
-    return at.toISOString()
-  }
 
   return (
     <Card data-testid="social-calendar">
@@ -232,52 +128,24 @@ export function SocialCalendar({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        {calendar.isPending ? (
-          <Skeleton className="h-40 w-full" />
-        ) : (
-          <div className="grid grid-cols-7 gap-1 text-xs">
-            {days.map((day) => (
-              <div key={day.toISOString()} className="flex flex-col gap-1">
-                <div className="px-1 pb-0.5 text-[11px] font-medium text-muted-foreground">
-                  {`${day.getMonth() + 1}/${day.getDate()}`}
-                </div>
-                {/* biome-ignore lint/a11y/noStaticElementInteractions: 放下那一下只能挂在列上 */}
-                <div
-                  data-testid="social-calendar-day"
-                  data-date={day.toISOString().slice(0, 10)}
-                  className="flex min-h-24 flex-col gap-1 rounded border border-dashed border-muted p-1"
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                  }}
-                  onDrop={() => {
-                    if (dragging === undefined) return
-                    move.mutate({ post_id: dragging, at: dropAt(day, dragging) })
-                    setDragging(undefined)
-                  }}
-                >
-                  {cells
-                    .filter((c) => sameDay(new Date(c.scheduled_at), day))
-                    .map((c) => (
-                      <Cell key={c.post_id} cell={c} onDragStart={setDragging} />
-                    ))}
-                  {accountRows.length === 0 ? null : (
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      className="h-6 justify-start px-1 text-[11px] text-muted-foreground"
-                      data-testid="social-calendar-add"
-                      onClick={() => {
-                        setComposing(day.toISOString())
-                      }}
-                    >
-                      <Plus className="size-3" aria-hidden />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* 同一个组件的嵌入：固定 social_post 图层 + 这条渠道（一条职责只看它自己那条，56 §2） */}
+        <UnifiedCalendar
+          layers={SOCIAL_LAYER}
+          fetchLayers={SOCIAL_LAYER}
+          view="week"
+          anchor={anchor}
+          channel={channel}
+          assignment={assignment}
+          heightClass="h-96"
+          // 没登记号就不给"在这一天新建"：点了也没号可发
+          {...(accountRows.length === 0
+            ? {}
+            : {
+                onPickDate: (iso: string) => {
+                  setComposing(iso)
+                },
+              })}
+        />
 
         {accountRows.length === 0 ? (
           // 36 §3：没有号就说没有号，不画一张空日历让人以为是自己没排

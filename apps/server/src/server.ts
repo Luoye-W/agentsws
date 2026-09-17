@@ -85,6 +85,8 @@ import {
   rangeTargetOfProduct,
 } from '@agentsws/roles'
 import { createSkills, type Skills } from '@agentsws/skills'
+// WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
+import { scheduleConflicts } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -2715,6 +2717,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }) as Promise<ApprovalItem[]>,
       orders: () => brand.workData.orders(),
       label: (ref) => brand.workData.label(ref),
+      /*
+       * WP74（37 §2.5）：统一日历的三条新图层。
+       *
+       * 品牌隔离就落在这三行上——`brand` 是 `forWorkspace(ws)` 取出来的那一套，
+       * 所以社媒帖子与红人交付物永远只是**这个品牌**自己那一份（56 §2：九条渠道是
+       * 九个真账号，串了品牌等于发错号）。
+       */
+      socialPosts: () =>
+        brand.social.posts().map((p) => ({
+          id: p.id,
+          account_id: p.account_id,
+          channel: p.channel,
+          status: p.status,
+          body: p.body,
+          ...(p.scheduled_at === undefined ? {} : { scheduled_at: p.scheduled_at }),
+          // 撞车是服务端算的（WP73 纪律 1）：格子上那个 ⚠ 与卡面上那句话同一份判据
+          ...(p.scheduled_at === undefined
+            ? {}
+            : {
+                conflicts: scheduleConflicts(
+                  {
+                    id: p.id,
+                    account_id: p.account_id,
+                    scheduled_at: p.scheduled_at,
+                    body: p.body,
+                  },
+                  brand.social.posts(),
+                  { now: clock.now(), tz_offset_minutes: workData.tz_offset_minutes },
+                ).map((h) => h.message),
+              }),
+        })),
+      kolDeliverables: () =>
+        brand.kol.deliverables().map((d) => ({
+          id: d.id,
+          collaboration_id: d.collaboration_id,
+          kind: d.kind,
+          due_at: d.due_at,
+          ...(d.submitted_at === undefined ? {} : { submitted_at: d.submitted_at }),
+        })),
+      // 52 O5：值守是**这个进程 bootstrap 出来的那个品牌**的事，别的品牌各有各的子进程
+      standbyRenewals: (actor) => {
+        const row = standby.renewal()
+        return row === undefined || row.workspace_id !== actor.workspace_id ? [] : [row]
+      },
       // WP69（54 §2）：职责入口的事项记下它走的是哪条职责（`X-Assignment` 反查）
       roleOf: (assignment_id) => roles.assignments.get(assignment_id)?.role_id,
       // 40 §2.2：周 / 月复盘里那一段"疑似重复"

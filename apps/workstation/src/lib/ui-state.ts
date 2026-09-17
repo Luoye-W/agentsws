@@ -1,5 +1,5 @@
 /**
- * WP71：左栏展开态与右栏（第三栏）开合态存在哪儿。
+ * WP71：左栏展开态与右栏（第三栏）开合态存在哪儿；WP74 之后日历的图层与视图也在这里。
  *
  * 两条规矩：
  *
@@ -21,6 +21,16 @@ export const RAIL_EXPANDED_KEY = 'agentsws.rail.expanded'
 export const RIGHT_RAIL_PANEL_KEY = 'agentsws.rightrail.panel'
 /** 第三栏的宽度（px，320–520）。 */
 export const RIGHT_RAIL_WIDTH_KEY = 'agentsws.rightrail.width'
+
+/**
+ * WP74：日历上开着哪几个图层、用的哪个视图。
+ *
+ * 与左右栏那三个同一类：**纯界面偏好**。图层不是"哪些事存在"，是"这一屏现在画哪几类"；
+ * 丢了最坏的结果是下次打开回默认的三层。所以它落在这台电脑上，不占服务端一张表。
+ */
+export const CALENDAR_LAYERS_KEY = 'agentsws.calendar.layers'
+/** 日历上次停在哪个视图（日 / 周 / 月 / 议程）。 */
+export const CALENDAR_VIEW_KEY = 'agentsws.calendar.view'
 
 export const RIGHT_RAIL_MIN_WIDTH = 320
 export const RIGHT_RAIL_MAX_WIDTH = 520

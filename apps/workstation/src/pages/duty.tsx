@@ -19,6 +19,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { CalendarLink } from '@/components/calendar/calendar-link'
 import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
 // WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
@@ -272,7 +273,7 @@ export function DutyPage(): React.ReactNode {
         </p>
         <OpenHere assignment={assignment} />
         {/* 四个设置面板在右栏（36 §9）；这一行只是把右栏打开到那一格 */}
-        <div className="flex flex-wrap gap-1" data-testid="duty-rail-links">
+        <div className="flex flex-wrap items-center gap-1" data-testid="duty-rail-links">
           {['memory', 'skills', 'knowledge', 'caps'].map((panel) => (
             <Button
               key={panel}
@@ -286,6 +287,8 @@ export function DutyPage(): React.ReactNode {
               {t(`rail.panel.${panel}`)}
             </Button>
           ))}
+          {/* WP74：进去的是同一个日历，只是默认开着与这条职责相关的那几层 */}
+          <CalendarLink role_id={role_id} />
         </div>
       </header>
 

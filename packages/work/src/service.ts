@@ -50,7 +50,14 @@ import type {
   WorkStore,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { buildCalendar, type CalendarInput, type ScheduledTaskLike } from './calendar.js'
+import {
+  buildCalendar,
+  type CalendarInput,
+  type DeliverableLike,
+  type ScheduledTaskLike,
+  type SocialPostLike,
+  type StandbyRenewalLike,
+} from './calendar.js'
 import {
   claimOf,
   DEFAULT_IDLE_DAYS,
@@ -285,6 +292,10 @@ export interface CalendarSources {
   meetings?: readonly CalendarItem[]
   tasks?: readonly ScheduledTaskLike[]
   cards?: readonly ApprovalItem[]
+  /** WP74 的三条新图层；不给就是没有（老调用方一个字不用改） */
+  social_posts?: readonly SocialPostLike[]
+  deliverables?: readonly DeliverableLike[]
+  standby?: readonly StandbyRenewalLike[]
 }
 
 /** 一个固定序列的伪随机（只用来生成 id；调用方通常会注入 kernel 的 seeded random）。 */
@@ -1527,6 +1538,9 @@ export class Work {
       ...(sources.meetings === undefined ? {} : { meetings: sources.meetings }),
       ...(sources.tasks === undefined ? {} : { tasks: sources.tasks }),
       ...(sources.cards === undefined ? {} : { cards: sources.cards }),
+      ...(sources.social_posts === undefined ? {} : { social_posts: sources.social_posts }),
+      ...(sources.deliverables === undefined ? {} : { deliverables: sources.deliverables }),
+      ...(sources.standby === undefined ? {} : { standby: sources.standby }),
     }
     return buildCalendar(input)
   }

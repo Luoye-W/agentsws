@@ -31683,7 +31683,7 @@
     "/v1/calendar": {
       "get": {
         "operationId": "getCalendar",
-        "summary": "日历：会议 / 有排期的待办 / 定时任务 / 卡片到期，四类合一份",
+        "summary": "日历：一个日历多图层（会议 / 待办 / 定时 / 卡片到期 / 社媒排期 / 交付物 / 值守）",
         "tags": ["work"],
         "parameters": [
           {
@@ -31705,6 +31705,15 @@
             }
           },
           {
+            "name": "sources",
+            "in": "query",
+            "required": false,
+            "description": "图层，逗号分隔；**不传 = 全部**（WP74，37 §2.5）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "X-Assignment",
             "in": "header",
             "required": true,
@@ -31716,7 +31725,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items: CalendarItem[], from, to }",
+            "description": "{ items: CalendarItem[], from, to, sources? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -31797,7 +31806,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ items: CalendarItem[], from, to }"
+        "x-returns": "{ items: CalendarItem[], from, to, sources? }"
       }
     },
     "/v1/plans/today": {

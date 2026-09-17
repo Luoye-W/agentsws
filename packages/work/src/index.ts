@@ -8,8 +8,14 @@
 export {
   buildCalendar,
   type CalendarInput,
+  type DeliverableLike,
+  deliverableCalendarItem,
   type ScheduledTaskLike,
+  type SocialPostLike,
+  type StandbyRenewalLike,
+  socialPostCalendarItem,
   sortCalendar,
+  standbyCalendarItem,
   todoCalendarItem,
 } from './calendar.js'
 export {
