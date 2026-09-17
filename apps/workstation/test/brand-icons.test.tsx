@@ -47,7 +47,10 @@ function manifest(): {
  */
 function catalogServices(): string[] {
   const source = read('apps/server/src/catalog.ts')
-  const live = source.slice(0, source.indexOf('PLANNED_CONNECTORS'))
+  // WP78：切点要用**声明那一行**。`PLANNED_CONNECTORS` 这个名字现在也出现在
+  // `PR_CONNECTORS` 上面那段注释里（新闻稿分发登记在"待增加"那张表），
+  // 按裸名字切会把公关那几张卡连同社媒一半一起切掉，这条用例就变成在数半张目录。
+  const live = source.slice(0, source.indexOf('export const PLANNED_CONNECTORS'))
   const ids = [...live.matchAll(/^\s{4}service: '([a-z0-9_]+)',$/gm)].map((m) => m[1] as string)
   return [...new Set(ids)]
 }
@@ -73,7 +76,8 @@ describe('BrandIcon', () => {
     // WP64 加了四张骨架卡（klaviyo / shopify_email / aftership / track17）
     // WP68 又加了红人那五条渠道（youtube_data / instagram_graph / facebook_graph /
     // tiktok_research / x_api），从"待增加"改成可连
-    expect(services.length).toBeGreaterThanOrEqual(15)
+    // WP78 再加一张（google_alerts，品牌监控）
+    expect(services.length).toBeGreaterThanOrEqual(16)
     expect(services).toContain('tiktok_research')
     expect(services).toContain('klaviyo')
     expect(services).toContain('shopify_admin')
@@ -91,8 +95,8 @@ describe('BrandIcon', () => {
   // WP63：还没做的那几个**故意**落通用插头
   it('登记为"待增加"的连接器画通用插头，不借人家的标志', () => {
     const planned = plannedServices()
-    // WP68：红人那五条已经可连了，"待增加"这一档现在只剩评价应用两家
-    expect(planned).toEqual(['judgeme', 'loox'])
+    // WP68：红人那五条已经可连了；WP78 加了新闻稿分发（要合同要账号要钱）
+    expect(planned).toEqual(['press_distribution', 'judgeme', 'loox'])
     for (const service of planned) {
       const { unmount } = render(<BrandIcon provider={service} />)
       const icon = screen.getByTestId('brand-icon')

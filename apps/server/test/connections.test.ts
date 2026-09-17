@@ -183,7 +183,7 @@ describe('WP20 §A 连接清单与目录', () => {
     expect((await data<{ connections: ConnectionView[] }>(res)).connections).toEqual([])
   })
 
-  it('目录里二十一个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
+  it('目录里二十二个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
@@ -216,6 +216,9 @@ describe('WP20 §A 连接清单与目录', () => {
       'discord_bot',
       'telegram_bot',
       'whatsapp_business',
+      // WP78（60 §5）：品牌监控那一张。Reddit 不在这里——公关用的就是上面
+      // 那张 `reddit`（一把 key 管两条职责）；新闻稿分发是"待增加"，在下面那条用例里
+      'google_alerts',
     ])
     for (const p of live) {
       expect(p.setup_guide.steps.length).toBeGreaterThan(0)
@@ -244,17 +247,18 @@ describe('WP20 §A 连接清单与目录', () => {
       await api('/v1/connections/providers'),
     )
     const planned = providers.filter((p) => p.planned === true)
-    // WP68：红人那五条已经可连了，"待增加"这一档现在只剩评价应用两家
-    expect(planned.map((p) => p.service)).toEqual(['judgeme', 'loox'])
+    // WP68：红人那五条已经可连了；WP78（60 §5）加了新闻稿分发——
+    // 那一类服务要合同、要企业账号、按条收费，给一张表单是骗人
+    expect(planned.map((p) => p.service)).toEqual(['press_distribution', 'judgeme', 'loox'])
     for (const p of planned) {
       // 点不动：没有表单字段，也不"可用"
       expect(p.fields, p.service).toEqual([])
       expect(p.available, p.service).toBe(false)
       // 但说得出为什么——不是一句冷冰冰的 unavailable
       expect((p.unavailable_reason ?? '').length, p.service).toBeGreaterThan(10)
-      // 接上之后哪一块会亮，也写清楚（评价那两家亮评价，红人五条亮找人那一块）
+      // 接上之后哪一块会亮，也写清楚（评价那两家亮评价，分发那张亮公关那一块）
       expect(p.data_sources.length, p.service).toBe(1)
-      expect(['reviews'], p.service).toContain(p.data_sources[0])
+      expect(['reviews', 'pr'], p.service).toContain(p.data_sources[0])
     }
   })
 
@@ -296,6 +300,8 @@ describe('WP20 §A 连接清单与目录', () => {
       'discord_bot',
       'telegram_bot',
       'whatsapp_business',
+      // WP78（60 §5）：品牌监控那一张，与店铺平台无关，换成 Woo 也照出
+      'google_alerts',
     ])
 
     // 改回 Shopify，那张卡就回来了
