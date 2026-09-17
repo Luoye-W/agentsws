@@ -190,3 +190,37 @@ export function envRefSource(table?: Record<string, string>): CredentialRefSourc
     },
   }
 }
+
+/**
+ * WP90（55 §9 Q8）：**订阅登录的记录层**——`llm-pi-ai/<provider>` 那一族记录。
+ *
+ * 为什么不走上面那条 OpenConnector 的路：ChatGPT Plus / Claude Pro 的账号**是人的**，
+ * 不是公司的一条外部连接（20「个人身份类凭据留本机」）。它们的 access / refresh token
+ * 由官方 `pi-ai` 自己生成、自己刷新，我们只提供一个**本机加密**的存放处。
+ *
+ * 所以这一层的形状与上面那两条都不同：**它是个真正的读写库**（官方
+ * `modifyRecord` 的"读—决定—替换"要落地，刷新才跑得起来），但它只服务
+ * 一个人、一台机器：
+ *
+ * - `enabled` 为假（公司档 / 托管档 / 没有秘密库密钥 / 不是本人）→ 读一律"不存在"、
+ *   写一律拒。**不报"你没权限"**——那会泄漏"这台机器上有人登录过"。
+ * - `payload` 原样 JSON 进出：格式是 `pi-ai` 的，我们一个字段都不解释、不改写
+ *   （官方 `auth.ts` 的原话：the seam treats it as opaque JSON）。
+ */
+export interface SubscriptionRecordSource {
+  /**
+   * 这台机器、这个人、这一刻允不允许读写订阅凭据。
+   *
+   * 公司档 / 托管档（`AGENTSWS_RUNTIME_MODE=docker|hosted`）永远是 `false`：
+   * 那里的"个人订阅账号"只能是被代持的共享账号，违反 OpenAI / Anthropic 的条款。
+   */
+  enabled(): boolean
+  /** 读一条（`<provider>`，比如 `openai-codex`）。没有就 `undefined`。 */
+  read(provider: string): Promise<unknown | undefined>
+  /** 写一条（原样 JSON）。 */
+  write(provider: string, payload: unknown): Promise<void>
+  /** 删一条；没有就当删过了。 */
+  remove(provider: string): Promise<void>
+  /** 现在存了哪几个 provider（排序后）。 */
+  list(): Promise<readonly string[]>
+}

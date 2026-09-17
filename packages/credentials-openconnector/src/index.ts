@@ -16,6 +16,7 @@ export {
   CredentialsBoundaryError,
   connectionCredentialKey,
   credentialSegment,
+  SUBSCRIPTION_RECORD_SCOPE,
 } from './provider.js'
 export type {
   CredentialRefSource,
@@ -23,5 +24,6 @@ export type {
   OpenConnectorSource,
   OpenConnectorSourceOptions,
   RefHit,
+  SubscriptionRecordSource,
 } from './source.js'
 export { envRefSource, openConnectorSource } from './source.js'
