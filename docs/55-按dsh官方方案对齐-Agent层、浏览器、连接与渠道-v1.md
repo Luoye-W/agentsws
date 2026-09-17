@@ -254,12 +254,16 @@ Luoye：很多客户在用 ChatGPT 的套餐，官方连接器好像能直接用
 
 已核实（`Tencent/BrowserSkill`，MIT，3.3k★，2026-06 开源，两周一版，0.3.0 于 09-17）：Rust `bsk` CLI + 本机 daemon + Chrome / Edge MV3 扩展，在**用户自己的浏览器**里 `chrome.debugger` 附加（不带 Chromium、不开调试端口），每 session 一个独立 Agent 窗口、借用户标签要确认；页面感知是自研 VOM（压缩 DOM + ref + 悬浮探测 + 分页）也有无障碍树；内置人接管弹层（`request-help`）；**远程模式**（Agent 在服务器、扩展在本机，WSS 配对）；操作录制成 trace（非录成 Skill）；无基准数据。它的 dsh 插件 `@wxg-prc-cpg/browser-skill-dsh-plugin` **直接注册 `ctx.tools`、不走官方 `dsh-browser-use` seam**，6 个多态工具（动作在 `action` 参数里，读写混），不暴露 evaluate；无原生构建、不下载浏览器；无腾讯云绑定、无遥测（daemon 每 30 分钟查 GitHub 更新，`BSK_AUTO_UPDATE=off` 可关）。
 
-| 约束 | 判定 |
-|---|---|
-| 只在官方 seam 下挂 provider | 不满足 → 自写薄 provider（spawn `bsk --json`，复用其 MIT 逻辑） |
-| 按工具名分读写 | 部分 → 门禁改看 `args.action` |
-| 导航 url 白名单 | 满足，拦 `browser_page{url}` / `browser_session start{url}` / `browser_tabs create{url}` 三处 |
-| 公司端禁 evaluate | dsh 工具面无 evaluate；但 `bsk` 在 PATH 上时有 shell 的职责能直接跑 `bsk evaluate`——shell allowlist（WP89）同时禁 `bsk` |
-| 不开构建 / 不下载 Chromium | 满足 |
+**Luoye 纠正（09-17）**：我们的尺子是"能用官方的就先用官方"，不是"只走 dsh 官方 seam"。Codex / Claude 都是"自带浏览器 + 浏览器插件"两条腿，很多东西只有在用户正在用的浏览器环境里才看得到、操作得到，所以第二方案必须有，腾讯这个就是很好的补充——**现在就做，直接用腾讯官方的 dsh 插件**，不自写 provider。
 
-**建议**：作为个人端 **B2 执行器**加，取它两样长处——远程模式给托管档（Agent 在云、浏览器在用户本机，官方 provider 做不到）、内置人接管给个人端；排在官方 provider 真跑一轮之后（红人 YouTube 只读场景 + Luoye 实际用一次）。工作量约一个 WP：薄 provider + 门禁看动作 + 三处白名单 + "装扩展 + 装 bsk" 向导 + `bsk doctor` 前置检查。**待拍板 Q9：现在派还是等官方方案跑一轮再派。**
+| 事项 | 做法 |
+|---|---|
+| 挂法 | `@wxg-prc-cpg/browser-skill-dsh-plugin` 按官方方式挂（它直接注册 6 个工具 + 一个 skill，`lazyTools`）；只在个人档、且用户在设置页选了"我正在用的浏览器"时挂 |
+| 读写分类 | 门禁看 `args.action`：`browser_inspect` 全读；`browser_page` 的 navigate / back / forward / reload / wait 读；`browser_interact` 全写；`browser_session` start 读（带 url 走白名单）、stop 读；`browser_tabs` list / select 读，create（带 url 走白名单）/ close / borrow / return 写；`browser_assist` 读 |
+| 域名白名单 | 拦 `browser_page{url}`、`browser_session start{url}`、`browser_tabs create{url}` 三处，规则与官方 provider 同一套（`browser_scope`） |
+| evaluate | dsh 工具面本来没有；`bsk evaluate` 归 shell allowlist（WP89）一并禁 |
+| 隐私 | daemon 的 30 分钟 GitHub 查更新默认关（`BSK_AUTO_UPDATE=off`），更新由我们的上游哨兵盯 |
+| 安装 | 向导两步：装扩展（Chrome / Edge 商店链接或本地加载）+ 装 `bsk`（我们钉版本与 sha256 从 GitHub Releases 下载，不用它的 `install.sh`）；`bsk doctor` 前置检查 |
+| 与官方 provider 并存 | 设置页"浏览器"一节两种方式并列：「单独的工作 Chrome（官方 Playwright）」「我正在用的浏览器（腾讯 BrowserSkill 扩展）」，一次运行只挂一种 |
+
+**落地：WP92（已派）。**
