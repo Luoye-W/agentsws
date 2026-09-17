@@ -238,7 +238,7 @@ export const MAX_TASK_EXAMPLES = 6
 export interface RoleDefinition {
   id: RoleId
   version: string
-  domain: 'dtc' | 'amz' | 'social' | 'kol' | 'ads' | 'design' | 'dev' | 'common'
+  domain: 'dtc' | 'amz' | 'social' | 'kol' | 'ads' | 'design' | 'dev' | 'common' | 'pr'
   name: { zh: string; en: string }
   description: string
   scopes: PermissionScope[]

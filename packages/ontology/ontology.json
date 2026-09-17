@@ -24,6 +24,7 @@
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/packages.ts",
+    "packages/contracts/src/pr.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
@@ -59,7 +60,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a29e3c387267b89dbad85990ee5c865e",
+  "source_digest": "8b175927666aecd73938c8acdfcd0fb8",
   "objects": [
     {
       "id": "ad_set",
@@ -1109,6 +1110,133 @@
       "read_via": []
     },
     {
+      "id": "external_post",
+      "label": "external_post",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "external_post",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "role_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "ExternalPostKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "venue",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "ExternalPostStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "rules_checked",
+          "type": "ExternalPostRuleCheck",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "parent_external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.score",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.replies",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.removed",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback.observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "ExternalPost"
+    },
+    {
       "id": "fact_card",
       "label": "事实卡",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -1580,6 +1708,103 @@
       "contract": "Matter"
     },
     {
+      "id": "media_contact",
+      "label": "media_contact",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "media_contact",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "kind",
+          "type": "MediaContactKind",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "outlet",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "beats",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "email_ref",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "email_masked",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "stage",
+          "type": "MediaPitchStage",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "last_pitched_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_covered_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "notes",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "MediaContact"
+    },
+    {
       "id": "meeting",
       "label": "会议",
       "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
@@ -1889,6 +2114,115 @@
       "contract": "MembershipRequest"
     },
     {
+      "id": "mention",
+      "label": "mention",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "mention",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source",
+          "type": "MentionSource",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "origin",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "author",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "published_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "observed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "sentiment",
+          "type": "MentionSentiment",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "triage",
+          "type": "MentionTriage",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "MentionStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "dedupe_key",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "routed_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "alert_approval_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "Mention"
+    },
+    {
       "id": "message",
       "label": "消息",
       "key_format": "平台给的 id，原样存、不解析",
@@ -2159,6 +2493,115 @@
       ],
       "read_via": [],
       "contract": "Position"
+    },
+    {
+      "id": "press_release",
+      "label": "press_release",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "press_release",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": [],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "PressReleaseStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "headline",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "dek",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "quotes",
+          "type": "PressQuote[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "boilerplate",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "contact.name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "contact.email",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "contact.phone",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "facts_cited",
+          "type": "PressFactCitation[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "embargo_until",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "distributed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "PressRelease"
     },
     {
       "id": "product",
@@ -4340,6 +4783,14 @@
       "lookup": []
     },
     {
+      "from": "external_post",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "fact_card",
       "to": "todo",
       "direction": "in",
@@ -4476,6 +4927,14 @@
       "lookup": []
     },
     {
+      "from": "media_contact",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "meeting",
       "to": "matter",
       "direction": "out",
@@ -4541,6 +5000,14 @@
     },
     {
       "from": "membership_request",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "mention",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -4713,6 +5180,14 @@
       "direction": "in",
       "cardinality": "many",
       "via": "work_item.position_id",
+      "lookup": []
+    },
+    {
+      "from": "press_release",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
       "lookup": []
     },
     {
@@ -5685,6 +6160,14 @@
     },
     {
       "from": "workspace",
+      "to": "external_post",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "external_post.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
       "to": "fact_card",
       "direction": "in",
       "cardinality": "many",
@@ -5705,6 +6188,14 @@
       "direction": "in",
       "cardinality": "many",
       "via": "matter.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "media_contact",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "media_contact.workspace_id",
       "lookup": []
     },
     {
@@ -5733,10 +6224,26 @@
     },
     {
       "from": "workspace",
+      "to": "mention",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "mention.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
       "to": "package",
       "direction": "in",
       "cardinality": "many",
       "via": "package.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "press_release",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "press_release.workspace_id",
       "lookup": []
     },
     {
