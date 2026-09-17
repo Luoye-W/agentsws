@@ -20,15 +20,18 @@ import type {
   ConnectionsPort,
   KolPort,
   ModelDefaultsView,
+  ModelsActor,
   ModelsPort,
   PositionEntryPort,
   SocialPort,
+  SubscriptionLoginInput,
   WorkPort,
   WorkstationPort,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type { ObjectRef, WorkspaceId } from '@agentsws/contracts'
 import type { BrandModules } from './brand-modules.js'
+import type { SubscriptionPortLike } from './subscription.js'
 
 /** 跟随公司默认时不许从这个品牌改设置——改了等于悄悄改了公司那一份。 */
 const INHERITING =
@@ -112,6 +115,12 @@ export interface BrandModelsPortOptions {
   brands: BrandModules
   /** 公司默认品牌的名字（界面上那句"跟随「XX」的设置"）。 */
   brandName(workspace_id: WorkspaceId): string
+  /**
+   * WP90（55 §9 Q8）：订阅登录。**不按品牌分**——ChatGPT / Claude 的账号是
+   * 这台机器上这个人的，换个品牌不该要求他重登一次。所以这一份是装配方
+   * 建好一个、所有品牌共用，`brandModelsPort` 只负责转手。
+   */
+  subscription?: SubscriptionPortLike
 }
 
 /**
@@ -172,6 +181,23 @@ export function brandModelsPort(options: BrandModelsPortOptions): ModelsPort {
      * 还只有一个品牌）。它必须是同步的，所以只看已经建出来的那一套。
      */
     configured: (): boolean => brands.peek(brands.bootstrap)?.ownModels.configured() ?? false,
+    // WP90：订阅登录按人、按机器，一律转给那一份（跟随公司默认对它没有意义）
+    ...(options.subscription === undefined
+      ? {}
+      : {
+          subscriptions: (actor: ModelsActor) => options.subscription?.list(actor),
+          subscription: (actor: ModelsActor, provider: string) =>
+            options.subscription?.get(actor, provider),
+          subscriptionLogin: (actor: ModelsActor, input: SubscriptionLoginInput) =>
+            options.subscription?.login(actor, input),
+          subscriptionAnswer: (actor: ModelsActor, provider: string, value: string) =>
+            options.subscription?.answer(actor, provider, value),
+          subscriptionSelectModel: (actor: ModelsActor, provider: string, model: string) =>
+            options.subscription?.selectModel(actor, provider, model),
+          subscriptionSignOut: async (actor: ModelsActor, provider: string) => {
+            await options.subscription?.signOut(actor, provider)
+          },
+        }),
     setInheritance: async (actor: Actor, input: { inherit_org: boolean }) => {
       if (brands.isOrgDefault(actor.workspace_id))
         throw new ApiError(

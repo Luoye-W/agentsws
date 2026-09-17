@@ -28,10 +28,16 @@
       "path": "../../packages/core"
     },
     {
+      "path": "../../packages/credentials-openconnector"
+    },
+    {
       "path": "../../packages/data"
     },
     {
       "path": "../../packages/deck"
+    },
+    {
+      "path": "../../packages/dsh-adapter"
     },
     {
       "path": "../../packages/kernel"
@@ -41,9 +47,6 @@
     },
     {
       "path": "../../packages/kol-core"
-    },
-    {
-      "path": "../../packages/social-core"
     },
     {
       "path": "../../packages/learning"
@@ -67,16 +70,19 @@
       "path": "../../packages/schedule"
     },
     {
-      "path": "../../packages/support-core"
-    },
-    {
       "path": "../../packages/secretary"
     },
     {
       "path": "../../packages/skills"
     },
     {
+      "path": "../../packages/social-core"
+    },
+    {
       "path": "../../packages/stand-ins"
+    },
+    {
+      "path": "../../packages/support-core"
     },
     {
       "path": "../../packages/support-core"

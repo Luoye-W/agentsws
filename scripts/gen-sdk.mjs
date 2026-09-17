@@ -57,7 +57,17 @@ if (check && before !== json) {
 
 // openapi-typescript 是 packages/sdk 自己的 devDependency（不进根 package.json）
 const cli = join(SDK, 'node_modules/.bin/openapi-typescript')
-const generated = execFileSync(cli, [OPENAPI_JSON], { encoding: 'utf8', cwd: ROOT })
+/*
+ * `maxBuffer` 不能用默认值（1 MiB）。生成出来的 `schema.ts` 本来就 800 KB 打底，
+ * WP90 加了六条路由之后越过 1 MiB，`execFileSync` 直接 `ENOBUFS` + SIGTERM ——
+ * 而且它报的是"子进程被杀"，看不出是缓冲区满了。给足 64 MiB：这是一次构建期
+ * 的一次性读取，多留一点没有代价，越界那天报的错也该是真的错。
+ */
+const generated = execFileSync(cli, [OPENAPI_JSON], {
+  encoding: 'utf8',
+  cwd: ROOT,
+  maxBuffer: 64 * 1024 * 1024,
+})
 
 const banner = `/**
  * **自动生成，别手改。** 来源：\`/v1\` 的路由声明（\`packages/api/src/routes/*\`）。

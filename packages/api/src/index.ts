@@ -243,6 +243,12 @@ export type {
   ModelUsageView,
   SaveModelProviderInput,
   SetModelDefaultsInput,
+  SubscriptionLoginInput,
+  SubscriptionLoginMethodName,
+  SubscriptionNoticeView,
+  SubscriptionProviderKind,
+  SubscriptionQuestionView,
+  SubscriptionView,
 } from './routes/models.js'
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
 export type {

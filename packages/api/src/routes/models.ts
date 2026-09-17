@@ -66,6 +66,15 @@ export type ModelProviderKind =
    * 界面上显示"先在设置 → 账号与积分里关联账号"。
    */
   | 'agentsws_cloud'
+  /**
+   * WP90（55 §9 Q8）：**用 ChatGPT 的订阅登录**（`pi-ai` 的 `openai-codex`）。
+   *
+   * 与前三种的根本差别：**没有 key 可填**。凭据是一次 OAuth 登录的产物，
+   * 存在本机加密秘密库里、由官方 `pi-ai` 自己刷新；这一条只在个人档出现。
+   */
+  | 'openai-codex'
+  /** WP90：**用 Claude 的订阅登录**（`pi-ai` 的 `anthropic`）。同上。 */
+  | 'anthropic'
 
 /**
  * 一个 provider 的对外形状。**这里没有、也不会有 key 字段。**
@@ -113,11 +122,41 @@ export interface ModelProviderView {
   from_env?: boolean
 }
 
-/** 可以新建哪几种 provider——界面照着画卡片，文案在这里，不在前端。 */
+/**
+ * 可以新建哪几种 provider——界面照着画卡片，文案在这里，不在前端。
+ *
+ * **WP90 起一张卡可以有几个"方案"**（Luoye 定）：同一家厂商 / 渠道的几套接法
+ * （阿里云百炼的按量 / Token Plan / Coding Plan，OpenAI 的 API key / ChatGPT 订阅登录）
+ * 合成**一张卡**，点进去再选方案。以前是一个方案一张卡——三张百炼卡并排摆着，
+ * 用户第一眼要先分清"这三张有什么区别"，而那个区别恰恰是他还不知道的东西。
+ *
+ * 承载方式是**加三个可选字段**，不是改结构：`vendor` 相同的几条归一张卡，
+ * `plan_label` 是卡里那一排单选按钮上的字，`plan_order` 定顺序（小的在前，
+ * 默认选第一个）。不填 `vendor` 的那些照旧一条一张卡。
+ */
 export interface ModelProviderTemplate {
   kind: ModelProviderKind
   label: string
   summary: string
+  /** WP90：这几条属于同一张卡（缺省 = 自己独占一张卡）。 */
+  vendor?: string
+  /** 卡名（同一个 `vendor` 的几条要写一样的）。 */
+  vendor_label?: string
+  /** 卡上那句话（同上）。 */
+  vendor_summary?: string
+  /** 这一条在卡里叫什么方案（「Token Plan（订阅）」「按量计费」「用 ChatGPT 订阅登录」）。 */
+  plan_label?: string
+  /** 方案排序；小的在前，卡打开时默认选第一个。 */
+  plan_order?: number
+  /**
+   * 这个方案怎么认证：填 key（默认），还是用订阅登录。
+   *
+   * `subscription` 的方案**没有表单**——卡里换成一个"登录"按钮 + 风险提示，
+   * 走 `/v1/settings/models/subscription/*` 那几条路。
+   */
+  auth?: 'api_key' | 'subscription'
+  /** `auth: 'subscription'` 时走哪一家（与 {@link SubscriptionView.provider} 同一个串）。 */
+  subscription_provider?: SubscriptionProviderKind
   default_base_url: string
   default_model: string
   region: 'cn' | 'global'
@@ -132,6 +171,68 @@ export interface ModelProviderTemplate {
     model: string
     region: 'cn' | 'global'
   }[]
+}
+
+// ── WP90：订阅登录（55 §9 Q8）──────────────────────────────────────────
+
+/** 能用订阅登录的两家。名字是 `pi-ai` 的 provider id，三处（路由、凭据记录、这里）同一个串。 */
+export type SubscriptionProviderKind = 'openai-codex' | 'anthropic'
+
+/** 登录方式：设备码（在手机上输一串码）或浏览器（本机回调）。 */
+export type SubscriptionLoginMethodName = 'device' | 'browser'
+
+/** 登录途中的一条进展。**永远没有 token**——只有"去哪儿、输什么"。 */
+export interface SubscriptionNoticeView {
+  message: string
+  url?: string
+  code?: string
+}
+
+/** 登录途中要人回答的一个问题（浏览器流里"把授权码贴回来"那一条）。 */
+export interface SubscriptionQuestionView {
+  kind: 'text' | 'secret'
+  message: string
+  placeholder?: string
+}
+
+/**
+ * 一家订阅登录现在的样子。**这里没有、也不会有 token 字段。**
+ *
+ * 与凭据有关的只有三样：登没登录（布尔）、账号标识**脱敏后**的样子
+ * （`acct…cdef`，看不出完整 id）、什么时候过期。
+ */
+export interface SubscriptionView {
+  provider: SubscriptionProviderKind
+  /** 卡上的名字（「用 ChatGPT 订阅登录（Plus / Pro）」）。 */
+  label: string
+  summary: string
+  /** 这家能用哪几种登录方式，最推荐的在前（Claude 只有浏览器）。 */
+  methods: SubscriptionLoginMethodName[]
+  /** 固定的白话风险提示（卡上一定要显示）。 */
+  risk_note: string
+  /** 这台机器允不允许（只有个人档允许）。 */
+  available: boolean
+  /** 不允许的原因（人话）。 */
+  unavailable_reason?: string
+  signed_in: boolean
+  /** 账号标识**脱敏**后的样子；完整值永远不出服务进程。 */
+  account?: string
+  expires_at?: string
+  /** 现在有没有一次登录在跑。 */
+  in_flight: boolean
+  notice?: SubscriptionNoticeView
+  question?: SubscriptionQuestionView
+  /** 上一次为什么没成（人话；不含任何凭据）。 */
+  last_error?: string
+  /** 登录之后能用哪些模型（目录来自 `pi-ai`：gpt-5.x / claude-*）。价目一律是"订阅"。 */
+  models: { id: string; name: string }[]
+  /** 这个人在这一家选了哪个模型。 */
+  selected_model?: string
+}
+
+export interface SubscriptionLoginInput {
+  provider: SubscriptionProviderKind
+  method: SubscriptionLoginMethodName
 }
 
 export interface ModelTestResult {
@@ -347,6 +448,35 @@ export interface ModelsPort {
     actor: ModelsActor,
     input: SetModelInheritanceInput,
   ): MaybePromise<ModelDefaultsView>
+
+  /*
+   * WP90（55 §9 Q8）：订阅登录。**五个方法都是可选的**——不实现 =
+   * 这个进程没有装配订阅登录（公司端的镜像就该是这样），路由回 not_implemented。
+   *
+   * 为什么挂在模型面而不是新开一个端口：它就是"这台机器怎么接模型"的第三种答案
+   * （前两种是填 key 与用积分），设置页上也在同一节里。
+   */
+  subscriptions?(actor: ModelsActor): MaybePromise<SubscriptionView[]>
+  subscription?(actor: ModelsActor, provider: string): MaybePromise<SubscriptionView>
+  /** 起一次登录；回来时带着"去这个网址、输这串码"，界面据此轮询 `subscription()`。 */
+  subscriptionLogin?(
+    actor: ModelsActor,
+    input: SubscriptionLoginInput,
+  ): MaybePromise<SubscriptionView>
+  /** 回答登录途中的那个问题（把授权码贴回来）。 */
+  subscriptionAnswer?(
+    actor: ModelsActor,
+    provider: string,
+    value: string,
+  ): MaybePromise<SubscriptionView>
+  /** 选这一家用哪个模型（目录来自 `pi-ai`）。 */
+  subscriptionSelectModel?(
+    actor: ModelsActor,
+    provider: string,
+    model: string,
+  ): MaybePromise<SubscriptionView>
+  /** 登出 = 销毁本机那条记录。 */
+  subscriptionSignOut?(actor: ModelsActor, provider: string): MaybePromise<void>
 }
 
 /** 装配方给网关的 ModelRef 拆解（`provider/model`）。 */
@@ -358,7 +488,22 @@ export function parseModelId(id: string): ModelRef | undefined {
 
 // ── 校验 ───────────────────────────────────────────────────────────────
 
-const KIND = z.enum(['deepseek', 'openai_compatible', 'agentsws_cloud'])
+const KIND = z.enum([
+  'deepseek',
+  'openai_compatible',
+  'agentsws_cloud',
+  'openai-codex',
+  'anthropic',
+])
+/** WP90：订阅登录的两家 + 两种方式。值一律白名单，不接受别的串。 */
+const SUBSCRIPTION_PROVIDER = z.enum(['openai-codex', 'anthropic'])
+const SubscriptionLoginBody = z.object({
+  provider: SUBSCRIPTION_PROVIDER,
+  method: z.enum(['device', 'browser']),
+})
+/** 贴回来的授权码：只限长度，**值不进任何错误信封**（与 `api_key` 同一条纪律）。 */
+const SubscriptionAnswerBody = z.object({ value: z.string().min(1).max(4096) })
+const SubscriptionModelBody = z.object({ model: z.string().min(1).max(128) })
 const REGION = z.enum(['cn', 'global'])
 const PURPOSE = z.enum(['run', 'extraction', 'reflection', 'embedding', 'judge', 'transcription'])
 
@@ -428,6 +573,24 @@ function actorOf(c: Parameters<typeof principalOf>[0]): ModelsActor {
     role_id: a.role_id,
   }
 }
+
+/**
+ * WP90：装了订阅登录才有这五条路。没装 = 这个进程是公司端 / 托管端的镜像，
+ * 那里本来就不该有"用个人账号登录"这件事——回 not_implemented，不是 500。
+ */
+function subscriptionPortOf(deps: GatewayDeps): ModelsPort {
+  const p = portOf(deps)
+  if (p.subscriptionLogin === undefined || p.subscription === undefined)
+    throw new ApiError('not_implemented', '这个服务进程没有装配订阅登录（55 §9）')
+  return p
+}
+
+const PROVIDER_PARAM = {
+  name: 'provider',
+  in: 'path',
+  required: true,
+  description: '订阅登录的那一家：openai-codex（ChatGPT）或 anthropic（Claude）',
+} as const
 
 const ID_PARAM = {
   name: 'id',
@@ -647,6 +810,136 @@ export function modelRoutes(): Route[] {
       async (c, deps) => {
         await portOf(deps).remove(actorOf(c), param(c, 'id'))
         return ok(c, { removed: true })
+      },
+    ),
+    /*
+     * WP90（55 §9 Q8）：订阅登录五条路。
+     *
+     * 路径挂在 `/v1/settings/models/subscription` 下而不是 `/v1/models/…`：
+     * 这是**设置页上的一件事**（这台机器上这个人登了谁的账号），不是"这个工作区
+     * 配了哪些模型 provider"——它按人、按机器，不按工作区。与 `/v1/settings/browser`
+     * （WP82，同样是一台机器一份）摆在一起。
+     *
+     * 权限照模型面那一套：读 `store_config.read`，改 `policy.stage`。
+     */
+    route(
+      {
+        method: 'get',
+        path: '/v1/settings/models/subscription',
+        operationId: 'listModelSubscriptions',
+        summary:
+          '用 ChatGPT / Claude 的订阅登录现在什么样（**永不含 token**：只有登没登录、账号脱敏后的样子、到期时间）。公司档 / 托管档上 available=false 并带一句人话',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '{ providers: SubscriptionView[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.subscriptions === undefined) return ok(c, { providers: [] })
+        return ok(c, { providers: await port.subscriptions(actorOf(c)) })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/settings/models/subscription/login',
+        operationId: 'startModelSubscriptionLogin',
+        summary:
+          '起一次订阅登录（设备码或浏览器）：回来时带着"去这个网址、输这串码"，界面据此轮询状态。**只在个人档**，公司档 403',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: SubscriptionLoginBody,
+        returns: 'SubscriptionView',
+      },
+      async (c, deps) => {
+        const port = subscriptionPortOf(deps)
+        const input = await body(c, SubscriptionLoginBody)
+        return ok(c, await port.subscriptionLogin?.(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/settings/models/subscription/:provider',
+        operationId: 'getModelSubscription',
+        summary: '这一家订阅登录现在什么样（界面登录途中轮询它）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [PROVIDER_PARAM],
+        returns: 'SubscriptionView',
+      },
+      async (c, deps) => {
+        const port = subscriptionPortOf(deps)
+        return ok(c, await port.subscription?.(actorOf(c), param(c, 'provider')))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/settings/models/subscription/:provider/answer',
+        operationId: 'answerModelSubscriptionLogin',
+        summary:
+          '回答登录途中的那个问题（把浏览器里的授权码贴回来）。值只走这一次，不落盘、不进事件、不回显',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [PROVIDER_PARAM],
+        body: SubscriptionAnswerBody,
+        returns: 'SubscriptionView',
+      },
+      async (c, deps) => {
+        const port = subscriptionPortOf(deps)
+        const input = await body(c, SubscriptionAnswerBody)
+        return ok(c, await port.subscriptionAnswer?.(actorOf(c), param(c, 'provider'), input.value))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/settings/models/subscription/:provider/model',
+        operationId: 'selectModelSubscriptionModel',
+        summary: '选这一家用哪个模型（清单来自 pi-ai 的目录；价目一律显示"订阅"）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [PROVIDER_PARAM],
+        body: SubscriptionModelBody,
+        returns: 'SubscriptionView',
+      },
+      async (c, deps) => {
+        const port = subscriptionPortOf(deps)
+        const input = await body(c, SubscriptionModelBody)
+        return ok(
+          c,
+          await port.subscriptionSelectModel?.(actorOf(c), param(c, 'provider'), input.model),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/settings/models/subscription/:provider',
+        operationId: 'signOutModelSubscription',
+        summary: '登出：把本机那条授权记录销毁（下一次运行就连不上了，这正是本意）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [PROVIDER_PARAM],
+        returns: '{ signed_out: true }',
+      },
+      async (c, deps) => {
+        const port = subscriptionPortOf(deps)
+        await port.subscriptionSignOut?.(actorOf(c), param(c, 'provider'))
+        return ok(c, { signed_out: true })
       },
     ),
   ]

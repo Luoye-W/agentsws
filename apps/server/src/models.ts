@@ -295,11 +295,63 @@ export const BAILIAN_CODING_DEFAULT_MODEL = 'qwen3.7-plus'
  * 硅基流动、以及本地跑的 Ollama / vLLM——它们的 `/chat/completions` 是同一个形状，
  * 差别只在地址和模型名。所以给一组预设点一下就填好，而不是每家写一张卡。
  */
+
+/**
+ * WP90（Luoye 定）：**同一家厂商 / 渠道的几个方案合成一张卡**，点进去再选方案。
+ *
+ * WP88 把百炼做成了三张并排的卡（按量 / Token Plan / Coding Plan）。三张卡各自
+ * 讲得都对，但摆在一起的第一眼问题是"这三张有什么区别"——而那恰恰是用户还不
+ * 知道的事。合成一张之后，第一眼变成"阿里云百炼"，第二眼才是"你买的是哪个方案"，
+ * 那是个他答得上来的问题。
+ *
+ * **三套逻辑一行没改**：地址、key 形态、说明、计费方式还是各是各的，
+ * 只是从三张卡收进一张卡的三个单选。已经填好的配置也一条不动——保存的是
+ * provider 配置（`models.json` + 加密库），与卡怎么画无关。
+ */
+const BAILIAN_VENDOR = {
+  vendor: 'bailian',
+  vendor_label: '阿里云百炼',
+  vendor_summary:
+    '一把 key 同时调通义千问与 DeepSeek，账单也在一处。先选你买的是哪个方案——三个方案的地址与 key 互不通用，选错要么打不通要么乱扣钱。',
+} as const
+
+/** WP90：订阅登录那两张卡的接口地址（只是给卡一个稳定的身份，不真的往这儿发请求）。 */
+export const CHATGPT_SUBSCRIPTION_URL = 'https://chatgpt.com'
+export const CLAUDE_SUBSCRIPTION_URL = 'https://claude.ai'
+
+/**
+ * Anthropic 自己的 **OpenAI 兼容口**（`https://api.anthropic.com/v1/`）。
+ *
+ * 官方给的是"把 OpenAI SDK 的 base_url 指到这里、把 key 换成 Anthropic 的"那一层
+ * 兼容层，所以形态仍是 `openai_compatible`，复用同一套 provider 实现。
+ */
+export const ANTHROPIC_OPENAI_COMPAT_URL = 'https://api.anthropic.com/v1'
+
+const OPENAI_VENDOR = {
+  vendor: 'openai',
+  vendor_label: 'OpenAI / ChatGPT',
+  vendor_summary:
+    '两条路：用你已经在付的 ChatGPT 订阅登录，或者去 platform.openai.com 建一把 API key 按量付费。',
+} as const
+
+const ANTHROPIC_VENDOR = {
+  vendor: 'anthropic',
+  vendor_label: 'Anthropic / Claude',
+  vendor_summary:
+    '两条路：用你已经在付的 Claude 订阅登录，或者去 console.anthropic.com 建一把 API key 按量付费。',
+} as const
+
 export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
   {
     kind: 'deepseek',
     label: 'DeepSeek 官方',
     summary: '国内直连、便宜、够用。没别的偏好就选它。',
+    vendor: 'deepseek',
+    vendor_label: 'DeepSeek 官方',
+    vendor_summary: '国内直连、便宜、够用。没别的偏好就选它。',
+    plan_label: 'API key（按量计费）',
+    plan_order: 1,
+    auth: 'api_key',
     default_base_url: 'https://api.deepseek.com',
     default_model: 'deepseek-chat',
     region: 'cn',
@@ -317,6 +369,13 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     label: 'OpenAI 兼容（自定义）',
     summary:
       '任何"OpenAI 格式"的服务都能接：OpenAI、Moonshot、通义千问、智谱，以及这台电脑上跑的 Ollama。',
+    vendor: 'openai-compatible',
+    vendor_label: 'OpenAI 兼容（自定义）',
+    vendor_summary:
+      '任何"OpenAI 格式"的服务都能接：OpenAI、Moonshot、通义千问、智谱，以及这台电脑上跑的 Ollama。',
+    plan_label: '自己填地址与 key',
+    plan_order: 1,
+    auth: 'api_key',
     default_base_url: 'https://api.openai.com/v1',
     default_model: 'gpt-4o-mini',
     region: 'global',
@@ -400,6 +459,10 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     kind: 'openai_compatible',
     label: '阿里云百炼（标准，按量计费）',
     summary: '一把 key 同时调通义千问与 DeepSeek，账单也在一处，用多少算多少。',
+    ...BAILIAN_VENDOR,
+    plan_label: '按量计费（标准）',
+    plan_order: 2,
+    auth: 'api_key',
     default_base_url: BAILIAN_CN_BASE_URL,
     default_model: BAILIAN_DEFAULT_MODEL,
     region: 'cn',
@@ -453,6 +516,10 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     label: '阿里云百炼 Token Plan（订阅）',
     summary:
       '买了 Token Plan 订阅的走这张：按 Credits 扣，不按 token 花钱。专属 key（sk-sp- 开头）配专属地址，和按量那张完全不通用。',
+    ...BAILIAN_VENDOR,
+    plan_label: 'Token Plan（订阅）',
+    plan_order: 1,
+    auth: 'api_key',
     default_base_url: BAILIAN_TOKEN_PLAN_BASE_URL,
     default_model: BAILIAN_TOKEN_PLAN_DEFAULT_MODEL,
     region: 'cn',
@@ -483,6 +550,10 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     label: '阿里云百炼 Coding Plan（订阅）',
     summary:
       '买了 Coding Plan 订阅的走这张：按次数配额，不按 token 花钱。key 与地址同样和别的档不通用。',
+    ...BAILIAN_VENDOR,
+    plan_label: 'Coding Plan（订阅）',
+    plan_order: 3,
+    auth: 'api_key',
     default_base_url: BAILIAN_CODING_BASE_URL,
     default_model: BAILIAN_CODING_DEFAULT_MODEL,
     region: 'cn',
@@ -521,6 +592,112 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     ],
   },
   /*
+   * WP90（55 §9 Q8）：**OpenAI 一张卡，两个方案**——用 ChatGPT 的订阅登录，
+   * 或者填 API key 按量付费。
+   *
+   * 订阅那个方案排第一：很多人已经在付 ChatGPT 的钱，再买一份 API 额度是白花。
+   * 但它**只在个人档**能用，而且卡上必须写明风险（见 `SUBSCRIPTION_RISK_NOTE`）——
+   * 第三方工具用订阅登录没有得到 OpenAI 的明文授权。
+   */
+  {
+    kind: 'openai-codex',
+    label: '用 ChatGPT 订阅登录（Plus / Pro）',
+    summary: '已经在付 ChatGPT 的钱就不用再买 API 额度：登录一次，按订阅额度跑。',
+    ...OPENAI_VENDOR,
+    plan_label: '用 ChatGPT 订阅登录（Plus / Pro）',
+    plan_order: 1,
+    auth: 'subscription',
+    subscription_provider: 'openai-codex',
+    default_base_url: CHATGPT_SUBSCRIPTION_URL,
+    default_model: 'gpt-5.4',
+    region: 'global',
+    steps: [
+      '确认你的 ChatGPT 账号是 Plus 或 Pro（免费档没有这条路）',
+      '点下面的"用设备码登录"——会给你一个网址和一串码',
+      '在手机或另一台电脑上打开那个网址，输入那串码，确认授权',
+      '这一页会自己变成"已登录"，然后选一个模型',
+      '要退出就点"登出"：本机那条授权记录当场销毁',
+    ],
+    links: [
+      { label: 'ChatGPT 订阅档位', url: 'https://openai.com/chatgpt/pricing' },
+      { label: 'Codex CLI（这条登录路的出处）', url: 'https://github.com/openai/codex' },
+    ],
+  },
+  {
+    kind: 'openai_compatible',
+    label: 'OpenAI（API key，按量计费）',
+    summary: '在 platform.openai.com 建一把 key，按 token 付费。与 ChatGPT 的订阅是两笔钱。',
+    ...OPENAI_VENDOR,
+    plan_label: 'API key（按量计费）',
+    plan_order: 2,
+    auth: 'api_key',
+    default_base_url: 'https://api.openai.com/v1',
+    default_model: 'gpt-4o-mini',
+    region: 'global',
+    steps: [
+      '打开 platform.openai.com，登录后进 API keys',
+      '建一把 key，复制那一串（只显示一次）',
+      '粘进下面的表单，地址保持预填的那条',
+      '点"拉取模型列表"选一个模型',
+      '点"测试"确认能通',
+    ],
+    links: [{ label: 'OpenAI API keys', url: 'https://platform.openai.com/api-keys' }],
+  },
+  /*
+   * WP90：**Anthropic 一张卡，两个方案**——用 Claude 的订阅登录，或者填 API key。
+   *
+   * 订阅那条**没有设备码**（实测：`pi-ai` 的 anthropic 流只有浏览器 + 贴授权码），
+   * 所以卡上只会出现"用浏览器登录"一个按钮——方式清单由服务端给，不在前端写死。
+   */
+  {
+    kind: 'anthropic',
+    label: '用 Claude 订阅登录（Pro / Max）',
+    summary: '已经在付 Claude 的钱就不用再买 API 额度：登录一次，按订阅额度跑。',
+    ...ANTHROPIC_VENDOR,
+    plan_label: '用 Claude 订阅登录（Pro / Max）',
+    plan_order: 1,
+    auth: 'subscription',
+    subscription_provider: 'anthropic',
+    default_base_url: CLAUDE_SUBSCRIPTION_URL,
+    default_model: 'claude-sonnet-4-5',
+    region: 'global',
+    steps: [
+      '确认你的 Claude 账号是 Pro 或 Max（免费档没有这条路）',
+      '点下面的"用浏览器登录"——会打开 Claude 的授权页',
+      '授权完成后这一页会自己变成"已登录"；浏览器在别的机器上就把授权码贴回来',
+      '选一个模型',
+      '要退出就点"登出"：本机那条授权记录当场销毁',
+    ],
+    links: [{ label: 'Claude 订阅档位', url: 'https://claude.ai/upgrade' }],
+  },
+  {
+    kind: 'openai_compatible',
+    label: 'Anthropic（API key，按量计费）',
+    summary:
+      'Anthropic 官方的 OpenAI 兼容口：把地址指到 api.anthropic.com/v1、填一把 Anthropic 的 key 就能用。',
+    ...ANTHROPIC_VENDOR,
+    plan_label: 'API key（按量计费）',
+    plan_order: 2,
+    auth: 'api_key',
+    default_base_url: ANTHROPIC_OPENAI_COMPAT_URL,
+    default_model: 'claude-sonnet-4-5',
+    region: 'global',
+    steps: [
+      '打开 console.anthropic.com，进 API keys 建一把',
+      '复制那一串，粘进下面的表单',
+      '地址保持预填的那条（官方的 OpenAI 兼容口，以 /v1 结尾）',
+      '选一个模型名（claude-sonnet-4-5 之类）',
+      '点"测试"确认能通',
+    ],
+    links: [
+      { label: 'Anthropic Console', url: 'https://console.anthropic.com/settings/keys' },
+      {
+        label: 'OpenAI SDK 兼容层说明',
+        url: 'https://docs.anthropic.com/en/api/openai-sdk',
+      },
+    ],
+  },
+  /*
    * 49 M2 第三张卡：**用 agentsws 的**。
    *
    * 与前两张唯一的差别是"要准备什么"那一栏——**什么都不用准备**：不填 key、
@@ -533,6 +710,12 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     kind: 'agentsws_cloud',
     label: 'agentsws 云（用积分）',
     summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
+    vendor: 'agentsws-cloud',
+    vendor_label: 'agentsws 云（用积分）',
+    vendor_summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
+    plan_label: '按积分',
+    plan_order: 1,
+    auth: 'api_key',
     default_base_url: `${DEFAULT_CLOUD_BASE_URL}/v1/ai`,
     default_model: 'deepseek-flash',
     region: 'cn',
