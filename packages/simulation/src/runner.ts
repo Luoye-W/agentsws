@@ -27,6 +27,7 @@ import { judgeConfigOf, runModelJudge, runRuleJudge } from './judge.js'
 import { computeMetrics } from './metrics.js'
 import type { Pack } from './pack.js'
 import { loadPack } from './pack.js'
+import { type DesignLoop, installDesign } from './design.js'
 import { installPositions, type PositionsLoop } from './positions.js'
 import type { ScenarioReport } from './report.js'
 import { buildReport } from './report.js'
@@ -36,6 +37,9 @@ import type {
   Scenario,
   ScenarioEvent,
   ScenarioPositionOpen,
+  ScenarioDesignPick,
+  ScenarioDesignRequest,
+  ScenarioDesignVariants,
   ScenarioPositionStaff,
   ScenarioSecretaryAsk,
   ScenarioSecretaryDecide,
@@ -767,6 +771,83 @@ async function execute(
     }
   }
 
+  /* ── WP76（58）：设计岗位 ─────────────────────────────────────────── */
+
+  /**
+   * 惰性装配：场景里没有 `design.*` 就一个都不装（同 `positions`）。
+   *
+   * 三条事件之间靠**上一条的产物**串起来：`design.variants` 不给 `brief_id`
+   * 就用刚出的那一份，`design.pick` 不给 `asset_id` 就挑刚出的第一张。
+   * 场景里写死 id 的后果是每加一条事件就要重编一遍编号。
+   */
+  let design: DesignLoop | undefined
+  const designLoop = (): DesignLoop => {
+    design ??= installDesign(world)
+    world.design = design
+    return design
+  }
+
+  const designRequest = async (input: ScenarioDesignRequest): Promise<void> => {
+    const out = await designLoop().request({
+      who: input.who,
+      from: input.from,
+      title: input.title,
+      need: input.need,
+      ...(input.specs === undefined ? {} : { specs: input.specs }),
+    })
+    world.appendEvent('simulation.design_request_requested', {
+      from_role_id: input.from,
+      // 路由真判到哪条、brief 出没出——58 §1 那两件事就是这两格
+      ...(out.routed_to === undefined ? {} : { routed_to: out.routed_to }),
+      brief_drafted: out.brief_id !== undefined,
+    })
+  }
+
+  const designVariants = async (input: ScenarioDesignVariants): Promise<void> => {
+    const loop = designLoop()
+    const brief_id = input.brief_id ?? loop.requests.at(-1)?.brief_id
+    if (brief_id === undefined) {
+      workBlocked(
+        new Error('还没有 brief：先来一条 design.request'),
+        'design_variants_without_brief',
+      )
+      return
+    }
+    const out = await loop.variants({
+      who: input.who,
+      brief_id,
+      ...(input.n === undefined ? {} : { n: input.n }),
+      ...(input.image_model === undefined ? {} : { image_model: input.image_model }),
+      ...(input.level === undefined ? {} : { level: input.level }),
+    })
+    world.appendEvent('simulation.design_variants_requested', {
+      brief_id,
+      n: out.n,
+      generated: out.generated,
+      image_model: out.image_model,
+    })
+  }
+
+  const designPick = async (input: ScenarioDesignPick): Promise<void> => {
+    const loop = designLoop()
+    const asset_id = input.asset_id ?? loop.variantRuns.at(-1)?.asset_ids[0]
+    if (asset_id === undefined) {
+      workBlocked(new Error('没有可挑的素材：先来一条 design.variants'), 'design_pick_without_asset')
+      return
+    }
+    const out = await loop.pick({
+      who: input.who,
+      asset_id,
+      ...(input.level === undefined ? {} : { level: input.level }),
+      ...(input.without_pick === undefined ? {} : { without_pick: input.without_pick }),
+    })
+    world.appendEvent('simulation.design_pick_requested', {
+      asset_id,
+      staged: out.staged,
+      auto_approved: out.auto_approved,
+    })
+  }
+
   const dispatch = async (event: ScenarioEvent): Promise<void> => {
     switch (event.type) {
       case 'inbound.email': {
@@ -1056,6 +1137,22 @@ async function execute(
           suppressed_removed: out.suppressed.length,
           ...(out.reason === undefined ? {} : { reason: out.reason }),
         })
+        return
+      }
+      // ── WP76 设计岗位（58 §1）──────────────────────────────────────
+      case 'design.request': {
+        await designRequest(event.design_request)
+        await tick()
+        return
+      }
+      case 'design.variants': {
+        await designVariants(event.design_variants)
+        await tick()
+        return
+      }
+      case 'design.pick': {
+        await designPick(event.design_pick)
+        await tick()
         return
       }
       // ── WP72 社媒运营（56 §2 / §4）─────────────────────────────────

@@ -878,6 +878,9 @@ importers:
       '@agentsws/deck':
         specifier: workspace:*
         version: link:../deck
+      '@agentsws/design-core':
+        specifier: workspace:*
+        version: link:../design-core
       '@agentsws/dsh-adapter':
         specifier: workspace:*
         version: link:../dsh-adapter

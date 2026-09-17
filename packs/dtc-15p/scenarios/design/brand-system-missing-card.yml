@@ -1,0 +1,55 @@
+# WP76（58 §2 / §3 第四张卡）：**没设品牌系统 → 出一张卡，而不是编一套配色**。
+#
+# 15 人 pack 里**没有** `skills/brand-system.md`（3 人 pack 里有）——所以这条题
+# 里的"没设过"是真的没设过，不是场景开了一个开关。
+#
+# 要钉的是两件事，缺一不可：
+#
+# 1. **不挡路**。brief 照样出，尺寸、文案、平台硬规矩一样不少——58 §1 说的
+#    "没有图片模型也只出 brief 与规格"是同一条道理：缺一样东西不等于这条
+#    职责停摆。
+# 2. **把代价说清楚**。卡上那句话不是"缺少配置"，是"没有它，出来的图每一张
+#    都是另一种风格——同一个品牌的十张图放在一起会像十个牌子"。
+#
+# 为什么不编一套"看起来还行"的默认配色：编了之后这个品牌所有的图都按我们编的
+# 那套出，而没有人同意过。`design-core` 的 `brand.ts` 从头到尾没有一个色值。
+id: design/brand-system-missing-card
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 15 人公司里设计是专职的：先把设计岗配给他（46 §1 ③ 勾岗位 = 默认职责全勾）
+  - at: '+0m'
+    position.staff: { who: p_wei, position: design }
+  - at: '+10m'
+    design.request:
+      who: p_wei
+      from: human
+      title: 展会易拉宝两版
+      need: 下个月参展，要两版易拉宝。目标：让路过的人三秒内知道我们卖什么。受众：来看桌面配件的采购。
+      specs: [print.rollup]
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  design_request:
+    # 手动开的单没有上游职责，按需求里的词判到展会设计
+    routed_to: design.exhibition
+    # 不挡路：brief 照样出
+    brief_drafted: true
+    brief_auto_approved: true
+    # 这家公司真的没设过品牌系统 → 出「先设品牌系统」卡
+    brand_system_missing: true
+    # 缺品牌系统那一句也原样记在卡上
+    questions_at_least: 1
+  event_types:
+    - simulation.design_request_routed
+    - simulation.design_brief_drafted
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  "先设品牌系统"那张卡上，读完知道"不设会怎样"吗？还是只说了一句"缺少配置"？

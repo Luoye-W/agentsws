@@ -1,0 +1,59 @@
+# WP76（58 §1 / 54）：**需求单从别的岗位来，岗位路由挑那条设计职责**。
+#
+# 这条题要钉三件事，每一件都是真发生的，不是场景自己判的：
+#
+# 1. **下单的是网站运营，不是设计岗**。`request_design` 那条动作是从
+#    `dtc.store` 那条分配上提的——权限、额度、等级全是它的（05 §4 不并集）。
+#    设计岗自己不发明需求，58 §1「需求来源」那一列写的就是这件事。
+# 2. **落到哪条设计职责由路由真判**（`routeWithinPosition`，与服务进程、
+#    与秘书是同一份）。五条设计职责的动作 id 与数据域一模一样，所以
+#    **意图词是唯一分得开它们的东西**——"产品页""主视觉""Banner"这几个词
+#    把这张单判到了独立站设计，而不是 Amazon 设计或展会设计。
+# 3. **brief L3 自动出**（58 §1 上限那一列）。它不产生任何外部可见的东西：
+#    一段给人看的文字，看完不合适改一句就是了。真正要人点的在后面两条题。
+#
+# 需求里**故意没写受众**：brief 照样出，但"给谁看？"这一句原样记在卡上
+# （`questions_at_least`）。编一个"新客"填进去才是真的错——那等于我们替
+# 需求方做了决定，而卡面上看不出来。
+#
+# 一个合成人都不装：brief 是 L3 自动出的，没有人要点它。
+id: design/request-routes-from-store
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 李默（运营，兼着网站运营的店铺管理与设计岗的独立站设计）给自己下一张单
+  - at: '+0m'
+    design.request:
+      who: p_li
+      from: dtc.store
+      title: 65W 充电器产品页主视觉
+      need: 下周上新，产品页要一张横版主视觉 Banner。目标：让人一眼看懂一个口能同时喂笔记本和手机。图上写“一个口，三台设备”。
+      specs: [web.hero.desktop]
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  design_request:
+    # 意图词真判出来的那一条（不是场景指定的）
+    routed_to: design.dtc
+    brief_drafted: true
+    # L3 自动：brief 只产生一段给人看的文字
+    brief_auto_approved: true
+    # 需求里没写受众 —— 那一句要原样记在卡上，**不编一个填进去**
+    questions_at_least: 1
+    # 3 人 pack 里有一张公司层的品牌系统，所以不该出「先设品牌系统」卡
+    brand_system_missing: false
+  staged_change_kinds: [design_request, design_brief]
+  event_types:
+    - simulation.design_request_routed
+    - simulation.design_brief_drafted
+  metrics:
+    staged_changes: 2
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  brief 卡上"这张图要达成什么、画多大、不许出现什么"三样齐不齐？缺的那一样是不是明说了缺？

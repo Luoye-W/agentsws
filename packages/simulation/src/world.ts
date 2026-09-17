@@ -166,6 +166,7 @@ import type {
 } from './evidence.js'
 import { installLearningLoop, type LearningLoop, type LearningOptions } from './learning.js'
 import type { Pack, PackAssignment, PackCustomer } from './pack.js'
+import type { DesignLoop } from './design.js'
 import type { PositionsLoop } from './positions.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 import type { RuntimeName } from './runtime-name.js'
@@ -379,6 +380,13 @@ export interface World {
    * 场景里出现 `position.*` 才装；不装的世界一次路由都不跑，原有场景的指标一个不变。
    */
   positions?: PositionsLoop
+  /**
+   * WP76（58）：设计岗位。**惰性**——场景里没有 `design.*` 就一个都不装
+   * （同 `positions`）。判据一个字都不在模拟层：路由走 `routeWithinPosition`、
+   * brief 走 `design-core` 的 `draftBrief`、入库的"永远人审"走 guardrail 的
+   * `HARD_L1`。
+   */
+  design?: DesignLoop
   /**
    * WP32：每一拍的审批总线例行公事——过期、升级链、抽检复核、把新投递刷成卡片。
    *

@@ -256,6 +256,11 @@ const PEOPLE_3: PersonTemplate[] = [
       'kol.youtube',
       'social.meta',
       'social.discord',
+      // WP76（58 §1）：设计也归他——3 人公司里没有专职设计，官网要一张图的时候
+      // 是同一个人自己去做的。**只挂独立站设计一条**：五条的骨架完全相同
+      // （58 §1 第一句），多挂几条演示不出新东西，反而让"路由挑哪一条"这件事
+      // 在只有一条候选时失去意义（`routeWithinPosition` 那两条阈值都不看）。
+      'design.dtc',
     ],
   },
   {
@@ -628,6 +633,39 @@ Agent 只能提出退款，不能自己施行；退款一律进审批队列，�
 `,
   },
 ]
+
+/**
+ * WP76（58 §2）：公司层的品牌系统卡（色 / 字 / 版式 / 禁忌）。
+ *
+ * 人写的，Agent 只读不编（`design-core` 的 `brand.ts`）。禁忌那一段是
+ * guardrail 拿去查提示词的那一张表——所以它是一串**词**，不是一段话。
+ */
+const SKILL_BRAND_SYSTEM = `---
+name: brand-system
+description: 品牌系统：色、字、版式、禁忌。设计岗位出图前取它，Agent 只读不编。
+---
+
+## 色
+
+- #0F172A 主色（深蓝，用在大块背景与标题）
+- #F97316 强调色（只用在一处，用多了就不强调了）
+- #FFFFFF 底
+
+## 字
+
+- Inter
+- 思源黑体
+
+## 版式
+
+留白多，产品居中，一屏只说一件事。不堆元素，不加边框，不上渐变。
+
+## 禁忌
+
+- 竞品 logo
+- 真人脸
+- 手写字体
+`
 
 const SKILL_OVERLAY = `# 个人 overlay 示例：王岚的售后习惯
 
@@ -1074,6 +1112,14 @@ export function synth(options: SynthOptions): SynthResult {
     files.set(doc.path, `---\n${front}\n---\n${doc.body}`)
   }
   files.set('skills/aftersales-overlay.md', SKILL_OVERLAY)
+  /*
+   * WP76（58 §2 / 24）：品牌系统是**公司层技能**。
+   *
+   * 只有 3 人 pack 有——15 人 pack **故意没有**：
+   * `design/brand-system-missing-card` 那条题要证的是"这家公司真的没设过，
+   * 于是出了一张卡"，靠场景开一个开关就什么都没证明。
+   */
+  if (preset.size === 3) files.set('skills/brand-system.md', SKILL_BRAND_SYSTEM)
   for (const [name, body] of Object.entries(FIXTURES)) files.set(`fixtures/${name}`, body)
   files.set(
     'README.md',
