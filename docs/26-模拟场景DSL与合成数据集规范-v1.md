@@ -115,13 +115,45 @@ parity 比的才是运行时本身。`stub` 运行时不受影响（它自己就
 | §2 pack | `packs/dtc-3c-3p`（3 人）、`packs/dtc-15p`（15 人） | 50 人档 `synth --size 50` 现生成、跑一条烟测，**不入库不进门禁**；pack 可自带 `roles/*.yml`（15 人的运营与投放两个岗位就是这么来的） |
 | §3 替身 | `packages/stand-ins` | model 档：stub / 真模型（realistic）；replay provider 仍未实现（见下） |
 | §4 fast | `ci.yml` | 13 条场景 × 六条不变量 × 三个运行时（stub / direct / dsh-subprocess） |
-| §4 realistic | `nightly.yml` job `realistic` | 真模型经网关，key 只从环境变量（`DEEPSEEK_API_KEY` 或 `AGENTSWS_SIM_MODEL_API_KEY`）；**没有 key 整档跳过并说明，不红**；同 seed 下客户来信内容固定（`out/realistic-cache/` 写一次、之后回放）；花费按 `model.usage` 记账，超 `--max-cost-base` 就停 |
+| §4 realistic | `nightly.yml` job `realistic` | 真模型经网关，key 只从环境变量（`DEEPSEEK_API_KEY` 或 `AGENTSWS_SIM_MODEL_API_KEY`）；**没有 key 整档跳过并说明，不红**；同 seed 下客户来信内容固定（`out/realistic-cache/` 写一次、之后回放）；花费按 `model.usage` 记账，超 `--max-cost-base` 就停。**WP88 起认三档预设**，见下面「realistic 档要设哪几个变量」 |
 | §4 soak | `nightly.yml` job `soak` | 同一个世界连着过 N 天：按到达率来信、注入连接器故障 / 模型停机 / 关库再开、每天一次对账；按天断言队列不涨、预占收口、`unknown` 清零、SQLite 有上界；报告带按天曲线 |
 | §4 报告 | `--report out/` | `summary.json` / `.txt` / **`.md`** / **`.html`**（judge 分数、指标表与基线 delta）；soak 另出 `soak.json` / `soak.md` |
 | §4 合并门禁 | `report.ts` `gate()` | fast 全过 + 指标不劣化（默认 5%）；基线按运行时分档（`runtimes.stub|direct|dsh`） |
 | §5 CLI | `apps/cli` | `simulate` / `synth` / `replay` / `demo` |
 | §6 一致性用例 | `packages/simulation/test/` | 四条都有测试；另加 WP32 的 15 条（三档、judge、15 / 50 人 pack） |
 | 升级链与抽检进 tick | `runner.ts` `tick()` → `world.tickApprovals()` | 每一拍调 `expire` / `escalate` / 抽检复核；场景 `ops/escalation-chain`（3 人）与 `ops/cross-desk-handover`（15 人，三个不同的人） |
+
+#### realistic 档要设哪几个变量（WP88）
+
+key **只从环境变量取**，一个字都不进仓库。本机跑放
+`~/Library/Application Support/agentsws-dev/.env.local`（`scripts/dev-real.sh` 会 source 它），
+CI 里放 secrets。
+
+| 变量 | 干什么 | 不写会怎样 |
+|---|---|---|
+| `AGENTSWS_SIM_MODEL_API_KEY` | 那把 key 本身 | 没有 key → **整档跳过，不红** |
+| `AGENTSWS_SIM_MODEL_PROVIDER` | 选哪一档预设（见下表） | 默认 DeepSeek 官方 |
+| `AGENTSWS_SIM_MODEL_NAME` | 换个模型名 | 用该档的默认模型 |
+| `AGENTSWS_SIM_MODEL_BASE_URL` | 自己指一个地址 | 用该档的默认地址 |
+
+`PROVIDER` 认这几档（都只需再给一把 key，地址 / 地域 / 价目跟着出来）：
+
+| 写什么 | 打哪个口 | 默认模型 | 怎么算钱 |
+|---|---|---|---|
+| 不写 | DeepSeek 官方 | `deepseek-chat` | 按 token（USD） |
+| `bailian` / `dashscope` / `qwen` | 百炼**按量计费** `dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` | 按 token（CNY，价取自内置价目表） |
+| `token_plan` / `bailian_token_plan` | 百炼 **Token Plan 订阅** `token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` | `qwen3.7-plus` | 订阅内按 Credits，**`cost_base` 记 0、token 照记** |
+| `coding_plan` / `bailian_coding` | 百炼 **Coding Plan 订阅** `coding.dashscope.aliyuncs.com/v1` | `qwen3.7-plus` | 订阅内按次数配额，同上记 0 |
+| 别的任意字符串 | 自定义：地址与价自己给 | 必须自己给 | 自己给的三个 `_PRICE_*` |
+
+三件要记住的事：
+
+1. **百炼这三套互不通用**——地址不同、key 不同（订阅档的 key 是 `sk-sp-` 开头）、计费方式不同。
+   拿订阅的 key 打按量的口会 401（实测）；反过来官方明说会被当按量付费扣钱。选错档不是"稍微不准"。
+2. **`--max-cost-base` 在两个订阅档拦不住任何东西**：那两档的价目本来就是 0（真的不按 token 花钱）。
+   想让它拦点什么，自己给 `AGENTSWS_SIM_MODEL_PRICE_IN/_OUT/_CACHED`。
+3. 价的优先级：`_PRICE_*` 三个变量 > 内置价目表按 (地址, 模型名) 查 > DeepSeek 那三个数字兜底。
+   拿美元价去算人民币花费，预算上限会差出好几倍——所以第二层不是可有可无的。
 
 **还没做的**（按 26 的原文逐条）
 

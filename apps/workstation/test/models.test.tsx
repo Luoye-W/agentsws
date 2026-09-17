@@ -64,6 +64,60 @@ const CUSTOM_TEMPLATE: ModelProviderTemplate = {
   ],
 }
 
+/**
+ * WP88：百炼三档里的两张（按量 + Token Plan 订阅）。
+ *
+ * 这两张和 `CUSTOM_TEMPLATE` 的 `kind` **一模一样**（都是 `openai_compatible`）——
+ * 这正是这几条测试要盯的：在这之前卡是按 `kind` 认的，三张同 kind 的卡会共用一个
+ * React key，点开一张另外两张跟着展开。
+ */
+const BAILIAN_TEMPLATE: ModelProviderTemplate = {
+  kind: 'openai_compatible',
+  label: '阿里云百炼（标准，按量计费）',
+  summary: '一把 key 同时调通义千问与 DeepSeek，账单也在一处，用多少算多少。',
+  default_base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  default_model: 'qwen-plus',
+  region: 'cn',
+  steps: ['开通百炼', '创建 API-KEY', '粘进表单', '选模型名', '点测试'],
+  links: [{ label: '百炼控制台', url: 'https://bailian.console.aliyun.com/?tab=model#/api-key' }],
+  presets: [
+    {
+      id: 'bailian',
+      label: '百炼 · 北京（国内）',
+      base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen-plus',
+      region: 'cn',
+    },
+    {
+      id: 'bailian-intl',
+      label: '百炼 · 新加坡（国际站）',
+      base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen-plus',
+      region: 'global',
+    },
+  ],
+}
+
+const TOKEN_PLAN_TEMPLATE: ModelProviderTemplate = {
+  kind: 'openai_compatible',
+  label: '阿里云百炼 Token Plan（订阅）',
+  summary:
+    '买了 Token Plan 订阅的走这张：按 Credits 扣，不按 token 花钱。专属 key（sk-sp- 开头）配专属地址，和按量那张完全不通用。',
+  default_base_url: 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+  default_model: 'qwen3.7-plus',
+  region: 'cn',
+  steps: ['开通 Token Plan', '拿专属 API Key', '粘进表单', '拉模型列表', '点测试'],
+  links: [
+    {
+      label: 'Token Plan 快速开始',
+      url: 'https://help.aliyun.com/zh/model-studio/token-plan-personal-quick-start',
+    },
+  ],
+}
+
+/** WP88 那几条测试盯的那一串（和上面那把分开，断言好认）。 */
+const BAILIAN_KEY = 'sk-bailian-never-leaves-the-form-4c7e'
+
 const ACTIVE: ModelProviderView = {
   id: 'deepseek',
   kind: 'deepseek',
@@ -178,7 +232,12 @@ const state = {
   providers: [] as ModelProviderView[],
   /** WP66（52 O3）：`getModelDefaults` 回哪一份（跟不跟随公司默认）。 */
   defaults: DEFAULTS as ModelDefaultsView,
-  templates: [DEEPSEEK_TEMPLATE, CUSTOM_TEMPLATE] as ModelProviderTemplate[],
+  templates: [
+    DEEPSEEK_TEMPLATE,
+    CUSTOM_TEMPLATE,
+    BAILIAN_TEMPLATE,
+    TOKEN_PLAN_TEMPLATE,
+  ] as ModelProviderTemplate[],
   /** 清空就是"当前身份不是所有者"（面板与黄条都该静默）。 */
   positions: [OWNER_POSITION] as (typeof OWNER_POSITION)[],
   /** 列表这条路 403（客服岗位问模型面就是这样）。 */
@@ -402,11 +461,11 @@ describe('WP25 §C 模型面板：填 key（零泄漏）', () => {
 })
 
 describe('WP25 §C 模型面板：模板与预设', () => {
-  it('一个都没配时给一句人话，两张模板卡各带 ≤ 5 步说明与外链', async () => {
+  it('一个都没配时给一句人话，每张模板卡各带 ≤ 5 步说明与外链', async () => {
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     expect((await screen.findByTestId('models-empty')).textContent).toContain('还一个都没配')
     const cards = await screen.findAllByTestId('model-template')
-    expect(cards).toHaveLength(2)
+    expect(cards).toHaveLength(state.templates.length)
     for (const card of cards) {
       expect(within(card).getAllByRole('listitem').length).toBeLessThanOrEqual(5)
       expect(within(card).getAllByRole('link').length).toBeGreaterThan(0)
@@ -426,6 +485,113 @@ describe('WP25 §C 模型面板：模板与预设', () => {
     expect(fieldValue('接口地址')).toBe('http://127.0.0.1:11434/v1')
     expect(fieldValue('模型名')).toBe('llama3.1')
     expect(fieldValue('编号')).toBe('ollama')
+  })
+})
+
+/*
+ * WP88：阿里云百炼的几张卡。
+ *
+ * 百炼有三套**互不通用**的东西（按量 / Token Plan 订阅 / Coding Plan 订阅），
+ * 它们的 `kind` 都是 `openai_compatible`，与「OpenAI 兼容（自定义）」那张一样。
+ * 在这之前卡是按 `kind` 认的——同 kind 的几张卡会共用一个 React key，
+ * 点开一张另外几张跟着展开，等于用户根本填不成第二条。
+ */
+describe('WP88 百炼卡：同一个 kind 的几张卡各自独立', () => {
+  it('每张卡一个独立标识：点开百炼那张，别的卡不跟着展开', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const cards = await screen.findAllByTestId('model-template')
+    const slugs = cards.map((c) => c.getAttribute('data-template'))
+    // 四张卡四个标识——撞一个就等于两张卡共用一个 key
+    expect(new Set(slugs).size).toBe(cards.length)
+    expect(slugs).toContain('openai_compatible:qwen')
+    expect(slugs).toContain('openai_compatible:bailian-token-plan')
+
+    const bailian = cards.find((c) => c.getAttribute('data-template') === 'openai_compatible:qwen')
+    await user.click(within(bailian as HTMLElement).getByText('填 API key'))
+    // 全页只展开一张表单
+    expect(screen.getAllByTestId('model-form')).toHaveLength(1)
+    const form = screen.getByTestId('model-form')
+    const fieldValue = (label: string): string =>
+      (within(form).getByLabelText(label) as HTMLInputElement).value
+    expect(fieldValue('接口地址')).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
+    expect(fieldValue('模型名')).toBe('qwen-plus')
+    // 编号按地址猜，按量档是 qwen
+    expect(fieldValue('编号')).toBe('qwen')
+  })
+
+  it('Token Plan 那张：编号与按量那张分得开（三套 key 不通用，不能只存一条）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const cards = await screen.findAllByTestId('model-template')
+    const plan = cards.find(
+      (c) => c.getAttribute('data-template') === 'openai_compatible:bailian-token-plan',
+    )
+    await user.click(within(plan as HTMLElement).getByText('填 API key'))
+    const form = await screen.findByTestId('model-form')
+    const fieldValue = (label: string): string =>
+      (within(form).getByLabelText(label) as HTMLInputElement).value
+    expect(fieldValue('接口地址')).toBe(
+      'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+    )
+    expect(fieldValue('编号')).toBe('bailian-token-plan')
+    // 订阅档没有别的地址可选——不该摆一排预设按钮
+    expect(within(form).queryByTestId('model-presets')).toBeNull()
+  })
+
+  it('百炼那张的 key：零泄漏——只经一次提交出去，DOM 与 state 里都不留', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const cards = await screen.findAllByTestId('model-template')
+    const bailian = cards.find((c) => c.getAttribute('data-template') === 'openai_compatible:qwen')
+    await user.click(within(bailian as HTMLElement).getByText('填 API key'))
+    const form = await screen.findByTestId('model-form')
+    const key = within(form).getByLabelText('API key') as HTMLInputElement
+    // key 永远是 password 框：浏览器不记、不自动填、密码管理器也不插手
+    expect(key.type).toBe('password')
+    expect(key.getAttribute('data-1p-ignore')).toBe('true')
+    await user.type(key, BAILIAN_KEY)
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(saved).toHaveLength(1)
+    })
+    // 出口只有这一个
+    expect(saved[0]?.input.api_key).toBe(BAILIAN_KEY)
+    expect(saved[0]?.input.base_url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
+    // 提交完 DOM 里也不留（`form.reset()`），整页的 HTML 里搜不到那一串
+    expect(key.value).toBe('')
+    expect(document.body.innerHTML).not.toContain(BAILIAN_KEY)
+    expect(document.body.innerHTML).not.toContain(BAILIAN_KEY.slice(0, 12))
+  })
+
+  it('拉不到 /models 但回了内置兜底清单：下拉照画，"为什么没拉到"也照说', async () => {
+    const user = userEvent.setup()
+    // 服务端对百炼这条口的真实回法：ok=false（这份不是上游报的）+ 一份内置清单
+    state.listing = {
+      ok: false,
+      models: ['qwen-plus', 'qwen-turbo', 'deepseek-r1'],
+      reason: '这家没回模型列表（有的服务没有这个接口）。下面这 3 个是内置价目表里的。',
+      checked_at: T0,
+    }
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const cards = await screen.findAllByTestId('model-template')
+    const bailian = cards.find((c) => c.getAttribute('data-template') === 'openai_compatible:qwen')
+    await user.click(within(bailian as HTMLElement).getByText('填 API key'))
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), BAILIAN_KEY)
+    await user.click(within(form).getByTestId('model-discover'))
+
+    // 下拉照样画得出来（在这之前 ok=false 就等于一个空的手填框）
+    await waitFor(() => {
+      expect(within(form).getByTestId('model-name-input').getAttribute('data-options')).toBe('3')
+    })
+    // 但"为什么没拉到"一个字都不藏——内置清单可能比上游旧，用户有权知道
+    expect(within(form).getByTestId('model-discover-failed').textContent).toContain('内置价目表')
+    // 兜底清单不该改用户已经选好的模型名（只有上游真的回了清单才换）
+    expect((within(form).getByLabelText('模型名') as HTMLInputElement).value).toBe('qwen-plus')
+    // 拉清单那一次也带着 key，但它只走这一次，页面上留不下
+    expect(discovered[0]?.input.api_key).toBe(BAILIAN_KEY)
+    expect(document.body.innerHTML).not.toContain(BAILIAN_KEY)
   })
 })
 

@@ -191,11 +191,17 @@ export function ModelForm({
         ...(key === '' ? {} : { api_key: key }),
       })
       setListing(result)
-      if (result.ok) {
+      /*
+       * WP88：`ok` 为假但**带着名字**也算数——那是服务端照内置价目表兜的一份
+       * （百炼的 OpenAI 兼容口没有 `GET /models`，不兜就只剩一个空的手填框）。
+       * 下拉照样画，`ok: false` 那句"为什么没拉到"照样显示在下面，两件事不互斥。
+       */
+      if (result.models.length > 0) {
         setModels(result.models)
-        // 模板默认名不在接口清单里就换成第一个——用户不该看到一个接口不认的名字
+        // 模板默认名不在清单里就换成第一个——用户不该看到一个接口不认的名字。
+        // 只在**上游真的回了清单**时换：兜底清单可能比上游旧，不该拿它去改用户选好的名字
         const el = document.getElementById(`${prefix}-model`) as HTMLInputElement | null
-        if (el !== null && result.models.length > 0 && !result.models.includes(el.value)) {
+        if (result.ok && el !== null && !result.models.includes(el.value)) {
           el.value = result.models[0] as string
         }
       }
@@ -509,7 +515,11 @@ export function ModelForm({
           ? t('models.price.manual')
           : quote === undefined
             ? t('models.field.price.hint')
-            : t('models.price.from_catalog', { as_of: quote.as_of, currency: quote.currency })}
+            : // WP88：价目表里三个数都是 0 = 这家按套餐配额收钱（百炼 Coding Plan），
+              // 不是"价目表漏了它"。这两件事在界面上长得一样，所以必须分开说
+              quote.in === 0 && quote.out === 0 && quote.cached === 0
+              ? t('models.price.included_in_plan', { as_of: quote.as_of })
+              : t('models.price.from_catalog', { as_of: quote.as_of, currency: quote.currency })}
         <Hint text={t('models.field.price.why.hint')} />
       </p>
 
@@ -600,6 +610,10 @@ const ID_BY_HOST: readonly (readonly [RegExp, string])[] = [
   [/(^|\.)deepseek\.com$/, 'deepseek'],
   [/(^|\.)openai\.com$/, 'openai'],
   [/(^|\.)(moonshot\.(cn|ai)|kimi\.com)$/, 'kimi'],
+  // WP88：百炼的两个订阅口要和按量口分开——三套的 key 与账单都不通用，编号撞在
+  // 一起等于逼用户只能存一条。**这两条必须排在通配的 aliyuncs 之前**
+  [/^token-plan\./, 'bailian-token-plan'],
+  [/^coding(-intl)?\.dashscope\.aliyuncs\.com$/, 'bailian-coding'],
   [/(^|\.)aliyuncs\.com$/, 'qwen'],
   [/(^|\.)(bigmodel\.cn|z\.ai)$/, 'zhipu'],
   [/(^|\.)siliconflow\.(cn|com)$/, 'siliconflow'],

@@ -153,7 +153,12 @@ export async function runSuite(options: SuiteOptions): Promise<SuiteResult> {
       not_in_tier,
       skipped:
         'realistic 档需要真模型的 key：设 DEEPSEEK_API_KEY，或 AGENTSWS_SIM_MODEL_API_KEY ' +
-        '（配合 AGENTSWS_SIM_MODEL_PROVIDER / _NAME / _BASE_URL）。没有 key 不算失败，整档跳过。',
+        '（配合 AGENTSWS_SIM_MODEL_PROVIDER / _NAME / _BASE_URL）。' +
+        '用阿里云百炼的话两个变量就够：AGENTSWS_SIM_MODEL_PROVIDER=bailian ' +
+        '加 AGENTSWS_SIM_MODEL_API_KEY=<百炼的 key>（地址、地域、价目跟着预设出来）。' +
+        '买的是订阅套餐就把 provider 写成 token_plan 或 coding_plan——' +
+        '那是**另外的地址与另外一把 key**（sk-sp- 开头），和按量那把不通用。' +
+        '没有 key 不算失败，整档跳过。',
     }
   }
   const guard = new CostGuard(options.maxCostBase ?? 2)

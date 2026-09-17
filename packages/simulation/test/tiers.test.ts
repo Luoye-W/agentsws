@@ -67,6 +67,100 @@ describe('realistic 档（26 §4）', () => {
     expect(custom?.describe).toContain('https://example.invalid/v1')
   })
 
+  /*
+   * WP88：realistic 档是整套里唯一真花钱的地方，Luoye 手上已经有百炼账号——
+   * 能用它跑就不用再办一把别家的 key。
+   *
+   * 但百炼有**三套互不通用**的东西，地址、key、计费方式都不一样：
+   *
+   * | 档 | base URL | key | 怎么扣 |
+   * |---|---|---|---|
+   * | 按量 | dashscope.aliyuncs.com/compatible-mode/v1 | `sk-` | 按 token |
+   * | Token Plan | token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1 | `sk-sp-` | 按 Credits |
+   * | Coding Plan | coding.dashscope.aliyuncs.com/v1 | `sk-sp-` | 按次数配额 |
+   *
+   * **Luoye 实测**：Token Plan 的 key 打标准口，国内国际都回 401；官方也明说混用会
+   * 认证失败或产生意料之外的扣费。所以认错档不是"稍微不准"，是"打不通或者乱扣钱"。
+   */
+  describe('百炼三档（WP88）', () => {
+    it('provider=bailian：地址、地域、模型名、价目全跟着预设出来，只剩 key 要填', () => {
+      const sim = resolveSimModel({
+        [SIM_MODEL_ENV.key]: 'sk-fake',
+        [SIM_MODEL_ENV.provider]: 'bailian',
+      })
+      expect(sim?.ref).toMatchObject({ provider: 'qwen', model: 'qwen-plus', region: 'cn' })
+      expect(sim?.describe).toContain('https://dashscope.aliyuncs.com/compatible-mode/v1')
+      // 价来自内置价目表（2026-09-17 核官网），不是 DeepSeek 那三个美元数字——
+      // 拿美元价去算人民币花费，`--max-cost-base` 会差出好几倍
+      expect(sim?.prices['qwen/qwen-plus']).toEqual({ in: 0.8, out: 2, cached: 0.08 })
+      expect(sim?.describe).toContain('内置价目表')
+      // 报告里只写"key 来自哪个环境变量"
+      expect(sim?.describe).not.toContain('sk-fake')
+    })
+
+    it('百炼上的 DeepSeek 是同一把 key、同一个地址：换个模型名就行', () => {
+      const sim = resolveSimModel({
+        [SIM_MODEL_ENV.key]: 'sk-fake',
+        [SIM_MODEL_ENV.provider]: 'bailian',
+        [SIM_MODEL_ENV.model]: 'deepseek-r1',
+      })
+      // 记账仍归在 qwen（百炼）名下，价是百炼的人民币价，不是 DeepSeek 官方的美元价
+      expect(sim?.prices['qwen/deepseek-r1']).toEqual({ in: 4, out: 16, cached: 4 })
+    })
+
+    it('provider=token_plan：专属地址 + 花费一律记 0（订阅内按 Credits 扣）', () => {
+      const sim = resolveSimModel({
+        [SIM_MODEL_ENV.key]: 'sk-sp-fake',
+        [SIM_MODEL_ENV.provider]: 'token_plan',
+      })
+      expect(sim?.ref).toMatchObject({ provider: 'qwen', model: 'qwen3.7-plus', region: 'cn' })
+      expect(sim?.describe).toContain(
+        'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+      )
+      // 订阅按 Credits 扣，不按 token：三个价都是 0，报告里也写明这件事
+      expect(sim?.prices['qwen/qwen3.7-plus']).toEqual({ in: 0, out: 0, cached: 0 })
+      expect(sim?.describe).toContain('订阅内')
+      expect(sim?.describe).not.toContain('sk-sp-fake')
+    })
+
+    it('provider=coding_plan：另一个订阅档，地址不带 compatible-mode', () => {
+      const sim = resolveSimModel({
+        [SIM_MODEL_ENV.key]: 'sk-sp-fake',
+        [SIM_MODEL_ENV.provider]: 'coding_plan',
+      })
+      expect(sim?.describe).toContain('https://coding.dashscope.aliyuncs.com/v1')
+      expect(sim?.describe).not.toContain('compatible-mode')
+      expect(sim?.prices['qwen/qwen3.7-plus']).toEqual({ in: 0, out: 0, cached: 0 })
+    })
+
+    it('订阅档的别名里也含 bailian——认错顺序就会打到按量那条口上（401）', () => {
+      const cases: [string, string][] = [
+        ['bailian_token_plan', 'token-plan.cn-beijing.maas.aliyuncs.com'],
+        ['bailian-token-plan', 'token-plan.cn-beijing.maas.aliyuncs.com'],
+        ['TOKEN-PLAN', 'token-plan.cn-beijing.maas.aliyuncs.com'],
+        ['bailian_coding', 'coding.dashscope.aliyuncs.com'],
+        ['CODING-PLAN', 'coding.dashscope.aliyuncs.com'],
+      ]
+      for (const [name, host] of cases) {
+        const sim = resolveSimModel({
+          [SIM_MODEL_ENV.key]: 'sk-sp-fake',
+          [SIM_MODEL_ENV.provider]: name,
+        })
+        expect(sim?.describe, name).toContain(host)
+      }
+    })
+
+    it('三个价格变量照旧最优先：订阅档也能自己写一份价（想让预算拦点什么的话）', () => {
+      const sim = resolveSimModel({
+        [SIM_MODEL_ENV.key]: 'sk-sp-fake',
+        [SIM_MODEL_ENV.provider]: 'token_plan',
+        [SIM_MODEL_ENV.priceIn]: '0.5',
+        [SIM_MODEL_ENV.priceOut]: '1.5',
+      })
+      expect(sim?.prices['qwen/qwen3.7-plus']).toEqual({ in: 0.5, out: 1.5, cached: 0 })
+    })
+  })
+
   it('来信缓存：第一次写盘，第二次回放（同 seed 内容固定）', () => {
     const dir = join(tempDir(), 'realistic-cache')
     const cache = new RealisticCache(dir)

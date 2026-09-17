@@ -32,11 +32,28 @@ export interface CatalogModel extends CatalogPrice {
   aliases?: string[]
 }
 
+/**
+ * 这家怎么收钱。
+ *
+ * - `per_token`（默认）：按 token 算，`in / out / cached` 是每百万 token 的价；
+ * - `quota`：**包月 / 包周套餐**，调用不按 token 扣钱，扣的是次数配额（百炼 Coding Plan
+ *   就是这样：¥200/月，每 5 小时 6000 次、每周 45000 次）。这一档的三个价一律是 0——
+ *   **不是"价未知"，是"这次调用真的不花钱"**，所以 22 §3 的 `cost_base` 记 0 而
+ *   token 照记（配额用掉多少由上游那边算，我们这边算不出来也不该编）。
+ */
+export type BillingMode = 'per_token' | 'quota'
+
 export interface CatalogVendor {
   id: string
   label: string
   currency: string
-  /** 按接口地址的主机名认这家。 */
+  /** 怎么收钱；不写就是按 token。 */
+  billing?: BillingMode
+  /**
+   * 按接口地址的主机名认这家。**写全写准**：`vendorForBaseUrl` 先比完全相等，
+   * 所以互为子域的两家（百炼按量的 `dashscope.aliyuncs.com` 与 Coding Plan 的
+   * `coding.dashscope.aliyuncs.com`）只要各自都列全，就各归各的、与行序无关。
+   */
   hosts: string[]
   source_url: string
   /** 还要看的几页（Kimi 一个模型一页）。 */
@@ -82,15 +99,31 @@ export function hostOf(baseUrl: string): string {
   }
 }
 
-/** 按接口地址认这是哪一家。认不出来回 undefined（内置价就没有，用户自己填）。 */
+/**
+ * 按接口地址认这是哪一家。认不出来回 undefined（内置价就没有，用户自己填）。
+ *
+ * **三轮，从严到宽**（WP88 改成分轮；在这之前是一次 `some(...)` 把三条规则并列）：
+ *
+ * 1. **主机名一模一样**；
+ * 2. 用户填的是表里那家的**子域**（`x.api.example.com` 对 `api.example.com`）；
+ * 3. 反过来——表里的地址是用户填的那个的子域（用户只填了个母域名）。
+ *
+ * 为什么非分轮不可：百炼的两套口是 `dashscope.aliyuncs.com`（按量）与
+ * `coding.dashscope.aliyuncs.com`（Coding Plan 套餐），后者是前者的子域。三条规则
+ * 并列时，两个地址会**互相**命中对方，谁排前面谁赢——于是"按量的调用被按套餐记成
+ * 0 花费"或者"套餐的调用被按 token 记成花钱"，取决于 `catalog.json` 里的行序。
+ * 先比完全相等，两边就各归各的，跟顺序无关了。
+ */
 export function vendorForBaseUrl(
   baseUrl: string,
   from: PriceCatalog = PRICE_CATALOG,
 ): CatalogVendor | undefined {
   const host = hostOf(baseUrl)
   if (host === '') return undefined
-  return from.vendors.find((v) =>
-    v.hosts.some((h) => host === h || host.endsWith(`.${h}`) || h.endsWith(`.${host}`)),
+  return (
+    from.vendors.find((v) => v.hosts.some((h) => host === h)) ??
+    from.vendors.find((v) => v.hosts.some((h) => host.endsWith(`.${h}`))) ??
+    from.vendors.find((v) => v.hosts.some((h) => h.endsWith(`.${host}`)))
   )
 }
 
@@ -119,6 +152,20 @@ export function catalogPrice(
     source_url: vendor.source_url,
     as_of: vendor.as_of,
   }
+}
+
+/**
+ * 这家在内置价目表里有哪几个模型名（WP88）。
+ *
+ * 用处只有一个：**`/models` 拉不到时的兜底清单**。百炼的 OpenAI 兼容口没有
+ * `GET /models`（官方文档里从头到尾只有 `/chat/completions`），用户点「拉取模型列表」
+ * 只会拿到一个 404——然后面对一个空的手填框，还得自己去官网翻模型名。
+ *
+ * 兜底清单只能来自这里：价目表里的名字是**核实过出处的**（`source_url` + `as_of`），
+ * 而不是另写一份迟早和价对不上的硬编码清单。认不出这一家就回空数组——**不猜**。
+ */
+export function catalogModels(baseUrl: string, from: PriceCatalog = PRICE_CATALOG): string[] {
+  return (vendorForBaseUrl(baseUrl, from)?.models ?? []).map((m) => m.model)
 }
 
 export function findModel(vendor: CatalogVendor, model: string): CatalogModel | undefined {

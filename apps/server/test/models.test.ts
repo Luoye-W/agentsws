@@ -251,13 +251,18 @@ describe('WP25 §C 模板与空状态', () => {
     expect(ctx.server.modelSettings.configured()).toBe(false)
   })
 
-  // WP59（49 M2）起是**三种**：第三种「agentsws 云」不填 key，细节在 `cloud.test.ts`
-  it('三种模板：DeepSeek 官方 + OpenAI 兼容自定义 + agentsws 云，各带 ≤ 5 步说明', async () => {
+  // WP59（49 M2）起第三种「agentsws 云」不填 key，细节在 `cloud.test.ts`；
+  // WP88 起百炼占三张卡（按量 / Token Plan / Coding Plan）——形态仍是
+  // `openai_compatible`，卡分开是因为**三套的地址与 key 互不通用**
+  it('六张模板卡：DeepSeek / OpenAI 兼容 / 百炼三档 / agentsws 云，各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
     expect(templates.map((t) => t.kind)).toEqual([
       'deepseek',
+      'openai_compatible',
+      'openai_compatible',
+      'openai_compatible',
       'openai_compatible',
       'agentsws_cloud',
     ])
@@ -267,9 +272,110 @@ describe('WP25 §C 模板与空状态', () => {
       expect(t.links.length).toBeGreaterThan(0)
       expect(t.default_model).not.toBe('')
     }
+    // 卡的标题与默认地址都各不相同——界面按地址认卡（templateSlug），
+    // 撞了两张卡会共用一个 key，点开一张另一张跟着展开
+    expect(new Set(templates.map((t) => t.label)).size).toBe(templates.length)
+    expect(new Set(templates.map((t) => t.default_base_url)).size).toBe(templates.length)
     // 自定义那条带一组"点一下就填好"的预设（Moonshot / 通义 / 本地 Ollama…）
-    const custom = templates.find((t) => t.kind === 'openai_compatible')
+    const custom = templates.find((t) => t.label.startsWith('OpenAI 兼容'))
     expect((custom?.presets ?? []).length).toBeGreaterThan(2)
+  })
+
+  /*
+   * WP88：**阿里云百炼一键设置**。
+   *
+   * 百炼有三套**互不通用**的东西——按量计费、Token Plan 订阅、Coding Plan 订阅：
+   * 地址不同、key 不同（订阅档是 sk-sp- 开头）、计费方式也不同。Luoye 实测他那把
+   * Token Plan 的 key 打标准口回 401；官方也明说混用会认证失败或产生意料之外的扣费。
+   *
+   * 所以这几条断言盯的不是"卡好不好看"，是**三张卡的地址没有串**。
+   */
+  it('百炼按量那张：国内 / 国际两条预设，地址与数据归属都对得上（WP88）', async () => {
+    const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
+      await api('/v1/models/providers'),
+    )
+    const bailian = templates.find((t) => t.label.includes('标准，按量'))
+    expect(bailian).toBeDefined()
+    // 官方 2026-09-17 核实：北京地域的 OpenAI 兼容口
+    expect(bailian?.default_base_url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
+    expect(bailian?.default_model).toBe('qwen-plus')
+    // 默认是境内：22 §2 `data_residency: cn` 的工作区能直接用
+    expect(bailian?.region).toBe('cn')
+    const presets = bailian?.presets ?? []
+    expect(presets.map((p) => p.id)).toEqual(['bailian', 'bailian-intl'])
+    // 国际站（新加坡）那条算**出境**——选了它，`cn` 的工作区会拦下来
+    expect(presets.find((p) => p.id === 'bailian-intl')).toMatchObject({
+      base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      region: 'global',
+    })
+    // 卡上要说清楚"一把 key 同时调通义与 DeepSeek"——这正是最容易多办一把 key 的地方
+    expect(`${bailian?.summary}${(bailian?.steps ?? []).join('')}`).toContain('DeepSeek')
+    // 外链里有拿 key 的那一页
+    expect((bailian?.links ?? []).some((l) => l.url.includes('bailian.console.aliyun.com'))).toBe(
+      true,
+    )
+  })
+
+  it('百炼 Token Plan 那张：专属地址、只有北京、卡上写明 key 不通用（WP88）', async () => {
+    const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
+      await api('/v1/models/providers'),
+    )
+    const plan = templates.find((t) => t.label.includes('Token Plan'))
+    expect(plan?.default_base_url).toBe(
+      'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+    )
+    expect(plan?.default_model).toBe('qwen3.7-plus')
+    expect(plan?.region).toBe('cn')
+    // 官方只支持华北2（北京）——没有别的地址可选，就不该摆一排预设按钮
+    expect(plan?.presets).toBeUndefined()
+    // "专属 key、和按量那把不是同一把"必须写在卡上：拿错一把就是 401 或者乱扣钱
+    const words = `${plan?.summary}${(plan?.steps ?? []).join('')}`
+    expect(words).toContain('sk-sp-')
+    expect(words).toContain('不通用')
+  })
+
+  it('百炼 Coding Plan 那张：另一个订阅档，地址不带 compatible-mode（WP88）', async () => {
+    const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
+      await api('/v1/models/providers'),
+    )
+    const coding = templates.find((t) => t.label.includes('Coding Plan'))
+    expect(coding?.default_base_url).toBe('https://coding.dashscope.aliyuncs.com/v1')
+    expect(coding?.default_base_url).not.toContain('compatible-mode')
+    expect((coding?.presets ?? []).map((p) => p.base_url)).toEqual([
+      'https://coding.dashscope.aliyuncs.com/v1',
+      'https://coding-intl.dashscope.aliyuncs.com/v1',
+    ])
+  })
+
+  it('百炼：`/models` 拉不到时退回内置清单——三档各兜各的（WP88）', async () => {
+    ctx.upstream.models = []
+    const pull = async (base_url: string): Promise<ModelListing> =>
+      data<ModelListing>(
+        await post('/v1/models/providers/qwen/discover', {
+          base_url,
+          api_key: API_KEY,
+          region: 'cn',
+        }),
+      )
+
+    // 按量档：通义与 DeepSeek 同一把 key，两家的名字都在里面
+    const payg = await pull('https://dashscope.aliyuncs.com/compatible-mode/v1')
+    expect(payg.ok).toBe(false)
+    expect(payg.models).toContain('qwen-plus')
+    expect(payg.models).toContain('deepseek-r1')
+    expect(payg.reason ?? '').not.toContain(API_KEY)
+
+    // Token Plan：专属地址是 maas.aliyuncs.com 的子域，不能被按量那条按后缀认走
+    const plan = await pull('https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1')
+    expect(plan.models).toContain('qwen3.7-plus')
+    expect(plan.models).toContain('glm-5.3')
+    // 按量档独有的名字不该混进订阅档的清单
+    expect(plan.models).not.toContain('qwen-turbo')
+    expect(plan.reason ?? '').toContain('Token Plan')
+
+    const coding = await pull('https://coding.dashscope.aliyuncs.com/v1')
+    expect(coding.models).toContain('qwen3-coder-plus')
+    expect(coding.reason ?? '').toContain('Coding Plan')
   })
 
   it('没配模型时默认模型是 stub —— 运行时落回 stub 而不是崩', () => {
@@ -531,6 +637,64 @@ describe('WP25 §C 默认模型 / 驻留 / 三级预算', () => {
     expect(usage.total?.calls).toBe(1)
   })
 
+  /*
+   * WP88：订阅档（百炼 Token Plan / Coding Plan）**花费记 0、token 照记**。
+   *
+   * 这是"价目表里写 0"这件事的真正落点：0 不是"价未知"，是这次调用确实不按 token
+   * 花钱。所以 `cost_base` 必须是 0（不能算出一个假数字去误导 22 §3 的三级预算），
+   * 而 `input_tokens` / `output_tokens` 必须照记——用掉多少 Credits 只有百炼那边算得出，
+   * 但"这台机器打了多少 token"是我们自己的账，一条都不能少。
+   */
+  it('订阅档：保存后价自动填成 0，跑一次的 cost_base 是 0 而 token 照记（WP88）', async () => {
+    const saved = await data<ModelProviderView>(
+      await put('/v1/models/providers/bailian-token-plan', {
+        kind: 'openai_compatible',
+        label: '百炼 Token Plan',
+        base_url: 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        model: 'qwen3.7-plus',
+        api_key: API_KEY,
+      }),
+    )
+    // 卡是按**接口地址**认的：没给 region 也不该兜成通用 OpenAI 那张的 global
+    // （兜错了，22 §2 的 data_residency: cn 会当场把这条拦下来说"禁止出境"）
+    expect(saved.region).toBe('cn')
+    // 价照内置价目表自动填：三个 0，来源标成 catalog（用户没手改过）
+    expect([saved.price_in, saved.price_out, saved.price_cached]).toEqual([0, 0, 0])
+    expect(saved.price_source).toBe('catalog')
+    expect(saved.price_currency).toBe('CNY')
+
+    const probe = await data<ModelTestResult>(
+      await post('/v1/models/providers/bailian-token-plan/test'),
+    )
+    expect(probe.ok, probe.reason ?? '').toBe(true)
+    const usage = await data<ModelUsageView>(await api('/v1/models/usage'))
+    // token 照记
+    expect(usage.total?.input_tokens).toBe(9)
+    expect(usage.total?.output_tokens).toBe(1)
+    // 花费记 0
+    expect(usage.total?.cost_base).toBe(0)
+
+    // 响应体里照旧没有 key 的任何痕迹
+    const raw = await (await api('/v1/models/providers')).text()
+    expect(raw).not.toContain(API_KEY)
+    expect(raw).not.toContain(API_KEY.slice(0, 12))
+  })
+
+  it('卡按地址认，预设的地址也算数：百炼国际站那条不会兜成别人家的默认值（WP88）', async () => {
+    const saved = await data<ModelProviderView>(
+      await put('/v1/models/providers/bailian-intl', {
+        kind: 'openai_compatible',
+        base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+        model: 'qwen-plus',
+        api_key: API_KEY,
+      }),
+    )
+    // 这条地址是百炼那张卡的**预设**（不是它的 default_base_url）——照样要认到那张卡，
+    // 而且要认到**卡内那一条预设**：新加坡这条的地域是 global，不是卡默认的 cn
+    expect(saved.label).toContain('新加坡')
+    expect(saved.region).toBe('global')
+  })
+
   it('落盘之后重启进程，配置还在、key 也还在（不用重填）', async () => {
     await put('/v1/models/providers/deepseek', SAVE)
     await put('/v1/models/defaults', { budget: { workspace_daily_base: 7 } })
@@ -662,7 +826,7 @@ describe('WP42 §1 拉模型列表', () => {
     }
   })
 
-  it('拉不到不是错：回 ok=false + 一句人话，界面退回手填', async () => {
+  it('拉不到不是错：回 ok=false + 一句人话；认得出的那几家还兜一份内置清单（WP88）', async () => {
     ctx.upstream.models = []
     const listing = await data<ModelListing>(
       await post('/v1/models/providers/deepseek/discover', {
@@ -670,10 +834,25 @@ describe('WP42 §1 拉模型列表', () => {
         api_key: API_KEY,
       }),
     )
+    // `ok` 仍然是假——这份不是上游报的，用户有权知道差别
+    expect(listing.ok).toBe(false)
+    // 但内置价目表认得出 api.deepseek.com，就把那份核实过出处的名字兜回去
+    expect(listing.models).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
+    expect(listing.reason ?? '').toContain('内置价目表')
+    expect(listing.reason ?? '').not.toContain(API_KEY)
+  })
+
+  it('内置价目表都不认的地址：清单就是空的，不硬凑一份（WP88）', async () => {
+    ctx.upstream.models = []
+    const listing = await data<ModelListing>(
+      await post('/v1/models/providers/ollama/discover', {
+        base_url: 'http://127.0.0.1:11434/v1',
+        api_key: API_KEY,
+      }),
+    )
     expect(listing.ok).toBe(false)
     expect(listing.models).toEqual([])
-    expect(listing.reason ?? '').not.toBe('')
-    expect(listing.reason ?? '').not.toContain(API_KEY)
+    expect(listing.reason ?? '').not.toContain('内置价目表')
   })
 
   it('还没填 key 就点拉取：明说要先填 key，一次网络请求都不发', async () => {

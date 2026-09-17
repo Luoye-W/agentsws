@@ -18,6 +18,7 @@ export type {
   PriceParserId,
 } from './pricing/catalog.js'
 export {
+  catalogModels,
   catalogPrice,
   findModel,
   hostOf,
