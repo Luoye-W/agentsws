@@ -526,7 +526,7 @@ describe('WP62 §F 档案换了平台 → 面板与工具都改口', () => {
     expect(tiles.map((t) => t.status)).toEqual(['not_connected', 'not_connected'])
   })
 
-  it('刷新时分得清"你还没连"与"我们还没做"（reason 两个码）', async () => {
+  it('刷新时分得清"你还没连"与"我们还没做"与"你还没搭网站"（reason 三个码）', async () => {
     const live = ctx.server.liveData
     expect(live).toBeDefined()
     // 一家店都没连：还是老的 no_connection
@@ -543,6 +543,35 @@ describe('WP62 §F 档案换了平台 → 面板与工具都改口', () => {
     expect(report?.reason).toBe('platform_unsupported')
     // 一条只读动作都没跑过：平台都没接，别去打上游
     expect(ctx.connect.executed).toEqual([])
+
+    // WP79 第三档：他自己说还没搭网站——既不是他没连，也不是我们没做
+    const none = await api('/v1/workspace/profile', {
+      method: 'PUT',
+      assignment: ctx.server.bootstrap.ownerAssignment.id,
+      body: JSON.stringify({ legal_name: '一家还没建站的公司', storefront_platform: 'none' }),
+    })
+    expect(none.status).toBe(200)
+    const notBuilt = await live?.refresh()
+    expect(notBuilt?.status).toBe('skipped')
+    expect(notBuilt?.reason).toBe('no_storefront')
+    expect(ctx.connect.executed).toEqual([])
+  })
+
+  it('WP79 面板店铺那一块明说"还没搭网站"，不说成"这个平台还没接"', async () => {
+    const put = await api('/v1/workspace/profile', {
+      method: 'PUT',
+      assignment: ctx.server.bootstrap.ownerAssignment.id,
+      body: JSON.stringify({ legal_name: '一家还没建站的公司', storefront_platform: 'none' }),
+    })
+    expect(put.status).toBe(200)
+    const view = await data<{ sections: ViewSection[] }>(
+      await api(`/v1/positions/${ctx.assignment}/view`),
+    )
+    const shop = shopSection(view.sections)
+    expect(shop?.connected).toBe(false)
+    expect(shop?.note).toContain('还没搭网站')
+    expect(shop?.note).not.toContain('这个平台还没接')
+    expect(shop?.report_url).toBeUndefined()
   })
 })
 

@@ -245,6 +245,48 @@ describe('54 §4 第二层：GET /v1/positions/:id/connections', () => {
     expect(after.items.length).toBe(before.items.length - 1)
   })
 
+  it('WP79 选了「还没开始搭建」：网站运营照勾，清单里干脆没有店铺那一条', async () => {
+    for (const role_id of ['dtc.store', 'dtc.content'])
+      ctx.server.roles.assignments.create({
+        person_id: ctx.server.bootstrap.person.id,
+        workspace_id: ctx.server.bootstrap.workspace.id,
+        role_id,
+        granted_by: ctx.server.bootstrap.person.id,
+      })
+
+    // Magento：平台我们还没接 → 那一条**留在清单里**（他在等我们），也算进未就绪
+    await api('/v1/workspace/profile', {
+      method: 'PUT',
+      body: JSON.stringify({
+        legal_name: '测试有限公司',
+        discoverable: false,
+        storefront_platform: 'magento',
+      }),
+    })
+    const waiting = await data<PositionConnectionsView>(
+      await api('/v1/positions/web-ops/connections'),
+    )
+    expect(waiting.items.map((i) => i.kind)).toContain('shop')
+    expect(waiting.missing_required).toContain('shop')
+
+    // 「还没开始搭建」：他还没有网站，不是少连了一个东西 → 那一条根本不出现
+    await api('/v1/workspace/profile', {
+      method: 'PUT',
+      body: JSON.stringify({
+        legal_name: '测试有限公司',
+        discoverable: false,
+        storefront_platform: 'none',
+      }),
+    })
+    const notBuilt = await data<PositionConnectionsView>(
+      await api('/v1/positions/web-ops/connections'),
+    )
+    expect(notBuilt.items.map((i) => i.kind)).not.toContain('shop')
+    expect(notBuilt.missing_required).not.toContain('shop')
+    // 别的连接器一条没少：去掉的只有店铺那一条
+    expect(notBuilt.items.length).toBe(waiting.items.length - 1)
+  })
+
   it('给本人持有的 assignment_id 也认（岗位页递的就是它）', async () => {
     const assignment = ctx.server.roles.assignments.create({
       person_id: ctx.server.bootstrap.person.id,

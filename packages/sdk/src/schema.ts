@@ -19083,7 +19083,7 @@ export interface operations {
           /** @enum {string} */
           vertical?: 'goods' | 'digital'
           /** @enum {string} */
-          storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other'
+          storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other' | 'none'
           brand_name?: string
         }
       }
@@ -20397,7 +20397,7 @@ export interface operations {
           /** @enum {string} */
           vertical?: 'goods' | 'digital'
           /** @enum {string} */
-          storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other'
+          storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other' | 'none'
           copy_from?: string
         }
       }
