@@ -183,7 +183,7 @@ describe('WP20 §A 连接清单与目录', () => {
     expect((await data<{ connections: ConnectionView[] }>(res)).connections).toEqual([])
   })
 
-  it('目录里二十一个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
+  it('目录里二十五个 provider，各自带 ≤ 5 步的准备说明与外链', async () => {
     const { providers } = await data<{ providers: ProviderView[] }>(
       await api('/v1/connections/providers'),
     )
@@ -216,6 +216,15 @@ describe('WP20 §A 连接清单与目录', () => {
       'discord_bot',
       'telegram_bot',
       'whatsapp_business',
+      // WP75（57 §1）：投放那四张。**Meta 在这里出现第二次**（`meta_marketing`
+      // 与社媒的 `meta_graph` 是两张卡）：同一次 OAuth 可以把两边权限一起授，
+      // 但要的权限不一样（`ads_management` vs `pages_manage_posts`），
+      // 做成一张的后果是"想发个帖子"要先授权"能动广告预算"。
+      // `x_ads` / `tiktok_ads` 照 WP64 那几张骨架卡的老规矩标着"还没接"。
+      'meta_marketing',
+      'google_ads',
+      'x_ads',
+      'tiktok_ads',
     ])
     for (const p of live) {
       expect(p.setup_guide.steps.length).toBeGreaterThan(0)
@@ -296,6 +305,11 @@ describe('WP20 §A 连接清单与目录', () => {
       'discord_bot',
       'telegram_bot',
       'whatsapp_business',
+      // WP75（57 §1）：投放那四张也与店铺平台无关，一张不少
+      'meta_marketing',
+      'google_ads',
+      'x_ads',
+      'tiktok_ads',
     ])
 
     // 改回 Shopify，那张卡就回来了
