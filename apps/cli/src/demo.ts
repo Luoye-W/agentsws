@@ -745,7 +745,18 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 近 30 天表现 / 待回评论 vs 待审入群 / 待处理 / 群发队列 / 活跃度），
   // 只挂一条就只看得见一半，56 §2 那张表在 demo 里就演示不完整。
   // 社媒库那几行由 `seedDemoSocial` 放（`apps/server/src/social.ts`）。
-  for (const role of ['dtc.store', 'dtc.content', 'kol.youtube', 'social.meta', 'social.discord']) {
+  // WP75（57 §3）：**投放**岗位挂一条 `ads.meta`——四条平台职责的面板骨架完全相同
+  // （今日花费 / 总闸剩余、ROAS 两口径、转化、止损次数 + campaign 表 / 待审四车道 /
+  // 止损记录 / 像素健康 / 日报），挂一条就演示得完整，不像社媒那样分两组。
+  // 广告库那几行由 `seedDemoAds` 放（`apps/server/src/ads.ts`）。
+  for (const role of [
+    'dtc.store',
+    'dtc.content',
+    'kol.youtube',
+    'social.meta',
+    'social.discord',
+    'ads.meta',
+  ]) {
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,

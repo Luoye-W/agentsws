@@ -66,6 +66,18 @@ describe('04 §5 岗位级日花费总闸', () => {
     expect(gate.missing).not.toContain('meta')
   })
 
+  it('**币种不一致就不报币种**：总闸是一个数，而账户是多币种的', () => {
+    const s = createAdsStore({ workspace_id: 'ws_test' })
+    seedDemoAds(s, NOW)
+    expect(s.spendToday().currency).toBe('USD')
+    const google = s.account('aa_demo_google')
+    if (google === undefined) throw new Error('账户没了')
+    s.saveAccount({ ...google, currency: 'CNY' })
+    // 700 还是 700，但它不再是任何一种货币里的 700——所以那一格空着
+    expect(s.spendToday().spent).toBe(700)
+    expect(s.spendToday().currency).toBeUndefined()
+  })
+
   it('账户上直接有 `spend_today` 时优先用它（拉数那一跳写回来的那一格）', () => {
     const s = store()
     const account = s.account('aa_demo_meta')

@@ -291,7 +291,17 @@ export function createAdsStore(options: AdsStoreOptions): AdsStore {
           ...(observed_at === undefined ? {} : { observed_at }),
         })
       }
-      const currency = accounts[0]?.currency
+      /*
+       * **币种一致才报币种**（契约 `AdAccount.currency` 那一条的另一半）。
+       *
+       * 总闸是一个数，而账户是多币种的：一个 CNY 账户花了 700、一个 USD 账户
+       * 花了 100，加起来那个 800 不是任何一种货币里的 800。两种以上就不报币种——
+       * 面板上那一格于是显示成一个**没有货币符号的数**，而不是一个看起来
+       * 煞有介事、实际上错的金额。真要按一种货币汇总，得先有汇率那一跳
+       * （`Money.amount_base`），那不在 WP75 的范围里。
+       */
+      const currencies = new Set(accounts.map((a) => a.currency).filter((c) => c !== ''))
+      const currency = currencies.size === 1 ? [...currencies][0] : undefined
       return {
         spent: by_platform.reduce((sum, r) => sum + r.spend, 0),
         by_platform,
@@ -446,7 +456,9 @@ export function seedDemoAds(store: AdsStore, now: string): void {
     platform: 'meta',
     external_id: 'act_100000000000001',
     name: 'Nordvolt 广告账户',
-    currency: 'CNY',
+    // demo 的 3 人 pack 基准货币是 USD；两个账户用同一种，总闸那个数才有意义
+    // （见 `spendToday` 里"币种一致才报币种"那一段）
+    currency: 'USD',
     status: 'active',
     observed_at,
   })
@@ -456,7 +468,7 @@ export function seedDemoAds(store: AdsStore, now: string): void {
     platform: 'google',
     external_id: '1234567890',
     name: 'Nordvolt Google Ads',
-    currency: 'CNY',
+    currency: 'USD',
     status: 'active',
     observed_at,
   })

@@ -24,13 +24,22 @@ describe('service → 数据源', () => {
 })
 
 describe('dataSourcesFromConnections', () => {
-  it('一条都没连：只有我们自己的那三个库是连上的，其余全「去连接」', () => {
+  it('一条都没连：只有我们自己的那几个库是连上的，其余全「去连接」', () => {
     const rows = dataSourcesFromConnections([])
     expect(rows.map((r) => r.id)).toEqual([...ALL_DATA_SOURCES])
     // WP67：红人库也在这台机器上（六张表），跟工作队列一样没有"去连接"这回事。
     // WP72：社媒库同理（四张表）——内容日历上那几条是我们自己排的，
     // 一个平台都没连也照样在那儿摆着；渠道那八个源才是"连没连"的事。
-    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual(['approvals', 'kol', 'social'])
+    // WP75：广告库同理（五张表）。**尤其是总闸那一格**——"今天四个平台一共花了
+    // 多少 / 还剩多少"是这台机器上算出来的，一个平台都没连也照样成立
+    // （04 §5 那条纪律不因为某个平台没连就不生效）；平台那一侧的"连没连"
+    // 是另外四个源（`ads_meta` / `ads_google` / `ads_x` / `ads_tiktok`）的事。
+    expect(rows.filter((r) => r.connected).map((r) => r.id)).toEqual([
+      'approvals',
+      'ads',
+      'kol',
+      'social',
+    ])
     // 没连上就别给「查看完整报告」外链
     expect(rows.find((r) => r.id === 'shop')?.report_url).toBeUndefined()
   })

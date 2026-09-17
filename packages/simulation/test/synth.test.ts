@@ -68,7 +68,7 @@ describe('合成公司生成器（26 §2）', () => {
     // WP64 + WP63：22 + 邮件营销与订单履约各一条 + 店铺管理与内容三条；
     // WP67 加红人三条（30）；WP68 再加两条（campaign 不并集权限 / 公共库计费）；
     // WP72 再加三条（发布永远人审 / 回评论承诺词被拦 / 群里的客户问题转客服）
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(38)
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(41)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 

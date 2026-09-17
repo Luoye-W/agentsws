@@ -232,7 +232,10 @@ const PEOPLE_3: PersonTemplate[] = [
     // WP72（56 §4）：客服岗位新加的第四条「社群管理」也挂在店主身上——
     // 3 人公司里客服就是他。**这一条不是可有可无的**：社媒运营那边判成客户问题的
     // 留言要转给它，没人持有的话那张卡只能落到 owner 头上（如实报，但那不是设计）。
-    extra: ['common.owner', 'dtc.community-support'],
+    // WP75（57 §1）：投放也归店主——3 人公司里花钱买流量这件事没有第二个人做。
+    // 只挂 Meta 那一条：Google 也连得上，但**演示一条就够了**，四条全挂只会让
+    // 首次设置向导里那个岗位看起来像四份活（勾上一条比去掉一条容易，57 §5）。
+    extra: ['common.owner', 'dtc.community-support', 'ads.meta'],
   },
   {
     id: 'p_li',

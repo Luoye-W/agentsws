@@ -226,11 +226,6 @@ const GSC_BLOCKS = (): BlockDef[] => [
   block('gsc.landing_pages', 'table', '落地页', 'gsc.landing_pages'),
 ]
 
-const ADS_BLOCKS = (): BlockDef[] => [
-  block('ads.spend', 'stat_tile', '花费', 'ads.spend'),
-  block('ads.trend', 'chart_line', '投放走势', 'ads.trend'),
-]
-
 /**
  * WP75（57 §3 面板）：投放那**四个数字块 + 五个分块**。
  *

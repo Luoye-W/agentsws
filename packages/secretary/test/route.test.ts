@@ -61,6 +61,53 @@ describe('一件活该谁做', () => {
     expect(v.owner).toBe('p_wu')
   })
 
+  /*
+   * WP75 顺手修的那个真洞的回归用例。
+   *
+   * 职责库里躺着一条**没人持有**的职责（种岗位那一步会把四条投放、九条社媒
+   * 全装进库里，就为了让首次设置向导显示得全）。它的判据词写得更准就会
+   * **悄悄抢走**路由——而那张认领卡落在一条谁也点不了的职责上。
+   */
+  it('没人持有的职责不抢路由（哪怕它的判据词更准）', () => {
+    const ghost = {
+      role_id: 'ads.google',
+      role_name: 'Google Ads',
+      terms: roleTermsOf({
+        id: 'ads.google',
+        name: { zh: 'Google Ads' },
+        description: '关键词与否词、出价与预算、低效广告暂停',
+        actions: [{ id: 'pause_ads' }],
+        scopes: [{ domain: 'ad_account' }],
+      }),
+      // **一个人都没有**
+      positions: [],
+    }
+    const v = routeTask({ text: '把那条低效广告暂停，顺便加几个否词', roles: [...ROLES, ghost] })
+    expect(v.role_id).toBe('ads.performance')
+    expect(v.owner).toBe('p_wu')
+    // 但候选清单里它照样在（界面上"还有哪些像"一条都不少）
+    expect(v.scores.map((s) => s.role_id)).toContain('ads.google')
+  })
+
+  it('一条有人持有的都不像时，照样报那条没人持有的（"这家公司还没人做"比不报强）', () => {
+    const ghost = {
+      role_id: 'site.builder',
+      role_name: '建站',
+      terms: roleTermsOf({
+        id: 'site.builder',
+        name: { zh: '建站' },
+        description: 'DNS 解析、部署上线、证书',
+        actions: [{ id: 'stage_publish_theme' }],
+        scopes: [{ domain: 'store_config' }],
+      }),
+      positions: [],
+    }
+    // 这句话与售后 / 运营 / 投放三条的判据词一个都不沾
+    const v = routeTask({ text: '把 DNS 解析改一下再部署上线', roles: [...ROLES, ghost] })
+    expect(v.role_id).toBe('site.builder')
+    expect(v.owner).toBeUndefined()
+  })
+
   it('看不出属于谁就不指名（进"没人认领"的车道）', () => {
     const v = routeTask({ text: '帮我订个会议室', roles: ROLES })
     expect(v.role_id).toBeUndefined()

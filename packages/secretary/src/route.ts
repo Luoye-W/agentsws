@@ -83,14 +83,33 @@ export function scoreRoles(text: string, roles: readonly RoleProfile[]): RouteSc
  */
 export function routeTask(input: RouteInput): RouteVerdict {
   const kind = looksLikeQuestion(input.text) ? 'question' : 'task'
-  const scores = scoreRoles(input.text, input.roles)
+  /*
+   * WP75 顺手修的一个真洞：**先看这家公司真有人做的那几条职责**。
+   *
+   * `roleProfiles()` 端进来的是**职责库里全部的定义**，包括一条都没人持有的
+   * （种岗位那一步会把四条投放 / 九条社媒全装进库里，就为了让首次设置向导
+   * 显示得全，见 `BUNDLED_ROLES`）。于是加一条新职责会**悄悄抢走**别人的路由：
+   * 15 人 pack 里"把那条低效广告暂停，顺便加几个否词"本来路由到有人持有的
+   * `ads.performance`，WP75 把 `ads.google`（描述里写着"关键词与否词"）装进库
+   * 之后，它以更高的分赢了——而这家公司**没有一个人持有它**，那张认领卡落在
+   * 一条谁也点不了的职责上。
+   *
+   * 修法是**优先而不是过滤**：有人持有的那几条里有候选就只在它们之间选；
+   * 一条都没有的时候仍然照原样报（那时那句话本来就该是"这像是投放的活，
+   * 可这家公司还没人做"——比不报强）。`scores` 回的仍是全量，
+   * 界面上"还有哪些候选"一条都不少。
+   */
+  const allScores = scoreRoles(input.text, input.roles)
+  const held = new Set(input.roles.filter((r) => r.positions.length > 0).map((r) => r.role_id))
+  const preferred = allScores.filter((s) => held.has(s.role_id))
+  const scores = preferred.length > 0 ? preferred : allScores
   const first = scores[0]
   if (first === undefined)
     return {
       kind,
       confidence: 0,
       reason: '代理判断：看不出这属于哪个岗位，先进"没人认领"的车道',
-      scores,
+      scores: allScores,
     }
   const second = scores[1]?.score ?? 0
   const separation = first.score / (first.score + second)
@@ -108,7 +127,7 @@ export function routeTask(input: RouteInput): RouteVerdict {
       kind,
       confidence,
       reason: `代理判断：像是${first.role_name}的活（${why}），但不够有把握，先进"没人认领"的车道`,
-      scores,
+      scores: allScores,
     }
   return {
     kind,
@@ -119,7 +138,7 @@ export function routeTask(input: RouteInput): RouteVerdict {
       kind === 'question'
         ? `代理判断：这是${first.role_name}的专业问题（${why}），代理不答，转给岗位`
         : `代理判断：${first.role_name}，因为你说了${why}`,
-    scores,
+    scores: allScores,
     ...(holder === undefined ? {} : { position_id: holder.position_id, owner: holder.person_id }),
   }
 }

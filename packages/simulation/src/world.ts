@@ -6,6 +6,19 @@
  * 时钟（合成时钟）、投递（收件箱）、入站（内存管线）是替身。
  */
 
+/*
+ * WP75（57 §2）：总闸 / delta / 止损 / 归因四件事的判据**只有 `ads-core` 那一份**。
+ * 世界里不写第二份——两份判据必然有一天对不上，而对不上的那一天没人会发现
+ * （模拟绿着，真环境按另一份走）。
+ */
+import {
+  attributeAds,
+  attributionGapPct,
+  budgetDelta,
+  daySpendGate,
+  roasBothViews,
+  stopLossVerdict,
+} from '@agentsws/ads-core'
 import {
   compareJoinBundle,
   deriveStoreRanges,
@@ -15,6 +28,7 @@ import {
   rewriteAliasedAssignments,
 } from '@agentsws/catalog'
 import type {
+  AdsCaps,
   ApprovalItem,
   Assignment,
   ChangeKind,
@@ -45,6 +59,9 @@ import type {
   RunUsage,
 } from '@agentsws/contracts'
 import {
+  // WP75：57 §6 的额度默认值与"平台 id → 职责 id / 中文名"。**全仓唯一**那张平台清单
+  ADS_DEFAULT_CAPS,
+  adsPlatformSpec,
   DEFAULT_STOREFRONT_PLATFORM,
   // WP72：渠道 id → 职责 id 与中文名。**全仓唯一**那张渠道清单，不在这里拼字符串
   socialChannelSpec,
@@ -470,6 +487,16 @@ export interface World {
    */
   social: SocialOps
   /**
+   * WP75：投放（57 §1、04 §5）。
+   *
+   * 走的也是真机制：**开花钱口子永远 L1** 由 guardrail 的 `HARD_L1` 按回来、
+   * **总闸满了新建直接 block** 由 guardrail 按四个平台加起来的当日花费判、
+   * **止损那一档要判据真的成立**由 `ads-core` 的 `stopLossVerdict` 算、
+   * **两个口径的归因不合并**由 `ads-core` 的 `attributeAds` 算——四件事
+   * 都不是场景自己写的答案。
+   */
+  ads: AdsOps
+  /**
    * WP47 / 44：品牌（范围组）与产品线的组织动作。
    *
    * 也走真机制：品牌成员一变，职责层重算所有挂了它的岗位的范围，这里记一条
@@ -772,6 +799,115 @@ export interface SocialOps {
     rules: string
     level?: 'L1' | 'L2' | 'L3'
   }): Promise<SocialRulesResult>
+}
+
+/**
+ * WP75（57 §1 / 04 §5）：投放那四件事。
+ *
+ * 四条 op 覆盖 57 §4 的四条模拟题：新建 campaign（永远 L1；总闸满了直接拦）、
+ * 改预算（超额度升 L1）、止损暂停（判据真的成立才是 L3）、跑一次归因
+ * （两个口径两列不合并）。
+ *
+ * `spend_today` 是**这个平台今天到此刻为止花了多少**：世界里没有广告库
+ * （那是服务进程那一侧的东西），所以这一格由场景直接给，世界按平台记一份，
+ * 总闸判的时候四个平台加起来——04 §5 那条"岗位级总闸"在模拟里的落点就是它。
+ */
+export interface AdsOps {
+  /**
+   * 提一条新建 campaign（`create_campaign`）。
+   *
+   * `level` 是**故意报高的**那一格：15 §2 的 `HARD_L1` 会把它按回人审。
+   * 总闸已经满了的时候 guardrail **直接 block**——那不是"人点一下就能过"的事
+   * （04 §5：超过即熔断）。
+   */
+  createCampaign(input: {
+    who: PersonId
+    platform: string
+    name: string
+    daily_budget: number
+    audience?: string
+    /** 这个平台今天到此刻为止花了多少（不给就沿用上一次记的）。 */
+    spend_today?: number
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<AdsStagedResult>
+  /** 提一条改预算（`budget_change`）：超 `max_budget_delta_pct` 或会破总闸 → 升 L1。 */
+  budgetChange(input: {
+    who: PersonId
+    platform: string
+    campaign: string
+    before: number
+    after: number
+    spend_today?: number
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<AdsStagedResult>
+  /**
+   * 提一条暂停（`pause_ad`）。
+   *
+   * 判据由 `ads-core` 的 `stopLossVerdict` 算（世界里不写第二份），算出来那句话
+   * **原样进卡面**；报了 `stop_loss` 但判据不成立的，guardrail 转人审。
+   */
+  pause(input: {
+    who: PersonId
+    platform: string
+    campaign: string
+    reason: string
+    roas?: number
+    spend?: number
+    daily_budget?: number
+    spend_today?: number
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<AdsStopLossResult>
+  /**
+   * 跑一次归因（`ads-core` 的 `attributeAds`）。
+   *
+   * **两列不合并**：平台报的与订单表里找到的各是各的，差多少算给人看。
+   * 归不上的订单进 `unmatched`，绝不按时间窗口猜给谁。
+   */
+  attribution(input: {
+    who: PersonId
+    platform: string
+    campaign: string
+    spend?: number
+    platform_conversions?: number
+    platform_value?: number
+    /** 订单那一侧：一张单一行（`url` 是落地页链接，没有就归不上）。 */
+    orders: { id: string; url?: string; amount?: number }[]
+  }): Promise<AdsAttributionResult>
+}
+
+/** WP75：一条投放提案的结果。 */
+export interface AdsStagedResult {
+  platform: string
+  staged: boolean
+  level_requested: string
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+  /** 被拦下来那句话（总闸满了 / 文案里有承诺）。 */
+  message?: string
+  /** 提这一下的时候总闸是什么样（人点头之前要看得见）。 */
+  spend_gate: { spent: number; cap: number; remaining: number; note: string }
+}
+
+/** WP75：一条止损提案的结果（比普通提案多两格判据）。 */
+export interface AdsStopLossResult extends AdsStagedResult {
+  /** `trigger` / `hold` / `unknown`（`ads-core` 的 `stopLossVerdict`）。 */
+  outcome: string
+  /** 判据那句话，**原样**。 */
+  verdict: string
+}
+
+/** WP75：一次归因的结果（两列永远分开）。 */
+export interface AdsAttributionResult {
+  platform: string
+  campaign: string
+  platform_conversions?: number
+  order_conversions?: number
+  platform_roas?: number
+  order_roas?: number
+  gap_pct?: number
+  /** 归不上的订单数（**不分摊、不猜**）。 */
+  unmatched: number
 }
 
 /** WP73：一条入群审核提案的结果。 */
@@ -1242,6 +1378,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('social.telegram-group'),
     loadBundledRole('social.whatsapp'),
     loadBundledRole('dtc.community-support'),
+    // WP75（57 §1）：投放岗位的四条平台职责。3 人 pack 里店主真挂着 `ads.meta`
+    // （`assignments.yml`）；其余三条躺在库里——躺着不产生任何行为，装它们是为了
+    // 首次设置向导里"投放"那个岗位显示四条而不是一条（同上面红人 / 社媒的理由）。
+    loadBundledRole('ads.meta'),
+    loadBundledRole('ads.google'),
+    loadBundledRole('ads.x'),
+    loadBundledRole('ads.tiktok'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
@@ -2171,6 +2314,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP72：同上（56 §2 社媒运营 / §4 社群管理）
     get social() {
       return social
+    },
+    // WP75：同上（57 §1 投放、04 §5 额度纪律）
+    get ads() {
+      return ads
     },
     // 44：与 `shop` 同理，装在这个对象字面量之后
     get org() {
@@ -5511,6 +5658,462 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         level_requested,
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
+      }
+    },
+  }
+
+  /* ── WP75（57 §1 / §4、04 §5）：投放 ────────────────────────────────── */
+
+  const adsRoleOf = (platform: string): RoleId => {
+    const spec = adsPlatformSpec(platform)
+    if (spec === undefined) throw new SimulationError('invalid_input', `没有这个平台：${platform}`)
+    return spec.role_id
+  }
+  const adsLabelOf = (platform: string): string => adsPlatformSpec(platform)?.zh ?? platform
+
+  /**
+   * WP75：各平台今天到此刻为止花了多少。
+   *
+   * 世界里没有广告库（那是服务进程那一侧的东西），所以这里留一份最小的：
+   * 一个平台一个数。**总闸判的时候四个平台加起来**——04 §5 那条"岗位级总闸"
+   * 在模拟里的落点就是它，各判各的等于这条纪律从来没生效过。
+   */
+  const adsSpendByPlatform = new Map<string, number>()
+
+  /** 这条分配上那份投放额度（57 §6 的默认值补缺）。 */
+  const adsCapsOf = (asg: Assignment, action: string): AdsCaps => {
+    const raw = actionOf(asg, action).mandate.caps ?? {}
+    const pick = (k: keyof AdsCaps): number | undefined => {
+      const v = raw[k]
+      return typeof v === 'number' ? v : undefined
+    }
+    return {
+      max_daily_spend: pick('max_daily_spend') ?? ADS_DEFAULT_CAPS.max_daily_spend,
+      max_budget_delta_pct: pick('max_budget_delta_pct') ?? ADS_DEFAULT_CAPS.max_budget_delta_pct,
+      max_bid_delta_pct: pick('max_bid_delta_pct') ?? ADS_DEFAULT_CAPS.max_bid_delta_pct,
+      stop_loss_roas_below: pick('stop_loss_roas_below') ?? ADS_DEFAULT_CAPS.stop_loss_roas_below,
+      stop_loss_spend_pct: pick('stop_loss_spend_pct') ?? ADS_DEFAULT_CAPS.stop_loss_spend_pct,
+      max_changes_per_day: pick('max_changes_per_day') ?? ADS_DEFAULT_CAPS.max_changes_per_day,
+    }
+  }
+
+  /** 岗位级总闸当时的样子（四个平台加起来）。 */
+  const adsGateOf = (caps: AdsCaps, adding: number) =>
+    daySpendGate({
+      spend_by_platform: Object.fromEntries(adsSpendByPlatform),
+      adding,
+      caps,
+      expected_platforms: [...adsSpendByPlatform.keys()],
+    })
+
+  const ads: AdsOps = {
+    async createCampaign({ who, platform, name, daily_budget, audience, spend_today, level }) {
+      if (spend_today !== undefined) adsSpendByPlatform.set(platform, spend_today)
+      const asg = assignmentFor(who, adsRoleOf(platform))
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'ad_account', id: `aa_${platform}` }
+      const { mandate, level: configured } = actionOf(asg, 'stage_campaign')
+      const level_requested = level ?? configured
+      const caps = adsCapsOf(asg, 'stage_campaign')
+      const gate = adsGateOf(caps, daily_budget)
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_ads_${run_id}`,
+        kind: 'create_campaign',
+        target,
+        before: {},
+        after: {
+          platform,
+          platform_label: adsLabelOf(platform),
+          name,
+          daily_budget,
+          ...(audience === undefined ? {} : { audience_summary: audience }),
+          spend_gate_note: gate.reason,
+        },
+        notes: [
+          '新建一条 campaign 是**开一个新的花钱口子**，永远要人点一下（04 §5）。',
+          gate.reason,
+        ],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        // 岗位级总闸的分子：四个平台加起来（guardrail 的 `max_daily_spend` 看它）
+        daily_spend_total: gate.spent,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `提一条 ${adsLabelOf(platform)} 的新 campaign`,
+        }),
+        approval: {
+          title: `新建 campaign：${name}`,
+          summary: `${adsLabelOf(platform)}｜日预算 ${daily_budget}｜${audience ?? '受众没写'}｜${gate.reason}`,
+          recipients: [recipientOf('owner')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'owner',
+          separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      const view = {
+        spent: gate.spent,
+        cap: gate.cap,
+        remaining: gate.remaining,
+        note: gate.reason,
+      }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.ads_campaign_blocked',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          payload: {
+            platform,
+            level_requested,
+            reason: outcome.reason,
+            // 拦下来那句话里有没有把数摆出来（36 §2：说不清等于没说）
+            message: outcome.message,
+            stated_on_card: outcome.message.includes('max_daily_spend'),
+            spend_gate_spent: gate.spent,
+            spend_gate_cap: gate.cap,
+          },
+        })
+        return {
+          platform,
+          staged: false,
+          level_requested,
+          reason: outcome.reason,
+          message: outcome.message,
+          spend_gate: view,
+        }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.ads_campaign_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          platform,
+          role_id: asg.role_id,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          daily_budget,
+          // 总闸那句话在不在卡面上（每一张投放的卡上都该有）
+          gate_stated_on_card: outcome.approval.summary.includes(gate.reason),
+          spend_gate_spent: gate.spent,
+          spend_gate_cap: gate.cap,
+        },
+      })
+      return {
+        platform,
+        staged: true,
+        level_requested,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        spend_gate: view,
+      }
+    },
+
+    async budgetChange({ who, platform, campaign, before, after, spend_today, level }) {
+      if (spend_today !== undefined) adsSpendByPlatform.set(platform, spend_today)
+      const asg = assignmentFor(who, adsRoleOf(platform))
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'campaign', id: campaign }
+      const { mandate, level: configured } = actionOf(asg, 'stage_budget_change')
+      const level_requested = level ?? configured
+      const caps = adsCapsOf(asg, 'stage_budget_change')
+      // 判据在 `ads-core` 里算一次（世界里不写第二份），算出来那句话原样进卡面
+      const delta = budgetDelta(before, after, caps)
+      const gate = adsGateOf(caps, Math.max(0, after - before))
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_ads_${run_id}`,
+        kind: 'budget_change',
+        target,
+        before: { value: before },
+        after: {
+          value: after,
+          platform,
+          platform_label: adsLabelOf(platform),
+          spend_gate_note: gate.reason,
+        },
+        notes: [delta.reason, gate.reason],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        daily_spend_total: gate.spent,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `提一条 ${adsLabelOf(platform)} 的改预算`,
+        }),
+        approval: {
+          title: `改预算：${campaign}`,
+          summary: `${before} → ${after}｜${delta.reason}｜${gate.reason}`,
+          recipients: [recipientOf('scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'scope_manager',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      const view = {
+        spent: gate.spent,
+        cap: gate.cap,
+        remaining: gate.remaining,
+        note: gate.reason,
+      }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return {
+          platform,
+          staged: false,
+          level_requested,
+          reason: outcome.reason,
+          message: outcome.message,
+          spend_gate: view,
+        }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.ads_budget_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          platform,
+          role_id: asg.role_id,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          delta_pct: delta.pct,
+          within: delta.within,
+          direction: delta.direction,
+          caps_hit: outcome.approval.automation.mandate_check.caps_hit,
+          // 幅度那句话在不在卡面上——人点头之前要看得见"提了百分之多少"
+          stated_on_card: outcome.approval.summary.includes(delta.reason),
+          spend_gate_spent: gate.spent,
+          spend_gate_cap: gate.cap,
+        },
+      })
+      return {
+        platform,
+        staged: true,
+        level_requested,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        spend_gate: view,
+      }
+    },
+
+    async pause({
+      who,
+      platform,
+      campaign,
+      reason,
+      roas,
+      spend,
+      daily_budget,
+      spend_today,
+      level,
+    }) {
+      if (spend_today !== undefined) adsSpendByPlatform.set(platform, spend_today)
+      const asg = assignmentFor(who, adsRoleOf(platform))
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'campaign', id: campaign }
+      const { mandate, level: configured } = actionOf(asg, 'pause_ads')
+      const level_requested = level ?? configured
+      const caps = adsCapsOf(asg, 'pause_ads')
+      const verdict = stopLossVerdict({
+        ...(roas === undefined ? {} : { roas }),
+        ...(spend === undefined ? {} : { spend }),
+        ...(daily_budget === undefined ? {} : { daily_budget }),
+        caps,
+      })
+      const gate = adsGateOf(caps, 0)
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_ads_${run_id}`,
+        kind: 'pause_ad',
+        target,
+        before: { status: 'active' },
+        after: {
+          status: 'paused',
+          reason,
+          platform,
+          platform_label: adsLabelOf(platform),
+          ...(roas === undefined ? {} : { roas }),
+          ...(spend === undefined ? {} : { spend }),
+          ...(daily_budget === undefined ? {} : { daily_budget }),
+          // 卡面上那一格放的是**判据**不是"止损"两个字
+          stop_loss_reason: verdict.reason,
+          spend_gate_note: gate.reason,
+        },
+        notes: [verdict.reason, '停了不是删了——历史数据还在，随时能再开。'],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        daily_spend_total: gate.spent,
+        provenance: run.finish({
+          seen: [target],
+          outputs: [],
+          summary: `提一条 ${adsLabelOf(platform)} 的暂停`,
+        }),
+        approval: {
+          title: `暂停：${campaign}`,
+          summary: `${reason}｜${verdict.reason}`,
+          recipients: [recipientOf('role_holder')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'role_holder',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      const view = {
+        spent: gate.spent,
+        cap: gate.cap,
+        remaining: gate.remaining,
+        note: gate.reason,
+      }
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return {
+          platform,
+          staged: false,
+          level_requested,
+          outcome: verdict.outcome,
+          verdict: verdict.reason,
+          reason: outcome.reason,
+          message: outcome.message,
+          spend_gate: view,
+        }
+      }
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.ads_stop_loss_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          platform,
+          role_id: asg.role_id,
+          reason,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          outcome: verdict.outcome,
+          caps_hit: outcome.approval.automation.mandate_check.caps_hit,
+          // 判据那句话在不在卡面上（卡上只写"止损"的话，点头这件事就没有内容）
+          verdict_stated_on_card: outcome.approval.summary.includes(verdict.reason),
+        },
+      })
+      return {
+        platform,
+        staged: true,
+        level_requested,
+        outcome: verdict.outcome,
+        verdict: verdict.reason,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        spend_gate: view,
+      }
+    },
+
+    async attribution({
+      who,
+      platform,
+      campaign,
+      spend,
+      platform_conversions,
+      platform_value,
+      orders,
+    }) {
+      const asg = assignmentFor(who, adsRoleOf(platform))
+      const run = await beginShopRun(asg)
+      const at = now(clock)
+      const result = attributeAds({
+        platform_rows: [
+          {
+            platform: platform as never,
+            campaign,
+            ...(spend === undefined ? {} : { spend }),
+            ...(platform_conversions === undefined ? {} : { conversions: platform_conversions }),
+            ...(platform_value === undefined ? {} : { conversion_value: platform_value }),
+          },
+        ],
+        orders: orders.map((o) => ({
+          order_id: o.id,
+          ...(o.url === undefined ? {} : { landing_url: o.url }),
+          ...(o.amount === undefined ? {} : { amount: o.amount }),
+          created_at: at,
+        })),
+        observed_at: at,
+      })
+      const row = result.rows[0]
+      const roas = row === undefined ? {} : roasBothViews(row)
+      run.tool('ads_attribution', { platform, campaign, orders: orders.length })
+      run.finish({
+        seen: [{ type: 'ad_account', id: `aa_${platform}` }],
+        outputs: [],
+        summary: `跑一次 ${adsLabelOf(platform)} 的归因`,
+      })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.ads_attribution',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id: run.run_id },
+        payload: {
+          platform,
+          campaign,
+          // **两列**：一个字段一个口径，谁也不改谁
+          platform_conversions: row?.platform_conversions,
+          order_conversions: row?.order_conversions,
+          platform_roas: roas.platform,
+          order_roas: roas.order,
+          gap_pct: row === undefined ? undefined : attributionGapPct(row),
+          unmatched: result.unmatched.length,
+          /*
+           * **没有一个字段叫"真实转化数"**。这一格报的就是"没合并"这件事本身：
+           * 合成一个数要么偏袒平台（于是每次都该加预算），要么偏袒订单
+           * （于是每条广告看起来都在亏），而做这个判断的人本来就该看见差多少。
+           */
+          merged: false,
+        },
+      })
+      return {
+        platform,
+        campaign,
+        ...(row?.platform_conversions === undefined
+          ? {}
+          : { platform_conversions: row.platform_conversions }),
+        ...(row?.order_conversions === undefined
+          ? {}
+          : { order_conversions: row.order_conversions }),
+        ...(roas.platform === undefined ? {} : { platform_roas: roas.platform }),
+        ...(roas.order === undefined ? {} : { order_roas: roas.order }),
+        ...(row === undefined || attributionGapPct(row) === undefined
+          ? {}
+          : { gap_pct: attributionGapPct(row) as number }),
+        unmatched: result.unmatched.length,
       }
     },
   }

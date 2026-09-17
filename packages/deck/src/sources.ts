@@ -104,8 +104,14 @@ export const SOCIAL_SOURCE_BY_CHANNEL: Readonly<Record<string, DataSourceId>> = 
  *
  * WP72 加进 `social`：社媒库同理（四张表，`apps/server/src/social.ts`）。
  * 内容日历上那几条是**我们自己排的**，一个平台都没连也照样在那儿摆着。
+ *
+ * WP75 加进 `ads`：广告库同理（五张表，`apps/server/src/ads.ts`）。**尤其是总闸
+ * 那一格**——"今天四个平台一共花了多少 / 还剩多少"是这台机器上算出来的，
+ * 它在只连了一个平台、甚至一个都没连的时候照样成立（04 §5 那条纪律不因为
+ * 某个平台没连就不生效）。平台那一侧的"连没连"是另外四个源
+ * （`ads_meta` / `ads_google` / `ads_x` / `ads_tiktok`）的事。
  */
-export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social']
+export const ALWAYS_CONNECTED: readonly DataSourceId[] = ['approvals', 'kol', 'social', 'ads']
 
 /** 全部数据源，按面板里的出场顺序。 */
 export const ALL_DATA_SOURCES: readonly DataSourceId[] = [

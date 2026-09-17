@@ -35,7 +35,13 @@ events:
     clock.advance: {}
 expected:
   # 两件活各出一张认领卡，都进了池；专业问题一张都没出
-  routed_to: [dtc.support, ads.performance]
+  #
+  # WP75（57 §1 / docs/50 §6）：投放那一条从 `ads.performance` 变成 `ads.meta`。
+  # **落到的还是同一个人**（吴迪手上两条都有），变的是"这件事属于哪条职责"——
+  # 50 §6 把旧 04 §5 那条笼统的"效果投放"拆成了按平台的四条，而这句话里的
+  # "暂停低效广告"在新的那套里就是平台职责的事。这一行跟着定义走，不跟着代码走
+  # （06 §2.4：职责分类表就是路由词典）。
+  routed_to: [dtc.support, ads.meta]
   event_types:
     - todo.pooled
     - secretary.routed

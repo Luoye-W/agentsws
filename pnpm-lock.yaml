@@ -869,6 +869,9 @@ importers:
 
   packages/simulation:
     dependencies:
+      '@agentsws/ads-core':
+        specifier: workspace:*
+        version: link:../ads-core
       '@agentsws/catalog':
         specifier: workspace:*
         version: link:../catalog

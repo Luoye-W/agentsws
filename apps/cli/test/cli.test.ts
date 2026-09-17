@@ -62,7 +62,7 @@ describe('agentsws simulate（26 §5）', () => {
       scenarios: unknown[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(38)
+    expect(summary.scenarios).toHaveLength(41)
     expect(existsSync(join(report, 'aftersales__return-within-window.json'))).toBe(true)
   }, 60_000)
 

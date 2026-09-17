@@ -157,7 +157,19 @@ describe('数字块（36 §3）', () => {
       'refund_requests',
       'csat',
     ])
-    expect(DEFAULT_HOME_TILES['ads.meta']).toEqual(['ads_spend', 'ads_roas', 'ads_cpa', 'ads_ctr'])
+    /*
+     * WP75（57 §3）：投放那一行从"花费 / ROAS / CPA / 点击率"（36 §3 举例时的
+     * 四个占位，值永远是 0）换成**真算出来的三个**。
+     *
+     * 少的那一个是"转化数"：它是平台那一侧的数（一个平台一个查询、各有各的
+     * "连没连"），首页这一条跨岗位摆在一起，放它会因为某个平台没连就变成
+     * "去连接"——那一格摆在首页上没用。它在岗位面板里。
+     */
+    expect(DEFAULT_HOME_TILES['ads.meta']).toEqual([
+      'ads_spend_today',
+      'ads_roas_views',
+      'ads_stop_losses',
+    ])
     expect(defaultTilesFor('common.member')).toEqual([])
   })
 
