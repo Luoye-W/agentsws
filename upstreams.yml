@@ -1,0 +1,273 @@
+# 上游登记表（docs/10 §3.2 的那份清单，WP91 落地）
+#
+# 这份文件回答三个问题：**我们在盯谁、盯它的什么、锁在哪一版**。
+# 哨兵（`.github/workflows/upstream-watch.yml` 与 `scripts/upstream-watch.mjs`）只读它；
+# `scripts/check-upstreams.mjs --check` 在 CI 里校验它没写坏、锁的版本和仓库里真装的一致。
+#
+# ── 字段 ───────────────────────────────────────────────────────────────────
+#
+# id                  必填。全表唯一的短名，只许 a-z 0-9 与连字符。报告里按它分节。
+# kind                必填。docs/10 §3.1 的四类 + 16 §6 的 wrapped-plugin：
+#                       runtime-dep    版本锁定的运行依赖 —— 要升级，可能破坏契约
+#                       vendored       fork + 我们的补丁 —— 要 rebase
+#                       ported         抄进来的源码 —— 上游改了要对照回来
+#                       reference      只参考 —— 不升级，只看"有没有新想法"
+#                       wrapped-plugin 我们包了一层的社区插件（16 §6）
+# why                 必填，一句话：**我们哪里用到它**。空话不如不写。
+# watch               必填，至少一项。哨兵这一周替你看什么：
+#                       versions       npm 的 dist-tags 与版本表（要 `npm:`）
+#                       releases       GitHub 的 release / tag（要 `repo:`）
+#                       readme         README 这一周有没有被改（要 `repo:`）
+#                       stars          星数（只对 reference 有意义，看热度拐点，要 `repo:`）
+#                       default_flips  默认值扫描：克隆两个 tag 的源码 grep `.default(`
+#                                      （docs/42 ④bis；`.d.ts` 的 diff 看不见默认值的翻转）
+#                       wishlist       `wishlist:` 里的词命中 release notes / README 就单独提醒
+#
+# npm / repo / image  至少要有一个。repo 写 `owner/name`；image 不带 tag，tag 另写。
+# image_tag           镜像的 tag。写 `latest` 就是"没锁"，报告里会照实说。
+# locked_version      我们锁的版本（精确版本，或 `^x.y.z` 这种范围 —— 后者要 `pin: allow_caret`）。
+# pinned_commit       git 固定的上游写这个（与 locked_version 二选一）。
+# pin                 exact（默认）| allow_caret。docs/42 红线 3：runtime-dep 一律锁精确版本；
+#                     写 allow_caret 就是"记录在案的例外"，必须在注释里说清为什么。
+# locked_in           这些 package.json 里声明的版本必须**逐字等于** locked_version。
+# lockfile_single     默认 true（有 npm + locked_version 时）：pnpm-lock.yaml 的 packages: 段里
+#                     这个包只许解析出**一个**版本，且等于 locked_version。
+# release_age_prefix  pnpm-workspace.yaml 的 minimumReleaseAgeExclude 里，以这个前缀开头的
+#                     每一条都必须是 locked_version（docs/42 红线 3：写死版本、不写通配）。
+# we_depend_on        我们碰到的 seam，一行一条。docs/42 §4 第 1 条说的就是这份清单：
+#                     "我们碰了哪些 seam"以前散在 docs/17 §4 的表、gate.ts 的注释和 UPGRADE.md 里。
+# watch_paths         只盯上游仓库的这些路径（给"转正信号"这类局部观察用）。
+# wishlist            等上游做的事，一行一条。命中就单独提醒（docs/10 §3.3 ②）。
+# covered_by          我们这一侧钉住它的测试 / 记录。**路径必须真存在**，`--check` 会查。
+#
+# ── 纪律 ───────────────────────────────────────────────────────────────────
+#
+# · 改了 locked_version 就要同步改 locked_in 里的每个文件 —— 不同步 CI 会红。
+# · 报告只到 issue 为止：哨兵不改版本号、不开 PR、不合并（docs/10 §3.3 第 ⑤ 步是人看）。
+# · reference 类不升级。它出现在报告里只是为了让人一周看一眼"有没有新想法"。
+
+upstreams:
+  # ── runtime-dep：版本锁定的运行依赖 ──────────────────────────────────────
+  - id: dsh
+    kind: runtime-dep
+    why: 我们的 Agent 运行时本体；`packages/dsh-adapter` 是全仓唯一 import dsh 的地方（docs/34）
+    npm: '@deepseek-ai/dsh'
+    repo: deepseek-ai/deepseek-harness
+    locked_version: 0.1.6-alpha.1
+    pin: exact
+    watch: [versions, releases, default_flips, wishlist]
+    locked_in:
+      - packages/dsh-adapter/package.json
+      - profiles/agentsws/package.json
+    release_age_prefix: '@deepseek-ai/dsh'
+    we_depend_on:
+      - 'dsh-tools: pre-execute 的 allow / deny / ask'
+      - 'dsh-tools: post-execute 的 replace / enrich / block'
+      - 'dsh-user-approval: answerer waterfall 的四个结果值与 fail-closed'
+      - 'dsh-system-prompt: section({ complete: true }) 的遮蔽、systemPrompt.context 的分节'
+      - 'dsh-scope: ctx.tools.restrict({ allow }) 在 scoped context 里的过滤'
+      - 'dsh-agent: ctx.agents.create / followup / whenIdle（WP81 起两档运行时都走它）'
+      - 'dsh-session-projection: session/event 的投影（我们的事件序列就是从它来的）'
+      - 'dsh-browser-use + dsh-experimental-browser-use-*: mountSessionMcp，一个 Agent 一个 MCP 客户端（WP82）'
+      - 'dsh-agent-presets: 一职责一目录的 preset 承载'
+      - 'dsh-llm: ctx.llm.stream({ system, messages, tools }) 这条"一次性调用方"的路'
+    wishlist:
+      - 官方 SDK 出现 server→client 请求（dsh-sdk-jsonrpc-server 里的 transport.request）
+      - headless 的 turn 驱动能被宿主接管（--json 只是单向投影，不算）
+      - browser-use 从 experimental 转正，且后端不需要开原生构建就能起
+      - session.eventAt() 的替代接口定下来（上游已弃用，下次升级第一个红）
+      - 出现渠道 seam（现在入站只能靠 agent.followup()）
+    covered_by:
+      - packages/dsh-adapter/test/seams.test.ts
+      - packages/dsh-adapter/test/browser-seam.test.ts
+      - packages/dsh-adapter/test/upgrade.test.ts
+      - packages/dsh-adapter/UPGRADE.md
+      - docs/42-上游升级流程-v1.md
+
+  # 34 §核实里的"共享兄弟包"：dsh vendored 出来独立发，packages/kernel 也在用。
+  # 跟着 dsh 升是"必要时"才做的事，不是默认动作（改了就要跑 kernel 全部测试）。
+  - id: cordis
+    kind: runtime-dep
+    why: 内核的插件容器（docs/09 契约选型"采用"的那一条），packages/kernel 与 dsh 两边共用
+    npm: '@deepseek-ai/cordis'
+    locked_version: 4.0.2
+    pin: exact
+    watch: [versions]
+    locked_in:
+      - packages/kernel/package.json
+      - packages/dsh-adapter/package.json
+      - profiles/agentsws/package.json
+    covered_by:
+      - packages/kernel/test
+
+  - id: schemastery
+    kind: runtime-dep
+    # 记录在案的例外：kernel 写 `3.18.2`、dsh-adapter 写 `^3.18.2`，lockfile 里只解析出一个
+    # 3.18.2，所以运行时没有两棵树；但写法不齐是 docs/42 红线 3 的擦边球。下次 dsh 升级时统一成精确版本。
+    why: dsh 的配置 schema 库，packages/kernel 也在用；它翻默认值等于翻我们的配置默认值
+    npm: '@deepseek-ai/schemastery'
+    locked_version: 3.18.2
+    pin: allow_caret
+    watch: [versions, default_flips]
+    locked_in:
+      - packages/kernel/package.json
+      - packages/dsh-adapter/package.json
+    covered_by:
+      - packages/kernel/test
+
+  - id: open-connector
+    kind: runtime-dep
+    # 它是两样东西：SDK（npm，锁死了）与 runtime 镜像（docker-compose 里写 `:latest`，**没锁**）。
+    # docs/42 §4 第 2 条说的"OpenConnector 没走过这套"就是指镜像那一半：第 ② 步的 npm view
+    # 要换成看 commit / 镜像 digest，基线换成 connect-adapter 的磁带与一致性套件。
+    why: 唯一的系统动作执行面（Shopify / Gmail / Meta …），`packages/connect-adapter` 是唯一 import 处
+    npm: '@oomol-lab/connector'
+    repo: oomol-lab/open-connector
+    image: ghcr.io/oomol-lab/open-connector
+    image_tag: latest
+    locked_version: 1.2.0
+    pin: exact
+    watch: [versions, releases, readme, wishlist]
+    locked_in:
+      - packages/connect-adapter/package.json
+    release_age_prefix: '@oomol-lab/connector'
+    we_depend_on:
+      - 'runtime HTTP：SDK 覆盖不到的三块（见 packages/connect-adapter/src/http.ts 的注释）'
+      - 'errorCode 优先于 HTTP 状态的判错顺序（09-09 对真容器实测出来的）'
+      - 'provider 目录：shopify_admin / gmail / meta / whatsapp / klaviyo'
+    wishlist:
+      - amazon_sp_api provider
+      - tiktok_shop provider
+      - imap provider
+      - feishu_contacts provider
+      - merchant_center provider
+    covered_by:
+      - packages/connect-adapter/test/conformance-adapter.test.ts
+      - packages/connect-adapter/test/errors.test.ts
+      - packages/connect-adapter/test/fixtures
+
+  - id: mcp-sdk
+    kind: runtime-dep
+    why: 自定义 MCP 服务器接进运行时那条路的客户端（apps/server），也是 playwright-mcp 的底座
+    npm: '@modelcontextprotocol/sdk'
+    repo: modelcontextprotocol/typescript-sdk
+    locked_version: 1.30.0
+    pin: exact
+    watch: [versions, releases]
+    locked_in:
+      - apps/server/package.json
+
+  - id: playwright-mcp
+    kind: runtime-dep
+    # 传递依赖：`dsh-experimental-browser-use-playwright-mcp` 拖进来的，我们没有直接依赖，
+    # 所以没有 locked_in，只钉 lockfile 里那一个版本。
+    why: WP82 的浏览器门禁按它**实测的 24 个默认工具名**做读写分类；工具名一变门禁就漏
+    npm: '@playwright/mcp'
+    repo: microsoft/playwright-mcp
+    locked_version: 0.0.80
+    pin: exact
+    watch: [versions, releases, default_flips, wishlist]
+    we_depend_on:
+      - '默认工具集（不传 --caps 时的 Core automation 23 + Tab management 1）'
+      - 'browser_evaluate / browser_run_code_unsafe 这两个注 JS 的工具名（公司端硬拒）'
+      - 'browser_navigate.url 与 browser_tabs{action:new}.url 这两个带 URL 的入参'
+      - 'attach 的 --cdp-endpoint 与 launch 的 --isolated / --executable-path'
+    wishlist:
+      - 又新增一个注 JS 或执行代码的工具（门禁的硬拒名单要跟着加）
+      - 默认工具集增减（读写分类表要重排）
+      - cli.js 启动时开始碰浏览器（那样 allowBuilds:false 就不够了）
+    covered_by:
+      - packages/dsh-adapter/test/browser-seam.test.ts
+
+  - id: pi-ai
+    kind: runtime-dep
+    # 传递依赖，经 `@deepseek-ai/dsh-llm-pi-ai` 进来。GitHub 仓库地址没核实过，所以不填 `repo:`——
+    # 填一个猜的地址等于让报告每周 404 一次。第一次真去看过再补。
+    why: 订阅登录（ChatGPT Plus/Pro、Claude Pro/Max）的 OAuth 全在它里面（docs/55 §9 Q8）
+    npm: '@earendil-works/pi-ai'
+    locked_version: 0.85.1
+    pin: exact
+    watch: [versions, default_flips, wishlist]
+    we_depend_on:
+      - 'provider openai-codex：公开 client id、PKCE 回调固定 localhost:1455、设备码两种登录'
+      - '凭据记录键 llm-pi-ai/<provider> 与 { kind: grant, payload: {...} } 的形状'
+      - '到期前 5 分钟在 modifyRecord 里刷新（跨进程锁）'
+    wishlist:
+      - 新增 Gemini 的订阅 OAuth（现在没有）
+      - OpenAI / Anthropic 明文授权第三方客户端（现在是灰的，卡上要写风险）
+
+  # ── ported：抄进来的源码，上游改了要对照回来 ──────────────────────────────
+  - id: commerce-agents
+    kind: ported
+    why: 围栏与变更账本是从它移植的（Apache-2.0），上游修规则我们要跟
+    repo: anthropics/commerce-agents
+    watch: [releases, readme]
+    watch_paths:
+      - commerce_common/fencing.py
+      - merchant_agent/changes.py
+      - merchant_agent/gates.py
+    we_depend_on:
+      - 'commerce_common/fencing.py → packages/core/src/fencing.ts（文件头注了出处与版权）'
+      - 'merchant_agent/changes.py 的 ChangeLedger + guardrails → packages/core/src/guardrail.ts（出处：docs/15 表头）'
+      - 'merchant_agent/gates.py 的 provenance / record-read → packages/core/src/provenance.ts（出处：docs/15 表头）'
+    covered_by:
+      - packages/core/src/fencing.ts
+      - packages/core/src/guardrail.ts
+      - packages/core/src/provenance.ts
+      - docs/15-变更账本与Guardrail规范-v1.md
+
+  # ── reference：不升级，只看"有没有新想法"（docs/10 §3.1 第四类）─────────────
+  - id: dsh-experimental
+    kind: reference
+    # 与 dsh 同一个仓库，但盯的是**转正信号**，不是版本号，所以单列一条。
+    why: browser-use 与它的三个后端都还挂在 experimental 下；包名去掉 experimental = 可以重判 WP82 的那些让步
+    repo: deepseek-ai/deepseek-harness
+    watch: [releases, wishlist]
+    watch_paths:
+      - packages/experimental
+    wishlist:
+      - dsh-experimental-browser-use-* 改名去掉 experimental
+      - browser-use 后端能在不开原生构建的前提下起
+      - experimental 下出现渠道 / IM 相关的包
+
+  - id: openclaw-weixin
+    kind: reference
+    why: WP85 的微信 ClawBot 适配器照它的 iLink 协议写；有两处（ret=-2、context_token TTL）官方文档没有，等它更新来复核
+    repo: Tencent/openclaw-weixin
+    watch: [releases, readme, wishlist]
+    wishlist:
+      - ret=-2 的官方含义
+      - context_token 的官方 TTL
+      - 能进群 / 能拉同事（现在只能"本人 ↔ 自己的 Agent"私聊）
+    covered_by:
+      - packages/channels/src/wechat-clawbot
+
+  - id: browser-skill
+    kind: reference
+    # 09-17 登记时没打开过这个仓库，`why` 是按名字与派工书写的占位。
+    # 第一份周报出来、真看过一眼之后把这一行改掉（不改就一直是个占位）。
+    why: '另一条公开的浏览器技能实现；契约 #20 的工具面与"人接管"语义可以对照它重判（未核实，见上方注释）'
+    repo: Tencent/BrowserSkill
+    watch: [releases, stars, readme]
+
+  - id: octop
+    kind: reference
+    why: docs/53 §3 逐项对照过的"借形不借体"对象——连接器目录、专家模板的 quick_prompts、Browser AI+ 的录制→技能
+    repo: TencentCloud/Octop
+    watch: [releases, stars, readme]
+
+  - id: ego-lite
+    kind: reference
+    why: docs/53 §4.4 判它"只能个人端 macOS 可选、不进公司端"，理由是无 API + 三个 open 安全 issue；这两条变了就要重判
+    repo: citrolabs/ego-lite
+    watch: [releases, stars, readme, wishlist]
+    wishlist:
+      - Browser ACP 做完（roadmap 上写着进行中）
+      - 出 HTTP / MCP API 或能 headless
+      - 那三个 cookie jar / HttpOnly 的安全 issue 关掉
+
+  - id: dsh-im
+    kind: reference
+    why: 社区的 IM 聚合插件（docs/53 §1.3 d）；WP85 是我们自己写的微信 / 企微适配器，它要是出了能进群的企业级渠道就值得重判
+    repo: xmanrui/dsh-im
+    watch: [releases, stars, readme]

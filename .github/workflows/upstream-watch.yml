@@ -1,23 +1,40 @@
-name: Upstream watch (draft, not enabled)
+name: Upstream watch
 
-# 上游哨兵（docs/10 §3）的 CI 草案 —— **写好了，但没启用**。
+# 上游哨兵（docs/10 §3）的机器层。**WP91 起已启用**（docs/42 §3）。
 #
-# 现在只有 `workflow_dispatch`：要手动跑一次可以，不会自己动。
-# 下面 `schedule:` 那三行注释着，两次人肉演练都顺之后再取消注释（理由见 docs/42 §3）。
+# 两条 cron，做的是两件不同的事：
 #
-# 它做 docs/42 checklist 里的第 ② 步（观察）与第 ⑥ 步（对比），到"开一个 issue"为止：
-#   查 npm dist-tags → 和仓库锁的版本比 → 有新版就在临时分支上试升级 →
-#   装 / tsc / dsh-adapter 全部测试 / 采一份新基线 / 与仓库里的旧基线逐条对比 → 把结果贴进 issue
+#   每周一 06:00 UTC（北京 14:00）   全量周报：`upstreams.yml` 里的每一个上游都看一遍
+#                                     （版本 / releases / README 有没有动 / wishlist 命中），
+#                                     产出一条 `上游周报 <年>-W<周>` 的 issue，同一周只开一条。
+#   每天 18:30 UTC（北京次日 02:30）  只查 dsh：dist-tags 与 GitHub releases。
+#                                     **没新版就零输出**——不开 issue、不评论、不试升级。
+#                                     有新版才走试升级 + ④bis 默认值扫描，开一条版本专属的 issue。
+#
+# 为什么周报每周、dsh 每天：dsh 是唯一一个"它动我们就得动"的上游（全仓唯一 import 处在
+# `packages/dsh-adapter`），而且它在预发布期，版本节奏比 pnpm 的静默期还快；其余上游一周看一次够了。
 #
 # 它**不做**：不改版本号、不开 PR、不推分支、不合并、不替人决定纳不纳入。
-# 为什么止步于 issue：10 §3.3 第 ⑤ 步是「L1 人看报告点通过」；自动开 PR 会让
-# "点一下 merge"变成默认动作，而升级的风险恰恰在测试全绿、基线却悄悄变了的地方。
+# 为什么止步于 issue：10 §3.3 第 ⑤ 步是「L1 人看报告点通过」；自动开 PR 会让"点一下 merge"
+# 变成默认动作，而升级的风险恰恰在测试全绿、基线却悄悄变了的地方。
 
 on:
+  schedule:
+    # 全量周报（每周一 06:00 UTC = 北京时间 14:00）
+    - cron: '0 6 * * 1'
+    # 只查 dsh（每天 18:30 UTC = 北京时间次日 02:30）
+    - cron: '30 18 * * *'
+
   workflow_dispatch:
     inputs:
+      scope:
+        description: weekly（全量周报）还是 daily（只查 dsh）
+        required: false
+        default: weekly
+        type: choice
+        options: [weekly, daily]
       version:
-        description: 试升级到哪个版本（留空 = npm 的 latest）
+        description: 试升级到哪个版本（留空 = 按 dist-tags 里最高的那个）
         required: false
         default: ''
       dry_run:
@@ -25,34 +42,30 @@ on:
         required: false
         default: 'true'
 
-  # ── 启用时取消这三行的注释（每周一 UTC 06:00 = 北京时间 14:00）────────────
-  # schedule:
-  #   - cron: '0 6 * * 1'
-
 permissions:
   contents: read
-  # 开 issue 需要；启用前保持最小权限，dry_run 下用不到
   issues: write
+
+concurrency:
+  group: upstream-watch-${{ github.event.schedule || inputs.scope || 'manual' }}
+  cancel-in-progress: false
 
 env:
   ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
   npm_config_update_notifier: 'false'
-  # 这两个包是 34 §核实里的"共享兄弟包"：dsh vendored 出来独立发，packages/kernel 也在用。
-  # 它们跟着升是"必要时"才做的事，所以只观察、不试升级。
-  WATCH_SIBLINGS: '@deepseek-ai/cordis @deepseek-ai/schemastery'
 
 jobs:
-  # ── ① 观察：npm 上是什么，仓库里锁的是什么 ────────────────────────────────
+  # ── ① 观察：读 upstreams.yml，把这一趟该看的都看一遍 ──────────────────────
   observe:
-    name: 观察 · npm dist-tags vs 仓库锁的版本
+    name: 观察
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     outputs:
-      pinned: ${{ steps.compare.outputs.pinned }}
-      latest: ${{ steps.compare.outputs.latest }}
-      target: ${{ steps.compare.outputs.target }}
-      changed: ${{ steps.compare.outputs.changed }}
-      tags: ${{ steps.compare.outputs.tags }}
+      scope: ${{ steps.scope.outputs.scope }}
+      title: ${{ steps.watch.outputs.title }}
+      dsh_locked: ${{ steps.watch.outputs.dsh_locked }}
+      dsh_target: ${{ steps.watch.outputs.dsh_target }}
+      dsh_changed: ${{ steps.watch.outputs.dsh_changed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,58 +73,91 @@ jobs:
         with:
           node-version: '22'
 
-      - id: compare
-        name: 比版本
-        env:
-          REQUESTED: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          # 仓库锁的版本：以 dsh-adapter 的 package.json 为准（profile 与它同步）
-          PINNED=$(node -p "require('./packages/dsh-adapter/package.json').dependencies['@deepseek-ai/dsh']")
-          TAGS=$(npm view @deepseek-ai/dsh dist-tags --json | tr -d '\n ')
-          LATEST=$(node -p "JSON.parse(process.argv[1]).latest" "$TAGS")
-          TARGET="${REQUESTED:-$LATEST}"
-          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
-          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
-          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
-          echo "tags=$TAGS"     >> "$GITHUB_OUTPUT"
-          if [ "$PINNED" = "$TARGET" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-          {
-            echo "## 上游观察"
-            echo
-            echo "| | |"
-            echo "|---|---|"
-            echo "| 仓库锁的版本 | \`$PINNED\` |"
-            echo "| npm latest | \`$LATEST\` |"
-            echo "| 本次试升级到 | \`$TARGET\` |"
-            echo "| dist-tags | \`$TAGS\` |"
-            echo
-            echo "> dist-tags 要如实看：预发布期的 \`latest\` 可能就是一个 rc，"
-            echo "> 而且**未必存在同号的正式版**（docs/42 §1 第 ② 步）。"
-          } >> "$GITHUB_STEP_SUMMARY"
+      # 登记表本身先过一遍形状与"锁的版本对不对得上"：一份写坏的 upstreams.yml
+      # 会让后面每一步都在看错的东西。这两个脚本零依赖，所以不用 pnpm install。
+      - name: 校验 upstreams.yml
+        run: node scripts/check-upstreams.mjs --check
 
-      - name: 共享兄弟包（只观察，不试升级）
+      - id: scope
+        name: 这一趟看什么
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
-          echo "## 共享兄弟包" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 包 | 仓库锁 | npm latest |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          for p in $WATCH_SIBLINGS; do
-            HAVE=$(node -p "require('./packages/kernel/package.json').dependencies['$p'] ?? '—'")
-            WANT=$(npm view "$p" version 2>/dev/null || echo '?')
-            echo "| \`$p\` | \`$HAVE\` | \`$WANT\` |" >> "$GITHUB_STEP_SUMMARY"
-          done
+          if [ -n "$INPUT_SCOPE" ]; then SCOPE="$INPUT_SCOPE"
+          elif [ "$SCHEDULE" = '30 18 * * *' ]; then SCOPE=daily
+          else SCOPE=weekly
+          fi
+          echo "scope=$SCOPE" >> "$GITHUB_OUTPUT"
+          echo "这一趟：$SCOPE" >> "$GITHUB_STEP_SUMMARY"
+
+      - id: watch
+        name: 观察（只读，不装依赖、不跑测试）
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SCOPE: ${{ steps.scope.outputs.scope }}
+        run: |
+          set -euo pipefail
+          if [ "$SCOPE" = daily ]; then WINDOW=2; else WINDOW=7; fi
+          node scripts/upstream-watch.mjs \
+            --scope "$SCOPE" --window-days "$WINDOW" \
+            --out out/upstream/report.md \
+            --json out/upstream/summary.json
+          node -e '
+            const fs = require("node:fs")
+            const s = JSON.parse(fs.readFileSync("out/upstream/summary.json", "utf8"))
+            for (const [k, v] of Object.entries(s)) {
+              if (Array.isArray(v)) continue
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v ?? ""}\n`)
+            }
+          '
+          cat out/upstream/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upstream-report
+          path: out/upstream/
+          if-no-files-found: error
+          retention-days: 30
+
+  # ── ④bis 默认值扫描：`.d.ts` 的 diff 看不见的那一半（docs/42）──────────────
+  # 这一步是 docs/42 §3 定的**启用前提**：没有它，一条"把整条会话日志上报给模型厂商"
+  # 的开关从 false 翻成 true，类型不变、行为指纹也不变，全绿的自动报告会整条漏掉（WP70 实例）。
+  default-flips:
+    name: ④bis 默认值扫描
+    needs: observe
+    if: needs.observe.outputs.dsh_changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 扫不成（私有仓 / tag 命名变了）不把流程染红：报告里会写明"没扫成，要人工补做"
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: 克隆两个 tag 的源码、只看 default 那几行
+        env:
+          FROM: ${{ needs.observe.outputs.dsh_locked }}
+          TO: ${{ inputs.version || needs.observe.outputs.dsh_target }}
+        run: |
+          set -euo pipefail
+          mkdir -p out/upstream
+          bash scripts/scan-default-flips.sh \
+            deepseek-ai/deepseek-harness "dsh-v$FROM" "dsh-v$TO" packages \
+            out/upstream/default-flips.md
+          cat out/upstream/default-flips.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upstream-default-flips
+          path: out/upstream/
+          if-no-files-found: warn
+          retention-days: 30
 
   # ── ⑥ 试升级 + 对比：在临时工作树里做，不碰 main、不推任何分支 ─────────────
   try-upgrade:
-    name: 试升级 · ${{ needs.observe.outputs.pinned }} → ${{ needs.observe.outputs.target }}
+    name: 试升级 · ${{ needs.observe.outputs.dsh_locked }} → ${{ needs.observe.outputs.dsh_target }}
     needs: observe
-    if: needs.observe.outputs.changed == 'true'
+    if: needs.observe.outputs.dsh_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # 试升级失败**不等于**流程失败：结论要进 issue 给人看，不是把 CI 染红
@@ -128,9 +174,8 @@ jobs:
           node-version: '22'
           cache: pnpm
 
-      # 第 ① 步：基线必须来自**升级前**。仓库里已经有一份（上次升级时采的），
-      # 但那份是上一版的口径；这里在动版本号之前**重新采一份当前版的**，
-      # 才是 docs/42「基线在升级前采」的真意思。
+      # 第 ① 步：基线必须来自**升级前的当前代码树**。仓库里那几份是历次升级当天的口径，
+      # 直接拿来当 FROM 会把我们自己 WP 的改动算到上游头上（docs/42 ① 的 WP70 红线）。
       - name: install（升级前）
         run: pnpm install --frozen-lockfile
 
@@ -141,10 +186,10 @@ jobs:
         run: node packages/dsh-adapter/test/upgrade-baseline/capture.mjs watch-before.json
 
       # 第 ③ 步：改版本号
-      - name: 改版本号到 ${{ needs.observe.outputs.target }}
+      - name: 改版本号
         env:
-          FROM: ${{ needs.observe.outputs.pinned }}
-          TO: ${{ needs.observe.outputs.target }}
+          FROM: ${{ needs.observe.outputs.dsh_locked }}
+          TO: ${{ inputs.version || needs.observe.outputs.dsh_target }}
         run: |
           set -euo pipefail
           sed -i "s/\"$FROM\"/\"$TO\"/g" packages/dsh-adapter/package.json profiles/agentsws/package.json
@@ -251,73 +296,84 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  # ── 开 issue：同一个版本只开一次（靠标题去重）───────────────────────────────
+  # ── 报告：周报一周一条（已有就追评论），dsh 新版一个版本一条 ────────────────
   report:
     name: 报告 · 开 issue（不开 PR、不合并）
-    needs: [observe, try-upgrade]
-    if: needs.observe.outputs.changed == 'true' && inputs.dry_run != 'true'
+    needs: [observe, default-flips, try-upgrade]
+    # daily 且 dsh 没新版 = 零输出：这一趟连这个 job 都不起
+    if: >-
+      always()
+      && needs.observe.result == 'success'
+      && inputs.dry_run != 'true'
+      && (needs.observe.outputs.scope == 'weekly' || needs.observe.outputs.dsh_changed == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: upstream-*
+          merge-multiple: true
+          path: out/upstream
+
       - uses: actions/github-script@v7
         env:
-          PINNED: ${{ needs.observe.outputs.pinned }}
-          TARGET: ${{ needs.observe.outputs.target }}
-          TAGS: ${{ needs.observe.outputs.tags }}
+          SCOPE: ${{ needs.observe.outputs.scope }}
+          TITLE: ${{ needs.observe.outputs.title }}
           VERDICT: ${{ needs.try-upgrade.outputs.verdict }}
+          DSH_CHANGED: ${{ needs.observe.outputs.dsh_changed }}
         with:
           script: |
-            const { PINNED, TARGET, TAGS, VERDICT } = process.env
-            const title = `上游哨兵：dsh ${PINNED} → ${TARGET}`
-            // 同一个版本只开一次
+            const fs = require('node:fs')
+            const { SCOPE, TITLE, VERDICT, DSH_CHANGED } = process.env
+            const read = (p) => { try { return fs.readFileSync(p, 'utf8') } catch { return null } }
+
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const parts = [read('out/upstream/report.md') ?? '（报告没生成，见运行日志）']
+
+            if (DSH_CHANGED === 'true') {
+              parts.push('', '---', '')
+              parts.push(read('out/upstream/default-flips.md') ??
+                '### ④bis 默认值扫描\n\n❌ **没跑成**，见运行日志。这一步是 docs/42 §3 定的启用前提，要人工补做。')
+              parts.push('', '### ⑥ 自动试升级', '')
+              parts.push(VERDICT || '（试升级没跑完，见运行日志）')
+              parts.push('', '完整对比表、依赖树 diff 与两份基线在这次运行的 artifact 里。', '')
+              parts.push('### 接下来（人做）', '')
+              parts.push('按 `docs/42-上游升级流程-v1.md` 的 checklist 走：', '')
+              parts.push('- [ ] ② 看清 dist-tags：latest 是不是 rc？有没有同号的正式版？')
+              parts.push('- [ ] ③ 依赖树 diff：新增的原生依赖 `allowBuilds: false` + 写注释；消失的删掉并想一想它解锁了什么')
+              parts.push('- [ ] ④ 逐个 seam 对着 `.d.ts` diff 看，填 `packages/dsh-adapter/UPGRADE.md` 的表（「出处」列不许空）')
+              parts.push('- [ ] ④bis 上面扫出来的默认值逐条判：出网 / 上报 / 遥测翻成默认开的，在 profile 的 patch 层关掉并加测试')
+              parts.push('- [ ] ⑤ 重判上次放弃的选项（官方 SDK 等），换与不换的线事先说死')
+              parts.push('- [ ] ⑥ 指标若真变了，逐条解释之后才可以 `--rewrite-baseline`')
+              parts.push('- [ ] ⑦ 全仓验证：四运行时 × 场景矩阵 + 15 人 pack')
+              parts.push('- [ ] 改完同步 `upstreams.yml` 的 `locked_version`（CI 会查它和 package.json 一致）')
+            }
+
+            parts.push('', `运行记录：${run}`, '')
+            parts.push('> 17 §4：**任一红 = 不升级**。自动化只负责把事实摆出来（docs/10 §3.3 第 ⑤ 步是人看）。')
+            const body = parts.join('\n')
+
+            // 去重：周报按"上游周报 <年>-W<周>"，dsh 新版按"上游哨兵：dsh <旧> → <新>"。
+            // 已经有了就追一条评论，不再开第二条 —— 一周被开五条 issue 的哨兵没人看。
             const found = await github.rest.search.issuesAndPullRequests({
-              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue in:title "${title}"`,
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue in:title "${TITLE}"`,
             })
-            if (found.data.total_count > 0) {
-              core.info(`已经开过：#${found.data.items[0].number}`)
+            const hit = found.data.items.find((i) => i.title === TITLE)
+            if (hit) {
+              core.info(`已经有了：#${hit.number}，追一条评论`)
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: hit.number,
+                body,
+              })
               return
             }
-            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const body = [
-              `上游 \`@deepseek-ai/dsh\` 有新版本。**这条 issue 只是提议，没有任何东西被改或被合并。**`,
-              ``,
-              `| | |`,
-              `|---|---|`,
-              `| 仓库锁的版本 | \`${PINNED}\` |`,
-              `| 新版本 | \`${TARGET}\` |`,
-              `| dist-tags | \`${TAGS}\` |`,
-              `| 自动试升级结论 | ${VERDICT || '（试升级没跑完，见运行日志）'} |`,
-              ``,
-              `完整对比表、依赖树 diff 与两份基线在这次运行里：${run}`,
-              ``,
-              `## 接下来（人做）`,
-              ``,
-              `按 \`docs/42-上游升级流程-v1.md\` 的 checklist 走：`,
-              ``,
-              `- [ ] ② 看清 dist-tags：latest 是不是 rc？有没有同号的正式版？`,
-              `- [ ] ③ 依赖树 diff：新增的原生依赖 \`allowBuilds: false\` + 写注释；消失的删掉并想一想它解锁了什么`,
-              `- [ ] ④ 逐个 seam 对着 \`.d.ts\` diff 看，填 \`packages/dsh-adapter/UPGRADE.md\` 的表（「出处」列不许空）`,
-              `- [ ] ⑤ 重判上次放弃的选项（官方 SDK 等），换与不换的线事先说死`,
-              `- [ ] ⑥ 指标若真变了，逐条解释之后才可以 \`--rewrite-baseline\``,
-              `- [ ] ⑦ 全仓验证：四运行时 × 场景矩阵 + 15 人 pack`,
-              ``,
-              `## 这一版特别盯什么（wishlist；每次升级完更新这一段）`,
-              ``,
-              `- **官方 SDK 的 server→client 请求**：\`dsh-sdk-jsonrpc-server\` 里出现 \`transport.request(...)\` 的调用点，`,
-              `  或 \`dsh-sdk-protocol\` 的类型里出现 server 发起的 method。WP70 复核：\`lib/index.js\` 仍是 0 处，`,
-              `  只有 4 个 \`transport.notify\`（session.event / session.status / subagent.started / subagent.finished）。`,
-              `- **headless 的 turn 驱动能不能被宿主接管**：0.1.6-alpha.1 的 \`--json\` 只是 stdout 单向投影，不算。`,
-              `- **browser-use 转正 / 进 rc**：现在 \`@deepseek-ai/dsh-browser-use\` + 三个后端都还挂在 \`experimental\` 下，`,
-              `  且 playwright 后端要 \`@playwright/mcp\` → Chromium 下载（16 §3 不给开构建）。`,
-              `  信号是：包名从 \`dsh-experimental-browser-use-*\` 去掉 experimental，或后端能在不开原生构建的前提下起。`,
-              `  我们这一侧的门禁已经证明挡得住（\`packages/dsh-adapter/test/browser-seam.test.ts\`，WP70）。`,
-              ``,
-              `> 17 §4：**任一红 = 不升级**。自动化只负责把事实摆出来。`,
-            ].join('\n')
+            const labels = SCOPE === 'weekly' ? ['upstream'] : ['upstream', 'dsh']
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title,
+              title: TITLE,
               body,
-              labels: ['upstream', 'dsh'],
+              labels,
             })

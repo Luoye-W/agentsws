@@ -68,6 +68,12 @@ jobs:
       - name: gen-ontology（零漂移）
         run: node scripts/gen-ontology.mjs --check
 
+      # WP91：上游登记表（docs/10 §3.2）与仓库里真锁的版本必须一致。
+      # 升级时改了 package.json 却忘了改 upstreams.yml（或者反过来）会红在这里——
+      # 哨兵读的就是 upstreams.yml，那份错了，之后每一趟都在看错的版本。
+      - name: check-upstreams（登记表与锁的版本一致）
+        run: node scripts/check-upstreams.mjs --check
+
       # 覆盖率写到 out/ 下：biome.json 已经忽略 out/，否则下一次 `biome check .`
       # 会去 lint 覆盖率报告自带的那些 js
       - name: vitest
