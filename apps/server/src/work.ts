@@ -12,6 +12,7 @@ import type {
   ApprovalItem,
   AssignmentId,
   CalendarItem,
+  CalendarSource,
   ClaimPayload,
   Clock,
   Goal,
@@ -190,20 +191,40 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
   const waitingCount = (items: readonly ApprovalItem[]): number =>
     items.filter((i) => WAITING_STATES.has(i.state)).length
 
+  /**
+   * 装配日历的各路来源。
+   *
+   * `wanted` 是这一次要的图层（WP74；不给 = 全部）。**关掉的层就不去取**——
+   * 社媒那一层每条都要算一次撞车（`social-core` 的 `scheduleConflicts`），
+   * 职责页上只开社媒的那一屏没有理由顺带把红人交付物也捞一遍。
+   * 过滤本身仍然在 `buildCalendar` 的最后一步做，这里只是省掉白取的那几次。
+   */
   const sourcesFor = async (
     actor: WorkActor,
     range: { from: Iso8601; to: Iso8601 },
     cards: readonly ApprovalItem[],
-  ): Promise<CalendarSources> => ({
-    cards: cards.filter((i) => WAITING_STATES.has(i.state)),
-    ...(options.scheduledTasks === undefined ? {} : { tasks: options.scheduledTasks(actor) }),
-    ...(options.meetings === undefined ? {} : { meetings: await options.meetings(actor, range) }),
-    ...(options.socialPosts === undefined ? {} : { social_posts: options.socialPosts(actor) }),
-    ...(options.kolDeliverables === undefined
-      ? {}
-      : { deliverables: options.kolDeliverables(actor) }),
-    ...(options.standbyRenewals === undefined ? {} : { standby: options.standbyRenewals(actor) }),
-  })
+    wanted?: readonly CalendarSource[],
+  ): Promise<CalendarSources> => {
+    const want = (s: CalendarSource): boolean => wanted === undefined || wanted.includes(s)
+    return {
+      cards: want('card_due') ? cards.filter((i) => WAITING_STATES.has(i.state)) : [],
+      ...(options.scheduledTasks === undefined || !want('scheduled_task')
+        ? {}
+        : { tasks: options.scheduledTasks(actor) }),
+      ...(options.meetings === undefined || !want('meeting')
+        ? {}
+        : { meetings: await options.meetings(actor, range) }),
+      ...(options.socialPosts === undefined || !want('social_post')
+        ? {}
+        : { social_posts: options.socialPosts(actor) }),
+      ...(options.kolDeliverables === undefined || !want('kol_deliverable')
+        ? {}
+        : { deliverables: options.kolDeliverables(actor) }),
+      ...(options.standbyRenewals === undefined || !want('standby')
+        ? {}
+        : { standby: options.standbyRenewals(actor) }),
+    }
+  }
 
   const runnerFor = (cards: readonly ApprovalItem[]): QueryRunner =>
     periodQueryRunner(options.orders, () => [...cards], 'USD')
@@ -364,7 +385,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       return work.calendar(
         range,
         { person_id: actor.person_id },
-        await sourcesFor(actor, range, cards),
+        await sourcesFor(actor, range, cards, range.sources),
       )
     },
 

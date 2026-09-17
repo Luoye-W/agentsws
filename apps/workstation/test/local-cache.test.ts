@@ -37,6 +37,10 @@ const ALLOWED_KEYS = [
   'agentsws.rail.expanded',
   'agentsws.rightrail.panel',
   'agentsws.rightrail.width',
+  // WP74（37 §2.5）：日历上开着哪几个图层、停在哪个视图。同上一类——**纯界面偏好**。
+  // 图层不是"哪些事存在"，是"这一屏现在画哪几类"；丢了最坏的结果是下次打开回默认三层。
+  'agentsws.calendar.layers',
+  'agentsws.calendar.view',
 ]
 /** 未发送的草稿走这个前缀（40 §1.2 明确允许的那一类）。 */
 const DRAFT_PREFIX = 'agentsws.draft.'

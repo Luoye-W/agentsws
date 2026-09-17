@@ -10,8 +10,8 @@
  * 3. **从哪儿进来决定默认开哪几层**（`?layers=`）。从社媒运营的职责页点进来，
  *    默认看到的应该是社媒排期与自己的待办，而不是七层一起糊在一屏上。
  *
- * 记忆在 `localStorage`：它不是工作数据，换台电脑重新勾一次没有任何损失
- * （所以不占服务端一张表，也不占一条路由）。
+ * 记忆落在本机（`lib/ui-state`，与左右栏折叠态同一处）：它不是工作数据，
+ * 换台电脑重新勾一次没有任何损失，所以不占服务端一张表、也不占一条路由。
  */
 import type { CalendarSource } from '@agentsws/contracts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -52,7 +52,7 @@ export function CalendarPage(): React.ReactNode {
 
   /**
    * 开哪几层：URL 上写了就听 URL（从岗位页 / 职责页跳进来的那一下），
-   * 否则听上一次（`localStorage`），再否则按 `role` 给一份默认。
+   * 否则听上一次（本机存的那一份），再否则按 `role` 给一份默认。
    */
   const roleHint = params.get('role') ?? undefined
   const [layers, setLayers] = useState<CalendarSource[]>(

@@ -158,12 +158,30 @@ describe('WP74 统一日历：一个日历，多图层', () => {
     expect(items.find((i) => i.source === 'kol_deliverable')).toMatchObject({ drag: 'readonly' })
   })
 
-  it('传了 sources 只回那几层', async () => {
+  it('传了 sources 只回那几层；关掉的层连取都不去取', async () => {
     const me = bootstrapWho()
     await seedPost(me.workspace_id, 'sp_a', '2026-09-15T10:00:00.000Z')
+    const brand = await server.brands.forWorkspace(me.workspace_id)
+    brand.kol.saveDeliverable({
+      id: 'dl_a',
+      collaboration_id: 'col_a',
+      kind: 'video',
+      due_at: '2026-09-15T12:00:00.000Z',
+      review: 'pending',
+    })
+    // 关掉的那一层不该被取：社媒每条都要算一次撞车，白取是真有成本的
+    let deliverableReads = 0
+    const real = brand.kol.deliverables.bind(brand.kol)
+    brand.kol.deliverables = ((filter?: Parameters<typeof real>[0]) => {
+      deliverableReads += 1
+      return real(filter)
+    }) as typeof real
+
     const only = await calendarOf(me, 'social_post')
     expect(only).toHaveLength(1)
     expect(only[0]).toMatchObject({ source: 'social_post', ref: { type: 'social_post' } })
+    expect(deliverableReads).toBe(0)
+
     // 一个图层都不开就是一条都不给（空选择是人主动做的事）
     expect(await calendarOf(me, 'standby')).toHaveLength(0)
   })

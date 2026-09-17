@@ -9,9 +9,9 @@
  *
  * 1. **不传 = 全部**。`sources` 这个词在服务端与这里意思一致（`CalendarRange.sources`）：
  *    没有选择 ≠ 空选择。空选择（一个都不勾）是人主动做的事，回一条都不给是对的。
- * 2. **记忆是每个人自己的**，所以在 `localStorage`，不在服务端——它不是工作数据，
- *    换台电脑重新勾一次没有任何损失。读不出来（隐私窗口、清过站点数据）就用默认，
- *    不报错、不空屏。
+ * 2. **记忆是每个人自己的**，所以落在这台电脑上（`lib/ui-state`），不在服务端——
+ *    它不是工作数据，换台电脑重新勾一次没有任何损失。读不出来（隐私窗口、清过站点数据）
+ *    就用默认，不报错、不空屏。
  * 3. **从哪儿进来决定默认开哪几层**。从社媒运营的职责页点进日历，默认看到的应该是
  *    社媒排期与自己的待办，而不是七层一起糊在一屏上。
  */
@@ -27,6 +27,7 @@ import {
   Package,
   Users,
 } from 'lucide-react'
+import { CALENDAR_LAYERS_KEY, CALENDAR_VIEW_KEY, readString, writeString } from '@/lib/ui-state'
 
 export type CalendarView = 'day' | 'week' | 'month' | 'agenda'
 
@@ -90,51 +91,52 @@ export function serializeLayers(layers: readonly CalendarSource[]): string {
   return LAYERS.filter((l) => layers.includes(l)).join(',')
 }
 
-export const LAYERS_STORAGE_KEY = 'agentsws.calendar.layers'
-export const VIEW_STORAGE_KEY = 'agentsws.calendar.view'
-
 /**
- * 记住上次（纪律 2）。`localStorage` 在隐私窗口里会直接抛，所以每一次读写都包起来：
- * 日历打不开比"没记住上次"严重得多。
+ * 记住上次（纪律 2）。
+ *
+ * 落盘那一下走 `lib/ui-state`——本机存储在工作台里只有三个文件碰得到
+ * （40 §1.2 那条边界有一档用例盯着），日历的图层与视图与左右栏折叠态是同一类东西：
+ * 纯界面偏好，不是业务对象。`storage` 这个参数只给测试注入用。
  */
-export function loadLayers(storage?: Pick<Storage, 'getItem'>): CalendarSource[] | undefined {
+function get(key: string, storage?: Pick<Storage, 'getItem'>): string | null {
+  if (storage === undefined) return readString(key)
   try {
-    const store = storage ?? globalThis.localStorage
-    return parseLayers(store?.getItem(LAYERS_STORAGE_KEY))
+    return storage.getItem(key)
   } catch {
-    return undefined
+    return null
   }
+}
+
+function put(key: string, value: string, storage?: Pick<Storage, 'setItem'>): void {
+  if (storage === undefined) {
+    writeString(key, value)
+    return
+  }
+  try {
+    storage.setItem(key, value)
+  } catch {
+    // 记不住就算了：日历打不开比"没记住上次"严重得多
+  }
+}
+
+export function loadLayers(storage?: Pick<Storage, 'getItem'>): CalendarSource[] | undefined {
+  return parseLayers(get(CALENDAR_LAYERS_KEY, storage))
 }
 
 export function saveLayers(
   layers: readonly CalendarSource[],
   storage?: Pick<Storage, 'setItem'>,
 ): void {
-  try {
-    const store = storage ?? globalThis.localStorage
-    store?.setItem(LAYERS_STORAGE_KEY, serializeLayers(layers))
-  } catch {
-    // 记不住就算了
-  }
+  put(CALENDAR_LAYERS_KEY, serializeLayers(layers), storage)
 }
 
 export function loadView(storage?: Pick<Storage, 'getItem'>): CalendarView | undefined {
-  try {
-    const store = storage ?? globalThis.localStorage
-    const raw = store?.getItem(VIEW_STORAGE_KEY)
-    return CALENDAR_VIEWS.find((v) => v === raw)
-  } catch {
-    return undefined
-  }
+  const raw = get(CALENDAR_VIEW_KEY, storage)
+  return CALENDAR_VIEWS.find((v) => v === raw)
 }
 
 export function saveView(view: CalendarView, storage?: Pick<Storage, 'setItem'>): void {
-  try {
-    const store = storage ?? globalThis.localStorage
-    store?.setItem(VIEW_STORAGE_KEY, view)
-  } catch {
-    // 同上
-  }
+  put(CALENDAR_VIEW_KEY, view, storage)
 }
 
 /**
