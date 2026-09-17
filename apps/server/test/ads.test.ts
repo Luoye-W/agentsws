@@ -10,7 +10,7 @@
 import { ADS_PLATFORMS } from '@agentsws/contracts'
 import { ALL_DATA_SOURCES, dataSourcesOfService } from '@agentsws/deck'
 import { describe, expect, it } from 'vitest'
-import { adsDeckData, createAdsStore, seedDemoAds } from '../src/ads.js'
+import { adsDeckData, adsPixelAlerts, createAdsStore, seedDemoAds } from '../src/ads.js'
 import { CATALOG, catalogEntry } from '../src/catalog.js'
 
 const NOW = '2026-09-17T09:00:00.000Z'
@@ -172,5 +172,68 @@ describe('57 §1 四张连接卡', () => {
     // 目录里 service 不重名
     const services = CATALOG.map((e) => e.service)
     expect(new Set(services).size).toBe(services.length)
+  })
+})
+
+/**
+ * 57 §3 那五张卡里的第五张。前四张是审批项（`/v1/ads/*` 那五个写口子出的），
+ * 这一张不是——所以它不在 `ads-routes.test.ts` 里，在这儿。
+ */
+describe('57 §3 第五张卡：像素异常卡（**通知，不是审批项**）', () => {
+  it('健康的一条都不出卡：告警区常年摆着"一切正常"，真出事那天没人会看', () => {
+    const s = createAdsStore({ workspace_id: 'ws_test' })
+    s.savePixel({
+      id: 'px_ok',
+      account_id: 'aa',
+      platform: 'meta',
+      external_id: '1',
+      event_name: 'Purchase',
+      count_24h: 13,
+      status: 'healthy',
+      observed_at: NOW,
+    })
+    expect(adsPixelAlerts(s)).toEqual([])
+  })
+
+  it('`stale` 与 `missing` 是**两张不同的卡**，而且坏得最厉害的排最前', () => {
+    const s = store()
+    s.savePixel({
+      id: 'px_missing',
+      account_id: 'aa_demo_meta',
+      platform: 'meta',
+      external_id: '7890000003',
+      event_name: 'Purchase',
+      status: 'missing',
+      note: '平台后台查不到这个转化动作。',
+      observed_at: NOW,
+    })
+    const cards = adsPixelAlerts(s)
+    // 一个压根没装的 Purchase 意味着今天所有转化数都是假的——它不该排第二个
+    expect(cards.map((c) => c.reason)).toEqual(['missing', 'stale'])
+    expect(cards[0]?.event_name).toBe('Purchase')
+    expect(cards[0]?.title).not.toBe(cards[1]?.title)
+    expect(cards.every((c) => c.kind === 'system_alert')).toBe(true)
+  })
+
+  it('平台说的原话**原样**带上，判据那两格也带上（不补 0）', () => {
+    const card = adsPixelAlerts(store())[0]
+    if (card === undefined) throw new Error('那张卡没出来')
+    expect(card.reason).toBe('stale')
+    expect(card.note).toContain('五天没收到这个事件了')
+    expect(card.count_24h).toBe(0)
+    expect(card.last_fired_at).toBeDefined()
+  })
+
+  it('卡上写的是"转给建站"，**不是**"去改代码"——投放没有那个权限', () => {
+    const card = adsPixelAlerts(store())[0]
+    if (card === undefined) throw new Error('那张卡没出来')
+    expect(card.actions.map((a) => a.id)).toEqual(['handoff_site', 'dismiss'])
+    expect(card.body).toContain('建站')
+    expect(card.body).toContain('人审')
+  })
+
+  it('按平台筛得开：Google 那条职责看不见 Meta 的像素卡', () => {
+    expect(adsPixelAlerts(store(), { platform: 'google' })).toEqual([])
+    expect(adsPixelAlerts(store(), { platform: 'meta' }).length).toBe(1)
   })
 })

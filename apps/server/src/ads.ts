@@ -30,6 +30,7 @@ import type {
   AdSet,
   AdsPlatform,
   PixelEvent,
+  PixelHealth,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { ADS_PLATFORM_IDS } from '@agentsws/contracts'
@@ -425,6 +426,124 @@ export function adsDeckData(
       : { conversions_today: conversions.reduce((a, b) => a + b, 0) }),
     stop_loss_count: stop_losses.length,
   }
+}
+
+/**
+ * WP75（57 §3）：**像素异常卡**——投放那五张卡里唯一一张不是审批项的。
+ *
+ * 为什么它是通知不是审批项：14 §1 那句判据（"通过后施行什么"）在这里答不上来。
+ * 像素掉了，投放这一侧一行代码都改不动——改追踪代码是**建站**的事，而且永远 L1
+ * （04 §5 `ads.tracking` 那一行）。点头点不出任何一件会发生的事，那就不是审批项。
+ * 形状照 `packages/meetings` 那张系统卡抄（同一个工作台告警区、同一套动作）。
+ */
+export interface AdsPixelAlert {
+  id: string
+  kind: 'system_alert'
+  /** 为什么出这张卡（= 那条像素的 `status`）。 */
+  reason: Exclude<PixelHealth, 'healthy'>
+  platform: string
+  pixel_id: string
+  event_name: string
+  title: string
+  body: string
+  /** 平台说的原话，**原样**（契约 `PixelEvent.note` 那一行的要求）。 */
+  note?: string
+  /** 近 24 小时收到多少条。没查过就没有这一格（**不补 0**）。 */
+  count_24h?: number
+  last_fired_at?: string
+  observed_at: string
+  actions: { id: string; label: string }[]
+}
+
+/**
+ * 三种坏法三张卡（契约 `PixelHealth` 那一条的另一半）。
+ *
+ * "还在但很久没响了"多半是有人改了主题，"平台上查不到"多半是压根没装，
+ * "配错了"是装了但参数不对——去找谁、说什么话都不一样。并成一句
+ * "像素出问题了"，等于把这一步判断原样推回给人。
+ */
+const PIXEL_ALERT_COPY: Readonly<
+  Record<Exclude<PixelHealth, 'healthy'>, { title: (event: string) => string; body: string }>
+> = {
+  missing: {
+    title: (event) => `平台上查不到这个转化事件：${event}`,
+    body:
+      '这个事件在平台后台不存在——多半是从来没装上，或者被删了。在它回来之前，' +
+      '这个平台报的转化数与 ROAS 都不能当真（分子缺一块）。装它要改网站上的追踪代码，' +
+      '那是建站那条职责的活，而且永远人审。',
+  },
+  misconfigured: {
+    title: (event) => `这个转化事件配错了：${event}`,
+    body:
+      '事件在，但平台不认它报上来的参数（域名没验证 / 缺必填字段 / 被拒登都长这样）。' +
+      '照平台那句原话去改，改的是网站上的追踪代码——建站那条职责，永远人审。',
+  },
+  stale: {
+    title: (event) => `像素还在，但很久没响过了：${event}`,
+    body:
+      '事件本身没丢，只是最近一直没收到——主题改版把那段代码带掉是最常见的原因。' +
+      '先确认网站上那段代码还在，再看是不是真的没人触发这个动作。' +
+      '改代码是建站那条职责的活，永远人审。',
+  },
+}
+
+/** 坏得最厉害的排最前（见 {@link adsPixelAlerts} 的第 3 条）。 */
+const PIXEL_ALERT_ORDER: readonly Exclude<PixelHealth, 'healthy'>[] = [
+  'missing',
+  'misconfigured',
+  'stale',
+]
+
+/**
+ * 广告库里那几条不健康的像素 → 告警区那几张卡（57 §3 的第五张卡）。
+ *
+ * 三件事在这一跳定死：
+ *
+ * 1. **健康的一条都不出卡**。告警区里常年摆着一张"一切正常"，下一次真出事的
+ *    时候没人会看它。
+ * 2. **卡上不写"去改代码"**：投放没有那个权限（`pixel_event` 域里只有 `read`），
+ *    写了就是让人去点一个点不动的东西。写的是转给建站，并说明那一侧永远人审。
+ * 3. **坏得最厉害的排最前**（`missing` → `misconfigured` → `stale`）：一个压根
+ *    没装的 `Purchase` 与一个五天没响的 `AddToCart` 摆在一起时，前者意味着今天
+ *    所有的转化数都是假的——那张卡不该排在第二个。
+ *
+ * 宿主把它挂到 `WorkstationData.systemCards`（`apps/server/src/workstation.ts`）
+ * 那一跳还没接——与"待审改动四车道""归因两列"是同一道缝，都是装配那一层几行的事。
+ */
+export function adsPixelAlerts(
+  store: Pick<AdsStore, 'pixels'>,
+  filter: { platform?: AdsPlatform } = {},
+): AdsPixelAlert[] {
+  const rows = store
+    .pixels(filter.platform === undefined ? {} : { platform: filter.platform })
+    .flatMap((p) => (p.status === 'healthy' ? [] : [{ p, reason: p.status }]))
+  rows.sort(
+    (x, y) =>
+      PIXEL_ALERT_ORDER.indexOf(x.reason) - PIXEL_ALERT_ORDER.indexOf(y.reason) ||
+      x.p.id.localeCompare(y.p.id),
+  )
+  return rows.map(({ p, reason }) => {
+    const copy = PIXEL_ALERT_COPY[reason]
+    return {
+      id: `pxcard_${p.id}`,
+      kind: 'system_alert' as const,
+      reason,
+      platform: p.platform as string,
+      pixel_id: p.id,
+      event_name: p.event_name,
+      title: copy.title(p.event_name),
+      body: copy.body,
+      ...(p.note === undefined ? {} : { note: p.note }),
+      ...(p.count_24h === undefined ? {} : { count_24h: p.count_24h }),
+      ...(p.last_fired_at === undefined ? {} : { last_fired_at: p.last_fired_at }),
+      observed_at: p.observed_at,
+      actions: [
+        // 投放自己改不动它，所以第一个动作是"转给建站"而不是"去修"
+        { id: 'handoff_site', label: '转给建站' },
+        { id: 'dismiss', label: '知道了' },
+      ],
+    }
+  })
 }
 
 /**
