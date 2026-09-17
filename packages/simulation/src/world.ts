@@ -155,6 +155,8 @@ import {
 import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
 import { createWork, type Work } from '@agentsws/work'
+import type { ModelTrace } from './diagnostics.js'
+import { traceGateway } from './diagnostics.js'
 import { SimulationError } from './errors.js'
 import type {
   AssignmentSnapshot,
@@ -292,6 +294,12 @@ export interface WorldOptions {
    * 不给就是 fast 档那套确定性 provider。
    */
   model?: RealModelBinding
+  /**
+   * WP87 realistic 档：把每次模型往返的**摘要**记下来（不含正文、不含凭据），
+   * 报告目录里落成 `<场景>.model.jsonl`，用来回答"模型为什么没调工具"。
+   * 包在网关这一层，因为只有它拿得到 `meta`（run_id / purpose）。
+   */
+  modelTrace?: ModelTrace
 }
 
 /** 14 §11.6 / §13.2 的两个旋钮 + 过期天数（只覆盖给到的字段）。 */
@@ -1473,8 +1481,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     prices: opts.model?.prices ?? { 'stub/stub-v1': { in: 1, out: 2, cached: 0.1 } },
     ...(budget === undefined ? {} : { budget }),
   })
-  const buildGateway = (budget: ModelGatewayPolicy['budget']): ModelGatewayApi =>
-    createModelGateway({
+  const buildGateway = (budget: ModelGatewayPolicy['budget']): ModelGatewayApi => {
+    const built = createModelGateway({
       providers: [gatedProvider],
       policy: gatewayPolicy(budget),
       clock,
@@ -1483,6 +1491,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         appendEnvelope({ ...e, correlation: { ...e.correlation } })
       },
     })
+    // WP87：realistic 档给了 trace 才包一层；fast 档一个字节不变
+    return opts.modelTrace === undefined ? built : traceGateway(built, opts.modelTrace)
+  }
   let gateway = buildGateway({ workspace_daily_base: 1000, workspace_monthly_base: 20000 })
 
   // ── 17 §4：换运行时只换这一处；替身的其余部分（连接器、人、时钟）原样不动 ──
@@ -1504,6 +1515,16 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           clock,
           seed,
           ...(dshMode === undefined ? {} : { mode: dshMode }),
+          /*
+           * WP87：realistic 档把子进程超时放宽到十分钟。
+           *
+           * 缺省 60 秒是照规则脑定的——它一轮几毫秒。真模型（还是个思考模型）一次运行
+           * 四五轮、八次工具调用，六十秒根本跑不完：38 条场景跑下来，
+           * 凡是真打模型的那几条几乎都以 `status: "cancelled"` +
+           * 「这次被中断了：子进程超时」收场，起草与批准整条链就此断掉。
+           * fast 档一个字节不变（不给真模型就不给这个值）。
+           */
+          ...(opts.model === undefined ? {} : { subprocessTimeoutMs: 10 * 60 * 1000 }),
           gateway: { complete: (req) => gateway.complete(req) },
           stage: (i) => (holder.stage ?? (async () => undefined))(i),
           createDraft: (p) => (holder.createDraft ?? (async () => undefined))(p),

@@ -6,6 +6,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { provenanceOf } from '../src/headless/subprocess.js'
 import {
   BRIDGE_PROTOCOL_VERSION,
   createDshRuntime,
@@ -149,6 +150,91 @@ describe('子进程隔离（16 §3 / 31 §3）', () => {
     const result = await runtime.run(makeRequest(), sink, NO_ABORT())
     expect(result.status).toBe('cancelled')
     expect(events.map((e) => e.type)).toContain('run.cancelled')
+  })
+
+  /**
+   * WP87：超时之前子进程已经干完的事不能扔。
+   *
+   * 出处：realistic 档（真模型，dsh-subprocess）里 `amazon/buyer-message-guardrail`
+   * 与 `ops/model-outage` 两条的 provenance_respected 红了——子进程超时前明明
+   * `get_order` 读过那张单、`stage_refund` 才通过的门禁，宿主却回了一份空 provenance，
+   * 于是证据里变成"凭空提的退款"。
+   */
+  it('超时前子进程已经回来的工具结果，仍然进这次运行的 provenance', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-hang-prov-'))
+    const entry = join(dir, 'hang-prov.js')
+    // 答 hello；收到 run 就先推一条带 provenance 的 tool.result 事件，然后不答话
+    writeFileSync(
+      entry,
+      [
+        "let buf = ''",
+        "process.stdin.setEncoding('utf8')",
+        "process.stdin.on('data', (c) => {",
+        '  buf += c',
+        "  let i = buf.indexOf('\\n')",
+        '  while (i >= 0) {',
+        '    const line = buf.slice(0, i)',
+        '    buf = buf.slice(i + 1)',
+        '    const msg = JSON.parse(line)',
+        "    if (msg.method === 'agentsws/hello') {",
+        '      process.stdout.write(',
+        `        JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { protocol: ${BRIDGE_PROTOCOL_VERSION}, runtime: 'dsh', capabilities: {} } }) + '\\n',`,
+        '      )',
+        '    }',
+        "    if (msg.method === 'agentsws/run') {",
+        '      process.stdout.write(',
+        "        JSON.stringify({ jsonrpc: '2.0', method: 'agentsws/event', params: { token: msg.params.token, event: { type: 'tool.result', call_id: 'c1', tool: 'get_order', status: 'ok', provenance_added: [{ type: 'order', id: 'ord_1001' }] } } }) + '\\n',",
+        '      )',
+        '    }',
+        "    i = buf.indexOf('\\n')",
+        '  }',
+        '})',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+    const runtime = createSubprocessDshRuntime({
+      ...baseOptions(),
+      mode: 'subprocess',
+      childEntry: entry,
+      subprocessTimeoutMs: 1_000,
+    })
+    const { sink, events } = collect()
+    const result = await runtime.run(makeRequest(), sink, NO_ABORT())
+    expect(result.status).toBe('cancelled')
+    expect(events.some((e) => e.type === 'tool.result')).toBe(true)
+    expect(result.provenance.seen.order).toEqual(['ord_1001'])
+    expect(result.provenance.read_full).toEqual(['order:ord_1001'])
+    expect(result.usage.tool_calls).toBe(0)
+  })
+
+  it('provenanceOf：按事件顺序重建，重复出现的挪到末尾', () => {
+    const state = provenanceOf(
+      'run_1',
+      [
+        {
+          type: 'tool.result',
+          call_id: 'c1',
+          tool: 'list_orders',
+          status: 'ok',
+          provenance_added: [
+            { type: 'order', id: 'ord_1' },
+            { type: 'order', id: 'ord_2' },
+          ],
+        },
+        { type: 'tool.call', call_id: 'c2', tool: 'get_order', input: {} },
+        {
+          type: 'tool.result',
+          call_id: 'c2',
+          tool: 'get_order',
+          status: 'ok',
+          provenance_added: [{ type: 'order', id: 'ord_1' }],
+        },
+      ],
+      '2026-09-07T00:00:00.000Z',
+    )
+    expect(state.seen.order).toEqual(['ord_2', 'ord_1'])
+    expect(state.run_id).toBe('run_1')
   })
 
   it('health 报告子进程能不能起来', async () => {
