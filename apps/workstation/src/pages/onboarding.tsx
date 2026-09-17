@@ -1,8 +1,12 @@
 /**
- * 首次设置向导（46 §1 的四步表）。
+ * 首次设置向导（46 §1 的四步表：公司设置 / 个人设置 / 岗位设置 / 初始配置）。
  *
  * 第一次打开工具只问三件事——**你们公司叫什么、你是谁、你做什么**——第四步不问，
  * 只把前三步的答案翻译成一张"要配的东西"清单。
+ *
+ * WP79（09-17 Luoye 看真机截图）：这一页的规矩是**每个字段最多一行说明，
+ * 能不写就不写**。导语整段去掉、步骤条换成进度条、灰色分组小标题不出、
+ * 「加入一家公司」默认折叠成一行——第一次打开的人要的是开始填，不是先读一页字。
  *
  * 四条：
  *
@@ -21,8 +25,9 @@ import { JoinPanel } from '@/components/onboarding/join-panel'
 import { PlanList } from '@/components/onboarding/plan-list'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
 import { expandPick, type RolePick, RolePicker } from '@/components/onboarding/role-picker'
+import { StepProgress } from '@/components/onboarding/step-progress'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -39,7 +44,6 @@ import {
   setWorkspaceProfile,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { cn } from '@/lib/utils'
 
 /**
  * "先跳过"只活在**这一个标签页的内存里**（46 §1：随时可退出）。
@@ -134,6 +138,8 @@ export function OnboardingPage(): React.ReactNode {
       setFailure(undefined)
       setSaved(true)
       await client.invalidateQueries({ queryKey: ['onboarding'] })
+      // WP79 ⑥：存完就进下一步——按钮上写的是「保存并继续」，它就该真的继续
+      setStep(1)
     },
     onError: say,
   })
@@ -189,7 +195,7 @@ export function OnboardingPage(): React.ReactNode {
         </button>
       </div>
 
-      <StepProgress step={step} />
+      <StepProgress steps={STEPS} step={step} />
 
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6">
@@ -213,7 +219,8 @@ export function OnboardingPage(): React.ReactNode {
               <JoinPanel
                 {...(peers.data === undefined ? {} : { discovery: peers.data })}
                 configured={state.data.profile !== undefined}
-                me={state.data.person}
+                // WP79 ⑤：第 ① 步这一整块默认折叠成一行「已有邀请码？」
+                collapsed
                 busy={join.isPending}
                 sent={sent}
                 onJoin={(input) => {
@@ -275,15 +282,18 @@ export function OnboardingPage(): React.ReactNode {
             </p>
           )}
 
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              {t('onboarding.step', { n: String(step + 1) })}
-            </span>
-            <div className="flex gap-2">
+          {/*
+            WP79 ①⑥：底下原来还有一行"第 N 步 / 共 4 步"——进度条已经把它画出来了，
+            去掉。往前走的那个按钮四步统一说「保存并继续」，最后一步说「完成」。
+            **第 ① 步整条不出**：那一步的「保存并继续」在表单里（存完自己进下一步），
+            这里再放一个等于同一句话摆两遍；而「上一步」在第 ① 步本来就是灰的，
+            单摆一个点不动的按钮比没有它更糟。
+          */}
+          {step === 0 ? null : (
+            <div className="flex items-center justify-end gap-2">
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={step === 0}
                 data-testid="onboarding-back"
                 onClick={() => {
                   setStep((s) => Math.max(0, s - 1))
@@ -315,7 +325,7 @@ export function OnboardingPage(): React.ReactNode {
                 </Button>
               )}
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

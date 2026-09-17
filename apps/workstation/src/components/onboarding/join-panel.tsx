@@ -96,91 +96,102 @@ export function JoinPanel({
       ) : null}
 
       {!shown ? null : (
-      <section className="flex flex-col gap-2">
-        {collapsed ? null : <p className="font-medium">{t('onboarding.join.title')}</p>}
-
-        <div className="flex items-end gap-2">
-          <div className="flex flex-1 flex-col gap-1">
-            <Label htmlFor="join-code" className="flex items-center gap-1 text-xs">
-              {t('onboarding.join.code')}
-              <Hint text={t('onboarding.join.code.hint')} />
-            </Label>
-            <Input
-              id="join-code"
-              data-testid="join-code"
-              value={code}
-              placeholder={t('onboarding.join.code.placeholder')}
-              onChange={(e) => {
-                setCode(e.target.value.toUpperCase())
-                setPeer(null)
-              }}
-            />
-          </div>
-          <Button
-            size="sm"
-            data-testid="join-submit"
-            disabled={busy || (code.trim() === '' && peer === null)}
-            onClick={() => {
-              onJoin(peer === null ? { code: code.trim() } : { peer_id: peer })
-            }}
-          >
-            {t('onboarding.join.submit')}
-          </Button>
-        </div>
-
-        {/* 局域网上看见的同伴（46 §2 I3：看见之后按钮就是"申请加入他们"） */}
-        <div className="flex flex-col gap-1" data-testid="join-peers">
-          {discovery === undefined ? null : configured === false ? (
-            <p className="text-xs text-muted-foreground">{t('onboarding.join.peers.no_profile')}</p>
-          ) : !discovery.available ? (
-            <p className="text-xs text-muted-foreground">
-              {t('onboarding.join.peers.unavailable', {
-                reason: discovery.reason ?? '',
-              })}
-            </p>
-          ) : !discovery.enabled ? (
-            <p className="text-xs text-muted-foreground">{t('onboarding.join.peers.off')}</p>
-          ) : peers.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t('onboarding.join.peers.empty')}</p>
-          ) : (
+        <section className="flex flex-col gap-2">
+          {/*
+            WP79 ⑤：折叠展开之后也只剩一个输入框——原来那行"贴一个同事发的邀请码，
+            或者从下面的局域网同伴里挑一位"去掉：下面两样都摆在那儿，不用再说一遍。
+          */}
+          {collapsed ? null : (
             <>
-              <p className="text-xs text-muted-foreground">
-                {t('onboarding.join.peers', { n: String(peers.length) })}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {peers.map((p) => (
-                  <PickToggle
-                    key={p.peer_id}
-                    checked={peer === p.peer_id}
-                    testId="join-peer"
-                    onToggle={() => {
-                      setPeer(peer === p.peer_id ? null : p.peer_id)
-                      setCode('')
-                    }}
-                  >
-                    {p.workspace_label}
-                  </PickToggle>
-                ))}
-              </div>
+              <p className="font-medium">{t('onboarding.join.title')}</p>
+              <p className="text-xs text-muted-foreground">{t('onboarding.join.subtitle')}</p>
             </>
           )}
-        </div>
 
-        {sent ? (
-          <p className="text-xs text-muted-foreground" data-testid="join-sent">
-            {t('onboarding.join.sent')}
-          </p>
-        ) : null}
-        {error === undefined ? null : (
-          <p role="alert" className="text-destructive" data-testid="join-error">
-            {error}
-          </p>
-        )}
-        {/*
-          WP79 ⑤：这里原来还有一行"王岚（wang@nordvolt.cn）"。去掉——
-          申请人就是登录的这个人，他不需要被告知自己是谁。
-        */}
-      </section>
+          <div className="flex items-end gap-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <Label htmlFor="join-code" className="flex items-center gap-1 text-xs">
+                {t('onboarding.join.code')}
+                <Hint text={t('onboarding.join.code.hint')} />
+              </Label>
+              <Input
+                id="join-code"
+                data-testid="join-code"
+                value={code}
+                placeholder={t('onboarding.join.code.placeholder')}
+                onChange={(e) => {
+                  setCode(e.target.value.toUpperCase())
+                  setPeer(null)
+                }}
+              />
+            </div>
+            <Button
+              size="sm"
+              data-testid="join-submit"
+              disabled={busy || (code.trim() === '' && peer === null)}
+              onClick={() => {
+                onJoin(peer === null ? { code: code.trim() } : { peer_id: peer })
+              }}
+            >
+              {t('onboarding.join.submit')}
+            </Button>
+          </div>
+
+          {/* 局域网上看见的同伴（46 §2 I3：看见之后按钮就是"申请加入他们"） */}
+          <div className="flex flex-col gap-1" data-testid="join-peers">
+            {discovery === undefined ? null : configured === false ? (
+              <p className="text-xs text-muted-foreground">
+                {t('onboarding.join.peers.no_profile')}
+              </p>
+            ) : !discovery.available ? (
+              <p className="text-xs text-muted-foreground">
+                {t('onboarding.join.peers.unavailable', {
+                  reason: discovery.reason ?? '',
+                })}
+              </p>
+            ) : !discovery.enabled ? (
+              <p className="text-xs text-muted-foreground">{t('onboarding.join.peers.off')}</p>
+            ) : peers.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t('onboarding.join.peers.empty')}</p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  {t('onboarding.join.peers', { n: String(peers.length) })}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {peers.map((p) => (
+                    <PickToggle
+                      key={p.peer_id}
+                      checked={peer === p.peer_id}
+                      testId="join-peer"
+                      onToggle={() => {
+                        setPeer(peer === p.peer_id ? null : p.peer_id)
+                        setCode('')
+                      }}
+                    >
+                      {p.workspace_label}
+                    </PickToggle>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {sent ? (
+            <p className="text-xs text-muted-foreground" data-testid="join-sent">
+              {t('onboarding.join.sent')}
+            </p>
+          ) : null}
+          {error === undefined ? null : (
+            <p role="alert" className="text-destructive" data-testid="join-error">
+              {error}
+            </p>
+          )}
+          {/*
+            WP79 ⑤：这里原来还有一行"王岚（wang@nordvolt.cn）"。去掉——
+            申请人就是登录的这个人，他不需要被告知自己是谁。
+          */}
+        </section>
       )}
 
       {invites === undefined ? null : (

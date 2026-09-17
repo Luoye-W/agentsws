@@ -21,7 +21,8 @@ import { DIGITAL_TRIAGE } from './triage.js'
 export const digitalPack: VerticalPack = {
   key: 'digital',
   labelZh: '虚拟产品与服务',
-  hintZh: '不用发货的东西：App、SaaS、在线服务、会员与课程……客户会问"怎么用""为什么扣费"。',
+  // WP79 ⑤：同上，一行短句
+  hintZh: '不用发货的东西，客户会问"怎么用""为什么扣费"。',
   persona: DIGITAL_PERSONA,
   chatRules: DIGITAL_CHAT_RULES,
   emailRules: DIGITAL_EMAIL_RULES,
