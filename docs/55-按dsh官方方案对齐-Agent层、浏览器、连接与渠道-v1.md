@@ -249,3 +249,17 @@ Luoye：很多客户在用 ChatGPT 的套餐，官方连接器好像能直接用
 **方案（按官方，路 ①）**：组合里加 `@deepseek-ai/dsh-llm-pi-ai`（只开 `openai-codex` 与 `anthropic` 两个订阅 provider）+ `dsh-authorization`；`ctx.llm` 按 provider 名并存：`openai-codex/*`、`anthropic/*` 归官方适配器，其余仍归 `agentsws-gateway`；网关那一侧对订阅路由只做记账（会话 usage 事件里的 token）、预算按 token 算、`cost_base` 记 0；凭据记录 `llm-pi-ai/*` 由 WP86 的组合 provider 路由到**本机加密秘密库**（不是 OpenConnector；这是个人身份类凭据，20 的规则），刷新沿用官方 `modifyRecord`；设置页模型一节加"用 ChatGPT 订阅登录 / 用 Claude 订阅登录"两张卡（设备码优先，浏览器流次之），**只在个人档出现**，卡上写明"第三方工具用订阅登录未获 OpenAI / Anthropic 明文授权，可能被限流或封禁；账号只属于你本人"。不做路 ②（自己复刻 Codex 协议）。
 
 **落地**：WP90，排在 WP88（百炼模板）合并之后（同改设置页模型一节）。
+
+## 10. Q9（2026-09-17 补）：腾讯 BrowserSkill 作个人端第二执行器
+
+已核实（`Tencent/BrowserSkill`，MIT，3.3k★，2026-06 开源，两周一版，0.3.0 于 09-17）：Rust `bsk` CLI + 本机 daemon + Chrome / Edge MV3 扩展，在**用户自己的浏览器**里 `chrome.debugger` 附加（不带 Chromium、不开调试端口），每 session 一个独立 Agent 窗口、借用户标签要确认；页面感知是自研 VOM（压缩 DOM + ref + 悬浮探测 + 分页）也有无障碍树；内置人接管弹层（`request-help`）；**远程模式**（Agent 在服务器、扩展在本机，WSS 配对）；操作录制成 trace（非录成 Skill）；无基准数据。它的 dsh 插件 `@wxg-prc-cpg/browser-skill-dsh-plugin` **直接注册 `ctx.tools`、不走官方 `dsh-browser-use` seam**，6 个多态工具（动作在 `action` 参数里，读写混），不暴露 evaluate；无原生构建、不下载浏览器；无腾讯云绑定、无遥测（daemon 每 30 分钟查 GitHub 更新，`BSK_AUTO_UPDATE=off` 可关）。
+
+| 约束 | 判定 |
+|---|---|
+| 只在官方 seam 下挂 provider | 不满足 → 自写薄 provider（spawn `bsk --json`，复用其 MIT 逻辑） |
+| 按工具名分读写 | 部分 → 门禁改看 `args.action` |
+| 导航 url 白名单 | 满足，拦 `browser_page{url}` / `browser_session start{url}` / `browser_tabs create{url}` 三处 |
+| 公司端禁 evaluate | dsh 工具面无 evaluate；但 `bsk` 在 PATH 上时有 shell 的职责能直接跑 `bsk evaluate`——shell allowlist（WP89）同时禁 `bsk` |
+| 不开构建 / 不下载 Chromium | 满足 |
+
+**建议**：作为个人端 **B2 执行器**加，取它两样长处——远程模式给托管档（Agent 在云、浏览器在用户本机，官方 provider 做不到）、内置人接管给个人端；排在官方 provider 真跑一轮之后（红人 YouTube 只读场景 + Luoye 实际用一次）。工作量约一个 WP：薄 provider + 门禁看动作 + 三处白名单 + "装扩展 + 装 bsk" 向导 + `bsk doctor` 前置检查。**待拍板 Q9：现在派还是等官方方案跑一轮再派。**
