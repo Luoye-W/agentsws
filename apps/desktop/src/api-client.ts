@@ -91,6 +91,17 @@ export interface ApiClient {
     assignment: string,
     endpoint: string,
   ): Promise<ApiResult<{ mode: string }>>
+  /**
+   * WP92（55 §10）：「我正在用的浏览器」装到哪一步了
+   * （`GET /v1/settings/browser/browserskill` = 服务端跑一次 `bsk doctor`）。
+   *
+   * 托盘那条「检查浏览器扩展」用它：扩展装没装、装对没有，只有**用户自己**
+   * 在浏览器里看得见，所以给一条不用打开工作台就能问一句的路。
+   */
+  browserSkillStatus(
+    session: DesktopSession,
+    assignment: string,
+  ): Promise<ApiResult<{ ok: boolean; installed: boolean; detail?: string }>>
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -192,6 +203,24 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       return out.ok ? { ok: true, value: { rotated: out.value.value.rotated } } : out
     },
 
+    async browserSkillStatus(session, assignment) {
+      const out = await call<{ ok: boolean; installed: boolean; detail?: string }>(
+        '/v1/settings/browser/browserskill',
+        { method: 'GET', headers: { cookie: session.cookie, 'X-Assignment': assignment } },
+      )
+      return out.ok
+        ? {
+            ok: true,
+            value: {
+              ok: out.value.value.ok === true,
+              installed: out.value.value.installed === true,
+              ...(typeof out.value.value.detail === 'string'
+                ? { detail: out.value.value.detail }
+                : {}),
+            },
+          }
+        : out
+    },
     async setBrowserEndpoint(session, assignment, endpoint) {
       const out = await call<{ mode: string }>('/v1/settings/browser', {
         method: 'PUT',

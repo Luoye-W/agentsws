@@ -19,6 +19,10 @@ export interface Strings {
   rotateSecretsKey: string
   /** WP82（55 §3 末段）：给 AI 起一个**单独的**工作用 Chrome（带调试口）。 */
   openWorkBrowser: string
+  /** WP92（55 §10）：「我正在用的浏览器」那一套（扩展 + bsk）装好没有。 */
+  checkBrowserExtension: string
+  browserExtensionOk: string
+  browserExtensionBad: string
   openLogs: string
   launchAtLogin: string
   quit: string
@@ -56,6 +60,9 @@ const ZH: Strings = {
   restartServer: '重启服务',
   rotateSecretsKey: '轮换本机密钥',
   openWorkBrowser: '打开工作用的浏览器',
+  checkBrowserExtension: '检查浏览器扩展',
+  browserExtensionOk: '浏览器扩展已连上，可以用你正在用的浏览器干活了。',
+  browserExtensionBad: '还没好：{detail}',
   openLogs: '打开日志目录',
   launchAtLogin: '开机自启',
   quit: '退出',
@@ -92,6 +99,10 @@ const EN: Strings = {
   restartServer: 'Restart service',
   rotateSecretsKey: 'Rotate local key',
   openWorkBrowser: 'Open the work browser',
+  checkBrowserExtension: 'Check the browser extension',
+  browserExtensionOk:
+    'The browser extension is connected — your everyday browser is ready to work.',
+  browserExtensionBad: 'Not ready: {detail}',
   openLogs: 'Open log folder',
   launchAtLogin: 'Launch at login',
   quit: 'Quit',

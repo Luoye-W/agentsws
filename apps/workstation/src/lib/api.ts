@@ -1489,16 +1489,22 @@ export const setCapabilitySources = (
 
 /** 这台机器上的浏览器怎么配（`GET`/`PUT /v1/settings/browser` 的形状）。 */
 export interface BrowserSettings {
-  mode: 'off' | 'attach' | 'launch'
+  /** WP92：`browserskill` = 用你正在用的那个浏览器（腾讯 BrowserSkill，55 §10）。 */
+  mode: 'off' | 'attach' | 'launch' | 'browserskill'
   endpoint?: string
   executable_path?: string
   headless?: boolean
+  /** WP92：`bsk` 的路径；不给就用我们自己装的那一份。 */
+  bsk_path?: string
 }
 
 export interface BrowserSettingsView extends BrowserSettings {
   /** 只有个人档（服务跑在你自己电脑上）才允许接你的 Chrome。 */
   attach_allowed: boolean
   attach_blocked_reason?: string
+  /** WP92：同一条理由——bsk 与浏览器扩展都在你那台电脑上。 */
+  browserskill_allowed: boolean
+  browserskill_blocked_reason?: string
 }
 
 export interface BrowserProbeResult {
@@ -4001,3 +4007,40 @@ export const createSocialBroadcast = (
   assignment?: string,
 ): Promise<SocialBroadcastData> =>
   api('/v1/social/broadcasts', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+// ── WP92：「我正在用的浏览器」（腾讯 BrowserSkill，55 §10）───────────────
+//
+// 两条路由，对着设置页那三步向导：
+// ① 装扩展 —— 没有 API，商店链接写在界面上；
+// ② 装 `bsk` —— `installBrowserSkill()`（版本与 sha256 钉死在 browserskill.lock.json）；
+// ③ 检查 —— `getBrowserSkillStatus()` 跑一次 `bsk doctor --json`，把它那几条原样端出来。
+
+/** `bsk doctor` 的一条检查（形状照抄上游 CLI 的 JSON）。 */
+export interface BrowserSkillCheck {
+  name: string
+  ok: boolean
+  status: 'ok' | 'fail' | 'warn' | 'na'
+  detail: string
+  hint?: string
+}
+
+export interface BrowserSkillStatus {
+  installed: boolean
+  bsk_path?: string
+  version?: string
+  pinned_version?: string
+  checks: BrowserSkillCheck[]
+  ok: boolean
+  detail?: string
+}
+
+/** 跑一次 `bsk doctor`（daemon 起没起、扩展连没连）。 */
+export const getBrowserSkillStatus = (assignment?: string): Promise<BrowserSkillStatus> =>
+  api('/v1/settings/browser/browserskill', withAssignment(assignment))
+
+/** 装 `bsk`（下载 → 校验 sha256 → 放进数据目录；校验不过什么都不装）。 */
+export const installBrowserSkill = (assignment?: string): Promise<BrowserSkillStatus> =>
+  api('/v1/settings/browser/browserskill/install', {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })

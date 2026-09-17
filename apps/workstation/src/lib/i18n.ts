@@ -1574,6 +1574,31 @@ const zh: Table = {
   'settings.browser.scope':
     '能打开哪些站由岗位的职责说了算：红人各自的平台、Amazon 客服只开卖家后台，其余岗位一个站都开不了。',
 
+  // WP92（55 §10）：设置 → 浏览器 → 「我正在用的浏览器」（腾讯 BrowserSkill）
+  'settings.browser.bsk': '我正在用的浏览器',
+  'settings.browser.bsk.note':
+    '用你日常那个浏览器（Chrome / Edge）。你登录过的东西它直接就看得到，不用再登一次；AI 在一个单独的窗口里操作，要用你已经开着的标签会先问你。',
+  'settings.browser.bsk.blocked': '这一档用不了（扩展和 bsk 都在你自己那台电脑上）。',
+  'settings.browser.bsk.compare':
+    '两种的区别：「独立的 Chrome」不碰你日常的登录，干净但什么都要重新登；「我正在用的浏览器」能看到你登录后才看得到的东西，AI 在单独窗口里操作，动你已开的标签会先问你。',
+  'settings.browser.bsk.step1': '① 装浏览器扩展',
+  'settings.browser.bsk.step1.note':
+    '在你日常用的那个浏览器里装（Chrome 或 Edge，二选一，装完不用改任何设置）。',
+  'settings.browser.bsk.step1.chrome': 'Chrome 应用商店',
+  'settings.browser.bsk.step1.edge': 'Edge 加载项',
+  'settings.browser.bsk.step2': '② 装 bsk（本机的小程序）',
+  'settings.browser.bsk.step2.note':
+    '扩展要有它才能和工作台说话。版本与校验码都是钉死的：下载完先核对，对不上就一个文件都不装。',
+  'settings.browser.bsk.step2.install': '一键安装',
+  'settings.browser.bsk.step2.reinstall': '重装',
+  'settings.browser.bsk.step2.installed': '已装好：{version}（{path}）',
+  'settings.browser.bsk.step2.missing': '还没装',
+  'settings.browser.bsk.step3': '③ 检查一下',
+  'settings.browser.bsk.step3.note': '看后台起没起、扩展连没连；连不上会告诉你该怎么修。',
+  'settings.browser.bsk.step3.check': '检查一下',
+  'settings.browser.bsk.ok': '都好了：浏览器已经连上，可以让岗位干活了。',
+  'settings.browser.bsk.fail': '还没好：{detail}',
+
   // WP52（47 J2 / J3）：对象引用 vs 知识引用、设置页的数据地图
   'chip.object': '对象',
   'chip.object.hint': '这是一个具体的东西（订单、客户、商品），显示的是它现在的状态；点开看详情。',
@@ -3365,6 +3390,33 @@ const en: Table = {
   'settings.browser.saved': 'Saved',
   'settings.browser.scope':
     'Which sites can be opened is decided by the role: each creator channel its own platform, Amazon support only Seller Central, and every other role none at all.',
+
+  // WP92 (55 §10): Settings → Browser → "The browser I already use" (Tencent BrowserSkill)
+  'settings.browser.bsk': 'The browser I already use',
+  'settings.browser.bsk.note':
+    'Uses your everyday browser (Chrome or Edge). Anything you are signed in to is visible right away; the AI works in a separate window and asks before touching a tab you already have open.',
+  'settings.browser.bsk.blocked':
+    'Not available in this setup (the extension and bsk both live on your own computer).',
+  'settings.browser.bsk.compare':
+    'The difference: a separate Chrome never touches your everyday logins — clean, but you sign in to everything again. Your own browser can see what only a signed-in you can see; the AI works in its own window and asks before using a tab you already have open.',
+  'settings.browser.bsk.step1': '① Install the browser extension',
+  'settings.browser.bsk.step1.note':
+    'Install it in the browser you actually use (Chrome or Edge — either one; nothing else to configure).',
+  'settings.browser.bsk.step1.chrome': 'Chrome Web Store',
+  'settings.browser.bsk.step1.edge': 'Edge Add-ons',
+  'settings.browser.bsk.step2': '② Install bsk (a small local program)',
+  'settings.browser.bsk.step2.note':
+    'The extension needs it to talk to the workstation. Version and checksum are pinned: the download is verified first, and nothing is installed if it does not match.',
+  'settings.browser.bsk.step2.install': 'Install',
+  'settings.browser.bsk.step2.reinstall': 'Reinstall',
+  'settings.browser.bsk.step2.installed': 'Installed: {version} ({path})',
+  'settings.browser.bsk.step2.missing': 'Not installed yet',
+  'settings.browser.bsk.step3': '③ Check it',
+  'settings.browser.bsk.step3.check': 'Check',
+  'settings.browser.bsk.step3.note':
+    'Checks whether the local service is running and the extension is connected, and tells you how to fix it if not.',
+  'settings.browser.bsk.ok': 'All set: the browser is connected and roles can start working.',
+  'settings.browser.bsk.fail': 'Not ready: {detail}',
 
   // WP52 (47 J2 / J3): object vs knowledge references, and the settings data map
   'chip.object': 'Object',
