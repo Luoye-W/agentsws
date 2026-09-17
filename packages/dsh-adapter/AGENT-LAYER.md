@@ -407,6 +407,87 @@ Chrome、真的打开一个网页**这一段只能手工（步骤见 `scripts/de
 一个副作用值得记：官方 MCP 服务器把截图 / 快照落在 **Agent 的 `cwd` 下的
 `.playwright-mcp/`**（`--output-dir` 的默认值，上游薄壳没透出这个参数）。已进 `.gitignore`。
 
+### 9.7 第二种浏览器：BrowserSkill（WP92，55 §10）
+
+个人档的另一种挂法：**用户正在用的那个浏览器**。工具面同样一个字不是我们写的——
+它来自腾讯官方的 dsh 插件 `@wxg-prc-cpg/browser-skill-dsh-plugin`（MIT，锁 `0.3.0`），
+插件 spawn 本机的 `bsk` CLI，CLI 经 daemon 让浏览器扩展用 `chrome.debugger` 附上去。
+
+```
+run(req)  —— req.browser.mode === 'browserskill'
+  └─ createHarness
+       ├─（**不挂** BrowserUseRegistry —— 它不走 dsh-browser-use 那个 seam）
+       └─ ctx.agents.create({ setup: async (agentCtx, agent) => {
+            installGate(ctx, { …, agent, agentCtx })
+            bskBinaryUsable(bskPath) 否则当场失败          ← 见下 ③
+            applyBskEnv()                                  ← 两个更新开关，见下 ④
+            await agentCtx.plugin(BrowserSkillPlugin, { bskPath, lazyTools: false, … })
+          }})
+              └─ 六个裸名工具（browser_session / page / inspect / interact / tabs / assist）
+                 进这个 Agent 的 scope
+```
+
+**一次运行只挂一种**：`RunRequest.browser.mode` 是 `attach` / `launch` 就走官方 provider
+（§9.1），是 `browserskill` 就走这一条。
+
+#### 读写分类：看 `args.action`
+
+六个工具是**多态**的（一个名字管好几件事），所以 `classifySideEffect` 对它们看的是
+`args.action`，表在 `browserskill.ts` 的 `BROWSERSKILL_READ_ACTIONS`：
+
+| 判定 | 工具与动作 |
+|---|---|
+| `read_external` | `browser_inspect` 全部（observe / snapshot / html / screenshot / console / network）、`browser_page` 全部（navigate / back / forward / reload / wait）、`browser_session` start / stop / list、`browser_tabs` list / select、`browser_assist` resize / emulate / request-help |
+| `write_external` | `browser_interact` 全部、`browser_tabs` create / close / **borrow / return**（借用户自己的标签）、**以及任何不在表里的动作，和"没给 `action`"** |
+
+域名白名单三处：`browser_page{navigate}.url`、`browser_session{start}.url`、
+`browser_tabs{create}.url`（后两处的 url 是选填的——不给就是开个空白窗口 / 空白标签）。
+注 JS 那一道在这一种下**没有对应物**：工具面里没有 evaluate；能跑脚本的是
+`bsk evaluate` 这条 CLI，归 shell 的命令 allowlist（WP89）管。
+
+人接管是这一种真正多出来的东西：`browser_assist{request-help}` 在用户浏览器里弹一层
+请他自己做这一步。**两档都放行**（公司端也放行——让人来做正是公司端要的那条路），
+放行的同时发 `progress{step:'browser_handoff'}`。
+
+#### 四条踩过的上游语义
+
+① **`lazyTools` 默认 `true` 会让工具面整个空掉。** 上游的 progressive disclosure：
+六个工具要等 `browser-skill` 这个技能被成功调用过一次才注册，触发器挂在 `tools/result`
+上等一个名叫 `skill` 的调用。我们的最小组合里没有 `dsh-skill` / `dsh-tool-skill`，
+它一辈子不会响——实测 `ctx.tools.schemas(agent)` 是空的。所以写死 `lazyTools: false`。
+
+② **它的六个工具是 scoped registration —— 与 §9.4 第 1 条同一条结论。**
+决定"全局还是 scoped"的不是插件用了 `ctx.tools.register`，而是**它挂在哪个 ctx 上**：
+挂在 Agent 的 scoped ctx 上（我们就是这么挂的）→ scoped，`restrict` 遮不住，
+**列进白名单当场抛** `unknown global tools`；挂在宿主 ctx 上 → 全局，`restrict` 遮得住。
+两种都实测过。所以这一组与官方 provider 一样：**一个名字都不列进 `restrict`**。
+
+③ **`bskPath` 指错会把宿主进程打死（SIGINT）。** 插件加载时 spawn 一次 `bsk --version`
+探活；文件不存在时子进程 spawn 失败但已进 in-flight 表，卸载时 `killAll()` 对一个
+**还没有 pid** 的子进程 `kill('SIGINT')`，信号落到我们自己的进程组上。
+所以 `harness.ts` 在挂之前先 `bskBinaryUsable()`，没装就抛一个说人话的错。
+
+④ **`BSK_AUTO_UPDATE=off` 只关"装"不关"查"。** 周期任务里 `refresh_update_cache()`
+（出网取 GitHub 的 version.json）在 `auto_update_step()` 之前，`off` 只拦住后者。
+`applyBskEnv()` 因此设两条：`BSK_AUTO_UPDATE=off` + `BSK_UPDATE_MANIFEST_URL` 指到
+没人监听的回环地址。daemon 早就在跑时这两条管不到它（它继承的是当初那个环境）。
+
+#### 依赖与本机实测
+
+插件锁死 `0.3.0`（`minimumReleaseAgeExclude` 写死这一版）：**无 `dependencies`、无
+install / postinstall / prepare 脚本、无原生模块**（逐条核实过），所以不进 `allowBuilds`。
+它的 peer 写的是 `^0.1.0-rc.6`，与我们这棵 `0.1.6-alpha.1` 的树**按 semver 不相交**
+（预发布规则），不管的话 pnpm 会另装一份 dsh 进它自己的 `node_modules`——那等于一棵树
+两份 `dsh-tools`。`pnpm-workspace.yaml` 的 `overrides` 用 `包>peer` 选择器把这三个 peer
+钉到树里已有的那一版（`packageExtensions` 对它**不生效**，试过）。
+
+`bsk` 二进制由我们自己装：`browserskill.lock.json`（版本 + 每平台 sha256，上游哨兵盯它）
++ `apps/server/src/browserskill-install.ts`（下载 → 校验 → 装进 `AGENTSWS_DATA_DIR/bin/bsk`，
+**不进 PATH**）。本机实测（2026-09-17）：真的下了 darwin-arm64 的 `cli-v0.3.0`，sha256
+与 lock 逐字相同；`bsk doctor` 五条 OK、`extension connected` FAIL（没装扩展，符合预期）；
+`BSK_HOME` 指到一个一百多字符的路径时 daemon 起不来（unix socket 路径上限）。
+步骤与结论见 `scripts/dev-browserskill.md`。
+
 ---
 
 ## 10. 职责 preset 与凭据（WP86，55 §4）
