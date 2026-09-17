@@ -193,6 +193,10 @@ const OBJECT_DOMAIN = {
   // WP69（54 §1）：岗位实体与 assignment / person 一样是**制度层**的东西 —— 归 policy。
   // 它没有自己的数据域：岗位没有任何权限，权限一律在职责那一条分配上（05 §4）。
   position: 'policy',
+  // WP75（57 §1）：投放那一侧新写进契约的两类（`pixel_event` 自己就是一个数据域）。
+  // `ad` 与 `ad_set` 一样归 `ad_account`：广告树上从账户到一条广告是同一把闸——
+  // 一个岗位读得到这个账户，就读得到它下面的 campaign / 广告组 / 广告。
+  ad: 'ad_account',
 }
 const domainOf = (id) => {
   const d = OBJECT_DOMAIN[id] ?? (DATA_DOMAINS.has(id) ? id : undefined)

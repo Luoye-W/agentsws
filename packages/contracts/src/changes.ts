@@ -154,6 +154,23 @@ export type ChangeKind =
    * `after.published` 分档的老办法。
    */
   | 'community_moderation'
+  /**
+   * WP75（57 §1 投放）：换素材 / 换文案。L2。
+   *
+   * 投放那五个写动作里**只有这一个是新名字**：`create_campaign` /
+   * `budget_change` / `bid_change` / `pause_ad` 从 15 §2 第一版起就在上面
+   * （57 §1 写的 `campaign_create` / `ad_pause` 是同一件事的另一个写法，
+   * 对照表在 `ads.ts` 的 `ADS_KIND_ALIASES`）。同一件事**不给第二个名字**：
+   * `HARD_L1` 里放着 `create_campaign`，再加一个 `campaign_create`，
+   * 那道硬顶就会静悄悄地对一半的提案不生效。
+   *
+   * 为什么换素材要单独一条而不是塞进 `listing_edit`：它改的是**花着钱在外面
+   * 跑的那一条广告**，文案里多一句"买一送一"，那就是一条没人批准过的促销
+   * 挂在付费流量上。所以正文要过承诺扫描（`AD_COPY_FORBIDDEN`，
+   * `@agentsws/core` 的 guardrail），命中就 block——与邀评、开发信同一条理由：
+   * 这种句子不该有"人点一下就发出去"的路径。
+   */
+  | 'creative_swap'
 
 export type ChangeStatus =
   | 'staged'

@@ -111,6 +111,17 @@ export type ObjectType =
   | 'social_account'
   | 'community_member'
   | 'community_thread'
+  /**
+   * WP75（57 §1）：投放那一侧的三类（`campaign` 与 `ad_set` 上面早就有）。
+   *
+   * 为什么不是一个「广告」对象：`ad_account` 是**一个独立的计费主体**（总闸按它
+   * 聚合，04 §5）；`ad` 是素材落地的那一级（换素材的目标是它，不是 campaign）；
+   * `pixel_event` 压根不在广告树里——它是**只读**的，改追踪代码那件事归建站
+   * 且永远 L1（04 §5 `ads.tracking` 那一行）。一个域一把闸。**只加不删**。
+   */
+  | 'ad_account'
+  | 'ad'
+  | 'pixel_event'
   | (string & {})
 
 export interface ObjectRef {
@@ -202,6 +213,16 @@ export type DataDomain =
    */
   | 'community_member'
   | 'community_thread'
+  /**
+   * WP75（57 §1）：投放那一侧的新域（`ad_account` / `campaign` / `analytics`
+   * 上面早就有，四条投放职责的 scopes 读那三个）。
+   *
+   * 只多出 `pixel_event` 一个，理由与红人那五个一样：**可读范围不一样**。
+   * 像素与转化事件是**只读 + 出异常卡**，而且改它要去改网站代码——那是建站的事
+   * （04 §5 `ads.tracking`）。分一个域出来，"投放看得见、改不动"这句话才是
+   * 19 §3 过滤下推真的切得出来的一刀，不是写在文档里的一句话。
+   */
+  | 'pixel_event'
 
 export type Operation = 'read' | 'stage' | 'approve' | 'agent_auto'
 export type Range = 'own' | 'assigned' | 'workspace'
