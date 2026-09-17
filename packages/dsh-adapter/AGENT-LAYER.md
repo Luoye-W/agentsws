@@ -671,3 +671,105 @@ opaque JSON 正是为了让拥有格式的那个库继续拥有它）。落点�
 
 对手方是 `test/fixtures/fake-openai.ts`——拦 `globalThis.fetch` 的替身（设备码端点 +
 token 端点 + 刷新 + `/codex/responses` 的 SSE）。**它不认识的请求当场抛，CI 一个包都不出网。**
+---
+
+## 11. 终端与沙箱（WP89，55 §8 Q7）
+
+`site.shopify-theme`（别名 `site.builder`）这条职责能在一个**只写得了主题工作副本目录**的
+沙箱里跑 `shopify theme …`。工具面一个字不是我们写的——与 §9 的浏览器同一条纪律：
+**官方给面，我们只留策略**。
+
+### 11.1 挂什么，什么时候挂
+
+只在**两道都过**时挂（`harness.ts`；`runShell()`）：
+① `RunRequest.shell` 给了；② 职责在 `SHELL_ROLE_IDS` 里。第二道是有意的冗余——
+契约说的是"怎么跑"，"谁能跑"不该由请求方说了算。不挂时整层不存在：
+没有 `ctx.shell` / `ctx.sandbox`，工具面里一个 `bash` 都没有。
+
+| 包 | 给什么 | 配置 |
+|---|---|---|
+| `dsh-subprocess-local` | `ctx.subprocess`：真 fork | — |
+| `dsh-sandbox-local` | `ctx.sandbox`：按平台选笼子 | — |
+| `dsh-sandbox-policy` | `ctx.sandboxPolicy`：档位与可写根 | `{ mode, workspaceRoot }` |
+| `AgentswsBashExecutor`（`dsh-bash-sandbox` 的子类） | `ctx.shell`：一条命令 = 一个经沙箱包起来的 `bash -c` | `{ cwd: workspace_root }` |
+| `dsh-shell-env` | `ctx.shellEnv`：管理的 `DSH_*` | — |
+| `dsh-tool-bash` | 模型面的 `bash` | `{ enableRunInBackground: false }` |
+
+**为什么不写进职责 preset**（实测过，不是猜的）：把这六行写进 `agent.cordis.yml`
+再 `mount()`，上游当场拒——
+
+> agent-presets: preset "…" failed to mount: row(s) published process-global service(s)
+> [sandbox, sandboxPolicy, shell, shellEnv, subprocess]; a preset service must sit behind
+> an `isolate` realm or move to the host composition
+
+与 §9 的浏览器 provider 同一条纪律（`preset.ts` 的 manifest 注释早写过"不许往 root realm
+发服务"，只是那次没撞上）。上游给的两条路里选"搬到宿主组合"而不是 `isolate` realm，
+还有第二个独立理由：沙箱根是**一次运行一个值**（这家店的副本目录），写进 preset 文件
+等于每次运行重写它，而上游把"代"钉在组合文件的 mtime + size 上、被顶掉的那一代
+永不回收（§10.1）。
+
+**顺序是硬的**（与 §10.1 preset 同一条实测）：`dsh-tool-bash` 必须在
+`ctx.agents.create` **之前**挂完，因为 `installGate` 里的 `tools.restrict({ allow })`
+只认调用当刻**已经全局注册**的名字。晚一步 `bash` 就被职责白名单挡在 Agent 的 scope 外。
+
+### 11.2 三件实测到的、与预判不同的事
+
+**① 档位的真源不是 config，是会话的 `cwd`。**
+`sandbox-policy` 的 `workspaceRoot` 只是"没有会话时的兜底"；管着 Agent 那次调用的是
+`SessionHeader.cwd`（上游原话：normal agent calls use their session cwd instead）。
+所以 `agents.create({ meta: { cwd } })` 必须与 `workspaceRoot` 是同一个目录——
+少改一处，命令就在别的地方写文件，而且不会报错。
+
+**② `bash` 按工具名判不出读写。**
+一个名字底下几十条命令。落到 `classifySideEffect` 的兜底会被整个当成 `write_external`，
+公司端连 `shopify theme list` 都跑不了。所以命令 allowlist 那一关**排在读写分类之前**，
+判完直接给出分类，不再往下走。
+
+**③ 凭据不能走 `process.env`。**
+官方 `dsh-subprocess` 对**继承来的**环境有一道自己的清洗：`/KEY|PASSWORD|SECRET|TOKEN/i`
+的名字一律不往子进程传（上游原话：the harness's own `DEEPSEEK_API_KEY`/secrets must not
+leak into a spawned process implicitly）。`SHOPIFY_CLI_THEME_TOKEN` 正好撞这条，
+所以 §10.3（WP86）那条"放进 `process.env` 再还原"在这里**到不了 CLI 手里**。
+
+上游给的路是"显式 env 在清洗之后合进去"，而显式 env 来自 `ShellExecSpec.env`——
+官方 `tool-bash` 有意不把 `env` 开给模型。于是我们继承执行器（`AgentswsBashExecutor`），
+在 `resolve()` 里把这一跳要用的几个名字合进去。结果比 preset 那条路**更紧**：
+
+- 令牌**一次都不进这个进程的环境**；
+- 它只在"这一条命令"里活着（`tools/pre-execute` 放、`tools/post-execute` 清，`dispose()` 兜底）；
+- 事件日志、模型面两处都只看得见名字。
+
+### 11.3 我们这一侧的策略（`src/shell.ts`）
+
+| 策略 | 怎么做 |
+|---|---|
+| 命令 allowlist | 五个前缀（`shopify` / `git` / `node` / `npx` / `pnpm`）各带子命令表，表外拒。整表见 docs/43 §5b |
+| 写法 | 管道、命令替换、进程替换、后台一律拒（它们能把没过表的命令接进来）；`;` / `&&` / `\|\|` 放行，但**每段各自再判一次** |
+| 路径 | 重定向目标、看着像路径的参数、`workdir`，落到副本目录外一律拒 |
+| 发布 | `theme publish` / `--live` / `push` 不带 `--unpublished` → 物化成 `publish_theme` 的 staged change（永远 L1），然后拒掉这次调用 |
+| 升档 / 后台 | `sandbox_permissions` 与 `run_in_background` 一律拒 |
+| 提示词 | `shellBrief()` 进 persona 的 **complete 段**（官方 `tool:bash` 那一句是独立段，不受遮蔽，留着） |
+
+**拒绝物化成 `tool.result{blocked}`** 进事件日志（17 §2），与浏览器策略同一套。
+
+### 11.4 回归证据（用例名）
+
+| 事 | 用例（`test/shell-seam.test.ts`） |
+|---|---|
+| allowlist 放行 / 拒 / 归到卡，逐条 | `(a)` 组 8 条 |
+| 只有建站职责有终端；客服带了 `shell` 也不挂 | `(d)` 组 4 条 |
+| 沙箱真起一次：命令真跑、副本内写得进、越界写被内核挡 | `(b)` 组 2 条 |
+| 发布物化成 `publish_theme`，`before` 留空不编 | `(e)` 组 1 条 |
+| 令牌到得了 CLI，但不进事件、不进 `process.env` | `(c)` 组 2 条 |
+| 两档 headless 各跑一条带终端的运行 | `(f)` 组 2 条 |
+
+`test/seams.test.ts` 的 30 条**一条没删**；`browser-seam.test.ts` / `preset-seam.test.ts`
+一条没动。3 人 pack 新增 `site/theme-edit-then-publish`（stub / dsh-in-process /
+dsh-subprocess 三档同一份指标，基线只写了它这一条）。
+
+### 11.5 平台
+
+macOS（Seatbelt）**本机实测**：`workspace-write` 起得来、上游报 `enforcement: 'full'`、
+副本目录外的写回 `Operation not permitted`。Linux（bwrap→Landlock）与 Windows
+（受限令牌）按上游文档，未在本机实测。选不出 runner 时上游 `SANDBOX_UNAVAILABLE`
+**fail-closed**——命令不会"没关笼子就跑"，这正是我们要的。

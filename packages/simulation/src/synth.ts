@@ -241,6 +241,8 @@ const PEOPLE_3: PersonTemplate[] = [
       'pr.monitoring',
       'ads.meta',
       'site.shopify-build',
+      // WP89（55 §8 Q7）：主题也挂店主——`site/theme-edit-then-publish` 那条题要有人发布
+      'site.shopify-theme',
     ],
   },
   {

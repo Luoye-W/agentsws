@@ -9,6 +9,7 @@ import type {
   RunConnection,
   RunEvent,
   RunRequest,
+  RunShell,
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
@@ -67,6 +68,8 @@ export interface RequestOverrides {
   allowed_hosts?: string[]
   /** WP86：这条职责挂哪几台 MCP 服务器（不给 = 一台都不挂）。 */
   connections?: RunConnection[]
+  /** WP89：这次运行的终端与沙箱（不给 = 一个 `bash` 都没有）。 */
+  shell?: RunShell
   /** 换一条职责（preset id 与目录名跟着它走）。 */
   role_id?: string
   workspace_id?: string
@@ -154,6 +157,7 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     ...(o.browser === undefined ? {} : { browser: o.browser }),
     ...(o.allowed_hosts === undefined ? {} : { allowed_hosts: o.allowed_hosts }),
     ...(o.connections === undefined ? {} : { connections: o.connections }),
+    ...(o.shell === undefined ? {} : { shell: o.shell }),
     idempotency_key: 'idem_test',
   }
 }

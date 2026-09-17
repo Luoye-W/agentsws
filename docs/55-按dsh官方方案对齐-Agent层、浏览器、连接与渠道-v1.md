@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| 状态 | **已定案并全部落地（2026-09-16）**：Q2 WP81 官方 Agent 层、Q3 WP82 浏览器、Q4 WP83（目录 + 岗位清单）+ WP86（职责 preset 承载 + `credentials-openconnector`）、Q5 WP85 微信 / 企业微信 + Q5a 改口、P6 WP84 快捷提示，均已合并进 main；Q1 查证后不做开关（上传通路不存在，见 `packages/dsh-adapter/AGENT-LAYER.md` §7）。编号说明：本文原为 54，与另一会话的「54 岗位是任务主入口」撞号后改为 55；WP 编号从 71–75 改为 81–86。后置项见 docs/35 各条 |
+| 状态 | **已定案并全部落地（2026-09-16）**：Q2 WP81 官方 Agent 层、Q3 WP82 浏览器、Q4 WP83（目录 + 岗位清单）+ WP86（职责 preset 承载 + `credentials-openconnector`）、Q5 WP85 微信 / 企业微信 + Q5a 改口、P6 WP84 快捷提示，均已合并进 main；Q1 查证后不做开关（上传通路不存在，见 `packages/dsh-adapter/AGENT-LAYER.md` §7）；Q7（终端与沙箱）09-17 拍板、WP89 已落地（见 §8 落点）。编号说明：本文原为 54，与另一会话的「54 岗位是任务主入口」撞号后改为 55；WP 编号从 71–75 改为 81–86。后置项见 docs/35 各条 |
 | 日期 | 2026-09-16 |
 | 起因 | Luoye 看完 docs/53 的 P1–P7 后定方向：**能用 dsh 官方方案的都用官方方案，不然以后兼容性会很差**；浏览器按官方来、作为个人端；会话日志上报"优先按官方"；连接要有统一目录但又怕太大、希望按岗位 / 职责能快速知道连哪些；个人微信可以做（微信有官方的 Agent bot 入口）；P5 没看懂 |
 | 事实来源 | dsh 0.1.6-alpha.1 源码走读（Agent 层嵌入、preset、credentials、browser-use、webhook；细节引用在 §2–§5）；微信 ClawBot / iLink 官方仓库 `Tencent/openclaw-weixin` 与使用条款；WP70 的浏览器 seam spike（`packages/dsh-adapter/test/browser-seam.test.ts`） |
@@ -347,3 +347,45 @@ Agent 会在单独窗口里操作，动你已开的标签会先问你。"
 
 手工验证步骤 `scripts/dev-browserskill.md`；这次实测到第 ③ 步（装扩展要真人点"添加"，
 所以"真的 observe 一次"仍欠着）。
+### 落点（WP89，2026-09-17 已实现）
+
+上面那张表逐行落在哪，以及**实测到的三件与预判不同的事**。
+
+| Q7 那一行 | 落点 | 实测 |
+|---|---|---|
+| 谁需要 | `dsh-adapter/src/shell.ts` 的 `SHELL_ROLE_IDS = ['site.shopify-theme','site.builder']`，**加上** `RunRequest.shell` 给没给——两道都过 `harness.ts` 才挂那一摞 | 冗余是有意的：契约说的是"怎么跑"，"谁能跑"不该由请求方说了算。客服职责即使请求里带了 `shell` 也不挂（测试钉着） |
+| 用什么 | `dsh-tool-bash` + `dsh-bash-sandbox` + `dsh-sandbox-local` + `dsh-sandbox-policy`（+ `shell-env` / `subprocess-local`），全在 `harness.ts` 的 `root.plugin(...)` 里——**不是**写进职责 preset（交付单原话是写进 preset，实测挂不上，见下面"偏离"一段） | **① 档位的真源不是 config，是会话的 cwd**。`sandbox-policy` 的 `workspaceRoot` 只是"没有会话时的兜底"，管着 Agent 那次调用的是 `SessionHeader.cwd`（上游原话：normal agent calls use their session cwd instead）——所以 `agents.create` 的 `meta.cwd` 必须是同一个目录，少一处就写到别处去了 |
+| 与 43 的关系 | 43 新增 §5b；`apps/server/src/shopify-theme.ts` 一条没删，头部加了分工表 | Agent 管"改与看"，服务端管"发与长驻"（`publish` / `theme dev`）。`ThemePublishProposal` 是两边的接缝 |
+| 门禁 | `shell.ts` 的 `checkShellCommand`，接在 `gate.ts` 的 `tools/pre-execute` 上、**排在读写分类之前** | **② `bash` 按工具名判不出读写**：一个名字底下几十条命令，落到 `classifySideEffect` 的兜底会被整个当成写外部，公司端连 `theme list` 都跑不了。所以这一关先把命令拆开，判完直接给出分类 |
+| 门禁（发布那一条） | `gate.ts` 的 `materializePublish`：`shopify theme publish` / `--live` → 一条 `publish_theme` 的 staged change（15 §2 永远 L1），然后拒掉这次调用 | 卡上的 `before` 这里填不出来（Agent 没读过线上那一份，15 §1 不许编），由服务端 `proposePublish()` 渲染卡之前真读一次补上 |
+| 凭据 | `shell.ts` 的 `AgentswsBashExecutor`（`dsh-bash-sandbox` 的子类）在 `resolve()` 里把这一跳的 env 合进 spec | **③ WP86 那条"放进 `process.env` 再还原"的路在这里走不通**：官方 `dsh-subprocess` 对继承来的环境有一道清洗，`/KEY\|PASSWORD\|SECRET\|TOKEN/i` 的名字一律不往子进程传，`SHOPIFY_CLI_THEME_TOKEN` 正好撞上。改走执行器的显式 env 之后反而更紧：令牌**一次都不进这个进程的环境** |
+| 不做 | 用户面终端、非建站职责的 shell、`danger-full-access`（契约 `RunShell.mode` 里拼不出来） | 升档请求（`bash` 的 `sandbox_permissions`）门禁一律拒 |
+
+**沙箱实测**：macOS 26 / arm64 / dsh 0.1.6-alpha.1，`workspace-write` 真起得来，
+上游报 `enforcement: 'full'`（Seatbelt），副本目录外的写回 `Operation not permitted`；
+`pnpm install --frozen-lockfile` 不开任何构建。Linux（bwrap→Landlock）与 Windows
+（受限令牌）按上游文档，未在本机实测。
+
+**偏离一件（实测过，不是猜的）**：交付单说"在这条职责的 preset 里挂"。试了——把那六行写进
+`agent.cordis.yml` 再 `mount()`，上游当场拒：
+
+> `agent-presets: preset "…" failed to mount: row(s) published process-global service(s)`
+> `[sandbox, sandboxPolicy, shell, shellEnv, subprocess]; a preset service must sit behind an`
+> `` `isolate` realm or move to the host composition ``
+
+与 §3「浏览器 provider 不写进 preset」是同一条纪律（`preset.ts` 的 manifest 注释早写过
+"不许往 root realm 发服务"，只是那次没撞上）。上游给的两条路——`isolate` realm、
+或者搬到宿主组合——选了后者，还有第二个独立理由：**沙箱根是一次运行一个值**
+（这家店的副本目录），写进 preset 文件等于每次运行重写它，而上游把"代"钉在组合文件的
+mtime + size 上、被顶掉的那一代永不回收。所以职责 preset 那一层仍然只管 MCP 连接；
+"谁有终端"照旧由职责说了算（`SHELL_ROLE_IDS`），只是挂的地方在宿主。
+
+**顺带动的两处**（3 人 pack 那条建站题要它们才跑得起来）：`synth.ts` 的 `PEOPLE_3`
+给店主多挂一条 `site.builder`（3 人公司没有专职建站，壳是店主自己按模板凑的——
+这是他身上多出来的一顶帽子，不是一个岗位），`assignments.yml` / `manifest.yml`
+随生成器重出；三处写死"38 条场景"的断言改成 39（`synth.test.ts` / `report.test.ts` /
+`cli.test.ts`），`cli.test.ts` 那条的超时从 60s 对齐到 120s（`report.test.ts` 同形的题
+一直是 120s）。
+
+**后置一件**：Agent 还没有"在副本目录里改文件"的手（白名单里没有 `cat` / `sed`），
+要挂官方 `dsh-tool-fs` + `dsh-fs-sandbox`（它们读同一个 `ctx.sandboxPolicy`）。见 43 §5b 末尾。

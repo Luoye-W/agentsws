@@ -178,3 +178,23 @@ task_examples:
     title: { zh: "手机上太慢", en: "It is slow on phones" }
     description: "客户反映手机上打开很慢。"
     expected_output: "一份按影响排序的拖慢项清单，每一项配一个具体改法；动手的部分仍然只在副本上做。"
+
+# ── WP89（55 §8 Q7）：这条职责在沙箱里跑 Shopify CLI ─────────────────────
+#
+# 09-17 Luoye 拍板：主题那几条 `shopify theme` 命令，从"服务端写死的几条调用"
+# （`apps/server/src/shopify-theme.ts`）改成 **Agent 自己在沙箱里按需跑**。
+# 43 的流程一个字没变——改副本 → `theme push --unpublished` → 审批卡 → 批了才发布。
+#
+# **这一段是注释，不是字段**：职责模板的 schema 拒绝未声明的键（`packages/roles/src/schema.ts`
+# 的 `collectUnknownKeys`），而 schema 那一侧这一轮由别的 WP 在动。等它落地之后，
+# 下面这三条会变成真正的 `sandbox:` 段（`mode` / `workspace` / `commands`）。
+# 在那之前，**它们写死在 `@agentsws/dsh-adapter` 的 `src/shell.ts` 里**：
+#
+# - 谁有终端：`SHELL_ROLE_IDS = ['site.shopify-theme', 'site.builder']`。
+#   别的职责（客服 / 运营 / 红人）一个都没有——即使请求里带了 `shell` 也不挂。
+# - 档位：`workspace-write`，沙箱根 = 这家店的主题工作副本目录
+#   （`AGENTSWS_DATA_DIR/themes/<workspace>/<store>/`）。**没有 `danger-full-access`**：
+#   契约 `RunShell.mode` 里根本拼不出来，升档请求（`sandbox_permissions`）一律拒。
+# - 能跑哪些命令：只有 `shopify` / `git` / `node` / `npx` / `pnpm` 五个前缀，各带子命令表。
+#   `shopify theme publish`、任何带 `--live` 的，都不会真跑——它们被物化成上面
+#   `stage_publish_theme` 那条动作的一张卡（`publish_theme`，hard_ceiling，永远 L1）。
