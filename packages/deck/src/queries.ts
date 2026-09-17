@@ -345,8 +345,10 @@ const SITE_QUERIES: QueryDef[] = [
                 ? '缺（买不成）'
                 : '缺（迟早出事）',
         detail: r.detail,
-        // 补不了的那两项（支付 / 税）照实说，不给一个点不动的"去补"
-        fix: r.fixable ? r.fix : `${r.fix}`,
+        // `fix` 原样出：补不了的那两项（支付 / 税）在纯函数那一层写的就已经是
+        // "去后台自己点"，这里再按 `fixable` 改写一遍等于把同一句话说两个版本。
+        // `fixable` 留在 `SiteDeckData` 上给界面上那个「去补」按钮判要不要出。
+        fix: r.fix,
       })),
     }),
   },
