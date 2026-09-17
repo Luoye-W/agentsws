@@ -53,7 +53,8 @@ describe('agentsws simulate（26 §5）', () => {
       '--report',
       report,
     )
-    expect(text()).toContain('38/38 场景通过')
+    // WP75（57 §4）：3 人 pack +3 条投放（38 → 41）
+    expect(text()).toContain('41/41 场景通过')
     expect(text()).toContain('合并门禁：通过')
     expect(process.exitCode).toBeUndefined()
     expect(existsSync(join(report, 'summary.json'))).toBe(true)
