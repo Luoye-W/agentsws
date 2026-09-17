@@ -105,8 +105,14 @@ describe('Shopify 写动作对照表', () => {
     for (const kind of ['payment_config', 'tax_config', 'domain_config'] as const) {
       expect(actionsOfChangeKind(kind), kind).toEqual([])
     }
-    // 对照表里也没有任何落在店铺设置上的写动作
-    expect(SHOPIFY_WRITE_ACTIONS.filter((a) => a.target === 'store_config')).toEqual([])
+    // WP77（59 §1）：店铺设置上从此有写动作了（导航 / 政策页 / 店铺信息，都是
+    // `store_setup`），但**可 stage 的那几条一条都不碰这三样**——支付与税那两条
+    // 在表里写着 `not_stageable`，理由指向 51 §3 N2。
+    for (const a of SHOPIFY_WRITE_ACTIONS.filter((a) => a.target === 'store_config')) {
+      if (a.change_kind === undefined) continue
+      expect(a.change_kind, a.action_id).toBe('store_setup')
+      expect(/checkout|payment|tax/.test(a.action_id), a.action_id).toBe(false)
+    }
     // 于是"改一下就影响收款"的那几个动作名连查都查不到 → 未知即拒
     for (const id of [
       'shopify_admin.update_payment_settings',
@@ -143,6 +149,29 @@ describe('Shopify 写动作对照表', () => {
     ])
   })
 
+  // WP77（59 §1）：建站那一侧。三条新 kind 有入口，支付与税**故意没有**。
+  it('建站的写口有 kind：设置批、装主题、邮件模板、装 App、改 App 配置', () => {
+    expect(changeKindOfAction('shopify_admin.update_shop_settings')).toBe('store_setup')
+    expect(changeKindOfAction('shopify_admin.update_menu')).toBe('store_setup')
+    expect(changeKindOfAction('shopify_admin.update_shop_policy')).toBe('store_setup')
+    expect(changeKindOfAction('shopify_admin.install_theme')).toBe('theme_install')
+    expect(changeKindOfAction('shopify_admin.update_email_template')).toBe('email_template_edit')
+    expect(changeKindOfAction('shopify_admin.install_app')).toBe('app_install')
+    expect(changeKindOfAction('shopify_admin.uninstall_app')).toBe('app_install')
+    expect(changeKindOfAction('shopify_admin.update_app_config')).toBe('app_config')
+  })
+
+  it('结账 / 支付 / 税：给得出 API 也不给入口（51 §3 N2）', () => {
+    for (const id of [
+      'shopify_admin.update_payment_settings',
+      'shopify_admin.update_tax_settings',
+    ]) {
+      const can = canStageAction(id)
+      expect(can.ok, id).toBe(false)
+      expect(can.ok === false && can.reason).toContain('51')
+    }
+  })
+
   it('按 kind 反查得到施行时该调哪个动作', () => {
     expect(actionsOfChangeKind('price_change').map((a) => a.action_id)).toEqual([
       'shopify_admin.update_product_price',
@@ -150,6 +179,11 @@ describe('Shopify 写动作对照表', () => {
     expect(actionsOfChangeKind('publish_theme').map((a) => a.action_id)).toEqual([
       'shopify_admin.publish_theme',
       'shopify_admin.update_theme_asset',
+    ])
+    // WP77：装 / 卸是同一条 kind 的两个动作（`after.operation` 分得开）
+    expect(actionsOfChangeKind('app_install').map((a) => a.action_id)).toEqual([
+      'shopify_admin.install_app',
+      'shopify_admin.uninstall_app',
     ])
   })
 })

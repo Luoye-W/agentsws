@@ -1,4 +1,10 @@
-# 12 §2 的建站岗位（WP44 落地）。
+# 12 §2 的建站岗位（WP44 落地；WP77 / 59 §1 **改名为 `site.shopify-theme`**）。
+#
+# 改名不是重写：内容一个字没动（动作、额度、上限、grounding、快捷提示全照旧），
+# 只是这条职责从"建站与主题"变成建站岗位**四条之一**——网页模板那一条。
+# 另外三条（整站搭建 / 邮件模板 / 插件）是 WP77 新建的，各在自己的 yml 里。
+# 旧 id `site.builder` 仍然读得进来（加载器的 `ROLE_ID_ALIASES`），已有分配在
+# 启动时迁移一次。
 #
 # 一句话定位：**Agent 负责需求、验收、预览、发布门禁；代码交给编码 Agent。**
 # 主题天然适合这个模式——未发布的主题副本就是 stage，预览链接就是审批材料，
@@ -6,11 +12,11 @@
 #
 # 它跟 `dtc.ops` 的分工：运营改的是**内容**（标题、价格、上下架），
 # 建站改的是**壳**（模板、section、样式）。两边都不许直接写线上。
-id: site.builder
-version: 1.0.0
+id: site.shopify-theme
+version: 1.1.0
 domain: dev
-name: { zh: 建站与主题, en: Site & Theme Builder }
-description: Shopify 主题定制、落地页与页面美化、速度优化；改动走未发布副本 + 预览，发布永远人审
+name: { zh: Shopify 网页模板, en: Shopify Theme }
+description: Shopify 主题与页面模板：分区、模板、样式、落地页骨架、速度优化。改动只做在未发布副本上，预览链接就是审批材料，发布永远人审。管的是**壳**——页面里放什么商品、写什么文案、做什么促销是网站运营岗位的事。
 
 scopes:
   # 主题文件、页面、博客都算 content；商品只读（改价不是这个岗位的事）
@@ -110,7 +116,7 @@ home_blocks:
       id: site.pending_publishes,
       placement: queue,
       component: staged_change_list,
-      query: changes.pending(site.builder),
+      query: changes.pending(site.shopify-theme),
       default_order: 10,
       pinnable: true,
       adaptive: true,
@@ -119,7 +125,7 @@ home_blocks:
       id: site.theme_previews,
       placement: focus,
       component: card_list,
-      query: 'changes.by_kind(site.builder, publish_theme)',
+      query: 'changes.by_kind(site.shopify-theme, publish_theme)',
       default_order: 20,
       pinnable: true,
       adaptive: true,

@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/site-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "建站共享包（59 §2）：上线检查单、主题副本与发布提案、通知邮件模板的 Liquid 校验、App 目录与装 / 配动作。纯逻辑，CLI 与 Admin 口子都靠注入。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}

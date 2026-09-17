@@ -144,6 +144,14 @@ import {
   withToolChoice,
 } from '@agentsws/runtime-direct'
 import { wallClock } from '@agentsws/schedule'
+// WP77（59 §2）：上线检查单与两条 `after` 的组装——判断在纯函数里，世界只递事实
+import {
+  appInstallAfter,
+  emailTemplateAfter,
+  type LaunchCheckFacts,
+  launchCheckAfter,
+  runLaunchChecklist,
+} from '@agentsws/site-core'
 import {
   ACTION_WORDS,
   buildAudience,
@@ -511,6 +519,14 @@ export interface World {
    */
   social: SocialOps
   /**
+   * WP77：建站（59 §1 / §2）。
+   *
+   * 走的也是真机制：上线检查单由 `@agentsws/site-core` 的**纯函数**算（同一份事实
+   * 每次得到同一张清单）、邮件模板缺变量由 **guardrail** 拦（不是场景自己判）、
+   * 装 App 的"永远人审"由 `HARD_L1` 按回来。三件事都不是场景写的答案。
+   */
+  site: SiteOps
+  /**
    * WP75：投放（57 §1、04 §5）。
    *
    * 走的也是真机制：**开花钱口子永远 L1** 由 guardrail 的 `HARD_L1` 按回来、
@@ -561,6 +577,55 @@ export interface ShopStageResult {
   change_id?: string
   approval_item_id?: string
   reason?: string
+}
+
+/**
+ * WP77（59 §1 / §2）：建站那三件事。
+ *
+ * 与 `shop.themePublish` 并排而不是塞进 `ShopOps`：建站是一个**岗位**（四条职责），
+ * 它与运营改价改上下架不是同一批人、不是同一批额度。混成一个面的后果是
+ * "这条动作是谁的"要靠读实现才知道。
+ */
+export interface SiteOps {
+  /**
+   * 跑一次上线检查单（`launch_check`，L3）。
+   *
+   * 判断在 `@agentsws/site-core` 的纯函数里；这一层只把世界里真有的事实递进去
+   * （线上主题从 `themeCli.list()` 真读一次），并把结论提成一张卡。
+   */
+  launchChecklist(input: { who: PersonId }): Promise<
+    ShopStageResult & {
+      /** 缺了几项会让顾客买不成。 */
+      blockers: number
+      warnings: number
+      /** 缺项的 id（场景断言读它，不用去翻卡面文案）。 */
+      missing: string[]
+    }
+  >
+  /**
+   * 改一份通知邮件模板（`email_template_edit`）。
+   *
+   * **草稿 L2，启用 L1**——分档在 guardrail 的 `after.enabled` 上。
+   * Liquid 缺必需变量由 guardrail **当场 block**，所以这条题验的不是空气。
+   */
+  emailTemplate(input: {
+    who: PersonId
+    notification_type: string
+    subject: string
+    body: string
+    enabled: boolean
+    /** 故意报高的自动化等级（回归"启用那一下按不回去"用）。 */
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<ShopStageResult>
+  /** 提一条装 / 卸 App（`app_install`，15 §2 永远 L1）。 */
+  appInstall(input: {
+    who: PersonId
+    app: string
+    operation: 'install' | 'uninstall'
+    reason?: string
+    /** 故意报高的自动化等级；hard_ceiling 会把它拉回人审（回归用）。 */
+    level?: 'L1' | 'L2' | 'L3'
+  }): Promise<ShopStageResult>
 }
 
 /** WP64（51 §2.4）：一次超期巡检的结论。 */
@@ -1485,8 +1550,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('dtc.live-chat'),
     loadBundledRole('amz.support'),
     // WP44：建站与主题（12 §2）。没人被分到它的 pack 一个字节都不变——
-    // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效
-    loadBundledRole('site.builder'),
+    // 职责定义在库里躺着不产生任何行为，只有 assignments.yml 里有人挂它才生效。
+    // WP77（59 §1）：改名为 `site.shopify-theme`（建站岗位四条里的网页模板），
+    // 内容一个字没动；另外三条见下面 WP77 那一段。
+    loadBundledRole('site.shopify-theme'),
     // WP64（51 §2.3 / §2.4）：网站运营岗位的邮件营销与订单履约。
     // 3 人 pack 里"运营"这个人真挂着它们（`assignments.yml`），所以这两条不是躺着的。
     loadBundledRole('dtc.email-marketing'),
@@ -1519,6 +1586,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('social.telegram-group'),
     loadBundledRole('social.whatsapp'),
     loadBundledRole('dtc.community-support'),
+    // WP77（59 §1）：建站岗位另外三条（网页模板那条在上面 WP44 那一行）。
+    // 3 人 pack 里"店主"真挂着 `site.shopify-build`（`assignments.yml`），
+    // 另外两条躺在库里——装它们是为了首次设置向导里"建站"那个岗位显示四条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面社媒那八条的理由）。
+    loadBundledRole('site.shopify-build'),
+    loadBundledRole('site.shopify-email'),
+    loadBundledRole('site.shopify-apps'),
     // WP75（57 §1）：投放岗位的四条平台职责。3 人 pack 里店主真挂着 `ads.meta`
     // （`assignments.yml`）；其余三条躺在库里——躺着不产生任何行为，装它们是为了
     // 首次设置向导里"投放"那个岗位显示四条而不是一条（同上面红人 / 社媒的理由）。
@@ -2063,6 +2137,64 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           return { status: 'failed', error: { message: messageOfError(err) } }
         }
       }
+      /*
+       * WP77（59 §2）：建站那几条的施行口。
+       *
+       * 三条各走各的，而且**都不假装经过连接器**（同主题那条的理由）：
+       *
+       * - `launch_check` 是一次**只读巡检**：批下来之后没有任何东西要写。
+       *   它照样走执行器这一步，是因为 15 §5 的状态机只有一条路——
+       *   进了账本的变更要么 applied 要么 failed，没有"它不用施行"这一档。
+       * - `email_template_edit` 与 `app_install`：合成世界里没有通知模板接口、
+       *   也没有 App 安装流程（真身一个走后台 / Theme CLI 的 notifications 目录，
+       *   一个走 OAuth 授权页——两条都不是一次 Admin mutation）。所以这里写的是
+       *   世界自己那份内存台账，与 `publish_post` 那条逐字同理。
+       */
+      if (change.kind === 'launch_check') {
+        return {
+          status: 'ok',
+          execution_id: `site_${change.id}`,
+          outcome_ref: { type: 'launch_item', id: change.target.id },
+        }
+      }
+      if (change.kind === 'email_template_edit') {
+        const after = change.after as { enabled?: unknown; subject?: unknown }
+        siteTemplates.set(change.target.id, {
+          subject: typeof after.subject === 'string' ? after.subject : '',
+          enabled: after.enabled === true,
+        })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'site.email_template_applied',
+          actor: { kind: 'system', id: 'sim.executor' },
+          correlation: { trace_id: traceId() },
+          payload: { notification_type: change.target.id, enabled: after.enabled === true },
+        })
+        return {
+          status: 'ok',
+          execution_id: `site_${change.id}`,
+          outcome_ref: { type: 'email_template', id: change.target.id },
+        }
+      }
+      if (change.kind === 'app_install' || change.kind === 'app_config') {
+        const after = change.after as { operation?: unknown }
+        if (change.kind === 'app_install')
+          siteApps.set(change.target.id, after.operation !== 'uninstall')
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'site.app_change_applied',
+          actor: { kind: 'system', id: 'sim.executor' },
+          correlation: { trace_id: traceId() },
+          payload: { app_id: change.target.id, operation: String(after.operation ?? 'config') },
+        })
+        return {
+          status: 'ok',
+          execution_id: `site_${change.id}`,
+          outcome_ref: { type: 'shop_app', id: change.target.id },
+        }
+      }
       // WP64（51 §2.3）：邮件营销这一侧**没有施行口**，而且这是诚实的——
       // 连接器还是骨架（目录 + 只读动作 + 表单，真调用没接）。批了也发不出去，
       // 所以这里说的是"为什么发不出去"，不是一句 `未实现 kind`。
@@ -2485,6 +2617,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     get ads() {
       return ads
     },
+    // WP77：同上（59 §1 建站那三件事）
+    get site() {
+      return site
+    },
     // 44：与 `shop` 同理，装在这个对象字面量之后
     get org() {
       return org
@@ -2836,6 +2972,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
    * 第二次提案时 `before.published` 来自第一次写下的那一条，不是凭空编的。
    */
   const articles = new Map<string, { title: string; published: boolean }>()
+  /**
+   * WP77（59 §2）：世界自己那份建站台账。
+   *
+   * 与 `articles` 同一条理由：合成世界里没有通知模板接口、也没有 App 安装流程，
+   * 所以施行那一步写的是这里，**不假装经过连接器**——出站观察表里凭空多一条
+   * 不存在的调用，会让 `no_write_without_stage` 之类的不变量验的是假的。
+   */
+  const siteTemplates = new Map<string, { subject: string; enabled: boolean }>()
+  const siteApps = new Map<string, boolean>()
   /** 日报看的是"过去一天"。 */
   const REPORT_WINDOW_MS = 86_400_000
 
@@ -2859,6 +3004,21 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   /** 这个人在这条职责上的分配；没有就退回主分配（3 人公司常常一人多职）。 */
   const assignmentFor = (who: PersonId, role_id: RoleId): Assignment =>
     created.get(`${who}|${role_id}`) ?? assignment
+
+  /**
+   * WP77（59 §1）：建站那四条职责里这个人真挂着的那一条。
+   *
+   * 3 人公司里店主只挂了 `site.shopify-build`（synth 的 `extra` 只加了这一条）——
+   * 因为在那个规模上四条是同一个人的同一件事。所以邮件模板与插件那两条动作
+   * **退到整站搭建那条分配上**：额度与等级仍然是他真有的那一份，而不是凭空
+   * 用一条不存在的分配（那会让 `provenance_respected` 拿着一个查不到的
+   * assignment 去比对）。15 人公司里挂了专门那一条时，这里自然取到专门那一条。
+   */
+  const siteAssignmentFor = (who: PersonId, preferred: RoleId): Assignment =>
+    created.get(`${who}|${preferred}`) ??
+    created.get(`${who}|site.shopify-build`) ??
+    created.get(`${who}|site.shopify-theme`) ??
+    assignment
 
   const recipientOf = (
     via: 'scope_manager' | 'owner' | 'role_holder',
@@ -4189,7 +4349,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
 
     themePush({ who, name }) {
-      const asg = assignmentFor(who, 'site.builder')
+      const asg = siteAssignmentFor(who, 'site.shopify-theme')
       // 造一份未发布副本对线上没有任何影响，所以它不进账本（见
       // `connect-adapter/src/shopify-actions.ts` 里 create_theme 那一条的理由）。
       // 走的是 CLI 那条路，不是连接器——预览链接就是给人看的审批材料。
@@ -4210,7 +4370,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
 
     async themePublish({ who, theme, level }) {
-      const asg = assignmentFor(who, 'site.builder')
+      const asg = siteAssignmentFor(who, 'site.shopify-theme')
       const run = await beginShopRun(asg)
       const run_id = run.run_id
 
@@ -4278,6 +4438,216 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
           rule: 'owner',
           separation_of_duties: true,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+  }
+
+  /**
+   * WP77（59 §2）：这家合成店的**基础设置事实**。
+   *
+   * 它在世界里而不在场景里，理由与退订名单那一条逐字相同：这家店现在配没配税、
+   * 有没有政策页，是一件**已经存在的事**，不是场景里某个人做的动作。
+   *
+   * 这一份**故意留着三个缺口**（还挂在 myshopify 域名上、政策页只写了退换货、
+   * 运费一条都没配）——合成的是一家**刚开的店**，检查单在这样的店上才有话可说。
+   * 支付与税配好了：那两项建站岗位改不了（51 §3 N2），留成缺口只会让每条题
+   * 都在报同一句"去后台自己点"。
+   */
+  const siteFacts: LaunchCheckFacts = {
+    domain: { primary: 'https://nordvolt.myshopify.com', custom: false },
+    payment: { providers: ['shopify_payments'], test_mode: false },
+    tax: { configured: true, regions: ['US'] },
+    shipping: { zones: 1, rates: 0 },
+    policies: { present: ['refund'] },
+    navigation: { main_menu_items: 3, footer_menu_items: 1 },
+    apps: { installed: [] },
+  }
+
+  const site: SiteOps = {
+    async launchChecklist({ who }) {
+      const asg = siteAssignmentFor(who, 'site.shopify-build')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+
+      // 主题那一项**真读一次** `theme list`：清单上写的是线上现在那一份，
+      // 不是谁记得的那一份（同 `themePublish` 的 `before`）。
+      const themes = themeCli.list()
+      run.tool('theme_list', { count: themes.length })
+      const live = themes.find((t) => t.role === 'main')
+      const result = runLaunchChecklist(
+        {
+          ...siteFacts,
+          ...(live === undefined ? {} : { theme: { published: { id: live.id, name: live.name } } }),
+        },
+        { at: now(clock) },
+      )
+
+      const target: ObjectRef = { type: 'launch_item', id: `lc_${run_id}` }
+      const config = roles.effectiveConfig(asg.id)
+      const action = config.actions.find((a) => a.id === 'run_launch_checklist')
+      const provenance = run.finish({
+        seen: [target],
+        outputs: [],
+        summary: `跑了一次上线检查单：${result.missing.length} 项缺`,
+      })
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_site_${run_id}`,
+        kind: 'launch_check',
+        target,
+        before: {},
+        after: launchCheckAfter(result),
+        notes: result.missing.map((i) => `${i.title.zh}：${i.detail.zh}`),
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate: action?.mandate ?? { caps: {} },
+        level: config.automation.run_launch_checklist?.level ?? 'L3',
+        provenance,
+        approval: {
+          title: result.ready
+            ? '上线检查单：没有拦路的缺项'
+            : `上线检查单：${result.blockers} 项会让顾客买不成`,
+          summary: result.missing.map((i) => `${i.title.zh}——${i.fix.zh}`).join('\n'),
+          recipients: [recipientOf('role_holder')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'role_holder',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      const missing = result.missing.map((i) => i.id)
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return {
+          staged: false,
+          reason: outcome.reason,
+          blockers: result.blockers,
+          warnings: result.warnings,
+          missing,
+        }
+      }
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        blockers: result.blockers,
+        warnings: result.warnings,
+        missing,
+      }
+    },
+
+    async emailTemplate({ who, notification_type, subject, body, enabled, level }) {
+      const asg = siteAssignmentFor(who, 'site.shopify-email')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'email_template', id: notification_type }
+      const config = roles.effectiveConfig(asg.id)
+      const action = config.actions.find((a) => a.id === 'stage_email_template')
+      // 15 §1 改前必读：模板的 `before` 就是那段正文，所以 `read_full` 要有它
+      const provenance = run.finish({
+        seen: [target],
+        outputs: [],
+        summary: `${enabled ? '启用' : '改草稿'}：${notification_type}`,
+      })
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_site_${run_id}`,
+        kind: 'email_template_edit',
+        target,
+        before: { subject: '', body: '', enabled: false },
+        after: emailTemplateAfter({ notification_type, subject, body, enabled }),
+        notes: enabled
+          ? ['启用这一份之后，之后每一个下单的客户收到的都是它']
+          : ['草稿——启用那一下另提一张卡'],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate: action?.mandate ?? { caps: {} },
+        // 报高也没用：启用那一档由 guardrail 的 `after.enabled` 按回人审
+        level: level ?? config.automation.stage_email_template?.level ?? 'L1',
+        provenance,
+        connection_id: 'conn_shopify_admin',
+        approval: {
+          title: `${notification_type}：${enabled ? '启用这一份' : '改成这一版（草稿）'}`,
+          summary: subject,
+          recipients: [recipientOf(enabled ? 'owner' : 'scope_manager')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: enabled ? 'owner' : 'scope_manager',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        blocked.push({ rule: 'guardrail', at: now(clock), run_id, message: outcome.message })
+        return { staged: false, reason: outcome.reason }
+      }
+      await flushCards()
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async appInstall({ who, app, operation, reason, level }) {
+      const asg = siteAssignmentFor(who, 'site.shopify-apps')
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = { type: 'shop_app', id: app }
+      const config = roles.effectiveConfig(asg.id)
+      const action = config.actions.find((a) => a.id === 'stage_app_install')
+      const provenance = run.finish({
+        seen: [target],
+        outputs: [],
+        summary: `${operation === 'install' ? '装' : '卸'} ${app}`,
+      })
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_site_${run_id}`,
+        kind: 'app_install',
+        target,
+        before: { installed: operation === 'uninstall' },
+        after: appInstallAfter({
+          app_id: app,
+          operation,
+          ...(reason === undefined ? {} : { reason }),
+        }),
+        notes:
+          operation === 'install'
+            ? ['装一个 App = 把店里的数据交给另一家公司，多数还按月收钱']
+            : ['卸掉一个正在往前台注脚本的 App，店面会当场少一块'],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate: action?.mandate ?? { caps: {} },
+        // 15 §2 hard_ceiling：这里就算报 L3，guardrail 也会把它拉回人审
+        level: level ?? config.automation.stage_app_install?.level ?? 'L1',
+        provenance,
+        connection_id: 'conn_shopify_admin',
+        approval: {
+          title: `${operation === 'install' ? '装' : '卸'} ${app}`,
+          summary: reason ?? '',
+          recipients: [recipientOf('owner')],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: 'owner',
+          separation_of_duties: false,
           source_events: [],
         },
       })

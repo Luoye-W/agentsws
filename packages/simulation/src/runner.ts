@@ -1021,6 +1021,53 @@ async function execute(
         })
         return
       }
+      // ── WP77 建站（59 §1 / §2）────────────────────────────────────
+      case 'site.checklist': {
+        const out = await world.site.launchChecklist({ who: event.checklist.who })
+        world.appendEvent('simulation.site_checklist_ran', {
+          staged: out.staged,
+          blockers: out.blockers,
+          warnings: out.warnings,
+          // 缺项的 id 进日志（那是结论，不是店里的原文）
+          missing: out.missing,
+        })
+        return
+      }
+      case 'site.email_template': {
+        const out = await world.site.emailTemplate({
+          who: event.email_template.who,
+          notification_type: event.email_template.notification_type,
+          subject: event.email_template.subject,
+          body: event.email_template.body,
+          enabled: event.email_template.enabled,
+          ...(event.email_template.level === undefined
+            ? {}
+            : { level: event.email_template.level }),
+        })
+        world.appendEvent('simulation.site_email_template_staged', {
+          notification_type: event.email_template.notification_type,
+          enabling: event.email_template.enabled,
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
+      case 'site.app_install': {
+        const out = await world.site.appInstall({
+          who: event.app_install.who,
+          app: event.app_install.app,
+          operation: event.app_install.operation ?? 'install',
+          ...(event.app_install.reason === undefined ? {} : { reason: event.app_install.reason }),
+          ...(event.app_install.level === undefined ? {} : { level: event.app_install.level }),
+        })
+        world.appendEvent('simulation.site_app_change_staged', {
+          app: event.app_install.app,
+          operation: event.app_install.operation ?? 'install',
+          staged: out.staged,
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
       // ── WP64 邮件营销与订单履约（51 §2.3 / §2.4）──────────────────
       case 'fulfillment.sweep': {
         const out = await world.web.overdueSweep({ who: event.sweep.who })

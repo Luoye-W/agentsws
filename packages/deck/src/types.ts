@@ -90,6 +90,26 @@ export type HighlightType =
    */
   | 'handoff'
   /**
+   * WP77（59 §3）：**主题发布卡上的预览链接**。
+   *
+   * 12 §2 那句"预览链接就是审批材料"在卡面上的落点。没有它的发布卡根本提不出去
+   * （`@agentsws/site-core` 的 `publishReadiness`），所以这一格只要出现就一定有值。
+   */
+  | 'preview'
+  /**
+   * WP77（59 §3）：**上线检查单卡上还差几项**。
+   *
+   * 写成"3 项会让顾客买不成 / 2 项迟早出事"而不是一个总分：合成一个分数，
+   * 没人答得上"哪儿不对"（同社群活跃度那三个数不合成"健康分"的理由）。
+   */
+  | 'gaps'
+  /**
+   * WP77（59 §3）：这张卡对着的是哪一封通知邮件 / 哪一个 App。
+   *
+   * 建站那四张卡长得很像，这一格是第一眼分得开它们的东西（同社媒的 `channel`）。
+   */
+  | 'site_target'
+  /**
    * WP75（57 §3）：这条卡对着的是哪个平台（`Meta Ads` / `Google Ads` …）。
    *
    * 与 `channel` 分开：那一格说的是"发到哪个号"，这一格说的是"花哪个账户的钱"。
@@ -325,6 +345,14 @@ export type DataSourceId =
   | 'social_telegram'
   | 'social_whatsapp'
   /**
+   * WP77（59 §2 / §3）：**我们自己的建站库**（上一次巡检、邮件模板、已装 App）。
+   * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `social`）。
+   *
+   * 上线检查单上那几行是**我们自己跑出来的结论**：一个平台都没连的时候，
+   * 它会照实说"这几项没读到"，而不是显示一张"去连接"的空图（36 §3）。
+   */
+  | 'site'
+  /**
    * WP75（57 §1）：四个平台**各一个**数据源，理由与社媒那八个逐字相同——
    * 连上 Meta 不该把 Google 那一块点亮。
    *
@@ -556,6 +584,57 @@ export interface KolDeckData {
  * 每一行都带 `channel`：九条职责共用同一份投影，面板那一层按自己那条渠道筛
  * （`socialChannelOfRole(ctx.role_id)`），不是算九遍。
  */
+/**
+ * WP77（59 §3）：建站面板那五块。
+ *
+ * 五块全走 `site` 这个源（我们自己的库，永远算连上）：上线检查单上那几行是
+ * **我们自己跑出来的结论**，一个平台都没连的时候它会照实说"这几项没读到"，
+ * 而不是显示一张"去连接"的空图（36 §3）。
+ */
+export interface SiteDeckData {
+  /** 上线检查单：一格一行。`state` 原样端出去，缺项与"没读到"在界面上是两种颜色。 */
+  checklist: {
+    id: string
+    title: string
+    state: 'ok' | 'missing' | 'unknown'
+    severity: 'blocker' | 'warning'
+    detail: string
+    fix: string
+    /** `false` = 建站岗位补不了（支付 / 税，51 §3 N2）。那一行的"怎么补"写的是去后台。 */
+    fixable: boolean
+  }[]
+  /** 上一次巡检什么时候跑的。没跑过就没有——**不现算一份**。 */
+  checked_at?: string
+  /** 主题副本与预览。`role` 只有 `live` / `copy` 两种（临时主题不摆上面板）。 */
+  themes: {
+    theme_id: string
+    name: string
+    role: string
+    /** 12 §2「预览链接就是审批材料」：没有它的副本发布卡提不出去。 */
+    preview_url?: string
+    updated_at?: string
+  }[]
+  /** 已装 App。目录里没有的那些也在里面（`known: false`）——看不见比看得见危险。 */
+  apps: {
+    app_id: string
+    name: string
+    installed: boolean
+    known: boolean
+    /** 装上了但那张"待增加"的卡还没连（59 §2 那条接缝）。 */
+    connectable: boolean
+  }[]
+  /** 邮件模板状态。**正文一个字都不端上来**：它是外部文本，而且长（21 §1）。 */
+  email_templates: {
+    notification_type: string
+    name: string
+    enabled: boolean
+    /** 缺几个必需变量（不是缺哪几个——那在卡里面）。 */
+    missing_variables: number
+    /** 有一份还没批下来的草稿。 */
+    has_draft: boolean
+  }[]
+}
+
 /**
  * WP75（57 §3）：投放面板那九块要的投影。
  *
@@ -838,6 +917,8 @@ export interface QueryContext {
    * 后者说"去连接页把 Discord 连上"。
    */
   social?: SocialDeckData
+  /** WP77（59 §3）：建站面板那几块。 */
+  site?: SiteDeckData
   /**
    * WP75（57 §3）：投放那几张投影（宿主从 `AdsStore` 里读出来递进来）。
    *

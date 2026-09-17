@@ -1,0 +1,76 @@
+# WP77（59 §1 邮件模板）：**缺变量当场拦，启用那一下永远人审。**
+#
+# 这条题走两步，验的是两道不同的门：
+#
+# 1. **第一稿故意少写 `order.order_status_url`**。guardrail 当场 block——
+#    判据是 `@agentsws/core` 的 `EMAIL_TEMPLATE_REQUIRED_VARS`，与
+#    `@agentsws/site-core` 起草那一步读的是**同一张表**。在这里另写一份的后果是：
+#    起草时说过得去、提上去被拦，模型只会反复试同一个错。
+#    这一条是 **block 不是 review**：人在一屏卡面上看一段 Liquid 判不出少了哪个
+#    变量，不该让人替机器背这个锅（同 51 §2.1 邀评合规词表的理由）。
+# 2. **第二稿补齐变量、而且 `enabled: true`**，等级**故意报 L3**（等于有人把
+#    "改模板"开到了全自动）。guardrail 按 `after.enabled` 把它拉回人审——
+#    所以 `auto_approved: 0`。
+#
+# 为什么启用要人点而草稿不用：发错模板不是发给一个人，是发给**之后每一个**
+# 下单的客户，而且没有"撤回"。躺在后台的草稿改不坏任何东西。
+#
+# 分档不写在职责 yml 里（写了草稿也自动不了），也不进 `HARD_L1`（同上）——
+# 它在 guardrail 的 switch 上，照 `publish_post` 按 `after.published` 分档的老办法。
+id: site/email-template-enable-needs-approval
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  # 启用那一张 route_to: owner——只可能落在店主手上
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 第一稿：少了 `order.order_status_url`——客户收到的信里点不进订单状态页
+  - at: '+0m'
+    site.email_template:
+      who: p_wang
+      notification_type: order_confirmation
+      subject: 你的订单 {{ order.name }} 收到了
+      body: 你好 {{ customer.first_name }}，订单 {{ order.name }} 我们收到了，会尽快发出。
+      enabled: false
+  # 第二稿：补上那个变量，而且直接提"以后就发这一份"。等级故意报 L3
+  - at: '+30m'
+    site.email_template:
+      who: p_wang
+      notification_type: order_confirmation
+      subject: 你的订单 {{ order.name }} 收到了
+      body: >-
+        你好 {{ customer.first_name }}，订单 {{ order.name }} 我们收到了，会尽快发出。
+        随时点这里看进度：{{ order.order_status_url }}
+      enabled: true
+      level: L3
+  - at: '+6h'
+    clock.advance: {}
+expected:
+  staged_change_kinds: [email_template_edit]
+  # 第一稿被 block，连账本都没进；第二稿报了 L3 也自动批不了
+  auto_approved: 0
+  approval_kinds: { staged_change: 1 }
+  event_types:
+    - simulation.site_email_template_staged
+    - change.staged
+    - change.applied
+  metrics:
+    # 只有第二稿进了账本
+    staged_changes: 1
+    applied_changes: 1
+    # 缺变量那一条 block + 启用那一条 review
+    guardrail_hits: '>=2'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  第一稿被拦下来之后，人从事件里看得出"拦的是哪个变量"吗？启用那张卡说清了
+  "批了之后，之后每一个下单的客户收到的都是这一份"吗？

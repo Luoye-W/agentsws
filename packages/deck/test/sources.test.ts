@@ -37,6 +37,7 @@ describe('dataSourcesFromConnections', () => {
       'ads',
       'kol',
       'social',
+      'site',
       'pr',
     ])
     // 没连上就别给「查看完整报告」外链

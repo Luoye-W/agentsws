@@ -1,0 +1,162 @@
+# WP77（59 §1）：建站岗位四条里的**整站搭建**。
+#
+# 一句话定位：**把一家新店从"什么都没有"搭到"能开门"。**
+# 它管的是骨架——导航、页面结构、店铺基础信息、政策页挂载，以及那张上线检查单。
+#
+# 与网站运营（`dtc.*` 四条）的分界，54 的路由靠 description 那一行读：
+# **建站管结构，运营管内容。** 一个页面该不该存在、放在导航第几个、叫什么名字，
+# 是这条职责的事；那个页面里摆哪几件商品、写什么文案、挂什么促销，是运营的事。
+#
+# 与另外三条建站职责的分界：主题文件与分区归 `site.shopify-theme`（网页模板），
+# 通知邮件归 `site.shopify-email`，第三方 App 归 `site.shopify-apps`。
+#
+# **结账 / 支付 / 税这三样它一个写动作都没有**（51 §1 N0 / §3 N2）。检查单会把
+# 它们的缺项列出来，但那几行的"怎么补"写的是"去后台自己点"——说得出缺什么、
+# 补不了，这两件事在卡面上要分得开。
+id: site.shopify-build
+version: 1.0.0
+domain: dev
+name: { zh: Shopify 整站搭建, en: Shopify Store Build }
+description: 新店从零到能开门：导航与页面结构、店铺基础信息、政策页挂载、上线检查单。管的是**结构**——页面里放什么商品、写什么文案、做什么促销是网站运营岗位的事；结账 / 支付 / 税没有写动作，检查单只说得出缺什么。
+
+scopes:
+  # 店铺设置、导航、页面结构都算 store_config 与 content；商品只读（改价不是这个岗位的事）
+  - { domain: store_config, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: content, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+
+connectors:
+  - {
+      kind: shopify,
+      required: true,
+      grants: [read_themes, write_themes, read_content, write_content, read_products],
+      ownership: workspace,
+    }
+
+actions:
+  # 一批店铺基础设置（导航、页面结构、店铺信息、政策页挂载）。
+  # **一批**而不是一条：搭店时"把导航理一遍"就是十几个改动，拆成十几张卡没人看得完。
+  - id: stage_store_setup
+    target: store_config
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_setup_batches_per_day: 5 }, window: { max_count: 5, per: day } }
+    route_to: scope_manager
+  # 装一份主题。15 §2 hard_ceiling：配置成什么等级都要人点头——要么花钱，
+  # 要么把店里的主题列表换成另一个样子。
+  - id: stage_theme_install
+    target: store_config
+    kind: staged_change
+    mandate: { caps: {}, window: { max_count: 5, per: day } }
+    review_cannot_be_disabled: true
+    route_to: owner
+  # 跑一次上线检查单。只读巡检，什么都不改，所以可以到 L3；
+  # 它仍然建一条审批记录（14：所有改变都进同一条队列），只是不进人的待办。
+  - id: run_launch_checklist
+    target: store_config
+    kind: staged_change
+    mandate: { caps: {}, window: { max_count: 20, per: day } }
+    route_to: role_holder
+
+automation:
+  stage_store_setup:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_theme_install:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  run_launch_checklist:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [manual]
+
+grounding:
+  - {
+      name: store_settings,
+      intent_terms: [店铺设置, store settings, 导航, navigation, menu, 政策页, policy],
+      cue_terms: [改, change, 加, add, 配, configure, 上线, launch],
+      tool: shopify.shop.get,
+      prefetch: true,
+    }
+  - {
+      name: launch_checklist,
+      intent_terms: [上线, launch, 检查单, checklist, 开门, go live, 缺什么],
+      cue_terms: [能不能, can we, 还差, missing, 查一遍, check],
+      tool: site.checklist.run,
+      prefetch: false,
+    }
+
+skills: []
+
+home_blocks:
+  - {
+      id: site.launch_checklist,
+      placement: focus,
+      component: card_list,
+      query: 'changes.by_kind(site.shopify-build, launch_check)',
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: site.pending_setup,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(site.shopify-build),
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_theme_install',
+      mode: immediate,
+      recipients: [owner],
+      escalate_after_hours: 24,
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, scheduled_tasks]
+  fallback: owner
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: launch_check
+    label: { zh: "还差什么才能开门", en: "What is left before launch" }
+    prompt: "跑一遍上线检查单，把缺的按「顾客买不成」和「迟早出事」分开列"
+    kind: ask
+  - id: tidy_nav
+    label: { zh: "把导航理一遍", en: "Tidy up the navigation" }
+    prompt: "把主菜单和页脚菜单理一遍，政策页挂到页脚，改动先给我看一批"
+    kind: start_task
+  - id: policy_pages
+    label: { zh: "补齐政策页", en: "Fill in the policy pages" }
+    prompt: "退换货、隐私、服务条款、配送这四张政策页缺哪几张，缺的先起个草"
+    kind: start_task
+  - id: why_blocked
+    label: { zh: "为什么这项补不了", en: "Why can't this one be fixed" }
+    prompt: "检查单上支付和税那两项为什么标着要我自己去后台"
+    kind: ask
+
+task_examples:
+  - id: new_store
+    title: { zh: "新店从零搭起来", en: "Build a new store from scratch" }
+    description: "店刚开，后台一片空白。"
+    expected_output: "一份上线检查单（缺项按能不能开门分档）+ 一批导航与页面结构的改动；支付与税那两项只会告诉你缺什么，改要你自己去后台。"
+  - id: pre_launch
+    title: { zh: "上线前最后一遍", en: "One last check before going live" }
+    description: "这周就要开门了，想确认没漏。"
+    expected_output: "八项逐条的结论 + 每条缺项配一个具体改法；读不到的项会明说是「没读到」而不是「没有」。"

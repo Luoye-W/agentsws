@@ -5,6 +5,8 @@ import {
   evaluateGuardrail,
   executionSnapshot,
   KOL_OUTREACH_FORBIDDEN,
+  liquidVariables,
+  missingEmailTemplateVars,
   Provenance,
   resolveMandate,
   snapshotMatches,
@@ -1048,5 +1050,252 @@ describe('WP72 社媒运营那六条（15 §2 + 56 §2）', () => {
     )
     expect(r.verdict).toBe('block')
     expect(ruleOf(r, 'community_moderation_action_required')?.actual).toBe('shadowban')
+  })
+})
+
+describe('WP77 建站那六条（15 §2 + 59 §1）', () => {
+  const shop = { type: 'store_config', id: 'shop_1' } as const
+  const theme = { type: 'theme', id: 'thm_1' } as const
+  const tpl = { type: 'email_template', id: 'et_order_confirmation' } as const
+  const app = { type: 'shop_app', id: 'app_judgeme' } as const
+  const checklist = { type: 'launch_item', id: 'lc_1' } as const
+  const seen = (ref: { type: string; id: string }) => {
+    const p = new Provenance('run_wp77')
+    p.see([ref], { full: true })
+    return p
+  }
+  const f = (ref: { type: string; id: string }, over = {}) => ({
+    now,
+    changeSet: [],
+    windowCount: 0,
+    provenance: seen(ref),
+    ...over,
+  })
+  const ruleOf = (r: ReturnType<typeof evaluateGuardrail>, rule: string) =>
+    r.hits.find((h) => h.rule === rule)
+
+  it('设置批额内自动；碰到结账 / 支付 / 税的字段当场 block（51 §3 N2）', () => {
+    const ok = evaluateGuardrail(
+      {
+        kind: 'store_setup',
+        target: shop,
+        before: { main_menu: ['首页'] },
+        after: { main_menu: ['首页', '全部商品', '关于我们'] },
+      },
+      { caps: { max_setup_batches_per_day: 5 } },
+      f(shop),
+      'stage',
+    )
+    expect(ok.verdict).toBe('allow')
+
+    for (const key of ['checkout_settings', 'payment_provider', 'tax_rates']) {
+      const bad = evaluateGuardrail(
+        { kind: 'store_setup', target: shop, before: {}, after: { [key]: 'x' } },
+        { caps: { max_setup_batches_per_day: 5 } },
+        f(shop),
+        'stage',
+      )
+      expect(bad.verdict).toBe('block')
+      expect(ruleOf(bad, 'store_setup_no_checkout_payment_tax')?.actual).toBe(key)
+    }
+  })
+
+  it('设置批超额 = 转人审，不是拦', () => {
+    const r = evaluateGuardrail(
+      { kind: 'store_setup', target: shop, before: {}, after: { main_menu: ['首页'] } },
+      { caps: { max_setup_batches_per_day: 5 } },
+      f(shop, { windowCount: 5 }),
+      'stage',
+    )
+    expect(r.verdict).toBe('require_review')
+    expect(ruleOf(r, 'max_setup_batches_per_day')?.cap).toBe(5)
+  })
+
+  it('装主题永远 L1（hard_ceiling），而且得说得出装的是哪一份', () => {
+    const r = evaluateGuardrail(
+      { kind: 'theme_install', target: theme, before: {}, after: { theme_name: 'Dawn 15.0' } },
+      { caps: {} },
+      f(theme),
+      'stage',
+    )
+    expect(r.verdict).toBe('require_review')
+    expect(ruleOf(r, 'hard_ceiling')?.actual).toBe('theme_install')
+
+    const nameless = evaluateGuardrail(
+      { kind: 'theme_install', target: theme, before: {}, after: {} },
+      { caps: {} },
+      f(theme),
+      'stage',
+    )
+    expect(nameless.verdict).toBe('block')
+    expect(ruleOf(nameless, 'theme_install_target_required')).toBeDefined()
+  })
+
+  it('上线检查单 L3 自动；一项都没查的空检查单 = block', () => {
+    const r = evaluateGuardrail(
+      {
+        kind: 'launch_check',
+        target: checklist,
+        before: {},
+        after: { items: [{ id: 'domain', ok: true }], checked: 1 },
+      },
+      { caps: {} },
+      f(checklist),
+      'stage',
+    )
+    expect(r.verdict).toBe('allow')
+
+    const empty = evaluateGuardrail(
+      { kind: 'launch_check', target: checklist, before: {}, after: { items: [] } },
+      { caps: {} },
+      f(checklist),
+      'stage',
+    )
+    expect(empty.verdict).toBe('block')
+    expect(ruleOf(empty, 'launch_check_empty')).toBeDefined()
+  })
+
+  const body =
+    '你好 {{ customer.first_name }}，订单 {{ order.name }} 收到了：{{ order.order_status_url }}'
+
+  it('邮件模板：草稿 L2 自动、启用升 L1', () => {
+    const draft = evaluateGuardrail(
+      {
+        kind: 'email_template_edit',
+        target: tpl,
+        before: {},
+        after: { notification_type: 'order_confirmation', body, enabled: false },
+      },
+      { caps: { max_template_edits_per_day: 10 } },
+      f(tpl),
+      'stage',
+    )
+    expect(draft.verdict).toBe('allow')
+
+    const enabled = evaluateGuardrail(
+      {
+        kind: 'email_template_edit',
+        target: tpl,
+        before: {},
+        after: { notification_type: 'order_confirmation', body, enabled: true },
+      },
+      { caps: { max_template_edits_per_day: 10 } },
+      f(tpl),
+      'stage',
+    )
+    expect(enabled.verdict).toBe('require_review')
+    expect(ruleOf(enabled, 'email_template_enable_needs_review')?.cap).toBe('L1')
+  })
+
+  it('邮件模板缺必需变量 = block，不给"人点一下就发"的路', () => {
+    const r = evaluateGuardrail(
+      {
+        kind: 'email_template_edit',
+        target: tpl,
+        before: {},
+        after: {
+          notification_type: 'order_confirmation',
+          body: '你好 {{ customer.first_name }}，谢谢下单。',
+          enabled: false,
+        },
+      },
+      { caps: { max_template_edits_per_day: 10 } },
+      f(tpl),
+      'stage',
+    )
+    expect(r.verdict).toBe('block')
+    expect(ruleOf(r, 'email_template_missing_variable')?.actual).toBe(
+      'order.name,order.order_status_url',
+    )
+  })
+
+  it('表里没有的通知类型不判（新类型随时会加，判不了宁可放过）', () => {
+    const r = evaluateGuardrail(
+      {
+        kind: 'email_template_edit',
+        target: tpl,
+        before: {},
+        after: { notification_type: 'some_new_notification', body: '随便写', enabled: false },
+      },
+      { caps: {} },
+      f(tpl),
+      'stage',
+    )
+    expect(r.verdict).toBe('allow')
+  })
+
+  it('Liquid 变量按名字比，不是子串', () => {
+    expect(liquidVariables('{{ order.name }} {{- order.total | money -}}')).toEqual([
+      'order.name',
+      'order.total',
+    ])
+    expect(missingEmailTemplateVars('order_confirmation', '{{ order.name_was_here }}')).toEqual([
+      'order.name',
+      'order.order_status_url',
+    ])
+    expect(missingEmailTemplateVars('unknown_type', '')).toEqual([])
+  })
+
+  it('装 App 永远 L1、改配置 L2；两条共用一条额度', () => {
+    const install = evaluateGuardrail(
+      {
+        kind: 'app_install',
+        target: app,
+        before: {},
+        after: { app_id: 'judge-me', operation: 'install' },
+      },
+      { caps: { max_app_changes_per_day: 5 } },
+      f(app),
+      'stage',
+    )
+    expect(install.verdict).toBe('require_review')
+    expect(ruleOf(install, 'hard_ceiling')?.actual).toBe('app_install')
+
+    const config = evaluateGuardrail(
+      {
+        kind: 'app_config',
+        target: app,
+        before: { widget_position: 'bottom' },
+        after: { app_id: 'judge-me', widget_position: 'product_page' },
+      },
+      { caps: { max_app_changes_per_day: 5 } },
+      f(app),
+      'stage',
+    )
+    expect(config.verdict).toBe('allow')
+
+    const over = evaluateGuardrail(
+      {
+        kind: 'app_config',
+        target: app,
+        before: {},
+        after: { app_id: 'judge-me', widget_position: 'product_page' },
+      },
+      { caps: { max_app_changes_per_day: 5 } },
+      f(app, { windowCount: 5 }),
+      'stage',
+    )
+    expect(over.verdict).toBe('require_review')
+    expect(ruleOf(over, 'max_app_changes_per_day')?.cap).toBe(5)
+  })
+
+  it('说不清是装还是卸的卡 = block；没有 app_id 也是', () => {
+    const noOp = evaluateGuardrail(
+      { kind: 'app_install', target: app, before: {}, after: { app_id: 'judge-me' } },
+      { caps: {} },
+      f(app),
+      'stage',
+    )
+    expect(noOp.verdict).toBe('block')
+    expect(ruleOf(noOp, 'app_operation_required')?.cap).toBe('install|uninstall')
+
+    const noId = evaluateGuardrail(
+      { kind: 'app_config', target: app, before: {}, after: {} },
+      { caps: {} },
+      f(app),
+      'stage',
+    )
+    expect(noId.verdict).toBe('block')
+    expect(ruleOf(noId, 'app_id_required')).toBeDefined()
   })
 })

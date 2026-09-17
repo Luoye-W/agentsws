@@ -194,6 +194,38 @@ describe('agentsws demo（合成世界当后端）', () => {
     expect(view.sections[1]?.report_url).toBeUndefined()
   })
 
+  /**
+   * WP77（59 §3）：**建站岗位在 demo 里不是空的**——截图 `docs/assets/workstation/
+   * site-position.png` 里那一屏的可断言版本。
+   *
+   * 钉两件事：面板上一块店铺后台的积木都没有（四条职责的 scopes 里订单与分析
+   * 是只读的，19 §3 过滤下推），以及上线检查单上**真的有缺项**（`seedDemoSite`
+   * 造的是一家刚开起来、还差几项的店——全绿的清单演示不出"缺项高亮"）。
+   */
+  it('建站岗位的面板只有建站那一块，检查单上真的有缺项', async () => {
+    const build = demo.world.roles.assignments
+      .listByPerson(demo.world.roleHolder, { workspace_id: demo.world.workspace_id })
+      .find((a) => a.role_id === 'site.shopify-build')
+    expect(build).toBeDefined()
+    const view = await data<{ sections: { source: string; connected: boolean }[] }>(
+      await call(`/v1/positions/${build?.id}/view`, { assignment: build?.id ?? '' }),
+    )
+    // 建站库是我们自己的库，永远算连上；店铺后台一块都没有
+    expect(view.sections.map((s) => s.source)).toEqual(['site'])
+    expect(view.sections[0]?.connected).toBe(true)
+
+    const block = await data<{
+      status: string
+      payload: { rows: { item: string; state: string }[] }
+    }>(await call('/v1/blocks/site.checklist/data', { assignment: build?.id ?? '' }))
+    expect(block.status).toBe('ok')
+    // 八项全在，运费那一项是缺的——而且面板上写的是"买不成"，不是一个色块
+    expect(block.payload.rows).toHaveLength(8)
+    expect(block.payload.rows.find((r) => r.item === '运费')?.state).toBe('缺（买不成）')
+    // 支付与税是过了的：那两项建站岗位改不了，留成缺口只会刷屏同一句话
+    expect(block.payload.rows.find((r) => r.item === '收款方式')?.state).toBe('过了')
+  })
+
   it('积木数据过 29 §2 的管线；未注册的积木被拒', async () => {
     const block = await data<{ status: string; payload: { rows: unknown[] } }>(
       await call('/v1/blocks/shop.recent_orders/data?range=last_7d', {

@@ -46,12 +46,6 @@
       "path": "../../packages/kol-core"
     },
     {
-      "path": "../../packages/pr-core"
-    },
-    {
-      "path": "../../packages/social-core"
-    },
-    {
       "path": "../../packages/learning"
     },
     {
@@ -64,6 +58,9 @@
       "path": "../../packages/model-gateway"
     },
     {
+      "path": "../../packages/pr-core"
+    },
+    {
       "path": "../../packages/roles"
     },
     {
@@ -73,16 +70,22 @@
       "path": "../../packages/schedule"
     },
     {
-      "path": "../../packages/support-core"
+      "path": "../../packages/secretary"
     },
     {
-      "path": "../../packages/secretary"
+      "path": "../../packages/site-core"
     },
     {
       "path": "../../packages/skills"
     },
     {
+      "path": "../../packages/social-core"
+    },
+    {
       "path": "../../packages/stand-ins"
+    },
+    {
+      "path": "../../packages/support-core"
     },
     {
       "path": "../../packages/support-core"

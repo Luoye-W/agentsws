@@ -118,6 +118,25 @@ actions:
   shopify_admin.update_page: write
   shopify_admin.create_article: write
   shopify_admin.update_article: write
+  # WP77（59 §1）：建站那一侧的写口（读侧 get_menu / get_shop_policy / get_tax_settings
+  # 那几条上面早就有了）。支付与税这两条写出来是为了让人一眼看见"它们在表里、
+  # 但对照表里明说不给入口"，不是为了允许——默认本来就是 write。
+  shopify_admin.update_shop_settings: write
+  shopify_admin.create_menu: write
+  shopify_admin.update_menu: write
+  shopify_admin.update_shop_policy: write
+  shopify_admin.install_theme: write
+  shopify_admin.update_payment_settings: write
+  shopify_admin.update_tax_settings: write
+  shopify_admin.update_email_template: write
+  shopify_admin.install_app: write
+  shopify_admin.uninstall_app: write
+  shopify_admin.update_app_config: write
+  # WP77：已装 App 与通知模板的读侧
+  shopify_admin.list_installed_apps: read
+  shopify_admin.get_installed_app: read
+  shopify_admin.list_email_templates: read
+  shopify_admin.get_email_template: read
   # 副作用取决于传入的 GraphQL 文档 → 永远 write
   shopify_admin.execute_graphql: write
   shopify_admin.submit_bulk_query: write

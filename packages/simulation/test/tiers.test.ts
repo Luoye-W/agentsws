@@ -354,6 +354,10 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'secretary/ask-colleague',
       'secretary/meet-conflict',
       'secretary/route-to-desk',
+      // WP77（59 §1 / §4）：`site.builder` 改名成 `site.shopify-theme` 之后，发布仍然 L1。
+      // 它与 `ops/theme-publish-needs-approval` **并存**：一条钉"门在"，
+      // 一条钉"改名之后门还在"——哪天有人把别名表删了，坏的会是这一条。
+      'site/theme-publish-still-l1',
       // WP73（56 §6）：同渠道同一小时两条 → 撞车，而且那句话真的在卡面上
       'social/calendar-conflict-flagged',
       // WP63（51 §2.1 数据日报）：日报卡 L3 自动出、看完归档，一条变更都不提

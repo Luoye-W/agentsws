@@ -221,6 +221,18 @@ export const PENDING_LANES: readonly { lane: string; label: string; kinds: reado
   { lane: 'promotion', label: '促销与折扣', kinds: ['discount_code', 'promotion'] },
   // 51 §2.2：内容那条职责自己的车道（博客发布）
   { lane: 'publish_post', label: '待发布', kinds: ['publish_post'] },
+  /*
+   * WP77（59 §3）：建站那三条车道。
+   *
+   * 三条**不合成一条**："这张卡要不要我点"在三条上的答案不一样，合成一张表
+   * 之后人得自己一行行看 kind 才知道（59 §3 明写三条车道）。
+   *
+   * 车道走 `approvals` 这个源而不是 `site`：它读的是**审批项**，与建站库里那三张表
+   * 没有关系——一条主题发布卡在建站库里连一行都没有。
+   */
+  { lane: 'theme_publish', label: '待发布的主题', kinds: ['publish_theme', 'theme_install'] },
+  { lane: 'email_enable', label: '待启用的模板', kinds: ['email_template_edit'] },
+  { lane: 'app_install', label: '待装 / 待卸的 App', kinds: ['app_install', 'app_config'] },
 ]
 
 const kindOfItem = (i: ApprovalItem): string | undefined => {
@@ -304,6 +316,109 @@ function ofChannel<T extends { channel: string }>(rows: readonly T[], ctx: Query
 
 /** 时刻那一列拿不到就留空串，不写"未知"——空着本身就说明了问题。 */
 const when = (iso: string | undefined): string => iso ?? ''
+
+/* ── WP77（59 §3）：建站面板那五块 ────────────────────────────────────
+ *
+ * 五块全走 `site` 这个源（我们自己的库，永远算连上）。三条待审车道读的是
+ * **同一份待审列表**，各自按 kind 筛——把三条合成一张表的话，"这张卡要不要我点"
+ * 就得靠人自己一行行看 kind（59 §3 明写三条车道）。
+ *
+ * 检查单那一块的 `state` 原样出：**缺项与"没读到"是两种颜色**，合成一种
+ * 就等于把"这家店没有收款方式"与"这次没读到支付设置"说成同一句话。
+ */
+const SITE_QUERIES: QueryDef[] = [
+  {
+    name: 'site.launch_checklist',
+    source: 'site',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'item', label: '这一项' },
+        { key: 'state', label: '结论' },
+        { key: 'detail', label: '现在是什么样' },
+        { key: 'fix', label: '怎么补' },
+      ],
+      rows: (ctx.site?.checklist ?? []).map((r) => ({
+        item: r.title,
+        // 三种说法各不相同：过了 / 缺（分能不能开门）/ 这次没读到
+        state:
+          r.state === 'ok'
+            ? '过了'
+            : r.state === 'unknown'
+              ? '没读到'
+              : r.severity === 'blocker'
+                ? '缺（买不成）'
+                : '缺（迟早出事）',
+        detail: r.detail,
+        // `fix` 原样出：补不了的那两项（支付 / 税）在纯函数那一层写的就已经是
+        // "去后台自己点"，这里再按 `fixable` 改写一遍等于把同一句话说两个版本。
+        // `fixable` 留在 `SiteDeckData` 上给界面上那个「去补」按钮判要不要出。
+        fix: r.fix,
+      })),
+    }),
+  },
+  {
+    name: 'site.theme_copies',
+    source: 'site',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: '主题' },
+        { key: 'role', label: '在哪' },
+        { key: 'preview', label: '预览' },
+        { key: 'updated_at', label: '改于' },
+      ],
+      rows: (ctx.site?.themes ?? []).map((r) => ({
+        name: r.name,
+        role: r.role === 'live' ? '线上' : '副本',
+        // 没有预览链接的副本要看得出来：没有它发布卡根本提不出去（12 §2）
+        preview: r.preview_url ?? '',
+        updated_at: when(r.updated_at),
+      })),
+    }),
+  },
+  {
+    name: 'site.installed_apps',
+    source: 'site',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: 'App' },
+        { key: 'installed', label: '装了吗' },
+        { key: 'note', label: '说明' },
+      ],
+      rows: (ctx.site?.apps ?? []).map((r) => ({
+        name: r.name,
+        installed: r.installed ? '已装' : '没装',
+        // 三句话各不相同，别合成一句
+        note: !r.known
+          ? '不在我们的目录里——它要了什么权限得你自己去后台看'
+          : r.connectable
+            ? '装了，但我们这边还没连上它的 API'
+            : '',
+      })),
+    }),
+  },
+  {
+    name: 'site.email_templates',
+    source: 'site',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'name', label: '这封信' },
+        { key: 'enabled', label: '在用吗' },
+        { key: 'missing', label: '缺变量', align: 'right' as const, format: 'count' as const },
+        { key: 'draft', label: '有草稿' },
+      ],
+      rows: (ctx.site?.email_templates ?? []).map((r) => ({
+        name: r.name,
+        enabled: r.enabled ? '在用' : '出厂那一份',
+        missing: r.missing_variables,
+        draft: r.has_draft ? '有一份等你点' : '',
+      })),
+    }),
+  },
+]
 
 const SOCIAL_QUERIES: QueryDef[] = [
   {
@@ -1544,6 +1659,7 @@ const QUERY_LIST: QueryDef[] = [
     }),
   },
   ...SOCIAL_QUERIES,
+  ...SITE_QUERIES,
   ...ADS_QUERIES,
   // WP78（60 §3）：公关五块
   ...PR_QUERIES,

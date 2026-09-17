@@ -759,6 +759,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'pr.reddit',
     // WP75（57 §3）：投放挂一条 `ads.meta`，四条平台职责的面板骨架相同
     'ads.meta',
+    // WP77（59 §3）：建站岗位四条（模板默认全勾；只挂一条时另三块面板看不见）
+    'site.shopify-build',
+    'site.shopify-theme',
+    'site.shopify-email',
+    'site.shopify-apps',
   ]) {
     world.roles.assignments.create({
       person_id: world.roleHolder,

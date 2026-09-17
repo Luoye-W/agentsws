@@ -23,6 +23,9 @@ export const BUNDLED_POSITIONS_DIR = fileURLToPath(new URL('../positions/', impo
  * - `amz.buyer-messages` → `amz.support`（只改名，语义不变）
  * - `dtc.ops` → `dtc.store`（WP62 / 51 §2：独立站运营 → 网站运营岗位下的**店铺管理**；
  *   职责定义从 15 人 pack 自带搬成内置一份，动作与额度一个数没改）
+ * - `site.builder` → `site.shopify-theme`（WP77 / 59 §1：建站岗位从一条拆成四条，
+ *   原来那条"建站与主题"就是其中的**网页模板**。内容一个字没改——动作、额度、
+ *   上限、grounding 全照旧，只是名字说清了它在四条里是哪一条）
  *
  * 读得到不等于迁移了：已有分配的真迁移由宿主在启动时做一次，并记一条
  * `assignment.role_migrated`（`apps/server/src/roles-migrate.ts`）。
@@ -32,6 +35,8 @@ export const ROLE_ID_ALIASES: Readonly<Record<string, RoleId>> = {
   'dtc.aftersales': 'dtc.support',
   'amz.buyer-messages': 'amz.support',
   'dtc.ops': 'dtc.store',
+  // WP77（59 §1）
+  'site.builder': 'site.shopify-theme',
 }
 
 /** 旧 id → 新 id；不是旧 id 就原样返回。 */

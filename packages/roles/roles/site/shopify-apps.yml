@@ -1,0 +1,151 @@
+# WP77（59 §1）：建站岗位四条里的**插件**。
+#
+# 一句话定位：**店里装着哪些第三方 App，它们配成什么样。**
+#
+# 为什么装 / 卸永远人审：装一个 App = 把店里的订单与客户数据交给另一家公司，
+# 而且多数按月收钱。采纳率证明得了"这个 Agent 挑 App 挑得准"，证明不了
+# "这笔钱该花、这份数据该给"——与红人那条建合作永远人审是同一条理由。
+# 卸载同理：一个正在往前台注脚本的 App 被卸掉，店面会当场少一块。
+#
+# 改配置是 L2：调一个已经在店里跑的 App 的参数，做错了改回来就是了。
+#
+# 与另外三条的分界：App 自带的那个前台小组件摆在哪一屏、占多宽，是
+# `site.shopify-theme`（网页模板）的事；这条职责管的是"装不装、配成什么样"。
+#
+# 与连接目录的分界（59 §2 那句"与待增加卡的对应"）：**装上它** 与 **我们连不连
+# 得上它的 API** 是两件事。一家店可以装了 Judge.me 却没把 API key 给我们，
+# 反过来也成立。面板上那条"去连接"就是这两件事的接缝。
+#
+# 自家 Shopify Extension 的开发**不走这条**——那是代码，走 `site.shopify-theme`
+# 的 `stage_dev_task` 与主题那条同一条路（59 §1 表尾那一句）。
+id: site.shopify-apps
+version: 1.0.0
+domain: dev
+name: { zh: Shopify 插件, en: Shopify Apps }
+description: 店里第三方 App 的装 / 卸与配置，以及"装了却还没接上 API"的那几条提醒。管的是**装不装、配成什么样**——App 的前台小组件摆在哪一屏是网页模板那条职责的事，自家 Extension 的代码走主题那条路。装 / 卸永远人审。
+
+scopes:
+  - { domain: store_config, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: content, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, stage], range: own, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+
+connectors:
+  - {
+      kind: shopify,
+      required: true,
+      grants: [read_themes, read_content, read_products],
+      ownership: workspace,
+    }
+
+actions:
+  # 装 / 卸一个 App。15 §2 hard_ceiling：配置成什么等级都要人点头。
+  - id: stage_app_install
+    target: store_config
+    kind: staged_change
+    mandate: { caps: { max_app_changes_per_day: 5 }, window: { max_count: 5, per: day } }
+    review_cannot_be_disabled: true
+    route_to: owner
+  # 改一个已装 App 的配置。L2——做错了改回来就是了；额度与装 / 卸共用一条。
+  - id: stage_app_config
+    target: store_config
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_app_changes_per_day: 5 }, window: { max_count: 5, per: day } }
+    route_to: scope_manager
+
+automation:
+  stage_app_install:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_app_config:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+
+grounding:
+  - {
+      name: installed_apps,
+      intent_terms: [插件, app, 应用, 装, install, 卸载, uninstall],
+      cue_terms: [有哪些, which, 装了吗, installed, 要不要, should we],
+      tool: site.apps.list,
+      prefetch: true,
+    }
+  - {
+      name: app_catalog,
+      intent_terms: [评价, review app, 邮件营销, klaviyo, 物流, tracking, seo],
+      cue_terms: [推荐, recommend, 选哪个, which one, 多少钱, pricing],
+      tool: site.apps.catalog,
+      prefetch: false,
+    }
+
+skills: []
+
+home_blocks:
+  - {
+      id: site.installed_apps,
+      placement: focus,
+      component: card_list,
+      query: 'changes.by_kind(site.shopify-apps, app_install)',
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: site.pending_apps,
+      placement: queue,
+      component: staged_change_list,
+      query: changes.pending(site.shopify-apps),
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+
+notifications:
+  - {
+      event: 'approval.created:stage_app_install',
+      mode: immediate,
+      recipients: [owner],
+      escalate_after_hours: 24,
+    }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, scheduled_tasks]
+  fallback: owner
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: list_apps
+    label: { zh: "店里装了哪些插件", en: "What is installed" }
+    prompt: "把店里已经装的 App 列一遍，不在目录里的那些也列出来并说清风险"
+    kind: ask
+  - id: need_reviews
+    label: { zh: "想收商品评价", en: "We want product reviews" }
+    prompt: "想开始收商品评价，有哪几个选择、各要花多少钱，推荐一个并说清理由"
+    kind: ask
+  - id: connect_pending
+    label: { zh: "哪些装了还没接上", en: "Installed but not connected" }
+    prompt: "哪几个 App 装上了但我们这边还没连上它的 API，连上之后工作台会多出什么"
+    kind: ask
+  - id: tune_widget
+    label: { zh: "调一下插件设置", en: "Tune an app's settings" }
+    prompt: "把评价插件的小组件挪到商品页详情下面，改动先给我看"
+    kind: start_task
+
+task_examples:
+  - id: pick_review_app
+    title: { zh: "挑一个评价插件", en: "Pick a reviews app" }
+    description: "想让商品页上有买家评价。"
+    expected_output: "两三个候选的对比（收不收钱、往前台注什么）+ 一张装它的卡；装这一下永远要你点。"
+  - id: audit_apps
+    title: { zh: "清一遍插件", en: "Audit the installed apps" }
+    description: "后台插件越装越多，不知道哪些还在用。"
+    expected_output: "一张已装清单（含我们目录里没有的那几个）+ 哪几个装了却没连上 API；卸载同样要你点。"

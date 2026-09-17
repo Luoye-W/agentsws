@@ -197,6 +197,12 @@ const OBJECT_DOMAIN = {
   // `ad` 与 `ad_set` 一样归 `ad_account`：广告树上从账户到一条广告是同一把闸——
   // 一个岗位读得到这个账户，就读得到它下面的 campaign / 广告组 / 广告。
   ad: 'ad_account',
+  // WP77（59 §1）：建站那一侧新写进契约的三类。
+  // 通知邮件模板是一份 Liquid 正文 —— 与主题、页面、文章同一个域（content）；
+  // 已装 App 与上线检查单上的一格说的都是"这家店现在是什么样"，归 store_config。
+  email_template: 'content',
+  shop_app: 'store_config',
+  launch_item: 'store_config',
 }
 const domainOf = (id) => {
   const d = OBJECT_DOMAIN[id] ?? (DATA_DOMAINS.has(id) ? id : undefined)

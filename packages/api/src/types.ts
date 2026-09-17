@@ -73,6 +73,7 @@ import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
+import type { SitePort } from './routes/site.js'
 import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
@@ -679,6 +680,11 @@ export interface GatewayDeps {
    * 只是没有任何增删改的入口。
    */
   social?: SocialPort
+  /**
+   * WP77（59 §1 / §2）：建站数据面。没装配时 `/v1/site/*` 回 not_implemented——
+   * 建站那四条职责的检查单、邮件模板与 App 清单要它才动得了。
+   */
+  site?: SitePort
   /**
    * WP75（57 §5）：这个品牌的广告库那一面（`/v1/ads/*`）。
    *

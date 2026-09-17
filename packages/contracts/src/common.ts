@@ -112,6 +112,19 @@ export type ObjectType =
   | 'community_member'
   | 'community_thread'
   /**
+   * WP77（59 §1）：建站那一侧的三类（`theme` / `store_config` / `page` 上面早就有）。
+   *
+   * 为什么不把它们塞进已有的名字里：`email_template` 是**通知邮件模板**（订单 / 发货 /
+   * 退款那几封），真源在 Shopify 的通知设置里，而 `email_campaign` 是营销那一侧的一次群发，
+   * 两者的真源、可读范围、能对它做什么都不一样；`shop_app` 是**装在店上的第三方应用**，
+   * 它既不是 `package`（我们自己的应用包）也不是 `connection`（我们连出去的那条线）；
+   * `launch_item` 是上线检查单上的一格，它的真源是**一次巡检的结论**而不是店里的某条记录，
+   * 所以它得有自己的类型才登记得上（47 J1）。**只加不删**。
+   */
+  | 'email_template'
+  | 'shop_app'
+  | 'launch_item'
+  /**
    * WP75（57 §1）：投放那一侧的三类（`campaign` 与 `ad_set` 上面早就有）。
    *
    * 为什么不是一个「广告」对象：`ad_account` 是**一个独立的计费主体**（总闸按它

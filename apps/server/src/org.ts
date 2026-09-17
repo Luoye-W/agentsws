@@ -327,6 +327,22 @@ const SEED_POSITIONS: readonly {
       ['common.member', false],
     ],
   },
+  // WP77（59 §1 / 54）：**建站**岗位 = 四条职责（Luoye 09-17 手写那一行）。
+  // 顺序 = 一家新店真实的先后：先骨架、再壳、再那几封自动发的信、最后插件。
+  // **默认全勾**——一个人开店的时候这四件事本来就是他一个人做；分工是后来的事，
+  // 界面上去勾比想起来该加一条容易（与网站运营那条同一条理由）。
+  {
+    id: 'site',
+    zh: '建站',
+    en: 'Site Building',
+    roles: [
+      ['site.shopify-build', true],
+      ['site.shopify-theme', true],
+      ['site.shopify-email', true],
+      ['site.shopify-apps', true],
+      ['common.member', false],
+    ],
+  },
   { id: 'member', zh: '普通成员', en: 'Member', roles: [['common.member', true]] },
 ]
 

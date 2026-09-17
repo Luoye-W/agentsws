@@ -7,10 +7,10 @@
   "include": ["src"],
   "references": [
     {
-      "path": "../catalog"
+      "path": "../ads-core"
     },
     {
-      "path": "../ads-core"
+      "path": "../catalog"
     },
     {
       "path": "../contracts"
@@ -40,13 +40,16 @@
       "path": "../kol-public"
     },
     {
-      "path": "../metering"
-    },
-    {
       "path": "../learning"
     },
     {
+      "path": "../metering"
+    },
+    {
       "path": "../model-gateway"
+    },
+    {
+      "path": "../pr-core"
     },
     {
       "path": "../roles"
@@ -61,7 +64,13 @@
       "path": "../secretary"
     },
     {
+      "path": "../site-core"
+    },
+    {
       "path": "../skills"
+    },
+    {
+      "path": "../social-core"
     },
     {
       "path": "../stand-ins"
@@ -74,12 +83,6 @@
     },
     {
       "path": "../work"
-    },
-    {
-      "path": "../pr-core"
-    },
-    {
-      "path": "../social-core"
     }
   ]
 }

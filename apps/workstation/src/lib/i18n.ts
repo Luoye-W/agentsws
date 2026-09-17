@@ -659,6 +659,11 @@ const zh: Table = {
   'highlight.scheduled': '发布时间',
   'highlight.member': '申请人',
   'highlight.handoff': '转给',
+  // WP77（59 §3）：建站那四张卡上的芯片。
+  // 预览那一格就是审批材料本身（12 §2）；缺项写成两档而不是一个总分。
+  'highlight.preview': '预览',
+  'highlight.gaps': '还差',
+  'highlight.site_target': '对着',
   // WP75（57 §3）：投放那五张卡上的芯片。
   // 平台那一格是四条职责的卡唯一分得开的东西；**总闸剩余每一张卡上都有**——
   // 人点头之前要看得见今天还能花多少（04 §5）；止损那一格放的是判据不是结论。
@@ -2450,6 +2455,10 @@ const en: Table = {
   'highlight.scheduled': 'Goes out',
   'highlight.member': 'Applicant',
   'highlight.handoff': 'Hand off to',
+  // WP77 (59 §3): the four site-building cards.
+  'highlight.preview': 'Preview',
+  'highlight.gaps': 'Gaps',
+  'highlight.site_target': 'For',
   'highlight.platform': 'Platform',
   'highlight.spend_gate': 'Daily cap',
   'highlight.stop_loss': 'Stop-loss check',

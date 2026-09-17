@@ -1,0 +1,24 @@
+# WP77（59 §1 / 27 §1 / 54）：**建站**岗位 = 四条职责。
+#
+# 拆法是 Luoye 09-17 手写的那一行：Shopify 整站搭建 / Shopify 网页模板 /
+# Shopify 邮件模板 / Shopify 插件。四条的顺序 = 一家新店真实的先后：
+# 先有骨架，再有壳，再有那几封自动发的信，最后按需要装插件。
+#
+# **默认全勾**（与网站运营那条同一条理由）：一个人开店的时候这四件事本来就是
+# 他一个人做。分工是后来的事——在界面上去掉一个勾，比想起来"还该给他加一条"容易。
+#
+# 与网站运营岗位的分界（51）：**建站管结构 / 模板 / 代码，运营管内容 / 商品 /
+# 促销 / 数据。** 一个页面该不该存在是建站的事，那个页面里摆哪几件商品是运营的事；
+# 订单确认信长什么样是建站的事，这周给谁发一次促销是运营的事。
+# 54 的路由靠每条职责 description 那一行读这条线，所以那几行不是文案是接口。
+#
+# 四条的第二条（`site.shopify-theme`）就是 WP44 的 `site.builder` 改了个名字，
+# 内容一个字没动；旧 id 仍然读得进来（`ROLE_ID_ALIASES`）。
+id: site
+version: 1.0.0
+name: { zh: 建站, en: Site Building }
+roles:
+  - { role: site.shopify-build, default: true }
+  - { role: site.shopify-theme, default: true }
+  - { role: site.shopify-email, default: true }
+  - { role: site.shopify-apps, default: true }

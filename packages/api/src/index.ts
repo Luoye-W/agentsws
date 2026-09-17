@@ -378,6 +378,18 @@ export type {
 export { PROFILE_FIELD_NAMES, secretaryRoutes } from './routes/secretary.js'
 export type { SecretsPort, SecretsRotationView } from './routes/secrets.js'
 export { secretRoutes } from './routes/secrets.js'
+// WP77（59 §1 / §2）：建站那一侧最小一组
+export type {
+  SiteAppInstallInput,
+  SiteAppRow,
+  SiteChecklistView,
+  SiteEmailTemplateInput,
+  SiteEmailTemplateView,
+  SitePort,
+  SiteStagedView,
+} from './routes/site.js'
+export { siteRoutes } from './routes/site.js'
+export type { SiteActor } from './routes/site-types.js'
 export type {
   SocialAccountInput,
   SocialAccountRow,
