@@ -319,6 +319,24 @@ function ofDuty<T extends { duty: string }>(rows: readonly T[], ctx: QueryContex
   return duty === undefined ? [] : rows.filter((r) => r.duty === duty)
 }
 
+/** 只取到天（`2026-09-21`）。设计的期限从来不是"下午三点"，时分秒只是噪音。 */
+const day = (iso: string | undefined): string => (iso ?? '').slice(0, 10)
+
+/**
+ * 需求单的状态 → 人话。
+ *
+ * 英文状态名在面板上没有意义（`generating` 对用户是一个谜），而翻译这件事
+ * 只该做一次——所以这张表在这里，不在渲染层。
+ */
+const DESIGN_STATUS_ZH: Record<string, string> = {
+  queued: '排着队',
+  briefed: '出了 brief',
+  generating: '正在出图',
+  awaiting_pick: '等你挑',
+  delivered: '交付了',
+  cancelled: '取消了',
+}
+
 const DESIGN_QUERIES: QueryDef[] = [
   {
     name: 'design.request_queue',
@@ -336,8 +354,9 @@ const DESIGN_QUERIES: QueryDef[] = [
         title: r.title,
         // 原样截断，不改写（外部文本，21 §1）
         need: r.excerpt,
-        // 过期的那一行把话说出来：**这件事没做成**，不是"逾期"，也不靠颜色表达
-        due_at: r.overdue ? `${when(r.due_at)}（已经过了）` : when(r.due_at),
+        // 过期的那一行把话说出来：**这件事没做成**，不是"逾期"，也不靠颜色表达。
+        // 只取到天：设计的期限从来不是"下午三点"，写出时分秒只是噪音。
+        due_at: r.overdue ? `${day(r.due_at)}（已经过了）` : day(r.due_at),
       })),
     }),
   },
@@ -355,7 +374,7 @@ const DESIGN_QUERIES: QueryDef[] = [
       rows: ofDuty(ctx.design?.in_progress ?? [], ctx).map((r) => ({
         title: r.title,
         from: r.from,
-        status: r.status,
+        status: DESIGN_STATUS_ZH[r.status] ?? r.status,
         // 「计划几张 / 出了几张」写成一格给人看，但两个数在投影里是分开的——
         // 合成一个百分比就再也看不出"计划了六张、一张没出"与"计划三张、出了三张"
         progress: `${r.generated} / ${r.planned}`,
@@ -390,8 +409,9 @@ const DESIGN_QUERIES: QueryDef[] = [
     run: (ctx) => ({
       columns: [
         { key: 'use', label: '用途' },
-        { key: 'final', label: '定稿' },
-        { key: 'count', label: '一共' },
+        // 张数不是钱：不说 `count` 的列按金额渲染，`4` 会变成 `US$4.00`（WP63 那条）
+        { key: 'final', label: '定稿', format: 'count', align: 'right' },
+        { key: 'count', label: '一共', format: 'count', align: 'right' },
       ],
       // 素材库按用途分组；没打标的归「没打标」，**不藏起来**——
       // 藏起来的结果是三个月后有人把同一张图重做一遍
@@ -411,7 +431,7 @@ const DESIGN_QUERIES: QueryDef[] = [
       return {
         columns: [
           { key: 'metric', label: '这一周' },
-          { key: 'value', label: '几张' },
+          { key: 'value', label: '几张', format: 'count', align: 'right' },
         ],
         rows:
           week === undefined

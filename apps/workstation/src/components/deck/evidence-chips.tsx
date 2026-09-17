@@ -99,6 +99,14 @@ const TONE: Record<DeckHighlight['type'], string> = {
   member: 'border-border text-muted-foreground',
   // 转客服：这条不归我答。给它一个能一眼扫到的边，免得压在队列里没人接
   handoff: 'border-chart-4/50 text-foreground',
+  // WP76（58 §3）：规格与张数是中性事实。
+  spec: 'border-border text-muted-foreground',
+  variants: 'border-border text-muted-foreground',
+  // **谁点的头**给强调色：04 §6 那条"视觉决定永远是人"在界面上唯一看得见的
+  // 地方就是它——批的人要一眼看出，这一张是有人挑过的，不是机器自己选的。
+  picked_by: 'border-chart-1/50 text-foreground',
+  // 没有图片模型：这不是错误，是一句要被读完的人话。给它一个能一眼扫到的边。
+  no_image_model: 'border-chart-4/50 text-foreground',
 }
 
 export function Highlights({

@@ -32,6 +32,7 @@ describe('58 §5 设计库（三类对象）', () => {
   it('按来源岗位筛得出来（面板第一块按它分组）', () => {
     const s = store()
     expect(s.requests({ from_role_id: 'social.meta' }).map((r) => r.id)).toEqual(['dreq_demo_2'])
+    expect(s.requests({ from_role_id: 'dtc.content' }).map((r) => r.id)).toEqual(['dreq_demo_4'])
     expect(s.requests({ from_role_id: 'dtc.support' })).toEqual([])
   })
 
@@ -64,8 +65,13 @@ describe('58 §3 面板五块的投影', () => {
     expect(data().request_queue.map((r) => r.request_id)).toEqual(['dreq_demo_1'])
   })
 
-  it('每一行都说得出是谁下的单', () => {
+  it('每一行都说得出是谁下的单；给了职责名就不摆裸 id（36 §2）', () => {
     expect(data().request_queue[0]?.from).toBe('dtc.store')
+    const named = designDeckData(store(), {
+      now: NOW,
+      roleName: (id) => (id === 'dtc.store' ? '店铺管理' : undefined),
+    })
+    expect(named.request_queue[0]?.from).toBe('店铺管理')
   })
 
   it('进行中那一块把「计划几张 / 出了几张」分开', () => {
@@ -73,29 +79,41 @@ describe('58 §3 面板五块的投影', () => {
     expect(row?.brief_id).toBe('dbrief_demo_2')
     expect(row?.planned).toBe(2)
     expect(row?.generated).toBe(0)
+    // 第四张单出完了三张，还在等人挑
+    const dtc = data().in_progress.find((r) => r.request_id === 'dreq_demo_4')
+    expect(dtc?.planned).toBe(3)
+    expect(dtc?.generated).toBe(3)
   })
 
   it('**待挑与待定稿分得开**：球在谁那儿要看得出来', () => {
     const rows = data().awaiting_pick
-    expect(rows.length).toBe(3)
+    expect(rows.length).toBe(6)
     expect(rows.every((r) => r.stage === 'waiting_pick')).toBe(true)
     // 规格显示中文名，不是 id
     expect(rows[0]?.spec).toBe('Amazon 主图')
+    expect(rows.map((r) => r.duty).sort()).toEqual([
+      'amazon',
+      'amazon',
+      'amazon',
+      'dtc',
+      'dtc',
+      'dtc',
+    ])
   })
 
   it('**本周产出数的是定稿**，不是出图张数', () => {
     const week = data().weekly
-    // demo 里这一周出了四张、定下来一张——产出是 1 不是 4。
+    // demo 里这一周出了七张、定下来一张——产出是 1 不是 7。
     // 把出图张数当产出的结果是这个数永远好看，而只有一张图真的能用。
-    expect(week.variants).toBe(4)
+    expect(week.variants).toBe(7)
     expect(week.final).toBe(1)
-    expect(week.by_use).toEqual([{ use: 'story', count: 1 }])
+    expect(week.by_use).toEqual([{ use: 'hero', count: 1 }])
   })
 
   it('素材库只放定稿的（判据是「入库了**而且**人点过」）', () => {
     const s = store()
     // 上周那张定过稿的不在本周窗口里，但它在素材库里
-    expect(designDeckData(s, { now: NOW }).library.map((g) => g.use)).toEqual(['story'])
+    expect(designDeckData(s, { now: NOW }).library.map((g) => g.use)).toEqual(['hero'])
   })
 
   it('过期是单独一格，不靠颜色表达', () => {

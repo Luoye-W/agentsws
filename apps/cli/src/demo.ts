@@ -745,7 +745,19 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 近 30 天表现 / 待回评论 vs 待审入群 / 待处理 / 群发队列 / 活跃度），
   // 只挂一条就只看得见一半，56 §2 那张表在 demo 里就演示不完整。
   // 社媒库那几行由 `seedDemoSocial` 放（`apps/server/src/social.ts`）。
-  for (const role of ['dtc.store', 'dtc.content', 'kol.youtube', 'social.meta', 'social.discord']) {
+  // WP76（58 §3）：**设计**岗位挂一条（`design.dtc`）。理由与上面几条同一条，
+  // 但只挂一条就够：五条设计职责的面板骨架**完全相同**（58 §1 第一句），
+  // 不同的只有规格表与需求来源，而那两样在行里、不在块上。
+  // 设计库那几行由 `seedDemoDesign` 放（`apps/server/src/design.ts`）；
+  // 图片模型是 stub（占位色块），所以待挑那一块在 demo 里真的有图可挑。
+  for (const role of [
+    'dtc.store',
+    'dtc.content',
+    'kol.youtube',
+    'social.meta',
+    'social.discord',
+    'design.dtc',
+  ]) {
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,

@@ -74,6 +74,7 @@ import {
   type FetchLike,
   type ModelGatewayApi,
   type PageFetch,
+  stubImageProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
 import {
@@ -816,6 +817,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const makeGateway = (): ModelGatewayApi =>
     createModelGateway({
       providers: [stubProvider({ seed: 7 })],
+      /*
+       * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
+       *
+       * 生产上不挂是故意的：不挂的时候网关自己兜一条
+       * `unavailableImageProvider`，它 `available: false` 并带一句人话
+       * （"DeepSeek 不出图，去设置页填一个 OpenAI 兼容口的 key"）——
+       * 那正是 58 §1 要的"没有就明说"。挂一个出色块的替身上去，
+       * 用户会以为自己有图片模型，然后拿一张纯色块去上架。
+       *
+       * demo 里反过来：不挂的话"待挑"那一块永远是空的，58 §3 的变体挑选卡
+       * 在演示里一次都出不来。
+       */
+      ...(options.mount === undefined ? {} : { images: stubImageProvider({ seed: 7 }) }),
       policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
       clock,
       env,
@@ -1179,7 +1193,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       social: () => socialDeckData(social, { now: clock.now() }),
       // WP76（58 §3）：设计那五块同理——需求单、brief、待挑、素材库、本周产出
       // 都在这台机器上，出图走模型网关的图片槽（那不是一条连接）。
-      design: () => designDeckData(design, { now: clock.now() }),
+      design: () =>
+        designDeckData(design, {
+          now: clock.now(),
+          // 36 §2：面板上不摆裸 id——"谁下的"那一格显示职责的中文名
+          roleName: (id) => roles.roles.get(id)?.name.zh,
+        }),
       // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
       sources: () => withOwnSources(baseWorkData.sources()),
     }
@@ -1338,6 +1357,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       random,
       images: () => ownGateway.images,
       ...(blobs === undefined ? {} : { blobs }),
+      roleName: (id) => roles.roles.get(id)?.name.zh,
       brandCards: () => {
         const sections = skills.registry.listSections(BRAND_SYSTEM_SKILL_NAME)
         if (sections.length === 0) return []

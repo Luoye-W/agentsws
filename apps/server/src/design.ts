@@ -249,9 +249,16 @@ function excerpt(text: string, max = 60): string {
   return one.length <= max ? one : `${one.slice(0, max)}…`
 }
 
-/** 来源职责 → 给人看的那一格（"网站运营 · 店铺管理"这种）。 */
-function sourceLabel(role_id: string): string {
-  return role_id === 'human' ? '人手动开的' : role_id
+/**
+ * 来源职责 → 给人看的那一格。
+ *
+ * `roleName` 给了就用职责的中文名（"店铺管理"），不给才退回 id。
+ * 面板上摆一个 `dtc.store` 不算错，但它要求读的人自己翻译一遍
+ * ——而那份翻译在职责定义里本来就有（36 §2：卡面上不出裸 id）。
+ */
+function sourceLabel(role_id: string, roleName?: (id: string) => string | undefined): string {
+  if (role_id === 'human') return '人手动开的'
+  return roleName?.(role_id) ?? role_id
 }
 
 /**
@@ -271,7 +278,7 @@ function sourceLabel(role_id: string): string {
  */
 export function designDeckData(
   store: Pick<DesignStore, 'requests' | 'briefs' | 'assets'>,
-  options: { now?: string } = {},
+  options: { now?: string; roleName?: (role_id: string) => string | undefined } = {},
 ): DesignDeckData {
   const nowMs = options.now === undefined ? Number.NaN : Date.parse(options.now)
   const at = (iso: string | undefined): number => (iso === undefined ? Number.NaN : Date.parse(iso))
@@ -289,7 +296,7 @@ export function designDeckData(
     .map((r) => ({
       request_id: r.id,
       duty: r.duty as string,
-      from: sourceLabel(r.from_role_id),
+      from: sourceLabel(r.from_role_id, options.roleName),
       title: r.title,
       excerpt: excerpt(r.need),
       ...(r.due_at === undefined ? {} : { due_at: r.due_at }),
@@ -310,7 +317,7 @@ export function designDeckData(
       return {
         request_id: r.id,
         duty: r.duty as string,
-        from: sourceLabel(r.from_role_id),
+        from: sourceLabel(r.from_role_id, options.roleName),
         title: r.title,
         status: r.status as string,
         ...(brief === undefined ? {} : { brief_id: brief.id }),
@@ -395,6 +402,8 @@ export interface DesignServiceOptions {
    * `design-core` 的 `brand.ts` 会出「先设品牌系统」卡。
    */
   brandCards?(): readonly BrandSystemCard[]
+  /** 职责 id → 中文名（卡面与清单上「谁下的」那一格）。不给就显示 id。 */
+  roleName?(role_id: string): string | undefined
 }
 
 export interface DesignServiceAssembly {
@@ -532,7 +541,7 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
   const requestRow = (r: DesignRequest): DesignRequestRow => ({
     ...r,
     duty_name: designDutySpec(r.duty)?.zh ?? r.duty,
-    from_label: sourceLabel(r.from_role_id),
+    from_label: sourceLabel(r.from_role_id, options.roleName),
   })
 
   const assetRow = (a: DesignAsset): DesignAssetRow => ({
@@ -1062,18 +1071,99 @@ export function seedDemoDesign(store: DesignStore, now: string): void {
     })
   }
 
-  // 上周已经定过稿的一张（"本周产出"与素材库那两块要有东西可看）
+  /*
+   * 第四张单：**独立站设计**那一条，停在"出完图在等人挑"。
+   *
+   * 为什么要有它：demo 登录的人挂的是 `design.dtc`，而面板五块各按自己那条
+   * 职责筛（`designDeckData` 出一份、deck 那层按 duty 切）。少了这一张，
+   * 独立站设计的面板上只有队列里一行，"进行中 / 待挑 / 素材库 / 本周产出"
+   * 四块全是空的——那张截图证明不了 58 §3 那五块分得开。
+   */
+  store.saveRequest({
+    id: 'dreq_demo_4',
+    workspace_id: ws,
+    duty: 'dtc',
+    from_role_id: 'dtc.content',
+    title: '秋季活动落地页 Banner',
+    need: '目标：把"买二免一"说清楚。受众：老客。图上写“买二免一”。',
+    spec_ids: ['web.banner'],
+    status: 'generating',
+    created_at: iso(-2 * DAY),
+    updated_at: iso(-1 * DAY),
+  })
+
+  store.saveBrief({
+    id: 'dbrief_demo_4',
+    workspace_id: ws,
+    request_id: 'dreq_demo_4',
+    duty: 'dtc',
+    goal: '把"买二免一"说清楚',
+    audience: '老客',
+    key_message: '买二免一',
+    copy: ['买二免一'],
+    spec_ids: ['web.banner'],
+    must_avoid: ['竞品 logo', '真人脸'],
+    brand_system: 'brand-system',
+    variant_plan: [
+      {
+        id: 'web.banner#1',
+        spec_id: 'web.banner',
+        angle_zh: '产品本身：干净背景、正面视角、细节清楚',
+        prompt: '产品本身：干净背景、正面视角、细节清楚。1440×480px；图上文字不超过 30 字',
+      },
+      {
+        id: 'web.banner#2',
+        spec_id: 'web.banner',
+        angle_zh: '用起来什么样：真实场景里有人在用',
+        prompt: '用起来什么样：真实场景里有人在用。1440×480px；图上文字不超过 30 字',
+      },
+      {
+        id: 'web.banner#3',
+        spec_id: 'web.banner',
+        angle_zh: '卖点摊开：几个关键点分块排列',
+        prompt: '卖点摊开：几个关键点分块排列。1440×480px；图上文字不超过 30 字',
+      },
+    ],
+    created_at: iso(-1 * DAY),
+  })
+
+  for (const [i, item] of ['web.banner#1', 'web.banner#2', 'web.banner#3'].entries()) {
+    store.saveAsset({
+      id: `dasset_demo_dtc_${i + 1}`,
+      workspace_id: ws,
+      duty: 'dtc',
+      brief_id: 'dbrief_demo_4',
+      request_id: 'dreq_demo_4',
+      spec_id: 'web.banner',
+      status: 'variant',
+      content_type: 'image/png',
+      width: 1440,
+      height: 480,
+      provenance: {
+        source: 'generated',
+        brief_id: 'dbrief_demo_4',
+        variant_plan_item_id: item,
+        model: { provider: 'local', model: 'stub-image' },
+        prompt_sha256: `demodtc${i + 1}`.padEnd(64, '0'),
+        generated_at: iso(-1 * DAY),
+      },
+      created_at: iso(-1 * DAY),
+    })
+  }
+
+  // 上周已经定过稿的一张（"本周产出"与素材库那两块要有东西可看）。
+  // 挂在 `dtc` 上：demo 登录的人挂的就是那一条职责。
   store.saveAsset({
     id: 'dasset_demo_final',
     workspace_id: ws,
-    duty: 'social',
-    spec_id: 'social.ig.story',
+    duty: 'dtc',
+    spec_id: 'web.hero.desktop',
     status: 'published',
     content_type: 'image/png',
-    width: 1080,
-    height: 1920,
-    tags: ['story'],
-    blob_uri: 'blob://design/demo/social/dasset_demo_final.png',
+    width: 1920,
+    height: 800,
+    tags: ['hero'],
+    blob_uri: 'blob://design/demo/dtc/dasset_demo_final.png',
     provenance: {
       source: 'generated',
       prompt_sha256: 'demofinal'.padEnd(64, '0'),

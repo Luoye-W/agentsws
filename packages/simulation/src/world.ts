@@ -1242,6 +1242,15 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('social.telegram-group'),
     loadBundledRole('social.whatsapp'),
     loadBundledRole('dtc.community-support'),
+    // WP76（58 §1）：设计岗位的五条职责。3 人 pack 里"运营"真挂着 `design.dtc`
+    // （`assignments.yml`），其余四条躺在库里——躺着不产生任何行为，
+    // 装它们是为了首次设置向导里"设计"那个岗位显示五条而不是一条
+    // （种岗位那一步会把解析不到的职责筛掉，同上面社媒那九条的理由）。
+    loadBundledRole('design.dtc'),
+    loadBundledRole('design.amazon'),
+    loadBundledRole('design.social'),
+    loadBundledRole('design.ads'),
+    loadBundledRole('design.exhibition'),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
