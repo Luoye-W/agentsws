@@ -148,8 +148,10 @@ profiles/     dsh profile：版本锁定
 vendor/       上游子树（dsh-channels 等）
 evals/        eval 用例
 docs/         38 份中文设计文档 + 英文 ARCHITECTURE
+upstreams.yml 上游登记表：我们在盯谁、盯它的什么、锁在哪一版（见下）
 scripts/      review-wp.sh（审核一个任务包分支）· dev-real.sh（真账号环境）· release.sh
               fetch-brand-icons.mjs（`pnpm icons:fetch`：手动抓一次各官网当前的图标入库）
+              check-upstreams.mjs / upstream-watch.mjs / scan-default-flips.sh（上游哨兵）
 ```
 
 | 包 | 一句话 |
@@ -179,6 +181,38 @@ scripts/      review-wp.sh（审核一个任务包分支）· dev-real.sh（真�
 | `apps/workstation` | Web 工作台（React + Vite） |
 | `apps/desktop` | Electron 托盘壳：sidecar 监督、首次运行密钥、原生桥接 |
 | `apps/cli` | `agentsws` 命令：`simulate` / `synth` / `replay` / `demo` |
+
+---
+
+## 上游哨兵：怎么读那份周报
+
+我们依赖、移植、参考过的东西都登记在仓库根的 [`upstreams.yml`](upstreams.yml) 里（十四个上游，
+字段说明写在文件顶部）。GitHub Actions 按它跑两趟：
+
+| 什么时候 | 看什么 | 出什么 |
+|---|---|---|
+| 每周一 14:00（北京） | 全部上游：版本 / releases / README 动没动 / wishlist 命中 | 一条 issue：`上游周报 <年>-W<周>`，同一周只开一条 |
+| 每天 02:30（北京） | 只看 dsh | **没新版就零输出**；有新版才试升级 + 默认值扫描，开一条版本专属 issue |
+
+一条周报从上到下四段，按这个顺序读最省时间：**顶上那张小表**（几个上游、哪几个有新版、
+哪几个命中 wishlist、哪几个查不到——没事的一周四行全是"无"，看完就能关）→
+**每个上游一节**（版本与 dist-tags 如实列、窗口内的变动都带链接、折叠着的"我们碰到的 seam"）→
+**dsh 那一节后面**（默认值扫描与自动试升级的结论 + `docs/42` 的 checklist）→
+**末尾"给评估例程的提示"**（每条一句话：该走全套升级，还是只是一次"重判"，还是"这一趟查不到"）。
+
+报告只摆事实，**不替人做"纳不纳入"的决定**：它不改版本号、不开 PR、不合并
+（`docs/10 §3.3` 第 ⑤ 步是人看报告点通过）。"查不到"也照实写——查不到不等于没变。
+
+本机演练同一套观察（不开 issue）：
+
+```bash
+pnpm upstream:watch --dry-run                 # 全量，整份周报打到终端
+pnpm upstream:watch --dry-run --scope daily   # 只查 dsh
+pnpm upstreams:check                          # 只校验登记表与锁的版本一致（CI 里也跑这条）
+```
+
+细节（两条 cron 的含义、默认值扫描为什么必须扫源码）见
+[`docs/42-上游升级流程-v1.md`](docs/42-上游升级流程-v1.md) §3。
 
 ---
 
