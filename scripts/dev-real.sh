@@ -6,6 +6,35 @@
 #   scripts/dev-real.sh                      本机档：node 直接跑服务进程（改代码即时生效）
 #   scripts/dev-real.sh --compose            公司档：docker compose 起同一套（验镜像与部署）
 #   scripts/dev-real.sh --compose postgres s3  再换上 Postgres 与 MinIO（验双方言与对象存储）
+#
+# ── realistic 档（模拟回路跑真模型）要设哪几个变量（WP88）────────────────────
+#
+# 这个脚本**不跑模拟**，但它 source 的那个 .env.local（见下面的 ENV_FILE）同时也是
+# realistic 档取 key 的地方。四个变量，写进同一个文件即可：
+#
+#   AGENTSWS_SIM_MODEL_API_KEY=<把 key 贴这儿>      # 没有它 → 整档跳过，不算失败
+#   AGENTSWS_SIM_MODEL_PROVIDER=<见下表>            # 不写 = DeepSeek 官方
+#   AGENTSWS_SIM_MODEL_NAME=<模型名>                # 不写 = 该档的默认模型
+#   AGENTSWS_SIM_MODEL_BASE_URL=<接口地址>          # 不写 = 该档的默认地址
+#
+# PROVIDER 认这几档（选中后地址 / 地域 / 价目自动跟着出来，只剩 key 要给）：
+#
+#   （不写）      DeepSeek 官方            默认 deepseek-chat，按 token 计费
+#   bailian      百炼 · 按量计费          默认 qwen-plus，按 token（人民币）
+#   token_plan   百炼 · Token Plan 订阅   默认 qwen3.7-plus，按 Credits，花费记 0
+#   coding_plan  百炼 · Coding Plan 订阅  默认 qwen3.7-plus，按次数配额，花费记 0
+#
+# 百炼这三套的地址与 key **互不通用**：订阅档的 key 是 sk-sp- 开头，拿它去打按量那条口
+# 回 401；反过来官方明说会被当按量付费扣钱。所以 PROVIDER 写哪档，key 就得是哪档的。
+#
+# 举例（用百炼 Token Plan 订阅跑 3 人 pack 的 realistic 档）：
+#   AGENTSWS_SIM_MODEL_PROVIDER=token_plan
+#   AGENTSWS_SIM_MODEL_API_KEY=sk-sp-xxxxxxxxxxxxxxxx      # ← 占位符，真 key 自己贴
+#   然后跑：node apps/cli/dist/index.js simulate --tier realistic --pack dtc-3c-3p \
+#            --seed 42 --max-cost-base 1 --report out/
+#
+# 这个文件是 600 权限、不进 git；key 一个字都不该出现在仓库里或命令行历史里。
+# 细节见 docs/26 §4「realistic 档要设哪几个变量」。
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DATA_DIR="${AGENTSWS_DATA_DIR:-$HOME/Library/Application Support/agentsws-dev}"

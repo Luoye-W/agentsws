@@ -1334,6 +1334,10 @@ const zh: Table = {
   'models.field.price.why.hint': '填了才算得出花了多少钱、预算才拦得住；不填按 0 记。',
   'models.price.from_catalog': '来源：官网 {as_of}（{currency}）。改了就算你自己填的。',
   'models.price.manual': '手动：你改过这几个数，每周那次官网刷新不会动它。',
+  // WP88：包月 / 包周套餐（百炼 Coding Plan）——三个价都是 0 不是「没填」，
+  // 是「这次调用真的不按 token 花钱」。不写这一句，用户会以为价目表漏了它
+  'models.price.included_in_plan':
+    '套餐内：这家按次数配额收钱，不按 token 计价，所以三个价都是 0——花费记 0，token 照记。配额还剩多少去它自己的控制台看（来源：官网 {as_of}）。',
   'models.pricing': '价目表',
   'models.pricing.refresh': '去官网抓一次',
   'models.pricing.refreshing': '正在抓…',
@@ -3090,6 +3094,8 @@ const en: Table = {
   'models.price.from_catalog':
     'Source: vendor site, {as_of} ({currency}). Edit and it becomes yours.',
   'models.price.manual': 'Manual — you edited these, so the weekly refresh leaves them alone.',
+  'models.price.included_in_plan':
+    'Included in your plan: billed by request quota, not per token, so all three prices are 0 — spend records as 0 while tokens are still counted. Check remaining quota in the vendor console (source: vendor site, {as_of}).',
   'models.pricing': 'Price list',
   'models.pricing.refresh': 'Fetch from vendor sites',
   'models.pricing.refreshing': 'Fetching…',

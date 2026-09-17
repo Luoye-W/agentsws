@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { PageFetch } from '../src/index.js'
 import {
+  catalogModels,
   catalogPrice,
   hostOf,
   PRICE_CATALOG,
@@ -59,7 +60,13 @@ describe('内置价目表', () => {
       expect(vendor.currency, vendor.id).toMatch(/^[A-Z]{3}$/)
       for (const m of vendor.models) {
         expect(m.in, `${vendor.id}/${m.model}`).toBeGreaterThanOrEqual(0)
-        expect(m.out, `${vendor.id}/${m.model}`).toBeGreaterThan(0)
+        if (vendor.billing === 'quota') {
+          // 订阅档（WP88，百炼 Token Plan / Coding Plan）：三个价一律 0——**不是"价未知"**，
+          // 是这次调用真的不按 token 花钱。写成 0 才能让 cost_base 记 0 而 token 照记
+          expect([m.in, m.out, m.cached], `${vendor.id}/${m.model}`).toEqual([0, 0, 0])
+        } else {
+          expect(m.out, `${vendor.id}/${m.model}`).toBeGreaterThan(0)
+        }
       }
     }
   })
@@ -72,6 +79,94 @@ describe('内置价目表', () => {
     // 本机 Ollama 不是任何一家：没有内置价，也不该硬套一条
     expect(vendorForBaseUrl('http://127.0.0.1:11434/v1')).toBeUndefined()
     expect(hostOf('api.deepseek.com/v1')).toBe('api.deepseek.com')
+  })
+
+  /*
+   * WP88：百炼有**三套互不通用**的口——按量计费（`dashscope.aliyuncs.com`）、
+   * Token Plan 订阅（`token-plan.cn-beijing.maas.aliyuncs.com`，按 Credits）、
+   * Coding Plan 订阅（`coding.dashscope.aliyuncs.com`，按次数配额）。key 也各是各的
+   * （订阅档 `sk-sp-` 开头）；官方明说混用会认证失败或产生意料之外的扣费。
+   *
+   * 这里盯的是两件事：**别把订阅档的调用按 token 记成花钱了**，
+   * 以及**三个地址互为子域时别互相认走**。
+   */
+  describe('百炼三档（WP88）', () => {
+    it('三个地址各归各的 vendor，互为子域也不串', () => {
+      // `coding.dashscope.aliyuncs.com` 也 endsWith `.dashscope.aliyuncs.com`；
+      // `token-plan.cn-beijing.maas.aliyuncs.com` 也 endsWith `.maas.aliyuncs.com`。
+      // 全靠 `vendorForBaseUrl` **先比完全相等**——这几条断言就是那条规则的守门人
+      expect(vendorForBaseUrl('https://coding.dashscope.aliyuncs.com/v1')?.id).toBe(
+        'bailian_coding',
+      )
+      expect(vendorForBaseUrl('https://coding-intl.dashscope.aliyuncs.com/v1')?.id).toBe(
+        'bailian_coding',
+      )
+      expect(
+        vendorForBaseUrl('https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1')?.id,
+      ).toBe('bailian_token_plan')
+      // 反过来，按量那两个口不该落到订阅那两条上
+      expect(vendorForBaseUrl('https://dashscope.aliyuncs.com/compatible-mode/v1')?.id).toBe('qwen')
+      expect(vendorForBaseUrl('https://dashscope-intl.aliyuncs.com/compatible-mode/v1')?.id).toBe(
+        'qwen',
+      )
+      // 官方新推的按业务空间分的地址仍然落到按量那条（按子域匹配兜住）
+      expect(
+        vendorForBaseUrl('https://ws123.cn-beijing.maas.aliyuncs.com/compatible-mode/v1')?.id,
+      ).toBe('qwen')
+    })
+
+    it('两个订阅档里的模型三个价都是 0——调用不按 token 花钱', () => {
+      expect(
+        catalogPrice('https://coding.dashscope.aliyuncs.com/v1', 'qwen3.7-plus'),
+      ).toMatchObject({ in: 0, out: 0, cached: 0, vendor_id: 'bailian_coding', currency: 'CNY' })
+      expect(
+        catalogPrice(
+          'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+          'qwen3.8-max',
+        ),
+      ).toMatchObject({ in: 0, out: 0, cached: 0, vendor_id: 'bailian_token_plan' })
+      // 同一个模型名在按量那条上是有价的——三条互不影响
+      expect(
+        catalogPrice('https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3.7-plus'),
+      ).toMatchObject({ in: 2, out: 8, vendor_id: 'qwen' })
+      expect(
+        catalogPrice('https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3.8-max'),
+      ).toMatchObject({ in: 12, out: 36, vendor_id: 'qwen' })
+    })
+
+    it('按量档：通义与 DeepSeek 同一把 key、同一条 vendor（2026-09-17 核官网）', () => {
+      const cn = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      expect(catalogPrice(cn, 'qwen-plus')).toMatchObject({ in: 0.8, out: 2, cached: 0.08 })
+      expect(catalogPrice(cn, 'qwen-turbo')).toMatchObject({ in: 0.3, out: 0.6 })
+      // 百炼上的 DeepSeek 是人民币价，和 DeepSeek 官方那条（美元）不是一回事
+      expect(catalogPrice(cn, 'deepseek-r1')).toMatchObject({ in: 4, out: 16, currency: 'CNY' })
+      expect(catalogPrice(cn, 'deepseek-v4-pro')).toMatchObject({ in: 12, out: 24 })
+      expect(catalogPrice('https://api.deepseek.com', 'deepseek-v4-pro')).toMatchObject({
+        in: 1.32,
+        currency: 'USD',
+      })
+      // 带日期后缀的也查得到（deepseek-v4-pro-0813 → deepseek-v4-pro）
+      expect(catalogPrice(cn, 'deepseek-v4-pro-0813')?.out).toBe(24)
+    })
+
+    it('兜底清单：拉不到 /models 时照价目表列名字，认不出的一家就空着（不猜）', () => {
+      const cn = catalogModels('https://dashscope.aliyuncs.com/compatible-mode/v1')
+      expect(cn).toContain('qwen-plus')
+      expect(cn).toContain('deepseek-r1')
+      const coding = catalogModels('https://coding.dashscope.aliyuncs.com/v1')
+      expect(coding).toContain('qwen3.7-plus')
+      expect(coding).toContain('qwen3-coder-plus')
+      const plan = catalogModels(
+        'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+      )
+      expect(plan).toContain('qwen3.8-max')
+      expect(plan).toContain('deepseek-v4.1-flash')
+      expect(plan).toContain('glm-5.3')
+      // 订阅那两份里不该混进按量档才有的名字
+      expect(coding).not.toContain('qwen-turbo')
+      expect(plan).not.toContain('qwen-turbo')
+      expect(catalogModels('http://127.0.0.1:11434/v1')).toEqual([])
+    })
   })
 
   it('DeepSeek：官网 2026-09-10 那天的三个数字（标准时段）', () => {

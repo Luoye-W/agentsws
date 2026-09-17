@@ -17,7 +17,7 @@ import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } f
 import { useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
-import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
+import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -47,6 +47,21 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
+/**
+ * 一张模板卡的稳定标识（WP88）。
+ *
+ * 在这之前卡是按 `kind` 认的——`kind` 当时恰好一张卡一个。WP88 之后不是了：
+ * 「OpenAI 兼容（自定义）」和「阿里云百炼」都是 `openai_compatible`（它俩确实是同一种
+ * 接口形态，分两张卡是因为**要准备的东西不一样**）。再拿 `kind` 当 key，两张卡会共用
+ * 一个 React key，点开一张另一张跟着展开。
+ *
+ * 所以按**接口地址**认——那正是两张卡真正不同的地方；而且 `suggestProviderId` 本来
+ * 就是干这个的（表单里的"编号"也是它生成的，两处认出来的名字天然一致）。
+ */
+function templateSlug(kind: string, baseUrl: string): string {
+  return `${kind}:${suggestProviderId(baseUrl, [])}`
+}
+
 const PURPOSES: ModelPurposeName[] = [
   'run',
   'extraction',
@@ -59,7 +74,8 @@ const PURPOSES: ModelPurposeName[] = [
 export function ModelsPanel({ assignment }: { assignment?: string }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  const [adding, setAdding] = useState<ModelProviderKind | null>(null)
+  /** 现在展开的是哪张模板卡。存的是 {@link templateSlug}，不是 `kind`——见它的注释。 */
+  const [adding, setAdding] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [tests, setTests] = useState<Record<string, ModelTestResult>>({})
   const [error, setError] = useState<string | null>(null)
@@ -287,6 +303,13 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   {editing === p.id ? (
                     <ModelForm
                       template={
+                        // WP88：同一个 kind 现在可能有两张卡，先按接口地址认是哪一张
+                        // （改一条百炼的配置，该看到百炼那张的预设，不是通用那张的）
+                        templates.find(
+                          (tpl) =>
+                            templateSlug(tpl.kind, tpl.default_base_url) ===
+                            templateSlug(p.kind, p.base_url),
+                        ) ??
                         templates.find((tpl) => tpl.kind === p.kind) ??
                         templates[0] ?? {
                           kind: p.kind,
@@ -323,10 +346,11 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
           <div className="grid gap-2 lg:grid-cols-2">
             {templates.map((tpl) => (
               <div
-                key={tpl.kind}
+                key={templateSlug(tpl.kind, tpl.default_base_url)}
                 className="rounded-lg border p-2.5"
                 data-testid="model-template"
                 data-kind={tpl.kind}
+                data-template={templateSlug(tpl.kind, tpl.default_base_url)}
               >
                 <p className="flex items-center gap-2 text-sm font-medium">
                   {/* WP45：加模型那两张卡也戴各家自己的标志 */}
@@ -353,7 +377,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                     </a>
                   ))}
                 </div>
-                {adding === tpl.kind ? (
+                {adding === templateSlug(tpl.kind, tpl.default_base_url) ? (
                   <ModelForm
                     template={tpl}
                     busy={save.isPending}
@@ -374,7 +398,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                     variant="outline"
                     onClick={() => {
                       setError(null)
-                      setAdding(tpl.kind)
+                      setAdding(templateSlug(tpl.kind, tpl.default_base_url))
                     }}
                   >
                     <Plus aria-hidden />

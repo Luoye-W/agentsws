@@ -56,11 +56,13 @@ import type {
   PageFetch,
 } from '@agentsws/model-gateway'
 import {
+  catalogModels,
   hostOf,
   openaiCompatibleProvider,
   PRICE_CATALOG,
   refreshPriceCatalog,
   stubProvider,
+  vendorForBaseUrl,
 } from '@agentsws/model-gateway'
 import type { SecretStore } from './secret-store.js'
 import { SECRETS_KEY_ENV } from './secret-store.js'
@@ -218,7 +220,76 @@ export interface ModelsAssembly {
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
 
 /**
- * v1 只做两种：**DeepSeek 官方** + **OpenAI 兼容自定义**。
+ * 阿里云百炼的 OpenAI 兼容口（WP88）。
+ *
+ * 北京地域这条是官方「获取 API Key」页上写的那条
+ * （<https://help.aliyun.com/zh/model-studio/get-api-key>，2026-09-17 核实）。
+ * 官方现在**另外**推荐一条按业务空间分的地址
+ * （`https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`，
+ * 说是更快更稳），但它要用户先去控制台抄一个 WorkspaceId 出来——一键设置里不该有
+ * 这一步。所以默认填这条老地址（官方明说仍然可用），要用新地址的人自己改一个字段，
+ * 价目表的 `hosts` 里也把 `maas.aliyuncs.com` 一并认了。
+ */
+export const BAILIAN_CN_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+
+/** 国际站（新加坡）。同样是官方仍在用的老地址，新形态是 `{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com`。 */
+export const BAILIAN_INTL_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
+
+/**
+ * 默认挑 `qwen-plus`：便宜（￥0.8 / ￥2 每百万 token）、够用、价目表里有核实过的价。
+ * 想更便宜有 `qwen-turbo`（￥0.3 / ￥0.6），想更强有 `qwen3.8-max`——都在下拉里。
+ */
+export const BAILIAN_DEFAULT_MODEL = 'qwen-plus'
+
+/**
+ * 百炼的两个**订阅**产品的专属口（WP88）。
+ *
+ * 百炼一共三套东西，**key 与 base URL 官方明说完全隔离、必须配对使用**，混用要么
+ * 认证失败、要么"产生意料之外的扣费"：
+ *
+ * | 档 | base URL | key | 怎么扣 |
+ * |---|---|---|---|
+ * | 按量计费 | `dashscope.aliyuncs.com/compatible-mode/v1` | `sk-` | 按 token |
+ * | Token Plan（订阅） | `token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` | `sk-sp-` | 按 Credits |
+ * | Coding Plan（订阅） | `coding.dashscope.aliyuncs.com/v1` | `sk-sp-` | 按次数配额 |
+ *
+ * **Luoye 实测**（2026-09-17）：手上那把 Token Plan 的 key（`sk-sp-` 开头、114 字符）
+ * 打标准口，国内国际都回 `401 invalid_api_key`。
+ *
+ * 所以界面上必须是**三张卡**，不是一张卡上的三个预设——把"选错了要么打不通要么乱
+ * 扣钱"这件事留给用户自己避，是把最难的一步推给了最不该承担它的人。
+ *
+ * 两个订阅档在价目表里三个价都是 0：`cost_base` 记 0、token 照记。剩多少 Credits /
+ * 配额只有百炼控制台算得出来，我们这边算不出也不编。
+ *
+ * 出处：<https://help.aliyun.com/zh/model-studio/token-plan-personal-quick-start>、
+ * <https://help.aliyun.com/zh/model-studio/coding-plan>（均 2026-09-17 核实）。
+ */
+export const BAILIAN_TOKEN_PLAN_BASE_URL =
+  'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1'
+
+/**
+ * Token Plan 的默认模型。清单以它自己的 `/models` 为准；`qwen3.7-plus` 是
+ * Luoye 控制台里那份可用模型中通用向最稳的一档（官方文档没有一页把 ID 列全）。
+ */
+export const BAILIAN_TOKEN_PLAN_DEFAULT_MODEL = 'qwen3.7-plus'
+
+/** Coding Plan 的口。注意**没有** `/compatible-mode` 这一段。 */
+export const BAILIAN_CODING_BASE_URL = 'https://coding.dashscope.aliyuncs.com/v1'
+
+/** Coding Plan 的国际口（FAQ 页列的那条）。Token Plan 没有国际口——官方只支持华北2。 */
+export const BAILIAN_CODING_INTL_BASE_URL = 'https://coding-intl.dashscope.aliyuncs.com/v1'
+
+/**
+ * Coding Plan 档的默认模型：官网「推荐模型」里排第一的 `qwen3.7-plus`。
+ * 这一档里还有 `qwen3-coder-plus` / `qwen3-max-2026-01-23` / `kimi-k2.5` / `glm-5` 等，
+ * 从它自己的 `GET /v1/models` 拉出来在下拉里选。
+ */
+export const BAILIAN_CODING_DEFAULT_MODEL = 'qwen3.7-plus'
+
+/**
+ * v1 只做两种：**DeepSeek 官方** + **OpenAI 兼容自定义**（WP88 起，后者出四张卡：
+ * 通用的那张 + 百炼按量 + 百炼 Token Plan + 百炼 Coding Plan）。
  *
  * 后者一种形态覆盖一大片：OpenAI 本身、Moonshot（Kimi）、通义千问、智谱 GLM、
  * 硅基流动、以及本地跑的 Ollama / vLLM——它们的 `/chat/completions` 是同一个形状，
@@ -297,6 +368,155 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
         base_url: 'http://127.0.0.1:11434/v1',
         model: 'llama3.1',
         region: 'cn',
+      },
+    ],
+  },
+  /*
+   * WP88：**阿里云百炼**给三张卡——「标准（按量）」「Token Plan（订阅）」「Coding Plan（订阅）」。
+   *
+   * 上面那张「OpenAI 兼容（自定义）」的预设里本来就有一条「通义千问」，为什么还要
+   * 单开？因为那条预设只解决"地址填什么"，而百炼真正会卡住人的是另外几件事：
+   *
+   * 1. **一把 key 同时能调两家**：通义（qwen-*）与 DeepSeek（deepseek-*）在百炼上是
+   *    同一个接口地址、同一把 key、同一份账单。用过 DeepSeek 官方的人会以为要再
+   *    去 platform.deepseek.com 办一把——不用。这件事只有卡上写出来才知道。
+   * 2. **国内 / 国际两个地址**，选错了 key 不通（两边的 key 也不通用），而"数据归属"
+   *    也跟着变：北京那条是 `cn`，新加坡那条是 `global`（22 §2 的 `data_residency`
+   *    在 `cn` 时会直接拦下 `global` 的 provider）。
+   * 3. **按量与两个订阅档是三套互不通用的东西**（后两张卡）：地址不同、key 不同、
+   *    计费方式也不同。**Luoye 实测**：Token Plan 的 key（`sk-sp-` 开头、114 字符）
+   *    打标准口，国内国际都回 `401 invalid_api_key`；官方也明说混用会认证失败或
+   *    产生意料之外的扣费。所以不能做成同一张卡上的几个预设——那等于把"选错要么
+   *    打不通要么乱扣钱"留给用户自己避。
+   * 4. **标准口没有 `GET /models`**：官方文档从头到尾只有 `/chat/completions`。点"拉取
+   *    模型列表"会空手而归，于是模型名要手打——所以拉不到时退回内置价目表里那份
+   *    核实过的清单（`catalogModels`），用户照旧是在下拉框里选。
+   *    （两个订阅档那两条口反倒有 `/models`，正常拉就行。）
+   *
+   * 形态仍是 OpenAI 兼容，所以 `kind` 还是 `openai_compatible`——复用同一套 provider
+   * 实现与保存路径，卡是给人看的，不是给代码分支用的。
+   */
+  {
+    kind: 'openai_compatible',
+    label: '阿里云百炼（标准，按量计费）',
+    summary: '一把 key 同时调通义千问与 DeepSeek，账单也在一处，用多少算多少。',
+    default_base_url: BAILIAN_CN_BASE_URL,
+    default_model: BAILIAN_DEFAULT_MODEL,
+    region: 'cn',
+    steps: [
+      '打开百炼控制台 bailian.console.aliyun.com，用阿里云账号登录并开通',
+      '右上角选好地域（北京 / 新加坡），进"API-KEY"页点"创建我的 API-KEY"',
+      '复制那一串（`sk-` 开头），粘进下面的表单',
+      '地址按地域选：国内用北京那条，海外用新加坡那条（两边的 key 不通用）',
+      '选模型名 → 点"测试"，回了模型名和延迟就是通了',
+    ],
+    links: [
+      {
+        label: '百炼控制台（拿 API Key）',
+        url: 'https://bailian.console.aliyun.com/?tab=model#/api-key',
+      },
+      { label: '模型列表与计费', url: 'https://help.aliyun.com/zh/model-studio/models' },
+      {
+        label: 'DeepSeek 在百炼上怎么调',
+        url: 'https://help.aliyun.com/zh/model-studio/deepseek-api',
+      },
+    ],
+    presets: [
+      {
+        id: 'bailian',
+        label: '百炼 · 北京（国内）',
+        base_url: BAILIAN_CN_BASE_URL,
+        model: BAILIAN_DEFAULT_MODEL,
+        region: 'cn',
+      },
+      {
+        id: 'bailian-intl',
+        label: '百炼 · 新加坡（国际站）',
+        base_url: BAILIAN_INTL_BASE_URL,
+        model: BAILIAN_DEFAULT_MODEL,
+        region: 'global',
+      },
+    ],
+  },
+  /*
+   * 百炼的订阅档之一：**Token Plan**（按 Credits 扣）。与上面那张的区别全写在
+   * {@link BAILIAN_TOKEN_PLAN_BASE_URL} 的注释里，一句话：**三套东西，别混**。
+   *
+   * 这张卡存在的理由就是那句"别混"——把几个地址塞进同一张卡的预设里，用户点错一次
+   * 就是一次 401，或者一次意料之外的扣费。
+   *
+   * 它**没有预设**：官方只支持华北2（北京）一个地域，只有一个地址可填；给一排按钮
+   * 让人选，反而像是在暗示还有别的选择。
+   */
+  {
+    kind: 'openai_compatible',
+    label: '阿里云百炼 Token Plan（订阅）',
+    summary:
+      '买了 Token Plan 订阅的走这张：按 Credits 扣，不按 token 花钱。专属 key（sk-sp- 开头）配专属地址，和按量那张完全不通用。',
+    default_base_url: BAILIAN_TOKEN_PLAN_BASE_URL,
+    default_model: BAILIAN_TOKEN_PLAN_DEFAULT_MODEL,
+    region: 'cn',
+    steps: [
+      '在百炼控制台开通 Token Plan（订阅制，按 Credits 计量）',
+      '进 Token Plan 页面拿"专属 API Key"——sk-sp- 开头，和按量那把不是同一把',
+      '把 key 粘进下面的表单；地址保持这张卡预填的那条（带 token-plan 的）',
+      '点"拉取模型列表"，订阅里能用哪几个就会列出来，选一个',
+      '点"测试"确认能通。价格三个框留 0 就对——Credits 扣的不是 token 钱',
+    ],
+    links: [
+      {
+        label: 'Token Plan 快速开始（拿专属 key 与地址）',
+        url: 'https://help.aliyun.com/zh/model-studio/token-plan-personal-quick-start',
+      },
+      {
+        label: 'Token Plan 概述与 Credits 计量',
+        url: 'https://help.aliyun.com/zh/model-studio/token-plan-overview',
+      },
+    ],
+  },
+  /*
+   * 百炼的订阅档之二：**Coding Plan**（按次数配额扣）。与 Token Plan 是两个独立产品，
+   * 官方明说不能互转——买了哪个走哪张卡。
+   */
+  {
+    kind: 'openai_compatible',
+    label: '阿里云百炼 Coding Plan（订阅）',
+    summary:
+      '买了 Coding Plan 订阅的走这张：按次数配额，不按 token 花钱。key 与地址同样和别的档不通用。',
+    default_base_url: BAILIAN_CODING_BASE_URL,
+    default_model: BAILIAN_CODING_DEFAULT_MODEL,
+    region: 'cn',
+    steps: [
+      '在百炼控制台开通 Coding Plan（订阅制，官网写明按次数配额）',
+      '进 Coding Plan 页面点"获取 API Key"——同样是 sk-sp- 开头的专属 key',
+      '把 key 粘进表单；地址保持预填的那条（带 coding、没有 compatible-mode）',
+      '点"拉取模型列表"，订阅里有哪几个模型就会列出来，选一个',
+      '点"测试"确认能通。价格三个框留 0 就对——配额扣的不是 token 钱',
+    ],
+    links: [
+      {
+        label: 'Coding Plan 说明与配额',
+        url: 'https://help.aliyun.com/zh/model-studio/coding-plan',
+      },
+      {
+        label: '常见问题（含国际站地址）',
+        url: 'https://help.aliyun.com/zh/model-studio/coding-plan-faq',
+      },
+    ],
+    presets: [
+      {
+        id: 'bailian-coding',
+        label: 'Coding Plan · 国内',
+        base_url: BAILIAN_CODING_BASE_URL,
+        model: BAILIAN_CODING_DEFAULT_MODEL,
+        region: 'cn',
+      },
+      {
+        id: 'bailian-coding-intl',
+        label: 'Coding Plan · 国际站',
+        base_url: BAILIAN_CODING_INTL_BASE_URL,
+        model: BAILIAN_CODING_DEFAULT_MODEL,
+        region: 'global',
       },
     ],
   },
@@ -652,6 +872,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * 不落盘、不进返回值、不进日志。
    *
    * **拉不到不抛**：回一条 `ok: false` + 一句人话，界面据此退回手填。
+   *
+   * WP88 起多一层：拉不到而**内置价目表认得出这一家**时，把价目表里那份模型名当兜底
+   * 清单一起回去（`ok` 仍然是 `false`，界面照旧显示"为什么没拉到"）。百炼的 OpenAI
+   * 兼容口没有 `GET /models`，没有这一层用户就得对着一个空框自己去官网抄模型名。
    */
   const listModelsOf = async (
     id: string,
@@ -680,24 +904,33 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       timeoutMs: DISCOVER_TIMEOUT_MS,
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     })
+    /**
+     * 拉不到时的兜底：内置价目表里这一家有哪几个模型（WP88）。
+     *
+     * 回的 `ok` 仍然是 `false`——这份不是上游报的，是我们内置的，**用户有权知道差别**
+     * （价目表可能落后于上游）。所以原因那句话后面缀一句说明，而不是假装拉成功了。
+     */
+    const withCatalogFallback = (reason: string): ModelListing => {
+      const models = catalogModels(base_url)
+      const vendor = vendorForBaseUrl(base_url)
+      if (models.length === 0 || vendor === undefined) {
+        return { ok: false, models: [], reason, checked_at }
+      }
+      return {
+        ok: false,
+        models,
+        reason: `${reason}下面这 ${models.length} 个是内置价目表里${vendor.label}那份（${vendor.as_of} 核对官网），照它选就行；不在里面的手打也一样能用。`,
+        checked_at,
+      }
+    }
     try {
       const rows = (await provider.listModels?.()) ?? []
       if (rows.length === 0) {
-        return {
-          ok: false,
-          models: [],
-          reason: '这家没回模型列表（有的服务没有这个接口）。模型名手填也一样能用。',
-          checked_at,
-        }
+        return withCatalogFallback('这家没回模型列表（有的服务没有这个接口）。')
       }
       return { ok: true, models: rows.map((r) => r.id), checked_at }
     } catch (e) {
-      return {
-        ok: false,
-        models: [],
-        reason: humanizeModelError(codeOf(e), messageOf(e)),
-        checked_at,
-      }
+      return withCatalogFallback(`${humanizeModelError(codeOf(e), messageOf(e))} `)
     }
   }
 
@@ -710,7 +943,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     const saved = state.providers.find((p) => p.id === config.id)
     const target = saved ?? config
     target.last_listing = listing
-    if (listing.ok) target.models = listing.models
+    // WP88：兜底清单（`ok: false` 但有名字）也记下来——下拉框照它画，
+    // 用户不用每次打开表单都再点一次"拉取"
+    if (listing.ok || listing.models.length > 0) target.models = listing.models
     if (saved !== undefined) {
       flush()
       // 清单变了，能选的模型跟着变——但只有被选中的那几个才真的挂上网关
@@ -941,8 +1176,34 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(id)) {
         throw invalid('provider 的 id 只能是小写字母、数字、下划线和短横线（32 位以内）')
       }
-      const template = templatesFor(env).find((t) => t.kind === input.kind)
+      /*
+       * 哪一张模板卡（WP88）。
+       *
+       * 在这之前是 `find(t => t.kind === input.kind)`——`kind` 当时一张卡一个，
+       * 所以"种类"和"卡"是一回事。现在不是了：OpenAI 兼容那张、百炼三张，四张卡
+       * 同一个 `kind`。再按 `kind` 取第一张，请求里没给的字段（`region` / `label`）
+       * 就会拿**别人家**的默认值来兜——保存一条百炼的配置，`region` 兜成通用 OpenAI
+       * 那张的 `global`，然后 22 §2 的 `data_residency: cn` 当场把它拦下来，
+       * 用户看到的是一句"禁止出境"，而他填的明明是北京的地址。
+       *
+       * 所以先按**接口地址**认是哪一张（地址正是这几张卡真正不同的地方），
+       * 认不出来才退回按 `kind` 取第一张（没给地址的老调用照旧能过）。
+       *
+       * 认到卡之后还要再往里认一层：卡上那几个"点一下就填好"的预设各有自己的地域
+       * （百炼北京是 `cn`、新加坡是 `global`）。认到哪个预设，兜底就用哪个预设的。
+       */
+      const wantUrl = input.base_url?.trim() ?? state.providers.find((p) => p.id === id)?.base_url
+      const sameKind = templatesFor(env).filter((t) => t.kind === input.kind)
+      const wantHost = wantUrl === undefined ? '' : hostOf(wantUrl)
+      const matches = (t: ModelProviderTemplate): boolean =>
+        wantHost !== '' &&
+        [t.default_base_url, ...(t.presets ?? []).map((p) => p.base_url)].some(
+          (u) => hostOf(u) === wantHost,
+        )
+      const template = sameKind.find(matches) ?? sameKind[0]
       if (template === undefined) throw invalid(`不认识的模型种类：${input.kind}`)
+      // 卡内的那一条预设（认不到就按卡本身的默认值兜）
+      const preset = (template.presets ?? []).find((p) => hostOf(p.base_url) === wantHost)
       /*
        * 49 M2：**"用 agentsws 的"这一条不填 key。**
        *
@@ -977,10 +1238,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       const config: ModelProviderConfig = {
         id,
         kind: input.kind,
-        label: input.label?.trim() ?? existing?.label ?? template.label,
+        label: input.label?.trim() ?? existing?.label ?? preset?.label ?? template.label,
         base_url,
         model: input.model.trim(),
-        region: input.region ?? existing?.region ?? template.region,
+        region: input.region ?? existing?.region ?? preset?.region ?? template.region,
         ...defined({
           embedding_model: input.embedding_model ?? existing?.embedding_model,
           transcription_model: input.transcription_model ?? existing?.transcription_model,
@@ -1004,8 +1265,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         // 模板里的默认模型名不一定还存在（DeepSeek 官网已不列 deepseek-chat）：
         // 接口回的清单才是真的，不在清单里就换成清单第一个，别让用户看到一个接口不认的名字
         const saved = state.providers.find((p) => p.id === config.id) ?? config
-        const untouchedDefault =
-          MODEL_TEMPLATES.find((t) => t.kind === saved.kind)?.default_model === saved.model
+        // WP88：拿**这一次认出来的那张卡**的默认值比（同一个 kind 现在有好几张卡，
+        // 按 kind 取第一张会比错人：比的是别人家的默认模型名）
+        const untouchedDefault = template.default_model === saved.model
         // 只兜模板默认值；用户自己填的名字（哪怕清单里没有）照他的来
         if (
           untouchedDefault &&

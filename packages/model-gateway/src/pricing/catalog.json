@@ -87,20 +87,82 @@
       ]
     },
     {
-      "id": "qwen",
-      "label": "通义千问（百炼）",
+      "id": "bailian_token_plan",
+      "label": "阿里云百炼 Token Plan（订阅）",
       "currency": "CNY",
-      "hosts": ["dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"],
+      "billing": "quota",
+      "hosts": ["token-plan.cn-beijing.maas.aliyuncs.com"],
+      "source_url": "https://help.aliyun.com/zh/model-studio/token-plan-personal-quick-start",
+      "extra_source_urls": ["https://help.aliyun.com/zh/model-studio/token-plan-overview"],
+      "as_of": "2026-09-17",
+      "parser": "none",
+      "parser_note": "订阅制没有 token 单价可抓：它按 Credits 统一计量，页面上是套餐档位与 Credits 额度，抓下来也填不进「每百万 token 多少钱」那三个框。",
+      "note": "订阅档，按 Credits 扣，不按 token 计费，所以三个价一律 0——不是「价未知」，是这次调用真的不额外花钱（22 §3 的 cost_base 记 0，token 照记，Credits 剩多少由百炼控制台算）。专属 key 以 sk-sp- 开头、专属 base URL 是 token-plan.cn-beijing.maas.aliyuncs.com，与按量计费、Coding Plan 三套**完全隔离**：官方明说混用会认证失败或产生意料之外的扣费。官方只支持华北2（北京），没有国际口。下面这份模型清单来自 Luoye 2026-09-17 的控制台截图（官方文档没有一页把可用模型 ID 列全），只作 /models 拉不到时的兜底；以接口拉回来的为准。",
+      "models": [
+        { "model": "qwen3.8-max", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3.8-flash", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3.7-max", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3.7-plus", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3.6-flash", "in": 0, "out": 0, "cached": 0 },
+        { "model": "deepseek-v4.1-flash", "in": 0, "out": 0, "cached": 0 },
+        { "model": "deepseek-v4-pro", "in": 0, "out": 0, "cached": 0 },
+        { "model": "deepseek-v4-pro-0813", "in": 0, "out": 0, "cached": 0 },
+        { "model": "deepseek-v4-flash-0731", "in": 0, "out": 0, "cached": 0 },
+        { "model": "glm-5.3", "in": 0, "out": 0, "cached": 0 },
+        { "model": "glm-5.2", "in": 0, "out": 0, "cached": 0 }
+      ]
+    },
+    {
+      "id": "bailian_coding",
+      "label": "阿里云百炼 Coding Plan（订阅）",
+      "currency": "CNY",
+      "billing": "quota",
+      "hosts": ["coding.dashscope.aliyuncs.com", "coding-intl.dashscope.aliyuncs.com"],
+      "source_url": "https://help.aliyun.com/zh/model-studio/coding-plan",
+      "extra_source_urls": ["https://help.aliyun.com/zh/model-studio/coding-plan-faq"],
+      "as_of": "2026-09-17",
+      "parser": "none",
+      "parser_note": "订阅制没有 token 单价可抓——它的页面上是「¥200/月、每 5 小时 6000 次、每周 45000 次、每月 90000 次」这样的次数配额，抓下来也填不进「每百万 token 多少钱」那三个框。",
+      "note": "另一个订阅档（与 Token Plan 是两个独立产品，官方明说不能互转）。按次数配额扣，不按 token 计费，所以三个价一律 0，理由同 Token Plan 那条。它的主机名是按量那条（dashscope.aliyuncs.com）的子域，全靠 vendorForBaseUrl 先比完全相等才各归各的——两条的 hosts 都要写全写准，少一个就会被对方按后缀认走。key 同样是 sk-sp- 开头且与按量的不通用。模型清单以它自己的 GET /v1/models 为准；下面这份是官网「推荐模型 + 备选」那几个，拉不到时兜底用。",
+      "models": [
+        { "model": "qwen3.7-plus", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3.6-plus", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3.5-plus", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3-max-2026-01-23", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3-coder-plus", "in": 0, "out": 0, "cached": 0 },
+        { "model": "qwen3-coder-next", "in": 0, "out": 0, "cached": 0 },
+        { "model": "kimi-k2.5", "in": 0, "out": 0, "cached": 0 },
+        { "model": "glm-5", "in": 0, "out": 0, "cached": 0 },
+        { "model": "glm-4.7", "in": 0, "out": 0, "cached": 0 },
+        { "model": "MiniMax-M2.5", "in": 0, "out": 0, "cached": 0 }
+      ]
+    },
+    {
+      "id": "qwen",
+      "label": "阿里云百炼（标准，按量计费）",
+      "currency": "CNY",
+      "hosts": [
+        "dashscope.aliyuncs.com",
+        "dashscope-intl.aliyuncs.com",
+        "dashscope-us.aliyuncs.com",
+        "maas.aliyuncs.com"
+      ],
       "source_url": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
-      "as_of": "2026-09-10",
+      "extra_source_urls": ["https://help.aliyun.com/zh/model-studio/deepseek-api"],
+      "as_of": "2026-09-17",
       "parser": "none",
       "parser_note": "这张价目表按地域 × 思考模式 × 输入长度阶梯分了四层，同一个模型名在页面上出现七八次。机器抽出来的数字对不上用户实际用的那一档，反而比不抓更糟——所以这家只保内置价，改价了手工来。",
-      "note": "记的是北京地域、非思考模式、第一档阶梯的价。缓存命中按输入价的 10% 计（官网口径）。",
+      "note": "记的是北京地域、非思考模式、第一档阶梯的价。百炼上的 DeepSeek 与通义是同一把 key、同一个接口地址，所以两家的价都记在这一条 vendor 下。缓存命中：官网明写「按输入价的 10%」的那四个通义模型照它记；官网只写「上下文缓存享有折扣」、没给数字的（qwen3.8-flash、qwen3.7-plus 与全部 DeepSeek），cached 与输入同价——不编一个折扣出来，预算宁可保守。deepseek-v4.1-flash 分忙时 / 闲时，按规矩记忙时（贵的那一档）；deepseek-r1 的批量 5 折不记。这条是**按量计费**那一档。百炼另有两个订阅产品，各占一条 vendor：bailian_token_plan（按 Credits）与 bailian_coding（按次数配额）。三套的 key 与 base URL 官方明说完全隔离、不能混用——混了要么认证失败，要么被当按量付费扣钱。",
       "models": [
         { "model": "qwen3.8-max", "in": 12, "out": 36, "cached": 1.2 },
+        { "model": "qwen3.7-plus", "in": 2, "out": 8, "cached": 2 },
+        { "model": "qwen3.8-flash", "in": 0.8, "out": 2.7, "cached": 0.8 },
         { "model": "qwen-max", "in": 2.4, "out": 9.6, "cached": 0.24 },
         { "model": "qwen-plus", "in": 0.8, "out": 2, "cached": 0.08 },
-        { "model": "qwen-turbo", "in": 0.3, "out": 0.6, "cached": 0.03 }
+        { "model": "qwen-turbo", "in": 0.3, "out": 0.6, "cached": 0.03 },
+        { "model": "deepseek-v4-pro", "in": 12, "out": 24, "cached": 12 },
+        { "model": "deepseek-v4.1-flash", "in": 2, "out": 8, "cached": 2 },
+        { "model": "deepseek-r1", "in": 4, "out": 16, "cached": 4 }
       ]
     },
     {
