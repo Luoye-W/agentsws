@@ -289,4 +289,61 @@ API 的 SSE）。**认不出的请求当场抛，CI 一个包都不出网**。�
 | 安装 | 向导两步：装扩展（Chrome / Edge 商店链接或本地加载）+ 装 `bsk`（我们钉版本与 sha256 从 GitHub Releases 下载，不用它的 `install.sh`）；`bsk doctor` 前置检查 |
 | 与官方 provider 并存 | 设置页"浏览器"一节两种方式并列：「单独的工作 Chrome（官方 Playwright）」「我正在用的浏览器（腾讯 BrowserSkill 扩展）」，一次运行只挂一种 |
 
-**落地：WP92（已派）。**
+**落地：WP92（已实现，落点见下）。**
+
+
+### 落点（WP92，已实现）
+
+上面那张表逐行落在哪，以及**实测到的四件与预判不同的事**。
+
+| 约束 / 策略 | 落点 | 实测 |
+|---|---|---|
+| 工具面 | **直接挂腾讯官方插件**（Luoye 拍板：不自写 provider）。`harness.ts` 在 `setup` 里、与 WP82 同一位置同一顺序（mount → installGate → 浏览器）`await agentCtx.plugin(BrowserSkillPlugin, …)`；这一档**不挂** `BrowserUseRegistry`（它不走那个 seam，挂了也没人占槽） | 六个工具照常报上来；`lazyTools` 必须显式关（见下 ①） |
+| 读写分类 | `browserskill.ts` 的 `BROWSERSKILL_READ_ACTIONS`（按 `args.action`）→ `tools.ts` 的 `classifySideEffect` 多一条分支 | 与派工书那张表一致；表外动作与"没给 action"一律按写 |
+| 域名白名单 | `browserskill.ts` 的 `checkBrowserSkillPolicy`，三处：`browser_page{navigate}` / `browser_session{start}` / `browser_tabs{create}`；规则（`hostAllowed` + 人话理由）与官方 provider 同一套 | 三处都拦得住；`navigate` 少给 url 按"打不开这个地址"拒 |
+| 公司端禁 evaluate | 工具面里**没有** evaluate，所以这一层不写代码；能跑脚本的是 `bsk evaluate` 这条 CLI，归 shell allowlist（WP89） | 另外我们把 `bsk` **装在数据目录、不进 PATH**，少一条顺手能敲到的路 |
+| 人接管 | `browser_assist{request-help}` 两档都放行，并发 `progress{step:'browser_handoff'}`；提示词里多三条（单独窗口 / 借标签先问 / 卡住了请人接管） | 这是这一种相对官方 provider 真正多出来的东西 |
+| 供应链 | `bsk` 由我们钉版本 + sha256 下载（`browserskill.lock.json` + `apps/server/src/browserskill-install.ts`），**不用上游 `install.sh`**（它校验不了会"只警告"、还会改用户的 `~/.zshrc`）；插件锁死 `0.3.0` 进 `minimumReleaseAgeExclude`（无 postinstall、无原生模块、无 dependencies——逐条核实过） | 本机真装了一次：darwin-arm64 产物 sha256 与 lock 逐字相同 |
+| 只在个人档 | `browser-settings.ts`：`browserskill_allowed = runtimeMode() === 'local'`，`forRun()` 还要 `bsk` **真的装了**才给 | 没装就当这次运行没有浏览器（比给一个坏路径安全，见下 ③） |
+
+四件与预判不同的事：
+
+① **`lazyTools` 的默认值会让工具面整个空掉。** 上游缺省 `lazyTools: true`：六个工具要等
+`browser-skill` 这个**技能**被成功调用过一次才注册（progressive disclosure，触发器挂在
+`tools/result` 上等一个名为 `skill` 的调用）。我们的最小组合里没有 `dsh-skill` /
+`dsh-tool-skill`，那个触发器一辈子不会响——实测 `lazyTools: true` 时
+`ctx.tools.schemas(agent)` 是**空的**。所以配置里写死 `false`。
+
+② **它的六个工具是 scoped registration，不能列进 `restrict`——与派工书的预判相反。**
+派工书按"插件直接 `ctx.tools.register` = 全局注册"推断要把六个名字列进职责白名单。
+实测：**挂在哪个 ctx 上决定的是哪一种**——我们挂在 Agent 的 scoped ctx 上（与官方
+provider 同一位置），于是注册就是 scoped 的：`restrict({allow})` 遮不住它们，
+而把它们**列进去当场抛** `tools.restrict() names unknown global tools`（抛完整张白名单
+都装不上，反而更松，AGENT-LAYER §9.4 那条坑）。所以这一条**按官方 provider 那一套办**：
+一个字都不列。"只有 `browser_scope` 非空的职责才有这六个工具"照样成立，靠的是另一条
+既有的链：职责没填 `browser_scope` → `allowed_hosts` 空 → `runtime.ts` 根本不给
+`RunRequest.browser` → 插件不挂、门禁的 allowlist 也不放这六个名字。
+
+③ **`bsk` 路径指错会把我们自己的进程打死。** 插件加载时会 spawn 一次 `bsk --version`
+探活；文件不存在时那个子进程 spawn 失败（ENOENT）却已经被记进它的 in-flight 表，
+卸载时 `killAll()` 对一个**还没有 pid** 的子进程调 `child.kill('SIGINT')`——信号落到
+**我们自己这个进程组**上，服务进程当场收到 SIGINT 退出（复现：挂上插件后立刻 dispose）。
+所以纪律是**装好了才挂**：`bskBinaryUsable()` 在挂之前查一次，没装就让这次运行
+明明白白失败；服务端那一侧更早一步，`forRun()` 没装就不给 `browser`。
+
+④ **`BSK_AUTO_UPDATE=off` 只关"装"，不关"查"。** 本机实测：设着 `off` 跑一次
+`bsk doctor`，`~/.bsk/update-check.json` 里照样多出一条 `latest_version`——上游
+`daemon/start.rs` 的周期任务里 `refresh_update_cache()`（出网取 version.json）发生在
+`auto_update_step()` 之前，`off` 只让后者不装。所以我们**两个开关一起设**：
+`BSK_AUTO_UPDATE=off` + `BSK_UPDATE_MANIFEST_URL` 指到一个没人监听的回环地址。
+一种管不到的情况得说清楚：daemon 早就在跑时，它继承的是当初那个环境。
+
+设置页：三种方式并列单选（不开 / 连接我电脑上的 Chrome / 用独立的 Chrome / **我正在用的浏览器**），
+第四种选中后出三步向导——① 装扩展（只给两个官方商店链接，扩展只能用户自己装）
+② 装 `bsk`（一键，走上面那个安装器）③ `bsk doctor`（把它那几条**原样**列出来，含
+"怎么修"）。桌面壳托盘多一项「检查浏览器扩展」。白话那一句写在向导底下：
+"独立的浏览器不碰你日常的登录；用你正在用的浏览器能看到你登录后才看得到的东西，
+Agent 会在单独窗口里操作，动你已开的标签会先问你。"
+
+手工验证步骤 `scripts/dev-browserskill.md`；这次实测到第 ③ 步（装扩展要真人点"添加"，
+所以"真的 observe 一次"仍欠着）。

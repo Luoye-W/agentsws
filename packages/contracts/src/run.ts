@@ -93,6 +93,27 @@ export type RunBrowser =
       /** 不给 = `true`（上游默认）。 */
       headless?: boolean
     }
+  | {
+      /**
+       * 55 §10 / WP92：**用户正在用的那个浏览器**（腾讯 BrowserSkill）。
+       *
+       * 工具面来自腾讯官方的 dsh 插件（`@wxg-prc-cpg/browser-skill-dsh-plugin`）：
+       * 它 spawn 本机的 `bsk` CLI，CLI 经 daemon 让浏览器扩展用 `chrome.debugger`
+       * 附到用户自己的 Chrome / Edge 上，每个 Session 一个独立的 Agent 窗口；
+       * 要动用户已经开着的标签得先"借"，借要他点头。
+       *
+       * 与 `attach` 的差别：`attach` 接的是**我们替他另起的**那个 Chrome（单独 Profile，
+       * 不带他日常的登录态）；这一种用的就是他**日常那个**浏览器，所以他登录过的东西
+       * Agent 直接看得到。**只有个人档允许**（服务得跟浏览器在同一台电脑上）。
+       */
+      mode: 'browserskill'
+      /**
+       * `bsk` 可执行文件的路径。不给 = 从 PATH 上找 `bsk`（上游默认）。
+       * 我们自己装的那一份在 `AGENTSWS_DATA_DIR/bin/bsk`（钉版本 + sha256，
+       * 见仓库根的 `browserskill.lock.json`）。
+       */
+      bsk_path?: string
+    }
 
 /**
  * WP82（55 §3 末段）：**这台机器上**的浏览器怎么配（`/v1/settings/browser` 的形状）。
@@ -102,13 +123,58 @@ export type RunBrowser =
  */
 export interface BrowserSettings {
   /** `off` = 谁都不许开浏览器（缺省）。 */
-  mode: 'off' | 'attach' | 'launch'
+  mode: 'off' | 'attach' | 'launch' | 'browserskill'
   /** `attach`：本机 Chrome 的 CDP 地址（`http://127.0.0.1:9222`）。 */
   endpoint?: string
   /** `launch`：本机 Chrome / Chromium 的可执行文件路径。 */
   executable_path?: string
   /** `launch`：不给 = `true`。 */
   headless?: boolean
+  /**
+   * WP92：`browserskill`：`bsk` 可执行文件的路径。
+   * 缺省是我们自己装的那一份（`AGENTSWS_DATA_DIR/bin/bsk`），用户一般不用填。
+   */
+  bsk_path?: string
+}
+
+/**
+ * WP92（55 §10）：`bsk doctor` 的一条检查。
+ *
+ * 形状照抄上游 CLI 的 JSON（`CheckResult`）：`ok` 只有失败时是 false，
+ * `status` 才分得出"警告"与"这台机器上不适用"。
+ */
+export interface BrowserSkillCheck {
+  name: string
+  ok: boolean
+  status: 'ok' | 'fail' | 'warn' | 'na'
+  detail: string
+  /** 失败 / 警告时上游给的那句"怎么修"。 */
+  hint?: string
+}
+
+/**
+ * WP92：**这台机器上 BrowserSkill 装到哪一步了**（设置页那三步向导读它）。
+ *
+ * 三步各自对应哪一项：
+ * ① 装扩展 → `checks` 里那条 "browser extension connected"；
+ * ② 装 `bsk` → `installed` / `version`（我们钉的版本，见 `browserskill.lock.json`）；
+ * ③ `bsk doctor` → `ok` 与 `checks` 全表。
+ */
+export interface BrowserSkillStatus {
+  /** `bsk` 在不在（文件存在且可执行）。 */
+  installed: boolean
+  /** 装在哪。 */
+  bsk_path?: string
+  /** 装上的那一份自己报的版本（`bsk --version`）。 */
+  version?: string
+  /** 我们钉的版本（`browserskill.lock.json`），与 `version` 对不上就该重装。 */
+  pinned_version?: string
+  /** 跑过 `bsk doctor` 才有；没跑（或者没装）时是空数组。 */
+  checks: BrowserSkillCheck[]
+  /** `doctor` 里一条 `fail` 都没有。没装时是 `false`。 */
+  ok: boolean
+  /** 说给人听的那一句（没装 / 跑不起来 / 这一档不允许）。 */
+  detail?: string
 }
 
 /** 设置页读到的那一份：设置本身 + 这个部署允不允许 attach。 */
@@ -121,6 +187,14 @@ export interface BrowserSettingsView extends BrowserSettings {
   attach_allowed: boolean
   /** 不允许时说给人听的那一句。 */
   attach_blocked_reason?: string
+  /**
+   * WP92：这一档允不允许用「我正在用的浏览器」（BrowserSkill）。
+   * 与 attach 同一条理由：`bsk` 与浏览器扩展都在**用户那台电脑**上，
+   * 服务不在那台电脑上就连不到——所以也只有个人档给。
+   */
+  browserskill_allowed: boolean
+  /** 不允许时说给人听的那一句。 */
+  browserskill_blocked_reason?: string
 }
 
 /** 探一次 CDP 地址（`GET /json/version`）的结果。 */

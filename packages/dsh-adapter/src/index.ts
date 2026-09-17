@@ -6,11 +6,28 @@
  */
 
 export {
+  anyBrowserToolName,
   type BrowserProviderConfig,
   browserBrief,
   browserProviderConfig,
   checkBrowserNavigation,
 } from './browser.js'
+export type { BrowserSkillPluginConfig } from './browserskill.js'
+export {
+  applyBskEnv,
+  BROWSERSKILL_PLUGIN,
+  BROWSERSKILL_READ_ACTIONS,
+  BROWSERSKILL_TOOLS,
+  BSK_NO_UPDATE_MANIFEST,
+  browserSkillBrief,
+  browserSkillNavigationUrl,
+  browserSkillPluginConfig,
+  browserSkillToolName,
+  bskBinaryUsable,
+  checkBrowserSkillPolicy,
+  classifyBrowserSkillEffect,
+  isBrowserSkillHandoff,
+} from './browserskill.js'
 export { DshAdapterError } from './errors.js'
 export type { AskedBoundary, DraftArgs, GateApi, GateInput, StageArgs } from './gate.js'
 export { CONTEXT_PREFIX, installGate, PERSONA_SECTION } from './gate.js'

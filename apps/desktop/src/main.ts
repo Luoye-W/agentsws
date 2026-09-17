@@ -670,6 +670,41 @@ async function bootstrap(): Promise<void> {
     refreshTray()
   }
 
+  /**
+   * WP92（55 §10）：托盘的「检查浏览器扩展」。
+   *
+   * 服务端跑一次 `bsk doctor`，把结论弹成一句人话。为什么值得一条托盘菜单：
+   * 扩展装没装、连没连，只有**用户自己**在他那个浏览器里看得见；出问题时
+   * 他第一反应是找托盘，而不是打开工作台翻设置页。
+   */
+  async function checkBrowserExtension(): Promise<void> {
+    const t = strings(config.language)
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) {
+      logger.warn('检查浏览器扩展失败：换不到会话')
+      return
+    }
+    const status = await api.browserSkillStatus(s, assignment)
+    if (!status.ok) {
+      logger.warn('检查浏览器扩展失败', { reason: status.reason })
+      dialog
+        .showMessageBox({
+          type: 'warning',
+          message: t.browserExtensionBad.replace('{detail}', status.reason),
+        })
+        .catch(() => undefined)
+      return
+    }
+    const message = status.value.ok
+      ? t.browserExtensionOk
+      : t.browserExtensionBad.replace('{detail}', status.value.detail ?? '')
+    logger.info('检查浏览器扩展', { ok: status.value.ok, installed: status.value.installed })
+    dialog
+      .showMessageBox({ type: status.value.ok ? 'info' : 'warning', message })
+      .catch(() => undefined)
+  }
+
   function invoke(action: MenuAction): void {
     switch (action) {
       case 'open-workstation':
@@ -687,6 +722,10 @@ async function bootstrap(): Promise<void> {
       case 'open-work-browser':
         if (remote) break
         void openWorkBrowserAndSave()
+        break
+      case 'check-browser-extension':
+        if (remote) break
+        void checkBrowserExtension()
         break
       case 'restart-server':
         if (remote) break

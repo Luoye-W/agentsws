@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-attachment': 0.1.6-alpha.1
+  '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-tools': 0.1.6-alpha.1
+  '@wxg-prc-cpg/browser-skill-dsh-plugin>@deepseek-ai/dsh-llm': 0.1.6-alpha.1
+
 packageExtensionsChecksum: sha256-pmFu6wcjFShthtLtoAT2YOqnzHuXGnI+4vvW14q0fJo=
 
 importers:
@@ -671,6 +676,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: ^3.18.2
         version: 3.18.2
+      '@wxg-prc-cpg/browser-skill-dsh-plugin':
+        specifier: 0.3.0
+        version: 0.3.0(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-attachment@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-llm@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-tools@0.1.6-alpha.1(e89197212305e1b19bd6df05221bc44b))(@deepseek-ai/schemastery@3.18.2)
       yaml:
         specifier: ^2.5.0
         version: 2.9.0
@@ -5604,6 +5612,32 @@ packages:
 
   '@vscode/ripgrep@1.18.0':
     resolution: {integrity: sha512-ns5lWe44tSfbTMbVUsyB+I1819PVSw4AdpgK0RNkzfWfwy6+3IUNSxwSrfTno1/oWaS/hERNz+XLWVyga2aJBQ==}
+
+  '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0':
+    resolution: {integrity: sha512-l0/lIiXj60FqL6aAyMDloWMPIlZvSAfunPHbI47lWfGSjyeziExELEkBPCjfTLdnsaBaAJnqOpjfMReVmWfUOA==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-attachment': 0.1.6-alpha.1
+      '@deepseek-ai/dsh-client-ui-attachment': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-client-ui-primitives': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-client-ui-tool': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-llm': 0.1.6-alpha.1
+      '@deepseek-ai/dsh-tools': 0.1.6-alpha.1
+      '@deepseek-ai/schemastery': ^3.18.1
+      react: ^18.2.0
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-attachment':
+        optional: true
+      '@deepseek-ai/dsh-client-ui-attachment':
+        optional: true
+      '@deepseek-ai/dsh-client-ui-primitives':
+        optional: true
+      '@deepseek-ai/dsh-client-ui-tool':
+        optional: true
+      '@deepseek-ai/dsh-llm':
+        optional: true
+      react:
+        optional: true
 
   '@xmldom/xmldom@0.8.15':
     resolution: {integrity: sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA==}
@@ -13916,6 +13950,15 @@ snapshots:
       '@vscode/ripgrep-win32-arm64': 1.18.0
       '@vscode/ripgrep-win32-ia32': 1.18.0
       '@vscode/ripgrep-win32-x64': 1.18.0
+
+  '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-attachment@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)))(@deepseek-ai/dsh-llm@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-tools@0.1.6-alpha.1(e89197212305e1b19bd6df05221bc44b))(@deepseek-ai/schemastery@3.18.2)':
+    dependencies:
+      '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
+      '@deepseek-ai/dsh-tools': 0.1.6-alpha.1(e89197212305e1b19bd6df05221bc44b)
+      '@deepseek-ai/schemastery': 3.18.2
+    optionalDependencies:
+      '@deepseek-ai/dsh-attachment': 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2))
+      '@deepseek-ai/dsh-llm': 0.1.6-alpha.1(@deepseek-ai/cordis@4.0.2)
 
   '@xmldom/xmldom@0.8.15': {}
 

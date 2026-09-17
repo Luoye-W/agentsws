@@ -20,6 +20,8 @@ export type MenuAction =
   | 'rotate-secrets-key'
   /** WP82（55 §3 末段）：起一个单独 Profile 的工作用 Chrome，并把地址写进设置。 */
   | 'open-work-browser'
+  /** WP92（55 §10）：问一句「我正在用的浏览器」那一套装好没有（跑一次 `bsk doctor`）。 */
+  | 'check-browser-extension'
   | 'quit'
 
 export interface MenuItemModel {
@@ -144,6 +146,16 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
         id: 'open-work-browser',
         type: 'normal',
         label: t.openWorkBrowser,
+        enabled: input.health?.ok === true,
+      },
+      /*
+       * WP92（55 §10）：「检查浏览器扩展」。与上面那条同一条理由——扩展与 `bsk`
+       * 都在**这台电脑**上，`remote` 档问不出所以然。服务得活着：体检是服务端跑的。
+       */
+      {
+        id: 'check-browser-extension',
+        type: 'normal',
+        label: t.checkBrowserExtension,
         enabled: input.health?.ok === true,
       },
     )

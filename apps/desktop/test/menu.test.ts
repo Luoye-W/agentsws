@@ -179,6 +179,25 @@ describe('WP82（55 §3 末段）：打开工作用的浏览器', () => {
   })
 })
 
+describe('WP92（55 §10）：检查浏览器扩展', () => {
+  it('菜单里有这一项，且服务健康时才点得动（体检是服务端跑的）', () => {
+    const up = buildTrayMenu(input()).find((i) => i.id === 'check-browser-extension')
+    expect(up).toMatchObject({ type: 'normal', enabled: true, label: '检查浏览器扩展' })
+
+    const down = buildTrayMenu(input({ health: undefined })).find(
+      (i) => i.id === 'check-browser-extension',
+    )
+    expect(down?.enabled).toBe(false)
+  })
+
+  it('英文档也有文案', () => {
+    const item = buildTrayMenu(input({ language: 'en-US' })).find(
+      (i) => i.id === 'check-browser-extension',
+    )
+    expect(item?.label).toBe('Check the browser extension')
+  })
+})
+
 describe('trayTooltip', () => {
   it('版本 + 状态；暂停时补一句', () => {
     expect(trayTooltip(input())).toBe('agentsws 0.1.0 · 服务运行中')
@@ -213,6 +232,8 @@ describe('WP36 / 40 §1.3：连公司服务器那一档', () => {
     expect(ids).not.toContain('rotate-secrets-key')
     // WP82：服务在公司那台机器上，起在这儿的浏览器它连不到（127.0.0.1 各指各的）
     expect(ids).not.toContain('open-work-browser')
+    // WP92：扩展与 bsk 也都在那台电脑上，问不出所以然
+    expect(ids).not.toContain('check-browser-extension')
     expect(ids).toContain('open-workstation')
     expect(ids).toContain('toggle-pause')
     expect(ids).toContain('quit')

@@ -17,7 +17,7 @@
  * "打开工作用的浏览器"），服务端只负责记住地址、探一下通不通。服务端去 spawn
  * 用户的浏览器等于让一个后台服务在别人桌面上开窗口，那是桌面壳才该干的事。
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type {
   BrowserProbeResult,
@@ -68,6 +68,15 @@ export interface BrowserSettingsOptions {
    */
   runtimeMode(): 'local' | 'docker' | 'hosted'
   probe?: CdpProbe
+  /**
+   * WP92（55 §10）：这台机器上 `bsk` 装在哪（`AGENTSWS_DATA_DIR/bin/bsk`）。
+   *
+   * 用户没在设置里另填路径时用它。不给（没有数据目录的全内存档）= 这台服务
+   * 装不了 bsk，`browserskill` 那一项就一直是"还没装"。
+   */
+  defaultBskPath?(): string | undefined
+  /** 这个文件在不在（测试注入；缺省 `existsSync`）。 */
+  bskExists?(path: string): boolean
 }
 
 export interface BrowserSettingsAssembly {
@@ -81,6 +90,8 @@ export interface BrowserSettingsAssembly {
    * 也就是这次运行根本不开浏览器。
    */
   forRun(): RunBrowser | undefined
+  /** WP92：这台机器上 `bsk` 该在哪（设置里填过就是那个）。 */
+  bskPath(): string | undefined
 }
 
 /** CDP 的 endpoint 只允许 http(s) / ws(s)，且不能带空白（上游 provider 的同一条口径）。 */
@@ -152,6 +163,13 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
   }
 
   const attachAllowed = (): boolean => options.runtimeMode() === 'local'
+  /*
+   * WP92：「我正在用的浏览器」与 attach 同一条判据——`bsk` 与浏览器扩展都在
+   * **用户那台电脑**上，服务不在那台电脑上就连不过去。
+   */
+  const browserSkillAllowed = attachAllowed
+  const bskExists = options.bskExists ?? ((path: string) => existsSync(path))
+  const bskPathOf = (): string | undefined => settings.bsk_path ?? options.defaultBskPath?.()
 
   const view = (): BrowserSettingsView => ({
     ...settings,
@@ -162,6 +180,14 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
           attach_blocked_reason:
             '这台服务不在你自己的电脑上（Docker / 托管档），连不到你的 Chrome；' +
             '这一档只能用「独立的 Chrome」那一种。',
+        }),
+    browserskill_allowed: browserSkillAllowed(),
+    ...(browserSkillAllowed()
+      ? {}
+      : {
+          browserskill_blocked_reason:
+            '这台服务不在你自己的电脑上（Docker / 托管档）：bsk 与浏览器扩展都装在你那台' +
+            '电脑上，连不过来。这一档只能用「独立的 Chrome」那一种。',
         }),
   })
 
@@ -189,6 +215,20 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
           executable_path: path,
           headless: input.headless ?? true,
         }
+      } else if (input.mode === 'browserskill') {
+        /*
+         * WP92（55 §10）：用**用户正在用的那个浏览器**。这里只记"选了这一种"和
+         * `bsk` 在哪；扩展装没装、daemon 起没起由 `bsk doctor` 说了算（设置页第 ③ 步），
+         * 存设置这一刻不去跑它——存一个设置不该等一个子进程。
+         */
+        if (!browserSkillAllowed()) {
+          throw new BrowserSettingsError(
+            'forbidden',
+            '这一档不能用你正在用的浏览器（55 §10：bsk 与扩展都在用户那台电脑上）',
+          )
+        }
+        const path = (input.bsk_path ?? '').trim()
+        settings = { mode: 'browserskill', ...(path === '' ? {} : { bsk_path: path }) }
       } else {
         settings = { mode: 'off' }
       }
@@ -218,6 +258,18 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
         if (!attachAllowed() || settings.endpoint === undefined) return undefined
         return { mode: 'attach', endpoint: settings.endpoint }
       }
+      if (settings.mode === 'browserskill') {
+        /*
+         * WP92：**装好了才给**。没装（或者档位变了）就当这次运行没有浏览器——
+         * 与"没配浏览器"是同一种结果。给一个指不到文件的 `bsk_path` 更糟：
+         * 适配器那一层会让整次运行失败（见 `dsh-adapter/src/browserskill.ts`
+         * 的 `bskBinaryUsable`：插件卸载时会把 SIGINT 发到我们自己头上）。
+         */
+        if (!browserSkillAllowed()) return undefined
+        const path = bskPathOf()
+        if (path === undefined || !bskExists(path)) return undefined
+        return { mode: 'browserskill', bsk_path: path }
+      }
       if (settings.mode === 'launch') {
         return {
           mode: 'launch',
@@ -229,5 +281,6 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
       }
       return undefined
     },
+    bskPath: bskPathOf,
   }
 }
