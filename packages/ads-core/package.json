@@ -1,0 +1,26 @@
+{
+  "name": "@agentsws/ads-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "投放共享包（57 §2）：日花费总闸与 delta 与止损判定、素材与文案变体、两个口径的归因、四平台素材规格表、四条平台适配器。纯逻辑，注入 fetch，碰不到凭据。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/kol-core": "workspace:*",
+    "@agentsws/support-core": "workspace:*"
+  }
+}
