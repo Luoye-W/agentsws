@@ -215,3 +215,18 @@ dsh 0.1.6 仍没有渠道 / IM 这一层（全仓文档零命中）。官方入�
 - README："一切在你机器上"加"除非打开分享"（Q1）；对外叫法（P1）
 - 53：§4 整节以本文 §3 取代；表头状态改"P1–P7 已答复，落地方案见 54"
 - 41：我的代理加微信 ClawBot 入口
+
+## 8. Q7（2026-09-17 补）：终端 / Shopify CLI 走官方 shell 与沙箱 seam
+
+Luoye：Shopify 之后要用官方 CLI 改主题等，"终端"这种集成要考虑进来。53 §3 说过 Terminal AI+ 不进用户面，这一条不变；变的是**Agent 自己要能跑命令**。
+
+| 项 | 建议 |
+|---|---|
+| 谁需要 | 只有 `site.builder`（建站与主题，43）这类职责；客服 / 运营 / 红人职责不给 shell 工具 |
+| 用什么 | 官方 `dsh-tool-bash` + `dsh-sandbox`（macOS Seatbelt / Linux bwrap→Landlock / Windows restricted token）+ `dsh-sandbox-policy`，档位 `workspace-write`，工作区根 = 该品牌的主题工作副本目录，不给 `danger-full-access` |
+| 与 43 的关系 | 主题改动流程不变：改的是副本 → `theme push` 到未发布主题 → 审批卡 → 批了才发布（`ThemePublishProposal`）。区别只是"跑 `shopify theme` 命令"这一步从服务端写死的几条（`shopify-theme.ts`）变成 Agent 在沙箱里按需跑 |
+| 门禁 | 命令走 `tools/pre-execute`：`shopify theme push --unpublished` / `pull` / `list` / `check` = 读或本地写；`theme publish`、任何带 `--live` 的 = `write_external`（公司端拒，走审批卡）；非 `shopify` / `git` / `node` 前缀的命令一律拒（allowlist 白名单） |
+| 凭据 | `SHOPIFY_CLI_THEME_TOKEN` 等仍由 13 §4 的方式进沙箱环境变量（与 WP86 的 `withPresetCredentials` 同一跳），不进模型 |
+| 不做 | 用户面的终端窗口；给非建站职责开 shell |
+
+**待拍板 Q7**：同意的话派 WP（`site.builder` preset 挂官方 shell + 沙箱、命令 allowlist 门禁、43 的主题流程改由 Agent 跑 CLI），依赖 WP86 的 preset 机制，可与其余后置并行。
