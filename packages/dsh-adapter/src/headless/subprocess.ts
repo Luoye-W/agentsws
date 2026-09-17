@@ -426,19 +426,19 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
             request_id: req.id,
             status: 'cancelled',
             outputs: [],
-            provenance: {
-              run_id: req.id,
-              seen: {},
-              read_full: [],
-              recorded_at: options.clock.now(),
-            },
+            // WP87：**不把子进程已经干完的事扔掉**。超时之前它每一条工具结果都已经
+            // 经桥回来过（`tool.result.provenance_added`），宿主手里就有那份 provenance；
+            // 原来这里回一份空的，于是"读过 ord_1001 才提的退款"在证据里变成"凭空提的"，
+            // 26 的 provenance_respected 当场误红（出处：realistic 档
+            // `amazon/buyer-message-guardrail` 与 `ops/model-outage`，两条都是这个假阳）。
+            provenance: provenanceOf(req.id, events, options.clock.now()),
             memory_candidates: [],
             lessons: [],
             usage: {
               input_tokens: 0,
               output_tokens: 0,
               cached_tokens: 0,
-              tool_calls: 0,
+              tool_calls: events.filter((e) => e.type === 'tool.call').length,
               seconds: 0,
               cost_base: 0,
             },
@@ -464,4 +464,33 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
       }
     },
   }
+}
+
+/**
+ * WP87：从桥回来的事件里重建这次运行的 provenance。
+ *
+ * 子进程超时时宿主拿不到子进程那份 `Provenance` 对象，但**每一条工具结果都经桥回来过**
+ * （`tool.result` 带 `provenance_added`），所以这份账在宿主手里是全的。
+ * 顺序按事件顺序，与 `Provenance.see()` 的 LRU 一致（同一个 id 再出现就挪到末尾）。
+ */
+export function provenanceOf(
+  run_id: RunRequest['id'],
+  events: readonly RunEvent[],
+  at: string,
+): RunResult['provenance'] {
+  const seen: Record<string, string[]> = {}
+  const full: string[] = []
+  for (const e of events) {
+    if (e.type !== 'tool.result') continue
+    for (const ref of e.provenance_added ?? []) {
+      const list = seen[ref.type] ?? []
+      const idx = list.indexOf(ref.id)
+      if (idx >= 0) list.splice(idx, 1)
+      list.push(ref.id)
+      seen[ref.type] = list
+      const key = `${ref.type}:${ref.id}`
+      if (!full.includes(key)) full.push(key)
+    }
+  }
+  return { run_id, seen, read_full: full, recorded_at: at }
 }

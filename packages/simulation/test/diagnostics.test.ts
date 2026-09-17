@@ -17,15 +17,15 @@ import {
   errorReport,
   gate,
   loadScenario,
-  maskSecrets,
   type ModelTrace,
+  maskSecrets,
   runScenario,
   summarizeDiagnostics,
   traceGateway,
   writeEventsJsonl,
   writeModelJsonl,
 } from '../src/index.js'
-import { pack, PACK_DIR, runPackScenario } from './helpers.js'
+import { PACK_DIR, pack, runPackScenario } from './helpers.js'
 
 const META: ModelMeta = {
   workspace_id: 'ws_t',

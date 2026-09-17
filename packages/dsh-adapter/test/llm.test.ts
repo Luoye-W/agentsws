@@ -62,9 +62,13 @@ describe('WP87 思考模型的 reasoning 在 dsh 这条路上原样带回', () =
     const seen: { reasoning?: string }[] = []
     let turn = 0
     const gateway = {
-      async complete(req: { messages: { role: string; reasoning?: string }[] }): Promise<Completion> {
+      async complete(req: {
+        messages: { role: string; reasoning?: string }[]
+      }): Promise<Completion> {
         const assistant = req.messages.find((m) => m.role === 'assistant')
-        seen.push({ ...(assistant?.reasoning === undefined ? {} : { reasoning: assistant.reasoning }) })
+        seen.push({
+          ...(assistant?.reasoning === undefined ? {} : { reasoning: assistant.reasoning }),
+        })
         turn += 1
         return {
           text: '',

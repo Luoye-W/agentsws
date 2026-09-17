@@ -206,9 +206,24 @@ export function classifySideEffect(
   return 'write_external'
 }
 
+/**
+ * WP87：订单号与订单 id 不是一回事，这句话得写在模型看得见的地方。
+ *
+ * 出处：realistic 档（deepseek-v4.1-flash，dsh-subprocess）几乎每条场景的第一件事都是
+ * `get_order({order_id: "1001"})`——客户信里写的是「Order #1001」——回「订单不存在：1001」，
+ * 再花一到两次调用试出 `ord_1001`。一条运行只有 8 次工具调用的预算，
+ * 光这一条就烧掉两次，剩下的不够写回信（报告目录里的 `aftersales__return-within-window.events.jsonl`）。
+ *
+ * 只改这一句、不改整张工具面：工具说明进 prompt 的静态前缀，多写一段等于每次调用都多付
+ * 一份 token。同一批里写长版本（每个只读工具一句说明 + 补 `product_id`）实测让 fast 档的
+ * `tokens_per_item` 涨 23%，超过门禁 5% 的线——那条路留在报告里当建议，不在这里落。
+ */
+const ORDER_ID_HINT =
+  'Order id like "ord_1001" — a customer\'s "#1001" is the order number, not the id.'
+
 /** 只读工具共用的模型可见参数（隐式开放对象根，多余键照样接得住）。 */
 const READ_PARAMS = {
-  order_id: { type: 'string', description: 'Order id to read.' },
+  order_id: { type: 'string', description: ORDER_ID_HINT },
   email: { type: 'string', description: 'Customer email to filter by.' },
   query: { type: 'string', description: 'Free-text query.' },
   thread_id: { type: 'string', description: 'Conversation thread id.' },
@@ -318,7 +333,12 @@ function stageTool(hooks: StageToolHooks): ToolDefinition {
 function draftTool(hooks: StageToolHooks): ToolDefinition {
   return defineTool({
     name: DRAFT_TOOL,
-    description: 'Propose an outbound reply. Nothing is sent: it creates an approval item.',
+    // WP87：realistic 档里模型常把回信写在自己的正文里就收工（`model.jsonl` 的
+    // `stop: "text"`，`tools_called` 里没有 draft_reply），于是一封信都没发出去。
+    // 补的这半句是事实，不是迎合模型：不经这个工具写的字确实到不了任何人手上。
+    description:
+      'Propose an outbound reply. Nothing is sent: it creates an approval item. ' +
+      'A reply you write outside this tool reaches nobody.',
     parameters: DRAFT_PARAMS,
     output: {
       schema: { type: 'json' },

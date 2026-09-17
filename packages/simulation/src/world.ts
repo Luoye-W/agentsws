@@ -1515,6 +1515,16 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           clock,
           seed,
           ...(dshMode === undefined ? {} : { mode: dshMode }),
+          /*
+           * WP87：realistic 档把子进程超时放宽到十分钟。
+           *
+           * 缺省 60 秒是照规则脑定的——它一轮几毫秒。真模型（还是个思考模型）一次运行
+           * 四五轮、八次工具调用，六十秒根本跑不完：38 条场景跑下来，
+           * 凡是真打模型的那几条几乎都以 `status: "cancelled"` +
+           * 「这次被中断了：子进程超时」收场，起草与批准整条链就此断掉。
+           * fast 档一个字节不变（不给真模型就不给这个值）。
+           */
+          ...(opts.model === undefined ? {} : { subprocessTimeoutMs: 10 * 60 * 1000 }),
           gateway: { complete: (req) => gateway.complete(req) },
           stage: (i) => (holder.stage ?? (async () => undefined))(i),
           createDraft: (p) => (holder.createDraft ?? (async () => undefined))(p),
