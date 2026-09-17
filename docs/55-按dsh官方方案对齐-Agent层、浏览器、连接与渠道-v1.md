@@ -229,4 +229,6 @@ Luoye：Shopify 之后要用官方 CLI 改主题等，"终端"这种集成要考
 | 凭据 | `SHOPIFY_CLI_THEME_TOKEN` 等仍由 13 §4 的方式进沙箱环境变量（与 WP86 的 `withPresetCredentials` 同一跳），不进模型 |
 | 不做 | 用户面的终端窗口；给非建站职责开 shell |
 
-**待拍板 Q7**：同意的话派 WP（`site.builder` preset 挂官方 shell + 沙箱、命令 allowlist 门禁、43 的主题流程改由 Agent 跑 CLI），依赖 WP86 的 preset 机制，可与其余后置并行。
+**与另一会话 WP77（建站，docs/59）的分工（09-17 已对齐）**：WP77 不引入 shell / 沙箱、不做命令门禁，它把 `site.builder` 改名 `site.shopify-theme`（yml 在 `packages/roles/roles/site/shopify-theme.yml`），写动作 `theme_edit`（副本）/ `publish_theme`（永远 L1）已在，主题那一跳仍是 43 的 `apps/server/src/shopify-theme.ts` CLI 封装。Q7 落点沿用它：职责 id 用 `site.shopify-theme`；allowlist 把 `theme publish` / `--live` 归到 `publish_theme` 那张卡；合并顺序 WP77 先进 main、Q7 的 WP 再合。
+
+**待拍板 Q7**：同意的话派 WP（`site.shopify-theme` preset 挂官方 shell + 沙箱、命令 allowlist 门禁、主题流程改由 Agent 在沙箱里跑 CLI），依赖 WP86 的 preset 机制与 WP77 合并。
