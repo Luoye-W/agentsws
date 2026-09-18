@@ -19,7 +19,7 @@ import { ADMIN_TOKEN_ENV } from '@agentsws/cloud/workers-kit'
 import { authenticate, errorResponse } from '@agentsws/cloud-entry'
 import type { CloudTokenVerifier, VerifiedCloudToken } from '@agentsws/contracts'
 import type { WorkerEnv } from './env.js'
-import { stripInternalHeaders, withInternalHeaders } from './internal.js'
+import { INTERNAL_HEADERS, stripInternalHeaders, withInternalHeaders } from './internal.js'
 
 /** 单例 `AccountsDO` 的名字。只有这一个名字，所以只有这一个对象。 */
 export const ACCOUNTS_SINGLETON = 'accounts'
@@ -60,6 +60,27 @@ export const STRIPE_WEBHOOK_PATH = '/v1/wallet/topup/stripe/webhook'
 
 /** 管理员手动发积分（WP110）。 */
 export const ADMIN_TOPUP_PATH = '/v1/admin/topup'
+
+/** 运营后台的静态产物（WP115）。由 wrangler 的 `[assets]` 服务，不进这段代码。 */
+export const ADMIN_ASSET_PREFIX = '/admin/'
+
+/**
+ * 这条路归后台那一层吗（WP115 / 65 §2）。
+ *
+ * 后台的**会话、角色、封禁、黑名单、审计、会员 term** 都与账号住在
+ * `AccountsDO` 的同一张库里，所以 `/v1/admin/*` 与 `/admin/*` 一律去那个单例。
+ * 例外只有一条：`/v1/admin/topup`（WP110 那条手动充值）**要动钱**，所以它
+ * 仍然去 `WalletDO`——上面单独判了。
+ */
+export function isAdminPath(pathname: string): boolean {
+  if (pathname === ADMIN_TOPUP_PATH) return false
+  return (
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname.startsWith('/v1/admin/') ||
+    pathname === '/v1/admin'
+  )
+}
 
 /** 定长比较：不给计时旁路。 */
 export function secretEquals(a: string, b: string): boolean {
@@ -207,6 +228,29 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
 
   if (url.pathname === ADMIN_TOPUP_PATH && clean.method === 'POST')
     return handleAdminTopup(env, clean, origin)
+
+  /*
+   * WP115 的后台。**不在这里判权限**——那一层在 `AccountsDO` 里（会话、角色、
+   * CSRF 都要查库）。这里只负责把它送到对的对象上。
+   *
+   * `/admin/assets/*` 这类静态资产由 wrangler 的 `[assets]` 在到达 Worker
+   * **之前**就回掉了（`not_found_handling = "none"`，`run_worker_first` 只对
+   * `/admin/*` 之外的路径为真——见 wrangler.toml 的那一段）。所以走到这里的
+   * `/admin/*` 只剩服务端渲染的那两页与 SPA 的兜底。
+   */
+  if (isAdminPath(url.pathname)) {
+    const res = await accountsStub(env).fetch(clean)
+    /*
+     * DO 说"这个人有后台会话"（204 + 内部头）→ 由这里去 `[assets]` 取文件。
+     * 判权限在库那一侧，取文件在 binding 这一侧，一次往返各做一半。
+     */
+    if (res.status === 204 && res.headers.get(INTERNAL_HEADERS.adminAsset) === '1') {
+      if (env.ASSETS === undefined)
+        return envelope('not_found', `没有这个入口：${clean.method} ${url.pathname}`, 404)
+      return env.ASSETS.fetch(clean)
+    }
+    return res
+  }
 
   if (isWalletPath(url.pathname)) {
     // ② 验令牌：每次都去问 AccountsDO（撤销立刻生效）

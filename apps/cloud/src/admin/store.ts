@@ -648,7 +648,7 @@ export class AdminStore {
    */
   tombstoneAccount(account_id: string, tombstoneEmail: string): void {
     const now = this.now()
-    const tx = this.db.transaction(() => {
+    this.db.transaction(() => {
       this.db
         .prepare("UPDATE cloud_accounts SET email = ?, role = 'user', deleted_at = ? WHERE id = ?")
         .run(tombstoneEmail, now, account_id)

@@ -1292,13 +1292,22 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
          * 与 `admin.topup` 一样被排除在"用量"之外（见 `admin-queries.ts` 的
          * `NON_USAGE_CAPABILITIES`），所以不会把总用量拉低。
          */
-        const out = await port.revoke({
-          org_id: input.org_id ?? '',
-          lot_id: input.lot_id,
-          reason: input.reason,
-          actor_account_id: principal.session.account_id,
-          at: deps.clock.now(),
-        })
+        let out: { revoked: number } | undefined
+        try {
+          out = await port.revoke({
+            org_id: input.org_id ?? '',
+            lot_id: input.lot_id,
+            reason: input.reason,
+            actor_account_id: principal.session.account_id,
+            at: deps.clock.now(),
+          })
+        } catch (err) {
+          /*
+           * 钱那一侧说不行（比如官方托管形态下没给 `org_id`，不知道该敲哪扇门）：
+           * **把它的原话端出来**。翻成"没有这一笔"会让人去找一笔本来就在的积分。
+           */
+          throw new ApiError('invalid_input', err instanceof Error ? err.message : '撤不了')
+        }
         if (out === undefined)
           throw new ApiError('not_found', '没有这一笔 granted 积分（充值买的不能撤）')
         admin.audit({

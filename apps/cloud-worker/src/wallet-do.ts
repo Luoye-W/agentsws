@@ -20,6 +20,15 @@
  * 来自 Worker 的调用（它在公网上没有地址），所以 `verifier` 就是"把内部头里
  * 那一份拿出来"。403（差 scope）与 402（余额不够）仍然在这里判——
  * 那两件事本来就该在钱这一侧判。
+ *
+ * WP115（65 §9）加了两样：
+ *
+ * - **每条计量事件抄一份给单例 `LedgerDO`**（后台的总览 / 台账要跨全部组织看，
+ *   而 DO 是按组织切开的）。抄写走 `ctx.waitUntil`：**绝不阻塞也绝不回滚扣费**，
+ *   失败的行留在本对象的待补队列里，alarm 时重投（重投安全——那一头有唯一索引）。
+ * - 一组**只给后台用的内部路由**（`/__internal/admin/*`）：余额真值、lots、
+ *   发积分、撤回、匿名化。它们在这里而不在后台那一侧，是因为钱只能在钱的
+ *   对象里动——撤回与那条负向流水必须落在同一个事务里。
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks'
@@ -43,13 +52,30 @@ import {
   mountEntryRoutes,
   type StripeConfig,
 } from '@agentsws/cloud-entry'
-import type { Clock, CloudTokenVerifier, Pricing, VerifiedCloudToken } from '@agentsws/contracts'
-import { buildPricing, createSqlWalletStore, type SqlWalletStore, Wallet } from '@agentsws/metering'
+import type {
+  Clock,
+  CloudTokenVerifier,
+  MeteringEvent,
+  Pricing,
+  VerifiedCloudToken,
+  WalletLot,
+} from '@agentsws/contracts'
+import {
+  buildPricing,
+  createSqlWalletStore,
+  type SqlWalletStore,
+  sqlWalletAdminPort,
+  Wallet,
+  type WalletAdminPort,
+} from '@agentsws/metering'
 import type { Hono } from 'hono'
 import type { DoStorageLike } from './do-sql.js'
 import { doSyncDb } from './do-sql.js'
 import type { WorkerEnv } from './env.js'
 import { INTERNAL_HEADERS, principalFrom } from './internal.js'
+import { copyEventsTo, copyLotsTo, LEDGER_SINGLETON } from './ledger-do.js'
+import { createOutbox, type Outbox, outboxEventKey } from './outbox.js'
+import { handleWalletAdmin } from './wallet-admin.js'
 
 /** 预扣多久扫一次（与 Compose 形态的 `SWEEP_INTERVAL_MS` 同一个数）。 */
 export const RESERVATION_SWEEP_MS = 10 * 60 * 1000
@@ -81,6 +107,13 @@ export interface WalletDoOptions {
   /** 测试注入假上游 → 全程不联网、不花钱。 */
   fetch?: EntryDeps['fetch']
   newRequestId?: () => string
+  /**
+   * 抄给 Ledger 的那一跳。不给就按 `env.LEDGER` 取；两样都没有就**只排队不抄**
+   * （队列会长，健康页看得见）——那比静默丢掉一条账好。
+   */
+  ledgerStub?: { fetch(request: Request): Promise<Response> }
+  /** `ctx.waitUntil`；测试里给一个同步收集器。不给就直接 `void` 掉那个 Promise。 */
+  waitUntil?: (p: Promise<unknown>) => void
 }
 
 export class WalletCore {
@@ -88,9 +121,15 @@ export class WalletCore {
   readonly wallet: Wallet
   readonly pricing: Pricing
   readonly idempotency: SweepableIdempotencyStore
+  /** 后台那一侧用的钱口（余额真值 / lots / 发放 / 撤回 / 匿名化）。 */
+  readonly port: WalletAdminPort
+  /** 抄给 Ledger 的待补队列。 */
+  readonly outbox: Outbox
   readonly #app: Hono<EntryEnv>
   readonly #state: WalletDoStateLike
   readonly #clock: Clock
+  readonly #ledger: { fetch(request: Request): Promise<Response> } | undefined
+  readonly #waitUntil: (p: Promise<unknown>) => void
 
   constructor(state: WalletDoStateLike, env: WorkerEnv, options: WalletDoOptions = {}) {
     this.#state = state
@@ -100,12 +139,49 @@ export class WalletCore {
     const db = doSyncDb(state.storage)
     // 迁移在第一次唤醒时跑完（同步）——升级 = 再 deploy 一次，见 docs/64 §8
     this.store = createSqlWalletStore({ db, now })
+    this.outbox = createOutbox(db, now)
+    this.#ledger =
+      options.ledgerStub ??
+      (env.LEDGER === undefined
+        ? undefined
+        : env.LEDGER.get(env.LEDGER.idFromName(LEDGER_SINGLETON)))
+    this.#waitUntil =
+      options.waitUntil ??
+      ((p) => {
+        // 没有 ctx.waitUntil（测试、或者装配方没给）就随它去——**不 await**：
+        // 抄一份给看板绝不能拖住用户那条请求
+        void p.catch(() => undefined)
+      })
     // 幂等表与钱包住在同一张 DO SQLite 里 → 版本号表另起一个名字（见 AccountsDO 那条注释）
     this.idempotency = new SqlIdempotencyStore({
       db,
       clock,
       migrationsTable: IDEMPOTENCY_MIGRATIONS_TABLE,
     })
+
+    /*
+     * 每条计量事件**同步排一次队**（就在扣费那一跳里，同一张库）。
+     * 真正抄出去是后面 `ctx.waitUntil` 的事。
+     */
+    const outbox = this.outbox
+    const baseAppend = this.store.appendEvent.bind(this.store)
+    this.store.appendEvent = (e: MeteringEvent): void => {
+      baseAppend(e)
+      try {
+        outbox.push('event', outboxEventKey(e), e, e.at)
+      } catch {
+        // 排队失败不该把扣费也带走——那条账已经记在本对象里了，只是看板会少一行
+      }
+    }
+    const baseAddLot = this.store.addLot.bind(this.store)
+    this.store.addLot = (lot: WalletLot): void => {
+      baseAddLot(lot)
+      try {
+        outbox.push('lot', lot.id, lot, lot.granted_at)
+      } catch {
+        /* 同上 */
+      }
+    }
 
     let seq = 0
     this.wallet = new Wallet({
@@ -118,6 +194,13 @@ export class WalletCore {
       },
     })
     this.pricing = options.pricing ?? buildPricing()
+    this.port = sqlWalletAdminPort({
+      db,
+      wallet: this.wallet,
+      appendEvent: (e) => {
+        this.store.appendEvent(e)
+      },
+    })
 
     const upstream: AiUpstream = {
       base_url: env.AGENTSWS_NEWAPI_BASE_URL ?? DEFAULT_WORKER_UPSTREAM,
@@ -198,14 +281,47 @@ export class WalletCore {
         headers: { 'content-type': 'application/json' },
       })
     }
+    // WP115：后台那几条（余额真值 / lots / 发放 / 撤回 / 匿名化）
+    const adminRes = await handleWalletAdmin(this.port, request, url)
+    if (adminRes !== undefined) {
+      this.#scheduleFlush()
+      await this.armAlarm()
+      return adminRes
+    }
     const principal = principalFrom(request)
     const run = async (): Promise<Response> => {
       const res = await this.#app.fetch(request)
+      /*
+       * 抄给 Ledger 排在**响应之后**（`ctx.waitUntil`）：用户那条请求不等它。
+       * 抄失败的行留在队列里，下一次 alarm 再试。
+       */
+      this.#scheduleFlush()
       await this.armAlarm()
       return res
     }
     // 没有内部头（管理员那条路由就没有）就不开 ALS 作用域
     return principal === undefined ? run() : PRINCIPAL.run(principal, run)
+  }
+
+  /** 把待补队列里的行抄给 Ledger。**永不抛**——它是"顺便"，不是"必须"。 */
+  async flushOutbox(limit = 100): Promise<{ events: number; lots: number; left: number }> {
+    if (this.#ledger === undefined) return { events: 0, lots: 0, left: this.outbox.size() }
+    const batch = this.outbox.take(limit)
+    if (batch.ids.length === 0) return { events: 0, lots: 0, left: 0 }
+    const okEvents = await copyEventsTo(this.#ledger, batch.events)
+    const okLots = await copyLotsTo(this.#ledger, batch.lots)
+    if (okEvents && okLots) {
+      this.outbox.done(batch.ids)
+      return { events: batch.events.length, lots: batch.lots.length, left: this.outbox.size() }
+    }
+    // 一半成一半不成也整批留着重投：Ledger 那一头有唯一索引，重投是安全的
+    this.outbox.failed(batch.ids)
+    return { events: 0, lots: 0, left: this.outbox.size() }
+  }
+
+  #scheduleFlush(): void {
+    if (this.#ledger === undefined || this.outbox.size() === 0) return
+    this.#waitUntil(this.flushOutbox())
   }
 
   /**
@@ -232,15 +348,18 @@ export class WalletCore {
     return { reservations, idempotency }
   }
 
-  async alarm(): Promise<{ reservations: number; idempotency: number }> {
+  async alarm(): Promise<{ reservations: number; idempotency: number; outbox: number }> {
     const out = this.sweep()
+    // 重投那些没抄出去的（这是待补队列存在的全部理由）
+    const flushed = await this.flushOutbox()
     await this.armAlarm(true)
-    return out
+    return { ...out, outbox: flushed.events + flushed.lots }
   }
 
-  /** 有预扣（或有幂等键）才续闹钟；两样都没有就让这个对象安静睡着。 */
+  /** 有预扣（或有幂等键、或有没抄出去的账）才续闹钟；都没有就让这个对象安静睡着。 */
   async armAlarm(force = false): Promise<void> {
-    const wanted = this.store.hasReservations() || this.idempotency.size > 0
+    const wanted =
+      this.store.hasReservations() || this.idempotency.size > 0 || this.outbox.size() > 0
     if (!wanted) return
     if (!force) {
       const current = await this.#state.storage.getAlarm()

@@ -29,6 +29,14 @@ export const INTERNAL_HEADERS = {
   trace: 'X-Agentsws-Internal-Trace',
   /** 管理员那条路由：Worker 已经把邮箱解析成组织了，DO 不必再查账号库。 */
   adminOrg: 'X-Agentsws-Internal-Admin-Org',
+  /**
+   * WP115：`AccountsDO` 对 Worker 说"这个人有后台会话，把静态产物给他"。
+   *
+   * 为什么是一个头而不是让 DO 自己回文件：`[assets]` 的 binding 在**入口
+   * Worker** 上，DO 拿不到；而判权限要查库，库在 DO 里。一次往返，两边各做
+   * 自己做得到的那一半。
+   */
+  adminAsset: 'X-Agentsws-Internal-Admin-Asset',
 } as const
 
 /** 全部内部头的名字（进门先按这张表剥）。 */
