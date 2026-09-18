@@ -3,6 +3,7 @@
  * 事件名在联合里、动作集只有三个、令牌明文与哈希不在任何 payload 上。
  */
 import { describe, expect, it } from 'vitest'
+import { CLOUD_BASE_URL_ENV, cloudBaseUrl, DEFAULT_CLOUD_BASE_URL } from '../src/cloud.js'
 import type {
   CloudAccount,
   CloudAccountLinkedPayload,
@@ -101,5 +102,21 @@ describe('49 M1 云账号契约', () => {
       scopes: ['ai'],
     })
     expect(await verify('wst_revoked')).toBeUndefined()
+  })
+})
+
+/** WP110：域名买下来了，默认地址改成 `cloud.agentsws.com`，而且只在这一处定义。 */
+describe('WP110 云的默认地址', () => {
+  it('默认地址是 cloud.agentsws.com', () => {
+    expect(DEFAULT_CLOUD_BASE_URL).toBe('https://cloud.agentsws.com')
+    expect(CLOUD_BASE_URL_ENV).toBe('AGENTSWS_CLOUD_BASE_URL')
+  })
+
+  it('环境变量永远优先，末尾斜杠去掉；空串当没配', () => {
+    expect(cloudBaseUrl({})).toBe(DEFAULT_CLOUD_BASE_URL)
+    expect(cloudBaseUrl({ [CLOUD_BASE_URL_ENV]: '   ' })).toBe(DEFAULT_CLOUD_BASE_URL)
+    expect(cloudBaseUrl({ [CLOUD_BASE_URL_ENV]: 'http://127.0.0.1:4401/' })).toBe(
+      'http://127.0.0.1:4401',
+    )
   })
 })

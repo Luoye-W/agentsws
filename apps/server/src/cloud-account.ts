@@ -41,15 +41,14 @@ import type {
   EventEnvelope,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { emailDomain } from '@agentsws/contracts'
+import { CLOUD_BASE_URL_ENV, DEFAULT_CLOUD_BASE_URL, emailDomain } from '@agentsws/contracts'
 import type { SecretStore } from './secret-store.js'
 
 /** 本机加密库里的 key 名。与连接面（`conn:*`）、模型面（`model:*`）同库不同前缀。 */
 export const CLOUD_TOKEN_SECRET_ID = 'cloud.workspace_token'
 
-/** 云的地址；全仓唯一真源在这里解析。 */
-export const CLOUD_BASE_URL_ENV = 'AGENTSWS_CLOUD_BASE_URL'
-export const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agentsws.app'
+/** 云的地址；全仓唯一真源在 `@agentsws/contracts`（WP110），这里只转出去。 */
+export { CLOUD_BASE_URL_ENV, DEFAULT_CLOUD_BASE_URL }
 
 /** 一次关联最多挂多久没人点（超了就作废，免得一条 state 永远有效）。 */
 export const LINK_PENDING_TTL_MS = 30 * 60 * 1000

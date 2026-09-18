@@ -31,7 +31,7 @@ import {
   type OpenApiDocument,
   toRouteSpec,
 } from '@agentsws/api'
-import type { Clock, CloudTokenVerifier } from '@agentsws/contracts'
+import { type Clock, type CloudTokenVerifier, cloudBaseUrl } from '@agentsws/contracts'
 import { type ServerType, serve } from '@hono/node-server'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { type MailSender, mailSenderFromEnv } from './mail.js'
@@ -44,9 +44,11 @@ import { type CloudStore, cloudDbPath, createCloudStore } from './store.js'
 export const DEFAULT_CLOUD_PORT = 4400
 export const CLOUD_PORT_ENV = 'AGENTSWS_CLOUD_PORT'
 export const CLOUD_DATA_DIR_ENV = 'AGENTSWS_CLOUD_DATA_DIR'
-export const CLOUD_BASE_URL_ENV = 'AGENTSWS_CLOUD_BASE_URL'
-/** 云的对外地址。现在还不存在——本地测试用 `createCloudServer` 起一个内存版。 */
-export const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agentsws.app'
+/**
+ * 云的对外地址与它的环境变量名。**定义在 `@agentsws/contracts`**（WP110 收成一处），
+ * 这里只转出去——`apps/cloud` 的调用方一直是从这个模块 import 的，签名不动。
+ */
+export { CLOUD_BASE_URL_ENV, DEFAULT_CLOUD_BASE_URL } from '@agentsws/contracts'
 export const HOST = '0.0.0.0'
 
 export interface CloudServerOptions {
@@ -121,7 +123,7 @@ export function createCloudServer(options: CloudServerOptions = {}): CloudServer
   const clock: Clock = options.clock ?? { now: () => new Date().toISOString() }
   const version = options.version ?? env.AGENTSWS_VERSION ?? '0.1.0'
   const dataDir = options.dataDir ?? env[CLOUD_DATA_DIR_ENV]
-  const baseUrl = (env[CLOUD_BASE_URL_ENV] ?? DEFAULT_CLOUD_BASE_URL).replace(/\/+$/, '')
+  const baseUrl = cloudBaseUrl(env)
   const store = createCloudStore({
     dbPath: cloudDbPath(dataDir),
     clock,

@@ -4,7 +4,7 @@
  * 商家往自己网站里贴一行：
  *
  * ```html
- * <script src="https://cloud.agentsws.app/w/ws_x/widget.js" async></script>
+ * <script src="https://cloud.agentsws.com/w/ws_x/widget.js" async></script>
  * ```
  *
  * 四条硬约束，逐条写在代码里：
