@@ -1,151 +1,158 @@
 /**
- * 证据芯片与实体芯片（37 §1 第 5 行）。
+ * 卡片外围的那几个芯片（37 §1 第 5 行）+ WP98（09-18 收口）。
  *
- * 两条硬规矩：
+ * WP96 之后真实页面上一张卡的正文底下常常挂着七八个小圆角标签：对象引用、事实卡引用、
+ * 额度、期限、预检通过、引用了 N 条知识、读了 N 条记录、还有 N 条你无权查看已隐去……
+ * 它们不是一类东西。**只有头三样是这次决定要看的**（这一单是谁的、能不能花这笔钱、
+ * 依据哪一句），其余是"这件事被查过了"的证据层——证据该在需要时点开看，不该常驻卡面。
+ *
+ * 所以这个文件现在只出两样：
+ * - {@link CardChips}：外围芯片，**最多三个**（对象引用 → 额度 / 总闸 → 事实卡引用）；
+ * - {@link EvidencePill}：卡片右上角那个"证据 N"，点开在第三栏的证据面板看。
+ *   面板走的是 WP95 那条**公开注册路**（`useRailState().show('evidence')`），
+ *   这里只调用，注册层一个字不碰。
+ *
+ * 两条硬规矩一个字没改：
  * - 证据芯片**只渲染 i18n key + 参数**，它的数据里根本没有 ref 可露。
  * - 实体芯片**只渲染 `label`**（服务端 enrichment 查出来的展示名），`id` 只用来跳转，
  *   一个字都不印在卡面上——WP15 截图里的 `fact_775c…` / `cus_anna` 就是这么漏出去的。
  */
-import type { DeckEntityChip, DeckEvidenceChip, DeckHighlight } from '@agentsws/deck'
+import type { DeckCard, DeckEntityChip, DeckHighlight } from '@agentsws/deck'
+import { FileSearch } from 'lucide-react'
 import { FactChip, ObjectChip } from '@/components/chips'
 import { Badge } from '@/components/ui/badge'
 import { useApp } from '@/lib/app-context'
 
-export function EvidenceChips({ chips }: { chips: DeckEvidenceChip[] }): React.ReactNode {
-  const { t } = useApp()
-  if (chips.length === 0) return null
-  return (
-    <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label={t('card.evidence')}>
-      {chips.map((chip) => (
-        <li key={`${chip.label_key}-${JSON.stringify(chip.params ?? {})}`}>
-          <span className="inline-block rounded-lg border bg-muted/40 px-2.5 py-1 text-xs">
-            {t(chip.label_key, chip.params)}
-          </span>
-        </li>
-      ))}
-    </ul>
-  )
-}
+/** `useApp().t`——这个文件里有一个纯函数要用它，所以把那一行签名写出来。 */
+type Translate = (key: string, vars?: Record<string, string | number>) => string
+
+/** 09-18 Luoye 定：外围**最多三个**。第四个开始就是"看不完，于是一个也不看"。 */
+export const MAX_CARD_CHIPS = 3
 
 /**
- * 实体芯片另起一行（37 §1 第 5 行「实体 chip 另起一行」）。
+ * 「额度 / 总闸」那一家：**这次决定花不花得起**。
  *
- * 47 J2：**对象引用与知识引用长得不一样**——`fact_card` 走 `FactChip`（虚线 + 引号），
- * 其余对象走 `ObjectChip`（实框 + 主色）。人一眼就分得出"这是现在的状态"还是"这是一句话"。
+ * 只有这两种进外围——它们是按下"批准"之前必须看清的一格（57 §1 总闸、14 §2 额度）。
+ * 期限、渠道、排期、版规那些要么已经在主体里（`deck-card-body` 按 layout 各取各的），
+ * 要么属于证据层，都进右上角那个胶囊。
  */
-export function EntityChips({
+const GATE_TYPES: readonly DeckHighlight['type'][] = ['amount', 'spend_gate']
+
+const isGate = (h: DeckHighlight): boolean => GATE_TYPES.includes(h.type)
+
+/**
+ * 外围芯片：与这次决定**直接相关**的那几个，按"对象 → 额度 → 依据"取，满三个就停。
+ *
+ * 顺序是有意的：人先问"这是哪一单"，再问"花不花得起"，最后才问"凭什么"。
+ */
+export function CardChips({
   chips,
-  dropped,
+  highlights,
   onOpen,
 }: {
   chips: DeckEntityChip[]
-  dropped: number
+  highlights: DeckHighlight[]
   onOpen?: (chip: DeckEntityChip) => void
 }): React.ReactNode {
-  const { t } = useApp()
-  if (chips.length === 0 && dropped === 0) return null
+  const objects = chips.filter((c) => c.type !== 'fact_card')
+  const facts = chips.filter((c) => c.type === 'fact_card')
+  const gates = highlights.filter(isGate)
+  const picked = [
+    ...objects.map((c) => ({ kind: 'object' as const, chip: c })),
+    ...gates.map((h) => ({ kind: 'gate' as const, highlight: h })),
+    ...facts.map((c) => ({ kind: 'fact' as const, chip: c })),
+  ].slice(0, MAX_CARD_CHIPS)
+  if (picked.length === 0) return null
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="entity-chips">
-      {chips.map((chip) =>
-        chip.type === 'fact_card' ? (
+    <div className="mt-2.5 flex flex-wrap items-center gap-1.5" data-testid="card-chips">
+      {picked.map((item) =>
+        item.kind === 'gate' ? (
+          <Badge
+            key={`gate:${item.highlight.type}:${item.highlight.text}`}
+            variant="outline"
+            data-testid="gate-chip"
+            className="border-chart-1/50 font-normal text-foreground"
+          >
+            {item.highlight.text}
+          </Badge>
+        ) : item.kind === 'fact' ? (
+          // 47 J2：知识引用是虚线 + 引号，与实框的对象引用刻意不同——
+          // 人一眼要分得出"这是现在的状态"还是"这是一句话"。
           <FactChip
-            key={`${chip.type}:${chip.id}`}
-            label={chip.label}
+            key={`fact:${item.chip.id}`}
+            label={item.chip.label}
             onOpen={() => {
-              onOpen?.(chip)
+              onOpen?.(item.chip)
             }}
           />
         ) : (
           <ObjectChip
-            key={`${chip.type}:${chip.id}`}
-            label={chip.label}
-            id={chip.id}
+            key={`${item.chip.type}:${item.chip.id}`}
+            label={item.chip.label}
+            id={item.chip.id}
             onOpen={() => {
-              onOpen?.(chip)
+              onOpen?.(item.chip)
             }}
           />
         ),
-      )}
-      {dropped === 0 ? null : (
-        <span className="text-xs text-muted-foreground" data-testid="enrichment-note">
-          {t('deck.enrichment.dropped', { n: dropped })}
-        </span>
       )}
     </div>
   )
 }
 
-const TONE: Record<DeckHighlight['type'], string> = {
-  amount: 'border-chart-2/40 text-foreground',
-  deadline: 'border-chart-4/50 text-foreground',
-  commitment: 'border-chart-5/50 text-foreground',
-  risk_term: 'border-destructive/50 text-destructive',
-  order_ref: 'border-border text-muted-foreground',
-  // WP64：群发的受众规模与剔除人数是中性事实（不是风险词，别染成红的）；
-  // 超期天数是这张卡存在的理由，给它告警色。
-  audience: 'border-chart-2/40 text-foreground',
-  suppressed: 'border-border text-muted-foreground',
-  overdue: 'border-destructive/50 text-destructive',
-  tracking: 'border-border text-muted-foreground',
-  // WP67：红人是谁、合作走到哪一步、这条链接带回来多少——都是中性事实。
-  // 归因那一格给强调色：它是这个岗位存在的理由。
-  creator: 'border-chart-2/40 text-foreground',
-  stage: 'border-border text-muted-foreground',
-  attribution: 'border-chart-1/50 text-foreground',
-  // WP72：渠道、申请人、管理动作都是中性事实；**发布时间**给强调色——
-  // 批了之后这条内容会在那个时刻自己出去，它是人按下那一下之前最该看清的一格。
-  channel: 'border-border text-muted-foreground',
-  scheduled: 'border-chart-1/50 text-foreground',
-  member: 'border-border text-muted-foreground',
-  // 转客服：这条不归我答。给它一个能一眼扫到的边，免得压在队列里没人接
-  handoff: 'border-chart-4/50 text-foreground',
-  // WP76（58 §3）：规格与张数是中性事实。
-  spec: 'border-border text-muted-foreground',
-  variants: 'border-border text-muted-foreground',
-  // **谁点的头**给强调色：04 §6 那条"视觉决定永远是人"在界面上唯一看得见的
-  // 地方就是它——批的人要一眼看出，这一张是有人挑过的，不是机器自己选的。
-  picked_by: 'border-chart-1/50 text-foreground',
-  // 没有图片模型：这不是错误，是一句要被读完的人话。给它一个能一眼扫到的边。
-  no_image_model: 'border-chart-4/50 text-foreground',
-  // WP77：**预览链接**给强调色——12 §2「预览链接就是审批材料」，
-  // 它是人按下"发布"之前最该点开的一格。缺项数给告警色（那是这张卡存在的理由）；
-  // 这张卡对着哪一封信 / 哪一个 App 是中性事实。
-  preview: 'border-chart-1/50 text-foreground',
-  gaps: 'border-destructive/50 text-destructive',
-  site_target: 'border-border text-muted-foreground',
-  // WP75：平台是中性事实；**总闸**给告警色——它是"今天还能不能再花钱"那一格，
-  // 而这张卡正要花钱；止损判据给强调色：那是人真正要判的内容（不是"止损"两个字）。
-  platform: 'border-border text-muted-foreground',
-  spend_gate: 'border-destructive/50 text-destructive',
-  stop_loss: 'border-chart-1/50 text-foreground',
-  // WP78：**版规**给告警色——我们在别人的地盘上，那一格说的是"这一条会不会
-  // 让整个品牌被那个版赶走"，它是外部发帖卡上最该先看清的一格。
-  // 数字出处是中性事实（提得上来的稿子那两个数永远相等）；舆情给强调色：
-  // 一条被转了 30 次的负面与一条孤零零的抱怨，要不要现在就回是两个答案。
-  venue_rules: 'border-destructive/50 text-destructive',
-  facts_cited: 'border-border text-muted-foreground',
-  sentiment: 'border-chart-1/50 text-foreground',
+/**
+ * 这张卡的**证据层**摊成几句人话：预检结果、引用了几条知识、查了哪几单、
+ * 读了多少条记录、还有几条无权查看已隐去、期限、以及外围没排上的那些高亮。
+ *
+ * 全是**已经在卡上的字段**，一句都不是这儿现编的（14 §2 数字不经模型手）。
+ * `deadline` 那一条按本地时区排版，与它原来在高亮行里的样子一致。
+ */
+export function evidenceLines(
+  card: DeckCard,
+  t: Translate,
+  formatDeadline: (iso: string) => string,
+): string[] {
+  const out = card.evidence_chips.map((chip) => t(chip.label_key, chip.params))
+  for (const h of card.highlights) {
+    if (isGate(h)) continue
+    out.push(
+      `${t(`highlight.${h.type}`)} ${h.type === 'deadline' ? formatDeadline(h.text) : h.text}`,
+    )
+  }
+  const dropped = card.detail.enrichment.dropped_refs
+  if (dropped > 0) out.push(t('deck.enrichment.dropped', { n: dropped }))
+  if (card.merge_count > 1) out.push(t('deck.merge', { n: card.merge_count }))
+  return out
 }
 
-export function Highlights({
-  highlights,
-  formatDeadline,
+/**
+ * 卡片右上角那个「证据 N」。
+ *
+ * 点它 = 在第三栏打开证据面板（WP71 就有那一格）。走的是 WP95 定下的**公开注册路**，
+ * 与应用包开一个面板用的是同一句——注册层这次一个字都没碰。
+ * 悬停时 `title` 里就是那 N 条，于是"要不要点开"这件事本身不用点开才知道。
+ */
+export function EvidencePill({
+  lines,
+  onOpen,
 }: {
-  highlights: DeckHighlight[]
-  formatDeadline: (iso: string) => string
+  lines: string[]
+  onOpen: () => void
 }): React.ReactNode {
   const { t } = useApp()
-  if (highlights.length === 0) return null
+  if (lines.length === 0) return null
   return (
-    <ul className="mt-2.5 flex flex-wrap gap-1.5">
-      {highlights.map((h) => (
-        <li key={`${h.type}-${h.text}`}>
-          <Badge variant="outline" className={`font-normal ${TONE[h.type]}`}>
-            <span className="text-[10px] uppercase opacity-60">{t(`highlight.${h.type}`)}</span>
-            <span className="ml-1">{h.type === 'deadline' ? formatDeadline(h.text) : h.text}</span>
-          </Badge>
-        </li>
-      ))}
-    </ul>
+    <button
+      type="button"
+      data-testid="deck-evidence"
+      data-count={lines.length}
+      title={lines.join(' · ')}
+      aria-label={t('deck.evidence.open')}
+      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-ws-surface px-2 text-[11px] text-ws-muted-fg hover:text-ws-ink"
+      onClick={onOpen}
+    >
+      <FileSearch className="size-3" aria-hidden />
+      {t('deck.evidence.pill', { n: lines.length })}
+    </button>
   )
 }

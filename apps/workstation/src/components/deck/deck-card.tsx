@@ -31,8 +31,9 @@ import {
   DECK_CARD_MIN_HEIGHT_CLASS,
 } from '@/components/deck/deck-layout'
 import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/deck/deck-panels'
-import { EntityChips, EvidenceChips, Highlights } from '@/components/deck/evidence-chips'
-import { GoButton, WsAvatar } from '@/components/design'
+import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
+import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
+import { useRailState } from '@/components/rail/rail-state'
 import { getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
@@ -92,8 +93,17 @@ function CardDetail({ card }: { card: DeckCard }): React.ReactNode {
   )
 }
 
-/** 倒计时徽章：**只有带 expires_at 的卡才出**，每秒滴答一次（37 §1 第 2 行）。 */
-function Countdown({ expiresAt }: { expiresAt: string }): React.ReactNode {
+/**
+ * 头一行第二枚：**等待时长**（WP98 收口）。
+ *
+ * 09-18 之前这一行上并排着"排队 / 已过期 / 变更待批 / 邮件"四枚胶囊，加上倒计时与
+ * "合并 N 张"能到六枚——而人扫一眼只想知道两件事：这是谁家的什么活儿、急不急。
+ * 于是这一枚把**倒计时、已过期、已处理**合成一个：每秒还是滴答（37 §1 第 2 行），
+ * 已过期的卡"期限"照旧在这里表达，其余的进右上角那个"证据 N"。
+ *
+ * 没有 `expires_at` 又还没决定的卡不出这一枚——没人在等就别装出有人在等。
+ */
+function WaitPill({ card }: { card: DeckCard }): React.ReactNode {
   const { t } = useApp()
   const [nowMs, setNowMs] = useState(() => Date.now())
   useEffect(() => {
@@ -104,7 +114,15 @@ function Countdown({ expiresAt }: { expiresAt: string }): React.ReactNode {
       clearInterval(timer)
     }
   }, [])
-  const left = secondsLeftOf(expiresAt, nowMs)
+  const decidable = card.available_actions.some((a) => a !== 'open')
+  if (!decidable)
+    return (
+      <StatusPill tone="neutral" data-testid="deck-wait" data-wait="done">
+        {t('card.done')}
+      </StatusPill>
+    )
+  if (card.expires_at === undefined) return null
+  const left = secondsLeftOf(card.expires_at, nowMs)
   if (left === null) return null
   const face = countdownFace(left)
   const text =
@@ -114,13 +132,37 @@ function Countdown({ expiresAt }: { expiresAt: string }): React.ReactNode {
         ? t('deck.countdown', { clock: face.clock })
         : t(`deck.countdown.${face.kind}`, { n: face.n })
   return (
-    <span
-      data-testid="deck-countdown"
-      className="rounded-full border border-amber-400/70 bg-amber-50 px-2 py-0.5 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200"
+    <StatusPill
+      tone={face.kind === 'expired' ? 'bad' : 'warn'}
+      data-testid="deck-wait"
+      data-wait={face.kind === 'expired' ? 'expired' : 'countdown'}
     >
       {text}
-    </span>
+    </StatusPill>
   )
+}
+
+/**
+ * 头一行第一枚：**岗位 · 类别**（画布《卡片排版一览》那一行的头一格）。
+ *
+ * 岗位名从首页那把 `['positions']` 的缓存里认（这张卡那条职责挂在哪个岗位下）——
+ * 没装岗位面的服务进程查不到，那就只出类别，不编一个岗位名。
+ * 优先级不再单占一枚胶囊，它变成这一枚的**颜色**：P0 红、P1 黄、P2 蓝、P3 灰。
+ */
+const BAND_TONE: Record<DeckCard['priority_band'], Tone> = {
+  P0: 'bad',
+  P1: 'warn',
+  P2: 'info',
+  P3: 'neutral',
+}
+
+function usePositionName(role_id: string): string | undefined {
+  const { lang } = useApp()
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  const hit = (positions.data?.instances ?? []).find((p) =>
+    p.roles.some((r) => r.role_id === role_id),
+  )
+  return hit === undefined ? undefined : lang === 'en' ? hit.name.en : hit.name.zh
 }
 
 /**
@@ -173,7 +215,9 @@ export function DeckCardView({
 
   const isQuestion = card.options !== undefined && card.options.length > 0
   const examples = useTaskExamples(card.role_id)
-  const decidable = card.available_actions.some((a) => a !== 'open')
+  const positionName = usePositionName(card.role_id)
+  const rail = useRailState()
+  const evidence = evidenceLines(card, t, (iso) => formatDateTime(iso, lang))
 
   const act = (action: DeckAction): void => {
     if (action === 'open') {
@@ -218,41 +262,33 @@ export function DeckCardView({
         </button>
       )}
 
-      {/* ① 标签行 —— 渠道 → 优先级 → 倒计时 → 卡型 → 合并 N 张 */}
+      {/*
+        ① 标签行 —— WP98 收口：**两枚胶囊 + 证据 + 提案人**。
+        「岗位 · 类别」（优先级变成它的颜色）→ 等待时长 → 证据 N → 谁提的。
+        渠道、合并 N 张、预检那些都在右上角那个"证据 N"里，点开在第三栏看。
+      */}
       <div
         className="flex flex-wrap items-center gap-2 border-b border-ws-line px-5 py-3 text-xs"
         data-testid="deck-tag-row"
       >
-        {card.channel === undefined ? null : (
-          <span className="rounded-full bg-ws-surface px-2 py-0.5 text-ws-muted-fg">
-            {t(`channel.${card.channel}`)}
-          </span>
-        )}
-        <span
-          data-testid="deck-band"
-          className={
-            card.priority_band === 'P0'
-              ? 'rounded-full bg-destructive px-2 py-0.5 text-destructive-foreground'
-              : 'rounded-full bg-primary px-2 py-0.5 text-primary-foreground'
-          }
-        >
-          {t(`band.${card.priority_band}`)}
-        </span>
-        {card.expires_at === undefined ? null : <Countdown expiresAt={card.expires_at} />}
-        <span className="rounded-full bg-ws-tint px-2 py-0.5 text-ws-brand-ink">
-          {t(`kind.${card.kind}`)}
-        </span>
-        {card.merge_count > 1 ? (
-          <span
-            data-testid="deck-merge"
-            className="rounded-full border bg-background px-2 py-0.5 text-muted-foreground"
-          >
-            {t('deck.merge', { n: card.merge_count })}
-          </span>
-        ) : null}
-        {decidable ? null : <span className="text-ws-muted-fg">{t('card.done')}</span>}
-        {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。 */}
-        <span className="ml-auto flex items-center">
+        <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
+          {positionName === undefined
+            ? t(`kind.${card.kind}`)
+            : `${positionName} · ${t(`kind.${card.kind}`)}`}
+        </StatusPill>
+        <WaitPill card={card} />
+        <span className="ml-auto flex items-center gap-2">
+          {/*
+            右上角那个「证据 N」：点它在第三栏的证据面板里看（WP71 就有那一格）。
+            走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。
+          */}
+          <EvidencePill
+            lines={evidence}
+            onOpen={() => {
+              rail.show('evidence')
+            }}
+          />
+          {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。 */}
           <WsAvatar
             name={t(`deck.proposer.${card.detail.proposer.kind}`)}
             tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
@@ -292,14 +328,13 @@ export function DeckCardView({
           }}
         />
 
-        <Highlights
-          highlights={card.highlights}
-          formatDeadline={(iso) => formatDateTime(iso, lang)}
-        />
-        <EvidenceChips chips={card.evidence_chips} />
-        <EntityChips
+        {/*
+          ③ 外围芯片 —— WP98 收口：**最多三个**，只留与这次决定直接相关的
+          （对象引用 → 额度 / 总闸 → 事实卡引用）。证据层那些进上面的"证据 N"。
+        */}
+        <CardChips
           chips={card.entity_chips}
-          dropped={card.detail.enrichment.dropped_refs}
+          highlights={card.highlights}
           onOpen={() => {
             onOpen(card)
           }}

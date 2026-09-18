@@ -1153,6 +1153,9 @@ const zh: Table = {
   'deck.countdown.expired': '已过期',
   'deck.option_required': '先选一个',
   'deck.merge': '合并 {n} 张',
+  // WP98：卡片右上角那个「证据 N」——证据层不常驻卡面，点开在第三栏看
+  'deck.evidence.pill': '证据 {n}',
+  'deck.evidence.open': '在右栏看这张卡的证据',
   'deck.matter': '属于：事项 {title}',
   'deck.content.zh_summary': '中文摘要',
   'deck.content.original': '原文',
@@ -3133,6 +3136,8 @@ const en: Table = {
   'deck.countdown.expired': 'Expired',
   'deck.option_required': 'Pick one first',
   'deck.merge': '{n} merged',
+  'deck.evidence.pill': 'Evidence {n}',
+  'deck.evidence.open': 'See this card evidence in the right rail',
   'deck.matter': 'In matter: {title}',
   'deck.content.zh_summary': '\u4e2d\u6587\u6458\u8981',
   'deck.content.original': 'Original',
