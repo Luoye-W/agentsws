@@ -219,7 +219,7 @@ export function harness(
     dataRoot: '/data/standby',
     serverEntry: '/app/server/dist/index.js',
     allocatePort: () => Promise.resolve(41000 + spawn.calls.length),
-    cloudBaseUrl: 'https://cloud.agentsws.app',
+    cloudBaseUrl: 'https://cloud.agentsws.com',
     childTokens,
     wallet,
     pricing: buildPricing(),

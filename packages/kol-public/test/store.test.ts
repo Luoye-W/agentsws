@@ -201,6 +201,19 @@ for (const [name, make] of stores) {
       store.close?.()
     })
 
+    /** WP110：云侧那个进程内定时（每 10 分钟）调的就是这一条。 */
+    it('基准缓存能按时间扫掉；比截止时刻新的那些留着', () => {
+      const store = make()
+      const bucket = { channel: 'youtube', category: 'any', followers_band: '10k-100k' } as const
+      store.putBenchmark(benchmark())
+      // 截止时刻比它还早 → 一条都不该动
+      expect(store.sweepBenchmarks?.('2026-09-14T00:00:00.000Z')).toBe(0)
+      expect(store.cachedBenchmark(bucket)).toBeDefined()
+      expect(store.sweepBenchmarks?.(AT)).toBe(1)
+      expect(store.cachedBenchmark(bucket)).toBeUndefined()
+      store.close?.()
+    })
+
     it('争议：只记不裁，按人取得回来', () => {
       const store = make()
       store.putDispute({

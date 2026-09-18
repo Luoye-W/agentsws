@@ -9,7 +9,12 @@ export type Lang = 'zh' | 'en'
 type Table = Record<string, string>
 
 const zh: Table = {
-  'app.title': 'agentsws 工作台',
+  'app.title': 'Agents 工坊',
+  // WP112：冷启动那一瞬首屏上的那句话（母品牌「集结」在它上面）
+  'app.boot': '正在把工作台装起来…',
+  // WP112：**全站只有这一句**配「呼吸」那段动效——它只代表"Agent 正在替你干活"。
+  // 按钮里那种普通的加载转圈不算（docs/36 §12）。
+  'brand.busy': 'Agent 正在替你干活',
   // ── 41 §1 个人代理（原「秘书」，09-10 改名）─────────────────────────
   //
   // **只改面向用户的文案**：键名（`secretary.*`）、包名（`@agentsws/secretary`）、
@@ -402,6 +407,10 @@ const zh: Table = {
   'org.assign.range.use': '加上',
   'org.assign.summary': '{person} 会拿到「{position}」，管：{ranges}。',
   'org.assign.confirm': '就这么定',
+  // WP112：上岗成功的回执（配一段「一变一队」）
+  'org.assign.receipt': '{person} 上岗「{position}」',
+  'org.assign.receipt.hint': '一个活做通了，就复制成一队——现在可以再给这个岗位加人。',
+  'org.assign.receipt.close': '知道了',
   'org.roles.bundled': '内置',
   'org.roles.custom': '本公司',
   'org.roles.holders': '{n} 人在做',
@@ -879,9 +888,9 @@ const zh: Table = {
   // ── 49 M1 / M5 账号与积分（WP58 上半张卡；下半张 WP59 填）────────────
   'settings.tab.general': '通用',
   'settings.tab.account': '账号与积分',
-  'cloud.account.title': 'agentsws 云账号',
+  'cloud.account.title': 'Agents 工坊云账号',
   'cloud.account.intro':
-    '关联 agentsws 云账号后可以一键用 agentsws 的模型和数据服务（按积分）。不关联也照常用——填自己的 key 走本地直连，一分不扣。',
+    '关联 Agents 工坊云账号后可以一键用 Agents 工坊的模型和数据服务（按积分）。不关联也照常用——填自己的 key 走本地直连，一分不扣。',
   'cloud.account.email': '邮箱',
   'cloud.account.email.placeholder': '你常用的邮箱',
   'cloud.account.send': '发登录邮件',
@@ -1000,7 +1009,7 @@ const zh: Table = {
   'storage.in_use': '正在用',
   'storage.tier.local': '本地（默认）',
   'storage.tier.byo': '接我的云',
-  'storage.tier.managed': '用 agentsws 托管',
+  'storage.tier.managed': '用 Agents 工坊托管',
   'storage.local.note': '数据在这台机器上（公司 NAS 也算这一档）。',
   'storage.local.more.hint':
     '谁走了都带不走，也不经过任何第三方。人多了可以换成 Postgres，大文件可以放 NAS 的共享目录或 MinIO——都在下面「高级」里。',
@@ -1009,12 +1018,12 @@ const zh: Table = {
     '开放了我们也只跑无状态的服务进程，数据仍在你自己的机器上。在那之前，「接我的云」已经能把数据放到你自己的阿里云 / AWS / 腾讯云账号里，我们不代持任何云账号。',
   'storage.managed.learn': '看看这一档会是什么样',
   // WP60（49 §6 / 48 L6 / L7）：在线值守与聊天窗托管
-  'standby.title': '在线值守（agentsws 托管）',
+  'standby.title': '在线值守（Agents 工坊托管）',
   'standby.note':
     '关了电脑也有人接活：你的工作区服务进程搬到云上 7×24 跑，邮箱轮询、聊天窗、跟进都在云上。',
   'standby.more.hint':
     '同一时刻只有一个服务进程——开了值守，云上那个就是唯一那个，这台电脑变成它的一个窗口。没有"两边同步"这回事，因为只有一份。随时能接回本机，包格式两边一样。',
-  'standby.not_linked': '还没关联 agentsws 账号。',
+  'standby.not_linked': '还没关联 Agents 工坊账号。',
   'standby.go_link': '去关联账号',
   'standby.seats': '座位数',
   'standby.monthly': '这个月要扣',
@@ -1431,6 +1440,9 @@ const zh: Table = {
   'home.positions.entry': '交给它一件事',
   // WP98：岗位卡中间那句改成真状态；一个数都没有的岗位照实说，不编"一切正常"
   'home.positions.idle': '还没开工',
+  // WP112：岗位卡上那个「运行中」状态点旁边的话
+  'home.positions.running': '运行中',
+  'home.positions.running.hint': '运行中 · {count} 件在办',
   'home.headline': '今天',
   'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
   'home.stats': '今天的数',
@@ -1632,7 +1644,7 @@ const zh: Table = {
   //
   // 口径：**对用户只显示最终积分价**。成本、倍率、汇率是算这个数字的中间量，
   // 一个都不进界面。1 积分 = ¥1，所以"积分"这两个字后面不用再跟一个括号解释。
-  'models.cloud.title': 'agentsws 云（用积分）',
+  'models.cloud.title': 'Agents 工坊云（用积分）',
   'models.cloud.summary': '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
   'models.cloud.hint':
     '模型跑在我们云上，按 token 折成积分扣。1 积分 = ¥1。你自己填 key 的那几条一分不扣——它们根本不经过我们。',
@@ -1646,7 +1658,7 @@ const zh: Table = {
 
   'credits.title': '积分',
   'credits.hint': '1 积分 = ¥1。充值买的永不过期，活动送的按周期清零，扣费先扣有期限的。',
-  'credits.not_linked': '还没关联 agentsws 账号。关联之后这里会显示余额与用量。',
+  'credits.not_linked': '还没关联 Agents 工坊账号。关联之后这里会显示余额与用量。',
   'credits.available': '可用',
   'credits.purchased': '充值（不过期）',
   'credits.granted': '赠送（有期限）',
@@ -1685,7 +1697,7 @@ const zh: Table = {
   'kol.search.placeholder.tiktok': '账号名，多个用逗号隔开（TikTok 没有按关键词搜人）',
   'kol.search.placeholder.x': '账号名，多个用逗号隔开（X 没有按关键词搜人）',
   'kol.source.channel': '这一份来自你自己连的平台接口。',
-  'kol.source.public_library': '这一份来自 agentsws 的公共红人库。',
+  'kol.source.public_library': '这一份来自 Agents 工坊的公共红人库。',
   'kol.reveal': '取邮箱（扣 {n} 积分）',
   'kol.add': '加进红人库',
   'kol.in_library': '已在库里',
@@ -1747,9 +1759,9 @@ const zh: Table = {
   'kol.campaign.plan': '出清单',
   'kol.campaign.accept': '接受这份清单',
   'capability.mine': '用我的',
-  'capability.ours': '用 agentsws 的',
-  'capability.aria': '{capability} 用我的还是用 agentsws 的',
-  'capability.nudge': '没有 key，可以用 agentsws 的（按积分）。',
+  'capability.ours': '用 Agents 工坊的',
+  'capability.aria': '{capability} 用我的还是用 Agents 工坊的',
+  'capability.nudge': '没有 key，可以用 Agents 工坊的（按积分）。',
   'capability.billing': '正在用我们的配额，按次扣积分。切回"用我的"就不再扣。',
 
   'models.region.cn': '境内',
@@ -1809,6 +1821,10 @@ const zh: Table = {
   // 往前走的那个按钮四步统一这一句（WP79 ⑥：按了就真的存下来再继续）
   'onboarding.next': '保存并继续',
   'onboarding.done': '完成',
+  // WP112：设置完成那一屏（配一段「一变一队」）
+  'onboarding.done.title': '一队上岗了',
+  'onboarding.done.line': '{count} 条职责已经配好。回首页，把第一件事交给它们。',
+  'onboarding.done.enter': '进工作台',
   'onboarding.step.done': '已完成',
   'onboarding.step1': '公司设置',
   'onboarding.step2': '个人设置',
@@ -2102,6 +2118,8 @@ const zh: Table = {
   'chat.visitor.placeholder': '像访客那样问一句，例如：运费多少？',
   'chat.visitor.send': '发',
   'chat.transcript.empty': '还没有消息。发一句试试。',
+  // WP112：线程末尾那行——这一轮交给 AI 了、还没回来
+  'chat.thinking': '客服 AI 正在判这一轮…',
 
   'chat.role.visitor': '访客',
   'chat.role.agent': 'AI 客服',
@@ -2207,7 +2225,9 @@ const zh: Table = {
 }
 
 const en: Table = {
-  'app.title': 'agentsws Workstation',
+  'app.title': 'Agents Workshop',
+  'app.boot': 'Bringing the workstation up…',
+  'brand.busy': 'An agent is working on it',
   'nav.home': 'Home',
   'nav.secretary': 'My agent',
   // WP96: the top-bar search bar (opens the ⌘K palette)
@@ -2605,6 +2625,10 @@ const en: Table = {
   'org.assign.range.use': 'Add',
   'org.assign.summary': '{person} will hold “{position}”, covering: {ranges}.',
   'org.assign.confirm': 'Confirm',
+  'org.assign.receipt': '{person} now holds “{position}”',
+  'org.assign.receipt.hint':
+    'One job done well, copied into a team — you can add more people to this position now.',
+  'org.assign.receipt.close': 'Got it',
   'org.roles.bundled': 'built-in',
   'org.roles.custom': 'ours',
   'org.roles.holders': '{n} people',
@@ -3072,9 +3096,9 @@ const en: Table = {
   // ── 49 M1 / M5 account & credits (WP58 upper card; WP59 fills the lower one) ──
   'settings.tab.general': 'General',
   'settings.tab.account': 'Account & credits',
-  'cloud.account.title': 'agentsws cloud account',
+  'cloud.account.title': 'Agents Workshop cloud account',
   'cloud.account.intro':
-    'Link an agentsws cloud account to use agentsws models and data services in one click (paid in credits). Not linking is fine too — bring your own key, connect directly, pay nothing here.',
+    'Link an Agents Workshop cloud account to use Agents Workshop models and data services in one click (paid in credits). Not linking is fine too — bring your own key, connect directly, pay nothing here.',
   'cloud.account.email': 'Email',
   'cloud.account.email.placeholder': 'the email you actually use',
   'cloud.account.send': 'Send login email',
@@ -3196,7 +3220,7 @@ const en: Table = {
   'storage.in_use': 'in use',
   'storage.tier.local': 'Local (default)',
   'storage.tier.byo': 'My own cloud',
-  'storage.tier.managed': 'Hosted by agentsws',
+  'storage.tier.managed': 'Hosted by Agents Workshop',
   'storage.local.note': 'Data stays on this machine — a company NAS counts as this tier.',
   'storage.local.more.hint':
     'Nobody can walk off with it and no third party sees it. More people? Switch to Postgres. Big files? Point them at a NAS share or MinIO. Both are under Advanced below.',
@@ -3205,12 +3229,12 @@ const en: Table = {
     'Even then we would only run the stateless service — your data would stay on your own machine. Until then, "My own cloud" already puts the data in your own Alibaba Cloud / AWS / Tencent account, and we never hold your cloud credentials.',
   'storage.managed.learn': 'See what this tier would look like',
   // WP60 (49 §6 / 48 L6 / L7): online standby and hosted chat widget
-  'standby.title': 'Online standby (hosted by agentsws)',
+  'standby.title': 'Online standby (hosted by Agents Workshop)',
   'standby.note':
     'Someone is on duty after you shut the laptop: your workspace service moves to the cloud and runs 24/7 — mailbox polling, the chat widget, follow-ups, all of it.',
   'standby.more.hint':
     'There is only ever one service process. Turn standby on and the cloud one is it; this machine becomes a window onto it. Nothing to sync, because there is only one copy. You can bring it home any time — same package format both ways.',
-  'standby.not_linked': 'No agentsws account linked yet.',
+  'standby.not_linked': 'No Agents Workshop account linked yet.',
   'standby.go_link': 'Link an account',
   'standby.seats': 'Seats',
   'standby.monthly': 'Charged this month',
@@ -3623,6 +3647,8 @@ const en: Table = {
   'home.positions.pending': 'pending',
   'home.positions.entry': 'Hand it a task',
   'home.positions.idle': 'Not started yet',
+  'home.positions.running': 'Running',
+  'home.positions.running.hint': 'Running · {count} in flight',
   'home.headline': 'Today',
   'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
   'home.stats': "Today's numbers",
@@ -3830,7 +3856,7 @@ const en: Table = {
   'models.field.region.hint':
     'Pick the region this service runs in. Overseas models are blocked when residency is set to China-only.',
   // ── WP59 (49 M2 / M4 / M5): agentsws cloud, credits, per-capability switch ──
-  'models.cloud.title': 'agentsws cloud (credits)',
+  'models.cloud.title': 'Agents Workshop cloud (credits)',
   'models.cloud.summary':
     'No key, no signup. Link your account once and it works — billed in credits, switch back to your own key any time.',
   'models.cloud.hint':
@@ -3846,7 +3872,8 @@ const en: Table = {
   'credits.title': 'Credits',
   'credits.hint':
     '1 credit = CNY 1. Credits you buy never expire; granted ones clear each period, and those are spent first.',
-  'credits.not_linked': 'No agentsws account linked yet. Link one and your balance shows up here.',
+  'credits.not_linked':
+    'No Agents Workshop account linked yet. Link one and your balance shows up here.',
   'credits.available': 'Available',
   'credits.purchased': 'Purchased (no expiry)',
   'credits.granted': 'Granted (expires)',
@@ -3886,7 +3913,7 @@ const en: Table = {
   'kol.search.placeholder.tiktok': 'Handles, comma separated (TikTok has no keyword people search)',
   'kol.search.placeholder.x': 'Handles, comma separated (X has no keyword people search)',
   'kol.source.channel': 'From the platform API you connected.',
-  'kol.source.public_library': "From agentsws's shared creator library.",
+  'kol.source.public_library': "From Agents Workshop's shared creator library.",
   'kol.reveal': 'Get email ({n} credits)',
   'kol.add': 'Add to library',
   'kol.in_library': 'already yours',
@@ -3948,8 +3975,8 @@ const en: Table = {
   'kol.campaign.plan': 'Build the list',
   'kol.campaign.accept': 'Accept this list',
   'capability.mine': 'Mine',
-  'capability.ours': 'agentsws',
-  'capability.aria': 'Use mine or use agentsws for {capability}',
+  'capability.ours': 'Agents Workshop',
+  'capability.aria': 'Use mine or use Agents Workshop for {capability}',
   'capability.nudge': 'No key here — you can use ours instead (billed in credits).',
   'capability.billing': 'Using our quota, billed per call. Switch back to "Mine" and it stops.',
 
@@ -4005,6 +4032,9 @@ const en: Table = {
   'onboarding.back': 'Back',
   'onboarding.next': 'Save and continue',
   'onboarding.done': 'Finish',
+  'onboarding.done.title': 'Your team is on duty',
+  'onboarding.done.line': '{count} duties are configured. Head home and hand them the first thing.',
+  'onboarding.done.enter': 'Enter the workstation',
   'onboarding.step.done': 'Done',
   'onboarding.step1': 'Company',
   'onboarding.step2': 'You',
@@ -4311,6 +4341,7 @@ const en: Table = {
   'chat.visitor.placeholder': 'Ask like a visitor would, e.g. how much is shipping?',
   'chat.visitor.send': 'Send',
   'chat.transcript.empty': 'No messages yet. Send one.',
+  'chat.thinking': 'The support AI is working out this turn…',
 
   'chat.role.visitor': 'Visitor',
   'chat.role.agent': 'AI support',

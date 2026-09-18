@@ -397,6 +397,32 @@ describe('公司页：分配向导', () => {
     })
   })
 
+  it('上岗成功给一张回执，配一段「一变一队」（WP112）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    // 做之前没有回执
+    expect(screen.queryByTestId('assign-receipt')).toBeNull()
+    await user.click(within(cards[0] as HTMLElement).getByTestId('position-assign'))
+    const wizard = await screen.findByTestId('assign-wizard')
+    await user.click(within(wizard).getByRole('button', { name: '李默' }))
+    await user.click(within(wizard).getByRole('button', { name: 'store_main' }))
+    await user.click(within(wizard).getByTestId('assign-confirm'))
+
+    const receipt = await screen.findByTestId('assign-receipt')
+    // 说的是人话（谁 + 哪个岗位），一个 id 都不印
+    expect(receipt.textContent).toContain('李默')
+    expect(receipt.textContent).toContain('独立站售后客服')
+    expect(receipt.textContent).not.toContain('per_li')
+    expect(receipt.textContent).not.toContain('dtc-support')
+    expect(
+      receipt.querySelector('svg[data-testid="brand-mark"]')?.getAttribute('data-motion'),
+    ).toBe('split')
+
+    await user.click(within(receipt).getByTestId('assign-receipt-close'))
+    expect(screen.queryByTestId('assign-receipt')).toBeNull()
+  })
+
   // ── WP47 / 44 G3 三种入口 ────────────────────────────────────────
   it('挑品牌：发出去的是 range_groups，不是摊平的店铺清单', async () => {
     const user = userEvent.setup()

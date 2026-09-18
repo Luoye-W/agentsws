@@ -107,6 +107,19 @@ describe('createLogRedactor（日志脱敏表）', () => {
     expect(defaultLogRedactor(`blob ${'f'.repeat(40)}`)).toBe(`blob ${REDACTED}`)
   })
 
+  it('WP111：`Authorization: Bearer <token>` **整段**遮掉，不是只遮掉 Bearer 那个词', () => {
+    // 修之前是 `Authorization: [redacted] eyJhbGciOiJIUzI1NiJ9.payload.sig`——
+    // `labelled` 把 `Bearer` 当成值吃掉了，真 token 原封不动留在后面，
+    // 而它带着点、又短于 32 字符，`opaque` 那条也兜不住。
+    const line = 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig'
+    const out = defaultLogRedactor(line)
+    expect(out).not.toContain('eyJhbGciOiJIUzI1NiJ9')
+    expect(out).toContain('Authorization')
+    expect(defaultLogRedactor('authorization: Basic dXNlcjpwYXNzd29yZA==')).not.toContain(
+      'dXNlcjpwYXNzd29yZA',
+    )
+  })
+
   it('普通日志行原样保留', () => {
     const line = '2026-09-09T00:00:00.000Z INFO  [desktop/server] 子进程稳定运行'
     expect(defaultLogRedactor(line)).toBe(line)

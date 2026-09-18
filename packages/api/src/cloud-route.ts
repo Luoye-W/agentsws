@@ -38,12 +38,16 @@ export interface CloudRequestContext {
 export type CloudEnv = { Variables: { cctx: CloudRequestContext } }
 
 /**
- * 云侧只有三种鉴权：
+ * 云侧只有四种鉴权：
  * - `public`：magic link 那两条与 health；
  * - `session`：云账号自己在管关联（签发 / 续期 / 撤销 / 列表）；
- * - `workspace_token`：一台机器上的工作区在用服务（WP59 的 `/v1/ai/*`、`/v1/wallet/*`）。
+ * - `workspace_token`：一台机器上的工作区在用服务（WP59 的 `/v1/ai/*`、`/v1/wallet/*`）；
+ * - `admin`：运维自己（WP110 的 `/v1/admin/*`）。**网关不给它装中间件**——
+ *   管理员令牌是哪一串只有那个路由包知道（它从自己的 env 里取），网关认识它
+ *   就等于把这把钥匙又抄了一份。声明成一档而不是混进 `public`，是为了让
+ *   OpenAPI 与路由表上看得出"这条要带凭据"。
  */
-export type CloudAuth = 'public' | 'session' | 'workspace_token'
+export type CloudAuth = 'public' | 'session' | 'workspace_token' | 'admin'
 
 export interface CloudRouteSpec {
   method: HttpMethod

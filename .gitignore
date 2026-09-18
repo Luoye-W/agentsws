@@ -2,6 +2,8 @@ node_modules/
 dist/
 .env
 .env.*
+# WP110：样板文件里全是空值 + 注释，要进仓库（真 `.env` 仍被上面两行挡着）
+!.env.example
 *.log
 .DS_Store
 .agentsws-local/

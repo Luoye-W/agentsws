@@ -48,6 +48,7 @@ import type {
   ModelPurpose,
   ModelRef,
 } from '@agentsws/contracts'
+import { CLOUD_BASE_URL_ENV, cloudBaseUrl, DEFAULT_CLOUD_BASE_URL } from '@agentsws/contracts'
 import type {
   CatalogPrice,
   FetchLike,
@@ -82,14 +83,15 @@ export const DEEPSEEK_KEY_ENV = 'DEEPSEEK_API_KEY'
  */
 export const CLOUD_TOKEN_SECRET_ID = 'cloud.workspace_token'
 
-/** 云侧地址；自建 / 联调时用环境变量指到别处（`bin/dev.mjs` 就起在 4401）。 */
-export const CLOUD_BASE_URL_ENV = 'AGENTSWS_CLOUD_BASE_URL'
-export const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agentsws.app'
+/**
+ * 云侧地址；自建 / 联调时用环境变量指到别处（`bin/dev.mjs` 就起在 4401）。
+ * 常量本身在 `@agentsws/contracts`（WP110 收成一处），这里只转出去。
+ */
+export { CLOUD_BASE_URL_ENV, DEFAULT_CLOUD_BASE_URL }
 
 /** `…/v1/ai`：服务入口的 OpenAI 兼容口（49 M3）。 */
 export function cloudAiBaseUrl(env: Record<string, string | undefined>): string {
-  const raw = env[CLOUD_BASE_URL_ENV]?.trim()
-  return `${raw === undefined || raw === '' ? DEFAULT_CLOUD_BASE_URL : raw.replace(/\/+$/, '')}/v1/ai`
+  return `${cloudBaseUrl(env)}/v1/ai`
 }
 
 /** 环境变量兜底出来的那条 provider 的固定 id。 */

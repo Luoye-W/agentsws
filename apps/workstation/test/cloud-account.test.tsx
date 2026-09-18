@@ -17,7 +17,7 @@ import { renderWithProviders } from './helpers'
 
 const UNLINKED: CloudAccountView = {
   linked: false,
-  cloud_base_url: 'https://cloud.agentsws.app',
+  cloud_base_url: 'https://cloud.agentsws.com',
 }
 
 const LINKED: CloudAccountView = {
@@ -27,7 +27,7 @@ const LINKED: CloudAccountView = {
   expires_at: '2026-12-14T00:00:00.000Z',
   scopes: ['ai', 'wallet:read'],
   linked_at: '2026-09-15T00:00:00.000Z',
-  cloud_base_url: 'https://cloud.agentsws.app',
+  cloud_base_url: 'https://cloud.agentsws.com',
 }
 
 const state = {
@@ -63,7 +63,7 @@ describe('49 M1 设置页账号卡', () => {
   it('没关联：一句人话 + 邮箱框 + 发登录邮件；按完只提示去邮箱点', async () => {
     renderWithProviders(<CloudAccountCard assignment="asg_1" />)
     await screen.findByTestId('cloud-account-unlinked')
-    expect(screen.getByText(/关联 agentsws 云账号后可以一键用/)).toBeTruthy()
+    expect(screen.getByText(/关联 Agents 工坊云账号后可以一键用/)).toBeTruthy()
 
     const input = screen.getByLabelText('邮箱')
     await userEvent.type(input, 'luoye@example.com')
