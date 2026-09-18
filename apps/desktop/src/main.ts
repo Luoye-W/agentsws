@@ -26,6 +26,7 @@ import { BRIDGE_CHANNELS, type BridgeInfo } from './bridge-types.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
   type ConnectRuntimeStatus,
+  connectUrlForServer,
   connectUrlFrom,
   createConnectRuntime,
   type HardeningReportLike,
@@ -267,8 +268,16 @@ async function bootstrap(): Promise<void> {
         resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
         exists: (p) => files.exists(p),
         electronExecPath: process.execPath,
+        platform: process.platform,
       })
-  if (!remote) logger.info('服务进程入口', { entry: serverEntry, runtime: serverRuntime.kind })
+  if (!remote)
+    logger.info('服务进程入口', {
+      entry: serverEntry,
+      runtime: serverRuntime.kind,
+      // WP111：装完之后这一行必须是 `<resources>/node/...`。要是它指到 `node`，
+      // 说明捆绑那份没进包（或者被杀毒软件删了）——诊断包里第一眼看的就是这一行。
+      exec: serverRuntime.execPath,
+    })
 
   const serverLog = createLogger({
     files,
@@ -279,6 +288,18 @@ async function bootstrap(): Promise<void> {
 
   let boundPort = config.port
   const serverUrl = (): string => runtimeMode.serverUrl ?? `http://127.0.0.1:${boundPort}`
+
+  // ── OpenConnector runtime 的地址。
+  //     `@agentsws/server` 是唯一定默认值的地方；动态 import 免得把整个服务进程
+  //     拖进主进程的启动路径。WP111：**打包之后一定给一个值**——不给，服务进程会走
+  //     开发替身，连接页上连出来的是假连接（见 `connectUrlForServer`）。
+  const { DEFAULT_CONNECT_URL: SERVER_DEFAULT_CONNECT_URL } = await import('@agentsws/server')
+  const connectUrl = connectUrlFrom(process.env) ?? SERVER_DEFAULT_CONNECT_URL
+  const serverConnectUrl = connectUrlForServer({
+    env: process.env,
+    packaged: app.isPackaged,
+    fallback: SERVER_DEFAULT_CONNECT_URL,
+  })
 
   const server = createSidecar({
     name: 'server',
@@ -300,9 +321,7 @@ async function bootstrap(): Promise<void> {
         // 所以托盘按下的暂停不必再靠重启 sidecar 生效。
         haltFile: paths.haltFile,
         halt: halt.read(),
-        ...(connectUrlFrom(process.env) === undefined
-          ? {}
-          : { connectUrl: connectUrlFrom(process.env) as string }),
+        ...(serverConnectUrl === undefined ? {} : { connectUrl: serverConnectUrl }),
         secrets: secrets ?? EMPTY_SECRETS,
         version,
         baseEnv: process.env,
@@ -316,14 +335,13 @@ async function bootstrap(): Promise<void> {
     },
   })
 
-  // ── OpenConnector runtime：v1 只检测 + 加固检查，不负责拉起（08 §5）。
+  // ── OpenConnector runtime：只检测 + 加固检查，不负责拉起（08 §5）。
   //     地址只有一个出处（`AGENTSWS_CONNECT_URL`，见 apps/server/src/connect-url.ts）；
   //     桌面壳不再自带默认值，读不到就用服务进程那边的同一个常量。
-  // `@agentsws/server` 是唯一定默认值的地方；动态 import 免得把整个服务进程拖进主进程启动路径。
   //     `remote` 档：连接器 runtime 跟服务进程一起住在公司那台机器上，
   //     员工电脑既探不到也不该探——那一格在托盘上直接不出现。
-  const { DEFAULT_CONNECT_URL: SERVER_DEFAULT_CONNECT_URL } = await import('@agentsws/server')
-  const connectUrl = connectUrlFrom(process.env) ?? SERVER_DEFAULT_CONNECT_URL
+  //     WP111：探不到**不影响启动**，只让依赖它的连接卡置灰（见 catalog.ts 的
+  //     `connectCardGating`）。托盘上那一行照旧说"连接器 runtime：未检测到"。
   const connect = remote
     ? undefined
     : createConnectRuntime({

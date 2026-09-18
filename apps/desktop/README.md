@@ -112,23 +112,38 @@ server 哪天提供了运行期急停接口，`src/halt.ts` 换成直接调它�
 
 1. `AGENTSWS_SIDECAR_RUNTIME=electron` —— 逃生口，明确要求时才借 Electron 自带 Node；
 2. `AGENTSWS_NODE` —— 指定 node 可执行文件；
-3. 安装包里随包携带的 `<resources>/node`（v1 还没往里放，见下）；
+3. **安装包里随包携带的那一份**（WP111 起真的有了：`<resources>/node/bin/node`，
+   Windows 上是 `<resources>/node/node.exe`）；
 4. `PATH` 上的 `node`。
 
-**所以 v1 的安装包要求机器上有 Node ≥ 22。** 要做到"一个安装包把运行时带齐"，下一步二选一：
-往 `extraResources` 里塞一份独立 Node 运行时；或等 `better-sqlite3` 能编过 Electron 44
-（也可以换 `node:sqlite`）之后切回 Electron 自带 Node。
+**WP111 起用户不需要自己装 Node。** `scripts/fetch-node.mjs` 把官方 Node 22 发行包下到
+`vendor/node/<平台>/`（sha256 对官方 `SHASUMS256.txt`，哈希签进 `node-runtime.lock.json`），
+`extraResources` 把当前平台那一份摆进 `<resources>/node`。第 4 条留着只是兜底
+（开发期没跑过脚本、或者捆绑那份被杀毒软件删了）——退化成"要装 Node"比直接起不来好。
+
+**原生模块跟着那份 Node 的 ABI 走。** 捆绑的是 Node 22（`NODE_MODULE_VERSION` 127），
+所以 `better_sqlite3.node` 也必须是 v127 那一份——用开发机 Node（可能是 25）编的那份塞进去
+只会在用户那儿炸 `ERR_DLOPEN_FAILED`。脚本按 ABI 取官方 prebuild 放进 `vendor/natives/<平台>/`，
+`scripts/after-pack.mjs` 在打包那一刻把包里的换掉，然后**用捆绑的 Node 真 import 一遍**
+服务进程入口——不通就让打包失败，不发出去。
+
+那个 afterPack 还顺手补一件事：electron-builder 的 pnpm 依赖收集器解析不了带 peer 后缀的
+`.pnpm` 目录（`@hono+node-server@2.1.1_hono@4.13.7`），也不跟 `peerDependencies`。
+日志里只有一行 `cannot find path for dependency` 就过去了，而 `@hono/node-server` 正是服务进程
+listen 用的那一个——WP111 之前打出来的包**装完根本起不来**。afterPack 按 `dependencies` +
+非 optional 的 `peerDependencies` 做一次广度优先补齐（一次补 77 个），那个 import 冒烟就是它的门禁。
 
 ## 打包
 
 ```bash
-pnpm --filter @agentsws/desktop build     # tsc -b
-pnpm --filter @agentsws/desktop package   # electron-builder --dir（不出安装包）
-pnpm --filter @agentsws/desktop dist      # macOS .dmg (arm64) / Windows .exe (NSIS x64)
+pnpm --filter @agentsws/desktop fetch-node  # 先把捆绑的 Node 与原生模块下下来（当前平台）
+pnpm --filter @agentsws/desktop build       # tsc -b
+pnpm --filter @agentsws/desktop package     # electron-builder --dir（不出安装包）
+pnpm --filter @agentsws/desktop dist        # macOS .dmg (arm64 / x64) / Windows .exe (NSIS x64)
 ```
 
-产物在 `apps/desktop/release/`（已 gitignore）。v1 **不签名、不公证、不接更新源**：
-`identity: null`、`publish: null`。`asar: false`——服务进程是以子进程跑的，从 asar 里执行脚本
+产物在 `apps/desktop/release/`（已 gitignore）。**不签名、不公证**（`identity: null`）；
+WP111 起**接了更新源**：`publish: github`、渠道 `beta`（见下面「内测安装与升级」）。`asar: false`——服务进程是以子进程跑的，从 asar 里执行脚本
 要额外的 hook，v1 用平铺目录换确定性。
 
 ## 测试

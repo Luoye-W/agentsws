@@ -133,3 +133,32 @@ export function createConnectRuntime(options: ConnectRuntimeOptions): ConnectRun
     },
   }
 }
+
+/**
+ * WP111：交给服务进程的 `AGENTSWS_CONNECT_URL` 到底给不给。
+ *
+ * 为什么需要这么一个判定：服务进程看这个变量决定走**真适配器**还是**开发替身**
+ * （`apps/server/src/connections.ts` 的 `usingStandIn`）。不给 = 替身档，
+ * 连接页上点一下就"连上了"——连出来的全是假的。开发期那正是我们要的；
+ * 到了一个内测用户的机器上那是骗人。
+ *
+ * 所以**打包之后一定给一个值**：给了，服务进程就走真路径；Docker 没装、
+ * runtime 探不到，那几张卡就置灰说"这张需要 Docker（可选）"（08 §5 的
+ * "不接未加固的 runtime" 照旧成立，只是不再拖着整个应用起不来）。
+ *
+ * `AGENTSWS_CONNECT_STANDIN=1` 是反向逃生口：打包版里也能退回替身（演示用）。
+ */
+export const CONNECT_STANDIN_ENV = 'AGENTSWS_CONNECT_STANDIN'
+
+export function connectUrlForServer(input: {
+  env: Readonly<Record<string, string | undefined>>
+  /** `app.isPackaged`。 */
+  packaged: boolean
+  /** 服务进程那边的默认值（`@agentsws/server` 的 `DEFAULT_CONNECT_URL`，唯一真源）。 */
+  fallback: string
+}): string | undefined {
+  const explicit = connectUrlFrom(input.env)
+  if (explicit !== undefined) return explicit
+  if (input.env[CONNECT_STANDIN_ENV] === '1') return undefined
+  return input.packaged ? input.fallback : undefined
+}

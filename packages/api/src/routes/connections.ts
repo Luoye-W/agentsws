@@ -140,6 +140,14 @@ export interface ProviderView {
    * 不出表单，只显示 `unavailable_reason` 那句话。
    */
   planned?: boolean
+  /**
+   * WP111：这张卡要不要本机的 OpenConnector runtime（= 要不要装 Docker）。
+   *
+   * 与 `available` 分开：连上之后它**也还是**要 Docker，界面上那个角标不该消失——
+   * 换台机器、Docker 没起，这张卡又不能用了，用户得知道为什么。没有这一位的话，
+   * 界面只能去 `unavailable_reason` 那句话里找「Docker」二字。
+   */
+  requires_runtime?: boolean
 }
 
 export interface BeginConnectResult {

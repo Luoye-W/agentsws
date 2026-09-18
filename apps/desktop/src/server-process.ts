@@ -11,7 +11,7 @@
  * 环境变量按**白名单**传：宿主环境里可能有开发者自己的 `DEEPSEEK_API_KEY`、
  * `OOMOL_CONNECT_*`，全量继承会让"密钥只从 safeStorage 来"这条纪律形同虚设。
  */
-import { join } from 'node:path'
+import { findBundledNode } from './bundled-node.js'
 import type { HaltScope } from './halt.js'
 import { haltEnv } from './halt.js'
 import type { SpawnRequest } from './ports.js'
@@ -108,6 +108,8 @@ export interface RuntimeChoiceInput {
   exists: (path: string) => boolean
   /** `process.execPath`（Electron 可执行文件）。 */
   electronExecPath: string
+  /** `process.platform`；不给就按 node 的。Windows 上捆绑的 Node 叫 `node.exe`。 */
+  platform?: string
 }
 
 /**
@@ -117,18 +119,25 @@ export interface RuntimeChoiceInput {
  * （见 README「原生模块」）。顺序：
  * 1. `AGENTSWS_SIDECAR_RUNTIME=electron` —— 明确要求借 Electron 自带 Node 的逃生口；
  * 2. `AGENTSWS_NODE` —— 指定 node 可执行文件；
- * 3. 安装包里随包携带的 `<resources>/node`；
+ * 3. 安装包里随包携带的那一份（WP111 起真的有了：`<resources>/node/bin/node`，
+ *    Windows 上是 `<resources>/node/node.exe`）；
  * 4. `PATH` 上的 `node`。
+ *
+ * 第 4 条是**兜底，不是设计**：WP111 之后正常安装的机器一定走到第 3 条，
+ * 用户不需要自己装 Node。留着第 4 条是为了开发期（没跑 `fetch-node.mjs` 也能起）
+ * 与"捆绑那份被杀毒软件删了"这种现场——退化成"要装 Node"比直接起不来好。
  */
 export function resolveServerRuntime(input: RuntimeChoiceInput): ServerRuntime {
   if (input.env.AGENTSWS_SIDECAR_RUNTIME === 'electron')
     return { kind: 'electron', execPath: input.electronExecPath }
   const explicit = input.env.AGENTSWS_NODE
   if (explicit !== undefined && explicit !== '') return { kind: 'node', execPath: explicit }
-  if (input.resourcesPath !== undefined && input.resourcesPath !== '') {
-    const bundled = join(input.resourcesPath, 'node')
-    if (input.exists(bundled)) return { kind: 'node', execPath: bundled }
-  }
+  const bundled = findBundledNode(
+    input.resourcesPath,
+    input.platform ?? process.platform,
+    input.exists,
+  )
+  if (bundled !== undefined) return { kind: 'node', execPath: bundled }
   return { kind: 'node', execPath: 'node' }
 }
 
