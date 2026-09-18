@@ -22,6 +22,7 @@ import { useEffect, useState } from 'react'
 import { FactChip } from '@/components/chips'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
 import { DeckCardBody } from '@/components/deck/deck-card-body'
+import { focusEvidenceCard } from '@/components/deck/deck-focus'
 import {
   countdownFace,
   isTypingTarget,
@@ -301,6 +302,8 @@ export function DeckCardView({
           <EvidencePill
             lines={evidence}
             onOpen={() => {
+              // WP100：一下动作两半——把这张卡交给证据面板，再把那一格打开
+              focusEvidenceCard(card)
               rail.show('evidence')
             }}
           />
