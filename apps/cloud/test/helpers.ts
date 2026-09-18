@@ -1,7 +1,13 @@
 /** 云侧测试的共用装配：可推的钟、可捕获的邮件、内存库。 */
 
+import type { CloudRoute } from '@agentsws/api'
 import type { Clock } from '@agentsws/contracts'
-import { type CloudMail, type CloudServer, createCloudServer } from '../src/index.js'
+import {
+  type CloudMail,
+  type CloudServer,
+  createCloudServer,
+  type MailSender,
+} from '../src/index.js'
 
 export interface TestClock extends Clock {
   advance(ms: number): void
@@ -21,6 +27,20 @@ export function testClock(start = '2026-09-15T00:00:00.000Z'): TestClock {
   }
 }
 
+/** 一次 HTTP 调用；`headers` 给的是原样的头（WP110 的限流按 `X-Forwarded-For` 认来源）。 */
+export interface CallInit {
+  method?: string
+  body?: unknown
+  token?: string
+  headers?: Record<string, string>
+}
+
+export interface RawResponse {
+  status: number
+  text: string
+  headers: Headers
+}
+
 export interface Harness {
   server: CloudServer
   clock: TestClock
@@ -30,22 +50,54 @@ export interface Harness {
   lastLink(): string
   call(
     path: string,
-    init?: { method?: string; body?: unknown; token?: string },
-  ): Promise<{ status: number; body: { data?: unknown; code?: string; message?: string } }>
+    init?: CallInit,
+  ): Promise<{
+    status: number
+    body: { data?: unknown; code?: string; message?: string }
+    headers: Headers
+  }>
+  /** 不解析 JSON 的那一档（网页那两页是 HTML）。 */
+  raw(path: string, init?: CallInit): Promise<RawResponse>
   close(): Promise<void>
 }
 
-export function harness(options: { clock?: TestClock } = {}): Harness {
+export interface HarnessOptions {
+  clock?: TestClock
+  /** 额外挂的路由包（WP110 的 admin 就走这条）。 */
+  modules?: CloudRoute[][]
+  /** 换一个投递实现（默认是往 `mails` 里推）。 */
+  mail?: MailSender
+  /** 覆盖环境变量（默认只有 `AGENTSWS_CLOUD_BASE_URL`）。 */
+  env?: Record<string, string | undefined>
+}
+
+export function harness(options: HarnessOptions = {}): Harness {
   const clock = options.clock ?? testClock()
   const mails: CloudMail[] = []
   const server = createCloudServer({
     clock,
     quiet: true,
-    env: { AGENTSWS_CLOUD_BASE_URL: 'https://cloud.example.test' },
-    mail: async (mail) => {
-      mails.push(mail)
-    },
+    env: { AGENTSWS_CLOUD_BASE_URL: 'https://cloud.example.test', ...options.env },
+    mail:
+      options.mail ??
+      (async (mail) => {
+        mails.push(mail)
+      }),
+    ...(options.modules === undefined ? {} : { modules: options.modules }),
   })
+  const fetchOnce = async (path: string, init: CallInit = {}): Promise<RawResponse> => {
+    const headers = new Headers(init.headers ?? {})
+    if (init.body !== undefined) headers.set('content-type', 'application/json')
+    if (init.token !== undefined) headers.set('Authorization', `Bearer ${init.token}`)
+    const res = await server.fetch(
+      new Request(`http://cloud.test${path}`, {
+        method: init.method ?? 'GET',
+        headers,
+        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      }),
+    )
+    return { status: res.status, text: await res.text(), headers: res.headers }
+  }
   return {
     server,
     clock,
@@ -58,22 +110,14 @@ export function harness(options: { clock?: TestClock } = {}): Harness {
       return match[0]
     },
     async call(path, init = {}) {
-      const headers = new Headers()
-      if (init.body !== undefined) headers.set('content-type', 'application/json')
-      if (init.token !== undefined) headers.set('Authorization', `Bearer ${init.token}`)
-      const res = await server.fetch(
-        new Request(`http://cloud.test${path}`, {
-          method: init.method ?? 'GET',
-          headers,
-          ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-        }),
-      )
-      const text = await res.text()
+      const res = await fetchOnce(path, init)
       return {
         status: res.status,
-        body: text === '' ? {} : (JSON.parse(text) as { data?: unknown }),
+        body: res.text === '' ? {} : (JSON.parse(res.text) as { data?: unknown }),
+        headers: res.headers,
       }
     },
+    raw: fetchOnce,
     close: () => server.close(),
   }
 }

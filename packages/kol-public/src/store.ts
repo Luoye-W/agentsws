@@ -107,6 +107,14 @@ export interface KolStore {
   cachedBenchmark(filter: BucketFilter): Benchmark | undefined
   putBenchmark(row: Benchmark): void
 
+  /**
+   * 扔掉比 `olderThan` 还老的基准缓存行（WP110 的进程内定时调它）。返回删掉的条数。
+   *
+   * **可选成员**：读的时候本来就按 {@link BENCHMARK_CACHE_MS} 判新鲜，不清也不会
+   * 读到过期数据——这一条只是不让一年前的桶永远占着行。老实现没有它，宿主跳过就是了。
+   */
+  sweepBenchmarks?(olderThan: string): number
+
   close?(): void
 }
 
@@ -252,6 +260,17 @@ export class MemoryKolStore implements KolStore {
   cachedBenchmark(filter: BucketFilter): Benchmark | undefined {
     const row = this.benchmarks.get(bucketKeyOf(filter))
     return row === undefined ? undefined : { ...row }
+  }
+
+  sweepBenchmarks(olderThan: string): number {
+    const cutoff = Date.parse(olderThan)
+    let removed = 0
+    for (const [key, row] of this.benchmarks)
+      if (Date.parse(row.computed_at) <= cutoff) {
+        this.benchmarks.delete(key)
+        removed += 1
+      }
+    return removed
   }
 
   putBenchmark(row: Benchmark): void {
@@ -835,6 +854,14 @@ export class SqliteKolStore implements KolStore {
       )
       .get(filter.channel, filter.category, filter.followers_band) as BenchmarkSqlRow | undefined
     return row === undefined ? undefined : toBenchmark(row)
+  }
+
+  sweepBenchmarks(olderThan: string): number {
+    // `SqliteLike.run` 故意只回 `unknown`（这个包不把 better-sqlite3 的类型拖进来）
+    const result = this.db
+      .prepare('DELETE FROM kol_benchmarks_cache WHERE computed_at <= ?')
+      .run(olderThan) as { changes?: number } | undefined
+    return result?.changes ?? 0
   }
 
   putBenchmark(row: Benchmark): void {

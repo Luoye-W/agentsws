@@ -172,3 +172,22 @@ export function emailDomain(email: string): string {
   if (at <= 0 || at === email.length - 1) return 'unknown'
   return email.slice(at + 1).toLowerCase()
 }
+
+/**
+ * 云的对外地址——**全仓唯一真源**（WP110）。
+ *
+ * 之所以放在契约里而不是各自的模块里：这条串同时被云侧（`apps/cloud` 拼 magic link
+ * 的落地址与回调白名单）、本地服务进程（`apps/server` 的账号关联与模型 provider）、
+ * 测试与部署脚本读。之前它在三个文件里各写了一遍，换域名就得记得三处都改——
+ * 少改一处的后果是"发出去的信里那条链接指向一个不存在的域名"，而且没人会立刻发现。
+ *
+ * 环境变量永远优先：自建、联调、内测各指各的（`bin/dev.mjs` 就起在 4401）。
+ */
+export const CLOUD_BASE_URL_ENV = 'AGENTSWS_CLOUD_BASE_URL'
+export const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agentsws.com'
+
+/** `AGENTSWS_CLOUD_BASE_URL` → 去掉末尾斜杠的地址；没配就是默认那条。 */
+export function cloudBaseUrl(env: Record<string, string | undefined>): string {
+  const raw = env[CLOUD_BASE_URL_ENV]?.trim()
+  return raw === undefined || raw === '' ? DEFAULT_CLOUD_BASE_URL : raw.replace(/\/+$/, '')
+}

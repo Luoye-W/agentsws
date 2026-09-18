@@ -91,7 +91,7 @@ function harness(over: Partial<EntryDeps> = {}): Harness {
       secret_key: () => 'sk_test_not_a_real_key',
       webhook_secret: () => WEBHOOK_SECRET,
       api_base: 'https://stripe.invalid',
-      return_url: 'https://cloud.agentsws.app/billing',
+      return_url: 'https://cloud.agentsws.com/billing',
     },
     now: () => NOW,
     newRequestId: () => `req_${++seq}`,

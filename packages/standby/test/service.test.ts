@@ -44,7 +44,7 @@ describe('开通 → 起进程 → 健康 → 到期停', () => {
     expect(env.AGENTSWS_BIND_HOST).toBe('127.0.0.1')
     expect(env.AGENTSWS_DATA_KEY).toBeTruthy()
     expect(env.AGENTSWS_SECRETS_KEY).toBe(env.AGENTSWS_DATA_KEY)
-    expect(env.AGENTSWS_PUBLIC_BASE_URL).toBe('https://cloud.agentsws.app/w/ws_1')
+    expect(env.AGENTSWS_PUBLIC_BASE_URL).toBe('https://cloud.agentsws.com/w/ws_1')
 
     // 密钥**不在编排层的库里**（21：我们没有读数据的路径）
     const row = JSON.stringify(h.store.get('ws_1'))
