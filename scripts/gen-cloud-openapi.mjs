@@ -38,7 +38,7 @@ const routes = collectCloudRoutes({
   store,
   clock,
   mail: consoleMailSender(() => {}),
-  baseUrl: 'https://cloud.agentsws.app',
+  baseUrl: 'https://cloud.agentsws.com',
   version,
 })
 const doc = buildCloudOpenApi(routes, version)

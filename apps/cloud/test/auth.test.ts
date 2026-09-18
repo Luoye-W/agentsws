@@ -3,6 +3,7 @@
  * 外加 `callback_url` 的白名单——这是本 WP 唯一一处"按调用方给的地址拼链接"。
  */
 
+import { DEFAULT_CLOUD_BASE_URL as CONTRACT_CLOUD_BASE_URL } from '@agentsws/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { checkCallbackUrl, DEFAULT_CLOUD_BASE_URL } from '../src/index.js'
 import { type Harness, harness, login } from './helpers.js'
@@ -78,6 +79,16 @@ describe('49 M1 云账号登录', () => {
 })
 
 describe('callback_url 白名单（不给开放重定向留口）', () => {
+  /*
+   * WP110：域名买下来了。这一条钉的不是"值是多少"（那在契约的用例里），
+   * 而是**云侧转出去的那一份与契约里的是同一个**——三个文件各写一遍的时候，
+   * 换域名少改一处的后果是信里那条链接指向一个不存在的站点。
+   */
+  it('云侧的默认地址就是契约里那一条（cloud.agentsws.com）', () => {
+    expect(DEFAULT_CLOUD_BASE_URL).toBe(CONTRACT_CLOUD_BASE_URL)
+    expect(DEFAULT_CLOUD_BASE_URL).toBe('https://cloud.agentsws.com')
+  })
+
   it('只认回环地址与云自己的地址', () => {
     expect(
       checkCallbackUrl('http://127.0.0.1:3000/v1/cloud/account/callback', DEFAULT_CLOUD_BASE_URL)
@@ -92,7 +103,7 @@ describe('callback_url 白名单（不给开放重定向留口）', () => {
   it('别人的站点、看起来像我们的域名、带口令的地址一律拒绝', () => {
     for (const bad of [
       'https://evil.example/steal',
-      'https://cloud.agentsws.app.evil.example/steal',
+      'https://cloud.agentsws.com.evil.example/steal',
       'http://user:pw@127.0.0.1:3000/cb',
       'http://10.0.0.5:3000/cb',
       'not-a-url',

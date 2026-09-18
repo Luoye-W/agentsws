@@ -17,7 +17,7 @@ import { renderWithProviders } from './helpers'
 
 const UNLINKED: CloudAccountView = {
   linked: false,
-  cloud_base_url: 'https://cloud.agentsws.app',
+  cloud_base_url: 'https://cloud.agentsws.com',
 }
 
 const LINKED: CloudAccountView = {
@@ -27,7 +27,7 @@ const LINKED: CloudAccountView = {
   expires_at: '2026-12-14T00:00:00.000Z',
   scopes: ['ai', 'wallet:read'],
   linked_at: '2026-09-15T00:00:00.000Z',
-  cloud_base_url: 'https://cloud.agentsws.app',
+  cloud_base_url: 'https://cloud.agentsws.com',
 }
 
 const state = {

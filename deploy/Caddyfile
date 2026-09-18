@@ -1,0 +1,75 @@
+# agentsws 云侧的反向代理（WP110）。Caddy 自动申请与续期 Let's Encrypt 证书——
+# 前提是 DNS 的 A 记录已经指到这台机器，而且 80 / 443 都开着（docs/61 §2）。
+{
+	# 证书到期提醒发到这里（ACME 账号邮箱）
+	email {$ACME_EMAIL}
+}
+
+{$CLOUD_DOMAIN} {
+	log {
+		output stdout
+		format console
+		# 访问日志里不留凭据：magic link 的一次性 token 在 query 里，
+		# 登录信被转发、被截图、被贴进群里的事都会发生，日志里再留一份就是第二次泄漏。
+		format filter {
+			wrap console
+			fields {
+				request>uri query {
+					replace token REDACTED
+				}
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+
+	header {
+		# 说清楚这个站只走 HTTPS。测试环境不预加载（preload 是不可逆的）
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		# 云侧这几页不该被任何人嵌进 iframe（登录落地页尤其）
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# 只有一页静态 HTML，没有脚本，也不该有——真出现了就是被注入了
+		Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'"
+		-Server
+	}
+
+	# ── 流式与 SSE：不能缓冲 ────────────────────────────────────────────
+	#
+	# 两条路是流的：
+	# - `/v1/ai/*`：OpenAI 兼容的流式补全（入口边转发边扫最后那个 usage，
+	#   缓冲一下就把"流式"变成了"假流式"，用户看到的是几十秒空白后一次吐完）；
+	# - `/w/*`：值守托管的聊天窗（WP60），SSE 长连接。
+	#
+	# `flush_interval -1` = 每写必刷。`encode` 在这一段**不开**：
+	# 压缩器要攒够一块才吐，那本身就是一次缓冲。
+	@stream path /v1/ai/* /w/*
+	handle @stream {
+		reverse_proxy cloud:4400 {
+			# 见下面 handle 块里关于 X-Forwarded-For 那一段
+			header_up -X-Forwarded-For
+			flush_interval -1
+			# 长连接不该被代理这一层掐断；真正的超时由应用自己管
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	# ── 其余（账号、钱包、公共红人库、两页网页）────────────────────────
+	handle {
+		encode zstd gzip
+		reverse_proxy cloud:4400 {
+			# **先把客户端送来的那一串删掉**，再让 Caddy 填自己看到的对端。
+			#
+			# Caddy 默认是**追加**，于是客户端自己塞一个头就会变成
+			# `X-Forwarded-For: 1.2.3.4, <真实 IP>`。而云进程取的是第一段
+			# （`apps/cloud/src/guards.ts` 的 `clientIpOf`），那等于谁都能换一个
+			# 限流桶——每 IP 20 次 / 小时当场作废。删掉之后这个头里只会有
+			# Caddy 自己看到的 TCP 对端，伪造不了。
+			header_up -X-Forwarded-For
+		}
+	}
+}
