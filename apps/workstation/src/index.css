@@ -1,90 +1,159 @@
 /*
- * 36 §1：shadcn/ui（radix-nova 风格、neutral 基色）+ Tailwind v4 CSS variables 主题。
+ * 36 §1：shadcn/ui + Tailwind v4 CSS variables 主题。
  *
- * - v1 不定品牌强调色，用 shadcn neutral 默认；品牌定了改这里的 --primary 一个变量。
- * - 字体：系统字体栈 + Noto Sans SC 本地回退，**不从 CDN 拉字体**（开源版离线优先）。
+ * WP96（09-18 设计画布定稿）把 v1 的 shadcn neutral 换成工作台自己的一套颜色：
+ * 浅色 = 纸 #F3F5F2 / 卡 #FFFFFF / 线 #ECEFEA / 品牌青绿 #007B67；
+ * 深色 = Linear 的克制版，黑底 #0E100F + 霓虹绿 #76FB91 **只用于强调与数据高亮**。
+ * shadcn 的 --background / --card / --border / --primary 直接指到这套值上，
+ * 所以所有既有 shadcn 组件不改一行也跟着换皮。
+ *
+ * - 卡：圆角 16、**无边框**、两层浅阴影（--ws-shadow）；选中态 = 细一圈绿 + 真渐变光晕。
+ * - 字体：标题与大数字 Outfit（本地 @fontsource，**不从 CDN 拉**，36 §1）；
+ *   正文中文走系统栈 + Noto Sans SC 回退。只引 500 / 600 / 700 三档。
  * - 深浅色两套 token；`.dark` 由 ThemeProvider 挂在 <html> 上。
  */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Outfit：只要 500 / 600 / 700 三档，本地打包，离线可用 */
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
   --radius: 0.625rem;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* ── WP96 · 09-18 设计画布的浅色 token（改这一段就换整套皮） ───────── */
+  --ws-paper: #f3f5f2;
+  --ws-card: #ffffff;
+  --ws-line: #ecefea;
+  --ws-ink: #263331;
+  /* 正文灰：比标题浅一档，卡里的说明文字用它 */
+  --ws-body: #4b5550;
+  --ws-muted-fg: #6b746f;
+  --ws-brand: #007b67;
+  --ws-brand-ink: #045246;
+  --ws-brand-fg: #ffffff;
+  --ws-tint: #e8f3f0;
+  --ws-good: #158a4b;
+  --ws-good-bg: #e3f5ea;
+  --ws-warn: #b26e0b;
+  --ws-warn-bg: #fff4db;
+  --ws-bad: #c93b30;
+  --ws-bad-bg: #fde9e7;
+  --ws-info: #2f63c8;
+  --ws-info-bg: #e9f0fb;
+  /* 柱状图的第二根柱（"上周同时"）与进度条底槽 */
+  --ws-brand-soft: #cfebdd;
+  --ws-surface: #f7f9f6;
+  /* 卡：圆角 16、无边框、两层浅阴影 */
+  --ws-radius-card: 16px;
+  --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
+  --ws-shadow-hover: 0 16px 34px rgba(20, 40, 30, 0.14), 0 2px 6px rgba(20, 40, 30, 0.06);
+  /* 选中态的光晕：真渐变（模糊阴影），不是分层描边 */
+  --ws-glow: 0 0 0 1px rgba(0, 123, 103, 0.32), 0 0 12px 2px rgba(0, 123, 103, 0.14);
+  --ws-display: "Outfit", "Noto Sans SC", var(--font-stack-sans);
 
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  /* ── shadcn token 指到上面那套值上 ───────────────────────────────── */
+  --background: var(--ws-paper);
+  --foreground: var(--ws-ink);
+  --card: var(--ws-card);
+  --card-foreground: var(--ws-ink);
+  --popover: var(--ws-card);
+  --popover-foreground: var(--ws-ink);
+  --primary: var(--ws-brand);
+  --primary-foreground: var(--ws-brand-fg);
+  --secondary: #edf0eb;
+  --secondary-foreground: var(--ws-ink);
+  --muted: #f3f5f2;
+  --muted-foreground: var(--ws-muted-fg);
+  --accent: var(--ws-tint);
+  --accent-foreground: var(--ws-brand-ink);
+  --destructive: var(--ws-bad);
+  --destructive-foreground: #ffffff;
+  --border: var(--ws-line);
+  --input: #e6eae5;
+  --ring: var(--ws-brand);
 
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --chart-1: var(--ws-brand);
+  --chart-2: var(--ws-brand-soft);
+  --chart-3: var(--ws-info);
+  --chart-4: var(--ws-warn);
+  --chart-5: var(--ws-bad);
+
+  --sidebar: #f8faf7;
+  --sidebar-foreground: var(--ws-ink);
+  --sidebar-primary: var(--ws-brand);
+  --sidebar-primary-foreground: var(--ws-brand-fg);
+  --sidebar-accent: var(--ws-tint);
+  --sidebar-accent-foreground: var(--ws-brand-ink);
+  --sidebar-border: var(--ws-line);
+  --sidebar-ring: var(--ws-brand);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.556 0 0);
+  /* ── WP96 · 深色照 Linear 的克制版：霓虹绿只用于强调与数据高亮 ────── */
+  --ws-paper: #0e100f;
+  --ws-card: #171a18;
+  --ws-line: #242825;
+  --ws-ink: #f1f4f0;
+  --ws-body: #c9d2cc;
+  --ws-muted-fg: #98a29b;
+  --ws-brand: #76fb91;
+  --ws-brand-ink: #b9ffc9;
+  --ws-brand-fg: #0e100f;
+  --ws-tint: #173c24;
+  --ws-good: #76fb91;
+  --ws-good-bg: #173c24;
+  --ws-warn: #f5c451;
+  --ws-warn-bg: #3a2e10;
+  --ws-bad: #ff7a6b;
+  --ws-bad-bg: #3d1d19;
+  --ws-info: #8bb8ff;
+  --ws-info-bg: #1a2436;
+  --ws-brand-soft: #2c5c3b;
+  --ws-surface: #1c201d;
+  --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --ws-shadow-hover: 0 16px 34px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.36);
+  --ws-glow: 0 0 0 1px rgba(118, 251, 145, 0.32), 0 0 12px 2px rgba(118, 251, 145, 0.14);
 
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --background: var(--ws-paper);
+  --foreground: var(--ws-ink);
+  --card: var(--ws-card);
+  --card-foreground: var(--ws-ink);
+  --popover: var(--ws-card);
+  --popover-foreground: var(--ws-ink);
+  --primary: var(--ws-brand);
+  --primary-foreground: var(--ws-brand-fg);
+  --secondary: #1f2320;
+  --secondary-foreground: var(--ws-ink);
+  --muted: #1d211e;
+  --muted-foreground: var(--ws-muted-fg);
+  --accent: var(--ws-tint);
+  --accent-foreground: var(--ws-brand-ink);
+  --destructive: var(--ws-bad);
+  --destructive-foreground: #1a0f0d;
+  --border: var(--ws-line);
+  --input: #2a2e2b;
+  --ring: var(--ws-brand);
 
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --chart-1: var(--ws-brand);
+  --chart-2: var(--ws-brand-soft);
+  --chart-3: var(--ws-info);
+  --chart-4: var(--ws-warn);
+  --chart-5: var(--ws-bad);
+
+  --sidebar: #121513;
+  --sidebar-foreground: var(--ws-ink);
+  --sidebar-primary: var(--ws-brand);
+  --sidebar-primary-foreground: var(--ws-brand-fg);
+  --sidebar-accent: var(--ws-tint);
+  --sidebar-accent-foreground: var(--ws-brand-ink);
+  --sidebar-border: var(--ws-line);
+  --sidebar-ring: var(--ws-brand);
 }
 
 @theme inline {
@@ -128,6 +197,35 @@
 
   --font-sans: var(--font-stack-sans);
   --font-mono: var(--font-stack-mono);
+  --font-display: var(--ws-display);
+
+  /* WP96：设计画布的语义色也进 Tailwind，写 bg-ws-good-bg / text-ws-warn 就行 */
+  --color-ws-paper: var(--ws-paper);
+  --color-ws-card: var(--ws-card);
+  --color-ws-line: var(--ws-line);
+  --color-ws-ink: var(--ws-ink);
+  --color-ws-body: var(--ws-body);
+  --color-ws-muted-fg: var(--ws-muted-fg);
+  --color-ws-brand: var(--ws-brand);
+  --color-ws-brand-ink: var(--ws-brand-ink);
+  --color-ws-brand-fg: var(--ws-brand-fg);
+  --color-ws-brand-soft: var(--ws-brand-soft);
+  --color-ws-tint: var(--ws-tint);
+  --color-ws-surface: var(--ws-surface);
+  --color-ws-good: var(--ws-good);
+  --color-ws-good-bg: var(--ws-good-bg);
+  --color-ws-warn: var(--ws-warn);
+  --color-ws-warn-bg: var(--ws-warn-bg);
+  --color-ws-bad: var(--ws-bad);
+  --color-ws-bad-bg: var(--ws-bad-bg);
+  --color-ws-info: var(--ws-info);
+  --color-ws-info-bg: var(--ws-info-bg);
+
+  --radius-ws-card: var(--ws-radius-card);
+
+  --shadow-ws: var(--ws-shadow);
+  --shadow-ws-hover: var(--ws-shadow-hover);
+  --shadow-ws-glow: var(--ws-glow);
 }
 
 @layer base {
@@ -164,5 +262,64 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /*
+   * WP96 卡面：圆角 16、**无边框**、两层浅阴影。
+   *
+   * 选中态是一整块真渐变光晕（一条模糊阴影），不是"细描边 + 再描一圈"的分层，
+   * 所以 `.ws-card-selected` 只换 box-shadow 再抬 3px，不加 border——加了边框
+   * 就会在光晕里看见一条硬线。
+   */
+  .ws-card {
+    border-radius: var(--ws-radius-card);
+    border: 0;
+    background-color: var(--ws-card);
+    color: var(--ws-ink);
+    box-shadow: var(--ws-shadow);
+    transition:
+      box-shadow 180ms ease-out,
+      transform 180ms ease-out;
+  }
+
+  .ws-card-selected {
+    box-shadow: var(--ws-glow), var(--ws-shadow-hover);
+    transform: translateY(-3px);
+  }
+
+  /* 标题与大数字：Outfit，字距收紧、数字等宽 */
+  .ws-display {
+    font-family: var(--ws-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 表格与键值对里的数字：等宽，列才对得齐 */
+  .ws-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 右下角那个 → 圆钮：每张卡都有，点进事项详情 */
+  .ws-go {
+    display: inline-flex;
+    height: 30px;
+    width: 30px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background-color: var(--ws-surface);
+    color: var(--ws-ink);
+    transition:
+      background-color 150ms ease-out,
+      color 150ms ease-out;
+  }
+
+  .ws-go:hover {
+    background-color: var(--ws-brand);
+    color: var(--ws-brand-fg);
   }
 }
