@@ -1186,6 +1186,24 @@ async function execute(
         world.web.unsubscribe({ email: event.unsubscribe.email })
         return
       }
+      // ── WP113 消息（63 §4）：分拣那一跳 ───────────────────────────
+      case 'messages.inbound': {
+        // 判成什么不在这儿：`world.mail.inbound` 调的是 channels 的 `triageMessage`
+        await world.mail.inbound(event.message)
+        return
+      }
+      case 'messages.correct': {
+        world.mail.correct(event.correct)
+        return
+      }
+      case 'messages.disable_position': {
+        world.mail.disablePosition(event.disable_position)
+        return
+      }
+      case 'messages.halt_model': {
+        world.mail.haltModel(event.halt_model)
+        return
+      }
       case 'email.campaign_send': {
         const out = await world.web.campaignSend({
           who: event.campaign_send.who,

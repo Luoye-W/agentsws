@@ -642,6 +642,64 @@ export function checkExpectations(
     }
   }
   /*
+   * WP113 / 63 §4：最后一封信分拣成了什么。
+   *
+   * `moved` 是这一组题的心脏：**岗位没开、把握不够、急停**三种情况下它都必须是
+   * `false`——"没开客服岗位的工作区里，一封客户投诉照样只是收件箱里打了标签的
+   * 一封信"（Luoye 原话）。`model_calls` 是第二重要的那一格：规则层命中时是 0，
+   * "教过一次之后下一封直达"在数字上就是它从 1 变成 0。
+   */
+  if (expected.message_triage !== undefined) {
+    const last = [...evidence.events].reverse().find((e) => e.type === 'simulation.message_triaged')
+    if (last === undefined) {
+      add('message_triage', false, '这一轮一封信都没被分拣')
+    } else {
+      const p = payloadOf(last)
+      const want = expected.message_triage
+      const problems: string[] = []
+      if (want.route !== undefined && p.route !== want.route) {
+        problems.push(`判成了 ${String(p.route)}，不是 ${want.route}`)
+      }
+      if (want.suggested_route !== undefined && p.suggested_route !== want.suggested_route) {
+        problems.push(`没挂上"像是 ${want.suggested_route} 信？"那一问`)
+      }
+      if (want.by !== undefined && p.by !== want.by) {
+        problems.push(`这一判是 ${String(p.by)} 做的，不是 ${want.by}`)
+      }
+      if (want.needs_reply !== undefined && (p.needs_reply === true) !== want.needs_reply) {
+        problems.push(`needs_reply 是 ${String(p.needs_reply)}`)
+      }
+      if (want.moved !== undefined && (p.moved === true) !== want.moved) {
+        problems.push(
+          want.moved ? '这封信没被挪走' : `这封信被挪进了 ${String(p.moved_to ?? '?')}——它不该挪`,
+        )
+      }
+      if (want.moved_to !== undefined && p.moved_to !== want.moved_to) {
+        problems.push(`挪到了 ${String(p.moved_to ?? '哪儿都没去')}，不是 ${want.moved_to}`)
+      }
+      const labels = Array.isArray(p.labels) ? (p.labels as string[]) : []
+      const missing = (want.labels ?? []).filter((l) => !labels.includes(l))
+      if (missing.length > 0) problems.push(`少了标签：${missing.join(', ')}`)
+      const calls = Number(p.model_calls ?? 0)
+      if (want.model_calls !== undefined && !matchNumeric(calls, want.model_calls)) {
+        problems.push(`花了 ${calls} 次模型，不合期望`)
+      }
+      const confidence = Number(p.confidence ?? 0)
+      if (want.confidence !== undefined && !matchNumeric(confidence, want.confidence)) {
+        problems.push(`把握 ${confidence}，不合期望`)
+      }
+      add(
+        'message_triage',
+        problems.length === 0,
+        problems.length === 0
+          ? `判成 ${String(p.route)}（${String(p.by)}，把握 ${confidence}），${
+              p.moved === true ? `挪进 ${String(p.moved_to)}` : '留在收件箱'
+            }，花了 ${calls} 次模型`
+          : problems.join('；'),
+      )
+    }
+  }
+  /*
    * WP76 / 58 §1：那一张需求单。
    *
    * 三件事：路由**真判**到哪条设计职责（不是场景指定的）、brief 出没出、

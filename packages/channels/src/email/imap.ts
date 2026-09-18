@@ -9,6 +9,13 @@ export interface RawEmailMessage {
   /** 原始 MIME 源；只进受控原始材料区 */
   source: string
   internal_date?: Iso8601
+  /**
+   * WP113（63 §7）：服务器上的 flags（`\Seen` / `\Flagged` / `\Answered` / `\Draft`）。
+   *
+   * 消息库要它才说得出"这封读过没有"。老调用方（入站管线）不看这一格，
+   * 不实现的替身也照常工作——那时消息库里一律按"未读、没星标"算。
+   */
+  flags?: readonly string[]
 }
 
 /** 收信端口：适配器只依赖它，imapflow 是其默认实现，测试可注入内存实现。 */
@@ -49,14 +56,31 @@ export interface ImapClientLike {
   logout(): Promise<void>
   close(): void
   getMailboxLock(path: string): Promise<{ release: () => void }>
-  /** WP55：打开一个文件夹并拿到它的 `UIDVALIDITY`。 */
-  mailboxOpen?(path: string): Promise<{ uidValidity?: number | bigint }>
+  /**
+   * WP55：打开一个文件夹并拿到它的 `UIDVALIDITY`。
+   *
+   * WP113 多读一格 `permanentFlags`：含 `\*` 的服务器允许自定义 keyword，
+   * 标签才同步得过去（63 §5）；不含就只在本地打标签，**不为了标签去挪信**。
+   */
+  mailboxOpen?(path: string): Promise<{
+    uidValidity?: number | bigint | undefined
+    permanentFlags?: readonly string[] | Set<string> | undefined
+  }>
   /** WP55：新建文件夹（归档文件夹第一次用时）。 */
   mailboxCreate?(path: string): Promise<unknown>
   /** WP55：把一封信搬到另一个文件夹。 */
   messageMove?(range: string, destination: string, options: { uid: true }): Promise<unknown>
   /** WP55：加 flag（归档时顺手标已读）。 */
   messageFlagsAdd?(range: string, flags: string[], options: { uid: true }): Promise<unknown>
+  /**
+   * WP113（63 §7）：**去** flag。
+   *
+   * 回写要的是双向：人在工作台里把一封信标回未读，用户的邮箱软件里也该是未读。
+   * 只加不减的回写会让"已读"变成一条单行道。
+   */
+  messageFlagsRemove?(range: string, flags: string[], options: { uid: true }): Promise<unknown>
+  /** WP113：这台服务器上有哪些文件夹（全量同步要按真名逐个扫）。 */
+  list?(): Promise<readonly { path: string }[]>
   /** WP55：按头搜（对账用）。imapflow 有，最小桩可以不实现。 */
   search?(
     query: { header: Record<string, string> },
@@ -64,12 +88,14 @@ export interface ImapClientLike {
   ): Promise<number[] | false | undefined>
   fetch(
     range: string,
-    query: { uid: true; source: true; internalDate: true },
+    /** WP113：多取一格 `flags`——消息库要它才说得出"这封读过没有"。 */
+    query: { uid: true; source: true; internalDate: true; flags?: true },
     options: { uid: true },
   ): AsyncIterable<{
     uid: number
     source?: Uint8Array | undefined
     internalDate?: Date | string | undefined
+    flags?: Set<string> | readonly string[] | undefined
   }>
 }
 
@@ -168,6 +194,9 @@ export function fromImapFlow(client: ImapFlow): ImapClientLike {
     mailboxCreate: (path) => client.mailboxCreate(path),
     messageMove: (range, destination, options) => client.messageMove(range, destination, options),
     messageFlagsAdd: (range, flags, options) => client.messageFlagsAdd(range, flags, options),
+    // WP113：回写要双向（标回未读 / 去星标），所以 remove 也接出来
+    messageFlagsRemove: (range, flags, options) => client.messageFlagsRemove(range, flags, options),
+    list: async () => (await client.list()).map((b) => ({ path: b.path })),
     search: (query, options) => client.search(query, options),
     fetch: (range, query, options) => client.fetch(range, query, options),
   }
@@ -231,11 +260,12 @@ export class ImapMailSource implements MailSource {
         const range = `${Math.max(1, since_uid + 1)}:*`
         for await (const msg of client.fetch(
           range,
-          { uid: true, source: true, internalDate: true },
+          { uid: true, source: true, internalDate: true, flags: true },
           { uid: true },
         )) {
           if (msg.uid <= since_uid) continue
           if (msg.source === undefined) continue
+          const flags = flagsOf(msg.flags)
           out.push({
             uid: msg.uid,
             mailbox: this.mailbox,
@@ -243,6 +273,7 @@ export class ImapMailSource implements MailSource {
             ...(internalDateOf(msg.internalDate) === undefined
               ? {}
               : { internal_date: internalDateOf(msg.internalDate) as Iso8601 }),
+            ...(flags === undefined ? {} : { flags }),
           })
           if (out.length >= batch) break
         }
@@ -387,7 +418,14 @@ export class ImapMailSource implements MailSource {
   }
 }
 
-function defaultImapClient(config: ImapConfig, password: string): ImapClientLike {
+/**
+ * 缺省的 imapflow 客户端工厂。
+ *
+ * 导出它是为了让**同一个包之外**的装配（`apps/server` 的消息面回写端）不必自己
+ * `import { ImapFlow }`——那会把 imapflow 变成 `apps/server` 的直接依赖，
+ * 而"哪个包认识 imapflow"这件事应该只有一个答案。
+ */
+export function defaultImapClient(config: ImapConfig, password: string): ImapClientLike {
   return fromImapFlow(
     new ImapFlow({
       host: config.host,
@@ -398,6 +436,13 @@ function defaultImapClient(config: ImapConfig, password: string): ImapClientLike
       emitLogs: false,
     }),
   )
+}
+
+/** imapflow 的 flags 是 Set；替身可能给数组，也可能一个都不给。 */
+export function flagsOf(value: Set<string> | readonly string[] | undefined): string[] | undefined {
+  if (value === undefined) return undefined
+  const list = Array.isArray(value) ? value : [...(value as Set<string>)]
+  return list.length === 0 ? [] : list
 }
 
 /** imapflow 的 internalDate 可能是 Date 也可能是字符串。 */

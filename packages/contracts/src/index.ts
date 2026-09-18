@@ -25,6 +25,8 @@ export * from './kol.js'
 // 48 §5.3 / 49 §6 WP61：云上的公共红人库服务（本地那六个红人对象在 kol.ts，WP67）
 export * from './kol-public.js'
 export * from './meetings.js'
+// WP113（63）：消息——统一收件处。v1 只有邮箱一种来源，但数据模型按"来源可扩"建
+export * from './messages.js'
 export * from './model.js'
 export * from './packages.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：

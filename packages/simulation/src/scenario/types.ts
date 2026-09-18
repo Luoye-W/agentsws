@@ -229,6 +229,41 @@ export interface ScenarioFulfillmentShip {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/* ── WP113（63）：消息 ──────────────────────────────────────────────── */
+
+/**
+ * 一封信进世界（世界里发生的一件事）。
+ *
+ * 场景只说"谁寄了什么"，**不说它该归谁**——判成什么由 `@agentsws/channels` 的
+ * `triageMessage` 算，那是真服务进程里跑的同一个函数。
+ */
+export interface ScenarioMessageInbound {
+  from: string
+  subject: string
+  body: string
+  /** 分拣要看的那几个原始头（`list-unsubscribe` / `auto-submitted` / `precedence`）。 */
+  headers?: Record<string, string>
+  /** 回的是哪一封（线程归并那一层看它）。 */
+  in_reply_to?: string
+}
+
+/** 人纠错：把某个发件人的信挪到别处，并（可选）教一条规则。 */
+export interface ScenarioMessageCorrect {
+  from: string
+  to: 'inbox' | 'support' | 'kol'
+  remember_sender?: boolean
+}
+
+/** 把某个岗位撤了（这个工作区没有人持那条职责了）。 */
+export interface ScenarioMessageDisablePosition {
+  position: 'support' | 'kol'
+}
+
+/** 人按了托盘的「暂停」（`halt.model`）。 */
+export interface ScenarioMessageHaltModel {
+  on: boolean
+}
+
 /** WP64 / 51 §2.3：某个顾客点了退订（世界里发生的一件事，不是场景递答案）。 */
 export interface ScenarioEmailUnsubscribe {
   email: string
@@ -780,6 +815,15 @@ export type ScenarioEvent =
   | { at: string; type: 'email.unsubscribe'; unsubscribe: ScenarioEmailUnsubscribe }
   /** WP64：提一条群发（51 §2.3，发送永远 L1）。 */
   | { at: string; type: 'email.campaign_send'; campaign_send: ScenarioEmailCampaignSend }
+  // WP113（63）：消息的分拣那一跳
+  | { at: string; type: 'messages.inbound'; message: ScenarioMessageInbound }
+  | { at: string; type: 'messages.correct'; correct: ScenarioMessageCorrect }
+  | {
+      at: string
+      type: 'messages.disable_position'
+      disable_position: ScenarioMessageDisablePosition
+    }
+  | { at: string; type: 'messages.halt_model'; halt_model: ScenarioMessageHaltModel }
   /** WP72：提一条内容（56 §2，发布永远 L1）。 */
   | { at: string; type: 'social.post'; post: ScenarioSocialPost }
   /** WP72：处理一条留言（56 §2 / §4，先判类：客户问题转客服）。 */
@@ -1138,6 +1182,26 @@ export interface ScenarioExpected {
     suppressed_removed?: NumericAssertion
     audience_size?: NumericAssertion
     stated_on_card?: boolean
+  }
+  /**
+   * WP113 / 63 §4：**最后一封信**分拣成了什么。
+   *
+   * `moved` 是这一组题的心脏：岗位没开、把握不够、急停——三种情况下它都必须是
+   * `false`。`model_calls` 是第二重要的那一格：规则层命中时它是 0，
+   * "教过一次之后下一封直达"在数字上就是它从 1 变成 0。
+   */
+  message_triage?: {
+    route?: string
+    suggested_route?: string
+    labels?: string[]
+    by?: string
+    needs_reply?: boolean
+    /** 真挪走了吗。岗位没开 / 把握不够 / 急停 → 一律 false。 */
+    moved?: boolean
+    moved_to?: string
+    /** 这一封花了几次模型（规则层命中 = 0）。 */
+    model_calls?: NumericAssertion
+    confidence?: NumericAssertion
   }
   /**
    * WP72 / 56 §2：那一条内容提案。

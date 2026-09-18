@@ -21,6 +21,7 @@ import type {
   ConnectionsPort,
   DesignPort,
   KolPort,
+  MessagesPort,
   ModelDefaultsView,
   ModelsActor,
   ModelsPort,
@@ -295,6 +296,19 @@ export function brandWorkPort(
   make: (workspace_id: WorkspaceId) => Promise<WorkPort>,
 ): WorkPort {
   return scopedPort<WorkPort>(make, () => brands.bootstrap)
+}
+
+/**
+ * WP113（63）消息面：一个品牌一张消息库、一段加密库里的那几只邮箱。
+ *
+ * 这一条与红人库同样不能漏——品牌 A 的信在 B 的任何路由里都不该读得到。
+ * 端口的每个方法第一个参数都是 `MessageActor`，所以 `scopedPort` 直接套得上。
+ */
+export function brandMessagesPort(brands: BrandModules): MessagesPort {
+  return scopedPort<MessagesPort>(
+    async (ws) => (await brands.forWorkspace(ws)).messages.port,
+    () => brands.bootstrap,
+  )
 }
 
 /**
