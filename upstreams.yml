@@ -53,7 +53,7 @@ upstreams:
     why: 我们的 Agent 运行时本体；`packages/dsh-adapter` 是全仓唯一 import dsh 的地方（docs/34）
     npm: '@deepseek-ai/dsh'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.1.6-alpha.1
+    locked_version: 0.1.6-alpha.2
     pin: exact
     watch: [versions, releases, default_flips, wishlist]
     locked_in:
@@ -77,6 +77,10 @@ upstreams:
       - browser-use 从 experimental 转正，且后端不需要开原生构建就能起
       - session.eventAt() 的替代接口定下来（上游已弃用，下次升级第一个红）
       - 出现渠道 seam（现在入站只能靠 agent.followup()）
+      # WP93 加：`.d.ts` 与 README 的 diff 看不见 bundle 自己的 patch 层。alpha.2 就是往
+      # `packages/bundle/base/cordis.patch.yml` 里 insert 了一行默认开的 `plugin-manager`
+      # （按 `!ctx.get('profileContext')` 判），而我们的 profile 正好把 base 列进 bundles。
+      - bundle 的 cordis.patch.yml 里新增默认开启的行（plugin-manager / hmr 那一类）
     covered_by:
       - packages/dsh-adapter/test/seams.test.ts
       - packages/dsh-adapter/test/browser-seam.test.ts
@@ -248,7 +252,14 @@ upstreams:
     # 第一份周报出来、真看过一眼之后把这一行改掉（不改就一直是个占位）。
     why: '另一条公开的浏览器技能实现；契约 #20 的工具面与"人接管"语义可以对照它重判（未核实，见上方注释）'
     repo: Tencent/BrowserSkill
-    watch: [releases, stars, readme]
+    watch: [releases, stars, readme, wishlist]
+    wishlist:
+      # WP93：它的 dsh plugin（`@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0`）把六个 dsh peer
+      # 写成 `^0.1.0-rc.6`，与我们整棵预发布树在 semver 的预发布规则下**不相交**。每当有一个
+      # 那六个之一的包第一次进树，`pnpm install` 就红一次（WP92 撞了三个、WP93 又撞第四个
+      # `dsh-client-ui-primitives`），只能一条一条往 `pnpm-workspace.yaml` 的 overrides 里钉。
+      # 还剩 dsh-client-ui-attachment / dsh-client-ui-tool 两个没进树。
+      - dsh plugin 的 peer 范围放宽到能与预发布版相交（现在写死 ^0.1.0-rc.6）
 
   - id: octop
     kind: reference

@@ -20,6 +20,6 @@
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
     "@deepseek-ai/cordis": "4.0.2",
-    "@deepseek-ai/dsh-credentials": "0.1.6-alpha.1"
+    "@deepseek-ai/dsh-credentials": "0.1.6-alpha.2"
   }
 }

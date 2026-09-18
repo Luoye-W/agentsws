@@ -31,7 +31,7 @@ Agent 只**提议**，写操作一律进人审队列。
 
 本仓是 dsh 的**发行版**，不 fork 内核：
 
-- `profiles/agentsws/` 把官方 `@deepseek-ai/dsh-*` 锁死在同一个版本（当前 `0.1.6-alpha.1`，两次升级记录在 `packages/dsh-adapter/UPGRADE.md`）。
+- `profiles/agentsws/` 把官方 `@deepseek-ai/dsh-*` 锁死在同一个版本（当前 `0.1.6-alpha.2`，三次升级记录在 `packages/dsh-adapter/UPGRADE.md`）。
 - 所有对 dsh 的调用收口在 `packages/dsh-adapter`，业务代码只 import 契约。升级 dsh =
   改版本号 → 跑适配层的 seam 契约测试 → 跑模拟回路 → 全绿才合并。
 - 内核用的就是 dsh vendored 的那个 Cordis（`@deepseek-ai/cordis`）：我们的每个模块也是
