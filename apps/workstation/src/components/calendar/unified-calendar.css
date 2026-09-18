@@ -1,9 +1,13 @@
 /*
- * Schedule-X 贴 shadcn 的 token（WP74）。
+ * Schedule-X 贴我们的 token（WP74；WP96 换成设计画布那套）。
  *
- * 一条纪律：**这里只把库自己的变量接到我们的 token 上**，不写第二套颜色。
+ * 一条纪律没变：**这里只把库自己的变量接到我们的 token 上**，不写第二套颜色。
  * Schedule-X 全部颜色都走 `--sx-color-*` 这一组变量，所以覆盖这一组就够了——
  * 深色浅色是 `.dark` 那一层换 token 时浏览器自己算的，这个文件不需要写两遍。
+ *
+ * WP96 在此之上只加"画布上看得见、库自己给不出"的那几样：卡壳的圆角与阴影、
+ * 事件左边那条色条、今天那一列的淡绿头、现在线换成品牌色。**壳不换**
+ * （WP74 定的 Schedule-X 留着），这一整个文件都是皮。
  */
 
 .sx-host {
@@ -15,45 +19,49 @@
   width: 100%;
 }
 
+/* 画布：整块日历就是一张卡——圆角 16、无边框、浅阴影 */
 .sx-host .sx__calendar-wrapper {
   height: 100%;
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: var(--ws-radius-card);
+  box-shadow: var(--ws-shadow);
+  overflow: hidden;
 }
 
 .sx-host {
-  --sx-color-primary: var(--primary);
-  --sx-color-on-primary: var(--primary-foreground);
-  --sx-color-primary-container: color-mix(in oklab, var(--primary) 18%, var(--card));
-  --sx-color-on-primary-container: var(--card-foreground);
+  --sx-color-primary: var(--ws-brand);
+  --sx-color-on-primary: var(--ws-brand-fg);
+  --sx-color-primary-container: var(--ws-tint);
+  --sx-color-on-primary-container: var(--ws-brand-ink);
 
   --sx-color-secondary: var(--secondary);
   --sx-color-on-secondary: var(--secondary-foreground);
   --sx-color-secondary-container: var(--secondary);
   --sx-color-on-secondary-container: var(--secondary-foreground);
 
-  --sx-color-surface: var(--card);
-  --sx-color-surface-dim: var(--card);
-  --sx-color-surface-bright: var(--card);
-  --sx-color-on-surface: var(--card-foreground);
-  --sx-color-surface-container: var(--card);
-  --sx-color-surface-container-low: var(--background);
-  --sx-color-surface-container-high: var(--muted);
-  --sx-color-on-surface-variant: var(--muted-foreground);
+  --sx-color-surface: var(--ws-card);
+  --sx-color-surface-dim: var(--ws-card);
+  --sx-color-surface-bright: var(--ws-card);
+  --sx-color-on-surface: var(--ws-ink);
+  --sx-color-surface-container: var(--ws-card);
+  --sx-color-surface-container-low: var(--ws-surface);
+  --sx-color-surface-container-high: var(--ws-surface);
+  --sx-color-on-surface-variant: var(--ws-muted-fg);
 
-  --sx-color-background: var(--background);
-  --sx-color-on-background: var(--foreground);
-  --sx-color-outline: var(--border);
-  --sx-color-outline-variant: var(--border);
+  --sx-color-background: var(--ws-card);
+  --sx-color-on-background: var(--ws-ink);
+  --sx-color-outline: var(--ws-line);
+  --sx-color-outline-variant: var(--ws-line);
 
-  --sx-color-error: var(--destructive);
-  --sx-color-on-error: var(--primary-foreground);
-  --sx-color-error-container: color-mix(in oklab, var(--destructive) 16%, var(--card));
-  --sx-color-on-error-container: var(--card-foreground);
+  --sx-color-error: var(--ws-bad);
+  --sx-color-on-error: #ffffff;
+  --sx-color-error-container: var(--ws-bad-bg);
+  --sx-color-on-error-container: var(--ws-ink);
 
-  --sx-color-neutral: var(--muted);
-  --sx-color-neutral-variant: var(--muted);
+  --sx-color-neutral: var(--ws-surface);
+  --sx-color-neutral-variant: var(--ws-surface);
 
-  --sx-internal-color-text: var(--foreground);
+  --sx-internal-color-text: var(--ws-ink);
   font-family: inherit;
 }
 
@@ -83,4 +91,51 @@
 .sx-host .sx__event[data-event-id^="cal_task_"] {
   border-style: dashed;
   opacity: 0.85;
+}
+
+/*
+ * ── WP96 · 画布《日历 · 新风格》 ──────────────────────────────────────
+ */
+
+/* 事件：圆角 10、左边一条色条（图层色），底色是同色的淡版 */
+.sx-host .sx__event {
+  border-radius: 10px;
+  border-left: 3px solid currentColor;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.05);
+}
+
+.sx-host .sx__time-grid-event,
+.sx-host .sx__date-grid-event {
+  font-size: 12px;
+  line-height: 15px;
+}
+
+/* 今天那一列：淡绿头 + 下面一条品牌色实线（画布上一眼看出"今天在这儿"） */
+.sx-host .sx__week-grid__date--is-today,
+.sx-host .sx__month-grid-day--today .sx__month-grid-day__header-day-name {
+  background: var(--ws-tint);
+  border-bottom: 2px solid var(--ws-brand);
+  color: var(--ws-brand-ink);
+}
+
+/* 现在线：品牌色，左端一个圆点 */
+.sx-host .sx__current-time-indicator,
+.sx-host .sx__current-time-indicator-full-week {
+  background-color: var(--ws-brand);
+}
+
+.sx-host .sx__current-time-indicator::before {
+  background-color: var(--ws-brand);
+}
+
+/* 全天行（到期项落在这儿）：比正文浅一档的底，和时间格分得开 */
+.sx-host .sx__date-grid {
+  background: var(--ws-surface);
+}
+
+/* 钟点与星期名：灰一档、等宽数字，别抢事件的注意力 */
+.sx-host .sx__time-grid-day,
+.sx-host .sx__week-grid__hour {
+  color: var(--ws-muted-fg);
+  font-variant-numeric: tabular-nums;
 }

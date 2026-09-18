@@ -49,7 +49,6 @@ import { RightRail } from '@/components/rail/right-rail'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
 import { StandbyBadge } from '@/components/standby-badge'
 import { CreditsChip, ModelChip } from '@/components/top-chips'
-import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { Me, PositionInstanceData, PositionSummary } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
