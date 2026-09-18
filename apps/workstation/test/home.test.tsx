@@ -248,7 +248,10 @@ describe('WP98 收口：岗位卡补齐持有人与一句真状态', () => {
       // 卡片上那个提案人头像走的是同一个共用件，所以这里只在岗位卡这一段里数
       expect(within(cards).getAllByTestId('ws-avatar')).toHaveLength(1)
     })
-    expect(within(cards).getByTestId('ws-avatar').getAttribute('title')).toBe('王岚')
+    const avatar = within(cards).getByTestId('ws-avatar')
+    expect(avatar.getAttribute('title')).toBe('王岚')
+    // WP100：圆里只放一个字（名字的末字），全名在 title 上
+    expect(avatar.textContent).toBe('岚')
     expect(cards.textContent).not.toContain('p_hidden')
   })
 })

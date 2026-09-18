@@ -145,9 +145,8 @@ function PositionCards({ tiles }: { tiles: PositionTiles[] }): React.ReactNode {
           // 岗位页的地址用的是分配 id（36 §3 的"岗位"）：只能取**本人**那几条里的一条
           const to = p.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
           const holders = p.holders
-            .map((id) => names.get(id))
-            .filter((name): name is string => name !== undefined && name !== '')
-            .map((name) => ({ name }))
+            .map((id) => ({ id, name: names.get(id) }))
+            .filter((h): h is { id: string; name: string } => h.name !== undefined && h.name !== '')
           return (
             <div key={p.position_id} data-testid="position-card" data-position={p.position_id}>
               <PositionCard

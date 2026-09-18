@@ -9,6 +9,8 @@ import { render, screen } from '@testing-library/react'
 import { Boxes } from 'lucide-react'
 import { describe, expect, it } from 'vitest'
 import {
+  avatarInitial,
+  avatarTone,
   DeltaPill,
   PositionCard,
   SparkBars,
@@ -16,6 +18,7 @@ import {
   StatRow,
   StatTile,
   StatusPill,
+  WsAvatar,
   WsCard,
 } from '@/components/design'
 import { ProgressBar } from '@/components/ui/tremor/progress-bar'
@@ -163,5 +166,43 @@ describe('Tremor Raw 本地组件', () => {
     expect(circle?.getAttribute('aria-valuenow')).toBe('72')
     expect(bar?.getAttribute('aria-valuenow')).toBe('22')
     expect(bar?.getAttribute('aria-valuemax')).toBe('37')
+  })
+})
+
+/**
+ * WP100：头像里放**一个字**，底色按 person id 定。
+ *
+ * WP96 那一版把"王岚""李默"整个塞进 26px 的小圆里，两个字各挤成一半；画布上那一排
+ * 从来都是一个字。全名不丢——它在 `title` 里。
+ */
+describe('WsAvatar（WP100）', () => {
+  it('中文取名字最后一个字，拉丁取首字母大写，AI 这种缩写原样留着', () => {
+    expect(avatarInitial('王岚')).toBe('岚')
+    expect(avatarInitial('李默')).toBe('默')
+    expect(avatarInitial('欧阳修远')).toBe('远')
+    expect(avatarInitial('maria_k')).toBe('M')
+    expect(avatarInitial('AI')).toBe('AI')
+    expect(avatarInitial('人')).toBe('人')
+  })
+
+  it('画出来的就是那一个字，全名在 title 里（不在圆里）', () => {
+    render(<WsAvatar id="p_wang" name="王岚" />)
+    const avatar = screen.getByTestId('ws-avatar')
+    expect(avatar.textContent).toBe('岚')
+    expect(avatar.getAttribute('title')).toBe('王岚')
+  })
+
+  it('底色按 person id 哈希取六档之一：同一个 id 永远同一档，不同的人多半不同色', () => {
+    expect(avatarTone('p_wang')).toBe(avatarTone('p_wang'))
+    const tones = ['p_wang', 'p_li', 'p_zhao', 'p_sun', 'p_zhou', 'p_wu'].map(avatarTone)
+    expect(new Set(tones).size).toBeGreaterThan(1)
+    for (const tone of tones) {
+      expect(['brand', 'good', 'warn', 'bad', 'info', 'neutral']).toContain(tone)
+    }
+  })
+
+  it('显式给了 tone 就听人的（卡上那枚提案人头像按 proposer.kind 定色）', () => {
+    render(<WsAvatar id="p_wang" name="王岚" tone="good" />)
+    expect(screen.getByTestId('ws-avatar').className).toContain('ws-good')
   })
 })
