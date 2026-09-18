@@ -28,6 +28,10 @@ export interface Strings {
   exportDiagnostics: string
   /** WP111：升级出事之后那一项「还原上一份备份」。 */
   restoreBackup: string
+  /** WP111：mac / linux 只提示那一档，托盘上挂的那一项。 */
+  updateAvailable: string
+  /** 弹通知的标题。 */
+  updateAvailableTitle: string
   /** 升级没成功，但数据一个字节都没动（迁移在事务里，失败整条回滚）。 */
   upgradeFailedIntact: string
   /** 万一真动了（理论上不该出现，出现了就得说实话）。 */
@@ -80,6 +84,8 @@ const ZH: Strings = {
   openLogs: '打开日志目录',
   exportDiagnostics: '导出诊断包…',
   restoreBackup: '还原上一份备份',
+  updateAvailable: '有新版本 {version}，去下载…',
+  updateAvailableTitle: 'agentsws 有新版本',
   upgradeFailedIntact: '升级没成功，你的数据一个字节都没动。',
   upgradeFailedTouched: '升级中断了，数据可能只改了一半——先还原备份，别继续用。',
   upgradeBackupAt: '升级前的备份在：{path}',
@@ -129,6 +135,8 @@ const EN: Strings = {
   openLogs: 'Open log folder',
   exportDiagnostics: 'Export a diagnostics bundle…',
   restoreBackup: 'Restore the last backup',
+  updateAvailable: 'Version {version} is out — open the download page…',
+  updateAvailableTitle: 'A new agentsws is available',
   upgradeFailedIntact: 'The upgrade did not go through. Not one byte of your data was touched.',
   upgradeFailedTouched:
     'The upgrade stopped halfway and your data may be half-changed. Restore the backup before using it again.',

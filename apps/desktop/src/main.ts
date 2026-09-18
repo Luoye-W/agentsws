@@ -69,7 +69,15 @@ import {
 } from './server-process.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
 import { TRAY_ICON_2X_DATA_URL, TRAY_ICON_DATA_URL } from './tray-icon.js'
-import { createUpdateGate, type UpdaterPort } from './updater.js'
+import {
+  createReleaseChecker,
+  createUpdateGate,
+  isNewer,
+  RELEASES_PAGE,
+  type UpdateInfo,
+  type UpdaterPort,
+  updatePolicy,
+} from './updater.js'
 import {
   canRestore,
   failureMessage,
@@ -581,6 +589,7 @@ async function bootstrap(): Promise<void> {
     standby: isStandby(runtimeMode.serverUrl),
     upgradeFailed: upgradeNote() !== undefined,
     restorable: canRestore(upgradeNote()),
+    ...(updateAvailable === undefined ? {} : { updateAvailable }),
   })
 
   const model = (): MenuItemModel[] => buildTrayMenu(trayInput())
@@ -807,6 +816,9 @@ async function bootstrap(): Promise<void> {
         if (remote) break
         void restoreLastBackup()
         break
+      case 'open-download-page':
+        void shell.openExternal(updateUrl)
+        break
       case 'open-logs':
         void shell.openPath(paths.logDir)
         break
@@ -873,25 +885,96 @@ async function bootstrap(): Promise<void> {
     void pollConnect()
   }
 
-  // ── 自动更新：只有骨架，默认关（没有更新源）；打开时"冒烟不过不切换"。
-  const updater: UpdaterPort = {
-    checkForUpdates: () => Promise.resolve(undefined),
-    downloadUpdate: () => Promise.resolve(),
-    quitAndInstall: () => undefined,
-  }
-  const updateGate = createUpdateGate({
-    updater,
-    logger,
-    enabled: process.env.AGENTSWS_DESKTOP_UPDATES === '1',
-    smoke: async () =>
-      (await probeHealth(serverUrl(), { fetchImpl: globalThis.fetch as never, abort: nodeAbort }))
-        .ok,
+  /*
+   * ── 更新（WP111）。两条路，由签名决定走哪条（见 `updater.ts` 顶上那张表）：
+   *
+   * - Windows：`electron-updater` 应用内自动更新。**冒烟不过不切换**那条纪律没变。
+   * - macOS / Linux：只查、只提示、把人送到 Releases 下载页——mac 未签名时
+   *   Squirrel 连 `checkForUpdates()` 都过不去，硬接只会得到一个每次都报错的更新器。
+   *
+   * 两条路都不带任何凭据：一边是 electron-updater 读公开的 `latest*.yml`，
+   * 一边是一次匿名的 GitHub API GET。
+   */
+  const policy = updatePolicy({
+    platform: process.platform,
+    env: process.env,
+    packaged: app.isPackaged,
   })
-  void updateGate.run().then((outcome) => {
+  logger.info('更新策略', { mode: policy.mode, reason: policy.reason })
+
+  /** mac / linux 查到的新版本（托盘上挂那一项用）。 */
+  let updateAvailable: string | undefined
+  let updateUrl = RELEASES_PAGE
+
+  const autoUpdater = async (): Promise<UpdaterPort> => {
+    // 动态 import：`electron-updater` 在 notify 档一次都用不上，
+    // 没必要把它拖进每一次冷启动。
+    const { autoUpdater: real } = await import('electron-updater')
+    real.autoDownload = false
+    real.allowPrerelease = true
+    real.channel = 'beta'
+    real.logger = {
+      info: (m: unknown) => logger.child('electron-updater').info(String(m)),
+      warn: (m: unknown) => logger.child('electron-updater').warn(String(m)),
+      error: (m: unknown) => logger.child('electron-updater').error(String(m)),
+      debug: () => undefined,
+    } as never
+    return {
+      async checkForUpdates() {
+        const result = await real.checkForUpdates()
+        const found = result?.updateInfo.version
+        // `checkForUpdates()` 在"已经是最新"时也可能回一个对象，所以自己比一次
+        // （`isNewer` 认得 `0.1.0-beta.2 > 0.1.0-beta.1`）。
+        return found !== undefined && isNewer(version, found) ? { version: found } : undefined
+      },
+      downloadUpdate: async () => {
+        await real.downloadUpdate()
+      },
+      quitAndInstall: () => {
+        real.quitAndInstall()
+      },
+    }
+  }
+
+  const notify = (info: UpdateInfo): void => {
+    updateAvailable = info.version
+    updateUrl = info.url ?? RELEASES_PAGE
+    refreshTray()
+    if (Notification.isSupported())
+      new Notification({
+        title: strings(config.language).updateAvailableTitle,
+        body: strings(config.language).updateAvailable.replace('{version}', info.version),
+      }).show()
+  }
+
+  const runUpdateCheck = async (): Promise<void> => {
+    if (policy.mode === 'off') return
+    const updater: UpdaterPort =
+      policy.mode === 'auto'
+        ? await autoUpdater()
+        : createReleaseChecker({
+            fetchImpl: globalThis.fetch as never,
+            currentVersion: version,
+            abort: nodeAbort,
+          })
+    const gate = createUpdateGate({
+      updater,
+      logger,
+      mode: policy.mode,
+      notify,
+      smoke: async () =>
+        (await probeHealth(serverUrl(), { fetchImpl: globalThis.fetch as never, abort: nodeAbort }))
+          .ok,
+    })
+    const outcome = await gate.run()
     logger.info('更新检查', {
       state: outcome.state,
+      ...(outcome.version === undefined ? {} : { version: outcome.version }),
       ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
     })
+  }
+  void runUpdateCheck().catch((err: unknown) => {
+    logger.warn('更新检查抛错', { error: String(err) })
   })
 
   // ── 托盘常驻、无主窗口启动（13 §5）。

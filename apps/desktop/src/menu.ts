@@ -26,6 +26,8 @@ export type MenuAction =
   | 'restore-backup'
   /** WP111：白名单式收集一个 zip 发回来（不含任何凭据 / 正文）。 */
   | 'export-diagnostics'
+  /** WP111：mac / linux 只提示那一档，点它开 Releases 下载页。 */
+  | 'open-download-page'
   | 'quit'
 
 export interface MenuItemModel {
@@ -59,6 +61,13 @@ export interface TrayModelInput {
   upgradeFailed?: boolean
   /** 有没有可还原的备份（纸条里带了路径）。没有就那一项灰着。 */
   restorable?: boolean
+  /**
+   * WP111：查到的新版本号（只在**只提示**那一档有值：mac / linux）。
+   *
+   * Windows 那一档不用它——那边是应用内自动更新，托盘上挂一句"去下载"反而是
+   * 让用户多做一件本来不用做的事。
+   */
+  updateAvailable?: string
   /**
    * WP60：这台电脑是不是"值守中的远程窗口"（服务地址是 `https://<云>/w/<ws>`）。
    *
@@ -184,6 +193,15 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
       type: 'normal',
       label: t.restoreBackup,
       enabled: input.restorable === true,
+    })
+  // WP111：mac / linux 那一档查到新版本就挂一项，点了开 Releases。
+  // 摆在「打开日志目录」上面：它是这一刻用户最可能想点的那一个。
+  if (input.updateAvailable !== undefined && input.updateAvailable !== '')
+    items.push({
+      id: 'open-download-page',
+      type: 'normal',
+      label: t.updateAvailable.replace('{version}', input.updateAvailable),
+      enabled: true,
     })
   items.push(
     { id: 'open-logs', type: 'normal', label: t.openLogs, enabled: true },
