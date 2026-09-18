@@ -30,6 +30,9 @@ import { assignmentForPosition } from '@/lib/positions'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
 
+/** WP96：数字块单独排一行（画布第一屏那四块）。 */
+const isTile = (block: { component: string }): boolean => block.component === 'stat_tile'
+
 /**
  * 44 / 09-11 真店验收的后置项：**没挂范围的岗位要明说**。
  *
@@ -139,12 +142,31 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
       </div>
       {(view.data?.sections ?? []).map((section) => (
         <section key={section.source} data-testid="view-section" data-source={section.source}>
-          <h3 className="mb-2 text-sm font-medium">{section.label}</h3>
+          <h3 className="ws-display mb-2.5 text-[17px]">{section.label}</h3>
           {section.connected ? (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {section.blocks.map((block) => (
-                <BlockCard key={block.id} block={block} range={range} assignment={id} />
-              ))}
+            /*
+             * WP96 画布《岗位页 · 新风格》第一屏：**数字块一排四个**排在最上面，
+             * 图与表在下面两列。分开排的理由是它们回答的问题不同——四个数回答
+             * "现在怎么样"，图表回答"为什么"。`auto-rows-min` 让高矮不一的块各占
+             * 各的高，不被最高那个撑齐。
+             */
+            <div className="flex flex-col gap-4">
+              {section.blocks.filter(isTile).length === 0 ? null : (
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="view-tiles">
+                  {section.blocks.filter(isTile).map((block) => (
+                    <BlockCard key={block.id} block={block} range={range} assignment={id} />
+                  ))}
+                </div>
+              )}
+              {section.blocks.filter((b) => !isTile(b)).length === 0 ? null : (
+                <div className="grid auto-rows-min gap-4 lg:grid-cols-2">
+                  {section.blocks
+                    .filter((b) => !isTile(b))
+                    .map((block) => (
+                      <BlockCard key={block.id} block={block} range={range} assignment={id} />
+                    ))}
+                </div>
+              )}
             </div>
           ) : (
             <Card data-testid="connect-card">

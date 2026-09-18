@@ -16,6 +16,8 @@ const zh: Table = {
   // 路由（`/v1/people/:id/ask`）、事件名（`secretary.answered`）一个都不动——
   // 那些是契约面，改了就是无谓地把外面接着的东西全打断。
   'nav.secretary': '我的代理',
+  // WP96：顶栏那条长搜索框（点开就是 ⌘K 命令面板）
+  'nav.command': '交给某个岗位一件事…',
   'secretary.title': '我的代理',
   'secretary.intro':
     '代理只管四件事：我是谁、我在做什么、我什么时候有空，以及别人丢来的事该谁做。专业的事它不做，只转给对的岗位。',
@@ -1132,6 +1134,11 @@ const zh: Table = {
   // WP69（54 §4）：首页只列岗位卡，职责不出现
   'home.positions': '我的岗位',
   'home.positions.cards': '{count} 张待审',
+  'home.positions.pending': '张待审',
+  'home.positions.entry': '交给它一件事',
+  'home.headline': '今天',
+  'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
+  'home.stats': '今天的数',
   // WP84（54 §1 第 6 行）：岗位卡下面的快捷提示——点一条就是开一件事，不是聊天框
   'home.quick.more': '还有 {count} 条',
   'home.quick.less': '收起',
@@ -1895,6 +1902,8 @@ const en: Table = {
   'app.title': 'agentsws Workstation',
   'nav.home': 'Home',
   'nav.secretary': 'My agent',
+  // WP96: the top-bar search bar (opens the ⌘K palette)
+  'nav.command': 'Hand a position a task…',
   'secretary.title': 'My agent',
   'secretary.intro':
     'Your agent only handles four things: who you are, what you are working on, when you are free, and which desk an incoming task belongs to. It never answers domain questions — it routes them.',
@@ -3015,6 +3024,11 @@ const en: Table = {
   // WP69 (54 §4): the home page lists positions only — duties stay one level down
   'home.positions': 'My positions',
   'home.positions.cards': '{count} waiting',
+  'home.positions.pending': 'pending',
+  'home.positions.entry': 'Hand it a task',
+  'home.headline': 'Today',
+  'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
+  'home.stats': "Today's numbers",
   // WP84 (54 §1 line 6): quick starts under each position card — a click opens a matter
   'home.quick.more': '{count} more',
   'home.quick.less': 'Show fewer',

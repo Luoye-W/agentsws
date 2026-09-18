@@ -64,3 +64,24 @@ describe('左栏（WP43 §1 图标）', () => {
     }
   })
 })
+
+/**
+ * WP96 交付 4：左栏与顶栏按画布重排**样式**，结构一个字没动。
+ */
+describe('左栏 / 顶栏新风格（WP96）', () => {
+  it('顶栏那颗 ⌘K 变成一条长搜索框，点开还是同一个命令面板', () => {
+    renderShell()
+    const bar = screen.getByTestId('top-command')
+    expect(bar.textContent).toContain('交给某个岗位一件事')
+    expect(bar.textContent).toContain('⌘K')
+    expect(bar.getAttribute('aria-label')).toBe('命令面板 (⌘K)')
+  })
+
+  it('品牌与账号还在左栏最下面（WP71 定的位置没被换皮挪走）', () => {
+    renderShell()
+    const bottom = screen.getByTestId('rail-bottom')
+    const nav = screen.getByTestId('main-nav')
+    // 最下面 = 在导航之后
+    expect(nav.compareDocumentPosition(bottom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})

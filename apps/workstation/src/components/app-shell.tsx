@@ -57,13 +57,20 @@ import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
 
+/**
+ * 左栏一行。
+ *
+ * WP96（09-18 画布）：圆角从 6 提到 10、行高从 1.5 提到 2，选中态是**浅品牌底 +
+ * 品牌深色字**（`--sidebar-accent` / `--sidebar-accent-foreground` 已经指到
+ * tint / brand-ink 上），不再是灰底。结构一个字没动。
+ */
 function navClass({ isActive }: { isActive: boolean }): string {
   return cn(
-    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+    'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] transition-colors',
     // 选中态图标跟文字同色（`[&_svg]:text-current`），未选中时图标压成 muted。
     isActive
       ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium [&_svg]:text-current'
-      : 'hover:bg-sidebar-accent/60 [&_svg]:text-muted-foreground',
+      : 'hover:bg-sidebar-accent/60 [&_svg]:text-ws-muted-fg',
   )
 }
 
@@ -210,8 +217,9 @@ export function AppShell({
           账号块在最下面，而主区经常比一屏长——不钉住的话它会跟着页面滚走，
           "最下面"就成了"文档的最下面"，滚三屏才见得到。
         */}
-        <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r bg-sidebar p-3 md:flex">
-          <div className="px-2 pb-3 text-sm font-semibold">{t('app.title')}</div>
+        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ws-line bg-sidebar p-3 md:flex">
+          {/* WP96：产品名走 Outfit，与页面大标题同一种字 */}
+          <div className="ws-display px-2 pt-1 pb-4 text-[15px]">{t('app.title')}</div>
           <nav
             className="flex flex-1 flex-col gap-0.5 overflow-y-auto"
             aria-label={t('nav.main')}
@@ -234,7 +242,9 @@ export function AppShell({
               <NavIcon icon={Target} />
               {t('nav.goals')}
             </NavLink>
-            <div className="px-2 pt-3 pb-1 text-xs text-muted-foreground">{t('nav.positions')}</div>
+            <div className="px-2.5 pt-4 pb-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase">
+              {t('nav.positions')}
+            </div>
             {byPosition.length > 0
               ? byPosition.map((p) => {
                   const open = flags[p.position_id] ?? p.position_id === current?.position_id
@@ -301,31 +311,40 @@ export function AppShell({
           WP71（36 §10）：品牌与账号在**最下面**。
           个人用户（一个人一个品牌）看不到品牌切换器，那一块自己不渲染（52 O1）。
         */}
-          <div className="mt-2 flex flex-col gap-1 border-t pt-2" data-testid="rail-bottom">
+          <div
+            className="mt-2 flex flex-col gap-1 border-t border-ws-line pt-2"
+            data-testid="rail-bottom"
+          >
             <BrandSwitcher />
             <AccountBlock {...(me === undefined ? {} : { me })} />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-center justify-end gap-1 border-b px-4 py-2">
+          {/*
+            WP96：顶栏还是那几样（⌘K / 模型 / 积分），只是换成纸底 + 一条浅线，
+            并且 ⌘K 做成画布上那个"交给某个岗位一件事…"的长条搜索框样子。
+          */}
+          <header className="flex items-center justify-end gap-2 border-b border-ws-line bg-ws-paper px-5 py-2.5">
             <StandbyBadge />
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              type="button"
               onClick={() => {
                 setPaletteOpen(true)
               }}
               aria-label="命令面板 (⌘K)"
+              data-testid="top-command"
+              className="flex h-9 w-full max-w-[280px] items-center gap-2 rounded-[10px] bg-ws-card px-3 text-[13px] text-ws-muted-fg shadow-ws transition-shadow hover:shadow-ws-hover"
             >
-              <CommandIcon aria-hidden />
-              <span className="hidden text-xs sm:inline">⌘K</span>
-            </Button>
+              <CommandIcon aria-hidden className="size-4" />
+              <span className="truncate">{t('nav.command')}</span>
+              <span className="ws-num ml-auto hidden text-[11px] sm:inline">⌘K</span>
+            </button>
             {/* WP71：顶栏只剩这两个数——现在用哪个模型、还剩多少积分（问不到就不出） */}
             <ModelChip />
             <CreditsChip />
           </header>
-          <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+          <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">{children}</main>
         </div>
 
         {/* 36 §9 第三栏：默认收成 44px 图标轨，一次开一个面板 */}

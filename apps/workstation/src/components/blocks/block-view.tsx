@@ -23,7 +23,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DualBarChart, DualBarLegend, WsCard } from '@/components/design'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getBlockData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -38,7 +38,7 @@ const isKnown = (name: string): name is Renderer => (RENDERERS as readonly strin
 function ScalarBlock({ payload }: { payload: ScalarResult }): React.ReactNode {
   const { lang } = useApp()
   return (
-    <div className="text-2xl font-semibold tabular-nums">
+    <div className="ws-display text-[30px] leading-none">
       {formatValue(
         payload.value,
         payload.currency === undefined ? 'count' : 'money',
@@ -56,17 +56,18 @@ function rowKey(row: Record<string, string | number>, columns: TableResult['colu
 
 function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
   const { lang } = useApp()
-  if (payload.rows.length === 0) return <p className="text-sm text-muted-foreground">—</p>
+  if (payload.rows.length === 0) return <p className="text-sm text-ws-muted-fg">—</p>
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm" data-testid="block-table">
+    <div className="-mx-4 overflow-x-auto">
+      <table className="w-full text-[13.5px]" data-testid="block-table">
         <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
+          {/* WP96 画布：表头是浅灰底、**没有下边框**，靠底色分区 */}
+          <tr className="bg-ws-surface text-left text-xs font-medium text-ws-muted-fg">
             {payload.columns.map((c) => (
               <th
                 key={c.key}
                 scope="col"
-                className={`py-1.5 pr-3 ${c.align === 'right' ? 'text-right' : ''}`}
+                className={`px-4 py-3 first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
               >
                 {c.label}
               </th>
@@ -75,7 +76,10 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
         </thead>
         <tbody>
           {payload.rows.map((row) => (
-            <tr key={rowKey(row, payload.columns)} className="border-b last:border-0">
+            <tr
+              key={rowKey(row, payload.columns)}
+              className="border-b border-ws-line last:border-0"
+            >
               {payload.columns.map((c) => {
                 const value = row[c.key]
                 // WP63：列自己说它是什么（不说就按金额——老积木的行为一个字不变）。
@@ -89,7 +93,7 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
                 return (
                   <td
                     key={c.key}
-                    className={`py-1.5 pr-3 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}
+                    className={`px-4 py-3.5 ${c.align === 'right' ? 'ws-num text-right' : ''}`}
                   >
                     {text}
                   </td>
@@ -124,9 +128,37 @@ function useChartColors(theme: string): { grid: string; axis: string; series: st
   }, [theme])
 }
 
+/**
+ * 走势块。
+ *
+ * WP96：**两条序列就画画布那种双色柱**（"本周 vs 上周同时"），一条或三条以上
+ * 还是折线。这是按数据形状挑图形，不是按块的名字挑：两条序列就是在做对比，
+ * 柱子比两条叠在一起的折线读得快；日度多序列叠柱只会糊成一片。
+ */
 function ChartLineBlock({ payload }: { payload: SeriesResult }): React.ReactNode {
-  const { theme } = useApp()
+  const { theme, lang } = useApp()
   const colors = useChartColors(theme)
+  if (payload.series.length === 2) {
+    const [current, previous] = payload.series
+    const points = payload.x.map((x, i) => ({
+      label: x,
+      current: current?.points[i] ?? 0,
+      previous: previous?.points[i] ?? 0,
+    }))
+    return (
+      <div data-testid="block-chart" data-chart="dual_bar">
+        <div className="mb-2 flex justify-end">
+          <DualBarLegend currentName={current?.label ?? ''} previousName={previous?.label ?? ''} />
+        </div>
+        <DualBarChart
+          data={points}
+          currentName={current?.label ?? ''}
+          previousName={previous?.label ?? ''}
+          formatValue={(v) => formatValue(v, 'count', lang)}
+        />
+      </div>
+    )
+  }
   const rows = payload.x.map((x, i) => {
     const row: Record<string, string | number> = { x }
     for (const s of payload.series) row[s.key] = s.points[i] ?? 0
@@ -167,12 +199,12 @@ function ChartLineBlock({ payload }: { payload: SeriesResult }): React.ReactNode
 
 function TimelineBlock({ payload }: { payload: { rows: RecordRow[] } }): React.ReactNode {
   const { t, lang } = useApp()
-  if (payload.rows.length === 0) return <p className="text-sm text-muted-foreground">—</p>
+  if (payload.rows.length === 0) return <p className="text-sm text-ws-muted-fg">—</p>
   return (
     <ol className="flex flex-col gap-3" data-testid="block-timeline">
       {payload.rows.map((row) => (
         <li key={row.id} className="border-l pl-3">
-          <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-baseline gap-2 text-xs text-ws-muted-fg">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
             <span className="font-mono">{row.state}</span>
@@ -187,11 +219,11 @@ function TimelineBlock({ payload }: { payload: { rows: RecordRow[] } }): React.R
 export function BlockBody({ data }: { data: BlockData }): React.ReactNode {
   const { t } = useApp()
   if (!isKnown(data.block.component)) {
-    return <p className="text-sm text-muted-foreground">{t('block.unknown')}</p>
+    return <p className="text-sm text-ws-muted-fg">{t('block.unknown')}</p>
   }
   if (data.status !== 'ok' || data.payload === undefined) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-ws-muted-fg">
         {t('view.not_connected', { source: data.block.source })}
       </p>
     )
@@ -224,12 +256,17 @@ export function BlockCard({
     queryFn: () => getBlockData(block.id, range, assignment),
   })
   return (
-    <Card data-testid="block" data-block-id={block.id} data-block-component={block.component}>
-      <CardHeader>
-        <CardTitle className="text-sm">{block.title}</CardTitle>
+    <WsCard
+      data-testid="block"
+      data-block-id={block.id}
+      data-block-component={block.component}
+      className="flex flex-col gap-3.5 p-[18px]"
+    >
+      <div className="flex items-start gap-2">
+        <h3 className="ws-display flex-1 text-[15px]">{block.title}</h3>
         {block.report_url === undefined ? null : (
           <a
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-ws-muted-fg hover:underline"
             href={block.report_url}
             target="_blank"
             rel="noreferrer noopener"
@@ -238,11 +275,9 @@ export function BlockCard({
             <ExternalLink className="size-3" aria-hidden />
           </a>
         )}
-      </CardHeader>
-      <CardContent>
-        {query.isPending ? <Skeleton className="h-24 w-full" /> : null}
-        {query.data === undefined ? null : <BlockBody data={query.data} />}
-      </CardContent>
-    </Card>
+      </div>
+      {query.isPending ? <Skeleton className="h-24 w-full" /> : null}
+      {query.data === undefined ? null : <BlockBody data={query.data} />}
+    </WsCard>
   )
 }

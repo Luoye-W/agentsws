@@ -18,6 +18,7 @@ export function StatTile({
   deltaTone,
   note,
   fallback,
+  spark,
   selected,
   onClick,
 }: {
@@ -35,6 +36,8 @@ export function StatTile({
   note?: string
   /** 数据源没连上时顶掉整块内容的那个节点 */
   fallback?: React.ReactNode
+  /** 右下角那条走势线（深色画板那种）；自己画的，不上图表库 */
+  spark?: React.ReactNode
   selected?: boolean
   onClick?: () => void
 }): React.ReactNode {
@@ -67,14 +70,19 @@ export function StatTile({
           <div className="mt-1.5">{fallback}</div>
         </div>
       )}
-      {delta === undefined || fallback !== undefined ? null : (
-        <DeltaPill
-          {...(direction === undefined ? {} : { direction })}
-          {...(deltaTone === undefined ? {} : { tone: deltaTone })}
-        >
-          {delta}
-        </DeltaPill>
-      )}
+      <div className="flex items-end justify-between gap-2.5">
+        {delta === undefined || fallback !== undefined ? (
+          <span />
+        ) : (
+          <DeltaPill
+            {...(direction === undefined ? {} : { direction })}
+            {...(deltaTone === undefined ? {} : { tone: deltaTone })}
+          >
+            {delta}
+          </DeltaPill>
+        )}
+        {spark}
+      </div>
     </WsCard>
   )
 }
