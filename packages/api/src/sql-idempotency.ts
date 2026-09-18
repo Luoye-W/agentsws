@@ -59,20 +59,41 @@ export interface SqlIdempotencyOptions {
   ttlMs?: number
   /** 迁移记时间用；不给则用固定占位时刻（不裸调 Date.now）。 */
   clock?: Clock
+  /**
+   * 版本号表叫什么。**只有与别的表挤在同一张库里时才要给**——
+   * Durable Object 一个对象只有一张库，账号库 / 钱包与幂等表住在一起，
+   * 两边都用 `_migrations` 的话后跑的那个会以为自己跑过了（见 `migrate` 的注释）。
+   */
+  migrationsTable?: string
 }
+
+/** DO 那一头给幂等表用的版本号表名（与账号库 / 钱包的那张分开）。 */
+export const IDEMPOTENCY_MIGRATIONS_TABLE = '_migrations_idempotency'
 
 export class SqlIdempotencyStore implements SweepableIdempotencyStore {
   readonly #db: SyncDb
   readonly #ttl: number
 
+  readonly #migrationsTable: string | undefined
+
   constructor(options: SqlIdempotencyOptions) {
     this.#ttl = options.ttlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS
     this.#db = options.db
-    migrate(this.#db, IDEMPOTENCY_MIGRATIONS, options.clock?.now() ?? IDEMPOTENCY_EPOCH)
+    this.#migrationsTable = options.migrationsTable
+    migrate(
+      this.#db,
+      IDEMPOTENCY_MIGRATIONS,
+      options.clock?.now() ?? IDEMPOTENCY_EPOCH,
+      this.#tableOption(),
+    )
+  }
+
+  #tableOption(): { table: string } | undefined {
+    return this.#migrationsTable === undefined ? undefined : { table: this.#migrationsTable }
   }
 
   get schemaVersion(): number {
-    return schemaVersion(this.#db)
+    return schemaVersion(this.#db, this.#tableOption())
   }
 
   get(scope: string, key: string, nowMs: number): IdempotencyRecord | undefined {

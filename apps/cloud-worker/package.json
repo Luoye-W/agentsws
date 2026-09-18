@@ -1,0 +1,29 @@
+{
+  "name": "@agentsws/cloud-worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "agentsws 云的无服务器形态（Cloudflare Workers + Durable Objects，49 / 64）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "check": "wrangler deploy --dry-run",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/api": "workspace:*",
+    "@agentsws/cloud": "workspace:*",
+    "@agentsws/cloud-entry": "workspace:*",
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
+    "@agentsws/metering": "workspace:*",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250906.0",
+    "better-sqlite3": "^12.0.0",
+    "wrangler": "^4.134.0"
+  }
+}

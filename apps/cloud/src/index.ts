@@ -75,6 +75,7 @@ export {
   ADMIN_TOKEN_ENV,
   ADMIN_TOKEN_MIN_BYTES,
   ADMIN_TOPUP_CAPABILITY,
+  type AdminAccountsLookup,
   type AdminRouteDeps,
   type AdminWalletHandles,
   adminRoutes,

@@ -81,22 +81,27 @@ CREATE INDEX IF NOT EXISTS metering_events_org_at ON metering_events (org_id, at
   },
 ]
 
-const VERSION_TABLE = `
-CREATE TABLE IF NOT EXISTS _migrations (
+/** 版本号表的默认名字。 */
+export const WALLET_MIGRATIONS_TABLE = '_migrations'
+
+const versionDdl = (table: string): string => `
+CREATE TABLE IF NOT EXISTS ${table} (
   version    INTEGER PRIMARY KEY NOT NULL,
   applied_at TEXT    NOT NULL
 ) STRICT;
 `
 
-function migrate(db: SyncDb, at: string): void {
-  db.exec(VERSION_TABLE)
+function migrate(db: SyncDb, at: string, table: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table))
+    throw new Error(`版本号表的名字只能是标识符：${table}`)
+  db.exec(versionDdl(table))
   const done = new Set(
     db
-      .prepare<{ version: number }>('SELECT version FROM _migrations')
+      .prepare<{ version: number }>(`SELECT version FROM ${table}`)
       .all()
       .map((r) => r.version),
   )
-  const record = db.prepare('INSERT INTO _migrations (version, applied_at) VALUES (?, ?)')
+  const record = db.prepare(`INSERT INTO ${table} (version, applied_at) VALUES (?, ?)`)
   const pending = WALLET_MIGRATIONS.filter((m) => !done.has(m.version))
   db.transaction(() => {
     for (const m of pending) {
@@ -131,6 +136,11 @@ const toLot = (r: LotRow): WalletLot => ({
 export interface SqlWalletStoreOptions {
   db: SyncDb
   now: () => Iso8601
+  /**
+   * 版本号表叫什么。**只有与别的表挤在同一张库里时才要给**——
+   * Durable Object 一个对象只有一张库，钱包与幂等表住在一起。
+   */
+  migrationsTable?: string
 }
 
 export interface SqlWalletStore extends WalletStore {
@@ -147,7 +157,7 @@ export interface SqlWalletStore extends WalletStore {
 /** 在一张已经开好的库上装一个钱包存储。开库 / 关库由调用方负责。 */
 export function createSqlWalletStore(options: SqlWalletStoreOptions): SqlWalletStore {
   const db = options.db
-  migrate(db, options.now())
+  migrate(db, options.now(), options.migrationsTable ?? WALLET_MIGRATIONS_TABLE)
 
   const insertLot = db.prepare(
     `INSERT INTO wallet_lots (id, org_id, kind, credits, remaining, granted_at, expires_at, source_ref)

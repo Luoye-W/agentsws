@@ -1,0 +1,62 @@
+# Agents 工坊云 · 无服务器形态（WP114 / docs/64）
+#
+# 这个文件进仓库，所以它里面**一个密钥都没有**：
+# `[vars]` 只放非敏感项（对外地址、上游地址、发件地址、版本号），
+# 其余一律 `wrangler secret put <名字>`，由人在自己的终端里敲一次。
+# 名字与去哪儿拿，见 docs/64 的 secrets 全表。
+#
+# 自建（Compose）形态在 `deploy/` 与 docs/61，**保留不删**。
+
+name = "agentsws-cloud"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+# node:crypto（sha256 / hmac / 定长比较）与 node:async_hooks（每请求的 principal
+# 作用域）都要它。官方文档：这两个在 nodejs_compat 下是全支持的。
+compatibility_flags = ["nodejs_compat"]
+
+# 域名本来就在这个 Cloudflare 账号里，所以自定义域一步到位——
+# 不用去后台点，也不用改 NS。
+routes = [{ pattern = "cloud.agentsws.com", custom_domain = true }]
+
+# ── Durable Objects ────────────────────────────────────────────────────
+# 为什么是 DO 而不是 D1 / Supabase：DO 的 SQLite 是**同步** SQL、单对象单线程，
+# 正好保住"钱的读写中间不该有一个 await"这条纪律（见 packages/metering/src/wallet.ts）。
+# 换成异步口就得把钱包整片改成 async，而那等于把并发扣款的窗口打开。
+
+# 账号 / 组织 / 链接令牌 / magic link / 限流 / 幂等（单例）
+[[durable_objects.bindings]]
+name = "ACCOUNTS"
+class_name = "AccountsDO"
+
+# 钱包：每个组织一个（idFromName(org_id)）
+[[durable_objects.bindings]]
+name = "WALLET"
+class_name = "WalletDO"
+
+# SQLite 存储后端。迁移在对象第一次唤醒时自己跑完——升级 = 再 deploy 一次。
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AccountsDO", "WalletDO"]
+
+# ── 发信 ───────────────────────────────────────────────────────────────
+# Cloudflare Email Sending 的 binding。**没有密钥**——发信这块一把 key 都不用。
+# 发件域要先在后台 / CLI 里开通（SPF + DKIM 两条 DNS，域在本账号就是一键）。
+[[send_email]]
+name = "EMAIL"
+
+# ── 非敏感变量（进仓库） ───────────────────────────────────────────────
+[vars]
+AGENTSWS_CLOUD_BASE_URL = "https://cloud.agentsws.com"
+AGENTSWS_CLOUD_PUBLIC_URL = "https://cloud.agentsws.com"
+# 发件人显示名用产品名「Agents 工坊」，发件地址仍在 agentsws.com 上
+AGENTSWS_CLOUD_MAIL_FROM = "Agents 工坊 <login@agentsws.com>"
+# 内测期直接指一家 OpenAI 兼容的官方上游；以后换回自建的 New API 只改这一行
+AGENTSWS_NEWAPI_BASE_URL = "https://api.deepseek.com/v1"
+AGENTSWS_VERSION = "0.1.0"
+
+# ── 打包 ───────────────────────────────────────────────────────────────
+# better-sqlite3 是原生模块，Workers 上装不进去。云侧几个包的主入口里有它那一档
+# 存储，但这个形态一条都用不上（库是 DO 自己的 SQLite）。换成一个"被 new 就抛
+# 一句人话"的替身，见 src/node-stubs/better-sqlite3.ts。
+[alias]
+"better-sqlite3" = "./src/node-stubs/better-sqlite3.ts"

@@ -32,7 +32,6 @@ import {
 import { type Clock, emailDomain } from '@agentsws/contracts'
 import { assertMeteringEvent, type Wallet, type WalletStore } from '@agentsws/metering'
 import { z } from 'zod'
-import type { CloudStore } from '../store.js'
 
 /** 管理员令牌的环境变量名。值不在仓库里，也不在任何日志里。 */
 export const ADMIN_TOKEN_ENV = 'AGENTSWS_CLOUD_ADMIN_TOKEN'
@@ -71,12 +70,26 @@ export interface AdminWalletHandles {
   store: WalletStore
 }
 
+/**
+ * 这条路由要问账号库的**全部三件事**（WP114 把入参从 `CloudStore` 收窄成这个口）。
+ *
+ * 为什么要收窄：Workers 形态里钱包与账号库在**两个** Durable Object 里，
+ * 这条路由跑在钱包那一个里，手上没有账号库。组织是 Worker 在转发之前就解析好的
+ * （`/__internal/resolve-org`），所以它给进来的是一个"已经验过"的极小实现。
+ * `CloudStore` 结构上满足这个口，Compose 形态那边一个字都不用改。
+ */
+export interface AdminAccountsLookup {
+  accountByEmail(email: string): { id: string } | undefined
+  primaryOrg(account_id: string): { id: string } | undefined
+  org(id: string): { id: string } | undefined
+}
+
 export interface AdminRouteDeps {
   clock: Clock
   /** 明文管理员令牌（由 {@link adminRoutesFromEnv} 从环境变量取）。 */
   token: string
   /** 账号库（邮箱 → 账号 → 组织）。 */
-  accounts: () => CloudStore
+  accounts: () => AdminAccountsLookup
   /** 钱包；还没装好就回 `undefined`（这时路由回 503，不假装充上了）。 */
   wallet: () => AdminWalletHandles | undefined
   newRequestId?: () => string
