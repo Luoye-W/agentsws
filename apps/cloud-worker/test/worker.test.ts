@@ -399,3 +399,40 @@ describe('WP114 Workers 形态 · 流式与结算', () => {
     expect(after.available).toBeLessThan(100)
   })
 })
+
+describe('WP114 Workers 形态 · 跨平台导出', () => {
+  it('没配 admin 钥匙 → 这条路由不存在', async () => {
+    const cloud = fakeCloud()
+    expect((await call(cloud, '/v1/admin/export')).status).toBe(404)
+  })
+
+  it('钥匙不对 401；对了就把账号 + 组织 + 关联 + 各组织的积分批次一起导出来', async () => {
+    const cloud = fakeCloud({ env: { AGENTSWS_CLOUD_ADMIN_TOKEN: ADMIN_TOKEN } })
+    const { org } = await issueToken(cloud, 'a@example.com', 'ws_a', DEFAULT_CLOUD_SCOPES)
+    cloud.wallet(org).wallet.topup({ org_id: org, credits: 30, kind: 'granted' })
+
+    expect((await call(cloud, '/v1/admin/export', { token: 'nope' })).status).toBe(401)
+
+    const res = await call(cloud, '/v1/admin/export', { token: ADMIN_TOKEN })
+    expect(res.status).toBe(200)
+    const data = res.body.data as {
+      accounts: { email: string }[]
+      orgs: { id: string }[]
+      links: { token_sha256: string }[]
+      wallets: { org_id: string; lots: { credits: number; kind: string }[] }[]
+    }
+    expect(data.accounts.map((a) => a.email)).toEqual(['a@example.com'])
+    expect(data.orgs.map((o) => o.id)).toEqual([org])
+    // 令牌哈希在（不带它搬完家所有人都得重新关联），**明文一个都没有**
+    expect(data.links[0]?.token_sha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(JSON.stringify(data)).not.toContain('wst_')
+    expect(JSON.stringify(data)).not.toContain('cs_')
+    expect(JSON.stringify(data)).not.toContain('cml_')
+    // 钱那一份跨对象拿回来了
+    expect(data.wallets).toHaveLength(1)
+    expect(data.wallets[0]?.org_id).toBe(org)
+    expect(data.wallets[0]?.lots).toEqual([
+      expect.objectContaining({ credits: 30, kind: 'granted' }),
+    ])
+  })
+})

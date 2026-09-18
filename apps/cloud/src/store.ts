@@ -470,9 +470,55 @@ export class CloudStore {
     return this.link(id)
   }
 
+  /**
+   * 整库的 JSON 快照（WP114 的跨平台退路）。
+   *
+   * 为什么要它：Workers 形态的库在 Durable Object 里，Compose 形态的库是一个
+   * sqlite 文件——两边**没有**一个共同的"把文件拷过去"的动作。所以搬家那条路
+   * 走的是这一份 JSON：从哪一边导出来，都能往另一边灌回去。
+   *
+   * 里面**只有账号层该有的东西**：账号（邮箱）、组织、成员、工作区关联。
+   * 令牌哈希在里面（不带它的话搬完家所有令牌都得重签，等于所有人重新关联一次），
+   * **明文一个都没有**——库里本来就没存过。一次性登录与会话**不导**：
+   * 它们本来就只活几分钟到十几小时，搬家时让人重登一次比把会话搬过去干净。
+   */
+  exportSnapshot(): CloudSnapshot {
+    return {
+      at: this.#clock.now(),
+      accounts: this.db
+        .prepare<CloudAccount>(
+          'SELECT id, email, created_at FROM cloud_accounts ORDER BY created_at',
+        )
+        .all(),
+      orgs: this.db
+        .prepare<{ id: string; name: string; owner_account_id: string; created_at: string }>(
+          'SELECT id, name, owner_account_id, created_at FROM cloud_orgs ORDER BY created_at',
+        )
+        .all(),
+      members: this.db
+        .prepare<{ org_id: string; account_id: string; role: string; joined_at: string }>(
+          'SELECT org_id, account_id, role, joined_at FROM cloud_org_members ORDER BY joined_at',
+        )
+        .all(),
+      links: this.db
+        .prepare<LinkRow>('SELECT * FROM workspace_links ORDER BY created_at')
+        .all()
+        .map(rowToLink),
+    }
+  }
+
   close(): void {
     this.db.close()
   }
+}
+
+/** 账号层的整库快照（{@link CloudStore.exportSnapshot} 的形状）。 */
+export interface CloudSnapshot {
+  at: Iso8601
+  accounts: CloudAccount[]
+  orgs: { id: string; name: string; owner_account_id: string; created_at: string }[]
+  members: { org_id: string; account_id: string; role: string; joined_at: string }[]
+  links: WorkspaceLink[]
 }
 
 function constantTimeEqual(a: string, b: string): boolean {

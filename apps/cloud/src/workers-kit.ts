@@ -59,8 +59,10 @@ export {
   ADMIN_TOKEN_MIN_BYTES,
   ADMIN_TOPUP_CAPABILITY,
   type AdminAccountsLookup,
+  type AdminExportDeps,
   type AdminRouteDeps,
   type AdminWalletHandles,
+  adminExportRoutes,
   adminRoutes,
   DEFAULT_GRANT_DAYS,
 } from './routes/admin.js'
@@ -71,6 +73,7 @@ export {
   CLOUD_LOGIN_TTL_MS,
   CLOUD_SESSION_TTL_MS,
   type CloudSessionRow,
+  type CloudSnapshot,
   CloudStore,
   type CloudStoreDeps,
   type CreateLinkInput,

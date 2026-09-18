@@ -187,6 +187,17 @@ export class WalletCore {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    /*
+     * 导出那条路由在 `AccountsDO` 里（账号层的快照在那边），钱在这边，
+     * 所以它会为每个组织来问一次这个内部口。只读、只回积分批次。
+     */
+    if (url.pathname === '/__internal/lots') {
+      const org_id = url.searchParams.get('org') ?? ''
+      return new Response(JSON.stringify(org_id === '' ? [] : this.store.lots(org_id)), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }
     const principal = principalFrom(request)
     const run = async (): Promise<Response> => {
       const res = await this.#app.fetch(request)

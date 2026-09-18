@@ -24,6 +24,8 @@ import {
   type SweepableIdempotencyStore,
 } from '@agentsws/api'
 import {
+  ADMIN_TOKEN_ENV,
+  adminExportRoutes,
   buildCloudApp,
   type CloudApp,
   type CloudHealthState,
@@ -34,7 +36,7 @@ import {
   createMagicLinkLimiter,
   type MailSender,
 } from '@agentsws/cloud/workers-kit'
-import { type Clock, cloudBaseUrl } from '@agentsws/contracts'
+import { type Clock, cloudBaseUrl, type WalletLot } from '@agentsws/contracts'
 import { type DoStorageLike, doSyncDb } from './do-sql.js'
 import { envRecord, type WorkerEnv } from './env.js'
 
@@ -117,6 +119,35 @@ export class AccountsCore {
       },
     }
 
+    /*
+     * WP114 的跨平台退路：账号层的快照在这个对象里，钱在每个组织自己的
+     * `WalletDO` 里，所以导出那条路由挂在这边，按组织一个个去问对面要积分批次。
+     * 充值那条挂在 `WalletDO`（它要动钱）——同一把钥匙，两条路由各在该在的地方。
+     */
+    const adminToken = (env[ADMIN_TOKEN_ENV] ?? '').trim()
+    const store = this.store
+    const modules =
+      adminToken === ''
+        ? []
+        : [
+            adminExportRoutes({
+              clock,
+              token: adminToken,
+              accounts: () => store,
+              walletLots: async (org_id) => {
+                const res = await env.WALLET.get(env.WALLET.idFromName(org_id)).fetch(
+                  new Request(
+                    `https://do.internal/__internal/lots?org=${encodeURIComponent(org_id)}`,
+                  ),
+                )
+                return res.ok ? ((await res.json()) as WalletLot[]) : []
+              },
+              log: (line) => {
+                console.log(line.trimEnd())
+              },
+            }),
+          ]
+
     this.#app = buildCloudApp({
       store: this.store,
       clock,
@@ -126,6 +157,7 @@ export class AccountsCore {
       health: this.health,
       limiter: createMagicLinkLimiter(),
       idempotency: this.idempotency,
+      modules,
     })
   }
 

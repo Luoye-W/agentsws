@@ -29,9 +29,10 @@ import {
   cloudRoute,
   secretEquals,
 } from '@agentsws/api'
-import { type Clock, emailDomain } from '@agentsws/contracts'
+import { type Clock, emailDomain, type WalletLot } from '@agentsws/contracts'
 import { assertMeteringEvent, type Wallet, type WalletStore } from '@agentsws/metering'
 import { z } from 'zod'
+import type { CloudSnapshot } from '../store.js'
 
 /** 管理员令牌的环境变量名。值不在仓库里，也不在任何日志里。 */
 export const ADMIN_TOKEN_ENV = 'AGENTSWS_CLOUD_ADMIN_TOKEN'
@@ -209,6 +210,73 @@ export function adminRoutes(deps: AdminRouteDeps): CloudRoute[] {
           },
           201,
         )
+      },
+    ),
+  ]
+}
+
+/**
+ * `GET /v1/admin/export`：账号与钱包的 JSON 快照（WP114）。
+ *
+ * 为什么要这条路由：两个部署形态的库长得完全不一样——Compose 形态是几个
+ * sqlite 文件，Workers 形态是 Durable Object 里的库，**没有一个共同的"把文件
+ * 拷过去"的动作**。搬家（Workers ↔ Compose）与"跑路"这两件事都靠这一份 JSON。
+ *
+ * 三条纪律：
+ *
+ * 1. 与充值那条**同一把钥匙、同一道闸**（admin token，定长比较，没配就不挂）；
+ * 2. 里面**没有任何明文凭据**：令牌哈希在（不带它搬完家所有人都得重新关联一次），
+ *    明文库里本来就没有；一次性登录与会话不导——让人重登一次比搬会话干净；
+ * 3. 钱那一份是**积分批次**（lots），不是计量事件：事件是流水账，动辄几十万条，
+ *    而且它不是"钱"——搬家要搬的是余额，不是历史。历史留在旧那一边。
+ */
+export interface AdminExportDeps {
+  clock: Clock
+  /** 明文管理员令牌（与充值那条同一把）。 */
+  token: string
+  /** 账号层的快照。 */
+  accounts: () => { exportSnapshot(): CloudSnapshot }
+  /**
+   * 某个组织的积分批次。
+   *
+   * 写成**异步**是有意的：Compose 形态下钱包就在手边（同步的，包一层 Promise
+   * 即可），Workers 形态下它在另一个 Durable Object 里，必须发一次请求。
+   * 这里是导出，不是扣款——那条"钱的读写全同步"的纪律管的是 reserve / settle，
+   * 不管一年跑一次的快照。
+   */
+  walletLots: (org_id: string) => Promise<WalletLot[]>
+  log?: (line: string) => void
+}
+
+export function adminExportRoutes(deps: AdminExportDeps): CloudRoute[] {
+  const log = deps.log ?? ((line: string) => process.stdout.write(line))
+  return [
+    cloudRoute(
+      {
+        method: 'get',
+        path: '/v1/admin/export',
+        operationId: 'cloudAdminExport',
+        summary: '账号与钱包的 JSON 快照（跨部署形态搬家用）。只认 admin 令牌',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        returns: '{ at, accounts, orgs, members, links, wallets }',
+      },
+      async (c) => {
+        const raw = c.req.header('Authorization')
+        const given =
+          raw === undefined ? '' : raw.startsWith('Bearer ') ? raw.slice('Bearer '.length) : raw
+        if (!secretEquals(given.trim(), deps.token))
+          throw new ApiError('unauthenticated', '管理员令牌不对')
+
+        const snapshot = deps.accounts().exportSnapshot()
+        const wallets: { org_id: string; lots: WalletLot[] }[] = []
+        for (const org of snapshot.orgs)
+          wallets.push({ org_id: org.id, lots: await deps.walletLots(org.id) })
+        // 审计行：导了几个账号、几个组织。**没有邮箱、没有令牌、没有金额**
+        log(
+          `[admin] export accounts=${String(snapshot.accounts.length)} orgs=${String(snapshot.orgs.length)} at=${deps.clock.now()}\n`,
+        )
+        return cloudOk(c, { ...snapshot, wallets })
       },
     ),
   ]
