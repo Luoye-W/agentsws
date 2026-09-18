@@ -110,5 +110,8 @@ cat <<EOT
     git push origin $BRANCH
     git push origin $TAG
 
-然后在 GitHub 上按 CHANGELOG 的这一节建 release。
+**tag 名形如 v*-beta.* 的话，推完就不用手动建 release 了**（WP111）：
+\`.github/workflows/release.yml\` 会接手——四个平台各自打包，产物与 latest*.yml
+自动传到那个 tag 的 GitHub Release（prerelease）。CI 里没有任何密钥，
+不签名、不公证。其余 tag 仍然按 CHANGELOG 手工建 release。
 EOT

@@ -40,6 +40,7 @@ import {
   diagnosticsListing,
   humanBytes,
 } from './diagnostics.js'
+import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
@@ -227,6 +228,14 @@ async function bootstrap(): Promise<void> {
 
   const configStore = createConfigStore(files, paths.configFile)
   let config: DesktopConfig = configStore.load()
+  /*
+   * WP111：这台电脑上是不是第一次跑。**在首启向导之前取**——向导会写 `config.json`，
+   * 之后再问就永远是"不是第一次"了。
+   *
+   * 它决定的只有一件事：服务起来之后自动把工作台端出来一次（见 `first-run.ts`）。
+   * 一个刚双击完安装包的人，不该看到"我装完了，然后什么都没发生"。
+   */
+  const firstRun = !configStore.exists()
 
   // ── WP36 / 40 §1.3：这台电脑第一次启动，先问一句「本机还是公司服务器」。
   //    环境变量给了地址就不问（运维已经替它选了）。关掉窗口 = 什么都不写，下次再问。
@@ -960,6 +969,7 @@ async function bootstrap(): Promise<void> {
   if (!remote) server.start()
 
   // ── 健康轮询：托盘状态、"打开工作台"是否可点都看它。
+  let firstRunOpened = false
   const pollHealth = async (): Promise<void> => {
     health = await probeHealth(serverUrl(), {
       fetchImpl: globalThis.fetch as never,
@@ -967,6 +977,20 @@ async function bootstrap(): Promise<void> {
       abort: nodeAbort,
     })
     refreshTray()
+    // WP111 首启：服务一健康就把工作台端出来一次，落在「初始化设置」那一页
+    // （跳转由工作台自己判 `needs_setup`，壳不认识那个路由）。
+    if (
+      shouldOpenOnFirstRun({
+        firstRun,
+        healthy: health.ok,
+        alreadyOpened: firstRunOpened,
+        remote,
+      })
+    ) {
+      firstRunOpened = true
+      logger.info('第一次打开：自动端出工作台')
+      void openWorkstation()
+    }
   }
   const healthTimer = setInterval(() => {
     void pollHealth()
