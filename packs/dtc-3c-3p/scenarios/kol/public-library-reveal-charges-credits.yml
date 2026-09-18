@@ -5,8 +5,9 @@
 # 不是一个替身。理由很实在：这道题要钉的三件事——浏览免费、reveal 扣多少、
 # 钱不够怎么说——全是那一份代码算出来的。换成替身，断言就只是在验场景自己写的数。
 #
-# 顺序是**故意**的：先在一分钱都没充的时候取一次（该被拦），再充值取一次（该成功）。
-# 反过来写的话，"钱不够"那一半就永远跑在一个已经有余额的钱包上，等于没测。
+# 09-18 Luoye 定：**送的免费额度可以用来看邮箱**。① 那一步往公共库回填了一条联系方式，
+# 按 49 M4 的贡献奖励得了 1 积分（`granted`，有期限）；② 一分钱没充就去取，用的就是这 1 积分——
+# 该取到，而且账上先扣送的那一份。"钱不够回人话"不在这条题里（余额为 0 的那条另立）。
 #
 # 最后一条断言是隐私那一条：取回来的明文进本机加密库，库里那一行只留 key 名。
 id: kol/public-library-reveal-charges-credits
@@ -24,20 +25,20 @@ events:
       followers: 120000
       engagement_rate: 0.035
       email: kevin@creators.example
-  # ② 一分钱没充就去取：浏览照样免费，reveal 被拦下，**不收钱**
+  # ② 一分钱没充就去取：浏览免费；reveal 用贡献奖励送的那 1 积分，**取得到**
   - at: '+10m'
     kol.public_reveal: { who: p_li, channel: youtube, handle: cablekevin }
   - at: '+20m'
     clock.advance: {}
-  # ③ 充 100 积分再取一次：这一次取得到，扣的是 `data.kol.lookup` 那个价
+  # ③ 充 100 积分再取一次：仍取得到，扣的还是 `data.kol.lookup` 那个价（先扣有期限的，再扣充的）
   - at: '+30m'
     kol.public_reveal: { who: p_li, channel: youtube, handle: cablekevin, topup: 100 }
   - at: '+4h'
     clock.advance: {}
 expected:
   kol_reveal:
-    # 第一次（一分钱没充）被拦下来，而且**没收钱**
-    first_refused: true
+    # 第一次（一分钱没充）也取得到——花的是送的免费额度（09-18 Luoye 定）
+    first_refused: false
     # 第二次（充过 100 积分）取得到
     ok: true
     # **浏览免费**不是一句文案，是账上的数

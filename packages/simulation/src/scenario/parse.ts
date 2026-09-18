@@ -2059,16 +2059,17 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       created: 'num',
     },
     /*
-     * `kol_reveal` **故意还没接上**。
-     *
-     * 接上去当场红一条：`public-library-reveal-charges-credits.yml` 写着
-     * `first_refused: true`（一分钱没充那一次该被拦），而世界里那一次**取到了**
-     * ——钱包有免费额度，所以"钱不够"根本没发生。
-     *
-     * 那是 WP68 的语义问题（该不该有免费额度、免费额度下这条题要验什么），
-     * 不是 WP72 能定的。所以这一条原地留着，记进 docs/35 等 Luoye 定：
-     * 是钱包该拦，还是那句断言该改。改完把这一格接上来，一行的事。
+     * `kol_reveal`（WP68 / 48 §5.3）。09-18 Luoye 定：**免费额度（贡献奖励送的积分）可以用来看邮箱**，
+     * 所以"一分钱没充那一次被拦"不再是这条题要验的事——它验的是：浏览免费、reveal 扣的是
+     * `data.kol.lookup` 那个价、账上的钱先扣送的那一份。"钱不够回人话"另立一条题（见 docs/35）。
      */
+    kol_reveal: {
+      first_refused: 'bool',
+      ok: 'bool',
+      reason: 'str',
+      browse_credits: 'num',
+      reveal_credits: 'str',
+    },
     // WP72（56 §2 / §4）
     social_post: {
       requested_level: 'str',
