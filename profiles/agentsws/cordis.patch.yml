@@ -38,6 +38,51 @@
     enabled: false
 # ——————————————————————————————————————————————————————————————————————
 
+# ——————————————————————————————————————————————————————————————————————
+# 生效的第二条（WP93，dsh 0.1.6-alpha.2）：把 Plugin Manager 与 HMR 关死。
+#
+# alpha.2 往 `dsh-base` 的 patch 里 **insert 了两个新行**（出处：上游
+# `packages/bundle/base/cordis.patch.yml` 的 diff）：
+#
+#     - id: tool-plugin-manager
+#       name: '@deepseek-ai/dsh-plugin-manager/tools'
+#       disabled: true
+#     - id: plugin-manager
+#       name: '@deepseek-ai/dsh-plugin-manager'
+#       disabled: !!js "!ctx.get('profileContext')"
+#
+# 同一个 diff 里 `hmr` 从 `@deepseek-ai/cordis-plugin-hmr`（写死 `disabled: true`）
+# 换成了 `@deepseek-ai/dsh-hmr`，默认值也翻成 `!ctx.get('profileContext')`。
+# `profileContext` 的定义是「Present only in a profile launched by dsh」
+# （上游 `packages/boot/app-boot/src/profile-context.ts`）——也就是说
+# **`dsh --profile agentsws` 一起，这两个服务就是开的**。
+#
+# 为什么必须关：
+# - `plugin-manager` 是"以宿主用户身份跑 pnpm，装任意包，装完的 Host 代码在沿进程里跑、
+#   在工作区沙箱之外"（上游 README：「installed Host code executes in-process outside the
+#   workspace sandbox」）。它还能改本 profile 的 `package.json` 与这份 patch 文件本身，
+#   并且带一条 `approvedBuilds` 能替用户把 pnpm 挡下来的构建脚本放行——那正是
+#   `pnpm-workspace.yaml` 的 `allowBuilds` 在守的那道门（16 §3 最严解释）。
+#   与 31 §3.5「v1 的公司端执行器不装任何第三方代码」正面冲突。
+# - `hmr` 会监视 profile 目录并**热替换模块**；我们这份 profile 写的是
+#   `patchReload: startup`（启动时应用一次），运行中被换掉的组合不在任何基线的口径里。
+#
+# `tool-plugin-manager`（模型面的那个工具）上游已经写死 `disabled: true`，我们再写一遍：
+# 默认值是上游可以单方面翻的，写在案上才算数（docs/42 红线 7）。
+#
+# 注意这三行**不是**"我们的组合里碰巧没有它"。两档运行时（`harness.ts` 自己搭树）
+# 的真实模块图里确实一个都没有——WP93 用 ESM resolve 钩子实测过，
+# `@deepseek-ai/dsh-plugin-manager` / `-hmr` 两档都是 0 命中。但红线 7 要的就是
+# 不许拿这个当保证：这三行管的是"哪天真起了完整 profile"那条路。
+# 钉住它们的测试：`packages/dsh-adapter/test/profile-lockdown.test.ts`。
+- id: plugin-manager
+  disabled: true
+- id: tool-plugin-manager
+  disabled: true
+- id: hmr
+  disabled: true
+# ——————————————————————————————————————————————————————————————————————
+
 # - id: system-prompt
 #   config:
 #     # persona 由 preset 的 complete 段接管，deployment 前后缀留空
