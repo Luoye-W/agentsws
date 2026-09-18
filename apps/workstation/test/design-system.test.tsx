@@ -96,6 +96,22 @@ describe('PositionCard', () => {
     expect(screen.getByTestId('ws-position-card').className).not.toContain('ws-card-selected')
   })
 
+  it('WP98：右上角那个 `···` 是一个插槽——这一层不知道里面装的是什么', () => {
+    render(
+      <PositionCard
+        name="客服"
+        pending={2}
+        pendingLabel="张待审"
+        line="待回复 2"
+        entryLabel="交给它"
+        menu={<button type="button" data-testid="card-menu" />}
+      />,
+    )
+    expect(screen.getByTestId('card-menu')).toBeTruthy()
+    // 插槽不传的时候连那一格都不占
+    expect(screen.getByTestId('ws-position-card').textContent).toContain('待回复 2')
+  })
+
   it('当前岗位是光晕态', () => {
     render(
       <PositionCard

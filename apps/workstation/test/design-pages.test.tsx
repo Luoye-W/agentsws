@@ -22,6 +22,8 @@ const getPositions = vi.fn(async () => ({
   instances: [
     {
       position_id: 'pos_store',
+      workspace_id: 'ws_1',
+      holders: [],
       name: { zh: '网站运营', en: 'Store ops' },
       pending_cards: 3,
       open_matters: 2,
@@ -36,6 +38,8 @@ const getPositions = vi.fn(async () => ({
     },
     {
       position_id: 'pos_support',
+      workspace_id: 'ws_1',
+      holders: [],
       name: { zh: '客服', en: 'Support' },
       pending_cards: 0,
       open_matters: 1,

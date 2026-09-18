@@ -239,16 +239,17 @@ describe('首页第三稿（37 §3）', () => {
     getHome.mockClear()
   })
 
-  it('四段都在：目标进度 / 今天（时间轴 + 到期）/ 卡片 / 复盘', async () => {
+  it('四段都在：目标那一行 / 今天（时间轴 + 到期）/ 卡片 / 复盘', async () => {
     renderWithProviders(<HomePage />)
-    expect(await screen.findByTestId('goals')).toBeDefined()
-    expect(screen.getAllByTestId('goal-row')).toHaveLength(2)
+    // WP98 收口：目标从一整块网格折成一行"目标 2 项 · 1 项落后 →"，细的进 /goals
+    const goals = await screen.findByTestId('goals-line')
+    expect(goals.textContent).toContain('目标 2 项')
+    expect(goals.getAttribute('data-behind')).toBe('1')
+    expect(screen.queryByTestId('goal-row')).toBeNull()
     expect(screen.getByTestId('today-timeline')).toBeDefined()
     expect(screen.getByTestId('today-due')).toBeDefined()
     expect(await screen.findByTestId('deck-section')).toBeDefined()
     expect(screen.getByTestId('battle-report')).toBeDefined()
-    // 落后的目标有标记
-    expect(screen.getByText('落后')).toBeDefined()
     // 到期清单里第二个数字：待我定的卡片数
     expect(screen.getByTestId('cards-waiting').textContent).toContain('3')
   })

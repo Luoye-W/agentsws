@@ -1,15 +1,20 @@
 /**
- * 首页 = 今天（37 §3 第三稿），四段：
- * ① 目标进度        数字块加「目标 / 进度 / 剩余天数」
- * ② 今天            左：时间轴（会议 / 排期待办 / 定时任务）  右：到期清单（待办 + 待我定的卡片数）
- * ③ 卡片            `<DeckSection />`（WP21 交付后换成一次一张的 deck）
- * ④ 复盘 / 战报     晚上是复盘卡；白天是四格战报
+ * 首页 = 今天。**第一屏照画布《首页 · 新风格》的顺序**（WP98，09-18 收口）：
+ *
+ * ① 问候          "早上好，王岚" + 一句"今天 N 张卡等你决定，M 件到期"
+ * ② 岗位卡一排    岗位是任务主入口（54 §4），所以它紧跟着问候
+ * ③ 目标一行      原来那一整块下移到这儿，并折成一行"目标 3 项 · 2 项落后 →"
+ * ④ 今天要你决定的 + 右侧「今天的数 / 今天」（两栏，2fr / 1fr）
+ * ⑤ 复盘 / 战报
+ *
+ * 收口只删不加：「还没接模型」那条黄条搬去顶栏当胶囊（不占第一屏），
+ * 快捷提示收进岗位卡右上角的 `···`（原来一张卡下面挂一串芯片，四张卡就是一片）。
  *
  * 硬约束照旧：**首页无图表无表格**（36 §5.2），数字全从服务端来（29 原则 ③），
  * 没有全局聊天框（对话只在卡片指导、问 AI、⌘K、事项页四处）。
  */
 import type { CalendarItem, CalendarSource, GoalProgress, Todo } from '@agentsws/contracts'
-import type { RangeName } from '@agentsws/deck'
+import type { PositionTiles, RangeName } from '@agentsws/deck'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Briefcase,
@@ -19,14 +24,15 @@ import {
   HandHeart,
   ListTodo,
   type LucideIcon,
+  MoreHorizontal,
+  Target,
   Users,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
 import { PositionCard, type Tone, WsCard } from '@/components/design'
-import { NoModelBanner } from '@/components/models/no-model-banner'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -36,12 +42,15 @@ import {
   getHome,
   getPositions,
   listInProgress,
+  listMembers,
   openMatterAtPosition,
   type PositionInstanceData,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { LAYER_ICON } from '@/lib/calendar-layers'
-import { daysLeftLabel, hhmm, matterUrl, todoUrl } from '@/lib/work'
+import { formatValue } from '@/lib/format'
+import type { Lang } from '@/lib/i18n'
+import { hhmm, matterUrl, todoUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
 
@@ -58,11 +67,75 @@ const POSITION_TONES: Tone[] = ['info', 'good', 'warn', 'bad']
  *
  * 没装岗位面的服务进程没有 `instances`——那时候整块不出，首页退回老样子。
  */
-function PositionCards(): React.ReactNode {
-  const { t } = useApp()
+/** 一张卡上那句状态最多摆几个数：三个是一行的量，第四个就换行了。 */
+const MAX_STATUS_FACTS = 3
+
+/**
+ * WP98：岗位卡中间那句**真状态**。
+ *
+ * 原来那句是 `position.counts`——"3 张待审 · 2 件在办"。它和卡上那个 28px 的大数字
+ * 说的是同一件事，于是一张卡上同一个数印了两遍，而"这个岗位现在到底怎么样"一个字都没有。
+ * 现在改成从**岗位面板已经算好的数字块**里抄：客服是"待回复 2 · 24h 回复率 96%"，
+ * 网站运营是"改价 1 待审 · 库存告急 3"。
+ *
+ * 两条纪律：
+ * - **一个数都不在这儿算**（29 原则 ③ / 14 §2）：`StatTile` 是服务端算好下发的，
+ *   这里只把 `label` 与 `value` 拼成一句话；
+ * - **没连上的数据源不出**（`status === 'not_connected'` 的块跳过），一个数都没有的岗位
+ *   照实说"还没开工"，不编一句"一切正常"。
+ *
+ * 首页那份 `tiles` 按**分配 id** 分组（`PositionTiles.position_id` 是 assignment），
+ * 而岗位实体的 id 是模板 id——所以这里按这个岗位下全部职责的 `assignment_ids` 去认。
+ */
+function statusLine(
+  position: PositionInstanceData,
+  tiles: PositionTiles[],
+  lang: Lang,
+): string | undefined {
+  const mine = new Set(position.roles.flatMap((r) => r.assignment_ids))
+  const facts = tiles
+    .filter((bar) => mine.has(bar.position_id))
+    .flatMap((bar) => bar.tiles)
+    .filter((tile) => tile.status === 'ok' && tile.value !== undefined)
+    .slice(0, MAX_STATUS_FACTS)
+    .map((tile) => `${tile.label} ${formatValue(tile.value, tile.format, lang, tile.currency)}`)
+  return facts.length === 0 ? undefined : facts.join(' · ')
+}
+
+/**
+ * WP98：持有人头像那一排（画布上卡左下角那几个圆头像）。
+ *
+ * `instances[].holders` 给的是 person id，卡上要的是**展示名**——所以这里拿成员清单
+ * 换一次名字（`/v1/workspaces/:id/members` 是既有的读接口，没加路由）。
+ * 换不到名字的 person **不画头像**：19 §3 / WP15 那条"先给再脱敏"的反面教训——
+ * 与其在卡上印半个 `p_li`，不如那个位置什么都没有。问不到整份清单（403 / 离线）时
+ * 一排头像整个不出，卡的其余部分照旧。
+ *
+ * 成员清单要 `policy:read`，而客服那条分配上没有——所以这里**拿所有者那条分配去问**
+ * （与「还没接模型」那条黄条问模型时同一个做法）。不是所有者的人问不到，
+ * 那就当作"这一排不归我看"，静静地不画，而不是给他一排点不动的灰头像。
+ */
+function useHolderNames(workspace_id: string | undefined): Map<string, string> {
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  const ownerId = positions.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
+  const members = useQuery({
+    queryKey: ['members', workspace_id, ownerId],
+    enabled: workspace_id !== undefined && workspace_id !== '' && ownerId !== undefined,
+    retry: false,
+    queryFn: () => listMembers(workspace_id ?? '', ownerId),
+  })
+  return useMemo(
+    () => new Map((members.data ?? []).map((m) => [m.person_id, m.name])),
+    [members.data],
+  )
+}
+
+function PositionCards({ tiles }: { tiles: PositionTiles[] }): React.ReactNode {
+  const { t, lang } = useApp()
   const navigate = useNavigate()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const instances = positions.data?.instances ?? []
+  const names = useHolderNames(instances[0]?.workspace_id)
   if (instances.length === 0) return null
   return (
     <section data-testid="position-cards">
@@ -71,6 +144,10 @@ function PositionCards(): React.ReactNode {
         {instances.map((p, i) => {
           // 岗位页的地址用的是分配 id（36 §3 的"岗位"）：只能取**本人**那几条里的一条
           const to = p.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
+          const holders = p.holders
+            .map((id) => names.get(id))
+            .filter((name): name is string => name !== undefined && name !== '')
+            .map((name) => ({ name }))
           return (
             <div key={p.position_id} data-testid="position-card" data-position={p.position_id}>
               <PositionCard
@@ -79,10 +156,8 @@ function PositionCards(): React.ReactNode {
                 name={p.name.zh}
                 pending={p.pending_cards}
                 pendingLabel={t('home.positions.pending')}
-                line={t('position.counts', {
-                  cards: p.pending_cards,
-                  matters: p.open_matters,
-                })}
+                line={statusLine(p, tiles, lang) ?? t('home.positions.idle')}
+                holders={holders}
                 {...(to === undefined
                   ? {}
                   : {
@@ -94,9 +169,8 @@ function PositionCards(): React.ReactNode {
                       },
                     })}
                 entryLabel={t('home.positions.entry')}
+                menu={<QuickPromptMenu position={p} />}
               />
-              {/* 快捷提示排在卡下面：它是"用这条职责开一件事"，不是卡的一部分 */}
-              <QuickPrompts position={p} />
             </div>
           )
         })}
@@ -105,13 +179,15 @@ function PositionCards(): React.ReactNode {
   )
 }
 
-/** 默认先露几条；一张卡读不完就等于没有（54 §4 认知成本）。 */
-const QUICK_PROMPTS_SHOWN = 3
-
 /**
- * WP84（53 §3 / 54 §1 第 6 行）：岗位卡下面的**快捷提示**，按职责分组。
+ * WP84（53 §3 / 54 §1 第 6 行）+ WP98（09-18 收口）：岗位卡右上角 `···` 里的**快捷提示**。
  *
- * 三条纪律：
+ * WP84 把它们平铺在岗位卡下面：一个岗位一串芯片，四个岗位就是四串——第一屏一眼看过去
+ * 全是小圆角标签，而它们回答的是"我现在想自己起一件事"，不是"今天有什么等我决定"。
+ * 09-18 收口把它们折进画布上本来就画着的那个 `···`：**数据与路由一个字没改**，
+ * 只是默认不占地方。
+ *
+ * 三条纪律原样保留：
  * 1. **不是聊天框**（36 §3：对话入口只有指导 / 问 AI / ⌘K / 事项页）。点一条就是用
  *    这条职责在这个岗位下开一件事，走的还是 54 §2 那个岗位入口
  *    （`entry: 'position'` + `position_template_id`），只是把"该归哪条职责"这件
@@ -119,14 +195,14 @@ const QUICK_PROMPTS_SHOWN = 3
  *    只会猜错。
  * 2. **只用本人那条分配**。没有 `my_assignment_id` 的职责（别人在做、我没有）
  *    连按钮都不出——拿别人那条去开就是借岗位扩权（54 §1 第三条纪律）。
- * 3. **一职责一组、默认只露前 3 条**；一个岗位只有一条职责时连职责名那行小字都不出。
+ * 3. **一职责一组**；一个岗位只有一条职责时连职责名那行小字都不出。
  */
-function QuickPrompts({ position }: { position: PositionInstanceData }): React.ReactNode {
+function QuickPromptMenu({ position }: { position: PositionInstanceData }): React.ReactNode {
   const { t, lang } = useApp()
   const navigate = useNavigate()
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [open, setOpen] = useState(false)
 
-  const open = useMutation({
+  const openMatter = useMutation({
     mutationFn: (input: { assignment: string; role_id: string; prompt: string }) =>
       openMatterAtPosition(input.assignment, { title: input.prompt, role_id: input.role_id }),
     onSuccess: (out) => {
@@ -140,104 +216,97 @@ function QuickPrompts({ position }: { position: PositionInstanceData }): React.R
   if (groups.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-2 border-t pt-2" data-testid="quick-prompts">
-      {groups.map((role) => {
-        const prompts = role.quick_prompts ?? []
-        const assignment = role.my_assignment_id
-        const isOpen = expanded[role.role_id] === true
-        const shown = isOpen ? prompts : prompts.slice(0, QUICK_PROMPTS_SHOWN)
-        const rest = prompts.length - shown.length
-        return (
-          <div key={role.role_id} data-testid="quick-prompt-group" data-role={role.role_id}>
-            {groups.length === 1 ? null : (
-              <p className="mb-1 text-[11px] text-muted-foreground">{role.role_name}</p>
-            )}
-            <div className="flex flex-wrap gap-1.5">
-              {shown.map((q) => (
-                <button
-                  key={q.id}
-                  type="button"
-                  className="rounded-full border px-2.5 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
-                  data-testid="quick-prompt"
-                  data-prompt={q.id}
-                  data-kind={q.kind}
-                  title={q.prompt}
-                  disabled={assignment === undefined || open.isPending}
-                  onClick={() => {
-                    if (assignment === undefined) return
-                    open.mutate({ assignment, role_id: role.role_id, prompt: q.prompt })
-                  }}
-                >
-                  {lang === 'en' ? q.label.en : q.label.zh}
-                </button>
-              ))}
-              {rest <= 0 && !isOpen ? null : (
-                <button
-                  type="button"
-                  className="rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-                  data-testid="quick-prompt-more"
-                  aria-expanded={isOpen}
-                  onClick={() => {
-                    setExpanded((v) => ({ ...v, [role.role_id]: !isOpen }))
-                  }}
-                >
-                  {isOpen ? t('home.quick.less') : t('home.quick.more', { count: rest })}
-                </button>
-              )}
-            </div>
-          </div>
-        )
-      })}
-      <p className="text-[11px] text-muted-foreground">{t('home.quick.hint')}</p>
-    </div>
+    <span className="relative inline-flex" data-testid="quick-prompts">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={t('home.quick.menu')}
+        title={t('home.quick.menu')}
+        data-testid="quick-prompt-menu"
+        className="inline-flex size-6 items-center justify-center rounded-md text-ws-muted-fg hover:bg-ws-surface hover:text-ws-ink"
+        onClick={() => {
+          setOpen(!open)
+        }}
+      >
+        <MoreHorizontal className="size-4" aria-hidden />
+      </button>
+      {open ? (
+        // 与账号块、品牌切换器同一种朴素下拉：一个按钮 + 一张列表，不引浮层引擎
+        <div
+          role="menu"
+          data-testid="quick-prompt-list"
+          className="absolute top-full right-0 z-50 mt-1 flex w-64 flex-col gap-2 rounded-md border bg-popover p-2 shadow-md"
+        >
+          {groups.map((role) => {
+            const assignment = role.my_assignment_id
+            return (
+              <div key={role.role_id} data-testid="quick-prompt-group" data-role={role.role_id}>
+                {groups.length === 1 ? null : (
+                  <p className="mb-1 text-[11px] text-muted-foreground">{role.role_name}</p>
+                )}
+                <div className="flex flex-col">
+                  {(role.quick_prompts ?? []).map((q) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      role="menuitem"
+                      className="rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+                      data-testid="quick-prompt"
+                      data-prompt={q.id}
+                      data-kind={q.kind}
+                      title={q.prompt}
+                      disabled={assignment === undefined || openMatter.isPending}
+                      onClick={() => {
+                        if (assignment === undefined) return
+                        setOpen(false)
+                        openMatter.mutate({ assignment, role_id: role.role_id, prompt: q.prompt })
+                      }}
+                    >
+                      {lang === 'en' ? q.label.en : q.label.zh}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+          <p className="text-[11px] text-muted-foreground">{t('home.quick.hint')}</p>
+        </div>
+      ) : null}
+    </span>
   )
 }
 
 /** 七个图层各一个图标（WP74）；与日历页那一列用的是同一张表（`lib/calendar-layers`）。 */
 const SOURCE_ICON: Record<CalendarSource, LucideIcon> = LAYER_ICON
 
-/** ① 一个目标：值 / 目标 / 进度 / 剩余天数。没有图表。 */
-function GoalRow({ goal }: { goal: GoalProgress }): React.ReactNode {
+/**
+ * ③ 目标：**折成一行**（WP98，09-18 收口）。
+ *
+ * 原来这里是一块网格，每个目标一张带进度条的小卡，排在第一屏最上面——于是第一屏
+ * 一开始就是几个与"今天要做什么"无关的百分比。目标是**季度尺度**的东西，它该出现在
+ * 岗位卡之后，而且只要一行就够："目标 3 项 · 2 项落后 →"；要看细的点进 `/goals`，
+ * 那一页本来就在。落后几项从 `status` 数，一个数都不在这儿算（29 原则 ③）。
+ */
+function GoalsLine({ goals }: { goals: GoalProgress[] }): React.ReactNode {
   const { t } = useApp()
-  const pct = goal.progress_pct ?? 0
+  if (goals.length === 0) return null
+  const behind = goals.filter((g) => g.status === 'behind').length
   return (
-    <div
-      className="rounded-lg border p-3"
-      data-testid="goal-row"
-      data-status={goal.status}
-      data-goal={goal.goal_id}
+    <Link
+      to="/goals"
+      data-testid="goals-line"
+      data-behind={behind}
+      className="flex w-fit items-center gap-1 text-[13px] text-ws-muted-fg hover:text-ws-ink"
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-sm font-medium">{goal.title}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {daysLeftLabel(goal.days_left, t)}
-        </span>
-      </div>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums">
-          {goal.value === undefined ? '—' : goal.value.toLocaleString()}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          / {goal.target.toLocaleString()} · {t('goal.progress')} {pct}%
-        </span>
-        {goal.status === 'behind' ? (
-          <span className="rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[11px] text-destructive">
-            {t('goal.behind')}
-          </span>
-        ) : null}
-      </div>
-      {/* 进度条是一条 div，不是图表 */}
-      <div className="mt-2 h-1.5 w-full rounded-full bg-muted" aria-hidden>
-        <div
-          className={
-            goal.status === 'behind'
-              ? 'h-1.5 rounded-full bg-destructive/60'
-              : 'h-1.5 rounded-full bg-primary/70'
-          }
-          style={{ width: `${Math.min(100, pct)}%` }}
-        />
-      </div>
-    </div>
+      <Target className="size-3.5" aria-hidden />
+      <span>
+        {behind === 0
+          ? t('home.goals.line', { count: goals.length })
+          : t('home.goals.line.behind', { count: goals.length, behind })}
+      </span>
+      <span aria-hidden>→</span>
+    </Link>
   )
 }
 
@@ -386,13 +455,12 @@ export function HomePage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-6" data-testid="home">
-      {/* WP25：没接模型时先说清楚——不然界面看着一切正常，Agent 却跑不起来 */}
-      <NoModelBanner />
-
       {/*
-        WP96（09-18 画布《首页 · 新风格》）：一句话开头。
+        ① WP96（09-18 画布《首页 · 新风格》）：一句话开头。
         标题是 Outfit 的大字，下面那行回答"今天还剩多少事"——
-        这两行之后才是岗位卡，因为岗位是任务主入口（54）。
+        这两行之后**紧跟着就是岗位卡**，因为岗位是任务主入口（54）。
+        WP98：「还没接模型」那条黄条从这儿搬去了顶栏（`app-shell` 的 `NoModelBanner
+        variant="chip"`）——它说的是整个工作区的状态，不占今天这一屏。
       */}
       <header className="flex items-end gap-4" data-testid="home-header">
         <div>
@@ -406,25 +474,11 @@ export function HomePage(): React.ReactNode {
         </div>
       </header>
 
-      {/* ① 目标进度 */}
-      {goals.length === 0 ? null : (
-        <section data-testid="goals">
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <h2 className="ws-display text-[17px]">{t('home.goals')}</h2>
-            <Button size="xs" variant="ghost" asChild>
-              <Link to="/goals">{t('home.tiles.more')}</Link>
-            </Button>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {goals.map((goal) => (
-              <GoalRow key={goal.goal_id} goal={goal} />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* ② WP69（54 §4）：首页只列**岗位**卡，职责不出现 */}
+      <PositionCards tiles={data.tiles} />
 
-      {/* WP69（54 §4）：首页只列**岗位**卡，职责不出现 */}
-      <PositionCards />
+      {/* ③ 目标：一行（WP98 收口——原来是第一屏最上面那一整块网格） */}
+      <GoalsLine goals={goals} />
 
       {/*
         WP96：下半屏照画布分两栏——

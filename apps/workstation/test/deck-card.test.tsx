@@ -12,6 +12,9 @@ import {
   DECK_CARD_BODY_SCROLL_CLASS,
   DECK_CARD_MIN_HEIGHT_CLASS,
 } from '@/components/deck/deck-layout'
+import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
+import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
+import { panelType } from '@/components/rail/registry'
 import { draftCard, questionCard } from './fixtures'
 import { renderWithProviders } from './helpers'
 
@@ -21,8 +24,8 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('37 §1 第 2 行：标签行顺序 = 渠道 → 优先级 → 倒计时 → 卡型 → 合并 N 张', () => {
-  it('顺序固定，且**客户名不进标签行**', () => {
+describe('37 §1 第 2 行 + WP98 收口：头一行 = 岗位 · 类别 → 等待时长 → 证据 N → 谁提的', () => {
+  it('两枚胶囊一个证据一个头像，渠道 / 合并 N 张不再各占一枚；**客户名不进标签行**', () => {
     renderWithProviders(
       <DeckCardView
         card={draftCard({
@@ -35,17 +38,18 @@ describe('37 §1 第 2 行：标签行顺序 = 渠道 → 优先级 → 倒计�
       />,
     )
     const row = screen.getByTestId('deck-tag-row')
-    const texts = [...row.children].map((el) => el.textContent ?? '')
-    expect(texts[0]).toBe('邮件')
-    expect(texts[1]).toBe('排队')
-    expect(texts[2]).toMatch(/^剩 1:/)
-    expect(texts[3]).toBe('回复草稿待审')
-    expect(texts[4]).toBe('合并 3 张')
+    // 没装岗位面的服务进程查不到岗位名，那就只出类别（不编一个岗位名）
+    expect(screen.getByTestId('deck-band').textContent).toBe('回复草稿待审')
+    expect(screen.getByTestId('deck-wait').textContent).toMatch(/^剩 1:/)
+    // 渠道与"合并 3 张"进了证据胶囊，不再各占头一行一枚
+    expect(row.textContent).not.toContain('邮件')
+    expect(row.textContent).not.toContain('合并 3 张')
+    expect(screen.getByTestId('deck-evidence').getAttribute('title')).toContain('合并 3 张')
     // 客户名在别处（详情 / 筛选），不在这一行
     expect(row.textContent).not.toContain('Anna Meyer')
   })
 
-  it('P0 是红的，其余是主色', () => {
+  it('优先级不再单占一枚胶囊，它成了「岗位 · 类别」那一枚的颜色：P0 红、P2 蓝', () => {
     const p0 = renderWithProviders(
       <DeckCardView
         card={draftCard({ priority_band: 'P0' })}
@@ -54,17 +58,19 @@ describe('37 §1 第 2 行：标签行顺序 = 渠道 → 优先级 → 倒计�
         onOpen={noop}
       />,
     )
-    expect(screen.getByTestId('deck-band').className).toContain('bg-destructive')
+    expect(screen.getByTestId('deck-band').getAttribute('data-tone')).toBe('bad')
+    // "排队"那两个字不再单独占一枚
+    expect(screen.getByTestId('deck-tag-row').textContent).not.toContain('排队')
     p0.unmount()
     renderWithProviders(
       <DeckCardView
-        card={draftCard({ priority_band: 'P1' })}
+        card={draftCard({ priority_band: 'P2' })}
         mode="zh_summary"
         onDecide={noop}
         onOpen={noop}
       />,
     )
-    expect(screen.getByTestId('deck-band').className).toContain('bg-primary')
+    expect(screen.getByTestId('deck-band').getAttribute('data-tone')).toBe('info')
   })
 
   it('一小时以上换粗粒度：不印「剩 6789:08」这种没人读得懂的大数', () => {
@@ -79,7 +85,7 @@ describe('37 §1 第 2 行：标签行顺序 = 渠道 → 优先级 → 倒计�
         onOpen={noop}
       />,
     )
-    expect(screen.getByTestId('deck-countdown').textContent).toBe('剩 5 小时')
+    expect(screen.getByTestId('deck-wait').textContent).toBe('剩 5 小时')
     hours.unmount()
     renderWithProviders(
       <DeckCardView
@@ -89,14 +95,14 @@ describe('37 §1 第 2 行：标签行顺序 = 渠道 → 优先级 → 倒计�
         onOpen={noop}
       />,
     )
-    expect(screen.getByTestId('deck-countdown').textContent).toBe('剩 4 天')
+    expect(screen.getByTestId('deck-wait').textContent).toBe('剩 4 天')
   })
 
-  it('没有 expires_at 就没有倒计时徽章；一小时以内 mm:ss 每秒滴答', async () => {
+  it('没有 expires_at 就不出这一枚；一小时以内 mm:ss 每秒滴答；过期后是「已过期」', async () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    expect(screen.queryByTestId('deck-countdown')).toBeNull()
+    expect(screen.queryByTestId('deck-wait')).toBeNull()
 
     vi.useFakeTimers()
     const now = Date.parse('2026-09-07T00:00:00.000Z')
@@ -109,16 +115,18 @@ describe('37 §1 第 2 行：标签行顺序 = 渠道 → 优先级 → 倒计�
         onOpen={noop}
       />,
     )
-    expect(screen.getAllByTestId('deck-countdown')[0]?.textContent).toBe('剩 1:30')
+    expect(screen.getAllByTestId('deck-wait')[0]?.textContent).toBe('剩 1:30')
     await act(async () => {
       vi.advanceTimersByTime(2000)
     })
-    expect(screen.getAllByTestId('deck-countdown')[0]?.textContent).toBe('剩 1:28')
-    // 过期后是「已过期」，不是 0:00
+    expect(screen.getAllByTestId('deck-wait')[0]?.textContent).toBe('剩 1:28')
+    // 过期后是「已过期」，不是 0:00——已过期的卡"期限"就靠这一枚表达
     await act(async () => {
       vi.advanceTimersByTime(100_000)
     })
-    expect(screen.getAllByTestId('deck-countdown')[0]?.textContent).toBe('已过期')
+    const pill = screen.getAllByTestId('deck-wait')[0]
+    expect(pill?.textContent).toBe('已过期')
+    expect(pill?.getAttribute('data-wait')).toBe('expired')
   })
 })
 
@@ -168,15 +176,51 @@ describe('37 §1 第 4 行：内容盒一次只显示一种语言', () => {
   })
 })
 
-describe('37 §1 第 5 行：证据 chip 走 i18n，实体 chip 另起一行，DOM 里没有裸 id', () => {
-  it('证据 chip 是人话，不是 key 也不是 id', () => {
+describe('37 §1 第 5 行 + WP98 收口：外围 ≤ 3 个芯片，证据层进右上角那个胶囊', () => {
+  it('证据 chip 还是人话（不是 key 也不是 id），只是不再常驻卡面——它在「证据 N」里', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    expect(screen.getByText('预检通过')).toBeDefined()
-    expect(screen.getByText('引用了 1 条知识')).toBeDefined()
-    expect(screen.getByText('订单：已查单 #1001')).toBeDefined()
-    expect(screen.queryByText('evidence.precheck.ok')).toBeNull()
+    const pill = screen.getByTestId('deck-evidence')
+    const lines = pill.getAttribute('title') ?? ''
+    expect(lines).toContain('预检通过')
+    expect(lines).toContain('引用了 1 条知识')
+    expect(lines).toContain('订单：已查单 #1001')
+    expect(lines).not.toContain('evidence.precheck.ok')
+    // 胶囊上的数就是那几条的条数
+    expect(pill.getAttribute('data-count')).toBe(String(lines.split(' · ').length))
+    // 卡面上不再平铺这几条
+    expect(screen.queryByText('预检通过')).toBeNull()
+  })
+
+  it('外围芯片最多三个（09-18 Luoye 定）', () => {
+    renderWithProviders(
+      <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
+    )
+    expect(screen.getByTestId('card-chips').children.length).toBeLessThanOrEqual(3)
+  })
+
+  it('「还有 N 条你无权查看已隐去」与「期限」都进证据，不占外围那三个位置', () => {
+    renderWithProviders(
+      <DeckCardView
+        card={draftCard({
+          detail: { ...draftCard().detail, enrichment: { dropped_refs: 2 } },
+          highlights: [{ type: 'deadline', text: '2026-09-20T10:00:00.000Z' }],
+        })}
+        mode="zh_summary"
+        onDecide={noop}
+        onOpen={noop}
+      />,
+    )
+    const lines = screen.getByTestId('deck-evidence').getAttribute('title') ?? ''
+    // 「还有 2 条你无权查看已隐去」
+    expect(lines).toContain('2')
+    // 期限按本地时区排版（与它原来在高亮行里的样子一致），不是那串 ISO
+    expect(lines).toContain('期限')
+    expect(lines).not.toContain('2026-09-20T10:00:00.000Z')
+    expect(screen.queryByTestId('enrichment-note')).toBeNull()
+    // 期限没占掉外围那三个位置：外围只有对象与事实卡
+    expect(screen.getByTestId('card-chips').textContent).not.toContain('期限')
   })
 
   it('整张卡的 DOM 文本里不出现 fact_ / cus_ / run_ 前缀', async () => {
@@ -189,20 +233,38 @@ describe('37 §1 第 5 行：证据 chip 走 i18n，实体 chip 另起一行，D
     expect(screen.getByTestId('deck-detail').textContent).toContain('run_demo_42')
   })
 
-  it('实体 chip 另起一行，只印展示名；无权看的留一行 note', () => {
+  it('实体 chip 只印展示名：对象在前、事实卡在后，裸 id 一个字都没有', () => {
     renderWithProviders(
-      <DeckCardView
-        card={draftCard({ detail: { ...draftCard().detail, enrichment: { dropped_refs: 2 } } })}
-        mode="zh_summary"
-        onDecide={noop}
-        onOpen={noop}
-      />,
+      <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    const row = screen.getByTestId('entity-chips')
+    const row = screen.getByTestId('card-chips')
     expect(within(row).getByText('订单 #1001')).toBeDefined()
     expect(within(row).getByText('退货窗口 14 天')).toBeDefined()
     expect(row.textContent).not.toContain('fact_775c')
-    expect(screen.getByTestId('enrichment-note').textContent).toContain('2')
+  })
+})
+
+describe('WP98：「证据 N」点开的是第三栏那个证据面板（走公开注册路）', () => {
+  /** 读一眼第三栏现在开着哪个面板——第三栏本体不在这条题里，只看状态。 */
+  function RailProbe(): React.ReactNode {
+    const rail = useRailState()
+    return <span data-testid="rail-open">{rail.open ?? '—'}</span>
+  }
+
+  it('点它 = show("evidence")，而 evidence 是注册表里真有的那一格', async () => {
+    ensureBuiltinPanels()
+    // 注册层这次一个字都没改：这一格是 WP71 就注册好的
+    expect(panelType('evidence')?.label).toBe('rail.panel.evidence')
+
+    renderWithProviders(
+      <RailStateProvider>
+        <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />
+        <RailProbe />
+      </RailStateProvider>,
+    )
+    expect(screen.getByTestId('rail-open').textContent).toBe('—')
+    await userEvent.click(screen.getByTestId('deck-evidence'))
+    expect(screen.getByTestId('rail-open').textContent).toBe('evidence')
   })
 })
 
@@ -262,7 +324,7 @@ describe('37 §1 第 6 行：动作行 ≤ 3 快捷决定 + 安静区，没有�
     expect(screen.queryByTestId('deck-detail')).toBeNull()
   })
 
-  it('已决定的卡没有决定按钮', () => {
+  it('已决定的卡没有决定按钮，头一行第二枚换成「已处理」', () => {
     const card = draftCard({
       status: 'applied',
       available_actions: ['open'],
@@ -272,7 +334,9 @@ describe('37 §1 第 6 行：动作行 ≤ 3 快捷决定 + 安静区，没有�
       <DeckCardView card={card} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
     expect(quickActions(card)).toEqual([])
-    expect(screen.getByText('已处理')).toBeDefined()
+    const pill = screen.getByTestId('deck-wait')
+    expect(pill.textContent).toBe('已处理')
+    expect(pill.getAttribute('data-wait')).toBe('done')
   })
 })
 

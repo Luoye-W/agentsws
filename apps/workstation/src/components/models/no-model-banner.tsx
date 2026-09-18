@@ -17,7 +17,20 @@ import { Link } from 'react-router-dom'
 import { getPositions, listModelProviders } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-export function NoModelBanner(): React.ReactNode {
+/**
+ * WP98（09-18 收口）：首页第一屏不再让它占一整条。
+ *
+ * `banner` 是原样那条黄条（设置页还在用它——那一页本来就是来处理这件事的）；
+ * `chip` 是顶栏上的一个黄色小胶囊，与模型 / 积分那两个芯片并排。
+ * 判据一个字没改：仍旧只读 `has_key`，问不到就什么都不出。
+ */
+export type NoModelVariant = 'banner' | 'chip'
+
+export function NoModelBanner({
+  variant = 'banner',
+}: {
+  variant?: NoModelVariant
+} = {}): React.ReactNode {
   const { t } = useApp()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const ownerId = positions.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
@@ -31,6 +44,19 @@ export function NoModelBanner(): React.ReactNode {
 
   if (providers.data === undefined) return null
   if (providers.data.providers.some((p) => p.active)) return null
+
+  if (variant === 'chip')
+    return (
+      <Link
+        to="/settings"
+        title={`${t('models.banner')} ${t('models.banner.cta')}`}
+        data-testid="no-model-chip"
+        className="flex items-center gap-1 rounded-full bg-ws-warn-bg px-2 py-1 text-xs font-medium text-ws-warn"
+      >
+        <TriangleAlert aria-hidden className="size-3.5" />
+        <span className="max-w-32 truncate">{t('models.chip')}</span>
+      </Link>
+    )
 
   return (
     <p
