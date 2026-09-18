@@ -36,7 +36,13 @@ export function bearerToken(raw: string | undefined): string | undefined {
  * 分开说等于告诉试探的人"你的前缀猜对了"。
  */
 export async function authenticate(
-  deps: EntryDeps,
+  /*
+   * 只用得到 `verifier` 这一样。WP114 把入参从整个 `EntryDeps` 收窄成它，
+   * 于是 Workers 形态的入口 Worker 也能调这个函数——它手上只有一个
+   * "去问 AccountsDO"的 verifier，没有钱包也没有价目表，但**401 那句话必须
+   * 与这里一字不差**，所以不能在那边另写一遍。
+   */
+  deps: Pick<EntryDeps, 'verifier'>,
   authorization: string | undefined,
 ): Promise<EntryPrincipal> {
   const token = bearerToken(authorization)

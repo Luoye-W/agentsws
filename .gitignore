@@ -23,3 +23,4 @@ release/
 # WP82：官方 Playwright MCP 服务器把截图 / 快照落在 Agent 的 cwd 下的这个目录里
 # （`--output-dir` 的默认值）。我们不指定它，所以它跟着一次运行的 cwd 走。
 .playwright-mcp/
+.dev.vars

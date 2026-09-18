@@ -41,13 +41,26 @@ export {
   loginMail,
   MailDeliveryError,
   type MailSender,
-  mailSenderFromEnv,
   NODE_ENV,
   SMTP_ENV,
+} from './mail.js'
+export {
+  CLOUDFLARE_MAIL_FROM_ENV,
+  type CloudflareEmailBinding,
+  type CloudflareEmailSenderOptions,
+  type CloudflareMailFromEnvOptions,
+  cloudflareEmailSender,
+  cloudflareMailReady,
+  cloudflareMailSenderFromEnv,
+  type MailFrom,
+  parseMailFrom,
+} from './mail-cloudflare.js'
+export {
+  mailSenderFromEnv,
   type SmtpMailSenderOptions,
   type SmtpTransport,
   smtpMailSender,
-} from './mail.js'
+} from './mail-smtp.js'
 export {
   BENCHMARK_MAX_AGE_MS,
   type Maintenance,
@@ -62,8 +75,11 @@ export {
   ADMIN_TOKEN_ENV,
   ADMIN_TOKEN_MIN_BYTES,
   ADMIN_TOPUP_CAPABILITY,
+  type AdminAccountsLookup,
+  type AdminExportDeps,
   type AdminRouteDeps,
   type AdminWalletHandles,
+  adminExportRoutes,
   adminRoutes,
   adminRoutesFromEnv,
   DEFAULT_GRANT_DAYS,
@@ -103,26 +119,38 @@ export {
   CLOUD_LOGIN_TTL_MS,
   CLOUD_SESSION_TTL_MS,
   type CloudSessionRow,
+  type CloudSnapshot,
   CloudStore,
-  type CloudStoreOptions,
+  type CloudStoreDeps,
   type CreateLinkInput,
-  cloudDbPath,
-  createCloudStore,
+  createCloudStoreOn,
   hashToken,
   rowToLink,
   type VerifiedLogin,
 } from './store.js'
+export {
+  type CloudStoreOptions,
+  cloudDbPath,
+  createCloudStore,
+  openCloudDb,
+} from './store-node.js'
 export { sqliteTokenVerifier } from './verifier.js'
 export { linkView, type WorkspaceLinkView } from './views.js'
 
 import { pathToFileURL } from 'node:url'
+import type { CloudRoute } from '@agentsws/api'
 import type { CloudTokenVerifier } from '@agentsws/contracts'
 import type { Wallet, WalletStore } from '@agentsws/metering'
 import { DEFAULT_NEWAPI_BASE_URL, ENTRY_ENV, mountEntry } from './entry.js'
 import { mountKolPublic } from './kol-public.js'
 import { SMTP_ENV } from './mail.js'
 import { startMaintenance } from './maintenance.js'
-import { type AdminWalletHandles, adminRoutesFromEnv } from './routes/admin.js'
+import {
+  ADMIN_TOKEN_ENV,
+  type AdminWalletHandles,
+  adminExportRoutes,
+  adminRoutesFromEnv,
+} from './routes/admin.js'
 import { CLOUD_DATA_DIR_ENV, createCloudServer } from './server.js'
 import { mountStandby } from './standby.js'
 
@@ -177,7 +205,23 @@ export async function main(): Promise<void> {
     accounts: () => server.store,
     wallet: () => walletHandles,
   })
-  const server = createCloudServer(admin === undefined ? {} : { modules: [admin] })
+  /*
+   * WP114 的跨平台退路：同一把 admin 钥匙再开一条只读的导出口。
+   * 没配钥匙就一条都不挂（`adminRoutesFromEnv` 回 undefined 时这里也不拼）。
+   */
+  const adminToken = env[ADMIN_TOKEN_ENV]?.trim()
+  const adminExport =
+    admin === undefined || adminToken === undefined || adminToken === ''
+      ? undefined
+      : adminExportRoutes({
+          clock,
+          token: adminToken,
+          accounts: () => server.store,
+          // Compose 形态下钱包就在手边，同步取一把包成 Promise
+          walletLots: async (org_id) => walletHandles?.store.lots(org_id) ?? [],
+        })
+  const modules = [admin, adminExport].filter((m): m is CloudRoute[] => m !== undefined)
+  const server = createCloudServer(modules.length === 0 ? {} : { modules })
   const dataDir = env[CLOUD_DATA_DIR_ENV]
   /*
    * 两个模块互相要对方的一样东西：入口要值守的子进程令牌验证器（子进程也用

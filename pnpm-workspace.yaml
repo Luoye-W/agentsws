@@ -98,6 +98,10 @@ allowBuilds:
   # 所以这两个写死 false —— 下载脚本没跑过，provider 照样能起（它只要 `cli.js` 那段 JS）。
   playwright: false
   playwright-core: false
+  # workerd 是 Cloudflare 的运行时二进制（`wrangler dev` 与 vitest-pool-workers 才用它）。
+  # CI 与本仓库只跑 `wrangler deploy --dry-run`（那一步只是 esbuild 打包 + 校验配置），
+  # 用不到这个几十 MB 的下载，所以写死 false。真要在本机 `wrangler dev` 的人自己 approve 一次。
+  workerd: false
 minimumReleaseAgeExclude:
   - '@oomol-lab/connector@1.2.0'
   - electron@44.3.0
@@ -408,3 +412,5 @@ minimumReleaseAgeExclude:
   # - 运行时只 import `@deepseek-ai/cordis` / `-dsh-tools` / `-schemastery`（都已在树里），
   #   React 那几个 peer 是 optional 的客户端 UI，headless 组合里一个都不加载。
   - '@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0'
+  - miniflare@5.20260917.0-alpha
+  - wrangler@4.134.0

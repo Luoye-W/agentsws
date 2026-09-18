@@ -1,5 +1,6 @@
 /**
- * 云侧那两页网页（WP110）。
+ * 云侧那两页网页（WP110；WP114 把面向用户的称呼改成产品名「Agents 工坊」——
+ * `agentsws` 只留作仓库 / 包名 / 域名）。
  *
  * WP58 的后置清单第 ② 条："云侧没有网页版登录页"——于是 magic link 的默认落点
  * `${baseUrl}/cloud/auth/callback` 是一条**不存在的路由**：不带 `callback_url`
@@ -81,10 +82,10 @@ export function indexPage(info: IndexPageInfo): string {
     )
     .join('\n')
   return shell(
-    'agentsws 云',
-    `<h1>agentsws 云</h1>
-<p>这台机器提供 agentsws 的云上能力：用积分跑模型、公共红人库、在线值守。</p>
-<p class="muted">这里没有网页控制台。要用它，请在自己电脑上的 agentsws 里打开
+    'Agents 工坊 · 云',
+    `<h1>Agents 工坊 · 云</h1>
+<p>这里提供 Agents 工坊的云上能力：用积分跑模型、公共红人库、在线值守。</p>
+<p class="muted">这里没有网页控制台。要用它，请在自己电脑上的 Agents 工坊里打开
 <strong>设置 → 账号与积分</strong>，关联一次账号——登录信、令牌、余额都在那边。</p>
 <dl>
 <dt>版本</dt><dd><code>${escapeHtml(info.version)}</code></dd>
@@ -108,24 +109,24 @@ export type LoginOutcome =
 export function loginPage(outcome: LoginOutcome): string {
   if (outcome.kind === 'ok')
     return shell(
-      '已登录 · agentsws 云',
+      '已登录 · Agents 工坊',
       `<h1>已登录</h1>
 <p><span class="ok">${escapeHtml(outcome.email_domain)}</span> 这个邮箱收得到我们的信，链接也有效。</p>
-<p>回到你电脑上的 agentsws 继续——这一页可以关掉了。</p>
+<p>回到你电脑上的 Agents 工坊继续——这一页可以关掉了。</p>
 <p class="muted">如果你是在「设置 → 账号与积分」里点的关联，本地那一步会自己完成，
 不需要从这一页复制任何东西。</p>`,
     )
   if (outcome.kind === 'missing')
     return shell(
-      '登录 · agentsws 云',
+      '登录 · Agents 工坊',
       `<h1>这条链接不完整</h1>
 <p>地址里没有登录凭据——多半是邮件客户端把链接截断了。</p>
-<p class="muted">把信里那条链接整条复制到浏览器地址栏，或者回到 agentsws 里重新发一封。</p>`,
+<p class="muted">把信里那条链接整条复制到浏览器地址栏，或者回到 Agents 工坊里重新发一封。</p>`,
     )
   return shell(
-    '登录 · agentsws 云',
+    '登录 · Agents 工坊',
     `<h1>这条链接用不了了</h1>
 <p>登录链接只能用一次，而且 15 分钟就过期。</p>
-<p class="muted">回到你电脑上的 agentsws，点一次「发登录邮件」，会有一封新的。</p>`,
+<p class="muted">回到你电脑上的 Agents 工坊，点一次「发登录邮件」，会有一封新的。</p>`,
   )
 }

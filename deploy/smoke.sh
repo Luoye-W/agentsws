@@ -53,7 +53,7 @@ echo "冒烟：$BASE"
 
 echo "① 活着没有"
 check "health 回 200" 200 /v1/cloud/health '"status":"ok"'
-check "首页在" 200 / 'agentsws 云'
+check "首页在" 200 / 'Agents 工坊'
 
 echo "② 证书与安全头"
 if [[ "$BASE" == https://* ]]; then
@@ -85,13 +85,24 @@ fi
 
 echo "⑤ 模块与上游"
 modules="$(curl -sS -m 15 "$BASE/v1/cloud/health" 2>/dev/null)"
-for m in entry standby kol_public mail; do
+# 这两块**两个形态都必须有**：没有入口就跑不了模型，没有发信就没人登得进来。
+for m in entry mail; do
   if [[ "$modules" == *"\"$m\":true"* ]]; then
     printf '  ✓ %s 挂上了\n' "$m"
     pass=$((pass + 1))
   else
     printf '  ✗ %s 没挂（health 里是 false 或没有这一格）\n' "$m"
     fail=$((fail + 1))
+  fi
+done
+# 这两块**只有 Compose 自建形态有**（在线值守要常驻子进程，Workers 上没有这种东西）。
+# 所以这里只报一句，不算失败——两个形态用同一个冒烟脚本。
+for m in standby kol_public; do
+  if [[ "$modules" == *"\"$m\":true"* ]]; then
+    printf '  ✓ %s 挂上了\n' "$m"
+    pass=$((pass + 1))
+  else
+    printf '  · %s 没开通（Workers 形态本来就没有；Compose 形态下这是个问题）\n' "$m"
   fi
 done
 case "$modules" in

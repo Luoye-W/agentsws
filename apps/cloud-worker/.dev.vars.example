@@ -1,0 +1,18 @@
+# 本地 `wrangler dev` 用的密钥占位（WP114）。
+#
+# **这个文件里全是空值，而且它是 .example——真值只进 `wrangler secret put`。**
+# 要在本机联调就 `cp .dev.vars.example .dev.vars` 再自己填；
+# `.dev.vars` 已经在 .gitignore 里，填了也提交不上去。
+#
+# 每一项是什么、去哪儿拿、必填否，见 docs/64 的 secrets 全表。
+
+# 打模型上游的 key（OpenAI 兼容口，内测期例如 DeepSeek 官方）
+AGENTSWS_NEWAPI_KEY=
+
+# 管理员手动发积分那条路由的钥匙。**没配这条路由根本不挂**（不是挂上去再拒）。
+# 生成：openssl rand -base64 48
+AGENTSWS_CLOUD_ADMIN_TOKEN=
+
+# Stripe（不配就回 501 一句人话，不是 500）
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=

@@ -11,12 +11,13 @@ import { describe, expect, it } from 'vitest'
 import {
   ADMIN_TOKEN_ENV,
   ADMIN_TOPUP_CAPABILITY,
+  adminExportRoutes,
   adminRoutesFromEnv,
   DEFAULT_GRANT_DAYS,
   mountEntry,
 } from '../src/index.js'
 import type { AdminWalletHandles } from '../src/routes/admin.js'
-import { type Harness, harness, testClock } from './helpers.js'
+import { type Harness, harness, login, testClock } from './helpers.js'
 
 /** 48 字节，够长。这一串只在测试里存在。 */
 const TOKEN = 'test-admin-token-0123456789abcdef0123456789abcdef'
@@ -214,6 +215,65 @@ describe('WP110 手动充值', () => {
       expect(line).not.toContain(TOKEN)
     } finally {
       await s.h.close()
+    }
+  })
+})
+
+describe('WP114 GET /v1/admin/export（Compose 形态）', () => {
+  it('同一把钥匙：不对 401，对了导出账号 / 组织 / 关联 / 积分批次，且没有明文凭据', async () => {
+    const clock = testClock()
+    let current: Harness | undefined
+    let handles: AdminWalletHandles | undefined
+    const routes = adminExportRoutes({
+      clock,
+      token: TOKEN,
+      accounts: () => {
+        if (current === undefined) throw new Error('还没建服务器')
+        return current.server.store
+      },
+      // Compose 形态下钱包就在手边，同步取一把包成 Promise
+      walletLots: async (org_id) => handles?.store.lots(org_id) ?? [],
+      log: () => undefined,
+    })
+    const h = harness({ clock, modules: [routes] })
+    current = h
+    const mounted = mountEntry(h.server, {
+      clock,
+      walletStore: new MemoryWalletStore(),
+      fetch: async () => {
+        throw new Error('测试里不该打任何上游')
+      },
+    })
+    handles = { wallet: mounted.wallet, store: mounted.store }
+    try {
+      const { org } = await login(h, 'luoye@example.com')
+      mounted.wallet.topup({ org_id: org, credits: 42, kind: 'granted' })
+      const issued = h.server.store.createLink({
+        workspace_id: 'ws_a',
+        cloud_org_id: org,
+        created_by: 'acc_test',
+      })
+
+      expect((await h.call('/v1/admin/export', { token: 'nope' })).status).toBe(401)
+
+      const res = await h.call('/v1/admin/export', { token: TOKEN })
+      expect(res.status).toBe(200)
+      const data = res.body.data as {
+        accounts: { email: string }[]
+        orgs: { id: string }[]
+        links: { token_sha256: string }[]
+        wallets: { org_id: string; lots: { credits: number; kind: string }[] }[]
+      }
+      expect(data.accounts.map((a) => a.email)).toEqual(['luoye@example.com'])
+      expect(data.orgs.map((o) => o.id)).toEqual([org])
+      expect(data.links[0]?.token_sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(data.wallets[0]?.lots[0]?.credits).toBe(42)
+      // 令牌明文一个都没有——库里本来就没存过
+      expect(JSON.stringify(data)).not.toContain(issued.token)
+      expect(JSON.stringify(data)).not.toContain('cs_')
+      expect(JSON.stringify(data)).not.toContain('cml_')
+    } finally {
+      await h.close()
     }
   })
 })
