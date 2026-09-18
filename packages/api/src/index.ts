@@ -484,6 +484,13 @@ export {
   wsRoutes,
 } from './routes/ws.js'
 export {
+  IDEMPOTENCY_EPOCH,
+  IDEMPOTENCY_MIGRATIONS,
+  IDEMPOTENCY_MIGRATIONS_TABLE,
+  type SqlIdempotencyOptions,
+  SqlIdempotencyStore,
+} from './sql-idempotency.js'
+export {
   createSqliteIdempotencyStore,
   type SqliteIdempotencyOptions,
   SqliteIdempotencyStore,
@@ -493,7 +500,13 @@ export {
   type SqliteIdentityOptions,
   SqliteIdentityService,
 } from './sqlite-identity.js'
-export { type Migration, migrate, schemaVersion } from './sqlite-migrations.js'
+export {
+  DEFAULT_MIGRATIONS_TABLE,
+  type MigrateOptions,
+  type Migration,
+  migrate,
+  schemaVersion,
+} from './sqlite-migrations.js'
 export { createAsyncTraceScope, createNoopTraceScope } from './trace-scope.js'
 export type {
   ChangesPort,
