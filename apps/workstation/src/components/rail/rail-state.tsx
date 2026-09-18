@@ -18,6 +18,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { railLayoutBucket } from '@/components/rail/rail-layout'
+import { resolvePanel } from '@/components/rail/registry'
 import { useApp } from '@/lib/app-context'
 import {
   clampRailWidth,
@@ -30,12 +31,35 @@ import {
 export interface RailState {
   /** 现在开着哪个面板；`null` = 收起成图标轨。 */
   open: string | null
+  /**
+   * WP97：这一次是**为哪个资源**开的（`agentsws://file/src_1/报价单.xlsx`）；
+   * `null` = 人点图标轨开的"页"。
+   *
+   * **只活在内存里**，不进本机那一份布局：40 §1.2 与 #5 说的"只存结构"里，
+   * 结构指的是"开哪个面板、多宽"。刷新之后这一格回到空是**有意的**——
+   * 上一次看的是哪份文件不该留在这台电脑上。
+   */
+  address: string | null
   /** 面板宽度（px，320–520）。 */
   width: number
   /** 这一份布局记在哪个桶里（岗位 / 事项 / 职责）。 */
   bucket: string
-  /** 开一个面板（传 `null` 收起）。 */
+  /** 开一个面板（传 `null` 收起）。资源地址跟着清空——换面板 = 换一件事。 */
   show(panel: string | null): void
+  /**
+   * WP97：**为一个资源地址开面板**——`resolvePanel()` 的第一个真入口（#3）。
+   *
+   * 知识库里点一份文件走的就是这一句。排序由注册表说了算（`priority` 三档 →
+   * pattern 长度 → 注册顺序，`canOpen()` 一票否决），这里不判"这是不是 Office 文件"：
+   * 判了就等于把注册表那套排序在调用点抄了第二遍，而第二遍永远会先走歪。
+   *
+   * 回 `false` = **没有面板认领这个地址**（.zip、.pdf……）。调用方那时该去下载，
+   * 不该"打开一个空面板然后说不支持"。
+   *
+   * **同一份文件再点一次 = 聚焦已经开着的那个**：状态一个字不改，于是面板不重挂、
+   * 滚动位置与正在看的那一页都留着（#16 借的那条细节）。
+   */
+  openAddress(address: string): boolean
   /** 开着就收起、收起就开这一个（`]` 与图标轨点击都用它）。 */
   toggle(panel: string): void
   /**
@@ -62,7 +86,11 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   if (current !== state) setState(current)
   const layout = current.layout
 
+  // WP97：为哪个资源开的。与布局分开存，因为它**不进本机**（见 `RailState.address`）。
+  const [address, setAddress] = useState<string | null>(null)
+
   const show = useCallback((panel: string | null) => {
+    setAddress(null)
     setState((prev) => {
       const next = { ...prev.layout, open_panel_id: panel }
       writeRailLayout(prev.bucket, next)
@@ -71,6 +99,7 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   }, [])
 
   const toggle = useCallback((panel: string) => {
+    setAddress(null)
     setState((prev) => {
       const next = {
         ...prev.layout,
@@ -81,6 +110,23 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
     })
   }, [])
 
+  const openAddress = useCallback(
+    (next_address: string): boolean => {
+      const panel = resolvePanel({ address: next_address })
+      if (panel === undefined) return false
+      // 已经开着同一份 = 聚焦：**一个 setState 都不发**，于是面板不重挂
+      if (layout.open_panel_id === panel.id && address === next_address) return true
+      setAddress(next_address)
+      setState((prev) => {
+        const next = { ...prev.layout, open_panel_id: panel.id }
+        writeRailLayout(prev.bucket, next)
+        return { bucket: prev.bucket, layout: next }
+      })
+      return true
+    },
+    [address, layout.open_panel_id],
+  )
+
   const setWidth = useCallback((width: number, persist = true) => {
     setState((prev) => {
       const next = { ...prev.layout, width: clampRailWidth(width) }
@@ -90,8 +136,17 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   }, [])
 
   const value = useMemo<RailState>(
-    () => ({ open: layout.open_panel_id, width: layout.width, bucket, show, toggle, setWidth }),
-    [layout.open_panel_id, layout.width, bucket, show, toggle, setWidth],
+    () => ({
+      open: layout.open_panel_id,
+      address,
+      width: layout.width,
+      bucket,
+      show,
+      toggle,
+      openAddress,
+      setWidth,
+    }),
+    [layout.open_panel_id, address, layout.width, bucket, show, toggle, openAddress, setWidth],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -107,10 +162,13 @@ export function useRailState(): RailState {
   return (
     ctx ?? {
       open: null,
+      address: null,
       width: DEFAULT_RAIL_LAYOUT.width,
       bucket: 'default',
       show: () => {},
       toggle: () => {},
+      // 没有 Provider 时"开不出来"是实话：回假，调用方于是走它的兜底（下载）
+      openAddress: () => false,
       setWidth: () => {},
     }
   )

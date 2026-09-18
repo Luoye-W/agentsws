@@ -354,9 +354,10 @@ describe('启动不激活（#6）', () => {
     expect(getLayerMemory).not.toHaveBeenCalled()
   })
 
-  it('一个都没开的时候：十二个图标都在，但没有任何面板发请求', () => {
+  // WP97 把第十三个（Office 预览）加进了工具那一组
+  it('一个都没开的时候：十三个图标都在，但没有任何面板发请求', () => {
     renderRail()
-    expect(screen.getAllByTestId(/^rail-icon-/)).toHaveLength(12)
+    expect(screen.getAllByTestId(/^rail-icon-/)).toHaveLength(13)
     expect(getLayerMemory).not.toHaveBeenCalled()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })

@@ -26,6 +26,7 @@ import type {
   KnowledgeGapStatus,
   KnowledgeLayer,
   KnowledgeSource,
+  KnowledgeSourceFile,
   KnowledgeSourceInput,
   LessonRecord,
   MaybePromise,
@@ -219,6 +220,13 @@ export interface KnowledgePort {
   sources?(actor: GatewayActor): MaybePromise<KnowledgeSource[]>
   /** 登记一个导入源；真正的解析与分块由 knowledge 包做，网关只转发。 */
   addSource?(actor: GatewayActor, input: KnowledgeSourceInput): MaybePromise<KnowledgeSource>
+  /**
+   * WP97（36 §11，`sidebar-compare` #13）：按 source_id 取**原件字节**（只读）。
+   *
+   * 读不到 / 不是本工作区的 / 这个源没有本机原件（飞书文档一类）→ `undefined`，
+   * 路由翻成 404。**网关不做任何转换**，它只把字节转下去（与 `/knowledge/export` 同形）。
+   */
+  sourceFile?(actor: GatewayActor, id: string): MaybePromise<KnowledgeSourceFile | undefined>
   /** 19 §3 `cite`：记一次引用（`usage.cited + 1`）。 */
   cite?(actor: GatewayActor, fact_card_id: string, run_id: RunId): MaybePromise<void>
   /** 19 §4 缺口队列。 */
@@ -280,6 +288,7 @@ export type {
   KnowledgeGapAnswer,
   KnowledgeGapInput,
   KnowledgeGapStatus,
+  KnowledgeSourceFile,
   KnowledgeSourceInput,
 } from '@agentsws/contracts'
 

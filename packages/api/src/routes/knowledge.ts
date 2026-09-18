@@ -125,6 +125,19 @@ async function packInput(
   return { zip: new Uint8Array(await file.arrayBuffer()) }
 }
 
+/**
+ * WP97：`Content-Disposition` 里的文件名。
+ *
+ * 两份一起给：`filename=` 是 ASCII 兜底（旧浏览器），`filename*=` 是 RFC 5987 的
+ * UTF-8 真名。**引号、反斜杠、CR / LF 一律先去掉**——文件名是外来串，直接拼进
+ * 响应头就是一个换行注入（多写一个 header 进去）。
+ */
+export function contentDisposition(filename: string): string {
+  const clean = filename.replace(/[\r\n"\\]/g, '').slice(0, 200)
+  const ascii = clean.replace(/[^\x20-\x7e]/g, '_')
+  return `attachment; filename="${ascii === '' ? 'download' : ascii}"; filename*=UTF-8''${encodeURIComponent(clean)}`
+}
+
 /** 没装配那几个可选方法时的统一说法。 */
 function needs<T>(fn: T | undefined, what: string): NonNullable<T> {
   if (fn === undefined || fn === null)
@@ -260,6 +273,40 @@ export function knowledgeRoutes(): Route[] {
           c,
           await sources.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a })),
         )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/knowledge/sources/:id/file',
+        operationId: 'getKnowledgeSourceFile',
+        summary: '取一个导入源的原件字节（WP97 第三栏 Office 预览；只读、不转换）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        // 权限与"读知识对象"同一条：能看见这个源在清单里，就能看见它的原件。
+        // 不给它单开一条 scope——那会让"列得出、打不开"成为常态（54 §2 那个洞的教训）。
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: '导入源 id' }],
+        returns: '原件字节（Content-Disposition 带文件名；无原件 → 404）',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const run = needs(deps.knowledge.sourceFile, '导入源原件读取')
+        const out = await run.call(
+          deps.knowledge,
+          actorOf(deps, { principal: p, assignment: a }),
+          param(c, 'id'),
+        )
+        // 不是本工作区的 / 没有本机原件 / 超过上限：一律 404，不区分——
+        // 区分出来等于把"这个 id 存在"告诉一个本来看不见它的人（与 `cards/:id` 同一条）
+        if (out === undefined) throw new ApiError('not_found', '这个导入源没有可读的原件')
+        return c.body(out.bytes as unknown as ArrayBuffer, 200, {
+          'content-type': out.content_type,
+          'content-disposition': contentDisposition(out.filename),
+          'content-length': String(out.size),
+        })
       },
     ),
     route(

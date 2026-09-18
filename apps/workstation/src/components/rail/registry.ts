@@ -56,6 +56,14 @@ export interface RailPanelBodyProps {
   tier: RailTier
   /** 当前地址（事项页的面板要从它里面认 `matter_id`）。 */
   pathname: string
+  /**
+   * WP97：这一次是**为哪个资源**打开的（`agentsws://file/src_1/报价单.xlsx`）。
+   *
+   * 人点图标轨打开的面板没有它（那是"开一个页"，不是"开一份资源"）。
+   * 官方把资源地址算进 tab 身份的一部分，我们照做——区别只在**我们不把它写进本机**：
+   * 布局只存结构（#5 / 40 §1.2），刷新之后这一格回到空，面板照实说"从知识库点一份文件"。
+   */
+  address?: string
 }
 
 export interface PanelTypeDefinition {

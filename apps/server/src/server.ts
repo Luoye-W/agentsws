@@ -165,6 +165,7 @@ import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
+import { knowledgeSourceFile } from './knowledge-file.js'
 import { importKnowledgePack } from './knowledge-pack.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
@@ -2763,6 +2764,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     sources: (actor) => knowledge.intake.sources(actor.workspace_id),
     addSource: (actor, input) =>
       knowledge.intake.addSource({ ...input, workspace_id: actor.workspace_id }),
+    // WP97（36 §11 #13）：按 source_id 取原件字节。**只读、不转换**——
+    // 官方那一侧在服务端起 LibreOffice 转 PDF，我们把渲染整个留给浏览器（纯 JS）。
+    // 不是本工作区的源当成不存在：让它 404 而不是 403，省得把"这个 id 存在"说出去。
+    sourceFile: async (actor, id) => {
+      const source = knowledge.intake.getSource(id)
+      if (source === undefined || source.workspace_id !== actor.workspace_id) return undefined
+      return knowledgeSourceFile(source, {
+        ...(dbDir === undefined ? {} : { dataDir: dbDir }),
+        ...(blobs === undefined ? {} : { blobs }),
+      })
+    },
     gaps: (actor, filter) => knowledge.intake.gaps(actor.workspace_id, filter),
     openGap: (actor, input) =>
       knowledge.intake.openGap({

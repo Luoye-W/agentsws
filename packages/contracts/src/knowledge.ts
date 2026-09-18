@@ -172,6 +172,27 @@ export interface KnowledgeSourceInput {
   acl_inherit?: boolean
 }
 
+/**
+ * WP97（36 §11，`docs/upstream/sidebar-compare.md` #13）：一个导入源的**原件字节**。
+ *
+ * 只给字节与三格元数据，**服务端不做任何转换**——官方那一侧是本机 LibreOffice
+ * 转 PDF 再渲染（`dsh-office-to-pdf` → `libreoffice-kit`，平台包 259 MB，WP93 已经
+ * 用 `ignoredOptionalDependencies` 挡掉了）。我们反过来：字节原样下发，Word / Excel /
+ * PPT 在浏览器里用纯 JS 渲染（`components/rail/panels/office-preview-panel.tsx`）。
+ *
+ * 这么分的三个理由：①「转一次存起来」要为每份上传多存一份 PDF，40 §1.2 的数据边界上
+ * 又多一个副本；② 转换进程是一大块 C++ 攻击面，而喂给它的正是外来文件；
+ * ③ 渲染放在客户端，服务进程这一侧就只剩「读一个文件」这件看得懂的事。
+ */
+export interface KnowledgeSourceFile {
+  bytes: Uint8Array
+  /** 给人看的原始文件名（"下载原件"按钮用的就是它）。 */
+  filename: string
+  content_type: string
+  /** 明文字节数（与 `bytes.length` 相同；单列一格是为了让调用方不必先拿到字节）。 */
+  size: number
+}
+
 export type KnowledgeGapStatus = 'open' | 'answered' | 'dismissed'
 
 /**

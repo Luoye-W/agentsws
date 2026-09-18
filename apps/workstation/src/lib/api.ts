@@ -4203,3 +4203,85 @@ export const listChanges = (
   const qs = params.toString()
   return api(`/v1/changes${qs === '' ? '' : `?${qs}`}`, withAssignment(assignment))
 }
+
+// ── WP97（36 §11，`docs/upstream/sidebar-compare.md` #13）：第三栏 Office 预览 ──
+//
+// 两条：列知识库的导入源（点哪一份），与**按 source_id 取原件字节**。
+// 字节这一条不走 `api()`——那个函数只解 JSON，而这里要的是 `Blob`。
+// 与 `exportKnowledgePack` 同形（都得自己拼 `Authorization` / `X-Assignment`：
+// 直接把 `<a href="/v1/...">` 摆上去那一发不带头，浏览器档会 401）。
+
+type KnowledgeSourceRow = import('@agentsws/contracts').KnowledgeSource
+
+export type { KnowledgeSource } from '@agentsws/contracts'
+
+/** 19 §1.3 导入源清单（知识库页的"上传的文件"那一块列的就是它们）。 */
+export const listKnowledgeSources = (assignment?: string): Promise<KnowledgeSourceRow[]> =>
+  api('/v1/knowledge/sources', withAssignment(assignment))
+
+/**
+ * 一次取原件的结果。
+ *
+ * `too_large` 是**没取正文**的那一档：看完 `Content-Length` 就把响应体取消掉，
+ * 20 MB 的表格一个字节都不进浏览器内存。这时 `blob` 是空的，界面只给"下载原件"。
+ */
+export interface SourceFileResult {
+  filename: string
+  size: number
+  content_type: string
+  too_large: boolean
+  blob?: Blob
+}
+
+/**
+ * 预览这一侧的大小闸（20 MB）。
+ *
+ * 服务端那道闸是 64 MB 的**内存闸**（`apps/server/src/knowledge-file.ts`），两道分开：
+ * 太大的文件预览不了，但"下载原件"仍然要能点。
+ */
+export const PREVIEW_MAX_BYTES = 20 * 1024 * 1024
+
+/** `attachment; filename="a.docx"; filename*=UTF-8''a.docx` → `a.docx`。 */
+function filenameFromDisposition(header: string | null): string | undefined {
+  if (header === null) return undefined
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (star?.[1] !== undefined) {
+    try {
+      return decodeURIComponent(star[1])
+    } catch {
+      // 服务端写坏了就当没有这一格，往下用 ASCII 那一份
+    }
+  }
+  return /filename="([^"]*)"/i.exec(header)?.[1]
+}
+
+/**
+ * 取一个导入源的原件。
+ *
+ * `limit` 给 0 表示"只要元数据不要正文"（下载按钮要显示大小时用）。
+ */
+export async function getKnowledgeSourceFile(
+  source_id: string,
+  options: { limit?: number; assignment?: string } = {},
+): Promise<SourceFileResult> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = options.assignment ?? currentAssignment
+  if (asg !== null) headers.set('X-Assignment', asg)
+  const res = await fetch(`/v1/knowledge/sources/${encodeURIComponent(source_id)}/file`, {
+    headers,
+  })
+  if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
+  const declared = Number(res.headers.get('content-length') ?? '0')
+  const filename = filenameFromDisposition(res.headers.get('content-disposition')) ?? source_id
+  const content_type = res.headers.get('content-type') ?? 'application/octet-stream'
+  const limit = options.limit ?? PREVIEW_MAX_BYTES
+  if (Number.isFinite(declared) && declared > limit) {
+    // 取消而不是读完再丢：读完再丢等于内存已经付过一次了
+    await res.body?.cancel()
+    return { filename, size: declared, content_type, too_large: true }
+  }
+  const blob = await res.blob()
+  return { filename, size: blob.size, content_type, too_large: false, blob }
+}
