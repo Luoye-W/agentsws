@@ -27,6 +27,8 @@ import {
   type OrgAlias,
   rewriteAliasedAssignments,
 } from '@agentsws/catalog'
+// WP113（63 §4）：分拣那条链与真服务进程里跑的是**同一个函数**
+import { type TriageModel, triageMessage } from '@agentsws/channels'
 import type {
   AdsCaps,
   ApprovalItem,
@@ -57,14 +59,18 @@ import type {
   RunRequest,
   RuntimeAdapter,
   RunUsage,
+  SenderRule,
 } from '@agentsws/contracts'
+// WP113（63 §4）：客服 / 红人那两个文件夹的名字（全仓唯一那一份）
 import {
   // WP75：57 §6 的额度默认值与"平台 id → 职责 id / 中文名"。**全仓唯一**那张平台清单
   ADS_DEFAULT_CAPS,
   adsPlatformSpec,
   DEFAULT_STOREFRONT_PLATFORM,
+  KOL_FOLDER,
   // WP72：渠道 id → 职责 id 与中文名。**全仓唯一**那张渠道清单，不在这里拼字符串
   PR_ROLE_IDS,
+  SUPPORT_FOLDER,
   socialChannelSpec,
   storefrontUnsupportedNote,
   storefrontUsableService,
@@ -97,6 +103,8 @@ import {
   attributeOrders,
   buildUtm,
   canAdvanceCollaboration,
+  // WP113：分拣的 stand-in 模型用它判"这是不是想谈合作"（纯函数，与真运行时同一份）
+  classifyReply,
   collaborationStageName,
   draftOutreach,
   planCampaign,
@@ -185,6 +193,8 @@ import {
   AMAZON_CHANNEL,
   buildAmazonChannelMeta,
   buildAmazonRewriteInstruction,
+  // WP113：分拣的 stand-in 模型用它判"这是不是客服诉求"（纯函数，与真运行时同一份）
+  classifyText,
   describeAmazonDetection,
   detectAmazonChannel,
   evaluateAmazonOutbound,
@@ -511,6 +521,20 @@ export interface World {
    */
   web: WebOps
   /**
+   * WP113（63）：**消息**——分拣那一跳。
+   *
+   * 走的也是真机制：分拣本身就是 `@agentsws/channels` 的 `triageMessage`
+   * （与真服务进程里跑的**是同一个函数**），规则四层与"岗位没开不挪信""把握不够
+   * 不挪信""halt.model 只跑规则"三条收口一个字都没重写。场景只往世界里丢一封信，
+   * 判成什么不是场景说了算。
+   *
+   * 模型那一层是 stand-in（`stand_ins.model`）：它经模型网关**真走一次**
+   * （于是记账、预算与急停都是真的），结论用仓里已有的两个纯函数算
+   * ——`support-core` 的词表分类与 `kol-core` 的回复分类。那两份本来就写着
+   * "模型那一半在运行时里，这里是它的兜底与测试锚点"。
+   */
+  mail: MailOps
+  /**
    * WP67：红人营销（48 §5.1）。
    *
    * 也走真机制：开发信的禁承诺由 **guardrail** 拦（不是场景自己判），
@@ -652,6 +676,58 @@ export interface CampaignStageResult extends ShopStageResult {
   suppressed: string[]
   /** 提案时报的等级（场景可以故意报高，看硬顶会不会把它按回来）。 */
   level_requested: 'L1' | 'L2' | 'L3'
+}
+
+/** WP113（63 §4）：一封进世界的信。 */
+export interface ScenarioMail {
+  from: string
+  subject: string
+  body: string
+  /** 分拣要看的那几个原始头（`list-unsubscribe` / `auto-submitted` / …）。 */
+  headers?: Readonly<Record<string, string>>
+  /** 回的是哪一封（线程归并那一层看它）。 */
+  in_reply_to?: string
+}
+
+/** 一封信分拣完的样子（进事件日志的那一份，**不含正文**）。 */
+export interface MailTriageResult {
+  message_id: string
+  route: 'inbox' | 'support' | 'kol'
+  suggested_route?: 'inbox' | 'support' | 'kol'
+  labels: string[]
+  needs_reply: boolean
+  by: 'rule' | 'model' | 'halted' | 'user'
+  confidence: number
+  /** 真挪到了哪个文件夹；`undefined` = 没挪（留在收件箱）。 */
+  moved_to?: string
+  /** 这一封花了几次模型（规则层命中时是 0）。 */
+  model_calls: number
+  reasons: string[]
+}
+
+export interface MailOps {
+  /** 一封新信进来（世界里发生的一件事）。 */
+  inbound(input: ScenarioMail): Promise<MailTriageResult>
+  /**
+   * 人纠错：把某封信挪到别处，并（可选）教一条发件人规则。
+   *
+   * 教过之后同一个发件人的下一封**直达**，不再花模型——这既省钱，
+   * 也让"我教过它"这件事在指标上看得见（`model_calls` 从 1 变 0）。
+   */
+  correct(input: { from: string; to: 'inbox' | 'support' | 'kol'; remember_sender?: boolean }): void
+  /**
+   * 把某个岗位撤了（世界里发生的一件事：这个工作区没有人持那条职责了）。
+   *
+   * 岗位没开的那条路**一封信都不挪**——这是 Luoye 原话的直译，
+   * 也是这一组场景里最要紧的那一条。
+   */
+  disablePosition(input: { position: 'support' | 'kol' }): void
+  /**
+   * 人按了托盘的「暂停」（`halt.model`）。
+   *
+   * 这时分拣**只跑规则**，剩下的标「未分拣」——不是猜一个，也不是卡住整条收信。
+   */
+  haltModel(input: { on: boolean }): void
 }
 
 export interface WebOps {
@@ -2621,6 +2697,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP67：同上（48 §5.1 红人营销那几件事）
     get kol() {
       return kol
+    },
+    // WP113：同上（63 消息的分拣那一跳）
+    get mail() {
+      return mail
     },
     // WP72：同上（56 §2 社媒运营 / §4 社群管理）
     get social() {
@@ -5009,6 +5089,259 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     workspace_id,
     scopes: ['data'],
     region: 'global' as const,
+  }
+
+  /* ── WP113（63 §4）：消息的分拣那一跳 ──────────────────────────────── */
+
+  /**
+   * 合作词面（stand-in 模型那一层的第 ② 问）。
+   *
+   * 与 `kol-core` 的 `classifyReply` 分开问，是因为那六类答的是"我们发过开发信的人
+   * 回了什么"——一封供应商的报价单在它眼里也是 `wants_quote`（"报价"两个字）。
+   */
+  const MAIL_PARTNERSHIP_HINTS: readonly string[] = [
+    'brand deal',
+    'sponsored',
+    'collaboration',
+    'collab',
+    'affiliate',
+    'influencer',
+    '合作',
+    '寄样',
+    '带货',
+    '推广',
+  ]
+
+  /** 不归任何岗位的信，按 `support-core` 判出来的意图挂一个标签。 */
+  const MAIL_INTENT_LABEL: Readonly<Record<string, string | undefined>> = {
+    supplier: 'suppliers',
+    platform_notification: 'platform',
+    marketing: 'newsletters',
+    business: 'partnership',
+    billing: 'billing',
+    account_access: 'security',
+    spam: 'suspicious',
+  }
+
+  /**
+   * 世界里关于这只邮箱的那点状态。
+   *
+   * 三样都是**已经发生的事**，不是场景递给 Agent 的答案：
+   * 用户教过哪几条发件人规则、这个工作区还开着哪几个岗位、模型有没有被按停。
+   */
+  const mailRules: SenderRule[] = []
+  const mailDisabled = new Set<'support' | 'kol'>()
+  let mailHalted = false
+  /** 已经归给客服 / 红人的那几条线程（线程归并那一层看它）。 */
+  const mailSupportThreads = new Set<string>()
+  const mailKolThreads = new Set<string>()
+  let mailSeq = 0
+  /** 这一轮花了几次模型（`by: 'model'` 那一层走的是真网关）。 */
+  let mailModelCalls = 0
+
+  const mailPositionOpen = (position: 'support' | 'kol'): boolean => {
+    if (mailDisabled.has(position)) return false
+    const role: RoleId = position === 'support' ? 'dtc.support' : 'kol.youtube'
+    return (
+      created.has(`p_wang|${role}`) || created.has(`p_li|${role}`) || assignment.role_id === role
+    )
+  }
+
+  /**
+   * 模型那一层的 stand-in（`stand_ins.model`）。
+   *
+   * 两件事都是真的：**经模型网关走一次**（于是记账、预算、急停都作数），
+   * 结论用仓里已有的两个**纯函数**算——`support-core` 的词表分类与 `kol-core` 的
+   * 回复分类，那两份本来就写着"模型那一半在运行时里，这里是它的兜底与测试锚点"。
+   *
+   * 不让 stub 的输出决定判定，是因为 stub 回的是一段固定文本：让它当分类器，
+   * 这一组场景验的就成了"stub 有没有变"，而不是"分拣那条链对不对"。
+   */
+  const mailTriageModel: TriageModel = {
+    async classify(input) {
+      mailModelCalls += 1
+      // 真走一次：预算、记账与 `halt.model` 都在这条路上
+      await gateway.complete({
+        messages: [
+          { role: 'system', content: '邮件分拣（便宜档）' },
+          { role: 'user', content: `${input.subject}\n${input.body}` },
+        ],
+        meta: {
+          workspace_id,
+          assignment_id: assignment.id,
+          role_id: assignment.role_id,
+          run_id: `run_mail_${mailSeq}`,
+          purpose: 'extraction',
+        },
+      })
+      const support = classifyText(
+        { text: input.body, subject: input.subject, from: input.from_email },
+        { now: now(clock) },
+      )
+      // ① 先问"这是不是客服诉求"：`support-core` 的词表，全仓同一份
+      if (support.is_customer_service) {
+        return {
+          route: 'support',
+          labels: ['orders'],
+          needs_reply: true,
+          priority: support.urgency === 'high' ? 'high' : 'normal',
+          summary: support.reason,
+          confidence: support.confidence,
+        }
+      }
+      /*
+       * ② 再问"这是不是想谈合作"。
+       *
+       * `kol-core` 的 `classifyReply` **单独用不了**：它的六类是给"我们发过开发信
+       * 的人回了什么"设计的，一封供应商的报价单在它眼里也是 `wants_quote`
+       * （"报价"两个字）。所以先过一道合作词面，再让它判把握——两件事分开问。
+       */
+      const partnership = MAIL_PARTNERSHIP_HINTS.some((h) =>
+        `${input.subject}\n${input.body}`.toLowerCase().includes(h),
+      )
+      if (partnership) {
+        const reply = classifyReply({ text: input.body, known_contact: false })
+        return {
+          route: 'kol',
+          labels: ['partnership'],
+          needs_reply: true,
+          priority: 'normal',
+          summary: '想谈合作',
+          confidence: Math.max(reply.confidence, 0.7),
+        }
+      }
+      return {
+        route: 'inbox',
+        labels:
+          MAIL_INTENT_LABEL[support.intent] === undefined
+            ? []
+            : [MAIL_INTENT_LABEL[support.intent] as string],
+        needs_reply: false,
+        priority: 'low',
+        summary: support.reason,
+        confidence: support.confidence,
+      }
+    },
+  }
+
+  const mail: MailOps = {
+    async inbound(input) {
+      mailSeq += 1
+      const before = mailModelCalls
+      const thread_id = input.in_reply_to ?? `<mail-${mailSeq}@sim.example>`
+      const verdict = await triageMessage(
+        {
+          from_email: input.from.trim().toLowerCase(),
+          subject: input.subject,
+          text: input.body,
+          thread_id,
+          ...(input.in_reply_to === undefined ? {} : { in_reply_to: input.in_reply_to }),
+          references: input.in_reply_to === undefined ? [] : [input.in_reply_to],
+          headers: input.headers ?? {},
+          has_attachments: false,
+        },
+        {
+          support_enabled: mailPositionOpen('support'),
+          kol_enabled: mailPositionOpen('kol'),
+          isSupportThread: (id) => mailSupportThreads.has(id),
+          isKolThread: (id) => mailKolThreads.has(id),
+          senderRules: mailRules,
+          model_halted: mailHalted,
+          at: now(clock),
+        },
+        mailTriageModel,
+      )
+      // 岗位开着才真挪；挪了才记进那一侧的线程（下一封走线程归并，不花模型）
+      const moved_to =
+        verdict.route === 'support'
+          ? SUPPORT_FOLDER
+          : verdict.route === 'kol'
+            ? KOL_FOLDER
+            : undefined
+      if (verdict.route === 'support') mailSupportThreads.add(thread_id)
+      if (verdict.route === 'kol') mailKolThreads.add(thread_id)
+      const result: MailTriageResult = {
+        message_id: thread_id,
+        route: verdict.route,
+        ...(verdict.suggested_route === undefined
+          ? {}
+          : { suggested_route: verdict.suggested_route }),
+        labels: [...verdict.labels],
+        needs_reply: verdict.needs_reply,
+        by: verdict.by,
+        confidence: verdict.confidence,
+        ...(moved_to === undefined ? {} : { moved_to }),
+        model_calls: mailModelCalls - before,
+        reasons: [...verdict.reasons],
+      }
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.message_triaged',
+        actor: { kind: 'system', id: 'simulation' },
+        correlation: { trace_id: traceId() },
+        // 63 §10：正文与完整地址都不进事件日志
+        payload: {
+          route: result.route,
+          ...(result.suggested_route === undefined
+            ? {}
+            : { suggested_route: result.suggested_route }),
+          labels: result.labels,
+          needs_reply: result.needs_reply,
+          by: result.by,
+          confidence: result.confidence,
+          moved: moved_to !== undefined,
+          ...(moved_to === undefined ? {} : { moved_to }),
+          model_calls: result.model_calls,
+          reasons: result.reasons,
+        },
+      })
+      return result
+    },
+
+    correct({ from, to, remember_sender }) {
+      const sender = from.trim().toLowerCase()
+      if (remember_sender === true) {
+        mailRules.push({
+          id: `rule_${mailRules.length + 1}`,
+          sender,
+          route: to,
+          labels: [],
+          by: 'p_wang',
+          created_at: now(clock),
+        })
+      }
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.message_corrected',
+        actor: { kind: 'person', id: 'p_wang' },
+        correlation: { trace_id: traceId() },
+        // 地址遮掩（63 §10）
+        payload: {
+          to,
+          remembered: remember_sender === true,
+          sender_domain: sender.slice(sender.indexOf('@')),
+          rules: mailRules.length,
+        },
+      })
+    },
+
+    disablePosition({ position }) {
+      mailDisabled.add(position)
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.message_position_disabled',
+        actor: { kind: 'system', id: 'simulation' },
+        correlation: { trace_id: traceId() },
+        payload: { position },
+      })
+    },
+
+    haltModel({ on }) {
+      mailHalted = on
+    },
   }
 
   const kol: KolOps = {

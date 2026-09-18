@@ -1,0 +1,46 @@
+# WP113（63 §4）：**先规则后模型**——三种不花模型的情况，一条题验两种。
+#
+# ① 订阅信：有 `List-Unsubscribe` 头就够了。一封退订链接俱全的群发，
+#    不需要一次模型调用来确认它是群发——那是花钱买一个已经写在头里的答案。
+# ② 急停：`halt.model` 开着时**只跑规则**，剩下的标「未分拣」
+#    （`by: halted`）。不是猜一个，也不是卡住整条收信。
+#
+# `model_calls: 0` 是这条题的心脏：它不是"跑得快"，是"这一封没花钱"。
+id: messages/rules-before-model
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 订阅信走规则（第 ③ 层：自动信头）
+  - at: '+0m'
+    messages.inbound:
+      from: news@brand-weekly.example
+      subject: This week's picks
+      body: Shop the new arrivals now.
+      headers:
+        list-unsubscribe: <https://brand-weekly.example/u>
+  # ② 人按了托盘的暂停
+  - at: '+5m'
+    messages.halt_model: { on: true }
+  - at: '+10m'
+    messages.inbound:
+      from: someone@unknown.example
+      subject: 关于下周
+      body: 想跟你聊一下下周的事，方便吗？
+expected:
+  message_triage:
+    # 急停时只跑规则，剩下的标「未分拣」
+    by: halted
+    route: inbox
+    moved: false
+    model_calls: 0
+  event_types:
+    - simulation.message_triaged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  急停之后那封信标的是「未分拣」。人看得出"它没被判过"，而不是"它被判成了普通邮件"吗？

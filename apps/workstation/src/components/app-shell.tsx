@@ -16,6 +16,7 @@
  * 3. **右边多一条 44px 图标轨**（第三栏，36 §9）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
+import { useQuery } from '@tanstack/react-query'
 import {
   BookOpen,
   Bot,
@@ -28,6 +29,7 @@ import {
   Crown,
   Headset,
   Home,
+  Inbox,
   ListTodo,
   type LucideIcon,
   Megaphone,
@@ -36,7 +38,6 @@ import {
   Settings,
   Sparkles,
   Store,
-  Target,
   Users,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useState } from 'react'
@@ -52,7 +53,12 @@ import { RightRail } from '@/components/rail/right-rail'
 import { StandbyBadge } from '@/components/standby-badge'
 import { CreditsChip, ModelChip } from '@/components/top-chips'
 import { Separator } from '@/components/ui/separator'
-import type { Me, PositionInstanceData, PositionSummary } from '@/lib/api'
+import {
+  listMessageAccounts,
+  type Me,
+  type PositionInstanceData,
+  type PositionSummary,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
@@ -175,6 +181,33 @@ function PositionNav({
   )
 }
 
+/**
+ * 左栏「消息」右边那个未读点。
+ *
+ * **是一个点，不是一个数字**（36 减字 / 图形化，WP96 那一轮定的调子）：
+ * 未读 132 封时一个红色的 "132" 会让整块左栏看起来像在报警，而它要说的只有
+ * "那边有没读的"。数字留给点进去之后的文件夹。
+ *
+ * 取不到（没装配消息面 / 一只邮箱都没连）就什么都不画——不报错、不占位。
+ */
+function MessagesUnread(): ReactNode {
+  const accounts = useQuery({
+    queryKey: ['messages', 'accounts'],
+    queryFn: listMessageAccounts,
+    retry: false,
+    staleTime: 60_000,
+  })
+  const unread = (accounts.data?.accounts ?? []).reduce((n, a) => n + a.unread, 0)
+  if (unread === 0) return null
+  return (
+    <i
+      aria-hidden
+      data-testid="nav-messages-dot"
+      className="ml-auto size-1.5 shrink-0 rounded-full bg-ws-brand"
+    />
+  )
+}
+
 export function AppShell({
   children,
   positions,
@@ -248,7 +281,19 @@ export function AppShell({
               <NavIcon icon={Home} />
               {t('nav.home')}
             </NavLink>
-            {/* 37 工作模型：待办 / 日历 / 目标 */}
+            {/*
+              WP113（63 §1）：这一格原来是「目标」。Luoye 定：换成**消息**——
+              一只邮箱是人每天真正会去的地方，而目标是每周看一次的东西。
+              目标模型**没删**（37 的每日计划与复盘都靠它），入口收进「待办」页的
+              一个 tab，`/goals` 路由留着，⌘K 里仍然搜得到。
+              顺序：首页 / 消息 / 待办 / 日历。
+            */}
+            <NavLink to="/messages" className={navClass} data-testid="nav-messages">
+              <NavIcon icon={Inbox} />
+              {t('nav.messages')}
+              <MessagesUnread />
+            </NavLink>
+            {/* 37 工作模型：待办 / 日历 */}
             <NavLink to="/todos" className={navClass}>
               <NavIcon icon={ListTodo} />
               {t('nav.todos')}
@@ -256,10 +301,6 @@ export function AppShell({
             <NavLink to="/calendar" className={navClass}>
               <NavIcon icon={CalendarDays} />
               {t('nav.calendar')}
-            </NavLink>
-            <NavLink to="/goals" className={navClass}>
-              <NavIcon icon={Target} />
-              {t('nav.goals')}
             </NavLink>
             <div className="px-2.5 pt-4 pb-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase">
               {t('nav.positions')}

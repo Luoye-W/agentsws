@@ -27,6 +27,7 @@ import {
   FolderOpen,
   Gauge,
   Globe,
+  Mail,
   MessagesSquare,
   Sparkles,
 } from 'lucide-react'
@@ -120,6 +121,17 @@ const ChangesBody = lazy(async () => {
  * 文件之前**一个字节都不下载；`canOpen` 与 `matches` 那一段是静态的（第一段），
  * 判"这个地址归谁开"不需要把库先拉下来——两段式注册要的就是这个（#6）。
  */
+/**
+ * WP113（63 §8）新增：**邮件助手**（本封摘要 / 回复建议 / 发件人是谁 / 相关待办）。
+ *
+ * 与其余十三个走的是**逐字相同的两句**（`registerPanelType` + `registerPanelBody`）——
+ * `registry.ts` 一个字没改。身体照旧 `lazy()`：没人打开消息页之前它一个字节都不下载。
+ */
+const MailAssistantBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/mail-assistant-panel')
+  return { default: m.MailAssistantPanel }
+})
+
 const OfficePreviewBody = lazy(async () => {
   const m = await import('@/components/rail/panels/office-preview-panel')
   return { default: m.OfficePreviewPanel }
@@ -242,6 +254,17 @@ export function ensureBuiltinPanels(): void {
     canOpen: canOpenOfficeFile,
   })
   registerPanelBody('office-preview', OfficePreviewBody)
+  // WP113（63）：邮件助手。归「这件事的」那一组——它看的是**当前这封信**，
+  // 不是这一层的设置，所以不 `scoped`。
+  registerPanelType({
+    id: 'mail-assistant',
+    label: 'rail.panel.mail',
+    icon: Mail,
+    priority: 'builtin',
+    group: 'context',
+    matches: ['agentsws://message/**'],
+  })
+  registerPanelBody('mail-assistant', MailAssistantBody)
   registerPanelType({
     id: 'ask',
     label: 'rail.panel.ask',

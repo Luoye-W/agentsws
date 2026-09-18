@@ -18,7 +18,17 @@ import type {
   MeetingOutputs,
   MeetingRecord,
   MeetingRecordSourceKind,
+  MessageDraft,
+  MessageFolder,
+  MessageFolderKind,
+  MessageLabel,
+  MessageRecord,
+  MessageSendResult,
+  MessageSyncReport,
+  MessageThreadSummary,
+  ReplySuggestion,
   Review,
+  SenderRule,
   Todo,
   BattleReport as WorkBattleReport,
 } from '@agentsws/contracts'
@@ -4344,3 +4354,151 @@ export const deleteKnowledgeSource = (
 /** 改本人的展示名（`PUT /v1/me`）。登录邮箱是身份，不在这里改。 */
 export const renameMe = (name: string, assignment?: string): Promise<{ person: Me['person'] }> =>
   api('/v1/me', { method: 'PUT', body: { name }, ...withAssignment(assignment) })
+
+/* ── WP113（63）：消息——统一收件处 ────────────────────────────────────── */
+
+/** 一只邮箱在消息页上的样子（"全部邮箱"那一排）。 */
+export interface MessageAccountView {
+  address: string
+  unread: number
+  folders: MessageFolder[]
+  backfill_floor: string
+}
+
+/** 打开一条会话时一次拿全（正文 + 状态带）。 */
+export interface MessageThreadView {
+  thread_id: string
+  subject: string
+  messages: MessageRecord[]
+  /**
+   * 63 §9：`kefuagents` / `kolagents` 里的信顶上那条状态带。
+   * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。
+   */
+  agent_status?: {
+    route: 'support' | 'kol'
+    state: 'working' | 'waiting_for_you' | 'replied'
+    href?: string
+    takeover_matter_id?: string
+  }
+}
+
+/** 右栏 `mail-assistant` 那一格（一次取全，前端不发第二个请求）。 */
+export interface MailAssistantView {
+  message_id: string
+  summary: string
+  /**
+   * 这封信要不要回。
+   *
+   * 与 `suggestions` 分开给：一台没接模型的机器上 `suggestions` 永远是空数组，
+   * 只看它的话界面会对每封信都说"这封信看起来不用回"——那是假的。
+   */
+  needs_reply: boolean
+  suggestions: ReplySuggestion[]
+  sender: {
+    address: string
+    name?: string
+    history_count: number
+    linked: { type: string; id: string; label: string }[]
+  }
+  todos: { id: string; title: string; status: string }[]
+  model_available: boolean
+}
+
+/** 会话列表的查询串（筛选、搜索、多邮箱都走它）。 */
+export function messageQuery(q: {
+  folder?: string
+  folder_kind?: string
+  account?: string
+  label?: string
+  unread?: boolean
+  starred?: boolean
+  q?: string
+  limit?: number
+}): string {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(q)) {
+    if (v === undefined || v === '' || v === false) continue
+    params.set(k, String(v))
+  }
+  const s = params.toString()
+  return s === '' ? '' : `?${s}`
+}
+
+export const listMessageAccounts = (): Promise<{ accounts: MessageAccountView[] }> =>
+  api('/v1/messages/accounts')
+
+export const listMessageThreads = (query = ''): Promise<{ threads: MessageThreadSummary[] }> =>
+  api(`/v1/messages${query}`)
+
+export const getMessageThread = (thread_id: string): Promise<MessageThreadView> =>
+  api(`/v1/messages/threads/${encodeURIComponent(thread_id)}`)
+
+export const getMailAssistant = (id: string): Promise<MailAssistantView> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/assistant`)
+
+export const setMessageFlags = (
+  id: string,
+  input: { read?: boolean; starred?: boolean; answered?: boolean },
+): Promise<{ message: MessageRecord }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/flags`, { method: 'POST', body: input })
+
+/** 挪一封信。**删除 = `to: 'trash'`**，没有第二种去处（63 §7）。 */
+export const moveMessage = (
+  id: string,
+  input: { to: MessageFolderKind; remember_sender?: boolean },
+): Promise<{ message: MessageRecord; rule?: SenderRule }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/move`, { method: 'POST', body: input })
+
+export const setMessageLabels = (
+  id: string,
+  labels: string[],
+): Promise<{ message: MessageRecord }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/labels`, { method: 'POST', body: { labels } })
+
+export const showMessageImages = (
+  id: string,
+  always: boolean,
+): Promise<{ message: MessageRecord }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/images`, { method: 'POST', body: { always } })
+
+export const listMessageLabels = (): Promise<{ labels: MessageLabel[] }> =>
+  api('/v1/messages/labels')
+
+export const saveMessageDraft = (input: {
+  id?: string
+  account?: string
+  thread_id?: string
+  in_reply_to?: string
+  to?: { email: string; name?: string }[]
+  cc?: { email: string; name?: string }[]
+  bcc?: { email: string; name?: string }[]
+  subject?: string
+  text?: string
+}): Promise<{ draft: MessageDraft }> => api('/v1/messages/drafts', { method: 'POST', body: input })
+
+export const discardMessageDraft = (id: string): Promise<{ deleted: boolean }> =>
+  api(`/v1/messages/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** **人自己按的发送**。不出卡（36「只有要人拍板的才是卡」）。 */
+export const sendMessage = (input: {
+  draft_id?: string
+  account?: string
+  thread_id?: string
+  in_reply_to?: string
+  to?: { email: string; name?: string }[]
+  cc?: { email: string; name?: string }[]
+  bcc?: { email: string; name?: string }[]
+  subject?: string
+  text?: string
+}): Promise<MessageSendResult> => api('/v1/messages/send', { method: 'POST', body: input })
+
+export const messageToTodo = (id: string): Promise<{ todo: Todo }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/todo`, { method: 'POST', body: {} })
+
+export const syncMessages = (): Promise<MessageSyncReport> =>
+  api('/v1/messages/sync', { method: 'POST', body: {} })
+
+export const backfillMessages = (input: {
+  account?: string
+  days?: number
+}): Promise<{ floor: string }> => api('/v1/messages/backfill', { method: 'POST', body: input })

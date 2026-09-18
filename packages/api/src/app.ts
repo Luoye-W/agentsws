@@ -36,6 +36,8 @@ import { knowledgeRoutes } from './routes/knowledge.js'
 // WP68（48 §5.4）：本地红人库 `/v1/kol/*`
 import { kolRoutes } from './routes/kol.js'
 import { meetingRoutes } from './routes/meetings.js'
+// WP113（63）：消息——统一收件处 `/v1/messages/*`
+import { messageRoutes } from './routes/messages.js'
 import { modelRoutes } from './routes/models.js'
 import { onboardingRoutes } from './routes/onboarding.js'
 import { ontologyRoutes } from './routes/ontology.js'
@@ -190,6 +192,14 @@ export function collectRoutes(): Route[] {
     ...adsRoutes(),
     // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
     ...prRoutes(),
+    /*
+     * WP113（63）：消息。`/v1/messages*` 是独立前缀，与已有路径都不撞。
+     * **内部次序要紧**：定值段（`accounts` / `labels` / `rules` / `drafts` /
+     * `send` / `sync` / `backfill` / `threads`）必须排在 `/v1/messages/:id` 之前，
+     * 否则 `GET /v1/messages/labels` 会被当成 id=labels；光秃秃的 `/v1/messages`
+     * 排最后（它谁也遮不住）。
+     */
+    ...messageRoutes(),
   ]
 }
 

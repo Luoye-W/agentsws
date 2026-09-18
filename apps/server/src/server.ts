@@ -115,6 +115,7 @@ import {
   brandConnectionsPort,
   brandDesignPort,
   brandKolPort,
+  brandMessagesPort,
   brandModelsPort,
   brandPositionPort,
   brandPrPort,
@@ -183,6 +184,8 @@ import {
 } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
+// WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
+import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
@@ -525,6 +528,12 @@ export interface ServerOptions {
   mailSource?: ChannelsOptions['makeSource']
   mailer?: ChannelsOptions['makeMailer']
   /**
+   * WP113（63）消息面的测试注入：按「邮箱 × 文件夹」开收信端、按邮箱开回写端。
+   * 生产路径一个都不传，各自走真 IMAP。
+   */
+  messageSource?: MessagesOptions['makeSource']
+  messageWriter?: MessagesOptions['makeWriter']
+  /**
    * 15 §5.8 对账时的「这条到底写进去没有」回查。
    *
    * 缺省问后端自己（`MemoryBackend.verify`）。真接了平台之后这里换成按
@@ -566,6 +575,8 @@ export interface Server {
   liveData?: LiveDataSource
   /** WP34 渠道面（IMAP 轮询 / 入站管线 / 受控原始材料区 / 出站发信）。 */
   channels: ChannelsAssembly
+  /** WP113（63）消息面（消息库 / 全量同步 / 分拣 / IMAP 回写）——bootstrap 品牌那一份。 */
+  messages: MessagesAssembly
   /** WP57 在线聊天的实时车道（会话 / 轮次聚合 / 五种动作 / 求助超时）。 */
   chat: ChatLane
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
@@ -2010,6 +2021,59 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
 
+    /*
+     * WP113（63）：**消息**——把整只邮箱接进来。
+     *
+     * 位置有讲究：**必须在 channels 之后**——它要 `channels.raw`（与渠道共用同一个
+     * 受控原始材料区：21 §4「删这个人」不许漏掉一半）与 `channels.sendMail`
+     * （人自己按下发送的那一封走 outbox 七态 + 对账）。凭据仍然只从
+     * `connections` 来，**这一层不新增任何凭据入口**。
+     */
+    const messages = createMessages({
+      clock,
+      workspace_id: ws,
+      appendEvent,
+      halt: kernel.halt,
+      accounts: () => connections.mailAccounts(),
+      credentials: connections.credentialSource(),
+      work,
+      position: () => firstPositionOf(ws),
+      // 岗位开没开每次现查：昨天开了今天关了，信就不该再往 kefuagents 里挪
+      activeRoles: () =>
+        roles.assignments
+          .listByWorkspace(ws)
+          .filter((a) => a.revoked_at === undefined)
+          .map((a) => a.role_id),
+      models: gatewayProxy,
+      rawStore: channels.raw,
+      sendMail: (input) => channels.sendMail(input),
+      searchKnowledge: async (text, limit) => {
+        const position = firstPositionOf(ws)
+        if (position === undefined) return []
+        const config = roles.effectiveConfig(position.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text,
+          k: limit,
+          actor: {
+            person_id: position.person_id,
+            workspace_id: ws,
+            assignment_id: position.assignment_id,
+            role_id: position.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        })
+        return hits.map((h) => ({
+          source_id: h.fact_card_id,
+          title: h.statement_redacted.slice(0, 40),
+          text: h.statement_redacted,
+        }))
+      },
+      ...(dir === undefined ? {} : { dbDir: dir }),
+      ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
+      ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
+    })
+
     // WP60（48 §4 L3 #11 的云端一半）：聊天窗的公开访客面（白名单 + 限流 + 访客令牌）
     const chatWidget = createChatWidget({
       workspace_id: ws,
@@ -2044,6 +2108,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
       channels,
+      messages,
       chat,
       chatWidget,
       ownModels,
@@ -2051,6 +2116,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ownCloud,
       async dispose() {
         await chat.close()
+        messages.close()
         await channels.close()
         liveData?.close()
         connections.close()
@@ -2325,6 +2391,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         out.retried += one.retried
         // 哪个品牌的哪个账号拉不动要看得出来（一个坏了不该拖垮别的）
         out.failed.push(...one.failed.map((f) => `${brand.workspace_id}:${f}`))
+        /*
+         * WP113（63 §3）：同一拍里把**整只邮箱**也拉一轮（六个文件夹各一个游标）。
+         *
+         * 挂在同一条任务上而不是另起一条定时器：两条路看的是同一只邮箱，
+         * 分开跑只会让"现在到底收到哪儿了"有两个答案。上面那一轮扫 INBOX 把客户
+         * 来信变成事项，这一轮把每一封信落进消息库——租约 key 已经错开
+         * （`msg:<地址>`），互相不抢。
+         *
+         * 一个品牌的消息同步炸了不该拖垮别的品牌的收信，所以单独 catch。
+         */
+        try {
+          const mail = await brand.messages.poll()
+          out.failed.push(...mail.failed.map((f) => `${brand.workspace_id}:messages:${f}`))
+        } catch (e) {
+          out.failed.push(
+            `${brand.workspace_id}:messages: ${e instanceof Error ? e.message : String(e)}`,
+          )
+        }
       }
       return out
     },
@@ -3544,6 +3628,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     meetings: meetings.port,
     // WP20 / WP66：连接面按品牌（死信与重投也按品牌，见 `brand-ports.ts`）
     connections: brandConnectionsPort(brandModules),
+    // WP113（63）：消息——按请求的品牌取那一只邮箱库
+    messages: brandMessagesPort(brandModules),
     // WP83（54 §4）：连接目录（按 kind 的总表）与岗位连接清单，也按品牌
     connectionDirectory: connectionDirectoryOf,
     /*
@@ -3900,6 +3986,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     connections: boot.connections,
     ...(boot.liveData === undefined ? {} : { liveData: boot.liveData }),
     channels: boot.channels,
+    messages: boot.messages,
     // WP57：在线聊天车道
     chat: boot.chat,
     modelSettings: boot.ownModels,

@@ -1,0 +1,56 @@
+# WP113（63 §4）：分拣的四条路，一条题走完。
+#
+# 这条题要看的是**判成什么不是场景说了算**：世界里只丢进四封信，
+# 归谁由 `@agentsws/channels` 的 `triageMessage` 算——那是真服务进程里跑的
+# 同一个函数，规则四层与三道收口一个字都没重写。
+#
+# 四封信各验一层：
+#   ① 客服信 → 客服岗位开着 → 判 support 并 MOVE 进 kefuagents
+#   ② 那封信的后续回信 → **线程归并**直接归客服，一次模型都不花
+#   ③ 红人来信 → 红人岗位也开着 → 判 kol 并 MOVE 进 kolagents
+#   ④ 供应商来信 → 哪个岗位都不归 → **留在收件箱**，只打标签
+#
+# 最后一封是 ④，所以 `message_triage` 断言的是它：`moved: false`。
+# 前三封的证据在 `event_types` 与那四条 `simulation.message_triaged` 上。
+id: messages/triage-routes
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    messages.inbound:
+      from: ann@customer.example
+      subject: My order arrived damaged
+      body: The box was crushed and the bottle is broken. I want a refund for order 1042.
+  - at: '+5m'
+    messages.inbound:
+      from: ann@customer.example
+      subject: 'Re: My order arrived damaged'
+      body: Any update on the refund?
+      in_reply_to: '<mail-1@sim.example>'
+  - at: '+10m'
+    messages.inbound:
+      from: mia@creator.example
+      subject: Collaboration
+      body: I am interested in a brand deal, could you send a quote for a sponsored video?
+  - at: '+15m'
+    messages.inbound:
+      from: sales@packaging-supplier.example
+      subject: 新报价单
+      body: 附上这一批纸箱的报价，单价比上次低 3%。
+expected:
+  message_triage:
+    route: inbox
+    moved: false
+  event_types:
+    - simulation.message_triaged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  四封信分别落在收件箱 / 客服 / 红人三处。人一眼看得出"为什么这封归客服"吗
+  （`reasons` 里那句话），还是只看得到一个结论？

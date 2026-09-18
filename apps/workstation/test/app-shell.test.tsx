@@ -55,6 +55,20 @@ describe('左栏（WP43 §1 图标）', () => {
     }
   })
 
+  /**
+   * WP113（63 §1）：左栏那一格从「目标」换成「**消息**」。
+   *
+   * 钉两件事：顺序是 首页 / 消息 / 待办 / 日历，而且 `/goals` **不在左栏里**了
+   * （路由还在、⌘K 还搜得到、待办页有一个 tab——那几条各自有自己的用例）。
+   */
+  it('左栏顺序：首页 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
+    renderShell()
+    const nav = screen.getByTestId('main-nav')
+    const hrefs = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs.slice(0, 4)).toEqual(['/', '/messages', '/todos', '/calendar'])
+    expect(hrefs).not.toContain('/goals')
+  })
+
   it('岗位按职责给图标，认不出的也有一个', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')

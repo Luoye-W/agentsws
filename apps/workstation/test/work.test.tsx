@@ -547,6 +547,27 @@ describe('日历（37 C3 + §2.5：一个日历，多图层）', () => {
   })
 })
 
+/**
+ * WP113（63 §1）：左栏那一格换成「消息」之后，目标收进**待办页的一个 tab**。
+ *
+ * 钉的是"入口挪了但东西没少"：tab 在、点得开、记在 URL 上（刷新还在那一格）。
+ * `/goals` 路由本身仍然在（`App.tsx` 里那一条），⌘K 也照样搜得到。
+ */
+describe('目标入口收进待办页（WP113 / 63 §1）', () => {
+  it('待办页有两个 tab，点「目标」出目标树，并记在 ?tab=goals 上', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<TodosPage />)
+    await screen.findByTestId('todos-tabs')
+    await user.click(screen.getByTestId('todos-tab-goals'))
+    expect(await screen.findByTestId('goals-page')).toBeDefined()
+    // 记在 URL 上（`MemoryRouter` 不动 `window.location`，所以看选中态）
+    expect(screen.getByTestId('todos-tab-goals').getAttribute('aria-selected')).toBe('true')
+    // 回得去
+    await user.click(screen.getByTestId('todos-tab-todos'))
+    expect(await screen.findByTestId('horizon-today')).toBeDefined()
+  })
+})
+
 describe('目标页（37 §2.3）', () => {
   it('三级树 + 进度；子目标缩进在父目标下', async () => {
     renderWithProviders(<GoalsPage />)

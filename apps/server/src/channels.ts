@@ -77,6 +77,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { RawBlobPort, RawCipher } from '@agentsws/core'
+import { redactOutboundText } from '@agentsws/core'
 import {
   AMAZON_MESSAGE_ACTIONS,
   type AmazonSlaThreadState,
@@ -164,6 +165,8 @@ interface MailChannel {
   pipeline: ChannelInboundPipeline
   /** WP55：对账要直接问这只邮箱「已发送里有没有这封」。 */
   source: MailSource
+  /** WP113：人自己写的信从这里发（`deliver` 那条路走适配器，它有收件人门禁）。 */
+  mailer: Mailer
 }
 
 export interface ChannelsOptions {
@@ -251,6 +254,39 @@ export interface ReconcileReport {
   escalated: number
 }
 
+/**
+ * WP113：人自己写的一封信（消息页的写信 / 回复 / 转发都落到这里）。
+ *
+ * `idempotency_key` 由调用方给（工作台按"草稿 id + 内容哈希"算），于是"网络抖了
+ * 一下、人又按了一次发送"只会发出一封。
+ */
+export interface DirectMailInput {
+  /** 从哪只邮箱发；不给就用第一只。 */
+  account?: string
+  to: readonly string[]
+  cc?: readonly string[]
+  bcc?: readonly string[]
+  subject: string
+  text: string
+  in_reply_to?: string
+  references?: readonly string[]
+  /** 落 outbox 用（回信时是会话 id；新写的信没有会话就用 `compose:<幂等键>`）。 */
+  thread_ref?: string
+  idempotency_key: string
+}
+
+export interface DirectMailResult {
+  ok: boolean
+  outbox_id: string
+  message_id: string
+  /** 发件邮箱地址（落"已发送"时要它）。 */
+  account: string
+  /** `ok` 为假时那句人话。 */
+  error?: string
+  /** 出错时能不能重试（`sent_unknown` 一律不可）。 */
+  retryable?: boolean
+}
+
 /** WP55：对账耗尽时要人看一眼的那一条。 */
 export interface UnresolvedDelivery {
   outbox_id: string
@@ -313,6 +349,20 @@ export interface ChannelsAssembly {
    * 回 `undefined` = 这条不归渠道管（不是邮件 / 没有线程 / 没装邮箱），调用方回落到别处。
    */
   deliver(item: ApprovalItem, opts: { idempotencyKey: string }): Promise<BackendResult | undefined>
+  /**
+   * WP113（63 §6）：**人自己在消息页按下发送的那一封**。
+   *
+   * 与 {@link ChannelsAssembly.deliver} 的区别只有一处，但那一处要紧：
+   * **收件人从入参来，不从线程台账来**。31 §3.3 那道收件人门禁挡的是"模型从
+   * 入站材料里解析出一个新收件人"——它不该也挡住人自己在写信框里敲的地址。
+   * 所以这条路是**只给人用的**：调用它的只有 `/v1/messages/send`，那条路由
+   * 要 `X-Assignment`、要会话、挂 `outbound: true`。Agent 的回信仍然只走
+   * `deliver`，一个字都没放松。
+   *
+   * 其余一律照旧：急停的出站档、outbox 七态 + 幂等键、`payload_hash` 防同键换稿、
+   * 失败三态分类、`sent_unknown` 绝不自动重试。
+   */
+  sendMail(input: DirectMailInput): Promise<DirectMailResult>
   /** 21 §4 随主体删除（`./erase.ts` 的编排调它）。 */
   eraseSubject(subject: string): Promise<{ shredded_at?: string; rows: number }>
   /** 18 §2.1 保留期。 */
@@ -607,7 +657,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         : { resolveActor: options.resolveActor.bind(options) }),
       onEvent,
     })
-    return { account, adapter, pipeline, source }
+    return { account, adapter, pipeline, source, mailer }
   }
 
   const refresh = (): void => {
@@ -803,6 +853,120 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
             // 代价是客户收到两封，而两封信是收不回来的。
             retryable: row.status === 'failed_retryable',
           },
+        }
+      }
+    },
+
+    async sendMail(input: DirectMailInput): Promise<DirectMailResult> {
+      refresh()
+      const channel =
+        input.account === undefined
+          ? channels[0]
+          : channels.find((c) => c.account.address === input.account)
+      const message_id = messageIdFor(
+        input.idempotency_key,
+        domainOf(channel?.account.address ?? input.account ?? 'localhost'),
+      )
+      if (channel === undefined) {
+        return {
+          ok: false,
+          outbox_id: '',
+          message_id,
+          account: input.account ?? '',
+          error: '这台机器上没有连上的邮箱，发不出去',
+          retryable: false,
+        }
+      }
+      // 15 §5.8 / 28 §1：出站急停。对账没完、或人按了托盘的「暂停」，一律不发。
+      if (options.halt.isHalted('outbound')) {
+        return {
+          ok: false,
+          outbox_id: '',
+          message_id,
+          account: channel.account.address,
+          error: OUTBOUND_HALTED,
+          retryable: true,
+        }
+      }
+      const to = [...input.to].filter((a) => a.trim() !== '')
+      if (to.length === 0) {
+        return {
+          ok: false,
+          outbox_id: '',
+          message_id,
+          account: channel.account.address,
+          error: '没有收件人',
+          retryable: false,
+        }
+      }
+      const thread_ref = input.thread_ref ?? `compose:${input.idempotency_key}`
+      const prepared = await outbox.prepare({
+        idempotency_key: input.idempotency_key,
+        thread_ref,
+        message_id,
+        payload_hash: outboxPayloadHash({ to, text: input.text, subject: input.subject }),
+        now: clock.now(),
+      })
+      if (prepared.kind === 'payload_drift') {
+        return {
+          ok: false,
+          outbox_id: prepared.record.id,
+          message_id,
+          account: channel.account.address,
+          error: OUTBOX_PAYLOAD_DRIFT,
+          retryable: false,
+        }
+      }
+      if (prepared.kind === 'already') {
+        // 已经发过（或可能已经发出去了）：**不要再发**——重发一封可能已发出的信收不回来
+        return {
+          ok: true,
+          outbox_id: prepared.record.id,
+          message_id: prepared.record.message_id,
+          account: channel.account.address,
+        }
+      }
+      let row = await outbox.beginSend(prepared.record, clock.now())
+      try {
+        // 31 §3.3 出站脱敏：人写的正文里也可能粘进一串 key（从别处复制过来的）
+        const text = redactOutboundText('email_body', input.text)
+        const sent = await channel.mailer.send({
+          from: channel.account.address,
+          to,
+          ...(input.cc === undefined || input.cc.length === 0 ? {} : { cc: [...input.cc] }),
+          ...(input.bcc === undefined || input.bcc.length === 0 ? {} : { bcc: [...input.bcc] }),
+          subject: input.subject,
+          text,
+          message_id,
+          ...(input.in_reply_to === undefined ? {} : { in_reply_to: input.in_reply_to }),
+          ...(input.references === undefined || input.references.length === 0
+            ? {}
+            : { references: input.references.join(' ') }),
+        })
+        row = await outbox.markAccepted(row, clock.now(), sent.message_id)
+        return {
+          ok: true,
+          outbox_id: row.id,
+          message_id: sent.message_id.length > 0 ? sent.message_id : message_id,
+          account: channel.account.address,
+        }
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e)
+        const code = (e as { code?: string }).code
+        const failure = classifySendFailure(
+          Object.assign(
+            e instanceof Error ? e : new Error(detail),
+            code === undefined ? {} : { code },
+          ),
+        )
+        row = await outbox.recordFailure(row, failure, clock.now())
+        return {
+          ok: false,
+          outbox_id: row.id,
+          message_id,
+          account: channel.account.address,
+          error: `${detail}（outbox：${row.status}）`,
+          retryable: row.status === 'failed_retryable',
         }
       }
     },

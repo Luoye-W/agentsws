@@ -1,0 +1,43 @@
+# WP113（63 §4）：**没开红人岗位，红人信留 INBOX 只打标签**。
+#
+# Luoye 原话的直译，也是这一组题里最要紧的那一条：
+# "如果用户接入了红人营销、客服岗位……那两个是自动挪到 kolagents / kefuagents
+#  文件夹。但是其他的也要打上对应标签。"
+#
+# 反过来说就是：**没接那个岗位的，一封都不许挪**。挪了之后信会出现在一个
+# 用户根本不会去看的文件夹里——那比不分拣更糟。
+#
+# 场景里"把红人岗位撤了"是世界里发生的一件事（和退订、预算没了同一类），
+# 不是场景把答案递给 Agent：撤没撤由世界记着，挪不挪由 `triageMessage` 判。
+id: messages/no-position-no-move
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # 这个工作区不做红人营销了（没有人再持 kol.youtube）
+  - at: '+0m'
+    messages.disable_position: { position: kol }
+  - at: '+5m'
+    messages.inbound:
+      from: mia@creator.example
+      subject: Collaboration
+      body: I am interested in a brand deal, could you send a quote for a sponsored video?
+expected:
+  message_triage:
+    route: inbox
+    # 岗位没开 → 一封都不挪
+    moved: false
+    # 标签照打——"其他的也要打上对应标签"
+    labels: [partnership]
+  event_types:
+    - simulation.message_position_disabled
+    - simulation.message_triaged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  这封信留在收件箱里，标着「合作邀约」。用户看得出"这是一封想谈合作的信"，
+  而不需要先去开一个岗位吗？

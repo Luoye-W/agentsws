@@ -361,9 +361,10 @@ describe('启动不激活（#6）', () => {
   })
 
   // WP97 把第十三个（Office 预览）加进了工具那一组
-  it('一个都没开的时候：十三个图标都在，但没有任何面板发请求', () => {
+  // WP113（63 §8）：加了「邮件助手」那一格，于是从十三个变成十四个
+  it('一个都没开的时候：十四个图标都在，但没有任何面板发请求', () => {
     renderRail()
-    expect(screen.getAllByTestId(/^rail-icon-/)).toHaveLength(13)
+    expect(screen.getAllByTestId(/^rail-icon-/)).toHaveLength(14)
     expect(getLayerMemory).not.toHaveBeenCalled()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })

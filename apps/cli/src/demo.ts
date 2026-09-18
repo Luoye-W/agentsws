@@ -23,6 +23,7 @@ import type {
   DailyPlanDraft,
   InboundEvent,
   Iso8601,
+  MessageRecord,
   ObjectRef,
   RangeRef,
   RunEvent,
@@ -1201,6 +1202,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     analytics_id: analytics.id,
   })
 
+  // WP113（63）：消息页的样例来信（客服在处理的 / 红人的 / 供应商 / 账单 / 订阅 / 可疑 / 应聘 / 已发）
+  await seedMessages(server, world)
+
   // WP96：十一种排版各一张（默认不造，见 `DemoOptions.cardGallery`）
   if (options.cardGallery === true) await seedCardGallery(world)
   // WP66（52 O1）：第二个品牌（默认不造，见 `DemoOptions.twoBrands`）
@@ -1217,6 +1221,234 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       await world.close()
     },
   }
+}
+
+/* ── WP113（63）：消息页的样例来信 ─────────────────────────────────────── */
+
+/** demo 里那只邮箱（与 pack 的公司对得上；域名用 `example` 保留域，不是真地址）。 */
+export const DEMO_MAILBOX = 'hello@luminous-lab.example'
+
+/**
+ * 种一批像样的来信（截图与"打开就懂"都靠它）。
+ *
+ * 为什么直接写进消息库而不是"跑一遍同步"：demo 里没有 IMAP 服务器，而这一批信要
+ * 覆盖的是**界面上看得见的几种状态**——客服 Agent 在处理的、红人合作的、留在
+ * 收件箱等你回的、订阅通知、带远程图片的、可疑的。同步那条链在
+ * `packages/channels` 与 `apps/server` 的用例里各跑过一遍了。
+ *
+ * 一条纪律：**这里一个真地址都没有**（全部 `.example` 保留域），
+ * 正文里也不出现任何真实品牌与人名之外的联系方式。
+ */
+async function seedMessages(server: Server, world: World): Promise<void> {
+  const store = server.messages.store
+  const nowMs = Date.parse(world.clock.now())
+  const at = (minutesAgo: number): string => new Date(nowMs - minutesAgo * 60_000).toISOString()
+
+  const base = (over: {
+    id: string
+    from: { email: string; name?: string }
+    subject: string
+    text: string
+    minutes: number
+    folder?: string
+    folder_kind?: MessageRecord['folder_kind']
+    route?: MessageRecord['route']
+    labels?: string[]
+    read?: boolean
+    starred?: boolean
+    html?: string
+    remote?: boolean
+    triage?: MessageRecord['triage']
+    attachments?: MessageRecord['attachments']
+  }): MessageRecord => ({
+    id: over.id,
+    workspace_id: world.workspace_id,
+    source: 'email',
+    account: DEMO_MAILBOX,
+    folder: over.folder ?? 'INBOX',
+    folder_kind: over.folder_kind ?? 'inbox',
+    uid: Number(over.id.replace(/\D/g, '')) || 1,
+    thread_id: `<demo-${over.id}@mail.example>`,
+    message_id: `<demo-${over.id}@mail.example>`,
+    references: [],
+    headers: {},
+    from: over.from,
+    to: [{ email: DEMO_MAILBOX }],
+    cc: [],
+    bcc: [],
+    subject: over.subject,
+    snippet: over.text.replace(/\s+/g, ' ').slice(0, 120),
+    text: over.text,
+    ...(over.html === undefined ? {} : { html: over.html }),
+    has_remote_images: over.remote === true,
+    attachments: over.attachments ?? [],
+    date: at(over.minutes),
+    received_at: at(over.minutes),
+    flags: {
+      read: over.read ?? false,
+      starred: over.starred ?? false,
+      answered: false,
+      draft: false,
+    },
+    labels: over.labels ?? [],
+    route: over.route ?? 'inbox',
+    ...(over.triage === undefined ? {} : { triage: over.triage }),
+  })
+
+  const verdict = (over: Partial<MessageRecord['triage']> & object): MessageRecord['triage'] => ({
+    route: 'inbox',
+    labels: [],
+    needs_reply: false,
+    priority: 'normal',
+    summary: '',
+    confidence: 0.9,
+    by: 'rule',
+    reasons: [],
+    at: at(1),
+    ...over,
+  })
+
+  const rows: MessageRecord[] = [
+    base({
+      id: 'm101',
+      from: { email: 'ann.becker@buyer.example', name: 'Ann Becker' },
+      subject: '包裹到的时候箱子是瘪的',
+      text: '你好，昨天收到 #1042，外箱压扁了，里面那瓶漏了一半。我想退款，或者你们重寄一瓶也行。附了两张照片。',
+      minutes: 26,
+      route: 'support',
+      folder: 'kefuagents',
+      folder_kind: 'support',
+      labels: ['orders'],
+      attachments: [
+        { id: 'a1', name: '外箱.jpg', mime: 'image/jpeg', size: 284_100 },
+        { id: 'a2', name: '瓶身.jpg', mime: 'image/jpeg', size: 197_400 },
+      ],
+      triage: verdict({
+        route: 'support',
+        labels: ['orders'],
+        needs_reply: true,
+        priority: 'high',
+        summary: '客户说包裹破损，要退款或补发',
+        confidence: 0.94,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+      }),
+    }),
+    base({
+      id: 'm102',
+      from: { email: 'mia@creator.example', name: 'Mia Hart' },
+      subject: 'Collab on the new travel bottle?',
+      text: "Hi! I run a 120k travel channel and I'd love to do a sponsored video on the new bottle. Could you send over your rates and whether you can ship to Berlin?",
+      minutes: 95,
+      route: 'kol',
+      folder: 'kolagents',
+      folder_kind: 'kol',
+      labels: ['partnership'],
+      triage: verdict({
+        route: 'kol',
+        labels: ['partnership'],
+        needs_reply: true,
+        summary: '红人想谈一条赞助视频',
+        confidence: 0.88,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+      }),
+    }),
+    base({
+      id: 'm103',
+      from: { email: 'sales@kraft-boxes.example', name: '恒昌纸品 · 周敏' },
+      subject: '10 月纸箱报价（比上次低 3%）',
+      text: '王总您好，附上 10 月的纸箱报价。同规格单价比 9 月低 3%，起订量不变。方便的话这周定下来，我们排产。',
+      minutes: 180,
+      labels: ['suppliers'],
+      attachments: [{ id: 'a3', name: '10月报价.pdf', mime: 'application/pdf', size: 88_200 }],
+      triage: verdict({
+        labels: ['suppliers'],
+        needs_reply: true,
+        summary: '供应商报价，比上次低 3%',
+        confidence: 0.82,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+      }),
+    }),
+    base({
+      id: 'm104',
+      from: { email: 'billing@shipfast.example', name: 'ShipFast Billing' },
+      subject: 'Invoice #SF-20931 is ready',
+      text: 'Your September shipping invoice is ready. Total EUR 1,284.40, due in 14 days.',
+      minutes: 320,
+      read: true,
+      labels: ['billing'],
+      triage: verdict({
+        labels: ['billing'],
+        summary: '本月物流账单，14 天内到期',
+        by: 'rule',
+        reasons: ['noreply 发件人'],
+      }),
+    }),
+    base({
+      id: 'm105',
+      from: { email: 'news@packaging-weekly.example', name: 'Packaging Weekly' },
+      subject: '本周包装行业速览',
+      text: '本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。',
+      html: '<p>本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。</p><img data-ws-remote-src="https://packaging-weekly.example/pixel.gif" width="1" height="1" />',
+      remote: true,
+      minutes: 520,
+      read: true,
+      labels: ['newsletters'],
+      triage: verdict({
+        labels: ['newsletters'],
+        summary: '订阅类周报',
+        by: 'rule',
+        reasons: ['List-Unsubscribe'],
+      }),
+    }),
+    base({
+      id: 'm106',
+      from: { email: 'security@shop1fy-alerts.example', name: 'Shopify Security' },
+      subject: '您的店铺账号将在 24 小时内冻结，请立即验证',
+      text: '检测到异常登录。请在 24 小时内点击链接验证身份，否则账号将被冻结。',
+      minutes: 700,
+      labels: ['suspicious', 'security'],
+      triage: verdict({
+        labels: ['suspicious', 'security'],
+        priority: 'high',
+        summary: '像是钓鱼：催你立即验证',
+        by: 'rule',
+        reasons: ['noreply 发件人'],
+      }),
+    }),
+    base({
+      id: 'm107',
+      from: { email: 'linh@applicant.example', name: 'Linh Tran' },
+      subject: '应聘：社媒运营（附作品集）',
+      text: '您好，看到贵司在招社媒运营。我做过两个独立站的 TikTok 与 IG，去年带来 3.2 万自然流量。简历与作品集在附件里。',
+      minutes: 1440,
+      starred: true,
+      labels: ['hiring'],
+      attachments: [{ id: 'a4', name: 'LinhTran-CV.pdf', mime: 'application/pdf', size: 142_000 }],
+      triage: verdict({
+        labels: ['hiring'],
+        needs_reply: true,
+        summary: '有人应聘社媒运营，附了作品集',
+        confidence: 0.86,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+      }),
+    }),
+    base({
+      id: 'm108',
+      from: { email: 'ops@luminous-lab.example', name: '李默' },
+      subject: 'Re: 10 月纸箱报价（比上次低 3%）',
+      text: '我看过了，价格没问题。要不要顺便问一下能不能改成可降解内衬？',
+      minutes: 60,
+      folder: 'Sent',
+      folder_kind: 'sent',
+      read: true,
+    }),
+  ]
+
+  for (const row of rows) await store.put(row)
 }
 
 /** 第二个品牌的名字（截图与文档里都用它，别改来改去）。 */
