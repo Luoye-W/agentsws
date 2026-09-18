@@ -20,17 +20,20 @@ import { describe, expect, it } from 'vitest'
  * WP41 留下的 `0.1.5-rc.1.json` 是 WP41 当时的代码树（pack 只有 13 条场景），
  * WP42–WP69 之后再拿它当 FROM，diff 出来的是我们自己的改动，不是上游的。
  *
- * **WP81 的特例：自比。** 这一棒换的是**我们自己的回合逻辑**（回合改由 dsh 的
- * Agent 层驱动），不是 dsh 的版本——指纹必然全变，拿 0.1.5 那份当 FROM 比出来的
- * 全是本棒的改动，一条也说明不了上游。所以重采一份 `0.1.6-alpha.1-wp81.json`，
- * FROM / TO 都指向它：这一版是**下一次 dsh 升级的起点**，比对本身退化成
- * "采集器是确定的、两档仍然逐条相等"两条。旧的三份一个不删（历史刻度）。
+ * **WP81 的特例（已过去）：自比。** 那一棒换的是**我们自己的回合逻辑**（回合改由 dsh
+ * 的 Agent 层驱动），不是 dsh 的版本——指纹必然全变，所以 FROM / TO 都指向
+ * `0.1.6-alpha.1-wp81.json`，比对退化成"采集器是确定的、两档仍然逐条相等"两条。
  * 理由与逐条解释见 `packages/dsh-adapter/AGENT-LAYER.md` §6。
+ *
+ * **WP93（0.1.6-alpha.1 → 0.1.6-alpha.2）：回到真正的跨版本比。**
+ * FROM_FILE 是升级前在**当前代码树**（WP82–WP92 之后：浏览器 / BrowserSkill /
+ * preset / shell 沙箱 / 订阅登录都进来了）重采的 `0.1.6-alpha.1-wp93.json`，
+ * 不是 WP81 那一份。旧的六份一个不删（历史刻度）。
  */
-const FROM_FILE = '0.1.6-alpha.1-wp81'
-const TO_FILE = '0.1.6-alpha.1-wp81'
+const FROM_FILE = '0.1.6-alpha.1-wp93'
+const TO_FILE = '0.1.6-alpha.2'
 const FROM = '0.1.6-alpha.1'
-const TO = '0.1.6-alpha.1'
+const TO = '0.1.6-alpha.2'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
 const MAX_TOKEN_DRIFT_PCT = 5
