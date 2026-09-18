@@ -110,13 +110,19 @@ function statusLine(
  * 换不到名字的 person **不画头像**：19 §3 / WP15 那条"先给再脱敏"的反面教训——
  * 与其在卡上印半个 `p_li`，不如那个位置什么都没有。问不到整份清单（403 / 离线）时
  * 一排头像整个不出，卡的其余部分照旧。
+ *
+ * 成员清单要 `policy:read`，而客服那条分配上没有——所以这里**拿所有者那条分配去问**
+ * （与「还没接模型」那条黄条问模型时同一个做法）。不是所有者的人问不到，
+ * 那就当作"这一排不归我看"，静静地不画，而不是给他一排点不动的灰头像。
  */
 function useHolderNames(workspace_id: string | undefined): Map<string, string> {
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  const ownerId = positions.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
   const members = useQuery({
-    queryKey: ['members', workspace_id],
-    enabled: workspace_id !== undefined && workspace_id !== '',
+    queryKey: ['members', workspace_id, ownerId],
+    enabled: workspace_id !== undefined && workspace_id !== '' && ownerId !== undefined,
     retry: false,
-    queryFn: () => listMembers(workspace_id ?? ''),
+    queryFn: () => listMembers(workspace_id ?? '', ownerId),
   })
   return useMemo(
     () => new Map((members.data ?? []).map((m) => [m.person_id, m.name])),

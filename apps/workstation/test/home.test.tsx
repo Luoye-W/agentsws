@@ -72,7 +72,8 @@ const GOALS: GoalProgress[] = [
 const getHome = vi.fn(async () => home)
 const decide = vi.fn(async () => ({}))
 const getPositions = vi.fn(async () => ({
-  positions: [],
+  // 成员清单要 policy:read：界面拿**所有者那条分配**去问（与"还没接模型"同一个做法）
+  positions: [{ position_id: 'asg_owner', role_id: 'common.owner' }],
   instances: [
     // `p_hidden` 在成员清单里查不到名字：那个位置就该什么都没有（19 §3 / WP15）
     instance('customer-care', '客服', 'asg_1', ['p_li', 'p_hidden']),
@@ -230,6 +231,14 @@ describe('WP98 收口：岗位卡补齐持有人与一句真状态', () => {
       '满意度',
     )
     expect(cards.querySelector('[data-position="web-ops"]')?.textContent).toContain('还没开工')
+  })
+
+  it('拿所有者那条分配去问成员清单（客服那条上没有 policy:read）', async () => {
+    renderWithProviders(<HomePage />)
+    await screen.findByTestId('position-cards')
+    await waitFor(() => {
+      expect(listMembers).toHaveBeenCalledWith('ws_1', 'asg_owner')
+    })
   })
 
   it('持有人头像按展示名画；查不到名字的那个人不画（不在卡上印半个 id）', async () => {

@@ -390,6 +390,31 @@ async function seedPolicyQuestion(world: World): Promise<ApprovalItem> {
  * `money`（退款变更卡）、`policy`（`seedPolicyQuestion` 那张边界问题卡）。
  */
 async function seedCardGallery(world: World): Promise<void> {
+  /**
+   * WP98（09-18 收口）：**每张摆拍卡挂到它真该归的那条职责上**。
+   *
+   * 头一行收口成「岗位 · 类别」之后，这件事一眼就露了馅：一张改价卡、一张 IG 发布卡、
+   * 一张止损恢复卡，头上全写着"客服"——因为原来十一张都用登录人那条客服分配种下去。
+   * 芯片多的时候没人注意，胶囊只剩两枚之后它就是卡上最显眼的一句假话。
+   *
+   * 这里只改**挂哪条职责**：那几条职责本来就都挂在这个人名下（上面那个 for 循环里
+   * 一条条挂的），所以权限、额度、动作面一个不多一个不少，走的还是同一条
+   * `approvals.create` → `projectCard` → `layoutFor`。挂不到（这个人没这条职责）
+   * 就退回登录人那条——不为一张摆拍卡凭空造一条分配。
+   */
+  const routed = (r: { role_id: string; assignment_id: string }) => ({
+    role_id: r.role_id,
+    proposer: { kind: 'agent' as const, id: 'agent_store', assignment_id: r.assignment_id },
+  })
+  const at = (role_id: string): { role_id: string; assignment_id: string } => {
+    const mine = world.roles.assignments
+      .listByRole(role_id, { workspace_id: world.workspace_id })
+      .find((a) => a.person_id === world.roleHolder && a.revoked_at === undefined)
+    return mine === undefined
+      ? { role_id: world.role_id, assignment_id: world.assignment.id }
+      : { role_id, assignment_id: mine.id }
+  }
+
   const base = {
     workspace_id: world.workspace_id,
     schema_version: 1 as const,
@@ -429,6 +454,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'staged_change',
     subject: { object: { type: 'product', id: 'GB-12-CLR' } },
+    ...routed(at('dtc.store')), // 改价是店铺管理的活儿
     // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
     evidence: { ...base.evidence, provenance: { seen: [{ type: 'product', id: 'GB-12-CLR' }] } },
     dedupe_key: `gallery_price_change:${world.workspace_id}:1`,
@@ -447,6 +473,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'staged_change',
     subject: { object: { type: 'post', id: 'post_unbox' } },
+    ...routed(at('social.meta')), // IG 帖子归内容账号组
     // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
     evidence: { ...base.evidence, provenance: { seen: [{ type: 'post', id: 'post_unbox' }] } },
     dedupe_key: `gallery_social_post:${world.workspace_id}:1`,
@@ -466,6 +493,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'ai_question',
     subject: { object: { type: 'work_item', id: 'mat_gallery' } },
+    ...routed(at('dtc.store')), // 路由拿不准的那件事是店铺管理引出来的
     dedupe_key: `gallery_ai_question:${world.workspace_id}:1`,
     title: '这件事像两条职责，你定',
     summary: '命中「改价 · 商品」的是店铺管理，命中「页面 · 文案」的是内容与博客。',
@@ -482,6 +510,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'staged_change',
     subject: { object: { type: 'asset', id: 'banner_set3' } },
+    ...routed(at('design.dtc')), // Banner 变体归设计
     // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
     evidence: { ...base.evidence, provenance: { seen: [{ type: 'asset', id: 'banner_set3' }] } },
     dedupe_key: `gallery_design_variant:${world.workspace_id}:1`,
@@ -505,6 +534,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'staged_change',
     subject: { object: { type: 'campaign', id: 'cmp_autumn' } },
+    ...routed(at('ads.meta')), // 止损恢复归投放
     // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
     evidence: { ...base.evidence, provenance: { seen: [{ type: 'campaign', id: 'cmp_autumn' }] } },
     dedupe_key: `gallery_pause_ad:${world.workspace_id}:1`,
@@ -525,6 +555,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'staged_change',
     subject: { object: { type: 'person', id: 'maria_k' } },
+    ...routed(at('social.discord')), // 入群审核归社群组
     // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
     evidence: { ...base.evidence, provenance: { seen: [{ type: 'person', id: 'maria_k' }] } },
     dedupe_key: `gallery_community_membership:${world.workspace_id}:1`,
@@ -558,6 +589,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'dev_handoff_result',
     subject: { object: { type: 'run', id: 'run_gallery' } },
+    ...routed(at('site.shopify-build')), // 登录态失效是建站那条职责停在那儿
     dedupe_key: `gallery_takeover:${world.workspace_id}:1`,
     title: 'Facebook 群组 · 登录态失效',
     summary:
