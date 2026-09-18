@@ -119,3 +119,13 @@ export {
   validateTileSelection,
 } from './tiles.js'
 export type * from './types.js'
+export {
+  CATEGORY_BY_CHANGE,
+  CATEGORY_BY_KIND,
+  categoryKey,
+  type DeckVerb,
+  LAYOUT_VERBS,
+  type LayoutVerbs,
+  verbKey,
+  verbRank,
+} from './verbs.js'

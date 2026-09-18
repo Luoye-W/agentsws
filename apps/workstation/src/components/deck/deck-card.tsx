@@ -16,6 +16,7 @@
  * ④ 动作行：≤ 3 个快捷决定 + 安静区；折叠区就地替换它
  */
 import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@agentsws/deck'
+import { categoryKey } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { FactChip } from '@/components/chips'
@@ -156,6 +157,21 @@ const BAND_TONE: Record<DeckCard['priority_band'], Tone> = {
   P3: 'neutral',
 }
 
+/**
+ * 头一行第一枚上那个**类别**（WP100，09-18 画布）。
+ *
+ * 画布上写的是"网站运营 · 改价""客服 · 退款""建站 · 请你接管"，而 WP96 这一版出的是
+ * `kind.<kind>`——也就是账本里的枚举名（"变更待批"）。同一句话里，前半截是人话
+ * （岗位名），后半截是数据库术语，读起来就像界面没写完。
+ *
+ * 表在投影层（`@agentsws/deck` 的 `verbs.ts`），这里只负责"查不到就退回原来的写法"：
+ * 第十二种 kind 出现那天，卡面上说的是一句不好看的实话，而不是一句好看的错话。
+ */
+function categoryOf(card: DeckCard, t: (key: string) => string): string {
+  const key = categoryKey(card.kind, card.change_kind)
+  return t(key ?? `kind.${card.kind}`)
+}
+
 function usePositionName(role_id: string): string | undefined {
   const { lang } = useApp()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
@@ -218,6 +234,8 @@ export function DeckCardView({
   const positionName = usePositionName(card.role_id)
   const rail = useRailState()
   const evidence = evidenceLines(card, t, (iso) => formatDateTime(iso, lang))
+  // WP100：头一行那个类别写人话（"网站运营 · 改价"）；表里没登记的退回枚举名那一版
+  const category = categoryOf(card, t)
 
   const act = (action: DeckAction): void => {
     if (action === 'open') {
@@ -272,9 +290,7 @@ export function DeckCardView({
         data-testid="deck-tag-row"
       >
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
-          {positionName === undefined
-            ? t(`kind.${card.kind}`)
-            : `${positionName} · ${t(`kind.${card.kind}`)}`}
+          {positionName === undefined ? category : `${positionName} · ${category}`}
         </StatusPill>
         <WaitPill card={card} />
         <span className="ml-auto flex items-center gap-2">

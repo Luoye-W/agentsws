@@ -266,3 +266,58 @@ describe('全类共用的头与脚', () => {
     expect(card.dataset.layout).toBe('outbound')
   })
 })
+
+/**
+ * WP100（09-18 画布收口）：**按钮上的字按排版走，头一行的类别写人话**。
+ *
+ * 一种排版一行，钉的是"人按下去之前读到的那个字"与"这是哪个岗位的什么活儿"——
+ * 十一种卡共用"批准 / 驳回 / 指导"等于把这两件事都从界面上抹掉。
+ * 动作本身一个没换：`data-action` 还是 `approve`，换的只有文案与位置。
+ */
+describe('WP100：十一种各有主动词，头一行的类别写人话', () => {
+  const table: [DeckCard['layout'], Partial<DeckCard>, string, string][] = [
+    ['outbound', { kind: 'outbound_draft' }, '发送', '回信'],
+    ['change', { kind: 'staged_change', change_kind: 'price_change' }, '批准', '改价'],
+    ['publish', { kind: 'staged_change', change_kind: 'publish_post' }, '批准发布', '发布'],
+    ['money', { kind: 'staged_change', change_kind: 'refund' }, '批准退款', '退款'],
+    ['choice', { kind: 'ai_question' }, '就这条', '路由'],
+    ['variants', { kind: 'staged_change', change_kind: 'design_variant' }, '就这张', '变体'],
+    ['aftermath', { kind: 'staged_change', change_kind: 'pause_ad' }, '恢复投放', '止损后'],
+    ['person', { kind: 'staged_change', change_kind: 'community_membership' }, '通过', '入群'],
+    ['handoff', { kind: 'claim' }, '认领', '转交'],
+    ['takeover', { kind: 'dev_handoff_result' }, '打开浏览器', '请你接管'],
+    ['policy', { kind: 'policy_change' }, '批准', '策略变更'],
+  ]
+
+  for (const [layout, over, verb, category] of table) {
+    it(`${layout}：主动词是「${verb}」，类别是「${category}」`, () => {
+      renderCard(layoutCard(layout, over))
+      const bar = screen.getByTestId('deck-action-bar')
+      const primary = within(bar).getByText(verb).closest('button')
+      expect(primary?.dataset.action).toBe('approve')
+      expect(primary?.dataset.rank).toBe('primary')
+      expect(screen.getByTestId('deck-band').textContent).toBe(category)
+    })
+  }
+
+  it('金钱卡的主动词按账本条目类型换（退款 / 补发 / 发码 / 合作）', () => {
+    renderCard(layoutCard('money', { kind: 'staged_change', change_kind: 'reship' }))
+    expect(within(screen.getByTestId('deck-action-bar')).getByText('批准补发')).toBeTruthy()
+  })
+
+  it('没登记的 kind 回退到原来的写法，不编一个类别名', () => {
+    renderCard(layoutCard('change', { kind: 'staged_change', change_kind: 'no_such_kind' }))
+    // `kind.staged_change` = 「变更待批」：一句不好看的实话，好过一句好看的错话
+    expect(screen.getByTestId('deck-band').textContent).toBe('变更待批')
+    expect(within(screen.getByTestId('deck-action-bar')).getByText('批准')).toBeTruthy()
+  })
+
+  it('「指导」在选择卡上排不进按钮行，收进 ···（动作还在，位置换了）', async () => {
+    renderCard(layoutCard('choice', { kind: 'ai_question' }))
+    const bar = screen.getByTestId('deck-action-bar')
+    expect(within(bar).queryByText('我来说')).toBeNull()
+    await userEvent.click(screen.getByTestId('deck-more'))
+    const menu = screen.getByTestId('deck-more-menu')
+    expect(within(menu).getByText('我来说').closest('button')?.dataset.action).toBe('instruct')
+  })
+})
