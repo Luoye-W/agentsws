@@ -132,6 +132,127 @@ for (const tier of TIERS) {
       expect(() => k.intake.markSynced(s.id, -1)).toThrow(/非负整数/)
     })
 
+    it('WP99 上传：那几格落得住，清单与 getSource 都拿得到', () => {
+      const k = make()
+      const s = k.intake.addSource({
+        workspace_id: WS,
+        kind: 'upload',
+        ref: 'blob://knowledge/ws_1/abc.xlsx',
+        parser: 'anydoc',
+        upload: {
+          filename: '报价 单.xlsx',
+          uploaded_by: 'per_1',
+          content_sha256: 'a'.repeat(64),
+          size: 1234,
+        },
+      })
+      expect(s.filename).toBe('报价 单.xlsx')
+      expect(s.uploaded_by).toBe('per_1')
+      expect(s.uploaded_at).toBeDefined()
+      expect(s.content_sha256).toBe('a'.repeat(64))
+      expect(s.size).toBe(1234)
+      expect(s.deleted_at).toBeUndefined()
+      expect(k.intake.getSource(s.id)?.filename).toBe('报价 单.xlsx')
+      expect(k.intake.sources(WS)[0]?.size).toBe(1234)
+    })
+
+    it('WP99 溯源：加一条源发 `knowledge.source.added`，载荷里没有正文', () => {
+      const k = make()
+      const s = k.intake.addSource({
+        workspace_id: WS,
+        kind: 'upload',
+        ref: 'blob://knowledge/ws_1/abc.xlsx',
+        parser: 'anydoc',
+        upload: {
+          filename: '退货说明.docx',
+          uploaded_by: 'per_1',
+          content_sha256: 'b'.repeat(64),
+          size: 9,
+        },
+      })
+      const added = events.filter((e) => e.type === 'knowledge.source.added')
+      expect(added).toHaveLength(1)
+      expect(added[0]?.payload).toMatchObject({
+        source_id: s.id,
+        kind: 'upload',
+        filename: '退货说明.docx',
+        uploaded_by: 'per_1',
+        content_sha256: 'b'.repeat(64),
+        size: 9,
+      })
+      // 同一个 ref 再登记一次不发第二条（那是同一个源）
+      k.intake.addSource({
+        workspace_id: WS,
+        kind: 'upload',
+        ref: 'blob://knowledge/ws_1/abc.xlsx',
+        parser: 'anydoc',
+      })
+      expect(events.filter((e) => e.type === 'knowledge.source.added')).toHaveLength(1)
+    })
+
+    it('WP99 删除：软删 + 墓碑——清单里没有了，按 id 还查得到，再删一次回 undefined', () => {
+      const k = make()
+      const s = k.intake.addSource({
+        workspace_id: WS,
+        kind: 'upload',
+        ref: 'blob://knowledge/ws_1/abc.xlsx',
+        parser: 'anydoc',
+        upload: {
+          filename: 'a.xlsx',
+          uploaded_by: 'per_1',
+          content_sha256: 'c'.repeat(64),
+          size: 3,
+        },
+      })
+      const gone = k.intake.deleteSource(s.id)
+      expect(gone?.deleted_at).toBeDefined()
+      expect(k.intake.sources(WS)).toEqual([])
+      // 墓碑还在：这个 id 曾经存在过，仍然追得到
+      expect(k.intake.getSource(s.id)?.deleted_at).toBeDefined()
+      expect(k.intake.deleteSource(s.id)).toBeUndefined()
+      expect(k.intake.deleteSource('src_nope')).toBeUndefined()
+      const removed = events.filter((e) => e.type === 'knowledge.source.removed')
+      expect(removed).toHaveLength(1)
+      expect(removed[0]?.payload).toMatchObject({ source_id: s.id, filename: 'a.xlsx' })
+    })
+
+    it('WP99 删了再传同一份：复活那一行，而不是留一条永远看不见的墓碑', () => {
+      const k = make()
+      const ref = 'blob://knowledge/ws_1/abc.xlsx'
+      const first = k.intake.addSource({
+        workspace_id: WS,
+        kind: 'upload',
+        ref,
+        parser: 'anydoc',
+        upload: {
+          filename: '旧名字.xlsx',
+          uploaded_by: 'per_1',
+          content_sha256: 'd'.repeat(64),
+          size: 3,
+        },
+      })
+      k.intake.deleteSource(first.id)
+      const again = k.intake.addSource({
+        workspace_id: WS,
+        kind: 'upload',
+        ref,
+        parser: 'anydoc',
+        upload: {
+          filename: '新名字.xlsx',
+          uploaded_by: 'per_2',
+          content_sha256: 'd'.repeat(64),
+          size: 3,
+        },
+      })
+      expect(again.id).toBe(first.id)
+      expect(again.deleted_at).toBeUndefined()
+      expect(again.filename).toBe('新名字.xlsx')
+      expect(again.uploaded_by).toBe('per_2')
+      expect(k.intake.sources(WS).map((x) => x.id)).toEqual([first.id])
+      // 复活也算"又加了一次"：溯源链上看得见两次 added
+      expect(events.filter((e) => e.type === 'knowledge.source.added')).toHaveLength(2)
+    })
+
     it('缺口：同问题只开一条；答完再问就是新的一条', () => {
       const k = make()
       const input = {

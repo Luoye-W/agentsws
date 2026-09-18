@@ -4285,3 +4285,57 @@ export async function getKnowledgeSourceFile(
   const blob = await res.blob()
   return { filename, size: blob.size, content_type, too_large: false, blob }
 }
+
+// ── WP99（19 §1.3「上传」）：知识库的**写口** ─────────────────────────
+//
+// WP97 只有读（列清单 + 按 id 取原件字节），`kind: 'upload'` 的源只有 demo 在造。
+// 这两条把写补上：传一份文件进来、删一份。
+//
+// 上传不走 `api()`（那个函数发 JSON），与 `importKnowledgePack` 同形：
+// 自己拼 `Authorization` / `X-Assignment`，`content-type` 交给浏览器填
+// （multipart 要带 boundary，手写一个准错）。
+
+/**
+ * 前端这一侧的单份上限（64 MB），与服务端两道闸**同一个数**
+ * （`apps/server/src/knowledge-upload.ts` 的 `UPLOAD_MAX_BYTES`
+ * 与 `knowledge-file.ts` 的 `SOURCE_FILE_MAX_BYTES`）。
+ *
+ * 前端先拦一道不是为了安全（谁都能绕过去），是为了**别让人等**：
+ * 一份 300 MB 的文件传上去再被拒，人已经等了两分钟。
+ */
+export const UPLOAD_MAX_BYTES = 64 * 1024 * 1024
+
+/** 服务端收哪几种（与 `UPLOAD_EXTENSIONS` 同一份表；`<input accept>` 与前端预检都用它）。 */
+export const UPLOAD_EXTENSIONS = ['docx', 'xlsx', 'xls', 'csv', 'pptx', 'pdf', 'md', 'txt'] as const
+
+/** `.docx,.xlsx,…`——直接喂给 `<input type="file" accept>`。 */
+export const UPLOAD_ACCEPT = UPLOAD_EXTENSIONS.map((e) => `.${e}`).join(',')
+
+/** 传一份文件进知识库；回登记好的那条源（列表立刻就能显示它）。 */
+export async function uploadKnowledgeSource(
+  file: File,
+  assignment?: string,
+): Promise<KnowledgeSourceRow> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = assignment ?? currentAssignment
+  if (asg !== null) headers.set('X-Assignment', asg)
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/v1/knowledge/sources/upload', { method: 'POST', headers, body: form })
+  const text = await res.text()
+  const parsed: unknown = text === '' ? {} : JSON.parse(text)
+  if (!res.ok) throw new ApiClientError(res.status, parsed as ApiErrorBody)
+  return (parsed as ApiEnvelope<KnowledgeSourceRow>).data
+}
+
+/** 删一份（21 的擦除语义：字节真删、行留墓碑）。 */
+export const deleteKnowledgeSource = (
+  source_id: string,
+  assignment?: string,
+): Promise<{ deleted: true; id: string }> =>
+  api(`/v1/knowledge/sources/${encodeURIComponent(source_id)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })

@@ -96,6 +96,15 @@ export type KnownEventType =
   | 'knowledge.card.cited'
   | 'knowledge.gap.opened'
   | 'knowledge.gap.answered'
+  /**
+   * WP99（19 §1.3）：知识库里多了 / 少了一个**导入源**。
+   *
+   * 「上传一份文件」的溯源就落在这两条上：payload 带**谁传的、什么时候、
+   * 内容的 sha256、多大、什么类型**——`filename` 只带洗过的那一份，
+   * **正文一个字节都不进事件日志**（21 §2 / 13 §4：内容不进日志）。
+   */
+  | 'knowledge.source.added'
+  | 'knowledge.source.removed'
   // WP56（48 §4 #6 知识溯源链）：源页 / 文档内容变了之后的那条链。
   // `knowledge.card.stale` 复用上面那条（47 J2 与源页复核是同一个意思：这条别当"现在"用）。
   /** 复核完了（或受管辖数值压根没变）→ 这张卡回鲜，`last_verified_at` 往前走。 */
