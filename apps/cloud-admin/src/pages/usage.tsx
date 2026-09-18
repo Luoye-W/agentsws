@@ -175,7 +175,7 @@ export function UsagePage(): React.ReactNode {
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
-          className={`${inputClass} w-52`}
+          className={cn(inputClass, 'w-52')}
           placeholder="org_id"
           defaultValue={filters.org_id ?? ''}
           onKeyDown={(e) => {
@@ -258,7 +258,7 @@ function Select({
   return (
     <select
       aria-label={label}
-      className={`${inputClass} w-40`}
+      className={cn(inputClass, 'w-40')}
       value={value ?? ''}
       onChange={(e) => {
         onChange(e.target.value === '' ? undefined : e.target.value)

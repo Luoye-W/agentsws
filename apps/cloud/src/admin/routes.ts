@@ -51,7 +51,14 @@ import { z } from 'zod'
 import { clientIpOf } from '../guards.js'
 import { loginMail, type MailSender } from '../mail.js'
 import type { CloudStore } from '../store.js'
-import { cookieHeader, notThere, requireAdmin, requireCsrf, requireStaff } from './guard.js'
+import {
+  cookieHeader,
+  notThere,
+  requireAdmin,
+  requireCsrf,
+  requireStaff,
+  secureCookiesFor,
+} from './guard.js'
 import { anchorFor, planOrThrow, runDueGrants } from './membership.js'
 import {
   accountCount,
@@ -132,8 +139,8 @@ const strQuery = (c: Context<CloudEnv>, name: string): string | undefined => {
   return raw === undefined || raw.trim() === '' ? undefined : raw.trim()
 }
 
-/** `admin` 档的 cookie 要不要带 Secure：地址是 https 就带。本地 http 联调不带。 */
-const secureCookies = (baseUrl: string): boolean => baseUrl.startsWith('https://')
+/** `admin` 档的 cookie 要不要带 Secure（见 `guard.ts` 的 {@link secureCookiesFor}）。 */
+const secureCookies = secureCookiesFor
 
 /* ------------------------------------------------------------------ */
 /* 请求体                                                               */

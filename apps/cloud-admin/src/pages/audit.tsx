@@ -13,6 +13,7 @@ import { qs } from '@/lib/api'
 import { useApp, useQuery } from '@/lib/app'
 import { when } from '@/lib/format'
 import type { Key } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
 interface AuditRow {
   id: number
@@ -100,7 +101,7 @@ export function AuditPage(): React.ReactNode {
         right={
           <div className="flex gap-2">
             <input
-              className={`${inputClass} w-44`}
+              className={cn(inputClass, 'w-44')}
               placeholder={t('col.action')}
               defaultValue={state.get('action') ?? ''}
               onKeyDown={(e) => {
@@ -108,7 +109,7 @@ export function AuditPage(): React.ReactNode {
               }}
             />
             <input
-              className={`${inputClass} w-52`}
+              className={cn(inputClass, 'w-52')}
               placeholder={t('col.target')}
               defaultValue={state.get('target_id') ?? ''}
               onKeyDown={(e) => {

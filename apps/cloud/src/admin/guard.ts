@@ -49,6 +49,27 @@ export function parseCookies(header: string | undefined): Map<string, string> {
 }
 
 /**
+ * 这个地址下 cookie 要不要带 `Secure`。
+ *
+ * 不只是"https 才带"：`__Host-` 前缀**要求**必须有 `Secure`，而浏览器把
+ * `localhost` / `127.0.0.1` 当作可信来源（potentially trustworthy origin），
+ * 在这两个主机上即使走 http 也认 `Secure` cookie。
+ *
+ * 只按 `https://` 判的后果是：本机联调时后台**永远登不进去**——服务端写了一张
+ * 没有 `Secure` 的 `__Host-` cookie，浏览器当场丢掉，而页面上看不出任何异常，
+ * 只是一直回登录页。这一条是真踩出来的（WP115 的截图脚本）。
+ */
+export function secureCookiesFor(baseUrl: string): boolean {
+  if (baseUrl.startsWith('https://')) return true
+  try {
+    const host = new URL(baseUrl).hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1'
+  } catch {
+    return false
+  }
+}
+
+/**
  * 写一张 cookie。
  *
  * `__Host-` 前缀（会话那一张）要求：`Secure`、`Path=/`、**没有 `Domain`**。

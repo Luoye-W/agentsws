@@ -155,10 +155,10 @@ export const zh = {
   'form.new_role': '新角色',
 
   'delete.warning':
-    '删除不可撤销。必须先封禁；他的钱包与计量流水会**保留并匿名化**（账要对得上），邮箱与它的规范化别名进黑名单。',
-  'suspend.note': '停用 = 云端服务入口拒绝。**不影响他本地的软件**——那一份数据在他自己电脑上。',
+    '删除不可撤销。必须先封禁；他的钱包与计量流水会保留并匿名化（账要对得上），邮箱与它的规范化别名进黑名单。',
+  'suspend.note': '停用 = 云端服务入口拒绝。不影响他本地的软件——那一份数据在他自己电脑上。',
   'no.impersonation':
-    '这里没有「以他的身份看一眼」。云上只有账号、钱和计量，**没有商家的业务正文**（21），所以没有东西可看——这是刻意的。',
+    '这里没有「以他的身份看一眼」。云上只有账号、钱和计量，没有商家的业务正文（21），所以没有东西可看——这是刻意的。',
 
   'credits.grants': '发放流水',
   'credits.terms': '手动会员',
@@ -325,11 +325,11 @@ export const en: Record<Key, string> = {
   'form.new_role': 'New role',
 
   'delete.warning':
-    'Deletion cannot be undone. The account must be banned first. Wallet and metering rows are **kept and anonymised** (the books must still balance); the email and its normalised alias go on the blocklist.',
+    'Deletion cannot be undone. The account must be banned first. Wallet and metering rows are kept and anonymised (the books must still balance); the email and its normalised alias go on the blocklist.',
   'suspend.note':
-    'Suspending only makes the cloud service entry refuse them. **Their local software keeps working** — that data lives on their own machine.',
+    'Suspending only makes the cloud service entry refuse them. Their local software keeps working — that data lives on their own machine.',
   'no.impersonation':
-    'There is no “view as this user”. The cloud holds accounts, money and metering only — **no merchant business content** (docs/21) — so there is nothing to look at. That is deliberate.',
+    'There is no “view as this user”. The cloud holds accounts, money and metering only — no merchant business content (docs/21) — so there is nothing to look at. That is deliberate.',
 
   'credits.grants': 'Grant ledger',
   'credits.terms': 'Manual memberships',

@@ -24,6 +24,7 @@ import { ServerTable, useTableState } from '@/components/table'
 import { api, qs } from '@/lib/api'
 import { useApp, useQuery } from '@/lib/app'
 import { cny, compact, credits, day, orDash, when } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 interface OrgRow {
   org_id: string
@@ -140,7 +141,7 @@ export function OrgsPage(): React.ReactNode {
         right={
           <div className="flex items-center gap-2">
             <input
-              className={`${inputClass} w-56`}
+              className={cn(inputClass, 'w-56')}
               placeholder={t('search.org')}
               defaultValue={state.q ?? ''}
               onKeyDown={(e) => {

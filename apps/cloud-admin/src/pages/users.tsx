@@ -29,6 +29,7 @@ import { api, qs } from '@/lib/api'
 import { useApp, useQuery } from '@/lib/app'
 import { cny, credits, orDash, when } from '@/lib/format'
 import type { Key } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
 interface AccountRow {
   account_id: string
@@ -160,7 +161,7 @@ export function UsersPage(): React.ReactNode {
         right={
           <div className="flex flex-wrap items-center gap-2">
             <input
-              className={`${inputClass} w-56`}
+              className={cn(inputClass, 'w-56')}
               placeholder={t('search.email')}
               defaultValue={state.q ?? ''}
               onKeyDown={(e) => {
@@ -168,7 +169,7 @@ export function UsersPage(): React.ReactNode {
               }}
             />
             <select
-              className={`${inputClass} w-36`}
+              className={cn(inputClass, 'w-36')}
               value={state.get('role') ?? ''}
               onChange={(e) => {
                 state.set({ role: e.target.value })

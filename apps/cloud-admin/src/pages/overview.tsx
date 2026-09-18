@@ -151,30 +151,40 @@ export function OverviewPage(): React.ReactNode {
           )}
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-            {data.kpis.map((kpi) => {
-              const kind = KPI_KIND[kpi.key] ?? 'count'
-              const Icon = KPI_ICONS[kpi.key]
-              const value =
-                kind === 'micros'
-                  ? cny(kpi.value)
-                  : kind === 'credits'
-                    ? credits(kpi.value)
-                    : compact(kpi.value, lang)
-              const delta =
-                kpi.delta_7d === undefined && kpi.delta_30d === undefined
-                  ? undefined
-                  : `+${String(kpi.delta_7d ?? 0)}/7d · +${String(kpi.delta_30d ?? 0)}/30d`
-              return (
-                <Kpi
-                  key={kpi.key}
-                  label={t(`kpi.${kpi.key}` as Key)}
-                  value={value}
-                  tone={kpi.key === 'margin_micros_30d' && kpi.value < 0 ? 'bad' : 'brand'}
-                  {...(delta === undefined ? {} : { delta })}
-                  {...(Icon === undefined ? {} : { icon: <Icon className="size-3.5" /> })}
-                />
-              )
-            })}
+            {/*
+             * "未消耗积分"那一格的两类明细不各占一张卡——那会让这一排多出一行
+             * 半截。它们挂在那张卡的副行上（与"+N/7d · +N/30d"同一个位置）。
+             */}
+            {data.kpis
+              .filter((k) => k.key !== 'outstanding_granted' && k.key !== 'outstanding_purchased')
+              .map((kpi) => {
+                const kind = KPI_KIND[kpi.key] ?? 'count'
+                const Icon = KPI_ICONS[kpi.key]
+                const value =
+                  kind === 'micros'
+                    ? cny(kpi.value)
+                    : kind === 'credits'
+                      ? credits(kpi.value)
+                      : compact(kpi.value, lang)
+                const pick = (key: string): number =>
+                  data.kpis.find((x) => x.key === key)?.value ?? 0
+                const delta =
+                  kpi.key === 'outstanding_credits'
+                    ? `${t('kpi.outstanding_granted')} ${credits(pick('outstanding_granted'))} · ${t('kpi.outstanding_purchased')} ${credits(pick('outstanding_purchased'))}`
+                    : kpi.delta_7d === undefined && kpi.delta_30d === undefined
+                      ? undefined
+                      : `+${String(kpi.delta_7d ?? 0)}/7d · +${String(kpi.delta_30d ?? 0)}/30d`
+                return (
+                  <Kpi
+                    key={kpi.key}
+                    label={t(`kpi.${kpi.key}` as Key)}
+                    value={value}
+                    tone={kpi.key === 'margin_micros_30d' && kpi.value < 0 ? 'bad' : 'brand'}
+                    {...(delta === undefined ? {} : { delta })}
+                    {...(Icon === undefined ? {} : { icon: <Icon className="size-3.5" /> })}
+                  />
+                )
+              })}
           </div>
 
           <WsCard className="p-4">
@@ -256,7 +266,11 @@ export function OverviewPage(): React.ReactNode {
             </div>
           </WsCard>
 
-          <div className="grid gap-4 xl:grid-cols-3">
+          {/*
+           * 三张分组表**两列起，2xl 才三列**：三列在 1440 宽下会把"毛利"那一列
+           * 挤出可视区，而毛利正是这三张表唯一值得看的那个数。
+           */}
+          <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
             <BreakdownTable title={t('overview.by_capability')} rows={data.by_capability} />
             <BreakdownTable title={t('overview.by_provider')} rows={data.by_provider} />
             <BreakdownTable title={t('overview.by_model')} rows={data.by_model} />

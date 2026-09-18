@@ -21,7 +21,7 @@ import { BRAND_MARK_SVG_DARK } from '@agentsws/brand'
 import { ADMIN_CSRF_COOKIE, ADMIN_SESSION_COOKIE } from '@agentsws/contracts'
 import type { Context, Hono } from 'hono'
 import type { CloudStore } from '../store.js'
-import { cookieHeader } from './guard.js'
+import { cookieHeader, secureCookiesFor } from './guard.js'
 import { ADMIN_COOKIE_MAX_AGE_SECONDS } from './routes.js'
 import type { AdminStore } from './store.js'
 
@@ -127,7 +127,7 @@ const html = (body: string, status = 200): Response =>
 
 /** 把 `/admin/login` 与 `/admin/callback` 挂上去。**不碰静态产物**。 */
 export function mountAdminWebRoutes(deps: AdminWebDeps): void {
-  const secure = deps.baseUrl.startsWith('https://')
+  const secure = secureCookiesFor(deps.baseUrl)
 
   deps.app.get('/admin/login', () => html(adminLoginPage('idle')))
 
