@@ -1,3 +1,6 @@
 release/
 test-results/
 playwright-report/
+# WP111：捆绑的 Node 运行时与原生模块 prebuild（`scripts/fetch-node.mjs` 下的，
+# 哈希钉在 node-runtime.lock.json 里）。二进制不进仓库。
+vendor/

@@ -1,0 +1,20 @@
+{
+  "name": "@agentsws/brand",
+  "version": "0.0.0",
+  "private": true,
+  "description": "母品牌「出海Agents工坊」标记的几何、颜色与静态 SVG（真源在 00_Brand/品牌设计规范-v2.md）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  }
+}

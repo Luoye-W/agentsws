@@ -10,6 +10,7 @@
  * **身体一律 `lazy()`**（#6）：面板的代码在**第一次被打开**之前既不下载也不挂载，
  * 于是"刷新之后恢复布局"这件事不会顺手把上次那个面板的请求也重放一遍。
  * 图标轨照样画得出十三个格子（WP97 加了 Office 预览）——它读的是第一段（类型），那一段是静态的。
+ * WP100 给「证据」补了身体，于是还占着位的只剩上组那三个（数据面板 / 运行中 / 定时任务）。
  *
  * **占位面板只注册类型不注册身体**：点开显示"还没做"（`right-rail.tsx` 兜的），
  * 位置先占住——图标轨的位置定了就不该再挪（肌肉记忆）。
@@ -88,6 +89,18 @@ const AskBody = lazy(async () => {
   }
 })
 
+/**
+ * WP100 新增：**证据**（36 §9 那张表里的第四格）。
+ *
+ * 位置从 WP71 起就占着（那时点开显示"还没做"）；这一版把正文挂上来，走的是与
+ * 其余十二个面板、以及将来任何一个应用包的面板**逐字相同的两句**——内置不走后门
+ * （#4）。身体照旧 `lazy()`：没人点「证据 N」之前它一个字节都不下载。
+ */
+const EvidenceBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/evidence-panel')
+  return { default: m.EvidencePanel }
+})
+
 /** WP95 新增：运行中的浏览器（#12 借形，我们自己的组件画 WP82 / WP92 的会话）。 */
 const RunBrowserBody = lazy(async () => {
   const m = await import('@/components/rail/panels/run-browser-panel')
@@ -150,6 +163,7 @@ export function ensureBuiltinPanels(): void {
     priority: 'builtin',
     group: 'context',
   })
+  registerPanelBody('evidence', EvidenceBody)
   registerPanelType({
     id: 'changes',
     label: 'rail.panel.changes',

@@ -22,6 +22,12 @@ export type MenuAction =
   | 'open-work-browser'
   /** WP92（55 §10）：问一句「我正在用的浏览器」那一套装好没有（跑一次 `bsk doctor`）。 */
   | 'check-browser-extension'
+  /** WP111：升级出事之后，回到升级之前那一份。 */
+  | 'restore-backup'
+  /** WP111：白名单式收集一个 zip 发回来（不含任何凭据 / 正文）。 */
+  | 'export-diagnostics'
+  /** WP111：mac / linux 只提示那一档，点它开 Releases 下载页。 */
+  | 'open-download-page'
   | 'quit'
 
 export interface MenuItemModel {
@@ -46,6 +52,23 @@ export interface TrayModelInput {
   /** 公司名（登录前退到主机名，见 `mode.companyLabel`）。 */
   company?: string
   /**
+   * WP111：服务进程上次启动时升级没成功（数据目录里有 `upgrade-failed.json`）。
+   *
+   * 托盘要多说一句、多给一项：状态那行改说"升级没成功，数据没动"，
+   * 菜单里出现「还原上一份备份」。**没出事的时候这一项不出现**——
+   * 一个平时就摆在那儿的"还原"按钮，迟早有人会在没出事的时候点它。
+   */
+  upgradeFailed?: boolean
+  /** 有没有可还原的备份（纸条里带了路径）。没有就那一项灰着。 */
+  restorable?: boolean
+  /**
+   * WP111：查到的新版本号（只在**只提示**那一档有值：mac / linux）。
+   *
+   * Windows 那一档不用它——那边是应用内自动更新，托盘上挂一句"去下载"反而是
+   * 让用户多做一件本来不用做的事。
+   */
+  updateAvailable?: string
+  /**
    * WP60：这台电脑是不是"值守中的远程窗口"（服务地址是 `https://<云>/w/<ws>`）。
    *
    * 与 `mode: 'remote'` 的差别在于用户看到的那句话：连公司 NAS 是"已连接 NAS"，
@@ -58,6 +81,9 @@ const separator: MenuItemModel = { id: 'separator', type: 'separator', label: ''
 
 export function serverStateLabel(input: TrayModelInput): string {
   const t = strings(input.language)
+  // WP111：升级没成功时，"服务反复启动失败"是对的但没用——用户要的是
+  // "我的数据还在吗"。所以这一行先回答那个。
+  if (input.mode !== 'remote' && input.upgradeFailed === true) return t.upgradeFailedStatus
   // remote：这台电脑没有 sidecar，`server.state` 永远是 `stopped`——
   // 把那句"服务已停止"端给用户是错的，他要看的是"连上公司了没有"。
   if (input.mode === 'remote') {
@@ -159,8 +185,29 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
         enabled: input.health?.ok === true,
       },
     )
+  // WP111：只有真出事了才出现。`restorable: false` 时灰着但仍然摆出来——
+  // 用户需要看见"有这么一个东西，只是这次没有备份可还原"。
+  if (input.mode !== 'remote' && input.upgradeFailed === true)
+    items.push({
+      id: 'restore-backup',
+      type: 'normal',
+      label: t.restoreBackup,
+      enabled: input.restorable === true,
+    })
+  // WP111：mac / linux 那一档查到新版本就挂一项，点了开 Releases。
+  // 摆在「打开日志目录」上面：它是这一刻用户最可能想点的那一个。
+  if (input.updateAvailable !== undefined && input.updateAvailable !== '')
+    items.push({
+      id: 'open-download-page',
+      type: 'normal',
+      label: t.updateAvailable.replace('{version}', input.updateAvailable),
+      enabled: true,
+    })
   items.push(
     { id: 'open-logs', type: 'normal', label: t.openLogs, enabled: true },
+    // WP111：**一直在**，不像「还原上一份备份」那样只在出事时出现——
+    // 出问题的时候她第一反应是找托盘，那一刻不该还要先让某个东西"出现"。
+    { id: 'export-diagnostics', type: 'normal', label: t.exportDiagnostics, enabled: true },
     {
       id: 'toggle-launch-at-login',
       type: 'checkbox',
@@ -183,7 +230,7 @@ function statusSuffix(input: TrayModelInput): string {
 
 export function trayTooltip(input: TrayModelInput): string {
   const t = strings(input.language)
-  return `agentsws ${input.version} · ${serverStateLabel(input)}${
+  return `Agents 工坊 ${input.version} · ${serverStateLabel(input)}${
     input.paused ? ` · ${t.paused}` : ''
   }`
 }

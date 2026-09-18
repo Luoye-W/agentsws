@@ -720,6 +720,10 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     kind,
     // WP96：排版跟着 kind（`staged_change` 再看账本条目类型）一起下发，见 layout.ts
     layout: layoutFor(kind, str(payload.kind)),
+    // WP100：算 layout 时已经读过这一格，顺手带出来给类别人话与主动词用（见 verbs.ts）
+    ...(kind === 'staged_change' && str(payload.kind) !== undefined
+      ? { change_kind: str(payload.kind) as string }
+      : {}),
     status: item.state,
     priority_band: priorityBandOf(item, risk, ctx.now),
     priority: item.priority,

@@ -123,10 +123,24 @@ describe('resolveServerRuntime', () => {
     expect(resolveServerRuntime({ ...base, env: { AGENTSWS_NODE: '' } }).execPath).toBe('node')
   })
 
-  it('安装包里带了 node 就用随包那份', () => {
+  it('安装包里带了 node 就用随包那份（WP111：`<resources>/node/bin/node`）', () => {
     expect(
-      resolveServerRuntime({ ...base, resourcesPath: '/App/Resources', exists: () => true }),
-    ).toEqual({ kind: 'node', execPath: '/App/Resources/node' })
+      resolveServerRuntime({
+        ...base,
+        resourcesPath: '/App/Resources',
+        exists: () => true,
+        platform: 'darwin',
+      }),
+    ).toEqual({ kind: 'node', execPath: '/App/Resources/node/bin/node' })
+    // WP16 那种「直接摆一个叫 node 的文件」也还认（旧安装不该因为升级就起不来）
+    expect(
+      resolveServerRuntime({
+        ...base,
+        resourcesPath: '/App/Resources',
+        exists: (p) => p === '/App/Resources/node',
+        platform: 'darwin',
+      }).execPath,
+    ).toBe('/App/Resources/node')
     // 带了目录但里面没有 node
     expect(resolveServerRuntime({ ...base, resourcesPath: '/App/Resources' }).execPath).toBe('node')
     expect(resolveServerRuntime({ ...base, resourcesPath: '', exists: () => true }).execPath).toBe(

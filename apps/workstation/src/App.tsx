@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/app-shell'
-import { Skeleton } from '@/components/ui/skeleton'
+import { BootSplash } from '@/components/boot-splash'
 import {
   ensureSession,
   getHome,
@@ -139,13 +139,10 @@ function Workspace(): ReactNode {
       </div>
     )
   }
-  if (positions.data === undefined) {
-    return (
-      <div className="p-6">
-        <Skeleton className="h-64 w-full" />
-      </div>
-    )
-  }
+  // WP112：应用还没起来的那一瞬是**集结**，不是一块灰条——
+  // 灰条说的是"这一屏在加载"，而这里整个工作台都还没有。
+  // 它自己管住"等够 300ms 才出现"，所以本机几十毫秒回来的时候一个像素都不画。
+  if (positions.data === undefined) return <BootSplash />
 
   // 第一次打开 → 直接进四步向导。"先跳过"之后这一次会话里不再拦。
   if (

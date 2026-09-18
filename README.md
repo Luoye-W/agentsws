@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/mark-dark.svg">
+    <img src="docs/assets/brand/mark-light.svg" alt="出海Agents工坊" width="88" height="88">
+  </picture>
+</p>
+
 # agentsws
 
 [![CI](https://github.com/Luoye-W/agentsws/actions/workflows/ci.yml/badge.svg)](https://github.com/Luoye-W/agentsws/actions/workflows/ci.yml)

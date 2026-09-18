@@ -252,6 +252,16 @@ export interface DeckCard {
    * 通用头（岗位 · 类 / 等待时长 / 提案人）与通用页脚（按钮行 + → 圆钮）不受它影响。
    */
   layout: DeckLayout
+  /**
+   * WP100：`staged_change` 那条账本条目的类型（`payload.kind`，即 `ChangeKind`）。
+   *
+   * 投影层已经为了算 `layout` 读过它一次，顺手带出来——头一行的类别人话
+   * （"网站运营 · 改价"）与金钱卡的主动词（"批准退款" / "批准补发"）都要它，
+   * 而前端**不许自己去翻 `detail.payload`**：payload 是各 kind 各样的结构化原料，
+   * 一旦渲染层开始读它，"这张卡长什么样"就又散回六端各写一遍了（见 `layout` 那条）。
+   * 别的卡没有它。
+   */
+  change_kind?: string
   status: ApprovalState
   /** 由 risk_class + expires_at + 14 §8 排序算出 */
   priority_band: PriorityBand

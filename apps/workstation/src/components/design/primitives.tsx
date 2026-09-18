@@ -106,28 +106,73 @@ export function DeltaPill({
   )
 }
 
-/** 圆头像：没有图就用名字第一个字（AI 提案用 "AI"）。 */
+/** 头像配色的那六档（就是语义色那六档，顺序固定——哈希取的是下标）。 */
+const AVATAR_TONES: readonly Tone[] = ['brand', 'good', 'warn', 'bad', 'info', 'neutral']
+
+/**
+ * 圆头像里放**一个字**（WP100，09-18 收口）。
+ *
+ * WP96 那一版是"两个字以内原样放，超过取第一个"——于是"王岚""李默"这类两字名
+ * **整个**塞进 26px 的小圆里，两个字各挤成一半，四个头像叠在一起时谁也读不出来。
+ * 画布上那一排从来都是一个字。
+ *
+ * 规矩三条：
+ * - 中文取**名字最后一个字**（"王岚" → 岚、"李默" → 默）：中文名里区分人的是名不是姓，
+ *   一家公司里"王""李"能有好几个，而"岚""默"多半只有一个；
+ * - 拉丁名取**首字母大写**（`maria_k` → M）；
+ * - `AI` / `PR` 这种一两个大写字母的缩写**原样留着**——它本来就是一个词的样子
+ *   （卡上那枚提案人头像写的就是 `AI`）。
+ *
+ * 全名照旧在 `title` 里：一个字认不出来是谁的时候，鼠标停一下就有。
+ */
+export function avatarInitial(name: string): string {
+  const trimmed = name.trim()
+  if (trimmed === '') return '?'
+  if (/^[A-Z]{1,2}$/.test(trimmed)) return trimmed
+  const han = [...trimmed].filter((c) => /\p{Script=Han}/u.test(c))
+  const last = han.at(-1)
+  if (last !== undefined) return last
+  return ([...trimmed][0] ?? '?').toUpperCase()
+}
+
+/**
+ * 没给 `tone` 时按 **person id** 挑一档颜色。
+ *
+ * 按 id 不按名字：改个显示名不该让一个人在界面上换个颜色（颜色是这一排头像里
+ * 唯一的分辨手段之一）。哈希只要**稳定**，不要均匀——同一个 id 在任何一台机器上、
+ * 任何一次刷新之后都落在同一档，就够了。
+ */
+export function avatarTone(id: string): Tone {
+  let h = 0
+  for (const ch of id) h = (h * 31 + ch.codePointAt(0)!) % 100_000_007
+  return AVATAR_TONES[h % AVATAR_TONES.length] as Tone
+}
+
+/** 圆头像：一个字（中文取名字末字，拉丁取首字母）+ 按 person id 定的底色。 */
 export function WsAvatar({
+  id,
   name,
-  tone = 'brand',
+  tone,
   className,
 }: {
+  /** 这个人的 id（只用来定底色，一个字都不印出来）。 */
+  id?: string
   name: string
   tone?: Tone
   className?: string
 }): React.ReactNode {
-  const initial = name.length <= 2 ? name : name.slice(0, 1)
+  const resolved: Tone = tone ?? (id === undefined ? 'brand' : avatarTone(id))
   return (
     <span
       data-testid="ws-avatar"
       title={name}
       className={cn(
         'inline-flex size-[26px] items-center justify-center rounded-full text-[11px] font-semibold',
-        TONE_PILL[tone],
+        TONE_PILL[resolved],
         className,
       )}
     >
-      {initial}
+      {avatarInitial(name)}
     </span>
   )
 }

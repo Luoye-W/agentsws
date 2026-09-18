@@ -265,10 +265,16 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
   })
 
   it('占位面板只有类型没有身体（点开显示"还没做"）', () => {
-    for (const id of ['data', 'runs', 'schedules', 'evidence', 'files']) {
+    // WP100 给「证据」补了身体，于是还占着位的只剩这四个
+    for (const id of ['data', 'runs', 'schedules', 'files']) {
       expect(registry.panelType(id)).toBeDefined()
       expect(registry.panelBody(id)).toBeUndefined()
     }
+  })
+
+  it('WP100：「证据」也走同一条公开路——有类型也有身体', () => {
+    expect(registry.panelType('evidence')?.priority).toBe('builtin')
+    expect(registry.panelBody('evidence')).toBeDefined()
   })
 
   it('WP95 新加的两个（变更审阅 / 运行中的浏览器）也在同一张表里', () => {

@@ -1,0 +1,121 @@
+name: Release (beta)
+
+# 内测发版（WP111）。`git tag v0.1.0-beta.1 && git push --tags` 之后这条流水线负责：
+#
+#   下捆绑 Node 与原生模块 → tsc -b → electron-builder → 把产物与 latest*.yml
+#   传到**那个 tag 的 GitHub Release**（prerelease，不是草稿）。
+#
+# 三条纪律：
+#
+# 1. **里面没有任何密钥。** 上传用的是 workflow 自带的 `GITHUB_TOKEN`，
+#    签名与公证一概不做（`CSC_*` / `APPLE_*` 一个都不设）。要签名的那天再补，
+#    补的时候是往这里加 secret，不是把现在这份改成"看起来像签了"。
+# 2. **每个平台在自己的机器上打。** 原生模块与捆绑的 Node 都是按平台取的，
+#    交叉打包出来的包我们验不了——`after-pack.mjs` 的那道 import 冒烟也只有
+#    同平台才跑得起来。
+# 3. **版本号只有一个出处：tag。** 不在仓库里另存一份 `version`，也不手改
+#    `package.json` —— 打包前从 tag 反写进去，对不上的可能性就没有了。
+
+on:
+  push:
+    tags:
+      - 'v*-beta.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 手动重跑某个已经打好的 tag（例如 v0.1.0-beta.1）
+        required: true
+
+permissions:
+  # 只为了往 Release 上传产物。没有别的权限。
+  contents: write
+
+env:
+  npm_config_update_notifier: 'false'
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      # 一个平台挂了，别的照样发得出去——内测用户不该因为 Linux 打挂了而拿不到 Windows 包
+      fail-fast: false
+      matrix:
+        include:
+          # Windows 是第一优先：第一位内测用户用 Windows
+          - os: windows-latest
+            label: Windows x64（NSIS）
+            target: win32-x64
+            builder: --win
+          - os: macos-14
+            label: macOS arm64（Apple 芯片）
+            target: darwin-arm64
+            builder: --mac --arm64
+          - os: macos-13
+            label: macOS x64（Intel）
+            target: darwin-x64
+            builder: --mac --x64
+          - os: ubuntu-latest
+            label: Linux x64（AppImage，顺带）
+            target: linux-x64
+            builder: --linux
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+
+      # Node 22：与安装包里捆绑的那一份**同一个大版本**。
+      # 这不是口味问题——仓库里装出来的 better-sqlite3 是按这个 Node 的 ABI 编的，
+      # 跟捆绑那份对不上，用户那边就是启动即 ERR_DLOPEN_FAILED。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      # 版本号从 tag 来（`v0.1.0-beta.1` → `0.1.0-beta.1`），写进桌面壳的 package.json。
+      # electron-builder 读它做产物名与 latest*.yml 里的版本。
+      - name: 版本号取自 tag
+        shell: bash
+        run: |
+          raw="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${raw#v}"
+          echo "打的是 $version"
+          node -e "
+            const fs = require('node:fs')
+            const path = 'apps/desktop/package.json'
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'))
+            pkg.version = process.argv[1]
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n')
+          " "$version"
+          echo "AGENTSWS_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+      # 捆绑的 Node 与按它 ABI 编好的原生模块。sha256 对 node-runtime.lock.json；
+      # 对不上就当场失败（不覆盖、不将就）。
+      - name: 取捆绑的 Node 与原生模块
+        run: node apps/desktop/scripts/fetch-node.mjs --target ${{ matrix.target }}
+
+      - name: tsc -b
+        run: pnpm exec tsc -b
+
+      # `--publish always`：产物与 latest*.yml 一起传到这个 tag 的 Release。
+      # Release 由 electron-builder 自己建（draft: false、prerelease: true，
+      # 见 electron-builder.yml 的 `publish`）。
+      - name: electron-builder（打包 + 上传到 Release）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 明确关掉签名：没设证书的情况下 electron-builder 在 mac 上会去找钥匙串
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm -F @agentsws/desktop exec electron-builder ${{ matrix.builder }} --publish always
+
+      # 打挂了要看得见是哪一步：afterPack 的那道 import 冒烟不过，日志里就是答案
+      - name: 失败时留下 release 目录的清单
+        if: failure()
+        shell: bash
+        run: ls -laR apps/desktop/release || true

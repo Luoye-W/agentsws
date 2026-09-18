@@ -8,7 +8,7 @@
 import { resolve } from 'node:path'
 import type { DeckCard, PositionTiles, StatTile } from '@agentsws/deck'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createDemo, DEMO_SECOND_BRAND, type Demo } from '../src/demo.js'
+import { createDemo, DEMO_SECOND_BRAND, type Demo, demoClockStart } from '../src/demo.js'
 
 const ROOT = resolve(import.meta.dirname, '../../..')
 
@@ -293,5 +293,45 @@ describe('agentsws demo --two-brands（WP66）', () => {
     } finally {
       await two.close()
     }
+  })
+})
+
+/**
+ * WP100：**demo 的"今天"就是启动那天**。
+ *
+ * 之前 demo 的钟停在场景 yml 写死的 2026-09-07，而界面读的是这台机器的真实时间——
+ * 于是卡片满屏"已过期"、日历把所有到期堆在同一天。挪的只有 demo 这一处起点：
+ * 场景 yml、`packs/` 下的文件、`agentsws simulate` 的虚拟时钟一个字没动。
+ */
+describe('demo 的钟锚在启动那天（WP100）', () => {
+  it('整天平移：钟点照旧是场景那个钟点，只有日期换成今天', () => {
+    // 场景是 2026-09-07 09:00+08:00，启动那天是 09-18 → 还是 09:00+08:00，只是 09-18
+    expect(
+      demoClockStart('2026-09-07T09:00:00+08:00', Date.parse('2026-09-18T05:00:00+08:00')),
+    ).toBe('2026-09-18T01:00:00.000Z')
+    // 同一天启动 = 一点不挪
+    expect(
+      demoClockStart('2026-09-07T09:00:00+08:00', Date.parse('2026-09-07T23:00:00+08:00')),
+    ).toBe('2026-09-07T01:00:00.000Z')
+    // 日界按场景自己那个时区算（东八区的 00:30 还算这一天，不按 UTC 提前一天）
+    expect(
+      demoClockStart('2026-09-07T09:00:00+08:00', Date.parse('2026-09-18T00:30:00+08:00')),
+    ).toBe('2026-09-18T01:00:00.000Z')
+  })
+
+  it('跑起来的这个 demo，世界的钟就在今天（不是 2026-09-07）', () => {
+    const worldNow = Date.parse(demo.world.clock.now())
+    expect(Math.abs(worldNow - Date.now())).toBeLessThan(2 * 24 * 3_600_000)
+  })
+
+  it('摆拍数据跟着挪同样的天数：那一单还是"钟点之前 N 天"下的', () => {
+    const order = demo.world.connect.state.orders.find((o) => o.id === 'ord_1001')
+    if (order === undefined) throw new Error('demo 里应该有 #1001 这一单')
+    // pack 里 #1001 是 2026-08-28 下的、09-04 签收，场景开钟是 09-07 09:00+08
+    const start = Date.parse(demoClockStart('2026-09-07T09:00:00+08:00', Date.now()))
+    const days = (iso: string): number => Math.round((start - Date.parse(iso)) / (24 * 3_600_000))
+    expect(days(order.created_at)).toBe(10)
+    expect(order.delivered_at).toBeDefined()
+    expect(days(order.delivered_at as string)).toBe(3)
   })
 })

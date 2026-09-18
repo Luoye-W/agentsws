@@ -32,7 +32,7 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
-import { PositionCard, type Tone, WsCard } from '@/components/design'
+import { BrandMark, PositionCard, type Tone, WsCard } from '@/components/design'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -145,9 +145,8 @@ function PositionCards({ tiles }: { tiles: PositionTiles[] }): React.ReactNode {
           // 岗位页的地址用的是分配 id（36 §3 的"岗位"）：只能取**本人**那几条里的一条
           const to = p.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
           const holders = p.holders
-            .map((id) => names.get(id))
-            .filter((name): name is string => name !== undefined && name !== '')
-            .map((name) => ({ name }))
+            .map((id) => ({ id, name: names.get(id) }))
+            .filter((h): h is { id: string; name: string } => h.name !== undefined && h.name !== '')
           return (
             <div key={p.position_id} data-testid="position-card" data-position={p.position_id}>
               <PositionCard
@@ -158,6 +157,13 @@ function PositionCards({ tiles }: { tiles: PositionTiles[] }): React.ReactNode {
                 pendingLabel={t('home.positions.pending')}
                 line={statusLine(p, tiles, lang) ?? t('home.positions.idle')}
                 holders={holders}
+                {...(p.open_matters > 0
+                  ? {
+                      running: true,
+                      runningLabel: t('home.positions.running'),
+                      runningHint: t('home.positions.running.hint', { count: p.open_matters }),
+                    }
+                  : {})}
                 {...(to === undefined
                   ? {}
                   : {
@@ -409,10 +415,37 @@ function BattleReportGrid({
  *
  * 自己取数、挂在 `todos` 这把 key 下——WS 一收到 `todo.* / matter.*` 摘要就自动重取。
  */
+const IN_PROGRESS_KEY = ['todos', 'in-progress', 'position'] as const
+
+/**
+ * WP112：「正在进行」那块卡的标题。
+ *
+ * 真的有东西在跑的时候，标题旁边多一个**呼吸**的标记——全站只有这一个动效代表
+ * "Agent 正在替你干活"（docs/36 §12）。一条都没有的时候整个不出：
+ * 一个永远在呼吸的标记是装饰，不是状态。
+ *
+ * 取数走的是与 `InProgressSection` **同一把 key**，所以不多发一个请求。
+ */
+function InProgressTitle(): React.ReactNode {
+  const { t } = useApp()
+  const board = useQuery({ queryKey: IN_PROGRESS_KEY, queryFn: () => listInProgress('position') })
+  const busy = (board.data?.items.length ?? 0) > 0
+  return (
+    <h3
+      className="mb-2 flex items-center gap-1.5 text-sm font-medium"
+      data-testid="home-inprogress-title"
+    >
+      <Users className="size-4" aria-hidden />
+      {t('home.inprogress')}
+      {busy ? <BrandMark size={14} motion="breathe" label={t('brand.busy')} /> : null}
+    </h3>
+  )
+}
+
 function InProgressSection(): React.ReactNode {
   const { t } = useApp()
   const board = useQuery({
-    queryKey: ['todos', 'in-progress', 'position'],
+    queryKey: IN_PROGRESS_KEY,
     queryFn: () => listInProgress('position'),
   })
   if (board.isPending) return <Skeleton className="h-12 w-full" />
@@ -601,10 +634,7 @@ export function HomePage(): React.ReactNode {
                 <TodayDue todos={today.due.todos} cardsWaiting={today.due.cards_waiting} />
               </WsCard>
               <WsCard className="p-4" data-testid="home-inprogress">
-                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-                  <Users className="size-4" aria-hidden />
-                  {t('home.inprogress')}
-                </h3>
+                <InProgressTitle />
                 <InProgressSection />
               </WsCard>
               <WsCard className="p-4" data-testid="home-claim-pool">

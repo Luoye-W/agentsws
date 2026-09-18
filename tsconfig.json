@@ -29,6 +29,9 @@
       "path": "packages/blob"
     },
     {
+      "path": "packages/brand"
+    },
+    {
       "path": "packages/catalog"
     },
     {

@@ -15,15 +15,19 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronsUpDown, Languages, LogOut, Moon, Settings, Sun, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { avatarInitial } from '@/components/design'
 import { Separator } from '@/components/ui/separator'
 import { clearToken, getPositions, type Me } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-/** 名字取头一个字当头像（中文一个字、英文一个字母，都刚好）。 */
-function initialOf(name: string): string {
-  const trimmed = name.trim()
-  return trimmed === '' ? '?' : ([...trimmed][0] ?? '?')
-}
+/**
+ * 名字取一个字当头像。
+ *
+ * WP100：与卡片 / 岗位卡上那些头像走**同一个函数**（中文取名字末字、拉丁取首字母、
+ * `AI` 这种缩写原样留着）——同一屏里"王岚"在左下角是「王」、在岗位卡上是「岚」，
+ * 人会以为那是两个人。
+ */
+const initialOf = avatarInitial
 
 export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang } = useApp()

@@ -63,7 +63,7 @@ describe('49 M1 设置页账号卡', () => {
   it('没关联：一句人话 + 邮箱框 + 发登录邮件；按完只提示去邮箱点', async () => {
     renderWithProviders(<CloudAccountCard assignment="asg_1" />)
     await screen.findByTestId('cloud-account-unlinked')
-    expect(screen.getByText(/关联 agentsws 云账号后可以一键用/)).toBeTruthy()
+    expect(screen.getByText(/关联 Agents 工坊云账号后可以一键用/)).toBeTruthy()
 
     const input = screen.getByLabelText('邮箱')
     await userEvent.type(input, 'luoye@example.com')

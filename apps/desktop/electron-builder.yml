@@ -1,5 +1,8 @@
 # 打包配置（13 §5「一个安装包把运行时带齐」）。
-# v1 不签名、不接更新源：本机验证用；正式发行要补 macOS 公证与 Windows 代码签名。
+#
+# WP111 起安装包里**带着一份 Node 22 与按它 ABI 编好的原生模块**（`extraResources`），
+# 对方的机器上不需要装 Node、不需要 Docker。仍然**不签名、不公证**：
+# 首次打开 Windows 要点「更多信息 → 仍要运行」、mac 要右键「打开」（docs/62 写了）。
 appId: com.agentsws.desktop
 productName: agentsws
 copyright: Copyright © 2026 agentsws contributors
@@ -14,6 +17,16 @@ files:
   - package.json
   - '!**/*.map'
   - '!**/test/**'
+# 捆绑的 Node（`scripts/fetch-node.mjs` 下的，sha256 钉在 node-runtime.lock.json 里）。
+# `${platform}-${arch}` 展开成 `darwin-arm64` / `win32-x64` —— 与脚本建的目录名同一套。
+extraResources:
+  - from: vendor/node/${platform}-${arch}
+    to: node
+    filter:
+      - '**/*'
+# 打完包再做三件事（见 scripts/after-pack.mjs）：补齐 electron-builder 漏收的 pnpm 依赖、
+# 把原生模块换成捆绑 Node 的 ABI 那份、用捆绑的 Node 冒烟一次 import。
+afterPack: scripts/after-pack.mjs
 mac:
   category: public.app-category.productivity
   icon: build/icon.png
@@ -25,6 +38,7 @@ mac:
     - target: dmg
       arch:
         - arm64
+        - x64
 win:
   icon: build/icon.png
   target:
@@ -35,7 +49,11 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  shortcutName: agentsws
+  shortcutName: Agents 工坊
+  uninstallDisplayName: Agents 工坊
+  # WP111：未签名的 NSIS 照样能做应用内自动更新。差分包关掉——每次下整包，
+  # 比「更新到一半起不来」强；内测量小，带宽不是问题。
+  differentialPackage: false
 linux:
   target:
     - AppImage
@@ -45,4 +63,11 @@ linux:
 # 那份 .node 覆盖掉。
 npmRebuild: false
 nodeGypRebuild: false
-publish: null
+# WP111：发布源 = GitHub Releases，渠道 beta。
+# CI 里**不放任何密钥**——`--publish` 用的是 workflow 默认的 `GITHUB_TOKEN`。
+publish:
+  - provider: github
+    owner: Luoye-W
+    repo: agentsws
+    channel: beta
+    releaseType: prerelease

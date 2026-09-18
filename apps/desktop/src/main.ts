@@ -26,12 +26,21 @@ import { BRIDGE_CHANNELS, type BridgeInfo } from './bridge-types.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
   type ConnectRuntimeStatus,
+  connectUrlForServer,
   connectUrlFrom,
   createConnectRuntime,
   type HardeningReportLike,
   notImplementedLauncher,
 } from './connect-runtime.js'
 import { withCsp } from './csp.js'
+import {
+  type ConnectorSummary,
+  collectDiagnostics,
+  diagnosticsFileName,
+  diagnosticsListing,
+  humanBytes,
+} from './diagnostics.js'
+import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
@@ -68,7 +77,22 @@ import {
 } from './server-process.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
 import { TRAY_ICON_2X_DATA_URL, TRAY_ICON_DATA_URL } from './tray-icon.js'
-import { createUpdateGate, type UpdaterPort } from './updater.js'
+import {
+  createReleaseChecker,
+  createUpdateGate,
+  isNewer,
+  RELEASES_PAGE,
+  type UpdateInfo,
+  type UpdaterPort,
+  updatePolicy,
+} from './updater.js'
+import {
+  canRestore,
+  failureMessage,
+  readFailureNote,
+  requestRestore,
+  type UpgradeFailureNote,
+} from './upgrade.js'
 import { openWorkBrowser } from './work-browser.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -204,6 +228,14 @@ async function bootstrap(): Promise<void> {
 
   const configStore = createConfigStore(files, paths.configFile)
   let config: DesktopConfig = configStore.load()
+  /*
+   * WP111：这台电脑上是不是第一次跑。**在首启向导之前取**——向导会写 `config.json`，
+   * 之后再问就永远是"不是第一次"了。
+   *
+   * 它决定的只有一件事：服务起来之后自动把工作台端出来一次（见 `first-run.ts`）。
+   * 一个刚双击完安装包的人，不该看到"我装完了，然后什么都没发生"。
+   */
+  const firstRun = !configStore.exists()
 
   // ── WP36 / 40 §1.3：这台电脑第一次启动，先问一句「本机还是公司服务器」。
   //    环境变量给了地址就不问（运维已经替它选了）。关掉窗口 = 什么都不写，下次再问。
@@ -267,8 +299,16 @@ async function bootstrap(): Promise<void> {
         resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
         exists: (p) => files.exists(p),
         electronExecPath: process.execPath,
+        platform: process.platform,
       })
-  if (!remote) logger.info('服务进程入口', { entry: serverEntry, runtime: serverRuntime.kind })
+  if (!remote)
+    logger.info('服务进程入口', {
+      entry: serverEntry,
+      runtime: serverRuntime.kind,
+      // WP111：装完之后这一行必须是 `<resources>/node/...`。要是它指到 `node`，
+      // 说明捆绑那份没进包（或者被杀毒软件删了）——诊断包里第一眼看的就是这一行。
+      exec: serverRuntime.execPath,
+    })
 
   const serverLog = createLogger({
     files,
@@ -279,6 +319,18 @@ async function bootstrap(): Promise<void> {
 
   let boundPort = config.port
   const serverUrl = (): string => runtimeMode.serverUrl ?? `http://127.0.0.1:${boundPort}`
+
+  // ── OpenConnector runtime 的地址。
+  //     `@agentsws/server` 是唯一定默认值的地方；动态 import 免得把整个服务进程
+  //     拖进主进程的启动路径。WP111：**打包之后一定给一个值**——不给，服务进程会走
+  //     开发替身，连接页上连出来的是假连接（见 `connectUrlForServer`）。
+  const { DEFAULT_CONNECT_URL: SERVER_DEFAULT_CONNECT_URL } = await import('@agentsws/server')
+  const connectUrl = connectUrlFrom(process.env) ?? SERVER_DEFAULT_CONNECT_URL
+  const serverConnectUrl = connectUrlForServer({
+    env: process.env,
+    packaged: app.isPackaged,
+    fallback: SERVER_DEFAULT_CONNECT_URL,
+  })
 
   const server = createSidecar({
     name: 'server',
@@ -300,9 +352,7 @@ async function bootstrap(): Promise<void> {
         // 所以托盘按下的暂停不必再靠重启 sidecar 生效。
         haltFile: paths.haltFile,
         halt: halt.read(),
-        ...(connectUrlFrom(process.env) === undefined
-          ? {}
-          : { connectUrl: connectUrlFrom(process.env) as string }),
+        ...(serverConnectUrl === undefined ? {} : { connectUrl: serverConnectUrl }),
         secrets: secrets ?? EMPTY_SECRETS,
         version,
         baseEnv: process.env,
@@ -316,14 +366,13 @@ async function bootstrap(): Promise<void> {
     },
   })
 
-  // ── OpenConnector runtime：v1 只检测 + 加固检查，不负责拉起（08 §5）。
+  // ── OpenConnector runtime：只检测 + 加固检查，不负责拉起（08 §5）。
   //     地址只有一个出处（`AGENTSWS_CONNECT_URL`，见 apps/server/src/connect-url.ts）；
   //     桌面壳不再自带默认值，读不到就用服务进程那边的同一个常量。
-  // `@agentsws/server` 是唯一定默认值的地方；动态 import 免得把整个服务进程拖进主进程启动路径。
   //     `remote` 档：连接器 runtime 跟服务进程一起住在公司那台机器上，
   //     员工电脑既探不到也不该探——那一格在托盘上直接不出现。
-  const { DEFAULT_CONNECT_URL: SERVER_DEFAULT_CONNECT_URL } = await import('@agentsws/server')
-  const connectUrl = connectUrlFrom(process.env) ?? SERVER_DEFAULT_CONNECT_URL
+  //     WP111：探不到**不影响启动**，只让依赖它的连接卡置灰（见 catalog.ts 的
+  //     `connectCardGating`）。托盘上那一行照旧说"连接器 runtime：未检测到"。
   const connect = remote
     ? undefined
     : createConnectRuntime({
@@ -481,7 +530,7 @@ async function bootstrap(): Promise<void> {
         width: 1280,
         height: 840,
         show: false,
-        title: 'agentsws',
+        title: 'Agents 工坊',
         webPreferences: {
           preload: join(here, 'preload.cjs'),
           contextIsolation: true,
@@ -532,6 +581,15 @@ async function bootstrap(): Promise<void> {
       }
     })
 
+  /**
+   * WP111：服务进程上次启动时升级没成功吗（`upgrade-failed.json` 在不在）。
+   *
+   * 每次刷托盘都重读一次，不缓存：那张纸条是**服务进程**写的、**服务进程**清的
+   * （下次起成功 `recordUpgradeSuccess` 就删），托盘缓存一份只会和真相对不上。
+   */
+  const upgradeNote = (): UpgradeFailureNote | undefined =>
+    remote ? undefined : readFailureNote(files, paths.serverDataDir)
+
   const trayInput = () => ({
     language: config.language,
     serverUrl: serverUrl(),
@@ -545,6 +603,9 @@ async function bootstrap(): Promise<void> {
     company: companyLabel({ serverUrl: runtimeMode.serverUrl, workspaceName }),
     // WP60：判据是服务地址的形状，不是另存的一个开关（见 `mode.isStandby`）
     standby: isStandby(runtimeMode.serverUrl),
+    upgradeFailed: upgradeNote() !== undefined,
+    restorable: canRestore(upgradeNote()),
+    ...(updateAvailable === undefined ? {} : { updateAvailable }),
   })
 
   const model = (): MenuItemModel[] => buildTrayMenu(trayInput())
@@ -705,6 +766,133 @@ async function bootstrap(): Promise<void> {
       .catch(() => undefined)
   }
 
+  /**
+   * WP111 托盘「还原上一份备份」。
+   *
+   * 三步：**先问一句**（这是个覆盖数据的动作，不能一点就做）→ 写还原单 →
+   * 重启 sidecar。真正的导入由服务进程下次启动时做（`guardBeforeStart` 第 ① 步）——
+   * 托盘不自己解 zip：在一台已经出事的机器上，多一处解压逻辑就是多一处会出事的地方。
+   */
+  async function restoreLastBackup(): Promise<void> {
+    const note = upgradeNote()
+    if (!canRestore(note)) {
+      logger.warn('没有可还原的备份')
+      return
+    }
+    const t = strings(config.language)
+    const answer = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: [t.restoreBackup, t.wizardCancel],
+      defaultId: 1,
+      cancelId: 1,
+      message: t.restoreBackup,
+      detail: failureMessage(note, config.language),
+    })
+    if (answer.response !== 0) return
+    requestRestore({
+      files,
+      dataDir: paths.serverDataDir,
+      backup: note.backup as string,
+      clock: systemClock,
+    })
+    logger.info('已下还原单，重启服务进程去办', { backup: note.backup })
+    forgetSession()
+    server.restart()
+    refreshTray()
+  }
+
+  /**
+   * WP111 托盘「导出诊断包…」。
+   *
+   * 四步：**白名单式收集** → **把清单端给用户看** → 她选存哪儿 → 打包。
+   * 第二步不能省：这个 zip 是要发回给我们的，她点"导出"之前该知道自己在发什么。
+   *
+   * 打包用 `@agentsws/server` 里那份 `zipDir`——已经有测试、已经被备份包用着，
+   * 不为这一个菜单项再写一份 zip。
+   */
+  async function exportDiagnostics(): Promise<void> {
+    const t = strings(config.language)
+    const healthText = await probeHealthText()
+    let connectors: ConnectorSummary[] | undefined
+    let modules: string[] | undefined
+    const s = remote ? undefined : await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s !== undefined && assignment !== undefined) {
+      const out = await api.connections(s, assignment)
+      if (out.ok) connectors = out.value
+    }
+    try {
+      const parsed = JSON.parse(healthText ?? '{}') as { data?: { modules?: unknown } }
+      if (Array.isArray(parsed.data?.modules)) modules = parsed.data.modules.map(String)
+    } catch {
+      // health 打不通就没有模块清单，收集那边会如实写"问不到"
+    }
+
+    const bundle = collectDiagnostics({
+      appVersion: version,
+      platform: process.platform,
+      arch: process.arch,
+      serverExec: serverRuntime.execPath,
+      updateMode: policy.mode,
+      updateReason: policy.reason,
+      mode: runtimeMode.mode,
+      serverUrl: serverUrl(),
+      at: systemClock.now(),
+      health: healthText,
+      schemaState: files.readText(join(paths.serverDataDir, 'upgrade-state.json')),
+      upgradeFailure: files.readText(join(paths.serverDataDir, 'upgrade-failed.json')),
+      connectors,
+      modules,
+      desktopLog: files.readText(paths.logFile),
+      serverLog: files.readText(paths.serverLogFile),
+      ...(secrets === undefined ? {} : { redactor: createRedactor(secretLiterals(secrets)) }),
+    })
+
+    const confirmed = await dialog.showMessageBox({
+      type: 'info',
+      buttons: [t.exportDiagnostics, t.wizardCancel],
+      defaultId: 0,
+      cancelId: 1,
+      message: `${t.exportDiagnostics}（${humanBytes(bundle.totalBytes)}）`,
+      detail: diagnosticsListing(bundle, config.language),
+    })
+    if (confirmed.response !== 0) return
+
+    const suggested = diagnosticsFileName(version, systemClock.now())
+    const picked = await dialog.showSaveDialog({
+      defaultPath: join(app.getPath('downloads'), suggested),
+      filters: [{ name: 'zip', extensions: ['zip'] }],
+    })
+    if (picked.canceled || picked.filePath === undefined || picked.filePath === '') return
+
+    // 先摊进一个临时目录再打包：`zipDir` 打的是一个平目录，而那正是这个包的形状。
+    const stage = join(paths.userData, 'diagnostics-stage')
+    files.remove(stage)
+    files.ensureDir(stage)
+    for (const entry of bundle.entries) files.writeText(join(stage, entry.name), entry.content)
+    const { zipDir } = await import('@agentsws/server')
+    zipDir(stage, picked.filePath)
+    files.remove(stage)
+    logger.info('已导出诊断包', { to: picked.filePath, items: bundle.entries.length })
+    shell.showItemInFolder(picked.filePath)
+  }
+
+  /** `/v1/health` 的**原始响应文本**（诊断包要原文，不是解析过的快照）。 */
+  async function probeHealthText(): Promise<string | undefined> {
+    const guard = nodeAbort(3000)
+    try {
+      const res = await fetch(`${serverUrl()}/v1/health`, {
+        headers: { accept: 'application/json' },
+        signal: guard.signal,
+      })
+      return await res.text()
+    } catch {
+      return undefined
+    } finally {
+      guard.done()
+    }
+  }
+
   function invoke(action: MenuAction): void {
     switch (action) {
       case 'open-workstation':
@@ -732,8 +920,18 @@ async function bootstrap(): Promise<void> {
         forgetSession()
         server.restart()
         break
+      case 'restore-backup':
+        if (remote) break
+        void restoreLastBackup()
+        break
+      case 'open-download-page':
+        void shell.openExternal(updateUrl)
+        break
       case 'open-logs':
         void shell.openPath(paths.logDir)
+        break
+      case 'export-diagnostics':
+        void exportDiagnostics()
         break
       case 'toggle-launch-at-login': {
         config = configStore.update({ launchAtLogin: !config.launchAtLogin })
@@ -771,6 +969,7 @@ async function bootstrap(): Promise<void> {
   if (!remote) server.start()
 
   // ── 健康轮询：托盘状态、"打开工作台"是否可点都看它。
+  let firstRunOpened = false
   const pollHealth = async (): Promise<void> => {
     health = await probeHealth(serverUrl(), {
       fetchImpl: globalThis.fetch as never,
@@ -778,6 +977,20 @@ async function bootstrap(): Promise<void> {
       abort: nodeAbort,
     })
     refreshTray()
+    // WP111 首启：服务一健康就把工作台端出来一次，落在「初始化设置」那一页
+    // （跳转由工作台自己判 `needs_setup`，壳不认识那个路由）。
+    if (
+      shouldOpenOnFirstRun({
+        firstRun,
+        healthy: health.ok,
+        alreadyOpened: firstRunOpened,
+        remote,
+      })
+    ) {
+      firstRunOpened = true
+      logger.info('第一次打开：自动端出工作台')
+      void openWorkstation()
+    }
   }
   const healthTimer = setInterval(() => {
     void pollHealth()
@@ -798,25 +1011,96 @@ async function bootstrap(): Promise<void> {
     void pollConnect()
   }
 
-  // ── 自动更新：只有骨架，默认关（没有更新源）；打开时"冒烟不过不切换"。
-  const updater: UpdaterPort = {
-    checkForUpdates: () => Promise.resolve(undefined),
-    downloadUpdate: () => Promise.resolve(),
-    quitAndInstall: () => undefined,
-  }
-  const updateGate = createUpdateGate({
-    updater,
-    logger,
-    enabled: process.env.AGENTSWS_DESKTOP_UPDATES === '1',
-    smoke: async () =>
-      (await probeHealth(serverUrl(), { fetchImpl: globalThis.fetch as never, abort: nodeAbort }))
-        .ok,
+  /*
+   * ── 更新（WP111）。两条路，由签名决定走哪条（见 `updater.ts` 顶上那张表）：
+   *
+   * - Windows：`electron-updater` 应用内自动更新。**冒烟不过不切换**那条纪律没变。
+   * - macOS / Linux：只查、只提示、把人送到 Releases 下载页——mac 未签名时
+   *   Squirrel 连 `checkForUpdates()` 都过不去，硬接只会得到一个每次都报错的更新器。
+   *
+   * 两条路都不带任何凭据：一边是 electron-updater 读公开的 `latest*.yml`，
+   * 一边是一次匿名的 GitHub API GET。
+   */
+  const policy = updatePolicy({
+    platform: process.platform,
+    env: process.env,
+    packaged: app.isPackaged,
   })
-  void updateGate.run().then((outcome) => {
+  logger.info('更新策略', { mode: policy.mode, reason: policy.reason })
+
+  /** mac / linux 查到的新版本（托盘上挂那一项用）。 */
+  let updateAvailable: string | undefined
+  let updateUrl = RELEASES_PAGE
+
+  const autoUpdater = async (): Promise<UpdaterPort> => {
+    // 动态 import：`electron-updater` 在 notify 档一次都用不上，
+    // 没必要把它拖进每一次冷启动。
+    const { autoUpdater: real } = await import('electron-updater')
+    real.autoDownload = false
+    real.allowPrerelease = true
+    real.channel = 'beta'
+    real.logger = {
+      info: (m: unknown) => logger.child('electron-updater').info(String(m)),
+      warn: (m: unknown) => logger.child('electron-updater').warn(String(m)),
+      error: (m: unknown) => logger.child('electron-updater').error(String(m)),
+      debug: () => undefined,
+    } as never
+    return {
+      async checkForUpdates() {
+        const result = await real.checkForUpdates()
+        const found = result?.updateInfo.version
+        // `checkForUpdates()` 在"已经是最新"时也可能回一个对象，所以自己比一次
+        // （`isNewer` 认得 `0.1.0-beta.2 > 0.1.0-beta.1`）。
+        return found !== undefined && isNewer(version, found) ? { version: found } : undefined
+      },
+      downloadUpdate: async () => {
+        await real.downloadUpdate()
+      },
+      quitAndInstall: () => {
+        real.quitAndInstall()
+      },
+    }
+  }
+
+  const notify = (info: UpdateInfo): void => {
+    updateAvailable = info.version
+    updateUrl = info.url ?? RELEASES_PAGE
+    refreshTray()
+    if (Notification.isSupported())
+      new Notification({
+        title: strings(config.language).updateAvailableTitle,
+        body: strings(config.language).updateAvailable.replace('{version}', info.version),
+      }).show()
+  }
+
+  const runUpdateCheck = async (): Promise<void> => {
+    if (policy.mode === 'off') return
+    const updater: UpdaterPort =
+      policy.mode === 'auto'
+        ? await autoUpdater()
+        : createReleaseChecker({
+            fetchImpl: globalThis.fetch as never,
+            currentVersion: version,
+            abort: nodeAbort,
+          })
+    const gate = createUpdateGate({
+      updater,
+      logger,
+      mode: policy.mode,
+      notify,
+      smoke: async () =>
+        (await probeHealth(serverUrl(), { fetchImpl: globalThis.fetch as never, abort: nodeAbort }))
+          .ok,
+    })
+    const outcome = await gate.run()
     logger.info('更新检查', {
       state: outcome.state,
+      ...(outcome.version === undefined ? {} : { version: outcome.version }),
       ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
     })
+  }
+  void runUpdateCheck().catch((err: unknown) => {
+    logger.warn('更新检查抛错', { error: String(err) })
   })
 
   // ── 托盘常驻、无主窗口启动（13 §5）。
