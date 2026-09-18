@@ -22,7 +22,7 @@ import type {
   PublicCreatorObservation,
   WorkspaceId,
 } from '@agentsws/contracts'
-import type { Wallet } from '@agentsws/metering'
+import type { CostTable, Wallet } from '@agentsws/metering'
 import type { Context } from 'hono'
 import type { KolStore } from './store.js'
 
@@ -93,6 +93,13 @@ export interface KolServiceDeps {
   sources?: SourceLookup
   /** 请求号；不给就按时间 + 计数。 */
   newRequestId?: () => string
+  /**
+   * WP115（65 §3）：成本表。不给就用 `@agentsws/metering` 打包的那份；
+   * `null` = 这个节点不算成本（计量事件里 `cost_micros` 留空，聚合当 0）。
+   */
+  costTable?: CostTable | null
+  /** WP115：我们自己人的调用免计费，也不进失败统计（记 `admin_exempt`）。 */
+  isExemptAccount?: (account_id: string) => boolean
 }
 
 /** 一次外部取数的结果：一条观察 + 可能顺带抓到的邮箱（48 §5.3「邮箱抓取」）。 */

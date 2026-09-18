@@ -48,7 +48,16 @@ import {
   SOCIAL_FETCH_CAPABILITY,
   SOURCE_CONFIDENCE,
 } from '@agentsws/contracts'
-import { creditsFor, roundCredits, WalletError, type WalletReservation } from '@agentsws/metering'
+import {
+  COST_TABLE,
+  type CostTable,
+  creditsFor,
+  roundCredits,
+  type SettleMeta,
+  unitCostMicros,
+  WalletError,
+  type WalletReservation,
+} from '@agentsws/metering'
 import { buildAudit } from './audit.js'
 import { benchmarkNote, benchmarkOf, bucketOf } from './benchmarks.js'
 import { dayOf, normalizeEmail, parseObservation } from './normalize.js'
@@ -149,6 +158,39 @@ export class KolPublicService {
     return credits
   }
 
+  /**
+   * 这一次的成本会计那几格（WP115，65 §3）。
+   *
+   * 非 token 的上游按 **`provider:unit`** 记（`youtube:call` / `apify:call`），
+   * 与 AI 那边按 token 记的是两套量纲——合成一套就得给"一次 Apify 抓取等于
+   * 多少 token"编一个换算，而那个数字是编的。
+   *
+   * `internal` 是我们自己库里的读写：成本 0，但**照样记一行**，否则用量看板
+   * 会以为公共红人库没人用。
+   */
+  private meta(
+    principal: KolPrincipal,
+    provider: string,
+    quantity: number,
+    charge_status: 'charged' | 'skipped' | 'admin_exempt',
+  ): SettleMeta {
+    const table: CostTable | null =
+      this.deps.costTable === undefined ? COST_TABLE : this.deps.costTable
+    const base: SettleMeta = {
+      provider,
+      account_id: principal.account_id,
+      charge_status,
+    }
+    if (table === null) return base
+    const cost = unitCostMicros(`${provider}:${KOL_UNIT}`, quantity, table)
+    return { ...base, cost_micros: cost.micros, cost_currency: cost.currency }
+  }
+
+  /** 这个账号是不是我们自己人（免计费、不进失败统计）。 */
+  private exempt(principal: KolPrincipal): boolean {
+    return this.deps.isExemptAccount?.(principal.account_id) === true
+  }
+
   private reserve(
     principal: KolPrincipal,
     capability: string,
@@ -182,12 +224,19 @@ export class KolPublicService {
     capability: string,
     quantity: number,
     run: () => T,
+    provider = 'internal',
   ): { value: T; credits: number } {
-    const { reservation, credits } = this.reserve(principal, capability, quantity)
+    const exempt = this.exempt(principal)
+    const { reservation, credits } = this.reserve(principal, capability, exempt ? 0 : quantity)
     try {
       const value = run()
-      this.deps.wallet.settle(reservation, { quantity, credits })
-      return { value, credits }
+      const charged = exempt ? 0 : credits
+      this.deps.wallet.settle(reservation, {
+        quantity,
+        credits: charged,
+        ...this.meta(principal, provider, quantity, exempt ? 'admin_exempt' : 'charged'),
+      })
+      return { value, credits: charged }
     } catch (err) {
       this.deps.wallet.release(reservation)
       throw err
@@ -215,7 +264,17 @@ export class KolPublicService {
         request_id: this.nextRequestId(),
         at,
       },
-      { quantity, credits: FREE_CREDITS },
+      {
+        quantity,
+        credits: FREE_CREDITS,
+        // `skipped` = 本来就免费，不是"该扣没扣上"。扣费健康那张表靠这一格分开这两件事
+        ...this.meta(
+          principal,
+          'internal',
+          quantity,
+          this.exempt(principal) ? 'admin_exempt' : 'skipped',
+        ),
+      },
     )
   }
 
@@ -404,7 +463,16 @@ export class KolPublicService {
     // 顺手抓到的邮箱：进库就变成哈希 + 密文（明文不落库、不进日志）
     if (snapshot.email !== undefined)
       this.storeContact(card, snapshot.email, source, principal.workspace_id, at)
-    this.deps.wallet.settle(reservation, { quantity: 1, credits })
+    /*
+     * 这一次真去外面取了数：供应商就是实际用上的那一家（`youtube` / `apify`），
+     * 不是 `internal`。成本按 `provider:call` 那张表算——两家的单价差着一个
+     * 数量级，记成同一个供应商会让"按供应商"那张表完全失去意义。
+     */
+    this.deps.wallet.settle(reservation, {
+      quantity: 1,
+      credits,
+      ...this.meta(principal, source === 'apify' ? 'apify' : 'youtube', 1, 'charged'),
+    })
     return {
       refreshed: true,
       used: outcome.used,

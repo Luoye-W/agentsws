@@ -174,10 +174,59 @@ export interface MeteringEvent {
   workspace_id: WorkspaceId
   /** 这一次调用的请求号（对账用；不是会话 id、不是用户 id）。 */
   request_id: string
+
+  /*
+   * ── WP115 的成本会计扩列（全部可选；旧行是 null，聚合时当 0）────────────
+   *
+   * 这八个不是"正文"，是**账**：没有它们，后台答不出"这一块钱我们自己花了多少"。
+   * M6 真正要挡的是"从上游响应里 spread 一把过来"，而那道运行时断言还在——
+   * 不在 {@link METERING_EVENT_FIELDS} 里的键照样抛。详见 `cloud-admin.ts`。
+   */
+
+  /** 上游供应商（`deepseek` / `openai` / `youtube` / `apify`…）。 */
+  provider?: string
+  /** 模型名（非 AI 的能力没有这一格）。 */
+  model?: string
+  /** 进 token。**与出分开**——只存合计就再也算不出输入输出的成本比（KOLAgents 的坑）。 */
+  input_tokens?: number
+  output_tokens?: number
+  /** 我方成本，**整数微单位**（1 元 = 1_000_000）。四舍五入到分会让便宜模型成本恒为 0。 */
+  cost_micros?: number
+  /** 成本的币种（价目表里写的那个）。 */
+  cost_currency?: string
+  /** 这一条最后扣上钱没有（`ChargeStatus`）。 */
+  charge_status?: string
+  /** 哪个账号发起的（组织里有多个人时用得上）。不是会话 id。 */
+  account_id?: string
 }
 
-/** {@link MeteringEvent} 的字段白名单。多一个键就是违反 49 M6。 */
+/**
+ * {@link MeteringEvent} 的字段白名单。多一个键就是违反 49 M6。
+ *
+ * 前八个是**必填**（`assertMeteringEvent` 逐个查），后八个是 WP115 的成本会计扩列，
+ * 可有可无——给了就写进库，不给就是 null。
+ */
 export const METERING_EVENT_FIELDS: readonly (keyof MeteringEvent)[] = [
+  'capability',
+  'unit',
+  'quantity',
+  'credits',
+  'at',
+  'org_id',
+  'workspace_id',
+  'request_id',
+  'provider',
+  'model',
+  'input_tokens',
+  'output_tokens',
+  'cost_micros',
+  'cost_currency',
+  'charge_status',
+  'account_id',
+]
+
+/** 上面那张表里**必填**的那八个（49 M6 原本的八列）。 */
+export const METERING_EVENT_REQUIRED_FIELDS: readonly (keyof MeteringEvent)[] = [
   'capability',
   'unit',
   'quantity',

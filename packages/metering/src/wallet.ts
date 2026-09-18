@@ -26,7 +26,7 @@ import type {
   WalletBalance,
   WalletLot,
 } from '@agentsws/contracts'
-import { METERING_EVENT_FIELDS } from '@agentsws/contracts'
+import { METERING_EVENT_FIELDS, METERING_EVENT_REQUIRED_FIELDS } from '@agentsws/contracts'
 import { roundCredits } from './pricing.js'
 
 /** 余额低于它出一个 `wallet.low_balance` 事件（只事件，不弹窗——49 §3）。 */
@@ -116,10 +116,48 @@ export function assertMeteringEvent(e: MeteringEvent): MeteringEvent {
       throw new WalletError('invalid_input', `计量事件不许有 ${key} 这个字段（49 M6：只记计量）`)
     }
   }
-  for (const key of METERING_EVENT_FIELDS) {
+  /*
+   * WP115 之后白名单分两段：前八个必填（49 M6 原本那八列），后八个是成本会计的
+   * 扩列，可以不给。**"多一个键就抛"那条一个字没改**——挡住"从上游响应里 spread
+   * 一把过来"靠的是它，不是靠必填。
+   */
+  for (const key of METERING_EVENT_REQUIRED_FIELDS) {
     if (e[key] === undefined) throw new WalletError('invalid_input', `计量事件缺字段 ${key}`)
   }
   return e
+}
+
+/**
+ * 结算时可以顺手填的成本会计字段（WP115）。全可选——不填就是旧行为。
+ *
+ * 之所以让调用方填而不是钱包自己算：钱包不知道这一次打的是哪家的哪个模型，
+ * 也不该知道（它连 `pricing.json` 都不读）。算成本的是 `cost.ts`，填进来的是
+ * 入口（`cloud-entry` / `kol-public`）——它们本来就握着上游返回的 usage。
+ */
+export interface SettleMeta {
+  provider?: string | undefined
+  model?: string | undefined
+  input_tokens?: number | undefined
+  output_tokens?: number | undefined
+  cost_micros?: number | undefined
+  cost_currency?: string | undefined
+  charge_status?: string | undefined
+  account_id?: string | undefined
+}
+
+/** `SettleMeta` → 可以 spread 进 `MeteringEvent` 的那几格（`undefined` 的一律不出现）。 */
+export function settleMetaFields(meta: SettleMeta | undefined): Partial<MeteringEvent> {
+  if (meta === undefined) return {}
+  const out: Partial<MeteringEvent> = {}
+  if (meta.provider !== undefined) out.provider = meta.provider
+  if (meta.model !== undefined) out.model = meta.model
+  if (meta.input_tokens !== undefined) out.input_tokens = meta.input_tokens
+  if (meta.output_tokens !== undefined) out.output_tokens = meta.output_tokens
+  if (meta.cost_micros !== undefined) out.cost_micros = meta.cost_micros
+  if (meta.cost_currency !== undefined) out.cost_currency = meta.cost_currency
+  if (meta.charge_status !== undefined) out.charge_status = meta.charge_status
+  if (meta.account_id !== undefined) out.account_id = meta.account_id
+  return out
 }
 
 export interface WalletOptions {
@@ -246,7 +284,7 @@ export class Wallet {
    */
   settle(
     reservation: WalletReservation,
-    actual: { quantity: number; credits: number },
+    actual: { quantity: number; credits: number } & SettleMeta,
   ): MeteringEvent {
     this.store.dropReservation(reservation.id)
     const at = this.now()
@@ -266,6 +304,7 @@ export class Wallet {
       org_id: reservation.org_id,
       workspace_id: reservation.workspace_id,
       request_id: reservation.request_id,
+      ...settleMetaFields(actual),
     })
     this.store.appendEvent(event)
     this.checkLowBalance(reservation.org_id)

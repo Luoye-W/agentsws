@@ -6,6 +6,13 @@
 | 起因 | 不想为云端另买一台服务器。手里有 Cloudflare（`agentsws.com` 就是在它这里注册的，DNS 也在），那就把云端跑成一个 Worker |
 | 关联 | 49（统一账号、服务入口与积分：M1–M6）、**61（Compose 自建形态——留给开源自建用户，两份都在）**、21（数据驻留与密钥纪律）、34（仓库结构）、`apps/cloud-worker/`（这一版的全部配置） |
 
+> **运营后台在 `docs/65`**（WP115）。这个形态下它多一个单例 Durable Object
+> （`LedgerDO`，计量事件的只读副本——DO 按组织切开之后没有跨组织的表），
+> 静态产物走 wrangler 的 `[assets]` + `run_worker_first = ["/admin/*"]`。
+> **`wrangler deploy` 之前先 `pnpm --filter @agentsws/cloud-admin build`**：
+> `[assets] directory` 指着 `apps/cloud-admin/dist`，它不存在 deploy 会失败。
+
+
 ## 0. 一句话
 
 **一个 Worker、两类 Durable Object、一条 `wrangler deploy`。** 没有服务器、没有 Docker、没有 SSH、没有证书要续。装完之后内测朋友在自己电脑上的 Agents 工坊里点一次「关联账号」，收一封信，就能用积分跑模型。

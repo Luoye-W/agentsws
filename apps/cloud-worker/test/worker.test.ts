@@ -18,7 +18,11 @@
  * 7. 内部头**伪造不了**（进门先剥）。
  */
 
-import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
+import {
+  DEFAULT_CLOUD_SCOPES,
+  METERING_EVENT_FIELDS,
+  METERING_EVENT_REQUIRED_FIELDS,
+} from '@agentsws/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { INTERNAL_HEADERS, route } from '../src/index.js'
 import { type FakeCloud, fakeCloud, req, tokenFromMail } from './helpers.js'
@@ -378,22 +382,20 @@ describe('WP114 Workers 形态 · 流式与结算', () => {
     }
     expect(rest).toContain('[DONE]')
 
-    // 流走完 → 按最后那条 usage 结算，记一条计量事件（只有八个字段）
+    /*
+     * 流走完 → 按最后那条 usage 结算，记一条计量事件。
+     *
+     * WP115 之后字段白名单从八个扩到十六个（后八个是成本会计的可选列，65 §3），
+     * 所以这里钉的两件事换了说法，但意思一个字没变：**必填那八个都在**，
+     * **白名单之外一个键都没有**。
+     */
     const events = cloud.wallet(org).store.events({ org_id: org })
     expect(events).toHaveLength(1)
     expect(events[0]?.capability).toBe('ai.chat')
-    expect(Object.keys(events[0] ?? {}).sort()).toEqual(
-      [
-        'at',
-        'capability',
-        'credits',
-        'org_id',
-        'quantity',
-        'request_id',
-        'unit',
-        'workspace_id',
-      ].sort(),
-    )
+    const allowed = new Set<string>(METERING_EVENT_FIELDS as readonly string[])
+    for (const key of Object.keys(events[0] ?? {})) expect(allowed.has(key), key).toBe(true)
+    for (const key of METERING_EVENT_REQUIRED_FIELDS)
+      expect((events[0] as Record<string, unknown> | undefined)?.[key], key).toBeDefined()
     const after = cloud.wallet(org).wallet.balance(org)
     expect(after.reserved).toBe(0)
     expect(after.available).toBeLessThan(100)

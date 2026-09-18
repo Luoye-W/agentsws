@@ -27,6 +27,7 @@ import type {
 } from '@agentsws/contracts'
 import { DEFAULT_CLOUD_SCOPES, DEFAULT_WORKSPACE_TOKEN_TTL_MS } from '@agentsws/contracts'
 import type { SyncDb } from '@agentsws/core/sql/sync-db'
+import { ADMIN_MIGRATION_V2 } from './admin/schema.js'
 import { sqliteTokenVerifier } from './verifier.js'
 
 /** magic link 的有效期：15 分钟（与 20 §3 本地档同一个数）。 */
@@ -97,6 +98,9 @@ CREATE TABLE IF NOT EXISTS workspace_links (
 CREATE INDEX IF NOT EXISTS workspace_links_by_org ON workspace_links (cloud_org_id);
 `,
   },
+  // WP115（65）：角色、后台会话、封禁、邮箱黑名单、审计、会员 term / cycle。
+  // SQL 全在 `admin/schema.ts`——这里只多一个迁移号。
+  { version: 2, sql: ADMIN_MIGRATION_V2 },
 ]
 
 export interface CloudStoreDeps {

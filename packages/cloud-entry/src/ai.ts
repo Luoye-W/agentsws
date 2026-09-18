@@ -19,12 +19,15 @@
  * 所以出站时替用户带上 `stream_options.include_usage`。
  */
 
-import type { WalletReservation } from '@agentsws/metering'
+import type { CostTable, WalletReservation } from '@agentsws/metering'
 import {
   aiCredits,
+  COST_TABLE,
   estimateAiCredits,
   estimateTokens,
   isCnAvailable,
+  providerOfModel,
+  tokenCostMicros,
   WalletError,
 } from '@agentsws/metering'
 import type { Context } from 'hono'
@@ -264,6 +267,23 @@ function guardResidency(c: Context<EntryEnv>, deps: EntryDeps, model: string): v
   )
 }
 
+/**
+ * 这一次调用我们自己花了多少（65 §3）。
+ *
+ * `costTable: null` = 装配方明说"这个节点不算成本"，于是 `micros` 留空，计量
+ * 事件里那一列是 NULL，聚合当 0。**不写 0**：0 与"没算过"在毛利表上是两回事。
+ */
+function costOf(
+  deps: EntryDeps,
+  model: string,
+  usage: { input_tokens: number; output_tokens: number },
+): { micros?: number; currency?: string; provider: string } {
+  const table: CostTable | null = deps.costTable === undefined ? COST_TABLE : deps.costTable
+  if (table === null) return { provider: providerOfModel(model) }
+  const est = tokenCostMicros(model, usage, table)
+  return { micros: est.micros, currency: est.currency, provider: est.provider }
+}
+
 /** `/v1/ai/chat/completions` 与 `/v1/ai/embeddings` 共用的那一套。 */
 async function meteredCall(
   c: Context<EntryEnv>,
@@ -282,6 +302,12 @@ async function meteredCall(
   if (model === undefined) throw new EntryError('invalid_input', '请求体里缺 model')
   guardResidency(c, deps, model)
 
+  /*
+   * WP115（65 §3）：我们自己人的调用免计费。判在**预扣之前**——免了还预扣的话，
+   * 余额为 0 的管理员账号会被自己的钱包拦在门外。
+   */
+  const exempt = deps.isExemptAccount?.(principal.account_id) === true
+
   const input_tokens = args.inputTokens(body)
   const max_tokens = asNumber(body.max_tokens) ?? asNumber(body.max_completion_tokens)
   const estimate = estimateAiCredits(deps.pricing, model, {
@@ -295,17 +321,33 @@ async function meteredCall(
       capability: args.capability,
       unit: '1k_tokens',
       quantity: input_tokens / 1000,
-      credits: estimate,
+      // 免计费的那一档预扣 0：它不该因为自己余额为 0 而被拦下
+      credits: exempt ? 0 : estimate,
       request_id,
     }),
   )
 
   const settle = (usage: WireUsage | undefined): void => {
     const t = tokensOf(usage, input_tokens)
-    const credits = aiCredits(deps.pricing, model, t)
+    const credits = exempt ? 0 : aiCredits(deps.pricing, model, t)
+    /*
+     * 我方成本按**成本表**算，与向用户收的积分**各算各的**（65 §3）。
+     * 免计费的那一档 `credits = 0` 但**成本照记**——那笔钱我们确实付给了上游，
+     * 只是不从用户身上收。
+     */
+    const cost = costOf(deps, model, t)
     deps.wallet.settle(reservation, {
       quantity: (t.input_tokens + t.output_tokens) / 1000,
       credits,
+      provider: cost.provider,
+      model,
+      input_tokens: t.input_tokens,
+      output_tokens: t.output_tokens,
+      account_id: principal.account_id,
+      charge_status: exempt ? 'admin_exempt' : 'charged',
+      ...(cost.micros === undefined
+        ? {}
+        : { cost_micros: cost.micros, cost_currency: cost.currency }),
     })
   }
 

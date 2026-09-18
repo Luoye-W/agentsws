@@ -9,14 +9,35 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { adminConsoleRoutes } from '../src/index.js'
 import { harness } from './helpers.js'
+
+const never = (): never => {
+  throw new Error('这里只读声明，不该调到处理器')
+}
+
+/**
+ * 与 `scripts/gen-cloud-openapi.mjs` **同一套装配**：后台那一组也在 committed
+ * 的那份里，所以这边也得挂上，否则两边路径集合永远对不齐。
+ */
+const consoleRoutes = () =>
+  adminConsoleRoutes({
+    clock: { now: () => '1970-01-01T00:00:00.000Z' },
+    accounts: never,
+    admin: never,
+    wallet: () => undefined,
+    ledger: () => undefined,
+    baseUrl: 'https://cloud.agentsws.com',
+    mail: async () => {},
+    bootstrapToken: 'openapi-placeholder-token-not-a-secret',
+  })
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OPENAPI = join(HERE, '../openapi.json')
 
 describe('云侧 OpenAPI', () => {
   it('committed 的那份路径集合与路由声明一致', async () => {
-    const h = harness()
+    const h = harness({ modules: [consoleRoutes()] })
     try {
       const committed = JSON.parse(readFileSync(OPENAPI, 'utf8')) as {
         paths: Record<string, Record<string, unknown>>
@@ -29,7 +50,7 @@ describe('云侧 OpenAPI', () => {
   })
 
   it('账号与关联那几条都在', async () => {
-    const h = harness()
+    const h = harness({ modules: [consoleRoutes()] })
     try {
       for (const p of [
         '/v1/cloud/health',
@@ -41,6 +62,10 @@ describe('云侧 OpenAPI', () => {
         '/v1/cloud/links/current/revoke',
         '/v1/cloud/links/{id}/renew',
         '/v1/cloud/links/{id}/revoke',
+        '/v1/admin/overview',
+        '/v1/admin/accounts',
+        '/v1/admin/usage',
+        '/v1/admin/audit',
       ])
         expect(Object.keys(h.server.openapi.paths)).toContain(p)
     } finally {

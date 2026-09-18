@@ -26,8 +26,24 @@ export interface WorkerEnv {
   ACCOUNTS: DoNamespaceLike
   /** 钱包：lots / reservations / 计量事件。**每个 org 一个**（`idFromName(org_id)`）。 */
   WALLET: DoNamespaceLike
+  /**
+   * 计量事件的只读副本（**单例**，WP115 / 65 §9）。
+   *
+   * 钱按组织切开之后没有一张跨全部组织的表，而后台的总览 / 台账要的正是那个。
+   * 所以每条计量事件抄一份进这个对象，后台只读它。没绑这个 binding 也能跑——
+   * 那时后台的看板页回 503（比画一堆 0 诚实），钱那一侧一个字不受影响。
+   */
+  LEDGER?: DoNamespaceLike
   /** Cloudflare Email Sending（`[[send_email]] name = "EMAIL"`）。没绑 = 发不了信。 */
   EMAIL?: CloudflareEmailBinding
+  /**
+   * 运营后台的静态产物（`[assets] binding = "ASSETS"`，WP115）。
+   *
+   * `run_worker_first` 把 `/admin/*` 先交给 Worker，所以这个 binding 只在
+   * **确认过有后台会话之后**才被调用——无权的人看到的是 404，连 index.html
+   * 都拿不到（65 §8）。
+   */
+  ASSETS?: { fetch(request: Request): Promise<Response> }
 
   // ── [vars]：非敏感，进仓库 ─────────────────────────────────────────
   /** 云的对外地址，例如 `https://cloud.agentsws.com`。 */

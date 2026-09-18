@@ -8,6 +8,9 @@
       "path": "apps/cloud"
     },
     {
+      "path": "apps/cloud-admin"
+    },
+    {
       "path": "apps/cloud-worker"
     },
     {

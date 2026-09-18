@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@agentsws/api": "workspace:*",
+    "@agentsws/brand": "workspace:*",
     "@agentsws/cloud-entry": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",

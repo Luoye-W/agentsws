@@ -33,10 +33,37 @@ class_name = "AccountsDO"
 name = "WALLET"
 class_name = "WalletDO"
 
+# 计量事件的只读副本（单例，WP115 / docs/65 §9）。
+# 钱按组织切开之后没有一张跨全部组织的表，而运营后台的总览 / 台账要的正是那个。
+# 每条计量事件由源头 WalletDO 抄一份进来（ctx.waitUntil，失败进待补队列、alarm 重投）。
+[[durable_objects.bindings]]
+name = "LEDGER"
+class_name = "LedgerDO"
+
 # SQLite 存储后端。迁移在对象第一次唤醒时自己跑完——升级 = 再 deploy 一次。
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["AccountsDO", "WalletDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["LedgerDO"]
+
+# ── 运营后台的静态产物（WP115 / docs/65 §8） ───────────────────────────
+# `apps/cloud-admin` 的 Vite 产物（base = "/admin/"）。
+#
+# `run_worker_first = ["/admin/*"]` 是这一段的关键：默认情况下 assets 会在到达
+# Worker **之前**就把文件回掉，那样任何人都能拿到后台的 index.html 与那一坨 js。
+# 先过 Worker 之后，`/admin/*` 要先问 AccountsDO 有没有后台会话——没有就 404，
+# 连 index.html 都不给（扫描的人看到的与"这台机器上没有后台"一模一样）。
+#
+# `not_found_handling = "single-page-application"`：后台是前端路由，
+# `/admin/users` 这类路径在产物里没有对应文件，要回 index.html 让它自己路由。
+[assets]
+directory = "../cloud-admin/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/admin/*", "/admin"]
 
 # ── 发信 ───────────────────────────────────────────────────────────────
 # Cloudflare Email Sending 的 binding。**没有密钥**——发信这块一把 key 都不用。

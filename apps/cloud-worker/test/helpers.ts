@@ -19,6 +19,7 @@ import Database from 'better-sqlite3'
 import { AccountsCore } from '../src/accounts-do.js'
 import type { DoSqlCursor, DoStorageLike } from '../src/do-sql.js'
 import type { DoNamespaceLike, WorkerEnv } from '../src/env.js'
+import { LedgerCore } from '../src/ledger-do.js'
 import { WalletCore, type WalletDoOptions } from '../src/wallet-do.js'
 
 /** 一个 DO 的存储：一张内存 sqlite + 一个闹钟。 */
@@ -78,9 +79,18 @@ export interface FakeCloud {
   mails: CloudMail[]
   accounts(): AccountsCore
   wallet(org_id: string): WalletCore
+  /** 单例的计量副本（WP115）。 */
+  ledger(): LedgerCore
   /** 某个组织的钱包存储（测试里预充值、看闹钟用）。 */
   walletStorage(org_id: string): FakeDoStorage
   accountsStorage(): FakeDoStorage
+  /**
+   * 把 `ctx.waitUntil` 里排着的那些抄写跑完。
+   *
+   * 真实运行时里它们在响应之后自己跑；测试里要有一个显式的"等一下"，
+   * 否则断言会跑在抄写之前——那不是 bug，那是 `waitUntil` 的语义。
+   */
+  settle(): Promise<void>
 }
 
 /**
@@ -125,12 +135,30 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
     return made
   }
 
+  const ledgerCores = new Map<string, LedgerCore>()
+  const ledgerCore = (name: string): LedgerCore => {
+    const found = ledgerCores.get(name)
+    if (found !== undefined) return found
+    const made = new LedgerCore(
+      { storage: storageOf(`led:${name}`) },
+      options.clock === undefined ? {} : { now: () => options.clock?.now() ?? '' },
+    )
+    ledgerCores.set(name, made)
+    return made
+  }
+
+  /** `ctx.waitUntil` 排着的那些（测试里显式 settle）。 */
+  const pending: Promise<unknown>[] = []
+
   const walletCore = (name: string): WalletCore => {
     const found = walletCores.get(name)
     if (found !== undefined) return found
     const made = new WalletCore({ storage: storageOf(`wal:${name}`) }, env, {
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      waitUntil: (p) => {
+        pending.push(p.catch(() => undefined))
+      },
     })
     walletCores.set(name, made)
     return made
@@ -146,14 +174,34 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
 
   env.ACCOUNTS = namespace(accountsCore)
   env.WALLET = namespace(walletCore)
+  env.LEDGER = namespace(ledgerCore)
+  // 假的 `[assets]`：只回一句"这是后台的壳"，够验"有会话才拿得到"
+  env.ASSETS = {
+    fetch: async (request: Request) =>
+      new Response(
+        `<!doctype html><title>Agents 工坊 · 运营后台</title><!-- ${new URL(request.url).pathname} -->`,
+        {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        },
+      ),
+  }
 
   return {
     env,
     mails,
     accounts: () => accountsCore('accounts'),
     wallet: (org_id) => walletCore(org_id),
+    ledger: () => ledgerCore('ledger'),
     walletStorage: (org_id) => storageOf(`wal:${org_id}`),
     accountsStorage: () => storageOf('acc:accounts'),
+    async settle() {
+      // 排队的过程中可能又排进新的（抄写会触发下一批），所以循环到空为止
+      for (let i = 0; i < 10 && pending.length > 0; i++) {
+        const batch = pending.splice(0, pending.length)
+        await Promise.all(batch)
+      }
+    },
   }
 }
 

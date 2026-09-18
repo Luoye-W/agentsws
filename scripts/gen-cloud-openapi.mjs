@@ -27,20 +27,45 @@ if (!existsSync(dist)) {
   process.exit(70)
 }
 
-const { buildCloudOpenApi, collectCloudRoutes, createCloudStore, consoleMailSender } = await import(
-  pathToFileURL(dist).href
-)
+const {
+  adminConsoleRoutes,
+  buildCloudOpenApi,
+  collectCloudRoutes,
+  createCloudStore,
+  consoleMailSender,
+} = await import(pathToFileURL(dist).href)
 
 const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version ?? '0.0.0'
 const clock = { now: () => '1970-01-01T00:00:00.000Z' }
 const store = createCloudStore({ dbPath: ':memory:', clock })
-const routes = collectCloudRoutes({
-  store,
+const never = () => {
+  throw new Error('gen-cloud-openapi 只读声明，不该调到处理器')
+}
+/*
+ * WP115：后台那一组也要进 openapi.json——它是契约的一部分（`support` 只读、
+ * 写接口认 CSRF 与幂等，这些都要在声明上看得见）。给的依赖全是"一调就抛"的
+ * 占位：这个脚本只读 `spec`，一个 handler 都不会跑。
+ */
+const console_ = adminConsoleRoutes({
   clock,
-  mail: consoleMailSender(() => {}),
+  accounts: never,
+  admin: never,
+  wallet: () => undefined,
+  meter: () => undefined,
   baseUrl: 'https://cloud.agentsws.com',
-  version,
+  mail: consoleMailSender(() => {}),
+  bootstrapToken: 'openapi-placeholder-token-not-a-secret',
 })
+const routes = collectCloudRoutes(
+  {
+    store,
+    clock,
+    mail: consoleMailSender(() => {}),
+    baseUrl: 'https://cloud.agentsws.com',
+    version,
+  },
+  [console_],
+)
 const doc = buildCloudOpenApi(routes, version)
 store.close()
 

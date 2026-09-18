@@ -1,0 +1,384 @@
+/*
+ * 运营后台的皮：**直接复用工作台那套 `--ws-*` 令牌**（36 §1 / WP96 的设计画布）。
+ *
+ * 为什么是复制而不是抽包：工作台那份里有一半是卡片收件箱与岗位面板专用的
+ * 组件层（`.ws-go`、选中光晕、火花线），后台一条都用不上；而真正要共用的
+ * 是**颜色与字体那几十行 token**。把两边的 token 抽成第三个包，代价是
+ * 工作台要改一次 import、后台要跟着它的发版走——WP112 刚把标记抽成
+ * `@agentsws/brand`，那是因为标记有几何与动效要算。颜色没有。
+ *
+ * 所以这里的规矩是：**token 那一段逐字照抄，组件那一段各写各的**。
+ * 改皮的时候两处都要改，而这一句注释就是提醒。
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Outfit：只要 500 / 600 / 700 三档，本地打包，离线可用 */
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+
+  /* ── WP96 · 09-18 设计画布的浅色 token（改这一段就换整套皮） ───────── */
+  --ws-paper: #f3f5f2;
+  --ws-card: #ffffff;
+  --ws-line: #ecefea;
+  --ws-ink: #263331;
+  /* 正文灰：比标题浅一档，卡里的说明文字用它 */
+  --ws-body: #4b5550;
+  --ws-muted-fg: #6b746f;
+  --ws-brand: #007b67;
+  --ws-brand-ink: #045246;
+  --ws-brand-fg: #ffffff;
+  --ws-tint: #e8f3f0;
+  --ws-good: #158a4b;
+  --ws-good-bg: #e3f5ea;
+  --ws-warn: #b26e0b;
+  --ws-warn-bg: #fff4db;
+  --ws-bad: #c93b30;
+  --ws-bad-bg: #fde9e7;
+  --ws-info: #2f63c8;
+  --ws-info-bg: #e9f0fb;
+  /* 柱状图的第二根柱（"上周同时"）与进度条底槽 */
+  --ws-brand-soft: #cfebdd;
+  --ws-surface: #f7f9f6;
+  /* 卡：圆角 16、无边框、两层浅阴影 */
+  --ws-radius-card: 16px;
+  --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
+  --ws-shadow-hover: 0 16px 34px rgba(20, 40, 30, 0.14), 0 2px 6px rgba(20, 40, 30, 0.06);
+  /* 选中态的光晕：真渐变（模糊阴影），不是分层描边 */
+  --ws-glow: 0 0 0 1px rgba(0, 123, 103, 0.32), 0 0 12px 2px rgba(0, 123, 103, 0.14);
+  --ws-display: "Outfit", "Noto Sans SC", var(--font-stack-sans);
+
+  /* ── WP112 · 母品牌标记的渐变端点（真源：00_Brand/品牌设计规范-v2.md §1.2 / §3.0）─
+   *
+   * 端点走 CSS 变量而不是写死在组件里，`BrandMark` 于是**不需要知道现在是哪个主题**。
+   * 浅色这一套是规范里那组**压暗 15–20%** 的端点：亮端点在纸底上对比不足，
+   * 黄那一头几乎消失（§1.2「浅底的坑」）。
+   *
+   * `-0/-1/-2` 是静态标记那一条整体渐变的三个端点；`-b1..-b6` 是动效里**每块
+   * 自己那一段**（§3.0），由 `@agentsws/brand` 从同一条轴上采样推出来——
+   * `test/brand-mark.test.tsx` 会拿这些数字跟那个包逐格对。
+   */
+  --ws-brand-mark-0: #2e86d8;
+  --ws-brand-mark-1: #1fb8a4;
+  --ws-brand-mark-2: #d9a82e;
+  --ws-brand-mark-b1-from: #2a92cc;
+  --ws-brand-mark-b1-to: #23abb2;
+  --ws-brand-mark-b2-from: #279ebf;
+  --ws-brand-mark-b2-to: #1fb7a5;
+  --ws-brand-mark-b3-from: #22afad;
+  --ws-brand-mark-b3-to: #62b27a;
+  --ws-brand-mark-b4-from: #23aab3;
+  --ws-brand-mark-b4-to: #4ab489;
+  --ws-brand-mark-b5-from: #2cb79c;
+  --ws-brand-mark-b5-to: #91ae5b;
+  --ws-brand-mark-b6-from: #74b16e;
+  --ws-brand-mark-b6-to: #d9a82e;
+
+  /* ── shadcn token 指到上面那套值上 ───────────────────────────────── */
+  --background: var(--ws-paper);
+  --foreground: var(--ws-ink);
+  --card: var(--ws-card);
+  --card-foreground: var(--ws-ink);
+  --popover: var(--ws-card);
+  --popover-foreground: var(--ws-ink);
+  --primary: var(--ws-brand);
+  --primary-foreground: var(--ws-brand-fg);
+  --secondary: #edf0eb;
+  --secondary-foreground: var(--ws-ink);
+  --muted: #f3f5f2;
+  --muted-foreground: var(--ws-muted-fg);
+  --accent: var(--ws-tint);
+  --accent-foreground: var(--ws-brand-ink);
+  --destructive: var(--ws-bad);
+  --destructive-foreground: #ffffff;
+  --border: var(--ws-line);
+  --input: #e6eae5;
+  --ring: var(--ws-brand);
+
+  --chart-1: var(--ws-brand);
+  --chart-2: var(--ws-brand-soft);
+  --chart-3: var(--ws-info);
+  --chart-4: var(--ws-warn);
+  --chart-5: var(--ws-bad);
+
+  --sidebar: #f8faf7;
+  --sidebar-foreground: var(--ws-ink);
+  --sidebar-primary: var(--ws-brand);
+  --sidebar-primary-foreground: var(--ws-brand-fg);
+  --sidebar-accent: var(--ws-tint);
+  --sidebar-accent-foreground: var(--ws-brand-ink);
+  --sidebar-border: var(--ws-line);
+  --sidebar-ring: var(--ws-brand);
+}
+
+.dark {
+  /* ── WP96 · 深色照 Linear 的克制版：霓虹绿只用于强调与数据高亮 ────── */
+  --ws-paper: #0e100f;
+  --ws-card: #171a18;
+  --ws-line: #242825;
+  --ws-ink: #f1f4f0;
+  --ws-body: #c9d2cc;
+  --ws-muted-fg: #98a29b;
+  --ws-brand: #76fb91;
+  --ws-brand-ink: #b9ffc9;
+  --ws-brand-fg: #0e100f;
+  --ws-tint: #173c24;
+  --ws-good: #76fb91;
+  --ws-good-bg: #173c24;
+  --ws-warn: #f5c451;
+  --ws-warn-bg: #3a2e10;
+  --ws-bad: #ff7a6b;
+  --ws-bad-bg: #3d1d19;
+  --ws-info: #8bb8ff;
+  --ws-info-bg: #1a2436;
+  --ws-brand-soft: #2c5c3b;
+  --ws-surface: #1c201d;
+  --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --ws-shadow-hover: 0 16px 34px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.36);
+  --ws-glow: 0 0 0 1px rgba(118, 251, 145, 0.32), 0 0 12px 2px rgba(118, 251, 145, 0.14);
+
+  /* WP112：深底那一套亮端点（规范 §1.2 / §3.0 原样） */
+  --ws-brand-mark-0: #4ea8ff;
+  --ws-brand-mark-1: #2fe0c8;
+  --ws-brand-mark-2: #ffd84d;
+  --ws-brand-mark-b1-from: #47b5f2;
+  --ws-brand-mark-b1-to: #37d1d6;
+  --ws-brand-mark-b2-from: #3fc3e5;
+  --ws-brand-mark-b2-to: #30dfc9;
+  --ws-brand-mark-b3-from: #34d6d1;
+  --ws-brand-mark-b3-to: #7add9c;
+  --ws-brand-mark-b4-from: #38d0d8;
+  --ws-brand-mark-b4-to: #5fdeac;
+  --ws-brand-mark-b5-from: #3edfbf;
+  --ws-brand-mark-b5-to: #afdb7c;
+  --ws-brand-mark-b6-from: #8edc90;
+  --ws-brand-mark-b6-to: #ffd84d;
+
+  --background: var(--ws-paper);
+  --foreground: var(--ws-ink);
+  --card: var(--ws-card);
+  --card-foreground: var(--ws-ink);
+  --popover: var(--ws-card);
+  --popover-foreground: var(--ws-ink);
+  --primary: var(--ws-brand);
+  --primary-foreground: var(--ws-brand-fg);
+  --secondary: #1f2320;
+  --secondary-foreground: var(--ws-ink);
+  --muted: #1d211e;
+  --muted-foreground: var(--ws-muted-fg);
+  --accent: var(--ws-tint);
+  --accent-foreground: var(--ws-brand-ink);
+  --destructive: var(--ws-bad);
+  --destructive-foreground: #1a0f0d;
+  --border: var(--ws-line);
+  --input: #2a2e2b;
+  --ring: var(--ws-brand);
+
+  --chart-1: var(--ws-brand);
+  --chart-2: var(--ws-brand-soft);
+  --chart-3: var(--ws-info);
+  --chart-4: var(--ws-warn);
+  --chart-5: var(--ws-bad);
+
+  --sidebar: #121513;
+  --sidebar-foreground: var(--ws-ink);
+  --sidebar-primary: var(--ws-brand);
+  --sidebar-primary-foreground: var(--ws-brand-fg);
+  --sidebar-accent: var(--ws-tint);
+  --sidebar-accent-foreground: var(--ws-brand-ink);
+  --sidebar-border: var(--ws-line);
+  --sidebar-ring: var(--ws-brand);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-stack-sans);
+  --font-mono: var(--font-stack-mono);
+  --font-display: var(--ws-display);
+
+  /* WP96：设计画布的语义色也进 Tailwind，写 bg-ws-good-bg / text-ws-warn 就行 */
+  --color-ws-paper: var(--ws-paper);
+  --color-ws-card: var(--ws-card);
+  --color-ws-line: var(--ws-line);
+  --color-ws-ink: var(--ws-ink);
+  --color-ws-body: var(--ws-body);
+  --color-ws-muted-fg: var(--ws-muted-fg);
+  --color-ws-brand: var(--ws-brand);
+  --color-ws-brand-ink: var(--ws-brand-ink);
+  --color-ws-brand-fg: var(--ws-brand-fg);
+  --color-ws-brand-soft: var(--ws-brand-soft);
+  --color-ws-tint: var(--ws-tint);
+  --color-ws-surface: var(--ws-surface);
+  --color-ws-good: var(--ws-good);
+  --color-ws-good-bg: var(--ws-good-bg);
+  --color-ws-warn: var(--ws-warn);
+  --color-ws-warn-bg: var(--ws-warn-bg);
+  --color-ws-bad: var(--ws-bad);
+  --color-ws-bad-bg: var(--ws-bad-bg);
+  --color-ws-info: var(--ws-info);
+  --color-ws-info-bg: var(--ws-info-bg);
+
+  --radius-ws-card: var(--ws-radius-card);
+
+  --shadow-ws: var(--ws-shadow);
+  --shadow-ws-hover: var(--ws-shadow-hover);
+  --shadow-ws-glow: var(--ws-glow);
+}
+
+@layer base {
+  :root {
+    /* 系统字体优先；中文回退到本机的 Noto Sans SC / 苹方 / 微软雅黑，不联网 */
+    --font-stack-sans:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+      "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --font-stack-mono:
+      ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+      "Noto Sans Mono CJK SC", monospace;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-stack-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 键盘可达：焦点环永远可见（Radix 自带 focus-visible，这里只补兜底） */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* 后台的卡面：与工作台同一个圆角 / 阴影，但**没有选中态光晕**——
+     后台的表格行选中靠底色，不靠卡片抬起来。 */
+  .ws-card {
+    border-radius: var(--ws-radius-card);
+    border: 0;
+    background-color: var(--ws-card);
+    color: var(--ws-ink);
+    box-shadow: var(--ws-shadow);
+  }
+
+  /* 标题与大数字：Outfit，字距收紧、数字等宽 */
+  .ws-display {
+    font-family: var(--ws-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 表格里的数字：等宽，列才对得齐 */
+  .ws-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 侧栏那一列 */
+  .ws-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--ws-body);
+    transition:
+      background-color 140ms ease-out,
+      color 140ms ease-out;
+  }
+
+  .ws-nav:hover {
+    background-color: var(--ws-surface);
+    color: var(--ws-ink);
+  }
+
+  .ws-nav[aria-current="page"] {
+    background-color: var(--ws-tint);
+    color: var(--ws-brand-ink);
+    font-weight: 600;
+  }
+
+  /* 表头：粘在顶上，滚动时列名不跑掉 */
+  .ws-th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: var(--ws-card);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ws-muted-fg);
+    padding: 10px 12px;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--ws-line);
+  }
+
+  .ws-td {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--ws-body);
+    border-bottom: 1px solid var(--ws-line);
+    white-space: nowrap;
+  }
+
+  .ws-tr:hover .ws-td {
+    background-color: var(--ws-surface);
+  }
+}

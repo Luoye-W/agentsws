@@ -6,6 +6,8 @@ export * from './blocks.js'
 export * from './changes.js'
 export * from './channels.js'
 export * from './cloud.js'
+// 65 云端运营后台（WP115）：角色、后台会话、封禁与黑名单、审计、会员 term / cycle、看板形状
+export * from './cloud-admin.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
 export * from './cloud-entry.js'
 export * from './common.js'

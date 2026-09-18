@@ -13,6 +13,52 @@
  */
 
 export {
+  cookieHeader,
+  parseCookies,
+  requireAdmin,
+  requireCsrf,
+  requireStaff,
+  type StaffPrincipal,
+  sameOrigin,
+} from './admin/guard.js'
+export {
+  anchorFor,
+  type GrantRunResult,
+  nextCycleStart,
+  planOrThrow,
+  runDueGrants,
+} from './admin/membership.js'
+export {
+  ADMIN_TITLE_ZH,
+  type AdminWebDeps,
+  adminCallbackPage,
+  adminLoginPage,
+  mountAdminWebRoutes,
+} from './admin/pages.js'
+/*
+ * WP115 的后台（65）。**只列没有 Node 专有代码的那几个**：
+ * `admin/mount.ts` 读磁盘上的 `dist`，Workers 形态用不上（那边是 wrangler 的
+ * `[assets]`），所以它不在这张清单里——这张清单本身就是边界。
+ */
+export {
+  ADMIN_BASE_PATH,
+  ADMIN_BOOTSTRAP_TOKEN_ENV,
+  ADMIN_CALLBACK_PATH,
+  ADMIN_COOKIE_MAX_AGE_SECONDS,
+  type AdminConsoleDeps,
+  type AdminConsoleWallet,
+  adminConsoleRoutes,
+  tombstoneEmail,
+  tombstoneOrg,
+} from './admin/routes.js'
+export { ADMIN_MIGRATION_V2 } from './admin/schema.js'
+export {
+  AdminStore,
+  type AdminStoreOptions,
+  type IssuedAdminSession,
+  roleOf,
+} from './admin/store.js'
+export {
   buildCloudApp,
   buildCloudOpenApi,
   type CloudApp,

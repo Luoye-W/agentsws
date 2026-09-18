@@ -52,6 +52,14 @@ export interface MaintenanceOptions {
   idempotency?: { sweep?(clock: Clock): number } | undefined
   /** 公共红人库；`sweepBenchmarks` 是可选成员，老实现没有就跳过。 */
   kol?: { sweepBenchmarks?(olderThan: string): number } | undefined
+  /**
+   * WP115：顺带跑的那几件（会员 cycle 续发）。
+   *
+   * 为什么搭在这一拍上而不是另起一个定时器：多一个定时器就多一个要在关闭时
+   * 记得 clear 的东西，而这三件加一件都是"每十分钟看一眼库"。
+   * 它自己也 try 住——续发失败不该让扫孤儿预扣那件事也不跑。
+   */
+  also?: (() => void) | undefined
   /** 多久一拍；`0` = 不起定时器（测试手动调 `runOnce`）。 */
   intervalMs?: number
   onReport?: (report: SweepReport) => void
@@ -90,6 +98,11 @@ export function startMaintenance(options: MaintenanceOptions): Maintenance {
       benchmarks = options.kol?.sweepBenchmarks?.(iso(options.clock, BENCHMARK_MAX_AGE_MS)) ?? 0
     } catch {
       benchmarks = 0
+    }
+    try {
+      options.also?.()
+    } catch {
+      // 会员续发自己会记审计；这里只保证它不把整轮清理带走
     }
     const out: SweepReport = { reservations, idempotency, benchmarks, at: options.clock.now() }
     if (options.onReport !== undefined) options.onReport(out)

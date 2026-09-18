@@ -27,6 +27,28 @@ export {
   withInternalHeaders,
 } from './internal.js'
 export {
+  copyEventsTo,
+  copyLotsTo,
+  LEDGER_COPY_BATCH,
+  LEDGER_INTERNAL,
+  LEDGER_SINGLETON,
+  LedgerCore,
+  remoteUsageLedger,
+} from './ledger-do.js'
+export {
+  createOutbox,
+  OUTBOX_MIGRATIONS,
+  OUTBOX_MIGRATIONS_TABLE,
+  type Outbox,
+  outboxEventKey,
+} from './outbox.js'
+export {
+  handleWalletAdmin,
+  remoteWalletAdminPort,
+  WALLET_ADMIN_INTERNAL,
+  type WalletNamespaceLike,
+} from './wallet-admin.js'
+export {
   DEFAULT_WORKER_UPSTREAM,
   RESERVATION_MAX_AGE_MS,
   RESERVATION_SWEEP_MS,
@@ -34,7 +56,9 @@ export {
 } from './wallet-do.js'
 export {
   ACCOUNTS_SINGLETON,
+  ADMIN_ASSET_PREFIX,
   ADMIN_TOPUP_PATH,
+  isAdminPath,
   isWalletPath,
   normalizeClientIp,
   orgOfStripePayload,
@@ -46,6 +70,7 @@ export {
 
 import { AccountsCore, type DoStateLike } from './accounts-do.js'
 import type { WorkerEnv } from './env.js'
+import { LedgerCore } from './ledger-do.js'
 import { WalletCore, type WalletDoStateLike } from './wallet-do.js'
 import { route } from './worker.js'
 
@@ -67,8 +92,27 @@ export class AccountsDO {
     return this.#core.fetch(request)
   }
 
-  alarm(): void {
-    this.#core.alarm()
+  async alarm(): Promise<void> {
+    await this.#core.alarm()
+  }
+}
+
+/**
+ * 计量事件的只读副本（**单例**，WP115 / 65 §9）。
+ *
+ * 钱按组织切开之后没有一张跨全部组织的表，而后台的总览 / 台账要的正是那个。
+ * 每条计量事件由源头 `WalletDO` 抄一份进来（`ctx.waitUntil`，失败进待补队列、
+ * alarm 重投）。**只增不改**：这个对象上没有一条改或删计量事件的路由。
+ */
+export class LedgerDO {
+  readonly #core: LedgerCore
+
+  constructor(state: { storage: DoStateLike['storage'] }) {
+    this.#core = new LedgerCore(state)
+  }
+
+  fetch(request: Request): Promise<Response> {
+    return this.#core.fetch(request)
   }
 }
 
