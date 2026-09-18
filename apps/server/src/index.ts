@@ -312,6 +312,37 @@ export {
   type StandbyOptions,
 } from './standby.js'
 export { mountStatic, resolveAsset, type StaticOptions } from './static.js'
+// WP111 升级闸：升级前自动备份、迁移失败不启动、还原上一份备份
+export {
+  clearUpgradeFailure,
+  guardBeforeStart,
+  latestUpgradeBackup,
+  planUpgrade,
+  pruneUpgradeBackups,
+  RESTORE_REQUEST_FILE,
+  type RestoreRequest,
+  readRestoreRequest,
+  readSchemaVersions,
+  readUpgradeFailure,
+  readUpgradeState,
+  recordUpgradeSuccess,
+  SCHEMA_TARGETS,
+  type SchemaAdvance,
+  schemaFiles,
+  UPGRADE_BACKUP_KEEP,
+  UPGRADE_FAILED_FILE,
+  UPGRADE_STATE_FILE,
+  type UpgradeFailure,
+  type UpgradeFailureStage,
+  type UpgradeGuardInput,
+  type UpgradeGuardReport,
+  type UpgradePlan,
+  type UpgradeState,
+  upgradeBackupName,
+  workspaceIdOf,
+  writeRestoreRequest,
+  writeUpgradeFailure,
+} from './upgrade-guard.js'
 export { CHAT_WIDGET_JS, mountChatWidget, WIDGET_API_PATH, WIDGET_PATH } from './widget.js'
 export {
   createWorkModel,
@@ -328,6 +359,12 @@ export {
 
 import { pathToFileURL } from 'node:url'
 import { createServer } from './server.js'
+import {
+  guardBeforeStart,
+  recordUpgradeSuccess,
+  type UpgradeGuardReport,
+  writeUpgradeFailure,
+} from './upgrade-guard.js'
 
 /** 进程入口：启动、打印 /v1/health、挂优雅关闭。 */
 export async function main(): Promise<void> {
@@ -336,11 +373,71 @@ export async function main(): Promise<void> {
   const dbDir = process.env.AGENTSWS_DATA_DIR ?? process.env.AGENTSWS_DB_DIR
   // 单机真账号档：给了工作台构建目录就一并托管（demo 之外也能开工作台）
   const staticDir = process.env.AGENTSWS_STATIC_DIR
-  const server = await createServer({
-    ...(dbDir === undefined ? {} : { dbDir }),
-    ...(staticDir === undefined ? {} : { staticDir }),
-  })
+  const release = process.env.AGENTSWS_VERSION ?? '0.0.0'
+  const clock = { now: () => new Date().toISOString() }
+
+  /*
+   * WP111 升级闸（13 §5「更新前跑一次冒烟；失败回滚」）。只有落盘档有——
+   * 内存档没有可丢的东西。
+   *
+   * 顺序是死的：**先办还原单 → 会动数据就先备份 → 再建服务**（各库的迁移在
+   * `createServer()` 里各自跑）。建服务炸了就**不 listen、不半启动**，留一张纸条
+   * （`upgrade-failed.json`）说清楚数据动没动、备份在哪，托盘照着念。
+   * 半启动比不启动糟得多：她会以为能用，然后往一个坏掉的库里写东西。
+   */
+  let guarded: UpgradeGuardReport | undefined
+  /** 出事就留一张纸条，然后原样抛出去。托盘照着这张纸条说话。 */
+  const noteAndRethrow = (stage: 'backup' | 'migrate', err: unknown): never => {
+    if (dbDir !== undefined) {
+      writeUpgradeFailure(dbDir, {
+        at: clock.now(),
+        release,
+        ...(guarded?.plan.previousRelease === undefined
+          ? {}
+          : { previous_release: guarded.plan.previousRelease }),
+        stage,
+        error: String(err instanceof Error ? (err.stack ?? err.message) : err),
+        ...(guarded?.backup === undefined ? {} : { backup: guarded.backup }),
+        // 迁移在一个事务里跑（各包 `migrate()` 的 `db.transaction`），失败整条回滚；
+        // 卡在备份那一步则一条迁移都还没跑。两种情形数据都没动——
+        // 这一格就是这道闸存在的意义：出事之后能对用户说"你的数据还在"。
+        data_touched: false,
+      })
+      process.stderr.write(
+        `升级没成功，数据没动。${guarded?.backup === undefined ? '' : `备份在 ${guarded.backup}。`}\n`,
+      )
+    }
+    throw err
+  }
+
+  if (dbDir !== undefined) {
+    try {
+      guarded = await guardBeforeStart({
+        dataDir: dbDir,
+        release,
+        clock,
+        env: process.env,
+        log: (line) => process.stdout.write(`${line}\n`),
+      })
+    } catch (err) {
+      // 备份没做成就**不往下走**：留不成还照样跑迁移，等于把闸拆了还留着门框。
+      noteAndRethrow('backup', err)
+    }
+  }
+
+  let server: Awaited<ReturnType<typeof createServer>>
+  try {
+    server = await createServer({
+      ...(dbDir === undefined ? {} : { dbDir }),
+      ...(staticDir === undefined ? {} : { staticDir }),
+    })
+  } catch (err) {
+    return noteAndRethrow('migrate', err)
+  }
+
   await server.listen()
+  // 起来了才记：下次就知道上一版是什么、各库到了哪一版
+  if (dbDir !== undefined) recordUpgradeSuccess({ dataDir: dbDir, release, clock })
   let closing = false
   const shutdown = (signal: string): void => {
     if (closing) return

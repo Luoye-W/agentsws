@@ -8,6 +8,53 @@
 
 ---
 
+## 0.1.0-beta.1 — 未发布（WP111，待审）
+
+**第一个能发给别人双击安装的版本。** 目标是一位非技术的内测用户（Windows 优先）：
+双击能装、能升级、出问题能一键把诊断包发回来。
+
+这一版**仍然不签名、不公证**：Windows 装的时候要点「更多信息 → 仍要运行」，
+macOS 第一次打开要右键「打开」。给内测用户的一页纸是
+[`docs/62-内测安装与升级-v1.md`](docs/62-内测安装与升级-v1.md)。
+
+### 新增
+
+- **安装包把运行时带齐**（13 §5）：`apps/desktop/scripts/fetch-node.mjs` 按平台下官方
+  Node 22 发行包（sha256 对官方 `SHASUMS256.txt`，哈希签进 `apps/desktop/node-runtime.lock.json`），
+  `extraResources` 摆进 `<resources>/node`。**对方机器上不需要装 Node，也不需要 Docker。**
+  原生模块按捆绑 Node 的 ABI（v127）取官方 prebuild，`scripts/after-pack.mjs` 在打包那一刻换掉，
+  并**用捆绑的 Node 真 import 一遍**服务进程入口——不通就让打包失败。
+  四个目标平台：Windows x64、macOS arm64 / x64、Linux x64（AppImage，顺带）。
+- **没有 Docker 照常启动**：要 OpenConnector runtime 的连接卡置灰并说明
+  "这张需要 Docker（可选）"；邮箱、模型、红人、社媒这些走本机加密库的卡照常能用。
+  判定收在 `connectCardGating`（纯函数），`ProviderView` 加 `requires_runtime?`（只加不删）。
+- **升级前自动备份**：迁移版本将前进（或版本号变了）就先导一份完整工作区，
+  文件名带旧版本号，留最近 5 份。**备份失败就不往下走。**
+- **迁移失败不启动 + 一键还原**：出事留一张 `upgrade-failed.json`（卡在备份还是迁移、
+  数据动没动、备份在哪），托盘写"升级没成功，数据没动"，并多出一项「还原上一份备份」。
+- **更新接上 GitHub Releases（渠道 `beta`）**：Windows 应用内自动更新（**下载完先打一次
+  `/v1/health`，不过不切换**）；macOS / Linux 只提示 + 打开下载页（mac 未签名做不了
+  Squirrel 自动更新），`AGENTSWS_MAC_AUTOUPDATE` 给将来签名后留了开关。
+- **托盘「导出诊断包」**：白名单式收集（版本、平台、最近 2000 行日志、`/v1/health`、
+  迁移版本表、已连连接器**名字**、模块清单），**导出前把清单列给用户看**。
+  包里没有任何凭据、邮件正文、事件负载、知识内容。
+- **首次启动自动打开工作台**的「初始化设置」；之后恢复成托盘壳。
+- `.github/workflows/release.yml`：`push tag v*-beta.*` → 四平台矩阵各自打包并传到
+  那个 tag 的 GitHub Release（prerelease）。**CI 里没有任何密钥**，只用默认 `GITHUB_TOKEN`。
+
+### 修复
+
+- **打出来的包装完起不来**（WP111 发现）：electron-builder 的 pnpm 依赖收集器解析不了
+  带 peer 后缀的 `.pnpm` 目录、也不跟 `peerDependencies`，`@hono/node-server`（服务进程
+  listen 用的那一个）与 `@deepseek-ai/dsh-session-persistence` 等 **77 个包压根没进包**，
+  日志里只有一行 `cannot find path for dependency`。afterPack 广度优先补齐 + import 冒烟门禁。
+- **日志里的 `Authorization: Bearer <token>` 没被遮干净**（`packages/core/src/secret-patterns.ts`）：
+  `labelled` 规则把 `Bearer` 当成值遮掉，真 token 原封不动留在后面，而它带着点、
+  又短于 32 字符，`opaque` 那条也兜不住。加一条排最前的 `auth_scheme` 整段遮。
+  影响**所有**走 `createLogRedactor` 的日志，不只是诊断包。
+
+---
+
 ## 0.1.0-alpha — 2026-09-10（首个公开版本，尚未打 tag）
 
 第一阶段：框架骨架（1a）→ 替身换真实现（1b）→ 客服共享包（1c）→ 开源基建。

@@ -112,24 +112,120 @@ server 哪天提供了运行期急停接口，`src/halt.ts` 换成直接调它�
 
 1. `AGENTSWS_SIDECAR_RUNTIME=electron` —— 逃生口，明确要求时才借 Electron 自带 Node；
 2. `AGENTSWS_NODE` —— 指定 node 可执行文件；
-3. 安装包里随包携带的 `<resources>/node`（v1 还没往里放，见下）；
+3. **安装包里随包携带的那一份**（WP111 起真的有了：`<resources>/node/bin/node`，
+   Windows 上是 `<resources>/node/node.exe`）；
 4. `PATH` 上的 `node`。
 
-**所以 v1 的安装包要求机器上有 Node ≥ 22。** 要做到"一个安装包把运行时带齐"，下一步二选一：
-往 `extraResources` 里塞一份独立 Node 运行时；或等 `better-sqlite3` 能编过 Electron 44
-（也可以换 `node:sqlite`）之后切回 Electron 自带 Node。
+**WP111 起用户不需要自己装 Node。** `scripts/fetch-node.mjs` 把官方 Node 22 发行包下到
+`vendor/node/<平台>/`（sha256 对官方 `SHASUMS256.txt`，哈希签进 `node-runtime.lock.json`），
+`extraResources` 把当前平台那一份摆进 `<resources>/node`。第 4 条留着只是兜底
+（开发期没跑过脚本、或者捆绑那份被杀毒软件删了）——退化成"要装 Node"比直接起不来好。
+
+**原生模块跟着那份 Node 的 ABI 走。** 捆绑的是 Node 22（`NODE_MODULE_VERSION` 127），
+所以 `better_sqlite3.node` 也必须是 v127 那一份——用开发机 Node（可能是 25）编的那份塞进去
+只会在用户那儿炸 `ERR_DLOPEN_FAILED`。脚本按 ABI 取官方 prebuild 放进 `vendor/natives/<平台>/`，
+`scripts/after-pack.mjs` 在打包那一刻把包里的换掉，然后**用捆绑的 Node 真 import 一遍**
+服务进程入口——不通就让打包失败，不发出去。
+
+那个 afterPack 还顺手补一件事：electron-builder 的 pnpm 依赖收集器解析不了带 peer 后缀的
+`.pnpm` 目录（`@hono+node-server@2.1.1_hono@4.13.7`），也不跟 `peerDependencies`。
+日志里只有一行 `cannot find path for dependency` 就过去了，而 `@hono/node-server` 正是服务进程
+listen 用的那一个——WP111 之前打出来的包**装完根本起不来**。afterPack 按 `dependencies` +
+非 optional 的 `peerDependencies` 做一次广度优先补齐（一次补 77 个），那个 import 冒烟就是它的门禁。
 
 ## 打包
 
 ```bash
-pnpm --filter @agentsws/desktop build     # tsc -b
-pnpm --filter @agentsws/desktop package   # electron-builder --dir（不出安装包）
-pnpm --filter @agentsws/desktop dist      # macOS .dmg (arm64) / Windows .exe (NSIS x64)
+pnpm --filter @agentsws/desktop fetch-node  # 先把捆绑的 Node 与原生模块下下来（当前平台）
+pnpm --filter @agentsws/desktop build       # tsc -b
+pnpm --filter @agentsws/desktop package     # electron-builder --dir（不出安装包）
+pnpm --filter @agentsws/desktop dist        # macOS .dmg (arm64 / x64) / Windows .exe (NSIS x64)
 ```
 
-产物在 `apps/desktop/release/`（已 gitignore）。v1 **不签名、不公证、不接更新源**：
-`identity: null`、`publish: null`。`asar: false`——服务进程是以子进程跑的，从 asar 里执行脚本
+产物在 `apps/desktop/release/`（已 gitignore）。**不签名、不公证**（`identity: null`）；
+WP111 起**接了更新源**：`publish: github`、渠道 `beta`（见下面「内测安装与升级」）。`asar: false`——服务进程是以子进程跑的，从 asar 里执行脚本
 要额外的 hook，v1 用平铺目录换确定性。
+
+## 内测安装与升级（WP111）
+
+发给一位**非技术用户**的那条路。给她看的一页纸是
+[`docs/62-内测安装与升级-v1.md`](../../docs/62-内测安装与升级-v1.md)；这里是我们这一侧。
+
+### 发一版
+
+```bash
+git tag v0.1.0-beta.1 && git push origin v0.1.0-beta.1
+```
+
+`.github/workflows/release.yml` 接手：四个平台各在自己的机器上打
+（windows-latest / macos-14 / macos-13 / ubuntu-latest），版本号**只从 tag 来**
+（打包前反写进 `apps/desktop/package.json`），产物与 `latest*.yml` 传到那个 tag 的
+GitHub Release（`draft: false`、`prerelease: true`）。
+
+**CI 里没有任何密钥**：上传用 workflow 自带的 `GITHUB_TOKEN`，不签名、不公证
+（`CSC_IDENTITY_AUTO_DISCOVERY=false`）。交叉平台打包不做——原生模块与捆绑的 Node
+都按平台取，交叉打出来的包我们验不了（`after-pack.mjs` 那道 import 冒烟也只有同平台跑得起来）。
+
+本机试一次（不出安装包、不上传）：
+
+```bash
+pnpm --filter @agentsws/desktop fetch-node   # 当前平台
+pnpm --filter @agentsws/desktop package
+```
+
+### 更新：两个平台两条路，差别是签名定的
+
+| 平台 | 走哪条 | 为什么 |
+|---|---|---|
+| Windows（NSIS） | **应用内自动更新** | 未签名的 NSIS 照样能自更新。第一位内测用户用 Windows，这是主路径 |
+| macOS | 只提示 + 开 Releases 下载页 | Squirrel.Mac 强制校验代码签名，未签名连 `checkForUpdates()` 都过不去 |
+| Linux（AppImage） | 只提示 | 顺带发的一档，自动更新没在真机上验过 |
+
+判定在 `src/updater.ts` 的 `updatePolicy()`，连**理由**一起端出来（进日志与诊断包：
+"为什么我的 mac 不自动更新"要答得上来）。三个开关：
+
+- `AGENTSWS_DESKTOP_UPDATES=0` —— 一律不查；`=1` —— 开发期也查（调试用）。
+- `AGENTSWS_MAC_AUTOUPDATE=1` —— 将来 mac 签名 / 公证做完之后切自动。**默认关**。
+
+**冒烟闸没变**：auto 那条路上下载完先打一次 `GET /v1/health`，不 ok 就停在原地
+（`state: 'blocked'`），旧版本继续跑。notify 那条不走 `electron-updater`
+（mac 上它连查都过不去），而是一次**匿名** GitHub API GET + 自己比版本。
+
+### 升级安全：动数据之前先备份
+
+真身在 `apps/server/src/upgrade-guard.ts`，在 `createServer()` **之前**跑：
+
+1. 有没有**还原单**（`restore-request.json`）——有就先把那个包导回去。
+2. 这次**会不会动数据**——两条判据取并集：`SCHEMA_TARGETS` 里登记的库磁盘版本 <
+   代码里的最高版本（精确），或者上次成功启动记的 `release` 变了（兜底，覆盖登记不到的库）。
+3. 会动 → 先 `runBackup`，文件名尾巴补 `-from-<旧版本>`，只留最近 5 份。
+   **备份失败就不往下走。**
+
+建服务炸了 → **不 listen**，留一张 `upgrade-failed.json`（`stage` 是 `backup` 还是
+`migrate`、`data_touched: false`、备份路径）。托盘照着它说"升级没成功，数据没动"，
+并多出一项「还原上一份备份」（**只在真出事时出现**）。点了写一张还原单 + 重启 sidecar——
+托盘**不自己解 zip**：在一台已经出事的机器上，多一处解压逻辑就是多一处会出事的地方。
+
+启动成功才写 `upgrade-state.json`（上一版是什么、各库到了哪一版）。
+
+### 诊断包
+
+托盘「导出诊断包…」→ 白名单收集（`src/diagnostics.ts` 的 `DIAGNOSTIC_ITEMS`，
+一项一项列，不在表上的一律不收）→ **先把清单端给用户看** → 她选存哪儿 →
+用 `@agentsws/server` 的 `zipDir` 打包。
+
+收：版本 / 平台 / 架构、更新档位与理由、服务进程跑在哪个 Node、`/v1/health` 原文、
+各库迁移版本表、已连连接器的**名字与状态**、模块清单、两份日志各最近 2000 行。
+
+不收：任何凭据、邮件正文、事件负载、知识库内容、数据目录里的**任何库文件**，
+以及连接的 `alias` 与身份展示名（那多半就是她的邮箱地址——在 `api-client` 那一层就丢掉，
+不是收了再挑）。
+
+### 首次启动
+
+装完第一次打开会**自动把工作台端出来**一次（判据：跑首启向导之前 `config.json` 在不在），
+落在工作台自己判出来的「初始化设置」上。之后就恢复成托盘壳，不再自己弹窗。
+判定在 `src/first-run.ts`。
 
 ## 测试
 

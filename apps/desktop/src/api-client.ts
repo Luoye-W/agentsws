@@ -102,6 +102,17 @@ export interface ApiClient {
     session: DesktopSession,
     assignment: string,
   ): Promise<ApiResult<{ ok: boolean; installed: boolean; detail?: string }>>
+  /**
+   * WP111 诊断包：已连的连接器**名字与状态**（`GET /v1/connections`）。
+   *
+   * 路由本身连凭据都不含，但它回的 `alias` 与 `identity.display_name` 多半就是
+   * 用户的邮箱地址或店铺名——那是个人数据，不该进一个要发回给我们的包。
+   * 所以**在这里就丢掉**，而不是等收集那一层去挑：能不进内存就不进内存。
+   */
+  connections(
+    session: DesktopSession,
+    assignment: string,
+  ): Promise<ApiResult<{ service: string; label?: string; status?: string }[]>>
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -221,6 +232,24 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
           }
         : out
     },
+    async connections(session, assignment) {
+      const out = await call<{
+        connections?: { service?: unknown; service_label?: unknown; status?: unknown }[]
+      }>('/v1/connections', {
+        method: 'GET',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+      })
+      if (!out.ok) return out
+      return {
+        ok: true,
+        value: (out.value.value.connections ?? []).map((c) => ({
+          service: typeof c.service === 'string' ? c.service : '(未知)',
+          ...(typeof c.service_label === 'string' ? { label: c.service_label } : {}),
+          ...(typeof c.status === 'string' ? { status: c.status } : {}),
+        })),
+      }
+    },
+
     async setBrowserEndpoint(session, assignment, endpoint) {
       const out = await call<{ mode: string }>('/v1/settings/browser', {
         method: 'PUT',

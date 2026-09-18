@@ -59,8 +59,10 @@ import { seededRandom } from '@agentsws/kernel'
 import { MockOpenConnector } from '@agentsws/stand-ins'
 import {
   CATALOG,
+  type ConnectRuntimeState as CatalogConnectRuntimeState,
   type CatalogEntry,
   catalogEntry,
+  connectCardGating,
   flowOf,
   PLANNED_CONNECTORS,
   ROLE_CONNECTOR_KIND,
@@ -775,6 +777,17 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     }
   }
 
+  /**
+   * WP111：连接卡置灰判定要的那一个字。
+   *
+   * 比 `connectUsable()` 多分出 `unhardened` 与 `stand_in`——"装了没加固"与"没装"
+   * 在界面上不能是同一句话，前者要用户去改 runtime 的配置，后者只是"你还没装 Docker"。
+   */
+  const connectRuntimeState = async (): Promise<CatalogConnectRuntimeState> => {
+    if (options.connect !== undefined) return 'ready'
+    return (await runtimeStatus()).state
+  }
+
   /** OpenConnector 那条路现在能不能用（替身档永远能用）。 */
   const connectUsable = async (): Promise<{ ok: boolean; reason?: string }> => {
     if (usingStandIn || options.connect !== undefined) return { ok: true }
@@ -1156,25 +1169,23 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
   // ── 端口
   const port: ConnectionsPort = {
     async providers(): Promise<ProviderView[]> {
-      const usable = await connectUsable()
+      const runtimeState = await connectRuntimeState()
       // WP62（51 §1 N0 ①）：店铺卡按公司档案的平台过滤——别的平台那张**不渲染**。
       // 只筛"某个平台的店铺卡"，邮箱 / GA4 / 广告这些与平台无关的一张不少。
       const shopService = storefrontConnectorService(options.storefrontPlatform?.())
       const live: ProviderView[] = CATALOG.filter(
         (entry) => !isStorefrontService(entry.service) || entry.service === shopService,
       ).map((entry) => {
-        const local = entry.store === 'local_vault'
         // WP64：骨架卡永远点不动，理由就是那句"还没接"——它跟"这台机器缺什么"
         // 是两回事（51 §1 N0 里"没连"与"还没做"分得开的那条老规矩，同一条）。
-        const planned = entry.planned
-        const available = planned !== undefined ? false : local ? secrets.available : usable.ok
-        const unavailable_reason = available
-          ? undefined
-          : planned !== undefined
-            ? planned
-            : local
-              ? `这台机器没有秘密库密钥（${SECRETS_KEY_ENV}），邮箱账号密码无处安全存放`
-              : usable.reason
+        // WP111：判定整个搬进 `connectCardGating`（catalog.ts），这里只把结论端出去——
+        // 没有 Docker 时那几张卡说的是"这张需要 Docker（可选）"，而不是让应用起不来。
+        const { available, unavailable_reason, requires_runtime } = connectCardGating({
+          entry,
+          runtime: runtimeState,
+          secretsAvailable: secrets.available,
+          vaultReason: `这台机器没有秘密库密钥（${SECRETS_KEY_ENV}），邮箱账号密码无处安全存放`,
+        })
         return {
           service: entry.service,
           label: entry.label,
@@ -1183,6 +1194,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           fields: entry.auth === 'oauth2' ? [] : entry.fields,
           available,
           ...(unavailable_reason === undefined ? {} : { unavailable_reason }),
+          requires_runtime,
           data_sources: [...entry.data_sources],
           setup_guide: entry.setup_guide,
           ...(entry.data_note === undefined ? {} : { data_note: entry.data_note }),

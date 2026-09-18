@@ -1342,3 +1342,75 @@ export function catalogEntry(service: string): CatalogEntry | undefined {
 export function serviceOfUpstream(upstream: string): string {
   return UPSTREAM_TO_SERVICE[upstream] ?? upstream
 }
+
+// ── WP111：没有 Docker 时怎么办 ─────────────────────────────────────────
+//
+// 08 §5 的安装器策略写的是「`ENCRYPTION_KEY` + `ADMIN_TOKEN` 未设不启动」——
+// 那说的是**不许接进一个没加固的 runtime**，不是"没有 runtime 就不许开机"。
+// WP111 把这条落成用户看得见的形状：**应用照常起**，只是依赖 OpenConnector 的
+// 那些卡置灰，并说清楚为什么、缺的是什么、不装有什么后果。
+//
+// 内测用户是个非技术的人，她的机器上不会有 Docker。要是没有这一层，
+// 她打开连接页看到的是一排点得动却连不上的卡——或者更糟，替身档下"连上了"
+// 一堆假连接。
+
+/**
+ * 这张卡要不要本机的 OpenConnector runtime（= 要不要装 Docker）。
+ *
+ * 判据是**凭据存哪**，不是"是不是云服务"：`local_vault` 那几张（邮箱 IMAP/SMTP、
+ * Google Alerts 这类）凭据进本机加密库，一步都不经 runtime。
+ */
+export function needsConnectRuntime(entry: CatalogEntry): boolean {
+  return entry.store === 'openconnector'
+}
+
+/** 连接页上那句话。**「（可选）」三个字是重点**——不装不影响别的。 */
+export const DOCKER_OPTIONAL_REASON =
+  '这张需要 Docker（可选）：它的账号凭据存在本机的连接器 runtime 里，' +
+  '那一份要用 Docker 起。不装也没关系——模型、邮箱、红人、社媒这些都不经它。'
+
+/** runtime 起着但没加固：这一条比"没装"更要紧，不能含糊成同一句话。 */
+export const RUNTIME_UNHARDENED_REASON =
+  '本机的连接器 runtime 起着，但鉴权或静态加密没开——这种状态下不能往里放凭据（08 §5）。'
+
+export type ConnectRuntimeState = 'ready' | 'absent' | 'unhardened' | 'stand_in'
+
+export interface ConnectCardGating {
+  available: boolean
+  unavailable_reason?: string
+  /** 界面上「这张要 Docker」那个角标；与 `available` 分开——装好了它也还是要 Docker。 */
+  requires_runtime: boolean
+}
+
+/**
+ * 一张连接卡点不点得动（WP111）。纯函数，服务端与测试读同一份。
+ *
+ * 四层，从"用户修不好"到"用户修得好"：
+ * 1. `planned` —— 我们还没写。修不好，也不该让他试。
+ * 2. 本机库那几张 —— 缺 `AGENTSWS_SECRETS_KEY`，凭据无处安全存放。
+ * 3. 要 runtime 那几张 + 没装 —— 就是这次要说的"需要 Docker（可选）"。
+ * 4. 要 runtime + 装了没加固 —— 另一句话，别跟"没装"混成一句。
+ */
+export function connectCardGating(input: {
+  entry: Pick<CatalogEntry, 'store' | 'planned'>
+  runtime: ConnectRuntimeState
+  secretsAvailable: boolean
+  /** 本机库那一档的理由（调用方知道环境变量名）。 */
+  vaultReason: string
+}): ConnectCardGating {
+  const requires_runtime = needsConnectRuntime(input.entry as CatalogEntry)
+  if (input.entry.planned !== undefined)
+    return { available: false, unavailable_reason: input.entry.planned, requires_runtime }
+  if (!requires_runtime)
+    return input.secretsAvailable
+      ? { available: true, requires_runtime }
+      : { available: false, unavailable_reason: input.vaultReason, requires_runtime }
+  if (input.runtime === 'ready' || input.runtime === 'stand_in')
+    return { available: true, requires_runtime }
+  return {
+    available: false,
+    unavailable_reason:
+      input.runtime === 'unhardened' ? RUNTIME_UNHARDENED_REASON : DOCKER_OPTIONAL_REASON,
+    requires_runtime,
+  }
+}

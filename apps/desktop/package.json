@@ -21,6 +21,7 @@
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "start": "electron dist/main.js",
+    "fetch-node": "node scripts/fetch-node.mjs",
     "package": "tsc -b && electron-builder --dir",
     "dist": "tsc -b && electron-builder",
     "e2e": "playwright test -c e2e/playwright.config.ts",
