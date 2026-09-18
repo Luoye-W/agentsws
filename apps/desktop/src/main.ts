@@ -33,6 +33,13 @@ import {
   notImplementedLauncher,
 } from './connect-runtime.js'
 import { withCsp } from './csp.js'
+import {
+  type ConnectorSummary,
+  collectDiagnostics,
+  diagnosticsFileName,
+  diagnosticsListing,
+  humanBytes,
+} from './diagnostics.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
@@ -785,6 +792,98 @@ async function bootstrap(): Promise<void> {
     refreshTray()
   }
 
+  /**
+   * WP111 托盘「导出诊断包…」。
+   *
+   * 四步：**白名单式收集** → **把清单端给用户看** → 她选存哪儿 → 打包。
+   * 第二步不能省：这个 zip 是要发回给我们的，她点"导出"之前该知道自己在发什么。
+   *
+   * 打包用 `@agentsws/server` 里那份 `zipDir`——已经有测试、已经被备份包用着，
+   * 不为这一个菜单项再写一份 zip。
+   */
+  async function exportDiagnostics(): Promise<void> {
+    const t = strings(config.language)
+    const healthText = await probeHealthText()
+    let connectors: ConnectorSummary[] | undefined
+    let modules: string[] | undefined
+    const s = remote ? undefined : await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s !== undefined && assignment !== undefined) {
+      const out = await api.connections(s, assignment)
+      if (out.ok) connectors = out.value
+    }
+    try {
+      const parsed = JSON.parse(healthText ?? '{}') as { data?: { modules?: unknown } }
+      if (Array.isArray(parsed.data?.modules)) modules = parsed.data.modules.map(String)
+    } catch {
+      // health 打不通就没有模块清单，收集那边会如实写"问不到"
+    }
+
+    const bundle = collectDiagnostics({
+      appVersion: version,
+      platform: process.platform,
+      arch: process.arch,
+      serverExec: serverRuntime.execPath,
+      updateMode: policy.mode,
+      updateReason: policy.reason,
+      mode: runtimeMode.mode,
+      serverUrl: serverUrl(),
+      at: systemClock.now(),
+      health: healthText,
+      schemaState: files.readText(join(paths.serverDataDir, 'upgrade-state.json')),
+      upgradeFailure: files.readText(join(paths.serverDataDir, 'upgrade-failed.json')),
+      connectors,
+      modules,
+      desktopLog: files.readText(paths.logFile),
+      serverLog: files.readText(paths.serverLogFile),
+      ...(secrets === undefined ? {} : { redactor: createRedactor(secretLiterals(secrets)) }),
+    })
+
+    const confirmed = await dialog.showMessageBox({
+      type: 'info',
+      buttons: [t.exportDiagnostics, t.wizardCancel],
+      defaultId: 0,
+      cancelId: 1,
+      message: `${t.exportDiagnostics}（${humanBytes(bundle.totalBytes)}）`,
+      detail: diagnosticsListing(bundle, config.language),
+    })
+    if (confirmed.response !== 0) return
+
+    const suggested = diagnosticsFileName(version, systemClock.now())
+    const picked = await dialog.showSaveDialog({
+      defaultPath: join(app.getPath('downloads'), suggested),
+      filters: [{ name: 'zip', extensions: ['zip'] }],
+    })
+    if (picked.canceled || picked.filePath === undefined || picked.filePath === '') return
+
+    // 先摊进一个临时目录再打包：`zipDir` 打的是一个平目录，而那正是这个包的形状。
+    const stage = join(paths.userData, 'diagnostics-stage')
+    files.remove(stage)
+    files.ensureDir(stage)
+    for (const entry of bundle.entries) files.writeText(join(stage, entry.name), entry.content)
+    const { zipDir } = await import('@agentsws/server')
+    zipDir(stage, picked.filePath)
+    files.remove(stage)
+    logger.info('已导出诊断包', { to: picked.filePath, items: bundle.entries.length })
+    shell.showItemInFolder(picked.filePath)
+  }
+
+  /** `/v1/health` 的**原始响应文本**（诊断包要原文，不是解析过的快照）。 */
+  async function probeHealthText(): Promise<string | undefined> {
+    const guard = nodeAbort(3000)
+    try {
+      const res = await fetch(`${serverUrl()}/v1/health`, {
+        headers: { accept: 'application/json' },
+        signal: guard.signal,
+      })
+      return await res.text()
+    } catch {
+      return undefined
+    } finally {
+      guard.done()
+    }
+  }
+
   function invoke(action: MenuAction): void {
     switch (action) {
       case 'open-workstation':
@@ -821,6 +920,9 @@ async function bootstrap(): Promise<void> {
         break
       case 'open-logs':
         void shell.openPath(paths.logDir)
+        break
+      case 'export-diagnostics':
+        void exportDiagnostics()
         break
       case 'toggle-launch-at-login': {
         config = configStore.update({ launchAtLogin: !config.launchAtLogin })

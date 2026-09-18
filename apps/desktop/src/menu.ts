@@ -205,6 +205,9 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
     })
   items.push(
     { id: 'open-logs', type: 'normal', label: t.openLogs, enabled: true },
+    // WP111：**一直在**，不像「还原上一份备份」那样只在出事时出现——
+    // 出问题的时候她第一反应是找托盘，那一刻不该还要先让某个东西"出现"。
+    { id: 'export-diagnostics', type: 'normal', label: t.exportDiagnostics, enabled: true },
     {
       id: 'toggle-launch-at-login',
       type: 'checkbox',

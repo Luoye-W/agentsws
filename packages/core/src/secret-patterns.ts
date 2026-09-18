@@ -107,6 +107,14 @@ export const REDACTED = '[redacted]'
  * `标签: 值` 与「长不透明串」两种形态兜底。
  */
 export const LOG_SECRET_PATTERNS: readonly SecretPattern[] = [
+  /**
+   * WP111：`Authorization: Bearer <token>` 必须**排在 `labelled` 前面**。
+   *
+   * 否则 `labelled` 会把 `Bearer` 这个词当成 `authorization` 的值遮掉，
+   * 真正的 token 原封不动留在后面——`Authorization: [redacted] eyJhbGciOi…`。
+   * 短于 32 字符的 JWT 头段连 `opaque` 那条也兜不住。整段一起遮才对。
+   */
+  p('auth_scheme', /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi),
   p(
     'labelled',
     /\b(bearer|authorization|admin[-_]?token|session[-_]?key|encryption[-_]?key|api[-_]?key|access[-_]?token|refresh[-_]?token|internal token|token|secret|passwd|password|pwd)\b(\s*[:=]\s*|\s+)(["']?)([^\s"',;{}]{3,})\3/gi,
