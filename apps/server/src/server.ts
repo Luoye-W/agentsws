@@ -132,6 +132,8 @@ import {
   readLock,
 } from './browserskill-install.js'
 import { createCatalogIndex } from './catalog-index.js'
+// WP95（36 §11）：第三栏「变更审阅」逐文件 diff / 「运行中的浏览器」汇总，两条只读投影
+import { changeFiles } from './change-files.js'
 import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
 import {
@@ -197,6 +199,7 @@ import {
   type ReconcileGuardOptions,
 } from './reconcile.js'
 import { createConnectRecordSource } from './records.js'
+import { readRunBrowser } from './run-browser.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
@@ -3505,7 +3508,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           throw err
         }
       },
+      /*
+       * WP95（36 §11）：第三栏「运行中的浏览器」读的那一份。
+       * 纯投影——把这次运行的事件折成"哪种执行器、当前域、最近一次导航 / 拒绝、
+       * 等不等人接管"，服务端不为它多存一张表（`run-browser.ts`）。
+       */
+      runBrowser: (actor, run_id) => readRunBrowser(eventLogPort, actor.workspace_id, run_id),
     },
+    /*
+     * WP95（36 §11，`sidebar-compare` #11）：一条变更改了哪几个文件、哪几行。
+     * 只有有数据目录的那一档才有——主题工作副本落在 `<data>/themes/<workspace>/<store>/`
+     * （WP89）。全内存档不装配，那条路由回 `not_implemented`，面板照实说。
+     */
+    ...(dbDir === undefined
+      ? {}
+      : {
+          changeFiles: {
+            files: (_actor, change) => changeFiles(change, { dataDir: dbDir }),
+          },
+        }),
     // WP31：本机秘密库的密钥轮换（owner）。密钥只在请求体里出现一次，
     // 网关这一层不碰库、也不碰值，只把「换了几条」端出去。
     secrets: {

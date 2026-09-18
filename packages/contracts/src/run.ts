@@ -251,6 +251,45 @@ export interface BrowserProbeResult {
   detail?: string
 }
 
+/**
+ * WP95（36 §11，`docs/upstream/sidebar-compare.md` #12 / #15）：
+ * 第三栏「运行中的浏览器」面板读的**一次运行的浏览器侧汇总**。
+ *
+ * 它是**投影，不是新状态**：每一格都从事件日志里算出来
+ * （`tool.call` / `tool.result{blocked}` / `progress{browser_handoff}`），
+ * 服务端不为它多存一张表。所以运行结束之后这一份仍然算得出来——
+ * 官方那一侧"会话一销毁摘要就没了"的毛病（`sidebar-compare` §4 第 1 条）我们不学。
+ *
+ * **只给域名不给整条 URL**：路径里常带订单号、邮箱、一次性 token；
+ * 第三栏是给人看"它现在在哪家站上"，不是给人看参数（21 敏感级）。
+ */
+export interface RunBrowserView {
+  run_id: RunId
+  /**
+   * 哪种执行器（55 §3 / §10）：
+   * `playwright-mcp` = 官方 provider 那一种（工具名带 `mcp__playwright-mcp__` 前缀）；
+   * `browserskill` = WP92「我正在用的浏览器」（六个 `browser_*` 裸名工具）；
+   * `none` = 这次运行一个浏览器工具都没调过。
+   */
+  executor: 'playwright-mcp' | 'browserskill' | 'none'
+  /** 这次运行还在不在跑（日志里有没有 `run.completed` / `run.failed` / `run.cancelled`）。 */
+  running: boolean
+  /** 最近一次导航去的域（`example.myshopify.com`）。 */
+  current_host?: string
+  /** 最近一次导航。 */
+  last_navigation?: { at: Iso8601; host: string; tool: string }
+  /** 最近一次被门禁拦下来的浏览器调用（白名单外的域、写动作越权…）。 */
+  last_blocked?: { at: Iso8601; tool: string; reason: string }
+  /**
+   * 正等人接管（`browser_assist{action:'request-help'}` → `progress{browser_handoff}`）。
+   * 有它 = 界面上该出"去接管"，而不是让人盯着一个不动的运行。
+   */
+  awaiting_handoff?: { at: Iso8601; note?: string }
+  /** 导航次数与被拦次数（"运行中"那三个字段的同一条思路，#15）。 */
+  navigations: number
+  blocked: number
+}
+
 export interface RunRequest {
   id: RunId
   schema_version: 1
