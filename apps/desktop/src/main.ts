@@ -70,6 +70,13 @@ import {
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
 import { TRAY_ICON_2X_DATA_URL, TRAY_ICON_DATA_URL } from './tray-icon.js'
 import { createUpdateGate, type UpdaterPort } from './updater.js'
+import {
+  canRestore,
+  failureMessage,
+  readFailureNote,
+  requestRestore,
+  type UpgradeFailureNote,
+} from './upgrade.js'
 import { openWorkBrowser } from './work-browser.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -550,6 +557,15 @@ async function bootstrap(): Promise<void> {
       }
     })
 
+  /**
+   * WP111：服务进程上次启动时升级没成功吗（`upgrade-failed.json` 在不在）。
+   *
+   * 每次刷托盘都重读一次，不缓存：那张纸条是**服务进程**写的、**服务进程**清的
+   * （下次起成功 `recordUpgradeSuccess` 就删），托盘缓存一份只会和真相对不上。
+   */
+  const upgradeNote = (): UpgradeFailureNote | undefined =>
+    remote ? undefined : readFailureNote(files, paths.serverDataDir)
+
   const trayInput = () => ({
     language: config.language,
     serverUrl: serverUrl(),
@@ -563,6 +579,8 @@ async function bootstrap(): Promise<void> {
     company: companyLabel({ serverUrl: runtimeMode.serverUrl, workspaceName }),
     // WP60：判据是服务地址的形状，不是另存的一个开关（见 `mode.isStandby`）
     standby: isStandby(runtimeMode.serverUrl),
+    upgradeFailed: upgradeNote() !== undefined,
+    restorable: canRestore(upgradeNote()),
   })
 
   const model = (): MenuItemModel[] => buildTrayMenu(trayInput())
@@ -723,6 +741,41 @@ async function bootstrap(): Promise<void> {
       .catch(() => undefined)
   }
 
+  /**
+   * WP111 托盘「还原上一份备份」。
+   *
+   * 三步：**先问一句**（这是个覆盖数据的动作，不能一点就做）→ 写还原单 →
+   * 重启 sidecar。真正的导入由服务进程下次启动时做（`guardBeforeStart` 第 ① 步）——
+   * 托盘不自己解 zip：在一台已经出事的机器上，多一处解压逻辑就是多一处会出事的地方。
+   */
+  async function restoreLastBackup(): Promise<void> {
+    const note = upgradeNote()
+    if (!canRestore(note)) {
+      logger.warn('没有可还原的备份')
+      return
+    }
+    const t = strings(config.language)
+    const answer = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: [t.restoreBackup, t.wizardCancel],
+      defaultId: 1,
+      cancelId: 1,
+      message: t.restoreBackup,
+      detail: failureMessage(note, config.language),
+    })
+    if (answer.response !== 0) return
+    requestRestore({
+      files,
+      dataDir: paths.serverDataDir,
+      backup: note.backup as string,
+      clock: systemClock,
+    })
+    logger.info('已下还原单，重启服务进程去办', { backup: note.backup })
+    forgetSession()
+    server.restart()
+    refreshTray()
+  }
+
   function invoke(action: MenuAction): void {
     switch (action) {
       case 'open-workstation':
@@ -749,6 +802,10 @@ async function bootstrap(): Promise<void> {
         if (remote) break
         forgetSession()
         server.restart()
+        break
+      case 'restore-backup':
+        if (remote) break
+        void restoreLastBackup()
         break
       case 'open-logs':
         void shell.openPath(paths.logDir)

@@ -24,6 +24,20 @@ export interface Strings {
   browserExtensionOk: string
   browserExtensionBad: string
   openLogs: string
+  /** WP111：托盘「导出诊断包」。 */
+  exportDiagnostics: string
+  /** WP111：升级出事之后那一项「还原上一份备份」。 */
+  restoreBackup: string
+  /** 升级没成功，但数据一个字节都没动（迁移在事务里，失败整条回滚）。 */
+  upgradeFailedIntact: string
+  /** 万一真动了（理论上不该出现，出现了就得说实话）。 */
+  upgradeFailedTouched: string
+  upgradeBackupAt: string
+  upgradeNoBackup: string
+  /** 卡在备份那一步：连升级前那份都没做成，所以一条迁移都没跑。 */
+  upgradeBackupFailed: string
+  /** 托盘状态里那一行「升级没成功」。 */
+  upgradeFailedStatus: string
   launchAtLogin: string
   quit: string
   paused: string
@@ -64,6 +78,15 @@ const ZH: Strings = {
   browserExtensionOk: '浏览器扩展已连上，可以用你正在用的浏览器干活了。',
   browserExtensionBad: '还没好：{detail}',
   openLogs: '打开日志目录',
+  exportDiagnostics: '导出诊断包…',
+  restoreBackup: '还原上一份备份',
+  upgradeFailedIntact: '升级没成功，你的数据一个字节都没动。',
+  upgradeFailedTouched: '升级中断了，数据可能只改了一半——先还原备份，别继续用。',
+  upgradeBackupAt: '升级前的备份在：{path}',
+  upgradeNoBackup: '这次没有留下升级前的备份（这次升级本来就不动数据）。',
+  upgradeBackupFailed:
+    '升级前的备份没做成，所以一条迁移都没跑——先看看磁盘还剩多少，再导一份诊断包发回来。',
+  upgradeFailedStatus: '升级没成功，数据没动',
   launchAtLogin: '开机自启',
   quit: '退出',
   paused: '已暂停',
@@ -104,6 +127,16 @@ const EN: Strings = {
     'The browser extension is connected — your everyday browser is ready to work.',
   browserExtensionBad: 'Not ready: {detail}',
   openLogs: 'Open log folder',
+  exportDiagnostics: 'Export a diagnostics bundle…',
+  restoreBackup: 'Restore the last backup',
+  upgradeFailedIntact: 'The upgrade did not go through. Not one byte of your data was touched.',
+  upgradeFailedTouched:
+    'The upgrade stopped halfway and your data may be half-changed. Restore the backup before using it again.',
+  upgradeBackupAt: 'The pre-upgrade backup is at: {path}',
+  upgradeNoBackup: 'No pre-upgrade backup was taken (this upgrade does not touch data).',
+  upgradeBackupFailed:
+    'The pre-upgrade backup could not be made, so no migration ran at all. Check free disk space, then export a diagnostics bundle.',
+  upgradeFailedStatus: 'Upgrade failed, data untouched',
   launchAtLogin: 'Launch at login',
   quit: 'Quit',
   paused: 'Paused',
