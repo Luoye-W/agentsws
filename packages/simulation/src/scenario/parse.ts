@@ -320,6 +320,9 @@ const EXPECTED_KEYS = [
   // WP63（51 §2.1 数据日报）
   'daily_reports',
   'daily_report_figures',
+  // WP96（36 §2）：只有要人决定的才是卡
+  'queue_cards',
+  'panel_reports',
 ] as const
 
 function parseActor(source: string, name: string, raw: unknown): ScenarioActor {
@@ -1981,6 +1984,13 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       figures[name] = numeric(source, `expected.daily_report_figures.${name}`, v)
     }
     out.daily_report_figures = figures
+  }
+  // WP96（36 §2）：队列里剩几张、面板报表块有几条
+  if (raw.queue_cards !== undefined) {
+    out.queue_cards = numeric(source, 'expected.queue_cards', raw.queue_cards)
+  }
+  if (raw.panel_reports !== undefined) {
+    out.panel_reports = numeric(source, 'expected.panel_reports', raw.panel_reports)
   }
   const eventTypes = optStrList(source, 'expected.event_types', raw.event_types)
   if (eventTypes !== undefined) out.event_types = eventTypes

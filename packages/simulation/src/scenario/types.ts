@@ -1416,6 +1416,15 @@ export interface ScenarioExpected {
   daily_reports?: NumericAssertion
   /** WP63：日报卡里那几个数（`sales` / `orders` / `low_stock` / `pending`）。 */
   daily_report_figures?: Record<string, NumericAssertion>
+  /**
+   * WP96（09-18 / 36 §2）：**进人队列的卡**有几张。
+   *
+   * 与 `approval_kinds` 分工不同：那个问的是"账本上有没有这条"，这个问的是
+   * "它有没有压在谁的待办里"。日报与上线检查单在账本上**有**，在队列里**没有**。
+   */
+  queue_cards?: NumericAssertion
+  /** WP96：落进岗位面板报表块的有几条（日报 / 上线检查单）。 */
+  panel_reports?: NumericAssertion
 }
 
 export interface Scenario {

@@ -124,6 +124,7 @@ const plan: DailyPlan = {
 const home: HomeData = {
   queue: [draftCard({ detail: { ...draftCard().detail, payload: { matter_id: 'mat_1' } } })],
   alerts: [],
+  reports: [],
   tiles: [TILE_BAR],
   estimated_minutes: 6,
   range: 'yesterday',

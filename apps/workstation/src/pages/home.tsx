@@ -23,6 +23,7 @@ import {
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
+import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
@@ -489,19 +490,23 @@ export function HomePage(): React.ReactNode {
         </section>
       )}
 
-      {/* 告警单列（06 §1.2 immediate 通知；系统卡，P0 留在 deck 里） */}
-      {data.alerts.length === 0 ? null : (
-        <section data-testid="alerts">
-          <h2 className="mb-2 text-sm font-medium">{t('home.alerts')}</h2>
-          <ul className="flex flex-col gap-2">
-            {data.alerts.map((a) => (
-              <li key={a.id} className="rounded-lg border bg-card px-4 py-3 text-sm">
-                {a.title}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/*
+        WP96：**不是卡的那两样**。
+        告警块 = 系统卡（06 §1.2 已经走过 immediate 通知），报表块 = 日报 / 检查单。
+        两样都不要人决定，所以都不进下面那副 deck；它们引出的决定才出卡。
+      */}
+      <AlertBlocks
+        alerts={data.alerts}
+        onOpen={(card) => {
+          navigate(matterUrl(card))
+        }}
+      />
+      <ReportBlocks
+        reports={data.reports}
+        onOpen={(card) => {
+          navigate(matterUrl(card))
+        }}
+      />
 
       {/* ③ 卡片 deck —— 一次一张（37 §1） */}
       <section data-testid="queue">

@@ -1212,6 +1212,14 @@ export interface BattleReport {
 export interface HomeAssembly {
   queue: DeckCard[]
   alerts: DeckCard[]
+  /**
+   * WP96（09-18）：**看完即过的报表**——日报（WP63）与上线检查单（WP77）。
+   *
+   * 它们不再进 `queue`：队列里的每一张都该是"要你决定的"，而这两样一个决定都
+   * 不要人做（36 §2）。它们照旧在账本里（14 的老规矩：Agent 主动做的每件事都
+   * 进同一条账），只是投影到界面时落进岗位面板的报表块。
+   */
+  reports: DeckCard[]
   tiles: PositionTiles[]
   digest?: DeckCard
   estimated_minutes: number

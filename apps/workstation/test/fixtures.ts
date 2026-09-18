@@ -129,6 +129,7 @@ export function homeData(over: Partial<HomeData> = {}): HomeData {
   return {
     queue,
     alerts: [],
+    reports: [],
     tiles: [TILE_BAR],
     estimated_minutes: 6,
     range: 'yesterday',

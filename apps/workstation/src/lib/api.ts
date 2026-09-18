@@ -253,6 +253,8 @@ export interface DeckCounts {
 export interface HomeData {
   queue: DeckCard[]
   alerts: DeckCard[]
+  /** WP96：看完即过的报表（日报 / 上线检查单）——它们不进队列，进面板的报表块 */
+  reports: DeckCard[]
   tiles: PositionTiles[]
   digest?: DeckCard
   estimated_minutes: number
