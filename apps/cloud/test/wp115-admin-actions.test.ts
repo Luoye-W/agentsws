@@ -258,7 +258,7 @@ describe('WP115 用户管理', () => {
     const ah = adminHarness()
     close = ah.close
     const admin = await staffLogin(ah, 'boss@example.com', 'admin')
-    const free = ah.h.server.store.ensureAccount('free@example.com')
+    ah.h.server.store.ensureAccount('free@example.com')
     const paid = ah.h.server.store.ensureAccount('paid@example.com')
     const member = ah.h.server.store.ensureAccount('member@example.com')
     const bad = ah.h.server.store.ensureAccount('bad@example.com')

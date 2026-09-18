@@ -178,7 +178,7 @@ export { linkView, type WorkspaceLinkView } from './views.js'
 
 import { pathToFileURL } from 'node:url'
 import { type CloudTokenVerifier, cloudBaseUrl } from '@agentsws/contracts'
-import type { Wallet, WalletStore } from '@agentsws/metering'
+import type { WalletStore } from '@agentsws/metering'
 import { runDueGrants } from './admin/membership.js'
 import { createAdminStore, mountAdminPages } from './admin/mount.js'
 import { adminConsoleRoutes } from './admin/routes.js'

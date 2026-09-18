@@ -57,6 +57,12 @@ function harness(over: Partial<EntryDeps> = {}) {
   return { app, wallet, events }
 }
 
+/** 取那唯一一条计量事件；没有就抛（断言里用 `!` 会被 lint 挡下，而这里要的是一句人话）。 */
+function only(events: MeteringEvent[]): MeteringEvent {
+  if (events.length !== 1) throw new Error(`期望 1 条计量事件，实际 ${String(events.length)} 条`)
+  return events[0] as MeteringEvent
+}
+
 const chat = (app: ReturnType<typeof createEntryApp>, token: string, model: string) =>
   app.fetch(
     new Request('http://entry.test/v1/ai/chat/completions', {
@@ -72,7 +78,7 @@ describe('WP115 成本会计落点', () => {
     const res = await chat(h.app, 'wst_user', 'deepseek-flash')
     expect(res.status).toBe(200)
     expect(h.events).toHaveLength(1)
-    const e = h.events[0]!
+    const e = only(h.events)
     expect(e.provider).toBe('deepseek')
     expect(e.model).toBe('deepseek-flash')
     expect(e.input_tokens).toBe(1000)
@@ -91,7 +97,7 @@ describe('WP115 成本会计落点', () => {
   it('认不出的模型：provider 落成本表里最贵那一档的家，成本不为 0', async () => {
     const h = harness()
     await chat(h.app, 'wst_user', 'brand-new-model-2028')
-    const e = h.events[0]!
+    const e = only(h.events)
     expect(e.cost_micros).toBeGreaterThan(0)
     expect(e.model).toBe('brand-new-model-2028')
   })
@@ -99,7 +105,7 @@ describe('WP115 成本会计落点', () => {
   it('管理员账号：admin_exempt，积分 0，但成本照记', async () => {
     const h = harness({ isExemptAccount: (id) => id === 'acc_staff' })
     await chat(h.app, 'wst_staff', 'deepseek-flash')
-    const e = h.events[0]!
+    const e = only(h.events)
     expect(e.charge_status).toBe('admin_exempt')
     expect(e.credits).toBe(0)
     expect(e.cost_micros).toBeGreaterThan(0)
@@ -110,7 +116,7 @@ describe('WP115 成本会计落点', () => {
   it('costTable: null → 那一列留空（不是 0）：0 与「没算过」在毛利表上不是一回事', async () => {
     const h = harness({ costTable: null })
     await chat(h.app, 'wst_user', 'deepseek-flash')
-    const e = h.events[0]!
+    const e = only(h.events)
     expect('cost_micros' in e).toBe(false)
     expect(e.provider).toBe('deepseek')
   })
