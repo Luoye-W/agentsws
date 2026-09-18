@@ -200,7 +200,7 @@ describe('WP92（55 §10）：检查浏览器扩展', () => {
 
 describe('trayTooltip', () => {
   it('版本 + 状态；暂停时补一句', () => {
-    expect(trayTooltip(input())).toBe('agentsws 0.1.0 · 服务运行中')
+    expect(trayTooltip(input())).toBe('Agents 工坊 0.1.0 · 服务运行中')
     expect(trayTooltip(input({ paused: true }))).toContain('已暂停')
   })
 })

@@ -530,7 +530,7 @@ async function bootstrap(): Promise<void> {
         width: 1280,
         height: 840,
         show: false,
-        title: 'agentsws',
+        title: 'Agents 工坊',
         webPreferences: {
           preload: join(here, 'preload.cjs'),
           contextIsolation: true,
