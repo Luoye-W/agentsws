@@ -31,6 +31,16 @@ export {
 export { DeckError, type DeckErrorReason, errorCodeFor } from './errors.js'
 export { assembleHome, type HomeInput, type HomePosition } from './home.js'
 export {
+  DECK_LAYOUTS,
+  DEFAULT_LAYOUT,
+  type DeckLayout,
+  isQueueCard,
+  LAYOUT_BY_CHANGE,
+  LAYOUT_BY_KIND,
+  layoutFor,
+  NOT_A_CARD,
+} from './layout.js'
+export {
   actionsFor,
   DECIDABLE_STATES,
   labelsFor,

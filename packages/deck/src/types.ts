@@ -14,6 +14,7 @@ import type {
   RiskClass,
   RoleId,
 } from '@agentsws/contracts'
+import type { DeckLayout } from './layout.js'
 
 /**
  * 岗位 id。
@@ -243,6 +244,14 @@ export interface DeckOption {
 export interface DeckCard {
   id: string
   kind: DeckKind
+  /**
+   * WP96：卡的**主体排版**（十一种之一）。
+   *
+   * 由 `layoutFor(kind, payload.kind)` 在投影层算出，六端拿到的是同一个值——
+   * "这张卡长什么样"和"这张卡是什么"一起下发，前端不再自己 `switch (kind)`。
+   * 通用头（岗位 · 类 / 等待时长 / 提案人）与通用页脚（按钮行 + → 圆钮）不受它影响。
+   */
+  layout: DeckLayout
   status: ApprovalState
   /** 由 risk_class + expires_at + 14 §8 排序算出 */
   priority_band: PriorityBand

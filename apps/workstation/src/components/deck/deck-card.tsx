@@ -1,6 +1,11 @@
 /**
  * 四段式卡面（37 §1，照 KefuAgent `support-inbox-deck.tsx` 的骨架）。
  *
+ * WP96：**头与脚全类共用，中间那块按 `card.layout` 换十一种排版**（画布《卡片排版
+ * 一览》）。头一行还是 37 §1 定的那个顺序，只是换了皮，末尾多一个提案人头像；
+ * 脚多一个右下角的 → 圆钮——**没按钮的卡也有它**，它是出口不是第四个动作。
+ * 中间那块搬去了 `deck-card-body.tsx`。
+ *
  * 四段是**三条边界线围出来的三个区域**，不是靠 margin 堆出来的四行：标签行和动作行
  * 各自带分隔线，中间是唯一会长高的内容区，而它长到 420px 就在卡内滚。动作行是唯一
  * 绝不许靠翻页才够得着的东西。
@@ -11,11 +16,11 @@
  * ④ 动作行：≤ 3 个快捷决定 + 安静区；折叠区就地替换它
  */
 import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@agentsws/deck'
-import { pickContent } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { FactChip } from '@/components/chips'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
+import { DeckCardBody } from '@/components/deck/deck-card-body'
 import {
   countdownFace,
   isTypingTarget,
@@ -27,8 +32,7 @@ import {
 } from '@/components/deck/deck-layout'
 import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/deck/deck-panels'
 import { EntityChips, EvidenceChips, Highlights } from '@/components/deck/evidence-chips'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { GoButton, WsAvatar } from '@/components/design'
 import { getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
@@ -169,7 +173,6 @@ export function DeckCardView({
 
   const isQuestion = card.options !== undefined && card.options.length > 0
   const examples = useTaskExamples(card.role_id)
-  const content = pickContent(card.content_variants, mode)
   const decidable = card.available_actions.some((a) => a !== 'open')
 
   const act = (action: DeckAction): void => {
@@ -193,9 +196,10 @@ export function DeckCardView({
     <div
       data-testid="deck-card"
       data-kind={card.kind}
+      data-layout={card.layout}
       data-band={card.priority_band}
       className={[
-        'relative flex flex-col overflow-hidden rounded-2xl border bg-card shadow-xl transition-all duration-300 ease-out',
+        'ws-card relative flex flex-col overflow-hidden transition-all duration-300 ease-out',
         DECK_CARD_MIN_HEIGHT_CLASS,
         exiting == null ? '' : EXIT_CLASS[exiting],
       ].join(' ')}
@@ -216,11 +220,11 @@ export function DeckCardView({
 
       {/* ① 标签行 —— 渠道 → 优先级 → 倒计时 → 卡型 → 合并 N 张 */}
       <div
-        className="flex flex-wrap items-center gap-2 border-b px-5 py-3 text-xs"
+        className="flex flex-wrap items-center gap-2 border-b border-ws-line px-5 py-3 text-xs"
         data-testid="deck-tag-row"
       >
         {card.channel === undefined ? null : (
-          <span className="rounded-full border bg-background px-2 py-0.5 text-muted-foreground">
+          <span className="rounded-full bg-ws-surface px-2 py-0.5 text-ws-muted-fg">
             {t(`channel.${card.channel}`)}
           </span>
         )}
@@ -235,7 +239,9 @@ export function DeckCardView({
           {t(`band.${card.priority_band}`)}
         </span>
         {card.expires_at === undefined ? null : <Countdown expiresAt={card.expires_at} />}
-        <span className="text-muted-foreground">{t(`kind.${card.kind}`)}</span>
+        <span className="rounded-full bg-ws-tint px-2 py-0.5 text-ws-brand-ink">
+          {t(`kind.${card.kind}`)}
+        </span>
         {card.merge_count > 1 ? (
           <span
             data-testid="deck-merge"
@@ -244,7 +250,15 @@ export function DeckCardView({
             {t('deck.merge', { n: card.merge_count })}
           </span>
         ) : null}
-        {decidable ? null : <span className="text-muted-foreground">{t('card.done')}</span>}
+        {decidable ? null : <span className="text-ws-muted-fg">{t('card.done')}</span>}
+        {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。 */}
+        <span className="ml-auto flex items-center">
+          <WsAvatar
+            name={t(`deck.proposer.${card.detail.proposer.kind}`)}
+            tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
+            className="size-[22px] text-[10px]"
+          />
+        </span>
       </div>
 
       {/*
@@ -267,38 +281,16 @@ export function DeckCardView({
         {/* ② 一句话标题 */}
         <p className="text-[15px] leading-6 font-semibold">{card.title}</p>
 
-        {/* ③ 内容盒 —— 一次只显示一种语言 */}
-        {isQuestion ? (
-          <fieldset className="mt-2.5 rounded-lg border p-3" data-testid="deck-card-options">
-            <legend className="px-1 text-xs text-muted-foreground">{t('card.options.hint')}</legend>
-            <RadioGroup value={option} onValueChange={setOption}>
-              {(card.options ?? []).map((o) => (
-                <Label key={o.id} className="flex items-center gap-2 font-normal">
-                  <RadioGroupItem value={o.id} />
-                  <span>{o.label}</span>
-                </Label>
-              ))}
-            </RadioGroup>
-          </fieldset>
-        ) : (
-          <>
-            <p
-              data-testid="deck-content"
-              data-mode={content.mode}
-              className="mt-2.5 rounded-lg border bg-muted/40 p-3 text-sm leading-6 whitespace-pre-wrap"
-            >
-              {content.text}
-            </p>
-            {content.fell_back ? (
-              <p
-                data-testid="deck-content-fallback"
-                className="mt-1.5 text-xs text-amber-600 dark:text-amber-400"
-              >
-                {t('deck.content.fallback')}
-              </p>
-            ) : null}
-          </>
-        )}
+        {/* ③ 主体 —— WP96：按 card.layout 换十一种排版，见 deck-card-body.tsx */}
+        <DeckCardBody
+          card={card}
+          mode={mode}
+          option={option}
+          onOption={setOption}
+          onOpen={() => {
+            onOpen(card)
+          }}
+        />
 
         <Highlights
           highlights={card.highlights}
@@ -325,54 +317,66 @@ export function DeckCardView({
         </button>
       </div>
 
-      {/* ④ 动作行 —— 或者它就地展开的那块面板 */}
-      <div className="border-t bg-muted/30 px-5 py-3">
-        {error === undefined ? null : (
-          <p role="alert" className="mb-2 text-xs text-destructive">
-            {error}
-          </p>
-        )}
-        {panel === 'supplement' ? (
-          <DeckSupplementPanel
-            onCancel={() => {
-              setPanel(null)
-            }}
-            onSnooze={() => {
-              setPanel(null)
-              onDecide({ action: 'snooze', version: card.version })
-            }}
-          />
-        ) : panel === null ? (
-          <DeckActionBar
-            card={card}
-            disabled={busy === true}
-            optionMissing={isQuestion && option === ''}
-            onAction={act}
-            onSupplement={() => {
-              setPanel('supplement')
-            }}
-          />
-        ) : (
-          <DeckNotePanel
-            mode={panel}
-            busy={busy === true}
-            ask={{ card_id: card.id }}
-            {...(examples === undefined ? {} : { examples })}
-            onCancel={() => {
-              setPanel(null)
-            }}
-            onSubmit={({ text, scope }) => {
-              setPanel(null)
-              onDecide({
-                action: panel,
-                version: card.version,
-                ...(scope === undefined
-                  ? { reason: text }
-                  : { instruction: { scope, text }, reason: text }),
-              })
-            }}
-          />
-        )}
+      {/* ④ 动作行 —— 或者它就地展开的那块面板；右下角的 → 圆钮全类都有 */}
+      <div className="flex items-center gap-3 border-t border-ws-line bg-ws-surface px-5 py-3">
+        <div className="min-w-0 flex-1">
+          {error === undefined ? null : (
+            <p role="alert" className="mb-2 text-xs text-destructive">
+              {error}
+            </p>
+          )}
+          {panel === 'supplement' ? (
+            <DeckSupplementPanel
+              onCancel={() => {
+                setPanel(null)
+              }}
+              onSnooze={() => {
+                setPanel(null)
+                onDecide({ action: 'snooze', version: card.version })
+              }}
+            />
+          ) : panel === null ? (
+            <DeckActionBar
+              card={card}
+              disabled={busy === true}
+              optionMissing={isQuestion && option === ''}
+              onAction={act}
+              onSupplement={() => {
+                setPanel('supplement')
+              }}
+            />
+          ) : (
+            <DeckNotePanel
+              mode={panel}
+              busy={busy === true}
+              ask={{ card_id: card.id }}
+              {...(examples === undefined ? {} : { examples })}
+              onCancel={() => {
+                setPanel(null)
+              }}
+              onSubmit={({ text, scope }) => {
+                setPanel(null)
+                onDecide({
+                  action: panel,
+                  version: card.version,
+                  ...(scope === undefined
+                    ? { reason: text }
+                    : { instruction: { scope, text }, reason: text }),
+                })
+              }}
+            />
+          )}
+        </div>
+        {/*
+          09-18 定：**每张卡右下角都有一个 → 圆钮**，没按钮的卡也有。
+          它不是第四个动作，是出口——点它离开队列，进这件事的详情 / 工作线程。
+        */}
+        <GoButton
+          label={t('deck.go')}
+          onClick={() => {
+            onOpen(card)
+          }}
+        />
       </div>
     </div>
   )
