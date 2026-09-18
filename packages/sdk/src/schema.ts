@@ -121,7 +121,8 @@ export interface paths {
     }
     /** 当前主体：人、工作区、成员身份、名下 Assignment */
     get: operations['getMe']
-    put?: never
+    /** 改本人的展示名（只改 name；登录邮箱是身份，不在这里改） */
+    put: operations['renameMe']
     post?: never
     delete?: never
     options?: never
@@ -5379,6 +5380,77 @@ export interface operations {
     requestBody?: never
     responses: {
       /** @description { person, workspace, membership, assignments, kind } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  renameMe: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          name: string
+        }
+      }
+    }
+    responses: {
+      /** @description { person } */
       200: {
         headers: {
           [name: string]: unknown

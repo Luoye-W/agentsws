@@ -4339,3 +4339,8 @@ export const deleteKnowledgeSource = (
     method: 'DELETE',
     ...withAssignment(assignment),
   })
+
+// ── 09-18：向导第 ② 步 / 本人改名 ──────────────────────────────────────────
+/** 改本人的展示名（`PUT /v1/me`）。登录邮箱是身份，不在这里改。 */
+export const renameMe = (name: string, assignment?: string): Promise<{ person: Me['person'] }> =>
+  api('/v1/me', { method: 'PUT', body: { name }, ...withAssignment(assignment) })

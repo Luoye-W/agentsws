@@ -399,6 +399,13 @@ export class SqliteIdentityService implements LocalIdentityService {
     return row === undefined ? undefined : this.#person(row)
   }
 
+  async renamePerson(id: PersonId, name: string): Promise<Person> {
+    const changed = this.#db.prepare('UPDATE people SET name = ? WHERE id = ?').run(name, id)
+    const row = this.#getPersonRow(id)
+    if (changed.changes === 0 || row === undefined) throw new Error('person not found')
+    return this.#person(row)
+  }
+
   personByEmail(email: string): Person | undefined {
     const row = this.#db
       .prepare<[string], PersonRow>('SELECT * FROM people WHERE email = ?')

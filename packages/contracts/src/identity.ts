@@ -158,6 +158,11 @@ export interface TokenInfo {
 export interface IdentityService {
   createPerson(input: { email: string; name: string }): Promise<Person>
   getPerson(id: PersonId): Promise<Person | undefined>
+  /**
+   * 09-18 Luoye 真机：向导第 ② 步的名字改不了、设置页也没有改名的地方。名字是**本人的**
+   * 展示名（不是登录邮箱），本人可改；只改 `name`，其余字段一个不碰。空名或超长由路由层拒。
+   */
+  renamePerson(id: PersonId, name: string): Promise<Person>
   createWorkspace(input: {
     name: string
     owner_id: PersonId

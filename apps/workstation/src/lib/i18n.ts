@@ -1679,7 +1679,7 @@ const zh: Table = {
   'onboarding.company.empty': '公司全称还没填。',
   'onboarding.person.name': '你的名字',
   'onboarding.person.email': '登录邮箱',
-  'onboarding.person.hint': '已经登录了，直接带出来的；要改去"设置"。',
+  'onboarding.person.hint': '名字是给同事和 AI 看的，可以直接改；登录邮箱是你的身份，改不了。',
   'onboarding.roles.pick_position': '勾一个岗位 = 它包含的职责全勾上',
   'onboarding.roles.expand': '展开，只勾其中几条',
   'onboarding.roles.collapse': '收起',
@@ -3671,7 +3671,8 @@ const en: Table = {
   'onboarding.company.empty': 'The company name is still empty.',
   'onboarding.person.name': 'Your name',
   'onboarding.person.email': 'Sign-in email',
-  'onboarding.person.hint': 'Carried over from your sign-in. Change it under Settings.',
+  'onboarding.person.hint':
+    'Your display name — edit it here. The sign-in email is your identity and cannot be changed.',
   'onboarding.roles.pick_position': 'Ticking a position ticks all of its duties',
   'onboarding.roles.expand': 'Expand and pick individual duties',
   'onboarding.roles.collapse': 'Collapse',
