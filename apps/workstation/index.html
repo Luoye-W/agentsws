@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      WP112：标签页上的那个小图标 = 母品牌标记 + 深色圆底。
+      深色圆底是规范 §1.2「浅底的坑」给的第 1 条解法（推荐那条）——标签栏的底色
+      是浏览器说了算的，不能假设它是深是浅。
+      两张都由 `scripts/gen-brand-assets.py` 出，**不手改**；SVG 是主版，
+      32px PNG 给不吃 SVG favicon 的浏览器兜底。
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/favicon-32.png" />
     <title>agentsws 工作台</title>
   </head>
   <body>

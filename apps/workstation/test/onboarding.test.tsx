@@ -567,6 +567,47 @@ describe('46 §1 首次设置向导', () => {
     expect(state.applies[0]).toMatchObject({ position_ids: ['pos_cs'] })
   })
 
+  // ── WP112：第一屏的「集结」与完成屏的「一变一队」─────────────────
+  it('第 ① 步页头带一段「集结」，往后几步不再播', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    const head = await screen.findByRole('heading', { level: 1 })
+    expect(head.querySelector('svg[data-testid="brand-mark"]')?.getAttribute('data-motion')).toBe(
+      'assemble',
+    )
+    await goTo(1)
+    expect(
+      (await screen.findByRole('heading', { level: 1 })).querySelector(
+        'svg[data-testid="brand-mark"]',
+      ),
+    ).toBeNull()
+    void user
+  })
+
+  it('「完成」之后是一屏回执（「一变一队」），按了按钮才进工作台', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await goTo(2)
+    await user.click((await screen.findAllByTestId('onboarding-position'))[0] as HTMLElement)
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-plan')
+    await user.click(screen.getByTestId('onboarding-finish'))
+
+    const done = await screen.findByTestId('onboarding-done')
+    // 一个活做通了，复制成一队——这一屏就是这句话
+    expect(done.querySelector('svg[data-testid="brand-mark"]')?.getAttribute('data-motion')).toBe(
+      'split',
+    )
+    expect(done.textContent).toContain('一队上岗了')
+    // 四步全打勾；「先跳过」这时不再出（已经做完了，退路没有意义）
+    expect(
+      screen.getAllByTestId('onboarding-step').map((el) => el.getAttribute('data-state')),
+    ).toEqual(['done', 'done', 'done', 'done'])
+    expect(screen.queryByTestId('onboarding-skip')).toBeNull()
+    expect(screen.queryByTestId('onboarding-next')).toBeNull()
+    expect(screen.getByTestId('onboarding-enter')).toBeTruthy()
+  })
+
   it('随时可以"先跳过"：不落任何东西，这一次会话里不再拦', async () => {
     const user = userEvent.setup()
     renderWithProviders(<OnboardingPage />)

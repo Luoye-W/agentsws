@@ -44,6 +44,7 @@ import { NavLink } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
+import { BrandMark } from '@/components/design'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
@@ -218,8 +219,26 @@ export function AppShell({
           "最下面"就成了"文档的最下面"，滚三屏才见得到。
         */}
         <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ws-line bg-sidebar p-3 md:flex">
-          {/* WP96：产品名走 Outfit，与页面大标题同一种字 */}
-          <div className="ws-display px-2 pt-1 pb-4 text-[15px]">{t('app.title')}</div>
+          {/*
+            WP112：左栏顶部 = **母品牌标记 + 字标**，点了回首页。
+
+            标记给 28——规范 §1.3 的最小可用尺寸，再小方块间的缝会并起来。
+            字标是产品名 `agentsws` 本身（不是 `app.title` 那句"agentsws 工作台"），
+            走 Outfit（WP96：与页面大标题同一种字）；整句留给读屏当 aria-label。
+            这里用的是**静态**那一姿态：一直在动的 logo 是噪音，不是品牌。
+          */}
+          <div className="px-2 pt-1 pb-4">
+            <NavLink
+              to="/"
+              end
+              aria-label={t('app.title')}
+              data-testid="brand-home"
+              className="inline-flex items-center gap-2 rounded-[10px] outline-offset-4"
+            >
+              <BrandMark size={28} />
+              <span className="ws-display text-[15px]">agentsws</span>
+            </NavLink>
+          </div>
           <nav
             className="flex flex-1 flex-col gap-0.5 overflow-y-auto"
             aria-label={t('nav.main')}

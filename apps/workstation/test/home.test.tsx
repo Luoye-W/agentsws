@@ -87,6 +87,21 @@ const listMembers = vi.fn(async () => [
   { person_id: 'p_li', name: '王岚', email: '', role: 'owner', joined_at: '', positions: [] },
 ])
 
+/** WP112：「正在进行」那块——标题旁边的呼吸只在真有东西在跑的时候出。 */
+const inProgress: {
+  kind: 'todo'
+  id: string
+  title: string
+  owner: string
+  owner_label: string
+  collaborators: string[]
+  status: string
+  started_at: string
+  last_activity: string
+  cards: number
+}[] = []
+const listInProgress = vi.fn(async () => ({ items: [...inProgress], scope: 'position' }))
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
@@ -95,6 +110,7 @@ vi.mock('@/lib/api', async () => {
     getPositions: (...args: unknown[]) => getPositions(...(args as [])),
     listMembers: (...args: unknown[]) => listMembers(...(args as [])),
     decide: (...args: unknown[]) => decide(...(args as [])),
+    listInProgress: (...args: unknown[]) => listInProgress(...(args as [])),
   }
 })
 
@@ -239,6 +255,59 @@ describe('WP98 收口：岗位卡补齐持有人与一句真状态', () => {
     await waitFor(() => {
       expect(listMembers).toHaveBeenCalledWith('ws_1', 'asg_owner')
     })
+  })
+
+  it('WP112：有活在跑的岗位卡上多一个呼吸的状态点，几件在办只在 title 里说', async () => {
+    renderWithProviders(<HomePage />)
+    const cards = await screen.findByTestId('position-cards')
+    // 两张卡的 `open_matters` 都是 1（fixture），所以两张都该有
+    const dots = within(cards).getAllByTestId('ws-position-running')
+    expect(dots).toHaveLength(2)
+    expect(dots[0]?.getAttribute('title')).toBe('运行中 · 1 件在办')
+    expect(dots[0]?.querySelector('svg')?.getAttribute('data-motion')).toBe('breathe')
+  })
+
+  it('WP112：「正在进行」的标题旁边——有东西在跑才呼吸，一条都没有就整个不出', async () => {
+    getHome.mockImplementation(async () => ({
+      ...home,
+      today: { timeline: [], due: { todos: [], cards_waiting: 0 } },
+    }))
+    // ① 一条都没有
+    inProgress.length = 0
+    const quiet = renderWithProviders(<HomePage />)
+    await screen.findByTestId('home-inprogress')
+    await waitFor(() => {
+      expect(listInProgress).toHaveBeenCalled()
+    })
+    expect(
+      screen.getByTestId('home-inprogress-title').querySelector('svg[data-testid="brand-mark"]'),
+    ).toBeNull()
+    quiet.unmount()
+
+    // ② 有一条在跑
+    inProgress.push({
+      kind: 'todo',
+      id: 't1',
+      title: '退款 #1024',
+      owner: 'p_li',
+      owner_label: '王岚',
+      collaborators: [],
+      status: 'doing',
+      started_at: '2026-09-18T01:00:00.000Z',
+      last_activity: '2026-09-18T01:10:00.000Z',
+      cards: 1,
+    })
+    renderWithProviders(<HomePage />)
+    await screen.findByTestId('home-inprogress')
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId('home-inprogress-title')
+          .querySelector('svg[data-testid="brand-mark"]')
+          ?.getAttribute('data-motion'),
+      ).toBe('breathe')
+    })
+    inProgress.length = 0
   })
 
   it('持有人头像按展示名画；查不到名字的那个人不画（不在卡上印半个 id）', async () => {

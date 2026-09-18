@@ -10,6 +10,11 @@ type Table = Record<string, string>
 
 const zh: Table = {
   'app.title': 'agentsws 工作台',
+  // WP112：冷启动那一瞬首屏上的那句话（母品牌「集结」在它上面）
+  'app.boot': '正在把工作台装起来…',
+  // WP112：**全站只有这一句**配「呼吸」那段动效——它只代表"Agent 正在替你干活"。
+  // 按钮里那种普通的加载转圈不算（docs/36 §12）。
+  'brand.busy': 'Agent 正在替你干活',
   // ── 41 §1 个人代理（原「秘书」，09-10 改名）─────────────────────────
   //
   // **只改面向用户的文案**：键名（`secretary.*`）、包名（`@agentsws/secretary`）、
@@ -402,6 +407,10 @@ const zh: Table = {
   'org.assign.range.use': '加上',
   'org.assign.summary': '{person} 会拿到「{position}」，管：{ranges}。',
   'org.assign.confirm': '就这么定',
+  // WP112：上岗成功的回执（配一段「一变一队」）
+  'org.assign.receipt': '{person} 上岗「{position}」',
+  'org.assign.receipt.hint': '一个活做通了，就复制成一队——现在可以再给这个岗位加人。',
+  'org.assign.receipt.close': '知道了',
   'org.roles.bundled': '内置',
   'org.roles.custom': '本公司',
   'org.roles.holders': '{n} 人在做',
@@ -1360,6 +1369,9 @@ const zh: Table = {
   'home.positions.entry': '交给它一件事',
   // WP98：岗位卡中间那句改成真状态；一个数都没有的岗位照实说，不编"一切正常"
   'home.positions.idle': '还没开工',
+  // WP112：岗位卡上那个「运行中」状态点旁边的话
+  'home.positions.running': '运行中',
+  'home.positions.running.hint': '运行中 · {count} 件在办',
   'home.headline': '今天',
   'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
   'home.stats': '今天的数',
@@ -1738,6 +1750,10 @@ const zh: Table = {
   // 往前走的那个按钮四步统一这一句（WP79 ⑥：按了就真的存下来再继续）
   'onboarding.next': '保存并继续',
   'onboarding.done': '完成',
+  // WP112：设置完成那一屏（配一段「一变一队」）
+  'onboarding.done.title': '一队上岗了',
+  'onboarding.done.line': '{count} 条职责已经配好。回首页，把第一件事交给它们。',
+  'onboarding.done.enter': '进工作台',
   'onboarding.step.done': '已完成',
   'onboarding.step1': '公司设置',
   'onboarding.step2': '个人设置',
@@ -2031,6 +2047,8 @@ const zh: Table = {
   'chat.visitor.placeholder': '像访客那样问一句，例如：运费多少？',
   'chat.visitor.send': '发',
   'chat.transcript.empty': '还没有消息。发一句试试。',
+  // WP112：线程末尾那行——这一轮交给 AI 了、还没回来
+  'chat.thinking': '客服 AI 正在判这一轮…',
 
   'chat.role.visitor': '访客',
   'chat.role.agent': 'AI 客服',
@@ -2137,6 +2155,8 @@ const zh: Table = {
 
 const en: Table = {
   'app.title': 'agentsws Workstation',
+  'app.boot': 'Bringing the workstation up…',
+  'brand.busy': 'An agent is working on it',
   'nav.home': 'Home',
   'nav.secretary': 'My agent',
   // WP96: the top-bar search bar (opens the ⌘K palette)
@@ -2534,6 +2554,10 @@ const en: Table = {
   'org.assign.range.use': 'Add',
   'org.assign.summary': '{person} will hold “{position}”, covering: {ranges}.',
   'org.assign.confirm': 'Confirm',
+  'org.assign.receipt': '{person} now holds “{position}”',
+  'org.assign.receipt.hint':
+    'One job done well, copied into a team — you can add more people to this position now.',
+  'org.assign.receipt.close': 'Got it',
   'org.roles.bundled': 'built-in',
   'org.roles.custom': 'ours',
   'org.roles.holders': '{n} people',
@@ -3482,6 +3506,8 @@ const en: Table = {
   'home.positions.pending': 'pending',
   'home.positions.entry': 'Hand it a task',
   'home.positions.idle': 'Not started yet',
+  'home.positions.running': 'Running',
+  'home.positions.running.hint': 'Running · {count} in flight',
   'home.headline': 'Today',
   'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
   'home.stats': "Today's numbers",
@@ -3864,6 +3890,9 @@ const en: Table = {
   'onboarding.back': 'Back',
   'onboarding.next': 'Save and continue',
   'onboarding.done': 'Finish',
+  'onboarding.done.title': 'Your team is on duty',
+  'onboarding.done.line': '{count} duties are configured. Head home and hand them the first thing.',
+  'onboarding.done.enter': 'Enter the workstation',
   'onboarding.step.done': 'Done',
   'onboarding.step1': 'Company',
   'onboarding.step2': 'You',
@@ -4170,6 +4199,7 @@ const en: Table = {
   'chat.visitor.placeholder': 'Ask like a visitor would, e.g. how much is shipping?',
   'chat.visitor.send': 'Send',
   'chat.transcript.empty': 'No messages yet. Send one.',
+  'chat.thinking': 'The support AI is working out this turn…',
 
   'chat.role.visitor': 'Visitor',
   'chat.role.agent': 'AI support',
