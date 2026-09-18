@@ -19,6 +19,9 @@
   "include": ["src", "test", "vite.config.ts"],
   "references": [
     {
+      "path": "../../packages/brand"
+    },
+    {
       "path": "../../packages/contracts"
     },
     {

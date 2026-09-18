@@ -262,6 +262,9 @@ importers:
 
   apps/workstation:
     dependencies:
+      '@agentsws/brand':
+        specifier: workspace:*
+        version: link:../../packages/brand
       '@agentsws/ontology':
         specifier: workspace:*
         version: link:../../packages/ontology
@@ -435,6 +438,8 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/brand: {}
 
   packages/catalog:
     dependencies:
