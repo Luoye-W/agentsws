@@ -787,6 +787,18 @@ export async function harness(
     cite: (_actor, fact_card_id, run_id) => {
       knowledgeState.cites.push({ id: fact_card_id, run_id })
     },
+    // WP97（36 §11 #13）：按 source_id 取原件字节。只认一个 id，别的回 undefined
+    // ——路由把 undefined 翻成 404，而"不存在"与"不是你的"故意不分（不泄漏存在性）
+    sourceFile: (_actor, id) => {
+      if (id !== 'src_file') return undefined
+      const bytes = new TextEncoder().encode('PK\u0003\u0004fake-xlsx')
+      return {
+        bytes,
+        filename: '报价 单.xlsx',
+        content_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size: bytes.length,
+      }
+    },
     gaps: (_actor, filter) =>
       knowledgeState.gaps.filter((g) => filter.status === undefined || g.status === filter.status),
     openGap: (_actor, input) => {

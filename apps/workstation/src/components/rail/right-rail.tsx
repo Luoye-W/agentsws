@@ -149,6 +149,8 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
           {...(scope === undefined ? {} : { scope })}
           tier={effectiveTier}
           pathname={location.pathname}
+          // WP97：这一次是为哪个资源开的（人点图标轨开的那种没有它）
+          {...(rail.address === null ? {} : { address: rail.address })}
         />
       </Suspense>
     )

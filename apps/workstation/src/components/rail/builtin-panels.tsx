@@ -9,7 +9,7 @@
  *
  * **身体一律 `lazy()`**（#6）：面板的代码在**第一次被打开**之前既不下载也不挂载，
  * 于是"刷新之后恢复布局"这件事不会顺手把上次那个面板的请求也重放一遍。
- * 图标轨照样画得出十二个格子——它读的是第一段（类型），那一段是静态的。
+ * 图标轨照样画得出十三个格子（WP97 加了 Office 预览）——它读的是第一段（类型），那一段是静态的。
  *
  * **占位面板只注册类型不注册身体**：点开显示"还没做"（`right-rail.tsx` 兜的），
  * 位置先占住——图标轨的位置定了就不该再挪（肌肉记忆）。
@@ -22,6 +22,7 @@ import {
   Clock,
   FileDiff,
   FileSearch,
+  FileText,
   FolderOpen,
   Gauge,
   Globe,
@@ -29,6 +30,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { lazy } from 'react'
+import { canOpenOfficeFile, FILE_ADDRESS_PATTERN } from '@/components/rail/panels/office/address'
 import { parseMatterPath } from '@/components/rail/rail-layout'
 import {
   panelType,
@@ -96,6 +98,18 @@ const RunBrowserBody = lazy(async () => {
 const ChangesBody = lazy(async () => {
   const m = await import('@/components/rail/panels/changes-panel')
   return { default: m.ChangesPanel }
+})
+
+/**
+ * WP97 新增：Office 预览（#13）。
+ *
+ * 身体是 `lazy()`，于是 `docx-preview` / `xlsx` / `jszip` 三个库在**有人点开一份
+ * 文件之前**一个字节都不下载；`canOpen` 与 `matches` 那一段是静态的（第一段），
+ * 判"这个地址归谁开"不需要把库先拉下来——两段式注册要的就是这个（#6）。
+ */
+const OfficePreviewBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/office-preview-panel')
+  return { default: m.OfficePreviewPanel }
 })
 
 /**
@@ -201,6 +215,19 @@ export function ensureBuiltinPanels(): void {
     priority: 'builtin',
     group: 'tools',
   })
+  // WP97（#13）：第一个真被 `resolvePanel()` 挑中的面板——知识库里点一份文件，
+  // 地址 `agentsws://file/<源 id>/<文件名>` 交给注册表排序，排到它这儿，
+  // `canOpen` 再看一眼扩展名（只认 docx / xlsx / xls / csv / pptx，别的交给下载）
+  registerPanelType({
+    id: 'office-preview',
+    label: 'rail.panel.office',
+    icon: FileText,
+    priority: 'builtin',
+    group: 'tools',
+    matches: [FILE_ADDRESS_PATTERN],
+    canOpen: canOpenOfficeFile,
+  })
+  registerPanelBody('office-preview', OfficePreviewBody)
   registerPanelType({
     id: 'ask',
     label: 'rail.panel.ask',
