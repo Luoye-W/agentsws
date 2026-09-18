@@ -9,6 +9,8 @@ import { WsAvatar, WsCard } from './primitives'
 import { TONE_BADGE, type Tone } from './tone'
 
 export interface PositionCardHolder {
+  /** person id：只用来给头像定底色（WP100），一个字都不印出来。 */
+  id?: string
   name: string
   tone?: Tone
 }
@@ -89,8 +91,9 @@ export function PositionCard({
         <span className="flex pl-1.5">
           {holders.map((h) => (
             <WsAvatar
-              key={h.name}
+              key={h.id ?? h.name}
               name={h.name}
+              {...(h.id === undefined ? {} : { id: h.id })}
               {...(h.tone === undefined ? {} : { tone: h.tone })}
               className="-ml-1.5 ring-2 ring-ws-card"
             />

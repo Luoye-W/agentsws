@@ -127,7 +127,7 @@ describe('37 §1 第 1 行：一次一张', () => {
     home = homeData({ queue: [draftCard()] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
-    await user.click(screen.getByText('指导'))
+    await user.click(screen.getByText('改一下'))
     const box = screen.getByLabelText('一句话说清楚要怎么改')
     await user.click(box)
     await user.keyboard('改一句{ArrowLeft}{ArrowRight}')

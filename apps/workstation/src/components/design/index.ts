@@ -2,6 +2,8 @@
 export { type BarPoint, DualBarChart, DualBarLegend } from './bar-chart'
 export { PositionCard, type PositionCardHolder } from './position-card'
 export {
+  avatarInitial,
+  avatarTone,
   DeltaPill,
   type Direction,
   GoButton,

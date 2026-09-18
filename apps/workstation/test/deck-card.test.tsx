@@ -39,7 +39,7 @@ describe('37 §1 第 2 行 + WP98 收口：头一行 = 岗位 · 类别 → 等�
     )
     const row = screen.getByTestId('deck-tag-row')
     // 没装岗位面的服务进程查不到岗位名，那就只出类别（不编一个岗位名）
-    expect(screen.getByTestId('deck-band').textContent).toBe('回复草稿待审')
+    expect(screen.getByTestId('deck-band').textContent).toBe('回信')
     expect(screen.getByTestId('deck-wait').textContent).toMatch(/^剩 1:/)
     // 渠道与"合并 3 张"进了证据胶囊，不再各占头一行一枚
     expect(row.textContent).not.toContain('邮件')
@@ -268,13 +268,14 @@ describe('WP98：「证据 N」点开的是第三栏那个证据面板（走公�
   })
 })
 
-describe('37 §1 第 6 行：动作行 ≤ 3 快捷决定 + 安静区，没有「更多」也没有「详情 ▾」', () => {
-  it('快捷行是三个决定，approve 是主按钮，动词来自服务端', () => {
+describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· 安静区', () => {
+  it('快捷行是主动词在前的三个决定，主动词是实心按钮，字按排版走', () => {
     const card = draftCard()
     renderWithProviders(
       <DeckCardView card={card} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    expect(quickActions(card)).toEqual(['approve', 'reject', 'instruct'])
+    // WP100：顺序由 LAYOUT_VERBS 说了算（主 → 次），不再是服务端 actions 的原序
+    expect(quickActions(card)).toEqual(['approve', 'instruct', 'reject'])
     expect(quickActions(card).length).toBeLessThanOrEqual(MAX_QUICK_ACTIONS)
     const bar = screen.getByTestId('deck-action-bar')
     expect(within(bar).getByText('发送')).toBeDefined()
@@ -282,23 +283,29 @@ describe('37 §1 第 6 行：动作行 ≤ 3 快捷决定 + 安静区，没有�
     expect(within(bar).getByText('发送').closest('button')?.className.includes('bg-primary')).toBe(
       true,
     )
+    expect(within(bar).getByText('发送').closest('button')?.dataset.rank).toBe('primary')
+    expect(within(bar).getByText('改一下').closest('button')?.dataset.rank).toBe('secondary')
   })
 
-  it('右侧安静区是「需要补素材」与「稍后」', () => {
+  it('安静区收进 ···：点开才有「需要补素材」与「稍后」，收着时按钮行上没有它们', async () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
     const bar = screen.getByTestId('deck-action-bar')
-    expect(within(bar).getByText('需要补素材')).toBeDefined()
-    expect(within(bar).getByText('稍后')).toBeDefined()
+    expect(within(bar).queryByText('需要补素材')).toBeNull()
+    expect(within(bar).queryByText('稍后')).toBeNull()
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    await userEvent.click(screen.getByTestId('deck-more'))
+    const menu = screen.getByTestId('deck-more-menu')
+    expect(within(menu).getByText('需要补素材')).toBeDefined()
+    expect(within(menu).getByText('稍后')).toBeDefined()
   })
 
-  it('没有「更多」溢出菜单，也没有「详情 ▾」按钮', () => {
+  it('没有「详情 ▾」按钮（详情还是点卡面展开）', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    expect(screen.queryByLabelText('更多动作')).toBeNull()
-    expect(screen.queryByRole('menu')).toBeNull()
     const bar = screen.getByTestId('deck-action-bar')
     expect(bar.textContent).not.toContain('详情')
   })
@@ -346,7 +353,7 @@ describe('选择题卡（36 §2.1：裸 approve 服务端会拒）', () => {
     renderWithProviders(
       <DeckCardView card={questionCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
     )
-    expect(screen.getByText('就这么定').closest('button')?.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('批准').closest('button')?.hasAttribute('disabled')).toBe(true)
     expect(screen.getByTestId('deck-action-bar').textContent).toContain('先选一个')
   })
 
@@ -359,7 +366,7 @@ describe('选择题卡（36 §2.1：裸 approve 服务端会拒）', () => {
     expect(within(options).getAllByRole('radio')).toHaveLength(2)
     expect(within(options).queryByRole('textbox')).toBeNull()
     await userEvent.click(screen.getByText('宽限 7 天，照退'))
-    await userEvent.click(screen.getByText('就这么定'))
+    await userEvent.click(screen.getByText('批准'))
     expect(onDecide).toHaveBeenCalledWith({
       action: 'approve',
       selected_option_id: 'grace_7',
@@ -385,7 +392,7 @@ describe('37 §1 第 7 行：折叠区点开前不在 DOM 里', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
     )
-    await userEvent.click(screen.getByText('指导'))
+    await userEvent.click(screen.getByText('改一下'))
     const panel = screen.getByTestId('deck-panel-instruct')
     expect(within(panel).getByTestId('deck-scopes')).toBeDefined()
     // 问 AI 只在指导区里出现，且是禁用占位
@@ -425,6 +432,7 @@ describe('37 §1 第 7 行：折叠区点开前不在 DOM 里', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
     )
+    await userEvent.click(screen.getByTestId('deck-more'))
     await userEvent.click(screen.getByText('需要补素材'))
     const panel = screen.getByTestId('deck-panel-supplement')
     await userEvent.click(within(panel).getByText('先放一放'))
@@ -435,7 +443,7 @@ describe('37 §1 第 7 行：折叠区点开前不在 DOM 里', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    await userEvent.click(screen.getByText('指导'))
+    await userEvent.click(screen.getByText('改一下'))
     await userEvent.click(screen.getByRole('button', { name: '返回' }))
     expect(screen.queryByTestId('deck-panel-instruct')).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()

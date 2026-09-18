@@ -9,7 +9,12 @@
  * 4. 把这个世界接进服务进程（同一进程），在 127.0.0.1:4317 上托管工作台。
  *
  * 纪律：全程 **stub 模型**（`runtime: 'stub'` 根本不叫模型），所以事件日志里不该有任何 `model.*`；
- * 时间走合成时钟，随机走 seed，没有一处 `Date.now()` / `Math.random()`。
+ * 时间走合成时钟，随机走 seed。
+ *
+ * `Date.now()` 只在**一处**出现（WP100）：{@link demoClockStart} 把合成时钟的起点挪到
+ * 启动那天——摆拍数据是按 `world.clock.now()` 种下去的，而浏览器读的是真实时间，
+ * 两者差十天的结果就是截图里满屏"已过期"、日历把所有到期堆在同一天。
+ * 起点定下之后，世界里一切照旧走合成时钟（**模拟仍是虚拟时钟，基线一个数没动**）。
  */
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -95,6 +100,13 @@ export interface DemoOptions {
    * 也用来一眼看出"第十二种排版出现了却没人给它样子"。
    */
   cardGallery?: boolean
+  /**
+   * WP100：把"今天"定在哪一刻（毫秒）。**只给测试用**；不给就是启动的这一刻。
+   *
+   * 有了它，"demo 的钟锚在启动那天"这件事才测得出来——否则用例只能拿 `Date.now()`
+   * 去比 `Date.now()`，测的是同义反复。
+   */
+  now?: number
 }
 
 export interface Demo {
@@ -922,19 +934,96 @@ async function seedKnowledgeRecheck(server: Server, world: World, pack: Pack): P
   knowledge.intake.markSynced(source.id, source.chunks, contentHashOf(content))
 }
 
+/** 一个字符串是不是 ISO-8601 的时刻（只认整串是时刻的那种，正文里提到的日期不算）。 */
+const ISO_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
+
+/** 把一份纯数据里的所有时刻整体平移 `ms`（结构照抄，非时刻的值一个字不碰）。 */
+function shiftTimes<T>(value: T, ms: number): T {
+  if (typeof value === 'string')
+    return (ISO_AT.test(value) ? new Date(Date.parse(value) + ms).toISOString() : value) as T
+  if (Array.isArray(value)) return value.map((v) => shiftTimes(v, ms)) as unknown as T
+  if (typeof value === 'object' && value !== null) {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) out[k] = shiftTimes(v, ms)
+    return out as T
+  }
+  return value
+}
+
+/**
+ * WP100：**pack 里那批摆拍数据跟着钟一起挪**。
+ *
+ * 只挪钟不挪数据，demo 会变成另一种难看：订单全是十天前的，"今天卖了多少"是 0，
+ * "近 7 天"是一条平线——那和满屏"已过期"是同一个毛病的两面。合成 pack 是按
+ * `manifest.anchor`（2026-09-07）生成的，这里把它连同订单 / 物流 / 会话 / 客户 /
+ * 商品的时刻**整天平移**同样的天数，于是"这一单是三天前下的"照旧是三天前。
+ *
+ * 动的是**这一次 demo 内存里的那份 pack**：`packs/` 下的文件一个字节没改，
+ * `agentsws simulate` 读的还是原样（基线因此一个数都不用重定）。
+ */
+function shiftDemoPack(pack: Pack, days: number): Pack {
+  if (days === 0) return pack
+  const ms = days * DAY_MS
+  return {
+    ...pack,
+    manifest: shiftTimes(pack.manifest, ms),
+    products: shiftTimes(pack.products, ms),
+    orders: shiftTimes(pack.orders, ms),
+    customers: shiftTimes(pack.customers, ms),
+    shipments: shiftTimes(pack.shipments, ms),
+    threads: shiftTimes(pack.threads, ms),
+    // `mockState()` 闭包在**原来**那几个数组上（`pack.ts` 里就是这么建的），
+    // 所以不能只换上面那几格——要把它的产物也挪一遍
+    mockState: () => shiftTimes(pack.mockState(), ms),
+  }
+}
+
+/**
+ * WP100：**demo 的"今天"就是启动那天**。
+ *
+ * 为什么要挪：demo 的摆拍数据（今天的计划、这周的待办、卡片的期限、日历上的到期）
+ * 全是按 `world.clock.now()` 种下去的，而那个钟停在场景 yml 写死的 2026-09-07；
+ * 界面那一侧读的是**这台机器的真实时间**（倒计时每秒滴答的那一枚胶囊、日历的"今天"）。
+ * 两边差几天，卡就全成了"已过期"，日历把所有到期堆在同一天——截图里看到的正是这个。
+ *
+ * 挪法是**整天数平移**：保留场景那个钟点（09:00+08:00），只把日期换成今天。
+ * 不按毫秒对齐是有意的：场景里的相对时刻（`+65m` 那些）与摆拍数据都是按"那天早上
+ * 九点"写的，整天平移之后它们之间的间隔一个都没变。
+ *
+ * **不动的东西**：pack 场景 yml、`agentsws simulate` 的时钟与基线——模拟仍是虚拟
+ * 时钟（同一个 seed 同一条时间线，否则基线天天要重定）。这里改的只有 demo 这一处起点。
+ *
+ * @param scenarioStart 场景 yml 里的 `clock.start`
+ * @param nowMs 启动的这一刻
+ */
+export function demoClockStart(scenarioStart: Iso8601, nowMs: number): Iso8601 {
+  const startMs = Date.parse(scenarioStart)
+  if (!Number.isFinite(startMs)) return scenarioStart
+  // 用场景自己那个时区的日界算"差几天"：`2026-09-07T09:00+08:00` 的一天是东八区的一天
+  const offsetMs = startMs - Date.parse(`${scenarioStart.slice(0, 19)}Z`)
+  const dayOf = (ms: number): number => Math.floor((ms - offsetMs) / DAY_MS)
+  const days = dayOf(nowMs) - dayOf(startMs)
+  return new Date(startMs + days * DAY_MS).toISOString()
+}
+
 export async function createDemo(options: DemoOptions): Promise<Demo> {
   const root = options.root
-  const pack = loadPack(fromRoot(root, DEMO_PACK))
   const scenario = parseScenario(
     readFileSync(join(fromRoot(root, DEMO_PACK), DEMO_SCENARIO), 'utf8'),
     DEMO_SCENARIO,
   )
   const seed = scenario.dataset.seed
+  // WP100：场景那个 `2026-09-07T09:00+08:00` 挪到**启动那天**的同一个钟点，
+  // 摆拍数据跟着挪同样的天数（见 `demoClockStart` / `shiftDemoPack`）。
+  // 场景 yml、`packs/` 下的文件与模拟的时钟一个字没动——改的只有 demo 这一处起点。
+  const start = demoClockStart(scenario.clock.start, options.now ?? Date.now())
+  const shiftedDays = Math.round((Date.parse(start) - Date.parse(scenario.clock.start)) / DAY_MS)
+  const pack = shiftDemoPack(loadPack(fromRoot(root, DEMO_PACK)), shiftedDays)
 
   const world = await createWorld({
     pack,
     seed,
-    start: scenario.clock.start,
+    start,
     runtime: 'stub',
   })
 
