@@ -1,0 +1,122 @@
+# agentsws **云侧测试环境**（WP110）。一台机器，三个容器。
+#
+#   cd deploy && cp .env.example .env && vi .env && docker compose up -d
+#
+# 步骤与"要什么服务器、DNS 加哪条、New API 的上游 key 怎么填"见
+# `docs/61-云端测试环境部署-v1.md`。这里只放"为什么这么摆"。
+#
+# ── 端口纪律（这是这个文件里最重要的一条）──────────────────────────────
+#
+# **只有 caddy 发布端口**。`cloud` 一个端口都不发布，`newapi` 只绑宿主的
+# 回环（要开它的后台就用 SSH 隧道）。两个理由：
+#
+# 1. 云进程的限流按 `X-Forwarded-For` 认来源（`apps/cloud/src/guards.ts`）。
+#    那一段可信的前提就是"外面只能经 Caddy 进来"。直接把 4400 暴到公网，
+#    任何人都能自己填一个头，限流当场形同虚设。
+# 2. New API 的后台是**用户体系与我们完全不同的另一套**（49 M6：不把它暴露
+#    给用户）。它里面有各家模型的上游 key，那些 key 一个字都不该经过公网登录页。
+#
+# ── 不做的事 ────────────────────────────────────────────────────────────
+#
+# - **不上多实例**。`sweepReservations` 与那个进程内定时（每 10 分钟）没有
+#   分布式锁，两个实例的钟不一样就会互相把对方正在进行中的预扣扫掉。
+#   要上多实例先解决这一条（docs/61 §7）。
+# - **不开 Stripe**。测试环境的额度走 `POST /v1/admin/topup` 手动发
+#   （docs/61 §5）。没给 Stripe 密钥时充值路由回 501 一句人话，这是现状也是有意的。
+
+name: agentsws-cloud
+
+services:
+  # ── 反向代理与自动 HTTPS ───────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 证书与 ACME 账号。**丢了就得重新签**（Let's Encrypt 有频率限制），
+      # 所以它是一个具名卷，不是容器里的临时目录。
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      CLOUD_DOMAIN: ${CLOUD_DOMAIN:?没写域名。把 .env 里的 CLOUD_DOMAIN 填成 cloud.agentsws.com}
+      ACME_EMAIL: ${ACME_EMAIL:?没写邮箱。证书快到期时 Let'\''s Encrypt 会往这里发提醒}
+    depends_on:
+      - cloud
+
+  # ── 云进程（apps/cloud）────────────────────────────────────────────────
+  cloud:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.cloud
+    image: agentsws/cloud:dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # 这几个由 compose 定死，**不从 .env 读**——它们说的是"容器里的拓扑"，
+      # 不是运维要做的选择。写在 .env 里只会给人一个改错的机会。
+      AGENTSWS_CLOUD_PORT: '4400'
+      AGENTSWS_CLOUD_DATA_DIR: /data
+      AGENTSWS_CLOUD_BASE_URL: https://${CLOUD_DOMAIN:?见上}
+      AGENTSWS_CLOUD_PUBLIC_URL: https://${CLOUD_DOMAIN:?见上}
+      # New API 只在 compose 的内网里可达（它没发布端口）
+      AGENTSWS_NEWAPI_BASE_URL: http://newapi:3000/v1
+    volumes:
+      - cloud-data:/data
+    # **一个端口都不发布**：只有 caddy 经内部网络进得来（见文件头的端口纪律）
+    expose:
+      - '4400'
+    depends_on:
+      - newapi
+
+  # ── 模型汇聚层（49 §1：只当汇聚层，不当计费层）─────────────────────────
+  #
+  # 上游各家的 key（DeepSeek / OpenAI / …）由 Luoye 在**它自己的后台页**里填，
+  # 一个都不进我们的 `.env`（docs/61 §4）。我们只拿一把它的内部令牌
+  # （`AGENTSWS_NEWAPI_KEY`），给云进程转发用。
+  #
+  # 镜像名以 New API 自己 README 上那一行为准；换一个就改 .env 里的
+  # NEWAPI_IMAGE，不用动这个文件。
+  newapi:
+    image: ${NEWAPI_IMAGE:-ghcr.io/quantumnous/new-api:latest}
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - newapi-data:/data
+    ports:
+      # **只绑宿主回环**：公网进不来，SSH 隧道进得来（docs/61 §4）。
+      #   ssh -N -L 3000:127.0.0.1:3000 你@服务器
+      # 然后本机浏览器开 http://127.0.0.1:3000
+      - '127.0.0.1:3000:3000'
+
+  # ── 每日备份 ───────────────────────────────────────────────────────────
+  #
+  # 为什么是一个独立容器而不是云进程里的定时：备份最该跑的时候，正是云进程
+  # 已经卡住或崩溃循环的时候。跟它同生共死的备份等于没有备份。
+  #
+  # 用 `sqlite3 .backup` 而不是 `cp`：库开着 WAL，直接拷文件拷到的是一个
+  # 可能缺半条事务的快照（见 backup.sh 的头注释）。
+  backup:
+    image: alpine:3
+    restart: unless-stopped
+    volumes:
+      - cloud-data:/data
+      - ./backup.sh:/backup.sh:ro
+    environment:
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        apk add --no-cache sqlite >/dev/null &&
+        while true; do sh /backup.sh || echo "[backup] 这一轮失败，下一轮再来"; sleep 86400; done
+
+volumes:
+  cloud-data:
+  newapi-data:
+  caddy-data:
+  caddy-config:

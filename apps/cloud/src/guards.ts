@@ -97,10 +97,15 @@ export function rateLimited(verdict: RateVerdict): ApiError {
 /**
  * 这一次请求从哪儿来。
  *
- * **前提**：云进程只从反向代理（Caddy）收流量——compose 里 `cloud` 不发布端口，
- * 外面连不到它。所以 `X-Forwarded-For` 的第一段可信。直接把容器暴露到公网的话
- * 这一段就能被伪造，限流也就形同虚设——runbook 里把"不要 publish cloud 的端口"
- * 写成了一条硬规矩，理由就是这个。
+ * **两条前提，缺一条这个值就能被伪造、限流就形同虚设**：
+ *
+ * 1. 云进程只从反向代理收流量——`deploy/docker-compose.yml` 里 `cloud`
+ *    一个端口都不发布，外面连不到它；
+ * 2. 那个反向代理**把客户端送来的 `X-Forwarded-For` 删掉之后**才填自己看到的
+ *    对端（`deploy/Caddyfile` 里的 `header_up -X-Forwarded-For`）。Caddy 默认是
+ *    追加而不是覆盖，不删的话任何人自己塞一个头就能换一个限流桶。
+ *
+ * 换别的代理、或者直接把容器暴到公网，都要重新想一遍这两条。
  */
 export function clientIpOf(c: Context<CloudEnv>): string {
   const forwarded = c.req.header('X-Forwarded-For')
