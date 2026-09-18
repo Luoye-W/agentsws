@@ -23,6 +23,7 @@ import {
   officeKindOf,
   parseFileAddress,
 } from '@/components/rail/panels/office/address'
+import { isStyleOrImageViolation } from '@/components/rail/panels/office/csp-watch'
 import { parseCsv } from '@/components/rail/panels/office/csv'
 import { RenderTimeoutError, withDeadline } from '@/components/rail/panels/office/deadline'
 import { resolveRelTarget } from '@/components/rail/panels/office/slides-view'
@@ -227,6 +228,50 @@ describe('三种格式各渲染出预期的字', () => {
     expect(resolveRelTarget('../media/image1.png')).toBe('ppt/media/image1.png')
     expect(resolveRelTarget('media/x.png')).toBe('ppt/slides/media/x.png')
     expect(resolveRelTarget('https://example.com/a.png')).toBeUndefined()
+  })
+})
+
+/** 造一个 `securitypolicyviolation`（jsdom 25 没有那个构造器，拿普通 Event 补一格）。 */
+function violation(directive: string): Event {
+  const e = new Event('securitypolicyviolation', { bubbles: true })
+  Object.defineProperty(e, 'violatedDirective', { value: directive })
+  return e
+}
+
+describe('CSP 那一句只在真被挡时出现（WP99）', () => {
+  it('哪几条算：样式与图片（带后缀的 `-elem` / `-attr` 也算），别的不算', () => {
+    for (const d of ['style-src', 'style-src-elem', 'style-src-attr', 'img-src'])
+      expect(isStyleOrImageViolation(violation(d))).toBe(true)
+    // 脚本 / 连接被挡下来是**对的**，不该劝人换个姿势
+    for (const d of ['script-src', 'connect-src', 'worker-src', ''])
+      expect(isStyleOrImageViolation(violation(d))).toBe(false)
+    expect(isStyleOrImageViolation(new Event('securitypolicyviolation'))).toBe(false)
+  })
+
+  it('没被挡：一个字都不说（浏览器档 / 壳里开了那两条之后，就是这一档）', async () => {
+    getKnowledgeSourceFile.mockResolvedValue(result('报价单.xlsx', await xlsxFixture()))
+    renderPanel('报价单.xlsx')
+    await screen.findByTestId('rail-office-sheet', undefined, { timeout: 5000 })
+    expect(screen.queryByTestId('rail-office-csp')).toBeNull()
+  })
+
+  it('真被挡：说一句，而且只说一次', async () => {
+    getKnowledgeSourceFile.mockResolvedValue(result('报价单.xlsx', await xlsxFixture()))
+    renderPanel('报价单.xlsx')
+    await screen.findByTestId('rail-office-sheet', undefined, { timeout: 5000 })
+    fireEvent(document, violation('img-src'))
+    const pill = await screen.findByTestId('rail-office-csp')
+    expect(pill.dataset.tone).toBe('neutral')
+    fireEvent(document, violation('style-src-elem'))
+    expect(screen.getAllByTestId('rail-office-csp')).toHaveLength(1)
+  })
+
+  it('挡的是脚本：这一句不出现（那一条本来就该挡）', async () => {
+    getKnowledgeSourceFile.mockResolvedValue(result('报价单.xlsx', await xlsxFixture()))
+    renderPanel('报价单.xlsx')
+    await screen.findByTestId('rail-office-sheet', undefined, { timeout: 5000 })
+    fireEvent(document, violation('script-src'))
+    expect(screen.queryByTestId('rail-office-csp')).toBeNull()
   })
 })
 

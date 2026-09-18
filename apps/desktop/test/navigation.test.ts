@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONTENT_SECURITY_POLICY, withCsp } from '../src/csp.js'
+import { CONTENT_SECURITY_POLICY, IMG_SRC, STYLE_SRC, withCsp } from '../src/csp.js'
 import {
   decideNavigation,
   decideWindowOpen,
@@ -90,6 +90,35 @@ describe('withCsp', () => {
     expect(CONTENT_SECURITY_POLICY).toContain("default-src 'self'")
     expect(CONTENT_SECURITY_POLICY).toContain("object-src 'none'")
     expect(CONTENT_SECURITY_POLICY).toContain("frame-ancestors 'none'")
+  })
+
+  it('WP99：在 self 之上只开两条——Word 的排版与文档里的内嵌图片', () => {
+    expect(CONTENT_SECURITY_POLICY).toContain(STYLE_SRC)
+    expect(CONTENT_SECURITY_POLICY).toContain(IMG_SRC)
+    expect(STYLE_SRC).toBe("style-src 'self' 'unsafe-inline'")
+    // `blob:` 与 `data:` 都是同源、纯本地的东西，不发起一次网络请求
+    expect(IMG_SRC).toBe("img-src 'self' blob: data:")
+  })
+
+  it('WP99：`script-src` 一个字都没放宽，`connect-src` / `worker-src` 一个字都没写', () => {
+    // 脚本那条线是唯一能把"一份外来文件"变成"同源里跑的代码"的口子。
+    // 不写 `script-src` = 回落到 `default-src 'self'`，既没有 unsafe-eval
+    // 也没有 unsafe-inline——这才是上面两条敢开的前提
+    expect(CONTENT_SECURITY_POLICY).not.toContain('script-src')
+    expect(CONTENT_SECURITY_POLICY).not.toContain('unsafe-eval')
+    // `'unsafe-inline'` 全文只该出现一次，而且只在 style-src 那一条上
+    const inline = CONTENT_SECURITY_POLICY.split("'unsafe-inline'").length - 1
+    expect(inline).toBe(1)
+    const styleDirective = CONTENT_SECURITY_POLICY.split('; ').find((d) =>
+      d.startsWith('style-src'),
+    )
+    expect(styleDirective).toBe(STYLE_SRC)
+    // 这两条仍然跟着 default-src 回落，不单列（单列就等于在讨论要不要放宽）
+    expect(CONTENT_SECURITY_POLICY).not.toContain('connect-src')
+    expect(CONTENT_SECURITY_POLICY).not.toContain('worker-src')
+    // 开的两条里没有任何外域
+    expect(CONTENT_SECURITY_POLICY).not.toMatch(/https?:/)
+    expect(CONTENT_SECURITY_POLICY).not.toContain('*')
   })
 
   it('覆盖服务端自己发的 CSP（大小写不敏感）', () => {

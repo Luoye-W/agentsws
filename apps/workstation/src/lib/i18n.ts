@@ -606,6 +606,10 @@ const zh: Table = {
   'rail.office.broken': '这份文件读不开（可能不是完整的 Office 文件）。下载下来看。',
   'rail.office.empty': '这份文件里没有可显示的内容。',
   'rail.office.image': '文档里的一张图',
+  // WP99：只有浏览器真的挡下一条样式 / 图片时才出现（`office/csp-watch.ts`）。
+  // WP97 那句固定文案去掉了——它在浏览器档从来不成立
+  'rail.office.csp_blocked':
+    '这份文件里有一部分样式或图片被安全策略挡下了，画出来会和原件不太一样。',
   'rail.office.rows': '共 {rows} 行',
   'rail.office.page': '第 {page} / {pages} 页',
   'rail.office.prev': '上一页',
@@ -2560,6 +2564,8 @@ const en: Table = {
     'This file could not be opened (it may be incomplete). Download it instead.',
   'rail.office.empty': 'Nothing displayable in this file.',
   'rail.office.image': 'An image from the document',
+  'rail.office.csp_blocked':
+    'Some styles or images in this file were blocked by the security policy, so it may not look like the original.',
   'rail.office.rows': '{rows} rows',
   'rail.office.page': 'Page {page} of {pages}',
   'rail.office.prev': 'Previous',
