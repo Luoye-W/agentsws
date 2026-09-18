@@ -156,7 +156,12 @@ export function unitCostMicros(
 ): CostEstimate {
   const entry = t.unit_prices.find((e) => e.key.toLowerCase() === key.trim().toLowerCase())
   if (entry === undefined)
-    return { micros: 0, currency: t.base_currency, provider: key.split(':')[0] ?? 'unknown', fallback: true }
+    return {
+      micros: 0,
+      currency: t.base_currency,
+      provider: key.split(':')[0] ?? 'unknown',
+      fallback: true,
+    }
   return {
     micros: cnyToMicros(toCny(entry.per_unit * Math.max(0, quantity), entry.currency, t)),
     currency: entry.currency,

@@ -14,34 +14,190 @@
   "fx_note": "与 pricing.json 用同一张参考汇率快照（同一个 as_of），两边必须一致：售价按一个汇率折、成本按另一个折，毛利就成了汇率差的函数。",
   "match_note": "按**模型名前缀**匹配，最长前缀优先。认不出的模型落 token_fallback——它是这张表里最贵的那一档（算出来的，不是写死的）：估贵了只是让毛利看起来保守，估便宜了会让一条真亏本的调用在看板上显示赚钱。",
   "token_models": [
-    { "provider": "deepseek", "prefix": "deepseek-v4-pro", "currency": "USD", "in_per_m": 1.32, "out_per_m": 3.96 },
-    { "provider": "deepseek", "prefix": "deepseek-flash", "currency": "USD", "in_per_m": 0.3, "out_per_m": 1.2 },
-    { "provider": "deepseek", "prefix": "deepseek-v4-flash", "currency": "USD", "in_per_m": 0.3, "out_per_m": 1.2 },
-    { "provider": "deepseek", "prefix": "deepseek", "currency": "USD", "in_per_m": 1.32, "out_per_m": 3.96 },
-    { "provider": "openai", "prefix": "gpt-6-astra", "currency": "USD", "in_per_m": 10, "out_per_m": 50 },
-    { "provider": "openai", "prefix": "gpt-5.6-sol", "currency": "USD", "in_per_m": 4, "out_per_m": 20 },
-    { "provider": "openai", "prefix": "gpt-5.6-terra", "currency": "USD", "in_per_m": 2, "out_per_m": 12 },
-    { "provider": "openai", "prefix": "gpt-5.6-luna", "currency": "USD", "in_per_m": 0.2, "out_per_m": 1.2 },
-    { "provider": "openai", "prefix": "gpt-5.4-mini", "currency": "USD", "in_per_m": 0.75, "out_per_m": 4.5 },
-    { "provider": "openai", "prefix": "gpt-5.4-nano", "currency": "USD", "in_per_m": 0.2, "out_per_m": 1.25 },
-    { "provider": "openai", "prefix": "gpt-5.4", "currency": "USD", "in_per_m": 2.5, "out_per_m": 15 },
-    { "provider": "openai", "prefix": "gpt-5-mini", "currency": "USD", "in_per_m": 0.25, "out_per_m": 2 },
-    { "provider": "openai", "prefix": "gpt-5-nano", "currency": "USD", "in_per_m": 0.05, "out_per_m": 0.4 },
-    { "provider": "openai", "prefix": "gpt-5", "currency": "USD", "in_per_m": 1.25, "out_per_m": 10 },
-    { "provider": "openai", "prefix": "gpt-4.1-mini", "currency": "USD", "in_per_m": 0.4, "out_per_m": 1.6 },
-    { "provider": "openai", "prefix": "gpt-4.1-nano", "currency": "USD", "in_per_m": 0.1, "out_per_m": 0.4 },
+    {
+      "provider": "deepseek",
+      "prefix": "deepseek-v4-pro",
+      "currency": "USD",
+      "in_per_m": 1.32,
+      "out_per_m": 3.96
+    },
+    {
+      "provider": "deepseek",
+      "prefix": "deepseek-flash",
+      "currency": "USD",
+      "in_per_m": 0.3,
+      "out_per_m": 1.2
+    },
+    {
+      "provider": "deepseek",
+      "prefix": "deepseek-v4-flash",
+      "currency": "USD",
+      "in_per_m": 0.3,
+      "out_per_m": 1.2
+    },
+    {
+      "provider": "deepseek",
+      "prefix": "deepseek",
+      "currency": "USD",
+      "in_per_m": 1.32,
+      "out_per_m": 3.96
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-6-astra",
+      "currency": "USD",
+      "in_per_m": 10,
+      "out_per_m": 50
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5.6-sol",
+      "currency": "USD",
+      "in_per_m": 4,
+      "out_per_m": 20
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5.6-terra",
+      "currency": "USD",
+      "in_per_m": 2,
+      "out_per_m": 12
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5.6-luna",
+      "currency": "USD",
+      "in_per_m": 0.2,
+      "out_per_m": 1.2
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5.4-mini",
+      "currency": "USD",
+      "in_per_m": 0.75,
+      "out_per_m": 4.5
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5.4-nano",
+      "currency": "USD",
+      "in_per_m": 0.2,
+      "out_per_m": 1.25
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5.4",
+      "currency": "USD",
+      "in_per_m": 2.5,
+      "out_per_m": 15
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5-mini",
+      "currency": "USD",
+      "in_per_m": 0.25,
+      "out_per_m": 2
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5-nano",
+      "currency": "USD",
+      "in_per_m": 0.05,
+      "out_per_m": 0.4
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-5",
+      "currency": "USD",
+      "in_per_m": 1.25,
+      "out_per_m": 10
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-4.1-mini",
+      "currency": "USD",
+      "in_per_m": 0.4,
+      "out_per_m": 1.6
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-4.1-nano",
+      "currency": "USD",
+      "in_per_m": 0.1,
+      "out_per_m": 0.4
+    },
     { "provider": "openai", "prefix": "gpt-4.1", "currency": "USD", "in_per_m": 2, "out_per_m": 8 },
-    { "provider": "openai", "prefix": "gpt-4o-mini", "currency": "USD", "in_per_m": 0.15, "out_per_m": 0.6 },
-    { "provider": "openai", "prefix": "gpt-4o", "currency": "USD", "in_per_m": 2.5, "out_per_m": 10 },
-    { "provider": "openai", "prefix": "text-embedding-3-large", "currency": "USD", "in_per_m": 0.13, "out_per_m": 0 },
-    { "provider": "openai", "prefix": "text-embedding-3-small", "currency": "USD", "in_per_m": 0.02, "out_per_m": 0 },
+    {
+      "provider": "openai",
+      "prefix": "gpt-4o-mini",
+      "currency": "USD",
+      "in_per_m": 0.15,
+      "out_per_m": 0.6
+    },
+    {
+      "provider": "openai",
+      "prefix": "gpt-4o",
+      "currency": "USD",
+      "in_per_m": 2.5,
+      "out_per_m": 10
+    },
+    {
+      "provider": "openai",
+      "prefix": "text-embedding-3-large",
+      "currency": "USD",
+      "in_per_m": 0.13,
+      "out_per_m": 0
+    },
+    {
+      "provider": "openai",
+      "prefix": "text-embedding-3-small",
+      "currency": "USD",
+      "in_per_m": 0.02,
+      "out_per_m": 0
+    },
     { "provider": "openai", "prefix": "gpt-", "currency": "USD", "in_per_m": 10, "out_per_m": 50 },
-    { "provider": "moonshot", "prefix": "kimi-k3", "currency": "CNY", "in_per_m": 20, "out_per_m": 100 },
-    { "provider": "moonshot", "prefix": "kimi-k2.7-code-highspeed", "currency": "CNY", "in_per_m": 13, "out_per_m": 54 },
-    { "provider": "moonshot", "prefix": "kimi-k2.7-code", "currency": "CNY", "in_per_m": 6.5, "out_per_m": 27 },
-    { "provider": "moonshot", "prefix": "kimi-k2.6", "currency": "CNY", "in_per_m": 6.5, "out_per_m": 27 },
-    { "provider": "moonshot", "prefix": "kimi", "currency": "CNY", "in_per_m": 20, "out_per_m": 100 },
-    { "provider": "zhipu", "prefix": "glm-5.3-flash", "currency": "CNY", "in_per_m": 0.8, "out_per_m": 2.8 },
+    {
+      "provider": "moonshot",
+      "prefix": "kimi-k3",
+      "currency": "CNY",
+      "in_per_m": 20,
+      "out_per_m": 100
+    },
+    {
+      "provider": "moonshot",
+      "prefix": "kimi-k2.7-code-highspeed",
+      "currency": "CNY",
+      "in_per_m": 13,
+      "out_per_m": 54
+    },
+    {
+      "provider": "moonshot",
+      "prefix": "kimi-k2.7-code",
+      "currency": "CNY",
+      "in_per_m": 6.5,
+      "out_per_m": 27
+    },
+    {
+      "provider": "moonshot",
+      "prefix": "kimi-k2.6",
+      "currency": "CNY",
+      "in_per_m": 6.5,
+      "out_per_m": 27
+    },
+    {
+      "provider": "moonshot",
+      "prefix": "kimi",
+      "currency": "CNY",
+      "in_per_m": 20,
+      "out_per_m": 100
+    },
+    {
+      "provider": "zhipu",
+      "prefix": "glm-5.3-flash",
+      "currency": "CNY",
+      "in_per_m": 0.8,
+      "out_per_m": 2.8
+    },
     { "provider": "zhipu", "prefix": "glm-5.3", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 },
     { "provider": "zhipu", "prefix": "glm-5.2", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 },
     { "provider": "zhipu", "prefix": "glm-4.7", "currency": "CNY", "in_per_m": 2, "out_per_m": 8 },

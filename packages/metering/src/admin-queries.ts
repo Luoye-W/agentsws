@@ -118,12 +118,7 @@ export const GROUPABLE = {
 
 export type GroupKey = keyof typeof GROUPABLE
 
-export function breakdown(
-  db: SqlDriver,
-  group: GroupKey,
-  w: Window,
-  limit = 50,
-): BreakdownRow[] {
+export function breakdown(db: SqlDriver, group: GroupKey, w: Window, limit = 50): BreakdownRow[] {
   const column = GROUPABLE[group]
   const rows = db
     .prepare(
@@ -309,7 +304,10 @@ export interface LedgerRow {
 /** 条件拼装：**每一条都是占位符**，一个值都不往 SQL 串里拼。 */
 function ledgerWhere(f: LedgerFilter): { sql: string; params: unknown[] } {
   const clauses: string[] = ['at >= ?', 'at <= ?']
-  const params: unknown[] = [f.from ?? '0000-01-01T00:00:00.000Z', f.to ?? '9999-12-31T23:59:59.999Z']
+  const params: unknown[] = [
+    f.from ?? '0000-01-01T00:00:00.000Z',
+    f.to ?? '9999-12-31T23:59:59.999Z',
+  ]
   if (f.org_id !== undefined && f.org_id !== '') {
     clauses.push('org_id = ?')
     params.push(f.org_id)
@@ -541,12 +539,11 @@ export function anonymizeOrg(db: SqlDriver, org_id: string, tombstone: string): 
         WHERE org_id = ?`,
     )
     .run(tombstone, org_id).changes
-  const b = db.prepare('UPDATE wallet_lots SET org_id = ? WHERE org_id = ?').run(tombstone, org_id)
-    .changes
+  const b = db
+    .prepare('UPDATE wallet_lots SET org_id = ? WHERE org_id = ?')
+    .run(tombstone, org_id).changes
   const c = db
-    .prepare(
-      `UPDATE wallet_reservations SET org_id = ?, workspace_id = 'deleted' WHERE org_id = ?`,
-    )
+    .prepare(`UPDATE wallet_reservations SET org_id = ?, workspace_id = 'deleted' WHERE org_id = ?`)
     .run(tombstone, org_id).changes
   return a + b + c
 }

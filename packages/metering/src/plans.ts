@@ -86,7 +86,7 @@ const daysInMonth = (year: number, month: number): number =>
  */
 export function addCalendarMonths(iso: string, months: number): string {
   const p = toLocal(iso)
-  const total = (p.year * 12 + (p.month - 1)) + months
+  const total = p.year * 12 + (p.month - 1) + months
   const year = Math.floor(total / 12)
   const month = (total % 12) + 1
   const day = Math.min(p.day, daysInMonth(year, month))
@@ -176,7 +176,11 @@ export function termEndsAt(
 }
 
 /** 现在该发的那些 cycle（起始时间已到、还没发过的）。定时续发拿它跑。 */
-export function dueCycles(cycles: PlannedCycle[], now: string, granted: Set<string>): PlannedCycle[] {
+export function dueCycles(
+  cycles: PlannedCycle[],
+  now: string,
+  granted: Set<string>,
+): PlannedCycle[] {
   const nowMs = Date.parse(now)
   return cycles.filter((c) => Date.parse(c.starts_at) <= nowMs && !granted.has(c.grant_key))
 }

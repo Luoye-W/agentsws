@@ -227,11 +227,7 @@ export class KolPublicService {
     provider = 'internal',
   ): { value: T; credits: number } {
     const exempt = this.exempt(principal)
-    const { reservation, credits } = this.reserve(
-      principal,
-      capability,
-      exempt ? 0 : quantity,
-    )
+    const { reservation, credits } = this.reserve(principal, capability, exempt ? 0 : quantity)
     try {
       const value = run()
       const charged = exempt ? 0 : credits
@@ -272,7 +268,12 @@ export class KolPublicService {
         quantity,
         credits: FREE_CREDITS,
         // `skipped` = 本来就免费，不是"该扣没扣上"。扣费健康那张表靠这一格分开这两件事
-        ...this.meta(principal, 'internal', quantity, this.exempt(principal) ? 'admin_exempt' : 'skipped'),
+        ...this.meta(
+          principal,
+          'internal',
+          quantity,
+          this.exempt(principal) ? 'admin_exempt' : 'skipped',
+        ),
       },
     )
   }
