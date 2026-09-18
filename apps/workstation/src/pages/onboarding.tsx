@@ -40,6 +40,7 @@ import {
   listOnboardingPositions,
   type OnboardingPlanInput,
   planOnboarding,
+  renameMe,
   requestMembership,
   setWorkspaceProfile,
 } from '@/lib/api'
@@ -87,6 +88,9 @@ export function OnboardingPage(): React.ReactNode {
   const [saved, setSaved] = useState(false)
   const [sent, setSent] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  // 09-18 Luoye 真机：第 ② 步的名字原来是只读的，删不掉默认值、打的字也不出现。
+  // 名字是本人的展示名，可以改；登录邮箱是身份，仍只读。
+  const [nameDraft, setNameDraft] = useState<string | undefined>(undefined)
 
   const state = useQuery({ queryKey: ['onboarding', 'state'], queryFn: () => getOnboardingState() })
   const positions = useQuery({
@@ -140,6 +144,17 @@ export function OnboardingPage(): React.ReactNode {
       await client.invalidateQueries({ queryKey: ['onboarding'] })
       // WP79 ⑥：存完就进下一步——按钮上写的是「保存并继续」，它就该真的继续
       setStep(1)
+    },
+    onError: say,
+  })
+
+  const rename = useMutation({
+    mutationFn: (name: string) => renameMe(name),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await client.invalidateQueries({ queryKey: ['onboarding'] })
+      await client.invalidateQueries({ queryKey: ['me'] })
+      setStep(2)
     },
     onError: say,
   })
@@ -240,8 +255,11 @@ export function OnboardingPage(): React.ReactNode {
                 <Input
                   id="person-name"
                   data-testid="person-name"
-                  readOnly
-                  value={state.data.person.name}
+                  maxLength={64}
+                  value={nameDraft ?? state.data.person.name}
+                  onChange={(e) => {
+                    setNameDraft(e.target.value)
+                  }}
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -304,9 +322,16 @@ export function OnboardingPage(): React.ReactNode {
               {step < 3 ? (
                 <Button
                   size="sm"
-                  disabled={!canNext}
+                  disabled={!canNext || rename.isPending}
                   data-testid="onboarding-next"
                   onClick={() => {
+                    // 第 ② 步：名字改过就先存（存完自己进下一步），没改就直接走
+                    const current = state.data?.person.name ?? ''
+                    const wanted = (nameDraft ?? current).trim()
+                    if (step === 1 && wanted !== '' && wanted !== current) {
+                      rename.mutate(wanted)
+                      return
+                    }
                     setStep((s) => Math.min(3, s + 1))
                   }}
                 >

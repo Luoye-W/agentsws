@@ -227,6 +227,27 @@ export interface KnowledgePort {
    * 路由翻成 404。**网关不做任何转换**，它只把字节转下去（与 `/knowledge/export` 同形）。
    */
   sourceFile?(actor: GatewayActor, id: string): MaybePromise<KnowledgeSourceFile | undefined>
+  /**
+   * WP99（19 §1.3「上传」）：**收一份文件**。
+   *
+   * 网关只做两件事：把 multipart 里那一个 `file` 拆出来，与一道粗的大小闸。
+   * **权威的闸在宿主那一侧**（`apps/server/src/knowledge-upload.ts`：扩展名白名单、
+   * magic bytes 与扩展名对得上、文件名洗净、纯文本档反着判）——网关不认识
+   * Office 格式，也不该认识。
+   *
+   * 落进对象存储、登记成一条 `kind: 'upload'` 的源、进溯源链，都在宿主那一侧。
+   */
+  uploadSource?(
+    actor: GatewayActor,
+    input: { filename: string; bytes: Uint8Array },
+  ): MaybePromise<KnowledgeSource>
+  /**
+   * WP99：删一个导入源（21 的擦除语义：字节真删、行留墓碑）。
+   *
+   * 不存在 / 不是本工作区的 / 已经删过的 → `false`，路由翻成 404
+   * （与 `sourceFile` 同一条：不区分"不存在"与"不是你的"）。
+   */
+  deleteSource?(actor: GatewayActor, id: string): MaybePromise<boolean>
   /** 19 §3 `cite`：记一次引用（`usage.cited + 1`）。 */
   cite?(actor: GatewayActor, fact_card_id: string, run_id: RunId): MaybePromise<void>
   /** 19 §4 缺口队列。 */

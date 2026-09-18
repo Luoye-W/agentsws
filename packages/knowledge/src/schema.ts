@@ -177,6 +177,14 @@ const ADDED_COLUMNS: readonly [table: string, column: string, type: string][] = 
   ['fact_cards', 'media_json', 'TEXT'],
   ['fact_cards', 'last_verified_at', 'TEXT'],
   ['knowledge_sources', 'last_content_hash', 'TEXT'],
+  // WP99（19 §1.3「上传」）：`kind: 'upload'` 才有的那几格 + 软删的墓碑。
+  // 走 ADDED_COLUMNS 而不是改 CREATE TABLE：老库升上来不用导数据
+  ['knowledge_sources', 'filename', 'TEXT'],
+  ['knowledge_sources', 'uploaded_by', 'TEXT'],
+  ['knowledge_sources', 'uploaded_at', 'TEXT'],
+  ['knowledge_sources', 'content_sha256', 'TEXT'],
+  ['knowledge_sources', 'size_bytes', 'INTEGER'],
+  ['knowledge_sources', 'deleted_at', 'TEXT'],
 ]
 
 export function migrate(db: Database): void {

@@ -200,6 +200,20 @@ describe('身份（20 §5）', () => {
     expect(me.kind).toBe('session')
   })
 
+  it('PUT /v1/me 改本人展示名（09-18 真机：向导第 ② 步原来改不了）', async () => {
+    const h = await harness()
+    const renamed = await data<{ person: { id: string; name: string; email: string } }>(
+      await h.put('/v1/me', { name: '  罗野  ' }),
+    )
+    expect(renamed.person.id).toBe(h.person_id)
+    expect(renamed.person.name).toBe('罗野')
+    const me = await data<{ person: { name: string } }>(await h.get('/v1/me'))
+    expect(me.person.name).toBe('罗野')
+    // 空名与超长拒；登录邮箱这条路根本收不到
+    expect((await h.put('/v1/me', { name: '   ' })).status).toBe(400)
+    expect((await h.put('/v1/me', { name: 'x'.repeat(65) })).status).toBe(400)
+  })
+
   it('建工作区 201；加成员要策略层写权限且不能跨工作区', async () => {
     const h = await harness()
     const created = await h.post('/v1/workspaces', { name: '新工作区' })

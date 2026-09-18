@@ -355,6 +355,14 @@ export class MemoryIdentityService implements LocalIdentityService {
     return this.#people.get(id)
   }
 
+  async renamePerson(id: PersonId, name: string): Promise<Person> {
+    const person = this.#people.get(id)
+    if (person === undefined) throw new Error('person not found')
+    const next = { ...person, name }
+    this.#people.set(id, next)
+    return next
+  }
+
   personByEmail(email: string): Person | undefined {
     const id = this.#byEmail.get(email.trim().toLowerCase())
     return id === undefined ? undefined : this.#people.get(id)

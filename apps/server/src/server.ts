@@ -40,7 +40,7 @@ import {
   WS_SUBPROTOCOL,
   WsSession,
 } from '@agentsws/api'
-import { openBlobStore } from '@agentsws/blob'
+import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
   ApprovalBus,
@@ -167,6 +167,7 @@ import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
 import { importKnowledgePack } from './knowledge-pack.js'
+import { checkUpload, UploadRejected, uploadBlobKey, uploadSubjectRef } from './knowledge-upload.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
@@ -832,7 +833,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           defaultRoot: join(dbDir, 'blobs'),
         })
 
-  const knowledge = createKnowledge({ dbPath: file('knowledge.db'), clock })
+  /*
+   * WP99：知识那一侧的事件接到**同一条**事件日志上。
+   *
+   * 以前 `createKnowledge` 没接 `emit`，于是 19 §6 里那几条 `knowledge.*`
+   * （缺口开了 / 答了、复核开了 / 答了）发出来之后没人接，落不进日志。
+   * 上传要"进溯源链"（谁传的、何时、sha256），而溯源链的落点就是这条日志——
+   * 所以这一根线现在接上，那几条老事件跟着一起落。
+   *
+   * 载荷里**没有正文**：本包发出来的几条只带 id、subject_key、文件名与 hash
+   * （21 §2 / 13 §4：内容不进日志）。
+   */
+  const knowledge = createKnowledge({
+    dbPath: file('knowledge.db'),
+    clock,
+    emit: (e) => {
+      appendEvent({
+        schema_version: 1,
+        workspace_id: e.workspace_id,
+        type: e.type,
+        at: e.at,
+        actor: { kind: 'system', id: 'knowledge' },
+        correlation: { trace_id: `tr_knowledge_${Date.parse(e.at).toString(36)}` },
+        payload: e.payload,
+      })
+    },
+  })
   const skills = createSkills({ clock, random })
 
   // WP25：本机加密秘密库建**一次**，连接面（邮箱口令 / Shopify 应用密钥）与
@@ -2770,10 +2796,76 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     sourceFile: async (actor, id) => {
       const source = knowledge.intake.getSource(id)
       if (source === undefined || source.workspace_id !== actor.workspace_id) return undefined
+      // 软删过的（WP99 的墓碑）当不存在：字节已经不在了，读它只会拿到 undefined，
+      // 但把这一步写明比靠 blob 读不到兜底清楚
+      if (source.deleted_at !== undefined) return undefined
       return knowledgeSourceFile(source, {
         ...(dbDir === undefined ? {} : { dataDir: dbDir }),
         ...(blobs === undefined ? {} : { blobs }),
       })
+    },
+    /*
+     * WP99（19 §1.3「上传」）：**收一份文件**。顺序是死的，一步都不能换：
+     *
+     * 1. 过六道闸（`knowledge-upload.ts`，纯函数：大小 / 扩展名白名单 / 文件名洗净 /
+     *    magic bytes 与扩展名对得上 / 不信客户端 MIME / 纯文本档反着判）；
+     * 2. 进对象存储（`blob://<key>`，key 是 `<工作区>/<sha256>.<扩展名>`；
+     *    `subject_ref` = 工作区 → 走信封加密，销毁这个主体的密钥 = 它的每一份
+     *    原件当场读不出来，21 §4）；
+     * 3. 登记成一条 `kind: 'upload'` 的源，带上"谁传的、何时、sha256、多大"，
+     *    并发一条 `knowledge.source.added` 进事件日志（溯源链）。
+     *
+     * 闸在**存之前**：把字节先落盘再判，等于在数据目录里留下一份判不合格的东西。
+     */
+    uploadSource: async (actor, input) => {
+      const checked = checkUpload(input)
+      if (blobs === undefined) {
+        throw new UploadRejected(
+          '这个服务进程没有开对象存储（内存档），存不下上传的文件。',
+          'not_implemented',
+        )
+      }
+      const key = uploadBlobKey(actor.workspace_id, checked.sha256, checked.extension)
+      await blobs.put(key, input.bytes, {
+        filename: checked.filename,
+        content_type: checked.content_type,
+        subject_ref: uploadSubjectRef(actor.workspace_id),
+        workspace_id: actor.workspace_id,
+      })
+      return knowledge.intake.addSource({
+        workspace_id: actor.workspace_id,
+        kind: 'upload',
+        ref: blobUri(key),
+        // 19 §1.3：文档档一律 anydoc（真正的解析在下游，这条路上不解）
+        parser: 'anydoc',
+        acl_inherit: false,
+        upload: {
+          filename: checked.filename,
+          uploaded_by: actor.person_id,
+          uploaded_at: clock.now(),
+          content_sha256: checked.sha256,
+          size: checked.size,
+        },
+      })
+    },
+    /*
+     * WP99：删一个导入源。**先删字节，再立墓碑**——反过来的话，中间崩一次
+     * 就留下一条"看着已经删了、字节还在盘上"的记录，而那是最坏的一种状态。
+     *
+     * 同一份内容被两条源共用是可能的（key 是内容 hash）。所以删字节之前先看
+     * 还有没有别的活着的源指着同一个 `ref`：有就只立墓碑、不删字节。
+     */
+    deleteSource: async (actor, id) => {
+      const source = knowledge.intake.getSource(id)
+      if (source === undefined || source.workspace_id !== actor.workspace_id) return false
+      if (source.deleted_at !== undefined) return false
+      const shared = knowledge.intake
+        .sources(actor.workspace_id)
+        .some((s) => s.id !== id && s.ref === source.ref)
+      if (!shared && blobs !== undefined && source.ref.startsWith('blob://')) {
+        await blobs.delete(blobKey(source.ref))
+      }
+      return knowledge.intake.deleteSource(id) !== undefined
     },
     gaps: (actor, filter) => knowledge.intake.gaps(actor.workspace_id, filter),
     openGap: (actor, input) =>

@@ -173,6 +173,7 @@ const state = {
     vertical?: 'goods' | 'digital'
     storefront_platform?: 'shopify' | 'none' | 'woocommerce' | 'magento' | 'other'
   }[],
+  renames: [] as string[],
   plans: [] as OnboardingPlanInput[],
   applies: [] as OnboardingPlanInput[],
   joins: [] as { code?: string; peer_id?: string; name: string; email: string }[],
@@ -188,6 +189,11 @@ vi.mock('@/lib/api', async () => {
     getOnboardingState: async () => state.state,
     listOnboardingPositions: async () => POSITIONS,
     listDiscoveryPeers: async () => state.peers,
+    renameMe: async (name: string) => {
+      state.renames.push(name)
+      state.state = { ...state.state, person: { ...state.state.person, name } }
+      return { person: { ...state.state.person, name } }
+    },
     setWorkspaceProfile: async (input: {
       legal_name: string
       vertical?: 'goods' | 'digital'
@@ -230,6 +236,7 @@ vi.mock('@/lib/api', async () => {
 
 beforeEach(() => {
   state.profiles = []
+  state.renames = []
   state.plans = []
   state.applies = []
   state.joins = []
@@ -435,6 +442,28 @@ describe('46 §1 首次设置向导', () => {
     const peers = await screen.findByTestId('join-peers')
     await waitFor(() => {
       expect(within(peers).getByText(/这台机器没有可用网卡/)).toBeTruthy()
+    })
+  })
+
+  it('② 名字能改：清掉默认值打自己的，「保存并继续」真存下来再进第 ③ 步', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await goTo(1)
+    const person = await screen.findByTestId('onboarding-person')
+    const name = within(person).getByTestId('person-name') as HTMLInputElement
+    expect(name.readOnly).toBe(false)
+    await user.clear(name)
+    expect(name.value).toBe('')
+    await user.type(name, '罗野')
+    expect(name.value).toBe('罗野')
+    // 登录邮箱仍是身份，只读
+    expect((within(person).getByTestId('person-email') as HTMLInputElement).readOnly).toBe(true)
+    await user.click(screen.getByTestId('onboarding-next'))
+    await waitFor(() => {
+      expect(state.renames).toEqual(['罗野'])
+    })
+    await waitFor(() => {
+      expect(screen.queryByTestId('onboarding-person')).toBeNull()
     })
   })
 

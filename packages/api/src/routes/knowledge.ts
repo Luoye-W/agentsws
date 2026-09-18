@@ -96,6 +96,39 @@ const RecheckResolveBody = z.object({
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024
 const IMPORT_MAX_FILES = 200
 
+/**
+ * WP99：单份上传的入口闸（64 MB）。
+ *
+ * **权威上限在宿主那一侧**（`apps/server/src/knowledge-upload.ts` 的
+ * `UPLOAD_MAX_BYTES`，与读口那道内存闸同一个数）——网关不依赖服务实现，
+ * 所以这里是一道粗的入口闸：先看 `Content-Length`，能在**读之前**就回绝的
+ * 就别读进内存。`Content-Length` 可以撒谎，所以拆出 `File` 之后再验一次。
+ */
+const UPLOAD_MAX_BYTES = 64 * 1024 * 1024
+
+/**
+ * multipart 里那一个 `file`。
+ *
+ * 只认字段名 `file`（与知识包导入同一条），**其余字段一个都不读**——
+ * 文件名从 `File.name` 来、类型从扩展名来（宿主定），客户端说的 MIME 不作数。
+ */
+async function uploadInput(
+  c: Parameters<Route['handler']>[0],
+): Promise<{ filename: string; bytes: Uint8Array }> {
+  const contentType = c.req.header('content-type') ?? ''
+  if (!contentType.includes('multipart/form-data'))
+    throw new ApiError('invalid_input', '上传要用 multipart/form-data，字段名 file')
+  const declared = Number(c.req.header('content-length') ?? '0')
+  if (Number.isFinite(declared) && declared > UPLOAD_MAX_BYTES)
+    throw new ApiError('invalid_input', `这份文件超过大小上限（${UPLOAD_MAX_BYTES} 字节）`)
+  const form = await c.req.parseBody()
+  const file = form.file
+  if (!(file instanceof File)) throw new ApiError('invalid_input', 'multipart 里没有 file')
+  if (file.size > UPLOAD_MAX_BYTES)
+    throw new ApiError('invalid_input', `这份文件超过大小上限（${UPLOAD_MAX_BYTES} 字节）`)
+  return { filename: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }
+}
+
 /** JSON 档：直接传 `路径 → 正文`（粘贴形态与 CLI 用）。 */
 const ImportBody = z.object({
   files: z
@@ -307,6 +340,61 @@ export function knowledgeRoutes(): Route[] {
           'content-disposition': contentDisposition(out.filename),
           'content-length': String(out.size),
         })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/sources/upload',
+        operationId: 'uploadKnowledgeSource',
+        summary: '上传一份文件进知识库（multipart，字段名 file；19 §1.3）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        // 与「登记一个导入源」同一档（`knowledge.stage`）：上传也是**往知识库里提议**东西。
+        // 不给它单开一条 scope——多一条就多一处"谁该有它"要在六个职责包里各答一遍
+        authz: WRITE,
+        returns: 'KnowledgeSource',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await uploadInput(c)
+        const run = needs(deps.knowledge.uploadSource, '知识库上传')
+        const created = await run.call(
+          deps.knowledge,
+          actorOf(deps, { principal: p, assignment: a }),
+          input,
+        )
+        return ok(c, created, 201)
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/knowledge/sources/:id',
+        operationId: 'deleteKnowledgeSource',
+        summary: '删一个导入源（21 的擦除语义：字节真删、行留墓碑）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '导入源 id' }],
+        returns: '{ deleted: true, id }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const id = param(c, 'id')
+        const run = needs(deps.knowledge.deleteSource, '导入源删除')
+        const done = await run.call(
+          deps.knowledge,
+          actorOf(deps, { principal: p, assignment: a }),
+          id,
+        )
+        // 不存在 / 不是本工作区的 / 已经删过的一律 404，不区分——与 `:id/file` 同一条
+        if (!done) throw new ApiError('not_found', '这个导入源不存在')
+        return ok(c, { deleted: true, id })
       },
     ),
     route(

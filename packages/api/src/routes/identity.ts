@@ -11,6 +11,8 @@ const SessionBody = z.object({ key: z.string().min(8), email: z.string().min(3).
 /** 会话 cookie 的有效期；与内存 / SQLite 身份服务的会话 token 默认一致（12h）。 */
 const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 const VerifyBody = z.object({ token: z.string().min(1) })
+/** 09-18：本人改自己的展示名；去掉首尾空白后 1–64 字。登录邮箱不在这里改（它是身份）。 */
+const RenameMeBody = z.object({ name: z.string().trim().min(1).max(64) })
 const CreateWorkspaceBody = z.object({
   name: z.string().min(1),
   kind: z.enum(['personal', 'shared']).optional(),
@@ -192,6 +194,24 @@ export function identityRoutes(): Route[] {
           assignments: deps.roles.listAssignments(p.person_id, { workspace_id: p.workspace_id }),
           kind: p.kind,
         })
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/me',
+        operationId: 'renameMe',
+        summary: '改本人的展示名（只改 name；登录邮箱是身份，不在这里改）',
+        tag: 'identity',
+        auth: 'bearer',
+        body: RenameMeBody,
+        returns: '{ person }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const input = await body(c, RenameMeBody)
+        const person = await deps.identity.renamePerson(p.person_id, input.name)
+        return ok(c, { person })
       },
     ),
     route(

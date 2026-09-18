@@ -16,17 +16,23 @@
  * ## CSP 这道墙（13 §5，`apps/desktop/src/csp.ts`）
  *
  * 壳给所有响应盖 `default-src 'self'`，而 CSP 的回落规则让它一口气管住四样东西。
- * 选库时这张表比"哪个排版还原得好"重要得多：
+ * 选库时这张表比"哪个排版还原得好"重要得多。**WP99（Luoye 09-18 定）把后两行
+ * 开了、前两行原样不动**：
  *
- * | 被管住的 | 后果 | 这一版怎么办 |
+ * | 被管住的 | 后果 | 现在怎么办 |
  * |---|---|---|
- * | `script-src`（没有 `'unsafe-eval'`） | 库里只要执行到 `eval` / `new Function` 就抛 | **mammoth 因此出局**（它的浏览器包里 8 处 `new Function`）；三个在用的库实测零处 |
- * | `worker-src` → `child-src` → `default-src 'self'` | 同源 blob 的 Worker 也起不来 | 解析**全在主线程**，配一道 5 秒的闸（`office/deadline.ts`） |
- * | `style-src`（没有 `'unsafe-inline'`） | `<style>` 与 `style="…"` 都不生效 | 表格与 PPT 我们自己画（本来就不需要）；Word 那一档退成"结构 + 文字"，见 `office/word-view.tsx` |
- * | `img-src`（不含 `blob:`） | 文档里内嵌的图片在壳里显示不出来 | 照渲染、照回收；显示不出来时 `alt` 里有一句人话。**要让它显示得改壳的 CSP，那是 Luoye 的一道题**，不在这个 WP 里动 |
+ * | `script-src`（没有 `'unsafe-eval'`，**WP99 一个字没放宽**） | 库里只要执行到 `eval` / `new Function` 就抛 | **mammoth 因此出局**（它的浏览器包里 8 处 `new Function`）；三个在用的库实测零处 |
+ * | `worker-src` → `child-src` → `default-src 'self'`（**WP99 不动**） | 同源 blob 的 Worker 也起不来 | 解析**全在主线程**，配一道 5 秒的闸（`office/deadline.ts`） |
+ * | ~~`style-src`~~ → WP99 开成 `style-src 'self' 'unsafe-inline'` | 原先 `<style>` 与 `style="…"` 都不生效，Word 只剩结构 + 文字 | **壳里也保留排版了**。表格与 PPT 仍然我们自己画（本来就不需要文档自带的样式） |
+ * | ~~`img-src`~~ → WP99 开成 `img-src 'self' blob: data:` | 原先文档里内嵌的图片在壳里显示不出来 | **显示得出来了**；`blob:` / `data:` 都不出网，所以"让内容决定去哪取数"这件事仍然不存在 |
+ *
+ * 那句"壳里可能画不全"的固定文案**随之去掉**：它在浏览器档本来就不成立，
+ * 开了两条之后在壳里也不成立了。换成 `office/csp-watch.ts`——浏览器真挡下
+ * 一样东西时才派 `securitypolicyviolation`，收到才说一句，收不到一个字不说。
  *
  * 三个库都逐个核实过（许可证 / eval / 外链 / 体积，数字进报告）：
- * `docx-preview@0.4.0`（Apache-2.0）、`xlsx@0.18.5`（Apache-2.0）、
+ * `docx-preview@0.4.0`（Apache-2.0）、`exceljs@4.4.0`（MIT，**WP99 换掉了
+ * `xlsx@0.18.5`**——理由见 `office/sheet-view.tsx` 顶上）、
  * `jszip@3.10.2`（MIT OR GPL-3.0-or-later，取 MIT）。
  *
  * ## 数据边界（40 §1.2）
@@ -43,6 +49,7 @@ import { lazy, type ReactNode, Suspense, useCallback, useState } from 'react'
 import { StatusPill, WsCard, WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
 import { officeKindOf, parseFileAddress } from '@/components/rail/panels/office/address'
+import { useCspBlocked } from '@/components/rail/panels/office/csp-watch'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -54,7 +61,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-/** 三个视图各自一个 chunk：开 Word 的人不该顺手把 896 KB 的 SheetJS 下下来。 */
+/** 三个视图各自一个 chunk：开 Word 的人不该顺手把近 1 MB 的 exceljs 下下来。 */
 const WordView = lazy(async () => {
   const m = await import('@/components/rail/panels/office/word-view')
   return { default: m.WordView }
@@ -120,7 +127,9 @@ function Body({
       {kind === 'word' ? (
         <WordView blob={blob} onFail={onFail} />
       ) : kind === 'sheet' ? (
-        <SheetView blob={blob} onFail={onFail} />
+        // 文件名传下去只为了分 `.csv` 与 `.xlsx` 两条读法（WP99：csv 自己按
+        // RFC 4180 解，xlsx 走 exceljs）——视图不拿它做别的
+        <SheetView blob={blob} filename={filename} onFail={onFail} />
       ) : (
         <SlidesView blob={blob} onFail={onFail} />
       )}
@@ -136,6 +145,8 @@ export function OfficePreviewPanel({ address }: RailPanelBodyProps): ReactNode {
   const onFail = useCallback(() => {
     setFailed(true)
   }, [])
+  // WP99：壳的 CSP 真挡下样式 / 图片时才为真（挂载期间监听，不上报、不落盘）
+  const cspBlocked = useCspBlocked()
 
   const parsed = address === undefined ? undefined : parseFileAddress(address)
   const source_id = parsed?.source_id
@@ -207,6 +218,16 @@ export function OfficePreviewPanel({ address }: RailPanelBodyProps): ReactNode {
       {failed ? (
         <StatusPill tone="warn" data-testid="rail-office-fallback">
           {t('rail.office.download_instead')}
+        </StatusPill>
+      ) : null}
+      {/*
+        WP99：只有浏览器**真的**挡下一条样式 / 图片时才出现（`office/csp-watch.ts`）。
+        WP97 那句固定文案去掉了——它在浏览器档从来不成立，而壳的 CSP 开了那两条
+        之后在壳里也不成立了。
+      */}
+      {cspBlocked ? (
+        <StatusPill tone="neutral" data-testid="rail-office-csp">
+          {t('rail.office.csp_blocked')}
         </StatusPill>
       ) : null}
       {file.isPending ? <Skeleton className="h-32 w-full" /> : null}
