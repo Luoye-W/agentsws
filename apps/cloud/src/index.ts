@@ -41,13 +41,26 @@ export {
   loginMail,
   MailDeliveryError,
   type MailSender,
-  mailSenderFromEnv,
   NODE_ENV,
   SMTP_ENV,
+} from './mail.js'
+export {
+  CLOUDFLARE_MAIL_FROM_ENV,
+  type CloudflareEmailBinding,
+  type CloudflareEmailSenderOptions,
+  type CloudflareMailFromEnvOptions,
+  cloudflareEmailSender,
+  cloudflareMailReady,
+  cloudflareMailSenderFromEnv,
+  type MailFrom,
+  parseMailFrom,
+} from './mail-cloudflare.js'
+export {
+  mailSenderFromEnv,
   type SmtpMailSenderOptions,
   type SmtpTransport,
   smtpMailSender,
-} from './mail.js'
+} from './mail-smtp.js'
 export {
   BENCHMARK_MAX_AGE_MS,
   type Maintenance,
