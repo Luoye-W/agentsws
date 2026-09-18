@@ -11,6 +11,9 @@
       "path": "apps/cloud-admin"
     },
     {
+      "path": "apps/cloud-worker"
+    },
+    {
       "path": "apps/desktop"
     },
     {

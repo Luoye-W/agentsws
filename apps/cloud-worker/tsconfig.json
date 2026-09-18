@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/api" },
+    { "path": "../../packages/cloud-entry" },
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/metering" },
+    { "path": "../cloud" }
+  ]
+}

@@ -49,7 +49,8 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  shortcutName: agentsws
+  shortcutName: Agents 工坊
+  uninstallDisplayName: Agents 工坊
   # WP111：未签名的 NSIS 照样能做应用内自动更新。差分包关掉——每次下整包，
   # 比「更新到一半起不来」强；内测量小，带宽不是问题。
   differentialPackage: false

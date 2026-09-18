@@ -5,11 +5,15 @@
  * （不是 `MemoryWalletStore`——后台的聚合全在 SQL 里做，内存 store 没有 `db`）。
  */
 
+import { syncDbFromBetterSqlite } from '@agentsws/core/sql/sync-db'
 import {
   createSqliteWalletStore,
-  type SqlDriver,
   type SqliteWalletStore,
+  sqlUsageLedger,
+  sqlWalletAdminPort,
+  type UsageLedger,
   Wallet,
+  type WalletAdminPort,
 } from '@agentsws/metering'
 import {
   type AdminStore,
@@ -28,7 +32,15 @@ export interface AdminHarness {
   admin: AdminStore
   wallet: Wallet
   store: SqliteWalletStore
-  meter: SqlDriver
+  /** 读账那一层（Compose 形态下钱包库就是账本）。 */
+  ledger: UsageLedger
+  port: WalletAdminPort
+  /** 直接打库的那一份（测试里要断言行数）。 */
+  meter: {
+    prepare<R = Record<string, unknown>>(
+      sql: string,
+    ): { get(...p: unknown[]): R | undefined; all(...p: unknown[]): R[] }
+  }
   /** 带 cookie 的调用（后台的凭据是 cookie，不是 Bearer）。 */
   call(
     path: string,
@@ -58,6 +70,15 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
     newId: (prefix) => `${prefix}_${String(++seq).padStart(6, '0')}`,
     onEvent: () => {},
   })
+  const sync = syncDbFromBetterSqlite(store.db)
+  const book = sqlUsageLedger(sync)
+  const port = sqlWalletAdminPort({
+    db: sync,
+    wallet,
+    appendEvent: (e) => {
+      store.appendEvent(e)
+    },
+  })
   let current: Harness | undefined
   const routes = adminConsoleRoutes({
     clock,
@@ -69,8 +90,8 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
       if (adminStore === undefined) throw new Error('还没建后台库')
       return adminStore
     },
-    wallet: () => ({ wallet, store }),
-    meter: () => store.db as unknown as SqlDriver,
+    wallet: () => ({ wallet, port }),
+    ledger: () => book,
     baseUrl: BASE_URL,
     // 信推进 harness 那个数组里：后台的登录信与云账号的登录信共用同一个投递口
     mail: async (mail) => {
@@ -120,7 +141,9 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
     admin: adminStore,
     wallet,
     store,
-    meter: store.db as unknown as SqlDriver,
+    ledger: book,
+    port,
+    meter: sync,
     async call(path, init = {}) {
       const res = await fetchOnce(path, init)
       return {

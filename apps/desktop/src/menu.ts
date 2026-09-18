@@ -230,7 +230,7 @@ function statusSuffix(input: TrayModelInput): string {
 
 export function trayTooltip(input: TrayModelInput): string {
   const t = strings(input.language)
-  return `agentsws ${input.version} · ${serverStateLabel(input)}${
+  return `Agents 工坊 ${input.version} · ${serverStateLabel(input)}${
     input.paused ? ` · ${t.paused}` : ''
   }`
 }

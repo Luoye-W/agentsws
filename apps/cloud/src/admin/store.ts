@@ -26,7 +26,7 @@ import {
   ADMIN_SESSION_TTL_MS,
   normalizeEmailAlias,
 } from '@agentsws/contracts'
-import type { Database as Db } from 'better-sqlite3'
+import type { SyncDb, SyncDbValue } from '@agentsws/core/sql/sync-db'
 
 const sha256 = (raw: string): string => createHash('sha256').update(raw).digest('hex')
 
@@ -36,7 +36,12 @@ export function roleOf(raw: string | null | undefined): CloudRole {
 }
 
 export interface AdminStoreOptions {
-  db: Db
+  /**
+   * 一张已经开好的**同步 SQL 口**（WP114 的 `SyncDb`）。
+   * Compose 形态是 `cloud.sqlite`，Workers 形态是 `AccountsDO` 自己的 SQLite——
+   * 这个文件不知道也不需要知道是哪一种。
+   */
+  db: SyncDb
   clock: Clock
   /** id 与秘密的随机源（测试注入定死的那一份）。 */
   randomBytes: (n: number) => Buffer
@@ -64,7 +69,7 @@ interface SessionRow {
 }
 
 export class AdminStore {
-  readonly db: Db
+  readonly db: SyncDb
   readonly #clock: Clock
   readonly #random: (n: number) => Buffer
 
@@ -90,7 +95,7 @@ export class AdminStore {
 
   role(account_id: string): CloudRole {
     const row = this.db
-      .prepare<[string], { role: string | null; deleted_at: string | null }>(
+      .prepare<{ role: string | null; deleted_at: string | null }>(
         'SELECT role, deleted_at FROM cloud_accounts WHERE id = ?',
       )
       .get(account_id)
@@ -107,7 +112,7 @@ export class AdminStore {
   adminCount(): number {
     return (
       this.db
-        .prepare<[], { n: number }>(
+        .prepare<{ n: number }>(
           "SELECT COUNT(*) AS n FROM cloud_accounts WHERE role = 'admin' AND deleted_at IS NULL",
         )
         .get()?.n ?? 0
@@ -118,7 +123,7 @@ export class AdminStore {
   emailVerified(account_id: string): boolean {
     return (
       (this.db
-        .prepare<[string], { n: number }>(
+        .prepare<{ n: number }>(
           'SELECT COUNT(*) AS n FROM cloud_logins WHERE account_id = ? AND used_at IS NOT NULL',
         )
         .get(account_id)?.n ?? 0) > 0
@@ -172,7 +177,7 @@ export class AdminStore {
    */
   session(token: string): (AdminSession & { csrf_sha256: string }) | undefined {
     const row = this.db
-      .prepare<[string], SessionRow>('SELECT * FROM admin_sessions WHERE token_sha256 = ?')
+      .prepare<SessionRow>('SELECT * FROM admin_sessions WHERE token_sha256 = ?')
       .get(sha256(token))
     if (row === undefined || row.revoked_at !== null) return undefined
     const now = this.now()
@@ -235,18 +240,15 @@ export class AdminStore {
   activeBan(account_id: string): AccountBan | undefined {
     const now = this.now()
     const row = this.db
-      .prepare<
-        [string],
-        {
-          account_id: string
-          reason: string
-          banned_by: string
-          banned_at: string
-          expires_at: string | null
-          lifted_at: string | null
-          lifted_by: string | null
-        }
-      >(
+      .prepare<{
+        account_id: string
+        reason: string
+        banned_by: string
+        banned_at: string
+        expires_at: string | null
+        lifted_at: string | null
+        lifted_by: string | null
+      }>(
         `SELECT account_id, reason, banned_by, banned_at, expires_at, lifted_at, lifted_by
            FROM account_bans WHERE account_id = ? AND lifted_at IS NULL
           ORDER BY banned_at DESC LIMIT 1`,
@@ -272,16 +274,13 @@ export class AdminStore {
     const holes = account_ids.map(() => '?').join(', ')
     const now = this.now()
     const rows = this.db
-      .prepare<
-        unknown[],
-        {
-          account_id: string
-          reason: string
-          banned_by: string
-          banned_at: string
-          expires_at: string | null
-        }
-      >(
+      .prepare<{
+        account_id: string
+        reason: string
+        banned_by: string
+        banned_at: string
+        expires_at: string | null
+      }>(
         `SELECT account_id, reason, banned_by, banned_at, expires_at
            FROM account_bans
           WHERE account_id IN (${holes}) AND lifted_at IS NULL
@@ -363,7 +362,7 @@ export class AdminStore {
   emailBanned(email: string): boolean {
     return (
       (this.db
-        .prepare<[string, string], { n: number }>(
+        .prepare<{ n: number }>(
           'SELECT COUNT(*) AS n FROM banned_emails WHERE email_sha256 = ? OR alias_sha256 = ?',
         )
         .get(sha256(email.trim().toLowerCase()), sha256(normalizeEmailAlias(email)))?.n ?? 0) > 0
@@ -389,7 +388,7 @@ export class AdminStore {
     const holes = org_ids.map(() => '?').join(', ')
     return new Set(
       this.db
-        .prepare<unknown[], { id: string }>(
+        .prepare<{ id: string }>(
           `SELECT id FROM cloud_orgs WHERE id IN (${holes}) AND suspended_at IS NOT NULL`,
         )
         .all(...org_ids)
@@ -399,7 +398,7 @@ export class AdminStore {
 
   orgSuspension(org_id: string): { at: string; reason: string } | undefined {
     const row = this.db
-      .prepare<[string], { suspended_at: string | null; suspended_reason: string | null }>(
+      .prepare<{ suspended_at: string | null; suspended_reason: string | null }>(
         'SELECT suspended_at, suspended_reason FROM cloud_orgs WHERE id = ?',
       )
       .get(org_id)
@@ -457,7 +456,7 @@ export class AdminStore {
     target_id?: string | undefined
   }): { rows: AuditEntry[]; total: number } {
     const clauses: string[] = ['1 = 1']
-    const params: unknown[] = []
+    const params: SyncDbValue[] = []
     if (f.action !== undefined && f.action !== '') {
       clauses.push('action = ?')
       params.push(f.action)
@@ -469,24 +468,21 @@ export class AdminStore {
     const where = clauses.join(' AND ')
     const total =
       this.db
-        .prepare<unknown[], { n: number }>(`SELECT COUNT(*) AS n FROM admin_audit WHERE ${where}`)
+        .prepare<{ n: number }>(`SELECT COUNT(*) AS n FROM admin_audit WHERE ${where}`)
         .get(...params)?.n ?? 0
     const rows = this.db
-      .prepare<
-        unknown[],
-        {
-          id: number
-          at: string
-          action: string
-          actor_account_id: string
-          actor_role: string
-          target_kind: string
-          target_id: string
-          outcome: string
-          details: string
-          ip: string
-        }
-      >(`SELECT * FROM admin_audit WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+      .prepare<{
+        id: number
+        at: string
+        action: string
+        actor_account_id: string
+        actor_role: string
+        target_kind: string
+        target_id: string
+        outcome: string
+        details: string
+        ip: string
+      }>(`SELECT * FROM admin_audit WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
       .all(...params, Math.min(f.limit ?? 50, 200), f.offset ?? 0)
     return {
       total,
@@ -540,8 +536,8 @@ export class AdminStore {
          (id, term_id, org_id, idx, starts_at, ends_at, grant_key, credits)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    const run = this.db.transaction((list: Omit<MembershipCycle, 'id'>[]) => {
-      for (const c of list)
+    this.db.transaction(() => {
+      for (const c of cycles)
         insert.run(
           this.#id('msc'),
           c.term_id,
@@ -553,14 +549,11 @@ export class AdminStore {
           c.credits,
         )
     })
-    run(cycles)
   }
 
   term(id: string): MembershipTerm | undefined {
     const row = this.db
-      .prepare<[string], Record<string, string | null>>(
-        'SELECT * FROM membership_terms WHERE id = ?',
-      )
+      .prepare<Record<string, string | null>>('SELECT * FROM membership_terms WHERE id = ?')
       .get(id)
     return row === undefined ? undefined : rowToTerm(row)
   }
@@ -569,7 +562,7 @@ export class AdminStore {
     const where = f.org_id === undefined || f.org_id === '' ? '' : ' WHERE org_id = ?'
     const params = f.org_id === undefined || f.org_id === '' ? [] : [f.org_id]
     return this.db
-      .prepare<unknown[], Record<string, string | null>>(
+      .prepare<Record<string, string | null>>(
         `SELECT * FROM membership_terms${where} ORDER BY starts_at DESC LIMIT ?`,
       )
       .all(...params, Math.min(f.limit ?? 100, 500))
@@ -583,7 +576,7 @@ export class AdminStore {
     const now = this.now()
     return new Set(
       this.db
-        .prepare<unknown[], { org_id: string }>(
+        .prepare<{ org_id: string }>(
           `SELECT DISTINCT org_id FROM membership_terms
             WHERE org_id IN (${holes}) AND status = 'active' AND starts_at <= ? AND ends_at > ?`,
         )
@@ -609,7 +602,7 @@ export class AdminStore {
 
   cyclesOf(term_id: string): MembershipCycle[] {
     return this.db
-      .prepare<[string], Record<string, string | number | null>>(
+      .prepare<Record<string, string | number | null>>(
         'SELECT * FROM membership_cycles WHERE term_id = ? ORDER BY idx',
       )
       .all(term_id)
@@ -619,7 +612,7 @@ export class AdminStore {
   /** 到点该发、还没发的那些 cycle（进程内定时拿它跑）。 */
   dueCycles(now: string, limit = 200): MembershipCycle[] {
     return this.db
-      .prepare<[string, number], Record<string, string | number | null>>(
+      .prepare<Record<string, string | number | null>>(
         `SELECT c.* FROM membership_cycles c
            JOIN membership_terms t ON t.id = c.term_id
           WHERE c.granted_at IS NULL AND c.starts_at <= ? AND t.status = 'active'
@@ -673,13 +666,12 @@ export class AdminStore {
         .prepare('UPDATE cloud_logins SET used_at = COALESCE(used_at, ?) WHERE account_id = ?')
         .run(now, account_id)
     })
-    tx()
   }
 
   /** 这个人**独占**的那些组织（他是 owner 且只有他一个成员）。删号时一并清理。 */
   soleOwnedOrgs(account_id: string): string[] {
     return this.db
-      .prepare<[string, string], { id: string }>(
+      .prepare<{ id: string }>(
         `SELECT o.id FROM cloud_orgs o
           WHERE o.owner_account_id = ?
             AND (SELECT COUNT(*) FROM cloud_org_members m WHERE m.org_id = o.id) <= 1
@@ -704,13 +696,12 @@ export class AdminStore {
   /** 组织那一侧的删除：成员清空、组织改名成墓碑。钱与账在 `anonymizeOrg` 里另走。 */
   tombstoneOrgs(org_ids: string[], tombstone: string): void {
     if (org_ids.length === 0) return
-    const tx = this.db.transaction(() => {
+    this.db.transaction(() => {
       for (const id of org_ids) {
         this.db.prepare('DELETE FROM cloud_org_members WHERE org_id = ?').run(id)
         this.db.prepare('UPDATE cloud_orgs SET name = ? WHERE id = ?').run(tombstone, id)
       }
     })
-    tx()
   }
 }
 

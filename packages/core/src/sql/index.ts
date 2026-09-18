@@ -45,6 +45,19 @@ export {
   type PostgresDriverOptions,
 } from './pg-driver.js'
 export { openSqliteDriver, SqliteDriver, type SqliteDriverOptions } from './sqlite-driver.js'
+export {
+  type BetterSqliteLike,
+  type SyncDb,
+  type SyncDbRunResult,
+  type SyncDbStatement,
+  type SyncDbValue,
+  syncDbFromBetterSqlite,
+} from './sync-db.js'
+export {
+  runSyncDbContract,
+  SYNC_DB_CONTRACT,
+  type SyncDbContractCase,
+} from './sync-db-contract.js'
 
 import { type SqlDialect, type SqlDriver, SqlDriverError } from './driver.js'
 import { openPostgresDriver } from './pg-driver.js'

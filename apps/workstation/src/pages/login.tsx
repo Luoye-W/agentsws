@@ -12,6 +12,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { BrandMark } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -75,6 +76,10 @@ export function LoginPage(): React.ReactNode {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
+      <div className="mb-5 flex items-center justify-center gap-2.5" data-testid="login-brand">
+        <BrandMark size={32} motion="assemble" />
+        <span className="ws-display text-[18px]">{t('app.title')}</span>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">

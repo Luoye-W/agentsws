@@ -85,7 +85,7 @@ const ZH: Strings = {
   exportDiagnostics: '导出诊断包…',
   restoreBackup: '还原上一份备份',
   updateAvailable: '有新版本 {version}，去下载…',
-  updateAvailableTitle: 'agentsws 有新版本',
+  updateAvailableTitle: 'Agents 工坊有新版本',
   upgradeFailedIntact: '升级没成功，你的数据一个字节都没动。',
   upgradeFailedTouched: '升级中断了，数据可能只改了一半——先还原备份，别继续用。',
   upgradeBackupAt: '升级前的备份在：{path}',
@@ -136,7 +136,7 @@ const EN: Strings = {
   exportDiagnostics: 'Export a diagnostics bundle…',
   restoreBackup: 'Restore the last backup',
   updateAvailable: 'Version {version} is out — open the download page…',
-  updateAvailableTitle: 'A new agentsws is available',
+  updateAvailableTitle: 'A new Agents Workshop is available',
   upgradeFailedIntact: 'The upgrade did not go through. Not one byte of your data was touched.',
   upgradeFailedTouched:
     'The upgrade stopped halfway and your data may be half-changed. Restore the backup before using it again.',

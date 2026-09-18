@@ -14,8 +14,6 @@ export type {
   LossRow,
   LossSummary,
   OrgUsage,
-  SqlDriver,
-  SqlStatement,
   Totals,
   TrendPoint,
   Window as AdminWindow,
@@ -83,8 +81,29 @@ export {
   roundCredits,
   TOKEN_CAPABILITIES,
 } from './pricing.js'
+export type { EventRow, SqlWalletStore, SqlWalletStoreOptions } from './sql-store.js'
+export {
+  createSqlWalletStore,
+  toEvent,
+  WALLET_MIGRATIONS,
+  WALLET_MIGRATIONS_TABLE,
+} from './sql-store.js'
 export type { SqliteWalletStore, SqliteWalletStoreOptions } from './sqlite-store.js'
 export { createSqliteWalletStore } from './sqlite-store.js'
+export type {
+  LedgerWriter,
+  SqlWalletAdminPortOptions,
+  UsageLedger,
+  WalletAdminPort,
+} from './usage-ledger.js'
+export {
+  eventIdOf,
+  LEDGER_MIGRATIONS,
+  LEDGER_MIGRATIONS_TABLE,
+  sqlLedgerWriter,
+  sqlUsageLedger,
+  sqlWalletAdminPort,
+} from './usage-ledger.js'
 export type {
   SettleMeta,
   UsageFilter,

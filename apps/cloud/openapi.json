@@ -3701,6 +3701,11 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "org_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
                   "reason": {
                     "type": "string",
                     "minLength": 2,

@@ -26,7 +26,7 @@ const consoleRoutes = () =>
     accounts: never,
     admin: never,
     wallet: () => undefined,
-    meter: () => undefined,
+    ledger: () => undefined,
     baseUrl: 'https://cloud.agentsws.com',
     mail: async () => {},
     bootstrapToken: 'openapi-placeholder-token-not-a-secret',

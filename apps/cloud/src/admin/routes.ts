@@ -35,31 +35,16 @@ import {
   type MembershipTerm,
 } from '@agentsws/contracts'
 import {
-  anonymizeOrg,
-  balancesByOrgs,
-  breakdown,
   COST_TABLE,
-  chargeHealth,
   costTableNeedsReview,
-  dailyTrend,
-  distinctValues,
-  expiringSoon,
-  grantLedger,
+  type LedgerFilter,
   type LedgerRow,
-  ledger,
-  ledgerBatches,
-  lossAlert,
-  lotsOfOrg,
-  outstandingCredits,
   planCycles,
   plans,
-  revokeRemaining,
-  type SqlDriver,
   termEndsAt,
-  totals,
-  usageByOrgs,
+  type UsageLedger,
   type Wallet,
-  type WalletStore,
+  type WalletAdminPort,
 } from '@agentsws/metering'
 import type { Context } from 'hono'
 import { z } from 'zod'
@@ -93,9 +78,16 @@ export const tombstoneEmail = (account_id: string): string =>
 /** 匿名化之后计量流水挂到哪个 id 上。 */
 export const tombstoneOrg = (org_id: string): string => `org_deleted_${org_id.slice(-8)}`
 
+/**
+ * 钱那一侧的句柄。
+ *
+ * `wallet` 是 Compose 形态下那个进程内的钱包（会员续发直接用它）；
+ * `port` 是**两个形态共用**的那一层（Workers 形态下它是按组织打 `WalletDO`）。
+ * 两个都可能没有：没装钱包的节点，那几条路由回 503，不假装。
+ */
 export interface AdminConsoleWallet {
   wallet: Wallet
-  store: WalletStore
+  port: WalletAdminPort
 }
 
 export interface AdminConsoleDeps {
@@ -104,10 +96,13 @@ export interface AdminConsoleDeps {
   accounts: () => CloudStore
   /** 后台库（同一个连接的另一层）。 */
   admin: () => AdminStore
-  /** 钱包与计量。没装就回 `undefined`——那几条路由回 503，不假装。 */
+  /** 钱那一侧。没装就回 `undefined`——那几条路由回 503，不假装。 */
   wallet: () => AdminConsoleWallet | undefined
-  /** 计量库的同步驱动（聚合全在 SQL 里做）。内存钱包档下是 `undefined`。 */
-  meter: () => SqlDriver | undefined
+  /**
+   * 读账那一侧（65 §9）。Compose 形态直接查钱包库，Workers 形态查 `LedgerDO`
+   * 那个只读副本——**同一个口，两份实现**，后台这一层不知道自己在哪个形态里。
+   */
+  ledger: () => UsageLedger | undefined
   /** 云的对外地址（CSRF 的 Origin 与 magic link 的落点都用它）。 */
   baseUrl: string
   mail: MailSender
@@ -169,6 +164,14 @@ const GrantBody = z.object({
 })
 const RevokeGrantBody = z.object({
   lot_id: z.string().min(1).max(200),
+  /**
+   * 这一笔在哪个组织名下。
+   *
+   * Compose 形态下**可以不给**（一张表，按 lot_id 就找得到）；Workers 形态下
+   * 钱按组织分在不同的对象里，不给就不知道该敲哪一扇门。前端从发放流水那一行
+   * 里带过来，所以这不是负担。
+   */
+  org_id: z.string().min(1).max(200).optional(),
   reason: z.string().min(2).max(500),
 })
 const MembershipBody = z.object({
@@ -206,11 +209,11 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
     return handles
   }
 
-  const meterOr503 = (): SqlDriver => {
-    const meter = deps.meter()
-    if (meter === undefined)
-      throw new ApiError('provider_unavailable', '这个节点的计量库不是 sqlite，看不了账')
-    return meter
+  const ledgerOr503 = (): UsageLedger => {
+    const found = deps.ledger()
+    if (found === undefined)
+      throw new ApiError('provider_unavailable', '这个节点没接账本，看不了账')
+    return found
   }
 
   const routes: CloudRoute[] = []
@@ -398,7 +401,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       async (c) => {
         staff(c)
         const admin = deps.admin()
-        const meter = meterOr503()
+        const book = ledgerOr503()
         const wanted = intQuery(c, 'window', 30)
         const days = ADMIN_TREND_WINDOWS.includes(wanted) ? wanted : 30
         const w = windowOf(deps.clock, days)
@@ -406,10 +409,10 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         const w7 = windowOf(deps.clock, 7)
         const w30 = windowOf(deps.clock, 30)
 
-        const t = totals(meter, w)
-        const t7 = totals(meter, w7)
-        const t30 = totals(meter, w30)
-        const outstanding = outstandingCredits(meter, now)
+        const t = await book.totals(w)
+        const t7 = await book.totals(w7)
+        const t30 = await book.totals(w30)
+        const outstanding = await book.outstanding(now)
         const accounts7 = accountCount(admin, w7.from)
         const accounts30 = accountCount(admin, w30.from)
 
@@ -438,7 +441,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           { key: 'outstanding_purchased', value: round2(outstanding.purchased) },
         ]
 
-        const topOrgs = breakdown(meter, 'org', w30, 10)
+        const topOrgs = await book.breakdown('org', w30, 10)
         const names = orgNames(
           admin,
           topOrgs.map((r) => r.key),
@@ -449,13 +452,13 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           from: w.from,
           to: w.to,
           kpis,
-          trend: dailyTrend(meter, w),
-          by_capability: breakdown(meter, 'capability', w),
-          by_provider: breakdown(meter, 'provider', w),
-          by_model: breakdown(meter, 'model', w, 20),
+          trend: await book.dailyTrend(w),
+          by_capability: await book.breakdown('capability', w),
+          by_provider: await book.breakdown('provider', w),
+          by_model: await book.breakdown('model', w, 20),
           top_orgs: topOrgs.map((r) => ({ ...r, org_name: names.get(r.key) ?? null })),
-          loss: lossAlert(meter, w),
-          charge_health: chargeHealth(meter, w),
+          loss: await book.lossAlert(w),
+          charge_health: await book.chargeHealth(w),
           cost_table: {
             as_of: COST_TABLE.as_of,
             last_verified_at: COST_TABLE.last_verified_at,
@@ -485,7 +488,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         const offset = Math.max(intQuery(c, 'offset', 0), 0)
         const role = strQuery(c, 'role')
         const sort = strQuery(c, 'sort')
-        const page = listAccounts(deps.admin(), deps.meter(), {
+        const page = await listAccounts(deps.admin(), deps.ledger(), {
           q: strQuery(c, 'q'),
           ...(role === 'user' || role === 'support' || role === 'admin' ? { role } : {}),
           ...(strQuery(c, 'banned') === 'true' ? { banned: true } : {}),
@@ -517,15 +520,19 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         const account = accounts.account(id)
         if (account === undefined) throw new ApiError('not_found', '没有这个账号')
         const org = accounts.primaryOrg(id)
-        const meter = deps.meter()
-        const now = deps.clock.now()
+        const book = deps.ledger()
+        const wallets = deps.wallet()
         const w = windowOf(deps.clock, 30)
-        const balances =
-          meter === undefined || org === undefined
-            ? new Map()
-            : balancesByOrgs(meter, [org.id], now)
+        /*
+         * 抽屉里的余额问的是**真值**（按组织去钱那一侧要），不是列表页那个
+         * 副本算出来的近似值——点进来的人多半是要照着这个数做决定。
+         */
+        const balance =
+          org === undefined || wallets === undefined
+            ? { granted: 0, purchased: 0 }
+            : await wallets.port.balance(org.id)
         const usage =
-          meter === undefined || org === undefined ? new Map() : usageByOrgs(meter, [org.id], w)
+          book === undefined || org === undefined ? new Map() : await book.usageByOrgs([org.id], w)
         return cloudOk(c, {
           account: {
             id: account.id,
@@ -543,7 +550,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
                   members: org.members.length,
                   suspended: admin.orgSuspension(org.id) !== undefined,
                 },
-          balance: balances.get(org?.id ?? '') ?? { granted: 0, purchased: 0 },
+          balance,
           usage_30d: usage.get(org?.id ?? '') ?? { calls: 0, credits: 0, cost_micros: 0 },
           ban: admin.activeBan(id) ?? null,
           memberships: org === undefined ? [] : admin.terms({ org_id: org.id, limit: 20 }),
@@ -790,10 +797,10 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
          * 钱与计量**保留并匿名化**（65 §5）：删掉的后果是历史收入随着删号一起
          * 缩水，而那一块钱是真收过的。所以只把 org_id 换成墓碑。
          */
-        const meter = deps.meter()
+        const wallets = deps.wallet()
         let anonymized = 0
-        if (meter !== undefined)
-          for (const org of orgs) anonymized += anonymizeOrg(meter, org, tombstoneOrg(org))
+        if (wallets !== undefined)
+          for (const org of orgs) anonymized += await wallets.port.anonymize(org, tombstoneOrg(org))
         admin.tombstoneOrgs(orgs, '（已删除）')
         admin.tombstoneAccount(id, tombstoneEmail(id))
 
@@ -838,7 +845,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         const limit = Math.min(intQuery(c, 'limit', 50), 200)
         const offset = Math.max(intQuery(c, 'offset', 0), 0)
         const sort = strQuery(c, 'sort')
-        const page = listOrgs(deps.admin(), deps.meter(), {
+        const page = await listOrgs(deps.admin(), deps.ledger(), {
           q: strQuery(c, 'q'),
           ...(strQuery(c, 'suspended') === 'true' ? { suspended: true } : {}),
           ...(sort === 'name' || sort === 'created_at' ? { sort } : {}),
@@ -867,11 +874,14 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         const id = cloudParam(c, 'id')
         const org = deps.accounts().org(id)
         if (org === undefined) throw new ApiError('not_found', '没有这个组织')
-        const meter = deps.meter()
+        const book = deps.ledger()
+        const wallets = deps.wallet()
         const w = windowOf(deps.clock, 30)
-        const usage = meter === undefined ? new Map() : usageByOrgs(meter, [id], w)
-        const balances =
-          meter === undefined ? new Map() : balancesByOrgs(meter, [id], deps.clock.now())
+        const usage = book === undefined ? new Map() : await book.usageByOrgs([id], w)
+        // 抽屉里的 lots 与余额都是**真值**（按组织去钱那一侧要）
+        const lots = wallets === undefined ? [] : await wallets.port.lots(id)
+        const balance =
+          wallets === undefined ? { granted: 0, purchased: 0 } : await wallets.port.balance(id)
         return cloudOk(c, {
           org: {
             id: org.id,
@@ -882,8 +892,8 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           },
           members: membersOfOrg(admin, id),
           links: linksOfOrg(admin, id),
-          lots: meter === undefined ? [] : lotsOfOrg(meter, id),
-          balance: balances.get(id) ?? { granted: 0, purchased: 0 },
+          lots,
+          balance,
           usage_30d: usage.get(id) ?? { calls: 0, credits: 0, cost_micros: 0 },
           memberships: admin.terms({ org_id: id, limit: 20 }),
         })
@@ -1019,11 +1029,11 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       },
       async (c) => {
         staff(c)
-        const meter = meterOr503()
+        const book = ledgerOr503()
         const limit = Math.min(intQuery(c, 'limit', 50), 500)
         const offset = Math.max(intQuery(c, 'offset', 0), 0)
         const f = ledgerFilterOf(c)
-        const page = ledger(meter, { ...f, limit, offset })
+        const page = await book.page({ ...f, limit, offset })
         const names = orgNames(deps.admin(), [...new Set(page.rows.map((r) => r.org_id))])
         const w = { from: f.from ?? windowOf(deps.clock, 30).from, to: f.to ?? deps.clock.now() }
         return cloudOk(c, {
@@ -1031,7 +1041,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           total: page.total,
           limit,
           offset,
-          loss: lossAlert(meter, w),
+          loss: await book.lossAlert(w),
         })
       },
     ),
@@ -1048,11 +1058,11 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       },
       async (c) => {
         staff(c)
-        const meter = meterOr503()
+        const book = ledgerOr503()
         return cloudOk(c, {
-          capabilities: distinctValues(meter, 'capability'),
-          providers: distinctValues(meter, 'provider'),
-          models: distinctValues(meter, 'model'),
+          capabilities: await book.distinctValues('capability'),
+          providers: await book.distinctValues('provider'),
+          models: await book.distinctValues('model'),
         })
       },
     ),
@@ -1069,7 +1079,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       },
       async (c) => {
         const principal = staff(c)
-        const meter = meterOr503()
+        const book = ledgerOr503()
         const admin = deps.admin()
         const f = ledgerFilterOf(c)
         admin.audit({
@@ -1089,12 +1099,11 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
          * 流式：一批五百行推一段，不把十万行同时放进堆里。两个旧后台都是
          * 一次 `SELECT *` 再 `map`，那正是它们在数据长起来之后变慢的地方。
          */
-        const batches = ledgerBatches(meter, f)
         const stream = new ReadableStream<Uint8Array>({
-          start(controller) {
+          async start(controller) {
             const encoder = new TextEncoder()
             controller.enqueue(encoder.encode(header))
-            for (const rows of batches)
+            for await (const rows of ledgerPages(book, f))
               controller.enqueue(encoder.encode(rows.map(csvLine).join('')))
             controller.close()
           },
@@ -1126,13 +1135,13 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       },
       async (c) => {
         staff(c)
-        const meter = meterOr503()
+        const book = ledgerOr503()
         const admin = deps.admin()
         const limit = Math.min(intQuery(c, 'limit', 50), 200)
         const offset = Math.max(intQuery(c, 'offset', 0), 0)
         const now = deps.clock.now()
         const soon = new Date(Date.parse(now) + 14 * DAY_MS).toISOString()
-        const grants = grantLedger(meter, { org_id: strQuery(c, 'org_id'), limit, offset })
+        const grants = await book.grants({ org_id: strQuery(c, 'org_id'), limit, offset })
         const orgIds = new Set<string>((grants.rows as { org_id: string }[]).map((r) => r.org_id))
         const terms = admin.terms({ org_id: strQuery(c, 'org_id'), limit: 100 })
         for (const t of terms) orgIds.add(t.org_id)
@@ -1153,7 +1162,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
             cycles: admin.cyclesOf(t.id).length,
             granted_cycles: admin.cyclesOf(t.id).filter((x) => x.granted_at !== undefined).length,
           })),
-          expiring: expiringSoon(meter, now, soon),
+          expiring: await book.expiring(now, soon),
           plans: plans(),
         })
       },
@@ -1173,7 +1182,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       async (c) => {
         const principal = writer(c)
         const admin = deps.admin()
-        const { wallet } = walletOr503()
+        const { port } = walletOr503()
         const input = await cloudBody(c, GrantBody)
         const now = deps.clock.now()
         const days = input.expires_in_days ?? 90
@@ -1224,14 +1233,14 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
              * 里面**没有时间戳**，只有日期——KefuAgent 就是在这里栽的。
              */
             const source_ref = `admgrant:${principal.session.account_id}:${t.org_id}:${now.slice(0, 10)}:${hash8(input.reason)}`
-            const lot = wallet.topup({
+            const lot = await port.grant({
               org_id: t.org_id,
               credits: input.credits,
               kind: input.kind,
               ...(expires_at === undefined ? {} : { expires_at }),
               source_ref,
             })
-            granted.push({ org_id: t.org_id, lot_id: lot.id, credits: input.credits })
+            granted.push({ org_id: t.org_id, lot_id: lot.lot_id, credits: input.credits })
           } catch (err) {
             skipped.push({ label: t.label, why: err instanceof Error ? err.message : '发不出去' })
           }
@@ -1265,8 +1274,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       async (c) => {
         const principal = writer(c)
         const admin = deps.admin()
-        const meter = meterOr503()
-        const { store } = walletOr503()
+        const { port } = walletOr503()
         const input = await cloudBody(c, RevokeGrantBody)
         admin.audit({
           action: 'credits.revoke',
@@ -1278,28 +1286,21 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           details: { reason: input.reason },
           ip: principal.ip,
         })
-        const out = revokeRemaining(meter, input.lot_id)
+        /*
+         * 撤回与那条**负向流水**一起做，在钱那一侧（Workers 形态下它们必须
+         * 落在同一个 `WalletDO` 里，否则两件事会分家）。能力名 `admin.grant`，
+         * 与 `admin.topup` 一样被排除在"用量"之外（见 `admin-queries.ts` 的
+         * `NON_USAGE_CAPABILITIES`），所以不会把总用量拉低。
+         */
+        const out = await port.revoke({
+          org_id: input.org_id ?? '',
+          lot_id: input.lot_id,
+          reason: input.reason,
+          actor_account_id: principal.session.account_id,
+          at: deps.clock.now(),
+        })
         if (out === undefined)
           throw new ApiError('not_found', '没有这一笔 granted 积分（充值买的不能撤）')
-        /*
-         * 记一条**负向**的流水：钱包里没有负的 lot，所以撤回这件事只能靠计量
-         * 事件留痕。能力名 `admin.grant`，积分记成负数——它与 `admin.topup` 一样
-         * 被排除在"用量"之外（见 `admin-queries.ts` 的 NON_USAGE_CAPABILITIES），
-         * 所以不会把总用量拉低。
-         */
-        store.appendEvent({
-          capability: 'admin.grant',
-          unit: 'credit',
-          quantity: -out.revoked,
-          credits: 0,
-          at: deps.clock.now(),
-          org_id: orgOfLot(meter, input.lot_id) ?? 'unknown',
-          workspace_id: 'admin',
-          request_id: `revoke_${input.lot_id}`,
-          charge_status: 'skipped',
-          provider: 'internal',
-          account_id: principal.session.account_id,
-        })
         admin.audit({
           action: 'credits.revoke',
           actor_account_id: principal.session.account_id,
@@ -1472,23 +1473,13 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
       async (c) => {
         staff(c)
         const admin = deps.admin()
-        const meter = deps.meter()
+        const book = deps.ledger()
         const now = deps.clock.now()
         const modules = deps.health?.().modules ?? {}
-        const lastEvent =
-          meter === undefined
-            ? undefined
-            : ((
-                meter.prepare('SELECT MAX(at) AS at FROM metering_events').get() as
-                  | { at: string | null }
-                  | undefined
-              )?.at ?? undefined)
+        const lastEvent = book === undefined ? undefined : await book.lastEventAt()
         const lastAudit =
-          (
-            admin.db
-              .prepare<[], { at: string | null }>('SELECT MAX(at) AS at FROM admin_audit')
-              .get() as { at: string | null } | undefined
-          )?.at ?? undefined
+          admin.db.prepare<{ at: string | null }>('SELECT MAX(at) AS at FROM admin_audit').get()
+            ?.at ?? undefined
         const staleMs =
           lastEvent === undefined
             ? Number.POSITIVE_INFINITY
@@ -1515,7 +1506,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
             label_zh: '计量管线',
             measures_zh:
               '测量的是「最后一条计量事件是什么时候写进去的」。超过 24 小时没有新行，要么真没人用，要么结算那一步在某个地方悄悄失败了——这两件事看起来一模一样，所以它只是黄灯，不是红灯。',
-            status: meter === undefined ? 'unknown' : staleMs < 24 * 60 * 60 * 1000 ? 'ok' : 'warn',
+            status: book === undefined ? 'unknown' : staleMs < 24 * 60 * 60 * 1000 ? 'ok' : 'warn',
             ...(lastEvent === undefined ? {} : { at: lastEvent }),
           },
           {
@@ -1593,11 +1584,25 @@ function hash8(raw: string): string {
   return h.toString(16).padStart(8, '0')
 }
 
-function orgOfLot(meter: SqlDriver, lot_id: string): string | undefined {
-  const row = meter.prepare('SELECT org_id FROM wallet_lots WHERE id = ?').get(lot_id) as
-    | { org_id: string }
-    | undefined
-  return row?.org_id
+/**
+ * CSV 导出的分页游标：**一页一页取**，不一次全要。
+ *
+ * 导出十万行不该让这个进程的堆里同时躺着十万个对象——上游那两个后台都是
+ * 一次 `SELECT *` 然后 `map`，那正是它们在数据长起来之后变慢的地方。
+ */
+async function* ledgerPages(
+  book: UsageLedger,
+  filter: LedgerFilter,
+  batchSize = 500,
+): AsyncGenerator<LedgerRow[]> {
+  let offset = filter.offset ?? 0
+  for (;;) {
+    const { rows } = await book.page({ ...filter, limit: batchSize, offset })
+    if (rows.length === 0) return
+    yield rows
+    if (rows.length < batchSize) return
+    offset += rows.length
+  }
 }
 
 /** CSV 一行。**每个字段都引起来并转义**——模型名里真的会有逗号。 */

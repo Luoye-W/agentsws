@@ -25,14 +25,18 @@ export {
 } from './admin/membership.js'
 export {
   ADMIN_DIST_ENV,
-  ADMIN_TITLE_ZH,
-  adminCallbackPage,
-  adminLoginPage,
   createAdminStore,
   type MountAdminPagesOptions,
   type MountedAdminPages,
   mountAdminPages,
 } from './admin/mount.js'
+export {
+  ADMIN_TITLE_ZH,
+  type AdminWebDeps,
+  adminCallbackPage,
+  adminLoginPage,
+  mountAdminWebRoutes,
+} from './admin/pages.js'
 export {
   ACCOUNT_SORTS,
   type AccountFilter,
@@ -102,13 +106,26 @@ export {
   loginMail,
   MailDeliveryError,
   type MailSender,
-  mailSenderFromEnv,
   NODE_ENV,
   SMTP_ENV,
+} from './mail.js'
+export {
+  CLOUDFLARE_MAIL_FROM_ENV,
+  type CloudflareEmailBinding,
+  type CloudflareEmailSenderOptions,
+  type CloudflareMailFromEnvOptions,
+  cloudflareEmailSender,
+  cloudflareMailReady,
+  cloudflareMailSenderFromEnv,
+  type MailFrom,
+  parseMailFrom,
+} from './mail-cloudflare.js'
+export {
+  mailSenderFromEnv,
   type SmtpMailSenderOptions,
   type SmtpTransport,
   smtpMailSender,
-} from './mail.js'
+} from './mail-smtp.js'
 export {
   BENCHMARK_MAX_AGE_MS,
   type Maintenance,
@@ -123,8 +140,11 @@ export {
   ADMIN_TOKEN_ENV,
   ADMIN_TOKEN_MIN_BYTES,
   ADMIN_TOPUP_CAPABILITY,
+  type AdminAccountsLookup,
+  type AdminExportDeps,
   type AdminRouteDeps,
   type AdminWalletHandles,
+  adminExportRoutes,
   adminRoutes,
   adminRoutesFromEnv,
   DEFAULT_GRANT_DAYS,
@@ -164,30 +184,49 @@ export {
   CLOUD_LOGIN_TTL_MS,
   CLOUD_SESSION_TTL_MS,
   type CloudSessionRow,
+  type CloudSnapshot,
   CloudStore,
-  type CloudStoreOptions,
+  type CloudStoreDeps,
   type CreateLinkInput,
-  cloudDbPath,
-  createCloudStore,
+  createCloudStoreOn,
   hashToken,
   rowToLink,
   type VerifiedLogin,
 } from './store.js'
+export {
+  type CloudStoreOptions,
+  cloudDbPath,
+  createCloudStore,
+  openCloudDb,
+} from './store-node.js'
 export { sqliteTokenVerifier } from './verifier.js'
 export { linkView, type WorkspaceLinkView } from './views.js'
 
 import { pathToFileURL } from 'node:url'
+import type { CloudRoute } from '@agentsws/api'
 import { type CloudTokenVerifier, cloudBaseUrl } from '@agentsws/contracts'
-import type { WalletStore } from '@agentsws/metering'
+import { type BetterSqliteLike, syncDbFromBetterSqlite } from '@agentsws/core/sql/sync-db'
+import {
+  sqlUsageLedger,
+  sqlWalletAdminPort,
+  type UsageLedger,
+  type WalletStore,
+} from '@agentsws/metering'
 import { runDueGrants } from './admin/membership.js'
 import { createAdminStore, mountAdminPages } from './admin/mount.js'
-import { adminConsoleRoutes } from './admin/routes.js'
+import { type AdminConsoleWallet, adminConsoleRoutes } from './admin/routes.js'
 import type { AdminStore } from './admin/store.js'
 import { DEFAULT_NEWAPI_BASE_URL, ENTRY_ENV, mountEntry } from './entry.js'
 import { mountKolPublic } from './kol-public.js'
-import { mailSenderFromEnv, SMTP_ENV } from './mail.js'
+import { SMTP_ENV } from './mail.js'
+import { mailSenderFromEnv } from './mail-smtp.js'
 import { startMaintenance } from './maintenance.js'
-import { ADMIN_TOKEN_ENV, type AdminWalletHandles, adminRoutesFromEnv } from './routes/admin.js'
+import {
+  ADMIN_TOKEN_ENV,
+  type AdminWalletHandles,
+  adminExportRoutes,
+  adminRoutesFromEnv,
+} from './routes/admin.js'
 import { CLOUD_DATA_DIR_ENV, createCloudServer } from './server.js'
 import { mountStandby } from './standby.js'
 
@@ -243,28 +282,45 @@ export async function main(): Promise<void> {
     wallet: () => walletHandles,
   })
   /*
+   * WP114 的跨平台退路：同一把 admin 钥匙再开一条只读的导出口。
+   * 没配钥匙就一条都不挂（`adminRoutesFromEnv` 回 undefined 时这里也不拼）。
+   */
+  const adminToken = env[ADMIN_TOKEN_ENV]?.trim()
+  const adminExport =
+    admin === undefined || adminToken === undefined || adminToken === ''
+      ? undefined
+      : adminExportRoutes({
+          clock,
+          token: adminToken,
+          accounts: () => server.store,
+          // Compose 形态下钱包就在手边，同步取一把包成 Promise
+          walletLots: async (org_id) => walletHandles?.store.lots(org_id) ?? [],
+        })
+  /*
    * WP115 的后台也是一个路由包，也要晚绑：它要账号库（还没建）、后台库（要账号库
-   * 的连接）与钱包（要 `mountEntry`）。三样都用取值函数闭包进去。
+   * 那张同步 SQL 口）与计量库（要 `mountEntry`）。三样都用取值函数闭包进去。
    */
   let adminStore: AdminStore | undefined
-  let meterDb: { prepare(sql: string): never } | undefined
-  const console_ = adminConsoleRoutes({
+  let ledger: UsageLedger | undefined
+  let consoleWallet: AdminConsoleWallet | undefined
+  const consoleRoutes = adminConsoleRoutes({
     clock,
     accounts: () => server.store,
     admin: () => {
       if (adminStore === undefined) throw new Error('后台库还没建起来')
       return adminStore
     },
-    wallet: () => walletHandles,
-    meter: () => meterDb as never,
+    wallet: () => consoleWallet,
+    ledger: () => ledger,
     baseUrl: cloudBaseUrl(env),
     mail: mailSenderFromEnv(env),
-    ...(env[ADMIN_TOKEN_ENV] === undefined ? {} : { bootstrapToken: env[ADMIN_TOKEN_ENV] }),
+    ...(adminToken === undefined || adminToken === '' ? {} : { bootstrapToken: adminToken }),
     health: () => server.health,
   })
-  const server = createCloudServer({
-    modules: admin === undefined ? [console_] : [admin, console_],
-  })
+  const modules = [admin, adminExport, consoleRoutes].filter(
+    (m): m is CloudRoute[] => m !== undefined,
+  )
+  const server = createCloudServer(modules.length === 0 ? {} : { modules })
   adminStore = createAdminStore(server, clock)
   const dataDir = env[CLOUD_DATA_DIR_ENV]
   /*
@@ -294,14 +350,32 @@ export async function main(): Promise<void> {
   })
   walletHandles = { wallet: entry.wallet, store: entry.store }
   /*
-   * 后台的聚合直接打钱包那张 sqlite。内存档没有 `db`，那时后台的看板页回 503
-   * ——比画一堆 0 诚实（那几个 0 看起来像"没人用"，而不是"这里看不到"）。
+   * WP115：后台读账的那一层。**Compose 形态下钱包库就是账本**——一张
+   * `wallet.sqlite` 装着全部组织，所以 `sqlUsageLedger` 直接查它。
+   * （Workers 形态下这一层是 `LedgerDO`，见 `apps/cloud-worker/src/ledger-do.ts`。）
+   *
+   * 内存钱包档（测试、没给 dataDir）没有 `db`，那时后台的看板页回 503——
+   * 比画一堆 0 诚实（那几个 0 看起来像"没人用"，而不是"这里看不到"）。
    */
-  meterDb = (entry.store as { db?: unknown }).db as typeof meterDb
+  const walletDb = (entry.store as { db?: BetterSqliteLike }).db
+  if (walletDb !== undefined) {
+    const sync = syncDbFromBetterSqlite(walletDb)
+    ledger = sqlUsageLedger(sync)
+    consoleWallet = {
+      wallet: entry.wallet,
+      port: sqlWalletAdminPort({
+        db: sync,
+        wallet: entry.wallet,
+        appendEvent: (e) => {
+          entry.store.appendEvent(e)
+        },
+      }),
+    }
+  }
   mountAdminPages(server, {
     admin: () => adminStore as AdminStore,
     clock,
-    baseUrl: server.baseUrl,
+    baseUrl: cloudBaseUrl(env),
     env,
   })
 
