@@ -2,7 +2,14 @@
  * 15 §7 变更账本 API 的读侧 + withdraw / reverse + guardrails/evaluate。
  * `stage` / `approve` / `apply` 只有执行器与审批总线能发起，不在网关上暴露。
  */
-import type { ChangeKind, ChangeStatus, ObjectRef, StagedChange } from '@agentsws/contracts'
+import type {
+  ChangeFilesView,
+  ChangeKind,
+  ChangeStatus,
+  MaybePromise,
+  ObjectRef,
+  StagedChange,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, listParam, ok, param, principalOf } from '../helpers.js'
@@ -15,6 +22,20 @@ import type { GatewayDeps } from '../types.js'
  */
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
 const WRITE = { domain: 'approval', op: 'approve', range: 'own', sensitivity: 'internal' } as const
+
+/**
+ * WP95（`docs/upstream/sidebar-compare.md` #11）：一条变更改了哪几个文件。
+ *
+ * **只读，而且是可选面**：没装配（没有建站职责的发行版、没有工作副本的机器）时
+ * 那条路由回 `not_implemented`——不是 404，路由在那儿，只是这台机器上没有副本目录。
+ * 权限与变更账本的读同一档（`approval.read`）：看得见这条变更的人才看得见它改了什么。
+ */
+export interface ChangeFilesPort {
+  files(
+    actor: { workspace_id: string; person_id: string },
+    change: StagedChange,
+  ): MaybePromise<ChangeFilesView>
+}
 
 const ObjectRefSchema = z.object({ type: z.string().min(1), id: z.string().min(1) })
 
@@ -101,6 +122,33 @@ export function changeRoutes(): Route[] {
         const p = principalOf(c)
         assignmentOf(c)
         return ok(c, await mustGet(deps, param(c, 'id'), p.workspace_id))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/changes/:id/files',
+        operationId: 'getChangeFiles',
+        summary:
+          'WP95：这条变更改了哪几个文件、每个文件改了哪几行（主题工作副本目录的 `git diff`，只读）',
+        tag: 'change',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: '变更 id' }],
+        returns: 'ChangeFilesView',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        const port = deps.changeFiles
+        if (port === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配变更文件对比（工作副本目录）')
+        const change = await mustGet(deps, param(c, 'id'), p.workspace_id)
+        return ok(
+          c,
+          await port.files({ workspace_id: p.workspace_id, person_id: p.person_id }, change),
+        )
       },
     ),
     route(

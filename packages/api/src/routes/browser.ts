@@ -23,10 +23,11 @@ import type {
   BrowserSettingsView,
   BrowserSkillStatus,
   MaybePromise,
+  RunBrowserView,
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { body, ok, principalOf } from '../helpers.js'
+import { body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
@@ -72,6 +73,16 @@ export interface BrowserPort {
   browserSkillStatus?(actor: BrowserActor): MaybePromise<BrowserSkillStatus>
   /** WP92：按钉死的版本 + sha256 装 `bsk`，装完顺便把状态端回去。 */
   installBrowserSkill?(actor: BrowserActor): MaybePromise<BrowserSkillStatus>
+  /**
+   * WP95（36 §11，`docs/upstream/sidebar-compare.md` #12 / #15）：
+   * **一次运行的浏览器侧汇总**，给第三栏「运行中的浏览器」面板。
+   *
+   * 它与上面那几条不是一回事：上面是"这台机器上的浏览器怎么配"（设置），
+   * 这一条是"这次运行的浏览器在干什么"（运行）。放在同一个端口上只因为
+   * 它们对着的是同一样东西，读的却是事件日志——所以它是**只读投影**，
+   * 服务端不为它多存一张表。没装配时那条路由回 `not_implemented`。
+   */
+  runBrowser?(actor: BrowserActor, run_id: string): MaybePromise<RunBrowserView>
 }
 
 const SettingsBody = z.object({
@@ -97,6 +108,29 @@ function actorOf(c: Parameters<typeof principalOf>[0]): BrowserActor {
 
 export function browserRoutes(): Route[] {
   return [
+    route(
+      {
+        method: 'get',
+        path: '/v1/runs/:id/browser',
+        operationId: 'getRunBrowser',
+        summary:
+          'WP95：这次运行的浏览器在干什么——哪种执行器、当前域、最近一次导航 / 拒绝、等不等人接管（事件日志的只读投影）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        // 每一格都是从事件日志里算出来的，所以鉴权跟着日志走，不跟着"浏览器设置"走
+        // （设置是所有者的事，这一条是干活的人的事）
+        authz: { domain: 'event_log', op: 'read', range: 'own', sensitivity: 'internal' },
+        params: [{ name: 'id', in: 'path', required: true, description: 'run_id' }],
+        returns: 'RunBrowserView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.runBrowser === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配运行浏览器汇总')
+        return ok(c, await port.runBrowser(actorOf(c), param(c, 'id')))
+      },
+    ),
     route(
       {
         method: 'get',

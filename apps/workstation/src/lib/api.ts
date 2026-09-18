@@ -4158,3 +4158,48 @@ export const installBrowserSkill = (assignment?: string): Promise<BrowserSkillSt
     method: 'POST',
     ...withAssignment(assignment),
   })
+
+// ── WP95（36 §11）：第三栏两个新面板的取数口 ─────────────────────────
+//
+// 两条都是**只读投影**：
+// ① 运行中的浏览器（`sidebar-compare` #12 / #15）——事件日志折出来的那五格；
+// ② 变更审阅（#11）——主题工作副本目录的 `git diff`，逐文件。
+//
+// 面板不缓存它们（第三栏只存结构不存内容，40 §1.2）：刷新之后按作用域重新取。
+
+export type {
+  ChangeFileDiff,
+  ChangeFilesView,
+  RunBrowserView,
+  StagedChange,
+} from '@agentsws/contracts'
+
+// 文件开头那一摞 import 不动（这个文件是多条 WP 共同的末尾追加区），
+// 用 `import(...)` 型别引用把三个契约类型拿进来。
+type RunBrowserViewType = import('@agentsws/contracts').RunBrowserView
+type ChangeFilesViewType = import('@agentsws/contracts').ChangeFilesView
+type StagedChangeType = import('@agentsws/contracts').StagedChange
+
+/** 这次运行的浏览器在干什么（哪种执行器、当前域、最近一次导航 / 拒绝、等不等人接管）。 */
+export const getRunBrowser = (run_id: string, assignment?: string): Promise<RunBrowserViewType> =>
+  api(`/v1/runs/${encodeURIComponent(run_id)}/browser`, withAssignment(assignment))
+
+/** 这条变更改了哪几个文件、每个文件改了哪几行。 */
+export const getChangeFiles = (
+  change_id: string,
+  assignment?: string,
+): Promise<ChangeFilesViewType> =>
+  api(`/v1/changes/${encodeURIComponent(change_id)}/files`, withAssignment(assignment))
+
+/** 变更账本查询（第三栏的变更审阅按事项 / 运行筛一遍）。 */
+export const listChanges = (
+  query: { run?: string; kind?: string; status?: string },
+  assignment?: string,
+): Promise<StagedChangeType[]> => {
+  const params = new URLSearchParams()
+  if (query.run !== undefined) params.set('run', query.run)
+  if (query.kind !== undefined) params.set('kind', query.kind)
+  if (query.status !== undefined) params.set('status', query.status)
+  const qs = params.toString()
+  return api(`/v1/changes${qs === '' ? '' : `?${qs}`}`, withAssignment(assignment))
+}

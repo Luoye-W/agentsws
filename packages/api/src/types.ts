@@ -55,6 +55,7 @@ import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
 import type { BrowserPort } from './routes/browser.js'
 import type { CatalogPort } from './routes/catalog.js'
+import type { ChangeFilesPort } from './routes/changes.js'
 import type { ChatPort } from './routes/chat.js'
 import type { CloudPort } from './routes/cloud.js'
 import type { CloudAccountPort } from './routes/cloud-account.js'
@@ -656,6 +657,12 @@ export interface GatewayDeps {
   modules: ModulesPort
   approvals: ApprovalBus
   changes: ChangesPort
+  /**
+   * WP95（36 §11，`docs/upstream/sidebar-compare.md` #11）：一条变更改了哪几个文件。
+   * 没装配时 `GET /v1/changes/:id/files` 回 `not_implemented`——第三栏的
+   * 「变更审阅」面板照实说"这台机器上没有这份工作副本"，其余照常。
+   */
+  changeFiles?: ChangeFilesPort
   guardrails: GuardrailPort
   knowledge: KnowledgePort
   skills: SkillsPort
