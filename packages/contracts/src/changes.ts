@@ -501,3 +501,55 @@ export interface GuardrailEvaluator {
   ): Promise<GuardrailResult>
   authorizationCheck(input: AuthorizationCheckInput): Promise<AuthorizationCheckResult>
 }
+
+/**
+ * WP95（36 §11，`docs/upstream/sidebar-compare.md` #11）：
+ * 一条变更**改了哪几个文件、每个文件改了哪几行**。
+ *
+ * 借的是官方"回合末改动卡 → 侧栏逐文件对比审阅"那个**形**，体是我们自己的
+ * （`sidebar-compare` §4 写了体不借的三条实测理由：存活期对不上、它盖不到 shell 改动、
+ * 它要插在 `tools/pre-execute` 前面）。这里的来源是 WP89 的**主题工作副本目录**——
+ * 那是一个 git 仓，`git diff` 一跑就有。
+ *
+ * 缺的那一块补上了：建站职责跑完一轮，人以前只看得见"要不要发布"，
+ * 现在看得见"改了哪几个 liquid 的哪几行"。
+ *
+ * **只读**。面板里不改文件——要改回去走 `POST /v1/changes/:id/withdraw` 或反向变更。
+ */
+export interface ChangeFileDiff {
+  /** 相对工作副本根的路径（`sections/header.liquid`）。 */
+  path: string
+  status: 'added' | 'modified' | 'deleted' | 'renamed'
+  /** 改名时的旧路径。 */
+  old_path?: string
+  additions: number
+  deletions: number
+  /** unified diff 正文。空 = 二进制文件，或者这一条被上限截掉了。 */
+  diff: string
+  /** 这个文件的 diff 撞了上限，正文只有前一段。 */
+  truncated: boolean
+  /**
+   * 行对比超时，降级成"整文件替换"一个 hunk（官方那三条约束里的第三条）。
+   * 界面要说出来——不说的话人会以为这个文件真的被整个重写了。
+   */
+  coarse: boolean
+  /** 二进制文件：只报增删，不给正文。 */
+  binary: boolean
+}
+
+export interface ChangeFilesView {
+  change_id: string
+  kind: ChangeKind
+  /**
+   * 取到了没有。取不到不是错误，是一种常态——
+   * Agent 没在副本目录里 `git init` 过、副本目录被清过、这台机器上根本没有这家店的副本。
+   */
+  available: boolean
+  /** 取不到（或只取到一半）时说给人听的那一句。 */
+  detail?: string
+  /** 这是哪家店的主题副本（不给绝对路径：那是这台机器的目录结构，不是业务信息）。 */
+  store?: string
+  files: ChangeFileDiff[]
+  /** 文件数撞了上限，列表只有前一段。 */
+  truncated: boolean
+}

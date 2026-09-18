@@ -32,11 +32,17 @@ const ALLOWED_KEYS = [
   'agentsws.theme', // 偏好：深浅色
   'agentsws.lang', // 偏好：界面语言
   'agentsws.session_token', // 会话凭据：不是业务对象，且本来就只该活在本机
-  // WP71（36 §9 / §10）：三个**纯界面折叠态**。存的是"左栏哪几个岗位展开着""右栏
-  // 开着哪个面板、多宽"——没有一条是业务对象，丢了最坏的结果是下次打开回默认值。
+  // WP71（36 §9 / §10）：左栏**纯界面折叠态**。存的是"哪几个岗位展开着"——
+  // 不是业务对象，丢了最坏的结果是下次打开回默认值。
   'agentsws.rail.expanded',
-  'agentsws.rightrail.panel',
-  'agentsws.rightrail.width',
+  // WP95（36 §11，`docs/upstream/sidebar-compare.md` #5）：第三栏的**布局**。
+  // 它替掉了 WP71 那两个键（`agentsws.rightrail.panel` / `.width`），值的形状是
+  // `{ 作用域桶: { open_panel_id, width } }`——**只有结构，没有内容**：
+  // 哪条记忆、哪个事项的证据、面板取回来的任何一个字都不在里面（官方右栏也是
+  // 这么分的：布局存 localStorage，内容刷新后各面板自己找回来）。
+  // 分桶是因为布局跟着岗位 / 事项 / 职责走，而桶的键是 id——id 不是内容，
+  // 而且它本来就在地址栏里，写进本机不多泄露一个字。
+  'agentsws.rightrail.layout',
   // WP74（37 §2.5）：日历上开着哪几个图层、停在哪个视图。同上一类——**纯界面偏好**。
   // 图层不是"哪些事存在"，是"这一屏现在画哪几类"；丢了最坏的结果是下次打开回默认三层。
   'agentsws.calendar.layers',
