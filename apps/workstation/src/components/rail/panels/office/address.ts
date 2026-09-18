@@ -30,17 +30,29 @@ export type OfficeKind = 'word' | 'sheet' | 'slides'
 /**
  * 扩展名 → 用哪一种渲染。
  *
- * `.doc` / `.ppt`（2003 之前的二进制档）**不在表里**：纯 JS 解析它们要另一套
- * OLE 复合文档的实现，而我们没有。列进来再在面板里说"打不开"，
+ * `.doc` / `.ppt` / `.xls`（2003 之前的 OLE 复合文档）**不在表里**：纯 JS 解析
+ * 它们要另一套复合文档的实现，而我们没有。列进来再在面板里说"打不开"，
  * 不如一开始就让 `canOpen` 回假、让人去下载。
+ *
+ * **WP99 把 `.xls` 从这张表里去掉了。** WP97 时表格走的是 SheetJS，它连老 xls
+ * 也解；换成 `exceljs@4.4.0` 之后（理由见 `sheet-view.tsx` 顶上）只剩 OOXML，
+ * 老 xls **解不了**。与其让面板开出来再说一句"坏了"，不如一开始就不接——
+ * 知识库页那一行会写明"这是老格式，下载下来用 Excel 打开"（见 `isLegacyOfficeFile`）。
  */
 const BY_EXTENSION: Readonly<Record<string, OfficeKind>> = {
   docx: 'word',
   xlsx: 'sheet',
-  xls: 'sheet',
   csv: 'sheet',
   pptx: 'slides',
 }
+
+/**
+ * 2003 之前的三种老格式。
+ *
+ * 单列出来只为了**界面上能说人话**：同样是"不预览"，`.zip` 与 `.xls` 的原因不一样——
+ * 前者是"这一栏不管这种文件"，后者是"这个格式太老了，浏览器里解不动"。
+ */
+const LEGACY_OFFICE: ReadonlySet<string> = new Set(['xls', 'doc', 'ppt'])
 
 export function extensionOf(filename: string): string {
   const i = filename.lastIndexOf('.')
@@ -49,6 +61,11 @@ export function extensionOf(filename: string): string {
 
 export function officeKindOf(filename: string): OfficeKind | undefined {
   return BY_EXTENSION[extensionOf(filename)]
+}
+
+/** 是不是 2003 之前的老 Office 格式（知识库页据此换一句提示）。 */
+export function isLegacyOfficeFile(filename: string): boolean {
+  return LEGACY_OFFICE.has(extensionOf(filename))
 }
 
 export interface FileAddress {

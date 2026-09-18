@@ -26,7 +26,8 @@
  * | `img-src`（不含 `blob:`） | 文档里内嵌的图片在壳里显示不出来 | 照渲染、照回收；显示不出来时 `alt` 里有一句人话。**要让它显示得改壳的 CSP，那是 Luoye 的一道题**，不在这个 WP 里动 |
  *
  * 三个库都逐个核实过（许可证 / eval / 外链 / 体积，数字进报告）：
- * `docx-preview@0.4.0`（Apache-2.0）、`xlsx@0.18.5`（Apache-2.0）、
+ * `docx-preview@0.4.0`（Apache-2.0）、`exceljs@4.4.0`（MIT，**WP99 换掉了
+ * `xlsx@0.18.5`**——理由见 `office/sheet-view.tsx` 顶上）、
  * `jszip@3.10.2`（MIT OR GPL-3.0-or-later，取 MIT）。
  *
  * ## 数据边界（40 §1.2）
@@ -54,7 +55,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-/** 三个视图各自一个 chunk：开 Word 的人不该顺手把 896 KB 的 SheetJS 下下来。 */
+/** 三个视图各自一个 chunk：开 Word 的人不该顺手把近 1 MB 的 exceljs 下下来。 */
 const WordView = lazy(async () => {
   const m = await import('@/components/rail/panels/office/word-view')
   return { default: m.WordView }
@@ -120,7 +121,9 @@ function Body({
       {kind === 'word' ? (
         <WordView blob={blob} onFail={onFail} />
       ) : kind === 'sheet' ? (
-        <SheetView blob={blob} onFail={onFail} />
+        // 文件名传下去只为了分 `.csv` 与 `.xlsx` 两条读法（WP99：csv 自己按
+        // RFC 4180 解，xlsx 走 exceljs）——视图不拿它做别的
+        <SheetView blob={blob} filename={filename} onFail={onFail} />
       ) : (
         <SlidesView blob={blob} onFail={onFail} />
       )}

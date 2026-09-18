@@ -15,7 +15,11 @@ import { useRef, useState } from 'react'
 import { WsCard, WsTag } from '@/components/design'
 import { GapRow } from '@/components/knowledge/gap-row'
 import { RecheckCard } from '@/components/knowledge/recheck-card'
-import { fileAddress, officeKindOf } from '@/components/rail/panels/office/address'
+import {
+  fileAddress,
+  isLegacyOfficeFile,
+  officeKindOf,
+} from '@/components/rail/panels/office/address'
 import { useRailState } from '@/components/rail/rail-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -226,6 +230,9 @@ export function KnowledgePage(): React.ReactNode {
               {uploads.map((source) => {
                 const name = nameOfSource(source.ref)
                 const previewable = officeKindOf(name) !== undefined
+                // WP99：`.xls` / `.doc` / `.ppt` 换库之后解不动了，那一行要说清是
+                // **格式太老**，不是"这一栏不管这种文件"（两句话对应的下一步不一样）
+                const legacy = !previewable && isLegacyOfficeFile(name)
                 return (
                   <li key={source.id}>
                     {/* 一份文件一张卡（WP96 的 `WsCard`）；整张卡可点 */}
@@ -243,7 +250,9 @@ export function KnowledgePage(): React.ReactNode {
                         <WsTag>
                           {previewable
                             ? t('knowledge.sources.preview')
-                            : t('knowledge.sources.download_only')}
+                            : legacy
+                              ? t('knowledge.sources.legacy_only')
+                              : t('knowledge.sources.download_only')}
                         </WsTag>
                       </button>
                     </WsCard>

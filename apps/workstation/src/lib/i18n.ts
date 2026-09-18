@@ -623,6 +623,9 @@ const zh: Table = {
   'knowledge.sources.empty': '还没有上传过文件。',
   'knowledge.sources.preview': '在第三栏预览',
   'knowledge.sources.download_only': '这种文件不预览，点一下下载。',
+  // WP99：换成 exceljs 之后老 xls / doc / ppt 解不动了——这一行要说清是格式太老，
+  // 不是「这一栏不管这种文件」（前者的下一步是「用 Excel 另存成 xlsx」）
+  'knowledge.sources.legacy_only': '这是 2003 之前的老格式，浏览器里打不开，点一下下载。',
   'memory.source.manual': '手动加',
   'memory.source.promoted': '提升上来的',
   'memory.source.learned': '从复盘提升 · 已批准',
@@ -2575,6 +2578,8 @@ const en: Table = {
   'knowledge.sources.empty': 'No file has been uploaded yet.',
   'knowledge.sources.preview': 'Preview in the right rail',
   'knowledge.sources.download_only': 'No preview for this kind of file — click to download.',
+  'knowledge.sources.legacy_only':
+    'Pre-2003 Office format — the browser cannot open it. Click to download.',
   'rail.panel.files': 'Files',
   'rail.panel.ask': 'Ask AI',
   'rail.skills.hint': 'One skill, one copy; six layers patch it. Edit the text on the skills page.',

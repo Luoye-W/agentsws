@@ -3,7 +3,8 @@
  *
  * 钉住的七件事：
  *
- * 1. `canOpen` 只认那五种扩展名——别的交给下载，不开一个空抽屉；
+ * 1. `canOpen` 只认那四种扩展名——别的交给下载，不开一个空抽屉
+ *    （WP99 换成 exceljs 之后 `.xls` 从五种里去了，见 `office/address.ts`）；
  * 2. 它是 `resolvePanel()` 的**第一个真入口**：一个文件地址排到它这儿；
  * 3. 三种格式各渲染出预期的字（样本是 `office-fixtures.ts` 现造的，不是下载来的）；
  * 4. 大表按 200 行分页、多 sheet 切得动；
@@ -18,9 +19,11 @@ import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import {
   canOpenOfficeFile,
   fileAddress,
+  isLegacyOfficeFile,
   officeKindOf,
   parseFileAddress,
 } from '@/components/rail/panels/office/address'
+import { parseCsv } from '@/components/rail/panels/office/csv'
 import { RenderTimeoutError, withDeadline } from '@/components/rail/panels/office/deadline'
 import { resolveRelTarget } from '@/components/rail/panels/office/slides-view'
 import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
@@ -28,7 +31,13 @@ import { resolvePanel } from '@/components/rail/registry'
 import { RightRail } from '@/components/rail/right-rail'
 import type { KnowledgeSource, SourceFileResult } from '@/lib/api'
 import { renderWithProviders } from './helpers'
-import { bigXlsxFixture, docxFixture, pptxFixture, xlsxFixture } from './office-fixtures'
+import {
+  bigXlsxFixture,
+  csvFixture,
+  docxFixture,
+  pptxFixture,
+  xlsxFixture,
+} from './office-fixtures'
 
 const SOURCES: KnowledgeSource[] = [
   {
@@ -65,6 +74,21 @@ vi.mock('@/lib/api', async () => {
 
 const { OfficePreviewPanel } = await import('@/components/rail/panels/office-preview-panel')
 
+/** 一个字面双引号。拼出来而不是写进模板串里——省得这一段里到处是转义。 */
+const QUOTE = String.fromCharCode(34)
+
+/**
+ * 一份钉 RFC 4180 四条规矩的 csv：引号里的逗号、连着两个引号 = 一个字面引号。
+ *
+ * 用 `join` 拼而不是写成一整段带转义的字面量：这一份样本要一眼看得出
+ * "每一格本来是什么"，转义堆起来之后就看不出了。
+ */
+const CSV_SAMPLE = [
+  '原因,件数',
+  `${QUOTE}尺码, 不合${QUOTE},2`,
+  `${QUOTE}他说${QUOTE}${QUOTE}太大了${QUOTE}${QUOTE}${QUOTE},1`,
+].join('\n')
+
 function result(filename: string, blob: Blob): SourceFileResult {
   return {
     filename,
@@ -86,11 +110,17 @@ function renderPanel(filename: string): void {
 }
 
 describe('地址与 canOpen（#3 排序的一票否决那一格）', () => {
-  it('五种扩展名认，别的不认', () => {
-    for (const name of ['a.docx', 'a.xlsx', 'a.xls', 'a.csv', 'a.pptx', 'A.DOCX'])
+  it('四种扩展名认，别的不认（WP99：换成 exceljs 之后 `.xls` 也不认了）', () => {
+    for (const name of ['a.docx', 'a.xlsx', 'a.csv', 'a.pptx', 'A.DOCX'])
       expect(canOpenOfficeFile({ address: fileAddress('src_1', name) })).toBe(true)
-    for (const name of ['a.pdf', 'a.zip', 'a.doc', 'a.ppt', 'a.md', 'a'])
+    for (const name of ['a.pdf', 'a.zip', 'a.xls', 'a.doc', 'a.ppt', 'a.md', 'a'])
       expect(canOpenOfficeFile({ address: fileAddress('src_1', name) })).toBe(false)
+  })
+
+  it('老格式单独认得出来（界面上那句话不一样：格式太老 ≠ 这一栏不管）', () => {
+    for (const name of ['报价.xls', 'a.DOC', 'b.ppt']) expect(isLegacyOfficeFile(name)).toBe(true)
+    for (const name of ['a.xlsx', 'a.zip', 'a.pdf', 'a'])
+      expect(isLegacyOfficeFile(name)).toBe(false)
   })
 
   it('地址里没有文件名 = 判不出来 = 不接（让调用方去下载）', () => {
@@ -164,10 +194,64 @@ describe('三种格式各渲染出预期的字', () => {
     expect(screen.getByTestId('rail-office-slide-2').textContent).toContain('第二页标题')
   })
 
+  it('Excel：日期一格写成 YYYY-MM-DD，不是那一长串 Date.toString()（WP99）', async () => {
+    getKnowledgeSourceFile.mockResolvedValue(
+      result(
+        '发货.xlsx',
+        await xlsxFixture({
+          发货: [
+            ['单号', '发货日'],
+            ['SO-9', new Date(2026, 0, 2)],
+          ],
+        }),
+      ),
+    )
+    renderPanel('发货.xlsx')
+    const sheet = await screen.findByTestId('rail-office-sheet', undefined, { timeout: 5000 })
+    expect(sheet.textContent).toContain('2026-01-02')
+    expect(sheet.textContent).not.toContain('GMT')
+  })
+
+  it('CSV：走我们自己那个 RFC 4180 解析器，画成一张表', async () => {
+    getKnowledgeSourceFile.mockResolvedValue(result('退款.csv', csvFixture(CSV_SAMPLE)))
+    renderPanel('退款.csv')
+    const sheet = await screen.findByTestId('rail-office-sheet', undefined, { timeout: 5000 })
+    // 引号里的逗号不当分隔符；两个连着的引号是一个字面引号
+    expect(sheet.textContent).toContain('尺码, 不合')
+    expect(sheet.textContent).toContain(`他说${QUOTE}太大了${QUOTE}`)
+    // 一份 csv 只有一张表，所以没有 sheet 切换那一条
+    expect(sheet.getAttribute('data-sheets')).toBe('1')
+  })
+
   it('pptx 的关系路径按 `ppt/slides/` 解，不出网', () => {
     expect(resolveRelTarget('../media/image1.png')).toBe('ppt/media/image1.png')
     expect(resolveRelTarget('media/x.png')).toBe('ppt/slides/media/x.png')
     expect(resolveRelTarget('https://example.com/a.png')).toBeUndefined()
+  })
+})
+
+describe('CSV 解析器本身（RFC 4180，WP99）', () => {
+  it('四条规矩：逗号分隔、引号包字段、两个引号是一个引号、引号里能有换行', () => {
+    expect(parseCsv('a,b\nc,d')).toEqual([
+      ['a', 'b'],
+      ['c', 'd'],
+    ])
+    expect(parseCsv(`${QUOTE}a,1${QUOTE},b`)).toEqual([['a,1', 'b']])
+    expect(parseCsv(`${QUOTE}he said ${QUOTE}${QUOTE}hi${QUOTE}${QUOTE}${QUOTE},b`)).toEqual([
+      [`he said ${QUOTE}hi${QUOTE}`, 'b'],
+    ])
+    expect(parseCsv(`${QUOTE}两\n行${QUOTE},b`)).toEqual([['两\n行', 'b']])
+  })
+
+  it('三种行尾都认；BOM 去掉；最后一行没有行尾也收得进来；空文件不产生空行', () => {
+    expect(parseCsv('a\r\nb')).toEqual([['a'], ['b']])
+    expect(parseCsv('a\rb')).toEqual([['a'], ['b']])
+    expect(parseCsv('﻿订单号,金额')).toEqual([['订单号', '金额']])
+    expect(parseCsv('')).toEqual([])
+  })
+
+  it('空格留成空串，不塌掉（塌了后面几列会整体左移）', () => {
+    expect(parseCsv('a,,c')).toEqual([['a', '', 'c']])
   })
 })
 
@@ -199,14 +283,18 @@ describe('画不出来的时候照实说，并给"下载查看"', () => {
   })
 
   it('不是 Office 文件的字节（xlsx 名字、四个随机字节）：不崩，下载按钮照样在', async () => {
-    // SheetJS 会把认不出的字节当一行纯文本读进来，于是这里既不抛也不空白。
-    // 钉的是"不崩"：一个外来文件把第三栏整栏炸掉，比画得难看严重得多
+    // WP99 换成 exceljs 之后这一支的表现变了：SheetJS 会把认不出的字节当一行
+    // 纯文本读进来（于是画出一张一格的表），exceljs 直接抛。**两种都合格**——
+    // 这个用例钉的是"不崩"：一个外来文件把第三栏整栏炸掉，比画得难看严重得多
     getKnowledgeSourceFile.mockResolvedValue(
       result('坏的.xlsx', new Blob([new Uint8Array([1, 2, 3, 4])])),
     )
     renderPanel('坏的.xlsx')
-    await screen.findByTestId('rail-office-sheet', undefined, { timeout: 5000 })
+    expect(
+      await screen.findByTestId('rail-office-broken', undefined, { timeout: 5000 }),
+    ).toBeDefined()
     expect(screen.getByTestId('rail-office-download')).toBeDefined()
+    expect(screen.getByTestId('rail-office-fallback')).toBeDefined()
   })
 
   it('五秒画不完就不等了（`withDeadline` 本身）', async () => {

@@ -2,7 +2,9 @@
  * WP97：三种格式各一份**自己造**的小样本。
  *
  * 不从网上下载样本文件（派工书那条），也不把二进制签进仓库：`.docx` / `.pptx`
- * 就是一个 zip 加几份 XML，用已经在树里的 JSZip 现造；`.xlsx` 用 SheetJS 自己写。
+ * 就是一个 zip 加几份 XML，用已经在树里的 JSZip 现造；`.xlsx` 用 exceljs 自己写
+ * （WP99 换库之前这一份是 SheetJS 写的——**造样本与读样本用同一个库**，
+ * 否则"读得出来"这件事里就掺了另一个库的实现细节）。
  * 好处是样本的**内容是这个文件里写着的**——用例断言"渲染出这句话"时，
  * 那句话的出处就在上面几行，不用去翻一个谁也打不开的二进制。
  */
@@ -40,9 +42,17 @@ export async function docxFixture(
   return zip.generateAsync({ type: 'blob' })
 }
 
-/** 一份有两张表的 .xlsx（第二张用来测"多 sheet 切换"）。 */
+/** 一行里能出现的几种值（日期那一档专门用来钉"日期怎么显示"）。 */
+export type CellValue = string | number | Date
+
+/**
+ * 一份有两张表的 .xlsx（第二张用来测"多 sheet 切换"）。
+ *
+ * exceljs 的浏览器包是 UMD、Node 里解到的是 CJS——`Workbook` 一边在命名空间上、
+ * 一边在 `default` 上，与 `sheet-view.tsx` 里那个 `loadWorkbookClass` 同一个道理。
+ */
 export async function xlsxFixture(
-  sheets: Readonly<Record<string, readonly (readonly (string | number)[])[]>> = {
+  sheets: Readonly<Record<string, readonly (readonly CellValue[])[]>> = {
     订单: [
       ['订单号', '金额'],
       ['SO-1', 128],
@@ -51,22 +61,39 @@ export async function xlsxFixture(
     退款: [['原因'], ['尺码不合']],
   },
 ): Promise<Blob> {
-  const xlsx = await import('xlsx')
-  const book = xlsx.utils.book_new()
-  for (const [name, rows] of Object.entries(sheets)) {
-    xlsx.utils.book_append_sheet(book, xlsx.utils.aoa_to_sheet(rows as unknown[][]), name)
+  const mod = (await import('exceljs')) as unknown as {
+    Workbook?: new () => ExcelWorkbook
+    default?: { Workbook?: new () => ExcelWorkbook }
   }
-  const bytes = xlsx.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
-  return new Blob([bytes], {
+  const Workbook = mod.Workbook ?? mod.default?.Workbook
+  if (Workbook === undefined) throw new Error('exceljs: 找不到 Workbook')
+  const book = new Workbook()
+  for (const [name, rows] of Object.entries(sheets)) {
+    const sheet = book.addWorksheet(name)
+    for (const row of rows) sheet.addRow([...row])
+  }
+  const bytes = await book.xlsx.writeBuffer()
+  return new Blob([bytes as unknown as ArrayBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
 }
 
+/** 只用到这三件事，不把 exceljs 的整份型别拖进来。 */
+interface ExcelWorkbook {
+  addWorksheet(name: string): { addRow(values: CellValue[]): unknown }
+  xlsx: { writeBuffer(): Promise<unknown> }
+}
+
 /** 一份 N 行 × 2 列的大表（测"每页 200 行"的分页）。 */
 export async function bigXlsxFixture(rows: number): Promise<Blob> {
-  const data: (string | number)[][] = [['行号', '值']]
+  const data: CellValue[][] = [['行号', '值']]
   for (let i = 1; i <= rows; i += 1) data.push([i, `第${i}行`])
   return xlsxFixture({ 大表: data })
+}
+
+/** 一份 .csv（WP99：csv 走我们自己那个 RFC 4180 解析器，不过 exceljs）。 */
+export function csvFixture(text: string): Blob {
+  return new Blob([new TextEncoder().encode(text)], { type: 'text/csv' })
 }
 
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main'
