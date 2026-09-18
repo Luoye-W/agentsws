@@ -44,6 +44,7 @@ import { NavLink } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
+import { NoModelBanner } from '@/components/models/no-model-banner'
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
@@ -340,6 +341,12 @@ export function AppShell({
               <span className="ws-num ml-auto hidden text-[11px] sm:inline">⌘K</span>
             </button>
             {/* WP71：顶栏只剩这两个数——现在用哪个模型、还剩多少积分（问不到就不出） */}
+            {/*
+              WP98（09-18 收口）：「还没接模型」原来是首页第一屏一整条黄条。
+              它说的是**整个工作区的状态**，不是今天的哪一件事——所以它和模型 / 积分
+              是同一类东西，收进顶栏当一个黄色小胶囊，第一屏还给岗位卡。
+            */}
+            <NoModelBanner variant="chip" />
             <ModelChip />
             <CreditsChip />
           </header>

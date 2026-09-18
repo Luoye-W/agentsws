@@ -21,6 +21,7 @@ export function PositionCard({
   pendingLabel,
   line,
   holders = [],
+  menu,
   selected,
   entryLabel,
   onEntry,
@@ -36,6 +37,13 @@ export function PositionCard({
   /** 一句状态：例如 "改价 1 待审 · 库存告急 3 个 SKU · 日报已出" */
   line: string
   holders?: PositionCardHolder[]
+  /**
+   * WP98：画布上卡头右上角那个 `···`。
+   *
+   * 里面装的是这个岗位的快捷提示（WP84 原来平铺在首页岗位卡下面的那一串芯片）。
+   * 这一层只留一个插槽，不知道里面是什么——菜单的内容与路由都在页面那边。
+   */
+  menu?: React.ReactNode
   selected?: boolean
   entryLabel: string
   onEntry?: () => void
@@ -68,6 +76,7 @@ export function PositionCard({
             {name}
           </button>
         )}
+        {menu === undefined ? null : <span className="ml-auto">{menu}</span>}
       </div>
       <div className="flex items-baseline gap-2">
         <span className="ws-display text-[28px] leading-none" data-testid="ws-position-pending">

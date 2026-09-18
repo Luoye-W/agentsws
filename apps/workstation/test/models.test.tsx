@@ -356,6 +356,23 @@ describe('WP25 §C 「还没接模型」黄条', () => {
     })
   })
 
+  it('WP98：顶栏那个胶囊走同一份判据，一样指向设置页', async () => {
+    renderWithProviders(<NoModelBanner variant="chip" />)
+    const chip = await screen.findByTestId('no-model-chip')
+    expect(chip.textContent).toContain('还没接模型')
+    expect(chip.getAttribute('href')).toBe('/settings')
+    // 它是胶囊不是黄条：整条 banner 不在 DOM 里
+    expect(screen.queryByTestId('no-model-banner')).toBeNull()
+  })
+
+  it('WP98：接上一个能用的，顶栏那个胶囊也跟着不见', async () => {
+    state.providers = [ACTIVE]
+    renderWithProviders(<NoModelBanner variant="chip" />)
+    await waitFor(() => {
+      expect(screen.queryByTestId('no-model-chip')).toBeNull()
+    })
+  })
+
   it('不是所有者（403）：什么都不显示，而不是给一条点不动的提示', async () => {
     state.forbidden = true
     renderWithProviders(<NoModelBanner />)

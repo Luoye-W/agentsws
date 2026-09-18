@@ -1,8 +1,10 @@
 /**
- * WP84（53 §3 / 54 §1 第 6 行）：职责模板的快捷提示与示例任务落到界面上。
+ * WP84（53 §3 / 54 §1 第 6 行）+ WP98（09-18 收口）：职责模板的快捷提示与示例任务。
  *
- * 钉四件事：
- * - 首页岗位卡下面按**职责**分组出快捷提示，默认只露前 3 条；
+ * WP98 把快捷提示从首页第一屏**折进岗位卡右上角的 `···`**（数据与路由一个字没改），
+ * 所以这一组用例钉的是新结构：
+ * - 菜单收起时首页上一条快捷提示都没有（第一屏还给岗位卡）；
+ * - 点开 `···` 才出，按**职责**分组，本人那条职责的全部都在（不再折一半）；
  * - 点一条 = 走 54 §2 的**岗位任务入口**，事项 `entry: 'position'` 且带那条职责
  *   （不是往一个聊天框里塞一句话——36 §3 首页仍然没有自由输入框）；
  * - 只用**本人**那条分配：别人在做的职责连按钮都不出（借岗位扩权的口子堵死）；
@@ -162,7 +164,7 @@ vi.mock('react-router-dom', async () => {
 const { HomePage } = await import('@/pages/home')
 const { DeckCardView } = await import('@/components/deck/deck-card')
 
-describe('首页岗位卡下的快捷提示（WP84）', () => {
+describe('岗位卡右上角 ··· 里的快捷提示（WP84 + WP98 收口）', () => {
   beforeEach(() => {
     getHome.mockClear()
     getPositions.mockClear()
@@ -170,22 +172,27 @@ describe('首页岗位卡下的快捷提示（WP84）', () => {
     navigate.mockClear()
   })
 
-  it('按职责分组，默认只露前 3 条；点"还有 N 条"才出全部', async () => {
+  it('WP98：收起时首页上一条快捷提示都没有——第一屏只剩岗位卡', async () => {
     renderWithProviders(<HomePage />)
+    await screen.findByTestId('quick-prompt-menu')
+    expect(screen.queryByTestId('quick-prompt-list')).toBeNull()
+    expect(screen.queryByTestId('quick-prompt')).toBeNull()
+    expect(screen.queryByText('起草退货回复')).toBeNull()
+  })
+
+  it('点开 ··· 才出，按职责分组，本人那条职责的四条全在（不再折一半）', async () => {
+    renderWithProviders(<HomePage />)
+    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
     const group = await screen.findByTestId('quick-prompt-group')
     expect(group.getAttribute('data-role')).toBe('dtc.support')
-    expect(screen.getAllByTestId('quick-prompt')).toHaveLength(3)
-    expect(screen.getByText('起草退货回复')).toBeDefined()
-    // 第 4 条在折起来的那一半里
-    expect(screen.queryByText('退款算一算')).toBeNull()
-
-    fireEvent.click(screen.getByTestId('quick-prompt-more'))
     expect(screen.getAllByTestId('quick-prompt')).toHaveLength(4)
+    expect(screen.getByText('起草退货回复')).toBeDefined()
     expect(screen.getByText('退款算一算')).toBeDefined()
   })
 
   it('别人在做的那条职责不出按钮（只能用本人那条分配）', async () => {
     renderWithProviders(<HomePage />)
+    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
     await screen.findByTestId('quick-prompt-group')
     expect(screen.getAllByTestId('quick-prompt-group')).toHaveLength(1)
     expect(screen.queryByText('现在等着回的')).toBeNull()
@@ -193,6 +200,7 @@ describe('首页岗位卡下的快捷提示（WP84）', () => {
 
   it('点一条 = 走岗位任务入口：带本人那条分配 + 那条职责，开出来的事项 entry 是 position', async () => {
     renderWithProviders(<HomePage />)
+    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
     await screen.findByTestId('quick-prompt-group')
     fireEvent.click(screen.getByText('起草退货回复'))
     await waitFor(() => {
@@ -208,9 +216,10 @@ describe('首页岗位卡下的快捷提示（WP84）', () => {
     expect(OPENED.matter.entry).toBe('position')
   })
 
-  it('还是没有聊天框：卡上只有按钮，一个自由文本输入都没有（36 §3 A4）', async () => {
+  it('还是没有聊天框：菜单里只有按钮，一个自由文本输入都没有（36 §3 A4）', async () => {
     const { container } = renderWithProviders(<HomePage />)
-    await screen.findByTestId('quick-prompts')
+    fireEvent.click(await screen.findByTestId('quick-prompt-menu'))
+    await screen.findByTestId('quick-prompt-list')
     const inputs = [
       ...container.querySelectorAll('input[type="text"], input:not([type]), textarea'),
     ].filter((el) => !(el as HTMLInputElement).disabled)

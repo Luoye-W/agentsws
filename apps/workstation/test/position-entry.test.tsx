@@ -25,6 +25,14 @@ const INSTANCE: PositionInstanceData = {
       default: true,
       assignment_ids: ['asg_store', 'asg_store_someone_else'],
       my_assignment_id: 'asg_store',
+      quick_prompts: [
+        {
+          id: 'drop_price',
+          label: { zh: '给这个商品降价', en: 'Drop this price' },
+          prompt: '把这个商品按竞品价降一档',
+          kind: 'start_task' as const,
+        },
+      ],
     },
     {
       role_id: 'dtc.content',
@@ -33,6 +41,21 @@ const INSTANCE: PositionInstanceData = {
       // 这条职责别人也在做——界面上的入口只能用**本人**那一条（借岗位扩权的口子堵死）
       assignment_ids: ['asg_content_someone_else', 'asg_content'],
       my_assignment_id: 'asg_content',
+    },
+    {
+      role_id: 'dtc.seo',
+      role_name: 'SEO',
+      default: false,
+      // 这条**我没有**：它的快捷提示一条都不该出现在输入框下面
+      assignment_ids: ['asg_seo_someone_else'],
+      quick_prompts: [
+        {
+          id: 'not_mine',
+          label: { zh: '别人的活儿', en: 'Someone else task' },
+          prompt: '这条不该出现',
+          kind: 'ask' as const,
+        },
+      ],
     },
   ],
   open_matters: 2,
@@ -181,5 +204,46 @@ describe('54 §2 / §4 岗位页顶部：交给这个岗位一件事', () => {
       })
     })
     expect(navigate).toHaveBeenCalledWith('/matters/mat_3')
+  })
+})
+
+describe('WP98 收口：快捷提示落在岗位页输入框下面', () => {
+  beforeEach(() => {
+    getPosition.mockClear()
+    openMatterAtPosition.mockClear()
+    navigate.mockClear()
+    openMatterAtPosition.mockResolvedValue(PICKED)
+  })
+
+  it('点一条只是**把那句话填进框里**，不直接开事项', async () => {
+    renderWithProviders(<PositionEntry id="asg_store" />)
+    await screen.findByTestId('position-entry')
+    const chips = screen.getAllByTestId('entry-suggestion')
+    expect(chips).toHaveLength(1)
+    fireEvent.click(chips[0] as HTMLElement)
+    expect((screen.getByTestId('position-entry-input') as HTMLTextAreaElement).value).toBe(
+      '把这个商品按竞品价降一档',
+    )
+    // 填进去 ≠ 交出去：还要人自己点一下那个按钮
+    expect(openMatterAtPosition).not.toHaveBeenCalled()
+  })
+
+  it('别人在做的那条职责的提示一条都不出（只能用本人那条分配）', async () => {
+    renderWithProviders(<PositionEntry id="asg_store" />)
+    await screen.findByTestId('position-entry')
+    expect(screen.queryByText('别人的活儿')).toBeNull()
+  })
+
+  it('一条快捷提示都没写的岗位：那一行整块不出', async () => {
+    getPosition.mockResolvedValueOnce({
+      ...INSTANCE,
+      roles: INSTANCE.roles.map((r) => {
+        const { quick_prompts: _drop, ...rest } = r
+        return rest
+      }),
+    })
+    renderWithProviders(<PositionEntry id="asg_store" />)
+    await screen.findByTestId('position-entry')
+    expect(screen.queryByTestId('entry-suggestions')).toBeNull()
   })
 })

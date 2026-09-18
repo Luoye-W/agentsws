@@ -1207,11 +1207,13 @@ const zh: Table = {
   'home.headline': '今天',
   'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
   'home.stats': '今天的数',
-  // WP84（54 §1 第 6 行）：岗位卡下面的快捷提示——点一条就是开一件事，不是聊天框
-  'home.quick.more': '还有 {count} 条',
-  'home.quick.less': '收起',
+  // WP84（54 §1 第 6 行）+ WP98：快捷提示收进岗位卡右上角的 `···`——点一条就是开一件事，不是聊天框
+  'home.quick.menu': '快捷提示',
   'home.quick.hint': '点一条 = 用这条职责在这个岗位下开一件事',
   'home.goals.empty': '还没有定目标。',
+  // WP98：目标折成一行，细的进 /goals
+  'home.goals.line': '目标 {count} 项',
+  'home.goals.line.behind': '目标 {count} 项 · {behind} 项落后',
   'home.today': '今天',
   'home.today.timeline': '时间轴',
   'home.today.timeline.empty': '今天没有安排。',
@@ -1344,6 +1346,8 @@ const zh: Table = {
   'models.inherit.own': '这个品牌单独设了一套',
   'models.inherit.readonly': '跟随期间这一页是只读的。要单独设，把上面的开关关掉。',
   'models.banner': '还没接模型，Agent 跑不起来。',
+  // WP98：首页第一屏那条黄条收进顶栏，成了一个黄色小胶囊
+  'models.chip': '还没接模型',
   'models.banner.cta': '去设置里接一个 →',
   'models.configured': '已配的',
   'models.empty': '还一个都没配。下面挑一种开始——每种都写清楚了要准备什么。',
@@ -3183,10 +3187,11 @@ const en: Table = {
   'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
   'home.stats': "Today's numbers",
   // WP84 (54 §1 line 6): quick starts under each position card — a click opens a matter
-  'home.quick.more': '{count} more',
-  'home.quick.less': 'Show fewer',
+  'home.quick.menu': 'Quick prompts',
   'home.quick.hint': 'One click opens a matter for this position, using that duty',
   'home.goals.empty': 'No goals yet.',
+  'home.goals.line': '{count} goals',
+  'home.goals.line.behind': '{count} goals · {behind} behind',
   'home.today': 'Today',
   'home.today.timeline': 'Timeline',
   'home.today.timeline.empty': 'Nothing scheduled today.',
@@ -3324,6 +3329,7 @@ const en: Table = {
   'models.inherit.own': 'This brand has its own set',
   'models.inherit.readonly': 'Read-only while following. Turn the switch off to set your own.',
   'models.banner': 'No model connected yet — agents cannot run.',
+  'models.chip': 'No model',
   'models.banner.cta': 'Connect one in Settings →',
   'models.configured': 'Configured',
   'models.empty': 'Nothing configured yet. Pick one below — each says what you need to prepare.',

@@ -30,8 +30,11 @@ import { useApp } from '@/lib/app-context'
  * `id` 就是地址栏里那个（工作台的"岗位"= 本人持有的一条分配）；服务端会把它换算成
  * 它所属的岗位，所以这里不用先查一次模板 id。
  */
+/** 输入框下面最多摆几条：一行摆得下，读不完就等于没有（54 §4 认知成本）。 */
+const MAX_ENTRY_SUGGESTIONS = 4
+
 export function PositionEntry({ id }: { id: string }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const client = useQueryClient()
   const navigate = useNavigate()
   const [text, setText] = useState('')
@@ -81,6 +84,14 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
   // 没装岗位面的服务进程（或这条 id 不属于任何岗位）：整块不出，岗位页照旧能用
   if (position.error !== null || position.data === undefined) return null
   const view = position.data
+  /*
+   * 建议只从**本人**那几条职责来（54 §1 第三条纪律：拿别人那条去开就是借岗位扩权）。
+   * 一个岗位下几条职责各写各的，这里按职责顺序取前几条——一屏读不完就等于没有。
+   */
+  const suggestions = view.roles
+    .filter((r) => r.my_assignment_id !== undefined)
+    .flatMap((r) => r.quick_prompts ?? [])
+    .slice(0, MAX_ENTRY_SUGGESTIONS)
 
   return (
     <Card data-testid="position-entry" data-position={view.position_id}>
@@ -111,6 +122,32 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
               setText(e.target.value)
             }}
           />
+          {/*
+            WP98（09-18 收口）：**快捷提示落在输入框下面**，当"可以这么说"的建议。
+            它原来平铺在首页岗位卡下面（WP84），那儿它答的是"我想自己起一件事"——
+            而真正要起事的地方就是上面这个框。点一条不再另走一条路：把那句话**填进框里**，
+            人再按一下"交给它"。于是这一层一条纪律都没多：提交仍旧只有一个出口
+            （54 §2 的岗位入口），职责由岗位自己判，与人手打一句话一模一样。
+          */}
+          {suggestions.length === 0 ? null : (
+            <div className="flex flex-wrap gap-1.5" data-testid="entry-suggestions">
+              {suggestions.map((q) => (
+                <button
+                  key={q.id}
+                  type="button"
+                  className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                  data-testid="entry-suggestion"
+                  data-prompt={q.id}
+                  title={q.prompt}
+                  onClick={() => {
+                    setText(q.prompt)
+                  }}
+                >
+                  {lang === 'en' ? q.label.en : q.label.zh}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Button
               size="sm"
