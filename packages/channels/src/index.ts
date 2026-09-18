@@ -11,6 +11,8 @@ export * from './email/threads.js'
 export * from './errors.js'
 // WP85（54 §5）：卡片进 IM 只出「文本摘要 + 去工作台处理」的深链，审批动作不在 IM 里做
 export * from './im-cards.js'
+// WP113（63）：消息——统一收件处（消息库 / 分拣 / 标签 / 草稿 / IMAP 回写）
+export * from './messages/index.js'
 export * from './migrations.js'
 export * from './outbox.js'
 export * from './pipeline.js'

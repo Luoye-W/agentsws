@@ -38,6 +38,7 @@ import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { KolStore } from './kol.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
+import type { MessagesAssembly } from './messages.js'
 import type { ModelsAssembly } from './models.js'
 import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
@@ -188,6 +189,14 @@ export interface BrandModuleSet {
   runtime?: RuntimeAssembly
   startRun?: StartRun
   channels: ChannelsAssembly
+  /**
+   * WP113（63）：这个品牌的**消息**（整只邮箱）。
+   *
+   * 与 `channels` 分成两格，理由与红人 / 广告那两组一样：那一格是**传输**
+   * （IMAP 拉、SMTP 发、把客户来信变成事项），这一格是**用户看到的那只邮箱**
+   * （消息库、分拣、标签、草稿、回写）。两边共用同一批凭据与同一个受控原始材料区。
+   */
+  messages: MessagesAssembly
   chat: ChatLane
   chatWidget: ChatWidgetAssembly
   /**

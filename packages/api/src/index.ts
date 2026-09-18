@@ -245,6 +245,15 @@ export type {
   MeetingsPort,
 } from './routes/meetings.js'
 export { meetingRoutes } from './routes/meetings.js'
+// WP113（63）：消息——统一收件处
+export type {
+  MailAssistantView,
+  MessageAccountView,
+  MessageActor,
+  MessagesPort,
+  MessageThreadView,
+} from './routes/messages.js'
+export { messageRoutes } from './routes/messages.js'
 export type {
   DiscoverModelsInput,
   ModelDefaultsView,

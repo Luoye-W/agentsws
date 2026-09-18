@@ -7,6 +7,14 @@ import { asChannelError, errorText, readPassword } from './imap.js'
 export interface OutboundMail {
   from: string
   to: string[]
+  /**
+   * WP113（63 §7）：抄送 / 密送。
+   *
+   * 老调用方（审批通过的回信）一条都不传——那条路的收件人只从线程台账取
+   * （31 §3.3 收件人门禁），本来就没有抄送这回事。这两格只给**人自己写的信**用。
+   */
+  cc?: string[]
+  bcc?: string[]
   subject: string
   text: string
   html?: string
@@ -44,6 +52,8 @@ export interface TransportLike {
   sendMail(mail: {
     from: string
     to: string[]
+    cc?: string[]
+    bcc?: string[]
     subject: string
     text: string
     html?: string
@@ -99,6 +109,8 @@ export class SmtpMailer implements Mailer {
       const info = await this.client.sendMail({
         from: mail.from,
         to: [...mail.to],
+        ...(mail.cc === undefined || mail.cc.length === 0 ? {} : { cc: [...mail.cc] }),
+        ...(mail.bcc === undefined || mail.bcc.length === 0 ? {} : { bcc: [...mail.bcc] }),
         subject: mail.subject,
         text: mail.text,
         ...(mail.html === undefined ? {} : { html: mail.html }),

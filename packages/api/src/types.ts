@@ -67,6 +67,7 @@ import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
 import type { KolPort } from './routes/kol.js'
 import type { MeetingsPort } from './routes/meetings.js'
+import type { MessagesPort } from './routes/messages.js'
 import type { ModelsPort } from './routes/models.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
@@ -745,6 +746,11 @@ export interface GatewayDeps {
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */
   meetings?: MeetingsPort
+  /**
+   * WP113（63）：消息——统一收件处。没装配时 `/v1/messages/*` 回 not_implemented——
+   * 左栏的「消息」照实说"这台机器上还没连邮箱"，工作台其余一切照常。
+   */
+  messages?: MessagesPort
   /** WP20 连接面（连接向导 / 凭据原生表单直填）；没装配时 `/v1/connections/*` 回 not_implemented。 */
   connections?: ConnectionsPort
   /**
