@@ -1348,6 +1348,2800 @@
         ],
         "x-returns": "WorkspaceLinkView"
       }
+    },
+    "/v1/admin/bootstrap": {
+      "post": {
+        "operationId": "cloudAdminBootstrap",
+        "summary": "把一个邮箱提为 admin（第一个管理员；认运维令牌，不认后台会话）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ account_id, role: \"admin\" }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ account_id, role: \"admin\" }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  }
+                },
+                "required": ["email"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/auth/magic-link": {
+      "post": {
+        "operationId": "cloudAdminMagicLink",
+        "summary": "给后台账号发一封登录信（不是 staff 的邮箱：响应一模一样，但不发信）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ sent: true }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "{ sent: true }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  }
+                },
+                "required": ["email"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/me": {
+      "get": {
+        "operationId": "cloudAdminMe",
+        "summary": "我是谁、什么角色、成本表核对过没有",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ account, role, cost_table }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ account, role, cost_table }"
+      }
+    },
+    "/v1/admin/auth/logout": {
+      "post": {
+        "operationId": "cloudAdminLogout",
+        "summary": "注销后台会话（清 cookie + 库里写 revoked_at）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ revoked: true }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ revoked: true }"
+      }
+    },
+    "/v1/admin/overview": {
+      "get": {
+        "operationId": "cloudAdminOverview",
+        "summary": "总览：KPI、日趋势（7 / 30 / 90）、按能力 / 供应商 / 模型、成本 Top 10、亏本告警",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "AdminOverview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "AdminOverview"
+      }
+    },
+    "/v1/admin/accounts": {
+      "get": {
+        "operationId": "cloudAdminAccounts",
+        "summary": "用户列表：搜邮箱 / 筛角色与封禁 / 服务端排序分页",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "AdminPage<AdminAccountRow>",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "AdminPage<AdminAccountRow>"
+      }
+    },
+    "/v1/admin/accounts/{id}": {
+      "get": {
+        "operationId": "cloudAdminAccount",
+        "summary": "一个用户的抽屉：组织、余额、近 30 天用量、封禁历史",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "账号 id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ account, org, balance, usage_30d, ban }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ account, org, balance, usage_30d, ban }"
+      }
+    },
+    "/v1/admin/accounts/{id}/ban": {
+      "post": {
+        "operationId": "cloudAdminBanAccount",
+        "summary": "封禁（理由必填，可选到期）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "账号 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "AccountBan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "AccountBan",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  },
+                  "expires_at": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 40
+                  }
+                },
+                "required": ["reason"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/accounts/{id}/unban": {
+      "post": {
+        "operationId": "cloudAdminUnbanAccount",
+        "summary": "解封（写 lifted_at，不删行）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "账号 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ lifted: number }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ lifted: number }"
+      }
+    },
+    "/v1/admin/accounts/{id}/role": {
+      "post": {
+        "operationId": "cloudAdminSetRole",
+        "summary": "改角色（只有 admin；不能改自己）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "账号 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ account_id, role }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ account_id, role }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": ["user", "support", "admin"]
+                  }
+                },
+                "required": ["role"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/accounts/{id}/revoke-sessions": {
+      "post": {
+        "operationId": "cloudAdminRevokeSessions",
+        "summary": "吊销这个人的全部会话与工作区令牌",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "账号 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ sessions, links }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ sessions, links }"
+      }
+    },
+    "/v1/admin/accounts/{id}/delete": {
+      "post": {
+        "operationId": "cloudAdminDeleteAccount",
+        "summary": "删除账号（必须已封禁 → 手打邮箱 → 不能删自己与 admin；钱与账保留并匿名化）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "账号 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ deleted, orgs, anonymized_rows }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ deleted, orgs, anonymized_rows }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email_confirm": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["email_confirm", "reason"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/orgs": {
+      "get": {
+        "operationId": "cloudAdminOrgs",
+        "summary": "组织列表：成员数、活令牌数、余额、近 30 天用量与成本",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "AdminPage<AdminOrgRow>",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "AdminPage<AdminOrgRow>"
+      }
+    },
+    "/v1/admin/orgs/{id}": {
+      "get": {
+        "operationId": "cloudAdminOrg",
+        "summary": "组织抽屉：成员、关联令牌（只有前缀与动作集）、钱包 lots、近 30 天用量",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "组织 id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ org, members, links, lots, usage_30d, memberships }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ org, members, links, lots, usage_30d, memberships }"
+      }
+    },
+    "/v1/admin/orgs/{id}/suspend": {
+      "post": {
+        "operationId": "cloudAdminSuspendOrg",
+        "summary": "停用组织（= 云端服务入口拒绝；不影响他本地的软件）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "组织 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ suspended: true }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ suspended: true }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["reason"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/orgs/{id}/resume": {
+      "post": {
+        "operationId": "cloudAdminResumeOrg",
+        "summary": "恢复组织",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "组织 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ suspended: false }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ suspended: false }"
+      }
+    },
+    "/v1/admin/links/{id}/revoke": {
+      "post": {
+        "operationId": "cloudAdminRevokeLink",
+        "summary": "吊销一把工作区关联令牌",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "关联 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ revoked: true }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ revoked: true }"
+      }
+    },
+    "/v1/admin/usage": {
+      "get": {
+        "operationId": "cloudAdminUsage",
+        "summary": "用量台账：筛组织 / 能力 / 供应商 / 模型 / 状态 / 时间，服务端分页",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "AdminPage<AdminUsageRow> + loss",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "AdminPage<AdminUsageRow> + loss"
+      }
+    },
+    "/v1/admin/usage/filters": {
+      "get": {
+        "operationId": "cloudAdminUsageFilters",
+        "summary": "台账筛选器的取值（表里真出现过的，不是我们以为会有的）",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ capabilities, providers, models }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ capabilities, providers, models }"
+      }
+    },
+    "/v1/admin/usage/export.csv": {
+      "get": {
+        "operationId": "cloudAdminUsageExport",
+        "summary": "CSV 导出（流式；记一条审计）",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "text/csv",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "text/csv"
+      }
+    },
+    "/v1/admin/credits": {
+      "get": {
+        "operationId": "cloudAdminCredits",
+        "summary": "发放流水、手动会员 term 列表、即将到期",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ grants, terms, expiring, plans }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ grants, terms, expiring, plans }"
+      }
+    },
+    "/v1/admin/credits/grant": {
+      "post": {
+        "operationId": "cloudAdminGrantCredits",
+        "summary": "发积分（默认 granted，可批量；理由必填；逐个幂等）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ granted: [...], skipped: [...] }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ granted: [...], skipped: [...] }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "emails": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 320
+                    }
+                  },
+                  "org_ids": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "credits": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "kind": {
+                    "default": "granted",
+                    "type": "string",
+                    "enum": ["granted", "purchased"]
+                  },
+                  "expires_in_days": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 3650
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["credits", "reason"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/credits/revoke": {
+      "post": {
+        "operationId": "cloudAdminRevokeCredits",
+        "summary": "撤回一笔已发积分里还没被消耗的部分（两个旧后台都没有，这里补上）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ lot_id, revoked }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ lot_id, revoked }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "lot_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["lot_id", "reason"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/membership/start": {
+      "post": {
+        "operationId": "cloudAdminStartMembership",
+        "summary": "手动开通会员（档位 + 月数或绝对到期日；按 cycle 幂等发积分）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ term, cycles, granted }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ term, cycles, granted }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "org_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "plan_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "months": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 60
+                  },
+                  "until": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 40
+                  },
+                  "grant_now": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": ["plan_id"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/membership/{id}/cancel": {
+      "post": {
+        "operationId": "cloudAdminCancelMembership",
+        "summary": "取消会员（term 即刻结束；已发积分不回收）",
+        "tags": ["cloud-admin"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "term id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ cancelled: true }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ cancelled: true }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["reason"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/health": {
+      "get": {
+        "operationId": "cloudAdminHealth",
+        "summary": "健康：发信 / 上游 / 计量管线 / 定时 / 备份 —— 每项写明「它测量了什么」",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "AdminHealthItem[]",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "AdminHealthItem[]"
+      }
+    },
+    "/v1/admin/audit": {
+      "get": {
+        "operationId": "cloudAdminAudit",
+        "summary": "审计（只读分页）",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "AdminPage<AuditEntry>",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "AdminPage<AuditEntry>"
+      }
     }
   },
   "x-asyncapi": {
