@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@agentsws/catalog": "workspace:*",
+    "@agentsws/channels": "workspace:*",
     "@agentsws/ads-core": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",

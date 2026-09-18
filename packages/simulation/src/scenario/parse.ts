@@ -186,6 +186,11 @@ const EVENT_KEYS = [
   'fulfillment.mark_shipped',
   'email.unsubscribe',
   'email.campaign_send',
+  // WP113 消息（63 §4）
+  'messages.inbound',
+  'messages.correct',
+  'messages.disable_position',
+  'messages.halt_model',
   // WP72 社媒运营（56 §2 / §4）
   'social.post',
   'social.reply',
@@ -281,6 +286,8 @@ const EXPECTED_KEYS = [
   // WP64（51 §2.3 / §2.4）
   'overdue_orders',
   'campaign_send',
+  // WP113（63 §4）
+  'message_triage',
   // WP67（48 §5.1）
   'kol_outreach',
   'kol_collaboration',
@@ -785,6 +792,80 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             : { order: str(source, `${path}.${key}.order`, body.order) }),
           ...(shipLevel === undefined ? {} : { level: shipLevel as 'L1' | 'L2' | 'L3' }),
         },
+      }
+    }
+    /*
+     * WP113（63 §4）：消息。
+     *
+     * 场景只说"谁寄了什么"与"人挪了哪一封"——**判成什么不在这儿**：
+     * 那由 `@agentsws/channels` 的 `triageMessage` 算（真服务进程里跑的同一个函数）。
+     */
+    case 'messages.inbound': {
+      known(source, `${path}.${key}`, body, ['from', 'subject', 'body', 'headers', 'in_reply_to'])
+      const headers = body.headers
+      if (headers !== undefined && !isRec(headers)) {
+        fail(source, `${path}.${key}.headers`, 'headers 必须是对象')
+      }
+      const parsedHeaders: Record<string, string> = {}
+      for (const [k, v] of Object.entries((headers ?? {}) as Record<string, unknown>)) {
+        parsedHeaders[k.toLowerCase()] = str(source, `${path}.${key}.headers.${k}`, v)
+      }
+      return {
+        at,
+        type: 'messages.inbound',
+        message: {
+          from: str(source, `${path}.${key}.from`, body.from),
+          subject: str(source, `${path}.${key}.subject`, body.subject),
+          body: str(source, `${path}.${key}.body`, body.body),
+          ...(Object.keys(parsedHeaders).length === 0 ? {} : { headers: parsedHeaders }),
+          ...(body.in_reply_to === undefined
+            ? {}
+            : { in_reply_to: str(source, `${path}.${key}.in_reply_to`, body.in_reply_to) }),
+        },
+      }
+    }
+    case 'messages.correct': {
+      known(source, `${path}.${key}`, body, ['from', 'to', 'remember_sender'])
+      const to = str(source, `${path}.${key}.to`, body.to)
+      if (!['inbox', 'support', 'kol'].includes(to)) {
+        fail(source, `${path}.${key}.to`, 'to 只能是 inbox / support / kol')
+      }
+      return {
+        at,
+        type: 'messages.correct',
+        correct: {
+          from: str(source, `${path}.${key}.from`, body.from),
+          to: to as 'inbox' | 'support' | 'kol',
+          ...(body.remember_sender === undefined
+            ? {}
+            : {
+                remember_sender: requireBool(
+                  source,
+                  `${path}.${key}.remember_sender`,
+                  body.remember_sender,
+                ),
+              }),
+        },
+      }
+    }
+    case 'messages.disable_position': {
+      known(source, `${path}.${key}`, body, ['position'])
+      const position = str(source, `${path}.${key}.position`, body.position)
+      if (!['support', 'kol'].includes(position)) {
+        fail(source, `${path}.${key}.position`, 'position 只能是 support / kol')
+      }
+      return {
+        at,
+        type: 'messages.disable_position',
+        disable_position: { position: position as 'support' | 'kol' },
+      }
+    }
+    case 'messages.halt_model': {
+      known(source, `${path}.${key}`, body, ['on'])
+      return {
+        at,
+        type: 'messages.halt_model',
+        halt_model: { on: requireBool(source, `${path}.${key}.on`, body.on) },
       }
     }
     // WP64（51 §2.3）：退订与群发
@@ -2053,6 +2134,18 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       audience_size: 'num',
       suppressed_removed: 'num',
       stated_on_card: 'bool',
+    },
+    // WP113（63 §4）：最后一封信分拣成了什么
+    message_triage: {
+      route: 'str',
+      suggested_route: 'str',
+      labels: 'strs',
+      by: 'str',
+      needs_reply: 'bool',
+      moved: 'bool',
+      moved_to: 'str',
+      model_calls: 'num',
+      confidence: 'num',
     },
     kol_outreach: {
       forbidden_hits: 'strs',
