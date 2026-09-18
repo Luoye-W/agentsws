@@ -27,6 +27,7 @@
     "@agentsws/api": "workspace:*",
     "@agentsws/cloud-entry": "workspace:*",
     "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*",
     "@agentsws/kol-public": "workspace:*",
     "@agentsws/metering": "workspace:*",
     "@agentsws/server": "workspace:*",

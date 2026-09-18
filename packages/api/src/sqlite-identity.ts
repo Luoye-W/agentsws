@@ -23,6 +23,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { brandNameOf } from '@agentsws/contracts'
+import { syncDbFromBetterSqlite } from '@agentsws/core/sql/sync-db'
 import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { ApiError } from './errors.js'
@@ -206,7 +207,8 @@ export class SqliteIdentityService implements LocalIdentityService {
     this.#sessionTtl = options.sessionTtlMs ?? DEFAULT_SESSION_TTL
     this.#db = new Database(options.dbPath ?? ':memory:')
     this.#db.pragma('journal_mode = WAL')
-    migrate(this.#db, MIGRATIONS, this.#clock.now())
+    // WP114：迁移器的入参是同步 SQL 口（`SyncDb`），这里把连接包一层
+    migrate(syncDbFromBetterSqlite(this.#db), MIGRATIONS, this.#clock.now())
     const backend: OrgBackend = {
       get: (id) => {
         const row = this.#db
@@ -267,7 +269,7 @@ export class SqliteIdentityService implements LocalIdentityService {
     this.#organizations.migrateWorkspace(input)
 
   get schemaVersion(): number {
-    return schemaVersion(this.#db)
+    return schemaVersion(syncDbFromBetterSqlite(this.#db))
   }
 
   /** 底层连接；只给同包测试用（断言 token 只存哈希）。 */

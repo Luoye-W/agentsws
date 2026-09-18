@@ -16,6 +16,8 @@ export {
   roundCredits,
   TOKEN_CAPABILITIES,
 } from './pricing.js'
+export type { SqlWalletStore, SqlWalletStoreOptions } from './sql-store.js'
+export { createSqlWalletStore, WALLET_MIGRATIONS } from './sql-store.js'
 export type { SqliteWalletStore, SqliteWalletStoreOptions } from './sqlite-store.js'
 export { createSqliteWalletStore } from './sqlite-store.js'
 export type {

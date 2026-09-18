@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto'
 import type { Clock, CloudScope, CloudTokenVerifier, VerifiedCloudToken } from '@agentsws/contracts'
 import { WORKSPACE_TOKEN_PREFIX } from '@agentsws/contracts'
-import type { Database } from 'better-sqlite3'
+import type { SyncDb } from '@agentsws/core/sql/sync-db'
 
 const SYSTEM_CLOCK: Clock = { now: () => new Date().toISOString() }
 
@@ -32,8 +32,8 @@ interface VerifyRow {
  * 验成功会顺手把 `last_used_at` 往前推——那是"这把令牌还在用"的唯一证据，
  * 撤旧令牌时靠它判断"撤了会不会打断谁"。写的是时间，不是计数，也不是调用内容。
  */
-export function sqliteTokenVerifier(db: Database, clock: Clock = SYSTEM_CLOCK): CloudTokenVerifier {
-  const select = db.prepare<[string], VerifyRow>(
+export function sqliteTokenVerifier(db: SyncDb, clock: Clock = SYSTEM_CLOCK): CloudTokenVerifier {
+  const select = db.prepare<VerifyRow>(
     `SELECT id, workspace_id, cloud_org_id, scopes, expires_at, revoked_at, created_by
      FROM workspace_links WHERE token_sha256 = ?`,
   )

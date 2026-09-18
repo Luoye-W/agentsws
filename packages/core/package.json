@@ -16,6 +16,14 @@
       "types": "./dist/sql/index.d.ts",
       "import": "./dist/sql/index.js"
     },
+    "./sql/sync-db": {
+      "types": "./dist/sql/sync-db.d.ts",
+      "import": "./dist/sql/sync-db.js"
+    },
+    "./sql/sync-db-contract": {
+      "types": "./dist/sql/sync-db-contract.d.ts",
+      "import": "./dist/sql/sync-db-contract.js"
+    },
     "./sql/testing": {
       "types": "./dist/sql/testing.d.ts",
       "import": "./dist/sql/testing.js"

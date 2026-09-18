@@ -104,14 +104,19 @@ export {
   CLOUD_SESSION_TTL_MS,
   type CloudSessionRow,
   CloudStore,
-  type CloudStoreOptions,
+  type CloudStoreDeps,
   type CreateLinkInput,
-  cloudDbPath,
-  createCloudStore,
+  createCloudStoreOn,
   hashToken,
   rowToLink,
   type VerifiedLogin,
 } from './store.js'
+export {
+  type CloudStoreOptions,
+  cloudDbPath,
+  createCloudStore,
+  openCloudDb,
+} from './store-node.js'
 export { sqliteTokenVerifier } from './verifier.js'
 export { linkView, type WorkspaceLinkView } from './views.js'
 

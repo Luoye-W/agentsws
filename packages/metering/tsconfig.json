@@ -2,5 +2,5 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": "src", "outDir": "dist", "resolveJsonModule": true },
   "include": ["src/**/*.ts", "src/**/*.json"],
-  "references": [{ "path": "../contracts" }, { "path": "../model-gateway" }]
+  "references": [{ "path": "../contracts" }, { "path": "../core" }, { "path": "../model-gateway" }]
 }

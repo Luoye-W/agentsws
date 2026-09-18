@@ -45,7 +45,8 @@ import { indexPage, loginPage } from './pages.js'
 import { authRoutes } from './routes/auth.js'
 import { type CloudHealthState, cloudHealthRoutes } from './routes/health.js'
 import { linkRoutes } from './routes/links.js'
-import { type CloudStore, cloudDbPath, createCloudStore } from './store.js'
+import type { CloudStore } from './store.js'
+import { cloudDbPath, createCloudStore } from './store-node.js'
 
 /** 云侧默认端口。与本地服务进程（3000 档）离得远，同机跑两个不打架。 */
 export const DEFAULT_CLOUD_PORT = 4400

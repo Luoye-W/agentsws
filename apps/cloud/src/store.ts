@@ -13,8 +13,6 @@
  */
 
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
 import { migrate } from '@agentsws/api'
 import type {
   Clock,
@@ -28,8 +26,7 @@ import type {
   WorkspaceLink,
 } from '@agentsws/contracts'
 import { DEFAULT_CLOUD_SCOPES, DEFAULT_WORKSPACE_TOKEN_TTL_MS } from '@agentsws/contracts'
-import type { Database as Db } from 'better-sqlite3'
-import Database from 'better-sqlite3'
+import type { SyncDb } from '@agentsws/core/sql/sync-db'
 import { sqliteTokenVerifier } from './verifier.js'
 
 /** magic link 的有效期：15 分钟（与 20 §3 本地档同一个数）。 */
@@ -102,9 +99,13 @@ CREATE INDEX IF NOT EXISTS workspace_links_by_org ON workspace_links (cloud_org_
   },
 ]
 
-export interface CloudStoreOptions {
-  /** `cloud.sqlite` 的路径；`:memory:` = 不落盘（测试）。 */
-  dbPath: string
+export interface CloudStoreDeps {
+  /**
+   * 一张已经开好的库（同步 SQL 口）。开在哪由装配方决定：
+   * Compose 形态是 `cloud.sqlite`（见 `store-node.ts`），Workers 形态是
+   * `AccountsDO` 自己的 SQLite。**这个文件不知道也不需要知道是哪一种。**
+   */
+  db: SyncDb
   clock: Clock
   /** 随机源注入点（测试用）。默认 `node:crypto` 的 randomBytes。 */
   randomBytes?: (n: number) => Buffer
@@ -165,15 +166,13 @@ export function rowToLink(row: LinkRow): WorkspaceLink {
 const normalizeEmail = (email: string): string => email.trim().toLowerCase()
 
 export class CloudStore {
-  readonly db: Db
+  readonly db: SyncDb
   readonly #clock: Clock
   readonly #random: (n: number) => Buffer
   readonly #verify: (token: string) => Promise<VerifiedCloudToken | undefined>
 
-  constructor(options: CloudStoreOptions) {
-    this.db = new Database(options.dbPath)
-    this.db.pragma('journal_mode = WAL')
-    this.db.pragma('foreign_keys = ON')
+  constructor(options: CloudStoreDeps) {
+    this.db = options.db
     this.#clock = options.clock
     this.#random = options.randomBytes ?? nodeRandomBytes
     migrate(this.db, MIGRATIONS, options.clock.now())
@@ -247,30 +246,25 @@ export class CloudStore {
 
   account(id: string): CloudAccount | undefined {
     return this.db
-      .prepare<[string], CloudAccount>(
-        'SELECT id, email, created_at FROM cloud_accounts WHERE id = ?',
-      )
+      .prepare<CloudAccount>('SELECT id, email, created_at FROM cloud_accounts WHERE id = ?')
       .get(id)
   }
 
   accountByEmail(email: string): CloudAccount | undefined {
     return this.db
-      .prepare<[string], CloudAccount>(
-        'SELECT id, email, created_at FROM cloud_accounts WHERE email = ?',
-      )
+      .prepare<CloudAccount>('SELECT id, email, created_at FROM cloud_accounts WHERE email = ?')
       .get(normalizeEmail(email))
   }
 
   org(id: string): CloudOrg | undefined {
     const row = this.db
-      .prepare<
-        [string],
-        { id: string; name: string; owner_account_id: string; created_at: string }
-      >('SELECT id, name, owner_account_id, created_at FROM cloud_orgs WHERE id = ?')
+      .prepare<{ id: string; name: string; owner_account_id: string; created_at: string }>(
+        'SELECT id, name, owner_account_id, created_at FROM cloud_orgs WHERE id = ?',
+      )
       .get(id)
     if (row === undefined) return undefined
     const members = this.db
-      .prepare<[string], CloudOrgMember>(
+      .prepare<CloudOrgMember>(
         'SELECT account_id, role, joined_at FROM cloud_org_members WHERE org_id = ? ORDER BY joined_at',
       )
       .all(id)
@@ -280,7 +274,7 @@ export class CloudStore {
   /** 这个人所属的第一个组织（本版一人一组织；团队版是往同一个组织里加成员）。 */
   primaryOrg(account_id: string): CloudOrg | undefined {
     const row = this.db
-      .prepare<[string], { org_id: string }>(
+      .prepare<{ org_id: string }>(
         'SELECT org_id FROM cloud_org_members WHERE account_id = ? ORDER BY joined_at LIMIT 1',
       )
       .get(account_id)
@@ -290,7 +284,7 @@ export class CloudStore {
   isMember(org_id: string, account_id: string): boolean {
     return (
       (this.db
-        .prepare<[string, string], { n: number }>(
+        .prepare<{ n: number }>(
           'SELECT COUNT(*) AS n FROM cloud_org_members WHERE org_id = ? AND account_id = ?',
         )
         .get(org_id, account_id)?.n ?? 0) > 0
@@ -318,10 +312,12 @@ export class CloudStore {
   /** 验一次性 token 并换会话。用过 / 过期 / 不存在一律 `undefined`。 */
   verifyLogin(token: string, ttlMs = CLOUD_SESSION_TTL_MS): VerifiedLogin | undefined {
     const row = this.db
-      .prepare<
-        [string],
-        { token_sha256: string; account_id: string; expires_at: string; used_at: string | null }
-      >(
+      .prepare<{
+        token_sha256: string
+        account_id: string
+        expires_at: string
+        used_at: string | null
+      }>(
         'SELECT token_sha256, account_id, expires_at, used_at FROM cloud_logins WHERE token_sha256 = ?',
       )
       .get(hashToken(token))
@@ -346,16 +342,13 @@ export class CloudStore {
   session(token: string): CloudSessionRow | undefined {
     const hash = hashToken(token)
     const row = this.db
-      .prepare<
-        [string],
-        {
-          token_sha256: string
-          account_id: string
-          org_id: string
-          expires_at: string
-          revoked_at: string | null
-        }
-      >(
+      .prepare<{
+        token_sha256: string
+        account_id: string
+        org_id: string
+        expires_at: string
+        revoked_at: string | null
+      }>(
         'SELECT token_sha256, account_id, org_id, expires_at, revoked_at FROM cloud_sessions WHERE token_sha256 = ?',
       )
       .get(hash)
@@ -423,15 +416,13 @@ export class CloudStore {
   }
 
   link(id: string): WorkspaceLink | undefined {
-    const row = this.db
-      .prepare<[string], LinkRow>('SELECT * FROM workspace_links WHERE id = ?')
-      .get(id)
+    const row = this.db.prepare<LinkRow>('SELECT * FROM workspace_links WHERE id = ?').get(id)
     return row === undefined ? undefined : rowToLink(row)
   }
 
   links(org_id: string): WorkspaceLink[] {
     return this.db
-      .prepare<[string], LinkRow>(
+      .prepare<LinkRow>(
         'SELECT * FROM workspace_links WHERE cloud_org_id = ? ORDER BY created_at DESC',
       )
       .all(org_id)
@@ -441,7 +432,7 @@ export class CloudStore {
   /** 这个工作区现在还活着的那条关联（撤了 / 过期了都不算）。 */
   activeLinkOfWorkspace(workspace_id: string): WorkspaceLink | undefined {
     return this.db
-      .prepare<[string], LinkRow>(
+      .prepare<LinkRow>(
         'SELECT * FROM workspace_links WHERE workspace_id = ? AND revoked_at IS NULL ORDER BY created_at DESC',
       )
       .all(workspace_id)
@@ -491,13 +482,13 @@ function constantTimeEqual(a: string, b: string): boolean {
   return timingSafeEqual(x, y)
 }
 
-/** `AGENTSWS_CLOUD_DATA_DIR` → `cloud.sqlite` 的路径；不给就内存档。 */
-export function cloudDbPath(dataDir: string | undefined): string {
-  if (dataDir === undefined || dataDir.trim() === '') return ':memory:'
-  mkdirSync(dataDir, { recursive: true })
-  return join(dataDir, 'cloud.sqlite')
-}
-
-export function createCloudStore(options: CloudStoreOptions): CloudStore {
+/**
+ * 在一张已经开好的库上装一个账号库。
+ *
+ * 开库那一跳（路径、WAL、外键）在 `store-node.ts`——它是**唯一**一处
+ * `better-sqlite3` 出现在云侧账号层的地方。Workers 形态把 `db` 换成 DO 的 SQLite，
+ * 这个文件一个字都不动。
+ */
+export function createCloudStoreOn(options: CloudStoreDeps): CloudStore {
   return new CloudStore(options)
 }

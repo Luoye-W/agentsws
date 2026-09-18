@@ -484,6 +484,12 @@ export {
   wsRoutes,
 } from './routes/ws.js'
 export {
+  IDEMPOTENCY_EPOCH,
+  IDEMPOTENCY_MIGRATIONS,
+  type SqlIdempotencyOptions,
+  SqlIdempotencyStore,
+} from './sql-idempotency.js'
+export {
   createSqliteIdempotencyStore,
   type SqliteIdempotencyOptions,
   SqliteIdempotencyStore,
