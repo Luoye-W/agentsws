@@ -34,6 +34,8 @@ import { LoginPage } from '@/pages/login'
 import { MatterPage } from '@/pages/matter'
 import { MeetingPage } from '@/pages/meeting'
 import { MeetingsPage } from '@/pages/meetings'
+// WP113（63）：消息——统一收件处（左栏那个入口从「目标」换过来的）
+import { MessagesPage } from '@/pages/messages'
 import { OnboardingPage, onboardingSkipped } from '@/pages/onboarding'
 import { OrgPage } from '@/pages/org'
 import { PeoplePage, PersonPage } from '@/pages/people'
@@ -179,7 +181,14 @@ function Workspace(): ReactNode {
         <Route path="/matters/:id" element={<MatterPage />} />
         <Route path="/todos" element={<TodosPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        {/*
+          WP113（63 §1）：`/goals` **留着**。左栏入口换成「消息」之后目标收进
+          待办页的一个 tab（`/todos?tab=goals`），但这条路由还在——⌘K 搜得到、
+          老书签点得开、首页那一行"目标 2 项 →"也仍然跳它。
+        */}
         <Route path="/goals" element={<GoalsPage />} />
+        {/* WP113（63）：消息——整只邮箱 */}
+        <Route path="/messages" element={<MessagesPage />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />

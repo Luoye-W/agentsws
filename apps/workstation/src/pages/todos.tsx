@@ -13,7 +13,7 @@ import type { Todo } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, MoreHorizontal } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -31,6 +31,8 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { DAY_MS, groupByHorizon, HORIZONS, todoUrl } from '@/lib/work'
+// WP113（63 §1）：目标入口从左栏收进这一页的 tab（`/goals` 路由仍然留着）
+import { GoalsPage } from '@/pages/goals'
 
 export const TODO_DRAG_TYPE = 'application/x-agentsws-todo'
 
@@ -152,10 +154,22 @@ function TodoRow({
   )
 }
 
+/**
+ * WP113（63 §1）：**目标收进这一页的一个 tab**。
+ *
+ * 左栏那一格换成「消息」之后，目标需要一个去处。放这儿而不是别处的理由：
+ * 待办与目标本来就是同一件事的两端（37 §2.3「目标 → 待办」那条链），
+ * 人看完"这周还剩什么"顺手想看一眼"这个月定的数走到哪了"，中间不该隔一次导航。
+ *
+ * **目标模型一个字没删**：`/goals` 路由留着，⌘K 搜得到，首页那一行也还跳它。
+ * 这里只是多开一扇门。tab 记在 URL 的 `?tab=goals` 上——刷新之后还在那一格。
+ */
 export function TodosPage(): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const [title, setTitle] = useState('')
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'goals' ? 'goals' : 'todos'
 
   const todos = useQuery({
     queryKey: ['todos'],
@@ -215,8 +229,41 @@ export function TodosPage(): React.ReactNode {
 
   const groups = groupByHorizon(todos.data.todos)
 
+  const tabs = (
+    <div className="flex gap-1" role="tablist" data-testid="todos-tabs">
+      {(['todos', 'goals'] as const).map((id) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={tab === id}
+          data-testid={`todos-tab-${id}`}
+          className={
+            tab === id
+              ? 'rounded-[10px] bg-sidebar-accent px-3 py-1.5 text-[13px] font-medium text-sidebar-accent-foreground'
+              : 'rounded-[10px] px-3 py-1.5 text-[13px] text-ws-muted-fg hover:bg-sidebar-accent/60'
+          }
+          onClick={() => {
+            setParams(id === 'goals' ? { tab: 'goals' } : {}, { replace: true })
+          }}
+        >
+          {t(id === 'goals' ? 'goals.title' : 'todos.title')}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (tab === 'goals')
+    return (
+      <div className="flex max-w-3xl flex-col gap-4" data-testid="todos">
+        {tabs}
+        <GoalsPage />
+      </div>
+    )
+
   return (
     <div className="flex max-w-3xl flex-col gap-6" data-testid="todos">
+      {tabs}
       <h1 className="flex items-center gap-1 text-base font-semibold">
         {t('todos.title')}
         <Hint text={t('todos.drag_hint')} />
