@@ -14,7 +14,7 @@
  * 没有全局聊天框（对话只在卡片指导、问 AI、⌘K、事项页四处）。
  */
 import type { CalendarItem, CalendarSource, GoalProgress, Todo } from '@agentsws/contracts'
-import type { RangeName } from '@agentsws/deck'
+import type { PositionTiles, RangeName } from '@agentsws/deck'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Briefcase,
@@ -28,7 +28,7 @@ import {
   Target,
   Users,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
@@ -42,11 +42,14 @@ import {
   getHome,
   getPositions,
   listInProgress,
+  listMembers,
   openMatterAtPosition,
   type PositionInstanceData,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { LAYER_ICON } from '@/lib/calendar-layers'
+import { formatValue } from '@/lib/format'
+import type { Lang } from '@/lib/i18n'
 import { hhmm, matterUrl, todoUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
@@ -64,11 +67,69 @@ const POSITION_TONES: Tone[] = ['info', 'good', 'warn', 'bad']
  *
  * 没装岗位面的服务进程没有 `instances`——那时候整块不出，首页退回老样子。
  */
-function PositionCards(): React.ReactNode {
-  const { t } = useApp()
+/** 一张卡上那句状态最多摆几个数：三个是一行的量，第四个就换行了。 */
+const MAX_STATUS_FACTS = 3
+
+/**
+ * WP98：岗位卡中间那句**真状态**。
+ *
+ * 原来那句是 `position.counts`——"3 张待审 · 2 件在办"。它和卡上那个 28px 的大数字
+ * 说的是同一件事，于是一张卡上同一个数印了两遍，而"这个岗位现在到底怎么样"一个字都没有。
+ * 现在改成从**岗位面板已经算好的数字块**里抄：客服是"待回复 2 · 24h 回复率 96%"，
+ * 网站运营是"改价 1 待审 · 库存告急 3"。
+ *
+ * 两条纪律：
+ * - **一个数都不在这儿算**（29 原则 ③ / 14 §2）：`StatTile` 是服务端算好下发的，
+ *   这里只把 `label` 与 `value` 拼成一句话；
+ * - **没连上的数据源不出**（`status === 'not_connected'` 的块跳过），一个数都没有的岗位
+ *   照实说"还没开工"，不编一句"一切正常"。
+ *
+ * 首页那份 `tiles` 按**分配 id** 分组（`PositionTiles.position_id` 是 assignment），
+ * 而岗位实体的 id 是模板 id——所以这里按这个岗位下全部职责的 `assignment_ids` 去认。
+ */
+function statusLine(
+  position: PositionInstanceData,
+  tiles: PositionTiles[],
+  lang: Lang,
+): string | undefined {
+  const mine = new Set(position.roles.flatMap((r) => r.assignment_ids))
+  const facts = tiles
+    .filter((bar) => mine.has(bar.position_id))
+    .flatMap((bar) => bar.tiles)
+    .filter((tile) => tile.status === 'ok' && tile.value !== undefined)
+    .slice(0, MAX_STATUS_FACTS)
+    .map((tile) => `${tile.label} ${formatValue(tile.value, tile.format, lang, tile.currency)}`)
+  return facts.length === 0 ? undefined : facts.join(' · ')
+}
+
+/**
+ * WP98：持有人头像那一排（画布上卡左下角那几个圆头像）。
+ *
+ * `instances[].holders` 给的是 person id，卡上要的是**展示名**——所以这里拿成员清单
+ * 换一次名字（`/v1/workspaces/:id/members` 是既有的读接口，没加路由）。
+ * 换不到名字的 person **不画头像**：19 §3 / WP15 那条"先给再脱敏"的反面教训——
+ * 与其在卡上印半个 `p_li`，不如那个位置什么都没有。问不到整份清单（403 / 离线）时
+ * 一排头像整个不出，卡的其余部分照旧。
+ */
+function useHolderNames(workspace_id: string | undefined): Map<string, string> {
+  const members = useQuery({
+    queryKey: ['members', workspace_id],
+    enabled: workspace_id !== undefined && workspace_id !== '',
+    retry: false,
+    queryFn: () => listMembers(workspace_id ?? ''),
+  })
+  return useMemo(
+    () => new Map((members.data ?? []).map((m) => [m.person_id, m.name])),
+    [members.data],
+  )
+}
+
+function PositionCards({ tiles }: { tiles: PositionTiles[] }): React.ReactNode {
+  const { t, lang } = useApp()
   const navigate = useNavigate()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const instances = positions.data?.instances ?? []
+  const names = useHolderNames(instances[0]?.workspace_id)
   if (instances.length === 0) return null
   return (
     <section data-testid="position-cards">
@@ -77,6 +138,10 @@ function PositionCards(): React.ReactNode {
         {instances.map((p, i) => {
           // 岗位页的地址用的是分配 id（36 §3 的"岗位"）：只能取**本人**那几条里的一条
           const to = p.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
+          const holders = p.holders
+            .map((id) => names.get(id))
+            .filter((name): name is string => name !== undefined && name !== '')
+            .map((name) => ({ name }))
           return (
             <div key={p.position_id} data-testid="position-card" data-position={p.position_id}>
               <PositionCard
@@ -85,10 +150,8 @@ function PositionCards(): React.ReactNode {
                 name={p.name.zh}
                 pending={p.pending_cards}
                 pendingLabel={t('home.positions.pending')}
-                line={t('position.counts', {
-                  cards: p.pending_cards,
-                  matters: p.open_matters,
-                })}
+                line={statusLine(p, tiles, lang) ?? t('home.positions.idle')}
+                holders={holders}
                 {...(to === undefined
                   ? {}
                   : {
@@ -406,7 +469,7 @@ export function HomePage(): React.ReactNode {
       </header>
 
       {/* ② WP69（54 §4）：首页只列**岗位**卡，职责不出现 */}
-      <PositionCards />
+      <PositionCards tiles={data.tiles} />
 
       {/* ③ 目标：一行（WP98 收口——原来是第一屏最上面那一整块网格） */}
       <GoalsLine goals={goals} />

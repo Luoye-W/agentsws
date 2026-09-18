@@ -8,7 +8,7 @@
  */
 
 import type { GoalProgress } from '@agentsws/contracts'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
 import { homeData } from './fixtures'
@@ -17,12 +17,17 @@ import { renderWithProviders } from './helpers'
 const home = homeData()
 
 /** 两个岗位——只有一个的人首页直接跳岗位页（54 §4），那就看不到这一屏了。 */
-const instance = (id: string, name: string, assignment: string): PositionInstanceData => ({
+const instance = (
+  id: string,
+  name: string,
+  assignment: string,
+  holders: string[] = [],
+): PositionInstanceData => ({
   position_id: id,
   workspace_id: 'ws_1',
   name: { zh: name, en: name },
   template_version: '1.0.0',
-  holders: [],
+  holders,
   roles: [
     {
       role_id: `${id}.role`,
@@ -68,10 +73,18 @@ const getHome = vi.fn(async () => home)
 const decide = vi.fn(async () => ({}))
 const getPositions = vi.fn(async () => ({
   positions: [],
-  instances: [instance('customer-care', '客服', 'asg_1'), instance('web-ops', '网站运营', 'asg_2')],
+  instances: [
+    // `p_hidden` 在成员清单里查不到名字：那个位置就该什么都没有（19 §3 / WP15）
+    instance('customer-care', '客服', 'asg_1', ['p_li', 'p_hidden']),
+    instance('web-ops', '网站运营', 'asg_2'),
+  ],
   tile_library: [],
   max_tiles: 4,
 }))
+
+const listMembers = vi.fn(async () => [
+  { person_id: 'p_li', name: '王岚', email: '', role: 'owner', joined_at: '', positions: [] },
+])
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -79,6 +92,7 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     getHome: (...args: unknown[]) => getHome(...(args as [])),
     getPositions: (...args: unknown[]) => getPositions(...(args as [])),
+    listMembers: (...args: unknown[]) => listMembers(...(args as [])),
     decide: (...args: unknown[]) => decide(...(args as [])),
   }
 })
@@ -186,5 +200,46 @@ describe('WP98 收口：第一屏的顺序', () => {
     renderWithProviders(<HomePage />)
     await screen.findByTestId('queue')
     expect(screen.queryByTestId('no-model-banner')).toBeNull()
+  })
+})
+
+describe('WP98 收口：岗位卡补齐持有人与一句真状态', () => {
+  beforeEach(() => {
+    getHome.mockClear()
+    getHome.mockImplementation(async () => home)
+  })
+
+  it('中间那句改成岗位面板已经算好的数，不再重复卡上那个大数字', async () => {
+    renderWithProviders(<HomePage />)
+    await screen.findByTestId('position-cards')
+    const care = screen
+      .getByTestId('position-cards')
+      .querySelector('[data-position="customer-care"]')
+    // 首页那份 tiles 按**分配 id** 分组（asg_1），岗位实体的 id 是模板 id
+    expect(care?.textContent).toContain('待回复 2')
+    // "N 张待审 · M 件在办"那句话不再出现在卡上
+    expect(care?.textContent).not.toContain('件在办')
+  })
+
+  it('没连上数据源的块不进那句话；一个数都没有的岗位照实说"还没开工"', async () => {
+    renderWithProviders(<HomePage />)
+    await screen.findByTestId('position-cards')
+    const cards = screen.getByTestId('position-cards')
+    // csat 那一块是 not_connected，一个字都不该进去
+    expect(cards.querySelector('[data-position="customer-care"]')?.textContent).not.toContain(
+      '满意度',
+    )
+    expect(cards.querySelector('[data-position="web-ops"]')?.textContent).toContain('还没开工')
+  })
+
+  it('持有人头像按展示名画；查不到名字的那个人不画（不在卡上印半个 id）', async () => {
+    renderWithProviders(<HomePage />)
+    const cards = await screen.findByTestId('position-cards')
+    await waitFor(() => {
+      // 卡片上那个提案人头像走的是同一个共用件，所以这里只在岗位卡这一段里数
+      expect(within(cards).getAllByTestId('ws-avatar')).toHaveLength(1)
+    })
+    expect(within(cards).getByTestId('ws-avatar').getAttribute('title')).toBe('王岚')
+    expect(cards.textContent).not.toContain('p_hidden')
   })
 })

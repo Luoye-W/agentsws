@@ -1204,6 +1204,8 @@ const zh: Table = {
   'home.positions.cards': '{count} 张待审',
   'home.positions.pending': '张待审',
   'home.positions.entry': '交给它一件事',
+  // WP98：岗位卡中间那句改成真状态；一个数都没有的岗位照实说，不编"一切正常"
+  'home.positions.idle': '还没开工',
   'home.headline': '今天',
   'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
   'home.stats': '今天的数',
@@ -3183,6 +3185,7 @@ const en: Table = {
   'home.positions.cards': '{count} waiting',
   'home.positions.pending': 'pending',
   'home.positions.entry': 'Hand it a task',
+  'home.positions.idle': 'Not started yet',
   'home.headline': 'Today',
   'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
   'home.stats': "Today's numbers",
