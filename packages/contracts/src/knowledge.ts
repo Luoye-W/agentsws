@@ -162,6 +162,29 @@ export interface KnowledgeSource {
    * 为空 = 还没同步过，第一次同步只记 hash，不产生复核。
    */
   last_content_hash?: string
+  /* ── WP99（19 §1.3「上传」）：`kind: 'upload'` 才有的几格。**只加不改** ──
+   *
+   * 为什么不塞进 `ref` 里：`ref` 是"到哪去拿这份东西"（`blob://<key>`），
+   * 而下面这几格是"这份东西是怎么来的"。混在一起的话，光把文件名显示出来
+   * 就得先解析一个 URL——而 key 是内容 hash，里面根本没有名字。
+   */
+  /** 给人看的原始文件名（洗过：没有路径、没有控制字符）。 */
+  filename?: string
+  /** 谁传的。 */
+  uploaded_by?: PersonId
+  /** 什么时候传的。 */
+  uploaded_at?: Iso8601
+  /** 原件内容的 sha256（十六进制全长）。溯源链认的就是它。 */
+  content_sha256?: string
+  /** 原件明文字节数。 */
+  size?: number
+  /**
+   * 软删（21 的擦除语义）：字节已经从对象存储里删掉了，这一行留着是**墓碑**。
+   *
+   * 清单里不再出现它；留行是为了"这个 id 曾经存在过"仍然追得到——
+   * 事件日志里 `knowledge.source.added` 与 `.removed` 两条都指着它。
+   */
+  deleted_at?: Iso8601
 }
 
 /** 19 §1.3 的登记入参（`id` / `chunks` / `last_synced_at` 由实现给）。 */

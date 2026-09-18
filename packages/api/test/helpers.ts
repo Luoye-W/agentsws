@@ -766,6 +766,9 @@ export async function harness(
     sources: [] as KnowledgeSource[],
     gaps: [] as KnowledgeGap[],
     cites: [] as { id: string; run_id: string }[],
+    /** WP99：网关把哪几份文件转下来了（文件名 + 字节，用来断言"原样转"）。 */
+    uploads: [] as { filename: string; bytes: Uint8Array }[],
+    deleted: [] as string[],
   }
   let knowledgeSeq = 0
   const knowledgeExtras: Partial<KnowledgePort> = {
@@ -786,6 +789,32 @@ export async function harness(
     },
     cite: (_actor, fact_card_id, run_id) => {
       knowledgeState.cites.push({ id: fact_card_id, run_id })
+    },
+    // WP99：上传 / 删除。这个假件只记"网关把什么转下来了"——真正的六道闸
+    // 在宿主那一侧（`apps/server/src/knowledge-upload.ts`），网关不认识 Office 格式
+    uploadSource: (_actor, input) => {
+      knowledgeSeq += 1
+      knowledgeState.uploads.push({ filename: input.filename, bytes: input.bytes })
+      const source: KnowledgeSource = {
+        id: `src_${knowledgeSeq}`,
+        workspace_id: workspace.id,
+        kind: 'upload',
+        ref: `blob://knowledge/${workspace.id}/${knowledgeSeq}`,
+        parser: 'anydoc',
+        acl_inherit: false,
+        chunks: 0,
+        filename: input.filename,
+        size: input.bytes.length,
+      }
+      knowledgeState.sources.push(source)
+      return source
+    },
+    deleteSource: (_actor, id) => {
+      const i = knowledgeState.sources.findIndex((s) => s.id === id)
+      if (i < 0) return false
+      knowledgeState.sources.splice(i, 1)
+      knowledgeState.deleted.push(id)
+      return true
     },
     // WP97（36 §11 #13）：按 source_id 取原件字节。只认一个 id，别的回 undefined
     // ——路由把 undefined 翻成 404，而"不存在"与"不是你的"故意不分（不泄漏存在性）

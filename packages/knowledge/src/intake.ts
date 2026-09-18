@@ -61,6 +61,13 @@ interface SourceRow {
   created_at: string
   /** WP56：上一次同步时源的内容 hash。 */
   last_content_hash: string | null
+  /* WP99：`kind: 'upload'` 才有的那几格 + 软删的墓碑（schema.ts 的 ADDED_COLUMNS）。 */
+  filename: string | null
+  uploaded_by: string | null
+  uploaded_at: string | null
+  content_sha256: string | null
+  size_bytes: number | null
+  deleted_at: string | null
 }
 
 interface GapRow {
@@ -93,6 +100,18 @@ function rowToSource(r: SourceRow): KnowledgeSource {
     chunks: r.chunks,
     ...(r.last_synced_at === null ? {} : { last_synced_at: r.last_synced_at }),
     ...(r.last_content_hash === null ? {} : { last_content_hash: r.last_content_hash }),
+    ...(r.filename === null || r.filename === undefined ? {} : { filename: r.filename }),
+    ...(r.uploaded_by === null || r.uploaded_by === undefined
+      ? {}
+      : { uploaded_by: r.uploaded_by }),
+    ...(r.uploaded_at === null || r.uploaded_at === undefined
+      ? {}
+      : { uploaded_at: r.uploaded_at }),
+    ...(r.content_sha256 === null || r.content_sha256 === undefined
+      ? {}
+      : { content_sha256: r.content_sha256 }),
+    ...(r.size_bytes === null || r.size_bytes === undefined ? {} : { size: r.size_bytes }),
+    ...(r.deleted_at === null || r.deleted_at === undefined ? {} : { deleted_at: r.deleted_at }),
   }
 }
 
@@ -123,8 +142,28 @@ export interface IntakeStoreOptions {
   emit?: KnowledgeEmitter
 }
 
-/** `addSource` 的入参：契约那一份 + 落在哪个工作区。 */
-export type AddSourceInput = KnowledgeSourceInput & { workspace_id: WorkspaceId }
+/**
+ * WP99：`kind: 'upload'` 那一档多带的几格（谁传的、什么时候、sha256、多大）。
+ *
+ * 字节本身**不经过这个包**：它在宿主那一侧进对象存储，这里只登记"这份东西
+ * 是怎么来的"。`ref` 仍然是那条 `blob://<key>`。
+ */
+export interface AddSourceUpload {
+  /** 洗过的原始文件名（洗在宿主那一侧：`apps/server` 的 `sanitizeUploadFilename`）。 */
+  filename: string
+  uploaded_by: PersonId
+  /** 不给就用 `clock.now()`。 */
+  uploaded_at?: Iso8601
+  /** 内容的 sha256（十六进制全长）。 */
+  content_sha256: string
+  size: number
+}
+
+/** `addSource` 的入参：契约那一份 + 落在哪个工作区（+ WP99 的上传那几格）。 */
+export type AddSourceInput = KnowledgeSourceInput & {
+  workspace_id: WorkspaceId
+  upload?: AddSourceUpload
+}
 
 /** `openGap` 的入参：契约那一份 + 工作区 + 谁问的。 */
 export type OpenGapInput = KnowledgeGapInput & {
@@ -183,9 +222,17 @@ export class SqliteIntakeStore {
     const existing = this.db
       .prepare('SELECT * FROM knowledge_sources WHERE workspace_id = ? AND kind = ? AND ref = ?')
       .get(input.workspace_id, input.kind, ref) as SourceRow | undefined
-    if (existing !== undefined) return rowToSource(existing)
+    if (existing !== undefined) {
+      // WP99：同一个 ref 又传了一次，而上一条已经软删（字节删了、墓碑留着）——
+      // 这不是"已经有了"，是"又来了一份"。复活它并把上传那几格换成这一次的
+      if (existing.deleted_at !== null && existing.deleted_at !== undefined) {
+        return this.reviveSource(existing, input)
+      }
+      return rowToSource(existing)
+    }
 
     const now = this.clock.now()
+    const upload = input.upload
     const row: SourceRow = {
       id: this.id('src', 'knowledge_source_seq', [input.workspace_id, input.kind, ref, now]),
       workspace_id: input.workspace_id,
@@ -198,12 +245,19 @@ export class SqliteIntakeStore {
       last_synced_at: null,
       created_at: now,
       last_content_hash: null,
+      filename: upload?.filename ?? null,
+      uploaded_by: upload?.uploaded_by ?? null,
+      uploaded_at: upload === undefined ? null : (upload.uploaded_at ?? now),
+      content_sha256: upload?.content_sha256 ?? null,
+      size_bytes: upload?.size ?? null,
+      deleted_at: null,
     }
     this.db
       .prepare(
         `INSERT INTO knowledge_sources
-           (id, workspace_id, kind, ref, parser, acl_inherit, chunks, last_synced_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, workspace_id, kind, ref, parser, acl_inherit, chunks, last_synced_at, created_at,
+            filename, uploaded_by, uploaded_at, content_sha256, size_bytes, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -215,26 +269,125 @@ export class SqliteIntakeStore {
         row.chunks,
         row.last_synced_at,
         row.created_at,
+        row.filename,
+        row.uploaded_by,
+        row.uploaded_at,
+        row.content_sha256,
+        row.size_bytes,
+        row.deleted_at,
       )
+    this.fireSourceAdded(row)
     return rowToSource(row)
   }
 
+  /** 软删过的那一行又被传了一次：清墓碑、换上这一次的上传信息，并重新发一次"加了"。 */
+  private reviveSource(existing: SourceRow, input: AddSourceInput): KnowledgeSource {
+    const now = this.clock.now()
+    const upload = input.upload
+    this.db
+      .prepare(
+        `UPDATE knowledge_sources
+            SET deleted_at = NULL, filename = ?, uploaded_by = ?, uploaded_at = ?,
+                content_sha256 = ?, size_bytes = ?
+          WHERE id = ?`,
+      )
+      .run(
+        upload?.filename ?? existing.filename ?? null,
+        upload?.uploaded_by ?? existing.uploaded_by ?? null,
+        upload === undefined ? (existing.uploaded_at ?? null) : (upload.uploaded_at ?? now),
+        upload?.content_sha256 ?? existing.content_sha256 ?? null,
+        upload?.size ?? existing.size_bytes ?? null,
+        existing.id,
+      )
+    const row = this.db.prepare('SELECT * FROM knowledge_sources WHERE id = ?').get(existing.id) as
+      | SourceRow
+      | undefined
+    if (row === undefined) throw notFound(`导入源不存在：${existing.id}`, { id: existing.id })
+    this.fireSourceAdded(row)
+    return rowToSource(row)
+  }
+
+  /**
+   * 19 §1.3 的溯源那一条：**谁传的、什么时候、内容的 sha256、多大**。
+   *
+   * `filename` 是洗过的那一份（`apps/server` 的 `sanitizeUploadFilename`）；
+   * **正文一个字节都不进事件日志**（21 §2 / 13 §4）。
+   */
+  private fireSourceAdded(row: SourceRow): void {
+    this.fire('knowledge.source.added', row.workspace_id, {
+      source_id: row.id,
+      kind: row.kind,
+      parser: row.parser,
+      ...(row.filename === null || row.filename === undefined ? {} : { filename: row.filename }),
+      ...(row.uploaded_by === null || row.uploaded_by === undefined
+        ? {}
+        : { uploaded_by: row.uploaded_by }),
+      ...(row.uploaded_at === null || row.uploaded_at === undefined
+        ? {}
+        : { uploaded_at: row.uploaded_at }),
+      ...(row.content_sha256 === null || row.content_sha256 === undefined
+        ? {}
+        : { content_sha256: row.content_sha256 }),
+      ...(row.size_bytes === null || row.size_bytes === undefined ? {} : { size: row.size_bytes }),
+    })
+  }
+
+  /**
+   * 清单。**软删掉的不出现**——它那一行留着只是墓碑（字节已经不在了）。
+   */
   sources(workspace_id: WorkspaceId): KnowledgeSource[] {
     return (
       this.db
         .prepare(
           // rowid = 插入顺序：固定时钟下 created_at 会相同，按 id（哈希）排就成了随机序
-          'SELECT * FROM knowledge_sources WHERE workspace_id = ? ORDER BY rowid',
+          'SELECT * FROM knowledge_sources WHERE workspace_id = ? AND deleted_at IS NULL' +
+            ' ORDER BY rowid',
         )
         .all(workspace_id) as SourceRow[]
     ).map(rowToSource)
   }
 
+  /**
+   * 按 id 取一条。**软删掉的也取得到**（带着 `deleted_at`）——调用方据此回 404
+   * 而不是把墓碑当成一条能读的源。
+   */
   getSource(id: string): KnowledgeSource | undefined {
     const row = this.db.prepare('SELECT * FROM knowledge_sources WHERE id = ?').get(id) as
       | SourceRow
       | undefined
     return row === undefined ? undefined : rowToSource(row)
+  }
+
+  /**
+   * 删一个导入源：**软删 + 留墓碑**（21 的擦除语义）。
+   *
+   * 真正把字节抹掉的是宿主（`apps/server` 那一侧去 `BlobStore.delete`）——本包
+   * 不认识对象存储。这里只做两件事：把 `deleted_at` 写上（从此清单里没有它），
+   * 发一条 `knowledge.source.removed`。
+   *
+   * 为什么不 `DELETE FROM`：21 要求"删过什么"本身是可追的。一行墓碑加两条事件，
+   * 比"这条记录凭空消失了"好查得多——而墓碑里没有任何正文。
+   *
+   * 已经删过的再删一次回 `undefined`（不是错：两个人同时点了"删除"是常态）。
+   */
+  deleteSource(id: string): KnowledgeSource | undefined {
+    const row = this.db.prepare('SELECT * FROM knowledge_sources WHERE id = ?').get(id) as
+      | SourceRow
+      | undefined
+    if (row === undefined) return undefined
+    if (row.deleted_at !== null && row.deleted_at !== undefined) return undefined
+    const at = this.clock.now()
+    this.db.prepare('UPDATE knowledge_sources SET deleted_at = ? WHERE id = ?').run(at, id)
+    this.fire('knowledge.source.removed', row.workspace_id, {
+      source_id: row.id,
+      kind: row.kind,
+      ...(row.filename === null || row.filename === undefined ? {} : { filename: row.filename }),
+      ...(row.content_sha256 === null || row.content_sha256 === undefined
+        ? {}
+        : { content_sha256: row.content_sha256 }),
+      at,
+    })
+    return this.getSource(id)
   }
 
   /** 解析完之后回填「切了几块、什么时候同步的」。 */

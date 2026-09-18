@@ -606,6 +606,10 @@ const zh: Table = {
   'rail.office.broken': '这份文件读不开（可能不是完整的 Office 文件）。下载下来看。',
   'rail.office.empty': '这份文件里没有可显示的内容。',
   'rail.office.image': '文档里的一张图',
+  // WP99：只有浏览器真的挡下一条样式 / 图片时才出现（`office/csp-watch.ts`）。
+  // WP97 那句固定文案去掉了——它在浏览器档从来不成立
+  'rail.office.csp_blocked':
+    '这份文件里有一部分样式或图片被安全策略挡下了，画出来会和原件不太一样。',
   'rail.office.rows': '共 {rows} 行',
   'rail.office.page': '第 {page} / {pages} 页',
   'rail.office.prev': '上一页',
@@ -623,6 +627,22 @@ const zh: Table = {
   'knowledge.sources.empty': '还没有上传过文件。',
   'knowledge.sources.preview': '在第三栏预览',
   'knowledge.sources.download_only': '这种文件不预览，点一下下载。',
+  // WP99：换成 exceljs 之后老 xls / doc / ppt 解不动了——这一行要说清是格式太老，
+  // 不是「这一栏不管这种文件」（前者的下一步是「用 Excel 另存成 xlsx」）
+  'knowledge.sources.legacy_only': '这是 2003 之前的老格式，浏览器里打不开，点一下下载。',
+  'knowledge.sources.remove': '删掉这份文件',
+  // WP99：上传那一块
+  'knowledge.upload.hint': '把文件拖到这里，或者点下面的按钮选。',
+  'knowledge.upload.kinds': '收这几种：{kinds}；一份最大 {limit} MB。',
+  'knowledge.upload.pick': '选择文件',
+  'knowledge.upload.sending': '正在传…',
+  'knowledge.upload.state.waiting': '排队中',
+  'knowledge.upload.state.sending': '正在传',
+  'knowledge.upload.state.done': '好了',
+  'knowledge.upload.state.failed': '没传上去',
+  'knowledge.upload.bad_kind': '这种文件知识库不收。收这几种：{kinds}。',
+  'knowledge.upload.too_large': '这份文件超过 {limit} MB，传不上去。',
+  'knowledge.upload.empty': '这是一个空文件，传不上去。',
   'memory.source.manual': '手动加',
   'memory.source.promoted': '提升上来的',
   'memory.source.learned': '从复盘提升 · 已批准',
@@ -2557,6 +2577,8 @@ const en: Table = {
     'This file could not be opened (it may be incomplete). Download it instead.',
   'rail.office.empty': 'Nothing displayable in this file.',
   'rail.office.image': 'An image from the document',
+  'rail.office.csp_blocked':
+    'Some styles or images in this file were blocked by the security policy, so it may not look like the original.',
   'rail.office.rows': '{rows} rows',
   'rail.office.page': 'Page {page} of {pages}',
   'rail.office.prev': 'Previous',
@@ -2575,6 +2597,20 @@ const en: Table = {
   'knowledge.sources.empty': 'No file has been uploaded yet.',
   'knowledge.sources.preview': 'Preview in the right rail',
   'knowledge.sources.download_only': 'No preview for this kind of file — click to download.',
+  'knowledge.sources.legacy_only':
+    'Pre-2003 Office format — the browser cannot open it. Click to download.',
+  'knowledge.sources.remove': 'Delete this file',
+  'knowledge.upload.hint': 'Drop files here, or use the button below.',
+  'knowledge.upload.kinds': 'Accepted: {kinds}; up to {limit} MB each.',
+  'knowledge.upload.pick': 'Choose files',
+  'knowledge.upload.sending': 'Uploading…',
+  'knowledge.upload.state.waiting': 'Queued',
+  'knowledge.upload.state.sending': 'Uploading',
+  'knowledge.upload.state.done': 'Done',
+  'knowledge.upload.state.failed': 'Not uploaded',
+  'knowledge.upload.bad_kind': 'This kind of file is not accepted. Accepted: {kinds}.',
+  'knowledge.upload.too_large': 'This file is over {limit} MB.',
+  'knowledge.upload.empty': 'This file is empty.',
   'rail.panel.files': 'Files',
   'rail.panel.ask': 'Ask AI',
   'rail.skills.hint': 'One skill, one copy; six layers patch it. Edit the text on the skills page.',
