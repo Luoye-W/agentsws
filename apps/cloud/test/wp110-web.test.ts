@@ -116,7 +116,7 @@ describe('WP110 首页', () => {
     try {
       const page = await h.raw('/')
       expect(page.status).toBe(200)
-      expect(page.text).toContain('agentsws 云')
+      expect(page.text).toContain('Agents 工坊')
       expect(page.text).toContain('设置 → 账号与积分')
       expect(page.text.match(/<rect /g) ?? []).toHaveLength(6)
       expect(page.text).not.toMatch(/<script/i)

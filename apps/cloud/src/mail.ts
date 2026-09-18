@@ -73,7 +73,7 @@ const escapeHtml = (raw: string): string =>
 /** 登录信的正文。只有一句话与一条链接——没有品牌废话，也没有任何别的信息。 */
 export function loginMail(to: string, link: string, minutes: number): CloudMail {
   const text = [
-    '点下面这条链接登录 agentsws 云账号：',
+    '点下面这条链接登录 Agents 工坊的云账号：',
     '',
     link,
     '',
@@ -84,13 +84,13 @@ export function loginMail(to: string, link: string, minutes: number): CloudMail 
   const html = [
     '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;font-size:15px;line-height:1.7;color:#1B1D22;">',
     `<div style="margin-bottom:20px;">${brandDisc({ size: 52, id: 'awmail' })}</div>`,
-    '<p style="margin:0 0 16px;">点下面这颗按钮登录 agentsws 云账号：</p>',
-    `<p style="margin:0 0 20px;"><a href="${safeLink}" style="display:inline-block;padding:11px 20px;border-radius:10px;background:${BRAND_GREEN};color:#ffffff;text-decoration:none;font-weight:600;">登录 agentsws</a></p>`,
+    '<p style="margin:0 0 16px;">点下面这颗按钮登录 Agents 工坊的云账号：</p>',
+    `<p style="margin:0 0 20px;"><a href="${safeLink}" style="display:inline-block;padding:11px 20px;border-radius:10px;background:${BRAND_GREEN};color:#ffffff;text-decoration:none;font-weight:600;">登录 Agents 工坊</a></p>`,
     // 按钮点不动的客户端（纯文本视图、部分企业邮箱）也要能把链接抄出来
     `<p style="margin:0 0 16px;font-size:13px;color:#5B6169;word-break:break-all;">按钮点不动就复制这条：<br><a href="${safeLink}" style="color:${BRAND_GREEN};">${safeLink}</a></p>`,
     `<p style="margin:0 0 6px;font-size:13px;color:#5B6169;">链接 ${String(minutes)} 分钟内有效，只能用一次。</p>`,
     '<p style="margin:0;font-size:13px;color:#5B6169;">不是你本人操作的话，忽略这封信就行——没有点，什么都不会发生。</p>',
     '</div>',
   ].join('')
-  return { to, subject: '登录 agentsws 云账号', text, html }
+  return { to, subject: '登录 Agents 工坊', text, html }
 }

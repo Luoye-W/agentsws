@@ -53,7 +53,7 @@ echo "冒烟：$BASE"
 
 echo "① 活着没有"
 check "health 回 200" 200 /v1/cloud/health '"status":"ok"'
-check "首页在" 200 / 'agentsws 云'
+check "首页在" 200 / 'Agents 工坊'
 
 echo "② 证书与安全头"
 if [[ "$BASE" == https://* ]]; then

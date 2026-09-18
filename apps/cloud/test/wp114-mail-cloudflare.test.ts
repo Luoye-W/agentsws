@@ -52,7 +52,7 @@ describe('WP114 parseMailFrom', () => {
   })
 
   it('带引号的名字去掉引号', () => {
-    expect(parseMailFrom('"agentsws 云" <login@agentsws.com>')?.name).toBe('agentsws 云')
+    expect(parseMailFrom('"Agents 工坊" <login@agentsws.com>')?.name).toBe('Agents 工坊')
   })
 
   it('解不出邮箱就是 undefined（不抛，由调用方决定怎么办）', () => {
@@ -102,7 +102,7 @@ describe('WP114 真发一封（假 binding）', () => {
     const one = binding.sent[0]
     expect(one?.to).toBe('someone@example.com')
     expect(one?.from).toEqual({ email: 'login@agentsws.com', name: 'agentsws' })
-    expect(one?.subject).toContain('agentsws')
+    expect(one?.subject).toContain('Agents 工坊')
     // 纯文本与 HTML 两边都要有那条链接——只放在 HTML 里的话有些客户端就登不进来
     expect(one?.text).toContain(link)
     expect(one?.html).toContain(link)
