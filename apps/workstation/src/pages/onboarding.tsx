@@ -19,7 +19,7 @@
  *    第 ④ 步那张清单是服务端按同一份勾选算的，两边不会两张皮。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
@@ -86,6 +86,27 @@ const STEPS = [
  * 它不是第五个"步骤"（进度条仍然是四步，到这一屏四步全打勾），所以不进 `STEPS`。
  */
 const DONE_STEP = STEPS.length
+
+/**
+ * 完成屏的标记：先播一次「一变一队」，播完接「呼吸」一直动着（Luoye 09-18：这里一定要是动的）。
+ * 1.5s = 领头 0.5s + 五块最后一块延迟 0.7s + 0.55s 落位，留一点余量。
+ */
+function DoneMark() {
+  const [settled, setSettled] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSettled(true)
+    }, 1900)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [])
+  return (
+    <span data-testid="onboarding-done-mark" data-phase={settled ? 'breathe' : 'split'}>
+      <BrandMark size={96} motion={settled ? 'breathe' : 'split'} />
+    </span>
+  )
+}
 
 export function OnboardingPage(): React.ReactNode {
   const { t } = useApp()
@@ -322,7 +343,7 @@ export function OnboardingPage(): React.ReactNode {
               className="flex flex-col items-center gap-3 py-6 text-center"
               data-testid="onboarding-done"
             >
-              <BrandMark size={72} motion="split" />
+              <DoneMark />
               <p className="ws-display text-[17px]">{t('onboarding.done.title')}</p>
               <p className="max-w-sm text-sm text-ws-muted-fg">
                 {t('onboarding.done.line', { count: expanded.length })}

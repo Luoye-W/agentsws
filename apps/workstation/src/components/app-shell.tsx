@@ -222,8 +222,8 @@ export function AppShell({
           {/*
             WP112：左栏顶部 = **母品牌标记 + 字标**，点了回首页。
 
-            标记给 28——规范 §1.3 的最小可用尺寸，再小方块间的缝会并起来。
-            字标是产品名 `agentsws` 本身（不是 `app.title` 那句"agentsws 工作台"），
+            标记给 24（Luoye 09-18 定：再缩一点）；再小就退单色，见 `@agentsws/brand` 的 `MIN_GRADIENT_PX`。
+            字标是产品名「Agents 工坊」（Luoye 09-18 定；`agentsws` 只留作仓库 / 包 / 域名），
             走 Outfit（WP96：与页面大标题同一种字）；整句留给读屏当 aria-label。
             这里用的是**静态**那一姿态：一直在动的 logo 是噪音，不是品牌。
           */}
@@ -235,8 +235,8 @@ export function AppShell({
               data-testid="brand-home"
               className="inline-flex items-center gap-2 rounded-[10px] outline-offset-4"
             >
-              <BrandMark size={28} />
-              <span className="ws-display text-[15px]">agentsws</span>
+              <BrandMark size={24} />
+              <span className="ws-display text-[14px]">Agents 工坊</span>
             </NavLink>
           </div>
           <nav

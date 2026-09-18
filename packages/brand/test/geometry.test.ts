@@ -83,7 +83,7 @@ describe('§1.1 几何真源', () => {
   })
 
   it('§1.3 最小 28px；§1.4 安全区 = 一个方块宽', () => {
-    expect(MIN_GRADIENT_PX).toBe(28)
+    expect(MIN_GRADIENT_PX).toBe(24)
     expect(SAFE_AREA).toBe(BLOCK_SIZE)
   })
 })

@@ -52,8 +52,11 @@ export const VIEW_BOX = `${MARK_BOX.x} ${MARK_BOX.y} ${MARK_BOX.width} ${MARK_BO
 /** 渐变轴：对角 ↗，外框左下 (14,77) → 右上 (79,12)（§1.2）。 */
 export const GRADIENT_AXIS = { x1: 14, y1: 77, x2: 79, y2: 12 } as const
 
-/** 最小可用尺寸 28px；再小方块间的缝会并起来，一律退单色（§1.3 / §1.2）。 */
-export const MIN_GRADIENT_PX = 28
+/**
+ * 渐变的最小尺寸。母品牌规范 §1.3 写的是 28px（位图 / 视频口径）；产品界面里 Luoye 定左栏
+ * logo 缩到 24（09-18）——屏幕上是矢量渲染、多为 2x 屏，24 时缝仍分得开。再小一律退单色。
+ */
+export const MIN_GRADIENT_PX = 24
 
 /** 安全区：外框四周留不小于一个方块宽（§1.4）。 */
 export const SAFE_AREA = BLOCK_SIZE

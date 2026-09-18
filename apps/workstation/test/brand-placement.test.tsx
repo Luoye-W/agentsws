@@ -36,16 +36,16 @@ describe('左栏顶部：标记 + 字标，点了回首页', () => {
     )
     const home = screen.getByTestId('brand-home')
     expect(home.getAttribute('href')).toBe('/')
-    // 读屏听到的是整句"agentsws 工作台"，眼睛看到的是标记 + `agentsws`
-    expect(home.getAttribute('aria-label')).toBe('agentsws 工作台')
-    expect(home.textContent).toBe('agentsws')
+    // 读屏听到的是「Agents 工坊」，眼睛看到的是标记 + 同一个名字
+    expect(home.getAttribute('aria-label')).toBe('Agents 工坊')
+    expect(home.textContent).toBe('Agents 工坊')
 
     const svg = home.querySelector('svg[data-testid="brand-mark"]')
     expect(svg).not.toBeNull()
     // logo 是**静态**的：一直在动的 logo 是噪音
     expect((svg as SVGElement).getAttribute('data-motion')).toBe('none')
     // 规范 §1.3 的最小可用尺寸，再小方块间的缝会并起来
-    expect((svg as SVGElement).getAttribute('width')).toBe('28')
+    expect((svg as SVGElement).getAttribute('width')).toBe('24')
     expect((svg as SVGElement).getAttribute('data-variant')).toBe('gradient')
   })
 })
@@ -178,7 +178,7 @@ describe('index.html：标签页图标接上了', () => {
     )
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />')
     expect(html).toContain('href="/favicon-32.png"')
-    expect(html).toContain('<title>agentsws 工作台</title>')
+    expect(html).toContain('<title>Agents 工坊</title>')
   })
 })
 
