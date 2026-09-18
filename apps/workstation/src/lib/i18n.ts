@@ -16,6 +16,8 @@ const zh: Table = {
   // 路由（`/v1/people/:id/ask`）、事件名（`secretary.answered`）一个都不动——
   // 那些是契约面，改了就是无谓地把外面接着的东西全打断。
   'nav.secretary': '我的代理',
+  // WP96：顶栏那条长搜索框（点开就是 ⌘K 命令面板）
+  'nav.command': '交给某个岗位一件事…',
   'secretary.title': '我的代理',
   'secretary.intro':
     '代理只管四件事：我是谁、我在做什么、我什么时候有空，以及别人丢来的事该谁做。专业的事它不做，只转给对的岗位。',
@@ -452,6 +454,10 @@ const zh: Table = {
   'home.queue': '今日卡片队列',
   'home.queue.empty': '队列清空了。今天没有需要你决定的事。',
   'home.alerts': '告警',
+  // ── WP96：只有要人决定的才是卡；这两样改成面板块 ─────────────────────
+  'panel.alerts.hint': '不用你决定，看见就行；要处理的那一步会另出一张卡',
+  'panel.reports': '报表',
+  'panel.reports.hint': '日报与上线检查单 · 看完即过，没有要批的东西',
   'home.digest': '每日摘要',
   'home.estimate': '今天队列预计 {minutes} 分钟',
   'home.tiles.more': '了解更多 →',
@@ -1126,6 +1132,22 @@ const zh: Table = {
   'deck.content.en': 'English',
   'deck.content.fallback': '这张卡没有这种语言，显示的是中文摘要',
   'deck.detail.toggle': '展开 / 收起详情',
+  // ── WP96 卡片十一种排版（09-18 设计画布）─────────────────────────────
+  'deck.go': '打开这件事',
+  'deck.before': '改之前',
+  'deck.after': '改之后',
+  'deck.proposer.agent': 'AI',
+  'deck.proposer.person': '人',
+  'deck.proposer.sentinel': '哨',
+  'deck.proposer.registry': '库',
+  'deck.proposer.system': '系',
+  'deck.policy.owner_only': '这一条只有工作区 owner 能批；批了才落到在岗同事身上。',
+  'deck.publish.when': '排期 · {when}',
+  'deck.publish.now': '批了就发',
+  'deck.publish.audience': '受众 · {n}',
+  'deck.person.unknown': '没写名字',
+  'deck.handoff.basis': '分类依据：{basis}',
+  'deck.takeover.open': '打开浏览器',
   'deck.detail.proposer': '由 {by} 提出',
   'deck.enrichment.dropped': '还有 {n} 条记录你无权查看，已隐去',
   'deck.needs_media': '需要补素材',
@@ -1153,6 +1175,11 @@ const zh: Table = {
   // WP69（54 §4）：首页只列岗位卡，职责不出现
   'home.positions': '我的岗位',
   'home.positions.cards': '{count} 张待审',
+  'home.positions.pending': '张待审',
+  'home.positions.entry': '交给它一件事',
+  'home.headline': '今天',
+  'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
+  'home.stats': '今天的数',
   // WP84（54 §1 第 6 行）：岗位卡下面的快捷提示——点一条就是开一件事，不是聊天框
   'home.quick.more': '还有 {count} 条',
   'home.quick.less': '收起',
@@ -1218,6 +1245,15 @@ const zh: Table = {
   'calendar.layers': '图层',
   'calendar.layers.hint': '勾掉的那一层还在，只是这一屏不画它。',
   'calendar.layers.none': '一个图层都没开——左边勾一个回来。',
+  'calendar.event.later': '先不管',
+  // WP96 画布《日历 · 新风格》：左栏主按钮 / 顶栏统计 / 图层那一行
+  'calendar.schedule': '安排一件事',
+  'calendar.count': '本周 {n} 项',
+  'calendar.layers.only_this': '只看这个岗位',
+  // 小月历自己的上下月（与主视图的"上一页 / 下一页"分开：两个都在这一屏上）
+  'calendar.month.prev': '上个月',
+  'calendar.month.next': '下个月',
+  'calendar.event.close': '关掉',
   'calendar.open_in_matter': '在事项里打开',
   'calendar.open_position': '去这个岗位',
   'calendar.event.source': '来源',
@@ -1916,6 +1952,8 @@ const en: Table = {
   'app.title': 'agentsws Workstation',
   'nav.home': 'Home',
   'nav.secretary': 'My agent',
+  // WP96: the top-bar search bar (opens the ⌘K palette)
+  'nav.command': 'Hand a position a task…',
   'secretary.title': 'My agent',
   'secretary.intro':
     'Your agent only handles four things: who you are, what you are working on, when you are free, and which desk an incoming task belongs to. It never answers domain questions — it routes them.',
@@ -2361,6 +2399,10 @@ const en: Table = {
   'home.queue': "Today's cards",
   'home.queue.empty': 'Queue is clear. Nothing needs you today.',
   'home.alerts': 'Alerts',
+  // ── WP96: only decisions are cards; these two became panel blocks ────
+  'panel.alerts.hint': 'Nothing to decide — the follow-up action gets its own card',
+  'panel.reports': 'Reports',
+  'panel.reports.hint': 'Daily report and launch checklist · read and move on',
   'home.digest': 'Daily digest',
   'home.estimate': 'About {minutes} min of queue today',
   'home.tiles.more': 'More →',
@@ -3030,6 +3072,23 @@ const en: Table = {
   'deck.content.en': 'English',
   'deck.content.fallback': 'No such language on this card; showing the Chinese summary',
   'deck.detail.toggle': 'Toggle details',
+  // ── WP96 card layouts ────────────────────────────────────────────────
+  'deck.go': 'Open this matter',
+  'deck.before': 'before',
+  'deck.after': 'after',
+  'deck.proposer.agent': 'AI',
+  'deck.proposer.person': 'H',
+  'deck.proposer.sentinel': 'S',
+  'deck.proposer.registry': 'R',
+  'deck.proposer.system': 'SYS',
+  'deck.policy.owner_only':
+    'Only the workspace owner can approve this; it lands on teammates once approved.',
+  'deck.publish.when': 'Scheduled · {when}',
+  'deck.publish.now': 'Sends on approval',
+  'deck.publish.audience': 'Audience · {n}',
+  'deck.person.unknown': 'No name',
+  'deck.handoff.basis': 'Classified as: {basis}',
+  'deck.takeover.open': 'Open the browser',
   'deck.detail.proposer': 'Proposed by {by}',
   'deck.enrichment.dropped': '{n} more record(s) you cannot see were hidden',
   'deck.needs_media': 'Needs material',
@@ -3057,6 +3116,11 @@ const en: Table = {
   // WP69 (54 §4): the home page lists positions only — duties stay one level down
   'home.positions': 'My positions',
   'home.positions.cards': '{count} waiting',
+  'home.positions.pending': 'pending',
+  'home.positions.entry': 'Hand it a task',
+  'home.headline': 'Today',
+  'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
+  'home.stats': "Today's numbers",
   // WP84 (54 §1 line 6): quick starts under each position card — a click opens a matter
   'home.quick.more': '{count} more',
   'home.quick.less': 'Show fewer',
@@ -3122,6 +3186,14 @@ const en: Table = {
   'calendar.layers': 'Layers',
   'calendar.layers.hint': 'An unchecked layer is still there — this screen just does not draw it.',
   'calendar.layers.none': 'No layer is on — tick one on the left.',
+  'calendar.event.later': 'Later',
+  // WP96 canvas: left-column primary button / top-bar count / layer row
+  'calendar.schedule': 'Schedule something',
+  'calendar.count': '{n} this week',
+  'calendar.layers.only_this': 'Only this position',
+  'calendar.month.prev': 'Previous month',
+  'calendar.month.next': 'Next month',
+  'calendar.event.close': 'Close',
   'calendar.open_in_matter': 'Open in the matter',
   'calendar.open_position': 'Go to this position',
   'calendar.event.source': 'Source',

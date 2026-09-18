@@ -20,6 +20,7 @@ import { Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CalendarLink } from '@/components/calendar/calendar-link'
+import { WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
 // WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
@@ -240,10 +241,8 @@ export function DutyPage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4" data-testid="duty-page" data-duty={role_id}>
-      <nav
-        className="flex items-center gap-1 text-xs text-muted-foreground"
-        aria-label="breadcrumb"
-      >
+      {/* WP96 画布《职责页》：面包屑 → 标题 → 一行胶囊，与事项页同一套头 */}
+      <nav className="flex items-center gap-1 text-xs text-ws-muted-fg" aria-label="breadcrumb">
         <Link to={`/positions/${encodeURIComponent(assignment)}`} data-testid="duty-breadcrumb">
           {positionName === '' ? t('nav.positions') : positionName}
         </Link>
@@ -253,22 +252,19 @@ export function DutyPage(): React.ReactNode {
 
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-2">
-          <h1 className="text-lg font-semibold" data-testid="duty-name">
+          <h1 className="ws-display text-[26px]" data-testid="duty-name">
             {role.data?.name ?? here?.role_name ?? role_id}
           </h1>
           {role.data === undefined ? null : (
             <>
-              <span className="font-mono text-xs text-muted-foreground">v{role.data.version}</span>
-              <span
-                className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground"
-                data-testid="duty-source"
-              >
+              <span className="ws-num text-xs text-ws-muted-fg">v{role.data.version}</span>
+              <WsTag data-testid="duty-source">
                 {role.data.source === 'bundled' ? t('duty.bundled') : t('duty.custom')}
-              </span>
+              </WsTag>
             </>
           )}
         </div>
-        <p className="text-xs text-muted-foreground" data-testid="duty-holders">
+        <p className="text-xs text-ws-muted-fg" data-testid="duty-holders">
           {t('duty.holders', { count: role.data?.holders ?? 0 })}
         </p>
         <OpenHere assignment={assignment} />

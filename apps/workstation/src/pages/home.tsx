@@ -12,6 +12,7 @@ import type { CalendarItem, CalendarSource, GoalProgress, Todo } from '@agentsws
 import type { RangeName } from '@agentsws/deck'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
+  Briefcase,
   CalendarDays,
   CheckSquare,
   Clock,
@@ -23,10 +24,11 @@ import {
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
+import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
+import { PositionCard, type Tone, WsCard } from '@/components/design'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ClaimPool } from '@/components/work/claim-pool'
 import { InProgressList } from '@/components/work/in-progress-list'
@@ -43,6 +45,9 @@ import { daysLeftLabel, hhmm, matterUrl, todoUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
 
+/** 岗位卡图标徽的配色：一排四张各不相同，只是分得开，不表示好坏。 */
+const POSITION_TONES: Tone[] = ['info', 'good', 'warn', 'bad']
+
 /**
  * WP69（54 §4）：**首页只有岗位，没有职责**。
  *
@@ -55,40 +60,42 @@ const RANGES: RangeName[] = ['yesterday', 'last_7d']
  */
 function PositionCards(): React.ReactNode {
   const { t } = useApp()
+  const navigate = useNavigate()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const instances = positions.data?.instances ?? []
   if (instances.length === 0) return null
   return (
     <section data-testid="position-cards">
-      <h2 className="mb-2 text-sm font-medium">{t('home.positions')}</h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {instances.map((p) => {
+      <h2 className="ws-display mb-2.5 text-[17px]">{t('home.positions')}</h2>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {instances.map((p, i) => {
           // 岗位页的地址用的是分配 id（36 §3 的"岗位"）：只能取**本人**那几条里的一条
           const to = p.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
           return (
-            <div
-              key={p.position_id}
-              className="flex flex-col gap-2 rounded-lg border p-3"
-              data-testid="position-card"
-              data-position={p.position_id}
-            >
-              {/* 卡头整块可点：进岗位页。快捷提示是按钮，所以卡不能整张包在 <Link> 里 */}
-              <Link to={`/positions/${to}`} className="-m-1 rounded p-1 hover:bg-accent">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-sm font-medium">{p.name.zh}</span>
-                  {p.pending_cards === 0 ? null : (
-                    <span
-                      className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[11px]"
-                      data-testid="position-card-cards"
-                    >
-                      {t('home.positions.cards', { count: p.pending_cards })}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t('position.counts', { cards: p.pending_cards, matters: p.open_matters })}
-                </p>
-              </Link>
+            <div key={p.position_id} data-testid="position-card" data-position={p.position_id}>
+              <PositionCard
+                icon={<Briefcase className="size-4" aria-hidden />}
+                tone={POSITION_TONES[i % POSITION_TONES.length] ?? 'brand'}
+                name={p.name.zh}
+                pending={p.pending_cards}
+                pendingLabel={t('home.positions.pending')}
+                line={t('position.counts', {
+                  cards: p.pending_cards,
+                  matters: p.open_matters,
+                })}
+                {...(to === undefined
+                  ? {}
+                  : {
+                      onOpen: () => {
+                        navigate(`/positions/${to}`)
+                      },
+                      onEntry: () => {
+                        navigate(`/positions/${to}`)
+                      },
+                    })}
+                entryLabel={t('home.positions.entry')}
+              />
+              {/* 快捷提示排在卡下面：它是"用这条职责开一件事"，不是卡的一部分 */}
               <QuickPrompts position={p} />
             </div>
           )
@@ -381,16 +388,34 @@ export function HomePage(): React.ReactNode {
     <div className="flex flex-col gap-6" data-testid="home">
       {/* WP25：没接模型时先说清楚——不然界面看着一切正常，Agent 却跑不起来 */}
       <NoModelBanner />
+
+      {/*
+        WP96（09-18 画布《首页 · 新风格》）：一句话开头。
+        标题是 Outfit 的大字，下面那行回答"今天还剩多少事"——
+        这两行之后才是岗位卡，因为岗位是任务主入口（54）。
+      */}
+      <header className="flex items-end gap-4" data-testid="home-header">
+        <div>
+          <h1 className="ws-display text-[30px]">{t('home.headline')}</h1>
+          <p className="mt-1 text-[13px] text-ws-muted-fg">
+            {t('home.greeting.line', {
+              cards: data.counts.total,
+              matters: today?.due.todos.length ?? 0,
+            })}
+          </p>
+        </div>
+      </header>
+
       {/* ① 目标进度 */}
       {goals.length === 0 ? null : (
         <section data-testid="goals">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-medium">{t('home.goals')}</h2>
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <h2 className="ws-display text-[17px]">{t('home.goals')}</h2>
             <Button size="xs" variant="ghost" asChild>
               <Link to="/goals">{t('home.tiles.more')}</Link>
             </Button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {goals.map((goal) => (
               <GoalRow key={goal.goal_id} goal={goal} />
             ))}
@@ -401,162 +426,154 @@ export function HomePage(): React.ReactNode {
       {/* WP69（54 §4）：首页只列**岗位**卡，职责不出现 */}
       <PositionCards />
 
-      {/* 每岗位一条核心数据条（36 §3 保留） */}
-      {data.tiles.map((bar) => (
-        <section key={bar.position_id} data-testid="tile-bar" data-position={bar.position_id}>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-medium">{bar.role_name}</h2>
-            <div className="flex items-center gap-1">
-              {RANGES.map((r) => (
-                <Button
-                  key={r}
-                  size="xs"
-                  variant={range === r ? 'secondary' : 'ghost'}
-                  aria-pressed={range === r}
-                  onClick={() => {
-                    setRange(r)
-                  }}
-                >
-                  {t(`range.${r}`)}
-                </Button>
-              ))}
-              <Button size="xs" variant="ghost" asChild>
-                <Link to={`/positions/${bar.position_id}?tab=view`}>{t('home.tiles.more')}</Link>
-              </Button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {bar.tiles.map((tile) => (
-              <StatTileView key={tile.id} tile={tile} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {/*
+        WP96：下半屏照画布分两栏——
+        左 2fr 是"今天要你决定的"（告警 / 报表 / 一副牌 / 复盘），
+        右 1fr 是"今天的数"与"今天"。两栏都只是重排，没删任何一段。
+      */}
+      <div className="grid items-start gap-4 lg:grid-cols-[2fr_1fr]">
+        <div className="flex min-w-0 flex-col gap-5">
+          {/*
+            WP96：**不是卡的那两样**。
+            告警块 = 系统卡（06 §1.2 已经走过 immediate 通知），报表块 = 日报 / 检查单。
+            两样都不要人决定，所以都不进下面那副 deck；它们引出的决定才出卡。
+          */}
+          <AlertBlocks
+            alerts={data.alerts}
+            onOpen={(card) => {
+              navigate(matterUrl(card))
+            }}
+          />
+          <ReportBlocks
+            reports={data.reports}
+            onOpen={(card) => {
+              navigate(matterUrl(card))
+            }}
+          />
 
-      {/* ② 今天：左时间轴 / 右到期清单 */}
-      {today === undefined ? null : (
-        <section data-testid="today">
-          <h2 className="mb-2 text-sm font-medium">{t('home.today')}</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-1.5 text-sm">
+          {/* ③ 卡片 deck —— 一次一张（37 §1） */}
+          <section data-testid="queue">
+            <div className="mb-2.5 flex items-center justify-between gap-2">
+              <h2 className="ws-display text-[17px]">{t('home.deck')}</h2>
+              <span className="inline-flex items-center gap-1 text-xs text-ws-muted-fg">
+                <Clock className="size-3" aria-hidden />
+                {t('home.estimate', { minutes: data.estimated_minutes })}
+              </span>
+            </div>
+            <DeckSection
+              onOpen={(card) => {
+                navigate(matterUrl(card))
+              }}
+            />
+          </section>
+
+          {/* ④ 复盘 / 战报（没装工作模型的服务进程两个都没有，整段不出） */}
+          {data.review === undefined && data.report === undefined ? null : (
+            <section data-testid="review">
+              <h2 className="ws-display mb-2.5 text-[17px]">{t('home.review')}</h2>
+              <div className="flex flex-col gap-3">
+                {/* 白天是四格战报；晚上有复盘就在下面多几行亮点 */}
+                <BattleReportGrid
+                  report={
+                    data.review?.cards ??
+                    data.report ?? { ai_handled: 0, you_handled: 0, auto_sent: 0, blocked: 0 }
+                  }
+                />
+                {data.review === undefined ? (
+                  <p className="text-sm text-ws-muted-fg">{t('home.review.empty')}</p>
+                ) : (
+                  <ul className="flex flex-col gap-1 text-sm text-ws-muted-fg">
+                    {data.review.highlights.map((line) => (
+                      <li key={line}>· {line}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-5">
+          {/* 每岗位一条核心数据条（36 §3 保留） */}
+          {data.tiles.map((bar) => (
+            <section key={bar.position_id} data-testid="tile-bar" data-position={bar.position_id}>
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="ws-display text-[17px]">{bar.role_name}</h2>
+                <div className="flex items-center gap-1">
+                  {RANGES.map((r) => (
+                    <Button
+                      key={r}
+                      size="xs"
+                      variant={range === r ? 'secondary' : 'ghost'}
+                      aria-pressed={range === r}
+                      onClick={() => {
+                        setRange(r)
+                      }}
+                    >
+                      {t(`range.${r}`)}
+                    </Button>
+                  ))}
+                  <Button size="xs" variant="ghost" asChild>
+                    <Link to={`/positions/${bar.position_id}?tab=view`}>
+                      {t('home.tiles.more')}
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {bar.tiles.map((tile) => (
+                  <StatTileView key={tile.id} tile={tile} />
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {/* ② 今天：时间轴 + 到期清单 + 正在进行 + 待认领（40 §3.2 / §3.3） */}
+          {today === undefined ? null : (
+            <section data-testid="today" className="flex flex-col gap-3">
+              <h2 className="ws-display text-[17px]">{t('home.today')}</h2>
+              <WsCard className="p-4">
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
                   <CalendarDays className="size-4" aria-hidden />
                   {t('home.today.timeline')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                </h3>
                 <TodayTimeline items={today.timeline} />
-              </CardContent>
-            </Card>
-            {/* 右栏：到期清单 + 正在进行 + 待认领（40 §3.2 / §3.3） */}
-            <div className="flex flex-col gap-3">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-1.5 text-sm">
-                    <ListTodo className="size-4" aria-hidden />
-                    {t('home.today.due')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <TodayDue todos={today.due.todos} cardsWaiting={today.due.cards_waiting} />
-                </CardContent>
-              </Card>
-              <Card data-testid="home-inprogress">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-1.5 text-sm">
-                    <Users className="size-4" aria-hidden />
-                    {t('home.inprogress')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <InProgressSection />
-                </CardContent>
-              </Card>
-              <Card data-testid="home-claim-pool">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-1.5 text-sm">
-                    <HandHeart className="size-4" aria-hidden />
-                    {t('home.claim_pool')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ClaimPool />
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </section>
-      )}
+              </WsCard>
+              <WsCard className="p-4">
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                  <ListTodo className="size-4" aria-hidden />
+                  {t('home.today.due')}
+                </h3>
+                <TodayDue todos={today.due.todos} cardsWaiting={today.due.cards_waiting} />
+              </WsCard>
+              <WsCard className="p-4" data-testid="home-inprogress">
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                  <Users className="size-4" aria-hidden />
+                  {t('home.inprogress')}
+                </h3>
+                <InProgressSection />
+              </WsCard>
+              <WsCard className="p-4" data-testid="home-claim-pool">
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                  <HandHeart className="size-4" aria-hidden />
+                  {t('home.claim_pool')}
+                </h3>
+                <ClaimPool />
+              </WsCard>
+            </section>
+          )}
 
-      {/* 告警单列（06 §1.2 immediate 通知；系统卡，P0 留在 deck 里） */}
-      {data.alerts.length === 0 ? null : (
-        <section data-testid="alerts">
-          <h2 className="mb-2 text-sm font-medium">{t('home.alerts')}</h2>
-          <ul className="flex flex-col gap-2">
-            {data.alerts.map((a) => (
-              <li key={a.id} className="rounded-lg border bg-card px-4 py-3 text-sm">
-                {a.title}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* ③ 卡片 deck —— 一次一张（37 §1） */}
-      <section data-testid="queue">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium">{t('home.deck')}</h2>
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="size-3" aria-hidden />
-            {t('home.estimate', { minutes: data.estimated_minutes })}
-          </span>
+          {/* 每日摘要（36 §3 保留） */}
+          {data.digest === undefined ? null : (
+            <section data-testid="digest">
+              <WsCard className="p-4">
+                <h3 className="mb-1.5 text-sm font-medium">{t('home.digest')}</h3>
+                <p className="text-sm text-ws-muted-fg">{data.digest.summary}</p>
+              </WsCard>
+            </section>
+          )}
         </div>
-        <DeckSection
-          onOpen={(card) => {
-            navigate(matterUrl(card))
-          }}
-        />
-      </section>
-
-      {/* ④ 复盘 / 战报（没装工作模型的服务进程两个都没有，整段不出） */}
-      {data.review === undefined && data.report === undefined ? null : (
-        <section data-testid="review">
-          <h2 className="mb-2 text-sm font-medium">{t('home.review')}</h2>
-          <div className="flex flex-col gap-3">
-            {/* 白天是四格战报；晚上有复盘就在下面多几行亮点 */}
-            <BattleReportGrid
-              report={
-                data.review?.cards ??
-                data.report ?? { ai_handled: 0, you_handled: 0, auto_sent: 0, blocked: 0 }
-              }
-            />
-            {data.review === undefined ? (
-              <p className="text-sm text-muted-foreground">{t('home.review.empty')}</p>
-            ) : (
-              <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
-                {data.review.highlights.map((line) => (
-                  <li key={line}>· {line}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* 每日摘要（36 §3 保留） */}
-      {data.digest === undefined ? null : (
-        <section data-testid="digest">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">{t('home.digest')}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              {data.digest.summary}
-            </CardContent>
-          </Card>
-        </section>
-      )}
+      </div>
     </div>
   )
 }

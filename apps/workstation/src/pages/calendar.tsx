@@ -15,9 +15,10 @@
  */
 import type { CalendarSource } from '@agentsws/contracts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { MiniMonth } from '@/components/calendar/mini-month'
 import { UnifiedCalendar } from '@/components/calendar/unified-calendar'
 import { MeetDialog } from '@/components/secretary/meet-dialog'
 import { Button } from '@/components/ui/button'
@@ -84,6 +85,9 @@ export function CalendarPage(): React.ReactNode {
     queryFn: listPeople,
   })
 
+  /** 顶栏那句"本周 N 项"：开着的图层加起来（关掉的不算——它这一屏没画）。 */
+  const total = LAYERS.filter((l) => layers.includes(l)).reduce((n, l) => n + counts[l], 0)
+
   const title = useMemo(
     () => `${anchor.getFullYear()}-${`${anchor.getMonth() + 1}`.padStart(2, '0')}`,
     [anchor],
@@ -91,66 +95,65 @@ export function CalendarPage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4" data-testid="calendar" data-view={view}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-base font-semibold">
-          {t('calendar.title')}
-          <span className="ml-2 text-xs font-normal tabular-nums text-muted-foreground">
-            {title}
-          </span>
-        </h1>
-        <div className="flex items-center gap-1">
-          <Button
-            size="icon-sm"
-            variant="ghost"
+      {/*
+        WP96 画布《日历 · 新风格》顶栏：今天 → 翻页 → 范围与统计 → 日周月议程分段。
+        分段是一块浅底里的四个钮（不是四个独立按钮），因为它们是"四选一"。
+      */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => {
+            setAnchor(new Date())
+          }}
+        >
+          {t('calendar.today')}
+        </Button>
+        <span className="flex gap-1">
+          <button
+            type="button"
+            className="ws-go"
             aria-label={t('calendar.prev')}
             onClick={() => {
               setAnchor(addDays(anchor, -PAGE_DAYS[view]))
             }}
           >
-            <ChevronLeft aria-hidden />
-          </Button>
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={() => {
-              setAnchor(new Date())
-            }}
-          >
-            {t('calendar.today')}
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
+            <ChevronLeft className="size-3.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="ws-go"
             aria-label={t('calendar.next')}
             onClick={() => {
               setAnchor(addDays(anchor, PAGE_DAYS[view]))
             }}
           >
-            <ChevronRight aria-hidden />
-          </Button>
-          <Button
-            size="xs"
-            variant={meeting ? 'secondary' : 'ghost'}
-            data-testid="calendar-meet"
-            aria-pressed={meeting}
-            onClick={() => {
-              setMeeting(!meeting)
-            }}
-          >
-            {t('secretary.meet.title')}
-          </Button>
+            <ChevronRight className="size-3.5" aria-hidden />
+          </button>
+        </span>
+        <h1 className="ws-display text-[22px]">{t('calendar.title')}</h1>
+        <span className="ws-num text-[12.5px] text-ws-muted-fg" data-testid="calendar-range">
+          {title} · {t('calendar.count', { n: total })}
+        </span>
+        <span className="flex-1" />
+        <div
+          className="flex items-center gap-0.5 rounded-xl bg-ws-surface p-0.5"
+          data-testid="calendar-views"
+        >
           {CALENDAR_VIEWS.map((v) => (
-            <Button
+            <button
               key={v}
-              size="xs"
-              variant={view === v ? 'secondary' : 'ghost'}
+              type="button"
               aria-pressed={view === v}
               onClick={() => {
                 setView(v)
               }}
+              className={`rounded-[9px] px-2.5 py-1 text-xs ${
+                view === v ? 'bg-ws-card shadow-ws' : 'text-ws-muted-fg hover:text-ws-ink'
+              }`}
             >
               {t(`calendar.${v}`)}
-            </Button>
+            </button>
           ))}
         </div>
       </div>
@@ -176,13 +179,42 @@ export function CalendarPage(): React.ReactNode {
       ) : null}
 
       <div className="flex flex-col gap-4 md:flex-row">
-        <LayerColumn
-          layers={layers}
-          counts={counts}
-          onToggle={(l) => {
-            setLayers(toggleLayer(layers, l))
-          }}
-        />
+        {/* 画布左栏：主按钮 → 小月历 → 图层勾选 */}
+        <aside className="flex shrink-0 flex-col gap-3.5 md:w-[236px]">
+          <Button
+            className="h-9 w-full justify-center rounded-xl"
+            data-testid="calendar-meet"
+            aria-pressed={meeting}
+            onClick={() => {
+              setMeeting(!meeting)
+            }}
+          >
+            {t('calendar.schedule')}
+          </Button>
+          <MiniMonth
+            anchor={anchor}
+            onPick={(d) => {
+              setAnchor(d)
+            }}
+            onShiftMonth={(delta) => {
+              setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + delta, 1))
+            }}
+          />
+          <LayerColumn
+            layers={layers}
+            counts={counts}
+            onToggle={(l) => {
+              setLayers(toggleLayer(layers, l))
+            }}
+            {...(roleHint === undefined
+              ? {}
+              : {
+                  onOnlyThis: () => {
+                    setLayers(defaultLayersFor(roleHint))
+                  },
+                })}
+          />
+        </aside>
         <UnifiedCalendar
           layers={layers}
           view={view}
@@ -196,24 +228,44 @@ export function CalendarPage(): React.ReactNode {
   )
 }
 
-/** 左侧那一列：图层名 + 颜色点 + 数量。 */
+/**
+ * 图层列（画布左栏下半）：颜色方块 + 图层名 + 数量，顶上一个"只看这个岗位"。
+ *
+ * 颜色方块就是**勾选框本身**（勾上了是实心带勾，勾掉是空心留一圈边）——画布上
+ * 一个格子干两件事：说这层是什么颜色、说它开着没有。
+ */
 function LayerColumn({
   layers,
   counts,
   onToggle,
+  onOnlyThis,
 }: {
   layers: readonly CalendarSource[]
   counts: Record<CalendarSource, number>
   onToggle(layer: CalendarSource): void
+  /** 从岗位 / 职责页带着 `?role=` 进来才有：一键回到"只看这个岗位相关的那几层" */
+  onOnlyThis?: () => void
 }): React.ReactNode {
   const { t } = useApp()
   return (
-    <aside
-      data-testid="calendar-layers"
-      className="flex shrink-0 flex-col gap-1 md:w-44"
-      aria-label={t('calendar.layers')}
-    >
-      <span className="px-1 text-xs font-medium text-muted-foreground">{t('calendar.layers')}</span>
+    // 一组勾选框，所以是 fieldset / legend——标题本来就是它的名字
+    <fieldset data-testid="calendar-layers" className="ws-card flex flex-col gap-0.5 p-2">
+      <div className="flex w-full items-center px-2 pt-1 pb-2">
+        <legend className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+          {t('calendar.layers')}
+        </legend>
+        <span className="flex-1" />
+        {onOnlyThis === undefined ? null : (
+          <button
+            type="button"
+            data-testid="calendar-only-this"
+            onClick={onOnlyThis}
+            className="text-[11.5px] text-ws-brand hover:underline"
+          >
+            {t('calendar.layers.only_this')}
+          </button>
+        )}
+      </div>
       {LAYERS.map((layer) => {
         const on = layers.includes(layer)
         const Icon = LAYER_ICON[layer]
@@ -223,33 +275,43 @@ function LayerColumn({
             data-testid="calendar-layer"
             data-layer={layer}
             data-on={on ? 'true' : 'false'}
-            className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs hover:bg-muted/60"
+            className={`flex cursor-pointer items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-[13px] hover:bg-ws-surface ${
+              on ? '' : 'text-ws-muted-fg'
+            }`}
           >
             <input
               type="checkbox"
               checked={on}
-              className="size-3.5 accent-primary"
+              className="sr-only"
               onChange={() => {
                 onToggle(layer)
               }}
             />
             <span
               aria-hidden
-              className="size-2 shrink-0 rounded-full"
-              style={{ background: LAYER_COLOR[layer] }}
-            />
-            <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              className="inline-flex size-4 shrink-0 items-center justify-center rounded-[5px] border-[1.5px] text-white"
+              style={{
+                borderColor: LAYER_COLOR[layer],
+                background: on ? LAYER_COLOR[layer] : 'transparent',
+              }}
+            >
+              {on ? <Check className="size-2.5" aria-hidden /> : null}
+            </span>
+            <Icon className="size-3.5 shrink-0 text-ws-muted-fg" aria-hidden />
             <span className="min-w-0 flex-1 truncate">{t(`calendar.source.${layer}`)}</span>
-            <span className="tabular-nums text-muted-foreground" data-testid="calendar-layer-count">
-              {counts[layer]}
+            <span
+              className="ws-num text-[11.5px] text-ws-muted-fg"
+              data-testid="calendar-layer-count"
+            >
+              {counts[layer] === 0 ? '' : counts[layer]}
             </span>
           </label>
         )
       })}
       {/* 勾掉的那一层还在，只是这一屏不画它——这句话省掉的话，人会以为勾掉 = 删掉 */}
-      <p className="px-1 pt-1 text-[11px] leading-snug text-muted-foreground">
+      <p className="px-2 pt-1.5 pb-1 text-[11px] leading-snug text-ws-muted-fg">
         {t('calendar.layers.hint')}
       </p>
-    </aside>
+    </fieldset>
   )
 }

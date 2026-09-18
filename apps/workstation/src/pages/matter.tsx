@@ -13,6 +13,7 @@ import { Bot, CheckSquare, CreditCard, FileText, MessageSquare, Pin, User } from
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AskAiPanel } from '@/components/deck/ask-ai-panel'
+import { StatusPill } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -204,18 +205,22 @@ export function MatterPage(): React.ReactNode {
       data-testid="matter"
       data-matter={view.matter.id}
     >
-      {/* 顶部：标题 + 摘要 */}
-      <header className="flex flex-col gap-1">
+      {/*
+        顶部：标题 + 摘要。
+        WP96 画布《事项页 · 新风格》：标题是 26px 的 Outfit，下面一行胶囊
+        （待审几张 / 岗位路由 / 范围），右边是"收尾"。胶囊行的顺序不变，只换皮。
+      */}
+      <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-base font-semibold">{view.matter.title}</h1>
+          <h1 className="ws-display text-[26px]">{view.matter.title}</h1>
           <div className="flex items-center gap-2">
             {view.open_card_ids.length === 0 ? null : (
-              <span className="rounded border bg-muted px-1.5 py-0.5 text-[11px]">
+              <StatusPill tone="good">
                 {t('matter.cards', { count: view.open_card_ids.length })}
-              </span>
+              </StatusPill>
             )}
             {view.matter.status === 'closed' ? (
-              <span className="text-xs text-muted-foreground">{t('matter.closed')}</span>
+              <span className="text-xs text-ws-muted-fg">{t('matter.closed')}</span>
             ) : (
               <Button
                 size="xs"
@@ -270,7 +275,7 @@ export function MatterPage(): React.ReactNode {
       {/* 固定记录 */}
       {view.pinned_labels.length === 0 ? null : (
         <section data-testid="matter-pinned">
-          <h2 className="mb-1 text-sm font-medium">{t('matter.pinned')}</h2>
+          <h2 className="ws-display mb-1.5 text-[15px]">{t('matter.pinned')}</h2>
           <div className="flex flex-wrap gap-1.5">
             {view.pinned_labels.map((p) => (
               <span
@@ -287,7 +292,7 @@ export function MatterPage(): React.ReactNode {
 
       {/* 参与者与最近活动（40 §3.3：一件事看得见谁在做） */}
       <section data-testid="matter-participants">
-        <h2 className="mb-1 text-sm font-medium">{t('matter.participants')}</h2>
+        <h2 className="ws-display mb-1.5 text-[15px]">{t('matter.participants')}</h2>
         <div className="flex flex-wrap items-center gap-1.5">
           {view.participant_labels.length === 0 ? (
             <span className="text-sm text-muted-foreground">{t('matter.participants.empty')}</span>
@@ -314,7 +319,7 @@ export function MatterPage(): React.ReactNode {
 
       {/* 这里的待办 */}
       <section data-testid="matter-todos">
-        <h2 className="mb-1 text-sm font-medium">{t('matter.todos')}</h2>
+        <h2 className="ws-display mb-1.5 text-[15px]">{t('matter.todos')}</h2>
         {view.todos.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('todos.empty')}</p>
         ) : (

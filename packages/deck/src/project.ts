@@ -6,6 +6,7 @@
  * 拿到的一定是同一份。
  */
 import type { ApprovalItem, Iso8601, ObjectRef, RiskClass } from '@agentsws/contracts'
+import { layoutFor } from './layout.js'
 import { actionsFor, labelsFor, minutesFor, riskClassFor } from './matrix.js'
 import type {
   DeckCard,
@@ -717,6 +718,8 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   return {
     id: item.id,
     kind,
+    // WP96：排版跟着 kind（`staged_change` 再看账本条目类型）一起下发，见 layout.ts
+    layout: layoutFor(kind, str(payload.kind)),
     status: item.state,
     priority_band: priorityBandOf(item, risk, ctx.now),
     priority: item.priority,

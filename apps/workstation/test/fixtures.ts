@@ -5,6 +5,7 @@ export function draftCard(over: Partial<DeckCard> = {}): DeckCard {
   return {
     id: 'ap_1',
     kind: 'outbound_draft',
+    layout: 'outbound',
     status: 'pending',
     priority_band: 'P2',
     priority: 'queue',
@@ -64,6 +65,9 @@ export function questionCard(over: Partial<DeckCard> = {}): DeckCard {
   return draftCard({
     id: 'ap_q',
     kind: 'policy_change',
+    // WP96：policy_change 的排版是 ⑪ 策略卡（配置 diff），但它同时是问句形态——
+    // 所以卡面上既有 diff 也有单选列表（裸 approve 服务端会拒）。
+    layout: 'policy',
     priority_band: 'P1',
     risk_class: 'high',
     title: '超窗一周的退货，怎么办？',
@@ -125,6 +129,7 @@ export function homeData(over: Partial<HomeData> = {}): HomeData {
   return {
     queue,
     alerts: [],
+    reports: [],
     tiles: [TILE_BAR],
     estimated_minutes: 6,
     range: 'yesterday',

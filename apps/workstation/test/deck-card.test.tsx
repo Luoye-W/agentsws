@@ -163,7 +163,8 @@ describe('37 §1 第 4 行：内容盒一次只显示一种语言', () => {
     const box = screen.getByTestId('deck-content')
     expect(box.getAttribute('data-mode')).toBe('zh_summary')
     const hint = screen.getByTestId('deck-content-fallback')
-    expect(hint.className).toContain('amber')
+    // WP96：换皮之后"注意"这一档走 --ws-warn token，不再硬写 amber-600
+    expect(hint.className).toContain('text-ws-warn')
   })
 })
 

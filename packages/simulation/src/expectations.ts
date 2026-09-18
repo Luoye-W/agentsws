@@ -3,6 +3,7 @@
  * `reply_omits` / `reply_includes_any` 是"必须没有 / 至少有一个"的白名单，不是逐字比对。
  */
 import type { ChangeKind } from '@agentsws/contracts'
+import { type DeckKind, isQueueCard } from '@agentsws/deck'
 import { assemblePrompt } from '@agentsws/stand-ins'
 import type { Evidence } from './evidence.js'
 import { payloadOf } from './evidence.js'
@@ -240,6 +241,45 @@ export function checkExpectations(
         `approval_kinds.${kind}`,
         matchNumeric(n, assertion),
         `${kind} × ${n}（期望 ${String(assertion)}）`,
+      )
+    }
+  }
+  /*
+   * WP96（09-18）：**只有要人决定的才是卡**。
+   *
+   * 账本照旧收下每一条（14 的老规矩：Agent 主动做的每件事都进同一条账），
+   * 变的是投影到界面的那一步：日报与上线检查单落进岗位面板的**报表块**，
+   * 不进人的队列。所以这两个断言问的是两件不同的事——
+   * `panel_reports` 问"报表块有没有数"，`queue_cards` 问"队列里干不干净"。
+   * 判据是 deck 的 `isQueueCard`，六端同一份，不在这里另写一遍。
+   */
+  if (expected.queue_cards !== undefined || expected.panel_reports !== undefined) {
+    const changeKindOf = (item: (typeof evidence.approvals)[number]): string | undefined => {
+      const p = item.payload
+      if (typeof p !== 'object' || p === null || Array.isArray(p)) return undefined
+      const k = (p as Record<string, unknown>).kind
+      return typeof k === 'string' ? k : undefined
+    }
+    const inQueue = evidence.approvals.filter((i) =>
+      isQueueCard(i.kind as DeckKind, changeKindOf(i)),
+    )
+    // 账本里只有 ApprovalKind，没有 `system_alert`（那是投影时才有的系统卡），
+    // 所以"不进队列的"在模拟里就等于报表块那两样。
+    const inPanel = evidence.approvals.filter(
+      (i) => !isQueueCard(i.kind as DeckKind, changeKindOf(i)),
+    )
+    if (expected.queue_cards !== undefined) {
+      add(
+        'queue_cards',
+        matchNumeric(inQueue.length, expected.queue_cards),
+        `进人队列的卡 ${inQueue.length} 张（期望 ${String(expected.queue_cards)}）`,
+      )
+    }
+    if (expected.panel_reports !== undefined) {
+      add(
+        'panel_reports',
+        matchNumeric(inPanel.length, expected.panel_reports),
+        `面板报表块 ${inPanel.length} 条（期望 ${String(expected.panel_reports)}）`,
       )
     }
   }

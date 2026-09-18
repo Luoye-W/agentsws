@@ -87,6 +87,14 @@ export interface DemoOptions {
    * 公司页的品牌一览就有两行、各有各的待审卡 / 告警 / 今日销售。
    */
   twoBrands?: boolean
+  /**
+   * WP96：再种十一张卡，**十一种排版各一张**（09-18 设计画布《卡片排版一览》）。
+   *
+   * **默认不造**：demo 的本分是把一件真事演完整，十一张摆拍卡会把队列冲掉。
+   * `agentsws demo --card-gallery` 打开它，用来出那张卡片一览的截图，
+   * 也用来一眼看出"第十二种排版出现了却没人给它样子"。
+   */
+  cardGallery?: boolean
 }
 
 export interface Demo {
@@ -368,6 +376,193 @@ async function seedPolicyQuestion(world: World): Promise<ApprovalItem> {
       separation_of_duties: false,
     },
     priority: 'queue',
+  })
+}
+
+/**
+ * WP96：十一种排版各一张（09-18 设计画布《卡片排版一览》）。
+ *
+ * 这些卡是**摆拍**：`--card-gallery` 才种，默认不种。它们走的是与真卡完全同一条路
+ * （`world.txn.approvals.create` → `projectCard` → `layoutFor`），所以截出来的东西
+ * 与真跑出来的一模一样——摆的是数据，不是界面。
+ *
+ * 十一种里有三种不用在这儿造：`outbound`（场景真跑出来的回信卡）、
+ * `money`（退款变更卡）、`policy`（`seedPolicyQuestion` 那张边界问题卡）。
+ */
+async function seedCardGallery(world: World): Promise<void> {
+  const base = {
+    workspace_id: world.workspace_id,
+    schema_version: 1 as const,
+    role_id: world.role_id,
+    evidence: {
+      source_events: [],
+      provenance: { seen: [] },
+      precheck: { permission_diff: 'ok' as const, semantic_diff: 'ok' as const },
+    },
+    proposer: {
+      kind: 'agent' as const,
+      id: 'agent_store',
+      assignment_id: world.assignment.id,
+    },
+    automation: {
+      level_at_creation: 'L2' as const,
+      auto_approved: false,
+      mandate_check: { within: true, caps_hit: [] },
+      sampling: { selected: false },
+    },
+    routing: {
+      recipients: [{ person: world.owner, via: 'owner' as const }],
+      rule: 'owner' as const,
+      escalation: {
+        after_hours: 24,
+        business_hours: true,
+        chain: ['owner' as const],
+        escalated_at: [],
+      },
+      separation_of_duties: false,
+    },
+    priority: 'queue' as const,
+  }
+
+  /** ② 改动：before / after 双格 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'staged_change',
+    subject: { object: { type: 'product', id: 'GB-12-CLR' } },
+    // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
+    evidence: { ...base.evidence, provenance: { seen: [{ type: 'product', id: 'GB-12-CLR' }] } },
+    dedupe_key: `gallery_price_change:${world.workspace_id}:1`,
+    title: 'GB-12-CLR 从 US$14.90 降到 US$13.40',
+    summary:
+      '竞品同款 US$13.99，我们不做最低价，差 10% 以内可以（职责记忆）。库存 42 件，不在告急线。',
+    payload: {
+      kind: 'price_change',
+      before: { price: 'US$14.90' },
+      after: { price: 'US$13.40（-10.1%）' },
+    },
+  })
+
+  /** ③ 发布：左预览右说明 + 排期 + 受众数 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'staged_change',
+    subject: { object: { type: 'post', id: 'post_unbox' } },
+    // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
+    evidence: { ...base.evidence, provenance: { seen: [{ type: 'post', id: 'post_unbox' }] } },
+    dedupe_key: `gallery_social_post:${world.workspace_id}:1`,
+    title: 'IG 帖子 · 三件套开箱，明天 14:00 发',
+    summary: '开箱三件套：12cm 透明、16cm 琥珀、三件礼盒装。#glassbowl #kitchen',
+    payload: {
+      kind: 'social_post',
+      channel: 'instagram',
+      scheduled_at: '明天 14:00',
+      audience: '1,204 人',
+      after: { state: 'scheduled' },
+    },
+  })
+
+  /** ⑤ 选择：路由拿不准，人点一个 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'ai_question',
+    subject: { object: { type: 'work_item', id: 'mat_gallery' } },
+    dedupe_key: `gallery_ai_question:${world.workspace_id}:1`,
+    title: '这件事像两条职责，你定',
+    summary: '命中「改价 · 商品」的是店铺管理，命中「页面 · 文案」的是内容与博客。',
+    payload: {
+      options: [
+        { id: 'store', label: '店铺管理 · 命中 改价 · 商品' },
+        { id: 'content', label: '内容与博客 · 命中 页面 · 文案' },
+      ],
+    },
+  })
+
+  /** ⑥ 变体：缩略图格 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'staged_change',
+    subject: { object: { type: 'asset', id: 'banner_set3' } },
+    // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
+    evidence: { ...base.evidence, provenance: { seen: [{ type: 'asset', id: 'banner_set3' }] } },
+    dedupe_key: `gallery_design_variant:${world.workspace_id}:1`,
+    title: '首页 Banner · 三件套 · 挑一张',
+    summary: '六张里挑一张；定稿入库另出一张永远人审的卡。',
+    payload: {
+      kind: 'design_variant',
+      variants: [
+        { id: 'v1' },
+        { id: 'v2' },
+        { id: 'v3' },
+        { id: 'v4' },
+        { id: 'v5' },
+        { id: 'v6' },
+      ],
+    },
+  })
+
+  /** ⑦ 事后决定：系统已经止损了，问要不要恢复 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'staged_change',
+    subject: { object: { type: 'campaign', id: 'cmp_autumn' } },
+    // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
+    evidence: { ...base.evidence, provenance: { seen: [{ type: 'campaign', id: 'cmp_autumn' }] } },
+    dedupe_key: `gallery_pause_ad:${world.workspace_id}:1`,
+    title: '秋季新品 campaign 已自动暂停，要恢复吗',
+    summary: 'ROAS 连续两小时低于止损线，11:42 按 L3 自动停了。',
+    payload: {
+      kind: 'pause_ad',
+      facts: {
+        ROAS: '0.6（线 1.0）',
+        今日花费: 'US$400 · 日预算 40%',
+        暂停时间: '11:42 · 自动 L3',
+      },
+    },
+  })
+
+  /** ⑧ 人物：头像 + 资料摘要 + 规则匹配 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'staged_change',
+    subject: { object: { type: 'person', id: 'maria_k' } },
+    // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
+    evidence: { ...base.evidence, provenance: { seen: [{ type: 'person', id: 'maria_k' }] } },
+    dedupe_key: `gallery_community_membership:${world.workspace_id}:1`,
+    title: 'Discord · @maria_k 申请入群',
+    summary: '群规匹配通过，不在抑制名单。',
+    payload: {
+      kind: 'community_membership',
+      person: {
+        name: 'maria_k',
+        profile: '加入 Discord 2 年 · 3 个共同群 · 答题：在 Reddit 看到你们的碗',
+      },
+    },
+  })
+
+  /** ⑨ 转交 / 认领：原话 + 分类依据 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'claim',
+    subject: { object: { type: 'thread', id: 'thr_gallery' } },
+    dedupe_key: `gallery_claim:${world.workspace_id}:1`,
+    title: '群里有人问"我的单什么时候到"',
+    summary: '看着像客户问题，转给社群管理那条职责。',
+    payload: {
+      quote: 'Discord #support · @tom：订单 #1088 上周下的，物流一直没动，能查一下吗？',
+      reason: '客户问题 · 订单 #1088',
+    },
+  })
+
+  /** ⑩ 接管：机器停在这儿了，要人上手 */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'dev_handoff_result',
+    subject: { object: { type: 'run', id: 'run_gallery' } },
+    dedupe_key: `gallery_takeover:${world.workspace_id}:1`,
+    title: 'Facebook 群组 · 登录态失效',
+    summary:
+      '在受控浏览器里打开时被要求重新登录。我不会替你输密码——请在右栏的浏览器里登录后点"继续"。',
+    payload: { url: 'https://facebook.com/groups/glass-bowl' },
   })
 }
 
@@ -885,6 +1080,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     analytics_id: analytics.id,
   })
 
+  // WP96：十一种排版各一张（默认不造，见 `DemoOptions.cardGallery`）
+  if (options.cardGallery === true) await seedCardGallery(world)
   // WP66（52 O1）：第二个品牌（默认不造，见 `DemoOptions.twoBrands`）
   if (options.twoBrands === true)
     await seedSecondBrand({ server, world, pack, data: extraBrandData })

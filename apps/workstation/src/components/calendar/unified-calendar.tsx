@@ -31,7 +31,8 @@ import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react'
 import { createResizePlugin } from '@schedule-x/resize'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { GoButton, StatusPill, WsCard } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getCalendar, rescheduleSocialPost, scheduleTodo } from '@/lib/api'
@@ -259,12 +260,14 @@ export function UnifiedCalendar({
       firstDayOfWeek: 1,
       locale: lang === 'en' ? 'en-US' : 'zh-CN',
       /**
-       * 日 / 周视图只画 07:00–23:00。
+       * 日 / 周视图只画 08:00–20:00（WP96 照画布收窄了两头）。
        *
        * 整整 24 小时的格子里，凌晨那八行永远是空的，而它们把真正有事的时段挤到了
-       * 屏幕外面——打开周视图第一眼看到的是 1AM 到 8AM 的空白。做生意的一天从早上开始。
+       * 屏幕外面——打开周视图第一眼看到的是 1AM 到 8AM 的空白。做生意的一天从早上
+       * 开始，也在晚上结束：真落在这之外的事仍然画得出来，Schedule-X 会把它顶到
+       * 边界那一格，不会丢。
        */
-      dayBoundaries: { start: '07:00', end: '23:00' },
+      dayBoundaries: { start: '08:00', end: '20:00' },
       isDark: theme === 'dark',
       events: [],
       // 七个图层各一个 shadcn token：深浅色由浏览器在上色那一刻算，不在这里监听主题
@@ -382,7 +385,13 @@ export function UnifiedCalendar({
   )
 }
 
-/** 点开一条：标题、来源、状态、提示行，以及"在事项里打开"。 */
+/**
+ * 点开一条出来的小卡（WP96 照画布《日历 · 新风格》右下那张）。
+ *
+ * 四样东西：图层胶囊 + 状态胶囊、标题、预览（来源那一行 + 撞车提示）、
+ * 一主一次两个按钮 + 右下角的 → 圆钮。**与卡片队列是同一套语言**——
+ * 人在日历上点开一条和在队列里翻到一张，看到的应该是同一种东西。
+ */
 function EventCard({
   item,
   onClose,
@@ -391,6 +400,7 @@ function EventCard({
   onClose: () => void
 }): React.ReactNode {
   const { t } = useApp()
+  const navigate = useNavigate()
   const href =
     item.matter_id !== undefined
       ? `/matters/${item.matter_id}`
@@ -398,41 +408,51 @@ function EventCard({
         ? `/positions/${item.position_id}`
         : undefined
   return (
-    <div
+    <WsCard
       data-testid="calendar-event-card"
       data-source={item.source}
-      className="rounded-md border bg-card p-3 text-sm shadow-sm"
+      className="flex flex-col gap-2.5 p-4 text-sm"
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="font-medium">{item.title}</span>
-        <Button size="xs" variant="ghost" onClick={onClose}>
+      <div className="flex items-center gap-2">
+        <StatusPill tone="brand">{t(`calendar.source.${item.source}`)}</StatusPill>
+        {item.status === undefined ? null : <StatusPill tone="warn">{item.status}</StatusPill>}
+        <span className="flex-1" />
+        <Button size="xs" variant="ghost" onClick={onClose} aria-label={t('calendar.event.close')}>
           ✕
         </Button>
       </div>
-      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-        <dt>{t('calendar.event.source')}</dt>
-        <dd>{t(`calendar.source.${item.source}`)}</dd>
-        {item.status === undefined ? null : (
-          <>
-            <dt>{t('calendar.event.status')}</dt>
-            <dd>{item.status}</dd>
-          </>
-        )}
-      </dl>
+      <div className="text-[14.5px] leading-5 font-semibold">{item.title}</div>
       {item.notes === undefined ? null : (
-        <ul className="mt-1 list-disc pl-4 text-xs text-destructive">
+        <ul className="list-disc pl-4 text-xs text-ws-bad">
           {item.notes.map((n) => (
             <li key={n}>{n}</li>
           ))}
         </ul>
       )}
-      {href === undefined ? null : (
-        <Link to={href} className="mt-2 inline-block text-xs text-primary underline">
-          {item.matter_id === undefined
-            ? t('calendar.open_position')
-            : t('calendar.open_in_matter')}
-        </Link>
-      )}
-    </div>
+      <div className="flex items-center gap-2 border-t border-ws-line pt-2.5">
+        {href === undefined ? null : (
+          <Link
+            to={href}
+            className="inline-flex h-8 items-center rounded-[10px] bg-ws-brand px-3 text-xs font-medium text-ws-brand-fg"
+          >
+            {item.matter_id === undefined
+              ? t('calendar.open_position')
+              : t('calendar.open_in_matter')}
+          </Link>
+        )}
+        <Button size="xs" variant="ghost" onClick={onClose}>
+          {t('calendar.event.later')}
+        </Button>
+        <span className="flex-1" />
+        {href === undefined ? null : (
+          <GoButton
+            label={t('deck.go')}
+            onClick={() => {
+              navigate(href)
+            }}
+          />
+        )}
+      </div>
+    </WsCard>
   )
 }

@@ -124,6 +124,7 @@ const plan: DailyPlan = {
 const home: HomeData = {
   queue: [draftCard({ detail: { ...draftCard().detail, payload: { matter_id: 'mat_1' } } })],
   alerts: [],
+  reports: [],
   tiles: [TILE_BAR],
   estimated_minutes: 6,
   range: 'yesterday',
@@ -392,6 +393,59 @@ describe('日历（37 C3 + §2.5：一个日历，多图层）', () => {
   })
 
   const host = (): Promise<HTMLElement> => screen.findByTestId('calendar-host')
+
+  /**
+   * WP96 交付 5：日历换皮（**壳不换**——WP74 定的 Schedule-X 留着）。
+   *
+   * 钉的是画布上那几件看得见的事：左栏是"安排一件事"主按钮 + 小月历 + 图层列，
+   * 顶栏是今天 / 翻页 / 范围与统计 / 四选一的视图分段，图层勾选是颜色方块带数量。
+   */
+  it('左栏照画布：安排一件事 + 小月历 + 图层列', async () => {
+    renderWithProviders(<CalendarPage />)
+    await host()
+    expect(screen.getByTestId('calendar-meet').textContent).toBe('安排一件事')
+    const mini = screen.getByTestId('calendar-mini-month')
+    // 6 行 × 7 列，今天那一格标出来
+    expect(within(mini).getAllByTestId('mini-day')).toHaveLength(42)
+    expect(mini.querySelector('[data-today="true"]')).not.toBeNull()
+    expect(screen.getByTestId('calendar-layers')).toBeTruthy()
+  })
+
+  it('顶栏：范围与统计一行，视图是四选一的分段（不是四个独立按钮）', async () => {
+    renderWithProviders(<CalendarPage />)
+    await host()
+    expect(screen.getByTestId('calendar-range').textContent).toMatch(/本周 \d+ 项/)
+    const seg = screen.getByTestId('calendar-views')
+    expect(within(seg).getAllByRole('button')).toHaveLength(4)
+    expect(
+      within(seg)
+        .getAllByRole('button')
+        .filter((b) => b.ariaPressed === 'true'),
+    ).toHaveLength(1)
+  })
+
+  it('图层那一行：颜色方块就是勾选框，勾掉的层数字照数', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderWithProviders(<CalendarPage />)
+    await host()
+    const todo = screen
+      .getAllByTestId('calendar-layer')
+      .find((el) => el.dataset.layer === 'todo') as HTMLElement
+    expect(todo.dataset.on).toBe('true')
+    const before = within(todo).getByTestId('calendar-layer-count').textContent
+    await user.click(todo)
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('calendar-layer').find((el) => el.dataset.layer === 'todo')?.dataset
+          .on,
+      ).toBe('false')
+    })
+    // 关掉之后那一层的数字没变——看不出"关掉的那层里有东西"的开关是没用的
+    const after = screen
+      .getAllByTestId('calendar-layer')
+      .find((el) => el.dataset.layer === 'todo') as HTMLElement
+    expect(within(after).getByTestId('calendar-layer-count').textContent).toBe(before)
+  })
 
   it('壳是 Schedule-X：周格与事件都画得出来（不是我们自己那张表格）', async () => {
     const { container } = renderWithProviders(<CalendarPage />)

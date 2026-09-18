@@ -214,6 +214,8 @@ export function buildProgram(
     .option('--static <dir>', '工作台构建产物目录')
     // WP66（52 O1）：多造一个品牌，看"一个进程装多套品牌模块"长什么样
     .option('--two-brands', '再造一个品牌（公司页的品牌一览就有两行，各有各的数）')
+    // WP96：十一种卡片排版各一张，用来看《卡片排版一览》
+    .option('--card-gallery', '再种十一张卡（十一种排版各一张）')
     .action(async (opts: Record<string, unknown>) => {
       const root = opts.root === undefined ? baseDir() : fromCwd(String(opts.root))
       const demo = await createDemo({
@@ -221,6 +223,7 @@ export function buildProgram(
         port: asInt(String(opts.port), '--port'),
         quiet: true,
         ...(opts.twoBrands === true ? { twoBrands: true } : {}),
+        ...(opts.cardGallery === true ? { cardGallery: true } : {}),
         ...(opts.static === undefined ? {} : { staticDir: fromCwd(String(opts.static)) }),
       })
       const { url } = await demo.server.listen()
