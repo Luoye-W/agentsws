@@ -11,30 +11,44 @@
  *    深色圆底上用；浅底要用就先放进 `#1B1D22` 的圆底里（{@link brandMark}
  *    的 `disc` 就是干这件事的）。
  *
- * 常量先落在 `apps/cloud` 里——WP112 正在建 `packages/brand`，合并时换引用。
+ * 几何与颜色的真源是 `@agentsws/brand`（WP112）；这里只负责把它拼成能内联进页面 / 邮件的字符串。
  */
+import {
+  ALL_BLOCKS,
+  BLOCK_RADIUS,
+  BLOCK_SIZE,
+  GRADIENT_AXIS,
+  INK,
+  STOPS_ON_DARK,
+  VIEW_BOX,
+} from '@agentsws/brand'
 
 /** 产品绿。页面上除了标记之外的所有强调色都用它。 */
 export const BRAND_GREEN = '#007B67'
 
 /** 标记的底色（浅色页面上给它垫一个圆底）。 */
-export const BRAND_DISC = '#1B1D22'
+export const BRAND_DISC = INK
 
 /** 六块标记本体。`id` 参数是给渐变用的——同一页出现两次就得有两个不同的 id。 */
 export function brandMark(options: { size?: number; id?: string } = {}): string {
   const size = options.size ?? 40
   const id = options.id ?? 'aw'
+  const stops = STOPS_ON_DARK.map(
+    (stop) => `<stop offset="${String(stop.offset)}" stop-color="${stop.color}"/>`,
+  ).join('')
+  const rects = [...ALL_BLOCKS]
+    .sort((p, q) => p.x - q.x || q.y - p.y)
+    .map(
+      (block) =>
+        `<rect x="${String(block.x)}" y="${String(block.y)}" width="${String(BLOCK_SIZE)}" height="${String(BLOCK_SIZE)}" rx="${String(BLOCK_RADIUS)}" fill="url(#${id})"/>`,
+    )
+    .join('')
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 12 65 65" width="${String(size)}" height="${String(size)}" role="img" aria-label="出海 Agents 工坊">`,
-    `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12">`,
-    '<stop offset="0%" stop-color="#4EA8FF"/><stop offset="52%" stop-color="#2FE0C8"/><stop offset="100%" stop-color="#FFD84D"/>',
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${VIEW_BOX}" width="${String(size)}" height="${String(size)}" role="img" aria-label="Agents 工坊">`,
+    `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${String(GRADIENT_AXIS.x1)}" y1="${String(GRADIENT_AXIS.y1)}" x2="${String(GRADIENT_AXIS.x2)}" y2="${String(GRADIENT_AXIS.y2)}">`,
+    stops,
     '</linearGradient></defs>',
-    `<rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#${id})"/>`,
-    `<rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#${id})"/>`,
-    `<rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#${id})"/>`,
-    `<rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#${id})"/>`,
-    `<rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#${id})"/>`,
-    `<rect x="62" y="12" width="17" height="17" rx="2.5" fill="url(#${id})"/>`,
+    rects,
     '</svg>',
   ].join('')
 }
