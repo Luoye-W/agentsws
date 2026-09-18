@@ -4386,6 +4386,13 @@ export interface MessageThreadView {
 export interface MailAssistantView {
   message_id: string
   summary: string
+  /**
+   * 这封信要不要回。
+   *
+   * 与 `suggestions` 分开给：一台没接模型的机器上 `suggestions` 永远是空数组，
+   * 只看它的话界面会对每封信都说"这封信看起来不用回"——那是假的。
+   */
+  needs_reply: boolean
   suggestions: ReplySuggestion[]
   sender: {
     address: string

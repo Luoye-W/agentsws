@@ -86,6 +86,14 @@ export interface MessageThreadView {
 export interface MailAssistantView {
   message_id: string
   summary: string
+  /**
+   * 这封信要不要回。
+   *
+   * 与 `suggestions` 分开给，是因为"不用回"与"要回但这台机器上生成不出来"
+   * 在界面上必须是两句话——只看空数组的话，一台没接模型的机器会对每封信都说
+   * "这封信看起来不用回"，而那是假的。
+   */
+  needs_reply: boolean
   /** `needs_reply` 为假时是空数组（不生成、不花钱）。 */
   suggestions: ReplySuggestion[]
   sender: {

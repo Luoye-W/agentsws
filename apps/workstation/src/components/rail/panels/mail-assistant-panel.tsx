@@ -110,7 +110,10 @@ export function MailAssistantPanel(): ReactNode {
             {t('rail.mail.no_model')}
           </p>
         ) : data.suggestions.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground">{t('rail.mail.no_reply_needed')}</p>
+          // "不用回"与"要回但生成不出来"是两句话——只看空数组会把后者说成前者
+          <p className="text-[12px] text-muted-foreground" data-testid="rail-mail-no-suggestions">
+            {t(data.needs_reply ? 'rail.mail.not_generated' : 'rail.mail.no_reply_needed')}
+          </p>
         ) : (
           <ul className="flex flex-col gap-2">
             {data.suggestions.map((s) => (

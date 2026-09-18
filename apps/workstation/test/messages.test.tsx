@@ -86,6 +86,7 @@ const summary = (over: Partial<MessageThreadSummary> = {}): MessageThreadSummary
 const assistant: MailAssistantView = {
   message_id: 'msg_1',
   summary: '客户说包裹破损要退款',
+  needs_reply: true,
   suggestions: [
     { id: 's1', kind: 'short', title: '简短回一句', text: '这就给你补发。', citations: [] },
     {

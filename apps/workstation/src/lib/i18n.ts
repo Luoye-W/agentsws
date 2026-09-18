@@ -1421,6 +1421,7 @@ const zh: Table = {
   'rail.mail.suggestions': '回复建议',
   'rail.mail.no_model': '这台机器上还没接模型，回复建议出不来——写信框照常能用。',
   'rail.mail.no_reply_needed': '这封信看起来不用回。',
+  'rail.mail.not_generated': '这封信要回，但这一轮没生成出建议——写信框照常能用。',
   'rail.mail.sender': '发件人是谁',
   'rail.mail.history': '往来 {count} 封',
   'rail.mail.todos': '相关待办',
@@ -3629,6 +3630,8 @@ const en: Table = {
   'rail.mail.no_model':
     'No model connected on this machine, so there are no reply drafts — the composer still works.',
   'rail.mail.no_reply_needed': 'This one does not look like it needs a reply.',
+  'rail.mail.not_generated':
+    'This one needs a reply, but no draft came back this round — the composer still works.',
   'rail.mail.sender': 'Who this is',
   'rail.mail.history': '{count} messages exchanged',
   'rail.mail.todos': 'Related to-dos',

@@ -1223,7 +1223,6 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   }
 }
 
-
 /* ── WP113（63）：消息页的样例来信 ─────────────────────────────────────── */
 
 /** demo 里那只邮箱（与 pack 的公司对得上；域名用 `example` 保留域，不是真地址）。 */

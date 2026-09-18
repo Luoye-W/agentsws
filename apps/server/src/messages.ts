@@ -692,6 +692,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       return {
         message_id: row.id,
         summary: row.triage?.summary ?? '',
+        needs_reply: needsReply,
         suggestions,
         sender: {
           address: row.from.email,

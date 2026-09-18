@@ -243,6 +243,7 @@ class FakeMessages implements MessagesPort {
     return {
       message_id: id,
       summary: '客户说包裹破损要退款',
+      needs_reply: true,
       suggestions: [
         { id: 's1', kind: 'short', title: '简短回一句', text: '这就给你补发', citations: [] },
       ],
