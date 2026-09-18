@@ -5,6 +5,7 @@
  * 36 §3 / 54：**岗位是任务主入口**——所以这张卡上最显眼的是"几张等你决定"和
  * 那个把活儿交出去的按钮，不是岗位名。`selected` 是当前岗位的光晕态。
  */
+import { BrandMark } from './brand-mark'
 import { WsAvatar, WsCard } from './primitives'
 import { TONE_BADGE, type Tone } from './tone'
 
@@ -24,6 +25,9 @@ export function PositionCard({
   line,
   holders = [],
   menu,
+  running,
+  runningLabel,
+  runningHint,
   selected,
   entryLabel,
   onEntry,
@@ -46,6 +50,18 @@ export function PositionCard({
    * 这一层只留一个插槽，不知道里面是什么——菜单的内容与路由都在页面那边。
    */
   menu?: React.ReactNode
+  /**
+   * WP112：这个岗位现在**有活在跑**吗。
+   *
+   * 真的在跑才给——卡头上多一个呼吸的标记，它在全站只代表一件事：
+   * "Agent 正在替你干活"（docs/36 §12）。不跑的时候整个不出，
+   * 而不是给一个灰掉的点：一个永远在那儿的状态点等于没有状态。
+   */
+  running?: boolean
+  /** 状态点的名字（"运行中"）：读屏念的就是它。 */
+  runningLabel?: string
+  /** hover 上去才说的细节（"运行中 · 3 件在办"）。不给就只说 `runningLabel`。 */
+  runningHint?: string
   selected?: boolean
   entryLabel: string
   onEntry?: () => void
@@ -78,6 +94,14 @@ export function PositionCard({
             {name}
           </button>
         )}
+        {running === true && runningLabel !== undefined ? (
+          // 一个**状态点**，不是一句话：WP98 已经把"N 件在办"从卡面上拿掉了
+          // （它和那个 28px 的大数字说的是同一件事）。这里只留那一下呼吸，
+          // 具体几件在 hover 与读屏里说。
+          <span data-testid="ws-position-running" title={runningHint ?? runningLabel}>
+            <BrandMark size={14} motion="breathe" label={runningLabel} />
+          </span>
+        ) : null}
         {menu === undefined ? null : <span className="ml-auto">{menu}</span>}
       </div>
       <div className="flex items-baseline gap-2">

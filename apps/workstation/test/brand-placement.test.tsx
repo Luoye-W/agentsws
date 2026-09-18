@@ -4,10 +4,12 @@
  * `brand-mark.test.tsx` 管的是标记本身画得对不对；这一份管的是"哪一处该出哪种姿态"。
  * 每处只有一种，写在 docs/36 §12 那张表里——摆错位置的动效比没有动效更吵。
  */
-import { act, screen } from '@testing-library/react'
+import { act, cleanup, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/app-shell'
 import { BootSplash } from '@/components/boot-splash'
+import { ChatTranscript } from '@/components/chat/transcript'
+import { PositionCard } from '@/components/design'
 import type { PositionSummary } from '@/lib/api'
 import { renderWithProviders } from './helpers'
 
@@ -101,6 +103,66 @@ describe('reduced-motion 下摆在各处的标记也一律静态', () => {
     } finally {
       vi.useRealTimers()
       vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('呼吸 = 「Agent 正在替你干活」，全站只此一个语义', () => {
+  it('岗位卡：有活在跑才出那个点，不跑的时候整个不出', () => {
+    const card = (open: number): HTMLElement => {
+      const { container } = renderWithProviders(
+        <PositionCard
+          name="客服"
+          pending={2}
+          pendingLabel="张待审"
+          line="待回复 2"
+          entryLabel="交给它一件事"
+          {...(open > 0
+            ? { running: true, runningLabel: '运行中', runningHint: `运行中 · ${open} 件在办` }
+            : {})}
+        />,
+      )
+      return container
+    }
+    const idle = card(0)
+    expect(idle.querySelector('[data-testid="ws-position-running"]')).toBeNull()
+
+    cleanup()
+    const busy = card(3)
+    const dot = busy.querySelector('[data-testid="ws-position-running"]')
+    expect(dot).not.toBeNull()
+    // 一个**状态点**：几件在办只在 hover 与读屏里说，卡面上不再印一遍那个数
+    expect((dot as HTMLElement).getAttribute('title')).toBe('运行中 · 3 件在办')
+    expect(dot?.querySelector('svg')?.getAttribute('data-motion')).toBe('breathe')
+    // 14px < 28px，按规范 §1.3 自己退单色：跟着文字颜色走，不跳出来抢戏
+    expect(dot?.querySelector('svg')?.getAttribute('data-variant')).toBe('mono')
+  })
+
+  it('对话线程：交出去了还没回来才出那一行', () => {
+    const quiet = renderWithProviders(<ChatTranscript messages={[]} />)
+    expect(quiet.container.querySelector('[data-testid="chat-thinking"]')).toBeNull()
+
+    cleanup()
+    const busy = renderWithProviders(<ChatTranscript messages={[]} busy />)
+    const row = busy.container.querySelector('[data-testid="chat-thinking"]')
+    expect(row?.textContent).toContain('客服 AI 正在判这一轮')
+    expect(row?.querySelector('svg')?.getAttribute('data-motion')).toBe('breathe')
+  })
+
+  it('普通的加载转圈不换成呼吸：按钮里的 Loader2 还在，标记不进按钮', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { dirname, join } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const here = dirname(fileURLToPath(import.meta.url))
+    for (const rel of [
+      'src/components/settings/browser-card.tsx',
+      'src/components/models/model-form.tsx',
+      'src/components/connections/standby-wizard.tsx',
+    ]) {
+      const src = readFileSync(join(here, '..', rel), 'utf8')
+      expect(src).toContain('Loader2')
+      expect(src).not.toContain('BrandMark')
+      expect(src).not.toContain('AgentBusyMark')
     }
   })
 })

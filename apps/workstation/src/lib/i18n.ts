@@ -12,6 +12,9 @@ const zh: Table = {
   'app.title': 'agentsws 工作台',
   // WP112：冷启动那一瞬首屏上的那句话（母品牌「集结」在它上面）
   'app.boot': '正在把工作台装起来…',
+  // WP112：**全站只有这一句**配「呼吸」那段动效——它只代表"Agent 正在替你干活"。
+  // 按钮里那种普通的加载转圈不算（docs/36 §12）。
+  'brand.busy': 'Agent 正在替你干活',
   // ── 41 §1 个人代理（原「秘书」，09-10 改名）─────────────────────────
   //
   // **只改面向用户的文案**：键名（`secretary.*`）、包名（`@agentsws/secretary`）、
@@ -1366,6 +1369,9 @@ const zh: Table = {
   'home.positions.entry': '交给它一件事',
   // WP98：岗位卡中间那句改成真状态；一个数都没有的岗位照实说，不编"一切正常"
   'home.positions.idle': '还没开工',
+  // WP112：岗位卡上那个「运行中」状态点旁边的话
+  'home.positions.running': '运行中',
+  'home.positions.running.hint': '运行中 · {count} 件在办',
   'home.headline': '今天',
   'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
   'home.stats': '今天的数',
@@ -2041,6 +2047,8 @@ const zh: Table = {
   'chat.visitor.placeholder': '像访客那样问一句，例如：运费多少？',
   'chat.visitor.send': '发',
   'chat.transcript.empty': '还没有消息。发一句试试。',
+  // WP112：线程末尾那行——这一轮交给 AI 了、还没回来
+  'chat.thinking': '客服 AI 正在判这一轮…',
 
   'chat.role.visitor': '访客',
   'chat.role.agent': 'AI 客服',
@@ -2148,6 +2156,7 @@ const zh: Table = {
 const en: Table = {
   'app.title': 'agentsws Workstation',
   'app.boot': 'Bringing the workstation up…',
+  'brand.busy': 'An agent is working on it',
   'nav.home': 'Home',
   'nav.secretary': 'My agent',
   // WP96: the top-bar search bar (opens the ⌘K palette)
@@ -3497,6 +3506,8 @@ const en: Table = {
   'home.positions.pending': 'pending',
   'home.positions.entry': 'Hand it a task',
   'home.positions.idle': 'Not started yet',
+  'home.positions.running': 'Running',
+  'home.positions.running.hint': 'Running · {count} in flight',
   'home.headline': 'Today',
   'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
   'home.stats': "Today's numbers",
@@ -4188,6 +4199,7 @@ const en: Table = {
   'chat.visitor.placeholder': 'Ask like a visitor would, e.g. how much is shipping?',
   'chat.visitor.send': 'Send',
   'chat.transcript.empty': 'No messages yet. Send one.',
+  'chat.thinking': 'The support AI is working out this turn…',
 
   'chat.role.visitor': 'Visitor',
   'chat.role.agent': 'AI support',
