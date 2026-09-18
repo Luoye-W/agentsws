@@ -21,6 +21,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { PlanList } from '@/components/onboarding/plan-list'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
@@ -74,6 +75,17 @@ const STEPS = [
   'onboarding.step3',
   'onboarding.step4',
 ] as const
+
+/**
+ * 第五屏：**完成**。
+ *
+ * WP112 给它加了母品牌那段「一变一队」——领头那块先出现，其余五块从它的位置分出去。
+ * 这段动效演的就是这一刻的意思：**一个活做通了，复制成一队**。它只播一次，
+ * 播完停住；下面那个按钮才是出口。
+ *
+ * 它不是第五个"步骤"（进度条仍然是四步，到这一屏四步全打勾），所以不进 `STEPS`。
+ */
+const DONE_STEP = STEPS.length
 
 export function OnboardingPage(): React.ReactNode {
   const { t } = useApp()
@@ -179,7 +191,8 @@ export function OnboardingPage(): React.ReactNode {
       setFailure(undefined)
       await client.invalidateQueries({ queryKey: ['onboarding'] })
       await client.invalidateQueries({ queryKey: ['positions'] })
-      navigate('/')
+      // WP112：不再直接跳首页——先给一屏回执（"一队上岗了"），人自己按按钮进去
+      setStep(DONE_STEP)
     },
     onError: say,
   })
@@ -196,18 +209,28 @@ export function OnboardingPage(): React.ReactNode {
         「先跳过」留在右上，但压成一行弱化的小字：它是退路，不是主动作。
       */}
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-sm font-semibold">{t('onboarding.title')}</h1>
-        <button
-          type="button"
-          data-testid="onboarding-skip"
-          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          onClick={() => {
-            markSkipped()
-            navigate('/')
-          }}
-        >
-          {t('onboarding.skip')}
-        </button>
+        {/*
+          WP112：**第一屏**的页头带一段「集结」——六块依次落位。
+          它说的是"这套东西正在起来"，所以只在第 ① 步出、只播一次、播完停住；
+          往后几步再播一遍就成了装饰。
+        */}
+        <h1 className="flex items-center gap-2 text-sm font-semibold">
+          {step === 0 ? <BrandMark size={28} motion="assemble" /> : null}
+          {t('onboarding.title')}
+        </h1>
+        {step === DONE_STEP ? null : (
+          <button
+            type="button"
+            data-testid="onboarding-skip"
+            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => {
+              markSkipped()
+              navigate('/')
+            }}
+          >
+            {t('onboarding.skip')}
+          </button>
+        )}
       </div>
 
       <StepProgress steps={STEPS} step={step} />
@@ -294,6 +317,28 @@ export function OnboardingPage(): React.ReactNode {
             )
           ) : null}
 
+          {step === DONE_STEP ? (
+            <div
+              className="flex flex-col items-center gap-3 py-6 text-center"
+              data-testid="onboarding-done"
+            >
+              <BrandMark size={72} motion="split" />
+              <p className="ws-display text-[17px]">{t('onboarding.done.title')}</p>
+              <p className="max-w-sm text-sm text-ws-muted-fg">
+                {t('onboarding.done.line', { count: expanded.length })}
+              </p>
+              <Button
+                size="sm"
+                data-testid="onboarding-enter"
+                onClick={() => {
+                  navigate('/')
+                }}
+              >
+                {t('onboarding.done.enter')}
+              </Button>
+            </div>
+          ) : null}
+
           {failure === undefined || step === 0 ? null : (
             <p role="alert" className="text-sm text-destructive" data-testid="onboarding-error">
               {failure}
@@ -307,7 +352,7 @@ export function OnboardingPage(): React.ReactNode {
             这里再放一个等于同一句话摆两遍；而「上一步」在第 ① 步本来就是灰的，
             单摆一个点不动的按钮比没有它更糟。
           */}
-          {step === 0 ? null : (
+          {step === 0 || step === DONE_STEP ? null : (
             <div className="flex items-center justify-end gap-2">
               <Button
                 size="sm"

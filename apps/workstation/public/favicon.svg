@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="agentsws">
+  <!-- WP112 · 出海Agents工坊 标记。由 scripts/gen-brand-assets.py 生成，不手改。
+       浅底的坑（规范 §1.2）：这里走的是第 1 条解法——深色圆底。 -->
+  <title>agentsws</title>
+  <circle cx="50" cy="50" r="50" fill="#1B1D22"/>
+  <defs>
+    <linearGradient id="fav" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12"><stop offset="0%" stop-color="#4EA8FF"/><stop offset="52%" stop-color="#2FE0C8"/><stop offset="100%" stop-color="#FFD84D"/></linearGradient>
+  </defs>
+  <g transform="translate(4.21538,6.18462) scale(0.984615)"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#fav)"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#fav)"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#fav)"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#fav)"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#fav)"/><rect x="62" y="12" width="17" height="17" rx="2.5" fill="url(#fav)"/></g>
+</svg>

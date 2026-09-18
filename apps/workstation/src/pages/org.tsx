@@ -16,6 +16,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { BrandsTab } from '@/components/org/brands-tab'
@@ -25,6 +26,7 @@ import { MembersTab } from '@/components/org/members-tab'
 import { PositionsTab } from '@/components/org/positions-tab'
 import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/components/org/ranges-tab'
 import { ToolboxTab } from '@/components/org/toolbox-tab'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -84,6 +86,16 @@ export function OrgPage(): React.ReactNode {
   const [fresh, setFresh] = useState<OrgInvitationView | undefined>(undefined)
   const [submitted, setSubmitted] = useState<string | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  /**
+   * WP112：**新岗位上岗成功的回执**。
+   *
+   * 分配做完以前这里什么都不说——向导自己收起来，人盯着一张没变化的表猜"成了没有"。
+   * 现在给一屏回执，配上母品牌那段「一变一队」：领头块先出现，其余五块从它的位置
+   * 分出去。这正是这一刻的意思——**一个活做通了，复制成一队**。只播一次。
+   *
+   * 名字认不出来就是 `null`（不出回执）：宁可没有，也不在界面上印一串 id。
+   */
+  const [receipt, setReceipt] = useState<{ person: string; position: string } | null>(null)
 
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession })
   // 52 O1：这个品牌挂在哪家公司下（品牌一览要它）
@@ -190,9 +202,14 @@ export function OrgPage(): React.ReactNode {
       ranges: { kind: string; id: string }[]
       range_groups: string[]
     }) => createAssignments(input, owner),
-    onSuccess: async () => {
+    onSuccess: async (_data, input) => {
       setFailure(undefined)
       setWizard(null)
+      // WP112：上岗成功给一张回执（见 `receipt` 那一段）。名字从界面上已经有的
+      // 两张清单里认，认不出来就不出回执——宁可没有，也不印一串 id
+      const person = (members.data ?? []).find((m) => m.person_id === input.person_id)?.name
+      const position = (positions.data ?? []).find((x) => x.id === input.position_id)?.name
+      setReceipt(person === undefined || position === undefined ? null : { person, position })
       await refresh()
     },
     onError: say,
@@ -418,6 +435,30 @@ export function OrgPage(): React.ReactNode {
         <h1 className="text-sm font-semibold">{t('org.title')}</h1>
         <p className="text-xs text-muted-foreground">{t('org.subtitle')}</p>
       </div>
+
+      {receipt === null ? null : (
+        <Card data-testid="assign-receipt">
+          <CardContent className="flex items-center gap-4 pt-6">
+            <BrandMark size={44} motion="split" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <p className="ws-display text-[15px]">
+                {t('org.assign.receipt', { person: receipt.person, position: receipt.position })}
+              </p>
+              <p className="text-[12.5px] text-ws-muted-fg">{t('org.assign.receipt.hint')}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="assign-receipt-close"
+              onClick={() => {
+                setReceipt(null)
+              }}
+            >
+              {t('org.assign.receipt.close')}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {wizard === null ? null : (
         <Card>
