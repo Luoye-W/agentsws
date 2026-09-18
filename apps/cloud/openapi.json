@@ -192,12 +192,12 @@
     "/v1/cloud/health": {
       "get": {
         "operationId": "cloudHealth",
-        "summary": "活着没有",
+        "summary": "活着没有：版本、各模块挂没挂上、New API 通不通（不回任何密钥与地址）",
         "tags": ["cloud-health"],
         "parameters": [],
         "responses": {
           "200": {
-            "description": "{ status, version, at }",
+            "description": "{ status, version, at, modules, newapi }",
             "content": {
               "application/json": {
                 "schema": {
@@ -228,7 +228,7 @@
           }
         },
         "security": [],
-        "x-returns": "{ status, version, at }"
+        "x-returns": "{ status, version, at, modules, newapi }"
       }
     },
     "/v1/cloud/auth/magic-link": {

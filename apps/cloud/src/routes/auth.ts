@@ -15,11 +15,21 @@ import {
   cloudRoute,
   cloudSession,
 } from '@agentsws/api'
-import type { Clock } from '@agentsws/contracts'
+import { type Clock, emailDomain } from '@agentsws/contracts'
 import { z } from 'zod'
 import { callbackWithToken, checkCallbackUrl } from '../callback.js'
-import { loginMail, type MailSender } from '../mail.js'
+import { clientIpOf, type MagicLinkLimiter, rateLimited } from '../guards.js'
+import { loginMail, MailDeliveryError, type MailSender } from '../mail.js'
 import { CLOUD_LOGIN_TTL_MS, type CloudStore } from '../store.js'
+
+/**
+ * 不带 `callback_url` 时信里那条链接落在哪。
+ *
+ * WP58 拼的是 `/cloud/auth/callback`，而那条路由**不存在**——不带 callback 调一次
+ * magic-link，信发出去了，点开是 404。WP110 把落点改成真有的那一页（`/login`），
+ * 旧路径留成别名（`server.ts` 的 `LEGACY_LOGIN_PATH`），已经发出去的信照样点得开。
+ */
+export const DEFAULT_CALLBACK_PATH = '/login'
 
 const MagicLinkBody = z.object({
   email: z.string().min(3).max(320),
@@ -41,10 +51,21 @@ export interface AuthRouteDeps {
   /** 云自己的对外地址（`AGENTSWS_CLOUD_BASE_URL`）。 */
   baseUrl: string
   loginTtlMs?: number
+  /**
+   * WP110 限流：每邮箱 5 次 / 小时、每 IP 20 次 / 小时。
+   *
+   * 不给 = 不限（只读路由声明的场合，比如 `gen-cloud-openapi.mjs`）。
+   * 这一条是整个云侧**唯一**一条"不带任何凭据就能让服务器发出一封信"的路由，
+   * 裸着的话别人能拿它给任意邮箱刷信，而收信的人只会觉得是我们在骚扰他。
+   */
+  limiter?: MagicLinkLimiter
+  /** 投递失败时把那一行写到哪儿（默认 stderr）。 */
+  warn?: (line: string) => void
 }
 
 export function authRoutes(deps: AuthRouteDeps): CloudRoute[] {
   const ttl = deps.loginTtlMs ?? CLOUD_LOGIN_TTL_MS
+  const warn = deps.warn ?? ((line: string) => process.stderr.write(line))
   return [
     cloudRoute(
       {
@@ -61,15 +82,39 @@ export function authRoutes(deps: AuthRouteDeps): CloudRoute[] {
         const input = await cloudBody(c, MagicLinkBody)
         const email = input.email.trim().toLowerCase()
         if (!email.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
-        const callback = input.callback_url ?? `${deps.baseUrl}/cloud/auth/callback`
+        const callback = input.callback_url ?? `${deps.baseUrl}${DEFAULT_CALLBACK_PATH}`
         const check = checkCallbackUrl(callback, deps.baseUrl)
         if (!check.ok) throw new ApiError('invalid_input', check.reason ?? 'callback_url 不允许')
+        /*
+         * 限流在**建账号之前**：先建后限的话，刷一遍就能在库里种下一堆空账号
+         * （每个还各带一个隐式组织）。
+         */
+        if (deps.limiter !== undefined) {
+          const verdict = deps.limiter.take(email, clientIpOf(c), Date.parse(deps.clock.now()))
+          if (!verdict.allowed) {
+            // 哪一条限住的只进服务端日志；给用户的那句话对此一个字不说
+            warn(`[magic-link] 限流 scope=${verdict.scope} domain=${emailDomain(email)}\n`)
+            throw rateLimited(verdict)
+          }
+        }
         // 第一次见到这个邮箱就建账号 + 隐式建组织（52 O3）；
         // 回应对"这个邮箱注册过没有"一个字都不透露——两条路的响应一模一样。
         const { account } = deps.store.ensureAccount(email)
         const issued = deps.store.issueLogin(account.id, ttl)
         const link = callbackWithToken(callback, issued.token, input.state)
-        await deps.mail(loginMail(email, link, Math.round(ttl / 60000)))
+        try {
+          await deps.mail(loginMail(email, link, Math.round(ttl / 60000)))
+        } catch (err) {
+          /*
+           * 投递失败要如实说"信没发出去"——假装发出去了只会让人在收件箱里干等。
+           * 但那句话对"这个地址存不存在"一个字都不说（退信原文在 `cause` 里，
+           * 由 `smtpMailSender` 打进 stderr，不进响应）。
+           */
+          if (err instanceof MailDeliveryError)
+            throw new ApiError('provider_unavailable', err.message)
+          warn(`[magic-link] 投递出了没预料到的错：${String(err)}\n`)
+          throw new ApiError('provider_unavailable', '登录信没发出去，等一分钟再试一次。')
+        }
         return cloudOk(c, { expires_at: issued.expires_at, delivered: 'email' })
       },
     ),
