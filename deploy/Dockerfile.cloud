@@ -1,0 +1,75 @@
+# agentsws **云侧**镜像（`apps/cloud`）。WP110。
+#
+# 与仓库根的 `Dockerfile`（本地 / NAS 上的服务进程）是两件不同的东西：
+# 那一个跑 `@agentsws/server`，绑回环，给一家公司自己用；这一个跑
+# `@agentsws/cloud`，在公网上对全部内测用户提供账号、积分、模型入口、
+# 值守与公共红人库。两个镜像各建各的，不共用一份产物。
+#
+# 三条与根 Dockerfile 一样的做法，理由也一样（别改）：
+#
+# 1. **两个阶段都不跑 apt**。编译阶段用完整的 `node:22-bookworm`（自带
+#    python3 / make / g++，better-sqlite3 缺预编译包时能就地编译），运行阶段
+#    用 slim，健康检查用 `node --eval` 而不是 curl。少一次 apt 就少一个
+#    「构建时 Debian 镜像站抽风」的失败点。
+# 2. **用 `pnpm deploy` 而不是 `prune --prod` + 拷 node_modules**：pnpm 的
+#    workspace 依赖在 node_modules 里是符号链接，`prune --prod` 会把那一层
+#    剪掉，起来就是 `ERR_MODULE_NOT_FOUND: @agentsws/api`。
+# 3. **不用 root 跑**。`/data` 的属主由 compose 那边给。
+#
+# 一条这个镜像特有的：值守（WP60）会 `spawn` 一个 `@agentsws/server` 的子进程，
+# 所以 `/out` 里必须有服务进程那一份 dist —— 它是 `@agentsws/cloud` 的
+# dependency，`pnpm deploy` 会把它实拷进来，不需要额外的 COPY。
+
+# ── 编译 ────────────────────────────────────────────────────────────────
+FROM node:22-bookworm AS build
+WORKDIR /app
+
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
+    npm_config_update_notifier=false \
+    CI=1
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tsconfig.json tsconfig.base.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY role-packs ./role-packs
+COPY scripts ./scripts
+
+RUN pnpm install --frozen-lockfile
+
+# 只建云侧那条引用链（`apps/cloud/tsconfig.json` 的 references 已经把 server 与
+# 六个包都列进去了）。整仓 `tsc -b` 会连工作台一起编，而云上一个字节都用不到它。
+RUN pnpm exec tsc -b apps/cloud
+
+RUN pnpm --filter @agentsws/cloud deploy --prod --legacy /out
+
+# ── 运行 ────────────────────────────────────────────────────────────────
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /app
+
+# `NODE_ENV=production` 在这个镜像里**是一道闸**：没配 SMTP 的话进程会拒绝启动
+# （`apps/cloud/src/mail.ts`），而不是把真账号的登录链接打进生产日志。
+ENV NODE_ENV=production \
+    AGENTSWS_CLOUD_PORT=4400 \
+    AGENTSWS_CLOUD_DATA_DIR=/data
+
+COPY --from=build /out ./
+
+# 账号库 / 钱包库 / 公共红人库 / 幂等表 / 值守的工作区目录都在这底下。
+#
+# **`mkdir` + `chown` 必须在 `VOLUME` 之前**，而且不能省：具名卷第一次挂上来时，
+# Docker 按镜像里那个路径的属主来初始化它。镜像里没有 `/data` 的话（`VOLUME`
+# 自己建的那个是 root:root），卷就是 root 的，而这个容器以 `node` 跑——
+# 起来第一件事开库就是 `SQLITE_CANTOPEN`。这不是假设，第一版就是这么挂的。
+RUN mkdir -p /data && chown node:node /data
+VOLUME ["/data"]
+EXPOSE 4400
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.AGENTSWS_CLOUD_PORT||4400}/v1/cloud/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+CMD ["node", "dist/index.js"]
