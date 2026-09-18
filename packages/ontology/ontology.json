@@ -9,6 +9,7 @@
     "packages/contracts/src/blocks.ts",
     "packages/contracts/src/changes.ts",
     "packages/contracts/src/channels.ts",
+    "packages/contracts/src/cloud-admin.ts",
     "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/cloud.ts",
     "packages/contracts/src/common.ts",
@@ -79,7 +80,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "cd459db6f1cc18f6db33b320f8c65fa5",
+  "source_digest": "f11fcb8e632d95ee658cb85e0abb461a",
   "objects": [
     {
       "id": "ad",

@@ -72,6 +72,32 @@ CREATE TABLE IF NOT EXISTS metering_events (
 CREATE INDEX IF NOT EXISTS metering_events_org_at ON metering_events (org_id, at);
 `,
   },
+  {
+    /*
+     * WP115 的成本会计扩列（65 §3）。**只加列不改列**：旧行这几格是 NULL，
+     * 聚合时 `COALESCE(..., 0)`——那不是"未知"，是"那时候没记"。
+     *
+     * 为什么加在计量事件上而不是另开一张成本表：一次调用的"收"与"支"必须在
+     * 同一行上，否则"这一笔亏没亏本"就要靠 join 两张表对 request_id，而其中
+     * 一张的写入可能失败。KOLAgents 的用量账本就是一行两列，照搬。
+     */
+    version: 2,
+    sql: `
+ALTER TABLE metering_events ADD COLUMN provider      TEXT;
+ALTER TABLE metering_events ADD COLUMN model         TEXT;
+ALTER TABLE metering_events ADD COLUMN input_tokens  REAL;
+ALTER TABLE metering_events ADD COLUMN output_tokens REAL;
+ALTER TABLE metering_events ADD COLUMN cost_micros   INTEGER;
+ALTER TABLE metering_events ADD COLUMN cost_currency TEXT;
+ALTER TABLE metering_events ADD COLUMN charge_status TEXT;
+ALTER TABLE metering_events ADD COLUMN account_id    TEXT;
+
+-- 后台三张表各自的入口（65 §9：全部 SQL 聚合 + 索引，不把全量行拉进内存）
+CREATE INDEX IF NOT EXISTS metering_events_at         ON metering_events (at);
+CREATE INDEX IF NOT EXISTS metering_events_provider_at ON metering_events (provider, at);
+CREATE INDEX IF NOT EXISTS metering_events_cap_at      ON metering_events (capability, at);
+`,
+  },
 ]
 
 const VERSION_TABLE = `
@@ -121,6 +147,52 @@ const toLot = (r: LotRow): WalletLot => ({
   ...(r.source_ref === null ? {} : { source_ref: r.source_ref }),
 })
 
+/** 库里的一行计量事件。扩列在旧行上是 NULL，所以这里全是 `| null`。 */
+interface EventRow {
+  capability: string
+  unit: string
+  quantity: number
+  credits: number
+  at: string
+  org_id: string
+  workspace_id: string
+  request_id: string
+  provider: string | null
+  model: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cost_micros: number | null
+  cost_currency: string | null
+  charge_status: string | null
+  account_id: string | null
+}
+
+/**
+ * 行 → {@link MeteringEvent}。**NULL 的那几格干脆不出现**，不写成 `undefined`：
+ * `exactOptionalPropertyTypes` 下这两件事不一样，而 `assertMeteringEvent` 查的是
+ * "键在不在"。
+ */
+function toEvent(r: EventRow): MeteringEvent {
+  return {
+    capability: r.capability,
+    unit: r.unit,
+    quantity: r.quantity,
+    credits: r.credits,
+    at: r.at,
+    org_id: r.org_id,
+    workspace_id: r.workspace_id,
+    request_id: r.request_id,
+    ...(r.provider === null ? {} : { provider: r.provider }),
+    ...(r.model === null ? {} : { model: r.model }),
+    ...(r.input_tokens === null ? {} : { input_tokens: r.input_tokens }),
+    ...(r.output_tokens === null ? {} : { output_tokens: r.output_tokens }),
+    ...(r.cost_micros === null ? {} : { cost_micros: r.cost_micros }),
+    ...(r.cost_currency === null ? {} : { cost_currency: r.cost_currency }),
+    ...(r.charge_status === null ? {} : { charge_status: r.charge_status }),
+    ...(r.account_id === null ? {} : { account_id: r.account_id }),
+  }
+}
+
 export interface SqliteWalletStoreOptions {
   /** 库文件路径；`:memory:` 也行（测试用）。 */
   dbPath: string
@@ -169,11 +241,18 @@ export function createSqliteWalletStore(options: SqliteWalletStoreOptions): Sqli
   const deleteReservation = db.prepare('DELETE FROM wallet_reservations WHERE id = ?')
   const sweep = db.prepare('DELETE FROM wallet_reservations WHERE at < ?')
   const insertEvent = db.prepare(
-    `INSERT INTO metering_events (capability, unit, quantity, credits, at, org_id, workspace_id, request_id)
-     VALUES (@capability, @unit, @quantity, @credits, @at, @org_id, @workspace_id, @request_id)`,
+    `INSERT INTO metering_events
+       (capability, unit, quantity, credits, at, org_id, workspace_id, request_id,
+        provider, model, input_tokens, output_tokens, cost_micros, cost_currency,
+        charge_status, account_id)
+     VALUES (@capability, @unit, @quantity, @credits, @at, @org_id, @workspace_id, @request_id,
+             @provider, @model, @input_tokens, @output_tokens, @cost_micros, @cost_currency,
+             @charge_status, @account_id)`,
   )
-  const selectEvents = db.prepare<[string, string, string], MeteringEvent>(
-    `SELECT capability, unit, quantity, credits, at, org_id, workspace_id, request_id
+  const selectEvents = db.prepare<[string, string, string], EventRow>(
+    `SELECT capability, unit, quantity, credits, at, org_id, workspace_id, request_id,
+            provider, model, input_tokens, output_tokens, cost_micros, cost_currency,
+            charge_status, account_id
        FROM metering_events WHERE org_id = ? AND at >= ? AND at <= ? ORDER BY at`,
   )
 
@@ -219,7 +298,7 @@ export function createSqliteWalletStore(options: SqliteWalletStoreOptions): Sqli
     },
 
     appendEvent(e) {
-      // 参数按名字取，多给的键 better-sqlite3 会直接报错——又一道"只有八列"的闸
+      // 参数按名字取，多给的键 better-sqlite3 会直接报错——又一道白名单的闸
       insertEvent.run({
         capability: e.capability,
         unit: e.unit,
@@ -229,15 +308,25 @@ export function createSqliteWalletStore(options: SqliteWalletStoreOptions): Sqli
         org_id: e.org_id,
         workspace_id: e.workspace_id,
         request_id: e.request_id,
+        provider: e.provider ?? null,
+        model: e.model ?? null,
+        input_tokens: e.input_tokens ?? null,
+        output_tokens: e.output_tokens ?? null,
+        cost_micros: e.cost_micros ?? null,
+        cost_currency: e.cost_currency ?? null,
+        charge_status: e.charge_status ?? null,
+        account_id: e.account_id ?? null,
       })
     },
 
     events(filter) {
-      return selectEvents.all(
-        filter.org_id,
-        filter.from ?? '0000-01-01T00:00:00.000Z',
-        filter.to ?? '9999-12-31T23:59:59.999Z',
-      )
+      return selectEvents
+        .all(
+          filter.org_id,
+          filter.from ?? '0000-01-01T00:00:00.000Z',
+          filter.to ?? '9999-12-31T23:59:59.999Z',
+        )
+        .map(toEvent)
     },
 
     sweepReservations(olderThan) {

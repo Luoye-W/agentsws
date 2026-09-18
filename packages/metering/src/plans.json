@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "as_of": "2026-09-18",
+  "note": "65 §7：会员档位是**数据**，和 pricing.json 一个道理。今天 agentsws 还没有定义过任何会员权益（49 通篇只有积分，没有套餐），所以这里只有一个占位档，把 term / cycle 的机制先跑通。**不要**把这张表当成产品档位表——权益体系要 Luoye 定。",
+  "needs_decision": "档位名、每 cycle 送多少积分、会员到底换来什么（更高的并发？免费的能力？折扣？）——三件都没定。beta-tester 的 50 积分是一个能看出效果的数，不是定价。",
+  "plans": [
+    {
+      "id": "beta-tester",
+      "label_zh": "内测会员",
+      "label_en": "Beta tester",
+      "credits_per_cycle": 50,
+      "note_zh": "内测期间手动开通。每个自然月发 50 积分（granted，下个 cycle 开始时清零）。50 这个数需要 Luoye 定——它现在只是「够跑几十次对话、看得出效果」的量级。"
+    }
+  ]
+}

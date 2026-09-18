@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "as_of": "2026-09-18",
+  "last_verified_at": null,
+  "needs_review": true,
+  "needs_review_note": "⚠️ 这张表里的每一个单价都是按各家公开价目页填的参考值，**没有一条经 Luoye 核对过**（`last_verified_at` 为 null 就是这个意思）。核对之前，后台里所有\"我方成本\"与\"毛利\"都要当作量级参考，不是财务事实。核对完把日期填进 last_verified_at，把 needs_review 改成 false。",
+  "note": "65 §3：我方成本价目。**与 pricing.json 刻意分离**——那一张是「向用户收多少积分」，这一张是「我们自己付出去多少钱」。合成一张的后果是改售价会顺手改掉历史成本，毛利就永远是我们想要的样子。token 价来自 packages/model-gateway/src/pricing/catalog.json 同一批数字（每百万 token）；非 token 的按 provider:unit 记一次多少钱。",
+  "base_currency": "CNY",
+  "fx": {
+    "CNY": 1,
+    "USD": 7.1,
+    "EUR": 7.7
+  },
+  "fx_note": "与 pricing.json 用同一张参考汇率快照（同一个 as_of），两边必须一致：售价按一个汇率折、成本按另一个折，毛利就成了汇率差的函数。",
+  "match_note": "按**模型名前缀**匹配，最长前缀优先。认不出的模型落 token_fallback——它是这张表里最贵的那一档（算出来的，不是写死的）：估贵了只是让毛利看起来保守，估便宜了会让一条真亏本的调用在看板上显示赚钱。",
+  "token_models": [
+    { "provider": "deepseek", "prefix": "deepseek-v4-pro", "currency": "USD", "in_per_m": 1.32, "out_per_m": 3.96 },
+    { "provider": "deepseek", "prefix": "deepseek-flash", "currency": "USD", "in_per_m": 0.3, "out_per_m": 1.2 },
+    { "provider": "deepseek", "prefix": "deepseek-v4-flash", "currency": "USD", "in_per_m": 0.3, "out_per_m": 1.2 },
+    { "provider": "deepseek", "prefix": "deepseek", "currency": "USD", "in_per_m": 1.32, "out_per_m": 3.96 },
+    { "provider": "openai", "prefix": "gpt-6-astra", "currency": "USD", "in_per_m": 10, "out_per_m": 50 },
+    { "provider": "openai", "prefix": "gpt-5.6-sol", "currency": "USD", "in_per_m": 4, "out_per_m": 20 },
+    { "provider": "openai", "prefix": "gpt-5.6-terra", "currency": "USD", "in_per_m": 2, "out_per_m": 12 },
+    { "provider": "openai", "prefix": "gpt-5.6-luna", "currency": "USD", "in_per_m": 0.2, "out_per_m": 1.2 },
+    { "provider": "openai", "prefix": "gpt-5.4-mini", "currency": "USD", "in_per_m": 0.75, "out_per_m": 4.5 },
+    { "provider": "openai", "prefix": "gpt-5.4-nano", "currency": "USD", "in_per_m": 0.2, "out_per_m": 1.25 },
+    { "provider": "openai", "prefix": "gpt-5.4", "currency": "USD", "in_per_m": 2.5, "out_per_m": 15 },
+    { "provider": "openai", "prefix": "gpt-5-mini", "currency": "USD", "in_per_m": 0.25, "out_per_m": 2 },
+    { "provider": "openai", "prefix": "gpt-5-nano", "currency": "USD", "in_per_m": 0.05, "out_per_m": 0.4 },
+    { "provider": "openai", "prefix": "gpt-5", "currency": "USD", "in_per_m": 1.25, "out_per_m": 10 },
+    { "provider": "openai", "prefix": "gpt-4.1-mini", "currency": "USD", "in_per_m": 0.4, "out_per_m": 1.6 },
+    { "provider": "openai", "prefix": "gpt-4.1-nano", "currency": "USD", "in_per_m": 0.1, "out_per_m": 0.4 },
+    { "provider": "openai", "prefix": "gpt-4.1", "currency": "USD", "in_per_m": 2, "out_per_m": 8 },
+    { "provider": "openai", "prefix": "gpt-4o-mini", "currency": "USD", "in_per_m": 0.15, "out_per_m": 0.6 },
+    { "provider": "openai", "prefix": "gpt-4o", "currency": "USD", "in_per_m": 2.5, "out_per_m": 10 },
+    { "provider": "openai", "prefix": "text-embedding-3-large", "currency": "USD", "in_per_m": 0.13, "out_per_m": 0 },
+    { "provider": "openai", "prefix": "text-embedding-3-small", "currency": "USD", "in_per_m": 0.02, "out_per_m": 0 },
+    { "provider": "openai", "prefix": "gpt-", "currency": "USD", "in_per_m": 10, "out_per_m": 50 },
+    { "provider": "moonshot", "prefix": "kimi-k3", "currency": "CNY", "in_per_m": 20, "out_per_m": 100 },
+    { "provider": "moonshot", "prefix": "kimi-k2.7-code-highspeed", "currency": "CNY", "in_per_m": 13, "out_per_m": 54 },
+    { "provider": "moonshot", "prefix": "kimi-k2.7-code", "currency": "CNY", "in_per_m": 6.5, "out_per_m": 27 },
+    { "provider": "moonshot", "prefix": "kimi-k2.6", "currency": "CNY", "in_per_m": 6.5, "out_per_m": 27 },
+    { "provider": "moonshot", "prefix": "kimi", "currency": "CNY", "in_per_m": 20, "out_per_m": 100 },
+    { "provider": "zhipu", "prefix": "glm-5.3-flash", "currency": "CNY", "in_per_m": 0.8, "out_per_m": 2.8 },
+    { "provider": "zhipu", "prefix": "glm-5.3", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 },
+    { "provider": "zhipu", "prefix": "glm-5.2", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 },
+    { "provider": "zhipu", "prefix": "glm-4.7", "currency": "CNY", "in_per_m": 2, "out_per_m": 8 },
+    { "provider": "zhipu", "prefix": "glm", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 }
+  ],
+  "unit_prices": [
+    {
+      "key": "youtube:call",
+      "provider": "youtube",
+      "currency": "USD",
+      "per_unit": 0,
+      "note": "YouTube Data API v3 的免费配额（每天 10000 单位）之内不收钱。超配额要开通计费——那时候把真实单价填进来，现在填一个编出来的数会让毛利凭空好看。"
+    },
+    {
+      "key": "apify:call",
+      "provider": "apify",
+      "currency": "USD",
+      "per_unit": 0.005,
+      "note": "Apify 按 actor 的 compute unit 计费，一次红人抓取的量级。**这是最需要核对的一条**——它是今天唯一真花现金的非 AI 上游。"
+    },
+    {
+      "key": "newapi:call",
+      "provider": "newapi",
+      "currency": "CNY",
+      "per_unit": 0,
+      "note": "New API 只做汇聚，本身不额外收钱；真正的钱在它后面那家模型上，按 token 算。"
+    },
+    {
+      "key": "internal:call",
+      "provider": "internal",
+      "currency": "CNY",
+      "per_unit": 0,
+      "note": "我们自己库里的读写（浏览公共红人库、基准、手动充值）。没有外部成本，但**照样记一行**——用量看板要知道这些能力被用了多少次。"
+    }
+  ]
+}

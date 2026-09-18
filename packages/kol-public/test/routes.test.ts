@@ -12,6 +12,7 @@ import {
   MAX_DAILY_REWARD_CREDITS,
   MAX_PLUGIN_OBSERVATIONS_PER_DAY,
   METERING_EVENT_FIELDS,
+  METERING_EVENT_REQUIRED_FIELDS,
   OBSERVATIONS_PER_CREDIT,
 } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
@@ -90,8 +91,15 @@ describe('WP61 计费', () => {
     const paid = events.filter((e) => e.credits > 0)
     expect(paid).toHaveLength(1)
     expect(paid[0]?.capability).toBe(KOL_LOOKUP_CAPABILITY)
+    /*
+     * WP115 之后白名单从八个扩到十六个（后八个是成本会计的可选列，见 65 §3）。
+     * 这里钉的两件事一个字没变：**必填那八个都在**，**白名单之外一个键都没有**
+     * ——"入口不存正文"靠的是后一条，而不是"总共只有八个"。
+     */
+    const allowed = new Set<string>(METERING_EVENT_FIELDS as readonly string[])
     for (const event of events) {
-      expect(Object.keys(event).sort()).toEqual([...METERING_EVENT_FIELDS].sort())
+      for (const key of Object.keys(event)) expect(allowed.has(key), key).toBe(true)
+      for (const key of METERING_EVENT_REQUIRED_FIELDS) expect(event[key], key).toBeDefined()
       expect(JSON.stringify(event)).not.toContain('somecreator')
       expect(JSON.stringify(event)).not.toContain('creator.com')
     }

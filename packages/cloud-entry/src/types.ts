@@ -6,7 +6,7 @@
  * 账号 / 令牌 / 组织在那边，价目 / 钱包 / 转发在这边，合并时不会撞同一个文件。
  */
 import type { CloudTokenVerifier, Pricing } from '@agentsws/contracts'
-import type { Wallet } from '@agentsws/metering'
+import type { CostTable, Wallet } from '@agentsws/metering'
 import type { Context } from 'hono'
 
 /**
@@ -64,6 +64,21 @@ export interface EntryDeps {
   now?: () => string
   /** 请求号；不给就用时间 + 计数（这个包里不裸调 `Math.random()`）。 */
   newRequestId?: () => string
+  /**
+   * WP115（65 §3）：**我们自己人的调用免计费，也不污染统计**。
+   *
+   * KefuAgent 那条真事：管理员拿生产环境试接口，失败率被顶到 30%，从那以后
+   * 没人再信那张看板。所以这一档单独记成 `admin_exempt`——成本照记（我们确实
+   * 付了上游的钱），向用户收 0，聚合时整行滤掉。
+   *
+   * 不给 = 谁都不免（默认最保守：漏免一次只是多收自己一点钱，错免一次是漏账）。
+   */
+  isExemptAccount?: (account_id: string) => boolean
+  /**
+   * WP115：成本表。不给就用 `@agentsws/metering` 打包的那份。
+   * 给 `null` = 不算成本（计量事件里 `cost_micros` 留空，聚合当 0）。
+   */
+  costTable?: CostTable | null
 }
 
 /** 这个包自己的错误信封（与网关 28 §2 同形状，码表按入口的语义另立）。 */
