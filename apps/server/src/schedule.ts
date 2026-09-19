@@ -70,9 +70,9 @@ import {
 import type { BackupRunResult } from './backup.js'
 // WP57：聊天求助超时巡检的 handler 名（真源在 ./chat.ts）
 import { CHAT_ASSIST_TIMEOUT_HANDLER } from './chat.js'
-import { SUPPORT_SLA_HANDLER } from './support-judgment.js'
 import { type HousekeepingDeps, runApprovalHousekeeping } from './housekeeping.js'
 import type { MeetingsAssembly } from './meetings.js'
+import { SUPPORT_SLA_HANDLER } from './support-judgment.js'
 
 /** 每个消费者的登记名。改名字要同时改工作台的 i18n（列表上显示的是它）。 */
 export const HANDLERS = {
