@@ -1146,7 +1146,13 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     brandData: (ws) => extraBrandData.get(ws),
     brandIntakeFetch: async (url: string) => {
       const body = siteFixtures.get(url)
-      if (body === undefined) return { ok: false, status: 503, text: async () => '' }
+      // 剧本里没有的网址回 **404**，不是 503：这一句会原样显示给用户
+      //（"有 N 个页面没读着（…）"），而 503 说的是"对方服务器出错"——
+      // 那是替商家的网站撒了一个我们不知道的谎。404 才是"这一页不存在"。
+      // 模拟世界那一侧仍回 503，因为那里的 503 是**绊线**（谁在这条路上加了
+      // 真请求，用例当场红）；demo 没有断言，绊线没有用处，只剩误导。
+      // 两种回法都不出这台机器：离线那一条保证一个字没变。
+      if (body === undefined) return { ok: false, status: 404, text: async () => '' }
       return { ok: true, status: 200, text: async () => body }
     },
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
