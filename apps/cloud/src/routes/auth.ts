@@ -20,6 +20,7 @@ import { z } from 'zod'
 import { callbackWithToken, checkCallbackUrl } from '../callback.js'
 import { clientIpOf, type MagicLinkLimiter, rateLimited } from '../guards.js'
 import { loginMail, MailDeliveryError, type MailSender } from '../mail.js'
+import { grantSignupBonus, type SignupBonusHooks } from '../signup-bonus.js'
 import { CLOUD_LOGIN_TTL_MS, type CloudStore } from '../store.js'
 
 /**
@@ -61,6 +62,12 @@ export interface AuthRouteDeps {
   limiter?: MagicLinkLimiter
   /** 投递失败时把那一行写到哪儿（默认 stderr）。 */
   warn?: (line: string) => void
+  /**
+   * WP121（70 §2）：注册赠送 10 积分。
+   *
+   * 不给 = 这个节点不送（开源自建档默认就是这样：没有云钱包，也没有积分这回事）。
+   */
+  signupBonus?: SignupBonusHooks
 }
 
 export function authRoutes(deps: AuthRouteDeps): CloudRoute[] {
@@ -127,18 +134,30 @@ export function authRoutes(deps: AuthRouteDeps): CloudRoute[] {
         tag: 'cloud-auth',
         auth: 'public',
         body: VerifyBody,
-        returns: '{ account, org, session_token, expires_at }',
+        returns: '{ account, org, session_token, expires_at, bonus? }',
       },
       async (c) => {
         const input = await cloudBody(c, VerifyBody)
         const out = deps.store.verifyLogin(input.token)
         // 用过 / 过期 / 不存在，一律同一句话
         if (out === undefined) throw new ApiError('unauthenticated', '登录链接无效或已用过')
+        /*
+         * WP121（70 §2）：**这一刻**才送注册积分——点开了信才算这个邮箱是真的。
+         * `grantSignupBonus` 永不抛：送不出去也不该让登录失败。
+         */
+        const bonus =
+          deps.signupBonus === undefined
+            ? undefined
+            : await grantSignupBonus(
+                { clock: deps.clock, hooks: deps.signupBonus },
+                { account_id: out.account.id, org_id: out.org.id, email: out.account.email },
+              )
         return cloudOk(c, {
           account: { id: out.account.id, email: out.account.email },
           org: { id: out.org.id, name: out.org.name },
           session_token: out.session_token,
           expires_at: out.expires_at,
+          ...(bonus === undefined ? {} : { bonus }),
         })
       },
     ),

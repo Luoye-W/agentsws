@@ -16,3 +16,12 @@ AGENTSWS_CLOUD_ADMIN_TOKEN=
 # Stripe（不配就回 501 一句人话，不是 500）
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+
+# 公共红人库的邮箱密钥（WP116，AES-256-GCM 的 32 字节，hex 或 base64url）。
+# **不配就不存邮箱**——一个字节都不写，绝不降级成明文。
+# 生成：node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+AGENTSWS_KOL_EMAIL_KEY=
+
+# 公共红人库的两个上游（都可选；一个都不配就是"只查库"）
+AGENTSWS_YOUTUBE_API_KEY=
+APIFY_TOKEN=

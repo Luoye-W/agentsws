@@ -15,10 +15,13 @@
 
 import type { CloudMail, MailSender } from '@agentsws/cloud/workers-kit'
 import type { Clock } from '@agentsws/contracts'
+import { signupBonus } from '@agentsws/metering'
 import Database from 'better-sqlite3'
 import { AccountsCore } from '../src/accounts-do.js'
 import type { DoSqlCursor, DoStorageLike } from '../src/do-sql.js'
 import type { DoNamespaceLike, WorkerEnv } from '../src/env.js'
+import { KOL_PUBLIC_SINGLETON } from '../src/kol-admin.js'
+import { KolPublicCore, type KolPublicDoOptions } from '../src/kol-public-do.js'
 import { LedgerCore } from '../src/ledger-do.js'
 import { WalletCore, type WalletDoOptions } from '../src/wallet-do.js'
 
@@ -71,6 +74,13 @@ export interface FakeCloudOptions {
   /** 假上游（`/v1/ai/*` 打的那一个）。不给就不联网也不给回应。 */
   fetch?: WalletDoOptions['fetch']
   randomBytes?: (n: number) => Buffer
+  /**
+   * 绑不绑公共红人库那个单例（WP116）。
+   *
+   * **默认不绑**：WP114 那几条钉的就是"没绑的时候 health 如实说 false、
+   * `/v1/data/kol/*` 回 404"。要测公共库的那几条自己打开它。
+   */
+  kol?: boolean | KolPublicDoOptions
 }
 
 export interface FakeCloud {
@@ -81,6 +91,8 @@ export interface FakeCloud {
   wallet(org_id: string): WalletCore
   /** 单例的计量副本（WP115）。 */
   ledger(): LedgerCore
+  /** 单例的公共红人库（WP116）。没开 `kol` 时调它会抛。 */
+  kol(): KolPublicCore
   /** 某个组织的钱包存储（测试里预充值、看闹钟用）。 */
   walletStorage(org_id: string): FakeDoStorage
   accountsStorage(): FakeDoStorage
@@ -147,6 +159,31 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
     return made
   }
 
+  /*
+   * 公共红人库（**单例**）。外部源一个都不给 = "只查库"：
+   * 测试不联网、不花钱，这一条在这里是编译期就保证的。
+   */
+  const kolCores = new Map<string, KolPublicCore>()
+  const kolCore = (name: string): KolPublicCore => {
+    const found = kolCores.get(name)
+    if (found !== undefined) return found
+    const made = new KolPublicCore({ storage: storageOf(`kol:${name}`) }, env, {
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+      ...(typeof options.kol === 'object' ? options.kol : {}),
+      sources: (typeof options.kol === 'object' ? options.kol.sources : undefined) ?? {
+        fetch: () =>
+          Promise.resolve({
+            used: 'none' as const,
+            reason: 'no_source' as const,
+            message: '这个节点没配外部源（测试）',
+            units: 0,
+          }),
+      },
+    })
+    kolCores.set(name, made)
+    return made
+  }
+
   /** `ctx.waitUntil` 排着的那些（测试里显式 settle）。 */
   const pending: Promise<unknown>[] = []
 
@@ -175,6 +212,7 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
   env.ACCOUNTS = namespace(accountsCore)
   env.WALLET = namespace(walletCore)
   env.LEDGER = namespace(ledgerCore)
+  if (options.kol !== undefined && options.kol !== false) env.KOL_PUBLIC = namespace(kolCore)
   // 假的 `[assets]`：只回一句"这是后台的壳"，够验"有会话才拿得到"
   env.ASSETS = {
     fetch: async (request: Request) =>
@@ -193,6 +231,11 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
     accounts: () => accountsCore('accounts'),
     wallet: (org_id) => walletCore(org_id),
     ledger: () => ledgerCore('ledger'),
+    kol: () => {
+      if (env.KOL_PUBLIC === undefined)
+        throw new Error('这个 fakeCloud 没绑公共红人库（`fakeCloud({ kol: true })`）')
+      return kolCore(KOL_PUBLIC_SINGLETON)
+    },
     walletStorage: (org_id) => storageOf(`wal:${org_id}`),
     accountsStorage: () => storageOf('acc:accounts'),
     async settle() {
@@ -215,4 +258,27 @@ export function tokenFromMail(mail: CloudMail): string {
   const found = /token=([A-Za-z0-9_-]+)/.exec(mail.text)
   if (found?.[1] === undefined) throw new Error(`信里没有 token：${mail.text}`)
   return found[1]
+}
+
+/**
+ * WP121（70 §2）：**每个点开过登录信的账号都会多出这一笔注册赠送**。
+ *
+ * 所以 WP114 / WP115 那些算钱的用例里，余额不再是它们自己充的那个数。这里不写
+ * 死 10：金额在 `bonuses.json` 里，改成 20 的那天这些用例不该跟着红一遍。
+ */
+export const SIGNUP_BONUS = signupBonus()?.credits ?? 0
+
+/**
+ * 把一个组织的钱清成 0（连注册赠送一起撤掉）。
+ *
+ * 给「这个人一分钱都没有」那一类用例用——WP121 之后「刚注册」不再等于「没钱」，
+ * 想要没钱得自己说出来。
+ */
+export function zeroOut(cloud: FakeCloud, org: string): void {
+  // 与 `revokeRemaining` 同一下动作（`remaining` 清零），只是这里够不着那个
+  // `SyncDb`——假运行时手里只有底下那张 sqlite。
+  cloud
+    .walletStorage(org)
+    .db.prepare('UPDATE wallet_lots SET remaining = 0 WHERE org_id = ?')
+    .run(org)
 }

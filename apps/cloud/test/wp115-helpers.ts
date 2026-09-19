@@ -7,6 +7,12 @@
 
 import { syncDbFromBetterSqlite } from '@agentsws/core/sql/sync-db'
 import {
+  type KolAdminPort,
+  localKolAdminPort,
+  nodeKolSecrets,
+  SqliteKolStore,
+} from '@agentsws/kol-public'
+import {
   createSqliteWalletStore,
   type SqliteWalletStore,
   sqlUsageLedger,
@@ -15,6 +21,7 @@ import {
   Wallet,
   type WalletAdminPort,
 } from '@agentsws/metering'
+import Database from 'better-sqlite3'
 import {
   type AdminStore,
   adminConsoleRoutes,
@@ -54,12 +61,28 @@ export interface AdminHarness {
   ): Promise<{ status: number; body: { data?: unknown; code?: string; message?: string } }>
   raw(
     path: string,
-    init?: { method?: string; session?: string; headers?: Record<string, string> },
+    init?: {
+      method?: string
+      body?: unknown
+      session?: string
+      csrf?: string
+      headers?: Record<string, string>
+    },
   ): Promise<{ status: number; text: string; headers: Headers }>
+  /** 公共红人库那一侧（WP116 §4）。`kol: false` 时是 `undefined`，那几条回 503。 */
+  kol: KolAdminPort | undefined
   close(): Promise<void>
 }
 
-export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness {
+export function adminHarness(
+  options: {
+    clock?: TestClock
+    /** 接不接公共红人库（WP116 §4）。默认**不接**——那几条路由回 503。 */
+    kol?: boolean
+    /** 邮箱密钥；不给就用一把测试用的假钥匙（32 字节 hex）。 */
+    kolEmailKey?: string | undefined
+  } = {},
+): AdminHarness {
   const clock = options.clock ?? testClock()
   let adminStore: AdminStore | undefined
   const store = createSqliteWalletStore({ dbPath: ':memory:', now: () => clock.now() })
@@ -79,6 +102,22 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
       store.appendEvent(e)
     },
   })
+  /*
+   * 公共红人库（WP116 §4）。**落盘那份实现的内存档**：后台那一页要的统计 /
+   * 搜索 / 搬家全在 SQL 里，`MemoryKolStore` 没有那几张表（`isLibraryStore`
+   * 就是判这个）。所以这里开一张 `:memory:` 的真 sqlite。
+   */
+  const kolStore = options.kol === true ? new SqliteKolStore(new Database(':memory:')) : undefined
+  const kolPort =
+    kolStore === undefined
+      ? undefined
+      : localKolAdminPort({
+          store: kolStore,
+          secrets: nodeKolSecrets({
+            env: { AGENTSWS_KOL_EMAIL_KEY: options.kolEmailKey ?? 'a'.repeat(64) },
+          }),
+          now: () => clock.now(),
+        })
   let current: Harness | undefined
   const routes = adminConsoleRoutes({
     clock,
@@ -92,6 +131,7 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
     },
     wallet: () => ({ wallet, port }),
     ledger: () => book,
+    kol: () => kolPort,
     baseUrl: BASE_URL,
     // 信推进 harness 那个数组里：后台的登录信与云账号的登录信共用同一个投递口
     mail: async (mail) => {
@@ -117,7 +157,14 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
     } = {},
   ): Promise<{ status: number; text: string; headers: Headers }> => {
     const headers = new Headers(init.headers ?? {})
-    if (init.body !== undefined) headers.set('content-type', 'application/json')
+    /*
+     * 正文是**字符串**时原样发（搬家那条路由收的是 NDJSON，一行一条）——
+     * 再 `JSON.stringify` 一次会把整块变成一个带引号的串，那时路由读到的
+     * 是一行而不是四行。其余一律当 JSON。
+     */
+    const raw = typeof init.body === 'string' ? init.body : undefined
+    if (init.body !== undefined && headers.get('content-type') === null)
+      headers.set('content-type', raw === undefined ? 'application/json' : 'application/x-ndjson')
     const cookies: string[] = []
     if (init.session !== undefined) cookies.push(`__Host-agentsws_admin=${init.session}`)
     if (init.csrf !== undefined) {
@@ -129,7 +176,7 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
       new Request(`${BASE_URL}${path}`, {
         method: init.method ?? 'GET',
         headers,
-        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        ...(init.body === undefined ? {} : { body: raw ?? JSON.stringify(init.body) }),
       }),
     )
     return { status: res.status, text: await res.text(), headers: res.headers }
@@ -144,6 +191,7 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
     ledger: book,
     port,
     meter: sync,
+    kol: kolPort,
     async call(path, init = {}) {
       const res = await fetchOnce(path, init)
       return {
@@ -154,6 +202,7 @@ export function adminHarness(options: { clock?: TestClock } = {}): AdminHarness 
     raw: fetchOnce,
     async close() {
       store.close()
+      kolStore?.close?.()
       await h.close()
     },
   }

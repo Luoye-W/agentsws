@@ -63,7 +63,7 @@ export {
   tombstoneEmail,
   tombstoneOrg,
 } from './admin/routes.js'
-export { ADMIN_MIGRATION_V2 } from './admin/schema.js'
+export { ADMIN_MIGRATION_V2, ADMIN_MIGRATION_V3 } from './admin/schema.js'
 export {
   AdminStore,
   type AdminStoreOptions,
@@ -169,6 +169,14 @@ export {
   LOGIN_PATH,
 } from './server.js'
 export {
+  grantSignupBonus,
+  type SignupBonusHooks,
+  type SignupBonusLedger,
+  type SignupBonusOutcome,
+  type SignupBonusPort,
+  type SignupBonusSkip,
+} from './signup-bonus.js'
+export {
   chainVerifiers,
   type MountedStandby,
   type MountStandbyOptions,
@@ -206,6 +214,7 @@ import { pathToFileURL } from 'node:url'
 import type { CloudRoute } from '@agentsws/api'
 import { type CloudTokenVerifier, cloudBaseUrl } from '@agentsws/contracts'
 import { type BetterSqliteLike, syncDbFromBetterSqlite } from '@agentsws/core/sql/sync-db'
+import { isLibraryStore, type KolAdminPort, localKolAdminPort } from '@agentsws/kol-public'
 import {
   sqlUsageLedger,
   sqlWalletAdminPort,
@@ -303,6 +312,8 @@ export async function main(): Promise<void> {
   let adminStore: AdminStore | undefined
   let ledger: UsageLedger | undefined
   let consoleWallet: AdminConsoleWallet | undefined
+  /** 公共红人库那一侧（WP116 §4）。装完 `mountKolPublic` 才有。 */
+  let consoleKol: KolAdminPort | undefined
   const consoleRoutes = adminConsoleRoutes({
     clock,
     accounts: () => server.store,
@@ -312,6 +323,7 @@ export async function main(): Promise<void> {
     },
     wallet: () => consoleWallet,
     ledger: () => ledger,
+    kol: () => consoleKol,
     baseUrl: cloudBaseUrl(env),
     mail: mailSenderFromEnv(env),
     ...(adminToken === undefined || adminToken === '' ? {} : { bootstrapToken: adminToken }),
@@ -320,7 +332,25 @@ export async function main(): Promise<void> {
   const modules = [admin, adminExport, consoleRoutes].filter(
     (m): m is CloudRoute[] => m !== undefined,
   )
-  const server = createCloudServer(modules.length === 0 ? {} : { modules })
+  /*
+   * WP121（70 §2）：注册赠送。两个口都晚绑——钱包要等 `mountEntry`（下面几十行），
+   * 后台库要等 `createAdminStore`（下一行）。取不到就是不送，`grantSignupBonus`
+   * 会如实回 `unavailable` 而不是装作送过了。
+   */
+  const server = createCloudServer({
+    ...(modules.length === 0 ? {} : { modules }),
+    signupBonus: {
+      port: () =>
+        walletHandles === undefined
+          ? undefined
+          : {
+              grant: async (args) => ({
+                lot_id: (walletHandles as AdminWalletHandles).wallet.topup(args).id,
+              }),
+            },
+      ledger: () => adminStore,
+    },
+  })
   adminStore = createAdminStore(server, clock)
   const dataDir = env[CLOUD_DATA_DIR_ENV]
   /*
@@ -348,6 +378,17 @@ export async function main(): Promise<void> {
     pricing: entry.pricing,
     ...(dataDir === undefined ? {} : { dataDir }),
   })
+  /*
+   * 后台那一页要的是"库统计 / 搜索 / 移除 / 搬家"，而这四件事只有 sqlite 那份
+   * 存储做得到（内存那份没有搬家用的那几张表）。所以内存档下**这一页回 503**，
+   * 不画一堆 0——与看板页同一条。
+   */
+  if (isLibraryStore(kol.store))
+    consoleKol = localKolAdminPort({
+      store: kol.store,
+      secrets: kol.secrets,
+      now: () => clock.now(),
+    })
   walletHandles = { wallet: entry.wallet, store: entry.store }
   /*
    * WP115：后台读账的那一层。**Compose 形态下钱包库就是账本**——一张

@@ -9,6 +9,12 @@
  * `{ channel, handle }`。
  */
 export {
+  type KolAdminPort,
+  type KolRemoveInput,
+  type LocalKolAdminDeps,
+  localKolAdminPort,
+} from './admin-port.js'
+export {
   type AuditInput,
   buildAudit,
   followerAuthenticity,
@@ -26,6 +32,19 @@ export {
   latestPerCreator,
   quantile,
 } from './benchmarks.js'
+export {
+  isKolPath,
+  KOL_CAPABILITIES,
+  type KolCharge,
+  kolChargeFor,
+} from './charge-map.js'
+export {
+  IMPORTED_FROM_KOLAGENTS,
+  importKolRecords,
+  importSource,
+  type KolImportDeps,
+  parseNdjson,
+} from './import.js'
 export { type NodeKolSecretsOptions, newEmailKey, nodeKolSecrets, parseKey } from './node-crypto.js'
 export {
   assertChannel,
@@ -67,6 +86,7 @@ export {
   createSourcePool,
   fakeApifySource,
   fakeYoutubeSource,
+  kolSourcesFromEnv,
   outcomeOfError,
   type QuotaPool,
   type SourcePoolDeps,
@@ -79,12 +99,18 @@ export {
   BENCHMARK_CACHE_MS,
   type BucketFilter,
   type ContactRow,
+  type ContentMetricRow,
+  type CreatorExtraRow,
   type CreatorFilter,
   type CreatorRow,
+  type CreatorSearchFilter,
   type DisputeRow,
+  isLibraryStore,
+  type KolLibraryStore,
   type KolStore,
   MemoryKolStore,
   type ObservationRow,
+  type OptOutRow,
   type QuotaRow,
   SqliteKolStore,
   type SqliteLike,
@@ -106,3 +132,10 @@ export {
   type SourceOutcome,
   type SourceSnapshot,
 } from './types.js'
+export {
+  type DeferredWallet,
+  type DeferredWalletOptions,
+  deferredWallet,
+  type KolWallet,
+  type KolWalletOp,
+} from './wallet-port.js'
