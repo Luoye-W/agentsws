@@ -786,27 +786,27 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
        * 「这条回复里有没有逐字引用商家那句话」：命中就重写一次，再命中**不发**，
        * 转成一张卡等人看（静默删改是最坏的那一种）。
        */
-      let leak = evaluateLeakGuard({
+      const first = evaluateLeakGuard({
         reply: reply ?? '',
         instructions: [input.instruction],
       })
-      if (leak.leaked && reply !== undefined) {
+      if (first.leaked && reply !== undefined) {
+        // 命中 → **重写一次**。`acceptChatTeaching` 自己也有一道同口径的守卫
+        // （`containsInstructionLeak`），所以这一版照样交给它判——
+        // 还在漏就由它回 `blocked_verbatim_leak`（拒发，指导仍然沉淀）。
         const second = await writeReply(LEAK_REWRITE_INSTRUCTION)
-        leak = evaluateLeakGuard({
+        const again = evaluateLeakGuard({
           reply: second ?? '',
           instructions: [input.instruction],
           rewrites: 1,
         })
-        reply = leak.leaked ? undefined : second
+        reply = second ?? reply
         emit('chat.turn_planned', session, {
           guard: 'instruction_leak',
-          action: leak.leaked ? 'human_review' : 'rewrote',
+          action: again.leaked ? 'human_review' : 'rewrote',
           // 只有长度：商家那句话一个字都不进日志
-          matched_chars: leak.matched_chars,
+          matched_chars: again.matched_chars,
         })
-        if (leak.leaked) {
-          await say(session, pack.assist_reply, 'teach')
-        }
       }
       const result = acceptChatTeaching({
         instruction: input.instruction,

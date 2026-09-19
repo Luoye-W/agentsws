@@ -1997,6 +1997,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         addWaiter: (gap_id, waiter) => {
           knowledge.intake.addGapWaiter(gap_id, waiter)
         },
+        getGap: (gap_id) => knowledge.intake.getGap(gap_id),
+        answerGap: (gap_id, input) => {
+          knowledge.intake.answerGap(gap_id, { answer: input.answer, by: input.by })
+        },
       },
     })
     supportJudgmentRef = supportJudgment

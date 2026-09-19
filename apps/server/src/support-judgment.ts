@@ -218,6 +218,12 @@ export interface SupportGapPort {
   openGap(input: { question: string; subject_key: string; run_id?: string }): string | undefined
   /** 记一个等待者（按线程去重）。 */
   addWaiter(gap_id: string, waiter: KnowledgeGapWaiter): void
+  /** 读一条缺口（补完之后要按它的 `waiting` 把人捞回来）。 */
+  getGap(
+    gap_id: string,
+  ): { id: string; question: string; waiting?: readonly KnowledgeGapWaiter[] } | undefined
+  /** 商家答了（贴链接 / 粘文字）。回那条 `knowledge_update` 卡的 id（有的话）。 */
+  answerGap(gap_id: string, input: { answer: string; by: PersonId }): void
 }
 
 export interface SupportJudgmentOptions {
@@ -296,6 +302,18 @@ export interface SupportJudgment {
     language?: string
     run_id?: string
   }): string | undefined
+  /**
+   * 商家把这条缺口补上了 → **给每个等待者各出一张 `pending_review` 草稿卡**。
+   *
+   * 这一步是整条闭环的终点，也是它最容易被做错的地方：把补好的答案群发出去
+   * 又快又省事，但商家补一条知识**不等于**他读过这五个人各自的问法。
+   * 所以路径里**零发送函数**——只建卡，每一张都要他再点一次头。
+   */
+  fulfillGap(input: {
+    gap_id: string
+    answer: string
+    by: PersonId
+  }): Promise<{ drafted: number; approval_item_ids: string[] }>
 }
 
 export function createSupportJudgment(options: SupportJudgmentOptions): SupportJudgment {
@@ -692,6 +710,86 @@ export function createSupportJudgment(options: SupportJudgmentOptions): SupportJ
     return gap_id
   }
 
+  /**
+   * 补完之后把等待的人捞回来。
+   *
+   * **这个函数体里没有任何发送调用**——只有 `approvals.create`。
+   * `apps/server/test/support-judgment.test.ts` 有一条 import 级断言钉住这件事。
+   */
+  const fulfillGap: SupportJudgment['fulfillGap'] = async (input) => {
+    const gaps = options.gaps
+    const approvals = options.approvals
+    const position = options.position?.()
+    const approval_item_ids: string[] = []
+    if (gaps === undefined) return { drafted: 0, approval_item_ids }
+    const gap = gaps.getGap(input.gap_id)
+    if (gap === undefined) return { drafted: 0, approval_item_ids }
+    const waiting = [...(gap.waiting ?? [])]
+    gaps.answerGap(input.gap_id, { answer: input.answer, by: input.by })
+    if (approvals === undefined || position === undefined) {
+      return { drafted: 0, approval_item_ids }
+    }
+    for (const waiter of waiting) {
+      const item = await approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'outbound_draft',
+        role_id: position.role_id,
+        subject: {
+          object: { type: 'thread', id: waiter.thread_id },
+          conversation_id: waiter.thread_id,
+        },
+        // 一个缺口 × 一条线程 = 一张卡。商家补两次也只该看见一张
+        dedupe_key: `${workspace_id}:gap_answer:${input.gap_id}:${waiter.thread_id}`,
+        title: `补上「${gap.question.slice(0, 24)}」之后，回一下这位还在等的客户`,
+        summary: '这条知识刚补上，这位客户之前问过同一件事，还在等答案。这一封仍然要你点头才发。',
+        payload: {
+          channel: waiter.channel,
+          thread_ref: waiter.thread_id,
+          gap_id: input.gap_id,
+          // 卡面上给的是**答案口径**，不是已经发出去的话
+          body: { text: input.answer },
+          ...(waiter.language === undefined ? {} : { language: waiter.language }),
+        },
+        evidence: {
+          run_id: `run_gap_${input.gap_id}`,
+          source_events: [],
+          provenance: { seen: [{ type: 'thread', id: waiter.thread_id }] },
+          precheck: {},
+          citations: [],
+        },
+        proposer: {
+          kind: 'agent',
+          id: position.assignment_id,
+          assignment_id: position.assignment_id,
+        },
+        automation: {
+          level_at_creation: 'L1',
+          auto_approved: false,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [{ person: position.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: { after_hours: 8, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: true,
+        },
+        // 客户在等：这一批排在「客户在等」那一带
+        priority: 'immediate',
+        context: { thread_participants: [waiter.thread_id], verified_contacts: [] },
+      })
+      if (item.state !== 'blocked') approval_item_ids.push(item.id)
+    }
+    emit('knowledge.gap.answered', input.gap_id, {
+      gap_id: input.gap_id,
+      // 只有人数：谁在等、等什么，一个字都不进日志
+      waiting_count: waiting.length,
+      drafted: approval_item_ids.length,
+    })
+    return { drafted: approval_item_ids.length, approval_item_ids }
+  }
+
   return {
     judgeInbound,
     judgeDraft,
@@ -710,6 +808,7 @@ export function createSupportJudgment(options: SupportJudgmentOptions): SupportJ
     overdue,
     teachCandidate,
     recordGap,
+    fulfillGap,
   }
 }
 
