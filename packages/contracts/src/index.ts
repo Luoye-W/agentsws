@@ -24,6 +24,7 @@ export * from './kernel.js'
 export * from './knowledge.js'
 // 48 §5.2 红人营销的六个对象与五条渠道（WP67）
 export * from './kol.js'
+export * from './kol-cloud.js'
 // 48 §5.3 / 49 §6 WP61：云上的公共红人库服务（本地那六个红人对象在 kol.ts，WP67）
 export * from './kol-public.js'
 export * from './meetings.js'
