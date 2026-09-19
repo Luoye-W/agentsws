@@ -428,7 +428,9 @@ async function main() {
      * `err.message` 里不含 URL 的那一句，拿不准就一句通用的。
      */
     const message = err instanceof Error ? err.message : String(err)
-    console.error(`导出没做完：${message.includes('://') ? '数据库连不上或者这条 SQL 不对' : message}`)
+    console.error(
+      `导出没做完：${message.includes('://') ? '数据库连不上或者这条 SQL 不对' : message}`,
+    )
     process.exitCode = 1
     return
   } finally {

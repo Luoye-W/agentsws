@@ -58,7 +58,8 @@ export function merge(results) {
     total.inserted += one.inserted ?? 0
     total.updated += one.updated ?? 0
     total.skipped += one.skipped ?? 0
-    for (const r of one.rejected ?? []) reasons.set(r.reason, (reasons.get(r.reason) ?? 0) + r.count)
+    for (const r of one.rejected ?? [])
+      reasons.set(r.reason, (reasons.get(r.reason) ?? 0) + r.count)
   }
   total.rejected = [...reasons].map(([reason, count]) => ({ reason, count }))
   return total
