@@ -2807,10 +2807,13 @@ const en: Table = {
   'rail.role.updated': 'Changed by {who} on {at}',
   'rail.role.edit': 'Rewrite',
   'rail.role.revert': 'Restore shipped wording',
-  'rail.role.readonly': 'Only the owner can change this — a role persona is the company’s voice, not a personal preference.',
-  'rail.role.hint': 'This text goes into the agent’s system prompt; a change takes effect on the next run.',
+  'rail.role.readonly':
+    'Only the owner can change this — a role persona is the company’s voice, not a personal preference.',
+  'rail.role.hint':
+    'This text goes into the agent’s system prompt; a change takes effect on the next run.',
   'rail.role.position_of': 'The position this duty belongs to',
-  'rail.role.no_position': 'This duty sits in several positions (or none), so runs carry no position section.',
+  'rail.role.no_position':
+    'This duty sits in several positions (or none), so runs carry no position section.',
   'rail.role.duties': 'Duties under this position (open one to see its own persona)',
   'rail.role.lang.zh': 'Chinese',
   'rail.role.lang.en': 'English',

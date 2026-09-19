@@ -128,7 +128,9 @@ describe('公司层覆盖（69 §4）', () => {
   it('查表键把两层分得开', () => {
     expect(personaKey({ kind: 'position', id: 'web-ops' })).toBe('position:web-ops')
     expect(personaKey({ kind: 'role', id: 'kol.youtube' })).toBe('role:kol.youtube')
-    expect(personaKey({ kind: 'position', id: 'x' })).not.toBe(personaKey({ kind: 'role', id: 'x' }))
+    expect(personaKey({ kind: 'position', id: 'x' })).not.toBe(
+      personaKey({ kind: 'role', id: 'x' }),
+    )
   })
 })
 
