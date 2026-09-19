@@ -9,7 +9,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000788,
+            "cost_base": 0.000862,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -21,7 +21,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 769,
+            "tokens_per_item": 854,
             "tool_calls": 2
           }
         },
@@ -30,7 +30,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000785,
+            "cost_base": 0.000879,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -42,7 +42,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 768,
+            "tokens_per_item": 863,
             "tool_calls": 2
           }
         },
@@ -51,7 +51,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.001621,
+            "cost_base": 0.00178,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -63,7 +63,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 783,
+            "tokens_per_item": 871,
             "tool_calls": 4
           }
         },
@@ -93,7 +93,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.000801,
+            "cost_base": 0.00087,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -105,7 +105,7 @@
             "runs_failed": 1,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 776,
+            "tokens_per_item": 859,
             "tool_calls": 2
           }
         },
@@ -135,7 +135,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 2,
-            "cost_base": 0.000858,
+            "cost_base": 0.000921,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -147,7 +147,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 833,
+            "tokens_per_item": 913,
             "tool_calls": 2
           }
         },
@@ -156,7 +156,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.000822,
+            "cost_base": 0.000914,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -168,7 +168,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 794,
+            "tokens_per_item": 888,
             "tool_calls": 2
           }
         },
@@ -177,7 +177,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000856,
+            "cost_base": 0.000954,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -189,7 +189,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 826,
+            "tokens_per_item": 923,
             "tool_calls": 2
           }
         },
@@ -198,7 +198,7 @@
             "adoption_rate": 0.3333333333333333,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.00187,
+            "cost_base": 0.002051,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -210,7 +210,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 831,
+            "tokens_per_item": 924,
             "tool_calls": 6
           }
         },
@@ -219,7 +219,7 @@
             "adoption_rate": 0,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.001344,
+            "cost_base": 0.001459,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -231,7 +231,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 829,
+            "tokens_per_item": 924,
             "tool_calls": 8
           }
         },
@@ -240,7 +240,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000801,
+            "cost_base": 0.00087,
             "escalations": 5,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -252,7 +252,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 776,
+            "tokens_per_item": 859,
             "tool_calls": 2
           }
         },
@@ -261,7 +261,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.000801,
+            "cost_base": 0.00087,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -273,7 +273,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 776,
+            "tokens_per_item": 859,
             "tool_calls": 2
           }
         },
@@ -303,7 +303,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000788,
+            "cost_base": 0.00091,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -315,7 +315,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 773,
+            "tokens_per_item": 882,
             "tool_calls": 2
           }
         },
@@ -324,7 +324,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.000771,
+            "cost_base": 0.000909,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -336,7 +336,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 763,
+            "tokens_per_item": 880,
             "tool_calls": 2
           }
         },
@@ -345,7 +345,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.00077,
+            "cost_base": 0.000884,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -357,7 +357,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 759,
+            "tokens_per_item": 864,
             "tool_calls": 2
           }
         },
@@ -408,7 +408,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.000807,
+            "cost_base": 0.000895,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -420,7 +420,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 790,
+            "tokens_per_item": 882,
             "tool_calls": 0
           }
         },
@@ -1179,6 +1179,27 @@
             "tokens_per_item": 0,
             "tool_calls": 1
           }
+        },
+        "org/positions-stay-in-lane": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -1189,7 +1210,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.005959,
+            "cost_base": 0.006439,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1201,7 +1222,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 5935,
+            "tokens_per_item": 6416,
             "tool_calls": 3
           }
         },
@@ -1210,7 +1231,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.005977,
+            "cost_base": 0.006455,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1222,7 +1243,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 5952,
+            "tokens_per_item": 6431,
             "tool_calls": 3
           }
         },
@@ -1231,7 +1252,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.013595,
+            "cost_base": 0.014663,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1243,7 +1264,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 6777,
+            "tokens_per_item": 7308,
             "tool_calls": 7
           }
         },
@@ -1273,7 +1294,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.007602,
+            "cost_base": 0.008184,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1285,7 +1306,7 @@
             "runs_failed": 1,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7577,
+            "tokens_per_item": 8157,
             "tool_calls": 4
           }
         },
@@ -1315,7 +1336,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 2,
-            "cost_base": 0.007859,
+            "cost_base": 0.00844,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -1327,7 +1348,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7838,
+            "tokens_per_item": 8417,
             "tool_calls": 4
           }
         },
@@ -1336,7 +1357,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.007681,
+            "cost_base": 0.008273,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1348,7 +1369,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7659,
+            "tokens_per_item": 8244,
             "tool_calls": 4
           }
         },
@@ -1357,7 +1378,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.00787,
+            "cost_base": 0.008452,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -1369,7 +1390,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7843,
+            "tokens_per_item": 8422,
             "tool_calls": 4
           }
         },
@@ -1378,7 +1399,7 @@
             "adoption_rate": 0.3333333333333333,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.018841,
+            "cost_base": 0.020263,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1390,7 +1411,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 6256,
+            "tokens_per_item": 6734,
             "tool_calls": 9
           }
         },
@@ -1399,7 +1420,7 @@
             "adoption_rate": 0,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.025086,
+            "cost_base": 0.027004,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1411,7 +1432,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 6248,
+            "tokens_per_item": 6729,
             "tool_calls": 12
           }
         },
@@ -1420,7 +1441,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007592,
+            "cost_base": 0.008184,
             "escalations": 5,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -1432,7 +1453,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7572,
+            "tokens_per_item": 8157,
             "tool_calls": 4
           }
         },
@@ -1441,7 +1462,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.007592,
+            "cost_base": 0.008184,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1453,7 +1474,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7572,
+            "tokens_per_item": 8157,
             "tool_calls": 4
           }
         },
@@ -1483,7 +1504,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.006005,
+            "cost_base": 0.006485,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1495,7 +1516,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 5983,
+            "tokens_per_item": 6464,
             "tool_calls": 3
           }
         },
@@ -1504,7 +1525,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.007654,
+            "cost_base": 0.00825,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1516,7 +1537,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7634,
+            "tokens_per_item": 8220,
             "tool_calls": 4
           }
         },
@@ -1525,7 +1546,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.00759,
+            "cost_base": 0.008154,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1537,7 +1558,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7561,
+            "tokens_per_item": 8132,
             "tool_calls": 4
           }
         },
@@ -1588,7 +1609,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.004617,
+            "cost_base": 0.005014,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -1600,7 +1621,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 4599,
+            "tokens_per_item": 4990,
             "tool_calls": 2
           }
         },
@@ -2358,6 +2379,27 @@
             "staged_changes": 5,
             "tokens_per_item": 0,
             "tool_calls": 1
+          }
+        },
+        "org/positions-stay-in-lane": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
           }
         }
       }
@@ -2390,7 +2432,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007787,
+            "cost_base": 0.008259,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2402,7 +2444,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7762,
+            "tokens_per_item": 8238,
             "tool_calls": 3
           }
         },
@@ -2411,7 +2453,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007793,
+            "cost_base": 0.008269,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2423,7 +2465,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7772,
+            "tokens_per_item": 8251,
             "tool_calls": 3
           }
         },
@@ -2432,7 +2474,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.017701,
+            "cost_base": 0.018756,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2444,7 +2486,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 8826,
+            "tokens_per_item": 9355,
             "tool_calls": 7
           }
         },
@@ -2474,7 +2516,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009866,
+            "cost_base": 0.01045,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2486,7 +2528,7 @@
             "runs_failed": 1,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9843,
+            "tokens_per_item": 10424,
             "tool_calls": 4
           }
         },
@@ -2516,7 +2558,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 2,
-            "cost_base": 0.010153,
+            "cost_base": 0.010738,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -2528,7 +2570,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 10132,
+            "tokens_per_item": 10713,
             "tool_calls": 4
           }
         },
@@ -2537,7 +2579,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009958,
+            "cost_base": 0.010536,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2549,7 +2591,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9932,
+            "tokens_per_item": 10509,
             "tool_calls": 4
           }
         },
@@ -2558,7 +2600,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.010136,
+            "cost_base": 0.010713,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -2570,7 +2612,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 10110,
+            "tokens_per_item": 10687,
             "tool_calls": 4
           }
         },
@@ -2579,7 +2621,7 @@
             "adoption_rate": 0.3333333333333333,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.024307,
+            "cost_base": 0.025741,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2591,7 +2633,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 8080,
+            "tokens_per_item": 8559,
             "tool_calls": 9
           }
         },
@@ -2600,7 +2642,7 @@
             "adoption_rate": 0,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.032378,
+            "cost_base": 0.03431,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2612,7 +2654,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 8072,
+            "tokens_per_item": 8554,
             "tool_calls": 12
           }
         },
@@ -2621,7 +2663,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.009866,
+            "cost_base": 0.010444,
             "escalations": 5,
             "expired_approvals": 0,
             "guardrail_hits": 1,
@@ -2633,7 +2675,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9843,
+            "tokens_per_item": 10421,
             "tool_calls": 4
           }
         },
@@ -2642,7 +2684,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009866,
+            "cost_base": 0.010444,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2654,7 +2696,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9843,
+            "tokens_per_item": 10421,
             "tool_calls": 4
           }
         },
@@ -2684,7 +2726,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007837,
+            "cost_base": 0.00831,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2696,7 +2738,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7812,
+            "tokens_per_item": 8289,
             "tool_calls": 3
           }
         },
@@ -2705,7 +2747,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009928,
+            "cost_base": 0.010513,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2717,7 +2759,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9905,
+            "tokens_per_item": 10487,
             "tool_calls": 4
           }
         },
@@ -2726,7 +2768,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.009851,
+            "cost_base": 0.010428,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -2738,7 +2780,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9826,
+            "tokens_per_item": 10403,
             "tool_calls": 4
           }
         },
@@ -2789,7 +2831,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.005986,
+            "cost_base": 0.006379,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2801,7 +2843,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 5967,
+            "tokens_per_item": 6356,
             "tool_calls": 2
           }
         },
@@ -3538,6 +3580,27 @@
             "staged_changes": 5,
             "tokens_per_item": 0,
             "tool_calls": 1
+          }
+        },
+        "org/positions-stay-in-lane": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
           }
         }
       }
