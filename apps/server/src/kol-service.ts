@@ -1304,10 +1304,15 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     createTrackedLink(actor, input) {
       const collab = store.collaboration(input.collaboration_id)
       if (collab === undefined) throw new ApiError('not_found', '库里没有这条合作')
+      /*
+       * WP117b：活动名不给了就默认用这条合作的活动 id（没有活动就用合作 id）。
+       * UTM 会出现在公开链接上，所以用 id 而不是人起的名字——稳、不重复、不泄懒。
+       */
+      const campaign = input.campaign ?? collab.campaign_id ?? collab.id
       const account = store.accounts({ creator_id: collab.creator_id, channel: collab.channel })[0]
       const utm = buildUtm({
         channel: collab.channel,
-        campaign: input.campaign,
+        campaign,
         // `content` 放的是合作 id 而不是红人的名字：UTM 会出现在公开链接上
         collaboration_id: collab.id,
         ...(input.utm?.term === undefined ? {} : { term: input.utm.term }),

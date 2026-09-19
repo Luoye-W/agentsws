@@ -350,7 +350,11 @@ export interface KolCollaborationInput {
 export interface KolTrackedLinkInput {
   collaboration_id: string
   url: string
-  campaign: string
+  /**
+   * WP117b：不给了就默认用这条合作的活动 id（没有活动就用合作 id）——
+   * 归因口径不变，只是让「从合作线程上顺手建一条链接」不用先想一个活动名。
+   */
+  campaign?: string | undefined
   affiliate_code?: string | undefined
   utm?: Partial<Record<keyof KolUtm, string | undefined>> | undefined
 }
@@ -711,7 +715,8 @@ const ReviewBody = z.object({
 const TrackedLinkBody = z.object({
   collaboration_id: z.string().min(1),
   url: z.string().min(1).max(2000),
-  campaign: z.string().min(1).max(100),
+  // WP117b：可选——不给就默认用这条合作的活动 id（合作线程上顺手建一条不该被活动名挡住）
+  campaign: z.string().min(1).max(100).optional(),
   affiliate_code: z.string().max(40).optional(),
   utm: z
     .object({

@@ -97,6 +97,7 @@ import { type ServerType, serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
 import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
+import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
@@ -609,6 +610,12 @@ export interface Server {
    * 要别的品牌那一套，走 `brands.forWorkspace(workspace_id)`。
    */
   brands: BrandModules
+  /**
+   * WP117b（66 复测 #19）：把服务进程这本账上「批准了、等取消窗口」的卡施行掉。
+   * 返回**还在等**的张数（取消窗口 / 父子顺序没到的也算）。demo 的 drain 每两秒
+   * 调一次（与模拟世界那一本同一个节奏），见 `apps/cli/src/demo.ts` 的注释。
+   */
+  drainApprovals(): Promise<number>
   /** WP50 Join 向导（个人工作区并进公司：对照 / 合并 / 别名 / 退出）。 */
   join: JoinAssembly
   /** WP50 夜间扫描（45 H4：同唯一键 / 相似的组织对象出卡合并）。 */
@@ -1164,7 +1171,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   bootstrapWorkspace = workspace.id
   bootstrapWorkspaceName = workspace.name
 
-  const rawApprovals = mount?.approvals ?? txn.approvals
+  // WP117b（66 复测 #19）：挂了模拟世界（demo）时有两本审批账——世界的演示卡
+  // 与服务进程 stage 的卡（红人开发信 / 议价）。读合成一本、决定各回各家；
+  // 生产没挂世界，服务进程那一本就是唯一的一本。见 `approvals-composite.ts`。
+  const rawApprovals =
+    mount === undefined ? txn.approvals : compositeApprovals(mount.approvals, txn.approvals)
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
   // 再把审批总线包一层——每张卡被决定之后抽 lesson，技能 / 知识类卡批了就施行。
   await seedDefaultSkill(skills, workspace.id)
@@ -4402,6 +4413,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     org,
     onboarding,
     organizations,
+    /*
+     * WP117b（66 复测 #19）：把「批准了、等取消窗口」的卡施行掉，返回**还在等**的张数。
+     *
+     * 15 §5「通过 ≠ 施行」：批准只写下批准，施行由执行器另拍发起——模拟世界那一本
+     * 的发起人在 demo 的 drain（`apps/cli/src/demo.ts`），服务进程这一本以前没有人
+     * 发起，于是红人开发信批了之后永远停在 `approved`，演练世界一封信都收不到。
+     * demo 的 drain 现在两本一起扫：先扫一遍拿到「还在等」的张数（与世界的加在
+     * 一起决定要不要推合成时钟过取消窗口），推完再扫一遍真施行。
+     * 取消窗口 / 父子顺序没到的下一拍再来（与模拟回路 `drainApprovals` 同一纪律）。
+     */
+    async drainApprovals(): Promise<number> {
+      const APPROVED = ['approved', 'approved_edited', 'auto_approved'] as const
+      const waiting = () =>
+        txn.runtime.store
+          .listApprovals({})
+          .filter((i) => (APPROVED as readonly string[]).includes(i.state))
+      if (waiting().length === 0) return 0
+      for (const item of waiting()) {
+        try {
+          await txn.executor.applyApproval(item.id)
+        } catch {
+          // 取消窗口 / 父子顺序没到：下一拍再来
+        }
+      }
+      return waiting().length
+    },
     join: joinAssembly,
     orgDuplicates,
     secretary,

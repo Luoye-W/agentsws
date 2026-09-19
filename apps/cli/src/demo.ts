@@ -1183,12 +1183,18 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    * 15 §5「通过 ≠ 施行」：批准只是写下批准，施行由执行器发起，而且有 2 分钟取消窗口。
    * demo 里时间是合成的，所以每次 drain 先把合成时钟往前推 3 分钟——只在真的有东西要施行时推，
    * 不会把「昨天」推成「今天」。
+   *
+   * WP117b（66 复测 #19）：**两本审批账一起扫**。世界那一本（演示卡）照旧；
+   * 服务进程那一本（运行中的服务 stage 的卡，比如红人的开发信）以前没人发起施行，
+   * 批了永远停在 `approved`。先扫一遍拿到「还在等」的张数（决定要不要推时钟），
+   * 推完时钟再扫一遍真施行。
    */
   const drain = async (): Promise<void> => {
     const waiting = world.txn.runtime.store
       .listApprovals({ workspace_id: world.workspace_id })
       .filter((i) => ['approved', 'approved_edited', 'auto_approved'].includes(i.state))
-    if (waiting.length === 0) return
+    const serverWaiting = await server.drainApprovals()
+    if (waiting.length === 0 && serverWaiting === 0) return
     world.clock.advance(3 * 60 * 1000)
     const order = (i: ApprovalItem): number => (i.kind === 'staged_change' ? 0 : 1)
     for (const item of [...waiting].sort((a, b) => order(a) - order(b))) {
@@ -1198,6 +1204,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
         // 取消窗口 / 父子顺序没到：下一拍再来
       }
     }
+    await server.drainApprovals()
   }
 
   // 45（WP50）：公司页「并进来」Tab 与新建品牌时的查重提示都要有东西可看
