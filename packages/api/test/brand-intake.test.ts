@@ -263,10 +263,7 @@ describe('WP121 网关：品牌接入面', () => {
       holdsOwnerWrite(
         c,
         ctx,
-        depsWith([
-          { id: 'asg_a' },
-          { id: 'asg_b', revoked_at: T0 },
-        ], 'asg_b'),
+        depsWith([{ id: 'asg_a' }, { id: 'asg_b', revoked_at: T0 }], 'asg_b'),
       ),
     ).toBe(false)
     // 一条都没有 → 不算

@@ -25,13 +25,13 @@ import type { BrandIntakeRun, MaybePromise } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import {
-  OWNER_WRITE as WRITE,
   assignmentOf,
   body,
   holdsOwnerWrite,
   ok,
   param,
   principalOf,
+  OWNER_WRITE as WRITE,
 } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
