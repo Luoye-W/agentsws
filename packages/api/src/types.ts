@@ -54,6 +54,7 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
+import type { BrandDesignPort } from './routes/brand-design.js'
 import type { BrandIntakePort } from './routes/brand-intake.js'
 import type { BrowserPort } from './routes/browser.js'
 import type { CatalogPort } from './routes/catalog.js'
@@ -813,6 +814,12 @@ export interface GatewayDeps {
    * 与"还没有网站"那条旁路走同一条路。
    */
   brandIntake?: BrandIntakePort
+  /**
+   * WP122（71）：每个品牌一份 DESIGN.md。
+   * 没装配时 `/v1/brand-design/*` 回 not_implemented——四个出活的岗位照常干活，
+   * 只是提示词里不注入品牌令牌（`brandDesignContext()` 回 `present: false`）。
+   */
+  brandDesign?: BrandDesignPort
   /**
    * WP65（52 O1）：组织（公司）与它下面的品牌工作区。
    * 没装配时 `/v1/orgs/*` 回 not_implemented——多品牌是加分项，

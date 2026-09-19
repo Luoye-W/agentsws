@@ -16,6 +16,7 @@ import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { backupRoutes } from './routes/backup.js'
+import { brandDesignRoutes } from './routes/brand-design.js'
 import { brandIntakeRoutes } from './routes/brand-intake.js'
 import { browserRoutes } from './routes/browser.js'
 import { catalogRoutes } from './routes/catalog.js'
@@ -143,6 +144,7 @@ export function collectRoutes(): Route[] {
      */
     ...onboardingRoutes(),
     ...brandIntakeRoutes(),
+    ...brandDesignRoutes(),
     // WP65（52 O1）：组织与品牌——排在首次设置之后，第 ① 步的两块是同一步
     ...organizationRoutes(),
     // WP50 Join 向导（20 §4–§5、45）：`/v1/join/*` 独立路径，与制度面不撞

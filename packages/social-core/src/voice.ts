@@ -20,6 +20,7 @@
  * 承诺扫描在这里——出站文案这一跳只有一个入口，两处各写一遍必然漏一处。
  */
 
+import type { BrandDesignContext } from '@agentsws/contracts'
 import { scanOutboundCommitment } from '@agentsws/support-core'
 
 /**
@@ -75,14 +76,17 @@ export function resolveVoice(cards: readonly VoiceCard[], channel: string): Reso
  * 没有卡的时候回的是"没有卡"那句话，而不是一段我们编的默认语气——
  * 编一段等于给这家公司定了调子，而没有人同意过。
  */
-export function voicePrompt(resolved: ResolvedVoice): string {
+export function voicePrompt(resolved: ResolvedVoice, design?: BrandDesignContext): string {
+  // 设计规范（71，WP122）是**视觉**那一侧：出图文时与话术一起注入。
+  // 由调用方用 `brandDesignContext()` 算好递进来——四个岗位共用同一个拼法。
+  const visual = design?.present === true ? `\n${design.prompt}` : ''
   const card = resolved.card
-  if (card === undefined) return `【品牌话术】${resolved.note}`
+  if (card === undefined) return `【品牌话术】${resolved.note}${visual}`
   const banned =
     card.banned_terms === undefined || card.banned_terms.length === 0
       ? ''
       : `\n【不许出现的词】${card.banned_terms.join('、')}`
-  return `【品牌话术｜${card.id}${card.updated_at === undefined ? '' : ` · ${card.updated_at}`}】\n${card.guidance}${banned}`
+  return `【品牌话术｜${card.id}${card.updated_at === undefined ? '' : ` · ${card.updated_at}`}】\n${card.guidance}${banned}${visual}`
 }
 
 /** 出站自查的结论。`ok` 为假 = **打回重写**，不是静默删改后照发。 */

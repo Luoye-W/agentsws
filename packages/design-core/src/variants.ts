@@ -15,7 +15,12 @@
  *    该这么出"的清单；出不出得了由调用方看 `gateway.images.available`。
  */
 
-import type { DesignBrief, DesignSpec, DesignVariantPlanItem } from '@agentsws/contracts'
+import type {
+  BrandDesignContext,
+  DesignBrief,
+  DesignSpec,
+  DesignVariantPlanItem,
+} from '@agentsws/contracts'
 import { DESIGN_CAPS } from '@agentsws/contracts'
 import { brandPrompt, type ResolvedBrandSystem } from './brand.js'
 import { canvasOf, resolveSpec, specNoteZh } from './specs.js'
@@ -122,11 +127,21 @@ export function planGeneration(input: PlanGenerationInput): GenerationPlan {
 export function composePrompt(
   item: DesignVariantPlanItem,
   brand: ResolvedBrandSystem,
+  /**
+   * 这个品牌的 `DESIGN.md`（71，WP122）。**由调用方用 `brandDesignContext()`
+   * 算好递进来**，这里只负责把那段话接上去——四个岗位共用同一个拼法，
+   * 各拼各的的话，过两周社媒出的图和建站出的页就不是一套颜色了。
+   *
+   * 不给（或者这个品牌还没抓过规范）就什么都不加：出图这件事不该因为没有
+   * 品牌规范就停下来。
+   */
+  design?: BrandDesignContext,
 ): VariantPrompt {
   const spec = resolveSpec(item.spec_id)
-  /** 正向那一半：角度 + 规格硬规矩 + 品牌系统（**不含禁忌行**）。 */
+  /** 正向那一半：角度 + 规格硬规矩 + 品牌系统（**不含禁忌行**）+ 设计规范。 */
   const positive = [item.angle_zh]
   if (spec !== undefined) positive.push(`【规格】${specNoteZh(spec)}`)
+  if (design?.present === true) positive.push(design.prompt)
   const positive_prompt = [...positive, brandPrompt(brand, { include_forbidden: false })].join('\n')
   const parts = [...positive, brandPrompt(brand)]
   const forbidden = brand.system?.forbidden ?? []

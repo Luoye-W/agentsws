@@ -74,6 +74,17 @@ export interface BrandIntakeOptions {
 export interface BrandIntakeAssembly {
   port: BrandIntakePort
   /**
+   * 最近那一轮抓回来的 HTML 原文（WP122 加）。
+   *
+   * 设计规范抽取（71 §2 第一条）要在**同一次抓取**上再读一遍 CSS。没有这一口
+   * 的话它只能把用户的站再抓一遍——别人的服务器不该为我们内部的模块边界
+   * 挨第二轮请求。
+   *
+   * 与 run 同一条命：进程重启就没了。那时候设计规范那一侧会自己去抓一轮
+   * （它知道这一格可能是空的）。
+   */
+  latestDocuments(workspace_id: string): { url: string; kind: string; html: string }[]
+  /**
    * 等当前所有在跑的分析结束。**只给测试用**——生产里没有人需要等它，
    * 界面是轮询 `get` 的。
    */
@@ -82,6 +93,8 @@ export interface BrandIntakeAssembly {
 
 export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssembly {
   const runs = new Map<string, BrandIntakeRun>()
+  /** 工作区 → 最近那一轮抓回来的 HTML（见 `BrandIntakeAssembly.latestDocuments`）。 */
+  const documents = new Map<string, { url: string; kind: string; html: string }[]>()
   const inflight = new Set<Promise<void>>()
   const warn = options.warn ?? ((line: string) => process.stderr.write(line))
 
@@ -106,11 +119,12 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
   const run = (id: string, urls: string[], cap: number, previous?: BrandIntakeProfile): void => {
     const task = (async () => {
       try {
-        const out = await analyzeBrand(options.fetch, urls, { capCredits: cap })
+        const out = await analyzeBrand(options.fetch, urls, { capCredits: cap, keepHtml: true })
         const current = runs.get(id)
         if (current === undefined) return
         const profile = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
         const gotSomething = out.pages.some((p) => p.ok)
+        documents.set(current.workspace_id, out.documents ?? [])
         runs.set(id, {
           ...current,
           status: gotSomething
@@ -224,6 +238,7 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
 
   return {
     port,
+    latestDocuments: (workspace_id: string) => documents.get(workspace_id) ?? [],
     async settle() {
       // 一跳里可能又起了一跳（重新分析），所以转几圈
       for (let i = 0; i < 10 && inflight.size > 0; i++) await Promise.all([...inflight])

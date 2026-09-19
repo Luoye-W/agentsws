@@ -98,6 +98,7 @@ import { createAdsService } from './ads-service.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
+import { createBrandDesign, designPageKindOf } from './brand-design.js'
 import { createBrandIntake } from './brand-intake.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
@@ -2934,6 +2935,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
 
   /**
+   * WP122（71）：这个品牌的那一份 `DESIGN.md`。
+   *
+   * 装在 `brandIntake` **之后**，因为它的页面是从那一轮手上拿的
+   * （`latestDocuments`）——71 §2 第一条的"同一次抓取"在这里是一行代码：
+   * 拿得到就用，拿不到（进程重启过、或者用户是从设置页直接点的）那一格就是空的，
+   * `extract` 会如实说"还没有抓回来的页面"，而不是偷偷把用户的站再抓一遍。
+   *
+   * `fetch` 仍然是真的 `globalThis.fetch`：外链样式表拿不到别的办法。纪律在包里
+   * （只同源与站自己的 CDN、遵 robots、封顶 6 份）。
+   */
+  const brandDesign = createBrandDesign({
+    clock,
+    workspace_id: workspace.id,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    fetch: globalThis.fetch as never,
+    newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
+    pages: () =>
+      brandIntake
+        .latestDocuments(workspace.id)
+        .filter((d) => d.kind === 'home' || d.kind === 'product' || d.kind === 'collection')
+        .map((d) => ({ url: d.url, kind: designPageKindOf(d.url), html: d.html })),
+    readUpload: async (upload_id) => {
+      const source = knowledge.intake.getSource(upload_id)
+      if (source === undefined || source.workspace_id !== workspace.id) return undefined
+      if (source.deleted_at !== undefined) return undefined
+      const file = await knowledgeSourceFile(source, {
+        ...(dbDir === undefined ? {} : { dataDir: dbDir }),
+        ...(blobs === undefined ? {} : { blobs }),
+      })
+      if (file === undefined) return undefined
+      return { filename: file.filename, bytes: file.bytes }
+    },
+  })
+
+  /**
    * WP65（52 O1）：组织（公司）与它下面的品牌工作区。
    *
    * 装在首次设置**之后**——启动时的一次性迁移要读公司档案里的三个字段
@@ -3934,6 +3970,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     onboarding: onboarding.port,
     // WP121（70 §3）：贴一个网址，自动分析出品牌档案
     brandIntake: brandIntake.port,
+    brandDesign: brandDesign.port,
     // WP65（52 O1）：组织与品牌（`/v1/orgs/*`）
     organizations: organizations.port,
     join: joinAssembly.port,

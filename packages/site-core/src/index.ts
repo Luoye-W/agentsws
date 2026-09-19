@@ -21,6 +21,8 @@
  * - 真的跑 Shopify CLI → `apps/server/src/shopify-theme.ts`（WP44，一行都没搬）。
  */
 export * from './apps.js'
+// 71（WP122）：建站怎么用那份 DESIGN.md —— 注提示词 + 翻成主题变量（WP89 沙箱吃这一份）
+export * from './brand-design.js'
 export * from './checklist.js'
 export * from './email-templates.js'
 export * from './theme.js'
