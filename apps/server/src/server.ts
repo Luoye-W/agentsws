@@ -20,6 +20,7 @@ import {
   ApiError,
   createAsyncTraceScope,
   createGateway,
+  createMemoryExtensionStore,
   createMemoryIdentity,
   createSqliteIdentity,
   type DiscoveryHelloView,
@@ -48,6 +49,7 @@ import type {
   Assignment,
   Clock,
   EventEnvelope,
+  KolChannel,
   Person,
   PersonId,
   SkillTier,
@@ -98,6 +100,7 @@ import { createAdsService } from './ads-service.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
+import { createBrandIntake } from './brand-intake.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
   type BrandModuleSet,
@@ -147,7 +150,7 @@ import {
   createChatLane,
 } from './chat.js'
 import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
-import { type CloudAssembly, type CloudFetch as CloudEntryFetch, createCloud } from './cloud.js'
+import { type CloudFetch as CloudEntryFetch, createCloud } from './cloud.js'
 import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
 import { connectBaseUrl } from './connect-url.js'
 // WP83（54 §4）：连接目录 + 岗位连接清单 + 自定义 MCP 服务器（保存 / 校验 / 探测）
@@ -162,6 +165,9 @@ import {
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
 import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
+// WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
+import { createExtensionContributor } from './extension-contribute.js'
+import { brandExtensionPort } from './extension-port.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
 import { createJoin, type JoinAssembly } from './join.js'
@@ -173,7 +179,9 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
-import { createKolService } from './kol-service.js'
+import { createKolSandbox, kolSandboxIntercept } from './kol-sandbox.js'
+import { CONTACT_SECRET_FIELD, contactSecretId, createKolService } from './kol-service.js'
+import { createKolToolExecutor } from './kol-tools.js'
 import {
   canEditMemory,
   canReadMemory,
@@ -246,13 +254,7 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 // WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
-import {
-  createConnectSiteFacts,
-  createSiteService,
-  createSiteStore,
-  seedDemoSite,
-  siteDeckData,
-} from './site.js'
+import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
 import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
 import { createSocialChannels, type SocialFetch } from './social-channels.js'
@@ -261,6 +263,13 @@ import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
+import {
+  createSupportJudgment,
+  SUPPORT_SLA_HANDLER,
+  SUPPORT_SLA_TASK_ID,
+  type SupportJudgment,
+  supportSlaTask,
+} from './support-judgment.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
@@ -1049,6 +1058,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     deliverOutbound: async (item, opts) => {
       // WP66：卡片自己写着属于哪个品牌，就从那个品牌的渠道发——**不是**进程装配的那一套
       const brand = await brands?.forWorkspace(item.workspace_id)
+      /*
+       * WP117 交付 4：**演练的硬闸**。
+       *
+       * 这是服务进程里唯一一条"真把东西发出去"的路，所以闸就设在这里——
+       * 在问聊天车道与邮件渠道**之前**。界面上的开关、接口上的参数、
+       * 卡片上的标记都可以被绕过；这一句绕不过去：收件人属于演练红人，
+       * 这封信就投进内存邮箱，下面三行一行都不执行。
+       */
+      const sandboxed = kolSandboxIntercept(brand, item)
+      if (sandboxed !== undefined) return sandboxed
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
       return (
         (await brand?.chat.deliver(item, opts)) ??
@@ -1624,6 +1643,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
 
     let workRef: Work | undefined
+    /**
+     * WP125：客服判断层（晚绑定，同 `workRef` 那一条理由）。
+     *
+     * 运行时比判断层先装配好，而运行时的 `judgeDraft` 要调它——靠这个变量打断环。
+     */
+    let supportJudgmentRef: SupportJudgment | undefined
     const records: MatterRecordSource =
       (isBootstrap ? options.records : undefined) ??
       createConnectRecordSource({
@@ -1827,6 +1852,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   },
                 }),
             source: records,
+            /*
+             * WP117（66 断点 #1）：红人那十一个工具。
+             *
+             * `kolService` 在这几百行之前就建好了（记录源要读它），所以这里直接取；
+             * 取值函数留着是为了「装配顺序换了也不崩」——它只在真调工具那一刻查。
+             */
+            kolTools: createKolToolExecutor({
+              workspace_id: ws,
+              port: () => kolService.port,
+              now: () => clock.now(),
+            }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
@@ -1839,6 +1875,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 与"这条职责一台 MCP 服务器都没登记"同一个结果。
              */
             connections: (role_id) => directoryAssemblies.get(ws)?.roleConnections(role_id) ?? [],
+            /*
+             * WP125（72 §P0-1 / §P0-2）：每一份出站草稿在建卡之前过判断层——
+             * 先泄漏守卫（商家教 AI 的那句中文有没有被逐字抄进客户会看到的正文），
+             * 再三道自主门。判断层还没装好（装配期）就是 `undefined`：老行为。
+             */
+            judgeDraft: (input) =>
+              supportJudgmentRef?.judgeDraft({
+                channel: input.channel,
+                thread_id: input.thread_external_id ?? input.matter.id,
+                inbound_text: input.inbound_text,
+                reply_text: input.body,
+                generated_by: 'ai',
+              }),
           })
     const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -1896,6 +1945,89 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 记录源要从工作模型里认线程（`record({ type: 'thread' })`）；到这一步才有得认
     workRef = work
 
+    /*
+     * ── WP125（72 §1.I / §P0-1）：**客服判断层** ────────────────────────
+     *
+     * 72 的头号发现是：`support-core` 的 `draftReply` / `computeSla` /
+     * `shouldEscalate` / `evaluateAutonomyGates` / `findUnansweredBoundary` /
+     * `knowledgeCandidate` 在这个进程里的生产引用数是 **0**——真邮件走的是
+     * 通用 Agent + 一份提示词技能，**没有门**。这一段把它们接上真路径。
+     *
+     * 位置在 `work` 之后、`channels` 之前：入站那一半要挂到渠道的 `judgeInbound` 上，
+     * 出站那一半要挂到运行时的 `judgeDraft` 上（运行时上面已经建好，靠这个变量晚绑定）。
+     */
+    const supportJudgment = createSupportJudgment({
+      workspace_id: ws,
+      clock,
+      appendEvent,
+      approvals,
+      position: () => firstPositionOf(ws),
+      vertical: () => brandProfileOf(ws).vertical,
+      // 落款：品牌名（模板草稿要它；没有就用一个中性的）
+      signature: () => '客服团队',
+      /*
+       * 已答边界的真源在知识库里（**答案不另存一张表**，同下面 `boundaries` 那一段）。
+       * 每次现查：商家刚在卡上答过一条，下一封信就该按新口径走，不该等重启。
+       */
+      policies: async () => {
+        const position = firstPositionOf(ws)
+        if (position === undefined) return []
+        const config = roles.effectiveConfig(position.assignment_id)
+        const cards = await knowledge.store.list(
+          { workspace_id: ws, status: 'active' },
+          {
+            person_id: position.person_id,
+            workspace_id: ws,
+            assignment_id: position.assignment_id,
+            role_id: position.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        )
+        return detectAnsweredBoundaries({
+          texts: cards.map((c) => c.statement),
+          structured: cards.flatMap((c) => (c.structured === undefined ? [] : [c.structured])),
+          at: clock.now(),
+        })
+      },
+      /*
+       * 泄漏守卫要商家教过的那几句。**只读不存**：从事项时间线上取人自己写的那几条
+       * （`actor.kind === 'person'`），判断层不会把它们写进任何卡片、事件或日志。
+       */
+      instructions: (thread_id) => {
+        const matter = work
+          .listMatters({ kind: 'conversation' })
+          .find((m) => m.context.pinned.some((p) => p.type === 'thread' && p.id === thread_id))
+        if (matter === undefined) return []
+        return work
+          .matterView(matter.id, { limit: 50 })
+          .timeline.filter((e) => e.actor.kind === 'person' && e.text.trim() !== '')
+          .map((e) => e.text)
+      },
+      // 72 §P0-3：答不上来 → 落缺口 + 记一个等待者（按线程去重，零新表）
+      gaps: {
+        openGap: (input) => {
+          const position = firstPositionOf(ws)
+          if (position === undefined) return undefined
+          return knowledge.intake.openGap({
+            workspace_id: ws,
+            question: input.question,
+            subject: { type: 'policy', key: input.subject_key },
+            asked_by: { kind: 'agent', id: position.assignment_id },
+            ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
+          }).id
+        },
+        addWaiter: (gap_id, waiter) => {
+          knowledge.intake.addGapWaiter(gap_id, waiter)
+        },
+        getGap: (gap_id) => knowledge.intake.getGap(gap_id),
+        answerGap: (gap_id, input) => {
+          knowledge.intake.answerGap(gap_id, { answer: input.answer, by: input.by })
+        },
+      },
+    })
+    supportJudgmentRef = supportJudgment
+
     // ── 18 渠道：IMAP 轮询 + 入站管线 + 出站发信（39 待办 C）────────────
     // 位置有讲究：要在 connections（拿邮箱参数与口令来源）、work（入站落成事项）、
     // runtime（起 Run）之后。轮询由调度器驱动，而调度器是**共享**的——
@@ -1920,6 +2052,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 入站事项挂谁名下：本人在**这个品牌**里现在持有的第一条岗位。
       // 每次取一次，不缓存——岗位撤销 / 新增之后下一封信就落到对的地方。
       position: () => firstPositionOf(ws),
+      // WP125（72 §P0-1）：落成事项之后、起 Run 之前，客服判断层先说话
+      judgeInbound: async (input) => supportJudgmentRef?.judgeInbound(input),
       /**
        * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
        *
@@ -2069,6 +2203,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           text: h.statement_redacted,
         }))
       },
+      // WP125（72 §P0-1）：分拣判成 `support` 的来信，下一步进客服判断层
+      onSupportMail: async (input) => {
+        await supportJudgmentRef?.judgeInbound(input)
+      },
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
@@ -2083,6 +2221,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
 
+    /*
+     * WP117 交付 4：演练场。建在 `kolService` 之后——它往同一个库里铺数据，
+     * 并把演练的出站截下来（硬闸在 `deliverOutbound`，见那一处）。
+     */
+    const kolSandbox = createKolSandbox({
+      store: kol,
+      secrets: brandSecrets,
+      clock,
+      emit: (type, payload) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'kol_sandbox' },
+          correlation: { trace_id: `tr_kolsbx_${clock.now()}` },
+          payload,
+        })
+      },
+    })
+
     return {
       workspace_id: ws,
       ...(dir === undefined ? {} : { dir }),
@@ -2093,6 +2251,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       records,
       kol,
       kolService,
+      kolSandbox,
       pr,
       prService,
       social,
@@ -2111,6 +2270,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       messages,
       chat,
       chatWidget,
+      supportJudgment,
       ownModels,
       ownGateway,
       ownCloud,
@@ -2177,7 +2337,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 面板在演示与截图里全是空的，"这个岗位长什么样"就无从谈起。
    * 只在挂了合成世界时放（真环境的库该是用户自己导进去的）。
    */
-  if (mount !== undefined) seedDemoKol(boot.kol, clock.now())
+  if (mount !== undefined) {
+    seedDemoKol(boot.kol, clock.now())
+    /*
+     * WP117（66 断点 #9）：**demo 的红人数据别自相矛盾。**
+     *
+     * 之前 demo 里 Gadget Jonas 处在「拍摄制作中 · US$400」，名下却一条联系方式
+     * 都没有——一条谁也联系不上的合作怎么谈到交付的？亲测的人到这里就卡住了，
+     * 因为"起开发信"必须先有联系方式，而他明明已经在交付中。
+     *
+     * 补的是**已经在合作中的那两个人**的联系方式（还没建联的那几个照旧空着——
+     * 那才是真实的样子）。地址是 example 域，走的是与真实逐字相同的那条路：
+     * 明文进加密库，库里只留 key 名。`seedDemoKol` 拿不到加密库，所以这一步
+     * 在这里做而不是在它里面。
+     */
+    for (const collab of boot.kol.collaborations()) {
+      if (boot.kol.contacts(collab.creator_id).length > 0) continue
+      const creator = boot.kol.creator(collab.creator_id)
+      if (creator === undefined) continue
+      const id = `ctc_demo_${collab.creator_id}`
+      const value_ref = contactSecretId(id)
+      const handle =
+        boot.kol.accounts({ creator_id: creator.id })[0]?.handle ?? creator.id.replace(/\W/g, '')
+      boot.secrets.put(value_ref, { [CONTACT_SECRET_FIELD]: `${handle}@example.com` })
+      boot.kol.saveContact({
+        id,
+        creator_id: creator.id,
+        kind: 'email',
+        value_ref,
+        source: 'channel_about',
+        verified_at: clock.now(),
+      })
+    }
+  }
 
   /**
    * WP72（56 §2）：demo 里给社媒库放几行，理由与上面那一条逐字相同。
@@ -2605,6 +2797,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }),
   )
 
+  /*
+   * WP125（72 §P0-1 ②）：**首响 SLA 巡检**（`support.sla_sweep`，一刻钟一拍）。
+   *
+   * 超时没回的来信进**岗位面板与通知，不出卡**（36 §2.2b：只有要人拍板的才是卡；
+   * 一封信超时了要的是"去看一眼"，不是"在两个选项里挑一个"）。
+   * 登记与排期放在一起，理由同上面那条聊天求助巡检。
+   */
+  schedule.scheduler.register(SUPPORT_SLA_HANDLER, async () => {
+    const out = { scanned: 0, reminded: 0, breached: 0 }
+    for (const brand of await brandModules.all()) {
+      const one = await brand.supportJudgment.sweepSla()
+      out.scanned += one.scanned
+      out.reminded += one.reminded
+      out.breached += one.breached
+    }
+    return out
+  })
+  await ensureTask(
+    schedule.scheduler,
+    SUPPORT_SLA_TASK_ID,
+    supportSlaTask({
+      workspace_id: workspace.id,
+      owner: person.id,
+      role_id: ownerAssignment.role_id,
+      assignment_id: ownerAssignment.id,
+    }),
+  )
+
   await ensureSystemTasks(schedule.scheduler, {
     workspace_id: workspace.id,
     owner: person.id,
@@ -2751,6 +2971,46 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 两档身份服务这一步都是同步落库的（Promise 只是签名）；唯一可能的失败是
       // 空的公司全称，而那一条 `setProfile` 在更早的地方就挡掉了
       void identity.updateOrganization(bootstrapOrg, patch).catch(() => undefined)
+    },
+  })
+
+  /**
+   * WP121（70 §3）：贴一个网址，自动分析出品牌档案。
+   *
+   * 装在 onboarding 之后：确认那一下写的是**同一份工作区档案**（`onboarding.port
+   * .setProfile`），走同一条归一化与同一条事件，不另开一条写入路径——两条写法
+   * 迟早会在"平台缺省值"这种地方分叉。
+   *
+   * `fetch` 是真的 `globalThis.fetch`：这一步要去敲用户自己给的那个网址。
+   * 纪律在包里（只 GET、不带凭据、遵 robots、超时 10 秒、页面数封顶）。
+   */
+  const brandIntake = createBrandIntake({
+    clock,
+    workspace_id: workspace.id,
+    fetch: globalThis.fetch as never,
+    newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
+    sinks: {
+      applyProfile: async (profile) => {
+        const legal = profile.legal_name?.value ?? profile.brand_name?.value
+        if (typeof legal !== 'string' || legal.trim() === '') return
+        await onboarding.port.setProfile(
+          {
+            workspace_id: workspace.id,
+            person_id: person.id,
+            assignment_id: '',
+            role_id: '',
+          },
+          {
+            legal_name: legal,
+            ...(typeof profile.brand_name?.value === 'string'
+              ? { brand_name: profile.brand_name.value }
+              : {}),
+            ...(profile.storefront_platform === undefined
+              ? {}
+              : { storefront_platform: profile.storefront_platform.value }),
+          },
+        )
+      },
     },
   })
 
@@ -3535,10 +3795,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
 
-  const kolPortOf = brandKolPort(
-    brandModules,
-    async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
-  )
+  const kolPortOf = brandKolPort(brandModules, async (ws) => {
+    const brand = await brandModules.forWorkspace(ws)
+    /*
+     * WP117 交付 4：演练场挂在红人端口的 `sandbox` 那一格上。
+     *
+     * 挂在这里而不是让 `kolService` 自己带：演练是**库之上的一层**
+     * （它往库里铺合成数据、在出站那一跳截信），`kolService` 不该认识它——
+     * 起草开发信那一跳对「这个人是不是演练的」应该一无所知，那正是
+     * 「演练走的是与真实逐字相同的那条路」的意思。
+     */
+    const sandbox = brand.kolSandbox
+    return {
+      ...brand.kolService.port,
+      sandboxStatus: () => sandbox.status(),
+      sandboxStart: (_actor: unknown, input: { channel: KolChannel }) => sandbox.start(input),
+      sandboxAdvance: (_actor: unknown, input: { days: number }) => sandbox.advance(input),
+      sandboxClear: () => sandbox.clear(),
+    }
+  })
+  /**
+   * WP119（68）：浏览器插件的本地一面 `/v1/extension/*`。
+   *
+   * 配对表**整台机器一张**（一把令牌自己带着 `workspace_id`）；写红人库与
+   * 加密库那一半按品牌走，与 `kolPortOf` 同一条（52 O1）。
+   *
+   * 云端转发口（登录了就默认共享到公共红人库，Luoye 09-19）挂在这里而不是
+   * 插件里：**插件不该持有云令牌**——装在浏览器里的东西，拿到这台电脑的人就读得到。
+   */
+  const extensionStore = createMemoryExtensionStore({ clock, random })
+  const extensionPortOf = brandExtensionPort({
+    store: extensionStore,
+    serviceOf: async (ws) => {
+      const brand = await brandModules.forWorkspace(ws)
+      return {
+        workspaceName: () => brandNameOfWorkspace(ws),
+        kol: brand.kol,
+        secrets: brand.secrets,
+        clock,
+        random,
+        publicLibrary: createExtensionContributor({ secrets: brand.secrets, env }),
+        serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
+      }
+    },
+  })
   /** WP73（56 §6）：社媒库 `/v1/social/*`（一个品牌一张库、一段加密库）。 */
   const socialPortOf = brandSocialPort(
     brandModules,
@@ -3753,6 +4053,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     org: org.port,
     // WP51（46）：首次设置向导、同事发现、邀请码与申请加入
     onboarding: onboarding.port,
+    // WP121（70 §3）：贴一个网址，自动分析出品牌档案
+    brandIntake: brandIntake.port,
     // WP65（52 O1）：组织与品牌（`/v1/orgs/*`）
     organizations: organizations.port,
     join: joinAssembly.port,
@@ -3862,6 +4164,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     positions: positionPortOf,
     // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
     kol: kolPortOf,
+    // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
+    extension: extensionPortOf,
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
     // WP76（58 §5）：本地设计库 `/v1/design/*`（同上；素材按品牌进 blob store）

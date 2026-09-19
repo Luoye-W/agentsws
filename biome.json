@@ -18,7 +18,9 @@
       "!**/test-results",
       "!**/playwright-report",
       "!**/release",
-      "!apps/desktop/vendor"
+      "!apps/desktop/vendor",
+      "!apps/extension/build",
+      "!apps/extension/.wxt"
     ]
   },
   "formatter": {

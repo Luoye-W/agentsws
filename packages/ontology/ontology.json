@@ -7,6 +7,7 @@
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/blocks.ts",
+    "packages/contracts/src/brand-intake.ts",
     "packages/contracts/src/changes.ts",
     "packages/contracts/src/channels.ts",
     "packages/contracts/src/cloud-admin.ts",
@@ -83,7 +84,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "4bd02c45f2aaa0c7524f9822d93be6ef",
+  "source_digest": "073208e7f792f66b1adad13f3284a6a8",
   "objects": [
     {
       "id": "ad",
@@ -897,6 +898,12 @@
           "type": "string",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "sandbox",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -1235,6 +1242,12 @@
           "type": "string[]",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "sandbox",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": ["search_creators"],

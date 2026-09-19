@@ -21,7 +21,7 @@
 import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { INTERNAL_HEADERS, remoteKolAdminPort, route } from '../src/index.js'
-import { type FakeCloud, fakeCloud, req, tokenFromMail } from './helpers.js'
+import { type FakeCloud, fakeCloud, req, SIGNUP_BONUS, tokenFromMail, zeroOut } from './helpers.js'
 
 /** 32 字节的邮箱密钥（**测试用的假钥匙**，hex）。 */
 const EMAIL_KEY = 'a'.repeat(64)
@@ -127,7 +127,8 @@ describe('WP116 Workers 形态 · 绑与不绑', () => {
 
     const browse = await call(cloud, '/v1/data/kol/creators', { token })
     expect(browse.status).toBe(200)
-    expect(await available(cloud, token)).toBe(100)
+    // 自己充的 100 + WP121 注册赠送（浏览这一下一分没扣，这才是这条用例要的）
+    expect(await available(cloud, token)).toBe(100 + SIGNUP_BONUS)
   })
 })
 
@@ -169,7 +170,9 @@ describe('WP116 Workers 形态 · 两段式的钱', () => {
   })
 
   it('余额不够：402，钱一分没动，而且这一次根本没碰库', async () => {
-    const { token } = await issueToken(cloud, 'b@example.com', 'ws_b')
+    const { token, org } = await issueToken(cloud, 'b@example.com', 'ws_b')
+    // WP121 之后「刚注册」自带赠送的积分，所以先撤干净——这条用例要的是"没钱"
+    zeroOut(cloud, org)
     await seedCreator(cloud, token)
     const before = await available(cloud, token)
     const res = await call(cloud, '/v1/data/kol/creators/youtube/somecreator/reveal', {

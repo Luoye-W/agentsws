@@ -340,7 +340,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ account, org, session_token, expires_at }",
+            "description": "{ account, org, session_token, expires_at, bonus? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -381,7 +381,7 @@
           }
         },
         "security": [],
-        "x-returns": "{ account, org, session_token, expires_at }",
+        "x-returns": "{ account, org, session_token, expires_at, bonus? }",
         "requestBody": {
           "required": true,
           "content": {
@@ -3380,7 +3380,7 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "{ grants, terms, expiring, plans }",
+            "description": "{ grants, terms, expiring, plans, signup_bonus }",
             "content": {
               "application/json": {
                 "schema": {
@@ -3445,7 +3445,7 @@
             "bearerAuth": []
           }
         ],
-        "x-returns": "{ grants, terms, expiring, plans }"
+        "x-returns": "{ grants, terms, expiring, plans, signup_bonus }"
       }
     },
     "/v1/admin/credits/grant": {

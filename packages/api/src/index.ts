@@ -32,6 +32,26 @@ export {
   STATUS_BY_CODE,
   statusFor,
 } from './errors.js'
+/*
+ * WP119（68）：浏览器插件的本地一面。
+ *
+ * 配对 / 令牌那张表与路由端口一起导出——`apps/server` 要拿
+ * `createMemoryExtensionStore` 建那张表，拿 `ExtensionPort` 装配它的实现。
+ */
+export {
+  createMemoryExtensionStore,
+  EXTENSION_SCOPES,
+  EXTENSION_TOKEN_TTL_MS,
+  type ExtensionScope,
+  type ExtensionSession,
+  type ExtensionStore,
+  type ExtensionTokenView,
+  extensionIdOfOrigin,
+  MemoryExtensionStore,
+  PAIRING_TTL_MS,
+  type PairingView,
+  type RedeemedToken,
+} from './extension-store.js'
 export {
   assignmentOf,
   body,
@@ -108,6 +128,9 @@ export type { AdsActor } from './routes/ads-types.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
 export type { BackupExportView, BackupPort } from './routes/backup.js'
 export { backupRoutes } from './routes/backup.js'
+// WP121（70 §3）：贴一个网址自动分析
+export type { BrandIntakeActor, BrandIntakePort } from './routes/brand-intake.js'
+export { brandIntakeRoutes } from './routes/brand-intake.js'
 export { type BrowserActor, type BrowserPort, browserRoutes } from './routes/browser.js'
 export {
   CATALOG_KINDS,
@@ -205,6 +228,15 @@ export {
   parseUntil,
   readVisibleEvents,
 } from './routes/events.js'
+export type {
+  ExtensionHello,
+  ExtensionIngestResult,
+  ExtensionIngestRow,
+  ExtensionIngestStatus,
+  ExtensionObservation,
+  ExtensionPort,
+} from './routes/extension.js'
+export { extensionRoutes } from './routes/extension.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export {

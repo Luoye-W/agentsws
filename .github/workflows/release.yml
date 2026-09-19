@@ -119,3 +119,62 @@ jobs:
         if: failure()
         shell: bash
         run: ls -laR apps/desktop/release || true
+
+  # WP119（68）：浏览器插件的 zip，挂到同一个 Release 上。
+  #
+  # **只加一个 job，上面那个矩阵一个字没改。** 理由是它跟桌面壳没有一点关系：
+  # 不需要捆绑 Node、不需要原生模块、不分平台（MV3 的 zip 三个系统通用），
+  # 挤进那个矩阵只会让它在四台机器上各打一遍同一个包。
+  #
+  # `needs: build`：等桌面壳那几个先把 Release 建出来（Release 是
+  # electron-builder 建的），这里只往上传一个文件。桌面壳全挂了就不传——
+  # 一个只有插件 zip 的 Release 对内测用户没有意义。
+  extension:
+    name: 浏览器插件（Chrome MV3 zip）
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      # 版本号同样只有 tag 一个出处（与上面那个 job 逐字同一条纪律）。
+      - name: 版本号取自 tag
+        shell: bash
+        run: |
+          raw="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${raw#v}"
+          echo "打的是 $version"
+          node -e "
+            const fs = require('node:fs')
+            const path = 'apps/extension/package.json'
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'))
+            pkg.version = process.argv[1]
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n')
+          " "$version"
+
+      - name: build（wxt build && wxt zip）
+        run: pnpm -F @agentsws/extension build
+
+      # 用 workflow 自带的 GITHUB_TOKEN 往那个 tag 的 Release 上传。
+      # `--clobber`：重跑同一个 tag 时覆盖，而不是失败。
+      - name: 挂到 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          zip="$(ls apps/extension/build/*.zip | head -n 1)"
+          echo "上传 $zip → $tag"
+          gh release upload "$tag" "$zip" --clobber

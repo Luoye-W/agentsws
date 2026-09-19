@@ -49,6 +49,7 @@ import {
   type LedgerRow,
   planCycles,
   plans,
+  signupBonus,
   termEndsAt,
   type UsageLedger,
   type Wallet,
@@ -1205,7 +1206,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         summary: '发放流水、手动会员 term 列表、即将到期',
         tag: 'cloud-admin',
         auth: 'admin',
-        returns: '{ grants, terms, expiring, plans }',
+        returns: '{ grants, terms, expiring, plans, signup_bonus }',
       },
       async (c) => {
         staff(c)
@@ -1238,6 +1239,12 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           })),
           expiring: await book.expiring(now, soon),
           plans: plans(),
+          /*
+           * WP121（70 §2）：注册赠送。**单独一格**，不混进上面那张发放流水——
+           * 那张表是"谁按了发放按钮"，这一格是"系统自己送出去了多少"，两个数
+           * 回答的是两个问题（这个月烧了多少拉新钱 / 运营手动发了多少）。
+           */
+          signup_bonus: { ...admin.signupBonusTotals(), rule: signupBonus() ?? null },
         })
       },
     ),

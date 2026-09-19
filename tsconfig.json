@@ -17,6 +17,9 @@
       "path": "apps/desktop"
     },
     {
+      "path": "apps/extension"
+    },
+    {
       "path": "apps/server"
     },
     {
@@ -33,6 +36,9 @@
     },
     {
       "path": "packages/brand"
+    },
+    {
+      "path": "packages/brand-intake"
     },
     {
       "path": "packages/catalog"

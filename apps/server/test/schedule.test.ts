@@ -417,8 +417,9 @@ describe('25 §5 API', () => {
     // + WP29 的学习提案 + WP34 的三条（审批家务 / 邮箱轮询 / 原始材料保留期）
     // + WP38 的闲置回收巡检 + WP42 的模型价目周刷新 + WP50 的重复组织对象夜扫
     // + WP55 的两条（Amazon 24h 响应线 sweep、出站对账）+ WP57 的聊天求助超时巡检
+    // + WP125 的首响 SLA 巡检（`support.sla_sweep`，72 §P0-1 ②）
     // （内存档没有幂等表落盘，所以没有那条清理任务）
-    expect(mine).toHaveLength(17)
+    expect(mine).toHaveLength(18)
     const all = await dataOf<{ id: string }[]>(await call('/v1/schedules?scope=workspace'))
     expect(all.length).toBe(mine.length)
     const byPerson = await dataOf<{ id: string }[]>(await call('/v1/schedules?scope=mine'))

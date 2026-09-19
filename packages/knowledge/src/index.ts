@@ -19,6 +19,8 @@ import { type Embedder, SqliteKnowledgeStore } from './store.js'
 export * from './errors.js'
 export * from './events.js'
 export * from './fact-fingerprint.js'
+// WP125（72 §P0-3）：缺口的「有多少客户在等」闭环（去重、排序、预期 preset）
+export * from './gap-waiting.js'
 export * from './ingest.js'
 export * from './intake.js'
 export * from './markdown.js'

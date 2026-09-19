@@ -6,5 +6,7 @@ export * from './provenance.js'
 export * from './raw-store.js'
 export * from './redact-outbound.js'
 export * from './secret-patterns.js'
+// WP125（72 §P0-2）：客户贴进来的支付 / 身份标识，进 prompt 前打码（打码先于围栏）
+export * from './sensitive-mask.js'
 export * from './snapshot.js'
 export * from './suppression.js'

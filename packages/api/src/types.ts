@@ -54,6 +54,7 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
+import type { BrandIntakePort } from './routes/brand-intake.js'
 import type { BrowserPort } from './routes/browser.js'
 import type { CatalogPort } from './routes/catalog.js'
 import type { ChangeFilesPort } from './routes/changes.js'
@@ -63,6 +64,7 @@ import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { DesignPort } from './routes/design.js'
+import type { ExtensionPort } from './routes/extension.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
 import type { KolPort } from './routes/kol.js'
@@ -714,6 +716,12 @@ export interface GatewayDeps {
    */
   kol?: KolPort
   /**
+   * WP119（68）：浏览器插件的本地一面。没装配时 `/v1/extension/*` 回
+   * not_implemented——工作台的连接页照实说「这台机器上还没有插件那一面」，
+   * 其余一切照常。插件的数据**只走本机**：它连的是 `127.0.0.1`，不是云。
+   */
+  extension?: ExtensionPort
+  /**
    * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
    * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），
    * 只是没有任何增删改的入口。
@@ -806,6 +814,12 @@ export interface GatewayDeps {
    * 回 not_implemented——向导是加分项，没有它工作台照常能用（只是第一次打开时没人带路）。
    */
   onboarding?: OnboardingPort
+  /**
+   * WP121（70 §3）：贴一个网址自动分析出品牌档案。
+   * 没装配时 `/v1/brand-intake/*` 回 not_implemented——向导第 ② 步退回手填，
+   * 与"还没有网站"那条旁路走同一条路。
+   */
+  brandIntake?: BrandIntakePort
   /**
    * WP65（52 O1）：组织（公司）与它下面的品牌工作区。
    * 没装配时 `/v1/orgs/*` 回 not_implemented——多品牌是加分项，

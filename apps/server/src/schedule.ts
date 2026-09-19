@@ -72,6 +72,7 @@ import type { BackupRunResult } from './backup.js'
 import { CHAT_ASSIST_TIMEOUT_HANDLER } from './chat.js'
 import { type HousekeepingDeps, runApprovalHousekeeping } from './housekeeping.js'
 import type { MeetingsAssembly } from './meetings.js'
+import { SUPPORT_SLA_HANDLER } from './support-judgment.js'
 
 /** 每个消费者的登记名。改名字要同时改工作台的 i18n（列表上显示的是它）。 */
 export const HANDLERS = {
@@ -106,6 +107,14 @@ export const HANDLERS = {
    * 40 §2 的工具箱里去，跟人建的定时任务混在一起。
    */
   chatAssistTimeout: CHAT_ASSIST_TIMEOUT_HANDLER,
+  /**
+   * WP125 / 72 §P0-1 ②：超时没回的客户来信（首响 SLA，一刻钟一拍）。
+   *
+   * 名字的真源在 `./support-judgment.ts`——登记在这里的理由与上面那条逐字相同：
+   * `SYSTEM_HANDLERS`（工具箱那张「不进目录」的名单）是从这张表算出来的，
+   * 漏了它，这条系统巡检会跑到 40 §2 的工具箱里，跟人建的定时任务混在一起。
+   */
+  supportSla: SUPPORT_SLA_HANDLER,
   /** WP55 / 48 §4 L3 #2：Amazon 24h 响应线的三档 sweep（每 5 分钟）。 */
   amazonSla: 'support.amazon_sla',
   /** WP55 / 48 §4 L3 #4：出站 outbox 的对账（每分钟）。 */

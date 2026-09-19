@@ -154,6 +154,13 @@ export type AuditAction =
   | 'membership.cycle_grant'
   | 'usage.export'
   /**
+   * 注册赠送（70 §2，WP121）。
+   *
+   * 三种结局都记：`done` = 真送出去了；`failed` = 没送（黑名单 / 钱包还没装起来）。
+   * "已经送过了"**不记**——那不是一件事发生了，那是一件事没再发生一次。
+   */
+  | 'signup.bonus'
+  /**
    * WP116 公共红人库那两条。
    *
    * `kol.remove` 是这张表上少见的**不可逆**动作（opt-out + 删掉那个人的全部行），

@@ -1,0 +1,150 @@
+# WP117 交付 2：**一条贯穿全程的长场景**。
+#
+# 在这条题之前，红人那五道题各测一步：起草归起草、建合作归建合作、归因归归因。
+# 每一步单独都是绿的，可 66 那次亲测走不通——因为**没有一道题把它们串起来跑在
+# 同一个世界上**。串起来才会暴露的那一类问题，正是这条题要钉的：
+#
+# 1. **campaign 建出来的合作，开发信认得出它**（起草那一跳会把 `sourced`
+#    推成 `contacted`——它得先找得到那条合作）；
+# 2. **第一稿被拦下之后改写的那一封，仍然落在同一条合作上**，不会另起一条；
+# 3. **合作的钱是另一条路**：开发信里写死"付你 800"被 guardrail 拦死，
+#    真要给钱得走 `kol_collaboration`，而它永远 L1、永远人审（15 §2 hard_ceiling）；
+# 4. **追踪链接挂在那条合作上，归因才算得回来**——这是整条链最后一环，
+#    前面任何一步串错了，这里的 `matched` 就是 0。
+#
+# 为什么这条题值得单独存在，而不是把那五道题合并：那五道各自钉的是**一条规矩**
+# （禁承诺是 block、不并集权限、reveal 先说价），题面越小越说得清。这一条钉的是
+# **顺序**——它们凑在一起还成不成立。两种题都要有。
+#
+# 时间线是真的按天走的（+0m → +6d），不是一口气发生：跟进节奏、审批延迟、
+# 订单回流本来就跨天，挤在同一分钟里跑不出"批准 ≠ 施行"那一截。
+id: kol/e2e-full-funnel
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 王岚点卡。`always_approve` 不是"她什么都批"——是这条题不测她的判断力，
+# 测的是链路：她不点，链就停在第一张卡上，后面四步全测不到。
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ── ① 找人：世界里有三个 YouTube 红人（数据写在题面上，不藏在 world 里）
+  - at: '+0m'
+    kol.creator:
+      channel: youtube
+      handle: gadgetjonas
+      followers: 48000
+      engagement_rate: 0.062
+      category: 数码
+  - at: '+0m'
+    kol.creator:
+      channel: youtube
+      handle: deskrosa
+      followers: 31000
+      engagement_rate: 0.041
+      category: 数码
+  # 刷粉那一个：62 万粉却几乎没人互动。放进来是为了钉住**两张清单的区别**：
+  # 「找人」那张上他看得见（分很低 + 一句"这个数不可信"，不悄悄剔掉，
+  # 否则人会以为这条渠道上只有两个人），而 campaign 的挑人清单上他不在——
+  # 那张清单是「准备发信的人」，不是搜索结果。下面 `picks: 2` 就是这件事。
+  - at: '+0m'
+    kol.creator:
+      channel: youtube
+      handle: cablekevin
+      followers: 620000
+      engagement_rate: 0.002
+      category: 数码
+
+  # ── ② 进候选池与活动：一次 campaign 把人收进来，按渠道建合作
+  - at: '+30m'
+    kol.campaign:
+      who: p_li
+      goal: 秋季桌面季：找人做开箱
+      budget: 1200
+      channels: [youtube]
+      headcount: 3
+
+  # ── ③ 起开发信：第一稿写死了给钱 → guardrail 当场拦 → 打回重写 → 再过一遍闸
+  #
+  # 故意用与 `outreach-draft-no-promises` 同一句话：同一条规矩在"单独一步"
+  # 与"链条中间一步"下必须得出同一个结论，不然那道闸是看场合的。
+  - at: '+2h'
+    kol.outreach:
+      who: p_li
+      creator: gadgetjonas
+      draft: 我们付你 800 美元，这一条视频就发吧。
+
+  # ── ④ 议价与合作确认：钱走这条路，而且**超出这条职责能谈的范围**
+  #
+  # `level: L3` 是故意报高的：15 §2 的 hard_ceiling 会把它按回人审。
+  # 这一格正是"议价超预算要人批"那条分支在这条长链里的落点。
+  - at: '+1d'
+    kol.collaboration:
+      who: p_li
+      creator: gadgetjonas
+      budget: 900
+      level: L3
+  # 王岚要时间点那张卡（她的延迟是 30m..2h）
+  - at: '+26h'
+    clock.advance: {}
+
+  # ── ⑤ 追踪链接：谈成之后、寄样之前就该建好，归因全靠它
+  - at: '+2d'
+    kol.tracked_link:
+      who: p_li
+      creator: gadgetjonas
+      code: GADGETJO10
+
+  # ── ⑥ 效果回收：有人用这个码下了一单
+  - at: '+5d'
+    kol.affiliate_order: { order: ord_1001, code: GADGETJO10 }
+  - at: '+6d'
+    kol.attribution: { who: p_li }
+  - at: '+148h'
+    clock.advance: {}
+
+expected:
+  # 三个人里挑出两个：刷粉那个不进「准备发信」的清单（见上面那条注释）
+  kol_campaign:
+    picks: 2
+    allowed_channels: [youtube]
+    blocked_channels: []
+    created: 2
+  # 链条中间这一步与单独那道题结论一致：拦下 → 改写 → 自己发出去
+  kol_outreach:
+    forbidden_hits: [我们付你]
+    rewritten: true
+    auto_approved: true
+    suppressed_removed: 0
+  # 钱那条路永远人审，报高的等级被按回来
+  kol_collaboration:
+    requested_level: L3
+    auto_approved: false
+    budget: 900
+  # 最后一环：前面任何一步串错了，这里就是 0
+  kol_attribution:
+    matched: 1
+    unmatched: '>=0'
+    revenue: 129
+    basis: [affiliate_code]
+  # 一条链上真正落到账本里的三类变更。**少一类就说明中间断了一节**
+  staged_change_kinds: [kol_collaboration, kol_outreach, kol_tracked_link]
+  event_types:
+    - simulation.kol_campaign_planned
+    - simulation.kol_outreach_blocked
+    - simulation.kol_outreach_staged
+    - simulation.kol_collaboration_staged
+    - simulation.kol_affiliate_order_placed
+    - simulation.kol_attribution_ran
+  blocked_rules: [guardrail]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  从"找到这三个人"到"这条合作带回来一单"，人把这条时间线从头读到尾，
+  每一步「为什么会走到下一步」都答得上来吗？
+  中间那次被拦下的开发信，与后面那条 900 美元的合作，是不是同一条合作上的两件事？

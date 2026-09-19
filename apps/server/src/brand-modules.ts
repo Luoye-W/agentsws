@@ -36,6 +36,7 @@ import type { CloudAssembly } from './cloud.js'
 import type { ConnectionsAssembly } from './connections.js'
 import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { KolStore } from './kol.js'
+import type { KolSandboxAssembly } from './kol-sandbox.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
 import type { MessagesAssembly } from './messages.js'
@@ -48,6 +49,7 @@ import type { SiteServiceAssembly, SiteStore } from './site.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
+import type { SupportJudgment } from './support-judgment.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 品牌落盘目录在 `dbDir` 下的那一级。 */
@@ -108,6 +110,14 @@ export interface BrandModuleSet {
    * 的那一层。品牌 A 的联系方式明文只有 A 这一份服务取得到。
    */
   kolService: KolServiceAssembly
+  /**
+   * WP117 交付 4：这个品牌的**演练场**。
+   *
+   * 与 `kolService` 分开的理由：演练是一层**在库之上、在真渠道之前**的东西——
+   * 它往库里铺合成数据（带 `sandbox` 标记），并在出站那一跳把演练的信截下来。
+   * 按品牌一份，因为演练数据也是这个品牌库里的行。
+   */
+  kolSandbox: KolSandboxAssembly
   /**
    * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象）。
    *
@@ -198,6 +208,14 @@ export interface BrandModuleSet {
    */
   messages: MessagesAssembly
   chat: ChatLane
+  /**
+   * WP125（72 §1.I / §P0-1）：这个品牌的**客服判断层**。
+   *
+   * 邮件线与聊天线共用它：入站那一半挂在渠道的 `judgeInbound` 上，出站那一半
+   * 挂在运行时的 `judgeDraft` 上，SLA 巡检由共享调度器每一拍把每个品牌各跑一轮
+   * （与 `chat.sweepAssistTimeouts` 同一个套路）。
+   */
+  supportJudgment: SupportJudgment
   chatWidget: ChatWidgetAssembly
   /**
    * 这个品牌**自己那一份**模型面与能力开关。
