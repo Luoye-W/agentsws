@@ -101,7 +101,7 @@ import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
-import { createBrandDesign, designPageKindOf } from './brand-design.js'
+import { type BrandDesignAssembly, createBrandDesign, designPageKindOf } from './brand-design.js'
 import { createBrandIntake } from './brand-intake.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
@@ -1243,6 +1243,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   /** 首次设置那一面（品牌级档案）比这里晚装配，所以档案是**被读的**（WP62 / WP65）。 */
   let onboardingRef: OnboardingAssembly | undefined
+  /**
+   * 那份 `DESIGN.md`（WP122，71 §5）同样比品牌模块晚装配：它要读 `brandIntake`
+   * 手上抓回来的页面，而 `brandIntake` 又要读首次设置那一面。四个岗位出活时经
+   * 这个变量取；取不到就是"这个品牌还没有规范"，出活照常（只是不注入令牌）。
+   */
+  let brandDesignRef: BrandDesignAssembly | undefined
   const brandProfileOf = (
     ws: WorkspaceId,
   ): { vertical?: WorkspaceVertical; storefront_platform?: StorefrontPlatform } =>
@@ -1681,6 +1687,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       images: () => ownGateway.images,
       ...(blobs === undefined ? {} : { blobs }),
       roleName: (id) => roles.roles.get(id)?.name.zh,
+      // WP122（71 §5）：这个品牌的那份 `DESIGN.md` 注进出图的提示词，
+      // 并给规范自检当尺子。**每次出活现取**——用户在设计规范页上改一格，
+      // 下一批图就得照着改后的来
+      brandDesign: () => brandDesignRef?.context(ws, 'design'),
+      brandDesignProfile: () => brandDesignRef?.profileOf(ws),
       brandCards: () => {
         const sections = skills.registry.listSections(BRAND_SYSTEM_SKILL_NAME)
         if (sections.length === 0) return []
@@ -3163,6 +3174,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return { filename: file.filename, bytes: file.bytes }
     },
   })
+  // 四个岗位出活时经 `brandDesignRef` 取这一份（见它声明处那条注释）
+  brandDesignRef = brandDesign
 
   /**
    * WP65（52 O1）：组织（公司）与它下面的品牌工作区。

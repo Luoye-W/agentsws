@@ -7,6 +7,7 @@
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/blocks.ts",
+    "packages/contracts/src/brand-design.ts",
     "packages/contracts/src/brand-intake.ts",
     "packages/contracts/src/changes.ts",
     "packages/contracts/src/channels.ts",
@@ -82,7 +83,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "ef630b765844605f9b5015b323efbc21",
+  "source_digest": "9e67769843f6c472fc7dd0d696278d22",
   "objects": [
     {
       "id": "ad",
@@ -1463,6 +1464,12 @@
         {
           "name": "tags",
           "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "design_note",
+          "type": "string",
           "sensitivity": "internal",
           "optional": true
         },

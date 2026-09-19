@@ -58,6 +58,24 @@ function Note({
   )
 }
 
+/**
+ * 规范自检那一行（71 §5，WP122）：这批产出物有哪些地方不合这个品牌的
+ * `DESIGN.md`（色板外的颜色、字体表外的字体……）。
+ *
+ * 排版上刻意做成**一行灰字**：不是红章、不是警告框、更不是按钮上的一把锁。
+ * 这一行没有任何一条通路能让这张卡批不下去——品牌规范是给人省事的，
+ * 一个会拦住人的检查，人只会想办法关掉它。
+ */
+function DesignNoteLine({ card }: { card: DeckCard }): React.ReactNode {
+  const note = highlightText(card, 'design_note')
+  if (note === undefined) return null
+  return (
+    <p className="mt-1.5 text-xs text-ws-muted-fg" data-testid="deck-design-note">
+      {note}
+    </p>
+  )
+}
+
 /** 键值对表（金钱卡右半、事后决定卡、策略卡都用它）。 */
 function KeyValues({
   rows,
@@ -247,6 +265,7 @@ export function DeckCardBody({
                   {t('deck.publish.audience', { n: audience ?? '—' })}
                 </span>
               </div>
+              <DesignNoteLine card={card} />
             </div>
           </div>
         )
@@ -308,6 +327,7 @@ export function DeckCardBody({
               })}
             </div>
             {variants.length === 0 ? <Note>{content.text}</Note> : null}
+            <DesignNoteLine card={card} />
           </div>
         )
       }

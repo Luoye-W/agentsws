@@ -68,6 +68,12 @@ export interface GenerationPlan {
 export interface PlanGenerationInput {
   brief: DesignBrief
   brand: ResolvedBrandSystem
+  /**
+   * 这个品牌的 `DESIGN.md`（71 §5，WP122）。调用方用 `brandDesignContext()`
+   * 算好递进来，这里只往下传给 {@link composePrompt}——**不在这一层再拼一遍**，
+   * 拼法只有一处。不给就什么都不加。
+   */
+  design?: BrandDesignContext
   /** 今天已经出了几张（调用方从账本 / 事件日志数）。 */
   generated_today?: number
   /** 这次只出计划里的这几条（人在卡上点"这个角度再来两张"）。 */
@@ -106,7 +112,13 @@ export function planGeneration(input: PlanGenerationInput): GenerationPlan {
     take = left
   }
 
-  const prompts = wanted.slice(0, take).map((item) => composePrompt(item, input.brand))
+  const prompts = wanted
+    .slice(0, take)
+    .map((item) =>
+      input.design === undefined
+        ? composePrompt(item, input.brand)
+        : composePrompt(item, input.brand, input.design),
+    )
   return {
     brief_id: input.brief.id,
     prompts,

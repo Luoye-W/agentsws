@@ -24,10 +24,13 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type { BrandDesignActor, BrandDesignPort } from '@agentsws/api'
 import {
+  type BrandDesignContextInput,
+  brandDesignContext,
   composeDesignProse,
   type DesignComposeModel,
   type DesignPageInput,
   type DesignPageKind,
+  EMPTY_BRAND_DESIGN_CONTEXT,
   editValue,
   extractFileDesign,
   extractSiteDesign,
@@ -40,6 +43,7 @@ import {
 } from '@agentsws/brand-design'
 import type { PageFetch } from '@agentsws/brand-intake'
 import type {
+  BrandDesignContext,
   BrandDesignDoc,
   BrandDesignProfile,
   BrandDesignRevision,
@@ -152,6 +156,18 @@ export interface BrandDesignOptions {
 
 export interface BrandDesignAssembly {
   port: BrandDesignPort
+  /**
+   * 四个岗位出活时要注入的那一份（71 §5）。
+   *
+   * **按工作区取**，不按装配时那一个：一个进程装多套品牌模块（WP66），
+   * 设计服务是每个品牌一个，各自要读自己那一份规范。
+   *
+   * 这个品牌还没有规范时回的是 `present: false` 那一份，**不是 undefined**——
+   * 调用方于是只有一个分支要写（"接上去"），不必到处判空。
+   */
+  context(workspace_id: WorkspaceId, role?: BrandDesignContextInput['role']): BrandDesignContext
+  /** 档案本体。规范自检（`checkAgainstDesign`）拿它当尺子；没有就是 undefined。 */
+  profileOf(workspace_id: WorkspaceId): BrandDesignProfile | undefined
   close(): void
 }
 
@@ -390,7 +406,21 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
     },
   }
 
-  return { port, close: () => backend.close() }
+  return {
+    port,
+    profileOf: (workspace_id) => {
+      const doc = backend.get<BrandDesignDoc>('brand_design_doc', docIdOf(workspace_id))
+      return doc?.workspace_id === workspace_id ? doc.profile : undefined
+    },
+    context: (workspace_id, role) => {
+      const doc = backend.get<BrandDesignDoc>('brand_design_doc', docIdOf(workspace_id))
+      if (doc?.workspace_id !== workspace_id) return EMPTY_BRAND_DESIGN_CONTEXT
+      return role === undefined
+        ? brandDesignContext({ profile: doc.profile })
+        : brandDesignContext({ profile: doc.profile, role })
+    },
+    close: () => backend.close(),
+  }
 }
 
 /** 一句人话（「抓到 6 色 2 字体」），进版本历史。 */

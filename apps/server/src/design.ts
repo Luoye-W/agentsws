@@ -27,6 +27,9 @@
 
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+// 卡片上那一行字的拼法只有一处（`ads-core/brand-design.ts`）：投放素材卡与
+// 挑图卡说的是同一种话，两边各拼一遍的话，过两周就不是一句了。
+import { designNoteZh } from '@agentsws/ads-core'
 import type {
   DesignActor,
   DesignAssetInput,
@@ -41,9 +44,12 @@ import type {
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type { BlobStore } from '@agentsws/blob'
+import { checkAgainstDesign } from '@agentsws/brand-design'
 import type {
   ApprovalBus,
   AssignmentId,
+  BrandDesignContext,
+  BrandDesignProfile,
   ChangeKind,
   Clock,
   DesignAsset,
@@ -404,6 +410,19 @@ export interface DesignServiceOptions {
   brandCards?(): readonly BrandSystemCard[]
   /** 职责 id → 中文名（卡面与清单上「谁下的」那一格）。不给就显示 id。 */
   roleName?(role_id: string): string | undefined
+  /**
+   * 这个品牌的那份 `DESIGN.md` 注进提示词的那一段（71 §5，WP122）。
+   *
+   * **取值函数**，同 `images?()` 的理由：用户随时会在设计规范页上改一格，
+   * 存一格下来会停在装配那一刻。不给 / 给了但 `present: false`，出图照常，
+   * 只是提示词里没有品牌令牌——出图这件事不该因为没有规范就停下来。
+   */
+  brandDesign?(): BrandDesignContext | undefined
+  /**
+   * 同一份档案的本体，给规范自检当尺子（71 §5 第二条）。
+   * 与上面那一格分开取：注入要的是**拼好的那段话**，自检要的是**色板与字体表**。
+   */
+  brandDesignProfile?(): BrandDesignProfile | undefined
 }
 
 export interface DesignServiceAssembly {
@@ -705,12 +724,19 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
       const generated_today = store
         .assets({ duty: brief.duty })
         .filter((a) => a.created_at.slice(0, 10) === clock.now().slice(0, 10)).length
+      const design = options.brandDesign?.()
       const plan: GenerationPlan = planGeneration({
         brief,
         brand,
         generated_today,
+        ...(design === undefined ? {} : { design }),
         ...(input.plan_item_ids === undefined ? {} : { only_plan_item_ids: input.plan_item_ids }),
       })
+      /**
+       * 规范自检（71 §5 第二条）。**只提示，不拦人**：这一行字进卡面与素材，
+       * 不出现在任何一道闸的判据里。
+       */
+      const designNote = designCheckNote(options.brandDesignProfile?.(), plan)
 
       const images = options.images?.()
       const available = images?.available === true
@@ -752,6 +778,9 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
                 prompt_sha256: image.prompt_sha256,
                 generated_at: now,
               },
+              // 定稿卡是另一次请求，那一跳手上只有这张素材（提示词原文只留了
+              // 哈希）——那一行提示跟着素材走，才会在定稿卡上还在
+              ...(designNote === undefined ? {} : { design_note: designNote }),
               created_at: now,
             }
             // 字节进 blob store，库里只留引用（文件头第 1 条）
@@ -795,10 +824,14 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
           ...(available
             ? {}
             : { no_image_model_reason: images?.unavailable_reason ?? NO_IMAGE_MODEL_FALLBACK }),
+          // 71 §5：卡面上那一行「这张图有 N 处不合品牌规范」。进 `after` 而不是
+          // 只进 `notes`——deck 的芯片只从结构化字段里取（37 §1 第 4 行）
+          ...(designNote === undefined ? {} : { design_note: designNote }),
         },
         notes: [
           ...plan.quota_notes,
           ...(available ? [] : [images?.unavailable_reason ?? NO_IMAGE_MODEL_FALLBACK]),
+          ...(designNote === undefined ? [] : [designNote]),
         ],
         title: `挑一张：${designDutySpec(brief.duty)?.zh ?? brief.duty}`,
         summary: available
@@ -826,6 +859,7 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
           available,
           ...(available ? {} : { reason: images?.unavailable_reason ?? NO_IMAGE_MODEL_FALLBACK }),
         },
+        ...(designNote === undefined ? {} : { design_note: designNote }),
         pick_note: available
           ? pickCardNoteZh(plan, resolveSpec(plan.prompts[0]?.spec_id ?? ''))
           : (images?.unavailable_reason ?? NO_IMAGE_MODEL_FALLBACK),
@@ -868,10 +902,14 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
           ...(spec === undefined ? {} : { spec_label: spec.zh }),
           tags: picked.tags,
           ...(asset.request_id === undefined ? {} : { deliver_to_request: asset.request_id }),
+          // 出图那一跳提过的那一行，跟着素材带到定稿卡上（71 §5）。
+          // 定稿的人要看得见"当初就说过这儿不合规范"，而不是重新算一遍
+          ...(picked.design_note === undefined ? {} : { design_note: picked.design_note }),
         },
         notes: [
           '入库之后下游（上架 / 发布 / 投放 / 送印）直接拿它去用，所以这一下永远要人点。',
           ...(spec === undefined ? [] : [specNoteZh(spec)]),
+          ...(picked.design_note === undefined ? [] : [picked.design_note]),
         ],
         title: `定稿入库：${spec?.zh ?? asset.spec_id}`,
         summary:
@@ -928,6 +966,37 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
 /** `gateway` 一格都没给的时候那句话（正常路径下读的是 provider 自己的 `unavailable_reason`）。 */
 const NO_IMAGE_MODEL_FALLBACK =
   '这个服务进程没有装配图片模型。这条职责照样能用——它会出 brief、尺寸规格和变体计划，只是不出图。'
+
+/**
+ * 这一批提示词过一道规范自检，压成卡片上那一行（71 §5 第二条，WP122）。
+ *
+ * 出图这条路上我们手里**只有提示词，没有像素**（图是模型给的字节，我们不解析
+ * 它的颜色），所以查的是提示词里写出来的那些色值与字体名——`checkAgainstDesign`
+ * 的 `text` 那一口就是为这个留的。
+ *
+ * 三条克制：
+ *
+ * 1. **没有规范就不检查**（`profile === undefined`）：一个刚建的品牌还没抓过
+ *    `DESIGN.md`，这时候每张图都报"不在色板里"，等于把一个还没启用的功能做成噪声源。
+ * 2. **同一句话只说一次**：一批六条提示词里都写了同一个色板外的橙，卡面上
+ *    出现六遍等于没有说。
+ * 3. **只回一句话，不回布尔**：这一行字没有任何一条通路能变成一道闸。
+ */
+export function designCheckNote(
+  profile: BrandDesignProfile | undefined,
+  plan: GenerationPlan,
+): string | undefined {
+  if (profile === undefined) return undefined
+  const seen = new Set<string>()
+  const findings = plan.prompts.flatMap((p) =>
+    checkAgainstDesign(profile, { text: p.prompt }).filter((f) => {
+      if (seen.has(f.message_zh)) return false
+      seen.add(f.message_zh)
+      return true
+    }),
+  )
+  return designNoteZh(findings)
+}
 
 /* ── demo 的种子（36 §5.7）───────────────────────────────────────────── */
 

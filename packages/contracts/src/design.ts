@@ -661,6 +661,16 @@ export interface DesignAsset {
   bytes?: number
   /** 按用途打的标（素材库按它分组：`hero` / `banner` / `story`）。 */
   tags?: readonly string[]
+  /**
+   * 规范自检那一行（71 §5，WP122）：出这张图的那条提示词里，有哪些地方不合
+   * 这个品牌的 `DESIGN.md`（色板外的颜色、字体表外的字体……）。
+   *
+   * **只是一句话，不是一道闸**：挑图卡与定稿卡上原样显示它，没有任何一条通路
+   * 拿它去拦人。要存下来的理由：定稿是另一次请求，那一跳手上只有这张素材，
+   * 而提示词原文我们只留了哈希（58 §1 末行）——不存这一行，当初提过什么就再也
+   * 说不清了。
+   */
+  design_note?: string
   provenance: DesignAssetProvenance
   created_at: Iso8601
   updated_at?: Iso8601

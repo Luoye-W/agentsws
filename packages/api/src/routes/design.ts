@@ -148,6 +148,12 @@ export interface DesignVariantView {
    * 而不是把"生成失败"四个字摆上去。
    */
   image_model: { available: boolean; reason?: string }
+  /**
+   * 规范自检那一行（71 §5，WP122）：这一批提示词里有哪些地方不合这个品牌的
+   * `DESIGN.md`。**没有规范、或者全都合，这一格就不出现**——界面上不画一行空白。
+   * 它同时进卡面（`after.design_note`），这里给的是那一句原文，界面不必再拼。
+   */
+  design_note?: string
   /** 挑图卡上那一行（"就这张 / 都不行再来"）。 */
   pick_note: string
   staged: DesignStagedView
