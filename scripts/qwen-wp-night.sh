@@ -12,12 +12,16 @@ prompt="$(cat "$root/docs/briefs/_common.md"; echo; echo '---'; echo "你负责�
 cd "$wt"; : > "$log"; n=0
 while [ ! -f "$report" ] && [ "$n" -lt "${QWEN_MAX_ROUNDS:-40}" ]; do
   n=$((n+1)); echo "=== [qwen-wp] 第 $n 轮 $(date '+%F %T') ===" >> "$log"
-  qwen --approval-mode "${QWEN_APPROVAL:-auto}" -m "${QWEN_MODEL:-qwen3.8-max}" "$prompt" >> "$log" 2>&1 || true
+  qwen --approval-mode "${QWEN_APPROVAL:-yolo}" -m "${QWEN_MODEL:-qwen3.8-max}" "$prompt" < /dev/null >> "$log" 2>&1 || true
   if tail -n 15 "$log" | grep -qiE "invalid.?api.?key|unauthorized|not authenticated"; then
     echo "=== [qwen-wp] 鉴权问题，停 ===" >> "$log"; exit 3; fi
   # 额度用完：不退出，每 10 分钟探一次；Luoye 一点「重置」就自己接着干（这一轮不计入轮数）
   if tail -n 15 "$log" | grep -qiE "quota|insufficient|arrearage|limit reached|rate.?limit|429"; then
     echo "=== [qwen-wp] 额度 / 限流，10 分钟后再试 $(date '+%T') ===" >> "$log"; n=$((n-1)); sleep 600; continue; fi
+  # 空转保险：连续两轮既没有新提交、也没有新改动，就停（别空烧额度）
+  sig="$(git rev-parse HEAD 2>/dev/null)-$(git status --short | grep -v 'QWEN.log' | shasum | cut -c1-12)"
+  if [ "$sig" = "${last_sig:-}" ]; then idle=$(( ${idle:-0} + 1 )); else idle=0; fi; last_sig="$sig"
+  if [ "${idle:-0}" -ge 2 ]; then echo "=== [qwen-wp] 连续两轮没有任何产出，停 ===" >> "$log"; exit 4; fi
   sleep 15
 done
 [ -f "$report" ]
