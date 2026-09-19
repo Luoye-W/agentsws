@@ -503,10 +503,7 @@ export interface KolPort {
    * 由服务端的硬闸做。给演练开一条自己的发信口，等于测的不是真链路。
    */
   sandboxStatus?(actor: KolActor): MaybePromise<KolSandboxStatusView>
-  sandboxStart?(
-    actor: KolActor,
-    input: { channel: KolChannel },
-  ): MaybePromise<KolSandboxStatusView>
+  sandboxStart?(actor: KolActor, input: { channel: KolChannel }): MaybePromise<KolSandboxStatusView>
   sandboxAdvance?(actor: KolActor, input: { days: number }): MaybePromise<KolSandboxAdvanceView>
   sandboxClear?(actor: KolActor): MaybePromise<KolSandboxStatusView>
 }
@@ -1254,7 +1251,11 @@ export function kolRoutes(): Route[] {
         returns: 'KolSandboxStatusView',
       },
       async (c, deps) =>
-        ok(c, await sandboxOf(deps, 'sandboxStart')(actorOf(c), await body(c, SandboxStartBody)), 201),
+        ok(
+          c,
+          await sandboxOf(deps, 'sandboxStart')(actorOf(c), await body(c, SandboxStartBody)),
+          201,
+        ),
     ),
     route(
       {
@@ -1271,7 +1272,10 @@ export function kolRoutes(): Route[] {
         returns: 'KolSandboxAdvanceView',
       },
       async (c, deps) =>
-        ok(c, await sandboxOf(deps, 'sandboxAdvance')(actorOf(c), await body(c, SandboxAdvanceBody))),
+        ok(
+          c,
+          await sandboxOf(deps, 'sandboxAdvance')(actorOf(c), await body(c, SandboxAdvanceBody)),
+        ),
     ),
     route(
       {

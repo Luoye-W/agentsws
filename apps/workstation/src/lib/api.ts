@@ -3835,6 +3835,108 @@ export const decideKolMerge = (
     method: 'POST',
     ...withAssignment(assignment),
   })
+
+/* ── WP117 交付 4：演练场 ─────────────────────────────────────────────── */
+
+export interface KolSandboxData {
+  on: boolean
+  /** 演练世界现在几点（真时钟不动）。 */
+  now: string
+  creators: number
+  collaborations: number
+  sent: number
+  replies: number
+  pending: number
+  /** 顶上那条状态带的字。**服务端给的那一句**，界面不自己拼。 */
+  banner: string
+}
+
+export interface KolSandboxAdvanceData extends KolSandboxData {
+  advanced_days: number
+  received: {
+    creator_id: string
+    display_name: string
+    collaboration_id?: string
+    subject: string
+    body: string
+    at: string
+    bounce_reason?: string
+  }[]
+}
+
+export const getKolSandbox = (assignment?: string): Promise<KolSandboxData> =>
+  api('/v1/kol/sandbox', withAssignment(assignment))
+
+export const startKolSandbox = (
+  channel: KolChannelId,
+  assignment?: string,
+): Promise<KolSandboxData> =>
+  api('/v1/kol/sandbox', { method: 'POST', body: { channel }, ...withAssignment(assignment) })
+
+export const advanceKolSandbox = (
+  days: number,
+  assignment?: string,
+): Promise<KolSandboxAdvanceData> =>
+  api('/v1/kol/sandbox/advance', {
+    method: 'POST',
+    body: { days },
+    ...withAssignment(assignment),
+  })
+
+export const clearKolSandbox = (assignment?: string): Promise<KolSandboxData> =>
+  api('/v1/kol/sandbox', { method: 'DELETE', ...withAssignment(assignment) })
+
+/* ── WP117：交付物与追踪链接（路由早就有，之前界面上没有入口，66 断点 #11）── */
+
+export const getKolDeliverables = (
+  filter: { collaboration_id?: string; pending?: boolean } = {},
+  assignment?: string,
+): Promise<{ rows: KolDeliverableData[] }> => {
+  const q = new URLSearchParams()
+  if (filter.collaboration_id !== undefined) q.set('collaboration_id', filter.collaboration_id)
+  if (filter.pending === true) q.set('pending', 'true')
+  const tail = q.toString() === '' ? '' : `?${q.toString()}`
+  return api(`/v1/kol/deliverables${tail}`, withAssignment(assignment))
+}
+
+export const reviewKolDeliverable = (
+  id: string,
+  input: { review: 'approved' | 'changes_requested' | 'rejected'; notes?: string },
+  assignment?: string,
+): Promise<KolStagedData> =>
+  api(`/v1/kol/deliverables/${encodeURIComponent(id)}/review`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const getKolTrackedLinks = (
+  filter: { collaboration_id?: string } = {},
+  assignment?: string,
+): Promise<{ rows: KolTrackedLinkData[] }> => {
+  const q =
+    filter.collaboration_id === undefined
+      ? ''
+      : `?collaboration_id=${encodeURIComponent(filter.collaboration_id)}`
+  return api(`/v1/kol/tracked-links${q}`, withAssignment(assignment))
+}
+
+export const createKolTrackedLink = (
+  input: { collaboration_id: string; url: string; campaign?: string; affiliate_code?: string },
+  assignment?: string,
+): Promise<KolTrackedLinkData> =>
+  api('/v1/kol/tracked-links', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export interface KolTrackedLinkData {
+  id: string
+  collaboration_id: string
+  url: string
+  utm: { source: string; medium: string; campaign: string; term?: string; content?: string }
+  affiliate_code?: string
+  clicks: number
+  orders: number
+  revenue: number
+}
 /* ── WP85（54 §5）消息渠道：微信 ClawBot（个人）与企业微信机器人（团队）──── */
 
 /**
