@@ -215,6 +215,7 @@ import {
   createFilePersonaBackend,
   createPersonas,
   PersonaError,
+  type PersonasAssembly,
   personaFileIn,
 } from './personas.js'
 import { createPositions, type PositionsAssembly } from './positions.js'
@@ -606,6 +607,16 @@ export interface Server {
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
   org: OrgAssembly
+  /**
+   * WP120（69 §4）：角色定位面（看 / 公司层改写 / 还原 / 装 persona 那几段）。
+   *
+   * **一份，不按品牌分**：persona 是公司对外的口径，岗位模板与职责定义本来就是
+   * 制度层的东西（与 `org.positions` 同一条理由）。
+   *
+   * 端出来的理由是晚绑定要可查：运行时装提示时调的是 `personas.sections()`，
+   * 公司在右栏改写完，下一次运行就该拿到新的那一份——这一条得能被测试看见。
+   */
+  personas: PersonasAssembly
   /** WP51 首次设置与同事发现（公司档案 / 岗位清单 / 局域网发现 / 邀请码 / 申请加入）。 */
   onboarding: OnboardingAssembly
   /** WP65 组织与品牌（52 O1：公司 = 组织，品牌 = 工作区；品牌一览 / 加品牌 / 切品牌）。 */
@@ -4514,6 +4525,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP66（52 O1）：一个进程里的多套品牌模块
     brands: brandModules,
     org,
+    // WP120（69 §4）：运行时装 persona 段与右栏「角色」面板走的是同一份
+    personas,
     onboarding,
     organizations,
     /*

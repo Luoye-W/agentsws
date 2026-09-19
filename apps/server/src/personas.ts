@@ -30,6 +30,7 @@ import type {
 } from '@agentsws/contracts'
 import {
   applyPersonaOverride,
+  loadBundledPosition,
   type PersonaBrandContext,
   type PersonaLang,
   personaKey,
@@ -173,8 +174,30 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
     })
   }
 
-  const positionOf = (id: string): Position | undefined =>
-    options.positions().find((p) => p.id === id)
+  /**
+   * 一个岗位模板（**persona 那一份以包里的 yml 为准**）。
+   *
+   * 存下来的那一行（`org.positions()`）管的是"这家公司有哪些岗位、各挂哪几条职责"，
+   * 它种下去的那一刻就没带 `persona`——而 persona 的原文属于**包**（69 §4「包里的原文
+   * 保留可还原」）。所以这里两步：先用存下来的那一行确认"公司确实有这个岗位"，
+   * 再去包里取原文。
+   *
+   * 不把 persona 抄进存下来的那一行：抄进去就等于把原文冻在首次设置那天，
+   * 之后包里改好的措辞一个都到不了老工作区，而「还原」还原的也会是那份旧快照。
+   *
+   * 公司自己建的岗位包里没有——那就没有原文，整段不出（54 §3「不猜一个」）。
+   */
+  const positionOf = (id: string): Position | undefined => {
+    const stored = options.positions().find((p) => p.id === id)
+    if (stored === undefined) return undefined
+    let packaged: Position | undefined
+    try {
+      packaged = loadBundledPosition(id)
+    } catch {
+      packaged = undefined
+    }
+    return packaged?.persona === undefined ? stored : { ...stored, persona: packaged.persona }
+  }
 
   /** 包里的原文 + 显示名。找不到这个岗位 / 职责就抛 `not_found`。 */
   const packagedOf = (
