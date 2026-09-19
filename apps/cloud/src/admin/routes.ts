@@ -245,6 +245,36 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
     return found
   }
 
+  /**
+   * 搬家那条路由的守卫：**后台会话或运维令牌，认一个就行**（WP116 §3）。
+   *
+   * 为什么不只认会话：搬家是脚本干的活（`scripts/import-kol-public.mjs` 分块推
+   * 几千行），而会话 + CSRF 是给浏览器设计的——让脚本模拟一次登录不但麻烦，
+   * 还得把后台的登录邮箱放进脚本里。运维令牌是**带外**的那把钥匙，与
+   * `/v1/admin/bootstrap` 认的是同一把（不另开第二把）。
+   *
+   * 走令牌那条**不查 CSRF**：CSRF 防的是"浏览器带着 cookie 被骗着发请求"，
+   * 而这条路上根本没有 cookie。
+   */
+  const importer = (c: Context<CloudEnv>): { account_id: string; role: CloudRole; ip: string } => {
+    const raw = c.req.header('Authorization')
+    const given =
+      raw === undefined ? '' : raw.startsWith('Bearer ') ? raw.slice('Bearer '.length) : raw
+    if (
+      deps.bootstrapToken !== undefined &&
+      deps.bootstrapToken !== '' &&
+      given.trim() !== '' &&
+      secretEquals(given.trim(), deps.bootstrapToken)
+    )
+      return { account_id: 'system', role: 'admin', ip: clientIpOf(c) }
+    const principal = writer(c)
+    return {
+      account_id: principal.session.account_id,
+      role: principal.session.role,
+      ip: principal.ip,
+    }
+  }
+
   const routes: CloudRoute[] = []
 
   /* ── 登录与会话 ──────────────────────────────────────────────────── */
@@ -1731,7 +1761,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         returns: 'KolImportResult',
       },
       async (c) => {
-        const principal = writer(c)
+        const principal = importer(c)
         const admin = deps.admin()
         const api = kolOr503()
         /*
@@ -1749,8 +1779,8 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         const out = await api.import(records)
         admin.audit({
           action: 'kol.import',
-          actor_account_id: principal.session.account_id,
-          actor_role: principal.session.role,
+          actor_account_id: principal.account_id,
+          actor_role: principal.role,
           target_kind: 'system',
           target_id: 'kol_public',
           outcome: 'done',

@@ -252,7 +252,7 @@ async function handleKolPublic(
    */
   let principal: VerifiedCloudToken | undefined
   const authorization = request.headers.get('Authorization') ?? undefined
-  if (authorization !== undefined && authorization.includes('wst_')) {
+  if (authorization?.includes('wst_')) {
     try {
       const verified = await authenticate({ verifier: remoteVerifier(env, origin) }, authorization)
       principal = { ...verified, scopes: verified.scopes as VerifiedCloudToken['scopes'] }
