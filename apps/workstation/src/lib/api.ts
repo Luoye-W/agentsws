@@ -4502,3 +4502,55 @@ export const backfillMessages = (input: {
   account?: string
   days?: number
 }): Promise<{ floor: string }> => api('/v1/messages/backfill', { method: 'POST', body: input })
+
+/*
+ * WP119（68）：浏览器插件（连接页「浏览器插件」那一节）。
+ *
+ * 三条都是**所有者**的事（与连接、数据后端同一把闸），所以一律显式带
+ * 所有者那条 Assignment，不跟着左栏当前选中的岗位走（同 `listConnections`）。
+ *
+ * 配对码明文**只在生成那一次的响应里出现**：这里不写 localStorage、
+ * 不进 query 缓存的持久层、不进 URL——它在屏幕上活 5 分钟，然后就没了。
+ */
+export interface ExtensionTokenView {
+  id: string
+  label: string
+  /** 绑死的扩展 id（浏览器说的，不是插件自己说的）。 */
+  extension_id: string
+  scopes: string[]
+  created_at: string
+  expires_at: string
+  last_used_at?: string
+  revoked_at?: string
+}
+
+export interface ExtensionPairingView {
+  /** 6 位数字。只在这一次响应里出现。 */
+  code: string
+  expires_at: string
+}
+
+export const listExtensionTokens = (
+  assignment?: string,
+): Promise<{ tokens: ExtensionTokenView[] }> =>
+  api<{ tokens: ExtensionTokenView[] }>('/v1/extension/tokens', withAssignment(assignment))
+
+export const createExtensionPairing = (
+  assignment?: string,
+  label?: string,
+): Promise<ExtensionPairingView> =>
+  api<ExtensionPairingView>('/v1/extension/pairings', {
+    method: 'POST',
+    body: label === undefined ? {} : { label },
+    ...withAssignment(assignment),
+  })
+
+export const revokeExtensionToken = (
+  id: string,
+  assignment?: string,
+): Promise<ExtensionTokenView> =>
+  api<ExtensionTokenView>(`/v1/extension/tokens/${encodeURIComponent(id)}/revoke`, {
+    method: 'POST',
+    body: {},
+    ...withAssignment(assignment),
+  })
