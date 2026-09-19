@@ -82,7 +82,8 @@ export async function handleKolWallet(
         const failure: KolReserveFailure =
           err instanceof WalletError
             ? {
-                code: err.code === 'insufficient_credits' ? 'insufficient_credits' : 'invalid_input',
+                code:
+                  err.code === 'insufficient_credits' ? 'insufficient_credits' : 'invalid_input',
                 message: err.message,
                 ...(err.details === undefined ? {} : { details: err.details }),
               }

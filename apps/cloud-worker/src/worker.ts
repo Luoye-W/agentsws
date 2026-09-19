@@ -18,7 +18,7 @@
 import { ADMIN_TOKEN_ENV } from '@agentsws/cloud/workers-kit'
 import { authenticate, errorResponse } from '@agentsws/cloud-entry'
 import type { CloudTokenVerifier, VerifiedCloudToken } from '@agentsws/contracts'
-import { isKolPath, type KolCharge, kolChargeFor, type KolWalletOp } from '@agentsws/kol-public'
+import { isKolPath, type KolCharge, type KolWalletOp, kolChargeFor } from '@agentsws/kol-public'
 import type { WalletReservation } from '@agentsws/metering'
 import type { WorkerEnv } from './env.js'
 import {
@@ -265,8 +265,7 @@ async function handleKolPublic(
   const charge = kolChargeFor(request.method, url.pathname)
   const reservations: WalletReservation[] = []
   if (charge !== undefined) {
-    if (principal === undefined)
-      return envelope('unauthenticated', '这一条要登录的工作区令牌', 401)
+    if (principal === undefined) return envelope('unauthenticated', '这一条要登录的工作区令牌', 401)
     const reserved = await reserveKolCharge(env, origin, principal, charge)
     if ('error' in reserved)
       return envelope(

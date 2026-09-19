@@ -206,6 +206,7 @@ import { pathToFileURL } from 'node:url'
 import type { CloudRoute } from '@agentsws/api'
 import { type CloudTokenVerifier, cloudBaseUrl } from '@agentsws/contracts'
 import { type BetterSqliteLike, syncDbFromBetterSqlite } from '@agentsws/core/sql/sync-db'
+import { isLibraryStore, type KolAdminPort, localKolAdminPort } from '@agentsws/kol-public'
 import {
   sqlUsageLedger,
   sqlWalletAdminPort,

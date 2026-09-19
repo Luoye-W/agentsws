@@ -10,8 +10,12 @@
  */
 
 import type { KolImportResult, KolLibraryStats } from '@agentsws/contracts'
-import type { CreatorRow, KolAdminPort, KolRemoveInput } from '@agentsws/kol-public'
-import type { CreatorSearchFilter } from '@agentsws/kol-public'
+import type {
+  CreatorRow,
+  CreatorSearchFilter,
+  KolAdminPort,
+  KolRemoveInput,
+} from '@agentsws/kol-public'
 
 /** 路由名。请求体是 JSON，响应也是——形状与 `KolAdminPort` 的签名一一对应。 */
 export const KOL_ADMIN_INTERNAL = {
