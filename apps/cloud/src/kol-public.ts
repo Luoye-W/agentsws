@@ -18,21 +18,16 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type { Clock, CloudTokenVerifier, Pricing } from '@agentsws/contracts'
 import {
-  apifySource,
-  createQuotaPool,
-  KOL_ENV,
   type KolEnv,
   KolPublicService,
   type KolSecrets,
-  type KolSource,
   type KolStore,
+  kolSourcesFromEnv,
   MemoryKolStore,
   mountKolPublicRoutes,
   nodeKolSecrets,
   type SourceLookup,
   SqliteKolStore,
-  sourcePoolFromParts,
-  youtubeSource,
 } from '@agentsws/kol-public'
 import type { Wallet } from '@agentsws/metering'
 import type { Database } from 'better-sqlite3'
@@ -63,6 +58,13 @@ export interface MountKolPublicOptions {
 export interface MountedKolPublic {
   service: KolPublicService
   store: KolStore
+  /**
+   * 哈希 / 加密那一跳（WP116：后台那一页的搬家口要用同一把邮箱密钥）。
+   *
+   * 转出来而不是让调用方自己再 `nodeKolSecrets()` 一次：两次解析同一个环境变量
+   * 迟早出现"一边有密钥一边没有"的错配，而那种错配的表现是**邮箱静默不落库**。
+   */
+  secrets: KolSecrets
   close(): void
 }
 
@@ -83,31 +85,15 @@ export function kolDbPath(dataDir: string | undefined): string | undefined {
 /**
  * 按环境变量拼外部源。
  *
- * 没有 key 就**没有那个源**，而不是一个会在运行时报错的空壳——
- * "今天配额用完了"与"这个功能没配"是两句不同的人话，用户要能分得开。
+ * 真身在 `@agentsws/kol-public`（`kolSourcesFromEnv`）——**两个形态共用**那一个，
+ * 官方托管形态的 `KolPublicDO` 调的也是它。这里只剩一个名字，留着是因为
+ * WP61 起就有调用方按这个名字 import。
  */
 export function sourcesFromEnv(
   env: Record<string, string | undefined>,
   store: KolStore,
 ): SourceLookup {
-  const unitsRaw = Number(env[KOL_ENV.youtubeUnitsPerDay])
-  const quota = createQuotaPool({
-    store,
-    ...(Number.isFinite(unitsRaw) && unitsRaw > 0 ? { unitsPerDay: unitsRaw } : {}),
-  })
-  const youtube: KolSource | undefined =
-    env[KOL_ENV.youtubeApiKey] === undefined
-      ? undefined
-      : youtubeSource({ apiKey: () => env[KOL_ENV.youtubeApiKey] })
-  const apify: KolSource | undefined =
-    env[KOL_ENV.apifyToken] === undefined
-      ? undefined
-      : apifySource({ token: () => env[KOL_ENV.apifyToken] })
-  return sourcePoolFromParts({
-    quota,
-    ...(youtube === undefined ? {} : { youtube }),
-    ...(apify === undefined ? {} : { apify }),
-  })
+  return kolSourcesFromEnv(env, store)
 }
 
 /** 把公共红人库挂到 `server.app` 上。 */
@@ -144,6 +130,7 @@ export function mountKolPublic(
   return {
     service,
     store,
+    secrets,
     close() {
       store.close?.()
     },

@@ -34,6 +34,14 @@ export interface WorkerEnv {
    * 那时后台的看板页回 503（比画一堆 0 诚实），钱那一侧一个字不受影响。
    */
   LEDGER?: DoNamespaceLike
+  /**
+   * 公共红人库（**单例**，WP116 / 64 §10.2）。
+   *
+   * 这张红人表是跨租户共享的一层事实，所以只有一个对象。没绑这个 binding
+   * 也能跑——那时 `/v1/data/kol/*` 回 404、health 里 `kol_public: false`
+   * （**如实说没开通**，不假装有）。
+   */
+  KOL_PUBLIC?: DoNamespaceLike
   /** Cloudflare Email Sending（`[[send_email]] name = "EMAIL"`）。没绑 = 发不了信。 */
   EMAIL?: CloudflareEmailBinding
   /**
@@ -63,6 +71,19 @@ export interface WorkerEnv {
   AGENTSWS_CLOUD_ADMIN_TOKEN?: string
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
+  /**
+   * 公共红人库的邮箱密钥（AES-256-GCM 的 32 字节，hex 或 base64url）。
+   *
+   * 没配就**不存邮箱**（`nodeKolSecrets` 的 `encrypt` 回 `undefined`，
+   * 落库那一层一个字节都不写），health 里那一格标黄。绝不降级成明文。
+   */
+  AGENTSWS_KOL_EMAIL_KEY?: string
+  /** YouTube Data API v3 的 key。没配就没有官方口（只查库或走 Apify）。 */
+  AGENTSWS_YOUTUBE_API_KEY?: string
+  /** Apify 的 token（降级口）。没配就不降级。 */
+  APIFY_TOKEN?: string
+  /** YouTube 官方口一天给多少配额单位（非敏感，可以进 `[vars]`）。 */
+  AGENTSWS_YOUTUBE_UNITS_PER_DAY?: string
 }
 
 /** `env` 里那些字符串项 → 现有代码认的那种 `Record`。 */
