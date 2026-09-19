@@ -3,6 +3,9 @@
 export * from './ads.js'
 export * from './approval.js'
 export * from './blocks.js'
+// 71 每个品牌一份 DESIGN.md（WP122）。格式逐字对齐 google-labs-code/design.md
+// （Apache-2.0，alpha）；我们在规范的裸值外面多一层出处 / 把握度 / 冲突。
+export * from './brand-design.js'
 // 70 §3 贴一个网址自动分析（WP121）。中心是 `BrandIntakeField`：自动填出来的格子
 // 拖着出处、把握度与"用户改过没有"走——与用户自己填的格子不是一回事。
 export * from './brand-intake.js'
