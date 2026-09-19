@@ -25,8 +25,11 @@ if [ -z "${KIRO_TRUST:-}" ]; then
 fi
 # 无人值守：Kiro 服务端偶尔断线（dispatch failure），断了就接着同一个会话续跑；
 # 以 worktree 根出现 REPORT.md 为完成标志，最多续 ${KIRO_MAX_RESUMES:-12} 次。
-: > "$wt/KIRO.log"
-kiro-cli "${args[@]}" "$prompt" >> "$wt/KIRO.log" 2>&1 || true
+# KIRO_CONTINUE=1：这个 worktree 里已有一轮中断的会话，别从头开始，直接续。
+if [ -z "${KIRO_CONTINUE:-}" ]; then
+  : > "$wt/KIRO.log"
+  kiro-cli "${args[@]}" "$prompt" >> "$wt/KIRO.log" 2>&1 || true
+fi
 n=0
 while [ ! -f "$wt/REPORT.md" ] && [ "$n" -lt "${KIRO_MAX_RESUMES:-12}" ]; do
   n=$((n+1)); sleep 20
