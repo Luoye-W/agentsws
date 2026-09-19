@@ -51,6 +51,18 @@ export {
   tokenCostMicros,
   unitCostMicros,
 } from './cost.js'
+export type { KolCycleCharge } from './kol-subscription.js'
+export {
+  cancelKolSubscription,
+  dueKolCharges,
+  grantKolMonths,
+  kolChargeKeyOf,
+  kolChargePaid,
+  kolChargeUnpaid,
+  kolGraceUntil,
+  kolStatusAt,
+  startKolSubscription,
+} from './kol-subscription.js'
 export type { PlannedCycle, PlansFile, TermPlanInput } from './plans.js'
 export {
   addCalendarMonths,
