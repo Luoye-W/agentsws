@@ -211,11 +211,20 @@ export function colorDistance(a: Rgb, b: Rgb): number {
 /** 去重时认为"同一个色"的距离上限（`#1a1c1e` 与 `#1b1d1f` 是同一个）。 */
 export const SAME_COLOR_DISTANCE = 12
 
+/**
+ * 「改成这个？」那一格最远能建议到多远。
+ *
+ * RGB 空间里两个色最远差 441。140 大约是三分之一：橙与砖红（`#ff7a00` 对
+ * `#b8422e`，差 101）够得着，橙与墨黑（差 240）够不着。建议一个够不着的色
+ * 比不建议更糟——用户会以为我们在说这两个是一回事。
+ */
+export const MAX_SUGGEST_DISTANCE = 140
+
 /** 色板里离它最近的那个（超过 `maxDistance` 就没有）。 */
 export function nearestColor(
   target: string,
   palette: readonly string[],
-  maxDistance = 96,
+  maxDistance = MAX_SUGGEST_DISTANCE,
 ): string | undefined {
   const t = parseColor(target)
   if (t === undefined) return undefined
