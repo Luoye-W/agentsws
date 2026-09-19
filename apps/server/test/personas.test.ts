@@ -142,7 +142,9 @@ describe('69 §4 改：公司层覆盖，包里的原文留着', () => {
      * 两边都 trim 再比：`packaged` 是包里的原文（yml 的块标量带一个尾换行），
      * `effective` 是叠完覆盖、trim 过的那一份。差的就是那个换行，不是文字。
      */
-    const en = (typeof after.effective === 'string' ? after.effective : (after.effective.en ?? '')).trim()
+    const en = (
+      typeof after.effective === 'string' ? after.effective : (after.effective.en ?? '')
+    ).trim()
     const packagedEn = (
       typeof before.packaged === 'string' ? before.packaged : (before.packaged.en ?? '')
     ).trim()
@@ -211,7 +213,7 @@ describe('69 §3 接线：运行时拿到的那几段', () => {
     const position = sections.find((s) => s.id === 'position')
     const role = sections.find((s) => s.id === 'role')
     expect(position?.name).toBe('红人营销')
-    expect((position?.order ?? 0)).toBeLessThan(role?.order ?? 0)
+    expect(position?.order ?? 0).toBeLessThan(role?.order ?? 0)
     expect(position?.text).toContain('你不负责')
     expect(role?.text).toContain('你不负责')
   })

@@ -638,6 +638,20 @@ describe('真环境自动装上记录源（WP53 交付二）', () => {
       env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com' },
     })
     try {
+      /*
+       * WP120（69 §3）：这条要用**客服那条职责**的分配，不能用 owner 那一条。
+       *
+       * stub 现在按职责选剧本，没有剧本的域回一句人话就结束、一个工具都不调——
+       * `common.owner` 正是没有剧本的那一类（店主什么活都接，演示里没法给它一套桩）。
+       * 拿 owner 的分配跑，这条测的就不是"记录源装上了没有"，而是"stub 有没有剧本"。
+       */
+      const support = server.roles.assignments.create({
+        person_id: server.bootstrap.person.id,
+        workspace_id: server.bootstrap.workspace.id,
+        role_id: 'dtc.support',
+        granted_by: server.bootstrap.person.id,
+        ranges: [{ kind: 'store', id: 'store_1' }],
+      })
       const matter = server.work.createMatter({
         kind: 'conversation',
         title: '与客户的往来',
@@ -646,7 +660,7 @@ describe('真环境自动装上记录源（WP53 交付二）', () => {
       })
       await server.work.say(matter.id, {
         person_id: server.bootstrap.person.id,
-        assignment_id: server.bootstrap.ownerAssignment.id,
+        assignment_id: support.id,
         text: '客户问订单 #1001 什么时候到',
       })
 

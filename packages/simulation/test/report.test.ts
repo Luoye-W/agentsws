@@ -263,7 +263,8 @@ describe('套件与报告落盘（26 §5）', () => {
     // WP78（60 §4）：公关三条（外部发帖 / 负面提及分流 / 新闻稿只引事实卡）
     // WP113（63 §4）：消息四条（四条路 / 岗位没开不挪信 / 先规则后模型 / 纠错教一次）
     // WP117（66）：红人那条贯穿全程的长场景一条
-    expect(result.reports).toHaveLength(56)
+    // WP120（69 §5）：「每个岗位待在自己的道上」一条（五个岗位各发一句典型的活）
+    expect(result.reports).toHaveLength(57)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {

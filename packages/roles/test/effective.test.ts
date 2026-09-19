@@ -1,6 +1,6 @@
 import type { WorkspacePolicy } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import { createRoleStore, RoleError, riskClassOf } from '../src/index.js'
+import { createRoleStore, personaTextIn, RoleError, riskClassOf } from '../src/index.js'
 import { aftersales, fixedClock, owner } from './helpers.js'
 
 const CONNECTED = ['email', 'shopify']
@@ -168,7 +168,14 @@ describe('effectiveConfig 不并集 (05 §4 / 31 §3.1)', () => {
       'chargeback-evidence',
     ])
     expect(cfg.home_blocks.map((b) => b.placement)).toEqual(['queue', 'queue', 'focus', 'alert'])
-    expect(cfg.persona).toBeUndefined()
+    /*
+     * WP120（69 §3）：persona 也照原样带过来——**包里的原文**，一个字节没改。
+     * 公司层覆盖不在这一跳叠：`effectiveConfig` 是纯函数（输入只有职责定义、分配与
+     * 工作区策略），叠一张要查库的覆盖表它就不再纯了、回放也算不出同一份。
+     * 叠加发生在装 `persona` 段的那一跳（`apps/server/src/personas.ts`）。
+     */
+    expect(cfg.persona).toEqual(aftersales().persona)
+    expect(personaTextIn(cfg.persona, 'zh')).toContain('你不负责')
   })
 
   it('is refused for a revoked assignment (05 §3)', () => {
