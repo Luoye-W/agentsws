@@ -520,6 +520,16 @@ describe('WP117 红人界面：说真话与三个子视图', () => {
     expect(alert.textContent).toContain('已经被别人接过了')
   })
 
+  it('取不回来 ≠ 库里没人：红人库的查询失败时说实话，不显示"先导一张表进来"', async () => {
+    getKolCreators.mockRejectedValue(
+      new ApiClientError(429, { code: 'budget_exhausted', message: '请求过于频繁' }),
+    )
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    const alert = await screen.findByTestId('kol-library-error')
+    expect(alert.textContent).toContain('请求过于频繁')
+    expect(screen.queryByTestId('kol-library-empty')).toBeNull()
+  })
+
   it('断点 #10 / #11：合作能点开成一条线程，交付物与追踪链接在里面', async () => {
     renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
     await goto('threads')

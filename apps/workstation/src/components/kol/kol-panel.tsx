@@ -252,7 +252,21 @@ function Discovery({
         <div className="mt-1">
           <h4 className="mb-1 text-xs font-medium text-muted-foreground">{t('kol.library')}</h4>
           {library.isPending ? <Skeleton className="h-16 w-full" /> : null}
-          {(library.data?.rows ?? []).length === 0 && !library.isPending ? (
+          {/*
+            36 §3 的同一条规矩，**查询这一侧**：取不回来不等于库里没人。
+            这一条是拍演练截图时撞出来的——demo 的请求配额用完回了 429，
+            界面上显示的却是"库里还没有人。先导一张表进来"，
+            于是人会去导一张他早就导过的表。
+          */}
+          {library.error !== null ? (
+            <KolError
+              error={errorText(library.error, '红人库这次没取回来。')}
+              testid="kol-library-error"
+            />
+          ) : null}
+          {library.error === null &&
+          (library.data?.rows ?? []).length === 0 &&
+          !library.isPending ? (
             <p className="text-sm text-muted-foreground" data-testid="kol-library-empty">
               {t('kol.library.empty')}
             </p>
@@ -597,7 +611,14 @@ function Collaborations({
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
         {list.isPending ? <Skeleton className="h-16 w-full" /> : null}
-        {rows.length === 0 && !list.isPending ? (
+        {/* 同上：取不回来不等于"没有在谈的合作" */}
+        {list.error !== null ? (
+          <KolError
+            error={errorText(list.error, '合作清单这次没取回来。')}
+            testid="kol-collab-list-error"
+          />
+        ) : null}
+        {list.error === null && rows.length === 0 && !list.isPending ? (
           <p className="text-muted-foreground">{t('kol.collab.empty')}</p>
         ) : null}
         {rows.map((c) => (

@@ -175,7 +175,7 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import { createKolSandbox, kolSandboxIntercept } from './kol-sandbox.js'
-import { createKolService } from './kol-service.js'
+import { CONTACT_SECRET_FIELD, contactSecretId, createKolService } from './kol-service.js'
 import { createKolToolExecutor } from './kol-tools.js'
 import {
   canEditMemory,
@@ -2222,7 +2222,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 面板在演示与截图里全是空的，"这个岗位长什么样"就无从谈起。
    * 只在挂了合成世界时放（真环境的库该是用户自己导进去的）。
    */
-  if (mount !== undefined) seedDemoKol(boot.kol, clock.now())
+  if (mount !== undefined) {
+    seedDemoKol(boot.kol, clock.now())
+    /*
+     * WP117（66 断点 #9）：**demo 的红人数据别自相矛盾。**
+     *
+     * 之前 demo 里 Gadget Jonas 处在「拍摄制作中 · US$400」，名下却一条联系方式
+     * 都没有——一条谁也联系不上的合作怎么谈到交付的？亲测的人到这里就卡住了，
+     * 因为"起开发信"必须先有联系方式，而他明明已经在交付中。
+     *
+     * 补的是**已经在合作中的那两个人**的联系方式（还没建联的那几个照旧空着——
+     * 那才是真实的样子）。地址是 example 域，走的是与真实逐字相同的那条路：
+     * 明文进加密库，库里只留 key 名。`seedDemoKol` 拿不到加密库，所以这一步
+     * 在这里做而不是在它里面。
+     */
+    for (const collab of boot.kol.collaborations()) {
+      if (boot.kol.contacts(collab.creator_id).length > 0) continue
+      const creator = boot.kol.creator(collab.creator_id)
+      if (creator === undefined) continue
+      const id = `ctc_demo_${collab.creator_id}`
+      const value_ref = contactSecretId(id)
+      const handle =
+        boot.kol.accounts({ creator_id: creator.id })[0]?.handle ?? creator.id.replace(/\W/g, '')
+      boot.secrets.put(value_ref, { [CONTACT_SECRET_FIELD]: `${handle}@example.com` })
+      boot.kol.saveContact({
+        id,
+        creator_id: creator.id,
+        kind: 'email',
+        value_ref,
+        source: 'channel_about',
+        verified_at: clock.now(),
+      })
+    }
+  }
 
   /**
    * WP72（56 §2）：demo 里给社媒库放几行，理由与上面那一条逐字相同。
