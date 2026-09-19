@@ -127,9 +127,22 @@ export function applyPersonaOverride(
 ): PersonaText | undefined {
   if (override === undefined) return packaged
   if (packaged === undefined) return override
-  const zh = personaTextIn(override, 'zh') || personaTextIn(packaged, 'zh')
-  const en = personaTextIn(override, 'en') || personaTextIn(packaged, 'en')
+  /*
+   * 这里读的是**原始格子**（`rawIn`），不是 `personaTextIn`。
+   *
+   * `personaTextIn` 那一层带回落（英文空了就给中文），在别处正是要的行为——
+   * 宁可语言不对也别给一段空白。但在这儿用它，公司只改了中文的那一次就会把
+   * 中文抄进英文那一格，包里原本写好的英文从此再也回不来了。
+   */
+  const zh = rawIn(override, 'zh') || personaTextIn(packaged, 'zh')
+  const en = rawIn(override, 'en') || personaTextIn(packaged, 'en')
   return { zh, en }
+}
+
+/** 某一格的原文（**不回落**另一份）。 */
+function rawIn(persona: PersonaText, lang: PersonaLang): string {
+  if (typeof persona === 'string') return persona.trim()
+  return ((lang === 'zh' ? persona.zh : persona.en) ?? '').trim()
 }
 
 /** 面板要的那一份（现在生效的 + 包里的原文 + 改没改过）。 */

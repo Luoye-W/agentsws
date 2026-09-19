@@ -12,7 +12,7 @@ id: dtc.support
 version: 2.0.0
 domain: dtc
 name: { zh: 网站客服, en: DTC Website Support }
-description: 客服邮箱（和网站表单）里的一切：售前问答与推荐、订单状态与物流、退换货、退款、改地址、漏发错发破损、保修、投诉、拒付争议
+description: 客服邮箱、网站表单里的一切：售前问答与推荐、订单状态与物流、退换货、退款、改地址、漏发错发破损、保修、投诉、拒付争议
 
 scopes:
   - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
