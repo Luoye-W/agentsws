@@ -49,7 +49,9 @@ describe('幂等键', () => {
 
   it('按 Asia/Shanghai 的挂历算，不看本机时区', () => {
     // UTC 是 2 月 27 日 20:00，上海已经是 2 月 28 日
-    expect(chargeKeyOf(KOL_SERVICE_ID, 'org_1', '2026-02-27T20:00:00.000Z')).toBe(`${KEY}:2026-02-28`)
+    expect(chargeKeyOf(KOL_SERVICE_ID, 'org_1', '2026-02-27T20:00:00.000Z')).toBe(
+      `${KEY}:2026-02-28`,
+    )
   })
 })
 
@@ -75,11 +77,7 @@ describe('该扣哪几个 cycle', () => {
     const sub = startSubscription(sub0(), T0)
     const charges = due({ sub, now: '2026-04-05T00:00:00.000Z', charged: new Set() })
     // 1 月 31、2 月 28（日号收回来）、3 月 31 —— 4 月 5 号还没到 4 月的边界（4 月 30）
-    expect(keys(charges)).toEqual([
-      `${KEY}:2026-01-31`,
-      `${KEY}:2026-02-28`,
-      `${KEY}:2026-03-31`,
-    ])
+    expect(keys(charges)).toEqual([`${KEY}:2026-01-31`, `${KEY}:2026-02-28`, `${KEY}:2026-03-31`])
   })
 
   it('1 月 31 日开通，2 月那期从 2 月 28 日起（日号超界要收回来）', () => {
@@ -162,8 +160,9 @@ describe('扣成 / 扣不成之后', () => {
     const back = startSubscription(sub, '2026-02-10T00:00:00.000Z')
     expect(back.anchor_at).toBe(T0)
     // 1 月那一期还没结，回来之后要扣的还是它，不是一个新起的 cycle
-    expect(keys(due({ sub: back, now: '2026-02-10T00:00:00.000Z', charged: new Set() }))
-      [0]).toBe(`${KEY}:2026-01-31`)
+    expect(keys(due({ sub: back, now: '2026-02-10T00:00:00.000Z', charged: new Set() }))[0]).toBe(
+      `${KEY}:2026-01-31`,
+    )
   })
 })
 
@@ -181,7 +180,7 @@ describe('取消', () => {
     expect(subscriptionStatusAt(sub, '2026-03-10T00:00:00.000Z')).toBe('none')
   })
 
-  it('取消之后不再产生新的 cycle', () => {
+  it('取消之后不再产生新的 cycle——当期的末尾就是界线', () => {
     let sub = startSubscription(sub0(), T0)
     const first = due({ sub, now: T0, charged: new Set() })
     if (first[0] === undefined) throw new Error('该有一期')
@@ -192,7 +191,7 @@ describe('取消', () => {
       now: '2026-05-01T00:00:00.000Z',
       charged: new Set(keys(first)),
     })
-    expect(later).toHaveLength(1)
+    expect(later).toEqual([])
   })
 
   it('没开通过的组织点取消，什么也不发生', () => {

@@ -100,19 +100,29 @@ export function dueCharges(args: {
   if (sub.status === 'none') return []
   const limit = args.maxCycles ?? 24
   const nowMs = Date.parse(now)
-  // 取消了就不再产生新的 cycle：当期用完为止
-  const cancelling = sub.cancel_at_period_end
+  /*
+   * 取消了就**不再产生新的 cycle**：当期用完为止。
+   *
+   * 界线是当期的末尾——从那一刻起的每一期都属于"已经取消掉的将来"，一期都不扣。
+   * 界线之前的那些还照扣：用户可能是在欠费（grace）的时候点的取消，而那一期的
+   * 服务他确实用过了。
+   *
+   * 从来没扣成过就没有"当期"（`current_cycle_end` 是空的），那就一期都不扣。
+   */
+  const cancelAt = sub.cancel_at_period_end
+    ? Date.parse(sub.current_cycle_end ?? '1970-01-01T00:00:00.000Z')
+    : Number.POSITIVE_INFINITY
   let granted = sub.granted_months
   const out: SubscriptionCycleCharge[] = []
   for (let i = 0; i < limit + 1; i++) {
     const cycle_start = addCalendarMonths(anchor, i)
     if (Date.parse(cycle_start) > nowMs) break
+    if (Date.parse(cycle_start) >= cancelAt) break
     const cycle_end = addCalendarMonths(anchor, i + 1)
     const charge_key = chargeKeyOf(sub.service_id, sub.org_id, cycle_start)
     // 已经扣过的那些跳过。赠送月的计数不在这里减——它由 `subscriptionPaid` 在真扣
     // 成的那一刻减一次，所以把同一批重算一遍不会把赠送月用掉两回
     if (charged.has(charge_key)) continue
-    if (cancelling && out.length > 0) break
     const useGrant = granted > 0
     if (useGrant) granted -= 1
     out.push({
