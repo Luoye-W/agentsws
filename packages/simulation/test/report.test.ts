@@ -272,7 +272,7 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(56)
+    expect(summary.scenarios).toHaveLength(57)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
     // 跑一整个 pack（17 条场景）不是 5 秒的活，而且并行跑别的项目时还要抢 CPU
   }, 120_000)
