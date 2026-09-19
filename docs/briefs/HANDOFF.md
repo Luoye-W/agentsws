@@ -16,13 +16,17 @@
 - Fable 那边有一个后台脚本（`scripts/watch-handoff.sh`，纯 shell、不花额度）每 2 分钟看一次这张表：某条变成 **待审**（或分支上出现了它的报告）就自动开始终审——读报告 → 查改动 → 跑全量 → 合并 → 把状态改成 **已合并** 或 **退回**（退回原因写在这张表下面的「退回」一节，实现方看到后接着改）。
 - 只有需要 Luoye 拍板的事，Fable 才会找他。
 
+## 分工（09-19 晚，Luoye 定）
+- **Proma：只做完手上的 WP117b 就停**，不要再领新的。
+- 其余由 **Qwen Code（百炼 qwen3.8-max）** 做，由 Fable 用 `scripts/qwen-wp.sh` 启动；状态写「进行中（Qwen）」的条目别人不要碰。
+
 ## 队列（从上往下做；「依赖」没合并的先跳过）
 | 顺序 | WP | 派工单 | worktree（都在 `/Users/yeluo/Documents/agentsws-wt/` 下）· 分支 | 依赖 | 状态 |
 |---|---|---|---|---|---|
 | 1 | WP117b 红人主线在界面上走通 + 点击级证据 | `docs/66` 末尾「复测」#15–#20 + `WP117-kol-e2e-sandbox.md` | `wp117b-kol-mainline` · `wp/117b-kol-mainline` | — | 续做 |
-| 2 | WP121b 初始化向导重排 | `WP121b-onboarding-wizard.md` | `wp121b-wizard` · `wp/121b-wizard` | — | 续做 |
-| 3 | WP120 岗位与职责的角色定位 | `WP120-role-personas.md` | `wp120-personas` · `wp/120-personas` | — | 续做 |
-| 4 | WP118 红人营销增值服务 + 充值四档（订阅引擎做成通用的，客服增值服务只登记） | `WP118-kol-cloud-service.md` | `wp118-kol-cloud` · `wp/118-kol-cloud` | — | 续做 |
+| 2 | WP121b 初始化向导重排 | `WP121b-onboarding-wizard.md` | `wp121b-wizard` · `wp/121b-wizard` | — | 进行中（Qwen） |
+| 3 | WP120 岗位与职责的角色定位 | `WP120-role-personas.md` | `wp120-personas` · `wp/120-personas` | — | 续做（22:00 后由 Qwen 并发） |
+| 4 | WP118 红人营销增值服务 + 充值四档（订阅引擎做成通用的，客服增值服务只登记） | `WP118-kol-cloud-service.md` | `wp118-kol-cloud` · `wp/118-kol-cloud` | — | 续做（22:00 后由 Qwen 并发） |
 | 5 | WP122 品牌设计规范 DESIGN.md | `WP122-brand-design-md.md` | `wp122-design-md` · `wp/122-design-md` | — | 续做 |
 | 6 | WP119b 插件：A 私有仓库移植 + B 开源仓库插件开放接口 | `WP119b-extension-parity.md` | A：`/Users/yeluo/Documents/agentsws-extension`（分支 `wp/119b-port`）；B：`wp119b-open-api` · `wp/119b-open-api` | — | 待做 |
 | 7 | WP126 数据接口路由 + 自带数据接口 + 官方接口命中也收费 | `WP126-data-routing-byo-source.md` | `wp126-data-routing` · `wp/126-data-routing` | WP117b 已合并 | 待做 |
