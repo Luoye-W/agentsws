@@ -10,6 +10,7 @@ import {
 } from '@agentsws/support-core'
 import { DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from '../assemble.js'
 import { asRecord, type OrderView, orderIdFromText, orderView } from '../view.js'
+import { kolBrain, kolRunOf } from './kol-brain.js'
 import type { ScriptedTurn, ScriptFn } from './scripted.js'
 import { scriptedProvider } from './scripted.js'
 
@@ -99,7 +100,18 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
   const signature = options.signature ?? 'Customer Care'
   const vertical = options.vertical
 
-  return ({ messages, tools }): ScriptedTurn => {
+  return (input): ScriptedTurn => {
+    const { messages, tools } = input
+    /*
+     * WP117（66 断点 #1）：**红人的运行不走售后这一套。**
+     *
+     * 判据是工具面里有没有红人工具（工具面按职责给，见服务端 `buildRequest`）。
+     * 有就整轮交给红人规则脑——售后这一整套（查单 → 退货窗口 → 提退款 → 回信）
+     * 一行都不执行。没有的话下面逐字不变，老场景的基线一个字节都不动。
+     */
+    if (kolRunOf(messages, tools) !== undefined) {
+      return kolBrain({ clock: options.clock })(input)
+    }
     const available = new Set((tools ?? []).map((t) => t.name))
     const blocks = blocksOf(messages)
     const thread = blocks.find((b) => b.kind === 'thread')

@@ -33,6 +33,8 @@ export {
   groundingInputFor,
   orderFromToolMessage,
 } from './providers/brain.js'
+export type { KolBrainOptions, KolBrainProviderOptions } from './providers/kol-brain.js'
+export { kolBrain, kolBrainProvider, kolRunOf } from './providers/kol-brain.js'
 export type {
   ScriptedProviderOptions,
   ScriptedToolCall,

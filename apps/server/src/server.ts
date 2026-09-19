@@ -49,6 +49,7 @@ import type {
   Assignment,
   Clock,
   EventEnvelope,
+  KolChannel,
   Person,
   PersonId,
   SkillTier,
@@ -178,7 +179,9 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
-import { createKolService } from './kol-service.js'
+import { createKolSandbox, kolSandboxIntercept } from './kol-sandbox.js'
+import { CONTACT_SECRET_FIELD, contactSecretId, createKolService } from './kol-service.js'
+import { createKolToolExecutor } from './kol-tools.js'
 import {
   canEditMemory,
   canReadMemory,
@@ -1055,6 +1058,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     deliverOutbound: async (item, opts) => {
       // WP66：卡片自己写着属于哪个品牌，就从那个品牌的渠道发——**不是**进程装配的那一套
       const brand = await brands?.forWorkspace(item.workspace_id)
+      /*
+       * WP117 交付 4：**演练的硬闸**。
+       *
+       * 这是服务进程里唯一一条"真把东西发出去"的路，所以闸就设在这里——
+       * 在问聊天车道与邮件渠道**之前**。界面上的开关、接口上的参数、
+       * 卡片上的标记都可以被绕过；这一句绕不过去：收件人属于演练红人，
+       * 这封信就投进内存邮箱，下面三行一行都不执行。
+       */
+      const sandboxed = kolSandboxIntercept(brand, item)
+      if (sandboxed !== undefined) return sandboxed
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
       return (
         (await brand?.chat.deliver(item, opts)) ??
@@ -1839,6 +1852,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   },
                 }),
             source: records,
+            /*
+             * WP117（66 断点 #1）：红人那十一个工具。
+             *
+             * `kolService` 在这几百行之前就建好了（记录源要读它），所以这里直接取；
+             * 取值函数留着是为了「装配顺序换了也不崩」——它只在真调工具那一刻查。
+             */
+            kolTools: createKolToolExecutor({
+              workspace_id: ws,
+              port: () => kolService.port,
+              now: () => clock.now(),
+            }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
@@ -2197,6 +2221,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
 
+    /*
+     * WP117 交付 4：演练场。建在 `kolService` 之后——它往同一个库里铺数据，
+     * 并把演练的出站截下来（硬闸在 `deliverOutbound`，见那一处）。
+     */
+    const kolSandbox = createKolSandbox({
+      store: kol,
+      secrets: brandSecrets,
+      clock,
+      emit: (type, payload) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'kol_sandbox' },
+          correlation: { trace_id: `tr_kolsbx_${clock.now()}` },
+          payload,
+        })
+      },
+    })
+
     return {
       workspace_id: ws,
       ...(dir === undefined ? {} : { dir }),
@@ -2207,6 +2251,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       records,
       kol,
       kolService,
+      kolSandbox,
       pr,
       prService,
       social,
@@ -2292,7 +2337,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 面板在演示与截图里全是空的，"这个岗位长什么样"就无从谈起。
    * 只在挂了合成世界时放（真环境的库该是用户自己导进去的）。
    */
-  if (mount !== undefined) seedDemoKol(boot.kol, clock.now())
+  if (mount !== undefined) {
+    seedDemoKol(boot.kol, clock.now())
+    /*
+     * WP117（66 断点 #9）：**demo 的红人数据别自相矛盾。**
+     *
+     * 之前 demo 里 Gadget Jonas 处在「拍摄制作中 · US$400」，名下却一条联系方式
+     * 都没有——一条谁也联系不上的合作怎么谈到交付的？亲测的人到这里就卡住了，
+     * 因为"起开发信"必须先有联系方式，而他明明已经在交付中。
+     *
+     * 补的是**已经在合作中的那两个人**的联系方式（还没建联的那几个照旧空着——
+     * 那才是真实的样子）。地址是 example 域，走的是与真实逐字相同的那条路：
+     * 明文进加密库，库里只留 key 名。`seedDemoKol` 拿不到加密库，所以这一步
+     * 在这里做而不是在它里面。
+     */
+    for (const collab of boot.kol.collaborations()) {
+      if (boot.kol.contacts(collab.creator_id).length > 0) continue
+      const creator = boot.kol.creator(collab.creator_id)
+      if (creator === undefined) continue
+      const id = `ctc_demo_${collab.creator_id}`
+      const value_ref = contactSecretId(id)
+      const handle =
+        boot.kol.accounts({ creator_id: creator.id })[0]?.handle ?? creator.id.replace(/\W/g, '')
+      boot.secrets.put(value_ref, { [CONTACT_SECRET_FIELD]: `${handle}@example.com` })
+      boot.kol.saveContact({
+        id,
+        creator_id: creator.id,
+        kind: 'email',
+        value_ref,
+        source: 'channel_about',
+        verified_at: clock.now(),
+      })
+    }
+  }
 
   /**
    * WP72（56 §2）：demo 里给社媒库放几行，理由与上面那一条逐字相同。
@@ -3718,10 +3795,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
 
-  const kolPortOf = brandKolPort(
-    brandModules,
-    async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
-  )
+  const kolPortOf = brandKolPort(brandModules, async (ws) => {
+    const brand = await brandModules.forWorkspace(ws)
+    /*
+     * WP117 交付 4：演练场挂在红人端口的 `sandbox` 那一格上。
+     *
+     * 挂在这里而不是让 `kolService` 自己带：演练是**库之上的一层**
+     * （它往库里铺合成数据、在出站那一跳截信），`kolService` 不该认识它——
+     * 起草开发信那一跳对「这个人是不是演练的」应该一无所知，那正是
+     * 「演练走的是与真实逐字相同的那条路」的意思。
+     */
+    const sandbox = brand.kolSandbox
+    return {
+      ...brand.kolService.port,
+      sandboxStatus: () => sandbox.status(),
+      sandboxStart: (_actor: unknown, input: { channel: KolChannel }) => sandbox.start(input),
+      sandboxAdvance: (_actor: unknown, input: { days: number }) => sandbox.advance(input),
+      sandboxClear: () => sandbox.clear(),
+    }
+  })
   /**
    * WP119（68）：浏览器插件的本地一面 `/v1/extension/*`。
    *

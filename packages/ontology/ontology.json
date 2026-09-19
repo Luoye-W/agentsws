@@ -82,7 +82,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "b4082df0e1165cec0355e9e33bef9776",
+  "source_digest": "2fa24d17018b0167c0e18e976b191881",
   "objects": [
     {
       "id": "ad",
@@ -896,6 +896,12 @@
           "type": "string",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "sandbox",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -1234,6 +1240,12 @@
           "type": "string[]",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "sandbox",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": ["search_creators"],

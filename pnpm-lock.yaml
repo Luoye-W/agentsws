@@ -1135,6 +1135,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      '@agentsws/kol-core':
+        specifier: workspace:*
+        version: link:../kol-core
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
@@ -1320,6 +1323,9 @@ importers:
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agentsws/kol-core':
+        specifier: workspace:*
+        version: link:../kol-core
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway

@@ -166,6 +166,17 @@ export interface KolStore {
    * 库里就会出现一条谁也指不到的孤儿记录。
    */
   merge(input: { keep_id: string; merge_id: string }): Creator | undefined
+  /**
+   * WP117 交付 4：删掉一行。
+   *
+   * **只为「清空演练」存在**——库里其余地方一条删除路径都没有，这是有意的
+   * （红人库是攒出来的资产，误删一条没有回收站可捡）。演练那一批是造出来的，
+   * 清得掉才敢让人放手玩。
+   *
+   * 调用方负责顺序（先删挂在人身上的，最后删人），这里不替它判：
+   * 一个会级联删除的接口太容易被别处误用。
+   */
+  removeRow(table: KolTable, id: string): void
   close(): void
 }
 
@@ -247,6 +258,10 @@ export function createKolStore(options: KolStoreOptions): KolStore {
       backend.put('creator', merged.id, merged)
       backend.remove('creator', merge_id)
       return merged
+    },
+
+    removeRow: (table, id) => {
+      backend.remove(table, id)
     },
 
     close: () => backend.close(),

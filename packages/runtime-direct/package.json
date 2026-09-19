@@ -20,6 +20,7 @@
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
+    "@agentsws/kol-core": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/ontology": "workspace:*",
     "@agentsws/stand-ins": "workspace:*",

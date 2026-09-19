@@ -16,6 +16,7 @@
  * 两者差十天的结果就是截图里满屏"已过期"、日历把所有到期堆在同一天。
  * 起点定下之后，世界里一切照旧走合成时钟（**模拟仍是虚拟时钟，基线一个数没动**）。
  */
+import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type {
@@ -1136,6 +1137,18 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       // demo 一律 stub 运行时：即使机器上配了 DEEPSEEK_API_KEY 也不叫模型
       DEEPSEEK_API_KEY: '',
       AGENTSWS_PORT: String(options.port ?? 4317),
+      /*
+       * WP117（66 断点 #6 的环境那一半）：**demo 自带一把临时加密钥匙**。
+       *
+       * 之前 demo 没有 `AGENTSWS_SECRETS_KEY`，于是「给红人加一条联系方式」
+       * 这一步在 demo 里必然 400——而联系方式是开发信的前提，整条建联链
+       * 在 demo 上从第一步就断了（断点 #6 → #7）。
+       *
+       * 这把钥匙**每次起 demo 都重新生成**、只活在这个进程的环境变量里、
+       * 不落盘也不进仓库：demo 的库本来就是一次性的，钥匙跟着一次性最稳妥——
+       * 存下来反而是在用户机器上留了一把没人管的钥匙。
+       */
+      AGENTSWS_SECRETS_KEY: process.env.AGENTSWS_SECRETS_KEY ?? randomBytes(32).toString('base64'),
     },
   })
 
