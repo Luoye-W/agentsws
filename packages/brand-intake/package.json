@@ -1,0 +1,23 @@
+{
+  "name": "@agentsws/brand-intake",
+  "version": "0.0.0",
+  "private": true,
+  "description": "品牌接入 #70：贴一个网址，抓取 + 解析 + 抽取出一张可编辑的品牌档案",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*"
+  }
+}

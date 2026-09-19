@@ -51,7 +51,7 @@ export {
   tombstoneEmail,
   tombstoneOrg,
 } from './admin/routes.js'
-export { ADMIN_MIGRATION_V2 } from './admin/schema.js'
+export { ADMIN_MIGRATION_V2, ADMIN_MIGRATION_V3 } from './admin/schema.js'
 export {
   AdminStore,
   type AdminStoreOptions,
@@ -115,6 +115,14 @@ export {
 export { type AuthRouteDeps, authRoutes, DEFAULT_CALLBACK_PATH } from './routes/auth.js'
 export { type CloudHealthState, cloudHealthRoutes, type UpstreamHealth } from './routes/health.js'
 export { type LinkRouteDeps, linkRoutes, ScopeSchema } from './routes/links.js'
+export {
+  grantSignupBonus,
+  type SignupBonusHooks,
+  type SignupBonusLedger,
+  type SignupBonusOutcome,
+  type SignupBonusPort,
+  type SignupBonusSkip,
+} from './signup-bonus.js'
 export {
   CLOUD_LOGIN_TTL_MS,
   CLOUD_SESSION_TTL_MS,

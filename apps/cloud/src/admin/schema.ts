@@ -125,3 +125,30 @@ CREATE TABLE IF NOT EXISTS membership_cycles (
 CREATE INDEX IF NOT EXISTS membership_cycles_term ON membership_cycles (term_id, idx);
 CREATE INDEX IF NOT EXISTS membership_cycles_due  ON membership_cycles (granted_at, starts_at);
 `
+
+/**
+ * 注册赠送的领取记录（70 §2，WP121）。
+ *
+ * 为什么不能只靠钱包那边的 `source_ref` 幂等：`source_ref` 是
+ * `signup_bonus:<account_id>`，而 `a.b+x@gmail.com` 与 `ab@gmail.com` 是**两个
+ * 账号**——两个 account_id，两串 source_ref，于是同一个人能领两份。所以这里按
+ * **规范化别名**再挡一道（`normalizeEmailAlias`，WP115 那个函数）。
+ *
+ * 三条：
+ *
+ * 1. **主键是别名哈希**，不是账号 id：一个人换一百个 `+tag` 也只有一行；
+ * 2. **只存哈希**，与黑名单同一条纪律（21 §1）——这张表没有理由存明文邮箱；
+ * 3. `lot_id` 留着，好在后台把这一行与发放流水里那一笔对上。
+ */
+export const ADMIN_MIGRATION_V3 = `
+CREATE TABLE IF NOT EXISTS signup_bonuses (
+  alias_sha256 TEXT PRIMARY KEY,
+  account_id   TEXT NOT NULL,
+  org_id       TEXT NOT NULL,
+  credits      REAL NOT NULL,
+  granted_at   TEXT NOT NULL,
+  lot_id       TEXT
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS signup_bonuses_account ON signup_bonuses (account_id);
+`

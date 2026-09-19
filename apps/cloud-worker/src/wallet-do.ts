@@ -73,6 +73,7 @@ import type { DoStorageLike } from './do-sql.js'
 import { doSyncDb } from './do-sql.js'
 import type { WorkerEnv } from './env.js'
 import { INTERNAL_HEADERS, principalFrom } from './internal.js'
+import { handleKolWallet } from './kol-wallet.js'
 import { copyEventsTo, copyLotsTo, LEDGER_SINGLETON } from './ledger-do.js'
 import { createOutbox, type Outbox, outboxEventKey } from './outbox.js'
 import { handleWalletAdmin } from './wallet-admin.js'
@@ -287,6 +288,20 @@ export class WalletCore {
       this.#scheduleFlush()
       await this.armAlarm()
       return adminRes
+    }
+    /*
+     * WP116 两段式：公共红人库的预扣（①）与照单执行（③）。
+     * **钱只在钱的对象里动**，所以这两条在这边而不在 `KolPublicDO` 那边。
+     */
+    const kolRes = await handleKolWallet(
+      { wallet: this.wallet, pricing: this.pricing },
+      request,
+      url,
+    )
+    if (kolRes !== undefined) {
+      this.#scheduleFlush()
+      await this.armAlarm()
+      return kolRes
     }
     const principal = principalFrom(request)
     const run = async (): Promise<Response> => {

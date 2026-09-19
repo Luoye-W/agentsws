@@ -10,9 +10,12 @@
  * 抛 500 会让"今天配额用完"和"云侧挂了"长得一样。
  */
 import type { Iso8601, KolChannel } from '@agentsws/contracts'
+import type { KolStore } from '../store.js'
 import type { KolSource, SourceLookup, SourceOutcome } from '../types.js'
-import { KolError } from '../types.js'
+import { KOL_ENV, KolError } from '../types.js'
+import { apifySource } from './apify.js'
 import type { QuotaPool } from './youtube.js'
+import { createQuotaPool, youtubeSource } from './youtube.js'
 
 export { APIFY_UNITS, apifySource, fakeApifySource } from './apify.js'
 export {
@@ -116,4 +119,38 @@ export function outcomeOfError(err: unknown): SourceOutcome {
   if (err instanceof KolError && err.code === 'not_implemented')
     return { used: 'none', reason: 'no_source', units: 0, message: err.message }
   throw err
+}
+
+/**
+ * 按环境变量拼外部源（**两个形态共用**：Compose 的 `apps/cloud` 与官方托管的
+ * `KolPublicDO` 都调这一个）。
+ *
+ * 没有 key 就**没有那个源**，而不是一个会在运行时报错的空壳——"今天配额用完了"
+ * 与"这个功能没配"是两句不同的人话，用户要能分得开。
+ *
+ * 为什么它在这个包里而不在装配方那边：哪个环境变量开哪个源是**这个包自己的事**，
+ * 两个形态各写一遍迟早对不上（一边加了新源另一边没加，表现是"云上刷不出来"）。
+ */
+export function kolSourcesFromEnv(
+  env: Record<string, string | undefined>,
+  store: KolStore,
+): SourceLookup {
+  const unitsRaw = Number(env[KOL_ENV.youtubeUnitsPerDay])
+  const quota = createQuotaPool({
+    store,
+    ...(Number.isFinite(unitsRaw) && unitsRaw > 0 ? { unitsPerDay: unitsRaw } : {}),
+  })
+  const youtube: KolSource | undefined =
+    env[KOL_ENV.youtubeApiKey] === undefined || env[KOL_ENV.youtubeApiKey] === ''
+      ? undefined
+      : youtubeSource({ apiKey: () => env[KOL_ENV.youtubeApiKey] })
+  const apify: KolSource | undefined =
+    env[KOL_ENV.apifyToken] === undefined || env[KOL_ENV.apifyToken] === ''
+      ? undefined
+      : apifySource({ token: () => env[KOL_ENV.apifyToken] })
+  return sourcePoolFromParts({
+    quota,
+    ...(youtube === undefined ? {} : { youtube }),
+    ...(apify === undefined ? {} : { apify }),
+  })
 }

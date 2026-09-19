@@ -24,6 +24,7 @@ import type {
   ContextItem,
   CreateApprovalInput,
   EventEnvelope,
+  GateDecision,
   Matter,
   ModelRef,
   ObjectRef,
@@ -164,6 +165,38 @@ export interface RuntimeOptions {
    * 里面没有任何凭据值，只有"请求头名 → 凭据引用名"。
    */
   connections?: (role_id: string) => RunConnection[]
+  /**
+   * WP125（72 §P0-1 / §P0-2）：**出站草稿的判断层**。
+   *
+   * 每一份 `outbound_draft` 在建卡之前过这一道：先泄漏守卫（商家教 AI 的那句中文
+   * 有没有被逐字抄进客户会看到的正文），再三道自主门（L3 黑名单 / 草稿来源 /
+   * 承诺扫描）。回 `rewrite` 就**打回重写**——原因回到写正文的那一跳，
+   * 绝不静默删改后照发（与 Amazon 出站硬闸同一条纪律，见 `channels.ts`）。
+   *
+   * 不接 = 老行为：草稿照常建卡，只是 `context.gates` 是空的、没有泄漏守卫。
+   * 真服务进程一定接（`server.ts` 把它接到 `support-judgment.ts` 上）。
+   */
+  judgeDraft?(input: {
+    matter: Matter
+    run_id: string
+    channel: 'email'
+    subject: string
+    body: string
+    /** 被回复的来信正文（判断层只扫不存）。 */
+    inbound_text: string
+    thread_external_id?: string
+  }): Promise<DraftVerdict | undefined> | DraftVerdict | undefined
+}
+
+/**
+ * WP125：判断层对一份草稿的结论（形状与 `support-judgment.ts` 的 `DraftJudgment` 一致，
+ * 这里只声明运行时真正要用的那几格——`runtime.ts` 不该 import 判断层，那是反向依赖）。
+ */
+export interface DraftVerdict {
+  action: 'send' | 'rewrite' | 'card'
+  rewrite_instruction?: string
+  /** 进 `ApprovalItem.context.gates`：只有门名、结论、规则集哈希，**没有被扫的文本**。 */
+  gate_context: GateDecision[]
 }
 
 /**
@@ -209,6 +242,8 @@ export function hasModelProvider(env: Record<string, string | undefined>): boole
 interface RunScope {
   run_id: string
   matter: Matter
+  /** WP125：这次运行的来信正文（判断层扫它；**只扫不存**）。 */
+  brief: string
   todo_id?: TodoId
   person_id: PersonId
   assignment_id: AssignmentId
@@ -274,7 +309,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    */
   const createDraft = async (
     payload: DraftPayload,
-  ): Promise<{ approval_item_id: string } | undefined> => {
+  ): Promise<{ approval_item_id: string } | { rewrite: string } | undefined> => {
     const s = scope
     if (s === undefined || work === undefined) return undefined
     const email = payload.to[0]
@@ -296,6 +331,46 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     }
     const seen = [...s.seen]
     if (!seen.some((r) => refKey(r) === refKey(to))) return undefined
+    /*
+     * WP125（72 §P0-1 / §P0-2）：**建卡之前过判断层**。
+     *
+     * 顺序是硬的：泄漏守卫 → 三道自主门 → 建卡。放在建卡之后就晚了——
+     * 一张已经进了队列的卡再去说"其实它不该长这样"，人已经看见了。
+     *
+     * 判断层自己炸了按 fail-closed 处理：`catch` 之后照常建卡（**不自主**，
+     * `context.gates` 留空），而不是把这封信丢掉。一个装配错误不该让客户等不到回信。
+     */
+    let verdict: DraftVerdict | undefined
+    try {
+      verdict = await options.judgeDraft?.({
+        matter: s.matter,
+        run_id: s.run_id,
+        channel: 'email',
+        subject: payload.subject,
+        body: payload.body,
+        inbound_text: s.brief,
+        ...(payload.thread_external_id === undefined
+          ? {}
+          : { thread_external_id: payload.thread_external_id }),
+      })
+    } catch (e) {
+      work.appendEvent(s.matter.id, {
+        kind: 'status',
+        text: `出站判断层没跑起来，这一封按"要人点头"处理：${e instanceof Error ? e.message : String(e)}`,
+        actor: { kind: 'system', id: 'runtime' },
+        run_id: s.run_id,
+      })
+    }
+    if (verdict?.action === 'rewrite') {
+      // 打回重写：原因回给写正文的那一跳，**不建卡**（这一版根本没成形）
+      work.appendEvent(s.matter.id, {
+        kind: 'status',
+        text: '这一版回信照抄了内部指导的原文，已打回重写。',
+        actor: { kind: 'system', id: 'runtime' },
+        run_id: s.run_id,
+      })
+      return { rewrite: verdict.rewrite_instruction ?? '重写一版，不要引用内部指导的原文。' }
+    }
     const subject = seen.find((r) => r.type === 'thread') ?? seen.find((r) => r.type === 'order')
     const assignment = roles.assignments.get(s.assignment_id)
     const item = await approvals.create({
@@ -347,7 +422,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         separation_of_duties: true,
       },
       priority: 'queue',
-      context: { thread_participants: [to.id], verified_contacts: [to.id] },
+      context: {
+        thread_participants: [to.id],
+        verified_contacts: [to.id],
+        // WP125：三道门的结论进前置（只有门名、结论、规则集哈希；被扫的文本一个字不进）
+        ...(verdict === undefined || verdict.gate_context.length === 0
+          ? {}
+          : { gates: verdict.gate_context }),
+      },
     })
     if (item.state === 'blocked') return undefined
     backfill(item)
@@ -673,6 +755,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     scope = {
       run_id,
       matter: input.matter,
+      brief: input.brief,
       person_id: input.actor.person_id,
       assignment_id: input.actor.assignment_id,
       seen,

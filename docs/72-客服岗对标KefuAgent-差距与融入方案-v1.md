@@ -1,6 +1,14 @@
 # 72 · 客服岗对标 KefuAgent：差距与融入方案 v1
 
 > 状态：WP123 只读调研产出，未改任何源码、未跑任何测试。
+> **2026-09-19 WP125 更新**：§P0-1（判断层接进生产）、§P0-2（两道纪律守卫）、
+> §P0-3（知识缺口等待闭环 + 卡片优先级带）**已实现**，见各节的「WP125 落点」。
+> §4.2 的六条永不做与原则 16 的判据已写进 `docs/36` §13。
+> 一处更正：§2.2 第 1 条与 §6.6 #1 说「工坊的 `teach` 今天没有指导原文泄漏守卫」
+> ——**不准确**。`packages/support-core/src/chat/teach.ts` 的
+> `containsInstructionLeak`（12 字、去空白）早就在聊天线上了，`acceptChatTeaching`
+> 的 `blocked_verbatim_leak` 就是它。WP125 补的是**邮件线**那一半、
+> 「命中则重写一次、再命中转人工审」这条 KefuAgent 语义，以及"证据里只有长度没有内容"。
 > 对标对象：`/Users/yeluo/Documents/KefuAgent`（下称 **KA**；Next.js + Supabase 的多租户客服 AI SaaS，
 > HEAD 2026-09-07，specs 编到 039），外加 `/Users/yeluo/Documents/kefuagent-shopify-app`、
 > `/Users/yeluo/Documents/kefuagent-flutter`。
@@ -575,7 +583,15 @@ WP124 §C 写：「云端每工作区一个 `SupportTenantDO` 持有知识快照
 
 ### P0
 
-#### P0-1 · 把客服的判断层接进生产（M～L）
+#### P0-1 · 把客服的判断层接进生产（M～L）· **已实现（WP125，2026-09-19）**
+
+> **WP125 落点**：`apps/server/src/support-judgment.ts`（新文件）。六个函数在
+> `apps/server` 下的生产引用数已经 ≥1（`apps/server/test/support-judgment.test.ts`
+> 里有一条 grep 级断言钉住）。接线点三处：`channels.ts` 的 `onEvent`（落成事项之后、
+> 起 Run 之前）、`runtime.ts` 的 `createDraft`（建卡之前）、`messages.ts` 的分拣
+> handoff。SLA 巡检是 `support.sla_sweep`（一刻钟一拍，**不出卡**）。
+> 未做：`--rewrite-baseline` 级的新模拟场景（判断层活在 `apps/server`，
+> 而模拟跑的是 `packages/simulation/src/world.ts`），改由 `apps/server` 的单测钉住。
 
 - **目标**：让 `apps/server` 的邮件客服路径跑在 `support-core` 的判断上，而不是只跑在一份提示词技能上。
 - **范围**：① `evaluateAutonomyGates` 三道门接进出站（`apps/server` 的 `deliver` / 审批发送路径），
@@ -592,7 +608,12 @@ WP124 §C 写：「云端每工作区一个 `SupportTenantDO` 持有知识快照
 - **为什么是 P0**：不做的话，「客服岗内测」测的是一个**没有门**的 AI；
   而这些门的代码早就写好躺在那儿了。
 
-#### P0-2 · 两道便宜的纪律守卫（S）
+#### P0-2 · 两道便宜的纪律守卫（S）· **已实现（WP125，2026-09-19）**
+
+> **WP125 落点**：`packages/core/src/sensitive-mask.ts`（卡号过 Luhn / CVV / 验证码 /
+> 密码）+ `packages/support-core/src/prompt-text.ts`（**打码先于围栏**的唯一入口）+
+> `packages/support-core/src/leak-guard.ts`（邮件线的泄漏守卫与「重写一次」语义）。
+> `prompts/customer-care.ts` 的 fence 段补了「不提及、不复述、不索取」那一句。
 
 - **目标**：把 KA round57（2026-09-07）那一轮里最便宜、最要命的两条补上。
 - **范围**：① **敏感标识进 prompt 前打码**——`packages/core/src/secret-patterns.ts` 加
@@ -608,7 +629,13 @@ WP124 §C 写：「云端每工作区一个 `SupportTenantDO` 持有知识快照
   与「回复逐字抄了指导 → 判为泄漏」两组）；一条模拟场景：访客贴了验证码 → prompt 里是 `[redacted:otp]`。
 - **为什么是 P0**：两条都是 S，但少任何一条都不敢让真实客户对着它说话。
 
-#### P0-3 · 知识缺口「有多少客户在等」闭环 + 卡片优先级带（M）
+#### P0-3 · 知识缺口「有多少客户在等」闭环 + 卡片优先级带（M）· **已实现（WP125，2026-09-19）**
+
+> **WP125 落点**：`packages/knowledge/src/gap-waiting.ts` + `knowledge_gaps` 上一列
+> `waiting_json`（走 `ADDED_COLUMNS`，**零新表**）；补完回灌在
+> `support-judgment.ts` 的 `fulfillGap`（**路径里零发送函数**，有 import 级断言）。
+> 四个优先级带的名字与分组计数在 `packages/deck/src/bands.ts`（**派生不存列**），
+> 也写进了 `docs/36` §13.4。
 
 - **目标**：AI 答不上来时，客户不被晾着、商家知道该先补哪条、补完之后那批人被自动捞回来。
 - **范围**：① 缺口等待队列——`packages/knowledge/src/intake.ts` 已有 `openGap` / `answerGap`，

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| 状态 | **WP114 实现**（2026-09-18）。这一版是**内测环境**：不开 Stripe、额度手动发、在线值守与公共红人库不在这里 |
+| 状态 | **WP114 实现**（2026-09-18）；**WP116 把公共红人库补上**（2026-09-19，见 §10.2）。这一版是**内测环境**：不开 Stripe、额度手动发、在线值守仍不在这里 |
 | 起因 | 不想为云端另买一台服务器。手里有 Cloudflare（`agentsws.com` 就是在它这里注册的，DNS 也在），那就把云端跑成一个 Worker |
 | 关联 | 49（统一账号、服务入口与积分：M1–M6）、**61（Compose 自建形态——留给开源自建用户，两份都在）**、21（数据驻留与密钥纪律）、34（仓库结构）、`apps/cloud-worker/`（这一版的全部配置） |
 
@@ -182,6 +182,9 @@ npx wrangler secret put AGENTSWS_CLOUD_ADMIN_TOKEN
 | `AGENTSWS_CLOUD_ADMIN_TOKEN` | 你自己生成一串：`openssl rand -base64 48`。**至少 32 字节**，短了会拒绝启动 | **必填**（内测期要靠它发积分） | `/v1/admin/topup` 与 `/v1/admin/export` **根本不存在**（404，不是 401）——发不了额度，也导不出备份 |
 | `STRIPE_SECRET_KEY` | Stripe 后台 → Developers → API keys | 选填 | 用户点"充值"回 501 一句人话（这就是内测期的现状） |
 | `STRIPE_WEBHOOK_SECRET` | Stripe 后台 → Developers → Webhooks → 建一个指向 `https://cloud.agentsws.com/v1/wallet/topup/stripe/webhook`，把 `whsec_…` 抄下来 | 选填 | 同上；配了 secret key 却不配它，webhook 一律 501 |
+| `AGENTSWS_KOL_EMAIL_KEY` | 公共红人库的邮箱密钥（WP116）。本机生成 32 字节：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`。**丢了就解不开已经落库的密文**，存进密码管理器 | 选填（要用公共红人库就必填） | **不存邮箱**（一个字节都不写，绝不降级成明文）；搬家时联系方式那一类全部 `skipped` |
+| `AGENTSWS_YOUTUBE_API_KEY` | Google Cloud Console → YouTube Data API v3 | 选填 | 没有官方口，`refresh` 只能走 Apify 或"只查库" |
+| `APIFY_TOKEN` | Apify 控制台 | 选填 | 没有降级口 |
 
 **没有发信的密钥**——Email Sending 在 Worker 里是一个 binding，一把 key 都不用。这是这个形态相对 SMTP 的一个实际好处：少一处"放哪儿、谁看得见、多久轮换"。
 
@@ -217,8 +220,9 @@ SMOKE_EMAIL=me@example.com ./deploy/smoke.sh https://cloud.agentsws.com
 
 那会真发一封信。限流是每邮箱 5 次 / 小时，别连着跑六遍。
 
-> 冒烟里 `standby` 与 `kol_public` 会显示"没开通"，**那是对的**（见 §10），
-> 脚本也不把它算作失败——两个部署形态用同一个冒烟脚本。
+> 冒烟里 `standby` 会显示"没开通"，**那是对的**（见 §10.1），脚本也不把它
+> 算作失败——两个部署形态用同一个冒烟脚本。`kol_public` 从 WP116 起跟着
+> `KOL_PUBLIC` 这个 binding 走：deploy 过一次就是 true。
 
 ### ⑦ 给内测朋友发积分
 
@@ -331,7 +335,7 @@ curl -H "Authorization: Bearer <ADMIN_TOKEN>" \
 
 DO 的库连不上标准 SQL 客户端，这是 §1 那个取舍的代价。这一版的办法就是 `GET /v1/admin/export` 拉下来自己看。将来要看板，正路是**把计量事件另外抄一份到一个能查的地方**（Analytics Engine 或者一张 D1 表）——那是"只读的副本"，不是第二本账，所以它异步无所谓。
 
-## 10. 在线值守为什么不在这里，公共红人库为什么也不在
+## 10. 在线值守为什么不在这里；公共红人库怎么补上的
 
 ### 10.1 在线值守（`packages/standby`）
 
@@ -346,11 +350,70 @@ DO 的库连不上标准 SQL 客户端，这是 §1 那个取舍的代价。这�
 | **Cloudflare Containers** | Cloudflare 自己的容器产品，能跑常驻进程，且与 Worker / DO 在同一个账号同一套绑定里 | 比 Worker 贵，而且要把子进程编排那一套（`packages/standby`）改成"起容器"而不是"起子进程" |
 | **一台小机器** | 就是 `docs/61` 那台，只跑值守；账号与钱还在 Workers 这边，它拿一把内部令牌来用 `/v1/ai/*` | 又有一台要打补丁的机器，但改动最小——值守那一套代码一个字不用动 |
 
-### 10.2 公共红人库（`packages/kol-public`）
+### 10.2 公共红人库（`packages/kol-public`）——**已做**（WP116）
 
-技术原因很具体：它的服务同时要**一张全局共享的红人表**和**某个组织的钱包**，而且是在**同一个同步上下文**里（查一次要扣一次积分）。Workers 形态下这两样在两个不同的 Durable Object 里——把它们凑到一起，只能让钱包那一侧变成异步，那正是 §1 要躲的东西。
+原来的难处很具体：它的服务同时要**一张全局共享的红人表**和**某个组织的钱包**，而且要在**同一个同步上下文**里（查一次要扣一次积分）。Workers 形态下这两样在两个不同的 Durable Object 里——把它们凑到一起，只能让钱包那一侧变成异步，那正是 §1 要躲的东西。
 
-将来的正路是把它改成**两段式**：先在 `WalletDO` 里预扣，再去公共库那个对象取数，回来结算或释放。这与 `/v1/ai/*` 现在的做法是同一个形状，改动量不大但不在这一轮。同样地，health 里 `kol_public: false`，不假装有。
+WP116 按这里原来写的那条路做了：**两段式**。
+
+```
+入口 Worker                WalletDO(org)              KolPublicDO（单例）
+   │  ① reserve  ─────────────▶  同步预扣
+   │  ◀──────────────────────── 一笔 WalletReservation
+   │  ② 带着那一笔打库  ──────────────────────────────▶  取数（钱包是"录音机"）
+   │  ◀──────────────────────────────────────────────  响应 + 记下来的那几笔
+   │  ③ apply    ─────────────▶  同步结算 / 释放 / 返额度
+```
+
+几条要点：
+
+- **服务本身一个字没改**。`KolPublicService` 在 Workers 形态下拿到的 `wallet` 是一个**只录不做**的替身（`packages/kol-public/src/wallet-port.ts` 的 `deferredWallet`）：`reserve()` 把入口做好的那笔递回去，`settle` / `release` / `topup` 只记在一张纸上。所以"钱的读写全同步"一个字没破——同步性发生在 `WalletDO` 里，异步只在两个对象之间的那两跳，而那两跳中间没有任何"读一次钱再写一次钱"。
+- **哪几条要预扣**由 `packages/kol-public/src/charge-map.ts` 说了算（`reveal` / `deep-audit` / `refresh` 三条 POST）。浏览、免费体检、基准、上报、回填、争议、插件配对**一笔都不预扣**——免费的东西不该因为余额用不了。这张表与 `service.ts` 里实际扣的那几笔由 `charge-map.test.ts` 对账。
+- **③ 不走 `waitUntil`**。它是钱：用户拿到 200 的那一刻账必须已经记上。抄给看板那一份（`LedgerDO`）才是"顺便"。
+- **兜底释放**：入口给了的预扣，凡是既没被结算也没被释放的，`apply` 那一步一律释放（`kol-wallet.ts` 的 `applyKolOps`）。库那头抛了（404、上游挂了、代码 bug）就走这条——不然那笔钱要等一小时的孤儿预扣清扫才回来，而用户会以为自己被扣了。
+- **`KolPublicDO` 是全局单例**（`idFromName('kol-public')`）：这张红人表是**跨租户共享的一层事实**，按组织切开就等于每个组织自己攒一份，公共库的全部价值就没了。它**没有 alarm**——不管钱，也没有孤儿预扣要扫。
+- health 里 `kol_public` 现在**如实**跟着 `KOL_PUBLIC` 这个 binding 走：绑了就 true，没绑就 false 且 `/v1/data/kol/*` 回 404。
+
+#### 要敲哪几个 secret
+
+| 名字 | 不配会怎样 | 去哪儿拿 |
+|---|---|---|
+| `AGENTSWS_KOL_EMAIL_KEY` | **不存邮箱**（`encrypt` 回 `undefined`，落库那一层一个字节都不写），搬家时 `kind: 'contact'` 全部 `skipped`。**绝不降级成明文** | 本机生成一把 32 字节：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
+| `AGENTSWS_YOUTUBE_API_KEY` | 没有官方口（`refresh` 只能走 Apify 或者"只查库"） | Google Cloud Console → YouTube Data API v3 |
+| `APIFY_TOKEN` | 没有降级口 | Apify 控制台 |
+| `AGENTSWS_CLOUD_ADMIN_TOKEN` | 搬家那条路由进不去（它认后台会话**或**这把带外钥匙） | WP110 起就有的那一把，已经敲过了 |
+
+```bash
+cd apps/cloud-worker
+pnpm exec wrangler secret put AGENTSWS_KOL_EMAIL_KEY
+pnpm exec wrangler secret put AGENTSWS_YOUTUBE_API_KEY   # 可选
+pnpm exec wrangler secret put APIFY_TOKEN                # 可选
+pnpm exec wrangler deploy      # binding 与 v3 迁移都在 wrangler.toml 里
+```
+
+**这把邮箱密钥丢了就解不开已经落库的密文**（AES-256-GCM，没有后门）。存进密码管理器，别只存在 Cloudflare 后台里。
+
+#### 搬家（把 KOLAgents 的存量搬过来）
+
+两步，两个脚本，**连接串与钥匙都只从环境变量读**，脚本本身不打印任何一个。
+
+```bash
+# ① 导出：只读连接，出六个 NDJSON 到 ./.data/kolagents-public/
+#    那个目录在 .gitignore 里，而且**里面有真实邮箱**——别提交、别外发。
+node --env-file=<KOLAgents 的 env 文件> scripts/export-kolagents-public.mjs
+
+# ② 推上去：按文件名排序（01-person → 02-creator → 其余）、一趟 500 行
+AGENTSWS_CLOUD_ADMIN_TOKEN=… node scripts/import-kol-public.mjs https://cloud.agentsws.com
+```
+
+- **可重跑**：幂等键是 `渠道 + handle`（内容是 `渠道 + 原生 id`，指标快照再加 `observed_at`）。网断了就再跑一次第二步，第二趟全是 `updated`，一行都不重复。
+- **坏行只算自己坏**：七百行里坏三行，另外六百九十七行照进，返回体里说清"这一行读不懂 × 3"。
+- **`bio` 一个字都不导**：它是简介正文，而且简介里经常写着邮箱——落进 `extra` 就等于把明文邮箱存进了库。
+- **移除过的人搬不回来**：后台按「从库中移除」时先写一条 opt-out 再删行，搬家每一种 kind 进门先问这张表。
+
+#### 运营后台那一页
+
+`/admin/kol`（`apps/cloud-admin/src/pages/kol.tsx`）：库里有多少、按平台、近 7 / 30 天新增、近 30 天的 reveal 与上游调用（次数 / 积分 / 我方成本，来自计量事件）、搜索、单条「从库中移除」。没绑 `KOL_PUBLIC` / 没接 `LEDGER` 时那一页分别回 503 与"看不了账"——**不画一堆 0**。
 
 ## 11. 这一版没做的
 
@@ -371,6 +434,12 @@ DO 的库连不上标准 SQL 客户端，这是 §1 那个取舍的代价。这�
 | `apps/cloud-worker/src/worker.ts` | 入口：擦头、验令牌、选对象、转发 |
 | `apps/cloud-worker/src/accounts-do.ts` | 账号那一层的 DO |
 | `apps/cloud-worker/src/wallet-do.ts` | 钱包 DO（每个组织一个）+ 闹钟 |
+| `apps/cloud-worker/src/kol-public-do.ts` | 公共红人库 DO（**全局一个**，WP116） |
+| `apps/cloud-worker/src/kol-wallet.ts` | 两段式的 ① 预扣与 ③ 照单执行（住在 `WalletDO` 里） |
+| `apps/cloud-worker/src/kol-admin.ts` | 后台 → `KolPublicDO` 的四条内部路由与远端口 |
+| `packages/kol-public/src/wallet-port.ts` | 那台"只录不做"的钱包（两段式的中间那一跳） |
+| `packages/kol-public/src/charge-map.ts` | 哪几条路要先预扣（入口按它判） |
+| `scripts/export-kolagents-public.mjs` / `scripts/import-kol-public.mjs` | 搬家两步（见 §10.2） |
 | `apps/cloud-worker/src/do-sql.ts` | DO 的 SQL → 同步 SQL 口（`SyncDb`） |
 | `apps/cloud/src/app.ts` | **两个形态共用**的路由表与鉴权装配 |
 | `deploy/smoke.sh` | 冒烟（两个形态共用） |

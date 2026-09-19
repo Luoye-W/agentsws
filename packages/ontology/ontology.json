@@ -7,6 +7,7 @@
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/blocks.ts",
+    "packages/contracts/src/brand-intake.ts",
     "packages/contracts/src/changes.ts",
     "packages/contracts/src/channels.ts",
     "packages/contracts/src/cloud-admin.ts",
@@ -81,7 +82,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "35990264b2ce510ba66f158d433255e4",
+  "source_digest": "b4082df0e1165cec0355e9e33bef9776",
   "objects": [
     {
       "id": "ad",

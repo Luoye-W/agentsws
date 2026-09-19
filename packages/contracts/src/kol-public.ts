@@ -127,6 +127,37 @@ export interface PublicCreatorCard {
   /** 库里有没有这个人的联系方式（**只说有没有，不说是什么**）。 */
   has_contact: boolean
   updated_at: Iso8601
+
+  /*
+   * ↓ WP116 搬家（48 §5.3 / 64 §10.2）新增的几格。全是**可选**：本系统自己攒的
+   * 行一格都不给，只有从别处搬进来的才有。加它们的理由是搬家那一刻必须无损——
+   * 丢掉 `external_id` 之后"同一个人改了 handle"就再也认不回来了。
+   */
+
+  /**
+   * 平台原生 id（YouTube 的 channelId、IG / TikTok 的 user id）。
+   *
+   * 库的主键仍然是 `{ channel, handle }`（自足键那条纪律不动），这一格只是
+   * **搬家与去重的锚**：handle 会被改，原生 id 不会。
+   */
+  external_id?: string
+  /** 展示名（频道名 / 昵称）。`handle` 是账号名，这一格是给人看的那个名字。 */
+  name?: string
+  /** 头像地址。**只存地址不存图**——图会过期，而我们不做图床。 */
+  avatar_url?: string
+  /** 国家 / 地区（ISO-3166 两位）；与 `region` 同义，搬家来的那一批填这一格。 */
+  country?: string
+  /** 同一个人在多个渠道的分组 id（库内分组，不对外解释成"这就是同一个人"）。 */
+  person_id?: string
+  /**
+   * 对不上我们字段的那些公开事实。
+   *
+   * **只放标量**（数、串、真假），不放正文、不放数组、不放嵌套对象——
+   * `extra` 是一个"别丢掉"的兜底，不是一个可以往里塞任何东西的口袋。
+   */
+  extra?: Record<string, string | number | boolean>
+  /** 这一行是从哪儿搬来的（`kolagents`）。空 = 本系统自己攒的。 */
+  imported_from?: string
 }
 
 /** 浏览的过滤条件（全是可选的；`limit` 有上限 {@link MAX_CREATOR_LIMIT}）。 */
@@ -157,6 +188,186 @@ export interface PublicCreatorContact {
   source: KolObservationSource
   /** 谁回填的（给贡献奖励用；不进任何对外响应）。 */
   contributed_by: WorkspaceId
+  at: Iso8601
+
+  /*
+   * ↓ WP116 搬家新增，全可选。合规上最要紧的是 `source_url`：
+   * "这个邮箱你从哪儿看到的" 是任何一次移除请求的第一个问题。
+   */
+
+  /** 贡献者当时看到这个邮箱的**公开页面**地址（合规审计线索）。 */
+  source_url?: string
+  /**
+   * 比 `source` 更细的一档（`plugin_manual` / `observation_email` /
+   * `youtube_channel_description` / `apify_tiktok_bio` / `manual`）。
+   *
+   * 为什么不把 `source` 的枚举扩开：那四档是**可信度的档位**（`SOURCE_CONFIDENCE`
+   * 按它查表），细分路径是另一件事。混成一个枚举等于每加一条采集路径就要
+   * 重新校准一次可信度。
+   */
+  source_detail?: string
+  /** 0–1。搬家来的那一批按原系统的确认 / 报错数折出来。 */
+  confidence?: number
+  /** 有几个人确认过这条是对的。 */
+  confirmations?: number
+  /** 有几个人报过错。 */
+  disputes?: number
+}
+
+/**
+ * 一条**内容样本**（WP116 搬家：`public_content` 那一层）。
+ *
+ * 为什么公共库里要有内容：判断一个红人值不值得合作，"他最近发的东西大概长什么样、
+ * 播放量在什么量级"比粉丝数有用得多。而这些是**创作者自己公开发布的元数据**
+ * （标题、封面、时长、播放数），不是 48 §1.3 第 4 条挡的那种正文（评论 / 私信 /
+ * 视频文案）——**这里一个字的评论都不收**。
+ */
+export interface PublicContentSample {
+  channel: KolChannel
+  /** 归属的红人（自足键的另一半）。 */
+  handle: string
+  /** 平台原生内容 id（YouTube 的 videoId、IG 的 shortcode）。 */
+  external_id: string
+  content_type: 'video' | 'post' | 'reel'
+  /** 标题。它是创作者给自己作品起的名字，不是正文。 */
+  title?: string
+  url?: string
+  thumbnail_url?: string
+  /** 从标题里摘出来的话题标签（**不带 `#`**）。 */
+  tags?: string[]
+  orientation?: 'landscape' | 'portrait'
+  duration_seconds?: number
+  published_at?: Iso8601
+  views?: number
+  likes?: number
+  comments?: number
+  shares?: number
+  /** 这份快照**被看到**的时刻。 */
+  observed_at: Iso8601
+  source: KolObservationSource
+  updated_at: Iso8601
+}
+
+/**
+ * 一条**指标快照**（WP116 搬家：`public_creator_metric` 那一层）。
+ *
+ * 与 {@link PublicCreatorObservation} 刻意分开，理由只有一条：观察要带
+ * `posts_30d` 与 `engagement_rate`，而搬进来的那一批**没有这两个数**。
+ * 把 0 填进观察表会让 k-匿名基准的中位互动率变成 0——一个编出来的数比
+ * 没有数坏得多（21 §4）。所以它们落在自己这张表上，只出现在"粉丝增长"
+ * 这类看得见来源的地方。
+ */
+export interface PublicCreatorMetricSnapshot {
+  channel: KolChannel
+  handle: string
+  followers?: number
+  /** 近期作品的平均播放量。 */
+  avg_views?: number
+  /** 账号累计作品数（不是近 30 天）。 */
+  video_count?: number
+  /** 账号累计播放量。 */
+  total_views?: number
+  observed_at: Iso8601
+  source: KolObservationSource
+}
+
+/** 同一个人在多个渠道的分组（WP116 搬家：`public_person`）。**只分组，不下结论**。 */
+export interface PublicPerson {
+  id: string
+  display_name?: string
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
+/**
+ * 搬家的一行。NDJSON 一行一条，`kind` 是判别键。
+ *
+ * 为什么是一个联合而不是六个接口 / 六个路由：搬家是**一次性**的，而一次性的东西
+ * 越少入口越好。一个 `POST /v1/admin/kol/import` 收所有 kind，脚本一趟推完，
+ * 顺序由脚本保证（先 person / creator，再 contact / content / metric）。
+ */
+export type KolImportRecord =
+  | ({ kind: 'person' } & PublicPerson)
+  | ({
+      kind: 'creator'
+      /** 落库用的自足键的一半；没有 handle 的账号用 `external_id` 顶上。 */
+      handle: string
+      channel: KolChannel
+      external_id?: string
+      name?: string
+      avatar_url?: string
+      country?: string
+      language?: string
+      person_id?: string
+      followers?: number
+      posts_30d?: number
+      engagement_rate?: number
+      categories?: string[]
+      observed_at?: Iso8601
+      extra?: Record<string, string | number | boolean>
+    } & Record<string, unknown>)
+  | ({
+      kind: 'contact'
+      channel: KolChannel
+      handle: string
+      /** **明文**（只在导入的那一趟里出现；落库前就变成哈希 + 密文）。 */
+      email: string
+      source?: KolObservationSource
+      source_url?: string
+      source_detail?: string
+      confirmations?: number
+      disputes?: number
+      at?: Iso8601
+    } & Record<string, unknown>)
+  | ({ kind: 'content' } & Partial<PublicContentSample> & {
+        channel: KolChannel
+        handle: string
+        external_id: string
+      })
+  | ({ kind: 'content_metric' } & {
+      channel: KolChannel
+      handle: string
+      /** 归属内容的平台原生 id。 */
+      content_external_id: string
+      views?: number
+      likes?: number
+      comments?: number
+      shares?: number
+      observed_at?: Iso8601
+      source?: KolObservationSource
+    })
+  | ({ kind: 'metric' } & Partial<PublicCreatorMetricSnapshot> & {
+        channel: KolChannel
+        handle: string
+      })
+
+/** 搬家一趟的结果。**坏行不让整趟失败**，但要数出来。 */
+export interface KolImportResult {
+  received: number
+  inserted: number
+  updated: number
+  skipped: number
+  /** 一条一句人话（同一个理由合并计数）。 */
+  rejected: { reason: string; count: number }[]
+  at: Iso8601
+}
+
+/** 一次搬家最多推多少行（脚本按它分块）。 */
+export const MAX_KOL_IMPORT_BATCH = 500
+
+/** 公共红人库在运营后台那一页看到的那几个数（65 / WP116）。 */
+export interface KolLibraryStats {
+  creators: number
+  contacts: number
+  contents: number
+  observations: number
+  /** 从别处搬进来的红人行数。 */
+  imported: number
+  /** 被移除过（opt-out）的条数。 */
+  removed: number
+  new_7d: number
+  new_30d: number
+  by_channel: { channel: KolChannel; creators: number; contacts: number }[]
   at: Iso8601
 }
 

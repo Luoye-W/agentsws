@@ -201,6 +201,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/kol-public':
+        specifier: workspace:*
+        version: link:../../packages/kol-public
       '@agentsws/metering':
         specifier: workspace:*
         version: link:../../packages/metering
@@ -300,6 +303,9 @@ importers:
       '@agentsws/blob':
         specifier: workspace:*
         version: link:../../packages/blob
+      '@agentsws/brand-intake':
+        specifier: workspace:*
+        version: link:../../packages/brand-intake
       '@agentsws/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog
@@ -605,6 +611,12 @@ importers:
         version: link:../core
 
   packages/brand: {}
+
+  packages/brand-intake:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/catalog:
     dependencies:
