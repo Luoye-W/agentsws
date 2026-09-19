@@ -41,7 +41,7 @@ const collab = (id: string, creator_id: string, over: Partial<Collaboration> = {
   }) as Collaboration
 
 describe('红人库存储（48 §5.2 数据面，WP67）', () => {
-  it('六张表：名字与对象类型一一对应', () => {
+  it('七张表：名字与对象类型一一对应（第七张 exchange 是 WP117b 加的往来）', () => {
     expect([...KOL_TABLES]).toEqual([
       'creator',
       'platform_account',
@@ -49,6 +49,7 @@ describe('红人库存储（48 §5.2 数据面，WP67）', () => {
       'collaboration',
       'deliverable',
       'tracked_link',
+      'exchange',
     ])
   })
 

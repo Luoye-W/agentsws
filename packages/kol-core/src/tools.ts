@@ -49,15 +49,17 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'search_creators',
     description:
-      '按关键词在一条渠道上找红人。没连这条渠道的官方接口时自动走公共红人库；两条路回的是同一个形状。要找人、找频道、找账号、拉一批候选时用它。',
+      '在一条渠道上找红人，可以按关键词、也可以只按粉丝区间。没连这条渠道的官方接口时自动退到你自己的红人库 / 公共红人库；几条路回的是同一个形状。要找人、找频道、找账号、拉一批候选时用它。**没有合适的关键词就别编一个**（「YouTube」「频道」这类词说的是渠道，不是要找什么样的人）——留空表示"这条渠道上的人都算候选"。',
     input_schema: {
       type: 'object',
       properties: {
         channel: CHANNEL_ENUM,
-        q: str('关键词：品类、产品词或人群词'),
+        q: str('关键词：品类、产品词或人群词。没有就不填'),
         limit: { type: 'number', description: '最多要几个，默认 20' },
+        // WP117b（66 复测 #15）：粉丝区间以前只出现在回话里，从没进过入参
+        min_followers: { type: 'number', description: '粉丝数下限（含）' },
+        max_followers: { type: 'number', description: '粉丝数上限（含）' },
       },
-      required: ['q'],
     },
   },
   {

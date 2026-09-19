@@ -45,11 +45,19 @@ export function KolSandboxBar({
     queryFn: () => getKolSandbox(assignment),
   })
 
-  /** 演练动了库，红人 / 合作两份清单都要重取。 */
+  /**
+   * 演练动了库，红人 / 合作两份清单都要重取。
+   *
+   * WP117b：面板那几块（`view`）也要——**「演练漏斗」就在那里**。不重取的话，
+   * 开了演练之后那一块还是一片"—"，人会以为演练没铺进去（第一次拍 e2e 截图时
+   * 就是这么被骗了一下）。往来记录同理。
+   */
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['kol-sandbox'] })
     void client.invalidateQueries({ queryKey: ['kol-creators'] })
     void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
+    void client.invalidateQueries({ queryKey: ['kol-exchanges'] })
+    void client.invalidateQueries({ queryKey: ['view'] })
   }
 
   const toggle = useMutation({

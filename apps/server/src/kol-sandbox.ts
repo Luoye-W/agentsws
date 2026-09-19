@@ -26,8 +26,10 @@ import type {
   CreatorContact,
   Iso8601,
   KolChannel,
+  KolExchange,
   PlatformAccount,
 } from '@agentsws/contracts'
+import { classifyReply } from '@agentsws/kol-core'
 import { KolWorld, type SyntheticCreator, syntheticCreators } from '@agentsws/stand-ins'
 import type { KolStore } from './kol.js'
 import { CONTACT_SECRET_FIELD, contactSecretId } from './kol-service.js'
@@ -41,6 +43,9 @@ export const SANDBOX_ID_PREFIX = 'sbx_'
 
 /** 顶上那条状态带的字。**只有这一份**，界面照它显示，不自己拼一句。 */
 export const SANDBOX_BANNER = '演练中 · 不会发出任何真邮件'
+
+/** 五条渠道（变更 `after` 里那一格认不出来时退到 `youtube`）。 */
+const CHANNELS: readonly KolChannel[] = ['youtube', 'instagram', 'tiktok', 'facebook', 'x']
 
 export interface KolSandboxStatus {
   on: boolean
@@ -96,6 +101,23 @@ export interface KolSandboxOptions {
   count?: number
   /** 事件日志（演练里发生的事也要能查，只是带着 sandbox 标记）。 */
   emit?: (type: string, payload: Record<string, unknown>) => void
+  /**
+   * WP117b（66 复测 #19 的留尾之一，63 那条链）：**回信归并进「消息」库**。
+   *
+   * 演练的回信以前只落在合作线程上，「消息」页的 `kolagents` 文件夹与它互不相干
+   * （66 断点 #9 的剩余）。这个钩子把每一封收到的回信也写进消息库，
+   * 于是用户在「消息 → kolagents」里看得见它，与真邮箱来的红人信一个样子。
+   *
+   * 钩子而不是直接依赖 `MessageStore`：演练场不该认识消息库那一整套
+   * （测试里起一个演练场不用连带起一个消息库）。抛了也只吞掉——
+   * 一封信没归并不该让整个「跳到 3 天后」失败。
+   */
+  onReply?: (input: {
+    exchange: KolExchange
+    /** 合成世界里那个地址（只有 `@example.com` 那一族）。 */
+    from: string
+    display_name: string
+  }) => void
 }
 
 export interface KolSandboxAssembly {
@@ -120,6 +142,8 @@ export interface KolSandboxAssembly {
     subject: string
     body: string
   }): KolSandboxIntercept | undefined
+  /** 这个加密库 key 名属于哪个演练红人（出站那一跳判"这封信归不归演练管"）。 */
+  creatorOfRef(value_ref: string): string | undefined
 }
 
 /** 合成红人 → 库里那三条记录（人、账号、联系方式）。 */
@@ -246,15 +270,58 @@ export function createKolSandbox(options: KolSandboxOptions): KolSandboxAssembly
         const creator_id = `${SANDBOX_ID_PREFIX}${synthetic.id}`
         const collab = sandboxCollabs().find((c) => c.creator_id === creator_id)
         /*
+         * WP117b（66 复测 #19）：**回信要被分类，而且要落库。**
+         *
+         * 分类用的是 `kol-core` 的 `classifyReply`——与真邮箱来的红人信同一个
+         * 分类器，不是演练专用的一套。`known_contact: true` 是因为这封信是
+         * 我们发出去那一封的回复（合成世界只给发过信的人排回信）。
+         * 退信不走词表：投递失败是传输层的事，直接判 `declined`。
+         */
+        const verdict =
+          mail.bounce_reason === undefined
+            ? classifyReply({ text: `${mail.subject}\n${mail.body}`, known_contact: true })
+            : { klass: 'declined' as const, opt_out: false }
+        const exchange: KolExchange = {
+          id: `${SANDBOX_ID_PREFIX}xch_${mail.id}`,
+          creator_id,
+          ...(collab === undefined ? {} : { collaboration_id: collab.id }),
+          channel: channel ?? 'youtube',
+          direction: 'in',
+          subject: mail.subject,
+          body: mail.body,
+          at: mail.at,
+          reply_class: verdict.klass,
+          ...(verdict.opt_out ? { opt_out: true } : {}),
+          ...(mail.bounce_reason === undefined ? {} : { bounce_reason: mail.bounce_reason }),
+          sandbox: true,
+        }
+        store.saveExchange(exchange)
+        /*
          * 回信落地 = 这条合作**至少**到了「有回音」；退信是另一回事——
          * 地址投不出去，这条合作停在那儿并标成「谢绝了」（不是"有回音"，
          * 没人回过话）。阶段机的合法迁移表在 `kol-core`，这里只走它允许的那两步。
+         *
+         * WP117b：他明说"别再发了"也一样停在「谢绝了」——跟进节奏看的就是这一格。
          */
         if (collab !== undefined) {
-          const nextStage = mail.bounce_reason === undefined ? 'replied' : 'declined'
+          const stop = mail.bounce_reason !== undefined || verdict.opt_out
+          const nextStage = stop ? 'declined' : 'replied'
           if (collab.stage === 'sourced' || collab.stage === 'contacted') {
-            store.saveCollaboration({ ...collab, stage: nextStage })
+            store.saveCollaboration({ ...collab, stage: nextStage, last_activity_at: mail.at })
+          } else {
+            store.saveCollaboration({ ...collab, last_activity_at: mail.at })
           }
+        }
+        // 归并进「消息」库（63 那条链）。归不成只吞掉：一封信没挪进文件夹，
+        // 不该让整个「跳到 N 天后」失败。
+        try {
+          options.onReply?.({
+            exchange,
+            from: synthetic.email,
+            display_name: synthetic.display_name,
+          })
+        } catch {
+          /* 63 §5：MOVE 失败只 log，信仍然在合作线程上看得见 */
         }
         received.push({
           creator_id,
@@ -287,6 +354,10 @@ export function createKolSandbox(options: KolSandboxOptions): KolSandboxAssembly
         }
         for (const l of store.links(collab.id)) store.removeRow('tracked_link', l.id)
         store.removeRow('collaboration', collab.id)
+      }
+      // WP117b：往来信件也在"挂在人身上的"那一堆里（先删它们，最后才删人）
+      for (const x of store.exchanges()) {
+        if (x.sandbox === true) store.removeRow('exchange', x.id)
       }
       for (const id of ids) {
         for (const a of store.accounts({ creator_id: id })) {
@@ -321,6 +392,8 @@ export function createKolSandbox(options: KolSandboxOptions): KolSandboxAssembly
         message: `${SANDBOX_BANNER}：这封信投进了演练收件箱，没有经过任何真渠道。`,
       }
     },
+
+    creatorOfRef: (value_ref) => refToCreator.get(value_ref),
   }
 }
 
@@ -369,6 +442,150 @@ export function kolSandboxIntercept(
    * 该去的地方（演练收件箱）。回 failed 会让执行器一直重试一封永远不该真发的信。
    * `outcome_ref` 指向演练红人，人点开就看得见"这封去了哪儿"。
    */
+  return {
+    status: 'ok',
+    execution_id: `ex_sandbox_${verdict.creator_id}`,
+    outcome_ref: { type: 'kol_sandbox_mail', id: verdict.creator_id },
+  }
+}
+
+/* ── WP117b（66 复测 #19）：开发信真发出去的那一跳 ───────────────────── */
+
+/** 一条 `kol_collaboration`（议价）变更的 `after` 里我们认得的那几格。 */
+interface QuoteAfter {
+  collaboration_id?: unknown
+  budget?: unknown
+  currency?: unknown
+  stage?: unknown
+}
+
+/**
+ * **一张议价卡批了之后真的落下去**（WP117b，66 复测 #19）。
+ *
+ * `quoteCollaboration` 一个字都不往库里写——预算与"进谈条件中"全在这一跳。
+ * 这样"批了"在界面上才有意义：批之前合作还停在「有回音」、没有预算，
+ * 批之后那一行当场变成「谈条件中 · 900 USD」。
+ *
+ * 只认带 `collaboration_id` 的那一种（议价）。`createCollaboration` 那条老路
+ * 的 `after` 里没有这一格，照旧走它自己的折中（建的时候就落库），一个字不动。
+ */
+export function kolQuoteApply(
+  brand: { kol?: Pick<KolStore, 'collaboration' | 'saveCollaboration'> } | undefined,
+  change: { id: string; kind: string; after?: unknown },
+): { status: 'ok'; execution_id: string; outcome_ref: { type: string; id: string } } | undefined {
+  if (change.kind !== 'kol_collaboration') return undefined
+  const store = brand?.kol
+  if (store === undefined) return undefined
+  const after =
+    change.after !== null && typeof change.after === 'object'
+      ? (change.after as QuoteAfter)
+      : undefined
+  const id = typeof after?.collaboration_id === 'string' ? after.collaboration_id : undefined
+  if (id === undefined) return undefined
+  const row = store.collaboration(id)
+  if (row === undefined) return undefined
+  const budget = typeof after?.budget === 'number' ? after.budget : row.budget
+  const currency = typeof after?.currency === 'string' ? after.currency : row.currency
+  /*
+   * 阶段只在**还没谈**的时候往前推一步：已经到「谈成」「交付中」的合作，
+   * 再批一张议价卡不该把它拽回「谈条件中」（那是倒着走阶段机）。
+   */
+  const backwards = ['negotiating', 'agreed', 'delivering', 'delivered', 'closed', 'declined']
+  const stage = backwards.includes(row.stage) ? row.stage : 'negotiating'
+  store.saveCollaboration({
+    ...row,
+    stage,
+    ...(budget === undefined ? {} : { budget }),
+    currency,
+    last_activity_at: new Date().toISOString(),
+  })
+  return {
+    status: 'ok',
+    execution_id: `ex_kol_quote_${change.id}`,
+    outcome_ref: { type: 'collaboration', id },
+  }
+}
+
+/** 一条 `kol_outreach` 变更的 `after` 里我们认得的那几格。 */
+interface OutreachAfter {
+  creator_id?: unknown
+  channel?: unknown
+  step?: unknown
+  subject?: unknown
+  body?: unknown
+  recipients?: unknown
+}
+
+/**
+ * **一封被批准了的开发信 → 真投出去 + 落一条往来记录。**
+ *
+ * 66 复测 #19 的根因就在这里：红人的开发信走的是**变更账本**那条路
+ * （`kind: 'kol_outreach'` 的 staged change），批了之后执行器调的是
+ * `backendApply`——而 `backendApply` 在服务进程里接的是内存桩，
+ * 它什么也不做就回 ok。于是：
+ *
+ * - 演练世界一封信都没收到（`sent` 永远是 0，状态带上"已发 0"）；
+ * - 没有信进去，合成红人当然也不会回信（"回信 0"）；
+ * - 合作线程上没有任何"我们发过什么"的痕迹。
+ *
+ * 这个函数把那条路补上。回 `undefined` = 这条变更与红人无关（或者收件人不是
+ * 演练红人），调用方接着走它原来的路。
+ *
+ * **硬闸仍然在这里，不在界面上**：只有 `sandbox.intercept` 认下的收件人才
+ * 走演练收件箱；一封发给真人的开发信在这个函数里得不到 `ok`，
+ * 它会掉回原来那条路（真渠道 / 内存桩），与以前逐字相同。
+ */
+export function kolOutreachApply(
+  brand:
+    | {
+        kolSandbox?: KolSandboxAssembly
+        kol?: Pick<KolStore, 'collaborations' | 'saveCollaboration' | 'saveExchange'>
+      }
+    | undefined,
+  change: { id: string; kind: string; after?: unknown },
+): { status: 'ok'; execution_id: string; outcome_ref: { type: string; id: string } } | undefined {
+  if (change.kind !== 'kol_outreach') return undefined
+  const sandbox = brand?.kolSandbox
+  if (sandbox === undefined) return undefined
+  const after =
+    change.after !== null && typeof change.after === 'object'
+      ? (change.after as OutreachAfter)
+      : undefined
+  if (after === undefined) return undefined
+  const recipients = Array.isArray(after.recipients)
+    ? after.recipients.filter((r): r is string => typeof r === 'string')
+    : []
+  if (recipients.length === 0) return undefined
+  const subject = typeof after.subject === 'string' ? after.subject : ''
+  const body = typeof after.body === 'string' ? after.body : ''
+  const verdict = sandbox.intercept({ recipients, subject, body })
+  if (verdict === undefined) return undefined
+
+  // 投出去了（进的是演练收件箱），把"我们发了这一封"记在合作线程上
+  const store = brand?.kol
+  const at = sandbox.status().now
+  if (store !== undefined) {
+    const channel = CHANNELS.find((c) => c === after.channel) ?? 'youtube'
+    const collab = store
+      .collaborations({ channel })
+      .find((c) => c.creator_id === verdict.creator_id && c.stage !== 'closed')
+    store.saveExchange({
+      id: `xch_${change.id}`,
+      creator_id: verdict.creator_id,
+      ...(collab === undefined ? {} : { collaboration_id: collab.id }),
+      channel,
+      direction: 'out',
+      subject,
+      body,
+      at,
+      sandbox: true,
+      change_id: change.id,
+      ...(after.step === 'follow_up' || after.step === 'final' || after.step === 'first'
+        ? { step: after.step }
+        : {}),
+    })
+    if (collab !== undefined) store.saveCollaboration({ ...collab, last_activity_at: at })
+  }
   return {
     status: 'ok',
     execution_id: `ex_sandbox_${verdict.creator_id}`,

@@ -267,6 +267,22 @@ describe('WP68 合作与交付物', () => {
     expect(link.url).toContain('utm_medium=kol')
     expect(link.affiliate_code).toMatch(/^GADGETJO\d\d$/)
   })
+
+  it('追踪链接：活动名不给了就默认用这条合作的活动 id（WP117b，合作线程上顺手建一条不该被活动名挡住）', async () => {
+    const id = await addCreator('Gadget Jonas')
+    const staged = await data<{ collaboration?: { id: string } }>(
+      await post('/v1/kol/collaborations', { creator_id: id, channel: 'youtube' }),
+    )
+    const col = staged.collaboration?.id as string
+    const link = await data<{ utm: { campaign: string } }>(
+      await post('/v1/kol/tracked-links', {
+        collaboration_id: col,
+        url: 'https://nordvolt.example/p/charger-65w',
+      }),
+    )
+    // 没有活动就落在合作 id 上：稳定、不重复、不透懒（UTM 会出现在公开链接上）
+    expect(link.utm.campaign).toBe(col.toLowerCase())
+  })
 })
 
 describe('WP68 导入与合并建议', () => {

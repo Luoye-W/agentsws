@@ -572,6 +572,19 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     const run_id = `run_kol_${nextId('o')}`
     const target: ObjectRef = { type: 'creator_contact', id: contact.id }
     const { mandate, level } = actionOf(input.actor.assignment_id, OUTREACH_ACTION)
+    /*
+     * WP117b（66 复测 #19）：**演练里的开发信一律出卡等人批。**
+     *
+     * 真实那一侧照职责模板走（`stage_outreach` initial L2 → 低风险 → 自动批），
+     * 那是 48 §5.1 定的，不动它。可演练的整个目的就是**让人看清这条链**：
+     * 起草 → 一张 outbound 排版的卡 → 人点「批」→ 信真的投出去（进演练收件箱）
+     * → 对面按性格回信。自动批掉的话，人在界面上什么都没看见，
+     * 「已发 1」就只是一个凭空跳出来的数。
+     *
+     * 判据是**这个人是不是演练红人**（`Creator.sandbox`），不是"现在是不是演练模式"
+     * ——用户可以一边演练一边干真活，那边的开发信不该因此多一道手续。
+     */
+    const sandboxDrill = input.creator.sandbox === true
     const outcome = await ledger.stage({
       workspace_id,
       role_id: input.actor.role_id,
@@ -597,7 +610,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       notes: [`给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`],
       created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
       mandate,
-      level,
+      level: sandboxDrill ? 'L1' : level,
       provenance: provenanceOf(run_id, [target, { type: 'creator', id: input.creator.id }]),
       approval: {
         title: `开发信：${input.creator.display_name}（${SEQUENCE_LABEL[draft.step]}）`,
@@ -636,8 +649,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     const collab = store
       .collaborations({ channel: input.channel })
       .find((c) => c.creator_id === input.creator.id && c.stage === 'sourced')
+    // WP117b（66 复测 #18）：合作清单上要显示"最近一次往来"，起草也算一次动静
     if (draft.step === 'first' && collab !== undefined)
-      store.saveCollaboration({ ...collab, stage: 'contacted' })
+      store.saveCollaboration({ ...collab, stage: 'contacted', last_activity_at: clock.now() })
     return {
       step: draft.step,
       subject: draft.subject,
@@ -661,6 +675,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     channel: KolChannel
     q: string
     limit?: number | undefined
+    min_followers?: number | undefined
+    max_followers?: number | undefined
   }): Promise<KolSearchResult> => {
     const library = options.publicLibrary
     if (library === undefined || !library.linked())
@@ -690,19 +706,22 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     return {
       ok: true,
       source: 'public_library',
-      rows: out.data.rows.map((row: PublicCreatorRow) => ({
-        channel: row.channel,
-        handle: row.handle,
-        url: urlOfPublicRow(row.channel, row.handle),
-        display_name: row.display_name,
-        ...(row.followers === undefined ? {} : { followers: row.followers }),
-        ...(row.engagement_rate === undefined ? {} : { engagement_rate: row.engagement_rate }),
-        ...(row.category === undefined ? {} : { category: row.category }),
-        ...(row.language === undefined ? {} : { language: row.language }),
-        ...(row.region === undefined ? {} : { region: row.region }),
-        has_contact: row.has_contact,
-        in_library: known.has(normalizeHandle(row.handle)),
-      })),
+      rows: out.data.rows
+        // WP117b（66 复测 #15）：公共库这一档也按粉丝区间筛
+        .filter((row: PublicCreatorRow) => inBand(row.followers, input))
+        .map((row: PublicCreatorRow) => ({
+          channel: row.channel,
+          handle: row.handle,
+          url: urlOfPublicRow(row.channel, row.handle),
+          display_name: row.display_name,
+          ...(row.followers === undefined ? {} : { followers: row.followers }),
+          ...(row.engagement_rate === undefined ? {} : { engagement_rate: row.engagement_rate }),
+          ...(row.category === undefined ? {} : { category: row.category }),
+          ...(row.language === undefined ? {} : { language: row.language }),
+          ...(row.region === undefined ? {} : { region: row.region }),
+          has_contact: row.has_contact,
+          in_library: known.has(normalizeHandle(row.handle)),
+        })),
       ...(price === undefined ? {} : { reveal_price: price }),
     }
   }
@@ -724,17 +743,55 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     }
   }
 
+  /*
+   * WP117b（66 复测 #15）：**搜不到东西的那两个原因，都在这两个小函数里。**
+   *
+   * ① 关键词以前是**整串**去 `includes`：Agent 递进来的是「youtube 频道」这样一串，
+   *    没有任何一个 handle 或名字整串带着它，于是回 0 个。现在**按词拆开、任意一个
+   *    命中就算**，而且名字 / handle / 类目三处都看——「桌面 好物」里的「桌面」
+   *    命中类目也该算数。
+   * ② 粉丝区间以前**根本没有这一层过滤**。
+   */
+  const matchesQ = (account: PlatformAccount, q: string | undefined): boolean => {
+    const words = (q ?? '')
+      .toLowerCase()
+      .split(/[\s,，、]+/)
+      .filter((w) => w !== '')
+    if (words.length === 0) return true
+    const hay = [
+      account.handle,
+      store.creator(account.creator_id)?.display_name ?? '',
+      account.category ?? '',
+      account.region ?? '',
+    ]
+      .join(' ')
+      .toLowerCase()
+    return words.some((w) => hay.includes(w))
+  }
+
+  /**
+   * 粉丝数落不落在区间里（两头都含）。
+   *
+   * **粉丝数没有的那些人算落在区间里**：不知道 ≠ 不合格（36 §3 的同一条）。
+   * 把他们剔掉，等于因为"我们没抓到这个数"就当这个人不存在。
+   */
+  const inBand = (
+    followers: number | undefined,
+    filter: { min_followers?: number | undefined; max_followers?: number | undefined },
+  ): boolean => {
+    if (followers === undefined) return true
+    if (filter.min_followers !== undefined && followers < filter.min_followers) return false
+    if (filter.max_followers !== undefined && followers > filter.max_followers) return false
+    return true
+  }
+
   const port: KolPort = {
     creators(_actor, filter) {
       const now = clock.now()
       const accounts = store
         .accounts(filter.channel === undefined ? {} : { channel: filter.channel })
-        .filter((a) => {
-          if (filter.q === undefined || filter.q.trim() === '') return true
-          const q = filter.q.trim().toLowerCase()
-          const name = store.creator(a.creator_id)?.display_name ?? ''
-          return a.handle.toLowerCase().includes(q) || name.toLowerCase().includes(q)
-        })
+        .filter((a) => matchesQ(a, filter.q))
+        .filter((a) => inBand(a.followers, filter))
       const hasContact = new Set(store.contacts().map((ct) => ct.creator_id))
       // 排序（含"刷粉的排在后面而不是剔掉"）在 `rankCreators` 里，不在这儿重写
       const rows: KolCreatorRow[] = rankCreators(accounts, { now }).map(({ account, score }) => ({
@@ -783,18 +840,22 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         return { ok: false, source: 'channel', rows: [], reason: out.reason, message: out.message }
       }
       const known = knownHandles(input.channel)
-      const rows: KolSearchHit[] = out.data.map((hit) => ({
-        channel: hit.channel,
-        handle: hit.handle,
-        url: hit.url,
-        display_name: hit.display_name,
-        ...(hit.followers === undefined ? {} : { followers: hit.followers }),
-        ...(hit.engagement_rate === undefined ? {} : { engagement_rate: hit.engagement_rate }),
-        ...(hit.category === undefined ? {} : { category: hit.category }),
-        ...(hit.language === undefined ? {} : { language: hit.language }),
-        ...(hit.region === undefined ? {} : { region: hit.region }),
-        in_library: known.has(normalizeHandle(hit.handle)),
-      }))
+      const rows: KolSearchHit[] = out.data
+        // WP117b（66 复测 #15）：粉丝区间对渠道这条路同样作数（渠道接口自己
+        // 大多不收这个条件，所以在这儿收）
+        .filter((hit) => inBand(hit.followers, input))
+        .map((hit) => ({
+          channel: hit.channel,
+          handle: hit.handle,
+          url: hit.url,
+          display_name: hit.display_name,
+          ...(hit.followers === undefined ? {} : { followers: hit.followers }),
+          ...(hit.engagement_rate === undefined ? {} : { engagement_rate: hit.engagement_rate }),
+          ...(hit.category === undefined ? {} : { category: hit.category }),
+          ...(hit.language === undefined ? {} : { language: hit.language }),
+          ...(hit.region === undefined ? {} : { region: hit.region }),
+          in_library: known.has(normalizeHandle(hit.handle)),
+        }))
       return {
         ok: true,
         source: 'channel',
@@ -1007,6 +1068,88 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       }
     },
 
+    /**
+     * WP117b（66 复测 #19）：**议价**——给一条已经存在的合作报一个数。
+     *
+     * 为什么不复用 `createCollaboration`：那一条是"新建一条合作"，给已经在谈的人
+     * 再建一条，库里就有两条指着同一个人的合作，阶段各走各的。议价改的是**这一条**。
+     *
+     * 出的是一张 money 排版的卡（`kol_collaboration` 在 15 §2 的 `HARD_L1` 里，
+     * 报什么数都按回人审）。**批了才算数**：这里一个字都不往库里写，
+     * 预算与阶段推进由施行那一跳做（`kolQuoteApply`）——与开发信同一条路，
+     * 也是 66 断点 #5「接口 200 但界面上什么都没发生」的反面。
+     */
+    async quoteCollaboration(actor, id, input) {
+      const row = store.collaboration(id)
+      if (row === undefined) throw new ApiError('not_found', '库里没有这条合作')
+      const creator = creatorOr404(row.creator_id)
+      const currency = input.currency ?? row.currency
+      const run_id = `run_kol_${nextId('q')}`
+      const target: ObjectRef = { type: 'collaboration', id: row.id }
+      const { mandate, level } = actionOf(actor.assignment_id, COLLAB_ACTION)
+      const outcome = await ledger.stage({
+        workspace_id,
+        role_id: actor.role_id,
+        assignment_id: actor.assignment_id,
+        run_id,
+        change_set_id: `cs_${run_id}`,
+        kind: 'kol_collaboration',
+        target,
+        before: { budget: row.budget ?? null, stage: row.stage, currency: row.currency },
+        after: {
+          collaboration_id: row.id,
+          creator_id: creator.id,
+          creator_name: creator.display_name,
+          channel: row.channel,
+          budget: input.budget,
+          currency,
+          stage: 'negotiating',
+        },
+        money: {
+          amount: input.budget,
+          currency,
+          amount_base: input.budget,
+          base_currency: currency,
+          fx_rate: 1,
+          fx_at: clock.now(),
+        },
+        notes: [
+          `给 ${creator.display_name} 报 ${input.budget} ${currency}${
+            input.note === undefined ? '' : `：${input.note}`
+          }`,
+        ],
+        created_by: { kind: 'person', id: actor.person_id },
+        mandate,
+        level,
+        provenance: provenanceOf(run_id, [target, { type: 'creator', id: creator.id }]),
+        approval: {
+          title: `议价：${creator.display_name}（${input.budget} ${currency}）`,
+          summary: `这条合作要付 ${input.budget} ${currency}。批了才作数，批完这条合作进「谈条件中」。`,
+          recipients: [{ person: actor.person_id, via: 'owner' }],
+          proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+          rule: 'owner',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) return { staged: false, message: outcome.message } satisfies KolStagedView
+      emit('kol.collaboration_quoted', actor.person_id, {
+        collaboration_id: row.id,
+        creator_id: creator.id,
+        budget: input.budget,
+        currency,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        auto_approved: outcome.approval.automation.auto_approved,
+      })
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        auto_approved: outcome.approval.automation.auto_approved,
+      }
+    },
+
     advanceCollaboration(actor, id, input) {
       const row = store.collaboration(id)
       if (row === undefined) throw new ApiError('not_found', '库里没有这条合作')
@@ -1023,6 +1166,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         stage,
         // 谈成那一刻记下来：归因与预算都要知道"从哪天起这笔钱算数"
         ...(stage === 'agreed' && row.agreed_at === undefined ? { agreed_at: clock.now() } : {}),
+        // WP117b（66 复测 #18）：推一步阶段也是一次动静，清单上那一列要跟着走
+        last_activity_at: clock.now(),
       }
       store.saveCollaboration(next)
       emit('kol.collaboration_stage_changed', actor.person_id, {
@@ -1046,8 +1191,10 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     },
 
     createDeliverable(actor, input) {
-      if (store.collaboration(input.collaboration_id) === undefined)
-        throw new ApiError('not_found', '库里没有这条合作，交付物挂不上去')
+      const owner = store.collaboration(input.collaboration_id)
+      if (owner === undefined) throw new ApiError('not_found', '库里没有这条合作，交付物挂不上去')
+      // WP117b（66 复测 #18）：登记一条交付物也是一次动静
+      store.saveCollaboration({ ...owner, last_activity_at: clock.now() })
       const row: Deliverable = {
         id: nextId('dlv'),
         collaboration_id: input.collaboration_id,
@@ -1138,13 +1285,34 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       return { rows: store.links(filter.collaboration_id) }
     },
 
+    /**
+     * WP117b（66 复测 #19）：这条合作来往过什么。
+     *
+     * 时间正序（库里那一层已经排好），**正文原样端出去**——合作线程页上
+     * 要看得见我们发的那一封与他回的那一封，不是一句"有 3 封往来"。
+     */
+    exchanges(_actor, filter) {
+      const rows = store.exchanges({
+        ...(filter.collaboration_id === undefined
+          ? {}
+          : { collaboration_id: filter.collaboration_id }),
+        ...(filter.creator_id === undefined ? {} : { creator_id: filter.creator_id }),
+      })
+      return { rows: filter.limit === undefined ? rows : rows.slice(-filter.limit) }
+    },
+
     createTrackedLink(actor, input) {
       const collab = store.collaboration(input.collaboration_id)
       if (collab === undefined) throw new ApiError('not_found', '库里没有这条合作')
+      /*
+       * WP117b：活动名不给了就默认用这条合作的活动 id（没有活动就用合作 id）。
+       * UTM 会出现在公开链接上，所以用 id 而不是人起的名字——稳、不重复、不泄懒。
+       */
+      const campaign = input.campaign ?? collab.campaign_id ?? collab.id
       const account = store.accounts({ creator_id: collab.creator_id, channel: collab.channel })[0]
       const utm = buildUtm({
         channel: collab.channel,
-        campaign: input.campaign,
+        campaign,
         // `content` 放的是合作 id 而不是红人的名字：UTM 会出现在公开链接上
         collaboration_id: collab.id,
         ...(input.utm?.term === undefined ? {} : { term: input.utm.term }),
