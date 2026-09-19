@@ -21,6 +21,7 @@ import type { DoSqlCursor, DoStorageLike } from '../src/do-sql.js'
 import type { DoNamespaceLike, WorkerEnv } from '../src/env.js'
 import { KOL_PUBLIC_SINGLETON } from '../src/kol-admin.js'
 import { KolPublicCore, type KolPublicDoOptions } from '../src/kol-public-do.js'
+import { KolTenantCore } from '../src/kol-tenant-do.js'
 import { LedgerCore } from '../src/ledger-do.js'
 import { WalletCore, type WalletDoOptions } from '../src/wallet-do.js'
 
@@ -80,6 +81,13 @@ export interface FakeCloudOptions {
    * `/v1/data/kol/*` 回 404"。要测公共库的那几条自己打开它。
    */
   kol?: boolean | KolPublicDoOptions
+  /**
+   * 绑不绑红人营销增值服务的租户对象（WP118）。
+   *
+   * **默认不绑**：与 `kol` 同一条纪律——"没绑的时候 `/v1/kol/*` 回 404"本身
+   * 就是要钉住的行为。
+   */
+  kolTenant?: boolean
 }
 
 export interface FakeCloud {
@@ -92,6 +100,8 @@ export interface FakeCloud {
   ledger(): LedgerCore
   /** 单例的公共红人库（WP116）。没开 `kol` 时调它会抛。 */
   kol(): KolPublicCore
+  /** 某个组织的云端红人库（WP118）。没开 `kolTenant` 时调它会抛。 */
+  kolTenant(org_id: string): KolTenantCore
   /** 某个组织的钱包存储（测试里预充值、看闹钟用）。 */
   walletStorage(org_id: string): FakeDoStorage
   accountsStorage(): FakeDoStorage
@@ -183,6 +193,21 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
     return made
   }
 
+  /*
+   * 云端红人库（**每个组织一个**）。钱那一跳走真的 `WalletDO`——WP118 要钉的
+   * 正是"月费真的从这个组织的钱包里扣掉了"，所以这里不塞假钱包。
+   */
+  const tenantCores = new Map<string, KolTenantCore>()
+  const tenantCore = (name: string): KolTenantCore => {
+    const found = tenantCores.get(name)
+    if (found !== undefined) return found
+    const made = new KolTenantCore({ storage: storageOf(`ten:${name}`) }, env, {
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    })
+    tenantCores.set(name, made)
+    return made
+  }
+
   /** `ctx.waitUntil` 排着的那些（测试里显式 settle）。 */
   const pending: Promise<unknown>[] = []
 
@@ -212,6 +237,7 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
   env.WALLET = namespace(walletCore)
   env.LEDGER = namespace(ledgerCore)
   if (options.kol !== undefined && options.kol !== false) env.KOL_PUBLIC = namespace(kolCore)
+  if (options.kolTenant === true) env.KOL_TENANT = namespace(tenantCore)
   // 假的 `[assets]`：只回一句"这是后台的壳"，够验"有会话才拿得到"
   env.ASSETS = {
     fetch: async (request: Request) =>
@@ -234,6 +260,11 @@ export function fakeCloud(options: FakeCloudOptions = {}): FakeCloud {
       if (env.KOL_PUBLIC === undefined)
         throw new Error('这个 fakeCloud 没绑公共红人库（`fakeCloud({ kol: true })`）')
       return kolCore(KOL_PUBLIC_SINGLETON)
+    },
+    kolTenant: (org_id) => {
+      if (env.KOL_TENANT === undefined)
+        throw new Error('这个 fakeCloud 没绑云端红人库（`fakeCloud({ kolTenant: true })`）')
+      return tenantCore(org_id)
     },
     walletStorage: (org_id) => storageOf(`wal:${org_id}`),
     accountsStorage: () => storageOf('acc:accounts'),

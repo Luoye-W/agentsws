@@ -73,7 +73,8 @@ function memoryDb(): SqliteLike {
     }
     if (sql.includes('INSERT INTO kol_cloud_charges')) {
       const key = String(args[0])
-      if (!charges.has(key)) charges.set(key, { charge_key: key, json: String(args[1]), at: String(args[2]) })
+      if (!charges.has(key))
+        charges.set(key, { charge_key: key, json: String(args[1]), at: String(args[2]) })
       return { changes: 1 }
     }
     if (sql.includes('INSERT INTO kol_cloud_audit')) {
@@ -159,7 +160,10 @@ function fakeWallet(): SubscriptionWallet & { charges: string[]; broke: boolean 
     // eslint-disable-next-line @typescript-eslint/require-await
     async charge(args: { request_id: string; credits: number }) {
       if (state.broke)
-        return { ok: false as const, reason: `积分不够了：这一次要 ${String(args.credits)} 积分，可用 4。` }
+        return {
+          ok: false as const,
+          reason: `积分不够了：这一次要 ${String(args.credits)} 积分，可用 4。`,
+        }
       state.charges.push(args.request_id)
       return { ok: true as const, credits: args.credits }
     },
@@ -201,8 +205,9 @@ describe('红人营销增值服务', () => {
 
   describe('没订阅', () => {
     it('调同步接口回 402，一句人话，而且不是 403', async () => {
-      await expect(async () => service.push(PRINCIPAL, { writer: 'device:a', objects: [obj()] }))
-        .rejects.toBeInstanceOf(KolCloudError)
+      await expect(async () =>
+        service.push(PRINCIPAL, { writer: 'device:a', objects: [obj()] }),
+      ).rejects.toBeInstanceOf(KolCloudError)
       try {
         service.status(PRINCIPAL)
         service.pull(PRINCIPAL, {})
@@ -333,7 +338,11 @@ describe('红人营销增值服务', () => {
       const result = service.push(PRINCIPAL, {
         writer: 'device:b',
         objects: [
-          obj({ writer: 'device:b', updated_at: '2026-02-05T00:00:00.000Z', body: { handle: 'b' } }),
+          obj({
+            writer: 'device:b',
+            updated_at: '2026-02-05T00:00:00.000Z',
+            body: { handle: 'b' },
+          }),
         ],
       })
       expect(result.conflicts).toHaveLength(1)
@@ -391,11 +400,16 @@ describe('红人营销增值服务', () => {
 
     it('下行按游标翻页，自己推上来的不回给自己', () => {
       service.push(PRINCIPAL, { writer: 'device:a', objects: [obj(), obj({ id: 'c2' })] })
-      service.push(PRINCIPAL, { writer: 'device:b', objects: [obj({ id: 'c3', writer: 'device:b' })] })
+      service.push(PRINCIPAL, {
+        writer: 'device:b',
+        objects: [obj({ id: 'c3', writer: 'device:b' })],
+      })
       const forA = service.pull(PRINCIPAL, { cursor: '0', writer: 'device:a' })
       expect(forA.objects.map((o) => o.id)).toEqual(['c3'])
       // 再拉一次（带着新游标）就没有了
-      expect(service.pull(PRINCIPAL, { cursor: forA.cursor, writer: 'device:a' }).objects).toEqual([])
+      expect(service.pull(PRINCIPAL, { cursor: forA.cursor, writer: 'device:a' }).objects).toEqual(
+        [],
+      )
     })
 
     it('一次推太多：回一句人话，让本地自己分批（不是默默截断）', () => {

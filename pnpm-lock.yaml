@@ -79,6 +79,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/kol-cloud':
+        specifier: workspace:*
+        version: link:../../packages/kol-cloud
       '@agentsws/kol-public':
         specifier: workspace:*
         version: link:../../packages/kol-public
@@ -201,6 +204,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/kol-cloud':
+        specifier: workspace:*
+        version: link:../../packages/kol-cloud
       '@agentsws/kol-public':
         specifier: workspace:*
         version: link:../../packages/kol-public

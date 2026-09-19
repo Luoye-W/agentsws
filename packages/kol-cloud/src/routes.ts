@@ -21,10 +21,9 @@
  */
 import type { CloudTokenVerifier } from '@agentsws/contracts'
 import { WORKSPACE_TOKEN_PREFIX } from '@agentsws/contracts'
-import type { Context, MiddlewareHandler } from 'hono'
-import type { Hono } from 'hono'
+import type { Context, Hono } from 'hono'
 import type { KolCloudService } from './service.js'
-import { KolCloudError, type KolCloudEnv, type KolCloudPrincipal } from './types.js'
+import { type KolCloudEnv, KolCloudError, type KolCloudPrincipal } from './types.js'
 
 /** 路径前缀。`/v1/data/kol/*` 是**公共库**那一层，两者不共用一个字节。 */
 export const KOL_CLOUD_PREFIX = '/v1/kol'
@@ -38,7 +37,15 @@ export function isKolCloudPath(pathname: string): boolean {
 export const KOL_CLOUD_SCOPE = 'kol'
 
 export interface KolCloudRouteDeps {
-  service: KolCloudService
+  /**
+   * **按组织**取服务。
+   *
+   * 为什么是一个函数而不是一个实例：两个形态里"一个组织一份数据"的落法不同
+   * （Workers 是一个 DO 一份，Compose 是一个库文件一份），但路由表是同一张。
+   * 把"选哪一份"这一步交给装配方，路由包就不必认识多租户这件事——也就不可能
+   * 写出一条忘了按组织过滤的查询。
+   */
+  serviceOf: (principal: KolCloudPrincipal) => KolCloudService
   /** 验工作区服务令牌。Workers 形态已经在入口验过，这里给一个读内部头的替身。 */
   verifier: CloudTokenVerifier
 }
@@ -94,71 +101,93 @@ export function errorResponse(err: unknown): Response {
   )
 }
 
-const principalOf = (c: Context<KolCloudEnv>): KolCloudPrincipal => {
-  const found = c.get('kol_cloud_principal')
-  // 中间件跑过就一定有；没有是装配错了，要吵（无声地当成匿名请求更危险）
-  if (found === undefined) throw new KolCloudError('internal', '这一次请求没有主体。')
-  return found
-}
-
-/** 把这一组路由挂到一个 Hono 应用上。 */
+/**
+ * 把这一组路由挂到一个 Hono 应用上。
+ *
+ * 每条处理器**各自包一层 try/catch**（{@link guard}），而不是靠一个 `app.use`
+ * 的错误中间件或 `app.onError`：这组路由会被挂进两个不同的应用（Workers 形态
+ * 是这个包自己建的 Hono，Compose 形态是云侧那个已经有自己 `onError` 的应用），
+ * 而那两种应用对"谁来兜错"的约定不一样。包在自己这一层，两边行为一模一样。
+ */
 export function mountKolCloudRoutes(app: Hono<KolCloudEnv>, deps: KolCloudRouteDeps): void {
-  const auth: MiddlewareHandler<KolCloudEnv> = async (c, next) => {
-    const principal = await authenticate(deps, c.req.header('Authorization'))
-    c.set('kol_cloud_principal', principal)
-    await next()
-  }
-
-  app.use(`${KOL_CLOUD_PREFIX}/*`, async (c, next) => {
-    try {
-      await next()
-    } catch (err) {
-      return errorResponse(err)
+  /**
+   * 把一个处理器包成"绝不抛"的：错误一律翻成 `{ code, message }` 信封。
+   *
+   * 处理器拿到的是**已经按组织选好的那一份服务**——它没有办法拿到别人的那一份。
+   */
+  const guard =
+    (
+      fn: (
+        service: KolCloudService,
+        principal: KolCloudPrincipal,
+        c: Context<KolCloudEnv>,
+      ) => Response | Promise<Response>,
+    ) =>
+    async (c: Context<KolCloudEnv>): Promise<Response> => {
+      try {
+        // 鉴权也在里面：401 / 403 与业务错走同一条翻译路径，不会漏成 500
+        const principal = await authenticate(deps, c.req.header('Authorization'))
+        c.set('kol_cloud_principal', principal)
+        return await fn(deps.serviceOf(principal), principal, c)
+      } catch (err) {
+        return errorResponse(err)
+      }
     }
-    return undefined
-  })
 
-  app.get(`${KOL_CLOUD_PREFIX}/sync/status`, auth, (c) =>
-    c.json(deps.service.status(principalOf(c))),
+  app.get(
+    `${KOL_CLOUD_PREFIX}/sync/status`,
+    guard((service, principal) => Response.json(service.status(principal))),
   )
 
-  app.post(`${KOL_CLOUD_PREFIX}/sync/push`, auth, async (c) => {
-    const body = (await c.req.json().catch(() => {
-      throw new KolCloudError('invalid_input', '请求体不是合法 JSON。')
-    })) as { writer?: string; objects?: unknown[] }
-    return c.json(
-      deps.service.push(principalOf(c), {
-        writer: String(body.writer ?? ''),
-        objects: (body.objects ?? []) as never,
-      }),
-    )
-  })
-
-  app.get(`${KOL_CLOUD_PREFIX}/sync/pull`, auth, (c) => {
-    const limitRaw = c.req.query('limit')
-    const parsed = limitRaw === undefined ? Number.NaN : Number(limitRaw)
-    return c.json(
-      deps.service.pull(principalOf(c), {
-        ...(c.req.query('cursor') === undefined ? {} : { cursor: c.req.query('cursor') as string }),
-        ...(c.req.query('writer') === undefined ? {} : { writer: c.req.query('writer') as string }),
-        ...(Number.isFinite(parsed) ? { limit: parsed } : {}),
-      }),
-    )
-  })
-
-  app.post(`${KOL_CLOUD_PREFIX}/subscription`, auth, async (c) =>
-    c.json(await deps.service.subscribe(principalOf(c))),
+  app.post(
+    `${KOL_CLOUD_PREFIX}/sync/push`,
+    guard(async (service, principal, c) => {
+      const body = (await c.req.json().catch(() => {
+        throw new KolCloudError('invalid_input', '请求体不是合法 JSON。')
+      })) as { writer?: string; objects?: unknown[] }
+      return Response.json(
+        service.push(principal, {
+          writer: String(body.writer ?? ''),
+          objects: (body.objects ?? []) as never,
+        }),
+      )
+    }),
   )
 
-  app.delete(`${KOL_CLOUD_PREFIX}/subscription`, auth, (c) =>
-    c.json(deps.service.cancel(principalOf(c))),
+  app.get(
+    `${KOL_CLOUD_PREFIX}/sync/pull`,
+    guard((service, principal, c) => {
+      const limitRaw = c.req.query('limit')
+      const parsed = limitRaw === undefined ? Number.NaN : Number(limitRaw)
+      const cursor = c.req.query('cursor')
+      const writer = c.req.query('writer')
+      return Response.json(
+        service.pull(principal, {
+          ...(cursor === undefined ? {} : { cursor }),
+          ...(writer === undefined ? {} : { writer }),
+          ...(Number.isFinite(parsed) ? { limit: parsed } : {}),
+        }),
+      )
+    }),
   )
 
-  app.get(`${KOL_CLOUD_PREFIX}/cloud/export`, auth, (c) =>
-    c.json(deps.service.exportAll(principalOf(c))),
+  app.post(
+    `${KOL_CLOUD_PREFIX}/subscription`,
+    guard(async (service, principal) => Response.json(await service.subscribe(principal))),
   )
 
-  app.delete(`${KOL_CLOUD_PREFIX}/cloud`, auth, (c) =>
-    c.json(deps.service.deleteAll(principalOf(c))),
+  app.delete(
+    `${KOL_CLOUD_PREFIX}/subscription`,
+    guard((service, principal) => Response.json(service.cancel(principal))),
+  )
+
+  app.get(
+    `${KOL_CLOUD_PREFIX}/cloud/export`,
+    guard((service, principal) => Response.json(service.exportAll(principal))),
+  )
+
+  app.delete(
+    `${KOL_CLOUD_PREFIX}/cloud`,
+    guard((service, principal) => Response.json(service.deleteAll(principal))),
   )
 }

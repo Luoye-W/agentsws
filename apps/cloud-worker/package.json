@@ -18,6 +18,7 @@
     "@agentsws/cloud-entry": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
+    "@agentsws/kol-cloud": "workspace:*",
     "@agentsws/kol-public": "workspace:*",
     "@agentsws/metering": "workspace:*",
     "hono": "^4.13.7"

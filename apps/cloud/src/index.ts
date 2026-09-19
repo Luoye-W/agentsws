@@ -93,6 +93,12 @@ export {
   rateLimited,
 } from './guards.js'
 export {
+  KOL_CLOUD_DIR,
+  type MountedKolCloud,
+  type MountKolCloudOptions,
+  mountKolCloud,
+} from './kol-cloud.js'
+export {
   KOL_DB_FILE,
   kolDbPath,
   type MountedKolPublic,
@@ -218,6 +224,7 @@ import { createAdminStore, mountAdminPages } from './admin/mount.js'
 import { type AdminConsoleWallet, adminConsoleRoutes } from './admin/routes.js'
 import type { AdminStore } from './admin/store.js'
 import { DEFAULT_NEWAPI_BASE_URL, ENTRY_ENV, mountEntry } from './entry.js'
+import { mountKolCloud } from './kol-cloud.js'
 import { mountKolPublic } from './kol-public.js'
 import { SMTP_ENV } from './mail.js'
 import { mailSenderFromEnv } from './mail-smtp.js'
@@ -353,6 +360,17 @@ export async function main(): Promise<void> {
     ...(dataDir === undefined ? {} : { dataDir }),
   })
   /*
+   * 67 §3 / WP118：红人营销增值服务（`/v1/kol/*`，鉴权要 `kol` 动作集）。
+   *
+   * 与上面那个公共库刚好相反：公共库一台机器一份（跨租户共享的事实），
+   * 这一份**一个组织一个库文件**——隔离边界与 Workers 形态里的对象边界一致。
+   */
+  const kolCloud = mountKolCloud(server, {
+    wallet: entry.wallet,
+    clock,
+    ...(dataDir === undefined ? {} : { dataDir }),
+  })
+  /*
    * 后台那一页要的是"库统计 / 搜索 / 移除 / 搬家"，而这四件事只有 sqlite 那份
    * 存储做得到（内存那份没有搬家用的那几张表）。所以内存档下**这一页回 503**，
    * 不画一堆 0——与看板页同一条。
@@ -402,6 +420,7 @@ export async function main(): Promise<void> {
     entry: true,
     standby: true,
     kol_public: true,
+    kol_cloud: true,
     mail: (env[SMTP_ENV.url] ?? '').trim() !== '',
     admin_topup: admin !== undefined,
     admin_console: true,
@@ -420,6 +439,20 @@ export async function main(): Promise<void> {
     // WP115：会员 cycle 的续发搭在这一拍上（幂等，重跑安全）
     also: () => {
       runDueGrants(adminStore as AdminStore, entry.wallet, clock)
+      /*
+       * WP118：增值服务的月费也搭在这一拍上（幂等，重跑安全）。
+       * Workers 形态里这件事由每个租户对象自己的 alarm 做——两个形态各有各的
+       * 定时器，但跑的是同一个 `runBilling`。
+       *
+       * **只扣已经建过库的那些组织**：没开通过的组织连库都没有，遍历它们等于
+       * 凭空建一堆空库文件。
+       */
+      for (const org_id of kolCloud.orgs()) {
+        const service = kolCloud.serviceOf(org_id)
+        const owner = service.store.owner()
+        if (owner === undefined) continue
+        void service.runBilling(owner)
+      }
     },
   })
   maintenance.runOnce()

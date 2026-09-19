@@ -74,6 +74,7 @@ import { doSyncDb } from './do-sql.js'
 import type { WorkerEnv } from './env.js'
 import { INTERNAL_HEADERS, principalFrom } from './internal.js'
 import { handleKolWallet } from './kol-wallet.js'
+import { handleSubscriptionWallet } from './subscription-wallet.js'
 import { copyEventsTo, copyLotsTo, LEDGER_SINGLETON } from './ledger-do.js'
 import { createOutbox, type Outbox, outboxEventKey } from './outbox.js'
 import { handleWalletAdmin } from './wallet-admin.js'
@@ -302,6 +303,16 @@ export class WalletCore {
       this.#scheduleFlush()
       await this.armAlarm()
       return kolRes
+    }
+    /*
+     * WP118：增值服务的月费。**不是两段式**——月费是一个定数，所以预扣与结算
+     * 在同一次调用里同步做完（见 `subscription-wallet.ts` 的头注释）。
+     */
+    const subRes = await handleSubscriptionWallet({ wallet: this.wallet }, request, url)
+    if (subRes !== undefined) {
+      this.#scheduleFlush()
+      await this.armAlarm()
+      return subRes
     }
     const principal = principalFrom(request)
     const run = async (): Promise<Response> => {

@@ -15,13 +15,13 @@
  */
 import type {
   KolCloudDeleteResult,
+  KolCloudExport,
   KolSyncConflict,
   KolSyncObject,
   KolSyncPullResult,
   KolSyncPushRequest,
   KolSyncPushResult,
   KolSyncStatus,
-  KolCloudExport,
   ServiceSubscription,
   SubscriptionCharge,
   SubscriptionService,
@@ -300,7 +300,13 @@ export class KolCloudService {
       const candidateWins = kolWinsOver(candidate, current)
       const winner = candidateWins ? candidate : current
       const loser = candidateWins ? current : candidate
-      const conflict: KolSyncConflict = { kind: candidate.kind, id: candidate.id, winner, loser, at }
+      const conflict: KolSyncConflict = {
+        kind: candidate.kind,
+        id: candidate.id,
+        winner,
+        loser,
+        at,
+      }
       // 冲突 id 由内容推出来：同一批重放不会记出两条
       this.store.putConflict(`cfl_${candidate.kind}_${candidate.id}_${loser.updated_at}`, conflict)
       conflicts.push(conflict)

@@ -8,7 +8,7 @@
  * - Workers 形态：钱在这个组织的 `WalletDO` 里，`apps/cloud-worker` 那一侧给一个
  *   打内部路由的实现（与 WP116 的 `remoteKolAdminPort` 同一种形状）。
  */
-import { Wallet, WalletError } from '@agentsws/metering'
+import { type Wallet, WalletError } from '@agentsws/metering'
 import type { SubscriptionChargeOutcome, SubscriptionWallet } from './types.js'
 
 /**

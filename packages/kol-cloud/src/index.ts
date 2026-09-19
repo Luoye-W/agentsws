@@ -27,9 +27,9 @@ export {
 export { KolCloudService, type KolCloudServiceOptions } from './service.js'
 export { KolCloudStore } from './store.js'
 export {
-  KolCloudError,
   type KolCloudAuditRow,
   type KolCloudEnv,
+  KolCloudError,
   type KolCloudErrorCode,
   type KolCloudPrincipal,
   type SqliteLike,

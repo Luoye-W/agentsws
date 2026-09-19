@@ -131,9 +131,9 @@ export class KolCloudStore {
 
   /** 当前游标（最后一次写入的 seq）。空库是 0。 */
   cursor(): number {
-    const row = this.db
-      .prepare('SELECT value FROM kol_cloud_meta WHERE key = ?')
-      .get('seq') as { value: string } | undefined
+    const row = this.db.prepare('SELECT value FROM kol_cloud_meta WHERE key = ?').get('seq') as
+      | { value: string }
+      | undefined
     return row === undefined ? 0 : Number(row.value)
   }
 
@@ -155,6 +155,32 @@ export class KolCloudStore {
       )
       .run(key, String(next))
     return next
+  }
+
+  /* ---------------- 这个对象是谁的 ---------------- */
+
+  /**
+   * 这个租户库归哪个组织、上一次是哪个工作区在用。
+   *
+   * **落库，不放内存**：Durable Object 会被驱逐，而闹钟可能在一个刚醒过来、
+   * 内存空空的对象上响——那一刻要扣费就得知道扣谁的。只记在内存里的后果是
+   * "机器闲了一阵子之后，这个月的月费再也不扣了"。
+   */
+  owner(): { org_id: string; workspace_id: string } | undefined {
+    const row = this.db.prepare('SELECT value FROM kol_cloud_meta WHERE key = ?').get('owner') as
+      | { value: string }
+      | undefined
+    return row === undefined
+      ? undefined
+      : (JSON.parse(row.value) as { org_id: string; workspace_id: string })
+  }
+
+  setOwner(owner: { org_id: string; workspace_id: string }): void {
+    this.db
+      .prepare(
+        'INSERT INTO kol_cloud_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      )
+      .run('owner', JSON.stringify(owner))
   }
 
   /* ---------------- 对象 ---------------- */
@@ -200,7 +226,11 @@ export class KolCloudStore {
    * 只有库知道。让调用方去猜（按条数加）的话，一旦中间有几条被 `exceptWriter`
    * 滤掉，游标就会算小——于是同一批数据被反复拉下来。
    */
-  since(cursor: number, limit: number, exceptWriter?: string): { object: KolSyncObject; seq: number }[] {
+  since(
+    cursor: number,
+    limit: number,
+    exceptWriter?: string,
+  ): { object: KolSyncObject; seq: number }[] {
     const rows = (
       exceptWriter === undefined
         ? this.db
@@ -287,7 +317,9 @@ export class KolCloudStore {
   /** 用户在界面上处理完一条（挑了其中一份）。**行不删**——审计要看得见。 */
   resolveConflict(id: string, at: Iso8601): void {
     this.db
-      .prepare('UPDATE kol_cloud_conflicts SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL')
+      .prepare(
+        'UPDATE kol_cloud_conflicts SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL',
+      )
       .run(at, id)
   }
 
@@ -356,14 +388,24 @@ export class KolCloudStore {
   appendAudit(row: KolCloudAuditRow): void {
     const seq = this.bump('audit_seq')
     this.db
-      .prepare('INSERT INTO kol_cloud_audit (seq, at, org_id, action, actor, note) VALUES (?, ?, ?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO kol_cloud_audit (seq, at, org_id, action, actor, note) VALUES (?, ?, ?, ?, ?, ?)',
+      )
       .run(seq, row.at, row.org_id, row.action, row.actor, row.note ?? null)
   }
 
   audit(limit = 100): KolCloudAuditRow[] {
     const rows = this.db
-      .prepare('SELECT at, org_id, action, actor, note FROM kol_cloud_audit ORDER BY seq DESC LIMIT ?')
-      .all(limit) as { at: string; org_id: string; action: string; actor: string; note: string | null }[]
+      .prepare(
+        'SELECT at, org_id, action, actor, note FROM kol_cloud_audit ORDER BY seq DESC LIMIT ?',
+      )
+      .all(limit) as {
+      at: string
+      org_id: string
+      action: string
+      actor: string
+      note: string | null
+    }[]
     return rows.map((r) => ({
       at: r.at,
       org_id: r.org_id,
