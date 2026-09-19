@@ -29,6 +29,7 @@ import type {
   ModelRef,
   ObjectRef,
   PersonId,
+  PromptSection,
   RunBrowser,
   RunConnection,
   RunEvent,
@@ -42,7 +43,7 @@ import { canonicalJson } from '@agentsws/core'
 import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
 import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
-import type { RoleStore } from '@agentsws/roles'
+import { personaTextIn, type RoleStore } from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import { createStubRuntime } from '@agentsws/stand-ins'
@@ -199,6 +200,19 @@ export interface RuntimeOptions {
     inbound_text: string
     thread_external_id?: string
   }): Promise<DraftVerdict | undefined> | DraftVerdict | undefined
+  /**
+   * WP120（69 §3）：**角色定位的那几段**（品牌 → 岗位 → 职责）。
+   *
+   * 晚绑定的读法与 `vertical` / `browser` 同一条理由：公司在右栏把某条 persona
+   * 改写了，下一次运行就该用新的那一份，不该等重启。
+   *
+   * 不接 = 老行为：`persona` 段里只有职责那一节（而且是包里的原文，不叠覆盖）。
+   * 真服务进程一定接（`server.ts` 把它接到 `personas.ts` 上）。
+   */
+  personaSections?(input: {
+    role_id: string
+    position_id?: string | undefined
+  }): PromptSection[]
 }
 
 /**
@@ -713,9 +727,32 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       skills: config.skills,
       persona: {
         sections: [
-          ...(config.persona === undefined
-            ? []
-            : [{ id: 'role', name: config.role_id, order: 20, text: config.persona }]),
+          /*
+           * WP120（69 §3）：**角色定位**——品牌 → 岗位 → 职责，排在技能正文前面。
+           *
+           * 接了 `personaSections` 就走它（叠过公司层覆盖、空段不出、三个运行时
+           * 拿到逐字相同的那几段）。没接时退回老行为：只有职责那一节，取包里的原文。
+           *
+           * 岗位那一节用的是上面 `positionHit` 算出来的那一个——反查不出唯一岗位时
+           * 它是 `undefined`，于是整段不出（54 §3「不猜一个」）。
+           */
+          ...(options.personaSections !== undefined
+            ? options.personaSections({
+                role_id: config.role_id,
+                ...(positionHit.position_id === undefined
+                  ? {}
+                  : { position_id: positionHit.position_id }),
+              })
+            : config.persona === undefined
+              ? []
+              : [
+                  {
+                    id: 'role',
+                    name: config.role_id,
+                    order: 20,
+                    text: personaTextIn(config.persona, 'zh'),
+                  },
+                ]),
           /*
            * 24 §1 + WP69（54 §1）：解析后的技能正文——**六层**叠加完的那一份
            * （包 → 公司 → 部门 → 岗位 → 职责 → 个人）。

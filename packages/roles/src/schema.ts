@@ -8,6 +8,7 @@
  */
 import { MAX_QUICK_PROMPTS, MAX_TASK_EXAMPLES } from '@agentsws/contracts'
 import Schema from '@deepseek-ai/schemastery'
+import { checkPersona } from './persona.js'
 
 type Node = Schemastery
 
@@ -81,6 +82,14 @@ const RANGE = Schema.union(['own', 'assigned', 'workspace'] as const)
 const LEVEL = Schema.union(['L1', 'L2', 'L3'] as const)
 
 const NAME = Schema.object({ zh: str(), en: str() }).required()
+
+/**
+ * WP120（69 §1）：persona 正文。中英各一份，或者老的"只有一份"纯字符串。
+ *
+ * 顺序要紧：`Schema.union` 按顺序试分支，字符串在前的话 `{ zh, en }` 也会被
+ * 某些实现先当对象试——这里把对象放前面，两种写法各走各的分支。
+ */
+const PERSONA = Schema.union([Schema.object({ zh: str(), en: str() }), Schema.string()])
 
 const SCOPE = Schema.object({
   domain: DATA_DOMAIN.required(),
@@ -277,7 +286,14 @@ export const ROLE_SCHEMA: Node = Schema.object({
    * `browser` = 这条渠道没有可用的接口，动作走第三栏受控浏览器。
    */
   mode: Schema.union(['api', 'browser'] as const),
-  persona: Schema.string(),
+  /**
+   * WP120（69 §1）：这条职责的角色定位。`{ zh, en }` 或老的纯字符串。
+   *
+   * **schemastery 只管形状**，「六段骨架写全了没有、是不是空的」归 `checkRoleExtras`
+   * 下面那一刀——理由与 `browser_scope` 逐字相同：形状对、内容空是**静默失效**，
+   * 这一格空掉的后果正是 69 §0 那条亲测记录（红人岗位回出客服的话）。
+   */
+  persona: PERSONA,
   handover: HANDOVER,
   requires: Schema.array(Schema.string()),
 }).required()
@@ -288,6 +304,11 @@ export const POSITION_SCHEMA: Node = Schema.object({
   version: str().pattern(/^\d+\.\d+\.\d+$/),
   name: NAME,
   roles: Schema.array(Schema.object({ role: str(), default: bool() })).required(),
+  /**
+   * WP120（69 §1）：这个岗位的角色定位，装配时排在职责 persona 前面。
+   * 只加字段——不填的岗位一切照旧（但内置九个一个都不许空，`checkPositionExtras` 管）。
+   */
+  persona: PERSONA,
 }).required()
 
 /**
@@ -320,7 +341,31 @@ export function checkRoleExtras(data: unknown): { field: string; message: string
       if (bad !== undefined) return { field: `browser_scope[${i}]`, message: bad }
     }
   }
-  return undefined
+  return checkPersonaField(data)
+}
+
+/**
+ * WP120（69 §2）：岗位模板那一侧的同一刀。
+ *
+ * 单独一个函数而不是塞进 `checkRoleExtras`：岗位没有 `quick_prompts` /
+ * `browser_scope`，把两份检查搅在一起，以后加一条就得先弄明白"这条是谁的"。
+ */
+export function checkPositionExtras(data: unknown): { field: string; message: string } | undefined {
+  if (!isPlainObject(data)) return undefined
+  return checkPersonaField(data)
+}
+
+/**
+ * WP120（69 §2）：**填了就得填对**。
+ *
+ * 只在 `persona` 这一格**存在**时查——"一条都不许空"那一条是整包级的纪律
+ * （`checkAllPersonas` + `gen-ontology --check`），不是单文件级的：外部用户自己写的
+ * 职责 yml 不填 persona 仍该读得进来（契约上它是可选的），只是内置这四十多条一条都不许空。
+ */
+function checkPersonaField(data: Record<string, unknown>): { field: string; message: string } | undefined {
+  if (!('persona' in data)) return undefined
+  const bad = checkPersona(data.persona as never)
+  return bad === undefined ? undefined : { field: 'persona', message: bad }
 }
 
 /**
