@@ -1,12 +1,37 @@
 # 72 · 客服岗对标 KefuAgent：差距与融入方案 v1
 
-> 状态：WP123 只读调研产出，未改任何源码。
-> 对标对象：`/Users/yeluo/Documents/KefuAgent`（下称 **KA**，Next.js + Supabase 的多租户 SaaS，客服 AI），
-> 以及 `/Users/yeluo/Documents/kefuagent-shopify-app`、`/Users/yeluo/Documents/kefuagent-flutter`。
-> 本仓（下称 **工坊**）= Agents 工坊，本地优先、岗位/职责/卡片/消息/知识/技能骨架。
-> 所有判断都带证据路径。KA 路径省略前缀 `/Users/yeluo/Documents/KefuAgent/`，工坊路径为仓库相对路径。
+> 状态：WP123 只读调研产出，未改任何源码、未跑任何测试。
+> 对标对象：`/Users/yeluo/Documents/KefuAgent`（下称 **KA**；Next.js + Supabase 的多租户客服 AI SaaS，
+> HEAD 2026-09-07，specs 编到 039），外加 `/Users/yeluo/Documents/kefuagent-shopify-app`、
+> `/Users/yeluo/Documents/kefuagent-flutter`。
+> 本仓（下称 **工坊**）= Agents 工坊。KA 路径省略前缀 `/Users/yeluo/Documents/KefuAgent/`，
+> 工坊路径为仓库相对路径。**未读任何 `.env*`，未输出任何真实客户数据。**
+>
+> 配套：`docs/48` §4（L3 移植清单，WP54–57 已落大半）、`docs/73`（Fable 亲测 + Luoye 09-19 定的三条路）、
+> `docs/briefs/WP124-live-chat-three-ways.md`（在线聊天派工单）。**本文第 6 节是对 WP124 的补充与修正，
+> 不另起一套。**
 
-一句话结论（先给答案）：**KA 的客服能力比工坊成熟一整代，但它的成熟度集中在"一个 SaaS 要活下去"的那些层（多租户、渠道接入、计费、审计、评测）；工坊真正缺的是三块——在线聊天的访客侧运行时（挂件 + 会话 + 转人工）、回答纪律与围栏（不许乱承诺 / 敏感信息打码）、知识补充闭环（答不上来 → 变成待办 → 回灌）。** 建议 P0 只做三张 WP：在线聊天最小闭环、回答纪律与围栏移植、知识缺口闭环；其余按 P1/P2 排。
+---
+
+## 0. 一句话结论
+
+**差距不在"零件"，在"纪律"和"访客那一面"。**
+
+`docs/48` §4 的移植清单（WP54–57）已经把 KA 的硬骨头搬过来了：垂直包、L3 黑名单、自主发送门、
+outbox 状态机、邮箱加固、知识溯源、聊天流水线纯函数、求助超时。逐条比对下来，工坊真正缺的是三类东西：
+
+1. **访客那一面整个不存在**（widget、公网端点、CORS / origin 判定、安装心跳、打字信号、页面上下文）——
+   docs/73 已经点出来了，本文把它拆细到可派工。
+2. **KA 2026-08 之后长出来的「纪律层」工坊没有**：客户内容围栏（把客户原文当数据不当指令）、
+   敏感标识进 prompt 前打码、指导原文泄漏守卫、统一卡片收件箱的优先级带、知识缺口「等一个答案」闭环。
+   这些不是功能，是安全边界，**便宜且必须**。
+3. **一条方向性分歧**：KA 在 2026-08-05 把「人工直接回复客户」这条路**整条拆掉**了
+   （`docs/product/current/live-chat-full-auto-v1.md` §2 原则 1、`specs/034-live-chat-teaching-mvp/spec.md` 红线 R1）；
+   工坊的 `packages/support-core/src/chat/types.ts:162` 明确写着「比 KefuAgent 多一态 `human_takeover`」，
+   WP124 §D 又把「我来接手」放在对话界面的主动作位置。**这是本文最需要 Luoye 拍板的一件事**（见 §6.1）。
+
+反过来，工坊有而 KA 没有的也不少：本地优先、岗位 / 职责主入口、一份代码本地与云上同跑
+（`packages/standby`）、模拟场景回归、变更账本。这些不该为了对标而丢。
 
 ---
 
@@ -17,7 +42,6 @@
 - [3 KA 2026-07 之后的更新清单](#3-ka-2026-07-之后的更新清单)
 - [4 不照搬的部分与理由](#4-不照搬的部分与理由)
 - [5 融入方案](#5-融入方案)
-- [6 可派工的 WP 清单](#6-可派工的-wp-清单)
-- [7 亲测脚本](#7-亲测脚本)
-
-<!-- SECTIONS-BELOW-FILLED-INCREMENTALLY -->
+- [6 对 WP124 的补充与修正](#6-对-wp124-的补充与修正)
+- [7 可派工的 WP 清单](#7-可派工的-wp-清单)
+- [8 亲测脚本](#8-亲测脚本)
