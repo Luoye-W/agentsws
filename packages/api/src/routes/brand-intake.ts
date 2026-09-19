@@ -15,23 +15,28 @@
  * 4. **重新分析不是"再发起一次"**。它带着上一次的结果进去，用户改过的格子整格
  *    不动（70 §3.4）。所以它是一条独立的路由，不是 `start` 的一个参数——两个
  *    动作的后果不一样，就不该共用一个入口。
+ *
+ * 五条路由都挂 `holdsOwnerWrite`（WP121b）：**这一步发生在向导里，而向导是所有者的
+ * 活**。工作台把 `X-Assignment` 绑成"本人名下第一条未撤销的分配"，所有者站在那条
+ * 上时它常常不是所有者层的那条——不挂这把尺子，第 ② 步的第一发就是 403（与 09-17
+ * 真机打在 `/v1/workspace/profile` 上的那个洞同一个根因，同一把尺子）。
  */
 import type { BrandIntakeRun, MaybePromise } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
+import {
+  OWNER_WRITE as WRITE,
+  assignmentOf,
+  body,
+  holdsOwnerWrite,
+  ok,
+  param,
+  principalOf,
+} from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
 const TAG = 'brand-intake'
-
-/** 发起与确认：会改公司档案、会花钱、会往知识库写。与首次设置同一级。 */
-const WRITE = {
-  domain: 'policy',
-  op: 'stage',
-  range: 'workspace',
-  sensitivity: 'restricted',
-} as const
 
 /** 看进度与看结果：读自己工作区的东西。 */
 const READ = {
@@ -131,6 +136,7 @@ export function brandIntakeRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        authzBypass: holdsOwnerWrite,
         // 它真的会去敲别人的服务器：急停开关对它有效
         outbound: true,
         body: StartBody,
@@ -158,6 +164,7 @@ export function brandIntakeRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        authzBypass: holdsOwnerWrite,
         returns: 'BrandIntakeRun | null',
       },
       async (c, deps) => ok(c, (await portOf(deps).latest(actorOf(c))) ?? null),
@@ -172,6 +179,7 @@ export function brandIntakeRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        authzBypass: holdsOwnerWrite,
         params: [
           {
             name: 'id',
@@ -196,6 +204,7 @@ export function brandIntakeRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        authzBypass: holdsOwnerWrite,
         params: [
           {
             name: 'id',
@@ -229,6 +238,7 @@ export function brandIntakeRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        authzBypass: holdsOwnerWrite,
         outbound: true,
         params: [
           {
