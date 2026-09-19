@@ -331,7 +331,13 @@ describe('WP116 导入 · 分块与顺序', () => {
     expect(
       merge([
         { received: 2, inserted: 2, updated: 0, skipped: 0, rejected: [] },
-        { received: 3, inserted: 0, updated: 3, skipped: 1, rejected: [{ reason: '坏', count: 2 }] },
+        {
+          received: 3,
+          inserted: 0,
+          updated: 3,
+          skipped: 1,
+          rejected: [{ reason: '坏', count: 2 }],
+        },
       ]),
     ).toEqual({
       received: 5,

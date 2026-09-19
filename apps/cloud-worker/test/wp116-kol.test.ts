@@ -88,11 +88,7 @@ async function available(cloud: FakeCloud, token: string): Promise<number> {
  * 正文只能有 `PUBLIC_OBSERVATION_FIELDS` 里那九个键，**多一个就 400**
  * （48 §1.3 第 4 条：观察里不收正文）。
  */
-async function seedCreator(
-  cloud: FakeCloud,
-  token: string,
-  handle = 'somecreator',
-): Promise<void> {
+async function seedCreator(cloud: FakeCloud, token: string, handle = 'somecreator'): Promise<void> {
   const res = await call(cloud, `/v1/data/kol/creators/youtube/${handle}/observations`, {
     method: 'POST',
     token,
