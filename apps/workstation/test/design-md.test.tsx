@@ -15,20 +15,24 @@ import { describe, expect, it } from 'vitest'
 import { countConflicts, designSummary, TokensView } from '@/components/design-md/tokens-view'
 import { renderWithProviders } from './helpers'
 
-const PROFILE: BrandDesignProfile = {
-  colors: {
-    primary: {
-      value: '#b8422e',
-      confidence: 'high',
-      source: [{ origin: 'site', url: 'https://heritage.test/', locator: 'css-var:--color-brand' }],
-      conflict: { value: '#a8321f', source: [{ origin: 'file', page: 3, quote: '#A8321F' }] },
-    },
-    surface: {
-      value: '#f7f5f2',
-      confidence: 'medium',
-      source: [{ origin: 'site', url: 'https://heritage.test/', locator: 'css:body{background-color}' }],
-    },
+const COLORS: NonNullable<BrandDesignProfile['colors']> = {
+  primary: {
+    value: '#b8422e',
+    confidence: 'high',
+    source: [{ origin: 'site', url: 'https://heritage.test/', locator: 'css-var:--color-brand' }],
+    conflict: { value: '#a8321f', source: [{ origin: 'file', page: 3, quote: '#A8321F' }] },
   },
+  surface: {
+    value: '#f7f5f2',
+    confidence: 'medium',
+    source: [
+      { origin: 'site', url: 'https://heritage.test/', locator: 'css:body{background-color}' },
+    ],
+  },
+}
+
+const PROFILE: BrandDesignProfile = {
+  colors: COLORS,
   typography: {
     h1: {
       value: { fontFamily: 'Public Sans', fontSize: '48px', fontWeight: 600 },
@@ -60,7 +64,7 @@ describe('可视化那一半', () => {
   })
 
   it('抽不到的那一节写「未找到，请补充」，不写「无」', () => {
-    renderWithProviders(<TokensView profile={{ colors: PROFILE.colors }} />)
+    renderWithProviders(<TokensView profile={{ colors: COLORS }} />)
     // 间距与圆角这一轮都没抓到
     expect(screen.getByTestId('design-md-spacing').textContent).toContain('未找到')
     cleanup()

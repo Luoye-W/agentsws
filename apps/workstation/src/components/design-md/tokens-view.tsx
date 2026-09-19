@@ -12,12 +12,7 @@
  * 这个文件只画，不取数、不写回：取数在页面，写回走 `editBrandDesignToken`。
  */
 import type { BrandDesignProfile, BrandDesignSource, BrandDesignValue } from '@agentsws/contracts'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useApp } from '@/lib/app-context'
 
 /** 出处那一句人话。**手册记页码，官网记变量名 / 选择器**——两种来路读法不同。 */
@@ -284,7 +279,6 @@ export function TokensView({ profile }: TokensViewProps): React.ReactElement {
                   className="flex h-16 w-32 items-center justify-center rounded-[--ws-radius-sm] border border-ws-border"
                   style={{ backgroundColor: logo.variant === 'dark' ? onSurface : surface }}
                 >
-                  {/* biome-ignore lint/performance/noImgElement: 这是用户自己站上的 logo，没有构建期尺寸 */}
                   <img src={logo.url} alt="" className="max-h-12 max-w-28 object-contain" />
                 </div>
                 <span className="text-[11px] text-ws-muted-fg">
