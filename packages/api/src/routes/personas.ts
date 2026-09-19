@@ -12,7 +12,13 @@
  * - **写**不豁免：改公司层 persona 要 `policy.stage`，端口里再判一次"只有 owner"。
  *   两道不是重复——tuple authz 答不出"这个人是不是 owner"，端口答得出。
  */
-import type { MaybePromise, PersonaSubject, PersonaView, PersonId, WorkspaceId } from '@agentsws/contracts'
+import type {
+  MaybePromise,
+  PersonaSubject,
+  PersonaView,
+  PersonId,
+  WorkspaceId,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, principalOf } from '../helpers.js'
@@ -22,7 +28,12 @@ import type { GatewayDeps } from '../types.js'
 /** 读：与工作台面同一个准入（能读自己的队列就能看自己岗位的定位）。 */
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
 /** 写：策略层——persona 进系统提示，改它等于改 Agent 对外说什么。 */
-const WRITE = { domain: 'policy', op: 'stage', range: 'workspace', sensitivity: 'internal' } as const
+const WRITE = {
+  domain: 'policy',
+  op: 'stage',
+  range: 'workspace',
+  sensitivity: 'internal',
+} as const
 
 export interface PersonaActor {
   workspace_id: WorkspaceId
@@ -117,14 +128,10 @@ export function personaRoutes(): Route[] {
           throw new ApiError('invalid_input', '至少要改中文或英文其中一份')
         return ok(
           c,
-          await portOf(deps).set(
-            actorOf(c),
-            { kind: input.kind, id: input.id } as PersonaSubject,
-            {
-              ...(input.zh === undefined ? {} : { zh: input.zh }),
-              ...(input.en === undefined ? {} : { en: input.en }),
-            },
-          ),
+          await portOf(deps).set(actorOf(c), { kind: input.kind, id: input.id } as PersonaSubject, {
+            ...(input.zh === undefined ? {} : { zh: input.zh }),
+            ...(input.en === undefined ? {} : { en: input.en }),
+          }),
         )
       },
     ),
@@ -145,7 +152,10 @@ export function personaRoutes(): Route[] {
         const input = await body(c, RevertBody)
         return ok(
           c,
-          await portOf(deps).revert(actorOf(c), { kind: input.kind, id: input.id } as PersonaSubject),
+          await portOf(deps).revert(actorOf(c), {
+            kind: input.kind,
+            id: input.id,
+          } as PersonaSubject),
         )
       },
     ),

@@ -4656,3 +4656,57 @@ export const revokeExtensionToken = (
     body: {},
     ...withAssignment(assignment),
   })
+
+/* ── WP120（69 §4）：角色定位 ─────────────────────────────────────────────── */
+
+/** 一段 persona 的正文。中英各一份；老的纯字符串写法也认（契约只加不删）。 */
+export type PersonaTextData = string | { zh: string; en: string }
+
+/** 右栏「角色」面板要的那一份：现在生效的 + 包里的原文（「还原」拿它比）。 */
+export interface PersonaViewData {
+  subject: { kind: 'position' | 'role'; id: string }
+  name: { zh: string; en: string }
+  /** 现在真正进系统提示的那一份。 */
+  effective: PersonaTextData
+  /** 包里自带的原文。 */
+  packaged: PersonaTextData
+  /** 公司改写过吗。 */
+  overridden: boolean
+  updated_at?: string
+  updated_by?: string
+}
+
+export const getPersona = (
+  kind: 'position' | 'role',
+  id: string,
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>(
+    `/v1/personas?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`,
+    withAssignment(assignment),
+  )
+
+/**
+ * 公司层改写。只传改动的那一边——另一边由服务端从现在生效的那一份补齐，
+ * 免得"改了中文、英文悄悄退回包里的原文"。
+ */
+export const setPersona = (
+  input: { kind: 'position' | 'role'; id: string; zh?: string; en?: string },
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>('/v1/personas', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 还原成包里的原文。 */
+export const revertPersona = (
+  input: { kind: 'position' | 'role'; id: string },
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>('/v1/personas/revert', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
