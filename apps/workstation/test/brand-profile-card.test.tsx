@@ -59,9 +59,10 @@ const PROFILE: BrandIntakeProfile = {
   },
 }
 
-function paint(
-  overrides: Partial<React.ComponentProps<typeof BrandProfileCard>> = {},
-): { onEdit: ReturnType<typeof vi.fn>; onConfirm: ReturnType<typeof vi.fn> } {
+function paint(overrides: Partial<React.ComponentProps<typeof BrandProfileCard>> = {}): {
+  onEdit: ReturnType<typeof vi.fn>
+  onConfirm: ReturnType<typeof vi.fn>
+} {
   const onEdit = vi.fn()
   const onConfirm = vi.fn()
   renderWithProviders(

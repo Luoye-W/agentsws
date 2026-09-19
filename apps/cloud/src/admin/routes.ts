@@ -32,8 +32,15 @@ import {
   type CloudRole,
   COST_MICRO_UNIT,
   emailDomain,
+  MAX_KOL_IMPORT_BATCH,
   type MembershipTerm,
 } from '@agentsws/contracts'
+import {
+  assertChannel,
+  KOL_CAPABILITIES,
+  type KolAdminPort,
+  parseNdjson,
+} from '@agentsws/kol-public'
 import {
   COST_TABLE,
   costTableNeedsReview,
@@ -111,6 +118,12 @@ export interface AdminConsoleDeps {
    * 那个只读副本——**同一个口，两份实现**，后台这一层不知道自己在哪个形态里。
    */
   ledger: () => UsageLedger | undefined
+  /**
+   * 公共红人库那一侧（WP116 §4）。Compose 形态直接查库，官方托管形态打那个
+   * 单例 `KolPublicDO`——**同一个口，两份实现**。没接就回 `undefined`，
+   * 那一页的路由回 503，不假装。
+   */
+  kol?: () => KolAdminPort | undefined
   /** 云的对外地址（CSRF 的 Origin 与 magic link 的落点都用它）。 */
   baseUrl: string
   mail: MailSender
@@ -193,6 +206,8 @@ const MembershipBody = z.object({
   note: z.string().max(500).optional(),
 })
 const CancelBody = z.object({ reason: z.string().min(2).max(500) })
+/** 移除一个人要交代的那一句。**必填**——见 `admin-port.ts` 的注释。 */
+const KolRemoveBody = z.object({ reason: z.string().min(2).max(500) })
 
 /* ------------------------------------------------------------------ */
 
@@ -222,6 +237,43 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
     if (found === undefined)
       throw new ApiError('provider_unavailable', '这个节点没接账本，看不了账')
     return found
+  }
+
+  const kolOr503 = (): KolAdminPort => {
+    const found = deps.kol?.()
+    if (found === undefined)
+      throw new ApiError('provider_unavailable', '这个节点没接公共红人库，这一页看不了')
+    return found
+  }
+
+  /**
+   * 搬家那条路由的守卫：**后台会话或运维令牌，认一个就行**（WP116 §3）。
+   *
+   * 为什么不只认会话：搬家是脚本干的活（`scripts/import-kol-public.mjs` 分块推
+   * 几千行），而会话 + CSRF 是给浏览器设计的——让脚本模拟一次登录不但麻烦，
+   * 还得把后台的登录邮箱放进脚本里。运维令牌是**带外**的那把钥匙，与
+   * `/v1/admin/bootstrap` 认的是同一把（不另开第二把）。
+   *
+   * 走令牌那条**不查 CSRF**：CSRF 防的是"浏览器带着 cookie 被骗着发请求"，
+   * 而这条路上根本没有 cookie。
+   */
+  const importer = (c: Context<CloudEnv>): { account_id: string; role: CloudRole; ip: string } => {
+    const raw = c.req.header('Authorization')
+    const given =
+      raw === undefined ? '' : raw.startsWith('Bearer ') ? raw.slice('Bearer '.length) : raw
+    if (
+      deps.bootstrapToken !== undefined &&
+      deps.bootstrapToken !== '' &&
+      given.trim() !== '' &&
+      secretEquals(given.trim(), deps.bootstrapToken)
+    )
+      return { account_id: 'system', role: 'admin', ip: clientIpOf(c) }
+    const principal = writer(c)
+    return {
+      account_id: principal.session.account_id,
+      role: principal.session.role,
+      ip: principal.ip,
+    }
   }
 
   const routes: CloudRoute[] = []
@@ -1593,7 +1645,196 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
     ),
   )
 
+  /* ── 公共红人库（WP116 §4）────────────────────────────────────────── */
+
+  routes.push(
+    cloudRoute(
+      {
+        method: 'get',
+        path: '/v1/admin/kol',
+        operationId: 'cloudAdminKolStats',
+        summary: '公共红人库那一页的数：总量 / 按平台 / 近 7·30 天新增 / reveal 与上游成本',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        returns: '{ library, usage }',
+      },
+      async (c) => {
+        staff(c)
+        const library = await kolOr503().stats()
+        /*
+         * 「reveal 次数与积分」「上游调用次数与成本」来自**计量事件**，不是库里
+         * 的行数——库只知道有多少人，不知道谁查过谁。没接账本就只有库那一半，
+         * 那一格显示"看不了账"而不是 0（65 §9 同一条）。
+         */
+        const book = deps.ledger()
+        const w = windowOf(deps.clock, 30)
+        const rows = book === undefined ? [] : await book.breakdown('capability', w, 200)
+        return cloudOk(c, {
+          library,
+          usage: {
+            window: w,
+            available: book !== undefined,
+            rows: rows.filter((r) => KOL_CAPABILITIES.includes(r.key)),
+          },
+        })
+      },
+    ),
+
+    cloudRoute(
+      {
+        method: 'get',
+        path: '/v1/admin/kol/creators',
+        operationId: 'cloudAdminKolCreators',
+        summary: '搜库里的红人（名字 / handle / 类目、按平台、有没有联系方式、只看搬来的）',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        returns: 'AdminPage<PublicCreatorCard>',
+      },
+      async (c) => {
+        staff(c)
+        const limit = Math.min(intQuery(c, 'limit', 50), 200)
+        const offset = Math.max(intQuery(c, 'offset', 0), 0)
+        const channel = strQuery(c, 'channel')
+        const hasContact = strQuery(c, 'has_contact')
+        const page = await kolOr503().search({
+          limit,
+          offset,
+          q: strQuery(c, 'q'),
+          ...(channel === undefined ? {} : { channel: assertChannel(channel) }),
+          ...(hasContact === undefined ? {} : { has_contact: hasContact === 'true' }),
+          ...(strQuery(c, 'imported_only') === 'true' ? { imported_only: true } : {}),
+        })
+        return cloudOk(c, { ...page, limit, offset })
+      },
+    ),
+
+    cloudRoute(
+      {
+        method: 'post',
+        path: '/v1/admin/kol/creators/:channel/:handle/remove',
+        operationId: 'cloudAdminKolRemove',
+        summary: '从库中移除一个人（opt-out：删掉全部行，而且以后搬家也搬不回来）',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        body: KolRemoveBody,
+        returns: '{ removed }',
+      },
+      async (c) => {
+        const principal = writer(c)
+        const admin = deps.admin()
+        const api = kolOr503()
+        const input = await cloudBody(c, KolRemoveBody)
+        const channel = assertChannel(c.req.param('channel'))
+        const handle = (c.req.param('handle') ?? '').toLowerCase()
+        const target = `${channel}/${handle}`
+        admin.audit({
+          action: 'kol.remove',
+          actor_account_id: principal.session.account_id,
+          actor_role: principal.session.role,
+          target_kind: 'system',
+          target_id: target,
+          outcome: 'intent',
+          details: { reason: input.reason },
+          ip: principal.ip,
+        })
+        const out = await api.remove({
+          channel,
+          handle,
+          reason: input.reason,
+          removed_by: principal.session.account_id,
+        })
+        admin.audit({
+          action: 'kol.remove',
+          actor_account_id: principal.session.account_id,
+          actor_role: principal.session.role,
+          target_kind: 'system',
+          target_id: target,
+          outcome: 'done',
+          details: { removed: out.removed },
+          ip: principal.ip,
+        })
+        return cloudOk(c, out)
+      },
+    ),
+
+    cloudRoute(
+      {
+        method: 'post',
+        path: '/v1/admin/kol/import',
+        operationId: 'cloudAdminKolImport',
+        summary: '搬家：收一批 NDJSON（分块推、可重跑、幂等键 = 渠道 + 原生 id）',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        returns: 'KolImportResult',
+      },
+      async (c) => {
+        const principal = importer(c)
+        const admin = deps.admin()
+        const api = kolOr503()
+        /*
+         * 正文是 **NDJSON**（`text/plain` 那样一行一条），不是 JSON 数组：
+         * 七百行里有一行坏了，JSON.parse 整块就全废；NDJSON 坏一行只废一行。
+         * 也认 `{ records: [...] }` ——脚本之外手动试一下时那样写更顺手。
+         */
+        const raw = await c.req.text()
+        const records = kolImportRecordsOf(raw)
+        if (records.length > MAX_KOL_IMPORT_BATCH)
+          throw new ApiError(
+            'invalid_input',
+            `一趟最多 ${String(MAX_KOL_IMPORT_BATCH)} 行（这一趟 ${String(records.length)} 行）。脚本会自己分块。`,
+          )
+        const out = await api.import(records)
+        admin.audit({
+          action: 'kol.import',
+          actor_account_id: principal.account_id,
+          actor_role: principal.role,
+          target_kind: 'system',
+          target_id: 'kol_public',
+          outcome: 'done',
+          // **不记任何一行的内容**（里面有真实邮箱）——只记数
+          details: {
+            received: out.received,
+            inserted: out.inserted,
+            updated: out.updated,
+            skipped: out.skipped,
+            rejected: out.rejected.length,
+          },
+          ip: principal.ip,
+        })
+        return cloudOk(c, out)
+      },
+    ),
+  )
+
   return routes
+}
+
+/**
+ * 搬家那条路由的正文：NDJSON 一行一条，也认 `{ records: [...] }`。
+ *
+ * **坏行不在这里抛**：原样带给 `importKolRecords` 去数，返回体里那句
+ * "这一行不是一个对象 × 3" 才是搬家的人真正需要的答复。
+ */
+export function kolImportRecordsOf(raw: string): unknown[] {
+  const text = raw.trim()
+  if (text === '') return []
+  if (text.startsWith('{') && text.includes('"records"')) {
+    try {
+      const parsed = JSON.parse(text) as { records?: unknown }
+      if (Array.isArray(parsed.records)) return parsed.records
+    } catch {
+      // 不是一整块 JSON 就当 NDJSON 处理（下面那一行）
+    }
+  }
+  if (text.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(text)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      /* 同上 */
+    }
+  }
+  return parseNdjson(text)
 }
 
 /* ------------------------------------------------------------------ */

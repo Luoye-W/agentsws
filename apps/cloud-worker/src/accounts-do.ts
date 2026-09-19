@@ -49,10 +49,12 @@ import {
   parseCookies,
 } from '@agentsws/cloud/workers-kit'
 import { ADMIN_SESSION_COOKIE, type Clock, cloudBaseUrl, type WalletLot } from '@agentsws/contracts'
+import type { KolAdminPort } from '@agentsws/kol-public'
 import type { UsageLedger } from '@agentsws/metering'
 import { type DoStorageLike, doSyncDb } from './do-sql.js'
 import { envRecord, type WorkerEnv } from './env.js'
 import { INTERNAL_HEADERS } from './internal.js'
+import { remoteKolAdminPort } from './kol-admin.js'
 import { LEDGER_SINGLETON, remoteUsageLedger } from './ledger-do.js'
 import { remoteWalletAdminPort } from './wallet-admin.js'
 
@@ -138,8 +140,8 @@ export class AccountsCore {
         entry: true,
         // 在线值守要常驻子进程，Workers 上没有这种东西——**如实说没开通**
         standby: false,
-        // 公共红人库这一轮不上（见 docs/64 §9 与 WP114 报告）
-        kol_public: false,
+        // 公共红人库（WP116 / 64 §10.2 的两段式）：绑了那个 DO 才算开通
+        kol_public: env.KOL_PUBLIC !== undefined,
         mail: options.mail !== undefined || cloudflareMailReady(env.EMAIL, record),
         admin_topup: (env.AGENTSWS_CLOUD_ADMIN_TOKEN ?? '').trim() !== '',
         // WP115：后台。读账那一半要 `LEDGER` binding；没绑就只有写动作能用
@@ -188,6 +190,12 @@ export class AccountsCore {
         ? undefined
         : remoteUsageLedger(env.LEDGER.get(env.LEDGER.idFromName(LEDGER_SINGLETON)))
     const walletPort = remoteWalletAdminPort(env.WALLET)
+    /*
+     * WP116 §4：公共红人库那一页。没绑 `KOL_PUBLIC` 就回 `undefined`，那一页
+     * 回 503——与看板页没绑 `LEDGER` 时同一条（不画一堆 0）。
+     */
+    const kolOf = (): KolAdminPort | undefined =>
+      env.KOL_PUBLIC === undefined ? undefined : remoteKolAdminPort(env.KOL_PUBLIC)
     modules.push(
       adminConsoleRoutes({
         clock,
@@ -200,6 +208,7 @@ export class AccountsCore {
          */
         wallet: () => ({ wallet: grantOnlyWallet(), port: walletPort }),
         ledger: ledgerOf,
+        kol: kolOf,
         baseUrl,
         mail,
         ...(adminToken === '' ? {} : { bootstrapToken: adminToken }),

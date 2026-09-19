@@ -45,7 +45,7 @@ export interface BrandProfileCardProps {
 }
 
 /** 一格的当前值：用户改过就是他改的那个，否则是分析出来的。 */
-function valueOf(
+function currentValue(
   profile: BrandIntakeProfile,
   edits: Record<string, unknown>,
   key: TextField,
@@ -72,7 +72,13 @@ function ConfidenceTag({
   field: string
 }): React.ReactNode {
   const { t } = useApp()
-  const cell = (profile as Record<string, { confidence?: string; evidence?: { url: string; locator: string }[]; edited?: boolean } | undefined>)[field]
+  const cell = (
+    profile as Record<
+      string,
+      | { confidence?: string; evidence?: { url: string; locator: string }[]; edited?: boolean }
+      | undefined
+    >
+  )[field]
   if (cell === undefined) return null
   if (edits[field] !== undefined || cell.edited === true)
     return (
@@ -112,7 +118,7 @@ function Row({
 }): React.ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useState(false)
-  const value = valueOf(profile, edits, field)
+  const value = currentValue(profile, edits, field)
   // 抓不到又没改过的格子**整行不出**：一行空格子比没有这一行更糟
   if (value === '' && !open) return null
   return (
