@@ -19,6 +19,7 @@
     "@agentsws/brand": "workspace:*",
     "@tailwindcss/vite": "^4.0.0",
     "@types/chrome": "^0.1.32",
+    "@types/jsdom": "^21.1.7",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",

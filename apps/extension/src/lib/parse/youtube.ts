@@ -84,12 +84,14 @@ export function parseYouTubeChannel(
   if (about !== undefined) {
     for (const a of about.querySelectorAll('a[href]')) {
       const url = absolute(a.getAttribute('href'), href)
-      if (url !== undefined && !url.includes('youtube.com/redirect?')) links.push(url)
-      if (url !== undefined && url.includes('youtube.com/redirect?')) {
+      if (url === undefined) continue
+      if (url.includes('youtube.com/redirect?')) {
         // YouTube 把外链包了一层跳转，真地址在 `q` 参数里
         const real = new URL(url).searchParams.get('q')
         if (real !== null) links.push(real)
+        continue
       }
+      links.push(url)
     }
   }
 

@@ -9,14 +9,14 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["chrome"],
+    "types": ["chrome", "jsdom"],
     "allowImportingTsExtensions": false,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "entrypoints", "test", "wxt.config.ts", "vitest.config.ts"],
+  "include": ["src", "test", "wxt.config.ts", "vitest.config.ts"],
   "references": [
     {
       "path": "../../packages/brand"
