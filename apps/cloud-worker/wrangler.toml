@@ -40,6 +40,14 @@ class_name = "WalletDO"
 name = "LEDGER"
 class_name = "LedgerDO"
 
+# 公共红人库（单例，WP116 / docs/64 §10.2）。
+# 这张红人表是**跨租户共享的一层事实**（48 §1.2）：一个人报的，所有人受益。
+# 按组织切开就等于每个组织自己攒一份，公共库的全部价值就没了。所以只有一个名字。
+# 钱不在这里——预扣与结算都在 WalletDO 里，这个对象拿到的钱包是一台录音机。
+[[durable_objects.bindings]]
+name = "KOL_PUBLIC"
+class_name = "KolPublicDO"
+
 # SQLite 存储后端。迁移在对象第一次唤醒时自己跑完——升级 = 再 deploy 一次。
 [[migrations]]
 tag = "v1"
@@ -48,6 +56,10 @@ new_sqlite_classes = ["AccountsDO", "WalletDO"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["LedgerDO"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["KolPublicDO"]
 
 # ── 运营后台的静态产物（WP115 / docs/65 §8） ───────────────────────────
 # `apps/cloud-admin` 的 Vite 产物（base = "/admin/"）。
