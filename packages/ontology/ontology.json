@@ -82,7 +82,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "2fa24d17018b0167c0e18e976b191881",
+  "source_digest": "1673172d68ee517b273759893e4e60da",
   "objects": [
     {
       "id": "ad",
@@ -3175,6 +3175,12 @@
           "type": "{ role: RoleId; default: boolean }[]",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "persona",
+          "type": "PersonaText",
+          "sensitivity": "confidential",
+          "optional": true
         }
       ],
       "read_via": [],

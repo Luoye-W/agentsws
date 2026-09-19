@@ -15,6 +15,7 @@ import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
+import { personaRoutes } from './routes/personas.js'
 import { backupRoutes } from './routes/backup.js'
 import { brandIntakeRoutes } from './routes/brand-intake.js'
 import { browserRoutes } from './routes/browser.js'
@@ -133,6 +134,8 @@ export function collectRoutes(): Route[] {
     // 25 定时与流程；`/v1/schedules/:id/run-now` 是定值段，与 `:id` 不撞
     ...scheduleRoutes(),
     ...assignmentRoutes(),
+    // WP120（69 §4）：角色定位。排在这儿是因为它与分配一样属于「制度层的读写」
+    ...personaRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),

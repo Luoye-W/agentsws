@@ -74,6 +74,7 @@ import type { ModelsPort } from './routes/models.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { OrganizationsPort } from './routes/organizations.js'
+import type { PersonaPort } from './routes/personas.js'
 import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
@@ -709,6 +710,12 @@ export interface GatewayDeps {
    * 只是少了"交给这个岗位一件事"那个按钮。
    */
   positions?: PositionEntryPort
+  /**
+   * WP120（69 §4）：角色定位面——右栏「角色」面板看的与改的就是它。
+   * 没装配时 `/v1/personas*` 回 not_implemented：提示里照样有 persona
+   * （那是包里的原文），只是公司改不了它。
+   */
+  personas?: PersonaPort
   /**
    * WP68（48 §5.4）：本地红人库。没装配时 `/v1/kol/*` 回 not_implemented——
    * 红人营销那五条职责的面板照常读得到（投影是装配期塞进去的），

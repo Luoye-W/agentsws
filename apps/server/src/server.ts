@@ -31,6 +31,7 @@ import {
   type KnowledgePort,
   type LocalIdentityService,
   parseSubprotocols,
+  type PersonaPort,
   type RolesPort,
   readCookie,
   SESSION_COOKIE,
@@ -83,6 +84,7 @@ import {
   changeKindOf,
   createRoleStore,
   loadBundledRole,
+  personaTextIn,
   type RangeExpanded,
   type RoleStore,
   rangeTargetOfProduct,
@@ -203,6 +205,12 @@ import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import {
+  createFilePersonaBackend,
+  createPersonas,
+  PersonaError,
+  personaFileIn,
+} from './personas.js'
 import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
@@ -1263,6 +1271,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const positionAssemblies = new Map<WorkspaceId, PositionsAssembly>()
 
+  /*
+   * ── WP120（69）：**角色定位** ───────────────────────────────────────────
+   *
+   * **一份，不按品牌分**。69 §4 定的是「公司层覆盖」——persona 是公司对外的口径，
+   * 而岗位模板与职责定义本来就是制度层的东西（跨品牌共用一份，同 `org.positions`）。
+   * 按品牌各存一份的后果是同一条职责在两个品牌里说两套话，而没有人记得去同步第二份。
+   *
+   * 声明提到这里是为了晚绑定：`org` 与 `onboarding` 都比它晚建，所以 `positions`
+   * 与 `brand` 都写成现查的闭包（与上面 `positionAssemblies` 同一个套路）。
+   */
+  const personas = createPersonas({
+    workspace_id: workspace.id,
+    clock,
+    roles,
+    positions: () => org.positions(),
+    ...(dbDir === undefined ? {} : { backend: createFilePersonaBackend(personaFileIn(dbDir)) }),
+    isOwner: (person_id) =>
+      roles.assignments
+        .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
+        .some((a) => a.revoked_at === undefined),
+    /*
+     * WP121（70 §3）：品牌上下文的四个槽位。**取不到就不写那一句**——
+     * 品牌名从工作区档案里来（那是确认品牌分析之后写下的那一份）。
+     * 定位、市场、口吻样例还没有落盘的地方（WP121b 正在重写向导），所以现在它们
+     * 一律取不到，于是 persona 里就没有那几行——这正是 69 §5 要的行为：**别编**。
+     * WP122 的「视觉气质」走同一个槽位（`visual_tone`），填上就多一行。
+     */
+    brand: () => {
+      const name = onboardingRef?.companyProfile()?.legal_name?.trim()
+      return name === undefined || name === '' ? undefined : { brand_name: name }
+    },
+    appendEvent,
+  })
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -1888,6 +1930,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 reply_text: input.body,
                 generated_by: 'ai',
               }),
+            /*
+             * WP120（69 §3）：**角色定位的那几段**（品牌 → 岗位 → 职责）。
+             *
+             * 三个运行时共用这一个口：排序、空段不出、语言、公司层覆盖全在里面。
+             * 公司在右栏改写了某条 persona，下一次运行就是新的那一份——
+             * `personas` 每次现查覆盖表，不用重启（同 `vertical` / `browser`）。
+             */
+            personaSections: (input) => personas.sections(input),
           })
     const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -3795,6 +3845,57 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
 
+  /**
+   * WP120（69 §4）：角色定位端口。
+   *
+   * **不按品牌分**（见 `personas` 那一段）：岗位模板与职责定义是制度层的，
+   * 覆盖也是公司层的。所以这里不像别的端口那样按 `ws` 建一份。
+   *
+   * 错误翻译在这一层做：端口里抛的是 `PersonaError`（服务层的词），
+   * 网关认的是 `ApiError`（HTTP 的词）。不翻的话 403 会变成 500。
+   */
+  const toApiError = (error: unknown): never => {
+    if (error instanceof PersonaError) throw new ApiError(error.code, error.message)
+    throw error
+  }
+  const personaPort: PersonaPort = {
+    view: (_actor, subject) => {
+      try {
+        return personas.view(subject)
+      } catch (error) {
+        return toApiError(error)
+      }
+    },
+    set: (actor, subject, text) => {
+      try {
+        /*
+         * 只改一边时另一边**先从现在生效的那一份补齐**，再整份存下去。
+         * 不补的话 `{ zh: '新的' }` 存进去就是"英文那份空着"，而空着的那一份
+         * 在 `applyPersonaOverride` 里会回落包里的原文——看着对，其实是两份
+         * 不同来历的文字拼在一起，公司改了中文却不知道英文没跟着改。
+         */
+        const current = personas.view(subject).effective
+        return personas.set({
+          subject,
+          text: {
+            zh: text.zh ?? personaTextIn(current, 'zh'),
+            en: text.en ?? personaTextIn(current, 'en'),
+          },
+          by: actor.person_id,
+        })
+      } catch (error) {
+        return toApiError(error)
+      }
+    },
+    revert: (actor, subject) => {
+      try {
+        return personas.revert({ subject, by: actor.person_id })
+      } catch (error) {
+        return toApiError(error)
+      }
+    },
+  }
+
   const kolPortOf = brandKolPort(brandModules, async (ws) => {
     const brand = await brandModules.forWorkspace(ws)
     /*
@@ -4162,6 +4263,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: workPortOf,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
+    // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
+    personas: personaPort,
     // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
