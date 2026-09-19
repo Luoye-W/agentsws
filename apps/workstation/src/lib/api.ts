@@ -4502,3 +4502,77 @@ export const backfillMessages = (input: {
   account?: string
   days?: number
 }): Promise<{ floor: string }> => api('/v1/messages/backfill', { method: 'POST', body: input })
+
+// ── WP121b（70 §3）：贴一个网址，自动填品牌档案 ────────────────────────
+//
+// 五条对着向导第 ② 步的五个动作：**发起 → 看进度 → 拿结果 → 确认 → 重新分析**。
+// 契约形状在 `@agentsws/contracts`（`BrandIntakeRun`），这里一个字段都不重画——
+// 界面认的就是服务端认的那一份。
+
+type BrandIntakeRunView = import('@agentsws/contracts').BrandIntakeRun
+
+export type {
+  BrandIntakeConfidence,
+  BrandIntakeEvidence,
+  BrandIntakeField,
+  BrandIntakePage,
+  BrandIntakePolicy,
+  BrandIntakeProduct,
+  BrandIntakeProfile,
+  BrandIntakeRun,
+  BrandIntakeRunStatus,
+  BrandIntakeSocialLink,
+} from '@agentsws/contracts'
+
+/** 发起一次：贴 1–3 条链接（官网 / Amazon 商品 / Amazon 店铺）。 */
+export const startBrandIntake = (
+  input: { urls: string[]; cap_credits?: number },
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api('/v1/brand-intake/runs', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 这一次跑到哪儿了（向导按它轮询，呼吸标记表示"Agent 在干活"）。 */
+export const getBrandIntake = (id: string, assignment?: string): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+/**
+ * 这个工作区最近的那一次。
+ *
+ * 向导第 ② 步回来时按它恢复现场——用户可以先去第 ③ 步选岗位，回来还看得见
+ * 那一轮分析的结果。没有过就是 `null`（**不是错误**）。
+ */
+export const latestBrandIntake = (assignment?: string): Promise<BrandIntakeRunView | null> =>
+  api('/v1/brand-intake/runs/latest', withAssignment(assignment))
+
+/**
+ * 「看着没问题」。
+ *
+ * `edits` **只带用户改过的那几格**：没带的按分析结果走，带了的在库里打上
+ * `edited`，以后重新分析整格跳过（70 §3.4）。
+ */
+export const confirmBrandIntake = (
+  id: string,
+  edits: Record<string, unknown> | undefined,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/confirm`, {
+    method: 'POST',
+    body: edits === undefined ? {} : { edits },
+    ...withAssignment(assignment),
+  })
+
+/** 重新分析（改了网址或换了新品时用）：**用户手改过的格子整格不动**。 */
+export const reanalyzeBrandIntake = (
+  id: string,
+  urls: string[] | undefined,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/reanalyze`, {
+    method: 'POST',
+    body: urls === undefined ? {} : { urls },
+    ...withAssignment(assignment),
+  })
