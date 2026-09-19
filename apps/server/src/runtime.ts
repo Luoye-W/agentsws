@@ -24,6 +24,7 @@ import type {
   ContextItem,
   CreateApprovalInput,
   EventEnvelope,
+  GateDecision,
   Matter,
   ModelRef,
   ObjectRef,
@@ -38,6 +39,7 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
+import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
 import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
@@ -68,6 +70,10 @@ const KIND_BY_REF: Record<string, ContextItem['kind']> = {
 }
 
 const bytesOf = (v: unknown): number => Buffer.byteLength(JSON.stringify(v) ?? '', 'utf8')
+
+/** 全名 `service.action` 去掉服务前缀（红人工具在链里按 bare 名匹配）。 */
+const bareOf = (name: string): string =>
+  name.includes('.') ? name.slice(name.indexOf('.') + 1) : name
 
 /** 进模型的内容先规范化（键排序），回放才是恒等变换（同 simulation 的纪律）。 */
 function canonical<T>(value: T): T {
@@ -136,6 +142,14 @@ export interface RuntimeOptions {
    */
   skills?: SkillResolver
   /**
+   * WP117（66 断点 #1）：红人那十一个工具的执行器（`kol-tools.ts` 建的那一份）。
+   *
+   * 给了就在工具链最前面——`kol.*` 那五条职责的运行才真有活干。不给的话红人岗位
+   * 仍然会去调这些工具（工具面是按职责给的），但每一次回的是「这个进程没装红人
+   * 那一摊」，界面上照实显示，而不是假装成功。
+   */
+  kolTools?: ToolExecutor
+  /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
    * 给了就把它现在真能调的那几个工具加进工具面——**起不来就一个都不加**，
@@ -164,6 +178,38 @@ export interface RuntimeOptions {
    * 里面没有任何凭据值，只有"请求头名 → 凭据引用名"。
    */
   connections?: (role_id: string) => RunConnection[]
+  /**
+   * WP125（72 §P0-1 / §P0-2）：**出站草稿的判断层**。
+   *
+   * 每一份 `outbound_draft` 在建卡之前过这一道：先泄漏守卫（商家教 AI 的那句中文
+   * 有没有被逐字抄进客户会看到的正文），再三道自主门（L3 黑名单 / 草稿来源 /
+   * 承诺扫描）。回 `rewrite` 就**打回重写**——原因回到写正文的那一跳，
+   * 绝不静默删改后照发（与 Amazon 出站硬闸同一条纪律，见 `channels.ts`）。
+   *
+   * 不接 = 老行为：草稿照常建卡，只是 `context.gates` 是空的、没有泄漏守卫。
+   * 真服务进程一定接（`server.ts` 把它接到 `support-judgment.ts` 上）。
+   */
+  judgeDraft?(input: {
+    matter: Matter
+    run_id: string
+    channel: 'email'
+    subject: string
+    body: string
+    /** 被回复的来信正文（判断层只扫不存）。 */
+    inbound_text: string
+    thread_external_id?: string
+  }): Promise<DraftVerdict | undefined> | DraftVerdict | undefined
+}
+
+/**
+ * WP125：判断层对一份草稿的结论（形状与 `support-judgment.ts` 的 `DraftJudgment` 一致，
+ * 这里只声明运行时真正要用的那几格——`runtime.ts` 不该 import 判断层，那是反向依赖）。
+ */
+export interface DraftVerdict {
+  action: 'send' | 'rewrite' | 'card'
+  rewrite_instruction?: string
+  /** 进 `ApprovalItem.context.gates`：只有门名、结论、规则集哈希，**没有被扫的文本**。 */
+  gate_context: GateDecision[]
 }
 
 /**
@@ -209,6 +255,8 @@ export function hasModelProvider(env: Record<string, string | undefined>): boole
 interface RunScope {
   run_id: string
   matter: Matter
+  /** WP125：这次运行的来信正文（判断层扫它；**只扫不存**）。 */
+  brief: string
   todo_id?: TodoId
   person_id: PersonId
   assignment_id: AssignmentId
@@ -274,7 +322,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    */
   const createDraft = async (
     payload: DraftPayload,
-  ): Promise<{ approval_item_id: string } | undefined> => {
+  ): Promise<{ approval_item_id: string } | { rewrite: string } | undefined> => {
     const s = scope
     if (s === undefined || work === undefined) return undefined
     const email = payload.to[0]
@@ -296,6 +344,46 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     }
     const seen = [...s.seen]
     if (!seen.some((r) => refKey(r) === refKey(to))) return undefined
+    /*
+     * WP125（72 §P0-1 / §P0-2）：**建卡之前过判断层**。
+     *
+     * 顺序是硬的：泄漏守卫 → 三道自主门 → 建卡。放在建卡之后就晚了——
+     * 一张已经进了队列的卡再去说"其实它不该长这样"，人已经看见了。
+     *
+     * 判断层自己炸了按 fail-closed 处理：`catch` 之后照常建卡（**不自主**，
+     * `context.gates` 留空），而不是把这封信丢掉。一个装配错误不该让客户等不到回信。
+     */
+    let verdict: DraftVerdict | undefined
+    try {
+      verdict = await options.judgeDraft?.({
+        matter: s.matter,
+        run_id: s.run_id,
+        channel: 'email',
+        subject: payload.subject,
+        body: payload.body,
+        inbound_text: s.brief,
+        ...(payload.thread_external_id === undefined
+          ? {}
+          : { thread_external_id: payload.thread_external_id }),
+      })
+    } catch (e) {
+      work.appendEvent(s.matter.id, {
+        kind: 'status',
+        text: `出站判断层没跑起来，这一封按"要人点头"处理：${e instanceof Error ? e.message : String(e)}`,
+        actor: { kind: 'system', id: 'runtime' },
+        run_id: s.run_id,
+      })
+    }
+    if (verdict?.action === 'rewrite') {
+      // 打回重写：原因回给写正文的那一跳，**不建卡**（这一版根本没成形）
+      work.appendEvent(s.matter.id, {
+        kind: 'status',
+        text: '这一版回信照抄了内部指导的原文，已打回重写。',
+        actor: { kind: 'system', id: 'runtime' },
+        run_id: s.run_id,
+      })
+      return { rewrite: verdict.rewrite_instruction ?? '重写一版，不要引用内部指导的原文。' }
+    }
     const subject = seen.find((r) => r.type === 'thread') ?? seen.find((r) => r.type === 'order')
     const assignment = roles.assignments.get(s.assignment_id)
     const item = await approvals.create({
@@ -347,7 +435,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         separation_of_duties: true,
       },
       priority: 'queue',
-      context: { thread_participants: [to.id], verified_contacts: [to.id] },
+      context: {
+        thread_participants: [to.id],
+        verified_contacts: [to.id],
+        // WP125：三道门的结论进前置（只有门名、结论、规则集哈希；被扫的文本一个字不进）
+        ...(verdict === undefined || verdict.gate_context.length === 0
+          ? {}
+          : { gates: verdict.gate_context }),
+      },
     })
     if (item.state === 'blocked') return undefined
     backfill(item)
@@ -420,28 +515,35 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 所以这条路**不往 provenance 里加任何 ref**（15 §6：seen 只证明读过业务对象）。
    */
   const devToolNames = (): readonly string[] => options.devTools?.toolNames() ?? []
-  const executeTool: ToolExecutor | undefined =
-    options.devTools === undefined
-      ? source.executeTool
-      : async (call) => {
-          if (devToolNames().includes(call.name)) {
-            try {
-              const { text } = await (
-                options.devTools as NonNullable<RuntimeOptions['devTools']>
-              ).call(call.name, call.input)
-              return { status: 'ok', data: { text } }
-            } catch (e) {
-              return {
-                status: 'error',
-                reason: e instanceof Error ? e.message : String(e),
-              }
-            }
-          }
-          if (source.executeTool === undefined) {
-            return { status: 'error', reason: 'no_tool_executor' }
-          }
-          return source.executeTool(call)
+  const executeTool: ToolExecutor | undefined = (() => {
+    /*
+     * WP117（66 断点 #1）：**三级链**——红人工具 → dev MCP → 记录源。
+     *
+     * 顺序是刻意的：红人工具名（`draft_outreach` 这些）与别处不重名，先问它一句，
+     * 不是它的再往下走。谁都不认才回 `unsupported_tool`——而不是静默回 `undefined`
+     * 让界面显示一个空结果（66 断点 #6 的病根）。
+     */
+    const kol = options.kolTools
+    const dev = options.devTools
+    if (kol === undefined && dev === undefined) return source.executeTool
+    return async (call) => {
+      if (kol !== undefined && KOL_TOOL_NAMES.includes(bareOf(call.name))) {
+        return kol(call)
+      }
+      if (dev !== undefined && devToolNames().includes(call.name)) {
+        try {
+          const { text } = await dev.call(call.name, call.input)
+          return { status: 'ok', data: { text } }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
         }
+      }
+      if (source.executeTool === undefined) {
+        return { status: 'error', reason: 'no_tool_executor' }
+      }
+      return source.executeTool(call)
+    }
+  })()
 
   const adapter: RuntimeAdapter = useDirect
     ? createDirectRuntime({
@@ -560,8 +662,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         run_id: input.run_id,
       })
     }
+    /*
+     * WP117（66 断点 #1）：红人那五条职责的**工具面**。
+     *
+     * 以前 `allow` 只有 grounding 点名的那两个（`search_creators` / `search_policies`）
+     * 加四个客服默认工具——于是「让红人岗位找人」这件事，模型手里一个能干活的工具
+     * 都没有，只能拿客服的凑。十一个红人工具在 `kol-core` 的目录里，
+     * 判据只有 `role_id`（`kol.*`），所以回放时算得出同一份清单。
+     */
     const allow = [
-      ...new Set([...config.grounding.map((g) => g.tool), ...DEFAULT_TOOLS, ...devToolNames()]),
+      ...new Set([
+        ...config.grounding.map((g) => g.tool),
+        ...DEFAULT_TOOLS,
+        ...devToolNames(),
+        ...(isKolRole(config.role_id) ? KOL_TOOL_NAMES : []),
+      ]),
     ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
     const vertical = options.vertical?.()
@@ -673,12 +788,28 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     scope = {
       run_id,
       matter: input.matter,
+      brief: input.brief,
       person_id: input.actor.person_id,
       assignment_id: input.actor.assignment_id,
       seen,
       ...(input.todo_id === undefined ? {} : { todo_id: input.todo_id }),
     }
     const answers: string[] = []
+    /*
+     * WP117b（66 复测 #16）：**同一句话只进时间线一次**。
+     *
+     * 一次运行的答复会从两个口子回来：`run.completed` 事件里的 `outputs`（sink 收到的）
+     * 与 `adapter.run` 的返回值（`result.outputs`）。三个运行时都是两边都给同一份，
+     * 于是两边都 push 的话，时间线上那条 `agent_message` 里同一段话会出现两遍
+     * ——用户看到的就是"Agent 把话说了两遍"。
+     *
+     * 不改成只认其中一边：哪一边都有适配器可能不给（回放档只走事件、直连档只给返回值）。
+     * 收口在这里：**逐字相同的一段只留第一次**。
+     */
+    const addAnswer = (text: string): void => {
+      if (answers.includes(text)) return
+      answers.push(text)
+    }
     let summary = ''
     const sink = (e: RunEvent): void => {
       appendRunEvent(request, e)
@@ -698,13 +829,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       if (e.type === 'run.completed') {
         summary = e.summary
-        for (const out of e.outputs) if (out.kind === 'answer') answers.push(out.text)
+        for (const out of e.outputs) if (out.kind === 'answer') addAnswer(out.text)
       }
     }
     try {
       const result = await adapter.run(request, sink, new AbortController().signal)
       summary = result.summary
-      for (const out of result.outputs) if (out.kind === 'answer') answers.push(out.text)
+      for (const out of result.outputs) if (out.kind === 'answer') addAnswer(out.text)
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
       if (answers.length > 0) {
         work?.appendEvent(input.matter.id, {

@@ -59,7 +59,6 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { ScheduleInput } from '@agentsws/schedule'
 import {
@@ -77,6 +76,9 @@ import {
   DEFAULT_CHAT_PACK,
   evaluateChatAssist,
   evaluateChatTurn,
+  evaluateLeakGuard,
+  fenceForPrompt,
+  LEAK_REWRITE_INSTRUCTION,
   sanitizeExternal,
 } from '@agentsws/support-core'
 import type { BackendResult } from '@agentsws/txn'
@@ -400,8 +402,19 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       parts.push(`客服知识：\n${hits.map((h) => `- ${h.statement}`).join('\n')}`)
     }
     parts.push(`意图：${plan.intent}；这一轮的收尾问句（可用可不用）：${plan.next_question}`)
-    // 访客原话是外部文本：围栏。判定早已做完，模型只负责写那句话
-    parts.push(`访客说：\n${EXTERNAL_FENCE.fencePayload(turn_text)}`)
+    /*
+     * WP125（72 §P0-2 / §6.6 #2）：访客原话进 prompt 之前**先打码再围栏**。
+     *
+     * 访客在聊天窗里贴卡号与验证码比邮件里更常见（他就在结账页上）。
+     * `fenceForPrompt` = `maskSensitive` → `EXTERNAL_FENCE.fencePayload`；
+     * 顺序不能换（围栏会截断，先围栏再打码会漏出半截卡号）。
+     * 原文仍在受控原始材料区里，界面上对有权限的人照常可见。
+     */
+    const fenced = fenceForPrompt(turn_text)
+    if (fenced.masked.length > 0) {
+      emit('chat.turn_planned', session, { masked: fenced.masked })
+    }
+    parts.push(`访客说：\n${fenced.text}`)
 
     try {
       const completion = await models.complete({
@@ -740,13 +753,16 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         plan_action: 'teach',
       })
       const position = options.position?.()
-      let reply: string | undefined
-      if (options.models !== undefined && position !== undefined) {
+      const writeReply = async (extra?: string): Promise<string | undefined> => {
+        if (options.models === undefined || position === undefined) return undefined
         try {
           const completion = await options.models.complete({
             messages: [
               { role: 'system', content: request.system },
-              { role: 'user', content: request.payload },
+              {
+                role: 'user',
+                content: extra === undefined ? request.payload : `${request.payload}\n\n${extra}`,
+              },
             ],
             meta: {
               workspace_id,
@@ -756,10 +772,41 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
               purpose: 'run',
             },
           })
-          reply = parseTeachingReply(completion.text)
+          return parseTeachingReply(completion.text)
         } catch {
-          reply = undefined
+          return undefined
         }
+      }
+      let reply = await writeReply()
+      /*
+       * WP125（72 §2.2 第 1 条 / §6.1 末）：**指导原文泄漏守卫**。
+       *
+       * 商家的中文指导进 prompt、永不进客户屏幕。但"prompt 里写了不要照抄"不是保证——
+       * 商家多半用中文，客户多半是外语，泄漏出去撤不回来。投递前先问一句
+       * 「这条回复里有没有逐字引用商家那句话」：命中就重写一次，再命中**不发**，
+       * 转成一张卡等人看（静默删改是最坏的那一种）。
+       */
+      const first = evaluateLeakGuard({
+        reply: reply ?? '',
+        instructions: [input.instruction],
+      })
+      if (first.leaked && reply !== undefined) {
+        // 命中 → **重写一次**。`acceptChatTeaching` 自己也有一道同口径的守卫
+        // （`containsInstructionLeak`），所以这一版照样交给它判——
+        // 还在漏就由它回 `blocked_verbatim_leak`（拒发，指导仍然沉淀）。
+        const second = await writeReply(LEAK_REWRITE_INSTRUCTION)
+        const again = evaluateLeakGuard({
+          reply: second ?? '',
+          instructions: [input.instruction],
+          rewrites: 1,
+        })
+        reply = second ?? reply
+        emit('chat.turn_planned', session, {
+          guard: 'instruction_leak',
+          action: again.leaked ? 'human_review' : 'rewrote',
+          // 只有长度：商家那句话一个字都不进日志
+          matched_chars: again.matched_chars,
+        })
       }
       const result = acceptChatTeaching({
         instruction: input.instruction,

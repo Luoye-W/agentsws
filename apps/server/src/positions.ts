@@ -40,6 +40,13 @@ import {
 } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
 
+/**
+ * 工作区的底座职责。每个岗位模板都带着它（`org.ts` 的 `SEED_POSITIONS`），
+ * 但它说的是"这个人是这个工作区的成员"，不是岗位的一条职责——
+ * 岗位视图里的职责清单与计数都把它滤掉（见 `dutyRolesOf`）。
+ */
+const BASE_ROLE: RoleId = 'common.member'
+
 const POSITION_ERROR = (
   code: 'not_found' | 'conflict' | 'invalid_input' | 'forbidden',
   msg: string,
@@ -201,6 +208,24 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
   const cardsOf = async (person_id: PersonId): Promise<ApprovalItem[]> =>
     options.cards === undefined ? [] : await options.cards(person_id)
 
+  /**
+   * WP125（72 §6.6 #11）：**岗位的职责清单里不算工作区的底座职责**。
+   *
+   * `docs/73` #3 记的那个 bug：客服岗位页写「5 条职责」，而
+   * `packages/roles/positions/customer-care.yml` 里只有 4 条。差的那一条是
+   * `common.member`——种岗位时每个岗位都带着它（`org.ts` 的 `SEED_POSITIONS`），
+   * 它是"这个人是这个工作区的成员"，不是客服岗位的一条职责。
+   *
+   * 于是岗位视图里把它滤掉：计数、折叠层、面板数字三处读的是同一个清单，
+   * 于是三处永远对得上 yml。**只滤视图不改模板**——分配与权限照旧从模板走。
+   *
+   * 「普通成员」那个岗位本身只有这一条，那就不滤（滤完是空清单，等于这个岗位消失）。
+   */
+  const dutyRolesOf = (template: Position): Position['roles'] => {
+    const kept = template.roles.filter((r) => r.role !== BASE_ROLE)
+    return kept.length === 0 ? template.roles : kept
+  }
+
   const instance = async (position_id: string, person_id: PersonId): Promise<PositionInstance> => {
     const template = templateOf(position_id)
     // 谁在做：默认包里的职责都在他名下才算（05 §2；与 org.ts 的 holdersOf 同一条规则）
@@ -237,7 +262,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       name: { ...template.name },
       template_version: template.version,
       holders: [...holders].sort(),
-      roles: template.roles.map((r) => {
+      roles: dutyRolesOf(template).map((r) => {
         const my = mine.get(r.role)
         // WP84：快捷提示与示例任务原样从职责定义抄来（改 yml 这里就变，没有第二份）
         const def = roles.roles.get(r.role)
@@ -409,7 +434,10 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     }
     const routed =
       pinned === undefined
-        ? routeWithinPosition(text, profilesOf(held))
+        ? // WP117b（66 复测 #17）：路由那句话要与岗位页标题上的数字对得上。
+          // 递进去的是 WP125 那份滤掉 `common.member` 的清单（`dutyRolesOf`），
+          // 也就是岗位页「N 条职责」读的同一份——两处一个来源，不会再打架。
+          routeWithinPosition(text, profilesOf(held), { duty_count: dutyRolesOf(template).length })
         : {
             picked: pinned,
             candidates: [],

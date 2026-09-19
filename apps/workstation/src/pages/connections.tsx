@@ -17,6 +17,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BrandScopeNote } from '@/components/brand-scope-note'
 import { openExternal } from '@/components/connections/bridge'
+// WP119（68）：浏览器插件的配对码与已配清单（只加一节，别处一个字没改）
+import { BrowserExtensionSection } from '@/components/connections/browser-extension'
 import { ConnectedRow } from '@/components/connections/connected-row'
 import { DataBackend } from '@/components/connections/data-backend'
 import { deadLettersFor } from '@/components/connections/dead-letters'
@@ -367,6 +369,9 @@ export function ConnectionsPage(): React.ReactNode {
           ))}
         </div>
       </section>
+
+      {/* WP119（68）：浏览器插件——6 位配对码 + 已配上的那几个浏览器 */}
+      <BrowserExtensionSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
 
       {/* WP40 / 41 §2.4：数据后端三档（本地 / 接我的云 / 托管）+ 迁移向导 */}
       <DataBackend {...(ownerId === undefined ? {} : { assignment: ownerId })} />

@@ -1735,6 +1735,25 @@ const QUERY_LIST: QueryDef[] = [
     }),
   },
   {
+    /*
+     * WP117b（Luoye 待定项的默认做法）：**演练漏斗单独一块。**
+     *
+     * 上面那块「建联漏斗」从此一条演练数据都不含——它是拿来做判断的数，
+     * 掺进 24 个合成红人之后就再也不能看了。演练开着时这一块才有行；
+     * 关掉演练 `sandbox_funnel` 连同它一起没有（**不是清零**）。
+     */
+    name: 'kol.sandbox_funnel',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'stage', label: '阶段' },
+        { key: 'count', label: '人数', align: 'right' as const, format: 'count' as const },
+      ],
+      rows: (ctx.kol?.sandbox_funnel ?? []).map((b) => ({ stage: b.label, count: b.count })),
+    }),
+  },
+  {
     name: 'kol.collaborations',
     source: 'kol',
     returns: 'table',

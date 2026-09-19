@@ -16,6 +16,7 @@
  * 两者差十天的结果就是截图里满屏"已过期"、日历把所有到期堆在同一天。
  * 起点定下之后，世界里一切照旧走合成时钟（**模拟仍是虚拟时钟，基线一个数没动**）。
  */
+import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type {
@@ -1156,6 +1157,18 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       // demo 一律 stub 运行时：即使机器上配了 DEEPSEEK_API_KEY 也不叫模型
       DEEPSEEK_API_KEY: '',
       AGENTSWS_PORT: String(options.port ?? 4317),
+      /*
+       * WP117（66 断点 #6 的环境那一半）：**demo 自带一把临时加密钥匙**。
+       *
+       * 之前 demo 没有 `AGENTSWS_SECRETS_KEY`，于是「给红人加一条联系方式」
+       * 这一步在 demo 里必然 400——而联系方式是开发信的前提，整条建联链
+       * 在 demo 上从第一步就断了（断点 #6 → #7）。
+       *
+       * 这把钥匙**每次起 demo 都重新生成**、只活在这个进程的环境变量里、
+       * 不落盘也不进仓库：demo 的库本来就是一次性的，钥匙跟着一次性最稳妥——
+       * 存下来反而是在用户机器上留了一把没人管的钥匙。
+       */
+      AGENTSWS_SECRETS_KEY: process.env.AGENTSWS_SECRETS_KEY ?? randomBytes(32).toString('base64'),
     },
   })
 
@@ -1190,12 +1203,18 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    * 15 §5「通过 ≠ 施行」：批准只是写下批准，施行由执行器发起，而且有 2 分钟取消窗口。
    * demo 里时间是合成的，所以每次 drain 先把合成时钟往前推 3 分钟——只在真的有东西要施行时推，
    * 不会把「昨天」推成「今天」。
+   *
+   * WP117b（66 复测 #19）：**两本审批账一起扫**。世界那一本（演示卡）照旧；
+   * 服务进程那一本（运行中的服务 stage 的卡，比如红人的开发信）以前没人发起施行，
+   * 批了永远停在 `approved`。先扫一遍拿到「还在等」的张数（决定要不要推时钟），
+   * 推完时钟再扫一遍真施行。
    */
   const drain = async (): Promise<void> => {
     const waiting = world.txn.runtime.store
       .listApprovals({ workspace_id: world.workspace_id })
       .filter((i) => ['approved', 'approved_edited', 'auto_approved'].includes(i.state))
-    if (waiting.length === 0) return
+    const serverWaiting = await server.drainApprovals()
+    if (waiting.length === 0 && serverWaiting === 0) return
     world.clock.advance(3 * 60 * 1000)
     const order = (i: ApprovalItem): number => (i.kind === 'staged_change' ? 0 : 1)
     for (const item of [...waiting].sort((a, b) => order(a) - order(b))) {
@@ -1205,6 +1224,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
         // 取消窗口 / 父子顺序没到：下一拍再来
       }
     }
+    await server.drainApprovals()
   }
 
   // 45（WP50）：公司页「并进来」Tab 与新建品牌时的查重提示都要有东西可看

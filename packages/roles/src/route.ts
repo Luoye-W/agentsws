@@ -249,22 +249,33 @@ export interface RouteWithinPositionResult {
  * 3. 拿不准 → 没有 `picked`、`ambiguous: true`，候选按分排好递出去，调用方出选择卡。
  *
  * 一个判据词都没命中也算拿不准（`candidates` 是空的）——空手猜一条比问一句糟。
+ *
+ * WP117b（66 复测 #17）：`options.duty_count` 是**这个岗位模板上有几条职责**
+ * （WP125 滤掉 `common.member` 之后的那个数，与岗位页标题上写的是同一个）。
+ * 给了它，"只有一条"那句话才说得准——`roles` 递进来的是**本人持有**的那几条，
+ * 岗位有 5 条而本人只持有 1 条时，原来那句「这个岗位下只有一条职责」与岗位页上的
+ * 「5 条职责」当场打架。不给就退回原来的说法（老调用方一个字不用改）。
  */
 export function routeWithinPosition(
   text: string,
   roles: readonly RouteRoleProfile[],
+  options: { duty_count?: number } = {},
 ): RouteWithinPositionResult {
   const eligible = roles.filter((r) => !GENERIC_ROLES.includes(r.role_id))
   // 岗位里只有一条职责：没得选就是它，两条阈值都不看
   const only = eligible[0]
   if (eligible.length === 1 && only !== undefined) {
+    const duties = options.duty_count
     return {
       picked: only.role_id,
       candidates: [
         { role_id: only.role_id, role_name: only.role_name, score: 1, why: ['唯一职责'] },
       ],
       ambiguous: false,
-      reason: `这个岗位下只有「${only.role_name}」一条职责，直接交给它`,
+      reason:
+        duties === undefined || duties <= 1
+          ? `这个岗位下只有「${only.role_name}」一条职责，直接交给它`
+          : `这个岗位有 ${duties} 条职责，你名下只有「${only.role_name}」这一条，直接交给它`,
     }
   }
 

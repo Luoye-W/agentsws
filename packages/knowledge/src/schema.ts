@@ -185,6 +185,10 @@ const ADDED_COLUMNS: readonly [table: string, column: string, type: string][] = 
   ['knowledge_sources', 'content_sha256', 'TEXT'],
   ['knowledge_sources', 'size_bytes', 'INTEGER'],
   ['knowledge_sources', 'deleted_at', 'TEXT'],
+  // WP125（72 §P0-3）：缺口的等待者（按线程去重的 JSON 数组）。
+  // 走 ADDED_COLUMNS 而不是新开一张表——**零新表**是这条交付的明文要求，
+  // 而等待者是缺口的一个属性，不是有自己生命周期的实体。
+  ['knowledge_gaps', 'waiting_json', 'TEXT'],
 ]
 
 export function migrate(db: Database): void {

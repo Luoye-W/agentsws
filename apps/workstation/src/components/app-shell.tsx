@@ -52,6 +52,7 @@ import { RightRail } from '@/components/rail/right-rail'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
 import { StandbyBadge } from '@/components/standby-badge'
 import { CreditsChip, ModelChip } from '@/components/top-chips'
+import { DemoBadge } from '@/components/ui/demo-badge'
 import { Separator } from '@/components/ui/separator'
 import {
   listMessageAccounts,
@@ -388,6 +389,8 @@ export function AppShell({
             并且 ⌘K 做成画布上那个"交给某个岗位一件事…"的长条搜索框样子。
           */}
           <header className="flex items-center justify-end gap-2 border-b border-ws-line bg-ws-paper px-5 py-2.5">
+            {/* WP125（本单交付 4）：合成世界的「演示数据」标记——不显眼但始终在 */}
+            <DemoBadge />
             <StandbyBadge />
             <button
               type="button"

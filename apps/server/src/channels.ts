@@ -223,6 +223,38 @@ export interface ChannelsOptions {
   archive_folder?: string | null
   /** WP55：归档时顺手标已读（默认开）。 */
   archive_mark_read?: boolean
+  /**
+   * WP125（72 §P0-1）：**客服判断层**（入站那一半）。
+   *
+   * 一封客户来信落成事项之后、起 Run 之前过这一道：意图分类 → SLA →
+   * 第一次撞到的未答边界（出一张选择题卡）→ 模板草稿 → 要不要转人工 → 三道自主门。
+   *
+   * 它**不决定要不要起 Run**——除了 `handoff` 那一档（那一档要人先看一眼，
+   * 与渠道判定里的 `needs_human_review` 同一条路）。其余情况运行时照常去写一封
+   * 更好的回信；判断层给的是"这一封该往哪个方向走"与一句会进时间线的结论。
+   *
+   * 不接 = 老行为（真邮件走通用 Agent + 一份提示词技能，**没有门**，见 72 §1.I）。
+   */
+  judgeInbound?(input: {
+    thread_id: string
+    matter_id: string
+    text: string
+    subject?: string
+    from?: string
+  }): Promise<SupportInboundVerdict | undefined> | SupportInboundVerdict | undefined
+}
+
+/**
+ * WP125：判断层对一封来信的结论（形状与 `support-judgment.ts` 的 `InboundJudgment`
+ * 一致，这里只声明渠道层真正要用的那几格——`channels.ts` 不该 import 判断层，
+ * 那是反向依赖；同 `runtime.ts` 的 `DraftVerdict`）。
+ */
+export interface SupportInboundVerdict {
+  action: 'handoff' | 'boundary_question' | 'pending_review' | 'auto_reply'
+  /** 给人看的一句话（进事项时间线）。**零裸枚举**。 */
+  note: string
+  /** 出了选择题卡就有值。 */
+  boundary_card_id?: string
 }
 
 export interface MailPollReport {
@@ -552,6 +584,41 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         actor: { kind: 'system', id: `channel:${event.channel}` },
       })
       return
+    }
+    /*
+     * WP125（72 §P0-1）：**判断层先说话**。
+     *
+     * 以前这里是「落事项 → 直接起 Run」：真邮件那条路上一道门都没有。现在中间
+     * 插一步——意图、SLA、未答边界、模板草稿、转人工判定、三道自主门全跑一遍，
+     * 结论进时间线（人看得见"AI 这次为什么这么办"）。
+     *
+     * fail-closed：判断层自己炸了照常起 Run（客户不该因为一个装配错误等不到回信），
+     * 但会在时间线上说一句——出了问题要能看见，不能只在日志里。
+     */
+    let verdict: SupportInboundVerdict | undefined
+    try {
+      verdict = await options.judgeInbound?.({
+        thread_id: event.thread?.external_id ?? matter.id,
+        matter_id: matter.id,
+        text: forDisplay(body),
+        ...(event.actor?.external_id === undefined ? {} : { from: event.actor.external_id }),
+      })
+    } catch (e) {
+      work.appendEvent(matter.id, {
+        kind: 'status',
+        text: `客服判断层没跑起来（${e instanceof Error ? e.message : String(e)}），这一封按老路径处理。`,
+        actor: { kind: 'system', id: `channel:${event.channel}` },
+      })
+    }
+    if (verdict !== undefined) {
+      work.appendEvent(matter.id, {
+        kind: 'note',
+        text: verdict.note,
+        actor: { kind: 'system', id: `channel:${event.channel}` },
+      })
+      // `handoff` = 这一封要人先看一眼：材料都在事项里，但**不起 Run**
+      // （与上面渠道判定里的 `needs_human_review` 是同一条纪律的两面）
+      if (verdict.action === 'handoff') return
     }
     const position = options.position?.()
     const startRun = options.startRun

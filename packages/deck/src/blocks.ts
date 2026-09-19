@@ -295,6 +295,9 @@ const FULFILLMENT_BLOCKS = (): BlockDef[] => [
 const KOL_BLOCKS = (): BlockDef[] => [
   block('kol.discovery', 'table', '找人清单', 'kol.discovery'),
   block('kol.funnel', 'table', '建联漏斗', 'kol.outreach_funnel'),
+  // WP117b：演练那一份单独一块（真漏斗里从此一条演练数据都没有）。
+  // 演练关掉它就是空表——表头留着，比一块忽隐忽现的面板好认。
+  block('kol.sandbox_funnel', 'table', '演练漏斗', 'kol.sandbox_funnel'),
   block('kol.collaborations', 'table', '合作进行中', 'kol.collaborations'),
   block('kol.pending_deliverables', 'table', '待审交付物', 'kol.pending_deliverables'),
   block('kol.attribution', 'table', '归因', 'kol.attribution'),
