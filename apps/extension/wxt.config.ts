@@ -28,7 +28,9 @@ export default defineConfig({
     description:
       '在 YouTube / Instagram / TikTok 页面上即时体检红人，一键把公开资料收进你本机的 Agents 工坊红人库。',
     default_locale: 'zh_CN',
-    permissions: ['storage', 'activeTab'],
+    // `alarms` 是给「应用刚打开，把排着的补上去」那个 5 分钟定时用的；
+    // 没有它 service worker 一被回收，队列就要等用户下次点按钮才动。
+    permissions: ['storage', 'activeTab', 'alarms'],
     host_permissions: [
       'https://*.youtube.com/*',
       'https://*.instagram.com/*',
