@@ -1434,6 +1434,8 @@ export interface PricingEntry {
   credits_per_unit: number
   label_zh: string
   label_en: string
+  /** 付费三块（67 §1，WP118）。老的价目表没有这一格，界面按能力名前缀兜底。 */
+  block?: 'data' | 'ai' | 'kol_service'
   models?: PricingModelEntry[]
 }
 
@@ -1479,6 +1481,44 @@ export const getCloudUsage = (
   assignment?: string,
 ): Promise<UsageReportView | null> =>
   api(`/v1/cloud/usage?group=${group}`, withAssignment(assignment))
+
+/** 充值四档（67 §2）。 */
+export interface TopupTierView {
+  id: string
+  usd: number
+  credits: number
+  label_zh: string
+  label_en: string
+  recommended?: boolean
+}
+
+export interface TopupTiersView {
+  version: number
+  as_of: string
+  credits_per_usd: number
+  tiers: TopupTierView[]
+}
+
+export interface TopupOrderView {
+  id: string
+  credits: number
+  amount_cny: number
+  amount_usd?: number
+  tier_id?: string
+  checkout_url?: string
+  status: string
+}
+
+export const getTopupTiers = (assignment?: string): Promise<TopupTiersView> =>
+  api('/v1/cloud/topup/tiers', withAssignment(assignment))
+
+/** 建一笔充值单，回一个去云上付款的链接。**本地不碰任何支付凭据**。 */
+export const createTopup = (tier_id: string, assignment?: string): Promise<TopupOrderView> =>
+  api('/v1/cloud/topup', {
+    ...withAssignment(assignment),
+    method: 'POST',
+    body: { tier_id },
+  })
 
 export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', withAssignment(assignment))

@@ -18,6 +18,7 @@ import type {
   ModelProviderTemplate,
   ModelProviderView,
   PricingView,
+  TopupTiersView,
   UsageReportView,
 } from '@/lib/api'
 import { renderWithProviders } from './helpers'
@@ -89,6 +90,34 @@ const PRICING: PricingView = {
       label_zh: '网页抓取（按页）',
       label_en: 'Page crawl (per page)',
     },
+    {
+      capability: 'kol.service.monthly',
+      unit: 'month',
+      credits_per_unit: 30,
+      block: 'kol_service',
+      label_zh: '红人营销增值服务（每月）',
+      label_en: 'Influencer service (per month)',
+    },
+  ],
+}
+
+/** 充值四档（67 §2）。 */
+const TIERS: TopupTiersView = {
+  version: 1,
+  as_of: '2026-09-19',
+  credits_per_usd: 7,
+  tiers: [
+    { id: 'usd20', usd: 20, credits: 140, label_zh: '入门', label_en: 'Starter' },
+    {
+      id: 'usd50',
+      usd: 50,
+      credits: 350,
+      label_zh: '常用',
+      label_en: 'Standard',
+      recommended: true,
+    },
+    { id: 'usd100', usd: 100, credits: 700, label_zh: '团队', label_en: 'Team' },
+    { id: 'usd200', usd: 200, credits: 1400, label_zh: '年度', label_en: 'Annual' },
   ],
 }
 
@@ -100,8 +129,9 @@ const USAGE: Record<string, UsageReportView> = {
     rows: [
       { key: 'ai.chat', credits: 30, quantity: 12.5, calls: 42 },
       { key: 'crawl.page', credits: 7.5, quantity: 375, calls: 5 },
+      { key: 'kol.service.monthly', credits: 30, quantity: 1, calls: 1 },
     ],
-    total_credits: 37.5,
+    total_credits: 67.5,
   },
   workspace: {
     group: 'workspace',
@@ -128,6 +158,7 @@ const state = {
   sources: { workspace_id: 'ws_1', capability_sources: {} } as CapabilitySourceSettings,
 }
 
+const orders: string[] = []
 const saved: { id: string; input: Record<string, unknown> }[] = []
 const sourceWrites: Record<string, string>[] = []
 
@@ -138,6 +169,18 @@ vi.mock('@/lib/api', async () => {
     getCloudCredits: async () => state.credits,
     getCloudPricing: async () => PRICING,
     getCloudUsage: async (group: 'capability' | 'workspace' | 'day') => USAGE[group] ?? null,
+    getTopupTiers: async () => TIERS,
+    createTopup: async (tier_id: string) => {
+      orders.push(tier_id)
+      return {
+        id: 'cs_1',
+        credits: 350,
+        amount_cny: 350,
+        tier_id,
+        checkout_url: 'https://pay.invalid/cs_1',
+        status: 'created',
+      }
+    },
     getCapabilitySources: async () => state.sources,
     setCapabilitySources: async (next: Record<string, 'mine' | 'agentsws'>) => {
       sourceWrites.push(next)
@@ -248,12 +291,54 @@ describe('积分面板（49 M5）', () => {
     expect(section.textContent).not.toContain('7.1')
   })
 
-  it('充值按钮开新窗口——付款永远在对方的页面上', async () => {
+  it('充值是四张档位卡，不是一个输入框（67 §2）', async () => {
     renderWithProviders(<CreditsPanel assignment="asg_owner" />)
-    const topup = await screen.findByTestId('credits-topup')
-    const link = topup.tagName === 'A' ? topup : within(topup).getByRole('link')
-    expect(link.getAttribute('target')).toBe('_blank')
-    expect(link.getAttribute('rel')).toContain('noopener')
+    const cards = await screen.findAllByTestId('credits-tier')
+    expect(cards.map((c) => c.getAttribute('data-tier'))).toEqual([
+      'usd20',
+      'usd50',
+      'usd100',
+      'usd200',
+    ])
+    // 卡面上同时有美元与积分——用户不用自己做那道除法
+    expect(cards[1]?.textContent).toContain('US$50')
+    expect(cards[1]?.textContent).toContain('350')
+    expect(cards[1]?.getAttribute('data-recommended')).toBe('true')
+    // 界面上一个填金额的输入框都没有
+    expect(screen.queryByTestId('credits-topup')).toBeNull()
+  })
+
+  it('点一张卡：去云上建单，然后开新窗口付款——本地不碰卡号', async () => {
+    const opened: string[] = []
+    vi.spyOn(window, 'open').mockImplementation((url) => {
+      opened.push(String(url))
+      return null
+    })
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    const cards = await screen.findAllByTestId('credits-tier')
+    const card = cards[1]
+    if (card === undefined) throw new Error('该有第二张卡')
+    await userEvent.click(card)
+    await waitFor(() => {
+      expect(orders).toContain('usd50')
+    })
+    await waitFor(() => {
+      expect(opened).toContain('https://pay.invalid/cs_1')
+    })
+  })
+
+  it('这个月钱花在哪：三张小卡，按付费三块分（67 §1）', async () => {
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    const blocks = await screen.findAllByTestId('credits-block')
+    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['data', 'ai', 'kol_service'])
+    const byBlock = (name: string): string =>
+      blocks.find((b) => b.getAttribute('data-block') === name)?.textContent ?? ''
+    // 价目表里 ai.chat 没写 block，按能力名前缀兜底也要归对
+    await waitFor(() => {
+      expect(byBlock('ai')).toContain('30')
+    })
+    expect(byBlock('data')).toContain('7.5')
+    expect(byBlock('kol_service')).toContain('30')
   })
 })
 

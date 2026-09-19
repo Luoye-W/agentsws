@@ -17,6 +17,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { ApiError } from '@agentsws/api'
 import type { CloudActor, CloudPort } from '@agentsws/api'
 import type {
   CapabilitySource,
@@ -25,11 +26,13 @@ import type {
   Clock,
   CloudCreditsView,
   Pricing,
+  TopupOrder,
+  TopupTiers,
   UsageGroup,
   UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
-import { buildPricing } from '@agentsws/metering'
+import { buildPricing, TOPUP_TIERS_FILE } from '@agentsws/metering'
 import { CLOUD_BASE_URL_ENV, CLOUD_TOKEN_SECRET_ID, DEFAULT_CLOUD_BASE_URL } from './models.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -132,7 +135,10 @@ export function createCloud(options: CloudOptions): CloudAssembly {
       globalThis.fetch(input, init as RequestInit) as unknown as ReturnType<CloudFetch>)
 
   /** 打一次云侧。令牌在这一行进头，函数返回之后没人再引用它。 */
-  const callCloud = async <T>(path: string): Promise<T | undefined> => {
+  const callCloud = async <T>(
+    path: string,
+    init: { method?: string; body?: string } = {},
+  ): Promise<T | undefined> => {
     const token = tokenOf()
     if (token === undefined) return undefined
     const controller = new AbortController()
@@ -141,8 +147,13 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     }, CLOUD_TIMEOUT_MS)
     try {
       const res = await doFetch(`${base}${path}`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
+        method: init.method ?? 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          accept: 'application/json',
+          ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(init.body === undefined ? {} : { body: init.body }),
         signal: controller.signal,
       })
       if (!res.ok) return undefined
@@ -224,10 +235,39 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     return callCloud<UsageReport>(`/v1/wallet/usage?${query.toString()}`)
   }
 
+  /**
+   * 充值四档。云上取不到就回本地内置那一份——四张卡不该因为断网就一片空白
+   * （与价目表同一条理由）。
+   */
+  const tiersView = async (): Promise<TopupTiers> =>
+    (await callCloud<TopupTiers>('/v1/wallet/topup/tiers')) ?? TOPUP_TIERS_FILE
+
+  /**
+   * 按档建一笔充值单。
+   *
+   * **本地只转发一个档位 id**，金额由云上那张表说了算——本地算一遍金额等于
+   * 多一份会跟云上分岔的价目表。没关联账号 / 云上没配 Stripe 都回一句人话。
+   */
+  const createTopupOrder = async (tier_id: string): Promise<TopupOrder> => {
+    if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+    const order = await callCloud<TopupOrder>('/v1/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify({ provider: 'stripe', tier_id }),
+    })
+    if (order === undefined)
+      throw new ApiError(
+        'provider_unavailable',
+        '云上暂时建不了充值单（连不通，或者那边还没接上支付）。稍后再试一次。',
+      )
+    return order
+  }
+
   const port: CloudPort = {
     credits: () => creditsView(),
     pricing: () => pricingView(),
     usage: (_actor, filter) => usageView(filter),
+    topupTiers: () => tiersView(),
+    createTopup: (_actor, input) => createTopupOrder(input.tier_id),
     capabilitySources: (actor) => settingsOf(actor),
     setCapabilitySources(actor, input) {
       /*

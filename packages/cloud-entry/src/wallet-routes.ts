@@ -133,8 +133,7 @@ export function walletRoutes(deps: EntryDeps): EntryRoute[] {
           const tier = topupTierById(tierId)
           // 认不出就回一句人话，**绝不退到某个默认档**：猜错的后果是用户按
           // US$20 那张卡付了钱，到账却是别的数
-          if (tier === undefined)
-            throw new EntryError('invalid_input', `没有这一档充值：${tierId}`)
+          if (tier === undefined) throw new EntryError('invalid_input', `没有这一档充值：${tierId}`)
           credits = tier.credits
           usd = tier.usd
           tier_id = tier.id
