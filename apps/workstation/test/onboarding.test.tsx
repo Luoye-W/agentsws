@@ -527,6 +527,7 @@ describe('70 §2 第 ① 步：接上 AI', () => {
     state.credits = {
       linked: true,
       balance: {
+        org_id: 'org_1',
         purchased: 0,
         granted: 10,
         available: 10,
