@@ -39,6 +39,7 @@ import { meetingRoutes } from './routes/meetings.js'
 // WP113（63）：消息——统一收件处 `/v1/messages/*`
 import { messageRoutes } from './routes/messages.js'
 import { modelRoutes } from './routes/models.js'
+import { brandIntakeRoutes } from './routes/brand-intake.js'
 import { onboardingRoutes } from './routes/onboarding.js'
 import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
@@ -141,6 +142,7 @@ export function collectRoutes(): Route[] {
      * 是 WP28 的**定向邮件邀请**，与这里的**人类可读码**是两件事，路径也不同）。
      */
     ...onboardingRoutes(),
+    ...brandIntakeRoutes(),
     // WP65（52 O1）：组织与品牌——排在首次设置之后，第 ① 步的两块是同一步
     ...organizationRoutes(),
     // WP50 Join 向导（20 §4–§5、45）：`/v1/join/*` 独立路径，与制度面不撞

@@ -303,6 +303,9 @@ export type {
   WorkspaceProfileView,
 } from './routes/onboarding.js'
 export { onboardingRoutes } from './routes/onboarding.js'
+// WP121（70 §3）：贴一个网址自动分析
+export type { BrandIntakeActor, BrandIntakePort } from './routes/brand-intake.js'
+export { brandIntakeRoutes } from './routes/brand-intake.js'
 export type {
   AcceptedInvitationView,
   AdoptArchivedInput,
