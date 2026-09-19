@@ -15,9 +15,10 @@
  * 6. 聚合口径与 Compose 形态一致（同一段 SQL，只是库换了）。
  */
 
+import { isSignupBonusRef } from '@agentsws/metering'
 import { describe, expect, it } from 'vitest'
 import { LEDGER_INTERNAL, route } from '../src/index.js'
-import { type FakeCloud, fakeCloud, req, tokenFromMail } from './helpers.js'
+import { type FakeCloud, fakeCloud, req, SIGNUP_BONUS, tokenFromMail } from './helpers.js'
 
 const ADMIN_TOKEN = 'test-admin-token-at-least-32-bytes-long-0123456789'
 
@@ -160,8 +161,8 @@ describe('WP115 Workers 形态 · 钱跨对象', () => {
       csrf: staff.csrf,
     })
     expect(granted.status, JSON.stringify(granted.body)).toBe(201)
-    // 钱真的进了那个组织自己的对象
-    expect(cloud.wallet(org).wallet.balance(org).granted).toBe(120)
+    // 钱真的进了那个组织自己的对象（120 是这条用例发的，另一笔是 WP121 注册赠送）
+    expect(cloud.wallet(org).wallet.balance(org).granted).toBe(120 + SIGNUP_BONUS)
 
     await cloud.settle()
     // 副本里也有那一笔（发放流水），所以列表页与"积分与会员"那一页看得见
@@ -172,7 +173,9 @@ describe('WP115 Workers 形态 · 钱跨对象', () => {
 
     // 抽屉里的余额问的是**真值**（按组织敲 WalletDO），不是副本
     const drawer = await call(cloud, `/v1/admin/orgs/${org}`, { session: staff.session })
-    expect((drawer.body.data as { balance: { granted: number } }).balance.granted).toBe(120)
+    expect((drawer.body.data as { balance: { granted: number } }).balance.granted).toBe(
+      120 + SIGNUP_BONUS,
+    )
   })
 
   it('撤回未消耗部分：钱与那条负向流水落在同一个对象里', async () => {
@@ -189,7 +192,8 @@ describe('WP115 Workers 形态 · 钱跨对象', () => {
     })
     expect(revoked.status, JSON.stringify(revoked.body)).toBe(200)
     expect((revoked.body.data as { revoked: number }).revoked).toBe(80)
-    expect(cloud.wallet(org).wallet.balance(org).granted).toBe(0)
+    // 撤的是这一笔 80，WP121 注册赠送那一笔**不该被撤掉**
+    expect(cloud.wallet(org).wallet.balance(org).granted).toBe(SIGNUP_BONUS)
     const events = cloud.wallet(org).store.events({ org_id: org })
     expect(events.filter((e) => e.capability === 'admin.grant')).toHaveLength(1)
   })
@@ -226,11 +230,17 @@ describe('WP115 Workers 形态 · 钱跨对象', () => {
     // 第一期由 alarm 发（Workers 形态下会员续发搭在账号对象的闹钟上）
     const first = await cloud.accounts().grantDueCycles()
     expect(first).toBe(1)
-    expect(cloud.wallet(org).wallet.balance(org).granted).toBe(50)
+    // 这一期的 50 + WP121 注册赠送
+    expect(cloud.wallet(org).wallet.balance(org).granted).toBe(50 + SIGNUP_BONUS)
 
     // 重跑十次也只有那一笔（grant_key 里没有时间戳 + 唯一索引兜底）
     for (let i = 0; i < 10; i++) await cloud.accounts().grantDueCycles()
-    expect(cloud.wallet(org).store.lots(org)).toHaveLength(1)
+    // 把 WP121 注册赠送那一笔排掉，剩下的才是会员续发
+    const cycleLots = cloud
+      .wallet(org)
+      .store.lots(org)
+      .filter((l) => !isSignupBonusRef(l.source_ref))
+    expect(cycleLots).toHaveLength(1)
   })
 })
 
@@ -350,7 +360,8 @@ describe('WP115 Workers 形态 · Ledger 抄写', () => {
       csrf: staff.csrf,
     })
     expect(granted.status).toBe(201)
-    expect(noLedger.wallet(org).wallet.balance(org).granted).toBe(10)
+    // 这条用例发的 10 + WP121 注册赠送
+    expect(noLedger.wallet(org).wallet.balance(org).granted).toBe(10 + SIGNUP_BONUS)
     expect(cloud.env.LEDGER).toBeDefined()
   })
 })
@@ -409,8 +420,11 @@ describe('WP115 Workers 形态 · 用户管理', () => {
     const lots = cloud.wallet(org).store.lots(org)
     expect(lots).toHaveLength(0)
     const tomb = cloud.wallet(org).store.lots(`org_deleted_${org.slice(-8)}`)
-    expect(tomb).toHaveLength(1)
-    expect(tomb[0]?.credits).toBe(30)
+    // 这条用例发的 30，外加 WP121 注册赠送那一笔——匿名化是把**每一笔**都搬过去
+    expect(tomb.filter((l) => !isSignupBonusRef(l.source_ref))).toEqual([
+      expect.objectContaining({ credits: 30 }),
+    ])
+    expect(tomb).toHaveLength(SIGNUP_BONUS > 0 ? 2 : 1)
 
     // 邮箱与规范化别名都进了黑名单
     expect(cloud.accounts().admin.emailBanned('a.b+tag@gmail.com')).toBe(true)

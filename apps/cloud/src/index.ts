@@ -63,7 +63,7 @@ export {
   tombstoneEmail,
   tombstoneOrg,
 } from './admin/routes.js'
-export { ADMIN_MIGRATION_V2 } from './admin/schema.js'
+export { ADMIN_MIGRATION_V2, ADMIN_MIGRATION_V3 } from './admin/schema.js'
 export {
   AdminStore,
   type AdminStoreOptions,
@@ -168,6 +168,14 @@ export {
   LEGACY_LOGIN_PATH,
   LOGIN_PATH,
 } from './server.js'
+export {
+  grantSignupBonus,
+  type SignupBonusHooks,
+  type SignupBonusLedger,
+  type SignupBonusOutcome,
+  type SignupBonusPort,
+  type SignupBonusSkip,
+} from './signup-bonus.js'
 export {
   chainVerifiers,
   type MountedStandby,
@@ -324,7 +332,25 @@ export async function main(): Promise<void> {
   const modules = [admin, adminExport, consoleRoutes].filter(
     (m): m is CloudRoute[] => m !== undefined,
   )
-  const server = createCloudServer(modules.length === 0 ? {} : { modules })
+  /*
+   * WP121（70 §2）：注册赠送。两个口都晚绑——钱包要等 `mountEntry`（下面几十行），
+   * 后台库要等 `createAdminStore`（下一行）。取不到就是不送，`grantSignupBonus`
+   * 会如实回 `unavailable` 而不是装作送过了。
+   */
+  const server = createCloudServer({
+    ...(modules.length === 0 ? {} : { modules }),
+    signupBonus: {
+      port: () =>
+        walletHandles === undefined
+          ? undefined
+          : {
+              grant: async (args) => ({
+                lot_id: (walletHandles as AdminWalletHandles).wallet.topup(args).id,
+              }),
+            },
+      ledger: () => adminStore,
+    },
+  })
   adminStore = createAdminStore(server, clock)
   const dataDir = env[CLOUD_DATA_DIR_ENV]
   /*

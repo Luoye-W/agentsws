@@ -54,6 +54,7 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { BackupPort } from './routes/backup.js'
+import type { BrandIntakePort } from './routes/brand-intake.js'
 import type { BrowserPort } from './routes/browser.js'
 import type { CatalogPort } from './routes/catalog.js'
 import type { ChangeFilesPort } from './routes/changes.js'
@@ -806,6 +807,12 @@ export interface GatewayDeps {
    * 回 not_implemented——向导是加分项，没有它工作台照常能用（只是第一次打开时没人带路）。
    */
   onboarding?: OnboardingPort
+  /**
+   * WP121（70 §3）：贴一个网址自动分析出品牌档案。
+   * 没装配时 `/v1/brand-intake/*` 回 not_implemented——向导第 ② 步退回手填，
+   * 与"还没有网站"那条旁路走同一条路。
+   */
+  brandIntake?: BrandIntakePort
   /**
    * WP65（52 O1）：组织（公司）与它下面的品牌工作区。
    * 没装配时 `/v1/orgs/*` 回 not_implemented——多品牌是加分项，

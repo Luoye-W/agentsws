@@ -98,6 +98,7 @@ import { createAdsService } from './ads-service.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
+import { createBrandIntake } from './brand-intake.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
   type BrandModuleSet,
@@ -2755,6 +2756,46 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
 
   /**
+   * WP121（70 §3）：贴一个网址，自动分析出品牌档案。
+   *
+   * 装在 onboarding 之后：确认那一下写的是**同一份工作区档案**（`onboarding.port
+   * .setProfile`），走同一条归一化与同一条事件，不另开一条写入路径——两条写法
+   * 迟早会在"平台缺省值"这种地方分叉。
+   *
+   * `fetch` 是真的 `globalThis.fetch`：这一步要去敲用户自己给的那个网址。
+   * 纪律在包里（只 GET、不带凭据、遵 robots、超时 10 秒、页面数封顶）。
+   */
+  const brandIntake = createBrandIntake({
+    clock,
+    workspace_id: workspace.id,
+    fetch: globalThis.fetch as never,
+    newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
+    sinks: {
+      applyProfile: async (profile) => {
+        const legal = profile.legal_name?.value ?? profile.brand_name?.value
+        if (typeof legal !== 'string' || legal.trim() === '') return
+        await onboarding.port.setProfile(
+          {
+            workspace_id: workspace.id,
+            person_id: person.id,
+            assignment_id: '',
+            role_id: '',
+          },
+          {
+            legal_name: legal,
+            ...(typeof profile.brand_name?.value === 'string'
+              ? { brand_name: profile.brand_name.value }
+              : {}),
+            ...(profile.storefront_platform === undefined
+              ? {}
+              : { storefront_platform: profile.storefront_platform.value }),
+          },
+        )
+      },
+    },
+  })
+
+  /**
    * WP65（52 O1）：组织（公司）与它下面的品牌工作区。
    *
    * 装在首次设置**之后**——启动时的一次性迁移要读公司档案里的三个字段
@@ -3753,6 +3794,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     org: org.port,
     // WP51（46）：首次设置向导、同事发现、邀请码与申请加入
     onboarding: onboarding.port,
+    // WP121（70 §3）：贴一个网址，自动分析出品牌档案
+    brandIntake: brandIntake.port,
     // WP65（52 O1）：组织与品牌（`/v1/orgs/*`）
     organizations: organizations.port,
     join: joinAssembly.port,
