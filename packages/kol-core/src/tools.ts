@@ -78,7 +78,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
       properties: {
         channel: CHANNEL_ENUM,
         stage: str(
-          '只要某一个阶段的：prospect / contacted / negotiating / agreed / sample_sent / content_due / delivered / published / paid / declined',
+          '只要某一个阶段的：sourced / contacted / replied / negotiating / agreed / delivering / delivered / closed / declined',
         ),
       },
     },
@@ -141,7 +141,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'advance_collaboration',
     description:
-      '把一条合作推到下一个阶段（谈条件 → 谈成 → 已寄样 → 待交稿 → 已交付 → 已上线 → 已付款；也能推到「谢绝了」）。跨阶段跳不过去的会被阶段机拒掉并说清为什么。',
+      '把一条合作推到下一个阶段（找到人 → 已建联 → 有回音 → 谈条件 → 谈成 → 交付中 → 已交付 → 结案；也能推到「谢绝了」）。阶段机不许跳步，跳了会被拒并说清为什么。',
     input_schema: {
       type: 'object',
       properties: {

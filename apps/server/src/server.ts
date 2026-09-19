@@ -174,6 +174,7 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import { createKolService } from './kol-service.js'
+import { createKolToolExecutor } from './kol-tools.js'
 import {
   canEditMemory,
   canReadMemory,
@@ -1827,6 +1828,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                   },
                 }),
             source: records,
+            /*
+             * WP117（66 断点 #1）：红人那十一个工具。
+             *
+             * `kolService` 在这几百行之前就建好了（记录源要读它），所以这里直接取；
+             * 取值函数留着是为了「装配顺序换了也不崩」——它只在真调工具那一刻查。
+             */
+            kolTools: createKolToolExecutor({
+              workspace_id: ws,
+              port: () => kolService.port,
+              now: () => clock.now(),
+            }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
