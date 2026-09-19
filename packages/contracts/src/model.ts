@@ -256,3 +256,30 @@ export interface ModelProvider {
     language?: string
   }): Promise<ProviderTranscription>
 }
+
+/**
+ * 试跑一把模型没通，**到底是哪一类没通**（70 §2.2，WP121b）。
+ *
+ * 五档，因为界面上只说得出五句话：密钥不对 / 余额不足 / 地址不对 /
+ * 连上了没回 / 认不出来。分档在契约里而不是在界面里，是因为**不止一处要它**：
+ * 向导第 ① 步按它挑那一句人话，模拟场景按它断言"说的是人话不是错误码"。
+ * 分成两份的话，哪天多一档（比如 429）就会有一处忘了改。
+ */
+export type ModelFailureKind = 'key' | 'balance' | 'address' | 'timeout' | 'other'
+
+/**
+ * 判这一次失败属于哪一档。
+ *
+ * 先看上游那句原文（它带着 HTTP 状态码，最准），再看 `reason` 这个码。
+ * **认不出来就是 `other`**——硬套一句"密钥不对"会让人去改一把本来没问题的密钥。
+ */
+export function modelFailureKind(input: { reason?: string; detail?: string }): ModelFailureKind {
+  if (input.reason === 'no_key') return 'key'
+  const text = `${input.reason ?? ''} ${input.detail ?? ''}`.toLowerCase()
+  if (/401|403|unauthorized|invalid api key|api key/.test(text)) return 'key'
+  if (/402|insufficient|balance|余额/.test(text)) return 'balance'
+  if (/timeout|timed out|etimedout|abort|超时/.test(text)) return 'timeout'
+  if (/404|enotfound|econnrefused|provider_unavailable|model not found|连不上/.test(text))
+    return 'address'
+  return 'other'
+}

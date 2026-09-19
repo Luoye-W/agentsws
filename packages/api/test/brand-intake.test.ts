@@ -12,6 +12,7 @@
  */
 import type { BrandIntakeRun } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
+import { holdsOwnerWrite } from '../src/helpers.js'
 import type { BrandIntakeActor, BrandIntakePort } from '../src/index.js'
 import { createGateway } from '../src/index.js'
 import { harness } from './helpers.js'
@@ -73,7 +74,7 @@ class FakePort implements BrandIntakePort {
 async function wired(options: { withPort?: boolean } = {}): Promise<{
   h: Awaited<ReturnType<typeof harness>>
   port: FakePort
-  call: (method: string, path: string, body?: unknown) => Promise<Response>
+  call: (method: string, path: string, body?: unknown, assignment?: string) => Promise<Response>
 }> {
   const h = await harness()
   const port = new FakePort()
@@ -81,10 +82,16 @@ async function wired(options: { withPort?: boolean } = {}): Promise<{
     ...h.deps,
     ...(options.withPort === false ? {} : { brandIntake: port }),
   })
-  const call = (method: string, path: string, body?: unknown): Promise<Response> => {
+  /** 不给 `assignment` 就用默认那一条（它什么权限都有）；测那把尺子时换成别的。 */
+  const call = (
+    method: string,
+    path: string,
+    body?: unknown,
+    assignment?: string,
+  ): Promise<Response> => {
     const headers = new Headers({
       Authorization: `Bearer ${h.token}`,
-      'X-Assignment': h.assignment.id,
+      'X-Assignment': assignment ?? h.assignment.id,
     })
     if (body !== undefined) headers.set('content-type', 'application/json')
     return Promise.resolve(
@@ -198,6 +205,71 @@ describe('WP121 网关：品牌接入面', () => {
       method: 'reanalyze',
       input: { run_id: 'bi_0001', urls: ['https://nordvik.example/'] },
     })
+  })
+
+  /**
+   * WP121b：向导第 ② 步发生在**用户还没有岗位**的时候，而工作台把 `X-Assignment`
+   * 绑成"本人名下第一条未撤销的分配"——那一条常常不是所有者层的。09-17 真机在
+   * `/v1/workspace/profile` 上打出来的正是这个 403；五条路由挂的是同一把尺子。
+   */
+  it('所有者站在只读那条分配上照样走得通（真机 403 的回归）', async () => {
+    const { h, call, port } = await wired()
+    // 这条分配自己没有 policy.stage（只读那一档）……
+    expect(
+      h.deps.roles.can('asg_readonly', 'policy', 'stage', {
+        range: 'workspace',
+        sensitivity: 'restricted',
+      }),
+    ).toBe(false)
+    // ……但持有它的人名下另有一条所有者层的：发起 / 确认 / 恢复现场都不再 403
+    const started = await call(
+      'POST',
+      '/v1/brand-intake/runs',
+      { urls: ['https://nordvik.example/'] },
+      'asg_readonly',
+    )
+    expect(started.status).toBe(201)
+    const confirmed = await call(
+      'POST',
+      '/v1/brand-intake/runs/bi_0001/confirm',
+      {},
+      'asg_readonly',
+    )
+    expect(confirmed.status).toBe(200)
+    const latest = await call('GET', '/v1/brand-intake/runs/latest', undefined, 'asg_readonly')
+    expect(latest.status).toBe(200)
+    expect(port.calls.map((c) => c.method)).toEqual(['start', 'confirm', 'latest'])
+  })
+
+  it('五条路由都挂着这把尺子（新增一条忘了挂，就是又一次真机 403）', async () => {
+    const { h } = await wired()
+    for (const s of h.gateway.specs.filter((spec) => spec.path.startsWith('/v1/brand-intake')))
+      expect(s.authzBypass, `${s.method.toUpperCase()} ${s.path}`).toBeDefined()
+  })
+
+  it('这把尺子不是扩权：本人名下没有所有者层的分配就不放行，撤销了的那条也不算', () => {
+    const rctx = { principal: { person_id: 'p_1', workspace_id: 'ws_test' } }
+    const depsWith = (rows: { id: string; revoked_at?: string }[], canId?: string) =>
+      ({
+        roles: {
+          listAssignments: () => rows,
+          can: (id: string) => id === canId,
+        },
+      }) as unknown as Parameters<typeof holdsOwnerWrite>[2]
+    const ctx = rctx as unknown as Parameters<typeof holdsOwnerWrite>[1]
+    const c = {} as Parameters<typeof holdsOwnerWrite>[0]
+    // 未撤销的那条没有那个权限，有权限的那条已撤销 → 都不算
+    expect(
+      holdsOwnerWrite(
+        c,
+        ctx,
+        depsWith([{ id: 'asg_a' }, { id: 'asg_b', revoked_at: T0 }], 'asg_b'),
+      ),
+    ).toBe(false)
+    // 一条都没有 → 不算
+    expect(holdsOwnerWrite(c, ctx, depsWith([], 'asg_a'))).toBe(false)
+    // 未撤销 + 有那个权限 → 放行
+    expect(holdsOwnerWrite(c, ctx, depsWith([{ id: 'asg_a' }], 'asg_a'))).toBe(true)
   })
 
   it('没装配这一面：回 not_implemented，说清楚缺的是哪个口', async () => {

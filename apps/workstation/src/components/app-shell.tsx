@@ -41,7 +41,7 @@ import {
   Users,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
@@ -230,6 +230,8 @@ export function AppShell({
 }): ReactNode {
   const { t, position } = useApp()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  /** 现在开着的是首次设置向导吗（顶栏那条「还没接模型」在向导期间不出，70 §2.2）。 */
+  const onboarding = useLocation().pathname === '/onboarding'
   // 岗位面装着就按岗位列；没装（或一个岗位都算不出来）退回老样子
   const byPosition = (instances ?? []).filter((p) => myAssignments(p).length > 0)
   // WP71：只存"用户显式点过的那几个"，没点过的按"当前岗位默认展开"算
@@ -409,7 +411,12 @@ export function AppShell({
               它说的是**整个工作区的状态**，不是今天的哪一件事——所以它和模型 / 积分
               是同一类东西，收进顶栏当一个黄色小胶囊，第一屏还给岗位卡。
             */}
-            <NoModelBanner variant="chip" />
+            {/*
+              WP121b（70 §2.2 末段）：**向导期间这条不出**。向导第 ① 步问的就是
+              "用哪个 AI"，同一屏上再顶一条黄条等于同一句话说两遍。走完向导
+              （包括走了演示旁路那条路）之后它照常出现——那时它才是一条新消息。
+            */}
+            {onboarding ? null : <NoModelBanner variant="chip" />}
             <ModelChip />
             <CreditsChip />
           </header>

@@ -1847,10 +1847,12 @@ const zh: Table = {
   'intake.field.category': '品类',
   'intake.field.support_email': '客服邮箱',
   'intake.field.currency': '币种',
-  'onboarding.step1': '公司设置',
-  'onboarding.step2': '个人设置',
-  'onboarding.step3': '岗位设置',
-  'onboarding.step4': '初始配置',
+  // WP121b（70 §1）：四步换了内容——第一件事从"你们公司叫什么"换成"用哪个 AI"。
+  // 原来的「公司设置 / 个人设置」并进第 ② 步（贴完网址顺带确认）。
+  'onboarding.step1': '接上 AI',
+  'onboarding.step2': '你的生意',
+  'onboarding.step3': '选岗位',
+  'onboarding.step4': '连接与开工',
   // ── WP65（52 O1–O4）品牌是顶层：公司 = 组织，品牌 = 工作区 ──────────
   //
   // 界面上**不说"组织"两个字**（52 O1 个人用户那一条）：一个人一个品牌的时候
@@ -2243,6 +2245,38 @@ const zh: Table = {
   'social.broadcast.no_account': '这条渠道还没登记任何一个号 / 群，群发没有去处。',
   'social.broadcast.whatsapp_note':
     'WhatsApp 只能按后台批过的模板发，而且收件人必须先 opt-in——少一格就不许发（封的是这个品牌的号）。',
+
+  // ── WP121b（70 §2 / §3）：向导第 ① 步「接上 AI」与第 ② 步「你的生意」──────
+  //
+  // 两张大卡各一行说明，选中哪张才展开哪张——两张同时铺开的话，第一次打开
+  // 这个产品的人要先读两段字才知道该点哪儿。
+  'onboarding.ai.official': '用 Agents 工坊的接口',
+  'onboarding.ai.official.bonus': '注册送 10 积分',
+  'onboarding.ai.official.email': '你的邮箱',
+  'onboarding.ai.official.send': '发登录信',
+  'onboarding.ai.official.sent': '信发出去了。去邮箱点那条链接，这一页会自己接上。',
+  'onboarding.ai.official.credits': '到账 {credits} 积分，现在就能跑起来。',
+  'onboarding.ai.own': '用我自己的模型接口',
+  'onboarding.ai.own.testing': '正在打一次最小请求，看这条路通不通…',
+  'onboarding.ai.own.ok': '通了。',
+  // 70 §2.2 的四句：说的是**用户该去做什么**，不是上游回了几号错误
+  'onboarding.ai.own.err.key': '密钥不对，或者这把密钥没开通这个模型。',
+  'onboarding.ai.own.err.balance': '这个账户余额不足。',
+  'onboarding.ai.own.err.address': '接口地址填错了，或者这台机器连不上它。',
+  'onboarding.ai.own.err.timeout': '连上了但一直没回，可能要走代理。',
+  'onboarding.ai.own.err.other': '没通。地址、密钥、模型名三样再核一遍。',
+  'onboarding.ai.demo': '先逛逛演示数据',
+  'onboarding.business.url': '你的官网网址，或者 Amazon 商品 / 店铺链接',
+  'onboarding.business.url.placeholder': 'https://你的域名.com',
+  'onboarding.business.url2': '再加一条（可选）',
+  'onboarding.business.url2.placeholder': '还有一条链接就贴这儿（可不填）',
+  'onboarding.business.start': '开始分析',
+  'onboarding.business.estimate': '这一步用便宜档模型读几个页面，最多花 {cap} 积分，到顶就停。',
+  'onboarding.business.cloud_note': '这一轮分析用的是 Agents 工坊的接口，网页内容会经过我们的云。',
+  'onboarding.business.no_site': '还没有网站',
+  'onboarding.business.working': '正在读你的网站，已经读了 {done} 页。可以先去选岗位，回来看结果。',
+  'onboarding.business.capped': '花到 {cap} 积分的上限就停下了——已经读到的都在下面。',
+  'onboarding.business.missed': '有 {count} 个页面没读着（{reason}）。缺的那几格自己填上就行。',
 }
 
 const en: Table = {
@@ -4076,10 +4110,11 @@ const en: Table = {
   'intake.field.category': 'Category',
   'intake.field.support_email': 'Support email',
   'intake.field.currency': 'Currency',
-  'onboarding.step1': 'Company',
-  'onboarding.step2': 'You',
-  'onboarding.step3': 'Positions',
-  'onboarding.step4': 'What to set up',
+  // WP121b (70 §1): same four dots, new contents.
+  'onboarding.step1': 'Connect AI',
+  'onboarding.step2': 'Your business',
+  'onboarding.step3': 'Pick positions',
+  'onboarding.step4': 'Connect and start',
   // ── WP65 (52 O1–O4) brands on top: company = organization, brand = workspace ──
   'onboarding.block.company': 'Company',
   'onboarding.block.first_brand': 'Your first brand',
@@ -4495,6 +4530,41 @@ const en: Table = {
   'social.broadcast.no_account': 'No account or group is registered on this channel yet.',
   'social.broadcast.whatsapp_note':
     'WhatsApp only sends pre-approved templates, and recipients must have opted in — either missing and nothing goes out (the number gets banned).',
+
+  // ── WP121b (70 §2 / §3): step ① "Connect AI" and step ② "Your business" ──
+  'onboarding.ai.official': "Use Agents Workshop's own endpoint",
+  'onboarding.ai.official.bonus': '10 credits on sign-up',
+  'onboarding.ai.official.email': 'Your email',
+  'onboarding.ai.official.send': 'Send the sign-in email',
+  'onboarding.ai.official.sent':
+    'Email sent. Click the link in it — this page picks up from there on its own.',
+  'onboarding.ai.official.credits': '{credits} credits are in. You can start right away.',
+  'onboarding.ai.own': 'Use my own model endpoint',
+  'onboarding.ai.own.testing': 'Making one tiny request to see whether this route works…',
+  'onboarding.ai.own.ok': 'It works.',
+  'onboarding.ai.own.err.key': 'That key is wrong, or it has no access to this model.',
+  'onboarding.ai.own.err.balance': 'That account is out of balance.',
+  'onboarding.ai.own.err.address':
+    'The endpoint address is wrong, or this machine cannot reach it.',
+  'onboarding.ai.own.err.timeout': 'Connected, but nothing came back — you may need a proxy.',
+  'onboarding.ai.own.err.other': 'No luck. Check the address, the key and the model name again.',
+  'onboarding.ai.demo': 'Just look around the demo data',
+  'onboarding.business.url': 'Your website, or an Amazon product / storefront link',
+  'onboarding.business.url.placeholder': 'https://your-domain.com',
+  'onboarding.business.url2': 'One more (optional)',
+  'onboarding.business.url2.placeholder': 'Paste a second link here, or leave it empty',
+  'onboarding.business.start': 'Analyse it',
+  'onboarding.business.estimate':
+    'This reads a handful of pages with a cheap model — at most {cap} credits, then it stops.',
+  'onboarding.business.cloud_note':
+    "This round runs on Agents Workshop's endpoint, so the page content passes through our cloud.",
+  'onboarding.business.no_site': 'I do not have a website yet',
+  'onboarding.business.working':
+    'Reading your site — {done} pages so far. You can pick positions first and come back.',
+  'onboarding.business.capped':
+    'It stopped at the {cap}-credit cap. Everything read so far is below.',
+  'onboarding.business.missed':
+    '{count} pages could not be read ({reason}). Just fill those fields in yourself.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

@@ -312,6 +312,7 @@ vi.mock('@/lib/api', async () => {
 const { ModelsPanel } = await import('@/components/models/models-panel')
 const { suggestProviderId } = await import('@/components/models/model-form')
 const { NoModelBanner } = await import('@/components/models/no-model-banner')
+const { AppShell } = await import('@/components/app-shell')
 
 beforeEach(() => {
   state.providers = []
@@ -387,6 +388,33 @@ describe('WP25 §C 「还没接模型」黄条', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('no-model-banner')).toBeNull()
     })
+  })
+
+  /**
+   * WP121b（70 §2.2 末段）：**首次设置向导期间这条不出**。
+   *
+   * 向导第 ① 步问的就是"用哪个 AI"，同一屏上再顶一条黄条等于同一句话说两遍。
+   * 走完向导（包括走了演示旁路那条路）之后它照常出现——那时它才是一条新消息。
+   */
+  it('WP121b：向导那一页顶栏不出这个胶囊；别的页照出', async () => {
+    renderWithProviders(
+      <AppShell positions={[]} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
+        <div>向导</div>
+      </AppShell>,
+      '/onboarding',
+    )
+    await screen.findByTestId('top-command')
+    await waitFor(() => {
+      expect(screen.queryByTestId('no-model-chip')).toBeNull()
+    })
+
+    renderWithProviders(
+      <AppShell positions={[]} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
+        <div>首页</div>
+      </AppShell>,
+      '/',
+    )
+    expect(await screen.findByTestId('no-model-chip')).toBeTruthy()
   })
 })
 

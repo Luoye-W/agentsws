@@ -1,0 +1,51 @@
+# WP121b（70 §2.2）：自己的模型接口没通——**说人话，而且不放行**。
+#
+# 两件事一起钉，因为少任何一件这一跳都白做：
+#
+# 1. **不放行。** 试跑不通就是没接上，向导第 ① 步过不去。这里最容易出的错是
+#    "存下来了就算接上了"——密钥存进加密库与这把密钥能用，是两件事。
+# 2. **说的是人话。** 上游回的是 `HTTP 401 unauthorized`，用户看见的该是
+#    "密钥不对，或者这把密钥没开通这个模型"。分档走契约里那张表
+#    （`modelFailureKind`），向导挑那一句用的是同一张——分成两份的话，
+#    哪天多一档就会有一处忘了改。
+#
+# 没接上就没有第 ② 步：那一轮分析根本不会起（断言里 `analysed: false`）。
+# 这不是"顺便少做了一件事"，是 70 §2 那条"没接上就不往下走"的直接后果。
+id: onboarding/own-model-bad-key
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-19T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    org.onboarding:
+      who: p_wang
+      ai: own
+      model_failure:
+        reason: provider_unavailable
+        detail: 'HTTP 401 unauthorized: invalid api key'
+      urls: ['https://nordvolt.example/']
+  - at: '+30m'
+    clock.advance: {}
+expected:
+  onboarding:
+    who: p_wang
+    connected: false
+    failure_kind: key
+    analysed: false
+    # 自己的模型接口不经我们的云，所以一分钱都不该动
+    signup_credits: 0
+    balance_credits: 0
+  event_types: [simulation.onboarding_done]
+  metrics:
+    runs_failed: 0
+    staged_changes: 0
+    applied_changes: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  用户看见的那一句，是"密钥不对，或者这把密钥没开通这个模型"，
+  还是一串他看不懂的 401？
