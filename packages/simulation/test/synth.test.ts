@@ -71,7 +71,7 @@ describe('合成公司生成器（26 §2）', () => {
     // WP78 再加三条（外部发帖过版规 / 负面提及分流 / 新闻稿数字只引事实卡）
     // WP89 再加一条（建站：改副本 → 推未发布 → 提议发布 → 卡）→ 51
     // WP113 再加四条（消息：四条路 / 岗位没开不挪信 / 先规则后模型 / 纠错教一次）→ 55
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(55)
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(56)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
