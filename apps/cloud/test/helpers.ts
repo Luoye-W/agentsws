@@ -7,6 +7,7 @@ import {
   type CloudServer,
   createCloudServer,
   type MailSender,
+  type SignupBonusHooks,
 } from '../src/index.js'
 
 export interface TestClock extends Clock {
@@ -69,6 +70,13 @@ export interface HarnessOptions {
   mail?: MailSender
   /** 覆盖环境变量（默认只有 `AGENTSWS_CLOUD_BASE_URL`）。 */
   env?: Record<string, string | undefined>
+  /**
+   * WP121（70 §2）：注册赠送的两个口。
+   *
+   * **默认不给 = 这个 harness 不送**，所以 WP110 / WP114 那些既有用例的钱一分
+   * 没变；要验赠送的用例自己把口交进来。
+   */
+  signupBonus?: SignupBonusHooks
 }
 
 export function harness(options: HarnessOptions = {}): Harness {
@@ -84,6 +92,7 @@ export function harness(options: HarnessOptions = {}): Harness {
         mails.push(mail)
       }),
     ...(options.modules === undefined ? {} : { modules: options.modules }),
+    ...(options.signupBonus === undefined ? {} : { signupBonus: options.signupBonus }),
   })
   const fetchOnce = async (path: string, init: CallInit = {}): Promise<RawResponse> => {
     const headers = new Headers(init.headers ?? {})

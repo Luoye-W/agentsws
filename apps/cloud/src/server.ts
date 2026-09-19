@@ -38,6 +38,7 @@ import { createMagicLinkLimiter, type MagicLinkLimiter } from './guards.js'
 import type { MailSender } from './mail.js'
 import { mailSenderFromEnv } from './mail-smtp.js'
 import type { CloudHealthState } from './routes/health.js'
+import type { SignupBonusHooks } from './signup-bonus.js'
 import type { CloudStore } from './store.js'
 import { cloudDbPath, createCloudStore } from './store-node.js'
 
@@ -93,6 +94,13 @@ export interface CloudServerOptions {
   idempotencyTtlMs?: number
   /** WP110 magic-link 限流；不给就是每邮箱 5 次 / 小时、每 IP 20 次 / 小时。 */
   limiter?: MagicLinkLimiter
+  /**
+   * WP121（70 §2）：注册赠送 10 积分。
+   *
+   * 两个口都是**取值函数**（钱包要等 `mountEntry`，后台库要等 `createAdminStore`）；
+   * 一个都不给就是这个节点不送——开源自建档默认如此。
+   */
+  signupBonus?: SignupBonusHooks
 }
 
 export interface CloudServer {
@@ -157,6 +165,7 @@ export function createCloudServer(options: CloudServerOptions = {}): CloudServer
     limiter,
     idempotency,
     ...(options.modules === undefined ? {} : { modules: options.modules }),
+    ...(options.signupBonus === undefined ? {} : { signupBonus: options.signupBonus }),
   })
 
   let httpServer: ServerType | undefined

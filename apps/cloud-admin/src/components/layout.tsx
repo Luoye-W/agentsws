@@ -13,6 +13,7 @@ import {
   Gauge,
   Languages,
   LogOut,
+  Megaphone,
   Moon,
   ScrollText,
   Sun,
@@ -30,6 +31,7 @@ const NAV: { to: string; key: Key; icon: React.ComponentType<{ className?: strin
   { to: '/orgs', key: 'nav.orgs', icon: Building2 },
   { to: '/usage', key: 'nav.usage', icon: Activity },
   { to: '/credits', key: 'nav.credits', icon: Coins },
+  { to: '/kol', key: 'nav.kol', icon: Megaphone },
   { to: '/health', key: 'nav.health', icon: Gauge },
   { to: '/audit', key: 'nav.audit', icon: ScrollText },
 ]

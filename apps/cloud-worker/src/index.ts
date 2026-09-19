@@ -22,10 +22,32 @@ export { envRecord, type WorkerEnv } from './env.js'
 export {
   INTERNAL_HEADER_NAMES,
   INTERNAL_HEADERS,
+  jsonArrayFrom,
   principalFrom,
   stripInternalHeaders,
   withInternalHeaders,
 } from './internal.js'
+export {
+  handleKolAdmin,
+  KOL_ADMIN_INTERNAL,
+  KOL_PUBLIC_SINGLETON,
+  type KolNamespaceLike,
+  remoteKolAdminPort,
+} from './kol-admin.js'
+export {
+  KolPublicCore,
+  type KolPublicDoOptions,
+  type KolPublicDoStateLike,
+} from './kol-public-do.js'
+export {
+  applyKolOps,
+  handleKolWallet,
+  KOL_WALLET_INTERNAL,
+  type KolApplyInput,
+  type KolApplyResult,
+  type KolReserveFailure,
+  type KolReserveInput,
+} from './kol-wallet.js'
 export {
   copyEventsTo,
   copyLotsTo,
@@ -70,6 +92,7 @@ export {
 
 import { AccountsCore, type DoStateLike } from './accounts-do.js'
 import type { WorkerEnv } from './env.js'
+import { KolPublicCore, type KolPublicDoStateLike } from './kol-public-do.js'
 import { LedgerCore } from './ledger-do.js'
 import { WalletCore, type WalletDoStateLike } from './wallet-do.js'
 import { route } from './worker.js'
@@ -109,6 +132,29 @@ export class LedgerDO {
 
   constructor(state: { storage: DoStateLike['storage'] }) {
     this.#core = new LedgerCore(state)
+  }
+
+  fetch(request: Request): Promise<Response> {
+    return this.#core.fetch(request)
+  }
+}
+
+/**
+ * 公共红人库（**全局一个**，WP116 / 64 §10.2）。
+ *
+ * 这张红人表是跨租户共享的一层事实，所以只有一个对象、只有一个名字
+ * （`KOL_PUBLIC_SINGLETON`）。钱不在这里——它拿到的钱包是一台录音机，
+ * 真正的预扣与结算发生在 `WalletDO` 里（见 `kol-public-do.ts` 的头注释）。
+ *
+ * **没有 alarm**：它不管钱，也没有孤儿预扣要扫。基准缓存过期不清也读不到
+ * 过期数据（`BENCHMARK_CACHE_MS` 在读的时候判），所以这个对象醒着的时间
+ * 就是有人查库的时间。
+ */
+export class KolPublicDO {
+  readonly #core: KolPublicCore
+
+  constructor(state: KolPublicDoStateLike, env: WorkerEnv) {
+    this.#core = new KolPublicCore(state, env)
   }
 
   fetch(request: Request): Promise<Response> {

@@ -22,9 +22,10 @@ import type {
   PublicCreatorObservation,
   WorkspaceId,
 } from '@agentsws/contracts'
-import type { CostTable, Wallet } from '@agentsws/metering'
+import type { CostTable } from '@agentsws/metering'
 import type { Context } from 'hono'
 import type { KolStore } from './store.js'
+import type { KolWallet } from './wallet-port.js'
 
 /** 这个包认的环境变量名（**值一个都不在仓库里**，README 列全）。 */
 export const KOL_ENV = {
@@ -83,7 +84,12 @@ export interface KolPrincipal {
 
 export interface KolServiceDeps {
   store: KolStore
-  wallet: Wallet
+  /**
+   * 钱那一层。自建形态直接给 `@agentsws/metering` 的 `Wallet` 实例（它结构上满足
+   * 这个口）；官方托管形态给 {@link KolWallet} 的录音机实现——见 `wallet-port.ts`
+   * 的头注释与 64 §10.2 的两段式。
+   */
+  wallet: KolWallet
   pricing: Pricing
   secrets: KolSecrets
   now: () => Iso8601

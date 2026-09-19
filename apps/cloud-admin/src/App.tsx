@@ -10,6 +10,7 @@ import { Layout } from '@/components/layout'
 import { AuditPage } from '@/pages/audit'
 import { CreditsPage } from '@/pages/credits'
 import { HealthPage } from '@/pages/health'
+import { KolPage } from '@/pages/kol'
 import { OrgsPage } from '@/pages/orgs'
 import { OverviewPage } from '@/pages/overview'
 import { UsagePage } from '@/pages/usage'
@@ -24,6 +25,7 @@ export function App(): React.ReactNode {
         <Route path="/orgs" element={<OrgsPage />} />
         <Route path="/usage" element={<UsagePage />} />
         <Route path="/credits" element={<CreditsPage />} />
+        <Route path="/kol" element={<KolPage />} />
         <Route path="/health" element={<HealthPage />} />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
