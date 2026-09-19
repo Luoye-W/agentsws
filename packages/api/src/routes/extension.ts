@@ -84,13 +84,25 @@ export interface ExtensionPort {
   hello(session: ExtensionSession): MaybePromise<ExtensionHello>
 }
 
-const MANAGE = {
+/**
+ * 权限照连接页那一套（31 §3.1 完整元组）：**读**清单是
+ * `store_config.read@workspace`，**发码 / 撤令牌**是策略层的
+ * `policy.stage@workspace`——给一个外部程序发一把能写本地红人库的令牌，
+ * 跟授权一个连接器是同一件事，永远 L1。
+ */
+const READ = {
   domain: 'store_config',
-  op: 'write',
+  op: 'read',
   range: 'workspace',
-  sensitivity: 'confidential',
+  sensitivity: 'internal',
 } as const
-const READ = { ...MANAGE, op: 'read' } as const
+
+const MANAGE = {
+  domain: 'policy',
+  op: 'stage',
+  range: 'workspace',
+  sensitivity: 'restricted',
+} as const
 
 function portOf(deps: GatewayDeps): ExtensionPort {
   const p = deps.extension
