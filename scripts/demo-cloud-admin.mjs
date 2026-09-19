@@ -390,9 +390,7 @@ if (consoleKol !== undefined) {
     reason: '本人来信要求从库中移除',
     removed_by: 'system',
   })
-  process.stdout.write(
-    `demo-cloud-admin: 红人库种了 ${String(imported.inserted)} 行（全是编的）\n`,
-  )
+  process.stdout.write(`demo-cloud-admin: 红人库种了 ${String(imported.inserted)} 行（全是编的）\n`)
 }
 
 /* ── 后台账号与一张会话 ───────────────────────────────────────────── */
