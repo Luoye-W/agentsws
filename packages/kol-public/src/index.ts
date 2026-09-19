@@ -9,6 +9,12 @@
  * `{ channel, handle }`。
  */
 export {
+  type KolAdminPort,
+  type KolRemoveInput,
+  type LocalKolAdminDeps,
+  localKolAdminPort,
+} from './admin-port.js'
+export {
   type AuditInput,
   buildAudit,
   followerAuthenticity,
@@ -26,6 +32,12 @@ export {
   latestPerCreator,
   quantile,
 } from './benchmarks.js'
+export {
+  isKolPath,
+  KOL_CAPABILITIES,
+  type KolCharge,
+  kolChargeFor,
+} from './charge-map.js'
 export {
   IMPORTED_FROM_KOLAGENTS,
   importKolRecords,
@@ -119,3 +131,10 @@ export {
   type SourceOutcome,
   type SourceSnapshot,
 } from './types.js'
+export {
+  type DeferredWallet,
+  type DeferredWalletOptions,
+  deferredWallet,
+  type KolWallet,
+  type KolWalletOp,
+} from './wallet-port.js'

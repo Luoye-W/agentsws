@@ -213,6 +213,14 @@ function putContact(deps: KolImportDeps, row: Record<string, unknown>, when: Iso
     ...numField('confirmations', row.confirmations),
     ...numField('disputes', row.disputes),
   })
+  /*
+   * 卡上那一格也要翻。后台那页数"有联系方式的人"数的是卡上的 `has_contact`
+   * （一次 JOIN 省掉），所以少翻这一下，搬完之后那个数就是 0——
+   * 数对不上比没有数更糟。服务那一侧 `saveContact` 走的也是这一行。
+   */
+  const card = deps.store.creator(key.channel, key.handle)
+  if (card !== undefined && !card.has_contact)
+    deps.store.putCreator({ ...card, has_contact: true, updated_at: when })
   return existing === undefined ? 'inserted' : 'updated'
 }
 
