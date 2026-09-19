@@ -138,7 +138,7 @@ describe('WP118 · 订阅闸门', () => {
     const { token } = await issueToken(cloud, 'a@example.com', 'ws_1')
     const res = await call(cloud, '/v1/kol/sync/status', { token })
     expect(res.status).toBe(200)
-    const status = res.body as { subscription: { status: string }; object_count: number }
+    const status = res.body.data as { subscription: { status: string }; object_count: number }
     expect(status.subscription.status).toBe('none')
     expect(status.object_count).toBe(0)
   })
@@ -155,7 +155,7 @@ describe('WP118 · 开通与扣费', () => {
 
     const res = await call(cloud, '/v1/kol/subscription', { method: 'POST', token })
     expect(res.status).toBe(200)
-    expect((res.body as { status: string }).status).toBe('active')
+    expect((res.body.data as { status: string }).status).toBe('active')
     expect(before - (await available(cloud, token))).toBe(30)
   })
 
@@ -208,7 +208,7 @@ describe('WP118 · 开通与扣费', () => {
     // 欠费也导得出来——这时候拦着等于拿数据当人质
     const dump = await call(cloud, '/v1/kol/cloud/export', { token })
     expect(dump.status).toBe(200)
-    expect((dump.body as { objects: unknown[] }).objects).toHaveLength(2)
+    expect((dump.body.data as { objects: unknown[] }).objects).toHaveLength(2)
   })
 })
 
@@ -239,14 +239,14 @@ describe('WP118 · 双向同步', () => {
       },
     })
     expect(second.status).toBe(200)
-    const pushed = second.body as { conflicts: { loser: { body: unknown } }[] }
+    const pushed = second.body.data as { conflicts: { loser: { body: unknown } }[] }
     expect(pushed.conflicts).toHaveLength(1)
     expect(pushed.conflicts[0]?.loser.body).toEqual({ handle: 'someone', followers: 1000 })
 
     const dump = await call(cloud, '/v1/kol/cloud/export', { token })
-    expect((dump.body as { conflicts: unknown[] }).conflicts).toHaveLength(1)
+    expect((dump.body.data as { conflicts: unknown[] }).conflicts).toHaveLength(1)
     const status = await call(cloud, '/v1/kol/sync/status', { token })
-    expect((status.body as { pending_conflicts: number }).pending_conflicts).toBe(1)
+    expect((status.body.data as { pending_conflicts: number }).pending_conflicts).toBe(1)
   })
 
   it('每个组织一个对象：A 看不到 B 的一条数据', async () => {
@@ -264,9 +264,9 @@ describe('WP118 · 双向同步', () => {
       body: { writer: 'device:a', objects: [creator()] },
     })
     const forB = await call(cloud, '/v1/kol/sync/pull', { token: b.token })
-    expect((forB.body as { objects: unknown[] }).objects).toEqual([])
+    expect((forB.body.data as { objects: unknown[] }).objects).toEqual([])
     const statusB = await call(cloud, '/v1/kol/sync/status', { token: b.token })
-    expect((statusB.body as { object_count: number }).object_count).toBe(0)
+    expect((statusB.body.data as { object_count: number }).object_count).toBe(0)
   })
 
   it('删云端这一份：订阅留着，数据没了，账还在', async () => {
@@ -281,7 +281,7 @@ describe('WP118 · 双向同步', () => {
     })
     const res = await call(cloud, '/v1/kol/cloud', { method: 'DELETE', token })
     expect(res.status).toBe(200)
-    expect((res.body as { deleted: number }).deleted).toBe(2)
+    expect((res.body.data as { deleted: number }).deleted).toBe(2)
     expect(cloud.kolTenant(org).store.count()).toBe(0)
     expect(cloud.kolTenant(org).service.liveStatus(org)).toBe('active')
     expect(cloud.kolTenant(org).store.charges()).toHaveLength(1)

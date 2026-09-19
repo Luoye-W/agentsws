@@ -102,6 +102,20 @@ export function errorResponse(err: unknown): Response {
 }
 
 /**
+ * 成功 → `{ data }` 信封。
+ *
+ * 与 `/v1/wallet/*`（`packages/cloud-entry`）、`/v1/data/kol/*`（`packages/kol-public`）
+ * **逐字同一个形状**：云对外的成功信封只有一种，本地那一侧的取数代码也只需要
+ * 认一种。裸着回对象的话，每多一个消费方就多一处"这个接口有没有信封"的记忆。
+ */
+export function okResponse(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify({ data: value }), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+/**
  * 把这一组路由挂到一个 Hono 应用上。
  *
  * 每条处理器**各自包一层 try/catch**（{@link guard}），而不是靠一个 `app.use`
@@ -136,7 +150,7 @@ export function mountKolCloudRoutes(app: Hono<KolCloudEnv>, deps: KolCloudRouteD
 
   app.get(
     `${KOL_CLOUD_PREFIX}/sync/status`,
-    guard((service, principal) => Response.json(service.status(principal))),
+    guard((service, principal) => okResponse(service.status(principal))),
   )
 
   app.post(
@@ -145,7 +159,7 @@ export function mountKolCloudRoutes(app: Hono<KolCloudEnv>, deps: KolCloudRouteD
       const body = (await c.req.json().catch(() => {
         throw new KolCloudError('invalid_input', '请求体不是合法 JSON。')
       })) as { writer?: string; objects?: unknown[] }
-      return Response.json(
+      return okResponse(
         service.push(principal, {
           writer: String(body.writer ?? ''),
           objects: (body.objects ?? []) as never,
@@ -161,7 +175,7 @@ export function mountKolCloudRoutes(app: Hono<KolCloudEnv>, deps: KolCloudRouteD
       const parsed = limitRaw === undefined ? Number.NaN : Number(limitRaw)
       const cursor = c.req.query('cursor')
       const writer = c.req.query('writer')
-      return Response.json(
+      return okResponse(
         service.pull(principal, {
           ...(cursor === undefined ? {} : { cursor }),
           ...(writer === undefined ? {} : { writer }),
@@ -173,21 +187,21 @@ export function mountKolCloudRoutes(app: Hono<KolCloudEnv>, deps: KolCloudRouteD
 
   app.post(
     `${KOL_CLOUD_PREFIX}/subscription`,
-    guard(async (service, principal) => Response.json(await service.subscribe(principal))),
+    guard(async (service, principal) => okResponse(await service.subscribe(principal))),
   )
 
   app.delete(
     `${KOL_CLOUD_PREFIX}/subscription`,
-    guard((service, principal) => Response.json(service.cancel(principal))),
+    guard((service, principal) => okResponse(service.cancel(principal))),
   )
 
   app.get(
     `${KOL_CLOUD_PREFIX}/cloud/export`,
-    guard((service, principal) => Response.json(service.exportAll(principal))),
+    guard((service, principal) => okResponse(service.exportAll(principal))),
   )
 
   app.delete(
     `${KOL_CLOUD_PREFIX}/cloud`,
-    guard((service, principal) => Response.json(service.deleteAll(principal))),
+    guard((service, principal) => okResponse(service.deleteAll(principal))),
   )
 }

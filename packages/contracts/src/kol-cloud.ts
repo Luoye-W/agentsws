@@ -85,6 +85,14 @@ export type KolObjectKind =
   | 'collaboration'
   | 'deliverable'
   | 'tracked_link'
+  /**
+   * 一条合作上的往来信件（WP117b 加的本地第七张表）。
+   *
+   * 补进这张表是 WP118 收尾时做的：67 §5 那三条云端执行的路（云端跟进节奏 /
+   * 云端收发信 / 云端长程任务）**全都要读线程**——只同步"合作到了哪个阶段"
+   * 而不同步"这个阶段是怎么谈到的"，云端就替用户跑不了下一步。
+   */
+  | 'exchange'
   | 'campaign'
   | 'candidate'
   | 'note'
@@ -96,6 +104,7 @@ export const KOL_OBJECT_KINDS: readonly KolObjectKind[] = [
   'collaboration',
   'deliverable',
   'tracked_link',
+  'exchange',
   'campaign',
   'candidate',
   'note',
@@ -240,3 +249,83 @@ export interface KolCloudDeleteResult {
   subscription_kept: boolean
   at: Iso8601
 }
+
+/* ------------------------------------------------------------------ */
+/* 本地那一头（工作台那张卡读的视图）                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 界面上标出来的那一条冲突。
+ *
+ * 两头都留着（`winner` / `loser`），**外加一个 `label`**：`(kind,id)` 是给我们看的，
+ * 用户要认的是"哪一个人 / 哪一条合作"。认不出来的时候退化成 id，也不留空。
+ */
+export interface KolCloudConflictView {
+  kind: KolObjectKind
+  id: string
+  at: Iso8601
+  /** 当前值（赢了的那一份）。 */
+  winner: KolSyncObject
+  /** 被盖掉的那一份（原样留着，用户能挑回来）。 */
+  loser: KolSyncObject
+  /** 人认得出的名字（红人名 / handle / 合作阶段）；认不出来就是 id。 */
+  label: string
+  /** 这一条来自哪一头：`cloud` = 云上记的那一本，`local` = 本地记的那一本。 */
+  source: 'cloud' | 'local'
+}
+
+/**
+ * 本地看到的这一份服务（`GET /v1/kol-cloud/status`）。
+ *
+ * **没关联账号时只有 `linked: false` + 一句人话**，其余字段一个都不画——
+ * 与 `CloudCreditsView` 逐字同一条理由：一堆 0 会让人以为服务坏了。
+ */
+export interface KolCloudLocalStatus {
+  linked: boolean
+  /** 没关联 / 连不通时的那句人话。 */
+  reason?: string
+  /** 云侧那份订阅（取到才有）。 */
+  subscription?: KolServiceSubscription
+  /** 云侧取到过没有（`false` = 连不通或者没订阅记录，界面上说"暂时取不到"）。 */
+  cloud_reachable: boolean
+  /** 本地攒着还没推上去的条数（离线队列的深度）。 */
+  pending: number
+  /** 云上有多少条（不含墓碑）。 */
+  object_count?: number
+  by_kind?: { kind: KolObjectKind; count: number }[]
+  /** 云上还没处理的冲突条数。 */
+  cloud_conflicts?: number
+  /** 界面上要标出来的冲突（两本合起来，云上的在前）。 */
+  conflicts: KolCloudConflictView[]
+  /** 最近一次同步成功是什么时候（本地记的）。 */
+  last_sync_at?: Iso8601
+  /** 这台机器的标识（`writer`）。界面上不显示，排障与导出里有它。 */
+  device_id: string
+  at: Iso8601
+}
+
+/** 一次「立即同步」的回执。 */
+export interface KolCloudSyncRun {
+  ok: boolean
+  /** 不 ok 时的一句人话（没关联 / 没订阅 / 欠费暂停 / 连不通）。 */
+  message?: string
+  /** 推上去几条。 */
+  pushed: number
+  /** 拉下来并写进本地几条。 */
+  pulled: number
+  /** 这一趟撞上几条冲突（都已留着双方版本）。 */
+  conflicts: number
+  /**
+   * 云上回了、本地这一版还没有那张表的条数（`campaign` / `candidate` / `note`）。
+   *
+   * **报出来而不是静默扔掉**：这三个种类是契约先行，本地补上就自动开始同步；
+   * 在那之前用户在界面上看得见"云上有 3 条本地还放不下的"，比一个悄悄少掉的数字好。
+   */
+  skipped: number
+  object_count?: number
+  /** 同步完之后本地还攒着几条（分批推的时候不为 0 是正常的）。 */
+  pending: number
+  last_sync_at?: Iso8601
+  at: Iso8601
+}
+
