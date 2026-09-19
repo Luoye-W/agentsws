@@ -3646,6 +3646,29 @@ export interface KolCollaborationData {
   currency: string
   campaign_id?: string
   agreed_at?: string
+  /** WP117b（66 复测 #18）：最近一次往来。没有 = 这条合作还什么都没发生过。 */
+  last_activity_at?: string
+  /** 演练数据（列表行上带一个角标）。 */
+  sandbox?: boolean
+}
+
+/** WP117b（66 复测 #19）：一条合作上的一次往来（我们发的 / 他回的）。 */
+export interface KolExchangeData {
+  id: string
+  creator_id: string
+  collaboration_id?: string
+  channel: KolChannelId
+  direction: 'out' | 'in'
+  subject: string
+  body: string
+  at: string
+  reply_class?: string
+  opt_out?: boolean
+  bounce_reason?: string
+  sandbox?: boolean
+  message_id?: string
+  change_id?: string
+  step?: 'first' | 'follow_up' | 'final'
 }
 
 export interface KolDeliverableData {
@@ -3949,6 +3972,48 @@ export const reviewKolDeliverable = (
     body: input,
     ...withAssignment(assignment),
   })
+
+/**
+ * WP117b（66 复测 #19）：**议价**——给一条已经在谈的合作报一个数。
+ *
+ * 回来的是一张 money 排版的卡（永远 L1）。**批了才作数**：预算与"进谈条件中"
+ * 由施行那一跳写，这一下一个字都不落库。
+ */
+export const quoteKolCollaboration = (
+  id: string,
+  input: { budget: number; currency?: string; note?: string },
+  assignment?: string,
+): Promise<KolStagedData> =>
+  api(`/v1/kol/collaborations/${encodeURIComponent(id)}/quote`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/**
+ * WP117b（66 复测 #19）：登记一条交付物。
+ *
+ * 路由早就在那儿了（`POST /v1/kol/deliverables`），界面上一直没有入口——
+ * 于是「交付物登记 → 验收」这半条链在界面上走不动（66 断点 #11 的剩余）。
+ */
+export const createKolDeliverable = (
+  input: { collaboration_id: string; kind: string; due_at: string; url?: string },
+  assignment?: string,
+): Promise<KolDeliverableData> =>
+  api('/v1/kol/deliverables', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** WP117b（66 复测 #19）：一条合作的往来信件，时间正序。 */
+export const getKolExchanges = (
+  filter: { collaboration_id?: string; creator_id?: string; limit?: number } = {},
+  assignment?: string,
+): Promise<{ rows: KolExchangeData[] }> => {
+  const q = new URLSearchParams()
+  if (filter.collaboration_id !== undefined) q.set('collaboration_id', filter.collaboration_id)
+  if (filter.creator_id !== undefined) q.set('creator_id', filter.creator_id)
+  if (filter.limit !== undefined) q.set('limit', String(filter.limit))
+  const s = q.toString()
+  return api(`/v1/kol/exchanges${s === '' ? '' : `?${s}`}`, withAssignment(assignment))
+}
 
 export const getKolTrackedLinks = (
   filter: { collaboration_id?: string } = {},

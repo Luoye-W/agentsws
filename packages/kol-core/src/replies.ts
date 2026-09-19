@@ -16,15 +16,14 @@
  * 判据是**词表 + 一条结构判断**（是不是我们发过信的人），没有模型。
  * 模型那一半在运行时里，这里是它的兜底与测试锚点。
  */
+import type { KolReplyClass } from '@agentsws/contracts'
 
-export type ReplyClass =
-  | 'interested'
-  | 'wants_quote'
-  | 'declined'
-  | 'already_working'
-  | 'cold_inbound'
-  | 'spam'
-  | 'unknown'
+/**
+ * WP117b（66 复测 #19）：口径搬到契约里了（{@link KolReplyClass}）——回信分类现在
+ * 要**存下来**（`KolExchange.reply_class`）并跨包传到界面上，两份同名不同步的
+ * 联合迟早会对不上。这里留一个别名，本包的调用方一个字都不用改。
+ */
+export type ReplyClass = KolReplyClass
 
 export interface ReplyClassification {
   klass: ReplyClass

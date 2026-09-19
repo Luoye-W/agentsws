@@ -84,7 +84,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "073208e7f792f66b1adad13f3284a6a8",
+  "source_digest": "8a22a1e0abc36a808c1b56ff1dcd1ad7",
   "objects": [
     {
       "id": "ad",
@@ -902,6 +902,12 @@
         {
           "name": "sandbox",
           "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "last_activity_at",
+          "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
         }

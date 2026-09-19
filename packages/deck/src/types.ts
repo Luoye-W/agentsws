@@ -631,6 +631,14 @@ export interface KolDeckData {
     revenue: number
     currency: string
   }[]
+  /**
+   * WP117b（Luoye 待定项的默认做法）：**演练那一份单独一列**。
+   *
+   * 上面五块一律**不含演练数据**——漏斗与归因是拿来做判断的数，掺进 24 个
+   * 合成红人之后那几个数就再也不能看了。演练开着时这一格才有值，
+   * 面板上单出一块「演练漏斗」；关掉演练它就没有了（**不是 0，是没有**）。
+   */
+  sandbox_funnel?: { stage: string; label: string; count: number }[]
 }
 
 /**

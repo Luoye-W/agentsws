@@ -4172,6 +4172,23 @@ export interface paths {
     patch: operations['advanceKolCollaboration']
     trace?: never
   }
+  '/v1/kol/collaborations/{id}/quote': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP117b（66 复测 #19）：给一条已经在谈的合作报一个数 → 一张 money 排版的卡（永远 L1）。批了才落预算、才进「谈条件中」 */
+    post: operations['quoteKolCollaboration']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/kol/deliverables': {
     parameters: {
       query?: never
@@ -4201,6 +4218,23 @@ export interface paths {
     put?: never
     /** 给一件交付物下结论：提一条 kol_deliverable_review 变更（L2 起） */
     post: operations['reviewKolDeliverable']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/kol/exchanges': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** WP117b（66 复测 #19）：一条合作上的往来信件（我们发的 + 他回的），时间正序；入站那几封带意向分类 */
+    get: operations['listKolExchanges']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -31403,10 +31437,14 @@ export interface operations {
       query?: {
         /** @description 只看这条渠道 */
         channel?: string
-        /** @description 在名字与 handle 里找（子串） */
+        /** @description 在名字、handle 与类目里找（按词，任意一个词命中就算） */
         q?: string
         /** @description 最多几行 */
         limit?: number
+        /** @description 粉丝数下限（含） */
+        min_followers?: number
+        /** @description 粉丝数上限（含） */
+        max_followers?: number
       }
       header: {
         /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
@@ -31590,10 +31628,14 @@ export interface operations {
       query: {
         /** @description 哪条渠道 */
         channel: string
-        /** @description 关键词（YouTube / Facebook）或者一串账号名（Instagram / TikTok / X 没有按关键词搜人这回事） */
-        q: string
+        /** @description 关键词（YouTube / Facebook）或者一串账号名（Instagram / TikTok / X 没有按关键词搜人这回事）。给了粉丝区间时可以不给关键词 */
+        q?: string
         /** @description 最多几条 */
         limit?: number
+        /** @description 粉丝数下限（含） */
+        min_followers?: number
+        /** @description 粉丝数上限（含） */
+        max_followers?: number
       }
       header: {
         /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
@@ -32257,6 +32299,114 @@ export interface operations {
       }
     }
   }
+  quoteKolCollaboration: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description collaboration_id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          budget: number
+          currency?: string
+          note?: string
+        }
+      }
+    }
+    responses: {
+      /** @description KolStagedView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   listKolDeliverables: {
     parameters: {
       query?: {
@@ -32545,6 +32695,90 @@ export interface operations {
       }
     }
   }
+  listKolExchanges: {
+    parameters: {
+      query?: {
+        /** @description 只看这条合作的 */
+        collaboration_id?: string
+        /** @description 只看这个人的 */
+        creator_id?: string
+        /** @description 最多几封（取最近的几封） */
+        limit?: number
+      }
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description { rows: KolExchange[] } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   listKolTrackedLinks: {
     parameters: {
       query?: {
@@ -32642,7 +32876,7 @@ export interface operations {
         'application/json': {
           collaboration_id: string
           url: string
-          campaign: string
+          campaign?: string
           affiliate_code?: string
           utm?: {
             source?: string
