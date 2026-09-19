@@ -39,6 +39,16 @@ describe('意图判定', () => {
     expect(classifyKolTask('审一下这条视频，频道是那个油管的').intent).toBe('deliverable_review')
   })
 
+  it('要的是一封信还是一个价钱：「起草开发信……不提具体报价」判成建联', () => {
+    expect(classifyKolTask('给这个频道起草一封开发信：说清寄样安排，不提具体报价').intent).toBe(
+      'outreach',
+    )
+    // 只问价、不提信：还是议价
+    expect(classifyKolTask('他要 800 美金，这个报价能接吗').intent).toBe('negotiate')
+    // 建联 + 没回音：跟进赢（要的是第二封，不是第一封）
+    expect(classifyKolTask('建联发出去超过 7 天还没回音的频道有哪些').intent).toBe('follow_up')
+  })
+
   it('判不出来就是 unknown，不猜一个动作', () => {
     const hit = classifyKolTask('你好')
     expect(hit.intent).toBe('unknown')
