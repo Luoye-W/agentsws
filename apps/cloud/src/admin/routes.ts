@@ -35,13 +35,13 @@ import {
   MAX_KOL_IMPORT_BATCH,
   type MembershipTerm,
 } from '@agentsws/contracts'
+import type { KolCloudAdminPort } from '@agentsws/kol-cloud'
 import {
   assertChannel,
   KOL_CAPABILITIES,
   type KolAdminPort,
   parseNdjson,
 } from '@agentsws/kol-public'
-import type { KolCloudAdminPort } from '@agentsws/kol-cloud'
 import {
   COST_TABLE,
   costTableNeedsReview,
@@ -1668,7 +1668,8 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
         method: 'get',
         path: '/v1/admin/orgs/:org_id/kol-service',
         operationId: 'cloudAdminKolService',
-        summary: '一个组织的红人营销增值服务：订阅状态 / 到期 / 云端对象数 / 最近同步 / 最近几笔扣费',
+        summary:
+          '一个组织的红人营销增值服务：订阅状态 / 到期 / 云端对象数 / 最近同步 / 最近几笔扣费',
         tag: 'cloud-admin',
         auth: 'admin',
         returns: 'KolCloudSummary',

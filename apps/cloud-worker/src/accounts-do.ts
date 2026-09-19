@@ -49,7 +49,6 @@ import {
   parseCookies,
 } from '@agentsws/cloud/workers-kit'
 import { ADMIN_SESSION_COOKIE, type Clock, cloudBaseUrl, type WalletLot } from '@agentsws/contracts'
-import type { KolCloudAdminPort } from '@agentsws/kol-cloud'
 import type { KolAdminPort } from '@agentsws/kol-public'
 import type { UsageLedger } from '@agentsws/metering'
 import { type DoStorageLike, doSyncDb } from './do-sql.js'

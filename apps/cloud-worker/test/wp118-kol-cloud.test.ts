@@ -149,12 +149,14 @@ describe('WP118 · 开通与扣费', () => {
     const cloud = newCloud()
     const { token, org } = await issueToken(cloud, 'a@example.com', 'ws_1')
     await topup(cloud, org, 100)
-    expect(await available(cloud, token)).toBe(100)
+    // 余额的绝对值不该进断言：注册赠送（WP121）之类的规则一改，写死的数就全红。
+    // 要钉的是**这一次扣了多少**
+    const before = await available(cloud, token)
 
     const res = await call(cloud, '/v1/kol/subscription', { method: 'POST', token })
     expect(res.status).toBe(200)
     expect((res.body as { status: string }).status).toBe('active')
-    expect(await available(cloud, token)).toBe(70)
+    expect(before - (await available(cloud, token))).toBe(30)
   })
 
   it('账上那一笔认得出是哪个 cycle（幂等键就是 request_id）', async () => {
@@ -172,9 +174,11 @@ describe('WP118 · 开通与扣费', () => {
     const cloud = newCloud()
     const { token, org } = await issueToken(cloud, 'a@example.com', 'ws_1')
     await topup(cloud, org, 200)
+    const before = await available(cloud, token)
     await call(cloud, '/v1/kol/subscription', { method: 'POST', token })
     for (let i = 0; i < 10; i++) await cloud.kolTenant(org).alarm()
-    expect(await available(cloud, token)).toBe(170)
+    // 十遍闹钟之后总共只少了一期的钱
+    expect(before - (await available(cloud, token))).toBe(30)
   })
 
   it('余额不足：进宽限、同步暂停，**数据一条不删**', async () => {
@@ -306,13 +310,15 @@ describe('WP118 · 后台那两条', () => {
     const cloud = newCloud()
     const { token, org } = await issueToken(cloud, 'a@example.com', 'ws_1')
     await topup(cloud, org, 10) // 连一期都不够
+    const before = await available(cloud, token)
     const tenant = cloud.kolTenant(org)
     const granted = await tenant.fetch(
       req(`/__internal/kol/tenant/grant?org=${org}&months=2`, { method: 'POST' }),
     )
     expect(granted.status).toBe(200)
     await tenant.alarm()
-    expect(await available(cloud, token)).toBe(10)
+    // 赠送的月份一分钱不碰钱包
+    expect(await available(cloud, token)).toBe(before)
     expect(tenant.service.liveStatus(org)).toBe('active')
 
     const summary = await tenant.fetch(req(`/__internal/kol/tenant/summary?org=${org}`))

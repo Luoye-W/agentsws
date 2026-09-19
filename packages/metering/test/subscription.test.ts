@@ -39,6 +39,12 @@ const due = (args: {
 }) => dueCharges({ credits_per_month: 30, ...args })
 
 describe('幂等键', () => {
+  it('两个服务在同一个月算出两串——不然一个组织订两个只扣一次（白送一个服务）', () => {
+    const a = chargeKeyOf(KOL_SERVICE_ID, 'org_1', T0)
+    const b = chargeKeyOf(SUPPORT_SERVICE_ID, 'org_1', T0)
+    expect(a).not.toBe(b)
+  })
+
   it('只由 org 与 cycle 起始那一天决定——没有时间戳、没有随机数', () => {
     // 两个时刻在**上海的挂历上**是同一天（12:00 与 23:59），所以是同一串
     const a = chargeKeyOf(KOL_SERVICE_ID, 'org_1', '2026-02-28T04:00:00.000Z')
