@@ -7,6 +7,9 @@
  * - 前端不引入任何模型 SDK：卡片按钮只打 decide（29 §5 动作不经模型）。
  */
 import type {
+  BrandDesignDoc,
+  BrandDesignRevision,
+  BrandDesignRun,
   CalendarItem,
   DailyPlan,
   Goal,
@@ -4502,3 +4505,35 @@ export const backfillMessages = (input: {
   account?: string
   days?: number
 }): Promise<{ floor: string }> => api('/v1/messages/backfill', { method: 'POST', body: input })
+
+/* ── WP122（71）：品牌设计规范 DESIGN.md ──────────────────────────────── */
+
+/**
+ * 这个品牌当前的那一份。**还没抓过就是 `null`**，不是一个空壳——
+ * 界面按"在不在"决定画空状态还是画色板（36 §3：没有就明说没有，不画一个 0）。
+ */
+export const getBrandDesign = (): Promise<BrandDesignDoc | null> =>
+  api<BrandDesignDoc | null>('/v1/brand-design')
+
+/** 从官网抓一轮（不带 urls 时复用上一轮分析抓回来的页面，一个页面都不重抓）。 */
+export const extractBrandDesign = (input: { urls?: string[] } = {}): Promise<BrandDesignRun> =>
+  api<BrandDesignRun>('/v1/brand-design/extract', { method: 'POST', body: input })
+
+/** 读一份已经传上来的品牌手册（`upload_id` 来自知识上传那条路）。 */
+export const ingestBrandDesignFile = (upload_id: string): Promise<BrandDesignRun> =>
+  api<BrandDesignRun>('/v1/brand-design/files', { method: 'POST', body: { upload_id } })
+
+/** 改一格。`value` 给 `null` = 这一格我不要。 */
+export const editBrandDesignToken = (path: string, value: unknown): Promise<BrandDesignDoc> =>
+  api<BrandDesignDoc>(`/v1/brand-design/tokens/${encodeURIComponent(path)}`, {
+    method: 'PATCH',
+    body: { path, value },
+  })
+
+/** 整份粘贴替换。 */
+export const replaceBrandDesign = (markdown: string): Promise<BrandDesignDoc> =>
+  api<BrandDesignDoc>('/v1/brand-design', { method: 'PUT', body: { markdown } })
+
+/** 版本历史。 */
+export const listBrandDesignRevisions = (): Promise<BrandDesignRevision[]> =>
+  api<BrandDesignRevision[]>('/v1/brand-design/revisions')

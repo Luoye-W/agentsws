@@ -308,7 +308,7 @@ upstreams:
       - lint 规则表稳定下来（我们的自检想对着它的规则写）
     covered_by:
       - packages/brand-design/src/serialize.ts
-      - packages/brand-design/test/serialize.test.ts
+      - packages/brand-design/test/compose.test.ts
 
   - id: dembrandt
     kind: reference

@@ -20,6 +20,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { connectRealtime } from '@/lib/realtime'
+import { BrandDesignPage } from '@/pages/brand-design'
 import { CalendarPage } from '@/pages/calendar'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
 import { ChatSandboxPage } from '@/pages/chat-sandbox'
@@ -199,6 +200,8 @@ function Workspace(): ReactNode {
         <Route path="/people/:id" element={<PersonPage />} />
         {/* WP28 制度面：岗位 / 成员 / 职责 */}
         <Route path="/org" element={<OrgPage />} />
+        {/* WP122（71）：这个品牌的 DESIGN.md —— 设计 / 建站 / 社媒 / 投放出活都照它来 */}
+        <Route path="/brand-design" element={<BrandDesignPage />} />
         {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}
         <Route path="/connections" element={<ConnectionsPage />} />
         {/* WP85（54 §5）：微信 ClawBot（个人）与企业微信机器人（团队） */}

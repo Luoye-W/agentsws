@@ -6,4 +6,6 @@ This product includes software developed by third parties under their own licens
 - Cordis (MIT)
 - OpenConnector (Apache-2.0) — https://github.com/oomol-lab/open-connector
 - Portions adapted from anthropics/commerce-agents (Apache-2.0)
+- DESIGN.md format specification (Apache-2.0) - https://github.com/google-labs-code/design.md
+  (format alignment only; no code imported. Extraction algorithms credited in docs/71 SS8 and upstreams.yml)
 See each package's LICENSE for details.

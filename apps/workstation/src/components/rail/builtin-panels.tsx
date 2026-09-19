@@ -29,6 +29,7 @@ import {
   Globe,
   Mail,
   MessagesSquare,
+  Palette,
   Sparkles,
 } from 'lucide-react'
 import { lazy } from 'react'
@@ -143,6 +144,12 @@ const OfficePreviewBody = lazy(async () => {
  * 幂等而不是"模块加载时跑一次"：单测会 `resetPanelRegistry()` 之后再渲染右栏，
  * 那时模块早就加载过了，副作用式的注册补不回来。
  */
+/** WP122（71）：右栏的设计规范速查表（只读）。 */
+const DesignMdBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/design-md-panel')
+  return { default: () => <m.DesignMdPanel /> }
+})
+
 export function ensureBuiltinPanels(): void {
   if (panelType('memory') !== undefined) return
 
@@ -244,6 +251,16 @@ export function ensureBuiltinPanels(): void {
   // WP97（#13）：第一个真被 `resolvePanel()` 挑中的面板——知识库里点一份文件，
   // 地址 `agentsws://file/<源 id>/<文件名>` 交给注册表排序，排到它这儿，
   // `canOpen` 再看一眼扩展名（只认 docx / xlsx / xls / csv / pptx，别的交给下载）
+  // WP122（71）：设计规范。归「这一层的」那一组——它答的是"这个品牌长什么样"，
+  // 与当前打开的是哪张卡无关。四个出活的岗位（设计 / 建站 / 社媒 / 投放）随手可查。
+  registerPanelType({
+    id: 'design-md',
+    label: 'rail.panel.design-md',
+    icon: Palette,
+    priority: 'builtin',
+    group: 'layer',
+  })
+  registerPanelBody('design-md', DesignMdBody)
   registerPanelType({
     id: 'office-preview',
     label: 'rail.panel.office',
