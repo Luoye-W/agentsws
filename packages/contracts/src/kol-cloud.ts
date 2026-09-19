@@ -17,98 +17,51 @@
  */
 
 import type { Iso8601 } from './common.js'
+import {
+  emptySubscription,
+  KOL_SERVICE_ID,
+  type ServiceSubscription,
+  SUBSCRIPTION_GRACE_DAYS,
+  SUBSCRIPTION_STATUSES,
+  type SubscriptionStatus,
+  subscriptionUsable,
+} from './subscription.js'
 
 /* ------------------------------------------------------------------ */
-/* 订阅                                                                */
+/* 订阅：红人这一份只是通用引擎的第一个实例                                */
 /* ------------------------------------------------------------------ */
 
-/** 计费用的能力名。价目表里那一条（`pricing.json`）就是它。 */
-export const KOL_SERVICE_CAPABILITY = 'kol.service.monthly'
+/**
+ * 计费用的能力名，同时是服务 id。价目表里那一条（`pricing.json`）就是它。
+ *
+ * 真身在 `subscription.ts`（{@link KOL_SERVICE_ID}）——订阅的状态机、幂等扣费、
+ * 宽限、取消、赠送全部是通用的（Luoye 09-19：客服增值服务同价同机制，WP124）。
+ * 这里只留一个名字，免得已经按这个名字 import 的地方全改一遍。
+ */
+export const KOL_SERVICE_CAPABILITY = KOL_SERVICE_ID
 
 /** 每月多少积分。30 积分 = ¥30 / 月（Luoye 2026-09-19 定）。 */
 export const KOL_SERVICE_CREDITS_PER_MONTH = 30
 
-/**
- * 余额不足之后还能拖多少天。
- *
- * 30 天不是随手写的：用户这个月没充上钱，不该第二天就看不到自己的红人库。
- * 宽限期内**同步暂停、数据一条不动**；过了宽限期仍然只是暂停（`suspended`），
- * 依旧不删——删数据的按钮只在用户自己手里。
- */
-export const KOL_SERVICE_GRACE_DAYS = 30
+/** 余额不足之后还能拖多少天。通用值，见 {@link SUBSCRIPTION_GRACE_DAYS}。 */
+export const KOL_SERVICE_GRACE_DAYS = SUBSCRIPTION_GRACE_DAYS
 
-/**
- * 订阅现在是什么状态。
- *
- * - `none`：从来没开通过（或者已经彻底结束了）。
- * - `active`：正常。
- * - `grace`：这一期的钱没扣上（余额不足），在 30 天宽限里——同步暂停，数据不动。
- * - `suspended`：宽限期过了，还是没充上钱。同步仍然停、数据仍然不动。
- * - `cancelling`：用户点了取消，**当期用完为止**（`current_cycle_end` 之前照常用）。
- *
- * 为什么把 `grace` 与 `suspended` 分开：前者界面上是一句提醒，后者是一张要人
- * 拍板的卡（充值 / 导出 / 删除三个选项）。合成一态就没法区分这两句话。
- */
-export type KolServiceStatus = 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+/** 订阅状态。五个态是通用的，见 {@link SubscriptionStatus}。 */
+export type KolServiceStatus = SubscriptionStatus
 
-export const KOL_SERVICE_STATUSES: readonly KolServiceStatus[] = [
-  'none',
-  'active',
-  'grace',
-  'suspended',
-  'cancelling',
-]
+export const KOL_SERVICE_STATUSES: readonly KolServiceStatus[] = SUBSCRIPTION_STATUSES
 
 /** 这个状态下同步能不能做。只有 `active` 与 `cancelling` 能。 */
 export function kolSyncAllowed(status: KolServiceStatus): boolean {
-  return status === 'active' || status === 'cancelling'
+  return subscriptionUsable(status)
 }
 
-/**
- * 一个组织的订阅。
- *
- * 时间字段全是可选的，因为 `none` 那一态什么都没有——写成必填就得塞一个假日期，
- * 而假日期会被当真日期算出一个假的 cycle。
- */
-export interface KolServiceSubscription {
-  org_id: string
-  status: KolServiceStatus
-  /** 第一次开通的时刻。取消再开通不改它（用来回答「用了多久」）。 */
-  started_at?: Iso8601
-  /**
-   * 算所有 cycle 边界的锚点。**取消再开通会换一个新的**，但调档不换
-   * （65 §7 第 3 条：换档沿用旧 anchor，否则这个月会扣两次）。
-   */
-  anchor_at?: Iso8601
-  current_cycle_start?: Iso8601
-  current_cycle_end?: Iso8601
-  /** 用户点过取消（当期用完为止）。等价于 `status === 'cancelling'`，但存下来便于审计。 */
-  cancel_at_period_end: boolean
-  /** 从哪一刻开始欠着这一期（余额不足那一刻）。 */
-  unpaid_since?: Iso8601
-  /** 宽限到哪天。`unpaid_since + 30 天`。 */
-  grace_until?: Iso8601
-  /** 运营后台赠送还剩几个月。赠送的那些 cycle **不扣钱**。 */
-  granted_months: number
-  last_charge_at?: Iso8601
-  /** 最后扣成功的那个 cycle 的起点（幂等的可读版本，真幂等靠 charge key）。 */
-  last_charged_cycle_start?: Iso8601
-  /** 云端这份有多少个对象（后台抽屉那一行）。 */
-  object_count: number
-  last_sync_at?: Iso8601
-  updated_at: Iso8601
-}
+/** 一个组织在红人服务上的订阅。就是通用的那一个（`service_id` 恒为红人那一个）。 */
+export type KolServiceSubscription = ServiceSubscription
 
 /** 一个没开通过的组织长什么样。**不是** `undefined`——界面上那张卡总要有东西渲染。 */
 export function emptyKolSubscription(org_id: string, at: Iso8601): KolServiceSubscription {
-  return {
-    org_id,
-    status: 'none',
-    cancel_at_period_end: false,
-    granted_months: 0,
-    object_count: 0,
-    updated_at: at,
-  }
+  return emptySubscription(org_id, KOL_SERVICE_ID, at)
 }
 
 /* ------------------------------------------------------------------ */

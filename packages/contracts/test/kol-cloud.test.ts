@@ -10,6 +10,7 @@ import {
   emptyKolSubscription,
   isKolObjectKind,
   KOL_OBJECT_KINDS,
+  KOL_SERVICE_CAPABILITY,
   KOL_SERVICE_CREDITS_PER_MONTH,
   KOL_SERVICE_GRACE_DAYS,
   KOL_SERVICE_STATUSES,
@@ -83,7 +84,9 @@ describe('订阅状态与同步权', () => {
     expect(KOL_SERVICE_STATUSES).toHaveLength(5)
     const empty = emptyKolSubscription('org_1', '2026-09-19T10:00:00.000Z')
     expect(empty.status).toBe('none')
-    expect(empty.object_count).toBe(0)
+    // 云端有多少条不在订阅上（那是同步的事，见 `KolSyncStatus`）：订阅这一层
+    // 是通用的，客服那个服务根本没有「对象数」这回事
+    expect(empty.service_id).toBe(KOL_SERVICE_CAPABILITY)
     expect(empty.granted_months).toBe(0)
     expect(empty.cancel_at_period_end).toBe(false)
   })

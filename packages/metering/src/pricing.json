@@ -87,6 +87,15 @@
       "label_zh": "红人营销增值服务（每月）",
       "label_en": "Influencer service (per month)",
       "note_zh": "云端红人库 + 双向同步：本地一份、云端一份。买的不是备份，是「红人营销以后不依赖本地 Agents 工坊也能跑起来」的地基。30 积分 = ¥30 / 月。"
+    },
+    {
+      "capability": "support.service.monthly",
+      "unit": "month",
+      "credits_per_unit": 30,
+      "block": "kol_service",
+      "label_zh": "客服增值服务（每月）",
+      "label_en": "Customer support service (per month)",
+      "note_zh": "WP124 实现，本轮只登记不接业务（subscriptions.json 里 available=false，后端一律拒）。同价同机制：30 积分 = ¥30 / 月，走同一套订阅引擎。"
     }
   ]
 }

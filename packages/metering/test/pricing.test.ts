@@ -29,7 +29,7 @@ describe('价目表', () => {
     expect(pricing.as_of).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  it('九条能力都在，每条中英标签齐全', () => {
+  it('十条能力都在，每条中英标签齐全', () => {
     expect(pricing.entries.map((e) => e.capability)).toEqual([
       'ai.chat',
       'ai.embeddings',
@@ -39,8 +39,9 @@ describe('价目表', () => {
       'crawl.page',
       'transcribe.minute',
       'standby.seat.month',
-      // WP118 加的第九条：红人营销增值服务（订阅，30 积分 / 月）
+      // WP118 加的两条订阅：红人营销（已上线）与客服（WP124，只登记不接业务）
       'kol.service.monthly',
+      'support.service.monthly',
     ])
     for (const e of pricing.entries) {
       expect(e.label_zh, e.capability).not.toBe('')

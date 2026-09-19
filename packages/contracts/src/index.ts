@@ -47,4 +47,6 @@ export * from './skills.js'
 export * from './social.js'
 // 49 §6 WP60 / 48 L6：在线值守与聊天窗托管
 export * from './standby.js'
+// 67 §3 WP118：按月订阅的增值服务（一份引擎，红人是第一个实例，客服 WP124 在后）
+export * from './subscription.js'
 export * from './work.js'

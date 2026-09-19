@@ -51,18 +51,6 @@ export {
   tokenCostMicros,
   unitCostMicros,
 } from './cost.js'
-export type { KolCycleCharge } from './kol-subscription.js'
-export {
-  cancelKolSubscription,
-  dueKolCharges,
-  grantKolMonths,
-  kolChargeKeyOf,
-  kolChargePaid,
-  kolChargeUnpaid,
-  kolGraceUntil,
-  kolStatusAt,
-  startKolSubscription,
-} from './kol-subscription.js'
 export type { PlannedCycle, PlansFile, TermPlanInput } from './plans.js'
 export {
   addCalendarMonths,
@@ -93,6 +81,14 @@ export {
   roundCredits,
   TOKEN_CAPABILITIES,
 } from './pricing.js'
+export type { SubscriptionServicesFile } from './services.js'
+export {
+  availableSubscriptionServices,
+  SUBSCRIPTION_SERVICES_FILE,
+  subscriptionPricingGaps,
+  subscriptionServiceById,
+  subscriptionServices,
+} from './services.js'
 export type { EventRow, SqlWalletStore, SqlWalletStoreOptions } from './sql-store.js'
 export {
   createSqlWalletStore,
@@ -102,6 +98,18 @@ export {
 } from './sql-store.js'
 export type { SqliteWalletStore, SqliteWalletStoreOptions } from './sqlite-store.js'
 export { createSqliteWalletStore } from './sqlite-store.js'
+export type { SubscriptionCycleCharge } from './subscription.js'
+export {
+  cancelSubscription,
+  chargeKeyOf,
+  dueCharges,
+  graceUntil,
+  grantSubscriptionMonths,
+  startSubscription,
+  subscriptionPaid,
+  subscriptionStatusAt,
+  subscriptionUnpaid,
+} from './subscription.js'
 export type { TopupTiersFile } from './topup-tiers.js'
 export {
   CREDITS_PER_USD,
