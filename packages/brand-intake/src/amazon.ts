@@ -19,8 +19,8 @@
  */
 import type { BrandIntakeProduct, BrandIntakeProfile } from '@agentsws/contracts'
 import { BRAND_INTAKE_MAX_PRODUCTS, type BrandIntakePage } from '@agentsws/contracts'
-import { field } from './field.js'
 import { fetchPage, type PageFetch } from './fetch.js'
+import { field } from './field.js'
 import { absolute, decodeEntities, jsonLdNodes, squash, visibleText } from './html.js'
 
 /** 站点域名 → 国家码（长后缀在前，不然 `.com` 会先命中 `.com.au`）。 */
@@ -108,11 +108,21 @@ export async function analyzeAmazonListing(
   const profile: BrandIntakeProfile = {}
   const res = await fetchPage(doFetch, url)
   if (!res.ok) {
-    pages.push({ url, kind: 'product', ok: false, ...(res.reason === undefined ? {} : { reason: res.reason }) })
+    pages.push({
+      url,
+      kind: 'product',
+      ok: false,
+      ...(res.reason === undefined ? {} : { reason: res.reason }),
+    })
     return { pages, profile }
   }
   if (isBlocked(res.html)) {
-    pages.push({ url, kind: 'product', ok: false, reason: 'Amazon 把我们挡住了（验证码），这一条没抓着' })
+    pages.push({
+      url,
+      kind: 'product',
+      ok: false,
+      reason: 'Amazon 把我们挡住了（验证码），这一条没抓着',
+    })
     return { pages, profile }
   }
   pages.push({ url, kind: 'product', ok: true })
@@ -147,7 +157,11 @@ export async function analyzeAmazonListing(
       ...(bullets.length === 0 ? {} : { selling_points: bullets }),
       ...(/twister|variationValues/i.test(html) ? { has_variants: true } : {}),
     }
-    profile.products = field([product], 'selector', { url, locator: 'selector:#productTitle', quote: title })
+    profile.products = field([product], 'selector', {
+      url,
+      locator: 'selector:#productTitle',
+      quote: title,
+    })
   }
 
   const rating = Number(/([0-9.]+)\s*out of\s*5\s*stars/i.exec(html)?.[1] ?? Number.NaN)
@@ -158,7 +172,10 @@ export async function analyzeAmazonListing(
     (/([\d,]+)\s*(?:ratings|reviews|global ratings)/i.exec(html)?.[1] ?? '').replace(/,/g, ''),
   )
   if (Number.isFinite(reviews) && reviews > 0)
-    profile.reviews_count = field(reviews, 'selector', { url, locator: 'selector:#acrCustomerReviewText' })
+    profile.reviews_count = field(reviews, 'selector', {
+      url,
+      locator: 'selector:#acrCustomerReviewText',
+    })
 
   if (entry.country !== undefined)
     profile.markets = field([entry.country], 'selector', { url, locator: 'url:host' })
@@ -186,7 +203,9 @@ function brandFromByline(html: string): string | undefined {
   const raw = textOfId(html, 'bylineInfo')
   if (raw === undefined) return undefined
   // "Visit the ACME Store" / "Brand: ACME" / "品牌: ACME"
-  const m = /(?:Visit the\s+)?(.+?)(?:\s+Store)?$/i.exec(raw.replace(/^(?:Brand|品牌)\s*[:：]\s*/i, ''))
+  const m = /(?:Visit the\s+)?(.+?)(?:\s+Store)?$/i.exec(
+    raw.replace(/^(?:Brand|品牌)\s*[:：]\s*/i, ''),
+  )
   return m?.[1]?.trim()
 }
 
@@ -223,11 +242,21 @@ export async function analyzeAmazonStorefront(
   const profile: BrandIntakeProfile = {}
   const res = await fetchPage(doFetch, url)
   if (!res.ok) {
-    pages.push({ url, kind: 'collection', ok: false, ...(res.reason === undefined ? {} : { reason: res.reason }) })
+    pages.push({
+      url,
+      kind: 'collection',
+      ok: false,
+      ...(res.reason === undefined ? {} : { reason: res.reason }),
+    })
     return { pages, profile }
   }
   if (isBlocked(res.html)) {
-    pages.push({ url, kind: 'collection', ok: false, reason: 'Amazon 把我们挡住了（验证码），这一条没抓着' })
+    pages.push({
+      url,
+      kind: 'collection',
+      ok: false,
+      reason: 'Amazon 把我们挡住了（验证码），这一条没抓着',
+    })
     return { pages, profile }
   }
   pages.push({ url, kind: 'collection', ok: true })
@@ -239,7 +268,12 @@ export async function analyzeAmazonStorefront(
     profile.markets = field([entry.country], 'selector', { url, locator: 'url:host' })
 
   const heading = squash(visibleText(res.html, 200))
-  if (heading !== '') profile.one_liner = field(heading.slice(0, 200), 'selector', { url, locator: 'selector:body', quote: heading })
+  if (heading !== '')
+    profile.one_liner = field(heading.slice(0, 200), 'selector', {
+      url,
+      locator: 'selector:body',
+      quote: heading,
+    })
 
   return { pages, profile }
 }
@@ -248,13 +282,18 @@ export async function analyzeAmazonStorefront(
 export function storefrontCards(html: string, base: string): BrandIntakeProduct[] {
   const out: BrandIntakeProduct[] = []
   const seen = new Set<string>()
-  for (const m of html.matchAll(/data-asin=["']([A-Z0-9]{10})["']([\s\S]{0,4000}?)(?=data-asin=|$)/gi)) {
+  for (const m of html.matchAll(
+    /data-asin=["']([A-Z0-9]{10})["']([\s\S]{0,4000}?)(?=data-asin=|$)/gi,
+  )) {
     const asin = (m[1] ?? '').toUpperCase()
     const block = m[2] ?? ''
     if (asin === '' || seen.has(asin)) continue
     const title =
-      squash(decodeEntities((/<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(block)?.[1] ?? '').replace(/<[^>]*>/g, ' '))) ||
-      squash(decodeEntities(/alt=["']([^"']{4,200})["']/i.exec(block)?.[1] ?? ''))
+      squash(
+        decodeEntities(
+          (/<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(block)?.[1] ?? '').replace(/<[^>]*>/g, ' '),
+        ),
+      ) || squash(decodeEntities(/alt=["']([^"']{4,200})["']/i.exec(block)?.[1] ?? ''))
     if (title === '') continue
     seen.add(asin)
     const img = /<img[^>]+src=["']([^"']+)["']/i.exec(block)?.[1]

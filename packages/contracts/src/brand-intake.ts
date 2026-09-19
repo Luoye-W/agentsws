@@ -26,11 +26,7 @@ import type { Iso8601, WorkspaceId } from './common.js'
 import type { StorefrontPlatform } from './identity.js'
 
 /** 用户贴进来的那一条链接是什么。`none` 是"我还没有网站"那条旁路（沿用 WP79）。 */
-export type BrandIntakeSourceKind =
-  | 'website'
-  | 'amazon_listing'
-  | 'amazon_storefront'
-  | 'none'
+export type BrandIntakeSourceKind = 'website' | 'amazon_listing' | 'amazon_storefront' | 'none'
 
 /**
  * 出处：**哪个网址、哪一段**。

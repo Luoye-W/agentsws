@@ -55,8 +55,7 @@ export function replayFetch(
   const fetch: PageFetch = async (url, init) => {
     calls.push({ url, headers: init.headers })
     const override = overrides[url]
-    if (typeof override === 'number')
-      return { ok: false, status: override, text: async () => '' }
+    if (typeof override === 'number') return { ok: false, status: override, text: async () => '' }
     const name = typeof override === 'string' ? override : pages[url]
     if (name === undefined) return { ok: false, status: 503, text: async () => '' }
     return { ok: true, status: 200, text: async () => fixture(name) }

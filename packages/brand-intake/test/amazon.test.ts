@@ -4,6 +4,8 @@
  * 三件：listing 页该抽的都抽到了；店铺页只枚举卡片不逐个进；**被验证码挡住
  * 的时候如实说挡住了**，不编一份数据出来。
  */
+
+import { describe, expect, it } from 'vitest'
 import {
   analyzeAmazonListing,
   analyzeAmazonStorefront,
@@ -13,7 +15,6 @@ import {
   isBlocked,
   storefrontCards,
 } from '../src/index.js'
-import { describe, expect, it } from 'vitest'
 import { AMAZON_PAGES, fixture, replayFetch } from './fixtures.js'
 
 const LISTING = 'https://www.amazon.com/dp/B08XYZ1234'

@@ -28,15 +28,6 @@ export {
   isBlocked,
   storefrontCards,
 } from './amazon.js'
-export type { IntakeLayer } from './field.js'
-export {
-  applyEdits,
-  confidenceOf,
-  field,
-  MAX_QUOTE_CHARS,
-  mergeProfile,
-  needsConfirm,
-} from './field.js'
 export type { FetchedPage, PageFetch } from './fetch.js'
 export {
   BRAND_INTAKE_TIMEOUT_MS,
@@ -47,6 +38,15 @@ export {
   MAX_PAGE_CHARS,
   parseRobotsDisallow,
 } from './fetch.js'
+export type { IntakeLayer } from './field.js'
+export {
+  applyEdits,
+  confidenceOf,
+  field,
+  MAX_QUOTE_CHARS,
+  mergeProfile,
+  needsConfirm,
+} from './field.js'
 export {
   absolute,
   decodeEntities,
@@ -71,8 +71,8 @@ import {
   DEFAULT_BRAND_INTAKE_CAP_CREDITS,
 } from '@agentsws/contracts'
 import { analyzeAmazonListing, analyzeAmazonStorefront, classifyAmazonUrl } from './amazon.js'
-import { mergeProfile } from './field.js'
 import type { PageFetch } from './fetch.js'
+import { mergeProfile } from './field.js'
 import { analyzeSite } from './site.js'
 
 /**

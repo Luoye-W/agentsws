@@ -55,10 +55,7 @@ export function isType(node: Record<string, unknown>, pattern: RegExp): boolean 
 /** 取一个 `og:` / `twitter:` meta。 */
 export function metaContent(html: string, property: string): string | undefined {
   const esc = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const byProperty = new RegExp(
-    `<meta[^>]+(?:property|name)\\s*=\\s*["']${esc}["'][^>]*>`,
-    'i',
-  )
+  const byProperty = new RegExp(`<meta[^>]+(?:property|name)\\s*=\\s*["']${esc}["'][^>]*>`, 'i')
   const tag = byProperty.exec(html)?.[0]
   if (tag === undefined) return undefined
   const content = /content\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1]

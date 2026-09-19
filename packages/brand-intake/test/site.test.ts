@@ -10,8 +10,15 @@
  *
  * 全程不联网：夹具表里没有的网址回 503。
  */
-import { BRAND_INTAKE_USER_AGENT, analyzeSite, isDisallowed, looksLikePolicy, parseRobotsDisallow } from '../src/index.js'
+
 import { describe, expect, it } from 'vitest'
+import {
+  analyzeSite,
+  BRAND_INTAKE_USER_AGENT,
+  isDisallowed,
+  looksLikePolicy,
+  parseRobotsDisallow,
+} from '../src/index.js'
 import { replayFetch, SHOP, SHOP_PAGES } from './fixtures.js'
 
 describe('WP121 · 官网分析', () => {
@@ -35,7 +42,10 @@ describe('WP121 · 官网分析', () => {
     expect(profile.storefront_platform?.evidence[0]?.quote).toBe('cdn.shopify.com')
 
     // 社媒只留认得出的那两条，example.net 那条不算
-    expect(profile.social_links?.value.map((s) => s.platform).sort()).toEqual(['instagram', 'tiktok'])
+    expect(profile.social_links?.value.map((s) => s.platform).sort()).toEqual([
+      'instagram',
+      'tiktok',
+    ])
 
     expect(profile.support_email?.value).toBe('hello@nordvik.example')
     expect(profile.tone_samples?.value[0]).toContain('garage in Malmo')

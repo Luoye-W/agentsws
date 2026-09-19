@@ -65,7 +65,8 @@ export async function fetchPage(
       headers: { 'user-agent': BRAND_INTAKE_USER_AGENT, accept: 'text/html,application/xhtml+xml' },
       signal: AbortSignal.timeout(timeoutMs),
     })
-    if (!res.ok) return { url, ok: false, status: res.status, html: '', reason: sayStatus(res.status) }
+    if (!res.ok)
+      return { url, ok: false, status: res.status, html: '', reason: sayStatus(res.status) }
     const text = await res.text()
     return { url, ok: true, status: res.status, html: text.slice(0, MAX_PAGE_CHARS) }
   } catch (err) {

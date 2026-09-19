@@ -4,17 +4,18 @@
  * 最后那一条是整个 WP121 最要紧的一条用例。它保护的不是数据，是那个按钮：
  * "重新分析"只要吃掉过一次用户的手工修改，之后就再没有人敢按它。
  */
+
+import { describe, expect, it } from 'vitest'
 import {
   analyzeBrand,
   applyEdits,
-  classifyUrl,
   CREDITS_PER_PAGE,
+  classifyUrl,
   estimateCredits,
   field,
   mergeProfile,
   needsConfirm,
 } from '../src/index.js'
-import { describe, expect, it } from 'vitest'
 import { AMAZON_PAGES, replayFetch, SHOP, SHOP_PAGES } from './fixtures.js'
 
 const ALL = { ...SHOP_PAGES, ...AMAZON_PAGES }
@@ -116,9 +117,9 @@ describe('WP121 · 重新分析不覆盖手改', () => {
     const low = field('猜的', 'model', { url: 'https://x.example/' })
     expect(needsConfirm(low)).toBe(true)
     expect(needsConfirm(field('明写的', 'jsonld', { url: 'https://x.example/' }))).toBe(false)
-    expect(needsConfirm(applyEdits({ one_liner: low }, { one_liner: '改过了' }, at).one_liner)).toBe(
-      false,
-    )
+    expect(
+      needsConfirm(applyEdits({ one_liner: low }, { one_liner: '改过了' }, at).one_liner),
+    ).toBe(false)
     expect(needsConfirm(undefined)).toBe(false)
   })
 })

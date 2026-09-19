@@ -30,8 +30,8 @@ import {
   type BrandIntakeSocialLink,
   type StorefrontPlatform,
 } from '@agentsws/contracts'
-import { field, type IntakeLayer } from './field.js'
 import { fetchPage, fetchRobots, isDisallowed, type PageFetch } from './fetch.js'
+import { field, type IntakeLayer } from './field.js'
 import {
   absolute,
   hrefs,
@@ -96,7 +96,9 @@ const SOCIAL_HOSTS: readonly [RegExp, string][] = [
  * 认不出来回 `undefined` 而不是 `'other'`——`'other'` 是用户自己选的一个答案，
  * 我们没资格替他选。
  */
-export function detectPlatform(html: string): { platform: StorefrontPlatform; hint: string } | undefined {
+export function detectPlatform(
+  html: string,
+): { platform: StorefrontPlatform; hint: string } | undefined {
   if (/cdn\.shopify\.com|Shopify\.theme|shopify-section/i.test(html))
     return { platform: 'shopify', hint: 'cdn.shopify.com' }
   if (/woocommerce|wp-content\/plugins\/woocommerce/i.test(html))
@@ -107,7 +109,10 @@ export function detectPlatform(html: string): { platform: StorefrontPlatform; hi
 }
 
 /** 从 JSON-LD 的 `Product` 节点上取一张商品卡。 */
-function productFromJsonLd(node: Record<string, unknown>, url: string): BrandIntakeProduct | undefined {
+function productFromJsonLd(
+  node: Record<string, unknown>,
+  url: string,
+): BrandIntakeProduct | undefined {
   const title = typeof node.name === 'string' ? squash(node.name) : undefined
   if (title === undefined || title === '') return undefined
   const offers = node.offers
@@ -175,10 +180,7 @@ export async function analyzeSite(
   const pages: BrandIntakePage[] = []
   const profile: BrandIntakeProfile = {}
 
-  const get = async (
-    url: string,
-    kind: BrandIntakePage['kind'],
-  ): Promise<string | undefined> => {
+  const get = async (url: string, kind: BrandIntakePage['kind']): Promise<string | undefined> => {
     if (pages.length >= maxPages) return undefined
     const path = new URL(url).pathname
     if (isDisallowed(path, disallow)) {
@@ -204,11 +206,11 @@ export async function analyzeSite(
     (typeof org?.name === 'string' ? squash(org.name) : undefined) ??
     metaContent(home, 'og:site_name')
   if (siteName !== undefined && siteName !== '') {
-    profile.brand_name = field(
-      siteName,
-      org?.name === undefined ? 'og' : 'jsonld',
-      { url: entryUrl, locator: org?.name === undefined ? 'og:site_name' : 'jsonld:Organization.name', quote: siteName },
-    )
+    profile.brand_name = field(siteName, org?.name === undefined ? 'og' : 'jsonld', {
+      url: entryUrl,
+      locator: org?.name === undefined ? 'og:site_name' : 'jsonld:Organization.name',
+      quote: siteName,
+    })
   }
   const legal = typeof org?.legalName === 'string' ? squash(org.legalName) : undefined
   if (legal !== undefined && legal !== '')
@@ -224,7 +226,11 @@ export async function analyzeSite(
 
   const color = themeColor(home)
   if (color !== undefined)
-    profile.primary_color = field(color, 'selector', { url: entryUrl, locator: 'meta:theme-color', quote: color })
+    profile.primary_color = field(color, 'selector', {
+      url: entryUrl,
+      locator: 'meta:theme-color',
+      quote: color,
+    })
 
   const tagline = metaContent(home, 'og:description') ?? metaContent(home, 'description')
   if (tagline !== undefined)
