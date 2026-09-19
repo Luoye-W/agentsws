@@ -29,3 +29,7 @@ release/
 .data/
 REPORT.md
 KIRO.log
+
+# WP119：插件构建产物与 WXT 生成的类型（`wxt prepare` 每次重出）
+apps/extension/build/
+apps/extension/.wxt/

@@ -1,0 +1,209 @@
+/*
+ * 设置页的样式。与面板同一套 `--ws-*` 令牌（36 §界面规范），只是这一页不在
+ * shadow root 里，所以令牌挂在 `:root` 上。
+ */
+
+:root {
+  --ws-paper: #f3f5f2;
+  --ws-card: #ffffff;
+  --ws-line: #ecefea;
+  --ws-ink: #263331;
+  --ws-body: #4b5550;
+  --ws-muted-fg: #6b746f;
+  --ws-brand: #007b67;
+  --ws-brand-ink: #045246;
+  --ws-brand-fg: #ffffff;
+  --ws-tint: #e8f3f0;
+  --ws-good: #158a4b;
+  --ws-good-bg: #e3f5ea;
+  --ws-warn: #b26e0b;
+  --ws-warn-bg: #fff4db;
+  --ws-bad-bg: #fde9e7;
+  --ws-bad: #c93b30;
+  --ws-radius-card: 16px;
+  --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 28px 20px 48px;
+  background: var(--ws-paper);
+  color: var(--ws-body);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ws-page {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ws-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ws-mark {
+  width: 26px;
+  height: 26px;
+  color: var(--ws-brand);
+}
+
+.ws-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+h1 {
+  font-size: 17px;
+  margin: 0;
+  color: var(--ws-ink);
+}
+
+.ws-card {
+  background: var(--ws-card);
+  border-radius: var(--ws-radius-card);
+  box-shadow: var(--ws-shadow);
+  padding: 18px;
+}
+
+.ws-card h2 {
+  font-size: 14px;
+  margin: 0 0 4px;
+  color: var(--ws-ink);
+}
+
+.ws-card p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ws-muted-fg);
+}
+
+.ws-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.ws-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.ws-label {
+  font-size: 12px;
+  color: var(--ws-muted-fg);
+}
+
+.ws-input {
+  border: 1px solid var(--ws-line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--ws-ink);
+  background: var(--ws-card);
+  width: 100%;
+}
+
+.ws-code {
+  letter-spacing: 6px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ws-btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ws-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ws-btn--primary {
+  background: var(--ws-brand);
+  color: var(--ws-brand-fg);
+}
+
+.ws-btn--ghost {
+  background: var(--ws-paper);
+  color: var(--ws-ink);
+}
+
+.ws-note {
+  font-size: 13px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--ws-tint);
+  color: var(--ws-brand-ink);
+  margin: 12px 0 0;
+}
+
+.ws-note--warn {
+  background: var(--ws-warn-bg);
+  color: var(--ws-warn);
+}
+
+.ws-note--bad {
+  background: var(--ws-bad-bg);
+  color: var(--ws-bad);
+}
+
+.ws-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+
+.ws-facts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--ws-line);
+}
+
+.ws-facts li:last-child {
+  border-bottom: 0;
+}
+
+.ws-facts b {
+  color: var(--ws-ink);
+  font-weight: 600;
+}
+
+.ws-privacy {
+  font-size: 13px;
+  color: var(--ws-muted-fg);
+}
+
+.ws-privacy strong {
+  color: var(--ws-ink);
+}
+
+.ws-privacy ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
