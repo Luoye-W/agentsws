@@ -113,6 +113,7 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
       ).toEqual([
         'kol.discovery',
         'kol.outreach_funnel',
+        'kol.sandbox_funnel',
         'kol.collaborations',
         'kol.pending_deliverables',
         'kol.attribution',

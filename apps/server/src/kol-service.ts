@@ -1192,8 +1192,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
 
     createDeliverable(actor, input) {
       const owner = store.collaboration(input.collaboration_id)
-      if (owner === undefined)
-        throw new ApiError('not_found', '库里没有这条合作，交付物挂不上去')
+      if (owner === undefined) throw new ApiError('not_found', '库里没有这条合作，交付物挂不上去')
       // WP117b（66 复测 #18）：登记一条交付物也是一次动静
       store.saveCollaboration({ ...owner, last_activity_at: clock.now() })
       const row: Deliverable = {

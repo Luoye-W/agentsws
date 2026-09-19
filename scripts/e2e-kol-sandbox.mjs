@@ -203,10 +203,7 @@ async function run(page, assignment) {
   // ⑤ 去岗位页的「卡片」tab 批这张卡
   say('去「卡片」tab，在那张开发信卡上点「批准」')
   await page.goto(`${BASE}/positions/${assignment}?tab=cards`, { waitUntil: 'networkidle' })
-  const card = page
-    .locator('[data-testid="deck-card"]')
-    .filter({ hasText: '开发信' })
-    .first()
+  const card = page.locator('[data-testid="deck-card"]').filter({ hasText: '开发信' }).first()
   await card.waitFor({ timeout: 20_000 })
   await shoot(page, 'outreach-card')
   await card.locator('[data-action="approve"]').first().click()
@@ -255,8 +252,12 @@ async function run(page, assignment) {
   await page.locator('[data-testid="kol-collab-open"]').first().click()
   await page.locator('[data-testid="kol-thread-exchanges"]').first().waitFor({ timeout: 20_000 })
   await settle(page)
-  const out = await page.locator('[data-testid="kol-thread-exchange"][data-direction="out"]').count()
-  const back = await page.locator('[data-testid="kol-thread-exchange"][data-direction="in"]').count()
+  const out = await page
+    .locator('[data-testid="kol-thread-exchange"][data-direction="out"]')
+    .count()
+  const back = await page
+    .locator('[data-testid="kol-thread-exchange"][data-direction="in"]')
+    .count()
   must(out >= 1, '往来里没有我们发出去的那一封')
   must(back >= 1, '往来里没有他回过来的那一封')
   const klass = await page.locator('[data-testid="kol-thread-reply-class"]').first().innerText()
@@ -320,13 +321,13 @@ async function run(page, assignment) {
 
   // ⑮ 验收（提一条结论 → 卡）
   say('验收：点「通过」→ 提一条待批的验收结论')
-  await page
-    .locator('[data-testid="kol-thread-review"][data-review="approved"]')
-    .first()
-    .click()
+  await page.locator('[data-testid="kol-thread-review"][data-review="approved"]').first().click()
   await page.waitForTimeout(2000)
   const reviewReceipt = await page.locator('[data-testid="kol-thread-receipt"]').first().innerText()
-  must(reviewReceipt.includes('批') || reviewReceipt.includes('验收'), `验收回执不对：${reviewReceipt}`)
+  must(
+    reviewReceipt.includes('批') || reviewReceipt.includes('验收'),
+    `验收回执不对：${reviewReceipt}`,
+  )
   await shoot(page, 'review')
 
   // ⑯ 建追踪链接

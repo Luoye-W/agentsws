@@ -101,8 +101,7 @@ export function cadenceText(rows: readonly KolExchangeData[]): string {
     return '他说过别再发了 —— 跟进已经停了，一封都不会再发。'
   if (replies.some((r) => r.bounce_reason !== undefined))
     return '地址退信 —— 跟进已经停了，先把联系方式换一个。'
-  if (replies.some((r) => r.reply_class === 'declined'))
-    return '他谢绝了 —— 跟进已经停了。'
+  if (replies.some((r) => r.reply_class === 'declined')) return '他谢绝了 —— 跟进已经停了。'
   if (replies.length > 0) return '他回过话了 —— 自动跟进停止，接下来由你来接。'
   if (sent.length === 0) return '还没发过信 —— 跟进节奏还没开始。'
   if (sent.length === 1) return '发过 1 封，没有回音 —— 3 天后自动起草第二封（仍要你批）。'
@@ -348,7 +347,9 @@ export function CollabThread({
           {exchanges.error === null &&
           (exchanges.data?.rows ?? []).length === 0 &&
           !exchanges.isPending ? (
-            <p className="text-xs text-muted-foreground">还没有来往过。先去候选池给他起一封开发信。</p>
+            <p className="text-xs text-muted-foreground">
+              还没有来往过。先去候选池给他起一封开发信。
+            </p>
           ) : null}
           <ol className="flex flex-col gap-2">
             {(exchanges.data?.rows ?? []).map((x) => {
@@ -373,7 +374,9 @@ export function CollabThread({
                     {x.step === undefined ? null : (
                       <span className="text-muted-foreground">{STEP_ZH[x.step] ?? x.step}</span>
                     )}
-                    <span className="text-muted-foreground">{x.at.slice(0, 16).replace('T', ' ')}</span>
+                    <span className="text-muted-foreground">
+                      {x.at.slice(0, 16).replace('T', ' ')}
+                    </span>
                     {klass === undefined ? null : (
                       <span
                         className={
@@ -398,9 +401,7 @@ export function CollabThread({
                   <p className="whitespace-pre-wrap text-xs text-muted-foreground">{x.body}</p>
                   {/* 建议不是动作：写清楚下一步该干什么，但不给一个按钮替人点 */}
                   {klass === undefined ? null : (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      下一步：{klass.next}
-                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">下一步：{klass.next}</p>
                   )}
                 </li>
               )

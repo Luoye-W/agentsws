@@ -398,9 +398,7 @@ export function kolDeckData(
         }
       }),
     // 演练开着才有这一格（`sandboxCollabs` 空 = 没在演练）
-    ...(sandboxCollabs.length === 0
-      ? {}
-      : { sandbox_funnel: collaborationFunnel(sandboxCollabs) }),
+    ...(sandboxCollabs.length === 0 ? {} : { sandbox_funnel: collaborationFunnel(sandboxCollabs) }),
   }
 }
 

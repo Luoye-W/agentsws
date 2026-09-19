@@ -657,7 +657,9 @@ function Collaborations({
       return `${r?.display_name ?? c.creator_id} ${r?.handle ?? ''}`.toLowerCase().includes(needle)
     })
     // 最近有动静的排前面；一次都没动过的沉底（它们是该被催的那一批，但不是最急的）
-    .sort((a, b) => Date.parse(b.last_activity_at ?? '') - Date.parse(a.last_activity_at ?? '') || 0)
+    .sort(
+      (a, b) => Date.parse(b.last_activity_at ?? '') - Date.parse(a.last_activity_at ?? '') || 0,
+    )
   const now = Date.now()
   const filtered = stage !== 'all' || needle !== ''
 
@@ -667,7 +669,10 @@ function Collaborations({
         <CardTitle className="flex items-center gap-1.5 text-sm">
           <Users className="size-4" aria-hidden />
           {t('kol.collab.title')}
-          <span className="font-normal text-xs text-muted-foreground" data-testid="kol-collab-count">
+          <span
+            className="font-normal text-xs text-muted-foreground"
+            data-testid="kol-collab-count"
+          >
             {filtered ? `${rows.length} / ${open.length}` : String(open.length)}
           </span>
         </CardTitle>
@@ -751,9 +756,7 @@ function Collaborations({
                 </div>
                 <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
                   <span data-testid="kol-collab-stage">{t(`kol.stage.${c.stage}`)}</span>
-                  <span data-testid="kol-collab-since">
-                    {sinceText(c.last_activity_at, now)}
-                  </span>
+                  <span data-testid="kol-collab-since">{sinceText(c.last_activity_at, now)}</span>
                   {c.budget === undefined ? null : (
                     <span data-testid="kol-collab-budget">
                       {c.budget} {c.currency}

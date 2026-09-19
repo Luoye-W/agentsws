@@ -789,7 +789,11 @@ export function kolRoutes(): Route[] {
         authz: READ_CREATOR,
         params: [
           { name: 'channel', in: 'query', description: '只看这条渠道' },
-          { name: 'q', in: 'query', description: '在名字、handle 与类目里找（按词，任意一个词命中就算）' },
+          {
+            name: 'q',
+            in: 'query',
+            description: '在名字、handle 与类目里找（按词，任意一个词命中就算）',
+          },
           { name: 'limit', in: 'query', description: '最多几行', schema: { type: 'integer' } },
           {
             name: 'min_followers',
@@ -1066,7 +1070,11 @@ export function kolRoutes(): Route[] {
       async (c, deps) =>
         ok(
           c,
-          await portOf(deps).quoteCollaboration(actorOf(c), param(c, 'id'), await body(c, QuoteBody)),
+          await portOf(deps).quoteCollaboration(
+            actorOf(c),
+            param(c, 'id'),
+            await body(c, QuoteBody),
+          ),
           201,
         ),
     ),
