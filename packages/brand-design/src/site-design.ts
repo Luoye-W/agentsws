@@ -650,7 +650,8 @@ function pickComponents(
       const normalized =
         token === 'backgroundColor' || token === 'textColor' ? firstColorIn(value) : value
       if (normalized === undefined || normalized === '') continue
-      const bucket = (out[component] ??= {})
+      out[component] ??= {}
+      const bucket = out[component]
       bucket[token] ??= {
         value: normalized,
         confidence: 'medium',
