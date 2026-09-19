@@ -83,7 +83,13 @@ export interface KolBrainOptions {
  * 「一步一个」而不是一轮把全部工具都丢出去：`direct` 的 turn loop 与 dsh 的
  * agent-loop 都是一轮一调，前一步的结果要能影响后一步（比如搜完才知道有没有人）。
  */
-export function kolBrain(options: KolBrainOptions): ScriptFn {
+export function kolBrain(_options: KolBrainOptions): ScriptFn {
+  /*
+   * `clock` 现在一行都没用上——红人这条剧本里没有一处要看"现在几点"
+   * （售后那一份要它算退货窗口还剩几天）。参数留着是为了与 `aftersalesBrain`
+   * 同形：两个脑在 `brain.ts` 里是一个 if 的两边，签名不同会让那一处读起来
+   * 像是两件事。真要用到的时候（比如跟进节奏）不用改调用方。
+   */
   return ({ messages, tools }): ScriptedTurn => {
     const run = kolRunOf(messages, tools)
     if (run === undefined) return { text: '' }

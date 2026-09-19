@@ -490,6 +490,51 @@ export interface KolPort {
   mergeSuggestions(actor: KolActor): MaybePromise<{ rows: KolMergeSuggestionView[] }>
   acceptMerge(actor: KolActor, id: string): MaybePromise<{ creator: Creator }>
   rejectMerge(actor: KolActor, id: string): MaybePromise<{ id: string; rejected: true }>
+
+  /* ── WP117 交付 4：演练场 ─────────────────────────────────────────────
+   *
+   * 四个动作**平铺在端口上**，不收进一个 `sandbox: {...}` 子对象——`brand-ports`
+   * 的按品牌代理是按「取一个属性就回一个函数」实现的，子对象在它手里会变成函数，
+   * 调 `.status()` 当场 TypeError。平铺还顺带给了想要的降级：没装演练场的进程
+   * （云端那一档）调到这几个名字，代理自己回 `not_implemented` + 一句人话。
+   *
+   * 这里**没有「发信」这个动作**，是有意的：演练里的发信走的是与真实**逐字相同**
+   * 的那条路（起草 → 卡 → 人批 → 出站）。演练与真实的分岔只在出站那一跳，
+   * 由服务端的硬闸做。给演练开一条自己的发信口，等于测的不是真链路。
+   */
+  sandboxStatus?(actor: KolActor): MaybePromise<KolSandboxStatusView>
+  sandboxStart?(
+    actor: KolActor,
+    input: { channel: KolChannel },
+  ): MaybePromise<KolSandboxStatusView>
+  sandboxAdvance?(actor: KolActor, input: { days: number }): MaybePromise<KolSandboxAdvanceView>
+  sandboxClear?(actor: KolActor): MaybePromise<KolSandboxStatusView>
+}
+
+export interface KolSandboxStatusView {
+  on: boolean
+  /** 演练世界现在几点（真时钟不动，这是被「跳到 N 天后」推出来的那个）。 */
+  now: string
+  creators: number
+  collaborations: number
+  sent: number
+  replies: number
+  pending: number
+  /** 顶上那条状态带的字。界面照它显示，**不自己拼一句**。 */
+  banner: string
+}
+
+export interface KolSandboxAdvanceView extends KolSandboxStatusView {
+  advanced_days: number
+  received: {
+    creator_id: string
+    display_name: string
+    collaboration_id?: string
+    subject: string
+    body: string
+    at: string
+    bounce_reason?: string
+  }[]
 }
 
 function portOf(deps: GatewayDeps): KolPort {
@@ -501,6 +546,33 @@ function portOf(deps: GatewayDeps): KolPort {
     )
   return p
 }
+
+/**
+ * 取演练场上的一个动作。
+ *
+ * 没装演练场（`sandboxStatus` 这几个名字在端口上是 `undefined`）就回一句人话——
+ * 不回 500，也不假装开了一个空演练场。
+ */
+function sandboxOf<K extends 'sandboxStatus' | 'sandboxStart' | 'sandboxAdvance' | 'sandboxClear'>(
+  deps: GatewayDeps,
+  action: K,
+): NonNullable<KolPort[K]> {
+  const port = portOf(deps)
+  const fn = port[action]
+  if (typeof fn !== 'function')
+    throw new ApiError(
+      'not_implemented',
+      '这个进程没有演练场。演练要本机跑的服务进程才有（它需要一个内存邮箱与一把本机加密钥匙）。',
+    )
+  return fn.bind(port) as NonNullable<KolPort[K]>
+}
+
+const SandboxStartBody = z.object({
+  channel: z.enum(['youtube', 'facebook', 'instagram', 'tiktok', 'x']),
+})
+
+/** 跳几天。上限 90——再往后没意义，跟进序列最长那一档是 7 天。 */
+const SandboxAdvanceBody = z.object({ days: z.number().int().min(1).max(90) })
 
 function actorOf(c: Parameters<typeof principalOf>[0]): KolActor {
   const p = principalOf(c)
@@ -1149,6 +1221,71 @@ export function kolRoutes(): Route[] {
         returns: '{ id, rejected }',
       },
       async (c, deps) => ok(c, await portOf(deps).rejectMerge(actorOf(c), param(c, 'id'))),
+    ),
+
+    /* ── WP117 交付 4：演练场 ─────────────────────────────────────────── */
+
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/sandbox',
+        operationId: 'getKolSandbox',
+        summary: '演练场的状态：开没开、演练世界几点了、发了几封、收了几封、还有几封在路上',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_COLLAB,
+        returns: 'KolSandboxStatusView',
+      },
+      async (c, deps) => ok(c, await sandboxOf(deps, 'sandboxStatus')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/sandbox',
+        operationId: 'startKolSandbox',
+        summary:
+          '开一个演练活动：铺一批合成红人（六种性格）+ 一条隔离的活动。已经开着就原样回（幂等）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        body: SandboxStartBody,
+        returns: 'KolSandboxStatusView',
+      },
+      async (c, deps) =>
+        ok(c, await sandboxOf(deps, 'sandboxStart')(actorOf(c), await body(c, SandboxStartBody)), 201),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/sandbox/advance',
+        operationId: 'advanceKolSandbox',
+        summary:
+          '跳到 N 天后：推演练世界自己的钟（真时钟一秒不动），把到点的回信收进来并推进合作阶段',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        body: SandboxAdvanceBody,
+        returns: 'KolSandboxAdvanceView',
+      },
+      async (c, deps) =>
+        ok(c, await sandboxOf(deps, 'sandboxAdvance')(actorOf(c), await body(c, SandboxAdvanceBody))),
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/kol/sandbox',
+        operationId: 'clearKolSandbox',
+        summary: '一键清空演练数据：删掉所有带 sandbox 标记的记录，真红人与真合作一条不碰',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        returns: 'KolSandboxStatusView',
+      },
+      async (c, deps) => ok(c, await sandboxOf(deps, 'sandboxClear')(actorOf(c))),
     ),
   ]
 }

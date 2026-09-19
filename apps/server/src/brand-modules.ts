@@ -36,6 +36,7 @@ import type { CloudAssembly } from './cloud.js'
 import type { ConnectionsAssembly } from './connections.js'
 import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { KolStore } from './kol.js'
+import type { KolSandboxAssembly } from './kol-sandbox.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
 import type { MessagesAssembly } from './messages.js'
@@ -108,6 +109,14 @@ export interface BrandModuleSet {
    * 的那一层。品牌 A 的联系方式明文只有 A 这一份服务取得到。
    */
   kolService: KolServiceAssembly
+  /**
+   * WP117 交付 4：这个品牌的**演练场**。
+   *
+   * 与 `kolService` 分开的理由：演练是一层**在库之上、在真渠道之前**的东西——
+   * 它往库里铺合成数据（带 `sandbox` 标记），并在出站那一跳把演练的信截下来。
+   * 按品牌一份，因为演练数据也是这个品牌库里的行。
+   */
+  kolSandbox: KolSandboxAssembly
   /**
    * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象）。
    *

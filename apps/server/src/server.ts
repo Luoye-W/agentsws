@@ -48,6 +48,7 @@ import type {
   Assignment,
   Clock,
   EventEnvelope,
+  KolChannel,
   Person,
   PersonId,
   SkillTier,
@@ -173,6 +174,7 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
+import { createKolSandbox, kolSandboxIntercept } from './kol-sandbox.js'
 import { createKolService } from './kol-service.js'
 import { createKolToolExecutor } from './kol-tools.js'
 import {
@@ -1050,6 +1052,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     deliverOutbound: async (item, opts) => {
       // WP66：卡片自己写着属于哪个品牌，就从那个品牌的渠道发——**不是**进程装配的那一套
       const brand = await brands?.forWorkspace(item.workspace_id)
+      /*
+       * WP117 交付 4：**演练的硬闸**。
+       *
+       * 这是服务进程里唯一一条"真把东西发出去"的路，所以闸就设在这里——
+       * 在问聊天车道与邮件渠道**之前**。界面上的开关、接口上的参数、
+       * 卡片上的标记都可以被绕过；这一句绕不过去：收件人属于演练红人，
+       * 这封信就投进内存邮箱，下面三行一行都不执行。
+       */
+      const sandboxed = kolSandboxIntercept(brand, item)
+      if (sandboxed !== undefined) return sandboxed
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
       return (
         (await brand?.chat.deliver(item, opts)) ??
@@ -2095,6 +2107,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
 
+    /*
+     * WP117 交付 4：演练场。建在 `kolService` 之后——它往同一个库里铺数据，
+     * 并把演练的出站截下来（硬闸在 `deliverOutbound`，见那一处）。
+     */
+    const kolSandbox = createKolSandbox({
+      store: kol,
+      secrets: brandSecrets,
+      clock,
+      emit: (type, payload) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'kol_sandbox' },
+          correlation: { trace_id: `tr_kolsbx_${clock.now()}` },
+          payload,
+        })
+      },
+    })
+
     return {
       workspace_id: ws,
       ...(dir === undefined ? {} : { dir }),
@@ -2105,6 +2137,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       records,
       kol,
       kolService,
+      kolSandbox,
       pr,
       prService,
       social,
@@ -3547,10 +3580,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
 
-  const kolPortOf = brandKolPort(
-    brandModules,
-    async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
-  )
+  const kolPortOf = brandKolPort(brandModules, async (ws) => {
+    const brand = await brandModules.forWorkspace(ws)
+    /*
+     * WP117 交付 4：演练场挂在红人端口的 `sandbox` 那一格上。
+     *
+     * 挂在这里而不是让 `kolService` 自己带：演练是**库之上的一层**
+     * （它往库里铺合成数据、在出站那一跳截信），`kolService` 不该认识它——
+     * 起草开发信那一跳对「这个人是不是演练的」应该一无所知，那正是
+     * 「演练走的是与真实逐字相同的那条路」的意思。
+     */
+    const sandbox = brand.kolSandbox
+    return {
+      ...brand.kolService.port,
+      sandboxStatus: () => sandbox.status(),
+      sandboxStart: (_actor: unknown, input: { channel: KolChannel }) => sandbox.start(input),
+      sandboxAdvance: (_actor: unknown, input: { days: number }) => sandbox.advance(input),
+      sandboxClear: () => sandbox.clear(),
+    }
+  })
   /** WP73（56 §6）：社媒库 `/v1/social/*`（一个品牌一张库、一段加密库）。 */
   const socialPortOf = brandSocialPort(
     brandModules,
