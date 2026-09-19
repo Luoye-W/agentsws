@@ -72,18 +72,18 @@ export {
   outboxEventKey,
 } from './outbox.js'
 export {
-  handleWalletAdmin,
-  remoteWalletAdminPort,
-  WALLET_ADMIN_INTERNAL,
-  type WalletNamespaceLike,
-} from './wallet-admin.js'
-export {
   chargeOnce,
   handleSubscriptionWallet,
   remoteSubscriptionWallet,
   SUBSCRIPTION_WALLET_INTERNAL,
   type SubscriptionChargeInput,
 } from './subscription-wallet.js'
+export {
+  handleWalletAdmin,
+  remoteWalletAdminPort,
+  WALLET_ADMIN_INTERNAL,
+  type WalletNamespaceLike,
+} from './wallet-admin.js'
 export {
   DEFAULT_WORKER_UPSTREAM,
   RESERVATION_MAX_AGE_MS,

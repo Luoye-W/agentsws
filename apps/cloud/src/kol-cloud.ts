@@ -15,8 +15,9 @@
  * 自建形态一台机器通常只服务几个组织（docs/61），所以"一个组织一个库文件"在
  * 这里是划算的；真到了几千个组织那一天，那台机器早就该用 Workers 形态了。
  */
-import { createRequire } from 'node:module'
+
 import { mkdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type { Clock, CloudTokenVerifier } from '@agentsws/contracts'
 import {
@@ -75,10 +76,7 @@ function safeName(org_id: string): string {
 }
 
 /** 把红人营销增值服务挂到 `server.app` 上。 */
-export function mountKolCloud(
-  server: CloudServer,
-  options: MountKolCloudOptions,
-): MountedKolCloud {
+export function mountKolCloud(server: CloudServer, options: MountKolCloudOptions): MountedKolCloud {
   const now = (): string => (options.clock ?? { now: () => new Date().toISOString() }).now()
   const dir =
     options.dataDir === undefined || options.dataDir.trim() === ''

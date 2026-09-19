@@ -155,8 +155,7 @@ export class KolTenantCore {
        * 把归属补上。工作区填 `system`：赠送那几期是 0 积分，不会产生计量事件；
        * 真有要扣钱的那一天，用户自己来过一次，这一格早就被真的工作区号盖掉了。
        */
-      if (this.store.owner() === undefined)
-        this.store.setOwner({ org_id, workspace_id: 'system' })
+      if (this.store.owner() === undefined) this.store.setOwner({ org_id, workspace_id: 'system' })
       return Response.json(this.service.grantMonths(org_id, months))
     }
     return undefined

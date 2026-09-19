@@ -74,9 +74,9 @@ import { doSyncDb } from './do-sql.js'
 import type { WorkerEnv } from './env.js'
 import { INTERNAL_HEADERS, principalFrom } from './internal.js'
 import { handleKolWallet } from './kol-wallet.js'
-import { handleSubscriptionWallet } from './subscription-wallet.js'
 import { copyEventsTo, copyLotsTo, LEDGER_SINGLETON } from './ledger-do.js'
 import { createOutbox, type Outbox, outboxEventKey } from './outbox.js'
+import { handleSubscriptionWallet } from './subscription-wallet.js'
 import { handleWalletAdmin } from './wallet-admin.js'
 
 /** 预扣多久扫一次（与 Compose 形态的 `SWEEP_INTERVAL_MS` 同一个数）。 */

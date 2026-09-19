@@ -54,7 +54,10 @@ export async function handleSubscriptionWallet(
  * `insufficient_credits` 的地方；结算那一步才会记下计量事件，于是这 30 积分
  * 会和别的花费一样出现在用量明细里——用户看得见自己订阅的钱花在哪。
  */
-export function chargeOnce(wallet: Wallet, input: SubscriptionChargeInput): SubscriptionChargeOutcome {
+export function chargeOnce(
+  wallet: Wallet,
+  input: SubscriptionChargeInput,
+): SubscriptionChargeOutcome {
   try {
     const reservation = wallet.reserve({
       org_id: input.org_id,

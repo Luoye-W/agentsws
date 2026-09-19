@@ -8,6 +8,7 @@
  * 成员那把只看自己工作区那一份——同一条路由，按 scope 裁，不另开一条"成员版"。
  */
 import type { UsageGroup } from '@agentsws/contracts'
+import { TOPUP_TIERS_FILE, topupTierById } from '@agentsws/metering'
 import type { Context } from 'hono'
 import {
   createCheckoutSession,
@@ -87,15 +88,23 @@ export function walletRoutes(deps: EntryDeps): EntryRoute[] {
       handler: async () => ok(deps.pricing),
     },
     {
+      method: 'get',
+      path: '/v1/wallet/topup/tiers',
+      auth: 'bearer',
+      scope: 'wallet:read',
+      summary: '充值四档（usd / credits）。价目数据化：改档位是出一个版本，不是改代码',
+      handler: async () => ok(TOPUP_TIERS_FILE),
+    },
+    {
       method: 'post',
       path: '/v1/wallet/topup',
       auth: 'bearer',
       scope: 'wallet:topup',
-      summary: '建一笔充值单（这一版只做 Stripe；微信 / 支付宝回一句人话）',
+      summary: '建一笔充值单（按四档之一；这一版只做 Stripe，微信 / 支付宝回一句人话）',
       handler: async (c: Context<EntryEnv>) => {
         const principal = c.get('principal')
         const raw = await c.req.text()
-        let body: { provider?: unknown; credits?: unknown } = {}
+        let body: { provider?: unknown; credits?: unknown; tier_id?: unknown } = {}
         if (raw.trim() !== '') {
           try {
             body = JSON.parse(raw) as typeof body
@@ -104,19 +113,48 @@ export function walletRoutes(deps: EntryDeps): EntryRoute[] {
           }
         }
         const provider = typeof body.provider === 'string' ? body.provider : 'stripe'
-        const credits = Number(body.credits)
-        if (!Number.isFinite(credits) || credits <= 0) {
-          throw new EntryError('invalid_input', 'credits 必须是大于 0 的数（1 积分 = ¥1）')
-        }
         if (provider === 'wechat' || provider === 'alipay') notImplementedProvider(provider)
         if (provider !== 'stripe') {
           throw new EntryError('invalid_input', `不认识的支付渠道：${provider}`)
+        }
+        /*
+         * WP118：**按档充**。档位 id 不给就只剩一条老路——任意金额，而那一条
+         * 现在只有运营后台走得通（`wallet:admin`）。
+         *
+         * 为什么把任意金额收掉：它要用户在付款之前先做一道除法（"我要多少积分？
+         * 那是多少钱？"），而四张卡他扫一眼就选完。留给 admin 是因为补偿、
+         * 试用、人工充值这些场合本来就不该受档位限制。
+         */
+        const tierId = typeof body.tier_id === 'string' ? body.tier_id.trim() : ''
+        let credits: number
+        let usd: number | undefined
+        let tier_id: string | undefined
+        if (tierId !== '') {
+          const tier = topupTierById(tierId)
+          // 认不出就回一句人话，**绝不退到某个默认档**：猜错的后果是用户按
+          // US$20 那张卡付了钱，到账却是别的数
+          if (tier === undefined)
+            throw new EntryError('invalid_input', `没有这一档充值：${tierId}`)
+          credits = tier.credits
+          usd = tier.usd
+          tier_id = tier.id
+        } else {
+          if (!principal.scopes.includes(WALLET_ADMIN_SCOPE))
+            throw new EntryError(
+              'invalid_input',
+              '请从四个充值档位里挑一个（tier_id）。任意金额充值已经收掉了。',
+            )
+          credits = Number(body.credits)
+          if (!Number.isFinite(credits) || credits <= 0)
+            throw new EntryError('invalid_input', 'credits 必须是大于 0 的数（1 积分 = ¥1）')
         }
         const session = await createCheckoutSession({
           config: deps.stripe ?? {},
           fetch: fetchLike,
           org_id: principal.org_id,
           credits,
+          ...(usd === undefined ? {} : { usd }),
+          ...(tier_id === undefined ? {} : { tier_id }),
         })
         return ok(
           topupOrderOf({
@@ -125,6 +163,8 @@ export function walletRoutes(deps: EntryDeps): EntryRoute[] {
             credits,
             url: session.url,
             at: nowOf(deps),
+            ...(usd === undefined ? {} : { usd }),
+            ...(tier_id === undefined ? {} : { tier_id }),
           }),
           201,
         )

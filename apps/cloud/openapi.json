@@ -698,7 +698,8 @@
                         "wallet:topup",
                         "wallet:admin",
                         "standby",
-                        "data"
+                        "data",
+                        "kol"
                       ]
                     }
                   },
@@ -988,7 +989,8 @@
                         "wallet:topup",
                         "wallet:admin",
                         "standby",
-                        "data"
+                        "data",
+                        "kol"
                       ]
                     }
                   },
