@@ -16,9 +16,17 @@
  */
 
 import type { ColumnDef } from '@tanstack/react-table'
-import { Database, Mail, TrendingUp, Trash2, Video } from 'lucide-react'
+import { Database, Mail, Trash2, TrendingUp, Video } from 'lucide-react'
 import { useState } from 'react'
-import { Button, inputClass, Kpi, Note, SectionTitle, StatusPill, WsCard } from '@/components/design'
+import {
+  Button,
+  inputClass,
+  Kpi,
+  Note,
+  SectionTitle,
+  StatusPill,
+  WsCard,
+} from '@/components/design'
 import { PageHeader } from '@/components/layout'
 import { ServerTable, useTableState } from '@/components/table'
 import { api, qs } from '@/lib/api'
@@ -162,10 +170,7 @@ export function KolPage(): React.ReactNode {
 
   return (
     <>
-      <PageHeader
-        title={t('nav.kol')}
-        note={<Note tone="neutral">{t('kol.what')}</Note>}
-      />
+      <PageHeader title={t('nav.kol')} note={<Note tone="neutral">{t('kol.what')}</Note>} />
 
       {stats.error !== undefined && <Note tone="bad">{stats.error.message}</Note>}
 
@@ -386,9 +391,7 @@ function RemoveDialog({
             setReason(e.target.value)
           }}
         />
-        {error !== undefined && (
-          <p className="mt-2 text-[12px] text-ws-bad">{error}</p>
-        )}
+        {error !== undefined && <p className="mt-2 text-[12px] text-ws-bad">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <Button onClick={onClose}>{t('action.cancel')}</Button>
           <Button
