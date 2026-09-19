@@ -25,14 +25,7 @@ import {
 } from '@agentsws/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { INTERNAL_HEADERS, route } from '../src/index.js'
-import {
-  type FakeCloud,
-  fakeCloud,
-  req,
-  SIGNUP_BONUS,
-  tokenFromMail,
-  zeroOut,
-} from './helpers.js'
+import { type FakeCloud, fakeCloud, req, SIGNUP_BONUS, tokenFromMail, zeroOut } from './helpers.js'
 
 const ADMIN_TOKEN = 'test-admin-token-at-least-32-bytes-long-0123456789'
 const CALLBACK = 'http://127.0.0.1:3000/v1/cloud/account/callback'

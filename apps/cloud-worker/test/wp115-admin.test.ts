@@ -15,9 +15,9 @@
  * 6. 聚合口径与 Compose 形态一致（同一段 SQL，只是库换了）。
  */
 
+import { isSignupBonusRef } from '@agentsws/metering'
 import { describe, expect, it } from 'vitest'
 import { LEDGER_INTERNAL, route } from '../src/index.js'
-import { isSignupBonusRef } from '@agentsws/metering'
 import { type FakeCloud, fakeCloud, req, SIGNUP_BONUS, tokenFromMail } from './helpers.js'
 
 const ADMIN_TOKEN = 'test-admin-token-at-least-32-bytes-long-0123456789'
