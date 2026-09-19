@@ -90,6 +90,14 @@ export {
 } from './sql-store.js'
 export type { SqliteWalletStore, SqliteWalletStoreOptions } from './sqlite-store.js'
 export { createSqliteWalletStore } from './sqlite-store.js'
+export type { TopupTiersFile } from './topup-tiers.js'
+export {
+  CREDITS_PER_USD,
+  TOPUP_TIERS_FILE,
+  topupTierById,
+  topupTiers,
+  topupTiersConsistent,
+} from './topup-tiers.js'
 export type {
   LedgerWriter,
   SqlWalletAdminPortOptions,
