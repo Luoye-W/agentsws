@@ -131,6 +131,23 @@ export interface MessagesOptions {
   ): Promise<{ source_id: string; title: string; text: string }[]>
   /** 语气与签名（个人层技能 / 记忆，54 的六层）。 */
   voice?(): string | undefined
+  /**
+   * WP125（72 §P0-1）：**分拣判成 `support` 的来信交给客服判断层**。
+   *
+   * 63 定的顺序是「消息 → 分拣 → 归到 kefuagents」；WP125 在它后面接上一步：
+   * 分出来的客服信下一步必须进 `support-core` 的那套判断（意图 → 边界 → 起草 →
+   * 升级 → 三道自主门），而不是直接落一条事项就完事。
+   *
+   * 这里只**递一次信号**：真正的判定在 `support-judgment.ts`，落卡与起 Run 在
+   * `channels.ts`。不接 = 老行为（信照常归档、照常挂事项，只是没有门）。
+   */
+  onSupportMail?(input: {
+    thread_id: string
+    matter_id: string
+    text: string
+    subject?: string
+    from?: string
+  }): void | Promise<void>
 }
 
 /**
@@ -324,6 +341,16 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           position_id: position.assignment_id,
         })
       await store.update(record.id, { linked: { type: 'matter', id: matter.id } })
+      // WP125（72 §P0-1）：分拣判成 `support` 的那一封，交给客服判断层
+      if (triage.route === 'support') {
+        await options.onSupportMail?.({
+          thread_id: record.thread_id,
+          matter_id: matter.id,
+          text: record.text,
+          subject: record.subject,
+          from: record.from.email,
+        })
+      }
       return true
     },
     on_error: (e) => logQuiet('message_sync_failed', '', e),

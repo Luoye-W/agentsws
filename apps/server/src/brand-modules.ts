@@ -48,6 +48,7 @@ import type { SiteServiceAssembly, SiteStore } from './site.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
+import type { SupportJudgment } from './support-judgment.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 品牌落盘目录在 `dbDir` 下的那一级。 */
@@ -198,6 +199,14 @@ export interface BrandModuleSet {
    */
   messages: MessagesAssembly
   chat: ChatLane
+  /**
+   * WP125（72 §1.I / §P0-1）：这个品牌的**客服判断层**。
+   *
+   * 邮件线与聊天线共用它：入站那一半挂在渠道的 `judgeInbound` 上，出站那一半
+   * 挂在运行时的 `judgeDraft` 上，SLA 巡检由共享调度器每一拍把每个品牌各跑一轮
+   * （与 `chat.sweepAssistTimeouts` 同一个套路）。
+   */
+  supportJudgment: SupportJudgment
   chatWidget: ChatWidgetAssembly
   /**
    * 这个品牌**自己那一份**模型面与能力开关。
