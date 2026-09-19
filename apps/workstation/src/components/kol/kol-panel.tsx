@@ -568,6 +568,45 @@ function CreatorDetail({
 
 /* ── 合作：阶段推进 ───────────────────────────────────────────────────── */
 
+/**
+ * 66 复测 #18：**每一行要看得出是谁。**
+ *
+ * 以前这张清单上一行只有阶段（「已找到 ›」「已建联 ›」），24 行长得一模一样——
+ * 人点开之前根本不知道自己在点谁。现在一行有六样：**红人名 · @账号 · 渠道 ·
+ * 阶段 · 最近一次往来 · 预算**（有的话），外加一排筛：按阶段、按名字搜。
+ *
+ * 两条小纪律：
+ *
+ * 1. **筛出 0 条与本来就没有合作是两句话**。筛没筛过界面自己知道，
+ *    说"这个条件下没有"比说"还没有在谈的合作"准确得多（36 §3 的同一条）。
+ * 2. **"最近一次往来"没有就说没有**，不拿建库时间凑一个——那是"这条合作
+ *    还什么都没发生过"，不是"很久没动了"。
+ */
+const STAGE_FILTERS = [
+  'all',
+  'sourced',
+  'contacted',
+  'replied',
+  'negotiating',
+  'agreed',
+  'delivering',
+  'delivered',
+  'declined',
+] as const
+
+/** 一个时刻 → 「3 天前」这种话（列表上那一列要的是"多久没动了"，不是一串数字）。 */
+function sinceText(at: string | undefined, now: number): string {
+  if (at === undefined) return '还没有往来'
+  const ms = now - Date.parse(at)
+  if (!Number.isFinite(ms)) return '还没有往来'
+  if (ms < 0) return at.slice(0, 10)
+  const days = Math.floor(ms / 86_400_000)
+  if (days >= 1) return `${days} 天前`
+  const hours = Math.floor(ms / 3_600_000)
+  if (hours >= 1) return `${hours} 小时前`
+  return '刚刚'
+}
+
 function Collaborations({
   assignment,
   channel,
@@ -580,10 +619,17 @@ function Collaborations({
   const { t } = useApp()
   const client = useQueryClient()
   const [error, setError] = useState<string | undefined>(undefined)
+  const [stage, setStage] = useState<(typeof STAGE_FILTERS)[number]>('all')
+  const [q, setQ] = useState('')
 
   const list = useQuery({
     queryKey: ['kol-collaborations', assignment, channel],
     queryFn: () => getKolCollaborations({ channel }, assignment),
+  })
+  // 名字与 @账号在红人库那一份里（合作记录上只有 creator_id）
+  const library = useQuery({
+    queryKey: ['kol-creators', assignment, channel],
+    queryFn: () => getKolCreators({ channel }, assignment),
   })
 
   const advance = useMutation({
@@ -600,16 +646,61 @@ function Collaborations({
     },
   })
 
-  const rows = (list.data?.rows ?? []).filter((c) => c.stage !== 'closed')
+  const who = new Map((library.data?.rows ?? []).map((r) => [r.creator_id, r]))
+  const open = (list.data?.rows ?? []).filter((c) => c.stage !== 'closed')
+  const needle = q.trim().toLowerCase()
+  const rows = open
+    .filter((c) => stage === 'all' || c.stage === stage)
+    .filter((c) => {
+      if (needle === '') return true
+      const r = who.get(c.creator_id)
+      return `${r?.display_name ?? c.creator_id} ${r?.handle ?? ''}`.toLowerCase().includes(needle)
+    })
+    // 最近有动静的排前面；一次都没动过的沉底（它们是该被催的那一批，但不是最急的）
+    .sort((a, b) => Date.parse(b.last_activity_at ?? '') - Date.parse(a.last_activity_at ?? '') || 0)
+  const now = Date.now()
+  const filtered = stage !== 'all' || needle !== ''
+
   return (
     <Card data-testid="kol-collaborations">
       <CardHeader>
         <CardTitle className="flex items-center gap-1.5 text-sm">
           <Users className="size-4" aria-hidden />
           {t('kol.collab.title')}
+          <span className="font-normal text-xs text-muted-foreground" data-testid="kol-collab-count">
+            {filtered ? `${rows.length} / ${open.length}` : String(open.length)}
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
+        {/* 筛：阶段一排胶囊 + 一个搜名字的框（24 行时没有它就没法用） */}
+        <div className="flex flex-wrap items-center gap-1" data-testid="kol-collab-filters">
+          {STAGE_FILTERS.map((s) => (
+            <Button
+              key={s}
+              size="xs"
+              variant={s === stage ? 'secondary' : 'ghost'}
+              aria-pressed={s === stage}
+              data-testid="kol-collab-filter"
+              data-stage={s}
+              onClick={() => {
+                setStage(s)
+              }}
+            >
+              {s === 'all' ? '全部' : t(`kol.stage.${s}`)}
+            </Button>
+          ))}
+          <Input
+            className="h-7 w-40"
+            value={q}
+            placeholder="搜红人名字 / @账号"
+            data-testid="kol-collab-search"
+            onChange={(e) => {
+              setQ(e.target.value)
+            }}
+          />
+        </div>
+
         {list.isPending ? <Skeleton className="h-16 w-full" /> : null}
         {/* 同上：取不回来不等于"没有在谈的合作" */}
         {list.error !== null ? (
@@ -619,47 +710,78 @@ function Collaborations({
           />
         ) : null}
         {list.error === null && rows.length === 0 && !list.isPending ? (
-          <p className="text-muted-foreground">{t('kol.collab.empty')}</p>
+          <p className="text-muted-foreground" data-testid="kol-collab-empty">
+            {filtered ? '这个条件下没有合作。换个阶段或者清掉搜索词。' : t('kol.collab.empty')}
+          </p>
         ) : null}
-        {rows.map((c) => (
-          <div
-            key={c.id}
-            className="flex flex-wrap items-center justify-between gap-2 border-b pb-2"
-            data-testid="kol-collab-row"
-            data-stage={c.stage}
-          >
-            <button
-              type="button"
-              className="rounded px-1 py-0.5 text-left text-xs hover:bg-muted"
-              data-testid="kol-collab-open"
-              data-collab={c.id}
-              onClick={() => {
-                onOpen(c.id)
-              }}
+        {rows.map((c) => {
+          const r = who.get(c.creator_id)
+          return (
+            <div
+              key={c.id}
+              className="flex flex-wrap items-center justify-between gap-2 border-b pb-2"
+              data-testid="kol-collab-row"
+              data-stage={c.stage}
+              data-creator={c.creator_id}
             >
-              {t(`kol.stage.${c.stage}`)}
-              {c.budget === undefined ? '' : ` · ${c.budget} ${c.currency}`}
-              <ChevronRight className="ml-1 inline size-3" aria-hidden />
-            </button>
-            <span className="flex gap-1">
-              {(NEXT_STAGES[c.stage] ?? []).map((next) => (
-                <Button
-                  key={next}
-                  size="xs"
-                  variant="outline"
-                  data-testid="kol-stage-next"
-                  data-next={next}
-                  disabled={advance.isPending}
-                  onClick={() => {
-                    advance.mutate({ id: c.id, stage: next })
-                  }}
-                >
-                  {t(`kol.stage.${next}`)}
-                </Button>
-              ))}
-            </span>
-          </div>
-        ))}
+              <button
+                type="button"
+                className="min-w-0 flex-1 rounded px-1 py-0.5 text-left hover:bg-muted"
+                data-testid="kol-collab-open"
+                data-collab={c.id}
+                onClick={() => {
+                  onOpen(c.id)
+                }}
+              >
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="truncate font-medium text-sm" data-testid="kol-collab-name">
+                    {r?.display_name ?? c.creator_id}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    @{r?.handle ?? '—'} · {t(`kol.channel.${c.channel}`)}
+                  </span>
+                  {c.sandbox === true ? (
+                    <span
+                      className="rounded bg-[var(--ws-warn-bg)] px-1 text-[10px] text-[var(--ws-ink)]"
+                      data-testid="kol-collab-sandbox"
+                    >
+                      演练
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+                  <span data-testid="kol-collab-stage">{t(`kol.stage.${c.stage}`)}</span>
+                  <span data-testid="kol-collab-since">
+                    {sinceText(c.last_activity_at, now)}
+                  </span>
+                  {c.budget === undefined ? null : (
+                    <span data-testid="kol-collab-budget">
+                      {c.budget} {c.currency}
+                    </span>
+                  )}
+                  <ChevronRight className="inline size-3" aria-hidden />
+                </div>
+              </button>
+              <span className="flex gap-1">
+                {(NEXT_STAGES[c.stage] ?? []).map((next) => (
+                  <Button
+                    key={next}
+                    size="xs"
+                    variant="outline"
+                    data-testid="kol-stage-next"
+                    data-next={next}
+                    disabled={advance.isPending}
+                    onClick={() => {
+                      advance.mutate({ id: c.id, stage: next })
+                    }}
+                  >
+                    {t(`kol.stage.${next}`)}
+                  </Button>
+                ))}
+              </span>
+            </div>
+          )
+        })}
         {error === undefined ? null : (
           <p className="text-xs text-destructive" data-testid="kol-stage-error">
             {error}

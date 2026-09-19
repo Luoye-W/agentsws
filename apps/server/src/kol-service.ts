@@ -572,6 +572,19 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     const run_id = `run_kol_${nextId('o')}`
     const target: ObjectRef = { type: 'creator_contact', id: contact.id }
     const { mandate, level } = actionOf(input.actor.assignment_id, OUTREACH_ACTION)
+    /*
+     * WP117b（66 复测 #19）：**演练里的开发信一律出卡等人批。**
+     *
+     * 真实那一侧照职责模板走（`stage_outreach` initial L2 → 低风险 → 自动批），
+     * 那是 48 §5.1 定的，不动它。可演练的整个目的就是**让人看清这条链**：
+     * 起草 → 一张 outbound 排版的卡 → 人点「批」→ 信真的投出去（进演练收件箱）
+     * → 对面按性格回信。自动批掉的话，人在界面上什么都没看见，
+     * 「已发 1」就只是一个凭空跳出来的数。
+     *
+     * 判据是**这个人是不是演练红人**（`Creator.sandbox`），不是"现在是不是演练模式"
+     * ——用户可以一边演练一边干真活，那边的开发信不该因此多一道手续。
+     */
+    const sandboxDrill = input.creator.sandbox === true
     const outcome = await ledger.stage({
       workspace_id,
       role_id: input.actor.role_id,
@@ -597,7 +610,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       notes: [`给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`],
       created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
       mandate,
-      level,
+      level: sandboxDrill ? 'L1' : level,
       provenance: provenanceOf(run_id, [target, { type: 'creator', id: input.creator.id }]),
       approval: {
         title: `开发信：${input.creator.display_name}（${SEQUENCE_LABEL[draft.step]}）`,
@@ -636,8 +649,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     const collab = store
       .collaborations({ channel: input.channel })
       .find((c) => c.creator_id === input.creator.id && c.stage === 'sourced')
+    // WP117b（66 复测 #18）：合作清单上要显示"最近一次往来"，起草也算一次动静
     if (draft.step === 'first' && collab !== undefined)
-      store.saveCollaboration({ ...collab, stage: 'contacted' })
+      store.saveCollaboration({ ...collab, stage: 'contacted', last_activity_at: clock.now() })
     return {
       step: draft.step,
       subject: draft.subject,
@@ -1054,6 +1068,88 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       }
     },
 
+    /**
+     * WP117b（66 复测 #19）：**议价**——给一条已经存在的合作报一个数。
+     *
+     * 为什么不复用 `createCollaboration`：那一条是"新建一条合作"，给已经在谈的人
+     * 再建一条，库里就有两条指着同一个人的合作，阶段各走各的。议价改的是**这一条**。
+     *
+     * 出的是一张 money 排版的卡（`kol_collaboration` 在 15 §2 的 `HARD_L1` 里，
+     * 报什么数都按回人审）。**批了才算数**：这里一个字都不往库里写，
+     * 预算与阶段推进由施行那一跳做（`kolQuoteApply`）——与开发信同一条路，
+     * 也是 66 断点 #5「接口 200 但界面上什么都没发生」的反面。
+     */
+    async quoteCollaboration(actor, id, input) {
+      const row = store.collaboration(id)
+      if (row === undefined) throw new ApiError('not_found', '库里没有这条合作')
+      const creator = creatorOr404(row.creator_id)
+      const currency = input.currency ?? row.currency
+      const run_id = `run_kol_${nextId('q')}`
+      const target: ObjectRef = { type: 'collaboration', id: row.id }
+      const { mandate, level } = actionOf(actor.assignment_id, COLLAB_ACTION)
+      const outcome = await ledger.stage({
+        workspace_id,
+        role_id: actor.role_id,
+        assignment_id: actor.assignment_id,
+        run_id,
+        change_set_id: `cs_${run_id}`,
+        kind: 'kol_collaboration',
+        target,
+        before: { budget: row.budget ?? null, stage: row.stage, currency: row.currency },
+        after: {
+          collaboration_id: row.id,
+          creator_id: creator.id,
+          creator_name: creator.display_name,
+          channel: row.channel,
+          budget: input.budget,
+          currency,
+          stage: 'negotiating',
+        },
+        money: {
+          amount: input.budget,
+          currency,
+          amount_base: input.budget,
+          base_currency: currency,
+          fx_rate: 1,
+          fx_at: clock.now(),
+        },
+        notes: [
+          `给 ${creator.display_name} 报 ${input.budget} ${currency}${
+            input.note === undefined ? '' : `：${input.note}`
+          }`,
+        ],
+        created_by: { kind: 'person', id: actor.person_id },
+        mandate,
+        level,
+        provenance: provenanceOf(run_id, [target, { type: 'creator', id: creator.id }]),
+        approval: {
+          title: `议价：${creator.display_name}（${input.budget} ${currency}）`,
+          summary: `这条合作要付 ${input.budget} ${currency}。批了才作数，批完这条合作进「谈条件中」。`,
+          recipients: [{ person: actor.person_id, via: 'owner' }],
+          proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+          rule: 'owner',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) return { staged: false, message: outcome.message } satisfies KolStagedView
+      emit('kol.collaboration_quoted', actor.person_id, {
+        collaboration_id: row.id,
+        creator_id: creator.id,
+        budget: input.budget,
+        currency,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        auto_approved: outcome.approval.automation.auto_approved,
+      })
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        auto_approved: outcome.approval.automation.auto_approved,
+      }
+    },
+
     advanceCollaboration(actor, id, input) {
       const row = store.collaboration(id)
       if (row === undefined) throw new ApiError('not_found', '库里没有这条合作')
@@ -1070,6 +1166,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         stage,
         // 谈成那一刻记下来：归因与预算都要知道"从哪天起这笔钱算数"
         ...(stage === 'agreed' && row.agreed_at === undefined ? { agreed_at: clock.now() } : {}),
+        // WP117b（66 复测 #18）：推一步阶段也是一次动静，清单上那一列要跟着走
+        last_activity_at: clock.now(),
       }
       store.saveCollaboration(next)
       emit('kol.collaboration_stage_changed', actor.person_id, {
@@ -1093,8 +1191,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     },
 
     createDeliverable(actor, input) {
-      if (store.collaboration(input.collaboration_id) === undefined)
+      const owner = store.collaboration(input.collaboration_id)
+      if (owner === undefined)
         throw new ApiError('not_found', '库里没有这条合作，交付物挂不上去')
+      // WP117b（66 复测 #18）：登记一条交付物也是一次动静
+      store.saveCollaboration({ ...owner, last_activity_at: clock.now() })
       const row: Deliverable = {
         id: nextId('dlv'),
         collaboration_id: input.collaboration_id,
@@ -1183,6 +1284,22 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
 
     trackedLinks(_actor, filter) {
       return { rows: store.links(filter.collaboration_id) }
+    },
+
+    /**
+     * WP117b（66 复测 #19）：这条合作来往过什么。
+     *
+     * 时间正序（库里那一层已经排好），**正文原样端出去**——合作线程页上
+     * 要看得见我们发的那一封与他回的那一封，不是一句"有 3 封往来"。
+     */
+    exchanges(_actor, filter) {
+      const rows = store.exchanges({
+        ...(filter.collaboration_id === undefined
+          ? {}
+          : { collaboration_id: filter.collaboration_id }),
+        ...(filter.creator_id === undefined ? {} : { creator_id: filter.creator_id }),
+      })
+      return { rows: filter.limit === undefined ? rows : rows.slice(-filter.limit) }
     },
 
     createTrackedLink(actor, input) {

@@ -33,6 +33,7 @@ import type {
   DeliverableReview,
   Iso8601,
   KolChannel,
+  KolExchange,
   KolUtm,
   MaybePromise,
   PersonId,
@@ -436,6 +437,17 @@ export interface KolPort {
     id: string,
     input: { stage: CollaborationStage },
   ): MaybePromise<Collaboration>
+  /**
+   * WP117b（66 复测 #19）：**议价**——给一条已经在谈的合作报一个数。
+   *
+   * 出的是一张 money 排版的卡（`kol_collaboration` 永远 L1）。**批了才算数**：
+   * 预算与"进谈条件中"由施行那一跳写，这一步一个字都不落库。
+   */
+  quoteCollaboration(
+    actor: KolActor,
+    id: string,
+    input: { budget: number; currency?: string | undefined; note?: string | undefined },
+  ): MaybePromise<KolStagedView>
 
   deliverables(
     actor: KolActor,
@@ -460,6 +472,23 @@ export interface KolPort {
     actor: KolActor,
     filter: { collaboration_id?: string | undefined },
   ): MaybePromise<{ rows: TrackedLink[] }>
+
+  /**
+   * WP117b（66 复测 #19）：一条合作 / 一个人身上的**往来信件**（时间正序）。
+   *
+   * 在它之前，"我们发了什么"只在变更账本里、"他回了什么"只在演练世界的内存里，
+   * 合作线程页上没有任何地方显示得出这条合作来往过什么——于是
+   * 「回信 → 意向分类 → 议价」这条链在界面上是断的。
+   */
+  exchanges(
+    actor: KolActor,
+    filter: {
+      collaboration_id?: string | undefined
+      creator_id?: string | undefined
+      /** 最多几封（取**最近**的几封，线程要的是末尾不是开头）。 */
+      limit?: number | undefined
+    },
+  ): MaybePromise<{ rows: KolExchange[] }>
   createTrackedLink(actor: KolActor, input: KolTrackedLinkInput): MaybePromise<TrackedLink>
 
   importTable(
@@ -659,6 +688,13 @@ const CollaborationBody = z.object({
 })
 
 const StageBody = z.object({ stage: z.enum(STAGES) })
+
+/** WP117b：议价。金额必须是正数——"报 0 块"不是一个报价，是一个填错的框。 */
+const QuoteBody = z.object({
+  budget: z.number().positive().max(10_000_000),
+  currency: z.string().min(1).max(8).optional(),
+  note: z.string().max(500).optional(),
+})
 
 const DeliverableBody = z.object({
   collaboration_id: z.string().min(1),
@@ -1012,6 +1048,28 @@ export function kolRoutes(): Route[] {
           ),
         ),
     ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/collaborations/:id/quote',
+        operationId: 'quoteKolCollaboration',
+        summary:
+          'WP117b（66 复测 #19）：给一条已经在谈的合作报一个数 → 一张 money 排版的卡（永远 L1）。批了才落预算、才进「谈条件中」',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        params: [{ name: 'id', in: 'path', required: true, description: 'collaboration_id' }],
+        body: QuoteBody,
+        returns: 'KolStagedView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await portOf(deps).quoteCollaboration(actorOf(c), param(c, 'id'), await body(c, QuoteBody)),
+          201,
+        ),
+    ),
 
     route(
       {
@@ -1096,6 +1154,46 @@ export function kolRoutes(): Route[] {
         ),
     ),
 
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/exchanges',
+        operationId: 'listKolExchanges',
+        summary:
+          'WP117b（66 复测 #19）：一条合作上的往来信件（我们发的 + 他回的），时间正序；入站那几封带意向分类',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        // 正文里有对方说的话，与联系方式同一档（confidential）
+        authz: READ_CONTACT,
+        params: [
+          { name: 'collaboration_id', in: 'query', description: '只看这条合作的' },
+          { name: 'creator_id', in: 'query', description: '只看这个人的' },
+          {
+            name: 'limit',
+            in: 'query',
+            description: '最多几封（取最近的几封）',
+            schema: { type: 'integer' },
+          },
+        ],
+        returns: '{ rows: KolExchange[] }',
+      },
+      async (c, deps) => {
+        const collaboration_id = c.req.query('collaboration_id')
+        const creator_id = c.req.query('creator_id')
+        const limit = intParam(c, 'limit')
+        return ok(
+          c,
+          await portOf(deps).exchanges(actorOf(c), {
+            ...(collaboration_id === undefined || collaboration_id === ''
+              ? {}
+              : { collaboration_id }),
+            ...(creator_id === undefined || creator_id === '' ? {} : { creator_id }),
+            ...(limit === undefined ? {} : { limit }),
+          }),
+        )
+      },
+    ),
     route(
       {
         method: 'get',
