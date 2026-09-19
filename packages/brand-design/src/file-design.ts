@@ -108,26 +108,56 @@ function colorsFromText(text: string): BrandDesignPrintColor[] {
 
 /* ── 字体 ─────────────────────────────────────────────────────────── */
 
-/** 「字体」这个词周围的那一段。中英各认几种说法。 */
+/**
+ * 「字体」这个词后面那一段。
+ *
+ * **冒号是必需的**，不是可选的。没有冒号的话，"Typography and Logo Font Family:
+ * Public Sans" 这种标题行会从 `Typography` 开始吞掉后面一整句，抽出来的
+ * "字体名" 是 `Logo Font Family`——一个手册里根本不存在的东西。
+ *
+ * 捕获用**前瞻**（零宽），所以 `lastIndex` 停在冒号后面：同一行里的第二个
+ * 提示词（`Secondary Typeface: …`）还能被找到。用普通捕获的话第一段会把它
+ * 吃掉，一份手册永远只抽得出一个字体。
+ */
 const FONT_CUE =
-  /(?:字体|字型|Typeface|Font\s*Family|Fonts?|Typography)\s*[:：]?\s*([^。.;；\n]{2,60})/gi
+  /(?:字体|字型|Typeface|Font\s*Family|Fonts?|Typography)\s*[:：]\s*(?=([^。.;；:：\n]{2,60}))/gi
 
-/** 一段话里像字体名的那几个词。 */
+/**
+ * 不是字体名的那些词。
+ *
+ * 这张表的作用是**给连续大写词的串断句**：`Public Sans Secondary Typeface`
+ * 里，`Secondary` 一出现就说明字体名到 `Sans` 为止了。没有这一刀，抽出来的
+ * 会是整串。
+ */
+const NOT_A_FONT_NAME =
+  /^(The|And|For|With|Use|Uses|Do|Don|All|Color|Colour|Colors|Brand|Book|Logo|Usage|Regular|Bold|Light|Medium|Italic|Semi|Primary|Secondary|Tertiary|Neutral|Typeface|Typography|Font|Family|Fonts|Minimum|Width|Height|Clear|Never|Always|Screen|Ink|On|In|At|Of)$/i
+
+/**
+ * 一段话里像字体名的那几个词。
+ *
+ * 做法是**连续大写词成串，遇到上面那张表里的词就断**。抽出来的是串，不是词：
+ * `Space Grotesk` 是一个字体，拆成两个词就都不是了。
+ */
 function fontNamesIn(chunk: string): string[] {
   const out: string[] = []
-  // 「Public Sans Semi-Bold」这种：连续的首字母大写词（允许连字符）
-  for (const m of chunk.matchAll(/\b([A-Z][A-Za-z]+(?:[\s-][A-Z][A-Za-z]+){0,3})\b/g)) {
-    const name = m[1]
-    if (name === undefined) continue
-    if (
-      /^(The|And|For|With|Use|Do|Don|All|Color|Colour|Brand|Logo|Regular|Bold|Light|Medium|Italic|Semi)$/i.test(
-        name,
-      )
-    )
-      continue
-    if (name.length < 3) continue
-    if (!out.includes(name)) out.push(name)
+  let run: string[] = []
+  const close = (): void => {
+    if (run.length > 0) {
+      const name = run.join(' ')
+      if (name.length >= 3 && !out.includes(name)) out.push(name)
+      run = []
+    }
   }
+  for (const token of chunk.split(/[\s,]+/)) {
+    const word = /^[A-Z][A-Za-z-]*$/.exec(token)?.[0]
+    if (word === undefined || NOT_A_FONT_NAME.test(word)) {
+      close()
+      continue
+    }
+    run.push(word)
+    if (run.length >= 4) close()
+  }
+  close()
   return out
 }
 
@@ -240,10 +270,10 @@ export function extractFileDesign(input: FileDesignInput): FileDesignResult {
     for (const m of page.text.matchAll(FONT_CUE)) {
       const chunk = m[1]
       if (chunk === undefined) continue
-      for (const name of fontNamesIn(chunk)) {
-        if (families.some((f) => f.name === name)) continue
-        families.push({ name, source: src(page.page, `pdf:p${String(page.page)}`, m[0]) })
-      }
+      // 一个提示词后面只认**第一个**串：后面那些是别的句子的开头
+      const name = fontNamesIn(chunk)[0]
+      if (name === undefined || families.some((f) => f.name === name)) continue
+      families.push({ name, source: src(page.page, `pdf:p${String(page.page)}`, chunk) })
     }
   }
   if (families.length > 0) {
