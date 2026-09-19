@@ -20,8 +20,24 @@ case "${KIRO_TRUST:-}" in
   "")  ;;
   *)   args+=(--no-interactive "--trust-tools=${KIRO_TRUST}") ;;
 esac
-if [ -n "${KIRO_TRUST:-}" ]; then
-  exec kiro-cli "${args[@]}" "$prompt" > "$wt/KIRO.log" 2>&1
-else
+if [ -z "${KIRO_TRUST:-}" ]; then
   exec kiro-cli "${args[@]}" "$prompt"
 fi
+# 无人值守：Kiro 服务端偶尔断线（dispatch failure），断了就接着同一个会话续跑；
+# 以 worktree 根出现 REPORT.md 为完成标志，最多续 ${KIRO_MAX_RESUMES:-60} 次。
+# KIRO_CONTINUE=1：这个 worktree 里已有一轮中断的会话，别从头开始，直接续。
+if [ -z "${KIRO_CONTINUE:-}" ]; then
+  : > "$wt/KIRO.log"
+  kiro-cli "${args[@]}" "$prompt" >> "$wt/KIRO.log" 2>&1 || true
+fi
+n=0
+while [ ! -f "$wt/REPORT.md" ] && [ "$n" -lt "${KIRO_MAX_RESUMES:-60}" ]; do
+  # 额度用尽 / 未登录这类重试也没用的错，立刻停，别空转
+  if tail -n 12 "$wt/KIRO.log" | grep -qE "Monthly request limit reached|Not logged in|limits reset on"; then
+    echo "=== [kiro-wp] Kiro 额度用尽或未登录，停止续跑 ===" >> "$wt/KIRO.log"; exit 3
+  fi
+  n=$((n+1)); sleep 20
+  echo "=== [kiro-wp] 第 $n 次续跑 $(date '+%F %T') ===" >> "$wt/KIRO.log"
+  kiro-cli "${args[@]}" --resume "上一轮因为网络中断停了。接着干：先 git status / git log 看自己做到哪了，再按派工单继续，直到写出 REPORT.md。" >> "$wt/KIRO.log" 2>&1 || true
+done
+[ -f "$wt/REPORT.md" ]

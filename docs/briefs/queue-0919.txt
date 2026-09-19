@@ -1,0 +1,7 @@
+# 09-19 第一批（互不依赖；顺序 = 优先级）。WP120 等 117 合并、WP122 等 121 合并、WP124 等 116 / 118 合并 + 123 结论，由审核方合并后另起。
+docs/briefs/WP117-kol-e2e-sandbox.md ../agentsws-wt/wp117-kol-e2e wp/117-kol-e2e
+docs/briefs/WP116-kol-public-live.md ../agentsws-wt/wp116-kol-public wp/116-kol-public
+docs/briefs/WP123-support-vs-kefuagent.md ../agentsws-wt/wp123-support-gap wp/123-support-gap
+docs/briefs/WP121-onboarding-ai-first.md ../agentsws-wt/wp121-onboarding wp/121-onboarding
+docs/briefs/WP118-kol-cloud-service.md ../agentsws-wt/wp118-kol-cloud wp/118-kol-cloud
+docs/briefs/WP119-browser-extension.md ../agentsws-wt/wp119-extension wp/119-extension
