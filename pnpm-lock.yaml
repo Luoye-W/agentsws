@@ -424,6 +424,9 @@ importers:
       '@agentsws/cloud':
         specifier: workspace:*
         version: link:../cloud
+      '@agentsws/kol-cloud':
+        specifier: workspace:*
+        version: link:../../packages/kol-cloud
       '@agentsws/kol-public':
         specifier: workspace:*
         version: link:../../packages/kol-public
