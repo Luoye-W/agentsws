@@ -16,8 +16,9 @@
  *    灰显 + 一句话，而不是悄悄少几行。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Coins, Mail, Search, Upload, Users } from 'lucide-react'
+import { ChevronRight, Coins, Mail, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -43,6 +44,9 @@ import {
   searchKolCreators,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { CollabThread } from './collab-thread'
+import { KolSandboxBar } from './kol-sandbox-bar'
+import { errorText, KolError, KolReceipt } from './kol-shared'
 
 /** 五条渠道（真源是契约的 `KOL_CHANNEL_IDS`；工作台不依赖服务端包，这里照抄一份）。 */
 const ALL_CHANNELS: readonly KolChannelId[] = ['youtube', 'facebook', 'instagram', 'tiktok', 'x']
@@ -83,6 +87,8 @@ function Discovery({
   const client = useQueryClient()
   const [q, setQ] = useState('')
   const [found, setFound] = useState<KolSearchData | undefined>(undefined)
+  const [error, setError] = useState<string | undefined>(undefined)
+  const [receipt, setReceipt] = useState<string | undefined>(undefined)
 
   const library = useQuery({
     queryKey: ['kol-creators', assignment, channel],
@@ -91,23 +97,46 @@ function Discovery({
 
   const search = useMutation({
     mutationFn: () => searchKolCreators({ channel, q }, assignment),
-    onSuccess: setFound,
+    onSuccess: (out) => {
+      setError(undefined)
+      setFound(out)
+    },
+    // 66 断点：接口挂了要照实说，不许留在"搜索中"或者悄悄什么都不发生
+    onError: (e: unknown) => {
+      setError(errorText(e, '这次没搜成。'))
+    },
   })
 
   const reveal = useMutation({
     mutationFn: (handle: string) => revealKolContact({ channel, handle }, assignment),
-    onSuccess: () => {
+    onSuccess: (out) => {
+      setError(undefined)
+      setReceipt(
+        out.contact === undefined
+          ? '这一次没取到联系方式（积分没扣）。'
+          : `取到了：${out.contact.masked}，已经进你的库。`,
+      )
       void client.invalidateQueries({ queryKey: ['kol-creators'] })
       search.mutate()
+    },
+    onError: (e: unknown) => {
+      setReceipt(undefined)
+      setError(errorText(e, '这一次没取到（积分没扣）。'))
     },
   })
 
   const add = useMutation({
     mutationFn: (row: { display_name: string; handle: string; url: string }) =>
       addKolCreator({ ...row, channel }, assignment),
-    onSuccess: () => {
+    onSuccess: (detail) => {
+      setError(undefined)
+      setReceipt(`${detail.creator.display_name} 进你的红人库了。`)
       void client.invalidateQueries({ queryKey: ['kol-creators'] })
       search.mutate()
+    },
+    onError: (e: unknown) => {
+      setReceipt(undefined)
+      setError(errorText(e, '这个人没加进库。'))
     },
   })
 
@@ -128,6 +157,12 @@ function Discovery({
             onChange={(e) => {
               setQ(e.target.value)
             }}
+            // 66 断点 #3：输关键词按回车没反应，非得去点「搜」
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || q.trim() === '' || search.isPending) return
+              e.preventDefault()
+              search.mutate()
+            }}
           />
           <Button
             size="sm"
@@ -140,6 +175,9 @@ function Discovery({
             {t('kol.search.go')}
           </Button>
         </div>
+
+        <KolError error={error} testid="kol-discovery-error" />
+        <KolReceipt text={receipt} testid="kol-discovery-receipt" />
 
         {/*
           36 §3：**"拿不到"与"搜到 0 个"分得开**。服务端把没连 / 要审核 / 要申请 /
@@ -214,7 +252,21 @@ function Discovery({
         <div className="mt-1">
           <h4 className="mb-1 text-xs font-medium text-muted-foreground">{t('kol.library')}</h4>
           {library.isPending ? <Skeleton className="h-16 w-full" /> : null}
-          {(library.data?.rows ?? []).length === 0 && !library.isPending ? (
+          {/*
+            36 §3 的同一条规矩，**查询这一侧**：取不回来不等于库里没人。
+            这一条是拍演练截图时撞出来的——demo 的请求配额用完回了 429，
+            界面上显示的却是"库里还没有人。先导一张表进来"，
+            于是人会去导一张他早就导过的表。
+          */}
+          {library.error !== null ? (
+            <KolError
+              error={errorText(library.error, '红人库这次没取回来。')}
+              testid="kol-library-error"
+            />
+          ) : null}
+          {library.error === null &&
+          (library.data?.rows ?? []).length === 0 &&
+          !library.isPending ? (
             <p className="text-sm text-muted-foreground" data-testid="kol-library-empty">
               {t('kol.library.empty')}
             </p>
@@ -279,28 +331,59 @@ function CreatorDetail({
    */
   const [pitch, setPitch] = useState('')
   const [draft, setDraft] = useState<KolOutreachData | undefined>(undefined)
+  const [error, setError] = useState<string | undefined>(undefined)
+  const [receipt, setReceipt] = useState<string | undefined>(undefined)
 
   const detail = useQuery({
     queryKey: ['kol-creator', id],
     queryFn: () => getKolCreator(id, assignment),
   })
 
+  /*
+   * 66 断点 #6：这一跳以前 400 了界面什么都不显示，邮箱还留在框里像是成功了。
+   * 现在两件事都做对：成功才清空输入框，失败照实说服务端那句话
+   * （「这台机器的加密库没开」这种，用户看得懂该去干什么）。
+   */
   const addContact = useMutation({
     mutationFn: () => addKolContact(id, { kind: 'email', value: email }, assignment),
-    onSuccess: () => {
+    onSuccess: (contact) => {
+      setError(undefined)
+      setReceipt(`加好了：${contact.masked}。现在可以起开发信了。`)
       setEmail('')
       void client.invalidateQueries({ queryKey: ['kol-creator', id] })
       void client.invalidateQueries({ queryKey: ['kol-creators'] })
     },
+    onError: (e: unknown) => {
+      setReceipt(undefined)
+      setError(errorText(e, '这条联系方式没加上。'))
+    },
   })
 
+  /*
+   * 66 断点 #7：接口回了 201，界面却显示失败——因为这里只认 `draft.staged`，
+   * 而真正的失败（异常）根本没人接。现在分成三种：成功出卡、被拦下
+   * （`staged: false` + 一句人话）、这一跳没打通（异常）。
+   */
   const outreach = useMutation({
     mutationFn: () =>
       draftKolOutreach({ creator_id: id, channel, product, brand_pitch: pitch }, assignment),
     onSuccess: (out) => {
+      setError(undefined)
       setDraft(out)
+      setReceipt(
+        out.staged
+          ? out.auto_approved === true
+            ? '这封信已经排进出站队列。'
+            : '起草好了，在待办里等你批。批了才发。'
+          : undefined,
+      )
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
       void client.invalidateQueries({ queryKey: ['cards'] })
+    },
+    onError: (e: unknown) => {
+      setDraft(undefined)
+      setReceipt(undefined)
+      setError(errorText(e, '这封信没起草成。'))
     },
   })
 
@@ -363,6 +446,8 @@ function CreatorDetail({
             </ul>
           )}
           <p className="mt-1 text-[11px] text-muted-foreground">{t('kol.detail.contacts.note')}</p>
+          <KolError error={error} testid="kol-detail-error" />
+          <KolReceipt text={receipt} testid="kol-detail-receipt" />
           <div className="mt-1 flex items-center gap-2">
             <Input
               value={email}
@@ -483,20 +568,68 @@ function CreatorDetail({
 
 /* ── 合作：阶段推进 ───────────────────────────────────────────────────── */
 
+/**
+ * 66 复测 #18：**每一行要看得出是谁。**
+ *
+ * 以前这张清单上一行只有阶段（「已找到 ›」「已建联 ›」），24 行长得一模一样——
+ * 人点开之前根本不知道自己在点谁。现在一行有六样：**红人名 · @账号 · 渠道 ·
+ * 阶段 · 最近一次往来 · 预算**（有的话），外加一排筛：按阶段、按名字搜。
+ *
+ * 两条小纪律：
+ *
+ * 1. **筛出 0 条与本来就没有合作是两句话**。筛没筛过界面自己知道，
+ *    说"这个条件下没有"比说"还没有在谈的合作"准确得多（36 §3 的同一条）。
+ * 2. **"最近一次往来"没有就说没有**，不拿建库时间凑一个——那是"这条合作
+ *    还什么都没发生过"，不是"很久没动了"。
+ */
+const STAGE_FILTERS = [
+  'all',
+  'sourced',
+  'contacted',
+  'replied',
+  'negotiating',
+  'agreed',
+  'delivering',
+  'delivered',
+  'declined',
+] as const
+
+/** 一个时刻 → 「3 天前」这种话（列表上那一列要的是"多久没动了"，不是一串数字）。 */
+function sinceText(at: string | undefined, now: number): string {
+  if (at === undefined) return '还没有往来'
+  const ms = now - Date.parse(at)
+  if (!Number.isFinite(ms)) return '还没有往来'
+  if (ms < 0) return at.slice(0, 10)
+  const days = Math.floor(ms / 86_400_000)
+  if (days >= 1) return `${days} 天前`
+  const hours = Math.floor(ms / 3_600_000)
+  if (hours >= 1) return `${hours} 小时前`
+  return '刚刚'
+}
+
 function Collaborations({
   assignment,
   channel,
+  onOpen,
 }: {
   assignment: string
   channel: KolChannelId
+  onOpen: (collaboration_id: string) => void
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const [error, setError] = useState<string | undefined>(undefined)
+  const [stage, setStage] = useState<(typeof STAGE_FILTERS)[number]>('all')
+  const [q, setQ] = useState('')
 
   const list = useQuery({
     queryKey: ['kol-collaborations', assignment, channel],
     queryFn: () => getKolCollaborations({ channel }, assignment),
+  })
+  // 名字与 @账号在红人库那一份里（合作记录上只有 creator_id）
+  const library = useQuery({
+    queryKey: ['kol-creators', assignment, channel],
+    queryFn: () => getKolCreators({ channel }, assignment),
   })
 
   const advance = useMutation({
@@ -513,50 +646,145 @@ function Collaborations({
     },
   })
 
-  const rows = (list.data?.rows ?? []).filter((c) => c.stage !== 'closed')
+  const who = new Map((library.data?.rows ?? []).map((r) => [r.creator_id, r]))
+  const open = (list.data?.rows ?? []).filter((c) => c.stage !== 'closed')
+  const needle = q.trim().toLowerCase()
+  const rows = open
+    .filter((c) => stage === 'all' || c.stage === stage)
+    .filter((c) => {
+      if (needle === '') return true
+      const r = who.get(c.creator_id)
+      return `${r?.display_name ?? c.creator_id} ${r?.handle ?? ''}`.toLowerCase().includes(needle)
+    })
+    // 最近有动静的排前面；一次都没动过的沉底（它们是该被催的那一批，但不是最急的）
+    .sort(
+      (a, b) => Date.parse(b.last_activity_at ?? '') - Date.parse(a.last_activity_at ?? '') || 0,
+    )
+  const now = Date.now()
+  const filtered = stage !== 'all' || needle !== ''
+
   return (
     <Card data-testid="kol-collaborations">
       <CardHeader>
         <CardTitle className="flex items-center gap-1.5 text-sm">
           <Users className="size-4" aria-hidden />
           {t('kol.collab.title')}
+          <span
+            className="font-normal text-xs text-muted-foreground"
+            data-testid="kol-collab-count"
+          >
+            {filtered ? `${rows.length} / ${open.length}` : String(open.length)}
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
+        {/* 筛：阶段一排胶囊 + 一个搜名字的框（24 行时没有它就没法用） */}
+        <div className="flex flex-wrap items-center gap-1" data-testid="kol-collab-filters">
+          {STAGE_FILTERS.map((s) => (
+            <Button
+              key={s}
+              size="xs"
+              variant={s === stage ? 'secondary' : 'ghost'}
+              aria-pressed={s === stage}
+              data-testid="kol-collab-filter"
+              data-stage={s}
+              onClick={() => {
+                setStage(s)
+              }}
+            >
+              {s === 'all' ? '全部' : t(`kol.stage.${s}`)}
+            </Button>
+          ))}
+          <Input
+            className="h-7 w-40"
+            value={q}
+            placeholder="搜红人名字 / @账号"
+            data-testid="kol-collab-search"
+            onChange={(e) => {
+              setQ(e.target.value)
+            }}
+          />
+        </div>
+
         {list.isPending ? <Skeleton className="h-16 w-full" /> : null}
-        {rows.length === 0 && !list.isPending ? (
-          <p className="text-muted-foreground">{t('kol.collab.empty')}</p>
+        {/* 同上：取不回来不等于"没有在谈的合作" */}
+        {list.error !== null ? (
+          <KolError
+            error={errorText(list.error, '合作清单这次没取回来。')}
+            testid="kol-collab-list-error"
+          />
         ) : null}
-        {rows.map((c) => (
-          <div
-            key={c.id}
-            className="flex flex-wrap items-center justify-between gap-2 border-b pb-2"
-            data-testid="kol-collab-row"
-            data-stage={c.stage}
-          >
-            <span className="text-xs">
-              {t(`kol.stage.${c.stage}`)}
-              {c.budget === undefined ? '' : ` · ${c.budget} ${c.currency}`}
-            </span>
-            <span className="flex gap-1">
-              {(NEXT_STAGES[c.stage] ?? []).map((next) => (
-                <Button
-                  key={next}
-                  size="xs"
-                  variant="outline"
-                  data-testid="kol-stage-next"
-                  data-next={next}
-                  disabled={advance.isPending}
-                  onClick={() => {
-                    advance.mutate({ id: c.id, stage: next })
-                  }}
-                >
-                  {t(`kol.stage.${next}`)}
-                </Button>
-              ))}
-            </span>
-          </div>
-        ))}
+        {list.error === null && rows.length === 0 && !list.isPending ? (
+          <p className="text-muted-foreground" data-testid="kol-collab-empty">
+            {filtered ? '这个条件下没有合作。换个阶段或者清掉搜索词。' : t('kol.collab.empty')}
+          </p>
+        ) : null}
+        {rows.map((c) => {
+          const r = who.get(c.creator_id)
+          return (
+            <div
+              key={c.id}
+              className="flex flex-wrap items-center justify-between gap-2 border-b pb-2"
+              data-testid="kol-collab-row"
+              data-stage={c.stage}
+              data-creator={c.creator_id}
+            >
+              <button
+                type="button"
+                className="min-w-0 flex-1 rounded px-1 py-0.5 text-left hover:bg-muted"
+                data-testid="kol-collab-open"
+                data-collab={c.id}
+                onClick={() => {
+                  onOpen(c.id)
+                }}
+              >
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="truncate font-medium text-sm" data-testid="kol-collab-name">
+                    {r?.display_name ?? c.creator_id}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    @{r?.handle ?? '—'} · {t(`kol.channel.${c.channel}`)}
+                  </span>
+                  {c.sandbox === true ? (
+                    <span
+                      className="rounded bg-[var(--ws-warn-bg)] px-1 text-[10px] text-[var(--ws-ink)]"
+                      data-testid="kol-collab-sandbox"
+                    >
+                      演练
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+                  <span data-testid="kol-collab-stage">{t(`kol.stage.${c.stage}`)}</span>
+                  <span data-testid="kol-collab-since">{sinceText(c.last_activity_at, now)}</span>
+                  {c.budget === undefined ? null : (
+                    <span data-testid="kol-collab-budget">
+                      {c.budget} {c.currency}
+                    </span>
+                  )}
+                  <ChevronRight className="inline size-3" aria-hidden />
+                </div>
+              </button>
+              <span className="flex gap-1">
+                {(NEXT_STAGES[c.stage] ?? []).map((next) => (
+                  <Button
+                    key={next}
+                    size="xs"
+                    variant="outline"
+                    data-testid="kol-stage-next"
+                    data-next={next}
+                    disabled={advance.isPending}
+                    onClick={() => {
+                      advance.mutate({ id: c.id, stage: next })
+                    }}
+                  >
+                    {t(`kol.stage.${next}`)}
+                  </Button>
+                ))}
+              </span>
+            </div>
+          )
+        })}
         {error === undefined ? null : (
           <p className="text-xs text-destructive" data-testid="kol-stage-error">
             {error}
@@ -590,12 +818,19 @@ function ImportAndCampaign({
    * 点不动（05 §4「不做跨 Assignment 并集」）。看得见比悄悄少几行有用得多。
    */
   const [channels, setChannels] = useState<KolChannelId[]>([channel])
+  const [error, setError] = useState<string | undefined>(undefined)
+  const [receipt, setReceipt] = useState<string | undefined>(undefined)
 
   const doImport = useMutation({
     mutationFn: (input: { filename: string; content: string }) => importKolTable(input, assignment),
     onSuccess: (out) => {
+      setError(undefined)
       setImported(out)
       void client.invalidateQueries({ queryKey: ['kol-creators'] })
+    },
+    onError: (e: unknown) => {
+      setImported(undefined)
+      setError(errorText(e, '这张表没导进来。'))
     },
   })
 
@@ -610,15 +845,41 @@ function ImportAndCampaign({
         },
         assignment,
       ),
-    onSuccess: setPlan,
+    onSuccess: (out) => {
+      setError(undefined)
+      setReceipt(undefined)
+      setPlan(out)
+    },
+    onError: (e: unknown) => {
+      setPlan(undefined)
+      setError(errorText(e, '这份清单没出来。'))
+    },
   })
 
+  /*
+   * 66 断点 #5：接口回 200，清单直接消失，**没有任何回执**——人不知道
+   * "接受"之后发生了什么，也不知道下一步该去哪儿看。清单还是要收起来
+   * （它已经被采纳了，留着会让人以为还能再点一次），但必须换成一句话：
+   * 建了几条、去哪儿看。
+   */
   const doAccept = useMutation({
     mutationFn: (id: string) => acceptKolCampaign(id, assignment),
-    onSuccess: () => {
+    onSuccess: (out) => {
+      setError(undefined)
       setPlan(undefined)
+      const created = out.created.length
+      const skipped = out.skipped.length
+      setReceipt(
+        created === 0
+          ? `一条都没新建（跳过 ${skipped} 条：${out.skipped[0]?.reason ?? '库里已经有了'}）。`
+          : `建了 ${created} 条合作，都在「合作线程」那一页里${skipped === 0 ? '' : `（跳过 ${skipped} 条）`}。`,
+      )
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
       void client.invalidateQueries({ queryKey: ['cards'] })
+    },
+    onError: (e: unknown) => {
+      setReceipt(undefined)
+      setError(errorText(e, '这份清单没接受成，一条合作都没建。'))
     },
   })
 
@@ -742,6 +1003,8 @@ function ImportAndCampaign({
               </Button>
             ))}
           </div>
+          <KolError error={error} testid="kol-campaign-error" />
+          <KolReceipt text={receipt} testid="kol-campaign-receipt" />
           {plan === undefined ? null : (
             <div className="mt-2 flex flex-col gap-2" data-testid="kol-campaign-plan">
               {plan.ready ? null : <p className="text-xs text-destructive">{plan.message}</p>}
@@ -794,7 +1057,33 @@ function ImportAndCampaign({
   )
 }
 
-/* ── 岗位页上那一块 ───────────────────────────────────────────────────── */
+/* ── 岗位页上那一块：三个子视图 ───────────────────────────────────────── */
+
+/**
+ * 66 断点 #10：以前导入、campaign、找人、合作、红人库、漏斗、交付物、归因
+ * **全挤在「面板」tab 的一长条里**，没有"一件事的界面"这种东西。
+ *
+ * 现在切成三个子视图，切分的依据是**红人营销干活时脑子里的三个阶段**，
+ * 不是接口的分组：
+ *
+ * | 视图 | 这一阶段在想什么 |
+ * |---|---|
+ * | 候选池 | 还没定人：找、导、看资料、加联系方式、起第一封信 |
+ * | 活动 | 定了一批人：出清单、接受、按渠道分组 |
+ * | 合作线程 | 定了一个人：这条合作到哪一步了，交付物验没验，链接带来多少单 |
+ *
+ * 为什么是岗位页里的子视图而不是三条路由：这三样都只对"当前这条渠道职责"
+ * 有意义，离开这个岗位它们没有独立存在的理由（对照 `/chat` 那条真路由——
+ * 在线聊天试用场确实是一件独立的事）。子视图的状态跟着 `?kol=` 走，
+ * 与岗位页 `?tab=` 同一套，刷新与分享链接都还在原地。
+ */
+const SUBVIEWS = [
+  { id: 'pool', zh: '候选池', icon: Search },
+  { id: 'campaign', zh: '活动', icon: Megaphone },
+  { id: 'threads', zh: '合作线程', icon: Users },
+] as const
+
+type SubviewId = (typeof SUBVIEWS)[number]['id']
 
 export function KolPanel({
   assignment,
@@ -803,22 +1092,78 @@ export function KolPanel({
   assignment: string
   channel: KolChannelId
 }): React.ReactNode {
-  const [open, setOpen] = useState<string | undefined>(undefined)
+  const [search, setSearch] = useSearchParams()
+  const raw = search.get('kol') ?? 'pool'
+  const view: SubviewId = SUBVIEWS.some((v) => v.id === raw) ? (raw as SubviewId) : 'pool'
+  /** 点开的那一个人（候选池里）。 */
+  const [openCreator, setOpenCreator] = useState<string | undefined>(undefined)
+  /** 点开的那一条合作（合作线程里）。 */
+  const [openCollab, setOpenCollab] = useState<string | undefined>(undefined)
+
+  const go = (next: SubviewId): void => {
+    setSearch((prev) => {
+      const params = new URLSearchParams(prev)
+      params.set('kol', next)
+      return params
+    })
+  }
+
   return (
     <div className="flex flex-col gap-4" data-testid="kol-panel" data-channel={channel}>
-      <ImportAndCampaign assignment={assignment} channel={channel} />
-      <Discovery assignment={assignment} channel={channel} onOpen={setOpen} />
-      {open === undefined ? null : (
-        <CreatorDetail
-          assignment={assignment}
-          channel={channel}
-          id={open}
-          onClose={() => {
-            setOpen(undefined)
-          }}
-        />
-      )}
-      <Collaborations assignment={assignment} channel={channel} />
+      {/* 演练开关 + 状态带：三个视图共用一条，永远在最上面 */}
+      <KolSandboxBar assignment={assignment} channel={channel} />
+
+      <nav className="flex flex-wrap items-center gap-1" data-testid="kol-subviews">
+        {SUBVIEWS.map((v) => (
+          <Button
+            key={v.id}
+            size="sm"
+            variant={v.id === view ? 'secondary' : 'ghost'}
+            aria-pressed={v.id === view}
+            data-testid="kol-subview"
+            data-view={v.id}
+            onClick={() => {
+              go(v.id)
+            }}
+          >
+            <v.icon className="size-4" aria-hidden />
+            {v.zh}
+          </Button>
+        ))}
+      </nav>
+
+      {view === 'pool' ? (
+        <>
+          <Discovery assignment={assignment} channel={channel} onOpen={setOpenCreator} />
+          {openCreator === undefined ? null : (
+            <CreatorDetail
+              assignment={assignment}
+              channel={channel}
+              id={openCreator}
+              onClose={() => {
+                setOpenCreator(undefined)
+              }}
+            />
+          )}
+        </>
+      ) : null}
+
+      {view === 'campaign' ? <ImportAndCampaign assignment={assignment} channel={channel} /> : null}
+
+      {view === 'threads' ? (
+        openCollab === undefined ? (
+          <Collaborations assignment={assignment} channel={channel} onOpen={setOpenCollab} />
+        ) : (
+          <CollabThread
+            assignment={assignment}
+            channel={channel}
+            id={openCollab}
+            onBack={() => {
+              setOpenCollab(undefined)
+            }}
+          />
+        )
+      ) : null}
     </div>
   )
 }

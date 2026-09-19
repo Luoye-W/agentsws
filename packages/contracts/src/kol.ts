@@ -114,6 +114,20 @@ export interface Creator {
   display_name: string
   /** 合进来的那几条的 id（没合过就是空数组，不是 `undefined`——查询里少一个分支）。 */
   merged_from: string[]
+  /**
+   * WP117 交付 4：这一条是**演练数据**。
+   *
+   * 三件事挂在这一格上，缺一件演练模式就不成立：
+   *
+   * 1. **发不出去**。出站那一跳（服务端唯一的 `deliverOutbound`）看见收件人是
+   *    演练红人就当场拦死，改投内存邮箱。硬闸在那里，不在界面上。
+   * 2. **一键清得掉**。清空演练 = 删掉所有带这一格的记录，真数据一条不碰。
+   * 3. **界面上看得出来**。列表里带一个「演练」角标，顶上一条状态带。
+   *
+   * 不带这一格 = 真数据。**默认真**是故意的：漏标一条演练数据只是多算一笔，
+   * 漏标一条真数据会让本该发出去的信发不出去。
+   */
+  sandbox?: boolean
 }
 
 /** 一个渠道上的一个账号。同一个人在两条渠道 = 两条这个。 */
@@ -185,6 +199,18 @@ export interface Collaboration {
   agreed_at?: Iso8601
   /** 条款正文的引用（知识层的一张卡 / 一个附件 id），不把合同正文塞进这条记录。 */
   terms_ref?: string
+  /** WP117 交付 4：这条合作属于演练活动（见 {@link Creator.sandbox}）。 */
+  sandbox?: boolean
+  /**
+   * WP117b（66 复测 #18）：**最近一次往来是什么时候**。
+   *
+   * 合作清单上每一行都要有它——只有阶段的那一版没法用：24 行「已找到 ›」长得
+   * 一模一样，看不出谁该催、谁刚回过话。发了信、收到回信、推了阶段、登记或
+   * 验收交付物，都会把它往前推。
+   *
+   * 没有这一格 = 这条合作还什么都没发生过（不是"很久没动"）。
+   */
+  last_activity_at?: Iso8601
 }
 
 /** 交付物的形态（五条渠道的并集）。 */
@@ -229,4 +255,62 @@ export interface KolUtm {
   campaign: string
   term?: string
   content?: string
+}
+
+/**
+ * 一封回信落在哪一类（`kol-core` 的 `classifyReply` 算出来的那个）。
+ *
+ * 口径放在契约里是因为它要**存下来**（{@link KolExchange.reply_class}）并跨包
+ * 传到界面上；`kol-core` 的 `ReplyClass` 就是它的别名，两边永远是同一份。
+ */
+export type KolReplyClass =
+  | 'interested'
+  | 'wants_quote'
+  | 'declined'
+  | 'already_working'
+  | 'cold_inbound'
+  | 'spam'
+  | 'unknown'
+
+/**
+ * WP117b（66 复测 #19）：**一条合作上的一次往来**（我们发出去的一封 / 他回过来的一封）。
+ *
+ * 为什么要有这张表：在它之前，"发了什么"只存在变更账本里（一条 `kol_outreach`
+ * 的 `after`），"他回了什么"只存在演练世界的内存里，两边谁也不认识谁——
+ * 于是合作线程页上没有任何地方能显示这条合作到底来往过什么，
+ * 「回信 → 意向分类 → 议价」这条链在界面上就断了。
+ *
+ * 三条纪律：
+ *
+ * 1. **正文落本机库**，与消息库同一条（63 §10）：没有任何一条路把它送出这台机器。
+ * 2. **收件人不落明文**。这张表上只有 `creator_id`——地址在加密库里，
+ *    要发信的那一跳自己去取。
+ * 3. **分类是算出来的，不是猜的**。`reply_class` 由 `classifyReply` 给，
+ *    分不出来就是 `unknown`，不硬塞一类。
+ */
+export interface KolExchange {
+  id: string
+  creator_id: string
+  /** 挂在哪条合作上；陌生来信可能还没有合作。 */
+  collaboration_id?: string
+  channel: KolChannel
+  /** `out` = 我们发的；`in` = 他回的（含退信）。 */
+  direction: 'out' | 'in'
+  subject: string
+  body: string
+  at: Iso8601
+  /** 入站才有：意向分类。 */
+  reply_class?: KolReplyClass
+  /** 他明说了"别再发了"（与"这次不做"分得开，见 `kol-core` 的 `classifyReply`）。 */
+  opt_out?: boolean
+  /** 退信那一封上带着。 */
+  bounce_reason?: string
+  /** 这一封属于演练（见 {@link Creator.sandbox}）。 */
+  sandbox?: boolean
+  /** 归并进消息库之后那一条的 id（63 那条链：红人来信进 `kolagents`）。 */
+  message_id?: string
+  /** 出站那一封对应的变更 id（回到变更账本上看它是怎么被批的）。 */
+  change_id?: string
+  /** 第几封（首封 / 3 天跟进 / 7 天收尾），出站才有。 */
+  step?: 'first' | 'follow_up' | 'final'
 }

@@ -28,6 +28,7 @@ import type {
   CreatorContact,
   Deliverable,
   KolChannel,
+  KolExchange,
   PlatformAccount,
   TrackedLink,
   WorkspaceId,
@@ -41,7 +42,12 @@ import {
 } from '@agentsws/kol-core'
 import type BetterSqlite3 from 'better-sqlite3'
 
-/** 库里的六张表。名字与对象类型一一对应，不另起别名。 */
+/**
+ * 库里的七张表。名字与对象类型一一对应，不另起别名。
+ *
+ * 第七张 `exchange` 是 WP117b 加的（66 复测 #19）：一条合作上的往来信件。
+ * 建表语句是 `CREATE TABLE IF NOT EXISTS`，所以老库直接接着用，不用迁移。
+ */
 export type KolTable =
   | 'creator'
   | 'platform_account'
@@ -49,6 +55,7 @@ export type KolTable =
   | 'collaboration'
   | 'deliverable'
   | 'tracked_link'
+  | 'exchange'
 
 export const KOL_TABLES: readonly KolTable[] = [
   'creator',
@@ -57,6 +64,7 @@ export const KOL_TABLES: readonly KolTable[] = [
   'collaboration',
   'deliverable',
   'tracked_link',
+  'exchange',
 ]
 
 interface KolBackend {
@@ -143,6 +151,12 @@ export interface KolStore {
   collaboration(id: string): Collaboration | undefined
   deliverables(filter?: { collaboration_id?: string; pending?: boolean }): Deliverable[]
   links(collaboration_id?: string): TrackedLink[]
+  /**
+   * WP117b（66 复测 #19）：一条合作 / 一个人身上的往来信件，**时间正序**。
+   *
+   * 正序是有讲究的：线程要从第一封读到最近一封，倒序读一段对话等于倒着读一本书。
+   */
+  exchanges(filter?: { collaboration_id?: string; creator_id?: string }): KolExchange[]
 
   saveCreator(row: Creator): void
   saveAccount(row: PlatformAccount): void
@@ -151,6 +165,7 @@ export interface KolStore {
   saveCollaboration(row: Collaboration): void
   saveDeliverable(row: Deliverable): void
   saveLink(row: TrackedLink): void
+  saveExchange(row: KolExchange): void
   /** 归因算完之后回填那三个数。链接不在就什么也不做（不凭空建一条）。 */
   recordAttribution(input: {
     tracked_link_id: string
@@ -166,6 +181,17 @@ export interface KolStore {
    * 库里就会出现一条谁也指不到的孤儿记录。
    */
   merge(input: { keep_id: string; merge_id: string }): Creator | undefined
+  /**
+   * WP117 交付 4：删掉一行。
+   *
+   * **只为「清空演练」存在**——库里其余地方一条删除路径都没有，这是有意的
+   * （红人库是攒出来的资产，误删一条没有回收站可捡）。演练那一批是造出来的，
+   * 清得掉才敢让人放手玩。
+   *
+   * 调用方负责顺序（先删挂在人身上的，最后删人），这里不替它判：
+   * 一个会级联删除的接口太容易被别处误用。
+   */
+  removeRow(table: KolTable, id: string): void
   close(): void
 }
 
@@ -210,6 +236,16 @@ export function createKolStore(options: KolStoreOptions): KolStore {
       backend
         .all<TrackedLink>('tracked_link')
         .filter((l) => collaboration_id === undefined || l.collaboration_id === collaboration_id),
+    exchanges: (filter) =>
+      backend
+        .all<KolExchange>('exchange')
+        .filter(
+          (e) =>
+            filter?.collaboration_id === undefined ||
+            e.collaboration_id === filter.collaboration_id,
+        )
+        .filter((e) => filter?.creator_id === undefined || e.creator_id === filter.creator_id)
+        .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id)),
 
     saveCreator: (row) => backend.put('creator', row.id, row),
     saveAccount: (row) => backend.put('platform_account', row.id, row),
@@ -217,6 +253,7 @@ export function createKolStore(options: KolStoreOptions): KolStore {
     saveCollaboration: (row) => backend.put('collaboration', row.id, row),
     saveDeliverable: (row) => backend.put('deliverable', row.id, row),
     saveLink: (row) => backend.put('tracked_link', row.id, row),
+    saveExchange: (row) => backend.put('exchange', row.id, row),
 
     recordAttribution: (input) => {
       const link = backend.get<TrackedLink>('tracked_link', input.tracked_link_id)
@@ -249,6 +286,10 @@ export function createKolStore(options: KolStoreOptions): KolStore {
       return merged
     },
 
+    removeRow: (table, id) => {
+      backend.remove(table, id)
+    },
+
     close: () => backend.close(),
   }
 }
@@ -268,6 +309,12 @@ export function createKolStore(options: KolStoreOptions): KolStore {
  *    那才是"这次找人要什么样的人"，面板上的默认条件不知道这件事。
  * 2. **归因的数字原样端出去**：`clicks` / `orders` / `revenue` 是归因那一跳回填的。
  * 3. 阶段的中文名只有 `kol-core` 的 `stages.ts` 那一份翻译。
+ * 4. **演练数据不进这五块**（WP117b，Luoye 待定项的默认做法）。漏斗、进行中的合作、
+ *    待审交付物、归因都是拿来做判断的数；掺进 24 个合成红人之后，"建联漏斗第一格
+ *    有 26 个人"这句话就再也不能信了。演练那一份单出一格 `sandbox_funnel`，
+ *    演练关掉它连同那一格一起消失——**不是清零，是没有**。
+ *    找人清单（`discovery`）是个例外：它就是"库里现在有谁"，演练开着时那 24 个人
+ *    本来就该出现在库里（不然演练里根本挑不到人），行上自己带着 `sandbox` 标记。
  */
 export function kolDeckData(
   store: Pick<KolStore, 'creators' | 'accounts' | 'collaborations' | 'deliverables' | 'links'>,
@@ -281,7 +328,10 @@ export function kolDeckData(
   const creators = new Map(store.creators().map((c) => [c.id, c]))
   const nameOf = (creator_id: string): string =>
     creators.get(creator_id)?.display_name ?? creator_id
-  const collaborations = store.collaborations()
+  const all = store.collaborations()
+  // 真数据与演练数据从这一行起就分开走，下面五块一个都碰不到演练那一份
+  const collaborations = all.filter((c) => c.sandbox !== true)
+  const sandboxCollabs = all.filter((c) => c.sandbox === true)
   const collabById = new Map(collaborations.map((c) => [c.id, c]))
 
   const accounts = store.accounts()
@@ -316,29 +366,39 @@ export function kolDeckData(
         ...(c.budget === undefined ? {} : { budget: c.budget }),
         currency: c.currency,
       })),
-    pending_deliverables: store.deliverables({ pending: true }).map((d) => {
-      const collab = collabById.get(d.collaboration_id)
-      return {
-        deliverable_id: d.id,
-        display_name: collab === undefined ? d.collaboration_id : nameOf(collab.creator_id),
-        channel: (collab?.channel ?? '') as string,
-        kind: d.kind as string,
-        due_at: d.due_at,
-        ...(d.url === undefined ? {} : { url: d.url }),
-      }
-    }),
-    attribution: store.links().map((l) => {
-      const collab = collabById.get(l.collaboration_id)
-      return {
-        tracked_link_id: l.id,
-        display_name: collab === undefined ? l.collaboration_id : nameOf(collab.creator_id),
-        channel: (collab?.channel ?? '') as string,
-        clicks: l.clicks,
-        orders: l.orders,
-        revenue: l.revenue,
-        currency: 'USD',
-      }
-    }),
+    pending_deliverables: store
+      .deliverables({ pending: true })
+      // 演练的交付物不进"待审"：那一摞是造出来的，混进来人就不知道哪几条真要审
+      .filter((d) => collabById.has(d.collaboration_id))
+      .map((d) => {
+        const collab = collabById.get(d.collaboration_id)
+        return {
+          deliverable_id: d.id,
+          display_name: collab === undefined ? d.collaboration_id : nameOf(collab.creator_id),
+          channel: (collab?.channel ?? '') as string,
+          kind: d.kind as string,
+          due_at: d.due_at,
+          ...(d.url === undefined ? {} : { url: d.url }),
+        }
+      }),
+    attribution: store
+      .links()
+      // 归因同理：演练里点出来的"订单"不是订单
+      .filter((l) => collabById.has(l.collaboration_id))
+      .map((l) => {
+        const collab = collabById.get(l.collaboration_id)
+        return {
+          tracked_link_id: l.id,
+          display_name: collab === undefined ? l.collaboration_id : nameOf(collab.creator_id),
+          channel: (collab?.channel ?? '') as string,
+          clicks: l.clicks,
+          orders: l.orders,
+          revenue: l.revenue,
+          currency: 'USD',
+        }
+      }),
+    // 演练开着才有这一格（`sandboxCollabs` 空 = 没在演练）
+    ...(sandboxCollabs.length === 0 ? {} : { sandbox_funnel: collaborationFunnel(sandboxCollabs) }),
   }
 }
 

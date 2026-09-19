@@ -39,6 +39,7 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
+import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
 import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
@@ -69,6 +70,10 @@ const KIND_BY_REF: Record<string, ContextItem['kind']> = {
 }
 
 const bytesOf = (v: unknown): number => Buffer.byteLength(JSON.stringify(v) ?? '', 'utf8')
+
+/** 全名 `service.action` 去掉服务前缀（红人工具在链里按 bare 名匹配）。 */
+const bareOf = (name: string): string =>
+  name.includes('.') ? name.slice(name.indexOf('.') + 1) : name
 
 /** 进模型的内容先规范化（键排序），回放才是恒等变换（同 simulation 的纪律）。 */
 function canonical<T>(value: T): T {
@@ -136,6 +141,14 @@ export interface RuntimeOptions {
    * 不给就是老行为：prompt 里只有技能名。
    */
   skills?: SkillResolver
+  /**
+   * WP117（66 断点 #1）：红人那十一个工具的执行器（`kol-tools.ts` 建的那一份）。
+   *
+   * 给了就在工具链最前面——`kol.*` 那五条职责的运行才真有活干。不给的话红人岗位
+   * 仍然会去调这些工具（工具面是按职责给的），但每一次回的是「这个进程没装红人
+   * 那一摊」，界面上照实显示，而不是假装成功。
+   */
+  kolTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -502,28 +515,35 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 所以这条路**不往 provenance 里加任何 ref**（15 §6：seen 只证明读过业务对象）。
    */
   const devToolNames = (): readonly string[] => options.devTools?.toolNames() ?? []
-  const executeTool: ToolExecutor | undefined =
-    options.devTools === undefined
-      ? source.executeTool
-      : async (call) => {
-          if (devToolNames().includes(call.name)) {
-            try {
-              const { text } = await (
-                options.devTools as NonNullable<RuntimeOptions['devTools']>
-              ).call(call.name, call.input)
-              return { status: 'ok', data: { text } }
-            } catch (e) {
-              return {
-                status: 'error',
-                reason: e instanceof Error ? e.message : String(e),
-              }
-            }
-          }
-          if (source.executeTool === undefined) {
-            return { status: 'error', reason: 'no_tool_executor' }
-          }
-          return source.executeTool(call)
+  const executeTool: ToolExecutor | undefined = (() => {
+    /*
+     * WP117（66 断点 #1）：**三级链**——红人工具 → dev MCP → 记录源。
+     *
+     * 顺序是刻意的：红人工具名（`draft_outreach` 这些）与别处不重名，先问它一句，
+     * 不是它的再往下走。谁都不认才回 `unsupported_tool`——而不是静默回 `undefined`
+     * 让界面显示一个空结果（66 断点 #6 的病根）。
+     */
+    const kol = options.kolTools
+    const dev = options.devTools
+    if (kol === undefined && dev === undefined) return source.executeTool
+    return async (call) => {
+      if (kol !== undefined && KOL_TOOL_NAMES.includes(bareOf(call.name))) {
+        return kol(call)
+      }
+      if (dev !== undefined && devToolNames().includes(call.name)) {
+        try {
+          const { text } = await dev.call(call.name, call.input)
+          return { status: 'ok', data: { text } }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
         }
+      }
+      if (source.executeTool === undefined) {
+        return { status: 'error', reason: 'no_tool_executor' }
+      }
+      return source.executeTool(call)
+    }
+  })()
 
   const adapter: RuntimeAdapter = useDirect
     ? createDirectRuntime({
@@ -642,8 +662,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         run_id: input.run_id,
       })
     }
+    /*
+     * WP117（66 断点 #1）：红人那五条职责的**工具面**。
+     *
+     * 以前 `allow` 只有 grounding 点名的那两个（`search_creators` / `search_policies`）
+     * 加四个客服默认工具——于是「让红人岗位找人」这件事，模型手里一个能干活的工具
+     * 都没有，只能拿客服的凑。十一个红人工具在 `kol-core` 的目录里，
+     * 判据只有 `role_id`（`kol.*`），所以回放时算得出同一份清单。
+     */
     const allow = [
-      ...new Set([...config.grounding.map((g) => g.tool), ...DEFAULT_TOOLS, ...devToolNames()]),
+      ...new Set([
+        ...config.grounding.map((g) => g.tool),
+        ...DEFAULT_TOOLS,
+        ...devToolNames(),
+        ...(isKolRole(config.role_id) ? KOL_TOOL_NAMES : []),
+      ]),
     ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
     const vertical = options.vertical?.()
@@ -762,6 +795,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...(input.todo_id === undefined ? {} : { todo_id: input.todo_id }),
     }
     const answers: string[] = []
+    /*
+     * WP117b（66 复测 #16）：**同一句话只进时间线一次**。
+     *
+     * 一次运行的答复会从两个口子回来：`run.completed` 事件里的 `outputs`（sink 收到的）
+     * 与 `adapter.run` 的返回值（`result.outputs`）。三个运行时都是两边都给同一份，
+     * 于是两边都 push 的话，时间线上那条 `agent_message` 里同一段话会出现两遍
+     * ——用户看到的就是"Agent 把话说了两遍"。
+     *
+     * 不改成只认其中一边：哪一边都有适配器可能不给（回放档只走事件、直连档只给返回值）。
+     * 收口在这里：**逐字相同的一段只留第一次**。
+     */
+    const addAnswer = (text: string): void => {
+      if (answers.includes(text)) return
+      answers.push(text)
+    }
     let summary = ''
     const sink = (e: RunEvent): void => {
       appendRunEvent(request, e)
@@ -781,13 +829,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       if (e.type === 'run.completed') {
         summary = e.summary
-        for (const out of e.outputs) if (out.kind === 'answer') answers.push(out.text)
+        for (const out of e.outputs) if (out.kind === 'answer') addAnswer(out.text)
       }
     }
     try {
       const result = await adapter.run(request, sink, new AbortController().signal)
       summary = result.summary
-      for (const out of result.outputs) if (out.kind === 'answer') answers.push(out.text)
+      for (const out of result.outputs) if (out.kind === 'answer') addAnswer(out.text)
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
       if (answers.length > 0) {
         work?.appendEvent(input.matter.id, {

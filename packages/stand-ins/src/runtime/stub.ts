@@ -18,6 +18,16 @@ import { orderTools, runOntologyBrief } from '@agentsws/ontology'
 import type { BoundaryItem } from '@agentsws/support-core'
 import { renderReplyBody, replySubject } from '@agentsws/support-core'
 import {
+  countOf,
+  describeKolRun,
+  type KolFinding,
+  kolBranch,
+  kolRefs,
+  parseFollowerBand,
+  receiptOf,
+  renderKolAnswer,
+} from './kol.js'
+import {
   boundaryGate,
   describeRun,
   marketplaceLinkSlip,
@@ -425,6 +435,111 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       const readTools: string[] = []
       const threadItem = itemsOfKind(req, 'thread')[0]
       const threadText = threadItem ? plainText(threadItem.content) : ''
+
+      /*
+       * WP117（66 断点 #1）：**红人的岔口**。
+       *
+       * 这条职责是 `kol.*` 的话，下面客服那一整套（订单 → 退货窗口 → 回信）一行都不跑。
+       * 意图判定与工具计划在 `kol-core` 的剧本里（三个运行时同一份），
+       * 这里只负责按计划调工具、把回执翻成事件、最后说一段人话。
+       */
+      const kol = kolBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (kol !== undefined) {
+        const findings: KolFinding[] = []
+        for (const call of kol.calls) {
+          if (signal.aborted) {
+            sink({ type: 'run.cancelled' })
+            return finish('cancelled', '运行被中断')
+          }
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool: call.tool, input: call.input })
+          if (toolCalls >= req.budget.max_tool_calls) {
+            exhausted = { which: 'max_tool_calls', used: toolCalls, cap: req.budget.max_tool_calls }
+            sink({ type: 'budget.exhausted', ...exhausted })
+            sink({ type: 'tool.result', call_id, status: 'blocked', reason: 'budget_exhausted' })
+            break
+          }
+          const exec = options.executeTool
+          if (exec === undefined) {
+            sink({ type: 'tool.result', call_id, status: 'error', reason: 'no_tool_executor' })
+            findings.push({ tool: call.tool, status: 'error', reason: '这个进程没接工具执行器' })
+            toolCalls += 1
+            continue
+          }
+          const res = await exec({ name: call.tool, input: call.input, request: req })
+          toolCalls += 1
+          const refs = res.status === 'ok' ? (res.provenance ?? kolRefs(res.data)) : []
+          if (refs.length > 0) prov.see(refs, { full: true })
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+            ...(refs.length > 0 ? { provenance_added: refs } : {}),
+          })
+          if (res.status === 'ok') readTools.push(call.tool)
+          const receipt = res.status === 'ok' ? receiptOf(res.data) : {}
+          if (receipt.change_id !== undefined) {
+            sink({ type: 'change.staged', change_id: receipt.change_id })
+            outputs.push({ kind: 'staged_change', change_id: receipt.change_id })
+          }
+          if (receipt.approval_item_id !== undefined) {
+            sink({
+              type: 'proposal.created',
+              approval_item_id: receipt.approval_item_id,
+              kind: receipt.kind ?? 'proposal',
+            })
+            outputs.push(
+              call.tool === 'draft_outreach'
+                ? { kind: 'draft', approval_item_id: receipt.approval_item_id }
+                : { kind: 'proposal', approval_item_id: receipt.approval_item_id },
+            )
+          }
+          const count = countOf(res.data)
+          findings.push({
+            tool: call.tool,
+            status: res.status,
+            ...(count === undefined ? {} : { count }),
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+            ...(receipt.approval_item_id === undefined && receipt.change_id === undefined
+              ? {}
+              : { receipt }),
+          })
+        }
+        const band = parseFollowerBand(kol.ctx.text)
+        const answer = renderKolAnswer({
+          intent: kol.intent,
+          channel: kol.channel,
+          findings,
+          ...(band === undefined ? {} : { band }),
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const found = findings.find((f) => f.tool === 'search_creators')?.count
+        const summary = describeKolRun({
+          intent: kol.intent,
+          readTools,
+          ...(found === undefined ? {} : { found }),
+          drafted: findings.some((f) => f.tool === 'draft_outreach' && f.status === 'ok'),
+          ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
       const orderItem = itemsOfKind(req, 'order')[0]
       let order = orderItem ? orderView(orderItem.content, refOf(orderItem)) : undefined
       const policy = returnWindowDays(req, defaultWindow)

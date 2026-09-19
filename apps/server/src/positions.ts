@@ -434,7 +434,10 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     }
     const routed =
       pinned === undefined
-        ? routeWithinPosition(text, profilesOf(held))
+        ? // WP117b（66 复测 #17）：路由那句话要与岗位页标题上的数字对得上。
+          // 递进去的是 WP125 那份滤掉 `common.member` 的清单（`dutyRolesOf`），
+          // 也就是岗位页「N 条职责」读的同一份——两处一个来源，不会再打架。
+          routeWithinPosition(text, profilesOf(held), { duty_count: dutyRolesOf(template).length })
         : {
             picked: pinned,
             candidates: [],

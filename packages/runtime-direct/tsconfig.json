@@ -13,6 +13,9 @@
       "path": "../core"
     },
     {
+      "path": "../kol-core"
+    },
+    {
       "path": "../model-gateway"
     },
     {

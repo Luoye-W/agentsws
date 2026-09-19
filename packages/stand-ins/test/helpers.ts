@@ -54,6 +54,8 @@ export interface RequestOverrides {
   seed?: number
   extraContext?: ContextItem[]
   idempotency_key?: string
+  /** WP117：换一条职责（`kol.youtube` 走红人剧本，见 `runtime/kol.ts`）。 */
+  roleId?: string
 }
 
 const GROUNDING: GroundingRule[] = [
@@ -111,8 +113,8 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     schema_version: 1,
     workspace_id: WORKSPACE,
     kind: o.kind ?? 'work_item',
-    actor: { person_id: 'p_wang', assignment_id: 'asg_1', role_id: 'dtc.support' },
-    work_item: { id: 'wi_1', conversation_id: 'conv_1', role_id: 'dtc.support' },
+    actor: { person_id: 'p_wang', assignment_id: 'asg_1', role_id: o.roleId ?? 'dtc.support' },
+    work_item: { id: 'wi_1', conversation_id: 'conv_1', role_id: o.roleId ?? 'dtc.support' },
     trigger: { event_id: 'evt_1', source: 'inbound' },
     context,
     grounding: o.grounding ?? GROUNDING,

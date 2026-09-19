@@ -33,6 +33,7 @@ import type {
   DeliverableReview,
   Iso8601,
   KolChannel,
+  KolExchange,
   KolUtm,
   MaybePromise,
   PersonId,
@@ -349,7 +350,11 @@ export interface KolCollaborationInput {
 export interface KolTrackedLinkInput {
   collaboration_id: string
   url: string
-  campaign: string
+  /**
+   * WP117b：不给了就默认用这条合作的活动 id（没有活动就用合作 id）——
+   * 归因口径不变，只是让「从合作线程上顺手建一条链接」不用先想一个活动名。
+   */
+  campaign?: string | undefined
   affiliate_code?: string | undefined
   utm?: Partial<Record<keyof KolUtm, string | undefined>> | undefined
 }
@@ -385,6 +390,14 @@ export interface KolPort {
       channel?: KolChannel | undefined
       q?: string | undefined
       limit?: number | undefined
+      /**
+       * WP117b（66 复测 #15）：粉丝区间（两头都含）。
+       *
+       * 「找粉丝 1 万到 10 万的频道」这个条件以前一路上都没有落脚的地方，
+       * 于是它只出现在 Agent 的回话里，从来没有真筛过人。
+       */
+      min_followers?: number | undefined
+      max_followers?: number | undefined
     },
   ): MaybePromise<{ rows: KolCreatorRow[] }>
   /**
@@ -392,10 +405,19 @@ export interface KolPort {
    *
    * 走哪条路由由 49 M2 的开关定：用我的 = 打这条渠道自己的接口；
    * 用 agentsws 的 = 查云端公共库。两条路回的是同一个形状。
+   *
+   * `q` 可以是空串——**"这条渠道上的人都算候选"**，筛人交给粉丝区间
+   * （WP117b，66 复测 #15）。
    */
   search(
     actor: KolActor,
-    input: { channel: KolChannel; q: string; limit?: number | undefined },
+    input: {
+      channel: KolChannel
+      q: string
+      limit?: number | undefined
+      min_followers?: number | undefined
+      max_followers?: number | undefined
+    },
   ): MaybePromise<KolSearchResult>
   creator(actor: KolActor, id: string): MaybePromise<KolCreatorDetail | undefined>
   createCreator(actor: KolActor, input: KolCreatorInput): MaybePromise<KolCreatorDetail>
@@ -419,6 +441,17 @@ export interface KolPort {
     id: string,
     input: { stage: CollaborationStage },
   ): MaybePromise<Collaboration>
+  /**
+   * WP117b（66 复测 #19）：**议价**——给一条已经在谈的合作报一个数。
+   *
+   * 出的是一张 money 排版的卡（`kol_collaboration` 永远 L1）。**批了才算数**：
+   * 预算与"进谈条件中"由施行那一跳写，这一步一个字都不落库。
+   */
+  quoteCollaboration(
+    actor: KolActor,
+    id: string,
+    input: { budget: number; currency?: string | undefined; note?: string | undefined },
+  ): MaybePromise<KolStagedView>
 
   deliverables(
     actor: KolActor,
@@ -443,6 +476,23 @@ export interface KolPort {
     actor: KolActor,
     filter: { collaboration_id?: string | undefined },
   ): MaybePromise<{ rows: TrackedLink[] }>
+
+  /**
+   * WP117b（66 复测 #19）：一条合作 / 一个人身上的**往来信件**（时间正序）。
+   *
+   * 在它之前，"我们发了什么"只在变更账本里、"他回了什么"只在演练世界的内存里，
+   * 合作线程页上没有任何地方显示得出这条合作来往过什么——于是
+   * 「回信 → 意向分类 → 议价」这条链在界面上是断的。
+   */
+  exchanges(
+    actor: KolActor,
+    filter: {
+      collaboration_id?: string | undefined
+      creator_id?: string | undefined
+      /** 最多几封（取**最近**的几封，线程要的是末尾不是开头）。 */
+      limit?: number | undefined
+    },
+  ): MaybePromise<{ rows: KolExchange[] }>
   createTrackedLink(actor: KolActor, input: KolTrackedLinkInput): MaybePromise<TrackedLink>
 
   importTable(
@@ -490,6 +540,48 @@ export interface KolPort {
   mergeSuggestions(actor: KolActor): MaybePromise<{ rows: KolMergeSuggestionView[] }>
   acceptMerge(actor: KolActor, id: string): MaybePromise<{ creator: Creator }>
   rejectMerge(actor: KolActor, id: string): MaybePromise<{ id: string; rejected: true }>
+
+  /* ── WP117 交付 4：演练场 ─────────────────────────────────────────────
+   *
+   * 四个动作**平铺在端口上**，不收进一个 `sandbox: {...}` 子对象——`brand-ports`
+   * 的按品牌代理是按「取一个属性就回一个函数」实现的，子对象在它手里会变成函数，
+   * 调 `.status()` 当场 TypeError。平铺还顺带给了想要的降级：没装演练场的进程
+   * （云端那一档）调到这几个名字，代理自己回 `not_implemented` + 一句人话。
+   *
+   * 这里**没有「发信」这个动作**，是有意的：演练里的发信走的是与真实**逐字相同**
+   * 的那条路（起草 → 卡 → 人批 → 出站）。演练与真实的分岔只在出站那一跳，
+   * 由服务端的硬闸做。给演练开一条自己的发信口，等于测的不是真链路。
+   */
+  sandboxStatus?(actor: KolActor): MaybePromise<KolSandboxStatusView>
+  sandboxStart?(actor: KolActor, input: { channel: KolChannel }): MaybePromise<KolSandboxStatusView>
+  sandboxAdvance?(actor: KolActor, input: { days: number }): MaybePromise<KolSandboxAdvanceView>
+  sandboxClear?(actor: KolActor): MaybePromise<KolSandboxStatusView>
+}
+
+export interface KolSandboxStatusView {
+  on: boolean
+  /** 演练世界现在几点（真时钟不动，这是被「跳到 N 天后」推出来的那个）。 */
+  now: string
+  creators: number
+  collaborations: number
+  sent: number
+  replies: number
+  pending: number
+  /** 顶上那条状态带的字。界面照它显示，**不自己拼一句**。 */
+  banner: string
+}
+
+export interface KolSandboxAdvanceView extends KolSandboxStatusView {
+  advanced_days: number
+  received: {
+    creator_id: string
+    display_name: string
+    collaboration_id?: string
+    subject: string
+    body: string
+    at: string
+    bounce_reason?: string
+  }[]
 }
 
 function portOf(deps: GatewayDeps): KolPort {
@@ -501,6 +593,33 @@ function portOf(deps: GatewayDeps): KolPort {
     )
   return p
 }
+
+/**
+ * 取演练场上的一个动作。
+ *
+ * 没装演练场（`sandboxStatus` 这几个名字在端口上是 `undefined`）就回一句人话——
+ * 不回 500，也不假装开了一个空演练场。
+ */
+function sandboxOf<K extends 'sandboxStatus' | 'sandboxStart' | 'sandboxAdvance' | 'sandboxClear'>(
+  deps: GatewayDeps,
+  action: K,
+): NonNullable<KolPort[K]> {
+  const port = portOf(deps)
+  const fn = port[action]
+  if (typeof fn !== 'function')
+    throw new ApiError(
+      'not_implemented',
+      '这个进程没有演练场。演练要本机跑的服务进程才有（它需要一个内存邮箱与一把本机加密钥匙）。',
+    )
+  return fn.bind(port) as NonNullable<KolPort[K]>
+}
+
+const SandboxStartBody = z.object({
+  channel: z.enum(['youtube', 'facebook', 'instagram', 'tiktok', 'x']),
+})
+
+/** 跳几天。上限 90——再往后没意义，跟进序列最长那一档是 7 天。 */
+const SandboxAdvanceBody = z.object({ days: z.number().int().min(1).max(90) })
 
 function actorOf(c: Parameters<typeof principalOf>[0]): KolActor {
   const p = principalOf(c)
@@ -574,6 +693,13 @@ const CollaborationBody = z.object({
 
 const StageBody = z.object({ stage: z.enum(STAGES) })
 
+/** WP117b：议价。金额必须是正数——"报 0 块"不是一个报价，是一个填错的框。 */
+const QuoteBody = z.object({
+  budget: z.number().positive().max(10_000_000),
+  currency: z.string().min(1).max(8).optional(),
+  note: z.string().max(500).optional(),
+})
+
 const DeliverableBody = z.object({
   collaboration_id: z.string().min(1),
   kind: z.enum(KINDS),
@@ -589,7 +715,8 @@ const ReviewBody = z.object({
 const TrackedLinkBody = z.object({
   collaboration_id: z.string().min(1),
   url: z.string().min(1).max(2000),
-  campaign: z.string().min(1).max(100),
+  // WP117b：可选——不给就默认用这条合作的活动 id（合作线程上顺手建一条不该被活动名挡住）
+  campaign: z.string().min(1).max(100).optional(),
   affiliate_code: z.string().max(40).optional(),
   utm: z
     .object({
@@ -667,8 +794,24 @@ export function kolRoutes(): Route[] {
         authz: READ_CREATOR,
         params: [
           { name: 'channel', in: 'query', description: '只看这条渠道' },
-          { name: 'q', in: 'query', description: '在名字与 handle 里找（子串）' },
+          {
+            name: 'q',
+            in: 'query',
+            description: '在名字、handle 与类目里找（按词，任意一个词命中就算）',
+          },
           { name: 'limit', in: 'query', description: '最多几行', schema: { type: 'integer' } },
+          {
+            name: 'min_followers',
+            in: 'query',
+            description: '粉丝数下限（含）',
+            schema: { type: 'integer' },
+          },
+          {
+            name: 'max_followers',
+            in: 'query',
+            description: '粉丝数上限（含）',
+            schema: { type: 'integer' },
+          },
         ],
         returns: '{ rows: KolCreatorRow[] }',
       },
@@ -676,12 +819,16 @@ export function kolRoutes(): Route[] {
         const channel = channelQuery(c)
         const q = c.req.query('q')
         const limit = intParam(c, 'limit')
+        const min_followers = intParam(c, 'min_followers')
+        const max_followers = intParam(c, 'max_followers')
         return ok(
           c,
           await portOf(deps).creators(actorOf(c), {
             ...(channel === undefined ? {} : { channel }),
             ...(q === undefined || q === '' ? {} : { q }),
             ...(limit === undefined ? {} : { limit }),
+            ...(min_followers === undefined ? {} : { min_followers }),
+            ...(max_followers === undefined ? {} : { max_followers }),
           }),
         )
       },
@@ -702,11 +849,22 @@ export function kolRoutes(): Route[] {
           {
             name: 'q',
             in: 'query',
-            required: true,
             description:
-              '关键词（YouTube / Facebook）或者一串账号名（Instagram / TikTok / X 没有按关键词搜人这回事）',
+              '关键词（YouTube / Facebook）或者一串账号名（Instagram / TikTok / X 没有按关键词搜人这回事）。给了粉丝区间时可以不给关键词',
           },
           { name: 'limit', in: 'query', description: '最多几条', schema: { type: 'integer' } },
+          {
+            name: 'min_followers',
+            in: 'query',
+            description: '粉丝数下限（含）',
+            schema: { type: 'integer' },
+          },
+          {
+            name: 'max_followers',
+            in: 'query',
+            description: '粉丝数上限（含）',
+            schema: { type: 'integer' },
+          },
         ],
         returns: 'KolSearchResult',
       },
@@ -714,15 +872,29 @@ export function kolRoutes(): Route[] {
         const channel = channelQuery(c)
         if (channel === undefined) throw new ApiError('invalid_input', '得说清楚是哪条渠道')
         const q = c.req.query('q')
-        if (q === undefined || q.trim() === '')
-          throw new ApiError('invalid_input', '得给一个关键词或者账号名')
         const limit = intParam(c, 'limit')
+        const min_followers = intParam(c, 'min_followers')
+        const max_followers = intParam(c, 'max_followers')
+        /*
+         * WP117b（66 复测 #15）：**关键词与粉丝区间给一样就行。**
+         *
+         * 「粉丝 1 万到 10 万的频道」本来就没有关键词，以前这一句会把它顶回去
+         * （`invalid_input`），Agent 只好编一个（「youtube」），于是搜到 0 个。
+         */
+        if (
+          (q === undefined || q.trim() === '') &&
+          min_followers === undefined &&
+          max_followers === undefined
+        )
+          throw new ApiError('invalid_input', '得给一个关键词、账号名，或者一个粉丝区间')
         return ok(
           c,
           await portOf(deps).search(actorOf(c), {
             channel,
-            q: q.trim(),
+            q: q === undefined ? '' : q.trim(),
             ...(limit === undefined ? {} : { limit }),
+            ...(min_followers === undefined ? {} : { min_followers }),
+            ...(max_followers === undefined ? {} : { max_followers }),
           }),
         )
       },
@@ -885,6 +1057,32 @@ export function kolRoutes(): Route[] {
           ),
         ),
     ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/collaborations/:id/quote',
+        operationId: 'quoteKolCollaboration',
+        summary:
+          'WP117b（66 复测 #19）：给一条已经在谈的合作报一个数 → 一张 money 排版的卡（永远 L1）。批了才落预算、才进「谈条件中」',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        params: [{ name: 'id', in: 'path', required: true, description: 'collaboration_id' }],
+        body: QuoteBody,
+        returns: 'KolStagedView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await portOf(deps).quoteCollaboration(
+            actorOf(c),
+            param(c, 'id'),
+            await body(c, QuoteBody),
+          ),
+          201,
+        ),
+    ),
 
     route(
       {
@@ -969,6 +1167,46 @@ export function kolRoutes(): Route[] {
         ),
     ),
 
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/exchanges',
+        operationId: 'listKolExchanges',
+        summary:
+          'WP117b（66 复测 #19）：一条合作上的往来信件（我们发的 + 他回的），时间正序；入站那几封带意向分类',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        // 正文里有对方说的话，与联系方式同一档（confidential）
+        authz: READ_CONTACT,
+        params: [
+          { name: 'collaboration_id', in: 'query', description: '只看这条合作的' },
+          { name: 'creator_id', in: 'query', description: '只看这个人的' },
+          {
+            name: 'limit',
+            in: 'query',
+            description: '最多几封（取最近的几封）',
+            schema: { type: 'integer' },
+          },
+        ],
+        returns: '{ rows: KolExchange[] }',
+      },
+      async (c, deps) => {
+        const collaboration_id = c.req.query('collaboration_id')
+        const creator_id = c.req.query('creator_id')
+        const limit = intParam(c, 'limit')
+        return ok(
+          c,
+          await portOf(deps).exchanges(actorOf(c), {
+            ...(collaboration_id === undefined || collaboration_id === ''
+              ? {}
+              : { collaboration_id }),
+            ...(creator_id === undefined || creator_id === '' ? {} : { creator_id }),
+            ...(limit === undefined ? {} : { limit }),
+          }),
+        )
+      },
+    ),
     route(
       {
         method: 'get',
@@ -1149,6 +1387,78 @@ export function kolRoutes(): Route[] {
         returns: '{ id, rejected }',
       },
       async (c, deps) => ok(c, await portOf(deps).rejectMerge(actorOf(c), param(c, 'id'))),
+    ),
+
+    /* ── WP117 交付 4：演练场 ─────────────────────────────────────────── */
+
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/sandbox',
+        operationId: 'getKolSandbox',
+        summary: '演练场的状态：开没开、演练世界几点了、发了几封、收了几封、还有几封在路上',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_COLLAB,
+        returns: 'KolSandboxStatusView',
+      },
+      async (c, deps) => ok(c, await sandboxOf(deps, 'sandboxStatus')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/sandbox',
+        operationId: 'startKolSandbox',
+        summary:
+          '开一个演练活动：铺一批合成红人（六种性格）+ 一条隔离的活动。已经开着就原样回（幂等）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        body: SandboxStartBody,
+        returns: 'KolSandboxStatusView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await sandboxOf(deps, 'sandboxStart')(actorOf(c), await body(c, SandboxStartBody)),
+          201,
+        ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/sandbox/advance',
+        operationId: 'advanceKolSandbox',
+        summary:
+          '跳到 N 天后：推演练世界自己的钟（真时钟一秒不动），把到点的回信收进来并推进合作阶段',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        body: SandboxAdvanceBody,
+        returns: 'KolSandboxAdvanceView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await sandboxOf(deps, 'sandboxAdvance')(actorOf(c), await body(c, SandboxAdvanceBody)),
+        ),
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/kol/sandbox',
+        operationId: 'clearKolSandbox',
+        summary: '一键清空演练数据：删掉所有带 sandbox 标记的记录，真红人与真合作一条不碰',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        returns: 'KolSandboxStatusView',
+      },
+      async (c, deps) => ok(c, await sandboxOf(deps, 'sandboxClear')(actorOf(c))),
     ),
   ]
 }

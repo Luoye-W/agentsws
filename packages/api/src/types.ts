@@ -65,6 +65,7 @@ import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { DesignPort } from './routes/design.js'
+import type { ExtensionPort } from './routes/extension.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
 import type { KolPort } from './routes/kol.js'
@@ -715,6 +716,12 @@ export interface GatewayDeps {
    * 只是没有任何增删改的入口。
    */
   kol?: KolPort
+  /**
+   * WP119（68）：浏览器插件的本地一面。没装配时 `/v1/extension/*` 回
+   * not_implemented——工作台的连接页照实说「这台机器上还没有插件那一面」，
+   * 其余一切照常。插件的数据**只走本机**：它连的是 `127.0.0.1`，不是云。
+   */
+  extension?: ExtensionPort
   /**
    * WP73（56 §6）：本地社媒库。没装配时 `/v1/social/*` 回 not_implemented——
    * 社媒运营那九条职责的面板照常读得到（投影是装配期塞进去的），
