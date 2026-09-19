@@ -15,13 +15,20 @@
 import type {
   CapabilitySourceSettings,
   CloudCreditsView,
+  KolCloudDeleteResult,
+  KolCloudExport,
+  KolCloudLocalStatus,
+  KolCloudSyncRun,
+  KolObjectKind,
   MaybePromise,
   Pricing,
+  ServiceSubscription,
   TopupOrder,
   TopupTiers,
   UsageGroup,
   UsageReport,
 } from '@agentsws/contracts'
+import { KOL_OBJECT_KINDS } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, principalOf } from '../helpers.js'
@@ -78,6 +85,33 @@ export interface CloudPort {
    * 云上没配 Stripe 就回一句人话（501），不是一个红框。
    */
   createTopup(actor: CloudActor, input: { tier_id: string }): MaybePromise<TopupOrder>
+  /**
+   * 红人营销增值服务（67 §3，WP118）：本地看到的那一份状态。
+   *
+   * 没关联账号、没订阅、云连不通**都不是错**——回一句人话加一个状态，界面上那张卡
+   * 照着画。这一条与 `credits` 同一条纪律：一张卡不该因为云上取不到就一片空白。
+   */
+  kolCloudStatus(actor: CloudActor): MaybePromise<KolCloudLocalStatus>
+  /** 立即同步一趟：把本地改过的推上去，把云上改过的拉下来。 */
+  kolCloudSync(actor: CloudActor): MaybePromise<KolCloudSyncRun>
+  /** 开通（当场扣第一期 30 积分）。 */
+  kolCloudSubscribe(actor: CloudActor): MaybePromise<ServiceSubscription>
+  /** 取消（当期用完为止，**数据一条不动**）。 */
+  kolCloudCancel(actor: CloudActor): MaybePromise<ServiceSubscription>
+  /**
+   * 一条同步冲突怎么处理。
+   *
+   * `winner` = 就这样（当前值不动），`loser` = 把被盖掉的那一份挑回来。两种都
+   * **不删另一份**：输的那一份留在账上，导出时也一起带走。
+   */
+  kolCloudResolveConflict(
+    actor: CloudActor,
+    input: { kind: KolObjectKind; id: string; pick: 'winner' | 'loser' },
+  ): MaybePromise<KolCloudSyncRun>
+  /** 导出云端这一份（**欠费也给导**——这时候拦着等于拿数据当人质）。 */
+  kolCloudExport(actor: CloudActor): MaybePromise<KolCloudExport>
+  /** 删掉云端这一份。**本地一条不动**，订阅也不动（用户可能只是想清空重来）。 */
+  kolCloudDelete(actor: CloudActor): MaybePromise<KolCloudDeleteResult>
   capabilitySources(actor: CloudActor): MaybePromise<CapabilitySourceSettings>
   setCapabilitySources(
     actor: CloudActor,
@@ -93,6 +127,18 @@ export interface CloudPort {
  */
 /** 按哪一档充。**只有档位 id，没有金额**——金额由云上那张表说了算。 */
 const TopupBody = z.object({ tier_id: z.string().min(1).max(64) })
+
+/**
+ * 一条同步冲突怎么处理（67 §3）。
+ *
+ * `pick` 只有两个值，而且**没有"删掉两份"那一项**：输的那一份是用户的数据，
+ * 处理冲突不等于同意扔掉它。
+ */
+const ConflictBody = z.object({
+  kind: z.enum(KOL_OBJECT_KINDS as [KolObjectKind, ...KolObjectKind[]]),
+  id: z.string().min(1).max(120),
+  pick: z.enum(['winner', 'loser']),
+})
 
 const SourcesBody = z.object({
   capability_sources: z.record(z.string().min(1).max(64), z.enum(['mine', 'agentsws'])),
@@ -216,6 +262,115 @@ export function cloudRoutes(): Route[] {
         const input = TopupBody.parse(await c.req.json())
         return ok(c, await portOf(deps).createTopup(actorOf(c), input), 201)
       },
+    ),
+    /*
+     * ── 红人营销增值服务（67 §3，WP118）──────────────────────────────────
+     *
+     * 七条路由一件事：**本地这一份与云上那一份是两份数据**，谁都不是谁的备份。
+     * 所以"删掉云上这一份"与"退订"是两条路，"同步"也不会替用户做任何删除决定
+     * （冲突的两个版本都留着，见 `kolCloudResolveConflict`）。
+     */
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/kol/status',
+        operationId: 'getKolCloudStatus',
+        summary: '红人营销增值服务：订阅状态 + 待推条数 + 云端条数 + 没处理的冲突',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'KolCloudLocalStatus',
+      },
+      async (c, deps) => ok(c, await portOf(deps).kolCloudStatus(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/cloud/kol/sync',
+        operationId: 'syncKolCloud',
+        summary: '立即同步一趟：推本地改过的、拉云上改过的。**任何一步失败都不动本地数据**',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'KolCloudSyncRun',
+      },
+      async (c, deps) => ok(c, await portOf(deps).kolCloudSync(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/cloud/kol/subscription',
+        operationId: 'subscribeKolCloud',
+        summary: '开通红人营销增值服务（30 积分 / 月，当场扣第一期）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'ServiceSubscription',
+      },
+      async (c, deps) => ok(c, await portOf(deps).kolCloudSubscribe(actorOf(c)), 201),
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/cloud/kol/subscription',
+        operationId: 'cancelKolCloud',
+        summary: '取消（当期用完为止）。**数据一条不删**——删数据是另一条路',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'ServiceSubscription',
+      },
+      async (c, deps) => ok(c, await portOf(deps).kolCloudCancel(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/cloud/kol/conflicts/resolve',
+        operationId: 'resolveKolCloudConflict',
+        summary: '一条同步冲突处理完了：留当前值，或把被盖掉的那一份挑回来（两份都不删）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: ConflictBody,
+        returns: 'KolCloudSyncRun',
+      },
+      async (c, deps) => {
+        const input = await body(c, ConflictBody)
+        return ok(c, await portOf(deps).kolCloudResolveConflict(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/kol/export',
+        operationId: 'exportKolCloud',
+        summary: '导出云端这一份（可读的 json，含被盖掉的那些版本）。**欠费也给导**',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'KolCloudExport',
+      },
+      async (c, deps) => ok(c, await portOf(deps).kolCloudExport(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/cloud/kol',
+        operationId: 'deleteKolCloud',
+        summary: '删掉云端这一份。**本地一条不动、订阅也不动**（用户可能只是想清空重来）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'KolCloudDeleteResult',
+      },
+      async (c, deps) => ok(c, await portOf(deps).kolCloudDelete(actorOf(c))),
     ),
     route(
       {

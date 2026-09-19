@@ -350,6 +350,11 @@ export interface KolCloudSync {
   status(): Promise<KolCloudLocalStatus>
   /** 走一趟：把本地改过的推上去，再把云上改过的拉下来。 */
   sync(): Promise<KolCloudSyncRun>
+  /**
+   * 排着队的东西自己补上去（不等结果，限流见 {@link KOL_CLOUD_AUTO_DRAIN_MS}）。
+   * 读状态那一跳顺带叫它：用户不必记得每天去点一次「立即同步」。
+   */
+  autoDrain(): void
   /** 界面上要标出来的冲突（云上那本在前，本地这本在后；已处理的不出现）。 */
   conflicts(): KolCloudConflictView[]
   /**
@@ -370,7 +375,20 @@ export const KOL_CLOUD_NOT_LINKED =
 
 /** 云连不通时的那句。**不说"失败"**——本地这一份一条没丢，说清楚这一点最要紧。 */
 export const KOL_CLOUD_UNREACHABLE =
-  '云上暂时联系不上。你的红人库在本地一条没动，改动都排着队，等连上会自动补同步。'
+  '云上暂时联系不上。你的红人库在本地一条没动，改动都排着队；连上之后自己会补上（回到这一页，或者点「立即同步」）。'
+
+/** 上一趟还在跑的时候点第二下：一句人话，不是两趟叠在一起推同一批。 */
+export const KOL_CLOUD_BUSY = '正在同步中，等几秒再看。'
+
+/**
+ * 自动补同步的最短间隔。
+ *
+ * 为什么要自动：排队这件事只有"自己会补上"才算数——用户不会记得每天去点一次
+ * 「立即同步」，而攒了三天再一次性推上去，撞冲突的概率比每天推一次高得多。
+ * 为什么要限流：打开那一页就打一趟云，等于把一次读变成一次写。5 分钟是
+ * "人连着点几下不会重复打云"与"排队的东西不会过夜"之间的那条线。
+ */
+export const KOL_CLOUD_AUTO_DRAIN_MS = 5 * 60_000
 
 /** 本地库还没建出来（品牌刚建 / 已关）时那一句。 */
 export const KOL_CLOUD_NO_STORE = '这个品牌还没有红人库，没有可同步的东西。'
@@ -632,8 +650,32 @@ export function createKolCloudSync(options: KolCloudSyncOptions): KolCloudSync {
     at: at ?? now(),
   })
 
+  /** 同一时刻只跑一趟：两趟叠在一起会把同一批改动推两次（云上按版本号认，不会错乱，但白跑）。 */
+  let inFlight = false
+
   const sync = async (): Promise<KolCloudSyncRun> => {
     const at = now()
+    if (inFlight) return busy(at)
+    inFlight = true
+    try {
+      return await oneSync(at)
+    } finally {
+      inFlight = false
+    }
+  }
+
+  const busy = (at: string): KolCloudSyncRun => ({
+    ok: false,
+    message: KOL_CLOUD_BUSY,
+    pushed: 0,
+    pulled: 0,
+    conflicts: 0,
+    skipped: 0,
+    pending: pending(),
+    at,
+  })
+
+  const oneSync = async (at: string): Promise<KolCloudSyncRun> => {
     if (options.store() === undefined)
       return {
         ok: false,
@@ -737,11 +779,36 @@ export function createKolCloudSync(options: KolCloudSyncOptions): KolCloudSync {
     }
   }
 
+  /**
+   * 排着队的东西自己补上去（**不等结果**）。
+   *
+   * 由读状态那一跳顺带叫一次：没有排队的东西就一个字节都不发，有排队的也最多
+   * 每 {@link KOL_CLOUD_AUTO_DRAIN_MS} 打一次云。补不上（还是连不通）就算了，
+   * 下一拍再来——这条路上没有任何一处会因为云不通而让用户看见一个红框。
+   */
+  const autoDrain = (): void => {
+    if (inFlight || !options.linked() || options.store() === undefined) return
+    if (pending() === 0) return
+    const last = backend.meta('last_attempt_at')
+    const nowMs = Date.parse(now())
+    if (
+      last !== undefined &&
+      Number.isFinite(nowMs) &&
+      nowMs - Date.parse(last) < KOL_CLOUD_AUTO_DRAIN_MS
+    )
+      return
+    backend.setMeta('last_attempt_at', now())
+    void sync().catch(() => {
+      // 排不上就算了：改动还在本地队列里，下一拍再来
+    })
+  }
+
   return {
     deviceId: () => deviceId,
     pending,
     status,
     sync,
+    autoDrain,
     conflicts: conflictViews,
     resolveConflict,
     close: () => backend.close(),

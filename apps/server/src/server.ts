@@ -1829,6 +1829,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       secrets: brandSecrets,
       env,
+      // WP118 / 67 §3：云端红人库要同步的就是这个品牌自己那本红人库
+      kol: () => kol,
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
     })
@@ -2395,6 +2397,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
+        ownCloud.kolSync?.close()
         site.close()
         ads.close()
         pr.close()
