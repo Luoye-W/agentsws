@@ -1,17 +1,20 @@
 /**
  * 设计规范页与右栏面板（WP122，71 §4）。
  *
- * 四组断言，每一组盯的都是"这一页**不做什么**"：
+ * 前三组盯的都是"这一页**不做什么**"：
  *
  * 1. 还没抓过时画的是一句人话 + 两个入口，**不是一张空色板**；
  * 2. 抽不到的那一节写「未找到，请补充」，**不写「无」**——用户看不出
  *    "这个品牌没有这一项"和"我们没抓到"的区别，而那两件事他要做的动作不同；
  * 3. 冲突的那一格**两个色块都画出来**，界面不替用户判哪个对；
  * 4. 右栏是**只读速查表**：没有编辑、没有抓取按钮。
+ *
+ * 最后一组是原文那一半的右预览，见它自己那段注释。
  */
 import type { BrandDesignProfile } from '@agentsws/contracts'
 import { cleanup, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { MarkdownPreview } from '@/components/design-md/markdown-preview'
 import { countConflicts, designSummary, TokensView } from '@/components/design-md/tokens-view'
 import { renderWithProviders } from './helpers'
 
@@ -104,5 +107,58 @@ describe('摘要那一行（档案卡与右栏共用）', () => {
   it('冲突数就是界面上那个角标', () => {
     expect(countConflicts(PROFILE)).toBe(1)
     expect(countConflicts({})).toBe(0)
+  })
+})
+
+/*
+ * 原文那一半的右预览（71 §4「左改右预览」）。
+ *
+ * 这一组里最要紧的是第三条：这份文件的内容有三个来路，其中两个不是我们写的
+ * （用户粘进来的整份替换、模型写成的正文）。预览把它当**文本**排，不当 HTML 插。
+ */
+describe('原文预览', () => {
+  const MD = [
+    '---',
+    'colors:',
+    '  primary: "#b8422e"',
+    '---',
+    '',
+    '# 用法',
+    '主色只用在最重要的那一处。',
+    '',
+    '- 不要大面积铺',
+    '- 不要和红色放在一起',
+  ].join('\n')
+
+  it('文件头那一段单独画出来（机器读的，不混进正文里）', () => {
+    renderWithProviders(<MarkdownPreview markdown={MD} />)
+    expect(screen.getByTestId('design-md-preview-front').textContent).toContain('primary')
+    cleanup()
+  })
+
+  it('标题、段落与列表都排出来，一个字都不吞', () => {
+    renderWithProviders(<MarkdownPreview markdown={MD} />)
+    const text = screen.getByTestId('design-md-preview').textContent ?? ''
+    expect(text).toContain('用法')
+    expect(text).toContain('主色只用在最重要的那一处。')
+    expect(text).toContain('不要大面积铺')
+    cleanup()
+  })
+
+  it('正文里混进来的标签**当文字排**，不当 HTML 插进 DOM', () => {
+    renderWithProviders(
+      <MarkdownPreview markdown={'# 标题\n<img src=x onerror="alert(1)"> 这一行'} />,
+    )
+    const el = screen.getByTestId('design-md-preview')
+    expect(el.textContent).toContain('<img src=x onerror=')
+    expect(el.querySelector('img')).toBeNull()
+    cleanup()
+  })
+
+  it('没有文件头也不抛（用户粘进来的可能只有正文）', () => {
+    renderWithProviders(<MarkdownPreview markdown="# 只有正文" />)
+    expect(screen.queryByTestId('design-md-preview-front')).toBeNull()
+    expect(screen.getByTestId('design-md-preview').textContent).toContain('只有正文')
+    cleanup()
   })
 })

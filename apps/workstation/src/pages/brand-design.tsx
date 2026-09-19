@@ -16,7 +16,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, RefreshCw, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { MarkdownPreview } from '@/components/design-md/markdown-preview'
 import { countConflicts, designSummary, TokensView } from '@/components/design-md/tokens-view'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -26,8 +27,13 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   extractBrandDesign,
   getBrandDesign,
+  ingestBrandDesignFile,
   listBrandDesignRevisions,
   replaceBrandDesign,
+  UPLOAD_ACCEPT,
+  UPLOAD_EXTENSIONS,
+  UPLOAD_MAX_BYTES,
+  uploadKnowledgeSource,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -61,6 +67,54 @@ export function BrandDesignPage(): React.ReactElement {
       await qc.invalidateQueries({ queryKey: ['brand-design'] })
     },
   })
+  /**
+   * 传一份品牌手册进来（71 §2 第二条）。走的是**知识上传那一条路**（WP99）——
+   * 文件先进知识库，再拿它的 id 去读；不另开一条上传通道，两道闸（扩展名与
+   * 大小）于是与知识库那边永远是同一份。
+   */
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const ingest = useMutation({
+    mutationFn: async (file: File) => {
+      const source = await uploadKnowledgeSource(file)
+      return ingestBrandDesignFile(source.id)
+    },
+    onSuccess: async () => {
+      setDraft(undefined)
+      await qc.invalidateQueries({ queryKey: ['brand-design'] })
+    },
+  })
+  const [fileError, setFileError] = useState<string | undefined>(undefined)
+  /**
+   * 前端那一道预检，与知识库上传那边**同一份判据、同一批 i18n key**。
+   * 不是安全闸（真闸在服务端），是别让人白等：一份 300 MB 的扫描件传上去
+   * 再被拒，他已经等了两分钟。
+   */
+  const precheck = (file: File): string | undefined => {
+    const dot = file.name.lastIndexOf('.')
+    const ext = dot < 0 ? '' : file.name.slice(dot + 1).toLowerCase()
+    if (!(UPLOAD_EXTENSIONS as readonly string[]).includes(ext))
+      return t('knowledge.upload.bad_kind', { kinds: UPLOAD_EXTENSIONS.join(' / ') })
+    if (file.size === 0) return t('knowledge.upload.empty')
+    if (file.size > UPLOAD_MAX_BYTES)
+      return t('knowledge.upload.too_large', {
+        limit: Math.floor(UPLOAD_MAX_BYTES / 1024 / 1024),
+      })
+    return undefined
+  }
+
+  /**
+   * 传手册没成有**三种长相**，都得说人话：
+   * ① 前端预检当场拦下（不收的扩展名 / 空文件 / 太大）；
+   * ② 上传或读取那一跳抛了（网络、服务端那六道闸）；
+   * ③ **HTTP 200 但 `status: 'failed'`**——文件收到了，却认不出里面有规范。
+   *    这一种最容易漏：请求是成功的，界面上于是什么都没发生，人只当没点上。
+   */
+  const ingestError =
+    fileError ??
+    (ingest.error === null ? undefined : ingest.error.message) ??
+    (ingest.data?.status === 'failed'
+      ? (ingest.data.failure ?? t('design.md.ingest.failed'))
+      : undefined)
 
   if (doc.isLoading) return <Skeleton className="h-64 w-full" />
 
@@ -78,7 +132,7 @@ export function BrandDesignPage(): React.ReactElement {
             {summary === undefined ? t('design.md.summary.none') : t('design.md.summary', summary)}
           </p>
           {conflicts === 0 ? null : (
-            <p className="text-ws-warning text-xs" data-testid="design-md-conflicts">
+            <p className="text-ws-warn text-xs" data-testid="design-md-conflicts">
               {t('design.md.conflicts', { count: conflicts })}
             </p>
           )}
@@ -94,11 +148,31 @@ export function BrandDesignPage(): React.ReactElement {
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             {extract.isPending ? t('design.md.extracting') : t('design.md.extract')}
           </Button>
-          <Button variant="ghost" size="sm" asChild data-testid="design-md-upload">
-            <a href="/knowledge">
-              <Upload className="mr-1.5 h-3.5 w-3.5" />
-              {t('design.md.upload')}
-            </a>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={UPLOAD_ACCEPT}
+            className="hidden"
+            data-testid="design-md-file"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              // 立刻清空：同一份文件选第二次也要能触发 change
+              e.target.value = ''
+              if (file === undefined) return
+              const bad = precheck(file)
+              setFileError(bad)
+              if (bad === undefined) ingest.mutate(file)
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={ingest.isPending}
+            onClick={() => fileRef.current?.click()}
+            data-testid="design-md-upload"
+          >
+            <Upload className="mr-1.5 h-3.5 w-3.5" />
+            {ingest.isPending ? t('design.md.ingesting') : t('design.md.upload')}
           </Button>
           {current === undefined ? null : (
             <Button variant="ghost" size="sm" asChild data-testid="design-md-download">
@@ -113,6 +187,14 @@ export function BrandDesignPage(): React.ReactElement {
           )}
         </div>
       </header>
+
+      {/* 传手册那一下没成：说清楚是哪一份、为什么。**不弹红框**——弹框会被关掉，
+          关掉之后那一行字就再也找不回来了 */}
+      {ingestError === undefined ? null : (
+        <p className="text-ws-bad text-xs" data-testid="design-md-ingest-error">
+          {ingestError}
+        </p>
+      )}
 
       {current === undefined ? (
         <Card className="p-6 text-sm text-ws-muted-fg" data-testid="design-md-empty">
@@ -139,8 +221,8 @@ export function BrandDesignPage(): React.ReactElement {
                 onChange={(e) => setDraft(e.target.value)}
                 data-testid="design-md-source"
               />
-              <div className="min-h-[28rem] overflow-auto rounded-[--ws-radius-md] border border-ws-border p-3">
-                <TokensView profile={current.profile} />
+              <div className="min-h-[28rem] overflow-auto rounded-md border border-ws-line p-3">
+                <MarkdownPreview markdown={draft ?? current.markdown} />
               </div>
             </div>
             <div className="flex items-center gap-2 pt-3">
@@ -168,7 +250,7 @@ export function BrandDesignPage(): React.ReactElement {
                 .map((r) => (
                   <li
                     key={r.revision}
-                    className="flex items-baseline gap-3 border-ws-border border-b pb-2 text-sm last:border-0"
+                    className="flex items-baseline gap-3 border-ws-line border-b pb-2 text-sm last:border-0"
                   >
                     <span className="font-mono text-ws-muted-fg text-xs">#{r.revision}</span>
                     <span>{t(`design.md.rev.${r.reason}`)}</span>

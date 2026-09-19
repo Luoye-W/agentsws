@@ -1864,6 +1864,9 @@ const zh: Table = {
   'design.md.extract': '从官网抓一份',
   'design.md.extracting': '正在读官网的样式…',
   'design.md.upload': '上传品牌手册',
+  'design.md.ingesting': '正在读这份手册…',
+  'design.md.ingest.failed':
+    '这份文件里没读出设计规范。它得是品牌手册那类文件（PDF / 图片 / docx / pptx）。',
   'design.md.summary': '已抓到 {colors} 色 · {fonts} 字体 · {logos} 个 logo',
   'design.md.summary.none': '还没抓过设计规范',
   'design.md.conflicts': '{count} 处两边说法不一样，点开挑一个',
@@ -4134,6 +4137,9 @@ const en: Table = {
   'design.md.extract': 'Pull from the website',
   'design.md.extracting': 'Reading the site styles…',
   'design.md.upload': 'Upload a brand book',
+  'design.md.ingesting': 'Reading this brand book…',
+  'design.md.ingest.failed':
+    'No design spec found in this file. It has to be a brand book (PDF / image / docx / pptx).',
   'design.md.summary': '{colors} colours · {fonts} typefaces · {logos} logos',
   'design.md.summary.none': 'No design spec yet',
   'design.md.conflicts': '{count} values differ between sources — pick one',

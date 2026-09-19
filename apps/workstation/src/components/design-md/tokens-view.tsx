@@ -71,7 +71,7 @@ function Swatch({
     <div className="flex flex-col gap-1" data-testid={`design-md-color-${token}`}>
       <WithSource value={value}>
         <div
-          className="h-14 w-full rounded-[--ws-radius-sm] border border-ws-border"
+          className="h-14 w-full rounded-sm border border-ws-line"
           style={{ backgroundColor: value.value }}
         />
       </WithSource>
@@ -80,7 +80,7 @@ function Swatch({
       {value.conflict === undefined ? null : (
         <div className="flex items-center gap-1" data-testid={`design-md-conflict-${token}`}>
           <div
-            className="h-4 w-4 rounded-[2px] border border-ws-border"
+            className="h-4 w-4 rounded-[2px] border border-ws-line"
             style={{ backgroundColor: value.conflict.value }}
             title={t('design.md.conflict.site')}
           />
@@ -108,7 +108,7 @@ function TypeSample({
   const v = value.value
   return (
     <WithSource value={value}>
-      <div className="flex flex-col gap-0.5 border-ws-border border-b py-2 last:border-0">
+      <div className="flex flex-col gap-0.5 border-ws-line border-b py-2 last:border-0">
         <p
           className="truncate"
           style={{
@@ -213,7 +213,7 @@ export function TokensView({ profile }: TokensViewProps): React.ReactElement {
             <WithSource key={token} value={value}>
               <div className="flex flex-col items-center gap-1">
                 <div
-                  className="bg-ws-accent"
+                  className="bg-ws-brand"
                   style={{ width: String(value.value), height: String(value.value), minWidth: 2 }}
                 />
                 <span className="text-[11px] text-ws-muted-fg">
@@ -226,7 +226,7 @@ export function TokensView({ profile }: TokensViewProps): React.ReactElement {
             <WithSource key={token} value={value}>
               <div className="flex flex-col items-center gap-1">
                 <div
-                  className="h-10 w-10 border-2 border-ws-accent"
+                  className="h-10 w-10 border-2 border-ws-brand"
                   style={{ borderRadius: value.value }}
                 />
                 <span className="text-[11px] text-ws-muted-fg">
@@ -255,7 +255,7 @@ export function TokensView({ profile }: TokensViewProps): React.ReactElement {
             </button>
           </div>
           <div
-            className="flex min-w-40 flex-col gap-1 border border-ws-border"
+            className="flex min-w-40 flex-col gap-1 border border-ws-line"
             style={{
               backgroundColor: surface,
               color: onSurface,
@@ -276,7 +276,7 @@ export function TokensView({ profile }: TokensViewProps): React.ReactElement {
             .map((logo) => (
               <div key={logo.url} className="flex flex-col items-center gap-1">
                 <div
-                  className="flex h-16 w-32 items-center justify-center rounded-[--ws-radius-sm] border border-ws-border"
+                  className="flex h-16 w-32 items-center justify-center rounded-sm border border-ws-line"
                   style={{ backgroundColor: logo.variant === 'dark' ? onSurface : surface }}
                 >
                   <img src={logo.url} alt="" className="max-h-12 max-w-28 object-contain" />

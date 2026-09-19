@@ -10,7 +10,12 @@ import type { BrandDesignProfile } from '@agentsws/contracts'
 import { CONNECTION_CATEGORIES, connectionDirectoryEntry } from '@agentsws/contracts'
 import type { GenerationPlan } from '@agentsws/design-core'
 import { describe, expect, it } from 'vitest'
-import { createDesignStore, designCheckNote, designDeckData, seedDemoDesign } from '../src/design.js'
+import {
+  createDesignStore,
+  designCheckNote,
+  designDeckData,
+  seedDemoDesign,
+} from '../src/design.js'
 
 const NOW = '2026-09-17T09:00:00.000Z'
 const store = () => {

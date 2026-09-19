@@ -31,7 +31,7 @@ export function DesignMdPanel(): React.ReactElement {
     return (
       <div className="flex flex-col gap-2 p-3" data-testid="design-md-panel-empty">
         <p className="text-sm text-ws-muted-fg">{t('design.md.empty')}</p>
-        <Link className="text-sm text-ws-accent underline" to="/brand-design">
+        <Link className="text-sm text-ws-brand underline" to="/brand-design">
           {t('design.md.title')}
         </Link>
       </div>
@@ -57,7 +57,7 @@ export function DesignMdPanel(): React.ReactElement {
           {colors.map(([token, v]) => (
             <div key={token} className="flex flex-col items-center gap-0.5">
               <div
-                className="h-7 w-7 rounded-[--ws-radius-sm] border border-ws-border"
+                className="h-7 w-7 rounded-sm border border-ws-line"
                 style={{ backgroundColor: v.value }}
                 title={`${token} ${v.value}`}
               />
@@ -89,7 +89,7 @@ export function DesignMdPanel(): React.ReactElement {
         </section>
       )}
 
-      <Link className="text-sm text-ws-accent underline" to="/brand-design">
+      <Link className="text-sm text-ws-brand underline" to="/brand-design">
         {t('design.md.title')}
       </Link>
     </div>

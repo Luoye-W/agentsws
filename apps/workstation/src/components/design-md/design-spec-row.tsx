@@ -26,7 +26,7 @@ export function DesignSpecRow(): React.ReactElement | null {
   return (
     <p className="text-xs text-ws-muted-fg" data-testid="intake-design-md">
       {t('design.md.title')}：{t('design.md.summary', summary)}{' '}
-      <Link className="text-ws-accent underline" to="/brand-design">
+      <Link className="text-ws-brand underline" to="/brand-design">
         {t('design.md.upload')}
       </Link>
     </p>
