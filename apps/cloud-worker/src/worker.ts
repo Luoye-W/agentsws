@@ -18,8 +18,17 @@
 import { ADMIN_TOKEN_ENV } from '@agentsws/cloud/workers-kit'
 import { authenticate, errorResponse } from '@agentsws/cloud-entry'
 import type { CloudTokenVerifier, VerifiedCloudToken } from '@agentsws/contracts'
+import { isKolPath, type KolCharge, kolChargeFor, type KolWalletOp } from '@agentsws/kol-public'
+import type { WalletReservation } from '@agentsws/metering'
 import type { WorkerEnv } from './env.js'
-import { INTERNAL_HEADERS, stripInternalHeaders, withInternalHeaders } from './internal.js'
+import {
+  INTERNAL_HEADERS,
+  jsonArrayFrom,
+  stripInternalHeaders,
+  withInternalHeaders,
+} from './internal.js'
+import { KOL_PUBLIC_SINGLETON } from './kol-admin.js'
+import { KOL_WALLET_INTERNAL, type KolReserveFailure } from './kol-wallet.js'
 
 /** 单例 `AccountsDO` 的名字。只有这一个名字，所以只有这一个对象。 */
 export const ACCOUNTS_SINGLETON = 'accounts'
@@ -212,9 +221,148 @@ async function handleAdminTopup(
   return walletStub(env, org_id).fetch(forwarded)
 }
 
+/**
+ * 公共红人库那三跳（WP116 / 64 §10.2）。
+ *
+ * ```
+ * ① WalletDO(org) 预扣（只有收费那三条路要）
+ * ② KolPublicDO 取数（带着那一笔预扣）
+ * ③ WalletDO(…)  照单结算 / 释放 / 返额度
+ * ```
+ *
+ * ③ **按组织分组**再打：结算走预扣上的组织，而"贡献返额度"那一笔可能落在
+ * 另一个组织头上（插件令牌配对给谁，额度就返给谁）。一趟打一个对象。
+ *
+ * ③ 用 `waitUntil` 吗？**不用。** 它是钱，用户拿到 200 的那一刻账必须已经记上；
+ * 抄给看板那一份才是"顺便"。
+ */
+async function handleKolPublic(
+  env: WorkerEnv,
+  request: Request,
+  origin: string,
+  url: URL,
+): Promise<Response> {
+  if (env.KOL_PUBLIC === undefined)
+    return envelope('not_found', `没有这个入口：${request.method} ${url.pathname}`, 404)
+
+  /*
+   * 插件上报那一条**不认工作区令牌**（只认 `plg_…`），所以这里不能强求 principal。
+   * 认令牌的活儿由公共库自己那一套鉴权做（`packages/kol-public` 的 `authenticate`），
+   * 入口只负责："如果带着 `wst_…`，先验一遍并把 principal 递进去"。
+   */
+  let principal: VerifiedCloudToken | undefined
+  const authorization = request.headers.get('Authorization') ?? undefined
+  if (authorization !== undefined && authorization.includes('wst_')) {
+    try {
+      const verified = await authenticate({ verifier: remoteVerifier(env, origin) }, authorization)
+      principal = { ...verified, scopes: verified.scopes as VerifiedCloudToken['scopes'] }
+    } catch (err) {
+      return errorResponse(err)
+    }
+  }
+
+  // ① 预扣（免费那几条一笔都不预扣）
+  const charge = kolChargeFor(request.method, url.pathname)
+  const reservations: WalletReservation[] = []
+  if (charge !== undefined) {
+    if (principal === undefined)
+      return envelope('unauthenticated', '这一条要登录的工作区令牌', 401)
+    const reserved = await reserveKolCharge(env, origin, principal, charge)
+    if ('error' in reserved)
+      return envelope(
+        reserved.error.code,
+        reserved.error.message,
+        reserved.error.code === 'insufficient_credits' ? 402 : 400,
+      )
+    reservations.push(reserved.reservation)
+  }
+
+  // ② 取数
+  const stub = env.KOL_PUBLIC.get(env.KOL_PUBLIC.idFromName(KOL_PUBLIC_SINGLETON))
+  const forwarded = withInternalHeaders(request, {
+    ...(principal === undefined ? {} : { principal }),
+    ...(reservations.length === 0 ? {} : { kolReservations: reservations }),
+  })
+  const res = await stub.fetch(forwarded)
+
+  // ③ 照单执行。**记不上不该把 200 变成 500**：钱那一侧的孤儿预扣清扫是兜底
+  const ops = jsonArrayFrom(res.headers, INTERNAL_HEADERS.kolOps) as KolWalletOp[]
+  await applyKolOpsRemote(env, origin, ops, reservations)
+
+  // 内部头不出门
+  const headers = new Headers(res.headers)
+  headers.delete(INTERNAL_HEADERS.kolOps)
+  return new Response(res.body, { status: res.status, headers })
+}
+
+/** ① 去那个组织的 `WalletDO` 里预扣一笔。 */
+async function reserveKolCharge(
+  env: WorkerEnv,
+  origin: string,
+  principal: VerifiedCloudToken,
+  charge: KolCharge,
+): Promise<{ reservation: WalletReservation } | { error: KolReserveFailure }> {
+  const res = await walletStub(env, principal.org_id).fetch(
+    new Request(`${origin}${KOL_WALLET_INTERNAL.reserve}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        org_id: principal.org_id,
+        workspace_id: principal.workspace_id,
+        capability: charge.capability,
+        unit: charge.unit,
+        quantity: charge.quantity,
+        request_id: crypto.randomUUID(),
+      }),
+    }),
+  )
+  if (!res.ok)
+    return { error: { code: 'invalid_input', message: '钱包没应答，这一次没做（钱一分没动）' } }
+  const parsed = (await res.json()) as
+    | { error: KolReserveFailure }
+    | (WalletReservation & { error?: undefined })
+  if (parsed.error !== undefined) return { error: parsed.error }
+  return { reservation: parsed as WalletReservation }
+}
+
+/** ③ 按组织分组，一趟打一个 `WalletDO`。 */
+async function applyKolOpsRemote(
+  env: WorkerEnv,
+  origin: string,
+  ops: readonly KolWalletOp[],
+  reservations: readonly WalletReservation[],
+): Promise<void> {
+  const byOrg = new Map<string, { ops: KolWalletOp[]; reservations: WalletReservation[] }>()
+  const bucket = (org_id: string): { ops: KolWalletOp[]; reservations: WalletReservation[] } => {
+    const found = byOrg.get(org_id)
+    if (found !== undefined) return found
+    const made = { ops: [] as KolWalletOp[], reservations: [] as WalletReservation[] }
+    byOrg.set(org_id, made)
+    return made
+  }
+  for (const op of ops)
+    bucket(op.kind === 'topup' ? op.args.org_id : op.reservation.org_id).ops.push(op)
+  for (const reservation of reservations) bucket(reservation.org_id).reservations.push(reservation)
+  if (byOrg.size === 0) return
+  await Promise.all(
+    [...byOrg].map(async ([org_id, batch]) => {
+      try {
+        await walletStub(env, org_id).fetch(
+          new Request(`${origin}${KOL_WALLET_INTERNAL.apply}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(batch),
+          }),
+        )
+      } catch {
+        // 记不上就算了：那笔预扣会被钱那一侧的闹钟当孤儿扫掉（一小时）
+      }
+    }),
+  )
+}
+
 /** 一条请求的全部去向。 */
 export async function route(request: Request, env: WorkerEnv): Promise<Response> {
-  // ① 擦头：外面送来的内部头与 IP 头一律不信
   const clean = normalizeClientIp(stripInternalHeaders(request))
   const url = new URL(clean.url)
   const origin = url.origin
@@ -251,6 +399,9 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
     }
     return res
   }
+
+  // WP116：公共红人库（预扣 → 取数 → 结算，三跳）
+  if (isKolPath(url.pathname)) return handleKolPublic(env, clean, origin, url)
 
   if (isWalletPath(url.pathname)) {
     // ② 验令牌：每次都去问 AccountsDO（撤销立刻生效）

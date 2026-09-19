@@ -138,8 +138,8 @@ export class AccountsCore {
         entry: true,
         // 在线值守要常驻子进程，Workers 上没有这种东西——**如实说没开通**
         standby: false,
-        // 公共红人库这一轮不上（见 docs/64 §9 与 WP114 报告）
-        kol_public: false,
+        // 公共红人库（WP116 / 64 §10.2 的两段式）：绑了那个 DO 才算开通
+        kol_public: env.KOL_PUBLIC !== undefined,
         mail: options.mail !== undefined || cloudflareMailReady(env.EMAIL, record),
         admin_topup: (env.AGENTSWS_CLOUD_ADMIN_TOKEN ?? '').trim() !== '',
         // WP115：后台。读账那一半要 `LEDGER` binding；没绑就只有写动作能用

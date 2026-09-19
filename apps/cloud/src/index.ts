@@ -303,6 +303,8 @@ export async function main(): Promise<void> {
   let adminStore: AdminStore | undefined
   let ledger: UsageLedger | undefined
   let consoleWallet: AdminConsoleWallet | undefined
+  /** 公共红人库那一侧（WP116 §4）。装完 `mountKolPublic` 才有。 */
+  let consoleKol: KolAdminPort | undefined
   const consoleRoutes = adminConsoleRoutes({
     clock,
     accounts: () => server.store,
@@ -312,6 +314,7 @@ export async function main(): Promise<void> {
     },
     wallet: () => consoleWallet,
     ledger: () => ledger,
+    kol: () => consoleKol,
     baseUrl: cloudBaseUrl(env),
     mail: mailSenderFromEnv(env),
     ...(adminToken === undefined || adminToken === '' ? {} : { bootstrapToken: adminToken }),
@@ -348,6 +351,17 @@ export async function main(): Promise<void> {
     pricing: entry.pricing,
     ...(dataDir === undefined ? {} : { dataDir }),
   })
+  /*
+   * 后台那一页要的是"库统计 / 搜索 / 移除 / 搬家"，而这四件事只有 sqlite 那份
+   * 存储做得到（内存那份没有搬家用的那几张表）。所以内存档下**这一页回 503**，
+   * 不画一堆 0——与看板页同一条。
+   */
+  if (isLibraryStore(kol.store))
+    consoleKol = localKolAdminPort({
+      store: kol.store,
+      secrets: kol.secrets,
+      now: () => clock.now(),
+    })
   walletHandles = { wallet: entry.wallet, store: entry.store }
   /*
    * WP115：后台读账的那一层。**Compose 形态下钱包库就是账本**——一张

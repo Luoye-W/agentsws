@@ -86,6 +86,7 @@ export {
   createSourcePool,
   fakeApifySource,
   fakeYoutubeSource,
+  kolSourcesFromEnv,
   outcomeOfError,
   type QuotaPool,
   type SourcePoolDeps,

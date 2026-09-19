@@ -37,6 +37,20 @@ export const INTERNAL_HEADERS = {
    * 自己做得到的那一半。
    */
   adminAsset: 'X-Agentsws-Internal-Admin-Asset',
+  /**
+   * WP116 两段式的**前一半**：入口已经在 `WalletDO` 里做好的预扣（JSON 数组）。
+   *
+   * 为什么放在头里而不是塞进正文：公共库那几条路由的正文是用户自己的（观察、
+   * 联系方式），改一个字就等于改了他的请求。头是旁路，正文原样转。
+   */
+  kolReservations: 'X-Agentsws-Internal-Kol-Reservations',
+  /**
+   * 两段式的**后一半**：`KolPublicDO` 记下来的那几笔（结算 / 释放 / 返额度）。
+   *
+   * 它在**响应**头上（DO → Worker），入口读完就删掉再回给用户——
+   * 用户不该看见我们内部怎么记账。
+   */
+  kolOps: 'X-Agentsws-Internal-Kol-Ops',
 } as const
 
 /** 全部内部头的名字（进门先按这张表剥）。 */
@@ -63,14 +77,33 @@ export function stripInternalHeaders(request: Request): Request {
 /** 往一个请求上写内部头（只有 Worker 调这个）。 */
 export function withInternalHeaders(
   request: Request,
-  values: { principal?: VerifiedCloudToken; trace?: string; adminOrg?: string },
+  values: {
+    principal?: VerifiedCloudToken
+    trace?: string
+    adminOrg?: string
+    kolReservations?: readonly unknown[]
+  },
 ): Request {
   const headers = new Headers(request.headers)
   if (values.principal !== undefined)
     headers.set(INTERNAL_HEADERS.principal, JSON.stringify(values.principal))
   if (values.trace !== undefined) headers.set(INTERNAL_HEADERS.trace, values.trace)
   if (values.adminOrg !== undefined) headers.set(INTERNAL_HEADERS.adminOrg, values.adminOrg)
+  if (values.kolReservations !== undefined && values.kolReservations.length > 0)
+    headers.set(INTERNAL_HEADERS.kolReservations, JSON.stringify(values.kolReservations))
   return new Request(request, { headers })
+}
+
+/** 从头里读回一个 JSON 数组。读不出来 / 不是数组一律空数组（**不抛**）。 */
+export function jsonArrayFrom(headers: Headers, name: string): unknown[] {
+  const raw = headers.get(name)
+  if (raw === null || raw === '') return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 
 /** 从内部头里读回 principal。读不出来 / 形状不对一律 `undefined`（不抛）。 */
