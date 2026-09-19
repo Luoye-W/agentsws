@@ -564,3 +564,84 @@ WP124 §C 写：「云端每工作区一个 `SupportTenantDO` 持有知识快照
 | 9 | **「保存并发布」前的通道检查** | 检测不到可用求助通道 → 提示「AI 求助时将只有邮件通知，建议绑飞书 / 钉钉」+ 一键绑定入口；**是提醒不是拦截** | S · P2 |
 | 10 | **不做 CSAT、不做 Pre-chat 留资表单** | 这两条要**写进 WP124 的「不做」清单**，否则内测反馈里一定会有人提（§4.2） | — |
 | 11 | **`docs/73` #3「在线客服职责没启用」的根因不在 yml** | `packages/roles/positions/customer-care.yml` 里 `dtc.live-chat` 本来就是 `default: true`；问题出在 demo / 种子数据，而且岗位页文案写「5 条职责」而 yml 只有 4 条。**这是两个小 bug，别当成设计问题修** | S · P1 |
+
+---
+
+## 7. 可派工的 WP 清单
+
+> **在线聊天不在这张表里**——它归 WP124，按 §6 修订后执行即可，不另开单。
+> 本表是 WP124 之外、对标出来的其余缺口。P0 三张，按依赖顺序排。
+
+### P0
+
+#### P0-1 · 把客服的判断层接进生产（M～L）
+
+- **目标**：让 `apps/server` 的邮件客服路径跑在 `support-core` 的判断上，而不是只跑在一份提示词技能上。
+- **范围**：① `evaluateAutonomyGates` 三道门接进出站（`apps/server` 的 `deliver` / 审批发送路径），
+  fail-closed，`gate_error` 一律转人审；② `computeSla` / `targetsFor` 接进巡检并出逾期卡；
+  ③ `shouldEscalate` / `evaluateManualReview` 接进入站；④ `findUnansweredBoundary` 接进分类之后，
+  第一次撞到未答边界时出一张选择题卡（去重键 `boundaryDedupeKey`）；
+  ⑤ `knowledgeCandidate` 接进「教一句」与回信之后。
+  **不改任何纯函数签名**，只做接线。
+- **依赖**：无（全部是已有纯函数）。
+- **验收**：① 上面五个函数在 `apps/server` 下的生产引用数 ≥1，可 grep 断言；
+  ② 三道门的结论在 `stub` / `direct` / `dsh-subprocess` 三个运行时下相同（复用既有模拟三档）；
+  ③ 新增两条模拟场景：「承诺扫描拦下一封本可自动发的信」「第一次撞到未答边界 → 出选择题卡且不自作主张」；
+  ④ 3 人 pack 与 15 人 pack 不劣化。
+- **为什么是 P0**：不做的话，「客服岗内测」测的是一个**没有门**的 AI；
+  而这些门的代码早就写好躺在那儿了。
+
+#### P0-2 · 两道便宜的纪律守卫（S）
+
+- **目标**：把 KA round57（2026-09-07）那一轮里最便宜、最要命的两条补上。
+- **范围**：① **敏感标识进 prompt 前打码**——`packages/core/src/secret-patterns.ts` 加
+  卡号（13–19 位 + **Luhn** 校验，避免把订单号 / 跟踪号误判成卡号）、CVV（上下文正则）、
+  OTP / 验证码、密码四类上下文规则，产出 `[redacted:card|cvv|otp|password]`；
+  在 `packages/support-core/src/text.ts` 的围栏入口**之前**调用（打码必须先于围栏）；
+  `prompts/customer-care.ts` 的 fence 段补一句「这些标记不要提及、复述，也不要向客户索取」。
+  ② **指导原文泄漏守卫**——`POST /v1/chat/sessions/:id/teach` 与邮件侧的中文指令路径，
+  投递前检查回复是否逐字引用了商家那句中文（两侧先归一化空白；≤12 字用全串包含，
+  更长用最长公共连续串），命中则不发、退回重生成。
+- **依赖**：无。
+- **验收**：纯函数单测（含「把 `4111 1111 1111 1111` 打码但不打 `1234567890123` 这种非 Luhn 数字串」
+  与「回复逐字抄了指导 → 判为泄漏」两组）；一条模拟场景：访客贴了验证码 → prompt 里是 `[redacted:otp]`。
+- **为什么是 P0**：两条都是 S，但少任何一条都不敢让真实客户对着它说话。
+
+#### P0-3 · 知识缺口「有多少客户在等」闭环 + 卡片优先级带（M）
+
+- **目标**：AI 答不上来时，客户不被晾着、商家知道该先补哪条、补完之后那批人被自动捞回来。
+- **范围**：① 缺口等待队列——`packages/knowledge/src/intake.ts` 已有 `openGap` / `answerGap`，
+  给缺口加 `waiting[]`（按 `threadId` / `session_id` 去重，落既有 evidence 字段，**零新表**）；
+  ② 路由卡「需要补素材」：卡上**只做路由不带编辑器**，商家选一个**预期 preset id**
+  （`compiling_details` / `checking_with_team` / `sending_guide`），对客文案由 AI 用客户语言现写
+  （**不承诺时限之外的任何事**）；卡是 snoozed 不是 resolved，三天后自己回来；
+  ③ 商家补完（贴链接 / 粘文字 / 标「不需要」三选一）→ 给每个等待者各出一张 `pending_review` 草稿卡，
+  **路径里零发送函数**；④ 待补区按**等待人数**排序，不是更新时间；
+  ⑤ 卡片加派生 `band`（P0 客户在等 / P1 待你确认 / P2 需要处理 / P3 无人等待）与 `expiresAt`，
+  **派生不存列**；岗位页按 band 分组计数。
+- **依赖**：P0-1（缺口的产生点在判断层里）。
+- **验收**：模拟场景「问了一句知识库没有的 → 落缺口 + 客户收到一句预期 → 商家补 → 那个人收到草稿卡」；
+  断言补完路径里**零发送函数**（import 级断言）；band 排序的纯函数单测。
+- **为什么是 P0**：这是「AI 答不上来」这条路上唯一的闭环。没有它，缺口就是个日志。
+
+### P1
+
+| WP | 目标 | 量 | 依赖 |
+|---|---|---|---|
+| P1-1 | **自主门补齐成有序链 + 单一入口 `decideAutonomy`**：补 G01 kill_switch / G02 语言 / G03 身份 / G05 商家规则 / G07 订单上下文 / **G09 每日上限 50**；缺的先 `recorded` 不 enforce；加 `mode: 'enforce' \| 'shadow'`（影子不短路、全门评、恒不放行） | M | P0-1 |
+| P1-2 | **职责 yml 的额度要有执行者**：`reply_customer: 200/day`、`max_auto_refund_amount: 50 USD` 今天是声明不是约束。接进 G09 与审批前置 | S | P1-1 |
+| P1-3 | **能力解析器 + 应急 kill switch**：分级能力表（纯常量）+ 四级 scope 关闭优先 + `apps/cli` 一条不依赖工作台的应急子命令 | M | — |
+| P1-4 | **通用实体卡**：一套 schema（`entityType / title / sections / actions / sourceMeta`）+ 一个渲染器 + 订单投影先行；即时拉取不落库、标 `fetchedAt`；IM 端脱敏简版；只给商家看 | M | — |
+| P1-5 | **影子质检**：只读连一个真实邮箱 → 同步已发 → AI 草稿 vs 真人回复四维打分 → 可采用率报表；配套「初稿直发率」指标 | L | — |
+| P1-6 | **prompt 契约断言**：`packages/simulation` 加 `prompt_contains` / `prompt_omits` 两类断言；拒绝类场景成对写（每个拒绝配一个 should-serve 对照，防过度拒绝） | M | — |
+| P1-7 | **Shopify Theme App Extension**（纯壳：一个 toml + 一个 Liquid block，商家在主题编辑器打开开关即上线，不贴 script；不把工作区 id 暴露在前台） | S | WP124 |
+| P1-8 | **IM 卡片这条路真跑一遍**（`docs/73` #6）：飞书先行，含「没绑任何通道时降级发邮件 + 站内红点，不静默跳过」 | S | — |
+| P1-9 | **用量事件细分** `chat_presales` / `chat_assist_requested` / `chat_assist_answered` / `chat_email_follow_up`，读时折叠旧名，新名不以 `ai_` 开头 | S | WP124 |
+| P1-10 | **垂直包 parity guard**：快照冻结渲染后字符串 + 规则集哈希，改包时逐字节比对 | S | — |
+| P1-11 | **文档三补**：`docs/36` 写进 KA 原则 16 的判据与手势语义表；`docs/14` 补「订单变更 = staged change 五条」；`docs/24` / `docs/37` 补指标定义（AI 自主解决率为北极星） | S | — |
+
+### P2
+
+放权闭环（信任统计 + `delegation_proposal` 卡）、卡片预算与安静时段、批量确认卡、
+Amazon 反 canned 相似度告警与垃圾箱扫描、复核卡节流与默认关、媒体作为一等知识、
+外观形象上传、移动端、开场引导数据闭环。
