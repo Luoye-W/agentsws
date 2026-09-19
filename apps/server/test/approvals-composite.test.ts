@@ -10,8 +10,8 @@
  * 3. **谁都不认识就照实炸**：不编造一个"存在"。
  */
 import type { ApprovalItem, CreateApprovalInput, EventEnvelope } from '@agentsws/contracts'
-import { describe, expect, it } from 'vitest'
 import { createTxn, type Txn } from '@agentsws/txn'
+import { describe, expect, it } from 'vitest'
 import { compositeApprovals } from '../src/approvals-composite.js'
 
 const T0 = '2026-09-19T09:00:00.000Z'
