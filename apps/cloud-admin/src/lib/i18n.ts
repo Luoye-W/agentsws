@@ -195,7 +195,7 @@ export const zh = {
   'kpi.kol_observations': '观察 {n} 条',
   'kpi.kol_removed_note': '移除过的人搬家也搬不回来',
   'kol.what':
-    '这是跨租户共享的那一层事实：一个人报的，所有人受益。这里只有公开资料与联系方式，没有任何商家的业务正文。',
+    '这是跨租户共享的那一层事实：一个人报的，所有人受益。这里只有红人的公开资料与联系方式。',
   'kol.by_channel': '按平台',
   'kol.with_contact': '有邮箱 {n}',
   'kol.usage': '近 30 天：有人在用吗',
