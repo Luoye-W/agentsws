@@ -32,6 +32,10 @@ if [ -z "${KIRO_CONTINUE:-}" ]; then
 fi
 n=0
 while [ ! -f "$wt/REPORT.md" ] && [ "$n" -lt "${KIRO_MAX_RESUMES:-60}" ]; do
+  # 额度用尽 / 未登录这类重试也没用的错，立刻停，别空转
+  if tail -n 12 "$wt/KIRO.log" | grep -qE "Monthly request limit reached|Not logged in|limits reset on"; then
+    echo "=== [kiro-wp] Kiro 额度用尽或未登录，停止续跑 ===" >> "$wt/KIRO.log"; exit 3
+  fi
   n=$((n+1)); sleep 20
   echo "=== [kiro-wp] 第 $n 次续跑 $(date '+%F %T') ===" >> "$wt/KIRO.log"
   kiro-cli "${args[@]}" --resume "上一轮因为网络中断停了。接着干：先 git status / git log 看自己做到哪了，再按派工单继续，直到写出 REPORT.md。" >> "$wt/KIRO.log" 2>&1 || true
