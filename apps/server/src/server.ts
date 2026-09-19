@@ -99,6 +99,7 @@ import { type ServerType, serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
 import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
+import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
@@ -181,7 +182,12 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
-import { createKolSandbox, kolSandboxIntercept } from './kol-sandbox.js'
+import {
+  createKolSandbox,
+  kolOutreachApply,
+  kolQuoteApply,
+  kolSandboxIntercept,
+} from './kol-sandbox.js'
 import { CONTACT_SECRET_FIELD, contactSecretId, createKolService } from './kol-service.js'
 import { createKolToolExecutor } from './kol-tools.js'
 import {
@@ -612,6 +618,12 @@ export interface Server {
    * 要别的品牌那一套，走 `brands.forWorkspace(workspace_id)`。
    */
   brands: BrandModules
+  /**
+   * WP117b（66 复测 #19）：把服务进程这本账上「批准了、等取消窗口」的卡施行掉。
+   * 返回**还在等**的张数（取消窗口 / 父子顺序没到的也算）。demo 的 drain 每两秒
+   * 调一次（与模拟世界那一本同一个节奏），见 `apps/cli/src/demo.ts` 的注释。
+   */
+  drainApprovals(): Promise<number>
   /** WP50 Join 向导（个人工作区并进公司：对照 / 合并 / 别名 / 退出）。 */
   join: JoinAssembly
   /** WP50 夜间扫描（45 H4：同唯一键 / 相似的组织对象出卡合并）。 */
@@ -680,6 +692,25 @@ export function mergeEventLogs(base: EventLogPort, extra?: EventLogPort): EventL
 
 /** `/v1/ws` 的路径（网关那边的路由声明与这里必须是同一个字面量）。 */
 const WS_PATH = '/v1/ws'
+
+/**
+ * WP117b：一台**一只邮箱都没连**的机器上，演练回信落在哪只"邮箱"下。
+ *
+ * 只在消息库里一个账号都没有的时候才用得上（连了邮箱就跟着真那只走）。
+ * 域名是 RFC 2606 的保留域，永远不可能对应一个真地址。
+ */
+const SANDBOX_MAILBOX = 'sandbox@agentsws.example'
+
+/** 一封红人回信在「消息」列表上那一句话（≤ 40 字，说的是"它要你干什么"）。 */
+const KOL_REPLY_SUMMARY: Readonly<Record<string, string>> = {
+  interested: '红人说有兴趣，等你接话',
+  wants_quote: '红人要报价——议价这一步永远人点头',
+  declined: '红人谢绝了',
+  already_working: '红人说已经在跟你们谈了，先查库别撞车',
+  cold_inbound: '陌生红人主动来信，先打个分',
+  spam: '像是群发推广',
+  unknown: '看不出他什么意思，这封得你读一遍',
+}
 
 /**
  * 28 §2 WebSocket 事件流的**传输层**：在 `@hono/node-server` 返回的 `http.Server` 的
@@ -1060,7 +1091,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const scoped = rangeTargetOfProduct(target, before)
       return scoped === undefined ? undefined : roles.targetInRange(assignment_id, scoped)
     },
-    backendApply: (change, opts) => backend.apply(change, opts),
+    /*
+     * WP117b（66 复测 #19）：**开发信批了之后真的要投出去。**
+     *
+     * 红人的开发信走的是变更账本（`kind: 'kol_outreach'`），批了之后执行器调的
+     * 是这一句——而这一句以前只有内存桩：它什么都不做就回 ok。于是演练世界
+     * 一封信都没收到（状态带上永远"已发 0"），合成红人当然也不会回信，
+     * 「发信 → 回信 → 议价」这条链在界面上一次都没走通过。
+     *
+     * `kolOutreachApply` 只认两种情况：不是开发信 → `undefined`；
+     * 收件人不是演练红人 → `undefined`。两种都掉回原来那条路，一个字节不变。
+     */
+    backendApply: async (change, opts) => {
+      const brand = await brands?.forWorkspace(change.workspace_id)
+      const sandboxed = kolOutreachApply(brand, change) ?? kolQuoteApply(brand, change)
+      if (sandboxed !== undefined) return sandboxed
+      return backend.apply(change, opts)
+    },
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
     // 才回落到内存桩——demo 与没连邮箱的机器照样跑得完整条链路。
     deliverOutbound: async (item, opts) => {
@@ -1132,7 +1179,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   bootstrapWorkspace = workspace.id
   bootstrapWorkspaceName = workspace.name
 
-  const rawApprovals = mount?.approvals ?? txn.approvals
+  // WP117b（66 复测 #19）：挂了模拟世界（demo）时有两本审批账——世界的演示卡
+  // 与服务进程 stage 的卡（红人开发信 / 议价）。读合成一本、决定各回各家；
+  // 生产没挂世界，服务进程那一本就是唯一的一本。见 `approvals-composite.ts`。
+  const rawApprovals =
+    mount === undefined ? txn.approvals : compositeApprovals(mount.approvals, txn.approvals)
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
   // 再把审批总线包一层——每张卡被决定之后抽 lesson，技能 / 知识类卡批了就施行。
   await seedDefaultSkill(skills, workspace.id)
@@ -2272,8 +2323,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
 
     /*
-     * WP117 交付 4：演练场。建在 `kolService` 之后——它往同一个库里铺数据，
-     * 并把演练的出站截下来（硬闸在 `deliverOutbound`，见那一处）。
+     * WP117 交付 4：演练场。建在 `kolService` 与 `messages` 之后——它往同一个库里
+     * 铺数据、把演练的出站截下来（硬闸在 `deliverOutbound` / `backendApply`），
+     * 收到的回信还要归并进消息库（WP117b，63 那条链）。
      */
     const kolSandbox = createKolSandbox({
       store: kol,
@@ -2288,6 +2340,68 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           correlation: { trace_id: `tr_kolsbx_${clock.now()}` },
           payload,
         })
+      },
+      /*
+       * WP117b（66 复测 #19 的留尾 2 / 断点 #9 的剩余）：**回信归并进「消息」。**
+       *
+       * 63 §4 那条链说的是：红人来信 → `route: 'kol'` → 挪进 `kolagents` 文件夹 →
+       * 归并到合作线程。演练的回信以前只做了最后半步（落在合作上），
+       * 「消息」页里一封都看不见，于是那个文件夹与合作永远互不相干。
+       *
+       * 这里补的就是前半步：同一封信也写进消息库，`route` / `folder` /
+       * `folder_kind` 与真邮箱来的红人信**逐字相同**，`linked` 指回合作，
+       * 界面上分不出它是演练来的——除了那一格 `sandbox` 标记。
+       */
+      onReply: ({ exchange, from, display_name }) => {
+        // 内存档与 SQLite 档的 `accounts()` 都是同步的；真回了 Promise 就退到
+        // 那只保留域的假邮箱（宁可归错文件夹，也不在这里 await 卡住时钟）
+        const known = messages.store.accounts()
+        const account = (Array.isArray(known) ? known[0] : undefined) ?? SANDBOX_MAILBOX
+        const message_id = `<sbx-${exchange.id}@sandbox.example>`
+        const summary = KOL_REPLY_SUMMARY[exchange.reply_class ?? 'unknown'] ?? '红人来信'
+        messages.store.put({
+          id: `msg_${exchange.id}`,
+          workspace_id: ws,
+          source: 'email',
+          account,
+          folder: 'kolagents',
+          folder_kind: 'kol',
+          thread_id: `<sbx-thread-${exchange.creator_id}@sandbox.example>`,
+          message_id,
+          references: [],
+          headers: {},
+          from: { email: from, name: display_name },
+          to: [{ email: account }],
+          cc: [],
+          bcc: [],
+          subject: exchange.subject,
+          snippet: exchange.body.replace(/\s+/g, ' ').slice(0, 120),
+          text: exchange.body,
+          has_remote_images: false,
+          attachments: [],
+          date: exchange.at,
+          received_at: exchange.at,
+          flags: { read: false, starred: false, answered: false, draft: false },
+          labels: ['partnership'],
+          route: 'kol',
+          ...(exchange.collaboration_id === undefined
+            ? {}
+            : { linked: { type: 'collaboration', id: exchange.collaboration_id } }),
+          triage: {
+            route: 'kol',
+            labels: ['partnership'],
+            // 退信不用回，别的都要人看一眼
+            needs_reply: exchange.bounce_reason === undefined,
+            priority: 'normal',
+            summary,
+            confidence: 0.95,
+            by: 'rule',
+            reasons: ['演练回信：合作线程上已有这条往来'],
+            at: exchange.at,
+          },
+        })
+        // 往来记录上记一句"它在消息库里是哪一条"，两边点得通
+        kol.saveExchange({ ...exchange, message_id })
       },
     })
 
@@ -4402,6 +4516,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     org,
     onboarding,
     organizations,
+    /*
+     * WP117b（66 复测 #19）：把「批准了、等取消窗口」的卡施行掉，返回**还在等**的张数。
+     *
+     * 15 §5「通过 ≠ 施行」：批准只写下批准，施行由执行器另拍发起——模拟世界那一本
+     * 的发起人在 demo 的 drain（`apps/cli/src/demo.ts`），服务进程这一本以前没有人
+     * 发起，于是红人开发信批了之后永远停在 `approved`，演练世界一封信都收不到。
+     * demo 的 drain 现在两本一起扫：先扫一遍拿到「还在等」的张数（与世界的加在
+     * 一起决定要不要推合成时钟过取消窗口），推完再扫一遍真施行。
+     * 取消窗口 / 父子顺序没到的下一拍再来（与模拟回路 `drainApprovals` 同一纪律）。
+     */
+    async drainApprovals(): Promise<number> {
+      const APPROVED = ['approved', 'approved_edited', 'auto_approved'] as const
+      const waiting = () =>
+        txn.runtime.store
+          .listApprovals({})
+          .filter((i) => (APPROVED as readonly string[]).includes(i.state))
+      if (waiting().length === 0) return 0
+      for (const item of waiting()) {
+        try {
+          await txn.executor.applyApproval(item.id)
+        } catch {
+          // 取消窗口 / 父子顺序没到：下一拍再来
+        }
+      }
+      return waiting().length
+    },
     join: joinAssembly,
     orgDuplicates,
     secretary,

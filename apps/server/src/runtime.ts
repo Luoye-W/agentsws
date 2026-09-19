@@ -829,6 +829,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...(input.todo_id === undefined ? {} : { todo_id: input.todo_id }),
     }
     const answers: string[] = []
+    /*
+     * WP117b（66 复测 #16）：**同一句话只进时间线一次**。
+     *
+     * 一次运行的答复会从两个口子回来：`run.completed` 事件里的 `outputs`（sink 收到的）
+     * 与 `adapter.run` 的返回值（`result.outputs`）。三个运行时都是两边都给同一份，
+     * 于是两边都 push 的话，时间线上那条 `agent_message` 里同一段话会出现两遍
+     * ——用户看到的就是"Agent 把话说了两遍"。
+     *
+     * 不改成只认其中一边：哪一边都有适配器可能不给（回放档只走事件、直连档只给返回值）。
+     * 收口在这里：**逐字相同的一段只留第一次**。
+     */
+    const addAnswer = (text: string): void => {
+      if (answers.includes(text)) return
+      answers.push(text)
+    }
     let summary = ''
     const sink = (e: RunEvent): void => {
       appendRunEvent(request, e)
@@ -848,13 +863,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       if (e.type === 'run.completed') {
         summary = e.summary
-        for (const out of e.outputs) if (out.kind === 'answer') answers.push(out.text)
+        for (const out of e.outputs) if (out.kind === 'answer') addAnswer(out.text)
       }
     }
     try {
       const result = await adapter.run(request, sink, new AbortController().signal)
       summary = result.summary
-      for (const out of result.outputs) if (out.kind === 'answer') answers.push(out.text)
+      for (const out of result.outputs) if (out.kind === 'answer') addAnswer(out.text)
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
       if (answers.length > 0) {
         work?.appendEvent(input.matter.id, {

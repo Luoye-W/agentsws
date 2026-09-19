@@ -27,7 +27,7 @@ if [ -z "$pkgs" ]; then
   echo; echo "=== vitest：没有改到带测试的包，跳过"
 else
   # shellcheck disable=SC2086
-  step "vitest（只跑改过的包：$(echo $pkgs | tr '\n' ' ')；并发 ≤ $workers）" \
+  step "vitest（只跑改过的包：$(echo $pkgs | tr '\n' ' ')；并发 ≤ ${workers}）" \
     npx vitest run $pkgs --maxWorkers="$workers" --minWorkers=1 --testTimeout=120000 --passWithNoTests
 fi
 

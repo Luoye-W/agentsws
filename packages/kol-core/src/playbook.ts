@@ -142,7 +142,19 @@ export function parseOutreachStep(text: string): OutreachStep {
   return 'first'
 }
 
-/** 从一句话里挑关键词当搜索词：去掉数量词、粉丝区间与那些没有信息量的动词。 */
+/**
+ * 从一句话里挑关键词当搜索词：去掉数量词、粉丝区间与那些没有信息量的动词。
+ *
+ * WP117b（66 复测 #15）：**渠道词也是噪声**。
+ *
+ * 「找 20 个粉丝 1 万到 10 万的 YouTube 频道」里唯一剩下的词是 `youtube` 与 `频道`，
+ * 而它们说的是"在哪条渠道找"，不是"找什么样的人"——渠道已经由
+ * {@link channelInText} 单独读走了。留着它们，搜索就变成"名字里带 youtube 的人"，
+ * 于是库里那两个 48,000 / 31,000 粉的频道一个都搜不到（回「找到 0 个」）。
+ *
+ * 一个关键词都不剩是**正常结局**：那句话本来就没说要什么样的人，只说了渠道与
+ * 粉丝区间。这时回空串，调用方按"不加关键词、只按区间筛"去搜。
+ */
 const NOISE = [
   '帮我',
   '请',
@@ -163,10 +175,34 @@ const NOISE = [
   '个',
 ]
 
+/** 说的是"哪条渠道"而不是"什么样的人"的那些词（与 {@link channelInText} 同一份口径）。 */
+const CHANNEL_WORDS = [
+  'youtube',
+  '油管',
+  '频道',
+  'instagram',
+  'ins',
+  'tiktok',
+  '抖音国际',
+  'facebook',
+  '脸书',
+  'twitter',
+  '推特',
+  'up 主',
+  '红人',
+  '达人',
+  '博主',
+  'creator',
+  'channel',
+]
+
 export function searchQueryOf(text: string): string {
   let out = text.replace(/\d+(?:\.\d+)?\s*万?/g, ' ').replace(/[，。,.!！?？;；:：、]/g, ' ')
   for (const n of NOISE) out = out.split(n).join(' ')
-  const words = out.split(/\s+/).filter((w) => w.length > 1)
+  const words = out
+    .split(/\s+/)
+    .filter((w) => w.length > 1)
+    .filter((w) => !CHANNEL_WORDS.includes(w.toLowerCase()))
   return words.slice(0, 6).join(' ').trim()
 }
 
@@ -219,9 +255,24 @@ export interface KolTaskContext {
 export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKolCall[] {
   const channel = channelInText(ctx.text) ?? ctx.channel
   const limit = parseWantedCount(ctx.text) ?? 20
+  /*
+   * WP117b（66 复测 #15）：**粉丝区间是条件，得递给工具**。
+   *
+   * 「1 万到 10 万」以前只被 `parseFollowerBand` 读出来写在回话里，一次都没进过
+   * 搜索的入参——于是"找 20 个粉丝 1 万到 10 万的频道"与"找 20 个频道"打的是
+   * 同一个请求。关键词那一格同理：算出来是空串就**不带 q**（不再退回渠道名当关键词，
+   * 那是回 0 个的直接原因）。
+   */
+  const band = parseFollowerBand(ctx.text)
+  const q = searchQueryOf(ctx.text)
   const find: PlannedKolCall = {
     tool: 'search_creators',
-    input: { channel, q: searchQueryOf(ctx.text) || channel, limit },
+    input: {
+      channel,
+      ...(q === '' ? {} : { q }),
+      limit,
+      ...(band === undefined ? {} : { min_followers: band.min, max_followers: band.max }),
+    },
   }
   const collabs: PlannedKolCall = { tool: 'list_collaborations', input: { channel } }
 

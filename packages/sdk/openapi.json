@@ -39340,7 +39340,7 @@
             "name": "q",
             "in": "query",
             "required": false,
-            "description": "在名字与 handle 里找（子串）",
+            "description": "在名字、handle 与类目里找（按词，任意一个词命中就算）",
             "schema": {
               "type": "string"
             }
@@ -39350,6 +39350,24 @@
             "in": "query",
             "required": false,
             "description": "最多几行",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "min_followers",
+            "in": "query",
+            "required": false,
+            "description": "粉丝数下限（含）",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "max_followers",
+            "in": "query",
+            "required": false,
+            "description": "粉丝数上限（含）",
             "schema": {
               "type": "integer"
             }
@@ -39640,8 +39658,8 @@
           {
             "name": "q",
             "in": "query",
-            "required": true,
-            "description": "关键词（YouTube / Facebook）或者一串账号名（Instagram / TikTok / X 没有按关键词搜人这回事）",
+            "required": false,
+            "description": "关键词（YouTube / Facebook）或者一串账号名（Instagram / TikTok / X 没有按关键词搜人这回事）。给了粉丝区间时可以不给关键词",
             "schema": {
               "type": "string"
             }
@@ -39651,6 +39669,24 @@
             "in": "query",
             "required": false,
             "description": "最多几条",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "min_followers",
+            "in": "query",
+            "required": false,
+            "description": "粉丝数下限（含）",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "max_followers",
+            "in": "query",
+            "required": false,
+            "description": "粉丝数上限（含）",
             "schema": {
               "type": "integer"
             }
@@ -40634,6 +40670,174 @@
         }
       }
     },
+    "/v1/kol/collaborations/{id}/quote": {
+      "post": {
+        "operationId": "quoteKolCollaboration",
+        "summary": "WP117b（66 复测 #19）：给一条已经在谈的合作报一个数 → 一张 money 排版的卡（永远 L1）。批了才落预算、才进「谈条件中」",
+        "tags": ["kol"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "collaboration_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "KolStagedView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "collaboration",
+          "op": "stage",
+          "range": "assigned",
+          "sensitivity": "confidential"
+        },
+        "x-returns": "KolStagedView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "budget": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 10000000
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": ["budget"]
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/kol/deliverables": {
       "get": {
         "operationId": "listKolDeliverables",
@@ -41065,6 +41269,135 @@
         }
       }
     },
+    "/v1/kol/exchanges": {
+      "get": {
+        "operationId": "listKolExchanges",
+        "summary": "WP117b（66 复测 #19）：一条合作上的往来信件（我们发的 + 他回的），时间正序；入站那几封带意向分类",
+        "tags": ["kol"],
+        "parameters": [
+          {
+            "name": "collaboration_id",
+            "in": "query",
+            "required": false,
+            "description": "只看这条合作的",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "creator_id",
+            "in": "query",
+            "required": false,
+            "description": "只看这个人的",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "最多几封（取最近的几封）",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ rows: KolExchange[] }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "creator_contact",
+          "op": "read",
+          "range": "assigned",
+          "sensitivity": "confidential"
+        },
+        "x-returns": "{ rows: KolExchange[] }"
+      }
+    },
     "/v1/kol/tracked-links": {
       "get": {
         "operationId": "listKolTrackedLinks",
@@ -41345,7 +41678,7 @@
                     }
                   }
                 },
-                "required": ["collaboration_id", "url", "campaign"]
+                "required": ["collaboration_id", "url"]
               }
             }
           }

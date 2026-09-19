@@ -185,9 +185,10 @@ describe('工具计划', () => {
     expect(plan[0]?.input.limit).toBe(5)
   })
 
-  it('搜索词全被噪声词吃掉时退回渠道名，不发一个空 q', () => {
+  it('搜索词全被噪声词吃掉时不带 q——按渠道与粉丝区间筛，不拿渠道名当关键词（66 #15）', () => {
     const plan = planKolTools('find', { channel: 'youtube', text: '找' })
-    expect(plan[0]?.input.q).toBe('youtube')
+    expect(plan[0]?.input.q).toBeUndefined()
+    expect(plan[0]?.input.channel).toBe('youtube')
   })
 })
 
