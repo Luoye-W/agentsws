@@ -16,7 +16,10 @@
 import type {
   KolCloudDeleteResult,
   KolCloudExport,
+  KolObjectKind,
   KolSyncConflict,
+  KolSyncConflictList,
+  KolSyncConflictResolveResult,
   KolSyncObject,
   KolSyncPullResult,
   KolSyncPushRequest,
@@ -388,6 +391,59 @@ export class KolCloudService {
     }
   }
 
+  /**
+   * 还没处理的冲突（界面上要标出来的那几条，**双方版本都带着**）。
+   *
+   * 一样过闸门：没订阅不给读。理由是这一条路由回的是数据本身（两份正文），
+   * 不是"有几条"那个数——数在 {@link KolCloudService.status} 里，那一条不拦。
+   */
+  conflicts(principal: KolCloudPrincipal, limit?: number): KolSyncConflictList {
+    this.gate(principal.org_id)
+    const at = this.now()
+    return {
+      org_id: principal.org_id,
+      conflicts: this.store.openConflictEntries(limit ?? 200),
+      pending_conflicts: this.store.openConflictCount(),
+      at,
+    }
+  }
+
+  /**
+   * 用户在界面上处理完一条：把云上这一本里那个对象的冲突标掉。
+   *
+   * **只是标掉，不删任何一份**——输的那一份还在账上（导出时也一起带走），
+   * 标掉的只是"这条还等着人看"这件事。挑回被盖掉的那一份是本地那一头做的
+   * （写进本地库，下一趟推上来），云上这一跳只负责把标记消掉。
+   */
+  resolveConflicts(
+    principal: KolCloudPrincipal,
+    input: { kind: string; id: string },
+  ): KolSyncConflictResolveResult {
+    this.gate(principal.org_id)
+    const kind = input.kind
+    if (!isKolObjectKind(kind))
+      throw new KolCloudError('invalid_input', '这个对象种类不认识（kind 不在清单里）。')
+    const id = (input.id ?? '').trim()
+    if (id === '') throw new KolCloudError('invalid_input', '没说要处理哪一条（缺 id）。')
+    const at = this.now()
+    const resolved = this.store.resolveConflictsForObject(kind, id, at)
+    this.store.appendAudit({
+      at,
+      org_id: principal.org_id,
+      action: 'sync',
+      actor: `ws:${principal.workspace_id}`,
+      note: `冲突已处理：${kind} ${String(resolved)} 条`,
+    })
+    return {
+      org_id: principal.org_id,
+      kind: kind as KolObjectKind,
+      id,
+      resolved,
+      pending_conflicts: this.store.openConflictCount(),
+      at,
+    }
+  }
+
   /* ---------------- 用户的数据权利（49 §5 / 21 §4） ---------------- */
 
   /**
@@ -408,8 +464,9 @@ export class KolCloudService {
       at,
       subscription: this.subscription(principal.org_id),
       objects: this.store.all(),
-      // 留着的那些冲突版本也一起带走（不然"输的那一份"就真丢了）
-      conflicts: this.store.openConflicts(KOL_SYNC_MAX_BATCH),
+      // 留着的那些冲突版本也一起带走（不然"输的那一份"就真丢了）。
+      // **含已处理的**：用户点过"这一条我处理完了"不等于同意把那一份扔掉。
+      conflicts: this.store.allConflicts(KOL_SYNC_MAX_BATCH),
     }
   }
 

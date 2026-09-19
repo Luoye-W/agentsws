@@ -83,6 +83,20 @@ function memoryDb(): SqliteLike {
       return { changes: 1 }
     }
     if (sql.includes('UPDATE kol_cloud_conflicts SET resolved_at')) {
+      /*
+       * 两种标法：按冲突号（用户在后台点某一条），或按对象
+       * （界面上"这一条我处理完了"，同一个对象可能撞过不止一次）。
+       */
+      if (sql.includes('object_id = ?')) {
+        const [at, kind, object_id] = args
+        let n = 0
+        for (const row of conflicts.values())
+          if (row.resolved_at === null && row.kind === kind && row.object_id === object_id) {
+            row.resolved_at = at
+            n += 1
+          }
+        return { changes: n }
+      }
       const row = conflicts.get(String(args[1]))
       if (row !== undefined && row.resolved_at === null) row.resolved_at = args[0]
       return { changes: 1 }
@@ -112,7 +126,10 @@ function memoryDb(): SqliteLike {
       return rows
     }
     if (sql.includes('FROM kol_cloud_conflicts'))
-      return [...conflicts.values()].filter((c) => c.resolved_at === null)
+      // 导出要的是**全部**（含已处理的），界面上的标记要的是还没处理的那些
+      return sql.includes('resolved_at IS NULL')
+        ? [...conflicts.values()].filter((c) => c.resolved_at === null)
+        : [...conflicts.values()]
     if (sql.includes('FROM kol_cloud_charges')) return [...charges.values()]
     if (sql.includes('FROM kol_cloud_audit')) return [...audit].reverse()
     throw new Error(`内存替身没实现这条查询：${sql}`)
@@ -127,6 +144,12 @@ function memoryDb(): SqliteLike {
     }
     if (sql.includes('COUNT(*) AS n FROM kol_cloud_objects'))
       return { n: [...objects.values()].filter(r0).length }
+    if (sql.includes('COUNT(*) AS n FROM kol_cloud_conflicts') && sql.includes('object_id = ?'))
+      return {
+        n: [...conflicts.values()].filter(
+          (c) => c.resolved_at === null && c.kind === args[0] && c.object_id === args[1],
+        ).length,
+      }
     if (sql.includes('COUNT(*) AS n FROM kol_cloud_conflicts'))
       return { n: [...conflicts.values()].filter((c) => c.resolved_at === null).length }
     if (sql.includes('FROM kol_cloud_objects'))
@@ -480,6 +503,64 @@ describe('红人营销增值服务', () => {
       clock = '2026-06-10T00:00:00.000Z'
       await service.runBilling(PRINCIPAL)
       expect(wallet.charges).toHaveLength(1)
+    })
+  })
+
+  describe('冲突清单与「这一条我处理完了」', () => {
+    /** 两头各改各的：device:a 先推一版，device:b 再推一版（时间更晚，它赢）。 */
+    const collide = (): void => {
+      service.push(PRINCIPAL, { writer: 'device:a', objects: [obj()] })
+      service.push(PRINCIPAL, {
+        writer: 'device:b',
+        objects: [
+          obj({
+            writer: 'device:b',
+            updated_at: '2026-02-05T00:00:00.000Z',
+            body: { handle: 'other' },
+          }),
+        ],
+      })
+    }
+
+    it('清单里双方版本都在，而且带着能把标记消掉的那个号', async () => {
+      await service.subscribe(PRINCIPAL)
+      collide()
+      const list = service.conflicts(PRINCIPAL)
+      expect(list.conflicts).toHaveLength(1)
+      const one = list.conflicts[0]
+      expect(one?.conflict_id).toContain('cfl_creator_c1')
+      expect(one?.winner.body).toEqual({ handle: 'other' })
+      expect(one?.loser.body).toEqual({ handle: 'someone' })
+      expect(list.pending_conflicts).toBe(1)
+    })
+
+    it('标掉之后计数归零，**但输的那一份还在导出里**（一条都不删）', async () => {
+      await service.subscribe(PRINCIPAL)
+      collide()
+      const done = service.resolveConflicts(PRINCIPAL, { kind: 'creator', id: 'c1' })
+      expect(done.resolved).toBe(1)
+      expect(done.pending_conflicts).toBe(0)
+      expect(service.conflicts(PRINCIPAL).conflicts).toHaveLength(0)
+      expect(service.exportAll(PRINCIPAL).conflicts).toHaveLength(1)
+      // 处理冲突也是一次同步动作，审计里要有一行
+      expect(store.audit().some((a) => a.action === 'sync')).toBe(true)
+    })
+
+    it('没订阅：清单不给（回的是数据本身），标掉也不给', async () => {
+      expect(() => service.conflicts(PRINCIPAL)).toThrowError(/还没开通/)
+      expect(() => service.resolveConflicts(PRINCIPAL, { kind: 'creator', id: 'c1' })).toThrowError(
+        /还没开通/,
+      )
+    })
+
+    it('种类不认识 / 没说哪一条：一句人话，不是 500', async () => {
+      await service.subscribe(PRINCIPAL)
+      expect(() => service.resolveConflicts(PRINCIPAL, { kind: 'nope', id: 'c1' })).toThrowError(
+        /不认识/,
+      )
+      expect(() =>
+        service.resolveConflicts(PRINCIPAL, { kind: 'creator', id: '   ' }),
+      ).toThrowError(/缺 id/)
     })
   })
 })

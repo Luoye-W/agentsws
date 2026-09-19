@@ -25,6 +25,7 @@ import type {
   Iso8601,
   KolObjectKind,
   KolSyncConflict,
+  KolSyncConflictEntry,
   KolSyncObject,
   ServiceSubscription,
   SubscriptionCharge,
@@ -312,6 +313,73 @@ export class KolCloudStore {
       .prepare('SELECT COUNT(*) AS n FROM kol_cloud_conflicts WHERE resolved_at IS NULL')
       .get() as { n: number } | undefined
     return row?.n ?? 0
+  }
+
+  /**
+   * **全部**冲突（含用户已经处理完的那些）。导出走这一条。
+   *
+   * 为什么不只导没处理的：用户点过"这一条我处理完了"之后，被盖掉的那一份仍然是
+   * 他的数据。承诺是"输的那一份留着"，不是"输的那一份留到你点掉标记为止"。
+   */
+  allConflicts(limit = 500): KolSyncConflict[] {
+    const rows = this.db
+      .prepare('SELECT * FROM kol_cloud_conflicts ORDER BY at DESC LIMIT ?')
+      .all(limit) as ConflictSqlRow[]
+    return rows.map((r) => ({
+      kind: r.kind as KolObjectKind,
+      id: r.object_id,
+      winner: JSON.parse(r.winner) as KolSyncObject,
+      loser: JSON.parse(r.loser) as KolSyncObject,
+      at: r.at,
+    }))
+  }
+
+  /**
+   * 还没处理的冲突，**带着它们在账上的号**。
+   *
+   * 与 {@link openConflicts} 的差别只有那个号：界面上让用户挑一份之后，要能把
+   * 云上这一条标掉（`/v1/kol/sync/conflicts/resolve`），标不掉的话那个标记永远
+   * 挂着，用户看三天就学会无视它了。
+   */
+  openConflictEntries(limit = 200): KolSyncConflictEntry[] {
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM kol_cloud_conflicts WHERE resolved_at IS NULL ORDER BY at DESC LIMIT ?',
+      )
+      .all(limit) as ConflictSqlRow[]
+    return rows.map((r) => ({
+      conflict_id: r.id,
+      kind: r.kind as KolObjectKind,
+      id: r.object_id,
+      winner: JSON.parse(r.winner) as KolSyncObject,
+      loser: JSON.parse(r.loser) as KolSyncObject,
+      at: r.at,
+    }))
+  }
+
+  /**
+   * 一个对象上的冲突全部标掉。回标掉了几条。
+   *
+   * 先数再改（两条语句），不读驱动返回的 `changes`：`SyncDb` 有两个实现
+   * （`better-sqlite3` 与 Durable Object 的 sqlite），返回形状不该变成两边都要
+   * 猜一次的东西。
+   */
+  resolveConflictsForObject(kind: string, object_id: string, at: Iso8601): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM kol_cloud_conflicts
+         WHERE kind = ? AND object_id = ? AND resolved_at IS NULL`,
+      )
+      .get(kind, object_id) as { n: number } | undefined
+    const n = row?.n ?? 0
+    if (n > 0)
+      this.db
+        .prepare(
+          `UPDATE kol_cloud_conflicts SET resolved_at = ?
+           WHERE kind = ? AND object_id = ? AND resolved_at IS NULL`,
+        )
+        .run(at, kind, object_id)
+    return n
   }
 
   /** 用户在界面上处理完一条（挑了其中一份）。**行不删**——审计要看得见。 */

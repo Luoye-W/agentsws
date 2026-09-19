@@ -219,6 +219,37 @@ export interface KolSyncStatus {
   at: Iso8601
 }
 
+/**
+ * 一条冲突 + 它在云上那本账里的号。
+ *
+ * 号是 `(kind, id, 输的那一份的时间)` 推出来的，不是随机数——同一批重放不会记出两条。
+ * 端出来是为了让用户处理完一条之后**云上那个标记能消掉**：留着消不掉的标记，
+ * 用户看三天就学会无视它，那这个标记就等于没有。
+ */
+export interface KolSyncConflictEntry extends KolSyncConflict {
+  conflict_id: string
+}
+
+/** `GET /v1/kol/sync/conflicts`。 */
+export interface KolSyncConflictList {
+  org_id: string
+  conflicts: KolSyncConflictEntry[]
+  /** 还有多少条没处理（含这一页之外的）。 */
+  pending_conflicts: number
+  at: Iso8601
+}
+
+/** `POST /v1/kol/sync/conflicts/resolve` 的回执。 */
+export interface KolSyncConflictResolveResult {
+  org_id: string
+  kind: KolObjectKind
+  id: string
+  /** 这一次标掉了几条（同一个对象可能撞过不止一次）。 */
+  resolved: number
+  pending_conflicts: number
+  at: Iso8601
+}
+
 /* ------------------------------------------------------------------ */
 /* 用户的数据权利（49 §5 / 21 §4）                                      */
 /* ------------------------------------------------------------------ */
@@ -328,4 +359,3 @@ export interface KolCloudSyncRun {
   last_sync_at?: Iso8601
   at: Iso8601
 }
-

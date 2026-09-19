@@ -9,6 +9,8 @@
  * | 路径 | 干什么 |
  * |---|---|
  * | `GET /v1/kol/sync/status` | 订阅状态 + 云端多少条 + 最近同步 + 冲突数 |
+ * | `GET /v1/kol/sync/conflicts` | 还没处理的冲突（**双方版本都在里面**） |
+ * | `POST /v1/kol/sync/conflicts/resolve` | 用户处理完一条：把标记消掉（不删任何一份） |
  * | `POST /v1/kol/sync/push` | 上行（最后写入者胜，输的留着） |
  * | `GET /v1/kol/sync/pull` | 下行（游标翻页） |
  * | `POST /v1/kol/subscription` | 开通（当场扣第一期） |
@@ -151,6 +153,30 @@ export function mountKolCloudRoutes(app: Hono<KolCloudEnv>, deps: KolCloudRouteD
   app.get(
     `${KOL_CLOUD_PREFIX}/sync/status`,
     guard((service, principal) => okResponse(service.status(principal))),
+  )
+
+  app.get(
+    `${KOL_CLOUD_PREFIX}/sync/conflicts`,
+    guard((service, principal, c) => {
+      const limitRaw = c.req.query('limit')
+      const parsed = limitRaw === undefined ? Number.NaN : Number(limitRaw)
+      return okResponse(service.conflicts(principal, Number.isFinite(parsed) ? parsed : undefined))
+    }),
+  )
+
+  app.post(
+    `${KOL_CLOUD_PREFIX}/sync/conflicts/resolve`,
+    guard(async (service, principal, c) => {
+      const body = (await c.req.json().catch(() => {
+        throw new KolCloudError('invalid_input', '请求体不是合法 JSON。')
+      })) as { kind?: string; id?: string }
+      return okResponse(
+        service.resolveConflicts(principal, {
+          kind: String(body.kind ?? ''),
+          id: String(body.id ?? ''),
+        }),
+      )
+    }),
   )
 
   app.post(
