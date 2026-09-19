@@ -1122,12 +1122,32 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    * 查不到就走活数据源。生产路径一个字节不变（生产从不传 `brandData`）。
    */
   const extraBrandData = new Map<string, WorkstationDataSource>()
+  /**
+   * WP121b（70 §3）：向导第 ② 步那一轮网址分析，在 demo 里 **replay pack 里的
+   * `fixtures/site/*`**。
+   *
+   * 两条理由：demo 不该因为演示而去敲别人的服务器；也不该因为这台机器没网
+   * 就演不出那张品牌档案卡。每份夹具自报家门（头几行里一句 `url: https://…`），
+   * 与模拟场景用的是同一份文件。
+   */
+  const siteFixtures = new Map<string, string>()
+  for (const [name, body] of pack.fixtures) {
+    if (!name.startsWith('fixtures/site/')) continue
+    const declared = /url:\s*(\S+)/.exec(body.slice(0, 400))?.[1]
+    if (declared !== undefined) siteFixtures.set(declared, body)
+  }
+
   const server = await createServer({
     clock: world.clock,
     random: world.random,
     mount,
     staticDir,
     brandData: (ws) => extraBrandData.get(ws),
+    brandIntakeFetch: async (url: string) => {
+      const body = siteFixtures.get(url)
+      if (body === undefined) return { ok: false, status: 503, text: async () => '' }
+      return { ok: true, status: 200, text: async () => body }
+    },
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
     records: recordSourceOf(world, pack),
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),

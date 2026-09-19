@@ -41,6 +41,7 @@ import {
   WsSession,
 } from '@agentsws/api'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
+import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
   ApprovalBus,
@@ -485,6 +486,14 @@ export interface ServerOptions {
    * 这五家的接口没有可以随便调的沙箱，所以"形状对不对"只能这么验。
    */
   kolFetch?: KolFetch
+  /**
+   * WP121b（70 §3）：品牌接入面（贴一个网址自动分析）抓页面用的 fetch。
+   *
+   * 生产不传（走 `globalThis.fetch`）；`agentsws demo` 传一个 replay——
+   * demo 是**离线**的，它不该因为演示而去敲别人的服务器，也不该因为没网
+   * 就演不出第 ② 步那张档案卡。
+   */
+  brandIntakeFetch?: BrandIntakeFetch
   /**
    * WP73：社媒那九条渠道打出去的那一跳（测试塞一个假的对着真 URL 断言）。
    * 生产路径不传它，走全局 fetch。
@@ -2770,7 +2779,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const brandIntake = createBrandIntake({
     clock,
     workspace_id: workspace.id,
-    fetch: globalThis.fetch as never,
+    fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
       applyProfile: async (profile) => {
