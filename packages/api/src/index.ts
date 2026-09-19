@@ -32,6 +32,26 @@ export {
   STATUS_BY_CODE,
   statusFor,
 } from './errors.js'
+/*
+ * WP119（68）：浏览器插件的本地一面。
+ *
+ * 配对 / 令牌那张表与路由端口一起导出——`apps/server` 要拿
+ * `createMemoryExtensionStore` 建那张表，拿 `ExtensionPort` 装配它的实现。
+ */
+export {
+  createMemoryExtensionStore,
+  EXTENSION_SCOPES,
+  EXTENSION_TOKEN_TTL_MS,
+  type ExtensionScope,
+  type ExtensionSession,
+  type ExtensionStore,
+  type ExtensionTokenView,
+  extensionIdOfOrigin,
+  MemoryExtensionStore,
+  PAIRING_TTL_MS,
+  type PairingView,
+  type RedeemedToken,
+} from './extension-store.js'
 export {
   assignmentOf,
   body,
@@ -205,6 +225,15 @@ export {
   parseUntil,
   readVisibleEvents,
 } from './routes/events.js'
+export type {
+  ExtensionHello,
+  ExtensionIngestResult,
+  ExtensionIngestRow,
+  ExtensionIngestStatus,
+  ExtensionObservation,
+  ExtensionPort,
+} from './routes/extension.js'
+export { extensionRoutes } from './routes/extension.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export {

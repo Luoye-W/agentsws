@@ -20,6 +20,7 @@ import {
   ApiError,
   createAsyncTraceScope,
   createGateway,
+  createMemoryExtensionStore,
   createMemoryIdentity,
   createSqliteIdentity,
   type DiscoveryHelloView,
@@ -162,6 +163,9 @@ import {
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
 import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
+// WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
+import { createExtensionContributor } from './extension-contribute.js'
+import { brandExtensionPort } from './extension-port.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
 import { createJoin, type JoinAssembly } from './join.js'
@@ -3539,6 +3543,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).kolService.port,
   )
+  /**
+   * WP119（68）：浏览器插件的本地一面 `/v1/extension/*`。
+   *
+   * 配对表**整台机器一张**（一把令牌自己带着 `workspace_id`）；写红人库与
+   * 加密库那一半按品牌走，与 `kolPortOf` 同一条（52 O1）。
+   *
+   * 云端转发口（登录了就默认共享到公共红人库，Luoye 09-19）挂在这里而不是
+   * 插件里：**插件不该持有云令牌**——装在浏览器里的东西，拿到这台电脑的人就读得到。
+   */
+  const extensionStore = createMemoryExtensionStore({ clock, random })
+  const extensionPortOf = brandExtensionPort({
+    store: extensionStore,
+    serviceOf: async (ws) => {
+      const brand = await brandModules.forWorkspace(ws)
+      return {
+        workspaceName: () => brandNameOfWorkspace(ws),
+        kol: brand.kol,
+        secrets: brand.secrets,
+        clock,
+        random,
+        publicLibrary: createExtensionContributor({ secrets: brand.secrets, env }),
+        serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
+      }
+    },
+  })
   /** WP73（56 §6）：社媒库 `/v1/social/*`（一个品牌一张库、一段加密库）。 */
   const socialPortOf = brandSocialPort(
     brandModules,
@@ -3862,6 +3891,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     positions: positionPortOf,
     // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
     kol: kolPortOf,
+    // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
+    extension: extensionPortOf,
     // WP73（56 §6）：本地社媒库 `/v1/social/*`（同上；九条渠道是九个真账号，串不得）
     social: socialPortOf,
     // WP76（58 §5）：本地设计库 `/v1/design/*`（同上；素材按品牌进 blob store）

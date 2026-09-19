@@ -76,12 +76,7 @@ export interface RedeemedToken {
 }
 
 /** 兑换失败的原因——都给人话，不给码。 */
-export type RedeemFailure =
-  | 'bad_origin'
-  | 'bad_code'
-  | 'expired'
-  | 'used'
-  | 'no_pairing'
+export type RedeemFailure = 'bad_origin' | 'bad_code' | 'expired' | 'used' | 'no_pairing'
 
 export interface ExtensionStore {
   /** 工作台按一下「生成配对码」。同一个工作区再按一下，上一码立刻作废。 */
@@ -91,9 +86,10 @@ export interface ExtensionStore {
     label?: string | undefined
   }): PairingView
   /** 插件把码送回来换令牌。`origin` 必须是扩展自己的 Origin 头。 */
-  redeem(input: { code: string; origin: string | undefined }):
-    | { ok: true; issued: RedeemedToken }
-    | { ok: false; reason: RedeemFailure }
+  redeem(input: {
+    code: string
+    origin: string | undefined
+  }): { ok: true; issued: RedeemedToken } | { ok: false; reason: RedeemFailure }
   list(workspace_id: WorkspaceId): ExtensionTokenView[]
   revoke(workspace_id: WorkspaceId, id: string): ExtensionTokenView | undefined
   /** 令牌 + Origin 双校验；通过就顺手记一次 `last_used_at`。 */
@@ -212,9 +208,10 @@ export class MemoryExtensionStore implements ExtensionStore {
     return { code, expires_at: new Date(expires_at_ms).toISOString() as Iso8601 }
   }
 
-  redeem(input: { code: string; origin: string | undefined }):
-    | { ok: true; issued: RedeemedToken }
-    | { ok: false; reason: RedeemFailure } {
+  redeem(input: {
+    code: string
+    origin: string | undefined
+  }): { ok: true; issued: RedeemedToken } | { ok: false; reason: RedeemFailure } {
     const extension_id = extensionIdOfOrigin(input.origin)
     if (extension_id === undefined) return { ok: false, reason: 'bad_origin' }
 

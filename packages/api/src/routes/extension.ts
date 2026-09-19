@@ -124,7 +124,10 @@ function sessionOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): Exten
   const raw = c.req.header('Authorization') ?? ''
   const session = portOf(deps).store.authenticate(raw, c.req.header('Origin'))
   if (session === undefined)
-    throw new ApiError('unauthenticated', '插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的')
+    throw new ApiError(
+      'unauthenticated',
+      '插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的',
+    )
   return session
 }
 
@@ -206,8 +209,7 @@ export function extensionRoutes(): Route[] {
         authz: READ,
         returns: '{ tokens: ExtensionTokenView[] }',
       },
-      async (c, deps) =>
-        ok(c, { tokens: portOf(deps).store.list(principalOf(c).workspace_id) }),
+      async (c, deps) => ok(c, { tokens: portOf(deps).store.list(principalOf(c).workspace_id) }),
     ),
     route(
       {
@@ -247,8 +249,14 @@ export function extensionRoutes(): Route[] {
         if (!out.ok) {
           // Origin 不对是「你不是扩展」，其余都是「码不对」——两句人话，不给码。
           if (out.reason === 'bad_origin')
-            throw new ApiError('forbidden', '这条只给浏览器扩展用（Origin 必须是 chrome-extension://…）')
-          throw new ApiError('unauthenticated', '配对码不对、已经用过，或已经过期了。回工作台再生成一个。')
+            throw new ApiError(
+              'forbidden',
+              '这条只给浏览器扩展用（Origin 必须是 chrome-extension://…）',
+            )
+          throw new ApiError(
+            'unauthenticated',
+            '配对码不对、已经用过，或已经过期了。回工作台再生成一个。',
+          )
         }
         return ok(c, out.issued)
       },
@@ -281,7 +289,10 @@ export function extensionRoutes(): Route[] {
         if (!session.scopes.includes('kol.observe'))
           throw new ApiError('forbidden', '这把令牌没有 kol.observe')
         const input = await body(c, ingestSchema)
-        return ok(c, await portOf(deps).ingest(session, input as { observations: ExtensionObservation[] }))
+        return ok(
+          c,
+          await portOf(deps).ingest(session, input as { observations: ExtensionObservation[] }),
+        )
       },
     ),
   ]
