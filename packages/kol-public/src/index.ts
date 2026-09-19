@@ -26,6 +26,13 @@ export {
   latestPerCreator,
   quantile,
 } from './benchmarks.js'
+export {
+  IMPORTED_FROM_KOLAGENTS,
+  importKolRecords,
+  importSource,
+  type KolImportDeps,
+  parseNdjson,
+} from './import.js'
 export { type NodeKolSecretsOptions, newEmailKey, nodeKolSecrets, parseKey } from './node-crypto.js'
 export {
   assertChannel,
@@ -79,12 +86,18 @@ export {
   BENCHMARK_CACHE_MS,
   type BucketFilter,
   type ContactRow,
+  type ContentMetricRow,
+  type CreatorExtraRow,
   type CreatorFilter,
   type CreatorRow,
+  type CreatorSearchFilter,
   type DisputeRow,
+  isLibraryStore,
+  type KolLibraryStore,
   type KolStore,
   MemoryKolStore,
   type ObservationRow,
+  type OptOutRow,
   type QuotaRow,
   SqliteKolStore,
   type SqliteLike,
