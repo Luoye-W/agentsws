@@ -190,3 +190,55 @@ outbox 状态机、邮箱加固、知识溯源、聊天流水线纯函数、求�
 
 - **置信度算了但没人用**：`Classification.confidence` 与 `ChatClassification.confidence` 都算了，`chat/plan.ts` / `draft.ts` / `gates/gates.ts` 一次都没读。KA 那边 `G06 knowledge_evidence` 是有阈值的。补一条门即可（S）。
 - **职责 yml 里的额度没有执行者**：`dtc.support` 写着 `reply_customer: 200/day`、`stage_refund: max_auto_refund_amount 50 USD`，但 `packages/metering` 里没有按能力 / 按工作区的配额机制（只有积分钱包的余额不足）。额度今天是**声明，不是约束**。这一条与 1.B 的 `AUTONOMY_DAILY_SEND_CAP` 是同一件事，应该一起做。
+
+---
+
+## 2. 在线聊天专章
+
+KA 的在线聊天是 2026-08-05 的 `live-chat-full-auto-v1.md` 一次性重构的，分 S1–S5 五期，
+落成 specs 034（S1 教学式协作）、035（S2 统一卡片工作台）、036（S3 页面上下文），
+S4（开场引导）与 S5（实体卡）并入后续轮次。**它那一整套的纲领是一句话**：
+
+> 前台永远是 AI 在说话；人工永远只教 AI 说话。设置与运营分离；售前靠页面上下文驱动。
+
+工坊这边的现状（`docs/73` 亲测 + 本次逐文件核对）：后端流水线端到端通了，
+**访客那一面与界面几乎不存在**。下面逐项拆。
+
+### 2.1 逐项对照
+
+| # | 项 | KA（含出处） | 工坊现状（含路径） | 差距 | 度 |
+|---|---|---|---|---|---|
+| 1 | **挂件外观与嵌入** | `public/chat-widget.js`（98 KB，由 `scripts/lib/widget-*-block.ts` 四个生成块拼出，**CI 断言两份 widget 逐字节相同**）；外观 = 主题包 3 套 + 8 款单色 SVG 图标（`currentColor`，一套资产覆盖所有配色）+ 双色 + WCAG ≥3:1 校验 + 形状 / 动效 / 招呼气泡；暗色自适应；实时预览 | `apps/server/src/widget.ts:39-324` 的内联 vanilla JS；56px 圆 launcher + 340×460 面板；**可配只有 `accent` 与 `greeting` 两项**（`chat-widget.ts` 的 `safeAccent` / `DEFAULT_GREETING`）；无预览、无主题包、无对比度校验 | 外观几乎不可配；没有「一份定义两处渲染」的约束（工坊只有一份 widget，但 WP124 要上三种部署，会变成多份） | P1 |
+| 2 | **访客会话生命周期** | `open → assist_requested → assist_answered → email_follow_up → closed`；`human_handling` 与 `operator` 直发**已废弃**（只读兼容）；`closed` 的写入路径在 S1 一并补上（勘误 12-D：之前是死代码） | `packages/support-core/src/chat/types.ts` 六态（多一态 `human_takeover`），迁移表是真源，巡检谓词从表算；`closed` 有写入路径 | 状态机更完整；分歧只在 `human_takeover`（§6.1） | — |
+| 3 | **AI 自动答与置信度** | 触发求助八条规则：知识缺口 / 只有 `unverified`·`stale` 可依据 / 行业模板缺品牌数值 / 高风险边界 / 订单歧义 / 客户点名要人工 / 商家主动介入；G06 `knowledge_evidence` 有证据阈值 | `chat/plan.ts` 五种动作按优先级：`handoff` → `assist` → `human_review`（**`money_touch` 为真时 `can_auto_reply` 恒 false，任何垂直包都覆盖不了**）→ `collect_info` → `answer` | **`confidence` 算了但没人读**（`plan.ts` / `draft.ts` / `gates.ts` 零引用）；知识缺口与 stale 知识没有进触发条件 | **P0** |
+| 4 | **转人工与接管** | **不存在**。`handoff` 语义改 `assist`；`human_handoff` 意图保留但话术**不承诺「转接真人」**；开场引导里的「Talk to a person」被删掉换成「其他问题」（不主动教客户绕过 AI） | `PUT /v1/chat/sessions/:id/takeover` + 沙盒页上的接管开关；`ChatMessageRole` 含 `operator` | **方向性分歧**，见 §6.1 | **P0（要拍板）** |
+| 5 | **离线与邮件续聊** | T+0 诚实话术（不装知道、不承诺结果、不承诺时限）→ T+3 换措辞再要一次邮箱（**勘误 12-C：T+0 已经要过一次，照抄会连发两遍同一句**）→ 等待时长 **1/3/5/10 分钟预设单选、默认 1 分钟**、**服务端白名单、非法值回落默认而不是最长档**、死线在求助那一刻固化进 `assist_deadline_at`（改设置不影响正在等的人）；超时转 `email_follow_up`，**发件身份永远是 AI**；无邮箱则不发信、下次客户回来优先补收 | `support-core/src/chat/assist-timeout.ts` 的 **T+3 / T+10 两个固定钟点**；`packs/dtc-3c-3p/scenarios/chat/assist-timeout-to-email.yml` 钉住了整条；没接邮件渠道时**转态但不假装发了邮件**（好） | 工坊的 10 分钟是 KA 2026-08-22 **主动改掉**的那个值；理由很硬：「在线聊天里等的人是客户，对着一句『我去和团队确认一下』的页面等十分钟不叫耐心，叫会话已经丢了」 | **P1（建议改默认 1 分钟）** |
+| 6 | **主动邀请** | 招呼气泡（teaser）：launcher 旁自动冒出当前场景开场语第一句，预设 关 / 延迟 3s / 延迟 8s。**没有传统意义的「主动邀请规则引擎」** | 缺 | 小；且要照 KA 的做法做成预设而不是规则 | P2 |
+| 7 | **商品 / 订单卡片** | 三层披露：第 0 层卡面证据摘要（订单号 / 状态 / 金额 / 物流最后事件 / 客户邮箱有无 / 当前页面 / 卡住的知识条目及可信度，**全部取自已有上下文，零新增查询**）；第 1 层通用实体卡（一套 schema、一个渲染器吃七种类型，**即时拉取不落库**，标 `fetchedAt`，IM 端脱敏简版）；第 2 层「问 AI」 | 缺全部三层。`support-core/src/entities.ts` 只有抽取（`extractOrderRef` / `extractAmount`） | 商家看到求助卡后只能去 Shopify 后台翻 | P1 |
+| 8 | **多语言与逐句翻译** | 客户侧回复用**客户语言**；商家侧界面中文优先；卡片内容三档 `zh / original / en`，**一次只显示一种，禁双语堆叠**，按四个槽位切；缺译回退原文并提示 | 挂件界面词只有中 / 英两套，且按**宿主页面 `<html lang>`** 判（不跟服务端配置走）；招呼语是商家写的单一字符串，不分语言；岗位页的中英摘要切换已有 | 挂件侧的语言判定错位（应按访客浏览器语言 + 服务端配置） | P1 |
+| 9 | **附件与图片理解** | spec 013 qwen-vision-attachments + `attachments/route.ts` + 010 附件生命周期；上传有格式 / 大小 / 频次硬限 | `ChatChannelAdapter` 能力写死 `{ text: true, image: false, file: false, card: false }`（`packages/channels/src/chat/adapter.ts:92`） | 访客发不了图 | P2 |
+| 10 | **评价与复盘** | **明确「永不做」CSAT 弹窗**（`opening-guide-data-loop-v1.md` §6.2 第 4 条）：满意度从行为推断（无求助关闭、复购、转化）。复盘走「会话已结束时提交指导 → 只沉淀不发消息」 | 缺；`docs/73` 里把「评价与复盘」列成待补项 | **建议照 KA 不做 CSAT**，只做「会话结束后教一句 = 只沉淀」这条 | P2 |
+| 11 | **Shopify 应用嵌入** | `kefuagent-shopify-app` 是**纯壳**（一个 `shopify.app.toml` + 一个 Theme App Extension，`extensions/chat-widget/blocks/chat_widget.liquid`，`target: body`）；商家在 *Themes → Customize → App embeds* 打开「KefuAgent Chat」开关即上线，**不改主题代码、不贴 script**；embed 只有三个设置项（开关 / 可选强调色 / app origin），Liquid 注释明写「外观唯一真源在后台」；**不把 workspace id 暴露在前台**，用 `shop.permanent_domain` 由后端反查；scopes **刻意不申请 `read_customers`** | `docs/43`（Shopify 接入）已有；Theme App Extension 形态未做 | 独立站用户装挂件要贴 script；Shopify 用户本可以一键 | P1（与 WP124 同期最省） |
+| 12 | **移动端通知与回复** | `kefuagent-flutter`：一屏一卡 deck + 桌面 Pet；四方向手势；中文语音指挥（端上 ASR，不可用回落服务端）；iOS APNs，**无 FCM**；**REST 为真相源、Realtime 只当加速器**（收到信号跑一次 `updatedAfter` 追赶；订阅健康时轮询放慢到 5 分钟当安全网；503 则本会话永久降级纯轮询）；动作带 Idempotency-Key + expectedVersion | 缺移动端；只有 IM 渠道卡片（飞书 / 钉钉 / 企微），`docs/73` #6 说未验证 | **本轮不做移动端**：IM 卡片已经能推到手机，先把它验证通 | P2 |
+| 13 | **关机后的在线值守** | KA 是 SaaS，不存在这个问题 | `packages/standby` 的「值守」= **进程值守**（云侧为每个租户拉起一个 `apps/server` 子进程 + 反向代理 `/w/:workspace_id/*`，`node-host.ts` 依赖 `child_process`）；`apps/cloud-worker` 里**没有任何聊天 / 客服 / standby 的 DO 或路由**（只有 `AccountsDO` / `LedgerDO` / `WalletDO`） | Cloudflare Workers **跑不了** `packages/standby`（不能 spawn 子进程）。这正是 `docs/73` #2「托管档在 Cloudflare 形态里没开」的根因 | **P0（架构分叉，见 §5.3）** |
+
+### 2.2 KA 那套里最值得抄的五条机制（与外观功能无关，都是纪律）
+
+1. **指导原文泄漏守卫**（`src/lib/support/chat.ts:517` `containsInstructionVerbatimLeak`）：
+   商家的中文指导进 prompt、**永不进 `bodyText`**；但「prompt 里写了」不是保证——
+   投递前先问一句「这条回复里有没有逐字引用商家那句话」（两侧先归一化空白，12 字以上按最长公共连续串判）。
+   **工坊的 `POST /v1/chat/sessions/:id/teach` 今天没有这道守卫**，而工坊的教 AI 是中文、客户多半是外语，
+   泄漏出去商家还撤不回来。**S 量级，P0。**
+2. **打字信号只承载布尔，服务端强制拒绝带自由文本的载荷**（FR-035）——隐私红线不依赖客户端自律。
+   配套 7 个可调常量（缓冲窗 2s / 打字中静默 8s / 停止判定 3s / 连珠炮封顶 20s / 活跃键击上限 60s /
+   点动画最短 1.5s / 上报节流 ≤1 次每 2s），**全部是纯函数 + 冻结时钟可测**。
+   工坊的 `chat/aggregate.ts` 已有 2s / 20s 两个，缺打字信号这一维。
+3. **消息接收与回复投递解耦**（FR-047）：消息落库即确认，回复走异步通道；
+   否则 60 秒的等待上限会撞穿函数执行时限。**这条直接决定 WP124 的转发器协议形状**（见 §6.3）。
+4. **服务端自己读 origin，永不信 `body.origin`**（`src/app/api/support/chat/session/route.ts` 注释）：
+   「调用方给的值是一个声明，而声明对这里的两件事（证明安装、授权安装）都一文不值」；
+   请求体里**故意没有 origin 字段**，连误读都不可能。心跳只留 hostname，
+   所以一个带着购物车 URL、query 里有邮箱的 `Referer` 也漏不出去。
+   工坊的 `chat-widget.ts` 已经按 Origin 头判（好），但**心跳 / 安装证据这一块整个没有**。
+5. **一次客户话轮恰好产出一条 AI 回复**（`SC-009`），生成中来新消息则废弃重生成、点动画不闪断，
+   且**被废弃的那次生成照常计费并记 usage**——真实发生的成本不隐藏。
