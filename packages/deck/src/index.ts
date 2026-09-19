@@ -10,6 +10,15 @@ export {
   type AnomalyKind,
   detectAnomalies,
 } from './anomalies.js'
+// WP125（72 §P0-3 ⑤）：四个优先级带的名字与分组计数（派生，不存列）
+export {
+  BAND_LABELS,
+  BAND_ORDER,
+  type BandGroup,
+  bandCounts,
+  bandSummaryLine,
+  groupByBand,
+} from './bands.js'
 export {
   allBlocks,
   assembleView,

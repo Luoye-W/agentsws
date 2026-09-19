@@ -21,6 +21,7 @@ import type {
   KnowledgeGapAnswer,
   KnowledgeGapInput,
   KnowledgeGapStatus,
+  KnowledgeGapWaiter,
   KnowledgeSource,
   KnowledgeSourceInput,
   PersonId,
@@ -30,6 +31,7 @@ import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { Database } from 'better-sqlite3'
 import { invalidInput, notFound } from './errors.js'
 import type { KnowledgeEmitter, KnowledgeEventType } from './events.js'
+import { addWaiter, sortGapsByWaiting, waitingCount } from './gap-waiting.js'
 import { nextSeq } from './schema.js'
 
 /** 问题 / 答案的长度上限：缺口是一句话，不是一篇文档。 */
@@ -87,6 +89,8 @@ interface GapRow {
   answered_at: string | null
   approval_item_id: string | null
   created_at: string
+  /** WP125（72 §P0-3）：等待者（JSON 数组，按 thread_id 去重）。老库里是 NULL。 */
+  waiting_json: string | null
 }
 
 function rowToSource(r: SourceRow): KnowledgeSource {
@@ -115,8 +119,28 @@ function rowToSource(r: SourceRow): KnowledgeSource {
   }
 }
 
+/** WP125：`waiting_json` → 等待者数组。解不出来当"没人在等"，**不抛**——
+ * 一条坏 JSON 不该让整条待补区打不开（而且它是派生信息，丢了还能再记一次）。 */
+function parseWaiting(json: string | null | undefined): KnowledgeGapWaiter[] {
+  if (json === null || json === undefined || json === '') return []
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (w): w is KnowledgeGapWaiter =>
+        typeof w === 'object' &&
+        w !== null &&
+        typeof (w as KnowledgeGapWaiter).thread_id === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
 function rowToGap(r: GapRow): KnowledgeGap {
+  const waiting = parseWaiting(r.waiting_json)
   return {
+    ...(waiting.length === 0 ? {} : { waiting }),
     id: r.id,
     workspace_id: r.workspace_id,
     question: r.question,
@@ -448,6 +472,7 @@ export class SqliteIntakeStore {
       answered_at: null,
       approval_item_id: null,
       created_at: now,
+      waiting_json: null,
     }
     this.db
       .prepare(
@@ -544,6 +569,50 @@ export class SqliteIntakeStore {
       gap: next,
       ...(next.approval_item_id === undefined ? {} : { approval_item_id: next.approval_item_id }),
     }
+  }
+
+  /* ── WP125（72 §P0-3）：「有多少客户在等」 ─────────────────────────── */
+
+  /**
+   * 记一个等待者。**按 `thread_id` 去重**（同一条线程里追问三次仍然是 1 个人在等）。
+   *
+   * 只对 `open` 的缺口记：已经答过的缺口再来一个人，那是一条**新**缺口
+   * （上一次的答案没能覆盖他的问法），应当由调用方 `openGap` 开一条新的。
+   *
+   * 返回更新后的缺口。事件里只有**人数**，问题与线程 id 一个都不进日志。
+   */
+  addGapWaiter(id: string, waiter: KnowledgeGapWaiter): KnowledgeGap {
+    const gap = this.requireGap(id)
+    if (gap.status !== 'open') throw invalidInput(`缺口已经是 ${gap.status}，不再收等待者`)
+    const thread_id = EXTERNAL_FENCE.sanitizeText(waiter.thread_id, 200).trim()
+    if (thread_id === '') throw invalidInput('等待者要说清是哪条线程（thread_id）')
+    const next = addWaiter(gap.waiting ?? [], {
+      ...waiter,
+      thread_id,
+      since: waiter.since === '' ? this.clock.now() : waiter.since,
+    })
+    this.db
+      .prepare('UPDATE knowledge_gaps SET waiting_json = ? WHERE id = ?')
+      .run(JSON.stringify(next), id)
+    const updated = this.requireGap(id)
+    this.fire('knowledge.gap.opened', updated.workspace_id, {
+      gap_id: updated.id,
+      subject_key: updated.subject.key,
+      domain: updated.domain,
+      asked_by: updated.asked_by.kind,
+      // 只有人数：「几个人在等」是可以进日志的，「谁在等什么」不是
+      waiting_count: waitingCount(updated),
+    })
+    return updated
+  }
+
+  /**
+   * 待补区：还开着的缺口，**按等待人数**排（不是更新时间）。
+   *
+   * 72 §1.C 原话：最近被碰过的那一条，不等于最该先补的那一条。
+   */
+  gapsByWaiting(workspace_id: WorkspaceId): KnowledgeGap[] {
+    return sortGapsByWaiting(this.gaps(workspace_id, { status: 'open' }))
   }
 
   /** 问错了 / 不用答了：留痕不删（19 §4 的队列要能回看）。 */

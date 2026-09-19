@@ -9,6 +9,15 @@
   role_id: common.owner
   ranges: []
   granted_by: p_wang
+# WP125（73 #3 / 72 §6.6 #11）：客服岗位的四条职责在 demo 里**都要有人挂**。
+# 以前只挂了「网站客服」与「社群管理」，于是左栏看不到「网站在线客服」，
+# 在线聊天那条线在演示里无从测试——而 yml 里它本来就是 `default: true`。
+- person_id: p_wang
+  role_id: dtc.live-chat
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
 - person_id: p_wang
   role_id: dtc.community-support
   ranges:

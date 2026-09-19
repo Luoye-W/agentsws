@@ -23,6 +23,9 @@ const zh: Table = {
   'nav.secretary': '我的代理',
   // WP96：顶栏那条长搜索框（点开就是 ⌘K 命令面板）
   'nav.command': '交给某个岗位一件事…',
+  // WP125（本单交付 4）：合成世界的「演示数据」标记——不显眼但始终在
+  'demo.badge': '演示数据',
+  'demo.badge.hint': '这个工作区跑的是演示用的合成数据，不是你的真实业务数据。',
   'secretary.title': '我的代理',
   'secretary.intro':
     '代理只管四件事：我是谁、我在做什么、我什么时候有空，以及别人丢来的事该谁做。专业的事它不做，只转给对的岗位。',
@@ -2250,6 +2253,8 @@ const en: Table = {
   'nav.secretary': 'My agent',
   // WP96: the top-bar search bar (opens the ⌘K palette)
   'nav.command': 'Hand a position a task…',
+  'demo.badge': 'Demo data',
+  'demo.badge.hint': 'This workspace runs on synthetic demo data, not your real business data.',
   'secretary.title': 'My agent',
   'secretary.intro':
     'Your agent only handles four things: who you are, what you are working on, when you are free, and which desk an incoming task belongs to. It never answers domain questions — it routes them.',
