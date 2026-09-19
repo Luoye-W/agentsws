@@ -157,7 +157,10 @@ export function Options(): React.ReactNode {
 
       <section className="ws-card">
         <h2>本机服务端口</h2>
-        <p>默认 {DEFAULT_PORT}。插件**只**连这台电脑上的 127.0.0.1，不会连任何别的地址。</p>
+        <p>
+          默认 {DEFAULT_PORT}。插件<strong>只</strong>连这台电脑上的 127.0.0.1，
+          不会连任何别的地址。
+        </p>
         <div className="ws-row">
           <label className="ws-field">
             <span className="ws-label">端口</span>

@@ -18,7 +18,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Puzzle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   createExtensionPairing,
@@ -30,8 +29,16 @@ import {
 /** 码的有效期（与本机服务那一侧的 `PAIRING_TTL_MS` 是同一个数）。 */
 const PAIRING_TTL_MS = 5 * 60 * 1000
 
-function secondsLeft(expires_at: string, now: number): number {
-  return Math.max(0, Math.round((Date.parse(expires_at) - now) / 1000))
+/**
+ * 倒计时从**浏览器自己的钟**算，不拿响应里那个 `expires_at` 减本地时间。
+ *
+ * 两个钟差一点点是常态（虚拟机、合成世界的 demo 钟、用户手动改过系统时间），
+ * 而差出来的后果很难看：码刚出来就显示「已过期」，或者显示还剩四分钟其实已经废了。
+ * 真正说了算的是服务端——它收到码的时候自己判。这里那一行只是给人看的进度条，
+ * 所以用「这个码在这一屏上出现了多久」来算，永远对得上用户的直觉。
+ */
+function secondsLeft(shownAt: number, now: number): number {
+  return Math.max(0, Math.round((shownAt + PAIRING_TTL_MS - now) / 1000))
 }
 
 function mmss(total: number): string {
@@ -49,9 +56,8 @@ function whenText(value: string | undefined): string {
 
 export function BrowserExtensionSection(props: { assignment?: string }): React.ReactNode {
   const client = useQueryClient()
-  const [pairing, setPairing] = useState<{ code: string; expires_at: string } | undefined>(
-    undefined,
-  )
+  /** 屏幕上那个码：明文只活在这个 state 里，刷新一下就没了。 */
+  const [pairing, setPairing] = useState<{ code: string; shown_at: number } | undefined>(undefined)
   const [now, setNow] = useState(() => Date.now())
 
   const tokens = useQuery({
@@ -59,24 +65,19 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
     queryFn: () => listExtensionTokens(props.assignment),
   })
 
-  // 倒计时：码在屏幕上活多久，这一行就跑多久。到点自己消失（而不是留一个死码）。
+  // 倒计时：码在屏幕上活多久，这一行就跑多久。
   useEffect(() => {
     if (pairing === undefined) return
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [pairing])
 
-  useEffect(() => {
-    if (pairing === undefined) return
-    if (secondsLeft(pairing.expires_at, now) > 0) return
-    setPairing(undefined)
-  }, [pairing, now])
-
   const generate = useMutation({
     mutationFn: () => createExtensionPairing(props.assignment),
     onSuccess: (out) => {
-      setPairing(out)
-      setNow(Date.now())
+      const at = Date.now()
+      setPairing({ code: out.code, shown_at: at })
+      setNow(at)
     },
   })
 
@@ -116,7 +117,10 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
                 {(generate.error as Error).message}
               </p>
             ) : (
-              <Hint text="生成之后去插件的设置页把那 6 位数字填进去。码 5 分钟内有效，只能用一次。" />
+              // 「5 分钟、只能用一次」是安全承诺，按 36 §7 必须可见，不能藏进 tooltip。
+              <p className="text-sm text-muted-foreground">
+                生成之后去插件的设置页把那 6 位数字填进去。码 5 分钟内有效，只能用一次。
+              </p>
             )}
           </div>
         ) : (
@@ -124,11 +128,26 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
             <div className="font-mono text-4xl tracking-[0.35em] text-[var(--ws-ink)]">
               {pairing.code}
             </div>
-            <p className="text-sm text-muted-foreground">
-              还剩 {mmss(secondsLeft(pairing.expires_at, now))}。
-              去插件设置页填进去；关掉这一页它就没了，到时候再生成一个就是。
-            </p>
-            <div>
+            {secondsLeft(pairing.shown_at, now) > 0 ? (
+              <p className="text-sm text-muted-foreground">
+                还剩 {mmss(secondsLeft(pairing.shown_at, now))}
+                。去插件设置页填进去；关掉这一页它就没了，到时候再生成一个就是。
+              </p>
+            ) : (
+              // **到点不让它自己消失**：用户可能正在另一个窗口里一位一位地敲。
+              // 让码留在屏幕上、旁边说一句"大概过期了"，比它凭空不见强得多。
+              <p className="text-sm text-[var(--ws-warn)]" data-testid="extension-code-stale">
+                这个码大概已经过期了（超过 5 分钟）。填进去要是不认，按下面再生成一个。
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => generate.mutate()}
+                disabled={generate.isPending}
+              >
+                再生成一个
+              </Button>
               <Button variant="ghost" onClick={() => setPairing(undefined)}>
                 收起来
               </Button>
@@ -158,9 +177,10 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
           ))}
         </ul>
       )}
-      <Hint
-        text={`码的有效期是 ${PAIRING_TTL_MS / 60000} 分钟。插件只连这台电脑上的 127.0.0.1，配对之后也是——它不认识任何云端地址。`}
-      />
+      {/* 安全承诺，按 36 §7 可见（不藏进 tooltip）。 */}
+      <p className="text-sm text-muted-foreground">
+        插件只连这台电脑上的 127.0.0.1，配对之后也是——它不认识任何云端地址。
+      </p>
     </section>
   )
 }
