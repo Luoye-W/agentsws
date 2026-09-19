@@ -312,7 +312,8 @@ describe('/v1/cloud/pricing', () => {
   it('没关联 / 连不上就回本地内置那份——价目表不该因为断网就一片空白', async () => {
     const pricing = await data<Pricing>(await api('/v1/cloud/pricing'))
     expect(pricing.credit_cny).toBe(1)
-    expect(pricing.entries.length).toBe(8)
+    // WP118 加了两条订阅（红人已上线、客服只登记），所以是 10 条
+    expect(pricing.entries.length).toBe(10)
     expect(pricing.entries.map((e) => e.capability)).toContain('crawl.page')
   })
 })

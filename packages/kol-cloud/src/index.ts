@@ -14,6 +14,7 @@
  * 订阅机制不在这里：它在 `@agentsws/metering` 的通用订阅引擎里（一份引擎多个
  * 服务，客服增值服务 WP124 是第二个实例）。
  */
+export type { KolCloudAdminPort, KolCloudSummary } from './admin-port.js'
 export {
   authenticate,
   bearerToken,

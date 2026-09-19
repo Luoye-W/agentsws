@@ -17,7 +17,8 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { Clock, VerifiedCloudToken } from '@agentsws/contracts'
+import type { Clock, ServiceSubscription, VerifiedCloudToken } from '@agentsws/contracts'
+import type { KolCloudAdminPort, KolCloudSummary } from '@agentsws/kol-cloud'
 import {
   type KolCloudEnv,
   KolCloudService,
@@ -135,14 +136,7 @@ export class KolTenantCore {
   #handleAdmin(request: Request, url: URL): Response | undefined {
     if (url.pathname === KOL_TENANT_INTERNAL.summary) {
       const org_id = url.searchParams.get('org') ?? ''
-      const sub = this.service.subscription(org_id)
-      return Response.json({
-        subscription: { ...sub, status: this.service.liveStatus(org_id) },
-        object_count: this.store.count(),
-        pending_conflicts: this.store.openConflictCount(),
-        last_sync_at: this.store.lastSyncAt(sub.service_id) ?? null,
-        charges: this.store.charges(12),
-      })
+      return Response.json(this.service.summary(org_id))
     }
     if (url.pathname === KOL_TENANT_INTERNAL.grant && request.method === 'POST') {
       const org_id = url.searchParams.get('org') ?? ''
@@ -169,6 +163,34 @@ export const KOL_TENANT_INTERNAL = {
   /** 后台赠送 N 个月。 */
   grant: '/__internal/kol/tenant/grant',
 } as const
+
+/**
+ * 后台那一层握的口子：**打那个组织的租户对象**。
+ *
+ * 与 WP116 的 `remoteKolAdminPort` 一模一样的形状——后台这一层不知道自己在哪个
+ * 形态里。差别只有一处：公共库是单例（一个名字），这里按组织取对象。
+ */
+export function remoteKolCloudAdminPort(ns: DoNamespaceLike): KolCloudAdminPort {
+  const call = async <T>(org_id: string, path: string, method = 'GET'): Promise<T> => {
+    const res = await ns
+      .get(ns.idFromName(org_id))
+      .fetch(new Request(`https://kol-tenant.internal${path}`, { method }))
+    return (await res.json()) as T
+  }
+  return {
+    summary: (org_id) =>
+      call<KolCloudSummary>(
+        org_id,
+        `${KOL_TENANT_INTERNAL.summary}?org=${encodeURIComponent(org_id)}`,
+      ),
+    grant: (org_id, months) =>
+      call<ServiceSubscription>(
+        org_id,
+        `${KOL_TENANT_INTERNAL.grant}?org=${encodeURIComponent(org_id)}&months=${String(months)}`,
+        'POST',
+      ),
+  }
+}
 
 /**
  * 钱那一跳：打这个组织的 `WalletDO`。

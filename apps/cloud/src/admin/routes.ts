@@ -41,6 +41,7 @@ import {
   type KolAdminPort,
   parseNdjson,
 } from '@agentsws/kol-public'
+import type { KolCloudAdminPort } from '@agentsws/kol-cloud'
 import {
   COST_TABLE,
   costTableNeedsReview,
@@ -123,6 +124,11 @@ export interface AdminConsoleDeps {
    * 那一页的路由回 503，不假装。
    */
   kol?: () => KolAdminPort | undefined
+  /**
+   * 红人营销增值服务那一口（WP118 / 67 §3）。没接就那一块显示"这个节点没开通"，
+   * 不画一堆 0（与看板页、公共红人库页同一条）。
+   */
+  kolCloud?: () => KolCloudAdminPort | undefined
   /** 云的对外地址（CSRF 的 Origin 与 magic link 的落点都用它）。 */
   baseUrl: string
   mail: MailSender
@@ -167,6 +173,8 @@ const BanBody = z.object({
   expires_at: z.string().min(4).max(40).optional(),
 })
 const RoleBody = z.object({ role: z.enum(['user', 'support', 'admin']) })
+/** 赠送几个月。上限 24 与会员 term 一致——一个后台按钮不该能送出十年。 */
+const KolGrantBody = z.object({ months: z.number().int().min(1).max(24) })
 const DeleteBody = z.object({
   /** 手打一遍邮箱才算数（KefuAgent 那条）。粘贴 id 手滑删错人的成本太高。 */
   email_confirm: z.string().min(3).max(320),
@@ -242,6 +250,13 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
     const found = deps.kol?.()
     if (found === undefined)
       throw new ApiError('provider_unavailable', '这个节点没接公共红人库，这一页看不了')
+    return found
+  }
+
+  const kolCloudOr503 = (): KolCloudAdminPort => {
+    const found = deps.kolCloud?.()
+    if (found === undefined)
+      throw new ApiError('provider_unavailable', '这个节点没开通红人营销增值服务，这一块看不了')
     return found
   }
 
@@ -1634,6 +1649,61 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           target_id: strQuery(c, 'target_id'),
         })
         return cloudOk(c, { ...page, limit, offset })
+      },
+    ),
+  )
+
+  /* ── 红人营销增值服务（WP118 / 67 §3）──────────────────────────────── */
+
+  routes.push(
+    cloudRoute(
+      {
+        method: 'get',
+        path: '/v1/admin/orgs/:org_id/kol-service',
+        operationId: 'cloudAdminKolService',
+        summary: '一个组织的红人营销增值服务：订阅状态 / 到期 / 云端对象数 / 最近同步 / 最近几笔扣费',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        returns: 'KolCloudSummary',
+      },
+      async (c) => {
+        staff(c)
+        return cloudOk(c, await kolCloudOr503().summary(c.req.param('org_id') ?? ''))
+      },
+    ),
+
+    cloudRoute(
+      {
+        method: 'post',
+        path: '/v1/admin/orgs/:org_id/kol-service/grant',
+        operationId: 'cloudAdminKolServiceGrant',
+        summary: '给一个组织赠送 N 个月增值服务（那几期 0 积分，照样走一遍流程）',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        body: KolGrantBody,
+        returns: 'ServiceSubscription',
+      },
+      async (c) => {
+        // 送钱的动作走 `writer`（会话 + CSRF），不是只读的 `staff`
+        const principal = writer(c)
+        const input = await cloudBody(c, KolGrantBody)
+        const org_id = c.req.param('org_id') ?? ''
+        const next = await kolCloudOr503().grant(org_id, input.months)
+        /*
+         * 赠送是**送钱**，所以进审计（与手动发积分同一条）：一个月 30 积分，
+         * 送十个月就是 300，这种事必须留一行谁在什么时候做的。
+         */
+        deps.admin().audit({
+          action: 'kol_service.grant',
+          actor_account_id: principal.session.account_id,
+          actor_role: principal.session.role,
+          target_kind: 'org',
+          target_id: org_id,
+          outcome: 'done',
+          details: { months: input.months },
+          ip: principal.ip,
+        })
+        return cloudOk(c, next)
       },
     ),
   )

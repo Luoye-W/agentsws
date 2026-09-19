@@ -212,6 +212,7 @@ import { pathToFileURL } from 'node:url'
 import type { CloudRoute } from '@agentsws/api'
 import { type CloudTokenVerifier, cloudBaseUrl } from '@agentsws/contracts'
 import { type BetterSqliteLike, syncDbFromBetterSqlite } from '@agentsws/core/sql/sync-db'
+import type { KolCloudAdminPort } from '@agentsws/kol-cloud'
 import { isLibraryStore, type KolAdminPort, localKolAdminPort } from '@agentsws/kol-public'
 import {
   sqlUsageLedger,
@@ -313,6 +314,8 @@ export async function main(): Promise<void> {
   let consoleWallet: AdminConsoleWallet | undefined
   /** 公共红人库那一侧（WP116 §4）。装完 `mountKolPublic` 才有。 */
   let consoleKol: KolAdminPort | undefined
+  /** 红人营销增值服务那一侧（WP118 / 67 §3）。装完 `mountKolCloud` 才有。 */
+  let consoleKolCloud: KolCloudAdminPort | undefined
   const consoleRoutes = adminConsoleRoutes({
     clock,
     accounts: () => server.store,
@@ -323,6 +326,7 @@ export async function main(): Promise<void> {
     wallet: () => consoleWallet,
     ledger: () => ledger,
     kol: () => consoleKol,
+    kolCloud: () => consoleKolCloud,
     baseUrl: cloudBaseUrl(env),
     mail: mailSenderFromEnv(env),
     ...(adminToken === undefined || adminToken === '' ? {} : { bootstrapToken: adminToken }),
@@ -370,6 +374,14 @@ export async function main(): Promise<void> {
     clock,
     ...(dataDir === undefined ? {} : { dataDir }),
   })
+  /*
+   * 后台那一口：**按组织现取**那一份服务。与 Workers 形态里的
+   * `remoteKolCloudAdminPort` 是同一个接口——后台这一层不知道自己在哪个形态里。
+   */
+  consoleKolCloud = {
+    summary: (org_id) => kolCloud.serviceOf(org_id).summary(org_id),
+    grant: (org_id, months) => kolCloud.serviceOf(org_id).grantMonths(org_id, months),
+  }
   /*
    * 后台那一页要的是"库统计 / 搜索 / 移除 / 搬家"，而这四件事只有 sqlite 那份
    * 存储做得到（内存那份没有搬家用的那几张表）。所以内存档下**这一页回 503**，

@@ -3922,13 +3922,16 @@ const en: Table = {
   'credits.block.data': 'Data APIs',
   'credits.block.ai': 'AI usage',
   'credits.block.kol_service': 'Add-on services',
-  'credits.block.data.note': 'Platform fees and quota we pay for you (creator lookups, social fetches, crawling, transcription)',
+  'credits.block.data.note':
+    'Platform fees and quota we pay for you (creator lookups, social fetches, crawling, transcription)',
   'credits.block.ai.note': 'Models, per token',
-  'credits.block.kol_service.note': 'Monthly subscriptions (influencer marketing, 30 credits/month)',
+  'credits.block.kol_service.note':
+    'Monthly subscriptions (influencer marketing, 30 credits/month)',
   'credits.blocks': 'Where this month went',
   'credits.blocks.none': 'Nothing spent here this month',
   'credits.tiers': 'Pick a top-up',
-  'credits.tiers.note': 'US$1 = 7 credits, 1 credit = CNY 1. You pay on Stripe — we never see your card.',
+  'credits.tiers.note':
+    'US$1 = 7 credits, 1 credit = CNY 1. You pay on Stripe — we never see your card.',
   'credits.tiers.recommended': 'Popular',
   'credits.tiers.credits': '{n} credits',
   'credits.tiers.go': 'Pay',

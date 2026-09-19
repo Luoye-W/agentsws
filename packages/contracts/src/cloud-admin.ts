@@ -162,6 +162,13 @@ export type AuditAction =
    */
   | 'kol.remove'
   | 'kol.import'
+  /**
+   * WP118 增值服务：后台赠送 N 个月。
+   *
+   * 它是**送钱**（一个月 30 积分），所以和 `credits.grant` 一样必须留一行谁在
+   * 什么时候做的。`details` 里只有月数——组织号在 `target_id` 上，别的一个字没有。
+   */
+  | 'kol_service.grant'
 
 /**
  * 一条审计。**只增不改**：没有 update，没有 delete，主键是自增号。

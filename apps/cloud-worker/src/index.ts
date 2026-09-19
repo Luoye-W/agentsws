@@ -45,6 +45,7 @@ export {
   KolTenantCore,
   type KolTenantDoOptions,
   type KolTenantDoStateLike,
+  remoteKolCloudAdminPort,
 } from './kol-tenant-do.js'
 export {
   applyKolOps,

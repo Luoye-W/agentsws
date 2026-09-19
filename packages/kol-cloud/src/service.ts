@@ -44,6 +44,7 @@ import {
   subscriptionStatusAt,
   subscriptionUnpaid,
 } from '@agentsws/metering'
+import type { KolCloudSummary } from './admin-port.js'
 import type { KolCloudStore } from './store.js'
 import { KolCloudError, type KolCloudPrincipal, type SubscriptionWallet } from './types.js'
 
@@ -229,6 +230,24 @@ export class KolCloudService {
       break
     }
     return out
+  }
+
+  /**
+   * 后台抽屉那一块（订阅状态、云端对象数、最近同步、最近几笔扣费）。
+   *
+   * 状态**算过一遍**再给：后台看到的"还在宽限里"必须与用户那一侧看到的是同一句话。
+   */
+  summary(org_id: string): KolCloudSummary {
+    const sub = this.subscription(org_id)
+    const last = this.store.lastSyncAt(this.service.id)
+    return {
+      org_id,
+      subscription: { ...sub, status: subscriptionStatusAt(sub, this.now()) },
+      object_count: this.store.count(),
+      pending_conflicts: this.store.openConflictCount(),
+      ...(last === undefined ? {} : { last_sync_at: last }),
+      charges: this.store.charges(12),
+    }
   }
 
   /* ---------------- 闸门 ---------------- */
