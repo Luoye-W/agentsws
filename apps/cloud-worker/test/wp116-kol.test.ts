@@ -21,14 +21,7 @@
 import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { INTERNAL_HEADERS, remoteKolAdminPort, route } from '../src/index.js'
-import {
-  type FakeCloud,
-  fakeCloud,
-  req,
-  SIGNUP_BONUS,
-  tokenFromMail,
-  zeroOut,
-} from './helpers.js'
+import { type FakeCloud, fakeCloud, req, SIGNUP_BONUS, tokenFromMail, zeroOut } from './helpers.js'
 
 /** 32 字节的邮箱密钥（**测试用的假钥匙**，hex）。 */
 const EMAIL_KEY = 'a'.repeat(64)
