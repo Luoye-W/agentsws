@@ -49,7 +49,8 @@ export interface PersonaBackend {
 export function createMemoryPersonaBackend(): PersonaBackend {
   const rows = new Map<string, PersonaOverride>()
   return {
-    all: () => [...rows.values()].sort((a, b) => personaKey(a.subject).localeCompare(personaKey(b.subject))),
+    all: () =>
+      [...rows.values()].sort((a, b) => personaKey(a.subject).localeCompare(personaKey(b.subject))),
     put: (row) => {
       rows.set(personaKey(row.subject), row)
     },
@@ -147,8 +148,14 @@ class PersonaError extends Error {
 
 export { PersonaError }
 
-/** persona 覆盖的正文上限（与包里那条同一个数，见 `MAX_PERSONA_CHARS`）。 */
-const MAX_OVERRIDE_CHARS = 700
+/**
+ * persona 覆盖的正文上限。
+ *
+ * 比包里那条（`MAX_PERSONA_CHARS`）松：包里那份是我们自己写的，要守 200 字的纪律；
+ * 公司改写的那份是**用户写的**，在一个文本框里卡到 260 字只会让人写到一半被拦住。
+ * 松到这个数仍拦得住"把整本手册粘进来"（那种粘贴才是这个上限真正要防的）。
+ */
+const MAX_OVERRIDE_CHARS = 1200
 
 export function createPersonas(options: PersonasOptions): PersonasAssembly {
   const backend = options.backend ?? createMemoryPersonaBackend()
@@ -170,10 +177,13 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
     options.positions().find((p) => p.id === id)
 
   /** 包里的原文 + 显示名。找不到这个岗位 / 职责就抛 `not_found`。 */
-  const packagedOf = (subject: PersonaSubject): { name: { zh: string; en: string }; persona: PersonaText } => {
+  const packagedOf = (
+    subject: PersonaSubject,
+  ): { name: { zh: string; en: string }; persona: PersonaText } => {
     if (subject.kind === 'position') {
       const template = positionOf(subject.id)
-      if (template === undefined) throw new PersonaError('not_found', `没有「${subject.id}」这个岗位`)
+      if (template === undefined)
+        throw new PersonaError('not_found', `没有「${subject.id}」这个岗位`)
       return { name: template.name, persona: template.persona ?? '' }
     }
     const role = options.roles.roles.get(subject.id as RoleId)
@@ -206,7 +216,8 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
   const effectiveOf = (subject: PersonaSubject): PersonaText | undefined => {
     try {
       const view = viewOf(subject)
-      return personaTextIn(view.effective, 'zh') === '' && personaTextIn(view.effective, 'en') === ''
+      return personaTextIn(view.effective, 'zh') === '' &&
+        personaTextIn(view.effective, 'en') === ''
         ? undefined
         : view.effective
     } catch {

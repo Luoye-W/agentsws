@@ -209,10 +209,7 @@ export interface RuntimeOptions {
    * 不接 = 老行为：`persona` 段里只有职责那一节（而且是包里的原文，不叠覆盖）。
    * 真服务进程一定接（`server.ts` 把它接到 `personas.ts` 上）。
    */
-  personaSections?(input: {
-    role_id: string
-    position_id?: string | undefined
-  }): PromptSection[]
+  personaSections?(input: { role_id: string; position_id?: string | undefined }): PromptSection[]
 }
 
 /**

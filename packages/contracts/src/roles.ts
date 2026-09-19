@@ -521,9 +521,7 @@ export interface EffectiveConfig {
 /* ── WP120（69 §4）：角色定位的公司层覆盖 ────────────────────────────────── */
 
 /** 一段 persona 挂在谁身上：一个岗位模板，或者一条职责。 */
-export type PersonaSubject =
-  | { kind: 'position'; id: string }
-  | { kind: 'role'; id: RoleId }
+export type PersonaSubject = { kind: 'position'; id: string } | { kind: 'role'; id: RoleId }
 
 /**
  * 69 §4：**公司改写过的那一份**。

@@ -32,6 +32,7 @@ export {
   parseRole,
   ROLE_ID_ALIASES,
   resolveRoleId,
+  SUPERSEDED_POSITION_IDS,
 } from './load.js'
 export { assertTighterOverrides } from './overrides.js'
 export type {

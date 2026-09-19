@@ -184,6 +184,21 @@ export function loadBundledRoles(): RoleDefinitionFull[] {
  */
 export function bundledPositionOfRole(role_id: RoleId): Position | undefined {
   const target = resolveRoleId(role_id)
-  const hits = loadBundledPositions().filter((p) => p.roles.some((r) => r.role === target))
+  const hits = loadBundledPositions()
+    .filter((p) => !SUPERSEDED_POSITION_IDS.includes(p.id))
+    .filter((p) => p.roles.some((r) => r.role === target))
   return hits.length === 1 ? hits[0] : undefined
 }
+
+/**
+ * **已经被拆掉的岗位模板**：文件还在（只加不删），但没有一个工作区会种出它来。
+ *
+ * `dtc-ops`（独立站运营）在 WP62 / WP63 / WP64 里拆成了「网站运营」+「客服」，
+ * `org.ts` 的 `SEED_POSITIONS` 里已经没有它。留着文件是因为它是 04 §1.11 的一份
+ * 历史记录，也还钉着几条测试；但**反查"这条职责属于哪个岗位"时必须跳过它**——
+ * 不跳的后果是 `dtc.support` 同时命中它与 `customer-care`，于是"挂在两个岗位里"
+ * → 跳过岗位层（54 §3）→ 客服这条最常用的职责反而拿不到岗位 persona。
+ *
+ * 这张表与 `ROLE_ID_ALIASES` 同一条纪律：**只可加行**。
+ */
+export const SUPERSEDED_POSITION_IDS: readonly string[] = ['dtc-ops']

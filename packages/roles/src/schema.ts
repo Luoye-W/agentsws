@@ -362,7 +362,9 @@ export function checkPositionExtras(data: unknown): { field: string; message: st
  * （`checkAllPersonas` + `gen-ontology --check`），不是单文件级的：外部用户自己写的
  * 职责 yml 不填 persona 仍该读得进来（契约上它是可选的），只是内置这四十多条一条都不许空。
  */
-function checkPersonaField(data: Record<string, unknown>): { field: string; message: string } | undefined {
+function checkPersonaField(
+  data: Record<string, unknown>,
+): { field: string; message: string } | undefined {
   if (!('persona' in data)) return undefined
   const bad = checkPersona(data.persona as never)
   return bad === undefined ? undefined : { field: 'persona', message: bad }

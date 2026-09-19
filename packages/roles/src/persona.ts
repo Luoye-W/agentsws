@@ -69,8 +69,16 @@ export const PERSONA_SECTIONS_EN = [
   'Always ask',
 ] as const
 
-/** 69 §2：每段 persona 的字数上限（中文按字符数；短是刻意的——长了模型读不进去）。 */
-export const MAX_PERSONA_CHARS = 700
+/**
+ * 69 §2：一段 persona 的字数上限。**短是刻意的**——长了模型读不进去，
+ * 而 persona 的作用恰恰是"进了系统提示之后还被记住"。
+ *
+ * 派工单写的是「每段 ≤ 200 字」。那是**正文**的目标，机器上限要留出两样开销：
+ * 六个小标题本身（约 30 字），以及英文——实测同一段话的英文字符数是中文的 3.5 倍
+ * （中文一个字顶英文三四个字母），一个数卡不住两种语言，卡了只会逼着英文那份
+ * 写得比中文少说一件事。所以两种语言各一个上限，目标仍是 200 字的中文正文。
+ */
+export const MAX_PERSONA_CHARS = { zh: 260, en: 950 } as const
 
 /**
  * 一段 persona 写全了没有。回 `undefined` = 没问题，回一句中文 = 哪儿不对。
@@ -85,8 +93,8 @@ export function checkPersona(persona: PersonaText | undefined): string | undefin
   for (const lang of ['zh', 'en'] as const) {
     const text = personaTextIn(persona, lang)
     if (text === '') continue
-    if (text.length > MAX_PERSONA_CHARS)
-      return `persona（${lang}）${text.length} 字，超过 ${MAX_PERSONA_CHARS} 字上限`
+    const cap = MAX_PERSONA_CHARS[lang]
+    if (text.length > cap) return `persona（${lang}）${text.length} 字，超过 ${cap} 字上限`
     const heads = lang === 'zh' ? PERSONA_SECTIONS_ZH : PERSONA_SECTIONS_EN
     const missing = heads.filter((h) => !text.includes(h))
     if (missing.length > 0)
@@ -231,7 +239,12 @@ export function personaSections(input: PersonaSectionsInput): PromptSection[] {
   const out: PromptSection[] = []
   const brand = renderBrandContext(input.brand, lang)
   if (brand !== '')
-    out.push({ id: 'brand', name: lang === 'zh' ? '品牌' : 'brand', order: PERSONA_ORDER.brand, text: brand })
+    out.push({
+      id: 'brand',
+      name: lang === 'zh' ? '品牌' : 'brand',
+      order: PERSONA_ORDER.brand,
+      text: brand,
+    })
   if (input.position !== undefined) {
     const text = personaTextIn(input.position.persona, lang)
     if (text !== '')
