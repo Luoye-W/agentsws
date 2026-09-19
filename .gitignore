@@ -24,3 +24,8 @@ release/
 # （`--output-dir` 的默认值）。我们不指定它，所以它跟着一次运行的 cwd 走。
 .playwright-mcp/
 .dev.vars
+
+# Kiro 派工产物与本地数据（含真实邮箱的导出）
+.data/
+REPORT.md
+KIRO.log

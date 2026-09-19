@@ -1,0 +1,23 @@
+# WP117 红人营销：用虚拟数据把全流程跑通
+
+worktree：`../agentsws-wt/wp117-kol-e2e`，分支 `wp/117-kol-e2e`。
+
+## 为什么
+第一位内测用户要测红人营销。现在八个岗位里除 Shopify 链路外没有任何真账号验证过。先用**虚拟数据**把红人营销从头到尾跑通，找出断点并修掉；再给用户一个不碰真人、不发真信的「演练」入口。
+
+## 先读
+`docs/48` §5（五条渠道职责）、`docs/54`（岗位主入口）、`docs/63`（消息：红人回信归并 + `kolagents` 文件夹）、`docs/36`、`docs/37`；`packages/kol-core/*`、`packages/simulation/*`、`packs/dtc-3c-3p/scenarios/kol/*`、`packages/stand-ins/*`、`apps/workstation/src/pages` 与 `components/kol/*`、`apps/cli/src/demo.ts`。
+只读参考：`/Users/yeluo/Documents/KOLAgents`（产品流程与界面，尤其建联、跟进、合作、交付物、追踪链接）。
+
+## 全流程（每一步都要有场景 + 界面能走通）
+找人（公共库搜索 / 粘链接 / 名单导入，含 xlsx——exceljs 已在仓里）→ 体检与打分（真实性、受众、报价估算）→ 进候选池与活动 → 起草开发信（卡：outbound 排版，人批）→ 发送（outbox）→ 回信进「消息」并归并到合作线程、挪 `kolagents` → 意向分类（感兴趣 / 要报价 / 拒绝 / 自动回复 / 退信）→ 议价（money 排版卡）→ 合作确认与寄样（要地址、建任务）→ 交付物登记与验收 → 追踪链接 / 折扣码与效果回收 → 付款登记 → 复盘（不是卡，是面板块）→ 跟进节奏（无回复 3 / 7 天自动起草下一封，次数上限，退订与拒绝即停）。
+
+## 交付
+1. **断点清单**：先按上面逐步实际走一遍（API 级 + 界面级），把走不通 / 假数据 / 死按钮列成表写进 `docs/66-红人营销全流程验证-v1.md`，再逐条修；修不完的留在表里标状态。
+2. **模拟场景**：`packs/dtc-3c-3p/scenarios/kol/` 补齐一条贯穿全程的长场景 + 各步分支（退信、拒绝即停、议价超预算要人批、交付物不合格打回、折扣码归因、余额不足时「钱不够」回人话且不扣费）。三运行时基线重定，门禁过。
+3. **虚拟红人世界**：`packages/stand-ins` 加一个红人替身（几十个合成红人，各有性格：秒回 / 拖延 / 只谈钱 / 要寄样 / 退信 / 已读不回；回信由规则 + 种子确定性生成，可选走模型便宜档润色）。邮件全部走内存邮箱，**绝不连真 SMTP / IMAP**。
+4. **演练模式**（给内测用户）：红人营销岗位页右上「演练」开关 → 开一个隔离的演练活动，数据打 `sandbox: true`、全程只跟虚拟红人来往、界面顶上一条明显的「演练中 · 不会发出任何真邮件」状态带、演练数据一键清空；任何真发送路径在演练活动里被硬拦（测试钉住）。时间可快进（「跳到 3 天后」）以触发跟进节奏。
+5. 截图：`docs/assets/workstation/kol-sandbox-*.png`（至少：找人、开发信卡、回信归并、议价卡、复盘）。
+
+## 验证
+通用项 + `vitest run packages/kol-core packages/stand-ins packages/simulation packages/channels packages/api apps/server apps/workstation` + 两个模拟包门禁。
