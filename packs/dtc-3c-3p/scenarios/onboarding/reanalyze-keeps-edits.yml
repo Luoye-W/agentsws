@@ -1,0 +1,54 @@
+# WP121b（70 §3.4）：**重新分析不覆盖手改**。
+#
+# 这是整个品牌接入面最要紧的一条，所以它单独占一条场景。
+#
+# 机器从首页的 JSON-LD 里读出来的品牌名是「诺伏特户外」；用户把它改成了
+# 「诺伏特 · 户外电源」——他知道得比页面多。上了新品之后他按「重新分析」，
+# 机器又会读出「诺伏特户外」。这时候只有一条规则：
+#
+# > **用户改过的格子，整格不动。**
+#
+# 不是"新值把握度更高就覆盖"，也不是"新值非空才覆盖"——就是不动。
+# 一个按钮只要有一次吃掉过你的手工修改，它就死了：以后没有人敢按它，
+# 于是"换了新品重跑一次"这件本该顺手的事，永远要靠手填。
+#
+# 没改过的格子照常刷新（这一轮的客服邮箱、政策、商品都是新读的）——
+# "不动"说的是**改过的那一格**，不是整张卡冻住。
+id: onboarding/reanalyze-keeps-edits
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-19T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    org.onboarding:
+      who: p_wang
+      ai: official
+      urls: ['https://nordvolt.example/']
+      # 他知道得比页面多：官网上写的是短名，实际对外用的是全名
+      edits: { brand_name: '诺伏特 · 户外电源' }
+      # 上了新品，按一次「重新分析」
+      reanalyze: true
+  - at: '+30m'
+    clock.advance: {}
+expected:
+  onboarding:
+    who: p_wang
+    connected: true
+    analysed: true
+    # 重跑完之后，这一格仍然是他改的那个值
+    kept_edits: [brand_name]
+  event_types: [simulation.onboarding_done]
+  metrics:
+    runs_failed: 0
+    staged_changes: 0
+    applied_changes: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  按完「重新分析」，他上周改对的那个品牌名还在吗？只要被吃掉过一次，
+  这个按钮以后就再没有人敢按。

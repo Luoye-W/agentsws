@@ -1848,6 +1848,27 @@ async function execute(
         })
         return
       }
+      // ── WP121b 初始化设置（70 §1–§3）────────────────────────────
+      case 'org.onboarding': {
+        const out = await world.org.onboarding({
+          who: event.onboarding.who,
+          ai: event.onboarding.ai,
+          ...(event.onboarding.model_failure === undefined
+            ? {}
+            : { model_failure: event.onboarding.model_failure }),
+          ...(event.onboarding.urls === undefined ? {} : { urls: event.onboarding.urls }),
+          ...(event.onboarding.cap_credits === undefined
+            ? {}
+            : { cap_credits: event.onboarding.cap_credits }),
+          ...(event.onboarding.edits === undefined ? {} : { edits: event.onboarding.edits }),
+          ...(event.onboarding.reanalyze === undefined
+            ? {}
+            : { reanalyze: event.onboarding.reanalyze }),
+        })
+        // 事件已经在 world 里记过了（`simulation.onboarding_done`）——这里不再记一遍
+        void out
+        return
+      }
       // WP56（48 §4 #6）：一个知识源同步了一次新正文
       case 'knowledge.source_sync': {
         await world.syncKnowledgeSource(event.source_sync.ref, event.source_sync.content)

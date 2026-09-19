@@ -262,7 +262,9 @@ describe('套件与报告落盘（26 §5）', () => {
     })
     // WP78（60 §4）：公关三条（外部发帖 / 负面提及分流 / 新闻稿只引事实卡）
     // WP113（63 §4）：消息四条（四条路 / 岗位没开不挪信 / 先规则后模型 / 纠错教一次）
-    expect(result.reports).toHaveLength(55)
+    // WP121b（70 §1–§3）：初始化设置四条（官方接口跑通 / 钥匙不通说人话 /
+    // 花到封顶就停 / 重新分析不覆盖手改）→ 59
+    expect(result.reports).toHaveLength(59)
     expect(result.reports.every((r) => r.passed)).toBe(true)
     expect(result.gate.ok).toBe(true)
     const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) as {
@@ -270,10 +272,11 @@ describe('套件与报告落盘（26 §5）', () => {
       scenarios: { id: string }[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(55)
+    expect(summary.scenarios).toHaveLength(59)
     expect(readFileSync(join(out, 'summary.txt'), 'utf8')).toContain('PASS')
-    // 跑一整个 pack（17 条场景）不是 5 秒的活，而且并行跑别的项目时还要抢 CPU
-  }, 120_000)
+    // 跑一整个 pack 不是 5 秒的活，而且并行跑别的项目时还要抢 CPU。
+    // WP121b 把题目加到 59 条之后，机器忙起来时 120s 会压线——放宽到 180s。
+  }, 180_000)
 
   it('与仓库里提交的基线比，指标没有劣化', async () => {
     const result = await runSuite({ packDir: PACK_DIR, seed: 42 })

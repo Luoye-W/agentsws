@@ -18,6 +18,7 @@
  * 减字：两张卡各一行说明，选中哪张才展开哪张的正文——两张同时铺开的话，
  * 第一次打开这个产品的人要先读两段字才知道自己该点哪儿。
  */
+import { modelFailureKind } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Cloud, KeyRound, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -48,18 +49,11 @@ export type AiChoice = 'official' | 'own'
 /**
  * 试跑失败那一句（70 §2.2）。
  *
- * **纯函数，单独导出**：这四句是这一步唯一会被用户记住的文案，值得单独钉一组用例。
- * 判据先看服务端给的那一句原文（它带着 HTTP 状态码），再看 `reason` 这个码。
+ * **分档在契约里**（`modelFailureKind`），因为不止这一处要它——模拟场景断言
+ * "说的是人话不是错误码"用的是同一张表。这里只做最后一步：档 → 词条。
  */
 export function modelTestKey(result: ModelTestResult): string {
-  const text = `${result.reason ?? ''} ${result.detail ?? ''}`.toLowerCase()
-  if (result.reason === 'no_key') return 'onboarding.ai.own.err.key'
-  if (/401|403|unauthorized|invalid api key|api key/.test(text)) return 'onboarding.ai.own.err.key'
-  if (/402|insufficient|balance|余额/.test(text)) return 'onboarding.ai.own.err.balance'
-  if (/timeout|timed out|etimedout|abort|超时/.test(text)) return 'onboarding.ai.own.err.timeout'
-  if (/404|enotfound|econnrefused|provider_unavailable|model not found|连不上/.test(text))
-    return 'onboarding.ai.own.err.address'
-  return 'onboarding.ai.own.err.other'
+  return `onboarding.ai.own.err.${modelFailureKind(result)}`
 }
 
 /**
