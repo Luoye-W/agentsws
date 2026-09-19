@@ -28,6 +28,8 @@ import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
 import { designRoutes } from './routes/design.js'
 import { eventRoutes } from './routes/events.js'
+// WP119（68）：浏览器插件的本地一面 `/v1/extension/*`（配对、观测、状态）
+import { extensionRoutes } from './routes/extension.js'
 import { haltRoutes } from './routes/halt.js'
 import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
@@ -200,6 +202,11 @@ export function collectRoutes(): Route[] {
      * 排最后（它谁也遮不住）。
      */
     ...messageRoutes(),
+    /*
+     * WP119（68）：浏览器插件。`/v1/extension/*` 是新前缀，与别处都不撞；
+     * `pairings` / `tokens` / `pair` / `hello` / `observations` 全是定值段。
+     */
+    ...extensionRoutes(),
   ]
 }
 
