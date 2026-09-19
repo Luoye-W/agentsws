@@ -39,6 +39,17 @@ export {
   totals,
   usageByOrgs,
 } from './admin-queries.js'
+export type { BonusRule, BonusesFile } from './bonuses.js'
+export {
+  BONUSES_FILE,
+  bonusById,
+  bonusExpiresAt,
+  bonuses,
+  isSignupBonusRef,
+  SIGNUP_BONUS_ID,
+  signupBonus,
+  signupBonusSourceRef,
+} from './bonuses.js'
 export type { CostEstimate, CostTable, TokenCostEntry, UnitCostEntry } from './cost.js'
 export {
   COST_TABLE,
