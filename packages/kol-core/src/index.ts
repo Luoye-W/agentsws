@@ -18,6 +18,8 @@
  * | `attribution` | UTM 生成 / 解析、联盟码、订单归因 |
  * | `import` | Excel / CSV 导入：列映射 + 去重 + 渠道识别 |
  * | `urls` | 五个渠道的链接解析 |
+ * | `tools` | **WP117**：上面这些能力作为 Agent 工具的名字与入参（纯定义） |
+ * | `playbook` | **WP117**：红人岗位的剧本——一件事落在哪一步、先调哪几个工具 |
  * | `channels` | 渠道适配器接口（YouTube / Instagram 有实现，其余三条待 WP68） |
  * | `public-library` | 云端公共红人库客户端接口（真接线等 WP61） |
  */
@@ -27,8 +29,10 @@ export * from './channels/index.js'
 export * from './import.js'
 export * from './merge.js'
 export * from './outreach.js'
+export * from './playbook.js'
 export * from './public-library.js'
 export * from './replies.js'
 export * from './scoring.js'
 export * from './stages.js'
+export * from './tools.js'
 export * from './urls.js'
