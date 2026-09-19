@@ -140,12 +140,27 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
 
     switch (bare) {
       case 'search_creators': {
-        const q = str(input.q) ?? channel
+        /*
+         * WP117b（66 复测 #15）：**关键词可以是空的，粉丝区间不能丢。**
+         *
+         * 以前这里是 `str(input.q) ?? channel`——模型没给关键词时拿渠道名当关键词，
+         * 于是"找粉丝 1 万到 10 万的 YouTube 频道"变成"找名字里带 youtube 的人"，
+         * 库里那两个 48,000 / 31,000 粉的频道一个都搜不出来。现在没关键词就是
+         * 没关键词（这条渠道上的人都算候选），筛人交给粉丝区间。
+         */
+        const q = str(input.q)
         const limit = num(input.limit)
+        const min_followers = num(input.min_followers)
+        const max_followers = num(input.max_followers)
+        const band = {
+          ...(min_followers === undefined ? {} : { min_followers }),
+          ...(max_followers === undefined ? {} : { max_followers }),
+        }
         const res = await port.search(actor, {
           channel,
-          q,
+          q: q ?? '',
           ...(limit === undefined ? {} : { limit }),
+          ...band,
         })
         if (res.ok) {
           return {
@@ -165,16 +180,24 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         if (res.reason === 'not_connected') {
           const local = await port.creators(actor, {
             channel,
-            q,
+            ...(q === undefined ? {} : { q }),
             ...(limit === undefined ? {} : { limit }),
+            ...band,
           })
+          const cond = [
+            q === undefined ? undefined : `关键词「${q}」`,
+            min_followers === undefined && max_followers === undefined
+              ? undefined
+              : `粉丝 ${(min_followers ?? 0).toLocaleString('en-US')}–${max_followers === undefined ? '不限' : max_followers.toLocaleString('en-US')}`,
+          ].filter((s): s is string => s !== undefined)
           return {
             ...rowsOf(local.rows, 'creator'),
             data: {
               rows: local.rows,
               object: 'creator',
               source: 'local_library',
-              note: `${channel} 还没连上，这一份是你自己库里的人（导入或以前存下来的）。连上之后能搜到更多。`,
+              ...(cond.length === 0 ? {} : { criteria: cond.join(' · ') }),
+              note: `${channel} 还没连上，这一份是你自己库里的人（导入或以前存下来的${cond.length === 0 ? '' : `，按 ${cond.join(' · ')} 筛过`}）。连上之后能搜到更多。`,
             },
           }
         }

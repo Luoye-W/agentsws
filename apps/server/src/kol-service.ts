@@ -661,6 +661,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     channel: KolChannel
     q: string
     limit?: number | undefined
+    min_followers?: number | undefined
+    max_followers?: number | undefined
   }): Promise<KolSearchResult> => {
     const library = options.publicLibrary
     if (library === undefined || !library.linked())
@@ -690,19 +692,22 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     return {
       ok: true,
       source: 'public_library',
-      rows: out.data.rows.map((row: PublicCreatorRow) => ({
-        channel: row.channel,
-        handle: row.handle,
-        url: urlOfPublicRow(row.channel, row.handle),
-        display_name: row.display_name,
-        ...(row.followers === undefined ? {} : { followers: row.followers }),
-        ...(row.engagement_rate === undefined ? {} : { engagement_rate: row.engagement_rate }),
-        ...(row.category === undefined ? {} : { category: row.category }),
-        ...(row.language === undefined ? {} : { language: row.language }),
-        ...(row.region === undefined ? {} : { region: row.region }),
-        has_contact: row.has_contact,
-        in_library: known.has(normalizeHandle(row.handle)),
-      })),
+      rows: out.data.rows
+        // WP117b（66 复测 #15）：公共库这一档也按粉丝区间筛
+        .filter((row: PublicCreatorRow) => inBand(row.followers, input))
+        .map((row: PublicCreatorRow) => ({
+          channel: row.channel,
+          handle: row.handle,
+          url: urlOfPublicRow(row.channel, row.handle),
+          display_name: row.display_name,
+          ...(row.followers === undefined ? {} : { followers: row.followers }),
+          ...(row.engagement_rate === undefined ? {} : { engagement_rate: row.engagement_rate }),
+          ...(row.category === undefined ? {} : { category: row.category }),
+          ...(row.language === undefined ? {} : { language: row.language }),
+          ...(row.region === undefined ? {} : { region: row.region }),
+          has_contact: row.has_contact,
+          in_library: known.has(normalizeHandle(row.handle)),
+        })),
       ...(price === undefined ? {} : { reveal_price: price }),
     }
   }
@@ -724,17 +729,55 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     }
   }
 
+  /*
+   * WP117b（66 复测 #15）：**搜不到东西的那两个原因，都在这两个小函数里。**
+   *
+   * ① 关键词以前是**整串**去 `includes`：Agent 递进来的是「youtube 频道」这样一串，
+   *    没有任何一个 handle 或名字整串带着它，于是回 0 个。现在**按词拆开、任意一个
+   *    命中就算**，而且名字 / handle / 类目三处都看——「桌面 好物」里的「桌面」
+   *    命中类目也该算数。
+   * ② 粉丝区间以前**根本没有这一层过滤**。
+   */
+  const matchesQ = (account: PlatformAccount, q: string | undefined): boolean => {
+    const words = (q ?? '')
+      .toLowerCase()
+      .split(/[\s,，、]+/)
+      .filter((w) => w !== '')
+    if (words.length === 0) return true
+    const hay = [
+      account.handle,
+      store.creator(account.creator_id)?.display_name ?? '',
+      account.category ?? '',
+      account.region ?? '',
+    ]
+      .join(' ')
+      .toLowerCase()
+    return words.some((w) => hay.includes(w))
+  }
+
+  /**
+   * 粉丝数落不落在区间里（两头都含）。
+   *
+   * **粉丝数没有的那些人算落在区间里**：不知道 ≠ 不合格（36 §3 的同一条）。
+   * 把他们剔掉，等于因为"我们没抓到这个数"就当这个人不存在。
+   */
+  const inBand = (
+    followers: number | undefined,
+    filter: { min_followers?: number | undefined; max_followers?: number | undefined },
+  ): boolean => {
+    if (followers === undefined) return true
+    if (filter.min_followers !== undefined && followers < filter.min_followers) return false
+    if (filter.max_followers !== undefined && followers > filter.max_followers) return false
+    return true
+  }
+
   const port: KolPort = {
     creators(_actor, filter) {
       const now = clock.now()
       const accounts = store
         .accounts(filter.channel === undefined ? {} : { channel: filter.channel })
-        .filter((a) => {
-          if (filter.q === undefined || filter.q.trim() === '') return true
-          const q = filter.q.trim().toLowerCase()
-          const name = store.creator(a.creator_id)?.display_name ?? ''
-          return a.handle.toLowerCase().includes(q) || name.toLowerCase().includes(q)
-        })
+        .filter((a) => matchesQ(a, filter.q))
+        .filter((a) => inBand(a.followers, filter))
       const hasContact = new Set(store.contacts().map((ct) => ct.creator_id))
       // 排序（含"刷粉的排在后面而不是剔掉"）在 `rankCreators` 里，不在这儿重写
       const rows: KolCreatorRow[] = rankCreators(accounts, { now }).map(({ account, score }) => ({
@@ -783,18 +826,22 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         return { ok: false, source: 'channel', rows: [], reason: out.reason, message: out.message }
       }
       const known = knownHandles(input.channel)
-      const rows: KolSearchHit[] = out.data.map((hit) => ({
-        channel: hit.channel,
-        handle: hit.handle,
-        url: hit.url,
-        display_name: hit.display_name,
-        ...(hit.followers === undefined ? {} : { followers: hit.followers }),
-        ...(hit.engagement_rate === undefined ? {} : { engagement_rate: hit.engagement_rate }),
-        ...(hit.category === undefined ? {} : { category: hit.category }),
-        ...(hit.language === undefined ? {} : { language: hit.language }),
-        ...(hit.region === undefined ? {} : { region: hit.region }),
-        in_library: known.has(normalizeHandle(hit.handle)),
-      }))
+      const rows: KolSearchHit[] = out.data
+        // WP117b（66 复测 #15）：粉丝区间对渠道这条路同样作数（渠道接口自己
+        // 大多不收这个条件，所以在这儿收）
+        .filter((hit) => inBand(hit.followers, input))
+        .map((hit) => ({
+          channel: hit.channel,
+          handle: hit.handle,
+          url: hit.url,
+          display_name: hit.display_name,
+          ...(hit.followers === undefined ? {} : { followers: hit.followers }),
+          ...(hit.engagement_rate === undefined ? {} : { engagement_rate: hit.engagement_rate }),
+          ...(hit.category === undefined ? {} : { category: hit.category }),
+          ...(hit.language === undefined ? {} : { language: hit.language }),
+          ...(hit.region === undefined ? {} : { region: hit.region }),
+          in_library: known.has(normalizeHandle(hit.handle)),
+        }))
       return {
         ok: true,
         source: 'channel',
