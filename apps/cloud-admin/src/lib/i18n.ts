@@ -190,7 +190,8 @@ export const zh = {
   'kpi.kol_contents': '内容样本',
   'kpi.kol_removed': '已移除（opt-out）',
   'kpi.kol_new': '7 天 +{d7} · 30 天 +{d30}',
-  'kpi.kol_imported': '其中搬来的 {n} 条',
+  'kpi.kol_imported': '其中搬来的 {n} 个',
+  'kpi.kol_contact_rate': '库里 {p}% 的人留了邮箱',
   'kpi.kol_observations': '观察 {n} 条',
   'kpi.kol_removed_note': '移除过的人搬家也搬不回来',
   'kol.what':
@@ -397,6 +398,7 @@ export const en: Record<Key, string> = {
   'kpi.kol_removed': 'Removed (opt-out)',
   'kpi.kol_new': '+{d7} in 7d · +{d30} in 30d',
   'kpi.kol_imported': '{n} of them imported',
+  'kpi.kol_contact_rate': '{p}% of creators have an email',
   'kpi.kol_observations': '{n} observations',
   'kpi.kol_removed_note': 'A removed creator never comes back via import',
   'kol.what':

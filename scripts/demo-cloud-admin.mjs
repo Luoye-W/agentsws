@@ -8,7 +8,7 @@
  * 2. 灌**全是假的**种子数据：几十个 `@example.com` 账号、各自的组织、两周的
  *    用量与成本、几笔发放、一个会员 term、两条故意亏本的调用；
  * 3. 直接签一张后台会话（不走发信——这是本机脚本，没有邮箱）；
- * 4. 用 playwright 拍四张图进 `docs/assets/cloud-admin/`。
+ * 4. 用 playwright 拍五张图进 `docs/assets/cloud-admin/`。
  *
  * **一条纪律：这里没有一个真实的人**。邮箱全是 `example.com`（RFC 2606 保留域，
  * 永远不会有人真的收到信），组织名是编的，模型名取自成本表。截图会进仓库，
@@ -57,6 +57,7 @@ for (const [what, where] of [
 const cloud = await import(pathToFileURL(join(ROOT, 'apps/cloud/dist/index.js')).href)
 const metering = await import(pathToFileURL(join(ROOT, 'packages/metering/dist/index.js')).href)
 const sync = await import(pathToFileURL(join(ROOT, 'packages/core/dist/sql/sync-db.js')).href)
+const kolPublic = await import(pathToFileURL(join(ROOT, 'packages/kol-public/dist/index.js')).href)
 
 /** 演示数据的"现在"。固定一个日子，截图就不会每天都变一遍。 */
 const NOW = new Date('2026-09-18T14:20:00.000Z')
@@ -66,12 +67,21 @@ const clock = { now: () => new Date(NOW.getTime() + tick).toISOString() }
 const dataDir = mkdtempSync(join(tmpdir(), 'agentsws-admin-demo-'))
 mkdirSync(SHOTS, { recursive: true })
 
-/* ── 装配（与 `apps/cloud/src/index.ts` 的 main() 同一套，只是省掉值守与红人库） ── */
+/* ── 装配（与 `apps/cloud/src/index.ts` 的 main() 同一套，只是省掉值守） ── */
+
+/**
+ * 端口。默认 4455；`DEMO_PORT` 可以改——这台机器上常常同时有好几个代理在跑，
+ * 端口撞上时的表现是"截图全白"，而那很难看出原因。
+ */
+const PORT = Number(process.env.DEMO_PORT ?? 4455)
+const BASE = `http://127.0.0.1:${String(PORT)}`
 
 let walletHandles
 let adminStore
 let ledger
 let consoleWallet
+/** 公共红人库那一侧（WP116 §4）。装完 `mountKolPublic` 才有。 */
+let consoleKol
 
 const consoleRoutes = cloud.adminConsoleRoutes({
   clock,
@@ -79,7 +89,8 @@ const consoleRoutes = cloud.adminConsoleRoutes({
   admin: () => adminStore,
   wallet: () => consoleWallet,
   ledger: () => ledger,
-  baseUrl: 'http://127.0.0.1:4455',
+  kol: () => consoleKol,
+  baseUrl: BASE,
   mail: async () => {},
   bootstrapToken: 'demo-token-not-a-secret-0123456789abcdef0123',
   health: () => server.health,
@@ -90,7 +101,7 @@ const server = cloud.createCloudServer({
   dataDir,
   clock,
   quiet: true,
-  env: { AGENTSWS_CLOUD_BASE_URL: 'http://127.0.0.1:4455' },
+  env: { AGENTSWS_CLOUD_BASE_URL: BASE },
   mail: async () => {},
   modules: [consoleRoutes],
 })
@@ -107,11 +118,27 @@ consoleWallet = {
     appendEvent: (e) => entry.store.appendEvent(e),
   }),
 }
-server.health.modules = { entry: true, mail: true, admin_console: true, kol_public: false }
+/*
+ * 公共红人库（WP116）。库开在这个临时目录里，跟着脚本一起被删掉。
+ * 邮箱密钥是**当场编的一把**——这个库活不过这次运行，而不给密钥的话
+ * 联系方式一条都落不进去（`import.ts` 第 3 条：要么加密要么不落）。
+ */
+const kol = cloud.mountKolPublic(server, {
+  wallet: entry.wallet,
+  pricing: entry.pricing,
+  dataDir,
+  clock,
+  // 64 个十六进制字符 = 32 字节。这一把只活这一次运行，谈不上密钥
+  env: { AGENTSWS_KOL_EMAIL_KEY: 'de0f'.repeat(16) },
+})
+consoleKol = kolPublic.isLibraryStore(kol.store)
+  ? kolPublic.localKolAdminPort({ store: kol.store, secrets: kol.secrets, now: () => clock.now() })
+  : undefined
+server.health.modules = { entry: true, mail: true, admin_console: true, kol_public: true }
 cloud.mountAdminPages(server, {
   admin: () => adminStore,
   clock,
-  baseUrl: 'http://127.0.0.1:4455',
+  baseUrl: BASE,
   distDir: DIST,
 })
 
@@ -303,6 +330,71 @@ server.store.createLink({
   label: '晨光家居 · MacBook',
 })
 
+/* ── 公共红人库的演示数据（WP116）──────────────────────────────────
+ *
+ * **全是编的**：handle 是拼出来的，邮箱一律 `example.com`（RFC 2606 保留域）。
+ * 走的是真的搬家那条路（`KolAdminPort.import`），所以这一页上的数与真跑一次
+ * 搬家之后看到的是同一个口径。
+ */
+if (consoleKol !== undefined) {
+  const CHANNELS = ['youtube', 'instagram', 'tiktok', 'youtube', 'tiktok']
+  const NICHES = ['beauty', 'outdoor', 'pet', 'kids', 'home', 'fitness', '3c']
+  const WORDS = ['sunny', 'maple', 'harbor', 'pixel', 'ember', 'north', 'clover', 'atlas']
+  const kolRecords = []
+  for (let i = 0; i < 48; i++) {
+    const channel = CHANNELS[i % CHANNELS.length]
+    const handle = `${pick(WORDS)}${pick(WORDS)}${String(i)}`
+    kolRecords.push({
+      kind: 'creator',
+      channel,
+      handle,
+      external_id: `demo_${channel}_${String(i)}`,
+      name: `${handle[0].toUpperCase()}${handle.slice(1)}`,
+      followers: Math.round(3_000 + rand() * 900_000),
+      categories: [pick(NICHES)],
+      country: pick(['US', 'GB', 'DE', 'JP', 'BR']),
+      language: pick(['en', 'de', 'ja', 'pt']),
+      observed_at: new Date(NOW.getTime() - Math.floor(rand() * 40) * 86_400_000).toISOString(),
+    })
+    // 大约三成的人库里有邮箱（那一列要有对照，不能全是"有"）
+    if (rand() < 0.3)
+      kolRecords.push({
+        kind: 'contact',
+        channel,
+        handle,
+        email: `${handle}@example.com`,
+        source: 'plugin',
+        source_url: `https://www.example.com/@${handle}/about`,
+        confirmations: 1 + Math.floor(rand() * 3),
+      })
+    // 一两条内容样本（标题是编的；**评论与文案一个字都不收**）
+    for (let k = 0; k < Math.floor(rand() * 3); k++)
+      kolRecords.push({
+        kind: 'content',
+        channel,
+        handle,
+        external_id: `demo_${channel}_${String(i)}_${String(k)}`,
+        content_type: channel === 'youtube' ? 'video' : 'reel',
+        title: `${pick(NICHES)} routine #${String(k + 1)}`,
+        url: `https://www.example.com/@${handle}/${String(k)}`,
+        views: Math.round(1_000 + rand() * 400_000),
+        likes: Math.round(50 + rand() * 20_000),
+        observed_at: new Date(NOW.getTime() - Math.floor(rand() * 30) * 86_400_000).toISOString(),
+      })
+  }
+  const imported = await consoleKol.import(kolRecords.slice(0, 500))
+  // 一条「从库中移除」，这样"已移除"那张卡不是 0
+  await consoleKol.remove({
+    channel: kolRecords[0].channel,
+    handle: kolRecords[0].handle,
+    reason: '本人来信要求从库中移除',
+    removed_by: 'system',
+  })
+  process.stdout.write(
+    `demo-cloud-admin: 红人库种了 ${String(imported.inserted)} 行（全是编的）\n`,
+  )
+}
+
 /* ── 后台账号与一张会话 ───────────────────────────────────────────── */
 
 const { account: boss } = server.store.ensureAccount('ops@example.com')
@@ -314,7 +406,7 @@ adminStore.setRole(boss.id, 'admin')
  */
 const login = server.store.issueLogin(boss.id)
 
-const { port } = await server.listen(4455)
+const { port } = await server.listen(PORT)
 const base = `http://127.0.0.1:${String(port)}`
 process.stdout.write(
   `demo-cloud-admin: ${String(orgs.length)} 个假账号 / ${String(requestNo)} 条用量 → ${base}/admin/\n`,
@@ -368,6 +460,7 @@ if (!shots) {
     '})',
     "await shot('/admin/usage', 'usage.png')",
     "await shot('/admin/credits', 'credits.png')",
+    "await shot('/admin/kol', 'kol.png')",
     'await browser.close()',
   ]
   writeFileSync(script, `${lines.join('\n')}\n`)
@@ -390,5 +483,5 @@ if (!shots) {
   await server.close()
   entry.store.close?.()
   rmSync(dataDir, { recursive: true, force: true })
-  process.stdout.write(`demo-cloud-admin: 四张图 → ${SHOTS}\n`)
+  process.stdout.write(`demo-cloud-admin: 五张图 → ${SHOTS}\n`)
 }

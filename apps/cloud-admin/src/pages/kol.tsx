@@ -16,7 +16,7 @@
  */
 
 import type { ColumnDef } from '@tanstack/react-table'
-import { Database, Mail, Trash2, TrendingUp, Video } from 'lucide-react'
+import { Database, Mail, Trash2, UserMinus, Video } from 'lucide-react'
 import { useState } from 'react'
 import {
   Button,
@@ -186,7 +186,12 @@ export function KolPage(): React.ReactNode {
             <Kpi
               label={t('kpi.kol_contacts')}
               value={compact(lib.contacts, lang)}
-              delta={t('kpi.kol_imported', { n: lib.imported })}
+              /*
+               * 这一格数的是**联系方式的条数**，不是"有邮箱的人数"（同一个人
+               * 可能有两个邮箱）。所以下面那一句说的是覆盖率，不是把两个不同
+               * 口径的数摆在一起——"14 条 / 其中搬来的 47 条"读起来像 47 > 14。
+               */
+              delta={t('kpi.kol_contact_rate', { p: pct(lib.contacts, lib.creators) })}
               tone="good"
               icon={<Mail className="size-3.5" />}
             />
@@ -202,13 +207,21 @@ export function KolPage(): React.ReactNode {
               value={compact(lib.removed, lang)}
               delta={t('kpi.kol_removed_note')}
               tone="neutral"
-              icon={<TrendingUp className="size-3.5" />}
+              icon={<UserMinus className="size-3.5" />}
             />
           </div>
 
           <div className="mb-4 grid gap-3 lg:grid-cols-2">
             <WsCard className="p-4">
-              <SectionTitle>{t('kol.by_channel')}</SectionTitle>
+              <SectionTitle
+                right={
+                  <span className="text-[12px] text-ws-muted-fg">
+                    {t('kpi.kol_imported', { n: compact(lib.imported, lang) })}
+                  </span>
+                }
+              >
+                {t('kol.by_channel')}
+              </SectionTitle>
               {lib.by_channel.length === 0 ? (
                 <p className="py-4 text-center text-sm text-ws-muted-fg">{t('kol.empty')}</p>
               ) : (
