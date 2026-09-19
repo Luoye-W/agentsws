@@ -240,6 +240,37 @@ export interface KnowledgeGap {
   /** 答完之后生成的那张 `knowledge_update` 审批项。 */
   approval_item_id?: string
   created_at: Iso8601
+  /**
+   * WP125（72 §1.C「有多少客户在等」/ §P0-3）：**正在等这条答案的人**。
+   *
+   * 按 `thread_id`（邮件线程）/ `session_id`（聊天会话）去重，一条线程只占一个位置。
+   * 这是缺口从「一条日志」变成「一条闭环」的那一格：待补区按 `waiting.length` 排序
+   * （不是更新时间），商家补完之后给每一个等待者各出一张 `pending_review` 草稿卡
+   * ——**路径里零发送函数**。
+   *
+   * 不落第二张表（走 `knowledge_gaps` 上新加的一列 JSON）：等待者是缺口的一个属性，
+   * 不是一个有自己生命周期的实体，拆出去只会多一次连表与一次不一致。
+   */
+  waiting?: readonly KnowledgeGapWaiter[]
+}
+
+/**
+ * WP125：一个正在等这条知识的人。
+ *
+ * **不存正文**：这里只有"哪条线程、哪条渠道、什么语言、什么时候开始等的"。
+ * 客户原话留在受控原始材料区里，缺口队列不该变成第二份对话副本。
+ */
+export interface KnowledgeGapWaiter {
+  /** 去重键：邮件线程 id 或聊天会话 id。 */
+  thread_id: string
+  /** 哪条渠道（出草稿卡时按它选投递口）。 */
+  channel: 'email' | 'chat'
+  /** 回信 / 回话要用的语言（support-core 的 `SupportLanguage` 那一组值）。 */
+  language?: string
+  /** 开始等的时刻（同样人数时按"等了多久"做次级排序）。 */
+  since: Iso8601
+  /** 已经给客户回过的那一条预期 preset id（`compiling_details` / `checking_with_team` / `sending_guide`）。 */
+  expectation?: string
 }
 
 export interface KnowledgeGapInput {
