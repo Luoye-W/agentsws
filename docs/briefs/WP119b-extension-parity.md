@@ -1,6 +1,8 @@
-# WP119b 浏览器插件：功能与信息量对齐 KOLAgents 插件 0.9.20
+# WP119b 浏览器插件：完整版移植进私有仓库 + 开源仓库公开「插件开放接口」
 
-worktree：`../agentsws-wt/wp119b-ext-parity`，分支 `wp/119b-ext-parity`（从 main 新起）。
+**两个仓库，两块活（Luoye 09-19 定）：**
+- **A · 私有仓库 `/Users/yeluo/Documents/agentsws-extension`**（GitHub `Luoye-W/agentsws-extension`，PRIVATE，已建好、已有首个提交；直接在它的 `main` 上分支 `wp/119b-port` 干活，不 push）：完整版插件。旧插件部分代码源自**付费模板**，授权不允许公开分发，所以**移植来的代码只许进这个私有仓库，一个字节都不许进开源仓库 `agentsws`**。在私有仓库里，`_common.md` 那条「模板自带的部分不搬」**不适用**——这里可以整块搬（含模板骨架里确实用得上的部分）；仍要在文件头注明出处。
+- **B · 开源仓库 `agentsws`**（worktree `../agentsws-wt/wp119b-open-api`，分支 `wp/119b-open-api`）：把本机那一半整理成**公开的「插件开放接口」**，让任何人都能自己写 Chrome 插件（或别的采集工具）接进来；WP119 那个从零写的 `apps/extension`（没有模板代码）**留下，改定位为「参考实现」**。
 
 ## 为什么
 Luoye 看了 WP119 的面板截图：「这比 KOLAgents 插件少了好多数据」。属实——旧插件卡片部分约 3500 行界面（`CreatorCaptureCard` 705、`ContactPanel` 833、`ContentCaptureCard` 877、`ValuationSection` 254、`WorkspacePanel` 257、`BioLinkCaptureStrip` 256、`AuthenticityBlock` 151、`SyncStatusPanel` 125），新插件面板只有 650 行、三个数字一个按钮。WP119 的派工单只写了「参考重做」却没把**功能对齐**写成验收，这张单补上。WP119 的架构（本机直连、配对、排队补传、权限最小化、登录即共享公共库并如实告知）**全部保留**，只补信息量与功能。
@@ -25,3 +27,19 @@ Luoye 看了 WP119 的面板截图：「这比 KOLAgents 插件少了好多数�
 10. **验收证据**：同一个 YouTube 频道夹具，旧插件面板的字段清单 vs 新面板截图并排放进 `docs/68`（`docs/assets/extension/parity-*.png`）；面板首屏不超过一屏高，其余折叠。
 
 验证：`scripts/verify-changed.sh` + `pnpm -F @agentsws/extension build`。并行提醒：WP117b 在改工作台红人界面与 `kol-core` 工具层——对 `kol-core` 只做最小追加。
+
+
+## A · 私有仓库怎么起
+1. 把开源仓库 `apps/extension`（WP119，我们自己的代码）整个拷进私有仓库作外壳：WXT 配置、`src/lib/{storage,local-client,broker,messages,wire}.ts`、`src/entrypoints/*`、测试与 `STORE.md`；它依赖的 `@agentsws/brand`（几何与 SVG 常量）与 `--ws-*` 令牌把用到的那几个文件拷一份进来（都是我们自己的代码）。私有仓库是独立的 pnpm 工程（不是 monorepo 的一部分），`pnpm build` 出 zip，`pnpm test` 跑 vitest。
+2. 再按上面「移植」一节把旧插件的组件、算法与测试搬进来，做交付 1–7、9、10（交付 8 属于 B）。
+3. 私有仓库加 `.github/workflows/release.yml`：打 tag 出 zip 挂到**私有** Release；不要任何会把源码或 sourcemap 公开的步骤；构建产物不带 sourcemap。
+4. `README.md` 写清：为什么私有、与开源仓库的接口版本对应关系、怎么本地加载、怎么发版。
+
+## B · 开源仓库：插件开放接口
+1. `docs/76-插件开放接口-v1.md`：配对流程、令牌与 scope（`kol.observe` / `kol.capture` / `kol.read`）、每个端点的请求 / 返回、观测与联系方式的数据格式、幂等与排队补传语义、限流、错误码人话表、版本协商（`/v1/extension/hello` 回接口版本）、隐私规则（登录云账号即共享公开数据到公共红人库，送出去的是窄行）、一个 30 行的最小示例（配对 + 上报一条观测）。`packages/contracts/src/extension.ts`（只加）补齐 JSON Schema 并进 `openapi.json`。
+2. **配对改为「配对时绑定」**：现在对 `chrome-extension://<id>` 的来源校验要让**任何**扩展都能配对——用户在工作台拿 6 位码、在哪个插件里输入，就把那个插件的 Origin 与令牌绑死；之后 Origin 与令牌必须同时对得上。工作台「浏览器插件」一节列出已配对的每个插件（名字由插件在 hello 里自报 + 扩展 id 前几位 + 配对时间 + 最近使用），逐个可吊销；非 `chrome-extension://` / `moz-extension://` 的来源一律拒（不开通配 CORS 的纪律不变）。配对表落 SQLite（WP119 留尾：内存档重启要重配）。
+3. `apps/extension` 改定位：`README.md` 写明「这是开放接口的**参考实现**，功能精简；官方完整版不开源」；`docs/68` 同步（内测用户装的是官方完整版的 zip，从私有 Release 拿）；`release.yml` 里挂 zip 的那一步保留但改名为 reference。
+4. 守卫测试：开源仓库里出现旧插件 / 模板特有的文件名或标识（如 `plasmo`、`CreatorCaptureCard`、`GroupedModelSelector`）即失败——防止以后有人手滑把移植代码提交到这边。
+5. 交付 8（本机服务与 API 只加不改，给完整版面板要的新字段）在这边做。
+
+两边各自 `git commit -s`、各自写报告；最终回复里分 A / B 两节。验证：B 用 `scripts/verify-changed.sh`；A 用私有仓库自己的 `pnpm test` 与 `pnpm build`。
