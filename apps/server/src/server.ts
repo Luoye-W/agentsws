@@ -98,6 +98,7 @@ import { createAdsService } from './ads-service.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
+import { createBrandIntake } from './brand-intake.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
   type BrandModuleSet,
@@ -188,7 +189,6 @@ import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meeti
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
 import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
-import { createBrandIntake } from './brand-intake.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'

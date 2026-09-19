@@ -24,13 +24,7 @@
  * `.catch()` 里，把失败写成 run 上的一句人话。一个没人接的 rejection 会把
  * 整个进程带走，那比分析失败严重得多。
  */
-import type {
-  BrandIntakeProfile,
-  BrandIntakeRun,
-  BrandIntakeSourceKind,
-  Clock,
-} from '@agentsws/contracts'
-import { DEFAULT_BRAND_INTAKE_CAP_CREDITS } from '@agentsws/contracts'
+
 import type { BrandIntakeActor, BrandIntakePort } from '@agentsws/api'
 import {
   analyzeBrand,
@@ -40,6 +34,13 @@ import {
   mergeProfile,
   type PageFetch,
 } from '@agentsws/brand-intake'
+import type {
+  BrandIntakeProfile,
+  BrandIntakeRun,
+  BrandIntakeSourceKind,
+  Clock,
+} from '@agentsws/contracts'
+import { DEFAULT_BRAND_INTAKE_CAP_CREDITS } from '@agentsws/contracts'
 
 /**
  * 确认那一刻往外写的两个口。
@@ -108,8 +109,7 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
         const out = await analyzeBrand(options.fetch, urls, { capCredits: cap })
         const current = runs.get(id)
         if (current === undefined) return
-        const profile =
-          previous === undefined ? out.profile : mergeProfile(previous, out.profile)
+        const profile = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
         const gotSomething = out.pages.some((p) => p.ok)
         runs.set(id, {
           ...current,
@@ -189,7 +189,9 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
        * 写出去的是分析结果而不是用户确认过的那一份。
        */
       const profile =
-        input.edits === undefined ? current.profile : applyEdits(current.profile, input.edits, now())
+        input.edits === undefined
+          ? current.profile
+          : applyEdits(current.profile, input.edits, now())
       await options.sinks.applyProfile(profile)
       await options.sinks.seedKnowledge?.(profile)
       const next: BrandIntakeRun = {
