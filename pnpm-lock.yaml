@@ -560,6 +560,12 @@ importers:
 
   packages/brand: {}
 
+  packages/brand-intake:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/catalog:
     dependencies:
       '@agentsws/contracts':
