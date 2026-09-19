@@ -566,6 +566,18 @@ importers:
 
   packages/brand: {}
 
+  packages/brand-design:
+    dependencies:
+      '@agentsws/brand-intake':
+        specifier: workspace:*
+        version: link:../brand-intake
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      yaml:
+        specifier: ^2.8.0
+        version: 2.9.0
+
   packages/brand-intake:
     dependencies:
       '@agentsws/contracts':

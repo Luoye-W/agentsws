@@ -1,0 +1,19 @@
+/* Heritage Supply theme — 主题自带的那一份 */
+.site-header { background-color: var(--color-limestone); padding: 16px; border-bottom: 1px solid var(--color-border); }
+.site-nav__link { color: var(--color-ink); padding: 8px; }
+.hero { background-color: var(--color-brand); color: #ffffff; padding: 64px; }
+.hero__title { color: #ffffff; }
+.hero__lead { font-size: 20px; line-height: 1.5; }
+.btn { border-radius: var(--radius-md); padding: 12px; font-size: 14px; font-family: var(--font-heading); font-weight: 600; }
+.btn--primary { background-color: var(--color-brand); color: #f7f5f2; border-radius: 8px; padding: 12px; }
+.btn--primary:hover { background-color: #9c3826; }
+.card { background-color: #ffffff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(26,28,30,0.08); margin: 8px; }
+.product-grid { padding: 32px; gap: 16px; }
+.site-footer { background-color: var(--color-ink); color: var(--color-slate); padding: 32px; }
+.site-footer__link { color: var(--color-slate); padding: 8px; }
+.site-footer__note { color: var(--color-slate); font-size: 12px; }
+.site-footer__divider { border-color: var(--color-slate); border-top: 1px solid #6c7278; }
+.badge--success { background-color: var(--color-success); color: #ffffff; border-radius: 9999px; padding: 4px; }
+.form-control, .input { border-radius: 8px; padding: 12px; border: 1px solid var(--color-border); color: #1a1c1e; background-color: #ffffff; }
+a, .link { color: var(--color-brand); transition: color 150ms ease-out; }
+.card { transition: box-shadow 200ms ease-in-out; }

@@ -1,0 +1,25 @@
+{
+  "name": "@agentsws/brand-design",
+  "version": "0.0.0",
+  "private": true,
+  "description": "品牌设计规范 #71：从官网抓、从手册读，写成一份 DESIGN.md，再喂给四个出活的岗位",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/brand-intake": "workspace:*",
+    "@agentsws/contracts": "workspace:*",
+    "yaml": "^2.8.0"
+  }
+}
