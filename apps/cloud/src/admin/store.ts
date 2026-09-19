@@ -391,7 +391,9 @@ export class AdminStore {
    * 只按账号 id 查的后果是 `me+1@gmail.com`、`me+2@gmail.com`、`m.e@gmail.com`
    * 各是一个账号，同一个人想领几份领几份。
    */
-  signupBonusOf(email: string): { account_id: string; credits: number; granted_at: string } | undefined {
+  signupBonusOf(
+    email: string,
+  ): { account_id: string; credits: number; granted_at: string } | undefined {
     return this.db
       .prepare<{ account_id: string; credits: number; granted_at: string }>(
         'SELECT account_id, credits, granted_at FROM signup_bonuses WHERE alias_sha256 = ?',

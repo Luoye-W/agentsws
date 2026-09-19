@@ -35,10 +35,10 @@ import { Hono, type MiddlewareHandler } from 'hono'
 import { cloudIdempotency, type MagicLinkLimiter } from './guards.js'
 import type { MailSender } from './mail.js'
 import { indexPage, loginPage } from './pages.js'
-import type { SignupBonusHooks } from './signup-bonus.js'
 import { authRoutes } from './routes/auth.js'
 import { type CloudHealthState, cloudHealthRoutes } from './routes/health.js'
 import { linkRoutes } from './routes/links.js'
+import type { SignupBonusHooks } from './signup-bonus.js'
 import type { CloudStore } from './store.js'
 
 /** magic link 点开之后的落地页（WP110 之前这条路由不存在，信里那条链接点开是 404）。 */

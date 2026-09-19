@@ -15,6 +15,7 @@
 
 import type { CloudMail, MailSender } from '@agentsws/cloud/workers-kit'
 import type { Clock } from '@agentsws/contracts'
+import { signupBonus } from '@agentsws/metering'
 import Database from 'better-sqlite3'
 import { AccountsCore } from '../src/accounts-do.js'
 import type { DoSqlCursor, DoStorageLike } from '../src/do-sql.js'
@@ -215,4 +216,27 @@ export function tokenFromMail(mail: CloudMail): string {
   const found = /token=([A-Za-z0-9_-]+)/.exec(mail.text)
   if (found?.[1] === undefined) throw new Error(`信里没有 token：${mail.text}`)
   return found[1]
+}
+
+/**
+ * WP121（70 §2）：**每个点开过登录信的账号都会多出这一笔注册赠送**。
+ *
+ * 所以 WP114 / WP115 那些算钱的用例里，余额不再是它们自己充的那个数。这里不写
+ * 死 10：金额在 `bonuses.json` 里，改成 20 的那天这些用例不该跟着红一遍。
+ */
+export const SIGNUP_BONUS = signupBonus()?.credits ?? 0
+
+/**
+ * 把一个组织的钱清成 0（连注册赠送一起撤掉）。
+ *
+ * 给「这个人一分钱都没有」那一类用例用——WP121 之后「刚注册」不再等于「没钱」，
+ * 想要没钱得自己说出来。
+ */
+export function zeroOut(cloud: FakeCloud, org: string): void {
+  // 与 `revokeRemaining` 同一下动作（`remaining` 清零），只是这里够不着那个
+  // `SyncDb`——假运行时手里只有底下那张 sqlite。
+  cloud
+    .walletStorage(org)
+    .db.prepare('UPDATE wallet_lots SET remaining = 0 WHERE org_id = ?')
+    .run(org)
 }

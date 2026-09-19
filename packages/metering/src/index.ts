@@ -39,7 +39,7 @@ export {
   totals,
   usageByOrgs,
 } from './admin-queries.js'
-export type { BonusRule, BonusesFile } from './bonuses.js'
+export type { BonusesFile, BonusRule } from './bonuses.js'
 export {
   BONUSES_FILE,
   bonusById,

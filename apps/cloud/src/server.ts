@@ -34,11 +34,11 @@ import { type Clock, type CloudTokenVerifier, cloudBaseUrl } from '@agentsws/con
 import { type ServerType, serve } from '@hono/node-server'
 import type { Hono } from 'hono'
 import { buildCloudApp } from './app.js'
-import type { SignupBonusHooks } from './signup-bonus.js'
 import { createMagicLinkLimiter, type MagicLinkLimiter } from './guards.js'
 import type { MailSender } from './mail.js'
 import { mailSenderFromEnv } from './mail-smtp.js'
 import type { CloudHealthState } from './routes/health.js'
+import type { SignupBonusHooks } from './signup-bonus.js'
 import type { CloudStore } from './store.js'
 import { cloudDbPath, createCloudStore } from './store-node.js'
 

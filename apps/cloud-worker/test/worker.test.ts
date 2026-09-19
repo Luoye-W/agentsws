@@ -25,7 +25,14 @@ import {
 } from '@agentsws/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { INTERNAL_HEADERS, route } from '../src/index.js'
-import { type FakeCloud, fakeCloud, req, tokenFromMail } from './helpers.js'
+import {
+  type FakeCloud,
+  fakeCloud,
+  req,
+  SIGNUP_BONUS,
+  tokenFromMail,
+  zeroOut,
+} from './helpers.js'
 
 const ADMIN_TOKEN = 'test-admin-token-at-least-32-bytes-long-0123456789'
 const CALLBACK = 'http://127.0.0.1:3000/v1/cloud/account/callback'
@@ -111,7 +118,8 @@ describe('WP114 Workers 形态 · 账号那一层', () => {
     cloud.wallet(org).wallet.topup({ org_id: org, credits: 100, kind: 'purchased' })
     const wallet = await call(cloud, '/v1/wallet', { token })
     expect(wallet.status).toBe(200)
-    expect((wallet.body.data as { available: number }).available).toBe(100)
+    // 自己充的 100 + WP121 注册赠送
+    expect((wallet.body.data as { available: number }).available).toBe(100 + SIGNUP_BONUS)
   })
 
   it('一次性 token 只进邮件，不进响应体', async () => {
@@ -192,7 +200,8 @@ describe('WP114 Workers 形态 · 钱', () => {
 
   it('余额不够 → 402，而且钱一分没扣', async () => {
     const { token, org } = await issueToken(cloud, 'a@example.com', 'ws_a', DEFAULT_CLOUD_SCOPES)
-    // 一分钱都不充
+    // 一分钱都不充。WP121 之后「刚注册」自带赠送的积分，所以先撤干净
+    zeroOut(cloud, org)
     const res = await call(cloud, '/v1/ai/chat/completions', {
       method: 'POST',
       token,
@@ -234,7 +243,8 @@ describe('WP114 Workers 形态 · 钱', () => {
     expect(ok.status).toBe(201)
     expect((ok.body.data as { org_id: string }).org_id).toBe(org)
     const wallet = await call(withAdmin, '/v1/wallet', { token })
-    expect((wallet.body.data as { granted: number }).granted).toBe(50)
+    // 管理员发的 50 + WP121 注册赠送（两笔都是 granted）
+    expect((wallet.body.data as { granted: number }).granted).toBe(50 + SIGNUP_BONUS)
   })
 
   it('管理员发积分：没登录过的邮箱 404，而且那句话不说"这个邮箱不存在"以外的事', async () => {
@@ -398,7 +408,7 @@ describe('WP114 Workers 形态 · 流式与结算', () => {
       expect((events[0] as Record<string, unknown> | undefined)?.[key], key).toBeDefined()
     const after = cloud.wallet(org).wallet.balance(org)
     expect(after.reserved).toBe(0)
-    expect(after.available).toBeLessThan(100)
+    expect(after.available).toBeLessThan(100 + SIGNUP_BONUS)
   })
 })
 
@@ -433,8 +443,10 @@ describe('WP114 Workers 形态 · 跨平台导出', () => {
     // 钱那一份跨对象拿回来了
     expect(data.wallets).toHaveLength(1)
     expect(data.wallets[0]?.org_id).toBe(org)
-    expect(data.wallets[0]?.lots).toEqual([
-      expect.objectContaining({ credits: 30, kind: 'granted' }),
-    ])
+    // 两笔：WP121 注册赠送那一笔，加这条用例自己发的 30
+    expect(data.wallets[0]?.lots).toEqual(
+      expect.arrayContaining([expect.objectContaining({ credits: 30, kind: 'granted' })]),
+    )
+    expect(data.wallets[0]?.lots).toHaveLength(SIGNUP_BONUS > 0 ? 2 : 1)
   })
 })

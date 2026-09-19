@@ -41,7 +41,9 @@ export interface SignupBonusPort {
 
 /** 别名台账那一半（`AdminStore` 的三个方法；测试可以塞一个 Map）。 */
 export interface SignupBonusLedger {
-  signupBonusOf(email: string): { account_id: string; credits: number; granted_at: string } | undefined
+  signupBonusOf(
+    email: string,
+  ): { account_id: string; credits: number; granted_at: string } | undefined
   recordSignupBonus(input: {
     email: string
     account_id: string
@@ -122,10 +124,7 @@ export async function grantSignupBonus(
   if (ledger === undefined || port === undefined) return NOT_GRANTED('unavailable')
 
   const warn = deps.hooks.warn ?? ((line: string) => process.stderr.write(line))
-  const audit = (
-    outcome: 'done' | 'failed',
-    details: Record<string, unknown>,
-  ): void => {
+  const audit = (outcome: 'done' | 'failed', details: Record<string, unknown>): void => {
     ledger.audit({
       action: 'signup.bonus',
       actor_account_id: 'system',

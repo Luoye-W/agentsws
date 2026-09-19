@@ -340,7 +340,9 @@ export async function main(): Promise<void> {
         walletHandles === undefined
           ? undefined
           : {
-              grant: async (args) => ({ lot_id: (walletHandles as AdminWalletHandles).wallet.topup(args).id }),
+              grant: async (args) => ({
+                lot_id: (walletHandles as AdminWalletHandles).wallet.topup(args).id,
+              }),
             },
       ledger: () => adminStore,
     },

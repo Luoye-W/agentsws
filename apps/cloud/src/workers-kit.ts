@@ -59,14 +59,6 @@ export {
   roleOf,
 } from './admin/store.js'
 export {
-  grantSignupBonus,
-  type SignupBonusHooks,
-  type SignupBonusLedger,
-  type SignupBonusOutcome,
-  type SignupBonusPort,
-  type SignupBonusSkip,
-} from './signup-bonus.js'
-export {
   buildCloudApp,
   buildCloudOpenApi,
   type CloudApp,
@@ -123,6 +115,14 @@ export {
 export { type AuthRouteDeps, authRoutes, DEFAULT_CALLBACK_PATH } from './routes/auth.js'
 export { type CloudHealthState, cloudHealthRoutes, type UpstreamHealth } from './routes/health.js'
 export { type LinkRouteDeps, linkRoutes, ScopeSchema } from './routes/links.js'
+export {
+  grantSignupBonus,
+  type SignupBonusHooks,
+  type SignupBonusLedger,
+  type SignupBonusOutcome,
+  type SignupBonusPort,
+  type SignupBonusSkip,
+} from './signup-bonus.js'
 export {
   CLOUD_LOGIN_TTL_MS,
   CLOUD_SESSION_TTL_MS,
