@@ -50,7 +50,10 @@ export interface BrandIntakeActor {
 
 export interface BrandIntakePort {
   /** 发起一次。回一条刚排上队的 `queued` / `running`。 */
-  start(actor: BrandIntakeActor, input: { urls: string[]; cap_credits?: number }): MaybePromise<BrandIntakeRun>
+  start(
+    actor: BrandIntakeActor,
+    input: { urls: string[]; cap_credits?: number },
+  ): MaybePromise<BrandIntakeRun>
   /** 这一次跑到哪儿了（界面用呼吸标记表示"Agent 在干活"，36 §12）。 */
   get(actor: BrandIntakeActor, run_id: string): MaybePromise<BrandIntakeRun>
   /** 这个工作区最近的那一次（向导回来的时候按它恢复现场）。 */
@@ -61,7 +64,10 @@ export interface BrandIntakePort {
     input: { run_id: string; edits?: Record<string, unknown> },
   ): MaybePromise<BrandIntakeRun>
   /** 重新分析：带着上一次的结果重跑，**用户改过的格子不动**。 */
-  reanalyze(actor: BrandIntakeActor, input: { run_id: string; urls?: string[] }): MaybePromise<BrandIntakeRun>
+  reanalyze(
+    actor: BrandIntakeActor,
+    input: { run_id: string; urls?: string[] },
+  ): MaybePromise<BrandIntakeRun>
 }
 
 /**
@@ -167,7 +173,13 @@ export function brandIntakeRoutes(): Route[] {
         assignment: true,
         authz: READ,
         params: [
-          { name: 'id', in: 'path', required: true, description: '分析 id', schema: { type: 'string' } },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: '分析 id',
+            schema: { type: 'string' },
+          },
         ],
         returns: 'BrandIntakeRun',
       },
@@ -185,7 +197,13 @@ export function brandIntakeRoutes(): Route[] {
         assignment: true,
         authz: WRITE,
         params: [
-          { name: 'id', in: 'path', required: true, description: '分析 id', schema: { type: 'string' } },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: '分析 id',
+            schema: { type: 'string' },
+          },
         ],
         body: ConfirmBody,
         returns: 'BrandIntakeRun',
@@ -213,7 +231,13 @@ export function brandIntakeRoutes(): Route[] {
         authz: WRITE,
         outbound: true,
         params: [
-          { name: 'id', in: 'path', required: true, description: '分析 id', schema: { type: 'string' } },
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: '分析 id',
+            schema: { type: 'string' },
+          },
         ],
         body: ReanalyzeBody,
         returns: 'BrandIntakeRun',

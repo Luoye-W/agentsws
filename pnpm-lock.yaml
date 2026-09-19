@@ -254,6 +254,9 @@ importers:
       '@agentsws/blob':
         specifier: workspace:*
         version: link:../../packages/blob
+      '@agentsws/brand-intake':
+        specifier: workspace:*
+        version: link:../../packages/brand-intake
       '@agentsws/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog
