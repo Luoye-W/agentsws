@@ -14,11 +14,7 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  ApiClientError,
-  type PersonaViewData,
-  type PositionInstanceData,
-} from '@/lib/api'
+import { ApiClientError, type PersonaViewData, type PositionInstanceData } from '@/lib/api'
 import { renderWithProviders } from './helpers'
 
 const INSTANCE: PositionInstanceData = {
@@ -78,8 +74,14 @@ const OVERRIDDEN_ROLE: PersonaViewData = {
 const POSITION_VIEW: PersonaViewData = {
   subject: { kind: 'position', id: 'web-ops' },
   name: { zh: '网站运营', en: 'Web Operations' },
-  effective: { zh: '你是谁：网站运营岗位。\n你不负责：客户的退款→客服。', en: 'Who you are: web ops.' },
-  packaged: { zh: '你是谁：网站运营岗位。\n你不负责：客户的退款→客服。', en: 'Who you are: web ops.' },
+  effective: {
+    zh: '你是谁：网站运营岗位。\n你不负责：客户的退款→客服。',
+    en: 'Who you are: web ops.',
+  },
+  packaged: {
+    zh: '你是谁：网站运营岗位。\n你不负责：客户的退款→客服。',
+    en: 'Who you are: web ops.',
+  },
   overridden: false,
 }
 
