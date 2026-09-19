@@ -51,13 +51,21 @@ export {
   tombstoneEmail,
   tombstoneOrg,
 } from './admin/routes.js'
-export { ADMIN_MIGRATION_V2 } from './admin/schema.js'
+export { ADMIN_MIGRATION_V2, ADMIN_MIGRATION_V3 } from './admin/schema.js'
 export {
   AdminStore,
   type AdminStoreOptions,
   type IssuedAdminSession,
   roleOf,
 } from './admin/store.js'
+export {
+  grantSignupBonus,
+  type SignupBonusHooks,
+  type SignupBonusLedger,
+  type SignupBonusOutcome,
+  type SignupBonusPort,
+  type SignupBonusSkip,
+} from './signup-bonus.js'
 export {
   buildCloudApp,
   buildCloudOpenApi,

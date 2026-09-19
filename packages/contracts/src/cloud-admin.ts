@@ -153,6 +153,13 @@ export type AuditAction =
   | 'membership.cancel'
   | 'membership.cycle_grant'
   | 'usage.export'
+  /**
+   * 注册赠送（70 §2，WP121）。
+   *
+   * 三种结局都记：`done` = 真送出去了；`failed` = 没送（黑名单 / 钱包还没装起来）。
+   * "已经送过了"**不记**——那不是一件事发生了，那是一件事没再发生一次。
+   */
+  | 'signup.bonus'
 
 /**
  * 一条审计。**只增不改**：没有 update，没有 delete，主键是自增号。

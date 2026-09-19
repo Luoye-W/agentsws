@@ -35,6 +35,7 @@ import { Hono, type MiddlewareHandler } from 'hono'
 import { cloudIdempotency, type MagicLinkLimiter } from './guards.js'
 import type { MailSender } from './mail.js'
 import { indexPage, loginPage } from './pages.js'
+import type { SignupBonusHooks } from './signup-bonus.js'
 import { authRoutes } from './routes/auth.js'
 import { type CloudHealthState, cloudHealthRoutes } from './routes/health.js'
 import { linkRoutes } from './routes/links.js'
@@ -57,6 +58,8 @@ export function collectCloudRoutes(
     health?: CloudHealthState
     /** WP110：magic-link 限流；不给就不限（`gen-cloud-openapi.mjs` 这类只读声明的场合）。 */
     limiter?: MagicLinkLimiter
+    /** WP121（70 §2）：注册赠送 10 积分；不给就不送。 */
+    signupBonus?: SignupBonusHooks
   },
   modules: CloudRoute[][] = [],
 ): CloudRoute[] {
@@ -72,6 +75,7 @@ export function collectCloudRoutes(
       mail: deps.mail,
       baseUrl: deps.baseUrl,
       ...(deps.limiter === undefined ? {} : { limiter: deps.limiter }),
+      ...(deps.signupBonus === undefined ? {} : { signupBonus: deps.signupBonus }),
     }),
     ...linkRoutes({ store: deps.store, clock: deps.clock }),
     ...modules.flat(),
@@ -110,6 +114,8 @@ export interface CloudAppDeps {
   idempotency: IdempotencyStore
   /** 49 M3：别的能力以路由包形式挂进来。 */
   modules?: CloudRoute[][]
+  /** WP121（70 §2）：注册赠送 10 积分；不给就不送。 */
+  signupBonus?: SignupBonusHooks
   /**
    * 验工作区服务令牌用哪一个。不给就是账号库那个。
    * （WP60 把它串成两个：先账号库，再值守的子进程令牌。）
@@ -165,7 +171,16 @@ export function createCloudHono(): Hono<CloudEnv> {
 export function buildCloudApp(deps: CloudAppDeps): CloudApp {
   const { store, clock, mail, baseUrl, version, health, limiter, idempotency } = deps
   const routes = collectCloudRoutes(
-    { store, clock, mail, baseUrl, version, health, limiter },
+    {
+      store,
+      clock,
+      mail,
+      baseUrl,
+      version,
+      health,
+      limiter,
+      ...(deps.signupBonus === undefined ? {} : { signupBonus: deps.signupBonus }),
+    },
     deps.modules,
   )
   const openapi = buildCloudOpenApi(routes, version)

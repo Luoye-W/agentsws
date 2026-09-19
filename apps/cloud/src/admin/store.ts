@@ -383,6 +383,62 @@ export class AdminStore {
       .run(org_id)
   }
 
+  // ── 注册赠送（70 §2，WP121）────────────────────────────────────────
+
+  /**
+   * 这个邮箱领过注册赠送了吗。**按规范化别名查**，不是按账号 id。
+   *
+   * 只按账号 id 查的后果是 `me+1@gmail.com`、`me+2@gmail.com`、`m.e@gmail.com`
+   * 各是一个账号，同一个人想领几份领几份。
+   */
+  signupBonusOf(email: string): { account_id: string; credits: number; granted_at: string } | undefined {
+    return this.db
+      .prepare<{ account_id: string; credits: number; granted_at: string }>(
+        'SELECT account_id, credits, granted_at FROM signup_bonuses WHERE alias_sha256 = ?',
+      )
+      .get(sha256(normalizeEmailAlias(email)))
+  }
+
+  /**
+   * 记一行"这个别名领过了"。
+   *
+   * `INSERT OR IGNORE`：并发两跳同时走到这里时，后一跳什么也不做。真正挡住
+   * 第二笔积分的是钱包那头 `(org_id, source_ref)` 的唯一索引；这一行挡的是
+   * **换个别名再来一次**。两道都要，各挡一种。
+   */
+  recordSignupBonus(input: {
+    email: string
+    account_id: string
+    org_id: string
+    credits: number
+    lot_id?: string | undefined
+  }): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO signup_bonuses
+           (alias_sha256, account_id, org_id, credits, granted_at, lot_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        sha256(normalizeEmailAlias(input.email)),
+        input.account_id,
+        input.org_id,
+        input.credits,
+        this.now(),
+        input.lot_id ?? null,
+      )
+  }
+
+  /** 一共送出去了多少（后台「积分与会员」那一页的一格）。 */
+  signupBonusTotals(): { count: number; credits: number } {
+    const row = this.db
+      .prepare<{ n: number; c: number | null }>(
+        'SELECT COUNT(*) AS n, SUM(credits) AS c FROM signup_bonuses',
+      )
+      .get()
+    return { count: row?.n ?? 0, credits: row?.c ?? 0 }
+  }
+
   suspendedOrgs(org_ids: string[]): Set<string> {
     if (org_ids.length === 0) return new Set()
     const holes = org_ids.map(() => '?').join(', ')
