@@ -388,6 +388,8 @@ export type {
   OrganizationView,
 } from './routes/organizations.js'
 export { organizationRoutes } from './routes/organizations.js'
+export type { PersonaActor, PersonaPort } from './routes/personas.js'
+export { personaRoutes } from './routes/personas.js'
 export type {
   OpenAtPositionView,
   PositionActor,

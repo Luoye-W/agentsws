@@ -4815,6 +4815,80 @@ export const backfillMessages = (input: {
   days?: number
 }): Promise<{ floor: string }> => api('/v1/messages/backfill', { method: 'POST', body: input })
 
+// ── WP121b（70 §3）：贴一个网址，自动填品牌档案 ────────────────────────
+//
+// 五条对着向导第 ② 步的五个动作：**发起 → 看进度 → 拿结果 → 确认 → 重新分析**。
+// 契约形状在 `@agentsws/contracts`（`BrandIntakeRun`），这里一个字段都不重画——
+// 界面认的就是服务端认的那一份。
+
+type BrandIntakeRunView = import('@agentsws/contracts').BrandIntakeRun
+
+export type {
+  BrandIntakeConfidence,
+  BrandIntakeEvidence,
+  BrandIntakeField,
+  BrandIntakePage,
+  BrandIntakePolicy,
+  BrandIntakeProduct,
+  BrandIntakeProfile,
+  BrandIntakeRun,
+  BrandIntakeRunStatus,
+  BrandIntakeSocialLink,
+} from '@agentsws/contracts'
+
+/** 发起一次：贴 1–3 条链接（官网 / Amazon 商品 / Amazon 店铺）。 */
+export const startBrandIntake = (
+  input: { urls: string[]; cap_credits?: number },
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api('/v1/brand-intake/runs', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 这一次跑到哪儿了（向导按它轮询，呼吸标记表示"Agent 在干活"）。 */
+export const getBrandIntake = (id: string, assignment?: string): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+/**
+ * 这个工作区最近的那一次。
+ *
+ * 向导第 ② 步回来时按它恢复现场——用户可以先去第 ③ 步选岗位，回来还看得见
+ * 那一轮分析的结果。没有过就是 `null`（**不是错误**）。
+ */
+export const latestBrandIntake = (assignment?: string): Promise<BrandIntakeRunView | null> =>
+  api('/v1/brand-intake/runs/latest', withAssignment(assignment))
+
+/**
+ * 「看着没问题」。
+ *
+ * `edits` **只带用户改过的那几格**：没带的按分析结果走，带了的在库里打上
+ * `edited`，以后重新分析整格跳过（70 §3.4）。
+ */
+export const confirmBrandIntake = (
+  id: string,
+  edits: Record<string, unknown> | undefined,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/confirm`, {
+    method: 'POST',
+    body: edits === undefined ? {} : { edits },
+    ...withAssignment(assignment),
+  })
+
+/** 重新分析（改了网址或换了新品时用）：**用户手改过的格子整格不动**。 */
+export const reanalyzeBrandIntake = (
+  id: string,
+  urls: string[] | undefined,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/reanalyze`, {
+    method: 'POST',
+    body: urls === undefined ? {} : { urls },
+    ...withAssignment(assignment),
+  })
+
 /*
  * WP119（68）：浏览器插件（连接页「浏览器插件」那一节）。
  *
@@ -4864,5 +4938,59 @@ export const revokeExtensionToken = (
   api<ExtensionTokenView>(`/v1/extension/tokens/${encodeURIComponent(id)}/revoke`, {
     method: 'POST',
     body: {},
+    ...withAssignment(assignment),
+  })
+
+/* ── WP120（69 §4）：角色定位 ─────────────────────────────────────────────── */
+
+/** 一段 persona 的正文。中英各一份；老的纯字符串写法也认（契约只加不删）。 */
+export type PersonaTextData = string | { zh: string; en: string }
+
+/** 右栏「角色」面板要的那一份：现在生效的 + 包里的原文（「还原」拿它比）。 */
+export interface PersonaViewData {
+  subject: { kind: 'position' | 'role'; id: string }
+  name: { zh: string; en: string }
+  /** 现在真正进系统提示的那一份。 */
+  effective: PersonaTextData
+  /** 包里自带的原文。 */
+  packaged: PersonaTextData
+  /** 公司改写过吗。 */
+  overridden: boolean
+  updated_at?: string
+  updated_by?: string
+}
+
+export const getPersona = (
+  kind: 'position' | 'role',
+  id: string,
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>(
+    `/v1/personas?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`,
+    withAssignment(assignment),
+  )
+
+/**
+ * 公司层改写。只传改动的那一边——另一边由服务端从现在生效的那一份补齐，
+ * 免得"改了中文、英文悄悄退回包里的原文"。
+ */
+export const setPersona = (
+  input: { kind: 'position' | 'role'; id: string; zh?: string; en?: string },
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>('/v1/personas', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 还原成包里的原文。 */
+export const revertPersona = (
+  input: { kind: 'position' | 'role'; id: string },
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>('/v1/personas/revert', {
+    method: 'POST',
+    body: input,
     ...withAssignment(assignment),
   })

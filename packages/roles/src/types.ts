@@ -15,6 +15,7 @@ import type {
   Mandate,
   Operation,
   PermissionScope,
+  PersonaText,
   PersonId,
   Range,
   RangeRef,
@@ -61,7 +62,8 @@ export interface RoleDefinitionFull extends RoleDefinition {
   home_blocks: HomeBlock[]
   notifications: NotificationRule[]
   grounding?: GroundingRule[]
-  persona?: string
+  /** WP120（69 §1）：这条职责的角色定位（`{ zh, en }`，或老的纯字符串）。 */
+  persona?: PersonaText
 }
 
 /** 05 §2 岗位模板：只在分配那一刻展开成一组 Assignment。 */
@@ -70,6 +72,8 @@ export interface Position {
   version: string
   name: { zh: string; en: string }
   roles: { role: RoleId; default: boolean }[]
+  /** WP120（69 §1）：这个岗位的角色定位，装配时排在职责 persona 前面。 */
+  persona?: PersonaText
 }
 
 /** 按 role_id（可选按版本）解析职责定义。 */
@@ -127,7 +131,8 @@ export interface EffectiveConfig {
    * 没填 = 空数组 = 这条职责开不了浏览器。服务端据它算 `RunRequest.allowed_hosts`。
    */
   browser_scope: string[]
-  persona?: string
+  /** WP120（69 §3）：这条职责的角色定位，已经叠加过公司层覆盖。 */
+  persona?: PersonaText
   /** 展开后的范围（44 G1：挂的范围组已经摊平进来了）。 */
   ranges: RangeRef[]
   /** 44 G1：这些范围是从哪几个范围组（品牌）来的。 */

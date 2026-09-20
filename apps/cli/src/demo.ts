@@ -1123,12 +1123,38 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    * 查不到就走活数据源。生产路径一个字节不变（生产从不传 `brandData`）。
    */
   const extraBrandData = new Map<string, WorkstationDataSource>()
+  /**
+   * WP121b（70 §3）：向导第 ② 步那一轮网址分析，在 demo 里 **replay pack 里的
+   * `fixtures/site/*`**。
+   *
+   * 两条理由：demo 不该因为演示而去敲别人的服务器；也不该因为这台机器没网
+   * 就演不出那张品牌档案卡。每份夹具自报家门（头几行里一句 `url: https://…`），
+   * 与模拟场景用的是同一份文件。
+   */
+  const siteFixtures = new Map<string, string>()
+  for (const [name, body] of pack.fixtures) {
+    if (!name.startsWith('fixtures/site/')) continue
+    const declared = /url:\s*(\S+)/.exec(body.slice(0, 400))?.[1]
+    if (declared !== undefined) siteFixtures.set(declared, body)
+  }
+
   const server = await createServer({
     clock: world.clock,
     random: world.random,
     mount,
     staticDir,
     brandData: (ws) => extraBrandData.get(ws),
+    brandIntakeFetch: async (url: string) => {
+      const body = siteFixtures.get(url)
+      // 剧本里没有的网址回 **404**，不是 503：这一句会原样显示给用户
+      //（"有 N 个页面没读着（…）"），而 503 说的是"对方服务器出错"——
+      // 那是替商家的网站撒了一个我们不知道的谎。404 才是"这一页不存在"。
+      // 模拟世界那一侧仍回 503，因为那里的 503 是**绊线**（谁在这条路上加了
+      // 真请求，用例当场红）；demo 没有断言，绊线没有用处，只剩误导。
+      // 两种回法都不出这台机器：离线那一条保证一个字没变。
+      if (body === undefined) return { ok: false, status: 404, text: async () => '' }
+      return { ok: true, status: 200, text: async () => body }
+    },
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
     records: recordSourceOf(world, pack),
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),

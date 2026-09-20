@@ -185,6 +185,11 @@ export function BrandProfileCard({
             alt=""
             className="h-10 w-10 rounded-sm object-contain"
             data-testid="intake-logo"
+            // 图挂了就整个不画（WP121b）：一张"看着没问题"的卡上摆一个碎图标，
+            // 用户第一眼看见的是我们的失误，而不是他的品牌
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
           />
         )}
         {color === undefined ? null : (
@@ -220,7 +225,14 @@ export function BrandProfileCard({
           {products.slice(0, 6).map((p) => (
             <figure key={p.title} className="w-20 text-[11px]">
               {p.image_url === undefined ? null : (
-                <img src={p.image_url} alt="" className="h-20 w-20 rounded-sm object-cover" />
+                <img
+                  src={p.image_url}
+                  alt=""
+                  className="h-20 w-20 rounded-sm object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
               )}
               <figcaption className="truncate" title={p.title}>
                 {p.title}

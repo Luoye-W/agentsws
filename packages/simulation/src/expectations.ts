@@ -1768,6 +1768,78 @@ export function checkExpectations(
         : problems.join('；'),
     )
   }
+  // WP121b（70 §1–§3）：那一趟初始化设置走成了什么样
+  if (expected.onboarding !== undefined) {
+    const want = expected.onboarding
+    const row = evidence.events
+      .filter((e) => e.type === 'simulation.onboarding_done')
+      .map((e) => payloadOf(e))
+      .find((p) => String(p.who ?? '') === want.who)
+    const problems: string[] = []
+    if (row === undefined) {
+      problems.push(`${want.who} 没有 org.onboarding，这条断言没有意义`)
+    } else {
+      const num = (key: string): number => Number(row[key] ?? 0)
+      const list = (key: string): string[] =>
+        Array.isArray(row[key]) ? (row[key] as string[]) : []
+      if (want.connected !== undefined && row.connected !== want.connected) {
+        problems.push(
+          want.connected
+            ? '第 ① 步没接上（接不上 AI 的向导走完也是个空壳）'
+            : '第 ① 步居然放行了——钥匙不通就不该往下走',
+        )
+      }
+      if (want.failure_kind !== undefined && row.failure_kind !== want.failure_kind) {
+        problems.push(
+          `没通的档判成了 ${String(row.failure_kind ?? '没有')}，不是 ${want.failure_kind}`,
+        )
+      }
+      if (
+        want.signup_credits !== undefined &&
+        !matchNumeric(num('signup_credits'), want.signup_credits)
+      ) {
+        problems.push(`注册送了 ${num('signup_credits')} 积分，对不上`)
+      }
+      if (
+        want.balance_credits !== undefined &&
+        !matchNumeric(num('balance_credits'), want.balance_credits)
+      ) {
+        problems.push(`分析完还剩 ${num('balance_credits')} 积分，对不上`)
+      }
+      if (want.capped !== undefined && row.capped !== want.capped) {
+        problems.push(
+          want.capped
+            ? `没停在封顶上（花了 ${num('spent_credits')}，顶是 ${num('cap_credits')}）`
+            : '不该停却停在了封顶上',
+        )
+      }
+      if (want.analysed !== undefined && row.analysed !== want.analysed) {
+        problems.push(
+          want.analysed
+            ? `一份档案都没填出来（${num('pages_ok')} 页读成、${num('pages_failed')} 页没读着）`
+            : '不该有结果却填出了一份档案',
+        )
+      }
+      // **停下来的时候已经抓到的照样交**：超预算那条题的另一半
+      if (want.capped === true && num('pages_ok') === 0) {
+        problems.push('停是停了，但一页都没交出来——两头落空')
+      }
+      for (const field of want.kept_edits ?? []) {
+        if (!list('kept_edits').includes(field)) {
+          problems.push(`重新分析吃掉了用户改过的「${field}」——这个按钮从此没人敢按`)
+        }
+      }
+    }
+    add(
+      'onboarding',
+      problems.length === 0,
+      problems.length === 0
+        ? `${want.who} 那一趟初始化设置：送 ${Number(row?.signup_credits ?? 0)} 积分、` +
+            `花 ${Number(row?.spent_credits ?? 0)}、读成 ${Number(row?.pages_ok ?? 0)} 页` +
+            `${row?.capped === true ? '（到顶停了，已抓到的照交）' : ''}`
+        : problems.join('；'),
+    )
+  }
   // WP39：代答里出现过哪几类（doing / scope / busy / skills / private / professional）
   if (expected.secretary_kinds !== undefined) {
     const kinds = new Set(

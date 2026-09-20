@@ -21,6 +21,7 @@
     "@agentsws/catalog": "workspace:*",
     "@agentsws/channels": "workspace:*",
     "@agentsws/ads-core": "workspace:*",
+    "@agentsws/brand-intake": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/data": "workspace:*",
