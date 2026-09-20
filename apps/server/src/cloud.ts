@@ -18,18 +18,27 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { CloudActor, CloudPort } from '@agentsws/api'
+import { ApiError } from '@agentsws/api'
 import type {
   CapabilitySource,
   CapabilitySourceSettings,
   CapabilitySources,
   Clock,
   CloudCreditsView,
+  KolCloudDeleteResult,
+  KolCloudExport,
   Pricing,
+  ServiceSubscription,
+  TopupOrder,
+  TopupTiers,
   UsageGroup,
   UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
-import { buildPricing } from '@agentsws/metering'
+import { buildPricing, TOPUP_TIERS_FILE } from '@agentsws/metering'
+import type { KolStore } from './kol.js'
+import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
+import { createKolCloudSync } from './kol-cloud-sync.js'
 import { CLOUD_BASE_URL_ENV, CLOUD_TOKEN_SECRET_ID, DEFAULT_CLOUD_BASE_URL } from './models.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -58,6 +67,14 @@ export interface CloudOptions {
   dbDir?: string
   /** 测试注入；不给就用全局 `fetch`。 */
   fetch?: CloudFetch
+  /**
+   * 这个品牌的红人库（WP118 / 67 §3：云端红人库要同步的就是它）。
+   *
+   * 递**取值函数**而不是库本身，理由与 `kolService` 那一处逐字相同：打断装配期的环。
+   * 不给就没有云端红人库这一格（那一组路由回一句人话，不是 500）——一次性任务与
+   * 只跑模型面的进程不该被迫建一个红人库出来。
+   */
+  kol?: () => KolStore | undefined
 }
 
 export interface CloudAssembly {
@@ -74,6 +91,13 @@ export interface CloudAssembly {
   sourceOf(capability: string): CapabilitySource
   /** 一项能力的价目（49 M4）。取不到就回 `undefined`——不编一个数。 */
   priceOf(capability: string): Promise<{ credits: number; unit: string } | undefined>
+  /**
+   * 红人营销增值服务的本地那一头（WP118 / 67 §3）。没装配红人库就没有它。
+   *
+   * 端出来是给关库那一跳用的（它手里有一个 sqlite 句柄），不是给路由用的——
+   * 路由走 `port` 上那七个方法。
+   */
+  kolSync?: KolCloudSync
 }
 
 export function cloudBaseUrl(env: Record<string, string | undefined>): string {
@@ -132,7 +156,10 @@ export function createCloud(options: CloudOptions): CloudAssembly {
       globalThis.fetch(input, init as RequestInit) as unknown as ReturnType<CloudFetch>)
 
   /** 打一次云侧。令牌在这一行进头，函数返回之后没人再引用它。 */
-  const callCloud = async <T>(path: string): Promise<T | undefined> => {
+  const callCloud = async <T>(
+    path: string,
+    init: { method?: string; body?: string } = {},
+  ): Promise<T | undefined> => {
     const token = tokenOf()
     if (token === undefined) return undefined
     const controller = new AbortController()
@@ -141,8 +168,13 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     }, CLOUD_TIMEOUT_MS)
     try {
       const res = await doFetch(`${base}${path}`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
+        method: init.method ?? 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          accept: 'application/json',
+          ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(init.body === undefined ? {} : { body: init.body }),
         signal: controller.signal,
       })
       if (!res.ok) return undefined
@@ -154,6 +186,105 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     } finally {
       clearTimeout(timer)
     }
+  }
+
+  /**
+   * 打云侧一跳，**把状态码与那句人话一起带回来**。
+   *
+   * 与上面那个 `callCloud` 的差别就这一条，而这一条是全部：`callCloud` 是"取不到
+   * 就 `undefined`"（余额与价目取不到，界面上显示"暂时取不到"就完了），而同步这一组
+   * 要把云上那句话原样端给用户——**402「还没开通」与 503「云连不上」是两句话**，
+   * 一句给"去开通"，一句给"稍后再试"，合成一句用户就不知道该怎么办了。
+   */
+  const cloudCall: KolCloudCallFn = async <T>(
+    path: string,
+    init: { method?: string; body?: unknown } = {},
+  ): Promise<KolCloudCall<T>> => {
+    const token = tokenOf()
+    if (token === undefined) return { ok: false, status: 0 }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      controller.abort()
+    }, CLOUD_TIMEOUT_MS)
+    try {
+      const res = await doFetch(`${base}${path}`, {
+        method: init.method ?? 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          accept: 'application/json',
+          ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        signal: controller.signal,
+      })
+      const payload = (await res.json().catch(() => undefined)) as
+        | { data?: T; code?: string; message?: string }
+        | undefined
+      if (!res.ok)
+        return {
+          ok: false,
+          status: res.status,
+          ...(payload?.code === undefined ? {} : { code: payload.code }),
+          message: payload?.message ?? `云上回了 ${String(res.status)}，这一次没有动你的数据。`,
+        }
+      return {
+        ok: true,
+        status: res.status,
+        ...(payload?.data === undefined ? {} : { data: payload.data }),
+      }
+    } catch {
+      // 超时 / 断网 / DNS：状态 0，界面上是"联系不上"，不是"出错了"
+      return { ok: false, status: 0 }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /**
+   * 红人营销增值服务的本地那一头（67 §3）。
+   *
+   * 没装配红人库就没有它：那一组路由回一句人话（`not_implemented`），不是 500——
+   * 一个只跑模型面的进程不该因为没建红人库就在设置页上挂一个红框。
+   */
+  const kolSync =
+    options.kol === undefined
+      ? undefined
+      : createKolCloudSync({
+          clock,
+          store: options.kol,
+          call: cloudCall,
+          linked: () => tokenOf() !== undefined,
+          ...(options.dbDir === undefined ? {} : { dbDir: options.dbDir }),
+        })
+
+  const kolSyncOf = (): KolCloudSync => {
+    if (kolSync === undefined)
+      throw new ApiError('not_implemented', '这个服务进程没有装配红人库，云端红人库这一格用不了。')
+    return kolSync
+  }
+
+  /**
+   * 云侧那一跳的失败 → 一句人话 + 一个不吓人的码。
+   *
+   * 三档，界面上是三张不同的脸：**没关联账号**（去关联）、**402**（这一项要付费 /
+   * 欠费暂停，数据一条没动）、**云连不上**（稍后再试）。全归成 500 的话，用户看到
+   * 的是"系统坏了"，而三件里没有一件是系统坏了。
+   */
+  const unwrap = <T>(res: KolCloudCall<T>, action: string): T => {
+    if (res.ok && res.data !== undefined) return res.data
+    if (res.status === 0)
+      throw new ApiError(
+        'provider_unavailable',
+        res.message ?? `云上暂时${action}不了（联系不上）。你的数据一条没动，稍后再试一次。`,
+      )
+    if (res.status === 402)
+      throw new ApiError('budget_exhausted', res.message ?? `这一项要付费：${action}暂停了。`)
+    if (res.status >= 500)
+      throw new ApiError(
+        'provider_unavailable',
+        res.message ?? `云上出了点问题，这一次没有${action}。`,
+      )
+    throw new ApiError('invalid_input', res.message ?? `云上没答应这一次${action}。`)
   }
 
   let cached: { at: number; view: CloudCreditsView } | undefined
@@ -224,10 +355,76 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     return callCloud<UsageReport>(`/v1/wallet/usage?${query.toString()}`)
   }
 
+  /**
+   * 充值四档。云上取不到就回本地内置那一份——四张卡不该因为断网就一片空白
+   * （与价目表同一条理由）。
+   */
+  const tiersView = async (): Promise<TopupTiers> =>
+    (await callCloud<TopupTiers>('/v1/wallet/topup/tiers')) ?? TOPUP_TIERS_FILE
+
+  /**
+   * 按档建一笔充值单。
+   *
+   * **本地只转发一个档位 id**，金额由云上那张表说了算——本地算一遍金额等于
+   * 多一份会跟云上分岔的价目表。没关联账号 / 云上没配 Stripe 都回一句人话。
+   */
+  const createTopupOrder = async (tier_id: string): Promise<TopupOrder> => {
+    if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+    const order = await callCloud<TopupOrder>('/v1/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify({ provider: 'stripe', tier_id }),
+    })
+    if (order === undefined)
+      throw new ApiError(
+        'provider_unavailable',
+        '云上暂时建不了充值单（连不通，或者那边还没接上支付）。稍后再试一次。',
+      )
+    return order
+  }
+
   const port: CloudPort = {
     credits: () => creditsView(),
     pricing: () => pricingView(),
     usage: (_actor, filter) => usageView(filter),
+    topupTiers: () => tiersView(),
+    createTopup: (_actor, input) => createTopupOrder(input.tier_id),
+    kolCloudStatus: async () => {
+      const engine = kolSyncOf()
+      /*
+       * 读状态那一跳顺带把排队的东西补上去（限流在引擎里，5 分钟最多一次）。
+       * 放在这里而不是起一个定时任务：用户打开这一页就是"我想看看同步了没有"，
+       * 而这一刻补一趟，比让他再点一次「立即同步」少一步。
+       */
+      engine.autoDrain()
+      return engine.status()
+    },
+    kolCloudSync: async () => kolSyncOf().sync(),
+    kolCloudSubscribe: async () => {
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      return unwrap(
+        await cloudCall<ServiceSubscription>('/v1/kol/subscription', { method: 'POST' }),
+        '开通',
+      )
+    },
+    kolCloudCancel: async () => {
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      return unwrap(
+        await cloudCall<ServiceSubscription>('/v1/kol/subscription', { method: 'DELETE' }),
+        '取消',
+      )
+    },
+    kolCloudResolveConflict: (_actor, input) => kolSyncOf().resolveConflict(input),
+    kolCloudExport: async () => {
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      return unwrap(await cloudCall<KolCloudExport>('/v1/kol/cloud/export'), '导出')
+    },
+    kolCloudDelete: async () => {
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      return unwrap(
+        await cloudCall<KolCloudDeleteResult>('/v1/kol/cloud', { method: 'DELETE' }),
+        '删除',
+      )
+    },
     capabilitySources: (actor) => settingsOf(actor),
     setCapabilitySources(actor, input) {
       /*
@@ -248,6 +445,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
 
   return {
     port,
+    ...(kolSync === undefined ? {} : { kolSync }),
     linked: () => tokenOf() !== undefined,
     sourceOf: (capability) => state.capability_sources[capability] ?? 'mine',
     priceOf: async (capability) => {

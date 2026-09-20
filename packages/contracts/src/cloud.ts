@@ -55,11 +55,19 @@ export interface CloudOrg {
  * - `wallet:read`：**只读**余额与用量（`/v1/wallet/*` 的读面）。充值 / 退款不在令牌能做的事里。
  * - `standby`：在线值守（WP60）。
  * - `data`：公共红人库服务（`/v1/data/*`，WP61）——浏览、体检、付费 reveal、插件配对。
+ * - `kol`：红人营销增值服务（`/v1/kol/*`，WP118）——租户私有的云端红人库与双向同步。
  *
- * 本版六个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`）；
+ * 本版七个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`，WP118 加 `kol`）；
  * 加能力就加成员（只加不删）。
  */
-export type CloudScope = 'ai' | 'wallet:read' | 'wallet:topup' | 'wallet:admin' | 'standby' | 'data'
+export type CloudScope =
+  | 'ai'
+  | 'wallet:read'
+  | 'wallet:topup'
+  | 'wallet:admin'
+  | 'standby'
+  | 'data'
+  | 'kol'
 
 export const CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -68,6 +76,7 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
   'wallet:admin',
   'standby',
   'data',
+  'kol',
 ]
 
 /**
@@ -77,12 +86,18 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
  * `data` 进默认是有意的：公共库的浏览与体检**免费**（48 §5.3），
  * 一把新令牌不该连"看看有哪些红人"都要用户先回云上改一次动作集；
  * 真花钱的 reveal 与深度体检照样走钱包，余额不够就是 402。
+ *
+ * `kol` 也进默认，理由是同一条**反过来说**的：红人营销增值服务是订阅制，
+ * 没订阅的组织调同步接口一律 402，所以这把动作集本身不解锁任何东西。
+ * 不放进默认的后果是"订阅完了还要回云上重签一把令牌"——那一步用户不知道要做，
+ * 也不该知道（18 §1 最小动作集管的是**能做什么**，不是**付过钱没有**）。
  */
 export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
   'wallet:read',
   'wallet:topup',
   'data',
+  'kol',
 ]
 
 /** 工作区服务令牌的前缀。一眼能认出来是什么，也方便在日志里做前缀级的屏蔽。 */

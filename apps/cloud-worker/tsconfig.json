@@ -11,6 +11,7 @@
     { "path": "../../packages/cloud-entry" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/core" },
+    { "path": "../../packages/kol-cloud" },
     { "path": "../../packages/kol-public" },
     { "path": "../../packages/metering" },
     { "path": "../cloud" }

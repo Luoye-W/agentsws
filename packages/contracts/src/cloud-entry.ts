@@ -57,6 +57,23 @@ export interface CapabilitySourceSettings {
 /* ------------------------------------------------------------------ */
 
 /**
+ * 付费的三块（67 §1，Luoye 2026-09-19 定）。
+ *
+ * - `data`：**数据接口**（YouTube Data API、Apify、各家社媒抓取）。我们替用户付了
+ *   平台的钱与配额。
+ * - `ai`：**AI 使用**。按 token。
+ * - `kol_service`：**红人营销增值服务**。订阅制，30 积分 / 月（= ¥30 / 月）——
+ *   它买的不是备份，是"红人营销以后不依赖本地 Agents 工坊也能跑起来"的地基：
+ *   本地一份、云端一份，双向同步。
+ *
+ * 为什么要分块而不是让用户对着一张十几行的价目表自己归类：这三块的**花钱方式**
+ * 根本不同（按次 / 按 token / 按月），"这个月钱花哪儿了"只有按这三块分开才回答得清。
+ */
+export type PricingBlock = 'data' | 'ai' | 'kol_service'
+
+export const PRICING_BLOCKS: readonly PricingBlock[] = ['data', 'ai', 'kol_service']
+
+/**
  * 价目表里的一条：一项能力、一个单位、多少积分。
  *
  * **对用户只显示最终积分价**（49 §3，同旧 SaaS）：成本、倍率、汇率都是算这个数字的
@@ -65,14 +82,36 @@ export interface CapabilitySourceSettings {
 export interface PricingEntry {
   /** 能力名（`ai.chat` / `data.kol.lookup` / `crawl.page` …）。 */
   capability: string
-  /** 单位（`1k_tokens` / `call` / `page` / `minute` / `seat_month`）。 */
+  /** 单位（`1k_tokens` / `call` / `page` / `minute` / `seat_month` / `month`）。 */
   unit: string
   /** 一个单位多少积分。1 积分 = ¥1（Luoye 2026-09-15 定）。 */
   credits_per_unit: number
   label_zh: string
   label_en: string
+  /**
+   * 属于付费三块里的哪一块（WP118 加，**可选**）。
+   *
+   * 写成可选是因为它是后加的一列：老的 `Pricing` 对象（测试里手搭的那些、
+   * 用户断网时本地内置的那一份旧版本）没有这一格，而界面不该因此少一张卡。
+   * 读的时候一律走 {@link pricingBlockOf}——它对缺值的那些按能力名前缀兜底。
+   */
+  block?: PricingBlock
   /** 按 token 计的那几条：各模型的单价（积分 / 1k token），界面上折叠着看。 */
   models?: PricingModelEntry[]
+}
+
+/**
+ * 一条能力归哪一块。
+ *
+ * `block` 有就用它；没有就按能力名的前缀兜底（`ai.*` → AI，`kol.service.*` →
+ * 增值服务，其余 → 数据接口）。**兜底不是猜**：三块的能力名各有自己的命名空间，
+ * 这条规则与 `pricing.json` 里那一列是同一件事写两遍——一遍给数据，一遍给旧数据。
+ */
+export function pricingBlockOf(entry: Pick<PricingEntry, 'capability' | 'block'>): PricingBlock {
+  if (entry.block !== undefined) return entry.block
+  if (entry.capability.startsWith('ai.')) return 'ai'
+  if (entry.capability.startsWith('kol.service.')) return 'kol_service'
+  return 'data'
 }
 
 /** 按 token 计价的能力里的一个模型。`in` / `out` 是**积分 / 1k token**。 */
@@ -264,6 +303,39 @@ export interface UsageReport {
 /** 支付渠道。这一版只做 Stripe；微信 / 支付宝回 `not_implemented` 人话。 */
 export type TopupProvider = 'stripe' | 'wechat' | 'alipay'
 
+/**
+ * 一个充值档位（WP118，Luoye 2026-09-19 定四档）。
+ *
+ * **1 美元 = 7 积分**，1 积分 = ¥1。四档：US$20 → 140、50 → 350、100 → 700、
+ * 200 → 1400。为什么是档位而不是任意金额：任意金额的输入框让用户在付款之前
+ * 先做一道除法（"我要多少积分？那是多少钱？"），而四张卡他扫一眼就选完了。
+ * 运营后台手动发积分**不受档位限制**——那是我们自己补偿、赠送、试用用的口。
+ *
+ * 价目数据化（`packages/metering/src/topup-tiers.json`），和 `pricing.json` 一个道理：
+ * 改档位是出一个版本，不是改一行代码。
+ */
+export interface TopupTier {
+  /** 档位 id（`usd20` / `usd50` …）。建单时传的就是它，不传金额——金额由表说了算。 */
+  id: string
+  /** 美元定价。Stripe 按这个数收（**不是** credits × 汇率——那会每天变一点）。 */
+  usd: number
+  /** 到账多少积分。 */
+  credits: number
+  label_zh: string
+  label_en: string
+  /** 推荐哪一档（界面上高亮一张；不给就一张都不高亮）。 */
+  recommended?: boolean
+}
+
+/** `topup-tiers.json` 的形状。 */
+export interface TopupTiers {
+  version: number
+  as_of: Iso8601
+  /** 1 美元几积分。恒为 7（写出来是为了让换算口径可读，同 `credit_cny`）。 */
+  credits_per_usd: number
+  tiers: TopupTier[]
+}
+
 /** 一笔充值单。**没有任何支付凭据**——只有去哪儿付的那个链接和订单号。 */
 export interface TopupOrder {
   id: string
@@ -272,6 +344,10 @@ export interface TopupOrder {
   credits: number
   /** 折算成人民币多少（1 积分 = ¥1，所以等于 credits）。 */
   amount_cny: number
+  /** 按档位充的那些：实际收多少美元（WP118 加）。任意金额那条没有这一格。 */
+  amount_usd?: number
+  /** 按哪一档充的（WP118 加）。 */
+  tier_id?: string
   /** 去这里付（Stripe Checkout 的 URL）。新窗口打开。 */
   checkout_url?: string
   status: 'created' | 'paid'

@@ -55,6 +55,7 @@ import { type DoStorageLike, doSyncDb } from './do-sql.js'
 import { envRecord, type WorkerEnv } from './env.js'
 import { INTERNAL_HEADERS } from './internal.js'
 import { remoteKolAdminPort } from './kol-admin.js'
+import { remoteKolCloudAdminPort } from './kol-tenant-do.js'
 import { LEDGER_SINGLETON, remoteUsageLedger } from './ledger-do.js'
 import { remoteWalletAdminPort } from './wallet-admin.js'
 
@@ -142,6 +143,7 @@ export class AccountsCore {
         standby: false,
         // 公共红人库（WP116 / 64 §10.2 的两段式）：绑了那个 DO 才算开通
         kol_public: env.KOL_PUBLIC !== undefined,
+        kol_cloud: env.KOL_TENANT !== undefined,
         mail: options.mail !== undefined || cloudflareMailReady(env.EMAIL, record),
         admin_topup: (env.AGENTSWS_CLOUD_ADMIN_TOKEN ?? '').trim() !== '',
         // WP115：后台。读账那一半要 `LEDGER` binding；没绑就只有写动作能用
@@ -209,6 +211,8 @@ export class AccountsCore {
         wallet: () => ({ wallet: grantOnlyWallet(), port: walletPort }),
         ledger: ledgerOf,
         kol: kolOf,
+        kolCloud: () =>
+          env.KOL_TENANT === undefined ? undefined : remoteKolCloudAdminPort(env.KOL_TENANT),
         baseUrl,
         mail,
         ...(adminToken === '' ? {} : { bootstrapToken: adminToken }),

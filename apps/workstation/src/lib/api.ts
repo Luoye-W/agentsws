@@ -1434,6 +1434,8 @@ export interface PricingEntry {
   credits_per_unit: number
   label_zh: string
   label_en: string
+  /** 付费三块（67 §1，WP118）。老的价目表没有这一格，界面按能力名前缀兜底。 */
+  block?: 'data' | 'ai' | 'kol_service'
   models?: PricingModelEntry[]
 }
 
@@ -1479,6 +1481,149 @@ export const getCloudUsage = (
   assignment?: string,
 ): Promise<UsageReportView | null> =>
   api(`/v1/cloud/usage?group=${group}`, withAssignment(assignment))
+
+/** 充值四档（67 §2）。 */
+export interface TopupTierView {
+  id: string
+  usd: number
+  credits: number
+  label_zh: string
+  label_en: string
+  recommended?: boolean
+}
+
+export interface TopupTiersView {
+  version: number
+  as_of: string
+  credits_per_usd: number
+  tiers: TopupTierView[]
+}
+
+export interface TopupOrderView {
+  id: string
+  credits: number
+  amount_cny: number
+  amount_usd?: number
+  tier_id?: string
+  checkout_url?: string
+  status: string
+}
+
+export const getTopupTiers = (assignment?: string): Promise<TopupTiersView> =>
+  api('/v1/cloud/topup/tiers', withAssignment(assignment))
+
+/** 建一笔充值单，回一个去云上付款的链接。**本地不碰任何支付凭据**。 */
+export const createTopup = (tier_id: string, assignment?: string): Promise<TopupOrderView> =>
+  api('/v1/cloud/topup', {
+    ...withAssignment(assignment),
+    method: 'POST',
+    body: { tier_id },
+  })
+
+/* ------------------------------------------------------------------ */
+/* 红人营销增值服务（67 §3，WP118）                                     */
+/* ------------------------------------------------------------------ */
+
+/** 订阅状态那五个态（`none` = 从来没开通过）。 */
+export type KolServiceStatus = 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+
+export interface KolServiceSubscriptionView {
+  status: KolServiceStatus
+  service_id: string
+  current_cycle_end?: string
+  grace_until?: string
+  unpaid_since?: string
+  granted_months: number
+  cancel_at_period_end: boolean
+  last_charge_at?: string
+}
+
+/** 一条同步冲突：两头都改过同一条，**双方版本都在**（输的那一份不删）。 */
+export interface KolCloudConflictView {
+  kind: string
+  id: string
+  at: string
+  label: string
+  source: 'cloud' | 'local'
+  winner: { version: number; updated_at: string; writer: string; body?: Record<string, unknown> }
+  loser: { version: number; updated_at: string; writer: string; body?: Record<string, unknown> }
+}
+
+export interface KolCloudStatusView {
+  linked: boolean
+  /** 没关联 / 云连不通时的那句人话。 */
+  reason?: string
+  cloud_reachable: boolean
+  /** 本地攒着还没推上去的条数。 */
+  pending: number
+  object_count?: number
+  by_kind?: { kind: string; count: number }[]
+  cloud_conflicts?: number
+  conflicts: KolCloudConflictView[]
+  subscription?: KolServiceSubscriptionView
+  last_sync_at?: string
+  device_id: string
+  at: string
+}
+
+export interface KolCloudSyncRunView {
+  ok: boolean
+  message?: string
+  pushed: number
+  pulled: number
+  conflicts: number
+  /** 云上有了、本地这一版还没有那张表的条数（报出来，不静默扔）。 */
+  skipped: number
+  pending: number
+  last_sync_at?: string
+  at: string
+}
+
+export interface KolCloudExportView {
+  format: number
+  org_id: string
+  at: string
+  objects: unknown[]
+  conflicts: unknown[]
+}
+
+export interface KolCloudDeleteView {
+  deleted: number
+  subscription_kept: boolean
+  at: string
+}
+
+export const getKolCloudStatus = (assignment?: string): Promise<KolCloudStatusView> =>
+  api('/v1/cloud/kol/status', withAssignment(assignment))
+
+/** 立即同步一趟。**失败也不是错**：回执里 `ok: false` + 一句人话。 */
+export const syncKolCloud = (assignment?: string): Promise<KolCloudSyncRunView> =>
+  api('/v1/cloud/kol/sync', { ...withAssignment(assignment), method: 'POST' })
+
+export const subscribeKolCloud = (assignment?: string): Promise<KolServiceSubscriptionView> =>
+  api('/v1/cloud/kol/subscription', { ...withAssignment(assignment), method: 'POST' })
+
+export const cancelKolCloud = (assignment?: string): Promise<KolServiceSubscriptionView> =>
+  api('/v1/cloud/kol/subscription', { ...withAssignment(assignment), method: 'DELETE' })
+
+/** 一条冲突处理完了：`winner` 留当前值，`loser` 把被盖掉的那一份挑回来（两份都不删）。 */
+export const resolveKolCloudConflict = (
+  input: { kind: string; id: string; pick: 'winner' | 'loser' },
+  assignment?: string,
+): Promise<KolCloudSyncRunView> =>
+  api('/v1/cloud/kol/conflicts/resolve', {
+    ...withAssignment(assignment),
+    method: 'POST',
+    body: input,
+  })
+
+/** 导出云端这一份（**欠费也给导**——这时候拦着等于拿数据当人质）。 */
+export const exportKolCloud = (assignment?: string): Promise<KolCloudExportView> =>
+  api('/v1/cloud/kol/export', withAssignment(assignment))
+
+/** 删掉云端这一份。**本地一条不动**、订阅也不动。 */
+export const deleteKolCloud = (assignment?: string): Promise<KolCloudDeleteView> =>
+  api('/v1/cloud/kol', { ...withAssignment(assignment), method: 'DELETE' })
 
 export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', withAssignment(assignment))

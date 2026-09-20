@@ -326,13 +326,13 @@ describe('钱包路由', () => {
     expect(data.expiring).toEqual([{ credits: 30, expires_at: '2026-10-01T00:00:00.000Z' }])
   })
 
-  it('价目表端得出来，首批八条都在', async () => {
+  it('价目表端得出来，首批八条 + WP118 的两条订阅都在', async () => {
     const h = harness()
     const res = await h.app.fetch(
       new Request('http://entry/v1/wallet/pricing', { headers: auth() }),
     )
     const { data } = (await res.json()) as { data: { entries: { capability: string }[] } }
-    expect(data.entries).toHaveLength(8)
+    expect(data.entries).toHaveLength(10)
     expect(data.entries.map((e) => e.capability)).toContain('ai.chat')
   })
 
@@ -396,31 +396,89 @@ describe('充值（Stripe）', () => {
       },
     })
 
-  it('建单回一个 Checkout 链接；1 积分 = ¥1，所以 unit_amount 是分', async () => {
+  it('按档建单：US$50 一档收 50 美元、到账 350 积分（WP118 四档）', async () => {
     const h = harness()
     h.setUpstream(async () => Response.json({ id: 'cs_test_1', url: 'https://pay.invalid/cs_1' }))
     const res = await h.app.fetch(
       new Request('http://entry/v1/wallet/topup', {
         method: 'POST',
         headers: { ...auth(), 'content-type': 'application/json' },
-        body: JSON.stringify({ provider: 'stripe', credits: 200 }),
+        body: JSON.stringify({ provider: 'stripe', tier_id: 'usd50' }),
       }),
     )
     expect(res.status).toBe(201)
     const { data } = (await res.json()) as { data: Record<string, unknown> }
     expect(data).toMatchObject({
       provider: 'stripe',
-      credits: 200,
-      amount_cny: 200,
+      credits: 350,
+      amount_usd: 50,
+      tier_id: 'usd50',
       checkout_url: 'https://pay.invalid/cs_1',
       status: 'created',
     })
     const sent = String(h.calls[0]?.init.body)
-    expect(sent).toContain('%5Bunit_amount%5D=20000')
-    expect(sent).toContain('%5Bcurrency%5D=cny')
-    // 支付渠道那边不需要知道我们的用户是谁：metadata 里只有组织号与积分数
+    // 按美元收，不是"积分数 × 当日汇率"——后者会让同一张卡上的价钱每天变一点
+    expect(sent).toContain('%5Bunit_amount%5D=5000')
+    expect(sent).toContain('%5Bcurrency%5D=usd')
+    // 支付渠道那边不需要知道我们的用户是谁：metadata 里只有组织号、积分数与档位
     expect(sent).toContain('metadata%5Borg_id%5D=org_1')
     expect(sent).not.toContain('account_id')
+  })
+
+  it('认不出的档位回一句人话，**不退到某个默认档**', async () => {
+    const h = harness()
+    const res = await h.app.fetch(
+      new Request('http://entry/v1/wallet/topup', {
+        method: 'POST',
+        headers: { ...auth(), 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'stripe', tier_id: 'usd999' }),
+      }),
+    )
+    expect(res.status).toBe(400)
+    expect(h.calls).toHaveLength(0)
+  })
+
+  it('任意金额只剩 admin 走得通；普通令牌被劝回四张档位卡', async () => {
+    const h = harness()
+    h.setUpstream(async () => Response.json({ id: 'cs_test_2', url: 'https://pay.invalid/cs_2' }))
+    const member = await h.app.fetch(
+      new Request('http://entry/v1/wallet/topup', {
+        method: 'POST',
+        headers: { ...auth('wst_member'), 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'stripe', credits: 37 }),
+      }),
+    )
+    expect(member.status).toBe(400)
+    expect(String(((await member.json()) as { message: string }).message)).toContain('档位')
+
+    const admin = await h.app.fetch(
+      new Request('http://entry/v1/wallet/topup', {
+        method: 'POST',
+        headers: { ...auth(), 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'stripe', credits: 37 }),
+      }),
+    )
+    expect(admin.status).toBe(201)
+    // 老路按人民币收（1 积分 = ¥1）
+    expect(String(h.calls[0]?.init.body)).toContain('%5Bcurrency%5D=cny')
+  })
+
+  it('四档端得出来，而且每一档的积分正好等于 usd × 7', async () => {
+    const h = harness()
+    const res = await h.app.fetch(
+      new Request('http://entry/v1/wallet/topup/tiers', { headers: auth() }),
+    )
+    expect(res.status).toBe(200)
+    const { data } = (await res.json()) as {
+      data: { credits_per_usd: number; tiers: { usd: number; credits: number }[] }
+    }
+    expect(data.credits_per_usd).toBe(7)
+    expect(data.tiers.map((t) => [t.usd, t.credits])).toEqual([
+      [20, 140],
+      [50, 350],
+      [100, 700],
+      [200, 1400],
+    ])
   })
 
   it('微信 / 支付宝回一句人话，不是 500', async () => {
