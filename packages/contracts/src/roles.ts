@@ -297,7 +297,23 @@ export interface RoleDefinition {
    * 后者要出「这条走浏览器」。
    */
   mode?: 'api' | 'browser'
-  persona?: string
+  /**
+   * WP120（69）：**这条职责的角色定位**——系统提示里的「你是谁」。
+   *
+   * 为什么非有不可：69 §0 那条亲测记录——让红人营销岗位找红人，回出来的是客服的话。
+   * 不是路由错了，是 Agent 的提示里从头到尾没有一句「你是谁、你不负责什么」，
+   * 于是它照着手边唯一一份剧本（客服）答。
+   *
+   * 骨架固定六段（69 §2，每段 ≤ 200 字）：你是谁 / 你负责什么 / **你不负责什么、
+   * 转给哪个岗位** / 做事顺序与判断口径 / 口气 / 哪些事必须出卡。第三段是防串岗的关键，
+   * 不许省；`gen-ontology --check` 把「persona 为空」判成失败。
+   *
+   * 与 {@link Position.persona} 的分工：岗位那一段说「这个岗位在公司里是干什么的」，
+   * 这一段说「这个岗位里的这一条活该怎么干」。装配时岗位在前、职责在后（69 §3）。
+   *
+   * 老的纯字符串写法仍然认（契约只加不删）：给 `{ zh, en }` 就是中英各一份。
+   */
+  persona?: PersonaText
   handover: {
     transfers: ('open_work_items' | 'context' | 'home_blocks' | 'queue_lane' | 'scheduled_tasks')[]
     fallback: 'owner' | 'scope_manager'
@@ -351,12 +367,35 @@ export interface WorkspacePolicy {
   raw_retention_days?: number
 }
 
+/**
+ * WP120（69 §1）：persona 的正文。
+ *
+ * 一份中文 + 一份英文（`{ zh, en }`），或者**只有一份**的老写法（纯字符串）。
+ * 契约只加不删，所以纯字符串永远认——老的职责 yml 不用改就还能读。
+ *
+ * 为什么不像 `RoleDefinition.description` 那样「只写中文、界面不双份维护」：
+ * description 是给**人**看的一行字，persona 是**进系统提示的正文**。英文界面下
+ * 送一段中文 persona 进去，模型十有八九拿中文回英文客户——这正是 persona 要防的
+ * 那种串味。所以这一格双份，而且两份要说同一件事。
+ */
+export type PersonaText = string | { zh: string; en: string }
+
 /** 05 §2 岗位模板：只在分配那一刻展开成一组 Assignment */
 export interface Position {
   id: string
   version: string
   name: { zh: string; en: string }
   roles: { role: RoleId; default: boolean }[]
+  /**
+   * WP120（69 §1）：**这个岗位的角色定位**——装配时排在职责 persona **前面**。
+   *
+   * 岗位那一段回答的是「这个岗位在公司里是干什么的、什么活不归它」；
+   * 职责那一段回答「这个岗位里的这一条活怎么干」。两段都写，因为串岗有两种：
+   * 岗位之间串（红人岗位答退款）与岗位内部串（红人岗位里 YouTube 那条去管 TikTok）。
+   *
+   * 只加字段：不填的岗位一切照旧（但内置的九个岗位一个都不许空，见 69 §2）。
+   */
+  persona?: PersonaText
 }
 
 /**
@@ -411,6 +450,13 @@ export interface PositionInstance {
   pending_cards: number
   /** 岗位层记忆的一句话（`position` 技能层 + 提到岗位层的教训条数） */
   memory_summary: string
+  /**
+   * WP120（69 §4）：这个岗位的角色定位——右栏「角色」面板顶上那一段。
+   *
+   * 已经叠加过公司层覆盖：包里的原文由 `GET /positions/:id/persona` 另给一份，
+   * 界面上的「还原」按钮拿它来比。
+   */
+  persona?: PersonaText
 }
 
 /** 05 §4 有效配置（单个 Assignment，不并集） */
@@ -453,7 +499,15 @@ export interface EffectiveConfig {
    * 服务端组 `RunRequest.allowed_hosts` 时读它；空 = 这条职责开不了浏览器。
    */
   browser_scope: string[]
-  persona?: string
+  /**
+   * WP120（69 §3）：这条职责的角色定位，**包里的原文**。
+   *
+   * 公司层覆盖不在这儿叠——`effectiveConfig` 是个纯函数（输入只有职责定义、
+   * 分配与工作区策略），把一张要查库的覆盖表塞进来，它就不再是纯的了，
+   * 回放也算不出同一份。叠加发生在装 `persona` 段的那一跳（`apps/server/src/personas.ts`），
+   * 与技能的六层叠加同一个位置、同一条规矩（24 §1）。
+   */
+  persona?: PersonaText
   /** 展开后的范围（挂的范围组已摊平）。 */
   ranges: RangeRef[]
   /** 44 G1：这些范围是从哪几个范围组（品牌）来的。 */
@@ -462,4 +516,44 @@ export interface EffectiveConfig {
   notifications: NotificationRule[]
   ready: boolean
   unassigned_range: boolean
+}
+
+/* ── WP120（69 §4）：角色定位的公司层覆盖 ────────────────────────────────── */
+
+/** 一段 persona 挂在谁身上：一个岗位模板，或者一条职责。 */
+export type PersonaSubject = { kind: 'position'; id: string } | { kind: 'role'; id: RoleId }
+
+/**
+ * 69 §4：**公司改写过的那一份**。
+ *
+ * 三条纪律：
+ * 1. **包里的原文一个字不动**。覆盖是另存的一层，所以「还原」永远做得到——
+ *    这与技能的六层覆盖是同一条规矩（24 §1），不另起一套。
+ * 2. **只有公司层**。个人改 persona = 每个人手里的 Agent 说不同的话，
+ *    而 persona 是公司对外的口径。要个性化的东西在个人技能层里，不在这儿。
+ * 3. **每一次改记一条审计**（`persona.overridden` / `persona.reverted`），
+ *    因为它进系统提示——改了它等于改了 Agent 对外说什么。
+ */
+export interface PersonaOverride {
+  workspace_id: WorkspaceId
+  subject: PersonaSubject
+  /** 改写后的正文。中英各一份；只填一边的话另一边回落包里的原文。 */
+  text: PersonaText
+  updated_at: Iso8601
+  updated_by: PersonId
+}
+
+/** 右栏「角色」面板要的那一份：现在生效的 + 包里的原文（「还原」拿它比）。 */
+export interface PersonaView {
+  subject: PersonaSubject
+  /** 显示名（岗位名 / 职责名）。 */
+  name: { zh: string; en: string }
+  /** 现在真正进系统提示的那一份。 */
+  effective: PersonaText
+  /** 包里自带的原文。与 `effective` 不同 = 公司改写过。 */
+  packaged: PersonaText
+  /** 公司改写过吗（= 有覆盖且与原文不同）。 */
+  overridden: boolean
+  updated_at?: Iso8601
+  updated_by?: PersonId
 }

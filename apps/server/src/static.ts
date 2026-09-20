@@ -2,7 +2,7 @@
  * 托管工作台的构建产物（36 §5.1「Hono 托管 dist/」）。
  *
  * 规矩：`/v1` 与 `/openapi.json` 归网关，这里一律不碰；其余走静态文件，
- * 找不到且看着像页面路径（没有后缀）就回 `index.html`（SPA fallback）。
+ * 找不到而请求是浏览器导航（Accept 里有 text/html）就回 `index.html`（SPA fallback）。
  * 只读 `dir` 下的文件，路径穿越（`..`）一律拒。
  */
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -65,8 +65,8 @@ export function mountStatic<E extends Env>(app: Hono<E>, options: StaticOptions)
       const type = TYPES[extname(file)] ?? 'application/octet-stream'
       return c.body(new Uint8Array(readFileSync(file)), 200, { 'content-type': type })
     }
-    // SPA fallback：没有后缀的路径都交给前端路由
-    if (extname(path) === '') {
+    // SPA fallback：浏览器在导航（Accept 里有 text/html）就交给前端路由
+    if (wantsHtml(c)) {
       const index = resolveAsset(options.dir, 'index.html')
       if (index !== undefined) {
         return c.html(readFileSync(index, 'utf8'))
@@ -74,4 +74,19 @@ export function mountStatic<E extends Env>(app: Hono<E>, options: StaticOptions)
     }
     return next()
   })
+}
+
+/**
+ * 这个请求是不是**浏览器在导航**。
+ *
+ * 以前按"路径有没有后缀"判 SPA fallback，栽在职责 id 上：`kol.youtube` / `dtc.store`
+ * 都带点，于是 `/positions/<asg>/duties/kol.youtube` 被当成"后缀 `.youtube` 的文件"，
+ * F5 一下或把地址贴进来就是网关的 404 信封——前端路由根本没机会接管。点站内链接
+ * 没事（客户端路由不重新发请求），所以这个 bug 只在刷新 / 书签 / 贴地址时露头。
+ *
+ * 按 Accept 判是 SPA 托管的通行规矩：导航要的是 HTML；资源请求（img / script / fetch）
+ * 要的不是，它们该拿 404 就拿 404，不会被一张 index.html 冒充。
+ */
+function wantsHtml(c: { req: { header: (name: string) => string | undefined } }): boolean {
+  return (c.req.header('accept') ?? '').includes('text/html')
 }

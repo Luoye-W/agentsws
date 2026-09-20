@@ -1,10 +1,16 @@
 /** 05 §0：职责定义是配置不是数据——从 `roles/<domain>/<id>.yml` 读，走 schema 校验。 */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { RoleId } from '@agentsws/contracts'
 import Schema from '@deepseek-ai/schemastery'
 import { parse as parseYaml } from 'yaml'
-import { checkRoleExtras, collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'
+import {
+  checkPositionExtras,
+  checkRoleExtras,
+  collectUnknownKeys,
+  POSITION_SCHEMA,
+  ROLE_SCHEMA,
+} from './schema.js'
 import { type Position, type RoleDefinitionFull, RoleSchemaError } from './types.js'
 
 /** 本包自带的职责定义目录（`roles/<domain>/<slug>.yml`）。 */
@@ -117,7 +123,16 @@ export function loadBundledRole(id: RoleId): RoleDefinitionFull {
 
 /** 从 YAML 文本解析一个岗位模板。 */
 export function parsePosition(text: string, source = '<string>'): Position {
-  return validate<Position>(parseDocument(text, source), POSITION_SCHEMA, source, 'position')
+  const position = validate<Position>(
+    parseDocument(text, source),
+    POSITION_SCHEMA,
+    source,
+    'position',
+  )
+  // WP120（69 §2）：填了 persona 就得填对（六段骨架、不超长、不是空的）
+  const bad = checkPositionExtras(position)
+  if (bad !== undefined) throw new RoleSchemaError(source, bad.field, bad.message)
+  return position
 }
 
 /** 从 YAML 文件读取一个岗位模板。 */
@@ -129,3 +144,61 @@ export function loadPosition(file: string): Position {
 export function loadBundledPosition(id: string): Position {
   return loadPosition(`${BUNDLED_POSITIONS_DIR}${id}.yml`)
 }
+
+/**
+ * WP120（69 §2）：本包自带的**全部**岗位模板（按 id 排序）。
+ *
+ * 为什么要这一个：「全部岗位的 persona 一条都不许空」这条纪律要有人去数，
+ * 而数之前得先有一份"全部"的名单。以前只有按 id 取一条的口，于是谁都数不了。
+ * 目录就是名单——加一个 yml 自动进来，不用再维护第二份清单。
+ */
+export function loadBundledPositions(): Position[] {
+  return readdirSync(BUNDLED_POSITIONS_DIR)
+    .filter((f) => f.endsWith('.yml'))
+    .sort()
+    .map((f) => loadPosition(`${BUNDLED_POSITIONS_DIR}${f}`))
+}
+
+/** WP120：本包自带的**全部**职责定义（按 `<domain>/<slug>` 排序）。同上，给"数一遍"用。 */
+export function loadBundledRoles(): RoleDefinitionFull[] {
+  const out: RoleDefinitionFull[] = []
+  for (const domain of readdirSync(BUNDLED_ROLES_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort()) {
+    for (const file of readdirSync(`${BUNDLED_ROLES_DIR}${domain}`)
+      .filter((f) => f.endsWith('.yml'))
+      .sort()) {
+      out.push(loadRole(`${BUNDLED_ROLES_DIR}${domain}/${file}`))
+    }
+  }
+  return out
+}
+
+/**
+ * WP120（69 §3）：一条职责落在**哪个**岗位模板里。
+ *
+ * 挂在多个岗位里、或者一个都不挂 → `undefined`。**不猜一个**：与
+ * `positions.positionOf` 逐字同一条纪律（54 §3），猜错等于把别的岗位的规矩
+ * 喂给这次运行。
+ */
+export function bundledPositionOfRole(role_id: RoleId): Position | undefined {
+  const target = resolveRoleId(role_id)
+  const hits = loadBundledPositions()
+    .filter((p) => !SUPERSEDED_POSITION_IDS.includes(p.id))
+    .filter((p) => p.roles.some((r) => r.role === target))
+  return hits.length === 1 ? hits[0] : undefined
+}
+
+/**
+ * **已经被拆掉的岗位模板**：文件还在（只加不删），但没有一个工作区会种出它来。
+ *
+ * `dtc-ops`（独立站运营）在 WP62 / WP63 / WP64 里拆成了「网站运营」+「客服」，
+ * `org.ts` 的 `SEED_POSITIONS` 里已经没有它。留着文件是因为它是 04 §1.11 的一份
+ * 历史记录，也还钉着几条测试；但**反查"这条职责属于哪个岗位"时必须跳过它**——
+ * 不跳的后果是 `dtc.support` 同时命中它与 `customer-care`，于是"挂在两个岗位里"
+ * → 跳过岗位层（54 §3）→ 客服这条最常用的职责反而拿不到岗位 persona。
+ *
+ * 这张表与 `ROLE_ID_ALIASES` 同一条纪律：**只可加行**。
+ */
+export const SUPERSEDED_POSITION_IDS: readonly string[] = ['dtc-ops']
