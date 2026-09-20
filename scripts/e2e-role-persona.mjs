@@ -139,10 +139,7 @@ async function run(page, assignment) {
   const blocks = panel.locator('[data-testid="role-persona"]')
   const n = await blocks.count()
   must(n === 2, `职责页该有两段（职责 + 所属岗位），实际 ${n} 段`)
-  must(
-    (await blocks.nth(0).getAttribute('data-subject')) === DUTY,
-    '第一段不是这条职责自己',
-  )
+  must((await blocks.nth(0).getAttribute('data-subject')) === DUTY, '第一段不是这条职责自己')
   must(
     (await blocks.nth(1).getAttribute('data-subject')) === 'kol-marketing',
     '第二段不是它所属的岗位（红人营销）',

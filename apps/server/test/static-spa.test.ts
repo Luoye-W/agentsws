@@ -9,10 +9,11 @@
  * 现在按**请求是不是浏览器导航**判（Accept 里有 text/html）：
  * 导航拿 index.html，资源请求该 404 就 404。
  */
-import { Hono } from 'hono'
+
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { mountStatic } from '../src/static.js'
 

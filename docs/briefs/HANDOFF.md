@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|
 | 1 | WP117b 红人主线在界面上走通 + 点击级证据 | `docs/66` 末尾「复测」#15–#20 + `WP117-kol-e2e-sandbox.md` | `wp117b-kol-mainline` · `wp/117b-kol-mainline` | — | 已合并（09-19，Fable 终审：全量过 + e2e 在 main 上重跑 19 步全过） |
 | 2 | WP121b 初始化向导重排 | `WP121b-onboarding-wizard.md` | `wp121b-wizard` · `wp/121b-wizard` | — | 已合并（09-19 夜，Fable 终审：全量过） |
-| 3 | WP120 岗位与职责的角色定位 | `WP120-role-personas.md` | `wp120-personas` · `wp/120-personas` | — | 续做（分支上有 Qwen 的进度，最后一个 wip 提交未终审） |
+| 3 | WP120 岗位与职责的角色定位 | `WP120-role-personas.md` | `wp120-personas` · `wp/120-personas` | — | 已合并（09-20，Fable 终审：全量过） |
 | 4 | WP118 红人营销增值服务 + 充值四档（订阅引擎做成通用的，客服增值服务只登记） | `WP118-kol-cloud-service.md` | `wp118-kol-cloud` · `wp/118-kol-cloud` | — | 续做（分支上有 Qwen 的进度，最后一个 wip 提交未终审） |
 | 5 | WP122 品牌设计规范 DESIGN.md | `WP122-brand-design-md.md` | `wp122-design-md` · `wp/122-design-md` | — | 续做（分支上有 Qwen 的进度，最后一个 wip 提交未终审） |
 | 6 | WP119b 插件：A 私有仓库移植 + B 开源仓库插件开放接口 | `WP119b-extension-parity.md` | A：`/Users/yeluo/Documents/agentsws-extension`（分支 `wp/119b-port`）；B：`wp119b-open-api` · `wp/119b-open-api` | — | 续做（分支上有 Qwen 的进度，最后一个 wip 提交未终审） |
