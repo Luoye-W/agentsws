@@ -71,11 +71,15 @@ function Workspace(): ReactNode {
     queryKey: ['positions', session.data?.person.id],
     enabled: session.data !== undefined,
     queryFn: async () => {
-      // 先随便绑一个自己的 Assignment，否则网关会因为缺 X-Assignment 拒（31 §3.1）
-      const first = session.data?.assignments.find((a) => a.revoked_at === undefined)
-      if (first !== undefined && position === null) {
-        setAssignment(first.id)
-        selectPosition(first.id)
+      // 先随便绑一个自己的 Assignment，否则网关会因为缺 X-Assignment 拒（31 §3.1）。
+      // WP122：默认优先绑 common.owner——设置页 / 设计规范这类**公司级**页面的
+      // 读权限判的是 policy 域，只有 owner 持有；默认绑到第一条（往往是客服）
+      // 会把这些页面变成永远 403 的死页。岗位页自己会在进入时换成那条岗位的分配。
+      const mine = session.data?.assignments.filter((a) => a.revoked_at === undefined) ?? []
+      const preferred = mine.find((a) => a.role_id === 'common.owner') ?? mine[0]
+      if (preferred !== undefined && position === null) {
+        setAssignment(preferred.id)
+        selectPosition(preferred.id)
       }
       return getPositions()
     },
