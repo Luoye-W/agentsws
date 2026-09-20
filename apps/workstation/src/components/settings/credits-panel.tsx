@@ -38,6 +38,7 @@ import {
   getTopupTiers,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { KolCloudCard } from './kol-cloud-card'
 
 type Group = 'capability' | 'workspace' | 'day'
 
@@ -317,6 +318,18 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                 </p>
               ) : null}
             </section>
+
+            <Separator />
+
+            {/*
+             * ⑤b 红人营销增值服务（67 §3，WP118）。
+             *
+             * 放在充值四档下面是有意的：这一项是**订阅**，而"欠费暂停"那一档用户
+             * 要做的下一件事就是充值——两件事挨着，比让他在页面里来回找少一步。
+             * 上面那三张小卡里"增值服务"那一格是这个月**已经花掉**的，这一张是
+             * **现在是什么状态**，两个问题不同，所以两处都在。
+             */}
+            <KolCloudCard assignment={assignment} />
           </>
         )}
 
