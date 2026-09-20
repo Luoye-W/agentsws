@@ -20,6 +20,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { connectRealtime } from '@/lib/realtime'
+import { BrandDesignPage } from '@/pages/brand-design'
 import { CalendarPage } from '@/pages/calendar'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
 import { ChatSandboxPage } from '@/pages/chat-sandbox'
@@ -70,11 +71,15 @@ function Workspace(): ReactNode {
     queryKey: ['positions', session.data?.person.id],
     enabled: session.data !== undefined,
     queryFn: async () => {
-      // 先随便绑一个自己的 Assignment，否则网关会因为缺 X-Assignment 拒（31 §3.1）
-      const first = session.data?.assignments.find((a) => a.revoked_at === undefined)
-      if (first !== undefined && position === null) {
-        setAssignment(first.id)
-        selectPosition(first.id)
+      // 先随便绑一个自己的 Assignment，否则网关会因为缺 X-Assignment 拒（31 §3.1）。
+      // WP122：默认优先绑 common.owner——设置页 / 设计规范这类**公司级**页面的
+      // 读权限判的是 policy 域，只有 owner 持有；默认绑到第一条（往往是客服）
+      // 会把这些页面变成永远 403 的死页。岗位页自己会在进入时换成那条岗位的分配。
+      const mine = session.data?.assignments.filter((a) => a.revoked_at === undefined) ?? []
+      const preferred = mine.find((a) => a.role_id === 'common.owner') ?? mine[0]
+      if (preferred !== undefined && position === null) {
+        setAssignment(preferred.id)
+        selectPosition(preferred.id)
       }
       return getPositions()
     },
@@ -199,6 +204,8 @@ function Workspace(): ReactNode {
         <Route path="/people/:id" element={<PersonPage />} />
         {/* WP28 制度面：岗位 / 成员 / 职责 */}
         <Route path="/org" element={<OrgPage />} />
+        {/* WP122（71）：这个品牌的 DESIGN.md —— 设计 / 建站 / 社媒 / 投放出活都照它来 */}
+        <Route path="/brand-design" element={<BrandDesignPage />} />
         {/* WP20 连接向导：左栏「连接」与各处「去连接」都跳这里（?service= 高亮那张卡） */}
         <Route path="/connections" element={<ConnectionsPage />} />
         {/* WP85（54 §5）：微信 ClawBot（个人）与企业微信机器人（团队） */}

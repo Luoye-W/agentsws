@@ -189,6 +189,15 @@ export type HighlightType =
    * 它决定的是"要不要现在就回"，而那是人要判的事。
    */
   | 'sentiment'
+  /**
+   * WP122（71 §5）：挑图卡与定稿入库卡上的**规范自检那一行**。
+   *
+   * 文字是 `ads-core` 的 `designNoteZh` 拼出来的那一句（"…不在品牌色板里"）。
+   * 它是一颗芯片，**不是一道闸**：这一格上永远只出现提示，永远不会因为它
+   * 而让这张卡批不下去——品牌规范是给人省事的，一个会拦住人的检查，
+   * 人只会想办法关掉它。
+   */
+  | 'design_note'
 
 export interface DeckHighlight {
   type: HighlightType

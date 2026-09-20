@@ -27,6 +27,7 @@
     "@agentsws/ads-core": "workspace:*",
     "@agentsws/api": "workspace:*",
     "@agentsws/blob": "workspace:*",
+    "@agentsws/brand-design": "workspace:*",
     "@agentsws/brand-intake": "workspace:*",
     "@agentsws/catalog": "workspace:*",
     "@agentsws/channels": "workspace:*",

@@ -16,6 +16,12 @@
       "path": "../../packages/blob"
     },
     {
+      "path": "../../packages/brand-design"
+    },
+    {
+      "path": "../../packages/brand-intake"
+    },
+    {
       "path": "../../packages/catalog"
     },
     {

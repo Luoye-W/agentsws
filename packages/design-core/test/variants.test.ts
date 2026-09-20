@@ -143,3 +143,45 @@ describe('58 §2 变体计划与提示词组装', () => {
     expect(note).toContain('都不行再来')
   })
 })
+
+/*
+ * WP122（71 §5）：这个品牌的那份 `DESIGN.md` 真的进了每一条提示词。
+ *
+ * 这一组盯的是**注入口在计划那一层也通**：`composePrompt` 早就能收这一段，
+ * 但出图走的是 `planGeneration`——那一层不往下传的话，四个岗位里最要紧的
+ * 这一个（出图）就永远拿不到品牌令牌，而界面上看起来一切正常。
+ */
+describe('71 §5 设计规范注进出图', () => {
+  const design = {
+    present: true as const,
+    prompt: '【品牌设计规范｜Heritage】\n色：primary #b8422e',
+    tokens: {},
+    palette: ['#b8422e'],
+    fonts: [],
+  }
+
+  it('给了规范：每一条提示词都带上那一段（正向那一半也带）', () => {
+    const plan = planGeneration({ brief: brief(3), brand, design })
+    expect(plan.n).toBe(3)
+    for (const p of plan.prompts) {
+      expect(p.prompt).toContain('#b8422e')
+      expect(p.positive_prompt).toContain('#b8422e')
+    }
+  })
+
+  it('那一段排在品牌系统**之前**：规格与令牌是硬规矩，品牌系统是原样引用的一整段', () => {
+    const one = composePrompt(brief(1).variant_plan[0] as never, brand, design)
+    expect(one.prompt.indexOf('#b8422e')).toBeLessThan(one.prompt.indexOf('【品牌系统'))
+  })
+
+  it('没有规范（`present: false`）：一个字都不加，出图照常', () => {
+    const bare = planGeneration({ brief: brief(2), brand })
+    const plan = planGeneration({
+      brief: brief(2),
+      brand,
+      design: { present: false, prompt: '', tokens: {}, palette: [], fonts: [] },
+    })
+    expect(plan.n).toBe(2)
+    expect(plan.prompts.map((p) => p.prompt)).toEqual(bare.prompts.map((p) => p.prompt))
+  })
+})

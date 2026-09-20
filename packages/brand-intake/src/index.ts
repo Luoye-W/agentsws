@@ -114,6 +114,8 @@ export interface AnalyzeBrandResult {
   budget: BrandIntakeBudget
   /** 撞上封顶停下来的。界面上要说一句"分析到这儿就停了"。 */
   stopped_for_budget: boolean
+  /** 抓回来的 HTML 原文（只在 `keepHtml` 时有；见 {@link SiteIntakeResult.documents}）。 */
+  documents?: { url: string; kind: BrandIntakePage['kind']; html: string }[]
 }
 
 /**
@@ -125,10 +127,11 @@ export interface AnalyzeBrandResult {
 export async function analyzeBrand(
   doFetch: PageFetch,
   urls: string[],
-  options: { capCredits?: number } = {},
+  options: { capCredits?: number; keepHtml?: boolean } = {},
 ): Promise<AnalyzeBrandResult> {
   const cap = options.capCredits ?? DEFAULT_BRAND_INTAKE_CAP_CREDITS
   const pages: BrandIntakePage[] = []
+  const documents: NonNullable<AnalyzeBrandResult['documents']> = []
   let profile: BrandIntakeProfile = {}
   let spent = 0
   let stopped = false
@@ -145,7 +148,12 @@ export async function analyzeBrand(
     if (kind === 'website') {
       // 还剩多少页的预算，就最多抓多少页
       const affordable = Math.max(1, Math.floor((cap - spent) / CREDITS_PER_PAGE))
-      got = await analyzeSite(doFetch, url, { maxPages: affordable })
+      const site = await analyzeSite(doFetch, url, {
+        maxPages: affordable,
+        ...(options.keepHtml === true ? { keepHtml: true } : {}),
+      })
+      documents.push(...(site.documents ?? []))
+      got = site
     } else {
       const entry = classifyAmazonUrl(url)
       if (entry === undefined) continue
@@ -176,6 +184,7 @@ export async function analyzeBrand(
       spent_credits: spent,
     },
     stopped_for_budget: stopped,
+    ...(options.keepHtml === true ? { documents } : {}),
   }
 }
 

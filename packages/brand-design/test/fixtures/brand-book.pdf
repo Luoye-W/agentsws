@@ -1,0 +1,56 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Length 395 >>
+stream
+BT /F1 20 Tf 50 780 Td (Heritage Supply Brand Book) Tj ET
+BT /F1 12 Tf 50 740 Td (Colors) Tj ET
+BT /F1 11 Tf 50 715 Td (Primary  #A8321F   PANTONE 186 C   C0 M100 Y81 K4) Tj ET
+BT /F1 11 Tf 50 695 Td (Ink      #1A1C1E) Tj ET
+BT /F1 11 Tf 50 675 Td (Limestone #F7F5F2) Tj ET
+0.659 0.196 0.122 rg 50 600 120 50 re f
+0.102 0.110 0.118 rg 190 600 120 50 re f
+0.969 0.961 0.949 rg 330 600 120 50 re f
+endstream
+endobj
+7 0 obj
+<< /Length 429 >>
+stream
+BT /F1 20 Tf 50 780 Td (Typography and Logo) Tj ET
+BT /F1 11 Tf 50 740 Td (Font Family: Public Sans) Tj ET
+BT /F1 11 Tf 50 720 Td (Secondary Typeface: Space Grotesk) Tj ET
+BT /F1 12 Tf 50 680 Td (Logo usage) Tj ET
+BT /F1 11 Tf 50 655 Td (Minimum width 24 px on screen.) Tj ET
+BT /F1 11 Tf 50 635 Td (Clear space: 0.5 x the logo width on every side.) Tj ET
+BT /F1 11 Tf 50 615 Td (Never place the logo on a busy photograph.) Tj ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000373 00000 n 
+0000000443 00000 n 
+0000000889 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1369
+%%EOF

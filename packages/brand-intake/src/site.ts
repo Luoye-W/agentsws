@@ -159,6 +159,15 @@ function logoOf(html: string, base: string): { url: string; layer: IntakeLayer }
 export interface SiteIntakeResult {
   pages: BrandIntakePage[]
   profile: BrandIntakeProfile
+  /**
+   * 抓回来的 HTML 原文（只在 `keepHtml` 时有，WP122 加）。
+   *
+   * 为什么是一个**开关**而不是一直带着：一页 HTML 最多 400 KB，一轮 12 页就是
+   * 5 MB。品牌档案那条路（WP121）解析完就不要它了，让它跟着结果一路传到界面
+   * 是白费内存。要它的只有一个调用方——设计规范抽取（71 §2 第一条）要在
+   * **同一次抓取**上再读一遍 CSS，重抓一遍别人的站是我们不该做的事。
+   */
+  documents?: { url: string; kind: BrandIntakePage['kind']; html: string }[]
 }
 
 /**
@@ -171,9 +180,10 @@ export interface SiteIntakeResult {
 export async function analyzeSite(
   doFetch: PageFetch,
   entryUrl: string,
-  options: { maxPages?: number } = {},
+  options: { maxPages?: number; keepHtml?: boolean } = {},
 ): Promise<SiteIntakeResult> {
   const maxPages = options.maxPages ?? BRAND_INTAKE_MAX_PAGES
+  const documents: { url: string; kind: BrandIntakePage['kind']; html: string }[] = []
   const base = new URL(entryUrl)
   const origin = base.origin
   const disallow = await fetchRobots(doFetch, origin)
@@ -194,12 +204,20 @@ export async function analyzeSite(
       ok: res.ok,
       ...(res.reason === undefined ? {} : { reason: res.reason }),
     })
+    if (res.ok && options.keepHtml === true) documents.push({ url, kind, html: res.html })
     return res.ok ? res.html : undefined
   }
 
+  /** 收尾：`keepHtml` 关着的时候，结果里连这一格都不该出现。 */
+  const done = (profile: BrandIntakeProfile): SiteIntakeResult => ({
+    pages,
+    profile,
+    ...(options.keepHtml === true ? { documents } : {}),
+  })
+
   // ── 首页 ────────────────────────────────────────────────────────────
   const home = await get(entryUrl, 'home')
-  if (home === undefined) return { pages, profile }
+  if (home === undefined) return done(profile)
 
   const org = jsonLdNodes(home).find((n) => isType(n, /organization|brand|onlinestore/i))
   const siteName =
@@ -360,5 +378,5 @@ export async function analyzeSite(
       })
   }
 
-  return { pages, profile }
+  return done(profile)
 }

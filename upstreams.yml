@@ -282,3 +282,72 @@ upstreams:
     why: 社区的 IM 聚合插件（docs/53 §1.3 d）；WP85 是我们自己写的微信 / 企微适配器，它要是出了能进群的企业级渠道就值得重判
     repo: xmanrui/dsh-im
     watch: [releases, stars, readme]
+
+  # ── WP122（docs/71）：DESIGN.md 格式与几个"从网站抽设计令牌"的实现 ─────────
+  #
+  # 09-19 开工前逐个核过许可证与活跃度（`GET /repos/:owner/:name`，见 docs/71 §8）。
+  # 六条全是 reference：**一个都不进 package.json**。它们各带一套 Puppeteer /
+  # Playwright，而桌面壳里已经有一个工作浏览器——为了一个抽取算法再装一个无头
+  # 浏览器，是拿几百兆的运行时换几百行能自己写的逻辑。借的是算法，不是包。
+
+  - id: design-md-spec
+    kind: reference
+    # 这一条与下面五条不是一回事：它是**格式规范本身**，我们的 `DESIGN.md`
+    # 逐字按它写（契约 `packages/contracts/src/brand-design.ts`）。规范自己说
+    # 它在 `alpha`、会变——所以这一条要盯得比别的紧：它的 `docs/spec.md` 一改，
+    # 我们序列化出来的文件就可能不再通过它的 linter。
+    why: 用户的 DESIGN.md 用它的格式（Apache-2.0，alpha）；拿去 Stitch / Claude Code / Cursor 也能直接用，我们不自造格式
+    repo: google-labs-code/design.md
+    watch: [releases, stars, readme, wishlist]
+    watch_paths:
+      - docs/spec.md
+      - packages/cli/src/linter
+    wishlist:
+      - 格式从 alpha 转正（转正那一版要重新对一遍我们的序列化器）
+      - front matter 里出现官方的阴影 / elevation 令牌组（我们现在用自己的 `shadows` 扩展）
+      - lint 规则表稳定下来（我们的自检想对着它的规则写）
+    covered_by:
+      - packages/brand-design/src/serialize.ts
+      - packages/brand-design/test/compose.test.ts
+
+  - id: dembrandt
+    kind: reference
+    why: WP122 的官网抽取器借它的"令牌分组 + W3C DTCG 输出"分法（MIT，3.5k★，09-17 还在动）
+    repo: dembrandt/dembrandt
+    watch: [releases, stars, readme]
+    covered_by:
+      - packages/brand-design/src/site-design.ts
+
+  - id: design-extract
+    kind: reference
+    why: WP122 借它的 primitive / semantic / composite 三层分法与 WCAG 自检思路（MIT，4.1k★，09-16 还在动）
+    repo: Manavarya09/design-extract
+    watch: [releases, stars, readme]
+    covered_by:
+      - packages/brand-design/src/site-design.ts
+
+  - id: design-md-extractor
+    kind: reference
+    why: WP122 借它"渐变 / 阴影 / 动效 / 交互状态也要抽"这一条（MIT，62★）
+    repo: jpoindexter/design-md-extractor
+    watch: [releases, readme]
+    covered_by:
+      - packages/brand-design/src/site-design.ts
+
+  - id: design-md-sunil
+    kind: reference
+    # 09-19 核：MIT，66★，最后一次推送 2026-05-19 —— 半年没动，按"想法看一眼"留着。
+    why: WP122 借它"每个值带出处页 + CSS 变量名 + 所在区域"这一条（MIT，66★，2026-05 起没动）
+    repo: sunil-dsb/design.md
+    watch: [releases, readme]
+    covered_by:
+      - packages/brand-design/src/site-design.ts
+
+  - id: design-md-generator
+    kind: reference
+    # 09-19 核：MIT，11★，最后一次推送 2026-04-19 —— 最冷的一条，留着只为那条"按稳定度分类"。
+    why: WP122 借它"按稳定度给令牌分级"这一条（MIT，11★，2026-04 起没动）
+    repo: jasonhnd/design-md-generator
+    watch: [releases, readme]
+    covered_by:
+      - packages/brand-design/src/site-design.ts

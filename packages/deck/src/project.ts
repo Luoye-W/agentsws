@@ -151,6 +151,12 @@ function designHighlights(item: ApprovalItem): DeckHighlight[] {
     if (who !== undefined) out.push({ type: 'picked_by', text: who })
   }
 
+  // 规范自检那一行（71 §5，WP122）：挑图卡与入库卡都要看得见它。
+  // 文字是提案那一跳算好写进 `after` 的，这儿不现算（37 §1 第 4 行）
+  const designNote = str(after.design_note)
+  if (designNote !== undefined && (kind === 'design_variant' || kind === 'asset_publish'))
+    out.push({ type: 'design_note', text: designNote })
+
   return out
 }
 

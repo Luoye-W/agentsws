@@ -275,4 +275,41 @@ describe('58 §3 四张卡：芯片全从结构化字段来', () => {
       'spec:不该出现',
     )
   })
+
+  /*
+   * WP122（71 §5）：规范自检那一行。挑图卡与入库卡都要看得见它——
+   * 定稿是另一次请求，那一跳手上只有这张素材，所以这句话得跟着素材走。
+   */
+  it('变体卡：不合规范的那一行进卡面（**只提示，不拦人**）', () => {
+    const out = typesOf(
+      card({ kind: 'design_variant', after: { n: 3, design_note: '#ff7a00 不在品牌色板里' } }),
+    )
+    expect(out).toContain('design_note:#ff7a00 不在品牌色板里')
+  })
+
+  it('入库卡：同一行还在（当初提过什么，定稿的人要看得见）', () => {
+    expect(
+      typesOf(
+        card({
+          kind: 'asset_publish',
+          after: { picked_by_label: '罗晔', design_note: '#ff7a00 不在品牌色板里' },
+        }),
+      ),
+    ).toContain('design_note:#ff7a00 不在品牌色板里')
+  })
+
+  it('全都合规范：这一格不出现（卡面上不画一行空白）', () => {
+    expect(typesOf(card({ kind: 'design_variant', after: { n: 3 } }))).not.toContain('design_note:')
+    expect(
+      typesOf(card({ kind: 'design_variant', after: { n: 3 } })).some((s) =>
+        s.startsWith('design_note'),
+      ),
+    ).toBe(false)
+  })
+
+  it('别的设计卡（brief / 需求单）不长这一行——它说的是**产出物**合不合规范', () => {
+    expect(
+      typesOf(card({ kind: 'design_brief', after: { design_note: '#ff7a00 不在品牌色板里' } })),
+    ).not.toContain('design_note:#ff7a00 不在品牌色板里')
+  })
 })

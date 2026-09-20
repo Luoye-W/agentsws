@@ -15,9 +15,11 @@
  * 用户改过的格子挂一个「已改」而不是「请确认」——那一格已经是他说了算的，
  * 重新分析也不会动它（70 §3.4）。
  */
+
 import type { BrandIntakeProfile } from '@agentsws/contracts'
 import { Check, Pencil } from 'lucide-react'
 import { useState } from 'react'
+import { DesignSpecRow } from '@/components/design-md/design-spec-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/lib/app-context'
@@ -250,6 +252,9 @@ export function BrandProfileCard({
           {t('intake.policies', { count: policies.length })}
         </p>
       )}
+
+      {/* WP122（71）：这个品牌的设计规范。查不到就整行不出现（见组件内注释） */}
+      <DesignSpecRow />
 
       <div className="flex items-center justify-end gap-2">
         <Button

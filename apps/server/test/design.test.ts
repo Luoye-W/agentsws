@@ -6,9 +6,16 @@
  * 2. 投影分得开「待挑」与「待定稿」，并且「本周产出」数的是**定稿**；
  * 3. Figma / Canva 明着列在目录里（找不到只会让人以为是自己没找到）。
  */
+import type { BrandDesignProfile } from '@agentsws/contracts'
 import { CONNECTION_CATEGORIES, connectionDirectoryEntry } from '@agentsws/contracts'
+import type { GenerationPlan } from '@agentsws/design-core'
 import { describe, expect, it } from 'vitest'
-import { createDesignStore, designDeckData, seedDemoDesign } from '../src/design.js'
+import {
+  createDesignStore,
+  designCheckNote,
+  designDeckData,
+  seedDemoDesign,
+} from '../src/design.js'
 
 const NOW = '2026-09-17T09:00:00.000Z'
 const store = () => {
@@ -137,5 +144,74 @@ describe('58 §1 末行：Figma / Canva 登记「待增加」', () => {
 
   it('目录里有「设计」这个分类（没有分类的条目在界面上根本不出现）', () => {
     expect(CONNECTION_CATEGORIES.map((c) => c.id)).toContain('design')
+  })
+})
+
+/*
+ * WP122（71 §5 第二条）：出图那一批提示词过一道规范自检，压成卡片上一行字。
+ *
+ * 这一组盯的是**克制**，不是覆盖率：
+ * - 没有规范就一个字都不说（不然每个新品牌的每张图都在报"不在色板里"）；
+ * - 同一句话只说一次（六条提示词都写了同一个橙，卡面上出现六遍等于没说）；
+ * - 回的是 `string | undefined`，**不是布尔**——它没有能力拦住任何东西。
+ */
+describe('71 §5 规范自检那一行', () => {
+  const profile: BrandDesignProfile = {
+    colors: {
+      primary: {
+        value: '#b8422e',
+        confidence: 'high',
+        source: [{ origin: 'site', url: 'https://heritage.test/', locator: 'css-var:--brand' }],
+      },
+      surface: {
+        value: '#f7f5f2',
+        confidence: 'high',
+        source: [{ origin: 'site', url: 'https://heritage.test/', locator: 'css:body' }],
+      },
+    },
+  }
+
+  const plan = (...prompts: string[]): GenerationPlan => ({
+    brief_id: 'dbrief_1',
+    n: prompts.length,
+    quota_notes: [],
+    over_quota: false,
+    prompts: prompts.map((prompt, i) => ({
+      plan_item_id: `p${String(i)}`,
+      spec_id: 'social.ig.square',
+      size: '1080x1080',
+      prompt,
+      positive_prompt: prompt,
+    })),
+  })
+
+  it('还没有规范：一个字都不说（不把一个没启用的功能做成噪声源）', () => {
+    expect(designCheckNote(undefined, plan('主视觉用 #ff7a00 的渐变'))).toBeUndefined()
+  })
+
+  it('色板外的颜色：说出来，并把色板里最近的那个一并给出', () => {
+    const note = designCheckNote(profile, plan('主视觉用 #ff7a00 的渐变'))
+    expect(note).toContain('#ff7a00 不在品牌色板里')
+  })
+
+  it('一批里同一个色出现三次：卡面上只说一次', () => {
+    const note = designCheckNote(
+      profile,
+      plan('底色 #ff7a00', '按钮 #ff7a00', '文字压在 #ff7a00 上'),
+    )
+    expect(note?.split('#ff7a00 不在品牌色板里').length).toBe(2)
+    expect(note).not.toContain('另有')
+  })
+
+  it('全都合规范：这一格不出现（界面上不画一行空白）', () => {
+    expect(designCheckNote(profile, plan('底色 #b8422e，留白多'))).toBeUndefined()
+  })
+
+  it('两个不同的色都出格：都进那一行，超过三条只报头三条 + 还有几条', () => {
+    const note = designCheckNote(
+      profile,
+      plan('#ff7a00 与 #00ff88 与 #1234ff 与 #abcdef 都不在色板里'),
+    )
+    expect(note).toContain('另有 1 条')
   })
 })

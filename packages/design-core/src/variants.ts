@@ -15,7 +15,12 @@
  *    该这么出"的清单；出不出得了由调用方看 `gateway.images.available`。
  */
 
-import type { DesignBrief, DesignSpec, DesignVariantPlanItem } from '@agentsws/contracts'
+import type {
+  BrandDesignContext,
+  DesignBrief,
+  DesignSpec,
+  DesignVariantPlanItem,
+} from '@agentsws/contracts'
 import { DESIGN_CAPS } from '@agentsws/contracts'
 import { brandPrompt, type ResolvedBrandSystem } from './brand.js'
 import { canvasOf, resolveSpec, specNoteZh } from './specs.js'
@@ -63,6 +68,12 @@ export interface GenerationPlan {
 export interface PlanGenerationInput {
   brief: DesignBrief
   brand: ResolvedBrandSystem
+  /**
+   * 这个品牌的 `DESIGN.md`（71 §5，WP122）。调用方用 `brandDesignContext()`
+   * 算好递进来，这里只往下传给 {@link composePrompt}——**不在这一层再拼一遍**，
+   * 拼法只有一处。不给就什么都不加。
+   */
+  design?: BrandDesignContext
   /** 今天已经出了几张（调用方从账本 / 事件日志数）。 */
   generated_today?: number
   /** 这次只出计划里的这几条（人在卡上点"这个角度再来两张"）。 */
@@ -101,7 +112,13 @@ export function planGeneration(input: PlanGenerationInput): GenerationPlan {
     take = left
   }
 
-  const prompts = wanted.slice(0, take).map((item) => composePrompt(item, input.brand))
+  const prompts = wanted
+    .slice(0, take)
+    .map((item) =>
+      input.design === undefined
+        ? composePrompt(item, input.brand)
+        : composePrompt(item, input.brand, input.design),
+    )
   return {
     brief_id: input.brief.id,
     prompts,
@@ -122,11 +139,21 @@ export function planGeneration(input: PlanGenerationInput): GenerationPlan {
 export function composePrompt(
   item: DesignVariantPlanItem,
   brand: ResolvedBrandSystem,
+  /**
+   * 这个品牌的 `DESIGN.md`（71，WP122）。**由调用方用 `brandDesignContext()`
+   * 算好递进来**，这里只负责把那段话接上去——四个岗位共用同一个拼法，
+   * 各拼各的的话，过两周社媒出的图和建站出的页就不是一套颜色了。
+   *
+   * 不给（或者这个品牌还没抓过规范）就什么都不加：出图这件事不该因为没有
+   * 品牌规范就停下来。
+   */
+  design?: BrandDesignContext,
 ): VariantPrompt {
   const spec = resolveSpec(item.spec_id)
-  /** 正向那一半：角度 + 规格硬规矩 + 品牌系统（**不含禁忌行**）。 */
+  /** 正向那一半：角度 + 规格硬规矩 + 品牌系统（**不含禁忌行**）+ 设计规范。 */
   const positive = [item.angle_zh]
   if (spec !== undefined) positive.push(`【规格】${specNoteZh(spec)}`)
+  if (design?.present === true) positive.push(design.prompt)
   const positive_prompt = [...positive, brandPrompt(brand, { include_forbidden: false })].join('\n')
   const parts = [...positive, brandPrompt(brand)]
   const forbidden = brand.system?.forbidden ?? []

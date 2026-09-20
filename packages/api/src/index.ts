@@ -128,6 +128,9 @@ export type { AdsActor } from './routes/ads-types.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
 export type { BackupExportView, BackupPort } from './routes/backup.js'
 export { backupRoutes } from './routes/backup.js'
+// WP122（71）：每个品牌一份 DESIGN.md
+export type { BrandDesignActor, BrandDesignPort } from './routes/brand-design.js'
+export { brandDesignRoutes } from './routes/brand-design.js'
 // WP121（70 §3）：贴一个网址自动分析
 export type { BrandIntakeActor, BrandIntakePort } from './routes/brand-intake.js'
 export { brandIntakeRoutes } from './routes/brand-intake.js'
