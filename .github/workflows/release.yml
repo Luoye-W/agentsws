@@ -130,7 +130,7 @@ jobs:
   # electron-builder 建的），这里只往上传一个文件。桌面壳全挂了就不传——
   # 一个只有插件 zip 的 Release 对内测用户没有意义。
   extension:
-    name: 浏览器插件（Chrome MV3 zip）
+    name: 浏览器插件参考实现（开源版 zip；官方完整版见私有 Release）
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20

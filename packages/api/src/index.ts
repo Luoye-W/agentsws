@@ -531,6 +531,7 @@ export {
   type SqlIdempotencyOptions,
   SqlIdempotencyStore,
 } from './sql-idempotency.js'
+export { SqliteExtensionStore } from './sqlite-extension-store.js'
 export {
   createSqliteIdempotencyStore,
   type SqliteIdempotencyOptions,

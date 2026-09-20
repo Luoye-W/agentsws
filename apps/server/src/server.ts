@@ -35,6 +35,7 @@ import {
   readCookie,
   SESSION_COOKIE,
   type SkillsPort,
+  SqliteExtensionStore,
   SqliteIdempotencyStore,
   SqliteIdentityService,
   type TraceScope,
@@ -3934,10 +3935,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 配对表**整台机器一张**（一把令牌自己带着 `workspace_id`）；写红人库与
    * 加密库那一半按品牌走，与 `kolPortOf` 同一条（52 O1）。
    *
+   * WP119b（docs/76）：配对表落 SQLite——WP119 留尾的那一条：内存档重启要重配，
+   * 用户的令牌与配对得跨重启还在。有数据目录用 SQLite 档；内存档只给测试与
+   * 一次性进程。
+   *
    * 云端转发口（登录了就默认共享到公共红人库，Luoye 09-19）挂在这里而不是
    * 插件里：**插件不该持有云令牌**——装在浏览器里的东西，拿到这台电脑的人就读得到。
    */
-  const extensionStore = createMemoryExtensionStore({ clock, random })
+  const extensionStore =
+    dbDir === undefined
+      ? createMemoryExtensionStore({ clock, random })
+      : new SqliteExtensionStore({ dbPath: join(dbDir, 'extension-pairing.sqlite'), clock, random })
   const extensionPortOf = brandExtensionPort({
     store: extensionStore,
     serviceOf: async (ws) => {
