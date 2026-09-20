@@ -167,6 +167,29 @@ describe('69 §4 改：公司层覆盖，包里的原文留着', () => {
     expect(after.effective).toEqual(before.packaged)
   })
 
+  it(
+    'owner 绑着职责的分配也改得动（右栏面板挂在职责页上，绑的是那条职责的分配；e2e 钓出来的）',
+    async () => {
+      const duty = server.roles.assignments.create({
+        person_id: server.bootstrap.person.id,
+        workspace_id: server.bootstrap.workspace.id,
+        role_id: 'kol.youtube',
+        granted_by: server.bootstrap.person.id,
+        ranges: [],
+      })
+      const res = await call('PUT', '/v1/personas', {
+        assignment: duty.id,
+        body: { ...ROLE, zh: '你是谁：职责页上改的版本。' },
+      })
+      expect(res.status).toBe(200)
+      const reverted = await call('POST', '/v1/personas/revert', {
+        assignment: duty.id,
+        body: ROLE,
+      })
+      expect(reverted.status).toBe(200)
+    },
+  )
+
   it('不是 owner 改不动：403 + 一句人话（要个性化写在个人技能层里）', async () => {
     const other = server.roles.assignments.create({
       person_id: 'p_other',

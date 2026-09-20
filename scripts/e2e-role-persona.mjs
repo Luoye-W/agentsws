@@ -116,8 +116,14 @@ const settle = (page) => page.waitForTimeout(900)
 
 /** 开出右栏「角色」面板，等它那几段真的渲染出来。 */
 async function openRolePanel(page) {
-  await page.locator('[data-testid="rail-icon-role"]').first().click()
-  await page.locator('[data-testid="role-panel"]').first().waitFor({ timeout: 30_000 })
+  /*
+   * 右栏的开合态是**持久化**的（localStorage）：刷新之后上一次开着的面板还开着，
+   * 而点同一个图标是"收起"。所以先看它开没开，没开才点——不然这一步等于把它关掉。
+   */
+  const panel = page.locator('[data-testid="role-panel"]').first()
+  const open = (await panel.count()) > 0 && (await panel.isVisible().catch(() => false))
+  if (!open) await page.locator('[data-testid="rail-icon-role"]').first().click()
+  await panel.waitFor({ timeout: 30_000 })
   await page.locator('[data-testid="role-effective"]').first().waitFor({ timeout: 30_000 })
   await settle(page)
 }

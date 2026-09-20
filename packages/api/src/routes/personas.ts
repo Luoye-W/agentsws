@@ -9,8 +9,12 @@
  * - **读**走自助豁免——持有这条职责（或这个岗位下任一条职责）的人看得见自己的定位。
  *   这一条抄的是 `GET /v1/roles/:id` 的先例（`org.ts` 的 `authzBypass`）：不抄的话
  *   非 owner 一律 403，而右栏面板正是给干活的人看的（36 §10.1 那个已知的坑）。
- * - **写**不豁免：改公司层 persona 要 `policy.stage`，端口里再判一次"只有 owner"。
- *   两道不是重复——tuple authz 答不出"这个人是不是 owner"，端口答得出。
+ * - **写**也豁免——但只放行 **owner 本人**：公司层 persona 只有 owner 改得动，
+ *   端口里再判一次 `isOwner`（两道不是重复——tuple authz 答不出“这个人是不是
+ *   owner”，端口答得出）。不能照原文按本次绑定的分配判 `policy.stage`：面板挂在
+ *   职责页上、绑的是那条职责的分配，而职责的 yml 里没有 policy.stage——
+ *   照判连 owner 都进不去（e2e 第 ③ 步钓出来的）。非 owner 落回原判，
+ *   几乎必然 403，拿到的就是面板上那句人话。
  */
 import type {
   MaybePromise,
@@ -34,6 +38,22 @@ const WRITE = {
   range: 'workspace',
   sensitivity: 'internal',
 } as const
+
+/**
+ * 写豁免：这个人在**这个工作区**持有未撤销的 `common.owner` 就放行。
+ * 真正的门在端口里（`isOwner`），这里只是别把绑着职责分配的 owner 挡在门外。
+ */
+const ownerBypass = (
+  _c: Parameters<typeof principalOf>[0],
+  rctx: { principal?: { person_id: PersonId; workspace_id: WorkspaceId } },
+  deps: GatewayDeps,
+): boolean => {
+  const p = rctx.principal
+  if (p === undefined) return false
+  return deps.roles
+    .listAssignments(p.person_id, { workspace_id: p.workspace_id })
+    .some((a) => a.role_id === 'common.owner' && a.revoked_at === undefined)
+}
 
 export interface PersonaActor {
   workspace_id: WorkspaceId
@@ -119,6 +139,7 @@ export function personaRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        authzBypass: ownerBypass,
         body: SetBody,
         returns: 'PersonaView',
       },
@@ -145,6 +166,7 @@ export function personaRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        authzBypass: ownerBypass,
         body: RevertBody,
         returns: 'PersonaView',
       },
