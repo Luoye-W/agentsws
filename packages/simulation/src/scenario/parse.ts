@@ -242,6 +242,8 @@ const EVENT_KEYS = [
   // WP65 品牌是顶层（52 O1 / O2）
   'org.brand',
   'org.brand_check',
+  // WP121b 初始化设置（70 §1–§3）
+  'org.onboarding',
   // WP56 知识溯源链（48 §4 #6）
   'knowledge.source_sync',
   // WP57 网站在线客服（48 §4 #11 的实时车道）
@@ -283,6 +285,8 @@ const EXPECTED_KEYS = [
   'scope_disjoint',
   // WP62（51 §1 N0）
   'platform_unsupported',
+  // WP121b（70 §1–§3）
+  'onboarding',
   // WP64（51 §2.3 / §2.4）
   'overdue_orders',
   'campaign_send',
@@ -595,6 +599,73 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         brand_check: {
           brand: str(source, `${path}.${key}.brand`, body.brand),
           who: str(source, `${path}.${key}.who`, body.who),
+        },
+      }
+    }
+    // WP121b（70 §1–§3）：一个新用户走一遍初始化设置
+    case 'org.onboarding': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'ai',
+        'model_failure',
+        'urls',
+        'cap_credits',
+        'edits',
+        'reanalyze',
+      ])
+      const ai = str(source, `${path}.${key}.ai`, body.ai)
+      if (ai !== 'official' && ai !== 'own') {
+        fail(source, `${path}.${key}.ai`, `第 ① 步只有两条路：official / own；不是 ${ai}`)
+      }
+      const failure = body.model_failure
+      if (failure !== undefined && !isRec(failure)) {
+        fail(source, `${path}.${key}.model_failure`, '必须是对象（reason / detail）')
+      }
+      const edits = body.edits
+      if (edits !== undefined && !isRec(edits)) {
+        fail(source, `${path}.${key}.edits`, '必须是对象（字段名 → 改成了什么）')
+      }
+      const urls =
+        body.urls === undefined ? undefined : strList(source, `${path}.${key}.urls`, body.urls)
+      return {
+        at,
+        type: 'org.onboarding',
+        onboarding: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ai: ai as 'official' | 'own',
+          ...(isRec(failure)
+            ? {
+                model_failure: {
+                  ...(failure.reason === undefined
+                    ? {}
+                    : {
+                        reason: str(source, `${path}.${key}.model_failure.reason`, failure.reason),
+                      }),
+                  ...(failure.detail === undefined
+                    ? {}
+                    : {
+                        detail: str(source, `${path}.${key}.model_failure.detail`, failure.detail),
+                      }),
+                },
+              }
+            : {}),
+          ...(urls === undefined ? {} : { urls }),
+          ...(body.cap_credits === undefined
+            ? {}
+            : { cap_credits: num(source, `${path}.${key}.cap_credits`, body.cap_credits) }),
+          ...(isRec(edits)
+            ? {
+                edits: Object.fromEntries(
+                  Object.entries(edits).map(([k, v]) => [
+                    k,
+                    str(source, `${path}.${key}.edits.${k}`, v),
+                  ]),
+                ),
+              }
+            : {}),
+          ...(body.reanalyze === undefined
+            ? {}
+            : { reanalyze: requireBool(source, `${path}.${key}.reanalyze`, body.reanalyze) }),
         },
       }
     }
@@ -2128,6 +2199,17 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
    */
   const shapes: Record<string, Record<string, 'bool' | 'str' | 'strs' | 'num'>> = {
     overdue_orders: { count: 'num', worst_days: 'num' },
+    // WP121b（70 §1–§3）：那一趟初始化设置走成了什么样
+    onboarding: {
+      who: 'str',
+      connected: 'bool',
+      signup_credits: 'num',
+      balance_credits: 'num',
+      capped: 'bool',
+      analysed: 'bool',
+      failure_kind: 'str',
+      kept_edits: 'strs',
+    },
     campaign_send: {
       requested_level: 'str',
       auto_approved: 'bool',

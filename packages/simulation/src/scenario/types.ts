@@ -391,6 +391,32 @@ export interface ScenarioOrgBrandCheck {
   who: string
 }
 
+/**
+ * WP121b（70 §1–§3）：一个新用户走一遍**初始化设置**。
+ *
+ * 一个事件表示一整趟，而不是拆成四个小事件——向导本来就是一口气走完的一件事，
+ * 拆开之后每条场景都要写四行仪式性的 YAML，而中间那几步单独拎出来没有意义
+ * （`org.first_run` 也是这么做的）。
+ */
+export interface ScenarioOrgOnboarding {
+  who: string
+  /** 第 ① 步走哪条路：Agents 工坊的官方接口，还是自己的模型接口。 */
+  ai: 'official' | 'own'
+  /**
+   * `ai: own` 时那一把钥匙试跑的结果。不给就是**通了**；
+   * 给了就是没通，按 `modelFailureKind` 分档（70 §2.2 那四句照这个档挑）。
+   */
+  model_failure?: { reason?: string; detail?: string }
+  /** 第 ② 步贴进去的链接（映射到 pack 里的 `fixtures/site/*`，**不联网**）。 */
+  urls?: string[]
+  /** 积分封顶。不给就是契约里那个缺省（2）。 */
+  cap_credits?: number
+  /** 用户在档案卡上手改的那几格（字段名 → 改成了什么）。 */
+  edits?: Record<string, string>
+  /** 确认之后再按一次「重新分析」（钉"不覆盖手改"那条）。 */
+  reanalyze?: boolean
+}
+
 /** WP50 / 45 H2 / H3：把个人工作区并进公司，owner 逐条选。 */
 export interface ScenarioOrgJoin {
   who: string
@@ -897,6 +923,8 @@ export type ScenarioEvent =
   | { at: string; type: 'org.brand'; brand: ScenarioOrgBrand }
   /** WP65：记一笔"这个人在这个品牌里看得到什么"（52 O2）。 */
   | { at: string; type: 'org.brand_check'; brand_check: ScenarioOrgBrandCheck }
+  /** WP121b：一个新用户走一遍初始化设置（70 §1–§3）。 */
+  | { at: string; type: 'org.onboarding'; onboarding: ScenarioOrgOnboarding }
   /** WP56：一个知识源（网页 / 文档）同步了一次新正文（48 §4 #6）。 */
   | { at: string; type: 'knowledge.source_sync'; source_sync: ScenarioKnowledgeSourceSync }
   /** WP57：访客在网站聊天窗里说一句（48 §4 #11 的实时车道）。 */
@@ -1163,6 +1191,27 @@ export interface ScenarioExpected {
    * 这一跳就白做了。
    */
   platform_unsupported?: string[]
+  /**
+   * WP121b（70 §1–§3）：那一趟初始化设置走成了什么样。
+   *
+   * 四条场景共用这一个断言块，各自只填自己关心的那几格：
+   * 接上了没有（`connected`）、送了多少积分（`signup_credits`）、
+   * 花到封顶停没停（`capped`）、抓到东西没有（`analysed`）、
+   * 没通是哪一档（`failure_kind`）、重新分析之后用户改过的格子还在不在（`kept_edits`）。
+   */
+  onboarding?: {
+    who: string
+    connected?: boolean
+    signup_credits?: NumericAssertion
+    /** 分析之后钱包里还剩多少（送的减去这一轮花的）。 */
+    balance_credits?: NumericAssertion
+    capped?: boolean
+    /** 至少抓到一个页面、而且档案里真有品牌名。 */
+    analysed?: boolean
+    failure_kind?: 'key' | 'balance' | 'address' | 'timeout' | 'other'
+    /** 重新分析跑完之后，这几格仍然是用户改的那个值。 */
+    kept_edits?: string[]
+  }
   /**
    * WP64 / 51 §2.4：这一轮超期巡检应当找出几张单、最久的压了几天。
    *

@@ -3,7 +3,7 @@ import type { ApprovalItem, Assignment, PersonId } from '@agentsws/contracts'
 import type { Context } from 'hono'
 import type { ZodType } from 'zod'
 import { ApiError } from './errors.js'
-import type { GatewayEnv } from './route-spec.js'
+import type { GatewayEnv, RouteSpec } from './route-spec.js'
 import type { Principal, RequestContext } from './types.js'
 
 /** 统一成功信封：`{ data, trace_id }`。 */
@@ -27,6 +27,43 @@ export function assignmentOf(c: Context<GatewayEnv>): Assignment {
   const a = c.get('rctx').assignment
   if (!a) throw new ApiError('invalid_input', '缺少 X-Assignment 头')
   return a
+}
+
+/** 改公司档案那一级的权限（05：owner 的策略层写）。 */
+export const OWNER_WRITE = {
+  domain: 'policy',
+  op: 'stage',
+  range: 'workspace',
+  sensitivity: 'restricted',
+} as const
+
+/**
+ * 「所有者站在随便哪一条分配上」这把尺子（09-17 Luoye 真机打出来的洞）。
+ *
+ * WP69 / WP71 之后 `X-Assignment` = **当前岗位**，而工作台挑的是本人名下第一条
+ * 未撤销的分配。所有者站在那一条上打开首次设置向导，写公司档案就 403——
+ * `policy.stage@workspace` 是所有者层的权限，不属于他当下站着的那个岗位。
+ *
+ * 放行条件：**本人在这个工作区持有任何一条能 `policy.stage@workspace` 的、未撤销
+ * 的分配**。不是扩权：只看本人名下的分配，没有所有者层的成员照样 403；请求上的
+ * `X-Assignment` 仍按 31 §3.1 绑定与记账。
+ *
+ * 放在这里而不是各自的路由文件里，是因为要用它的不止一处：向导的
+ * `/v1/workspace/profile` 与 `/v1/onboarding/apply`，还有向导第 ② 步那五条
+ * `/v1/brand-intake/*`（确认档案卡改的正是同一样东西）。分成两份的话，哪天多一条
+ * 同类的路由就会忘了挂，用户又会看见一次 403。
+ */
+export const holdsOwnerWrite: NonNullable<RouteSpec['authzBypass']> = (_c, rctx, deps) => {
+  const p = rctx.principal
+  if (!p) return false
+  return deps.roles.listAssignments(p.person_id, { workspace_id: p.workspace_id }).some(
+    (a) =>
+      a.revoked_at === undefined &&
+      deps.roles.can(a.id, OWNER_WRITE.domain, OWNER_WRITE.op, {
+        range: OWNER_WRITE.range,
+        sensitivity: OWNER_WRITE.sensitivity,
+      }),
+  )
 }
 
 /** zod 校验；失败 → invalid_input（400），details 带字段路径。 */

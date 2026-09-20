@@ -43,6 +43,7 @@ import {
   WsSession,
 } from '@agentsws/api'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
+import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
   ApprovalBus,
@@ -104,6 +105,8 @@ import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { createBrandIntake } from './brand-intake.js'
+// WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
+import { brandKnowledgeCards } from './brand-knowledge.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
   type BrandModuleSet,
@@ -506,6 +509,14 @@ export interface ServerOptions {
    * 这五家的接口没有可以随便调的沙箱，所以"形状对不对"只能这么验。
    */
   kolFetch?: KolFetch
+  /**
+   * WP121b（70 §3）：品牌接入面（贴一个网址自动分析）抓页面用的 fetch。
+   *
+   * 生产不传（走 `globalThis.fetch`）；`agentsws demo` 传一个 replay——
+   * demo 是**离线**的，它不该因为演示而去敲别人的服务器，也不该因为没网
+   * 就演不出第 ② 步那张档案卡。
+   */
+  brandIntakeFetch?: BrandIntakeFetch
   /**
    * WP73：社媒那九条渠道打出去的那一跳（测试塞一个假的对着真 URL 断言）。
    * 生产路径不传它，走全局 fetch。
@@ -3162,7 +3173,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const brandIntake = createBrandIntake({
     clock,
     workspace_id: workspace.id,
-    fetch: globalThis.fetch as never,
+    fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
       applyProfile: async (profile) => {
@@ -3185,6 +3196,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               : { storefront_platform: profile.storefront_platform.value }),
           },
         )
+      },
+      /**
+       * WP121b（70 §3.5）：首批知识条目——政策要点与商品卡。
+       *
+       * **一律 `proposed`**（`propose` 自己把状态钉死）：这是机器从别人网页上
+       * 读来的话，人点头之前它不该被任何 Agent 当成"我们的口径"。翻译那一步
+       * 是纯函数（`brand-knowledge.ts`），这里只负责一条条提上去。
+       *
+       * 一条失败不连累其余：一个品牌的退款政策没建成，不该让商品卡也一起没了。
+       */
+      seedKnowledge: async (profile) => {
+        for (const card of brandKnowledgeCards(profile, {
+          workspace_id: workspace.id,
+          at: clock.now(),
+          owner: person.id,
+        })) {
+          try {
+            await knowledge.store.propose(card)
+          } catch (err) {
+            process.stderr.write(`[brand-intake] 这条知识没建成：${String(err)}\n`)
+          }
+        }
       },
     },
   })

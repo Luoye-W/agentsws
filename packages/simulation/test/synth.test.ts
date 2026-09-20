@@ -71,9 +71,11 @@ describe('合成公司生成器（26 §2）', () => {
     // WP78 再加三条（外部发帖过版规 / 负面提及分流 / 新闻稿数字只引事实卡）
     // WP89 再加一条（建站：改副本 → 推未发布 → 提议发布 → 卡）→ 51
     // WP113 再加四条（消息：四条路 / 岗位没开不挪信 / 先规则后模型 / 纠错教一次）→ 55
-    // WP117（66）再加一条（红人贯穿全程）→ 56
-    // WP120（69 §5）再加一条（每个岗位待在自己的道上）→ 57
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(57)
+    // WP117 再加一条（红人：贯穿全程的长场景）→ 56
+    // WP121b 再加四条（初始化设置：官方接口跑通 / 钥匙不通说人话 / 花到封顶就停 /
+    // 重新分析不覆盖手改）→ 60
+    // WP120（69 §5）再加一条（每个岗位待在自己的道上）→ 61
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(61)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
