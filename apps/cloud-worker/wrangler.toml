@@ -48,6 +48,15 @@ class_name = "LedgerDO"
 name = "KOL_PUBLIC"
 class_name = "KolPublicDO"
 
+# 红人营销增值服务的租户库（**每个组织一个**，WP118 / 64 §10.3）。
+# 与上面那个公共库刚好相反：公共库是跨租户共享的一层事实（只有一个名字），
+# 这一份是一个组织自己的私有数据，所以 `idFromName(org_id)`——对象边界就是
+# 隔离边界，不靠"别忘了加 where org_id"。
+# 它有 alarm：每天醒一次把到点的月费扣掉（幂等，重跑不会多扣）。
+[[durable_objects.bindings]]
+name = "KOL_TENANT"
+class_name = "KolTenantDO"
+
 # SQLite 存储后端。迁移在对象第一次唤醒时自己跑完——升级 = 再 deploy 一次。
 [[migrations]]
 tag = "v1"
@@ -60,6 +69,10 @@ new_sqlite_classes = ["LedgerDO"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["KolPublicDO"]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["KolTenantDO"]
 
 # ── 运营后台的静态产物（WP115 / docs/65 §8） ───────────────────────────
 # `apps/cloud-admin` 的 Vite 产物（base = "/admin/"）。

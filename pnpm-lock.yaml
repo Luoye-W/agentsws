@@ -79,6 +79,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/kol-cloud':
+        specifier: workspace:*
+        version: link:../../packages/kol-cloud
       '@agentsws/kol-public':
         specifier: workspace:*
         version: link:../../packages/kol-public
@@ -201,6 +204,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/kol-cloud':
+        specifier: workspace:*
+        version: link:../../packages/kol-cloud
       '@agentsws/kol-public':
         specifier: workspace:*
         version: link:../../packages/kol-public
@@ -421,6 +427,9 @@ importers:
       '@agentsws/cloud':
         specifier: workspace:*
         version: link:../cloud
+      '@agentsws/kol-cloud':
+        specifier: workspace:*
+        version: link:../../packages/kol-cloud
       '@agentsws/kol-public':
         specifier: workspace:*
         version: link:../../packages/kol-public
@@ -989,6 +998,25 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/kol-cloud:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/metering':
+        specifier: workspace:*
+        version: link:../metering
+      hono:
+        specifier: ^4.13.7
+        version: 4.13.7
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.11.1
+
   packages/kol-core:
     dependencies:
       '@agentsws/contracts':
@@ -1215,6 +1243,9 @@ importers:
       '@agentsws/ads-core':
         specifier: workspace:*
         version: link:../ads-core
+      '@agentsws/brand-intake':
+        specifier: workspace:*
+        version: link:../brand-intake
       '@agentsws/catalog':
         specifier: workspace:*
         version: link:../catalog

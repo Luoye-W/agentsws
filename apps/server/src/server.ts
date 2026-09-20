@@ -30,6 +30,7 @@ import {
   type GuardrailPort,
   type KnowledgePort,
   type LocalIdentityService,
+  type PersonaPort,
   parseSubprotocols,
   type RolesPort,
   readCookie,
@@ -42,6 +43,7 @@ import {
   WsSession,
 } from '@agentsws/api'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
+import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
   ApprovalBus,
@@ -83,6 +85,7 @@ import {
   changeKindOf,
   createRoleStore,
   loadBundledRole,
+  personaTextIn,
   type RangeExpanded,
   type RoleStore,
   rangeTargetOfProduct,
@@ -103,6 +106,8 @@ import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { type BrandDesignAssembly, createBrandDesign, designPageKindOf } from './brand-design.js'
 import { createBrandIntake } from './brand-intake.js'
+// WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
+import { brandKnowledgeCards } from './brand-knowledge.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
   type BrandModuleSet,
@@ -210,6 +215,13 @@ import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import {
+  createFilePersonaBackend,
+  createPersonas,
+  PersonaError,
+  type PersonasAssembly,
+  personaFileIn,
+} from './personas.js'
 import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
@@ -499,6 +511,14 @@ export interface ServerOptions {
    */
   kolFetch?: KolFetch
   /**
+   * WP121b（70 §3）：品牌接入面（贴一个网址自动分析）抓页面用的 fetch。
+   *
+   * 生产不传（走 `globalThis.fetch`）；`agentsws demo` 传一个 replay——
+   * demo 是**离线**的，它不该因为演示而去敲别人的服务器，也不该因为没网
+   * 就演不出第 ② 步那张档案卡。
+   */
+  brandIntakeFetch?: BrandIntakeFetch
+  /**
    * WP73：社媒那九条渠道打出去的那一跳（测试塞一个假的对着真 URL 断言）。
    * 生产路径不传它，走全局 fetch。
    */
@@ -599,6 +619,16 @@ export interface Server {
   modelSettings: ModelsAssembly
   /** WP28 制度面（职责 / 岗位 / 分配 / 策略层 / 成员与邀请）。 */
   org: OrgAssembly
+  /**
+   * WP120（69 §4）：角色定位面（看 / 公司层改写 / 还原 / 装 persona 那几段）。
+   *
+   * **一份，不按品牌分**：persona 是公司对外的口径，岗位模板与职责定义本来就是
+   * 制度层的东西（与 `org.positions` 同一条理由）。
+   *
+   * 端出来的理由是晚绑定要可查：运行时装提示时调的是 `personas.sections()`，
+   * 公司在右栏改写完，下一次运行就该拿到新的那一份——这一条得能被测试看见。
+   */
+  personas: PersonasAssembly
   /** WP51 首次设置与同事发现（公司档案 / 岗位清单 / 局域网发现 / 邀请码 / 申请加入）。 */
   onboarding: OnboardingAssembly
   /** WP65 组织与品牌（52 O1：公司 = 组织，品牌 = 工作区；品牌一览 / 加品牌 / 切品牌）。 */
@@ -1321,6 +1351,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const positionAssemblies = new Map<WorkspaceId, PositionsAssembly>()
 
+  /*
+   * ── WP120（69）：**角色定位** ───────────────────────────────────────────
+   *
+   * **一份，不按品牌分**。69 §4 定的是「公司层覆盖」——persona 是公司对外的口径，
+   * 而岗位模板与职责定义本来就是制度层的东西（跨品牌共用一份，同 `org.positions`）。
+   * 按品牌各存一份的后果是同一条职责在两个品牌里说两套话，而没有人记得去同步第二份。
+   *
+   * 声明提到这里是为了晚绑定：`org` 与 `onboarding` 都比它晚建，所以 `positions`
+   * 与 `brand` 都写成现查的闭包（与上面 `positionAssemblies` 同一个套路）。
+   */
+  const personas = createPersonas({
+    workspace_id: workspace.id,
+    clock,
+    roles,
+    positions: () => org.positions(),
+    ...(dbDir === undefined ? {} : { backend: createFilePersonaBackend(personaFileIn(dbDir)) }),
+    isOwner: (person_id) =>
+      roles.assignments
+        .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
+        .some((a) => a.revoked_at === undefined),
+    /*
+     * WP121（70 §3）：品牌上下文的四个槽位。**取不到就不写那一句**——
+     * 品牌名从工作区档案里来（那是确认品牌分析之后写下的那一份）。
+     * 定位、市场、口吻样例还没有落盘的地方（WP121b 正在重写向导），所以现在它们
+     * 一律取不到，于是 persona 里就没有那几行——这正是 69 §5 要的行为：**别编**。
+     * WP122 的「视觉气质」走同一个槽位（`visual_tone`），填上就多一行。
+     */
+    brand: () => {
+      const name = onboardingRef?.companyProfile()?.legal_name?.trim()
+      return name === undefined || name === '' ? undefined : { brand_name: name }
+    },
+    appendEvent,
+  })
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -1841,6 +1905,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       secrets: brandSecrets,
       env,
+      // WP118 / 67 §3：云端红人库要同步的就是这个品牌自己那本红人库
+      kol: () => kol,
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
     })
@@ -1951,6 +2017,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 reply_text: input.body,
                 generated_by: 'ai',
               }),
+            /*
+             * WP120（69 §3）：**角色定位的那几段**（品牌 → 岗位 → 职责）。
+             *
+             * 三个运行时共用这一个口：排序、空段不出、语言、公司层覆盖全在里面。
+             * 公司在右栏改写了某条 persona，下一次运行就是新的那一份——
+             * `personas` 每次现查覆盖表，不用重启（同 `vertical` / `browser`）。
+             */
+            personaSections: (input) => personas.sections(input),
           })
     const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -2407,6 +2481,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
+        ownCloud.kolSync?.close()
         site.close()
         ads.close()
         pr.close()
@@ -3113,7 +3189,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const brandIntake = createBrandIntake({
     clock,
     workspace_id: workspace.id,
-    fetch: globalThis.fetch as never,
+    fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
       applyProfile: async (profile) => {
@@ -3136,6 +3212,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               : { storefront_platform: profile.storefront_platform.value }),
           },
         )
+      },
+      /**
+       * WP121b（70 §3.5）：首批知识条目——政策要点与商品卡。
+       *
+       * **一律 `proposed`**（`propose` 自己把状态钉死）：这是机器从别人网页上
+       * 读来的话，人点头之前它不该被任何 Agent 当成"我们的口径"。翻译那一步
+       * 是纯函数（`brand-knowledge.ts`），这里只负责一条条提上去。
+       *
+       * 一条失败不连累其余：一个品牌的退款政策没建成，不该让商品卡也一起没了。
+       */
+      seedKnowledge: async (profile) => {
+        for (const card of brandKnowledgeCards(profile, {
+          workspace_id: workspace.id,
+          at: clock.now(),
+          owner: person.id,
+        })) {
+          try {
+            await knowledge.store.propose(card)
+          } catch (err) {
+            process.stderr.write(`[brand-intake] 这条知识没建成：${String(err)}\n`)
+          }
+        }
       },
     },
   })
@@ -3958,6 +4056,57 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
 
+  /**
+   * WP120（69 §4）：角色定位端口。
+   *
+   * **不按品牌分**（见 `personas` 那一段）：岗位模板与职责定义是制度层的，
+   * 覆盖也是公司层的。所以这里不像别的端口那样按 `ws` 建一份。
+   *
+   * 错误翻译在这一层做：端口里抛的是 `PersonaError`（服务层的词），
+   * 网关认的是 `ApiError`（HTTP 的词）。不翻的话 403 会变成 500。
+   */
+  const toApiError = (error: unknown): never => {
+    if (error instanceof PersonaError) throw new ApiError(error.code, error.message)
+    throw error
+  }
+  const personaPort: PersonaPort = {
+    view: (_actor, subject) => {
+      try {
+        return personas.view(subject)
+      } catch (error) {
+        return toApiError(error)
+      }
+    },
+    set: (actor, subject, text) => {
+      try {
+        /*
+         * 只改一边时另一边**先从现在生效的那一份补齐**，再整份存下去。
+         * 不补的话 `{ zh: '新的' }` 存进去就是"英文那份空着"，而空着的那一份
+         * 在 `applyPersonaOverride` 里会回落包里的原文——看着对，其实是两份
+         * 不同来历的文字拼在一起，公司改了中文却不知道英文没跟着改。
+         */
+        const current = personas.view(subject).effective
+        return personas.set({
+          subject,
+          text: {
+            zh: text.zh ?? personaTextIn(current, 'zh'),
+            en: text.en ?? personaTextIn(current, 'en'),
+          },
+          by: actor.person_id,
+        })
+      } catch (error) {
+        return toApiError(error)
+      }
+    },
+    revert: (actor, subject) => {
+      try {
+        return personas.revert({ subject, by: actor.person_id })
+      } catch (error) {
+        return toApiError(error)
+      }
+    },
+  }
+
   const kolPortOf = brandKolPort(brandModules, async (ws) => {
     const brand = await brandModules.forWorkspace(ws)
     /*
@@ -4326,6 +4475,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: workPortOf,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
+    // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
+    personas: personaPort,
     // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
@@ -4461,6 +4612,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP66（52 O1）：一个进程里的多套品牌模块
     brands: brandModules,
     org,
+    // WP120（69 §4）：运行时装 persona 段与右栏「角色」面板走的是同一份
+    personas,
     onboarding,
     organizations,
     /*

@@ -1,0 +1,361 @@
+/**
+ * 红人营销增值服务（67，WP118）：订阅状态 + 云端红人库的双向同步。
+ *
+ * **这一块买的不是备份。** Luoye 2026-09-19 定的话：它是为「红人营销以后不依赖
+ * 本地 Agents 工坊也能跑起来」做的地基——像 KOLAgents 那样数据在云端，区别只是
+ * 本地有一份、云端也有一份。所以：
+ *
+ * 1. **云端要读得懂数据**。没有端到端加密、没有恢复口令——那一套的前提是「云上
+ *    存的是一坨我们看不懂的字节」，而看不懂就替用户跑不了任务。加密在传输
+ *    （TLS）与静态（平台能力）两层，联系方式再包一层本机密钥（见 `kol.ts`
+ *    `CreatorContact.value_ref`）。
+ * 2. **同步是双向的**，不是上传。两头都能改，冲突按「最后写入者胜」定谁是当前值，
+ *    **输的那一份留着**（{@link KolSyncConflict}）并在界面上标出来。静默丢掉用户
+ *    在另一台机器上写的半句话，是这类功能最常见也最伤的事故。
+ * 3. **没订阅就不给同步**（402），但**不删数据**。余额不足也一样：同步暂停、宽限
+ *    30 天、界面说人话。删数据只能由用户自己按那颗按钮。
+ */
+
+import type { Iso8601 } from './common.js'
+import {
+  emptySubscription,
+  KOL_SERVICE_ID,
+  type ServiceSubscription,
+  SUBSCRIPTION_GRACE_DAYS,
+  SUBSCRIPTION_STATUSES,
+  type SubscriptionStatus,
+  subscriptionUsable,
+} from './subscription.js'
+
+/* ------------------------------------------------------------------ */
+/* 订阅：红人这一份只是通用引擎的第一个实例                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 计费用的能力名，同时是服务 id。价目表里那一条（`pricing.json`）就是它。
+ *
+ * 真身在 `subscription.ts`（{@link KOL_SERVICE_ID}）——订阅的状态机、幂等扣费、
+ * 宽限、取消、赠送全部是通用的（Luoye 09-19：客服增值服务同价同机制，WP124）。
+ * 这里只留一个名字，免得已经按这个名字 import 的地方全改一遍。
+ */
+export const KOL_SERVICE_CAPABILITY = KOL_SERVICE_ID
+
+/** 每月多少积分。30 积分 = ¥30 / 月（Luoye 2026-09-19 定）。 */
+export const KOL_SERVICE_CREDITS_PER_MONTH = 30
+
+/** 余额不足之后还能拖多少天。通用值，见 {@link SUBSCRIPTION_GRACE_DAYS}。 */
+export const KOL_SERVICE_GRACE_DAYS = SUBSCRIPTION_GRACE_DAYS
+
+/** 订阅状态。五个态是通用的，见 {@link SubscriptionStatus}。 */
+export type KolServiceStatus = SubscriptionStatus
+
+export const KOL_SERVICE_STATUSES: readonly KolServiceStatus[] = SUBSCRIPTION_STATUSES
+
+/** 这个状态下同步能不能做。只有 `active` 与 `cancelling` 能。 */
+export function kolSyncAllowed(status: KolServiceStatus): boolean {
+  return subscriptionUsable(status)
+}
+
+/** 一个组织在红人服务上的订阅。就是通用的那一个（`service_id` 恒为红人那一个）。 */
+export type KolServiceSubscription = ServiceSubscription
+
+/** 一个没开通过的组织长什么样。**不是** `undefined`——界面上那张卡总要有东西渲染。 */
+export function emptyKolSubscription(org_id: string, at: Iso8601): KolServiceSubscription {
+  return emptySubscription(org_id, KOL_SERVICE_ID, at)
+}
+
+/* ------------------------------------------------------------------ */
+/* 云端红人库的对象                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 云端存的对象种类。
+ *
+ * 前六种与本地 `KolStore` 的六张表**一一对应**（`apps/server/src/kol.ts`），
+ * 后三种是 Luoye 点名要的那几样里还没有本地实现的部分（活动、候选池、备注）——
+ * 契约先到位，本地那一头补上就直接能同步，不用再改一次协议。
+ *
+ * 同步协议对「种类」是不关心的：它只认 `(kind, id)` 这个主键和版本号。
+ * 加一种就是往这张表里加一行，不改任何一条路由。
+ */
+export type KolObjectKind =
+  | 'creator'
+  | 'platform_account'
+  | 'creator_contact'
+  | 'collaboration'
+  | 'deliverable'
+  | 'tracked_link'
+  /**
+   * 一条合作上的往来信件（WP117b 加的本地第七张表）。
+   *
+   * 补进这张表是 WP118 收尾时做的：67 §5 那三条云端执行的路（云端跟进节奏 /
+   * 云端收发信 / 云端长程任务）**全都要读线程**——只同步"合作到了哪个阶段"
+   * 而不同步"这个阶段是怎么谈到的"，云端就替用户跑不了下一步。
+   */
+  | 'exchange'
+  | 'campaign'
+  | 'candidate'
+  | 'note'
+
+export const KOL_OBJECT_KINDS: readonly KolObjectKind[] = [
+  'creator',
+  'platform_account',
+  'creator_contact',
+  'collaboration',
+  'deliverable',
+  'tracked_link',
+  'exchange',
+  'campaign',
+  'candidate',
+  'note',
+]
+
+export function isKolObjectKind(raw: string): raw is KolObjectKind {
+  return (KOL_OBJECT_KINDS as readonly string[]).includes(raw)
+}
+
+/**
+ * 同步单元：一个对象的一个版本。
+ *
+ * - `version` **每对象自己数**，从 1 起，每写一次 +1。它不是时间戳：两台机器的钟
+ *   差几秒是常事，用时间当版本号会让「谁更新」变成「谁的钟快」。
+ * - `updated_at` 才是定胜负的那个（最后写入者胜），`writer` 只在同一毫秒撞上时
+ *   当平手裁判——两个都相同才比 writer 的字典序，纯粹为了让两头算出同一个结果。
+ * - `deleted` 的那些**留一行墓碑**（没有 `body`）。不留的话，一台机器删掉的东西
+ *   会被另一台还没同步的机器当成「新对象」推回来，删不掉。
+ */
+export interface KolSyncObject {
+  kind: KolObjectKind
+  id: string
+  /** 每对象版本号，从 1 起。 */
+  version: number
+  updated_at: Iso8601
+  /** 谁写的：本地那台机器的 id（`device:<uuid>`）或 `cloud`。 */
+  writer: string
+  /** 删除的墓碑。`true` 的时候 `body` 不出现。 */
+  deleted?: boolean
+  /** 正文（`Creator` / `Collaboration` … 原样那个 json）。删除的那些没有。 */
+  body?: Record<string, unknown>
+}
+
+/** 两头同时改了同一条：谁赢、输的那份是什么。**输的留着**，不静默丢。 */
+export interface KolSyncConflict {
+  kind: KolObjectKind
+  id: string
+  /** 赢的那一份（当前值）。 */
+  winner: KolSyncObject
+  /** 输的那一份（原样留着，界面上让用户看得见、必要时挑回来）。 */
+  loser: KolSyncObject
+  at: Iso8601
+}
+
+/**
+ * 「最后写入者胜」的判定。回 `true` 表示 `candidate` 该盖掉 `current`。
+ *
+ * 三级比较：先 `updated_at`，再 `version`（同一刻但版本更高的更新），
+ * 最后 `writer` 的字典序。**第三级不是为了公平，是为了确定性**：两头各算一次
+ * 必须算出同一个结果，否则同步永远收敛不了，两台机器会互相推翻。
+ */
+export function kolWinsOver(candidate: KolSyncObject, current: KolSyncObject): boolean {
+  if (candidate.updated_at !== current.updated_at) return candidate.updated_at > current.updated_at
+  if (candidate.version !== current.version) return candidate.version > current.version
+  return candidate.writer > current.writer
+}
+
+/* ------------------------------------------------------------------ */
+/* 同步的四条路由                                                       */
+/* ------------------------------------------------------------------ */
+
+/** 一次上行最多推多少条。超了回 `invalid_input`，让本地自己分批。 */
+export const KOL_SYNC_MAX_BATCH = 500
+
+/** 上行：本地把自己改过的那些推上去。 */
+export interface KolSyncPushRequest {
+  /** 本地那台机器的 id。同一台机器推上来的东西不会再被拉回去（省一趟）。 */
+  writer: string
+  objects: KolSyncObject[]
+}
+
+export interface KolSyncPushResult {
+  /** 写进去了几条。 */
+  accepted: number
+  /**
+   * 云端赢了、没被盖掉的那几条（本地要把这些覆盖回本地）。
+   *
+   * 这不是「失败」——这是双向同步的正常一半：本地推了个旧版本上来，
+   * 云端把当前值回给它。
+   */
+  rejected: KolSyncObject[]
+  /** 这一批里撞上的冲突（`rejected` 的那些里，两头都真改过的）。 */
+  conflicts: KolSyncConflict[]
+  /** 推完之后的游标（下一次 pull 从这里往后要）。 */
+  cursor: string
+  at: Iso8601
+}
+
+/** 下行：把游标之后云端改过的那些拉下来。 */
+export interface KolSyncPullResult {
+  objects: KolSyncObject[]
+  /** 下一次带上它。第一次不带（或者带空串）= 从头全量。 */
+  cursor: string
+  /** 还有没有下一页。有就接着用新游标再拉一次。 */
+  has_more: boolean
+  at: Iso8601
+}
+
+/** 同步状态（界面上那一行「最近同步：3 分钟前 · 云端 1,204 条」）。 */
+export interface KolSyncStatus {
+  org_id: string
+  subscription: KolServiceSubscription
+  /** 云端有多少条（不含墓碑）。 */
+  object_count: number
+  /** 按种类分的条数（界面上折叠着看）。 */
+  by_kind: { kind: KolObjectKind; count: number }[]
+  /** 云端当前游标。本地拿它和自己存的那个比，就知道落后没有。 */
+  cursor: string
+  /** 还没被人处理的冲突条数。**不为 0 就在界面上挂一个标**。 */
+  pending_conflicts: number
+  last_sync_at?: Iso8601
+  at: Iso8601
+}
+
+/**
+ * 一条冲突 + 它在云上那本账里的号。
+ *
+ * 号是 `(kind, id, 输的那一份的时间)` 推出来的，不是随机数——同一批重放不会记出两条。
+ * 端出来是为了让用户处理完一条之后**云上那个标记能消掉**：留着消不掉的标记，
+ * 用户看三天就学会无视它，那这个标记就等于没有。
+ */
+export interface KolSyncConflictEntry extends KolSyncConflict {
+  conflict_id: string
+}
+
+/** `GET /v1/kol/sync/conflicts`。 */
+export interface KolSyncConflictList {
+  org_id: string
+  conflicts: KolSyncConflictEntry[]
+  /** 还有多少条没处理（含这一页之外的）。 */
+  pending_conflicts: number
+  at: Iso8601
+}
+
+/** `POST /v1/kol/sync/conflicts/resolve` 的回执。 */
+export interface KolSyncConflictResolveResult {
+  org_id: string
+  kind: KolObjectKind
+  id: string
+  /** 这一次标掉了几条（同一个对象可能撞过不止一次）。 */
+  resolved: number
+  pending_conflicts: number
+  at: Iso8601
+}
+
+/* ------------------------------------------------------------------ */
+/* 用户的数据权利（49 §5 / 21 §4）                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 云端这一份的导出包。
+ *
+ * **一个文件、可读的 json**，不是我们自己的备份格式——用户要能拿着它走。
+ * 本地那一份不在里面（本地有本地的导出）。
+ */
+export interface KolCloudExport {
+  /** 导出格式版本。加字段不改它，改结构才改。 */
+  format: 1
+  org_id: string
+  at: Iso8601
+  subscription: KolServiceSubscription
+  objects: KolSyncObject[]
+  /** 留着的那些冲突版本也一起带走（不然「输的那一份」就真丢了）。 */
+  conflicts: KolSyncConflict[]
+}
+
+/** 删除云端这一份的结果。**本地一条不动**——这是两份数据，不是一份。 */
+export interface KolCloudDeleteResult {
+  org_id: string
+  /** 删掉了多少条。 */
+  deleted: number
+  /** 订阅还在不在（删数据不等于退订；用户可能只是想清空重来）。 */
+  subscription_kept: boolean
+  at: Iso8601
+}
+
+/* ------------------------------------------------------------------ */
+/* 本地那一头（工作台那张卡读的视图）                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 界面上标出来的那一条冲突。
+ *
+ * 两头都留着（`winner` / `loser`），**外加一个 `label`**：`(kind,id)` 是给我们看的，
+ * 用户要认的是"哪一个人 / 哪一条合作"。认不出来的时候退化成 id，也不留空。
+ */
+export interface KolCloudConflictView {
+  kind: KolObjectKind
+  id: string
+  at: Iso8601
+  /** 当前值（赢了的那一份）。 */
+  winner: KolSyncObject
+  /** 被盖掉的那一份（原样留着，用户能挑回来）。 */
+  loser: KolSyncObject
+  /** 人认得出的名字（红人名 / handle / 合作阶段）；认不出来就是 id。 */
+  label: string
+  /** 这一条来自哪一头：`cloud` = 云上记的那一本，`local` = 本地记的那一本。 */
+  source: 'cloud' | 'local'
+}
+
+/**
+ * 本地看到的这一份服务（`GET /v1/kol-cloud/status`）。
+ *
+ * **没关联账号时只有 `linked: false` + 一句人话**，其余字段一个都不画——
+ * 与 `CloudCreditsView` 逐字同一条理由：一堆 0 会让人以为服务坏了。
+ */
+export interface KolCloudLocalStatus {
+  linked: boolean
+  /** 没关联 / 连不通时的那句人话。 */
+  reason?: string
+  /** 云侧那份订阅（取到才有）。 */
+  subscription?: KolServiceSubscription
+  /** 云侧取到过没有（`false` = 连不通或者没订阅记录，界面上说"暂时取不到"）。 */
+  cloud_reachable: boolean
+  /** 本地攒着还没推上去的条数（离线队列的深度）。 */
+  pending: number
+  /** 云上有多少条（不含墓碑）。 */
+  object_count?: number
+  by_kind?: { kind: KolObjectKind; count: number }[]
+  /** 云上还没处理的冲突条数。 */
+  cloud_conflicts?: number
+  /** 界面上要标出来的冲突（两本合起来，云上的在前）。 */
+  conflicts: KolCloudConflictView[]
+  /** 最近一次同步成功是什么时候（本地记的）。 */
+  last_sync_at?: Iso8601
+  /** 这台机器的标识（`writer`）。界面上不显示，排障与导出里有它。 */
+  device_id: string
+  at: Iso8601
+}
+
+/** 一次「立即同步」的回执。 */
+export interface KolCloudSyncRun {
+  ok: boolean
+  /** 不 ok 时的一句人话（没关联 / 没订阅 / 欠费暂停 / 连不通）。 */
+  message?: string
+  /** 推上去几条。 */
+  pushed: number
+  /** 拉下来并写进本地几条。 */
+  pulled: number
+  /** 这一趟撞上几条冲突（都已留着双方版本）。 */
+  conflicts: number
+  /**
+   * 云上回了、本地这一版还没有那张表的条数（`campaign` / `candidate` / `note`）。
+   *
+   * **报出来而不是静默扔掉**：这三个种类是契约先行，本地补上就自动开始同步；
+   * 在那之前用户在界面上看得见"云上有 3 条本地还放不下的"，比一个悄悄少掉的数字好。
+   */
+  skipped: number
+  object_count?: number
+  /** 同步完之后本地还攒着几条（分批推的时候不为 0 是正常的）。 */
+  pending: number
+  last_sync_at?: Iso8601
+  at: Iso8601
+}

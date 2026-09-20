@@ -86,6 +86,9 @@
       "path": "packages/kol-core"
     },
     {
+      "path": "packages/kol-cloud"
+    },
+    {
       "path": "packages/kol-public"
     },
     {

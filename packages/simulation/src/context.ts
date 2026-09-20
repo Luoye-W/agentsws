@@ -14,6 +14,7 @@ import type {
   RunRequest,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
+import { bundledPositionOfRole, personaTextIn } from '@agentsws/roles'
 import { MemoryInboundPipeline } from '@agentsws/stand-ins'
 import type { RunContext, World } from './world.js'
 
@@ -49,8 +50,22 @@ export interface BuildRequestInput {
  * 采纳过的 overlay 就是靠这一步在**下一次运行**里生效的（WP29）。
  * 没装学习回路的世界一段都不多，所以原有九条场景的 prompt 字节不变。
  */
+/**
+ * WP120（69 §3）：这条职责所属岗位的那一段 persona。
+ *
+ * 反查不出唯一岗位就回 `undefined`（54 §3「不猜一个」）。模板从
+ * `packages/roles/positions/*.yml` 读——制度层的真源只有一份，模拟层不复制。
+ */
+function positionPersonaOf(role_id: string): { name: string; text: string } | undefined {
+  const position = bundledPositionOfRole(role_id)
+  if (position === undefined) return undefined
+  const text = personaTextIn(position.persona, 'zh')
+  return text === '' ? undefined : { name: position.name.zh, text }
+}
+
 async function personaSections(world: World): Promise<PromptSection[]> {
   const role = world.roles.roles.require(world.role_id)
+  const position = positionPersonaOf(world.role_id)
   const sections: PromptSection[] = [
     {
       id: 'company',
@@ -58,12 +73,23 @@ async function personaSections(world: World): Promise<PromptSection[]> {
       order: 10,
       text: world.pack.workspace.company_md.trim(),
     },
+    /*
+     * WP120（69 §3）：**岗位那一段**，排在职责前面。
+     *
+     * 反查不出唯一岗位（这条职责挂在好几个岗位里、或一个都不挂）就整段不出——
+     * 与 `positions.positionOf` 的"不猜一个"逐字同一条（54 §3）：猜错等于把别的岗位
+     * 的规矩喂给这次运行。`id` 排在 `company` 后面（同 order 10，按 id 排序），
+     * 于是公司简介 → 岗位 → 职责，读下来就是从大到小。
+     */
+    ...(position === undefined
+      ? []
+      : [{ id: 'position', name: position.name, order: 10, text: position.text }]),
     {
       id: 'role',
       name: role.name.zh,
       order: 20,
       text:
-        world.effective.persona ??
+        personaTextIn(world.effective.persona, 'zh') ||
         `你是 ${world.pack.workspace.name} 的${role.name.zh}。职责：${role.description}。` +
           `对外语言 ${world.pack.workspace.locales.customers}，对内语言 ${world.pack.workspace.locales.operators}。`,
     },

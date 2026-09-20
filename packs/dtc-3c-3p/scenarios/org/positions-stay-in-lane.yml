@@ -1,0 +1,107 @@
+# WP120（69 §5）：**每个岗位待在自己的道上**。
+#
+# 这条题的来历是一句亲测记录（69 §0 / docs/66 #1）：让红人营销岗位找红人，
+# 回出来的是客服的话。查下来不是路由错了——是 Agent 的提示里从头到尾没有
+# 「你是谁、你不负责什么」这一句，于是它照着手边唯一一份剧本（客服）答。
+#
+# 所以这条题要钉的是**两件互相独立的事**，缺一件那句亲测记录就会再犯一次：
+#
+# 1. **路由判得对**（54 §2，判据来自职责定义本身）。给五个岗位各发一句典型的活，
+#    每一句都落到那个岗位里该管它的那条职责上。这一半以前就成立，这里是回归护栏。
+# 2. **落到那条职责之后，它知道自己是谁**（69 §2）。这一半是新的，靠的是
+#    `persona` 的第三段「你不负责什么、转给哪个岗位」。它进的是系统提示，
+#    所以在这里断言不了——断言在 `packages/roles/test/persona-crosswalk.test.ts`
+#    与 `packages/runtime-direct/test/persona-sections.test.ts` 里逐条钉着
+#    （红人岗位的定位里写死了「客户退款物流→客服」，客服的写死了
+#    「写开发信→红人营销」，投放的写死了「商品价与促销→网站运营」）。
+#
+# 为什么五个岗位都发一句而不是只发红人那一句：串岗不是红人独有的毛病。
+# 只修出问题的那一条，等于等着下一个岗位再犯一次同样的错。
+#
+# 一个人身上挂五个岗位是刻意的（05 §4）：路由必须在**同一个人**的多条分配之间
+# 分得清，才证明分开它们的是职责定义而不是"他只有这一条职责"。
+# `assignments_not_unioned` 看的就是这件事的另一面——五个岗位没有给他多一点权限。
+id: org/positions-stay-in-lane
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 五个岗位一次配齐（46 §1 ③「勾岗位 = 它包含的职责全勾上」）
+  - at: '+0m'
+    position.staff: { who: p_wang, position: kol-marketing }
+  - at: '+1m'
+    position.staff: { who: p_wang, position: customer-care }
+  - at: '+2m'
+    position.staff: { who: p_wang, position: web-ops }
+  - at: '+3m'
+    position.staff: { who: p_wang, position: social-media }
+  - at: '+4m'
+    position.staff: { who: p_wang, position: pr }
+
+  # ② 红人营销：亲测记录里那一句。落到 kol.youtube（「频道」「油管」是它的意图词），
+  #    而不是任何一条客服职责。
+  - at: '+10m'
+    position.open:
+      who: p_wang
+      position: kol-marketing
+      text: 在油管上找 20 个粉丝一万到十万的频道，按匹配度排给我
+
+  # ③ 客服：一句真正的客户问题。落到网站客服。
+  #    **「客服邮箱」这半句是必须的**：网站客服与社群管理的动作、额度、数据域
+  #    逐字相同（56 §4「同一份 caps，不另起」），两条真正的差别只有渠道。
+  #    不带渠道的那句「客户问退款」在这个岗位里判不准，也**不该**判得准（54 §2）。
+  - at: '+30m'
+    position.open:
+      who: p_wang
+      position: customer-care
+      text: 客服邮箱里有一笔拒付争议，帮我准备材料
+
+  # ④ 网站运营：改价。落到店铺管理，不落到客服（虽然两边都认得"客户"两个字）。
+  - at: '+50m'
+    position.open:
+      who: p_wang
+      position: web-ops
+      text: 把 A 商品降价 10%
+
+  # ⑤ 社媒运营：自己账号发帖。落到 Meta 那条（「Instagram」是它的判据词），
+  #    而不是红人营销的 kol.instagram——同一个平台名，两个岗位，两件事。
+  - at: '+70m'
+    position.open:
+      who: p_wang
+      position: social-media
+      text: 给我们自己的 Instagram 账号排一条本周的帖子
+
+  # ⑥ 公共关系：盯外面在说什么。落到品牌监控。
+  - at: '+90m'
+    position.open:
+      who: p_wang
+      position: pr
+      text: 看看最近外面有没有人在提我们，负面的挑出来
+
+  - at: '+4h'
+    clock.advance: {}
+expected:
+  # 五句话各落到对的那条职责上。**这张表就是"每个岗位待在自己的道上"的机器口径**
+  position_routed_to:
+    - kol.youtube
+    - dtc.support
+    - dtc.store
+    - social.meta
+    - pr.monitoring
+  event_types:
+    - simulation.position_staffed
+    - simulation.position_routed
+  # 05 §4：五个岗位挂在同一个人身上，没有任何一条分配因此拿到并集权限
+  assignments_not_unioned: [p_wang]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  把「在油管上找 20 个频道」交给红人营销岗位，回来的还是客服的话吗？

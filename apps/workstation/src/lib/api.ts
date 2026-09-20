@@ -1437,6 +1437,8 @@ export interface PricingEntry {
   credits_per_unit: number
   label_zh: string
   label_en: string
+  /** 付费三块（67 §1，WP118）。老的价目表没有这一格，界面按能力名前缀兜底。 */
+  block?: 'data' | 'ai' | 'kol_service'
   models?: PricingModelEntry[]
 }
 
@@ -1482,6 +1484,149 @@ export const getCloudUsage = (
   assignment?: string,
 ): Promise<UsageReportView | null> =>
   api(`/v1/cloud/usage?group=${group}`, withAssignment(assignment))
+
+/** 充值四档（67 §2）。 */
+export interface TopupTierView {
+  id: string
+  usd: number
+  credits: number
+  label_zh: string
+  label_en: string
+  recommended?: boolean
+}
+
+export interface TopupTiersView {
+  version: number
+  as_of: string
+  credits_per_usd: number
+  tiers: TopupTierView[]
+}
+
+export interface TopupOrderView {
+  id: string
+  credits: number
+  amount_cny: number
+  amount_usd?: number
+  tier_id?: string
+  checkout_url?: string
+  status: string
+}
+
+export const getTopupTiers = (assignment?: string): Promise<TopupTiersView> =>
+  api('/v1/cloud/topup/tiers', withAssignment(assignment))
+
+/** 建一笔充值单，回一个去云上付款的链接。**本地不碰任何支付凭据**。 */
+export const createTopup = (tier_id: string, assignment?: string): Promise<TopupOrderView> =>
+  api('/v1/cloud/topup', {
+    ...withAssignment(assignment),
+    method: 'POST',
+    body: { tier_id },
+  })
+
+/* ------------------------------------------------------------------ */
+/* 红人营销增值服务（67 §3，WP118）                                     */
+/* ------------------------------------------------------------------ */
+
+/** 订阅状态那五个态（`none` = 从来没开通过）。 */
+export type KolServiceStatus = 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+
+export interface KolServiceSubscriptionView {
+  status: KolServiceStatus
+  service_id: string
+  current_cycle_end?: string
+  grace_until?: string
+  unpaid_since?: string
+  granted_months: number
+  cancel_at_period_end: boolean
+  last_charge_at?: string
+}
+
+/** 一条同步冲突：两头都改过同一条，**双方版本都在**（输的那一份不删）。 */
+export interface KolCloudConflictView {
+  kind: string
+  id: string
+  at: string
+  label: string
+  source: 'cloud' | 'local'
+  winner: { version: number; updated_at: string; writer: string; body?: Record<string, unknown> }
+  loser: { version: number; updated_at: string; writer: string; body?: Record<string, unknown> }
+}
+
+export interface KolCloudStatusView {
+  linked: boolean
+  /** 没关联 / 云连不通时的那句人话。 */
+  reason?: string
+  cloud_reachable: boolean
+  /** 本地攒着还没推上去的条数。 */
+  pending: number
+  object_count?: number
+  by_kind?: { kind: string; count: number }[]
+  cloud_conflicts?: number
+  conflicts: KolCloudConflictView[]
+  subscription?: KolServiceSubscriptionView
+  last_sync_at?: string
+  device_id: string
+  at: string
+}
+
+export interface KolCloudSyncRunView {
+  ok: boolean
+  message?: string
+  pushed: number
+  pulled: number
+  conflicts: number
+  /** 云上有了、本地这一版还没有那张表的条数（报出来，不静默扔）。 */
+  skipped: number
+  pending: number
+  last_sync_at?: string
+  at: string
+}
+
+export interface KolCloudExportView {
+  format: number
+  org_id: string
+  at: string
+  objects: unknown[]
+  conflicts: unknown[]
+}
+
+export interface KolCloudDeleteView {
+  deleted: number
+  subscription_kept: boolean
+  at: string
+}
+
+export const getKolCloudStatus = (assignment?: string): Promise<KolCloudStatusView> =>
+  api('/v1/cloud/kol/status', withAssignment(assignment))
+
+/** 立即同步一趟。**失败也不是错**：回执里 `ok: false` + 一句人话。 */
+export const syncKolCloud = (assignment?: string): Promise<KolCloudSyncRunView> =>
+  api('/v1/cloud/kol/sync', { ...withAssignment(assignment), method: 'POST' })
+
+export const subscribeKolCloud = (assignment?: string): Promise<KolServiceSubscriptionView> =>
+  api('/v1/cloud/kol/subscription', { ...withAssignment(assignment), method: 'POST' })
+
+export const cancelKolCloud = (assignment?: string): Promise<KolServiceSubscriptionView> =>
+  api('/v1/cloud/kol/subscription', { ...withAssignment(assignment), method: 'DELETE' })
+
+/** 一条冲突处理完了：`winner` 留当前值，`loser` 把被盖掉的那一份挑回来（两份都不删）。 */
+export const resolveKolCloudConflict = (
+  input: { kind: string; id: string; pick: 'winner' | 'loser' },
+  assignment?: string,
+): Promise<KolCloudSyncRunView> =>
+  api('/v1/cloud/kol/conflicts/resolve', {
+    ...withAssignment(assignment),
+    method: 'POST',
+    body: input,
+  })
+
+/** 导出云端这一份（**欠费也给导**——这时候拦着等于拿数据当人质）。 */
+export const exportKolCloud = (assignment?: string): Promise<KolCloudExportView> =>
+  api('/v1/cloud/kol/export', withAssignment(assignment))
+
+/** 删掉云端这一份。**本地一条不动**、订阅也不动。 */
+export const deleteKolCloud = (assignment?: string): Promise<KolCloudDeleteView> =>
+  api('/v1/cloud/kol', { ...withAssignment(assignment), method: 'DELETE' })
 
 export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', withAssignment(assignment))
@@ -4704,6 +4849,79 @@ export const replaceBrandDesign = (markdown: string): Promise<BrandDesignDoc> =>
 /** 版本历史。 */
 export const listBrandDesignRevisions = (): Promise<BrandDesignRevision[]> =>
   api<BrandDesignRevision[]>('/v1/brand-design/revisions')
+// ── WP121b（70 §3）：贴一个网址，自动填品牌档案 ────────────────────────
+//
+// 五条对着向导第 ② 步的五个动作：**发起 → 看进度 → 拿结果 → 确认 → 重新分析**。
+// 契约形状在 `@agentsws/contracts`（`BrandIntakeRun`），这里一个字段都不重画——
+// 界面认的就是服务端认的那一份。
+
+type BrandIntakeRunView = import('@agentsws/contracts').BrandIntakeRun
+
+export type {
+  BrandIntakeConfidence,
+  BrandIntakeEvidence,
+  BrandIntakeField,
+  BrandIntakePage,
+  BrandIntakePolicy,
+  BrandIntakeProduct,
+  BrandIntakeProfile,
+  BrandIntakeRun,
+  BrandIntakeRunStatus,
+  BrandIntakeSocialLink,
+} from '@agentsws/contracts'
+
+/** 发起一次：贴 1–3 条链接（官网 / Amazon 商品 / Amazon 店铺）。 */
+export const startBrandIntake = (
+  input: { urls: string[]; cap_credits?: number },
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api('/v1/brand-intake/runs', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 这一次跑到哪儿了（向导按它轮询，呼吸标记表示"Agent 在干活"）。 */
+export const getBrandIntake = (id: string, assignment?: string): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+/**
+ * 这个工作区最近的那一次。
+ *
+ * 向导第 ② 步回来时按它恢复现场——用户可以先去第 ③ 步选岗位，回来还看得见
+ * 那一轮分析的结果。没有过就是 `null`（**不是错误**）。
+ */
+export const latestBrandIntake = (assignment?: string): Promise<BrandIntakeRunView | null> =>
+  api('/v1/brand-intake/runs/latest', withAssignment(assignment))
+
+/**
+ * 「看着没问题」。
+ *
+ * `edits` **只带用户改过的那几格**：没带的按分析结果走，带了的在库里打上
+ * `edited`，以后重新分析整格跳过（70 §3.4）。
+ */
+export const confirmBrandIntake = (
+  id: string,
+  edits: Record<string, unknown> | undefined,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/confirm`, {
+    method: 'POST',
+    body: edits === undefined ? {} : { edits },
+    ...withAssignment(assignment),
+  })
+
+/** 重新分析（改了网址或换了新品时用）：**用户手改过的格子整格不动**。 */
+export const reanalyzeBrandIntake = (
+  id: string,
+  urls: string[] | undefined,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/reanalyze`, {
+    method: 'POST',
+    body: urls === undefined ? {} : { urls },
+    ...withAssignment(assignment),
+  })
 
 /*
  * WP119（68）：浏览器插件（连接页「浏览器插件」那一节）。
@@ -4754,5 +4972,59 @@ export const revokeExtensionToken = (
   api<ExtensionTokenView>(`/v1/extension/tokens/${encodeURIComponent(id)}/revoke`, {
     method: 'POST',
     body: {},
+    ...withAssignment(assignment),
+  })
+
+/* ── WP120（69 §4）：角色定位 ─────────────────────────────────────────────── */
+
+/** 一段 persona 的正文。中英各一份；老的纯字符串写法也认（契约只加不删）。 */
+export type PersonaTextData = string | { zh: string; en: string }
+
+/** 右栏「角色」面板要的那一份：现在生效的 + 包里的原文（「还原」拿它比）。 */
+export interface PersonaViewData {
+  subject: { kind: 'position' | 'role'; id: string }
+  name: { zh: string; en: string }
+  /** 现在真正进系统提示的那一份。 */
+  effective: PersonaTextData
+  /** 包里自带的原文。 */
+  packaged: PersonaTextData
+  /** 公司改写过吗。 */
+  overridden: boolean
+  updated_at?: string
+  updated_by?: string
+}
+
+export const getPersona = (
+  kind: 'position' | 'role',
+  id: string,
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>(
+    `/v1/personas?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`,
+    withAssignment(assignment),
+  )
+
+/**
+ * 公司层改写。只传改动的那一边——另一边由服务端从现在生效的那一份补齐，
+ * 免得"改了中文、英文悄悄退回包里的原文"。
+ */
+export const setPersona = (
+  input: { kind: 'position' | 'role'; id: string; zh?: string; en?: string },
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>('/v1/personas', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 还原成包里的原文。 */
+export const revertPersona = (
+  input: { kind: 'position' | 'role'; id: string },
+  assignment?: string,
+): Promise<PersonaViewData> =>
+  api<PersonaViewData>('/v1/personas/revert', {
+    method: 'POST',
+    body: input,
     ...withAssignment(assignment),
   })

@@ -27,6 +27,7 @@ import {
   receiptOf,
   renderKolAnswer,
 } from './kol.js'
+import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
 import {
   boundaryGate,
   describeRun,
@@ -538,6 +539,36 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           summary,
         })
         return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP120（69 §3 第 3 条）：**没有剧本的域到此为止**。
+       *
+       * WP117 给红人开了岔口，但剩下三十多条职责仍然往下掉进客服那条路——
+       * 于是投放岗位在演示里也会去问一句退货窗口。那与 69 §0 那条亲测记录
+       * 是同一个毛病，只是还没有人去点它。
+       *
+       * 所以：这条职责在 `playbookOf` 里查不到剧本，就回一句人话然后结束。
+       * **不调工具、不 stage、不起草、不出一张卡**——桩根本没做的事，
+       * 出一张"请批准"的卡比什么都不做糟得多。
+       */
+      if (playbookOf(req.actor.role_id) === undefined) {
+        const answer = noPlaybookAnswer(req.actor.role_id)
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = noPlaybookSummary(req.actor.role_id)
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: 0,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
       }
 
       const orderItem = itemsOfKind(req, 'order')[0]

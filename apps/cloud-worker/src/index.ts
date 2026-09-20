@@ -40,6 +40,14 @@ export {
   type KolPublicDoStateLike,
 } from './kol-public-do.js'
 export {
+  BILLING_SWEEP_MS,
+  KOL_TENANT_INTERNAL,
+  KolTenantCore,
+  type KolTenantDoOptions,
+  type KolTenantDoStateLike,
+  remoteKolCloudAdminPort,
+} from './kol-tenant-do.js'
+export {
   applyKolOps,
   handleKolWallet,
   KOL_WALLET_INTERNAL,
@@ -64,6 +72,13 @@ export {
   type Outbox,
   outboxEventKey,
 } from './outbox.js'
+export {
+  chargeOnce,
+  handleSubscriptionWallet,
+  remoteSubscriptionWallet,
+  SUBSCRIPTION_WALLET_INTERNAL,
+  type SubscriptionChargeInput,
+} from './subscription-wallet.js'
 export {
   handleWalletAdmin,
   remoteWalletAdminPort,
@@ -93,6 +108,7 @@ export {
 import { AccountsCore, type DoStateLike } from './accounts-do.js'
 import type { WorkerEnv } from './env.js'
 import { KolPublicCore, type KolPublicDoStateLike } from './kol-public-do.js'
+import { KolTenantCore, type KolTenantDoStateLike } from './kol-tenant-do.js'
 import { LedgerCore } from './ledger-do.js'
 import { WalletCore, type WalletDoStateLike } from './wallet-do.js'
 import { route } from './worker.js'
@@ -159,6 +175,30 @@ export class KolPublicDO {
 
   fetch(request: Request): Promise<Response> {
     return this.#core.fetch(request)
+  }
+}
+
+/**
+ * 红人营销增值服务的租户库（**每个组织一个**，WP118 / 67 §3）。
+ *
+ * 与上面那个公共库刚好相反：公共库是跨租户共享的事实（一个对象），这一份是
+ * 一个组织自己的私有数据（一个组织一个对象）——对象边界就是隔离边界。
+ *
+ * **有 alarm**：每天醒一次把到点的月费扣掉（幂等，重跑不会多扣）。
+ */
+export class KolTenantDO {
+  readonly #core: KolTenantCore
+
+  constructor(state: KolTenantDoStateLike, env: WorkerEnv) {
+    this.#core = new KolTenantCore(state, env)
+  }
+
+  fetch(request: Request): Promise<Response> {
+    return this.#core.fetch(request)
+  }
+
+  async alarm(): Promise<void> {
+    await this.#core.alarm()
   }
 }
 

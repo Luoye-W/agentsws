@@ -1,0 +1,6 @@
+# url: https://nordvolt.example/robots.txt
+# 这一份夹具让 WP121b 那几条初始化设置场景**不联网**也走得通（70 §4）。
+User-agent: *
+Disallow: /*/cart/
+Disallow: /checkout
+Allow: /

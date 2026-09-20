@@ -5,6 +5,7 @@ import type {
   Iso8601,
   ModelRef,
   ObjectRef,
+  PromptSection,
   RunBrowser,
   RunConnection,
   RunEvent,
@@ -73,6 +74,8 @@ export interface RequestOverrides {
   /** 换一条职责（preset id 与目录名跟着它走）。 */
   role_id?: string
   workspace_id?: string
+  /** WP120（69 §3）：换掉 persona 那几段（不给 = 默认的公司 + 职责两段）。 */
+  persona?: { sections: PromptSection[] }
 }
 
 /** 一条最小但完整的"退货窗口内"RunRequest。 */
@@ -134,7 +137,7 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
       side_effect_policy: o.side_effect_policy ?? 'executor',
     },
     skills: [{ name: 'customer-care', tier: 'open', load: 'always' }],
-    persona: {
+    persona: o.persona ?? {
       sections: [
         { id: 'company', name: 'company', order: 10, text: 'Test shop.' },
         { id: 'role', name: '售后', order: 20, text: '你是售后。' },

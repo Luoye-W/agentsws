@@ -1,0 +1,47 @@
+# WP121b（70 §3.1）：分析花到封顶就**停**——但已经抓到的照样交。
+#
+# 这条题只有一句要紧的话：**两头落空是最糟的结果**。
+#
+# 超预算了所以什么都不给你，用户既没拿到档案也花掉了额度；正确的做法是
+# 停在那儿，把已经读到的几页照样交出去——一份填了一半的档案卡仍然帮他省了事，
+# 缺的那几格他自己填。
+#
+# 封顶在这条题里调到 0.45（三页），只是为了让"撞上"这件事在一个小 pack 里
+# 也发生得了。真实的封顶是 2（`DEFAULT_BRAND_INTAKE_CAP_CREDITS`），
+# 正常一轮花 1.05，撞不上——**封顶不是摆设，但也不该在正常情况下就撞上**。
+id: onboarding/analysis-hits-cap
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-19T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    org.onboarding:
+      who: p_wang
+      ai: official
+      urls: ['https://nordvolt.example/']
+      cap_credits: 0.45
+  - at: '+30m'
+    clock.advance: {}
+expected:
+  onboarding:
+    who: p_wang
+    connected: true
+    signup_credits: 10
+    capped: true
+    # 停是停了，但品牌名已经读出来了——断言里 `capped` 那一条会一并检查"交了没有"
+    analysed: true
+  event_types: [simulation.onboarding_done]
+  metrics:
+    runs_failed: 0
+    staged_changes: 0
+    applied_changes: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+rubric: >-
+  撞上封顶那一刻，用户手里剩下的是什么——一份半成品档案，还是一句
+  "超预算了，什么都没有"？

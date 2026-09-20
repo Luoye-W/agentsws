@@ -31,6 +31,7 @@ import {
   MessagesSquare,
   Palette,
   Sparkles,
+  UserSquare,
 } from 'lucide-react'
 import { lazy } from 'react'
 import { canOpenOfficeFile, FILE_ADDRESS_PATTERN } from '@/components/rail/panels/office/address'
@@ -53,6 +54,14 @@ const MemoryBody = lazy(async () => {
   return {
     default: ({ scope }: RailPanelBodyProps) =>
       scope === undefined ? null : <m.MemoryPanel scope={scope} />,
+  }
+})
+
+const RoleBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/role-panel')
+  return {
+    default: ({ scope }: RailPanelBodyProps) =>
+      scope === undefined ? null : <m.RolePanel scope={scope} />,
   }
 })
 
@@ -231,6 +240,21 @@ export function ensureBuiltinPanels(): void {
     scoped: true,
   })
   registerPanelBody('caps', CapsBody)
+  /*
+   * WP120（69 §4）：**角色定位**。与上面四个同一组、同两句注册——
+   * 它回答的是"这个岗位 / 这条职责是谁"，与记忆 / 技能 / 知识 / 额度是同一类
+   * "当前这一层的设置"（36 §10）。放在额度后面：前四个是它**会**什么，
+   * 这一个是它**是**谁，读下来最后一句才收得住。
+   */
+  registerPanelType({
+    id: 'role',
+    label: 'rail.panel.role',
+    icon: UserSquare,
+    priority: 'builtin',
+    group: 'layer',
+    scoped: true,
+  })
+  registerPanelBody('role', RoleBody)
 
   // ── 下组：工具 ───────────────────────────────────────────────────
   registerPanelType({

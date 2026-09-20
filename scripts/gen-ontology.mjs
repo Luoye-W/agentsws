@@ -246,6 +246,44 @@ const roles = roleFiles.map((f) => ({
 }))
 for (const r of roles) INPUTS.push(r.file)
 
+/*
+ * ── WP120（69 §2）：**persona 为空即失败** ─────────────────────────────────
+ *
+ * 为什么这一刀在这儿而不在 yml 的 schema 里：schema 管的是"填了就得填对"
+ * （六段骨架、不超长），管不了"一条都不许空"——那是**整包**的纪律，
+ * 而这个脚本正是唯一一个把四十多条职责与十个岗位一次全读进来的地方。
+ *
+ * 不写它的后果不是编译错，是 69 §0 那条亲测记录重演一遍：
+ * 新加一条职责、忘了写 persona，那条职责的 Agent 就又没有"你是谁"了，
+ * 而没有人会在半年后想起来去数一遍。
+ */
+const POSITIONS_DIR = join(ROOT, 'packages/roles/positions')
+const positions = readdirSync(POSITIONS_DIR)
+  .filter((f) => f.endsWith('.yml'))
+  .sort()
+  .map((f) => ({
+    file: relative(ROOT, join(POSITIONS_DIR, f)),
+    def: parseYaml(readFileSync(join(POSITIONS_DIR, f), 'utf8')),
+  }))
+
+/** 这一格有正文吗（`{ zh, en }` 两边都空也算空）。 */
+const personaEmpty = (persona) => {
+  if (persona === undefined || persona === null) return true
+  if (typeof persona === 'string') return persona.trim() === ''
+  return `${persona.zh ?? ''}`.trim() === '' && `${persona.en ?? ''}`.trim() === ''
+}
+const missingPersona = [...positions, ...roles]
+  .filter((r) => personaEmpty(r.def?.persona))
+  .map((r) => `${r.file}（${r.def?.id ?? '?'}）`)
+if (missingPersona.length > 0) {
+  process.stderr.write(
+    `gen-ontology: 这几条没写 persona（69 §2：全部职责与岗位都要写，不许留空）\n${missingPersona
+      .map((m) => `  - ${m}`)
+      .join('\n')}\n`,
+  )
+  process.exit(1)
+}
+
 /** 域 → 这些职责给的可读范围（最宽的在前）。 */
 const RANGE_WIDTH = { workspace: 2, assigned: 1, own: 0 }
 const readRanges = new Map()

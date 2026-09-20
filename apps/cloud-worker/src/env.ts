@@ -42,6 +42,14 @@ export interface WorkerEnv {
    * （**如实说没开通**，不假装有）。
    */
   KOL_PUBLIC?: DoNamespaceLike
+  /**
+   * 红人营销增值服务的租户对象（**每个 org 一个**，WP118 / 67 §3）。
+   *
+   * 与 `KOL_PUBLIC` 刚好相反：那一份是跨租户共享的事实，这一份是一个组织自己的
+   * 私有数据——对象边界就是隔离边界。没绑这个 binding 也能跑：那时 `/v1/kol/*`
+   * 回 404、health 里 `kol_tenant: false`（**如实说没开通**，不假装有）。
+   */
+  KOL_TENANT?: DoNamespaceLike
   /** Cloudflare Email Sending（`[[send_email]] name = "EMAIL"`）。没绑 = 发不了信。 */
   EMAIL?: CloudflareEmailBinding
   /**

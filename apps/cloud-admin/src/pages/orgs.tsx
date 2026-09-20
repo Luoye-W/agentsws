@@ -199,6 +199,139 @@ export function OrgsPage(): React.ReactNode {
   )
 }
 
+/** 订阅那一行的摘要（后台抽屉与订阅列表共用这个形状）。 */
+interface KolServiceSummary {
+  org_id: string
+  subscription: {
+    status: 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+    current_cycle_end?: string
+    granted_months: number
+  }
+  object_count: number
+  pending_conflicts: number
+  last_sync_at?: string
+  charges: { cycle_start: string; credits: number; status: 'paid' | 'failed'; reason?: string }[]
+}
+
+/**
+ * 抽屉里的「红人营销增值服务」那一块（67 §3 / WP118）。
+ *
+ * 为什么单独一次请求而不是塞进组织详情：这一块的数据在**另一个对象**里
+ * （每个组织一个 `KolTenantDO`），而组织详情读的是账号库。合成一次请求就得让
+ * 账号那一层去等租户对象——那一头没开通的时候，整个抽屉都会慢一拍。
+ *
+ * 没开通那一档**不画一堆 0**，写一句"这个节点没开通"（与看板页同一条）。
+ */
+function KolServiceSection({
+  org_id,
+  onDone,
+}: {
+  org_id: string
+  onDone: () => void
+}): React.ReactNode {
+  const { t, canWrite } = useApp()
+  const [months, setMonths] = useState('1')
+  const [busy, setBusy] = useState(false)
+  const summary = useQuery<KolServiceSummary>(`/v1/admin/orgs/${org_id}/kol-service`)
+
+  if (summary.error !== undefined)
+    return (
+      <DrawerSection title={t('drawer.kol_service')}>
+        <Note tone="warn">{t('kol_service.off')}</Note>
+      </DrawerSection>
+    )
+  if (summary.data === undefined)
+    return (
+      <DrawerSection title={t('drawer.kol_service')}>
+        <Spinner label={t('loading')} />
+      </DrawerSection>
+    )
+
+  const row = summary.data
+  const n = Number(months)
+  return (
+    <DrawerSection title={t('drawer.kol_service')}>
+      <div className="flex flex-col gap-2">
+        <KeyValues
+          rows={[
+            {
+              label: t('kol_service.status'),
+              value: t(`kol_service.status.${row.subscription.status}`),
+            },
+            {
+              label: t('kol_service.cycle_end'),
+              value: orDash(
+                row.subscription.current_cycle_end === undefined
+                  ? undefined
+                  : day(row.subscription.current_cycle_end),
+              ),
+            },
+            { label: t('kol_service.objects'), value: compact(row.object_count) },
+            { label: t('kol_service.conflicts'), value: compact(row.pending_conflicts) },
+            {
+              label: t('kol_service.last_sync'),
+              value: orDash(row.last_sync_at === undefined ? undefined : when(row.last_sync_at)),
+            },
+            {
+              label: t('kol_service.granted'),
+              value: t('kol_service.months', { n: String(row.subscription.granted_months) }),
+            },
+          ]}
+        />
+        {row.charges.length > 0 && (
+          <table className="w-full border-collapse text-[13px]">
+            <tbody>
+              {row.charges.map((charge) => (
+                <tr key={charge.cycle_start} className="ws-tr">
+                  <td className="ws-td">{day(charge.cycle_start)}</td>
+                  <td className="ws-td">
+                    <WsTag>{charge.status}</WsTag>
+                  </td>
+                  <td className="ws-td ws-num text-right">{credits(charge.credits)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {canWrite && (
+          <>
+            <Note>{t('kol_service.grant.note')}</Note>
+            <div className="flex items-end gap-2">
+              <Field label={t('kol_service.grant')}>
+                <input
+                  className={inputClass}
+                  value={months}
+                  inputMode="numeric"
+                  onChange={(e) => {
+                    setMonths(e.target.value)
+                  }}
+                />
+              </Field>
+              <Button
+                variant="primary"
+                disabled={busy || !Number.isInteger(n) || n < 1 || n > 24}
+                onClick={() => {
+                  setBusy(true)
+                  void api
+                    .post(`/v1/admin/orgs/${org_id}/kol-service/grant`, { months: n })
+                    .then(() => {
+                      onDone()
+                    })
+                    .finally(() => {
+                      setBusy(false)
+                    })
+                }}
+              >
+                {t('kol_service.grant')}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </DrawerSection>
+  )
+}
+
 function OrgDrawer({ detail, onDone }: { detail: OrgDetail; onDone: () => void }): React.ReactNode {
   const { t, canWrite } = useApp()
   const [reason, setReason] = useState('')
@@ -309,6 +442,8 @@ function OrgDrawer({ detail, onDone }: { detail: OrgDetail; onDone: () => void }
           </table>
         )}
       </DrawerSection>
+
+      <KolServiceSection org_id={detail.org.id} onDone={onDone} />
 
       {canWrite && (
         <DrawerSection

@@ -24,6 +24,7 @@
     "packages/contracts/src/join.ts",
     "packages/contracts/src/kernel.ts",
     "packages/contracts/src/knowledge.ts",
+    "packages/contracts/src/kol-cloud.ts",
     "packages/contracts/src/kol-public.ts",
     "packages/contracts/src/kol.ts",
     "packages/contracts/src/meetings.ts",
@@ -38,6 +39,7 @@
     "packages/contracts/src/skills.ts",
     "packages/contracts/src/social.ts",
     "packages/contracts/src/standby.ts",
+    "packages/contracts/src/subscription.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
@@ -83,7 +85,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "9e67769843f6c472fc7dd0d696278d22",
+  "source_digest": "ddcf81424da5febfa3c3e0e151f1d778",
   "objects": [
     {
       "id": "ad",
@@ -3188,6 +3190,12 @@
           "type": "{ role: RoleId; default: boolean }[]",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "persona",
+          "type": "PersonaText",
+          "sensitivity": "confidential",
+          "optional": true
         }
       ],
       "read_via": [],

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "as_of": "2026-09-19",
+  "credits_per_usd": 7,
+  "note": "67 §2：充值四档（Luoye 2026-09-19 定）。1 美元 = 7 积分，1 积分 = ¥1。Stripe 按 usd 收款——不是按 credits × 当日汇率，那会让同一张卡上的价钱每天变一点。为什么是档位不是任意金额：任意金额要用户先做一道除法（「我要多少积分？那是多少钱？」），四张卡他扫一眼就选完。运营后台手动发积分不受这张表限制。",
+  "tiers": [
+    {
+      "id": "usd20",
+      "usd": 20,
+      "credits": 140,
+      "label_zh": "入门",
+      "label_en": "Starter"
+    },
+    {
+      "id": "usd50",
+      "usd": 50,
+      "credits": 350,
+      "label_zh": "常用",
+      "label_en": "Standard",
+      "recommended": true
+    },
+    {
+      "id": "usd100",
+      "usd": 100,
+      "credits": 700,
+      "label_zh": "团队",
+      "label_en": "Team"
+    },
+    {
+      "id": "usd200",
+      "usd": 200,
+      "credits": 1400,
+      "label_zh": "年度",
+      "label_en": "Annual"
+    }
+  ]
+}

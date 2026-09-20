@@ -21,10 +21,12 @@ import RAW from './pricing.json' with { type: 'json' }
 export interface PricingFile extends Omit<Pricing, 'entries'> {
   note: string
   fx_note: string
+  /** 67 §1 三块分组的口径说明（数据层的注释，不进界面）。 */
+  blocks_note?: string
   /** 数据驻留 `cn` 的请求只允许这几家（22 §2）。 */
   cn_vendors: string[]
   cn_vendors_note: string
-  entries: (PricingEntry & { fallback_note?: string })[]
+  entries: (PricingEntry & { fallback_note?: string; note_zh?: string })[]
 }
 
 export const PRICING_FILE: PricingFile = RAW as PricingFile
@@ -92,6 +94,8 @@ export function buildPricing(catalog: PriceCatalog = PRICE_CATALOG): Pricing {
         credits_per_unit: e.credits_per_unit,
         label_zh: e.label_zh,
         label_en: e.label_en,
+        // 67 §1：三块分组。表里没写的那些由 `pricingBlockOf` 按能力名前缀兜底
+        ...(e.block === undefined ? {} : { block: e.block }),
       }
       return e.capability === 'ai.chat' ? { ...base, models } : base
     }),

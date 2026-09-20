@@ -19,6 +19,9 @@ import {
   roasBothViews,
   stopLossVerdict,
 } from '@agentsws/ads-core'
+// WP121b（70 §1–§3）：向导第 ② 步那一轮分析走这一份真解析器（夹具 replay，不联网）
+import type { PageFetch } from '@agentsws/brand-intake'
+import { analyzeBrand, applyEdits, mergeProfile } from '@agentsws/brand-intake'
 import {
   compareJoinBundle,
   deriveStoreRanges,
@@ -44,6 +47,7 @@ import type {
   KolChannel,
   KolUtm,
   Mandate,
+  ModelFailureKind,
   ModelGateway,
   ModelProvider,
   ModelRef,
@@ -66,8 +70,11 @@ import {
   // WP75：57 §6 的额度默认值与"平台 id → 职责 id / 中文名"。**全仓唯一**那张平台清单
   ADS_DEFAULT_CAPS,
   adsPlatformSpec,
+  DEFAULT_BRAND_INTAKE_CAP_CREDITS,
   DEFAULT_STOREFRONT_PLATFORM,
   KOL_FOLDER,
+  // WP121b（70 §2.2）：试跑失败分档（向导挑那一句人话与这里的断言用同一张表）
+  modelFailureKind,
   // WP72：渠道 id → 职责 id 与中文名。**全仓唯一**那张渠道清单，不在这里拼字符串
   PR_ROLE_IDS,
   SUPPORT_FOLDER,
@@ -117,7 +124,15 @@ import {
  * "浏览免费、reveal 扣积分、余额不够回人话"，而这三件事全是那一份代码算出来的。
  */
 import { KolPublicService, MemoryKolStore, nodeKolSecrets } from '@agentsws/kol-public'
-import { buildPricing, MemoryWalletStore, Wallet } from '@agentsws/metering'
+import {
+  bonusExpiresAt,
+  buildPricing,
+  MemoryWalletStore,
+  roundCredits,
+  signupBonus,
+  signupBonusSourceRef,
+  Wallet,
+} from '@agentsws/metering'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
 /*
@@ -1336,6 +1351,29 @@ export interface OrgOps {
    */
   platformCheck(who: PersonId, role: RoleId): Promise<PlatformCheckResult>
   /**
+   * WP121b（70 §1–§3）：一个新用户**走一遍初始化设置**。
+   *
+   * 三样是真的，不是替身：
+   *
+   * - 那一轮网址分析走 `@agentsws/brand-intake` 的 `analyzeBrand`（真解析、真算钱、
+   *   真封顶），抓取口replay 的是 pack 里的 `fixtures/site/*`——**一个字节不出这台机器**；
+   * - 送的那几个积分与这一轮的花销走 `@agentsws/metering` 的真钱包（`granted` 那一类，
+   *   90 天到期也是它算的），金额取自 `bonuses.json`；
+   * - 「重新分析不覆盖手改」走的是 `mergeProfile` 本人。
+   *
+   * 假的只有两样：登录信那一跳（这里等于"用户已经点开了"）与自有模型那一把钥匙
+   * 通不通（场景直接给结果）。这两样在各自的单元测试里已经钉死了。
+   */
+  onboarding(input: {
+    who: PersonId
+    ai: 'official' | 'own'
+    model_failure?: { reason?: string; detail?: string }
+    urls?: string[]
+    cap_credits?: number
+    edits?: Record<string, string>
+    reanalyze?: boolean
+  }): Promise<OnboardingRunResult>
+  /**
    * 45 H1：某人单干时在**自己的工作区**里攒下的东西（品牌 / 产品线 / 一条岗位）。
    *
    * 个人工作区不是另一套界面，是同一套东西换了个 `workspace_id`——所以这里用的
@@ -1467,6 +1505,38 @@ export interface JoinRunResult {
  * 它只有三样东西：公司档案、开关、以及一个与工作区 id 无关的 peer id。
  * **没有成员名单、没有业务数据**——发现阶段交换的只有 `company_key` 这一串哈希。
  */
+/**
+ * WP121b：那一趟初始化设置走成了什么样（70 §1–§3）。
+ *
+ * 报告里出的是**数与档**，不是档案内容本身：这几条题钉的是"送了多少、花了多少、
+ * 停没停、改过的格子还在不在"，而不是"那张卡上写了什么"（那是 `brand-intake`
+ * 自己的用例的事）。
+ */
+export interface OnboardingRunResult {
+  who: PersonId
+  ai: 'official' | 'own'
+  /** 第 ① 步过去了没有。没过就没有后面那些数——向导本来就走不下去。 */
+  connected: boolean
+  /** 没过是哪一档（70 §2.2 那四句照它挑）。 */
+  failure_kind?: ModelFailureKind
+  /** 注册送了多少（官方接口那条路才有）。 */
+  signup_credits: number
+  /** 分析之后钱包里还剩多少。 */
+  balance_credits: number
+  spent_credits: number
+  cap_credits: number
+  /** 花到封顶停下来了。**停下来的时候已经抓到的照样交。** */
+  capped: boolean
+  pages_ok: number
+  pages_failed: number
+  /** 抓到东西了没有（至少一页成功，而且档案里真有品牌名）。 */
+  analysed: boolean
+  /** 用户手改过的那几格。 */
+  edited_fields: string[]
+  /** 重新分析跑完之后，仍然是用户那个值的格子。 */
+  kept_edits: string[]
+}
+
 export interface DiscoverSide {
   id: string
   owner: PersonId
@@ -3488,6 +3558,39 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     }
   }
 
+  /**
+   * WP121b：这个世界里那一份钱包（注册送的 10 积分与这一轮分析的花销都走它）。
+   *
+   * 用的是 `@agentsws/metering` 的真钱包，不是一个计数器：`granted` 那一类、
+   * 90 天到期、余额不够就拦——这三件事是它算的，不是场景写死的数。
+   */
+  const onboardingWallet = new Wallet({
+    store: new MemoryWalletStore(),
+    now: () => now(clock),
+    newId: (prefix) => `${prefix}_onb_${sides.size}_${Math.floor(random() * 1e6).toString(36)}`,
+  })
+
+  /**
+   * WP121b：抓取口——**replay pack 里的 `fixtures/site/*`，一个字节不出这台机器**。
+   *
+   * 每份夹具自报家门（头几行里一句 `url: https://…`），所以加一个页面就是加一个
+   * 文件，不用再维护一张 URL → 文件名的映射表。夹具表里没有的网址回 503：
+   * 哪天谁在这条路上加了个真请求，用例会当场红。
+   */
+  const siteReplay = (): PageFetch => {
+    const byUrl = new Map<string, string>()
+    for (const [name, body] of pack.fixtures) {
+      if (!name.startsWith('fixtures/site/')) continue
+      const declared = /url:\s*(\S+)/.exec(body.slice(0, 400))?.[1]
+      if (declared !== undefined) byUrl.set(declared, body)
+    }
+    return async (url: string) => {
+      const body = byUrl.get(url)
+      if (body === undefined) return { ok: false, status: 503, text: async () => '' }
+      return { ok: true, status: 200, text: async () => body }
+    }
+  }
+
   const org: OrgOps = {
     async rangeGroup({ id, name, members }) {
       const existing = roles.rangeGroups.get(id)
@@ -4099,6 +4202,133 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         tool,
         shop_services: [...new Set(shop_services)],
       }
+    },
+
+    // ── WP121b 初始化设置（70 §1–§3）────────────────────────────────
+    async onboarding(input) {
+      const cap = input.cap_credits ?? DEFAULT_BRAND_INTAKE_CAP_CREDITS
+
+      /*
+       * 第 ① 步。官方接口那条路这里当作"用户已经点开了登录信"——那一跳
+       * （magic link + 本机回环）在 `apps/cloud` 自己的用例里钉着，在这个世界里
+       * 再演一遍只会多一层替身。自有模型那把钥匙通不通由场景直接给。
+       */
+      const failure = input.model_failure
+      const connected = input.ai === 'official' || failure === undefined
+      const failure_kind = connected ? undefined : modelFailureKind(failure ?? {})
+
+      let signup_credits = 0
+      if (input.ai === 'official') {
+        const rule = signupBonus()
+        // 取不到就是**不送**——宁可不送也不猜一个金额（`bonuses.json` 那条纪律）
+        if (rule !== undefined && rule.credits > 0) {
+          const expires_at = bonusExpiresAt(rule, now(clock))
+          onboardingWallet.topup({
+            org_id: workspace_id,
+            credits: rule.credits,
+            kind: rule.kind,
+            ...(expires_at === undefined ? {} : { expires_at }),
+            source_ref: signupBonusSourceRef(`acct_${input.who}`),
+          })
+          signup_credits = rule.credits
+        }
+      }
+
+      const base = {
+        who: input.who,
+        ai: input.ai,
+        connected,
+        ...(failure_kind === undefined ? {} : { failure_kind }),
+        signup_credits,
+        balance_credits: onboardingWallet.balance(workspace_id).available,
+        spent_credits: 0,
+        cap_credits: cap,
+        capped: false,
+        pages_ok: 0,
+        pages_failed: 0,
+        analysed: false,
+        edited_fields: [],
+        kept_edits: [],
+      }
+
+      // 没接上 AI 就没有第 ② 步：向导在这里就停住了（70 §2「不能跳过」）
+      if (!connected || (input.urls ?? []).length === 0) {
+        world.appendEvent(
+          'simulation.onboarding_done',
+          { ...base },
+          {
+            actor: { kind: 'person', id: input.who },
+          },
+        )
+        return base
+      }
+
+      const urls = input.urls ?? []
+      const out = await analyzeBrand(siteReplay(), urls, { capCredits: cap })
+      let profile = out.profile
+      let spent = out.budget.spent_credits
+
+      if (Object.keys(input.edits ?? {}).length > 0) {
+        profile = applyEdits(profile, input.edits ?? {}, now(clock))
+      }
+
+      // 「重新分析」：带着上一次的结果重跑，**用户改过的格子整格不动**
+      if (input.reanalyze === true) {
+        const again = await analyzeBrand(siteReplay(), urls, { capCredits: cap })
+        profile = mergeProfile(profile, again.profile)
+        spent = roundCredits(spent + again.budget.spent_credits)
+      }
+
+      /*
+       * 花的钱从那 10 积分里走（用自己的模型接口时不扣我们的积分——那一轮
+       * 根本没经过我们的云）。余额不够就只扣得动剩下那些：钱包自己会拦。
+       */
+      if (input.ai === 'official' && spent > 0) {
+        const affordable = Math.min(spent, onboardingWallet.balance(workspace_id).available)
+        if (affordable > 0) {
+          const reservation = onboardingWallet.reserve({
+            org_id: workspace_id,
+            workspace_id,
+            capability: 'brand_intake',
+            unit: 'page',
+            quantity: out.pages.length,
+            credits: affordable,
+            request_id: `bi_${input.who}`,
+          })
+          onboardingWallet.settle(reservation, { quantity: out.pages.length, credits: affordable })
+        }
+      }
+
+      const edited_fields = Object.keys(input.edits ?? {}).filter(
+        (key) =>
+          (profile as Record<string, { edited?: boolean } | undefined>)[key]?.edited === true,
+      )
+      const kept_edits = edited_fields.filter(
+        (key) =>
+          (profile as Record<string, { value?: unknown } | undefined>)[key]?.value ===
+          (input.edits ?? {})[key],
+      )
+
+      const result: OnboardingRunResult = {
+        ...base,
+        balance_credits: onboardingWallet.balance(workspace_id).available,
+        spent_credits: spent,
+        capped: out.stopped_for_budget,
+        pages_ok: out.pages.filter((p) => p.ok).length,
+        pages_failed: out.pages.filter((p) => !p.ok).length,
+        // 抓到东西 = 至少一页成功**而且**档案里真有品牌名（一页 200 但什么都没读出来不算）
+        analysed: out.pages.some((p) => p.ok) && profile.brand_name !== undefined,
+        edited_fields,
+        kept_edits,
+      }
+      world.appendEvent(
+        'simulation.onboarding_done',
+        { ...result },
+        {
+          actor: { kind: 'person', id: input.who },
+        },
+      )
+      return result
     },
   }
 

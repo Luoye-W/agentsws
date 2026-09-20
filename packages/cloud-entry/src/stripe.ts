@@ -79,8 +79,14 @@ interface StripeSession {
 /**
  * 建一笔 Checkout Session。
  *
- * 1 积分 = ¥1，Stripe 的最小单位是"分"，所以 `unit_amount = credits × 100`。
- * `metadata` 里只放组织号与积分数——**没有账号、没有邮箱、没有工作区名字**：
+ * **按档收美元**（WP118 / 67 §2，Luoye 2026-09-19 定四档）：US$20 → 140 积分，
+ * 1 美元 = 7 积分。`usd` 给了就按美元收，没给就退回老路（按人民币，1 积分 = ¥1）
+ * ——那条老路现在只剩运营后台在用（用户界面上只有四张档位卡）。
+ *
+ * 为什么按美元定价而不是"积分数 × 当日汇率"：后者会让同一张卡上的价钱每天变
+ * 一点，用户第二次充值时会以为我们偷偷涨价了。
+ *
+ * `metadata` 里只放组织号、积分数与档位——**没有账号、没有邮箱、没有工作区名字**：
  * 支付渠道那边不需要知道我们的用户是谁。
  */
 export async function createCheckoutSession(args: {
@@ -88,20 +94,30 @@ export async function createCheckoutSession(args: {
   fetch: FetchLike
   org_id: string
   credits: number
+  /** 按档充的那些：收多少美元。不给就按人民币收（1 积分 = ¥1）。 */
+  usd?: number
+  /** 按哪一档（`usd20` / `usd50` …）。只进 metadata，不参与算钱。 */
+  tier_id?: string
 }): Promise<{ session_id: string; url: string }> {
   const key = secretOf(args.config.secret_key)
   if (key === undefined) {
     throw new EntryError('not_implemented', '云侧还没配 Stripe（环境变量 STRIPE_SECRET_KEY）')
   }
-  const amountCents = Math.round(args.credits * 100)
+  const byUsd = args.usd !== undefined && args.usd > 0
+  const amountCents = Math.round((byUsd ? (args.usd as number) : args.credits) * 100)
   const form = new URLSearchParams()
   form.set('mode', 'payment')
   form.set('line_items[0][quantity]', '1')
-  form.set('line_items[0][price_data][currency]', 'cny')
+  form.set('line_items[0][price_data][currency]', byUsd ? 'usd' : 'cny')
   form.set('line_items[0][price_data][unit_amount]', String(amountCents))
-  form.set('line_items[0][price_data][product_data][name]', `agentsws 积分 × ${args.credits}`)
+  form.set(
+    'line_items[0][price_data][product_data][name]',
+    `Agents 工坊积分 × ${String(args.credits)}`,
+  )
   form.set('metadata[org_id]', args.org_id)
   form.set('metadata[credits]', String(args.credits))
+  if (args.tier_id !== undefined) form.set('metadata[tier_id]', args.tier_id)
+  if (byUsd) form.set('metadata[usd]', String(args.usd))
   const back = args.config.return_url
   if (back !== undefined) {
     form.set('success_url', `${back}?topup=ok`)
@@ -202,6 +218,8 @@ export function topupOrderOf(args: {
   credits: number
   url: string
   at: string
+  usd?: number
+  tier_id?: string
 }): TopupOrder {
   return {
     id: args.id,
@@ -210,6 +228,8 @@ export function topupOrderOf(args: {
     credits: args.credits,
     // 1 积分 = ¥1
     amount_cny: args.credits,
+    ...(args.usd === undefined ? {} : { amount_usd: args.usd }),
+    ...(args.tier_id === undefined ? {} : { tier_id: args.tier_id }),
     checkout_url: args.url,
     status: 'created',
     created_at: args.at,

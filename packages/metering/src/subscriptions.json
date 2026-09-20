@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "as_of": "2026-09-19",
+  "note": "67 §3：按月订阅的增值服务。一份引擎（subscription.ts），这张表是它的全部输入——加一个服务是往 services 里加一行，不是写一份新代码。两个服务同价同机制（Luoye 2026-09-19 定）。available=false 的那些在界面上灰着写「即将上线」，后端一律拒：登记在先是为了让价目表、后台订阅列表、扣费定时任务提前遍历到它，不是为了先收钱。",
+  "services": [
+    {
+      "id": "kol.service.monthly",
+      "credits_per_month": 30,
+      "available": true,
+      "label_zh": "红人营销增值服务",
+      "label_en": "Influencer marketing service",
+      "note_zh": "云端红人库 + 双向同步：本地一份、云端一份。买的不是备份，是「红人营销以后不依赖本地 Agents 工坊也能跑起来」的地基。"
+    },
+    {
+      "id": "support.service.monthly",
+      "credits_per_month": 30,
+      "available": false,
+      "label_zh": "客服增值服务",
+      "label_en": "Customer support service",
+      "note_zh": "WP124 实现。本轮只登记：价目表、后台订阅列表、扣费引擎都已经认得它，接业务那一步单独做。"
+    }
+  ]
+}

@@ -21,16 +21,42 @@ export { changeKindOf, effectiveConfig, riskClassOf } from './effective.js'
 export {
   BUNDLED_POSITIONS_DIR,
   BUNDLED_ROLES_DIR,
+  bundledPositionOfRole,
   loadBundledPosition,
+  loadBundledPositions,
   loadBundledRole,
+  loadBundledRoles,
   loadPosition,
   loadRole,
   parsePosition,
   parseRole,
   ROLE_ID_ALIASES,
   resolveRoleId,
+  SUPERSEDED_POSITION_IDS,
 } from './load.js'
 export { assertTighterOverrides } from './overrides.js'
+export type {
+  PersonaBrandContext,
+  PersonaLang,
+  PersonaProblem,
+  PersonaSectionsInput,
+} from './persona.js'
+export {
+  applyPersonaOverride,
+  checkAllPersonas,
+  checkPersona,
+  MAX_PERSONA_CHARS,
+  PERSONA_ORDER,
+  PERSONA_SECTIONS_EN,
+  PERSONA_SECTIONS_ZH,
+  personaIsEmpty,
+  personaKey,
+  personaSections,
+  personaTextIn,
+  personaView,
+  renderBrandContext,
+  sameSubject,
+} from './persona.js'
 export type { PolicyEngine } from './policy.js'
 export { compilePolicies, createPolicyEngine, rangeCovers, sensAtMost } from './policy.js'
 export type {

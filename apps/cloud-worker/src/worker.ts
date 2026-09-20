@@ -18,6 +18,7 @@
 import { ADMIN_TOKEN_ENV } from '@agentsws/cloud/workers-kit'
 import { authenticate, errorResponse } from '@agentsws/cloud-entry'
 import type { CloudTokenVerifier, VerifiedCloudToken } from '@agentsws/contracts'
+import { isKolCloudPath } from '@agentsws/kol-cloud'
 import { isKolPath, type KolCharge, type KolWalletOp, kolChargeFor } from '@agentsws/kol-public'
 import type { WalletReservation } from '@agentsws/metering'
 import type { WorkerEnv } from './env.js'
@@ -360,6 +361,38 @@ async function applyKolOpsRemote(
   )
 }
 
+/**
+ * 红人营销增值服务（WP118 / 67 §3）。
+ *
+ * 只有一跳：验令牌 → 转给 `KolTenantDO(org_id)`。**没有预扣那一套**——月费是
+ * 按月扣的定数，由租户对象自己在 alarm 里打 `WalletDO`，与用户这条请求无关。
+ *
+ * 所以这一段比 `handleKolPublic` 短得多，而那正是"订阅制"与"按次计费"在
+ * 工程上的真实差别。
+ */
+async function handleKolTenant(
+  env: WorkerEnv,
+  request: Request,
+  origin: string,
+  url: URL,
+): Promise<Response> {
+  if (env.KOL_TENANT === undefined)
+    return envelope('not_found', `没有这个入口：${request.method} ${url.pathname}`, 404)
+  let principal: VerifiedCloudToken
+  try {
+    const verified = await authenticate(
+      { verifier: remoteVerifier(env, origin) },
+      request.headers.get('Authorization') ?? undefined,
+    )
+    principal = { ...verified, scopes: verified.scopes as VerifiedCloudToken['scopes'] }
+  } catch (err) {
+    // 401 那句话与 Compose 形态一字不差（同一个函数抛的同一个错）
+    return errorResponse(err)
+  }
+  const stub = env.KOL_TENANT.get(env.KOL_TENANT.idFromName(principal.org_id))
+  return stub.fetch(withInternalHeaders(request, { principal }))
+}
+
 /** 一条请求的全部去向。 */
 export async function route(request: Request, env: WorkerEnv): Promise<Response> {
   const clean = normalizeClientIp(stripInternalHeaders(request))
@@ -401,6 +434,9 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
 
   // WP116：公共红人库（预扣 → 取数 → 结算，三跳）
   if (isKolPath(url.pathname)) return handleKolPublic(env, clean, origin, url)
+
+  // WP118：租户私有的云端红人库（每个 org 一个对象；钱由那个对象自己去 WalletDO 扣）
+  if (isKolCloudPath(url.pathname)) return handleKolTenant(env, clean, origin, url)
 
   if (isWalletPath(url.pathname)) {
     // ② 验令牌：每次都去问 AccountsDO（撤销立刻生效）
