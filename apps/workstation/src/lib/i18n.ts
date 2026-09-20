@@ -1981,10 +1981,6 @@ const zh: Table = {
   'design.md.button.sample': '按钮样例',
   'design.md.card.sample': '卡片样例',
   'rail.panel.design-md': '设计规范',
-  'onboarding.step1': '公司设置',
-  'onboarding.step2': '个人设置',
-  'onboarding.step3': '岗位设置',
-  'onboarding.step4': '初始配置',
   // WP121b（70 §1）：四步换了内容——第一件事从"你们公司叫什么"换成"用哪个 AI"。
   // 原来的「公司设置 / 个人设置」并进第 ② 步（贴完网址顺带确认）。
   'onboarding.step1': '接上 AI',
@@ -4386,10 +4382,6 @@ const en: Table = {
   'design.md.button.sample': 'Button',
   'design.md.card.sample': 'Card',
   'rail.panel.design-md': 'Design spec',
-  'onboarding.step1': 'Company',
-  'onboarding.step2': 'You',
-  'onboarding.step3': 'Positions',
-  'onboarding.step4': 'What to set up',
   // WP121b (70 §1): same four dots, new contents.
   'onboarding.step1': 'Connect AI',
   'onboarding.step2': 'Your business',
