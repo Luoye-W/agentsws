@@ -1,0 +1,48 @@
+{%- comment -%}
+  Agents Workshop Chat · Theme App Extension block（WP124 / docs/72 §2.1 #11）
+
+  外观唯一真源在 Agents 工坊的聊天窗设置里（主色 / 欢迎语 / 位置 / 语言）；
+  这里只有两个开关位：启用与否、可选的主色覆盖。
+  **不把工作区号暴露在前台**：App embed 的设置里填的地址已经含 /relay/<ws>，
+  由商家后台注入（代理路径由后端反查），前台脚本不携带任何租户标识之外的凭据。
+
+  移植自 KefuAgent kefuagent-shopify-app 的纯壳形态（docs/72 §2.1 #11）。
+{%- endcomment -%}
+
+{%- if block.settings.accent != blank -%}
+  <script>window.agentswsChatAccent = {{ block.settings.accent | json }};</script>
+{%- endif -%}
+
+{%- if block.settings.enabled -%}
+  <script
+    src="{{ block.settings.relay_url }}/widget.js"
+    data-agentsws-chat
+    async
+  ></script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Agents Workshop Chat",
+  "target": "body",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enabled",
+      "label": "启用在线客服",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "relay_url",
+      "label": "聊天服务地址（含 /relay/<工作区>）",
+      "info": "在 Agents 工坊 → 聊天窗 的嵌入代码里复制"
+    },
+    {
+      "type": "color",
+      "id": "accent",
+      "label": "主色（可选，留空用后台配置）"
+    }
+  ]
+}
+{% endschema %}
