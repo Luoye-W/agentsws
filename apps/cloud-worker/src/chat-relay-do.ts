@@ -30,11 +30,24 @@ import {
   type RelayWidgetConfig,
   sealWithKey,
 } from '@agentsws/chat-relay'
-import { CHAT_CONVERSATIONS_MONTHLY } from '@agentsws/metering'
+import type { ServiceSubscription } from '@agentsws/contracts'
+import { SUPPORT_SERVICE_ID } from '@agentsws/contracts'
+import type { SubscriptionWallet } from '@agentsws/kol-cloud'
+import {
+  CHAT_CONVERSATIONS_MONTHLY,
+  cancelSubscription,
+  chargeKeyOf,
+  dueCharges,
+  startSubscription,
+  subscriptionPaid,
+  subscriptionStatusAt,
+  subscriptionUnpaid,
+} from '@agentsws/metering'
 import type { DoStateLike } from './accounts-do.js'
 import type { DoStorageLike } from './do-sql.js'
-import type { WorkerEnv } from './env.js'
+import type { DoNamespaceLike, WorkerEnv } from './env.js'
 import { principalFrom } from './internal.js'
+import { remoteSubscriptionWallet } from './subscription-wallet.js'
 
 /** kv 表名（这个对象里将来还可能住别的表，不叫 `_migrations`——WP114 的坑）。 */
 const RELAY_KV_TABLE = 'relay_kv'
@@ -109,6 +122,8 @@ export interface ChatRelayDoOptions {
   makeSocketPair?: () => { client: RelayWebSocket; server: RelayWebSocket }
   /** 测试钩子：调高限流。 */
   sessionRate?: { per_minute: number; per_hour: number }
+  /** 测试注入：假的钱包（不起第二个 DO）。 */
+  wallet?: SubscriptionWallet
 }
 
 /** 站内提醒的形状（owner 的「额度用到 80% / 到顶」）。 */
@@ -123,6 +138,9 @@ export interface RelayNotification {
 /** 留言暂存多久（与 packages/chat-relay 同一个数：7 天）。 */
 const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+/** 每天醒一次去扣该扣的月费（幂等；支持补扣落下的几期）。 */
+const SUPPORT_BILLING_SWEEP_MS = 24 * 60 * 60 * 1000
+
 const NOTIFICATION_LIMIT = 20
 
 export class ChatRelayDoCore {
@@ -132,6 +150,7 @@ export class ChatRelayDoCore {
   readonly #kv: SqlRelayKv
   readonly #now: () => string
   readonly #makeSocketPair: () => { client: RelayWebSocket; server: RelayWebSocket }
+  readonly #wallet: SubscriptionWallet
   readonly #options: ChatRelayDoOptions
   /** 访客面按工作区分派（DO = 一个工作区，实际只会有一份）。 */
   readonly #httpByWorkspace = new Map<string, ReturnType<typeof createRelayHttp>>()
@@ -156,6 +175,7 @@ export class ChatRelayDoCore {
         return { client: pair[0], server: pair[1] }
       })
     this.#kv = new SqlRelayKv(state.storage)
+    this.#wallet = options.wallet ?? walletOf(env)
     this.core = new RelayCore({
       clock: this.#now,
       // 配对密钥只存哈希（sha256 hex）；比对就是重算一次
@@ -378,6 +398,10 @@ export class ChatRelayDoCore {
       return Response.json({ data: { items } })
     }
 
+    // 客服增值服务：开通 / 取消 / 查状态（钱在 WalletDO，规则在 metering 引擎）
+    if (url.pathname === '/__internal/support-subscription')
+      return this.#handleSubscriptionInternal(request, url, workspace)
+
     return Response.json(
       { code: 'not_found', message: `没有这个入口：${request.method} ${url.pathname}` },
       { status: 404 },
@@ -388,6 +412,154 @@ export class ChatRelayDoCore {
     return this.#kv.get(`msgkey:${workspace}`) ?? 'no-message-key-issued'
   }
 
+  /* ── 客服增值服务的订阅（67 §3 那套引擎，support 是第二个实例） ───────── */
+
+  #subscription(): ServiceSubscription | undefined {
+    const raw = this.#kv.get('service-sub')
+    return raw === undefined ? undefined : (JSON.parse(raw) as ServiceSubscription)
+  }
+
+  /** 订阅现在真实生效吗（active / cancelling 都算——当期用完为止）。 */
+  #subscriptionEffective(sub: ServiceSubscription | undefined): boolean {
+    if (sub === undefined) return false
+    const status = subscriptionStatusAt(sub, this.#now())
+    return status === 'active' || status === 'cancelling'
+  }
+
+  async #handleSubscriptionInternal(
+    request: Request,
+    url: URL,
+    workspace: string,
+  ): Promise<Response> {
+    const principal = principalFrom(request)
+    const orgId = principal?.org_id
+    if (orgId === undefined)
+      return Response.json(
+        { code: 'unauthenticated', message: '要登录的工作区令牌' },
+        { status: 401 },
+      )
+    const now = this.#now()
+    const current = this.#subscription()
+
+    if (request.method === 'GET') {
+      const sub = this.#subscription()
+      return Response.json({
+        data: {
+          ...(sub === undefined
+            ? { status: 'none' as const }
+            : {
+                status: subscriptionStatusAt(sub, now),
+                current_cycle_end: sub.current_cycle_end,
+                grace_until: sub.grace_until,
+                cancel_at_period_end: sub.cancel_at_period_end,
+              }),
+          service_id: SUPPORT_SERVICE_ID,
+          workspace,
+        },
+      })
+    }
+
+    if (request.method === 'POST' && url.pathname === '/__internal/support-subscription') {
+      this.#kv.put('service-org', orgId)
+      this.#kv.put('service-workspace', workspace)
+      const sub = startSubscription(
+        current ?? {
+          org_id: orgId,
+          service_id: SUPPORT_SERVICE_ID,
+          status: 'none',
+          cancel_at_period_end: false,
+          granted_months: 0,
+          updated_at: now,
+        },
+        now,
+      )
+      const billed = await this.#runBilling(orgId, workspace, sub, now)
+      return Response.json({
+        data: { status: subscriptionStatusAt(billed.sub, now), charged: billed.charges },
+      })
+    }
+
+    if (request.method === 'DELETE') {
+      const sub = cancelSubscription(
+        current ?? {
+          org_id: orgId,
+          service_id: SUPPORT_SERVICE_ID,
+          status: 'none',
+          cancel_at_period_end: false,
+          granted_months: 0,
+          updated_at: now,
+        },
+        now,
+      )
+      this.#kv.put('service-sub', JSON.stringify(sub))
+      this.#refreshWorkspaceFlag(workspace, sub, now)
+      return Response.json({ data: { status: subscriptionStatusAt(sub, now) } })
+    }
+
+    return Response.json(
+      { code: 'not_found', message: `没有这个入口：${request.method} ${url.pathname}` },
+      { status: 404 },
+    )
+  }
+
+  /** 把到点的月费扣掉（幂等；支持补扣落下的几期）。 */
+  async #runBilling(
+    orgId: string,
+    workspace: string,
+    input: ServiceSubscription,
+    now: string,
+  ): Promise<{ sub: ServiceSubscription; charges: { cycle_start: string; ok: boolean }[] }> {
+    let sub = input
+    const charged = new Set(
+      (this.#kv.get('service-sub-charged') ?? '').split(',').filter((k) => k !== ''),
+    )
+    const charges = dueCharges({
+      sub,
+      credits_per_month: 30,
+      now,
+      charged,
+    })
+    const results: { cycle_start: string; ok: boolean }[] = []
+    for (const charge of charges) {
+      const outcome = await this.#wallet.charge({
+        org_id: orgId,
+        workspace_id: workspace,
+        capability: SUPPORT_SERVICE_ID,
+        credits: charge.credits,
+        request_id: chargeKeyOf(SUPPORT_SERVICE_ID, orgId, charge.cycle_start),
+      })
+      if (outcome.ok) {
+        sub = subscriptionPaid(sub, charge, now)
+        charged.add(charge.charge_key)
+        results.push({ cycle_start: charge.cycle_start, ok: true })
+      } else {
+        sub = subscriptionUnpaid(sub, charge, now)
+        results.push({ cycle_start: charge.cycle_start, ok: false })
+        break // 没钱：后面的期数等下一拍再补（宽限 30 天）
+      }
+    }
+    this.#kv.put('service-sub', JSON.stringify(sub))
+    this.#kv.put('service-sub-charged', [...charged].join(','))
+    this.#refreshWorkspaceFlag(workspace, sub, now)
+    return { sub, charges: results }
+  }
+
+  /** 转发器判「订阅生效」读的就是这个标志（active / cancelling 生效）。 */
+  #refreshWorkspaceFlag(
+    workspace: string,
+    sub: ServiceSubscription | undefined,
+    now: string,
+  ): void {
+    if (sub !== undefined && this.#subscriptionEffectiveFor(sub, now))
+      this.#kv.put(`sub:${workspace}`, 'active')
+    else this.#kv.delete(`sub:${workspace}`)
+  }
+
+  #subscriptionEffectiveFor(sub: ServiceSubscription, now: string): boolean {
+    const status = subscriptionStatusAt(sub, now)
+    return status === 'active' || status === 'cancelling'
+  }
+
   #notifications(): RelayNotification[] {
     return this.#kv
       .list('notify:')
@@ -396,12 +568,26 @@ export class ChatRelayDoCore {
       .slice(0, NOTIFICATION_LIMIT)
   }
 
-  /** alarm：扫超期留言（7 天，超的删）；六小时一拍。 */
+  /**
+   * alarm：扫超期留言（7 天，超的删）+ 把到点的月费扣掉。
+   * 六小时一拍（留言一小时的误差无所谓；月费补扣本来就支持，幂等）。
+   */
   async alarm(): Promise<void> {
-    const now = Date.parse(this.#now())
+    const nowIso = this.#now()
+    const now = Date.parse(nowIso)
     for (const { key, value } of this.#kv.list('offline:')) {
       const item = JSON.parse(value) as { created_at: string }
       if (now - Date.parse(item.created_at) >= OFFLINE_TTL_MS) this.#kv.delete(key)
+    }
+    // 月费补扣：机器停一周，回来把落下的几期一次扣完（上限 24 期，引擎兜底）
+    const sub = this.#subscription()
+    const orgId = this.#kv.get('service-org')
+    if (
+      sub !== undefined &&
+      orgId !== undefined &&
+      this.#kv.get('service-workspace') !== undefined
+    ) {
+      await this.#runBilling(orgId, this.#kv.get('service-workspace') as string, sub, nowIso)
     }
     await this.#state.storage.setAlarm(now + 6 * 60 * 60 * 1000)
   }
@@ -415,6 +601,24 @@ function sha256Hex(text: string): string {
 
 function deriveKey(seed: string): Buffer {
   return createHash('sha256').update(`chat-relay:${seed}`).digest()
+}
+
+/**
+ * 钱那一跳：打这个组织的 `WalletDO`（与 kol-tenant 同一形状）。
+ * 没绑 `WALLET` 就回一个**永远扣不上**的钱包：宁可让订阅停在宽限里，也不能白给服务。
+ */
+function walletOf(env: WorkerEnv): SubscriptionWallet {
+  return {
+    async charge(args) {
+      const ns = env.WALLET as DoNamespaceLike | undefined
+      if (ns === undefined)
+        return { ok: false, reason: '这台机器上还没接钱包，这一次没扣成（钱一分没动）。' }
+      return remoteSubscriptionWallet({
+        wallet: ns.get(ns.idFromName(args.org_id)),
+        origin: env.AGENTSWS_CLOUD_BASE_URL ?? 'https://cloud.agentsws.com',
+      }).charge(args)
+    },
+  }
 }
 
 function envValue(env: WorkerEnv, name: string): string | undefined {

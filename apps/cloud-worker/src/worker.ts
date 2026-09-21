@@ -380,10 +380,16 @@ const RELAY_INTERNAL_ROUTES: Record<string, { method: string; internal: string }
   '/v1/chat/relay/pairing': { method: 'POST', internal: '/__internal/pairing' },
   '/v1/chat/relay/status': { method: 'GET', internal: '/__internal/status' },
   '/v1/chat/relay/offline-messages': { method: 'POST', internal: '/__internal/offline-messages' },
+  '/v1/support/subscription': { method: 'GET', internal: '/__internal/support-subscription' },
 }
 
 export function isRelayOwnerPath(pathname: string): boolean {
   return pathname in RELAY_INTERNAL_ROUTES
+}
+
+/** 客服增值服务的开通 / 取消（同一条 owner 面；GET = 状态，POST = 开通，DELETE = 取消）。 */
+export function isSupportSubscriptionPath(pathname: string): boolean {
+  return pathname === '/v1/support/subscription'
 }
 
 async function handleRelayOwner(
@@ -495,6 +501,24 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
 
   // WP124：官方托管的聊天转发器（owner 面：配对密钥 / 状态 / 拉留言）
   if (isRelayOwnerPath(url.pathname)) return handleRelayOwner(env, clean, origin)
+
+  // WP124：客服增值服务（开通 / 取消 / 状态；对象与转发器同一个，按工作区取）
+  if (isSupportSubscriptionPath(url.pathname)) {
+    if (env.CHAT_RELAY === undefined)
+      return envelope('not_found', `没有这个入口：${clean.method} ${url.pathname}`, 404)
+    let principal: VerifiedCloudToken
+    try {
+      const verified = await authenticate(
+        { verifier: remoteVerifier(env, origin) },
+        clean.headers.get('Authorization') ?? undefined,
+      )
+      principal = { ...verified, scopes: verified.scopes as VerifiedCloudToken['scopes'] }
+    } catch (err) {
+      return errorResponse(err)
+    }
+    const stub = env.CHAT_RELAY.get(env.CHAT_RELAY.idFromName(principal.workspace_id))
+    return stub.fetch(withInternalHeaders(clean, { principal }))
+  }
 
   // WP124：转发器的访客面（挂件 / 会话 / SSE / 留言）。不认令牌，四道门在 DO 里
   if (isRelayVisitorPath(url.pathname)) {

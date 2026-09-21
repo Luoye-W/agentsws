@@ -45,8 +45,8 @@ type Group = 'capability' | 'workspace' | 'day'
 const GROUPS: Group[] = ['capability', 'workspace', 'day']
 
 /** 付费三块（67 §1）。顺序就是界面上从左到右。 */
-type Block = 'data' | 'ai' | 'kol_service'
-const BLOCKS: Block[] = ['data', 'ai', 'kol_service']
+type Block = 'data' | 'ai' | 'service'
+const BLOCKS: Block[] = ['data', 'ai', 'service']
 
 /**
  * 一条能力归哪一块。
@@ -59,7 +59,7 @@ function blockOf(capability: string, declared?: Block): Block {
   if (declared !== undefined) return declared
   if (capability.startsWith('ai.')) return 'ai'
   if (capability.startsWith('kol.service.') || capability.startsWith('support.service.'))
-    return 'kol_service'
+    return 'service'
   return 'data'
 }
 

@@ -2261,9 +2261,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 那一张去重表。两套区意味着 21 §4「删这个人」会漏掉一半，两张去重表意味着
      * 同一条消息从两处进来会产出两条事件。
      */
+    // WP124：求助等待时长存在聊天窗设置里（chatWidget 在 chat 之后建，经这个盒子回读）
+    const lateWidget: { current?: ReturnType<typeof createChatWidget> } = {}
     const chat = createChatLane({
       clock,
       workspace_id: ws,
+      assistWaitSeconds: () => lateWidget.current?.config().assist_wait_seconds,
       appendEvent,
       halt: kernel.halt,
       raw: channels.raw,
@@ -2410,6 +2413,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       secrets: brandSecrets,
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
+    lateWidget.current = chatWidget
 
     /*
      * WP124：本机 ↔ 转发器的那条外连。设置（转发器地址 / 配对密钥 / 留言密钥）

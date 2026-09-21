@@ -98,6 +98,9 @@ function rig(over: { models?: boolean; answer?: string } = {}): Rig {
   const chat = createChatLane({
     clock,
     workspace_id: WS,
+    // WP124：这一组测试钉的是"老口径"的 T+3 提醒 / T+10 转邮件（>3 分钟档）。
+    // 等待时长给 10 分钟——死线固化进会话行后，这些钟点才与原来的时刻对上。
+    assistWaitSeconds: () => 600,
     appendEvent: (e) => {
       events.push(e)
     },
@@ -475,5 +478,47 @@ describe('接线：事项、事件、出站', () => {
     expect(out.blocked).toBe('no_model')
     expect(out.approval_item_id).toBeDefined()
     expect((await r.chat.session(s.id))?.status).toBe('assist_requested')
+  })
+})
+
+describe('死线在求助那一刻固化（WP124 修订第 3 条）', () => {
+  it('assist 触发时把死线按当时的设置算定写进会话行；之后改设置不影响在等的客户', async () => {
+    const r = rig()
+    const s = await open(r)
+    await r.chat.receive({ session_id: s.id, text: 'I need to speak to a human, please.' })
+    await r.chat.advanceTurn(s.id, { force: true })
+    const after = await r.chat.session(s.id)
+    expect(after?.status).toBe('assist_requested')
+    expect(after?.assist_deadline_at).toBeDefined()
+    // rig 给的是 600 秒：死线 = 求助 + 10 分钟
+    expect(
+      Date.parse(after?.assist_deadline_at as string) -
+        Date.parse(after?.assist_requested_at as string),
+    ).toBe(600_000)
+  })
+
+  it('没配等待时长的老装配：默认 30 秒（修订第 3 条）', async () => {
+    const clock = new StepClock()
+    const events: unknown[] = []
+    const bare = createChatLane({
+      clock,
+      workspace_id: WS,
+      appendEvent: (e) => {
+        events.push(e)
+      },
+      halt: new MemoryHalt(),
+      raw: new MemoryRawStore({ clock }),
+      approvals: new RecordingApprovals(),
+      position: () => ({ person_id: 'p_wang', assignment_id: 'as_1', role_id: 'dtc.live-chat' }),
+      schedule_turn: () => undefined,
+    })
+    const s = await bare.openSandbox('p_wang')
+    await bare.receive({ session_id: s.id, text: 'I need a human, now.' })
+    await bare.advanceTurn(s.id, { force: true })
+    const after = await bare.session(s.id)
+    expect(
+      Date.parse(after?.assist_deadline_at as string) -
+        Date.parse(after?.assist_requested_at as string),
+    ).toBe(30_000)
   })
 })

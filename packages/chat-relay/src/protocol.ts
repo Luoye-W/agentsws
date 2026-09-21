@@ -63,6 +63,17 @@ export type ClientFrame =
       message_id: string
       text: string
     }
+  | {
+      /**
+       * 话轮之外的插话（比如教 AI 的那句改写，访客上一条消息的回复已经发过了）。
+       * 与 `reply` 分开是刻意的：「一次话轮恰好一条回复」的账本只认 `reply`；
+       * `note` 不占话轮、不冲账，转发器原样递给访客流。
+       */
+      type: 'note'
+      session: string
+      message_id: string
+      text: string
+    }
   | { type: 'typing'; session: string; active: boolean }
   | { type: 'pull_offline' }
   | { type: 'ping' }
@@ -147,6 +158,12 @@ export function parseClientFrame(raw: string): ClientFrame | undefined {
         message_id: frame.message_id,
         text: frame.text,
       }
+    }
+    case 'note': {
+      if (typeof frame.session !== 'string' || frame.session === '') return undefined
+      if (typeof frame.message_id !== 'string' || frame.message_id === '') return undefined
+      if (typeof frame.text !== 'string' || frame.text === '') return undefined
+      return { type: 'note', session: frame.session, message_id: frame.message_id, text: frame.text }
     }
     case 'typing': {
       // FR-035：只收布尔。多一个键 = 带自由文本 = 拒。

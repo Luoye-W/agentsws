@@ -102,6 +102,12 @@ export interface ChatWidgetConfig {
   accent?: string
   /** 打开时的第一句话；不填用内置的那句。 */
   greeting?: string
+  /**
+   * WP124（修订第 3 条）：求助等待时长（秒）。默认 30，范围 10–600，
+   * 非法值回落 30（服务端白名单，与 `normalizeAssistWaitSeconds` 同一条规则）。
+   * 死线在求助那一刻固化，改它只影响新的求助。
+   */
+  assist_wait_seconds?: number
 }
 
 /** widget 的默认配置：**一个来源都不放行**。 */

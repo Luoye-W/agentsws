@@ -1708,10 +1708,10 @@ const zh: Table = {
   'credits.unit.month': '每月',
   'credits.block.data': '数据接口',
   'credits.block.ai': 'AI 使用',
-  'credits.block.kol_service': '增值服务',
+  'credits.block.service': '增值服务',
   'credits.block.data.note': '我们替你付的平台费与配额（红人查询、社媒抓取、网页、转写）',
   'credits.block.ai.note': '模型按 token 算',
-  'credits.block.kol_service.note': '按月订阅（红人营销 30 积分 / 月）',
+  'credits.block.service.note': '按月订阅（红人营销、客服增值服务，各 30 积分 / 月）',
   'credits.blocks': '这个月钱花在哪',
   'credits.blocks.none': '这一块这个月还没花积分',
   'credits.tiers': '选一档充值',
@@ -4116,12 +4116,12 @@ const en: Table = {
   'credits.unit.month': 'per month',
   'credits.block.data': 'Data APIs',
   'credits.block.ai': 'AI usage',
-  'credits.block.kol_service': 'Add-on services',
+  'credits.block.service': 'Add-on services',
   'credits.block.data.note':
     'Platform fees and quota we pay for you (creator lookups, social fetches, crawling, transcription)',
   'credits.block.ai.note': 'Models, per token',
-  'credits.block.kol_service.note':
-    'Monthly subscriptions (influencer marketing, 30 credits/month)',
+  'credits.block.service.note':
+    'Monthly subscriptions (influencer marketing & customer support, 30 credits/month each)',
   'credits.blocks': 'Where this month went',
   'credits.blocks.none': 'Nothing spent here this month',
   'credits.tiers': 'Pick a top-up',

@@ -62,16 +62,17 @@ export interface CapabilitySourceSettings {
  * - `data`：**数据接口**（YouTube Data API、Apify、各家社媒抓取）。我们替用户付了
  *   平台的钱与配额。
  * - `ai`：**AI 使用**。按 token。
- * - `kol_service`：**红人营销增值服务**。订阅制，30 积分 / 月（= ¥30 / 月）——
- *   它买的不是备份，是"红人营销以后不依赖本地 Agents 工坊也能跑起来"的地基：
- *   本地一份、云端一份，双向同步。
+ * - `service`：**增值服务**（WP124 起改通用名；红人与客服两个服务都归它）。
+ *   订阅制，30 积分 / 月（= ¥30 / 月）——红人买的不是备份，是"不依赖本地
+ *   Agents 工坊也能跑起来"的地基：本地一份、云端一份，双向同步；
+ *   客服买的同理：订阅后转发器的对端从商家本机换成托管实例。
  *
  * 为什么要分块而不是让用户对着一张十几行的价目表自己归类：这三块的**花钱方式**
  * 根本不同（按次 / 按 token / 按月），"这个月钱花哪儿了"只有按这三块分开才回答得清。
  */
-export type PricingBlock = 'data' | 'ai' | 'kol_service'
+export type PricingBlock = 'data' | 'ai' | 'service'
 
-export const PRICING_BLOCKS: readonly PricingBlock[] = ['data', 'ai', 'kol_service']
+export const PRICING_BLOCKS: readonly PricingBlock[] = ['data', 'ai', 'service']
 
 /**
  * 价目表里的一条：一项能力、一个单位、多少积分。
@@ -103,14 +104,18 @@ export interface PricingEntry {
 /**
  * 一条能力归哪一块。
  *
- * `block` 有就用它；没有就按能力名的前缀兜底（`ai.*` → AI，`kol.service.*` →
+ * `block` 有就用它；没有就按能力名的前缀兜底（`ai.*` → AI，`*.service.*` →
  * 增值服务，其余 → 数据接口）。**兜底不是猜**：三块的能力名各有自己的命名空间，
  * 这条规则与 `pricing.json` 里那一列是同一件事写两遍——一遍给数据，一遍给旧数据。
+ * （WP124：块名从 `kol_service` 改成 `service`——第二个增值服务进来了，
+ * 第一个实例的名字不该刻在块上；老数据里读到 `kol_service` 的由下方归一化。）
  */
 export function pricingBlockOf(entry: Pick<PricingEntry, 'capability' | 'block'>): PricingBlock {
+  if ((entry.block as string) === 'kol_service') return 'service'
   if (entry.block !== undefined) return entry.block
   if (entry.capability.startsWith('ai.')) return 'ai'
-  if (entry.capability.startsWith('kol.service.')) return 'kol_service'
+  if (entry.capability.startsWith('kol.service.') || entry.capability.startsWith('support.service.'))
+    return 'service'
   return 'data'
 }
 

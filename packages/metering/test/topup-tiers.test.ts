@@ -67,7 +67,7 @@ describe('付费三块', () => {
     expect([...PRICING_BLOCKS].every((b) => seen.has(b))).toBe(true)
   })
 
-  it('AI 归 ai、红人营销增值服务归 kol_service、其余归 data', () => {
+  it('AI 归 ai、增值服务归 service（WP124 改通用名，红人与客服都归它）、其余归 data', () => {
     const blockOf = (capability: string): string => {
       const entry = PRICING_FILE.entries.find((e) => e.capability === capability)
       if (entry === undefined) throw new Error(`价目表里没有 ${capability}`)
@@ -75,7 +75,8 @@ describe('付费三块', () => {
     }
     expect(blockOf('ai.chat')).toBe('ai')
     expect(blockOf('data.kol.lookup')).toBe('data')
-    expect(blockOf('kol.service.monthly')).toBe('kol_service')
+    expect(blockOf('kol.service.monthly')).toBe('service')
+    expect(blockOf('support.service.monthly')).toBe('service')
   })
 
   it('红人营销增值服务是 30 积分 / 月（= ¥30）', () => {
@@ -86,9 +87,14 @@ describe('付费三块', () => {
 
   it('旧数据（没有 block 那一列）按能力名前缀兜底，不会漏出界面', () => {
     expect(pricingBlockOf({ capability: 'ai.embeddings' })).toBe('ai')
-    expect(pricingBlockOf({ capability: 'kol.service.monthly' })).toBe('kol_service')
+    expect(pricingBlockOf({ capability: 'kol.service.monthly' })).toBe('service')
+    expect(pricingBlockOf({ capability: 'support.service.monthly' })).toBe('service')
     expect(pricingBlockOf({ capability: 'crawl.page' })).toBe('data')
     // 显式写了的那一列优先于前缀
     expect(pricingBlockOf({ capability: 'crawl.page', block: 'ai' })).toBe('ai')
+    // 老数据里读到 kol_service：归一化成 service（块名改了，老价目表不断界面）
+    expect(pricingBlockOf({ capability: 'kol.service.monthly', block: 'kol_service' })).toBe(
+      'service',
+    )
   })
 })

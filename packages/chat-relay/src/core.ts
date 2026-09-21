@@ -190,6 +190,13 @@ export class RelayCore {
       case 'reply':
         this.deliverReply(workspace, frame.session, frame.turn, frame.message_id, frame.text)
         return
+      case 'note': {
+        // 话轮之外的插话：不占账本，原样递给访客流
+        const visitor = this.visitors.get(frame.session)
+        if (visitor !== undefined && visitor.workspace === workspace)
+          visitor.sink.send({ type: 'message', message: { role: 'agent', text: frame.text } })
+        return
+      }
       case 'typing': {
         const visitor = this.visitors.get(frame.session)
         if (visitor !== undefined && visitor.workspace === workspace)

@@ -92,6 +92,9 @@ export class MemoryChatStore implements ChatStore {
     if (patch.assist_requested_at === null) delete next.assist_requested_at
     else if (patch.assist_requested_at !== undefined)
       next.assist_requested_at = patch.assist_requested_at
+    if (patch.assist_deadline_at === null) delete next.assist_deadline_at
+    else if (patch.assist_deadline_at !== undefined)
+      next.assist_deadline_at = patch.assist_deadline_at
     if (patch.assist_reminded_at === null) delete next.assist_reminded_at
     else if (patch.assist_reminded_at !== undefined)
       next.assist_reminded_at = patch.assist_reminded_at

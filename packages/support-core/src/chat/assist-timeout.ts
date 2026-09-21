@@ -5,20 +5,25 @@
  *
  * 求助超时：访客要人工之后，商家没接，这条会话不能就这么挂着。
  *
- * - **T+3 分钟**：给访客一条进度提醒（"还在确认；不方便等就留个邮箱"）。一次，只此一次；
- * - **T+10 分钟**：转邮件跟进——把在这里干等换成"我们发邮件给你"，然后放访客走。
+ * WP124（修订第 3 条）把这套口径改成**可配置**：
  *
- * 这两个值是产品口径，不是可调旋钮（本地档只有一个商家，没有"每个工作区一套预设"
- * 那件事；KefuAgent 的四档预设留给托管档）。
+ * - **默认 30 秒**；商家可自定义 10–600 秒（30s / 1 / 3 / 5 / 10 分钟是快捷项）；
+ *   非法值回落 30 秒——等太短最多是客户早一点收到邮件，等太长是客户对着静默
+ *   页面坐着，安全不对称是反的；
+ * - **死线在求助那一刻固化**进会话行（`assist_deadline_at`），巡检不回读设置；
+ * - **只有超过 3 分钟的档才有中途提醒**，措辞与 T+0 那句不同（T+0 的话术里已经
+ *   要过一次邮箱，照抄会让客户连收两遍同一句——KA 勘误 12-C）。
+ *
+ * 没存死线的旧会话按老口径（T+3 提醒 / T+10 转邮件）跑，不回填。
  *
  * 全部纯判定：时间从参数进来，本文件里没有 `Date.now()`。
  */
 import type { Iso8601 } from '@agentsws/contracts'
 
 export const CHAT_ASSIST_TIMEOUTS = {
-  /** T+3：访客能拿到的那一条进度提醒。 */
+  /** T+3：访客能拿到的那一条进度提醒（老口径，>3 分钟档沿用）。 */
   reminder_ms: 3 * 60 * 1000,
-  /** T+10：停止等待，转邮件跟进。 */
+  /** T+10：停止等待，转邮件跟进（老口径；没存死线的旧会话用它）。 */
   deadline_ms: 10 * 60 * 1000,
   /**
    * 访客"还在页面上"的判定窗口。比 widget 的心跳周期宽得多，
@@ -34,12 +39,50 @@ export interface ChatAssistSchedule {
   deadline_at: Iso8601
 }
 
-export function chatAssistSchedule(requested_at: Iso8601): ChatAssistSchedule {
+/** 求助等待默认 30 秒（修订第 3 条）。 */
+export const ASSIST_WAIT_DEFAULT_SECONDS = 30
+/** 可自定义的边界。 */
+export const ASSIST_WAIT_MIN_SECONDS = 10
+export const ASSIST_WAIT_MAX_SECONDS = 600
+/** 设置页的快捷项（30s / 1 / 3 / 5 / 10 分钟）。 */
+export const ASSIST_WAIT_QUICK_OPTIONS: readonly number[] = [30, 60, 180, 300, 600]
+/** 只有超过 3 分钟的档才有中途提醒。 */
+export const ASSIST_MID_REMINDER_THRESHOLD_SECONDS = 180
+
+/** 非法值回落默认（不是回落最长档——等太长比等太短更伤）。 */
+export function normalizeAssistWaitSeconds(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return ASSIST_WAIT_DEFAULT_SECONDS
+  if (n < ASSIST_WAIT_MIN_SECONDS || n > ASSIST_WAIT_MAX_SECONDS) return ASSIST_WAIT_DEFAULT_SECONDS
+  return n
+}
+
+/**
+ * 一次求助的两个钟点。老口径（不带 `wait_seconds`）= T+3 / T+10；
+ * WP124 起（带 `wait_seconds`）= 死线在求助那一刻算定，中途提醒只有
+ * 超过 3 分钟的档才有。
+ */
+export function chatAssistSchedule(
+  requested_at: Iso8601,
+  wait_seconds?: number,
+): ChatAssistSchedule {
   const base = Date.parse(requested_at)
+  if (wait_seconds === undefined) {
+    return {
+      requested_at,
+      remind_at: new Date(base + CHAT_ASSIST_TIMEOUTS.reminder_ms).toISOString(),
+      deadline_at: new Date(base + CHAT_ASSIST_TIMEOUTS.deadline_ms).toISOString(),
+    }
+  }
+  const deadline = base + wait_seconds * 1000
   return {
     requested_at,
-    remind_at: new Date(base + CHAT_ASSIST_TIMEOUTS.reminder_ms).toISOString(),
-    deadline_at: new Date(base + CHAT_ASSIST_TIMEOUTS.deadline_ms).toISOString(),
+    // 只有 >3 分钟的档才有中途提醒（1 分钟档死线即提醒）
+    remind_at:
+      wait_seconds > ASSIST_MID_REMINDER_THRESHOLD_SECONDS
+        ? new Date(base + CHAT_ASSIST_TIMEOUTS.reminder_ms).toISOString()
+        : new Date(deadline).toISOString(),
+    deadline_at: new Date(deadline).toISOString(),
   }
 }
 
@@ -70,6 +113,14 @@ export interface ChatAssistDecision {
 export interface ChatAssistInput {
   /** 什么时候求的助；没求过就不该调这个函数。 */
   requested_at: Iso8601
+  /**
+   * WP124：**固化的死线**（求助那一刻从当时的设置算出来存进会话行）。
+   * 巡检不回读设置——商家中途改短，不许把已经在等的客户提前踢走。
+   * 不给就按老口径（requested + T+10）。
+   */
+  deadline_at?: Iso8601
+  /** 求助那一刻的等待时长（决定有没有中途提醒）；老口径 T+3 恒有。 */
+  wait_seconds?: number
   /** 已经提醒过的时刻；提醒的幂等锚——没有它，一分钟一次的巡检会提醒七遍。 */
   reminded_at?: Iso8601
   now: Iso8601
@@ -84,19 +135,27 @@ export interface ChatAssistInput {
  * "我还在确认" 紧接着 "我已经转到邮件了" 比两句里的任何一句单独出现都糟。
  */
 export function evaluateChatAssist(input: ChatAssistInput): ChatAssistDecision {
-  const schedule = chatAssistSchedule(input.requested_at)
+  const schedule = chatAssistSchedule(input.requested_at, input.wait_seconds)
+  // 固化的死线优先：它是在求助那一刻从"当时的设置"算出来的
+  const deadline_at = input.deadline_at ?? schedule.deadline_at
   const now = Date.parse(input.now)
 
-  if (now >= Date.parse(schedule.deadline_at)) {
+  if (now >= Date.parse(deadline_at)) {
     return { action: 'email_follow_up', reason: 'assist_deadline_reached' }
   }
 
+  // 没有中途提醒的档（≤3 分钟）：死线即提醒，跳过提醒判定
+  const hasMidReminder =
+    input.wait_seconds === undefined || input.wait_seconds > ASSIST_MID_REMINDER_THRESHOLD_SECONDS
   if (input.reminded_at !== undefined) {
     return {
       action: 'wait',
       reason: 'already_reminded',
-      next_check_at: schedule.deadline_at,
+      next_check_at: deadline_at,
     }
+  }
+  if (!hasMidReminder && input.wait_seconds !== undefined) {
+    return { action: 'wait', reason: 'before_deadline', next_check_at: deadline_at }
   }
 
   if (now < Date.parse(schedule.remind_at)) {
@@ -113,7 +172,7 @@ export function evaluateChatAssist(input: ChatAssistInput): ChatAssistDecision {
         : { last_visitor_message_at: input.last_visitor_message_at }),
     })
   ) {
-    return { action: 'wait', reason: 'visitor_away', next_check_at: schedule.deadline_at }
+    return { action: 'wait', reason: 'visitor_away', next_check_at: deadline_at }
   }
 
   return { action: 'remind', reason: 'reminder_due' }

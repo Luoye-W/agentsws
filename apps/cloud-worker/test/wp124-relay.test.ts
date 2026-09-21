@@ -8,6 +8,7 @@
 import { createHash } from 'node:crypto'
 import { openSealed } from '@agentsws/chat-relay'
 import type { VerifiedCloudToken } from '@agentsws/contracts'
+import type { SubscriptionWallet } from '@agentsws/kol-cloud'
 import { describe, expect, it } from 'vitest'
 import {
   ChatRelayDoCore,
@@ -84,7 +85,7 @@ interface Harness {
   ): Promise<Response>
 }
 
-function makeCore(): Harness {
+function makeCore(over: { wallet?: SubscriptionWallet } = {}): Harness {
   const storage = new FakeDoStorage()
   let lastPair: { client: FakeWSSide; server: FakeWSSide } | undefined
   const state = {
@@ -95,6 +96,7 @@ function makeCore(): Harness {
   const core = new ChatRelayDoCore(state, {} as WorkerEnv, {
     clock: () => NOW,
     sessionRate: { per_minute: 10_000, per_hour: 10_000 },
+    ...(over.wallet === undefined ? {} : { wallet: over.wallet }),
     makeSocketPair: () => {
       lastPair = FakeWSSide.linked()
       return lastPair
@@ -170,6 +172,86 @@ function makeCore(): Harness {
 
 const internalRequest = (path: string, method = 'GET'): Request =>
   withInternalHeaders(new Request(`https://do/__internal/${path}`, { method }), { principal })
+
+describe('ChatRelayDO · 客服增值服务（订阅 → 托管实例接手）', () => {
+  const okWallet = (): SubscriptionWallet => ({
+    async charge() {
+      return { ok: true, credits: 30 }
+    },
+  })
+  const brokeWallet = (): SubscriptionWallet => ({
+    async charge() {
+      return { ok: false, reason: '余额不足' }
+    },
+  })
+
+  it('开通：当场扣第一期，状态 active，转发器解除 200 上限', async () => {
+    const mk = makeCore({ wallet: okWallet() })
+    const { pairing_token } = await mk.issuePairing()
+    await mk.connectPeer(pairing_token)
+    const sub = await mk.core.fetch(internalRequest('support-subscription', 'POST'))
+    const { data } = (await sub.json()) as { data: { status: string; charged: unknown[] } }
+    expect(data.status).toBe('active')
+    expect(data.charged.length).toBe(1)
+    // 250 个访客全部放行
+    for (let i = 0; i < 250; i += 1) {
+      const session = await mk.visitorSession()
+      const res = await mk.sendMessage(session, 'hi')
+      expect([200, 202]).toContain(res.status)
+    }
+  })
+
+  it('扣不上：进宽限（服务暂停、数据不动），转发器不解除上限', async () => {
+    const mk = makeCore({ wallet: brokeWallet() })
+    await mk.issuePairing()
+    await mk.connectPeer('whatever-wrong-key')
+    const sub = await mk.core.fetch(internalRequest('support-subscription', 'POST'))
+    const { data } = (await sub.json()) as { data: { status: string } }
+    expect(data.status).toBe('grace')
+    // 上限仍在：一个填白名单失败的白名单 → 开会话 403 也说明转发器还在原样工作
+    const status = (await mk.status()) as unknown as { subscribed: boolean }
+    expect(status.subscribed).toBe(false)
+  })
+
+  it('取消：当期用完为止（cancelling 仍生效），到期后 alarm 收走标志', async () => {
+    const mk = makeCore({ wallet: okWallet() })
+    await mk.issuePairing()
+    await mk.core.fetch(internalRequest('support-subscription', 'POST'))
+    const cancel = await mk.core.fetch(internalRequest('support-subscription', 'DELETE'))
+    const { data } = (await cancel.json()) as { data: { status: string } }
+    expect(data.status).toBe('cancelling')
+    const status = (await mk.status()) as unknown as { subscribed: boolean }
+    expect(status.subscribed).toBe(true)
+  })
+
+  it('订阅生效时托管实例赢：两头都连着，访客消息转给 hosted', async () => {
+    const mk = makeCore({ wallet: okWallet() })
+    const { pairing_token } = await mk.issuePairing()
+    // 订阅生效
+    await mk.core.fetch(internalRequest('support-subscription', 'POST'))
+    // 商家本机连上来
+    await mk.connectPeer(pairing_token)
+    // 托管实例也连上来（同一把配对密钥，peer='hosted'）
+    await mk.core.fetch(
+      new Request(`https://do/relay/${WS}/connect`, { headers: { upgrade: 'websocket' } }),
+    )
+    mk.pair().server.emit(
+      JSON.stringify({
+        type: 'hello',
+        protocol_version: 1,
+        workspace: WS,
+        pairing: pairing_token,
+        peer: 'hosted',
+      }),
+    )
+    const session = await mk.visitorSession()
+    await mk.sendMessage(session, 'hi')
+    // 最后一次 makeSocketPair 是 hosted 那一条：visit 应该落在它身上
+    const hosted = mk.pair().server
+    const frames = hosted.inbox.map((e) => JSON.parse(String(e.data)) as Record<string, unknown>)
+    expect(frames.some((f) => f.type === 'visit')).toBe(true)
+  })
+})
 
 describe('ChatRelayDO · 配对', () => {
   it('首次签发返回密钥一次；第二次 409（重发等于再泄露一遍）', async () => {

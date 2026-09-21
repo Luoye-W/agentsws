@@ -13,9 +13,15 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 
 const SEALED_VERSION = 'cr1'
 
-/** 配对密钥（任意长度）→ 32 字节 AES 密钥。 */
-export function sealedKeyOf(pairingToken: string): Buffer {
-  return createHash('sha256').update(`chat-relay-message:${pairingToken}`).digest()
+/**
+ * 留言密钥（任意长度）→ 32 字节 AES 密钥。
+ *
+ * **与转发器侧同一条派生**：官方托管用 `sha256('chat-relay:' + 留言密钥)`
+ * 封箱；本机拉走时用同一把开箱。派生串不一致的话，本机永远开不开自己
+ * 的留言——契约测试在两包各钉一遍。
+ */
+export function sealedKeyOf(messageKey: string): Buffer {
+  return createHash('sha256').update(`chat-relay:${messageKey}`).digest()
 }
 
 /** 封箱。输出 `cr1:<iv>:<tag>:<ciphertext>`（base64url 三段）。 */
