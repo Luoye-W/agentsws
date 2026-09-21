@@ -137,6 +137,26 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
         Object.keys(current.capability_sources).map((key) => [key, 'agentsws' as const]),
       )
       if (Object.keys(next).length > 0) await setCapabilitySources(next, assignment)
+      /*
+       * WP126（派工单定论 2）：第一步选了官方 AI 接口的用户，数据接口默认也走官方
+       * ——五条红人渠道的顺序把「工坊官方数据接口」提到最前。选了自有模型的
+       * 不用动：默认顺序本来就是「我的 key → 我的数据接口 → 工坊的」，
+       * 缺什么回退什么。
+       */
+      const kolChannels = ['youtube', 'instagram', 'tiktok', 'facebook', 'x'] as const
+      await setCapabilitySources(
+        { ...current.capability_sources, ...next },
+        assignment,
+        Object.fromEntries(
+          kolChannels.map((channel) => [
+            `kol.${channel}`,
+            {
+              order: ['workshop', 'official_key', 'byo_source'] as const,
+              disabled: [] as const,
+            },
+          ]),
+        ),
+      )
     },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['model-providers'] })

@@ -15,6 +15,7 @@
 import type {
   CapabilitySourceSettings,
   CloudCreditsView,
+  DataSourceRoute,
   KolCloudDeleteResult,
   KolCloudExport,
   KolCloudLocalStatus,
@@ -115,7 +116,11 @@ export interface CloudPort {
   capabilitySources(actor: CloudActor): MaybePromise<CapabilitySourceSettings>
   setCapabilitySources(
     actor: CloudActor,
-    input: { capability_sources: Record<string, 'mine' | 'agentsws'> },
+    input: {
+      capability_sources: Record<string, 'mine' | 'agentsws'>
+      /** WP126：数据接口路由（键 `kol.<channel>`）。不给就不改这一块。 */
+      data_source_routing?: Record<string, DataSourceRoute> | undefined
+    },
   ): MaybePromise<CapabilitySourceSettings>
 }
 
@@ -142,6 +147,16 @@ const ConflictBody = z.object({
 
 const SourcesBody = z.object({
   capability_sources: z.record(z.string().min(1).max(64), z.enum(['mine', 'agentsws'])),
+  // WP126：数据接口路由。等级枚举在服务端再洗一遍（zod 这一层只管形状）
+  data_source_routing: z
+    .record(
+      z.string().min(1).max(64),
+      z.object({
+        order: z.array(z.enum(['official_key', 'byo_source', 'workshop'])).max(3),
+        disabled: z.array(z.enum(['official_key', 'byo_source', 'workshop'])).max(3),
+      }),
+    )
+    .optional(),
 })
 
 function portOf(deps: GatewayDeps): CloudPort {

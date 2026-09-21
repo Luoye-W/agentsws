@@ -17,7 +17,8 @@ import { Hint, SafetyNote } from '@/components/ui/hint'
 import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
-import { CapabilitySourceSwitch } from './capability-source-switch'
+import { CapabilitySourceSwitch, capabilityOf } from './capability-source-switch'
+import { ByoSourceCard, DataSourceRouteControl } from './data-source-route'
 import { SecureForm } from './secure-form'
 import { TestResultLine } from './test-result'
 
@@ -191,6 +192,16 @@ export function ProviderCard({
           connected={connected}
           {...(assignment === undefined ? {} : { assignment })}
         />
+        {/*
+          WP126：红人那五张卡多两块——数据从哪里来（顺序/停用）与自带数据接口（高级）。
+          别的卡不出：它们要么没有第二条路，要么不是取数。
+        */}
+        {capabilityOf(provider.service)?.startsWith('kol.') ? (
+          <>
+            <DataSourceRouteControl channel={capabilityOf(provider.service)!.slice(4)} />
+            <ByoSourceCard channel={capabilityOf(provider.service)!.slice(4)} />
+          </>
+        ) : null}
       </CardContent>
     </Card>
   )
