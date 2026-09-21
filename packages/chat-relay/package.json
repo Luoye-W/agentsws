@@ -1,0 +1,36 @@
+{
+  "name": "@agentsws/chat-relay",
+  "version": "0.0.0",
+  "private": true,
+  "description": "WP124 聊天转发器：职责只有转发（访客面 ↔ 商家本机主动外连的长连接），不存对话正文、不跑 AI；一份核心，官方托管（Workers DO）/ 自建 Docker（Node）/ 自建 Worker 三种部署",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./widget-script": {
+      "types": "./dist/widget-script.d.ts",
+      "import": "./dist/widget-script.js"
+    },
+    "./node-host": {
+      "types": "./dist/node-host.d.ts",
+      "import": "./dist/node-host.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "ws": "^8.21.0"
+  }
+}
