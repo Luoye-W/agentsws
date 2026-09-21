@@ -49,6 +49,8 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
    * 理由很实际：这个气泡是长在商家网站上的一块，它该说那个网站的语言；
    * 而招呼语是商家自己写的（配置里那条），那是内容，不是界面。
    */
+  // 界面语言：默认跟宿主页 <html lang>；商家配置里选了 zh / en 就强制
+  //（docs/72 §2.1 #8：挂件该说商家网站上的语言，招呼语是内容不是界面）
   var zh = (document.documentElement.lang || 'zh').toLowerCase().indexOf('zh') === 0
   var TXT = zh
     ? {
@@ -75,6 +77,35 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
         formDone: 'Got it — we will reply by email.',
         formNeedEmail: 'Please add an email so we can get back to you.',
       }
+  function applyLanguage(cfgLang) {
+    if (cfgLang !== 'zh' && cfgLang !== 'en') return
+    zh = cfgLang === 'zh'
+    TXT = zh
+      ? {
+          title: '在线客服',
+          send: '发送',
+          tooFast: '发得有点快，稍等一下再说。',
+          offline: '客服现在不在线，给我们留个话吧。',
+          formEmail: '你的邮箱（必填）',
+          formOrder: '订单号（选填）',
+          formQuestion: '想问什么？',
+          formSend: '留言',
+          formDone: '已收到，我们会用邮件回复你。',
+          formNeedEmail: '先填一个邮箱，我们才能回你。',
+        }
+      : {
+          title: 'Chat with us',
+          send: 'Send',
+          tooFast: 'A bit too fast — give it a second.',
+          offline: 'We are away right now — leave us a message.',
+          formEmail: 'Your email (required)',
+          formOrder: 'Order number (optional)',
+          formQuestion: 'What is your question?',
+          formSend: 'Send message',
+          formDone: 'Got it — we will reply by email.',
+          formNeedEmail: 'Please add an email so we can get back to you.',
+        }
+  }
 
   function saved() {
     try {
@@ -239,9 +270,10 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
   }
 
   function render() {
+    var side = cfg && cfg.position === 'left' ? 'left' : 'right'
     root = el(
       'div',
-      'position:fixed;right:20px;bottom:20px;z-index:2147483000;font-family:' +
+      'position:fixed;' + side + ':20px;bottom:20px;z-index:2147483000;font-family:' +
         '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,' +
         '"PingFang SC","Microsoft YaHei",sans-serif;',
     )
@@ -447,6 +479,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
       var data = body && body.data ? body.data : null
       if (!data || !data.enabled) return
       cfg = data
+      applyLanguage(data.language)
       if (document.readyState === 'loading')
         document.addEventListener('DOMContentLoaded', render)
       else render()

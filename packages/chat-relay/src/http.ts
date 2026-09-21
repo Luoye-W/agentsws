@@ -120,7 +120,13 @@ export function createRelayHttp(options: RelayHttpOptions): Hono {
     const cfg = core.publicConfig(workspace)
     return c.json(
       {
-        data: { enabled: cfg.enabled, accent: cfg.accent, greeting: cfg.greeting },
+        data: {
+          enabled: cfg.enabled,
+          accent: cfg.accent,
+          greeting: cfg.greeting,
+          ...(cfg.position === undefined ? {} : { position: cfg.position }),
+          ...(cfg.language === undefined ? {} : { language: cfg.language }),
+        },
       },
       200,
       cors(origin),

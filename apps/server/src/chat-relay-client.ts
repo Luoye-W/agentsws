@@ -125,13 +125,17 @@ export class ChatRelayClient {
   /** 商家改了挂件设置：把新外观推给转发器（连着才推；没连着下次握手带）。 */
   syncConfig(): void {
     if (this.#state !== 'online' || this.#socket === undefined) return
-    this.#socket.send(JSON.stringify({ type: 'config', config: this.#publicConfig() }))
+    this.#socket.send(JSON.stringify({ type: 'config', config: this.#relayConfig() }))
   }
 
   /* ── 连接生命周期 ─────────────────────────────────────────────── */
 
-  #publicConfig(): ChatWidgetConfig {
-    return this.#options.widget.config()
+  /**
+   * 转发器要的那一份外观。`enabled: true` 是**本机说了算**的——这条连接本身
+   * 就是"聊天窗在工作"的证据；转发器不猜（没配置 = 未开）。
+   */
+  #relayConfig(): ChatWidgetConfig & { enabled: boolean } {
+    return { enabled: true, ...this.#options.widget.config() }
   }
 
   #connect(): void {
@@ -167,7 +171,7 @@ export class ChatRelayClient {
           workspace: parsed.workspace,
           pairing,
           peer: 'server',
-          config: this.#publicConfig(),
+          config: this.#relayConfig(),
         }),
       )
     })

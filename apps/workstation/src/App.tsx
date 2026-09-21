@@ -24,6 +24,7 @@ import { BrandDesignPage } from '@/pages/brand-design'
 import { CalendarPage } from '@/pages/calendar'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
 import { ChatSandboxPage } from '@/pages/chat-sandbox'
+import { ChatWindowPage } from '@/pages/chat-window'
 import { ConnectionsPage } from '@/pages/connections'
 import { DutyPage } from '@/pages/duty'
 import { GoalsPage } from '@/pages/goals'
@@ -196,6 +197,8 @@ function Workspace(): ReactNode {
         <Route path="/knowledge" element={<KnowledgePage />} />
         {/* WP57：聊天沙盒（岗位 dtc.live-chat 的面板入口，48 §4 L3 #11） */}
         <Route path="/chat" element={<ChatSandboxPage />} />
+        {/* WP124：聊天窗（设置 / 嵌入 / 转发三选一 / 进行中的对话） */}
+        <Route path="/chat-window" element={<ChatWindowPage />} />
         {/* 24 技能与学习回路：当前版本、三层 overlay、待审提案 */}
         <Route path="/skills" element={<SkillsPage />} />
         {/* 41 §1 个人代理（原「秘书」）：我的代理（问 / profile 与公开级别 / 谁问过我 / 约时间） */}

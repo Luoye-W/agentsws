@@ -177,18 +177,8 @@ describe('聊天沙盒', () => {
       expect(screen.getByTestId('chat-plan-why')).not.toBeNull()
     })
     expect(screen.getByTestId('chat-plan-why').dataset.hint).toContain('低风险')
-    expect(screen.getByTestId('chat-takeover-why').dataset.hint).toContain('AI 一句都不答')
-  })
-
-  it('人工接管开关：打开之后说明 AI 已停口', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<ChatSandboxPage />)
-    await user.click(await screen.findByTestId('chat-takeover'))
-    await waitFor(() => {
-      expect(state.takeovers).toEqual([true])
-    })
-    expect(await screen.findByText('开着：AI 已停口')).not.toBeNull()
-    expect((await screen.findByTestId('chat-status')).textContent).toContain('你已接管')
+    // WP124（修订第 1 条）：接管开关拆掉了，沙盒页只剩教 AI——守卫测试
+    // test/no-direct-reply.test.ts 钉住「对客直发入口数 = 0」。
   })
 
   it('教 AI：商家那句中文标成"不对外"', async () => {

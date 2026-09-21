@@ -36,6 +36,9 @@ export interface RelayWidgetConfig {
   greeting: string
   /** 来源白名单（**空 = 全拒**，同 apps/server 那四道门；由本机随 hello/config 推上来）。 */
   allowed_origins?: string[]
+  /** 挂件位置与界面语言（外观预设；原样透传给挂件）。 */
+  position?: 'left' | 'right'
+  language?: 'auto' | 'zh' | 'en'
   /** 商家自己在设置页试聊：不计对话数（AI 费用照算，那在本机那一侧）。 */
   trial?: boolean
 }
@@ -163,7 +166,12 @@ export function parseClientFrame(raw: string): ClientFrame | undefined {
       if (typeof frame.session !== 'string' || frame.session === '') return undefined
       if (typeof frame.message_id !== 'string' || frame.message_id === '') return undefined
       if (typeof frame.text !== 'string' || frame.text === '') return undefined
-      return { type: 'note', session: frame.session, message_id: frame.message_id, text: frame.text }
+      return {
+        type: 'note',
+        session: frame.session,
+        message_id: frame.message_id,
+        text: frame.text,
+      }
     }
     case 'typing': {
       // FR-035：只收布尔。多一个键 = 带自由文本 = 拒。

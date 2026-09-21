@@ -108,6 +108,10 @@ export interface ChatWidgetConfig {
    * 死线在求助那一刻固化，改它只影响新的求助。
    */
   assist_wait_seconds?: number
+  /** 挂件在页面上的位置（预设二选一；36 §原则 16：开关与预设，不做自由画布）。 */
+  position?: 'left' | 'right'
+  /** 挂件界面语言。`auto` 跟宿主页 `<html lang>`，`zh` / `en` 强制。 */
+  language?: 'auto' | 'zh' | 'en'
 }
 
 /** widget 的默认配置：**一个来源都不放行**。 */

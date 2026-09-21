@@ -11,7 +11,7 @@
  * - **`kefuagents` / `kolagents` 里的信在这里只读**（63 §9）：顶上一条状态带说
  *   "客服 Agent 在处理"，右下角一个 → 去工作线程。**不给"直接回复"**——
  *   人与 Agent 同时回同一个客户，是这套东西最难解释的一种错。
- *   真要亲自回：先点"我来接手"，走现有的 takeover。
+ *   真要补充口径：教 AI 一句（WP124：人工直发的路已拆，界面只留教 AI）。
  * - **删除永远是"移到垃圾箱"**：界面上那个键叫"删除"，打出去的请求是
  *   `move { to: 'trash' }`，没有第二种去处。
  * - **键盘**：`j`/`k` 上下、`e` 归档、`r` 回复、`a` 全部回复、`/` 搜索。
@@ -261,6 +261,21 @@ export function MessagesPage(): ReactNode {
         >
           <PenSquare aria-hidden className="mr-1 size-3.5" />
           {t('messages.compose.new')}
+        </Button>
+
+        {/* WP124：聊天窗的离线留言落在这里（source = 'chat'）。一个开关，不是第二个收件箱。 */}
+        <Button
+          size="sm"
+          variant={filters.account === 'chat' ? 'secondary' : 'outline'}
+          className="w-full"
+          data-testid="messages-source-chat"
+          aria-pressed={filters.account === 'chat'}
+          onClick={() => {
+            setFilters((f) => ({ ...f, account: f.account === 'chat' ? undefined : 'chat' }))
+            setSelected(undefined)
+          }}
+        >
+          {t('messages.source.chat')}
         </Button>
 
         <nav className="flex flex-col gap-0.5" aria-label={t('messages.folders')}>
