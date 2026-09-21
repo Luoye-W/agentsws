@@ -157,6 +157,7 @@ import {
   chatView,
   createChatLane,
 } from './chat.js'
+import { ChatRelayClient, type OfflineMessageContent } from './chat-relay-client.js'
 import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
 import { type CloudFetch as CloudEntryFetch, createCloud } from './cloud.js'
 import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
@@ -2350,6 +2351,57 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
     })
 
+    /*
+     * WP124：转发器设置进本机加密库（与邮箱口令、模型 key 同一个库）；
+     * 离线留言落「消息」页的 `source: 'chat'`——63 的扩展位只加这一格。
+     */
+    const RELAY_SECRET_ID = 'chat.relay'
+    const relaySecret = (field: string): string | undefined => {
+      if (!brandSecrets.available) return undefined
+      try {
+        const value = brandSecrets.get(RELAY_SECRET_ID)?.[field]
+        return value === undefined || value === '' ? undefined : value
+      } catch {
+        return undefined
+      }
+    }
+    const storeOfflineMessage = (message: OfflineMessageContent): void => {
+      const account = 'chat'
+      messages.store.put({
+        id: `msg_chat_${message.left_at}_${Math.random().toString(36).slice(2, 8)}`,
+        workspace_id: ws,
+        source: 'chat',
+        account,
+        folder: 'INBOX',
+        folder_kind: 'inbox',
+        thread_id: `chat:${message.email}`,
+        references: [],
+        headers: {},
+        from: { email: message.email },
+        to: [{ email: account }],
+        cc: [],
+        bcc: [],
+        subject: message.text.replace(/\s+/g, ' ').slice(0, 60),
+        snippet: message.text.replace(/\s+/g, ' ').slice(0, 120),
+        text: message.text,
+        has_remote_images: false,
+        attachments: [],
+        date: message.left_at,
+        received_at: message.left_at,
+        flags: { read: false, starred: false, answered: false, draft: false },
+        labels: [],
+        route: 'inbox',
+      })
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type: 'inbound.recorded',
+        actor: { kind: 'system', id: 'chat_relay_client' },
+        correlation: { trace_id: `tr_relay_${clock.now()}` },
+        payload: { source: 'chat', thread: `chat:${message.email}` },
+      })
+    }
+
     // WP60（48 §4 L3 #11 的云端一半）：聊天窗的公开访客面（白名单 + 限流 + 访客令牌）
     const chatWidget = createChatWidget({
       workspace_id: ws,
@@ -2358,6 +2410,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       secrets: brandSecrets,
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
+
+    /*
+     * WP124：本机 ↔ 转发器的那条外连。设置（转发器地址 / 配对密钥 / 留言密钥）
+     * 进本机加密库（id `chat.relay`），没配就安静地不连——设置页会显示「未连接」。
+     * 离线留言拉走后落「消息」页（source = 'chat'，63 的扩展位只加这一格）。
+     */
+    const relayClient = new ChatRelayClient({
+      clock,
+      workspace_id: ws,
+      lane: chat,
+      widget: chatWidget,
+      endpoint: () => relaySecret('endpoint'),
+      pairingToken: () => relaySecret('pairing_token'),
+      messageKey: () => relaySecret('message_key'),
+      onOfflineMessage: (message) => {
+        storeOfflineMessage(message)
+      },
+      onEvent: (event) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type: 'channel.connected',
+          actor: { kind: 'system', id: 'chat_relay_client' },
+          correlation: { trace_id: `tr_relay_${clock.now()}` },
+          payload: {
+            relay: event.type,
+            ...(event.detail === undefined ? {} : { detail: event.detail }),
+          },
+        })
+      },
+    })
+    relayClient.start()
 
     /*
      * WP117 交付 4：演练场。建在 `kolService` 与 `messages` 之后——它往同一个库里
@@ -2446,6 +2530,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       ...(dir === undefined ? {} : { dir }),
       secrets: brandSecrets,
+      relay: {
+        client: relayClient,
+        secret: relaySecret,
+        setSecrets: (fields) => {
+          if (fields === null) {
+            brandSecrets.remove(RELAY_SECRET_ID)
+            return
+          }
+          if (brandSecrets.available) brandSecrets.put(RELAY_SECRET_ID, fields)
+        },
+        storeOffline: storeOfflineMessage,
+        cloudStatus: () => ownCloud.relayCloudStatus(),
+      },
       connections,
       ...(liveData === undefined ? {} : { liveData }),
       workData,
@@ -3855,6 +3952,115 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       openPublic: (input) => widget.open(input),
       verifyVisitor: (session_id, token) => widget.verify(session_id, token),
       widgetScript: () => CHAT_WIDGET_JS,
+
+      // ── WP124 转发器（三种部署同一套设置与状态；密钥只在 brand.relay 里） ──
+      relaySettings: () => {
+        const endpoint = brand.relay.secret('endpoint')
+        return {
+          ...(endpoint === undefined ? {} : { endpoint }),
+          has_pairing_token: brand.relay.secret('pairing_token') !== undefined,
+          has_message_key: brand.relay.secret('message_key') !== undefined,
+          configured: endpoint !== undefined && brand.relay.secret('pairing_token') !== undefined,
+        }
+      },
+      setRelaySettings: async (input) => {
+        if (input.endpoint === null) {
+          brand.relay.setSecrets(null)
+        } else {
+          const fields: Record<string, string> = {}
+          const endpoint = input.endpoint ?? brand.relay.secret('endpoint')
+          if (endpoint !== undefined) fields.endpoint = endpoint
+          const pairing = input.pairing_token ?? brand.relay.secret('pairing_token')
+          if (pairing !== undefined) fields.pairing_token = pairing
+          const messageKey = input.message_key ?? brand.relay.secret('message_key')
+          if (messageKey !== undefined) fields.message_key = messageKey
+          if (Object.keys(fields).length > 0) brand.relay.setSecrets(fields)
+        }
+        // 设置变了：重建连接（停掉旧的那条，按新设置重连）
+        brand.relay.client.stop()
+        brand.relay.client.start()
+        const endpoint = brand.relay.secret('endpoint')
+        return {
+          ...(endpoint === undefined ? {} : { endpoint }),
+          has_pairing_token: brand.relay.secret('pairing_token') !== undefined,
+          has_message_key: brand.relay.secret('message_key') !== undefined,
+          configured: endpoint !== undefined && brand.relay.secret('pairing_token') !== undefined,
+        }
+      },
+      relayTestConnection: async () => {
+        const client = brand.relay.client
+        const endpoint = brand.relay.secret('endpoint')
+        if (endpoint === undefined)
+          return {
+            ok: false,
+            detail: '还没填转发器地址。三种方式任选：官方托管（免费）/ 自建 / 客服增值服务。',
+            client_state: client.state(),
+          }
+        if (brand.relay.secret('pairing_token') === undefined)
+          return {
+            ok: false,
+            detail: '转发器地址填了，但配对密钥还没存。去设置里粘贴那把只显示一次的密钥。',
+            client_state: client.state(),
+          }
+        // 转发器活着吗：连它的 /connect，不带 WebSocket 升级 → 426 都算"活着"
+        try {
+          const probe = await fetch(`${endpoint.replace(/\/$/, '')}/connect`, {
+            headers: { upgrade: 'websocket' },
+          })
+          if (probe.status === 404)
+            return {
+              ok: false,
+              detail: '这个地址上没有转发器。核对地址（要含 /relay/<工作区>）。',
+              client_state: client.state(),
+            }
+        } catch {
+          return {
+            ok: false,
+            detail: '连不上这个地址。核对网络与转发器是否在跑。',
+            client_state: client.state(),
+          }
+        }
+        if (client.state() === 'online')
+          return {
+            ok: true,
+            detail: '转发器通，本机在线。可以贴嵌入代码了。',
+            client_state: client.state(),
+          }
+        return {
+          ok: true,
+          detail: '转发器通。本机正在连（密钥不对的话会停在「未连接」）。',
+          client_state: client.state(),
+        }
+      },
+      relayStatus: async () => {
+        const client = brand.relay.client
+        const endpoint = brand.relay.secret('endpoint')
+        const base: {
+          state: string
+          online: boolean
+          endpoint?: string
+          conversations_this_month?: number
+          limit?: number
+          unlimited?: boolean
+          offline_messages?: number
+        } = {
+          state: client.state(),
+          online: client.state() === 'online',
+          ...(endpoint === undefined ? {} : { endpoint }),
+        }
+        // 官方托管：本月数字在云侧的转发器对象里（取不到就说取不到，不编一个数）
+        const status = await brand.relay.cloudStatus()
+        if (status !== undefined) {
+          if (status.conversations_this_month !== undefined)
+            base.conversations_this_month = status.conversations_this_month
+          if (status.limit !== undefined) base.limit = status.limit
+          if (status.subscribed === true) base.unlimited = true
+          if (status.offline_messages !== undefined) base.offline_messages = status.offline_messages
+        } else if (endpoint !== undefined) {
+          base.unlimited = true
+        }
+        return base
+      },
       scoped: async (ws) => chatPortOf(await brandModules.forWorkspace(ws)),
     }
   }

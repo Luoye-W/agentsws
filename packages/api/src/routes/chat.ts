@@ -133,6 +133,43 @@ export interface ChatPort {
   /** 嵌入脚本本体（`GET /v1/chat/widget.js`）。 */
   widgetScript(): string
 
+  // ── WP124 转发器：本机连三种部署的那一跳 ────────────────────────────
+
+  /** 转发器设置。密钥只回"存没存"，值不出加密库。 */
+  relaySettings(): {
+    endpoint?: string
+    has_pairing_token: boolean
+    has_message_key: boolean
+    configured: boolean
+  }
+  /** 存转发器设置（进本机加密库；给了密钥当场重连）。 */
+  setRelaySettings(input: {
+    endpoint?: string | null
+    pairing_token?: string
+    message_key?: string
+  }): Promise<{
+    endpoint?: string
+    has_pairing_token: boolean
+    has_message_key: boolean
+    configured: boolean
+  }>
+  /** 测试连接：转发器通没通、本机在不在线，不通给可操作的下一步。 */
+  relayTestConnection(): Promise<{ ok: boolean; detail: string; client_state: string }>
+  /**
+   * 本月对话数与上限。官方托管时从云侧取（取不到就说取不到，不编一个数）；
+   * 自建无上限；订阅生效标 `unlimited: true`。
+   */
+  relayStatus(): Promise<{
+    state: string
+    online: boolean
+    endpoint?: string
+    conversations_this_month?: number
+    limit?: number
+    unlimited?: boolean
+    subscribed?: boolean
+    offline_messages?: number
+  }>
+
   /**
    * WP66（52 O1）：**按品牌取这一面**。
    *
@@ -154,6 +191,16 @@ const TakeoverBody = z.object({ on: z.boolean() })
  * "现在到底谁能嵌我"的快照，一次给全才能在界面上看见全貌，也不会因为
  * 两个标签页各改一项而互相覆盖（与 49 M2 的能力开关同一条理由）。
  */
+/**
+ * WP124：转发器设置。密钥进本机加密库，界面上只回"存没存"；
+ * `endpoint` 给 `null` 表示清除（切回"不转发"）。
+ */
+const RelaySettingsBody = z.object({
+  endpoint: z.string().min(1).max(500).nullish(),
+  pairing_token: z.string().min(8).max(200).optional(),
+  message_key: z.string().min(8).max(200).optional(),
+})
+
 const WidgetBody = z.object({
   allowed_origins: z.array(z.string().min(1).max(255)).max(50),
   accent: z
@@ -470,6 +517,86 @@ export function chatRoutes(): Route[] {
             ...(input.greeting === undefined ? {} : { greeting: input.greeting }),
           }),
         )
+      },
+    ),
+
+    /* ── WP124 转发器：官方托管 / 自建 / 托管实例三选一 ─────────────── */
+
+    route(
+      {
+        method: 'get',
+        path: '/v1/chat/relay/settings',
+        operationId: 'getChatRelaySettings',
+        summary: '转发器设置（密钥只回存没存，值不出加密库）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_READ,
+        returns: '{ endpoint?, has_pairing_token, has_message_key, configured }',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, (await scopedPortOf(deps, c)).relaySettings())
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/chat/relay/settings',
+        operationId: 'setChatRelaySettings',
+        summary: '存转发器设置（进本机加密库；填了密钥当场重连）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_WRITE,
+        body: RelaySettingsBody,
+        returns: '{ endpoint?, has_pairing_token, has_message_key, configured }',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        const input = await body(c, RelaySettingsBody)
+        return ok(
+          c,
+          await (await scopedPortOf(deps, c)).setRelaySettings({
+            ...(input.endpoint === undefined ? {} : { endpoint: input.endpoint }),
+            ...(input.pairing_token === undefined ? {} : { pairing_token: input.pairing_token }),
+            ...(input.message_key === undefined ? {} : { message_key: input.message_key }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/chat/relay/test',
+        operationId: 'testChatRelay',
+        summary: '测试连接：转发器通没通、本机在不在线',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_READ,
+        returns: '{ ok, detail, client_state }',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, await (await scopedPortOf(deps, c)).relayTestConnection())
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/chat/relay/status',
+        operationId: 'getChatRelayStatus',
+        summary: '本月对话数与上限、本机在线状态（官方托管的数字从云侧取）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_READ,
+        returns: '{ state, online, endpoint?, conversations_this_month?, limit?, unlimited? }',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, await (await scopedPortOf(deps, c)).relayStatus())
       },
     ),
 

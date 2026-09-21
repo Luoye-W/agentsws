@@ -86,6 +86,31 @@ export function secretsPrefixOf(workspace_id: WorkspaceId, bootstrap: WorkspaceI
 /** 一个品牌的那一套业务模块。 */
 export interface BrandModuleSet {
   workspace_id: WorkspaceId
+  /**
+   * WP124：这个品牌的转发器客户端与设置（密钥在 `secrets` 的 `chat.relay` 里，
+   * 值不出这一层）。`chatPortOf` 那一层经它读，不直接碰加密库。
+   */
+  relay: {
+    client: { state(): string; stop(): void; start(): void; syncConfig(): void }
+    secret(field: string): string | undefined
+    setSecrets(fields: Record<string, string> | null): void
+    storeOffline(message: {
+      email: string
+      text: string
+      order_ref?: string
+      page?: string
+      left_at: string
+    }): void
+    cloudStatus(): Promise<
+      | {
+          conversations_this_month?: number
+          limit?: number
+          subscribed?: boolean
+          offline_messages?: number
+        }
+      | undefined
+    >
+  }
   /** 这个品牌的落盘目录（内存档没有）。 */
   dir?: string
   /** 这个品牌自己那一段加密库视图（key 名已按品牌加过前缀）。 */

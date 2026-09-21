@@ -31,8 +31,10 @@ import type { Iso8601, ObjectRef, PersonId, WorkspaceId } from './common.js'
  *
  * v1 只有邮箱一种；这是一个**开放联合**的位置（以后加 `im` / `dm` / `whatsapp`），
  * 所以界面与查询一律按这个字段分流，不许按"有没有 Message-ID"之类的间接特征判。
+ * WP124 只加 `'chat'`：聊天窗的离线留言由本机从转发器拉走后落到消息库
+ * （按邮箱续聊），界面上与邮件同一个收件处，只多一个来源筛选。
  */
-export type MessageSource = 'email'
+export type MessageSource = 'email' | 'chat'
 
 /**
  * 分拣的结论：这封信归谁。
