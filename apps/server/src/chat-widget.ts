@@ -160,7 +160,7 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
   const secretOf = (): Buffer => {
     if (secret !== undefined) return secret
     const secrets = options.secrets
-    if (secrets !== undefined && secrets.available) {
+    if (secrets?.available === true) {
       try {
         const existing = secrets.get(WIDGET_SECRET_ID)?.token
         if (existing !== undefined && existing !== '') {

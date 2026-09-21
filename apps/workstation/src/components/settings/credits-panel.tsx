@@ -192,7 +192,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                       <p className="text-[11px] text-muted-foreground">
                         {sum.calls === 0
                           ? t('credits.blocks.none')
-                          : t('credits.usage.calls') + ' ' + String(sum.calls)}
+                          : `${t('credits.usage.calls')} ${String(sum.calls)}`}
                       </p>
                     </div>
                   )

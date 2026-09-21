@@ -138,9 +138,6 @@ export interface RelayNotification {
 /** 留言暂存多久（与 packages/chat-relay 同一个数：7 天）。 */
 const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-/** 每天醒一次去扣该扣的月费（幂等；支持补扣落下的几期）。 */
-const SUPPORT_BILLING_SWEEP_MS = 24 * 60 * 60 * 1000
-
 const NOTIFICATION_LIMIT = 20
 
 export class ChatRelayDoCore {
@@ -417,13 +414,6 @@ export class ChatRelayDoCore {
   #subscription(): ServiceSubscription | undefined {
     const raw = this.#kv.get('service-sub')
     return raw === undefined ? undefined : (JSON.parse(raw) as ServiceSubscription)
-  }
-
-  /** 订阅现在真实生效吗（active / cancelling 都算——当期用完为止）。 */
-  #subscriptionEffective(sub: ServiceSubscription | undefined): boolean {
-    if (sub === undefined) return false
-    const status = subscriptionStatusAt(sub, this.#now())
-    return status === 'active' || status === 'cancelling'
   }
 
   async #handleSubscriptionInternal(

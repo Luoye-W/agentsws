@@ -40,7 +40,7 @@ const isTile = (block: { component: string }): boolean => block.component === 's
  * 静默去掉了——页面上什么都没有，也没有一个字解释为什么。现在这里说人话，
  * 并且给 owner 一个"去分配"的按钮（不是 owner 的人点不到，只看到那句话）。
  */
-function NoRangeNotice({ id, isOwner }: { id: string; isOwner: boolean }): React.ReactNode {
+function NoRangeNotice({ isOwner }: { id: string; isOwner: boolean }): React.ReactNode {
   const { t } = useApp()
   return (
     <Card data-testid="no-range-card">

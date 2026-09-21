@@ -6,7 +6,10 @@ import { createStandaloneWorker } from '../../../../packages/chat-relay/src/stan
 const worker = createStandaloneWorker()
 
 export default {
-  fetch(request: Request, env: { WORKSPACE?: string; PAIRING_TOKEN?: string; VISITOR_SECRET?: string }) {
+  fetch(
+    request: Request,
+    env: { WORKSPACE?: string; PAIRING_TOKEN?: string; VISITOR_SECRET?: string },
+  ) {
     return worker.fetch(request, env)
   },
 }

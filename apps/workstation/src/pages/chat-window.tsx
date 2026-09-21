@@ -159,15 +159,16 @@ export function ChatWindowPage(): React.ReactNode {
               }
             />
           </label>
-          <label className="flex flex-col gap-1 text-[13px]">
+          <div className="flex flex-col gap-1 text-[13px]">
             <span>{t('chat.window.greeting')}</span>
             <Input
+              aria-label={t('chat.window.greeting')}
               value={greeting}
               placeholder={t('chat.window.greeting.placeholder')}
               onChange={(e) => setGreetingDraft(e.target.value)}
               data-testid="chat-greeting"
             />
-          </label>
+          </div>
           {greetingDraft !== greeting ? (
             <Button
               size="sm"
@@ -188,9 +189,10 @@ export function ChatWindowPage(): React.ReactNode {
               {t('chat.window.save')}
             </Button>
           ) : null}
-          <label className="flex flex-col gap-1 text-[13px]">
+          <div className="flex flex-col gap-1 text-[13px]">
             <span>{t('chat.window.origins')}</span>
             <Input
+              aria-label={t('chat.window.origins')}
               defaultValue={(cfg?.allowed_origins ?? []).join(', ')}
               placeholder="https://shop.example.com"
               data-testid="chat-origins"
@@ -209,10 +211,11 @@ export function ChatWindowPage(): React.ReactNode {
               }
             />
             <span className="text-xs text-muted-foreground">{t('chat.window.origins.hint')}</span>
-          </label>
-          <label className="flex flex-col gap-1 text-[13px]">
+          </div>
+          <div className="flex flex-col gap-1 text-[13px]">
             <span>{t('chat.window.assist_wait')}</span>
             <select
+              aria-label={t('chat.window.assist_wait')}
               className="h-9 rounded-md border bg-transparent px-2 text-[13px]"
               value={cfg?.assist_wait_seconds ?? 30}
               data-testid="chat-assist-wait"
@@ -234,7 +237,7 @@ export function ChatWindowPage(): React.ReactNode {
             <span className="text-xs text-muted-foreground">
               {t('chat.window.assist_wait.hint')}
             </span>
-          </label>
+          </div>
         </CardContent>
       </Card>
 

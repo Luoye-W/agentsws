@@ -140,8 +140,8 @@ describe('场景：官方转发一问一答', () => {
 describe('场景：关机留言续聊', () => {
   it('本机不在线 → 访客拿「离线」→ 留言密文暂存 → 上线拉走并清除、开箱可见', () => {
     const h = harness()
-    // 关机（没有对端连接）
-    const v = h.visitor('s1')
+    // 关机（没有对端连接）：挂上访客流，转发器对它回「离线」
+    h.visitor('s1')
     expect(
       h.core.visitorMessage({ workspace: 'ws_x', session: 's1', visitor: 'v1', text: '在吗' }),
     ).toEqual({

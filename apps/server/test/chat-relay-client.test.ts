@@ -7,7 +7,7 @@
 
 import { MemoryRawStore } from '@agentsws/channels'
 import { sealedKeyOf, sealWithKey } from '@agentsws/chat-relay'
-import type { ApprovalItem, Clock, CreateApprovalInput, EventEnvelope } from '@agentsws/contracts'
+import type { ApprovalItem, Clock, CreateApprovalInput } from '@agentsws/contracts'
 import { MemoryHalt } from '@agentsws/kernel'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import { createWork } from '@agentsws/work'

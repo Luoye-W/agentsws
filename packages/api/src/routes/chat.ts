@@ -612,7 +612,7 @@ export function chatRoutes(): Route[] {
         auth: 'public',
         returns: 'text/javascript',
       },
-      async (c, deps) =>
+      async (_c, deps) =>
         new Response(portOf(deps).widgetScript(), {
           status: 200,
           headers: {

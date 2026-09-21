@@ -114,7 +114,10 @@ export function pricingBlockOf(entry: Pick<PricingEntry, 'capability' | 'block'>
   if ((entry.block as string) === 'kol_service') return 'service'
   if (entry.block !== undefined) return entry.block
   if (entry.capability.startsWith('ai.')) return 'ai'
-  if (entry.capability.startsWith('kol.service.') || entry.capability.startsWith('support.service.'))
+  if (
+    entry.capability.startsWith('kol.service.') ||
+    entry.capability.startsWith('support.service.')
+  )
     return 'service'
   return 'data'
 }
