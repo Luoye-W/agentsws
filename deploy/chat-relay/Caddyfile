@@ -1,0 +1,5 @@
+# 自建转发器的自动 HTTPS（可选；docker compose --profile caddy up -d）
+# 把下面的域名换成你自己的，并把它解析到这台机器。Caddy 自动签发证书。
+chat.example.com {
+	reverse_proxy chat-relay:8787
+}

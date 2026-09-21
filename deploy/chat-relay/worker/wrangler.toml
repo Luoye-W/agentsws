@@ -1,0 +1,16 @@
+# Agents 工坊 · 聊天转发器（自建 Cloudflare Worker 档，WP124 / docs/74）
+#
+# 部署到**你自己的** Cloudflare 账号。两步：
+#   1. wrangler secret put PAIRING_TOKEN   # 自己生成一把：openssl rand -base64 32
+#   2. wrangler deploy
+# 然后把 `https://<你填的子域>.workers.dev/relay/<工作区号>` 填进聊天窗设置。
+#
+# 没有密钥不成跑：没有 PAIRING_TOKEN 的 Worker 一条本机连接都握不上手。
+# 单租户、内存态：redeploy 会丢没拉走的留言（要持久用 Docker 档）。
+name = "agentsws-chat-relay"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[vars]
+# 单租户：一个 Worker 服务一个工作区。改成你的工作区号。
+WORKSPACE = "ws_replace_me"
