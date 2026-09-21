@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest'
 import { kolChargeFor } from '../src/charge-map.js'
 import { SEARCH_IDEMPOTENCY_WINDOW_MS } from '../src/service.js'
-import { harness, observation, type Harness } from './helpers.js'
+import { type Harness, harness, observation } from './helpers.js'
 
 const principal = {
   account_id: 'acc_1',

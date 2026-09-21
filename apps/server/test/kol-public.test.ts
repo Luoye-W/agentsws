@@ -194,24 +194,32 @@ async function useOurs(): Promise<void> {
 }
 
 describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
-  it('默认用我的：没连 YouTube 就照实说没连，一跳云都不打', async () => {
-    const out = await data<{ ok: boolean; source: string; reason?: string }>(
-      await api('/v1/kol/search?channel=youtube&q=3c'),
-    )
+  it('默认用我的：没连 YouTube 也连不上任何数据源 → 人话 + 两个入口（WP126 修 #4/#15）', async () => {
+    const out = await data<{
+      ok: boolean
+      source: string
+      reason?: string
+      message?: string
+      entry_points?: { id: string }[]
+    }>(await api('/v1/kol/search?channel=youtube&q=3c'))
     expect(out.ok).toBe(false)
-    expect(out.source).toBe('channel')
-    expect(out.reason).toBe('not_connected')
+    // 老行为是回 not_connected 不回退（#4/#15 的根因）；现在四级路由落到④，
+    // 两个入口说得清清楚楚，而不再是死路一条
+    expect(out.reason).toBe('no_data_source')
+    expect(out.message).toContain('任选其一')
+    expect(out.entry_points?.map((e) => e.id)).toEqual(['link_account', 'byo'])
   })
 
-  it('拨到 agentsws 但没关联账号：说的是"去关联一次"，不是"搜到 0 个"', async () => {
+  it('拨到 agentsws 但没关联账号：说的是"去关联一次"，不是"搜到 0 个"（WP126：③没配落到④）', async () => {
     await useOurs()
     const out = await data<{ ok: boolean; source: string; reason?: string; message?: string }>(
       await api('/v1/kol/search?channel=youtube&q=3c'),
     )
     expect(out.ok).toBe(false)
-    expect(out.source).toBe('public_library')
-    expect(out.reason).toBe('not_linked')
+    // WP126：③（未关联）算"没配"，落到④——source 是④的默认，但工坊那句人话还带在后面
+    expect(out.reason).toBe('no_data_source')
     expect(out.message).toContain('账号与积分')
+    expect(out.entry_points?.map((e) => e.id)).toEqual(['link_account', 'byo'])
   })
 
   it('关联之后：搜索按次收费（WP126）、价目在点之前就说出来', async () => {
@@ -219,7 +227,11 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     await useOurs()
     seedCreator('gadgetjonas')
     // WP126：搜索本身也按次扣积分，先充一点
-    wallet.topup({ org_id: cloud.store.ensureAccount('luoye@example.com').org.id, credits: 10, kind: 'purchased' })
+    wallet.topup({
+      org_id: cloud.store.ensureAccount('luoye@example.com').org.id,
+      credits: 10,
+      kind: 'purchased',
+    })
 
     const before = wallet.balance(cloud.store.ensureAccount('luoye@example.com').org.id).available
     const out = await data<{
@@ -343,7 +355,8 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
       await api('/v1/kol/search?channel=youtube&q=gadgetjonas'),
     )
     expect(out.ok).toBe(false)
-    expect(out.reason).toBe('not_linked')
+    // WP126：③少权限 = 这一级没配成，落到④；但③那句"重新关联"还带在后面
+    expect(out.reason).toBe('no_data_source')
     expect(out.message).toContain('数据服务')
   })
 })

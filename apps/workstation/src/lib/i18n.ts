@@ -4301,7 +4301,8 @@ const en: Table = {
   'data.byo.test': 'Test connection',
   'data.byo.save': 'Save',
   'data.byo.remove': 'Remove',
-  'data.byo.compliance': 'You fetch this platform data with your own account; compliance is between you and that service\'s terms.',
+  'data.byo.compliance':
+    "You fetch this platform data with your own account; compliance is between you and that service's terms.",
   'data.byo.saved': 'Saved. No credits are used.',
 
   'models.region.cn': 'China',

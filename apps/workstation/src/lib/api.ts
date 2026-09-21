@@ -1499,7 +1499,10 @@ export const testKolByoSource = (
     ...withAssignment(assignment),
   })
 
-export const clearKolByoSource = (channel: string, assignment?: string): Promise<{ cleared: boolean }> =>
+export const clearKolByoSource = (
+  channel: string,
+  assignment?: string,
+): Promise<{ cleared: boolean }> =>
   api(`/v1/kol/byo-sources/${channel}`, { method: 'DELETE', ...withAssignment(assignment) })
 
 export const getCloudCredits = (assignment?: string): Promise<CloudCreditsView> =>

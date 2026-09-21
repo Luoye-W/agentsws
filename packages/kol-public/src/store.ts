@@ -1224,9 +1224,9 @@ export class SqliteKolStore implements KolStore, KolLibraryStore {
   }
 
   searchChargeAt(key: string): Iso8601 | undefined {
-    const row = this.db
-      .prepare('SELECT at FROM kol_search_window WHERE key = ?')
-      .get(key) as { at: Iso8601 } | undefined
+    const row = this.db.prepare('SELECT at FROM kol_search_window WHERE key = ?').get(key) as
+      | { at: Iso8601 }
+      | undefined
     return row?.at
   }
 

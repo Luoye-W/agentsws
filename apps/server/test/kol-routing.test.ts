@@ -100,7 +100,8 @@ function harness(options: HarnessOptions = {}): {
           byoSecrets: () => 'byo-key',
           byoFetch: async (_url, init) => {
             void init
-            const fail = options.byo !== undefined && options.byo !== false && options.byo.ok === false
+            const fail =
+              options.byo !== undefined && options.byo !== false && options.byo.ok === false
             const message =
               options.byo !== undefined && options.byo !== false
                 ? (options.byo.message ?? '你的接口限流了')
@@ -140,7 +141,8 @@ function harness(options: HarnessOptions = {}): {
                 ? {
                     ok: false,
                     reason: 'not_linked' as const,
-                    message: '这条渠道的开关拨到了"用 agentsws 的"，但这台机器还没关联 agentsws 账号。',
+                    message:
+                      '这条渠道的开关拨到了"用 agentsws 的"，但这台机器还没关联 agentsws 账号。',
                   }
                 : {
                     ok: true,

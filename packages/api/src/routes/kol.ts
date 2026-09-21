@@ -1415,7 +1415,8 @@ export function kolRoutes(): Route[] {
         method: 'post',
         path: '/v1/kol/byo-sources/test',
         operationId: 'testKolByoSource',
-        summary: '「测试连接」：打一次最小的 profile 请求。服务回 404（查无此人）也算通——听懂了就是通了',
+        summary:
+          '「测试连接」：打一次最小的 profile 请求。服务回 404（查无此人）也算通——听懂了就是通了',
         tag: 'kol',
         auth: 'bearer',
         assignment: true,
@@ -1439,7 +1440,10 @@ export function kolRoutes(): Route[] {
         returns: '{ cleared }',
       },
       async (c, deps) =>
-        ok(c, await portOf(deps).clearByoSource(actorOf(c), ChannelSchema.parse(param(c, 'channel')))),
+        ok(
+          c,
+          await portOf(deps).clearByoSource(actorOf(c), ChannelSchema.parse(param(c, 'channel'))),
+        ),
     ),
     route(
       {

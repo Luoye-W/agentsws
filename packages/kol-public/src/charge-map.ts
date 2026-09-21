@@ -72,8 +72,7 @@ export function kolChargeFor(method: string, pathname: string): KolCharge | unde
     // creators / benchmarks（一段）；creators / <渠道> / <handle> / audit（四段）。
     // 四段的 GET 只有 audit 是收费读：reveal / refresh 是 POST 专属，GET 上不存在。
     if (rest.length === 1) return PAID_READS[rest[0] ?? '']
-    if (rest.length === 4 && rest[0] === 'creators' && rest[3] === 'audit')
-      return PAID_TAILS.audit
+    if (rest.length === 4 && rest[0] === 'creators' && rest[3] === 'audit') return PAID_TAILS.audit
     return undefined
   }
   if (method.toUpperCase() !== 'POST') return undefined

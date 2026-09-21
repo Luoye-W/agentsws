@@ -219,8 +219,8 @@ export function createKolPublicClient(options: KolPublicClientOptions): PublicLi
         ok: true,
         credits_spent: (out.data as { credits?: number }).credits ?? 0,
         data: {
-          rows: ((out.data as { creators?: unknown[] }).creators ?? []).map(
-            (c) => rowOf(c as Parameters<typeof rowOf>[0]),
+          rows: ((out.data as { creators?: unknown[] }).creators ?? []).map((c) =>
+            rowOf(c as Parameters<typeof rowOf>[0]),
           ),
         },
       }

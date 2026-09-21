@@ -49,6 +49,8 @@ import type {
   CollaborationStage,
   Creator,
   CreatorContact,
+  DataSourceLevel,
+  DataSourceRoute,
   Deliverable,
   EffectiveConfig,
   EventEnvelope,
@@ -56,8 +58,6 @@ import type {
   KolChannel,
   KolUtm,
   Mandate,
-  DataSourceLevel,
-  DataSourceRoute,
   MaybePromise,
   ObjectRef,
   PersonId,
@@ -99,8 +99,14 @@ import {
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { KolStore } from './kol.js'
+import {
+  type ByoEndpointConfig,
+  type ByoSourceStore,
+  byoSearch,
+  byoSecretId,
+  byoTestConnection,
+} from './kol-byo.js'
 import type { KolChannelsAssembly } from './kol-channels.js'
-import { type ByoEndpointConfig, type ByoSourceStore, byoSearch, byoTestConnection, byoSecretId } from './kol-byo.js'
 import { REVEAL_CAPABILITY } from './kol-public-client.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -820,7 +826,15 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
    * 渠道的中文名（来源标签与错误提示用）。不认识就原样回。
    */
   const channelLabel = (channel: KolChannel): string =>
-    (({ youtube: 'YouTube', instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X' }) as Record<string, string>)[channel] ?? channel
+    (
+      ({
+        youtube: 'YouTube',
+        instagram: 'Instagram',
+        tiktok: 'TikTok',
+        facebook: 'Facebook',
+        x: 'X',
+      }) as Record<string, string>
+    )[channel] ?? channel
 
   /**
    * 第四层（都没有）的那一句人话 + 两个入口（WP126 定论 1）。
@@ -921,7 +935,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
             ...(input.limit === undefined ? {} : { limit: input.limit }),
           })
           if (!out.ok) {
-            // 配了但报错：不静默回退。说清哪一级失败 + 一句"改用官方接口"
+            // 适配器在但没填 key（`not_connected`）＝这一级"没配"，落下一级；
+            // 真报错（配额、上游故障…）才停：不静默回退到花钱的那一级
+            if (out.reason === 'not_connected') continue
             emit('kol.search_failed', actor.person_id, { channel, reason: out.reason })
             return {
               ok: false,
@@ -941,7 +957,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
               url: hit.url,
               display_name: hit.display_name,
               ...(hit.followers === undefined ? {} : { followers: hit.followers }),
-              ...(hit.engagement_rate === undefined ? {} : { engagement_rate: hit.engagement_rate }),
+              ...(hit.engagement_rate === undefined
+                ? {}
+                : { engagement_rate: hit.engagement_rate }),
               ...(hit.category === undefined ? {} : { category: hit.category }),
               ...(hit.language === undefined ? {} : { language: hit.language }),
               ...(hit.region === undefined ? {} : { region: hit.region }),
@@ -990,7 +1008,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
             source: 'byo_source',
             rows: out.data?.rows ?? [],
             source_label: '我的数据接口',
-            ...(out.data?.observed_at === undefined ? {} : { observed_at: out.data?.observed_at ?? '' }),
+            ...(out.data?.observed_at === undefined
+              ? {}
+              : { observed_at: out.data?.observed_at ?? '' }),
           } satisfies KolSearchResult
         }
 
@@ -1008,7 +1028,10 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       const base = nothingConfigured(channel)
       return lastWorkshopFailure === undefined
         ? base
-        : { ...base, message: `${base.message}（刚才试过工坊官方接口：${lastWorkshopFailure.message}）` }
+        : {
+            ...base,
+            message: `${base.message}（刚才试过工坊官方接口：${lastWorkshopFailure.message}）`,
+          }
     },
 
     creator(_actor, id) {
@@ -1803,21 +1826,22 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     /* ── WP126：自带数据接口（高级卡；每渠道最多一个）────────────────── */
 
     byoSources() {
-      const rows = (
-        ['youtube', 'instagram', 'tiktok', 'facebook', 'x'] as const
-      ).flatMap((channel) => {
-        const rec = options.byo?.record(channel)
-        if (rec === undefined) return []
-        return [
-          {
-            channel: rec.channel,
-            service_url: rec.service_url,
-            format: rec.format,
-            has_key: (options.byoSecrets ?? options.byo!.reader)(rec.secret_ref) !== undefined,
-            ...(rec.updated_at === undefined ? {} : { updated_at: rec.updated_at }),
-          },
-        ]
-      })
+      const reader = options.byoSecrets ?? options.byo?.reader ?? (() => undefined)
+      const rows = (['youtube', 'instagram', 'tiktok', 'facebook', 'x'] as const).flatMap(
+        (channel) => {
+          const rec = options.byo?.record(channel)
+          if (rec === undefined) return []
+          return [
+            {
+              channel: rec.channel,
+              service_url: rec.service_url,
+              format: rec.format,
+              has_key: reader(rec.secret_ref) !== undefined,
+              ...(rec.updated_at === undefined ? {} : { updated_at: rec.updated_at }),
+            },
+          ]
+        },
+      )
       return { rows }
     },
 
@@ -1828,11 +1852,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         service_url: input.service_url,
         ...(input.api_key === undefined ? {} : { api_key: input.api_key }),
       })
+      const reader = options.byoSecrets ?? options.byo.reader
       return {
         channel: rec.channel,
         service_url: rec.service_url,
         format: rec.format,
-        has_key: (options.byoSecrets ?? options.byo.reader)(rec.secret_ref) !== undefined,
+        has_key: reader(rec.secret_ref) !== undefined,
         ...(rec.updated_at === undefined ? {} : { updated_at: rec.updated_at }),
       }
     },
@@ -1845,7 +1870,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       const reader = options.byoSecrets ?? options.byo?.reader ?? (() => undefined)
       const config =
         input.service_url !== undefined
-          ? { service_url: input.service_url, secret_ref: byoSecretId(input.channel), format: 'byo/v1' as const }
+          ? {
+              service_url: input.service_url,
+              secret_ref: byoSecretId(input.channel),
+              format: 'byo/v1' as const,
+            }
           : options.byoDataSource?.(input.channel)
       if (config === undefined)
         return {
@@ -1853,7 +1882,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           message:
             '还没填服务地址。在卡上填一个能按工坊公开格式回数据的服务地址，再点一次「测试连接」。',
         }
-      return byoTestConnection(config, input.api_key === undefined ? reader : () => input.api_key as string, input.channel, options.byoFetch)
+      return byoTestConnection(
+        config,
+        input.api_key === undefined ? reader : () => input.api_key as string,
+        input.channel,
+        options.byoFetch,
+      )
     },
 
     async revealFromPublicLibrary(actor, input) {

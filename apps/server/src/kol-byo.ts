@@ -16,6 +16,7 @@
  *    对面是什么服务这一层不知道也不想知道。
  */
 
+import type { KolSearchHit } from '@agentsws/api'
 import type {
   ByoCreator,
   ByoDataSourceAction,
@@ -24,7 +25,6 @@ import type {
   KolChannel,
 } from '@agentsws/contracts'
 import { BYO_DATA_SOURCE_PATHS, BYO_DATA_SOURCE_PREFIX } from '@agentsws/contracts'
-import type { KolSearchHit } from '@agentsws/api'
 
 /** 打自带接口最多等多久。 */
 export const BYO_TIMEOUT_MS = 10_000
@@ -87,7 +87,11 @@ async function call<T>(
 ): Promise<ByoCallResult<T>> {
   const key = secrets(config.secret_ref)
   if (key === undefined || key === '')
-    return { ok: false, reason: 'no_secret', message: '这把数据接口的密钥读不出来了（本机加密库换了钥匙？）。去连接页重新填一次密钥。' }
+    return {
+      ok: false,
+      reason: 'no_secret',
+      message: '这把数据接口的密钥读不出来了（本机加密库换了钥匙？）。去连接页重新填一次密钥。',
+    }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), BYO_TIMEOUT_MS)
   try {
@@ -102,7 +106,11 @@ async function call<T>(
     try {
       parsed = text.trim() === '' ? {} : JSON.parse(text)
     } catch {
-      return { ok: false, reason: 'bad_response', message: '你的数据接口回的不是 JSON。检查一下服务地址填对没有。' }
+      return {
+        ok: false,
+        reason: 'bad_response',
+        message: '你的数据接口回的不是 JSON。检查一下服务地址填对没有。',
+      }
     }
     if (!res.ok) {
       const body2 = parsed as ByoEnvelopeError
@@ -118,7 +126,11 @@ async function call<T>(
       }
     }
     if (typeof parsed !== 'object' || parsed === null)
-      return { ok: false, reason: 'bad_response', message: '你的数据接口回的形状不对（要是一个 JSON 对象）。' }
+      return {
+        ok: false,
+        reason: 'bad_response',
+        message: '你的数据接口回的形状不对（要是一个 JSON 对象）。',
+      }
     return { ok: true, data: parsed as T }
   } catch (err) {
     const aborted = err instanceof Error && err.name === 'AbortError'
@@ -167,12 +179,13 @@ export async function byoSearch(
       ...(out.reason === undefined ? {} : { reason: out.reason }),
     }
   const creators = Array.isArray(out.data?.creators) ? (out.data?.creators ?? []) : []
-  const rows = creators
-    .filter((c) => c.channel === input.channel)
-    .map((c) => hitOf(c, known))
+  const rows = creators.filter((c) => c.channel === input.channel).map((c) => hitOf(c, known))
   return {
     ok: true,
-    data: { rows, ...(creators[0]?.observed_at === undefined ? {} : { observed_at: creators[0]?.observed_at }) },
+    data: {
+      rows,
+      ...(creators[0]?.observed_at === undefined ? {} : { observed_at: creators[0]?.observed_at }),
+    },
   }
 }
 
@@ -189,18 +202,20 @@ export async function byoTestConnection(
     secrets,
     'profile',
     { channel, handle: BYO_TEST_HANDLE },
-    doFetch ?? ((url, init) => globalThis.fetch(url, init as RequestInit) as unknown as ReturnType<ByoFetch>),
+    doFetch ??
+      ((url, init) =>
+        globalThis.fetch(url, init as RequestInit) as unknown as ReturnType<ByoFetch>),
   )
   // 通 = 服务听懂了：200（真有这个账号）或 404（查无此人是正常回答）都算
   if (out.ok) return { ok: true, message: '通了。你的数据接口听懂了我们的请求。' }
-  if (out.reason === 'not_found') return { ok: true, message: '通了。服务回了"查无此人"——这正是我们要的应答。' }
+  if (out.reason === 'not_found')
+    return { ok: true, message: '通了。服务回了"查无此人"——这正是我们要的应答。' }
   return { ok: false, message: out.message ?? '没通。' }
 }
 
 /* ── 配置的存取（连接卡「自带数据接口（高级）」那一半）───────────────────── */
 
-import { readFileSync } from 'node:fs'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Iso8601 } from '@agentsws/contracts'
 import type { SecretStore } from './secret-store.js'
@@ -267,7 +282,9 @@ export function createByoSourceStore(options: {
     record: recordOf,
     get(channel) {
       const rec = recordOf(channel)
-      return rec === undefined ? undefined : { service_url: rec.service_url, secret_ref: rec.secret_ref, format: rec.format }
+      return rec === undefined
+        ? undefined
+        : { service_url: rec.service_url, secret_ref: rec.secret_ref, format: rec.format }
     },
     set(channel, input) {
       const secret_ref = byoSecretId(channel)

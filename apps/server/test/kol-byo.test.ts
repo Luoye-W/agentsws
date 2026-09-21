@@ -40,7 +40,7 @@ const config = {
 const secrets = () => 'byo-key'
 
 function okFetch(body: unknown, status = 200): (url: string, init: never) => Promise<Response> {
-  return (url, init) => {
+  return (_url, init) => {
     void init
     return Promise.resolve(
       new Response(JSON.stringify(body), {
@@ -141,13 +141,8 @@ describe('WP126 自带数据接口 · 适配器纪律', () => {
   })
 
   it('回的不是 JSON：bad_response，一句人话', async () => {
-    const out = await byoSearch(
-      config,
-      secrets,
-      { channel: 'youtube' },
-      new Set(),
-      (() => Promise.resolve(new Response('<html>hi</html>'))) as never,
-    )
+    const out = await byoSearch(config, secrets, { channel: 'youtube' }, new Set(), (() =>
+      Promise.resolve(new Response('<html>hi</html>'))) as never)
     expect(out.ok).toBe(false)
     expect(out.reason).toBe('bad_response')
   })

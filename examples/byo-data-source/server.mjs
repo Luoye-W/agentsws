@@ -62,16 +62,16 @@ const CONTENT = [
   },
 ]
 
-const CONTACTS = [
-  { kind: 'email', value: 'hello@samplestudio.example', source: '主页公开邮箱' },
-]
+const CONTACTS = [{ kind: 'email', value: 'hello@samplestudio.example', source: '主页公开邮箱' }]
 
 /** 归一化对象的形状就是契约那份公开格式；这里只做最浅的校验。 */
 function match(q) {
   const words = (q ?? '').toLowerCase().split(/\s+/).filter(Boolean)
   if (words.length === 0) return CREATORS
   return CREATORS.filter((c) =>
-    words.some((w) => `${c.handle} ${c.display_name} ${c.category ?? ''}`.toLowerCase().includes(w)),
+    words.some((w) =>
+      `${c.handle} ${c.display_name} ${c.category ?? ''}`.toLowerCase().includes(w),
+    ),
   )
 }
 

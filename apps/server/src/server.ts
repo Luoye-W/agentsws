@@ -184,10 +184,10 @@ import { knowledgeSourceFile } from './knowledge-file.js'
 import { importKnowledgePack } from './knowledge-pack.js'
 import { checkUpload, UploadRejected, uploadBlobKey, uploadSubjectRef } from './knowledge-upload.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
+import { createByoSourceStore } from './kol-byo.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
-import { createByoSourceStore } from './kol-byo.js'
 import {
   createKolSandbox,
   kolOutreachApply,
@@ -1570,7 +1570,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
     })
     // WP126：自带数据接口的配置仓（每渠道一个；密钥只进本机加密库）
-    const byoStore = createByoSourceStore({ secrets: brandSecrets, ...(dbDir === undefined ? {} : { dbDir }), now: () => clock.now() })
+    const byoStore = createByoSourceStore({
+      secrets: brandSecrets,
+      ...(dbDir === undefined ? {} : { dbDir }),
+      now: () => clock.now(),
+    })
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,

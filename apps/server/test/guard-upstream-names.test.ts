@@ -63,7 +63,8 @@ const USER_FACING_TARGETS: readonly string[] = [
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
-    if (name === 'node_modules' || name === 'dist' || name === 'build' || name.startsWith('.')) continue
+    if (name === 'node_modules' || name === 'dist' || name === 'build' || name.startsWith('.'))
+      continue
     const full = join(dir, name)
     if (statSync(full).isDirectory()) walk(full, out)
     else out.push(full)

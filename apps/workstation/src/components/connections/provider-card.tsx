@@ -196,12 +196,17 @@ export function ProviderCard({
           WP126：红人那五张卡多两块——数据从哪里来（顺序/停用）与自带数据接口（高级）。
           别的卡不出：它们要么没有第二条路，要么不是取数。
         */}
-        {capabilityOf(provider.service)?.startsWith('kol.') ? (
-          <>
-            <DataSourceRouteControl channel={capabilityOf(provider.service)!.slice(4)} />
-            <ByoSourceCard channel={capabilityOf(provider.service)!.slice(4)} />
-          </>
-        ) : null}
+        {(() => {
+          const capability = capabilityOf(provider.service)
+          if (capability === undefined || !capability.startsWith('kol.')) return null
+          const channel = capability.slice(4)
+          return (
+            <>
+              <DataSourceRouteControl channel={channel} />
+              <ByoSourceCard channel={channel} />
+            </>
+          )
+        })()}
       </CardContent>
     </Card>
   )

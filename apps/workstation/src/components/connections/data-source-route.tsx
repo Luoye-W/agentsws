@@ -40,12 +40,14 @@ function effectiveOrder(
   capability: string,
 ): { order: DataSourceLevel[]; disabled: DataSourceLevel[] } {
   const saved = routing?.[capability]
-  if (saved === undefined || saved.order.length === 0)
-    return { order: [...LEVELS], disabled: [] }
+  if (saved === undefined || saved.order.length === 0) return { order: [...LEVELS], disabled: [] }
   // 只认三级以内、无重复的顺序；坏了就回默认（设置文件是手改不过来的，但防一手）
   const order = saved.order.filter((l, i) => LEVELS.includes(l) && saved.order.indexOf(l) === i)
   const missing = LEVELS.filter((l) => !order.includes(l))
-  return { order: [...order, ...missing], disabled: saved.disabled.filter((l) => LEVELS.includes(l)) }
+  return {
+    order: [...order, ...missing],
+    disabled: saved.disabled.filter((l) => LEVELS.includes(l)),
+  }
 }
 
 export function DataSourceRouteControl({ channel }: { channel: string }): React.ReactNode {
@@ -60,11 +62,9 @@ export function DataSourceRouteControl({ channel }: { channel: string }): React.
 
   const save = useMutation({
     mutationFn: (next: { order: DataSourceLevel[]; disabled: DataSourceLevel[] }) =>
-      setCapabilitySources(
-        sources.data?.capability_sources ?? {},
-        undefined,
-        { [capability]: next },
-      ),
+      setCapabilitySources(sources.data?.capability_sources ?? {}, undefined, {
+        [capability]: next,
+      }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['capability-sources'] }),
   })
 

@@ -9,6 +9,7 @@ export * from './brand-design.js'
 // 70 §3 贴一个网址自动分析（WP121）。中心是 `BrandIntakeField`：自动填出来的格子
 // 拖着出处、把握度与"用户改过没有"走——与用户自己填的格子不是一回事。
 export * from './brand-intake.js'
+export * from './byo-data-source.js'
 export * from './changes.js'
 export * from './channels.js'
 export * from './cloud.js'
@@ -16,7 +17,6 @@ export * from './cloud.js'
 export * from './cloud-admin.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
 export * from './cloud-entry.js'
-export * from './byo-data-source.js'
 export * from './common.js'
 export * from './connect.js'
 // 54（将改号 55）§4 第一层：连接目录（按职责模板的 `kind` 登记的总表，WP83）
