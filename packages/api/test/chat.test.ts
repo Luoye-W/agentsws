@@ -278,6 +278,11 @@ describe('边界', () => {
       'get /v1/chat/sessions/:id/stream': 'bearer',
       'get /v1/chat/widget/settings': 'bearer',
       'put /v1/chat/widget/settings': 'bearer',
+      // WP124 转发器 owner 面：密钥只存不读、状态与测试连接，一律 bearer
+      'get /v1/chat/relay/settings': 'bearer',
+      'put /v1/chat/relay/settings': 'bearer',
+      'post /v1/chat/relay/test': 'bearer',
+      'get /v1/chat/relay/status': 'bearer',
       'get /v1/chat/widget.js': 'public',
       'get /v1/chat/widget-config': 'public',
       'post /v1/chat/public/sessions': 'public',
