@@ -11,7 +11,7 @@
 import type { CalendarItem } from '@agentsws/contracts'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from './helpers'
 
 const T0 = '2026-09-15T09:00:00.000Z'
@@ -57,8 +57,16 @@ vi.mock('@/lib/api', async () => {
 const { SocialCalendar, socialChannelOfRole } = await import('@/components/social/social-calendar')
 
 beforeEach(() => {
+  // 周视图画的是「本周」。样例日程在 T0 那一周——不把钟钉住，这个测试过了那一周就红（09-21 真红过）。
+  // 只假 Date，不假定时器：userEvent 与 waitFor 还要用真的 setTimeout。
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(T0))
   getCalendar.mockClear()
   getSocialAccounts.mockClear()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('职责页的社媒周视图 = 统一日历的嵌入（WP74）', () => {

@@ -5,15 +5,13 @@
  * 逐条一致——这里挑的是"错了会出安全事故或丢用户配对"的那几条：一次性、
  * Origin 双校验、撤销不是删行、过期不认、重启之后令牌还在。
  */
-import type { Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
+
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import {
-  createMemoryExtensionStore,
-  type ExtensionStore,
-} from '../src/extension-store.js'
+import { createMemoryExtensionStore, type ExtensionStore } from '../src/extension-store.js'
 import { SqliteExtensionStore } from '../src/sqlite-extension-store.js'
 
 const WS = 'ws_1' as WorkspaceId
@@ -33,15 +31,18 @@ function fakeClock(start = '2026-09-20T10:00:00.000Z'): Clock & { advance(ms: nu
 
 /** 两档各一遍：`make` 把钟递进去，测试要拨表就能拨。 */
 const VARIANTS = describe.each([
-  ['内存档', (clock: Clock): ExtensionStore => createMemoryExtensionStore({ clock, random: () => 0.4 })],
+  [
+    '内存档',
+    (clock: Clock): ExtensionStore => createMemoryExtensionStore({ clock, random: () => 0.4 }),
+  ],
   [
     'SQLite 档',
-    (clock: Clock): ExtensionStore =>
-      new SqliteExtensionStore({ clock, random: () => 0.4 }),
+    (clock: Clock): ExtensionStore => new SqliteExtensionStore({ clock, random: () => 0.4 }),
   ],
-]) as unknown as {
-  (name: string, fn: (name: string, make: (clock: Clock) => ExtensionStore) => void): void
-}
+]) as unknown as (
+  name: string,
+  fn: (name: string, make: (clock: Clock) => ExtensionStore) => void,
+) => void
 
 VARIANTS('%s：配对与令牌（WP119b）', (_name, make) => {
   it('配对 → 兑换 → 令牌 + Origin 双校验；搬到别的扩展里不认', () => {
@@ -117,10 +118,18 @@ describe('SQLite 档独有：重启不丢（WP119 留尾的那一条）', () => 
   it('换一个文件等于换一台机器：新库里什么都没有', () => {
     const clock = fakeClock()
     const dir = mkdtempSync(join(tmpdir(), 'agentsws-ext-'))
-    const first = new SqliteExtensionStore({ dbPath: join(dir, 'a.sqlite'), clock, random: () => 0.4 })
+    const first = new SqliteExtensionStore({
+      dbPath: join(dir, 'a.sqlite'),
+      clock,
+      random: () => 0.4,
+    })
     const pairing = first.createPairing({ workspace_id: WS, person_id: PERSON })
     first.close()
-    const second = new SqliteExtensionStore({ dbPath: join(dir, 'b.sqlite'), clock, random: () => 0.4 })
+    const second = new SqliteExtensionStore({
+      dbPath: join(dir, 'b.sqlite'),
+      clock,
+      random: () => 0.4,
+    })
     expect(second.list(WS)).toHaveLength(0)
     expect(second.redeem({ code: pairing.code, origin: ORIGIN }).ok).toBe(false)
     second.close()
