@@ -44,6 +44,8 @@ export interface RelayHttpOptions {
   workspace: string
   /** 访客令牌的 HMAC 密钥（转发器不落库，验就是重算一次）。 */
   visitorSecret(): Uint8Array
+  /** 限流覆盖（测试钩子；缺省按 SESSION_RATE）。 */
+  sessionRate?: { per_minute: number; per_hour: number }
   /** 页面上下文里允许带的字段已经在协议层收窄；这里只决定收不收 query（不收）。 */
 }
 
@@ -65,6 +67,7 @@ export function createRelayHttp(options: RelayHttpOptions): Hono {
   const app = new Hono()
   const sessionLimiter = new FixedWindowLimiter()
   const offlineLimiter = new FixedWindowLimiter()
+  const sessionRate = options.sessionRate ?? SESSION_RATE
   const visitors = new Map<string, string>() // session_id → visitor_id（只这两样，没有正文）
 
   const visitorToken = (session_id: string): string =>
@@ -127,7 +130,7 @@ export function createRelayHttp(options: RelayHttpOptions): Hono {
   app.post('/v1/chat/public/sessions', (c) => {
     const origin = allowedOrigin(c.req.header('Origin'))
     if (origin === undefined) return c.json({ error: { code: 'origin_not_allowed' } }, 403)
-    if (!sessionLimiter.take(origin, SESSION_RATE, Date.now()))
+    if (!sessionLimiter.take(origin, sessionRate, Date.now()))
       return c.json({ error: { code: 'rate_limited' } }, 429)
     // 访客 id 随机生成，不从 IP / UA / cookie 推（21 §4 随主体删除的主体键不该能反推人）
     const visitor = `v_${crypto.randomUUID()}`

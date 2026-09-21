@@ -121,6 +121,13 @@ export {
   subscriptionStatusAt,
   subscriptionUnpaid,
 } from './subscription.js'
+export type { LimitsFile, ServiceLimit } from './limits.js'
+export {
+  CHAT_CONVERSATIONS_MONTHLY,
+  LIMITS_FILE,
+  limitsConsistent,
+  serviceLimitById,
+} from './limits.js'
 export type { TopupTiersFile } from './topup-tiers.js'
 export {
   CREDITS_PER_USD,

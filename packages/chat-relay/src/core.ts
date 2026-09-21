@@ -51,8 +51,15 @@ export type RelayEvent =
   | { type: 'quota_full'; workspace: string; limit: number; at: Iso8601 }
   | { type: 'offline_message_left'; workspace: string; at: Iso8601 }
 
+/** 挂件外观的存储口（转发器替商家存的唯一「配置」；Node 档内存、DO 档 kv）。 */
+export interface ConfigStore {
+  get(workspace: string): RelayWidgetConfig | undefined
+  put(workspace: string, config: RelayWidgetConfig): void
+}
+
 export interface RelayCoreOptions {
   clock(): Iso8601
+  configStore?: ConfigStore
   /** 配对校验：实现里做哈希比对（明文只进这一个函数一次）。 */
   verifyPairing(workspace: string, pairing: string): boolean
   /** 免费档每月对话上限；`undefined` = 无上限。官方托管从 limits.json 读。 */
@@ -139,7 +146,7 @@ export class RelayCore {
         socket.send({ type: 'error', code: 'closed', message: 'replaced by a new connection' }),
     }
     this.clients.set(frame.workspace, handle)
-    if (frame.config !== undefined) this.configs.set(frame.workspace, frame.config)
+    if (frame.config !== undefined) this.updateConfig(frame.workspace, frame.config)
     this.options.onEvent?.({
       type: 'peer_connected',
       workspace: frame.workspace,
@@ -158,6 +165,7 @@ export class RelayCore {
   /** 挂件外观更新（本机改了设置推过来；不是对话正文）。 */
   updateConfig(workspace: string, config: RelayWidgetConfig): void {
     this.configs.set(workspace, config)
+    this.options.configStore?.put(workspace, config)
   }
 
   /** 对端断开。 */
@@ -206,13 +214,27 @@ export class RelayCore {
 
   /* ── 访客那一侧 ────────────────────────────────────────────────── */
 
-  /** 挂件拉外观（不知道配置就给一个「未开」的默认——转发器不猜）。 */
+  /** 挂件拉外观（内存没有查存储；两处都没有 = 「未开」，转发器不猜）。 */
   publicConfig(workspace: string): RelayWidgetConfig {
-    return this.configs.get(workspace) ?? { enabled: false, accent: '#2563eb', greeting: '' }
+    return (
+      this.configs.get(workspace) ??
+      this.options.configStore?.get(workspace) ?? {
+        enabled: false,
+        accent: '#2563eb',
+        greeting: '',
+      }
+    )
   }
 
   attachVisitor(workspace: string, session: string, visitor: string, sink: VisitorSink): void {
-    this.visitors.set(session, { workspace, visitor, sink })
+    // 重连（刷新 SSE）不丢在途话轮：pendingTurn 跟着会话走，不跟着连接走
+    const pendingTurn = this.visitors.get(session)?.pendingTurn
+    this.visitors.set(session, {
+      workspace,
+      visitor,
+      sink,
+      ...(pendingTurn === undefined ? {} : { pendingTurn }),
+    })
   }
 
   detachVisitor(session: string): void {
@@ -332,6 +354,11 @@ export class RelayCore {
     delete visitor.pendingTurn
     visitor.sink.send({ type: 'message', message: { role: 'agent', text } })
     void message_id
+  }
+
+  /** 当前对端的类型（`server` = 商家本机，`hosted` = 托管实例）；没连是 `undefined`。 */
+  peerKindOf(workspace: string): RelayPeerKind | undefined {
+    return this.clients.get(workspace)?.peer
   }
 
   /** 测试与宿主自检用：不暴露正文，只有形状。 */

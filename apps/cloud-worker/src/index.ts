@@ -17,6 +17,13 @@
  */
 
 export { AccountsCore, IDEMPOTENCY_SWEEP_MS } from './accounts-do.js'
+export {
+  ChatRelayDoCore,
+  type ChatRelayDoOptions,
+  type RelayDoStateLike,
+  type RelayNotification,
+  type RelayWebSocket,
+} from './chat-relay-do.js'
 export { type DoSqlCursor, type DoSqlStorage, type DoStorageLike, doSyncDb } from './do-sql.js'
 export { envRecord, type WorkerEnv } from './env.js'
 export {
@@ -106,6 +113,7 @@ export {
 } from './worker.js'
 
 import { AccountsCore, type DoStateLike } from './accounts-do.js'
+import { ChatRelayDoCore, type RelayDoStateLike } from './chat-relay-do.js'
 import type { WorkerEnv } from './env.js'
 import { KolPublicCore, type KolPublicDoStateLike } from './kol-public-do.js'
 import { KolTenantCore, type KolTenantDoStateLike } from './kol-tenant-do.js'
@@ -208,6 +216,27 @@ export class WalletDO {
 
   constructor(state: WalletDoStateLike, env: WorkerEnv) {
     this.#core = new WalletCore(state, env)
+  }
+
+  fetch(request: Request): Promise<Response> {
+    return this.#core.fetch(request)
+  }
+
+  async alarm(): Promise<void> {
+    await this.#core.alarm()
+  }
+}
+
+/**
+ * 官方托管的聊天转发器（**每个工作区一个**，WP124 / docs/74）。
+ *
+ * 转发器只转发：不存对话正文、不跑 AI。有 alarm（六小时一拍，扫超期留言）。
+ */
+export class ChatRelayDO {
+  readonly #core: ChatRelayDoCore
+
+  constructor(state: RelayDoStateLike, env: WorkerEnv) {
+    this.#core = new ChatRelayDoCore(state, env)
   }
 
   fetch(request: Request): Promise<Response> {

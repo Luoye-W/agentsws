@@ -50,6 +50,11 @@ export interface WorkerEnv {
    * 回 404、health 里 `kol_tenant: false`（**如实说没开通**，不假装有）。
    */
   KOL_TENANT?: DoNamespaceLike
+  /**
+   * 官方托管的聊天转发器（**每个工作区一个**，WP124 / docs/74）。
+   * 没绑也能跑：`/relay/*` 与 `/v1/chat/relay/*` 回 404（如实说没开通）。
+   */
+  CHAT_RELAY?: DoNamespaceLike
   /** Cloudflare Email Sending（`[[send_email]] name = "EMAIL"`）。没绑 = 发不了信。 */
   EMAIL?: CloudflareEmailBinding
   /**

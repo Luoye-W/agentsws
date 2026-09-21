@@ -53,6 +53,7 @@ export {
   type QuotaInput,
   type QuotaVerdict,
 } from './quota.js'
+export { openSealed, sealedKeyOf, sealWithKey } from './sealed.js'
 export {
   KvCounterStore,
   KvOfflineBox,
