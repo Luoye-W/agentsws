@@ -416,6 +416,11 @@ export interface AuditReport {
   benchmark?: Benchmark
   /** 一句人话，说清楚这份报告能信到什么程度。 */
   note: string
+  /**
+   * 这一次扣了多少积分（WP126 起体检报告按 `data.kol.audit` 收；老调用方
+   * 看不到这一格时当 0 处理——字段是后加的，契约只加不删）。
+   */
+  credits?: number
   generated_at: Iso8601
 }
 

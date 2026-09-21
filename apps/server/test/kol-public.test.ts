@@ -8,7 +8,7 @@
  *
  * 四条硬断言：
  * 1. 开关拨到 "用 agentsws 的" 之后，找人真的改查公共库（`source: public_library`）；
- * 2. **浏览免费、reveal 才花钱**，而且价目在点之前就说出来（"这一步扣 N 积分"）；
+ * 2. **浏览 / 搜索按次收费、reveal 也花钱（WP126）**，而且价目在点之前就说出来（"这一步扣 N 积分"）；
  * 3. reveal 回来的明文**当场进本机加密库**，响应体里只有脱敏形态；
  * 4. 余额不够时回的是一句人话（云那边 402），不是一个红框。
  */
@@ -214,10 +214,12 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     expect(out.message).toContain('账号与积分')
   })
 
-  it('关联之后：浏览免费、价目在点之前就说出来', async () => {
+  it('关联之后：搜索按次收费（WP126）、价目在点之前就说出来', async () => {
     await link()
     await useOurs()
     seedCreator('gadgetjonas')
+    // WP126：搜索本身也按次扣积分，先充一点
+    wallet.topup({ org_id: cloud.store.ensureAccount('luoye@example.com').org.id, credits: 10, kind: 'purchased' })
 
     const before = wallet.balance(cloud.store.ensureAccount('luoye@example.com').org.id).available
     const out = await data<{
@@ -235,11 +237,11 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     // 49 M4 的价目：这一步扣多少，点之前就看得见
     expect(out.reveal_price?.capability).toBe('data.kol.lookup')
     expect(out.reveal_price?.credits).toBeGreaterThan(0)
-    expect(out.reveal_price?.note).toContain('浏览是免费的')
-    // 浏览一分不扣
-    expect(wallet.balance(cloud.store.ensureAccount('luoye@example.com').org.id).available).toBe(
-      before,
-    )
+    expect(out.reveal_price?.note).toContain('积分')
+    // WP126：搜索本身也按 data.kol.lookup 扣了一次（0.2）——官方接口没有免费动作了
+    expect(
+      before - wallet.balance(cloud.store.ensureAccount('luoye@example.com').org.id).available,
+    ).toBeCloseTo(0.2, 6)
   })
 
   it('reveal：扣积分、明文当场进本机加密库、响应体里只有脱敏形态', async () => {

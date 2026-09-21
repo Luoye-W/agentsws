@@ -53,18 +53,19 @@ describe('收费点那张表', () => {
     expect(kolChargeFor('POST', `${KEY}/refresh`)?.capability).toBe('social.fetch')
   })
 
-  it('免费与写入的那些一条都不在表里', () => {
+  it('写入与插件的路由一条都不在表里；GET 上只有读路由收费（WP126）', () => {
     for (const [method, path] of [
-      ['GET', '/v1/data/kol/creators'],
-      ['GET', `${KEY}/audit`],
-      ['GET', '/v1/data/kol/benchmarks'],
       ['POST', `${KEY}/observations`],
       ['POST', `${KEY}/contact`],
       ['POST', `${KEY}/disputes`],
       ['POST', '/v1/data/kol/plugins/pair'],
       ['POST', '/v1/data/kol/plugins/observations'],
-      // 免费体检那条的 POST 别名不存在——存在也不许变成免费的付费路由
-      ['POST', `${KEY}/audit`],
+      // reveal / refresh 是 POST 专属：GET 上不存在，也就不收费
+      ['GET', `${KEY}/reveal`],
+      ['GET', `${KEY}/refresh`],
+      // 非读路由的 GET：单条卡、详情、四段杂尾
+      ['GET', `${KEY}`],
+      ['GET', '/v1/data/kol/creators/youtube'],
     ] as const)
       expect(kolChargeFor(method, path)).toBeUndefined()
   })

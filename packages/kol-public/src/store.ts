@@ -108,6 +108,15 @@ export interface KolStore {
   quota(subject: string, day: string): QuotaRow
   putQuota(row: QuotaRow): void
 
+  /**
+   * 搜索幂等窗口（WP126 口径①：一次提交的搜索算一次）。
+   *
+   * 键是 `(subject, 规范化查询)` 的哈希，值是**上一次真收钱那一刻**。
+   * 窗口之内（10 分钟）翻页 / 重排不再扣第二次。没有记录回 `undefined`。
+   */
+  searchChargeAt(key: string): Iso8601 | undefined
+  putSearchCharge(key: string, at: Iso8601): void
+
   cachedBenchmark(filter: BucketFilter): Benchmark | undefined
   putBenchmark(row: Benchmark): void
 
@@ -242,6 +251,7 @@ export class MemoryKolStore implements KolStore {
   private readonly pairings = new Map<string, PluginPairing>()
   private readonly quotas = new Map<string, QuotaRow>()
   private readonly benchmarks = new Map<string, Benchmark>()
+  private readonly searchCharges = new Map<string, Iso8601>()
 
   creator(channel: KolChannel, handle: string): CreatorRow | undefined {
     const row = this.creators.get(keyOf(channel, handle))
@@ -346,6 +356,14 @@ export class MemoryKolStore implements KolStore {
 
   putQuota(row: QuotaRow): void {
     this.quotas.set(`${row.subject}/${row.day}`, { ...row })
+  }
+
+  searchChargeAt(key: string): Iso8601 | undefined {
+    return this.searchCharges.get(key)
+  }
+
+  putSearchCharge(key: string, at: Iso8601): void {
+    this.searchCharges.set(key, at)
   }
 
   cachedBenchmark(filter: BucketFilter): Benchmark | undefined {
@@ -477,6 +495,12 @@ CREATE TABLE IF NOT EXISTS kol_plugin_quota (
   reward_credits REAL NOT NULL DEFAULT 0,
   units          INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (subject, day)
+);
+
+-- WP126 口径①：搜索幂等窗口。键 = sha256(subject + 规范化查询)，值 = 上次真收钱那一刻
+CREATE TABLE IF NOT EXISTS kol_search_window (
+  key TEXT PRIMARY KEY,
+  at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS kol_benchmarks_cache (
@@ -1197,6 +1221,22 @@ export class SqliteKolStore implements KolStore, KolLibraryStore {
            units = excluded.units`,
       )
       .run(row.subject, row.day, row.observations, row.reward_credits, row.units)
+  }
+
+  searchChargeAt(key: string): Iso8601 | undefined {
+    const row = this.db
+      .prepare('SELECT at FROM kol_search_window WHERE key = ?')
+      .get(key) as { at: Iso8601 } | undefined
+    return row?.at
+  }
+
+  putSearchCharge(key: string, at: Iso8601): void {
+    this.db
+      .prepare(
+        `INSERT INTO kol_search_window (key, at) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET at = excluded.at`,
+      )
+      .run(key, at)
   }
 
   cachedBenchmark(filter: BucketFilter): Benchmark | undefined {

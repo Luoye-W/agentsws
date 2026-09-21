@@ -36,7 +36,7 @@ import type { SecretStore } from './secret-store.js'
  * 往公共红人库转发的那一跳。
  *
  * 形状刻意**只有两个方法**：连着没有、送一批。它既不读库、也不花积分——
- * 浏览与贡献都是免费的（49 M4），要花钱的只有 reveal，而那条路不经插件。
+ * 贡献与奖励照旧免费（49 M4，WP126 口径③保留）；官方侧的浏览 / reveal 计费改造不经插件这条路。
  */
 export interface PublicLibraryContributor {
   linked(): boolean

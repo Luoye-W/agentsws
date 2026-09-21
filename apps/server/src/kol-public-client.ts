@@ -16,8 +16,8 @@
  * 4. **没给 `data` 权限不是"云坏了"**。403 + `required_scope: data` 翻成一句
  *    人话："关联账号的时候没给数据服务权限，去设置 → 账号与积分重新关联一次。"
  *    这一句要让人知道去哪儿点，而不是看到一个 403。
- * 5. **免费的就是免费的**：浏览与体检记 0 积分，只有 reveal 扣
- *    `data.kol.lookup`。价目从云上那一份来（49 M4），本地一个数字都不自己算。
+ * 5. **计费照实回**（WP126）：官方数据接口没有免费动作了——浏览 / 体检都按次扣
+ *    积分，`credits_spent` 从云侧响应里带回来，本地一个数字都不自己算。
  */
 import type { Clock, KolChannel, WorkspaceId } from '@agentsws/contracts'
 import { KOL_LOOKUP_CAPABILITY, KOL_PUBLIC_SCOPE } from '@agentsws/contracts'
@@ -214,8 +214,12 @@ export function createKolPublicClient(options: KolPublicClientOptions): PublicLi
         `/creators${q === '' ? '' : `?${q}`}`,
       )
       if (!out.ok) return out
-      // 浏览免费：`credits_spent` 恒为 0（云那边也记 0 积分计量）
-      return { ok: true, credits_spent: 0, data: { rows: (out.data.creators ?? []).map(rowOf) } }
+      // WP126：浏览 / 搜索按 `data.kol.lookup` 收（0.2 / 次），云侧算了多少回多少
+      return {
+        ok: true,
+        credits_spent: (out.data as { credits?: number }).credits ?? 0,
+        data: { rows: ((out.data as { creators?: unknown[] }).creators ?? []).map(rowOf) },
+      }
     },
 
     async audit(input: {
@@ -232,13 +236,15 @@ export function createKolPublicClient(options: KolPublicClientOptions): PublicLi
         active_30d: boolean
         risk_flags: string[]
         note: string
+        credits?: number
         benchmark?: { p50_engagement_rate?: number; sample_size?: number }
       }>(`/creators/${encodeURIComponent(input.channel)}/${encodeURIComponent(input.handle)}/audit`)
       if (!out.ok) return out
       const report = out.data
       return {
         ok: true,
-        credits_spent: 0,
+        // WP126：体检报告按 `data.kol.audit` 收，云侧在报告里带回 credits
+        credits_spent: report.credits ?? 0,
         data: {
           public_id: `${report.channel}:${report.handle}`,
           channel: report.channel,

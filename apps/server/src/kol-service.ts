@@ -731,6 +731,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
    *
    * **起草开发信之前就说**：人在决定"要不要花这笔钱"之前该看得见数，
    * 而不是点下去之后才知道。取不到价目就不编一个——那一格干脆不出现。
+   *
+   * WP126：官方接口没有免费动作了，所以这里一并把搜索 / 取邮箱的计费口径说出来。
    */
   const revealPrice = async (): Promise<KolSearchResult['reveal_price']> => {
     const found = await options.priceOf?.(REVEAL_CAPABILITY)
@@ -739,7 +741,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       capability: REVEAL_CAPABILITY,
       credits: found.credits,
       unit: found.unit,
-      note: `浏览是免费的；取回一个邮箱这一步扣 ${found.credits} 积分。库里没有联系方式不收钱。`,
+      note: `搜索按次收（界面上常显单价）；取回一个邮箱这一步扣 ${found.credits} 积分。库里没有联系方式不收钱。`,
     }
   }
 
