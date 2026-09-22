@@ -1,5 +1,5 @@
 /**
- * WP122b 交付 ①：三个注入口通电（71 §9 第 7 条）。
+ * WP122b 交付 ① + ②：三个注入口通电与四类岗位只读（71 §9 第 7 / 9 条）。
  *
  * 跑的是**真装配线**（路由 → `assembleBrand` → `createRuntime` → stub 适配器），
  * 与 `vertical.test.ts` 同一个办法：在 `runtime.adapter` 外面套一层壳把请求抄下来。
@@ -239,5 +239,55 @@ describe('WP122b ①：三个注入口通电', () => {
     const support = await m.invite('care@nordvolt.cn', 'customer-care')
     const supportReq = await m.run(support.assignment_id)
     expect(sectionOf(supportReq)).toBeUndefined()
+  })
+})
+describe('WP122b ②：四类岗位只读设计规范', () => {
+  it('设计职责能读；客服职责仍 403；owner 能读也能改', async () => {
+    const m = await boot()
+    await m.call('PUT', '/v1/brand-design', { markdown: DESIGN_MD })
+    const designer = await m.invite('paint@nordvolt.cn', 'design')
+    const care = await m.invite('care@nordvolt.cn', 'customer-care')
+
+    // 设计：读得到（用她本人的 token + 她自己的 assignment）
+    const read = await m.server.gateway.fetch(
+      new Request('http://127.0.0.1/v1/brand-design', {
+        headers: {
+          Authorization: `Bearer ${designer.token}`,
+          'X-Assignment': designer.assignment_id,
+        },
+      }),
+    )
+    expect(read.status).toBe(200)
+
+    // 客服：仍然拒
+    const denied = await m.server.gateway.fetch(
+      new Request('http://127.0.0.1/v1/brand-design', {
+        headers: {
+          Authorization: `Bearer ${care.token}`,
+          'X-Assignment': care.assignment_id,
+        },
+      }),
+    )
+    expect(denied.status).toBe(403)
+
+    // 写：四类职责也不能改——改一格仍是 owner 一级
+    const edit = await m.server.gateway.fetch(
+      new Request('http://127.0.0.1/v1/brand-design/tokens/colors.primary', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${designer.token}`,
+          'X-Assignment': designer.assignment_id,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ value: '#ff0000' }),
+      }),
+    )
+    expect(edit.status).toBe(403)
+
+    const ownerEdit = await m.call('PATCH', '/v1/brand-design/tokens/colors.primary', {
+      path: 'colors.primary',
+      value: '#ff0000',
+    })
+    expect(ownerEdit.status).toBe(200)
   })
 })
