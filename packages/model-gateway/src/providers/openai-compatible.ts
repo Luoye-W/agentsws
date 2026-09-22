@@ -1,4 +1,5 @@
 import type {
+  ChatContentPart,
   ChatMessage,
   ModelProvider,
   ModelRef,
@@ -105,9 +106,26 @@ interface WireTranscriptionResponse {
  */
 export const wireToolName = (name: string): string => name.replace(/[^a-zA-Z0-9_-]/g, '__')
 
+/**
+ * content 出线：string 原样；数组（WP122b 视觉档）翻成 OpenAI 兼容口认的
+ * text / image_url 两类部件，图片按 `data:` URL 内联（base64）。数组的
+ * `image` 部件是我们契约里的形状，不是 OpenAI 的——这一跳就是它的翻译处。
+ */
+const toWireContent = (content: string | ChatContentPart[]): string | Record<string, unknown>[] => {
+  if (typeof content === 'string') return content
+  return content.map((part) =>
+    part.type === 'text'
+      ? { type: 'text', text: part.text }
+      : {
+          type: 'image_url',
+          image_url: { url: `data:${part.mime};base64,${part.data}` },
+        },
+  )
+}
+
 const toWireMessage = (m: ChatMessage): Record<string, unknown> => ({
   role: m.role,
-  content: m.content,
+  content: toWireContent(m.content),
   ...(m.name === undefined ? {} : { name: m.role === 'tool' ? wireToolName(m.name) : m.name }),
   ...(m.tool_call_id === undefined ? {} : { tool_call_id: m.tool_call_id }),
   // 思考模型（DeepSeek thinking 模式）多轮时要把上一轮的推理原样带回，否则 400

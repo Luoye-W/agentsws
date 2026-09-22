@@ -1,4 +1,5 @@
 import type { ChatMessage, Clock, ModelProvider, ModelRef } from '@agentsws/contracts'
+import { chatContentText } from '@agentsws/contracts'
 import { marketplaceLinkSlip } from '@agentsws/stand-ins'
 import type { Vertical } from '@agentsws/support-core'
 import {
@@ -49,7 +50,7 @@ function blocksOf(messages: readonly ChatMessage[]): Block[] {
   const out: Block[] = []
   for (const m of messages) {
     if (m.role === 'tool' || m.role === 'assistant') continue
-    const match = BLOCK.exec(m.content)
+    const match = BLOCK.exec(chatContentText(m.content))
     if (match?.[1] !== undefined && match[2] !== undefined && match[3] !== undefined) {
       out.push({ kind: match[1], id: match[2], body: match[3] })
     }
@@ -122,7 +123,9 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
     const orderResults = toolMessages(messages, 'get_order')
     const lastOrderResult = orderResults[orderResults.length - 1]
     const order =
-      lastOrderResult === undefined ? undefined : orderView(fencedJson(lastOrderResult.content))
+      lastOrderResult === undefined
+        ? undefined
+        : orderView(fencedJson(chatContentText(lastOrderResult.content)))
     const orderId = order?.id ?? orderIdFromText(threadBody)
 
     const askedPolicy = toolMessages(messages, 'search_policies').length > 0
@@ -205,7 +208,7 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
 
     // 4) 起草回复
     if (draftResults.length === 0 && available.has(DRAFT_REPLY_TOOL)) {
-      const stagedOk = stageResults.some((m) => m.content.includes('change_id'))
+      const stagedOk = stageResults.some((m) => chatContentText(m.content).includes('change_id'))
       const to = order?.email ?? EMAIL.exec(threadBody)?.[0]
       const customer =
         order?.customer_name ?? order?.email?.split('@')[0] ?? to?.split('@')[0] ?? 'there'
@@ -289,6 +292,6 @@ export function groundingInputFor(
 
 /** 工具结果里的订单（测试与宿主装配用）。 */
 export function orderFromToolMessage(message: ChatMessage): OrderView | undefined {
-  const data = fencedJson(message.content)
+  const data = fencedJson(chatContentText(message.content))
   return asRecord(data) === undefined ? undefined : orderView(data)
 }

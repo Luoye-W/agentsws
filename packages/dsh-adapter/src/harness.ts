@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import type { ChatMessage, Completion, ModelMeta, RunEvent, ToolDef } from '@agentsws/contracts'
+import { chatContentText } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
 import { Context } from '@deepseek-ai/cordis'
 import Include from '@deepseek-ai/cordis-plugin-include'
@@ -114,13 +115,13 @@ function toDshMessages(messages: ChatMessage[]): { system: string; messages: Mes
   const rest: Message[] = []
   for (const m of messages) {
     if (m.role === 'system') {
-      systems.push(m.content)
+      systems.push(chatContentText(m.content))
       continue
     }
     rest.push(
       createMessage({
         role: m.role === 'tool' ? 'user' : m.role,
-        content: [{ type: 'text', text: m.content }],
+        content: [{ type: 'text', text: chatContentText(m.content) }],
         source: { kind: 'user' },
       }),
     )

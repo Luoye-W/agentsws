@@ -339,6 +339,22 @@ export const HOST = '127.0.0.1'
 export const BIND_HOST_ENV = 'AGENTSWS_BIND_HOST'
 
 /** 只接受回环与「全部网卡」两种——写别的地址多半是配错了，不如报出来。 */
+/** 从字节认图型（视觉消息的 `mime` 那一格，WP122b 交付 ⑤）。认不出按 jpeg——provider 会拒，别在这一层猜第二遍。 */
+function imageMimeOf(bytes: Uint8Array): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return 'image/jpeg'
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png'
+  if (
+    bytes.length >= 12 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  )
+    return 'image/webp'
+  return 'image/jpeg'
+}
+
 export function bindHost(env: Record<string, string | undefined>): string {
   const raw = env[BIND_HOST_ENV]?.trim()
   if (raw === undefined || raw === '') return HOST
@@ -3310,6 +3326,44 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             return async ({ prompt }) => {
               const completion = await boot.ownGateway.complete({
                 messages: [{ role: 'user', content: prompt }],
+                meta: {
+                  workspace_id: workspace.id,
+                  assignment_id: actor.assignment_id,
+                  role_id: actor.role_id,
+                  run_id: run_id as never,
+                  purpose: 'extraction',
+                },
+                model: ref,
+              })
+              return { text: completion.text }
+            }
+          },
+        }
+      : {}),
+    // WP122b 交付 ⑤：视觉档。走用户配置的模型（同一条默认 ref）；
+    // 没配 provider 就回 undefined，看图整步跳过，产物里 imagery 留「未找到」。
+    // 看图的消息经 ChatMessage 的图片部件进网关（交付 ⑤ 的契约改动）。
+    imageFetch: globalThis.fetch as never,
+    ...(boot.ownModels.configured()
+      ? {
+          visionFor: ({ actor, run_id }) => {
+            const ref = boot.ownModels.defaultRef()
+            if (ref.provider === 'stub') return undefined
+            return async ({ image, prompt }) => {
+              const completion = await boot.ownGateway.complete({
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      { type: 'text', text: prompt },
+                      {
+                        type: 'image',
+                        mime: imageMimeOf(image),
+                        data: Buffer.from(image).toString('base64'),
+                      },
+                    ],
+                  },
+                ],
                 meta: {
                   workspace_id: workspace.id,
                   assignment_id: actor.assignment_id,

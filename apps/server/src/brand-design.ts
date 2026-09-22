@@ -30,13 +30,17 @@ import {
   type DesignComposeModel,
   type DesignPageInput,
   type DesignPageKind,
+  type DesignVisionModel,
   EMPTY_BRAND_DESIGN_CONTEXT,
   editValue,
   extractFileDesign,
   extractSiteDesign,
+  fetchPageImages,
   fetchStylesheets,
+  type ImageFetch,
   mergeDesignProfile,
   parseDesignMd,
+  pdfPageImages,
   profileFromTokens,
   serializeDesignMd,
   tokensOf,
@@ -145,6 +149,11 @@ export interface BrandDesignOptions {
   dbDir?: string
   /** 抓外链样式表那一口。生产传 `globalThis.fetch`，测试传夹具。 */
   fetch: PageFetch
+  /**
+   * 抓站上的内容图那一口（WP122b 交付 ⑤，视觉档）。给了才抓图；
+   * 没给 / 没配视觉模型就整步跳过，`imagery` 那一节如实写「未找到」。
+   */
+  imageFetch?: ImageFetch
   /** 页面从哪来（见 {@link DesignPageSource}）。 */
   pages: DesignPageSource
   /** 传上来的手册从哪读。不给就 `/v1/brand-design/files` 回"这个进程没装上传"。 */
@@ -162,6 +171,12 @@ export interface BrandDesignOptions {
     /** 这一轮的 run id（进模型网关的记账元组）。 */
     run_id: string
   }) => DesignComposeModel | undefined
+  /**
+   * 看图那一口（WP122b 交付 ⑤）。**每次现取**；没配视觉模型回 `undefined`，
+   * 看图整步跳过——产物里 `imagery` 留「未找到，请补充」，**不假装分析过**。
+   * 每张图按 `CREDITS_PER_VISION_CALL` 计积分，与文字档共用同一个封顶。
+   */
+  visionFor?: (meta: { actor: BrandDesignActor; run_id: string }) => DesignVisionModel | undefined
   newId: (prefix: string) => string
 }
 
@@ -311,25 +326,37 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
 
       // 模型口**现取**（WP122b 交付 ④）：模型设置改完下一轮抓取就生效；
       // 没配模型就是 undefined，成文退回直述版并如实标注（见下面 note）。
+      // 视觉口同理（交付 ⑤）：没配就整步跳过，imagery 留「未找到」；
+      // 配了才抓几张站上的内容图给视觉模型描述图片风格。
       const runId = options.newId('bdr')
       const model = options.modelFor?.({ actor, run_id: runId })
+      const vision = options.visionFor?.({ actor, run_id: runId })
+      const siteImages =
+        vision === undefined || options.imageFetch === undefined
+          ? []
+          : await fetchPageImages(options.imageFetch, withSheets)
       const composed = await composeDesignProse({
         profile: merged,
         capCredits: cap,
         ...(model === undefined ? {} : { model }),
+        ...(vision === undefined || siteImages.length === 0
+          ? {}
+          : { vision, images: siteImages.map((img) => img.bytes) }),
       })
       const note =
         composed.fallback_reason === undefined
           ? noteOf(fresh)
           : `${noteOf(fresh)}；${composed.fallback_reason}`
-      writeDoc(actor, { profile: merged, markdown: composed.markdown }, 'site_extract', note)
+      // 看图那一步可能给档案补了 imagery（WP122b 交付 ⑤），落库用补过的
+      const finalProfile = composed.profile ?? merged
+      writeDoc(actor, { profile: finalProfile, markdown: composed.markdown }, 'site_extract', note)
 
       return runOf(
         composed.stopped_for_budget ? 'budget_exceeded' : 'awaiting_confirm',
         {
           origins: ['site'],
           pages: withSheets.map((p) => ({ url: p.url, ok: true })),
-          profile: merged,
+          profile: finalProfile,
           budget: composed.budget,
         },
         actor,
@@ -375,15 +402,34 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       const previous = read(actor)
       // 方向是 (库里的, 手册的)：手册赢，但输的那个留在 `conflict` 里
       const merged = mergeDesignProfile(previous?.profile ?? {}, got.profile)
-      writeDoc(
-        actor,
-        { profile: merged },
-        'file_extract',
-        `${file.filename}：${noteOf(got.profile)}`,
-      )
+
+      // WP122b 交付 ⑤：手册里的图给视觉模型看（抽嵌图；零依赖解不了 PDF 渲染，
+      // 见 `pdfPageImages` 的注释）。没配视觉模型 / 传的不是 PDF 就整步跳过。
+      const runId = options.newId('bdr')
+      const model = options.modelFor?.({ actor, run_id: runId })
+      const vision = options.visionFor?.({ actor, run_id: runId })
+      const fileImages =
+        vision === undefined || file.filename.toLowerCase().endsWith('.pdf') === false
+          ? []
+          : pdfPageImages(file.bytes)
+      const cap = DEFAULT_BRAND_DESIGN_CAP_CREDITS
+      const composed = await composeDesignProse({
+        profile: merged,
+        capCredits: cap,
+        ...(model === undefined ? {} : { model }),
+        ...(vision === undefined || fileImages.length === 0
+          ? {}
+          : { vision, images: fileImages.map((img) => img.bytes) }),
+      })
+      const note =
+        composed.fallback_reason === undefined
+          ? `${file.filename}：${noteOf(got.profile)}`
+          : `${file.filename}：${noteOf(got.profile)}；${composed.fallback_reason}`
+      const finalProfile = composed.profile ?? merged
+      writeDoc(actor, { profile: finalProfile, markdown: composed.markdown }, 'file_extract', note)
 
       return runOf(
-        'awaiting_confirm',
+        composed.stopped_for_budget ? 'budget_exceeded' : 'awaiting_confirm',
         {
           origins: ['file'],
           files: [
@@ -394,9 +440,11 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
               contributed: got.contributed,
             },
           ],
-          profile: merged,
+          profile: finalProfile,
+          budget: composed.budget,
         },
         actor,
+        runId,
       )
     },
 

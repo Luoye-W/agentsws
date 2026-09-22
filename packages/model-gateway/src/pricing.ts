@@ -1,4 +1,5 @@
 import type { ChatMessage, CompletionUsage, ModelRef, ToolDef } from '@agentsws/contracts'
+import { chatContentText } from '@agentsws/contracts'
 import type { PriceEntry, PriceTable } from './types.js'
 import { GatewayError } from './types.js'
 
@@ -36,7 +37,8 @@ export function estimateInputTokens(
   charsPerToken: number,
 ): number {
   let chars = 0
-  for (const m of messages) chars += m.role.length + m.content.length + (m.name?.length ?? 0)
+  for (const m of messages)
+    chars += m.role.length + chatContentText(m.content).length + (m.name?.length ?? 0)
   for (const t of tools ?? []) {
     chars += t.name.length + t.description.length + JSON.stringify(t.input_schema ?? null).length
   }

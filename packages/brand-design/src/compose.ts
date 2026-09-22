@@ -57,6 +57,12 @@ export interface ComposeDesignInput {
 
 export interface ComposeDesignResult {
   prose: DesignProse
+  /**
+   * 成文用的那一份档案：**看图那一步可能补了 `imagery`**（视觉口回的话
+   * 也是证据）。调用方落库要用这一份，不要用它递进来的原档——否则文件里
+   * 写着图片风格、色板里却没有那一格，两边的真源就分叉了。
+   */
+  profile: BrandDesignProfile
   /** 整份文件（front matter + 正文）。 */
   markdown: string
   budget: { estimated_credits: number; cap_credits: number; spent_credits: number }
@@ -213,8 +219,7 @@ export function composePrompt(
  */
 export async function composeDesignProse(input: ComposeDesignInput): Promise<ComposeDesignResult> {
   const cap = input.capCredits ?? DEFAULT_BRAND_DESIGN_CAP_CREDITS
-  const sections = DESIGN_MD_SECTIONS.filter((s) => sectionEvidence(input.profile, s) !== undefined)
-  const missing = DESIGN_MD_SECTIONS.filter((s) => !sections.includes(s))
+  let missing = DESIGN_MD_SECTIONS.filter((s) => !sectionEvidence(input.profile, s))
   const estimated = estimateComposeCredits({
     profile: input.profile,
     ...(input.images === undefined ? {} : { images: input.images }),
@@ -225,17 +230,8 @@ export async function composeDesignProse(input: ComposeDesignInput): Promise<Com
   let fallbackReason: string | undefined
   let prose: DesignProse = {}
 
-  if (sections.length === 0) {
-    return {
-      prose,
-      markdown: serializeDesignMd(input.profile, prose),
-      budget: { estimated_credits: 0, cap_credits: cap, spent_credits: 0 },
-      stopped_for_budget: false,
-      missing,
-    }
-  }
-
-  // ① 看图那一步（有口子才跑，且先跑——它的结果要进成文的证据）
+  // ① 看图那一步（有口子才跑，且**先跑**——它的结果要进成文的证据，
+  // 甚至能凭空造出一节证据：只有图、没有 CSS 的站也能有 imagery 那一节）
   let profile = input.profile
   if (input.vision !== undefined && input.images !== undefined && input.images.length > 0) {
     const notes: string[] = []
@@ -268,6 +264,21 @@ export async function composeDesignProse(input: ComposeDesignInput): Promise<Com
       }
   }
 
+  // 看完图再算一遍小节：imagery 可能刚成为 Overview 那一节的新证据
+  const sections = DESIGN_MD_SECTIONS.filter((s) => sectionEvidence(profile, s) !== undefined)
+  missing = DESIGN_MD_SECTIONS.filter((s) => !sections.includes(s))
+
+  if (sections.length === 0) {
+    return {
+      prose,
+      profile,
+      markdown: serializeDesignMd(profile, prose),
+      budget: { estimated_credits: estimated, cap_credits: cap, spent_credits: spent },
+      stopped_for_budget: false,
+      missing,
+    }
+  }
+
   // ② 成文
   if (input.model === undefined) {
     fallbackReason = '这一轮没接上模型，正文按抓到的令牌直述。'
@@ -297,6 +308,7 @@ export async function composeDesignProse(input: ComposeDesignInput): Promise<Com
 
   return {
     prose,
+    profile,
     markdown: serializeDesignMd(profile, prose),
     budget: { estimated_credits: estimated, cap_credits: cap, spent_credits: spent },
     stopped_for_budget: stopped,
