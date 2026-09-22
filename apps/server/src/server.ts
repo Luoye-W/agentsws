@@ -3297,6 +3297,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     fetch: globalThis.fetch as never,
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
+    // WP122b 交付 ④：成文接模型（便宜档）。**配了才递**：没配模型时退回按令牌
+    // 直述的那一版并在版本历史里如实标注（`composeDesignProse` 的 fallback）。
+    // 计量与封顶在 `composeDesignProse` 里：与 WP121 同一套预估、封顶 1 积分。
+    ...(boot.ownModels.configured()
+      ? {
+          modelFor: ({ actor, run_id }) => {
+            const ref = boot.ownModels.defaultRef()
+            // 一条真 provider 都没有（只有 stub）：stub 回的是确定性假话，
+            // 当成"没配模型"处理，不拿假话当正文。
+            if (ref.provider === 'stub') return undefined
+            return async ({ prompt }) => {
+              const completion = await boot.ownGateway.complete({
+                messages: [{ role: 'user', content: prompt }],
+                meta: {
+                  workspace_id: workspace.id,
+                  assignment_id: actor.assignment_id,
+                  role_id: actor.role_id,
+                  run_id: run_id as never,
+                  purpose: 'extraction',
+                },
+                model: ref,
+              })
+              return { text: completion.text }
+            }
+          },
+        }
+      : {}),
     pages: () =>
       brandIntake
         .latestDocuments(workspace.id)

@@ -149,8 +149,19 @@ export interface BrandDesignOptions {
   pages: DesignPageSource
   /** 传上来的手册从哪读。不给就 `/v1/brand-design/files` 回"这个进程没装上传"。 */
   readUpload?: UploadReader
-  /** 成文那一口。不给就退回按令牌直述（见 `composeDesignProse`）。 */
-  model?: DesignComposeModel
+  /**
+   * 成文那一口（WP122b 交付 ④，71 §9 第 4 条）。**每次现取**：按这一次的
+   * 请求人与运行问模型面——没配模型回 `undefined`，成文退回按令牌直述
+   * 的那一版并在版本历史里如实标注，**不报错也不编**。
+   *
+   * 积分计量与封顶在 `composeDesignProse` 里（与 WP121 同一套预估：
+   * `estimateComposeCredits`，封顶 `DEFAULT_BRAND_DESIGN_CAP_CREDITS = 1`）。
+   */
+  modelFor?: (meta: {
+    actor: BrandDesignActor
+    /** 这一轮的 run id（进模型网关的记账元组）。 */
+    run_id: string
+  }) => DesignComposeModel | undefined
   newId: (prefix: string) => string
 }
 
@@ -244,8 +255,9 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
     status: BrandDesignRun['status'],
     extra: Partial<BrandDesignRun>,
     actor: BrandDesignActor,
+    id?: string,
   ): BrandDesignRun => ({
-    id: options.newId('bdr'),
+    id: id ?? options.newId('bdr'),
     schema_version: 1,
     workspace_id: actor.workspace_id as WorkspaceId,
     status,
@@ -297,17 +309,20 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       const previous = read(actor)
       const merged = mergeDesignProfile(previous?.profile ?? {}, fresh)
 
+      // 模型口**现取**（WP122b 交付 ④）：模型设置改完下一轮抓取就生效；
+      // 没配模型就是 undefined，成文退回直述版并如实标注（见下面 note）。
+      const runId = options.newId('bdr')
+      const model = options.modelFor?.({ actor, run_id: runId })
       const composed = await composeDesignProse({
         profile: merged,
         capCredits: cap,
-        ...(options.model === undefined ? {} : { model: options.model }),
+        ...(model === undefined ? {} : { model }),
       })
-      writeDoc(
-        actor,
-        { profile: merged, markdown: composed.markdown },
-        'site_extract',
-        noteOf(fresh),
-      )
+      const note =
+        composed.fallback_reason === undefined
+          ? noteOf(fresh)
+          : `${noteOf(fresh)}；${composed.fallback_reason}`
+      writeDoc(actor, { profile: merged, markdown: composed.markdown }, 'site_extract', note)
 
       return runOf(
         composed.stopped_for_budget ? 'budget_exceeded' : 'awaiting_confirm',
@@ -318,6 +333,7 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
           budget: composed.budget,
         },
         actor,
+        runId,
       )
     },
 
