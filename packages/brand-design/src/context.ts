@@ -35,6 +35,24 @@ export interface BrandDesignContextInput {
   role?: 'design' | 'site' | 'social' | 'ads'
 }
 
+/**
+ * 职责 id → 四个吃规范的岗位族（WP122b）。
+ *
+ * 职责 id 的**第一段**就是岗位域（`packages/roles/roles/<域>/*.yml`），
+ * 设计 / 建站 / 社媒 / 投放四个域各吃同一份 `DESIGN.md` 的一个侧面。
+ * 四个域以外的职责（客服、仓储、公关……）回 `undefined`——它们没有
+ * "出图 / 出页面"这一步，注一段品牌令牌进去只是烧 token。
+ */
+export function designRoleFamily(
+  role_id: string,
+): 'design' | 'site' | 'social' | 'ads' | undefined {
+  if (role_id.startsWith('design.')) return 'design'
+  if (role_id.startsWith('site.')) return 'site'
+  if (role_id.startsWith('social.')) return 'social'
+  if (role_id.startsWith('ads.')) return 'ads'
+  return undefined
+}
+
 /** 每个岗位最关心的那一句。**只有一句**——多了就成了模板文学。 */
 const ROLE_NOTE: Record<NonNullable<BrandDesignContextInput['role']>, string> = {
   design: '出图时：主色只用在一张图里最重要的那一处，其余用中性色撑。',

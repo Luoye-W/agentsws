@@ -51,6 +51,7 @@ export {
 export {
   type BrandDesignContextInput,
   brandDesignContext,
+  designRoleFamily,
   EMPTY_BRAND_DESIGN_CONTEXT,
 } from './context.js'
 export {

@@ -8,6 +8,7 @@ import { mkdirSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
+import { adDesignPrompt } from '@agentsws/ads-core'
 import type {
   AskPort,
   ChatPort,
@@ -44,17 +45,20 @@ import {
   WsSession,
 } from '@agentsws/api'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
+import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
   ApprovalBus,
   ApprovalItem,
   Assignment,
+  BrandDesignContext,
   Clock,
   EventEnvelope,
   KolChannel,
   Person,
   PersonId,
+  PromptSection,
   SkillTier,
   StartRun,
   StorefrontPlatform,
@@ -91,6 +95,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
 } from '@agentsws/roles'
+import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
 import { createSkills, type Skills } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
 import { scheduleConflicts } from '@agentsws/social-core'
@@ -1280,6 +1285,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 这个变量取；取不到就是"这个品牌还没有规范"，出活照常（只是不注入令牌）。
    */
   let brandDesignRef: BrandDesignAssembly | undefined
+
+  /**
+   * WP122b：一次运行的品牌规范注入段（71 §9 第 7 条）。
+   *
+   * 建站族额外附上 `themeDesignVariables()` 那张表——WP89 主题沙箱里的职责
+   * 副本在沙箱根目录干活，它写 `--color-*` / `--radius-*` 时该用的名字与值
+   * 就在这一段里；设计族不注（出图那一路在 `design.ts` 已逐图注入，再注
+   * 一遍是双份烧钱）；其它族回 `undefined`（整段不出，不注空节）。
+   */
+  const brandDesignSectionOf = (ws: WorkspaceId, role_id: string): PromptSection | undefined => {
+    const family = designRoleFamily(role_id)
+    if (family === undefined || family === 'design') return undefined
+    const design = brandDesignRef?.context(ws, family)
+    if (design === undefined || design.present !== true) return undefined
+    const text =
+      family === 'site'
+        ? [
+            siteDesignPrompt(design),
+            '主题里写颜色 / 字体 / 圆角 / 间距时，用这些变量名与值：',
+            ...Object.entries(themeDesignVariables(design.tokens)).map(
+              ([name, value]) => `${name}: ${value}`,
+            ),
+          ].join('\n')
+        : family === 'ads'
+          ? adDesignPrompt(design)
+          : design.prompt
+    return { id: 'brand-design', name: '品牌设计规范', order: 25, text }
+  }
+
   const brandProfileOf = (
     ws: WorkspaceId,
   ): { vertical?: WorkspaceVertical; storefront_platform?: StorefrontPlatform } =>
@@ -2026,6 +2060,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * `personas` 每次现查覆盖表，不用重启（同 `vertical` / `browser`）。
              */
             personaSections: (input) => personas.sections(input),
+            /*
+             * WP122b（71 §9 第 7 条）：三个注入口通电——建站 / 社媒 / 投放出活时
+             * 提示词里真带上品牌令牌。照 `design.ts` 的样板：取值口 + 现取
+             * （每次运行都重新问 `brandDesignRef`，用户改一格下一次运行就生效）。
+             * 出图那条路已在 `design.ts` 逐图注入（WP122），这里只补另外三条。
+             */
+            brandDesign: (role_id) => brandDesignSectionOf(ws, role_id),
           })
     const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
