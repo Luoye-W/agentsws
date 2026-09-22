@@ -1980,6 +1980,9 @@ const zh: Table = {
   'design.md.rev.compose': '重新成文',
   'design.md.button.sample': '按钮样例',
   'design.md.card.sample': '卡片样例',
+  'design.md.edit': '改这一格（重抓时不会覆盖手改的值）',
+  'design.md.edit.cancel': '取消',
+  'design.md.edit.failed': '没存进去。值要不要改，检查一下格式再试一次。',
   'rail.panel.design-md': '设计规范',
   // WP121b（70 §1）：四步换了内容——第一件事从"你们公司叫什么"换成"用哪个 AI"。
   // 原来的「公司设置 / 个人设置」并进第 ② 步（贴完网址顺带确认）。
@@ -4381,6 +4384,9 @@ const en: Table = {
   'design.md.rev.compose': 'Prose rewritten',
   'design.md.button.sample': 'Button',
   'design.md.card.sample': 'Card',
+  'design.md.edit': 'Edit this value (a re-scan will not overwrite manual edits)',
+  'design.md.edit.cancel': 'Cancel',
+  'design.md.edit.failed': 'Not saved. Check the format and try again.',
   'rail.panel.design-md': 'Design spec',
   // WP121b (70 §1): same four dots, new contents.
   'onboarding.step1': 'Connect AI',

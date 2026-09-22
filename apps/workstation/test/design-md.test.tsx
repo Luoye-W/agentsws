@@ -12,7 +12,7 @@
  * 最后一组是原文那一半的右预览，见它自己那段注释。
  */
 import type { BrandDesignProfile } from '@agentsws/contracts'
-import { cleanup, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { MarkdownPreview } from '@/components/design-md/markdown-preview'
 import { countConflicts, designSummary, TokensView } from '@/components/design-md/tokens-view'
@@ -84,6 +84,56 @@ describe('可视化那一半', () => {
   it('一份空档案：每一节都留白，不抛', () => {
     renderWithProviders(<TokensView profile={{}} />)
     expect(screen.getAllByText('未找到，请补充').length).toBeGreaterThanOrEqual(4)
+    cleanup()
+  })
+})
+
+/*
+ * WP122b 交付 ③：改一格的小铅笔。铅笔只在**给了 onEdit** 的那半页画
+ * （设计规范页；右栏只读面板不给），一次只开一格，出错就地一行字不弹框。
+ * "重抓后手改格不动"那条规则在服务端钉（apps/server/test/brand-design-flow.test.ts），
+ * 这里钉的是界面那一半。
+ */
+describe('改一格的小铅笔（WP122b ③）', () => {
+  it('点开铅笔是当前值；保存把路径与新值原样递给 onEdit', async () => {
+    const saved: { path: string; value: string }[] = []
+    renderWithProviders(
+      <TokensView
+        profile={PROFILE}
+        onEdit={async (path, value) => {
+          saved.push({ path, value })
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('design-md-edit-colors.primary'))
+    const input = screen.getByTestId('design-md-edit-input-colors.primary') as HTMLInputElement
+    expect(input.value).toBe('#b8422e')
+    fireEvent.change(input, { target: { value: '#123456' } })
+    fireEvent.click(screen.getByTestId('design-md-edit-save-colors.primary'))
+    await waitFor(() => expect(saved).toEqual([{ path: 'colors.primary', value: '#123456' }]))
+    cleanup()
+  })
+
+  it('onEdit 拒了：就地一行字，不弹框', async () => {
+    renderWithProviders(
+      <TokensView
+        profile={PROFILE}
+        onEdit={async () => {
+          throw new Error('值看不懂')
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('design-md-edit-colors.primary'))
+    fireEvent.click(screen.getByTestId('design-md-edit-save-colors.primary'))
+    await waitFor(() =>
+      expect(screen.getByTestId('design-md-edit-error').textContent).toContain('值看不懂'),
+    )
+    cleanup()
+  })
+
+  it('不给 onEdit（右栏只读面板）：一支铅笔都不画', () => {
+    renderWithProviders(<TokensView profile={PROFILE} />)
+    expect(screen.queryByTestId('design-md-edit-colors.primary')).toBeNull()
     cleanup()
   })
 })
