@@ -85,7 +85,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "ddcf81424da5febfa3c3e0e151f1d778",
+  "source_digest": "6a4316432e74b8aacbcc0fd02f22148d",
   "objects": [
     {
       "id": "ad",
@@ -3100,6 +3100,12 @@
           "type": "string",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "followers",

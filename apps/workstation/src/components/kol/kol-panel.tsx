@@ -1088,15 +1088,21 @@ type SubviewId = (typeof SUBVIEWS)[number]['id']
 export function KolPanel({
   assignment,
   channel,
+  /** WP119c：深链 ?creator= 带进来的人（已是 creator_id），进面板就点开。 */
+  initialOpenCreator,
+  /** WP119c：深链默认落在哪个子视图（/influencer/setup → 'campaign'）。 */
+  defaultSubview,
 }: {
   assignment: string
   channel: KolChannelId
+  initialOpenCreator?: string
+  defaultSubview?: SubviewId
 }): React.ReactNode {
   const [search, setSearch] = useSearchParams()
-  const raw = search.get('kol') ?? 'pool'
+  const raw = search.get('kol') ?? defaultSubview ?? 'pool'
   const view: SubviewId = SUBVIEWS.some((v) => v.id === raw) ? (raw as SubviewId) : 'pool'
   /** 点开的那一个人（候选池里）。 */
-  const [openCreator, setOpenCreator] = useState<string | undefined>(undefined)
+  const [openCreator, setOpenCreator] = useState<string | undefined>(initialOpenCreator)
   /** 点开的那一条合作（合作线程里）。 */
   const [openCollab, setOpenCollab] = useState<string | undefined>(undefined)
 

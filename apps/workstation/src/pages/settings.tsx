@@ -32,7 +32,14 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-export function SettingsPage({ identity }: { identity?: string }): React.ReactNode {
+export function SettingsPage({
+  identity,
+  /** WP119c：插件深链（/settings/credits 等三点）直接落在「账号与积分」那一档。 */
+  defaultTab = 'general',
+}: {
+  identity?: string
+  defaultTab?: 'general' | 'account'
+}): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang, position } = useApp()
   const client = useQueryClient()
   const [saved, setSaved] = useState(false)
@@ -87,7 +94,7 @@ export function SettingsPage({ identity }: { identity?: string }): React.ReactNo
   })
 
   return (
-    <Tabs defaultValue="general" className="flex flex-col gap-4">
+    <Tabs defaultValue={defaultTab} className="flex flex-col gap-4">
       <TabsList>
         <TabsTrigger value="general">{t('settings.tab.general')}</TabsTrigger>
         {/* 49 M5「设置 → 账号与积分」：上半张是账号卡（WP58），下半张是积分（WP59） */}

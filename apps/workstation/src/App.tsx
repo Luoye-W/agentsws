@@ -30,6 +30,7 @@ import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 // WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）
 import { ImChannelsPage } from '@/pages/im-channels'
+import { InfluencerPage } from '@/pages/influencer'
 import { KnowledgePage } from '@/pages/knowledge'
 import { LoginPage } from '@/pages/login'
 import { MatterPage } from '@/pages/matter'
@@ -218,6 +219,29 @@ function Workspace(): ReactNode {
             />
           }
         />
+        {/*
+          WP119c：插件深链的三条（docs/76 §10）——从面板的充值 / 设置链接直接落到
+          「账号与积分」那一档，不让人落在默认页再自己找。
+        */}
+        {[['credits'], ['billing'], ['apikeys']].map(([tab]) => (
+          <Route
+            key={tab}
+            path={`/settings/${tab}`}
+            element={
+              <SettingsPage
+                defaultTab="account"
+                {...(session.data === undefined ? {} : { identity: session.data.person.email })}
+              />
+            }
+          />
+        ))}
+        {/*
+          WP119c：插件深链的两条（docs/76 §10）——存入红人之后的「去查看」直接落到
+          红人面板；setup 那条落在「导入与 campaign」。带 ?creator=<handle|id> 时
+          面板自动点开那一个人。
+        */}
+        <Route path="/influencer/creators" element={<InfluencerPage />} />
+        <Route path="/influencer/setup" element={<InfluencerPage setup />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

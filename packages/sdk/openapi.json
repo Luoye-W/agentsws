@@ -54843,6 +54843,1371 @@
           }
         }
       }
+    },
+    "/v1/extension/setup": {
+      "get": {
+        "operationId": "extensionSetup",
+        "summary": "品牌（工作区）/ 活动 / 候选池清单——存入与搜索 FAB 的组织上下文",
+        "tags": ["extension"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "ExtensionSetup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionSetup"
+      }
+    },
+    "/v1/extension/creators": {
+      "post": {
+        "operationId": "saveExtensionCreator",
+        "summary": "显式存入红人池（upsert 全量快照；写本地红人库）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionCreatorSaveResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionCreatorSaveResult",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": ["youtube", "instagram", "tiktok", "facebook", "x"]
+                  },
+                  "handle": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "external_id": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "avatar_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "banner_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "followers": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "followers_text": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "avg_views": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "video_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "total_views": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "country": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "bio": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "contact": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["email", "dm", "phone", "form"]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 320
+                      },
+                      "source": {
+                        "type": "string",
+                        "maxLength": 300
+                      }
+                    },
+                    "required": ["kind", "value"]
+                  },
+                  "campaign_id": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "observed_at": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "page_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["channel_page", "content_page", "search_results", "manual_save"]
+                  }
+                },
+                "required": ["channel", "handle", "observed_at"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/creators/{channel}/{handle}/report": {
+      "get": {
+        "operationId": "extensionCreatorReport",
+        "summary": "本机观测历史 + 粉丝趋势 + 已存状态（库里的没有这个人 = 404）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "description": "哪条渠道",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "description": "handle 或平台的稳定 id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionCreatorReport",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionCreatorReport"
+      }
+    },
+    "/v1/extension/reveal-pricing": {
+      "get": {
+        "operationId": "extensionRevealPricing",
+        "summary": "看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.lookup）",
+        "tags": ["extension"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "ExtensionRevealPricing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionRevealPricing"
+      }
+    },
+    "/v1/extension/creators/{channel}/{handle}/contact": {
+      "get": {
+        "operationId": "extensionContactLookup",
+        "summary": "公共库 reveal（本机代理云端，计费在服务端；本机已有的邮箱不扣分；余额不足回人话）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "description": "哪条渠道",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "description": "handle 或平台的稳定 id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionContactLookup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionContactLookup"
+      },
+      "post": {
+        "operationId": "extensionContactContribute",
+        "summary": "贡献一条联系方式到公共库（云端收；回执说清是新的还是库里已有）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "description": "哪条渠道",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "description": "handle 或平台的稳定 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionContactContribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionContactContribution",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 320
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  }
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/creators/{channel}/{handle}/contact/dispute": {
+      "post": {
+        "operationId": "extensionContactDispute",
+        "summary": "标记一条联系方式是错的（免费；云端只记不裁）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "description": "哪条渠道",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "description": "handle 或平台的稳定 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionContactDispute",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionContactDispute",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "maxLength": 320
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 600
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/contacts": {
+      "post": {
+        "operationId": "saveExtensionContact",
+        "summary": "写进自己红人池的联系方式行（明文进本机加密库，库里只留 key 名）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionContactSaveResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionContactSaveResult",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": ["youtube", "instagram", "tiktok", "facebook", "x"]
+                  },
+                  "handle": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "external_id": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "contact_value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 320
+                  },
+                  "contact_kind": {
+                    "type": "string",
+                    "enum": ["email", "dm", "phone", "form"]
+                  },
+                  "source": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "page_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "observed_at": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["channel", "handle", "contact_value", "contact_kind"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/content-observations": {
+      "post": {
+        "operationId": "ingestExtensionContentObservation",
+        "summary": "内容观测。红线：请求体里没有评论这一格，多一个键整批拒",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionContentResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionContentResult",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": ["youtube", "instagram", "tiktok", "facebook", "x"]
+                  },
+                  "content_external_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "enum": ["video", "post", "reel"]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "thumbnail_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "published_at": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
+                  "stats": {
+                    "type": "object",
+                    "properties": {
+                      "views": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "likes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "comments": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "shares": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "author": {
+                    "type": "object",
+                    "properties": {
+                      "external_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "handle": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "followers": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": ["external_id"],
+                    "additionalProperties": false
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": ["landscape", "portrait"]
+                  },
+                  "duration_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "captured_at": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  }
+                },
+                "required": [
+                  "channel",
+                  "content_external_id",
+                  "content_type",
+                  "title",
+                  "stats",
+                  "author",
+                  "captured_at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/contents": {
+      "post": {
+        "operationId": "saveExtensionContent",
+        "summary": "存入自己的内容库（唯一可带已采评论的端点；服务端最多保 200 条）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionContentSaveResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionContentSaveResult",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": ["youtube", "instagram", "tiktok", "facebook", "x"]
+                  },
+                  "content_external_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "enum": ["video", "post", "reel"]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "thumbnail_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "published_at": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
+                  "stats": {
+                    "type": "object",
+                    "properties": {
+                      "views": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "likes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "comments": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "shares": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "author": {
+                    "type": "object",
+                    "properties": {
+                      "external_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "handle": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "followers": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": ["external_id"],
+                    "additionalProperties": false
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": ["landscape", "portrait"]
+                  },
+                  "duration_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "captured_at": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "campaign_id": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "captured_comments": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "author": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "like_count": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "published_at": {
+                          "type": "string",
+                          "maxLength": 60
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "channel",
+                  "content_external_id",
+                  "content_type",
+                  "title",
+                  "stats",
+                  "author",
+                  "captured_at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/bio-link-observations": {
+      "post": {
+        "operationId": "ingestExtensionBioLinkObservation",
+        "summary": "简介外链页（Linktree / Beacons）观测",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionBioLinkResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionBioLinkResult",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "platform": {
+                    "type": "string",
+                    "enum": ["linktree", "beacons"]
+                  },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 600
+                  },
+                  "links": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "url": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 600
+                        }
+                      },
+                      "required": ["url"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "social_links": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 600
+                        }
+                      },
+                      "required": ["url"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "emails": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 320
+                    }
+                  },
+                  "bio": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "avatar_url": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "captured_at": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "platform",
+                  "slug",
+                  "source_url",
+                  "links",
+                  "social_links",
+                  "emails",
+                  "captured_at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/seed-signature": {
+      "get": {
+        "operationId": "extensionSeedSignature",
+        "summary": "种子频道主题词（库里没有这个人 = 404，面板不做预筛）",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "required": true,
+            "description": "哪条渠道",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "externalId",
+            "in": "query",
+            "required": false,
+            "description": "handle 或平台的稳定 id（与 external_id 同义，两个名字都认）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "external_id",
+            "in": "query",
+            "required": false,
+            "description": "同上（蛇形名）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ExtensionSeedSignature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionSeedSignature"
+      }
     }
   },
   "x-asyncapi": {

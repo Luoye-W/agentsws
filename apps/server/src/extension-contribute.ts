@@ -104,6 +104,71 @@ export function createExtensionContributor(
     }
   }
 
+  /* ── WP119c：reveal / 贡献 / 争议（可选方法，老装配不实现这三条）──────────
+   *
+   * 云那一侧的错误信封是 `{ code, message, details }`、成功是 `{ data }`。
+   * 失败原因翻译成四个：余额不足 / 库里没有 / 没关联 / 云出了别的问题——
+   * 认不出来的一律进 upstream_error，不编。
+   */
+
+  async function callCloud<T>(
+    path: string,
+    init: { method: 'POST'; body?: unknown },
+  ): Promise<
+    { ok: true; data: T } | { ok: false; status: number; code?: string; message: string }
+  > {
+    const token = tokenOf()
+    if (token === undefined)
+      return { ok: false, status: 401, message: '还没关联 agentsws 云账号。' }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      controller.abort()
+    }, KOL_PUBLIC_TIMEOUT_MS)
+    try {
+      const res = await doFetch(`${base}${path}`, {
+        method: init.method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        signal: controller.signal,
+      })
+      const text = await res.text()
+      let parsed: unknown = {}
+      try {
+        parsed = text.trim() === '' ? {} : JSON.parse(text)
+      } catch {
+        parsed = {}
+      }
+      if (!res.ok) {
+        const body = parsed as { code?: string; message?: string }
+        return {
+          ok: false,
+          status: res.status,
+          ...(body.code === undefined ? {} : { code: body.code }),
+          message: body.message ?? `公共红人库那边没给回数据（HTTP ${res.status}）`,
+        }
+      }
+      return { ok: true, data: (parsed as { data?: T }).data as T }
+    } catch {
+      return {
+        ok: false,
+        status: 0,
+        message: '连不上 agentsws 云（网络不通，或者云那边暂时不可用）。稍后再试一次。',
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  const keyPath = (key: { channel: KolChannel; handle: string }): string =>
+    `/creators/${encodeURIComponent(key.channel)}/${encodeURIComponent(normalizeHandleOf(key.handle))}`
+
+  const normalizeHandleOf = (handle: string): string =>
+    handle.trim().replace(/^@+/, '').toLowerCase()
+
   return {
     // 「登录了没有」就是「这个品牌有没有那把工作区令牌」，没有第二处真源。
     linked: () => tokenOf() !== undefined,
@@ -116,6 +181,81 @@ export function createExtensionContributor(
         if (await postOne(token, row)) accepted += 1
       }
       return { accepted }
+    },
+
+    reveal: async (key) => {
+      const out = await callCloud<{
+        email?: string
+        source?: string
+        at?: string
+        credits?: number
+      }>(`${keyPath(key)}/reveal`, { method: 'POST' })
+      if (!out.ok) {
+        const reason =
+          out.code === 'insufficient_credits' || out.status === 402
+            ? 'insufficient_credits'
+            : out.code === 'not_found' || out.status === 404
+              ? 'not_found'
+              : out.status === 401
+                ? 'not_linked'
+                : 'upstream_error'
+        return { ok: false as const, reason, message: out.message }
+      }
+      const email = out.data.email
+      if (email === undefined || email === '')
+        return {
+          ok: false as const,
+          reason: 'not_found',
+          message: '库里还没有这个人的联系方式。没有取到就不收钱——这一次没有扣积分。',
+        }
+      return {
+        ok: true as const,
+        email,
+        ...(out.data.source === undefined ? {} : { source: out.data.source }),
+        ...(out.data.at === undefined ? {} : { at: out.data.at }),
+        credits: out.data.credits ?? 0,
+      }
+    },
+
+    contributeContact: async (key, input) => {
+      const out = await callCloud<{
+        accepted?: number
+        credits_granted?: number
+        rejected?: { reason: string }[]
+      }>(`${keyPath(key)}/contact`, {
+        method: 'POST',
+        body: { email: input.value, source: 'manual' },
+      })
+      if (!out.ok)
+        return {
+          ok: false as const,
+          reason: out.status === 401 ? 'not_linked' : 'upstream_error',
+          message: out.message,
+        }
+      const accepted = (out.data.accepted ?? 0) > 0
+      const note = out.data.rejected?.[0]?.reason
+      return {
+        ok: true as const,
+        action: accepted ? ('new' as const) : ('noop' as const),
+        rewarded: (out.data.credits_granted ?? 0) > 0,
+        ...(note === undefined ? {} : { message: note }),
+      }
+    },
+
+    disputeContact: async (key, input) => {
+      const claim = (
+        input.reason ??
+        (input.value === undefined ? '这条联系方式不对' : `这条联系方式不对：${input.value}`)
+      ).slice(0, 500)
+      const out = await callCloud<{ dispute?: unknown; message?: string }>(
+        `${keyPath(key)}/disputes`,
+        { method: 'POST', body: { field: 'contact', claim } },
+      )
+      if (!out.ok) return { ok: false, message: out.message }
+      return {
+        ok: true,
+        message: out.data.message ?? '记下了。公共库不会因为一条争议自动改数据——有人看过之后才改。',
+      }
     },
   }
 }

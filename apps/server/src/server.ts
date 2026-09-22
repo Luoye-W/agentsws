@@ -62,7 +62,13 @@ import type {
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { brandNameOf, KOL_CHANNEL_IDS, PR_ROLE_IDS, SOCIAL_ROLE_IDS } from '@agentsws/contracts'
+import {
+  brandNameOf,
+  KOL_CHANNEL_IDS,
+  KOL_LOOKUP_CAPABILITY,
+  PR_ROLE_IDS,
+  SOCIAL_ROLE_IDS,
+} from '@agentsws/contracts'
 import { evaluateGuardrail, extractFigures, uncitedFigures } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
@@ -74,6 +80,7 @@ import {
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
+import { buildPricing, entryFor, PRICING_FILE } from '@agentsws/metering'
 import {
   createModelGateway,
   type FetchLike,
@@ -4156,6 +4163,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         random,
         publicLibrary: createExtensionContributor({ secrets: brand.secrets, env }),
         serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
+        // WP119c：深链的基底（hello 的 workbench_url）；没绑端口就不出这一格。
+        workbenchUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
+        // WP119c：看一次邮箱的积分价——价目是数据不是代码，取 pricing.json 那一条。
+        revealPriceCredits: () =>
+          entryFor(buildPricing(), KOL_LOOKUP_CAPABILITY)?.credits_per_unit ??
+          PRICING_FILE.entries.find((e) => e.capability === KOL_LOOKUP_CAPABILITY)
+            ?.credits_per_unit ??
+          0,
       }
     },
   })
