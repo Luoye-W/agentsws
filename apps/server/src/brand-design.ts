@@ -35,10 +35,12 @@ import {
   editValue,
   extractFileDesign,
   extractSiteDesign,
+  extractThemeDesign,
   fetchPageImages,
   fetchStylesheets,
   type ImageFetch,
   mergeDesignProfile,
+  officePages,
   parseDesignMd,
   pdfPageImages,
   profileFromTokens,
@@ -177,6 +179,13 @@ export interface BrandDesignOptions {
    * 每张图按 `CREDITS_PER_VISION_CALL` 计积分，与文字档共用同一个封顶。
    */
   visionFor?: (meta: { actor: BrandDesignActor; run_id: string }) => DesignVisionModel | undefined
+  /**
+   * Shopify 主题设置（WP122b 交付 ⑥，`'theme'` 档）。已连接时读
+   * `config/settings_data.json` 里的配色与字体进令牌，来路 `theme`
+   * （比官网量的硬，比上传手册轻）。没连接 / 读不到回 `undefined`——
+   * **整格不出现，不猜**。
+   */
+  themeSettings?: () => Promise<unknown | undefined>
   newId: (prefix: string) => string
 }
 
@@ -322,7 +331,22 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       }))
       const fresh = extractSiteDesign(withSheets)
       const previous = read(actor)
-      const merged = mergeDesignProfile(previous?.profile ?? {}, fresh)
+      let merged = mergeDesignProfile(previous?.profile ?? {}, fresh)
+      // WP122b 交付 ⑥：已连接 Shopify 时读主题设置（`theme` 档，比 site 硬一档）。
+      // 读不到就跳——不猜、不报错。
+      let themeNote = ''
+      try {
+        const settings = await options.themeSettings?.()
+        if (settings !== undefined) {
+          const theme = extractThemeDesign(settings)
+          if (theme.contributed.length > 0) {
+            merged = mergeDesignProfile(merged, theme.profile)
+            themeNote = `；主题设置 ${String(theme.contributed.length)} 格`
+          }
+        }
+      } catch {
+        // 主题设置读不到就是没有这一档
+      }
 
       // 模型口**现取**（WP122b 交付 ④）：模型设置改完下一轮抓取就生效；
       // 没配模型就是 undefined，成文退回直述版并如实标注（见下面 note）。
@@ -345,8 +369,8 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       })
       const note =
         composed.fallback_reason === undefined
-          ? noteOf(fresh)
-          : `${noteOf(fresh)}；${composed.fallback_reason}`
+          ? `${noteOf(fresh)}${themeNote}`
+          : `${noteOf(fresh)}${themeNote}；${composed.fallback_reason}`
       // 看图那一步可能给档案补了 imagery（WP122b 交付 ⑤），落库用补过的
       const finalProfile = composed.profile ?? merged
       writeDoc(actor, { profile: finalProfile, markdown: composed.markdown }, 'site_extract', note)
@@ -376,11 +400,28 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       if (file === undefined)
         return runOf('failed', { origins: ['file'], failure: '找不到这个文件，重新传一次' }, actor)
 
-      const got = extractFileDesign({
-        filename: file.filename,
-        bytes: file.bytes,
-        maxPages: BRAND_DESIGN_MAX_FILE_PAGES,
-      })
+      // WP122b 交付 ⑥：docx / pptx 走零依赖的 OOXML 拆页（`officePages`），
+      // 结果经 `extractFileDesign` 的 `pages` 口进来——同一个抽取器吃三种格式。
+      const lower = file.filename.toLowerCase()
+      let got: ReturnType<typeof extractFileDesign>
+      if (lower.endsWith('.docx') || lower.endsWith('.pptx')) {
+        got = extractFileDesign({
+          filename: file.filename,
+          pages: officePages(file.bytes, { maxPages: BRAND_DESIGN_MAX_FILE_PAGES }),
+        })
+      } else {
+        got = extractFileDesign({
+          filename: file.filename,
+          bytes: file.bytes,
+          maxPages: BRAND_DESIGN_MAX_FILE_PAGES,
+        })
+      }
+      if (got.failure === undefined && got.pagesRead === 0) {
+        got = {
+          ...got,
+          failure: `${file.filename} 里没读到文字。支持 PDF / docx / pptx（老格式 .doc / .ppt 请另存）。`,
+        }
+      }
       if (got.failure !== undefined)
         return runOf(
           'failed',
@@ -552,4 +593,85 @@ export function designPageKindOf(url: string): DesignPageKind {
   if (/\/collections?\/|\/category\//i.test(url)) return 'collection'
   if (/\/blogs?\/|\/news\//i.test(url)) return 'blog'
   return 'home'
+}
+
+/* ── Shopify 主题设置（WP122b 交付 ⑥）──────────────────────────────── */
+
+/** 跑主题设置那两条只读 Action 要的连接器面（照 `site.ts` 的 `SiteConnectLike`，不多要一格）。 */
+export interface ThemeConnectLike {
+  actions(service: string): Promise<{ id: string }[]>
+  issueToken(input: {
+    assignment_id: string
+    kind: 'role-read'
+    allowed_actions: string[]
+    allowed_connections: string[]
+    expires_in_seconds?: number
+  }): Promise<{ token: string }>
+  execute(
+    action_id: string,
+    input: unknown,
+    opts: { token: string; connection?: string },
+  ): Promise<unknown>
+}
+
+const themeRec = (v: unknown): Record<string, unknown> =>
+  typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
+
+/**
+ * 读当前主题的 `config/settings_data.json`（WP122b 交付 ⑥）。
+ *
+ * 三步全是**只读** Action（`list_themes` → `get_theme_asset`，都在
+ * `action-side-effects.yml` 标 `read`）；任何一步读不到（没这两条 Action、
+ * 令牌签不出来、资产里没有设置文件）就回 `undefined`——主题设置那一档
+ * 整体跳过，**不报错也不猜**。响应形状按 Shopify Admin 的常规形状宽松解析，
+ * 认不出就 undefined。
+ */
+export async function shopifyThemeSettings(
+  connect: ThemeConnectLike,
+  connection: { id: string; service: string },
+): Promise<unknown | undefined> {
+  try {
+    const available = await connect.actions(connection.service)
+    const idOf = (name: string): string | undefined =>
+      available.find((a) => a.id === `${connection.service}.${name}` || a.id.endsWith(`.${name}`))
+        ?.id
+    const listId = idOf('list_themes')
+    const assetId = idOf('get_theme_asset')
+    if (listId === undefined || assetId === undefined) return undefined
+    const token = (
+      await connect.issueToken({
+        assignment_id: 'asg_brand_design_readonly',
+        kind: 'role-read',
+        allowed_actions: [listId, assetId],
+        allowed_connections: [connection.id],
+        expires_in_seconds: 120,
+      })
+    ).token
+    const themesRaw = await connect.execute(listId, {}, { token, connection: connection.id })
+    // 响应形状宽松解析：{data: …} 包一层 / 裸数组 / 裸对象都认
+    const unwrap = (out: unknown): unknown => {
+      const r = themeRec(out)
+      return r.data ?? out
+    }
+    const themesList = unwrap(themesRaw)
+    const themes: unknown[] = (() => {
+      const wrapped = themeRec(themesList).themes
+      const list = Array.isArray(wrapped) ? wrapped : Array.isArray(themesList) ? themesList : []
+      return list
+    })()
+    const main = themes.map(themeRec).find((t) => t.role === 'main' || t.live === true)
+    const themeId = (main ?? themes.map(themeRec)[0])?.id
+    if (themeId === undefined) return undefined
+    const assetRaw = await connect.execute(
+      assetId,
+      { theme_id: String(themeId), asset: { key: 'config/settings_data.json' } },
+      { token, connection: connection.id },
+    )
+    const asset = unwrap(assetRaw)
+    const value = themeRec(asset).value ?? themeRec(themeRec(asset).asset).value
+    if (typeof value !== 'string' || value.trim() === '') return undefined
+    return JSON.parse(value) as unknown
+  } catch {
+    return undefined
+  }
 }

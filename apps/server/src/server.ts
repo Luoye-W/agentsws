@@ -52,7 +52,6 @@ import type {
   ApprovalBus,
   ApprovalItem,
   Assignment,
-  BrandDesignContext,
   Clock,
   EventEnvelope,
   KolChannel,
@@ -110,7 +109,12 @@ import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
-import { type BrandDesignAssembly, createBrandDesign, designPageKindOf } from './brand-design.js'
+import {
+  type BrandDesignAssembly,
+  createBrandDesign,
+  designPageKindOf,
+  shopifyThemeSettings,
+} from './brand-design.js'
 import { createBrandIntake } from './brand-intake.js'
 // WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
 import { brandKnowledgeCards } from './brand-knowledge.js'
@@ -3383,6 +3387,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         .latestDocuments(workspace.id)
         .filter((d) => d.kind === 'home' || d.kind === 'product' || d.kind === 'collection')
         .map((d) => ({ url: d.url, kind: designPageKindOf(d.url), html: d.html })),
+    // WP122b 交付 ⑥：已连接 Shopify 时读主题设置（配色与字体进 `theme` 档）。
+    // 没连接 / 那两条只读 Action 不在 / 读不到 → undefined，整档跳过。
+    themeSettings: async () => {
+      const connection = boot.connections
+        .liveConnections()
+        .find((c) => c.service.startsWith('shopify') && c.status === 'active')
+      if (connection === undefined) return undefined
+      return shopifyThemeSettings(boot.connections.connect, connection)
+    },
     readUpload: async (upload_id) => {
       const source = knowledge.intake.getSource(upload_id)
       if (source === undefined || source.workspace_id !== workspace.id) return undefined

@@ -72,6 +72,7 @@ export {
   parsePrintColor,
 } from './file-design.js'
 export { conflictCount, editValue, mergeDesignProfile, mergeValue } from './merge.js'
+export { type OfficePagesOptions, officePages } from './office.js'
 export { type PdfImage, type PdfPage, pdfPageImages, pdfPages } from './pdf.js'
 export {
   type DesignProse,
@@ -100,6 +101,7 @@ export {
   type SheetFetchResult,
   worthFetching,
 } from './site-fetch.js'
+export { extractThemeDesign, type ThemeDesignResult } from './theme-design.js'
 export {
   countFactor,
   isColorProp,

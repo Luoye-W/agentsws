@@ -115,3 +115,88 @@ describe('WP122b ③：手改过的格子重抓时整格不动', () => {
     design.close()
   })
 })
+
+/* ── WP122b 交付 ⑥：Shopify 主题设置 → theme 档 ────────────────────── */
+
+import { shopifyThemeSettings } from '../src/brand-design.js'
+
+const THEME_CONNECT = {
+  actions: async () => [
+    { id: 'shopify_admin.list_themes' },
+    { id: 'shopify_admin.get_theme_asset' },
+  ],
+  issueToken: async () => ({ token: 'tok_theme_readonly' }),
+  execute: async (_id: string, input: unknown) => {
+    // list_themes：主主题一行；get_theme_asset：settings_data.json 的 value
+    if (JSON.stringify(input ?? {}) === '{}') {
+      return { data: { themes: [{ id: 918273, role: 'main', name: 'Dawn' }] } }
+    }
+    const settings = {
+      current: {
+        color_schemes: {
+          'scheme-1': { settings: { background: '#f7f5f2', button: '#0a7d33', text: '#1a1c1e' } },
+        },
+        type_header_font: 'assistant_n4',
+      },
+    }
+    return {
+      data: { asset: { key: 'config/settings_data.json', value: JSON.stringify(settings) } },
+    }
+  },
+}
+
+describe('WP122b ⑥：主题设置与手册格式', () => {
+  it('shopifyThemeSettings：读主主题的 settings_data.json；没那条 Action 就 undefined', async () => {
+    const settings = await shopifyThemeSettings(THEME_CONNECT, {
+      id: 'conn_1',
+      service: 'shopify.store',
+    })
+    expect(settings).toBeDefined()
+    const none = await shopifyThemeSettings(
+      { ...THEME_CONNECT, actions: async () => [{ id: 'shopify_admin.get_shop' }] },
+      { id: 'conn_1', service: 'shopify.store' },
+    )
+    expect(none).toBeUndefined()
+  })
+
+  it('extract：主题设置进令牌（origin theme），比官网量到的硬一档', async () => {
+    const design = createBrandDesign({
+      clock: makeClock(),
+      workspace_id: 'ws_test',
+      fetch: neverFetch,
+      pages,
+      newId: (prefix) => `${prefix}_1`,
+      themeSettings: async () => ({
+        current: {
+          color_schemes: {
+            'scheme-1': { settings: { button: '#0a7d33', background: '#f7f5f2' } },
+          },
+          type_header_font: 'assistant_n4',
+        },
+      }),
+    })
+    await design.port.extract(ACTOR, {})
+    const profile = design.profileOf('ws_test')
+    expect(profile?.colors?.primary?.value).toBe('#0a7d33')
+    expect(profile?.colors?.primary?.source[0]?.origin).toBe('theme')
+    expect(profile?.typography?.h1?.value.fontFamily).toBe('Assistant')
+    design.close()
+  })
+
+  it('themeSettings 抛错：整档跳过，extract 照常出官网令牌', async () => {
+    const design = createBrandDesign({
+      clock: makeClock(),
+      workspace_id: 'ws_test',
+      fetch: neverFetch,
+      pages,
+      newId: (prefix) => `${prefix}_1`,
+      themeSettings: async () => {
+        throw new Error('连接断了')
+      },
+    })
+    const run = await design.port.extract(ACTOR, {})
+    expect(run.status).toBe('awaiting_confirm')
+    expect(design.profileOf('ws_test')?.colors?.primary?.source[0]?.origin).toBe('site')
+    design.close()
+  })
+})
