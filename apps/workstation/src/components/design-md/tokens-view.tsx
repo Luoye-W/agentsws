@@ -22,13 +22,19 @@ import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useApp } from '@/lib/app-context'
 
-/** 出处那一句人话。**手册记页码，官网记变量名 / 选择器**——两种来路读法不同。 */
+/**
+ * 出处那一句人话。**手册记页码，官网记变量名 / 选择器**——两种来路读法不同。
+ * 粘贴与手改这两类「人的来路」不露内部标记（`paste` / `edited:<时刻>`），
+ * 说人话。
+ */
 function sourceLine(
   source: BrandDesignSource | undefined,
   t: ReturnType<typeof useApp>['t'],
 ): string {
   if (source === undefined) return ''
   if (source.page !== undefined) return t('design.md.source.page', { page: source.page })
+  if (source.locator === 'paste') return t('design.md.source.paste')
+  if (source.locator?.startsWith('edited:') === true) return t('design.md.source.manual')
   return [source.locator, source.url].filter((x) => x !== undefined).join(' · ')
 }
 

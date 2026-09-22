@@ -13,7 +13,7 @@
  */
 import type { BrandDesignProfile } from '@agentsws/contracts'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MarkdownPreview } from '@/components/design-md/markdown-preview'
 import { countConflicts, designSummary, TokensView } from '@/components/design-md/tokens-view'
 import { renderWithProviders } from './helpers'
@@ -209,6 +209,39 @@ describe('原文预览', () => {
     renderWithProviders(<MarkdownPreview markdown="# 只有正文" />)
     expect(screen.queryByTestId('design-md-preview-front')).toBeNull()
     expect(screen.getByTestId('design-md-preview').textContent).toContain('只有正文')
+    cleanup()
+  })
+})
+
+/* ── WP122b 交付 ⑦：向导品牌档案卡上的那一行 ─────────────────────────── */
+
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return {
+    ...actual,
+    getBrandDesign: vi.fn(),
+  }
+})
+
+describe('品牌档案卡上的那一行（向导第 ② 步）', () => {
+  it('有规范：一行摘要 + 上传手册入口；空档案/没抓过：整行不出现', async () => {
+    const { DesignSpecRow } = await import('@/components/design-md/design-spec-row')
+    const { getBrandDesign } = await import('@/lib/api')
+    const mocked = vi.mocked(getBrandDesign)
+
+    // 没抓过：整行不出现（不显示「0 色」）
+    mocked.mockResolvedValue(null as never)
+    renderWithProviders(<DesignSpecRow />)
+    await waitFor(() => expect(mocked).toHaveBeenCalled())
+    expect(screen.queryByTestId('intake-design-md')).toBeNull()
+    cleanup()
+
+    // 抓到了：摘要与入口都在
+    mocked.mockResolvedValue({ profile: PROFILE } as never)
+    renderWithProviders(<DesignSpecRow />)
+    const row = await waitFor(() => screen.getByTestId('intake-design-md'))
+    expect(row.textContent).toContain('2 色')
+    expect(row.textContent).toContain('上传品牌手册')
     cleanup()
   })
 })
