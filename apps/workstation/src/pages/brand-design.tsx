@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  editBrandDesignToken,
   extractBrandDesign,
   getBrandDesign,
   ingestBrandDesignFile,
@@ -62,6 +63,15 @@ export function BrandDesignPage(): React.ReactElement {
   })
   const save = useMutation({
     mutationFn: async (markdown: string) => replaceBrandDesign(markdown),
+    onSuccess: async () => {
+      setDraft(undefined)
+      await qc.invalidateQueries({ queryKey: ['brand-design'] })
+    },
+  })
+  /** 改一格（WP122b 交付 ③）：成功后可视化那一半当场跟着变——样例是实时渲染的。 */
+  const editToken = useMutation({
+    mutationFn: async (input: { path: string; value: string }) =>
+      editBrandDesignToken(input.path, input.value),
     onSuccess: async () => {
       setDraft(undefined)
       await qc.invalidateQueries({ queryKey: ['brand-design'] })
@@ -209,7 +219,14 @@ export function BrandDesignPage(): React.ReactElement {
           </TabsList>
 
           <TabsContent value="visual" className="pt-4">
-            <TokensView profile={current.profile} />
+            <TokensView
+              profile={current.profile}
+              onEdit={async (path, value) => {
+                // WP122b 交付 ③：小铅笔那一跳，走的就是 PATCH tokens 那个端点。
+                // 失败原样抛回去，由 TokensView 就地留一行字（不弹框）。
+                await editToken.mutateAsync({ path, value })
+              }}
+            />
           </TabsContent>
 
           {/* 原文：左改右预览。**同一份文件**，不是两份数据 */}

@@ -66,6 +66,36 @@ export const holdsOwnerWrite: NonNullable<RouteSpec['authzBypass']> = (_c, rctx,
   )
 }
 
+/**
+ * 四个吃品牌设计规范的岗位域（WP122b，71 §9 第 9 条）。
+ *
+ * 职责 id 的**第一段**就是岗位域（`packages/roles/roles/<域>/*.yml`）：
+ * 设计 / 建站 / 社媒 / 投放。这四类职责的日常动作是照着 `DESIGN.md` 出活，
+ * 右栏打开规范面板却拿 403——只读这一份文件不该需要 `policy.read workspace`
+ * （那是 owner 一级），所以读的路由挂这条窄放行。
+ */
+export const DESIGN_READER_ROLE_PREFIXES = ['design.', 'site.', 'social.', 'ads.'] as const
+
+/**
+ * 「持四类职责之一 + 同一工作区内」的窄放行（WP122b 交付 ②）。
+ *
+ * 只看本人名下**在这个工作区**的未撤销分配，不看请求上的 `X-Assignment`——
+ * 与 {@link holdsOwnerWrite} 同一条判定纪律（岗位是人的属性，不是请求头的属性；
+ * 31 §3.1 的绑定与记账照旧）。改的路由**不挂**它：改错一个色值，下一批活
+ * 全跟着错，写永远是 owner 一级。
+ */
+export const holdsDesignDutyRead: NonNullable<RouteSpec['authzBypass']> = (_c, rctx, deps) => {
+  const p = rctx.principal
+  if (!p) return false
+  return deps.roles
+    .listAssignments(p.person_id, { workspace_id: p.workspace_id })
+    .some(
+      (a) =>
+        a.revoked_at === undefined &&
+        DESIGN_READER_ROLE_PREFIXES.some((prefix) => a.role_id.startsWith(prefix)),
+    )
+}
+
 /** zod 校验；失败 → invalid_input（400），details 带字段路径。 */
 export async function body<T>(c: Context<GatewayEnv>, schema: ZodType<T>): Promise<T> {
   let raw: unknown

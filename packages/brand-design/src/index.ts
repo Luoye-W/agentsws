@@ -46,11 +46,13 @@ export {
   type ComposeDesignResult,
   composeDesignProse,
   type DesignComposeModel,
+  type DesignVisionModel,
   estimateComposeCredits,
 } from './compose.js'
 export {
   type BrandDesignContextInput,
   brandDesignContext,
+  designRoleFamily,
   EMPTY_BRAND_DESIGN_CONTEXT,
 } from './context.js'
 export {
@@ -70,7 +72,8 @@ export {
   parsePrintColor,
 } from './file-design.js'
 export { conflictCount, editValue, mergeDesignProfile, mergeValue } from './merge.js'
-export { type PdfPage, pdfPages } from './pdf.js'
+export { type OfficePagesOptions, officePages } from './office.js'
+export { type PdfImage, type PdfPage, pdfPageImages, pdfPages } from './pdf.js'
 export {
   type DesignProse,
   fontsOf,
@@ -90,7 +93,15 @@ export {
   extractSiteDesign,
   MAX_PALETTE_TOKENS,
 } from './site-design.js'
-export { fetchStylesheets, type SheetFetchResult, worthFetching } from './site-fetch.js'
+export {
+  fetchPageImages,
+  fetchStylesheets,
+  type ImageFetch,
+  type PageImage,
+  type SheetFetchResult,
+  worthFetching,
+} from './site-fetch.js'
+export { extractThemeDesign, type ThemeDesignResult } from './theme-design.js'
 export {
   countFactor,
   isColorProp,

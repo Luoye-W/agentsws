@@ -390,3 +390,39 @@ describe('openaiCompatibleProvider（DeepSeek 形态，注入 fetch，不联网�
     expect(rec.ofType('model.usage')[0]?.payload).toMatchObject({ cost_base: out.usage.cost_base })
   })
 })
+
+describe('WP122b ⑤：视觉档——content 图片部件出线', () => {
+  it('文本 + 图片部件翻成 OpenAI 兼容口认的 text / image_url（data: URL）；string 原样不变', async () => {
+    const { fetch, calls } = mockFetch(chatBody)
+    const provider = openaiCompatibleProvider({
+      apiKeyEnv: KEY_ENV,
+      model: 'deepseek-vl',
+      env,
+      fetch,
+    })
+    await provider.complete({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '这张截图里的图片风格？' },
+            // 一字节的 PNG 魔数开头的占位字节（base64 后 iVBORw0）
+            {
+              type: 'image',
+              mime: 'image/png',
+              data: Buffer.from([0x89, 0x50]).toString('base64'),
+            },
+          ],
+        },
+      ],
+    })
+    const sent = JSON.parse(String(calls[0]?.init.body ?? '{}')) as {
+      messages: { role: string; content: unknown }[]
+    }
+    expect(sent.messages[0]?.role).toBe('user')
+    expect(sent.messages[0]?.content).toEqual([
+      { type: 'text', text: '这张截图里的图片风格？' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,iVA=' } },
+    ])
+  })
+})

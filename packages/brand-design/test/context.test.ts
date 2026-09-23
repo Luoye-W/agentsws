@@ -7,6 +7,7 @@ import { checkAgainstDesign, extractColorsFromText } from '../src/check.js'
 import { contrastRatio, inPalette, nearestColor, parseColor } from '../src/color.js'
 import {
   brandDesignContext,
+  designRoleFamily,
   EMPTY_BRAND_DESIGN_CONTEXT,
   MAX_CONTEXT_CHARS,
 } from '../src/context.js'
@@ -32,6 +33,16 @@ function heritage(): BrandDesignProfile {
 }
 
 describe('brandDesignContext()：四个岗位共用的那一份（71 §5 第一条）', () => {
+  it('designRoleFamily()：四个吃规范的岗位族认得出，其它职责回 undefined（WP122b）', () => {
+    expect(designRoleFamily('design.dtc')).toBe('design')
+    expect(designRoleFamily('site.shopify-theme')).toBe('site')
+    expect(designRoleFamily('social.meta')).toBe('social')
+    expect(designRoleFamily('ads.google')).toBe('ads')
+    expect(designRoleFamily('dtc.support')).toBeUndefined()
+    expect(designRoleFamily('pr.press')).toBeUndefined()
+    expect(designRoleFamily('design')).toBeUndefined()
+  })
+
   it('没有规范时 `present: false`、提示词是空串 —— 调用方照常干活', () => {
     expect(brandDesignContext()).toEqual(EMPTY_BRAND_DESIGN_CONTEXT)
     expect(brandDesignContext({ profile: {} }).present).toBe(false)

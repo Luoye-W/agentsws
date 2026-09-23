@@ -210,6 +210,18 @@ export interface RuntimeOptions {
    * 真服务进程一定接（`server.ts` 把它接到 `personas.ts` 上）。
    */
   personaSections?(input: { role_id: string; position_id?: string | undefined }): PromptSection[]
+  /**
+   * WP122b（71 §5 / §9 第 7 条）：**品牌设计规范**那一段。
+   *
+   * 按职责 id 问：四个吃规范的岗位族（设计 / 建站 / 社媒 / 投放）回一段
+   * `PromptSection`（或 `undefined` = 这条职责不注）。取值函数 + 现取，
+   * 同 `vertical` / `personaSections` 的理由：用户在设计规范页改一格，
+   * 下一次运行就该照新的来，不该等重启。
+   *
+   * 不接 = 老行为：提示词里没有品牌令牌（WP122 合入时的状态）。
+   * 真服务进程一定接（`server.ts` 接到 `BrandDesignAssembly.context()` 上）。
+   */
+  brandDesign?(role_id: string): PromptSection | undefined
 }
 
 /**
@@ -724,6 +736,19 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       skills: config.skills,
       persona: {
         sections: [
+          /*
+           * WP122b（71 §5 / §9 第 7 条）：**品牌设计规范**——设计 / 建站 / 社媒 /
+           * 投放四族职责出活时注进提示词的那一段。取值口是注入的、**每次现取**
+           * （同 `images?()` 的理由：用户在设计规范页改一格，下一次运行就得照新的来）；
+           * 没有规范（`present: false`）就整段不出，**不注一个空节**。
+           * 出图那条路（`design.ts` 的 `generateVariants`）另有逐图注入，那里已通电，
+           * 所以这一段只补建站 / 社媒 / 投放三条。
+           */
+          ...(options.brandDesign === undefined
+            ? []
+            : [options.brandDesign(config.role_id)].filter(
+                (s): s is PromptSection => s !== undefined,
+              )),
           /*
            * WP120（69 §3）：**角色定位**——品牌 → 岗位 → 职责，排在技能正文前面。
            *

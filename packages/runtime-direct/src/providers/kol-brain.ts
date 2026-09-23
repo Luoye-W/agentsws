@@ -10,6 +10,7 @@
  * parity 比的才是运行时本身，而不是三份各写一遍的判定。
  */
 import type { ChatMessage, Clock, KolChannel, ModelProvider, ModelRef } from '@agentsws/contracts'
+import { chatContentText } from '@agentsws/contracts'
 import {
   classifyKolTask,
   KOL_TOOL_NAMES,
@@ -32,7 +33,7 @@ function blocksOf(messages: readonly ChatMessage[]): Block[] {
   const out: Block[] = []
   for (const m of messages) {
     if (m.role === 'tool' || m.role === 'assistant') continue
-    const match = BLOCK.exec(m.content)
+    const match = BLOCK.exec(chatContentText(m.content))
     if (match?.[1] !== undefined && match[2] !== undefined && match[3] !== undefined) {
       out.push({ kind: match[1], id: match[2], body: match[3] })
     }
@@ -66,7 +67,7 @@ export function kolRunOf(
   const names = new Set((tools ?? []).map((t) => t.name))
   if (!KOL_TOOL_NAMES.some((n) => names.has(n))) return undefined
   for (const m of messages) {
-    const hit = /kol\.(youtube|instagram|tiktok|facebook|x)\b/.exec(m.content)
+    const hit = /kol\.(youtube|instagram|tiktok|facebook|x)\b/.exec(chatContentText(m.content))
     const channel = hit?.[0] === undefined ? undefined : kolChannelOfRole(hit[0])
     if (channel !== undefined) return { channel }
   }

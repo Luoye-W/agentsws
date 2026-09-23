@@ -24,7 +24,7 @@ import type {
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
+import { assignmentOf, body, holdsDesignDutyRead, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
@@ -38,7 +38,7 @@ const WRITE = {
   sensitivity: 'restricted',
 } as const
 
-/** 看与翻历史：读自己工作区的东西。 */
+/** 看与翻历史：读自己工作区的东西。四类职责另有窄放行（见 {@link holdsDesignDutyRead}）。 */
 const READ = {
   domain: 'policy',
   op: 'read',
@@ -139,6 +139,9 @@ export function brandDesignRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP122b（71 §9 第 9 条）：设计 / 建站 / 社媒 / 投放四类职责读这一份
+        // DESIGN.md 不需要 owner 级的 policy.read；判据见 helpers 里的窄放行
+        authzBypass: holdsDesignDutyRead,
         returns: 'BrandDesignDoc | null',
       },
       async (c, deps) => ok(c, (await portOf(deps).get(actorOf(c))) ?? null),
@@ -248,6 +251,8 @@ export function brandDesignRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // 与 GET 同一条窄放行：翻历史是读的另一种长相
+        authzBypass: holdsDesignDutyRead,
         returns: 'BrandDesignRevision[]',
       },
       async (c, deps) => ok(c, await portOf(deps).revisions(actorOf(c))),

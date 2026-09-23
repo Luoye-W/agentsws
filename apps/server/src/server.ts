@@ -8,6 +8,7 @@ import { mkdirSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
+import { adDesignPrompt } from '@agentsws/ads-core'
 import type {
   AskPort,
   ChatPort,
@@ -44,6 +45,7 @@ import {
   WsSession,
 } from '@agentsws/api'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
+import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import type {
@@ -55,6 +57,7 @@ import type {
   KolChannel,
   Person,
   PersonId,
+  PromptSection,
   SkillTier,
   StartRun,
   StorefrontPlatform,
@@ -91,6 +94,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
 } from '@agentsws/roles'
+import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
 import { createSkills, type Skills } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
 import { scheduleConflicts } from '@agentsws/social-core'
@@ -105,7 +109,12 @@ import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
-import { type BrandDesignAssembly, createBrandDesign, designPageKindOf } from './brand-design.js'
+import {
+  type BrandDesignAssembly,
+  createBrandDesign,
+  designPageKindOf,
+  shopifyThemeSettings,
+} from './brand-design.js'
 import { createBrandIntake } from './brand-intake.js'
 // WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
 import { brandKnowledgeCards } from './brand-knowledge.js'
@@ -336,6 +345,22 @@ export const HOST = '127.0.0.1'
 export const BIND_HOST_ENV = 'AGENTSWS_BIND_HOST'
 
 /** 只接受回环与「全部网卡」两种——写别的地址多半是配错了，不如报出来。 */
+/** 从字节认图型（视觉消息的 `mime` 那一格，WP122b 交付 ⑤）。认不出按 jpeg——provider 会拒，别在这一层猜第二遍。 */
+function imageMimeOf(bytes: Uint8Array): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return 'image/jpeg'
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png'
+  if (
+    bytes.length >= 12 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  )
+    return 'image/webp'
+  return 'image/jpeg'
+}
+
 export function bindHost(env: Record<string, string | undefined>): string {
   const raw = env[BIND_HOST_ENV]?.trim()
   if (raw === undefined || raw === '') return HOST
@@ -1282,6 +1307,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 这个变量取；取不到就是"这个品牌还没有规范"，出活照常（只是不注入令牌）。
    */
   let brandDesignRef: BrandDesignAssembly | undefined
+
+  /**
+   * WP122b：一次运行的品牌规范注入段（71 §9 第 7 条）。
+   *
+   * 建站族额外附上 `themeDesignVariables()` 那张表——WP89 主题沙箱里的职责
+   * 副本在沙箱根目录干活，它写 `--color-*` / `--radius-*` 时该用的名字与值
+   * 就在这一段里；设计族不注（出图那一路在 `design.ts` 已逐图注入，再注
+   * 一遍是双份烧钱）；其它族回 `undefined`（整段不出，不注空节）。
+   */
+  const brandDesignSectionOf = (ws: WorkspaceId, role_id: string): PromptSection | undefined => {
+    const family = designRoleFamily(role_id)
+    if (family === undefined || family === 'design') return undefined
+    const design = brandDesignRef?.context(ws, family)
+    if (design === undefined || design.present !== true) return undefined
+    const text =
+      family === 'site'
+        ? [
+            siteDesignPrompt(design),
+            '主题里写颜色 / 字体 / 圆角 / 间距时，用这些变量名与值：',
+            ...Object.entries(themeDesignVariables(design.tokens)).map(
+              ([name, value]) => `${name}: ${value}`,
+            ),
+          ].join('\n')
+        : family === 'ads'
+          ? adDesignPrompt(design)
+          : design.prompt
+    return { id: 'brand-design', name: '品牌设计规范', order: 25, text }
+  }
+
   const brandProfileOf = (
     ws: WorkspaceId,
   ): { vertical?: WorkspaceVertical; storefront_platform?: StorefrontPlatform } =>
@@ -2040,6 +2094,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * `personas` 每次现查覆盖表，不用重启（同 `vertical` / `browser`）。
              */
             personaSections: (input) => personas.sections(input),
+            /*
+             * WP122b（71 §9 第 7 条）：三个注入口通电——建站 / 社媒 / 投放出活时
+             * 提示词里真带上品牌令牌。照 `design.ts` 的样板：取值口 + 现取
+             * （每次运行都重新问 `brandDesignRef`，用户改一格下一次运行就生效）。
+             * 出图那条路已在 `design.ts` 逐图注入（WP122），这里只补另外三条。
+             */
+            brandDesign: (role_id) => brandDesignSectionOf(ws, role_id),
           })
     const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
 
@@ -3370,11 +3431,85 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     fetch: globalThis.fetch as never,
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
+    // WP122b 交付 ④：成文接模型（便宜档）。**配了才递**：没配模型时退回按令牌
+    // 直述的那一版并在版本历史里如实标注（`composeDesignProse` 的 fallback）。
+    // 计量与封顶在 `composeDesignProse` 里：与 WP121 同一套预估、封顶 1 积分。
+    ...(boot.ownModels.configured()
+      ? {
+          modelFor: ({ actor, run_id }) => {
+            const ref = boot.ownModels.defaultRef()
+            // 一条真 provider 都没有（只有 stub）：stub 回的是确定性假话，
+            // 当成"没配模型"处理，不拿假话当正文。
+            if (ref.provider === 'stub') return undefined
+            return async ({ prompt }) => {
+              const completion = await boot.ownGateway.complete({
+                messages: [{ role: 'user', content: prompt }],
+                meta: {
+                  workspace_id: workspace.id,
+                  assignment_id: actor.assignment_id,
+                  role_id: actor.role_id,
+                  run_id: run_id as never,
+                  purpose: 'extraction',
+                },
+                model: ref,
+              })
+              return { text: completion.text }
+            }
+          },
+        }
+      : {}),
+    // WP122b 交付 ⑤：视觉档。走用户配置的模型（同一条默认 ref）；
+    // 没配 provider 就回 undefined，看图整步跳过，产物里 imagery 留「未找到」。
+    // 看图的消息经 ChatMessage 的图片部件进网关（交付 ⑤ 的契约改动）。
+    imageFetch: globalThis.fetch as never,
+    ...(boot.ownModels.configured()
+      ? {
+          visionFor: ({ actor, run_id }) => {
+            const ref = boot.ownModels.defaultRef()
+            if (ref.provider === 'stub') return undefined
+            return async ({ image, prompt }) => {
+              const completion = await boot.ownGateway.complete({
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      { type: 'text', text: prompt },
+                      {
+                        type: 'image',
+                        mime: imageMimeOf(image),
+                        data: Buffer.from(image).toString('base64'),
+                      },
+                    ],
+                  },
+                ],
+                meta: {
+                  workspace_id: workspace.id,
+                  assignment_id: actor.assignment_id,
+                  role_id: actor.role_id,
+                  run_id: run_id as never,
+                  purpose: 'extraction',
+                },
+                model: ref,
+              })
+              return { text: completion.text }
+            }
+          },
+        }
+      : {}),
     pages: () =>
       brandIntake
         .latestDocuments(workspace.id)
         .filter((d) => d.kind === 'home' || d.kind === 'product' || d.kind === 'collection')
         .map((d) => ({ url: d.url, kind: designPageKindOf(d.url), html: d.html })),
+    // WP122b 交付 ⑥：已连接 Shopify 时读主题设置（配色与字体进 `theme` 档）。
+    // 没连接 / 那两条只读 Action 不在 / 读不到 → undefined，整档跳过。
+    themeSettings: async () => {
+      const connection = boot.connections
+        .liveConnections()
+        .find((c) => c.service.startsWith('shopify') && c.status === 'active')
+      if (connection === undefined) return undefined
+      return shopifyThemeSettings(boot.connections.connect, connection)
+    },
     readUpload: async (upload_id) => {
       const source = knowledge.intake.getSource(upload_id)
       if (source === undefined || source.workspace_id !== workspace.id) return undefined

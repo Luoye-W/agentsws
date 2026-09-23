@@ -286,3 +286,91 @@ export function cmykToHex(c: number, m: number, y: number, k: number): string {
     255 * (1 - Math.min(1, Math.max(0, x))) * (1 - Math.min(1, Math.max(0, k)))
   return hexOf(f(c), f(m), f(y))
 }
+
+/* ── 手册里的图 → 视觉档（WP122b 交付 ⑤）─────────────────────────── */
+
+export interface PdfImage {
+  /** 图所在的那一页（从 1 数；归不到某一页时是 0）。 */
+  page: number
+  mime: 'image/jpeg'
+  /** 原始 JPEG 字节（DCTDecode 流原样，不解码不重压）。 */
+  bytes: Uint8Array
+}
+
+export interface PdfImageOptions {
+  /** 最多取几张（视觉调用按张计积分，见契约 `CREDITS_PER_VISION_CALL`）。 */
+  maxImages?: number
+  /** 小于这个字节数的图当图标跳过（默认 1 KB）。 */
+  minBytes?: number
+}
+
+/** 按出现顺序取页对象（`/Type /Page`，不是 `/Pages`）。 */
+function pageDicts(raw: Buffer, objects: Map<number, PdfObject>): PdfObject[] {
+  const text = raw.toString('latin1')
+  const out: PdfObject[] = []
+  for (const m of text.matchAll(/(\d+)\s+\d+\s+obj\b/g)) {
+    const obj = objects.get(Number(m[1]))
+    if (obj !== undefined && /\/Type\s*\/Page(?![s])/.test(obj.dict)) out.push(obj)
+  }
+  return out
+}
+
+/**
+ * 手册里的图取出来，交给视觉模型看（WP122b 交付 ⑤）。
+ *
+ * **为什么是"抽嵌图"而不是"逐页渲染"**：我们零依赖读 PDF（见文件头），
+ * 没有一个渲染器能把页面画成像素。但品牌手册的版面本来就是拿图片排的——
+ * 色卡、产品照、场景图都是嵌进去的 JPEG（`/Filter /DCTDecode`，字节原样
+ * 就是 JPEG）。把它们抽出来给视觉模型，看的正是手册作者想让人看的那些图。
+ * 纯文字页没有嵌图，自然跳过；扫描件（整页是一张图）反而最适合这条路。
+ *
+ * 页码是**尽力归**：页对象的 `/Resources /XObject` 里认得出就记那一页，
+ * 认不出（继承的资源、内联资源字典）记 0。页码只进出处的 locator，
+ * 错了不伤规范本身。
+ */
+export function pdfPageImages(bytes: Uint8Array, options: PdfImageOptions = {}): PdfImage[] {
+  const max = options.maxImages ?? 8
+  const minBytes = options.minBytes ?? 1024
+  try {
+    const raw = Buffer.from(bytes)
+    if (!raw.subarray(0, 8).toString('latin1').startsWith('%PDF-')) return []
+    const objects = parseObjects(raw)
+    const pages = pageDicts(raw, objects)
+
+    /** 每一页的资源字典里引用了哪些对象号（尽力归，解析不出的页空着）。 */
+    const pageOf = new Map<number, number>()
+    for (const [i, page] of pages.entries()) {
+      const xobj = /\/XObject\s*<<(.*?)>>/s.exec(page.dict)?.[1]
+      if (xobj === undefined) continue
+      for (const r of xobj.matchAll(/(\d+)\s+\d+\s+R/g)) {
+        const num = Number(r[1])
+        if (!pageOf.has(num)) pageOf.set(num, i + 1)
+      }
+    }
+
+    const out: PdfImage[] = []
+    for (const [num, obj] of objects) {
+      if (out.length >= max) break
+      if (obj.stream === undefined) continue
+      if (!/\/Subtype\s*\/Image\b/.test(obj.dict)) continue
+      if (!/\/DCTDecode/.test(obj.dict)) continue
+      if (obj.stream.length < minBytes) continue
+      // 声明的 /Length 是流的真实字节数；解析器给的可能带一个尾随换行
+      const declared = /\/Length\s+(\d+)\b/.exec(obj.dict)?.[1]
+      const streamBytes =
+        declared !== undefined && Number(declared) <= obj.stream.length
+          ? obj.stream.subarray(0, Number(declared))
+          : obj.stream
+      if (streamBytes.length < minBytes) continue
+      out.push({
+        page: pageOf.get(num) ?? 0,
+        mime: 'image/jpeg',
+        bytes: new Uint8Array(streamBytes),
+      })
+    }
+    return out
+  } catch {
+    // 与 pdfPages 同一条纪律：读不动就空手回，由调用方说那句人话
+    return []
+  }
+}

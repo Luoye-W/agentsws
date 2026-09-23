@@ -324,14 +324,26 @@ logo 留白、对比度（WCAG AA，小字 4.5:1 / 大字 3:1；半透明前景*
 
 ## 9. 留尾（下一张单）
 
-1. **视觉档那条路走不通。** 契约里 `ChatMessage.content` 是个纯 `string`，
-   没有"图进模型"这一格（`packages/contracts/src/model.ts`）；模型网关只有
-   **文生图**（`ImageProvider`），没有图生文。所以「逐页转图给视觉模型」与
-   「看截图描述图片风格」这两件事这一版**如实留白**：`composeDesignProse` 留了
-   `DesignVisionModel` 这个口子并有测试钉住它的行为，但生产里没人往里传东西。
-   要补的是一个契约级的改动（`ChatMessage` 收图），该是单独一张单。
-2. **Shopify 主题设置里的配色与字体没读**（有连接时那条路）。契约里
-   `BrandDesignOrigin` 留了 `'theme'` 这一档，抽取器还没有。
+> **WP122b（09-22）已消掉第 1–5、7、9 条**：① 视觉档（`ChatMessage.content`
+> 收图片部件，PDF 嵌图与站上内容图接视觉模型，没配视觉模型就跳过并如实标注）；
+> ② Shopify 主题设置进 `theme` 档令牌；③ 小铅笔（颜色一节，手改格重抓不覆盖）；
+> ④ 成文接模型（便宜档、计积分、封顶 1 积分、没配退直述）；⑤ docx / pptx 手册；
+> ⑦ 三个注入口通电（建站含 WP89 主题沙箱吃 `themeDesignVariables()`、社媒、投放）；
+> ⑨ 四类岗位只读 DESIGN.md（authzBypass 窄放行，写仍只有 owner）。以下为未消的
+> 留尾与新的注记。
+
+1. **视觉档的"截图"其实是图片素材本尊。** 无头浏览器纪律（§3）没破——给视觉
+   模型看的是站上的 og:image 与内容图（同源 / 自家 CDN、遵 robots、封顶 4 张），
+   不是整页屏幕截图。要真截图得接桌面壳的工作浏览器，该是单独一张单。
+2. **Shopify 主题设置已读**（WP122b），但只认 Dawn 系的 `color_schemes` 与字体
+   handle，认不出的主题整格不出现。
+3. **小铅笔只落在颜色一节**：spacing / rounded / typography 仍走「原文」整份
+   替换——颜色是重抓覆盖风险最高的格子，其余低频。
+4. **成文接了模型**（WP122b），但视觉模型没有独立的 purpose 档（走用户默认
+   模型；`ModelPurpose` 加 `'vision'` 波及设置页 / SDK，值得单独定）；默认模型
+   不支持图时按「看不了就不看」跳过，imagery 留白。
+5. **docx / pptx 已接**（WP122b，零依赖拆 OOXML）；老格式 .doc / .ppt 如实说
+   读不了。
 3. **改一格的界面只做到了展示**：`PATCH /v1/brand-design/tokens/:path` 与
    `setAt()` 都在、有测试，但页面上还没接那个小铅笔（现在改值要走「原文」
    那一半整份替换）。

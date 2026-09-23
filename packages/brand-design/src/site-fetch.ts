@@ -13,7 +13,15 @@
  * - **有上限**（{@link DESIGN_MAX_STYLESHEETS}）。一个现代站能挂十几份样式表，
  *   抓完它们对抽出来的令牌没有实质帮助，只是把用户的时间花在等。
  */
-import { fetchPage, fetchRobots, isDisallowed, type PageFetch } from '@agentsws/brand-intake'
+import {
+  absolute,
+  BRAND_INTAKE_USER_AGENT,
+  fetchPage,
+  fetchRobots,
+  isDisallowed,
+  type PageFetch,
+  parseRobotsDisallow,
+} from '@agentsws/brand-intake'
 import { type StyleSheet, stylesheetHrefs } from './css.js'
 import { DESIGN_MAX_STYLESHEETS, type DesignPageInput } from './site-design.js'
 
@@ -80,16 +88,136 @@ export async function fetchStylesheets(
       }
 
       fetched++
-      const res = await fetchPage(doFetch, href)
-      if (!res.ok || res.html.trim() === '') {
+      const fetchedPage = await fetchPage(doFetch, href)
+      if (!fetchedPage.ok || fetchedPage.html.trim() === '') {
         cache.set(href, undefined)
         continue
       }
-      const sheet: StyleSheet = { url: href, css: res.html }
+      const sheet: StyleSheet = { url: href, css: fetchedPage.html }
       cache.set(href, sheet)
       mine.push(sheet)
     }
     byPage.set(page.url, mine)
   }
   return byPage
+}
+
+/* ── 站上的图 → 视觉档（WP122b 交付 ⑤）──────────────────────────── */
+
+export interface PageImage {
+  url: string
+  mime: 'image/jpeg' | 'image/png' | 'image/webp'
+  bytes: Uint8Array
+}
+
+export interface PageImageOptions {
+  /** 最多取几张（视觉调用按张计积分，见契约 `CREDITS_PER_VISION_CALL`）。 */
+  maxImages?: number
+  /** 单张上限（默认 2 MB）：要的是照片与插画，不是一整张海报原图。 */
+  maxBytes?: number
+}
+
+const IMAGE_EXT = /\.(jpe?g|png|webp)(\?|#|$)/i
+const MIME_OF: Record<string, PageImage['mime']> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+}
+
+function mimeOf(url: string, contentType: string | undefined): PageImage['mime'] | undefined {
+  const ct = contentType?.split(';')[0]?.trim().toLowerCase()
+  if (ct === 'image/jpeg' || ct === 'image/png' || ct === 'image/webp') return ct
+  const ext = IMAGE_EXT.exec(url)?.[1]?.toLowerCase()
+  return ext === undefined ? undefined : MIME_OF[ext]
+}
+
+/**
+ * 从页面上挑几张**内容图**抓回来给视觉模型看（WP122b 交付 ⑤）。
+ *
+ * 我们没有无头浏览器（71 §3），拍不了屏幕截图；但"图片风格"那一节要看的
+ * 恰恰是站上的摄影与插画——`<img>` 与 `og:image` 就是它们本尊。挑法与纪律
+ * 都照样式表那一条来：**同源与站自己的 CDN**、遵 robots、封顶张数、
+ * 抓不到就说抓不到（单张失败只跳过，不报错）。data: URI、SVG、图标尺寸
+ * 的小图一律不碰。
+ */
+/**
+ * 抓图那一口的形状。与 `PageFetch`（样式表）分开：图要的是**字节**与
+ * content-type，不是文本。生产传 `globalThis.fetch`（天然兼容），
+ * 测试传夹具。
+ */
+export type ImageFetch = (
+  url: string,
+  init: { method: 'GET'; headers: Record<string, string> },
+) => Promise<{
+  ok: boolean
+  status: number
+  headers?: { get(name: string): string | null }
+  arrayBuffer(): Promise<ArrayBuffer>
+}>
+
+export async function fetchPageImages(
+  doFetch: ImageFetch,
+  pages: readonly DesignPageInput[],
+  options: PageImageOptions = {},
+): Promise<PageImage[]> {
+  const max = options.maxImages ?? 4
+  const maxBytes = options.maxBytes ?? 2 * 1024 * 1024
+
+  /** 候选地址：按页去重，logo 之外的 img 优先（logo 另有专口，不在这一步看）。 */
+  const urls: string[] = []
+  const seen = new Set<string>()
+  for (const page of pages) {
+    const candidates: string[] = []
+    for (const m of page.html.matchAll(/<meta[^>]+property=["']og:image["'][^>]*>/gi)) {
+      const content = /\bcontent\s*=\s*["']([^"']+)["']/i.exec(m[0])?.[1]
+      if (content !== undefined) candidates.push(absolute(content, page.url) ?? content)
+    }
+    for (const m of page.html.matchAll(/<img[^>]*>/gi)) {
+      if (/logo/i.test(m[0])) continue
+      const src = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(m[0])?.[1]
+      if (src !== undefined) candidates.push(absolute(src, page.url) ?? src)
+    }
+    for (const url of candidates) {
+      if (seen.has(url)) continue
+      seen.add(url)
+      urls.push(url)
+    }
+  }
+
+  const robotsByOrigin = new Map<string, string[]>()
+  const out: PageImage[] = []
+  for (const url of urls) {
+    if (out.length >= max) break
+    if (url.startsWith('data:')) continue
+    if (!IMAGE_EXT.test(url)) continue
+    if (!worthFetching(url, pages[0]?.url ?? url)) continue
+    try {
+      const origin = new URL(url).origin
+      let disallow = robotsByOrigin.get(origin)
+      if (disallow === undefined) {
+        // robots 那一份自己取：ImageFetch 回字节不回文本，不走 fetchPage
+        const robots = await doFetch(`${origin}/robots.txt`, {
+          method: 'GET',
+          headers: { 'user-agent': BRAND_INTAKE_USER_AGENT },
+        })
+        disallow = robots.ok
+          ? parseRobotsDisallow(Buffer.from(await robots.arrayBuffer()).toString('utf8'))
+          : []
+        robotsByOrigin.set(origin, disallow)
+      }
+      if (isDisallowed(new URL(url).pathname, disallow)) continue
+      const res = await doFetch(url, {
+        method: 'GET',
+        headers: { 'user-agent': BRAND_INTAKE_USER_AGENT, accept: 'image/*' },
+      })
+      if (!res.ok) continue
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length === 0 || buf.length > maxBytes) continue
+      const mime = mimeOf(url, res.headers?.get?.('content-type') ?? undefined)
+      if (mime === undefined) continue
+      out.push({ url, mime, bytes: new Uint8Array(buf) })
+    } catch {}
+  }
+  return out
 }

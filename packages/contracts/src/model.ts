@@ -10,9 +10,30 @@ export type ModelPurpose =
   | 'judge'
   /** WP23：ASR（会议转写）。驻留与预算走与其它 purpose 相同的一套策略。 */
   | 'transcription'
+/**
+ * 一条消息的 content 可以是纯文本（**既有调用方原样传 string**），或
+ * 文本 + 图片部件的数组（WP122b 交付 ⑤：视觉档，图进模型这一格）。
+ *
+ * 只加不改：老调用方不认得数组就不该看到数组；工具调用 / 多轮还原等
+ * 语义只对 string content 有定义，数组只用在 `user` 消息上。
+ */
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  /** `data` 是 base64（不含 `data:` 前缀）。图片永不进事件日志，只在线上跑。 */
+  | { type: 'image'; mime: string; data: string }
+
+/** 拼出一段纯文本：string 原样；数组取 text 部件——**base64 不进去**。 */
+export function chatContentText(content: string | ChatContentPart[]): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map((p) => p.text)
+    .join('\n')
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
+  content: string | ChatContentPart[]
   name?: string
   tool_call_id?: string
   /** 角色为 `assistant` 时有效：上一轮模型发出的工具调用（真 provider 需要它来还原对话，WP14）。 */

@@ -30,13 +30,19 @@ import {
   type DesignComposeModel,
   type DesignPageInput,
   type DesignPageKind,
+  type DesignVisionModel,
   EMPTY_BRAND_DESIGN_CONTEXT,
   editValue,
   extractFileDesign,
   extractSiteDesign,
+  extractThemeDesign,
+  fetchPageImages,
   fetchStylesheets,
+  type ImageFetch,
   mergeDesignProfile,
+  officePages,
   parseDesignMd,
+  pdfPageImages,
   profileFromTokens,
   serializeDesignMd,
   tokensOf,
@@ -145,12 +151,41 @@ export interface BrandDesignOptions {
   dbDir?: string
   /** 抓外链样式表那一口。生产传 `globalThis.fetch`，测试传夹具。 */
   fetch: PageFetch
+  /**
+   * 抓站上的内容图那一口（WP122b 交付 ⑤，视觉档）。给了才抓图；
+   * 没给 / 没配视觉模型就整步跳过，`imagery` 那一节如实写「未找到」。
+   */
+  imageFetch?: ImageFetch
   /** 页面从哪来（见 {@link DesignPageSource}）。 */
   pages: DesignPageSource
   /** 传上来的手册从哪读。不给就 `/v1/brand-design/files` 回"这个进程没装上传"。 */
   readUpload?: UploadReader
-  /** 成文那一口。不给就退回按令牌直述（见 `composeDesignProse`）。 */
-  model?: DesignComposeModel
+  /**
+   * 成文那一口（WP122b 交付 ④，71 §9 第 4 条）。**每次现取**：按这一次的
+   * 请求人与运行问模型面——没配模型回 `undefined`，成文退回按令牌直述
+   * 的那一版并在版本历史里如实标注，**不报错也不编**。
+   *
+   * 积分计量与封顶在 `composeDesignProse` 里（与 WP121 同一套预估：
+   * `estimateComposeCredits`，封顶 `DEFAULT_BRAND_DESIGN_CAP_CREDITS = 1`）。
+   */
+  modelFor?: (meta: {
+    actor: BrandDesignActor
+    /** 这一轮的 run id（进模型网关的记账元组）。 */
+    run_id: string
+  }) => DesignComposeModel | undefined
+  /**
+   * 看图那一口（WP122b 交付 ⑤）。**每次现取**；没配视觉模型回 `undefined`，
+   * 看图整步跳过——产物里 `imagery` 留「未找到，请补充」，**不假装分析过**。
+   * 每张图按 `CREDITS_PER_VISION_CALL` 计积分，与文字档共用同一个封顶。
+   */
+  visionFor?: (meta: { actor: BrandDesignActor; run_id: string }) => DesignVisionModel | undefined
+  /**
+   * Shopify 主题设置（WP122b 交付 ⑥，`'theme'` 档）。已连接时读
+   * `config/settings_data.json` 里的配色与字体进令牌，来路 `theme`
+   * （比官网量的硬，比上传手册轻）。没连接 / 读不到回 `undefined`——
+   * **整格不出现，不猜**。
+   */
+  themeSettings?: () => Promise<unknown | undefined>
   newId: (prefix: string) => string
 }
 
@@ -244,8 +279,9 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
     status: BrandDesignRun['status'],
     extra: Partial<BrandDesignRun>,
     actor: BrandDesignActor,
+    id?: string,
   ): BrandDesignRun => ({
-    id: options.newId('bdr'),
+    id: id ?? options.newId('bdr'),
     schema_version: 1,
     workspace_id: actor.workspace_id as WorkspaceId,
     status,
@@ -295,29 +331,60 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       }))
       const fresh = extractSiteDesign(withSheets)
       const previous = read(actor)
-      const merged = mergeDesignProfile(previous?.profile ?? {}, fresh)
+      let merged = mergeDesignProfile(previous?.profile ?? {}, fresh)
+      // WP122b 交付 ⑥：已连接 Shopify 时读主题设置（`theme` 档，比 site 硬一档）。
+      // 读不到就跳——不猜、不报错。
+      let themeNote = ''
+      try {
+        const settings = await options.themeSettings?.()
+        if (settings !== undefined) {
+          const theme = extractThemeDesign(settings)
+          if (theme.contributed.length > 0) {
+            merged = mergeDesignProfile(merged, theme.profile)
+            themeNote = `；主题设置 ${String(theme.contributed.length)} 格`
+          }
+        }
+      } catch {
+        // 主题设置读不到就是没有这一档
+      }
 
+      // 模型口**现取**（WP122b 交付 ④）：模型设置改完下一轮抓取就生效；
+      // 没配模型就是 undefined，成文退回直述版并如实标注（见下面 note）。
+      // 视觉口同理（交付 ⑤）：没配就整步跳过，imagery 留「未找到」；
+      // 配了才抓几张站上的内容图给视觉模型描述图片风格。
+      const runId = options.newId('bdr')
+      const model = options.modelFor?.({ actor, run_id: runId })
+      const vision = options.visionFor?.({ actor, run_id: runId })
+      const siteImages =
+        vision === undefined || options.imageFetch === undefined
+          ? []
+          : await fetchPageImages(options.imageFetch, withSheets)
       const composed = await composeDesignProse({
         profile: merged,
         capCredits: cap,
-        ...(options.model === undefined ? {} : { model: options.model }),
+        ...(model === undefined ? {} : { model }),
+        ...(vision === undefined || siteImages.length === 0
+          ? {}
+          : { vision, images: siteImages.map((img) => img.bytes) }),
       })
-      writeDoc(
-        actor,
-        { profile: merged, markdown: composed.markdown },
-        'site_extract',
-        noteOf(fresh),
-      )
+      const note =
+        composed.fallback_reason === undefined
+          ? `${noteOf(fresh)}${themeNote}`
+          : `${noteOf(fresh)}${themeNote}；${composed.fallback_reason}`
+      // 看图那一步可能给档案补了 imagery（WP122b 交付 ⑤），落库用补过的
+      const finalProfile = composed.profile ?? merged
+      writeDoc(actor, { profile: finalProfile, markdown: composed.markdown }, 'site_extract', note)
 
       return runOf(
         composed.stopped_for_budget ? 'budget_exceeded' : 'awaiting_confirm',
         {
           origins: ['site'],
           pages: withSheets.map((p) => ({ url: p.url, ok: true })),
-          profile: merged,
+          profile: finalProfile,
           budget: composed.budget,
         },
         actor,
+        runId,
       )
     },
 
@@ -333,11 +400,28 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       if (file === undefined)
         return runOf('failed', { origins: ['file'], failure: '找不到这个文件，重新传一次' }, actor)
 
-      const got = extractFileDesign({
-        filename: file.filename,
-        bytes: file.bytes,
-        maxPages: BRAND_DESIGN_MAX_FILE_PAGES,
-      })
+      // WP122b 交付 ⑥：docx / pptx 走零依赖的 OOXML 拆页（`officePages`），
+      // 结果经 `extractFileDesign` 的 `pages` 口进来——同一个抽取器吃三种格式。
+      const lower = file.filename.toLowerCase()
+      let got: ReturnType<typeof extractFileDesign>
+      if (lower.endsWith('.docx') || lower.endsWith('.pptx')) {
+        got = extractFileDesign({
+          filename: file.filename,
+          pages: officePages(file.bytes, { maxPages: BRAND_DESIGN_MAX_FILE_PAGES }),
+        })
+      } else {
+        got = extractFileDesign({
+          filename: file.filename,
+          bytes: file.bytes,
+          maxPages: BRAND_DESIGN_MAX_FILE_PAGES,
+        })
+      }
+      if (got.failure === undefined && got.pagesRead === 0) {
+        got = {
+          ...got,
+          failure: `${file.filename} 里没读到文字。支持 PDF / docx / pptx（老格式 .doc / .ppt 请另存）。`,
+        }
+      }
       if (got.failure !== undefined)
         return runOf(
           'failed',
@@ -359,15 +443,34 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       const previous = read(actor)
       // 方向是 (库里的, 手册的)：手册赢，但输的那个留在 `conflict` 里
       const merged = mergeDesignProfile(previous?.profile ?? {}, got.profile)
-      writeDoc(
-        actor,
-        { profile: merged },
-        'file_extract',
-        `${file.filename}：${noteOf(got.profile)}`,
-      )
+
+      // WP122b 交付 ⑤：手册里的图给视觉模型看（抽嵌图；零依赖解不了 PDF 渲染，
+      // 见 `pdfPageImages` 的注释）。没配视觉模型 / 传的不是 PDF 就整步跳过。
+      const runId = options.newId('bdr')
+      const model = options.modelFor?.({ actor, run_id: runId })
+      const vision = options.visionFor?.({ actor, run_id: runId })
+      const fileImages =
+        vision === undefined || file.filename.toLowerCase().endsWith('.pdf') === false
+          ? []
+          : pdfPageImages(file.bytes)
+      const cap = DEFAULT_BRAND_DESIGN_CAP_CREDITS
+      const composed = await composeDesignProse({
+        profile: merged,
+        capCredits: cap,
+        ...(model === undefined ? {} : { model }),
+        ...(vision === undefined || fileImages.length === 0
+          ? {}
+          : { vision, images: fileImages.map((img) => img.bytes) }),
+      })
+      const note =
+        composed.fallback_reason === undefined
+          ? `${file.filename}：${noteOf(got.profile)}`
+          : `${file.filename}：${noteOf(got.profile)}；${composed.fallback_reason}`
+      const finalProfile = composed.profile ?? merged
+      writeDoc(actor, { profile: finalProfile, markdown: composed.markdown }, 'file_extract', note)
 
       return runOf(
-        'awaiting_confirm',
+        composed.stopped_for_budget ? 'budget_exceeded' : 'awaiting_confirm',
         {
           origins: ['file'],
           files: [
@@ -378,9 +481,11 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
               contributed: got.contributed,
             },
           ],
-          profile: merged,
+          profile: finalProfile,
+          budget: composed.budget,
         },
         actor,
+        runId,
       )
     },
 
@@ -488,4 +593,85 @@ export function designPageKindOf(url: string): DesignPageKind {
   if (/\/collections?\/|\/category\//i.test(url)) return 'collection'
   if (/\/blogs?\/|\/news\//i.test(url)) return 'blog'
   return 'home'
+}
+
+/* ── Shopify 主题设置（WP122b 交付 ⑥）──────────────────────────────── */
+
+/** 跑主题设置那两条只读 Action 要的连接器面（照 `site.ts` 的 `SiteConnectLike`，不多要一格）。 */
+export interface ThemeConnectLike {
+  actions(service: string): Promise<{ id: string }[]>
+  issueToken(input: {
+    assignment_id: string
+    kind: 'role-read'
+    allowed_actions: string[]
+    allowed_connections: string[]
+    expires_in_seconds?: number
+  }): Promise<{ token: string }>
+  execute(
+    action_id: string,
+    input: unknown,
+    opts: { token: string; connection?: string },
+  ): Promise<unknown>
+}
+
+const themeRec = (v: unknown): Record<string, unknown> =>
+  typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
+
+/**
+ * 读当前主题的 `config/settings_data.json`（WP122b 交付 ⑥）。
+ *
+ * 三步全是**只读** Action（`list_themes` → `get_theme_asset`，都在
+ * `action-side-effects.yml` 标 `read`）；任何一步读不到（没这两条 Action、
+ * 令牌签不出来、资产里没有设置文件）就回 `undefined`——主题设置那一档
+ * 整体跳过，**不报错也不猜**。响应形状按 Shopify Admin 的常规形状宽松解析，
+ * 认不出就 undefined。
+ */
+export async function shopifyThemeSettings(
+  connect: ThemeConnectLike,
+  connection: { id: string; service: string },
+): Promise<unknown | undefined> {
+  try {
+    const available = await connect.actions(connection.service)
+    const idOf = (name: string): string | undefined =>
+      available.find((a) => a.id === `${connection.service}.${name}` || a.id.endsWith(`.${name}`))
+        ?.id
+    const listId = idOf('list_themes')
+    const assetId = idOf('get_theme_asset')
+    if (listId === undefined || assetId === undefined) return undefined
+    const token = (
+      await connect.issueToken({
+        assignment_id: 'asg_brand_design_readonly',
+        kind: 'role-read',
+        allowed_actions: [listId, assetId],
+        allowed_connections: [connection.id],
+        expires_in_seconds: 120,
+      })
+    ).token
+    const themesRaw = await connect.execute(listId, {}, { token, connection: connection.id })
+    // 响应形状宽松解析：{data: …} 包一层 / 裸数组 / 裸对象都认
+    const unwrap = (out: unknown): unknown => {
+      const r = themeRec(out)
+      return r.data ?? out
+    }
+    const themesList = unwrap(themesRaw)
+    const themes: unknown[] = (() => {
+      const wrapped = themeRec(themesList).themes
+      const list = Array.isArray(wrapped) ? wrapped : Array.isArray(themesList) ? themesList : []
+      return list
+    })()
+    const main = themes.map(themeRec).find((t) => t.role === 'main' || t.live === true)
+    const themeId = (main ?? themes.map(themeRec)[0])?.id
+    if (themeId === undefined) return undefined
+    const assetRaw = await connect.execute(
+      assetId,
+      { theme_id: String(themeId), asset: { key: 'config/settings_data.json' } },
+      { token, connection: connection.id },
+    )
+    const asset = unwrap(assetRaw)
+    const value = themeRec(asset).value ?? themeRec(themeRec(asset).asset).value
+    if (typeof value !== 'string' || value.trim() === '') return undefined
+    return JSON.parse(value) as unknown
+  } catch {
+    return undefined
+  }
 }
