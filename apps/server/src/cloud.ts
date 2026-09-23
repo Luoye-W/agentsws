@@ -25,6 +25,8 @@ import type {
   CapabilitySources,
   Clock,
   CloudCreditsView,
+  DataSourceLevel,
+  DataSourceRoute,
   KolCloudDeleteResult,
   KolCloudExport,
   Pricing,
@@ -35,6 +37,7 @@ import type {
   UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
+import { DEFAULT_DATA_SOURCE_ORDER } from '@agentsws/contracts'
 import { buildPricing, TOPUP_TIERS_FILE } from '@agentsws/metering'
 import type { KolStore } from './kol.js'
 import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
@@ -56,6 +59,11 @@ export type CloudFetch = (
 interface CapabilitySourcesFile {
   version: 1
   capability_sources: CapabilitySources
+  /**
+   * WP126 数据接口路由：键 `kol.<channel>`，只存显式改过的那几条
+   * （没存的渠道用 `DEFAULT_DATA_SOURCE_ORDER`）。
+   */
+  data_source_routing?: Record<string, DataSourceRoute>
   updated_at?: string
 }
 
@@ -89,6 +97,11 @@ export interface CloudAssembly {
    * 要在拼请求之前就知道走哪条路，为一个本地文件里的布尔位加一次 await 不值当。
    */
   sourceOf(capability: string): CapabilitySource
+  /**
+   * WP126：某条渠道的数据接口路由（顺序 + 被关掉的那几级）。
+   * 红人装配把它递给 `kol-service`，搜人那四级路由按它走。
+   */
+  routeOf(channel: 'youtube' | 'instagram' | 'tiktok' | 'facebook' | 'x'): DataSourceRoute
   /** 一项能力的价目（49 M4）。取不到就回 `undefined`——不编一个数。 */
   priceOf(capability: string): Promise<{ credits: number; unit: string } | undefined>
   /**
@@ -126,6 +139,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
       state = {
         version: 1,
         capability_sources: parsed.capability_sources ?? {},
+        ...(parsed.data_source_routing === undefined
+          ? {}
+          : { data_source_routing: parsed.data_source_routing }),
         ...(parsed.updated_at === undefined ? {} : { updated_at: parsed.updated_at }),
       }
     } catch {
@@ -328,6 +344,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   const settingsOf = (actor: CloudActor): CapabilitySourceSettings => ({
     workspace_id: actor.workspace_id,
     capability_sources: { ...state.capability_sources },
+    ...(state.data_source_routing === undefined
+      ? {}
+      : { data_source_routing: state.data_source_routing }),
     ...(state.updated_at === undefined ? {} : { updated_at: state.updated_at }),
   })
 
@@ -432,12 +451,38 @@ export function createCloud(options: CloudOptions): CloudAssembly {
        *
        * 为什么：`mine` 是默认，把默认值也写进文件等于把"今天的默认"腌成"这台机器的
        * 设置"——以后默认值真要改（比如某项能力本地那条没了），这些行会挡着。
+       *
+       * WP126：`data_source_routing` 同理，只存非空的渠道条目；空条目 = 回默认。
        */
       const next: CapabilitySources = {}
       for (const [capability, source] of Object.entries(input.capability_sources)) {
         if (source === 'agentsws') next[capability] = source
       }
-      state = { version: 1, capability_sources: next, updated_at: clock.now() }
+      const routingInput = input.data_source_routing
+      // WP126：与已存的路由**合并**（每次只改一个渠道的表）；空条目 = 那一渠道回默认
+      const routing: Record<string, DataSourceRoute> | undefined =
+        routingInput === undefined && state.data_source_routing === undefined
+          ? undefined
+          : { ...(state.data_source_routing ?? {}) }
+      if (routingInput !== undefined && routing !== undefined)
+        for (const [channel, entry] of Object.entries(routingInput)) {
+          const order = entry.order.filter(
+            (l): l is DataSourceLevel =>
+              l === 'official_key' || l === 'byo_source' || l === 'workshop',
+          )
+          const disabled = entry.disabled.filter(
+            (l): l is DataSourceLevel =>
+              l === 'official_key' || l === 'byo_source' || l === 'workshop',
+          )
+          if (order.length === 0 && disabled.length === 0) delete routing[channel]
+          else routing[channel] = { order, disabled }
+        }
+      state = {
+        version: 1,
+        capability_sources: next,
+        ...(routing === undefined ? {} : { data_source_routing: routing }),
+        updated_at: clock.now(),
+      }
       flush()
       return settingsOf(actor)
     },
@@ -448,6 +493,15 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     ...(kolSync === undefined ? {} : { kolSync }),
     linked: () => tokenOf() !== undefined,
     sourceOf: (capability) => state.capability_sources[capability] ?? 'mine',
+    /**
+     * WP126：某条渠道的数据接口路由（顺序 + 被关掉的那几级）。
+     * 没存的渠道回默认顺序。
+     */
+    routeOf: (channel) =>
+      state.data_source_routing?.[`kol.${channel}`] ?? {
+        order: [...DEFAULT_DATA_SOURCE_ORDER],
+        disabled: [],
+      },
     priceOf: async (capability) => {
       const found = (await pricingView()).entries.find((e) => e.capability === capability)
       return found === undefined ? undefined : { credits: found.credits_per_unit, unit: found.unit }

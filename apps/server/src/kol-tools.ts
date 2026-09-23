@@ -161,11 +161,18 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
           q: q ?? '',
           ...(limit === undefined ? {} : { limit }),
           ...band,
+          // WP126：上一级报错后，用户点了"改用官方接口"重发的那一次
+          ...(input.fallback === 'workshop' ? { fallback: 'workshop' as const } : {}),
         })
         if (res.ok) {
           return {
             ...rowsOf(res.rows, 'creator'),
-            data: { rows: res.rows, object: 'creator', source: res.source },
+            data: {
+              rows: res.rows,
+              object: 'creator',
+              source: res.source,
+              ...(res.source_label === undefined ? {} : { source_label: res.source_label }),
+            },
           }
         }
         /*
@@ -177,7 +184,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
          * 不是安慰剂。公共库那一档要等 WP116 真接上，接上之后 `port.search`
          * 自己就会回 `ok`，这里一行都不用改。
          */
-        if (res.reason === 'not_connected') {
+        if (res.reason === 'not_connected' || res.reason === 'no_data_source') {
           const local = await port.creators(actor, {
             channel,
             ...(q === undefined ? {} : { q }),

@@ -244,12 +244,12 @@ Luoye 09-15 定：红人营销**按渠道划分职责**，五个渠道：YouTube
 
 | 路由 | 鉴权 | 计价 | 一句话 |
 |---|---|---|---|
-| `GET /creators?channel=&q=&min_followers=&category=&limit=` | `data` | 免费（记 0 积分计量） | 共享库浏览，回卡**不回邮箱**（只回 `has_contact`） |
-| `GET /creators/:channel/:handle/audit` | `data` | 免费（记 0 积分计量） | 免费体检：粉丝真实度、互动率分位、近 30 天活跃、风险标记；**样本不够就明说** |
+| `GET /creators?channel=&q=&min_followers=&category=&limit=` | `data` | `data.kol.lookup`（WP126） | 共享库浏览 / 搜索，回卡**不回邮箱**（只回 `has_contact`）；0 条 / 窗口内重复不收钱 |
+| `GET /creators/:channel/:handle/audit` | `data` | `data.kol.audit`（WP126） | 体检报告：粉丝真实度、互动率分位、近 30 天活跃、风险标记；**样本不够就明说** |
 | `POST /creators/:channel/:handle/reveal` | `data` | `data.kol.lookup` | 解密邮箱，明文只在这一次响应里出现；库里没有联系方式**不收钱** |
-| `POST /creators/:channel/:handle/deep-audit` | `data` | `data.kol.audit` | 免费报告 + 基准分位，`depth: 'deep'`；**这一版是骨架**，报告的 `note` 里说明白 |
+| `POST /creators/:channel/:handle/deep-audit` | `data` | `data.kol.audit` | 与 GET audit 同价同源，`depth: 'deep'`；**这一版是骨架**，报告的 `note` 里说明白 |
 | `POST /creators/:channel/:handle/refresh` | `data` | `social.fetch` | 去外部源取一次；驻留 / 配额挡住就**整笔释放不收钱** |
-| `GET /benchmarks?channel=&category=&followers_band=` | `data` | 免费（记 0 积分计量） | k-匿名基准，只回 p25 / p50 / p75 |
+| `GET /benchmarks?channel=&category=&followers_band=` | `data` | `data.kol.lookup`（WP126） | k-匿名基准，只回 p25 / p50 / p75；桶不够 k **不收钱** |
 | `POST /creators/:channel/:handle/observations` | `data` | 免费（有贡献奖励） | 登录态工作区手动加观察 |
 | `POST /creators/:channel/:handle/contact` | `data` | 免费（有贡献奖励） | 联系方式回填：进库就是哈希 + 密文 |
 | `POST /creators/:channel/:handle/disputes` | `data` | 免费 | 争议**只记不裁**，owner 后台看 |

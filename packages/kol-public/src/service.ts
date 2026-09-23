@@ -6,8 +6,12 @@
  * 1. 查价目算预扣 → 2. 余额够才放行（不够 402 人话，**只拒这一次不冻结**）
  * → 3. 真做这件事 → 4. 按实际结算并记**一条**计量事件 → 失败整笔释放。
  *
- * 免费动作（浏览、体检报告、基准）不预扣，但**仍记一条 0 积分的计量事件**：
- * 用量看板要知道这些能力被用了多少次，而"免费"不等于"没发生过"。
+ * WP126（09-19 Luoye 定）把「浏览免费」那一套推翻了：官方数据接口本身就是增值
+ * 服务，**浏览 / 搜索 / 类目基准按 `data.kol.lookup` 收，体检报告按
+ * `data.kol.audit` 收**——命中缓存与未命中收同样的钱（库本身就是缓存，
+ * "命中"不是用户的功劳）；取数失败 / 查无此人 / 搜到 0 条 → 预扣释放不收钱。
+ * 口径①②③见 docs/75：一次提交的搜索算一次（10 分钟幂等窗口）；搜到 0 条
+ * 不收钱；贡献返额度保留。
  *
  * 计量事件只有八个字段（49 M6）——**红人名字没有地方放**，正文更没有。
  * 这不是靠自觉：`Wallet.settle` 里的 `assertMeteringEvent` 多一个键就抛。
@@ -78,12 +82,21 @@ const HOUR_MS = 60 * 60 * 1000
 /** 累计计数落在配额表的这一"天"上（主键是 `(subject, day)`，天然容得下）。 */
 export const LIFETIME_DAY = 'lifetime'
 
-/** 浏览 / 体检 / 基准这三条免费动作记的是 0 积分，不是不记。 */
+/** 0 积分的计量事件（用法看板要用，不是"没发生过"）。 */
 export const FREE_CREDITS = 0
+
+/**
+ * 搜索幂等窗口（WP126 口径①，Luoye 定、Fable 提出）：**一次提交的搜索算一次**。
+ *
+ * 同一个工作区、同一个查询串，10 分钟内翻页 / 重排不再扣第二次——翻页不
+ * 重新取数，只是把同一份结果换一种摆法。键里**刻意不含 limit**（翻页
+ * 就是 limit 在变）。输入过程中的空查询不算搜索，也不进窗口。
+ */
+export const SEARCH_IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000
 
 export interface BrowseResult {
   creators: PublicCreatorCard[]
-  /** 这一次扣了多少积分（浏览恒为 0，写出来免得界面去猜）。 */
+  /** 这一次扣了多少积分（命中缓存与未命中同价；窗口内重复搜索为 0）。 */
   credits: number
 }
 
@@ -99,6 +112,8 @@ export interface RefreshResult {
 
 export interface BenchmarkResult extends Benchmark {
   note: string
+  /** 这一次扣了多少积分（桶不够 k 不收钱 → 0）。 */
+  credits: number
 }
 
 export interface DisputeResult {
@@ -244,10 +259,10 @@ export class KolPublicService {
   }
 
   /**
-   * 免费动作也记一条计量事件（0 积分）。
+   * 免费或"这一次没扣"的动作也记一条计量事件（0 积分）。
    *
    * 为什么不走 `reserve` 再 `settle`：余额短暂为负的时候（结算可能比预扣多，
-   * 49 §3 允许）`reserve(0)` 会被拒——**免费的东西不该因为余额而用不了**。
+   * 49 §3 允许）`reserve(0)` 会被拒——**没扣钱的东西不该因为余额而用不了**。
    * 所以这里直接结算一笔 0 积分的记录：扣 0、记一条、不碰余额。
    */
   private meterFree(principal: KolPrincipal, capability: string, quantity: number): void {
@@ -280,7 +295,41 @@ export class KolPublicService {
 
   // ————————————————————————— 读 —————————————————————————
 
-  /** 共享库浏览：**免费，回卡不回邮箱**（有没有联系方式只回一个布尔）。 */
+  /**
+   * 搜索幂等窗口的键（口径①）。键里**不含 limit**（翻页就是 limit 在变），
+   * 含 subject（哪个工作区）、渠道、关键词、粉丝下限与类目。
+   * 空查询不算一次搜索——输入过程中不该扣钱。
+   */
+  private searchWindowKey(
+    principal: KolPrincipal,
+    query: {
+      channel?: KolChannel | undefined
+      q?: string | undefined
+      min_followers?: number | undefined
+      category?: string | undefined
+    },
+  ): string | undefined {
+    const q = query.q?.trim() ?? ''
+    if (q === '') return undefined
+    const parts = [
+      principal.workspace_id,
+      query.channel ?? '*',
+      q.toLowerCase(),
+      query.min_followers === undefined ? '*' : String(query.min_followers),
+      query.category?.trim().toLowerCase() || '*',
+    ]
+    return `srch:${this.deps.secrets.sha256(parts.join('|'))}`
+  }
+
+  /**
+   * 共享库浏览 / 搜索：按 `data.kol.lookup` 收（0.2 积分 / 次，价目表说了算）。
+   *
+   * 三条口径在这里落地：
+   * - **搜到 0 条不收钱**（口径②）：一个空列表不值得钱，一次都不预扣；
+   * - **一次提交的搜索算一次**（口径①）：同一个 (subject, 查询串) 10 分钟内
+   *     翻页 / 重排不重复收——窗口内记一条 0 积分的计量事件（用法照常可见），
+   * - **命中缓存与未命中同价**：库本身就是缓存，没有"命中免费"这一说。
+   */
   browse(
     principal: KolPrincipal,
     query: {
@@ -299,8 +348,19 @@ export class KolPublicService {
       category: query.category?.toLowerCase(),
       limit,
     })
-    this.meterFree(principal, KOL_LOOKUP_CAPABILITY, creators.length)
-    return { creators, credits: FREE_CREDITS }
+    if (creators.length === 0) return { creators, credits: FREE_CREDITS }
+    const key = this.searchWindowKey(principal, query)
+    const last = key === undefined ? undefined : this.deps.store.searchChargeAt(key)
+    if (
+      last !== undefined &&
+      Date.parse(this.deps.now()) - Date.parse(last) < SEARCH_IDEMPOTENCY_WINDOW_MS
+    ) {
+      this.meterFree(principal, KOL_LOOKUP_CAPABILITY, 1)
+      return { creators, credits: FREE_CREDITS }
+    }
+    const { credits } = this.charge(principal, KOL_LOOKUP_CAPABILITY, 1, () => creators)
+    if (key !== undefined) this.deps.store.putSearchCharge(key, this.deps.now())
+    return { creators, credits }
   }
 
   private cardOrThrow(channel: KolChannel, handle: string): CreatorRow {
@@ -325,33 +385,39 @@ export class KolPublicService {
     )
   }
 
-  /** 免费体检报告。数据不足就明说"样本不够"，**不编**。 */
+  /**
+   * 体检报告（WP126 起**付费**，`data.kol.audit`，3 积分 / 次）。
+   *
+   * 查无此人 → 预扣整笔释放，不收钱（`cardOrThrow` 在 `charge` 的 run 里抛）。
+   * 样本不够但人确实存在：报告照样出（里面明说样本不够），钱照收——
+   * 收钱换来的是"对这个人的真实体检"，样本少本身就是体检结论的一部分。
+   */
   audit(principal: KolPrincipal, key: { channel: KolChannel; handle: string }): AuditReport {
     const at = this.deps.now()
-    const card = this.cardOrThrow(key.channel, key.handle)
-    const report = buildAudit({
-      card,
-      observations: this.deps.store.observationsOf(card.channel, card.handle),
-      benchmark: this.benchmarkFor(card, at),
-      at,
-      depth: 'basic',
+    const { value, credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () => {
+      const card = this.cardOrThrow(key.channel, key.handle)
+      return buildAudit({
+        card,
+        observations: this.deps.store.observationsOf(card.channel, card.handle),
+        benchmark: this.benchmarkFor(card, at),
+        at,
+        depth: 'basic',
+      })
     })
-    this.meterFree(principal, KOL_AUDIT_CAPABILITY, 1)
-    return report
+    return { ...value, credits }
   }
 
   /**
-   * 付费深度体检（`data.kol.audit`）。
-   *
-   * **这一版是骨架**：免费那份 + 基准分位组合成一份，`depth` 标 `deep` 但里面
-   * 的判断与免费那份同源。真的深度分析（评论真实性抽样、受众画像、跨渠道对照）
-   * 留给后续 WP —— 收了钱就要说清楚现在买到的是什么，报告里的 `note` 会写明。
+   * 付费深度体检（`data.kol.audit`，与免费那份同价——WP126 之后只有这一档价，
+   * `depth` 标 `deep` 但里面的判断与 basic 同源。真的深度分析（评论真实性抽样、
+   * 受众画像、跨渠道对照）留给后续 WP —— 收了钱就要说清楚现在买到的是什么，
+   * 报告里的 `note` 会写明。
    */
   deepAudit(principal: KolPrincipal, key: { channel: KolChannel; handle: string }): AuditReport {
     const at = this.deps.now()
     const card = this.cardOrThrow(key.channel, key.handle)
     const benchmark = this.benchmarkFor(card, at)
-    const { value } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () =>
+    const { value, credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () =>
       buildAudit({
         card,
         observations: this.deps.store.observationsOf(card.channel, card.handle),
@@ -360,7 +426,7 @@ export class KolPublicService {
         depth: 'deep',
       }),
     )
-    return value
+    return { ...value, credits }
   }
 
   /** 付费 reveal 邮箱（`data.kol.lookup`）。库里没有联系方式**不扣积分**。 */
@@ -482,15 +548,23 @@ export class KolPublicService {
     }
   }
 
-  /** k-匿名基准：桶不到 20 条不出数，只回分位数不回个体。 */
+  /**
+   * k-匿名基准：桶不到 20 条不出数，只回分位数不回个体。
+   *
+   * WP126 起按 `data.kol.lookup` 收（0.2 积分 / 次）。**桶不够 k 不收钱**：
+   * 口径②的同一条——收了钱却交不出一个数，说不过去。先算桶再收钱
+   * （这一步是库内计算，不碰外部源，不存在"先扣后干"的成本风险）。
+   */
   benchmark(
     principal: KolPrincipal,
     query: { channel: KolChannel; category?: string | undefined; followers_band: FollowersBand },
   ): BenchmarkResult {
     const at = this.deps.now()
     const benchmark = benchmarkOf(this.deps.store, bucketOf(query), at)
-    this.meterFree(principal, KOL_LOOKUP_CAPABILITY, 1)
-    return { ...benchmark, note: benchmarkNote(benchmark) }
+    if (benchmark.insufficient_samples)
+      return { ...benchmark, credits: FREE_CREDITS, note: benchmarkNote(benchmark) }
+    const { credits } = this.charge(principal, KOL_LOOKUP_CAPABILITY, 1, () => benchmark)
+    return { ...benchmark, credits, note: benchmarkNote(benchmark) }
   }
 
   // ————————————————————————— 插件配对 —————————————————————————

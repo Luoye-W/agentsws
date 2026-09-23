@@ -28,6 +28,7 @@ import type {
   CollaborationStage,
   Creator,
   CreatorContactKind,
+  DataSourceLevel,
   Deliverable,
   DeliverableKind,
   DeliverableReview,
@@ -183,20 +184,43 @@ export interface KolImportView {
  */
 export interface KolSearchResult {
   ok: boolean
-  /** 这一份是从哪儿来的：`channel` = 你自己的平台连接；`public_library` = agentsws 的公共库。 */
-  source: 'channel' | 'public_library'
+  /**
+   * 这一份是从哪儿来的：`channel` = 你自己的平台连接；`public_library` =
+   * Agents 工坊官方数据接口；`byo_source` = 你自己的数据接口（WP126）。
+   */
+  source: 'channel' | 'public_library' | 'byo_source'
   rows: KolSearchHit[]
   /** `ok: false` 时那一句人话。 */
   message?: string
   /** 机器可读的原因（`not_connected` / `needs_approval` / `quota_exhausted` / …）。 */
   reason?: string
+  /**
+   * 这份数据来自哪儿，一句给人看的话（WP126：结果上始终标来源）——
+   * 「我的 YouTube key / 我的数据接口 / 公共红人库」。与 `source` 同义，
+   * 但已经是界面可直接展示的文案。
+   */
+  source_label?: string
+  /**
+   * 哪一级配了但报错（WP126：报错不静默回退）。把哪一级失败说清，
+   * 配合 `fallback_offer` 让用户自己点一下"改用官方接口"。
+   */
+  failed_level?: DataSourceLevel
+  /**
+   * 上一级失败时的那个"改用官方接口（约 N 积分）"（WP126）。
+   * 用户点头之后就带着 `fallback: 'workshop'` 重发一次。
+   */
+  fallback_offer?: { credits: number; note: string }
+  /**
+   * 第四层（都没有）的两个入口：关联官方账号送 10 积分 / 接自己的数据接口。
+   */
+  entry_points?: { id: 'link_account' | 'byo'; label: string; note: string }[]
   /** 这份数据什么时候看到的。 */
   observed_at?: Iso8601
   /**
    * 公共库那一档才有：**reveal 一个邮箱要花多少积分**（起草开发信之前先说）。
    *
-   * 浏览是免费的，所以这一格与 `rows` 一起回来——人在决定"要不要花这笔钱"之前
-   * 就该看得见数，而不是点下去之后才知道。
+   * WP126 起官方接口没有免费动作了（浏览 / 搜索也按次收，价常显在界面上），
+   * 这一格仍然只说 reveal 那一步；搜索自己的单价在连接卡上常显。
    */
   reveal_price?: KolRevealPrice
 }
@@ -208,6 +232,16 @@ export interface KolRevealPrice {
   unit: string
   /** 一句人话：「这一步扣 N 积分」。 */
   note: string
+}
+
+/** 自带数据接口在界面上的那一行（密钥永不回传，只有"设没设过"）。 */
+export interface KolByoSourceView {
+  channel: KolChannel
+  service_url: string
+  format: 'byo/v1'
+  /** 密钥设过没有（明文与引用都不回传）。 */
+  has_key: boolean
+  updated_at?: Iso8601
 }
 
 /** 搜出来的一条（还没进库——进库是"加到红人库"那一下的事）。 */
@@ -417,6 +451,11 @@ export interface KolPort {
       limit?: number | undefined
       min_followers?: number | undefined
       max_followers?: number | undefined
+      /**
+       * WP126：上一级配了但报错，用户看了"改用官方接口（约 N 积分）"之后点了头——
+       * 重发时带上这一个，跳过路由表直接走 Agents 工坊官方数据接口。
+       */
+      fallback?: 'workshop' | undefined
     },
   ): MaybePromise<KolSearchResult>
   creator(actor: KolActor, id: string): MaybePromise<KolCreatorDetail | undefined>
@@ -531,6 +570,22 @@ export interface KolPort {
     reason?: string
     message?: string
   }>
+
+  /* ── WP126：自带数据接口（高级卡；每渠道最多一个）────────────────────
+   *
+   * 配置落本地文件，密钥**只**进本机加密库；适配器跑本机，走用户自己的额度，
+   * 不扣积分。接口返回的形状是 `@agentsws/contracts` 那份公开格式（`byo/v1`）。
+   */
+  byoSources(actor: KolActor): MaybePromise<{ rows: KolByoSourceView[] }>
+  setByoSource(
+    actor: KolActor,
+    input: { channel: KolChannel; service_url: string; api_key?: string | undefined },
+  ): MaybePromise<KolByoSourceView>
+  clearByoSource(actor: KolActor, channel: KolChannel): MaybePromise<{ cleared: boolean }>
+  testByoSource(
+    actor: KolActor,
+    input: { channel: KolChannel; service_url?: string | undefined; api_key?: string | undefined },
+  ): MaybePromise<{ ok: boolean; message: string }>
 
   /** campaign 向导：四格 → 一份按渠道分好组的挑人清单 + 一张清单卡。 */
   planCampaign(actor: KolActor, input: KolCampaignBrief): MaybePromise<KolCampaignView>
@@ -747,6 +802,21 @@ const RevealBody = z.object({
   creator_id: z.string().min(1).optional(),
 })
 
+const ByoSourceBody = z.object({
+  channel: ChannelSchema,
+  /** 服务地址（含 scheme；适配器在后面拼 /byo/v1/...）。 */
+  service_url: z.string().min(1).max(500),
+  /** 密钥。**只在第一次或换钥时给**；不给就保留旧的。只进本机加密库。 */
+  api_key: z.string().min(1).max(500).optional(),
+})
+
+const ByoTestBody = z.object({
+  channel: ChannelSchema,
+  /** 不给就用已存的那份配置测。 */
+  service_url: z.string().min(1).max(500).optional(),
+  api_key: z.string().min(1).max(500).optional(),
+})
+
 const CampaignBody = z.object({
   goal: z.string().min(1).max(200),
   budget: z.number().positive(),
@@ -895,6 +965,8 @@ export function kolRoutes(): Route[] {
             ...(limit === undefined ? {} : { limit }),
             ...(min_followers === undefined ? {} : { min_followers }),
             ...(max_followers === undefined ? {} : { max_followers }),
+            // WP126：用户在失败提示上点了"改用官方接口"之后重发的那一次
+            ...(c.req.query('fallback') === 'workshop' ? { fallback: 'workshop' as const } : {}),
           }),
         )
       },
@@ -1304,6 +1376,74 @@ export function kolRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).revealFromPublicLibrary(actorOf(c), await body(c, RevealBody))),
+    ),
+
+    /* ── WP126：自带数据接口（高级卡）────────────────────────────── */
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/byo-sources',
+        operationId: 'listKolByoSources',
+        summary: '每条渠道挂的自带数据接口（密钥永不回传，只有设没设过）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CREATOR,
+        returns: '{ rows: KolByoSourceView[] }',
+      },
+      async (c, deps) => ok(c, await portOf(deps).byoSources(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/kol/byo-sources',
+        operationId: 'setKolByoSource',
+        summary:
+          '接一个自带数据接口（每渠道一个）。密钥只进本机加密库；适配器跑本机、走你自己的额度，不扣积分。返回格式固定为公开约定 byo/v1',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CREATOR,
+        body: ByoSourceBody,
+        returns: 'KolByoSourceView',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).setByoSource(actorOf(c), await body(c, ByoSourceBody))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/byo-sources/test',
+        operationId: 'testKolByoSource',
+        summary:
+          '「测试连接」：打一次最小的 profile 请求。服务回 404（查无此人）也算通——听懂了就是通了',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CREATOR,
+        body: ByoTestBody,
+        returns: '{ ok, message }',
+      },
+      async (c, deps) =>
+        ok(c, await portOf(deps).testByoSource(actorOf(c), await body(c, ByoTestBody))),
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/kol/byo-sources/:channel',
+        operationId: 'clearKolByoSource',
+        summary: '拔掉某条渠道的自带数据接口（本机文件与密钥引用一并清掉）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CREATOR,
+        returns: '{ cleared }',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await portOf(deps).clearByoSource(actorOf(c), ChannelSchema.parse(param(c, 'channel'))),
+        ),
     ),
     route(
       {

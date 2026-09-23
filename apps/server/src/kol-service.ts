@@ -49,6 +49,8 @@ import type {
   CollaborationStage,
   Creator,
   CreatorContact,
+  DataSourceLevel,
+  DataSourceRoute,
   Deliverable,
   EffectiveConfig,
   EventEnvelope,
@@ -65,6 +67,7 @@ import type {
   TrackedLink,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { DEFAULT_DATA_SOURCE_ORDER } from '@agentsws/contracts'
 import { suppressionKey } from '@agentsws/core'
 import {
   advanceCollaboration,
@@ -96,6 +99,13 @@ import {
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { KolStore } from './kol.js'
+import {
+  type ByoEndpointConfig,
+  type ByoSourceStore,
+  byoSearch,
+  byoSecretId,
+  byoTestConnection,
+} from './kol-byo.js'
 import type { KolChannelsAssembly } from './kol-channels.js'
 import { REVEAL_CAPABILITY } from './kol-public-client.js'
 import type { SecretStore } from './secret-store.js'
@@ -255,8 +265,33 @@ export interface KolServiceOptions {
    *
    * 键是 `kol.<channel>`（连接页那五张卡上各一个开关）。不给就一律"用我的"——
    * 默认是本地优先（40 §1），把"默认"也写进设置文件是另一回事（见 `cloud.ts`）。
+   *
+   * WP126：这一个开关仍是权威——显式拨到 `agentsws` 时官方数据接口排到最前。
+   * 更细的顺序 / 开关在 {@link dataSourceRoute} 那张表上。
    */
   capabilitySource?(capability: string): 'mine' | 'agentsws'
+  /**
+   * WP126 数据接口路由：这个渠道的层级顺序与被关掉的那几级。
+   * 不给就用 `DEFAULT_DATA_SOURCE_ORDER`（自己的 key → 自己的接口 → 工坊的）。
+   */
+  dataSourceRoute?(channel: KolChannel): DataSourceRoute
+  /**
+   * WP126：这个渠道挂的自带数据接口（连接卡「自带数据接口（高级）」上填的）。
+   * 没配回 `undefined`——那一级当"没配"，照常落下一级。
+   */
+  byoDataSource?(channel: KolChannel): ByoEndpointConfig | undefined
+  /**
+   * WP126：自带数据接口的配置仓（连接卡那组路由用：列 / 接 / 拔 / 试连）。
+   * 不给 = 这台机器没有这张卡（路由第②级照常当"没配"跳过）。
+   */
+  byo?: ByoSourceStore
+  /** 自带接口的密钥从哪儿读（本机加密库；测试用替身）。 */
+  byoSecrets?: (secret_ref: string) => string | undefined
+  /** 测试注入：自带接口的 fetch（生产走全局 fetch）。 */
+  byoFetch?: (
+    url: string,
+    init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal },
+  ) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>
   /** 一项能力的价目（49 M4；价从云上那一份来，本地一个数字都不自己算）。 */
   priceOf?(capability: string): MaybePromise<{ credits: number; unit: string } | undefined>
   /**
@@ -731,6 +766,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
    *
    * **起草开发信之前就说**：人在决定"要不要花这笔钱"之前该看得见数，
    * 而不是点下去之后才知道。取不到价目就不编一个——那一格干脆不出现。
+   *
+   * WP126：官方接口没有免费动作了，所以这里一并把搜索 / 取邮箱的计费口径说出来。
    */
   const revealPrice = async (): Promise<KolSearchResult['reveal_price']> => {
     const found = await options.priceOf?.(REVEAL_CAPABILITY)
@@ -739,7 +776,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       capability: REVEAL_CAPABILITY,
       credits: found.credits,
       unit: found.unit,
-      note: `浏览是免费的；取回一个邮箱这一步扣 ${found.credits} 积分。库里没有联系方式不收钱。`,
+      note: `搜索按次收（界面上常显单价）；取回一个邮箱这一步扣 ${found.credits} 积分。库里没有联系方式不收钱。`,
     }
   }
 
@@ -785,6 +822,45 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     return true
   }
 
+  /**
+   * 渠道的中文名（来源标签与错误提示用）。不认识就原样回。
+   */
+  const channelLabel = (channel: KolChannel): string =>
+    (
+      ({
+        youtube: 'YouTube',
+        instagram: 'Instagram',
+        tiktok: 'TikTok',
+        facebook: 'Facebook',
+        x: 'X',
+      }) as Record<string, string>
+    )[channel] ?? channel
+
+  /**
+   * 第四层（都没有）的那一句人话 + 两个入口（WP126 定论 1）。
+   */
+  const nothingConfigured = (channel: KolChannel): KolSearchResult => ({
+    ok: false,
+    source: 'channel',
+    rows: [],
+    reason: 'no_data_source',
+    message:
+      `现在找不到${channelLabel(channel)}上的红人：这台机器既没连${channelLabel(channel)}自己的接口，也没接自己的数据接口，工坊官方数据接口也没开通。两条路任选其一：` +
+      '① 关联 agentsws 账号（新用户送 10 积分，之后按次计价）；② 在连接页接你自己的数据接口（不扣积分）。',
+    entry_points: [
+      {
+        id: 'link_account',
+        label: '关联官方账号',
+        note: '送 10 积分，之后走工坊官方数据接口（按次计价，价常显在界面上）。',
+      },
+      {
+        id: 'byo',
+        label: '接自己的数据接口',
+        note: '高级用法：填一个能按工坊公开格式回数据的服务地址，不扣积分。',
+      },
+    ],
+  })
+
   const port: KolPort = {
     creators(_actor, filter) {
       const now = clock.now()
@@ -815,53 +891,147 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
 
     async search(actor, input) {
       /*
-       * 49 M2 的开关决定走哪条路：**用我的** = 打这条渠道自己的接口（本地直连、
-       * 不扣一分）；**用 agentsws 的** = 查云端公共库（浏览免费，reveal 才花钱）。
-       * 两条路回的是同一个形状，所以界面上只有"这一份是从哪儿来的"那一个差别。
+       * WP126：**四级路由**（docs/75 有整张表）。每个渠道 × 每种动作都过这张表：
+       *
+       * ① 用户自己的官方平台 key → ② 用户自带的数据接口 →
+       * ③ Agents 工坊官方数据接口（积分）→ ④ 都没有：人话 + 两个入口。
+       *
+       * 逐级回退只在「没配」或「这一级不支持这个动作」时发生；**配了但报错
+       * 不静默回退到花钱的那一级**——说清哪一级失败，给一句
+       * "改用官方接口（约 N 积分）"，用户点头后带 `fallback: 'workshop'` 重发。
        */
-      if (options.capabilitySource?.(`kol.${input.channel}`) === 'agentsws')
-        return publicSearch(input)
-      const adapter = options.channels?.adapters[input.channel]
-      if (adapter === undefined)
-        return {
-          ok: false,
-          source: 'channel',
-          rows: [],
-          reason: 'not_connected',
-          message:
-            '这个服务进程没有装配渠道适配器，所以去平台上找人这一条现在走不通。导入你手上那张表照常能用。',
-        }
-      const out = await adapter.search({
-        q: input.q,
-        ...(input.limit === undefined ? {} : { limit: input.limit }),
-      })
-      if (!out.ok) {
-        emit('kol.search_failed', actor.person_id, { channel: input.channel, reason: out.reason })
-        return { ok: false, source: 'channel', rows: [], reason: out.reason, message: out.message }
+      const channel = input.channel
+      const route = options.dataSourceRoute?.(channel) ?? {
+        order: [...DEFAULT_DATA_SOURCE_ORDER],
+        disabled: [],
       }
-      const known = knownHandles(input.channel)
-      const rows: KolSearchHit[] = out.data
-        // WP117b（66 复测 #15）：粉丝区间对渠道这条路同样作数（渠道接口自己
-        // 大多不收这个条件，所以在这儿收）
-        .filter((hit) => inBand(hit.followers, input))
-        .map((hit) => ({
-          channel: hit.channel,
-          handle: hit.handle,
-          url: hit.url,
-          display_name: hit.display_name,
-          ...(hit.followers === undefined ? {} : { followers: hit.followers }),
-          ...(hit.engagement_rate === undefined ? {} : { engagement_rate: hit.engagement_rate }),
-          ...(hit.category === undefined ? {} : { category: hit.category }),
-          ...(hit.language === undefined ? {} : { language: hit.language }),
-          ...(hit.region === undefined ? {} : { region: hit.region }),
-          in_library: known.has(normalizeHandle(hit.handle)),
-        }))
-      return {
-        ok: true,
-        source: 'channel',
-        rows,
-        observed_at: out.observed_at,
-      } satisfies KolSearchResult
+      // 49 M2 的老开关仍是权威：显式拨到 agentsws 时官方接口排最前
+      const order =
+        options.capabilitySource?.(`kol.${channel}`) === 'agentsws'
+          ? (['workshop', ...route.order.filter((l) => l !== 'workshop')] as DataSourceLevel[])
+          : route.order
+      const levels = order.filter((l) => !route.disabled.includes(l))
+      // 用户点了"改用官方接口"：跳过路由表，直接走官方（③）
+      const effective = input.fallback === 'workshop' ? (['workshop'] as DataSourceLevel[]) : levels
+      const known = knownHandles(channel)
+      // 官方接口的单价（界面上常显；失败提示里的"约 N 积分"也用它）。取不到就不编。
+      const searchPrice = await options.priceOf?.(REVEAL_CAPABILITY)
+      const fallbackOffer =
+        searchPrice === undefined
+          ? undefined
+          : {
+              credits: searchPrice.credits,
+              note: `改用工坊官方数据接口（约 ${searchPrice.credits} 积分一次）。`,
+            }
+      let lastWorkshopFailure: KolSearchResult | undefined
+
+      for (const level of effective) {
+        // ① 用户自己的官方平台 key（本地直连、不扣积分）
+        if (level === 'official_key') {
+          const adapter = options.channels?.adapters[channel]
+          if (adapter === undefined) continue // 没配 → 落下一级
+          const out = await adapter.search({
+            q: input.q,
+            ...(input.limit === undefined ? {} : { limit: input.limit }),
+          })
+          if (!out.ok) {
+            // 适配器在但没填 key（`not_connected`）＝这一级"没配"，落下一级；
+            // 真报错（配额、上游故障…）才停：不静默回退到花钱的那一级
+            if (out.reason === 'not_connected') continue
+            emit('kol.search_failed', actor.person_id, { channel, reason: out.reason })
+            return {
+              ok: false,
+              source: 'channel',
+              rows: [],
+              reason: out.reason,
+              message: `你自己的 ${channelLabel(channel)} 接口这次没答上来：${out.message}`,
+              failed_level: 'official_key',
+              ...(fallbackOffer === undefined ? {} : { fallback_offer: fallbackOffer }),
+            }
+          }
+          const rows: KolSearchHit[] = out.data
+            .filter((hit) => inBand(hit.followers, input))
+            .map((hit) => ({
+              channel: hit.channel,
+              handle: hit.handle,
+              url: hit.url,
+              display_name: hit.display_name,
+              ...(hit.followers === undefined ? {} : { followers: hit.followers }),
+              ...(hit.engagement_rate === undefined
+                ? {}
+                : { engagement_rate: hit.engagement_rate }),
+              ...(hit.category === undefined ? {} : { category: hit.category }),
+              ...(hit.language === undefined ? {} : { language: hit.language }),
+              ...(hit.region === undefined ? {} : { region: hit.region }),
+              in_library: known.has(normalizeHandle(hit.handle)),
+            }))
+          return {
+            ok: true,
+            source: 'channel',
+            rows,
+            source_label: `我的 ${channelLabel(channel)} key`,
+            observed_at: out.observed_at,
+          } satisfies KolSearchResult
+        }
+
+        // ② 用户自带的数据接口（跑本机、走用户自己的额度、不扣积分）
+        if (level === 'byo_source') {
+          const byo = options.byoDataSource?.(channel)
+          if (byo === undefined) continue // 没配 → 落下一级
+          const out = await byoSearch(
+            byo,
+            options.byoSecrets ?? (() => undefined),
+            {
+              channel,
+              q: input.q,
+              ...(input.limit === undefined ? {} : { limit: input.limit }),
+              ...(input.min_followers === undefined ? {} : { min_followers: input.min_followers }),
+              ...(input.max_followers === undefined ? {} : { max_followers: input.max_followers }),
+            },
+            known,
+            options.byoFetch,
+          )
+          if (!out.ok) {
+            // 同一条纪律：配了但报错不静默回退
+            return {
+              ok: false,
+              source: 'byo_source',
+              rows: [],
+              ...(out.reason === undefined ? {} : { reason: out.reason }),
+              message: `你自己的数据接口这次没答上来：${out.message}`,
+              failed_level: 'byo_source',
+              ...(fallbackOffer === undefined ? {} : { fallback_offer: fallbackOffer }),
+            }
+          }
+          return {
+            ok: true,
+            source: 'byo_source',
+            rows: out.data?.rows ?? [],
+            source_label: '我的数据接口',
+            ...(out.data?.observed_at === undefined
+              ? {}
+              : { observed_at: out.data?.observed_at ?? '' }),
+          } satisfies KolSearchResult
+        }
+
+        // ③ Agents 工坊官方数据接口（积分；对外只有这一个名字）
+        if (level === 'workshop') {
+          const out = await publicSearch(input)
+          if (out.ok) return { ...out, source_label: '公共红人库' }
+          // not_linked = 这一级"没配"：落下一级（④）。别的失败也照实往下落，
+          // 原因记在 lastFailure 里给 ④ 的 message 用
+          lastWorkshopFailure = out
+        }
+      }
+
+      // ④ 都没有（或都没配）：人话 + 两个入口
+      const base = nothingConfigured(channel)
+      return lastWorkshopFailure === undefined
+        ? base
+        : {
+            ...base,
+            message: `${base.message}（刚才试过工坊官方接口：${lastWorkshopFailure.message}）`,
+          }
     },
 
     creator(_actor, id) {
@@ -1651,6 +1821,73 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         skipped: skipped.length,
       })
       return { campaign_id, created, skipped }
+    },
+
+    /* ── WP126：自带数据接口（高级卡；每渠道最多一个）────────────────── */
+
+    byoSources() {
+      const reader = options.byoSecrets ?? options.byo?.reader ?? (() => undefined)
+      const rows = (['youtube', 'instagram', 'tiktok', 'facebook', 'x'] as const).flatMap(
+        (channel) => {
+          const rec = options.byo?.record(channel)
+          if (rec === undefined) return []
+          return [
+            {
+              channel: rec.channel,
+              service_url: rec.service_url,
+              format: rec.format,
+              has_key: reader(rec.secret_ref) !== undefined,
+              ...(rec.updated_at === undefined ? {} : { updated_at: rec.updated_at }),
+            },
+          ]
+        },
+      )
+      return { rows }
+    },
+
+    setByoSource(_actor, input) {
+      if (options.byo === undefined)
+        throw new ApiError('not_implemented', '这台机器没有装配自带数据接口的那张卡。')
+      const rec = options.byo.set(input.channel, {
+        service_url: input.service_url,
+        ...(input.api_key === undefined ? {} : { api_key: input.api_key }),
+      })
+      const reader = options.byoSecrets ?? options.byo.reader
+      return {
+        channel: rec.channel,
+        service_url: rec.service_url,
+        format: rec.format,
+        has_key: reader(rec.secret_ref) !== undefined,
+        ...(rec.updated_at === undefined ? {} : { updated_at: rec.updated_at }),
+      }
+    },
+
+    clearByoSource(_actor, channel) {
+      return { cleared: options.byo?.clear(channel) ?? false }
+    },
+
+    testByoSource(_actor, input) {
+      const reader = options.byoSecrets ?? options.byo?.reader ?? (() => undefined)
+      const config =
+        input.service_url !== undefined
+          ? {
+              service_url: input.service_url,
+              secret_ref: byoSecretId(input.channel),
+              format: 'byo/v1' as const,
+            }
+          : options.byoDataSource?.(input.channel)
+      if (config === undefined)
+        return {
+          ok: false,
+          message:
+            '还没填服务地址。在卡上填一个能按工坊公开格式回数据的服务地址，再点一次「测试连接」。',
+        }
+      return byoTestConnection(
+        config,
+        input.api_key === undefined ? reader : () => input.api_key as string,
+        input.channel,
+        options.byoFetch,
+      )
     },
 
     async revealFromPublicLibrary(actor, input) {

@@ -6004,7 +6004,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         kolWallet.topup({ org_id: kolPrincipal.org_id, credits: topup, kind: 'purchased' })
       const before = kolWallet.balance(kolPrincipal.org_id).available
 
-      // ① 浏览：**免费**。这一行之后余额一分不少，是这条题的一半
+      // ① 浏览：**按次收**（WP126，价目表说了算）。余额不够会抛，让场景自己看见
       kolPublicService.browse(kolPrincipal, { channel: channel as KolChannel, limit: 10 })
       const afterBrowse = kolWallet.balance(kolPrincipal.org_id).available
       const browse_credits = Math.round((before - afterBrowse) * 100) / 100

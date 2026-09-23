@@ -8,7 +8,7 @@
  * 要钉住的事：
  *
  * 1. 没绑那个 binding：`/v1/data/kol/*` 404，health 里 `kol_public` **如实 false**；
- * 2. 绑了就 true；浏览免费——一分钱不扣；
+ * 2. 绑了就 true；浏览按次收费（WP126）：空库 0 条不收钱，有结果才扣；
  * 3. reveal 真扣钱，而且**明文邮箱只在响应里出现一次**（库里只有哈希与密文）；
  * 4. 余额不够 402，**钱一分没动**，而且这一次根本没碰库；
  * 5. 库里没这个人：404，**那笔预扣被释放**（不是等一小时的孤儿清扫）；
@@ -117,7 +117,7 @@ describe('WP116 Workers 形态 · 绑与不绑', () => {
     )
   })
 
-  it('绑了就 true，浏览免费——一分钱不扣', async () => {
+  it('绑了就 true；浏览按次收费（WP126）：空库 0 条不收钱，有结果才扣 0.2', async () => {
     const cloud = fakeCloud({ kol: true })
     const { token, org } = await issueToken(cloud, 'a@example.com', 'ws_a')
     cloud.wallet(org).wallet.topup({ org_id: org, credits: 100, kind: 'purchased' })
@@ -125,10 +125,16 @@ describe('WP116 Workers 形态 · 绑与不绑', () => {
     const health = await call(cloud, '/v1/cloud/health')
     expect((health.body.data as { modules: Record<string, boolean> }).modules.kol_public).toBe(true)
 
+    // 空库：搜到 0 条 → 口径②不收钱
     const browse = await call(cloud, '/v1/data/kol/creators', { token })
     expect(browse.status).toBe(200)
-    // 自己充的 100 + WP121 注册赠送（浏览这一下一分没扣，这才是这条用例要的）
     expect(await available(cloud, token)).toBe(100 + SIGNUP_BONUS)
+
+    // 种一个人再搜：照价扣 0.2（命中缓存与未命中同价——库本身就是缓存）
+    await seedCreator(cloud, token)
+    const listed = await call(cloud, '/v1/data/kol/creators?channel=youtube', { token })
+    expect(listed.status).toBe(200)
+    expect(100 + SIGNUP_BONUS - (await available(cloud, token))).toBeCloseTo(0.2, 6)
   })
 })
 

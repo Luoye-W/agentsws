@@ -184,6 +184,7 @@ import { knowledgeSourceFile } from './knowledge-file.js'
 import { importKnowledgePack } from './knowledge-pack.js'
 import { checkUpload, UploadRejected, uploadBlobKey, uploadSubjectRef } from './knowledge-upload.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
+import { createByoSourceStore } from './kol-byo.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
 import { createKolPublicClient } from './kol-public-client.js'
@@ -1568,6 +1569,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       newContactId: () => `ctc_${Math.floor(random() * 0xffffffff).toString(36)}`,
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
     })
+    // WP126：自带数据接口的配置仓（每渠道一个；密钥只进本机加密库）
+    const byoStore = createByoSourceStore({
+      secrets: brandSecrets,
+      ...(dbDir === undefined ? {} : { dbDir }),
+      now: () => clock.now(),
+    })
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
@@ -1580,6 +1587,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * （同 `work: () => workRef` 那一处：打断装配期的环，取值时才查）。
        */
       capabilitySource: (capability) => ownCloud.sourceOf(capability),
+      // WP126 数据接口路由：顺序 / 开关从设置来（没配过的渠道回默认顺序）
+      dataSourceRoute: (channel) => ownCloud.routeOf(channel),
+      // WP126 自带数据接口：配置仓 + 路由第②级用的那份配置
+      byo: byoStore,
+      byoDataSource: (channel) => byoStore.get(channel),
+      byoSecrets: (ref) => byoStore.reader(ref),
       // 价目从云上那一份来（49 M4），本地一个数字都不自己算
       priceOf: (capability) => ownCloud.priceOf(capability),
       // 联系方式的明文落在**这个品牌**那一段加密库里（key 名已按品牌加过前缀）

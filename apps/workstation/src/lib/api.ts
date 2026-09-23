@@ -1454,8 +1454,56 @@ export interface PricingView {
 export interface CapabilitySourceSettings {
   workspace_id: string
   capability_sources: Record<string, CapabilitySource>
+  /** WP126：数据接口路由（键 kol.<渠道>，只含显式改过的渠道）。 */
+  data_source_routing?: Record<string, DataSourceRoute>
   updated_at?: string
 }
+
+/* ── WP126：数据接口路由 + 自带数据接口 ─────────────────────────── */
+
+export type DataSourceLevel = 'official_key' | 'byo_source' | 'workshop'
+
+export interface DataSourceRoute {
+  order: DataSourceLevel[]
+  disabled: DataSourceLevel[]
+}
+
+export interface KolByoSourceView {
+  channel: string
+  service_url: string
+  format: 'byo/v1'
+  has_key: boolean
+  updated_at?: string
+}
+
+export const getKolByoSources = (assignment?: string): Promise<{ rows: KolByoSourceView[] }> =>
+  api('/v1/kol/byo-sources', withAssignment(assignment))
+
+export const setKolByoSource = (
+  input: { channel: string; service_url: string; api_key?: string },
+  assignment?: string,
+): Promise<KolByoSourceView> =>
+  api('/v1/kol/byo-sources', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const testKolByoSource = (
+  input: { channel: string; service_url?: string; api_key?: string },
+  assignment?: string,
+): Promise<{ ok: boolean; message: string }> =>
+  api('/v1/kol/byo-sources/test', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const clearKolByoSource = (
+  channel: string,
+  assignment?: string,
+): Promise<{ cleared: boolean }> =>
+  api(`/v1/kol/byo-sources/${channel}`, { method: 'DELETE', ...withAssignment(assignment) })
 
 export const getCloudCredits = (assignment?: string): Promise<CloudCreditsView> =>
   api('/v1/cloud/credits', withAssignment(assignment))
@@ -1631,14 +1679,18 @@ export const deleteKolCloud = (assignment?: string): Promise<KolCloudDeleteView>
 export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', withAssignment(assignment))
 
-/** 整张表一次给全——两个标签页各改一项就不会互相覆盖。 */
+/** 整张表一次给全——两个标签页各改一项就不会互相覆盖。路由表（WP126）一并对齐。 */
 export const setCapabilitySources = (
   capability_sources: Record<string, CapabilitySource>,
   assignment?: string,
+  data_source_routing?: Record<string, DataSourceRoute>,
 ): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', {
     method: 'PUT',
-    body: { capability_sources },
+    body: {
+      capability_sources,
+      ...(data_source_routing === undefined ? {} : { data_source_routing }),
+    },
     ...withAssignment(assignment),
   })
 

@@ -48,6 +48,11 @@ export type CapabilitySources = Record<string, CapabilitySource>
 export interface CapabilitySourceSettings {
   workspace_id: WorkspaceId
   capability_sources: CapabilitySources
+  /**
+   * WP126 数据接口路由（键 `kol.<channel>`，只含显式改过的渠道）。
+   * 没存的渠道用 `DEFAULT_DATA_SOURCE_ORDER`。
+   */
+  data_source_routing?: Record<string, DataSourceRoute>
   /** 上次改是什么时候（没改过就没有）。 */
   updated_at?: Iso8601
 }
@@ -374,3 +379,35 @@ export interface CloudCreditsView {
   /** 这一份是什么时候取的（本地缓存 60 秒）。 */
   fetched_at?: Iso8601
 }
+
+/* ------------------------------------------------------------------ */
+/* WP126：数据接口路由（每个渠道 × 每种动作一张四级表）                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 数据来源的三层（第四层「都没有」不是一层，是一句人话 + 两个入口，见 docs/75）。
+ *
+ * - `official_key`：**用户自己的官方平台 key**（连接页那张卡上的 token）；
+ * - `byo_source`：**用户自带的数据接口**（高级卡上自己填的服务地址 + 密钥）；
+ * - `workshop`：**Agents 工坊官方数据接口**（积分计价；对外只有这一个名字，
+ *   绝不出现上游名）。
+ */
+export type DataSourceLevel = 'official_key' | 'byo_source' | 'workshop'
+
+/** 默认顺序（WP126 定论 1）：自己的 key → 自己的接口 → 工坊的（积分）。 */
+export const DEFAULT_DATA_SOURCE_ORDER: readonly DataSourceLevel[] = [
+  'official_key',
+  'byo_source',
+  'workshop',
+]
+
+/** 一个渠道的数据来源路由：顺序可调、每级可关。缺省用 `DEFAULT_DATA_SOURCE_ORDER`。 */
+export interface DataSourceRoute {
+  /** 有序，从先到后。 */
+  order: DataSourceLevel[]
+  /** 被用户关掉的那几级（关掉 = 这一级当"没配"处理，直接跳过）。 */
+  disabled: DataSourceLevel[]
+}
+
+/** 逐级回退时，每一级对这个动作支不支持（WP126：不支持才落下一级；报错不落）。 */
+export type DataSourceAction = 'search' | 'profile' | 'audit' | 'contacts'

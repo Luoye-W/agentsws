@@ -129,13 +129,27 @@ describe('WP61 计费', () => {
     expect(after.status).toBe(200)
   })
 
-  it('免费动作不预扣，但记一条 0 积分的计量事件', async () => {
+  it('浏览 / 搜索按 data.kol.lookup 收；余额不够 402，充值后同一条就过', async () => {
     const h = harness({ credits: 0 })
-    const listed = await h.call('/v1/data/kol/creators')
+    h.service.contributeAs(
+      {
+        account_id: 'acc_1',
+        org_id: 'org_1',
+        workspace_id: 'ws_1',
+        scopes: ['data'],
+        region: 'global',
+      },
+      [observation()],
+    )
+    const denied = await h.call('/v1/data/kol/creators?channel=youtube')
+    expect(denied.status).toBe(402)
+    expect(denied.body.code).toBe('insufficient_credits')
+    expect(String(denied.body.message)).toContain('积分')
+    // 只拒这一次不冻结：充了就能用，而且真扣了钱
+    h.wallet.topup({ org_id: 'org_1', credits: 10, kind: 'purchased' })
+    const listed = await h.call('/v1/data/kol/creators?channel=youtube')
     expect(listed.status).toBe(200)
-    const events = h.walletStore.events({ org_id: 'org_1' })
-    expect(events).toHaveLength(1)
-    expect(events[0]?.credits).toBe(0)
+    expect((listed.body.data as { credits: number }).credits).toBeGreaterThan(0)
   })
 })
 
@@ -283,8 +297,8 @@ describe('WP61 贡献奖励风控', () => {
 })
 
 describe('WP61 k-匿名基准', () => {
-  it('桶里不到 20 条不出数，只说一句人话', async () => {
-    const h = harness()
+  it('桶里不到 20 条不出数，只说一句人话——而且不收钱（WP126 口径②）', async () => {
+    const h = harness({ credits: 100 })
     seed(h, BENCHMARK_MIN_SAMPLES - 1)
     const thin = await h.call('/v1/data/kol/benchmarks?channel=youtube&followers_band=10k-100k')
     expect(thin.status).toBe(200)
@@ -292,22 +306,29 @@ describe('WP61 k-匿名基准', () => {
       insufficient_samples: boolean
       engagement_rate?: unknown
       note: string
+      credits: number
     }
     expect(thinData.insufficient_samples).toBe(true)
     expect(thinData.engagement_rate).toBeUndefined()
     expect(thinData.note).toContain('20')
+    expect(thinData.credits).toBe(0)
+    expect(h.wallet.balance('org_1').available).toBe(100)
   })
 
-  it('够 20 条只回分位数，不回任何个体', async () => {
-    const h = harness()
+  it('够 20 条只回分位数，不回任何个体——并且扣一次 lookup（WP126）', async () => {
+    const h = harness({ credits: 100 })
     seed(h, BENCHMARK_MIN_SAMPLES)
+    const before = h.wallet.balance('org_1').available
     const full = await h.call('/v1/data/kol/benchmarks?channel=youtube&followers=50000')
     const data = full.body.data as {
       insufficient_samples: boolean
       sample_size: number
+      credits: number
       engagement_rate: { p25: number; p50: number; p75: number }
     }
     expect(data.insufficient_samples).toBe(false)
+    expect(data.credits).toBeGreaterThan(0)
+    expect(h.wallet.balance('org_1').available).toBeLessThan(before)
     expect(data.sample_size).toBe(BENCHMARK_MIN_SAMPLES)
     expect(Object.keys(data.engagement_rate).sort()).toEqual(['p25', 'p50', 'p75'])
     expect(JSON.stringify(data)).not.toContain('creator0')
@@ -486,8 +507,8 @@ describe('WP61 体检报告', () => {
     region: 'global' as const,
   }
 
-  it('样本不够就明说，不给编出来的估计值', async () => {
-    const h = harness()
+  it('样本不够就明说，不给编出来的估计值（体检报告本身照价收，人存在就收）', async () => {
+    const h = harness({ credits: 100 })
     h.service.contributeAs(principal, [observation()])
     const res = await h.call(`${KEY}/audit`)
     const report = res.body.data as {
@@ -500,15 +521,16 @@ describe('WP61 体检报告', () => {
     expect(report.note).toContain('样本不够')
   })
 
-  it('深度体检是付费的那条（免费那条一分不扣）', async () => {
+  it('体检报告付费（WP126 起 GET audit 与 POST deep-audit 同价，都扣 data.kol.audit）', async () => {
     const h = harness({ credits: 100 })
     h.service.contributeAs(principal, [observation()])
-    await h.call(`${KEY}/audit`)
-    const free = h.wallet.balance('org_1').available
-    expect(free).toBe(100)
+    const before = h.wallet.balance('org_1').available
+    const basic = await h.call(`${KEY}/audit`)
+    expect(basic.status).toBe(200)
+    expect(h.wallet.balance('org_1').available).toBeLessThan(before)
     const deep = await h.call(`${KEY}/deep-audit`, { method: 'POST' })
     expect(deep.status).toBe(200)
     expect((deep.body.data as { depth: string }).depth).toBe('deep')
-    expect(h.wallet.balance('org_1').available).toBeLessThan(100)
+    expect(h.wallet.balance('org_1').available).toBeLessThan(before)
   })
 })
