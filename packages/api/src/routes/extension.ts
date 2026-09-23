@@ -316,6 +316,13 @@ export interface ExtensionContentObservation {
   author: { external_id: string; handle?: string; name?: string; followers?: number }
   orientation?: 'landscape' | 'portrait'
   duration_seconds?: number
+  /**
+   * WP129：页面上平台自己打的「含付费推广」标识。没采到就别带这一格——
+   * `false` 是"看过、没有"。登录了云账号时随内容观测进公共库。
+   */
+  paid_promotion?: boolean
+  /** WP129：有没有带货入口（商品标签 / 购物车 / 商品链接）。语义同上。 */
+  shoppable?: boolean
   captured_at: Iso8601
   source_url?: string
 }
@@ -323,6 +330,12 @@ export interface ExtensionContentObservation {
 export interface ExtensionContentResult {
   status: 'ok' | 'deduped'
   content_id: string
+  /**
+   * WP129：这一条有没有送进公共红人库（1 / 0）。登录了云账号才会送（同红人观测的
+   * 规则，没有第二个开关）；没登录、云连不上、作者 handle 认不出来都是 0。
+   * 老服务不回这一格——插件当 0 看。
+   */
+  forwarded_to_public_library?: number
 }
 
 export interface ExtensionContentComment {
@@ -496,6 +509,9 @@ const contentObservationSchema = z
       .strict(),
     orientation: z.enum(['landscape', 'portrait']).optional(),
     duration_seconds: z.number().nonnegative().optional(),
+    // WP129：带货 / 广告标识（只加；布尔，没采到就不带）
+    paid_promotion: z.boolean().optional(),
+    shoppable: z.boolean().optional(),
     captured_at: z.string().min(1),
     source_url: z.string().max(600).optional(),
   })

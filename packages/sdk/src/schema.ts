@@ -43724,6 +43724,8 @@ export interface operations {
           /** @enum {string} */
           orientation?: 'landscape' | 'portrait'
           duration_seconds?: number
+          paid_promotion?: boolean
+          shoppable?: boolean
           captured_at: string
           source_url?: string
         }
@@ -43805,6 +43807,8 @@ export interface operations {
           /** @enum {string} */
           orientation?: 'landscape' | 'portrait'
           duration_seconds?: number
+          paid_promotion?: boolean
+          shoppable?: boolean
           captured_at: string
           source_url?: string
           campaign_id?: string

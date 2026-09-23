@@ -218,6 +218,30 @@ export function isLibraryStore(store: KolStore): store is KolStore & KolLibraryS
   return typeof (store as Partial<KolLibraryStore>).libraryStats === 'function'
 }
 
+/**
+ * WP129：内容观测那一条写路要的几格。
+ *
+ * 与 {@link KolLibraryStore} 分开：那一组是聚合与后台，只在落盘库上有；这一组是
+ * **逐行读写**，内存档实现起来一眼能看完——插件的内容路在测试与 `bin/dev.mjs`
+ * 里也得能走通，不该因为"内存档没有后台"就 501。
+ *
+ * 用 {@link isContentStore} 判。
+ */
+export interface KolContentStore {
+  content(channel: KolChannel, external_id: string): PublicContentSample | undefined
+  putContent(row: PublicContentSample): void
+  putContentMetric(row: ContentMetricRow): void
+  /** 这条内容在这个 UTC 日（`YYYY-MM-DD`）里记过指标没有——幂等分桶就看它。 */
+  contentMetricOnDay(channel: KolChannel, external_id: string, day: string): boolean
+  /** 这个人要求过被移除吗（移除过的人，内容也不收）。 */
+  optedOut(channel: KolChannel, handle: string): boolean
+}
+
+/** 这个库带不带内容写路（WP129）。 */
+export function isContentStore(store: KolStore): store is KolStore & KolContentStore {
+  return typeof (store as Partial<KolContentStore>).contentMetricOnDay === 'function'
+}
+
 /** 基准缓存多久算新鲜。 */
 export const BENCHMARK_CACHE_MS = 60 * 60 * 1000
 
@@ -243,8 +267,10 @@ function matches(row: CreatorRow, filter: CreatorFilter): boolean {
   return true
 }
 
-export class MemoryKolStore implements KolStore {
+export class MemoryKolStore implements KolStore, KolContentStore {
   private readonly creators = new Map<string, CreatorRow>()
+  private readonly contents = new Map<string, PublicContentSample>()
+  private readonly contentMetrics = new Map<string, ContentMetricRow>()
   private readonly obs: ObservationRow[] = []
   private readonly contacts = new Map<string, ContactRow>()
   private readonly disputes: DisputeRow[] = []
@@ -380,6 +406,44 @@ export class MemoryKolStore implements KolStore {
         removed += 1
       }
     return removed
+  }
+
+  /* ── WP129：内容写路（KolContentStore）。合并规则与 sqlite 那份逐条一致 ── */
+
+  content(channel: KolChannel, external_id: string): PublicContentSample | undefined {
+    const row = this.contents.get(keyOf(channel, external_id))
+    return row === undefined ? undefined : { ...row }
+  }
+
+  putContent(row: PublicContentSample): void {
+    const key = keyOf(row.channel, row.external_id)
+    const prev = this.contents.get(key)
+    // 与 sqlite 的 `COALESCE(excluded.x, 原值)` 同义：这一次没给的格子不擦掉上一次的
+    const merged: Record<string, unknown> = { ...(prev ?? {}) }
+    for (const [k, v] of Object.entries(row)) if (v !== undefined) merged[k] = v
+    this.contents.set(key, merged as unknown as PublicContentSample)
+  }
+
+  putContentMetric(row: ContentMetricRow): void {
+    this.contentMetrics.set(`${row.channel}/${row.content_external_id}/${row.observed_at}`, {
+      ...row,
+    })
+  }
+
+  contentMetricOnDay(channel: KolChannel, external_id: string, day: string): boolean {
+    for (const row of this.contentMetrics.values())
+      if (
+        row.channel === channel &&
+        row.content_external_id === external_id &&
+        row.observed_at.slice(0, 10) === day
+      )
+        return true
+    return false
+  }
+
+  /** 内存档没有移除墓碑（后台只在落盘库上）。 */
+  optedOut(_channel: KolChannel, _handle: string): boolean {
+    return false
   }
 
   putBenchmark(row: Benchmark): void {
@@ -600,6 +664,18 @@ CREATE TABLE IF NOT EXISTS kol_content_metrics (
   source              TEXT NOT NULL,
   at                  TEXT NOT NULL,
   PRIMARY KEY (channel, content_external_id, observed_at)
+);
+
+-- WP129：内容上的平台原生标识（含付费推广 / 带货）。旁表，不 ALTER 主表。
+-- NULL = 没采到；0 = 看过、没有；1 = 有。
+CREATE TABLE IF NOT EXISTS kol_content_flags (
+  channel        TEXT NOT NULL,
+  external_id    TEXT NOT NULL,
+  handle         TEXT NOT NULL,
+  paid_promotion INTEGER,
+  shoppable      INTEGER,
+  updated_at     TEXT NOT NULL,
+  PRIMARY KEY (channel, external_id)
 );
 
 -- 账号级指标快照。**与 kol_observations 刻意分开**：观察要带 posts_30d 与
@@ -904,7 +980,7 @@ function toBenchmark(row: BenchmarkSqlRow): Benchmark {
   }
 }
 
-export class SqliteKolStore implements KolStore, KolLibraryStore {
+export class SqliteKolStore implements KolStore, KolLibraryStore, KolContentStore {
   private readonly db: SqliteLike
 
   constructor(db: SqliteLike) {
@@ -1400,11 +1476,39 @@ export class SqliteKolStore implements KolStore, KolLibraryStore {
         row.source,
         row.updated_at,
       )
+    if (row.paid_promotion === undefined && row.shoppable === undefined) return
+    // WP129：标识进旁表；没给的那一格不擦掉上一次的（与主表同一条 COALESCE 规矩）
+    const flag = (v: boolean | undefined): number | null => (v === undefined ? null : v ? 1 : 0)
+    this.db
+      .prepare(
+        `INSERT INTO kol_content_flags
+           (channel, external_id, handle, paid_promotion, shoppable, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(channel, external_id) DO UPDATE SET
+           handle         = excluded.handle,
+           paid_promotion = COALESCE(excluded.paid_promotion, kol_content_flags.paid_promotion),
+           shoppable      = COALESCE(excluded.shoppable, kol_content_flags.shoppable),
+           updated_at     = excluded.updated_at`,
+      )
+      .run(
+        row.channel,
+        row.external_id,
+        row.handle,
+        flag(row.paid_promotion),
+        flag(row.shoppable),
+        row.updated_at,
+      )
   }
 
   content(channel: KolChannel, external_id: string): PublicContentSample | undefined {
     const row = this.db
-      .prepare('SELECT * FROM kol_contents WHERE channel = ? AND external_id = ?')
+      .prepare(
+        `SELECT c.*, f.paid_promotion AS paid_promotion, f.shoppable AS shoppable
+           FROM kol_contents c
+           LEFT JOIN kol_content_flags f
+             ON f.channel = c.channel AND f.external_id = c.external_id
+          WHERE c.channel = ? AND c.external_id = ?`,
+      )
       .get(channel, external_id) as ContentSqlRow | undefined
     return row === undefined ? undefined : toContent(row)
   }
@@ -1412,11 +1516,27 @@ export class SqliteKolStore implements KolStore, KolLibraryStore {
   contentsOf(channel: KolChannel, handle: string, limit: number): PublicContentSample[] {
     const rows = this.db
       .prepare(
-        `SELECT * FROM kol_contents WHERE channel = ? AND handle = ?
-          ORDER BY COALESCE(published_at, observed_at) DESC LIMIT ?`,
+        `SELECT c.*, f.paid_promotion AS paid_promotion, f.shoppable AS shoppable
+           FROM kol_contents c
+           LEFT JOIN kol_content_flags f
+             ON f.channel = c.channel AND f.external_id = c.external_id
+          WHERE c.channel = ? AND c.handle = ?
+          ORDER BY COALESCE(c.published_at, c.observed_at) DESC LIMIT ?`,
       )
       .all(channel, handle, limit) as ContentSqlRow[]
     return rows.map(toContent)
+  }
+
+  contentMetricOnDay(channel: KolChannel, external_id: string, day: string): boolean {
+    // 前缀比较：observed_at 是 ISO 串，`YYYY-MM-DD` 开头就是那一天（UTC）
+    const row = this.db
+      .prepare(
+        `SELECT 1 AS hit FROM kol_content_metrics
+          WHERE channel = ? AND content_external_id = ? AND substr(observed_at, 1, 10) = ?
+          LIMIT 1`,
+      )
+      .get(channel, external_id, day) as { hit: number } | undefined
+    return row !== undefined
   }
 
   putContentMetric(row: ContentMetricRow): void {
@@ -1521,6 +1641,7 @@ export class SqliteKolStore implements KolStore, KolLibraryStore {
       ['kol_contact_extra', 'channel = ? AND handle = ?'],
       ['kol_contacts', 'channel = ? AND handle = ?'],
       ['kol_content_metrics', 'channel = ? AND handle = ?'],
+      ['kol_content_flags', 'channel = ? AND handle = ?'],
       ['kol_contents', 'channel = ? AND handle = ?'],
       ['kol_metric_snapshots', 'channel = ? AND handle = ?'],
       ['kol_observations', 'channel = ? AND handle = ?'],
@@ -1638,6 +1759,9 @@ interface ContentSqlRow {
   observed_at: string
   source: string
   updated_at: string
+  /** WP129：LEFT JOIN 旁表来的两格（没有那一行就是 null / 不存在）。 */
+  paid_promotion?: number | null
+  shoppable?: number | null
 }
 
 interface MetricSqlRow {
@@ -1672,6 +1796,12 @@ function toContent(row: ContentSqlRow): PublicContentSample {
     ...(row.likes === null ? {} : { likes: row.likes }),
     ...(row.comments === null ? {} : { comments: row.comments }),
     ...(row.shares === null ? {} : { shares: row.shares }),
+    ...(row.paid_promotion === null || row.paid_promotion === undefined
+      ? {}
+      : { paid_promotion: row.paid_promotion === 1 }),
+    ...(row.shoppable === null || row.shoppable === undefined
+      ? {}
+      : { shoppable: row.shoppable === 1 }),
     observed_at: row.observed_at,
     source: row.source as KolObservationSource,
     updated_at: row.updated_at,

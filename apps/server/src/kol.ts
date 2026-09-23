@@ -294,6 +294,11 @@ export interface KolContentObservation {
   likes?: number
   comments_count?: number
   shares?: number
+  /** WP129：时长 / 发布时间 / 带货与广告标识（只加；JSON 档，老行没有这几格）。 */
+  duration_seconds?: number
+  published_at?: Iso8601
+  paid_promotion?: boolean
+  shoppable?: boolean
   observed_at: Iso8601
 }
 
