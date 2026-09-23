@@ -327,8 +327,13 @@ describe('demo 的钟锚在启动那天（WP100）', () => {
   it('摆拍数据跟着挪同样的天数：那一单还是"钟点之前 N 天"下的', () => {
     const order = demo.world.connect.state.orders.find((o) => o.id === 'ord_1001')
     if (order === undefined) throw new Error('demo 里应该有 #1001 这一单')
-    // pack 里 #1001 是 2026-08-28 下的、09-04 签收，场景开钟是 09-07 09:00+08
-    const start = Date.parse(demoClockStart('2026-09-07T09:00:00+08:00', Date.now()))
+    // pack 里 #1001 是 2026-08-28 下的、09-04 签收，场景开钟是 09-07 09:00+08。
+    // 「启动那天」要跟 demo 起来时用的同一个钟——demo 是在这个文件顶部 setup 时起的，
+    // 那一刻的 Date.now() 才是它挪数据用的锚。这里若再取一次 Date.now()，跨过午夜跑
+    // 这条测试就会多出一天（09-24 真红过：expected 11 to be 10）。
+    const start = Date.parse(
+      demoClockStart('2026-09-07T09:00:00+08:00', Date.parse(demo.world.clock.now())),
+    )
     const days = (iso: string): number => Math.round((start - Date.parse(iso)) / (24 * 3_600_000))
     expect(days(order.created_at)).toBe(10)
     expect(order.delivered_at).toBeDefined()
