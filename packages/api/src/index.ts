@@ -232,14 +232,34 @@ export {
   readVisibleEvents,
 } from './routes/events.js'
 export type {
+  ExtensionBioLinkObservation,
+  ExtensionBioLinkResult,
+  ExtensionContactContribution,
+  ExtensionContactDispute,
+  ExtensionContactLookup,
+  ExtensionContactSave,
+  ExtensionContactSaveResult,
+  ExtensionContentComment,
+  ExtensionContentObservation,
+  ExtensionContentResult,
+  ExtensionContentSave,
+  ExtensionContentSaveResult,
+  ExtensionContentStats,
+  ExtensionCreatorKey,
+  ExtensionCreatorReport,
+  ExtensionCreatorSave,
+  ExtensionCreatorSaveResult,
   ExtensionHello,
   ExtensionIngestResult,
   ExtensionIngestRow,
   ExtensionIngestStatus,
   ExtensionObservation,
   ExtensionPort,
+  ExtensionRevealPricing,
+  ExtensionSeedSignature,
+  ExtensionSetup,
 } from './routes/extension.js'
-export { extensionRoutes } from './routes/extension.js'
+export { extensionRoutes, REVEAL_FREE_WINDOW_DAYS } from './routes/extension.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export {

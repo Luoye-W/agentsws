@@ -27,6 +27,7 @@ import type {
   Creator,
   CreatorContact,
   Deliverable,
+  Iso8601,
   KolChannel,
   KolExchange,
   PlatformAccount,
@@ -46,7 +47,9 @@ import type BetterSqlite3 from 'better-sqlite3'
  * 库里的七张表。名字与对象类型一一对应，不另起别名。
  *
  * 第七张 `exchange` 是 WP117b 加的（66 复测 #19）：一条合作上的往来信件。
- * 建表语句是 `CREATE TABLE IF NOT EXISTS`，所以老库直接接着用，不用迁移。
+ * WP119c 又加了四张（`account_observation` / `content` / `content_observation` /
+ * `bio_link_observation`，都是插件那面要的）：建表语句是
+ * `CREATE TABLE IF NOT EXISTS`，所以老库直接接着用，不用迁移。
  */
 export type KolTable =
   | 'creator'
@@ -56,6 +59,10 @@ export type KolTable =
   | 'deliverable'
   | 'tracked_link'
   | 'exchange'
+  | 'account_observation'
+  | 'content'
+  | 'content_observation'
+  | 'bio_link_observation'
 
 export const KOL_TABLES: readonly KolTable[] = [
   'creator',
@@ -65,6 +72,10 @@ export const KOL_TABLES: readonly KolTable[] = [
   'deliverable',
   'tracked_link',
   'exchange',
+  'account_observation',
+  'content',
+  'content_observation',
+  'bio_link_observation',
 ]
 
 interface KolBackend {
@@ -158,6 +169,20 @@ export interface KolStore {
    */
   exchanges(filter?: { collaboration_id?: string; creator_id?: string }): KolExchange[]
 
+  /* ── WP119c：插件那面要的读取/写入（四张新表的口）────────────────── */
+  /** 一条账号的粉丝快照，时间正序（趋势要从第一张看到最近一张）。 */
+  accountObservations(filter?: {
+    account_id?: string
+    creator_id?: string
+  }): KolAccountObservation[]
+  contents(): KolContent[]
+  contentObservations(filter?: {
+    creator_id?: string
+    channel?: KolChannel
+    content_external_id?: string
+  }): KolContentObservation[]
+  bioLinks(): KolBioLinkObservation[]
+
   saveCreator(row: Creator): void
   saveAccount(row: PlatformAccount): void
   /** 联系方式。入参里**没有**明文那一格（见文件头第 1 条）。 */
@@ -166,6 +191,14 @@ export interface KolStore {
   saveDeliverable(row: Deliverable): void
   saveLink(row: TrackedLink): void
   saveExchange(row: KolExchange): void
+  /** WP119c：粉丝快照只追不删。 */
+  saveAccountObservation(row: KolAccountObservation): void
+  /** WP119c：按 `channel + content_external_id` upsert；评论随行整体替换。 */
+  saveContent(row: KolContent): void
+  /** WP119c：内容观测只追；幂等键由调用方查重后决定写不写。 */
+  saveContentObservation(row: KolContentObservation): void
+  /** WP119c：按 `platform + slug` upsert（一次抓取覆盖上一次）。 */
+  saveBioLink(row: KolBioLinkObservation): void
   /** 归因算完之后回填那三个数。链接不在就什么也不做（不凭空建一条）。 */
   recordAttribution(input: {
     tracked_link_id: string
@@ -194,6 +227,97 @@ export interface KolStore {
   removeRow(table: KolTable, id: string): void
   close(): void
 }
+
+/* ── WP119c：插件那面要的四张表（全部只加不改；行形状都在这个文件里定）───── */
+
+/**
+ * 一条账号在某一刻的粉丝数快照（**只追不删**）。插件每报一次观测就追加一行，
+ * 粉丝趋势（插件面板那条线）与 snapshot_count 都从它算——在那之前库里只有
+ * 「最后一次看到的数」，趋势无从谈起。
+ */
+export interface KolAccountObservation {
+  id: string
+  account_id: string
+  creator_id: string
+  channel: KolChannel
+  handle: string
+  followers?: number
+  followers_text?: string
+  observed_at: Iso8601
+}
+
+/** 一条已采评论。**只住在 `content` 表里**（自己的内容库）——公共池那两张表没有它。 */
+export interface KolContentComment {
+  text: string
+  author?: string
+  like_count?: number
+  published_at?: string
+}
+
+/** 自己的内容库：一条内容 + 可能的已采评论（最多保 200 条）。 */
+export interface KolContent {
+  id: string
+  creator_id?: string
+  channel: KolChannel
+  handle: string
+  content_external_id: string
+  content_type: 'video' | 'post' | 'reel'
+  title: string
+  url?: string
+  thumbnail_url?: string
+  published_at?: string
+  views?: number
+  likes?: number
+  comments_count?: number
+  shares?: number
+  orientation?: 'landscape' | 'portrait'
+  duration_seconds?: number
+  campaign_id?: string
+  captured_at: Iso8601
+  comments?: KolContentComment[]
+}
+
+/**
+ * 内容观测：一条内容在某一刻的数。**形状里没有评论**——这个类型连那一格都不存在，
+ * 与 schema 的 `.strict()` 是同一条红线的两半。
+ */
+export interface KolContentObservation {
+  id: string
+  creator_id?: string
+  channel: KolChannel
+  handle: string
+  content_external_id: string
+  content_type: 'video' | 'post' | 'reel'
+  title?: string
+  url?: string
+  views?: number
+  likes?: number
+  comments_count?: number
+  shares?: number
+  observed_at: Iso8601
+}
+
+/** 简介外链页（Linktree / Beacons）的一次抓取。按 `platform + slug` upsert。 */
+export interface KolBioLinkObservation {
+  id: string
+  platform: 'linktree' | 'beacons'
+  slug: string
+  source_url: string
+  links: { title?: string; url: string }[]
+  social_links: { type?: string; url: string }[]
+  emails: string[]
+  bio?: string
+  display_name?: string
+  avatar_url?: string
+  captured_at: Iso8601
+  observed_at: Iso8601
+}
+
+/** WP119c 新增的四张表对应的行类型（见上）；单独给个名字好读。 */
+export type KolExtraTable = Extract<
+  KolTable,
+  'account_observation' | 'content' | 'content_observation' | 'bio_link_observation'
+>
 
 export function createKolStore(options: KolStoreOptions): KolStore {
   const backend =
@@ -247,6 +371,28 @@ export function createKolStore(options: KolStoreOptions): KolStore {
         .filter((e) => filter?.creator_id === undefined || e.creator_id === filter.creator_id)
         .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id)),
 
+    accountObservations: (filter) =>
+      backend
+        .all<KolAccountObservation>('account_observation')
+        .filter((o) => filter?.account_id === undefined || o.account_id === filter.account_id)
+        .filter((o) => filter?.creator_id === undefined || o.creator_id === filter.creator_id)
+        .sort(
+          (a, b) =>
+            Date.parse(a.observed_at) - Date.parse(b.observed_at) || a.id.localeCompare(b.id),
+        ),
+    contents: () => backend.all<KolContent>('content'),
+    contentObservations: (filter) =>
+      backend
+        .all<KolContentObservation>('content_observation')
+        .filter((o) => filter?.creator_id === undefined || o.creator_id === filter.creator_id)
+        .filter((o) => filter?.channel === undefined || o.channel === filter.channel)
+        .filter(
+          (o) =>
+            filter?.content_external_id === undefined ||
+            o.content_external_id === filter.content_external_id,
+        ),
+    bioLinks: () => backend.all<KolBioLinkObservation>('bio_link_observation'),
+
     saveCreator: (row) => backend.put('creator', row.id, row),
     saveAccount: (row) => backend.put('platform_account', row.id, row),
     saveContact: (row) => backend.put('creator_contact', row.id, row),
@@ -254,6 +400,10 @@ export function createKolStore(options: KolStoreOptions): KolStore {
     saveDeliverable: (row) => backend.put('deliverable', row.id, row),
     saveLink: (row) => backend.put('tracked_link', row.id, row),
     saveExchange: (row) => backend.put('exchange', row.id, row),
+    saveAccountObservation: (row) => backend.put('account_observation', row.id, row),
+    saveContent: (row) => backend.put('content', row.id, row),
+    saveContentObservation: (row) => backend.put('content_observation', row.id, row),
+    saveBioLink: (row) => backend.put('bio_link_observation', row.id, row),
 
     recordAttribution: (input) => {
       const link = backend.get<TrackedLink>('tracked_link', input.tracked_link_id)

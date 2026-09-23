@@ -32,6 +32,8 @@ async function wired() {
         shares_to_public_library: false,
         scopes: session.scopes,
         server_version: '0.1.0',
+        // WP119c：装配给了基址就带上（深链的基底只有一个真源）。
+        workbench_url: 'http://127.0.0.1:4317',
       }
     },
     ingest: (session, input) => {
@@ -41,6 +43,74 @@ async function wired() {
         forwarded_to_public_library: 0,
       }
     },
+    /* ── WP119c：最小桩——setup / report / seed 有形状，其余回固定值 ── */
+    setup: (session) => ({
+      organizations: [{ id: session.workspace_id, name: '我的品牌' }],
+      workspaces: [
+        { id: session.workspace_id, organization_id: session.workspace_id, name: '我的品牌' },
+      ],
+      brands: [
+        {
+          id: session.workspace_id,
+          organization_id: session.workspace_id,
+          workspace_id: session.workspace_id,
+          name: '我的品牌',
+        },
+      ],
+      campaigns: [],
+      creator_pool: { total: 0, creators: [] },
+    }),
+    saveCreator: (_session, input) => ({
+      status: 'ok' as const,
+      creator_id: 'cr_test',
+      ...(input.campaign_id === undefined ? {} : { campaign_id: input.campaign_id }),
+    }),
+    creatorReport: (_session, key) =>
+      key.handle === 'nobody'
+        ? undefined
+        : {
+            creator: { channel: key.channel, handle: key.handle },
+            report: {
+              followers: 123_000,
+              avg_views: null,
+              video_count: null,
+              follower_trend: null,
+              snapshot_count: 1,
+            },
+            tenant_pool: { saved: true, email: null, last_updated_at: null },
+          },
+    revealPricing: () => ({
+      capability: 'data.kol.lookup',
+      credits_per_reveal: 0.2,
+      free_window_days: 30,
+      note: '看一次邮箱的积分价。',
+    }),
+    contactLookup: () => Promise.resolve({ status: 'none' as const, message: '库里没有。' }),
+    contactContribute: () =>
+      Promise.resolve({ status: 'recorded' as const, action: 'new' as const, rewarded: false }),
+    contactDispute: () => Promise.resolve({ status: 'recorded' as const, message: '记下了。' }),
+    saveContact: (_session, input) =>
+      Promise.resolve(
+        input.contact_kind === 'phone'
+          ? ({ status: 'not_stored', creator_id: 'cr_test', reason: '这一版只收邮箱' } as const)
+          : ({ status: 'ok', contact_id: 'cc_test', creator_id: 'cr_test' } as const),
+      ),
+    contentObservation: (_session, input) =>
+      Promise.resolve({ status: 'ok' as const, content_id: `co_${input.content_external_id}` }),
+    contentSave: (_session, input) =>
+      Promise.resolve({
+        status: 'ok' as const,
+        content_id: `ct_${input.content_external_id}`,
+        creator_id: 'cr_test',
+        ...(input.captured_comments === undefined
+          ? {}
+          : { comments_stored: input.captured_comments.length }),
+      }),
+    bioLinkObservation: () => Promise.resolve({ status: 'ok' as const, attached_creators: 0 }),
+    seedSignature: (_session, key) =>
+      key.handle === 'nobody'
+        ? undefined
+        : { platform: key.channel, external_id: key.handle, topic_keywords: ['keyboard'] },
   }
   const gateway = createGateway({ ...h.deps, extension: port })
 
@@ -224,5 +294,187 @@ describe('观测的白名单', () => {
       body: { observations: Array.from({ length: 101 }, () => observation) },
     })
     expect(res.status).toBe(400)
+  })
+})
+
+/* ── WP119c：完整版面板要的那一批（docs/76 §10）────────────────────────── */
+
+/** 一把**只有 kol.observe** 的令牌：scope 不足的 403 要有测试钉住。 */
+async function pairedWithScope(
+  w: Awaited<ReturnType<typeof wired>>,
+  scopes: string[],
+): Promise<string> {
+  const made = await w.owner('POST', '/v1/extension/pairings', {})
+  const code = ((await made.json()) as { data: { code: string } }).data.code
+  const res = await w.plugin('POST', '/v1/extension/pair', { origin: EXT_ORIGIN, body: { code } })
+  const token = ((await res.json()) as { data: { token: string } }).data.token
+  // 配对发的令牌三scope全给；这里为了测「令牌上没有」这一格，把桩的认证换成受限会话。
+  const real = w.store.authenticate.bind(w.store)
+  ;(w.store as { authenticate: unknown }).authenticate = (raw: string, origin?: string) => {
+    const session = real(raw, origin)
+    return session === undefined ? undefined : { ...session, scopes: scopes as never }
+  }
+  return token
+}
+
+describe('WP119c：scope 的闸', () => {
+  it('只有 kol.observe 的令牌：写库的路与读库的 report / seed 全是 403；有 kol.read 的读路照常', async () => {
+    const w = await wired()
+    const token = await pairedWithScope(w, ['kol.observe'])
+    expect(
+      (await w.plugin('GET', '/v1/extension/setup', { token, origin: EXT_ORIGIN })).status,
+    ).toBe(403)
+    expect(
+      (
+        await w.plugin('POST', '/v1/extension/creators', {
+          token,
+          origin: EXT_ORIGIN,
+          body: { channel: 'youtube', handle: 'fixture', observed_at: nowIso() },
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (
+        await w.plugin('POST', '/v1/extension/contacts', {
+          token,
+          origin: EXT_ORIGIN,
+          body: {
+            channel: 'youtube',
+            handle: 'fixture',
+            contact_value: 'a@b.example',
+            contact_kind: 'email',
+          },
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (
+        await w.plugin('GET', '/v1/extension/creators/youtube/fixture/report', {
+          token,
+          origin: EXT_ORIGIN,
+        })
+      ).status,
+    ).toBe(403)
+  })
+
+  it('话里说清缺的是哪个 scope（不是一句干巴巴的 forbidden）', async () => {
+    const w = await wired()
+    const token = await pairedWithScope(w, ['kol.observe'])
+    const res = await w.plugin('GET', '/v1/extension/setup', { token, origin: EXT_ORIGIN })
+    expect(((await res.json()) as { message: string }).message).toContain('kol.capture')
+  })
+})
+
+function nowIso(): string {
+  return '2026-09-22T10:00:00.000Z'
+}
+
+describe('WP119c：report / reveal-pricing / contact', () => {
+  it('report：库里没有 = 404 + 人话', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    expect(
+      (
+        await w.plugin('GET', '/v1/extension/creators/youtube/nobody/report', {
+          token,
+          origin: EXT_ORIGIN,
+        })
+      ).status,
+    ).toBe(404)
+    const ok = await w.plugin('GET', '/v1/extension/creators/youtube/fixture/report', {
+      token,
+      origin: EXT_ORIGIN,
+    })
+    expect(ok.status).toBe(200)
+    const body = (await ok.json()) as { data: { tenant_pool: { saved: boolean } } }
+    expect(body.data.tenant_pool.saved).toBe(true)
+  })
+
+  it('reveal-pricing：读价不扣分', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const res = await w.plugin('GET', '/v1/extension/reveal-pricing', { token, origin: EXT_ORIGIN })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: { credits_per_reveal: number } }
+    expect(body.data.credits_per_reveal).toBe(0.2)
+  })
+
+  it('hello 带 workbench_url', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const res = await w.plugin('GET', '/v1/extension/hello', { token, origin: EXT_ORIGIN })
+    const body = (await res.json()) as { data: { workbench_url?: string } }
+    expect(body.data.workbench_url).toBe('http://127.0.0.1:4317')
+  })
+})
+
+describe('WP119c：评论文本红线（路由这一层）', () => {
+  const contentBody = {
+    channel: 'youtube',
+    content_external_id: 'vid_1',
+    content_type: 'video',
+    title: '一条视频',
+    stats: { views: 10_000 },
+    author: { external_id: 'UC123', handle: 'fixture' },
+    captured_at: '2026-09-22T10:00:00.000Z',
+  }
+
+  it('content-observations 带 captured_comments → 整批拒（400），服务端一个字段都没收到', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const res = await w.plugin('POST', '/v1/extension/content-observations', {
+      token,
+      origin: EXT_ORIGIN,
+      body: {
+        ...contentBody,
+        captured_comments: [{ text: '评论区的一段话', author: '路人' }],
+      },
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('contents 是唯一能带 captured_comments 的端点（200，且回执说实存几条）', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const res = await w.plugin('POST', '/v1/extension/contents', {
+      token,
+      origin: EXT_ORIGIN,
+      body: {
+        ...contentBody,
+        captured_comments: [{ text: '评论区的一段话', author: '路人' }],
+      },
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: { comments_stored?: number } }
+    expect(body.data.comments_stored).toBe(1)
+  })
+})
+
+describe('WP119c：seed-signature', () => {
+  it('缺参 400；不是种子 404；是种子回主题词', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    expect(
+      (await w.plugin('GET', '/v1/extension/seed-signature', { token, origin: EXT_ORIGIN })).status,
+    ).toBe(400)
+    expect(
+      (
+        await w.plugin('GET', '/v1/extension/seed-signature?platform=youtube&externalId=nobody', {
+          token,
+          origin: EXT_ORIGIN,
+        })
+      ).status,
+    ).toBe(404)
+    const ok = await w.plugin(
+      'GET',
+      '/v1/extension/seed-signature?platform=youtube&externalId=fixture',
+      {
+        token,
+        origin: EXT_ORIGIN,
+      },
+    )
+    expect(ok.status).toBe(200)
+    const body = (await ok.json()) as { data: { topic_keywords: string[] } }
+    expect(body.data.topic_keywords).toEqual(['keyboard'])
   })
 })

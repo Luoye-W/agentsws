@@ -44,5 +44,29 @@ export function brandExtensionPort(options: BrandExtensionPortOptions): Extensio
     store: options.store,
     hello: async (session) => (await portOf(session.workspace_id)).hello(session),
     ingest: async (session, input) => (await portOf(session.workspace_id)).ingest(session, input),
+
+    /* ── WP119c：每一条都按 session 上的 workspace_id 取那一套模块（52 O1 不变）── */
+    setup: async (session) => (await portOf(session.workspace_id)).setup(session),
+    saveCreator: async (session, input) =>
+      (await portOf(session.workspace_id)).saveCreator(session, input),
+    creatorReport: async (session, key) =>
+      (await portOf(session.workspace_id)).creatorReport(session, key),
+    revealPricing: async (session) => (await portOf(session.workspace_id)).revealPricing(session),
+    contactLookup: async (session, key) =>
+      (await portOf(session.workspace_id)).contactLookup(session, key),
+    contactContribute: async (session, key, input) =>
+      (await portOf(session.workspace_id)).contactContribute(session, key, input),
+    contactDispute: async (session, key, input) =>
+      (await portOf(session.workspace_id)).contactDispute(session, key, input),
+    saveContact: async (session, input) =>
+      (await portOf(session.workspace_id)).saveContact(session, input),
+    contentObservation: async (session, input) =>
+      (await portOf(session.workspace_id)).contentObservation(session, input),
+    contentSave: async (session, input) =>
+      (await portOf(session.workspace_id)).contentSave(session, input),
+    bioLinkObservation: async (session, input) =>
+      (await portOf(session.workspace_id)).bioLinkObservation(session, input),
+    seedSignature: async (session, key) =>
+      (await portOf(session.workspace_id)).seedSignature(session, key),
   }
 }

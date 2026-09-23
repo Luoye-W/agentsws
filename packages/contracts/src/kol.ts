@@ -138,6 +138,12 @@ export interface PlatformAccount {
   /** 平台上的用户名（带不带 @ 由解析归一，见 `kol-core` 的 `urls.ts`）。 */
   handle: string
   url: string
+  /**
+   * 平台自己的稳定 id（YouTube 的 `UC…`、TikTok 的数字 id）。**WP119c 加的可选格**：
+   * 插件按 id 认人（report / contact 都可能拿 id 来问），库里没有这一格就只能在
+   * handle 上撞运气。老库里的行没有它，读取时按 `undefined` 处理。
+   */
+  external_id?: string
   followers?: number
   /** 互动率，**0–1 的小数**（不是百分数；两种写法混用是打分错得最难查的一种）。 */
   engagement_rate?: number
