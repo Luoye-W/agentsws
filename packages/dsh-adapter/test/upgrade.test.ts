@@ -29,11 +29,21 @@ import { describe, expect, it } from 'vitest'
  * FROM_FILE 是升级前在**当前代码树**（WP82–WP92 之后：浏览器 / BrowserSkill /
  * preset / shell 沙箱 / 订阅登录都进来了）重采的 `0.1.6-alpha.1-wp93.json`，
  * 不是 WP81 那一份。旧的六份一个不删（历史刻度）。
+ *
+ * **WP132（0.1.6-alpha.2 → 0.1.7-rc.1）：同样的跨版本比，另有两处变化。**
+ * ① FROM_FILE 是升级前在当前代码树（WP94–WP131 之后）重采的 `0.1.6-alpha.2-wp132.json`；
+ * ② 这一跳 **cordis 跟着升了**（dsh 0.1.7 要 `~4.0.4`，4.0.2 装不进同一棵树），所以
+ * "cordis 不随 dsh 走"那条断言改成钉死新旧两个号；③ 两份都带 `skipped`
+ * （`kol/public-library-reveal-charges-credits` 在 main 上 stub 档就抛，与 dsh 无关，
+ * 见 capture.mjs 的 `CAPTURE_SKIP`），断言两边跳的是同一批。旧的八份一个不删。
  */
-const FROM_FILE = '0.1.6-alpha.1-wp93'
-const TO_FILE = '0.1.6-alpha.2'
-const FROM = '0.1.6-alpha.1'
-const TO = '0.1.6-alpha.2'
+const FROM_FILE = '0.1.6-alpha.2-wp132'
+const TO_FILE = '0.1.7-rc.1'
+const FROM = '0.1.6-alpha.2'
+const TO = '0.1.7-rc.1'
+/** cordis 这一跳的新旧号（WP132：dsh 0.1.7 的 peer 是 `~4.0.4`）。 */
+const CORDIS_FROM = '4.0.2'
+const CORDIS_TO = '4.0.4'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
 const MAX_TOKEN_DRIFT_PCT = 5
@@ -66,6 +76,8 @@ interface Baseline {
   dsh_version: string
   packages: Record<string, string | null>
   pack: string
+  /** WP132：采集时跳过的场景（`CAPTURE_SKIP`）；两份必须一致。 */
+  skipped?: string[]
   runtimes: Record<RuntimeKey, Record<string, ScenarioFingerprint>>
 }
 
@@ -115,6 +127,8 @@ describe('升级基线：两份都在，说的是同一件事', () => {
         Object.keys(before.runtimes[runtime]).sort(),
       )
     }
+    // 跳过的是同一批（WP132：与 dsh 无关、main 上就红的场景才许跳）
+    expect(after.skipped ?? []).toEqual(before.skipped ?? [])
     // 场景一条都没少（pack 现在 13 条）
     expect(Object.keys(before.runtimes['dsh-in-process']).length).toBeGreaterThanOrEqual(13)
   })
@@ -123,8 +137,10 @@ describe('升级基线：两份都在，说的是同一件事', () => {
     for (const [name, version] of Object.entries(after.packages)) {
       if (version === null) continue
       if (name === '@deepseek-ai/cordis') {
-        // cordis 是 dsh vendored 出来的独立包，不随 dsh 的版本走（34 §核实）
-        expect(version).toBe(before.packages[name])
+        // cordis 是 dsh vendored 出来的独立包，不随 dsh 的版本走（34 §核实）；
+        // WP132 这一跳是"必要时"跟着升的那一次（docs/42 ②），新旧号都钉死
+        expect(before.packages[name]).toBe(CORDIS_FROM)
+        expect(version).toBe(CORDIS_TO)
         continue
       }
       expect(version).toBe(TO)
