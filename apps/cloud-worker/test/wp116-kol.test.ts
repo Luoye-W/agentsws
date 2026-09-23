@@ -254,11 +254,11 @@ describe('WP116 Workers 形态 · 两段式的钱', () => {
     expect(res.res.headers.get(INTERNAL_HEADERS.kolOps)).toBeNull()
   })
 
-  it('贡献返免费额度：那一笔落在报数据的那个组织头上', async () => {
+  it('贡献不返额度（09-23 Luoye 定，WP130 改）：回填联系方式之后余额一分不动', async () => {
     const a = await issueToken(cloud, 'f@example.com', 'ws_f')
     cloud.wallet(a.org).wallet.topup({ org_id: a.org, credits: 1, kind: 'purchased' })
     const before = await available(cloud, a.token)
-    // 回填一条联系方式 = 一笔贡献奖励（`service.saveContact` 里 topup）
+    // 回填一条联系方式：原来是一笔贡献奖励，09-23 起不发（CONTRIBUTION_REWARDS_ENABLED = false）
     const saved = await call(cloud, '/v1/data/kol/creators/youtube/rewardme/observations', {
       method: 'POST',
       token: a.token,
@@ -276,8 +276,8 @@ describe('WP116 Workers 形态 · 两段式的钱', () => {
       body: { email: 'reward@example.com', source: 'manual' },
     })
     expect(contact.status).toBe(201)
-    // 返额度是**加**，所以余额只会不降
-    expect(await available(cloud, a.token)).toBeGreaterThanOrEqual(before)
+    expect((contact.body.data as { credits_granted: number }).credits_granted).toBe(0)
+    expect(await available(cloud, a.token)).toBeCloseTo(before, 6)
   })
 })
 

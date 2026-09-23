@@ -581,7 +581,16 @@ export const PLUGIN_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000
 /** 每个插件每天最多上报多少条观察；超了 429。 */
 export const MAX_PLUGIN_OBSERVATIONS_PER_DAY = 500
 
-/** 多少条**有效**观察换 1 积分。 */
+/**
+ * 贡献发不发积分奖励。**09-23 Luoye 定：不发**——红人观测、联系方式、内容观测一律
+ * 不返 `granted` 积分（推翻 48 §5.3「免费（有贡献奖励）」、49 §3「贡献奖励发 granted」、
+ * 75 §2 口径③）。贡献照旧免费、照旧不预扣；「贡献了什么」照旧记账（配额表的累计数、
+ * 配对行的有效条数、每次结算回执里的 received / accepted）。下面几个奖励常量留着
+ * （契约只加不删），只是不再生效。
+ */
+export const CONTRIBUTION_REWARDS_ENABLED = false
+
+/** 多少条**有效**观察换 1 积分。（09-23 起停发，见 {@link CONTRIBUTION_REWARDS_ENABLED}） */
 export const OBSERVATIONS_PER_CREDIT = 100
 
 /** 同一个 handle 多久之内重复上报不算有效（风控）。 */
@@ -608,9 +617,9 @@ export interface ContributionEvent {
   received: number
   /** 其中几条算有效（过了去重与白名单）。 */
   accepted: number
-  /** 这一次发了多少奖励积分。 */
+  /** 这一次发了多少奖励积分。09-23 起恒为 0（{@link CONTRIBUTION_REWARDS_ENABLED}）。 */
   credits_granted: number
-  /** 今天还能拿多少（到 {@link MAX_DAILY_REWARD_CREDITS} 封顶）。 */
+  /** 今天还能拿多少（到 {@link MAX_DAILY_REWARD_CREDITS} 封顶）。09-23 起恒为 0。 */
   daily_reward_remaining: number
   /** 今天这个插件还能报多少条。 */
   daily_quota_remaining: number

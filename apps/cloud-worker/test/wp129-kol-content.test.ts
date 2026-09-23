@@ -3,7 +3,7 @@
  * `WalletDO` 预扣 → 单例 `KolPublicDO` → 回 `WalletDO` 照单执行）。
  *
  * 1. 内容观测进公共库：不收费；落进 `kol_contents` / 标识旁表 / 指标表；
- *    同一条内容同一天只记一行；贡献返额度那一笔经录音机回到**报数据的那个组织**；
+ *    同一条内容同一天只记一行；贡献**不发积分**（09-23 Luoye 定，WP130 改），钱包一分不动；
  * 2. 体检报告样本不够不收钱：入口按 `data.kol.audit` 预扣的那一笔被兜底释放，
  *    报告里明说「样本不够，这次不收。」；样本够了照价收。
  *
@@ -132,7 +132,7 @@ describe('WP129 · 内容观测经 KolPublicDO 进公共库', () => {
     })
   })
 
-  it('贡献返额度：录音机记下的那一笔 granted 落回报数据的那个组织', async () => {
+  it('贡献不发积分（09-23 Luoye 定）：录音机里没有 granted 那一笔，报数据那个组织的余额不动', async () => {
     const cloud = fakeCloud({ kol: true })
     const a = await issueToken(cloud, 'c@example.com', 'ws_c')
     const before = await available(cloud, a.token)
@@ -143,8 +143,8 @@ describe('WP129 · 内容观测经 KolPublicDO 进公共库', () => {
       body: { observations: batch },
     })
     expect(res.status).toBe(201)
-    expect((res.body.data as { credits_granted: number }).credits_granted).toBe(1)
-    expect((await available(cloud, a.token)) - before).toBeCloseTo(1, 6)
+    expect((res.body.data as { credits_granted: number }).credits_granted).toBe(0)
+    expect((await available(cloud, a.token)) - before).toBeCloseTo(0, 6)
   })
 })
 

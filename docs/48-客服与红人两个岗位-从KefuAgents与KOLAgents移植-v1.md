@@ -250,12 +250,12 @@ Luoye 09-15 定：红人营销**按渠道划分职责**，五个渠道：YouTube
 | `POST /creators/:channel/:handle/deep-audit` | `data` | `data.kol.audit` | 与 GET audit 同价同源，`depth: 'deep'`；**这一版是骨架**，报告的 `note` 里说明白 |
 | `POST /creators/:channel/:handle/refresh` | `data` | `social.fetch` | 去外部源取一次；驻留 / 配额挡住就**整笔释放不收钱** |
 | `GET /benchmarks?channel=&category=&followers_band=` | `data` | `data.kol.lookup`（WP126） | k-匿名基准，只回 p25 / p50 / p75；桶不够 k **不收钱** |
-| `POST /creators/:channel/:handle/observations` | `data` | 免费（有贡献奖励） | 登录态工作区手动加观察 |
-| `POST /creators/:channel/:handle/contact` | `data` | 免费（有贡献奖励） | 联系方式回填：进库就是哈希 + 密文 |
+| `POST /creators/:channel/:handle/observations` | `data` | 免费（~~有贡献奖励~~ 09-23 起不发） | 登录态工作区手动加观察；本机转发插件观测时带 `via: 'extension'`，来源记 `plugin`（WP130） |
+| `POST /creators/:channel/:handle/contact` | `data` | 免费（~~有贡献奖励~~ 09-23 起不发） | 联系方式回填：进库就是哈希 + 密文 |
 | `POST /creators/:channel/:handle/disputes` | `data` | 免费 | 争议**只记不裁**，owner 后台看 |
 | `POST /plugins/pair` | `data` | 免费 | 换一把插件令牌 `plg_…`（30 天、只存哈希、可撤） |
 | `POST /plugins/:sha/revoke` | `data` | 免费 | 撤一把（写 `revoked_at`，不删行） |
-| `POST /plugins/observations` | **插件令牌** | 免费（有贡献奖励） | 插件上报一批观察——它只能往库里加事实，不能查库、不能花钱 |
+| `POST /plugins/observations` | **插件令牌** | 免费（~~有贡献奖励~~ 09-23 起不发） | 插件上报一批观察——它只能往库里加事实，不能查库、不能花钱 |
 
 **七张表**（`<AGENTSWS_CLOUD_DATA_DIR>/kol-public.sqlite`）：`kol_creators` /
 `kol_observations` / `kol_contacts` / `kol_disputes` / `kol_plugin_tokens` /
@@ -268,10 +268,15 @@ Luoye 09-15 定：红人营销**按渠道划分职责**，五个渠道：YouTube
 悄悄丢掉它等于把信号也丢了）。
 
 **风控参数**（都在契约里，改它要改契约）：每个贡献者每天 500 条（超了 429）、
-100 条有效观察 1 积分（`granted` 类 90 天过期）、同一 handle 24h 内重复**不计奖励但照收**、
-单日奖励封顶 5 积分（**封顶之外的明天接着拿**：累计数只按真发出去的那部分前进）、
-回填一条新联系方式 1 积分、k = 20、出体检报告最少 3 条样本、插件令牌 30 天、
+同一 handle 24h 内重复**不重复计数但照收**、k = 20、出体检报告最少 3 条样本、插件令牌 30 天、
 YouTube 全站日配额 10000 单位。
+
+> **09-23 Luoye 定（WP130 落地）：贡献一律不发积分奖励。** 红人观测、联系方式回填、
+> 内容观测都**不返 `granted` 积分**——原来的「100 条有效观察 1 积分、单日封顶 5 积分、
+> 回填一条新联系方式 1 积分」整段停发（契约常量 `CONTRIBUTION_REWARDS_ENABLED = false`，
+> 奖励常量留着不删、只是不生效）。贡献照旧**免费、不预扣**；「贡献了什么」照旧记账
+> （每次结算回执的 received / accepted、配额表的终身累计数、配对行的有效条数），
+> 后台「积分与会员」的发放流水里不再出现贡献发放。老的已发积分不回收、不回填。
 
 **外部源**：`sources/{youtube,apify}.ts` 两个接口 + 配额池 + 降级判定 + 假实现。
 顺序是**驻留 → 配额 → 降级**：`X-Agentsws-Region: cn` 一个境外源都不走（只查库，明说），
