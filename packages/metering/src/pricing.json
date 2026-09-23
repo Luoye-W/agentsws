@@ -5,6 +5,7 @@
   "ai_multiplier": 3,
   "note": "49 §3：定价表是数据不是代码。1 积分 = ¥1（Luoye 2026-09-15 定：前期主要客户是中国用户，一眼看得懂自己的消耗）。AI 按 token 计——成本 × 倍率，成本引用 model-gateway/pricing/catalog.json，各家币种按下面 fx 折成人民币。对用户只显示最终积分价：成本、倍率、汇率都是中间量，不进界面。",
   "blocks_note": "67 §1（Luoye 2026-09-19 定）：付费分三块，每条能力归一块。data = 数据接口（我们替用户付平台的钱与配额）；ai = AI 使用（按 token）；service = 增值服务（订阅，30 积分 / 月；WP124 起块名通用，红人与客服都归它）。分块的理由是这三块的花钱方式根本不同（按次 / 按 token / 按月），「这个月钱花哪儿了」只有按三块分开才回答得清。",
+  "basis_note": "WP131：每条的 `basis` 是「这个数怎么来的」一句话，`reviewed_at` 是 Luoye 核过这个数的日期；**null = 未核**（运营后台价目页挂「未核」标记，与成本表的「未核对」同一套做法）。两格都不进用户界面。重算表与建议价在 docs/77-积分价目重算-v1.md，建议价还没写进来——最终数字由 Luoye 定。",
   "fx": {
     "CNY": 1,
     "USD": 7.1,
@@ -19,6 +20,8 @@
       "unit": "1k_tokens",
       "credits_per_unit": 0.1,
       "block": "ai",
+      "basis": "认得出的模型 = 官网标价 × 参考汇率 × 倍率 3（毛利 66.7%）；这一格 0.1 只是认不出模型时的兜底（¥100 / 百万 token），比表里最贵那档的成本还低——重算见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "AI 对话（按 token）",
       "label_en": "AI chat (per token)",
       "fallback_note": "credits_per_unit 只在模型不在价目表里时兜底；认得出的模型走下面按模型的单价。"
@@ -28,6 +31,8 @@
       "unit": "1k_tokens",
       "credits_per_unit": 0.0015,
       "block": "ai",
+      "basis": "早期拍的数（WP59）：¥1.5 / 百万 token；对 text-embedding-3-small 成本 ¥0.14 毛利约 90%，对 -3-large 成本 ¥0.92 毛利约 38%——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "文本向量（按 token）",
       "label_en": "Embeddings (per token)"
     },
@@ -36,6 +41,8 @@
       "unit": "image",
       "credits_per_unit": 0.5,
       "block": "ai",
+      "basis": "WP127 暂定 0.5 / 张，没对过成本：gpt-image-1 1024² 中档约 ¥0.30（毛利 40%），不指定画质时可能按高档约 ¥1.18 出图（亏）——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "AI 生图（按张）",
       "label_en": "AI image generation (per image)",
       "note_zh": "WP127：生图单独一档。用 Agents 工坊官方接口出图按张扣积分，设置页「生图」那一块常显这个单价；出不来（上游拒了）一分不扣。"
@@ -45,6 +52,8 @@
       "unit": "call",
       "credits_per_unit": 0.2,
       "block": "data",
+      "basis": "早期拍的数（WP59），WP126 起浏览 / 搜索 / 基准 / 联系方式揭示都按它收；我方成本只有自家库读写 + 云端摊销（每次 < ¥0.001），毛利 > 99%——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "红人查询（按次）",
       "label_en": "Creator lookup (per call)"
     },
@@ -53,6 +62,8 @@
       "unit": "call",
       "credits_per_unit": 3,
       "block": "data",
+      "basis": "早期拍的数（WP59）：体检是自家库里的 k-匿名计算，成本每次 < ¥0.003，毛利 > 99%；按价值定价（KOLAgents 同类报告 ≈ ¥10.65）——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "红人体检报告（按次）",
       "label_en": "Creator audit report (per report)"
     },
@@ -61,6 +72,8 @@
       "unit": "call",
       "credits_per_unit": 0.05,
       "block": "data",
+      "basis": "早期拍的数（WP59）；外部刷新走第三方抓取，每次约 $0.005–0.009（¥0.04–0.06），按这个价毛利 27% 到 -30%——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "社媒数据抓取（按次）",
       "label_en": "Social data fetch (per call)"
     },
@@ -69,6 +82,8 @@
       "unit": "page",
       "credits_per_unit": 0.02,
       "block": "data",
+      "basis": "早期拍的数（WP59），还没有收费点接上；按每页约 $0.005（¥0.036）的抓取成本算是亏的——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "网页抓取（按页）",
       "label_en": "Page crawl (per page)"
     },
@@ -77,6 +92,8 @@
       "unit": "minute",
       "credits_per_unit": 0.1,
       "block": "data",
+      "basis": "早期拍的数（WP59），还没有收费点接上；按转写上游每分钟约 $0.006（¥0.043）算毛利约 56%——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "会议转写（按分钟）",
       "label_en": "Transcription (per minute)"
     },
@@ -85,6 +102,8 @@
       "unit": "seat_month",
       "credits_per_unit": 99,
       "block": "data",
+      "basis": "在线值守是人工服务，价按人力定，不按上游成本算；这次重算不动它。",
+      "reviewed_at": null,
       "label_zh": "在线值守（每座位每月）",
       "label_en": "Online standby (per seat per month)"
     },
@@ -93,6 +112,8 @@
       "unit": "month",
       "credits_per_unit": 30,
       "block": "service",
+      "basis": "Luoye 09-19 定（67 §3）：30 积分 = ¥30 / 月；我方成本是云端红人库与同步的存储 + 请求，每工作区每月约 ¥1–2。",
+      "reviewed_at": null,
       "label_zh": "红人营销增值服务（每月）",
       "label_en": "Influencer service (per month)",
       "note_zh": "云端红人库 + 双向同步：本地一份、云端一份。买的不是备份，是「红人营销以后不依赖本地 Agents 工坊也能跑起来」的地基。30 积分 = ¥30 / 月。"
@@ -102,6 +123,8 @@
       "unit": "month",
       "credits_per_unit": 30,
       "block": "service",
+      "basis": "WP124：与红人增值服务同价同机制，30 积分 = ¥30 / 月；WP128 起托管实例常驻，basic 规格约 $8.5（¥60）/ 工作区 / 月，盖不住——见 docs/77。",
+      "reviewed_at": null,
       "label_zh": "客服增值服务（每月）",
       "label_en": "Customer support service (per month)",
       "note_zh": "WP124 实现：订阅后转发器的对端从商家本机换成托管实例（同一份 apps/server）。同价同机制：30 积分 = ¥30 / 月，走同一套订阅引擎。"

@@ -26,10 +26,54 @@ export interface PricingFile extends Omit<Pricing, 'entries'> {
   /** 数据驻留 `cn` 的请求只允许这几家（22 §2）。 */
   cn_vendors: string[]
   cn_vendors_note: string
-  entries: (PricingEntry & { fallback_note?: string; note_zh?: string })[]
+  /** WP131：`basis` / `reviewed_at` 两格的口径说明。 */
+  basis_note?: string
+  entries: (PricingEntry & PricingReview & { fallback_note?: string; note_zh?: string })[]
+}
+
+/**
+ * WP131：一条价目的「来历」与「核没核过」。**只住在数据文件里、只给运营后台看**——
+ * 用户界面只显示最终积分价（成本、倍率、来历都是中间量，49 M4）。
+ */
+export interface PricingReview {
+  /** 这个数怎么算出来的，一句话。 */
+  basis?: string
+  /** Luoye 核过这个数的日期（`YYYY-MM-DD`）；**null / 没有 = 未核**。 */
+  reviewed_at?: string | null
 }
 
 export const PRICING_FILE: PricingFile = RAW as PricingFile
+
+/** WP131：这条价目核过没有（与成本表的 `costTableNeedsReview` 同一套做法：没日期就是没核）。 */
+export function pricingEntryNeedsReview(entry: PricingReview): boolean {
+  return entry.reviewed_at === undefined || entry.reviewed_at === null || entry.reviewed_at === ''
+}
+
+/** WP131：运营后台价目页的一行（带来历与未核标记；不进用户界面）。 */
+export interface PricingReviewRow {
+  capability: string
+  label_zh: string
+  unit: string
+  credits_per_unit: number
+  block?: string
+  basis: string
+  reviewed_at: string | null
+  needs_review: boolean
+}
+
+/** WP131：价目表逐条的来历与核对状态（运营后台价目页读它）。 */
+export function pricingReviewRows(file: PricingFile = PRICING_FILE): PricingReviewRow[] {
+  return file.entries.map((e) => ({
+    capability: e.capability,
+    label_zh: e.label_zh,
+    unit: e.unit,
+    credits_per_unit: e.credits_per_unit,
+    ...(e.block === undefined ? {} : { block: e.block }),
+    basis: e.basis ?? '',
+    reviewed_at: e.reviewed_at ?? null,
+    needs_review: pricingEntryNeedsReview(e),
+  }))
+}
 
 /** 按 token 计价的能力（这两条的 `models` 是拼出来的，不是手写的）。 */
 export const TOKEN_CAPABILITIES = ['ai.chat', 'ai.embeddings'] as const

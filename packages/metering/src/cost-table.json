@@ -126,7 +126,13 @@
       "in_per_m": 0.1,
       "out_per_m": 0.4
     },
-    { "provider": "openai", "prefix": "gpt-4.1", "currency": "USD", "in_per_m": 2, "out_per_m": 8 },
+    {
+      "provider": "openai",
+      "prefix": "gpt-4.1",
+      "currency": "USD",
+      "in_per_m": 2,
+      "out_per_m": 8
+    },
     {
       "provider": "openai",
       "prefix": "gpt-4o-mini",
@@ -155,7 +161,13 @@
       "in_per_m": 0.02,
       "out_per_m": 0
     },
-    { "provider": "openai", "prefix": "gpt-", "currency": "USD", "in_per_m": 10, "out_per_m": 50 },
+    {
+      "provider": "openai",
+      "prefix": "gpt-",
+      "currency": "USD",
+      "in_per_m": 10,
+      "out_per_m": 50
+    },
     {
       "provider": "moonshot",
       "prefix": "kimi-k3",
@@ -192,16 +204,94 @@
       "out_per_m": 100
     },
     {
+      "provider": "moonshot",
+      "prefix": "moonshot-v1-8k-vision-preview",
+      "currency": "CNY",
+      "in_per_m": 2,
+      "out_per_m": 10,
+      "unverified": true,
+      "note": "WP131 补：WP127 换上的多模态默认型号原先不在这张表里（认不出 → 落最贵档）。数字凭各家 2025 年公开价目的记忆值填，这次没能从官网页面读到当期价——**未核**。"
+    },
+    {
+      "provider": "moonshot",
+      "prefix": "moonshot-v1",
+      "currency": "CNY",
+      "in_per_m": 2,
+      "out_per_m": 10,
+      "unverified": true,
+      "note": "WP131 补：WP127 换上的多模态默认型号原先不在这张表里（认不出 → 落最贵档）。数字凭各家 2025 年公开价目的记忆值填，这次没能从官网页面读到当期价——**未核**。 moonshot-v1 家族的兜底（8k 档价）。"
+    },
+    {
       "provider": "zhipu",
       "prefix": "glm-5.3-flash",
       "currency": "CNY",
       "in_per_m": 0.8,
       "out_per_m": 2.8
     },
-    { "provider": "zhipu", "prefix": "glm-5.3", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 },
-    { "provider": "zhipu", "prefix": "glm-5.2", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 },
-    { "provider": "zhipu", "prefix": "glm-4.7", "currency": "CNY", "in_per_m": 2, "out_per_m": 8 },
-    { "provider": "zhipu", "prefix": "glm", "currency": "CNY", "in_per_m": 8, "out_per_m": 28 }
+    {
+      "provider": "zhipu",
+      "prefix": "glm-5.3",
+      "currency": "CNY",
+      "in_per_m": 8,
+      "out_per_m": 28
+    },
+    {
+      "provider": "zhipu",
+      "prefix": "glm-5.2",
+      "currency": "CNY",
+      "in_per_m": 8,
+      "out_per_m": 28
+    },
+    {
+      "provider": "zhipu",
+      "prefix": "glm-4.7",
+      "currency": "CNY",
+      "in_per_m": 2,
+      "out_per_m": 8
+    },
+    {
+      "provider": "zhipu",
+      "prefix": "glm-4v-plus",
+      "currency": "CNY",
+      "in_per_m": 10,
+      "out_per_m": 10,
+      "unverified": true,
+      "note": "WP131 补：WP127 换上的多模态默认型号原先不在这张表里（认不出 → 落最贵档）。数字凭各家 2025 年公开价目的记忆值填，这次没能从官网页面读到当期价——**未核**。 取较贵的旧档（¥10 / 百万，进出同价）——估贵了只让毛利显得保守。"
+    },
+    {
+      "provider": "zhipu",
+      "prefix": "glm",
+      "currency": "CNY",
+      "in_per_m": 8,
+      "out_per_m": 28
+    },
+    {
+      "provider": "qwen",
+      "prefix": "qwen-vl-max",
+      "currency": "CNY",
+      "in_per_m": 3,
+      "out_per_m": 9,
+      "unverified": true,
+      "note": "WP131 补：WP127 换上的多模态默认型号原先不在这张表里（认不出 → 落最贵档）。数字凭各家 2025 年公开价目的记忆值填，这次没能从官网页面读到当期价——**未核**。"
+    },
+    {
+      "provider": "qwen",
+      "prefix": "qwen-vl-plus",
+      "currency": "CNY",
+      "in_per_m": 1.5,
+      "out_per_m": 4.5,
+      "unverified": true,
+      "note": "WP131 补：WP127 换上的多模态默认型号原先不在这张表里（认不出 → 落最贵档）。数字凭各家 2025 年公开价目的记忆值填，这次没能从官网页面读到当期价——**未核**。"
+    },
+    {
+      "provider": "ollama",
+      "prefix": "llama3.2-vision",
+      "currency": "CNY",
+      "in_per_m": 0,
+      "out_per_m": 0,
+      "unverified": true,
+      "note": "WP131 补：本机 Ollama 模型，跑在用户自己的电脑上、不经官方网关，我方成本为 0。写进来只为不让它落最贵档。"
+    }
   ],
   "unit_prices": [
     {
@@ -231,6 +321,15 @@
       "currency": "CNY",
       "per_unit": 0,
       "note": "我们自己库里的读写（浏览公共红人库、基准、手动充值）。没有外部成本，但**照样记一行**——用量看板要知道这些能力被用了多少次。"
+    },
+    {
+      "key": "image:gpt-image-1",
+      "provider": "openai",
+      "currency": "USD",
+      "per_unit": 0.167,
+      "unverified": true,
+      "note": "WP131 补：官方生图默认型号（WP127）。官网价目页读到 gpt-image-1 出图 token 单价 $40 / 百万；1024×1024 一张按 OpenAI 公开的 token 数折算：低档 272 ≈ $0.011、中档 1056 ≈ $0.042、高档 4160 ≈ $0.167。我们的请求**没指定画质**（默认 auto，可能出高档），所以按高档记——估贵了只让毛利显得保守。token 数这一步未核。"
     }
-  ]
+  ],
+  "wp131_note": "WP131：带 `unverified: true` 的是这次按公开价补的条目（WP127 的多模态默认型号与生图），与整表一样等 Luoye 核对。"
 }

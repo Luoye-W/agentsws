@@ -81,7 +81,7 @@ export {
   shanghaiDate,
   termEndsAt,
 } from './plans.js'
-export type { PricingFile, TokenUsage } from './pricing.js'
+export type { PricingFile, PricingReview, PricingReviewRow, TokenUsage } from './pricing.js'
 export {
   aiCredits,
   buildPricing,
@@ -96,6 +96,8 @@ export {
   isCnAvailable,
   modelPrice,
   PRICING_FILE,
+  pricingEntryNeedsReview,
+  pricingReviewRows,
   roundCredits,
   TOKEN_CAPABILITIES,
 } from './pricing.js'

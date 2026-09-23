@@ -26,6 +26,9 @@ export interface TokenCostEntry {
   currency: string
   in_per_m: number
   out_per_m: number
+  /** WP131：按公开价补、还没核对的那几条（整表另有 `needs_review`）。 */
+  unverified?: boolean
+  note?: string
 }
 
 /** 一档按次计的成本（非 token 的上游：YouTube、Apify…）。 */
@@ -36,6 +39,8 @@ export interface UnitCostEntry {
   currency: string
   per_unit: number
   note?: string
+  /** WP131：按公开价补、还没核对。 */
+  unverified?: boolean
 }
 
 export interface CostTable {

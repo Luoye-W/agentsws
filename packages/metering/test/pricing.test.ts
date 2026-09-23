@@ -16,6 +16,8 @@ import {
   isCnAvailable,
   modelPrice,
   PRICING_FILE,
+  pricingEntryNeedsReview,
+  pricingReviewRows,
 } from '../src/pricing.js'
 
 describe('价目表', () => {
@@ -123,5 +125,43 @@ describe('价目表', () => {
     expect(tight).toBeGreaterThanOrEqual(
       aiCredits(pricing, model, { input_tokens: 100, output_tokens: 100 }),
     )
+  })
+})
+
+describe('WP131：价目的来历与核对状态（basis / reviewed_at）', () => {
+  it('每一条都有一句来历；reviewed_at 这一格写着（null = 未核）', () => {
+    for (const e of PRICING_FILE.entries) {
+      expect(e.basis, e.capability).toBeTruthy()
+      expect('reviewed_at' in e, e.capability).toBe(true)
+    }
+  })
+
+  it('没日期就是未核（与成本表同一套）；核过的不挂标记', () => {
+    expect(pricingEntryNeedsReview({ reviewed_at: null })).toBe(true)
+    expect(pricingEntryNeedsReview({})).toBe(true)
+    expect(pricingEntryNeedsReview({ reviewed_at: '' })).toBe(true)
+    expect(pricingEntryNeedsReview({ reviewed_at: '2026-09-30' })).toBe(false)
+    const rows = pricingReviewRows()
+    expect(rows).toHaveLength(PRICING_FILE.entries.length)
+    // 这一版一条都还没核（建议价在 docs/77，等 Luoye 定）
+    expect(rows.every((r) => r.needs_review)).toBe(true)
+  })
+
+  it('这两格只在数据文件里：拼给用户的价目表里没有它们', () => {
+    const json = JSON.stringify(buildPricing())
+    expect(json).not.toContain('basis')
+    expect(json).not.toContain('reviewed_at')
+  })
+
+  it('WP131 只加说明、不改价：现有数字原样', () => {
+    const price = (c: string) =>
+      PRICING_FILE.entries.find((e) => e.capability === c)?.credits_per_unit
+    expect(price('data.kol.lookup')).toBe(0.2)
+    expect(price('data.kol.audit')).toBe(3)
+    expect(price('ai.chat')).toBe(0.1)
+    expect(price('ai.image')).toBe(0.5)
+    expect(price('social.fetch')).toBe(0.05)
+    expect(price('crawl.page')).toBe(0.02)
+    expect(price('transcribe.minute')).toBe(0.1)
   })
 })
