@@ -5,8 +5,8 @@
 # 以前混在这里的占位注释（system-prompt / user-approval / preset 声明的写法）挪到了同目录 README。
 #
 # 为什么锁定就写在 profile 这一层、不拆成 bundle 的独立 patch 文件（WP133 实测，
-# 出处：`@deepseek-ai/dsh-app-boot` README「Unreadable or incompatible bundles are reported on
-# stderr and skipped; profile manifest and user patch errors still throw」）：
+# 出处：`@deepseek-ai/dsh-app-boot` 的 `lib/types/profile.d.ts` 里 `loadProfile` 的说明「Unreadable or
+# incompatible bundles are reported on stderr and skipped; profile manifest and user patch errors still throw」）：
 # 0.1.7 的 bundle 确实能按顺序挂多个 patch 文件，但 **bundle 层读不出来就跳过、照样启动**——
 # 把锁定放进一个坏掉 / 缺失的 bundle，`plugin-manager` 就回到 `!ctx.get('profileContext')`（开）。
 # profile 这一层解析失败则直接启动失败。锁定必须 fail-closed，所以留在这一层。
