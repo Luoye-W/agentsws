@@ -384,7 +384,16 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * `enableRunInBackground: false`：不挂 `dsh-jobs`，而且 17 §5.1 一次运行一棵树、
    * 跑完即销毁——后台进程在这条路上没有主人。关掉之后模型连这个参数都看不见。
    */
-  if (shell !== undefined) await ctx.plugin(ToolBash, { enableRunInBackground: false } as never)
+  /*
+   * WP132：`promoteOnTimeout` 是 0.1.7 新加的开关、**默认 true**（上游 `tool-bash` README 配置表：
+   * 「Keep a foreground command that reaches its timeout running as its background job instead
+   * of killing it」）。上游实现里它与 `enableRunInBackground` 取与（`src/index.ts` 第 236 行），
+   * 所以在我们这条路上本来就不生效；照样显式写 false——默认值是上游可以单方面翻的，
+   * 而"超时的命令不杀、转后台接着跑"与 17 §5.1「一次运行一棵树、跑完即销毁」正面冲突。
+   */
+  if (shell !== undefined) {
+    await ctx.plugin(ToolBash, { enableRunInBackground: false, promoteOnTimeout: false } as never)
+  }
 
   /*
    * WP132：把这条职责的 preset **注册**进 registry（0.1.7 的新入口，取代按目录扫）。

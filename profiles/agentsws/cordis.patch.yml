@@ -83,6 +83,50 @@
   disabled: true
 # ——————————————————————————————————————————————————————————————————————
 
+# ——————————————————————————————————————————————————————————————————————
+# 生效的第三条（WP132，dsh 0.1.7-rc.1）：配置写回、账号登录这三行关死。
+#
+# 0.1.7-rc.1 往 `dsh-base` 的 patch 里 **insert 了三行新服务**、换掉了一行（出处：上游
+# `packages/bundle/base/cordis.patch.yml` 的 diff，`dsh-v0.1.6-alpha.2...dsh-v0.1.7-rc.1`）：
+#
+#     - id: config-editor
+#       name: '@deepseek-ai/dsh-config-editor'
+#       disabled: !!js "!ctx.get('profileContext')"
+#     - id: settings
+#       name: '@deepseek-ai/dsh-settings'            # 原来是 dsh-settings-file
+#       disabled: !!js "!ctx.get('profileContext')"
+#     - id: authorization
+#       name: '@deepseek-ai/dsh-authorization'
+#     - id: deepseek-account
+#       name: '@deepseek-ai/dsh-deepseek-account-platform'
+#
+# 为什么关（出处都是上游各包 README 的 Summary / Use this package）：
+# - `config-editor`：「Save plugin configuration in the active profile's patch and apply it
+#   immediately」——它**写的就是这份文件**。开着它，运行中的任何一次表单保存都可能把上面
+#   `session-log-deepseek` 的 `enabled: false` 或 `plugin-manager` 的 `disabled: true` 改回去；
+#   `patchReload: startup` 也被它的"apply immediately"绕开。与 WP93 关 `hmr` 同一个理由。
+# - `settings`：「Changes persist through the active profile's Cordis patch」，写回走的就是
+#   `config-editor`；另外它启动后会把 `$DSH_HOME/settings.yaml` **导入一次并改名**
+#   （`settings.yaml.imported`）——宿主用户目录里的文件被一个我们没要的服务动了。
+# - `deepseek-account`：**没有 `disabled` 表达式，任何组合里默认就挂**。它是"用系统浏览器登录
+#   DeepSeek 账号"的那一套：在宿主 webServer 上注册 `/oauth/callback`、向 platformOrigin 发
+#   `/auth-api/v0/users/current`、`get_user_summary`（余额）、登出时后台重试最多 5 次，
+#   还能给推理请求换 `x-dsh-auth-token`。这是默认打开的出网，红线 7 原文就是这一类。
+#   我们的模型走自己的网关（`packages/dsh-adapter/src/llm.ts`），账号是 Agents 工坊自己的。
+#
+# `authorization` 不关：它是授权服务本身（`packages/dsh-adapter` 早就直接 import 它），不出网。
+#
+# 同 WP93：两档运行时的真实模块图里这三个包都是 0 命中（`harness.ts` 自己搭树，不读 bundle），
+# 这三行管的是"哪天真起了完整 profile"那条路。钉住它们的测试：
+# `packages/dsh-adapter/test/profile-lockdown.test.ts`（WP132 那一组）。
+- id: config-editor
+  disabled: true
+- id: settings
+  disabled: true
+- id: deepseek-account
+  disabled: true
+# ——————————————————————————————————————————————————————————————————————
+
 # - id: system-prompt
 #   config:
 #     # persona 由 preset 的 complete 段接管，deployment 前后缀留空
@@ -94,12 +138,15 @@
 #     # 'ask' 才会走 answerer waterfall；没有 answerer 时 dsh 自己 fail-closed
 #     policy: ask
 
+# WP132：0.1.7 起 preset 不再按目录扫（`dsh-agent-presets` 整包下线），
+# 换成 `dsh-agent-preset-registry` + 一行一个 `dsh-agent-preset` 的声明。真接管 dsh 进程时的写法：
 # - insert:
-#     - id: agentsws-preset-roster
-#       name: '@deepseek-ai/dsh-agent-presets'
+#     - id: agent-preset-registry
+#       name: '@deepseek-ai/dsh-agent-preset-registry'
 #       config:
-#         default: company.standard
-#         includeShippedRoot: false
-#         roots:
-#           - path: ./presets
-#             trust: system
+#         default: company-standard
+#     - id: preset-company-standard
+#       name: '@deepseek-ai/dsh-agent-preset'
+#       config:
+#         id: company-standard
+#         plugins: []

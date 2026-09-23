@@ -26,6 +26,11 @@
  *    手法同 `telemetry.test.ts`，不靠推断）。
  * 2. **就算哪天真起了完整 profile 也关着**：`profiles/agentsws/cordis.patch.yml`
  *    显式写死三行 `disabled: true`。
+ *
+ * WP132（dsh 0.1.7-rc.1）再加三行，同一个形状：base 的 patch 新 insert 了
+ * `config-editor`（把表单保存写回**这份 patch 文件**并立即生效）、`settings`（写回走前者，
+ * 还会导入并改名 `$DSH_HOME/settings.yaml`）、`deepseek-account`（没有 `disabled` 表达式、
+ * 任何组合默认就挂的 DeepSeek 账号登录 / 余额查询，出网）。理由写在 patch 文件里那一段。
  */
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -36,14 +41,29 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { defaultChildEntry, subprocessAvailable } from '../src/index.js'
 
-/** 这两个包一旦出现在两档的模块图里，就说明运行时里真有一条装任意代码 / 热替换模块的路。 */
-const FORBIDDEN = ['@deepseek-ai/dsh-plugin-manager', '@deepseek-ai/dsh-hmr'] as const
+/**
+ * 这些包一旦出现在两档的模块图里，就说明运行时里真有一条装任意代码 / 热替换模块 /
+ * 改写 profile patch / 默认出网登录的路。前两个是 WP93，后两个是 WP132（0.1.7-rc.1）。
+ */
+const FORBIDDEN = [
+  '@deepseek-ai/dsh-plugin-manager',
+  '@deepseek-ai/dsh-hmr',
+  '@deepseek-ai/dsh-config-editor',
+  '@deepseek-ai/dsh-deepseek-account-platform',
+] as const
 
 /** 反向哨兵：录到的图里必须有这两个，否则说明钩子没生效、测试是假绿。 */
 const EXPECTED = ['@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-agent-loop'] as const
 
-/** patch 层里必须写死 `disabled: true` 的三行。 */
-const MUST_BE_DISABLED = ['plugin-manager', 'tool-plugin-manager', 'hmr'] as const
+/** patch 层里必须写死 `disabled: true` 的行：前三行 WP93，后三行 WP132。 */
+const MUST_BE_DISABLED = [
+  'plugin-manager',
+  'tool-plugin-manager',
+  'hmr',
+  'config-editor',
+  'settings',
+  'deepseek-account',
+] as const
 
 const PATCH = fileURLToPath(new URL('../../../profiles/agentsws/cordis.patch.yml', import.meta.url))
 
@@ -119,7 +139,7 @@ describe('WP93 Plugin Manager / HMR 不进我们的运行时（16 §3 / 31 §3.5
     for (const name of FORBIDDEN) expect([...packages], name).not.toContain(name)
   })
 
-  it('profile 的 patch 层把三行显式写死 disabled（不靠"碰巧没装"）', () => {
+  it('profile 的 patch 层把这几行显式写死 disabled（不靠"碰巧没装"）', () => {
     const rows = parse(readFileSync(PATCH, 'utf8')) as PatchRow[]
     expect(Array.isArray(rows)).toBe(true)
     for (const id of MUST_BE_DISABLED) {
