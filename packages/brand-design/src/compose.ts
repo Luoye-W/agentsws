@@ -34,7 +34,10 @@ export type DesignComposeModel = (request: {
   purpose: 'brand_design_compose'
 }) => Promise<{ text: string; credits?: number }>
 
-/** 看图那一口（图片风格那一节要它）。**现在通常不接**，见下。 */
+/**
+ * 看图那一口（图片风格那一节要它）。WP127 起文字模型必须能看图，所以配了模型就一定接；
+ * 模型看不了（网关按能力声明拦下 / 上游不认图）时**明说**，不再悄悄跳过。
+ */
 export type DesignVisionModel = (request: {
   /** 页面截图或手册某一页的图。 */
   image: Uint8Array
@@ -48,7 +51,10 @@ export const CREDITS_PER_COMPOSE = 0.3
 export interface ComposeDesignInput {
   profile: BrandDesignProfile
   model?: DesignComposeModel
-  /** 看截图的那一口。不给就不看图，`imagery` 那一节如实写「未找到」。 */
+  /**
+   * 看截图的那一口。不给但有图（没接模型）→ 不看，并在 `vision_note` 里如实说一句；
+   * `imagery` 那一节如实写「未找到」。
+   */
   vision?: DesignVisionModel
   /** 给视觉模型看的图（页面截图 / 手册页）。 */
   images?: readonly Uint8Array[]
@@ -72,6 +78,11 @@ export interface ComposeDesignResult {
   missing: DesignMdSection[]
   /** 模型那一步没成的时候那一句人话（退回直述文本了）。 */
   fallback_reason?: string
+  /**
+   * WP127：有图却没看成时那一句人话（「当前模型看不了图」之类）。**不再悄悄跳过**——
+   * 调用方把它记进版本历史，用户知道图片风格那一节为什么是空的、该去哪儿换模型。
+   */
+  vision_note?: string
 }
 
 /** 开跑前给用户看的那个数。 */
@@ -233,6 +244,11 @@ export async function composeDesignProse(input: ComposeDesignInput): Promise<Com
   // ① 看图那一步（有口子才跑，且**先跑**——它的结果要进成文的证据，
   // 甚至能凭空造出一节证据：只有图、没有 CSS 的站也能有 imagery 那一节）
   let profile = input.profile
+  let visionNote: string | undefined
+  const hasImages = input.images !== undefined && input.images.length > 0
+  if (hasImages && input.vision === undefined) {
+    visionNote = '这一轮没接上模型，图没看，图片风格那一节留白。'
+  }
   if (input.vision !== undefined && input.images !== undefined && input.images.length > 0) {
     const notes: string[] = []
     for (const image of input.images) {
@@ -248,8 +264,13 @@ export async function composeDesignProse(input: ComposeDesignInput): Promise<Com
         })
         notes.push(res.text.trim())
         spent = round(spent + (res.credits ?? CREDITS_PER_VISION_CALL))
-      } catch {
-        // 看不了就不看。这一节会如实留白。
+      } catch (err) {
+        // WP127：不再"看不了就不看"——模型看不了图（网关按能力声明拦下时那句就是
+        // 「当前模型看不了图……」）或者上游不认图，都明说，这一节如实留白
+        const why = err instanceof Error ? err.message : '未知原因'
+        visionNote = why.includes('看不了图')
+          ? `${why}（图片风格那一节留白）`
+          : `看图那一步没成（${why}），图片风格那一节留白。`
         break
       }
     }
@@ -276,6 +297,7 @@ export async function composeDesignProse(input: ComposeDesignInput): Promise<Com
       budget: { estimated_credits: estimated, cap_credits: cap, spent_credits: spent },
       stopped_for_budget: false,
       missing,
+      ...(visionNote === undefined ? {} : { vision_note: visionNote }),
     }
   }
 
@@ -314,6 +336,7 @@ export async function composeDesignProse(input: ComposeDesignInput): Promise<Com
     stopped_for_budget: stopped,
     missing,
     ...(fallbackReason === undefined ? {} : { fallback_reason: fallbackReason }),
+    ...(visionNote === undefined ? {} : { vision_note: visionNote }),
   }
 }
 

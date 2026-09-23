@@ -1,7 +1,10 @@
 /**
  * 设置页的「模型」一段（WP25 交付 C）。
  *
- * 四块，从上到下：
+ * WP127 起分两块：「文字与看图」（下面这四段）与「生图」（最下面，单独一档）。
+ * 顶部一条提示：默认模型看不了图 / 还没验证过能不能看图（老用户升级上来）。
+ *
+ * 四段，从上到下：
  * 1. **已配的**——每条一行：地址、模型名、境内外、有没有 key、上次测试；两个动作：测试、删；
  * 2. **加一个**——两种种类各一张卡（DeepSeek 官方 / OpenAI 兼容自定义），
  *    卡上写清楚要准备什么（≤ 5 步 + 外链），表单是**不经模型的原生表单**；
@@ -12,11 +15,14 @@
  * key 这条线：值从 `ModelForm` 的 FormData 出来 → `saveModelProvider` 发出去 → 结束。
  * 这个文件里没有一处把它放进 state、query 缓存、URL 或日志。
  */
+import { VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
+import { ImageModelSection } from '@/components/models/image-model-section'
+import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
 import { SubscriptionPlan } from '@/components/models/subscription-plan'
 import { Button } from '@/components/ui/button'
@@ -210,6 +216,15 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   const templates = providers.data?.templates ?? []
   const settings = defaults.data
   const active = rows.filter((p) => p.active)
+  /*
+   * WP127：默认模型能不能看图（按上一次验证）。老用户升级上来多半是"还没验证过"——
+   * 顶部一条提示，**不挡路**：岗位照常干活，只是要看图的那一步会明说。
+   */
+  const defaultRow =
+    settings === undefined
+      ? undefined
+      : active.find((p) => `${p.id}/${p.model}` === settings.default)
+  const visionStatus = defaultRow?.vision_status
 
   return (
     <Card data-testid="models-panel">
@@ -226,6 +241,20 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         </p>
         {/* WP66（52 O1）：模型设置按品牌各一份——多品牌时说一句这一页管的是谁 */}
         <BrandScopeNote testId="models-brand-scope" />
+
+        {defaultRow === undefined || visionStatus === undefined || visionStatus === 'ok' ? null : (
+          <p
+            role="status"
+            className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-300"
+            data-testid="models-vision-banner"
+            data-status={visionStatus}
+          >
+            {t(`models.vision.banner.${visionStatus}`, {
+              model: defaultRow.model,
+              models: VISION_MODEL_EXAMPLES.join('、'),
+            })}
+          </p>
+        )}
 
         {/*
           52 O3「跟随公司默认」。**只有多品牌、而且不是公司默认那个品牌才出现**——
@@ -271,6 +300,12 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
             {error}
           </p>
         )}
+
+        {/* WP127：第一块「文字与看图」（第二块「生图」在最下面） */}
+        <h3 className="flex items-center gap-1 text-sm font-medium" data-testid="models-text-title">
+          {t('models.text.title')}
+          <Hint text={t('models.text.hint')} />
+        </h3>
 
         {/* ① 已配的 */}
         <section className="flex flex-col gap-2">
@@ -472,6 +507,10 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
             </section>
           </>
         )}
+
+        {/* WP127：第二块「生图」——单独一档，可以不配 */}
+        <Separator />
+        <ImageModelSection {...(assignment === undefined ? {} : { assignment })} />
       </CardContent>
     </Card>
   )
@@ -562,6 +601,8 @@ function ProviderRow({
           </span>
         </p>
       )}
+      {/* WP127：三步小清单（与向导第 ① 步同一个件） */}
+      {result === undefined ? null : <ModelCheckSteps steps={result.steps} />}
     </div>
   )
 }

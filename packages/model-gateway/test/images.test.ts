@@ -31,7 +31,7 @@ describe('22 图片槽（WP76，58 §1）', () => {
     const provider = unavailableImageProvider()
     expect(provider.available).toBe(false)
     expect(provider.unavailable_reason).toBe(NO_IMAGE_MODEL_ZH)
-    expect(NO_IMAGE_MODEL_ZH).toContain('DeepSeek')
+    expect(NO_IMAGE_MODEL_ZH).toContain('生图')
     await expect(
       provider.generate({ prompt: '白底摆台', meta: meta({ purpose: 'run' }) }),
     ).rejects.toMatchObject({ code: 'not_implemented' })

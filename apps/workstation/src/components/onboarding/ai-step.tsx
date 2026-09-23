@@ -12,16 +12,18 @@
  *   关联状态 → 关联上了就自动启用云模型、把各能力开关切到「用 Agents 工坊的」→
  *   显示到账的积分。
  * - **用我自己的模型接口**：沿用现有 `ModelForm`（原生表单、key 不进 state、
- *   不经 AI），存完**当场打一次最小请求**（`POST /v1/models/providers/:id/test`）。
- *   通了才算接上；不通说人话（70 §2.2 那四句）。
+ *   不经 AI），存完**当场验证三步**（`POST /v1/models/providers/:id/test`：连通 →
+ *   文字 → 带图，WP127）。三步都过才算接上；**看不了图的不放行**（Agents 工坊
+ *   只支持多模态模型）；不通说人话（70 §2.2 那几句）。
  *
  * 减字：两张卡各一行说明，选中哪张才展开哪张的正文——两张同时铺开的话，
  * 第一次打开这个产品的人要先读两段字才知道自己该点哪儿。
  */
-import { modelFailureKind } from '@agentsws/contracts'
+import { modelFailureKind, VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Cloud, KeyRound, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
 import { CLOUD_PROVIDER_ID } from '@/components/settings/model-cloud-card'
 import { Button } from '@/components/ui/button'
@@ -54,6 +56,14 @@ export type AiChoice = 'official' | 'own'
  */
 export function modelTestKey(result: ModelTestResult): string {
   return `onboarding.ai.own.err.${modelFailureKind(result)}`
+}
+
+/**
+ * WP127：那一句要填的变量。只有"看不了图"那一档要——列几个常见能看图的公开型号名
+ * （契约里那一份，不是推荐），让人知道往哪个方向换。
+ */
+export function modelTestVars(): Record<string, string> {
+  return { models: VISION_MODEL_EXAMPLES.join('、') }
 }
 
 /**
@@ -358,14 +368,21 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                 {t('onboarding.ai.own.testing')}
               </p>
             ) : null}
+            {/* WP127：三步小清单（与设置页那一行同一个件） */}
+            {test === undefined ? null : <ModelCheckSteps steps={test.steps} />}
             {test === undefined ? null : test.ok ? (
               <p className="flex items-center gap-1.5 text-primary" data-testid="ai-own-ok">
                 <Check aria-hidden className="size-4" />
                 {t('onboarding.ai.own.ok')}
               </p>
             ) : (
-              <p role="alert" className="text-destructive" data-testid="ai-own-failed">
-                {t(modelTestKey(test))}
+              <p
+                role="alert"
+                className="text-destructive"
+                data-testid="ai-own-failed"
+                data-kind={modelFailureKind(test)}
+              >
+                {t(modelTestKey(test), modelTestVars())}
               </p>
             )}
           </div>

@@ -205,5 +205,45 @@ describe('成文：钱（71 §3 第 3 条 / 契约的封顶）', () => {
     expect(result.budget.spent_credits).toBeCloseTo(0.1 + CREDITS_PER_COMPOSE, 5)
     // 看到的那句话进了送给成文模型的证据
     expect(echoModel.mock.calls.at(-1)?.[0]?.prompt).toContain('暖调产品摄影')
+    expect(result.vision_note).toBeUndefined()
+  })
+
+  it('WP127：模型看不了图——不再悄悄跳过，明说「当前模型看不了图」', async () => {
+    const vision = vi.fn(async () => {
+      throw new Error(
+        '当前模型看不了图。Agents 工坊要求文字模型能看图——去设置 → 模型，换一个能看图的模型。',
+      )
+    })
+    const result = await composeDesignProse({
+      profile: heritage(),
+      model: echoModel,
+      vision,
+      images: [new Uint8Array([1]), new Uint8Array([2])],
+    })
+    // 第一张就看不了，后面不再白试
+    expect(vision).toHaveBeenCalledTimes(1)
+    expect(result.vision_note).toContain('当前模型看不了图')
+    expect(result.profile.imagery).toBeUndefined()
+    // 文字那一步照常
+    expect(result.markdown).toContain('这一节由替身写的')
+  })
+
+  it('WP127：上游别的错也说出来，不吞', async () => {
+    const vision = vi.fn(async () => {
+      throw new Error('provider http 503')
+    })
+    const result = await composeDesignProse({
+      profile: heritage(),
+      model: echoModel,
+      vision,
+      images: [new Uint8Array([1])],
+    })
+    expect(result.vision_note).toContain('看图那一步没成')
+    expect(result.vision_note).toContain('503')
+  })
+
+  it('WP127：有图但没接模型——同样明说图没看', async () => {
+    const result = await composeDesignProse({ profile: heritage(), images: [new Uint8Array([1])] })
+    expect(result.vision_note).toContain('图没看')
   })
 })

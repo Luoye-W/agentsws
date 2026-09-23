@@ -30,6 +30,11 @@ export interface CatalogModel extends CatalogPrice {
   model: string
   /** 上游收但不在价目表上单列的老名字（按同一条价计费）。 */
   aliases?: string[]
+  /**
+   * WP127：官网写明能不能看图。**只记官网价目 / 文档页明写的**；没写就不填
+   * （不填 = 不知道，真能不能看以设置页的三步验证为准）。
+   */
+  vision?: boolean
 }
 
 /**
@@ -179,4 +184,30 @@ export function findModel(vendor: CatalogVendor, model: string): CatalogModel | 
   const undated = name.replace(/-\d{4}-\d{2}-\d{2}$/, '').replace(/-\d{4}$/, '')
   if (undated === name) return undefined
   return vendor.models.find((m) => m.model.toLowerCase() === undated)
+}
+
+/**
+ * WP127：内置价目表里这个模型**写明**能不能看图。认不出这一家 / 这个模型 / 没写，
+ * 一律 `undefined`——不猜。用处：钉住"官方接口的默认型号能看图"，以及界面上提前提醒。
+ */
+export function catalogVision(
+  baseUrl: string,
+  model: string,
+  from: PriceCatalog = PRICE_CATALOG,
+): boolean | undefined {
+  const vendor = vendorForBaseUrl(baseUrl, from)
+  if (vendor === undefined) return undefined
+  return findModel(vendor, model)?.vision
+}
+
+/** 不看地址、只按模型名在整张表里找"写明能不能看图"那一格（云端汇聚口用它）。 */
+export function catalogVisionByName(
+  model: string,
+  from: PriceCatalog = PRICE_CATALOG,
+): boolean | undefined {
+  for (const vendor of from.vendors) {
+    const hit = findModel(vendor, model)
+    if (hit?.vision !== undefined) return hit.vision
+  }
+  return undefined
 }

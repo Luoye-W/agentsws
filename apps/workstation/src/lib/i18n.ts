@@ -2472,6 +2472,32 @@ const zh: Table = {
   'onboarding.business.working': '正在读你的网站，已经读了 {done} 页。可以先去选岗位，回来看结果。',
   'onboarding.business.capped': '花到 {cap} 积分的上限就停下了——已经读到的都在下面。',
   'onboarding.business.missed': '有 {count} 个页面没读着（{reason}）。缺的那几格自己填上就行。',
+  // WP127：文字模型必须能看图；生图单独一档
+  'onboarding.ai.own.err.vision':
+    '这个模型看不了图，Agents 工坊要求模型能看图。换一个能看图的再试，常见的有：{models}。',
+  'models.check.connect': '连得上',
+  'models.check.text': '文字能回',
+  'models.check.vision': '看得懂图',
+  'models.check.skipped': '没跑到这一步',
+  'models.text.title': '文字与看图',
+  'models.text.hint': 'Agent 干活用的模型。Agents 工坊要求它能看图——读品牌手册、看图片风格都靠它。',
+  'models.vision.banner.no':
+    '当前默认模型「{model}」看不了图。岗位照常干活，但读手册、看图片风格这类要看图的动作会说「当前模型看不了图」。换一个能看图的模型（常见的有：{models}）。',
+  'models.vision.banner.unchecked':
+    '升级后要重新验证一次：默认模型「{model}」还没测过能不能看图。点它那一行的「测试」就行，十来个 token。',
+  'models.image.title': '生图',
+  'models.image.hint':
+    '出图用的模型，和上面的文字模型分开设。可以不配——不配时要出图的岗位会提醒你来这里。',
+  'models.image.none': '不配',
+  'models.image.source': '用哪一条',
+  'models.image.model': '生图模型名',
+  'models.image.save': '保存',
+  'models.image.official': 'Agents 工坊官方接口',
+  'models.image.price': '官方接口出图：每张 {credits} 积分（出不来不扣）',
+  'models.image.own_price': '用你自己的接口出图，按那一家的价收，不经我们的积分。',
+  'models.image.no_choices':
+    '上面还没有能出图的接口：接上 Agents 工坊官方接口，或者加一条 OpenAI 兼容口，再回来选。',
+  'models.image.saved': '已保存，下一次出图就用它。',
 }
 
 const en: Table = {
@@ -4964,6 +4990,33 @@ const en: Table = {
     'It stopped at the {cap}-credit cap. Everything read so far is below.',
   'onboarding.business.missed':
     '{count} pages could not be read ({reason}). Just fill those fields in yourself.',
+  // WP127: the text model must see images; image generation is its own setting
+  'onboarding.ai.own.err.vision':
+    'This model cannot see images, and Agents Workshop needs one that can. Try one that can — common ones: {models}.',
+  'models.check.connect': 'Reachable',
+  'models.check.text': 'Answers text',
+  'models.check.vision': 'Reads images',
+  'models.check.skipped': 'Not reached',
+  'models.text.title': 'Text & vision',
+  'models.text.hint':
+    'The model agents work with. Agents Workshop needs it to see images — reading brand books and judging image style depend on it.',
+  'models.vision.banner.no':
+    'The default model "{model}" cannot see images. Positions keep working, but steps that need to look at images will say "the current model cannot see images". Switch to one that can (common ones: {models}).',
+  'models.vision.banner.unchecked':
+    'After the upgrade, check once more: the default model "{model}" has not been tested for images yet. Press "Test" on its row — a dozen tokens.',
+  'models.image.title': 'Image generation',
+  'models.image.hint':
+    'The model that draws pictures, set apart from the text model. Optional — positions that need pictures will point you here.',
+  'models.image.none': 'Not set',
+  'models.image.source': 'Which one',
+  'models.image.model': 'Image model name',
+  'models.image.save': 'Save',
+  'models.image.official': 'Agents Workshop official API',
+  'models.image.price': 'Official API: {credits} credits per image (nothing charged if it fails)',
+  'models.image.own_price': 'Your own endpoint bills you directly; no Agents Workshop credits.',
+  'models.image.no_choices':
+    'Nothing above can draw yet: connect the Agents Workshop official API or add an OpenAI-compatible endpoint, then come back.',
+  'models.image.saved': 'Saved — the next picture uses it.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

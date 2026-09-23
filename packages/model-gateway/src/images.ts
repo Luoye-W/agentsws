@@ -1,11 +1,9 @@
 /**
  * 22 图片槽的两个实现（WP76，58 §1）。
  *
- * **现在真的没有图片模型**，这一句要说清楚而不是藏起来：
- *
- * - 工作区默认模型是 DeepSeek，DeepSeek **没有**图片生成接口；
- * - 要真出图得走 OpenAI 兼容口（用户自己的 key）或 agentsws 云按积分（49 M2）；
- * - 两条都还没接（58 §5「后置：真图片模型」）。
+ * 没配生图时要说清楚而不是藏起来：文字模型（WP127 起必须能看图）**不负责出图**，
+ * 生图是设置页上单独的一档（WP127 交付 3）——配了走 `providers/openai-images.ts`
+ * （自己的 OpenAI 兼容口，或 Agents 工坊官方接口按张扣积分）；没配就是下面这句人话。
  *
  * 所以这里给的是两个东西：{@link unavailableImageProvider}（默认，出不了图并
  * **说出为什么**）与 {@link stubImageProvider}（确定性占位图，模拟与 demo 用）。
@@ -31,14 +29,15 @@ import { GatewayError } from './types.js'
  * `no_image_model` 说明、模拟里那条断言读的是同一个字符串。
  */
 export const NO_IMAGE_MODEL_ZH =
-  '现在没有接图片模型：默认的 DeepSeek 不出图。这条职责照样能用——它会出 brief、' +
-  '尺寸规格和变体计划，只是不出图。要出图的话，去设置页填一个 OpenAI 兼容口的 key，' +
-  '或者开 agentsws 云的图片额度（按积分算）。'
+  '生图还没配：去设置 → 模型 →「生图」那一块选一个（用 Agents 工坊官方接口按张扣积分，' +
+  '或者用你自己的 OpenAI 兼容口）。这条职责照样能用——它会出 brief、尺寸规格和变体计划，' +
+  '只是不出图。'
 
 export const NO_IMAGE_MODEL_EN =
-  'No image model is connected: the default DeepSeek cannot generate images. This duty still ' +
-  'works — it produces the brief, the specs and the variant plan, just no pictures. To get ' +
-  'images, add an OpenAI-compatible key in settings, or turn on agentsws cloud image credits.'
+  'Image generation is not set up: go to Settings → Models → "Image generation" and pick one ' +
+  '(Agents Workshop official API, charged per image in credits, or your own OpenAI-compatible ' +
+  'endpoint). This duty still works — it produces the brief, the specs and the variant plan, ' +
+  'just no pictures.'
 
 const DEFAULT_REF: ModelRef = { provider: 'local', model: 'no-image-model' }
 const STUB_REF: ModelRef = { provider: 'local', model: 'stub-image' }
@@ -173,12 +172,25 @@ export function placeholderPng(width: number, height: number, hash: string): Uin
       p += 3
     }
   }
+  return encodePng(width, height, raw, 'rgb')
+}
+
+/**
+ * 把已经按行排好（每行前一个过滤字节 0）的像素编成 PNG。
+ * `gray` 一个像素一字节，`rgb` 三字节。WP127 的验证测试图也用它（灰度，更小）。
+ */
+export function encodePng(
+  width: number,
+  height: number,
+  raw: Uint8Array,
+  mode: 'gray' | 'rgb',
+): Uint8Array {
   const ihdr = new Uint8Array(13)
   const view = new DataView(ihdr.buffer)
   view.setUint32(0, width)
   view.setUint32(4, height)
   ihdr[8] = 8 // bit depth
-  ihdr[9] = 2 // colour type: truecolour
+  ihdr[9] = mode === 'rgb' ? 2 : 0 // colour type: truecolour / greyscale
   const idat = new Uint8Array(deflateSync(raw))
   const parts = [
     new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),

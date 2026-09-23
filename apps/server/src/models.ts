@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path'
 import type {
   DiscoverModelsInput,
   ModelDefaultsView,
+  ModelImageView,
   ModelListing,
   ModelPricingRefreshResult,
   ModelPricingVendorView,
@@ -37,8 +38,10 @@ import type {
   ModelTestResult,
   ModelUsageRow,
   ModelUsageView,
+  ModelVisionStatus,
   SaveModelProviderInput,
   SetModelDefaultsInput,
+  SetModelImageInput,
 } from '@agentsws/api'
 import type {
   Clock,
@@ -48,7 +51,14 @@ import type {
   ModelPurpose,
   ModelRef,
 } from '@agentsws/contracts'
-import { CLOUD_BASE_URL_ENV, cloudBaseUrl, DEFAULT_CLOUD_BASE_URL } from '@agentsws/contracts'
+import {
+  CLOUD_BASE_URL_ENV,
+  cloudBaseUrl,
+  DEFAULT_CLOUD_BASE_URL,
+  NO_VISION_REASON,
+  VISION_MODEL_EXAMPLES,
+} from '@agentsws/contracts'
+import { buildPricing, creditsFor } from '@agentsws/metering'
 import type {
   CatalogPrice,
   FetchLike,
@@ -58,8 +68,11 @@ import type {
 } from '@agentsws/model-gateway'
 import {
   catalogModels,
+  checkModel,
   hostOf,
+  NO_IMAGE_MODEL_ZH,
   openaiCompatibleProvider,
+  openaiImageProvider,
   PRICE_CATALOG,
   refreshPriceCatalog,
   stubProvider,
@@ -101,6 +114,23 @@ export const ENV_PROVIDER_ID = 'deepseek'
 export const STUB_REF: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
 
 const STUB_PRICES = { 'stub/stub-v1': { in: 0, out: 0, cached: 0 } }
+
+/**
+ * WP127：生图那一档没指定模型名时用哪个。OpenAI 与 Agents 工坊官方接口（背后是汇聚网关）
+ * 都认这个名字；别家的兼容口换成它自己的生图模型名即可（设置页那一格可改）。
+ */
+export const DEFAULT_IMAGE_MODEL = 'gpt-image-1'
+
+/** 能挂生图的 provider 种类：OpenAI 兼容口与官方接口。DeepSeek 没有生图口，订阅登录也没有。 */
+const IMAGE_CAPABLE_KINDS: readonly ModelProviderKind[] = ['openai_compatible', 'agentsws_cloud']
+
+/**
+ * WP127：验证没过、卡在"看不了图"时那句人话。**只列公开型号名，不是推荐**——
+ * 真能不能看以验证为准。
+ */
+export function noVisionMessage(): string {
+  return `这个模型看不了图，Agents 工坊要求模型能看图。换一个能看图的模型再测，常见的有：${VISION_MODEL_EXAMPLES.join('、')}。`
+}
 
 /** 一条 provider 的**非秘密**配置。key 不在这里，在加密库里。 */
 export interface ModelProviderConfig {
@@ -154,6 +184,11 @@ interface ModelsStateFile {
   defaults: {
     default?: string
     by_purpose?: Partial<Record<ModelPurpose, string>>
+    /**
+     * WP127：生图那一档（单独设置，可以不配）。放在 `defaults` 里而不是另起一格：
+     * 52 O3「跟随公司默认」与 O4「从某个品牌复制」复制的就是这一份决定，生图也该跟着走。
+     */
+    image?: { provider_id: string; model: string }
     data_residency?: 'cn' | 'any'
     budget?: {
       workspace_daily_base?: number
@@ -207,6 +242,11 @@ export interface ModelsAssembly {
   configured(): boolean
   /** 现在生效的默认模型（运行时组 `RunRequest.runtime.model` 用）。 */
   defaultRef(): ModelRef
+  /**
+   * WP127：现在生效的默认模型能不能看图（按上一次验证）。需要看图的动作据此明说
+   * 「当前模型看不了图」——不阻塞岗位，只是那一步如实说。
+   */
+  visionStatus(): ModelVisionStatus
   /** WP66：端一份可复制的设置快照（**没有 key**）。 */
   exportSettings(): ModelSettingsSnapshot
   /**
@@ -914,7 +954,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     model = config.model,
   ): ModelProvider | undefined => {
     if (!hasKey(config.id)) return undefined
+    const vision = visionOf(config, model)
     return openaiCompatibleProvider({
+      // WP127：上一次验证的结论就是能力声明；没验证过就不声明（网关照常放行）
+      ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
       baseUrl: config.base_url,
       apiKey: keySource(config.id),
       model,
@@ -940,6 +983,59 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           }
         : {}),
     })
+  }
+
+  /**
+   * WP127：按上一次验证，这家的这个模型能不能看图。**只认测的正是这个模型的那一次**——
+   * 换了模型名，上一次的结论就不算数（回 `undefined` = 没验证过）。
+   */
+  const visionOf = (config: ModelProviderConfig, model = config.model): boolean | undefined => {
+    const test = state.tests[config.id]
+    if (test?.vision === undefined) return undefined
+    return test.model === `${config.id}/${model}` ? test.vision : undefined
+  }
+
+  const visionStatusOf = (config: ModelProviderConfig, model = config.model): ModelVisionStatus => {
+    const vision = visionOf(config, model)
+    return vision === undefined ? 'unchecked' : vision ? 'ok' : 'no'
+  }
+
+  /** WP127：官方接口一张图多少积分（`pricing.json` 的 `ai.image`；界面常显）。 */
+  const creditsPerImage = (): number | undefined => creditsFor(buildPricing(), 'ai.image', 1)
+
+  /** WP127：生图那一档现在挂哪一条（配了、而且那一条现在能用才有）。 */
+  const imageConfig = (): { config: ModelProviderConfig; model: string } | undefined => {
+    const picked = state.defaults.image
+    if (picked === undefined) return undefined
+    const config = activeConfigs().find((c) => c.id === picked.provider_id)
+    if (config === undefined || !IMAGE_CAPABLE_KINDS.includes(config.kind)) return undefined
+    return { config, model: picked.model }
+  }
+
+  const imageView = (): ModelImageView => {
+    const picked = state.defaults.image
+    const live = imageConfig()
+    const credits = creditsPerImage()
+    const choices = activeConfigs()
+      .filter((c) => IMAGE_CAPABLE_KINDS.includes(c.kind))
+      .map((c) => ({
+        provider_id: c.id,
+        label: c.label,
+        official: c.kind === 'agentsws_cloud',
+        default_model: DEFAULT_IMAGE_MODEL,
+      }))
+    let unavailable_reason: string | undefined
+    if (picked === undefined) unavailable_reason = NO_IMAGE_MODEL_ZH
+    else if (live === undefined)
+      unavailable_reason = `生图用的那一条（${picked.provider_id}）现在用不了：没填 key、没关联账号，或者已经删了。去上面重新配好，或者换一条。`
+    return {
+      configured: live !== undefined,
+      ...(picked === undefined ? {} : { provider_id: picked.provider_id, model: picked.model }),
+      official: live?.config.kind === 'agentsws_cloud',
+      ...(credits === undefined ? {} : { credits_per_image: credits }),
+      choices,
+      ...(unavailable_reason === undefined ? {} : { unavailable_reason }),
+    }
   }
 
   /** 这家现在**已知**有哪些模型：拉过清单就是那一份，没拉过就只有配置里那一个。 */
@@ -1038,7 +1134,32 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       }
     }
     if (providers.length === 0) providers.push(stubProvider({ seed: 7 }))
-    gateway.reconfigure({ providers, policy: policyOf() })
+    // WP127：生图单独一档。没配就退回网关装配时那一条（生产上是"没有图片模型"那句人话，
+    // demo 里是占位图）
+    const image = imageConfig()
+    gateway.reconfigure({
+      providers,
+      policy: policyOf(),
+      images:
+        image === undefined
+          ? null
+          : openaiImageProvider({
+              baseUrl: image.config.base_url,
+              apiKey: keySource(image.config.id),
+              model: image.model,
+              provider: image.config.id,
+              region: image.config.region,
+              ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+              ...(image.config.kind === 'agentsws_cloud'
+                ? {
+                    extraHeaders: {
+                      'X-Agentsws-Region':
+                        (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
+                    },
+                  }
+                : {}),
+            }),
+    })
   }
 
   reassemble()
@@ -1273,6 +1394,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(config.models === undefined ? {} : { models: config.models }),
       ...(config.last_listing === undefined ? {} : { last_listing: config.last_listing }),
       ...(test === undefined ? {} : { last_test: test }),
+      vision_status: visionStatusOf(config),
       ...(fromEnvOnly(config.id) ? { from_env: true } : {}),
     }
   }
@@ -1496,11 +1618,15 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     },
 
     /**
-     * 试跑：经网关走一次最小 `complete`（`purpose: 'judge'`，十来个 token）。
+     * 验证三步（WP127，70 §2.2）：连通 → 一次最小文字请求 → **一次带图的最小请求**。
+     * 向导第 ① 步与设置页「测试」都走这一个（`checkModel` 在网关包里，模拟场景也用它）。
      *
      * 为什么经网关而不是直接打 provider：要一并验证驻留策略、预算、价目表都配对了——
      * 用户点"测试"要的是"这条路整条通不通"，不是"这个 URL 能不能连"。
-     * 回的是延迟与模型名，**永远没有 key**。
+     * 带图那一次标 `capability_probe`：网关不按上一次的结论拦它（问的正是"现在还看不看得了"）。
+     *
+     * 看不了图的**不通过**：Agents 工坊只支持多模态模型（Luoye 09-23）。
+     * 回的是三步结果、延迟与模型名，**永远没有 key**。
      */
     async test(actor, id): Promise<ModelTestResult> {
       const config = effectiveConfigs().find((c) => c.id === id)
@@ -1518,43 +1644,85 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         return result
       }
       const startedAt = Date.parse(clock.now())
-      let result: ModelTestResult
-      try {
-        const completion = await gateway.complete({
-          model: { provider: config.id, model: config.model, region: config.region },
-          messages: [
-            { role: 'system', content: '只回一个字：好' },
-            { role: 'user', content: '在吗' },
-          ],
-          meta: {
-            workspace_id: actor.workspace_id,
-            assignment_id: actor.assignment_id,
-            role_id: actor.role_id,
-            run_id: `run_model_test_${id}`,
-            purpose: 'judge',
-          },
-        })
-        result = {
-          ok: true,
-          reason: 'ok',
-          model: `${completion.model.provider}/${completion.model.model}`,
-          duration_ms: Math.max(0, Date.parse(clock.now()) - startedAt),
-          detail: `通了：回了 ${completion.text.trim().length} 个字，用了 ${completion.usage.input_tokens + completion.usage.output_tokens} 个 token`,
-          checked_at,
-        }
-      } catch (e) {
-        result = {
-          ok: false,
-          reason: codeOf(e),
-          // 上游报错原文里不会有 key（provider 只把它放进 header），但仍然截短
-          detail: humanizeModelError(codeOf(e), messageOf(e)),
-          duration_ms: Math.max(0, Date.parse(clock.now()) - startedAt),
-          checked_at,
-        }
-      }
+      const ref = { provider: config.id, model: config.model, region: config.region }
+      const outcome = await checkModel({
+        complete: (messages) =>
+          gateway.complete({
+            model: ref,
+            messages,
+            capability_probe: true,
+            meta: {
+              workspace_id: actor.workspace_id,
+              assignment_id: actor.assignment_id,
+              role_id: actor.role_id,
+              run_id: `run_model_test_${id}`,
+              purpose: 'judge',
+            },
+          }),
+        describe: (e) => ({ reason: codeOf(e), detail: messageOf(e) }),
+      })
+      const duration_ms = Math.max(0, Date.parse(clock.now()) - startedAt)
+      const result: ModelTestResult = outcome.ok
+        ? {
+            ok: true,
+            reason: 'ok',
+            model: modelIdOf(config),
+            duration_ms,
+            detail: `通了：连得上、文字能回、图也看得懂（用了 ${outcome.tokens} 个 token）`,
+            checked_at,
+            steps: outcome.steps,
+            vision: true,
+          }
+        : {
+            ok: false,
+            reason: outcome.reason ?? 'provider_error',
+            model: modelIdOf(config),
+            // 上游报错原文里不会有 key（provider 只把它放进 header），但仍然截短
+            detail:
+              outcome.reason === NO_VISION_REASON
+                ? noVisionMessage()
+                : humanizeModelError(outcome.reason ?? 'provider_error', outcome.detail ?? ''),
+            duration_ms,
+            checked_at,
+            steps: outcome.steps,
+            ...(outcome.vision === undefined ? {} : { vision: outcome.vision }),
+          }
       state.tests[id] = result
       flush()
+      // 结论变了，能力声明跟着变：下一次带图的请求按新结论走
+      reassemble()
       return result
+    },
+
+    /** WP127：生图那一档。 */
+    image: () => imageView(),
+
+    /**
+     * WP127：改生图那一档。**保存即生效**（`reassemble` 换掉网关的图片槽）。
+     *
+     * 只收已配、有 key、有生图口的那几条（OpenAI 兼容口与官方接口）；DeepSeek 与订阅登录
+     * 没有生图口，选了也出不了图——当场拒并说清楚，而不是存下来等出图时再失败。
+     */
+    setImage(_actor, input: SetModelImageInput) {
+      const id = input.provider_id.trim()
+      if (id === '') {
+        delete state.defaults.image
+      } else {
+        const config = activeConfigs().find((c) => c.id === id)
+        if (config === undefined) throw invalid(`这一条现在用不了（没配或者没填 key）：${id}`)
+        if (!IMAGE_CAPABLE_KINDS.includes(config.kind)) {
+          throw invalid(
+            `${config.label} 没有生图接口。生图请选 Agents 工坊官方接口，或者一条 OpenAI 兼容口。`,
+          )
+        }
+        state.defaults.image = {
+          provider_id: id,
+          model: input.model?.trim() || DEFAULT_IMAGE_MODEL,
+        }
+      }
+      flush()
+      reassemble()
+      return imageView()
     },
 
     /**
@@ -1734,6 +1902,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     port,
     configured: () => activeConfigs().length > 0,
     defaultRef,
+    visionStatus: () => {
+      const ref = defaultRef()
+      const config = activeConfigs().find((c) => c.id === ref.provider)
+      return config === undefined ? 'unchecked' : visionStatusOf(config, ref.model)
+    },
     exportSettings,
     importSettings(snapshot) {
       // 只往空的里写：已经配过的品牌一条都不动（复制是一次性的，不是同步）

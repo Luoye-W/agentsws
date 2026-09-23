@@ -23,6 +23,7 @@ import type { CostTable, WalletReservation } from '@agentsws/metering'
 import {
   aiCredits,
   COST_TABLE,
+  creditsFor,
   estimateAiCredits,
   estimateTokens,
   isCnAvailable,
@@ -390,6 +391,81 @@ async function meteredCall(
   })
 }
 
+/** 一次最多出几张（与本地 `openaiImageProvider` 同一个上限）。 */
+export const MAX_IMAGES_PER_CALL = 4
+
+/**
+ * `/v1/ai/images/generations`（WP127 交付 3：生图单独一档，按张扣积分）。
+ *
+ * 与对话口同一套五步，差别只在"单位"：按**张**预扣（`ai.image` 那条单价 × n），
+ * 按上游**真回来几张**结算——少回了就少收，一张没回（上游拒了）一分不扣。
+ * 单价在 `pricing.json`，本地设置页「生图」那一块常显的也是这一个数。
+ */
+async function meteredImages(c: Context<EntryEnv>, deps: EntryDeps): Promise<Response> {
+  const principal = c.get('principal')
+  const request_id = c.get('request_id')
+  const body = (await readJson(c)) as ChatBody & { n?: unknown; prompt?: unknown }
+  const model = asString(body.model)
+  if (model === undefined) throw new EntryError('invalid_input', '请求体里缺 model')
+  if (asString(body.prompt) === undefined)
+    throw new EntryError('invalid_input', '请求体里缺 prompt')
+  guardResidency(c, deps, model)
+
+  const unit = creditsFor(deps.pricing, 'ai.image', 1)
+  if (unit === undefined) {
+    throw new EntryError('internal', '价目表里没有 ai.image（生图单价），这个节点还不能出图')
+  }
+  const n = Math.max(1, Math.min(MAX_IMAGES_PER_CALL, Math.floor(asNumber(body.n) ?? 1)))
+  const exempt = deps.isExemptAccount?.(principal.account_id) === true
+  const reservation = reserveOrThrow(() =>
+    deps.wallet.reserve({
+      org_id: principal.org_id,
+      workspace_id: principal.workspace_id,
+      capability: 'ai.image',
+      unit: 'image',
+      quantity: n,
+      credits: exempt ? 0 : unit * n,
+      request_id,
+    }),
+  )
+
+  let res: Response
+  try {
+    res = await fetchOf(deps)(`${deps.upstream.ai.base_url}/images/generations`, {
+      method: 'POST',
+      headers: upstreamHeaders(deps),
+      body: JSON.stringify({ ...(body as Record<string, unknown>), n }),
+    })
+  } catch (err) {
+    deps.wallet.release(reservation)
+    throw new EntryError('provider_error', '上游暂时连不上，这一次没有扣积分，稍后再试。', {
+      details: { cause: err instanceof Error ? err.message : 'unknown' },
+    })
+  }
+  if (!res.ok) {
+    deps.wallet.release(reservation)
+    return passthrough(res)
+  }
+  const json = (await res.json()) as { data?: unknown[] }
+  const got = Array.isArray(json.data) ? Math.min(json.data.length, n) : 0
+  if (got === 0) {
+    deps.wallet.release(reservation)
+  } else {
+    deps.wallet.settle(reservation, {
+      quantity: got,
+      credits: exempt ? 0 : unit * got,
+      provider: providerOfModel(model),
+      model,
+      account_id: principal.account_id,
+      charge_status: exempt ? 'admin_exempt' : 'charged',
+    })
+  }
+  return new Response(JSON.stringify(json), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
 export function aiRoutes(deps: EntryDeps): EntryRoute[] {
   return [
     {
@@ -419,6 +495,14 @@ export function aiRoutes(deps: EntryDeps): EntryRoute[] {
           inputTokens: embeddingTokensOf,
           allowStream: false,
         }),
+    },
+    {
+      method: 'post',
+      path: '/v1/ai/images/generations',
+      auth: 'bearer',
+      scope: 'ai',
+      summary: 'OpenAI 兼容的生图口（WP127）；按张预扣，按真回来的张数结算',
+      handler: (c) => meteredImages(c, deps),
     },
     {
       method: 'get',

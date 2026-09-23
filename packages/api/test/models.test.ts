@@ -159,12 +159,14 @@ const SAVE_BODY = {
 }
 
 describe('WP25 网关：路由与信封', () => {
-  it('十一条路由都在 /v1/models 之下，且都要 Bearer + X-Assignment + 权限元组', async () => {
+  it('十三条路由都在 /v1/models 之下，且都要 Bearer + X-Assignment + 权限元组', async () => {
     const { h } = await wired()
     const specs = h.gateway.specs.filter((s) => s.path.startsWith('/v1/models'))
     expect(specs.map((s) => `${s.method.toUpperCase()} ${s.path}`).sort()).toEqual([
       'DELETE /v1/models/providers/:id',
       'GET /v1/models/defaults',
+      // WP127：生图单独一档
+      'GET /v1/models/image',
       'GET /v1/models/pricing',
       'GET /v1/models/providers',
       'GET /v1/models/usage',
@@ -173,6 +175,7 @@ describe('WP25 网关：路由与信封', () => {
       'POST /v1/models/providers/:id/discover',
       'POST /v1/models/providers/:id/test',
       'PUT /v1/models/defaults',
+      'PUT /v1/models/image',
       // WP66（52 O3）：这个品牌的模型设置跟不跟随公司默认
       'PUT /v1/models/inheritance',
       'PUT /v1/models/providers/:id',
@@ -371,5 +374,44 @@ describe('WP25 网关：小工具', () => {
     expect(parseModelId('nope')).toBeUndefined()
     expect(parseModelId('/leading')).toBeUndefined()
     expect(parseModelId('trailing/')).toBeUndefined()
+  })
+})
+
+describe('WP127 生图那一档', () => {
+  it('端口没装生图设置：回 not_implemented，不是 500', async () => {
+    const { call } = await wired()
+    const res = await call('GET', '/v1/models/image')
+    expect(res.status).toBe(501)
+  })
+
+  it('装了：GET 原样端出去，PUT 校验后往下传；读 / 改的权限元组同模型面', async () => {
+    const { h, call, port } = await wired()
+    const seen: unknown[] = []
+    const view = {
+      configured: false,
+      official: false,
+      credits_per_image: 0.5,
+      choices: [],
+    }
+    Object.assign(port, {
+      image: () => view,
+      setImage: (_a: unknown, input: unknown) => {
+        seen.push(input)
+        return { ...view, configured: true, provider_id: 'agentsws', official: true }
+      },
+    })
+    expect(await data(await call('GET', '/v1/models/image'))).toMatchObject({
+      credits_per_image: 0.5,
+    })
+    const put = await call('PUT', '/v1/models/image', { provider_id: 'agentsws' })
+    expect(put.status).toBe(200)
+    expect(seen).toEqual([{ provider_id: 'agentsws' }])
+    const bad = await call('PUT', '/v1/models/image', { provider_id: 7 })
+    expect(bad.status).toBe(400)
+    const of = (m: string) =>
+      h.gateway.specs.find((s) => s.method.toUpperCase() === m && s.path === '/v1/models/image')
+        ?.authz
+    expect(of('GET')).toMatchObject({ domain: 'store_config', op: 'read' })
+    expect(of('PUT')).toMatchObject({ domain: 'policy', op: 'stage' })
   })
 })
