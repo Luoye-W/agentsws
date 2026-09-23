@@ -8,6 +8,8 @@ import type {
 import { canonicalJson, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '../prefix.js'
 import { estimateInputTokens } from '../pricing.js'
+import { ProviderError } from '../types.js'
+import { hasImagePart, VISION_PROBE_WORD, visionProbeBase64 } from '../vision-probe.js'
 
 export interface StubProviderOptions {
   /** 随机全部经 seed；同一 (messages, tools, seed) 必然同一输出。 */
@@ -15,6 +17,13 @@ export interface StubProviderOptions {
   ref?: ModelRef
   /** 假向量维度（默认 8）。 */
   dim?: number
+  /**
+   * WP127：这个替身能不能看图（默认能——产品只支持多模态模型）。
+   *
+   * - 能：认得出验证用的那张测试图（按字节认），回那个约定的词；别的图照常回确定性假话。
+   * - 不能：见到带图的消息就像真上游那样回 400（模拟「配了看不了图的模型」）。
+   */
+  vision?: boolean
 }
 
 const VOCAB = [
@@ -76,9 +85,31 @@ export function stubProvider(options: StubProviderOptions): ModelProvider {
     }
   }
 
+  const vision = options.vision ?? true
+
   return {
     ref,
+    capabilities: { vision, image_generation: false },
     async complete(req) {
+      if (hasImagePart(req.messages)) {
+        if (!vision) {
+          throw new ProviderError('HTTP 400 this model does not support image input', {
+            status: 400,
+          })
+        }
+        const probe = visionProbeBase64()
+        const sawProbe = req.messages.some(
+          (m) =>
+            Array.isArray(m.content) &&
+            m.content.some((part) => part.type === 'image' && part.data === probe),
+        )
+        if (sawProbe) {
+          return {
+            text: VISION_PROBE_WORD,
+            usage: usageOf(sha256(probe), req.messages, req.tools),
+          }
+        }
+      }
       const hash = sha256(
         canonicalJson({
           messages: req.messages,

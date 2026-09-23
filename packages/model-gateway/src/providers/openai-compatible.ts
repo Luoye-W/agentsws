@@ -1,6 +1,7 @@
 import type {
   ChatContentPart,
   ChatMessage,
+  ModelCapabilities,
   ModelProvider,
   ModelRef,
   ProviderModelInfo,
@@ -56,6 +57,11 @@ export interface OpenAiCompatibleOptions {
   /** 给了才暴露 transcribe（走 /audio/transcriptions，OpenAI 的 whisper 形态）。 */
   transcriptionModel?: string
   extraHeaders?: Record<string, string>
+  /**
+   * WP127：能力声明（看不看得了图 / 出不出得了图）。**装配方按上一次验证结果填**；
+   * 不给就不声明（"不知道"不等于"不能"）。
+   */
+  capabilities?: ModelCapabilities
 }
 
 interface WireToolCall {
@@ -271,6 +277,8 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
 
   const provider: ModelProvider = {
     ref,
+    // WP127：能力声明由装配方给（来自上一次验证）；没给就是"还不知道"，网关照常放行
+    ...(options.capabilities === undefined ? {} : { capabilities: { ...options.capabilities } }),
     listModels,
     async complete(req) {
       const json = (await post('/chat/completions', {
