@@ -584,12 +584,28 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
       return { text, completion: lastCompletion }
     },
     async runTurn(text) {
-      const firstSeq = Number(agent.session.seq)
-      agent.followup(
-        createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }),
-      )
-      await agent.whenIdle()
-      return summarizeTurn(agent.session, firstSeq)
+      /*
+       * WP133：这一轮的摘要从**送到手的事件**里边收边折（`session/event`），不再回头按 seq
+       * 翻会话日志。`session.eventAt()` / `snapshotEvents()` / `ownEvents()` 上游已弃用
+       * （`dsh-session` README「Read the log」；官方 Agent Note 2026-09-09「Deprecate synchronous
+       * reads of arbitrary Session events」：普通逻辑"process the delivered current event
+       * instead of looking back through historical events"）。事件是 `append` 时同步发布的，
+       * 订阅挂在 `followup` 之前，`whenIdle()` 之后这一轮的事件一条不少。
+       */
+      const turn = new TurnSummary()
+      const sessionId = agent.session.id
+      const off = ctx.on('session/event', (session: { id: unknown }, event: SessionEvent) => {
+        if (session.id === sessionId) turn.observe(event)
+      })
+      try {
+        agent.followup(
+          createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }),
+        )
+        await agent.whenIdle()
+      } finally {
+        off()
+      }
+      return turn.result()
     },
     cancel() {
       agent.cancel({ kind: 'user' } as never)
@@ -604,14 +620,16 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   }
 }
 
-/** 一轮结束后：Agent 最后说的那段文本 + 终止原因（官方 headless 的 `summarize` 同款）。 */
-function summarizeTurn(session: Session, firstSeq: number): { text: string; reason: string } {
-  let text = ''
-  let reason = 'unknown'
-  const length = Number(session.seq)
-  for (let seq = firstSeq; seq < length; seq += 1) {
-    const event = session.eventAt(seq as never) as SessionEvent | undefined
-    if (event === undefined) continue
+/**
+ * 一轮的摘要：Agent 最后说的那段文本 + 终止原因（官方 headless 的 `summarize` 同款）。
+ * 逐条喂这一轮的 `session/event`，折法与 WP133 之前按 seq 用 `eventAt()` 回扫**逐条相同**：
+ * 最后一条文字非空的 `assistant/message` 胜出，`turn/end` 给出原因，别的事件不看。
+ */
+export class TurnSummary {
+  private text = ''
+  private reason = 'unknown'
+
+  observe(event: SessionEvent): void {
     if (event.type === 'assistant/message') {
       const joined = (
         event.data as { message: { content: readonly { type: string; text?: string }[] } }
@@ -619,13 +637,16 @@ function summarizeTurn(session: Session, firstSeq: number): { text: string; reas
         .filter((b) => b.type === 'text')
         .map((b) => b.text ?? '')
         .join('')
-      if (joined !== '') text = joined
+      if (joined !== '') this.text = joined
     }
     if (event.type === 'turn/end') {
-      reason = (event.data as { reason: { kind: string } }).reason.kind
+      this.reason = (event.data as { reason: { kind: string } }).reason.kind
     }
   }
-  return { text, reason }
+
+  result(): { text: string; reason: string } {
+    return { text: this.text, reason: this.reason }
+  }
 }
 
 /** 一段模型可见内容的指纹（事件里只记哈希，正文不重复进日志）。 */
