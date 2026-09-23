@@ -36,7 +36,7 @@
 | 11 | WP127 模型必须多模态（能看图）+ 生图单独一档 | `WP127-vision-required-and-image-model.md` | `wp127-vision` · `wp/127-vision` | — | 已合并（09-23，Fable 终审：全量过；合并时把各模型卡默认型号换成能看图的） |
 | 12 | WP128 客服增值服务托管实例 = Cloudflare Containers | `WP128-hosted-instance-cloudflare-containers.md` | `wp128-hosted` · `wp/128-hosted` | — | 已合并（09-23，Fable 终审：全量过；真部署未跑） |
 | 13 | WP129 内容观测上云 + 体检样本不够不收钱 | `WP129-content-observations-cloud.md` | `wp129-content-cloud` · `wp/129-content-cloud` | — | 已合并（09-23，Fable 终审：全量过） |
-| 14 | WP130 插件采集范围补齐：YouTube 搜索页 / 相关视频栏、IG 与 TikTok 搜索列表与 hashtag（移植） | `WP130-extension-capture-parity.md` | 私有仓库 `wp/130-capture`；开源 `wp130-ext-capture` · `wp/130-ext-capture` | — | 进行中（Claude） |
+| 14 | WP130 插件采集范围补齐：YouTube 搜索页 / 相关视频栏、IG 与 TikTok 搜索列表与 hashtag（移植） | `WP130-extension-capture-parity.md` | 私有仓库 `wp/130-capture`；开源 `wp130-ext-capture` · `wp/130-ext-capture` | — | 已合并（09-23，Fable 终审：开源全量过；私有仓库 390 测试 + 新旧对拍过，已并入其 main） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
