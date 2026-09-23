@@ -677,7 +677,8 @@ export function modelRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        returns: '{ providers: ModelProviderView[], templates: ModelProviderTemplate[] }',
+        returns:
+          '{ providers: ModelProviderView[]（WP127：vision_status = ok / no / unchecked，按上一次验证）, templates: ModelProviderTemplate[] }',
       },
       async (c, deps) => {
         const port = portOf(deps)
@@ -835,7 +836,8 @@ export function modelRoutes(): Route[] {
         assignment: true,
         authz: WRITE,
         params: [ID_PARAM],
-        returns: 'ModelTestResult',
+        returns:
+          'ModelTestResult（WP127：steps = 连通 / 文字 / 看图三步各自 ok；vision = 能不能看图，它就是这条 provider 的 capabilities.vision 声明的来源）',
       },
       async (c, deps) => ok(c, await portOf(deps).test(actorOf(c), param(c, 'id'))),
     ),
