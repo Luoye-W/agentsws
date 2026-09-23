@@ -175,8 +175,13 @@ import {
 } from './chat.js'
 import { ChatRelayClient, type OfflineMessageContent } from './chat-relay-client.js'
 import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
-import { type CloudFetch as CloudEntryFetch, createCloud } from './cloud.js'
-import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
+import { type CloudFetch as CloudEntryFetch, cloudBaseUrl, createCloud } from './cloud.js'
+import {
+  CLOUD_TOKEN_SECRET_ID,
+  type CloudAccountAssembly,
+  type CloudFetch,
+  createCloudAccount,
+} from './cloud-account.js'
 import { connectBaseUrl } from './connect-url.js'
 // WP83（54 §4）：连接目录 + 岗位连接清单 + 自定义 MCP 服务器（保存 / 校验 / 探测）
 import type { ConnectionDirectoryAssembly } from './connection-directory.js'
@@ -193,6 +198,14 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
+import {
+  createHostedOwnerClient,
+  ensureCloudModelDefault,
+  hostedModeOf,
+  hostedTargetOf,
+  type OwnerFetch,
+  seedHostedSecrets,
+} from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
 import { createJoin, type JoinAssembly } from './join.js'
@@ -225,7 +238,7 @@ import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
-import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
+import { createModels, type ModelsAssembly, STUB_REF, templatesFor } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
@@ -861,6 +874,8 @@ function mountEventStream(input: {
 
 export async function createServer(options: ServerOptions = {}): Promise<Server> {
   const env = options.env ?? process.env
+  // WP128：是不是托管实例（Cloudflare Container 里那一份）；开了开关缺配置就在这里抛
+  const hostedBoot = hostedModeOf(env)
   const clock: Clock = options.clock ?? { now: () => new Date().toISOString() }
   const random = options.random ?? seededRandom(Date.parse(clock.now()) % 2147483647)
   const dbDir = options.dbDir
@@ -1456,6 +1471,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (dir !== undefined) mkdirSync(dir, { recursive: true })
     // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
     const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
+    // WP128：托管实例——接托管的那个品牌种上托管令牌与转发器配对、默认模型换成云
+    // （两件事都在 createModels / 转发器客户端读之前做完，它们一行不用改）
+    if (
+      hostedBoot !== undefined &&
+      ws === hostedTargetOf(hostedBoot, workspace.id, brandsOfThisOrg())
+    ) {
+      seedHostedSecrets(brandSecrets, hostedBoot)
+      const cloudTemplate = templatesFor(env).find((t) => t.kind === 'agentsws_cloud')
+      if (dir !== undefined && cloudTemplate !== undefined)
+        ensureCloudModelDefault(dir, hostedBoot, {
+          label: cloudTemplate.label,
+          model: cloudTemplate.default_model,
+          region: cloudTemplate.region,
+        })
+    }
 
     // WP20 连接面：`/v1/connections/*` 与工作台数据源共用同一份连接状态
     const connections = await createConnections({
@@ -2509,6 +2539,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       endpoint: () => relaySecret('endpoint'),
       pairingToken: () => relaySecret('pairing_token'),
       messageKey: () => relaySecret('message_key'),
+      // WP128：托管实例以 `hosted` 的身份外连（转发器优先转给它）
+      ...(hostedBoot === undefined ? {} : { peer: 'hosted' as const }),
       onOfflineMessage: (message) => {
         storeOfflineMessage(message)
       },
@@ -2691,6 +2723,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const brandModules: BrandModules = brands
   /** bootstrap 品牌那一套：进程自己要用的那几处（会议 ASR、秘书、问 AI）取它。 */
   const boot = await brandModules.forWorkspace(workspace.id)
+  // WP128：托管的是这家公司的另一个品牌时，品牌那一套是懒装配的——现在就装上，
+  // 转发器客户端才会起来外连（不然要等第一条请求进来，而托管实例上不会有请求）
+  if (hostedBoot !== undefined) {
+    const target = hostedTargetOf(hostedBoot, workspace.id, brandsOfThisOrg())
+    if (target !== workspace.id) await brandModules.forWorkspace(target)
+  }
   const models = boot.ownGateway
 
   // 37 §4：会议内核。ASR 走同一个模型网关（没装 ASR provider 时管线出系统卡，不炸）；
@@ -4061,6 +4099,46 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 走 bootstrap 那一份——52 O5「一个值守子进程一个品牌工作区」，公开聊天窗
    * 本来就是那一档。
    */
+  /** WP128：聊天窗设置页「转发方式」第三项那几条（订阅 / 状态 / 取回 / 覆盖）。 */
+  const hostedOwnerPortOf = (
+    brand: BrandModuleSet,
+  ): Pick<
+    ChatPort,
+    | 'relayHosted'
+    | 'relayHostedSubscribe'
+    | 'relayHostedCancel'
+    | 'relayHostedBringHome'
+    | 'relayHostedSeed'
+  > => {
+    const client = createHostedOwnerClient({
+      cloud_base_url: cloudBaseUrl(env),
+      token: () => {
+        if (!brand.secrets.available) return undefined
+        try {
+          const token = brand.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+          return token === undefined || token === '' ? undefined : token
+        } catch {
+          return undefined
+        }
+      },
+      workspace_id: brand.workspace_id,
+      clock,
+      ...(brand.dir === undefined
+        ? {}
+        : { dataDir: brand.dir, backupDir: backupDirOf(env, brand.dir) }),
+      ...(options.cloudFetch === undefined
+        ? {}
+        : { fetch: options.cloudFetch as unknown as OwnerFetch }),
+    })
+    return {
+      relayHosted: () => client.status(),
+      relayHostedSubscribe: () => client.subscribe(),
+      relayHostedCancel: () => client.cancel(),
+      relayHostedBringHome: () => client.bringHome(),
+      relayHostedSeed: () => client.seed(),
+    }
+  }
+
   const chatPortOf = (brand: BrandModuleSet): ChatPort => {
     const lane = brand.chat
     const widget = brand.chatWidget
@@ -4202,7 +4280,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           conversations_this_month?: number
           limit?: number
           unlimited?: boolean
+          subscribed?: boolean
           offline_messages?: number
+          hosted?: {
+            state: 'running' | 'starting' | 'sleeping' | 'stopped'
+            last_heartbeat_at?: string
+          }
         } = {
           state: client.state(),
           online: client.state() === 'online',
@@ -4214,13 +4297,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           if (status.conversations_this_month !== undefined)
             base.conversations_this_month = status.conversations_this_month
           if (status.limit !== undefined) base.limit = status.limit
-          if (status.subscribed === true) base.unlimited = true
+          if (status.subscribed === true) {
+            base.unlimited = true
+            base.subscribed = true
+          }
           if (status.offline_messages !== undefined) base.offline_messages = status.offline_messages
+          // WP128：托管实例在不在跑（转发器那边的状态接口带着这一格）
+          if (status.hosted !== undefined)
+            base.hosted = {
+              state: status.hosted.state,
+              ...(status.hosted.last_heartbeat_at === undefined
+                ? {}
+                : { last_heartbeat_at: status.hosted.last_heartbeat_at }),
+            }
         } else if (endpoint !== undefined) {
           base.unlimited = true
         }
         return base
       },
+      // ── WP128 客服增值服务（「转发方式」第三项）：打云端的 /v1/support/*，令牌现取 ──
+      ...hostedOwnerPortOf(brand),
       scoped: async (ws) => chatPortOf(await brandModules.forWorkspace(ws)),
     }
   }

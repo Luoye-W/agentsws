@@ -32,6 +32,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+import { HostedRelayOption } from './chat-window-hosted'
 
 /** 嵌入代码：商家贴到网站 `</body>` 前的那一行。 */
 function embedCode(endpoint: string | undefined): string {
@@ -252,6 +253,7 @@ export function ChatWindowPage(): React.ReactNode {
             <p className="text-xs text-muted-foreground">{t('chat.window.relay.official.hint')}</p>
           </div>
           <div className="flex flex-col gap-1">
+            <p className="font-medium">{t('chat.window.relay.self')}</p>
             <span>{t('chat.window.relay.endpoint')}</span>
             <Input
               value={relayForm.endpoint || relay.data?.endpoint || ''}
@@ -283,6 +285,8 @@ export function ChatWindowPage(): React.ReactNode {
             </Button>
             <p className="text-xs text-muted-foreground">{t('chat.window.relay.hosted.hint')}</p>
           </div>
+          {/* WP128：第三项接真——订阅后「云端替你值守中」 */}
+          <HostedRelayOption />
           <div className="flex items-center gap-2">
             <Button
               size="sm"

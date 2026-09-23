@@ -283,6 +283,12 @@ describe('边界', () => {
       'put /v1/chat/relay/settings': 'bearer',
       'post /v1/chat/relay/test': 'bearer',
       'get /v1/chat/relay/status': 'bearer',
+      // WP128 客服增值服务（云端值守）：订阅 / 状态 / 取回 / 覆盖，一律 bearer
+      'get /v1/chat/relay/hosted': 'bearer',
+      'post /v1/chat/relay/hosted/subscribe': 'bearer',
+      'delete /v1/chat/relay/hosted/subscribe': 'bearer',
+      'post /v1/chat/relay/hosted/bring-home': 'bearer',
+      'post /v1/chat/relay/hosted/seed': 'bearer',
       'get /v1/chat/widget.js': 'public',
       'get /v1/chat/widget-config': 'public',
       'post /v1/chat/public/sessions': 'public',
@@ -290,6 +296,24 @@ describe('边界', () => {
       'get /v1/chat/public/sessions/:id/stream': 'public',
     })
     expect(chat.every((s) => s.auth === 'public' || s.assignment === true)).toBe(true)
+  })
+
+  it('WP128：端口没实现云端值守那几条 → 501 一句人话；实现了就原样转', async () => {
+    const r = await rig()
+    const missing = await r.call('GET', '/v1/chat/relay/hosted')
+    expect(missing.status).toBe(501)
+    const port = r.port as FakeChat & { relayHosted?: () => Promise<unknown> }
+    port.relayHosted = async () => ({
+      available: true,
+      linked: true,
+      subscription: { status: 'active' },
+      hosted: { state: 'running' },
+    })
+    const res = await r.call('GET', '/v1/chat/relay/hosted')
+    expect(res.status).toBe(200)
+    expect(await r.data<{ hosted: { state: string } }>(res)).toMatchObject({
+      hosted: { state: 'running' },
+    })
   })
 
   it('会让 AI 对外说话的那几条过出站急停', async () => {

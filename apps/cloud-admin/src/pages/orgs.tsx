@@ -332,6 +332,140 @@ function KolServiceSection({
   )
 }
 
+/** 客服增值服务那一块的摘要（形状与 `@agentsws/hosted` 的 `SupportServiceSummary` 一致）。 */
+interface SupportServiceSummary {
+  org_id: string
+  workspaces: {
+    workspace_id: string
+    subscription_status: 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+    current_cycle_end?: string
+    grace_until?: string
+    hosted?: {
+      desired: 'run' | 'stop'
+      state: 'running' | 'starting' | 'sleeping' | 'stopped'
+      instance_type: string
+      last_heartbeat_at?: string
+      restarts_this_month: number
+      snapshot?: { at: string; bytes: number; source: 'hosted' | 'local' }
+      snapshot_kept_until?: string
+      cost_estimate_usd_this_month: number
+      cost_estimate_usd_full_month: number
+      last_error?: string
+    }
+  }[]
+}
+
+const HOSTED_TONE = {
+  running: 'good',
+  starting: 'info',
+  sleeping: 'warn',
+  stopped: 'neutral',
+} as const
+
+const usd = (n: number): string => `$${n.toFixed(2)}`
+
+/**
+ * 抽屉里的「客服增值服务」那一块（WP128 / docs/64 §13）。
+ *
+ * 一个组织可能有好几个品牌，每个订阅的工作区一个容器，所以这里一行一个工作区：
+ * 订阅状态、容器状态（运行 / 休眠 / 停止）、最近心跳、本月费用估算。
+ * **只读**：起停只跟着订阅走，后台不提供手动开关（不然「扣了钱容器却停着」说不清）。
+ */
+function SupportServiceSection({ org_id }: { org_id: string }): React.ReactNode {
+  const { t } = useApp()
+  const summary = useQuery<SupportServiceSummary>(`/v1/admin/orgs/${org_id}/support-service`)
+  if (summary.error !== undefined)
+    return (
+      <DrawerSection title={t('drawer.support_service')}>
+        <Note tone="warn">{t('support_service.off')}</Note>
+      </DrawerSection>
+    )
+  if (summary.data === undefined)
+    return (
+      <DrawerSection title={t('drawer.support_service')}>
+        <Spinner label={t('loading')} />
+      </DrawerSection>
+    )
+  if (summary.data.workspaces.length === 0)
+    return (
+      <DrawerSection title={t('drawer.support_service')}>
+        <Empty label={t('support_service.empty')} />
+      </DrawerSection>
+    )
+  return (
+    <DrawerSection title={t('drawer.support_service')}>
+      <div className="flex flex-col gap-3" data-testid="support-service">
+        {summary.data.workspaces.map((row) => (
+          <div key={row.workspace_id} className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <WsTag>{row.workspace_id}</WsTag>
+              {row.hosted !== undefined && (
+                <StatusPill tone={HOSTED_TONE[row.hosted.state]}>
+                  {t(`support_service.state.${row.hosted.state}`)}
+                </StatusPill>
+              )}
+            </div>
+            <KeyValues
+              rows={[
+                {
+                  label: t('support_service.subscription'),
+                  value: t(`kol_service.status.${row.subscription_status}`),
+                },
+                ...(row.hosted === undefined
+                  ? []
+                  : [
+                      {
+                        label: t('support_service.heartbeat'),
+                        value: orDash(
+                          row.hosted.last_heartbeat_at === undefined
+                            ? undefined
+                            : when(row.hosted.last_heartbeat_at),
+                        ),
+                      },
+                      {
+                        label: t('support_service.restarts'),
+                        value: compact(row.hosted.restarts_this_month),
+                      },
+                      {
+                        label: t('support_service.cost_month'),
+                        value: usd(row.hosted.cost_estimate_usd_this_month),
+                      },
+                      {
+                        label: t('support_service.cost_full'),
+                        value: `${usd(row.hosted.cost_estimate_usd_full_month)} · ${row.hosted.instance_type}`,
+                      },
+                      {
+                        label: t('support_service.snapshot'),
+                        value: orDash(
+                          row.hosted.snapshot === undefined
+                            ? undefined
+                            : `${when(row.hosted.snapshot.at)} · ${compact(row.hosted.snapshot.bytes)} B`,
+                        ),
+                      },
+                      ...(row.hosted.snapshot_kept_until === undefined
+                        ? []
+                        : [
+                            {
+                              label: t('support_service.kept_until'),
+                              value: day(row.hosted.snapshot_kept_until),
+                            },
+                          ]),
+                    ]),
+              ]}
+            />
+            {row.hosted?.last_error !== undefined && (
+              <Note tone="warn">
+                {t('support_service.error')}：{row.hosted.last_error}
+              </Note>
+            )}
+          </div>
+        ))}
+        <Note>{t('support_service.cost_note')}</Note>
+      </div>
+    </DrawerSection>
+  )
+}
+
 function OrgDrawer({ detail, onDone }: { detail: OrgDetail; onDone: () => void }): React.ReactNode {
   const { t, canWrite } = useApp()
   const [reason, setReason] = useState('')
@@ -444,6 +578,7 @@ function OrgDrawer({ detail, onDone }: { detail: OrgDetail; onDone: () => void }
       </DrawerSection>
 
       <KolServiceSection org_id={detail.org.id} onDone={onDone} />
+      <SupportServiceSection org_id={detail.org.id} />
 
       {canWrite && (
         <DrawerSection

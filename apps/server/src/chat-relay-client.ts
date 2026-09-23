@@ -68,6 +68,11 @@ export interface ChatRelayClientOptions {
   heartbeatMs?: number
   /** 退避上限覆盖（测试）。 */
   maxBackoffMs?: number
+  /**
+   * 这一头是谁（WP128）：商家本机 `server`（缺省）；托管实例 `hosted`——
+   * 转发器按这一格决定访客消息给谁（两头都在时托管赢），配对也分开验。
+   */
+  peer?: 'server' | 'hosted'
 }
 
 const MAX_BACKOFF_MS = 60_000
@@ -170,7 +175,7 @@ export class ChatRelayClient {
           protocol_version: RELAY_PROTOCOL_VERSION,
           workspace: parsed.workspace,
           pairing,
-          peer: 'server',
+          peer: this.#options.peer ?? 'server',
           config: this.#relayConfig(),
         }),
       )

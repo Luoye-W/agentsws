@@ -185,6 +185,7 @@ npx wrangler secret put AGENTSWS_CLOUD_ADMIN_TOKEN
 | `AGENTSWS_KOL_EMAIL_KEY` | 公共红人库的邮箱密钥（WP116）。本机生成 32 字节：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`。**丢了就解不开已经落库的密文**，存进密码管理器 | 选填（要用公共红人库就必填） | **不存邮箱**（一个字节都不写，绝不降级成明文）；搬家时联系方式那一类全部 `skipped` |
 | `AGENTSWS_YOUTUBE_API_KEY` | Google Cloud Console → YouTube Data API v3 | 选填 | 没有官方口，`refresh` 只能走 Apify 或"只查库" |
 | `APIFY_TOKEN` | Apify 控制台 | 选填 | 没有降级口 |
+| `AGENTSWS_HOSTED_KEY_SEED` | 客服增值服务托管实例的库密钥种子（WP128，§13）。本机生成 32 字节：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`。**丢了就读不回已有的快照**，存进密码管理器 | 选填（要开客服增值服务就必填） | 订阅照常扣费、转发照常，但**不起容器**（后台那一格写明原因）——电脑关了没人接 |
 
 **没有发信的密钥**——Email Sending 在 Worker 里是一个 binding，一把 key 都不用。这是这个形态相对 SMTP 的一个实际好处：少一处"放哪儿、谁看得见、多久轮换"。
 
@@ -286,6 +287,7 @@ pnpm -F @agentsws/cloud-worker exec wrangler rollback <版本 id>
 | Email Sending | Paid 档含 3,000 封 / 月，超出 $0.35 / 1,000 封 | 内测期几十封，$0 |
 | 自定义域 / 证书 / DNS | 免费 | $0 |
 | **模型上游** | DeepSeek 按 token 计，**这一笔不在 Cloudflare 账上** | 看用量。这才是真正会花钱的那一项 |
+| **客服增值服务的容器**（WP128） | Containers 按秒：内存与盘按规格、CPU 按实用 | **每个订阅的工作区** basic 常驻约 $8.5 / 月、lite 约 $2.3 / 月，见 §13.3。没人订阅就是 $0 |
 
 **结论：基础设施 $5 / 月封顶，剩下全是模型钱。** 对比 Compose 形态那台 2 核 4G（大约 $20–40 / 月）便宜，而且没有一台需要打补丁的机器。
 
@@ -355,6 +357,11 @@ DO 的库连不上标准 SQL 客户端，这是 §1 那个取舍的代价。这�
 > 按 `packages/standby` 托管的同一份 `apps/server`（一台小机器），
 > 订阅生效后转发器把对端从商家本机换成托管实例。推荐与费用见 `docs/74` §5；
 > WP114 留下的「在线值守在 Cloudflare 形态未开」就此收口。
+>
+> **WP128 更新（09-23）**：托管实例改落 **Cloudflare Containers**（Luoye：只管 Cloudflare / Vercel），
+> 上表第一行那条路走了——不是改 `packages/standby` 去起容器，而是 `HostedInstanceDO` 直接用 `ctx.container`
+> 起同一份 `apps/server`。全文见 **§13**。`/v1/cloud/health` 的 `standby` 仍是 `false`（那是 Compose 形态的值守），
+> 新增 `hosted_instance` / `hosted_snapshots` 两格如实说绑没绑。
 
 ### 10.2 公共红人库（`packages/kol-public`）——**已做**（WP116）
 
@@ -447,6 +454,129 @@ AGENTSWS_CLOUD_ADMIN_TOKEN=… node scripts/import-kol-public.mjs https://cloud.
 | `packages/kol-public/src/charge-map.ts` | 哪几条路要先预扣（入口按它判） |
 | `scripts/export-kolagents-public.mjs` / `scripts/import-kol-public.mjs` | 搬家两步（见 §10.2） |
 | `apps/cloud-worker/src/do-sql.ts` | DO 的 SQL → 同步 SQL 口（`SyncDb`） |
+| `apps/cloud-worker/src/hosted-instance-do.ts` | 客服增值服务的托管实例 DO（每订阅工作区一个容器，WP128，§13） |
+| `apps/cloud-worker/src/hosted-routes.ts` / `hosted-admin.ts` | 托管实例的入口路由（两把钥匙）与后台那一块 |
+| `packages/hosted/` | 托管实例的纯逻辑：起停判定、容器环境变量契约、托管令牌、按官方单价的费用估算 |
+| `deploy/Dockerfile.hosted` | 容器镜像（只有 `apps/server`，amd64，不带工作区号与密钥） |
 | `apps/cloud/src/app.ts` | **两个形态共用**的路由表与鉴权装配 |
 | `deploy/smoke.sh` | 冒烟（两个形态共用） |
 | `docs/61-…` | **Compose 自建形态**的 runbook（留给开源自建用户） |
+
+## 13. 客服增值服务的托管实例：Cloudflare Containers（WP128，2026-09-23）
+
+> Luoye 09-23 定：托管实例只在 Cloudflare 或 Vercel 上，他只想管这两个平台。常驻进程 +
+> 长连接 + 本地库这三样 Workers / Vercel 都跑不了，所以落 **Cloudflare Containers**（同一个
+> 账号、同一份账单）。订阅了客服增值服务的工作区**容器常驻不休眠**；未订阅的不起容器。
+> 这一节取代 `docs/74` §5 原先「一台小机器」的推荐。
+
+### 13.1 上游评估（按 docs/42 记；09-23 用 WebFetch 读的现行官方文档，查到什么写什么）
+
+| 项 | 官方文档原话 / 数字 | 出处 |
+|---|---|---|
+| 状态 | Workers Paid 上可用（我们已经在付的那 $5） | `developers.cloudflare.com/containers/` |
+| 怎么接 | 一个 DO 类出现在 `wrangler.toml` 的 `[[containers]]` 里（`class_name` + `image`），迁移用 `new_sqlite_classes`；运行时给这个 DO 一个 `ctx.container` | wrangler 配置文档 `#containers` |
+| `[[containers]]` 的键 | `class_name`、`image`（Dockerfile 路径则 `wrangler deploy` 就地 build + push）必填；`instance_type` 缺省 `lite`；`max_instances` 缺省 20；`image_build_context`、`image_vars`、`rollout_step_percentage`、`rollout_active_grace_period` | 同上 |
+| `ctx.container` | `running`、`start({ env, entrypoint, enableInternet })`、`exec`、`destroy`、`signal`、`monitor()`、`getTcpPort(port).fetch()`、`interceptOutboundHttp(s)` | `durable-objects/api/container/` |
+| `Container` 类（`@cloudflare/containers`） | `defaultPort` / `sleepAfter` / `envVars` / `entrypoint` / `enableInternet` / `pingEndpoint`；钩子 `onStart` / `onStop` / `onError` / `onActivityExpired`；它**自己的 alarm 就是保活回路**（源码 `minTime = 3 * 60 * 1000`），官方建议别覆盖 `alarm()` 而用 `schedule()` | `github.com/cloudflare/containers` README 与 `src/lib/container.ts` |
+| `sleepAfter` | 缺省 10 分钟；「多久没请求就停」。**没有上限值、没有「永不休眠」的开关**。`onActivityExpired` 不调 `stop()` 容器就不停，计时器续上 | 同上 |
+| 冷启动 | 「often be in the 1-3 second range」，看镜像大小与启动代码 | `containers/platform-details/architecture/` |
+| 盘 | 「All disk is ephemeral」——睡着再起来是一张新盘；快照「coming soon」 | 同上 |
+| 关机 | 平台关容器先 `SIGTERM`，最多等 15 分钟再 `SIGKILL`；**发新镜像（rollout）也走这一套**——在跑的也会被换 | 同上 |
+| 位置 | DO 与它的容器不保证同地；重起后可能换地方 | 同上 |
+| 规格 | lite 1/16 vCPU · 256 MiB · 2 GB；basic 1/4 · 1 GiB · 4 GB；standard-1 1/2 · 4 GiB · 8 GB；standard-2 1 · 6 GiB · 12 GB；standard-3 2 · 8 GiB · 16 GB；standard-4 4 · 12 GiB · 20 GB | `containers/platform-details/limits/` |
+| 镜像 | 单个镜像上限 = 所选规格的盘（最大 20 GB）；整账号镜像存储 50 GB | 同上 |
+| 账号并发上限 | 内存 6 TiB、vCPU 1,500、盘 30 TB | 同上 |
+| 计费 | 内存 $0.0000025 / GiB·秒、CPU $0.000020 / vCPU·秒、盘 $0.00000007 / GB·秒；每月含 25 GiB·小时内存、375 vCPU·分钟、200 GB·小时盘（**整账号共享**）；**内存与盘按开着的规格计，CPU 只按真用了的计**；「Charges stop after the container instance goes to sleep」；北美 / 欧洲出站 $0.025 / GB（含 1 TB） | `containers/pricing/` |
+
+**取舍**：**不装 `@cloudflare/containers`**，直接用运行时的 `ctx.container`。理由三条：
+① 它的 `Container` 继承 `cloudflare:workers` 的 `DurableObject`，普通 tsc 与 vitest 里 import 不进来，
+而本包的每个 DO 都是朴素类、测试不起 workerd（`apps/cloud-worker/src/index.ts` 头注释）；
+② 它的保活回路占着那一个 `alarm()`，我们自己还要在同一个闹钟上做「快照满 30 天删掉」与「停容器后一分钟强停」；
+③ 少一个 npm 依赖、少一轮 docs/42 的升级。代价：官方以后在 `Container` 类里加的便利（比如更好的端口就绪探测）要我们自己照抄。
+`upstreams.yml` 登记了 `cloudflare-containers`（`kind: reference`），wishlist 盯「平台级常驻开关」与「盘快照」——任何一个出了就回头重判。
+
+**偏离派工单的一处**：派工单写「继承 Cloudflare 的 `Container` 类」——实际是**同一个底座**
+（`ctx.container`）+ 我们自己的保活 alarm，理由同上。
+
+### 13.2 怎么跑（一个订阅的工作区一个容器）
+
+```
+访客 ──▶ ChatRelayDO(ws)  ──(两格对端：hosted 在就给 hosted，否则给本机)──▶ 容器里的 apps/server
+             │  订阅开通 / 取消 / 六小时一拍                      ▲  外连 wss://…/relay/<ws>/connect（peer=hosted）
+             ▼                                                   │
+        HostedInstanceDO(ws) ──ctx.container.start({ env })─────┘
+             │  alarm 每 3 分钟：打 /v1/health（心跳）、没在跑就按退避重起、三次不应强停重起
+             ▼
+        R2 `agentsws-hosted-snapshots`：容器每 6 小时 + SIGTERM 时推一份工作区包；起来先拉最新那份
+```
+
+- **起停跟着订阅走**（`@agentsws/hosted` 的 `desiredFor`）：`active` / `cancelling` / `grace` → 跑；
+  `suspended`（宽限 30 天到期）/ `none`（取消且当期用完）→ 停：先 `SIGTERM`（容器推最后一份快照），
+  一分钟后还在就 `destroy`；快照留 30 天，30 天内重新订阅接着用，过期删。
+- **常驻怎么做**：官方没有永不休眠的开关，所以 `HostedInstanceDO` 的 alarm 每 3 分钟醒一次
+  （与 `Container` 类自己的保活节奏同一个数），打一次容器的 `/v1/health`——这一下既是心跳，也是一次真活动。
+  **这一条要在第一次真部署后亲眼确认**（§13.5 第 6 步）：跑一小时，后台那一格一直是「运行」。
+- **两把钥匙**：容器拿到的云令牌是 `wst_hosted_<工作区>.<随机>`（只有 `ai` + `wallet:read`，每次起容器换一把，
+  停容器即作废，DO 里只存哈希）；连转发器用另一把托管配对 `hrp_…`（转发器只存哈希，**与商家本机那把分开验**，
+  互相冒充不了）。托管令牌只在 `/v1/ai/*`、`/v1/wallet` 与 `/v1/hosted/snapshot` 上认，开不了订阅、签不了配对、拉不走留言。
+- **AI 计积分**：容器里的 `apps/server` 默认模型被换成「agentsws 云（用积分）」，走 `/v1/ai/*`，在这个组织的
+  `WalletDO` 里按 `ai` 块扣——与商家本机用云模型同一条路。
+- **本机上线对齐**：商家本机开机后，转发器**两格并存**（以前后连的会把先连的挤掉），访客消息仍给托管；
+  工作台「转发方式」第三项有两颗按钮：「用本机这一份更新云端」（导出本机包 → R2，托管实例下次重起就用它，
+  秘密库不带上去）与「把云端那一份取回来」（落进本机备份目录，**不自己导入**——WP36 那条：跑着的进程不换自己脚下的库）。
+- **镜像**：`deploy/Dockerfile.hosted`（照 `Dockerfile.cloud` 的多阶段做法，只建 `apps/server`，不带工作台；构建上下文的忽略表是仓库根新加的 `.dockerignore`，三个镜像共用；
+  `linux/amd64`；镜像里**没有任何工作区号与密钥**）。大小见 WP128 报告。
+
+### 13.3 费用（按官方单价，**每个订阅工作区一个容器**）
+
+一个月按 30 天 = 2,592,000 秒；CPU 按「10% 的时间在忙」估（客服实例大部分时间在等访客，话轮里真正耗时的是等模型）。
+账号每月包含的量是整账号共享的（25 GiB·小时内存只够一个 basic 跑一天多），摊到每个工作区 ≈ 0，不扣。
+
+| 规格 | 内存 | 盘 | CPU（10% 忙） | **常驻一个月** | 30 积分（¥30 ≈ $4.2）盖得住吗 |
+|---|---|---|---|---|---|
+| lite（1/16 vCPU · 256 MiB · 2 GB） | $1.62 | $0.36 | $0.32 | **≈ $2.31** | 盖得住，毛利约 45% |
+| **basic**（1/4 · 1 GiB · 4 GB，**本轮缺省**） | $6.48 | $0.73 | $1.30 | **≈ $8.50** | **盖不住**，每个工作区每月亏约 $4.3 |
+| standard-1（1/2 · 4 GiB · 8 GB） | $25.92 | $1.45 | $2.59 | ≈ $29.96 | 远远盖不住 |
+
+- 与派工单估的「$4–6 / 月」差在规格：那个数落在 lite 与 basic 之间。**选 lite 还是 basic 要 Luoye 定**
+  （报告第 3 节）：`apps/server` 空闲时本机实测约 75 MB，但跑话轮、推快照（VACUUM INTO + 打 zip）时会涨，
+  256 MiB 余量薄，OOM = 聊天窗掉线。建议：先 basic 上线，看一周 Cloudflare 后台的真实内存峰值，
+  峰值稳定在 180 MB 以下就降 lite（改 `wrangler.toml` 两处 + deploy 一次）。
+- 另外两笔：R2 快照（每工作区最多 3 份、几 MB，≈ $0）；AI 调用照常按积分扣（不在容器费里）。
+- 运营后台组织抽屉的「客服增值服务」一格显示**本月已花**与**常驻整月**两个估算（`packages/hosted/src/cost.ts`，
+  单价在 `pricing.ts`，官网改价改那一张表）。**是估算不是账单**，真账看 Cloudflare 后台。
+
+### 13.4 以后改共享容器（一个容器托管 N 个工作区）
+
+本轮每个订阅工作区一个容器：最快、隔离最干净（一个租户的进程崩了、被攻下来都碰不到别人）。
+内测阶段客户少，这是对的。**什么时候该切**：
+
+- **钱**：basic 每个工作区每月约 $8.5，30 积分盖不住；lite 约 $2.3 盖得住。一台 standard-2（1 vCPU · 6 GiB，
+  常驻约 $46 / 月：内存 $38.9 + 盘 $2.2 + CPU 10% 忙 $5.2）按每个工作区 ~150 MB 能装 ~30 个，摊下来每个约 $1.5。
+  对 basic（$8.5 / 个）**超过 ~6 个订阅工作区**共享版就更便宜；对 lite（$2.3 / 个）要**超过 ~20 个**才划算。
+- **上限**：`max_instances = 50`（`wrangler.toml`）。到 40 个就该准备切（或先调大这个数）。
+
+已经留好的口子（改的时候**不用动的**）：镜像里没有工作区号；启动参数里工作区号只出现在 `AGENTSWS_WORKSPACE_ID`
+一处（转发器地址是容器里拼出来的）；DO → 容器的形状是 `HostedContainerSpec = { cloud_base_url, key, tenants[] }`
+（`packages/hosted/src/env.ts`，本轮 `tenants.length` 只能是 1）；`apps/server` 本来就是多品牌的（一个进程多个工作区）。
+
+要改的地方（四处）：
+1. `HostedInstanceDO` 按「池」命名（`idFromName('pool-<k>')`）而不是按工作区；加一张「工作区 → 池」的表
+   （放 `AccountsDO` 或一个新的单例 DO），`ChatRelayDO.#syncHosted` 与 `hostedTokenVerifier` 按这张表找池；
+2. 租户下发从「拍平进环境变量」换成「容器起来后经控制口下发」（`getTcpPort(4317)` 打一个只在容器内网可达的
+   `/v1/hosted/tenants`），`buildHostedEnv` 只留容器级的那几项；
+3. 库密钥从「每容器一把」换成「每租户一把」（`apps/server` 的秘密库本来就按品牌加前缀分，要再加一层按租户的密钥）；
+4. 快照按租户拆（现在一个容器推一份整目录的包）：`exportWorkspace` 按品牌目录导，R2 键名已经按工作区分了。
+
+### 13.5 Luoye 上线时要亲手做的事
+
+1. 本机装好并开着 **Docker**（`wrangler deploy` 要就地 build 镜像并推到 Cloudflare 自己的仓库，不用 Docker Hub）；
+2. 建快照桶：`pnpm -F @agentsws/cloud-worker exec wrangler r2 bucket create agentsws-hosted-snapshots`；
+3. 生成并填种子：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`，
+   然后 `wrangler secret put AGENTSWS_HOSTED_KEY_SEED` 粘进去，**同时存进密码管理器**——丢了就读不回已有的快照；
+4. `pnpm -F @agentsws/cloud-worker exec wrangler deploy`（第一次 build amd64 镜像，Apple 芯片上要十几二十分钟）；
+5. 用自己的测试工作区在工作台「聊天窗 → 转发方式」第三项点「开通」（扣 30 积分）；
+6. 看运营后台「组织 → 客服增值服务」：一两分钟内从「启动中」变「运行」，**放一个小时**，确认一直是「运行」、
+   最近心跳一直在 3 分钟以内（这一条验证「心跳保活」在真平台上成立——官方文档没写它一定成立）；
+7. 关掉本机，从网站聊天窗发一句，确认有回复、`/v1/ai/*` 扣了积分；再开本机，确认访客消息仍给托管；
+8. 去 Cloudflare 后台 → Containers 看一周真实内存峰值，决定 basic 还是 lite（§13.3）。

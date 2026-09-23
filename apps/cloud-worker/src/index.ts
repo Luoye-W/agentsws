@@ -25,7 +25,17 @@ export {
   type RelayWebSocket,
 } from './chat-relay-do.js'
 export { type DoSqlCursor, type DoSqlStorage, type DoStorageLike, doSyncDb } from './do-sql.js'
-export { envRecord, type WorkerEnv } from './env.js'
+export { envRecord, type SnapshotBucketLike, type WorkerEnv } from './env.js'
+export {
+  type ContainerLike,
+  DEFAULT_INSTANCE_TYPE,
+  HOSTED_INTERNAL,
+  type HostedDoOptions,
+  type HostedDoStateLike,
+  HostedInstanceCore,
+  SNAPSHOT_SOURCE_HEADER,
+  STOP_GRACE_MS,
+} from './hosted-instance-do.js'
 export {
   INTERNAL_HEADER_NAMES,
   INTERNAL_HEADERS,
@@ -115,6 +125,7 @@ export {
 import { AccountsCore, type DoStateLike } from './accounts-do.js'
 import { ChatRelayDoCore, type RelayDoStateLike } from './chat-relay-do.js'
 import type { WorkerEnv } from './env.js'
+import { type HostedDoStateLike, HostedInstanceCore } from './hosted-instance-do.js'
 import { KolPublicCore, type KolPublicDoStateLike } from './kol-public-do.js'
 import { KolTenantCore, type KolTenantDoStateLike } from './kol-tenant-do.js'
 import { LedgerCore } from './ledger-do.js'
@@ -237,6 +248,32 @@ export class ChatRelayDO {
 
   constructor(state: RelayDoStateLike, env: WorkerEnv) {
     this.#core = new ChatRelayDoCore(state, env)
+  }
+
+  fetch(request: Request): Promise<Response> {
+    return this.#core.fetch(request)
+  }
+
+  async alarm(): Promise<void> {
+    await this.#core.alarm()
+  }
+}
+
+/**
+ * 客服增值服务的托管实例（**每个订阅的工作区一个**，WP128 / docs/64 §13）。
+ *
+ * `wrangler.toml` 的 `[[containers]]` 认的就是这个类：运行时给它的 `ctx.container`
+ * 里是一个 Cloudflare Container，容器里跑同一份 `apps/server`。
+ * 没有继承 `@cloudflare/containers` 的 `Container`——理由见 `hosted-instance-do.ts` 头注释。
+ *
+ * **有 alarm**：该跑的时候每 3 分钟一拍（保活 + 心跳 + 崩了重起）；停了之后只剩
+ * 「强停没退干净的」与「快照满 30 天删掉」两件事。
+ */
+export class HostedInstanceDO {
+  readonly #core: HostedInstanceCore
+
+  constructor(state: HostedDoStateLike, env: WorkerEnv) {
+    this.#core = new HostedInstanceCore(state, env)
   }
 
   fetch(request: Request): Promise<Response> {

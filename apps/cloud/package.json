@@ -33,6 +33,7 @@
     "@agentsws/cloud-entry": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
+    "@agentsws/hosted": "workspace:*",
     "@agentsws/kol-cloud": "workspace:*",
     "@agentsws/kol-public": "workspace:*",
     "@agentsws/metering": "workspace:*",

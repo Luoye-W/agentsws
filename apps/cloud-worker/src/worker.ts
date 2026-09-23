@@ -22,6 +22,7 @@ import { isKolCloudPath } from '@agentsws/kol-cloud'
 import { isKolPath, type KolCharge, type KolWalletOp, kolChargeFor } from '@agentsws/kol-public'
 import type { WalletReservation } from '@agentsws/metering'
 import type { WorkerEnv } from './env.js'
+import { handleHosted, hostedAwareVerifier, isHostedPath } from './hosted-routes.js'
 import {
   INTERNAL_HEADERS,
   jsonArrayFrom,
@@ -499,9 +500,6 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
   // WP118：租户私有的云端红人库（每个 org 一个对象；钱由那个对象自己去 WalletDO 扣）
   if (isKolCloudPath(url.pathname)) return handleKolTenant(env, clean, origin, url)
 
-  // WP124：官方托管的聊天转发器（owner 面：配对密钥 / 状态 / 拉留言）
-  if (isRelayOwnerPath(url.pathname)) return handleRelayOwner(env, clean, origin)
-
   // WP124：客服增值服务（开通 / 取消 / 状态；对象与转发器同一个，按工作区取）
   if (isSupportSubscriptionPath(url.pathname)) {
     if (env.CHAT_RELAY === undefined)
@@ -517,8 +515,19 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
       return errorResponse(err)
     }
     const stub = env.CHAT_RELAY.get(env.CHAT_RELAY.idFromName(principal.workspace_id))
-    return stub.fetch(withInternalHeaders(clean, { principal }))
+    /*
+     * WP128 修：以前这里把原路径（`/v1/support/subscription`）原样转进 DO，而 DO 只认
+     * `/__internal/support-subscription`；加上这一段排在 owner 面那张表**后面**、而那张表
+     * 里只登记了 GET——POST / DELETE 从公网进来一律 404。开通与取消从来没有从入口
+     * Worker 走通过（WP124 的测试是直接打 DO 的）。现在排到前面、改写成内部路径。
+     */
+    const internal = new URL(clean.url)
+    internal.pathname = '/__internal/support-subscription'
+    return stub.fetch(withInternalHeaders(new Request(internal, clean), { principal }))
   }
+
+  // WP124：官方托管的聊天转发器（owner 面：配对密钥 / 状态 / 拉留言）
+  if (isRelayOwnerPath(url.pathname)) return handleRelayOwner(env, clean, origin)
 
   // WP124：转发器的访客面（挂件 / 会话 / SSE / 留言）。不认令牌，四道门在 DO 里
   if (isRelayVisitorPath(url.pathname)) {
@@ -528,12 +537,17 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
     return env.CHAT_RELAY.get(env.CHAT_RELAY.idFromName(workspace)).fetch(clean)
   }
 
+  // WP128：托管实例（容器推 / 拉快照；商家看状态 / 取回 / 覆盖）
+  if (isHostedPath(url.pathname)) return handleHosted(env, clean, url, remoteVerifier(env, origin))
+
   if (isWalletPath(url.pathname)) {
-    // ② 验令牌：每次都去问 AccountsDO（撤销立刻生效）
+    // ② 验令牌：每次都去问 AccountsDO（撤销立刻生效）。
+    // WP128：`wst_hosted_` 那把（托管实例）去问它自己的 HostedInstanceDO——托管实例的
+    // 模型调用就这样走 `/v1/ai/*`、在 WalletDO 里按 `ai` 块计积分，与本机同一条路
     let principal: VerifiedCloudToken
     try {
       const verified = await authenticate(
-        { verifier: remoteVerifier(env, origin) },
+        { verifier: hostedAwareVerifier(env, remoteVerifier(env, origin)) },
         clean.headers.get('Authorization') ?? undefined,
       )
       // `EntryPrincipal.scopes` 是 `string[]`（入口那一层不认识动作集的枚举）；
