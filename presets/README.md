@@ -2,8 +2,15 @@
 
 **职责 preset 由职责模板生成，不手编。**
 
-55 §4 第三层：一条职责一个官方 [`@deepseek-ai/dsh-agent-presets`](https://www.npmjs.com/package/@deepseek-ai/dsh-agent-presets)
-目录，里面放**这条职责有哪些连接**（一条连接一行 `@deepseek-ai/dsh-mcp-client`）。
+55 §4 第三层：一条职责一个官方 preset，里面放**这条职责有哪些连接**（一条连接一行
+`@deepseek-ai/dsh-mcp-client`）。
+
+> **WP132（dsh 0.1.7-rc.1）**：官方把按目录扫的 `@deepseek-ai/dsh-agent-presets` 换成了
+> [`@deepseek-ai/dsh-agent-preset-registry`](https://www.npmjs.com/package/@deepseek-ai/dsh-agent-preset-registry)，
+> 它**不扫目录、不收路径**。运行时现在把同一份内容（`presetDefinition(req)`）直接
+> `register()` 进去；下面说的那三个文件照旧生成，留给跨进程那一面（`host.cordis.yml`）与排障。
+> 也因此"官方自带 preset / `$DSH_HOME` 下用户 preset 进不进 roster"不再靠两个开关——
+> 我们的组合里没有任何 bundle 行，roster 里结构上就只有我们注册的那一条。
 
 生成的人是 `@agentsws/dsh-adapter` 的 `writePreset()`，输入是一次运行的 `RunRequest`
 （职责 + 分配 + 这个品牌已连的连接），输出落在**数据目录**下：

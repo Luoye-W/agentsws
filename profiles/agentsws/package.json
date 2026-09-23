@@ -2,7 +2,7 @@
   "name": "@agentsws/profile-agentsws",
   "version": "0.0.0",
   "private": true,
-  "description": "agentsws 发行版的 dsh profile（16 §1）：headless bundle + 我们的门禁插件，版本锁到 0.1.6-alpha.2",
+  "description": "agentsws 发行版的 dsh profile（16 §1）：headless bundle + 我们的门禁插件，版本锁到 0.1.7-rc.1",
   "license": "Apache-2.0",
   "type": "module",
   "dsh": {

@@ -14,6 +14,17 @@ step() { echo; echo "=== $1"; shift; nice -n 10 "$@" || { echo "✗ 失败：$*"
 # 1. 类型检查：增量（不带 --force），只重编受影响的工程
 step "tsc（增量）" npx tsc -b
 
+# 1bis. 依赖升级时的补丁（WP132 撞出来的洞）：增量 `tsc -b` 只看**源码**有没有变，
+#   node_modules 里上游 `.d.ts` 变了它照样判"最新"——dsh 0.1.7 那次 dsh-adapter 实际有 14 处
+#   类型错误，`tsc -b` 退出码却是 0。所以锁文件一动，就对"package.json 也动了"的那几个工程
+#   单独做一次全量类型检查（`-p … --noEmit` 不产物、不连带 references，比 `--force` 便宜得多）。
+changed_all="$( { git diff --name-only "$base"...HEAD; git diff --name-only; } | sort -u )"
+if echo "$changed_all" | grep -qx 'pnpm-lock.yaml'; then
+  for d in $(echo "$changed_all" | grep -E '^(packages|apps|profiles)/[^/]+/package\.json$' | xargs -n1 dirname 2>/dev/null); do
+    [ -f "$d/tsconfig.json" ] && step "tsc（依赖变了，全量查 $d）" npx tsc -p "$d" --noEmit
+  done
+fi
+
 # 2. 代码规范：只查相对基准改过的文件
 step "biome（只查改动）" npx biome check --changed --since="$base" --no-errors-on-unmatched .
 

@@ -70,6 +70,8 @@ SDK 那组用 `test/fake-runtime.mjs`（只说线协议、不跑模型）——�
    只能在一个 provider 内部做（`@agentsws/credentials-openconnector`）。
 6. （WP86）`agent-presets` 挂上来的工具**受** `ctx.tools.restrict` 管，且 `restrict` 必须
    在 `mount()` **之后**调——与官方浏览器 provider 的语义正好相反（AGENT-LAYER §9.4 / §10.1）。
+   （WP132：0.1.7 换成 `dsh-agent-preset-registry` 之后这条照旧成立，`preset-seam.test.ts` 17 条一条没改；
+   另外 0.1.7 是**注册即激活**，凭据引用在 `register()` 那一跳解析。）
 7. （WP89）`dsh-subprocess` 对**继承来的**环境有一道清洗：`/KEY|PASSWORD|SECRET|TOKEN/i`
    的名字一律不往子进程传。所以 Shopify CLI 的令牌不能经 `process.env`，得经执行器的
    显式 `env`（AGENT-LAYER §11.2 第 ③ 条）。

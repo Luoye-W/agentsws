@@ -507,10 +507,11 @@ run(req)  —— req.connections 非空才有这一层
        ├─ ctx.baseUrl = <dsh-adapter 的 src 目录>      ← 包名从这里解析
        ├─ root.plugin(Loader); loader.builtins.include = Include
        ├─ root.plugin(<options.credentials>)            ← 官方 ctx.credentials 的那一个
-       ├─ root.plugin(AgentPresets, { default, roots:[{path, trust:'system'}],
-       │                              includeShippedRoot:false, includeUserRoot:false })
+       ├─ root.plugin(AgentPresetRegistry, { default })          ← WP132：0.1.7 换成 registry
+       ├─ await withPresetCredentials(… ctx.agentPresets.register(presetDefinition(req)))
+       │                                                ← 0.1.7 注册即激活，凭据在这一跳解析
        └─ ctx.agents.create({ setup: async (agentCtx, agent) => {
-            ① await withPresetCredentials(… ctx.agentPresets.mount(agentCtx, presetId))
+            ① await ctx.agentPresets.mount(agentCtx, presetId)   ← 只绑定这一代
             ② installGate(ctx, { …, agent, agentCtx })   ← 它里面调 restrict
             ③ await agentCtx.plugin(PlaywrightMcpProvider, …)  ← WP82，不变
           }})
@@ -570,6 +571,13 @@ OpenConnector 的，还是两者的组合。实现见 `@agentsws/credentials-ope
 "分层"只能在一个 provider 内部做。
 
 ### 10.4 幂等：为什么"内容没变就不写"是硬要求
+
+> **WP132（dsh 0.1.7-rc.1）修订**：下面这段说的是 0.1.6 的 `dsh-agent-presets`。0.1.7 把它
+> 整包换成 `dsh-agent-preset-registry`——不扫目录、不收路径，定义以 `register(definition)`
+> 交进去（我们交的是 `preset.ts` 的 `presetDefinition(req)`，与 `agent.cordis.yml` 同源），
+> 旧一代在最后一个引用释放时销毁。所以"mtime 一动就多挂一棵永不回收的子树"这个坑在 0.1.7
+> 已经不在了；`writePreset()` 仍然幂等（文件留给跨进程那一面与排障），但不再是硬要求的理由。
+> 另一处变化：0.1.7 是**注册即激活**，`withPresetCredentials` 因此包的是 `register()` 而不是 `mount()`。
 
 上游 `agent-presets` 把"代"（generation）钉在组合文件的 **mtime + size** 上，而
 **被顶掉的那一代永远不回收**（上游 Known Limitations 原话：superseded generation is
