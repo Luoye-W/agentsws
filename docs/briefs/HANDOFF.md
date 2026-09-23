@@ -34,7 +34,7 @@
 | 9 | WP122b 设计规范：三个注入口通电 + 岗位只读 + 小铅笔 + 成文接模型 + 视觉档 | `WP122b-design-md-wire-up.md` | `wp122b-design-wire` · `wp/122b-design-wire` | — | 已合并（09-23，Fable 终审：全量过） |
 | 10 | WP119c 插件完整版要的本机接口 + 面板接线（没有它完整版面板大半是空壳） | `WP119c-extension-endpoints.md` | 开源 `wp119c-ext-endpoints` · `wp/119c-ext-endpoints`；私有仓库分支 `wp/119c-wire` | — | 已合并（09-23，Fable 终审：开源全量过；私有仓库 350 测试过、已并入其 main） |
 | 11 | WP127 模型必须多模态（能看图）+ 生图单独一档 | `WP127-vision-required-and-image-model.md` | `wp127-vision` · `wp/127-vision` | — | 已合并（09-23，Fable 终审：全量过；合并时把各模型卡默认型号换成能看图的） |
-| 12 | WP128 客服增值服务托管实例 = Cloudflare Containers | `WP128-hosted-instance-cloudflare-containers.md` | `wp128-hosted` · `wp/128-hosted` | — | 进行中（Claude） |
+| 12 | WP128 客服增值服务托管实例 = Cloudflare Containers | `WP128-hosted-instance-cloudflare-containers.md` | `wp128-hosted` · `wp/128-hosted` | — | 已合并（09-23，Fable 终审：全量过；真部署未跑） |
 | 13 | WP129 内容观测上云 + 体检样本不够不收钱 | `WP129-content-observations-cloud.md` | `wp129-content-cloud` · `wp/129-content-cloud` | — | 已合并（09-23，Fable 终审：全量过） |
 | 14 | WP130 插件采集范围补齐：YouTube 搜索页 / 相关视频栏、IG 与 TikTok 搜索列表与 hashtag（移植） | `WP130-extension-capture-parity.md` | 私有仓库 `wp/130-capture`；开源 `wp130-ext-capture` · `wp/130-ext-capture` | — | 进行中（Claude） |
 
