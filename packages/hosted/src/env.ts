@@ -44,7 +44,7 @@ export const HOSTED_MAX_TENANTS_PER_CONTAINER = 1
 /** 容器里的一个工作区（租户）：只有它自己的令牌与配对，没有别的。 */
 export interface HostedTenant {
   workspace_id: string
-  /** `hct_…`：只能 `ai` + `wallet:read`。 */
+  /** `wst_hosted_…`：只能 `ai` + `wallet:read`。 */
   cloud_token: string
   /** 托管那一头连转发器用的配对密钥（`hrp_…`，与商家本机那把不是同一把）。 */
   relay_pairing: string
@@ -141,7 +141,7 @@ export function parseHostedEnv(
   }
 }
 
-/** 托管实例推 / 拉快照的地址（令牌是 `hct_` 那一把）。 */
+/** 托管实例推 / 拉快照的地址（令牌是 `wst_hosted_` 那一把）。 */
 export function hostedSnapshotUrl(cloud_base_url: string): string {
   return `${cloud_base_url.replace(/\/+$/, '')}/v1/hosted/snapshot`
 }

@@ -71,7 +71,7 @@ describe('容器环境变量：写出去的读得回来', () => {
     const env = buildHostedEnv({
       cloud_base_url: 'https://cloud.example.test/',
       key,
-      tenants: [{ workspace_id: 'ws_a', cloud_token: 'hct_x.y', relay_pairing: 'hrp_1' }],
+      tenants: [{ workspace_id: 'ws_a', cloud_token: 'wst_hosted_x.y', relay_pairing: 'hrp_1' }],
     })
     expect(env.AGENTSWS_BIND_HOST).toBe('0.0.0.0')
     // 工作区号在启动参数里只出现一处（共享容器的口子）
@@ -83,7 +83,7 @@ describe('容器环境变量：写出去的读得回来', () => {
       config: {
         workspace_id: 'ws_a',
         cloud_base_url: 'https://cloud.example.test',
-        cloud_token: 'hct_x.y',
+        cloud_token: 'wst_hosted_x.y',
         relay_endpoint: 'https://cloud.example.test/relay/ws_a',
         relay_pairing: 'hrp_1',
       },
@@ -109,14 +109,14 @@ describe('容器环境变量：写出去的读得回来', () => {
 describe('托管令牌', () => {
   it('令牌里读得出工作区号；形状不对一律 undefined', () => {
     const token = composeHostedToken('ws_a:b.c', 'r4nd0m')
-    expect(token.startsWith('hct_')).toBe(true)
+    expect(token.startsWith('wst_hosted_')).toBe(true)
     expect(workspaceOfHostedToken(token)).toBe('ws_a:b.c')
     expect(workspaceOfHostedToken('wst_abc')).toBeUndefined()
-    expect(workspaceOfHostedToken('hct_')).toBeUndefined()
-    expect(workspaceOfHostedToken('hct_abc.')).toBeUndefined()
-    expect(workspaceOfHostedToken(`hct_${Buffer.from('../x').toString('base64url')}.r`)).toBe(
-      undefined,
-    )
+    expect(workspaceOfHostedToken('wst_hosted_')).toBeUndefined()
+    expect(workspaceOfHostedToken('wst_hosted_abc.')).toBeUndefined()
+    expect(
+      workspaceOfHostedToken(`wst_hosted_${Buffer.from('../x').toString('base64url')}.r`),
+    ).toBe(undefined)
   })
 })
 

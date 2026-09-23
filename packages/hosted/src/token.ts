@@ -1,5 +1,5 @@
 /**
- * 托管实例那把云令牌（`hct_…`）。
+ * 托管实例那把云令牌（`wst_hosted_…`）。
  *
  * 容器里的 `apps/server` 要用云上的模型（`/v1/ai/*`，计积分，块 = `ai`）、要把
  * 快照推回来，所以它得有一把令牌。这把与商家手上那把**不是同一把**，照
@@ -10,13 +10,13 @@
  * - **每次起容器换一把**，旧的当场作废；停容器即作废；
  * - **库里只有 sha256**，明文只经容器的环境变量传一次。
  *
- * 令牌里带着工作区号（base64url）：入口 Worker 拿到一把 `hct_` 令牌时要知道该去问
+ * 令牌里带着工作区号（base64url）：入口 Worker 拿到一把 `wst_hosted_` 令牌时要知道该去问
  * 哪一个 `HostedInstanceDO`（每工作区一个），而不是去扫一张全局表。
  * 带工作区号不泄密——工作区号本来就在嵌入代码里公开。
  */
 import type { CloudScope } from '@agentsws/contracts'
 
-export const HOSTED_TOKEN_PREFIX = 'hct_'
+export const HOSTED_TOKEN_PREFIX = 'wst_hosted_'
 
 /** 托管实例那把令牌能做的全部事。 */
 export const HOSTED_TOKEN_SCOPES: readonly CloudScope[] = ['ai', 'wallet:read']
@@ -30,7 +30,7 @@ export function isHostedToken(token: string): boolean {
   return token.startsWith(HOSTED_TOKEN_PREFIX)
 }
 
-/** 拼一把：`hct_<base64url(工作区)>.<随机>`。随机部分由调用方给（DO 里用 crypto）。 */
+/** 拼一把：`wst_hosted_<base64url(工作区)>.<随机>`。随机部分由调用方给（DO 里用 crypto）。 */
 export function composeHostedToken(workspace_id: string, random: string): string {
   return `${HOSTED_TOKEN_PREFIX}${toB64url(workspace_id)}.${random}`
 }

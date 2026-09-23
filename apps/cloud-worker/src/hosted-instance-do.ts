@@ -250,7 +250,7 @@ export class HostedInstanceCore {
       return Response.json(token === undefined ? null : (this.verifyToken(token, now) ?? null))
     }
     if (url.pathname === HOSTED_INTERNAL.snapshot) {
-      // 快照两头都要验过身份：容器（hct_ 令牌）或商家本机（工作区令牌），Worker 已经验完
+      // 快照两头都要验过身份：容器（托管令牌）或商家本机（工作区令牌），Worker 已经验完
       const principal = principalFrom(request)
       const record = this.#record()
       if (principal === undefined || principal.workspace_id !== record.workspace_id)
@@ -510,7 +510,7 @@ export class HostedInstanceCore {
 
   /* ── 令牌 ─────────────────────────────────────────────────────── */
 
-  /** 验一把 `hct_` 令牌。作废 / 过期 / 不对 / 该停了一律 `undefined`（不区分）。 */
+  /** 验一把 `wst_hosted_` 令牌。作废 / 过期 / 不对 / 该停了一律 `undefined`（不区分）。 */
   verifyToken(token: string, now: string): VerifiedCloudToken | undefined {
     const record = this.#record()
     if (record.desired !== 'run') return undefined
