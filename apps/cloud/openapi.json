@@ -4074,6 +4074,82 @@
         "x-returns": "AdminHealthItem[]"
       }
     },
+    "/v1/admin/pricing": {
+      "get": {
+        "operationId": "cloudAdminPricing",
+        "summary": "价目（WP131）：每条能力的现价、来历（basis）与核对状态——没核过的挂「未核」（与成本表的「未核对」同一套）",
+        "tags": ["cloud-admin"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ as_of, version, rows: PricingReviewRow[], unreviewed, cost_table }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ as_of, version, rows: PricingReviewRow[], unreviewed, cost_table }"
+      }
+    },
     "/v1/admin/audit": {
       "get": {
         "operationId": "cloudAdminAudit",

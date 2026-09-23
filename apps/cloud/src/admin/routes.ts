@@ -48,8 +48,10 @@ import {
   costTableNeedsReview,
   type LedgerFilter,
   type LedgerRow,
+  PRICING_FILE,
   planCycles,
   plans,
+  pricingReviewRows,
   signupBonus,
   termEndsAt,
   type UsageLedger,
@@ -1641,6 +1643,14 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
             detail: `价目 as_of ${COST_TABLE.as_of}，核对于 ${COST_TABLE.last_verified_at ?? '从未'}`,
           },
           {
+            key: 'pricing_review',
+            label_zh: '积分价目核对',
+            measures_zh:
+              '测量的是「价目表里每一条有没有人核过」（`pricing.json` 每条的 reviewed_at）。没核过的那几条是早期拍的数或暂定价，重算表在 docs/77——不是「这些价亏不亏」，那要看用量页的毛利。',
+            status: pricingReviewRows().some((r) => r.needs_review) ? 'warn' : 'ok',
+            detail: `${String(pricingReviewRows().filter((r) => r.needs_review).length)} / ${String(pricingReviewRows().length)} 条未核（价目 as_of ${PRICING_FILE.as_of}）`,
+          },
+          {
             key: 'hosted_instance',
             label_zh: '客服增值服务 · 托管实例',
             measures_zh:
@@ -1667,6 +1677,34 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           },
         ]
         return cloudOk(c, { items, at: now })
+      },
+    ),
+
+    cloudRoute(
+      {
+        method: 'get',
+        path: '/v1/admin/pricing',
+        operationId: 'cloudAdminPricing',
+        summary:
+          '价目（WP131）：每条能力的现价、来历（basis）与核对状态——没核过的挂「未核」（与成本表的「未核对」同一套）',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        returns: '{ as_of, version, rows: PricingReviewRow[], unreviewed, cost_table }',
+      },
+      async (c) => {
+        staff(c)
+        const rows = pricingReviewRows()
+        return cloudOk(c, {
+          as_of: PRICING_FILE.as_of,
+          version: PRICING_FILE.version,
+          rows,
+          unreviewed: rows.filter((r) => r.needs_review).length,
+          cost_table: {
+            as_of: COST_TABLE.as_of,
+            last_verified_at: COST_TABLE.last_verified_at,
+            needs_review: costTableNeedsReview(),
+          },
+        })
       },
     ),
 
