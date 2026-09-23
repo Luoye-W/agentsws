@@ -75,7 +75,8 @@ describe('合成公司生成器（26 §2）', () => {
     // WP121b 再加四条（初始化设置：官方接口跑通 / 钥匙不通说人话 / 花到封顶就停 /
     // 重新分析不覆盖手改）→ 60
     // WP120（69 §5）再加一条（每个岗位待在自己的道上）→ 61
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(61)
+    // WP127 再加一条（配了看不了图的模型 → 向导不放行）→ 62
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(62)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
