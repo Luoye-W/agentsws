@@ -92,7 +92,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
     name: RUNTIME_NAME,
 
     capabilities() {
-      // 实测（0.1.6-alpha.2，WP93 复核；WP81 起走官方 Agent 层）：
+      // 实测（0.1.7-rc.1，WP132 复核；WP81 起走官方 Agent 层）：
       // tool_choice —— dsh 的 GenerateOptions 没有 tool_choice 字段，强制先读工具做不到 → false
       // streaming   —— LlmRuntime 是流式的（StreamChunk）→ true
       // followup    —— Agent 有 followup()，但本适配器一次运行一棵树、结束即销毁 → false
@@ -105,7 +105,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         const mod = await import('@deepseek-ai/dsh-agent')
         const ok = typeof mod.default === 'function'
         return ok
-          ? { ok: true, detail: 'dsh 0.1.6-alpha.2 Agent 层可解析；运行走同进程 headless 组合' }
+          ? { ok: true, detail: 'dsh 0.1.7-rc.1 Agent 层可解析；运行走同进程 headless 组合' }
           : { ok: false, detail: 'dsh-agent 没有默认导出的插件' }
       } catch (e) {
         return { ok: false, detail: e instanceof Error ? e.message : String(e) }
@@ -490,8 +490,9 @@ function project(event: SessionEvent, emit: (e: RunEvent) => void): void {
       return
     }
     case 'assistant/message': {
-      const message = (event.data as { message: { content: { type: string; text?: string }[] } })
-        .message
+      const message = (
+        event.data as { message: { content: readonly { type: string; text?: string }[] } }
+      ).message
       const text = message.content
         .filter((b) => b.type === 'text')
         .map((b) => b.text ?? '')

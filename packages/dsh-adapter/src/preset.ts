@@ -4,7 +4,7 @@
  *
  * | 文件 | 谁读它 | 里面是什么 |
  * |---|---|---|
- * | `agent.cordis.yml` | 官方 `dsh-agent-presets` 的 `mount()` | **能挂的那一份**：这条职责的 `mcp-client` 行 |
+ * | `agent.cordis.yml` | 人与排障（WP132 起不再被上游读，见下） | **能挂的那一份**：这条职责的 `mcp-client` 行 |
  * | `host.cordis.yml` | 跨进程宿主（`dsh --profile agentsws-executor`） | 门禁与模型网关那两行（同进程时我们直接装，见 `gate.ts` / `llm.ts`） |
  * | `preset.yml` | 官方 roster 的显示元数据 | 名字与一句说明 |
  *
@@ -21,9 +21,19 @@
  * 见 {@link presetCredentialRefs} 与 `harness.ts`。
  *
  * **生成是幂等的**：目录名与文件内容都只由 `RunRequest` 决定，内容没变就**一个字节都不写**。
- * 这不是省 IO：上游 `agent-presets` 把"代不代"钉在组合文件的 mtime + size 上，
- * 而**被顶掉的那一代永远不回收**（上游 Known Limitations 原话）。每次运行都重写一遍
- * 文件 = 每次运行都多挂一棵永不释放的子树，外加把上一代的 MCP 子进程晾在那儿。
+ * 0.1.6 时这不是省 IO：上游 `agent-presets` 把"代不代"钉在组合文件的 mtime + size 上，
+ * 而**被顶掉的那一代永远不回收**（上游 Known Limitations 原话）。
+ *
+ * **WP132（dsh 0.1.7-rc.1）：上游不再扫目录。** `dsh-agent-presets`（按 `roots` 扫
+ * `<root>/<id>/agent.cordis.yml`）整包下线，换成 `dsh-agent-preset-registry`——
+ * 「the registry neither scans directories nor accepts preset paths」，定义只能以
+ * **插件行**或 `ctx.agentPresets.register(definition)` 交进去（上游 README「Minimal configuration」）。
+ * 所以挂给 Agent 的那一份现在走 {@link presetDefinition}（同一份 `presetComposition(req).rows`，
+ * 只是 `!!js` 标量换成 loader 的 `{ __jsExpr }` 形），三个文件照旧写、照旧幂等：
+ * `host.cordis.yml` 仍是跨进程那一面的描述，另两份留给人看与排障。
+ * 上游的"代"也换了回收办法：旧一代在最后一个引用释放时销毁（registry README
+ * 「releasing the final reference disposes the retired tree」），所以"每次运行多挂一棵
+ * 永不释放的子树"那个坑这一版已经不在了——我们一次运行一棵树、结束整树 dispose，本来也踩不到。
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -31,6 +41,7 @@ import { join } from 'node:path'
 import type { RunConnection, RunRequest } from '@agentsws/contracts'
 import { mcpToolName } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
+import type { PresetDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import { Document, Scalar, stringify } from 'yaml'
 import { GATEWAY_PROVIDER } from './llm.js'
 
@@ -272,4 +283,39 @@ export function writePreset(req: RunRequest, root?: string): PresetPaths {
 /** 这份 preset 的内容指纹（事件里记它：内容没变 = 指纹没变 = 没起新一代）。 */
 export function presetDigest(req: RunRequest): string {
   return sha256(canonicalJson(presetComposition(req))).slice(0, 16)
+}
+
+/**
+ * `!!js` 标量 → loader 的序列化表达式 `{ __jsExpr }`（`cordis-plugin-loader` 的 `JsExpr`，
+ * 也就是 include 的 YAML 标签解析出来的那个形）。其余值原样递归拷贝。
+ */
+function toLoaderValue(value: unknown): unknown {
+  if (value instanceof Scalar) {
+    return value.tag === '!!js' ? { __jsExpr: String(value.value) } : value.value
+  }
+  if (Array.isArray(value)) return value.map((v) => toLoaderValue(v))
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toLoaderValue(v)]))
+  }
+  return value
+}
+
+/**
+ * WP132：交给官方 `dsh-agent-preset-registry` 的那一份定义（`ctx.agentPresets.register()`）。
+ *
+ * 与 `agent.cordis.yml` 同源（都来自 {@link presetComposition} 的 `rows`），`plugins`
+ * 逐行对应文件里的每一行；凭据仍然只有引用（`process.env.<REF> ?? ''` 的表达式），
+ * 值在注册那一刻由 loader 求值——**0.1.7 起是注册时就激活**（registry README
+ * 「Each declaration eagerly creates a registry-owned scope and an in-memory Loader tree」），
+ * 所以宿主的 `withPresetCredentials` 包的是 `register()`，不再是 `mount()`。
+ */
+export function presetDefinition(req: RunRequest): PresetDefinition {
+  const comp = presetComposition(req)
+  const manifest = comp.manifest as { name: string; description: string }
+  return {
+    id: presetIdOf(req.actor.role_id),
+    name: manifest.name,
+    description: manifest.description,
+    plugins: comp.rows.map((r) => toLoaderValue(r)) as PresetDefinition['plugins'],
+  }
 }

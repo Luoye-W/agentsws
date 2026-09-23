@@ -20,11 +20,11 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import AgentPresets from '@deepseek-ai/dsh-agent-presets'
+import AgentPresetRegistry from '@deepseek-ai/dsh-agent-preset-registry'
 import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
 import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import * as PlaywrightMcpProvider from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
-import type { GenerateOptions, Message, ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, RequestMessage, ToolSchema } from '@deepseek-ai/dsh-llm'
 import LlmRuntime, { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import SandboxLocal from '@deepseek-ai/dsh-sandbox-local'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
@@ -45,7 +45,7 @@ import type { GateApi, GateInput } from './gate.js'
 import { installGate } from './gate.js'
 import type { GatewayBudget } from './llm.js'
 import { GATEWAY_PROVIDER, GatewayLlmAdapter } from './llm.js'
-import { presetCredentialRefs, presetToolNames } from './preset.js'
+import { presetCredentialRefs, presetDefinition } from './preset.js'
 import { AgentswsBashExecutor, runShell } from './shell.js'
 import {
   installSubscriptionLlm,
@@ -110,21 +110,39 @@ export interface DshHarness {
   dispose(): Promise<void>
 }
 
-function toDshMessages(messages: ChatMessage[]): { system: string; messages: Message[] } {
+/**
+ * 一次性调用（`complete`）的消息翻译。
+ *
+ * WP132（0.1.7-rc.1）：`GenerateOptions.messages` 从 `Message[]` 放宽成 `RequestMessage[]`，
+ * user 一侧可以是**不进会话日志**的 `RequestUserInput`（无 id、无 source）——这正是
+ * 一次性调用要的，所以 user / tool 两种都走它（tool 照旧降成 user 文本，与 0.1.6 同形）。
+ * assistant 一侧的类型收紧了：`source` 必须是 `{ kind: 'model', provider, model }`
+ * （0.1.6 可以随便写 `{ kind: 'user' }`），这里如实标成我们的网关路由与这次的模型。
+ * `toChatMessages` 对这三种的翻译结果与 0.1.6 逐字段相同（角色、文本、顺序都没变）。
+ */
+function toDshMessages(
+  messages: ChatMessage[],
+  model: string,
+): { system: string; messages: RequestMessage[] } {
   const systems: string[] = []
-  const rest: Message[] = []
+  const rest: RequestMessage[] = []
   for (const m of messages) {
     if (m.role === 'system') {
       systems.push(chatContentText(m.content))
       continue
     }
-    rest.push(
-      createMessage({
-        role: m.role === 'tool' ? 'user' : m.role,
-        content: [{ type: 'text', text: chatContentText(m.content) }],
-        source: { kind: 'user' },
-      }),
-    )
+    const content = [{ type: 'text' as const, text: chatContentText(m.content) }]
+    if (m.role === 'assistant') {
+      rest.push(
+        createMessage({
+          role: 'assistant',
+          content,
+          source: { kind: 'model', provider: GATEWAY_PROVIDER, model },
+        }),
+      )
+      continue
+    }
+    rest.push({ role: 'user', content })
   }
   return { system: systems.join('\n\n'), messages: rest }
 }
@@ -222,17 +240,19 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   /*
    * WP86（55 §4 第三层）：**只有这条职责真有连接才有 preset 这一层**。
    *
-   * `dsh-agent-presets` 要一个 `loader`（组合是一份 YAML，得有人 import 它的行），
-   * 而 `mount()` 走的是 `cordis-plugin-include` 的子树。两个都只在这时候挂。
+   * preset 服务要一个 `loader`（组合是一列插件行，得有人 import 它们），
+   * 行在 `cordis-plugin-include` 的子树里起。两个都只在这时候挂。
    *
-   * `ctx.baseUrl` 是**包名从哪解析**：preset 目录在数据目录下，Node 的
-   * `node_modules` 上溯到不了我们这个包的依赖，所以 base 必须指回这个包
-   * （上游 `mount.ts` 的 `harnessBase` 就是这么用的）。
+   * `ctx.baseUrl` 是**包名从哪解析**：preset 的行写的是包名（`@deepseek-ai/dsh-mcp-client`），
+   * 要从这个包的依赖里解析，所以 base 必须指回这个包（registry 激活时用的是
+   * `record.context.baseUrl`，即注册它的那个 ctx 的 base）。
    *
-   * `includeShippedRoot: false` / `includeUserRoot: false`：16 §1「公司端不装第三方
-   * 代码」——官方自带的四个 preset（standard / ptc / cordis / minimal）与用户
-   * `$DSH_HOME/.agent-presets` 下自己写的那些，一个都不进 roster。
-   * `trust: 'system'` 是因为这个 root 是**我们自己生成的**，不是用户手写的。
+   * WP132（dsh 0.1.7-rc.1）：官方把 `dsh-agent-presets`（按目录扫 roster，WP86 用的
+   * `roots` / `includeShippedRoot: false` / `includeUserRoot: false` / `trust: 'system'`）
+   * 整包换成了 `dsh-agent-preset-registry`：**不扫目录、不收路径**，官方四个 preset
+   * 与 `$DSH_HOME` 下的用户 preset 都只能以 bundle 的插件行进来。我们的树里不挂任何
+   * bundle 行，所以 roster 里**只有我们注册的这一条**——16 §1「公司端不装第三方代码」
+   * 从"两个开关关着"变成"结构上就没有入口"。
    */
   const preset = input.preset
   if (preset !== undefined) {
@@ -340,12 +360,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     root.plugin(credentials as Parameters<Context['plugin']>[0], undefined as never)
   }
   if (preset !== undefined) {
-    root.plugin(AgentPresets, {
-      default: preset.id,
-      roots: [{ path: preset.root, trust: 'system' }],
-      includeShippedRoot: false,
-      includeUserRoot: false,
-    })
+    root.plugin(AgentPresetRegistry, { default: preset.id } as never)
   }
 
   const ctx = await inject(root, [
@@ -369,7 +384,38 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * `enableRunInBackground: false`：不挂 `dsh-jobs`，而且 17 §5.1 一次运行一棵树、
    * 跑完即销毁——后台进程在这条路上没有主人。关掉之后模型连这个参数都看不见。
    */
-  if (shell !== undefined) await ctx.plugin(ToolBash, { enableRunInBackground: false } as never)
+  /*
+   * WP132：`promoteOnTimeout` 是 0.1.7 新加的开关、**默认 true**（上游 `tool-bash` README 配置表：
+   * 「Keep a foreground command that reaches its timeout running as its background job instead
+   * of killing it」）。上游实现里它与 `enableRunInBackground` 取与（`src/index.ts` 第 236 行），
+   * 所以在我们这条路上本来就不生效；照样显式写 false——默认值是上游可以单方面翻的，
+   * 而"超时的命令不杀、转后台接着跑"与 17 §5.1「一次运行一棵树、跑完即销毁」正面冲突。
+   */
+  if (shell !== undefined) {
+    await ctx.plugin(ToolBash, { enableRunInBackground: false, promoteOnTimeout: false } as never)
+  }
+
+  /*
+   * WP132：把这条职责的 preset **注册**进 registry（0.1.7 的新入口，取代按目录扫）。
+   *
+   * 0.1.7 是**注册即激活**：`register()` 当场建 scope + 内存 Loader 树、把每一行
+   * 真的 import 并起起来（mcp-client 的子进程 / 连接就在这一刻起），`mount()` 只是把
+   * Agent 绑到这一代上。所以凭据引用要在 `register()` 这一跳里解析——
+   * `withPresetCredentials` 从 `mount()` 挪到了这里，三条纪律一条不改。
+   * 激活失败**不抛**（registry 把它记成 broken，随后 `mount()` 才拒）；这里读一遍
+   * `resolve()` 把 broken 当场翻成错误，免得晚到 `setup` 里才露出来、错误信息变成"绑定失败"。
+   * 注销不用我们管：registry 挂在 root 上，`root.fiber.dispose()` 连这一代一起收。
+   */
+  if (preset !== undefined) {
+    await withPresetCredentials(ctx, input, async () => {
+      await ctx.agentPresets.register(presetDefinition(input.request))
+    })
+    const resolved = await ctx.agentPresets.resolve(preset.id)
+    if (resolved.broken !== undefined) {
+      await root.fiber.dispose()
+      throw new DshAdapterError('internal', `职责 preset 挂不上：${resolved.broken}`)
+    }
+  }
 
   let lastCompletion: Completion | undefined
   const budget: GatewayBudget | undefined =
@@ -438,9 +484,8 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
          * 所以：mount → installGate（它里面调 restrict）→ 浏览器 provider。
          */
         if (preset !== undefined) {
-          await withPresetCredentials(ctx, input, async () => {
-            await ctx.agentPresets.mount(agentCtx, preset.id)
-          })
+          // WP132：凭据已在 `register()` 那一跳解析过（见上），这里只绑定
+          await ctx.agentPresets.mount(agentCtx, preset.id)
         }
         // 工具与 hook 装在宿主 ctx 上（scope-filtered dispatch 按 `exec.agent` 路由），
         // `tools.restrict` 则必须在 Agent 的 scoped ctx 上调——全局 ctx 会抛。
@@ -516,7 +561,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
       return renderContextSections(await assemble()).map((s) => ({ name: s.name, text: s.text }))
     },
     async complete(prompt) {
-      const { system, messages } = toDshMessages(prompt.messages)
+      const { system, messages } = toDshMessages(prompt.messages, input.model)
       const options: GenerateOptions = {
         provider: GATEWAY_PROVIDER,
         model: input.model,
@@ -569,7 +614,7 @@ function summarizeTurn(session: Session, firstSeq: number): { text: string; reas
     if (event === undefined) continue
     if (event.type === 'assistant/message') {
       const joined = (
-        event.data as { message: { content: { type: string; text?: string }[] } }
+        event.data as { message: { content: readonly { type: string; text?: string }[] } }
       ).message.content
         .filter((b) => b.type === 'text')
         .map((b) => b.text ?? '')

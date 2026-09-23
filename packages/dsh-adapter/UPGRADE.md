@@ -968,3 +968,284 @@ alpha.2 把 `dsh-experimental-agent-team-web-profile` 加进了 `@deepseek-ai/ds
 但要说出来）。release notes 是我用 `gh release view dsh-v0.1.6-alpha.2 -R deepseek-ai/deepseek-harness`
 （带鉴权，不走匿名 API）另取的，两个 tag 的源码也是 `scan-default-flips.sh` 自己克隆的——
 所以这次的盲区只影响"周报里那几行链接"，不影响任何一条判断的出处。
+
+---
+
+## 0.1.6-alpha.2 → 0.1.7-rc.1（2026-09-24，WP132）
+
+### 0. 版本口径
+
+Luoye 09-23 原话是"DeepSeek harness 0.1.7.2 更新了"。npm 上**没有 `0.1.7.2` 这个号**
+（semver 也写不出四段）。升级当天 `npm view @deepseek-ai/dsh dist-tags --json`：
+
+| tag | 版本 | 发布时间（`npm view … time`） |
+|---|---|---|
+| `next` | **0.1.7-rc.1** | 2026-09-23T13:44:12Z |
+| `alpha` | 0.1.7-alpha.2 | 2026-09-22T16:08:55Z |
+| `latest` | 0.1.5-rc.3 | 2026-09-22T05:55:20Z |
+
+0.1.7 系列一共三个号：`0.1.7-alpha.1`（09-22）、`0.1.7-alpha.2`（09-22）、`0.1.7-rc.1`（09-23）。
+他说的"0.1.7.2"最可能是 alpha.2，但**最新的是 rc.1**，这次按 rc.1 升。这是 dsh 第一次出 rc 之后
+我们跟 rc（前三次跟的都是 alpha）。`latest` 仍然停在 0.1.5 系列（09-22 还补发了一个 0.1.5-rc.3），
+按"升到 latest"办事仍然是**降级**。锁精确版本，不用 `^`。
+
+**兄弟包这次必须跟着升**（docs/42 ② 说的"必要时"第一次发生）：dsh 0.1.7-rc.1 的依赖写的是
+`@deepseek-ai/cordis ~4.0.4`、`@deepseek-ai/schemastery ~3.18.4`、`cordis-plugin-loader ~1.0.5`、
+`cordis-plugin-include ~1.0.9`（`npm view @deepseek-ai/dsh@0.1.7-rc.1 dependencies`），
+我们锁的 4.0.2 / 3.18.2 / 1.0.3 / 1.0.7 进不了同一棵树。于是 `packages/kernel`、`packages/roles`、
+`packages/credentials-openconnector`、`apps/server`、`profiles/agentsws`、`packages/dsh-adapter`
+六处一起改；`dsh-adapter` 里那个 `^3.18.2`（upstreams.yml 记在案的擦边球）顺手统一成精确版本。
+kernel / roles / credentials-openconnector 的测试全过（见 §4）。
+
+**四个包一起升？实际是 38 个。** 派工单写的是"`dsh` / `dsh-agent` / `dsh-agent-loop` / `dsh-agent-presets`
+四个包"，但 `dsh-adapter/package.json` 里写死 0.1.6-alpha.2 的 `@deepseek-ai/dsh*` 有 38 个
+（+ profile 里 10 个、credentials-openconnector 1 个），它们互为 peer、必须同版本。逐个 `npm view <包>@0.1.7-rc.1 version`：
+**37 个都在，唯独 `@deepseek-ai/dsh-agent-presets` 没有 0.1.7**（它的 dist-tags 停在 `alpha = 0.1.6-alpha.2`）——
+上游把它下线了，见 §1.1。
+
+第 ② 步的 release notes：`gh release view dsh-v0.1.7-{alpha.1,alpha.2,rc.1} -R deepseek-ai/deepseek-harness`
+（带鉴权）。rc.1 那份自称「汇总了自 v0.1.5-rc.3 以来的主要用户和开发者相关变更」，
+所以它和 0.1.6 两个 alpha 的说明有重叠；逐条判的时候以三份 0.1.7 的说明为准，旧条目只核"有没有变"。
+上游源码两个 tag 用 codeload 的 tarball 取（`git clone --depth 1` 这天两次 early EOF），
+④bis 的默认值扫描在这两份源码上照 `scripts/scan-default-flips.sh` 的同一套 diff + awk 跑。
+
+### 1. 上游改了什么
+
+比对方法同前三次：升级前后各把 `packages/dsh-adapter/node_modules/@deepseek-ai/*`（41 个包）
+的 `*.d.ts` + `README*` + `package.json` 抄一份，`diff -rq`。**这次比 WP93 大得多**：
+`.d.ts` 变了 **56 个文件 / 22 个包**，新增 1 个包（registry）、消失 1 个包（presets）。
+五个 seam 所在的包：`dsh-scope` **逐字节相同**；`dsh-tools` / `dsh-user-approval` / `dsh-system-prompt` 只有加法
+（见表）；**真正碰到我们的是三处：preset、消息形状、shell 执行接口。**
+
+**先记一个流程上的坑**：改完版本号、`pnpm install` 之后跑增量 `npx tsc -b`，**退出码 0**；
+单独 `npx tsc -p packages/dsh-adapter --noEmit` 却报 14 处错。增量构建只看**源码**变没变，
+node_modules 里上游 `.d.ts` 换了它照样判"已是最新"。docs/42 ④ 原文写的是 `tsc -b --force`，
+而日常用的 `scripts/verify-changed.sh` 走增量——这次顺手给它补了一步（锁文件一动，
+就对 package.json 也动了的工程跑 `tsc -p … --noEmit`），见 docs/42 修订注。
+
+| 包 | 变化 | 出处 | 碰到我们吗 |
+|---|---|---|---|
+| `dsh-agent-presets` → **`dsh-agent-preset-registry`** + `dsh-agent-preset` | **整包下线换新**。旧的按 `roots` 扫 `<root>/<id>/agent.cordis.yml`；新的「neither scans directories nor accepts preset paths」，定义只能以插件行（`dsh-agent-preset`）或 `ctx.agentPresets.register(definition)` 交进去；**注册即激活**（「Each declaration eagerly creates a registry-owned scope and an in-memory Loader tree」）；旧一代在最后一个引用释放时销毁 | registry `README.md`「Minimal configuration」「Understand the implementation」；`lib/types/index.d.ts` 的 `register()` / `mount()` / `resolve()` | **碰到，改了**（§3 ①）。`mount(ctx, id)` 签名没变，所以 setup 里那一行照旧；变的是"定义怎么交进去"与"凭据在哪一跳解析" |
+| `dsh-llm` | **消息形状改了**：工具结果从"带 `tool-result` 块的 user 消息"升成一等的 **`role: 'tool'` 消息**（`ToolResultMessage`：`toolCallId` + 结果块）；`ToolResultBlock` 删除；新增 `developer` 角色（`tool-addition` / `tool-removal` 块，「reserved for Session V4 persistence」）；`Message` 变成按 role 区分的并集、`content` 变 `readonly`；`GenerateOptions.messages` 放宽成 `RequestMessage[]`（可含无 id 的 `RequestUserInput`）；`createSystemMessage` 少一个参数；`ToolSchema.deferLoading?` | `lib/types/message.d.ts`、`types.d.ts`（`ContentBlockMap`、`RequestUserInput`）、`content.d.ts` | **碰到，改了**（§3 ②）。`llm.ts` 的 `toChatMessages` 与 `harness.ts` 的 `toDshMessages` |
+| `dsh-shell` / `dsh-bash-local` / `dsh-bash-sandbox` | **执行接口合并**：`run(spec)` / `start(spec)` → **`execute(spec): Promise<ShellExecution>`**，前台结果改由句柄上的 `result()` 给；新增 `onExpiry: 'kill' \| 'none'`；`LocalBashExecutor.Config` 各字段变 `Volatile` | `dsh-shell/lib/types/index.d.ts` 的 `ShellExecutor`、`types.d.ts` 的 `ShellExecution`；release notes「`SandboxProvider.confine` 和 `ShellExecutor.start` 改为可取消的异步接口」 | **碰到测试，没碰到实现**。`AgentswsBashExecutor` 只覆写 `resolve()`，`tsc` 零报错；`shell-seam.test.ts` 里有一条绕开门禁直接调 `ctx.shell.run()` 的替身跟着改成 `execute().result()`，断言不动 |
+| `dsh-tool-bash` | 新开关 **`promoteOnTimeout`，默认 `true`**：前台命令到时不杀、转成后台 job 接着跑 | README 配置表；源码 `src/index.ts` 第 236 行 `(config.promoteOnTimeout ?? true) && backgroundEnabled` | **否**（与 `enableRunInBackground` 取与，我们写的是 false）。照样在 `harness.ts` 显式写 `promoteOnTimeout: false`：默认值是上游能单方面翻的，"超时不杀转后台"与 17 §5.1 正面冲突 |
+| `dsh-tools` | 加法：`projectContent?()`、`deferLoading?`、`MessageSourceMap` 加 `tool-registry` | `lib/types/index.d.ts`、`schema.d.ts` | 否。`pre-execute` 的 allow/deny/ask、`post-execute` 的 replace/enrich/block 原样 |
+| `dsh-user-approval` | 只加一个 `MessageSourceMap['user-approval']` 声明 | `lib/types/index.d.ts` 头部 | 否。answerer waterfall 与 fail-closed 原样 |
+| `dsh-system-prompt` | 分节位 `TOOL_CORDIS: 2500` 删除（创造模式改走 Plugin Manager） | `lib/types/index.d.ts` 的 `SECTION_ORDER` | 否。我们只用 `complete: true` 的 persona 段与 `context`；提示词三组合逐字节相同（§4 第 4 层） |
+| `dsh-agent-loop` | `maxParallelToolCalls` 变 `Volatile`；`AGENT_LOOP_SETTINGS_*` 三个导出删除；`MessageSourceMap` 加 `runtime-context` | `lib/types/index.d.ts`、`runtime-context.d.ts` | 否。我们传 `{ maxParallelToolCalls: 1, agents: [] }`，形状照收 |
+| `dsh-session` | `SESSION_FORMAT_VERSION` 3 → **4**；新事件 `developer/message`；fork 相关调整；`eventAt` / `snapshotEvents` / `ownEvents` **仍在、仍标弃用** | `lib/types/types.d.ts`、`index.d.ts` 第 181 行 | 否。我们用内存 Session、不落 JSONL，没有 V3→V4 迁移这回事；`runtime.ts` 的投影对不认识的事件类型本来就跳过 |
+| `dsh-agent` | 加 `archive-admission.d.ts`、`SessionActivityKindMap.turn` | `lib/types/*` | 否 |
+| `dsh-authorization` | 抽象类加 `commit(record)` | `lib/types/index.d.ts` | 否。我们不实现它（`tsc -p packages/credentials-openconnector --noEmit` 零报错） |
+| `dsh-llm-pi-ai` | README 与 5 个 `.d.ts`：大型流式工具参数不再阻塞进程等 | `lib/types/*` | 否。订阅那条路只用默认导出插件 + `providers`，`subscription.test.ts` 13 条不改全过 |
+| `cordis` 4.0.2 → 4.0.4 | `Fiber.update()` 不再返回 Promise；导出 `Volatile` 类型 | `lib/types/fiber.d.ts`、`events.d.ts`、`index.d.ts` | 否。`packages/kernel` 测试全过 |
+| `cordis-plugin-loader` 1.0.3 → 1.0.5 | 新增 `config/diff.d.ts`（按 schema 的 volatile 字段比较配置） | `lib/types/config/diff.d.ts` | 否 |
+| `dsh-scope` / `dsh-session-projection` / `dsh-browser-use` / `dsh-credentials` / `dsh-sandbox` / `dsh-sandbox-policy` / `dsh-subprocess` / `dsh-sdk-protocol` / `dsh-sdk-client` / `dsh-util-values` / `dsh-home-paths` / `dsh-timeout` / `dsh-mcp-client` | **`.d.ts` 逐字节相同** | `diff -rq` 只报 `package.json` / README | 否 |
+
+#### 1.1 bundle 的 patch 层（第三个面）
+
+`packages/bundle/headless/cordis.patch.yml` **逐字节相同**。`packages/bundle/base/cordis.patch.yml` 的 diff：
+
+```diff
+-    - id: settings
+-      name: '@deepseek-ai/dsh-settings-file'
++    - id: config-editor
++      name: '@deepseek-ai/dsh-config-editor'
++      disabled: !!js "!ctx.get('profileContext')"
++
++    - id: settings
++      name: '@deepseek-ai/dsh-settings'
++      disabled: !!js "!ctx.get('profileContext')"
+ …
++    - id: authorization
++      name: '@deepseek-ai/dsh-authorization'
++
++    - id: deepseek-account
++      name: '@deepseek-ai/dsh-deepseek-account-platform'
++      config:
++        desktopPlatform: !!js "ctx.get('profileContext')?.name === 'desktop' && …"
+ …
+     - id: spill-policy
+       config:
+-        maxInlineBytes: 50000
++        maxInlineTokens: 12500
+```
+
+三行按 docs/42 红线 7 处理（§5）：`config-editor` 把表单保存**写回 profile 的这份 patch 文件**并立即生效；
+`settings` 写回走它，另外会把 `$DSH_HOME/settings.yaml` 导入一次并改名；`deepseek-account` **没有 `disabled`
+表达式、任何组合默认就挂**，是 DeepSeek 账号的浏览器登录 / 资料 / 余额查询，出网。
+`authorization` 不关（授权服务本身，我们早就直接 import）。`spill-policy` 改单位不碰我们（没挂）。
+
+#### 1.2 release notes 的条目逐条判（只列有可能碰到的；纯 web 客户端的界面条目略）
+
+| 条目 | 碰到我们吗 | 出处 |
+|---|---|---|
+| **Agent 预设改由插件组合包声明和安装……旧目录预设需迁移** | **碰到**，§3 ① | registry README |
+| **工具结果升一等 tool 消息 / Session 日志 V4** | **碰到**（消息形状），§3 ②；V4 迁移不碰（内存 Session） | `dsh-llm` / `dsh-session` `.d.ts` |
+| **`SandboxProvider.confine` 与 `ShellExecutor.start` 改为可取消的异步接口** | 实现不碰、测试替身跟改 | `dsh-shell` `.d.ts` |
+| 长时间命令超时后可转后台（`promoteOnTimeout`） | 否（与 `enableRunInBackground: false` 取与），仍显式写 false | `tool-bash` 源码第 236 行 |
+| **默认不再限制任务完成后连续唤醒 Agent 的次数**（`tool-jobs` 的 `maxConsecutiveWakes` 去掉默认 3） | 否。不挂 `dsh-jobs` / `tool-jobs`，模块图 0 命中 | ④bis 扫描那一行 |
+| 设置改由 Profile 插件配置保存；旧 settings.yaml 仅导入一次 | 否（不挂），但 profile 层关死，§5 | `settings/settings/README.md` |
+| 插件安装和启动检查与当前 DSH 版本的兼容性；不兼容时可对确切版本授予例外 | **可能**：BrowserSkill 插件的 peer 写的是 `^0.1.0-rc.6`。我们是 `agentCtx.plugin()` 直接挂，不经 Plugin Manager 的安装 / 启动检查——`browserskill-seam.test.ts` 49 条不改全过就是证据 | release notes；browserskill-seam |
+| 修复启用 Playwright 浏览器插件后，新会话、子代理及其他 Agent 创建失败 | 否（白得）。`browser-seam.test.ts` 23 条不改全过 | — |
+| 修复多个带检查工具的 Agent 预设共存时重复注册导致加载失败 | 否。我们一棵树一个 preset | — |
+| 可选插件启动失败时其余可用插件仍可运行 | 否 | — |
+| 配置热更新取消事务回滚 | 否。`patchReload: startup` | — |
+| 官方 DeepSeek 适配器只用 Messages API，移除 `protocol` | 否。不经 `dsh-llm-deepseek`（telemetry.test 钉着模块图） | — |
+| 默认不再启用 Ralph / 移除 E2B / PTC 改名 / workflow-ptc | 否。都不挂 | — |
+| MCP 升级到官方 SDK v2（协议协商、工具分页） | 否（0.1.6 已经是 v2，WP70 记过）。`preset-seam` 17 条不改全过 | — |
+| 工具返回按统一 token 预算保留首尾；`spill-policy` 的 `maxInlineBytes` → `maxInlineTokens` | 否。不挂 `spill-policy` | base patch diff |
+| 新增实验性语音转写插件（首次使用下载识别模型） | 否，但它拖进来一个原生库，§2 | — |
+| 新增 `--dump-config-schema` | 否（可借，见报告"官方化"一节） | — |
+| 插件组合包支持按顺序加载多个 patch 文件 | 否（可借） | — |
+| DeepSeek 账号登录 / 反馈入口 / Agent Team / Auto review / Computer Use / 侧边栏一大摞 | 否（web 客户端或我们不挂的插件）；账号那一行 profile 层关死，§5 | — |
+
+### 2. 原生依赖：又来一个"下载型"的
+
+依赖树 diff（`awk` 取 lockfile 的 `packages:` 段，去版本号后 `comm`）：
+
+| | 包 |
+|---|---|
+| **新增 22 个 dsh 包** | `dsh-agent-preset`、`dsh-agent-preset-registry`、`dsh-api-account-controller`、`dsh-api-job-controller`、`dsh-client-store`、`dsh-client-ui-primitives`、`dsh-client-ui-settings-{account,agent-loop,shell,subagent,web-search}`、`dsh-config-editor`、`dsh-deepseek-account`、`dsh-deepseek-account-platform`、`dsh-experimental-{api-speech-to-text,client-ui-voice-input,speech-to-text,speech-to-text-sensevoice,voice-input-bundle}`、`dsh-session-format-v3-to-v4`、`dsh-skill-office`、`dsh-tool-workspace-dependencies` |
+| **新增第三方** | `sherpa-onnx-node`（Apache-2.0）+ 六个 `sherpa-onnx-<平台>` 平台包；`@eslint-community/regexpp`（MIT，`dsh-app-boot` 的新依赖） |
+| **消失 4 个** | `dsh-agent-presets`、`dsh-client-ui-settings-unarchive-sessions`、`dsh-experimental-agent-team-web-profile`、`dsh-settings-file` |
+| 兄弟包升版 | `cordis` 4.0.4、`schemastery` 3.18.4、`cordis-plugin-{loader 1.0.5, include 1.0.9, group 1.0.4, timer 1.1.6}`、`cosmokit` 1.8.5、`libreoffice-kit` 0.0.1 → 0.1.0 |
+
+- **`allowBuilds` 一个字没改**：新进树的第三方都没有 `install` / `preinstall` / `postinstall`。
+- **`ignoredOptionalDependencies` 加三条**：`sherpa-onnx-node` 用 optionalDependencies 挂着六个平台包，
+  里面是 onnxruntime 与 sherpa-onnx 的原生 `.node` / `.dylib`，本机 `darwin-arm64` 实测 **33 MB**
+  （`du -sh node_modules/.pnpm/sherpa-onnx-darwin-arm64@1.13.8`），同样没有 install 脚本、`allowBuilds` 管不着。
+  它来自官方 web 客户端的实验性语音转写（`dsh` 元包 → `voice-input-bundle` → `speech-to-text-sensevoice`），
+  这个 bundle 只有被 profile 列进 `bundles` 或经 Plugin Manager 打开才会挂，我们两样都没有。
+  写成 `sherpa-onnx-darwin-*` / `-linux-*` / `-win-*` 三条，不写 `sherpa-onnx-*`（字面上会盖住本体，读的人会误会）。
+  装完 `grep sherpa-onnx-darwin pnpm-lock.yaml` 只剩 `ignoredOptionalDependencies` 那三行，本体 104 KB 留着。
+- `libreoffice-kit` 升到 0.1.0，五个平台包**仍被**上次那条 `'@deepseek-ai/libreoffice-kit-*'` 挡着（lockfile 里 0 处）；
+  release notes 那句「Office 任务默认使用随应用安装的 LibreOffice 运行环境」说的是官方桌面端自带，不是变硬依赖。
+- **`minimumReleaseAgeExclude` 253 → 271，整批替换**：+22 新包、-4 消失包，全部单版本写法；
+  pnpm 自己追加的 23 条挪回排序位置，其中 `@deepseek-ai/libreoffice-kit@0.1.0` 单列一段注释（它不带 `dsh` 前缀）。
+  脚本核对：lockfile 里 `@deepseek-ai/dsh*@0.1.7-rc.1` 271 个 = 排除表 271 条，逐条相等。
+- **`overrides` 这次没炸**：BrowserSkill 插件那四条钉的版本跟着改成 0.1.7-rc.1，
+  没有新的 `dsh-client-ui-*` peer 第一次进树（`dsh-client-ui-attachment` / `-tool` 仍然不在）。
+
+### 3. 我们改了什么
+
+改动全在 `packages/dsh-adapter` 与 `profiles/agentsws`（红线 4）：
+
+① **preset 走 registry**（`harness.ts` / `preset.ts`）：
+`root.plugin(AgentPresetRegistry, { default: id })` 取代 `AgentPresets({ roots, includeShippedRoot: false, includeUserRoot: false })`；
+新增 `presetDefinition(req)`——与 `agent.cordis.yml` **同源**（都是 `presetComposition(req).rows`），`!!js` 标量换成 loader 的
+`{ __jsExpr }`；注入就绪后 `ctx.agentPresets.register(definition)`，再 `resolve(id)` 一次把 broken 当场翻成错误。
+**`withPresetCredentials` 从 `mount()` 挪到 `register()`**——0.1.7 注册即激活，mcp-client 的子进程 / 连接在注册那一刻起，
+凭据引用必须在那一跳能解析；`mount()` 现在只绑定。三个文件照旧幂等地写（`host.cordis.yml` 是跨进程那一面的描述）。
+结果：`includeShippedRoot` / `includeUserRoot` 两个开关没了，但**结构上更严**——registry 不扫目录，
+我们的树里又没有任何 bundle 行，roster 里只有我们注册的那一条。
+
+② **消息翻译**（`llm.ts` / `harness.ts`）：`toChatMessages` 认 `role: 'tool'`（取 `toolCallId` 与块文本，
+与 0.1.6 从 `tool-result` 块里取出来的逐字段相同）；`developer` 消息有文字才按 system 送（我们的工具集一次运行定死，
+这类消息不该出现）；一次性调用的 `toDshMessages` 里 user / tool 走 `RequestUserInput`（不进会话日志，正合适），
+assistant 的 `source` 如实标 `{ kind: 'model', provider: 'agentsws-gateway', model }`。
+
+③ **两个测试替身跟上游形状改**：`llm.test.ts` 的工具结果替身改成 `role: 'tool'`；
+`shell-seam.test.ts` 那条绕开门禁直调执行器的改成 `execute(spec)` → `result()`。**断言一条没动。**
+
+④ **profile 层关三行 + bash 一个开关**：见 §5。
+
+⑤ 版本号：38 + 10 + 1 处 `0.1.6-alpha.2` → `0.1.7-rc.1`，`dsh-agent-presets` → `dsh-agent-preset-registry`
+（dsh-adapter 与 profile 两处）；cordis 家族与 schemastery 见 §0。
+
+### 4. 怎么证明行为没变
+
+1. **seam 契约**（`seams.test.ts`）：**30 条，一条没改、全绿。**
+2. **五组重点实证**，除 §3 ③ 那两个替身外一条不改全过：`browser-seam` 23、`browserskill-seam` 49、
+   `preset-seam` 17（**registry 换了，17 条一条没改**——包括"凭据解析出来的值到得了 MCP 子进程、挂完从 `process.env` 消失"、
+   "两条职责各挂各的看不见对方"、"preset 的工具受 `restrict` 管"）、`shell-seam` 19、`subscription` 13。
+   `@agentsws/dsh-adapter` 升级前 **16 文件 877 条**，升级后 **16 文件 1020 条**：
+   多的 143 条全在 `upgrade.test.ts`（666 → 809：场景 51 → 62，是 WP94–WP131 加的场景，不是这次加的；
+   另有 1 条新断言"两份 `skipped` 一致"）。
+   `packages/kernel`、`packages/credentials-openconnector`、`packages/roles`（cordis / schemastery 升版的下游）全过。
+3. **指纹逐条对比**（FROM = 升级前在当前代码树重采的 `0.1.6-alpha.2-wp132.json`，TO = `0.1.7-rc.1.json`）：
+   62 条场景 × 2 档 = **124 条**，事件类型序列 / `type@at` / 六条不变量 / 场景断言 / 运行摘要 **全部相同**，
+   `tokens_per_item` **偏差 0.00%**，两档之间仍逐条相等。去掉 `dsh_version` 与 `packages` 两个字段后两份 JSON **逐字节相同**。
+   `packs/*/baseline.json` **一个数都没重定**。
+   两个模拟包 `--runtime dsh` fast 档：3 人 pack **62/62**、15 人 pack **22/22**，门禁"通过"；
+   逐场景比 `metrics`，升级前后 **0 处差异**（数字见报告 WP132 §4）。
+   - 一段插曲要说清楚：开工时（main = cea0afeb）`kol/public-library-reveal-charges-credits` 在 **stub 档就抛**
+     `insufficient_credits`（45921fd4 取消插件贡献奖励之后，这道题依赖的那 1 积分没了），采集器整份中断。
+     第一轮于是给 `capture.mjs` 加了 `CAPTURE_SKIP`，前后两次都跳这一条（61 × 2 = 122 条，同样逐字节相同）。
+     收尾 `git merge main` 时 main 已经有 110f8ba3 修好了它，于是**在 main 的树（升级前的代码）上重采了 FROM、
+     在合并后的分支上重采了 TO，两份都是完整的 62 条、不跳任何场景**——仓库里提交的是这两份。
+     `CAPTURE_SKIP` 与 `upgrade.test.ts` 那条"两份 `skipped` 一致"的断言留着，给下次同样的情况用（docs/42 ① 写了纪律）。
+4. **提示词**：新旧两版各在一棵只挂 `SystemPrompt` 的树上 `assemble()` + `renderPrompt()`，三种组合
+   （裸默认 / `includeHarnessIdentity: false` / 加我们的 `complete: true` 段）的段名、长度、渲染结果、`variables` 键集合
+   **逐字节相同**，也与 WP70 / WP93 记的那张表一致。没有提示词 diff 要列。
+5. **两档的真实模块图**（ESM resolve 钩子，同 `telemetry.test.ts` 手法）：47 → 50 个包。
+   新进：`dsh-agent-preset-registry`、`cordis-plugin-group`、`dsh-app-boot`、`dsh-launch-environment`（后两个是 registry 的库依赖，
+   只 import 不启动）；消失：`dsh-agent-presets`。`dsh-plugin-manager` / `dsh-hmr` / `dsh-config-editor` /
+   `dsh-deepseek-account-platform` / `dsh-session-log-deepseek` / 语音那一摞 / `dsh-product-telemetry-otel`（新包，未进任何 bundle）**全部 0 命中**。
+
+### 5. 安全：把配置写回与账号登录在 patch 层关死
+
+形状与 WP70 的 `session-log-deepseek`、WP93 的 `plugin-manager` 一样：**上游 bundle 往我们这一层塞了默认会开的行**。
+`profiles/agentsws/cordis.patch.yml` 加三行（理由逐条写在文件里那一段）：
+
+```yaml
+- id: config-editor
+  disabled: true
+- id: settings
+  disabled: true
+- id: deepseek-account
+  disabled: true
+```
+
+`config-editor` 这条值得单说：它的 Summary 是「Save plugin configuration in the active profile's patch and apply it
+immediately」——**它写的就是这份文件**。开着它，任何一次表单保存都可能把上面 `session-log-deepseek: enabled: false`
+或 `plugin-manager: disabled: true` 改回去，前两次升级的锁定就形同虚设。
+
+钉住它们：`test/profile-lockdown.test.ts` 的禁用名单加 `dsh-config-editor` / `dsh-deepseek-account-platform`（两档模块图 0 命中），
+patch 必须 `disabled: true` 的行从 3 行加到 6 行。`session-log-deepseek` 仍是 `.default(true)`（上游 `src/index.ts` 第 45 行），
+我们那行 `enabled: false` 必须留，`telemetry.test.ts` 3 条仍绿。
+
+另外 `harness.ts` 挂官方 `bash` 工具时显式加 `promoteOnTimeout: false`（§1 表里那一行的理由）。
+
+### 6. ④bis 默认值扫描
+
+两份源码（codeload tarball）照 `scan-default-flips.sh` 的 diff + awk 跑：**138 行**，去掉测试文件与 `switch` 的 `default:` 误报后逐条看：
+
+| 行 | 判断 |
+|---|---|
+| `shell/tool-bash`、`tool-pwsh`：`promoteOnTimeout` **新增 `.default(true)`** | 不出网，但属于"上游能单方面翻的行为默认值"；我们这条路本就不生效，仍显式写 false（§5） |
+| `jobs/tool-jobs`：`maxConsecutiveWakes` 的 `.default(3)` **消失**（改成不限） | 无关，不挂 jobs |
+| `workflow/tool-workflow`：`enableRunInBackground` 新增 `.default(true)` | 无关，不挂 workflow |
+| `boot/plugin-manager`：`fallbackRegistries` 默认 `[npmmirror]`、`githubConnectionTimeoutMs` 等 | 出网类，但 plugin-manager 上次就关死了，模块图 0 命中 |
+| `client/ui-plugin-manager`：`registryProbeEnabled` **`.default(true)`**（探测 npm 源） | 出网类，但只在官方 web 客户端；我们不挂任何 `dsh-client-*` |
+| `llm/llm-deepseek`：十几个字段加 `.volatile()`，`protocol` 删除 | 无关，不经官方 DeepSeek 适配器 |
+| `bash-local` / `pwsh-local` / `subagent` / `web-search-deepseek` / `llm-pi-ai`：只是加 `.volatile()`，默认值本身没变 | 无关 |
+| `workspace/spec.ts` 加 `pinnedSessionIds` 等 | 无关 |
+
+**一条出网 / 上报 / 遥测开关都没有从关翻成开。** 但"新包里一个默认打开的出网服务"在这张表里看不见——
+`deepseek-account` 没有 `.default(true)`，它是**base patch 里一行不带 `disabled` 的新 insert**。这正是 WP93 补的"第三个面"
+抓到的，不是 ④bis 抓到的；两道都要做。
+
+### 7. 重判上次放弃的选项（docs/42 §⑤）
+
+线照旧：≤ 100 行且两档事件序列仍然相等才换。
+
+| # | 上次的判断 | 这次实测 | 还成立吗 |
+|---|---|---|---|
+| 1 | 官方 SDK 没有 server→client 请求 | `dsh-sdk-jsonrpc-server@0.1.7-rc.1` 的 `lib/index.js` 里 `transport.request(` **0 处**，往回仍只有 `session.event` / `session.status` / `subagent.started` / `subagent.finished` 四个 `notify`；上游 `packages/sdk/protocol/src` 与 0.1.6-alpha.2 **逐字节相同** | **成立**，不换 |
+| 2 | headless `--json` 替不了子进程档（单向 stdout 投影） | `bundle/headless/src` 的 diff 只有两处：`json-stream.ts` 跟着消息形状改（从 `content[0]` 取 → 直接取 `message.toolCallId`），`index.ts` 两行注释改包名 | **成立** |
+| 3 | `plugin-manager` 不能替 preset 承载 | 这次不用它也换了：registry 就是官方的 preset 承载，**我们已经在用它的 `register()`**（§3 ①）。plugin-manager 仍然关死 | **已部分解决**（官方承载换上了；安装 / 持久化那半仍不借） |
+| 4 | `workspace-changes` 形可借体不能用 | README 两句硬伤原样还在：「Host restart therefore has no card」「shell commands outside the snapshot coverage are not recorded」 | **成立** |
+| 5 | `session.eventAt()` 弃用（"下次第一个红"） | 仍在、仍标弃用（`dsh-session/lib/types/index.d.ts` 第 181 行），这次**没红** | 仍是悬着的一条，留给下一跳 |
+
+### 8. 留下的东西
+
+1. **`session.eventAt()` 仍在用**（`harness.ts` 的 `summarizeTurn()`）。上游已经三版挂着 `@deprecated`，迟早删；
+   替代是 `session.read()` 的异步分页（上游 Agent Note 2026-09-09），改起来是 S。
+2. **`capture.mjs` 的 `CAPTURE_SKIP` 留着**（只许跳"升级前 main 上就红、stub 档也红"的场景）；这次最终提交的两份基线没用上它。
+3. **`@deepseek-ai/dsh-agent-preset`（声明插件行）没用上**：我们直接 `register()`，因为我们的定义是按 RunRequest
+   一次运行生成一次、不是 profile 里的静态行。真接管 dsh 进程那天，profile 的写法见 `cordis.patch.yml` 末尾的注释。
+4. **`upstreams.yml` 的 `locked_in` 仍只钉 `@deepseek-ai/dsh` 一个包名**（WP93 记过）。这次 `dsh-agent-presets`
+   整包消失也是逐个 `npm view` 才发现的——登记表查不出"某个锁住的兄弟包新版里根本没有"。v2 值得给哨兵加一步：
+   对 `locked_in` 文件里每个 `<prefix>*` 依赖查一次 `<包>@<新版>` 在不在。
+5. **`contracts/src/run.ts`、`connection-directory.ts` 与 docs/18、docs/55 的注释里还写着 `agent-presets` 目录**。
+   契约注释不在本单改（改了要重出 SDK），文档是历史记录；dsh-adapter 自己的 README / AGENT-LAYER / presets/README 已加 WP132 修订注。

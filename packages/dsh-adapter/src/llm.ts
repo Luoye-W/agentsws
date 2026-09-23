@@ -17,7 +17,7 @@ import type {
   GenerateOptions,
   LlmProviderInfo,
   LlmResolvedModelInfo,
-  Message,
+  RequestMessage,
   StreamChunk,
   ToolCallId,
   ToolSchema,
@@ -38,14 +38,19 @@ export const GATEWAY_PROVIDER = 'agentsws-gateway'
  */
 const CONTEXT_MARKER = /^\[([a-z_]+):([^\]]*)\]$/
 
-/** dsh 的 ContentBlock → 纯文本（我们的 ChatMessage.content 是字符串）。 */
+/**
+ * dsh 的 ContentBlock → 纯文本（我们的 ChatMessage.content 是字符串）。
+ *
+ * WP132（0.1.7-rc.1）：`tool-result` 块没了——工具结果升成一等的 `role: 'tool'` 消息
+ * （`dsh-llm` 的 `ToolResultMessage`），块里只剩结果本身的 text / image / file；
+ * 新增的 `tool-addition` / `tool-removal` 两种块只出现在 `developer` 消息里，没有文字。
+ */
 function blockText(block: ContentBlock): string {
   if (block.type === 'text') return block.text
-  if (block.type === 'tool-result') return block.content.map((b) => blockText(b)).join('')
   return ''
 }
 
-function messageText(message: Message): string {
+function messageText(message: RequestMessage): string {
   return message.content
     .map((b) => blockText(b))
     .filter((s) => s.length > 0)
@@ -98,11 +103,12 @@ function parseArguments(raw: string): unknown {
  * dsh 的请求 → 22 §1 的 `complete` 请求。
  *
  * `system` 槽（一次性调用）在前；loop 建的请求没有 `system` 字段，系统提示词是
- * `messages` 里的第一条 system 消息。工具结果在 dsh 里是**带 `tool-result` 块的 user 消息**，
- * 这里还原成我们的 `tool` 角色并补回工具名（从上一条 assistant 的 `tool-call` 块取）。
+ * `messages` 里的第一条 system 消息。工具结果在 dsh 0.1.7 起是**一等的 `role: 'tool'` 消息**
+ * （0.1.6 是带 `tool-result` 块的 user 消息），这里翻成我们的 `tool` 角色并补回工具名
+ * （从上一条 assistant 的 `tool-call` 块取）。
  *
  * WP87：`reasoningByCallId` 把**思考模型上一轮的推理**接回 assistant 消息。dsh 的
- * `Message` 里没有这一格（它的块只有 text / tool-call / tool-result），推理在流协议这一层
+ * `Message` 里没有这一格（它的块只有 text / tool-call 等，没有推理原文），推理在流协议这一层
  * 就掉了；而 `ChatMessage.reasoning` 的契约注释写得很清楚——DeepSeek thinking 模式多轮时
  * 不原样带回就 400（09-14 真店实测）。键取这一轮 assistant 的第一个 tool-call id：
  * 有工具调用的 assistant 才会出现在下一轮的历史里，没有的那一轮 loop 已经结束了。
@@ -147,15 +153,25 @@ export function toChatMessages(
       })
       continue
     }
-    const result = m.content.find((b) => b.type === 'tool-result')
-    if (result !== undefined && result.type === 'tool-result') {
-      const name = toolNames.get(String(result.toolCallId))
+    if (m.role === 'tool') {
+      const name = toolNames.get(String(m.toolCallId))
       messages.push({
         role: 'tool',
-        content: result.content.map((b) => blockText(b)).join(''),
-        tool_call_id: String(result.toolCallId),
+        content: m.content.map((b) => blockText(b)).join(''),
+        tool_call_id: String(m.toolCallId),
         ...(name === undefined ? {} : { name }),
       })
+      continue
+    }
+    if (m.role === 'developer') {
+      /*
+       * WP132：0.1.7 新角色，记"这一轮会话里工具集怎么变了"（`tool-addition` /
+       * `tool-removal`），上游注释说 provider 与 UI 在生产方落地前一律拒收。
+       * 我们的工具集一次运行定死（`tools.restrict` 白名单），这类消息不该出现；
+       * 真出现了也没有可送的文字——有文字才按 system 送，与一次性调用的 `system` 槽同一条路。
+       */
+      const text = messageText(m)
+      if (text.length > 0) messages.push(...splitSystemText(text))
       continue
     }
     messages.push(...splitSystemText(messageText(m), 'user'))

@@ -53,7 +53,7 @@ upstreams:
     why: 我们的 Agent 运行时本体；`packages/dsh-adapter` 是全仓唯一 import dsh 的地方（docs/34）
     npm: '@deepseek-ai/dsh'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.1.6-alpha.2
+    locked_version: 0.1.7-rc.1
     pin: exact
     watch: [versions, releases, default_flips, wishlist]
     locked_in:
@@ -69,7 +69,8 @@ upstreams:
       - 'dsh-agent: ctx.agents.create / followup / whenIdle（WP81 起两档运行时都走它）'
       - 'dsh-session-projection: session/event 的投影（我们的事件序列就是从它来的）'
       - 'dsh-browser-use + dsh-experimental-browser-use-*: mountSessionMcp，一个 Agent 一个 MCP 客户端（WP82）'
-      - 'dsh-agent-presets: 一职责一目录的 preset 承载'
+      # WP132：0.1.7 起 `dsh-agent-presets`（按目录扫）整包下线，换成 registry（不扫目录、不收路径）
+      - 'dsh-agent-preset-registry: ctx.agentPresets.register(definition) + mount(agentCtx, id)；注册即激活'
       - 'dsh-llm: ctx.llm.stream({ system, messages, tools }) 这条"一次性调用方"的路'
     wishlist:
       - 官方 SDK 出现 server→client 请求（dsh-sdk-jsonrpc-server 里的 transport.request）
@@ -81,6 +82,9 @@ upstreams:
       # `packages/bundle/base/cordis.patch.yml` 里 insert 了一行默认开的 `plugin-manager`
       # （按 `!ctx.get('profileContext')` 判），而我们的 profile 正好把 base 列进 bundles。
       - bundle 的 cordis.patch.yml 里新增默认开启的行（plugin-manager / hmr 那一类）
+      # WP132 加：0.1.7-rc.1 的 base patch 又 insert 了 config-editor / settings / deepseek-account
+      # 三行（写回 profile patch、默认出网登录），已在 profile 层写死 disabled。
+      - 上游给 bundle 里的出网 / 写回类服务加上"headless 默认关"的开关（deepseek-account 现在任何组合默认就挂）
     covered_by:
       - packages/dsh-adapter/test/seams.test.ts
       - packages/dsh-adapter/test/browser-seam.test.ts
@@ -94,7 +98,8 @@ upstreams:
     kind: runtime-dep
     why: 内核的插件容器（docs/09 契约选型"采用"的那一条），packages/kernel 与 dsh 两边共用
     npm: '@deepseek-ai/cordis'
-    locked_version: 4.0.2
+    # WP132：dsh 0.1.7 的 peer 是 `~4.0.4`，4.0.2 进不了同一棵树——这是"必要时"那一次
+    locked_version: 4.0.4
     pin: exact
     watch: [versions]
     locked_in:
@@ -106,12 +111,12 @@ upstreams:
 
   - id: schemastery
     kind: runtime-dep
-    # 记录在案的例外：kernel 写 `3.18.2`、dsh-adapter 写 `^3.18.2`，lockfile 里只解析出一个
-    # 3.18.2，所以运行时没有两棵树；但写法不齐是 docs/42 红线 3 的擦边球。下次 dsh 升级时统一成精确版本。
+    # WP132：上次记录在案的例外（dsh-adapter 写 `^3.18.2`）已统一成精确版本；
+    # dsh 0.1.7 要 `~3.18.4`，kernel / roles / dsh-adapter 三处一起升到 3.18.4。
     why: dsh 的配置 schema 库，packages/kernel 也在用；它翻默认值等于翻我们的配置默认值
     npm: '@deepseek-ai/schemastery'
-    locked_version: 3.18.2
-    pin: allow_caret
+    locked_version: 3.18.4
+    pin: exact
     watch: [versions, default_flips]
     locked_in:
       - packages/kernel/package.json

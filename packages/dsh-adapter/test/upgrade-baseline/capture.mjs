@@ -27,6 +27,19 @@ const { findScenarios, loadPack, loadScenario, runScenario } = sim
 const PACK_DIR = join(REPO_ROOT, 'packs/dtc-3c-3p')
 const RUNTIMES = ['dsh-in-process', 'dsh-subprocess']
 
+/**
+ * WP132 加：`CAPTURE_SKIP=<场景 id>[,<场景 id>…]` 跳过指定场景，并把它们记进产物的 `skipped`。
+ * 只给"与 dsh 无关、在升级前的 main 上就已经红了"的场景用（例：WP132 那天
+ * `kol/public-library-reveal-charges-credits` 在 stub 档也抛 `insufficient_credits`，
+ * 整份采集直接中断）。升级前后两次采集必须用**同一份**跳过清单，`upgrade.test.ts` 会比。
+ */
+const SKIP = new Set(
+  (process.env.CAPTURE_SKIP ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+)
+
 /** 装的到底是哪一版（不看 package.json 的声明，看解析出来的那个包）。 */
 function installedVersions() {
   const names = [
@@ -76,6 +89,10 @@ async function capture() {
     const scenarios = {}
     for (const file of files) {
       const rel = file.slice(`${PACK_DIR}/scenarios/`.length).replace(/\.yml$/, '')
+      if (SKIP.has(rel)) {
+        process.stderr.write(`  ${runtime} ${rel} SKIP（CAPTURE_SKIP）\n`)
+        continue
+      }
       let evidence
       const report = await runScenario(loadScenario(file), {
         pack,
@@ -111,6 +128,7 @@ const payload = {
   dsh_version: versions['@deepseek-ai/dsh'],
   packages: versions,
   pack: 'dtc-3c-3p',
+  ...(SKIP.size > 0 ? { skipped: [...SKIP].sort() } : {}),
   runtimes,
 }
 mkdirSync(HERE, { recursive: true })

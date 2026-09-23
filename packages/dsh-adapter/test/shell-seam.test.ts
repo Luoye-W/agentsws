@@ -315,13 +315,17 @@ describe('(b) 沙箱真的把命令关起来了（macOS = Seatbelt）', () => {
 
     // ④ 第二道（沙箱本身）：直接问执行器要一次越界写，内核说不行。
     //    这一条测的是"笼子真的在"，不是我们的 allowlist——所以绕开门禁直接调 ctx.shell。
+    //    WP132（dsh 0.1.7-rc.1）：上游把 `run()` / `start()` 合成了 `execute()`，
+    //    前台结果改由句柄上的 `result()` 给（`dsh-shell` 的 `ShellExecution`）。断言不动。
     const shellSvc = harness.ctx.shell as unknown as {
       resolve(r: unknown): { sandboxPolicy?: { mode: string } }
-      run(s: unknown): Promise<{ stderr: { text: string }; sandbox?: { enforcement: string } }>
+      execute(s: unknown): Promise<{
+        result(): Promise<{ stderr: { text: string }; sandbox?: { enforcement: string } }>
+      }>
     }
     const spec = shellSvc.resolve({ command: `echo nope > ${outsidePath}`, workdir: root })
     expect(spec.sandboxPolicy?.mode).toBe('workspace-write')
-    const out = await shellSvc.run(spec)
+    const out = await (await shellSvc.execute(spec)).result()
     expect(existsSync(outsidePath)).toBe(false)
     expect(out.stderr.text.toLowerCase()).toContain('operation not permitted')
     // 上游把"管住了多少"当事实报出来；macOS Seatbelt 是 full
