@@ -610,3 +610,35 @@ describe('WP117 交付 4：演练开关与状态带', () => {
     expect(screen.getByTestId('kol-sandbox-clear')).toBeTruthy()
   })
 })
+
+describe('WP131 插件「回作战室看这批」', () => {
+  beforeEach(() => {
+    getKolCreators.mockClear()
+  })
+
+  it('?batch= 进来：只按这一批取、标题说清是「插件这一批」；「看全部」回到整个库', async () => {
+    renderWithProviders(
+      <KolPanel assignment="asg_yt" channel="youtube" />,
+      '/influencer/creators?batch=bt_abc123x',
+    )
+    expect(await screen.findByTestId('kol-library-batch')).toBeTruthy()
+    expect(screen.getByTestId('kol-library-batch').textContent).toContain('插件这一批')
+    expect(getKolCreators).toHaveBeenCalledWith(
+      { channel: 'youtube', batch: 'bt_abc123x' },
+      'asg_yt',
+    )
+    fireEvent.click(screen.getByText('看全部'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('kol-library-batch')).toBeNull()
+    })
+    expect(getKolCreators).toHaveBeenLastCalledWith({ channel: 'youtube' }, 'asg_yt')
+  })
+
+  it('自动评分跑过体检的人，清单上多一格「体检 N」', async () => {
+    getKolCreators.mockResolvedValueOnce({
+      rows: [{ ...LIBRARY[0], audit_health: 76, audited_at: '2026-09-23T10:00:00.000Z' }],
+    } as never)
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    expect((await screen.findByTestId('kol-audit')).textContent).toBe('体检 76')
+  })
+})

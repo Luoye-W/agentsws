@@ -6,6 +6,8 @@
  * - `/influencer/creators?creator=<handle|id>`——落到红人面板，能带出那一个人的
  *   详情（认得 handle 也认得 creator_id）；
  * - `/influencer/setup`——同一条面板，默认落在「导入与 campaign」那一格。
+ * - `/influencer/creators?batch=<bt_…>[&channel=<渠道>]`（WP131）——插件列表采集完点
+ *   「回作战室看这批」：候选池只列这一次收进来的人；带了 `channel` 就落到那条渠道的职责上。
  *
  * `/settings/credits`、`/settings/billing`、`/settings/apikeys` 三条直接复用设置页
  * 的「账号与积分」那一档（App.tsx 里接的），不经过这个文件。
@@ -35,8 +37,15 @@ export function InfluencerPage({ setup = false }: { setup?: boolean }): React.Re
   }
 
   // 红人面板按渠道分职责（kol.youtube → youtube）。有多条就取第一条——
-  // 深链要的是一个"能看"的地方，不是一道选择题。
-  const kol = positions.data?.positions.find((p) => channelOfRole(p.role_id) !== undefined)
+  // 深链要的是一个"能看"的地方，不是一道选择题。WP131：深链带了 `channel`
+  // （插件那一批来自哪条渠道）就先找那条渠道的职责，找不到再退回第一条。
+  const wanted = search.get('channel')
+  const kolPositions = (positions.data?.positions ?? []).filter(
+    (p) => channelOfRole(p.role_id) !== undefined,
+  )
+  const kol =
+    kolPositions.find((p) => wanted !== null && channelOfRole(p.role_id) === wanted) ??
+    kolPositions[0]
   if (kol === undefined) {
     return (
       <Card>

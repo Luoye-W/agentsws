@@ -78,10 +78,15 @@ function Discovery({
   assignment,
   channel,
   onOpen,
+  batch,
+  onClearBatch,
 }: {
   assignment: string
   channel: KolChannelId
   onOpen: (creator_id: string) => void
+  /** WP131：插件「回作战室看这批」带来的采集批次——只列这一批。 */
+  batch?: string
+  onClearBatch?: () => void
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -91,8 +96,9 @@ function Discovery({
   const [receipt, setReceipt] = useState<string | undefined>(undefined)
 
   const library = useQuery({
-    queryKey: ['kol-creators', assignment, channel],
-    queryFn: () => getKolCreators({ channel }, assignment),
+    queryKey: ['kol-creators', assignment, channel, batch ?? ''],
+    queryFn: () =>
+      getKolCreators({ channel, ...(batch === undefined ? {} : { batch }) }, assignment),
   })
 
   const search = useMutation({
@@ -250,7 +256,25 @@ function Discovery({
         ) : null}
 
         <div className="mt-1">
-          <h4 className="mb-1 text-xs font-medium text-muted-foreground">{t('kol.library')}</h4>
+          {batch === undefined ? (
+            <h4 className="mb-1 text-xs font-medium text-muted-foreground">{t('kol.library')}</h4>
+          ) : (
+            /* WP131：从插件跳回来的「这一批」——说清楚现在只看这一批，一键回全部 */
+            <div
+              className="mb-1 flex items-center justify-between gap-2"
+              data-testid="kol-library-batch"
+            >
+              <div className="min-w-0">
+                <h4 className="text-xs font-medium text-foreground">
+                  {t('kol.library.batch', { n: library.data?.rows.length ?? 0 })}
+                </h4>
+                <p className="text-xs text-muted-foreground">{t('kol.library.batch.hint')}</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={onClearBatch}>
+                {t('kol.library.batch.all')}
+              </Button>
+            </div>
+          )}
           {library.isPending ? <Skeleton className="h-16 w-full" /> : null}
           {/*
             36 §3 的同一条规矩，**查询这一侧**：取不回来不等于库里没人。
@@ -268,7 +292,7 @@ function Discovery({
           (library.data?.rows ?? []).length === 0 &&
           !library.isPending ? (
             <p className="text-sm text-muted-foreground" data-testid="kol-library-empty">
-              {t('kol.library.empty')}
+              {batch === undefined ? t('kol.library.empty') : t('kol.library.batch.empty')}
             </p>
           ) : null}
           <ol className="flex flex-col gap-1" data-testid="kol-library">
@@ -289,6 +313,10 @@ function Discovery({
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                     {/* 刷粉护栏那一条：清单上看得见"这个数不可信"，不悄悄少一行 */}
+                    {/* WP131：自动评分跑过的体检概括数（有才显示） */}
+                    {row.audit_health === undefined ? null : (
+                      <span data-testid="kol-audit">{t('kol.audit', { n: row.audit_health })}</span>
+                    )}
                     {row.blocked === undefined ? (
                       <span>{t('kol.score', { n: row.score })}</span>
                     ) : (
@@ -1105,6 +1133,15 @@ export function KolPanel({
   const [openCreator, setOpenCreator] = useState<string | undefined>(initialOpenCreator)
   /** 点开的那一条合作（合作线程里）。 */
   const [openCollab, setOpenCollab] = useState<string | undefined>(undefined)
+  /** WP131：插件深链 `?batch=` 带来的采集批次（候选池只列这一批）。 */
+  const batch = search.get('batch') ?? undefined
+  const clearBatch = (): void => {
+    setSearch((prev) => {
+      const params = new URLSearchParams(prev)
+      params.delete('batch')
+      return params
+    })
+  }
 
   const go = (next: SubviewId): void => {
     setSearch((prev) => {
@@ -1140,7 +1177,12 @@ export function KolPanel({
 
       {view === 'pool' ? (
         <>
-          <Discovery assignment={assignment} channel={channel} onOpen={setOpenCreator} />
+          <Discovery
+            assignment={assignment}
+            channel={channel}
+            onOpen={setOpenCreator}
+            {...(batch === undefined || batch === '' ? {} : { batch, onClearBatch: clearBatch })}
+          />
           {openCreator === undefined ? null : (
             <CreatorDetail
               assignment={assignment}
