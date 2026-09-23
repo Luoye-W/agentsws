@@ -477,8 +477,9 @@ describe('/v1/cloud/pricing', () => {
   it('没关联 / 连不上就回本地内置那份——价目表不该因为断网就一片空白', async () => {
     const pricing = await data<Pricing>(await api('/v1/cloud/pricing'))
     expect(pricing.credit_cny).toBe(1)
-    // WP118 加了两条订阅（红人已上线、客服只登记），WP127 加了生图（按张），所以是 11 条
-    expect(pricing.entries.length).toBe(11)
+    // WP118 加了两条订阅（红人已上线、客服只登记），WP127 加了生图（按张），09-23 又把联系方式揭示
+    // 从 lookup 里单开成 data.kol.reveal，所以是 12 条
+    expect(pricing.entries.length).toBe(12)
     expect(pricing.entries.map((e) => e.capability)).toContain('crawl.page')
   })
 })
