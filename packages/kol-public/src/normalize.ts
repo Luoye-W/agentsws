@@ -225,12 +225,18 @@ export function parseContentObservation(raw: unknown, at: string): PublicContent
   if (contentType !== 'video' && contentType !== 'post' && contentType !== 'reel')
     throw new KolError('invalid_input', 'content_type 只能是 video / post / reel。')
 
-  const title = input.title
+  /*
+   * WP131（Luoye 09-23 定）：标题**可选**。IG 网格 / TikTok hashtag 格子上的帖子本来就没有
+   * 标题，它们照样是内容观测（播放、带货标识、发布时间都有用）。空串 / 全空白 = 没有标题，
+   * 当作这一格不存在，**不再整批拒**；但给了非字符串或超长的仍拒——那是调用方写错了。
+   */
+  const rawTitle = input.title
   if (
-    title !== undefined &&
-    (typeof title !== 'string' || title.trim() === '' || title.length > MAX_CONTENT_TITLE)
+    rawTitle !== undefined &&
+    (typeof rawTitle !== 'string' || rawTitle.length > MAX_CONTENT_TITLE)
   )
     throw new KolError('invalid_input', `title 要是不超过 ${MAX_CONTENT_TITLE} 个字的标题。`)
+  const title = typeof rawTitle === 'string' && rawTitle.trim() !== '' ? rawTitle : undefined
 
   const publishedAt = input.published_at
   if (
@@ -271,7 +277,7 @@ export function parseContentObservation(raw: unknown, at: string): PublicContent
     handle,
     external_id: externalId,
     content_type: contentType,
-    ...(title === undefined ? {} : { title: (title as string).trim() }),
+    ...(title === undefined ? {} : { title: title.trim() }),
     ...(publishedAt === undefined ? {} : { published_at: publishedAt as string }),
     ...(duration === undefined ? {} : { duration_seconds: duration }),
     ...(orientation === undefined ? {} : { orientation }),

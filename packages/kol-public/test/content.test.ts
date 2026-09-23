@@ -314,3 +314,43 @@ describe('WP129 内容写路：两份库行为一致', () => {
     store.close()
   })
 })
+
+describe('WP131 内容观测：标题可选（Luoye 09-23）', () => {
+  const at = '2026-09-15T00:00:00.000Z'
+
+  it('没标题 / 空串 / 全空白都当「没有标题」收下，不再整批拒', () => {
+    const noTitle = { ...content() } as Record<string, unknown>
+    delete noTitle.title
+    expect(parseContentObservation(noTitle, at).title).toBeUndefined()
+    expect(parseContentObservation(content({ title: '' }), at).title).toBeUndefined()
+    expect(parseContentObservation(content({ title: '   ' }), at).title).toBeUndefined()
+    // 有标题照旧去首尾空白
+    expect(parseContentObservation(content({ title: '  Hi  ' }), at).title).toBe('Hi')
+    // 写错了的仍拒：非字符串、超长
+    expect(() => parseContentObservation({ ...content(), title: 42 }, at)).toThrow()
+    expect(() => parseContentObservation(content({ title: 'x'.repeat(10_000) }), at)).toThrow()
+  })
+
+  it('IG 网格帖子没有标题：整批照收，卡上没有标题这一格', async () => {
+    const h = harness()
+    const res = await h.call(PATH, {
+      method: 'POST',
+      body: {
+        observations: [
+          content({
+            channel: 'instagram',
+            external_id: 'Cabc123',
+            content_type: 'post',
+            title: '',
+          }),
+          content({ external_id: 'withTitle' }),
+        ],
+      },
+    })
+    expect(res.status).toBe(201)
+    expect((res.body.data as { accepted: number }).accepted).toBe(2)
+    const card = h.store.content('instagram', 'Cabc123')
+    expect(card).toBeDefined()
+    expect(card?.title).toBeUndefined()
+  })
+})
