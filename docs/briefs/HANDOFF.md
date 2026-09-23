@@ -17,6 +17,7 @@
 - 只有需要 Luoye 拍板的事，Fable 才会找他。
 
 ## 分工（09-19 晚，Luoye 定）
+- 09-23 起实现方回到 **Claude 子代理（Opus）**，由 Fable 直接派；Proma 不再需要领活。
 - 百炼额度已用尽（09-19 夜），Qwen 停了。**队列里所有「续做 / 待做」的条目，任何实现方都可以按顺序接**；WP119b 的 A 部分在私有仓库 `~/Documents/agentsws-extension` 的 `wp/119b-port` 分支上已有 6 个提交。
 
 ## 队列（从上往下做；「依赖」没合并的先跳过）
@@ -32,6 +33,9 @@
 | 8 | WP124 在线聊天三条路 | `WP124-live-chat-three-ways.md`（以文件里「修订」一节为准） | `wp124-live-chat` · `wp/124-live-chat` | WP118 已合并 ✓ | 已合并（09-23，Fable 终审：全量过；合并时补了 tsconfig 引用与 CHAT_RELAY 绑定） |
 | 9 | WP122b 设计规范：三个注入口通电 + 岗位只读 + 小铅笔 + 成文接模型 + 视觉档 | `WP122b-design-md-wire-up.md` | `wp122b-design-wire` · `wp/122b-design-wire` | — | 已合并（09-23，Fable 终审：全量过） |
 | 10 | WP119c 插件完整版要的本机接口 + 面板接线（没有它完整版面板大半是空壳） | `WP119c-extension-endpoints.md` | 开源 `wp119c-ext-endpoints` · `wp/119c-ext-endpoints`；私有仓库分支 `wp/119c-wire` | — | 已合并（09-23，Fable 终审：开源全量过；私有仓库 350 测试过、已并入其 main） |
+| 11 | WP127 模型必须多模态（能看图）+ 生图单独一档 | `WP127-vision-required-and-image-model.md` | `wp127-vision` · `wp/127-vision` | — | 进行中（Claude） |
+| 12 | WP128 客服增值服务托管实例 = Cloudflare Containers | `WP128-hosted-instance-cloudflare-containers.md` | `wp128-hosted` · `wp/128-hosted` | — | 进行中（Claude） |
+| 13 | WP129 内容观测上云 + 体检样本不够不收钱 | `WP129-content-observations-cloud.md` | `wp129-content-cloud` · `wp/129-content-cloud` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
