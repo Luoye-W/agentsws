@@ -358,6 +358,12 @@ export {
 } from './workstation.js'
 
 import { pathToFileURL } from 'node:url'
+import {
+  hostedModeOf,
+  pushHostedSnapshot,
+  restoreHostedSnapshot,
+  startHostedSnapshotLoop,
+} from './hosted-mode.js'
 import { createServer } from './server.js'
 import {
   guardBeforeStart,
@@ -375,6 +381,18 @@ export async function main(): Promise<void> {
   const staticDir = process.env.AGENTSWS_STATIC_DIR
   const release = process.env.AGENTSWS_VERSION ?? '0.0.0'
   const clock = { now: () => new Date().toISOString() }
+  const log = (line: string): void => {
+    process.stdout.write(`${line}\n`)
+  }
+
+  /*
+   * WP128：托管实例（Cloudflare Container 里那一份）。盘是临时的，所以**建服务之前**
+   * 先把云端最新那一份快照拉回来导进数据目录（WP36：跑着的进程不换自己脚下的库）。
+   * 拉失败就抛——容器退出，HostedInstanceDO 按退避重起；不起一个空库装没事。
+   */
+  const hosted = hostedModeOf(process.env)
+  if (hosted !== undefined && dbDir !== undefined)
+    await restoreHostedSnapshot({ config: hosted, dataDir: dbDir, log })
 
   /*
    * WP111 升级闸（13 §5「更新前跑一次冒烟；失败回滚」）。只有落盘档有——
@@ -438,13 +456,32 @@ export async function main(): Promise<void> {
   await server.listen()
   // 起来了才记：下次就知道上一版是什么、各库到了哪一版
   if (dbDir !== undefined) recordUpgradeSuccess({ dataDir: dbDir, release, clock })
+  // WP128：托管实例每 6 小时推一份快照回云端
+  const stopSnapshots =
+    hosted !== undefined && dbDir !== undefined
+      ? startHostedSnapshotLoop({ config: hosted, dataDir: dbDir, clock, log })
+      : undefined
   let closing = false
   const shutdown = (signal: string): void => {
     if (closing) return
     closing = true
     process.stdout.write(`\n${signal} received, closing…\n`)
-    server
-      .close()
+    stopSnapshots?.()
+    // WP128：托管实例收到 SIGTERM（取消订阅 / 平台滚动更新）先推最后一份快照；
+    // 平台给 15 分钟，DO 那边给一分钟再强停——推不完也照样关，不卡住关机
+    const lastPush =
+      hosted !== undefined && dbDir !== undefined
+        ? Promise.race([
+            pushHostedSnapshot({ config: hosted, dataDir: dbDir, clock }).then(
+              (bytes) => log(`托管实例：最后一份快照已推（${String(bytes)} 字节）`),
+              (err: unknown) =>
+                log(`托管实例：${err instanceof Error ? err.message : String(err)}`),
+            ),
+            new Promise<void>((resolve) => setTimeout(resolve, 45_000).unref()),
+          ])
+        : Promise.resolve()
+    lastPush
+      .then(() => server.close())
       .then(() => process.exit(0))
       .catch((err: unknown) => {
         process.stderr.write(`shutdown failed: ${String(err)}\n`)

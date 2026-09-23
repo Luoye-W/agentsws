@@ -55,6 +55,18 @@ export interface WorkerEnv {
    * 没绑也能跑：`/relay/*` 与 `/v1/chat/relay/*` 回 404（如实说没开通）。
    */
   CHAT_RELAY?: DoNamespaceLike
+  /**
+   * WP128：客服增值服务的托管实例（**每个工作区一个**，Cloudflare Containers）。
+   * 容器里跑的是同一份 `apps/server`（docs/74 §5）。没绑也能跑：订阅照常扣费、
+   * 转发照常（对端只有商家本机），health 里 `hosted_instance: false`（如实说没开通）。
+   */
+  HOSTED_INSTANCE?: DoNamespaceLike
+  /**
+   * WP128：托管实例的快照桶（R2）。容器的盘是临时的——睡着 / 重起就是一张新盘，
+   * 所以容器每 6 小时（与收到 SIGTERM 时）把工作区包推到这里，起来先拉回去。
+   * 没绑：容器照跑，但重起会丢掉上次以来的对话（health 标黄）。
+   */
+  HOSTED_SNAPSHOTS?: SnapshotBucketLike
   /** Cloudflare Email Sending（`[[send_email]] name = "EMAIL"`）。没绑 = 发不了信。 */
   EMAIL?: CloudflareEmailBinding
   /**
@@ -97,6 +109,24 @@ export interface WorkerEnv {
   APIFY_TOKEN?: string
   /** YouTube 官方口一天给多少配额单位（非敏感，可以进 `[vars]`）。 */
   AGENTSWS_YOUTUBE_UNITS_PER_DAY?: string
+  /**
+   * WP128：托管实例的库密钥种子（`wrangler secret put`）。每个工作区一把
+   * `HMAC(种子, 工作区号)`，不进 DO 存储。**没配就不起容器**（状态里写一句人话）。
+   */
+  AGENTSWS_HOSTED_KEY_SEED?: string
+  /** WP128：容器规格（非敏感，`[vars]`；与 `[[containers]].instance_type` 保持一致，估算费用用）。 */
+  AGENTSWS_HOSTED_INSTANCE_TYPE?: string
+}
+
+/** R2 桶里托管快照用到的那几样（workerd 的 R2Bucket 与测试替身都长这样）。 */
+export interface SnapshotBucketLike {
+  put(
+    key: string,
+    value: ArrayBuffer | Uint8Array,
+    options?: { customMetadata?: Record<string, string> },
+  ): Promise<unknown>
+  get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; size: number } | null>
+  delete(keys: string | string[]): Promise<void>
 }
 
 /** `env` 里那些字符串项 → 现有代码认的那种 `Record`。 */

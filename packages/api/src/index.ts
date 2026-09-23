@@ -159,6 +159,7 @@ export {
   type ChatFrame,
   type ChatMessageView,
   type ChatPort,
+  type ChatRelayHostedView,
   type ChatSessionView,
   type ChatTurnView,
   type ChatWidgetSettings,

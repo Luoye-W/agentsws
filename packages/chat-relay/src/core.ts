@@ -10,6 +10,11 @@
  * 对端选择（修订第 2 条）：订阅客服增值服务后，对端从「商家本机」换成
  * 「托管实例」。转发器不查订阅——**谁连上来谁说话**：托管实例只在订阅生效时
  * 连进来；两头都在时托管实例赢（它连着就说明订阅在效，且它 7×24 在线）。
+ *
+ * WP128：两类对端**各占一格、同时挂着**（以前是一格，后连上的顶掉先连的——
+ * 本机开机就把托管实例挤下线，与「托管实例赢」那句话正好相反）。访客消息给
+ * 「托管那一格，没有才给本机那一格」；ping / 拉留言 / 报错**回给发这一帧的那一头**
+ * （否则本机的心跳 pong 会被送到托管实例那边，本机两拍收不到就断线重连）。
  */
 import type { Iso8601 } from '@agentsws/contracts'
 import { MemoryOfflineBox, type OfflineBox } from './offline-box.js'
@@ -99,8 +104,11 @@ export type VisitorMessageResult =
   | { status: 'queued_typing' }
   | { status: 'offline'; reason: 'peer_offline' | 'quota_exhausted' }
 
+/** 一个工作区的两格对端（WP128）。 */
+type PeerSlots = Partial<Record<RelayPeerKind, ClientHandle>>
+
 export class RelayCore {
-  private readonly clients = new Map<string, ClientHandle>()
+  private readonly clients = new Map<string, PeerSlots>()
   private readonly visitors = new Map<string, VisitorSession>()
   private readonly configs = new Map<string, RelayWidgetConfig>()
   private readonly counters: CounterStore
@@ -136,16 +144,18 @@ export class RelayCore {
       })
       return { ok: false }
     }
-    // 同一工作区同一类对端只留一条：重连的先踢旧的（幂等，不靠对面守规矩）
-    const prior = this.clients.get(frame.workspace)
-    if (prior !== undefined && prior.peer === frame.peer) prior.close()
+    // 同一工作区同一类对端只留一条：重连的先踢旧的（幂等，不靠对面守规矩）。
+    // 另一类对端那一格不动（WP128：本机开机不把托管实例挤下线）
+    const slots = this.clients.get(frame.workspace) ?? {}
+    slots[frame.peer]?.close()
     const handle: ClientHandle = {
       peer: frame.peer,
       send: (f) => socket.send(f),
       close: () =>
         socket.send({ type: 'error', code: 'closed', message: 'replaced by a new connection' }),
     }
-    this.clients.set(frame.workspace, handle)
+    slots[frame.peer] = handle
+    this.clients.set(frame.workspace, slots)
     if (frame.config !== undefined) this.updateConfig(frame.workspace, frame.config)
     this.options.onEvent?.({
       type: 'peer_connected',
@@ -168,27 +178,51 @@ export class RelayCore {
     this.options.configStore?.put(workspace, config)
   }
 
-  /** 对端断开。 */
-  dropClient(workspace: string): void {
-    const handle = this.clients.get(workspace)
-    if (handle === undefined) return
-    this.clients.delete(workspace)
-    this.options.onEvent?.({
-      type: 'peer_disconnected',
-      workspace,
-      peer: handle.peer,
-      at: this.options.clock(),
-    })
+  /**
+   * 对端断开。给了 `peer` 只摘那一格（WP128）；不给就两格都摘（自建两档只有本机
+   * 一类对端，老调用方的语义不变）。
+   */
+  dropClient(workspace: string, peer?: RelayPeerKind): void {
+    const slots = this.clients.get(workspace)
+    if (slots === undefined) return
+    const kinds: RelayPeerKind[] = peer === undefined ? ['hosted', 'server'] : [peer]
+    for (const kind of kinds) {
+      const handle = slots[kind]
+      if (handle === undefined) continue
+      delete slots[kind]
+      this.options.onEvent?.({
+        type: 'peer_disconnected',
+        workspace,
+        peer: handle.peer,
+        at: this.options.clock(),
+      })
+    }
+    if (slots.hosted === undefined && slots.server === undefined) this.clients.delete(workspace)
   }
 
-  /** 对面上来的一帧（握手之后）。 */
-  onClientFrame(workspace: string, frame: ClientFrame): void {
+  /** 访客消息投给谁：托管那一格，没有才是本机那一格。 */
+  private activeOf(workspace: string): ClientHandle | undefined {
+    const slots = this.clients.get(workspace)
+    return slots?.hosted ?? slots?.server
+  }
+
+  /** 回帧给谁：知道是哪一头发的就回那一头；不知道（老调用方）回当前对端。 */
+  private senderOf(workspace: string, peer: RelayPeerKind | undefined): ClientHandle | undefined {
+    if (peer === undefined) return this.activeOf(workspace)
+    return this.clients.get(workspace)?.[peer]
+  }
+
+  /**
+   * 对面上来的一帧（握手之后）。`peer` = 这一帧是哪一头发的（WP128；自建两档只有
+   * 本机一类，不给也对）。
+   */
+  onClientFrame(workspace: string, frame: ClientFrame, peer?: RelayPeerKind): void {
     switch (frame.type) {
       case 'config':
         this.updateConfig(workspace, frame.config)
         return
       case 'reply':
-        this.deliverReply(workspace, frame.session, frame.turn, frame.message_id, frame.text)
+        this.deliverReply(workspace, frame.session, frame.turn, frame.message_id, frame.text, peer)
         return
       case 'note': {
         // 话轮之外的插话：不占账本，原样递给访客流
@@ -204,13 +238,15 @@ export class RelayCore {
         return
       }
       case 'pull_offline': {
+        // 拉走即删：没有对端接这一批就一条都不拿（不然留言就丢在半路上）
+        const handle = this.senderOf(workspace, peer)
+        if (handle === undefined) return
         const items = this.offline.take(workspace)
-        const handle = this.clients.get(workspace)
-        handle?.send({ type: 'offline_batch', items })
+        handle.send({ type: 'offline_batch', items })
         return
       }
       case 'ping': {
-        this.clients.get(workspace)?.send({ type: 'pong' })
+        this.senderOf(workspace, peer)?.send({ type: 'pong' })
         return
       }
       case 'hello':
@@ -292,7 +328,7 @@ export class RelayCore {
         })
       }
     }
-    const handle = this.clients.get(input.workspace)
+    const handle = this.activeOf(input.workspace)
     if (handle === undefined) return { status: 'offline', reason: 'peer_offline' }
     const turn = `t_${this.options.newId()}`
     const visitor = this.visitors.get(input.session)
@@ -313,7 +349,7 @@ export class RelayCore {
   visitorTyping(session: string, active: boolean): void {
     const visitor = this.visitors.get(session)
     if (visitor === undefined) return
-    this.clients.get(visitor.workspace)?.send({
+    this.activeOf(visitor.workspace)?.send({
       type: 'visitor_typing',
       session,
       active,
@@ -339,10 +375,11 @@ export class RelayCore {
     turn: string,
     message_id: string,
     text: string,
+    peer?: RelayPeerKind,
   ): void {
     const visitor = this.visitors.get(session)
     if (visitor === undefined || visitor.workspace !== workspace) {
-      this.clients.get(workspace)?.send({
+      this.senderOf(workspace, peer)?.send({
         type: 'error',
         code: 'unknown_session',
         message: '这条会话不在这台转发器上（访客已离开或换了节点）',
@@ -351,7 +388,7 @@ export class RelayCore {
     }
     // 一次话轮恰好一条回复：第二条同轮回复丢弃（docs/72 §6.3 #3）
     if (visitor.pendingTurn !== turn) {
-      this.clients.get(workspace)?.send({
+      this.senderOf(workspace, peer)?.send({
         type: 'error',
         code: 'turn_already_answered',
         message: '这一轮已经回过了',
@@ -365,11 +402,21 @@ export class RelayCore {
 
   /** 当前对端的类型（`server` = 商家本机，`hosted` = 托管实例）；没连是 `undefined`。 */
   peerKindOf(workspace: string): RelayPeerKind | undefined {
-    return this.clients.get(workspace)?.peer
+    return this.activeOf(workspace)?.peer
   }
 
-  /** 测试与宿主自检用：不暴露正文，只有形状。 */
+  /** 这个工作区眼下连着哪几类对端（WP128：状态页要分别说本机在不在、托管在不在）。 */
+  peersOf(workspace: string): RelayPeerKind[] {
+    const slots = this.clients.get(workspace)
+    if (slots === undefined) return []
+    return (['hosted', 'server'] as const).filter((kind) => slots[kind] !== undefined)
+  }
+
+  /** 测试与宿主自检用：不暴露正文，只有形状。`clients` = 连着的对端条数。 */
   stats(): { clients: number; visitors: number } {
-    return { clients: this.clients.size, visitors: this.visitors.size }
+    let clients = 0
+    for (const slots of this.clients.values())
+      clients += (slots.hosted === undefined ? 0 : 1) + (slots.server === undefined ? 0 : 1)
+    return { clients, visitors: this.visitors.size }
   }
 }

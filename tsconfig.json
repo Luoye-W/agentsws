@@ -56,6 +56,9 @@
       "path": "packages/cloud-entry"
     },
     {
+      "path": "packages/hosted"
+    },
+    {
       "path": "packages/connect-adapter"
     },
     {

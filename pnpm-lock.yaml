@@ -79,6 +79,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
       '@agentsws/kol-cloud':
         specifier: workspace:*
         version: link:../../packages/kol-cloud
@@ -207,6 +210,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
       '@agentsws/kol-cloud':
         specifier: workspace:*
         version: link:../../packages/kol-cloud
@@ -351,6 +357,9 @@ importers:
       '@agentsws/dsh-adapter':
         specifier: workspace:*
         version: link:../../packages/dsh-adapter
+      '@agentsws/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -972,6 +981,12 @@ importers:
       '@agentsws/runtime-direct':
         specifier: workspace:*
         version: link:../runtime-direct
+
+  packages/hosted:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/kernel:
     dependencies:

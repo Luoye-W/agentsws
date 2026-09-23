@@ -121,6 +121,11 @@ export interface CloudAssembly {
         limit?: number
         subscribed?: boolean
         offline_messages?: number
+        /** WP128：托管实例的状态（订阅了客服增值服务、云端绑了托管对象才有）。 */
+        hosted?: {
+          state: 'running' | 'starting' | 'sleeping' | 'stopped'
+          last_heartbeat_at?: string
+        }
       }
     | undefined
   >

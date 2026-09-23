@@ -22,6 +22,9 @@
       "path": "../../packages/core"
     },
     {
+      "path": "../../packages/hosted"
+    },
+    {
       "path": "../../packages/kol-cloud"
     },
     {

@@ -234,6 +234,25 @@ upstreams:
       - browser-use 后端能在不开原生构建的前提下起
       - experimental 下出现渠道 / IM 相关的包
 
+  - id: cloudflare-containers
+    kind: reference
+    # WP128（09-23 按 docs/42 记，docs/64 §13 有全文）：我们**不装** `@cloudflare/containers`
+    # 这个 npm 包（它的 Container 类继承 cloudflare:workers，普通 tsc / vitest 里 import 不进来），
+    # 直接用运行时的 `ctx.container`；那个类的保活回路照它的源码写成了我们自己的 alarm。
+    # 所以盯的是「平台会不会出一个真正的常驻开关 / 快照」——出了就把心跳保活换掉。
+    why: 客服增值服务的托管实例跑在 Cloudflare Containers 上（apps/cloud-worker 的 HostedInstanceDO + deploy/Dockerfile.hosted）
+    repo: cloudflare/containers
+    watch: [releases, readme, wishlist]
+    wishlist:
+      - 平台级「永不休眠」/ 常驻开关（现在只有 sleepAfter + 我们自己 3 分钟一拍的心跳）
+      - 容器盘快照 / 持久盘（官方文档写着 snapshots coming soon；现在靠 R2 快照）
+      - 单个容器同时托管多个工作区的官方做法（我们要改共享容器时对照）
+      - 价格变动（packages/hosted/src/pricing.ts 是抄的官网单价）
+    covered_by:
+      - apps/cloud-worker/src/hosted-instance-do.ts
+      - apps/cloud-worker/test/wp128-hosted.test.ts
+      - packages/hosted/src/pricing.ts
+
   - id: openclaw-weixin
     kind: reference
     why: WP85 的微信 ClawBot 适配器照它的 iLink 协议写；有两处（ret=-2、context_token TTL）官方文档没有，等它更新来复核

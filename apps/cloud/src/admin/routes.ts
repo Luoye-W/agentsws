@@ -35,6 +35,7 @@ import {
   MAX_KOL_IMPORT_BATCH,
   type MembershipTerm,
 } from '@agentsws/contracts'
+import type { SupportServiceAdminPort } from '@agentsws/hosted'
 import type { KolCloudAdminPort } from '@agentsws/kol-cloud'
 import {
   assertChannel,
@@ -130,6 +131,12 @@ export interface AdminConsoleDeps {
    * 不画一堆 0（与看板页、公共红人库页同一条）。
    */
   kolCloud?: () => KolCloudAdminPort | undefined
+  /**
+   * 客服增值服务那一口（WP128）：订阅状态 + 托管实例（运行 / 休眠 / 停止、最近心跳、
+   * 本月费用估算）。Workers 形态按工作区打 `ChatRelayDO` 与 `HostedInstanceDO`；
+   * Compose 形态没接（托管实例只在 Cloudflare Containers 上）——那一块显示"这个节点没开通"。
+   */
+  supportService?: () => SupportServiceAdminPort | undefined
   /** 云的对外地址（CSRF 的 Origin 与 magic link 的落点都用它）。 */
   baseUrl: string
   mail: MailSender
@@ -251,6 +258,16 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
     const found = deps.kol?.()
     if (found === undefined)
       throw new ApiError('provider_unavailable', '这个节点没接公共红人库，这一页看不了')
+    return found
+  }
+
+  const supportServiceOr503 = (): SupportServiceAdminPort => {
+    const found = deps.supportService?.()
+    if (found === undefined)
+      throw new ApiError(
+        'provider_unavailable',
+        '这个节点没开通客服增值服务的托管实例，这一块看不了',
+      )
     return found
   }
 
@@ -1624,6 +1641,24 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
             detail: `价目 as_of ${COST_TABLE.as_of}，核对于 ${COST_TABLE.last_verified_at ?? '从未'}`,
           },
           {
+            key: 'hosted_instance',
+            label_zh: '客服增值服务 · 托管实例',
+            measures_zh:
+              '测量的是「这个节点绑没绑托管实例（HOSTED_INSTANCE + [[containers]]）与快照桶（HOSTED_SNAPSHOTS）」，不是「每个订阅的容器此刻都活着」——那一项在组织抽屉的「客服增值服务」里一个工作区一个工作区看（运行 / 休眠 / 停止、最近心跳）。没绑 = 订阅照常扣费、转发照常，但电脑关了没人接。',
+            status:
+              modules.hosted_instance === true
+                ? modules.hosted_snapshots === true
+                  ? 'ok'
+                  : 'warn'
+                : 'unknown',
+            detail:
+              modules.hosted_instance === true
+                ? modules.hosted_snapshots === true
+                  ? '托管实例与快照桶都绑了'
+                  : '托管实例绑了，快照桶没绑：容器重起会丢掉上次以来的对话'
+                : '这个节点没开托管实例（Compose 形态本来就没有）',
+          },
+          {
             key: 'backup',
             label_zh: '备份',
             measures_zh:
@@ -1712,6 +1747,27 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
           ip: principal.ip,
         })
         return cloudOk(c, next)
+      },
+    ),
+  )
+
+  /* ── 客服增值服务（WP128 / docs/64 §13）────────────────────────────── */
+
+  routes.push(
+    cloudRoute(
+      {
+        method: 'get',
+        path: '/v1/admin/orgs/:org_id/support-service',
+        operationId: 'cloudAdminSupportService',
+        summary:
+          '一个组织的客服增值服务：每个工作区的订阅状态 + 托管实例（运行 / 休眠 / 停止、最近心跳、本月费用估算）',
+        tag: 'cloud-admin',
+        auth: 'admin',
+        returns: 'SupportServiceSummary',
+      },
+      async (c) => {
+        staff(c)
+        return cloudOk(c, await supportServiceOr503().summary(c.req.param('org_id') ?? ''))
       },
     ),
   )

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,6 +7,13 @@ import { buildProgram, main } from '../src/index.js'
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const PACK_DIR = join(REPO_ROOT, 'packs', 'dtc-3c-3p')
+/**
+ * 场景数从 pack 目录里现数，不写死——每加一条场景这里就红一次（60 → 61 → 62 都红过），
+ * 而这条测试钉的是「fast 全过 + 门禁通过 + 出报告」，不是场景有几条。
+ */
+const SCENARIO_COUNT = readdirSync(join(PACK_DIR, 'scenarios'), { recursive: true })
+  .map(String)
+  .filter((f) => f.endsWith('.yml')).length
 const HIDDEN_DIR = join(REPO_ROOT, 'packages', 'simulation', 'hidden')
 
 const temps: string[] = []
@@ -53,7 +60,7 @@ describe('agentsws simulate（26 §5）', () => {
       '--report',
       report,
     )
-    expect(text()).toContain('61/61 场景通过')
+    expect(text()).toContain(`${SCENARIO_COUNT}/${SCENARIO_COUNT} 场景通过`)
     expect(text()).toContain('合并门禁：通过')
     expect(process.exitCode).toBeUndefined()
     expect(existsSync(join(report, 'summary.json'))).toBe(true)
@@ -62,7 +69,7 @@ describe('agentsws simulate（26 §5）', () => {
       scenarios: unknown[]
     }
     expect(summary.passed).toBe(true)
-    expect(summary.scenarios).toHaveLength(61)
+    expect(summary.scenarios).toHaveLength(SCENARIO_COUNT)
     expect(existsSync(join(report, 'aftersales__return-within-window.json'))).toBe(true)
     // WP75：60 秒是 38 条场景时定的，pack 一路在长（这一轮 +3 到 41，还有三个
     // 并行的 WP 各自 +3）。跑一整个 pack 本来就不是一分钟的活，并行跑别的项目

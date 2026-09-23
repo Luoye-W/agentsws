@@ -53,6 +53,7 @@ import type { KolAdminPort } from '@agentsws/kol-public'
 import type { UsageLedger } from '@agentsws/metering'
 import { type DoStorageLike, doSyncDb } from './do-sql.js'
 import { envRecord, type WorkerEnv } from './env.js'
+import { remoteSupportServiceAdminPort } from './hosted-admin.js'
 import { INTERNAL_HEADERS } from './internal.js'
 import { remoteKolAdminPort } from './kol-admin.js'
 import { remoteKolCloudAdminPort } from './kol-tenant-do.js'
@@ -149,6 +150,9 @@ export class AccountsCore {
         // WP115：后台。读账那一半要 `LEDGER` binding；没绑就只有写动作能用
         admin_console: true,
         admin_ledger: env.LEDGER !== undefined,
+        // WP128：客服增值服务的托管实例（Cloudflare Containers）与它的快照桶
+        hosted_instance: env.HOSTED_INSTANCE !== undefined,
+        hosted_snapshots: env.HOSTED_SNAPSHOTS !== undefined,
       },
     }
 
@@ -213,6 +217,11 @@ export class AccountsCore {
         kol: kolOf,
         kolCloud: () =>
           env.KOL_TENANT === undefined ? undefined : remoteKolCloudAdminPort(env.KOL_TENANT),
+        // WP128：客服增值服务——按这个组织关联过的工作区挨个问转发器与托管对象
+        supportService: () =>
+          remoteSupportServiceAdminPort(env, (org_id) =>
+            this.store.links(org_id).map((link) => link.workspace_id),
+          ),
         baseUrl,
         mail,
         ...(adminToken === '' ? {} : { bootstrapToken: adminToken }),

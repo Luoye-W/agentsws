@@ -40,6 +40,7 @@
     "@agentsws/deck": "workspace:*",
     "@agentsws/design-core": "workspace:*",
     "@agentsws/dsh-adapter": "workspace:*",
+    "@agentsws/hosted": "workspace:*",
     "@agentsws/kernel": "workspace:*",
     "@agentsws/knowledge": "workspace:*",
     "@agentsws/kol-core": "workspace:*",

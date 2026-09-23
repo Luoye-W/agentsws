@@ -107,6 +107,11 @@ export interface BrandModuleSet {
           limit?: number
           subscribed?: boolean
           offline_messages?: number
+          /** WP128：托管实例的状态。 */
+          hosted?: {
+            state: 'running' | 'starting' | 'sleeping' | 'stopped'
+            last_heartbeat_at?: string
+          }
         }
       | undefined
     >

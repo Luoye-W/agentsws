@@ -368,7 +368,7 @@ describe('WP25 §C 模板与空状态', () => {
     expect(bailian).toBeDefined()
     // 官方 2026-09-17 核实：北京地域的 OpenAI 兼容口
     expect(bailian?.default_base_url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
-    expect(bailian?.default_model).toBe('qwen-plus')
+    expect(bailian?.default_model).toBe('qwen-vl-plus')
     // 默认是境内：22 §2 `data_residency: cn` 的工作区能直接用
     expect(bailian?.region).toBe('cn')
     const presets = bailian?.presets ?? []

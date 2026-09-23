@@ -278,10 +278,10 @@ export const BAILIAN_CN_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mo
 export const BAILIAN_INTL_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
 
 /**
- * 默认挑 `qwen-plus`：便宜（￥0.8 / ￥2 每百万 token）、够用、价目表里有核实过的价。
- * 想更便宜有 `qwen-turbo`（￥0.3 / ￥0.6），想更强有 `qwen3.8-max`——都在下拉里。
+ * 默认挑 `qwen-vl-plus`：WP127 之后文字模型必须能看图（Luoye 09-23 定），所以默认给多模态那一档；
+ * 纯文字的 `qwen-plus` / `qwen-turbo` 仍在下拉里但过不了第三步验证。**单价待核对**（原 `qwen-plus` 的价是核实过的，这条不是）。
  */
-export const BAILIAN_DEFAULT_MODEL = 'qwen-plus'
+export const BAILIAN_DEFAULT_MODEL = 'qwen-vl-plus'
 
 /**
  * 百炼的两个**订阅**产品的专属口（WP88）。
@@ -395,7 +395,7 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     plan_order: 1,
     auth: 'api_key',
     default_base_url: 'https://api.deepseek.com',
-    default_model: 'deepseek-chat',
+    default_model: 'deepseek-flash',
     region: 'cn',
     steps: [
       '打开 platform.deepseek.com，用手机号注册登录',
@@ -427,7 +427,7 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
      * 要接 OpenAI 就去 OpenAI 那张卡，那里还顺带告诉你订阅登录这条路。
      */
     default_base_url: 'https://api.moonshot.cn/v1',
-    default_model: 'moonshot-v1-8k',
+    default_model: 'moonshot-v1-8k-vision-preview',
     region: 'cn',
     steps: [
       '去你要用的那家的控制台，创建一个 API key',
@@ -447,28 +447,28 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
         id: 'moonshot',
         label: 'Moonshot / Kimi',
         base_url: 'https://api.moonshot.cn/v1',
-        model: 'moonshot-v1-8k',
+        model: 'moonshot-v1-8k-vision-preview',
         region: 'cn',
       },
       {
         id: 'qwen',
         label: '通义千问',
         base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model: 'qwen-plus',
+        model: 'qwen-vl-plus',
         region: 'cn',
       },
       {
         id: 'zhipu',
         label: '智谱 GLM',
         base_url: 'https://open.bigmodel.cn/api/paas/v4',
-        model: 'glm-4-plus',
+        model: 'glm-4v-plus',
         region: 'cn',
       },
       {
         id: 'ollama',
         label: '本机 Ollama',
         base_url: 'http://127.0.0.1:11434/v1',
-        model: 'llama3.1',
+        model: 'llama3.2-vision',
         region: 'cn',
       },
     ],
@@ -929,7 +929,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         kind: 'deepseek',
         label: 'DeepSeek 官方（环境变量）',
         base_url: 'https://api.deepseek.com',
-        model: 'deepseek-chat',
+        model: 'deepseek-flash',
         region: 'cn',
         price_in: 0.27,
         price_out: 1.1,
