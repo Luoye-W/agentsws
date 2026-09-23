@@ -33,6 +33,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { DEFAULT_CHAT_WIDGET_CONFIG } from '@agentsws/contracts'
+import { normalizeAssistWaitSeconds } from '@agentsws/support-core'
 import type { ChatLane } from './chat.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -126,6 +127,11 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
           allowed_origins: parsed.config?.allowed_origins ?? [],
           ...(parsed.config?.accent === undefined ? {} : { accent: parsed.config.accent }),
           ...(parsed.config?.greeting === undefined ? {} : { greeting: parsed.config.greeting }),
+          ...(parsed.config?.assist_wait_seconds === undefined
+            ? {}
+            : {
+                assist_wait_seconds: normalizeAssistWaitSeconds(parsed.config.assist_wait_seconds),
+              }),
         },
         ...(parsed.updated_at === undefined ? {} : { updated_at: parsed.updated_at }),
       }
@@ -154,7 +160,7 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
   const secretOf = (): Buffer => {
     if (secret !== undefined) return secret
     const secrets = options.secrets
-    if (secrets !== undefined && secrets.available) {
+    if (secrets?.available === true) {
       try {
         const existing = secrets.get(WIDGET_SECRET_ID)?.token
         if (existing !== undefined && existing !== '') {
@@ -202,6 +208,9 @@ export function createChatWidget(options: ChatWidgetOptions): ChatWidgetAssembly
           allowed_origins: origins,
           ...(accent === undefined || accent === '' ? {} : { accent: safeAccent(accent) }),
           ...(greeting === undefined || greeting === '' ? {} : { greeting }),
+          ...(input.assist_wait_seconds === undefined
+            ? {}
+            : { assist_wait_seconds: normalizeAssistWaitSeconds(input.assist_wait_seconds) }),
         },
         updated_at: clock.now(),
       }

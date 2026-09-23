@@ -22,9 +22,12 @@ describe('订阅服务登记表', () => {
     for (const id of ids) expect(subscriptionServiceById(id)?.credits_per_month).toBe(30)
   })
 
-  it('客服那个只登记不接业务：available=false，不进「可开通」的列表', () => {
-    expect(subscriptionServiceById(SUPPORT_SERVICE_ID)?.available).toBe(false)
-    expect(availableSubscriptionServices().map((s) => s.id)).toEqual([KOL_SERVICE_ID])
+  it('WP124 起客服也开通了：两个服务都进「可开通」的列表', () => {
+    expect(subscriptionServiceById(SUPPORT_SERVICE_ID)?.available).toBe(true)
+    expect(availableSubscriptionServices().map((s) => s.id)).toEqual([
+      KOL_SERVICE_ID,
+      SUPPORT_SERVICE_ID,
+    ])
   })
 
   it('认不出的 id 回 undefined，不退到某个默认服务', () => {

@@ -31,6 +31,7 @@
     "@agentsws/brand-intake": "workspace:*",
     "@agentsws/catalog": "workspace:*",
     "@agentsws/channels": "workspace:*",
+    "@agentsws/chat-relay": "workspace:*",
     "@agentsws/connect-adapter": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",

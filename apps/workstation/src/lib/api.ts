@@ -1438,7 +1438,7 @@ export interface PricingEntry {
   label_zh: string
   label_en: string
   /** 付费三块（67 §1，WP118）。老的价目表没有这一格，界面按能力名前缀兜底。 */
-  block?: 'data' | 'ai' | 'kol_service'
+  block?: 'data' | 'ai' | 'service'
   models?: PricingModelEntry[]
 }
 
@@ -3478,11 +3478,64 @@ export const sendChatMessage = (id: string, text: string): Promise<ChatTurnView>
 export const advanceChatTurn = (id: string): Promise<ChatTurnView> =>
   api<ChatTurnView>(`/v1/chat/sessions/${encodeURIComponent(id)}/advance`, { method: 'POST' })
 
-export const setChatTakeover = (id: string, on: boolean): Promise<ChatSessionView> =>
-  api<ChatSessionView>(`/v1/chat/sessions/${encodeURIComponent(id)}/takeover`, {
-    method: 'PUT',
-    body: { on },
-  })
+export const listChatSessions = (limit = 30): Promise<ChatSessionView[]> =>
+  api<ChatSessionView[]>(`/v1/chat/sessions?limit=${limit}`)
+
+export interface ChatWidgetSettingsView {
+  allowed_origins: string[]
+  accent?: string
+  greeting?: string
+  assist_wait_seconds?: number
+  updated_at?: string
+}
+
+export const getChatWidgetSettings = (): Promise<ChatWidgetSettingsView> =>
+  api('/v1/chat/widget/settings')
+
+export const setChatWidgetSettings = (input: {
+  allowed_origins: string[]
+  accent?: string
+  greeting?: string
+  assist_wait_seconds?: number
+}): Promise<ChatWidgetSettingsView> =>
+  api('/v1/chat/widget/settings', { method: 'PUT', body: input })
+
+export interface ChatRelaySettingsView {
+  endpoint?: string
+  has_pairing_token: boolean
+  has_message_key: boolean
+  configured: boolean
+}
+
+export const getChatRelaySettings = (): Promise<ChatRelaySettingsView> =>
+  api('/v1/chat/relay/settings')
+
+export const setChatRelaySettings = (input: {
+  endpoint?: string | null
+  pairing_token?: string
+  message_key?: string
+}): Promise<ChatRelaySettingsView> => api('/v1/chat/relay/settings', { method: 'PUT', body: input })
+
+export interface ChatRelayTestView {
+  ok: boolean
+  detail: string
+  client_state: string
+}
+
+export const testChatRelay = (): Promise<ChatRelayTestView> =>
+  api('/v1/chat/relay/test', { method: 'POST' })
+
+export interface ChatRelayStatusView {
+  state: string
+  online: boolean
+  endpoint?: string
+  conversations_this_month?: number
+  limit?: number
+  unlimited?: boolean
+  offline_messages?: number
+}
+
+export const getChatRelayStatus = (): Promise<ChatRelayStatusView> => api('/v1/chat/relay/status')
 
 export const teachChatSession = (
   id: string,

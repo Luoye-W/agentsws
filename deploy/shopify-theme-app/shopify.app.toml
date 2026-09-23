@@ -1,0 +1,26 @@
+# Agents 工坊 · Shopify Theme App Extension（WP124 / docs/72 §2.1 #11）
+#
+# 纯壳：一个 toml + 一个 Liquid block。商家在 Shopify 后台
+# Themes → Customize → App embeds 打开「Agents Workshop Chat」开关即上线，
+# 不改主题代码、不贴 script。
+#
+# 注意：这是随源码分发的模板。正式上架要补 OAuth scopes（刻意不申请
+# read_customers）与 app URL——见 docs/43。
+name = "Agents Workshop Chat"
+handle = "agentsws-chat"
+client_id = "REPLACE_WITH_SHOPIFY_APP_CLIENT_ID"
+application_url = "https://cloud.agentsws.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_products"
+
+[auth]
+redirect_urls = ["https://cloud.agentsws.com/shopify/callback"]
+
+[webhooks]
+api_version = "2025-10"
+
+[build]
+automatically_update_urls_on_dev = false
+include_config_on_deploy = true

@@ -1,0 +1,41 @@
+# Agents 工坊 · 聊天转发器（自建 Docker 档，WP124 / docs/74）
+#
+# 一条命令：docker compose up -d
+# 然后看一次日志拿配对密钥（只显示这一次）：docker compose logs chat-relay
+#
+# 默认只有 HTTP；要 HTTPS 就带 caddy 一起起：
+#   docker compose --profile caddy up -d
+#   （把 Caddyfile 里的域名改成你自己的，DNS 指到这台机器）
+services:
+  chat-relay:
+    build:
+      context: ../..
+      dockerfile: deploy/chat-relay/Dockerfile
+    image: agentsws-chat-relay
+    restart: unless-stopped
+    environment:
+      # 工作区号：在 Agents 工坊 → 设置里能看到。一个部署服务一个工作区。
+      WORKSPACE: ${WORKSPACE:?在 .env 或环境里给出 WORKSPACE}
+      PORT: 8787
+      DATA_DIR: /data
+    volumes:
+      - relay-data:/data
+    ports:
+      - "8787:8787"
+
+  caddy:
+    image: caddy:2
+    profiles: ["caddy"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

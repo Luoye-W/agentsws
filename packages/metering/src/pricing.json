@@ -4,7 +4,7 @@
   "credit_cny": 1,
   "ai_multiplier": 3,
   "note": "49 §3：定价表是数据不是代码。1 积分 = ¥1（Luoye 2026-09-15 定：前期主要客户是中国用户，一眼看得懂自己的消耗）。AI 按 token 计——成本 × 倍率，成本引用 model-gateway/pricing/catalog.json，各家币种按下面 fx 折成人民币。对用户只显示最终积分价：成本、倍率、汇率都是中间量，不进界面。",
-  "blocks_note": "67 §1（Luoye 2026-09-19 定）：付费分三块，每条能力归一块。data = 数据接口（我们替用户付平台的钱与配额）；ai = AI 使用（按 token）；kol_service = 红人营销增值服务（订阅，30 积分 / 月）。分块的理由是这三块的花钱方式根本不同（按次 / 按 token / 按月），「这个月钱花哪儿了」只有按三块分开才回答得清。",
+  "blocks_note": "67 §1（Luoye 2026-09-19 定）：付费分三块，每条能力归一块。data = 数据接口（我们替用户付平台的钱与配额）；ai = AI 使用（按 token）；service = 增值服务（订阅，30 积分 / 月；WP124 起块名通用，红人与客服都归它）。分块的理由是这三块的花钱方式根本不同（按次 / 按 token / 按月），「这个月钱花哪儿了」只有按三块分开才回答得清。",
   "fx": {
     "CNY": 1,
     "USD": 7.1,
@@ -83,7 +83,7 @@
       "capability": "kol.service.monthly",
       "unit": "month",
       "credits_per_unit": 30,
-      "block": "kol_service",
+      "block": "service",
       "label_zh": "红人营销增值服务（每月）",
       "label_en": "Influencer service (per month)",
       "note_zh": "云端红人库 + 双向同步：本地一份、云端一份。买的不是备份，是「红人营销以后不依赖本地 Agents 工坊也能跑起来」的地基。30 积分 = ¥30 / 月。"
@@ -92,10 +92,10 @@
       "capability": "support.service.monthly",
       "unit": "month",
       "credits_per_unit": 30,
-      "block": "kol_service",
+      "block": "service",
       "label_zh": "客服增值服务（每月）",
       "label_en": "Customer support service (per month)",
-      "note_zh": "WP124 实现，本轮只登记不接业务（subscriptions.json 里 available=false，后端一律拒）。同价同机制：30 积分 = ¥30 / 月，走同一套订阅引擎。"
+      "note_zh": "WP124 实现：订阅后转发器的对端从商家本机换成托管实例（同一份 apps/server）。同价同机制：30 积分 = ¥30 / 月，走同一套订阅引擎。"
     }
   ]
 }

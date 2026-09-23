@@ -5,7 +5,7 @@
  * 他的在线客服会怎么答？**自己坐到访客那一边试一遍。**
  *
  * 左边：扮演访客发消息。右边：这一轮 AI 判成了哪种动作、为什么、缺什么、
- * 走没走模型、出没出卡，还有人工接管开关。
+ * 走没走模型、出没出卡，还有教 AI（WP124：接管开关已拆，只教不接管）。
  *
  * 一个刻意的差别：发完一句之后页面**自己点一下「判完这一轮」**，不等服务进程里
  * 那个 2 秒定时器。真访客那一路照常由定时器驱动——这里是试用场，不是仿真场，
@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   advanceChatTurn,
@@ -27,7 +26,6 @@ import {
   getChatMessages,
   openChatSession,
   sendChatMessage,
-  setChatTakeover,
   teachChatSession,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -67,14 +65,6 @@ export function ChatSandboxPage(): React.ReactNode {
     },
   })
 
-  const takeover = useMutation({
-    mutationFn: (on: boolean) => setChatTakeover(id as string, on),
-    onSuccess: async () => {
-      setTurn(undefined)
-      await refresh()
-    },
-  })
-
   const teach = useMutation({
     mutationFn: (text: string) =>
       teachChatSession(id as string, { instruction: text, scope: 'similar_cases' }),
@@ -93,7 +83,6 @@ export function ChatSandboxPage(): React.ReactNode {
     )
   }
 
-  const takenOver = thread.data?.session.takeover ?? false
   const status = thread.data?.session.status ?? 'open'
 
   return (
@@ -152,32 +141,11 @@ export function ChatSandboxPage(): React.ReactNode {
           </CardContent>
         </Card>
 
-        {/* ── 右：AI 的计划、接管开关、教 AI ───────────────────── */}
+        {/* ── 右：AI 的计划、教 AI ────────────────────────────── */}
+        {/* WP124（修订第 1 条）：接管开关拆掉了——前台唯一发言者是 AI，
+            商家只教不接管（KefuAgent live-chat-full-auto 的同一刀）。 */}
         <div className="flex flex-col gap-4">
           <ChatPlanPanel turn={turn} />
-
-          <Card>
-            <CardHeader className="gap-1">
-              <CardTitle className="flex items-center gap-1.5 text-sm">
-                {t('chat.takeover.title')}
-                <Hint text={t('chat.takeover.why')} testId="chat-takeover-why" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex items-center gap-3">
-              <Switch
-                checked={takenOver}
-                aria-label={t('chat.takeover.title')}
-                data-testid="chat-takeover"
-                disabled={takeover.isPending || id === undefined}
-                onCheckedChange={(on) => {
-                  takeover.mutate(on)
-                }}
-              />
-              <span className="text-sm text-muted-foreground">
-                {takenOver ? t('chat.takeover.on') : t('chat.takeover.off')}
-              </span>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader className="gap-1">

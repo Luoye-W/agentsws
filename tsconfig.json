@@ -41,6 +41,9 @@
       "path": "packages/brand-design"
     },
     {
+      "path": "packages/chat-relay"
+    },
+    {
       "path": "packages/brand-intake"
     },
     {

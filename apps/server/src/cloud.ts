@@ -111,6 +111,19 @@ export interface CloudAssembly {
    * 路由走 `port` 上那七个方法。
    */
   kolSync?: KolCloudSync
+  /**
+   * WP124：官方托管转发器的本月对话数（云侧 `GET /v1/chat/relay/status`）。
+   * 取不到回 `undefined`——界面上显示「暂时取不到」，不编一个数。
+   */
+  relayCloudStatus(): Promise<
+    | {
+        conversations_this_month?: number
+        limit?: number
+        subscribed?: boolean
+        offline_messages?: number
+      }
+    | undefined
+  >
 }
 
 export function cloudBaseUrl(env: Record<string, string | undefined>): string {
@@ -491,6 +504,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   return {
     port,
     ...(kolSync === undefined ? {} : { kolSync }),
+    relayCloudStatus: () => callCloud('/v1/chat/relay/status'),
     linked: () => tokenOf() !== undefined,
     sourceOf: (capability) => state.capability_sources[capability] ?? 'mine',
     /**

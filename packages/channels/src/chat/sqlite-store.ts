@@ -67,6 +67,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS chat_message_unique ON chat_message (session_i
 CREATE INDEX IF NOT EXISTS chat_message_by_time ON chat_message (session_id, at);
 `,
   },
+  {
+    // WP124（修订第 3 条）：死线在求助那一刻固化进会话行。只加，不改老列。
+    version: 2,
+    sql: `ALTER TABLE chat_session ADD COLUMN assist_deadline_at TEXT;`,
+  },
 ]
 
 interface SessionRow {
@@ -84,6 +89,7 @@ interface SessionRow {
   last_seen_at: string | null
   assist_requested_at: string | null
   assist_reminded_at: string | null
+  assist_deadline_at?: string | null
   takeover: number
 }
 
@@ -116,6 +122,9 @@ function toSession(row: SessionRow): ChatSession {
     ...(row.last_seen_at === null ? {} : { last_seen_at: row.last_seen_at }),
     ...(row.assist_requested_at === null ? {} : { assist_requested_at: row.assist_requested_at }),
     ...(row.assist_reminded_at === null ? {} : { assist_reminded_at: row.assist_reminded_at }),
+    ...(row.assist_deadline_at === null || row.assist_deadline_at === undefined
+      ? {}
+      : { assist_deadline_at: row.assist_deadline_at }),
   }
 }
 
@@ -229,7 +238,7 @@ export class SqliteChatStore implements ChatStore {
     this.db
       .prepare(
         `UPDATE chat_session SET status = ?, takeover = ?, visitor_email = ?, last_seen_at = ?,
-           assist_requested_at = ?, assist_reminded_at = ?, updated_at = ? WHERE id = ?`,
+           assist_requested_at = ?, assist_deadline_at = ?, assist_reminded_at = ?, updated_at = ? WHERE id = ?`,
       )
       .run(
         patch.status ?? prior.status,
@@ -237,6 +246,7 @@ export class SqliteChatStore implements ChatStore {
         patch.visitor_email ?? prior.visitor_email ?? null,
         patch.last_seen_at ?? prior.last_seen_at ?? null,
         nullable(patch.assist_requested_at, prior.assist_requested_at),
+        nullable(patch.assist_deadline_at, prior.assist_deadline_at),
         nullable(patch.assist_reminded_at, prior.assist_reminded_at),
         patch.at,
         id,

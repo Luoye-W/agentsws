@@ -45,8 +45,8 @@ type Group = 'capability' | 'workspace' | 'day'
 const GROUPS: Group[] = ['capability', 'workspace', 'day']
 
 /** 付费三块（67 §1）。顺序就是界面上从左到右。 */
-type Block = 'data' | 'ai' | 'kol_service'
-const BLOCKS: Block[] = ['data', 'ai', 'kol_service']
+type Block = 'data' | 'ai' | 'service'
+const BLOCKS: Block[] = ['data', 'ai', 'service']
 
 /**
  * 一条能力归哪一块。
@@ -59,7 +59,7 @@ function blockOf(capability: string, declared?: Block): Block {
   if (declared !== undefined) return declared
   if (capability.startsWith('ai.')) return 'ai'
   if (capability.startsWith('kol.service.') || capability.startsWith('support.service.'))
-    return 'kol_service'
+    return 'service'
   return 'data'
 }
 
@@ -192,7 +192,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                       <p className="text-[11px] text-muted-foreground">
                         {sum.calls === 0
                           ? t('credits.blocks.none')
-                          : t('credits.usage.calls') + ' ' + String(sum.calls)}
+                          : `${t('credits.usage.calls')} ${String(sum.calls)}`}
                       </p>
                     </div>
                   )

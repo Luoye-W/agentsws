@@ -79,6 +79,7 @@ import {
   evaluateLeakGuard,
   fenceForPrompt,
   LEAK_REWRITE_INSTRUCTION,
+  normalizeAssistWaitSeconds,
   sanitizeExternal,
 } from '@agentsws/support-core'
 import type { BackendResult } from '@agentsws/txn'
@@ -157,6 +158,12 @@ export interface ChatLaneOptions {
   }): Promise<{ sent: boolean; detail?: string }>
   /** 06 §2.4 路由；不给就落 `dtc.live-chat`。 */
   route?(): { role_id?: RoleId; confidence: number }
+  /**
+   * WP124（修订第 3 条）：求助等待时长（秒）。商家在聊天窗设置里改，
+   * 默认 30 秒、范围 10–600（非法回落 30）。死线在求助那一刻固化进会话行，
+   * 之后改设置只影响新的求助。
+   */
+  assistWaitSeconds?(): number | undefined
   /** 轮次到期的排期；不给用 `setTimeout`（测试传一个假的，或者干脆自己调 `advanceTurn`）。 */
   schedule_turn?(session_id: string, delay_ms: number, run: () => void): void
 }
@@ -549,9 +556,12 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     // ② 客户要人工 → 出卡 + 起超时钟 + 说一句
     if (plan.action === 'assist') {
       const approval_item_id = await raiseCard(session, plan, turn_text)
+      const wait = normalizeAssistWaitSeconds(options.assistWaitSeconds?.())
       await store.patchSession(session.id, {
         status: 'assist_requested',
         assist_requested_at: now,
+        // 死线在求助那一刻固化：之后改设置只影响新的求助
+        assist_deadline_at: new Date(Date.parse(now) + wait * 1000).toISOString(),
         assist_reminded_at: null,
         at: now,
       })
@@ -598,9 +608,11 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         { ...plan, action: 'assist', summary: `轻模型不可用（${answer.blocked}），转求助。` },
         turn_text,
       )
+      const wait = normalizeAssistWaitSeconds(options.assistWaitSeconds?.())
       await store.patchSession(session.id, {
         status: 'assist_requested',
         assist_requested_at: now,
+        assist_deadline_at: new Date(Date.parse(now) + wait * 1000).toISOString(),
         assist_reminded_at: null,
         at: now,
       })
@@ -721,7 +733,9 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         takeover: on,
         // 接管时把会话推进 `human_takeover`；放手时回 `open`（求助钟点一并清掉）
         status: on ? 'human_takeover' : 'open',
-        ...(on ? {} : { assist_requested_at: null, assist_reminded_at: null }),
+        ...(on
+          ? {}
+          : { assist_requested_at: null, assist_deadline_at: null, assist_reminded_at: null }),
         at: now,
       })
       if (prior !== undefined) emit('chat.takeover_changed', next, { takeover: on })
@@ -823,6 +837,7 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         await store.patchSession(session.id, {
           status: 'assist_answered',
           assist_requested_at: null,
+          assist_deadline_at: null,
           assist_reminded_at: null,
           at: now,
         })
@@ -838,9 +853,22 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
       let demoted = 0
       for (const session of open) {
         if (session.assist_requested_at === undefined) continue
+        // 固化的死线优先（修订第 3 条）；等待时长从死线反推，决定有没有中途提醒
+        const deadlineAt = session.assist_deadline_at
+        const waitSeconds =
+          deadlineAt === undefined
+            ? undefined
+            : Math.max(
+                1,
+                Math.round(
+                  (Date.parse(deadlineAt) - Date.parse(session.assist_requested_at)) / 1000,
+                ),
+              )
         const decision = evaluateChatAssist({
           requested_at: session.assist_requested_at,
           now,
+          ...(deadlineAt === undefined ? {} : { deadline_at: deadlineAt }),
+          ...(waitSeconds === undefined ? {} : { wait_seconds: waitSeconds }),
           ...(session.assist_reminded_at === undefined
             ? {}
             : { reminded_at: session.assist_reminded_at }),
@@ -869,6 +897,7 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           await store.patchSession(session.id, {
             status: 'email_follow_up',
             assist_requested_at: null,
+            assist_deadline_at: null,
             at: now,
           })
           stream.publish(session.id, {

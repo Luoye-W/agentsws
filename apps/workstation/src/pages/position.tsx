@@ -40,7 +40,7 @@ const isTile = (block: { component: string }): boolean => block.component === 's
  * 静默去掉了——页面上什么都没有，也没有一个字解释为什么。现在这里说人话，
  * 并且给 owner 一个"去分配"的按钮（不是 owner 的人点不到，只看到那句话）。
  */
-function NoRangeNotice({ id, isOwner }: { id: string; isOwner: boolean }): React.ReactNode {
+function NoRangeNotice({ isOwner }: { id: string; isOwner: boolean }): React.ReactNode {
   const { t } = useApp()
   return (
     <Card data-testid="no-range-card">
@@ -74,6 +74,25 @@ function NoRangeNotice({ id, isOwner }: { id: string; isOwner: boolean }): React
  * 它与别的面板块不是一类东西——别的块是数字，这一块是一扇门：在线客服的产出
  * 不在图表里，在对话里。所以它只出现在 `dtc.live-chat` 上，而且排在最前面。
  */
+function ChatWindowEntry(): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <Card data-testid="chat-window-entry">
+      <CardHeader>
+        <CardTitle className="text-sm">{t('chat.window.entry.title')}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
+        <p>{t('chat.window.entry.subtitle')}</p>
+        <div>
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/chat-window">{t('chat.window.entry.open')}</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function ChatSandboxEntry(): React.ReactNode {
   const { t } = useApp()
   return (
@@ -123,6 +142,7 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
   return (
     <div className="flex flex-col gap-6">
       {/* WP57：在线客服的入口排在最前——它的产出在对话里，不在数字块里 */}
+      {isLiveChat ? <ChatWindowEntry /> : null}
       {isLiveChat ? <ChatSandboxEntry /> : null}
       {kolChannel === undefined ? null : <KolPanel assignment={id} channel={kolChannel} />}
       <div className="flex items-center gap-1">

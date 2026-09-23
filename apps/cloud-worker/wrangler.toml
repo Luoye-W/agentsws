@@ -57,6 +57,11 @@ class_name = "KolPublicDO"
 name = "KOL_TENANT"
 class_name = "KolTenantDO"
 
+# WP124：在线聊天官方转发——每工作区一个，只转发不落盘（docs/74）。
+[[durable_objects.bindings]]
+name = "CHAT_RELAY"
+class_name = "ChatRelayDO"
+
 # SQLite 存储后端。迁移在对象第一次唤醒时自己跑完——升级 = 再 deploy 一次。
 [[migrations]]
 tag = "v1"
@@ -73,6 +78,10 @@ new_sqlite_classes = ["KolPublicDO"]
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["KolTenantDO"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["ChatRelayDO"]
 
 # ── 运营后台的静态产物（WP115 / docs/65 §8） ───────────────────────────
 # `apps/cloud-admin` 的 Vite 产物（base = "/admin/"）。
@@ -105,6 +114,8 @@ AGENTSWS_CLOUD_MAIL_FROM = "Agents 工坊 <login@agentsws.com>"
 # 内测期直接指一家 OpenAI 兼容的官方上游；以后换回自建的 New API 只改这一行
 AGENTSWS_NEWAPI_BASE_URL = "https://api.deepseek.com/v1"
 AGENTSWS_VERSION = "0.1.0"
+# 官方转发每月对话上限（packages/metering/src/limits.json 是真源，这里只给 health 页展示）
+AGENTSWS_CHAT_MONTHLY_CONVERSATIONS = "200"
 
 # ── 打包 ───────────────────────────────────────────────────────────────
 # better-sqlite3 是原生模块，Workers 上装不进去。云侧几个包的主入口里有它那一档

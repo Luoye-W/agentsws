@@ -94,7 +94,7 @@ const PRICING: PricingView = {
       capability: 'kol.service.monthly',
       unit: 'month',
       credits_per_unit: 30,
-      block: 'kol_service',
+      block: 'service',
       label_zh: '红人营销增值服务（每月）',
       label_en: 'Influencer service (per month)',
     },
@@ -330,7 +330,7 @@ describe('积分面板（49 M5）', () => {
   it('这个月钱花在哪：三张小卡，按付费三块分（67 §1）', async () => {
     renderWithProviders(<CreditsPanel assignment="asg_owner" />)
     const blocks = await screen.findAllByTestId('credits-block')
-    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['data', 'ai', 'kol_service'])
+    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['data', 'ai', 'service'])
     const byBlock = (name: string): string =>
       blocks.find((b) => b.getAttribute('data-block') === name)?.textContent ?? ''
     // 价目表里 ai.chat 没写 block，按能力名前缀兜底也要归对
@@ -338,7 +338,7 @@ describe('积分面板（49 M5）', () => {
       expect(byBlock('ai')).toContain('30')
     })
     expect(byBlock('data')).toContain('7.5')
-    expect(byBlock('kol_service')).toContain('30')
+    expect(byBlock('service')).toContain('30')
   })
 })
 

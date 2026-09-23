@@ -192,6 +192,9 @@ importers:
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@agentsws/chat-relay':
+        specifier: workspace:*
+        version: link:../../packages/chat-relay
       '@agentsws/cloud':
         specifier: workspace:*
         version: link:../cloud
@@ -321,6 +324,9 @@ importers:
       '@agentsws/channels':
         specifier: workspace:*
         version: link:../../packages/channels
+      '@agentsws/chat-relay':
+        specifier: workspace:*
+        version: link:../../packages/chat-relay
       '@agentsws/connect-adapter':
         specifier: workspace:*
         version: link:../../packages/connect-adapter
@@ -697,6 +703,22 @@ importers:
       smtp-server:
         specifier: ^3.19.9
         version: 3.19.9
+
+  packages/chat-relay:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      hono:
+        specifier: ^4.13.7
+        version: 4.13.7
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   packages/cloud-entry:
     dependencies:

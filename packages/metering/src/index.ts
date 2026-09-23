@@ -62,6 +62,13 @@ export {
   tokenCostMicros,
   unitCostMicros,
 } from './cost.js'
+export type { LimitsFile, ServiceLimit } from './limits.js'
+export {
+  CHAT_CONVERSATIONS_MONTHLY,
+  LIMITS_FILE,
+  limitsConsistent,
+  serviceLimitById,
+} from './limits.js'
 export type { PlannedCycle, PlansFile, TermPlanInput } from './plans.js'
 export {
   addCalendarMonths,

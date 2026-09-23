@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "as_of": "2026-09-21",
+  "note": "WP124：官方托管的服务额度（数据不是代码）。免费本地档的官方转发每月 200 个对话（Luoye 09-19 定）；口径见 docs/74：访客发出第一条消息才算一个对话，同一访客 30 分钟内刷新重开算同一个，商家设置页试聊不计但 AI 费用照算，到顶只拦新会话（在途放行到结束），到 80% 提醒推 owner，已订阅客服增值服务（support.service.monthly）的不受限。自建转发无上限（不在这张表里就是没有这条限制）。",
+  "limits": [
+    {
+      "id": "chat.conversations.monthly",
+      "value": 200,
+      "scope": "workspace",
+      "label_zh": "官方转发每月对话数",
+      "label_en": "Hosted relay conversations per month"
+    },
+    {
+      "id": "chat.quota.warn_ratio",
+      "value": 0.8,
+      "scope": "workspace",
+      "label_zh": "额度提醒比例",
+      "label_en": "Quota warn threshold"
+    }
+  ]
+}

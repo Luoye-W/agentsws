@@ -44,8 +44,13 @@ export interface ChatSession {
   updated_at: Iso8601
   /** 访客最后一次露面（心跳或说话）。求助超时判"人还在不在"用它。 */
   last_seen_at?: Iso8601
-  /** 求助是什么时候提的（T+3 / T+10 两个钟点从它算）。 */
+  /** 求助是什么时候提的（提醒与死线的锚点）。 */
   assist_requested_at?: Iso8601
+  /**
+   * WP124（修订第 3 条）：**死线在求助那一刻固化**进会话行——商家中途把等待时长
+   * 改短，不许把已经在等的客户提前踢走。没有这一格的旧会话按老口径（T+10）。
+   */
+  assist_deadline_at?: Iso8601
   /** 已经提醒过的时刻（提醒的幂等锚）。 */
   assist_reminded_at?: Iso8601
   /** 人工接管开关。开着的时候 AI 一句都不答。 */
@@ -91,6 +96,7 @@ export interface ChatSessionPatch {
   last_seen_at?: Iso8601
   /** 显式传 `null` 表示清空（求助被接了 / 会话关了）。 */
   assist_requested_at?: Iso8601 | null
+  assist_deadline_at?: Iso8601 | null
   assist_reminded_at?: Iso8601 | null
   at: Iso8601
 }
