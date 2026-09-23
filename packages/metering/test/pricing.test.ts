@@ -29,10 +29,12 @@ describe('价目表', () => {
     expect(pricing.as_of).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  it('十条能力都在，每条中英标签齐全', () => {
+  it('十一条能力都在，每条中英标签齐全', () => {
     expect(pricing.entries.map((e) => e.capability)).toEqual([
       'ai.chat',
       'ai.embeddings',
+      // WP127：生图单独一档，按张
+      'ai.image',
       'data.kol.lookup',
       'data.kol.audit',
       'social.fetch',
