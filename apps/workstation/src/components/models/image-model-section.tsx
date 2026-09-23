@@ -128,7 +128,10 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
       {provider === '' || official ? null : (
         <p className="text-[11px] text-muted-foreground">{t('models.image.own_price')}</p>
       )}
-      {data.unavailable_reason === undefined || saved ? null : (
+      {/* 那句人话只在"现在选的就是服务端存着的那一份"时说——正在改的时候不唠叨 */}
+      {data.unavailable_reason === undefined ||
+      saved ||
+      provider !== (data.provider_id ?? '') ? null : (
         <p
           className="text-[11px] text-amber-600 dark:text-amber-400"
           data-testid="models-image-reason"
