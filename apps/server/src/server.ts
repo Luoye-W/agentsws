@@ -67,6 +67,7 @@ import type {
 } from '@agentsws/contracts'
 import {
   brandNameOf,
+  KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_LOOKUP_CAPABILITY,
   PR_ROLE_IDS,
@@ -2667,6 +2668,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kol,
       kolService,
       kolSandbox,
+      kolPublic,
       pr,
       prService,
       social,
@@ -4624,6 +4626,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         revealPriceCredits: () =>
           entryFor(buildPricing(), KOL_LOOKUP_CAPABILITY)?.credits_per_unit ??
           PRICING_FILE.entries.find((e) => e.capability === KOL_LOOKUP_CAPABILITY)
+            ?.credits_per_unit ??
+          0,
+        // WP131：「采集后自动评分」的体检那一半——这个品牌连公共库的客户端 + 体检的价
+        auditor: brand.kolPublic,
+        auditPriceCredits: () =>
+          entryFor(buildPricing(), KOL_AUDIT_CAPABILITY)?.credits_per_unit ??
+          PRICING_FILE.entries.find((e) => e.capability === KOL_AUDIT_CAPABILITY)
             ?.credits_per_unit ??
           0,
       }

@@ -3865,6 +3865,9 @@ export interface KolCreatorRowData {
   score: number
   blocked?: string
   has_contact: boolean
+  /** WP131：「采集后自动评分」跑出的云端体检概括数（0–100）与时刻；没做过就没有。 */
+  audit_health?: number
+  audited_at?: string
 }
 
 /** 一条联系方式。**没有明文那一格**——脱敏形态够认出是哪一个，不够拿去发信。 */
@@ -4033,12 +4036,14 @@ export interface KolMergeSuggestionData {
 }
 
 export const getKolCreators = (
-  filter: { channel?: KolChannelId; q?: string } = {},
+  filter: { channel?: KolChannelId; q?: string; batch?: string } = {},
   assignment?: string,
 ): Promise<{ rows: KolCreatorRowData[] }> => {
   const q = new URLSearchParams()
   if (filter.channel !== undefined) q.set('channel', filter.channel)
   if (filter.q !== undefined && filter.q !== '') q.set('q', filter.q)
+  // WP131：插件「回作战室看这批」——只看这一次列表采集收进来的人
+  if (filter.batch !== undefined && filter.batch !== '') q.set('batch', filter.batch)
   const s = q.toString()
   return api(`/v1/kol/creators${s === '' ? '' : `?${s}`}`, withAssignment(assignment))
 }

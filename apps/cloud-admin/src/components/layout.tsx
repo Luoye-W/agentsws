@@ -17,6 +17,7 @@ import {
   Moon,
   ScrollText,
   Sun,
+  Tags,
   Users,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -32,6 +33,7 @@ const NAV: { to: string; key: Key; icon: React.ComponentType<{ className?: strin
   { to: '/usage', key: 'nav.usage', icon: Activity },
   { to: '/credits', key: 'nav.credits', icon: Coins },
   { to: '/kol', key: 'nav.kol', icon: Megaphone },
+  { to: '/pricing', key: 'nav.pricing', icon: Tags },
   { to: '/health', key: 'nav.health', icon: Gauge },
   { to: '/audit', key: 'nav.audit', icon: ScrollText },
 ]

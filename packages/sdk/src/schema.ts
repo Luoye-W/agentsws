@@ -5998,6 +5998,24 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/extension/auto-score': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 「采集后自动评分」开关现状：开没开、每位约多少积分、队里还有几位（WP131） */
+    get: operations['extensionAutoScore']
+    /** 开 / 关「采集后自动评分」（每工作区一个，默认关；开着时体检花积分）（WP131） */
+    put: operations['setExtensionAutoScore']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/extension/seed-signature': {
     parameters: {
       query?: never
@@ -34339,6 +34357,8 @@ export interface operations {
         min_followers?: number
         /** @description 粉丝数上限（含） */
         max_followers?: number
+        /** @description 只看这一次插件列表采集收进来的人（批次 id，bt_ 开头；WP131） */
+        batch?: string
       }
       header: {
         /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
@@ -43667,6 +43687,7 @@ export interface operations {
             source_query?: string
             relevance_score?: number
           }[]
+          batch_id?: string
         }
       }
     }
@@ -44196,7 +44217,7 @@ export interface operations {
           content_external_id: string
           /** @enum {string} */
           content_type: 'video' | 'post' | 'reel'
-          title: string
+          title?: string
           url?: string
           thumbnail_url?: string
           published_at?: string
@@ -44279,7 +44300,7 @@ export interface operations {
           content_external_id: string
           /** @enum {string} */
           content_type: 'video' | 'post' | 'reel'
-          title: string
+          title?: string
           url?: string
           thumbnail_url?: string
           published_at?: string
@@ -44405,6 +44426,88 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  extensionAutoScore: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description ExtensionAutoScoreView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  setExtensionAutoScore: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          enabled: boolean
+        }
+      }
+    }
+    responses: {
+      /** @description ExtensionAutoScoreView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
         headers: {
           [name: string]: unknown
         }

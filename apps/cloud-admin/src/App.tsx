@@ -13,6 +13,7 @@ import { HealthPage } from '@/pages/health'
 import { KolPage } from '@/pages/kol'
 import { OrgsPage } from '@/pages/orgs'
 import { OverviewPage } from '@/pages/overview'
+import { PricingPage } from '@/pages/pricing'
 import { UsagePage } from '@/pages/usage'
 import { UsersPage } from '@/pages/users'
 
@@ -26,6 +27,7 @@ export function App(): React.ReactNode {
         <Route path="/usage" element={<UsagePage />} />
         <Route path="/credits" element={<CreditsPage />} />
         <Route path="/kol" element={<KolPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
         <Route path="/health" element={<HealthPage />} />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

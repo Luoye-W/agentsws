@@ -29,6 +29,7 @@ import {
   isCnAvailable,
   providerOfModel,
   tokenCostMicros,
+  unitCostMicros,
   WalletError,
 } from '@agentsws/metering'
 import type { Context } from 'hono'
@@ -451,13 +452,22 @@ async function meteredImages(c: Context<EntryEnv>, deps: EntryDeps): Promise<Res
   if (got === 0) {
     deps.wallet.release(reservation)
   } else {
+    /*
+     * WP131：生图的我方成本按张记（成本表 `image:<型号>`）。表里没有这个型号就不写
+     * `cost_micros`——「不知道」不是 0（与对话口 `costOf` 同一条）。
+     */
+    const table: CostTable | null = deps.costTable === undefined ? COST_TABLE : deps.costTable
+    const est = table === null ? undefined : unitCostMicros(`image:${model}`, got, table)
     deps.wallet.settle(reservation, {
       quantity: got,
       credits: exempt ? 0 : unit * got,
-      provider: providerOfModel(model),
+      provider: est === undefined || est.fallback ? providerOfModel(model) : est.provider,
       model,
       account_id: principal.account_id,
       charge_status: exempt ? 'admin_exempt' : 'charged',
+      ...(est === undefined || est.fallback
+        ? {}
+        : { cost_micros: est.micros, cost_currency: est.currency }),
     })
   }
   return new Response(JSON.stringify(json), {

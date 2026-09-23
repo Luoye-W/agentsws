@@ -8,7 +8,13 @@
  */
 
 import type { MeteringEvent } from '@agentsws/contracts'
-import { buildPricing, MemoryWalletStore, tokenCostMicros, Wallet } from '@agentsws/metering'
+import {
+  buildPricing,
+  MemoryWalletStore,
+  tokenCostMicros,
+  unitCostMicros,
+  Wallet,
+} from '@agentsws/metering'
 import { describe, expect, it } from 'vitest'
 import { createEntryApp } from '../src/routes.js'
 import type { EntryDeps, FetchLike } from '../src/types.js'
@@ -119,5 +125,34 @@ describe('WP115 成本会计落点', () => {
     const e = only(h.events)
     expect('cost_micros' in e).toBe(false)
     expect(e.provider).toBe('deepseek')
+  })
+})
+
+describe('WP131：生图的我方成本按张记', () => {
+  const image = (app: ReturnType<typeof createEntryApp>, model: string) =>
+    app.fetch(
+      new Request('http://entry.test/v1/ai/images/generations', {
+        method: 'POST',
+        headers: { authorization: 'Bearer wst_user', 'content-type': 'application/json' },
+        body: JSON.stringify({ model, prompt: '白底', n: 1 }),
+      }),
+    )
+  const b64 = async () => Response.json({ data: [{ b64_json: 'AAAA' }] })
+
+  it('成本表里有这个型号（image:gpt-image-1）：cost_micros 按张记', async () => {
+    const h = harness({ fetch: b64 })
+    const res = await image(h.app, 'gpt-image-1')
+    expect(res.status).toBe(200)
+    const e = only(h.events)
+    expect(e.capability).toBe('ai.image')
+    expect(e.cost_micros).toBe(unitCostMicros('image:gpt-image-1', 1).micros)
+    expect(e.cost_micros).toBeGreaterThan(0)
+    expect(e.provider).toBe('openai')
+  })
+
+  it('成本表里没有这个型号：不写 cost_micros（不知道 ≠ 0）', async () => {
+    const h = harness({ fetch: b64 })
+    await image(h.app, 'some-new-image-model')
+    expect(only(h.events).cost_micros).toBeUndefined()
   })
 })

@@ -478,6 +478,41 @@ describe('WP119c：评论文本红线（路由这一层）', () => {
     const body = (await res.json()) as { data: { comments_stored?: number } }
     expect(body.data.comments_stored).toBe(1)
   })
+
+  it('WP131：标题可选——不带 title、空串都收（200）；超长照旧拒', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const { title: _dropped, ...untitled } = contentBody
+    for (const body of [untitled, { ...contentBody, title: '' }]) {
+      const res = await w.plugin('POST', '/v1/extension/content-observations', {
+        token,
+        origin: EXT_ORIGIN,
+        body,
+      })
+      expect(res.status).toBe(200)
+    }
+    const tooLong = await w.plugin('POST', '/v1/extension/content-observations', {
+      token,
+      origin: EXT_ORIGIN,
+      body: { ...contentBody, title: 'x'.repeat(301) },
+    })
+    expect(tooLong.status).toBe(400)
+  })
+})
+
+describe('WP131：自动评分开关没装配时', () => {
+  it('老装配不实现 autoScore → 两条路都回 not_implemented（501），不是 500', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const read = await w.plugin('GET', '/v1/extension/auto-score', { token, origin: EXT_ORIGIN })
+    expect(read.status).toBe(501)
+    const write = await w.plugin('PUT', '/v1/extension/auto-score', {
+      token,
+      origin: EXT_ORIGIN,
+      body: { enabled: true },
+    })
+    expect(write.status).toBe(501)
+  })
 })
 
 describe('WP119c：seed-signature', () => {

@@ -25,6 +25,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { StartRun, WorkspaceId } from '@agentsws/contracts'
+import type { PublicLibraryClient } from '@agentsws/kol-core'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
 import type { AdsStore } from './ads.js'
@@ -148,6 +149,11 @@ export interface BrandModuleSet {
    * 按品牌一份，因为演练数据也是这个品牌库里的行。
    */
   kolSandbox: KolSandboxAssembly
+  /**
+   * WP131：这个品牌连云端公共红人库的那个客户端（`kol-public-client`）。插件「采集后
+   * 自动评分」的体检那一半经它走（令牌是这个品牌那一把）。可选：老装配没有它。
+   */
+  kolPublic?: PublicLibraryClient
   /**
    * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象）。
    *

@@ -233,6 +233,8 @@ export {
   readVisibleEvents,
 } from './routes/events.js'
 export type {
+  ExtensionAutoScoreQueued,
+  ExtensionAutoScoreView,
   ExtensionBioLinkObservation,
   ExtensionBioLinkResult,
   ExtensionContactContribution,
@@ -260,7 +262,11 @@ export type {
   ExtensionSeedSignature,
   ExtensionSetup,
 } from './routes/extension.js'
-export { extensionRoutes, REVEAL_FREE_WINDOW_DAYS } from './routes/extension.js'
+export {
+  EXTENSION_BATCH_ID,
+  extensionRoutes,
+  REVEAL_FREE_WINDOW_DAYS,
+} from './routes/extension.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export {

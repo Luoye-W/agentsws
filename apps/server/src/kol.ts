@@ -63,6 +63,8 @@ export type KolTable =
   | 'content'
   | 'content_observation'
   | 'bio_link_observation'
+  | 'auto_score'
+  | 'setting'
 
 export const KOL_TABLES: readonly KolTable[] = [
   'creator',
@@ -76,6 +78,9 @@ export const KOL_TABLES: readonly KolTable[] = [
   'content',
   'content_observation',
   'bio_link_observation',
+  // WP131：采集后自动评分的结果（每人一行，最近一次）与这个品牌的几个开关
+  'auto_score',
+  'setting',
 ]
 
 interface KolBackend {
@@ -174,6 +179,8 @@ export interface KolStore {
   accountObservations(filter?: {
     account_id?: string
     creator_id?: string
+    /** WP131：只要这一次采集批次里的快照。 */
+    batch_id?: string
   }): KolAccountObservation[]
   contents(): KolContent[]
   contentObservations(filter?: {
@@ -199,6 +206,15 @@ export interface KolStore {
   saveContentObservation(row: KolContentObservation): void
   /** WP119c：按 `platform + slug` upsert（一次抓取覆盖上一次）。 */
   saveBioLink(row: KolBioLinkObservation): void
+
+  /* ── WP131：采集后自动评分 ─────────────────────────────────────────── */
+  /** 自动评分结果（每人一行，最近一次）。 */
+  autoScores(filter?: { creator_id?: string; batch_id?: string }): KolAutoScore[]
+  /** 按 `creator_id` upsert（行 id 就是 creator_id）。 */
+  saveAutoScore(row: KolAutoScore): void
+  /** 这个品牌的一个开关 / 设置（键值；没设过回 `undefined`）。 */
+  setting<T>(key: KolSettingKey): T | undefined
+  saveSetting(key: KolSettingKey, value: unknown, at: Iso8601): void
   /** 归因算完之后回填那三个数。链接不在就什么也不做（不凭空建一条）。 */
   recordAttribution(input: {
     tracked_link_id: string
@@ -252,6 +268,58 @@ export interface KolAccountObservation {
   source_query?: string
   /** WP130：相关视频栏的预筛分（0–100）。 */
   relevance_score?: number
+  /**
+   * WP131：这一行属于哪一次列表采集（`bt_…`，本机服务在批量收进时发的）。工作台
+   * `/influencer/creators?batch=<id>` 按它把「这一批」筛出来。只记本机，不出去。
+   */
+  batch_id?: string
+}
+
+/**
+ * WP131：一位红人最近一次「采集后自动评分」的结果（每人一行，行 id = creator_id）。
+ *
+ * 两半：本机打分（`kol-core` 的 `scoreCreator`，不花积分）永远有；云端体检
+ * （`data.kol.audit`，花积分）只在关联了云账号时跑，没跑的原因写在 `audit.status` 里。
+ */
+export interface KolAutoScore {
+  id: string
+  creator_id: string
+  account_id: string
+  /** 触发这次评分的采集批次（显式存入那条路没有）。 */
+  batch_id?: string
+  /** 0–100（本机打分的总分）。 */
+  score: number
+  /** 刷粉护栏的理由（有值 = 数据本身不可信）。 */
+  blocked?: string
+  scored_at: Iso8601
+  audit?: KolAutoAudit
+}
+
+/** 云端体检那一半的结果。 */
+export interface KolAutoAudit {
+  /**
+   * - `done`：体检做了（`health` / `findings` 有值；`credits_spent` 是云侧实扣）；
+   * - `recent`：30 天内体检过，这次不重复花钱；
+   * - `not_linked`：没关联云账号，只做了本机打分；
+   * - `insufficient_credits`：积分不够，没做（不扣）；
+   * - `failed`：云那边没答上来（不扣）。
+   */
+  status: 'done' | 'recent' | 'not_linked' | 'insufficient_credits' | 'failed'
+  health?: number
+  findings?: string[]
+  credits_spent?: number
+  message?: string
+  at: Iso8601
+}
+
+/** WP131：这个品牌的开关键。现在只有一个。 */
+export type KolSettingKey = 'auto_score'
+
+/** `setting` 表里的一行。 */
+export interface KolSettingRow {
+  id: KolSettingKey
+  value: unknown
+  updated_at: Iso8601
 }
 
 /** 一条已采评论。**只住在 `content` 表里**（自己的内容库）——公共池那两张表没有它。 */
@@ -389,6 +457,7 @@ export function createKolStore(options: KolStoreOptions): KolStore {
         .all<KolAccountObservation>('account_observation')
         .filter((o) => filter?.account_id === undefined || o.account_id === filter.account_id)
         .filter((o) => filter?.creator_id === undefined || o.creator_id === filter.creator_id)
+        .filter((o) => filter?.batch_id === undefined || o.batch_id === filter.batch_id)
         .sort(
           (a, b) =>
             Date.parse(a.observed_at) - Date.parse(b.observed_at) || a.id.localeCompare(b.id),
@@ -417,6 +486,18 @@ export function createKolStore(options: KolStoreOptions): KolStore {
     saveContent: (row) => backend.put('content', row.id, row),
     saveContentObservation: (row) => backend.put('content_observation', row.id, row),
     saveBioLink: (row) => backend.put('bio_link_observation', row.id, row),
+
+    autoScores: (filter) =>
+      backend
+        .all<KolAutoScore>('auto_score')
+        .filter((r) => filter?.creator_id === undefined || r.creator_id === filter.creator_id)
+        .filter((r) => filter?.batch_id === undefined || r.batch_id === filter.batch_id),
+    saveAutoScore: (row) =>
+      backend.put('auto_score', row.creator_id, { ...row, id: row.creator_id }),
+    setting: <T>(key: KolSettingKey) =>
+      backend.get<KolSettingRow>('setting', key)?.value as T | undefined,
+    saveSetting: (key, value, at) =>
+      backend.put('setting', key, { id: key, value, updated_at: at } satisfies KolSettingRow),
 
     recordAttribution: (input) => {
       const link = backend.get<TrackedLink>('tracked_link', input.tracked_link_id)
