@@ -973,6 +973,12 @@ importers:
         specifier: workspace:*
         version: link:../runtime-direct
 
+  packages/hosted:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/kernel:
     dependencies:
       '@agentsws/contracts':
