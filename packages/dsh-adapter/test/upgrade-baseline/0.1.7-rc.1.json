@@ -20,7 +20,6 @@
     "@deepseek-ai/dsh-util-values": "0.1.7-rc.1"
   },
   "pack": "dtc-3c-3p",
-  "skipped": ["kol/public-library-reveal-charges-credits"],
   "runtimes": {
     "dsh-in-process": {
       "ads/budget-change-over-cap": {
@@ -1925,6 +1924,48 @@
           "inbound": 0,
           "approvals": 1,
           "changes": 1,
+          "outbound_observations": 0,
+          "emails_sent": 0
+        }
+      },
+      "kol/public-library-reveal-charges-credits": {
+        "passed": true,
+        "events": [],
+        "invariants": {
+          "no_write_without_stage": true,
+          "provenance_respected": true
+        },
+        "expectations": {
+          "metrics.runs_failed": true,
+          "event_types": true,
+          "kol_reveal": true
+        },
+        "metrics": {
+          "adoption_rate": 1,
+          "intervention_rate": 0,
+          "guardrail_hits": 0,
+          "queue_latency_ms": 0,
+          "tokens_per_item": 0,
+          "cost_base": 0,
+          "staged_changes": 0,
+          "applied_changes": 0,
+          "outbound_sent": 0,
+          "blocked_proposals": 0,
+          "runs_failed": 0,
+          "tool_calls": 0,
+          "knowledge_gaps": 0,
+          "escalations": 0,
+          "expired_approvals": 0,
+          "sampling_reviews": 0,
+          "judge_rule_score": 1
+        },
+        "summaries": [],
+        "counts": {
+          "events": 17,
+          "runs": 0,
+          "inbound": 0,
+          "approvals": 0,
+          "changes": 0,
           "outbound_observations": 0,
           "emails_sent": 0
         }
@@ -6267,6 +6308,48 @@
           "inbound": 0,
           "approvals": 1,
           "changes": 1,
+          "outbound_observations": 0,
+          "emails_sent": 0
+        }
+      },
+      "kol/public-library-reveal-charges-credits": {
+        "passed": true,
+        "events": [],
+        "invariants": {
+          "no_write_without_stage": true,
+          "provenance_respected": true
+        },
+        "expectations": {
+          "metrics.runs_failed": true,
+          "event_types": true,
+          "kol_reveal": true
+        },
+        "metrics": {
+          "adoption_rate": 1,
+          "intervention_rate": 0,
+          "guardrail_hits": 0,
+          "queue_latency_ms": 0,
+          "tokens_per_item": 0,
+          "cost_base": 0,
+          "staged_changes": 0,
+          "applied_changes": 0,
+          "outbound_sent": 0,
+          "blocked_proposals": 0,
+          "runs_failed": 0,
+          "tool_calls": 0,
+          "knowledge_gaps": 0,
+          "escalations": 0,
+          "expired_approvals": 0,
+          "sampling_reviews": 0,
+          "judge_rule_score": 1
+        },
+        "summaries": [],
+        "counts": {
+          "events": 17,
+          "runs": 0,
+          "inbound": 0,
+          "approvals": 0,
+          "changes": 0,
           "outbound_observations": 0,
           "emails_sent": 0
         }

@@ -33,9 +33,9 @@ import { describe, expect, it } from 'vitest'
  * **WP132（0.1.6-alpha.2 → 0.1.7-rc.1）：同样的跨版本比，另有两处变化。**
  * ① FROM_FILE 是升级前在当前代码树（WP94–WP131 之后）重采的 `0.1.6-alpha.2-wp132.json`；
  * ② 这一跳 **cordis 跟着升了**（dsh 0.1.7 要 `~4.0.4`，4.0.2 装不进同一棵树），所以
- * "cordis 不随 dsh 走"那条断言改成钉死新旧两个号；③ 两份都带 `skipped`
- * （`kol/public-library-reveal-charges-credits` 在 main 上 stub 档就抛，与 dsh 无关，
- * 见 capture.mjs 的 `CAPTURE_SKIP`），断言两边跳的是同一批。旧的八份一个不删。
+ * "cordis 不随 dsh 走"那条断言改成钉死新旧两个号；③ 新加一条"两份 `skipped` 一致"
+ * （capture.mjs 的 `CAPTURE_SKIP`，只许跳升级前 main 上就红的场景；这次最终提交的两份
+ * 都是完整的 62 条，没有跳）。旧的八份一个不删。
  */
 const FROM_FILE = '0.1.6-alpha.2-wp132'
 const TO_FILE = '0.1.7-rc.1'

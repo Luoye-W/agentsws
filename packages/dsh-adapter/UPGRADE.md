@@ -1158,19 +1158,22 @@ assistant 的 `source` 如实标 `{ kind: 'model', provider: 'agentsws-gateway',
 2. **五组重点实证**，除 §3 ③ 那两个替身外一条不改全过：`browser-seam` 23、`browserskill-seam` 49、
    `preset-seam` 17（**registry 换了，17 条一条没改**——包括"凭据解析出来的值到得了 MCP 子进程、挂完从 `process.env` 消失"、
    "两条职责各挂各的看不见对方"、"preset 的工具受 `restrict` 管"）、`shell-seam` 19、`subscription` 13。
-   `@agentsws/dsh-adapter` 升级前 **16 文件 877 条**，升级后 **16 文件 1007 条**：
-   多的 130 条全在 `upgrade.test.ts`（666 → 796，场景 51 → 61，是 WP94–WP131 加的场景，不是这次加的）。
+   `@agentsws/dsh-adapter` 升级前 **16 文件 877 条**，升级后 **16 文件 1020 条**：
+   多的 143 条全在 `upgrade.test.ts`（666 → 809：场景 51 → 62，是 WP94–WP131 加的场景，不是这次加的；
+   另有 1 条新断言"两份 `skipped` 一致"）。
    `packages/kernel`、`packages/credentials-openconnector`、`packages/roles`（cordis / schemastery 升版的下游）全过。
 3. **指纹逐条对比**（FROM = 升级前在当前代码树重采的 `0.1.6-alpha.2-wp132.json`，TO = `0.1.7-rc.1.json`）：
-   61 条场景 × 2 档 = **122 条**，事件类型序列 / `type@at` / 六条不变量 / 场景断言 / 运行摘要 **全部相同**，
+   62 条场景 × 2 档 = **124 条**，事件类型序列 / `type@at` / 六条不变量 / 场景断言 / 运行摘要 **全部相同**，
    `tokens_per_item` **偏差 0.00%**，两档之间仍逐条相等。去掉 `dsh_version` 与 `packages` 两个字段后两份 JSON **逐字节相同**。
    `packs/*/baseline.json` **一个数都没重定**。
-   两个模拟包 `--runtime dsh` fast 档：3 人 pack **61/61**、15 人 pack **22/22**，门禁"通过"；
-   逐场景比 `metrics`，升级前后 **0 处差异**（3 人 pack 61 份报告、15 人 pack 22 份）。
-   - 一个与 dsh 无关的例外要说清楚：`kol/public-library-reveal-charges-credits` 在 **main（cea0afeb）上 stub 档就抛**
-     `insufficient_credits`（45921fd4 取消插件贡献奖励之后，这道题依赖的那 1 积分没了），采集器会整份中断。
-     所以 `capture.mjs` 加了 `CAPTURE_SKIP`，升级前后两次采集跳的是同一条，`upgrade.test.ts` 断言两边 `skipped` 一致；
-     3 人 pack 的 `--runtime dsh` 也按 61 条跑。这条题的修复不在本单范围（主仓工作区里已经有人在改它）。
+   两个模拟包 `--runtime dsh` fast 档：3 人 pack **62/62**、15 人 pack **22/22**，门禁"通过"；
+   逐场景比 `metrics`，升级前后 **0 处差异**（数字见报告 WP132 §4）。
+   - 一段插曲要说清楚：开工时（main = cea0afeb）`kol/public-library-reveal-charges-credits` 在 **stub 档就抛**
+     `insufficient_credits`（45921fd4 取消插件贡献奖励之后，这道题依赖的那 1 积分没了），采集器整份中断。
+     第一轮于是给 `capture.mjs` 加了 `CAPTURE_SKIP`，前后两次都跳这一条（61 × 2 = 122 条，同样逐字节相同）。
+     收尾 `git merge main` 时 main 已经有 110f8ba3 修好了它，于是**在 main 的树（升级前的代码）上重采了 FROM、
+     在合并后的分支上重采了 TO，两份都是完整的 62 条、不跳任何场景**——仓库里提交的是这两份。
+     `CAPTURE_SKIP` 与 `upgrade.test.ts` 那条"两份 `skipped` 一致"的断言留着，给下次同样的情况用（docs/42 ① 写了纪律）。
 4. **提示词**：新旧两版各在一棵只挂 `SystemPrompt` 的树上 `assemble()` + `renderPrompt()`，三种组合
    （裸默认 / `includeHarnessIdentity: false` / 加我们的 `complete: true` 段）的段名、长度、渲染结果、`variables` 键集合
    **逐字节相同**，也与 WP70 / WP93 记的那张表一致。没有提示词 diff 要列。
@@ -1238,8 +1241,7 @@ patch 必须 `disabled: true` 的行从 3 行加到 6 行。`session-log-deepsee
 
 1. **`session.eventAt()` 仍在用**（`harness.ts` 的 `summarizeTurn()`）。上游已经三版挂着 `@deprecated`，迟早删；
    替代是 `session.read()` 的异步分页（上游 Agent Note 2026-09-09），改起来是 S。
-2. **`kol/public-library-reveal-charges-credits`** 在 main 上红（与 dsh 无关）。它修好之后，下一次升级的基线就不用 `CAPTURE_SKIP` 了；
-   `capture.mjs` 的开关留着（只许跳"升级前 main 上就红"的场景）。
+2. **`capture.mjs` 的 `CAPTURE_SKIP` 留着**（只许跳"升级前 main 上就红、stub 档也红"的场景）；这次最终提交的两份基线没用上它。
 3. **`@deepseek-ai/dsh-agent-preset`（声明插件行）没用上**：我们直接 `register()`，因为我们的定义是按 RunRequest
    一次运行生成一次、不是 profile 里的静态行。真接管 dsh 进程那天，profile 的写法见 `cordis.patch.yml` 末尾的注释。
 4. **`upstreams.yml` 的 `locked_in` 仍只钉 `@deepseek-ai/dsh` 一个包名**（WP93 记过）。这次 `dsh-agent-presets`
