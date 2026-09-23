@@ -524,7 +524,7 @@ AGENTSWS_CLOUD_ADMIN_TOKEN=… node scripts/import-kol-public.mjs https://cloud.
 - **本机上线对齐**：商家本机开机后，转发器**两格并存**（以前后连的会把先连的挤掉），访客消息仍给托管；
   工作台「转发方式」第三项有两颗按钮：「用本机这一份更新云端」（导出本机包 → R2，托管实例下次重起就用它，
   秘密库不带上去）与「把云端那一份取回来」（落进本机备份目录，**不自己导入**——WP36 那条：跑着的进程不换自己脚下的库）。
-- **镜像**：`deploy/Dockerfile.hosted`（照 `Dockerfile.cloud` 的多阶段做法，只建 `apps/server`，不带工作台；
+- **镜像**：`deploy/Dockerfile.hosted`（照 `Dockerfile.cloud` 的多阶段做法，只建 `apps/server`，不带工作台；构建上下文的忽略表是仓库根新加的 `.dockerignore`，三个镜像共用；
   `linux/amd64`；镜像里**没有任何工作区号与密钥**）。大小见 WP128 报告。
 
 ### 13.3 费用（按官方单价，**每个订阅工作区一个容器**）

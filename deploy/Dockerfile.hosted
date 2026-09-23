@@ -13,8 +13,10 @@
 # 做法照抄根 Dockerfile 的三条（理由也一样，别改）：两个阶段都不跑 apt；用
 # `pnpm deploy` 而不是 `prune --prod`；不用 root 跑。再加三条这个镜像特有的：
 #
-# 1. **`linux/amd64`**：Cloudflare Containers 只跑 amd64。在 Apple 芯片上 build 会走
-#    模拟，慢，但产物是对的；
+# 1. **`linux/amd64`**：Cloudflare Containers 只跑 amd64。`wrangler deploy` 自己带
+#    `--platform linux/amd64`（所以 FROM 上不写死平台——写死了 BuildKit 会报
+#    FromPlatformFlagConstDisallowed）；自己手动 build 记得加这个参数。Apple 芯片上走
+#    模拟，慢，但产物是对的。构建上下文的忽略表在仓库根的 `.dockerignore`；
 # 2. **镜像里没有任何工作区号、任何密钥**。一个镜像给所有订阅的工作区用，
 #    区别全在启动时的环境变量（`@agentsws/hosted` 的 `buildHostedEnv`，工作区号只出现
 #    在 `AGENTSWS_WORKSPACE_ID` 一处）——将来改成「一个容器托管 N 个工作区」时镜像不动；
@@ -22,7 +24,7 @@
 #    `apps/server` 自己定时推快照回云端、起来先拉回来（`apps/server/src/hosted-mode.ts`）。
 
 # ── 编译 ────────────────────────────────────────────────────────────────
-FROM --platform=linux/amd64 node:22-bookworm AS build
+FROM node:22-bookworm AS build
 WORKDIR /app
 
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
@@ -46,7 +48,7 @@ RUN pnpm exec tsc -b apps/server
 RUN pnpm --filter @agentsws/server deploy --prod --legacy /out
 
 # ── 运行 ────────────────────────────────────────────────────────────────
-FROM --platform=linux/amd64 node:22-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
 # 这几个是**镜像级**的缺省；工作区号、令牌、库密钥全在启动时由 HostedInstanceDO 给

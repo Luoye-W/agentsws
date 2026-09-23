@@ -1,0 +1,15 @@
+# 仓库根做构建上下文的三个镜像（根 Dockerfile、deploy/Dockerfile.cloud、deploy/Dockerfile.hosted）共用。
+#
+# WP128 加：三个镜像都在容器里自己 `pnpm install` + `tsc -b`，所以本机的 node_modules / dist
+# 一个字节都不该进上下文——几个 G 白传不说，本机（macOS arm64）编好的 better-sqlite3 原生模块
+# 进了 linux/amd64 的镜像，起来就是一句 `invalid ELF header`。
+# （原先想只给 Dockerfile.hosted 配一份 `<名字>.dockerignore`，但 `wrangler deploy` 是把
+#   Dockerfile 从标准输入喂给 docker 的，那种按文件名找的忽略表认不到——实测上下文照样全传。）
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.wrangler
+.git
+apps/desktop/release
+**/.env*
+**/.dev.vars*
