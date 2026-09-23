@@ -66,12 +66,21 @@ export function insufficient(filter: BucketFilter, sample_size: number, at: Iso8
   }
 }
 
+/** 这一行有没有互动率（WP130：插件来源可以没有）。 */
+const hasEngagement = (row: ObservationRow): row is ObservationRow & { engagement_rate: number } =>
+  row.engagement_rate !== undefined
+
 export function computeBenchmark(
   rows: ObservationRow[],
   filter: BucketFilter,
   at: Iso8601,
 ): Benchmark {
-  const unique = latestPerCreator(rows)
+  /*
+   * WP130：**缺格的行不进基准**（先筛再取每人最新）。缺不是 0——把插件报的
+   * 「没看到互动率」当 0 算进去，这个桶的中位互动率就是一个编出来的数；
+   * 也不让它凑 k：只有带着那个数的人才算样本。
+   */
+  const unique = latestPerCreator(rows.filter(hasEngagement)).filter(hasEngagement)
   if (unique.length < BENCHMARK_MIN_SAMPLES) return insufficient(filter, unique.length, at)
   return {
     channel: filter.channel,

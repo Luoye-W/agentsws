@@ -99,11 +99,20 @@ export function createExtensionContributor(
        * 在这个仓库里有一个看得见的答案，而不是"去读云端的 schema"。
        */
       const body = {
+        /*
+         * WP130：告诉云端「这是本机转发的插件观测」——来源记 `plugin`，`posts_30d` /
+         * `engagement_rate` 可缺。之前这一跳只送粉丝数，云端要这两格必须是数，
+         * 于是本机的红人观测**一条都没进过公共库**（WP129 发现的 bug）。
+         */
+        via: 'extension',
         observations: [
           {
             channel,
             handle: row.handle,
             ...(row.followers === undefined ? {} : { followers: row.followers }),
+            // 本机有值就送、没有就不送（不补 0：缺不是 0）
+            ...(row.posts_30d === undefined ? {} : { posts_30d: row.posts_30d }),
+            ...(row.engagement_rate === undefined ? {} : { engagement_rate: row.engagement_rate }),
             observed_at: row.observed_at as Iso8601,
           },
         ],

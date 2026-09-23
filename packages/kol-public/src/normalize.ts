@@ -91,7 +91,15 @@ function categoriesOf(raw: unknown): string[] | undefined {
  * `at` 是服务端的"现在"——`observed_at` 不许在它之后（一条"明天看到的"资料
  * 不是数据，是一个坏掉的钟或者一次试探）。
  */
-export function parseObservation(raw: unknown, at: string): PublicCreatorObservation {
+export function parseObservation(
+  raw: unknown,
+  at: string,
+  /**
+   * WP130：`metricsOptional` = 这一批是插件报的——`posts_30d` / `engagement_rate`
+   * 没有就不给这两格（**不补 0**）；给了照样校验范围。其余来源必须给。
+   */
+  options: { metricsOptional?: boolean } = {},
+): PublicCreatorObservation {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
     throw new KolError('invalid_input', '每一条观察都要是一个对象。')
   const input = raw as Record<string, unknown>
@@ -113,12 +121,16 @@ export function parseObservation(raw: unknown, at: string): PublicCreatorObserva
   if (!Number.isInteger(followers) || followers < 0 || followers > MAX_FOLLOWERS)
     throw new KolError('invalid_input', `followers 要是 0 到 ${MAX_FOLLOWERS} 之间的整数。`)
 
-  const posts = asFiniteNumber(input.posts_30d, 'posts_30d')
-  if (!Number.isInteger(posts) || posts < 0 || posts > MAX_POSTS_30D)
+  const skipPosts = options.metricsOptional === true && input.posts_30d === undefined
+  const posts = skipPosts ? undefined : asFiniteNumber(input.posts_30d, 'posts_30d')
+  if (posts !== undefined && (!Number.isInteger(posts) || posts < 0 || posts > MAX_POSTS_30D))
     throw new KolError('invalid_input', `posts_30d 要是 0 到 ${MAX_POSTS_30D} 之间的整数。`)
 
-  const engagement = asFiniteNumber(input.engagement_rate, 'engagement_rate')
-  if (engagement < 0 || engagement > 1)
+  const skipEngagement = options.metricsOptional === true && input.engagement_rate === undefined
+  const engagement = skipEngagement
+    ? undefined
+    : asFiniteNumber(input.engagement_rate, 'engagement_rate')
+  if (engagement !== undefined && (engagement < 0 || engagement > 1))
     throw new KolError(
       'invalid_input',
       'engagement_rate 是 0 到 1 之间的小数（3.1% 要写成 0.031，不是 3.1）。',
@@ -143,8 +155,8 @@ export function parseObservation(raw: unknown, at: string): PublicCreatorObserva
     channel,
     handle,
     followers,
-    posts_30d: posts,
-    engagement_rate: engagement,
+    ...(posts === undefined ? {} : { posts_30d: posts }),
+    ...(engagement === undefined ? {} : { engagement_rate: engagement }),
     ...(language === undefined ? {} : { language }),
     ...(region === undefined ? {} : { region: region.toUpperCase() }),
     ...(categories === undefined ? {} : { categories }),

@@ -37,6 +37,7 @@ import {
   ANY_CATEGORY,
   CONTACT_REWARD_CREDITS,
   CONTRIBUTION_CREDIT_TTL_DAYS,
+  CONTRIBUTION_REWARDS_ENABLED,
   DEFAULT_CREATOR_LIMIT,
   followersBandOf,
   KOL_AUDIT_CAPABILITY,
@@ -667,10 +668,21 @@ export class KolPublicService {
       channel: observation.channel,
       handle: observation.handle,
       followers: fresher ? observation.followers : (prev?.followers ?? observation.followers),
-      posts_30d: fresher ? observation.posts_30d : (prev?.posts_30d ?? observation.posts_30d),
-      engagement_rate: fresher
-        ? observation.engagement_rate
-        : (prev?.engagement_rate ?? observation.engagement_rate),
+      /*
+       * WP130：插件那条可以不带这两格。不带 = 卡上**留着原来的数**；一个从没见过的人
+       * 卡上只能先写 0（主表这两列是 NOT NULL，同 WP116 搬来的卡），但体检只在
+       * 观察里真有这个数时才拿它下判断（audit.ts），基准也跳过缺格的行（benchmarks.ts）。
+       */
+      posts_30d:
+        (fresher ? observation.posts_30d : undefined) ??
+        prev?.posts_30d ??
+        observation.posts_30d ??
+        0,
+      engagement_rate:
+        (fresher ? observation.engagement_rate : undefined) ??
+        prev?.engagement_rate ??
+        observation.engagement_rate ??
+        0,
       ...(language === undefined ? {} : { language }),
       ...(region === undefined ? {} : { region }),
       categories: mergeCategories(prev?.categories, observation.categories),
@@ -736,7 +748,8 @@ export class KolPublicService {
 
     const parsed = batch.map((one, index) => {
       try {
-        return parseObservation(one, at)
+        // WP130：插件来源这两格可缺（缺就不给，不补 0）；其余来源照旧必须给
+        return parseObservation(one, at, { metricsOptional: source === 'plugin' })
       } catch (err) {
         if (err instanceof KolError)
           throw new KolError(err.code, `第 ${index + 1} 条不合格：${err.message}`, {
@@ -772,7 +785,7 @@ export class KolPublicService {
     const rejected: { reason: string; count: number }[] = []
     if (duplicates > 0)
       rejected.push({
-        reason: `${OBSERVATION_DEDUPE_HOURS} 小时内报过同一个人，这些照样进库，但不算奖励`,
+        reason: `${OBSERVATION_DEDUPE_HOURS} 小时内报过同一个人，这些照样进库，只是不重复计数`,
         count: duplicates,
       })
     if (granted.capped > 0)
@@ -875,7 +888,7 @@ export class KolPublicService {
     const rejected: { reason: string; count: number }[] = []
     if (duplicates > 0)
       rejected.push({
-        reason: '同一条内容今天（UTC）已经有人报过，这些只刷新了数字，不算奖励',
+        reason: '同一条内容今天（UTC）已经有人报过，这些只刷新了数字，不重复计数',
         count: duplicates,
       })
     if (optedOut > 0)
@@ -966,7 +979,13 @@ export class KolPublicService {
     })
   }
 
-  /** 累计满 100 条发 1 积分；日封顶之外的留到明天（累计数只按真发的前进）。 */
+  /**
+   * 累计满 100 条发 1 积分；日封顶之外的留到明天（累计数只按真发的前进）。
+   *
+   * **09-23 Luoye 定：贡献不发积分**（{@link CONTRIBUTION_REWARDS_ENABLED} = false）——
+   * 累计有效条数照记（「贡献了什么」要看得见），发放整段关掉：不 topup、不占日封顶、
+   * 回执里没有「今天的奖励到顶了」这句话。
+   */
   private grantContribution(
     subject: ContributionSubject,
     counted: number,
@@ -975,6 +994,10 @@ export class KolPublicService {
   ): { credits: number; dailyRemaining: number; capped: number } {
     const life = this.deps.store.quota(subject.id, LIFETIME_DAY)
     const total = life.observations + counted
+    if (!CONTRIBUTION_REWARDS_ENABLED) {
+      this.deps.store.putQuota({ ...life, observations: total })
+      return { credits: 0, dailyRemaining: 0, capped: 0 }
+    }
     const earned = Math.floor(total / OBSERVATIONS_PER_CREDIT) - life.reward_credits
     const today = this.deps.store.quota(subject.id, day)
     const dailyRemaining = Math.max(0, MAX_DAILY_REWARD_CREDITS - today.reward_credits)
@@ -1052,10 +1075,12 @@ export class KolPublicService {
         received: 1,
         accepted: 0,
         credits_granted: 0,
-        daily_reward_remaining: Math.max(
-          0,
-          MAX_DAILY_REWARD_CREDITS - this.deps.store.quota(subject.id, day).reward_credits,
-        ),
+        daily_reward_remaining: CONTRIBUTION_REWARDS_ENABLED
+          ? Math.max(
+              0,
+              MAX_DAILY_REWARD_CREDITS - this.deps.store.quota(subject.id, day).reward_credits,
+            )
+          : 0,
         daily_quota_remaining: Math.max(
           0,
           MAX_PLUGIN_OBSERVATIONS_PER_DAY - this.deps.store.quota(subject.id, day).observations,
@@ -1068,8 +1093,13 @@ export class KolPublicService {
     this.storeContact(card, email, source, subject.workspace_id, at)
 
     const today = this.deps.store.quota(subject.id, day)
-    const dailyRemaining = Math.max(0, MAX_DAILY_REWARD_CREDITS - today.reward_credits)
-    const credits = Math.min(CONTACT_REWARD_CREDITS, dailyRemaining)
+    // 09-23 Luoye 定：回填联系方式也不发积分（CONTRIBUTION_REWARDS_ENABLED = false）
+    const dailyRemaining = CONTRIBUTION_REWARDS_ENABLED
+      ? Math.max(0, MAX_DAILY_REWARD_CREDITS - today.reward_credits)
+      : 0
+    const credits = CONTRIBUTION_REWARDS_ENABLED
+      ? Math.min(CONTACT_REWARD_CREDITS, dailyRemaining)
+      : 0
     if (credits > 0) {
       this.deps.store.putQuota({ ...today, reward_credits: today.reward_credits + credits })
       this.topupGranted(subject.org_id, credits, at)
@@ -1082,7 +1112,7 @@ export class KolPublicService {
       daily_reward_remaining: Math.max(0, dailyRemaining - credits),
       daily_quota_remaining: Math.max(0, MAX_PLUGIN_OBSERVATIONS_PER_DAY - today.observations),
       rejected:
-        credits === 0
+        CONTRIBUTION_REWARDS_ENABLED && credits === 0
           ? [{ reason: `今天的奖励到顶了（每天 ${MAX_DAILY_REWARD_CREDITS} 积分）`, count: 1 }]
           : [],
       at,
@@ -1149,7 +1179,16 @@ export class KolPublicService {
   }
 
   /** 手动加一条观察（登录态工作区那条路）。 */
-  contributeAs(principal: KolPrincipal, rawObservations: unknown): ContributionEvent {
+  contributeAs(
+    principal: KolPrincipal,
+    rawObservations: unknown,
+    /**
+     * WP130：`via: 'extension'` = 这批是本机服务转发的**浏览器插件观测**（登录态工作区
+     * 令牌代插件送）——来源记 `plugin`（与 WP129 内容观测同一口径），`posts_30d` /
+     * `engagement_rate` 可缺。不给就是工作区手填，照旧 `manual`、照旧必须给。
+     */
+    options: { via?: 'extension' } = {},
+  ): ContributionEvent {
     return this.contribute(
       {
         id: `ws:${principal.workspace_id}`,
@@ -1158,7 +1197,7 @@ export class KolPublicService {
         kind: 'workspace',
       },
       rawObservations,
-      'manual',
+      options.via === 'extension' ? 'plugin' : 'manual',
     )
   }
 }

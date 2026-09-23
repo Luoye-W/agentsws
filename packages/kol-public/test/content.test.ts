@@ -3,9 +3,9 @@
  *
  * 钉住五件事：
  * 1. 窄行：白名单外的键（评论文本 / 页面地址 / 备注）整批拒，一条都不落；
- * 2. 幂等：渠道 + external_id + observed_at 的 UTC 日 = 一条；桶内重复只刷新数字、不算奖励；
+ * 2. 幂等：渠道 + external_id + observed_at 的 UTC 日 = 一条；桶内重复只刷新数字、不重复计数；
  * 3. 旧观测（离线队列补传）不把新数盖回去，但会补上库里空着的格子；
- * 4. 贡献返额度与红人观测同一口径（日配额合算、每 100 条有效 1 积分、`granted` 类）；
+ * 4. 日配额与红人观测合算；贡献**不发积分**（09-23 Luoye 定，WP130 改；原来是每 100 条有效 1 积分）；
  * 5. 两份库（内存 / sqlite）行为一致，含标识旁表与移除时一起删。
  *
  * 全部替身，不联网。
@@ -134,7 +134,7 @@ describe('WP129 内容观测：落库与幂等', () => {
     expect(h.store.contentMetricOnDay('youtube', 'dQw4w9WgXcQ', '2026-09-14')).toBe(true)
   })
 
-  it('同一条内容同一个 UTC 日：只算一条（不算奖励），但卡上的数刷新', async () => {
+  it('同一条内容同一个 UTC 日：只算一条（不重复计数），但卡上的数刷新', async () => {
     const h = harness()
     await h.call(PATH, { method: 'POST', body: { observations: [content()] } })
     const again = await h.call(PATH, {
@@ -149,7 +149,7 @@ describe('WP129 内容观测：落库与幂等', () => {
     }
     expect(event.accepted).toBe(0)
     expect(event.rejected[0]?.count).toBe(1)
-    expect(event.rejected[0]?.reason).toContain('不算奖励')
+    expect(event.rejected[0]?.reason).toContain('不重复计数')
     expect(h.store.content('youtube', 'dQw4w9WgXcQ')?.views).toBe(15_000)
 
     // 同一批里两次也一样
@@ -205,15 +205,17 @@ describe('WP129 内容观测：落库与幂等', () => {
   })
 })
 
-describe('WP129 内容观测：贡献返额度（口径同红人观测）', () => {
-  it(`每 ${OBSERVATIONS_PER_CREDIT} 条有效内容观测发 1 积分（granted 类）`, async () => {
+describe('WP129 内容观测：贡献（09-23 起不发积分）', () => {
+  it(`${OBSERVATIONS_PER_CREDIT} 条有效内容观测：一分不发（09-23 Luoye 定），有效条数照算`, async () => {
     const h = harness()
     const batch = Array.from({ length: OBSERVATIONS_PER_CREDIT }, (_, i) =>
       content({ external_id: `vid${i}` }),
     )
     const res = await h.call(PATH, { method: 'POST', body: { observations: batch } })
-    expect((res.body.data as { credits_granted: number }).credits_granted).toBe(1)
-    expect(h.wallet.balance('org_1').available).toBe(1)
+    const data = res.body.data as { credits_granted: number; accepted: number }
+    expect(data.credits_granted).toBe(0)
+    expect(data.accepted).toBe(OBSERVATIONS_PER_CREDIT)
+    expect(h.wallet.balance('org_1').available).toBe(0)
   })
 
   it('日配额与红人观测合算', async () => {

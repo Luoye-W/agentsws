@@ -255,7 +255,9 @@ export function mountKolPublicRoutes(app: Hono<KolEnv>, deps: KolRouteDeps): Hon
           ? { ...(one as Record<string, unknown>), channel: key.channel, handle: key.handle }
           : one,
       )
-      return json(deps.service.contributeAs(c.get('kol_principal'), observations), 201)
+      // WP130：本机服务转发插件观测时带 `via: 'extension'`（来源记 plugin、两格可缺）
+      const via = body.via === 'extension' ? ({ via: 'extension' } as const) : {}
+      return json(deps.service.contributeAs(c.get('kol_principal'), observations, via), 201)
     }),
   )
 

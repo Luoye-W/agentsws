@@ -249,50 +249,51 @@ describe('WP61 贡献奖励风控', () => {
     expect(later.accepted).toBe(1)
   })
 
-  it('每 100 条有效观察换 1 积分（送的那一类，90 天到期）', () => {
+  /*
+   * 09-23 Luoye 定（WP130）：**贡献不发积分**——原来这里钉的是「每 100 条有效观察
+   * 换 1 积分」「单日封顶 5 积分」，现在钉的是「一分不发，但贡献了什么照记」。
+   */
+  it('100 条有效观察：一分不发（09-23 Luoye 定），累计有效条数照记', () => {
     const h = harness()
     const observations = Array.from({ length: OBSERVATIONS_PER_CREDIT }, (_, i) =>
       observation({ handle: `creator${String(i)}` }),
     )
     const event = h.service.contributeAs(principal, observations)
     expect(event.accepted).toBe(OBSERVATIONS_PER_CREDIT)
-    expect(event.credits_granted).toBe(1)
+    expect(event.credits_granted).toBe(0)
+    expect(event.daily_reward_remaining).toBe(0)
+    expect(event.rejected).toEqual([])
     const balance = h.wallet.balance('org_1')
-    expect(balance.granted).toBe(1)
-    expect(balance.purchased).toBe(0)
-    // 送的那一类有期限（90 天到期清零）
-    expect(balance.expiring).toHaveLength(1)
+    expect(balance.granted).toBe(0)
+    expect(balance.expiring).toHaveLength(0)
+    // 「贡献了什么」照记：终身累计数前进了
+    expect(h.store.quota('ws:ws_1', 'lifetime').observations).toBe(OBSERVATIONS_PER_CREDIT)
   })
 
-  it('单日奖励封顶 5 积分，封顶之外的明天接着拿', async () => {
+  it('联系方式回填 + 大批观察：钱包里一笔送的额度都没有，回执里也没有「到顶」这句话', async () => {
     const h = harness()
     seed(h, MAX_DAILY_REWARD_CREDITS)
-    // 五条联系方式回填 = 5 积分，今天的奖励到顶
     for (let i = 0; i < MAX_DAILY_REWARD_CREDITS; i += 1) {
       const res = await h.call(`/v1/data/kol/creators/youtube/creator${String(i)}/contact`, {
         method: 'POST',
         body: { email: `c${String(i)}@creator.com` },
       })
-      expect((res.body.data as { credits_granted: number }).credits_granted).toBe(1)
+      const data = res.body.data as {
+        credits_granted: number
+        accepted: number
+        rejected: unknown[]
+      }
+      expect(data.credits_granted).toBe(0)
+      expect(data.accepted).toBe(1)
+      expect(data.rejected).toEqual([])
     }
-    expect(h.wallet.balance('org_1').granted).toBe(MAX_DAILY_REWARD_CREDITS)
-
-    // 再报满 100 条有效观察：该得 1 积分，但今天到顶了 —— 记着，不发
     const observations = Array.from({ length: OBSERVATIONS_PER_CREDIT }, (_, i) =>
       observation({ handle: `late${String(i)}` }),
     )
-    const capped = h.service.contributeAs(principal, observations)
-    expect(capped.credits_granted).toBe(0)
-    expect(capped.daily_reward_remaining).toBe(0)
-    expect(capped.rejected.some((r) => r.reason.includes('到顶'))).toBe(true)
-    expect(h.wallet.balance('org_1').granted).toBe(MAX_DAILY_REWARD_CREDITS)
-
-    // 第二天：昨天没发出去的那 1 积分还在（累计数只按真发的前进）
-    h.clock.advance(24 * 60 * 60 * 1000)
-    const next = h.service.contributeAs(principal, [
-      observation({ handle: 'tomorrow', observed_at: h.clock.now() }),
-    ])
-    expect(next.credits_granted).toBe(1)
+    const event = h.service.contributeAs(principal, observations)
+    expect(event.credits_granted).toBe(0)
+    expect(event.rejected.some((r) => r.reason.includes('到顶'))).toBe(false)
+    expect(h.wallet.balance('org_1').granted).toBe(0)
   })
 })
 
@@ -450,7 +451,7 @@ describe('WP61 邮箱与争议', () => {
     expect(JSON.stringify(creators)).not.toContain('hi@creator.com')
   })
 
-  it('同一条联系方式回填第二次不再发奖励', async () => {
+  it('同一条联系方式回填第二次不再收录（09-23 起两次都不发积分）', async () => {
     const h = harness()
     h.service.contributeAs(
       {
@@ -470,8 +471,11 @@ describe('WP61 邮箱与争议', () => {
       method: 'POST',
       body: { email: 'HI@creator.com' },
     })
-    expect((first.body.data as { credits_granted: number }).credits_granted).toBe(1)
+    // 09-23 起贡献不发积分：两次都是 0；区别在第二次「库里已经有了」、不算收录
+    expect((first.body.data as { credits_granted: number }).credits_granted).toBe(0)
+    expect((first.body.data as { accepted: number }).accepted).toBe(1)
     expect((second.body.data as { credits_granted: number }).credits_granted).toBe(0)
+    expect((second.body.data as { accepted: number }).accepted).toBe(0)
   })
 
   it('争议只记不裁：数据不动，状态是 open', async () => {

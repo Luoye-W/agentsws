@@ -64,7 +64,7 @@ import type { SecretStore } from './secret-store.js'
  * 往公共红人库转发的那一跳。
  *
  * 形状刻意**只有两个方法**：连着没有、送一批。它既不读库、也不花积分——
- * 贡献与奖励照旧免费（49 M4，WP126 口径③保留）；官方侧的浏览 / reveal 计费改造不经插件这条路。
+ * 贡献照旧免费（49 M4）；09-23 Luoye 定起**贡献不发积分**（WP130，`rewarded` 恒为 false）；官方侧的浏览 / reveal 计费改造不经插件这条路。
  *
  * WP119c 在它身上**只加**了三个可选方法（reveal / 贡献 / 争议）：完整版面板的
  * 完整版面板的联系方式卡要经本机代理云端公共库。老装配（不给这三个方法）不红——那三条
@@ -122,6 +122,12 @@ export interface PublicObservationRow {
   /** 页面上原样那串。**不送解析出来的数** —— 解析错一条就污染所有人的库。 */
   followers_text?: string | undefined
   followers?: number | undefined
+  /**
+   * WP130：近 30 天发布数 / 互动率。**本机有值就送、没有就不送**——插件在页面上
+   * 看不到这两个数，云端对插件来源这两格可缺（缺的行不进 k-匿名基准）。
+   */
+  posts_30d?: number | undefined
+  engagement_rate?: number | undefined
   observed_at: string
   /** 公开的商务邮箱与它的来源页（用户显式收下过才有）。 */
   contact?: { value: string; source?: string | undefined } | undefined
@@ -222,6 +228,14 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       )
   }
 
+  /** WP130：一次观测的来源那几格（`ExtensionObservation` / 显式存入都可能带）。 */
+  type ListSource = {
+    source?: 'channel_page' | 'content_page' | 'search_results' | 'manual_save' | undefined
+    source_page?: 'search' | 'watch_related' | 'hashtag' | undefined
+    source_query?: string | undefined
+    relevance_score?: number | undefined
+  }
+
   /**
    * 找到或新建「这条渠道上的这个 handle」。
    *
@@ -232,18 +246,20 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
    * 删）——粉丝趋势与 snapshot_count 从它算；在那之前库里只有「最后一次看到的
    * 数」，趋势无从谈起。
    */
-  function upsert(one: {
-    channel: KolChannel
-    handle: string
-    external_id?: string | undefined
-    display_name?: string | undefined
-    url?: string | undefined
-    avatar_url?: string | undefined
-    followers?: number | undefined
-    followers_text?: string | undefined
-    country?: string | undefined
-    observed_at: string
-  }): { creator: Creator; account: PlatformAccount } {
+  function upsert(
+    one: {
+      channel: KolChannel
+      handle: string
+      external_id?: string | undefined
+      display_name?: string | undefined
+      url?: string | undefined
+      avatar_url?: string | undefined
+      followers?: number | undefined
+      followers_text?: string | undefined
+      country?: string | undefined
+      observed_at: string
+    } & ListSource,
+  ): { creator: Creator; account: PlatformAccount } {
     const key = normalizeHandle(one.handle)
     const existing = options.kol
       .accounts({ channel: one.channel })
@@ -304,7 +320,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       followers?: number | undefined
       followers_text?: string | undefined
       observed_at: string
-    },
+    } & ListSource,
   ): void {
     const row: KolAccountObservation = {
       id: nextId('ao'),
@@ -315,6 +331,11 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       ...(one.followers === undefined ? {} : { followers: one.followers }),
       ...(one.followers_text === undefined ? {} : { followers_text: one.followers_text }),
       observed_at: one.observed_at,
+      // WP130：这一刻是从哪儿看到的（列表页那三格只在批量采集时有）。只记本机，不出去。
+      ...(one.source === undefined ? {} : { source: one.source }),
+      ...(one.source_page === undefined ? {} : { source_page: one.source_page }),
+      ...(one.source_query === undefined ? {} : { source_query: one.source_query }),
+      ...(one.relevance_score === undefined ? {} : { relevance_score: one.relevance_score }),
     }
     options.kol.saveAccountObservation(row)
   }
@@ -478,7 +499,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         const before = options.kol
           .accounts({ channel: one.channel })
           .some((a) => normalizeHandle(a.handle) === normalizeHandle(one.handle))
-        const { creator } = upsert(one)
+        const { creator, account } = upsert(one)
         const contactNote = saveContact(creator.id, one)
         rows.push({
           handle: one.handle,
@@ -487,11 +508,24 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
           creator_id: creator.id,
           ...(contactNote === undefined ? {} : { reason: contactNote }),
         })
+        /*
+         * WP130：云端收不下的行不送，回执里的「共享了几条」才是真话——
+         * ① 公共库以 handle 为键：认不出 handle（只有 YouTube 频道 id `UC…`）不送
+         *    （与 WP129 内容观测同一条规矩）；
+         * ② 公共库的卡要粉丝数：列表页批量采集只有页面原文（`followers_text`），
+         *    本机不替它解析，于是这种行只进本机、不上云。
+         */
+        const bare = normalizeHandle(one.handle)
+        if (one.channel === 'youtube' && /^uc[a-z0-9_-]{22}$/.test(bare)) continue
+        if (one.followers === undefined) continue
         forwardable.push({
           channel: one.channel,
           handle: one.handle,
           ...(one.followers_text === undefined ? {} : { followers_text: one.followers_text }),
           ...(one.followers === undefined ? {} : { followers: one.followers }),
+          ...(account.engagement_rate === undefined
+            ? {}
+            : { engagement_rate: account.engagement_rate }),
           observed_at: one.observed_at,
           ...(one.contact === undefined || one.contact.kind !== 'email'
             ? {}

@@ -747,7 +747,34 @@ interface CreatorSqlRow {
   x_imported_from?: string | null
 }
 
+/**
+ * WP130：插件那条观察可以不带 `posts_30d` / `engagement_rate`。
+ *
+ * 主表那两列是 NOT NULL，而官方托管形态下**不 ALTER 老表**（见 SCHEMA_IMPORT 头注释：
+ * 迁移在 Durable Object 第一次唤醒时跑，`CREATE … IF NOT EXISTS` 才重跑安全）。
+ * 于是缺的那格在主表里垫 0，**真相住在这张旁表**：读观察一律 LEFT JOIN 它，
+ * 垫的 0 读回来是「没有这一格」——出了这个文件，谁也看不到那个 0。
+ */
+const SCHEMA_WP130 = `
+CREATE TABLE IF NOT EXISTS kol_observation_gaps (
+  id                 TEXT PRIMARY KEY,
+  posts_30d_missing  INTEGER NOT NULL DEFAULT 0,
+  engagement_missing INTEGER NOT NULL DEFAULT 0
+);
+`
+
+/** 读观察的那一句（带上缺格旁表）。WHERE 里的列一律写 `o.`。 */
+const OBSERVATION_SELECT = `
+  SELECT o.*,
+         g.posts_30d_missing  AS g_posts_missing,
+         g.engagement_missing AS g_engagement_missing
+    FROM kol_observations o
+    LEFT JOIN kol_observation_gaps g ON g.id = o.id`
+
 interface ObservationSqlRow {
+  /* ↓ LEFT JOIN kol_observation_gaps（WP130；没有旁表行时是 null = 两格都在）。 */
+  g_posts_missing?: number | null
+  g_engagement_missing?: number | null
   id: string
   channel: string
   handle: string
@@ -947,8 +974,9 @@ function toObservation(row: ObservationSqlRow): ObservationRow {
     subject: row.subject,
     source: row.source as KolObservationSource,
     followers: row.followers,
-    posts_30d: row.posts_30d,
-    engagement_rate: row.engagement_rate,
+    // WP130：旁表说缺，就是缺——主表里那个垫的 0 不往外给
+    ...(row.g_posts_missing === 1 ? {} : { posts_30d: row.posts_30d }),
+    ...(row.g_engagement_missing === 1 ? {} : { engagement_rate: row.engagement_rate }),
     ...(row.language === null ? {} : { language: row.language }),
     ...(row.region === null ? {} : { region: row.region }),
     categories: parseCategories(row.categories),
@@ -988,6 +1016,8 @@ export class SqliteKolStore implements KolStore, KolLibraryStore, KolContentStor
     this.db.exec(SCHEMA)
     // WP116 那一批（全是 CREATE … IF NOT EXISTS，重跑安全 —— 见 SCHEMA_IMPORT 头注释）
     this.db.exec(SCHEMA_IMPORT)
+    // WP130：观察缺格旁表（同样只 CREATE IF NOT EXISTS）
+    this.db.exec(SCHEMA_WP130)
   }
 
   creator(channel: KolChannel, handle: string): CreatorRow | undefined {
@@ -1091,8 +1121,9 @@ export class SqliteKolStore implements KolStore, KolLibraryStore, KolContentStor
         row.subject,
         row.source,
         row.followers,
-        row.posts_30d,
-        row.engagement_rate,
+        // WP130：缺格垫 0，真相记进旁表（见 SCHEMA_WP130）
+        row.posts_30d ?? 0,
+        row.engagement_rate ?? 0,
         row.language ?? null,
         row.region ?? null,
         JSON.stringify(row.categories ?? []),
@@ -1101,11 +1132,18 @@ export class SqliteKolStore implements KolStore, KolLibraryStore, KolContentStor
         row.at,
         row.counted ? 1 : 0,
       )
+    if (row.posts_30d === undefined || row.engagement_rate === undefined)
+      this.db
+        .prepare(
+          `INSERT OR REPLACE INTO kol_observation_gaps (id, posts_30d_missing, engagement_missing)
+           VALUES (?, ?, ?)`,
+        )
+        .run(row.id, row.posts_30d === undefined ? 1 : 0, row.engagement_rate === undefined ? 1 : 0)
   }
 
   observationsOf(channel: KolChannel, handle: string): ObservationRow[] {
     const rows = this.db
-      .prepare('SELECT * FROM kol_observations WHERE channel = ? AND handle = ? ORDER BY at ASC')
+      .prepare(`${OBSERVATION_SELECT} WHERE o.channel = ? AND o.handle = ? ORDER BY o.at ASC`)
       .all(channel, handle) as ObservationSqlRow[]
     return rows.map(toObservation)
   }
@@ -1123,11 +1161,11 @@ export class SqliteKolStore implements KolStore, KolLibraryStore, KolContentStor
     const rows =
       filter.category === 'any'
         ? (this.db
-            .prepare('SELECT * FROM kol_observations WHERE channel = ? AND followers_band = ?')
+            .prepare(`${OBSERVATION_SELECT} WHERE o.channel = ? AND o.followers_band = ?`)
             .all(filter.channel, filter.followers_band) as ObservationSqlRow[])
         : (this.db
             .prepare(
-              'SELECT * FROM kol_observations WHERE channel = ? AND followers_band = ? AND lower(categories) LIKE ?',
+              `${OBSERVATION_SELECT} WHERE o.channel = ? AND o.followers_band = ? AND lower(o.categories) LIKE ?`,
             )
             .all(
               filter.channel,
@@ -1644,6 +1682,11 @@ export class SqliteKolStore implements KolStore, KolLibraryStore, KolContentStor
       ['kol_content_flags', 'channel = ? AND handle = ?'],
       ['kol_contents', 'channel = ? AND handle = ?'],
       ['kol_metric_snapshots', 'channel = ? AND handle = ?'],
+      // WP130：缺格旁表按观察 id 挂着，先于主表删
+      [
+        'kol_observation_gaps',
+        'id IN (SELECT id FROM kol_observations WHERE channel = ? AND handle = ?)',
+      ],
       ['kol_observations', 'channel = ? AND handle = ?'],
       ['kol_disputes', 'channel = ? AND handle = ?'],
       ['kol_creator_extra', 'channel = ? AND handle = ?'],

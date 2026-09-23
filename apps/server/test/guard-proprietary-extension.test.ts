@@ -31,6 +31,9 @@ const FORBIDDEN = [
   'useProductDetails',
   'kolagents.com',
   'influencer-api',
+  // WP130：列表页批量采集那一批（完整版插件私有仓里的文件 / 函数名）
+  'SearchCaptureFab',
+  'collectSocialListCreators',
 ]
 
 function walk(dir: string, out: string[] = []): string[] {
