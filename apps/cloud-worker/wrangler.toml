@@ -64,7 +64,7 @@ class_name = "ChatRelayDO"
 
 # WP128：客服增值服务的托管实例——每个订阅的工作区一个（idFromName(workspace)）。
 # 这个类同时出现在下面的 `[[containers]]` 里：运行时给它的 ctx.container 就是那个容器，
-# 容器里跑同一份 apps/server（docs/74 §5、docs/64 §11）。
+# 容器里跑同一份 apps/server（docs/74 §5、docs/64 §13）。
 [[durable_objects.bindings]]
 name = "HOSTED_INSTANCE"
 class_name = "HostedInstanceDO"
@@ -95,14 +95,16 @@ new_sqlite_classes = ["ChatRelayDO"]
 tag = "v6"
 new_sqlite_classes = ["HostedInstanceDO"]
 
-# ── 容器（WP128 / docs/64 §11） ────────────────────────────────────────
+# ── 容器（WP128 / docs/64 §13） ────────────────────────────────────────
 # `wrangler deploy` 会就地 build `deploy/Dockerfile.hosted` 并推到 Cloudflare 自己的
 # 镜像仓库（要本机有 Docker）。镜像里没有任何工作区号与密钥。
 #
 # - instance_type = "basic"（1/4 vCPU、1 GiB 内存、4 GB 盘；镜像上限 = 盘）：
-#   apps/server + better-sqlite3 的常驻内存摸过 lite 的 256 MiB 上沿，OOM 就是聊天窗
-#   掉线，所以先上 basic。费用见 docs/64 §11：常驻一个月约 $8.5，**比 30 积分贵**，
-#   那一条要 Luoye 定（报告第 3 节）。改这里要同步改 [vars] 的 AGENTSWS_HOSTED_INSTANCE_TYPE。
+#   apps/server 空闲时本机实测约 75 MB（WP128 报告），但跑话轮、推快照（VACUUM INTO +
+#   打 zip）时会涨，lite 的 256 MiB 余量太薄——OOM 就是聊天窗掉线，所以先上 basic。
+#   费用见 docs/64 §13：basic 常驻一个月约 $8.5，**比 30 积分（约 $4.2）贵**；lite 约
+#   $2.3。选哪档要 Luoye 定（报告第 3 节）。改这里要同步改 [vars] 的
+#   AGENTSWS_HOSTED_INSTANCE_TYPE。
 # - max_instances：同时最多几个容器 = 最多几个订阅的工作区（每个一个）。内测 50 够；
 #   到顶后新订阅的工作区起不来容器（状态里如实写），先调大这个数再说共享版。
 [[containers]]
@@ -114,7 +116,7 @@ max_instances = 50
 
 # ── 快照桶（WP128） ────────────────────────────────────────────────────
 # 容器的盘是临时的，工作区包每 6 小时推一份进来；停容器后留 30 天。
-# 桶要先建一次：`wrangler r2 bucket create agentsws-hosted-snapshots`（docs/64 §11）。
+# 桶要先建一次：`wrangler r2 bucket create agentsws-hosted-snapshots`（docs/64 §13）。
 [[r2_buckets]]
 binding = "HOSTED_SNAPSHOTS"
 bucket_name = "agentsws-hosted-snapshots"

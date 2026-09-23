@@ -3,7 +3,7 @@
  *
  * 来源：https://developers.cloudflare.com/containers/pricing/ 与
  * https://developers.cloudflare.com/containers/platform-details/limits/ ，
- * 2026-09-23 用 WebFetch 读的现行版本（docs/64 §11 的上游评估一节原样记着）。
+ * 2026-09-23 用 WebFetch 读的现行版本（docs/64 §13 的上游评估一节原样记着）。
  *
  * 三条口径要记住，估算全靠它们：
  *

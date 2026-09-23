@@ -1,5 +1,5 @@
 /**
- * `@agentsws/hosted` —— 客服增值服务的托管实例（WP128 / docs/64 §11 / docs/74 §5）。
+ * `@agentsws/hosted` —— 客服增值服务的托管实例（WP128 / docs/64 §13 / docs/74 §5）。
  *
  * 纯逻辑，不起服务：生命周期判定、容器环境变量契约、托管令牌、费用估算。
  * 住在 Cloudflare Containers 上的那个对象在 `apps/cloud-worker/src/hosted-instance-do.ts`，

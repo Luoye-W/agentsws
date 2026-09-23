@@ -1,4 +1,4 @@
-# 客服增值服务的**托管实例**镜像（WP128 / docs/64 §11）：Cloudflare Containers 上跑的
+# 客服增值服务的**托管实例**镜像（WP128 / docs/64 §13）：Cloudflare Containers 上跑的
 # 那一份 `apps/server`。`apps/cloud-worker/wrangler.toml` 的 `[[containers]]` 指向这里，
 # `wrangler deploy` 会自己 build + push（推到 Cloudflare 自己的镜像仓库，不用 Docker Hub）。
 #
@@ -8,7 +8,7 @@
 # - `deploy/Dockerfile.cloud`：Compose 形态的云侧（`apps/cloud`）；
 # - 这一个：**只有服务进程**——托管实例没有人会打开它的工作台（商家用自己电脑上
 #   那一份），所以不建工作台、不带 Vite 产物，镜像小一截（镜像上限 = 规格的盘，
-#   basic 是 4 GB，见 docs/64 §11）。
+#   basic 是 4 GB，见 docs/64 §13）。
 #
 # 做法照抄根 Dockerfile 的三条（理由也一样，别改）：两个阶段都不跑 apt；用
 # `pnpm deploy` 而不是 `prune --prod`；不用 root 跑。再加三条这个镜像特有的：

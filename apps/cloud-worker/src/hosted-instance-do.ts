@@ -12,12 +12,12 @@
  * 的一层包装（start / getTcpPort / monitor / destroy + 一个 alarm 保活回路），
  * 所以这里直接用 `ctx.container`，把「保活回路」写成我们自己的 alarm：
  * 同一个底座，少一个 npm 依赖，也不和我们自己的 alarm（快照保留、心跳）抢那一个闹钟。
- * 偏离写在 docs/64 §11 与 WP128 报告里。
+ * 偏离写在 docs/64 §13 与 WP128 报告里。
  *
  * 常驻怎么做：官方没有「永不休眠」的开关（`sleepAfter` 只是「多久没请求就停」，
  * 且那是 `Container` 类里的 JS 逻辑，不是平台开关）。这里的 alarm 每 3 分钟醒一次：
  * 打一次容器的 `/v1/health`（= 心跳，也是一次真实活动），没在跑就拉起来，连续三次
- * 不应就重起。费用照「整月常驻」估（docs/64 §11 的费用一节）。
+ * 不应就重起。费用照「整月常驻」估（docs/64 §13 的费用一节）。
  *
  * 数据：容器的盘是临时的（官方：「All disk is ephemeral」），所以容器里的
  * `apps/server` 每 6 小时、以及收到 SIGTERM 时，把工作区包（WP36 的导出格式）
@@ -73,7 +73,7 @@ export const SNAPSHOT_SOURCE_HEADER = 'X-Agentsws-Snapshot-Source'
 /** 停容器时先发 SIGTERM（让 `apps/server` 推最后一份快照），过这么久还在就强停。 */
 export const STOP_GRACE_MS = 60_000
 
-/** 容器规格的缺省：basic（1/4 vCPU、1 GiB、4 GB 盘）。理由见 docs/64 §11。 */
+/** 容器规格的缺省：basic（1/4 vCPU、1 GiB、4 GB 盘）。理由见 docs/64 §13。 */
 export const DEFAULT_INSTANCE_TYPE: HostedInstanceType = 'basic'
 
 /**

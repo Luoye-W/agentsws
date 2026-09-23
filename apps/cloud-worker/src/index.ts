@@ -260,7 +260,7 @@ export class ChatRelayDO {
 }
 
 /**
- * 客服增值服务的托管实例（**每个订阅的工作区一个**，WP128 / docs/64 §11）。
+ * 客服增值服务的托管实例（**每个订阅的工作区一个**，WP128 / docs/64 §13）。
  *
  * `wrangler.toml` 的 `[[containers]]` 认的就是这个类：运行时给它的 `ctx.container`
  * 里是一个 Cloudflare Container，容器里跑同一份 `apps/server`。

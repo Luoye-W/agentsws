@@ -14,7 +14,7 @@
  * `sleepAfter` 只是「多久没请求就停」，没有上限值也没有 `Infinity` 的说法）。
  * 所以 `HostedInstanceDO` 自己的 alarm 每 {@link HOSTED_KEEPALIVE_MS} 醒一次：
  * 打一次容器里 `apps/server` 的 `/v1/health`（这一下既是心跳，也让平台看到有活动），
- * 容器没在跑就拉起来。见 docs/64 §11 的偏离说明。
+ * 容器没在跑就拉起来。见 docs/64 §13 的偏离说明。
  */
 import type { SubscriptionStatus } from '@agentsws/contracts'
 

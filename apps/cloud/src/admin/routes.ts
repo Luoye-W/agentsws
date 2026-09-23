@@ -1751,7 +1751,7 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
     ),
   )
 
-  /* ── 客服增值服务（WP128 / docs/64 §11）────────────────────────────── */
+  /* ── 客服增值服务（WP128 / docs/64 §13）────────────────────────────── */
 
   routes.push(
     cloudRoute(
