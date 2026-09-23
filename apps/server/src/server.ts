@@ -193,6 +193,12 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
+import {
+  ensureCloudModelDefault,
+  hostedModeOf,
+  hostedTargetOf,
+  seedHostedSecrets,
+} from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
 import { createJoin, type JoinAssembly } from './join.js'
@@ -225,7 +231,7 @@ import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
-import { createModels, type ModelsAssembly, STUB_REF } from './models.js'
+import { createModels, type ModelsAssembly, STUB_REF, templatesFor } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
@@ -861,6 +867,8 @@ function mountEventStream(input: {
 
 export async function createServer(options: ServerOptions = {}): Promise<Server> {
   const env = options.env ?? process.env
+  // WP128：是不是托管实例（Cloudflare Container 里那一份）；开了开关缺配置就在这里抛
+  const hostedBoot = hostedModeOf(env)
   const clock: Clock = options.clock ?? { now: () => new Date().toISOString() }
   const random = options.random ?? seededRandom(Date.parse(clock.now()) % 2147483647)
   const dbDir = options.dbDir
@@ -1456,6 +1464,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (dir !== undefined) mkdirSync(dir, { recursive: true })
     // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
     const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
+    // WP128：托管实例——接托管的那个品牌种上托管令牌与转发器配对、默认模型换成云
+    // （两件事都在 createModels / 转发器客户端读之前做完，它们一行不用改）
+    if (
+      hostedBoot !== undefined &&
+      ws === hostedTargetOf(hostedBoot, workspace.id, brandsOfThisOrg())
+    ) {
+      seedHostedSecrets(brandSecrets, hostedBoot)
+      const cloudTemplate = templatesFor(env).find((t) => t.kind === 'agentsws_cloud')
+      if (dir !== undefined && cloudTemplate !== undefined)
+        ensureCloudModelDefault(dir, hostedBoot, {
+          label: cloudTemplate.label,
+          model: cloudTemplate.default_model,
+          region: cloudTemplate.region,
+        })
+    }
 
     // WP20 连接面：`/v1/connections/*` 与工作台数据源共用同一份连接状态
     const connections = await createConnections({
@@ -2509,6 +2532,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       endpoint: () => relaySecret('endpoint'),
       pairingToken: () => relaySecret('pairing_token'),
       messageKey: () => relaySecret('message_key'),
+      // WP128：托管实例以 `hosted` 的身份外连（转发器优先转给它）
+      ...(hostedBoot === undefined ? {} : { peer: 'hosted' as const }),
       onOfflineMessage: (message) => {
         storeOfflineMessage(message)
       },
@@ -2691,6 +2716,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const brandModules: BrandModules = brands
   /** bootstrap 品牌那一套：进程自己要用的那几处（会议 ASR、秘书、问 AI）取它。 */
   const boot = await brandModules.forWorkspace(workspace.id)
+  // WP128：托管的是这家公司的另一个品牌时，品牌那一套是懒装配的——现在就装上，
+  // 转发器客户端才会起来外连（不然要等第一条请求进来，而托管实例上不会有请求）
+  if (hostedBoot !== undefined) {
+    const target = hostedTargetOf(hostedBoot, workspace.id, brandsOfThisOrg())
+    if (target !== workspace.id) await brandModules.forWorkspace(target)
+  }
   const models = boot.ownGateway
 
   // 37 §4：会议内核。ASR 走同一个模型网关（没装 ASR provider 时管线出系统卡，不炸）；

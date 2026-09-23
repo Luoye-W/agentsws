@@ -354,6 +354,9 @@ importers:
       '@agentsws/dsh-adapter':
         specifier: workspace:*
         version: link:../../packages/dsh-adapter
+      '@agentsws/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
