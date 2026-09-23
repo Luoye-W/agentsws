@@ -94,6 +94,12 @@ export const FREE_CREDITS = 0
  */
 export const SEARCH_IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000
 
+/**
+ * 体检报告样本不够时接在 `note` 后面的那句话（WP129）。界面直接显示 `note`，
+ * 所以"这次不收"是报告自己说的，不靠每个界面各写一遍。
+ */
+export const AUDIT_NOT_CHARGED_NOTE = '样本不够，这次不收。'
+
 export interface BrowseResult {
   creators: PublicCreatorCard[]
   /** 这一次扣了多少积分（命中缓存与未命中同价；窗口内重复搜索为 0）。 */
@@ -388,45 +394,49 @@ export class KolPublicService {
   /**
    * 体检报告（WP126 起**付费**，`data.kol.audit`，3 积分 / 次）。
    *
-   * 查无此人 → 预扣整笔释放，不收钱（`cardOrThrow` 在 `charge` 的 run 里抛）。
-   * 样本不够但人确实存在：报告照样出（里面明说样本不够），钱照收——
-   * 收钱换来的是"对这个人的真实体检"，样本少本身就是体检结论的一部分。
+   * 两种情况不收钱（预扣释放；Workers 形态下入口那一笔由 `apply` 兜底释放）：
+   * - 查无此人（`cardOrThrow` 抛）；
+   * - **样本不够、只能给部分结论**（WP129，与「0 条不收钱」同一口径）：报告照出，
+   *   里面明说样本不够，`credits` 为 0，`note` 末尾写「样本不够，这次不收。」。
+   *   收钱换来的应该是一份完整的体检；只剩"最近一次看到的资料本身"那一份，
+   *   说不过去。
+   *
+   * 基准桶不够 k（分位那一格缺）**不算**这一档：粉丝真实度是这个人自己的样本
+   * 算出来的完整结论，缺的是"和别人比"——报告里已经说清楚了。
    */
   audit(principal: KolPrincipal, key: { channel: KolChannel; handle: string }): AuditReport {
-    const at = this.deps.now()
-    const { value, credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () => {
-      const card = this.cardOrThrow(key.channel, key.handle)
-      return buildAudit({
-        card,
-        observations: this.deps.store.observationsOf(card.channel, card.handle),
-        benchmark: this.benchmarkFor(card, at),
-        at,
-        depth: 'basic',
-      })
-    })
-    return { ...value, credits }
+    return this.chargedAudit(principal, key, 'basic')
   }
 
   /**
-   * 付费深度体检（`data.kol.audit`，与免费那份同价——WP126 之后只有这一档价，
+   * 付费深度体检（`data.kol.audit`，与 basic 同价——WP126 之后只有这一档价，
    * `depth` 标 `deep` 但里面的判断与 basic 同源。真的深度分析（评论真实性抽样、
    * 受众画像、跨渠道对照）留给后续 WP —— 收了钱就要说清楚现在买到的是什么，
-   * 报告里的 `note` 会写明。
+   * 报告里的 `note` 会写明。样本不够同样不收（见 {@link audit}）。
    */
   deepAudit(principal: KolPrincipal, key: { channel: KolChannel; handle: string }): AuditReport {
+    return this.chargedAudit(principal, key, 'deep')
+  }
+
+  /** 两档体检共用：先出报告（库内计算，不碰外部源），够格才收钱。 */
+  private chargedAudit(
+    principal: KolPrincipal,
+    key: { channel: KolChannel; handle: string },
+    depth: 'basic' | 'deep',
+  ): AuditReport {
     const at = this.deps.now()
     const card = this.cardOrThrow(key.channel, key.handle)
-    const benchmark = this.benchmarkFor(card, at)
-    const { value, credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () =>
-      buildAudit({
-        card,
-        observations: this.deps.store.observationsOf(card.channel, card.handle),
-        benchmark,
-        at,
-        depth: 'deep',
-      }),
-    )
-    return { ...value, credits }
+    const report = buildAudit({
+      card,
+      observations: this.deps.store.observationsOf(card.channel, card.handle),
+      benchmark: this.benchmarkFor(card, at),
+      at,
+      depth,
+    })
+    if (report.insufficient_samples)
+      return { ...report, note: `${report.note}${AUDIT_NOT_CHARGED_NOTE}`, credits: FREE_CREDITS }
+    const { credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () => report)
+    return { ...report, credits }
   }
 
   /** 付费 reveal 邮箱（`data.kol.lookup`）。库里没有联系方式**不扣积分**。 */

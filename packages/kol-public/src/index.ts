@@ -68,6 +68,7 @@ export {
   regionOf,
 } from './routes.js'
 export {
+  AUDIT_NOT_CHARGED_NOTE,
   type BenchmarkResult,
   type BrowseResult,
   confidenceOf,

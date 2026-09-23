@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest'
 import { kolChargeFor } from '../src/charge-map.js'
 import { SEARCH_IDEMPOTENCY_WINDOW_MS } from '../src/service.js'
-import { type Harness, harness, observation } from './helpers.js'
+import { auditableObservations, type Harness, harness, observation } from './helpers.js'
 
 const principal = {
   account_id: 'acc_1',
@@ -110,7 +110,7 @@ describe('WP126 计费：体检报告与查无此人', () => {
     const missing = await h.call(`${KEY}/audit`)
     expect(missing.status).toBe(404)
     expect(h.wallet.balance('org_1').available).toBe(100)
-    h.service.contributeAs(principal, [observation()])
+    h.service.contributeAs(principal, auditableObservations())
     const before = h.wallet.balance('org_1').available
     const found = await h.call(`${KEY}/audit`)
     expect(found.status).toBe(200)
@@ -126,6 +126,37 @@ describe('WP126 计费：体检报告与查无此人', () => {
     const missing = await h.call(`${KEY}/deep-audit`, { method: 'POST' })
     expect(missing.status).toBe(404)
     expect(h.wallet.balance('org_1').available).toBe(100)
+  })
+
+  it('WP129：样本不够、只能给部分结论 → 预扣释放不收钱（GET audit 与 POST deep-audit 同口径）', async () => {
+    const h = harness({ credits: 100 })
+    h.service.contributeAs(principal, [observation()])
+    const basic = await h.call(`${KEY}/audit`)
+    expect(basic.status).toBe(200)
+    const report = basic.body.data as { insufficient_samples: boolean; credits: number; note: string }
+    expect(report.insufficient_samples).toBe(true)
+    expect(report.credits).toBe(0)
+    expect(report.note).toContain('样本不够，这次不收')
+    const deep = await h.call(`${KEY}/deep-audit`, { method: 'POST' })
+    expect(deep.status).toBe(200)
+    expect((deep.body.data as { credits: number }).credits).toBe(0)
+    expect(h.wallet.balance('org_1').available).toBe(100)
+    // 没收钱就没有一笔 data.kol.audit 的计费事件（与「0 条不收钱」同一口径：不记收费）
+    const paid = h.walletStore
+      .events({ org_id: 'org_1' })
+      .filter((e) => e.capability === 'data.kol.audit' && e.credits > 0)
+    expect(paid).toHaveLength(0)
+  })
+
+  it('WP129：样本一够就照价收（边界：刚好 MIN_AUDIT_SAMPLES 条）', async () => {
+    const h = harness({ credits: 100 })
+    h.service.contributeAs(principal, auditableObservations())
+    const res = await h.call(`${KEY}/audit`)
+    const report = res.body.data as { insufficient_samples: boolean; credits: number; note: string }
+    expect(report.insufficient_samples).toBe(false)
+    expect(report.credits).toBe(3)
+    expect(report.note).not.toContain('这次不收')
+    expect(h.wallet.balance('org_1').available).toBe(97)
   })
 
   it('reveal 与 social.fetch 的价不变（reveal 查无此人/没联系方式不收钱，老规矩）', async () => {

@@ -18,7 +18,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import { createQuotaPool, createSourcePool, fakeYoutubeSource } from '../src/sources/index.js'
 import type { KolSource, SourceSnapshot } from '../src/types.js'
-import { harness, observation } from './helpers.js'
+import { auditableObservations, harness, observation } from './helpers.js'
 
 const KEY = '/v1/data/kol/creators/youtube/somecreator'
 
@@ -115,7 +115,7 @@ describe('WP61 计费', () => {
         scopes: ['data'],
         region: 'global',
       },
-      [observation()],
+      auditableObservations(),
     )
 
     // 深度体检 3 积分，钱包里只有回填奖励那点（0）——不够
@@ -507,7 +507,7 @@ describe('WP61 体检报告', () => {
     region: 'global' as const,
   }
 
-  it('样本不够就明说，不给编出来的估计值（体检报告本身照价收，人存在就收）', async () => {
+  it('样本不够就明说，不给编出来的估计值——而且这次不收（WP129，与 0 条不收钱同口径）', async () => {
     const h = harness({ credits: 100 })
     h.service.contributeAs(principal, [observation()])
     const res = await h.call(`${KEY}/audit`)
@@ -515,15 +515,19 @@ describe('WP61 体检报告', () => {
       insufficient_samples: boolean
       follower_authenticity?: number
       note: string
+      credits: number
     }
     expect(report.insufficient_samples).toBe(true)
     expect(report.follower_authenticity).toBeUndefined()
     expect(report.note).toContain('样本不够')
+    expect(report.note).toContain('这次不收')
+    expect(report.credits).toBe(0)
+    expect(h.wallet.balance('org_1').available).toBe(100)
   })
 
   it('体检报告付费（WP126 起 GET audit 与 POST deep-audit 同价，都扣 data.kol.audit）', async () => {
     const h = harness({ credits: 100 })
-    h.service.contributeAs(principal, [observation()])
+    h.service.contributeAs(principal, auditableObservations())
     const before = h.wallet.balance('org_1').available
     const basic = await h.call(`${KEY}/audit`)
     expect(basic.status).toBe(200)
