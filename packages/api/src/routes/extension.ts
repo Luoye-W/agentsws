@@ -72,6 +72,45 @@ export interface ExtensionIngestResult {
   rows: ExtensionIngestRow[]
   /** 这一批里有几条同时转发去了云端公共红人库（未登录 = 0）。 */
   forwarded_to_public_library: number
+  /**
+   * WP131（只加）：**这次采集批次的 id**（`bt_…`）。插件一次列表采集按 20 条分块发，
+   * 第一块不带 `batch_id`、服务端发一个新的；后面几块把它原样带上，同一批就落在同一个
+   * 批次里。「回作战室看这批」深链 `/influencer/creators?batch=<id>` 拿它筛。
+   * 老服务不回这一格——插件回落到不带批次的深链。
+   */
+  batch_id?: string
+  /** WP131（只加）：采集后自动评分 / 体检的排队回执；开关关着就没有这一格。 */
+  auto_score?: ExtensionAutoScoreQueued
+}
+
+/**
+ * WP131：「采集后自动评分」那一条开关（**每工作区一个，默认关**）。
+ *
+ * 开着时，收进红人库的人会排队跑两件事：
+ * 1. 本机打分（`kol-core` 的 `scoreCreator`，**不花积分**）；
+ * 2. 关联了云账号时，再跑一次云端体检报告（`data.kol.audit`，**花积分**，
+ *    按 `credits_per_creator` 那个价；30 天内体检过的人不重复体检）。
+ */
+export interface ExtensionAutoScoreView {
+  enabled: boolean
+  /** 关联了云账号 = 体检那一半会跑（花积分）；没关联只做本机打分（免费）。 */
+  cloud_linked: boolean
+  /** 每位红人约多少积分（体检那一次的价；没关联云账号时是 0）。面板在收进前常显它。 */
+  credits_per_creator: number
+  /** 还在队里没跑完的人数。 */
+  pending: number
+  /** 一句人话（面板上直接显示）。 */
+  note: string
+}
+
+/** 一次采集的排队回执。 */
+export interface ExtensionAutoScoreQueued {
+  /** 这一次排进队的人数。 */
+  queued: number
+  /** 其中会跑云端体检的人数（30 天内体检过的、没关联云账号的不算）。 */
+  audits: number
+  /** 这一批体检最多花多少积分（`audits × 单价`；样本不够的那几位不收，实扣只会更少）。 */
+  credits_estimate: number
 }
 
 /** 插件开屏那一行要的全部事实。 */
@@ -95,7 +134,7 @@ export interface ExtensionPort {
   store: ExtensionStore
   ingest(
     session: ExtensionSession,
-    input: { observations: ExtensionObservation[] },
+    input: { observations: ExtensionObservation[]; batch_id?: string },
   ): MaybePromise<ExtensionIngestResult>
   hello(session: ExtensionSession): MaybePromise<ExtensionHello>
 
@@ -161,6 +200,16 @@ export interface ExtensionPort {
     session: ExtensionSession,
     key: ExtensionCreatorKey,
   ): MaybePromise<ExtensionSeedSignature | undefined>
+
+  /* ── WP131（只加；可选——老装配不实现，两条路回 not_implemented）──────── */
+
+  /** 「采集后自动评分」开关的现状（含每位约多少积分）。 */
+  autoScore?(session: ExtensionSession): MaybePromise<ExtensionAutoScoreView>
+  /** 开 / 关「采集后自动评分」（每工作区一个）。 */
+  setAutoScore?(
+    session: ExtensionSession,
+    input: { enabled: boolean },
+  ): MaybePromise<ExtensionAutoScoreView>
 }
 
 /* ── WP119c 的线上形状（与 docs/76 §10 一一对应）────────────────────────── */
@@ -318,7 +367,11 @@ export interface ExtensionContentObservation {
   /** 平台的稳定内容 id（视频 id / shortcode）。 */
   content_external_id: string
   content_type: 'video' | 'post' | 'reel'
-  title: string
+  /**
+   * 标题。**WP131 起可选**（Luoye 09-23）：IG 网格 / TikTok hashtag 格子上的帖子没有标题，
+   * 照样是内容观测。空串 / 全空白也当没有。界面上无标题的条目显示「（无标题）· 平台 · 编号」。
+   */
+  title?: string
   url?: string
   thumbnail_url?: string
   published_at?: Iso8601
@@ -478,8 +531,20 @@ const observationSchema = z
   })
   .strict()
 
+/**
+ * 采集批次 id 的样子（WP131）：服务端发的 `bt_` + 小写字母数字。插件只能原样带回，
+ * 不能自己编一个别的形状——那样工作台按批次筛就对不上。
+ */
+export const EXTENSION_BATCH_ID = /^bt_[a-z0-9]{4,40}$/
+
 /** 一批最多 100 条（插件自己按 20 条分块发，100 是给别的调用方留的上限）。 */
-const ingestSchema = z.object({ observations: z.array(observationSchema).min(1).max(100) })
+const ingestSchema = z.object({
+  observations: z.array(observationSchema).min(1).max(100),
+  // WP131：同一次列表采集的后几块带上第一块拿到的批次 id（只加；老插件不带）
+  batch_id: z.string().regex(EXTENSION_BATCH_ID).optional(),
+})
+
+const autoScoreSchema = z.object({ enabled: z.boolean() }).strict()
 
 const pairSchema = z.object({ code: z.string().min(1).max(12) })
 
@@ -508,7 +573,8 @@ const contentObservationSchema = z
     channel: channelSchema,
     content_external_id: z.string().min(1).max(160),
     content_type: z.enum(['video', 'post', 'reel']),
-    title: z.string().min(1).max(300),
+    // WP131：标题可选（空串也收，当没有）——没标题的帖子照样进内容观测
+    title: z.string().max(300).optional(),
     url: z.string().max(600).optional(),
     thumbnail_url: z.string().max(600).optional(),
     published_at: z.string().max(60).optional(),
@@ -754,7 +820,10 @@ export function extensionRoutes(): Route[] {
         const input = await body(c, ingestSchema)
         return ok(
           c,
-          await portOf(deps).ingest(session, input as { observations: ExtensionObservation[] }),
+          await portOf(deps).ingest(
+            session,
+            input as { observations: ExtensionObservation[]; batch_id?: string },
+          ),
         )
       },
     ),
@@ -1007,6 +1076,46 @@ export function extensionRoutes(): Route[] {
             input as unknown as ExtensionBioLinkObservation,
           ),
         )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/extension/auto-score',
+        operationId: 'extensionAutoScore',
+        summary: '「采集后自动评分」开关现状：开没开、每位约多少积分、队里还有几位（WP131）',
+        tag: 'extension',
+        auth: 'public',
+        returns: 'ExtensionAutoScoreView',
+      },
+      async (c, deps) => {
+        const session = sessionOf(c, deps)
+        requireScope(session, 'kol.read', '读自动评分开关')
+        const port = portOf(deps)
+        if (port.autoScore === undefined)
+          throw new ApiError('not_implemented', '这个本机服务版本还没有「采集后自动评分」。')
+        return ok(c, await port.autoScore(session))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/extension/auto-score',
+        operationId: 'setExtensionAutoScore',
+        summary: '开 / 关「采集后自动评分」（每工作区一个，默认关；开着时体检花积分）（WP131）',
+        tag: 'extension',
+        auth: 'public',
+        body: autoScoreSchema,
+        returns: 'ExtensionAutoScoreView',
+      },
+      async (c, deps) => {
+        const session = sessionOf(c, deps)
+        requireScope(session, 'kol.capture', '开关自动评分')
+        const input = await body(c, autoScoreSchema)
+        const port = portOf(deps)
+        if (port.setAutoScore === undefined)
+          throw new ApiError('not_implemented', '这个本机服务版本还没有「采集后自动评分」。')
+        return ok(c, await port.setAutoScore(session, { enabled: input.enabled }))
       },
     ),
     route(

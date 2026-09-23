@@ -68,5 +68,17 @@ export function brandExtensionPort(options: BrandExtensionPortOptions): Extensio
       (await portOf(session.workspace_id)).bioLinkObservation(session, input),
     seedSignature: async (session, key) =>
       (await portOf(session.workspace_id)).seedSignature(session, key),
+
+    /* ── WP131：「采集后自动评分」开关（每工作区一个，按 session 取那一套） ── */
+    autoScore: async (session) => {
+      const port = await portOf(session.workspace_id)
+      if (port.autoScore === undefined) throw new Error('auto-score not wired')
+      return port.autoScore(session)
+    },
+    setAutoScore: async (session, input) => {
+      const port = await portOf(session.workspace_id)
+      if (port.setAutoScore === undefined) throw new Error('auto-score not wired')
+      return port.setAutoScore(session, input)
+    },
   }
 }

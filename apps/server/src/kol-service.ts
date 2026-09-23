@@ -864,11 +864,24 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   const port: KolPort = {
     creators(_actor, filter) {
       const now = clock.now()
+      // WP131：插件「回作战室看这批」——只留这一次列表采集收进来的那几位
+      const inBatch =
+        filter.batch === undefined
+          ? undefined
+          : new Set(store.accountObservations({ batch_id: filter.batch }).map((o) => o.account_id))
       const accounts = store
         .accounts(filter.channel === undefined ? {} : { channel: filter.channel })
+        .filter((a) => inBatch === undefined || inBatch.has(a.id))
         .filter((a) => matchesQ(a, filter.q))
         .filter((a) => inBand(a.followers, filter))
       const hasContact = new Set(store.contacts().map((ct) => ct.creator_id))
+      // WP131：自动评分跑出来的体检概括数（做成了的才有）
+      const audits = new Map(
+        store
+          .autoScores()
+          .filter((r) => r.audit?.health !== undefined)
+          .map((r) => [r.creator_id, r.audit as { health: number; at: string }]),
+      )
       // 排序（含"刷粉的排在后面而不是剔掉"）在 `rankCreators` 里，不在这儿重写
       const rows: KolCreatorRow[] = rankCreators(accounts, { now }).map(({ account, score }) => ({
         creator_id: account.creator_id,
@@ -885,6 +898,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         score: score.total,
         ...(score.blocked === undefined ? {} : { blocked: score.blocked }),
         has_contact: hasContact.has(account.creator_id),
+        ...(audits.has(account.creator_id)
+          ? {
+              audit_health: audits.get(account.creator_id)?.health as number,
+              audited_at: audits.get(account.creator_id)?.at as string,
+            }
+          : {}),
       }))
       return { rows: rows.slice(0, filter.limit ?? 100) }
     },

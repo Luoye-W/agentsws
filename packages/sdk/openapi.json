@@ -42452,6 +42452,15 @@
             }
           },
           {
+            "name": "batch",
+            "in": "query",
+            "required": false,
+            "description": "只看这一次插件列表采集收进来的人（批次 id，bt_ 开头；WP131）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "X-Assignment",
             "in": "header",
             "required": true,
@@ -56628,6 +56637,10 @@
                       "required": ["channel", "handle", "observed_at", "source"],
                       "additionalProperties": false
                     }
+                  },
+                  "batch_id": {
+                    "type": "string",
+                    "pattern": "^bt_[a-z0-9]{4,40}$"
                   }
                 },
                 "required": ["observations"]
@@ -57456,7 +57469,6 @@
                   },
                   "title": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 300
                   },
                   "url": {
@@ -57549,7 +57561,6 @@
                   "channel",
                   "content_external_id",
                   "content_type",
-                  "title",
                   "stats",
                   "author",
                   "captured_at"
@@ -57644,7 +57655,6 @@
                   },
                   "title": {
                     "type": "string",
-                    "minLength": 1,
                     "maxLength": 300
                   },
                   "url": {
@@ -57770,7 +57780,6 @@
                   "channel",
                   "content_external_id",
                   "content_type",
-                  "title",
                   "stats",
                   "author",
                   "captured_at"
@@ -57937,6 +57946,106 @@
                   "emails",
                   "captured_at"
                 ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extension/auto-score": {
+      "get": {
+        "operationId": "extensionAutoScore",
+        "summary": "「采集后自动评分」开关现状：开没开、每位约多少积分、队里还有几位（WP131）",
+        "tags": ["extension"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "ExtensionAutoScoreView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionAutoScoreView"
+      },
+      "put": {
+        "operationId": "setExtensionAutoScore",
+        "summary": "开 / 关「采集后自动评分」（每工作区一个，默认关；开着时体检花积分）（WP131）",
+        "tags": ["extension"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "ExtensionAutoScoreView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "ExtensionAutoScoreView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["enabled"],
                 "additionalProperties": false
               }
             }

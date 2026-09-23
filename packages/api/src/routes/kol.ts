@@ -135,6 +135,12 @@ export interface KolCreatorRow {
   blocked?: string
   /** 库里有没有这个人的联系方式（**只说有没有**）。 */
   has_contact: boolean
+  /**
+   * WP131（只加）：「采集后自动评分」跑过的那份云端体检的概括数（0–100）与时刻。
+   * 没开开关、没关联云账号、体检没做成都没有这两格。
+   */
+  audit_health?: number
+  audited_at?: Iso8601
 }
 
 /** 红人详情（工作台上点开那一屏）。 */
@@ -432,6 +438,11 @@ export interface KolPort {
        */
       min_followers?: number | undefined
       max_followers?: number | undefined
+      /**
+       * WP131：只看这一次插件列表采集收进来的人（`bt_…`，插件「回作战室看这批」深链带来）。
+       * 认不出的批次 = 空清单，不是报错。
+       */
+      batch?: string | undefined
     },
   ): MaybePromise<{ rows: KolCreatorRow[] }>
   /**
@@ -882,6 +893,11 @@ export function kolRoutes(): Route[] {
             description: '粉丝数上限（含）',
             schema: { type: 'integer' },
           },
+          {
+            name: 'batch',
+            in: 'query',
+            description: '只看这一次插件列表采集收进来的人（批次 id，bt_ 开头；WP131）',
+          },
         ],
         returns: '{ rows: KolCreatorRow[] }',
       },
@@ -891,9 +907,11 @@ export function kolRoutes(): Route[] {
         const limit = intParam(c, 'limit')
         const min_followers = intParam(c, 'min_followers')
         const max_followers = intParam(c, 'max_followers')
+        const batch = c.req.query('batch')
         return ok(
           c,
           await portOf(deps).creators(actorOf(c), {
+            ...(batch === undefined || batch === '' ? {} : { batch }),
             ...(channel === undefined ? {} : { channel }),
             ...(q === undefined || q === '' ? {} : { q }),
             ...(limit === undefined ? {} : { limit }),

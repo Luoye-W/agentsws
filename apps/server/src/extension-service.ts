@@ -20,6 +20,8 @@
  */
 
 import type {
+  ExtensionAutoScoreQueued,
+  ExtensionAutoScoreView,
   ExtensionBioLinkResult,
   ExtensionContactContribution,
   ExtensionContactDispute,
@@ -50,8 +52,11 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { KOL_LOOKUP_CAPABILITY } from '@agentsws/contracts'
+import { type PublicLibraryClient, scoreCreator } from '@agentsws/kol-core'
 import type {
   KolAccountObservation,
+  KolAutoAudit,
+  KolAutoScore,
   KolBioLinkObservation,
   KolContent,
   KolContentObservation,
@@ -182,6 +187,37 @@ export interface ExtensionServiceOptions {
    * 价目是数据不是代码，所以这里只要一个取数的函数。
    */
   revealPriceCredits?: () => number
+  /**
+   * WP131：「采集后自动评分」里**云端体检**那一半用的客户端（`kol-public-client`
+   * 的 `linked` / `audit` 两个方法）。不给 = 只做本机打分（免费）。
+   */
+  auditor?: Pick<PublicLibraryClient, 'linked' | 'audit'> | undefined
+  /** WP131：体检一次的积分价（`pricing.json` 的 `data.kol.audit`；面板常显「每位约 N 积分」）。 */
+  auditPriceCredits?: () => number
+}
+
+/** WP131：同一个人 30 天内体检过就不再自动体检（不为同一个结论花两次钱）。 */
+export const AUTO_AUDIT_FRESH_DAYS = 30
+
+/** WP131：`createExtensionService` 的返回——端口本身 + 测试用的「等队跑完」。 */
+export type ExtensionService = ExtensionPort & {
+  /** 自动评分队列跑完（没在跑就立刻返回）。只给测试与关停用。 */
+  autoScoreIdle(): Promise<void>
+}
+
+/**
+ * WP131：内容的标题（可选）。空串 / 全空白 = 没有标题——IG 网格与 TikTok hashtag 格子的帖子
+ * 本来就没有，它们照样是内容观测，不该因为这一格被整条拒掉。
+ */
+function titleOf(input: { title?: string | undefined }): string | undefined {
+  const title = input.title?.trim()
+  return title === undefined || title === '' ? undefined : title
+}
+
+/** 同上，摊进对象字面量用：有标题才有 `title` 这一格。 */
+function optionalTitle(input: { title?: string | undefined }): { title?: string } {
+  const title = titleOf(input)
+  return title === undefined ? {} : { title }
 }
 
 /** 把 handle 归一成一个能当键用的东西（`@Foo` 与 `foo` 是同一个人）。 */
@@ -206,7 +242,7 @@ function urlOf(channel: KolChannel, handle: string): string {
   }
 }
 
-export function createExtensionService(options: ExtensionServiceOptions): ExtensionPort {
+export function createExtensionService(options: ExtensionServiceOptions): ExtensionService {
   let seq = 0
   const nextId = (prefix: string): string => {
     seq += 1
@@ -234,6 +270,8 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     source_page?: 'search' | 'watch_related' | 'hashtag' | undefined
     source_query?: string | undefined
     relevance_score?: number | undefined
+    /** WP131：这一行属于哪一次列表采集。 */
+    batch_id?: string | undefined
   }
 
   /**
@@ -336,6 +374,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       ...(one.source_page === undefined ? {} : { source_page: one.source_page }),
       ...(one.source_query === undefined ? {} : { source_query: one.source_query }),
       ...(one.relevance_score === undefined ? {} : { relevance_score: one.relevance_score }),
+      ...(one.batch_id === undefined ? {} : { batch_id: one.batch_id }),
     }
     options.kol.saveAccountObservation(row)
   }
@@ -447,7 +486,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       handle: bare,
       external_id: input.content_external_id,
       content_type: input.content_type,
-      ...(input.title.trim() === '' ? {} : { title: input.title.trim() }),
+      ...optionalTitle(input),
       // 页面上抓来的发布时间可能是「3 天前」这种话——不是时间戳就不送（云那边会整批拒）
       ...(input.published_at === undefined || Number.isNaN(Date.parse(input.published_at))
         ? {}
@@ -467,6 +506,156 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     } catch {
       return 0
     }
+  }
+
+  /* ── WP131：采集后自动评分（每工作区一个开关，默认关）─────────────────
+   *
+   * 开着时，收进红人库的人排队跑两件事：本机打分（免费，`kol-core` 的同一份纯函数）
+   * 与关联了云账号时的云端体检（`data.kol.audit`，花积分）。排队而不是在请求里当场跑：
+   * 一批 20 个人的体检是 20 次云调用，插件那一块请求不该为它多等十几秒。
+   *
+   * 三条纪律：
+   * 1. **开关默认关**——`setting('auto_score')` 没写过就是关；
+   * 2. **同一个人 30 天内体检过不重复花钱**（`AUTO_AUDIT_FRESH_DAYS`）；
+   * 3. **积分不够就停体检、不停打分**：这一轮剩下的人记 `insufficient_credits`，不再逐个去撞 402。
+   */
+  const autoScoreEnabled = (): boolean =>
+    options.kol.setting<{ enabled?: boolean }>('auto_score')?.enabled === true
+  const auditLinked = (): boolean => options.auditor?.linked() === true
+  const auditPrice = (): number => options.auditPriceCredits?.() ?? 0
+
+  interface AutoScoreJob {
+    creator_id: string
+    account_id: string
+    batch_id?: string | undefined
+  }
+  const queue: AutoScoreJob[] = []
+  let draining: Promise<void> | undefined
+
+  /** 这个人最近一次体检是不是还新鲜（30 天内做过 = 不再花钱）。 */
+  function auditFresh(creator_id: string): boolean {
+    const last = options.kol.autoScores({ creator_id })[0]?.audit
+    if (last?.status !== 'done' && last?.status !== 'recent') return false
+    const age = Date.parse(options.clock.now()) - Date.parse(last.at)
+    return age < AUTO_AUDIT_FRESH_DAYS * 86_400_000
+  }
+
+  function autoScoreView(): ExtensionAutoScoreView {
+    const enabled = autoScoreEnabled()
+    const linked = auditLinked()
+    const price = linked ? auditPrice() : 0
+    return {
+      enabled,
+      cloud_linked: linked,
+      credits_per_creator: price,
+      pending: queue.length,
+      note: !enabled
+        ? '关着：收进红人库之后不自动打分。打开后本机打分免费；关联了云账号还会顺手出一份体检报告（按次收积分）。'
+        : linked
+          ? `开着：每收进一位就本机打分（免费）并出一份体检报告（每位约 ${String(price)} 积分；30 天内体检过的不再收，样本不够的不收）。`
+          : '开着：每收进一位就本机打分（免费）。还没关联云账号，体检报告那一半不跑、不花积分。',
+    }
+  }
+
+  /** 排队；回这一次的回执（开关关着回 `undefined`）。 */
+  function enqueueAutoScore(jobs: readonly AutoScoreJob[]): ExtensionAutoScoreQueued | undefined {
+    if (!autoScoreEnabled() || jobs.length === 0) return undefined
+    const linked = auditLinked()
+    let queued = 0
+    let audits = 0
+    for (const job of jobs) {
+      if (queue.some((q) => q.creator_id === job.creator_id)) continue
+      queue.push(job)
+      queued += 1
+      if (linked && !auditFresh(job.creator_id)) audits += 1
+    }
+    if (queued > 0) kick()
+    return {
+      queued,
+      audits,
+      credits_estimate: Math.round(audits * auditPrice() * 100) / 100,
+    }
+  }
+
+  function kick(): void {
+    if (draining !== undefined) return
+    draining = drain().finally(() => {
+      draining = undefined
+    })
+  }
+
+  async function drain(): Promise<void> {
+    let outOfCredits = false
+    for (let job = queue.shift(); job !== undefined; job = queue.shift()) {
+      try {
+        outOfCredits = await runJob(job, outOfCredits)
+      } catch {
+        // 一个人跑挂了不连累后面的人；这一位下次收进时会再排一次。
+      }
+    }
+  }
+
+  /** 跑一位：先本机打分，再（可能）体检。回「积分是不是已经不够了」。 */
+  async function runJob(job: AutoScoreJob, outOfCredits: boolean): Promise<boolean> {
+    const account = options.kol
+      .accounts({ creator_id: job.creator_id })
+      .find((a) => a.id === job.account_id)
+    if (account === undefined) return outOfCredits
+    const now = options.clock.now()
+    const score = scoreCreator(account, { now })
+    const previous = options.kol.autoScores({ creator_id: job.creator_id })[0]
+
+    let audit: KolAutoAudit
+    let stillOut = outOfCredits
+    const bare = normalizeHandle(account.handle)
+    if (!auditLinked() || options.auditor === undefined) {
+      audit = { status: 'not_linked', at: now }
+    } else if (auditFresh(job.creator_id) && previous?.audit !== undefined) {
+      // 结论沿用上一次（`at` 仍是那次体检的时刻，30 天从那时算），这次不花钱
+      audit = { ...previous.audit, status: 'recent', credits_spent: 0 }
+    } else if (outOfCredits) {
+      audit = {
+        status: 'insufficient_credits',
+        message: '积分不够了，这一位没做体检（没扣）。充值后在工作台里手动体检。',
+        at: now,
+      }
+    } else if (account.channel === 'youtube' && /^uc[a-z0-9_-]{22}$/.test(bare)) {
+      // 公共库以 handle 为键；只认得频道 id 的人查不到，也就不去花这一次钱。
+      audit = {
+        status: 'failed',
+        message: '只认得频道 id、没有 handle，公共库里查不到他。',
+        at: now,
+      }
+    } else {
+      const out = await options.auditor.audit({ channel: account.channel, handle: bare })
+      if (out.ok) {
+        audit = {
+          status: 'done',
+          health: out.data.health,
+          findings: out.data.findings,
+          credits_spent: out.credits_spent ?? 0,
+          at: now,
+        }
+      } else if (out.reason === 'insufficient_credits') {
+        stillOut = true
+        audit = { status: 'insufficient_credits', message: out.message, at: now }
+      } else {
+        audit = { status: 'failed', message: out.message, at: now }
+      }
+    }
+
+    const row: KolAutoScore = {
+      id: job.creator_id,
+      creator_id: job.creator_id,
+      account_id: account.id,
+      ...(job.batch_id === undefined ? {} : { batch_id: job.batch_id }),
+      score: score.total,
+      ...(score.blocked === undefined ? {} : { blocked: score.blocked }),
+      scored_at: now,
+      audit,
+    }
+    options.kol.saveAutoScore(row)
+    return stillOut
   }
 
   return {
@@ -490,6 +679,15 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     ingest: async (session, input): Promise<ExtensionIngestResult> => {
       const rows: ExtensionIngestRow[] = []
       const forwardable: PublicObservationRow[] = []
+      /*
+       * WP131：采集批次。列表页批量采集（`search_results`）第一块不带、这里发一个新的；
+       * 后面几块原样带回来，同一批落在同一个批次里。主页 / 内容页的单条观测不算批次。
+       */
+      const listCapture =
+        input.batch_id !== undefined ||
+        input.observations.some((o) => o.source === 'search_results')
+      const batchId = listCapture ? (input.batch_id ?? nextId('bt')) : undefined
+      const scoreJobs: AutoScoreJob[] = []
 
       for (const one of input.observations) {
         if (normalizeHandle(one.handle) === '') {
@@ -499,7 +697,11 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         const before = options.kol
           .accounts({ channel: one.channel })
           .some((a) => normalizeHandle(a.handle) === normalizeHandle(one.handle))
-        const { creator, account } = upsert(one)
+        const { creator, account } = upsert({
+          ...one,
+          ...(batchId === undefined ? {} : { batch_id: batchId }),
+        })
+        scoreJobs.push({ creator_id: creator.id, account_id: account.id, batch_id: batchId })
         const contactNote = saveContact(creator.id, one)
         rows.push({
           handle: one.handle,
@@ -538,19 +740,26 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         })
       }
 
+      // WP131：批次 id 与自动评分的排队回执（开关关着没有后一格）
+      const queued = enqueueAutoScore(scoreJobs)
+      const extra = {
+        ...(batchId === undefined ? {} : { batch_id: batchId }),
+        ...(queued === undefined ? {} : { auto_score: queued }),
+      }
+
       // 没登录 = 一条都不出这台电脑。这是 `linked()` 唯一的用处。
       const cloud = options.publicLibrary
       if (cloud === undefined || !cloud.linked() || forwardable.length === 0) {
         void session
-        return { rows, forwarded_to_public_library: 0 }
+        return { rows, forwarded_to_public_library: 0, ...extra }
       }
       try {
         const out = await cloud.contribute(forwardable)
-        return { rows, forwarded_to_public_library: out.accepted }
+        return { rows, forwarded_to_public_library: out.accepted, ...extra }
       } catch {
         // 云那一跳挂了不影响本机那一半：数据已经在用户自己的电脑上了。
         // 回执里如实报 0，插件卡片上就不会说"共享了几条"。
-        return { rows, forwarded_to_public_library: 0 }
+        return { rows, forwarded_to_public_library: 0, ...extra }
       }
     },
 
@@ -607,9 +816,11 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     saveCreator: (session, input): ExtensionCreatorSaveResult => {
       void session
       const existingBefore = findAccount(input.channel, input.handle)
-      const { creator } = upsert(input)
+      const { creator, account } = upsert(input)
       // 页面上看到的商务邮箱：存入是一次显式动作，明文当场进加密库（同观测那条路）。
       if (input.contact !== undefined) storeContact(creator.id, input.contact)
+      // WP131：显式存入也是「收进红人库」——开关开着就排队自动评分
+      enqueueAutoScore([{ creator_id: creator.id, account_id: account.id }])
       return {
         status: existingBefore === undefined ? 'ok' : 'deduped',
         creator_id: creator.id,
@@ -854,7 +1065,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         handle: author?.handle ?? normalizeHandle(input.author.handle ?? input.author.external_id),
         content_external_id: input.content_external_id,
         content_type: input.content_type,
-        ...(input.title === '' ? {} : { title: input.title }),
+        ...optionalTitle(input),
         ...(input.url === undefined ? {} : { url: input.url }),
         ...(input.stats.views === undefined ? {} : { views: input.stats.views }),
         ...(input.stats.likes === undefined ? {} : { likes: input.stats.likes }),
@@ -910,7 +1121,8 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         handle: author?.handle ?? normalizeHandle(input.author.handle ?? input.author.external_id),
         content_external_id: input.content_external_id,
         content_type: input.content_type,
-        title: input.title,
+        // WP131：自己的内容库也收没标题的（空串 = 没有；界面显示「（无标题）」）
+        title: titleOf(input) ?? '',
         ...(input.url === undefined ? {} : { url: input.url }),
         ...(input.thumbnail_url === undefined ? {} : { thumbnail_url: input.thumbnail_url }),
         ...(input.published_at === undefined ? {} : { published_at: input.published_at }),
@@ -958,6 +1170,23 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       // 附加对上几个红人：本机库里还没有「谁的简介指向这个 slug」的记录，
       // 这一版如实回 0——页面本身已经存档，不是失败（旧插件的同一句话）。
       return { status: existing === undefined ? 'ok' : 'deduped', attached_creators: 0 }
+    },
+
+    /* ── WP131：采集后自动评分 ───────────────────────────────────────── */
+
+    autoScore: (session): ExtensionAutoScoreView => {
+      void session
+      return autoScoreView()
+    },
+
+    setAutoScore: (session, input): ExtensionAutoScoreView => {
+      void session
+      options.kol.saveSetting('auto_score', { enabled: input.enabled }, options.clock.now())
+      return autoScoreView()
+    },
+
+    autoScoreIdle: async (): Promise<void> => {
+      while (draining !== undefined) await draining
     },
 
     seedSignature: (session, key): ExtensionSeedSignature | undefined => {
