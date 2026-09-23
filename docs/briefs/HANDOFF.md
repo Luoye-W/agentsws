@@ -28,7 +28,7 @@
 | 4 | WP118 红人营销增值服务 + 充值四档（订阅引擎做成通用的，客服增值服务只登记） | `WP118-kol-cloud-service.md` | `wp118-kol-cloud` · `wp/118-kol-cloud` | — | 已合并（09-20，Fable 终审：全量过） |
 | 5 | WP122 品牌设计规范 DESIGN.md | `WP122-brand-design-md.md` | `wp122-design-md` · `wp/122-design-md` | — | 已合并（09-20，Fable 终审：地基；后半见 WP122b） |
 | 6 | WP119b 插件：A 私有仓库移植 + B 开源仓库插件开放接口 | `WP119b-extension-parity.md` | A：`/Users/yeluo/Documents/agentsws-extension`（分支 `wp/119b-port`）；B：`wp119b-open-api` · `wp/119b-open-api` | — | 已合并（09-21，Fable 终审：B 开放接口全量过；A 私有仓库 337 测试过、已并入其 main） |
-| 7 | WP126 数据接口路由 + 自带数据接口 + 官方接口命中也收费 | `WP126-data-routing-byo-source.md` | `wp126-data-routing` · `wp/126-data-routing` | WP117b 已合并 ✓ | 待做 |
+| 7 | WP126 数据接口路由 + 自带数据接口 + 官方接口命中也收费 | `WP126-data-routing-byo-source.md` | `wp126-data-routing` · `wp/126-data-routing` | WP117b 已合并 ✓ | 已合并（09-23，Fable 终审：全量过） |
 | 8 | WP124 在线聊天三条路 | `WP124-live-chat-three-ways.md`（以文件里「修订」一节为准） | `wp124-live-chat` · `wp/124-live-chat` | WP118 已合并 ✓ | 待做 |
 | 9 | WP122b 设计规范：三个注入口通电 + 岗位只读 + 小铅笔 + 成文接模型 + 视觉档 | `WP122b-design-md-wire-up.md` | `wp122b-design-wire` · `wp/122b-design-wire` | — | 待做 |
 | 10 | WP119c 插件完整版要的本机接口 + 面板接线（没有它完整版面板大半是空壳） | `WP119c-extension-endpoints.md` | 开源 `wp119c-ext-endpoints` · `wp/119c-ext-endpoints`；私有仓库分支 `wp/119c-wire` | — | 待做 |
