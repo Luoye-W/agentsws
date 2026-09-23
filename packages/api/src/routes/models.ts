@@ -17,7 +17,12 @@
  *    读走 `store_config.read@workspace`，改走 `policy.stage@workspace`——
  *    和连接面同一套元组，理由也一样：这属于策略层，永远 L1。
  */
-import type { MaybePromise, ModelPurpose, ModelRef } from '@agentsws/contracts'
+import type {
+  MaybePromise,
+  ModelCheckStepResult,
+  ModelPurpose,
+  ModelRef,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -118,6 +123,8 @@ export interface ModelProviderView {
   last_listing?: ModelListing
   /** 上次"测试"的结果。 */
   last_test?: ModelTestResult
+  /** WP127：按上一次验证，这条能不能看图。 */
+  vision_status?: ModelVisionStatus
   /** 这一条是环境变量给的（`DEEPSEEK_API_KEY`），界面上不给删。 */
   from_env?: boolean
 }
@@ -244,6 +251,52 @@ export interface ModelTestResult {
   model?: string
   duration_ms?: number
   checked_at: string
+  /**
+   * WP127：验证三步各自过没过（连通 → 文字 → 带图）。老版本存下来的结果没有这一格——
+   * 那就是"升级前测过、还没验证过能不能看图"。
+   */
+  steps?: ModelCheckStepResult[]
+  /** WP127：第 ③ 步的结论。`false` = 看不了图（`reason: 'no_vision'`）；没跑到就没有。 */
+  vision?: boolean
+}
+
+/**
+ * WP127：这条模型能不能看图，按上一次验证的结论。
+ *
+ * - `ok`：验证过，能看；
+ * - `no`：验证过，看不了（设置页顶部那条提示、需要看图的动作明说「当前模型看不了图」）；
+ * - `unchecked`：还没按三步验证过（老用户升级上来的都是这一档）。
+ */
+export type ModelVisionStatus = 'ok' | 'no' | 'unchecked'
+
+/**
+ * WP127 交付 3：**生图单独一档**。
+ *
+ * 文字模型（必须能看图）与生图是两件事：生图可以不配——不配时要出图的岗位说一句人话
+ * 让人来这里配，别的照常干活。能配的来源只有两类：Agents 工坊官方接口（按张扣积分，
+ * 单价 `credits_per_image` 常显）与已配的 OpenAI 兼容口（自己的 key，走 `/images/generations`）。
+ */
+export interface ModelImageView {
+  /** 配了没有。 */
+  configured: boolean
+  /** 用的是哪一条已配的 provider（`ModelProviderView.id`）。 */
+  provider_id?: string
+  /** 生图模型名（`gpt-image-1` 之类）。 */
+  model?: string
+  /** 走的是 Agents 工坊官方接口（按张扣积分）。 */
+  official: boolean
+  /** 官方接口一张图多少积分（`pricing.json` 的 `ai.image`）。**不管配没配都给**，界面常显。 */
+  credits_per_image?: number
+  /** 能选哪几条（已配、有 key 的 provider；订阅登录那两种没有生图口，不列）。 */
+  choices: { provider_id: string; label: string; official: boolean; default_model: string }[]
+  /** 没配 / 配的那条现在用不了时的人话。 */
+  unavailable_reason?: string
+}
+
+/** 改生图那一档。`provider_id` 给空串 = 不配。 */
+export interface SetModelImageInput {
+  provider_id: string
+  model?: string | undefined
 }
 
 /**
@@ -425,8 +478,15 @@ export interface ModelsPort {
     input: SaveModelProviderInput,
   ): MaybePromise<ModelProviderView>
   remove(actor: ModelsActor, id: string): MaybePromise<void>
-  /** 经网关跑一次最小 complete（`purpose: 'judge'`，十来个 token）。 */
+  /**
+   * 验证三步（WP127）：连通 → 一次最小文字请求 → 一次带图的最小请求（`purpose: 'judge'`）。
+   * 看不了图的**不通过**（`reason: 'no_vision'`）。
+   */
   test(actor: ModelsActor, id: string): MaybePromise<ModelTestResult>
+  /** WP127：生图那一档现在是什么样。不实现 = 这个进程没装生图设置。 */
+  image?(actor: ModelsActor): MaybePromise<ModelImageView>
+  /** WP127：改生图那一档（保存即生效）。 */
+  setImage?(actor: ModelsActor, input: SetModelImageInput): MaybePromise<ModelImageView>
   /** 去 provider 的 `/models` 拉一次可用模型清单（WP42）。拉不到回 `ok: false` + 人话。 */
   discover(actor: ModelsActor, id: string, input?: DiscoverModelsInput): MaybePromise<ModelListing>
   defaults(actor: ModelsActor): MaybePromise<ModelDefaultsView>
@@ -531,6 +591,12 @@ const SaveBody = z.object({
 /** 拉模型列表的请求体。`api_key` 同 `SaveBody`：只限长度，值不进任何错误信封。 */
 /** WP66（52 O3）：一个布尔，别的什么都不收。 */
 const InheritanceBody = z.object({ inherit_org: z.boolean() })
+
+/** WP127：生图那一档。`provider_id` 空串 = 不配。 */
+const ImageBody = z.object({
+  provider_id: z.string().max(64),
+  model: z.string().min(1).max(128).optional(),
+})
 
 const DiscoverBody = z.object({
   base_url: z.string().min(1).max(512).optional(),
@@ -763,7 +829,7 @@ export function modelRoutes(): Route[] {
         path: '/v1/models/providers/:id/test',
         operationId: 'testModelProvider',
         summary:
-          '经网关跑一次最小 complete（purpose=judge，十来个 token）：回延迟与模型名，不回 key',
+          '验证三步（WP127）：连通 → 一次最小文字请求 → 一次带图的最小请求（purpose=judge）；看不了图的不通过（reason=no_vision）。回延迟、模型名与三步结果，不回 key',
         tag: TAG,
         auth: 'bearer',
         assignment: true,
@@ -772,6 +838,48 @@ export function modelRoutes(): Route[] {
         returns: 'ModelTestResult',
       },
       async (c, deps) => ok(c, await portOf(deps).test(actorOf(c), param(c, 'id'))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/models/image',
+        operationId: 'getModelImage',
+        summary:
+          '生图那一档（WP127）：配了没有、用哪条、官方接口一张图多少积分（常显）、能选哪几条',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'ModelImageView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.image === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配生图设置')
+        return ok(c, await port.image(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/models/image',
+        operationId: 'setModelImage',
+        summary:
+          '改生图那一档（WP127）：选一条已配的 provider 与生图模型，或给空串不配；保存即生效',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: ImageBody,
+        returns: 'ModelImageView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setImage === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配生图设置')
+        const input = await body(c, ImageBody)
+        return ok(c, await port.setImage(actorOf(c), input))
+      },
     ),
     route(
       {
