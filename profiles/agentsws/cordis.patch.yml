@@ -1,11 +1,20 @@
-# agentsws profile 的 patch 层（16 §1）。
+# agentsws profile 的 patch 层（16 §1）——**这份文件只放锁定**（WP133）。
 #
-# 组合顺序：dsh-base 的 patch → dsh-headless 的 patch → 这一层 → $DSH_HOME/cordis.patch.yml。
-# 这里只放**发行版级**的决定；一职责一份的东西在 preset 里（`presets/<role_id>/agent.cordis.yml`，
-# 由 `@agentsws/dsh-adapter` 按 RunRequest 生成）。
+# 组合顺序：dsh-base 的 patch → dsh-headless 的 patch → 这一层 → $DSH_HOME/cordis.patch.yml → `--patch`。
+# 下面七行是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
+# 以前混在这里的占位注释（system-prompt / user-approval / preset 声明的写法）挪到了同目录 README。
 #
-# v1 的公司端执行器不装任何第三方代码（31 §3.5）。除了下面这一条**生效**的安全开关，
-# 其余都是占位注释；真接管 dsh 进程（跨进程 headless run）时取消注释即可。
+# 为什么锁定就写在 profile 这一层、不拆成 bundle 的独立 patch 文件（WP133 实测，
+# 出处：`@deepseek-ai/dsh-app-boot` README「Unreadable or incompatible bundles are reported on
+# stderr and skipped; profile manifest and user patch errors still throw」）：
+# 0.1.7 的 bundle 确实能按顺序挂多个 patch 文件，但 **bundle 层读不出来就跳过、照样启动**——
+# 把锁定放进一个坏掉 / 缺失的 bundle，`plugin-manager` 就回到 `!ctx.get('profileContext')`（开）。
+# profile 这一层解析失败则直接启动失败。锁定必须 fail-closed，所以留在这一层。
+#
+# 每一行的 id 都在测试里对照 dsh 自己导出的配置 schema（`dsh --dump-config-schema`）校验：
+# id 不在当前 dsh 的组合里、或指向的插件换了人，就是红灯——上游 patch 一个不存在的 id
+# 只打一行 warning（`patch: entry "<id>" not found`）然后跳过，也就是"静默什么都没关"。
+# 加一行锁定 = 这里加一行 + `packages/dsh-adapter/test/profile-lockdown.test.ts` 的 `LOCKDOWN` 表加一行。
 
 # ——————————————————————————————————————————————————————————————————————
 # 生效的一条：把"会话日志随请求上报官方 API"关掉。
@@ -126,27 +135,3 @@
 - id: deepseek-account
   disabled: true
 # ——————————————————————————————————————————————————————————————————————
-
-# - id: system-prompt
-#   config:
-#     # persona 由 preset 的 complete 段接管，deployment 前后缀留空
-#     personaPrefix: ''
-#     personaSuffix: ''
-
-# - id: user-approval
-#   config:
-#     # 'ask' 才会走 answerer waterfall；没有 answerer 时 dsh 自己 fail-closed
-#     policy: ask
-
-# WP132：0.1.7 起 preset 不再按目录扫（`dsh-agent-presets` 整包下线），
-# 换成 `dsh-agent-preset-registry` + 一行一个 `dsh-agent-preset` 的声明。真接管 dsh 进程时的写法：
-# - insert:
-#     - id: agent-preset-registry
-#       name: '@deepseek-ai/dsh-agent-preset-registry'
-#       config:
-#         default: company-standard
-#     - id: preset-company-standard
-#       name: '@deepseek-ai/dsh-agent-preset'
-#       config:
-#         id: company-standard
-#         plugins: []
