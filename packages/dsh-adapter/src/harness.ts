@@ -45,7 +45,7 @@ import type { GateApi, GateInput } from './gate.js'
 import { installGate } from './gate.js'
 import type { GatewayBudget } from './llm.js'
 import { GATEWAY_PROVIDER, GatewayLlmAdapter } from './llm.js'
-import { presetCredentialRefs, presetDefinition, presetToolNames } from './preset.js'
+import { presetCredentialRefs, presetDefinition } from './preset.js'
 import { AgentswsBashExecutor, runShell } from './shell.js'
 import {
   installSubscriptionLlm,
