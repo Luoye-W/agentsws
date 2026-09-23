@@ -3525,6 +3525,8 @@ export interface ChatRelayTestView {
 export const testChatRelay = (): Promise<ChatRelayTestView> =>
   api('/v1/chat/relay/test', { method: 'POST' })
 
+export type HostedInstanceState = 'running' | 'starting' | 'sleeping' | 'stopped'
+
 export interface ChatRelayStatusView {
   state: string
   online: boolean
@@ -3532,10 +3534,55 @@ export interface ChatRelayStatusView {
   conversations_this_month?: number
   limit?: number
   unlimited?: boolean
+  subscribed?: boolean
   offline_messages?: number
+  /** WP128：托管实例在不在跑（订阅了客服增值服务才有）。 */
+  hosted?: { state: HostedInstanceState; last_heartbeat_at?: string }
 }
 
 export const getChatRelayStatus = (): Promise<ChatRelayStatusView> => api('/v1/chat/relay/status')
+
+/* ── WP128 客服增值服务：云端替你值守（「转发方式」第三项） ─────────────── */
+
+export type HostedSubscriptionStatus = 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+
+export interface ChatRelayHostedView {
+  /** 云端开没开这项服务。 */
+  available: boolean
+  /** 关联过云账号没有。 */
+  linked: boolean
+  subscription: {
+    status: HostedSubscriptionStatus
+    current_cycle_end?: string
+    grace_until?: string
+    cancel_at_period_end?: boolean
+  }
+  hosted?: {
+    state: HostedInstanceState
+    last_heartbeat_at?: string
+    snapshot?: { at: string; bytes: number; source: 'hosted' | 'local' }
+    snapshot_kept_until?: string
+    last_error?: string
+  }
+  message?: string
+}
+
+export const getChatRelayHosted = (): Promise<ChatRelayHostedView> => api('/v1/chat/relay/hosted')
+
+export const subscribeChatRelayHosted = (): Promise<ChatRelayHostedView> =>
+  api('/v1/chat/relay/hosted/subscribe', { method: 'POST' })
+
+export const cancelChatRelayHosted = (): Promise<ChatRelayHostedView> =>
+  api('/v1/chat/relay/hosted/subscribe', { method: 'DELETE' })
+
+export const bringHomeChatRelayHosted = (): Promise<{
+  saved_to?: string
+  bytes?: number
+  message: string
+}> => api('/v1/chat/relay/hosted/bring-home', { method: 'POST' })
+
+export const seedChatRelayHosted = (): Promise<{ bytes: number; message: string }> =>
+  api('/v1/chat/relay/hosted/seed', { method: 'POST' })
 
 export const teachChatSession = (
   id: string,
