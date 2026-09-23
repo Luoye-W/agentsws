@@ -254,8 +254,58 @@ export interface ProviderModelInfo {
   owned_by?: string
 }
 
+/**
+ * 一个模型**能做什么**（WP127，Luoye 09-23：只支持多模态）。
+ *
+ * - `vision`：看得懂图。**Agents 工坊要求文字模型必须能看图**——品牌设计规范读手册、
+ *   看站上图片风格都靠它；设置页与向导第 ① 步的验证会真的发一张图去问。
+ * - `image_generation`：能出图。**单独一档**（设置页「生图」那一块），文字模型
+ *   不要求会出图。
+ *
+ * 为什么是声明而不是每次试：试一次要花钱。声明的来源是**上一次验证的结果**
+ * （`apps/server` 装配时按 `last_test` 填），没验证过就不填——网关只在
+ * 声明了 `vision: false` 时才拦带图的请求（"不知道"不等于"不能"）。
+ */
+export interface ModelCapabilities {
+  vision: boolean
+  image_generation: boolean
+}
+
+/**
+ * 模型验证的三步（WP127，70 §2.2）：连通 → 一次最小文字请求 → 一次带图的最小请求。
+ * 向导第 ① 步与设置页「测试」共用同一套（`@agentsws/model-gateway` 的 `checkModel`）。
+ */
+export type ModelCheckStep = 'connect' | 'text' | 'vision'
+
+export interface ModelCheckStepResult {
+  step: ModelCheckStep
+  ok: boolean
+  /** 前一步没过，这一步没跑。 */
+  skipped?: boolean
+}
+
+/**
+ * 常见的**能看图**的模型名（WP127）。只列公开型号名，**不是推荐**——
+ * 验证不过时给用户一个"大概该选哪种"的方向，真能不能看以验证为准。
+ */
+export const VISION_MODEL_EXAMPLES: readonly string[] = [
+  'gpt-4o',
+  'gpt-4o-mini',
+  'claude-sonnet-4-5',
+  'qwen-vl-max',
+  'qwen-vl-plus',
+  'glm-4v-plus',
+  'moonshot-v1-8k-vision-preview',
+  'llama3.2-vision',
+]
+
 export interface ModelProvider {
   ref: ModelRef
+  /**
+   * WP127：能力声明（只加）。**可选**——不填 = 还不知道（没验证过），
+   * 网关照常放行；填了 `vision: false` 的，带图的请求在网关就被拦下并说人话。
+   */
+  capabilities?: ModelCapabilities
   complete(req: {
     messages: ChatMessage[]
     tools?: ToolDef[]
@@ -282,11 +332,21 @@ export interface ModelProvider {
  * 试跑一把模型没通，**到底是哪一类没通**（70 §2.2，WP121b）。
  *
  * 五档，因为界面上只说得出五句话：密钥不对 / 余额不足 / 地址不对 /
- * 连上了没回 / 认不出来。分档在契约里而不是在界面里，是因为**不止一处要它**：
+ * 连上了没回 / 认不出来（WP127 加第六档：看不了图）。分档在契约里而不是在界面里，是因为**不止一处要它**：
  * 向导第 ① 步按它挑那一句人话，模拟场景按它断言"说的是人话不是错误码"。
  * 分成两份的话，哪天多一档（比如 429）就会有一处忘了改。
  */
-export type ModelFailureKind = 'key' | 'balance' | 'address' | 'timeout' | 'other'
+export type ModelFailureKind =
+  | 'key'
+  | 'balance'
+  | 'address'
+  | 'timeout'
+  | 'other'
+  /** WP127：文字通了，但**看不了图**——Agents 工坊要求模型能看图。 */
+  | 'vision'
+
+/** WP127：验证第 ③ 步（带图那一次）没过时 `ModelTestResult.reason` 填的码。 */
+export const NO_VISION_REASON = 'no_vision'
 
 /**
  * 判这一次失败属于哪一档。
@@ -296,6 +356,7 @@ export type ModelFailureKind = 'key' | 'balance' | 'address' | 'timeout' | 'othe
  */
 export function modelFailureKind(input: { reason?: string; detail?: string }): ModelFailureKind {
   if (input.reason === 'no_key') return 'key'
+  if (input.reason === NO_VISION_REASON) return 'vision'
   const text = `${input.reason ?? ''} ${input.detail ?? ''}`.toLowerCase()
   if (/401|403|unauthorized|invalid api key|api key/.test(text)) return 'key'
   if (/402|insufficient|balance|余额/.test(text)) return 'balance'

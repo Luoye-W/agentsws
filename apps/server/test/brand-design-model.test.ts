@@ -186,8 +186,8 @@ const imageFetchStub = (): Parameters<typeof createBrandDesign>[0]['imageFetch']
   }
 }
 
-describe('WP122b ⑤：视觉档接通', () => {
-  it('配了视觉模型：站上的内容图真被递给视觉口，imagery 按它写，积分按张计', async () => {
+describe('WP122b ⑤ / WP127：看图（文字模型即多模态）', () => {
+  it('配了模型：站上的内容图真被递给看图那一口，imagery 按它写，积分按张计', async () => {
     const seen: { size: number }[] = []
     const design = makeDesignWithVision({
       imageFetch: imageFetchStub(),
@@ -210,7 +210,7 @@ describe('WP122b ⑤：视觉档接通', () => {
     design.close()
   })
 
-  it('没配视觉模型：不抓图、不假装分析过——imagery 留「未找到」', async () => {
+  it('没接模型：不抓图、不假装分析过——imagery 留「未找到」', async () => {
     let imageFetchCalled = false
     const design = makeDesignWithVision({
       imageFetch: async () => {
@@ -224,6 +224,23 @@ describe('WP122b ⑤：视觉档接通', () => {
     expect(doc?.profile.imagery).toBeUndefined()
     expect(doc?.markdown).toContain('未找到，请补充')
     expect(run.status).toBe('awaiting_confirm')
+    design.close()
+  })
+
+  it('WP127：当前模型看不了图——不再悄悄跳过，版本历史里明说', async () => {
+    const design = makeDesignWithVision({
+      imageFetch: imageFetchStub(),
+      visionFor: () => async () => {
+        // 网关按能力声明拦下时抛的就是这一句（`CANNOT_SEE_IMAGES_ZH`）
+        throw new Error(
+          '当前模型看不了图。Agents 工坊要求文字模型能看图——去设置 → 模型，换一个能看图的模型。',
+        )
+      },
+    })
+    await design.port.extract(ACTOR, {})
+    const doc = design.port.get(ACTOR)
+    expect(doc?.profile.imagery).toBeUndefined()
+    expect(design.port.revisions(ACTOR).at(-1)?.note).toContain('当前模型看不了图')
     design.close()
   })
 

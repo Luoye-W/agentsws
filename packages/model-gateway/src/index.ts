@@ -9,6 +9,7 @@ export { createModelGateway } from './gateway.js'
 // WP76（22 图片槽 / 58 §1）：图片能力的两个实现 + 「没有图片模型」那句人话
 export type { StubImageProviderOptions } from './images.js'
 export {
+  encodePng,
   NO_IMAGE_MODEL_EN,
   NO_IMAGE_MODEL_ZH,
   parseImageSize,
@@ -30,6 +31,8 @@ export type {
 export {
   catalogModels,
   catalogPrice,
+  catalogVision,
+  catalogVisionByName,
   findModel,
   hostOf,
   PRICE_CATALOG,
@@ -60,6 +63,9 @@ export {
   ollamaTagsUrl,
   openaiCompatibleProvider,
 } from './providers/openai-compatible.js'
+export type { OpenAiImageOptions } from './providers/openai-images.js'
+// WP127：生图单独一档的真实现（OpenAI 形态 `/images/generations`）
+export { IMAGE_TIMEOUT_MS, openaiImageProvider } from './providers/openai-images.js'
 export type { StubProviderOptions } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'
@@ -82,3 +88,17 @@ export type {
   UsageRecord,
 } from './types.js'
 export { GatewayError, isRetryableProviderError, ProviderError } from './types.js'
+export type { CheckModelInput, ModelCheckErrorView, ModelCheckOutcome } from './vision-probe.js'
+// WP127：模型验证三步（连通 → 文字 → 带图），向导与设置页共用
+export {
+  CANNOT_SEE_IMAGES_ZH,
+  checkModel,
+  hasImagePart,
+  textProbeMessages,
+  VISION_PROBE_PROMPT,
+  VISION_PROBE_WORD,
+  visionProbeBase64,
+  visionProbeMessages,
+  visionProbePassed,
+  visionProbePng,
+} from './vision-probe.js'

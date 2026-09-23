@@ -19,6 +19,7 @@ import type {
   TranscriptionAudioDigest,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { NO_VISION_REASON } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import { unavailableImageProvider } from './images.js'
 import type { BudgetCtx, CapSpec, Reservation } from './ledger.js'
@@ -46,6 +47,7 @@ import type {
   UsageRecord,
 } from './types.js'
 import { GatewayError, isRetryableProviderError, ProviderError } from './types.js'
+import { CANNOT_SEE_IMAGES_ZH, hasImagePart } from './vision-probe.js'
 
 export interface ModelGatewayOptions {
   providers: ModelProvider[]
@@ -110,7 +112,15 @@ export interface ModelGatewayApi extends ModelGateway {
    * 22 §5「业务代码里没有 key」照旧：调用方给的是**装配好的 provider**，
    * key 怎么来（环境变量还是本机加密库）是装配方的事，网关不看值。
    */
-  reconfigure(next: { providers?: ModelProvider[]; policy?: ModelGatewayPolicy }): void
+  reconfigure(next: {
+    providers?: ModelProvider[]
+    policy?: ModelGatewayPolicy
+    /**
+     * WP127：换生图那一档（设置页「生图」那一块改完立刻生效）。
+     * `null` = 退回装配时那一条（生产上是"没有图片模型"，demo 里是占位图）。
+     */
+    images?: ImageProvider | null
+  }): void
   /** 现在挂着哪几个 provider（设置页要显示"当前生效的是谁"）。 */
   providers(): readonly ModelRef[]
 }
@@ -126,16 +136,23 @@ class Gateway implements ModelGatewayApi {
    * 为什么不是 `undefined`：调用方要说的那句话（58 §1「没有就明说」）
    * 得有地方放。留成 `undefined` 的结果是每个调用点自己编一句"生成失败"。
    */
-  readonly images: ImageProvider
+  private currentImages: ImageProvider
+  private readonly initialImages: ImageProvider
   private readonly ledger: BudgetLedger
   private readonly usageRecords: UsageRecord[] = []
 
   constructor(private readonly opts: ModelGatewayOptions) {
-    this.images = opts.images ?? unavailableImageProvider()
+    this.initialImages = opts.images ?? unavailableImageProvider()
+    this.currentImages = this.initialImages
     this.ledger = new BudgetLedger(opts.policy.budget ?? {}, {
       onFrozen: (cap, used, ctx) => this.emitFrozen(cap, used, ctx),
       onRunExhausted: (used, cap, ctx) => this.emitRunExhausted(used, cap, ctx),
     })
+  }
+
+  /** 生图那一档。getter 而不是一格：`reconfigure({ images })` 之后下一次取就是新的。 */
+  get images(): ImageProvider {
+    return this.currentImages
   }
 
   // ---- 事件 ----
@@ -324,6 +341,12 @@ class Gateway implements ModelGatewayApi {
     const primary = this.resolveRef(meta, req.model)
     const primaryProvider = this.findProvider(primary)
     this.assertResidency(primary, primaryProvider, ctx, meta.purpose, req.eu_customer === true)
+    const withImages = hasImagePart(req.messages)
+    // WP127：声明了看不了图的模型，带图的请求在这里就拦下——不花钱、说人话。
+    // 验证那一次（`capability_probe`）不拦：它问的正是"现在还看不看得了"。
+    if (withImages && req.capability_probe !== true) {
+      assertCanSee(primary, primaryProvider)
+    }
     const staticPrefix = staticPrefixHash(req.messages, req.tools, req.cache_breakpoints)
     const startedAt = this.opts.clock.now()
     const reservation = this.reserveFor(
@@ -345,6 +368,8 @@ class Gateway implements ModelGatewayApi {
           if (ref !== primary) {
             this.assertResidency(ref, provider, ctx, meta.purpose, req.eu_customer === true)
             priceFor(this.opts.policy.prices, ref)
+            // 降级到一个看不了图的备选，等于把图悄悄丢掉：跳过它
+            if (withImages && req.capability_probe !== true) assertCanSee(ref, provider)
           }
         } catch (e) {
           attempts.push({ model: ref, message: messageOf(e) })
@@ -568,8 +593,13 @@ class Gateway implements ModelGatewayApi {
     return this.usageRecords
   }
 
-  reconfigure(next: { providers?: ModelProvider[]; policy?: ModelGatewayPolicy }): void {
+  reconfigure(next: {
+    providers?: ModelProvider[]
+    policy?: ModelGatewayPolicy
+    images?: ImageProvider | null
+  }): void {
     if (next.providers !== undefined) this.opts.providers = next.providers
+    if (next.images !== undefined) this.currentImages = next.images ?? this.initialImages
     if (next.policy !== undefined) {
       this.opts.policy = next.policy
       this.ledger.setPolicy(next.policy.budget ?? {})
@@ -579,6 +609,20 @@ class Gateway implements ModelGatewayApi {
   providers(): readonly ModelRef[] {
     return this.opts.providers.map((p) => ({ ...p.ref }))
   }
+}
+
+/**
+ * WP127：这个模型声明了看不了图，就不把图递给它。
+ *
+ * 只认**明确声明 `vision: false`** 的——没声明（没验证过）照常放行，
+ * 让上游自己回答；"不知道"不等于"不能"。
+ */
+function assertCanSee(ref: ModelRef, provider: ModelProvider): void {
+  if (provider.capabilities?.vision !== false) return
+  throw new GatewayError('invalid_input', CANNOT_SEE_IMAGES_ZH, {
+    reason: NO_VISION_REASON,
+    model: priceKey(ref),
+  })
 }
 
 function ctxOf(meta: ModelMeta): BudgetCtx {

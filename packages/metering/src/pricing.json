@@ -32,6 +32,15 @@
       "label_en": "Embeddings (per token)"
     },
     {
+      "capability": "ai.image",
+      "unit": "image",
+      "credits_per_unit": 0.5,
+      "block": "ai",
+      "label_zh": "AI 生图（按张）",
+      "label_en": "AI image generation (per image)",
+      "note_zh": "WP127：生图单独一档。用 Agents 工坊官方接口出图按张扣积分，设置页「生图」那一块常显这个单价；出不来（上游拒了）一分不扣。"
+    },
+    {
       "capability": "data.kol.lookup",
       "unit": "call",
       "credits_per_unit": 0.2,

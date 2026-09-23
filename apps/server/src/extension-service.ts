@@ -25,6 +25,7 @@ import type {
   ExtensionContactDispute,
   ExtensionContactLookup,
   ExtensionContactSaveResult,
+  ExtensionContentObservation,
   ExtensionContentResult,
   ExtensionContentSaveResult,
   ExtensionCreatorReport,
@@ -92,6 +93,12 @@ export interface PublicLibraryContributor {
     | { ok: true; action: 'new' | 'noop'; rewarded: boolean; message?: string }
     | { ok: false; reason: 'not_linked' | 'upstream_error'; message: string }
   >
+  /**
+   * WP129：内容观测进公共库（云端 `POST /v1/data/kol/content-observations`）。
+   * 可选方法：老装配不实现就是"内容只落本机"，与 WP119c 之前一样。
+   * 回的 `accepted` 是**送进去了几条**（云那边桶内重复也算送进去了——它刷新了数字）。
+   */
+  contributeContent?(rows: readonly PublicContentRow[]): Promise<{ accepted: number }>
   /** 标记一条联系方式是错的（免费；云端只记不裁）。 */
   disputeContact?(
     key: {
@@ -118,6 +125,33 @@ export interface PublicObservationRow {
   observed_at: string
   /** 公开的商务邮箱与它的来源页（用户显式收下过才有）。 */
   contact?: { value: string; source?: string | undefined } | undefined
+}
+
+/**
+ * 送去公共库的一条内容（WP129）。**比插件报上来的那条窄**。
+ *
+ * 少掉的几格是故意的：`url` / `source_url` / `thumbnail_url` 带平台的一次性参数
+ * （分享 id、签名封面），`author.name` 与粉丝数走红人那条路；**评论文本本来就
+ * 进不了内容观测**（schema 红线），这里也没有它的位置。用户自己的备注、活动、
+ * 存入状态一概不出本机。
+ */
+export interface PublicContentRow {
+  channel: KolChannel
+  /** 作者 handle（归一过）。认不出 handle 的内容不送——公共库只认 handle。 */
+  handle: string
+  external_id: string
+  content_type: 'video' | 'post' | 'reel'
+  title?: string | undefined
+  published_at?: string | undefined
+  duration_seconds?: number | undefined
+  orientation?: 'landscape' | 'portrait' | undefined
+  views?: number | undefined
+  likes?: number | undefined
+  comments?: number | undefined
+  shares?: number | undefined
+  paid_promotion?: boolean | undefined
+  shoppable?: boolean | undefined
+  observed_at: string
 }
 
 export interface ExtensionServiceOptions {
@@ -368,6 +402,51 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
   })
 
   const revealPrice = (): number => options.revealPriceCredits?.() ?? 0
+
+  /**
+   * WP129：一条内容观测转发去公共库。规则与红人观测同一条：**登录了就送、没登录
+   * 一个字节都不出这台电脑**，没有第二个开关。先落本机、再转发；转发失败不回滚、
+   * 不让请求失败——回执里如实报 0。
+   */
+  async function forwardContent(
+    input: ExtensionContentObservation,
+    handle: string | undefined,
+  ): Promise<number> {
+    const cloud = options.publicLibrary
+    if (cloud?.contributeContent === undefined || !cloud.linked()) return 0
+    const bare = handle === undefined ? '' : normalizeHandle(handle)
+    /*
+     * 认不出 handle 就不送：公共库以 handle 为键。本机库里可能存着拿 YouTube 频道 id
+     * （`UC` + 22 位）顶替的 handle（存入时页面上没 handle），那不是 handle，也不送——
+     * 送上去就会在公共库里凭空多出一个叫 `uc…` 的人。
+     */
+    if (bare === '' || (input.channel === 'youtube' && /^uc[a-z0-9_-]{22}$/.test(bare))) return 0
+    const row: PublicContentRow = {
+      channel: input.channel,
+      handle: bare,
+      external_id: input.content_external_id,
+      content_type: input.content_type,
+      ...(input.title.trim() === '' ? {} : { title: input.title.trim() }),
+      // 页面上抓来的发布时间可能是「3 天前」这种话——不是时间戳就不送（云那边会整批拒）
+      ...(input.published_at === undefined || Number.isNaN(Date.parse(input.published_at))
+        ? {}
+        : { published_at: input.published_at }),
+      ...(input.duration_seconds === undefined ? {} : { duration_seconds: input.duration_seconds }),
+      ...(input.orientation === undefined ? {} : { orientation: input.orientation }),
+      ...(input.stats.views === undefined ? {} : { views: input.stats.views }),
+      ...(input.stats.likes === undefined ? {} : { likes: input.stats.likes }),
+      ...(input.stats.comments === undefined ? {} : { comments: input.stats.comments }),
+      ...(input.stats.shares === undefined ? {} : { shares: input.stats.shares }),
+      ...(input.paid_promotion === undefined ? {} : { paid_promotion: input.paid_promotion }),
+      ...(input.shoppable === undefined ? {} : { shoppable: input.shoppable }),
+      observed_at: input.captured_at,
+    }
+    try {
+      return (await cloud.contributeContent([row])).accepted > 0 ? 1 : 0
+    } catch {
+      return 0
+    }
+  }
 
   return {
     store: options.store,
@@ -705,7 +784,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       return { status: 'ok', contact_id: id, creator_id: creator.id }
     },
 
-    contentObservation: (session, input): ExtensionContentResult => {
+    contentObservation: async (session, input): Promise<ExtensionContentResult> => {
       void session
       const author =
         findAccount(input.channel, input.author.external_id) ??
@@ -721,7 +800,18 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
           content_external_id: input.content_external_id,
         })
         .find((o) => o.observed_at.slice(0, 10) === day)
-      if (same !== undefined) return { status: 'deduped', content_id: same.id }
+      /*
+       * WP129：本机去重了**照样转发**——云那边按同一个键（渠道 + 内容 id + UTC 日）
+       * 幂等，重复送只刷新数字、不多记一行也不算奖励；而"上次没送成（云连不上）"
+       * 的那一条，这一次就补上了。本机不另记"送没送过"。
+       */
+      const authorHandle = author?.handle ?? input.author.handle
+      if (same !== undefined)
+        return {
+          status: 'deduped',
+          content_id: same.id,
+          forwarded_to_public_library: await forwardContent(input, authorHandle),
+        }
       const id = nextId('co')
       const row: KolContentObservation = {
         id,
@@ -736,10 +826,20 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         ...(input.stats.likes === undefined ? {} : { likes: input.stats.likes }),
         ...(input.stats.comments === undefined ? {} : { comments_count: input.stats.comments }),
         ...(input.stats.shares === undefined ? {} : { shares: input.stats.shares }),
+        ...(input.duration_seconds === undefined
+          ? {}
+          : { duration_seconds: input.duration_seconds }),
+        ...(input.published_at === undefined ? {} : { published_at: input.published_at }),
+        ...(input.paid_promotion === undefined ? {} : { paid_promotion: input.paid_promotion }),
+        ...(input.shoppable === undefined ? {} : { shoppable: input.shoppable }),
         observed_at: input.captured_at,
       }
       options.kol.saveContentObservation(row)
-      return { status: 'ok', content_id: id }
+      return {
+        status: 'ok',
+        content_id: id,
+        forwarded_to_public_library: await forwardContent(input, authorHandle),
+      }
     },
 
     contentSave: (session, input): ExtensionContentSaveResult => {

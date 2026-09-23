@@ -5180,3 +5180,50 @@ export const revertPersona = (
     body: input,
     ...withAssignment(assignment),
   })
+
+// ── WP127：文字模型必须能看图；生图单独一档 ────────────────────────────
+
+/** 验证三步各自过没过（连通 → 文字 → 带图）。 */
+export interface ModelCheckStepView {
+  step: 'connect' | 'text' | 'vision'
+  ok: boolean
+  skipped?: boolean
+}
+
+/** WP127：验证结果多了三步与看图结论（接口合并，老字段不动）。 */
+export interface ModelTestResult {
+  steps?: ModelCheckStepView[]
+  /** `false` = 看不了图（`reason: 'no_vision'`）。 */
+  vision?: boolean
+}
+
+/** WP127：按上一次验证，这条能不能看图。老用户升级上来都是 `unchecked`。 */
+export interface ModelProviderView {
+  vision_status?: 'ok' | 'no' | 'unchecked'
+}
+
+/** WP127：生图那一档。 */
+export interface ModelImageView {
+  configured: boolean
+  provider_id?: string
+  model?: string
+  official: boolean
+  /** 官方接口一张图多少积分（常显）。 */
+  credits_per_image?: number
+  choices: { provider_id: string; label: string; official: boolean; default_model: string }[]
+  unavailable_reason?: string
+}
+
+export const getModelImage = (assignment?: string): Promise<ModelImageView> =>
+  api<ModelImageView>('/v1/models/image', withAssignment(assignment))
+
+/** `provider_id` 给空串 = 不配。 */
+export const setModelImage = (
+  input: { provider_id: string; model?: string },
+  assignment?: string,
+): Promise<ModelImageView> =>
+  api<ModelImageView>('/v1/models/image', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })

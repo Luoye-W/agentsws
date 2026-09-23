@@ -313,6 +313,7 @@ export { messageRoutes } from './routes/messages.js'
 export type {
   DiscoverModelsInput,
   ModelDefaultsView,
+  ModelImageView,
   ModelListing,
   ModelPricingModel,
   ModelPricingRefreshResult,
@@ -326,8 +327,10 @@ export type {
   ModelTestResult,
   ModelUsageRow,
   ModelUsageView,
+  ModelVisionStatus,
   SaveModelProviderInput,
   SetModelDefaultsInput,
+  SetModelImageInput,
   SubscriptionLoginInput,
   SubscriptionLoginMethodName,
   SubscriptionNoticeView,

@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
   ModelDefaultsView,
+  ModelImageView,
   ModelListing,
   ModelPricingRefreshResult,
   ModelPricingView,
@@ -26,9 +27,10 @@ import type {
 } from '@agentsws/api'
 import type { EventEnvelope } from '@agentsws/contracts'
 import type { FetchLike, PageFetch } from '@agentsws/model-gateway'
+import { catalogVisionByName, VISION_PROBE_WORD } from '@agentsws/model-gateway'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
-import { DEEPSEEK_KEY_ENV } from '../src/models.js'
+import { CLOUD_TOKEN_SECRET_ID, DEEPSEEK_KEY_ENV } from '../src/models.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
 const T0 = '2026-09-09T09:00:00.000Z'
@@ -68,6 +70,8 @@ interface FakeUpstream {
   mode: 'ok' | 'unauthorized' | 'down'
   /** WP42：`GET /models` 回哪几个模型名（空数组 = 这家没有这个口）。 */
   models: string[]
+  /** WP127：这个假模型能不能看图（能：念出测试图上的词；不能：带图的请求回 400）。 */
+  vision: boolean
 }
 
 function fakeUpstream(): FakeUpstream {
@@ -75,6 +79,7 @@ function fakeUpstream(): FakeUpstream {
     calls: [],
     mode: 'ok',
     models: ['deepseek-chat', 'deepseek-flash', 'deepseek-v4-pro'],
+    vision: true,
     fetch: async () => ({}) as never,
   }
   state.fetch = async (url, init) => {
@@ -105,6 +110,26 @@ function fakeUpstream(): FakeUpstream {
         status: 200,
         json: async () => body,
         text: async () => JSON.stringify(body),
+      }
+    }
+    // WP127：验证第 ③ 步是一次带图的请求
+    if (typeof init.body === 'string' && init.body.includes('"image_url"')) {
+      if (!state.vision) {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({}),
+          text: async () => '{"error":{"message":"image_url is not supported by this model"}}',
+        }
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: VISION_PROBE_WORD } }],
+          usage: { prompt_tokens: 90, completion_tokens: 2 },
+        }),
+        text: async () => '{}',
       }
     }
     return {
@@ -552,10 +577,11 @@ describe('WP25 §C 热更新（保存即生效，不重启）', () => {
     await put('/v1/models/providers/deepseek', SAVE)
     await post('/v1/models/providers/deepseek/test')
     const before = await data<ModelUsageView>(await api('/v1/models/usage'))
-    expect(before.total?.calls).toBe(1)
+    // WP127：验证是两次调用（文字一次、带图一次）
+    expect(before.total?.calls).toBe(2)
     await put('/v1/models/providers/deepseek', { kind: 'deepseek', model: 'deepseek-chat' })
     const after = await data<ModelUsageView>(await api('/v1/models/usage'))
-    expect(after.total?.calls).toBe(1)
+    expect(after.total?.calls).toBe(2)
     expect(after.total?.cost_base).toBe(before.total?.cost_base)
   })
 
@@ -582,8 +608,9 @@ describe('WP25 §C 测试按钮', () => {
     expect(result.duration_ms).toBeGreaterThanOrEqual(0)
     // 出网请求全打在注入的假上游上：真 fetch 一次都没被调到
     // （保存时会顺手拉一次模型清单，WP42；试跑本身仍然只有这一次 chat 调用）
+    // WP127：三步——文字一次、带图一次（连通由第一次回答）
     const chats = ctx.upstream.calls.filter((c) => c.url.endsWith('/chat/completions'))
-    expect(chats).toHaveLength(1)
+    expect(chats).toHaveLength(2)
     const call = chats[0]
     expect(call?.url).toBe('https://api.deepseek.com/chat/completions')
     // key 只在 Authorization 头里出现，body 里没有
@@ -647,6 +674,163 @@ describe('WP25 §C 测试按钮', () => {
   })
 })
 
+describe('WP127 验证三步：文字模型必须能看图', () => {
+  it('三步全过：结果里带三步与 vision: true，provider 视图标 ok', async () => {
+    await put('/v1/models/providers/deepseek', SAVE)
+    const result = await data<ModelTestResult>(await post('/v1/models/providers/deepseek/test'))
+    expect(result.ok).toBe(true)
+    expect(result.vision).toBe(true)
+    expect(result.steps?.map((s) => [s.step, s.ok])).toEqual([
+      ['connect', true],
+      ['text', true],
+      ['vision', true],
+    ])
+    // 第二次请求真的带着图（OpenAI 兼容口的 image_url 部件，base64 内联）
+    const chats = ctx.upstream.calls.filter((c) => c.url.endsWith('/chat/completions'))
+    expect(chats[1]?.body).toContain('data:image/png;base64,')
+    const { providers } = await data<{ providers: ModelProviderView[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(providers[0]?.vision_status).toBe('ok')
+  })
+
+  it('看不了图：不通过，说人话并列出常见能看图的型号；视图标 no', async () => {
+    await put('/v1/models/providers/deepseek', SAVE)
+    ctx.upstream.vision = false
+    const result = await data<ModelTestResult>(await post('/v1/models/providers/deepseek/test'))
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('no_vision')
+    expect(result.vision).toBe(false)
+    expect(result.detail).toContain('看不了图')
+    expect(result.detail).toContain('gpt-4o')
+    expect(result.steps?.[2]).toMatchObject({ step: 'vision', ok: false })
+    const { providers } = await data<{ providers: ModelProviderView[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(providers[0]?.vision_status).toBe('no')
+    expect(ctx.server.modelSettings.visionStatus()).toBe('no')
+  })
+
+  it('标了看不了图之后，带图的请求在网关就被拦下（不再打上游），纯文字照常', async () => {
+    await put('/v1/models/providers/deepseek', SAVE)
+    ctx.upstream.vision = false
+    await post('/v1/models/providers/deepseek/test')
+    const before = ctx.upstream.calls.length
+    const gateway = ctx.server.models
+    const meta = {
+      workspace_id: ctx.server.bootstrap.workspace.id,
+      assignment_id: ctx.server.bootstrap.ownerAssignment.id,
+      role_id: ctx.server.bootstrap.ownerAssignment.role_id,
+      run_id: 'run_x' as never,
+      purpose: 'extraction' as const,
+    }
+    await expect(
+      gateway.complete({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '看看' },
+              { type: 'image', mime: 'image/png', data: 'AAAA' },
+            ],
+          },
+        ],
+        meta,
+      }),
+    ).rejects.toThrow('当前模型看不了图')
+    expect(ctx.upstream.calls.length).toBe(before)
+    await expect(
+      gateway.complete({ messages: [{ role: 'user', content: '在吗' }], meta }),
+    ).resolves.toMatchObject({ text: '好' })
+  })
+
+  it('再测一次能看了就翻回来（验证那一次不被上一次的结论拦住）', async () => {
+    await put('/v1/models/providers/deepseek', SAVE)
+    ctx.upstream.vision = false
+    await post('/v1/models/providers/deepseek/test')
+    ctx.upstream.vision = true
+    const again = await data<ModelTestResult>(await post('/v1/models/providers/deepseek/test'))
+    expect(again.ok).toBe(true)
+    expect(ctx.server.modelSettings.visionStatus()).toBe('ok')
+  })
+
+  it('老用户升级上来：测试结果里没有三步那一格，视图标 unchecked', async () => {
+    await put('/v1/models/providers/deepseek', SAVE)
+    const { providers } = await data<{ providers: ModelProviderView[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(providers[0]?.vision_status).toBe('unchecked')
+  })
+
+  it('换了模型名，上一次"能看图"的结论就不算数', async () => {
+    await put('/v1/models/providers/deepseek', SAVE)
+    await post('/v1/models/providers/deepseek/test')
+    await put('/v1/models/providers/deepseek', { ...SAVE, model: 'deepseek-v4-pro' })
+    const { providers } = await data<{ providers: ModelProviderView[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(providers[0]?.vision_status).toBe('unchecked')
+  })
+
+  it('官方接口那一侧的默认型号（agentsws 云卡）价目表写明能看图', async () => {
+    const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
+      await api('/v1/models/providers'),
+    )
+    const cloud = templates.find((t) => t.kind === 'agentsws_cloud')
+    expect(cloud?.default_model).toBe('deepseek-flash')
+    expect(catalogVisionByName(cloud?.default_model ?? '')).toBe(true)
+  })
+
+  it('官方接口那一条也走同一套三步（不给官方开后门）', async () => {
+    ctx.server.secrets.put(CLOUD_TOKEN_SECRET_ID, { token: 'wst_test' })
+    await put('/v1/models/providers/agentsws', {
+      kind: 'agentsws_cloud',
+      model: 'deepseek-flash',
+    })
+    ctx.upstream.vision = false
+    const result = await data<ModelTestResult>(await post('/v1/models/providers/agentsws/test'))
+    expect(result.reason).toBe('no_vision')
+    const chats = ctx.upstream.calls.filter((c) => c.url.endsWith('/v1/ai/chat/completions'))
+    expect(chats).toHaveLength(2)
+  })
+})
+
+describe('WP127 生图单独一档', () => {
+  it('没配：说人话，单价照样常显', async () => {
+    const view = await data<ModelImageView>(await api('/v1/models/image'))
+    expect(view.configured).toBe(false)
+    expect(view.unavailable_reason).toContain('生图还没配')
+    expect(view.credits_per_image).toBeGreaterThan(0)
+    expect(ctx.server.models.images.available).toBe(false)
+  })
+
+  it('选一条 OpenAI 兼容口：保存即生效，出图打它的 /images/generations', async () => {
+    await put('/v1/models/providers/openai', {
+      kind: 'openai_compatible',
+      base_url: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      api_key: API_KEY,
+    })
+    const view = await data<ModelImageView>(
+      await put('/v1/models/image', { provider_id: 'openai' }),
+    )
+    expect(view).toMatchObject({ configured: true, model: 'gpt-image-1', official: false })
+    expect(view.choices.map((c) => c.provider_id)).toEqual(['openai'])
+    expect(ctx.server.models.images.available).toBe(true)
+    // 不给空串就不配
+    const off = await data<ModelImageView>(await put('/v1/models/image', { provider_id: '' }))
+    expect(off.configured).toBe(false)
+    expect(ctx.server.models.images.available).toBe(false)
+  })
+
+  it('DeepSeek 没有生图口：当场拒，不存下来等出图时再失败', async () => {
+    await put('/v1/models/providers/deepseek', SAVE)
+    const res = await put('/v1/models/image', { provider_id: 'deepseek' })
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('没有生图接口')
+  })
+})
+
 describe('WP25 §C 默认模型 / 驻留 / 三级预算', () => {
   it('按 purpose 指定模型；指到一个用不了的直接顶回来', async () => {
     await put('/v1/models/providers/deepseek', SAVE)
@@ -678,8 +862,9 @@ describe('WP25 §C 默认模型 / 驻留 / 三级预算', () => {
     await post('/v1/models/providers/deepseek/test')
     const usage = await data<ModelUsageView>(await api('/v1/models/usage'))
     expect(usage.rows.map((r) => r.purpose)).toEqual(['judge'])
-    expect(usage.rows[0]?.input_tokens).toBe(9)
-    expect(usage.total?.calls).toBe(1)
+    // WP127：文字一次（9）+ 带图一次（90）
+    expect(usage.rows[0]?.input_tokens).toBe(99)
+    expect(usage.total?.calls).toBe(2)
   })
 
   /*
@@ -713,9 +898,9 @@ describe('WP25 §C 默认模型 / 驻留 / 三级预算', () => {
     )
     expect(probe.ok, probe.reason ?? '').toBe(true)
     const usage = await data<ModelUsageView>(await api('/v1/models/usage'))
-    // token 照记
-    expect(usage.total?.input_tokens).toBe(9)
-    expect(usage.total?.output_tokens).toBe(1)
+    // token 照记（WP127：文字 9 + 1，带图 90 + 2）
+    expect(usage.total?.input_tokens).toBe(99)
+    expect(usage.total?.output_tokens).toBe(3)
     // 花费记 0
     expect(usage.total?.cost_base).toBe(0)
 

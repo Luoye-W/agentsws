@@ -14346,7 +14346,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ providers: ModelProviderView[], templates: ModelProviderTemplate[] }",
+            "description": "{ providers: ModelProviderView[]（WP127：vision_status = ok / no / unchecked，按上一次验证）, templates: ModelProviderTemplate[] }",
             "content": {
               "application/json": {
                 "schema": {
@@ -14427,7 +14427,7 @@
           "range": "workspace",
           "sensitivity": "internal"
         },
-        "x-returns": "{ providers: ModelProviderView[], templates: ModelProviderTemplate[] }"
+        "x-returns": "{ providers: ModelProviderView[]（WP127：vision_status = ok / no / unchecked，按上一次验证）, templates: ModelProviderTemplate[] }"
       }
     },
     "/v1/models/defaults": {
@@ -15466,7 +15466,7 @@
     "/v1/models/providers/{id}/test": {
       "post": {
         "operationId": "testModelProvider",
-        "summary": "经网关跑一次最小 complete（purpose=judge，十来个 token）：回延迟与模型名，不回 key",
+        "summary": "验证三步（WP127）：连通 → 一次最小文字请求 → 一次带图的最小请求（purpose=judge）；看不了图的不通过（reason=no_vision）。回延迟、模型名与三步结果，不回 key",
         "tags": ["models"],
         "parameters": [
           {
@@ -15499,7 +15499,7 @@
         ],
         "responses": {
           "200": {
-            "description": "ModelTestResult",
+            "description": "ModelTestResult（WP127：steps = 连通 / 文字 / 看图三步各自 ok；vision = 能不能看图，它就是这条 provider 的 capabilities.vision 声明的来源）",
             "content": {
               "application/json": {
                 "schema": {
@@ -15600,7 +15600,232 @@
           "range": "workspace",
           "sensitivity": "restricted"
         },
-        "x-returns": "ModelTestResult"
+        "x-returns": "ModelTestResult（WP127：steps = 连通 / 文字 / 看图三步各自 ok；vision = 能不能看图，它就是这条 provider 的 capabilities.vision 声明的来源）"
+      }
+    },
+    "/v1/models/image": {
+      "get": {
+        "operationId": "getModelImage",
+        "summary": "生图那一档（WP127）：配了没有、用哪条、官方接口一张图多少积分（常显）、能选哪几条",
+        "tags": ["models"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ModelImageView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "store_config",
+          "op": "read",
+          "range": "workspace",
+          "sensitivity": "internal"
+        },
+        "x-returns": "ModelImageView"
+      },
+      "put": {
+        "operationId": "setModelImage",
+        "summary": "改生图那一档（WP127）：选一条已配的 provider 与生图模型，或给空串不配；保存即生效",
+        "tags": ["models"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ModelImageView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-returns": "ModelImageView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "provider_id": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": ["provider_id"]
+              }
+            }
+          }
+        }
       }
     },
     "/v1/models/providers/{id}/discover": {
@@ -57292,6 +57517,12 @@
                     "type": "number",
                     "minimum": 0
                   },
+                  "paid_promotion": {
+                    "type": "boolean"
+                  },
+                  "shoppable": {
+                    "type": "boolean"
+                  },
                   "captured_at": {
                     "type": "string",
                     "minLength": 1
@@ -57473,6 +57704,12 @@
                   "duration_seconds": {
                     "type": "number",
                     "minimum": 0
+                  },
+                  "paid_promotion": {
+                    "type": "boolean"
+                  },
+                  "shoppable": {
+                    "type": "boolean"
                   },
                   "captured_at": {
                     "type": "string",

@@ -174,8 +174,9 @@ export interface BrandDesignOptions {
     run_id: string
   }) => DesignComposeModel | undefined
   /**
-   * 看图那一口（WP122b 交付 ⑤）。**每次现取**；没配视觉模型回 `undefined`，
-   * 看图整步跳过——产物里 `imagery` 留「未找到，请补充」，**不假装分析过**。
+   * 看图那一口（WP122b 交付 ⑤；WP127 起文字模型即多模态，配了模型就给）。**每次现取**；
+   * 没接模型回 `undefined`。模型看不了图时网关按能力声明拦下，成文那一步把
+   * 「当前模型看不了图」写进版本历史——`imagery` 留「未找到，请补充」，**不假装分析过**。
    * 每张图按 `CREDITS_PER_VISION_CALL` 计积分，与文字档共用同一个封顶。
    */
   visionFor?: (meta: { actor: BrandDesignActor; run_id: string }) => DesignVisionModel | undefined
@@ -350,8 +351,8 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
 
       // 模型口**现取**（WP122b 交付 ④）：模型设置改完下一轮抓取就生效；
       // 没配模型就是 undefined，成文退回直述版并如实标注（见下面 note）。
-      // 视觉口同理（交付 ⑤）：没配就整步跳过，imagery 留「未找到」；
-      // 配了才抓几张站上的内容图给视觉模型描述图片风格。
+      // 视觉口（交付 ⑤ → WP127）：文字模型就是多模态，配了模型就**必走**看图——
+      // 抓几张站上的内容图给它描述图片风格；看不了（当前模型看不了图）就在 note 里明说。
       const runId = options.newId('bdr')
       const model = options.modelFor?.({ actor, run_id: runId })
       const vision = options.visionFor?.({ actor, run_id: runId })
@@ -367,10 +368,10 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
           ? {}
           : { vision, images: siteImages.map((img) => img.bytes) }),
       })
-      const note =
-        composed.fallback_reason === undefined
-          ? `${noteOf(fresh)}${themeNote}`
-          : `${noteOf(fresh)}${themeNote}；${composed.fallback_reason}`
+      // WP127：看图没成（当前模型看不了图 / 上游不认图）也写进版本历史，不再悄悄跳过
+      const note = [`${noteOf(fresh)}${themeNote}`, composed.fallback_reason, composed.vision_note]
+        .filter((part): part is string => part !== undefined)
+        .join('；')
       // 看图那一步可能给档案补了 imagery（WP122b 交付 ⑤），落库用补过的
       const finalProfile = composed.profile ?? merged
       writeDoc(actor, { profile: finalProfile, markdown: composed.markdown }, 'site_extract', note)
@@ -444,8 +445,8 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
       // 方向是 (库里的, 手册的)：手册赢，但输的那个留在 `conflict` 里
       const merged = mergeDesignProfile(previous?.profile ?? {}, got.profile)
 
-      // WP122b 交付 ⑤：手册里的图给视觉模型看（抽嵌图；零依赖解不了 PDF 渲染，
-      // 见 `pdfPageImages` 的注释）。没配视觉模型 / 传的不是 PDF 就整步跳过。
+      // WP122b 交付 ⑤ → WP127：手册里的图**必走**视觉（抽嵌图；零依赖解不了 PDF 渲染，
+      // 见 `pdfPageImages` 的注释）。看不了图就在 note 里明说；docx / pptx 暂不抽嵌图。
       const runId = options.newId('bdr')
       const model = options.modelFor?.({ actor, run_id: runId })
       const vision = options.visionFor?.({ actor, run_id: runId })
@@ -462,10 +463,13 @@ export function createBrandDesign(options: BrandDesignOptions): BrandDesignAssem
           ? {}
           : { vision, images: fileImages.map((img) => img.bytes) }),
       })
-      const note =
-        composed.fallback_reason === undefined
-          ? `${file.filename}：${noteOf(got.profile)}`
-          : `${file.filename}：${noteOf(got.profile)}；${composed.fallback_reason}`
+      const note = [
+        `${file.filename}：${noteOf(got.profile)}`,
+        composed.fallback_reason,
+        composed.vision_note,
+      ]
+        .filter((part): part is string => part !== undefined)
+        .join('；')
       const finalProfile = composed.profile ?? merged
       writeDoc(actor, { profile: finalProfile, markdown: composed.markdown }, 'file_extract', note)
 

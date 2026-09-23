@@ -242,11 +242,76 @@ export interface PublicContentSample {
   likes?: number
   comments?: number
   shares?: number
+  /**
+   * WP129：页面上有没有「含付费推广」这一类广告标识（平台自己打的那个标，
+   * 不是我们猜的）。没看到 / 没采到就没有这一格——`false` 是"看过、没有"。
+   */
+  paid_promotion?: boolean
+  /** WP129：有没有带货（商品标签 / 购物车 / 商品链接那一类平台原生入口）。语义同上。 */
+  shoppable?: boolean
   /** 这份快照**被看到**的时刻。 */
   observed_at: Iso8601
   source: KolObservationSource
   updated_at: Iso8601
 }
+
+/**
+ * 一条**内容观测**（WP129）：插件在视频页看到的那一刻的数，经本机服务转发进公共库。
+ *
+ * 与 {@link PublicCreatorObservation} 同一条纪律：键就是白名单
+ * （{@link PUBLIC_CONTENT_OBSERVATION_FIELDS}），多一个键整批拒——**没有评论这一格**，
+ * 也没有页面地址 / 封面地址（带平台的一次性参数）与任何用户自己写的备注。
+ * `comments` 是评论**数**，不是评论。
+ */
+export interface PublicContentObservation {
+  channel: KolChannel
+  /** 作者在这条渠道上的 handle（自足键的另一半；只认 handle，不认平台内部 id）。 */
+  handle: string
+  /** 平台原生内容 id（YouTube 的 videoId、IG 的 shortcode）。 */
+  external_id: string
+  content_type: 'video' | 'post' | 'reel'
+  /** 标题。创作者给自己作品起的名字，不是正文。 */
+  title?: string
+  published_at?: Iso8601
+  duration_seconds?: number
+  orientation?: 'landscape' | 'portrait'
+  views?: number
+  likes?: number
+  comments?: number
+  shares?: number
+  paid_promotion?: boolean
+  shoppable?: boolean
+  /** 这一刻**被看到**的时间。幂等按它分桶（{@link CONTENT_OBSERVATION_BUCKET}）。 */
+  observed_at: Iso8601
+}
+
+/** 内容观测的字段白名单。运行时逐键比对：不在这张表里的一律拒。 */
+export const PUBLIC_CONTENT_OBSERVATION_FIELDS = [
+  'channel',
+  'handle',
+  'external_id',
+  'content_type',
+  'title',
+  'published_at',
+  'duration_seconds',
+  'orientation',
+  'views',
+  'likes',
+  'comments',
+  'shares',
+  'paid_promotion',
+  'shoppable',
+  'observed_at',
+] as const satisfies readonly (keyof PublicContentObservation)[]
+
+/**
+ * 内容观测的幂等分桶：**同一条内容（渠道 + external_id）同一个 UTC 日只算一条**。
+ *
+ * 与本机 `content_observation` 的去重同一个口径（插件离线攒的队列补传、多人同一天
+ * 看同一条视频，都不会让一条事实变成几条）。桶内重复报只刷新卡上的数、不再多记
+ * 一行指标、也不算贡献奖励。
+ */
+export const CONTENT_OBSERVATION_BUCKET = 'utc_day' as const
 
 /**
  * 一条**指标快照**（WP116 搬家：`public_creator_metric` 那一层）。
@@ -530,7 +595,8 @@ export const CONTACT_REWARD_CREDITS = 1
  * `rejected` 里是**为什么没算**，一条一句人话——风控不该是一个静默的 0。
  */
 export interface ContributionEvent {
-  kind: 'observation' | 'contact'
+  /** WP129 加 `content`（内容观测；契约只加不删）。 */
+  kind: 'observation' | 'contact' | 'content'
   /** 收到几条。 */
   received: number
   /** 其中几条算有效（过了去重与白名单）。 */

@@ -1783,8 +1783,26 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** 经网关跑一次最小 complete（purpose=judge，十来个 token）：回延迟与模型名，不回 key */
+    /** 验证三步（WP127）：连通 → 一次最小文字请求 → 一次带图的最小请求（purpose=judge）；看不了图的不通过（reason=no_vision）。回延迟、模型名与三步结果，不回 key */
     post: operations['testModelProvider']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/models/image': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 生图那一档（WP127）：配了没有、用哪条、官方接口一张图多少积分（常显）、能选哪几条 */
+    get: operations['getModelImage']
+    /** 改生图那一档（WP127）：选一条已配的 provider 与生图模型，或给空串不配；保存即生效 */
+    put: operations['setModelImage']
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -15808,7 +15826,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { providers: ModelProviderView[], templates: ModelProviderTemplate[] } */
+      /** @description { providers: ModelProviderView[]（WP127：vision_status = ok / no / unchecked，按上一次验证）, templates: ModelProviderTemplate[] } */
       200: {
         headers: {
           [name: string]: unknown
@@ -16586,7 +16604,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description ModelTestResult */
+      /** @description ModelTestResult（WP127：steps = 连通 / 文字 / 看图三步各自 ok；vision = 能不能看图，它就是这条 provider 的 capabilities.vision 声明的来源） */
       200: {
         headers: {
           [name: string]: unknown
@@ -16633,6 +16651,167 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getModelImage: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description ModelImageView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  setModelImage: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          provider_id: string
+          model?: string
+        }
+      }
+    }
+    responses: {
+      /** @description ModelImageView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
         headers: {
           [name: string]: unknown
         }
@@ -44032,6 +44211,8 @@ export interface operations {
           /** @enum {string} */
           orientation?: 'landscape' | 'portrait'
           duration_seconds?: number
+          paid_promotion?: boolean
+          shoppable?: boolean
           captured_at: string
           source_url?: string
         }
@@ -44113,6 +44294,8 @@ export interface operations {
           /** @enum {string} */
           orientation?: 'landscape' | 'portrait'
           duration_seconds?: number
+          paid_promotion?: boolean
+          shoppable?: boolean
           captured_at: string
           source_url?: string
           campaign_id?: string
