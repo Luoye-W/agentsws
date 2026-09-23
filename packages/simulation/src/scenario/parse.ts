@@ -608,6 +608,7 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         'who',
         'ai',
         'model_failure',
+        'model_vision',
         'urls',
         'cap_credits',
         'edits',
@@ -649,6 +650,11 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
                 },
               }
             : {}),
+          ...(body.model_vision === undefined
+            ? {}
+            : {
+                model_vision: requireBool(source, `${path}.${key}.model_vision`, body.model_vision),
+              }),
           ...(urls === undefined ? {} : { urls }),
           ...(body.cap_credits === undefined
             ? {}

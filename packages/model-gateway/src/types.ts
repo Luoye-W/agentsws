@@ -125,6 +125,11 @@ export interface CompleteRequest {
   eu_customer?: boolean
   /** 覆盖预留时的预计输出 token 数。 */
   estimated_output_tokens?: number
+  /**
+   * WP127：这是一次**能力验证**（设置页 / 向导「测试」的带图那一步）。
+   * 网关不按上一次的能力声明拦它——它问的正是"现在还看不看得了图"。
+   */
+  capability_probe?: boolean
 }
 
 export type { Completion }

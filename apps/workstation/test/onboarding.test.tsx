@@ -590,6 +590,36 @@ describe('70 §2 第 ① 步：接上 AI', () => {
     expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('WP127 自有模型：文字通了但看不了图——不放行，说人话并列常见能看图的型号', async () => {
+    const user = userEvent.setup()
+    state.test = {
+      ok: false,
+      reason: 'no_vision',
+      detail: '这个模型看不了图',
+      checked_at: T0,
+      vision: false,
+      steps: [
+        { step: 'connect', ok: true },
+        { step: 'text', ok: true },
+        { step: 'vision', ok: false },
+      ],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-own'))
+    const form = await screen.findByTestId('model-form')
+    await user.type(within(form).getByLabelText('API key'), 'sk-text-only')
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+
+    const failed = await screen.findByTestId('ai-own-failed')
+    expect(failed.dataset.kind).toBe('vision')
+    expect(failed.textContent).toContain('看不了图')
+    expect(failed.textContent).toContain('gpt-4o')
+    // 三步小清单：卡在第三格
+    const steps = screen.getByTestId('model-check-steps')
+    expect(steps.querySelector('[data-step="vision"]')?.getAttribute('data-ok')).toBe('false')
+    expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(true)
+  })
+
   // 70 §2.2 那张表：四种实际情况各对一句人话
   it('试跑失败那四句：密钥 / 余额 / 地址 / 代理，各认各的', () => {
     const at = { checked_at: T0 }

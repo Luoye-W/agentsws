@@ -3465,8 +3465,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         }
       : {}),
-    // WP122b 交付 ⑤：视觉档。走用户配置的模型（同一条默认 ref）；
-    // 没配 provider 就回 undefined，看图整步跳过，产物里 imagery 留「未找到」。
+    // WP122b 交付 ⑤ → WP127：看图走用户配置的那一个模型（同一条默认 ref）——文字模型
+    // 就是多模态，不再有单独的视觉档。配了就必走；模型看不了图时网关按能力声明拦下，
+    // 成文把「当前模型看不了图」写进版本历史。只有 stub（没接模型）回 undefined。
     // 看图的消息经 ChatMessage 的图片部件进网关（交付 ⑤ 的契约改动）。
     imageFetch: globalThis.fetch as never,
     ...(boot.ownModels.configured()

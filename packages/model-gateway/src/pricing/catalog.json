@@ -11,16 +11,17 @@
       "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
       "as_of": "2026-09-10",
       "parser": "deepseek",
-      "note": "记的是标准时段（peak）价；优惠时段是它的一半。deepseek-v4-flash / deepseek-v4-flash-vision-exp 这两个老名字仍然收，按 flash 价计费。",
+      "note": "记的是标准时段（peak）价；优惠时段是它的一半。deepseek-v4-flash / deepseek-v4-flash-vision-exp 这两个老名字仍然收，按 flash 价计费。vision 一格照官网价目页 FEATURES 里的 Vision 那一行（flash ✓、v4-pro Not supported），WP127。",
       "models": [
         {
           "model": "deepseek-flash",
           "in": 0.3,
           "out": 1.2,
           "cached": 0.006,
-          "aliases": ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"]
+          "aliases": ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"],
+          "vision": true
         },
-        { "model": "deepseek-v4-pro", "in": 1.32, "out": 3.96, "cached": 0.044 }
+        { "model": "deepseek-v4-pro", "in": 1.32, "out": 3.96, "cached": 0.044, "vision": false }
       ]
     },
     {
@@ -46,8 +47,8 @@
         { "model": "gpt-4.1", "in": 2, "out": 8, "cached": 0.5 },
         { "model": "gpt-4.1-mini", "in": 0.4, "out": 1.6, "cached": 0.1 },
         { "model": "gpt-4.1-nano", "in": 0.1, "out": 0.4, "cached": 0.025 },
-        { "model": "gpt-4o", "in": 2.5, "out": 10, "cached": 1.25 },
-        { "model": "gpt-4o-mini", "in": 0.15, "out": 0.6, "cached": 0.075 }
+        { "model": "gpt-4o", "in": 2.5, "out": 10, "cached": 1.25, "vision": true },
+        { "model": "gpt-4o-mini", "in": 0.15, "out": 0.6, "cached": 0.075, "vision": true }
       ]
     },
     {

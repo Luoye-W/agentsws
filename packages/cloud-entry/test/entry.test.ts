@@ -236,6 +236,48 @@ describe('AI 转发与计量', () => {
   })
 })
 
+describe('生图（WP127：按张扣积分）', () => {
+  const images = (body: Record<string, unknown>) =>
+    new Request('http://entry/v1/ai/images/generations', {
+      method: 'POST',
+      headers: { ...auth(), 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  const unit = buildPricing().entries.find((e) => e.capability === 'ai.image')
+    ?.credits_per_unit as number
+
+  it('按真回来的张数结算，单价是 pricing.json 那一个', async () => {
+    const h = harness()
+    h.wallet.topup({ org_id: 'org_1', credits: 100, kind: 'purchased' })
+    // 要两张，上游只回了一张：只收一张的钱
+    h.setUpstream(async () => Response.json({ data: [{ b64_json: 'AAAA' }] }))
+    const res = await h.app.fetch(images({ model: 'gpt-image-1', prompt: '白底', n: 2 }))
+    expect(res.status).toBe(200)
+    expect(h.calls[0]?.url).toBe('https://upstream.invalid/v1/images/generations')
+    const usage = h.wallet.usage({ org_id: 'org_1', group: 'capability' })
+    expect(usage.rows[0]?.key).toBe('ai.image')
+    expect(usage.rows[0]?.quantity).toBe(1)
+    expect(usage.total_credits).toBeCloseTo(unit, 6)
+    expect(h.wallet.balance('org_1').reserved).toBe(0)
+  })
+
+  it('上游拒了：状态码原样透传，一分不扣', async () => {
+    const h = harness()
+    h.wallet.topup({ org_id: 'org_1', credits: 100, kind: 'purchased' })
+    h.setUpstream(async () => new Response('{"error":{"message":"bad prompt"}}', { status: 400 }))
+    const res = await h.app.fetch(images({ model: 'gpt-image-1', prompt: 'x' }))
+    expect(res.status).toBe(400)
+    expect(h.wallet.balance('org_1').purchased).toBe(100)
+  })
+
+  it('余额不够一张：402，一次上游都不打', async () => {
+    const h = harness()
+    const res = await h.app.fetch(images({ model: 'gpt-image-1', prompt: 'x' }))
+    expect(res.status).toBe(402)
+    expect(h.calls).toHaveLength(0)
+  })
+})
+
 describe('余额不足 402', () => {
   it('回 402 + 人话 + 够不够的两个数，而且一次上游都不打', async () => {
     const h = harness()
@@ -326,13 +368,14 @@ describe('钱包路由', () => {
     expect(data.expiring).toEqual([{ credits: 30, expires_at: '2026-10-01T00:00:00.000Z' }])
   })
 
-  it('价目表端得出来，首批八条 + WP118 的两条订阅都在', async () => {
+  it('价目表端得出来，首批八条 + WP118 的两条订阅 + WP127 生图都在', async () => {
     const h = harness()
     const res = await h.app.fetch(
       new Request('http://entry/v1/wallet/pricing', { headers: auth() }),
     )
     const { data } = (await res.json()) as { data: { entries: { capability: string }[] } }
-    expect(data.entries).toHaveLength(10)
+    expect(data.entries).toHaveLength(11)
+    expect(data.entries.map((e) => e.capability)).toContain('ai.image')
     expect(data.entries.map((e) => e.capability)).toContain('ai.chat')
   })
 
