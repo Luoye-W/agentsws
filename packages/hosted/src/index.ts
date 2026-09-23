@@ -18,7 +18,11 @@ export {
   deriveHostedKey,
   HOSTED_DATA_DIR,
   HOSTED_ENV,
+  HOSTED_MAX_TENANTS_PER_CONTAINER,
   type HostedBootConfig,
+  type HostedContainerSpec,
+  type HostedTenant,
+  hostedRelayEndpoint,
   hostedSnapshotUrl,
   parseHostedEnv,
 } from './env.js'

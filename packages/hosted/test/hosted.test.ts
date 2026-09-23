@@ -69,14 +69,13 @@ describe('容器环境变量：写出去的读得回来', () => {
     expect(deriveHostedKey('seed', 'ws_a')).toBe(key)
     expect(deriveHostedKey('seed', 'ws_b')).not.toBe(key)
     const env = buildHostedEnv({
-      workspace_id: 'ws_a',
       cloud_base_url: 'https://cloud.example.test/',
-      cloud_token: 'hct_x.y',
-      relay_endpoint: 'https://cloud.example.test/relay/ws_a',
-      relay_pairing: 'hrp_1',
       key,
+      tenants: [{ workspace_id: 'ws_a', cloud_token: 'hct_x.y', relay_pairing: 'hrp_1' }],
     })
     expect(env.AGENTSWS_BIND_HOST).toBe('0.0.0.0')
+    // 工作区号在启动参数里只出现一处（共享容器的口子）
+    expect(Object.values(env).filter((v) => v.includes('ws_a'))).toEqual(['ws_a'])
     expect(env.AGENTSWS_SECRETS_KEY).toBe(key)
     const parsed = parseHostedEnv(env)
     expect(parsed).toEqual({
@@ -89,6 +88,14 @@ describe('容器环境变量：写出去的读得回来', () => {
         relay_pairing: 'hrp_1',
       },
     })
+  })
+
+  it('本轮一个容器一个工作区：多塞一个直接抛', () => {
+    const tenant = { workspace_id: 'ws_a', cloud_token: 't', relay_pairing: 'p' }
+    expect(() =>
+      buildHostedEnv({ cloud_base_url: 'https://c', key: 'k', tenants: [tenant, tenant] }),
+    ).toThrow(/只托管 1 个/)
+    expect(() => buildHostedEnv({ cloud_base_url: 'https://c', key: 'k', tenants: [] })).toThrow()
   })
 
   it('没开托管 = undefined；开了缺字段 = 说缺哪样', () => {
