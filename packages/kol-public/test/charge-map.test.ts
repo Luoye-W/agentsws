@@ -14,7 +14,7 @@ import {
   fakeYoutubeSource,
   type SourceSnapshot,
 } from '../src/index.js'
-import { harness, observation } from './helpers.js'
+import { auditableObservations, harness, observation } from './helpers.js'
 
 /** 假上游回的那一份（与 `routes.test.ts` 同一个形状）。 */
 const SNAPSHOT: SourceSnapshot = { ...observation({ followers: 88_000 }) }
@@ -29,8 +29,9 @@ async function charged(path: string, method: string): Promise<{ status: number; 
       quota: createQuotaPool({ store: quotaHost.store }),
     }),
   })
-  // 库里先有这个人（不然 reveal / deep-audit 会在扣费之前就 404）
-  h.service.contribute({ kind: 'plugin', id: 'plg:test' }, [observation()], 'plugin')
+  // 库里先有这个人（不然 reveal / deep-audit 会在扣费之前就 404）；样本喂够——
+  // WP129 起样本不够的体检不收钱，那就测不到"这条收费路由真的扣了"
+  h.service.contribute({ kind: 'plugin', id: 'plg:test' }, auditableObservations(), 'plugin')
   const before = h.walletStore.events({ org_id: 'org_1' }).length
   const res = await h.call(path, { method })
   const after = h.walletStore.events({ org_id: 'org_1' })
@@ -60,6 +61,9 @@ describe('收费点那张表', () => {
       ['POST', `${KEY}/disputes`],
       ['POST', '/v1/data/kol/plugins/pair'],
       ['POST', '/v1/data/kol/plugins/observations'],
+      // WP129：内容观测两条（工作区令牌 / 插件令牌）也是往库里加事实，不收
+      ['POST', '/v1/data/kol/content-observations'],
+      ['POST', '/v1/data/kol/plugins/content-observations'],
       // reveal / refresh 是 POST 专属：GET 上不存在，也就不收费
       ['GET', `${KEY}/reveal`],
       ['GET', `${KEY}/refresh`],

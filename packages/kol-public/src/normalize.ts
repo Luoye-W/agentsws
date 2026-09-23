@@ -10,8 +10,17 @@
  *    `observed_at` 是一个真的时间戳且不在未来；
  * 3. **渠道与 handle 的形状**：渠道只有五个，handle 去掉 `@`、小写、长度有上限。
  */
-import type { KolChannel, PublicCreatorObservation } from '@agentsws/contracts'
-import { KOL_CHANNEL_IDS, MAX_CATEGORIES, PUBLIC_OBSERVATION_FIELDS } from '@agentsws/contracts'
+import type {
+  KolChannel,
+  PublicContentObservation,
+  PublicCreatorObservation,
+} from '@agentsws/contracts'
+import {
+  KOL_CHANNEL_IDS,
+  MAX_CATEGORIES,
+  PUBLIC_CONTENT_OBSERVATION_FIELDS,
+  PUBLIC_OBSERVATION_FIELDS,
+} from '@agentsws/contracts'
 import { KolError } from './types.js'
 
 /** handle 的形状：字母、数字、`.`、`_`、`-`。 */
@@ -139,6 +148,127 @@ export function parseObservation(raw: unknown, at: string): PublicCreatorObserva
     ...(language === undefined ? {} : { language }),
     ...(region === undefined ? {} : { region: region.toUpperCase() }),
     ...(categories === undefined ? {} : { categories }),
+    observed_at: observedAt,
+  }
+}
+
+/** 内容 id 的形状：平台原生 id（videoId / shortcode），不许有空白，最长 160。 */
+export const CONTENT_ID_RE = /^[A-Za-z0-9._:-]{1,160}$/
+
+/** 播放 / 点赞这类计数的上限（比地球人口多两个数量级——超过它就是报错了）。 */
+export const MAX_CONTENT_COUNT = 1_000_000_000_000
+
+/** 标题最长多少字（与本机 schema 同一顶帽子）。 */
+export const MAX_CONTENT_TITLE = 300
+
+/** 一条内容最长多少秒（24 小时的直播回放封顶）。 */
+export const MAX_CONTENT_DURATION_SECONDS = 24 * 60 * 60
+
+const optionalCount = (value: unknown, field: string): number | undefined => {
+  if (value === undefined) return undefined
+  const n = asFiniteNumber(value, field)
+  if (!Number.isInteger(n) || n < 0 || n > MAX_CONTENT_COUNT)
+    throw new KolError('invalid_input', `${field} 要是 0 到 ${MAX_CONTENT_COUNT} 之间的整数。`)
+  return n
+}
+
+const optionalFlag = (value: unknown, field: string): boolean | undefined => {
+  if (value === undefined) return undefined
+  if (typeof value !== 'boolean')
+    throw new KolError('invalid_input', `${field} 要是 true / false（没看到就别带这一格）。`)
+  return value
+}
+
+/**
+ * 一条内容观测（WP129）：白名单 + 范围校验，与 {@link parseObservation} 同一套"拒而不改"。
+ *
+ * **评论文本没有入口**：白名单里没有它，带了就整批拒——`comments` 只收一个数。
+ */
+export function parseContentObservation(raw: unknown, at: string): PublicContentObservation {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+    throw new KolError('invalid_input', '每一条内容观测都要是一个对象。')
+  const input = raw as Record<string, unknown>
+
+  const allowed = new Set<string>(PUBLIC_CONTENT_OBSERVATION_FIELDS as readonly string[])
+  for (const key of Object.keys(input)) {
+    if (!allowed.has(key))
+      throw new KolError(
+        'invalid_input',
+        `内容观测里不许有 ${key} 这个字段：公共库只收内容的公开计数，评论 / 文案 / 备注一个字都不收。`,
+        { details: { allowed: [...PUBLIC_CONTENT_OBSERVATION_FIELDS] } },
+      )
+  }
+
+  const channel = assertChannel(input.channel)
+  const handle = normalizeHandle(input.handle)
+
+  const externalId = input.external_id
+  if (typeof externalId !== 'string' || !CONTENT_ID_RE.test(externalId))
+    throw new KolError(
+      'invalid_input',
+      'external_id 要是平台原生的内容 id（字母、数字与 . _ : -，最长 160）。',
+    )
+
+  const contentType = input.content_type
+  if (contentType !== 'video' && contentType !== 'post' && contentType !== 'reel')
+    throw new KolError('invalid_input', 'content_type 只能是 video / post / reel。')
+
+  const title = input.title
+  if (
+    title !== undefined &&
+    (typeof title !== 'string' || title.trim() === '' || title.length > MAX_CONTENT_TITLE)
+  )
+    throw new KolError('invalid_input', `title 要是不超过 ${MAX_CONTENT_TITLE} 个字的标题。`)
+
+  const publishedAt = input.published_at
+  if (
+    publishedAt !== undefined &&
+    (typeof publishedAt !== 'string' || Number.isNaN(Date.parse(publishedAt)))
+  )
+    throw new KolError('invalid_input', 'published_at 要是一个 ISO 8601 时间戳。')
+
+  let duration: number | undefined
+  if (input.duration_seconds !== undefined) {
+    duration = asFiniteNumber(input.duration_seconds, 'duration_seconds')
+    if (duration < 0 || duration > MAX_CONTENT_DURATION_SECONDS)
+      throw new KolError(
+        'invalid_input',
+        `duration_seconds 要在 0 到 ${MAX_CONTENT_DURATION_SECONDS} 秒之间。`,
+      )
+    duration = Math.round(duration)
+  }
+
+  const orientation = input.orientation
+  if (orientation !== undefined && orientation !== 'landscape' && orientation !== 'portrait')
+    throw new KolError('invalid_input', 'orientation 只能是 landscape / portrait。')
+
+  const observedAt = input.observed_at
+  if (typeof observedAt !== 'string' || Number.isNaN(Date.parse(observedAt)))
+    throw new KolError('invalid_input', 'observed_at 要是一个 ISO 8601 时间戳。')
+  if (observedAt > at) throw new KolError('invalid_input', 'observed_at 在未来——这一条不收。')
+
+  const views = optionalCount(input.views, 'views')
+  const likes = optionalCount(input.likes, 'likes')
+  const comments = optionalCount(input.comments, 'comments')
+  const shares = optionalCount(input.shares, 'shares')
+  const paid = optionalFlag(input.paid_promotion, 'paid_promotion')
+  const shoppable = optionalFlag(input.shoppable, 'shoppable')
+
+  return {
+    channel,
+    handle,
+    external_id: externalId,
+    content_type: contentType,
+    ...(title === undefined ? {} : { title: (title as string).trim() }),
+    ...(publishedAt === undefined ? {} : { published_at: publishedAt as string }),
+    ...(duration === undefined ? {} : { duration_seconds: duration }),
+    ...(orientation === undefined ? {} : { orientation }),
+    ...(views === undefined ? {} : { views }),
+    ...(likes === undefined ? {} : { likes }),
+    ...(comments === undefined ? {} : { comments }),
+    ...(shares === undefined ? {} : { shares }),
+    ...(paid === undefined ? {} : { paid_promotion: paid }),
+    ...(shoppable === undefined ? {} : { shoppable }),
     observed_at: observedAt,
   }
 }

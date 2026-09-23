@@ -16,7 +16,11 @@
 import type { Iso8601, KolChannel } from '@agentsws/contracts'
 import { cloudBaseUrl } from './cloud.js'
 import { CLOUD_TOKEN_SECRET_ID } from './cloud-account.js'
-import type { PublicLibraryContributor, PublicObservationRow } from './extension-service.js'
+import type {
+  PublicContentRow,
+  PublicLibraryContributor,
+  PublicObservationRow,
+} from './extension-service.js'
 import type { KolPublicFetch } from './kol-public-client.js'
 import { KOL_PUBLIC_PREFIX, KOL_PUBLIC_TIMEOUT_MS } from './kol-public-client.js'
 import type { SecretStore } from './secret-store.js'
@@ -36,6 +40,27 @@ export interface ExtensionContributorOptions {
  * 这里再攒一层只会让"哪一条没进去"更难说清。
  */
 export const CONTRIBUTE_MAX_ROWS = 100
+
+/** 一条内容 → 云端内容观测的请求体（逐键；没有的格子不带）。 */
+function contentBodyOf(row: PublicContentRow): Record<string, unknown> {
+  return {
+    channel: row.channel,
+    handle: row.handle,
+    external_id: row.external_id,
+    content_type: row.content_type,
+    ...(row.title === undefined ? {} : { title: row.title }),
+    ...(row.published_at === undefined ? {} : { published_at: row.published_at }),
+    ...(row.duration_seconds === undefined ? {} : { duration_seconds: row.duration_seconds }),
+    ...(row.orientation === undefined ? {} : { orientation: row.orientation }),
+    ...(row.views === undefined ? {} : { views: row.views }),
+    ...(row.likes === undefined ? {} : { likes: row.likes }),
+    ...(row.comments === undefined ? {} : { comments: row.comments }),
+    ...(row.shares === undefined ? {} : { shares: row.shares }),
+    ...(row.paid_promotion === undefined ? {} : { paid_promotion: row.paid_promotion }),
+    ...(row.shoppable === undefined ? {} : { shoppable: row.shoppable }),
+    observed_at: row.observed_at,
+  }
+}
 
 export function createExtensionContributor(
   options: ExtensionContributorOptions,
@@ -181,6 +206,24 @@ export function createExtensionContributor(
         if (await postOne(token, row)) accepted += 1
       }
       return { accepted }
+    },
+
+    /*
+     * WP129：内容观测。一批一次请求（云那边整批收或整批拒，回执说清几条）。
+     * 送上去的**只有下面这几格**——与云端 `PUBLIC_CONTENT_OBSERVATION_FIELDS` 对齐，
+     * 逐键写出来而不是 spread，让「插件往公共库送了什么内容数据」在这个仓库里
+     * 有一个看得见的答案。
+     */
+    contributeContent: async (rows) => {
+      const batch = rows.slice(0, CONTRIBUTE_MAX_ROWS)
+      if (batch.length === 0) return { accepted: 0 }
+      const out = await callCloud<{ received?: number }>('/content-observations', {
+        method: 'POST',
+        body: { observations: batch.map(contentBodyOf) },
+      })
+      // 没关联 / 网络不通 / 云拒了：这一批没送成。**不抛**——本机那一半已经写完了
+      if (!out.ok) return { accepted: 0 }
+      return { accepted: out.data?.received ?? batch.length }
     },
 
     reveal: async (key) => {

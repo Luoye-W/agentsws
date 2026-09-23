@@ -135,3 +135,19 @@ export function observation(
     ...overrides,
   }
 }
+
+/**
+ * 同一个人的 n 条观察（观察时刻各不相同），够体检报告出完整结论
+ * （WP129：样本不够的体检不收钱，要测"收钱"那一条就得先喂够样本）。
+ */
+export function auditableObservations(
+  n = 3,
+  overrides: Partial<PublicCreatorObservation> = {},
+): PublicCreatorObservation[] {
+  return Array.from({ length: n }, (_, i) =>
+    observation({
+      observed_at: new Date(Date.parse('2026-09-10T00:00:00.000Z') + i * 3_600_000).toISOString(),
+      ...overrides,
+    }),
+  )
+}

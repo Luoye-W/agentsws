@@ -56727,6 +56727,12 @@
                     "type": "number",
                     "minimum": 0
                   },
+                  "paid_promotion": {
+                    "type": "boolean"
+                  },
+                  "shoppable": {
+                    "type": "boolean"
+                  },
                   "captured_at": {
                     "type": "string",
                     "minLength": 1
@@ -56908,6 +56914,12 @@
                   "duration_seconds": {
                     "type": "number",
                     "minimum": 0
+                  },
+                  "paid_promotion": {
+                    "type": "boolean"
+                  },
+                  "shoppable": {
+                    "type": "boolean"
                   },
                   "captured_at": {
                     "type": "string",

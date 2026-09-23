@@ -55,6 +55,7 @@ export {
   MAX_POSTS_30D,
   normalizeEmail,
   normalizeHandle,
+  parseContentObservation,
   parseObservation,
 } from './normalize.js'
 export {
@@ -68,6 +69,7 @@ export {
   regionOf,
 } from './routes.js'
 export {
+  AUDIT_NOT_CHARGED_NOTE,
   type BenchmarkResult,
   type BrowseResult,
   confidenceOf,
@@ -105,7 +107,9 @@ export {
   type CreatorRow,
   type CreatorSearchFilter,
   type DisputeRow,
+  isContentStore,
   isLibraryStore,
+  type KolContentStore,
   type KolLibraryStore,
   type KolStore,
   MemoryKolStore,

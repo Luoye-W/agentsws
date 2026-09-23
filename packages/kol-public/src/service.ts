@@ -27,6 +27,8 @@ import type {
   KolChannel,
   KolObservationSource,
   PluginPairing,
+  PublicContentObservation,
+  PublicContentSample,
   PublicCreatorCard,
   PublicCreatorObservation,
   RevealedContact,
@@ -64,9 +66,14 @@ import {
 } from '@agentsws/metering'
 import { buildAudit } from './audit.js'
 import { benchmarkNote, benchmarkOf, bucketOf } from './benchmarks.js'
-import { dayOf, normalizeEmail, parseObservation } from './normalize.js'
+import { dayOf, normalizeEmail, parseContentObservation, parseObservation } from './normalize.js'
 import { outcomeOfError } from './sources/index.js'
-import type { CreatorRow, ObservationRow } from './store.js'
+import {
+  type CreatorRow,
+  isContentStore,
+  type KolContentStore,
+  type ObservationRow,
+} from './store.js'
 import {
   type ContributionSubject,
   KolError,
@@ -93,6 +100,12 @@ export const FREE_CREDITS = 0
  * 就是 limit 在变）。输入过程中的空查询不算搜索，也不进窗口。
  */
 export const SEARCH_IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000
+
+/**
+ * 体检报告样本不够时接在 `note` 后面的那句话（WP129）。界面直接显示 `note`，
+ * 所以"这次不收"是报告自己说的，不靠每个界面各写一遍。
+ */
+export const AUDIT_NOT_CHARGED_NOTE = '样本不够，这次不收。'
 
 export interface BrowseResult {
   creators: PublicCreatorCard[]
@@ -388,45 +401,49 @@ export class KolPublicService {
   /**
    * 体检报告（WP126 起**付费**，`data.kol.audit`，3 积分 / 次）。
    *
-   * 查无此人 → 预扣整笔释放，不收钱（`cardOrThrow` 在 `charge` 的 run 里抛）。
-   * 样本不够但人确实存在：报告照样出（里面明说样本不够），钱照收——
-   * 收钱换来的是"对这个人的真实体检"，样本少本身就是体检结论的一部分。
+   * 两种情况不收钱（预扣释放；Workers 形态下入口那一笔由 `apply` 兜底释放）：
+   * - 查无此人（`cardOrThrow` 抛）；
+   * - **样本不够、只能给部分结论**（WP129，与「0 条不收钱」同一口径）：报告照出，
+   *   里面明说样本不够，`credits` 为 0，`note` 末尾写「样本不够，这次不收。」。
+   *   收钱换来的应该是一份完整的体检；只剩"最近一次看到的资料本身"那一份，
+   *   说不过去。
+   *
+   * 基准桶不够 k（分位那一格缺）**不算**这一档：粉丝真实度是这个人自己的样本
+   * 算出来的完整结论，缺的是"和别人比"——报告里已经说清楚了。
    */
   audit(principal: KolPrincipal, key: { channel: KolChannel; handle: string }): AuditReport {
-    const at = this.deps.now()
-    const { value, credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () => {
-      const card = this.cardOrThrow(key.channel, key.handle)
-      return buildAudit({
-        card,
-        observations: this.deps.store.observationsOf(card.channel, card.handle),
-        benchmark: this.benchmarkFor(card, at),
-        at,
-        depth: 'basic',
-      })
-    })
-    return { ...value, credits }
+    return this.chargedAudit(principal, key, 'basic')
   }
 
   /**
-   * 付费深度体检（`data.kol.audit`，与免费那份同价——WP126 之后只有这一档价，
+   * 付费深度体检（`data.kol.audit`，与 basic 同价——WP126 之后只有这一档价，
    * `depth` 标 `deep` 但里面的判断与 basic 同源。真的深度分析（评论真实性抽样、
    * 受众画像、跨渠道对照）留给后续 WP —— 收了钱就要说清楚现在买到的是什么，
-   * 报告里的 `note` 会写明。
+   * 报告里的 `note` 会写明。样本不够同样不收（见 {@link audit}）。
    */
   deepAudit(principal: KolPrincipal, key: { channel: KolChannel; handle: string }): AuditReport {
+    return this.chargedAudit(principal, key, 'deep')
+  }
+
+  /** 两档体检共用：先出报告（库内计算，不碰外部源），够格才收钱。 */
+  private chargedAudit(
+    principal: KolPrincipal,
+    key: { channel: KolChannel; handle: string },
+    depth: 'basic' | 'deep',
+  ): AuditReport {
     const at = this.deps.now()
     const card = this.cardOrThrow(key.channel, key.handle)
-    const benchmark = this.benchmarkFor(card, at)
-    const { value, credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () =>
-      buildAudit({
-        card,
-        observations: this.deps.store.observationsOf(card.channel, card.handle),
-        benchmark,
-        at,
-        depth: 'deep',
-      }),
-    )
-    return { ...value, credits }
+    const report = buildAudit({
+      card,
+      observations: this.deps.store.observationsOf(card.channel, card.handle),
+      benchmark: this.benchmarkFor(card, at),
+      at,
+      depth,
+    })
+    if (report.insufficient_samples)
+      return { ...report, note: `${report.note}${AUDIT_NOT_CHARGED_NOTE}`, credits: FREE_CREDITS }
+    const { credits } = this.charge(principal, KOL_AUDIT_CAPABILITY, 1, () => report)
+    return { ...report, credits }
   }
 
   /** 付费 reveal 邮箱（`data.kol.lookup`）。库里没有联系方式**不扣积分**。 */
@@ -777,6 +794,176 @@ export class KolPublicService {
       rejected,
       at,
     }
+  }
+
+  /**
+   * WP129：插件（经本机服务转发，或插件令牌直报）上报一批**内容观测**。
+   *
+   * 口径与 {@link contribute} 逐条对齐——同一个日配额、同一套奖励累计（每
+   * `OBSERVATIONS_PER_CREDIT` 条有效 1 积分、日封顶、`granted` 类 90 天到期）、
+   * 同样"任意一条不合格整批拒"。两处不同，都写在这里：
+   *
+   * 1. **幂等键是 渠道 + external_id + observed_at 的 UTC 日**（不是"这个贡献者 24 小时"）：
+   *    同一条内容同一天不管谁报、报几次，都只记一行指标；桶内重复报只刷新卡上的数，
+   *    **不算奖励**——一条事实只奖一次，否则同一条视频刷新十遍就能刷积分；
+   * 2. **窄行**：白名单里没有评论、没有页面 / 封面地址、没有任何用户自己的备注。
+   *
+   * 库没有内容写路（老的装配）就明说 501，不假装收下了。
+   */
+  contributeContent(
+    subject: ContributionSubject,
+    rawObservations: unknown,
+    source: KolObservationSource,
+  ): ContributionEvent {
+    const store = this.deps.store
+    if (!isContentStore(store))
+      throw new KolError('not_implemented', '这个云侧的库还没开内容这一格，内容观测暂时收不了。')
+    const at = this.deps.now()
+    const day = dayOf(at)
+    const batch = Array.isArray(rawObservations) ? rawObservations : undefined
+    if (batch === undefined) throw new KolError('invalid_input', 'observations 要是一个数组。')
+    if (batch.length === 0) throw new KolError('invalid_input', 'observations 是空的。')
+    if (batch.length > MAX_OBSERVATIONS_PER_BATCH)
+      throw new KolError(
+        'invalid_input',
+        `一次最多报 ${MAX_OBSERVATIONS_PER_BATCH} 条，这一批有 ${batch.length} 条。`,
+      )
+
+    const quota = store.quota(subject.id, day)
+    const remaining = MAX_PLUGIN_OBSERVATIONS_PER_DAY - quota.observations
+    if (remaining <= 0 || batch.length > remaining)
+      throw new KolError(
+        'rate_limited',
+        `今天这把令牌还能报 ${Math.max(0, remaining)} 条（每天上限 ${MAX_PLUGIN_OBSERVATIONS_PER_DAY} 条，红人与内容合算），这一批有 ${batch.length} 条。明天零点（UTC）重置。`,
+        { details: { remaining: Math.max(0, remaining), limit: MAX_PLUGIN_OBSERVATIONS_PER_DAY } },
+      )
+
+    const parsed = batch.map((one, index) => {
+      try {
+        return parseContentObservation(one, at)
+      } catch (err) {
+        if (err instanceof KolError)
+          throw new KolError(err.code, `第 ${index + 1} 条不合格：${err.message}`, {
+            ...(err.details === undefined ? {} : { details: err.details }),
+          })
+        throw err
+      }
+    })
+
+    let counted = 0
+    let duplicates = 0
+    let optedOut = 0
+    for (const observation of parsed) {
+      if (store.optedOut(observation.channel, observation.handle)) {
+        optedOut += 1
+        continue
+      }
+      const bucket = dayOf(observation.observed_at)
+      const fresh = !store.contentMetricOnDay(observation.channel, observation.external_id, bucket)
+      if (fresh) counted += 1
+      else duplicates += 1
+      this.ingestContent(store, observation, source, at, fresh)
+    }
+
+    const granted = this.grantContribution(subject, counted, day, at)
+    this.deps.store.putQuota({
+      ...this.deps.store.quota(subject.id, day),
+      observations: quota.observations + parsed.length,
+    })
+    this.bumpPairing(subject, counted, granted.credits)
+
+    const rejected: { reason: string; count: number }[] = []
+    if (duplicates > 0)
+      rejected.push({
+        reason: '同一条内容今天（UTC）已经有人报过，这些只刷新了数字，不算奖励',
+        count: duplicates,
+      })
+    if (optedOut > 0)
+      rejected.push({ reason: '作者要求过从公共库移除，这些没有收', count: optedOut })
+    if (granted.capped > 0)
+      rejected.push({
+        reason: `今天的奖励到顶了（每天 ${MAX_DAILY_REWARD_CREDITS} 积分），剩下的明天接着拿`,
+        count: granted.capped,
+      })
+
+    return {
+      kind: 'content',
+      received: parsed.length,
+      accepted: counted,
+      credits_granted: granted.credits,
+      daily_reward_remaining: granted.dailyRemaining,
+      daily_quota_remaining: Math.max(
+        0,
+        MAX_PLUGIN_OBSERVATIONS_PER_DAY - (quota.observations + parsed.length),
+      ),
+      rejected,
+      at,
+    }
+  }
+
+  /** 登录态工作区那条路（本机服务转发走它）。 */
+  contributeContentAs(principal: KolPrincipal, rawObservations: unknown): ContributionEvent {
+    return this.contributeContent(workspaceSubject(principal), rawObservations, 'plugin')
+  }
+
+  /**
+   * 一条内容观测落库：新桶记一行指标；卡（`kol_contents`）只在这一条**不比库里旧**时
+   * 才刷新数字（离线队列补传的旧观测不该把新数盖回去），但旧观测里有、库里没有的
+   * 格子照样补上。
+   */
+  private ingestContent(
+    store: KolContentStore,
+    observation: PublicContentObservation,
+    source: KolObservationSource,
+    at: Iso8601,
+    fresh: boolean,
+  ): void {
+    const prev = store.content(observation.channel, observation.external_id)
+    const newer = prev === undefined || observation.observed_at >= prev.observed_at
+    const incoming: PublicContentSample = {
+      channel: observation.channel,
+      handle: observation.handle,
+      external_id: observation.external_id,
+      content_type: observation.content_type,
+      ...(observation.title === undefined ? {} : { title: observation.title }),
+      ...(observation.published_at === undefined ? {} : { published_at: observation.published_at }),
+      ...(observation.duration_seconds === undefined
+        ? {}
+        : { duration_seconds: observation.duration_seconds }),
+      ...(observation.orientation === undefined ? {} : { orientation: observation.orientation }),
+      ...(observation.views === undefined ? {} : { views: observation.views }),
+      ...(observation.likes === undefined ? {} : { likes: observation.likes }),
+      ...(observation.comments === undefined ? {} : { comments: observation.comments }),
+      ...(observation.shares === undefined ? {} : { shares: observation.shares }),
+      ...(observation.paid_promotion === undefined
+        ? {}
+        : { paid_promotion: observation.paid_promotion }),
+      ...(observation.shoppable === undefined ? {} : { shoppable: observation.shoppable }),
+      observed_at: observation.observed_at,
+      source,
+      updated_at: at,
+    }
+    // 新的盖旧的；旧的只补空格。两种情况都是"整行写回"，库那一侧的 COALESCE 只是第二道保险
+    const merged: PublicContentSample =
+      prev === undefined
+        ? incoming
+        : newer
+          ? { ...prev, ...incoming }
+          : { ...incoming, ...prev, updated_at: at }
+    store.putContent(merged)
+    if (!fresh) return
+    store.putContentMetric({
+      channel: observation.channel,
+      handle: observation.handle,
+      content_external_id: observation.external_id,
+      ...(observation.views === undefined ? {} : { views: observation.views }),
+      ...(observation.likes === undefined ? {} : { likes: observation.likes }),
+      ...(observation.comments === undefined ? {} : { comments: observation.comments }),
+      ...(observation.shares === undefined ? {} : { shares: observation.shares }),
+      observed_at: observation.observed_at,
+      source,
+      at,
+    })
   }
 
   /** 累计满 100 条发 1 积分；日封顶之外的留到明天（累计数只按真发的前进）。 */
