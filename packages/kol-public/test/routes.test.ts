@@ -9,6 +9,7 @@ import type { KolChannel } from '@agentsws/contracts'
 import {
   BENCHMARK_MIN_SAMPLES,
   KOL_LOOKUP_CAPABILITY,
+  KOL_REVEAL_CAPABILITY,
   MAX_DAILY_REWARD_CREDITS,
   MAX_PLUGIN_OBSERVATIONS_PER_DAY,
   METERING_EVENT_FIELDS,
@@ -61,7 +62,7 @@ describe('WP61 鉴权与动作集', () => {
 })
 
 describe('WP61 计费', () => {
-  it('reveal 扣 data.kol.lookup，计量事件只有八个字段、没有红人名字', async () => {
+  it('reveal 扣 data.kol.reveal，计量事件只有八个字段、没有红人名字', async () => {
     const h = harness({ credits: 100 })
     h.service.contributeAs(
       {
@@ -90,7 +91,7 @@ describe('WP61 计费', () => {
     const events = h.walletStore.events({ org_id: 'org_1' })
     const paid = events.filter((e) => e.credits > 0)
     expect(paid).toHaveLength(1)
-    expect(paid[0]?.capability).toBe(KOL_LOOKUP_CAPABILITY)
+    expect(paid[0]?.capability).toBe(KOL_REVEAL_CAPABILITY)
     /*
      * WP115 之后白名单从八个扩到十六个（后八个是成本会计的可选列，见 65 §3）。
      * 这里钉的两件事一个字没变：**必填那八个都在**，**白名单之外一个键都没有**

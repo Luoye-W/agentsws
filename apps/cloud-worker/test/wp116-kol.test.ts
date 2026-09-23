@@ -163,8 +163,8 @@ describe('WP116 Workers 形态 · 两段式的钱', () => {
     })
     expect(revealed.status).toBe(200)
     expect((revealed.body.data as { email: string }).email).toBe('hi@example.com')
-    // 0.2 积分一次（`packages/metering/src/pricing.json`）
-    expect(before - (await available(cloud, token))).toBeCloseTo(0.2, 6)
+    // 0.8 积分一次（`data.kol.reveal`，09-23 从 lookup 单开；`packages/metering/src/pricing.json`）
+    expect(before - (await available(cloud, token))).toBeCloseTo(0.8, 6) // 09-23 起 reveal 单开 0.8
 
     // 库里那一份：只有哈希与密文，**没有一个字节的明文**
     const rows = cloud
@@ -249,7 +249,7 @@ describe('WP116 Workers 形态 · 两段式的钱', () => {
       headers: { [INTERNAL_HEADERS.kolReservations]: forged },
     })
     expect(res.status).toBe(200)
-    expect(before - (await available(cloud, token))).toBeCloseTo(0.2, 6)
+    expect(before - (await available(cloud, token))).toBeCloseTo(0.8, 6) // 09-23 起 reveal 单开 0.8
     // 记账那张纸不出门
     expect(res.res.headers.get(INTERNAL_HEADERS.kolOps)).toBeNull()
   })

@@ -247,7 +247,7 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     expect(out.rows[0]?.has_contact).toBe(true)
     expect(out.rows[0]?.in_library).toBe(false)
     // 49 M4 的价目：这一步扣多少，点之前就看得见
-    expect(out.reveal_price?.capability).toBe('data.kol.lookup')
+    expect(out.reveal_price?.capability).toBe('data.kol.reveal')
     expect(out.reveal_price?.credits).toBeGreaterThan(0)
     expect(out.reveal_price?.note).toContain('积分')
     // WP126：搜索本身也按 data.kol.lookup 扣了一次（0.2）——官方接口没有免费动作了

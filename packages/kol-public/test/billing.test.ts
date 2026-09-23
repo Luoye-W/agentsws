@@ -193,7 +193,7 @@ describe('WP126 计费：入口预扣表（charge-map）', () => {
   })
 
   it('POST 的三条老收费路由不变', () => {
-    expect(kolChargeFor('POST', `${KEY}/reveal`)?.capability).toBe('data.kol.lookup')
+    expect(kolChargeFor('POST', `${KEY}/reveal`)?.capability).toBe('data.kol.reveal')
     expect(kolChargeFor('POST', `${KEY}/deep-audit`)?.capability).toBe('data.kol.audit')
     expect(kolChargeFor('POST', `${KEY}/refresh`)?.capability).toBe('social.fetch')
   })

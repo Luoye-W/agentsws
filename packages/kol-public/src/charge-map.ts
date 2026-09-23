@@ -2,7 +2,7 @@
  * 收费点那一节的文件头注（改这里之前先改它）：
  *
  * WP126 起官方数据接口没有免费动作了。浏览 / 搜索 / 基准按 `lookup` 计，
- * 体检报告（GET audit 与 POST deep-audit）按 `audit` 计，reveal 按 `lookup`，
+ * 体检报告（GET audit 与 POST deep-audit）按 `audit` 计，reveal 按 `reveal`（09-23 单开），
  * 外部刷新按 `social.fetch`。上报、回填、争议、插件配对仍然不收——
  * 它们是往库里加事实，不是从库里取价值。空结果与失败由服务那一侧
  * 预扣释放（`service.ts`），入口这一侧只管预扣。
@@ -11,6 +11,7 @@
 import {
   KOL_AUDIT_CAPABILITY,
   KOL_LOOKUP_CAPABILITY,
+  KOL_REVEAL_CAPABILITY,
   KOL_UNIT,
   SOCIAL_FETCH_CAPABILITY,
 } from '@agentsws/contracts'
@@ -36,7 +37,7 @@ export interface KolCharge {
  * "这一条要不要扣、扣哪个"。多一个路由器 = 两份真源。
  */
 const PAID_TAILS: Record<string, KolCharge> = {
-  reveal: { capability: KOL_LOOKUP_CAPABILITY, unit: KOL_UNIT, quantity: 1 },
+  reveal: { capability: KOL_REVEAL_CAPABILITY, unit: KOL_UNIT, quantity: 1 },
   'deep-audit': { capability: KOL_AUDIT_CAPABILITY, unit: KOL_UNIT, quantity: 1 },
   refresh: { capability: SOCIAL_FETCH_CAPABILITY, unit: KOL_UNIT, quantity: 1 },
   // GET …/audit：体检报告（WP126 起与 deep-audit 同价）。POST …/audit 不存在，

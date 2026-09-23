@@ -435,7 +435,9 @@ async function meteredImages(c: Context<EntryEnv>, deps: EntryDeps): Promise<Res
     res = await fetchOf(deps)(`${deps.upstream.ai.base_url}/images/generations`, {
       method: 'POST',
       headers: upstreamHeaders(deps),
-      body: JSON.stringify({ ...(body as Record<string, unknown>), n }),
+      // 09-23 Luoye 按 docs/77 定：0.5 积分 / 张不变，但画质钉在中档——不钉的话上游默认可能出高档图，
+      // 每张成本约 ¥1.18，0.5 收是亏的（docs/77 §3）。调用方传了 quality 也覆盖掉，价目只对应这一档。
+      body: JSON.stringify({ ...(body as Record<string, unknown>), n, quality: 'medium' }),
     })
   } catch (err) {
     deps.wallet.release(reservation)

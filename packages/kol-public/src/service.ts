@@ -42,6 +42,7 @@ import {
   followersBandOf,
   KOL_AUDIT_CAPABILITY,
   KOL_LOOKUP_CAPABILITY,
+  KOL_REVEAL_CAPABILITY,
   KOL_UNIT,
   MAX_CREATOR_LIMIT,
   MAX_DAILY_REWARD_CREDITS,
@@ -460,7 +461,8 @@ export class KolPublicService {
     if (!this.deps.secrets.available)
       throw new KolError('internal', '云侧没有配邮箱密钥，这一次没有扣积分。')
 
-    const { value, credits } = this.charge(principal, KOL_LOOKUP_CAPABILITY, 1, () => {
+    // 09-23 Luoye 按 docs/77 定：联系方式揭示从 lookup 里单开一条能力（0.8 / 次）
+    const { value, credits } = this.charge(principal, KOL_REVEAL_CAPABILITY, 1, () => {
       const email = this.deps.secrets.decrypt(contact.email_cipher)
       if (email === undefined)
         throw new KolError('internal', '这条联系方式解不开，这一次没有扣积分。')

@@ -20,7 +20,7 @@
  *    积分，`credits_spent` 从云侧响应里带回来，本地一个数字都不自己算。
  */
 import type { Clock, KolChannel, WorkspaceId } from '@agentsws/contracts'
-import { KOL_LOOKUP_CAPABILITY, KOL_PUBLIC_SCOPE } from '@agentsws/contracts'
+import { KOL_LOOKUP_CAPABILITY, KOL_PUBLIC_SCOPE, KOL_REVEAL_CAPABILITY } from '@agentsws/contracts'
 import type {
   AuditReport,
   BrowseQuery,
@@ -350,4 +350,4 @@ function riskText(flag: string): string {
 }
 
 /** 这一次 reveal 要花多少积分（价目从云上那一份来，本地不自己算）。 */
-export const REVEAL_CAPABILITY = KOL_LOOKUP_CAPABILITY
+export const REVEAL_CAPABILITY = KOL_REVEAL_CAPABILITY
