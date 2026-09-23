@@ -159,6 +159,17 @@ export function brandModelsPort(options: BrandModelsPortOptions): ModelsPort {
         input as Parameters<ModelsPort['save']>[2],
       )
     },
+    // WP127：生图那一档跟"跟随公司默认"走同一条写保护
+    setImage: async (actor: Actor, input: unknown) => {
+      writable(actor.workspace_id)
+      const port = await of(actor.workspace_id)
+      if (port.setImage === undefined)
+        throw new ApiError('not_implemented', '这个服务进程没有装配生图设置')
+      return port.setImage(
+        actor as Parameters<NonNullable<ModelsPort['setImage']>>[0],
+        input as Parameters<NonNullable<ModelsPort['setImage']>>[1],
+      )
+    },
     remove: async (actor: Actor, id: string) => {
       writable(actor.workspace_id)
       return (await of(actor.workspace_id)).remove(actor as Parameters<ModelsPort['remove']>[0], id)
