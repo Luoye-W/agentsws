@@ -26,12 +26,15 @@ const assistantWithCall = (id: string, name: string): Message =>
     content: [{ type: 'tool-call', id: id as ToolCallId, name, arguments: '{"order_id":"o1"}' }],
   }) as unknown as Message
 
+// WP132（dsh 0.1.7-rc.1）：工具结果从"带 `tool-result` 块的 user 消息"升成一等的
+// `role: 'tool'` 消息（`dsh-llm` 的 `ToolResultMessage`：`toolCallId` + 结果块本身）。
+// 这里是上游消息形状的替身，随上游改；断言一条没动。
 const toolResult = (id: string, text: string): Message =>
   ({
-    role: 'user',
-    content: [
-      { type: 'tool-result', toolCallId: id as ToolCallId, content: [{ type: 'text', text }] },
-    ],
+    role: 'tool',
+    toolCallId: id as ToolCallId,
+    source: { kind: 'tool', callId: id as ToolCallId },
+    content: [{ type: 'text', text }],
   }) as unknown as Message
 
 describe('WP87 思考模型的 reasoning 在 dsh 这条路上原样带回', () => {

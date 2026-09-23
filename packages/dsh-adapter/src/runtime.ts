@@ -490,8 +490,9 @@ function project(event: SessionEvent, emit: (e: RunEvent) => void): void {
       return
     }
     case 'assistant/message': {
-      const message = (event.data as { message: { content: { type: string; text?: string }[] } })
-        .message
+      const message = (
+        event.data as { message: { content: readonly { type: string; text?: string }[] } }
+      ).message
       const text = message.content
         .filter((b) => b.type === 'text')
         .map((b) => b.text ?? '')
