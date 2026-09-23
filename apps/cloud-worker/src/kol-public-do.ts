@@ -14,6 +14,13 @@
  * DO 单线程但请求会在 await 处交错，一个可变的"当前钱包"会把 A 的账记到 B 头上
  * （与 `wallet-do.ts` 里 `PRINCIPAL` 那条注释同一个理由）。
  *
+ * WP129 起这个对象也收**内容观测**（`POST /v1/data/kol/content-observations` 与插件那条
+ * `plugins/content-observations`）。它不收费、不经入口预扣；返额度那一笔（`topup`）
+ * 与红人观测一样记在录音机上带回入口。库还是同一个 `SqliteKolStore`——内容卡、
+ * 指标与带货 / 广告标识旁表都是 `CREATE TABLE IF NOT EXISTS`，唤醒时自己建，
+ * 所以这里**没有新 binding、没有新迁移**。体检报告"样本不够不收钱"同理：服务不结算，
+ * 入口那笔预扣由 `WalletDO` 的 `apply` 兜底释放（`kol-wallet.ts`）。
+ *
  * 上游密钥（`AGENTSWS_YOUTUBE_API_KEY` / `APIFY_TOKEN`）只从 Worker secret 读，
  * 一个都没配也要能起——那就是"只查库"。邮箱密钥（`AGENTSWS_KOL_EMAIL_KEY`）
  * 没配就**不存邮箱**，health 那一格标黄（64 §10.2）。
@@ -24,6 +31,7 @@ import type { Clock, Pricing, VerifiedCloudToken } from '@agentsws/contracts'
 import {
   type DeferredWallet,
   deferredWallet,
+  isContentStore,
   type KolAdminPort,
   type KolEnv,
   KolPublicService,
@@ -92,6 +100,8 @@ export class KolPublicCore {
   readonly admin: KolAdminPort
   /** 邮箱密钥配了没有（health 那一格看它）。 */
   readonly emailKeyReady: boolean
+  /** WP129：这个库带不带内容写路（`SqliteKolStore` 恒为 true；装配错了要看得见）。 */
+  readonly contentReady: boolean
   readonly #app: Hono<KolEnv>
 
   constructor(state: KolPublicDoStateLike, env: WorkerEnv, options: KolPublicDoOptions = {}) {
@@ -108,6 +118,7 @@ export class KolPublicCore {
     this.store = new SqliteKolStore(doSyncDb(state.storage))
     const secrets = options.secrets ?? nodeKolSecrets({ env: record })
     this.emailKeyReady = secrets.available
+    this.contentReady = isContentStore(this.store)
     let seq = 0
     const newId =
       options.newId ??
