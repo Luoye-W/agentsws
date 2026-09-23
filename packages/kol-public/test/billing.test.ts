@@ -133,7 +133,11 @@ describe('WP126 计费：体检报告与查无此人', () => {
     h.service.contributeAs(principal, [observation()])
     const basic = await h.call(`${KEY}/audit`)
     expect(basic.status).toBe(200)
-    const report = basic.body.data as { insufficient_samples: boolean; credits: number; note: string }
+    const report = basic.body.data as {
+      insufficient_samples: boolean
+      credits: number
+      note: string
+    }
     expect(report.insufficient_samples).toBe(true)
     expect(report.credits).toBe(0)
     expect(report.note).toContain('样本不够，这次不收')

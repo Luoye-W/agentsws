@@ -7,7 +7,7 @@
  * | 路径 | 谁能进 | 为什么 |
  * |---|---|---|
  * | `/v1/data/kol/*`（除下面那条） | 工作区服务令牌 + `data` 动作集 | 浏览 / 体检 / reveal / 配对是**商家**的动作 |
- * | `POST /v1/data/kol/plugins/observations` | 插件令牌 `plg_…` | 插件跑在浏览器里，它只能报观察——既不能查库，也不能花积分 |
+ * | `POST /v1/data/kol/plugins/observations`（WP129 加 `plugins/content-observations`） | 插件令牌 `plg_…` | 插件跑在浏览器里，它只能报观察——既不能查库，也不能花积分 |
  *
  * 令牌纪律（18 §1）三条，都在 {@link authenticate} 那一个函数里：
  * 令牌只从头里读一次、验完就扔；明文不进日志 / 不进错误信封 / 不进计量事件；
@@ -259,6 +259,19 @@ export function mountKolPublicRoutes(app: Hono<KolEnv>, deps: KolRouteDeps): Hon
     }),
   )
 
+  // ————— 写：内容观测（WP129；登录态工作区——本机服务转发插件采到的内容走这条）—————
+  app.post(
+    `${KOL_PREFIX}/content-observations`,
+    guarded,
+    wrap(async (c) => {
+      const body = await bodyOf(c)
+      return json(
+        deps.service.contributeContentAs(c.get('kol_principal'), body.observations ?? []),
+        201,
+      )
+    }),
+  )
+
   // ————— 写：联系方式回填（回填者得奖励）—————
   app.post(
     `${KOL_PREFIX}/creators/:channel/:handle/contact`,
@@ -334,6 +347,25 @@ export function mountKolPublicRoutes(app: Hono<KolEnv>, deps: KolRouteDeps): Hon
         )
       const body = await bodyOf(c)
       return json(deps.service.contribute(subject, body.observations ?? [], 'plugin'), 201)
+    }),
+  )
+
+  // ————— 插件：内容观测（WP129；与上面那条同一把 plg_…、同一套口径）—————
+  app.post(
+    `${KOL_PREFIX}/plugins/content-observations`,
+    wrap(async (c) => {
+      const token = bearerToken(c.req.header('Authorization'))
+      const subject =
+        token === undefined || !token.startsWith(PLUGIN_TOKEN_PREFIX)
+          ? undefined
+          : deps.service.verifyPluginToken(token)
+      if (subject === undefined)
+        throw new KolError(
+          'unauthenticated',
+          '这把插件令牌不认识或者已经撤了。在工作站里重新配对一次插件。',
+        )
+      const body = await bodyOf(c)
+      return json(deps.service.contributeContent(subject, body.observations ?? [], 'plugin'), 201)
     }),
   )
 
