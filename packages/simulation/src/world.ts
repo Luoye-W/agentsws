@@ -134,7 +134,12 @@ import {
   Wallet,
 } from '@agentsws/metering'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
-import { createModelGateway, ProviderError, stubProvider } from '@agentsws/model-gateway'
+import {
+  checkModel,
+  createModelGateway,
+  ProviderError,
+  stubProvider,
+} from '@agentsws/model-gateway'
 /*
  * WP72（56 §2 / §3）：社媒那三件事共用的能力。
  *
@@ -1368,6 +1373,8 @@ export interface OrgOps {
     who: PersonId
     ai: 'official' | 'own'
     model_failure?: { reason?: string; detail?: string }
+    /** WP127：自有模型能不能看图（不给就是能）。`false` 时真跑一遍验证三步。 */
+    model_vision?: boolean
     urls?: string[]
     cap_credits?: number
     edits?: Record<string, string>
@@ -4213,7 +4220,25 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
        * （magic link + 本机回环）在 `apps/cloud` 自己的用例里钉着，在这个世界里
        * 再演一遍只会多一层替身。自有模型那把钥匙通不通由场景直接给。
        */
-      const failure = input.model_failure
+      let failure = input.model_failure
+      /*
+       * WP127：配了一个看不了图的模型。这一跳**不是**场景直接给结果——真的跑一遍
+       * `checkModel`（向导第 ① 步与设置页「测试」同一个），替身模型见图就回 400，
+       * 与真上游不认 `image_url` 的样子一样。看不了图的不放行。
+       */
+      if (input.ai === 'own' && failure === undefined && input.model_vision === false) {
+        const blind = stubProvider({ seed: 7, vision: false })
+        const outcome = await checkModel({
+          complete: (messages) => blind.complete({ messages }),
+          describe: (e) => ({
+            reason: e instanceof ProviderError ? 'provider_error' : 'other',
+            detail: e instanceof Error ? e.message : String(e),
+          }),
+        })
+        if (!outcome.ok) {
+          failure = { reason: outcome.reason ?? 'other', detail: outcome.detail ?? '' }
+        }
+      }
       const connected = input.ai === 'official' || failure === undefined
       const failure_kind = connected ? undefined : modelFailureKind(failure ?? {})
 

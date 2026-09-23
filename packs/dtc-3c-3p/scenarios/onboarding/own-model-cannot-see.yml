@@ -1,0 +1,49 @@
+# WP127（Luoye 09-23：只支持多模态模型）：配了一个**看不了图**的模型——向导不放行。
+#
+# 与 `own-model-bad-key` 的差别：那一条的"没通"是场景直接给的（401），这一条是
+# **真的跑一遍验证三步**（`checkModel`，向导第 ① 步与设置页「测试」同一个）：
+#
+# 1. 连得上 ✓、文字能回 ✓——这把钥匙本身没毛病；
+# 2. 第 ③ 步带一张写着字的测试图去问，替身模型见图就回 400（与真上游不认
+#    `image_url` 的样子一样）——**看不了图**。
+#
+# 这里最容易出的错是"文字通了就算接上"：以前的试跑只发一句"在吗"，一个纯文字
+# 模型会顺利过关，然后读品牌手册、看图片风格的那几步悄悄跳过。现在它过不去，
+# 而且说的是人话："这个模型看不了图，Agents 工坊要求模型能看图"（分档 `vision`）。
+#
+# 没接上就没有第 ② 步：分析根本不会起（`analysed: false`），也一分钱不动。
+id: onboarding/own-model-cannot-see
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-23T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    org.onboarding:
+      who: p_wang
+      ai: own
+      model_vision: false
+      urls: ['https://nordvolt.example/']
+  - at: '+30m'
+    clock.advance: {}
+expected:
+  onboarding:
+    who: p_wang
+    connected: false
+    failure_kind: vision
+    analysed: false
+    signup_credits: 0
+    balance_credits: 0
+  event_types: [simulation.onboarding_done]
+  metrics:
+    runs_failed: 0
+    staged_changes: 0
+    applied_changes: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  用户看见的那一句，是"这个模型看不了图，Agents 工坊要求模型能看图"并给出能看图的型号方向，
+  还是一句"没通"让他去核对一把本来没问题的钥匙？

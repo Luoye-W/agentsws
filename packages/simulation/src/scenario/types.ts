@@ -407,6 +407,12 @@ export interface ScenarioOrgOnboarding {
    * 给了就是没通，按 `modelFailureKind` 分档（70 §2.2 那四句照这个档挑）。
    */
   model_failure?: { reason?: string; detail?: string }
+  /**
+   * WP127：`ai: own` 时那个模型**能不能看图**（不给就是能）。给 `false` 时第 ① 步
+   * 真的跑一遍验证三步（`checkModel`，与向导 / 设置页同一个），替身模型见图就 400——
+   * 看不了图的**不放行**。
+   */
+  model_vision?: boolean
   /** 第 ② 步贴进去的链接（映射到 pack 里的 `fixtures/site/*`，**不联网**）。 */
   urls?: string[]
   /** 积分封顶。不给就是契约里那个缺省（2）。 */
@@ -1208,7 +1214,7 @@ export interface ScenarioExpected {
     capped?: boolean
     /** 至少抓到一个页面、而且档案里真有品牌名。 */
     analysed?: boolean
-    failure_kind?: 'key' | 'balance' | 'address' | 'timeout' | 'other'
+    failure_kind?: 'key' | 'balance' | 'address' | 'timeout' | 'other' | 'vision'
     /** 重新分析跑完之后，这几格仍然是用户改的那个值。 */
     kept_edits?: string[]
   }

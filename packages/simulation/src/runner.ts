@@ -1856,6 +1856,9 @@ async function execute(
           ...(event.onboarding.model_failure === undefined
             ? {}
             : { model_failure: event.onboarding.model_failure }),
+          ...(event.onboarding.model_vision === undefined
+            ? {}
+            : { model_vision: event.onboarding.model_vision }),
           ...(event.onboarding.urls === undefined ? {} : { urls: event.onboarding.urls }),
           ...(event.onboarding.cap_credits === undefined
             ? {}
