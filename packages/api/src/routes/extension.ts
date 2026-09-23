@@ -47,6 +47,16 @@ export interface ExtensionObservation {
   observed_at: Iso8601
   page_url?: string | undefined
   source: 'channel_page' | 'content_page' | 'search_results'
+  /**
+   * WP130（docs/76 §11，只加）：列表页批量采集时这一行从哪种列表来——搜索结果 /
+   * 视频页右栏「相关视频」/ hashtag 页。记在本机粉丝快照上（`account_observation`），
+   * **不出本机**（公共库那条窄行里没有它）。
+   */
+  source_page?: 'search' | 'watch_related' | 'hashtag' | undefined
+  /** 这一批读自哪里：搜索词，或列表页的网址。 */
+  source_query?: string | undefined
+  /** 相关视频栏的预筛分（0–100）。没打分就没有这一格——「没法判」不是 0 分。 */
+  relevance_score?: number | undefined
 }
 
 export type ExtensionIngestStatus = 'ok' | 'deduped' | 'invalid'
@@ -461,6 +471,10 @@ const observationSchema = z
     observed_at: z.string().min(1),
     page_url: z.string().max(600).optional(),
     source: z.enum(['channel_page', 'content_page', 'search_results']),
+    // WP130：列表来源（只加；老插件不带，照旧）
+    source_page: z.enum(['search', 'watch_related', 'hashtag']).optional(),
+    source_query: z.string().max(600).optional(),
+    relevance_score: z.number().int().min(0).max(100).optional(),
   })
   .strict()
 

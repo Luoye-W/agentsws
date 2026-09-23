@@ -55820,6 +55820,19 @@
                         "source": {
                           "type": "string",
                           "enum": ["channel_page", "content_page", "search_results"]
+                        },
+                        "source_page": {
+                          "type": "string",
+                          "enum": ["search", "watch_related", "hashtag"]
+                        },
+                        "source_query": {
+                          "type": "string",
+                          "maxLength": 600
+                        },
+                        "relevance_score": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
                         }
                       },
                       "required": ["channel", "handle", "observed_at", "source"],

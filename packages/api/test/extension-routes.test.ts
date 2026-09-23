@@ -285,6 +285,36 @@ describe('观测的白名单', () => {
     expect(w.seen.filter((s) => s.count > 0)).toHaveLength(0)
   })
 
+  it('WP130：列表来源三格（只加）收；预筛分出了 0–100 整批拒', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const listed = {
+      ...observation,
+      source: 'search_results',
+      source_page: 'watch_related',
+      source_query: 'https://www.youtube.com/watch?v=SeedVideo01',
+      relevance_score: 71,
+    }
+    const ok = await w.plugin('POST', '/v1/extension/observations', {
+      token,
+      origin: EXT_ORIGIN,
+      body: { observations: [listed, { ...listed, source_page: 'hashtag', relevance_score: 0 }] },
+    })
+    expect(ok.status).toBe(200)
+    const bad = await w.plugin('POST', '/v1/extension/observations', {
+      token,
+      origin: EXT_ORIGIN,
+      body: { observations: [{ ...listed, relevance_score: 101 }] },
+    })
+    expect(bad.status).toBe(400)
+    const badKind = await w.plugin('POST', '/v1/extension/observations', {
+      token,
+      origin: EXT_ORIGIN,
+      body: { observations: [{ ...listed, source_page: 'feed' }] },
+    })
+    expect(badKind.status).toBe(400)
+  })
+
   it('一批最多 100 条', async () => {
     const w = await wired()
     const token = await paired(w)

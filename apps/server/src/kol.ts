@@ -244,6 +244,14 @@ export interface KolAccountObservation {
   followers?: number
   followers_text?: string
   observed_at: Iso8601
+  /** WP130：这次观测是从哪儿来的（主页 / 内容页 / 列表页）。老行没有这一格。 */
+  source?: 'channel_page' | 'content_page' | 'search_results' | 'manual_save'
+  /** WP130：列表页的种类——搜索 / 相关视频 / hashtag。只有列表页批量采集才有。 */
+  source_page?: 'search' | 'watch_related' | 'hashtag'
+  /** WP130：列表读自哪里（搜索词或列表页网址）。 */
+  source_query?: string
+  /** WP130：相关视频栏的预筛分（0–100）。 */
+  relevance_score?: number
 }
 
 /** 一条已采评论。**只住在 `content` 表里**（自己的内容库）——公共池那两张表没有它。 */

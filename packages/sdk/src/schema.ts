@@ -42996,6 +42996,10 @@ export interface operations {
             page_url?: string
             /** @enum {string} */
             source: 'channel_page' | 'content_page' | 'search_results'
+            /** @enum {string} */
+            source_page?: 'search' | 'watch_related' | 'hashtag'
+            source_query?: string
+            relevance_score?: number
           }[]
         }
       }
