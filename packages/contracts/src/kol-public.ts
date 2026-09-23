@@ -68,10 +68,17 @@ export interface PublicCreatorObservation {
   channel: KolChannel
   handle: string
   followers: number
-  /** 近 30 天发布数。 */
-  posts_30d: number
-  /** 互动率（0–1 的小数，不是百分数）。 */
-  engagement_rate: number
+  /**
+   * 近 30 天发布数。
+   *
+   * WP130：**只对插件来源（`source: 'plugin'`）可缺**——浏览器插件在一个页面上看不到
+   * 「近 30 天发了几条」「互动率」，逼它报就只能编一个 0。缺的行照样进库、照样更新
+   * 卡面上看得见的那几格，但**k-匿名基准跳过它**（缺不是 0），体检也不拿它下判断。
+   * 其余来源（官方 / apify / 工作区手填）照旧必须给。
+   */
+  posts_30d?: number
+  /** 互动率（0–1 的小数，不是百分数）。可缺的规则同 `posts_30d`。 */
+  engagement_rate?: number
   /** BCP-47 的主语言（`en` / `zh-CN`），认不出就不给这一格。 */
   language?: string
   /** ISO-3166 的两位地区码。 */

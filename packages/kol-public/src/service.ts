@@ -667,10 +667,21 @@ export class KolPublicService {
       channel: observation.channel,
       handle: observation.handle,
       followers: fresher ? observation.followers : (prev?.followers ?? observation.followers),
-      posts_30d: fresher ? observation.posts_30d : (prev?.posts_30d ?? observation.posts_30d),
-      engagement_rate: fresher
-        ? observation.engagement_rate
-        : (prev?.engagement_rate ?? observation.engagement_rate),
+      /*
+       * WP130：插件那条可以不带这两格。不带 = 卡上**留着原来的数**；一个从没见过的人
+       * 卡上只能先写 0（主表这两列是 NOT NULL，同 WP116 搬来的卡），但体检只在
+       * 观察里真有这个数时才拿它下判断（audit.ts），基准也跳过缺格的行（benchmarks.ts）。
+       */
+      posts_30d:
+        (fresher ? observation.posts_30d : undefined) ??
+        prev?.posts_30d ??
+        observation.posts_30d ??
+        0,
+      engagement_rate:
+        (fresher ? observation.engagement_rate : undefined) ??
+        prev?.engagement_rate ??
+        observation.engagement_rate ??
+        0,
       ...(language === undefined ? {} : { language }),
       ...(region === undefined ? {} : { region }),
       categories: mergeCategories(prev?.categories, observation.categories),
@@ -736,7 +747,8 @@ export class KolPublicService {
 
     const parsed = batch.map((one, index) => {
       try {
-        return parseObservation(one, at)
+        // WP130：插件来源这两格可缺（缺就不给，不补 0）；其余来源照旧必须给
+        return parseObservation(one, at, { metricsOptional: source === 'plugin' })
       } catch (err) {
         if (err instanceof KolError)
           throw new KolError(err.code, `第 ${index + 1} 条不合格：${err.message}`, {
@@ -1149,7 +1161,16 @@ export class KolPublicService {
   }
 
   /** 手动加一条观察（登录态工作区那条路）。 */
-  contributeAs(principal: KolPrincipal, rawObservations: unknown): ContributionEvent {
+  contributeAs(
+    principal: KolPrincipal,
+    rawObservations: unknown,
+    /**
+     * WP130：`via: 'extension'` = 这批是本机服务转发的**浏览器插件观测**（登录态工作区
+     * 令牌代插件送）——来源记 `plugin`（与 WP129 内容观测同一口径），`posts_30d` /
+     * `engagement_rate` 可缺。不给就是工作区手填，照旧 `manual`、照旧必须给。
+     */
+    options: { via?: 'extension' } = {},
+  ): ContributionEvent {
     return this.contribute(
       {
         id: `ws:${principal.workspace_id}`,
@@ -1158,7 +1179,7 @@ export class KolPublicService {
         kind: 'workspace',
       },
       rawObservations,
-      'manual',
+      options.via === 'extension' ? 'plugin' : 'manual',
     )
   }
 }

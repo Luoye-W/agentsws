@@ -26,6 +26,19 @@ import type { CreatorRow, ObservationRow } from './store.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/**
+ * WP130：卡上这个数是**真看到过的**，还是插件那条没带、卡上先垫的 0？
+ *
+ * 看观察：有观察、但没有一条带着这一格 → 不知道（卡上的 0 是垫的，不拿它下判断）。
+ * 没有观察的卡（WP116 搬来的）照旧按卡面算——那是本单之前的口径，不在这里改。
+ */
+export function metricKnown(
+  observations: ObservationRow[],
+  field: 'posts_30d' | 'engagement_rate',
+): boolean {
+  return observations.length === 0 || observations.some((o) => o[field] !== undefined)
+}
+
 /** 互动率在这个桶里的分位（0–100）。桶不够 k 就没有这一格。 */
 export function percentileOf(value: number, benchmark: Benchmark): number | undefined {
   const trio = benchmark.engagement_rate
@@ -54,10 +67,18 @@ export function followerAuthenticity(
     (SOURCE_CONFIDENCE[card.source] ?? 0.5) * 0.6 + Math.min(observations.length / 10, 1) * 0.35,
   )
   let score = base
-  const p25 = benchmark.insufficient_samples ? undefined : benchmark.engagement_rate?.p25
+  const p25 =
+    benchmark.insufficient_samples || !metricKnown(observations, 'engagement_rate')
+      ? undefined
+      : benchmark.engagement_rate?.p25
   if (p25 !== undefined && p25 > 0 && card.engagement_rate < p25 / 4) score -= 0.35
   else if (p25 !== undefined && p25 > 0 && card.engagement_rate < p25 / 2) score -= 0.15
-  if (card.posts_30d === 0 && followerGrowing(observations)) score -= 0.2
+  if (
+    card.posts_30d === 0 &&
+    metricKnown(observations, 'posts_30d') &&
+    followerGrowing(observations)
+  )
+    score -= 0.2
   return Math.max(0, Math.round(Math.min(1, score) * 100) / 100)
 }
 
@@ -93,13 +114,17 @@ export interface AuditInput {
 export function buildAudit(input: AuditInput): AuditReport {
   const { card, observations, benchmark, at } = input
   const flags: AuditRiskFlag[] = []
-  if (card.posts_30d === 0) flags.push('no_recent_posts')
+  // WP130：插件那条没带发布数时卡上的 0 是垫的——不标「近 30 天没发」
+  const postsKnown = metricKnown(observations, 'posts_30d')
+  if (card.posts_30d === 0 && postsKnown) flags.push('no_recent_posts')
   if (observations.length <= 1) flags.push('single_source')
   if (Date.parse(at) - Date.parse(card.observed_at) > STALE_AFTER_DAYS * DAY_MS)
     flags.push('stale_data')
   if (followerSpike(observations)) flags.push('follower_spike')
 
-  const percentile = percentileOf(card.engagement_rate, benchmark)
+  const percentile = metricKnown(observations, 'engagement_rate')
+    ? percentileOf(card.engagement_rate, benchmark)
+    : undefined
   if (percentile !== undefined && percentile < 10) flags.push('engagement_far_below_peers')
   if (percentile !== undefined && percentile > 95) flags.push('engagement_far_above_peers')
 
