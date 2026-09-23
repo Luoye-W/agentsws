@@ -168,7 +168,23 @@ export interface ChatPort {
     unlimited?: boolean
     subscribed?: boolean
     offline_messages?: number
+    /** WP128：托管实例在不在跑（订阅了客服增值服务才有这一格）。 */
+    hosted?: { state: 'running' | 'starting' | 'sleeping' | 'stopped'; last_heartbeat_at?: string }
   }>
+
+  // ── WP128 客服增值服务：云端替你值守（「转发方式」第三项） ────────────
+  // 都是可选的：没实现 = 这个进程不提供，路由回 501（与整块没装同一句话）。
+
+  /** 订阅状态 + 托管实例状态（没有任何密钥）。 */
+  relayHosted?(): Promise<ChatRelayHostedView>
+  /** 开通（当场扣第一期 30 积分；扣不上进宽限）。 */
+  relayHostedSubscribe?(): Promise<ChatRelayHostedView>
+  /** 取消（当期用完为止）。 */
+  relayHostedCancel?(): Promise<ChatRelayHostedView>
+  /** 把云端那一份取回来，落进本机备份目录（不自己导入）。 */
+  relayHostedBringHome?(): Promise<{ saved_to?: string; bytes?: number; message: string }>
+  /** 用本机这一份覆盖云端（托管实例下次重起就用它；秘密库不带上去）。 */
+  relayHostedSeed?(): Promise<{ bytes: number; message: string }>
 
   /**
    * WP66（52 O1）：**按品牌取这一面**。
@@ -252,6 +268,34 @@ const WIDGET_WRITE = {
   range: 'workspace',
   sensitivity: 'restricted',
 } as const
+
+/** WP128：聊天窗设置页「转发方式」第三项那一份。 */
+export interface ChatRelayHostedView {
+  available: boolean
+  linked: boolean
+  subscription: {
+    status: 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+    current_cycle_end?: string
+    grace_until?: string
+    cancel_at_period_end?: boolean
+  }
+  hosted?: {
+    state: 'running' | 'starting' | 'sleeping' | 'stopped'
+    last_heartbeat_at?: string
+    snapshot?: { at: string; bytes: number; source: 'hosted' | 'local' }
+    snapshot_kept_until?: string
+    last_error?: string
+  }
+  message?: string
+}
+
+/** WP128 那几条可选方法：没实现就 501。 */
+function hostedOf<K extends keyof ChatPort>(port: ChatPort, key: K): NonNullable<ChatPort[K]> {
+  const fn = port[key]
+  if (fn === undefined)
+    throw new ApiError('not_implemented', '这个服务进程不提供客服增值服务（云端值守）')
+  return (fn as (...args: unknown[]) => unknown).bind(port) as NonNullable<ChatPort[K]>
+}
 
 function portOf(deps: { chat?: ChatPort }): ChatPort {
   if (deps.chat === undefined) {
@@ -597,6 +641,94 @@ export function chatRoutes(): Route[] {
       async (c, deps) => {
         principalOf(c)
         return ok(c, await (await scopedPortOf(deps, c)).relayStatus())
+      },
+    ),
+
+    /* ── WP128 客服增值服务：云端替你值守 ──────────────────────────── */
+
+    route(
+      {
+        method: 'get',
+        path: '/v1/chat/relay/hosted',
+        operationId: 'getChatRelayHosted',
+        summary: '客服增值服务：订阅状态与托管实例状态（运行 / 休眠 / 停止、最近心跳、最近快照）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_READ,
+        returns: 'ChatRelayHostedView',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, await hostedOf(await scopedPortOf(deps, c), 'relayHosted')())
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/chat/relay/hosted/subscribe',
+        operationId: 'subscribeChatRelayHosted',
+        summary: '开通客服增值服务（30 积分 / 月，当场扣第一期；扣不上进 30 天宽限）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_WRITE,
+        returns: 'ChatRelayHostedView',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, await hostedOf(await scopedPortOf(deps, c), 'relayHostedSubscribe')())
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/chat/relay/hosted/subscribe',
+        operationId: 'cancelChatRelayHosted',
+        summary: '取消客服增值服务（当期用完为止；之后停容器、快照留 30 天）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_WRITE,
+        returns: 'ChatRelayHostedView',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, await hostedOf(await scopedPortOf(deps, c), 'relayHostedCancel')())
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/chat/relay/hosted/bring-home',
+        operationId: 'bringHomeChatRelayHosted',
+        summary: '把托管实例那一份取回本机（落进备份目录，不自己导入）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_WRITE,
+        returns: '{ saved_to?, bytes?, message }',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, await hostedOf(await scopedPortOf(deps, c), 'relayHostedBringHome')())
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/chat/relay/hosted/seed',
+        operationId: 'seedChatRelayHosted',
+        summary: '用本机这一份覆盖云端（托管实例下次重起就用它；秘密库不带上去）',
+        tag: 'chat',
+        auth: 'bearer',
+        assignment: true,
+        authz: WIDGET_WRITE,
+        returns: '{ bytes, message }',
+      },
+      async (c, deps) => {
+        principalOf(c)
+        return ok(c, await hostedOf(await scopedPortOf(deps, c), 'relayHostedSeed')())
       },
     ),
 

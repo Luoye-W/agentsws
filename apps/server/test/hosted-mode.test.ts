@@ -12,10 +12,12 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { exportWorkspace } from '../src/backup.js'
 import {
+  createHostedOwnerClient,
   ensureCloudModelDefault,
   type HostedFetch,
   hostedModeOf,
   hostedTargetOf,
+  type OwnerFetch,
   pushHostedSnapshot,
   restoreHostedSnapshot,
   seedHostedSecrets,
@@ -277,5 +279,101 @@ describe('托管模式：整台服务进程起来', () => {
     } finally {
       ;(globalThis as { WebSocket?: unknown }).WebSocket = original
     }
+  })
+})
+
+describe('商家本机那一侧：订阅 / 看状态 / 取回 / 覆盖', () => {
+  /** 一个假的云（/v1/support/*）：订阅状态机只有 none → active → cancelling。 */
+  function ownerCloud(): { fetch: OwnerFetch; puts: number[]; seen: string[] } {
+    let status: 'none' | 'active' | 'cancelling' = 'none'
+    const puts: number[] = []
+    const seen: string[] = []
+    const fetch: OwnerFetch = async (url, init) => {
+      const method = init.method ?? 'GET'
+      const path = new URL(url).pathname
+      seen.push(`${method} ${path} ${new Headers(init.headers).get('Authorization') ?? ''}`)
+      if (path === '/v1/support/subscription') {
+        if (method === 'POST') status = 'active'
+        if (method === 'DELETE') status = 'cancelling'
+        return Response.json({ data: { status, service_id: 'support.service.monthly' } })
+      }
+      if (path === '/v1/support/hosted')
+        return Response.json({
+          data: {
+            workspace_id: status === 'none' ? '' : WS,
+            state: 'running',
+            last_heartbeat_at: '2026-09-23T09:58:00.000Z',
+          },
+        })
+      if (path === '/v1/support/hosted/snapshot' && method === 'PUT') {
+        puts.push((init.body as Uint8Array).byteLength)
+        return Response.json({ data: { ok: true } })
+      }
+      if (path === '/v1/support/hosted/snapshot')
+        return new Response(new Uint8Array([9, 9]), {
+          status: 200,
+          headers: { 'x-agentsws-snapshot-at': '2026-09-23T04:00:00.000Z' },
+        })
+      return new Response('', { status: 404 })
+    }
+    return { fetch, puts, seen }
+  }
+
+  it('没关联账号：一句人话，一个请求都不发', async () => {
+    const cloud = ownerCloud()
+    const client = createHostedOwnerClient({
+      cloud_base_url: 'https://cloud.example.test',
+      token: () => undefined,
+      workspace_id: WS as never,
+      clock,
+      fetch: cloud.fetch,
+    })
+    const view = await client.status()
+    expect(view.linked).toBe(false)
+    expect(view.message).toContain('关联')
+    expect(cloud.seen).toHaveLength(0)
+  })
+
+  it('开通 → 云端替你值守中（托管在跑、有心跳）→ 取消（当期用完为止）', async () => {
+    const cloud = ownerCloud()
+    const client = createHostedOwnerClient({
+      cloud_base_url: 'https://cloud.example.test',
+      token: () => 'wst_owner',
+      workspace_id: WS as never,
+      clock,
+      fetch: cloud.fetch,
+    })
+    expect((await client.status()).subscription.status).toBe('none')
+    const on = await client.subscribe()
+    expect(on.subscription.status).toBe('active')
+    expect(on.hosted?.state).toBe('running')
+    expect(on.hosted?.last_heartbeat_at).toBe('2026-09-23T09:58:00.000Z')
+    expect(cloud.seen).toContain('POST /v1/support/subscription Bearer wst_owner')
+    expect((await client.cancel()).subscription.status).toBe('cancelling')
+  })
+
+  it('取回：落进备份目录（不自己导入）；覆盖：导出本机那一份 PUT 上去', async () => {
+    const cloud = ownerCloud()
+    const dataDir = temp('owner-data')
+    const backupDir = temp('owner-backup')
+    const db = new Database(join(dataDir, 'events.db'))
+    db.exec("CREATE TABLE t (x TEXT); INSERT INTO t VALUES ('本机')")
+    db.close()
+    const client = createHostedOwnerClient({
+      cloud_base_url: 'https://cloud.example.test',
+      token: () => 'wst_owner',
+      workspace_id: WS as never,
+      clock,
+      dataDir,
+      backupDir,
+      fetch: cloud.fetch,
+    })
+    const home = await client.bringHome()
+    expect(home.saved_to).toContain(backupDir)
+    expect(home.saved_to).toContain('hosted-')
+    expect([...readFileSync(home.saved_to as string)]).toEqual([9, 9])
+    const seeded = await client.seed()
+    expect(seeded.bytes).toBeGreaterThan(0)
+    expect(cloud.puts).toEqual([seeded.bytes])
   })
 })

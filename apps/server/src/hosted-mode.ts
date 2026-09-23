@@ -21,7 +21,15 @@
  * 商家本机推上来的包（`source = local`）里的秘密库一律删掉：邮箱口令、Shopify 密钥、
  * 模型 key 都是商家那把钥匙加密的，托管实例既打不开也不需要——**最小必要**。
  */
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Clock, WorkspaceId } from '@agentsws/contracts'
@@ -240,4 +248,189 @@ export function ensureCloudModelDefault(
     })
   state.defaults = { ...state.defaults, default: id, by_purpose: {} }
   writeFileSync(file, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+}
+
+/* ── 商家本机那一侧：订阅 / 看状态 / 取回 / 覆盖（WP128 交付 5） ─────────── */
+
+/** 聊天窗设置页「转发方式」第三项要的那一份（没有任何密钥）。 */
+export interface HostedOwnerView {
+  /** 云端开没开这项服务（没绑托管对象 / 没这条路由 = false，界面上说「这个节点没开通」）。 */
+  available: boolean
+  /** 关联过云账号没有（没关联就先去关联，订阅不了）。 */
+  linked: boolean
+  subscription: {
+    status: 'none' | 'active' | 'grace' | 'suspended' | 'cancelling'
+    current_cycle_end?: string
+    grace_until?: string
+    cancel_at_period_end?: boolean
+  }
+  hosted?: {
+    state: 'running' | 'starting' | 'sleeping' | 'stopped'
+    last_heartbeat_at?: string
+    snapshot?: { at: string; bytes: number; source: 'hosted' | 'local' }
+    snapshot_kept_until?: string
+    last_error?: string
+  }
+  /** 取不到时的一句人话（不编一个状态）。 */
+  message?: string
+}
+
+export type OwnerFetch = (input: string, init: RequestInit) => Promise<Response>
+
+export interface HostedOwnerClientOptions {
+  cloud_base_url: string
+  /** 商家那把工作区令牌（WP58 存进秘密库的那一把）；每次现取。 */
+  token: () => string | undefined
+  workspace_id: WorkspaceId
+  clock: Clock
+  /** 本机数据目录（推「本机这一份」要导出它）。内存档没有。 */
+  dataDir?: string
+  /** 取回的包落在哪（备份目录，与值守「搬回来」同一条：落盘，不自己导入）。 */
+  backupDir?: string
+  fetch?: OwnerFetch
+}
+
+const NOT_LINKED =
+  '还没关联 Agents 工坊账号。去"设置 → 账号与积分"里关联一次，再回来开客服增值服务。'
+
+export function createHostedOwnerClient(options: HostedOwnerClientOptions): {
+  status(): Promise<HostedOwnerView>
+  subscribe(): Promise<HostedOwnerView>
+  cancel(): Promise<HostedOwnerView>
+  bringHome(): Promise<{ saved_to?: string; bytes?: number; message: string }>
+  seed(): Promise<{ bytes: number; message: string }>
+} {
+  const base = options.cloud_base_url.replace(/\/+$/, '')
+  const doFetch: OwnerFetch = options.fetch ?? ((input, init) => fetch(input, init))
+  const call = async (path: string, init: RequestInit = {}): Promise<Response | undefined> => {
+    const token = options.token()
+    if (token === undefined) return undefined
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${token}`)
+    return doFetch(`${base}${path}`, { ...init, headers })
+  }
+  const empty = (linked: boolean, message?: string): HostedOwnerView => ({
+    available: false,
+    linked,
+    subscription: { status: 'none' },
+    ...(message === undefined ? {} : { message }),
+  })
+
+  const status = async (): Promise<HostedOwnerView> => {
+    if (options.token() === undefined) return empty(false, NOT_LINKED)
+    try {
+      const sub = await call('/v1/support/subscription')
+      if (sub === undefined || sub.status === 404)
+        return empty(true, '这个云节点还没开通客服增值服务。')
+      if (!sub.ok) return empty(true, `暂时取不到订阅状态（HTTP ${String(sub.status)}）`)
+      const subData = ((await sub.json()) as { data: HostedOwnerView['subscription'] }).data
+      const view: HostedOwnerView = {
+        available: true,
+        linked: true,
+        subscription: {
+          status: subData.status,
+          ...(subData.current_cycle_end === undefined
+            ? {}
+            : { current_cycle_end: subData.current_cycle_end }),
+          ...(subData.grace_until === undefined ? {} : { grace_until: subData.grace_until }),
+          ...(subData.cancel_at_period_end === undefined
+            ? {}
+            : { cancel_at_period_end: subData.cancel_at_period_end }),
+        },
+      }
+      const hosted = await call('/v1/support/hosted')
+      if (hosted?.ok === true) {
+        const data = (
+          (await hosted.json()) as {
+            data: NonNullable<HostedOwnerView['hosted']> & { workspace_id: string }
+          }
+        ).data
+        if (data.workspace_id !== '')
+          view.hosted = {
+            state: data.state,
+            ...(data.last_heartbeat_at === undefined
+              ? {}
+              : { last_heartbeat_at: data.last_heartbeat_at }),
+            ...(data.snapshot === undefined ? {} : { snapshot: data.snapshot }),
+            ...(data.snapshot_kept_until === undefined
+              ? {}
+              : { snapshot_kept_until: data.snapshot_kept_until }),
+            ...(data.last_error === undefined ? {} : { last_error: data.last_error }),
+          }
+      }
+      return view
+    } catch {
+      return empty(true, '暂时连不上云端（网络不通）。本机的聊天窗照常工作。')
+    }
+  }
+
+  const change = async (method: 'POST' | 'DELETE'): Promise<HostedOwnerView> => {
+    if (options.token() === undefined) return empty(false, NOT_LINKED)
+    const res = await call('/v1/support/subscription', { method })
+    if (res !== undefined && !res.ok && res.status !== 402) {
+      const view = await status()
+      return { ...view, message: `没办成（HTTP ${String(res.status)}）。钱一分没动。` }
+    }
+    return status()
+  }
+
+  return {
+    status,
+    subscribe: () => change('POST'),
+    cancel: () => change('DELETE'),
+    /** 取回云端那一份：落进备份目录（不自己导入——WP36 那条：跑着的进程不换自己脚下的库）。 */
+    bringHome: async () => {
+      if (options.token() === undefined) return { message: NOT_LINKED }
+      if (options.backupDir === undefined)
+        return { message: '这台机器是内存档，没有地方放取回来的那一份。' }
+      const res = await call('/v1/support/hosted/snapshot')
+      if (res === undefined || res.status === 204)
+        return { message: '云端还没有快照（托管实例起来后每 6 小时推一份）。' }
+      if (!res.ok) return { message: `取回失败（HTTP ${String(res.status)}）` }
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      const at = res.headers.get('x-agentsws-snapshot-at') ?? options.clock.now()
+      mkdirSync(options.backupDir, { recursive: true })
+      const saved_to = join(
+        options.backupDir,
+        `hosted-${options.workspace_id}-${at.replaceAll(':', '-')}.zip`,
+      )
+      writeFileSync(saved_to, bytes)
+      return {
+        saved_to,
+        bytes: bytes.byteLength,
+        message:
+          '云端那一份已经放进备份目录。要用它替换本机：先关掉 Agents 工坊，再用「导入」把这个包导进来。',
+      }
+    },
+    /** 用本机这一份覆盖云端：托管实例下次起来就用它（知识、话术、聊天窗设置跟着上去）。 */
+    seed: async () => {
+      if (options.token() === undefined) return { bytes: 0, message: NOT_LINKED }
+      if (options.dataDir === undefined)
+        return { bytes: 0, message: '这台机器是内存档，没有可推的那一份。' }
+      const stage = mkdtempSync(join(tmpdir(), 'agentsws-hosted-seed-'))
+      try {
+        const out = join(stage, 'local.zip')
+        exportWorkspace({
+          dataDir: options.dataDir,
+          workspace_id: options.workspace_id,
+          out,
+          clock: options.clock,
+        })
+        const body = new Uint8Array(readFileSync(out))
+        const res = await call('/v1/support/hosted/snapshot', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/zip' },
+          body,
+        })
+        if (res === undefined || !res.ok)
+          return { bytes: 0, message: `推上去没成功（HTTP ${String(res?.status ?? 0)}）` }
+        return {
+          bytes: body.byteLength,
+          message: '本机这一份已经推上去了。托管实例下次重起就用它（秘密库不带上去）。',
+        }
+      } finally {
+        rmSync(stage, { recursive: true, force: true })
+      }
+    },
+  }
 }

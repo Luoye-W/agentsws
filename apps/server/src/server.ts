@@ -175,8 +175,13 @@ import {
 } from './chat.js'
 import { ChatRelayClient, type OfflineMessageContent } from './chat-relay-client.js'
 import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
-import { type CloudFetch as CloudEntryFetch, createCloud } from './cloud.js'
-import { type CloudAccountAssembly, type CloudFetch, createCloudAccount } from './cloud-account.js'
+import { type CloudFetch as CloudEntryFetch, cloudBaseUrl, createCloud } from './cloud.js'
+import {
+  CLOUD_TOKEN_SECRET_ID,
+  type CloudAccountAssembly,
+  type CloudFetch,
+  createCloudAccount,
+} from './cloud-account.js'
 import { connectBaseUrl } from './connect-url.js'
 // WP83（54 §4）：连接目录 + 岗位连接清单 + 自定义 MCP 服务器（保存 / 校验 / 探测）
 import type { ConnectionDirectoryAssembly } from './connection-directory.js'
@@ -194,9 +199,11 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
 import {
+  createHostedOwnerClient,
   ensureCloudModelDefault,
   hostedModeOf,
   hostedTargetOf,
+  type OwnerFetch,
   seedHostedSecrets,
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
@@ -4091,6 +4098,46 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 走 bootstrap 那一份——52 O5「一个值守子进程一个品牌工作区」，公开聊天窗
    * 本来就是那一档。
    */
+  /** WP128：聊天窗设置页「转发方式」第三项那几条（订阅 / 状态 / 取回 / 覆盖）。 */
+  const hostedOwnerPortOf = (
+    brand: BrandModuleSet,
+  ): Pick<
+    ChatPort,
+    | 'relayHosted'
+    | 'relayHostedSubscribe'
+    | 'relayHostedCancel'
+    | 'relayHostedBringHome'
+    | 'relayHostedSeed'
+  > => {
+    const client = createHostedOwnerClient({
+      cloud_base_url: cloudBaseUrl(env),
+      token: () => {
+        if (!brand.secrets.available) return undefined
+        try {
+          const token = brand.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+          return token === undefined || token === '' ? undefined : token
+        } catch {
+          return undefined
+        }
+      },
+      workspace_id: brand.workspace_id,
+      clock,
+      ...(brand.dir === undefined
+        ? {}
+        : { dataDir: brand.dir, backupDir: backupDirOf(env, brand.dir) }),
+      ...(options.cloudFetch === undefined
+        ? {}
+        : { fetch: options.cloudFetch as unknown as OwnerFetch }),
+    })
+    return {
+      relayHosted: () => client.status(),
+      relayHostedSubscribe: () => client.subscribe(),
+      relayHostedCancel: () => client.cancel(),
+      relayHostedBringHome: () => client.bringHome(),
+      relayHostedSeed: () => client.seed(),
+    }
+  }
+
   const chatPortOf = (brand: BrandModuleSet): ChatPort => {
     const lane = brand.chat
     const widget = brand.chatWidget
@@ -4232,7 +4279,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           conversations_this_month?: number
           limit?: number
           unlimited?: boolean
+          subscribed?: boolean
           offline_messages?: number
+          hosted?: {
+            state: 'running' | 'starting' | 'sleeping' | 'stopped'
+            last_heartbeat_at?: string
+          }
         } = {
           state: client.state(),
           online: client.state() === 'online',
@@ -4244,13 +4296,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           if (status.conversations_this_month !== undefined)
             base.conversations_this_month = status.conversations_this_month
           if (status.limit !== undefined) base.limit = status.limit
-          if (status.subscribed === true) base.unlimited = true
+          if (status.subscribed === true) {
+            base.unlimited = true
+            base.subscribed = true
+          }
           if (status.offline_messages !== undefined) base.offline_messages = status.offline_messages
+          // WP128：托管实例在不在跑（转发器那边的状态接口带着这一格）
+          if (status.hosted !== undefined)
+            base.hosted = {
+              state: status.hosted.state,
+              ...(status.hosted.last_heartbeat_at === undefined
+                ? {}
+                : { last_heartbeat_at: status.hosted.last_heartbeat_at }),
+            }
         } else if (endpoint !== undefined) {
           base.unlimited = true
         }
         return base
       },
+      // ── WP128 客服增值服务（「转发方式」第三项）：打云端的 /v1/support/*，令牌现取 ──
+      ...hostedOwnerPortOf(brand),
       scoped: async (ws) => chatPortOf(await brandModules.forWorkspace(ws)),
     }
   }
