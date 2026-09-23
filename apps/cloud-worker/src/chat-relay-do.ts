@@ -9,6 +9,11 @@
  * 订阅客服增值服务后，托管实例（同一份 `apps/server`，按 `packages/standby`
  * 的方式托管）连上来，转发器优先转给它——挂件与嵌入代码一个字不用改。
  *
+ * WP128：托管实例落在 `HostedInstanceDO`（Cloudflare Containers）。订阅状态一变
+ * （开通 / 取消 / 每六小时扣费那一拍），这里就去叫它起或停；托管那一头连进来用的
+ * 是**另一把**配对（`hrp_…`，这里只存哈希），与商家本机那把分开验——本机那把
+ * 冒充不了托管，托管那把也冒充不了本机。
+ *
  * 计数口径（修订第 4 条，判定在 `packages/chat-relay/src/quota.ts`）：
  * 访客第一条消息才计数；30 分钟窗口内的重开算同一个（= 在途放行）；
  * 试聊不计；订阅生效不受限；80% 与到顶都出**站内提醒**（kv 行，
@@ -27,11 +32,13 @@ import {
   type RelayEvent,
   type RelayFrame,
   type RelayKv,
+  type RelayPeerKind,
   type RelayWidgetConfig,
   sealWithKey,
 } from '@agentsws/chat-relay'
 import type { ServiceSubscription } from '@agentsws/contracts'
 import { SUPPORT_SERVICE_ID } from '@agentsws/contracts'
+import { desiredFor, type HostedInstanceStatus, stopReasonFor } from '@agentsws/hosted'
 import type { SubscriptionWallet } from '@agentsws/kol-cloud'
 import {
   CHAT_CONVERSATIONS_MONTHLY,
@@ -46,6 +53,7 @@ import {
 import type { DoStateLike } from './accounts-do.js'
 import type { DoStorageLike } from './do-sql.js'
 import type { DoNamespaceLike, WorkerEnv } from './env.js'
+import { HOSTED_INTERNAL } from './hosted-instance-do.js'
 import { principalFrom } from './internal.js'
 import { remoteSubscriptionWallet } from './subscription-wallet.js'
 
@@ -151,8 +159,10 @@ export class ChatRelayDoCore {
   readonly #options: ChatRelayDoOptions
   /** 访客面按工作区分派（DO = 一个工作区，实际只会有一份）。 */
   readonly #httpByWorkspace = new Map<string, ReturnType<typeof createRelayHttp>>()
-  /** 已握手的 socket → 工作区（活着时的缓存；hibernation 之后以 attachment 为准）。 */
-  readonly #sockets = new Map<RelayWebSocket, string>()
+  /** 已握手的 socket → 工作区 + 哪一类对端（活着时的缓存；hibernation 之后以 attachment 为准）。 */
+  readonly #sockets = new Map<RelayWebSocket, { workspace: string; peer: RelayPeerKind }>()
+  /** 每类对端当前那一条（WP128：旧连接迟到的 close 不许把新连接摘掉）。 */
+  readonly #current = new Map<RelayPeerKind, RelayWebSocket>()
 
   constructor(state: RelayDoStateLike, env: WorkerEnv, options: ChatRelayDoOptions = {}) {
     this.#state = state
@@ -176,11 +186,17 @@ export class ChatRelayDoCore {
     this.core = new RelayCore({
       clock: this.#now,
       // 配对密钥只存哈希（sha256 hex）；比对就是重算一次
+      // WP128：托管那一头的配对另存一格（`hosted-pairing:<ws>`），哪一类用哪一把
+      // 在 #connect 里先分好；这里两把都认，是给握手本身用的最后一道
       verifyPairing:
         options.verifyPairing ??
         ((workspace, token) => {
+          const digest = sha256Hex(token)
           const hash = new KvPairingStore(this.#kv).hash(workspace)
-          return hash !== undefined && sha256Hex(token) === hash
+          const hosted = this.#kv.get(`hosted-pairing:${workspace}`)
+          return (
+            (hash !== undefined && digest === hash) || (hosted !== undefined && digest === hosted)
+          )
         }),
       // 免费档每月 200（limits.json 数据化；改这张表 = 改额度，不用发版）
       ...(CHAT_CONVERSATIONS_MONTHLY === undefined
@@ -300,14 +316,15 @@ export class ChatRelayDoCore {
       }
       if (frame.type === 'hello') {
         // 路径里的工作区是权威：hello 里的必须一致（不然一条连接冒充两个工作区）
-        if (frame.workspace !== workspace) {
+        if (frame.workspace !== workspace || !this.#pairingFitsPeer(workspace, frame)) {
           sendFrame({ type: 'hello_err', reason: 'bad_pairing', supported_versions: [1] })
           server.close()
           return
         }
         const verdict = this.core.handshake({ send: sendFrame, close: () => server.close() }, frame)
         if (verdict.ok) {
-          this.#sockets.set(server, workspace)
+          this.#sockets.set(server, { workspace, peer: frame.peer })
+          this.#current.set(frame.peer, server)
           try {
             this.#state.serializeAttachment?.(server, { workspace })
           } catch {
@@ -318,16 +335,21 @@ export class ChatRelayDoCore {
         }
         return
       }
-      if (this.#sockets.get(server) !== workspace) {
+      const bound = this.#sockets.get(server)
+      if (bound?.workspace !== workspace) {
         sendFrame({ type: 'error', code: 'not_handshaken', message: '先握手再说话' })
         return
       }
-      this.core.onClientFrame(workspace, frame)
+      this.core.onClientFrame(workspace, frame, bound.peer)
     })
     server.addEventListener('close', () => {
       const bound = this.#sockets.get(server)
       this.#sockets.delete(server)
-      if (bound !== undefined) this.core.dropClient(bound)
+      if (bound === undefined) return
+      // 只有「还是当前那一条」才摘：被新连接顶掉的旧连接迟到的 close 不算数
+      if (this.#current.get(bound.peer) !== server) return
+      this.#current.delete(bound.peer)
+      this.core.dropClient(bound.workspace, bound.peer)
     })
     void client
     // workerd：101 + webSocket。普通 Node 的 Response 不收 101（测试替身不跑
@@ -337,6 +359,17 @@ export class ChatRelayDoCore {
     } catch {
       return new Response(null, { status: 200 })
     }
+  }
+
+  /**
+   * 哪一类对端用哪一把配对（WP128）：托管实例只认 `hosted-pairing`，商家本机只认
+   * 签发给 owner 的那把。测试注入了 `verifyPairing` 时不分（那一档自己说了算）。
+   */
+  #pairingFitsPeer(workspace: string, frame: Extract<ClientFrame, { type: 'hello' }>): boolean {
+    if (this.#options.verifyPairing !== undefined) return true
+    const digest = sha256Hex(frame.pairing)
+    if (frame.peer === 'hosted') return this.#kv.get(`hosted-pairing:${workspace}`) === digest
+    return new KvPairingStore(this.#kv).hash(workspace) === digest
   }
 
   /* ── 内部路由（验过令牌的 owner 操作） ─────────────────────────── */
@@ -382,6 +415,9 @@ export class ChatRelayDoCore {
           subscribed: this.#kv.get(`sub:${workspace}`) === 'active',
           peer_online: this.core.stats().clients > 0,
           peer_kind: this.core.peerKindOf(workspace),
+          // WP128：本机与托管各在不在（两格并存，访客消息给托管那一格）
+          peers: this.core.peersOf(workspace),
+          ...(await this.#hostedStatus(workspace)),
           offline_messages: new KvOfflineBox(this.#kv).count(workspace),
           notifications: this.#notifications(),
         },
@@ -452,6 +488,8 @@ export class ChatRelayDoCore {
     if (request.method === 'POST' && url.pathname === '/__internal/support-subscription') {
       this.#kv.put('service-org', orgId)
       this.#kv.put('service-workspace', workspace)
+      // WP128：托管实例的 AI 调用记在开通的那个人名下（与值守子进程同一条）
+      if (principal?.account_id !== undefined) this.#kv.put('service-account', principal.account_id)
       const sub = startSubscription(
         current ?? {
           org_id: orgId,
@@ -464,6 +502,8 @@ export class ChatRelayDoCore {
         now,
       )
       const billed = await this.#runBilling(orgId, workspace, sub, now)
+      // 六小时一拍的扣费 / 托管对齐：开通那一刻把闹钟接上（以前没人接第一拍）
+      await this.#armAlarm(Date.parse(now) + 6 * 60 * 60 * 1000)
       return Response.json({
         data: { status: subscriptionStatusAt(billed.sub, now), charged: billed.charges },
       })
@@ -483,6 +523,8 @@ export class ChatRelayDoCore {
       )
       this.#kv.put('service-sub', JSON.stringify(sub))
       this.#refreshWorkspaceFlag(workspace, sub, now)
+      // 取消是「当期用完为止」：cancelling 期间托管照跑，到期那一拍 alarm 再停
+      await this.#syncHosted(workspace, now)
       return Response.json({ data: { status: subscriptionStatusAt(sub, now) } })
     }
 
@@ -531,7 +573,114 @@ export class ChatRelayDoCore {
     this.#kv.put('service-sub', JSON.stringify(sub))
     this.#kv.put('service-sub-charged', [...charged].join(','))
     this.#refreshWorkspaceFlag(workspace, sub, now)
+    await this.#syncHosted(workspace, now)
     return { sub, charges: results }
+  }
+
+  /* ── WP128：托管实例的起停 ──────────────────────────────────────── */
+
+  #hostedStub(workspace: string): { fetch(request: Request): Promise<Response> } | undefined {
+    const ns = this.#env.HOSTED_INSTANCE
+    return ns === undefined ? undefined : ns.get(ns.idFromName(workspace))
+  }
+
+  /**
+   * 订阅状态 → 托管实例该跑还是该停（表在 `@agentsws/hosted` 的 `desiredFor`）。
+   *
+   * 幂等，每次扣费 / 取消 / 六小时一拍都调。**失败不往外抛**：托管起不来不该让
+   * 扣费或取消跟着失败——原因写进 `hosted-last-error`，状态接口里看得到。
+   */
+  async #syncHosted(workspace: string, now: string): Promise<void> {
+    const stub = this.#hostedStub(workspace)
+    if (stub === undefined) return
+    const sub = this.#subscription()
+    const status = sub === undefined ? 'none' : subscriptionStatusAt(sub, now)
+    try {
+      if (desiredFor(status) === 'run') {
+        const orgId = this.#kv.get('service-org')
+        if (orgId === undefined) return
+        const account = this.#kv.get('service-account') ?? 'system'
+        let pairing: string | undefined
+        if (this.#kv.get(`hosted-pairing:${workspace}`) === undefined)
+          pairing = this.#issueHostedPairing(workspace)
+        const ensure = (withPairing: string | undefined): Promise<Response> =>
+          stub.fetch(
+            new Request(`https://hosted.internal${HOSTED_INTERNAL.ensure}`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                workspace_id: workspace,
+                org_id: orgId,
+                account_id: account,
+                ...(withPairing === undefined ? {} : { pairing: withPairing }),
+              }),
+            }),
+          )
+        let res = await ensure(pairing)
+        // 托管那一头把配对弄丢了（对象被重建）：换一把重发
+        if (res.status === 409 && pairing === undefined)
+          res = await ensure(this.#issueHostedPairing(workspace))
+        if (!res.ok) this.#kv.put('hosted-last-error', `起托管实例失败：HTTP ${String(res.status)}`)
+        else this.#kv.delete('hosted-last-error')
+        return
+      }
+      // 该停：先让转发器不再认托管那把配对，再叫容器停
+      this.#kv.delete(`hosted-pairing:${workspace}`)
+      const hostedSocket = this.#current.get('hosted')
+      if (hostedSocket !== undefined) {
+        this.#current.delete('hosted')
+        this.core.dropClient(workspace, 'hosted')
+        try {
+          hostedSocket.close()
+        } catch {
+          // 已经断了
+        }
+      }
+      await stub.fetch(
+        new Request(`https://hosted.internal${HOSTED_INTERNAL.stop}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reason: stopReasonFor(status) }),
+        }),
+      )
+    } catch (err) {
+      this.#kv.put(
+        'hosted-last-error',
+        `托管实例那一跳失败：${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+  }
+
+  /** 签一把托管配对：明文只交给托管对象一次，这里只留哈希。 */
+  #issueHostedPairing(workspace: string): string {
+    const token = `hrp_${crypto.randomUUID().replaceAll('-', '')}${crypto.randomUUID().replaceAll('-', '')}`
+    this.#kv.put(`hosted-pairing:${workspace}`, sha256Hex(token))
+    return token
+  }
+
+  /** 状态接口里的托管那一格（没绑 / 取不到就不出这一格——不编）。 */
+  async #hostedStatus(
+    workspace: string,
+  ): Promise<{ hosted?: HostedInstanceStatus; hosted_error?: string }> {
+    const stub = this.#hostedStub(workspace)
+    const error = this.#kv.get('hosted-last-error')
+    if (stub === undefined) return {}
+    try {
+      const res = await stub.fetch(new Request(`https://hosted.internal${HOSTED_INTERNAL.status}`))
+      if (!res.ok) return error === undefined ? {} : { hosted_error: error }
+      const body = (await res.json()) as { data: HostedInstanceStatus }
+      // 从没订过的工作区：托管对象是空的，不出这一格
+      if (body.data.workspace_id === '') return error === undefined ? {} : { hosted_error: error }
+      return { hosted: body.data, ...(error === undefined ? {} : { hosted_error: error }) }
+    } catch {
+      return error === undefined ? {} : { hosted_error: error }
+    }
+  }
+
+  async #armAlarm(at: number): Promise<void> {
+    const current = await this.#state.storage.getAlarm()
+    if (current !== null && current !== undefined) return
+    await this.#state.storage.setAlarm(at)
   }
 
   /** 转发器判「订阅生效」读的就是这个标志（active / cancelling 生效）。 */

@@ -35,3 +35,6 @@ apps/extension/build/
 apps/extension/.wxt/
 
 QWEN.log
+
+# wrangler 的本地产物（dry-run / dev 的打包输出）
+.wrangler/

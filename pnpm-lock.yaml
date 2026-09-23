@@ -207,6 +207,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
       '@agentsws/kol-cloud':
         specifier: workspace:*
         version: link:../../packages/kol-cloud

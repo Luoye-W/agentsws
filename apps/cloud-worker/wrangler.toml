@@ -62,6 +62,13 @@ class_name = "KolTenantDO"
 name = "CHAT_RELAY"
 class_name = "ChatRelayDO"
 
+# WP128：客服增值服务的托管实例——每个订阅的工作区一个（idFromName(workspace)）。
+# 这个类同时出现在下面的 `[[containers]]` 里：运行时给它的 ctx.container 就是那个容器，
+# 容器里跑同一份 apps/server（docs/74 §5、docs/64 §11）。
+[[durable_objects.bindings]]
+name = "HOSTED_INSTANCE"
+class_name = "HostedInstanceDO"
+
 # SQLite 存储后端。迁移在对象第一次唤醒时自己跑完——升级 = 再 deploy 一次。
 [[migrations]]
 tag = "v1"
@@ -82,6 +89,35 @@ new_sqlite_classes = ["KolTenantDO"]
 [[migrations]]
 tag = "v5"
 new_sqlite_classes = ["ChatRelayDO"]
+
+# WP128：容器类必须是 SQLite 后端的 DO（官方 wrangler 配置文档的写法）
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["HostedInstanceDO"]
+
+# ── 容器（WP128 / docs/64 §11） ────────────────────────────────────────
+# `wrangler deploy` 会就地 build `deploy/Dockerfile.hosted` 并推到 Cloudflare 自己的
+# 镜像仓库（要本机有 Docker）。镜像里没有任何工作区号与密钥。
+#
+# - instance_type = "basic"（1/4 vCPU、1 GiB 内存、4 GB 盘；镜像上限 = 盘）：
+#   apps/server + better-sqlite3 的常驻内存摸过 lite 的 256 MiB 上沿，OOM 就是聊天窗
+#   掉线，所以先上 basic。费用见 docs/64 §11：常驻一个月约 $8.5，**比 30 积分贵**，
+#   那一条要 Luoye 定（报告第 3 节）。改这里要同步改 [vars] 的 AGENTSWS_HOSTED_INSTANCE_TYPE。
+# - max_instances：同时最多几个容器 = 最多几个订阅的工作区（每个一个）。内测 50 够；
+#   到顶后新订阅的工作区起不来容器（状态里如实写），先调大这个数再说共享版。
+[[containers]]
+class_name = "HostedInstanceDO"
+image = "../../deploy/Dockerfile.hosted"
+image_build_context = "../.."
+instance_type = "basic"
+max_instances = 50
+
+# ── 快照桶（WP128） ────────────────────────────────────────────────────
+# 容器的盘是临时的，工作区包每 6 小时推一份进来；停容器后留 30 天。
+# 桶要先建一次：`wrangler r2 bucket create agentsws-hosted-snapshots`（docs/64 §11）。
+[[r2_buckets]]
+binding = "HOSTED_SNAPSHOTS"
+bucket_name = "agentsws-hosted-snapshots"
 
 # ── 运营后台的静态产物（WP115 / docs/65 §8） ───────────────────────────
 # `apps/cloud-admin` 的 Vite 产物（base = "/admin/"）。
@@ -116,6 +152,8 @@ AGENTSWS_NEWAPI_BASE_URL = "https://api.deepseek.com/v1"
 AGENTSWS_VERSION = "0.1.0"
 # 官方转发每月对话上限（packages/metering/src/limits.json 是真源，这里只给 health 页展示）
 AGENTSWS_CHAT_MONTHLY_CONVERSATIONS = "200"
+# WP128：托管实例的容器规格（与上面 [[containers]].instance_type 保持一致；估算费用用）
+AGENTSWS_HOSTED_INSTANCE_TYPE = "basic"
 
 # ── 打包 ───────────────────────────────────────────────────────────────
 # better-sqlite3 是原生模块，Workers 上装不进去。云侧几个包的主入口里有它那一档

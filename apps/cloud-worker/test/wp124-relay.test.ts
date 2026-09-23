@@ -224,14 +224,10 @@ describe('ChatRelayDO · 客服增值服务（订阅 → 托管实例接手）',
     expect(status.subscribed).toBe(true)
   })
 
-  it('订阅生效时托管实例赢：两头都连着，访客消息转给 hosted', async () => {
+  it('WP128：商家本机那把配对冒充不了托管（peer=hosted 要另一把，见 wp128-hosted.test.ts）', async () => {
     const mk = makeCore({ wallet: okWallet() })
     const { pairing_token } = await mk.issuePairing()
-    // 订阅生效
     await mk.core.fetch(internalRequest('support-subscription', 'POST'))
-    // 商家本机连上来
-    await mk.connectPeer(pairing_token)
-    // 托管实例也连上来（同一把配对密钥，peer='hosted'）
     await mk.core.fetch(
       new Request(`https://do/relay/${WS}/connect`, { headers: { upgrade: 'websocket' } }),
     )
@@ -244,12 +240,10 @@ describe('ChatRelayDO · 客服增值服务（订阅 → 托管实例接手）',
         peer: 'hosted',
       }),
     )
-    const session = await mk.visitorSession()
-    await mk.sendMessage(session, 'hi')
-    // 最后一次 makeSocketPair 是 hosted 那一条：visit 应该落在它身上
-    const hosted = mk.pair().server
-    const frames = hosted.inbox.map((e) => JSON.parse(String(e.data)) as Record<string, unknown>)
-    expect(frames.some((f) => f.type === 'visit')).toBe(true)
+    const frames = mk
+      .pair()
+      .server.inbox.map((e) => JSON.parse(String(e.data)) as Record<string, unknown>)
+    expect(frames.some((f) => f.type === 'hello_err' && f.reason === 'bad_pairing')).toBe(true)
   })
 })
 

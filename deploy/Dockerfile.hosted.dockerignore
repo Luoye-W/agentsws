@@ -1,0 +1,13 @@
+# 只给 deploy/Dockerfile.hosted 用（BuildKit 认「<Dockerfile 名>.dockerignore」）。
+# 构建上下文是仓库根；没有这张表，几个 G 的 node_modules 与 dist 会被整个塞进 docker。
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+.git
+docs
+apps/desktop/release
+apps/workstation/dist
+apps/cloud-admin/dist
+**/.env*
+**/.dev.vars*
