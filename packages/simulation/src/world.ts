@@ -6029,17 +6029,22 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         kolWallet.topup({ org_id: kolPrincipal.org_id, credits: topup, kind: 'purchased' })
       const before = kolWallet.balance(kolPrincipal.org_id).available
 
-      // ① 浏览：**按次收**（WP126，价目表说了算）。余额不够会抛，让场景自己看见
-      kolPublicService.browse(kolPrincipal, { channel: channel as KolChannel, limit: 10 })
-      const afterBrowse = kolWallet.balance(kolPrincipal.org_id).available
-      const browse_credits = Math.round((before - afterBrowse) * 100) / 100
-
-      // ② reveal：扣 `data.kol.lookup`。取不到 / 钱不够都回一句人话，并且不收钱
+      // ① 浏览：**按次收**（WP126，价目表说了算）。
+      // 09-23 起插件贡献不再送积分，一分钱没充的组织账上是 0——浏览那 0.2 就扣不动。
+      // 这一步以前放在 try 外面（「余额不够会抛，让场景自己看见」），那时新组织总有 1 积分奖励
+      // 垫着；现在抛出去等于整场中止，而场景要看的正是「被拦、回人话、一分没扣」。所以浏览也进
+      // 同一个 try：拦在哪一步都记成 ok=false，`browse_credits` / `reveal_credits` 照实是 0。
       let ok = true
       let reason: string | undefined
+      let browse_credits = 0
       let reveal_credits = 0
       let stored_as_ref = false
       try {
+        kolPublicService.browse(kolPrincipal, { channel: channel as KolChannel, limit: 10 })
+        const afterBrowse = kolWallet.balance(kolPrincipal.org_id).available
+        browse_credits = Math.round((before - afterBrowse) * 100) / 100
+
+        // ② reveal：扣 `data.kol.reveal`（09-23 单开）。取不到 / 钱不够都回一句人话，并且不收钱
         const revealed = kolPublicService.reveal(kolPrincipal, {
           channel: channel as KolChannel,
           handle,

@@ -15,7 +15,7 @@ afterEach(async () => {
 })
 
 describe('WP131 价目页', () => {
-  it('每条都有现价与来历；这一版全部「未核」，健康页挂黄灯', async () => {
+  it('每条都有现价与来历；还有没核的就挂黄灯（09-23 起大部分已核）', async () => {
     const ah = adminHarness()
     close = ah.close
     const staff = await staffLogin(ah, 'ops@example.com', 'support')
@@ -34,10 +34,10 @@ describe('WP131 价目页', () => {
     expect(data.rows).toHaveLength(PRICING_FILE.entries.length)
     for (const row of data.rows) {
       expect(row.basis.length, row.capability).toBeGreaterThan(10)
-      expect(row.reviewed_at).toBeNull()
-      expect(row.needs_review).toBe(true)
+      expect(row.needs_review).toBe(row.reviewed_at === null || row.reviewed_at === '')
     }
-    expect(data.unreviewed).toBe(data.rows.length)
+    expect(data.unreviewed).toBe(data.rows.filter((r) => r.needs_review).length)
+    expect(data.unreviewed).toBeGreaterThan(0) // standby 那条没定过价，仍未核 → 健康页黄灯
     expect(data.rows.find((r) => r.capability === 'data.kol.audit')?.credits_per_unit).toBe(3)
 
     const health = await ah.call('/v1/admin/health', { session: staff.session })

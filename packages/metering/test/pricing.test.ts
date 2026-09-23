@@ -31,7 +31,7 @@ describe('价目表', () => {
     expect(pricing.as_of).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  it('十一条能力都在，每条中英标签齐全', () => {
+  it('十二条能力都在，每条中英标签齐全', () => {
     expect(pricing.entries.map((e) => e.capability)).toEqual([
       'ai.chat',
       'ai.embeddings',
@@ -39,6 +39,8 @@ describe('价目表', () => {
       'ai.image',
       'data.kol.lookup',
       'data.kol.audit',
+      // 09-23 Luoye 按 docs/77 定：联系方式揭示从 lookup 里单开
+      'data.kol.reveal',
       'social.fetch',
       'crawl.page',
       'transcribe.minute',
@@ -143,8 +145,9 @@ describe('WP131：价目的来历与核对状态（basis / reviewed_at）', () =
     expect(pricingEntryNeedsReview({ reviewed_at: '2026-09-30' })).toBe(false)
     const rows = pricingReviewRows()
     expect(rows).toHaveLength(PRICING_FILE.entries.length)
-    // 这一版一条都还没核（建议价在 docs/77，等 Luoye 定）
-    expect(rows.every((r) => r.needs_review)).toBe(true)
+    // 09-23 Luoye 按 docs/77 定了价：定过的填了 reviewed_at，standby 那条没动过仍是未核
+    expect(rows.some((r) => r.needs_review)).toBe(true)
+    expect(rows.find((r) => r.capability === 'social.fetch')?.needs_review).toBe(false)
   })
 
   it('这两格只在数据文件里：拼给用户的价目表里没有它们', () => {
@@ -153,15 +156,16 @@ describe('WP131：价目的来历与核对状态（basis / reviewed_at）', () =
     expect(json).not.toContain('reviewed_at')
   })
 
-  it('WP131 只加说明、不改价：现有数字原样', () => {
+  it('09-23 Luoye 按 docs/77 定的价（不变的与改了的都钉住）', () => {
     const price = (c: string) =>
       PRICING_FILE.entries.find((e) => e.capability === c)?.credits_per_unit
     expect(price('data.kol.lookup')).toBe(0.2)
     expect(price('data.kol.audit')).toBe(3)
-    expect(price('ai.chat')).toBe(0.1)
+    expect(price('ai.chat')).toBe(0.3)
     expect(price('ai.image')).toBe(0.5)
-    expect(price('social.fetch')).toBe(0.05)
-    expect(price('crawl.page')).toBe(0.02)
-    expect(price('transcribe.minute')).toBe(0.1)
+    expect(price('social.fetch')).toBe(0.4)
+    expect(price('crawl.page')).toBe(0.2)
+    expect(price('transcribe.minute')).toBe(0.3)
+    expect(price('data.kol.reveal')).toBe(0.8)
   })
 })

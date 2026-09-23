@@ -46,7 +46,7 @@ const KEY = '/v1/data/kol/creators/youtube/somecreator'
 describe('收费点那张表', () => {
   it('三条收费路由都认得出来', () => {
     expect(kolChargeFor('POST', `${KEY}/reveal`)).toEqual({
-      capability: 'data.kol.lookup',
+      capability: 'data.kol.reveal',
       unit: 'call',
       quantity: 1,
     })

@@ -38,6 +38,7 @@
 | 13 | WP129 内容观测上云 + 体检样本不够不收钱 | `WP129-content-observations-cloud.md` | `wp129-content-cloud` · `wp/129-content-cloud` | — | 已合并（09-23，Fable 终审：全量过） |
 | 14 | WP130 插件采集范围补齐：YouTube 搜索页 / 相关视频栏、IG 与 TikTok 搜索列表与 hashtag（移植） | `WP130-extension-capture-parity.md` | 私有仓库 `wp/130-capture`；开源 `wp130-ext-capture` · `wp/130-ext-capture` | — | 已合并（09-23，Fable 终审：开源全量过；私有仓库 390 测试 + 新旧对拍过，已并入其 main） |
 | 15 | WP131 插件收尾六条（标题可选 / 列表页换算上云 / 自动评分接上 / 深链回本地页）+ 积分价目重算表 docs/77 | `WP131-plugin-followups-and-repricing.md` | 开源 `wp131-repricing` · `wp/131-repricing`；私有 `wp/131-plugin` | — | 已合并（09-23，Fable 终审：开源全量过；私有 416 测试 + 对拍过，已并入其 main） |
+| 16 | WP132 dsh 升级 0.1.6-alpha.2 → 0.1.7-rc.1（照 docs/42 七步；附「0.1.7 官方化了我们哪些自研」清单） | `WP132-dsh-0.1.7.md` | `wp132-dsh` · `wp/132-dsh` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 

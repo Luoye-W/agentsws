@@ -647,6 +647,8 @@ export const MAX_DISPUTE_CLAIM = 500
 /** 三条能力名（价目表 `pricing.json` 里本来就有这三条，WP59 留的）。 */
 export const KOL_LOOKUP_CAPABILITY = 'data.kol.lookup'
 export const KOL_AUDIT_CAPABILITY = 'data.kol.audit'
+/** 联系方式揭示（09-23 Luoye 按 docs/77 定，从 lookup 里单开：0.8 积分 / 次）。 */
+export const KOL_REVEAL_CAPABILITY = 'data.kol.reveal'
 export const SOCIAL_FETCH_CAPABILITY = 'social.fetch'
 
 /** 计价单位（价目表里那三条都是按次）。 */

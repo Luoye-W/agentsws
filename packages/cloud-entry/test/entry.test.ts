@@ -368,13 +368,13 @@ describe('钱包路由', () => {
     expect(data.expiring).toEqual([{ credits: 30, expires_at: '2026-10-01T00:00:00.000Z' }])
   })
 
-  it('价目表端得出来，首批八条 + WP118 的两条订阅 + WP127 生图都在', async () => {
+  it('价目表端得出来，首批八条 + WP118 的两条订阅 + WP127 生图 + 09-23 单开的 reveal 都在', async () => {
     const h = harness()
     const res = await h.app.fetch(
       new Request('http://entry/v1/wallet/pricing', { headers: auth() }),
     )
     const { data } = (await res.json()) as { data: { entries: { capability: string }[] } }
-    expect(data.entries).toHaveLength(11)
+    expect(data.entries).toHaveLength(12)
     expect(data.entries.map((e) => e.capability)).toContain('ai.image')
     expect(data.entries.map((e) => e.capability)).toContain('ai.chat')
   })

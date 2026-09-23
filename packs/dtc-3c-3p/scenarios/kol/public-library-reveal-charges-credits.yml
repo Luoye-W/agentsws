@@ -1,14 +1,14 @@
-# WP68 / WP126（49 M2 / M4、48 §5.3，09-19 Luoye 定的新计费规则）：
+# WP68 / WP126 / WP131（49 M2 / M4、48 §5.3；09-19 与 09-23 Luoye 定的计费规则）：
 # 官方数据接口**没有免费动作了**——浏览 / 搜索按 `data.kol.lookup`（0.2/次）收，
-# 取回一个邮箱照旧扣 `data.kol.lookup`；查无此人 / 搜到 0 条不收钱。
+# 取回一个邮箱按 `data.kol.reveal`（0.8/次，09-23 从 lookup 里单开）收；查无此人 / 搜到 0 条不收钱。
 #
 # 这条题跑的是 `packages/kol-public` 那一份**真服务**（真钱包、真价目、真加密），
 # 不是一个替身。理由很实在：这道题要钉的三件事——浏览收多少、reveal 扣多少、
-# 贡献返额度真的能用——全是那一份代码算出来的。换成替身，断言就只是在验场景自己写的数。
+# 没钱时到底拦不拦——全是那一份代码算出来的。换成替身，断言就只是在验场景自己写的数。
 #
-# 09-18 Luoye 定（保留）：**送的免费额度可以用来看邮箱**。① 那一步往公共库回填了一条联系方式，
-# 按 49 M4 的贡献奖励得了 1 积分（`granted`，有期限）；② 一分钱没充就去取，
-# 先浏览后 reveal，用的都是这 1 积分——该取到，而且账上先扣送的那一份。
+# 09-23 Luoye 定：**插件贡献一律不发积分**（推翻 09-18「送的免费额度可以用来看邮箱」——那条的前提
+# 是贡献会送 1 积分，现在不送了）。所以 ② 一分钱没充就去取，账上是 0，**该被拦**（「钱不够回人话」），
+# 而不是取到；③ 充了 100 再取才取得到，先扣浏览 0.2 再扣 reveal 0.8。
 #
 # 最后一条断言是隐私那一条：取回来的明文进本机加密库，库里那一行只留 key 名。
 id: kol/public-library-reveal-charges-credits
@@ -26,25 +26,25 @@ events:
       followers: 120000
       engagement_rate: 0.035
       email: kevin@creators.example
-  # ② 一分钱没充就去取：浏览先扣 0.2，reveal 再扣 0.2——用的都是贡献奖励送的那 1 积分，**取得到**
+  # ② 一分钱没充就去取：账上 0（贡献不再送积分），浏览那 0.2 就扣不动——**被拦，回人话**
   - at: '+10m'
     kol.public_reveal: { who: p_li, channel: youtube, handle: cablekevin }
   - at: '+20m'
     clock.advance: {}
-  # ③ 充 100 积分再取一次：仍取得到，扣的还是 `data.kol.lookup` 那个价（先扣有期限的，再扣充的）
+  # ③ 充 100 积分再取一次：取得到——浏览扣 `data.kol.lookup` 0.2，reveal 扣 `data.kol.reveal` 0.8
   - at: '+30m'
     kol.public_reveal: { who: p_li, channel: youtube, handle: cablekevin, topup: 100 }
   - at: '+4h'
     clock.advance: {}
 expected:
   kol_reveal:
-    # 第一次（一分钱没充）也取得到——花的是送的免费额度（09-18 Luoye 定，保留）
-    first_refused: false
+    # 第一次（一分钱没充）被拦——贡献不再送积分，账上是 0（09-23 Luoye 定）
+    first_refused: true
     # 第二次（充过 100 积分）取得到
     ok: true
     # **浏览按次收**不是一句文案，是账上的数（WP126：0.2/次，价目表说了算）
     browse_credits: '>0'
-    # 取回一个邮箱要花钱（具体几分由 49 M4 的价目表说了算，这里只断言"不是 0"）
+    # 取回一个邮箱要花钱（`data.kol.reveal`，具体几分由价目表说了算，这里只断言"不是 0"）
     reveal_credits: '>0'
   event_types:
     - simulation.kol_public_revealed
