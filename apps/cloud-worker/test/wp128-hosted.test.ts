@@ -490,6 +490,35 @@ describe('WP128 · 欠费宽限', () => {
 /* ── 从入口 Worker 走完整条路：令牌两类互不通用、AI 计积分、快照对齐 ─────── */
 
 const CALLBACK = 'http://127.0.0.1:3000/v1/cloud/account/callback'
+const ADMIN_TOKEN = 'test-admin-token-at-least-32-bytes-long-0123456789'
+
+/** 引导一个后台管理员（与 wp115 同一条路：bootstrap → magic link → 回调拿 cookie）。 */
+async function adminSession(cloud: FakeCloud): Promise<string> {
+  const email = 'boss@example.com'
+  await route(
+    req('/v1/admin/bootstrap', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
+      body: JSON.stringify({ email }),
+    }),
+    cloud.env,
+  )
+  await route(
+    req('/v1/admin/auth/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }),
+    cloud.env,
+  )
+  const oneTime = tokenFromMail(cloud.mails[cloud.mails.length - 1] as never)
+  const cb = await route(req(`/admin/callback?token=${encodeURIComponent(oneTime)}`), cloud.env)
+  const line = cb.headers.getSetCookie().find((c) => c.startsWith('__Host-agentsws_admin='))
+  return decodeURIComponent((line ?? '').slice('__Host-agentsws_admin='.length).split(';')[0] ?? '')
+}
+
+const adminGet = (cloud: FakeCloud, path: string, session: string): Promise<Response> =>
+  route(req(path, { headers: { Cookie: `__Host-agentsws_admin=${session}` } }), cloud.env)
 
 async function call(
   cloud: FakeCloud,
@@ -547,7 +576,11 @@ describe('WP128 · 入口 Worker：两把钥匙、AI 计积分、本机上线对
     container = new FakeContainer()
     bucket = new FakeBucket()
     cloud = fakeCloud({
-      env: { AGENTSWS_HOSTED_KEY_SEED: 'test-seed', AGENTSWS_NEWAPI_KEY: 'test-upstream-key' },
+      env: {
+        AGENTSWS_HOSTED_KEY_SEED: 'test-seed',
+        AGENTSWS_NEWAPI_KEY: 'test-upstream-key',
+        AGENTSWS_CLOUD_ADMIN_TOKEN: ADMIN_TOKEN,
+      },
       fetch: async () =>
         Response.json({
           id: 'c1',
@@ -675,6 +708,30 @@ describe('WP128 · 入口 Worker：两把钥匙、AI 计积分、本机上线对
     const data = ((await status.res.json()) as { data: HostedInstanceStatus }).data
     expect(data.snapshot?.source).toBe('local')
     expect(data.desired).toBe('run')
+  })
+
+  it('运营后台：组织抽屉「客服增值服务」一行一个工作区（状态 / 心跳 / 本月费用估算）；健康页一格', async () => {
+    const session = await adminSession(cloud)
+    const res = await adminGet(cloud, `/v1/admin/orgs/${owner.org}/support-service`, session)
+    expect(res.status).toBe(200)
+    const data = ((await res.json()) as { data: { workspaces: Record<string, unknown>[] } }).data
+    expect(data.workspaces).toHaveLength(1)
+    const row = data.workspaces[0] as {
+      workspace_id: string
+      subscription_status: string
+      hosted: HostedInstanceStatus
+    }
+    expect(row.workspace_id).toBe(WS)
+    expect(row.subscription_status).toBe('active')
+    expect(row.hosted.desired).toBe('run')
+    expect(row.hosted.cost_estimate_usd_full_month).toBeGreaterThan(8)
+    // 状态里一个密钥都没有
+    expect(JSON.stringify(row)).not.toMatch(/wst_hosted_|hrp_|test-seed/)
+
+    const health = await adminGet(cloud, '/v1/admin/health', session)
+    const items = ((await health.json()) as { data: { items: { key: string; status: string }[] } })
+      .data.items
+    expect(items.find((i) => i.key === 'hosted_instance')?.status).toBe('ok')
   })
 
   it('没有快照时容器拉到 204（从空库起）', async () => {
