@@ -1235,17 +1235,78 @@ patch 必须 `disabled: true` 的行从 3 行加到 6 行。`session-log-deepsee
 | 2 | headless `--json` 替不了子进程档（单向 stdout 投影） | `bundle/headless/src` 的 diff 只有两处：`json-stream.ts` 跟着消息形状改（从 `content[0]` 取 → 直接取 `message.toolCallId`），`index.ts` 两行注释改包名 | **成立** |
 | 3 | `plugin-manager` 不能替 preset 承载 | 这次不用它也换了：registry 就是官方的 preset 承载，**我们已经在用它的 `register()`**（§3 ①）。plugin-manager 仍然关死 | **已部分解决**（官方承载换上了；安装 / 持久化那半仍不借） |
 | 4 | `workspace-changes` 形可借体不能用 | README 两句硬伤原样还在：「Host restart therefore has no card」「shell commands outside the snapshot coverage are not recorded」 | **成立** |
-| 5 | `session.eventAt()` 弃用（"下次第一个红"） | 仍在、仍标弃用（`dsh-session/lib/types/index.d.ts` 第 181 行），这次**没红** | 仍是悬着的一条，留给下一跳 |
+| 5 | `session.eventAt()` 弃用（"下次第一个红"） | 仍在、仍标弃用（`dsh-session/lib/types/index.d.ts` 第 181 行），这次**没红** | 仍是悬着的一条，留给下一跳 （**WP133 已解决**，见下一节） |
 
 ### 8. 留下的东西
 
 1. **`session.eventAt()` 仍在用**（`harness.ts` 的 `summarizeTurn()`）。上游已经三版挂着 `@deprecated`，迟早删；
    替代是 `session.read()` 的异步分页（上游 Agent Note 2026-09-09），改起来是 S。
+   （**WP133 更正并解决**：0.1.7-rc.1 与上游 master 的 `Session` 上都**没有** `read()`；改成边收 `session/event` 边折，见下一节。）
 2. **`capture.mjs` 的 `CAPTURE_SKIP` 留着**（只许跳"升级前 main 上就红、stub 档也红"的场景）；这次最终提交的两份基线没用上它。
 3. **`@deepseek-ai/dsh-agent-preset`（声明插件行）没用上**：我们直接 `register()`，因为我们的定义是按 RunRequest
-   一次运行生成一次、不是 profile 里的静态行。真接管 dsh 进程那天，profile 的写法见 `cordis.patch.yml` 末尾的注释。
+   一次运行生成一次、不是 profile 里的静态行。真接管 dsh 进程那天，profile 的写法见 `cordis.patch.yml` 末尾的注释（WP133 起挪到 `profiles/agentsws/README.md`）。
 4. **`upstreams.yml` 的 `locked_in` 仍只钉 `@deepseek-ai/dsh` 一个包名**（WP93 记过）。这次 `dsh-agent-presets`
    整包消失也是逐个 `npm view` 才发现的——登记表查不出"某个锁住的兄弟包新版里根本没有"。v2 值得给哨兵加一步：
    对 `locked_in` 文件里每个 `<prefix>*` 依赖查一次 `<包>@<新版>` 在不在。
 5. **`contracts/src/run.ts`、`connection-directory.ts` 与 docs/18、docs/55 的注释里还写着 `agent-presets` 目录**。
    契约注释不在本单改（改了要重出 SDK），文档是历史记录；dsh-adapter 自己的 README / AGENT-LAYER / presets/README 已加 WP132 修订注。
+
+## WP133（2026-09-24）：不是升级——锁定可校验、换掉 `eventAt()`
+
+版本号一个没动（仍是 0.1.7-rc.1）。WP132 报告 §9 推荐的两条 S 量级收尾。
+
+### 1. profile 锁定：每一行的 id 对照 dsh 自己导出的配置 schema
+
+**洞**：`profiles/agentsws/cordis.patch.yml` 的锁定全是按服务 id 字符串对上的。上游改一个 id，
+我们那行就指向不存在的 entry——dsh 的处理是打一行 warning 然后跳过（`cordis-plugin-include` 的
+`applyEntryPatches`：「A patch that matches nothing warns and is skipped」；实测输出
+`dsh: warning: patch: entry "no-such-thing-xyz" not found`，**退出码 0**）。原来的测试只读我们自己的
+yaml，看不见上游那头，这种情况照样全绿（WP133 做过变异：把 `hmr` 改成 `dsh-hmr`，老断言仍绿）。
+
+**`--dump-config-schema` 的输出长什么样**（0.1.7 新加；实测 `DSH_HOME=<临时目录> dsh --profile agentsws --dump-config-schema`，
+约 1 秒、不挂插件、不求值 `!!js`，但会 import 组合里每个插件模块来读 schema）：一份 JSON Schema 2020-12 文档，
+`$defs.patchList` / `$defs.patch` 描述 patch 行（对每个已知 id 一个 `if id const … then config $ref`，
+**未知 id 不拒**——schema 本身是开放的），`x-cordis.entries[]` 是组合后的每一行（`id` / `name` / `status` / `configRef`，
+这次 94 行：65 行有 schema、29 行 `absent`），`x-cordis.diagnostics[]` 带着上面那条 `not found` warning，
+`x-cordis.complete` 这次是 `true`（有插件只导出一部分时为 `false`、退出码 1）。类型出处：
+`@deepseek-ai/dsh-app-boot/lib/types/config-schema/types.d.ts` 的 `ConfigSchemaDump`。
+
+所以校验不能只拿 JSON Schema 去 validate（未知 id 会过），要读 `x-cordis`：
+`test/profile-lockdown.test.ts` 新增一组 7 条——`LOCKDOWN` 表（id → 应当指向的插件 → 期望值）与 patch 文件双向对齐；
+每个 id 在 `entries` 里存在、`name` 还是那个插件、改配置那一行（`session-log-deepseek.enabled`）的字段仍在配置 schema 里、
+diagnostics 里没有这个 id 的 `not found`；再跑一次 `--dump-config` 看组合出来的树里这几行最终确实是关的；
+三个反向哨兵（塞一个不存在的 id / 把 `hmr` 的插件名换掉 / 把 `enabled` 字段改名）证明检查不是假绿。
+
+**为什么没拆成独立的 `lockdown.patch.yml`**：0.1.7 的 bundle 确实支持 `dsh.bundle.patch` 写一个有序的文件列表，
+profile 自己却只有一个 `cordis.patch.yml`（`dsh-app-boot` 的 `PROFILE_PATCH_FILENAME`）。要挂第二个文件只能走 bundle 层
+或 `--patch`。bundle 层是 **fail-open**：`loadProfile` 的注释「Unreadable or incompatible bundles are reported on stderr
+and skipped; profile manifest and user patch errors still throw」。WP133 实测：把锁定放进一个本地 bundle、再把它写坏，
+`dsh --dump-config` 退出码 0，`plugin-manager` 回到 `disabled: !!js '!ctx.get(''profileContext'')'`（profile 启动时即开）；
+同样写坏 profile 自己的 `cordis.patch.yml`，退出码 1。`--patch` 则靠每次启动记得带。锁定必须 fail-closed，
+所以留在 profile 这一层，改成**这份文件只放锁定**（七行），原来混在里面的占位注释挪到 `profiles/agentsws/README.md`。
+
+### 2. `session.eventAt()` → 边收 `session/event` 边折
+
+**更正 WP132 报告 §9 第 15 条**：0.1.7-rc.1 的 `Session` 上**没有** `read()`。查过三处：
+`dsh-session/lib/types/index.d.ts` 的 `class Session`（同步读只有 `eventAt` / `snapshotEvents` / `ownEvents`，全标
+`@deprecated`）；README「Read the log」；上游 `packages/core/session/src/index.ts` 在 `dsh-v0.1.7-rc.1` 与 `master` 两处。
+叫 `read()` 的是别的东西：`dsh-session-persistence` 的 `SessionHandle.read(offset, length)`（JSONL 存储句柄）、
+`dsh-session-query` 的 `read(sessionId)` / `readEvent(request)`——我们用内存 Session、不挂持久化，都用不上。
+
+Agent Note 2026-09-09（上游 `.agents/notes/implemented/architecture/2026-09-09-deprecate-synchronous-session-event-reads.md`，
+不在 npm 包里，用 `gh api` 取的）给的迁移方向其实是两条：普通逻辑「reads the projection or processes the delivered current
+event instead of looking back through historical events」；只有按需展示的历史内容才走「explicit asynchronous pagination」。
+`summarizeTurn()` 是前一种——它只要这一轮的最后一段话和结束原因。
+
+改法：`harness.ts` 的 `runTurn()` 在 `followup()` 之前挂一个 `session/event` 监听（按 session id 过滤），
+事件交给新的 `TurnSummary` 边收边折，`whenIdle()` 之后摘掉；折法与原来的回扫逐条相同。`packages/dsh-adapter/src`
+里三个弃用的同步读**一处不剩**。`test/turn-summary.test.ts` 7 条：折法单测 3 条；真跑 4 条，新折法与测试里保留的旧
+`eventAt()` 回扫（上游政策允许测试文件用这三个读）逐字段相同。
+
+### 3. 证明行为没变
+
+- 指纹：改动前在当前代码树重采一份，与仓库里的 `0.1.7-rc.1.json` **逐字节相同**；改完再采（124 条全 ok），
+  `0.1.7-rc.1.json` **逐字节不变**（`git status` 无差异）。没有新增基线文件。
+- 3 人 pack `--runtime dsh` fast 档：改动前后各跑一次，62/62，**1054 个指标值 0 差**，`summary.txt` 逐字节相同，门禁"通过"。
+- `@agentsws/dsh-adapter` 1020 → 1034 条全过（+7 `profile-lockdown`、+7 `turn-summary`），`seams.test.ts` 30 条不动。
+

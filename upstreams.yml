@@ -76,7 +76,10 @@ upstreams:
       - 官方 SDK 出现 server→client 请求（dsh-sdk-jsonrpc-server 里的 transport.request）
       - headless 的 turn 驱动能被宿主接管（--json 只是单向投影，不算）
       - browser-use 从 experimental 转正，且后端不需要开原生构建就能起
-      - session.eventAt() 的替代接口定下来（上游已弃用，下次升级第一个红）
+      # WP133：`session.eventAt()` 已不再用（`runTurn` 的摘要改成边收 `session/event` 边折），原来那条
+      # "替代接口定下来"撤掉。0.1.7-rc.1 与上游 master 的 Session 都没有 `read()`；Agent Note 2026-09-09
+      # 只说"按需展示的历史走显式异步分页"——真出了分页读接口，才用得上会话历史回看那类功能。
+      - Session 出现正式的异步分页读接口（Agent Note 2026-09-09 说的 explicit asynchronous pagination）
       - 出现渠道 seam（现在入站只能靠 agent.followup()）
       # WP93 加：`.d.ts` 与 README 的 diff 看不见 bundle 自己的 patch 层。alpha.2 就是往
       # `packages/bundle/base/cordis.patch.yml` 里 insert 了一行默认开的 `plugin-manager`
@@ -89,6 +92,8 @@ upstreams:
       - packages/dsh-adapter/test/seams.test.ts
       - packages/dsh-adapter/test/browser-seam.test.ts
       - packages/dsh-adapter/test/upgrade.test.ts
+      # WP133：profile 锁定每一行的 id 对照新版 dsh 的 `--dump-config-schema` 校验（升级时它先红）
+      - packages/dsh-adapter/test/profile-lockdown.test.ts
       - packages/dsh-adapter/UPGRADE.md
       - docs/42-上游升级流程-v1.md
 
