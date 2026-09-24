@@ -2501,7 +2501,7 @@ const zh: Table = {
   'onboarding.business.no_site': '还没有网站',
   'onboarding.business.working': '正在读你的网站，已经读了 {done} 页。可以先去选岗位，回来看结果。',
   'onboarding.business.capped': '花到 {cap} 积分的上限就停下了——已经读到的都在下面。',
-  'onboarding.business.missed': '有 {count} 个页面没读着（{reason}）。缺的那几格自己填上就行。',
+  'onboarding.business.missed': '有 {count} 个页面没读着：{reason}。缺的那几格自己填上就行。',
   // WP127：文字模型必须能看图；生图单独一档
   'onboarding.ai.own.err.vision':
     '这个模型看不了图，Agents 工坊要求模型能看图。换一个能看图的再试，常见的有：{models}。',
@@ -2602,6 +2602,12 @@ const zh: Table = {
   'need.no_range': '「{duty}」这条职责还没分配店铺 / 品牌，所以这里还用不了。',
   'need.go_assign': '去分配',
   'nav.chat_window': '聊天窗',
+  // ── WP142：红人为主的朋友第一步 ──
+  'onboarding.ai.official.pending': '正在连 Agents 工坊云…',
+  'onboarding.ai.official.offline': '网络不通，这一下没连上 Agents 工坊云。',
+  'onboarding.ai.official.retry': '再试一次',
+  'intake.confirmed': '记下了：品牌档案已存好，之后在设置里也能改。点「保存并继续」去选岗位。',
+  'intake.confirmed.button': '已确认',
 }
 
 const en: Table = {
@@ -5237,6 +5243,14 @@ const en: Table = {
     'The "{duty}" duty has no store or brand assigned yet, so it cannot be used here.',
   'need.go_assign': 'Assign one',
   'nav.chat_window': 'Live chat',
+  // ── WP142：红人为主的朋友第一步 ──
+  'onboarding.ai.official.pending': 'Connecting to Agents Workshop cloud…',
+  'onboarding.ai.official.offline':
+    'Could not reach Agents Workshop cloud — the network did not get through.',
+  'onboarding.ai.official.retry': 'Try again',
+  'intake.confirmed':
+    'Saved: the brand profile is stored and can be changed later in Settings. Click "Save and continue" to pick positions.',
+  'intake.confirmed.button': 'Confirmed',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

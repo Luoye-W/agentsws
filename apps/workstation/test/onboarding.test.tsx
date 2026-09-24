@@ -272,6 +272,11 @@ const state = {
   reanalyzes: [] as { id: string; urls?: string[] }[],
   confirms: [] as { id: string; edits?: Record<string, unknown> }[],
   run: undefined as BrandIntakeRun | undefined,
+  /** WP142：发登录信那一跳——连不上云 / 先挂着不回（看「正在连」那一句）。 */
+  linkFail: false,
+  linkHold: undefined as Promise<void> | undefined,
+  /** WP142：第 ① 步「自己的接口」那一排模板（默认两张：云 + DeepSeek）。 */
+  templates: undefined as ModelProviderTemplate[] | undefined,
 }
 
 vi.mock('@/lib/api', async () => {
@@ -316,12 +321,18 @@ vi.mock('@/lib/api', async () => {
     // ── 第 ① 步 ────────────────────────────────────────────────
     listModelProviders: async () => ({
       providers: state.providers,
-      templates: [CLOUD_TEMPLATE, DEEPSEEK_TEMPLATE],
+      templates: state.templates ?? [CLOUD_TEMPLATE, DEEPSEEK_TEMPLATE],
     }),
     getCloudAccount: async () => state.account,
     getCloudCredits: async () => state.credits,
     linkCloudAccount: async (email: string) => {
       state.links.push(email)
+      if (state.linkHold !== undefined) await state.linkHold
+      if (state.linkFail)
+        throw new actual.ApiClientError(503, {
+          code: 'provider_unavailable',
+          message: '网络不通，这一下没连上 Agents 工坊云。检查一下网络再试一次。',
+        })
       return { expires_at: T0, delivered: 'email' as const }
     },
     saveModelProvider: async (
@@ -393,6 +404,9 @@ beforeEach(() => {
   state.reanalyzes = []
   state.confirms = []
   state.run = undefined
+  state.linkFail = false
+  state.linkHold = undefined
+  state.templates = undefined
 })
 
 /** 走完第 ① 步（走演示旁路——四条路里最短的那条，而且不落任何东西）。 */
@@ -1320,5 +1334,177 @@ describe('设置页的公司档案（ProfileForm）', () => {
     )
     expect(await screen.findByText(/只交换一串哈希/)).toBeTruthy()
     expect(screen.getByTestId('company-name-hint').getAttribute('data-hint')).toContain('营业执照')
+  })
+})
+
+/* ── WP142：红人为主的朋友第一步（docs/78 §1 #6 #7、§2「向导」） ───────────────── */
+
+describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', () => {
+  it('发送中说「正在连 Agents 工坊云…」，不只是按钮变灰', async () => {
+    const user = userEvent.setup()
+    let release: () => void = () => {}
+    state.linkHold = new Promise<void>((r) => {
+      release = r
+    })
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.click(screen.getByTestId('ai-official-send'))
+    expect((await screen.findByTestId('ai-official-pending')).textContent).toContain(
+      '正在连 Agents 工坊云',
+    )
+    release()
+    expect(await screen.findByTestId('ai-official-sent')).toBeTruthy()
+    expect(screen.queryByTestId('ai-official-pending')).toBeNull()
+  })
+
+  it('连不上：一句人话 +「再试一次」+「先逛逛演示数据」，不报网址', async () => {
+    const user = userEvent.setup()
+    state.linkFail = true
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.click(screen.getByTestId('ai-official-send'))
+
+    const failed = await screen.findByTestId('ai-official-failed')
+    expect(within(failed).getByTestId('ai-error').textContent).toContain('网络不通')
+    expect(failed.textContent).not.toMatch(/https?:\/\//)
+
+    // 再试一次：同一个邮箱再发一遍，这回通了
+    state.linkFail = false
+    await user.click(within(failed).getByTestId('ai-official-retry'))
+    expect(await screen.findByTestId('ai-official-sent')).toBeTruthy()
+    expect(state.links).toEqual(['wang@nordvolt.cn', 'wang@nordvolt.cn'])
+  })
+
+  it('连不上时「先逛逛演示数据」直接往下走（不接模型也到得了第 ② 步）', async () => {
+    const user = userEvent.setup()
+    state.linkFail = true
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.click(screen.getByTestId('ai-official-send'))
+    await user.click(await screen.findByTestId('ai-official-demo'))
+    expect(await screen.findByTestId('onboarding-business')).toBeTruthy()
+  })
+
+  it('同一家厂商的几个方案收成一个钮，选中后再挑方案（百炼不再出三个同名）', async () => {
+    const user = userEvent.setup()
+    const bailian = (plan: string, url: string, order: number): ModelProviderTemplate => ({
+      kind: 'openai_compatible',
+      label: `阿里云百炼 ${plan}`,
+      summary: '一把 key。',
+      vendor: 'bailian',
+      vendor_label: '阿里云百炼',
+      plan_label: plan,
+      plan_order: order,
+      default_base_url: url,
+      default_model: 'qwen-plus',
+      region: 'cn',
+      steps: [],
+      links: [],
+    })
+    state.templates = [
+      CLOUD_TEMPLATE,
+      DEEPSEEK_TEMPLATE,
+      bailian('Token Plan（订阅）', 'https://tp.example/v1', 2),
+      bailian('按量计费（标准）', 'https://payg.example/v1', 1),
+      bailian('Coding Plan（订阅）', 'https://cp.example/v1', 3),
+    ]
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-own'))
+    const row = await screen.findByTestId('ai-own-templates')
+    const labels = within(row)
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+    expect(labels).toEqual(['DeepSeek 官方', '阿里云百炼'])
+    // 选中百炼才出第二排：三个方案，按 plan_order 排
+    expect(screen.queryByTestId('ai-own-plans')).toBeNull()
+    await user.click(within(row).getByText('阿里云百炼'))
+    const plans = await screen.findByTestId('ai-own-plans')
+    expect(
+      within(plans)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['按量计费（标准）', 'Token Plan（订阅）', 'Coding Plan（订阅）'])
+    expect(within(plans).getAllByRole('button')[0]?.getAttribute('data-picked')).toBe('true')
+  })
+})
+
+describe('WP142 第 ② 步：档案卡说人话、公司全称只有一个来源、确认有回执', () => {
+  const richRun = (): BrandIntakeRun =>
+    websiteRun({
+      pages: [
+        { url: 'https://nordvolt.cn/', kind: 'home', ok: true },
+        {
+          url: 'https://nordvolt.cn/policies/refund',
+          kind: 'policy',
+          ok: false,
+          reason: '这个页面不存在（404）',
+        },
+      ],
+      profile: {
+        ...websiteRun().profile,
+        legal_name: {
+          value: '深圳诺伏特科技有限公司',
+          confidence: 'high',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'jsonld:Organization.legalName' }],
+        },
+        currency: {
+          value: 'USD',
+          confidence: 'high',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'jsonld:Offer.priceCurrency' }],
+        },
+        languages: {
+          value: ['zh-CN'],
+          confidence: 'medium',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'og:locale' }],
+        },
+        products: {
+          value: [{ title: '65W 充电器', price_snapshot: '1299.00' }],
+          confidence: 'medium',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'jsonld:Product' }],
+        },
+      },
+    })
+
+  it('标签是中文 / 品牌名，价格带币种，没读着的页面不括号套括号', async () => {
+    state.run = richRun()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    const card = await screen.findByTestId('brand-profile-card')
+    const tags = within(card)
+      .getAllByTestId('intake-tag')
+      .map((t) => t.textContent)
+    expect(tags).toEqual(['中文（中国）', 'Instagram', 'TikTok'])
+    expect(card.textContent).not.toMatch(/zh-CN|instagram|tiktok/)
+    expect(within(card).getByTestId('intake-price').textContent).toContain('US$')
+    const missed = screen.getByTestId('intake-missed').textContent ?? ''
+    expect(missed).toContain('这个页面不存在（404）')
+    expect(missed).not.toMatch(/（[^）]*（/)
+  })
+
+  it('「公司全称」只出一次：卡上不再有，下面那一格预填分析出来的全称', async () => {
+    state.run = richRun()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    const card = await screen.findByTestId('brand-profile-card')
+    expect(within(card).queryByTestId('intake-row-legal_name')).toBeNull()
+    expect((screen.getByTestId('company-legal-name') as HTMLInputElement).value).toBe(
+      '深圳诺伏特科技有限公司',
+    )
+    expect(screen.getAllByText('公司全称')).toHaveLength(1)
+  })
+
+  it('点「看着没问题」有一句回执，按钮换成「已确认」', async () => {
+    const user = userEvent.setup()
+    state.run = richRun()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(await screen.findByTestId('intake-confirm'))
+    expect((await screen.findByTestId('intake-confirmed')).textContent).toContain('已存好')
+    const button = screen.getByTestId('intake-confirm') as HTMLButtonElement
+    expect(button.textContent).toContain('已确认')
+    expect(button.disabled).toBe(true)
   })
 })

@@ -287,6 +287,7 @@ export function OnboardingPage(): React.ReactNode {
                   email: state.data.person.email,
                 }}
                 companyName={companyName}
+                companyEdited={companyDraft !== undefined}
                 onRename={setNameDraft}
                 onCompanyName={setCompanyDraft}
                 onSettled={(run) => {
