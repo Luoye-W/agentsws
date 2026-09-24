@@ -13,6 +13,8 @@
 name = "agentsws-chat-relay"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
+# 转发器用到 node:crypto（HMAC 访客令牌、AES-GCM 封留言）：没有这个标志上传会报「No such module」
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 # 单租户：一个 Worker 服务一个工作区。改成你的工作区号。
