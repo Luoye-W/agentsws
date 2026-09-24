@@ -2198,6 +2198,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP25：有没有模型问模型面（加密库里的配置 + 环境变量兜底）
             hasModel: () => effectiveModels().configured(),
             modelRef: () => effectiveModels().defaultRef(),
+            // WP147：默认模型验证过能看图，浏览器 / 电脑操控的截图才进模型
+            modelVision: () => effectiveModels().visionStatus(),
             // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
             skills: skills.registry,
             ...(devMcp === undefined

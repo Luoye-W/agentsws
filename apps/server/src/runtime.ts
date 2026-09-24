@@ -133,6 +133,12 @@ export interface RuntimeOptions {
   /** WP25：现在生效的默认模型（进 `RunRequest.runtime.model`）。 */
   modelRef?: () => ModelRef
   /**
+   * WP147（截图给 AI 看）：现在生效的默认模型**验证过能看图**吗（WP127 三步验证的结论，
+   * `ModelsAssembly.visionStatus()`）。只有 `'ok'` 才让 dsh 那条路由声明图片输入——
+   * 浏览器 / 电脑操控的截图才进模型；`'no'` / `'unchecked'` / 不接都不声明（截图位置是官方诊断）。
+   */
+  modelVision?: () => 'ok' | 'no' | 'unchecked'
+  /**
    * WP54（48 v2 L2）：这个工作区卖的是什么（公司档案里的「你卖的是」）。
    *
    * 晚绑定的读法：档案在向导第 ① 步才写，而运行时比它先装配好；用户改了档案之后
@@ -236,6 +242,26 @@ export interface RuntimeOptions {
    * 别的运行照旧走 direct / stub，一个字节不变。
    */
   computerUse?: Pick<ComputerUseAssembly, 'forRun' | 'remember' | 'activate' | 'deactivate'>
+}
+
+/**
+ * WP147：这次运行的模型要不要向 dsh 那条路由**声明图片输入**（截图进不进模型）。
+ *
+ * 只认 WP127 三步验证的结论：`'ok'`，而且验证的正是这次运行用的这个模型（provider + 模型名）。
+ * `'no'`（看不了）/ `'unchecked'`（没验证过）/ 换了模型 / 没接，一律不声明——
+ * 截图的位置是官方 MCP 桥的诊断文字，模型照样靠文字干活。
+ */
+export function declaresImageInput(
+  vision: 'ok' | 'no' | 'unchecked' | undefined,
+  current: ModelRef | undefined,
+  model: ModelRef,
+): boolean {
+  return (
+    vision === 'ok' &&
+    current !== undefined &&
+    current.provider === model.provider &&
+    current.model === model.model
+  )
 }
 
 /**
@@ -585,7 +611,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       summary:
         input.stage === 'handoff'
           ? `请你在电脑上把这一步做完（登录、密码、支付、验证码它不会替你输）。做完点「允许」，它会再用 ${cu.minutes} 分钟接着做。`
-          : `它想：${input.reason}。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。运行时托盘会变色，随时可以点「停止」。`,
+          : `它想：${input.reason}。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行时托盘会变色，随时可以点「停止」。`,
       payload,
       evidence: {
         run_id: s.run_id,
@@ -700,6 +726,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           createDraft,
           createPolicyQuestion,
           requestComputerUse,
+          /*
+           * WP147：这次运行的模型就是现在的默认模型、而且验证过能看图，才声明图片输入。
+           * 换了模型名（`RunRequest.runtime.model` 与默认不是同一个）一律不声明——
+           * 结论只认测的正是这个模型的那一次（WP127 同一条规矩）。
+           */
+          imageInput: (model) =>
+            declaresImageInput(options.modelVision?.(), options.modelRef?.(), model),
           ...(executeTool === undefined ? {} : { executeTool }),
         })
       : undefined
