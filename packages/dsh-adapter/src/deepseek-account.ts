@@ -15,8 +15,9 @@
  *    **不另开端口**，回调仍是官方模块自己校验 state + PKCE、自己写响应。
  * 3. **按官方默认值走**：`platformOrigin` / `inferenceOrigin` / `requestTimeoutMs` / `attemptTimeoutMs`
  *    一个都不覆盖，不加 `requestHeaders`、不开 `allowLoopbackHttp`、不开 `rewriteBrowserOrigin`。
- *    `desktopPlatform` 也留默认 `null`（所有请求带 `x-client-platform: web`）——我们的界面是网页，
- *    桌面壳里也是同一个网页。只有测试会传 {@link DeepSeekAccountHostOptions.config}（调短超时）。
+ *    `desktopPlatform` 按文档默认 `null`（所有请求带 `x-client-platform: web`）——我们的界面是网页，
+ *    桌面壳里也是同一个网页。这一项要**显式**写（见 {@link OFFICIAL_DEFAULTS}，上游默认值没生效）。
+ *    只有测试会传 {@link DeepSeekAccountHostOptions.config}（调短超时、指向替身平台）。
  *
  * **默认关**（docs/42 红线 7）：这个模块只在用户选了「用我的 DeepSeek 账号登录」之后才被
  * `import()` 进来、才挂上；profile 那一层（`profiles/agentsws/cordis.patch.yml`）仍然写死关着，
@@ -65,6 +66,21 @@ export const DEEPSEEK_ACCOUNT_INFERENCE_ORIGIN = 'https://api.deepseek.com'
  * 官方 README：「Messages 和 Files 请求通过 `x-dsh-auth-token` 发送账号 token，不加 Bearer 前缀」。
  */
 export const DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL = `${DEEPSEEK_ACCOUNT_INFERENCE_ORIGIN}/anthropic`
+
+/**
+ * 我们**显式**写出来的唯一一项配置：`desktopPlatform: null`——它就是官方文档写的默认值
+ * （README：「`desktopPlatform` defaults to `null`. Every profile then sends `x-client-platform: web`」）。
+ *
+ * 为什么要写：0.1.7-rc.1 里这条默认值**实际没生效**（WP134 实测）。`Config({})` 回来的
+ * `desktopPlatform` 是 `undefined` 而不是 `null`（schemastery 的 `.default(null)` 不落值），
+ * 构造函数里 `desktopClientHeaders(undefined)` 只认 `=== null`，于是所有平台请求带的是
+ * `x-client-platform: desktop-mac`——与文档相反。显式传 `null` 才得到文档说的 `web`。
+ * 官方自己的组合里看不出这个洞，因为 `dsh-base` 的 patch 替它**显式**写了这一项
+ * （`dsh --dump-config` 实测：`desktopPlatform: !!js "ctx.get('profileContext')?.name === 'desktop' && …
+ * ? process.platform : null"`——不是 desktop profile 就是 `null`）。我们不走 bundle，所以照这个结果写死 `null`。
+ * 钉住它：`test/deepseek-account.test.ts` 第一条 + 「官方默认值」那一组的哨兵。
+ */
+export const OFFICIAL_DEFAULTS: PlatformAccountConfig = { desktopPlatform: null }
 
 /** 官方模块在宿主 webServer 上注册的回调路径（`lib/index.js`：`path: "/oauth/callback"`）。 */
 export const DEEPSEEK_ACCOUNT_CALLBACK_PATH = '/oauth/callback'
@@ -184,7 +200,7 @@ export async function createDeepSeekAccountHost(
     root.plugin(CredentialsLocal as never, { dshHome: options.dshHome, watch: false } as never)
   }
   root.plugin(Authorization)
-  root.plugin(PlatformAccount as never, (options.config ?? {}) as never)
+  root.plugin(PlatformAccount as never, { ...OFFICIAL_DEFAULTS, ...options.config } as never)
 
   const ctx = await injectReady(
     root,

@@ -1,0 +1,19 @@
+# 运行时 patch：**只在用户选了「用我的 DeepSeek 账号登录」时**才叠上（WP134）。
+#
+# docs/42 红线 7 的路线 (b)：profile 那一层（`cordis.patch.yml`）的 `deepseek-account: disabled: true`
+# 一个字都不动——那一层解析失败直接启动失败（fail-closed，WP133 实测），默认永远是关的。
+# 真用 `dsh --profile agentsws` 起完整 profile、而且这个人选了账号登录时，由服务进程加一个
+# `--patch <这份文件>` 把它打开；没选就不带，官方模块不挂、不出网。
+#
+# 为什么不走路线 (a)（`disabled: !!js "!process.env.…"`）：`--dump-config` / `--dump-config-schema`
+# 不求值 `!!js`，锁定测试就看不出"没选时到底关没关"——一行要靠运行时求值才知道开关的锁定，
+# 正是 WP133 要消灭的那种"看起来关了"。
+#
+# 我们自己的两档运行时不读 profile（`harness.ts` 自己搭树），服务进程里真正的开关是
+# `apps/server/src/deepseek-account.ts`：选了才 `import()` 官方模块、挂一棵只为它的最小树。
+# 这份文件与那边是同一个决定的两处落点；`packages/dsh-adapter/test/profile-lockdown.test.ts`
+# 钉住：不带它 → 关；带它 → 只有这一行被打开，别的锁定一行不动。
+#
+# 只写 `disabled: false`，**不写任何 config**：按官方默认值走（派工单硬要求）。
+- id: deepseek-account
+  disabled: false
