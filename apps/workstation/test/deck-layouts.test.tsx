@@ -321,3 +321,43 @@ describe('WP100：十一种各有主动词，头一行的类别写人话', () =>
     expect(within(menu).getByText('我来说').closest('button')?.dataset.action).toBe('instruct')
   })
 })
+
+describe('WP141：卡面上的字段名与值说人话', () => {
+  it('业务边界卡：late_return_grace_days: 0 → 7 写成「过了退货期还能宽限：0 天 → 7 天」', () => {
+    renderCard(
+      layoutCard(
+        'policy',
+        { kind: 'policy_change' },
+        { before: { late_return_grace_days: 0 }, after: { late_return_grace_days: 7 } },
+      ),
+    )
+    const ba = screen.getByTestId('deck-before-after').textContent ?? ''
+    expect(ba).toContain('过了退货期还能宽限: 0 天')
+    expect(ba).toContain('过了退货期还能宽限: 7 天')
+    expect(ba).not.toContain('late_return_grace_days')
+  })
+
+  it('红人挑人清单卡：按渠道列名字，不是「没 · 没写名字」', () => {
+    renderCard(
+      layoutCard(
+        'person',
+        { kind: 'kol_campaign' },
+        {
+          campaign_id: 'cmp_1',
+          by_channel: [
+            {
+              channel: 'youtube',
+              role_id: 'kol.youtube',
+              allowed: true,
+              picks: [{ display_name: 'Gadget Jonas' }, { display_name: 'Desk Rosa' }],
+            },
+          ],
+        },
+      ),
+    )
+    const box = screen.getByTestId('deck-campaign-groups').textContent ?? ''
+    expect(box).toContain('YouTube · 2 人')
+    expect(box).toContain('Gadget Jonas、Desk Rosa')
+    expect(screen.queryByText('没写名字')).toBeNull()
+  })
+})

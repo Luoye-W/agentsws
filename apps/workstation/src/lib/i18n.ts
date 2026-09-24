@@ -2576,6 +2576,29 @@ const zh: Table = {
   'scenes.unavailable': '这台部署不能切换场景：{reason}',
   'scenes.opened': '已在浏览器里打开「{name}」。',
   'scenes.error': '没办成：{message}',
+  // ── WP141（docs/78 §1 #4、§2）：牌堆与屏上的字 ─────────────────────────
+  'kind.kol_campaign': '红人挑人清单',
+  'deck.campaign.group': '{channel} · {n} 人',
+  'deck.campaign.blocked': '这一组你名下没有对应职责，只能看不能建',
+  'deck.matter.untitled': '属于：一件还没起名的事项',
+  'deck.proposer.name.agent': 'AI',
+  'deck.proposer.name.person': '同事',
+  'deck.proposer.name.sentinel': '巡检',
+  'deck.proposer.name.registry': '应用库',
+  'deck.proposer.name.system': '系统',
+  'deck.progress.range': '第 {from}–{to} / {total} 张',
+  'deck.nav.prev': '上一张',
+  'deck.nav.next': '下一张',
+  'deck.nav.list': '全部列出',
+  'deck.nav.list.close': '收起列表',
+  'deck.empty.filtered': '这个筛选下没有卡了',
+  'deck.receipt.instruct.single_reply': '记下了：这一条按你说的重写，改好再给你看。',
+  'deck.receipt.instruct.similar_cases':
+    '记下了：下次类似的情况也这样办（已经提成一张卡，你批了才生效）。',
+  'deck.receipt.instruct.global_rule': '记下了：已经提成一张规则变更卡，你批了以后都这样。',
+  'deck.receipt.reject': '记下了：这张不办，理由会让它下次少犯。',
+  'deck.receipt.snooze': '先放一放，过几个小时它再回来。',
+  'deck.receipt.choice': '记下了：以后遇到这种情况就按你选的办。',
 }
 
 const en: Table = {
@@ -5181,6 +5204,31 @@ const en: Table = {
   'scenes.unavailable': 'This deployment cannot switch scenes: {reason}',
   'scenes.opened': 'Opened "{name}" in your browser.',
   'scenes.error': 'That did not work: {message}',
+  // ── WP141 (docs/78 §1 #4, §2): the deck and the words on screen ─────────
+  'kind.kol_campaign': 'Creator shortlist',
+  'deck.campaign.group': '{channel} · {n} people',
+  'deck.campaign.blocked': 'You do not hold this channel, so this group is view-only',
+  'deck.matter.untitled': 'Part of: an unnamed matter',
+  'deck.proposer.name.agent': 'AI',
+  'deck.proposer.name.person': 'a teammate',
+  'deck.proposer.name.sentinel': 'the monitor',
+  'deck.proposer.name.registry': 'the app registry',
+  'deck.proposer.name.system': 'the system',
+  'deck.progress.range': 'Cards {from}–{to} of {total}',
+  'deck.nav.prev': 'Previous',
+  'deck.nav.next': 'Next',
+  'deck.nav.list': 'List all',
+  'deck.nav.list.close': 'Hide list',
+  'deck.empty.filtered': 'No cards left under this filter',
+  'deck.receipt.instruct.single_reply':
+    'Noted: this one will be rewritten your way and shown to you again.',
+  'deck.receipt.instruct.similar_cases':
+    'Noted: similar cases will go this way next time (a card is waiting for your approval).',
+  'deck.receipt.instruct.global_rule':
+    'Noted: "always do this" became a rule card waiting for your approval.',
+  'deck.receipt.reject': 'Noted: not doing this one, and your reason is kept for next time.',
+  'deck.receipt.snooze': 'Put aside; it will come back in a few hours.',
+  'deck.receipt.choice': 'Noted: cases like this will follow your choice from now on.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

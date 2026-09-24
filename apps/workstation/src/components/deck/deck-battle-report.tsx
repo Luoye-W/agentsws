@@ -29,7 +29,13 @@ export function DeckBattleReport({
       data-testid="deck-battle-report"
       className={`flex flex-col items-center justify-center rounded-2xl border bg-card p-6 text-center shadow-sm ${DECK_CARD_MIN_HEIGHT_CLASS}`}
     >
-      <p className="text-sm font-medium">{t('deck.empty.title')}</p>
+      {/*
+        WP141：被筛空 ≠ 清空了。原来筛掉最后一张也写「队列清空了」，而页头明明还有
+        「3 张待审」——两句话打架。筛空时说实话，并把「回到全部」放在下面。
+      */}
+      <p className="text-sm font-medium" data-testid="deck-empty-title">
+        {filtered ? t('deck.empty.filtered') : t('deck.empty.title')}
+      </p>
       <p className="mt-1 text-xs text-muted-foreground">{t('deck.recap.hint')}</p>
       <dl className="mx-auto mt-4 grid max-w-md grid-cols-2 gap-3 sm:grid-cols-4">
         {ROWS.map((key) => (

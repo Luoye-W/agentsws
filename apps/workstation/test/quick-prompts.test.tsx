@@ -248,4 +248,16 @@ describe('指导抽屉顶部的示例任务（WP84）', () => {
     // 填进去 ≠ 发出去：还要人自己点一下
     expect(onDecide).not.toHaveBeenCalled()
   })
+
+  it('WP141：已经写了指导再点示例，接在后面，不把写好的整段换掉', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <DeckCardView card={draftCard()} mode="zh_summary" onDecide={vi.fn()} onOpen={() => {}} />,
+    )
+    await user.click(screen.getByRole('button', { name: '改一下' }))
+    const box = screen.getByLabelText('一句话说清楚要怎么改') as HTMLTextAreaElement
+    await user.type(box, '先道歉')
+    await user.click(await screen.findByText('一封退货来信'))
+    expect(box.value).toBe('先道歉\n客户来信说尺码不合适想退货，东西还没寄回来。')
+  })
 })
