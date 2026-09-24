@@ -92,6 +92,8 @@ export interface WireRuntimeOptions {
   presetRoot?: string
   sessionLogRoot?: string
   sideEffects?: Record<string, ToolSideEffect>
+  /** WP147：宿主替这次运行的模型答好的「能不能看图」（回调不过线，只传结论）。 */
+  imageInput?: boolean
   /** 宿主侧是否接了这些回调；子进程据此决定 `options.stage` 之类给不给。 */
   has: {
     executeTool: boolean
