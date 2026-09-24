@@ -55,6 +55,13 @@ export {
 } from './quota.js'
 export { openSealed, sealedKeyOf, sealWithKey } from './sealed.js'
 export {
+  MIN_RELAY_SECRET_BYTES,
+  OFFLINE_UNAVAILABLE,
+  RELAY_UNAVAILABLE,
+  relaySecretReady,
+  relayUnavailableResponse,
+} from './secrets.js'
+export {
   KvCounterStore,
   KvOfflineBox,
   KvPairingStore,

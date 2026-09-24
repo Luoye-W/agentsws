@@ -76,6 +76,11 @@ export interface RelayCoreOptions {
   onEvent?(event: RelayEvent): void
   /** 留言封箱（宿主用配对密钥加密；不给就原样存——测试用）。 */
   seal?(workspace: string, plaintext: string): string
+  /**
+   * WP137：这个工作区的留言密钥签发了没有。`false` = 不收留言（访客面回人话），
+   * 绝不拿常量封箱。不给 = 有 `seal` 就算签发了。
+   */
+  sealReady?(workspace: string): boolean
   newId(): string
 }
 
@@ -354,6 +359,15 @@ export class RelayCore {
       session,
       active,
     })
+  }
+
+  /**
+   * WP137：访客面能不能收这个工作区的留言——宿主给了封箱、且留言密钥已经签发。
+   * 访客面（`createRelayHttp`）先问它；`false` 就回「商家还没完成配对，暂时不能留言」。
+   */
+  acceptsOfflineMessages(workspace: string): boolean {
+    if (this.options.seal === undefined) return false
+    return this.options.sealReady?.(workspace) ?? true
   }
 
   /** 访客留言（密文入箱）。返回条数上限是否已被顶掉（界面照常收，不拒绝）。 */

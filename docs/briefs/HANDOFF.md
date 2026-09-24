@@ -42,6 +42,8 @@
 | 17 | WP133 dsh 两条小收尾：profile 锁定可校验（--dump-config-schema）+ session.eventAt() → read() | `WP133-dsh-followups.md` | `wp133-dsh-follow` · `wp/133-dsh-follow` | — | 已合并（09-24，Fable 终审：全量过，dsh 两包门禁过，指纹零漂移） |
 | 18 | WP134 第三种模型来源：用 DeepSeek 账号登录（dsh 官方模块；默认关、选中才开） | `WP134-deepseek-account-login.md` | `wp134-deepseek-login` · `wp/134-deepseek-login` | — | 进行中（Claude） |
 | 19 | WP135 内测前客服线与红人线全流程走查（只出 docs/78 差距清单与可重跑脚本） | `WP135-beta-walkthrough.md` | `wp135-walkthrough` · `wp/135-walkthrough` | — | 进行中（Claude） |
+| 20 | WP136 在 Agents 工坊里切换 dsh 场景（Profile）：列表 / 启动官方与自建场景 / 私有 DSH_HOME / 边界说明 | `WP136-dsh-scene-switcher.md` | `wp136-dsh-scenes` · `wp/136-dsh-scenes` | — | 进行中（Claude） |
+| 21 | **WP137（P0 安全）聊天转发三种形态的密钥兜底改成没有真密钥就拒绝** | `WP137-relay-secret-fail-closed.md` | `wp137-relay-secret` · `wp/137-relay-secret` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 

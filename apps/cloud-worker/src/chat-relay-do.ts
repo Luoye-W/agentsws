@@ -18,6 +18,10 @@
  * 访客第一条消息才计数；30 分钟窗口内的重开算同一个（= 在途放行）；
  * 试聊不计；订阅生效不受限；80% 与到顶都出**站内提醒**（kv 行，
  * `GET /v1/chat/relay/status` 读走；IM 推送依赖云侧 IM 通道，docs/74 留口）。
+ *
+ * WP137（P0 安全）：访客令牌的 HMAC 种子**只认** `AGENTSWS_CHAT_RELAY_KEY`（≥ 32 字节）。
+ * 没配 / 太短 → 访客面一律 503「聊天窗暂时不可用」，health 那一格标红；没有任何兜底。
+ * 留言密钥没签发（owner 还没领配对）→ 不收留言。
  */
 
 import { createHash } from 'node:crypto'
@@ -34,6 +38,8 @@ import {
   type RelayKv,
   type RelayPeerKind,
   type RelayWidgetConfig,
+  relaySecretReady,
+  relayUnavailableResponse,
   sealWithKey,
 } from '@agentsws/chat-relay'
 import type { ServiceSubscription } from '@agentsws/contracts'
@@ -124,6 +130,11 @@ export interface ChatRelayDoOptions {
   clock?: () => string
   /** 留言封箱密钥（wrangler secret：`AGENTSWS_CHAT_RELAY_KEY`）。 */
   sealKey?: string
+  /**
+   * WP137：访客令牌的 HMAC 种子（测试注入；给了就不读 env）。与 env 那一把同一条规矩：
+   * 至少 32 字节，不够就当没配——访客面 503。
+   */
+  visitorSeed?: string
   /** 注入配对校验（测试用）；缺省用 kv 里的 sha256 哈希比对。 */
   verifyPairing?: (workspace: string, token: string) => boolean
   /** 测试注入 WebSocket 对（生产用全局 `WebSocketPair`）。 */
@@ -163,6 +174,8 @@ export class ChatRelayDoCore {
   readonly #sockets = new Map<RelayWebSocket, { workspace: string; peer: RelayPeerKind }>()
   /** 每类对端当前那一条（WP128：旧连接迟到的 close 不许把新连接摘掉）。 */
   readonly #current = new Map<RelayPeerKind, RelayWebSocket>()
+  /** 没配访客密钥那句日志只打一次（每个对象实例）。 */
+  #warnedNoKey = false
 
   constructor(state: RelayDoStateLike, env: WorkerEnv, options: ChatRelayDoOptions = {}) {
     this.#state = state
@@ -219,8 +232,13 @@ export class ChatRelayDoCore {
       // 留言封箱：AES-256-GCM。密钥是**配对时签发的那把留言密钥**（`msgkey:<ws>`），
       // 签发那一刻连同配对密钥一起只给本机一次；箱子拿来封箱，转发器不拿它做别的。
       // 不做端到端是 21 §4.1 定过的口径——这里是「静态加密」那一层。
-      seal: (_workspace, plaintext) =>
-        sealWithKey(deriveKey(this.#messageKeyOf(_workspace)), plaintext),
+      // WP137：没签发留言密钥就不收留言（访客面先问 sealReady）；绝不拿常量封箱
+      seal: (workspace, plaintext) => {
+        const key = this.#messageKeyOf(workspace)
+        if (key === undefined) throw new Error('留言密钥还没签发，不该走到封箱')
+        return sealWithKey(deriveKey(key), plaintext)
+      },
+      sealReady: (workspace) => this.#messageKeyOf(workspace) !== undefined,
       onEvent: (event) => this.#onEvent(event),
       newId: () => crypto.randomUUID(),
     })
@@ -264,6 +282,17 @@ export class ChatRelayDoCore {
       return this.#connect(workspace)
 
     // 访客面（widget.js / session / messages / stream / typing / offline-messages）
+    // WP137：没有真访客密钥就一律 503——宁可聊天窗不可用，也不让外人伪造访客令牌
+    if (this.#visitorSeed() === undefined) {
+      if (!this.#warnedNoKey) {
+        this.#warnedNoKey = true
+        console.error(
+          '[chat-relay] AGENTSWS_CHAT_RELAY_KEY 没配或短于 32 字节：访客面一律 503。' +
+            '`wrangler secret put AGENTSWS_CHAT_RELAY_KEY` 补上即恢复（docs/64 secrets 表）。',
+        )
+      }
+      return relayUnavailableResponse()
+    }
     const prefix = `/relay/${workspace}`
     const stripped = new URL(
       `${url.origin}${url.pathname.slice(prefix.length) || '/'}${url.search}`,
@@ -277,7 +306,12 @@ export class ChatRelayDoCore {
       app = createRelayHttp({
         core: this.core,
         workspace,
-        visitorSecret: () => deriveKey(`${this.#visitorSeed()}:visitor:${workspace}`),
+        visitorSecret: () => {
+          const seed = this.#visitorSeed()
+          // fetch 入口已经挡过；这里再拒一次，任何路径都拿不到兜底种子
+          if (seed === undefined) throw new Error('AGENTSWS_CHAT_RELAY_KEY 没配')
+          return deriveKey(`${seed}:visitor:${workspace}`)
+        },
         ...(this.#options.sessionRate === undefined
           ? {}
           : { sessionRate: this.#options.sessionRate }),
@@ -287,9 +321,13 @@ export class ChatRelayDoCore {
     return app
   }
 
-  /** 访客令牌的 HMAC 种子：部署侧 secret 优先，没配就派生一把（重启不变）。 */
-  #visitorSeed(): string {
-    return envValue(this.#env, 'AGENTSWS_CHAT_RELAY_KEY') ?? 'derived:agentsws-chat-relay'
+  /**
+   * 访客令牌的 HMAC 种子：测试注入优先，其次部署侧 secret。没有 / 短于 32 字节 = `undefined`
+   * （访客面 503）。**没有兜底**——写死在开源代码里的种子等于没有种子。
+   */
+  #visitorSeed(): string | undefined {
+    const seed = this.#options.visitorSeed ?? envValue(this.#env, 'AGENTSWS_CHAT_RELAY_KEY')
+    return relaySecretReady(seed) ? seed.trim() : undefined
   }
 
   #workspaceOf(url: URL): string | undefined {
@@ -441,8 +479,9 @@ export class ChatRelayDoCore {
     )
   }
 
-  #messageKeyOf(workspace: string): string {
-    return this.#kv.get(`msgkey:${workspace}`) ?? 'no-message-key-issued'
+  /** 签发给 owner 的留言密钥；还没签发 = `undefined`（不收留言）。 */
+  #messageKeyOf(workspace: string): string | undefined {
+    return this.#kv.get(`msgkey:${workspace}`)
   }
 
   /* ── 客服增值服务的订阅（67 §3 那套引擎，support 是第二个实例） ───────── */

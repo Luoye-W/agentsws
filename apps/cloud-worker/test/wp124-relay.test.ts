@@ -22,6 +22,8 @@ import { FakeDoStorage } from './helpers.js'
 const WS = 'ws_relay_test'
 const NOW = '2026-09-21T10:00:00.000Z'
 const ORIGIN = 'https://shop.example.com'
+/** WP137：访客令牌种子显式注入（≥ 32 字节；生产走 `AGENTSWS_CHAT_RELAY_KEY`，没有兜底）。 */
+const TEST_VISITOR_SEED = 'wp124-test-visitor-seed-0123456789abcdef'
 
 const principal: VerifiedCloudToken = {
   account_id: 'acc_1',
@@ -95,6 +97,7 @@ function makeCore(over: { wallet?: SubscriptionWallet } = {}): Harness {
   } as unknown as RelayDoStateLike
   const core = new ChatRelayDoCore(state, {} as WorkerEnv, {
     clock: () => NOW,
+    visitorSeed: TEST_VISITOR_SEED,
     sessionRate: { per_minute: 10_000, per_hour: 10_000 },
     ...(over.wallet === undefined ? {} : { wallet: over.wallet }),
     makeSocketPair: () => {

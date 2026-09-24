@@ -34,6 +34,9 @@ import {
   tokenFromMail,
 } from './helpers.js'
 
+/** WP137：访客令牌种子显式注入（≥ 32 字节；生产走 `AGENTSWS_CHAT_RELAY_KEY`，没有兜底）。 */
+const TEST_VISITOR_SEED = 'wp128-test-visitor-seed-0123456789abcdef'
+
 const WS = 'ws_hosted_test'
 const ORIGIN = 'https://shop.example.com'
 const T0 = '2026-09-23T10:00:00.000Z'
@@ -192,6 +195,7 @@ function makeWorld(over: { seed?: string | null; env?: Partial<WorkerEnv> } = {}
     env,
     {
       clock: () => clock.now,
+      visitorSeed: TEST_VISITOR_SEED,
       wallet: subscriptionWallet,
       sessionRate: { per_minute: 10_000, per_hour: 10_000 },
       makeSocketPair: () => {
@@ -619,7 +623,10 @@ describe('WP128 · 入口 Worker：两把钥匙、AI 计积分、本机上线对
               acceptWebSocket: () => {},
             } as unknown as RelayDoStateLike,
             cloud.env,
-            { wallet: { charge: async () => ({ ok: true, credits: 30 }) } },
+            {
+              visitorSeed: TEST_VISITOR_SEED,
+              wallet: { charge: async () => ({ ok: true, credits: 30 }) },
+            },
           )
           relayCores.set(name, core)
         }

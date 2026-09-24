@@ -114,6 +114,12 @@ export interface WorkerEnv {
    * `HMAC(种子, 工作区号)`，不进 DO 存储。**没配就不起容器**（状态里写一句人话）。
    */
   AGENTSWS_HOSTED_KEY_SEED?: string
+  /**
+   * WP137：官方聊天转发器的访客令牌种子（`wrangler secret put`，**必填，≥ 32 字节**）。
+   * 访客令牌 = `HMAC(派生自它, 工作区:会话)`；没配 / 太短 → `/relay/<ws>/*` 的访客面一律 503，
+   * health 里 `chat_relay_key: false`（后台标红）。**没有任何兜底**。
+   */
+  AGENTSWS_CHAT_RELAY_KEY?: string
   /** WP128：容器规格（非敏感，`[vars]`；与 `[[containers]].instance_type` 保持一致，估算费用用）。 */
   AGENTSWS_HOSTED_INSTANCE_TYPE?: string
 }
