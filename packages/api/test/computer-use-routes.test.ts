@@ -22,14 +22,18 @@ const VIEW: ComputerUseSettingsView = {
 async function wired(withPort = true) {
   const h = await harness()
   const calls: string[] = []
+  const rec = <T>(tag: string, value: T): T => {
+    calls.push(tag)
+    return value
+  }
   const port: ComputerUsePort = {
-    settings: () => (calls.push('settings'), VIEW),
-    setSettings: (_a, input) => (calls.push(`set:${JSON.stringify(input)}`), { ...VIEW, ...input }),
-    install: () => (calls.push('install'), { ...VIEW, driver: { installed: true } }),
-    check: () => (calls.push('check'), { ran: true, ok: true, checks: [] }),
-    openSettings: (_a, pane) => (calls.push(`open:${pane}`), { opened: true, url: 'x' }),
-    active: () => (calls.push('active'), {}),
-    stop: () => (calls.push('stop'), { stopped: 0 }),
+    settings: () => rec('settings', VIEW),
+    setSettings: (_a, input) => rec(`set:${JSON.stringify(input)}`, { ...VIEW, ...input }),
+    install: () => rec('install', { ...VIEW, driver: { installed: true } }),
+    check: () => rec('check', { ran: true, ok: true, checks: [] }),
+    openSettings: (_a, pane) => rec(`open:${pane}`, { opened: true, url: 'x' }),
+    active: () => rec('active', {}),
+    stop: () => rec('stop', { stopped: 0 }),
   }
   const gateway = createGateway(withPort ? { ...h.deps, computerUse: port } : h.deps)
   const call = (method: string, path: string, body?: unknown) => {
