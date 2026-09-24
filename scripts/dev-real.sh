@@ -42,6 +42,10 @@ ENV_FILE="$DATA_DIR/.env.local"
 PORT="${AGENTSWS_PORT:-4317}"
 OC_PORT="${AGENTSWS_CONNECT_PORT:-3000}"
 OC_NAME="agentsws-openconnector"
+# 连接器镜像钉版本（WP146）：tag + digest 一起写，`docker pull` 不会再悄悄换版本。
+# 这一行、docker-compose.yml、packages/connect-adapter/test/record-fixtures.test.ts 三处必须一致，
+# 与 upstreams.yml 的 open-connector 条对账（`node scripts/check-upstreams.mjs --check`）。怎么升见 docs/42。
+OC_IMAGE="ghcr.io/oomol-lab/open-connector:v1.6.5@sha256:aa088c5d3f308937ec9b9e8c959a940ff4a6ce3b8ee0abe30a755d5b2400a5b1"
 
 # --compose：走 docker-compose.yml 那一档（40 §1.3 公司 Docker 档 / 41 §2.1）。
 # 与默认的本机档跑的是**同一个服务进程**，差别只在谁来起它、数据落在哪。
@@ -132,15 +136,30 @@ export AGENTSWS_CONNECT_TRUSTED_HOSTS
 export AGENTSWS_SHOPIFY_DEVMCP="${AGENTSWS_SHOPIFY_DEVMCP:-1}"
 
 # OpenConnector：加固三件套；只绑 127.0.0.1
+if docker ps --format '{{.Names}}' | grep -qx "$OC_NAME" && [ "${AGENTSWS_CONNECT_RECREATE:-0}" != "1" ]; then
+  running_image=$(docker inspect -f '{{.Config.Image}}' "$OC_NAME" 2>/dev/null || true)
+  if [ "$running_image" != "$OC_IMAGE" ]; then
+    echo "注意：正在跑的连接器不是钉住的那一版（$running_image）。换版本：AGENTSWS_CONNECT_RECREATE=1 scripts/dev-real.sh" >&2
+  fi
+fi
 if ! docker ps --format '{{.Names}}' | grep -qx "$OC_NAME" || [ "${AGENTSWS_CONNECT_RECREATE:-0}" = "1" ]; then
+  mkdir -p "$DATA_DIR/openconnector"
+  # WP146 以前容器把数据写在镜像自带的 /app/data（匿名卷），挂进来的 /data 其实没用上；
+  # 重建容器前先把旧数据拷出来，不然已有的连接会跟着旧容器一起没了。
+  if docker inspect "$OC_NAME" >/dev/null 2>&1 && [ ! -e "$DATA_DIR/openconnector/connect.sqlite" ]; then
+    docker stop "$OC_NAME" >/dev/null 2>&1 || true
+    docker cp "$OC_NAME:/app/data/." "$DATA_DIR/openconnector/" >/dev/null 2>&1 \
+      && echo "已把旧连接器容器里的数据搬到 $DATA_DIR/openconnector"
+  fi
   docker rm -f "$OC_NAME" >/dev/null 2>&1 || true
   # shellcheck disable=SC2086
   docker run -d --name "$OC_NAME" -p "127.0.0.1:${OC_PORT}:3000" $OC_TRUST_ARGS \
     -e "OOMOL_CONNECT_ENCRYPTION_KEY=$OOMOL_CONNECT_ENCRYPTION_KEY" \
     -e "OOMOL_CONNECT_ADMIN_TOKEN=$OOMOL_CONNECT_ADMIN_TOKEN" \
     -e "OOMOL_CONNECT_BLOCKED_PROXIES=*" \
+    -e "OOMOL_CONNECT_DATA_DIR=/data" \
     -v "$DATA_DIR/openconnector:/data" \
-    ghcr.io/oomol-lab/open-connector:latest >/dev/null
+    "$OC_IMAGE" >/dev/null
   echo "OpenConnector 已起：http://127.0.0.1:${OC_PORT}"
 fi
 for i in $(seq 1 30); do

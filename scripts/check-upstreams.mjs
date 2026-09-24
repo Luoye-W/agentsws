@@ -10,6 +10,9 @@
  *   ② 锁的版本：`locked_in` 里的 package.json、pnpm-lock.yaml 的唯一解析版本、
  *      pnpm-workspace.yaml 的 minimumReleaseAgeExclude —— 三处都要和登记表逐字一致
  *   ③ 路径：`locked_in` / `covered_by` 指到的东西真的存在
+ *   ④ 镜像（WP146）：`image_in` 里每个文件对镜像的每一处引用都逐字等于
+ *      `image:image_tag@image_digest`（compose 里 digest 改坏一位就红）
+ *   ⑤ 二进制（WP146）：`bin_lock_file` 里钉的 cli / 插件版本与登记表一致
  *
  * 退出码：0 没问题；1 有问题；2 文件读不了 / 解析不了。
  */

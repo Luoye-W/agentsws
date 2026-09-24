@@ -24,7 +24,14 @@
 #                       wishlist       `wishlist:` 里的词命中 release notes / README 就单独提醒
 #
 # npm / repo / image  至少要有一个。repo 写 `owner/name`；image 不带 tag，tag 另写。
-# image_tag           镜像的 tag。写 `latest` 就是"没锁"，报告里会照实说。
+# image_tag           镜像的 tag。写 `latest` 就是"没锁"，报告里会照实说；runtime-dep 不许写 latest。
+# image_digest        镜像的 digest（`sha256:…`；多架构镜像取 index 那一层的，WP146）。tag 会被重打，只有它不会变。
+# image_in            这些文件里对 `image` 的每一处带 tag / digest 的引用都必须**逐字等于**
+#                     `image:image_tag@image_digest`（`--check` 查；改坏一处 digest 就红）。
+# bin_version         不走 npm 的二进制锁的版本（BrowserSkill 的 `bsk`）。三项要么都写、要么都不写：
+# bin_tag_prefix        它在上游 GitHub releases 里的 tag 前缀（`cli-v`），周报拿最新正式 release 比；
+# bin_lock_file         钉版本与 sha256 的那份 JSON（`{ cli: { version, tag }, plugin?: { name, version } }`），
+#                       `--check` 要求 cli.version = bin_version、plugin.version = locked_version。
 # locked_version      我们锁的版本（精确版本，或 `^x.y.z` 这种范围 —— 后者要 `pin: allow_caret`）。
 # pinned_commit       git 固定的上游写这个（与 locked_version 二选一）。
 # pin                 exact（默认）| allow_caret。docs/42 红线 3：runtime-dep 一律锁精确版本；
@@ -145,14 +152,21 @@ upstreams:
 
   - id: open-connector
     kind: runtime-dep
-    # 它是两样东西：SDK（npm，锁死了）与 runtime 镜像（docker-compose 里写 `:latest`，**没锁**）。
-    # docs/42 §4 第 2 条说的"OpenConnector 没走过这套"就是指镜像那一半：第 ② 步的 npm view
-    # 要换成看 commit / 镜像 digest，基线换成 connect-adapter 的磁带与一致性套件。
+    # 它是两样东西：SDK（npm，锁 1.2.0）与 runtime 镜像。镜像 WP146 起钉 tag + digest
+    # （09-24 实测 v1.6.5 = 当时的 latest；真 runtime 录制 + 回放 + 一致性套件全绿）。
+    # 周报拿"锁的 tag / digest"比 ghcr 上最新的正式版标签；升级走 docs/42 §2「镜像怎么升」。
     why: 唯一的系统动作执行面（Shopify / Gmail / Meta …），`packages/connect-adapter` 是唯一 import 处
     npm: '@oomol-lab/connector'
     repo: oomol-lab/open-connector
     image: ghcr.io/oomol-lab/open-connector
-    image_tag: latest
+    image_tag: v1.6.5
+    image_digest: sha256:aa088c5d3f308937ec9b9e8c959a940ff4a6ce3b8ee0abe30a755d5b2400a5b1
+    image_in:
+      - docker-compose.yml
+      - scripts/dev-real.sh
+      - packages/connect-adapter/test/record-fixtures.test.ts
+      # 磁带是在哪一版上录的：换镜像版本就得重录，不然这一行先红
+      - packages/connect-adapter/test/fixtures/runtime.meta.json
     locked_version: 1.2.0
     pin: exact
     watch: [versions, releases, readme, wishlist]
@@ -171,8 +185,10 @@ upstreams:
       - merchant_center provider
     covered_by:
       - packages/connect-adapter/test/conformance-adapter.test.ts
+      - packages/connect-adapter/test/record-fixtures.test.ts
       - packages/connect-adapter/test/errors.test.ts
       - packages/connect-adapter/test/fixtures
+      - packages/connect-adapter/README.md
 
   - id: mcp-sdk
     kind: runtime-dep
@@ -224,6 +240,45 @@ upstreams:
       - 新增 Gemini 的订阅 OAuth（现在没有）
       - OpenAI / Anthropic 明文授权第三方客户端（现在是灰的，卡上要写风险）
 
+  - id: browser-skill
+    kind: runtime-dep
+    # WP146（Luoye 09-24：引用的开源项目都要进每周评估）：09-17 按 reference 登记时是占位；
+    # WP92 起它其实是**运行时依赖**（docs/55 §10 落点）——两样东西，一起锁、一起升：
+    #   ① dsh 插件（npm，packages/dsh-adapter 锁精确版本，进 minimumReleaseAgeExclude）
+    #   ② `bsk` CLI（不走 npm：版本 + 各平台 sha256 钉在仓库根 browserskill.lock.json，
+    #      apps/server/src/browserskill-install.ts 照它下载校验，不用上游 install.sh）
+    # 周报两样都比：插件看 npm dist-tags，`bsk` 看 GitHub 上最新的 `cli-v*` 正式 release。
+    why: 「我正在用的浏览器」那条腿（个人档）：腾讯官方 dsh 插件 + `bsk` CLI + 用户自己装的 Chrome / Edge 扩展（MIT，docs/55 §10）
+    npm: '@wxg-prc-cpg/browser-skill-dsh-plugin'
+    repo: Tencent/BrowserSkill
+    locked_version: 0.3.0
+    pin: exact
+    bin_version: 0.3.0
+    bin_tag_prefix: cli-v
+    bin_lock_file: browserskill.lock.json
+    watch: [versions, releases, readme, wishlist]
+    locked_in:
+      - packages/dsh-adapter/package.json
+    release_age_prefix: '@wxg-prc-cpg/browser-skill-dsh-plugin'
+    we_depend_on:
+      - '插件直接在 Agent 的 scoped ctx 上注册 6 个多态工具（动作在 args.action 里），不走 dsh-browser-use seam'
+      - 'lazyTools 必须显式 false（上游缺省 true 时工具面整个是空的）'
+      - '门禁按 args.action 分读写（packages/dsh-adapter/src/browserskill.ts 的 BROWSERSKILL_READ_ACTIONS）；表外动作一律按写'
+      - '带 url 的三处：browser_page{navigate} / browser_session{start} / browser_tabs{create}（域名白名单拦在这里）'
+      - 'bsk 的 release 资产命名 bsk-v<版本>-<target>.tar.gz|zip（browserskill.lock.json 的 url / sha256 逐字抄自上游 version.json）'
+      - 'BSK_AUTO_UPDATE=off 只关"装"、不关"查"（docs/55 §10 ④）'
+    wishlist:
+      # WP93：它的 dsh plugin（`@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0`）把六个 dsh peer
+      # 写成 `^0.1.0-rc.6`，与我们整棵预发布树在 semver 的预发布规则下**不相交**。每当有一个
+      # 那六个之一的包第一次进树，`pnpm install` 就红一次（WP92 撞了三个、WP93 又撞第四个
+      # `dsh-client-ui-primitives`），只能一条一条往 `pnpm-workspace.yaml` 的 overrides 里钉。
+      # 还剩 dsh-client-ui-attachment / dsh-client-ui-tool 两个没进树。
+      - dsh plugin 的 peer 范围放宽到能与预发布版相交（现在写死 ^0.1.0-rc.6）
+    covered_by:
+      - packages/dsh-adapter/test/browserskill-seam.test.ts
+      - apps/server/test/browserskill-install.test.ts
+      - browserskill.lock.json
+
   # ── ported：抄进来的源码，上游改了要对照回来 ──────────────────────────────
   - id: commerce-agents
     kind: ported
@@ -238,11 +293,62 @@ upstreams:
       - 'commerce_common/fencing.py → packages/core/src/fencing.ts（文件头注了出处与版权）'
       - 'merchant_agent/changes.py 的 ChangeLedger + guardrails → packages/core/src/guardrail.ts（出处：docs/15 表头）'
       - 'merchant_agent/gates.py 的 provenance / record-read → packages/core/src/provenance.ts（出处：docs/15 表头）'
+      # WP146 扫出处时补：客服提示词的规则 21–28（邮件）/ 19–26（聊天）是它 customer-care skill 的
+      # 二手移植（先进 KefuAgent，再整块搬进来）。上游那份 skill 在仓库里的路径没核实，所以不加 watch_paths。
+      - 'customer-care skill 的回答纪律 → packages/support-core/src/prompts/customer-care.ts 与 verticals/goods/rules.ts（经 KefuAgent 二手移植）'
     covered_by:
       - packages/core/src/fencing.ts
       - packages/core/src/guardrail.ts
       - packages/core/src/provenance.ts
       - docs/15-变更账本与Guardrail规范-v1.md
+      - packages/support-core/src/prompts/customer-care.ts
+      - packages/support-core/src/verticals/goods/rules.ts
+
+  # WP146（Luoye 09-24）：工作台里复制进来的界面源码也登记。两条都是"源码已复制并改成 --ws-* 令牌"，
+  # 上游更新只作参考、不自动同步；周报只看 release 与 wishlist 里的破坏性改动。
+  - id: tremor-raw
+    kind: ported
+    why: 工作台的进度环 / 进度条（ProgressCircle / ProgressBar）抄自它（Apache-2.0），颜色换成 --ws-* 令牌；上游更新只作参考，不自动同步
+    repo: tremorlabs/tremor-raw
+    watch: [releases, wishlist]
+    we_depend_on:
+      - 'src/components/ProgressCircle → apps/workstation/src/components/ui/tremor/progress-circle.tsx（文件头注了出处与版权）'
+      - 'src/components/ProgressBar → apps/workstation/src/components/ui/tremor/progress-bar.tsx'
+    wishlist:
+      - BREAKING（破坏性改动，对照我们复制过来的两个组件看要不要跟）
+      - ProgressCircle / ProgressBar 有修复
+    covered_by:
+      - apps/workstation/src/components/ui/tremor/README.md
+      - apps/workstation/src/components/ui/tremor/progress-circle.tsx
+      - apps/workstation/src/components/ui/tremor/progress-bar.tsx
+
+  - id: shadcn-ui
+    kind: ported
+    # 不是 npm 依赖：shadcn 的做法就是把组件源码生成进仓库，之后归我们自己改。
+    why: 工作台 components/ui/*.tsx 是 shadcn 生成的源码（components.json 的 style = radix-nova，MIT），已复制并改成 --ws-* 令牌；上游更新只作参考，不自动同步
+    repo: shadcn-ui/ui
+    watch: [releases, wishlist]
+    we_depend_on:
+      - 'apps/workstation/components.json（style radix-nova、iconLibrary lucide、别名 @/components/ui）'
+      - 'apps/workstation/src/components/ui/ 下 shadcn 生成的那一批（alert / badge / button / card / command / dialog / dropdown-menu / input / input-group / label / radio-group / scroll-area / separator / sheet / skeleton / switch / tabs / textarea / tooltip）；demo-badge / duty-fold / hint 是我们自己写的'
+      - 'radix-ui 统一包（Slot / Dialog / Tabs … 从 radix-ui 一处 import）'
+    wishlist:
+      - BREAKING（破坏性改动，要对照我们复制过来的组件）
+      - radix-nova 风格的组件改动
+    covered_by:
+      - apps/workstation/components.json
+      - apps/workstation/src/components/ui/button.tsx
+
+  - id: simple-icons
+    kind: ported
+    # WP146 扫出处时找到的：brand-icons.tsx 头注"抄自 simple-icons v16.30.0（CC0-1.0），2026-09-11"。
+    why: 渠道 / 品牌图标的兜底 path 逐字抄自它（CC0-1.0，v16.30.0）；assets/brand 抓不到官方图时用它，上游改图标只作参考
+    repo: simple-icons/simple-icons
+    watch: [releases]
+    we_depend_on:
+      - 'icons/<slug>.svg 的 path → apps/workstation/src/components/brand-icons.tsx 的 GLYPHS（原样未改）'
+    covered_by:
+      - apps/workstation/src/components/brand-icons.tsx
 
   # ── reference：不升级，只看"有没有新想法"（docs/10 §3.1 第四类）─────────────
   - id: dsh-experimental
@@ -288,21 +394,6 @@ upstreams:
       - 能进群 / 能拉同事（现在只能"本人 ↔ 自己的 Agent"私聊）
     covered_by:
       - packages/channels/src/wechat-clawbot
-
-  - id: browser-skill
-    kind: reference
-    # 09-17 登记时没打开过这个仓库，`why` 是按名字与派工书写的占位。
-    # 第一份周报出来、真看过一眼之后把这一行改掉（不改就一直是个占位）。
-    why: '另一条公开的浏览器技能实现；契约 #20 的工具面与"人接管"语义可以对照它重判（未核实，见上方注释）'
-    repo: Tencent/BrowserSkill
-    watch: [releases, stars, readme, wishlist]
-    wishlist:
-      # WP93：它的 dsh plugin（`@wxg-prc-cpg/browser-skill-dsh-plugin@0.3.0`）把六个 dsh peer
-      # 写成 `^0.1.0-rc.6`，与我们整棵预发布树在 semver 的预发布规则下**不相交**。每当有一个
-      # 那六个之一的包第一次进树，`pnpm install` 就红一次（WP92 撞了三个、WP93 又撞第四个
-      # `dsh-client-ui-primitives`），只能一条一条往 `pnpm-workspace.yaml` 的 overrides 里钉。
-      # 还剩 dsh-client-ui-attachment / dsh-client-ui-tool 两个没进树。
-      - dsh plugin 的 peer 范围放宽到能与预发布版相交（现在写死 ^0.1.0-rc.6）
 
   - id: octop
     kind: reference
