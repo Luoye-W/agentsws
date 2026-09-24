@@ -469,6 +469,25 @@ async function sectionA() {
     '③ 预勾岗位',
     '按网址预勾合理的岗位；红人营销为主的朋友能一眼找到并勾上',
     async () => {
+      /*
+       * WP142：第 ③ 步顶上先问「这次主要想让它干什么」。红人为主的朋友按一下「红人营销」，
+       * 红人营销岗位就被勾上（默认是网址预勾的结果：官网 → 客服）。
+       */
+      const purpose = T('onboarding-purpose')
+      const hasPurpose = (await purpose.count()) > 0
+      const before = hasPurpose
+        ? await purpose
+            .locator('button[aria-pressed="true"]')
+            .allInnerTexts()
+            .catch(() => [])
+        : []
+      if (
+        hasPurpose &&
+        (await T('onboarding-purpose-kol').getAttribute('aria-pressed')) !== 'true'
+      ) {
+        await T('onboarding-purpose-kol').click()
+        await settle(400)
+      }
       const chips = T('onboarding-roles').locator('button[aria-pressed]')
       const state = await chips.evaluateAll((els) =>
         els.map((e) => ({
@@ -478,15 +497,23 @@ async function sectionA() {
       )
       const on = state.filter((s) => s.on).map((s) => s.t)
       const custom = await page
-        .locator('#custom-position, [data-testid="onboarding-custom"] input')
+        .locator(
+          '#custom-position, [data-testid="onboarding-custom"] input, input[data-testid="onboarding-custom"]',
+        )
         .first()
         .inputValue()
         .catch(() => '')
       const count = await text('onboarding-role-count')
-      const notes = [`预勾：${on.join('、') || '无'}；${count}`]
-      if (!on.some((t) => t.startsWith('红人营销'))) notes.push('红人营销没有预勾')
+      const notes = [
+        hasPurpose
+          ? `先问「这次主要想让它干什么」（默认按网址：${before.join('、') || '无'}），按「红人营销」后预勾：${on.join('、') || '无'}；${count}`
+          : `预勾：${on.join('、') || '无'}；${count}`,
+      ]
+      const kol = on.some((t) => t.startsWith('红人营销'))
+      if (!kol) notes.push('红人营销没有预勾')
+      if (!hasPurpose) notes.push('没有「这次主要想让它干什么」那一问')
       if (custom) notes.push(`「自定义岗位叫什么」预填了「${custom}」——没有勾自定义岗位也有这一格`)
-      return part(notes.join('；'))
+      return kol && hasPurpose && !custom ? ok(notes.join('；')) : part(notes.join('；'))
     },
   )
 
@@ -496,21 +523,35 @@ async function sectionA() {
     '③ 勾红人营销 → ④ 连接与开工',
     '只列必需的连接，可选的折起来；没有内部 id',
     async () => {
-      await T('onboarding-roles')
+      // WP142：上一步已经按「红人营销」勾上了——再点一下就是取消，所以只在没勾时点
+      const kolBtn = T('onboarding-roles')
         .getByRole('button', { name: /^红人营销/ })
         .first()
-        .click()
-      await settle(400)
+      if ((await kolBtn.getAttribute('aria-pressed')) !== 'true') {
+        await kolBtn.click()
+        await settle(400)
+      }
       await T('onboarding-next').click()
       await T('onboarding-plan').waitFor({ timeout: 15_000 })
+      await settle(600)
       const conns = await T('onboarding-plan-connector').count()
       const optional = await T('onboarding-plan-connector').filter({ hasText: '可选' }).count()
+      const folded = await T('onboarding-plan-optional-toggle')
+        .innerText()
+        .catch(() => '')
       const skills = await T('onboarding-plan-skill').allInnerTexts()
       const rawSkill = skills.filter((s) => /^[a-z]+-[a-z-]+/.test(s.trim()))
-      const notes = [`列了 ${conns} 个连接，其中 ${optional} 个标「可选」，全部平铺`]
-      if (rawSkill.length)
-        notes.push(`技能包显示内部名：${rawSkill.map((s) => s.split('\n')[0]).join('、')}`)
-      return conns > 3 || rawSkill.length ? part(notes.join('；')) : ok(notes.join('；'))
+      const notes = [
+        folded
+          ? `平铺 ${conns} 个必需的连接，可选的折成「${folded.trim()}」`
+          : `列了 ${conns} 个连接，其中 ${optional} 个标「可选」，全部平铺`,
+      ]
+      notes.push(
+        rawSkill.length
+          ? `技能包显示内部名：${rawSkill.map((s) => s.split('\n')[0]).join('、')}`
+          : `技能包：${skills.map((s) => s.split('\n')[0]).join('、') || '无'}`,
+      )
+      return optional > 0 || rawSkill.length ? part(notes.join('；')) : ok(notes.join('；'))
     },
   )
 
@@ -530,9 +571,13 @@ async function sectionA() {
       await settle(2000)
       const phase2 = await T('onboarding-done-mark').getAttribute('data-phase')
       const said = await text('onboarding-done')
-      const got = /(\d+) 条职责/.exec(said)?.[1]
-      const msg = `动效 ${phase1} → ${phase2}；完成屏说「${oneLine(said, 40)}」，第 ④ 步各岗位「已勾」合计 ${want} 条`
-      return got !== undefined && want !== undefined && got !== want ? part(msg) : ok(msg)
+      // WP142：完成屏按真建的说，已有的被跳过也说出来——建的 + 跳过的 = 第 ④ 步合计
+      const allHeld = /你勾的 (\d+) 条职责本来就都有了/.exec(said)?.[1]
+      const got = allHeld === undefined ? /(\d+) 条职责/.exec(said)?.[1] : '0'
+      const skipped = allHeld ?? /另外 (\d+) 条你本来就有/.exec(said)?.[1] ?? '0'
+      const total = String(Number(got ?? 0) + Number(skipped))
+      const msg = `动效 ${phase1} → ${phase2}；完成屏说「${oneLine(said, 80)}」，第 ④ 步各岗位「已勾」合计 ${want} 条`
+      return got !== undefined && want !== undefined && total !== want ? part(msg) : ok(msg)
     },
   )
 
@@ -654,12 +699,24 @@ async function sectionB(assignment) {
       const body = await page.locator('main').innerText()
       const found = /找人[:：]\s*(\d+)/.exec(body)?.[1] ?? /找到 (\d+) 个/.exec(body)?.[1]
       const notes = [`找到 ${found ?? '?'} 个`]
-      if (/search_creators/.test(body)) notes.push('摘要里露出工具名 search_creators')
-      if (/\byoutube 这条渠道/.test(body)) notes.push('「youtube」小写原始值')
-      const names = /Gadget Jonas|Desk Rosa/.test(body)
-      if (!names)
-        notes.push('时间线只写「找人：N 条」，不列是谁、没有去候选池的链接，也没说为什么不到 20 个')
-      return Number(found) >= 1 ? part(notes.join('；')) : fail(notes.join('；'))
+      const issues = []
+      if (/search_creators/.test(body)) issues.push('摘要里露出工具名 search_creators')
+      if (/\byoutube 这条渠道/.test(body)) issues.push('「youtube」小写原始值')
+      const names = [...new Set(body.match(/Gadget Jonas|Desk Rosa/g) ?? [])]
+      // WP142：回话点名前 5 个 + 去候选池的链接；不够数说原因 + 两个动作
+      const pool = await page.getByRole('link', { name: '去候选池看全部' }).count()
+      const why = /库里只有 \d+ 个|这次只找到 \d+ 个/.exec(body)?.[0]
+      const actions = ['关联官方数据接口', '导入一张表'].filter((w) => body.includes(w))
+      if (names.length) notes.push(`点名：${names.join('、')}`)
+      if (pool) notes.push('有「去候选池看全部」链接')
+      if (why) notes.push(`不够 20 个的原因：「${why}」`)
+      if (actions.length) notes.push(`下一步：${actions.join(' / ')}`)
+      if (!names.length || !pool)
+        issues.push('时间线只写「找人：N 条」，不列是谁、没有去候选池的链接')
+      if (Number(found) < 20 && (!why || actions.length < 2))
+        issues.push('没说为什么不到 20 个、也没给下一步')
+      if (Number(found) < 1) fail([...notes, ...issues].join('；'))
+      return issues.length ? part([...notes, ...issues].join('；')) : ok(notes.join('；'))
     },
   )
 
@@ -683,7 +740,17 @@ async function sectionB(assignment) {
         .innerText()
         .catch(() => '')
       if (res) return ok(`搜到：${oneLine(res, 120)}`)
-      if (blocked) return part(`没搜：${oneLine(blocked, 160)}`)
+      if (blocked) {
+        // WP142：没接数据源时两句话 + 两个按钮（关联官方账号 / 接自己的数据接口）
+        const sentences = blocked.split('。').filter((x) => x.trim() !== '').length
+        const buttons = await T('kol-search-blocked-box')
+          .first()
+          .locator('[data-testid^="kol-search-entry-"]')
+          .allInnerTexts()
+          .catch(() => [])
+        const msg = `没搜：「${oneLine(blocked, 160)}」（${sentences} 句）；按钮：${buttons.join(' / ') || '无'}`
+        return sentences <= 2 && buttons.length === 2 ? ok(msg) : part(msg)
+      }
       return part(
         `回车后没有可见结果区：${oneLine(
           await T('kol-discovery')
@@ -730,14 +797,26 @@ async function sectionB(assignment) {
     async () => {
       const btn = T('kol-campaign-accept').first()
       if (!(await btn.count())) fail('清单上没有「接受」按钮')
+      // WP142：清单一出来就说不够数的原因（想要几个、库里只有几个、几个已在合作里）
+      const short = await T('kol-campaign-short')
+        .first()
+        .innerText()
+        .catch(() => '')
       await btn.click()
       await settle(2500)
       const body = await T('kol-campaign').innerText()
       const line = body.split('\n').find((l) => /建了|没新建|没建|合作线程/.test(l))
       if (!line) fail('接受之后没有回执')
-      return /没新建|没建/.test(line)
-        ? part(`${oneLine(line)}——想要 5 个只出了 2 个，且都已在合作里，接受等于什么都没发生`)
-        : ok(oneLine(line))
+      const next = await T('kol-campaign-receipt')
+        .first()
+        .locator('button')
+        .allInnerTexts()
+        .catch(() => [])
+      const explained = /已经在合作里/.test(line) && next.length > 0
+      const msg = `${short ? `清单上：「${oneLine(short, 80)}」；` : ''}接受后：「${oneLine(line)}」${next.length ? `；下一步：${next.join(' / ')}` : ''}`
+      if (/没新建|没建/.test(line) && !explained)
+        return part(`${msg}——想要 5 个只出了 2 个，且都已在合作里，接受等于什么都没发生`)
+      return ok(msg)
     },
   )
 
@@ -1389,23 +1468,78 @@ async function sectionD(kolAssignment) {
     async () => {
       await go('/settings/credits')
       await settle(1500)
-      const blocks = await T('credits-block').count()
-      const tiers = await T('credits-tier').count()
-      const kol = await T('kol-cloud-card').count()
-      const model = await T('model-cloud-card').count()
+      /*
+       * WP142：这一页要在**两种状态**下都看得到价——已关联（A 段第 2 步关联过）与没关联。
+       * 先看已关联那一面（附图 44b），顺手点一档充值看 demo 那一句；再「解除关联」，
+       * 看没关联那一面（本步主图）：三块、充值四档、增值服务卡照常在，按钮是「先关联」。
+       * 「模型增值卡」（`model-cloud-card`）在设置「通用」那一档里，不是增值服务，不在这一页数。
+       */
+      const look = async () => {
+        await settle(1200)
+        const blocks = await T('credits-block').count()
+        const tiers = await T('credits-tier').count()
+        const kol = await T('kol-cloud-card').count()
+        const linkFirst = await T('credits-tier-link-first').count()
+        const pricingOpen = await T('credits-pricing-block').count()
+        if (!pricingOpen)
+          await T('credits-pricing')
+            .getByText('价目表')
+            .first()
+            .click()
+            .catch(() => {})
+        await settle(500)
+        const pricing = await T('credits-pricing-block').count()
+        return { blocks, tiers, kol, linkFirst, pricing }
+      }
+      const notes = []
+      let linkedOk = true
+      const wasLinked =
+        (await T('credits-panel')
+          .getAttribute('data-linked')
+          .catch(() => '')) === 'true'
+      if (wasLinked) {
+        const a = await look()
+        await T('credits-tier').first().click()
+        await settle(1500)
+        const demoSaid = await T('credits-tier-error')
+          .first()
+          .innerText()
+          .catch(() => '')
+        await page.screenshot({
+          path: join(SHOTS, `${String(shotNo).padStart(2, '0')}b-account-linked.png`),
+          fullPage: true,
+        })
+        linkedOk = a.blocks === 3 && a.tiers === 4 && a.kol > 0
+        notes.push(
+          `已关联：分组 ${a.blocks} 块、充值档 ${a.tiers} 个、红人增值卡 ${a.kol}、价目 ${a.pricing} 块${demoSaid ? `；demo 里点充值：「${oneLine(demoSaid, 60)}」` : ''}`,
+        )
+        await page.getByRole('button', { name: '解除关联' }).first().click()
+        await page
+          .locator('[data-testid="credits-panel"][data-linked="false"]')
+          .waitFor({ timeout: 15_000 })
+          .catch(() => {})
+      }
+      const b = await look()
       const notLinked = await T('credits-not-linked')
         .first()
         .innerText()
         .catch(() => '')
-      await T('credits-pricing')
-        .getByText('价目表')
+      const local = await T('credits-pricing-local').count()
+      await T('credits-link-first')
         .first()
         .click()
         .catch(() => {})
-      await settle(600)
-      const pricing = await T('credits-pricing-block').count()
-      const msg = `分组 ${blocks} 块、充值档 ${tiers} 个、红人增值卡 ${kol}、模型增值卡 ${model}、展开价目表后 ${pricing} 块${notLinked ? `；未连云：「${oneLine(notLinked, 80)}」` : ''}`
-      return blocks === 3 && tiers === 4 && kol && model ? ok(msg) : part(msg)
+      await settle(800)
+      const focused = await page.evaluate(
+        () => document.activeElement?.closest('[data-testid="cloud-account"]') !== null,
+      )
+      await page.evaluate(() => window.scrollTo(0, 0))
+      notes.push(
+        `没关联：分组 ${b.blocks} 块、充值档 ${b.tiers} 个（「先关联」${b.linkFirst} 个）、红人增值卡 ${b.kol}、价目 ${b.pricing} 块${local ? '、标了「以关联后显示为准」' : ''}；「先关联」${focused ? '把光标送进了上面的邮箱框' : '没带到关联那张卡'}；「${oneLine(notLinked, 60)}」`,
+      )
+      const unlinkedOk =
+        b.blocks === 3 && b.tiers === 4 && b.kol > 0 && b.linkFirst === 4 && b.pricing === 3
+      return linkedOk && unlinkedOk ? ok(notes.join('；')) : part(notes.join('；'))
     },
   )
 

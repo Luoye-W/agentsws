@@ -89,6 +89,10 @@ const fail = (status: number, code: string, message: string): CloudStandInRespon
 
 /** 替身账号的样子（邮箱用信里填的那个；公司名是合成的）。 */
 const STAND_IN_ORG = { id: 'org_demo', name: '演示公司' }
+
+/** WP142：demo 里点充值的那一句（界面原样显示）。 */
+export const DEMO_TOPUP_MESSAGE =
+  '这是演示环境，不真收钱。正式版里点这一档会打开 Stripe 的付款页，付完积分当场到账。'
 /** 替身余额：140 买的 + 10 注册赠送，本月用掉 12.4。 */
 const PURCHASED = 140
 const GRANTED = 10
@@ -246,7 +250,8 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (method === 'GET' && path === '/v1/wallet/pricing') return ok(buildPricing())
       if (method === 'GET' && path === '/v1/wallet/topup/tiers') return ok(TOPUP_TIERS_FILE)
       if (method === 'POST' && path === '/v1/wallet/topup')
-        return fail(503, 'provider_unavailable', '演示里不真收钱：充值要在正式版里做')
+        // WP142：demo 里点充值那一句——说清这是演示、正式版里会发生什么
+        return fail(503, 'provider_unavailable', DEMO_TOPUP_MESSAGE)
     }
     return fail(404, 'not_found', '演示里没有这一项（demo 不连真云）')
   }

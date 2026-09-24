@@ -642,3 +642,139 @@ describe('WP131 插件「回作战室看这批」', () => {
     expect((await screen.findByTestId('kol-audit')).textContent).toBe('体检 76')
   })
 })
+
+describe('WP142 候选池与活动：不够数说原因，给两个动作', () => {
+  beforeEach(() => {
+    for (const fn of [searchKolCreators, planKolCampaign, acceptKolCampaign, getKolSandbox])
+      fn.mockClear()
+    getKolCreators.mockResolvedValue({ rows: LIBRARY })
+    getKolSandbox.mockResolvedValue({
+      on: false,
+      now: '2026-09-15T09:00:00.000Z',
+      creators: 0,
+      collaborations: 0,
+      sent: 0,
+      replies: 0,
+      pending: 0,
+      banner: '演练中 · 不会发出任何真邮件',
+    })
+  })
+
+  it('候选池没接数据源：两句话 + 两个按钮（关联官方账号 → 账号与积分；接自己的数据接口 → 这条渠道的连接卡）', async () => {
+    searchKolCreators.mockResolvedValue({
+      ok: false,
+      source: 'channel',
+      rows: [],
+      reason: 'no_data_source',
+      message:
+        '现在搜不了YouTube上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜。',
+      entry_points: [
+        { id: 'link_account', label: '关联官方账号', note: '送 10 积分' },
+        { id: 'byo', label: '接自己的数据接口', note: '不扣积分' },
+      ],
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    const input = await screen.findByTestId('kol-search-input')
+    fireEvent.change(input, { target: { value: 'charger' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    const said = (await screen.findByTestId('kol-search-blocked')).textContent ?? ''
+    expect(said.split('。').filter((x) => x.trim() !== '')).toHaveLength(2)
+    expect(screen.getByTestId('kol-search-entry-link_account').getAttribute('href')).toBe(
+      '/settings/credits',
+    )
+    expect(screen.getByTestId('kol-search-entry-byo').getAttribute('href')).toBe(
+      '/connections?service=youtube_data',
+    )
+  })
+
+  const ALREADY_PLAN: KolCampaignData = {
+    ...PLAN,
+    by_channel: [
+      {
+        channel: 'youtube',
+        role_id: 'kol.youtube',
+        allowed: true,
+        assignment_id: 'asg_yt',
+        picks: [
+          {
+            creator_id: 'cre_1',
+            display_name: 'Gadget Jonas',
+            channel: 'youtube',
+            handle: 'gadgetjonas',
+            followers: 48_000,
+            score: 90,
+            why: ['正好在想要的区间里。'],
+            already: true,
+          },
+          {
+            creator_id: 'cre_2',
+            display_name: 'Desk Rosa',
+            channel: 'youtube',
+            handle: 'deskrosa',
+            followers: 31_000,
+            score: 90,
+            why: ['正好在想要的区间里。'],
+            already: true,
+          },
+        ],
+      },
+    ],
+  }
+
+  async function planIt(): Promise<void> {
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    await goto('campaign')
+    fireEvent.change(screen.getByTestId('kol-campaign-goal'), { target: { value: '65W 充电器' } })
+    fireEvent.change(screen.getByTestId('kol-campaign-headcount'), { target: { value: '5' } })
+    fireEvent.click(screen.getByTestId('kol-campaign-go'))
+    await screen.findByTestId('kol-campaign-plan')
+  }
+
+  it('清单不够数：想要 5 个只有 2 个（其中 2 个已在合作里），给「导入一张表」「关联官方数据接口」', async () => {
+    planKolCampaign.mockResolvedValue(ALREADY_PLAN)
+    await planIt()
+    const short = screen.getByTestId('kol-campaign-short')
+    expect(short.textContent).toContain('想要 5 个，库里合适的只有 2 个')
+    expect(short.textContent).toContain('其中 2 个已经在合作里了')
+    expect(screen.getByTestId('kol-campaign-short-link').getAttribute('href')).toBe(
+      '/settings/credits',
+    )
+    expect(screen.getByTestId('kol-campaign-short-import')).toBeTruthy()
+    // 清单上当场标出来：谁已经在合作里
+    expect(
+      screen.getAllByTestId('kol-campaign-pick').map((li) => li.getAttribute('data-already')),
+    ).toEqual(['true', 'true'])
+    expect(screen.getAllByTestId('kol-campaign-pick')[0]?.textContent).toContain('已在合作里')
+  })
+
+  it('接受后一条都没新建（都已在合作里）：说清为什么，并给「去合作线程看他们」「找更多人」', async () => {
+    planKolCampaign.mockResolvedValue(ALREADY_PLAN)
+    acceptKolCampaign.mockResolvedValue({
+      campaign_id: 'cmp_1',
+      created: [],
+      skipped: [
+        {
+          channel: 'youtube',
+          creator_id: 'cre_1',
+          reason: '这条渠道上已经有一条合作了，不重复建。',
+        },
+        {
+          channel: 'youtube',
+          creator_id: 'cre_2',
+          reason: '这条渠道上已经有一条合作了，不重复建。',
+        },
+      ],
+    })
+    await planIt()
+    fireEvent.click(screen.getByTestId('kol-campaign-accept'))
+    const receipt = await screen.findByTestId('kol-campaign-receipt')
+    expect(receipt.textContent).toContain('这 2 位都已经在合作里了，所以没有新建')
+    fireEvent.click(screen.getByTestId('kol-campaign-go-threads'))
+    await waitFor(() => {
+      const tabs = screen.getAllByTestId('kol-subview')
+      expect(
+        tabs.find((b) => b.getAttribute('data-view') === 'threads')?.getAttribute('aria-pressed'),
+      ).toBe('true')
+    })
+  })
+})

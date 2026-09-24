@@ -78,8 +78,74 @@ function MoreConnections({ planned }: { planned: string[] }): React.ReactNode {
   )
 }
 
+/**
+ * WP142（docs/78 第 8 步）：技能包显示中文名。`brand-voice` 这种是包名，不是给人看的。
+ * 认不出来的（第三方装的包）说「一个专用技能包」，也不露包名。
+ */
+const SKILL_NAMES = new Set([
+  'ad-copywriting',
+  'audience-research',
+  'brand-system',
+  'brand-voice',
+  'chargeback-evidence',
+  'customer-care',
+  'policy-review',
+  'returns-policy-calc',
+  'workspace-basics',
+])
+
+export function skillLabel(name: string, t: (key: string) => string): string {
+  return SKILL_NAMES.has(name) ? t(`skill.name.${name}`) : t('onboarding.plan.skill.unknown')
+}
+
+type ConnectorItem = OnboardingPlanView['connectors'][number]
+
+/** 一行连接：必需的与展开后的可选的长一个样子。 */
+function ConnectorRow({ c }: { c: ConnectorItem }): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <div
+      className="flex items-start justify-between gap-3 rounded-md border p-2"
+      data-testid="onboarding-plan-connector"
+      data-required={c.required}
+    >
+      <div className="flex items-start gap-2">
+        {c.connected ? (
+          <CircleCheck aria-hidden className="mt-0.5 size-4 text-primary" />
+        ) : (
+          <Circle aria-hidden className="mt-0.5 size-4 text-muted-foreground" />
+        )}
+        <div>
+          <p>
+            {c.label}
+            <span className="ml-2 text-xs text-muted-foreground">
+              {c.required ? t('onboarding.plan.required') : t('onboarding.plan.optional')}
+            </span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t('onboarding.plan.needed_by', { roles: c.needed_by.join('、') })}
+          </p>
+        </div>
+      </div>
+      {c.connected ? (
+        <span className="text-xs text-muted-foreground">{t('onboarding.plan.connected')}</span>
+      ) : (
+        <Button asChild size="sm" variant="outline">
+          <Link to={`/connections?service=${encodeURIComponent(c.service)}`}>
+            {t('onboarding.plan.connect')}
+          </Link>
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNode {
   const { t } = useApp()
+  const [optionalOpen, setOptionalOpen] = useState(false)
+  // WP142：第 ④ 步只列**必需**的；可选的折成「还有 N 个可选」，默认关着
+  const required = plan.connectors.filter((c) => c.required)
+  const optional = plan.connectors.filter((c) => !c.required)
   const nothing =
     !plan.model_first &&
     plan.connectors.length === 0 &&
@@ -108,43 +174,36 @@ export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNod
       {plan.connectors.length === 0 ? null : (
         <section className="flex flex-col gap-2">
           <p className="font-medium">{t('onboarding.plan.connectors')}</p>
-          {plan.connectors.map((c) => (
-            <div
-              key={c.service}
-              className="flex items-start justify-between gap-3 rounded-md border p-2"
-              data-testid="onboarding-plan-connector"
+          {required.length === 0 ? (
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="onboarding-plan-none-required"
             >
-              <div className="flex items-start gap-2">
-                {c.connected ? (
-                  <CircleCheck aria-hidden className="mt-0.5 size-4 text-primary" />
-                ) : (
-                  <Circle aria-hidden className="mt-0.5 size-4 text-muted-foreground" />
-                )}
-                <div>
-                  <p>
-                    {c.label}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {c.required ? t('onboarding.plan.required') : t('onboarding.plan.optional')}
-                    </span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t('onboarding.plan.needed_by', { roles: c.needed_by.join('、') })}
-                  </p>
-                </div>
-              </div>
-              {c.connected ? (
-                <span className="text-xs text-muted-foreground">
-                  {t('onboarding.plan.connected')}
-                </span>
-              ) : (
-                <Button asChild size="sm" variant="outline">
-                  <Link to={`/connections?service=${encodeURIComponent(c.service)}`}>
-                    {t('onboarding.plan.connect')}
-                  </Link>
+              {t('onboarding.plan.none_required')}
+            </p>
+          ) : (
+            required.map((c) => <ConnectorRow key={c.service} c={c} />)
+          )}
+          {optional.length === 0 ? null : (
+            <div className="flex flex-col gap-2">
+              <div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-expanded={optionalOpen}
+                  data-testid="onboarding-plan-optional-toggle"
+                  onClick={() => {
+                    setOptionalOpen((v) => !v)
+                  }}
+                >
+                  {optionalOpen
+                    ? t('onboarding.plan.optional.close')
+                    : t('onboarding.plan.optional.more', { n: optional.length })}
                 </Button>
-              )}
+              </div>
+              {optionalOpen ? optional.map((c) => <ConnectorRow key={c.service} c={c} />) : null}
             </div>
-          ))}
+          )}
         </section>
       )}
 
@@ -158,7 +217,7 @@ export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNod
               data-testid="onboarding-plan-skill"
             >
               <div>
-                <p>{s.name}</p>
+                <p>{skillLabel(s.name, t)}</p>
                 <p className="text-xs text-muted-foreground">
                   {t('onboarding.plan.needed_by', { roles: s.needed_by.join('、') })}
                 </p>

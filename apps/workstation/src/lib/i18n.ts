@@ -2501,7 +2501,7 @@ const zh: Table = {
   'onboarding.business.no_site': '还没有网站',
   'onboarding.business.working': '正在读你的网站，已经读了 {done} 页。可以先去选岗位，回来看结果。',
   'onboarding.business.capped': '花到 {cap} 积分的上限就停下了——已经读到的都在下面。',
-  'onboarding.business.missed': '有 {count} 个页面没读着（{reason}）。缺的那几格自己填上就行。',
+  'onboarding.business.missed': '有 {count} 个页面没读着：{reason}。缺的那几格自己填上就行。',
   // WP127：文字模型必须能看图；生图单独一档
   'onboarding.ai.own.err.vision':
     '这个模型看不了图，Agents 工坊要求模型能看图。换一个能看图的再试，常见的有：{models}。',
@@ -2629,6 +2629,48 @@ const zh: Table = {
   'need.no_range': '「{duty}」这条职责还没分配店铺 / 品牌，所以这里还用不了。',
   'need.go_assign': '去分配',
   'nav.chat_window': '聊天窗',
+  // ── WP142：红人为主的朋友第一步 ──
+  'onboarding.ai.official.pending': '正在连 Agents 工坊云…',
+  'onboarding.ai.official.offline': '网络不通，这一下没连上 Agents 工坊云。',
+  'onboarding.ai.official.retry': '再试一次',
+  'intake.confirmed': '记下了：品牌档案已存好，之后在设置里也能改。点「保存并继续」去选岗位。',
+  'intake.confirmed.button': '已确认',
+  'onboarding.purpose.title': '你这次主要想让它干什么？',
+  'onboarding.purpose.kol': '红人营销',
+  'onboarding.purpose.care': '客服',
+  'onboarding.purpose.both': '都要',
+  'onboarding.purpose.hint': '按你选的先把岗位勾好，下面还能改。',
+  'onboarding.done.skipped': '另外 {n} 条你本来就有，没重复建。',
+  'onboarding.done.all_held':
+    '你勾的 {n} 条职责本来就都有了，这次没新建。回首页，把第一件事交给它们。',
+  'onboarding.plan.optional.more': '还有 {n} 个可选',
+  'onboarding.plan.optional.close': '收起可选的',
+  'onboarding.plan.none_required': '没有非连不可的，现在就能开工。下面这些连上了能多干点事。',
+  'onboarding.plan.skill.unknown': '一个专用技能包',
+  'skill.name.ad-copywriting': '广告文案',
+  'skill.name.audience-research': '受众研究',
+  'skill.name.brand-system': '品牌视觉规范',
+  'skill.name.brand-voice': '品牌话术',
+  'skill.name.chargeback-evidence': '拒付举证',
+  'skill.name.customer-care': '客服手册',
+  'skill.name.policy-review': '政策核对',
+  'skill.name.returns-policy-calc': '退换货规则',
+  'skill.name.workspace-basics': '工作台基础',
+  'kol.campaign.already': '已在合作里',
+  'kol.campaign.all_existing':
+    '清单上这 {n} 位都已经在合作里了，所以没有新建。去合作线程接着谈，或者先找更多人。',
+  'kol.campaign.go_threads': '去合作线程看他们',
+  'kol.campaign.find_more': '找更多人',
+  'kol.campaign.short': '想要 {want} 个，库里合适的只有 {n} 个。',
+  'kol.campaign.short.already': '其中 {n} 个已经在合作里了。',
+  'kol.campaign.short.import': '导入一张表',
+  'kol.campaign.short.link': '关联官方数据接口',
+  'credits.unlinked.lead': '还没关联 Agents 工坊账号。价钱先摆在这儿，关联之后就能充值、用积分。',
+  'credits.link_first': '先关联',
+  'credits.blocks.price': '三块怎么收钱',
+  'credits.blocks.from': '积分起 · {unit}',
+  'credits.pricing.local': '这是本机内置的价目，以关联后显示为准。',
+  'credits.unit.image': '每张',
 }
 
 const en: Table = {
@@ -5293,6 +5335,54 @@ const en: Table = {
     'The "{duty}" duty has no store or brand assigned yet, so it cannot be used here.',
   'need.go_assign': 'Assign one',
   'nav.chat_window': 'Live chat',
+  // ── WP142：红人为主的朋友第一步 ──
+  'onboarding.ai.official.pending': 'Connecting to Agents Workshop cloud…',
+  'onboarding.ai.official.offline':
+    'Could not reach Agents Workshop cloud — the network did not get through.',
+  'onboarding.ai.official.retry': 'Try again',
+  'intake.confirmed':
+    'Saved: the brand profile is stored and can be changed later in Settings. Click "Save and continue" to pick positions.',
+  'intake.confirmed.button': 'Confirmed',
+  'onboarding.purpose.title': 'What do you mainly want it to do this time?',
+  'onboarding.purpose.kol': 'Creator marketing',
+  'onboarding.purpose.care': 'Customer care',
+  'onboarding.purpose.both': 'Both',
+  'onboarding.purpose.hint':
+    'We tick the positions for you from this; you can still change them below.',
+  'onboarding.done.skipped': '{n} more you already had, so they were not created again.',
+  'onboarding.done.all_held':
+    'You already had all {n} duties you ticked, so nothing new was created. Head home and hand them the first thing.',
+  'onboarding.plan.optional.more': '{n} more, optional',
+  'onboarding.plan.optional.close': 'Hide the optional ones',
+  'onboarding.plan.none_required':
+    'Nothing is required — you can start now. Connecting these lets it do more.',
+  'onboarding.plan.skill.unknown': 'A specialised skill pack',
+  'skill.name.ad-copywriting': 'Ad copywriting',
+  'skill.name.audience-research': 'Audience research',
+  'skill.name.brand-system': 'Brand visual system',
+  'skill.name.brand-voice': 'Brand voice',
+  'skill.name.chargeback-evidence': 'Chargeback evidence',
+  'skill.name.customer-care': 'Customer care playbook',
+  'skill.name.policy-review': 'Policy check',
+  'skill.name.returns-policy-calc': 'Returns rules',
+  'skill.name.workspace-basics': 'Workspace basics',
+  'kol.campaign.already': 'already working together',
+  'kol.campaign.all_existing':
+    'All {n} people on this list are already in a collaboration, so nothing new was created. Continue in the threads, or find more people first.',
+  'kol.campaign.go_threads': 'See them in the threads',
+  'kol.campaign.find_more': 'Find more people',
+  'kol.campaign.short': 'You want {want}; only {n} in your library fit.',
+  'kol.campaign.short.already': '{n} of them are already in a collaboration.',
+  'kol.campaign.short.import': 'Import a sheet',
+  'kol.campaign.short.link': 'Link the official data API',
+  'credits.unlinked.lead':
+    'No Agents Workshop account linked yet. Prices are shown here; link one to top up and spend credits.',
+  'credits.link_first': 'Link first',
+  'credits.blocks.price': 'How the three blocks are charged',
+  'credits.blocks.from': 'credits and up · {unit}',
+  'credits.pricing.local':
+    'This is the built-in price list; the one shown after linking is what counts.',
+  'credits.unit.image': 'per image',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

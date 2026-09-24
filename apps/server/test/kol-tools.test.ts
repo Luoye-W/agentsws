@@ -190,7 +190,8 @@ describe('66 断点 #1：红人岗位的工具面', () => {
     expect(completed?.summary).toContain('找人')
     expect(completed?.summary).not.toMatch(/退货|退款/)
     const answer = completed?.outputs.find((o) => o.kind === 'answer')
-    expect(answer?.kind === 'answer' ? answer.text : '').toContain('找人')
+    // WP142：回话说「在 YouTube 上找了一遍……」并点名，不再是「找人：N 条」
+    expect(answer?.kind === 'answer' ? answer.text : '').toContain('在 YouTube 上找了一遍')
   })
 
   it('没有红人装配时照实说，不假装成功', async () => {
@@ -206,7 +207,9 @@ describe('66 断点 #1：红人岗位的工具面', () => {
     )
     const answer = completed?.outputs.find((o) => o.kind === 'answer')
     const text = answer?.kind === 'answer' ? answer.text : ''
-    expect(text).toContain('找人')
+    // WP142：零条照实说，并给下一步（关联官方数据接口 / 导入一张表）
+    expect(text).toContain('一个合适的都没找到')
+    expect(text).toContain('关联官方数据接口')
     expect(text).not.toContain('没成')
   })
 })

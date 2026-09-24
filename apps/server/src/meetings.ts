@@ -40,7 +40,11 @@ import {
   type SqliteMeetingRawStore,
   type SqliteMeetingStore,
 } from '@agentsws/meetings'
-import type { ModelGatewayApi } from '@agentsws/model-gateway'
+import {
+  createSpeechToText,
+  type ModelGatewayApi,
+  type SpeechToText,
+} from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
 
 export interface MeetingsAssembly {
@@ -48,6 +52,11 @@ export interface MeetingsAssembly {
   raw: MeetingRawStore
   pipeline: MeetingPipeline
   port: MeetingsPort
+  /**
+   * WP145：识别器选择层。以后接本机识别器就是 `speech.register(provider)` +
+   * `speech.configure({ providerId })`，会议管线不用改。
+   */
+  speech: SpeechToText
   /** 37 §2.2b：会议跟进的事项由工作模型开；装配完成后由 server 注入。 */
   bind(work: Work): void
   /** 会议 → 日历（37 §2 表第三行「会议一定有时间，一定上日历」）。 */
@@ -77,6 +86,11 @@ export interface MeetingsOptions {
    * 一小时录音几十上百 MB，落 SQLite 是把库撑爆。
    */
   blobs?: RawBlobPort
+  /**
+   * WP145：转写前的识别器选择层。不传就只有内置的 `model-gateway` 一个识别器——
+   * 与 WP145 以前逐字相同（计费、事件、错误话术都是网关那一套）。
+   */
+  speech?: SpeechToText
 }
 
 export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
@@ -100,13 +114,15 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
       ? inner
       : new BlobBackedMeetingRawStore({ inner, blobs: options.blobs })
 
+  const speech = options.speech ?? createSpeechToText({ gateway: options.models })
   const pipeline = createMeetingPipeline({
     store,
     raw,
     clock,
     random,
-    // 22 ASR 槽；没装 ASR provider 的发行版这里会抛，管线转成一张系统卡
-    transcribe: (audio, meta) => options.models.transcribe(audio, meta),
+    // 22 ASR 槽；没装 ASR provider 的发行版这里会抛，管线转成一张系统卡。
+    // WP145：先经识别器选择层；默认只有网关这一个，入参原样交给 `models.transcribe`
+    transcribe: async (audio, meta) => speech.transcribe(speech.resolve({ input: audio }), meta),
     eventSink: (e) => {
       options.appendEvent(e)
     },
@@ -330,6 +346,7 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     raw,
     pipeline,
     port,
+    speech,
     bind(w) {
       work = w
     },
