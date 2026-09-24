@@ -31,6 +31,7 @@ import type {
   ModelProvider,
   ModelRef,
   ProviderModelInfo,
+  ReasoningReplay,
   ToolDef,
 } from '@agentsws/contracts'
 import { GatewayError, ProviderError } from '../types.js'
@@ -125,6 +126,7 @@ export interface DeepSeekMessagesProviderOptions
 }
 
 type WireBlock =
+  | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'text'; text: string }
   | { type: 'image'; source: WireImageSource }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
@@ -143,7 +145,7 @@ interface WireMessage {
 interface WireResponse {
   content?: (
     | { type: 'text'; text?: string }
-    | { type: 'thinking'; thinking?: string }
+    | { type: 'thinking'; thinking?: string; signature?: string }
     | { type: 'tool_use'; id?: string; name?: string; input?: unknown }
     | { type: string }
   )[]
@@ -165,6 +167,34 @@ const textOf = (content: string | ChatContentPart[]): string =>
 /** 一张图在线上长什么样：给了 `imageSource` 就问它（file id），否则内联 base64。 */
 export interface MessagesRequestOptions {
   imageSource?: (image: { mime: string; data: string }) => WireImageSource
+  /**
+   * WP143：这次请求发给哪个模型。思考签名只对产出它的模型有效（官方 `readReplay`：跨模型不可移植），
+   * 模型对不上就只回传思考原文、不带签名。不给 = 不比（按原样带签名）。
+   */
+  model?: string
+}
+
+/**
+ * WP143：上一轮 assistant 的思考块怎么回传（照官方 `serialize.js` 的 `assistant()` + `replay.js`）。
+ *
+ * - 有 {@link ReasoningReplay}（同一条线路格式）：逐块原样，签名原样；模型对不上就去掉签名；
+ * - 没有但有 `reasoning` 原文（例如历史来自别的 provider）：一块不带签名的思考——官方回放元数据
+ *   无效时也是这样「省略签名，不丢弃文本」；
+ * - 都没有：不发思考块。
+ */
+function thinkingBlocksOf(m: ChatMessage, model: string | undefined): WireBlock[] {
+  const replay = m.reasoning_replay
+  if (replay !== undefined && replay.kind === 'deepseek-messages' && replay.blocks.length > 0) {
+    const signed = model === undefined || replay.model === model
+    return replay.blocks.map((b) => ({
+      type: 'thinking',
+      thinking: b.thinking,
+      ...(signed && b.signature !== undefined ? { signature: b.signature } : {}),
+    }))
+  }
+  return m.reasoning === undefined || m.reasoning === ''
+    ? []
+    : [{ type: 'thinking', thinking: m.reasoning }]
 }
 
 const blocksOf = (
@@ -196,8 +226,8 @@ const blocksOf = (
  * - 助手的工具调用变成 `tool_use` 块（工具名同 OpenAI 那边一样换成合规名）；
  * - 相邻同角色合并（Messages 要求 user / assistant 交替）。
  *
- * 上一轮的推理（`reasoning`）**不带回**：Messages 的 thinking 块要带签名，我们手里没有；
- * 这一条没法离线核，写进了报告的「未核」。
+ * WP143：上一轮的推理**原样带回**——思考块排在这条 assistant 内容的最前面（Messages 的回复里
+ * 思考块本来就在前），签名原样（见 {@link thinkingBlocksOf}）。
  */
 export function toMessagesRequest(
   messages: readonly ChatMessage[],
@@ -227,6 +257,7 @@ export function toMessagesRequest(
     }
     if (m.role === 'assistant') {
       push('assistant', [
+        ...thinkingBlocksOf(m, options.model),
         ...blocksOf(m.content, options),
         ...(m.tool_calls ?? []).map(
           (c): WireBlock => ({
@@ -381,8 +412,9 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
         const wire = toMessagesRequest(
           req.messages,
           fileIds === undefined
-            ? {}
+            ? { model }
             : {
+                model,
                 imageSource: (image) => {
                   const file_id = fileIds.get(`${image.mime}\0${image.data}`)
                   // 走到这里说明解析漏了一张：宁可失败也不混用
@@ -443,12 +475,19 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
       const json = (await res.json()) as WireResponse
       let text = ''
       let reasoning = ''
+      const thinking: ReasoningReplay['blocks'] = []
       const calls: { id: string; name: string; input: unknown }[] = []
       for (const [i, block] of (json.content ?? []).entries()) {
         if (block.type === 'text') text += (block as { text?: string }).text ?? ''
-        else if (block.type === 'thinking')
-          reasoning += (block as { thinking?: string }).thinking ?? ''
-        else if (block.type === 'tool_use') {
+        else if (block.type === 'thinking') {
+          const b = block as { thinking?: string; signature?: string }
+          reasoning += b.thinking ?? ''
+          // WP143：思考原文与签名原样留下，下一轮原样带回
+          thinking.push({
+            thinking: b.thinking ?? '',
+            ...(typeof b.signature === 'string' ? { signature: b.signature } : {}),
+          })
+        } else if (block.type === 'tool_use') {
           const b = block as { id?: string; name?: string; input?: unknown }
           if (b.name === undefined) {
             throw new GatewayError('invalid_input', 'tool_use without name', { index: i })
@@ -464,6 +503,9 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
         text,
         ...(calls.length === 0 ? {} : { tool_calls: calls }),
         ...(reasoning === '' ? {} : { reasoning }),
+        ...(thinking.length === 0
+          ? {}
+          : { reasoning_replay: { kind: 'deepseek-messages' as const, model, blocks: thinking } }),
         usage: {
           input_tokens: json.usage?.input_tokens ?? 0,
           output_tokens: json.usage?.output_tokens ?? 0,
