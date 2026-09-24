@@ -190,6 +190,29 @@ upstreams:
       - packages/connect-adapter/test/fixtures
       - packages/connect-adapter/README.md
 
+  - id: new-api
+    kind: runtime-dep
+    # 09-24 补登（Luoye：引用的开源项目都要纳入周评估）。只在自建形态（deploy/docker-compose.yml）里跑；
+    # 官方 Cloudflare 形态现在直连 DeepSeek（apps/cloud-worker/wrangler.toml 的 AGENTSWS_NEWAPI_BASE_URL），
+    # 以后换回自建 New API 只改那一行。镜像 09-24 起钉 tag + digest（原来写的 ghcr 地址匿名 401、拉不下来）。
+    why: 自建云形态的 AI 转发网关（官方积分那条模型路的上游聚合），docs/49、docs/61
+    repo: QuantumNous/new-api
+    image: docker.io/calciumion/new-api
+    image_tag: v1.0.0-rc.40
+    locked_version: 1.0.0-rc.40
+    pin: exact
+    image_digest: sha256:37c0f99a76ed0a5d5b376b8486173415efd1ec416042b392bd564eb0ae6a55ef
+    image_in:
+      - deploy/docker-compose.yml
+      - deploy/.env.example
+    watch: [releases, readme, wishlist]
+    we_depend_on:
+      - 'OpenAI 兼容 /v1/chat/completions 与令牌鉴权（apps/cloud 的 AI 转发）'
+      - '渠道 / 令牌在它自己的后台页里配，key 不进我们的 .env（docs/61 §4）'
+    wishlist:
+      - BREAKING（令牌鉴权 / 计费口径 / 管理 API 的破坏性改动）
+      - 正式版 1.0.0（现在还是 rc）
+
   - id: mcp-sdk
     kind: runtime-dep
     why: 自定义 MCP 服务器接进运行时那条路的客户端（apps/server），也是 playwright-mcp 的底座
@@ -394,6 +417,30 @@ upstreams:
       - 能进群 / 能拉同事（现在只能"本人 ↔ 自己的 Agent"私聊）
     covered_by:
       - packages/channels/src/wechat-clawbot
+
+  - id: teamai-cli
+    kind: reference
+    # 09-24 补登：Luoye 早期给的借鉴对象，docs/07 整篇在对照它（团队 AI 管理的范式 + 商业化分层）。
+    why: 团队 AI 管理范式与免费 / 付费分层的对照对象（docs/07、docs/09、docs/11）
+    repo: Tencent/teamai-cli
+    watch: [releases, stars, readme]
+
+  - id: anydoc
+    kind: reference
+    # 09-24 补登：Luoye 指定的文档解析库。知识入库设计里 parser 已标 'anydoc'（apps/server/src/server.ts），
+    # 但解析还没真正接进来（knowledge-upload.ts：不解析内容，解析在下游）。真接入时改成 runtime-dep 并锁版本。
+    why: 知识库文档解析（PDF / Office → 文本）的指定方案，docs/19 §1.3
+    repo: firecrawl/anydoc
+    watch: [releases, readme, wishlist]
+    wishlist:
+      - 有稳定的 npm 包或可嵌入的库形态（决定我们怎么接）
+
+  - id: one-api
+    kind: reference
+    # 09-24 补登：New API 的前身（Laisky 维护的分支），docs/49 选型时对照过。
+    why: AI 转发网关选型的对照对象（最后选了 new-api），docs/49
+    repo: Laisky/one-api
+    watch: [releases, stars]
 
   - id: octop
     kind: reference

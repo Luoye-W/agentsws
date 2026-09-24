@@ -638,6 +638,11 @@ describe('镜像与二进制的"落后没有"（纯函数）', () => {
       registry: 'registry-1.docker.io',
       name: 'library/postgres',
     })
+    // 显式写 docker.io/ 的也要落到 Docker Hub 的 registry API 主机上（new-api 就是这么登记的）
+    expect(parseImage('docker.io/calciumion/new-api')).toEqual({
+      registry: 'registry-1.docker.io',
+      name: 'calciumion/new-api',
+    })
   })
 })
 

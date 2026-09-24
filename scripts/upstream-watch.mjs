@@ -191,7 +191,9 @@ async function observeGithub(item, sinceIso) {
 export function parseImage(image) {
   const parts = String(image).split('/')
   if (parts.length > 1 && /[.:]/.test(parts[0])) {
-    return { registry: parts[0], name: parts.slice(1).join('/') }
+    // `docker.io/…` 是 Docker Hub 的写法，它的 registry API 在 registry-1.docker.io（09-24 new-api 补登时发现）
+    const registry = parts[0] === 'docker.io' ? 'registry-1.docker.io' : parts[0]
+    return { registry, name: parts.slice(1).join('/') }
   }
   const name = parts.length === 1 ? `library/${parts[0]}` : parts.join('/')
   return { registry: 'registry-1.docker.io', name }
