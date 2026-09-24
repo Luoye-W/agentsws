@@ -81,6 +81,8 @@ export const M_HOST_COMPLETE = 'agentsws/host/complete'
 export const M_HOST_STAGE = 'agentsws/host/stage'
 export const M_HOST_DRAFT = 'agentsws/host/draft'
 export const M_HOST_BOUNDARY = 'agentsws/host/boundary'
+/** WP144：电脑操控的授权卡 / 接手卡（`DshRuntimeOptions.requestComputerUse`）。 */
+export const M_HOST_COMPUTER_USE = 'agentsws/host/computer-use'
 
 /** 子进程档能透传的运行时选项（回调、时钟、网关都在宿主侧，不过线）。 */
 export interface WireRuntimeOptions {
@@ -96,6 +98,8 @@ export interface WireRuntimeOptions {
     stage: boolean
     createDraft: boolean
     createPolicyQuestion: boolean
+    /** WP144：老宿主不发这一格 = 没接。 */
+    requestComputerUse?: boolean
   }
 }
 
@@ -198,4 +202,14 @@ export type RunResponse = RunOk | RunErr
 export interface EventParams {
   token: string
   event: RunEvent
+}
+
+/** WP144：子进程请宿主出一张电脑操控卡。 */
+export interface ComputerUseCardParams {
+  token: string
+  stage: 'authorize' | 'handoff'
+  reason: string
+}
+export interface ComputerUseCardResult extends HostReply {
+  approval_item_id?: string
 }

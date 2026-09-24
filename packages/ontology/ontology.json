@@ -16,6 +16,7 @@
     "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/cloud.ts",
     "packages/contracts/src/common.ts",
+    "packages/contracts/src/computer-use.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
     "packages/contracts/src/data.ts",
@@ -87,7 +88,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "fa77d78f3640e04e5da158836a37ac57",
+  "source_digest": "bd36e2d8dfe10128691ac6e3f57adfc0",
   "objects": [
     {
       "id": "ad",

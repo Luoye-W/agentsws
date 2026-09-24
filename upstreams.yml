@@ -246,6 +246,78 @@ upstreams:
     covered_by:
       - packages/dsh-adapter/test/browser-seam.test.ts
 
+  # ── WP144（docs/80）：电脑操控。两个官方包**同 dsh 版本**一起升；驱动跟 dsh 文档引用的版本走 ──
+  - id: dsh-computer-use
+    kind: runtime-dep
+    # 与 dsh 同一个仓库、同一个版本号；单列是因为它不在 `@deepseek-ai/dsh` 的依赖里（WP132 的对照就是这么漏的），
+    # minimumReleaseAgeExclude 那一条由 dsh 的 `release_age_prefix` 一起管。
+    why: 电脑操控的独占 provider 槽（一棵树一个提供方）；harness.ts 批过授权才挂（docs/80）
+    npm: '@deepseek-ai/dsh-computer-use'
+    repo: deepseek-ai/deepseek-harness
+    locked_version: 0.1.7-rc.1
+    pin: exact
+    watch: [versions, default_flips]
+    locked_in:
+      - packages/dsh-adapter/package.json
+      - profiles/agentsws/package.json
+    we_depend_on:
+      - 'ctx.computerUse.register(name)：第二个提供方激活即失败'
+    covered_by:
+      - packages/dsh-adapter/test/computer-use-seam.test.ts
+
+  - id: dsh-experimental-computer-use-cua-driver-mcp
+    kind: runtime-dep
+    why: 电脑操控的 MCP 提供方（驱动是独立进程）；不用 native（原生崩溃可能终止我们的进程），docs/80
+    npm: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
+    repo: deepseek-ai/deepseek-harness
+    locked_version: 0.1.7-rc.1
+    pin: exact
+    watch: [versions, default_flips, wishlist]
+    locked_in:
+      - packages/dsh-adapter/package.json
+      - profiles/agentsws/package.json
+    we_depend_on:
+      - 'Config：command / args / toolCallTimeoutMs / reconnect（我们给数据目录里的驱动绝对路径 + mcp --direct，不重连）'
+      - '工具名固定前缀 mcp__cua-driver-mcp__（门禁按它整组判写、只看授权窗口）'
+      - '初次连接或发现工具失败 → 激活失败并回滚（驱动装坏了不会把我们的进程打死）'
+      - 'README 引用的驱动版本（现在是 cua-driver-rs-v0.28.0）= computer-use.lock.json 要跟的那一版'
+    wishlist:
+      - computer-use 从 experimental 转正（包名去掉 experimental）
+      - README 引用的 cua-driver 版本变了（computer-use.lock.json 跟着换 version / tag / sha256）
+      - 提供方开始收 env（那样驱动的遥测 / 查更新开关就不用经 process.env 传）
+    covered_by:
+      - packages/dsh-adapter/test/computer-use-seam.test.ts
+      - profiles/agentsws/computer-use.on.patch.yml
+
+  - id: cua-driver
+    kind: runtime-dep
+    # 不走 npm（`@trycua/cua-driver` 是 native 提供方才用的 SDK 包，我们不装）：我们钉的是 GitHub Release 的
+    # 二进制 + sha256，写在 computer-use.lock.json 里，`bin_lock_file` 对它（与 BrowserSkill 的 bsk 同一套）。上游 `cua-driver-rs-v*` 一律标
+    # prerelease，那是它的常态，不是 nightly（nightly 另有 `nightly-cua-driver-rs-v*` 一条 tag）。
+    why: 电脑操控的驱动本体（MIT，trycua/cua 的 libs/cua-driver）；设置页一键装到数据目录（docs/80）
+    repo: trycua/cua
+    locked_version: 0.28.0
+    pin: exact
+    bin_version: 0.28.0
+    bin_tag_prefix: cua-driver-rs-v
+    bin_lock_file: computer-use.lock.json
+    watch: [releases, wishlist]
+    watch_paths:
+      - libs/cua-driver
+    we_depend_on:
+      - 'cua-driver mcp --direct：驱动进程自己跑，macOS 的辅助功能 / 录屏记在启动它的应用（Agents 工坊）上'
+      - 'check_permissions {prompt:false}：只读 TCC 状态，设置页第 ③ 步自检'
+      - '遥测默认开 → 我们设 CUA_DRIVER_RS_TELEMETRY_ENABLED=false；查更新 → CUA_DRIVER_RS_UPDATE_CHECK=false'
+      - 'check_for_update / set_config 这类改自身的工具由门禁一律拒'
+    wishlist:
+      - 遥测改成默认关（现在 telemetry.rs 是 environment → persisted → 默认开）
+      - check_permissions 的输出形状变了（accessibility / screen_recording 两个布尔值）
+      - mcp --direct 的 TCC 归属规则变了
+      - 出正式版（不再标 prerelease）
+    covered_by:
+      - computer-use.lock.json
+      - apps/server/test/computer-use-install.test.ts
+
   - id: pi-ai
     kind: runtime-dep
     # 传递依赖，经 `@deepseek-ai/dsh-llm-pi-ai` 进来。GitHub 仓库地址没核实过，所以不填 `repo:`——

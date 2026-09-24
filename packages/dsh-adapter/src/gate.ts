@@ -38,6 +38,15 @@ import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { anyBrowserToolName, browserBrief, checkBrowserNavigation } from './browser.js'
 import { browserSkillToolName, isBrowserSkillHandoff } from './browserskill.js'
+import {
+  checkComputerUse,
+  computerUseBrief,
+  computerUseGranted,
+  computerUseToolDefinitions,
+  cuaToolName,
+  isComputerUseOwnTool,
+  redactComputerUseValue,
+} from './computer-use.js'
 import { presetToolNames } from './preset.js'
 import { inferRefs, plainText } from './reading.js'
 import type { ShellCheck } from './shell.js'
@@ -227,11 +236,25 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
    * 真正管着它的是 {@link checkShellCommand} 那张命令表。
    */
   const shell = runShell(request)
+  /*
+   * WP144（docs/80）：电脑操控。与浏览器同一条纪律——**在不在只取决于这次运行给没给
+   * `computer_use`**，不在职责的 `tools.allow` 里。给了还分两步：没授权时只有
+   * `request_computer_use`（出授权卡），批过（`granted_until` 没过）才有驱动那一整组
+   * （`mcp__cua-driver-mcp__*`，由 `harness.ts` 挂的官方提供方注册）+ `computer_handoff`。
+   * 授权按**墙钟**判（合成时钟 / 子进程镜像时钟不走的时候它也得走）。
+   */
+  const computerUse = request.computer_use
+  const wallNow = options.wallClockMs ?? Date.now
+  const cuGranted = computerUseGranted(computerUse, wallNow())
+  /** Agent 调过 `computer_handoff`：这次运行不再碰电脑。 */
+  let handedOff = false
   const allowed = (name: string): boolean =>
     allow.has(name) ||
     presetTools.has(name) ||
     (browserOn && anyBrowserToolName(name) !== undefined) ||
-    (shell !== undefined && name === BASH_TOOL)
+    (shell !== undefined && name === BASH_TOOL) ||
+    (computerUse !== undefined && isComputerUseOwnTool(name)) ||
+    (cuGranted && cuaToolName(name) !== undefined)
 
   // Agent 层在场时用真 Agent 当 scope key（官方语义）；没有时退回一个占位键 + 自开 scope。
   const agent: object = input.agent ?? { preset: request.runtime.preset, run_id: request.id }
@@ -449,6 +472,35 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     },
   )
   for (const def of definitions) ctx.tools.register(def)
+  /*
+   * WP144：两个自有工具（只出卡，不碰外部）。与 stage / draft 同一类出口：
+   * 卡由宿主建（`options.requestComputerUse`），这里只登记产出与时间线。
+   */
+  const computerUseTools =
+    computerUse === undefined
+      ? []
+      : computerUseToolDefinitions(cuGranted, {
+          async card(_callId, stage, reason) {
+            const ask = options.requestComputerUse
+            if (ask === undefined) return undefined
+            const res = await ask({ request, stage, reason })
+            if (res === undefined) return undefined
+            if (stage === 'handoff') {
+              handedOff = true
+              sink({ type: 'progress', step: 'computer_handoff', note: reason })
+            } else {
+              sink({ type: 'progress', step: 'computer_use_requested', note: reason })
+            }
+            sink({
+              type: 'proposal.created',
+              approval_item_id: res.approval_item_id,
+              kind: 'computer_use',
+            })
+            api.outputs.push({ kind: 'proposal', approval_item_id: res.approval_item_id })
+            return res
+          },
+        })
+  for (const def of computerUseTools) ctx.tools.register(def)
 
   // ── `ctx.tools.restrict`：preset 的工具集按 RunRequest.tools.allow ───────
   //
@@ -472,6 +524,9 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     // WP89：`bash` 与 preset 的工具同类——它是 `harness.ts` 在 `agents.create` 之前
     // 全局注册的，所以 `restrict` 认得它，不列就被职责白名单挡掉。
     ...(shell !== undefined && registered.has(BASH_TOOL) ? [BASH_TOOL] : []),
+    // WP144：自有的那一个电脑操控工具是全局注册的（同 stage / draft），不列就被白名单挡掉。
+    // 驱动那一整组是提供方在 Agent scope 里注册的（与浏览器 provider 同类），不列、也不能列。
+    ...computerUseTools.map((d) => d.name),
   ]
   if (visible.length > 0) scopedCtx.tools.restrict({ allow: visible })
 
@@ -497,7 +552,27 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     }
     api.toolCalls += 1
 
+    /*
+     * WP144（docs/80 §4）：驱动的工具**全部**按写外部判，而且只看授权窗口——
+     * 放在 allowlist 之前，拒绝理由才说得清（没授权 / 过期 / 已交还给人），
+     * 不然模型只看到一句 `not_in_allowlist`。截图、列窗口这类只读也在这里拦：
+     * 整屏截图是隐私，与点击同一档。放行也要留痕（`progress{computer_use}`）。
+     */
+    if (cuaToolName(exec.name) !== undefined) {
+      const denial = checkComputerUse({
+        tool: exec.name,
+        args: asRecord(exec.arguments),
+        request,
+        nowMs: wallNow(),
+        handedOff,
+      })
+      if (denial !== undefined) return deny(denial)
+      sink({ type: 'progress', step: 'computer_use', note: exec.name })
+      return next()
+    }
     if (!allowed(exec.name)) return deny(`not_in_allowlist: ${exec.name}`)
+    // WP144：两个自有工具只出卡（与 stage 同类），不走读写分类（那样公司端一律拒）
+    if (isComputerUseOwnTool(exec.name)) return next()
     // 36 §2.2：没答过的边界挡着变更——拒掉这次 stage，同时把选择题发给商家
     if (exec.name === STAGE_TOOL && !boundary.allowed) {
       await api.askBoundaries()
@@ -618,8 +693,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       return decision
     }
     // 结果是外部文本：围栏（fencing 在入口，运行时不再信任任何外部文本）
-    const fenced = EXTERNAL_FENCE.sanitizeValue(result.value) as JsonValue
-    const refs: ObjectRef[] = inferRefs(result.value)
+    // WP144：驱动的结果先把截图 / base64 拿掉（截图不进模型，docs/80 §5）
+    const value =
+      cuaToolName(exec.name) !== undefined ? redactComputerUseValue(result.value) : result.value
+    const fenced = EXTERNAL_FENCE.sanitizeValue(value) as JsonValue
+    const refs: ObjectRef[] = inferRefs(value)
     if (refs.length > 0) provenance.see(refs, { full: true })
     const rec = api.records.get(call_id)
     const added = [...(rec?.provenance_added ?? [])]
@@ -632,9 +710,9 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       status: 'ok',
       provenance_added: added,
     })
-    if (exec.name !== STAGE_TOOL && exec.name !== DRAFT_TOOL) {
+    if (exec.name !== STAGE_TOOL && exec.name !== DRAFT_TOOL && !isComputerUseOwnTool(exec.name)) {
       api.readTools.push(exec.name)
-      input.onToolResult?.(exec.name, result.value)
+      input.onToolResult?.(exec.name, value)
     }
     emitResult(api, sink, call_id)
     return { kind: 'accept', value: fenced }
@@ -723,6 +801,21 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
             root: shell.workspace_root,
             mode: shell.mode,
             ...(shell.store === undefined ? {} : { store: shell.store }),
+          }),
+        ]),
+    /*
+     * WP144：电脑操控那一段也进**这一个**段。官方提供方一句指导都不写（它只挂驱动报的
+     * 工具），「什么时候能动、遇到密码怎么办、截图看不看得到」只能我们写。
+     */
+    ...(computerUse === undefined
+      ? []
+      : [
+          computerUseBrief({
+            granted: cuGranted,
+            minutes: computerUse.minutes,
+            ...(computerUse.granted_until === undefined
+              ? {}
+              : { until: computerUse.granted_until }),
           }),
         ]),
   ]

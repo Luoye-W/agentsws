@@ -56,7 +56,15 @@
  * `@agentsws/dsh-adapter/deepseek-account` 子路径懒加载，主入口不 re-export。
  */
 import { spawnSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -99,16 +107,31 @@ const LOCKDOWN: readonly LockdownRow[] = [
 ]
 
 /**
- * WP134：默认关、**选了才开**的行。每一行都必须同时是 `LOCKDOWN` 里 `disabled: true` 的一行
- * （没选时由 profile 层关死），再由 `file` 那份运行时 patch 打开。
+ * WP144（docs/80）：profile 层**插进来、默认关**的行（dsh-base 里本来没有它们）。
+ * 这是 `cordis.patch.yml` 里唯一允许的 `insert`：每一行都写死 `disabled: true`，
+ * id 同样要在当前 dsh 的组合里真的存在、指向的还是那个插件。
  */
-const OPT_IN: readonly { id: string; name: string; file: string }[] = [
+const INSERTED_OFF: readonly { id: string; name: string }[] = [
+  { id: 'computer-use', name: '@deepseek-ai/dsh-computer-use' },
   {
-    id: 'deepseek-account',
-    name: '@deepseek-ai/dsh-deepseek-account-platform',
-    file: 'deepseek-account.on.patch.yml',
+    id: 'computer-use-cua-driver-mcp',
+    name: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp',
   },
 ]
+
+/**
+ * WP134：默认关、**选了才开**的行。每一行都必须同时是 `LOCKDOWN` 里 `disabled: true` 的一行
+ * 或 `INSERTED_OFF` 里的一行（没选时由 profile 层关死），再由 `file` 那份运行时 patch 打开。
+ * WP144 起一份文件可以打开几行（电脑操控是服务 + 提供方两行，要一起开）。
+ */
+const OPT_IN: readonly { file: string; rows: readonly { id: string; name: string }[] }[] = [
+  {
+    file: 'deepseek-account.on.patch.yml',
+    rows: [{ id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform' }],
+  },
+  { file: 'computer-use.on.patch.yml', rows: INSERTED_OFF },
+]
+const OPT_IN_ROWS = OPT_IN.flatMap((o) => o.rows)
 
 interface LockdownRow {
   id: string
@@ -126,6 +149,23 @@ interface PatchRow {
   disabled?: unknown
   config?: unknown
   insert?: unknown
+}
+
+/** 读一份 patch 文件（`!!js` 标量原样留成 `{ js }`，不求值）。 */
+function parsePatch(text: string): PatchRow[] {
+  return parse(text, {
+    customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (src: string) => ({ js: src }) }],
+  }) as PatchRow[]
+}
+
+/** `cordis.patch.yml` 里按 id 找的锁定行（不含 `insert` 块）。 */
+function lockRows(rows: readonly PatchRow[]): PatchRow[] {
+  return rows.filter((r) => r?.insert === undefined)
+}
+
+/** `cordis.patch.yml` 里 `insert` 块插进来的全部行。 */
+function insertedRows(rows: readonly PatchRow[]): PatchRow[] {
+  return rows.flatMap((r) => (Array.isArray(r?.insert) ? (r.insert as PatchRow[]) : []))
 }
 
 /**
@@ -196,7 +236,7 @@ describe('WP93 Plugin Manager / HMR 不进我们的运行时（16 §3 / 31 §3.5
   })
 
   it('profile 的 patch 层把这几行显式写死（不靠"碰巧没装"），而且文件里只有锁定', () => {
-    const rows = parse(readFileSync(PATCH, 'utf8')) as PatchRow[]
+    const rows = parsePatch(readFileSync(PATCH, 'utf8'))
     expect(Array.isArray(rows)).toBe(true)
     for (const want of LOCKDOWN) {
       const row = rows.find((r) => r?.id === want.id)
@@ -207,7 +247,7 @@ describe('WP93 Plugin Manager / HMR 不进我们的运行时（16 §3 / 31 §3.5
       if (want.config !== undefined) expect(row?.config, want.id).toEqual(want.config)
     }
     // 反过来：文件里的每一行都得在 LOCKDOWN 表里（加锁定要两边一起加，才会被下面的 schema 校验覆盖）
-    for (const row of rows) {
+    for (const row of lockRows(rows)) {
       expect(
         LOCKDOWN.map((l) => l.id),
         `cordis.patch.yml 里的 ${String(row?.id)} 没登记在 LOCKDOWN 表里`,
@@ -215,6 +255,15 @@ describe('WP93 Plugin Manager / HMR 不进我们的运行时（16 §3 / 31 §3.5
       expect(row?.insert, `${String(row?.id)}：锁定行只关东西，不 insert`).toBeUndefined()
       expect(row?.name, `${String(row?.id)}：锁定行只按 id 找，不改插件`).toBeUndefined()
     }
+  })
+
+  it('WP144：唯一允许的 insert 是 INSERTED_OFF 那几行，而且每一行都写死 disabled: true', () => {
+    const rows = parsePatch(readFileSync(PATCH, 'utf8'))
+    const inserted = insertedRows(rows)
+    expect(inserted.map((r) => ({ id: r.id, name: r.name }))).toEqual(
+      INSERTED_OFF.map((r) => ({ id: r.id, name: r.name })),
+    )
+    for (const row of inserted) expect(row.disabled, `${row.id} 必须写死 disabled: true`).toBe(true)
   })
 })
 
@@ -249,6 +298,18 @@ function stageProfile(extraPatch = ''): string {
   mkdirSync(dir, { recursive: true })
   cpSync(join(PROFILE_DIR, 'package.json'), join(dir, 'package.json'))
   writeFileSync(join(dir, 'cordis.patch.yml'), readFileSync(PATCH, 'utf8') + extraPatch, 'utf8')
+  /*
+   * WP144：profile 自己插进来的行按**profile 目录**解析包名（dsh 的原话：imported from
+   * `profiles/agentsws/cordis.yml`），而这个一次性目录没有 node_modules。真装 profile 时这两个包
+   * 由 `profiles/agentsws/package.json` 装进来；这里照那份清单把本仓已装的同版本链进去，
+   * 于是 `--dump-config-schema` 能真的读到它们的配置 schema（不是 unknownConfig）。
+   */
+  for (const { name } of INSERTED_OFF) {
+    const manifest = require.resolve(`${name}/package.json`)
+    const link = join(dir, 'node_modules', ...name.split('/'))
+    mkdirSync(dirname(link), { recursive: true })
+    symlinkSync(dirname(manifest), link, 'dir')
+  }
   return home
 }
 
@@ -355,7 +416,7 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
   let rows: PatchRow[] = []
 
   beforeAll(() => {
-    rows = parse(readFileSync(PATCH, 'utf8')) as PatchRow[]
+    rows = parsePatch(readFileSync(PATCH, 'utf8'))
     home = stageProfile()
     dump = JSON.parse(runDsh(home, '--dump-config-schema')) as SchemaDump
   }, 180_000)
@@ -373,7 +434,16 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
   })
 
   it('每一行锁定：id 存在、指向的还是那个插件、改的配置字段还在', () => {
-    expect(lockdownProblems(rows, dump)).toEqual([])
+    expect(lockdownProblems(lockRows(rows), dump)).toEqual([])
+  })
+
+  it('WP144：插进来的电脑操控两行在当前 dsh 的组合里真的存在、指向的还是那两个包', () => {
+    // 连配置字段一起对：提供方的 `command` / `args` 还在它的配置 schema 里
+    const inserted = insertedRows(rows).map((r) => ({
+      id: r.id,
+      ...(r.config === undefined ? {} : { config: r.config }),
+    }))
+    expect(lockdownProblems(inserted, dump, INSERTED_OFF)).toEqual([])
   })
 
   it('改配置的那一行有真正的配置 schema 可查（不是 unknownConfig）', () => {
@@ -381,6 +451,13 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
       const hit = dump['x-cordis'].entries.find((e) => e.id === want.id)
       expect(hit?.status, want.id).toBe('schema')
     }
+    /*
+     * WP144：插进来的两行真的加载得到（profile 目录里装得到这两个包）。提供方有配置 schema；
+     * `dsh-computer-use` 本身「The service has no configuration」（上游 README），dsh 报 `absent`。
+     */
+    const status = (id: string) => dump['x-cordis'].entries.find((e) => e.id === id)?.status
+    expect(status('computer-use-cua-driver-mcp')).toBe('schema')
+    expect(status('computer-use')).toBe('absent')
   })
 
   it('dsh 自己组合出来的树里，这几行最终确实是关的（`--dump-config`）', () => {
@@ -405,7 +482,7 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
     const bad = stageProfile(extra)
     try {
       const badDump = JSON.parse(runDsh(bad, '--dump-config-schema')) as SchemaDump
-      const badRows = [...rows, { id: bogus, disabled: true }]
+      const badRows = [...lockRows(rows), { id: bogus, disabled: true }]
       const problems = lockdownProblems(badRows, badDump)
       expect(problems.some((p) => p.startsWith(`${bogus}：当前 dsh 的组合里没有这个 id`))).toBe(
         true,
@@ -427,7 +504,7 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
         ),
       },
     }
-    expect(lockdownProblems(rows, swapped)).toEqual([
+    expect(lockdownProblems(lockRows(rows), swapped)).toEqual([
       'hmr：现在指向 @someone/else-hmr，不是 @deepseek-ai/dsh-hmr',
     ])
   })
@@ -439,7 +516,7 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
       ...dump,
       $defs: { ...dump.$defs, [name]: { anyOf: [{ type: 'object', properties: { on: {} } }] } },
     }
-    expect(lockdownProblems(rows, renamed)).toEqual([
+    expect(lockdownProblems(lockRows(rows), renamed)).toEqual([
       'session-log-deepseek：配置字段 enabled 不在 @deepseek-ai/dsh-session-log-deepseek 的配置 schema 里（schema）',
     ])
   })
@@ -460,51 +537,60 @@ describe('WP134 DeepSeek 账号登录：没选时一定是关的、选了才开�
     if (home !== '') rmSync(home, { recursive: true, force: true })
   })
 
-  it('每一行 opt-in 在 profile 层仍是锁死的（LOCKDOWN 里 disabled: true，文件里也是）', () => {
-    const rows = parse(readFileSync(PATCH, 'utf8')) as PatchRow[]
-    for (const want of OPT_IN) {
-      expect(LOCKDOWN.find((l) => l.id === want.id)?.disabled, want.id).toBe(true)
-      expect(rows.find((r) => r?.id === want.id)?.disabled, want.id).toBe(true)
+  it('每一行 opt-in 在 profile 层仍是锁死的（LOCKDOWN / INSERTED_OFF 里关着，文件里也是）', () => {
+    const rows = parsePatch(readFileSync(PATCH, 'utf8'))
+    const all = [...lockRows(rows), ...insertedRows(rows)]
+    for (const want of OPT_IN_ROWS) {
+      const locked =
+        LOCKDOWN.find((l) => l.id === want.id)?.disabled === true ||
+        INSERTED_OFF.some((l) => l.id === want.id)
+      expect(locked, want.id).toBe(true)
+      expect(all.find((r) => r?.id === want.id)?.disabled, want.id).toBe(true)
     }
   })
 
-  it('opt-in 文件只打开它自己那一行：不 insert、不换插件、不带任何 config（按官方默认值走）', () => {
+  it('opt-in 文件只打开它自己那几行：不 insert、不换插件、不带任何 config', () => {
     for (const want of OPT_IN) {
       const rows = parse(readFileSync(join(PROFILE_DIR, want.file), 'utf8')) as PatchRow[]
-      expect(rows, want.file).toEqual([{ id: want.id, disabled: false }])
+      expect(rows, want.file).toEqual(want.rows.map((r) => ({ id: r.id, disabled: false })))
     }
   })
 
   it('opt-in 的 id 同样要真的存在、指向的还是那个插件（WP133 那条不削弱）', () => {
     for (const want of OPT_IN) {
       const rows = parse(readFileSync(join(PROFILE_DIR, want.file), 'utf8')) as PatchRow[]
-      expect(lockdownProblems(rows, dump, [{ id: want.id, name: want.name }]), want.file).toEqual(
-        [],
-      )
+      expect(lockdownProblems(rows, dump, [...want.rows]), want.file).toEqual([])
     }
   })
 
-  it('不叠 opt-in：组合树里这一行是关的', () => {
+  it('不叠 opt-in：组合树里这几行都是关的', () => {
     const composed = parseComposed(runDsh(home, '--dump-config'))
-    for (const want of OPT_IN) {
+    for (const want of OPT_IN_ROWS) {
       const row = composed.find((r) => r?.id === want.id)
       expect(row?.name, want.id).toBe(want.name)
       expect(row?.disabled, `${want.id} 没选也开了`).toBe(true)
     }
   }, 120_000)
 
-  it('叠上 opt-in：只有这一行被打开，其余每一条锁定照旧', () => {
+  it('叠上 opt-in：只有它那几行被打开，其余每一条锁定照旧', () => {
     for (const want of OPT_IN) {
       const composed = parseComposed(runDsh(home, '--dump-config', [join(PROFILE_DIR, want.file)]))
-      const row = composed.find((r) => r?.id === want.id)
-      expect(row?.name, want.id).toBe(want.name)
-      expect(row?.disabled, `${want.id} 选了还是关的`).toBe(false)
-      for (const other of LOCKDOWN.filter((l) => l.id !== want.id)) {
+      const opened = new Set(want.rows.map((r) => r.id))
+      for (const r of want.rows) {
+        const row = composed.find((c) => c?.id === r.id)
+        expect(row?.name, r.id).toBe(r.name)
+        expect(row?.disabled, `${r.id} 选了还是关的`).toBe(false)
+      }
+      for (const other of LOCKDOWN.filter((l) => !opened.has(l.id))) {
         const hit = composed.find((r) => r?.id === other.id)
         if (other.disabled === true) expect(hit?.disabled, `${other.id} 被连带打开了`).toBe(true)
         for (const [key, value] of Object.entries(other.config ?? {})) {
           expect((hit?.config as Record<string, unknown> | undefined)?.[key], other.id).toBe(value)
         }
+      }
+      for (const other of INSERTED_OFF.filter((l) => !opened.has(l.id))) {
+        const hit = composed.find((r) => r?.id === other.id)
+        expect(hit?.disabled, `${other.id} 被连带打开了`).toBe(true)
       }
     }
   }, 120_000)

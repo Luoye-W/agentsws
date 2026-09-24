@@ -120,7 +120,10 @@ describe('WP70 会话日志不上报官方 API（31 §3 / docs/39 §3.3 d）', (
   })
 
   it('profile 的 patch 层把 session-log-deepseek 显式关掉（不靠"碰巧没装"）', () => {
-    const rows = parse(readFileSync(PATCH, 'utf8')) as PatchRow[]
+    // WP144：patch 里多了一行 `!!js`（驱动路径），原样留成 `{ js }`，不求值、不报 warning
+    const rows = parse(readFileSync(PATCH, 'utf8'), {
+      customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (src: string) => ({ js: src }) }],
+    }) as PatchRow[]
     expect(Array.isArray(rows)).toBe(true)
     const row = rows.find((r) => r?.id === 'session-log-deepseek')
     expect(

@@ -247,6 +247,7 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-compaction-basic@0.1.7-rc.1'
   - '@deepseek-ai/dsh-compaction-image-offload@0.1.7-rc.1'
   - '@deepseek-ai/dsh-compaction-tool-result-pruner@0.1.7-rc.1'
+  - '@deepseek-ai/dsh-computer-use@0.1.7-rc.1'
   - '@deepseek-ai/dsh-config-editor@0.1.7-rc.1'
   - '@deepseek-ai/dsh-cordis-client-runner@0.1.7-rc.1'
   - '@deepseek-ai/dsh-cordis-host-runner@0.1.7-rc.1'
@@ -271,6 +272,9 @@ minimumReleaseAgeExclude:
   # `@playwright/mcp`，见 allowBuilds 段对 playwright 的处理。
   - '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp@0.1.7-rc.1'
   - '@deepseek-ai/dsh-experimental-browser-use-runtime@0.1.7-rc.1'
+  # WP144（docs/80）：电脑操控只挂 MCP 提供方（驱动是独立进程）；native 提供方与
+  # `@trycua/cua-driver` 的平台二进制**不进树**（不依赖它们，也就不会被拉进来）。
+  - '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp@0.1.7-rc.1'
   - '@deepseek-ai/dsh-experimental-client-ui-agent-team@0.1.7-rc.1'
   - '@deepseek-ai/dsh-experimental-client-ui-voice-input@0.1.7-rc.1'
   - '@deepseek-ai/dsh-experimental-speech-to-text@0.1.7-rc.1'

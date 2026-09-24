@@ -26,6 +26,7 @@ import {
   type BoundaryResult,
   BRIDGE_PROTOCOL_VERSION,
   type CompleteResult,
+  type ComputerUseCardResult,
   type DraftResult,
   ENV_CHILD_MARKER,
   ENV_RUN_TOKEN,
@@ -36,6 +37,7 @@ import {
   M_HELLO,
   M_HOST_BOUNDARY,
   M_HOST_COMPLETE,
+  M_HOST_COMPUTER_USE,
   M_HOST_DRAFT,
   M_HOST_STAGE,
   M_HOST_TOOL,
@@ -199,6 +201,19 @@ export function startChildBridge(io: {
         ? {
             createPolicyQuestion: async ({ boundary }) => {
               const reply = await ask<BoundaryResult>(M_HOST_BOUNDARY, { boundary })
+              return reply.approval_item_id === undefined
+                ? undefined
+                : { approval_item_id: reply.approval_item_id }
+            },
+          }
+        : {}),
+      ...(wire.has.requestComputerUse === true
+        ? {
+            requestComputerUse: async ({ stage, reason }) => {
+              const reply = await ask<ComputerUseCardResult>(M_HOST_COMPUTER_USE, {
+                stage,
+                reason,
+              })
               return reply.approval_item_id === undefined
                 ? undefined
                 : { approval_item_id: reply.approval_item_id }

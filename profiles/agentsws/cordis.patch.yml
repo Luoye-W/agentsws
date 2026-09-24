@@ -141,3 +141,29 @@
 - id: deepseek-account
   disabled: true
 # ——————————————————————————————————————————————————————————————————————
+
+# ——————————————————————————————————————————————————————————————————————
+# WP144（docs/80）：电脑操控两行——**插进来、默认关**，选了才叠 `computer-use.on.patch.yml` 打开
+# （docs/42 红线 7 的路线 (b)，与 deepseek-account 同一个形状）。
+#
+# 为什么这一层破例有一处 `insert`：dsh-base 里本来**没有**这两行（官方「no driver activates by
+# default」，两个提供方都是 experimental、要显式挂）。不插进来，opt-in 文件就只能自己 insert，
+# `--dump-config-schema` 在"没选"的时候看不见这两个 id——那就回到 WP133 要消灭的"看起来关了"。
+# 所以插在 profile 层、写死 `disabled: true`：没选时组合树里有这两行、而且确定是关的；
+# `profile-lockdown.test.ts` 的 `INSERTED_OFF` 表逐行对照 schema 校验 id 存在、插件没换人。
+#
+# 只挂 **MCP 提供方**（驱动是独立进程）；native 提供方在我们的进程里跑原生模块，
+# 上游原话「原生崩溃可能终止该进程」，不挂、也不进依赖树。驱动路径只认服务进程给的绝对路径
+# （数据目录里钉版本 + sha256 下载的那一份，`computer-use.lock.json`），不从 PATH 上找。
+# `--direct`：驱动进程自己跑、权限记在启动它的应用上（macOS 的 TCC；别的平台本来就是直接跑）。
+- insert:
+    - id: computer-use
+      name: '@deepseek-ai/dsh-computer-use'
+      disabled: true
+    - id: computer-use-cua-driver-mcp
+      name: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
+      disabled: true
+      config:
+        command: !!js "process.env.AGENTSWS_CUA_DRIVER || 'agentsws-cua-driver-not-installed'"
+        args: [mcp, --direct]
+# ——————————————————————————————————————————————————————————————————————

@@ -359,7 +359,41 @@ export interface RunRequest {
    * 工具面里一个 `mcp__*` 都不存在。老的运行记录里没有这个字段，回放出来照样是空。
    */
   connections?: RunConnection[]
+  /**
+   * WP144（docs/80）：这次运行**能不能操作这台电脑**（官方 `dsh-computer-use` +
+   * Cua Driver MCP 提供方）。
+   *
+   * 三层开关都过了服务端才给：设置页总开关开着、这条职责被勾了「可以操作电脑」、
+   * 而且服务就在用户自己的电脑上（`runtimeMode() === 'local'`）。**不给 = 这次运行
+   * 连「请求操作电脑」那个工具都没有**。给了也分两步：
+   *
+   * - 没有 `granted_until`：提供方**不挂**，模型只看得见 `request_computer_use`
+   *   一个工具——调它就出一张授权卡（「让它在接下来 N 分钟操作这台电脑？」）；
+   * - 有 `granted_until`（人批过的那一次）：才挂提供方，驱动的工具在这个时刻之前可用，
+   *   过了立刻全拒。
+   *
+   * 老的运行记录里没有这个字段，回放出来照样是「碰不到电脑」。
+   */
+  computer_use?: RunComputerUse
   idempotency_key: string
+}
+
+/**
+ * WP144（docs/80）：一次运行的电脑操控参数（见 {@link RunRequest.computer_use}）。
+ *
+ * 驱动由我们钉版本 + sha256 下载，装在数据目录、不进 PATH（`computer-use.lock.json`）。
+ */
+export interface RunComputerUse {
+  /** 驱动可执行文件的**绝对路径**（数据目录里那一份）。 */
+  command: string
+  /** 传给驱动的参数：macOS `['mcp', '--direct']`（权限记在我们的应用上），其余 `['mcp']`。 */
+  args: string[]
+  /** 授权卡上问的分钟数（设置页可改，缺省 10）。 */
+  minutes: number
+  /** 人批过的授权到什么时候为止（墙钟）。不给 = 还没批，提供方不挂。 */
+  granted_until?: Iso8601
+  /** 批的那张授权卡（时间线与第三栏按它对上号）。 */
+  grant_id?: string
 }
 
 /**

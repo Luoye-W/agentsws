@@ -70,6 +70,10 @@ export interface Strings {
   wizardConfirm: string
   wizardCancel: string
   wizardInvalidUrl: string
+  /** WP144（docs/80）：托盘最上面那一行——AI 正在操作这台电脑（`{until}` 是授权到几点）。 */
+  computerUseActive: string
+  /** 那一行下面的「停止」：撤销授权 + 中断那次运行。 */
+  computerUseStop: string
 }
 
 const ZH: Strings = {
@@ -126,6 +130,8 @@ const ZH: Strings = {
   wizardConfirm: '就这样',
   wizardCancel: '下次再说',
   wizardInvalidUrl: '地址要以 http:// 或 https:// 开头',
+  computerUseActive: 'AI 正在操作电脑（到 {until}）',
+  computerUseStop: '停止',
 }
 
 const EN: Strings = {
@@ -184,6 +190,8 @@ const EN: Strings = {
   wizardConfirm: 'Use this',
   wizardCancel: 'Ask me later',
   wizardInvalidUrl: 'The address must start with http:// or https://',
+  computerUseActive: 'AI is operating this computer (until {until})',
+  computerUseStop: 'Stop',
 }
 
 export function strings(language: Language): Strings {

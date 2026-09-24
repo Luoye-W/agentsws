@@ -91,6 +91,10 @@ const PRIMARY_BY_KIND: Partial<Record<DeckLayout, Record<string, string>>> = {
     promotion: 'verb.money.approve.promotion',
     kol_collaboration: 'verb.money.approve.kol_collaboration',
   },
+  // WP144：授权卡上"批准"说不清批了什么——写明是"允许它操作电脑"
+  policy: {
+    computer_use: 'verb.policy.approve.computer_use',
+  },
   aftermath: {
     pause_ad: 'verb.aftermath.approve.pause_ad',
     community_moderation: 'verb.aftermath.approve.community_moderation',
@@ -152,6 +156,7 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   review: 'recap',
   membership: 'join',
   kol_campaign: 'creator_list',
+  computer_use: 'computer_use',
   digest: 'digest',
 }
 

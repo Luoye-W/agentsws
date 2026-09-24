@@ -82,6 +82,10 @@ describe('仓库根的 upstreams.yml', () => {
       'ego-lite',
       'dsh-im',
       'dsh-experimental',
+      // WP144：电脑操控的两个官方包与驱动
+      'dsh-computer-use',
+      'dsh-experimental-computer-use-cua-driver-mcp',
+      'cua-driver',
       // WP146（Luoye 09-24：引用的开源项目都要进每周评估）
       'tremor-raw',
       'shadcn-ui',

@@ -10,6 +10,10 @@ dsh profile（16 §1）：**"我们这种模式"的技术实体**。
 - `deepseek-account.on.patch.yml` —— **运行时 patch**（WP134）：只把 `deepseek-account`（官方 DeepSeek 账号登录）
   那一行打开。默认不叠——profile 层那一行仍是关死的；用户在向导 / 设置里选了「用我的 DeepSeek 账号登录」才 `--patch` 叠上。
   钉住"没选关、选了开、别的锁定不动"：`profile-lockdown.test.ts` 的 `OPT_IN` 一组。
+- `computer-use.on.patch.yml` —— **运行时 patch**（WP144，docs/80）：把电脑操控两行（`computer-use` 服务 +
+  Cua Driver **MCP** 提供方）打开。这两行 dsh-base 里本来没有，由 `cordis.patch.yml` 唯一一处 `insert` 插进来、
+  写死 `disabled: true`（`INSERTED_OFF` 表）；用户在设置里打开「电脑操控」、这次运行又批了授权才叠上，
+  驱动路径由服务进程经 `AGENTSWS_CUA_DRIVER` 给（数据目录里钉版本 + sha256 的那一份）。native 提供方不挂、不进依赖。
 
 profile 与 preset 的分工：profile 决定**装哪些包、锁什么版本、打什么补丁**；
 preset 决定**一个职责用哪些工具、哪段人设**（`presets/<role_id>/agent.cordis.yml`，

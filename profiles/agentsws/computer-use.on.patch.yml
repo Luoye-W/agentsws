@@ -1,0 +1,17 @@
+# 运行时 patch：**只在用户打开了「电脑操控」、而且这次运行被批了授权时**才叠上（WP144，docs/80）。
+#
+# docs/42 红线 7 的路线 (b)：profile 那一层（`cordis.patch.yml`）把这两行插进来并写死 `disabled: true`，
+# 一个字都不动——没选时组合树里有这两行、而且确定是关的。真用 `dsh --profile agentsws` 起完整 profile、
+# 而且授权卡批过时，由服务进程加一个 `--patch <这份文件>` 把它们打开，并在环境里给
+# `AGENTSWS_CUA_DRIVER`（数据目录里那一份驱动的绝对路径）。
+#
+# 我们自己的两档运行时不读 profile（`harness.ts` 自己搭树）：真正的开关在
+# `packages/dsh-adapter/src/harness.ts`（`granted_until` 没过才挂）与 `apps/server/src/computer-use.ts`
+# （三层开关）。这份文件与那边是同一个决定的两处落点；`profile-lockdown.test.ts` 钉住：
+# 不带它 → 两行都关；带它 → 只有这两行被打开，别的锁定一行不动。
+#
+# 只写 `disabled: false`，**不写任何 config**：命令与参数在 profile 层那一行里。
+- id: computer-use
+  disabled: false
+- id: computer-use-cua-driver-mcp
+  disabled: false

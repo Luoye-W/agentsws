@@ -21,6 +21,7 @@ import type {
   ApprovalItem,
   AssignmentId,
   Clock,
+  ComputerUseGrantPayload,
   ContextItem,
   CreateApprovalInput,
   EventEnvelope,
@@ -40,6 +41,7 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
+import { createDshRuntime } from '@agentsws/dsh-adapter'
 import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
 import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
@@ -49,6 +51,7 @@ import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agents
 import { createStubRuntime } from '@agentsws/stand-ins'
 
 import { cardRefOf, type Work } from '@agentsws/work'
+import type { ComputerUseAssembly } from './computer-use.js'
 
 /**
  * 卡片的出口。类型就是契约的 `CreateApprovalInput`——收件人门禁（31 §3.3）要的
@@ -222,6 +225,17 @@ export interface RuntimeOptions {
    * 真服务进程一定接（`server.ts` 接到 `BrandDesignAssembly.context()` 上）。
    */
   brandDesign?(role_id: string): PromptSection | undefined
+  /**
+   * WP144（docs/80）：**电脑操控**（`computer-use.ts` 那一份，一台机器一个）。
+   *
+   * 三层开关的前两层（总开关、这条职责勾没勾）与「这件事有没有一次批过的授权」都在它里面，
+   * `buildRequest` 每次现问（同 `browser` 的理由：设置页改了下一次运行就生效）。
+   * 不接 = 老行为：`RunRequest.computer_use` 永远不给，谁都碰不到这台电脑。
+   *
+   * 带 `computer_use` 的运行**改走 dsh 运行时**（官方提供方只在那一条路上挂）；
+   * 别的运行照旧走 direct / stub，一个字节不变。
+   */
+  computerUse?: Pick<ComputerUseAssembly, 'forRun' | 'remember' | 'activate' | 'deactivate'>
 }
 
 /**
@@ -528,6 +542,89 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     return { approval_item_id: item.id }
   }
 
+  /**
+   * WP144（docs/80 §3 第三层）：**电脑操控的授权卡 / 接手卡**。
+   *
+   * Agent 调 `request_computer_use`（没授权时）或 `computer_handoff`（遇到登录 / 密码 /
+   * 支付 / 验证码）时出这一张。批了之后 `computer-use.ts` 记一次 N 分钟的授权、
+   * **带着它重跑这件事**（`remember` 里存的就是那一跳）——批了才挂提供方。
+   */
+  const requestComputerUse = async (input: {
+    request: RunRequest
+    stage: 'authorize' | 'handoff'
+    reason: string
+  }): Promise<{ approval_item_id: string } | undefined> => {
+    const s = scope
+    const cu = input.request.computer_use
+    if (s === undefined || cu === undefined || options.computerUse === undefined) return undefined
+    const role_id = input.request.actor.role_id
+    const payload: ComputerUseGrantPayload = {
+      stage: input.stage,
+      run_id: s.run_id,
+      matter_id: s.matter.id,
+      role_id,
+      minutes: cu.minutes,
+      reason: input.reason,
+    }
+    const item = await approvals.create({
+      workspace_id,
+      schema_version: 1,
+      kind: 'computer_use',
+      role_id,
+      subject: {
+        object: { type: 'matter', id: s.matter.id },
+        matter_id: s.matter.id,
+        work_item_id: s.matter.id,
+        ...(s.todo_id === undefined ? {} : { todo_id: s.todo_id }),
+      },
+      dedupe_key: `${workspace_id}:computer_use:${s.run_id}:${input.stage}`,
+      title:
+        input.stage === 'handoff'
+          ? `它停下来等你接手：${input.reason}`
+          : `让它在接下来 ${cu.minutes} 分钟操作这台电脑？`,
+      summary:
+        input.stage === 'handoff'
+          ? `请你在电脑上把这一步做完（登录、密码、支付、验证码它不会替你输）。做完点「允许」，它会再用 ${cu.minutes} 分钟接着做。`
+          : `它想：${input.reason}。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。运行时托盘会变色，随时可以点「停止」。`,
+      payload,
+      evidence: {
+        run_id: s.run_id,
+        source_events: [],
+        provenance: { seen: [...s.seen] },
+        precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+      },
+      proposer: { kind: 'agent', id: s.assignment_id, assignment_id: s.assignment_id },
+      automation: {
+        level_at_creation: 'L1',
+        auto_approved: false,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [{ person: s.person_id, via: 'role_holder' }],
+        rule: 'role_holder',
+        escalation: { after_hours: 8, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      // 桌面上等着人：进「马上」那一档，不排在队列后面
+      priority: 'immediate',
+    })
+    if (item.state === 'blocked') return undefined
+    backfill(item)
+    const rerunInput = {
+      matter: s.matter,
+      brief: s.brief,
+      actor: { person_id: s.person_id, assignment_id: s.assignment_id },
+      ...(s.todo_id === undefined ? {} : { todo_id: s.todo_id }),
+    }
+    options.computerUse.remember(item.id, {
+      matter_id: s.matter.id,
+      minutes: cu.minutes,
+      rerun: async () => startRun(rerunInput as Parameters<StartRun>[0]),
+    })
+    return { approval_item_id: item.id }
+  }
+
   const hasModel = options.hasModel ?? ((): boolean => hasModelProvider(options.env))
   const useDirect = (options.prefer ?? (hasModel() ? 'direct' : 'stub')) === 'direct'
 
@@ -588,6 +685,24 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         createPolicyQuestion,
         ...(executeTool === undefined ? {} : { executeTool }),
       })
+
+  /*
+   * WP144：带 `computer_use` 的运行走 **dsh 运行时**——官方电脑操控提供方只在那一条路上挂
+   * （`dsh-adapter` 的 `harness.ts`）。只在有模型时才建（没模型的 stub 档本来就碰不到电脑），
+   * 而且只给这一种运行用：别的运行照旧 direct，一个字节不变。
+   */
+  const computerAdapter: RuntimeAdapter | undefined =
+    useDirect && options.computerUse !== undefined
+      ? createDshRuntime({
+          gateway: { complete: (r) => options.models.complete(r) },
+          clock,
+          seed,
+          createDraft,
+          createPolicyQuestion,
+          requestComputerUse,
+          ...(executeTool === undefined ? {} : { executeTool }),
+        })
+      : undefined
 
   /** 事项现场 → ContextItem[]（37 §2.2b：摘要 + pinned 记录，围栏与出处照旧）。 */
   const contextOf = async (
@@ -709,6 +824,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     // WP86：这条职责登记了哪几台 MCP 服务器（凭据只有引用名，没有值）
     const connections = options.connections?.(config.role_id) ?? []
     const browser = allowed_hosts.length === 0 ? undefined : options.browser?.()
+    // WP144：这条职责能不能操作电脑、这件事有没有一次批过的授权（有就当场用掉）
+    const computer_use = options.computerUse?.forRun({
+      role_id: config.role_id,
+      matter_id: input.matter.id,
+    })
+    const granted = computer_use?.granted_until !== undefined
     return {
       id: input.run_id,
       schema_version: 1,
@@ -799,7 +920,16 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               })),
         ],
       },
-      budget: { max_tokens: 60_000, max_tool_calls: 12, max_seconds: 120, max_cost_base: 5 },
+      /*
+       * WP144：批过授权的那一次运行，工具调用上限从 12 放到 40——操作桌面是"看一眼、点一下、
+       * 再看一眼"，12 次连一个小任务都做不完。时间与花费上限不动。
+       */
+      budget: {
+        max_tokens: 60_000,
+        max_tool_calls: granted ? 40 : 12,
+        max_seconds: 120,
+        max_cost_base: 5,
+      },
       // 变更仍走各自的管线（渠道 / 执行器）；事项里的一次运行只出草稿与提案
       expectations: { outputs: ['draft', 'answer'], must_stage_if_change_requested: false },
       runtime: {
@@ -829,6 +959,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        * 老的运行记录里没有这个字段，回放出来必须还是"一台都没有"。
        */
       ...(connections.length === 0 ? {} : { connections }),
+      // WP144：不给就不写这个字段——老的运行记录回放出来仍是「碰不到电脑」
+      ...(computer_use === undefined ? {} : { computer_use }),
       idempotency_key: `idem_${input.run_id}`,
     }
   }
@@ -892,7 +1024,37 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
     }
     try {
-      const result = await adapter.run(request, sink, new AbortController().signal)
+      /*
+       * WP144：批过授权的这一次运行登记成「正在操作这台电脑」——托盘变色、第三栏一行；
+       * 点「停止」就中断这次运行（dsh 那棵树 dispose，驱动随之断开）。
+       */
+      const controller = new AbortController()
+      const cu = request.computer_use
+      const runner = cu !== undefined && computerAdapter !== undefined ? computerAdapter : adapter
+      if (cu?.granted_until !== undefined) {
+        options.computerUse?.activate(
+          {
+            run_id,
+            role_id: request.actor.role_id,
+            matter_id: input.matter.id,
+            until: cu.granted_until,
+            ...(cu.grant_id === undefined ? {} : { grant_id: cu.grant_id }),
+          },
+          () => controller.abort(),
+        )
+        work?.appendEvent(input.matter.id, {
+          kind: 'status',
+          text: `AI 正在操作这台电脑（授权到 ${cu.granted_until.slice(11, 16)}，随时可以点「停止」）`,
+          actor: { kind: 'system', id: 'runtime' },
+          run_id,
+        })
+      }
+      let result: Awaited<ReturnType<RuntimeAdapter['run']>>
+      try {
+        result = await runner.run(request, sink, controller.signal)
+      } finally {
+        options.computerUse?.deactivate(run_id)
+      }
       summary = result.summary
       for (const out of result.outputs) if (out.kind === 'answer') addAnswer(out.text)
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
