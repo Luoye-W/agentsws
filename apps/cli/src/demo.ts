@@ -39,7 +39,14 @@ import type {
   Server,
   WorkstationDataSource,
 } from '@agentsws/server'
-import { createServer, deepseekAccountStandIn, periodQueryRunner } from '@agentsws/server'
+import {
+  CLOUD_STAND_IN_BASE_URL,
+  type CloudStandIn,
+  cloudStandIn,
+  createServer,
+  deepseekAccountStandIn,
+  periodQueryRunner,
+} from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
@@ -109,12 +116,19 @@ export interface DemoOptions {
    * 去比 `Date.now()`，测的是同义反复。
    */
   now?: number
+  /**
+   * WP140：云账号替身「发登录信」之后多久替用户点链接（毫秒）。**只给测试用**；
+   * 不给就是替身的默认值（1.5 秒）。负数 = 不自动点。
+   */
+  cloudAutoLinkAfterMs?: number
 }
 
 export interface Demo {
   server: Server
   world: World
   pack: Pack
+  /** WP140：官方云那一跳的替身（测试用它断言「走的是替身、没出网」）。 */
+  cloud: CloudStandIn
   /** 施行队列：批准之后由它把变更真的施行掉（15 §5「通过 ≠ 施行」） */
   drain(): Promise<void>
   close(): Promise<void>
@@ -1138,6 +1152,17 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     if (declared !== undefined) siteFixtures.set(declared, body)
   }
 
+  /**
+   * WP140（docs/78 阻断 #6）：官方云那一跳换替身。demo 点「发登录信」不再打生产云：
+   * 替身回「信发出去了」，过一小会儿替用户点链接，于是能看到「已关联」（余额、价目、充值四档）。
+   * 云地址同时换成 `.invalid` 保留域——万一哪条路没走替身，也只会解析失败，不会出网。
+   */
+  const cloud = cloudStandIn({
+    clock: world.clock,
+    ...(options.cloudAutoLinkAfterMs === undefined
+      ? {}
+      : { autoLinkAfterMs: options.cloudAutoLinkAfterMs }),
+  })
   const server = await createServer({
     clock: world.clock,
     random: world.random,
@@ -1163,12 +1188,15 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * demo 不该为了演示去敲 DeepSeek 的服务器，也不该在没网的机器上演不出这张卡。
      */
     deepseekAccount: deepseekAccountStandIn(),
+    cloudFetch: cloud.fetch,
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),
     env: {
       ...process.env,
       // demo 一律 stub 运行时：即使机器上配了 DEEPSEEK_API_KEY 也不叫模型
       DEEPSEEK_API_KEY: '',
       AGENTSWS_PORT: String(options.port ?? 4317),
+      // WP140：云地址一律是替身那个（覆盖外面环境变量里的，demo 不连任何真云）
+      AGENTSWS_CLOUD_BASE_URL: CLOUD_STAND_IN_BASE_URL,
       /*
        * WP117（66 断点 #6 的环境那一半）：**demo 自带一把临时加密钥匙**。
        *
@@ -1267,6 +1295,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     server,
     world,
     pack,
+    cloud,
     drain,
     async close() {
       await server.close()
