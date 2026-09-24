@@ -90,6 +90,8 @@ export {
   type MailProbe,
   smokeDetail,
 } from './connections.js'
+// WP134：「用我的 DeepSeek 账号登录」的 demo / 截图替身（不出网）
+export { deepseekAccountStandIn } from './deepseek-account.js'
 export {
   createPrivacyErase,
   type EraseInput,

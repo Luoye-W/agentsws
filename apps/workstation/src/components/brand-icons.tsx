@@ -185,6 +185,8 @@ const ICONS: Record<string, IconChoice> = {
   // 49 M2「用 agentsws 的」那张卡。这一家是我们自己，没有第三方商标可用，
   // 也不该去别处扒一个——首字母徽标跟着主题走，与 openai_compatible 同一档。
   agentsws_cloud: { kind: 'letter', letter: 'A' },
+  // WP134：「用我的 DeepSeek 账号登录」——还是 DeepSeek 这一家，戴它自己的标志
+  deepseek_account: { kind: 'glyph', glyph: 'deepseek' },
 }
 
 /**

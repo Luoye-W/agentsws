@@ -123,6 +123,12 @@
 #   还能给推理请求换 `x-dsh-auth-token`。这是默认打开的出网，红线 7 原文就是这一类。
 #   我们的模型走自己的网关（`packages/dsh-adapter/src/llm.ts`），账号是 Agents 工坊自己的。
 #
+# WP134（09-24，Luoye 定做成第三种模型来源「用我的 DeepSeek 账号登录」）：`deepseek-account` 这一行
+# **原样不动**——默认仍然关。用户在向导 / 设置里选了账号登录，才由服务进程用同目录的运行时 patch
+# `deepseek-account.on.patch.yml`（`--patch`）把它打开；没选就不叠，官方模块不挂、不出网。
+# 为什么是"另一份运行时 patch"而不是在这里写 `disabled: !!js "…"`：见那份文件的头注释。
+# 钉住"没选关、选了开"：`profile-lockdown.test.ts` 的 WP134 那一组。
+#
 # `authorization` 不关：它是授权服务本身（`packages/dsh-adapter` 早就直接 import 它），不出网。
 #
 # 同 WP93：两档运行时的真实模块图里这三个包都是 0 命中（`harness.ts` 自己搭树，不读 bundle），

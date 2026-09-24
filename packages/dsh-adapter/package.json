@@ -15,6 +15,14 @@
     "./subscription-facts": {
       "types": "./dist/subscription-facts.d.ts",
       "import": "./dist/subscription-facts.js"
+    },
+    "./deepseek-account": {
+      "types": "./dist/deepseek-account.d.ts",
+      "import": "./dist/deepseek-account.js"
+    },
+    "./deepseek-account-stand-in": {
+      "types": "./dist/deepseek-account-stand-in.d.ts",
+      "import": "./dist/deepseek-account-stand-in.js"
     }
   },
   "scripts": {
@@ -41,6 +49,9 @@
     "@deepseek-ai/dsh-bash-sandbox": "0.1.7-rc.1",
     "@deepseek-ai/dsh-browser-use": "0.1.7-rc.1",
     "@deepseek-ai/dsh-credentials": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-credentials-local": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-deepseek-account": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-deepseek-account-platform": "0.1.7-rc.1",
     "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp": "0.1.7-rc.1",
     "@deepseek-ai/dsh-experimental-browser-use-runtime": "0.1.7-rc.1",
     "@deepseek-ai/dsh-headless": "0.1.7-rc.1",

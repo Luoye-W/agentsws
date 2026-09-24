@@ -31,6 +31,7 @@ import {
   type GuardrailPort,
   type KnowledgePort,
   type LocalIdentityService,
+  type ModelsActor,
   type PersonaPort,
   parseSubprotocols,
   type RolesPort,
@@ -86,6 +87,7 @@ import {
 } from '@agentsws/knowledge'
 import { buildPricing, entryFor, PRICING_FILE } from '@agentsws/metering'
 import {
+  type AccountFetch,
   createModelGateway,
   type FetchLike,
   type ModelGatewayApi,
@@ -109,7 +111,8 @@ import { scheduleConflicts } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
-import { type ServerType, serve } from '@hono/node-server'
+import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
+import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
 import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
@@ -193,6 +196,11 @@ import {
   createConnections,
   createMailProbe,
 } from './connections.js'
+import {
+  createDeepSeekAccount,
+  DEEPSEEK_ACCOUNT_PROVIDER_ID,
+  type DeepSeekAccountOptions,
+} from './deepseek-account.js'
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
 import type { MdnsFactory } from './discovery.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
@@ -545,6 +553,18 @@ export interface ServerOptions {
    * `await import('@agentsws/dsh-adapter')`。
    */
   subscriptionLogin?: SubscriptionOptions['createLogin']
+  /**
+   * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
+   * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
+   */
+  deepseekAccount?: {
+    /** 起官方那一侧宿主的工厂（替身：`@agentsws/dsh-adapter/deepseek-account-stand-in`）。 */
+    createHost?: DeepSeekAccountOptions['createHost']
+    /** 账号那一路推理口（Messages）的替身 fetch。 */
+    fetch?: AccountFetch
+    /** 登出后多久摘掉官方模块（测试调成 0）。 */
+    signOutGraceMs?: number
+  }
   /**
    * WP58（49 M1）/ WP59（49 M3）：往 agentsws 云发请求用的 fetch——关联账号那条
    * 与余额 / 价目那条共用同一个注入点。生产不传（走 `globalThis.fetch`）；
@@ -1040,6 +1060,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     runtimeMode,
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.subscriptionLogin === undefined ? {} : { createLogin: options.subscriptionLogin }),
+  })
+  /*
+   * WP134：第三种模型来源「用我的 DeepSeek 账号登录」。也是"一台机器一份"（账号在 dsh 本机凭据库里，
+   * 不按品牌分）；默认关，选了才挂官方模块。登上 / 登出时每个已装配的品牌都重装一次网关。
+   */
+  const deepseekAccount = createDeepSeekAccount({
+    runtimeMode,
+    ...(dbDir === undefined ? {} : { dbDir }),
+    callbackOrigin: () => (boundPort === undefined ? undefined : `http://${HOST}:${boundPort}`),
+    onChange: () => {
+      for (const brand of brands?.loaded() ?? []) brand.ownModels.accountChanged()
+    },
+    ...(options.deepseekAccount?.createHost === undefined
+      ? {}
+      : { createHost: options.deepseekAccount.createHost }),
+    ...(options.deepseekAccount?.signOutGraceMs === undefined
+      ? {}
+      : { signOutGraceMs: options.deepseekAccount.signOutGraceMs }),
   })
   /** WP92：我们钉的那一版 `bsk`（仓库根的 `browserskill.lock.json`）；发行版里没带就没有。 */
   const lockVersion = (): string | undefined => {
@@ -2031,6 +2069,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
       ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
+      // WP134：账号登录那一路（只有"登录了没有"与官方 resolveToken 两样）
+      deepseekAccount: {
+        signedIn: () => deepseekAccount.signedIn(),
+        resolveToken: (url: string) => deepseekAccount.resolveToken(url),
+        ...(options.deepseekAccount?.fetch === undefined
+          ? {}
+          : { fetch: options.deepseekAccount.fetch }),
+      },
     })
 
     /**
@@ -2725,6 +2771,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const brandModules: BrandModules = brands
   /** bootstrap 品牌那一套：进程自己要用的那几处（会议 ASR、秘书、问 AI）取它。 */
   const boot = await brandModules.forWorkspace(workspace.id)
+  // WP134：上次选过「用我的 DeepSeek 账号登录」就把官方模块挂回来（只读本机凭据库，不出网）
+  await deepseekAccount.resume()
   // WP128：托管的是这家公司的另一个品牌时，品牌那一套是懒装配的——现在就装上，
   // 转发器客户端才会起来外连（不然要等第一条请求进来，而托管实例上不会有请求）
   if (hostedBoot !== undefined) {
@@ -4840,6 +4888,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       brandName: brandNameOfWorkspace,
       // WP90：订阅登录按人、按机器——每个品牌看到的是同一份
       subscription: subscription.port,
+      // WP134：DeepSeek 账号登录也按机器；登出时把每个品牌里那一条 provider 一起摘掉
+      deepseekAccount: {
+        view: () => deepseekAccount.view(),
+        login: () => deepseekAccount.login(),
+        cancel: (id: string) => deepseekAccount.cancel(id),
+        signOut: async (actor: ModelsActor) => {
+          await deepseekAccount.signOut()
+          for (const brand of await brandModules.all()) {
+            const listed = brand.ownModels.port
+            const rows = await listed.providers(actor)
+            if (rows.some((p) => p.id === DEEPSEEK_ACCOUNT_PROVIDER_ID)) {
+              await listed.remove(actor, DEEPSEEK_ACCOUNT_PROVIDER_ID)
+            }
+          }
+        },
+      },
     }),
     // WP59 / WP66：`/v1/cloud/*` 与 `/v1/settings/capability-sources`，按品牌
     cloud: brandCloudPort(brandModules),
@@ -5148,7 +5212,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (!Number.isInteger(wanted) || wanted < 0 || wanted > 65535)
         throw new Error(`AGENTSWS_PORT 不合法：${String(env.AGENTSWS_PORT)}`)
       const started = await new Promise<ServerType>((resolve) => {
-        const s = serve({ fetch: gateway.fetch, port: wanted, hostname: bindHost(env) }, () => {
+        /*
+         * WP134：官方 DeepSeek 账号模块的浏览器回调（`/oauth/callback`）走**这同一个端口**——
+         * 它是官方在"宿主 webServer"上注册的路由，这里把那条请求的 node req / res 原样交给它
+         * （它自己校验 state + PKCE、自己写响应）。没挂模块 / 不是它的路由就照常进网关。
+         */
+        const fetch = (req: Request, bindings: HttpBindings): Response | Promise<Response> => {
+          const { incoming, outgoing } = bindings
+          if (
+            incoming.url?.startsWith('/oauth/callback') === true &&
+            deepseekAccount.handle(incoming, outgoing)
+          ) {
+            return RESPONSE_ALREADY_SENT
+          }
+          return gateway.fetch(req)
+        }
+        const s = serve({ fetch: fetch as never, port: wanted, hostname: bindHost(env) }, () => {
           resolve(s)
         })
       })
@@ -5219,6 +5298,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       orgDuplicates.close()
       offboard.close()
       await subscription.close()
+      await deepseekAccount.close()
       secrets.close()
       txnStore?.close()
       workStore?.close()

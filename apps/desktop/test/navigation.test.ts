@@ -85,6 +85,28 @@ describe('decideWindowOpen', () => {
   })
 })
 
+/**
+ * WP134：「用我的 DeepSeek 账号登录」在桌面壳里**不加任何新代码**——工作台把授权页交给
+ * `window.agentsws.openExternal`（现有的外链打开逻辑），这里钉住那条路对它放行；
+ * 回调是官方模块在服务进程**现有端口**上的 `/oauth/callback`，系统浏览器直接打到本机服务，
+ * 桌面壳不另开端口、不拦它。
+ */
+describe('WP134 DeepSeek 账号登录走现有的外链逻辑', () => {
+  const AUTHORIZE = 'https://platform.deepseek.com/dsh/authorize?authorize_id=az_1&locale=zh_CN'
+
+  it('授权页（平台源上的 /dsh/authorize）交给系统浏览器，不在应用窗口里加载', () => {
+    expect(isSafeExternal(AUTHORIZE)).toBe(true)
+    expect(decideWindowOpen(AUTHORIZE, LOCAL)).toEqual({ action: 'external', url: AUTHORIZE })
+    expect(decideNavigation(AUTHORIZE, LOCAL)).toMatchObject({ action: 'external' })
+  })
+
+  it('回调落在本机服务自己的源上（窗口里若真跳到它也是本地放行，不是新开端口）', () => {
+    expect(decideNavigation('http://127.0.0.1:4317/oauth/callback?code=c&state=s', LOCAL)).toEqual({
+      action: 'allow',
+    })
+  })
+})
+
 describe('withCsp', () => {
   it('只允许 self，并封掉 object / frame-ancestors', () => {
     expect(CONTENT_SECURITY_POLICY).toContain("default-src 'self'")

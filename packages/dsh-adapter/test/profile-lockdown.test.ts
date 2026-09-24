@@ -46,6 +46,14 @@
  *
  * 导出 schema 会 import 组合树里的插件模块（上游说明：「run it only against a profile whose plugins
  * you already trust」）——这里的插件全是锁定版本、已装在本仓 node_modules 里的官方包，不联网。
+ *
+ * WP134：`deepseek-account` 从"永远关"改成"**默认关、选了才开**"（Luoye 09-24：做成第三种模型来源）。
+ * 走的是路线 (b)：profile 层那一行 `disabled: true` **原样不动**，另有一份只打开它的运行时 patch
+ * （`profiles/agentsws/deepseek-account.on.patch.yml`），用户选了「用我的 DeepSeek 账号登录」才
+ * `--patch` 叠上。这里对应改成 {@link OPT_IN} 那一组：不叠 → 组合树里一定是关的；叠上 → 只有这一行
+ * 被打开、别的锁定一行不动；opt-in 文件里的 id 同样走「id 存在、指向的还是那个插件」的校验。
+ * 两档运行时的模块图里仍然**没有**它（`FORBIDDEN` 不变）：服务进程只从
+ * `@agentsws/dsh-adapter/deepseek-account` 子路径懒加载，主入口不 re-export。
  */
 import { spawnSync } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -88,6 +96,18 @@ const LOCKDOWN: readonly LockdownRow[] = [
   { id: 'config-editor', name: '@deepseek-ai/dsh-config-editor', disabled: true },
   { id: 'settings', name: '@deepseek-ai/dsh-settings', disabled: true },
   { id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform', disabled: true },
+]
+
+/**
+ * WP134：默认关、**选了才开**的行。每一行都必须同时是 `LOCKDOWN` 里 `disabled: true` 的一行
+ * （没选时由 profile 层关死），再由 `file` 那份运行时 patch 打开。
+ */
+const OPT_IN: readonly { id: string; name: string; file: string }[] = [
+  {
+    id: 'deepseek-account',
+    name: '@deepseek-ai/dsh-deepseek-account-platform',
+    file: 'deepseek-account.on.patch.yml',
+  },
 ]
 
 interface LockdownRow {
@@ -233,11 +253,16 @@ function stageProfile(extraPatch = ''): string {
 }
 
 /** 在那个 `DSH_HOME` 下跑一次 `dsh --profile agentsws <flag>`；环境里别的 `DSH_*` 一律不带。 */
-function runDsh(home: string, flag: '--dump-config' | '--dump-config-schema'): string {
+function runDsh(
+  home: string,
+  flag: '--dump-config' | '--dump-config-schema',
+  patches: readonly string[] = [],
+): string {
   const env: NodeJS.ProcessEnv = {}
   for (const [k, v] of Object.entries(process.env)) if (!k.startsWith('DSH_')) env[k] = v
   env.DSH_HOME = home
-  const res = spawnSync(process.execPath, [dshBin(), '--profile', 'agentsws', flag], {
+  const extra = patches.flatMap((p) => ['--patch', p])
+  const res = spawnSync(process.execPath, [dshBin(), '--profile', 'agentsws', ...extra, flag], {
     cwd: home,
     env,
     encoding: 'utf8',
@@ -417,5 +442,85 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
     expect(lockdownProblems(rows, renamed)).toEqual([
       'session-log-deepseek：配置字段 enabled 不在 @deepseek-ai/dsh-session-log-deepseek 的配置 schema 里（schema）',
     ])
+  })
+})
+
+// ── WP134：deepseek-account 默认关、选了才开 ─────────────────────────────────
+
+describe('WP134 DeepSeek 账号登录：没选时一定是关的、选了才开（路线 b：运行时 patch）', () => {
+  let home = ''
+  let dump: SchemaDump
+
+  beforeAll(() => {
+    home = stageProfile()
+    dump = JSON.parse(runDsh(home, '--dump-config-schema')) as SchemaDump
+  }, 180_000)
+
+  afterAll(() => {
+    if (home !== '') rmSync(home, { recursive: true, force: true })
+  })
+
+  it('每一行 opt-in 在 profile 层仍是锁死的（LOCKDOWN 里 disabled: true，文件里也是）', () => {
+    const rows = parse(readFileSync(PATCH, 'utf8')) as PatchRow[]
+    for (const want of OPT_IN) {
+      expect(LOCKDOWN.find((l) => l.id === want.id)?.disabled, want.id).toBe(true)
+      expect(rows.find((r) => r?.id === want.id)?.disabled, want.id).toBe(true)
+    }
+  })
+
+  it('opt-in 文件只打开它自己那一行：不 insert、不换插件、不带任何 config（按官方默认值走）', () => {
+    for (const want of OPT_IN) {
+      const rows = parse(readFileSync(join(PROFILE_DIR, want.file), 'utf8')) as PatchRow[]
+      expect(rows, want.file).toEqual([{ id: want.id, disabled: false }])
+    }
+  })
+
+  it('opt-in 的 id 同样要真的存在、指向的还是那个插件（WP133 那条不削弱）', () => {
+    for (const want of OPT_IN) {
+      const rows = parse(readFileSync(join(PROFILE_DIR, want.file), 'utf8')) as PatchRow[]
+      expect(lockdownProblems(rows, dump, [{ id: want.id, name: want.name }]), want.file).toEqual(
+        [],
+      )
+    }
+  })
+
+  it('不叠 opt-in：组合树里这一行是关的', () => {
+    const composed = parseComposed(runDsh(home, '--dump-config'))
+    for (const want of OPT_IN) {
+      const row = composed.find((r) => r?.id === want.id)
+      expect(row?.name, want.id).toBe(want.name)
+      expect(row?.disabled, `${want.id} 没选也开了`).toBe(true)
+    }
+  }, 120_000)
+
+  it('叠上 opt-in：只有这一行被打开，其余每一条锁定照旧', () => {
+    for (const want of OPT_IN) {
+      const composed = parseComposed(runDsh(home, '--dump-config', [join(PROFILE_DIR, want.file)]))
+      const row = composed.find((r) => r?.id === want.id)
+      expect(row?.name, want.id).toBe(want.name)
+      expect(row?.disabled, `${want.id} 选了还是关的`).toBe(false)
+      for (const other of LOCKDOWN.filter((l) => l.id !== want.id)) {
+        const hit = composed.find((r) => r?.id === other.id)
+        if (other.disabled === true) expect(hit?.disabled, `${other.id} 被连带打开了`).toBe(true)
+        for (const [key, value] of Object.entries(other.config ?? {})) {
+          expect((hit?.config as Record<string, unknown> | undefined)?.[key], other.id).toBe(value)
+        }
+      }
+    }
+  }, 120_000)
+
+  it('反向哨兵：opt-in 文件里的 id 被上游改名，同一套检查报出它', () => {
+    const renamed: SchemaDump = {
+      ...dump,
+      'x-cordis': {
+        ...dump['x-cordis'],
+        entries: dump['x-cordis'].entries.filter((e) => e.id !== 'deepseek-account'),
+      },
+    }
+    expect(
+      lockdownProblems([{ id: 'deepseek-account', disabled: false }], renamed, [
+        { id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform' },
+      ]),
+    ).toEqual(['deepseek-account：当前 dsh 的组合里没有这个 id（这一行什么都没关）'])
   })
 })
