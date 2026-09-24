@@ -44,6 +44,26 @@ export interface ChatMessage {
    * 只在运行时的对话历史里流转，不进事件、不进卡片。
    */
   reasoning?: string
+  /**
+   * WP143（只加）：Messages 口（DeepSeek 官方适配器同款）上一轮的思考块**原样**——含签名。
+   * 官方 `dsh-llm-deepseek` 的说法是「此前 assistant 轮次的推理内容会原样传回」「回放元数据保留模型与
+   * 思考签名」。有它时 provider 优先用它；没有时退回 {@link ChatMessage.reasoning}（不带签名）。
+   * 同 `reasoning`：只在运行时的对话历史里流转，不进事件、不进卡片。
+   */
+  reasoning_replay?: ReasoningReplay
+}
+
+/**
+ * WP143：一轮 assistant 的思考块回放（照官方 `dsh-llm-deepseek` 的 replay 元数据）。
+ *
+ * 签名**只对产出它的那个模型有效**（官方：跨模型签名不可移植）——换了模型，provider 只回传思考原文、
+ * 不带签名。`kind` 标明是哪条线路的格式，别的 provider 认不得就不用。
+ */
+export interface ReasoningReplay {
+  kind: 'deepseek-messages'
+  model: string
+  /** 按回复里的原顺序。`signature` 原样保存、原样回传，一个字节都不改。 */
+  blocks: { thinking: string; signature?: string }[]
 }
 /** 17 §5.4 强制工具选择：`tool` 时模型这一轮只能调 `name` 那个工具；provider 不支持则网关退化为 `auto`。 */
 export interface ToolChoice {
@@ -73,6 +93,8 @@ export interface Completion {
   tool_calls?: { id: string; name: string; input: unknown }[]
   /** 思考模型回的推理内容（下一轮要原样带回给 provider）；非思考模型没有。 */
   reasoning?: string
+  /** WP143（只加）：Messages 口的思考块原样（含签名），下一轮原样带回；见 {@link ReasoningReplay}。 */
+  reasoning_replay?: ReasoningReplay
   usage: CompletionUsage
   model: ModelRef
   static_prefix_hash: string

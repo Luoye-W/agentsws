@@ -97,8 +97,9 @@ describe('WP134 (a) 凭据：官方 resolveToken 现取、只进 x-dsh-auth-toke
     const p = deepseekAccountProvider({ resolveToken: signedIn, fetch })
     const out = await p.complete({ messages: [{ role: 'user', content: '在吗' }] })
     expect(out.text).toBe('好')
+    // WP143：Messages 的 input_tokens 不含缓存命中（12 + 3）；我们的口径是含
     expect(out.usage).toEqual({
-      input_tokens: 12,
+      input_tokens: 15,
       output_tokens: 1,
       cached_tokens: 3,
       cost_base: 0,
