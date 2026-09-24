@@ -323,18 +323,19 @@ async function sectionA() {
   await step(
     'A',
     'ob-ai',
-    '向导 ① 接上 AI：三个入口',
-    '官方接口 / 自己的接口 / 先逛逛演示数据 三个入口都在，一屏讲清',
+    '向导 ① 接上 AI：三张卡 + 演示旁路',
+    '工坊官方接口 / 自己的接口 / DeepSeek 账号登录 三张卡，外加「先逛逛演示数据」，一屏讲清',
     async () => {
       await go('/onboarding')
       await T('onboarding-ai').waitFor()
-      const has = [
-        await T('ai-card-official').count(),
-        await T('ai-card-own').count(),
-        await T('ai-demo').count(),
-      ]
-      if (has.includes(0)) fail(`缺入口：${JSON.stringify(has)}`)
-      return ok('三个入口都在；「先逛逛演示数据」是一行灰字链接，不是卡')
+      const cards = await page
+        .locator('[data-testid^="ai-card-"]')
+        .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')))
+      const demo = await T('ai-demo').count()
+      for (const want of ['ai-card-official', 'ai-card-own', 'ai-card-account'])
+        if (!cards.includes(want)) fail(`缺卡：${want}（有：${cards.join('、')}）`)
+      if (!demo) fail('没有「先逛逛演示数据」')
+      return ok(`${cards.length} 张卡都在；「先逛逛演示数据」是卡下面一行灰字链接`)
     },
   )
 
