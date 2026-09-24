@@ -46,6 +46,19 @@ export function quickActions(card: DeckCard): DeckAction[] {
     .slice(0, MAX_QUICK_ACTIONS)
 }
 
+/**
+ * 这个动作在这张卡上写什么字（按钮行、`···` 菜单、键盘提示行共用一份）。
+ *
+ * 顺序是有意的：**排版的动词赢过服务端给的 `action_labels`**——后者是 WP15 那版
+ * 按 kind 给的中文（只有中文），而排版这一张表是中英齐的，且与画布逐条对得上。
+ * 两张表都没有的（`open`）才退回服务端那份与通用动词。
+ */
+export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) => string): string {
+  const key = verbKey(card.layout, a, card.change_kind ?? card.kind)
+  if (key !== undefined) return t(key)
+  return card.action_labels?.[a] ?? t(`action.${a}`)
+}
+
 /** `···` 里的那几个：主次都排不上的动作（多半是「指导」与「稍后」）。 */
 export function moreActions(card: DeckCard): DeckAction[] {
   return card.available_actions.filter((a) => a !== 'open' && verbRank(card.layout, a) === 'more')
@@ -90,18 +103,7 @@ export function DeckActionBar({
     }
   }, [open])
 
-  /**
-   * 这个动作在这张卡上写什么字。
-   *
-   * 顺序是有意的：**排版的动词赢过服务端给的 `action_labels`**——后者是 WP15 那版
-   * 按 kind 给的中文（只有中文），而排版这一张表是中英齐的，且与画布逐条对得上。
-   * 两张表都没有的（`open`）才退回服务端那份与通用动词。
-   */
-  const labelOf = (a: DeckAction): string => {
-    const key = verbKey(card.layout, a, card.change_kind ?? card.kind)
-    if (key !== undefined) return t(key)
-    return card.action_labels?.[a] ?? t(`action.${a}`)
-  }
+  const labelOf = (a: DeckAction): string => deckActionLabel(card, a, t)
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="deck-action-bar">

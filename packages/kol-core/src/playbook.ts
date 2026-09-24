@@ -368,12 +368,40 @@ export function describeKolRun(input: {
 }): string {
   const parts: string[] = [KOL_INTENT_ZH[input.intent]]
   if (input.found !== undefined) parts.push(`找到 ${input.found} 个候选`)
-  if (input.readTools.length > 0) parts.push(`查了 ${[...new Set(input.readTools)].join('、')}`)
+  if (input.readTools.length > 0)
+    parts.push(`查了${[...new Set(input.readTools.map(toolZh))].join('、')}`)
   if (input.drafted === true) parts.push('起草了一封开发信（待批）')
   if (input.stagedWhat !== undefined) parts.push(`提了一条${input.stagedWhat}（待批）`)
   if (input.askedWhat !== undefined) parts.push(`问了一句：${input.askedWhat}`)
-  if (input.exhausted !== undefined) parts.push(`${input.exhausted} 预算耗尽，先停在这里`)
+  if (input.exhausted !== undefined)
+    parts.push(`${BUDGET_ZH[input.exhausted] ?? '这次的额度'}用完了，先停在这里`)
   return parts.join('；')
+}
+
+/**
+ * WP141（docs/78 §2 红人第 14 步）：摘要里不印工具名。原来写「查了 search_creators」——
+ * 工具名是给模型看的，给人看的是它干了什么。表里没有的工具退回一句「一个工具」。
+ */
+export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
+  search_creators: '红人库',
+  get_creator: '红人资料',
+  list_collaborations: '合作清单',
+  list_deliverables: '交付物清单',
+  search_policies: '合作规矩',
+  add_to_campaign: '活动名单',
+  draft_outreach: '开发信草稿',
+  review_deliverable: '交付物审核',
+  create_tracked_link: '追踪链接',
+}
+
+const toolZh = (tool: string): string => KOL_TOOL_ZH[tool] ?? '一个工具'
+
+/** 预算的哪一格用完了（`max_tool_calls` 这种键不上屏）。 */
+const BUDGET_ZH: Readonly<Record<string, string>> = {
+  max_tool_calls: '这次能查的次数',
+  max_tokens: '这次能写的字数',
+  max_wall_ms: '这次能用的时间',
+  max_cost_usd: '这次的花费额度',
 }
 
 /** 意图的人话（摘要与时间线上用的就是这几个词）。 */

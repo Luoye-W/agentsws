@@ -250,8 +250,12 @@ describe('首页第三稿（37 §3）', () => {
     expect(screen.getByTestId('today-due')).toBeDefined()
     expect(await screen.findByTestId('deck-section')).toBeDefined()
     expect(screen.getByTestId('battle-report')).toBeDefined()
-    // 到期清单里第二个数字：待我定的卡片数
-    expect(screen.getByTestId('cards-waiting').textContent).toContain('3')
+    // 到期清单里第二个数字：待我定的卡片数。WP141：与页头、筛选「全部」同一个口径
+    // （牌堆的张数 counts.total），不再读工作模型那一份（它把日报也算成一张）
+    const header = screen.getByTestId('home-header').textContent ?? ''
+    const n = /(\d+) 张卡等你决定/.exec(header)?.[1]
+    expect(n).toBeDefined()
+    expect(screen.getByTestId('cards-waiting').textContent).toContain(`还有 ${n} 张卡`)
   })
 
   it('首页仍然无图表无表格（36 §5.2）', async () => {

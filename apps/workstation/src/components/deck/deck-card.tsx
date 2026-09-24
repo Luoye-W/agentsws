@@ -39,6 +39,7 @@ import { useRailState } from '@/components/rail/rail-state'
 import { getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
+import { recordText, tOr } from '@/lib/humanize'
 
 export interface DeckDecideRequest {
   /**「打开」不是一次决定（它只是进入事项），所以这里不出现 */
@@ -60,7 +61,7 @@ const EXIT_CLASS: Record<DeckExitDirection, string> = {
 
 /** 详情区：按 kind 挑几个结构化字段展示，缺了就不展示，绝不编。 */
 function CardDetail({ card }: { card: DeckCard }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const payload = card.detail.payload
   const record =
     typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {}
@@ -69,11 +70,12 @@ function CardDetail({ card }: { card: DeckCard }): React.ReactNode {
   return (
     <div className="mt-3 flex flex-col gap-3 border-t pt-3 text-sm" data-testid="deck-detail">
       {before === undefined && after === undefined ? null : (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs">
-          <dt className="text-muted-foreground">before</dt>
-          <dd className="truncate">{JSON.stringify(before)}</dd>
-          <dt className="text-muted-foreground">after</dt>
-          <dd className="truncate">{JSON.stringify(after)}</dd>
+        // WP141：字段名与值过 humanize，不再摊 JSON 与英文的 before / after
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-muted-foreground">{t('deck.before')}</dt>
+          <dd className="truncate">{recordText(before, lang)}</dd>
+          <dt className="text-muted-foreground">{t('deck.after')}</dt>
+          <dd className="truncate">{recordText(after, lang)}</dd>
         </dl>
       )}
       {card.detail.citations.length === 0 ? null : (
@@ -88,7 +90,14 @@ function CardDetail({ card }: { card: DeckCard }): React.ReactNode {
         </ul>
       )}
       <p className="text-xs text-muted-foreground">
-        {t('deck.detail.proposer', { by: card.detail.proposer.id })}
+        {/* WP141：提案人只按 kind 出字（与头一行的头像同一条），人员 id 不上屏 */}
+        {t('deck.detail.proposer', {
+          by: tOr(
+            t,
+            `deck.proposer.name.${card.detail.proposer.kind}`,
+            t('deck.proposer.name.system'),
+          ),
+        })}
         {card.detail.run_id === undefined ? '' : ` · ${card.detail.run_id}`}
       </p>
     </div>
@@ -168,7 +177,7 @@ const BAND_TONE: Record<DeckCard['priority_band'], Tone> = {
  * 表在投影层（`@agentsws/deck` 的 `verbs.ts`），这里只负责"查不到就退回原来的写法"：
  * 第十二种 kind 出现那天，卡面上说的是一句不好看的实话，而不是一句好看的错话。
  */
-function categoryOf(card: DeckCard, t: (key: string) => string): string {
+export function categoryOf(card: DeckCard, t: (key: string) => string): string {
   const key = categoryKey(card.kind, card.change_kind)
   return t(key ?? `kind.${card.kind}`)
 }
@@ -277,7 +286,10 @@ export function DeckCardView({
             onOpen(card)
           }}
         >
-          {t('deck.matter', { title: card.matter_label ?? card.matter_id })}
+          {/* WP141：查不到展示名就说「一件还没起名的事项」，事项 id 不上屏 */}
+          {card.matter_label === undefined
+            ? t('deck.matter.untitled')
+            : t('deck.matter', { title: card.matter_label })}
         </button>
       )}
 

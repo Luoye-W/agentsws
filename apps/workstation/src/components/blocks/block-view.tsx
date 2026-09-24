@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getBlockData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate, formatValue } from '@/lib/format'
+import { approvalStateLabel, cellText } from '@/lib/humanize'
 
 /** 前端的组件注册表：名字对不上就不渲染（29 原则 ①）。 */
 const RENDERERS = ['stat_tile', 'table', 'chart_line', 'timeline', 'kv', 'markdown'] as const
@@ -89,7 +90,8 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
                     ? formatDate(value, lang)
                     : typeof value === 'number'
                       ? formatValue(value, c.format ?? 'money', lang, String(row.currency ?? 'USD'))
-                      : String(value ?? '')
+                      : // WP141：渠道 / 形态 / ISO 时间这几种字串说人话（lib/humanize）
+                        cellText(c.key, String(value ?? ''), lang)
                 return (
                   <td
                     key={c.key}
@@ -207,7 +209,7 @@ function TimelineBlock({ payload }: { payload: { rows: RecordRow[] } }): React.R
           <div className="flex flex-wrap items-baseline gap-2 text-xs text-ws-muted-fg">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
-            <span className="font-mono">{row.state}</span>
+            <span>{approvalStateLabel(row.state, lang)}</span>
           </div>
           <div className="text-sm">{row.title}</div>
         </li>

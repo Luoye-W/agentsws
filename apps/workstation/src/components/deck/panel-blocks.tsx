@@ -13,19 +13,26 @@
 import type { DeckCard } from '@agentsws/deck'
 import { GoButton, StatusPill, WsCard } from '@/components/design'
 import { useApp } from '@/lib/app-context'
+import { fieldLabel, fieldValue } from '@/lib/humanize'
+import type { Lang } from '@/lib/i18n'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
-/** 报表里那几个数：payload 上的标量字段，直接取，不算也不编（14 §2）。 */
-function figuresOf(card: DeckCard): [string, string][] {
+/**
+ * 报表里那几个数：payload 上的标量字段，直接取，不算也不编（14 §2）。
+ *
+ * WP141：列头原来就是字段名（`date / sales / orders / low_stock`），现在过
+ * `lib/humanize`——「日期 / 销售额 / 订单 / 库存告急」。
+ */
+function figuresOf(card: DeckCard, lang: Lang): [string, string][] {
   const payload = card.detail.payload
   if (!isRecord(payload)) return []
   const out: [string, string][] = []
   for (const [k, v] of Object.entries(payload)) {
     if (k === 'kind') continue
-    if (typeof v === 'number') out.push([k, String(v)])
-    else if (typeof v === 'string' && v.length <= 24) out.push([k, v])
+    if (typeof v === 'number' || (typeof v === 'string' && v.length <= 24))
+      out.push([fieldLabel(k, lang), fieldValue(k, v, lang)])
     if (out.length === 4) break
   }
   return out
@@ -38,7 +45,7 @@ export function ReportBlocks({
   reports: DeckCard[]
   onOpen: (card: DeckCard) => void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   if (reports.length === 0) return null
   return (
     <section data-testid="panel-reports">
@@ -59,7 +66,7 @@ export function ReportBlocks({
               <p className="truncate text-xs text-ws-muted-fg">{r.summary}</p>
             </div>
             <dl className="hidden shrink-0 items-center gap-4 sm:flex" data-testid="report-figures">
-              {figuresOf(r).map(([k, v]) => (
+              {figuresOf(r, lang).map(([k, v]) => (
                 <div key={k} className="text-right">
                   <dt className="text-[11px] text-ws-muted-fg">{k}</dt>
                   <dd className="ws-display ws-num text-base">{v}</dd>

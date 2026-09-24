@@ -302,6 +302,8 @@ export interface CardsData {
   filters: DeckFilters
   counts: DeckCounts
   pinned_p0: DeckCard[]
+  /** WP141：看完即过的报表（日报 / 上线检查单）——不进牌堆，岗位页上单独一块 */
+  reports?: DeckCard[]
 }
 
 export interface ViewData {

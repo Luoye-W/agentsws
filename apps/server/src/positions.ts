@@ -30,6 +30,7 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { isQueueCard } from '@agentsws/deck'
 import {
   RoleError,
   type RoleStore,
@@ -54,6 +55,16 @@ const POSITION_ERROR = (
 
 /** 还等着人定的卡（与工作台面同一个口径）。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
+
+/** 审批项投到界面上是不是一张卡（日报 / 上线检查单是报表块，不是卡；判据在 deck 的 layout.ts）。 */
+function isDeckCard(item: ApprovalItem): boolean {
+  const payload = item.payload
+  const changeKind =
+    typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>).kind
+      : undefined
+  return isQueueCard(item.kind, typeof changeKind === 'string' ? changeKind : undefined)
+}
 
 export interface PositionsOptions {
   workspace_id: WorkspaceId
@@ -252,9 +263,20 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const open_matters = work
       .listMatters({ status: ['open', 'waiting'] })
       .filter((m) => matterInPosition(m, position_id, assignmentIds)).length
+    /*
+     * WP141（docs/78 §2 首页 / 客服第 37 步）：「N 张待审」与牌堆**同一个口径**——
+     * 本人在这个岗位下持有的那几条职责上、还等着人定的、**真是卡**的那些
+     * （日报 / 上线检查单不算，36 §2.2b）。原来按「这几条职责的所有分配提出的」数，
+     * 于是页头写 3、牌堆里是 4（每日计划没有提案分配），日报还被多算一张。
+     */
+    const myDutyRoles = new Set(
+      dutyRolesOf(template)
+        .map((r) => r.role)
+        .filter((r) => mine.has(r)),
+    )
     const cards = await cardsOf(person_id)
     const pending_cards = cards.filter(
-      (i) => WAITING_STATES.has(i.state) && assignmentIds.has(i.proposer.assignment_id ?? ''),
+      (i) => WAITING_STATES.has(i.state) && myDutyRoles.has(i.role_id) && isDeckCard(i),
     ).length
     return {
       position_id: template.id,

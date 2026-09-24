@@ -1692,7 +1692,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           ...(mine === undefined ? {} : { assignment_id: mine.id }),
           ...(mine === undefined
             ? {
-                reason: `你名下没有「${group.role_id}」这条职责，所以这一组只能看不能建。要做这条渠道，让 owner 把这条职责分给你——一次 campaign 不会把别人的权限并给你（05 §4）。`,
+                // WP141：不把职责 id 印给人看——说「{渠道}红人」这条职责
+                reason: `你名下没有「${channelLabel(group.channel)} 红人」这条职责，所以这一组只能看不能建。要做这条渠道，让店主把这条职责分给你——一次挑人不会把别人的权限并给你。`,
               }
             : {}),
           picks,
@@ -1718,13 +1719,14 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         role_id: actor.role_id,
         subject: { object: { type: 'campaign', id: campaign_id } },
         dedupe_key: `${workspace_id}:kol_campaign:${campaign_id}`,
-        title: `campaign 挑人清单：${input.goal}（${total} 人）`,
+        // WP141（docs/78 §2 红人）：标题与摘要里不夹英文词、不印小写渠道值
+        title: `挑人清单：${input.goal}（${total} 人）`,
         summary:
-          `按 ${input.channels.join(' / ')} 分组，人均预算 ${plan.budget_per_creator} ${brief.currency}。` +
+          `按 ${input.channels.map(channelLabel).join(' / ')} 分组，人均预算 ${plan.budget_per_creator} ${brief.currency}。` +
           `接受就为每个人建一条合作（阶段从"已找到"开始），每条动作走各自渠道职责的额度。` +
           (blocked.length === 0
             ? ''
-            : `其中 ${blocked.map((g) => g.channel).join(' / ')} 这 ${blocked.length} 组你名下没有对应职责，灰着不建。`),
+            : `其中 ${blocked.map((g) => channelLabel(g.channel)).join(' / ')} 这 ${blocked.length} 组你名下没有对应职责，灰着不建。`),
         payload: { campaign_id, brief, by_channel },
         evidence: {
           source_events: [],

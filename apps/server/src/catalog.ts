@@ -253,12 +253,12 @@ export const KOL_CONNECTORS: readonly CatalogEntry[] = [
         required: true,
         kind: 'text',
         placeholder: '17841400000000000',
-        hint: 'business_discovery 是挂在**你自己**那个商业账号下去查别人的，所以这一格必填',
+        hint: '查别人的资料要挂在**你自己**那个商业账号下，所以这一格必填',
       },
     ],
     setup_guide: {
       summary:
-        'Instagram **没有"按关键词搜人"这回事**：官方只让你按名字查明确指名的商业账号（business_discovery）。所以 IG 上找人的主力永远是导入与公共库，这条连接补的是"这个人现在多少粉、互动怎么样"。',
+        'Instagram **没有"按关键词搜人"这回事**：官方只让你按名字查明确指名的商业账号。所以 IG 上找人的主力永远是导入与公共库，这条连接补的是"这个人现在多少粉、互动怎么样"。',
       steps: [
         '把你的 Instagram 账号切成「商业账号」，并关联一个 Facebook 主页',
         '在 Meta 开发者后台建一个应用，加上 Instagram Graph API',
@@ -466,7 +466,7 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
     ],
     setup_guide: {
       summary:
-        '一把 token 管 FB 主页 + IG 商业号：读帖子与表现、发布与排期、回评论。**连上就能读，能发要过 App Review**——这是两件事，别把"还没批"当成"连接失败"。排期要两格一起写（`published: false` + 时间），只写时间那条会当场发出去。',
+        '一把 token 管 FB 主页 + IG 商业号：读帖子与表现、发布与排期、回评论。**连上就能读，能发要过 App Review**——这是两件事，别把"还没批"当成"连接失败"。排期这件事我们替你按 Meta 的规矩写好（只写时间不关「立即发布」的话会当场发出去）。',
       steps: [
         '把 IG 切成商业账号并关联你的 FB 主页（只发 FB 可跳过）',
         '在 Meta 开发者后台建一个应用，加上 Facebook 登录与 Instagram Graph API',
@@ -510,7 +510,7 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
     ],
     setup_guide: {
       summary:
-        '**申请制**，而且与红人那条用的 Research API **要分别申请**。发布是两跳：init 拿一个 publish_id，TikTok 自己去抓素材，再轮询状态——一跳发完这件事在 TikTok 上不存在，所以"发出去了"要等状态变成 `PUBLISH_COMPLETE`。另外它**没有开放的评论读写接口**，待回评论那一块在这条渠道上是空的。',
+        '**申请制**，而且与红人那条用的 Research API **要分别申请**。发布是两跳：先交给 TikTok、它自己去抓素材，再等它回话——一跳发完这件事在 TikTok 上不存在，所以"发出去了"要等它说发完了才算。另外它**没有开放的评论读写接口**，待回评论那一块在这条渠道上是空的。',
       steps: [
         '到 TikTok 开发者后台建一个应用，申请 Content Posting API（要写用途说明，审核制）',
         '把要发视频的那个域名加进应用的 URL 白名单（我们用 PULL_FROM_URL，TikTok 自己去抓）',
@@ -824,7 +824,7 @@ export const ADS_CONNECTORS: readonly CatalogEntry[] = [
         secret: true,
         required: true,
         kind: 'password',
-        hint: '要带 ads_management 权限的那一把。与社媒那张卡可以是同一次授权换出来的，但那条权限要另加',
+        hint: '要带「管理广告」权限的那一把。与社媒那张卡可以是同一次授权换出来的，但那条权限要另加',
       },
       {
         name: 'business_id',
@@ -838,7 +838,7 @@ export const ADS_CONNECTORS: readonly CatalogEntry[] = [
     ],
     setup_guide: {
       summary:
-        '读账户与 campaign 表现、改预算与出价、暂停、换素材。**与社媒那张 Meta 卡是两张**：这条要 `ads_management`（能动预算），那条要 `pages_manage_posts`（能发帖）。同一次授权可以一起授下来，但别把两把钥匙做成一把。',
+        '读账户与 campaign 表现、改预算与出价、暂停、换素材。**与社媒那张 Meta 卡是两张**：这条要「管理广告」权限（能动预算），那条要「发主页帖子」权限（能发帖）。具体权限名在「要准备什么」里。同一次授权可以一起授下来，但别把两把钥匙做成一把。',
       steps: [
         '在 Meta 开发者后台建一个应用，加上 Marketing API',
         '申请 ads_management 与 ads_read 权限（**要过审核**）',

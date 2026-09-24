@@ -468,7 +468,7 @@ describe('37 §1 第 11 行：卡面顶部的「属于：事项 X」', () => {
     expect(onOpen).toHaveBeenCalledWith(card)
   })
 
-  it('没有展示名时退到 id，但那也是事项 id，不是证据里的裸 ref', () => {
+  it('WP141：没有展示名时说「一件还没起名的事项」，事项 id 也不上屏', () => {
     renderWithProviders(
       <DeckCardView
         card={draftCard({ matter_id: 'mat_7' })}
@@ -477,6 +477,8 @@ describe('37 §1 第 11 行：卡面顶部的「属于：事项 X」', () => {
         onOpen={noop}
       />,
     )
-    expect(screen.getByTestId('deck-matter-link').textContent).toContain('mat_7')
+    const link = screen.getByTestId('deck-matter-link').textContent ?? ''
+    expect(link).not.toContain('mat_7')
+    expect(link).toContain('还没起名')
   })
 })

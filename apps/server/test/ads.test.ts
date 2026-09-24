@@ -149,7 +149,10 @@ describe('57 §1 四张连接卡', () => {
 
   it('准备说明里**先说代价**（57 §1 末行）', () => {
     // Meta：与社媒那张卡是两张，要的权限不一样
-    expect(catalogEntry('meta_marketing')?.setup_guide?.summary).toContain('ads_management')
+    // WP141：卡面默认露出的这句不印权限名（权限名在「要准备什么」的步骤里）
+    expect(catalogEntry('meta_marketing')?.setup_guide?.summary).toContain('管理广告')
+    expect(catalogEntry('meta_marketing')?.setup_guide?.summary).not.toContain('ads_management')
+    expect(catalogEntry('meta_marketing')?.setup_guide?.steps.join('')).toContain('ads_management')
     // Google：developer token 要单独申请过审
     expect(catalogEntry('google_ads')?.setup_guide?.summary).toContain('developer token')
     expect(catalogEntry('x_ads')?.setup_guide?.summary).toContain('申请制')

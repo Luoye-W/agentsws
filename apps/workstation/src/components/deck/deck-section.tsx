@@ -4,12 +4,18 @@
  *
  * 首页与岗位页各自只写一行 `<DeckSection …/>`：筛选、语言、翻页、决定、飞出、空态
  * 全在这里，两个页面不再各抄一份卡片列表。
+ *
+ * WP141（docs/78 §1 #4）：一次一张之外多了「上一张 / 下一张」与紧凑列表（`deck-browser`），
+ * 不决定前一张也能直接找到后面的卡；卡型下拉从全部牌算；提示行按这张卡的动作给；
+ * 「第 x / N 张」与页头、筛选按同一个口径（合并前的张数）。
  */
 import type { BattleReport, DeckCard, DeckContentMode, DeckFilters, DeckKind } from '@agentsws/deck'
-import { CONTENT_MODES } from '@agentsws/deck'
+import { CONTENT_MODES, sortCards } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { type KeyboardEvent, useRef, useState } from 'react'
+import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { DeckBattleReport } from '@/components/deck/deck-battle-report'
+import { DeckBrowser } from '@/components/deck/deck-browser'
 import {
   DeckCardView,
   type DeckDecideRequest,
@@ -21,15 +27,25 @@ import {
   directionForDeckAction,
   directionForDeckKey,
   isTypingTarget,
+  keyboardHints,
 } from '@/components/deck/deck-gestures'
 import { DECK_EXIT_MS, DECK_MAX_WIDTH_CLASS } from '@/components/deck/deck-layout'
+import { ReportBlocks } from '@/components/deck/panel-blocks'
 import { Skeleton } from '@/components/ui/skeleton'
-import { type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
+import { type CardsData, type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export interface DeckSectionProps {
   /** 给了就只看这个岗位（岗位页）；不给就是首页的跨岗位队列 */
   positionId?: string
+  /**
+   * WP141：岗位页上**本人在这个岗位下的每一条职责**（含 `positionId` 那条）。
+   *
+   * 岗位页页头的「N 张待审」是按岗位聚合的（54 §4），牌堆原来只取地址栏那一条职责，
+   * 于是客服页头写「3 张待审」、牌堆却是「队列清空了」。给了这一串，牌堆就把几条
+   * 职责的卡合成一副，与页头同一个口径。
+   */
+  positionIds?: readonly string[]
   /** 初始筛选条件；之后由筛选行自己管 */
   filters?: DeckFilters
   /** 37 §2.2b：`open` = 进入事项。事项页由 WP22 做，这里只把卡交出去 */
@@ -42,45 +58,106 @@ interface DeckData {
   pinned_p0: DeckCard[]
   positions: PositionOption[]
   battle_report?: BattleReport
+  /** 只有岗位路由给：看完即过的报表块（首页的报表块在首页自己那一段） */
+  reports?: DeckCard[]
 }
 
-export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): React.ReactNode {
+/** 几条职责的牌合成一副：卡按同一个比较器重排，计数逐项相加。 */
+function mergeDecks(parts: CardsData[]): DeckData {
+  const first = parts[0]
+  const sum = (k: keyof DeckData['counts']): number => parts.reduce((n, p) => n + p.counts[k], 0)
+  return {
+    cards: sortCards(parts.flatMap((p) => p.cards)),
+    counts: {
+      total: sum('total'),
+      customer_waiting: sum('customer_waiting'),
+      nobody_waiting: sum('nobody_waiting'),
+      matched: sum('matched'),
+    },
+    pinned_p0: sortCards(parts.flatMap((p) => p.pinned_p0)),
+    reports: parts.flatMap((p) => p.reports ?? []),
+    // 岗位页只算一个岗位：不出岗位 chip（职责层在页头折叠里，不在筛选行上）
+    positions:
+      first === undefined
+        ? []
+        : [{ position_id: first.position.position_id, role_name: first.position.role_name }],
+  }
+}
+
+async function fetchDeck(
+  ids: readonly string[] | undefined,
+  filters: DeckFilters,
+): Promise<DeckData> {
+  if (ids !== undefined && ids.length > 0) {
+    return mergeDecks(await Promise.all(ids.map((id) => getPositionCards(id, filters))))
+  }
+  const home = await getHome('yesterday', filters)
+  return {
+    cards: home.queue,
+    counts: home.counts,
+    pinned_p0: home.pinned_p0,
+    positions: home.tiles.map((b) => ({
+      position_id: b.position_id,
+      role_name: b.role_name,
+    })),
+    battle_report: home.battle_report,
+  }
+}
+
+/** 决定之后给的那一句回执（WP141：「改一下」提交后原来一个字都没有，卡直接没了）。 */
+function receiptKey(body: DecideInput, card: DeckCard): string | undefined {
+  if (body.action === 'instruct')
+    return `deck.receipt.instruct.${body.instruction?.scope ?? 'single_reply'}`
+  if (body.action === 'reject') return 'deck.receipt.reject'
+  if (body.action === 'snooze') return 'deck.receipt.snooze'
+  if (body.action === 'approve' && body.selected_option_id !== undefined)
+    return 'deck.receipt.choice'
+  if (body.action === 'approve' && card.layout === 'policy') return 'deck.receipt.choice'
+  return undefined
+}
+
+export function DeckSection({
+  positionId,
+  positionIds,
+  filters,
+  onOpen,
+}: DeckSectionProps): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const deckRef = useRef<HTMLElement | null>(null)
 
   const [active, setActive] = useState<DeckFilters>(filters ?? {})
   const [mode, setMode] = useState<DeckContentMode>('zh_summary')
-  const [index, setIndex] = useState(0)
+  /*
+   * 游标记的是**卡**，不是下标（WP141）。决定完一张、队列刷新回来，那张卡就不在了；
+   * 按下标 +1 会跳过紧挨着的那张。`cursor` 找不到时退回 `fallback` 那个位置——
+   * 被决定的卡一拿掉，排在它后面那张正好落在这个位置上。
+   */
+  const [cursor, setCursor] = useState<string | undefined>(undefined)
+  const [fallback, setFallback] = useState(0)
   const [exiting, setExiting] = useState<DeckExitDirection | null>(null)
   const [error, setError] = useState<string>('')
+  const [receipt, setReceipt] = useState<string>('')
+
+  const ids =
+    positionIds !== undefined && positionIds.length > 0
+      ? positionIds
+      : positionId === undefined
+        ? undefined
+        : [positionId]
+  const idsKey = ids === undefined ? null : ids.join(',')
 
   const query = useQuery<DeckData>({
-    queryKey: ['deck', positionId ?? null, active],
-    queryFn: async () => {
-      if (positionId !== undefined) {
-        const data = await getPositionCards(positionId, active)
-        return {
-          cards: data.cards,
-          counts: data.counts,
-          pinned_p0: data.pinned_p0,
-          positions: [
-            { position_id: data.position.position_id, role_name: data.position.role_name },
-          ],
-        }
-      }
-      const home = await getHome('yesterday', active)
-      return {
-        cards: home.queue,
-        counts: home.counts,
-        pinned_p0: home.pinned_p0,
-        positions: home.tiles.map((b) => ({
-          position_id: b.position_id,
-          role_name: b.role_name,
-        })),
-        battle_report: home.battle_report,
-      }
-    },
+    queryKey: ['deck', idsKey, active],
+    queryFn: () => fetchDeck(ids, active),
+  })
+  /*
+   * WP141：「卡型」下拉的选项从**没筛过的全部牌**算。原来从筛过的牌算，于是选了
+   * 一种之后下拉里只剩这一种，要换就得先退回「所有卡型」。不带筛选时这就是同一把缓存。
+   */
+  const all = useQuery<DeckData>({
+    queryKey: ['deck', idsKey, {}],
+    queryFn: () => fetchDeck(ids, {}),
   })
 
   const mutation = useMutation({
@@ -88,26 +165,38 @@ export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): 
       decide(input.card.id, input.body, input.card.position_id),
     onError: (err) => {
       setError(err.message)
+      setReceipt('')
       setExiting(null)
     },
-    onSuccess: () => {
+    onSuccess: (_out, input) => {
       setError('')
+      const key = receiptKey(input.body, input.card)
+      setReceipt(key === undefined ? '' : t(key))
     },
     onSettled: () => {
       void client.invalidateQueries({ queryKey: ['deck'] })
       void client.invalidateQueries({ queryKey: ['home'] })
+      // 页头「N 张待审」与左栏岗位旁的数字也跟着变（同一屏的卡数对得上）
+      void client.invalidateQueries({ queryKey: ['positions'] })
+      void client.invalidateQueries({ queryKey: ['position-instance'] })
     },
   })
 
   const cards = query.data?.cards ?? []
   const total = cards.length
-  // 队列变短（决定完刷新回来）时把游标收回范围内，否则会停在一张不存在的卡上。
-  useEffect(() => {
-    setIndex((i) => (i >= total && total > 0 ? total - 1 : i))
-  }, [total])
-
-  const card = cards[Math.min(index, Math.max(total - 1, 0))]
+  const found = cursor === undefined ? -1 : cards.findIndex((c) => c.id === cursor)
+  const index = found >= 0 ? found : Math.max(0, Math.min(fallback, total - 1))
+  const card = cards[index]
   const filtered = Object.keys(active).length > 0
+
+  /** 翻到第 i 张（不是决定：不发请求，卡还在原处等着）。 */
+  const jump = (i: number): void => {
+    const target = cards[i]
+    if (target === undefined || exiting !== null) return
+    setCursor(target.id)
+    setFallback(i)
+    setError('')
+  }
 
   /**
    * 已处理不留队列：飞出 300ms → 下一张（37 §1 第 8 行）。
@@ -118,6 +207,7 @@ export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): 
   const dispatch = (request: DeckDecideRequest): void => {
     if (card === undefined || exiting !== null) return
     setExiting(directionForDeckAction(request.action))
+    setReceipt('')
     mutation.mutate({
       card,
       body: {
@@ -130,9 +220,11 @@ export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): 
         ...(request.reason === undefined ? {} : { reason: request.reason }),
       },
     })
+    const next = cards[index + 1]
     setTimeout(() => {
       setExiting(null)
-      setIndex((i) => i + 1)
+      setCursor(next?.id)
+      setFallback(index)
     }, DECK_EXIT_MS)
   }
 
@@ -172,7 +264,17 @@ export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): 
       </p>
     )
 
-  const kinds = [...new Set(cards.map((c) => c.kind))] as DeckKind[]
+  // 下拉里一直是全部牌里真有的那几种；已选中的那一种就算被决定光了也留着，免得选中值悬空
+  const kinds = [
+    ...new Set([
+      ...(all.data?.cards ?? cards).map((c) => c.kind),
+      ...(active.kind === undefined ? [] : [active.kind]),
+    ]),
+  ] as DeckKind[]
+  const hints =
+    card === undefined
+      ? []
+      : keyboardHints(card.available_actions, (a) => deckActionLabel(card, a, t))
 
   return (
     <section
@@ -201,7 +303,8 @@ export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): 
           pinnedCount={query.data?.pinned_p0.length ?? 0}
           onChange={(next) => {
             setActive(next)
-            setIndex(0)
+            setCursor(undefined)
+            setFallback(0)
           }}
         />
         {/* 语言是**队列级**的，不是每张卡各选一次（37 §1 第 4 行） */}
@@ -226,20 +329,29 @@ export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): 
         </div>
       </div>
 
+      {/* WP141：岗位页的报表块（日报 / 上线检查单）不再混在牌堆里当一张卡 */}
+      <ReportBlocks reports={all.data?.reports ?? []} onOpen={onOpen} />
+
+      {/* WP141：决定之后的一句回执（「记下了」），下一次决定时换掉 */}
+      {receipt === '' ? null : (
+        <p role="status" className="text-xs text-ws-good" data-testid="deck-receipt">
+          {receipt}
+        </p>
+      )}
+
       {card === undefined ? (
         <DeckBattleReport
           {...(query.data?.battle_report === undefined ? {} : { report: query.data.battle_report })}
           filtered={filtered}
           onBackToAll={() => {
             setActive({})
-            setIndex(0)
+            setCursor(undefined)
+            setFallback(0)
           }}
         />
       ) : (
         <>
-          <p className="text-xs text-muted-foreground" data-testid="deck-progress">
-            {t('deck.progress', { index: Math.min(index + 1, total), total })}
-          </p>
+          <DeckBrowser cards={cards} index={index} disabled={exiting !== null} onJump={jump} />
           <div className="relative mb-4">
             {/* 景深：背后两张歪斜的假卡，让「还有几张」有体感 */}
             {index + 1 < total ? (
@@ -265,7 +377,12 @@ export function DeckSection({ positionId, filters, onOpen }: DeckSectionProps): 
               onOpen={onOpen}
             />
           </div>
-          <p className="text-xs text-muted-foreground">{t('deck.keyboard')}</p>
+          {/* WP141：提示行按这张卡真有的动作生成（没有「稍后」就不写 ↑ 稍后） */}
+          {hints.length === 0 ? null : (
+            <p className="text-xs text-muted-foreground" data-testid="deck-keyboard">
+              {hints.join(' · ')}
+            </p>
+          )}
         </>
       )}
     </section>

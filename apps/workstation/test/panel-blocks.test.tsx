@@ -41,6 +41,10 @@ describe('报表块', () => {
     const figures = within(block).getByTestId('report-figures')
     expect(figures.textContent).toContain('61')
     expect(figures.textContent).toContain('3')
+    // WP141：列头是人话，不是字段名
+    expect(figures.textContent).toContain('订单')
+    expect(figures.textContent).toContain('库存告急')
+    expect(figures.textContent).not.toMatch(/low_stock|orders/)
   })
 
   it('没有批准 / 驳回——它不要人决定', () => {
