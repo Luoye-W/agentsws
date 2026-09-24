@@ -3,6 +3,7 @@ import type {
   Clock,
   Completion,
   ModelMeta,
+  ModelRef,
   ObjectRef,
   RunRequest,
   ToolDef,
@@ -93,6 +94,14 @@ export interface DshRuntimeOptions {
    * 不走的时候它也得走，所以授权过期按它判。缺省 `Date.now`；测试注入。
    */
   wallClockMs?: () => number
+  /**
+   * WP147（截图给 AI 看）：这次运行用的模型**能不能看图**——宿主按 WP127 的三步验证回答
+   * （验证过能看才回 true；没验证过 / 看不了都是 false）。
+   *
+   * true 时这条路由向官方声明图片输入，浏览器与电脑操控的截图经官方 MCP 桥 + 这次运行的
+   * 附件库进模型；false / 不给时路由不声明，截图的位置是官方诊断文字（与以前一样看不到图）。
+   */
+  imageInput?: (model: ModelRef) => boolean
 }
 
 /** WP144：出一张电脑操控卡；回 `undefined` = 没出成（宿主没接 / 这一档不允许）。 */

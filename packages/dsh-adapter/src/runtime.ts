@@ -299,6 +299,8 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
           buildDraftPayload,
           model: req.runtime.model.model,
           sessionId: `agentsws-${session_id}`,
+          // WP147：验证过能看图的模型才声明图片输入（截图才进模型）
+          ...(options.imageInput?.(req.runtime.model) === true ? { imageInput: true } : {}),
           /*
            * WP86（55 §4 第三层）：**这条职责有连接才挂 preset**。
            * 没连接就不装 Loader / Include / AgentPresets，工具面里一个 `mcp__*` 都没有

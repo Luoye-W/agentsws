@@ -45,7 +45,6 @@ import {
   computerUseToolDefinitions,
   cuaToolName,
   isComputerUseOwnTool,
-  redactComputerUseValue,
 } from './computer-use.js'
 import { presetToolNames } from './preset.js'
 import { inferRefs, plainText } from './reading.js'
@@ -187,6 +186,12 @@ function emitResult(api: GateApi, sink: (e: RunEvent) => void, call_id: string):
     ...(rec.reason === undefined ? {} : { reason: rec.reason }),
     ...(rec.provenance_added.length > 0 ? { provenance_added: rec.provenance_added } : {}),
   })
+}
+
+/** WP147：规范值是不是一个带图片块的 MCP 结果（`{ content: [{ type: 'image', … }] }`）。 */
+function mcpValueHasImage(value: unknown): boolean {
+  const content = asRecord(value).content
+  return Array.isArray(content) && content.some((b) => asRecord(b).type === 'image')
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -693,9 +698,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       return decision
     }
     // 结果是外部文本：围栏（fencing 在入口，运行时不再信任任何外部文本）
-    // WP144：驱动的结果先把截图 / base64 拿掉（截图不进模型，docs/80 §5）
-    const value =
-      cuaToolName(exec.name) !== undefined ? redactComputerUseValue(result.value) : result.value
+    const value = result.value
     const fenced = EXTERNAL_FENCE.sanitizeValue(value) as JsonValue
     const refs: ObjectRef[] = inferRefs(value)
     if (refs.length > 0) provenance.see(refs, { full: true })
@@ -715,6 +718,25 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       input.onToolResult?.(exec.name, value)
     }
     emitResult(api, sink, call_id)
+    /*
+     * WP147（截图给 AI 看）：带图的结果**按 content 接受**，不按 value。
+     *
+     * 官方 MCP 桥（电脑操控 / Playwright 两条都是它）在 post-execute 之前就把准入的截图装进
+     * `content`（`projectContent`：图片块引用附件库，base64 只留在执行现场的规范值里）。
+     * 按 value 接受会让工具流水线从值重新渲染一遍——MCP 的渲染只出文字，图就没了。
+     * 所以这里：文字块照样过围栏，图片块原样放行；没准入的图本来就是官方诊断文字，同样过围栏。
+     * 没准入的也走这条（值里有 MCP 图片块）：按 value 接受会把官方那句具体原因（例如
+     * 「model … does not declare image input」）重渲染成一句笼统的，按 content 才保得住。
+     * 没有图的结果仍然按 value 接受，逐字节同以前。
+     */
+    if (result.content.some((b) => b.type === 'image') || mcpValueHasImage(value)) {
+      return {
+        kind: 'accept',
+        content: result.content.map((b) =>
+          b.type === 'text' ? { type: 'text', text: EXTERNAL_FENCE.sanitizeText(b.text) } : b,
+        ),
+      }
+    }
     return { kind: 'accept', value: fenced }
   })
 

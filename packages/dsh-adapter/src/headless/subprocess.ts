@@ -115,8 +115,11 @@ function childEnv(token: string): NodeJS.ProcessEnv {
   return env
 }
 
-function wireOptions(options: DshRuntimeOptions): WireRuntimeOptions {
+function wireOptions(options: DshRuntimeOptions, request?: RunRequest): WireRuntimeOptions {
   return {
+    ...(request !== undefined && options.imageInput?.(request.runtime.model) === true
+      ? { imageInput: true }
+      : {}),
     ...(options.seed === undefined ? {} : { seed: options.seed }),
     ...(options.defaultReturnWindowDays === undefined
       ? {}
@@ -411,7 +414,7 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
           child.transport.request(M_RUN, {
             token: child.token,
             request: req,
-            options: wireOptions(options),
+            options: wireOptions(options, req),
             now: options.clock.now(),
             ...(signal.aborted ? { aborted: true } : {}),
           }) as Promise<RunResponse>,

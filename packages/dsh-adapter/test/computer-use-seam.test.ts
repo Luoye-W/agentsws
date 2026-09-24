@@ -6,7 +6,7 @@
  * | 层 | 用什么 | 测什么 |
  * |---|---|---|
  * | 提供方 | **真**官方提供方 + **假驱动**（一个讲 MCP stdio 的 node 脚本） | 挂得上、工具报上来、独占槽、没装好就不挂、驱动起不来不打死我们、卸载时驱动退出 |
- * | 门禁 | 真门禁（经 `harness.gate.execute` 走 dsh 工具流水线） | 没授权全拒、授权过期拒、硬拒、截图不进模型、人接手 |
+ * | 门禁 | 真门禁（经 `harness.gate.execute` 走 dsh 工具流水线） | 没授权全拒、授权过期拒、硬拒、截图原样放行（WP147）、人接手 |
  * | 两档 | 进程内 / 子进程 | 授权卡经宿主回调出得来 |
  *
  * **CI 里不启动真驱动、不动这台电脑**：假驱动只回固定 JSON；真驱动的手工步骤见
@@ -306,9 +306,8 @@ describe('(b) 门禁：驱动工具全部按写、只看授权窗口', () => {
     }
   })
 
-  it('截图不进模型：结果里的图片块与 base64 换成一句说明', async () => {
+  it('WP147：门禁不再脱敏截图；模型看的 content 里没有 base64（没声明看图时是官方诊断）', async () => {
     const req = makeRequest({ computer_use: GRANTED() })
-    const seen: unknown[] = []
     const { harness } = await harnessOf(req)
     try {
       const res = await harness.gate.execute('c_5', `${CUA_TOOL_PREFIX}get_window_state`, {
@@ -316,13 +315,17 @@ describe('(b) 门禁：驱动工具全部按写、只看授权窗口', () => {
         window_id: 2,
       })
       expect(res.isError).toBe(false)
-      seen.push(res.isError ? undefined : res.value)
-      const text = JSON.stringify(seen)
-      expect(text).not.toContain(PNG_B64.slice(0, 64))
-      expect(text).toContain('tree_markdown')
+      // 模型面前的是 content：文字 + 官方 MCP 桥的诊断，没有一个字节的 base64
+      const shown = JSON.stringify(res.content)
+      expect(shown).not.toContain(PNG_B64.slice(0, 64))
+      expect(shown).toContain('tree_markdown')
+      expect(shown).toContain('image unavailable')
+      // 规范值留在执行现场（官方语义：不进会话事件、不进模型），门禁不再改它
+      expect(JSON.stringify(res.isError ? undefined : res.value)).toContain(PNG_B64.slice(0, 64))
     } finally {
       await harness.dispose()
     }
+    // WP144 的脱敏函数导出不变（公共签名），只是门禁不再调它
     expect(redactComputerUseValue({ content: [{ type: 'image', data: PNG_B64 }] })).toEqual({
       content: [{ type: 'text', text: SCREENSHOT_OMITTED }],
     })
@@ -428,7 +431,10 @@ describe('(c) 授权卡 / 接手卡：经宿主回调出卡，批了才挂', () 
       expect(text).toContain(COMPUTER_HANDOFF_TOOL)
       expect(text).toContain('密码')
       expect(text).toContain('验证码')
-      expect(text).toContain('截图不会传给你')
+      // WP147：能看截图，优先读无障碍树文字；截图发给模型、不存进记录
+      expect(text).toContain('你能看到截图')
+      expect(text).toContain('优先读无障碍树文字')
+      expect(text).not.toContain('截图不会传给你')
     } finally {
       await b.harness.dispose()
     }

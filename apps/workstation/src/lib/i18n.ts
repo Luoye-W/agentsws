@@ -2171,7 +2171,7 @@ const zh: Table = {
   'settings.browser.hint':
     '有些活只能在网页上干（YouTube 的频道页、Amazon 卖家后台）。这一节告诉工作台用哪个浏览器去干。不配 = 谁都开不了浏览器。',
   'settings.browser.summary':
-    '每条岗位只能打开它自己那几个网站（职责里写死的），别的站一律打不开。密码永远是你自己在浏览器里输的，AI 看不到。',
+    '每条岗位只能打开它自己那几个网站（职责里写死的），别的站一律打不开。密码永远是你自己在浏览器里输的，AI 看不到。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。',
   'settings.browser.off': '不开浏览器',
   'settings.browser.off.note': '默认。没有哪条岗位能打开网页。',
   'settings.browser.attach': '连接我电脑上的 Chrome',
@@ -2637,7 +2637,7 @@ const zh: Table = {
     '有些活只能在电脑上的某个应用里干。默认关；打开后，你勾了的职责在需要时会先出一张授权卡问你。',
   'settings.cu.enable': '允许 AI 操作这台电脑',
   'settings.cu.risk':
-    '打开之后：批了授权卡，它就能在那几分钟里看你的屏幕、点、输入——和坐在你电脑前的人一样。遇到登录、密码、支付、验证码它会停下请你来，不会替你输。截图不会发给模型。操作时托盘会变红，随时能点「停止」。',
+    '打开之后：批了授权卡，它就能在那几分钟里看你的屏幕、点、输入——和坐在你电脑前的人一样。遇到登录、密码、支付、验证码它会停下请你来，不会替你输。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。操作时托盘会变红，随时能点「停止」。',
   'settings.cu.blocked': '这台服务不在你自己的电脑上，电脑操控开不了。',
   'settings.cu.minutes': '每次授权',
   'settings.cu.minutes.suffix': '分钟（1–60）',
@@ -4877,7 +4877,7 @@ const en: Table = {
   'settings.browser.hint':
     'Some work only exists on a web page (a YouTube channel page, Amazon Seller Central). This section says which browser the workstation uses. Leave it off and no role can open a page at all.',
   'settings.browser.summary':
-    'Each role can only open the sites its job description lists; everything else is refused. Passwords are always typed by you in the browser — the AI never sees them.',
+    'Each role can only open the sites its job description lists; everything else is refused. Passwords are always typed by you in the browser — the AI never sees them. Screenshots go to the AI model you chose so it can see the page; they are not kept in the Agents Workshop records.',
   'settings.browser.off': 'No browser',
   'settings.browser.off.note': 'The default. No role can open a web page.',
   'settings.browser.attach': 'Use the Chrome on my computer',
@@ -5384,7 +5384,7 @@ const en: Table = {
     'Some work only happens inside an app on this computer. Off by default; once on, the duties you tick ask you with a card first.',
   'settings.cu.enable': 'Allow AI to operate this computer',
   'settings.cu.risk':
-    'Once on: after you approve a card, it can see your screen, click and type for those minutes — like someone sitting at your computer. It stops and hands over at logins, passwords, payments and verification codes. Screenshots are not sent to the model. The tray icon turns red while it works; press Stop any time.',
+    'Once on: after you approve a card, it can see your screen, click and type for those minutes — like someone sitting at your computer. It stops and hands over at logins, passwords, payments and verification codes. Screenshots go to the AI model you chose so it can see the screen; they are not kept in the Agents Workshop records. The tray icon turns red while it works; press Stop any time.',
   'settings.cu.blocked':
     'This server is not on your own computer, so computer use cannot be turned on.',
   'settings.cu.minutes': 'Each approval lasts',

@@ -2,7 +2,7 @@
  * WP144（docs/80）：设置 → 电脑操控，与第三栏那一行。
  *
  * 四组断言：
- * 1. 默认关；打开前就把风险用白话说清（能看屏幕、点、输入；密码支付验证码会停下；截图不发给模型）；
+ * 1. 默认关；打开前就把风险用白话说清（能看屏幕、点、输入；密码支付验证码会停下；截图会发给你选的模型、不存进记录——WP147）；
  * 2. 打开后才出：分钟数、勾职责（默认一条都不勾）、三步向导；
  * 3. 三步各自按下去会发生什么：一键下载、打开系统设置那一页（macOS）、自检结果原样列出 + 怎么修；
  * 4. 非本机档：总开关是灰的，写清楚为什么；正在操作时出「停止」，第三栏那一行也在。
@@ -102,7 +102,9 @@ describe('设置页电脑操控', () => {
     expect(card.getAttribute('data-enabled')).toBe('off')
     expect(card.textContent).toContain('看你的屏幕、点、输入')
     expect(card.textContent).toContain('密码')
-    expect(card.textContent).toContain('截图不会发给模型')
+    expect(card.textContent).toContain(
+      '截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录',
+    )
     expect(screen.queryByTestId('computer-use-wizard')).toBeNull()
   })
 

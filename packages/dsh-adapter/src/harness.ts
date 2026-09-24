@@ -9,7 +9,9 @@
  * 上面那段注释；我们的五个门禁仍然是插件，装在 Agent 的 scoped ctx 上（`gate.ts`）。
  */
 import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ChatMessage, Completion, ModelMeta, RunEvent, ToolDef } from '@agentsws/contracts'
 import { chatContentText } from '@agentsws/contracts'
@@ -21,12 +23,20 @@ import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import AgentPresetRegistry from '@deepseek-ai/dsh-agent-preset-registry'
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
+import * as ImageOffload from '@deepseek-ai/dsh-compaction-image-offload'
 import ComputerUseRegistry from '@deepseek-ai/dsh-computer-use'
 import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import * as PlaywrightMcpProvider from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
 import * as CuaDriverMcpProvider from '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
-import type { GenerateOptions, RequestMessage, ToolSchema } from '@deepseek-ai/dsh-llm'
+import type {
+  GenerateOptions,
+  LlmImageRequestBudget,
+  RequestMessage,
+  ToolSchema,
+} from '@deepseek-ai/dsh-llm'
 import LlmRuntime, { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import SandboxLocal from '@deepseek-ai/dsh-sandbox-local'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
@@ -91,6 +101,13 @@ export interface HarnessInput extends GateInput {
   onCompletion?: (completion: Completion) => void
   /** 网关抛错时的原样消息（26 `freeze_on_model_outage` 要的那句话）。 */
   onModelError?: (message: string) => void
+  /**
+   * WP147：这次运行用的模型**声明**能看图（WP127 三步验证过了）。声明了，浏览器 / 电脑操控的
+   * 截图才进模型；不给 = 不声明，截图的位置是官方诊断文字。
+   */
+  imageInput?: boolean
+  /** WP147：一次请求的图片预算（测试用；缺省 `REQUEST_IMAGE_BUDGET`，最多 8 张）。 */
+  imageBudget?: LlmImageRequestBudget
 }
 
 export interface DshHarness {
@@ -314,6 +331,31 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   const cuGranted = computerUseGranted(computerUse, (input.options.wallClockMs ?? Date.now)())
   if (cuGranted) root.plugin(ComputerUseRegistry)
   /*
+   * WP147（Luoye 09-24「截图改成给 AI 看」）：**有浏览器或电脑操控的运行才挂附件库**。
+   *
+   * 官方的截图进模型要两样（`dsh-mcp-client` README「图片准入」）：挂着附件库（`ctx.attachments`），
+   * 而且当前模型路由声明能看图（`llm.ts` 的 `resolveModel`）。挂的是官方
+   * `dsh-attachment-local`，但 `dshHome` 指到**这次运行自己的临时目录**：
+   * - 不落我们的数据目录、不进事件日志、不上云——截图只在这一次运行里活着；
+   * - 运行结束（`dispose`，含装配失败的每条退路）整个目录删掉。上游这个库「永不自动删除」，
+   *   所以删这一步只能我们做，删的只是我们自己刚建的那一个目录。
+   *
+   * 同时挂官方 `dsh-compaction-image-offload`：一次请求的图超了预算，适配器报
+   * `IMAGE_OFFLOAD_REQUIRED`，由它在会话里记一条 `image/offload`（最旧的换占位）并重试这一步。
+   * 腾讯 BrowserSkill 插件同样认 `ctx.attachments` + 路由能力，这一条两条腿都受益。
+   */
+  const imageHome =
+    browser !== undefined || cuGranted
+      ? mkdtempSync(join(tmpdir(), 'agentsws-run-images-'))
+      : undefined
+  const dropImages = (): void => {
+    if (imageHome !== undefined) rmSync(imageHome, { recursive: true, force: true })
+  }
+  if (imageHome !== undefined) {
+    root.plugin(LocalAttachmentStore, { dshHome: imageHome } as never)
+    root.plugin(ImageOffload)
+  }
+  /*
    * WP89（55 §8 Q7）：**只有建站与主题那条职责、而且请求里真给了 `shell`，才有终端**。
    *
    * 挂的是官方那一摞，一个都不是我们写的（顺序就是依赖顺序）：
@@ -391,11 +433,15 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     'sessions',
     ...(browser === undefined || browserSkill ? [] : ['browserUse']),
     ...(cuGranted ? ['computerUse'] : []),
+    ...(imageHome === undefined ? [] : ['attachments']),
     ...(preset === undefined ? [] : ['agentPresets']),
     ...(shell === undefined ? [] : ['shell', 'sandbox', 'sandboxPolicy', 'shellEnv', 'subprocess']),
     // Cordis 的规矩：没 `inject` 过的服务连读都读不到（"cannot get property … without inject"）
     ...(credentials === undefined ? [] : ['credentials']),
-  ])
+  ]).catch((e: unknown) => {
+    dropImages()
+    throw e
+  })
 
   /*
    * WP89：官方 `bash` 工具。**必须在 `agents.create` 之前挂完**——`installGate` 里的
@@ -430,10 +476,14 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   if (preset !== undefined) {
     await withPresetCredentials(ctx, input, async () => {
       await ctx.agentPresets.register(presetDefinition(input.request))
+    }).catch((e: unknown) => {
+      dropImages()
+      throw e
     })
     const resolved = await ctx.agentPresets.resolve(preset.id)
     if (resolved.broken !== undefined) {
       await root.fiber.dispose()
+      dropImages()
       throw new DshAdapterError('internal', `职责 preset 挂不上：${resolved.broken}`)
     }
   }
@@ -456,6 +506,11 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     ...(budget === undefined ? {} : { budget }),
     ...(input.onModelRequest === undefined ? {} : { onRequest: input.onModelRequest }),
     ...(input.onModelError === undefined ? {} : { onError: input.onModelError }),
+    ...(input.imageInput === true ? { imageInput: true } : {}),
+    ...(input.imageBudget === undefined ? {} : { imageBudget: input.imageBudget }),
+    ...(imageHome === undefined
+      ? {}
+      : { attachments: () => ctx.get('attachments') as AttachmentStore | undefined }),
     onCompletion: (c) => {
       lastCompletion = c
       input.onCompletion?.(c)
@@ -524,6 +579,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     releaseSubscription()
     releaseAdapter()
     await root.fiber.dispose()
+    dropImages()
     throw e
   }
 
@@ -593,6 +649,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     releaseSubscription()
     releaseAdapter()
     await root.fiber.dispose()
+    dropImages()
     throw new DshAdapterError('internal', 'Agent setup 没有装上门禁插件')
   }
   const installed = gate
@@ -664,9 +721,14 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     async dispose() {
       releaseSubscription()
       releaseAdapter()
-      await installed.dispose()
-      await handle.dispose()
-      await root.fiber.dispose()
+      try {
+        await installed.dispose()
+        await handle.dispose()
+        await root.fiber.dispose()
+      } finally {
+        // WP147：这次运行的截图随树一起走（上游附件库不自己删）
+        dropImages()
+      }
     },
   }
 }

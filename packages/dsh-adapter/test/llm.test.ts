@@ -106,3 +106,122 @@ describe('WP87 思考模型的 reasoning 在 dsh 这条路上原样带回', () =
     expect(seen[1]?.reasoning).toBe('第 1 轮的推理')
   })
 })
+
+/**
+ * WP147：路由的图片能力声明与截图出线（`resolveModel` / `stream`）。
+ * 能不能看图由宿主按 WP127 三步验证回答；没验证过的来源不声明——行为与以前逐字节相同。
+ */
+describe('WP147：看图声明与工具结果里的截图', () => {
+  const gateway = {
+    async complete(): Promise<Completion> {
+      return {
+        text: 'ok',
+        usage: { input_tokens: 1, output_tokens: 1, cached_tokens: 0, cost_base: 0 },
+        model: { provider: 'stub', model: 'stub-v1' },
+        static_prefix_hash: 'p',
+      }
+    },
+  }
+
+  it('验证过能看图才声明 image；没声明时与以前一样什么都不写', async () => {
+    const yes = new GatewayLlmAdapter({ gateway, meta: META, imageInput: true })
+    expect((await yes.resolveModel('agentsws-gateway', 'm')).inputModalities).toEqual([
+      'text',
+      'image',
+    ])
+    const no = new GatewayLlmAdapter({ gateway, meta: META })
+    expect(await no.resolveModel('agentsws-gateway', 'm')).toEqual({
+      provider: 'agentsws-gateway',
+      id: 'm',
+      name: 'm',
+    })
+  })
+
+  const ref = {
+    attachmentId: 'sha256:0123456789abcdef',
+    mediaType: 'image/png',
+    bytes: 10,
+    width: 3000,
+    height: 1000,
+  }
+  const toolWithImage = (offloaded?: true): Message =>
+    ({
+      role: 'tool',
+      toolCallId: 'call_a' as ToolCallId,
+      content: [
+        { type: 'text', text: 'tree_markdown' },
+        { type: 'image', attachment: ref, ...(offloaded ? { offloaded } : {}) },
+      ],
+    }) as unknown as Message
+
+  it('按官方规则缩放（总像素 2048×2048、不放大、1 MiB 目标）并以图片部件出线', async () => {
+    const seen: unknown[] = []
+    const targets: unknown[] = []
+    const adapter = new GatewayLlmAdapter({
+      gateway: {
+        async complete(req) {
+          seen.push(req.messages)
+          return gateway.complete()
+        },
+      },
+      meta: META,
+      imageInput: true,
+      attachments: () =>
+        ({
+          async readImageRequest(_r: unknown, target: { width: number; height: number }) {
+            targets.push(target)
+            return {
+              attachment: ref,
+              data: new Uint8Array([1, 2, 3]),
+              mediaType: 'image/jpeg',
+              bytes: 3,
+              width: target.width,
+              height: target.height,
+            }
+          },
+        }) as never,
+    })
+    for await (const _ of adapter.stream({
+      messages: [assistantWithCall('call_a', 'shot'), toolWithImage()],
+    } as unknown as GenerateOptions)) {
+      // 走完
+    }
+    expect(targets[0]).toMatchObject({ maxBytes: 1024 * 1024 })
+    const t = targets[0] as { width: number; height: number }
+    expect(t.width * t.height).toBeLessThanOrEqual(2048 * 2048)
+    expect(t.width / t.height).toBeCloseTo(3, 1)
+    const tool = (seen[0] as { role: string; content: unknown }[]).find((m) => m.role === 'tool')
+    expect(tool?.content).toEqual([
+      { type: 'text', text: 'tree_markdown' },
+      expect.objectContaining({ type: 'text' }),
+      { type: 'image', mime: 'image/jpeg', data: 'AQID' },
+    ])
+  })
+
+  it('会话里已标 offloaded 的旧图换成官方占位；路由没声明看图时剩下的图换成「只收文字」那一句', async () => {
+    const seen: unknown[] = []
+    const adapter = new GatewayLlmAdapter({
+      gateway: {
+        async complete(req) {
+          seen.push(req.messages)
+          return gateway.complete()
+        },
+      },
+      meta: META,
+    })
+    for await (const _ of adapter.stream({
+      messages: [
+        assistantWithCall('call_a', 'shot'),
+        toolWithImage(true),
+        assistantWithCall('call_b', 'shot'),
+        { ...toolWithImage(), toolCallId: 'call_b' },
+      ],
+    } as unknown as GenerateOptions)) {
+      // 走完
+    }
+    const text = JSON.stringify(seen)
+    expect(text).toContain('image omitted to fit request image limits')
+    expect(text).toContain('image omitted because this model accepts text only')
+    expect(text).not.toContain('"type":"image"')
+  })
+})

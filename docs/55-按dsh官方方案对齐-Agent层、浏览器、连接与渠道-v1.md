@@ -402,3 +402,8 @@ mtime + size 上、被顶掉的那一代永不回收。所以职责 preset 那�
 **每次运行先出授权卡、批了才挂提供方**（三层开关：总开关 → 勾职责 → 授权 N 分钟）。
 
 全文（形态、三层开关、门禁、隐私、平台差异、实测到的四件事）见 **docs/80**。
+
+**WP147（2026-09-24）截图进模型**：Playwright 的 `browser_take_screenshot` 与 BrowserSkill 的截图动作，
+在路由验证过能看图时同样进模型（官方 MCP 桥 / BrowserSkill 插件都认 `ctx.attachments` + 路由的图片声明）；
+门禁读写分类不变。截图会发给用户选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。机制与预算见 docs/80 §11。
+

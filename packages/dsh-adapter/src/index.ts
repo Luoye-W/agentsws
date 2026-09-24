@@ -65,10 +65,13 @@ export {
   subprocessAvailable,
 } from './headless/index.js'
 export * from './headless/protocol.js'
-export type { GatewayAdapterOptions, GatewayBudget } from './llm.js'
+export type { GatewayAdapterOptions, GatewayBudget, RequestImages } from './llm.js'
 export {
   GATEWAY_PROVIDER,
   GatewayLlmAdapter,
+  // WP147：截图进模型的缩放规则与一次请求的图片预算
+  REQUEST_IMAGE_BUDGET,
+  REQUEST_IMAGE_POLICY,
   splitSystemText,
   toChatMessages,
   toToolDefs,
