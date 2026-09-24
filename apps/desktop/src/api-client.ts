@@ -11,6 +11,7 @@
  * 2. 只对 `127.0.0.1:<自己起的端口>` 说话——URL 由调用方给，不从网页来。
  * 3. 失败一律是「说清楚为什么」的结构化结果，不抛给 UI；托盘上按一下不该炸掉整个壳。
  */
+import type { TrayScene } from './menu.js'
 import type { ApiFetchLike } from './ports.js'
 
 export type HaltScopeName = 'all' | 'model' | 'outbound' | 'learning'
@@ -113,6 +114,16 @@ export interface ApiClient {
     session: DesktopSession,
     assignment: string,
   ): Promise<ApiResult<{ service: string; label?: string; status?: string }[]>>
+  /**
+   * WP136（docs/79）：托盘「切换场景」要列的那几个（`GET /v1/dsh-scenes`）。
+   * 只留点得开的（`launchable`）；服务说这台部署不能切场景时回空数组。
+   */
+  scenes(session: DesktopSession, assignment: string): Promise<ApiResult<TrayScene[]>>
+  /**
+   * WP136：打开一个网页场景（`POST /v1/dsh-scenes/:name/open`）。回的网址带 dsh 的一次性 token——
+   * 只交给 `shell.openExternal`，不进日志。
+   */
+  openScene(session: DesktopSession, assignment: string, name: string): Promise<ApiResult<string>>
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -124,9 +135,9 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
   async function call<T>(
     path: string,
-    init: { method: string; headers?: Record<string, string>; body?: unknown },
+    init: { method: string; headers?: Record<string, string>; body?: unknown; timeoutMs?: number },
   ): Promise<ApiResult<{ value: T; response: Awaited<ReturnType<ApiFetchLike>> }>> {
-    const guard = options.abort?.(options.timeoutMs ?? 5000)
+    const guard = options.abort?.(init.timeoutMs ?? options.timeoutMs ?? 5000)
     try {
       const res = await options.fetchImpl(`${base()}${path}`, {
         method: init.method,
@@ -248,6 +259,42 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
           ...(typeof c.status === 'string' ? { status: c.status } : {}),
         })),
       }
+    },
+
+    async scenes(session, assignment) {
+      const out = await call<{
+        available?: boolean
+        scenes?: { name?: unknown; origin?: unknown; state?: unknown; launchable?: unknown }[]
+      }>('/v1/dsh-scenes', {
+        method: 'GET',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+      })
+      if (!out.ok) return out
+      if (out.value.value.available !== true) return { ok: true, value: [] }
+      const origins = ['agentsws', 'official', 'custom'] as const
+      const states = ['stopped', 'starting', 'running', 'failed'] as const
+      const value: TrayScene[] = []
+      for (const s of out.value.value.scenes ?? []) {
+        const origin = origins.find((o) => o === s.origin)
+        const state = states.find((v) => v === s.state) ?? 'stopped'
+        if (typeof s.name !== 'string' || origin === undefined || s.launchable !== true) continue
+        value.push({ name: s.name, origin, state })
+      }
+      return { ok: true, value }
+    },
+
+    async openScene(session, assignment, name) {
+      const out = await call<{ url?: unknown }>(`/v1/dsh-scenes/${encodeURIComponent(name)}/open`, {
+        method: 'POST',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+        // 第一次打开要等 dsh 初始化场景目录、起网页服务；服务端自己 60 秒封顶
+        timeoutMs: 90_000,
+      })
+      if (!out.ok) return out
+      const url = out.value.value.url
+      return typeof url === 'string'
+        ? { ok: true, value: url }
+        : { ok: false, reason: '响应里没有网址' }
     },
 
     async setBrowserEndpoint(session, assignment, endpoint) {
