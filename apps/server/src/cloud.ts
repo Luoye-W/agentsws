@@ -417,16 +417,21 @@ export function createCloud(options: CloudOptions): CloudAssembly {
    */
   const createTopupOrder = async (tier_id: string): Promise<TopupOrder> => {
     if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
-    const order = await callCloud<TopupOrder>('/v1/wallet/topup', {
+    /*
+     * WP142：走带人话的那一跳（`cloudCall`）——云上说了为什么建不了（demo 替身的「不真收钱」、
+     * 还没接上支付……），就把那一句原样端给用户；连都连不上才用下面这句兜底。
+     */
+    const out = await cloudCall<TopupOrder>('/v1/wallet/topup', {
       method: 'POST',
-      body: JSON.stringify({ provider: 'stripe', tier_id }),
+      body: { provider: 'stripe', tier_id },
     })
-    if (order === undefined)
-      throw new ApiError(
-        'provider_unavailable',
-        '云上暂时建不了充值单（连不通，或者那边还没接上支付）。稍后再试一次。',
-      )
-    return order
+    if (out.ok && out.data !== undefined) return out.data
+    throw new ApiError(
+      'provider_unavailable',
+      !out.ok && out.status !== 0 && out.message !== undefined
+        ? out.message
+        : '云上暂时建不了充值单（连不通，或者那边还没接上支付）。稍后再试一次。',
+    )
   }
 
   const port: CloudPort = {

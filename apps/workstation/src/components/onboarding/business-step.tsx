@@ -16,7 +16,7 @@
  *    （70 §4 末段）。用自己的模型接口时这句话不出现——那时它不经我们的云。
  */
 import { DEFAULT_BRAND_INTAKE_CAP_CREDITS } from '@agentsws/contracts'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { BrandMark } from '@/components/design'
 import { BrandProfileCard } from '@/components/onboarding/brand-profile-card'
@@ -50,6 +50,11 @@ export interface BusinessStepProps {
   onRename: (name: string) => void
   onCompanyName: (name: string) => void
   companyName: string
+  /**
+   * WP142：用户自己动过「公司全称」那一格没有。没动过就用分析出来的全称预填
+   * ——档案卡上不再另出一格，公司全称只有这一个来源。
+   */
+  companyEdited?: boolean
 }
 
 export function BusinessStep({
@@ -60,8 +65,10 @@ export function BusinessStep({
   onRename,
   onCompanyName,
   companyName,
+  companyEdited = false,
 }: BusinessStepProps): React.ReactNode {
   const { t } = useApp()
+  const client = useQueryClient()
   const [url, setUrl] = useState('')
   const [second, setSecond] = useState('')
   const [runId, setRunId] = useState<string | undefined>(undefined)
@@ -122,12 +129,20 @@ export function BusinessStep({
       ),
     onSuccess: (done) => {
       setFailure(undefined)
+      // WP142：卡上当场显示「已确认」与那一句回执（不等下一次轮询）
+      client.setQueryData(['brand-intake', 'run', done.id, assignment], done)
+      setRunId(done.id)
       onSettled(done)
     },
     onError: say,
   })
 
   const busy = start.isPending || again.isPending || confirm.isPending || isRunning(current)
+  const analyzedLegal = current?.profile.legal_name?.value
+  const shownCompany =
+    !companyEdited && typeof analyzedLegal === 'string' && analyzedLegal.trim() !== ''
+      ? analyzedLegal
+      : companyName
   const failedPages = (current?.pages ?? []).filter((p) => !p.ok)
 
   return (
@@ -219,6 +234,7 @@ export function BusinessStep({
             profile={current.profile}
             edits={edits}
             busy={busy}
+            confirmed={current.status === 'confirmed'}
             onEdit={(field, value) => {
               setEdits((prev) => ({ ...prev, [field]: value }))
             }}
@@ -233,7 +249,8 @@ export function BusinessStep({
             <p className="text-xs text-ws-muted-fg" data-testid="intake-missed">
               {t('onboarding.business.missed', {
                 count: failedPages.length,
-                reason: failedPages[0]?.reason ?? '',
+                // WP142：句号由模板给，原因自己带的那个去掉（免得「。。」）
+                reason: (failedPages[0]?.reason ?? '').replace(/[。.]+$/, ''),
               })}
             </p>
           )}
@@ -249,7 +266,7 @@ export function BusinessStep({
               id="company-name"
               data-testid="company-legal-name"
               maxLength={128}
-              value={companyName}
+              value={shownCompany}
               onChange={(e) => {
                 onCompanyName(e.target.value)
               }}

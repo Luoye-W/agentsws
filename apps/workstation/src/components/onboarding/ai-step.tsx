@@ -83,6 +83,40 @@ function slugOf(template: { kind: string; default_base_url: string }): string {
   return `${template.kind}:${template.default_base_url}`
 }
 
+/**
+ * WP142（docs/78 第 3 步）：**同一家厂商的几个方案收成一个钮**。
+ *
+ * 百炼有三个方案（按量 / Token Plan / Coding Plan），以前摆成三个都叫「阿里云百炼」的钮，
+ * 第一眼看不出差别。现在按 `vendor` 归成一组：第一排是厂商，选中之后有几个方案才出
+ * 第二排（与设置页那张合并卡同一条思路，WP90）。没写 `vendor` 的模板自己一组。
+ */
+export interface VendorGroup<T extends { kind: string; default_base_url: string }> {
+  key: string
+  label: string
+  plans: T[]
+}
+
+export function vendorGroups<
+  T extends {
+    kind: string
+    default_base_url: string
+    label: string
+    vendor?: string
+    vendor_label?: string
+    plan_order?: number
+  },
+>(templates: readonly T[]): VendorGroup<T>[] {
+  const out: VendorGroup<T>[] = []
+  for (const tpl of templates) {
+    const key = tpl.vendor ?? slugOf(tpl)
+    const found = out.find((g) => g.key === key)
+    if (found === undefined) out.push({ key, label: tpl.vendor_label ?? tpl.label, plans: [tpl] })
+    else found.plans.push(tpl)
+  }
+  for (const g of out) g.plans.sort((a, b) => (a.plan_order ?? 0) - (b.plan_order ?? 0))
+  return out
+}
+
 export interface AiStepProps {
   assignment?: string
   /** 接上了：向导据此亮「下一步」。 */
@@ -123,14 +157,25 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
     retry: false,
   })
 
+  /**
+   * WP142（docs/78 #6）：发登录信那一跳**连不上云时单独说**——等的时候有一句
+   * 「正在连 Agents 工坊云…」，失败了给「再试一次」与「先逛逛演示数据」两个按钮，
+   * 不只报一个网址。朋友里没有自己模型 key 的人全靠这一跳。
+   */
+  const [sendError, setSendError] = useState<string | undefined>(undefined)
   const send = useMutation({
     mutationFn: (value: string) => linkCloudAccount(value, assignment),
     onSuccess: () => {
       setFailure(undefined)
+      setSendError(undefined)
       setSent(true)
     },
     onError: (err: unknown) => {
-      setFailure(err instanceof ApiClientError ? err.message : t('error.generic'))
+      setSendError(
+        err instanceof ApiClientError && err.code !== 'provider_unavailable'
+          ? err.message
+          : t('onboarding.ai.official.offline'),
+      )
     },
   })
 
@@ -226,6 +271,10 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
       !isAccountTemplate(tpl),
   )
   const template = templates.find((tpl) => slugOf(tpl) === picked) ?? templates[0]
+  const groups = vendorGroups(templates)
+  const group = groups.find((g) =>
+    g.plans.some((p) => template !== undefined && slugOf(p) === slugOf(template)),
+  )
   const granted = credits.data?.balance?.granted
 
   return (
@@ -286,12 +335,52 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                   disabled={send.isPending || email.trim() === ''}
                   data-testid="ai-official-send"
                   onClick={() => {
+                    setSendError(undefined)
                     send.mutate(email.trim())
                   }}
                 >
+                  {send.isPending ? <Loader2 aria-hidden className="animate-spin" /> : null}
                   {t('onboarding.ai.official.send')}
                 </Button>
               </div>
+              {send.isPending ? (
+                <p
+                  className="flex items-center gap-1.5 text-ws-muted-fg"
+                  data-testid="ai-official-pending"
+                >
+                  <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                  {t('onboarding.ai.official.pending')}
+                </p>
+              ) : null}
+              {sendError === undefined || send.isPending ? null : (
+                <div className="flex flex-col gap-2" data-testid="ai-official-failed">
+                  <p role="alert" className="text-destructive" data-testid="ai-error">
+                    {sendError}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      data-testid="ai-official-retry"
+                      disabled={email.trim() === ''}
+                      onClick={() => {
+                        setSendError(undefined)
+                        send.mutate(email.trim())
+                      }}
+                    >
+                      {t('onboarding.ai.official.retry')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      data-testid="ai-official-demo"
+                      onClick={onDemo}
+                    >
+                      {t('onboarding.ai.demo')}
+                    </Button>
+                  </div>
+                </div>
+              )}
               {sent ? (
                 <p
                   className="flex items-center gap-1.5 text-ws-muted-fg"
@@ -329,16 +418,44 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
 
         {choice === 'own' && template !== undefined ? (
           <div className="mt-2 flex flex-col gap-2">
-            {templates.length < 2 ? null : (
+            {groups.length < 2 ? null : (
               <div className="flex flex-wrap gap-1.5" data-testid="ai-own-templates">
-                {templates.map((tpl) => (
+                {groups.map((g) => {
+                  const first = g.plans[0] as (typeof templates)[number]
+                  const on = g.key === group?.key
+                  return (
+                    <button
+                      key={g.key}
+                      type="button"
+                      data-testid={`ai-own-template-${slugOf(first)}`}
+                      data-picked={on}
+                      className={cn(
+                        'rounded-sm border px-2 py-0.5 text-xs',
+                        on ? 'border-primary text-foreground' : 'text-ws-muted-fg',
+                      )}
+                      onClick={() => {
+                        if (on) return
+                        setPicked(slugOf(first))
+                        setTest(undefined)
+                      }}
+                    >
+                      {g.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {/* 同一家有几个方案才出这一排（百炼：按量 / Token Plan / Coding Plan） */}
+            {group === undefined || group.plans.length < 2 ? null : (
+              <div className="flex flex-wrap gap-1.5" data-testid="ai-own-plans">
+                {group.plans.map((tpl) => (
                   <button
                     key={slugOf(tpl)}
                     type="button"
-                    data-testid={`ai-own-template-${slugOf(tpl)}`}
+                    data-testid={`ai-own-plan-${slugOf(tpl)}`}
                     data-picked={slugOf(tpl) === slugOf(template)}
                     className={cn(
-                      'rounded-sm border px-2 py-0.5 text-xs',
+                      'rounded-full border px-2 py-0.5 text-[11px]',
                       slugOf(tpl) === slugOf(template)
                         ? 'border-primary text-foreground'
                         : 'text-ws-muted-fg',
@@ -348,7 +465,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                       setTest(undefined)
                     }}
                   >
-                    {tpl.vendor_label ?? tpl.label}
+                    {tpl.plan_label ?? tpl.label}
                   </button>
                 ))}
               </div>

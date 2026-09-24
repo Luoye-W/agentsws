@@ -26,7 +26,13 @@ import { AiStep } from '@/components/onboarding/ai-step'
 import { BusinessStep } from '@/components/onboarding/business-step'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { PlanList } from '@/components/onboarding/plan-list'
-import { presetPick } from '@/components/onboarding/preset-roles'
+import {
+  applyPurposes,
+  availablePurposes,
+  presetPick,
+  purposesOf,
+} from '@/components/onboarding/preset-roles'
+import { PurposePicker } from '@/components/onboarding/purpose-picker'
 import { expandPick, type RolePick, RolePicker } from '@/components/onboarding/role-picker'
 import { StepProgress } from '@/components/onboarding/step-progress'
 import { Button } from '@/components/ui/button'
@@ -214,9 +220,19 @@ export function OnboardingPage(): React.ReactNode {
     onError: say,
   })
 
+  /**
+   * WP142（docs/78 第 9 步）：完成屏的数字**按服务端真建了几条说**，已经有的被跳过也说出来
+   * ——以前写的是勾了几条，与第 ④ 步各岗位「已勾」加起来对不上，还不说差在哪。
+   */
+  const [applied, setApplied] = useState<{ created: number; skipped: number } | undefined>(
+    undefined,
+  )
   const apply = useMutation({
     mutationFn: () => applyOnboarding(planInput()),
-    onSuccess: async () => {
+    onSuccess: async (out) => {
+      // 服务端一条都没回（老服务端 / 职责定义没装）就退回按勾选数说
+      if (out.created_assignments.length + out.skipped.length > 0)
+        setApplied({ created: out.created_assignments.length, skipped: out.skipped.length })
       setFailure(undefined)
       await client.invalidateQueries({ queryKey: ['onboarding'] })
       await client.invalidateQueries({ queryKey: ['positions'] })
@@ -287,6 +303,7 @@ export function OnboardingPage(): React.ReactNode {
                   email: state.data.person.email,
                 }}
                 companyName={companyName}
+                companyEdited={companyDraft !== undefined}
                 onRename={setNameDraft}
                 onCompanyName={setCompanyDraft}
                 onSettled={(run) => {
@@ -312,14 +329,25 @@ export function OnboardingPage(): React.ReactNode {
             positions.data === undefined ? (
               <Skeleton className="h-40 w-full" />
             ) : (
-              <RolePicker
-                positions={positions.data}
-                value={pick}
-                onChange={(next) => {
-                  setTouched(true)
-                  setPick(next)
-                }}
-              />
+              <div className="flex flex-col gap-4">
+                {/* WP142：先问「这次主要想让它干什么」，按答案勾岗位（红人营销从此能被预勾） */}
+                <PurposePicker
+                  available={availablePurposes(positions.data)}
+                  value={purposesOf(pick)}
+                  onChange={(next) => {
+                    setTouched(true)
+                    setPick(applyPurposes(pick, next, positions.data ?? []))
+                  }}
+                />
+                <RolePicker
+                  positions={positions.data}
+                  value={pick}
+                  onChange={(next) => {
+                    setTouched(true)
+                    setPick(next)
+                  }}
+                />
+              </div>
             )
           ) : null}
 
@@ -342,8 +370,13 @@ export function OnboardingPage(): React.ReactNode {
             >
               <DoneMark />
               <p className="ws-display text-[17px]">{t('onboarding.done.title')}</p>
-              <p className="max-w-sm text-sm text-ws-muted-fg">
-                {t('onboarding.done.line', { count: expanded.length })}
+              <p className="max-w-sm text-sm text-ws-muted-fg" data-testid="onboarding-done-line">
+                {applied !== undefined && applied.created === 0 && applied.skipped > 0
+                  ? t('onboarding.done.all_held', { n: applied.skipped })
+                  : t('onboarding.done.line', { count: applied?.created ?? expanded.length })}
+                {applied === undefined || applied.skipped === 0 || applied.created === 0
+                  ? null
+                  : ` ${t('onboarding.done.skipped', { n: applied.skipped })}`}
               </p>
               <Button
                 size="sm"

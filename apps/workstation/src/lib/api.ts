@@ -3995,6 +3995,8 @@ export interface KolSearchData {
   reason?: string
   observed_at?: string
   reveal_price?: { capability: string; credits: number; unit: string; note: string }
+  /** WP142：搜不了时的两个去处（关联官方账号 / 接自己的数据接口），界面画成两个按钮。 */
+  entry_points?: { id: 'link_account' | 'byo'; label: string; note: string }[]
 }
 
 export interface KolStagedData {
