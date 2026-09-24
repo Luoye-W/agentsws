@@ -44,6 +44,7 @@ import {
   searchKolCreators,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { tOr } from '@/lib/humanize'
 import { CollabThread } from './collab-thread'
 import { KolSandboxBar } from './kol-sandbox-bar'
 import { errorText, KolError, KolReceipt } from './kol-shared'
@@ -439,7 +440,7 @@ function CreatorDetail({
         out.staged
           ? out.auto_approved === true
             ? '这封信已经排进出站队列。'
-            : '起草好了，在待办里等你批。批了才发。'
+            : '起草好了，在卡片里等你批。批了才发。'
           : undefined,
       )
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
@@ -504,7 +505,8 @@ function CreatorDetail({
                 <li key={c.id} className="font-mono text-xs" data-testid="kol-contact">
                   {c.masked}
                   <span className="ml-2 font-sans text-muted-foreground">
-                    {t(`kol.contact.source.${c.source}`, { source: c.source })}
+                    {/* WP141：没登记的来源不把 i18n 键印上屏（走查第 19 步的 kol.contact.source.sandbox） */}
+                    {tOr(t, `kol.contact.source.${c.source}`, t('kol.contact.source.other'))}
                   </span>
                 </li>
               ))}

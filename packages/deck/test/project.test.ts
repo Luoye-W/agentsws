@@ -358,13 +358,18 @@ describe('矩阵表本身', () => {
   })
 
   it('表里没有的 kind 走通用卡', () => {
-    expect(actionsFor('join_mapping', 'pending')).toEqual(['approve', 'reject', 'open'])
+    expect(actionsFor('join_mapping', 'pending')).toEqual(['approve', 'reject', 'snooze', 'open'])
     expect(labelsFor('join_mapping', ['approve', 'open'])).toEqual({
       approve: '批准',
       open: '打开',
     })
     expect(riskClassFor('join_mapping')).toBe('high')
     expect(riskClassFor('staged_change')).toBe('medium')
+  })
+  it('WP141：每张还能决定的卡都有「稍后」（campaign 名单卡、入群申请也不例外）', () => {
+    for (const kind of ['kol_campaign', 'membership', 'join_mapping', 'design_variant'] as const) {
+      expect(actionsFor(kind, 'pending')).toContain('snooze')
+    }
   })
   it('预计分钟：每种卡一个数，未知的按 2 分钟', () => {
     expect(minutesFor('policy_change')).toBe(4)

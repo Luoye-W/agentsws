@@ -97,3 +97,21 @@ export function secondsLeft(expiresAt: string | undefined, nowMs: number): numbe
   if (!Number.isFinite(at)) return null
   return (at - nowMs) / 1000
 }
+
+const ARROW: Record<DeckDirection, string> = { right: '→', left: '←', up: '↑', down: '↓' }
+
+/**
+ * WP141（docs/78 §1 #4）：提示行**按这张卡真有的动作**生成。
+ *
+ * 原来那一行是写死的「→ 批准 · ← 拒绝 · ↑ 稍后 · ↓ 指导」，而 campaign 名单卡
+ * 根本没有「稍后」——提示行在教人按一个按了没反应的键。现在只列这张卡有的那几个，
+ * 字也跟按钮上的一样（`label` 由调用方给，按钮行与提示行同一份）。
+ */
+export function keyboardHints(
+  available: readonly DeckAction[],
+  label: (action: DeckAction) => string,
+): string[] {
+  return (['right', 'left', 'up', 'down'] as const)
+    .filter((d) => available.includes(BY_DIRECTION[d]))
+    .map((d) => `${ARROW[d]} ${label(BY_DIRECTION[d])}`)
+}

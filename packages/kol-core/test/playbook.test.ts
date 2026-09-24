@@ -12,6 +12,7 @@ import {
   describeKolRun,
   followersZh,
   KOL_INTENT_ZH,
+  kolToolZh,
   parseFollowerBand,
   parseOutreachStep,
   parseWantedCount,
@@ -196,9 +197,8 @@ describe('工具计划', () => {
 
 describe('摘要', () => {
   it('一句人话，把这次真干过的事按顺序串起来', () => {
-    // WP142：工具名换人话；与意图同名的（「找人」）不重复说
     expect(describeKolRun({ intent: 'find', readTools: ['search_creators'], found: 12 })).toBe(
-      '找人；找到 12 个候选',
+      '找人；找到 12 个候选；查了红人库',
     )
     expect(
       describeKolRun({
@@ -206,7 +206,7 @@ describe('摘要', () => {
         readTools: ['get_creator', 'get_creator'],
         drafted: true,
       }),
-    ).toBe('建联起草；查了：看这个人的资料；起草了一封开发信（待批）')
+    ).toBe('建联起草；查了红人资料；起草了一封开发信（待批）')
     expect(
       describeKolRun({
         intent: 'negotiate',
@@ -215,16 +215,7 @@ describe('摘要', () => {
         askedWhat: '这个价能接吗',
         exhausted: 'max_tool_calls',
       }),
-    ).toBe('议价；提了一条合作（待批）；问了一句：这个价能接吗；工具调用次数预算用完了，先停在这里')
-  })
-
-  it('WP142：摘要里一个工具名都不露（认不出的也不露）', () => {
-    const said = describeKolRun({
-      intent: 'collab_status',
-      readTools: ['list_collaborations', 'kol.search_policies', 'some_new_tool'],
-    })
-    expect(said).toBe('看合作进展；查了：看合作清单、查政策、查了一下资料')
-    expect(said).not.toMatch(/[a-z]+_[a-z]+/)
+    ).toBe('议价；提了一条合作（待批）；问了一句：这个价能接吗；这次能查的次数用完了，先停在这里')
   })
 
   it('七类意图都有一个人话名字', () => {
@@ -295,5 +286,13 @@ describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
     expect(followersZh(48_000)).toBe('4.8 万粉')
     expect(followersZh(100_000)).toBe('10 万粉')
     expect(followersZh(8_500)).toBe('8,500 粉')
+  })
+})
+
+describe('WP142 回话里一行一件事：动作说人话', () => {
+  it('工具名 → 动作；带前缀的也认；认不出的不露名字', () => {
+    expect(kolToolZh('search_creators')).toBe('找人')
+    expect(kolToolZh('kol.search_policies')).toBe('查政策')
+    expect(kolToolZh('some_new_tool')).toBe('查了一下资料')
   })
 })

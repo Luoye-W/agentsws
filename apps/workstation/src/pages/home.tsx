@@ -631,7 +631,12 @@ export function HomePage(): React.ReactNode {
                   <ListTodo className="size-4" aria-hidden />
                   {t('home.today.due')}
                 </h3>
-                <TodayDue todos={today.due.todos} cardsWaiting={today.due.cards_waiting} />
+                {/*
+                  WP141（docs/78 §2 首页）：「还有 N 张卡」与页头「N 张卡等你决定」、筛选「全部 N」
+                  同一个数——都是牌堆的张数（合并前）。原来这里读的是工作模型里所有等着人的
+                  审批项，日报也算一张，于是页头 7、这里 8。
+                */}
+                <TodayDue todos={today.due.todos} cardsWaiting={data.counts.total} />
               </WsCard>
               <WsCard className="p-4" data-testid="home-inprogress">
                 <InProgressTitle />

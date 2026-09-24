@@ -66,7 +66,10 @@ export function DeckNotePanel({
                 data-example={e.id}
                 title={e.expected_output}
                 onClick={() => {
-                  setText(e.description)
+                  // WP141（docs/78 §2 客服第 37 步）：已经写了话就**接在后面**，不整段换掉
+                  setText((prev) =>
+                    prev.trim() === '' ? e.description : `${prev.trimEnd()}\n${e.description}`,
+                  )
                 }}
               >
                 {lang === 'en' ? e.title.en : e.title.zh}

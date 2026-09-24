@@ -93,6 +93,19 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
     .flatMap((r) => r.quick_prompts ?? [])
     .slice(0, MAX_ENTRY_SUGGESTIONS)
 
+  /*
+   * WP141（docs/78 §2 红人）：输入框的示例**按岗位给**。原来每个岗位都写「比如『把 A 商品
+   * 降价 10%』」，红人、客服也一样。现在抄这个岗位自己的第一条快捷提示；一条都没有就
+   * 只说「一句话说清要办什么」，不拿别的岗位的活儿举例。
+   */
+  const example = suggestions[0]
+  const placeholder =
+    example === undefined
+      ? t('position.entry.placeholder.plain')
+      : t('position.entry.placeholder.example', {
+          example: lang === 'en' ? example.label.en : example.label.zh,
+        })
+
   return (
     <Card data-testid="position-entry" data-position={view.position_id}>
       <CardHeader className="pb-2">
@@ -116,7 +129,7 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
             id="position-entry-text"
             rows={2}
             value={text}
-            placeholder={t('position.entry.placeholder')}
+            placeholder={placeholder}
             data-testid="position-entry-input"
             onChange={(e) => {
               setText(e.target.value)

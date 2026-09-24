@@ -15,6 +15,8 @@ import { pickContent } from '@agentsws/deck'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useApp } from '@/lib/app-context'
+import { channelLabel, fieldLabel, fieldValue } from '@/lib/humanize'
+import type { Lang } from '@/lib/i18n'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -29,9 +31,15 @@ function valueText(v: unknown): string {
   return JSON.stringify(v)
 }
 
-/** payload 里的 before / after 摊成键值对；不是对象就当成单个值。 */
-function pairs(v: unknown): [string, string][] {
-  if (isRecord(v)) return Object.entries(v).map(([k, x]) => [k, valueText(x)])
+/**
+ * payload 里的 before / after 摊成键值对；不是对象就当成单个值。
+ *
+ * WP141：键与值都过 `lib/humanize`——卡面上不再出现 `late_return_grace_days: 0 → 7`，
+ * 而是「过了退货期还能宽限: 0 天 → 7 天」。
+ */
+function pairs(v: unknown, lang: Lang): [string, string][] {
+  if (isRecord(v))
+    return Object.entries(v).map(([k, x]) => [fieldLabel(k, lang), fieldValue(k, x, lang)])
   if (v === undefined) return []
   return [['', valueText(v)]]
 }
@@ -100,11 +108,44 @@ function KeyValues({
   )
 }
 
+/**
+ * WP141（docs/78 §2 红人）：挑人清单卡的主体——按渠道一组一行，列出名字。
+ *
+ * 原来它走通用的人物排版，卡面上是一个写着「没」的头像配「没写名字」。
+ * 这张卡要人回答的是"这批人你认不认"，那就把这批人摆出来。
+ */
+function CampaignGroups({ groups }: { groups: unknown[] }): React.ReactNode {
+  const { t, lang } = useApp()
+  const rows = groups.filter(isRecord)
+  return (
+    <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-campaign-groups">
+      {rows.map((g) => {
+        const picks = Array.isArray(g.picks) ? g.picks.filter(isRecord) : []
+        const names = picks.map((p) => str(p.display_name) ?? str(p.handle)).filter(Boolean)
+        const channel = channelLabel(str(g.channel) ?? '', lang)
+        return (
+          <div
+            key={`${channel}:${str(g.role_id) ?? ''}`}
+            className="rounded-[10px] bg-ws-surface p-2.5 text-[13px] leading-5"
+            data-testid="deck-campaign-group"
+          >
+            <b>{t('deck.campaign.group', { channel, n: picks.length })}</b>
+            {names.length === 0 ? null : <span className="text-ws-body">：{names.join('、')}</span>}
+            {g.allowed === false ? (
+              <p className="text-xs text-ws-muted-fg">{t('deck.campaign.blocked')}</p>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** before / after 双格（② 改动卡与 ⑪ 策略卡共用的那一块）。 */
 function BeforeAfter({ before, after }: { before: unknown; after: unknown }): React.ReactNode {
-  const { t } = useApp()
-  const b = pairs(before)
-  const a = pairs(after)
+  const { t, lang } = useApp()
+  const b = pairs(before, lang)
+  const a = pairs(after, lang)
   if (b.length === 0 && a.length === 0) return null
   return (
     <div className="grid grid-cols-2 gap-2.5" data-testid="deck-before-after">
@@ -202,7 +243,7 @@ export function DeckCardBody({
   onOption: (id: string) => void
   onOpen: () => void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const payload = isRecord(card.detail.payload) ? card.detail.payload : {}
   const content = pickContent(card.content_variants, mode)
   const options = card.options ?? []
@@ -274,7 +315,7 @@ export function DeckCardBody({
       // ④ 金钱：金额一个大字，旁边是额度与依据的键值对
       case 'money': {
         const amount = highlightText(card, 'amount') ?? valueText(payload.amount)
-        const rows = pairs(payload.caps).concat(pairs(payload.basis))
+        const rows = pairs(payload.caps, lang).concat(pairs(payload.basis, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-money">
             <div className="flex items-end gap-3.5">
@@ -334,7 +375,7 @@ export function DeckCardBody({
 
       // ⑦ 事后决定：系统已经做了一件事，判据键值对是主体，问的是"要不要改回来"
       case 'aftermath': {
-        const rows = pairs(payload.facts).concat(pairs(payload.after))
+        const rows = pairs(payload.facts, lang).concat(pairs(payload.after, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-aftermath">
             <div className="rounded-[10px] bg-ws-surface p-3">
@@ -351,8 +392,11 @@ export function DeckCardBody({
 
       // ⑧ 人物：头像 + 资料摘要 + 规则匹配结果
       case 'person': {
+        // WP141：红人挑人清单卡不是「一个人」，是按渠道分组的一批人——照组列名字
+        if (Array.isArray(payload.by_channel)) return <CampaignGroups groups={payload.by_channel} />
         const who = isRecord(payload.person) ? payload.person : {}
-        const name = str(who.name) ?? str(payload.name) ?? t('deck.person.unknown')
+        const named = str(who.name) ?? str(payload.name)
+        const name = named ?? t('deck.person.unknown')
         const profile = str(who.profile) ?? str(payload.profile)
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-person">
@@ -361,7 +405,7 @@ export function DeckCardBody({
                 data-testid="deck-person-avatar"
                 className="inline-flex size-10 flex-none items-center justify-center rounded-full bg-ws-info-bg text-sm font-semibold text-ws-info"
               >
-                {name.slice(0, 1)}
+                {named === undefined ? '?' : named.slice(0, 1)}
               </span>
               <div className="min-w-0 flex-1 text-[13px] leading-5">
                 <b>{name}</b>

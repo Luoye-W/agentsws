@@ -14,7 +14,7 @@
  * 1. **每一个动作都有回执，失败照实说**（`KolError` / `KolReceipt`）。
  *    这一屏是新写的，从第一行起就不许再出现 66 断点 #5 那种"点了没反应"。
  * 2. **验收结论不是直接改库**：它提的是一条 `kol_deliverable_review` 变更，
- *    出一张待人批的卡。所以按钮上写的是「提交验收」，回执里写「在待办里等你批」——
+ *    出一张待人批的卡。所以按钮上写的是「提交验收」，回执里写「在卡片里等你批」——
  *    不写「已通过」，因为还没有。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -185,7 +185,7 @@ export function CollabThread({
       setNotes('')
       setReceipt(
         out.staged
-          ? '验收结论提上去了，在待办里等你批。批了才算数。'
+          ? '验收结论提上去了，在卡片里等你批。批了才算数。'
           : (out.message ?? '这条结论没提上去。'),
       )
       refresh()
@@ -239,7 +239,7 @@ export function CollabThread({
       setError(undefined)
       setReceipt(
         out.staged
-          ? '议价提上去了，在待办里等你批（那张卡上写着要付多少钱）。批了这条合作才进「谈条件中」。'
+          ? '议价提上去了，在卡片里等你批（那张卡上写着要付多少钱）。批了这条合作才进「谈条件中」。'
           : (out.message ?? '这个数没提上去。'),
       )
       refresh()
@@ -302,9 +302,22 @@ export function CollabThread({
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
         {/* ① 阶段：推到下一步 */}
+        {/*
+          WP141（docs/78 §2 红人第 27 步）：标题写「现在到哪一步」，下面原来只摆着
+          **下一步**的按钮——于是「交付中」的合作这里读成「已交付」。现在先说现在在哪，
+          再给「推到」哪几步。
+        */}
         <section data-testid="kol-thread-stage">
-          <h4 className="mb-1 text-xs font-medium text-muted-foreground">现在到哪一步</h4>
-          <div className="flex flex-wrap gap-1">
+          <h4 className="mb-1 text-xs font-medium text-muted-foreground">
+            现在到哪一步：
+            <span className="text-foreground" data-testid="kol-thread-stage-now">
+              {t(`kol.stage.${collab.stage}`)}
+            </span>
+          </h4>
+          <div className="flex flex-wrap items-center gap-1">
+            {(NEXT_STAGES[collab.stage] ?? []).length === 0 ? null : (
+              <span className="text-xs text-muted-foreground">推到：</span>
+            )}
             {(NEXT_STAGES[collab.stage] ?? []).length === 0 ? (
               <span className="text-xs text-muted-foreground">这条合作已经结案了。</span>
             ) : null}

@@ -356,13 +356,61 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
   }
 }
 
+/** 这次运行的摘要（17 §3，三个运行时同一份拼法）。 */
+export function describeKolRun(input: {
+  intent: KolIntent
+  readTools: readonly string[]
+  found?: number
+  drafted?: boolean
+  stagedWhat?: string
+  askedWhat?: string
+  exhausted?: string
+}): string {
+  const parts: string[] = [KOL_INTENT_ZH[input.intent]]
+  if (input.found !== undefined) parts.push(`找到 ${input.found} 个候选`)
+  if (input.readTools.length > 0)
+    parts.push(`查了${[...new Set(input.readTools.map(toolZh))].join('、')}`)
+  if (input.drafted === true) parts.push('起草了一封开发信（待批）')
+  if (input.stagedWhat !== undefined) parts.push(`提了一条${input.stagedWhat}（待批）`)
+  if (input.askedWhat !== undefined) parts.push(`问了一句：${input.askedWhat}`)
+  if (input.exhausted !== undefined)
+    parts.push(`${BUDGET_ZH[input.exhausted] ?? '这次的额度'}用完了，先停在这里`)
+  return parts.join('；')
+}
+
 /**
- * 工具名 → 人话（摘要与时间线上用的那几个词；三个运行时同一份）。
- *
- * WP142（docs/78 第 14 步）：事项摘要以前直接拼工具名（「查了 search_creators」），
- * 那是给开发者看的。认不出的工具说「查了一下资料」，也不露名字。
+ * WP141（docs/78 §2 红人第 14 步）：摘要里不印工具名。原来写「查了 search_creators」——
+ * 工具名是给模型看的，给人看的是它干了什么。表里没有的工具退回一句「一个工具」。
  */
 export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
+  search_creators: '红人库',
+  get_creator: '红人资料',
+  list_collaborations: '合作清单',
+  list_deliverables: '交付物清单',
+  search_policies: '合作规矩',
+  add_to_campaign: '活动名单',
+  draft_outreach: '开发信草稿',
+  review_deliverable: '交付物审核',
+  create_tracked_link: '追踪链接',
+}
+
+const toolZh = (tool: string): string => KOL_TOOL_ZH[tool] ?? '一个工具'
+
+/** 预算的哪一格用完了（`max_tool_calls` 这种键不上屏）。 */
+const BUDGET_ZH: Readonly<Record<string, string>> = {
+  max_tool_calls: '这次能查的次数',
+  max_tokens: '这次能写的字数',
+  max_wall_ms: '这次能用的时间',
+  max_cost_usd: '这次的花费额度',
+}
+
+/**
+ * WP142：工具名 → **动作**的人话（回话里一行一件事：「- 找人：……」「- 查政策：完成」）。
+ *
+ * 与上面 WP141 的 `KOL_TOOL_ZH`（摘要里「查了红人库」用的名词）分开：一个说"查了什么"，
+ * 一个说"干了什么"。认不出的工具说「查了一下资料」，也不露名字。
+ */
+export const KOL_TOOL_ACTION_ZH: Readonly<Record<string, string>> = {
   search_creators: '找人',
   get_creator: '看这个人的资料',
   list_collaborations: '看合作清单',
@@ -377,41 +425,9 @@ export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
   search_policies: '查政策',
 }
 
-/** 预算耗尽是哪一项（摘要里说人话，不露 `max_tool_calls`）。 */
-const EXHAUSTED_ZH: Readonly<Record<string, string>> = {
-  max_tool_calls: '工具调用次数',
-  max_tokens: '字数',
-  max_seconds: '时间',
-  max_cost: '花费',
-}
-
 export function kolToolZh(tool: string): string {
   const bare = tool.includes('.') ? tool.slice(tool.indexOf('.') + 1) : tool
-  return KOL_TOOL_ZH[bare] ?? '查了一下资料'
-}
-
-/** 这次运行的摘要（17 §3，三个运行时同一份拼法）。 */
-export function describeKolRun(input: {
-  intent: KolIntent
-  readTools: readonly string[]
-  found?: number
-  drafted?: boolean
-  stagedWhat?: string
-  askedWhat?: string
-  exhausted?: string
-}): string {
-  const head = KOL_INTENT_ZH[input.intent]
-  const parts: string[] = [head]
-  if (input.found !== undefined) parts.push(`找到 ${input.found} 个候选`)
-  // WP142：工具名换人话；与意图同名的那个（「找人」里的「找人」）不重复说
-  const read = [...new Set(input.readTools.map(kolToolZh))].filter((w) => w !== head)
-  if (read.length > 0) parts.push(`查了：${read.join('、')}`)
-  if (input.drafted === true) parts.push('起草了一封开发信（待批）')
-  if (input.stagedWhat !== undefined) parts.push(`提了一条${input.stagedWhat}（待批）`)
-  if (input.askedWhat !== undefined) parts.push(`问了一句：${input.askedWhat}`)
-  if (input.exhausted !== undefined)
-    parts.push(`${EXHAUSTED_ZH[input.exhausted] ?? '这次的'}预算用完了，先停在这里`)
-  return parts.join('；')
+  return KOL_TOOL_ACTION_ZH[bare] ?? '查了一下资料'
 }
 
 /** 找人回话里的一个人（名字 + 粉丝数，够认人就行）。 */

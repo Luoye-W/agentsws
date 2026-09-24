@@ -267,3 +267,143 @@ describe('岗位页用同一副牌', () => {
     expect(screen.queryByText(/^全部 /)).toBeNull()
   })
 })
+
+/**
+ * WP141（docs/78 §1 #4）：牌堆能直接找到后面的卡。
+ *
+ * 走查里红人岗位的牌堆第一张是 campaign 名单卡、第二张是议价卡——想先批议价卡，
+ * 卡型下拉只有「所有卡型」一项，名单卡又没有「稍后」，只能先把它批掉。
+ */
+describe('WP141：不决定前一张也能去后面的卡', () => {
+  const campaign = draftCard({
+    id: 'ap_cmp',
+    kind: 'kol_campaign',
+    layout: 'person',
+    title: '挑人清单：夏季快充（2 人）',
+    available_actions: ['approve', 'reject', 'open'],
+  })
+  const quote = draftCard({
+    id: 'ap_quote',
+    kind: 'staged_change',
+    layout: 'money',
+    title: '议价：Urban Pike 005 报价 800 USD',
+  })
+
+  it('「下一张」直接翻到议价卡，一个决定都没发', async () => {
+    const user = userEvent.setup()
+    home = homeData({ queue: [campaign, quote] })
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    await screen.findByText('挑人清单：夏季快充（2 人）')
+    expect(screen.getByTestId('deck-prev')).toHaveProperty('disabled', true)
+    await user.click(screen.getByTestId('deck-next'))
+    expect(await screen.findByText('议价：Urban Pike 005 报价 800 USD')).toBeDefined()
+    expect(screen.getByTestId('deck-progress').textContent).toBe('第 2 / 2 张')
+    expect(decide).not.toHaveBeenCalled()
+    await user.click(screen.getByTestId('deck-prev'))
+    expect(await screen.findByText('挑人清单：夏季快充（2 人）')).toBeDefined()
+  })
+
+  it('紧凑列表：每张一行，点议价那一行就翻到它', async () => {
+    const user = userEvent.setup()
+    home = homeData({ queue: [campaign, draftCard({ id: 'ap_x' }), quote] })
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    await screen.findByTestId('deck-card')
+    await user.click(screen.getByTestId('deck-list-toggle'))
+    const rows = within(screen.getByTestId('deck-list')).getAllByTestId('deck-list-item')
+    expect(rows).toHaveLength(3)
+    // 列表里的类别是人话，不是 kind 枚举
+    expect(screen.getByTestId('deck-list').textContent).not.toMatch(/kol_campaign|staged_change/)
+    await user.click(rows[2] as HTMLElement)
+    expect(await screen.findByText('议价：Urban Pike 005 报价 800 USD')).toBeDefined()
+    expect(screen.queryByTestId('deck-list')).toBeNull()
+    expect(decide).not.toHaveBeenCalled()
+  })
+
+  it('提示行按这张卡真有的动作生成：没有「稍后」就不写 ↑', async () => {
+    const user = userEvent.setup()
+    home = homeData({ queue: [campaign, draftCard()] })
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    const hint = await screen.findByTestId('deck-keyboard')
+    expect(hint.textContent).toContain('→')
+    expect(hint.textContent).not.toContain('↑')
+    expect(hint.textContent).not.toContain('↓')
+    await user.click(screen.getByTestId('deck-next'))
+    await waitFor(() => {
+      expect(screen.getByTestId('deck-keyboard').textContent).toContain('↑')
+    })
+    // 字与按钮上的一样（出站文案卡的主动词是「发送」）
+    expect(screen.getByTestId('deck-keyboard').textContent).toContain('→ 发送')
+  })
+
+  it('卡型下拉从全部牌算：选了一种之后别的卡型还在', async () => {
+    home = homeData({ queue: [campaign, quote, draftCard()] })
+    getHome.mockImplementation(async (...args: unknown[]) => {
+      const f = (args[1] ?? {}) as { kind?: string }
+      return f.kind === undefined
+        ? home
+        : { ...home, queue: home.queue.filter((c) => c.kind === f.kind) }
+    })
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    await screen.findByTestId('deck-card')
+    const select = screen.getByLabelText('卡型') as HTMLSelectElement
+    await userEvent.selectOptions(select, 'kol_campaign')
+    await waitFor(() => {
+      expect(getHome).toHaveBeenLastCalledWith('yesterday', { kind: 'kol_campaign' })
+    })
+    const values = [...select.options].map((o) => o.value)
+    expect(values).toEqual(
+      expect.arrayContaining(['', 'kol_campaign', 'staged_change', 'outbound_draft']),
+    )
+    // 下拉里没有 i18n 键或裸 kind
+    expect([...select.options].map((o) => o.textContent).join(' ')).not.toMatch(/kind\.|_/)
+    getHome.mockImplementation(async () => home)
+  })
+
+  it('「第 x / N 张」按合并前的张数：合并卡写成一段', async () => {
+    home = homeData({ queue: [draftCard({ id: 'ap_m', merge_count: 3 }), quote] })
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    expect((await screen.findByTestId('deck-progress')).textContent).toBe('第 1–3 / 4 张')
+    await userEvent.click(screen.getByTestId('deck-next'))
+    await waitFor(() => {
+      expect(screen.getByTestId('deck-progress').textContent).toBe('第 4 / 4 张')
+    })
+  })
+
+  it('「改一下」提交后给一句「记下了」', async () => {
+    const user = userEvent.setup()
+    home = homeData({ queue: [draftCard(), quote] })
+    renderWithProviders(<DeckSection onOpen={() => {}} />)
+    await screen.findByTestId('deck-card')
+    await user.click(screen.getByText('改一下'))
+    await user.type(screen.getByLabelText('一句话说清楚要怎么改'), '先道歉')
+    await user.click(screen.getByRole('button', { name: '提交' }))
+    expect((await screen.findByTestId('deck-receipt')).textContent).toContain('记下了')
+  })
+
+  it('筛空了不说「队列清空了」，说这个筛选下没有卡了', async () => {
+    home = homeData({ queue: [], filters: { kind: 'kol_campaign' } })
+    renderWithProviders(<DeckSection onOpen={() => {}} filters={{ kind: 'kol_campaign' }} />)
+    expect((await screen.findByTestId('deck-empty-title')).textContent).toBe('这个筛选下没有卡了')
+    expect(screen.getByText('回到全部')).toBeDefined()
+  })
+})
+
+describe('WP141：岗位页把本人几条职责的牌合成一副', () => {
+  it('每条职责各取一次，计数相加，顺序按同一个比较器排', async () => {
+    getPositionCards.mockImplementation(async (...args: unknown[]) => {
+      const id = args[0] as string
+      return {
+        ...cards,
+        cards: [draftCard({ id: `ap_${id}`, position_id: id, title: `卡 ${id}` })],
+        counts: { total: 1, customer_waiting: 0, nobody_waiting: 0, matched: 1 },
+      }
+    })
+    renderWithProviders(
+      <DeckSection positionId="asg_1" positionIds={['asg_1', 'asg_2']} onOpen={() => {}} />,
+    )
+    expect((await screen.findByTestId('deck-progress')).textContent).toBe('第 1 / 2 张')
+    expect(getPositionCards).toHaveBeenCalledWith('asg_1', {})
+    expect(getPositionCards).toHaveBeenCalledWith('asg_2', {})
+    getPositionCards.mockImplementation(async () => cards)
+  })
+})

@@ -217,8 +217,10 @@ async function text(sel) {
 const oneLine = (s, n = 160) => s.replace(/\s+/g, ' ').trim().slice(0, n)
 
 /**
- * 一副牌一次只露一张（37 §1）。要找某一张，先看当前那张；不是就按「卡型」下拉逐个筛，
- * 这正是用户要做的事——牌堆里没有「下一张」按钮，不决定当前这张就看不到后面的。
+ * 一副牌一次只露一张（37 §1）。要找某一张，先看当前那张；不是就按「下一张」往后翻
+ * （WP141：牌堆有了上一张 / 下一张与紧凑列表，**不决定前一张也能直接去后面的卡**）。
+ * 翻牌不是决定，所以一张卡都不会被顺手批掉。找不到才退回老办法（卡型下拉），
+ * 并在 `focusNote` 里记一句绕了路。
  */
 async function focusCard(re) {
   focusNote = ''
@@ -226,72 +228,45 @@ async function focusCard(re) {
   await card()
     .waitFor({ timeout: 15_000 })
     .catch(() => {})
-  if (
+  const hit = async () =>
     re.test(
       await card()
         .innerText()
         .catch(() => ''),
     )
-  )
-    return card()
+  if (await hit()) return card()
+  // 回到第一张，再一张一张往后翻
+  for (let i = 0; i < 30; i += 1) {
+    const prev = T('deck-prev').first()
+    if (!(await prev.count()) || (await prev.isDisabled())) break
+    await prev.click()
+    await settle(200)
+  }
+  if (await hit()) return card()
+  for (let i = 0; i < 30; i += 1) {
+    const next = T('deck-next').first()
+    if (!(await next.count()) || (await next.isDisabled())) break
+    await next.click()
+    await settle(300)
+    if (await hit()) return card()
+  }
+  // 老办法：按卡型下拉逐个筛（WP141 之后下拉从全部牌算，选了一种别的还在）
   const sel = T('deck-filters').locator('select').first()
   const opts = await sel.locator('option').evaluateAll((o) => o.map((x) => x.value))
   for (const v of opts) {
     if (!v) continue
-    // 选了一种卡型之后，下拉里就只剩这一种（选项是从筛过的牌里算的）——先回到「所有卡型」再选下一种
-    await sel.selectOption('', { timeout: 3000 }).catch(() => {})
-    await settle(400)
     const okSel = await sel.selectOption(v, { timeout: 3000 }).then(
       () => true,
       () => false,
     )
     if (!okSel) continue
     await settle(800)
-    if (
-      re.test(
-        await card()
-          .innerText()
-          .catch(() => ''),
-      )
-    )
+    if (await hit()) {
+      focusNote = '「下一张」翻不到，按卡型筛才看见'
       return card()
+    }
   }
   await sel.selectOption('', { timeout: 3000 }).catch(() => {})
-  await settle(500)
-  let snoozed = 0
-  const forced = []
-  // 卡型筛不出来：只能把挡在前面的卡「稍后」（↑）挪开——这也是用户唯一的办法
-  for (let i = 0; i < 4; i += 1) {
-    await card()
-      .locator('[data-testid="deck-more"]')
-      .first()
-      .click()
-      .catch(() => {})
-    await settle(300)
-    const snooze = T('deck-more-menu').locator('[data-action="snooze"]').first()
-    if (await snooze.count()) {
-      await snooze.click()
-      snoozed += 1
-    } else {
-      // 这张卡没有「稍后」（提示行却写着 ↑ 稍后）：只能先决定它。挡路的是 campaign 名单卡时照用户本意批掉
-      await page.keyboard.press('Escape').catch(() => {})
-      const blocker = oneLine(await card().innerText(), 30)
-      if (!/建联名单|campaign/.test(blocker)) break
-      await card().locator('[data-action="approve"]').first().click()
-      forced.push(blocker)
-    }
-    await settle(1200)
-    if (
-      re.test(
-        await card()
-          .innerText()
-          .catch(() => ''),
-      )
-    ) {
-      focusNote = `卡型下拉是空的筛不出来；${snoozed ? `把前面 ${snoozed} 张「稍后」挪开` : ''}${forced.length ? `前面那张「${forced[0]}」没有「稍后」（提示行却写 ↑ 稍后），只能先批掉它` : ''}才轮到它`
-      return card()
-    }
-  }
   fail(`牌堆里找不到「${re.source}」那张卡`)
 }
 
@@ -319,7 +294,7 @@ async function cardCounts() {
   return {
     header: pick(/(\d+) 张卡等你决定/),
     all: pick(/全部\s*(\d+)/),
-    pager: pick(/第 \d+ \/ (\d+) 张/),
+    pager: pick(/第 [\d–]+ \/ (\d+) 张/),
     today: pick(/还有 (\d+) 张卡等你定/),
   }
 }
@@ -904,12 +879,15 @@ async function sectionB(assignment) {
         40,
       )
       const card = await focusCard(/开发信/)
+      const detour = focusNote
       const body = oneLine(await card.innerText(), 140)
       await card.locator('[data-action="approve"]').first().click()
       await settle(2500)
+      // WP141：挡在前面的卡不用先决定——「下一张」翻过去就是；绕了路（按卡型筛）才算部分
+      if (detour) return part(`牌堆第一张是「${first}」，${detour}；卡面：${body}`)
       return /开发信/.test(first)
         ? ok(`卡面：${body}`)
-        : part(`牌堆第一张是「${first}」，要先按卡型筛才看得到开发信卡；卡面：${body}`)
+        : ok(`牌堆第一张是「${first}」，按「下一张」翻到开发信卡（前一张没动）；卡面：${body}`)
     },
   )
 
@@ -1025,7 +1003,13 @@ async function sectionB(assignment) {
       await page.locator(`[data-testid="kol-thread-next"][data-next="${next}"]`).first().click()
       await settle(1500)
     }
-    return ok(oneLine(await text('kol-thread-stage')))
+    // WP141：「现在到哪一步」先说现在（推到交付中之后就该写交付中），再给「推到」哪几步
+    const now = await text('kol-thread-stage-now').catch(() => '')
+    const receipt = await text('kol-thread-receipt').catch(() => '')
+    const msg = `${oneLine(await text('kol-thread-stage'))}；回执：${oneLine(receipt, 60)}`
+    return now === '交付中'
+      ? ok(msg)
+      : part(`现在那一格是「${now}」，与推到的「交付中」对不上；${msg}`)
   })
 
   await step(
@@ -1044,7 +1028,9 @@ async function sectionB(assignment) {
         .first()
         .click()
       await settle(2000)
-      return ok(oneLine(await text('kol-thread-receipt')))
+      const receipt = oneLine(await text('kol-thread-receipt'))
+      // WP141：卡在「卡片」tab 里，回执不该说「待办」（左栏另有一个叫「待办」的页）
+      return /待办/.test(receipt) ? part(`回执说「待办」：${receipt}`) : ok(receipt)
     },
   )
 
@@ -1068,8 +1054,10 @@ async function sectionB(assignment) {
       const seg = i >= 0 ? oneLine(body.slice(i, i + 120)) : '（没找到演练漏斗）'
       const notes = [seg]
       if (/\d{4}-\d{2}-\d{2}T/.test(body)) notes.push('「待审交付物」交付期限是 ISO 时间戳')
-      if (/\byoutube\b/.test(body))
-        notes.push('渠道列是小写 youtube / instagram；形态列是 video / post')
+      // 只看表格的格子：线程里贴的 www.youtube.com 链接不算原始值
+      const cells = await page.locator('[data-testid="block-table"] td').allInnerTexts()
+      const raw = cells.filter((c) => /^(youtube|instagram|tiktok|video|post)$/.test(c.trim()))
+      if (raw.length) notes.push(`表格里还有原始值：${[...new Set(raw)].join(' / ')}`)
       return notes.length > 1 ? part(notes.join('；')) : ok(seg)
     },
   )
@@ -1224,19 +1212,32 @@ async function sectionC(careAssignment) {
       const examples = await T('deck-panel-instruct')
         .locator('[data-testid="task-example"]')
         .allInnerTexts()
+      // WP141：点一条示例不该把写好的指导整段换掉（接在后面）
+      let overwrote = false
+      if (examples.length) {
+        const box = T('deck-panel-instruct').locator('textarea').first()
+        await T('deck-panel-instruct').locator('[data-testid="task-example"]').first().click()
+        const v = await box.inputValue()
+        overwrote = !v.includes('退货超过 30 天的')
+        await box.fill('退货超过 30 天的，先道歉再给店铺余额方案')
+      }
       await T('deck-panel-instruct')
         .getByRole('button', { name: '提交', exact: true })
         .first()
         .click()
       await settle(2000)
       const after = await page.locator('main').innerText()
-      const receipt = after.split('\n').find((l) => /已(记|收|交)|下次|沉淀|记住/.test(l))
-      const ex = examples.length
-        ? `；抽屉里还摆着「示例任务」（${examples.join(' / ')}），点一下会把写好的指导整段换掉`
-        : ''
-      return receipt
-        ? part(`作用域：${oneLine(scopes, 60)}；回执：${oneLine(receipt, 80)}${ex}`)
-        : part(`作用域：${oneLine(scopes, 60)}；提交后没看到明确回执${ex}`)
+      const receipt = after.split('\n').find((l) => /记下了|已(记|收|交)|下次|沉淀|记住/.test(l))
+      const ex = overwrote
+        ? `；抽屉里的「示例任务」（${examples.join(' / ')}）点一下会把写好的指导整段换掉`
+        : examples.length
+          ? '；点「示例任务」是接在写好的指导后面，不覆盖'
+          : ''
+      const header = /(\d+) 张待审/.exec(after)?.[1]
+      const empty = /队列清空了/.test(after)
+      const clash = empty && header !== undefined && header !== '0'
+      const msg = `作用域：${oneLine(scopes, 60)}；${receipt ? `回执：${oneLine(receipt, 80)}` : '提交后没看到明确回执'}${ex}${clash ? `；牌堆说「队列清空了」而页头写「${header} 张待审」` : ''}`
+      return receipt && !overwrote && !clash ? ok(msg) : part(msg)
     },
   )
 
@@ -1260,7 +1261,10 @@ async function sectionC(careAssignment) {
         notes.push('卡面「改之前 / 改之后」是 late_return_grace_days: 0 → 7')
       const still = await T('deck-card').filter({ hasText: '超过退货窗口一周' }).count()
       notes.push(still ? '批了之后卡还在' : '批了卡消失')
-      return notes.length > 2 || still ? part(notes.join('；')) : ok(notes.join('；'))
+      const receipt = await text('deck-receipt').catch(() => '')
+      if (receipt) notes.push(`回执：${oneLine(receipt, 60)}`)
+      else notes.push('批完没有「以后按这个办」的回执')
+      return notes.length > 3 || still || !receipt ? part(notes.join('；')) : ok(notes.join('；'))
     },
   )
 
