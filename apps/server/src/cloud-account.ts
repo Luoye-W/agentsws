@@ -53,6 +53,12 @@ export { CLOUD_BASE_URL_ENV, DEFAULT_CLOUD_BASE_URL }
 /** 一次关联最多挂多久没人点（超了就作废，免得一条 state 永远有效）。 */
 export const LINK_PENDING_TTL_MS = 30 * 60 * 1000
 
+/** WP142：关联那一跳最多等多久（超了就说连不上、给「再试一次」）。 */
+export const CLOUD_LINK_TIMEOUT_MS = 12_000
+
+/** WP142（docs/78 #6）：连不上云时那一句——说人话、给下一步，不报网址。 */
+export const CLOUD_OFFLINE_MESSAGE = '网络不通，这一下没连上 Agents 工坊云。检查一下网络再试一次。'
+
 export type CloudFetch = (
   input: string,
   init?: { method?: string; headers?: Record<string, string>; body?: string },
@@ -196,25 +202,48 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
     init: { method?: string; token?: string; body?: unknown } = {},
   ): Promise<T> => {
     let res: Awaited<ReturnType<CloudFetch>>
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      res = await doFetch(`${base}${path}`, {
-        method: init.method ?? 'GET',
-        headers: {
-          ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
-          ...(init.token === undefined ? {} : { Authorization: `Bearer ${init.token}` }),
-        },
-        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-      })
+      /*
+       * WP142（docs/78 #6）：**等多久有个头**。以前断网时这一跳要等系统层超时，
+       * 向导上只有一个变灰的按钮；现在 12 秒没回就当连不上，界面给「再试一次」。
+       */
+      res = await Promise.race([
+        doFetch(`${base}${path}`, {
+          method: init.method ?? 'GET',
+          headers: {
+            ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+            ...(init.token === undefined ? {} : { Authorization: `Bearer ${init.token}` }),
+          },
+          ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        }),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error('timeout'))
+          }, CLOUD_LINK_TIMEOUT_MS)
+        }),
+      ])
     } catch (err) {
-      throw new ApiError('provider_unavailable', `连不上 agentsws 云（${base}）`, { cause: err })
+      // WP142：说人话、给下一步，不报网址（网址在设置页「连到 …」那一行里本来就看得见）
+      throw new ApiError('provider_unavailable', CLOUD_OFFLINE_MESSAGE, { cause: err })
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
     }
     const text = await res.text()
-    const parsed: unknown = text === '' ? {} : JSON.parse(text)
+    let parsed: unknown = {}
+    try {
+      parsed = text === '' ? {} : JSON.parse(text)
+    } catch {
+      // 云那头回了一页 HTML（网关报错页）：当成连不上，而不是把解析错误甩给用户
+      parsed = {}
+    }
     if (!res.ok) {
       const body = parsed as { message?: string }
+      if (res.status >= 500 && body.message === undefined)
+        throw new ApiError('provider_unavailable', CLOUD_OFFLINE_MESSAGE)
       throw new ApiError(
         res.status === 401 || res.status === 403 ? 'forbidden' : 'provider_error',
-        body.message ?? `agentsws 云回了 ${String(res.status)}`,
+        body.message ?? `Agents 工坊云回了 ${String(res.status)}，这一次没关联上。再试一次。`,
       )
     }
     return (parsed as { data: T }).data
