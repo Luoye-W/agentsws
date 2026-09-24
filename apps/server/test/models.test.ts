@@ -285,8 +285,11 @@ describe('WP25 §C 模板与空状态', () => {
    * **模板条数 ≠ 卡数**（WP90，Luoye 定）：同一个 `vendor` 的几条合成一张卡、
    * 点进去再选方案。眼下十条模板 → 六张卡（DeepSeek / OpenAI 兼容 / 阿里云百炼 /
    * OpenAI / Anthropic / agentsws 云）。所以这条用例既钉模板清单，也钉分组结果。
+   *
+   * WP134 再加一条：「用我的 DeepSeek 账号登录」（`deepseek_account`，`auth: 'account'`）——
+   * 不挂 `vendor`，自己一张卡（向导与设置页都是单独那一张，不进上面那一排）。十一条 → 七张。
    */
-  it('十条模板 → 六张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
+  it('十一条模板 → 七张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
@@ -302,6 +305,8 @@ describe('WP25 §C 模板与空状态', () => {
       // Anthropic 那张卡的两个方案
       'anthropic',
       'openai_compatible',
+      // WP134：第三种模型来源
+      'deepseek_account',
       'agentsws_cloud',
     ])
     for (const t of templates) {
@@ -323,6 +328,7 @@ describe('WP25 §C 模板与空状态', () => {
       'bailian',
       'openai',
       'anthropic',
+      '用我的 DeepSeek 账号登录',
       'agentsws-cloud',
     ])
     const planOf = (vendor: string): ModelProviderTemplate[] =>

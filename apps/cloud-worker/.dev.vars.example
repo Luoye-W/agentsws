@@ -25,3 +25,8 @@ AGENTSWS_KOL_EMAIL_KEY=
 # 公共红人库的两个上游（都可选；一个都不配就是"只查库"）
 AGENTSWS_YOUTUBE_API_KEY=
 APIFY_TOKEN=
+
+# 官方聊天转发的访客令牌种子（WP137，**必填，至少 32 字节**）。
+# 没配 = 所有商家网站上的聊天窗一律 503（没有兜底——写死的种子等于任何人都能伪造访客令牌）。
+# 生成：node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+AGENTSWS_CHAT_RELAY_KEY=

@@ -9,13 +9,32 @@ import { fileURLToPath } from 'node:url'
 import type { ActionId, ObjectType } from '@agentsws/contracts'
 import type { ActionDef, LinkDef, ObjectTypeDef, OntologyRegistry } from './types.js'
 
-/** 本包自带的那一份（`packages/ontology/ontology.json`）。 */
-export const ONTOLOGY_JSON_PATH = fileURLToPath(new URL('../ontology.json', import.meta.url))
+/**
+ * 本包自带的那一份（`packages/ontology/ontology.json`）。
+ *
+ * 在模块加载时算，但**算不出来不许抛**：Cloudflare Workers 里 `import.meta.url` 不是文件网址，
+ * `new URL(..., import.meta.url)` 会抛「Invalid URL string」，而这个包经由几条 import 链被打进了
+ * Worker（它并不读登记表）——09-24 首次真部署就是卡在 Cloudflare 执行这一行上。算不出来就是空串，
+ * 真正要读的时候（`ontology()`）再说清楚。Node 下行为不变。
+ */
+export const ONTOLOGY_JSON_PATH = ontologyJsonPath()
+
+function ontologyJsonPath(): string {
+  try {
+    return fileURLToPath(new URL('../ontology.json', import.meta.url))
+  } catch {
+    return ''
+  }
+}
 
 let cached: OntologyRegistry | undefined
 
 /** 读登记表（第一次读文件，之后回同一份；返回值当只读用）。 */
 export function ontology(): OntologyRegistry {
+  if (cached === undefined && ONTOLOGY_JSON_PATH === '')
+    throw new Error(
+      '这个运行环境里没有本体登记表文件（比如 Cloudflare Workers），ontology() 不可用。',
+    )
   cached ??= JSON.parse(readFileSync(ONTOLOGY_JSON_PATH, 'utf8')) as OntologyRegistry
   return cached
 }

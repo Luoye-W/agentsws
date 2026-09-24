@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DataMapPanel } from '@/components/data-map'
+import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
@@ -207,6 +208,8 @@ export function SettingsPage({
         {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
         {/* 49 M5 第三张模型卡：agentsws 云（用积分）。不填 key，一键启用 */}
         {ownerId === undefined ? null : <ModelCloudCard assignment={ownerId} />}
+        {/* WP134：第三种模型来源「用我的 DeepSeek 账号登录」（与向导第 ① 步第三张大卡同一个件） */}
+        {ownerId === undefined ? null : <DeepSeekAccountLogin framed assignment={ownerId} />}
         {/*
         47 J1 数据地图：按**当前选中的那条岗位**裁剪（登记表是按岗位的，
         不像模型 key 那样统一走所有者）。左栏还没选岗位时这一块不出。

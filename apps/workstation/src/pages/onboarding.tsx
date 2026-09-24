@@ -111,7 +111,7 @@ function DoneMark() {
 }
 
 /** 第 ① 步是怎么过去的：接上了官方接口 / 自己的模型 / 走了演示旁路。 */
-type AiState = 'official' | 'own' | 'demo' | undefined
+type AiState = 'official' | 'own' | 'account' | 'demo' | undefined
 
 export function OnboardingPage(): React.ReactNode {
   const { t } = useApp()

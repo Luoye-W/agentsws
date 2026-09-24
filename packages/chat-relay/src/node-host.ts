@@ -6,9 +6,13 @@
  * 与官方托管 / 自建 Worker 一字不差；这个文件只做三件事：
  * 把 `ws` 的 WebSocket 接进来、把 KV 落到卷上的 JSON、首启配对密钥**只打印一次**
  * （之后箱里只有哈希——重发等于把密钥再泄露一遍）。
+ *
+ * WP137：访客密钥从**服务端秘密**派生——首启随机生成 32 字节，存进同一个卷
+ * （与配对密钥哈希同处），**不打印**；老部署升级时自动补生成。以前那把从工作区号
+ * 推出来的访客密钥作废（工作区号是公开的）。留言密钥没签发就不收留言。
  */
-import { createHash, randomBytes } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, type Server as HttpServer, type IncomingMessage } from 'node:http'
 import { dirname, join } from 'node:path'
 import { WebSocketServer } from 'ws'
@@ -23,7 +27,7 @@ import {
   type RelayWidgetConfig,
 } from './protocol.js'
 import type { CounterStore } from './quota.js'
-import { sealWithKey } from './sealed.js'
+import { sealedKeyOf, sealWithKey } from './sealed.js'
 import { KvCounterStore, KvOfflineBox, KvPairingStore, MemoryKv, type RelayKv } from './stores.js'
 
 /** JSON 文件 KV：进程启动时装进来，每次写都整份落盘（数据量小：哈希、计数、留言密文）。 */
@@ -62,7 +66,17 @@ export class FileKv implements RelayKv {
 
   private flush(): void {
     mkdirSync(dirname(this.path), { recursive: true })
-    writeFileSync(this.path, JSON.stringify(Object.fromEntries(this.map), null, 2), 'utf8')
+    // 0600：卷里有服务端秘密与配对哈希，只给跑转发器的那个用户读
+    //（mode 只在新建时生效；老卷升级上来的文件再收一次权限）
+    writeFileSync(this.path, JSON.stringify(Object.fromEntries(this.map), null, 2), {
+      encoding: 'utf8',
+      mode: 0o600,
+    })
+    try {
+      chmodSync(this.path, 0o600)
+    } catch {
+      // 某些挂载（如 Windows 卷）不支持 chmod：不影响功能
+    }
   }
 }
 
@@ -109,6 +123,9 @@ export function startNodeRelayHost(options: NodeHostOptions): NodeHostHandle {
   const offline: OfflineBox = new KvOfflineBox(kv)
   const now = (): string => new Date().toISOString()
 
+  // WP137：服务端秘密（访客密钥从它派生）。首启 / 老部署升级时生成，存卷，不打印。
+  const serverSecret = ensureServerSecret(kv)
+
   // 配对密钥：只打印一次
   const pairingToken = ensurePairingToken(pairing, workspace, (n) => randomBytes(n))
   let messageKey = options.messageKey
@@ -152,8 +169,13 @@ export function startNodeRelayHost(options: NodeHostOptions): NodeHostHandle {
         kv.put(`widgetcfg:${ws}`, JSON.stringify(config))
       },
     },
-    // 留言封箱：AES-256-GCM，密钥是配对时签发的那把留言密钥
-    seal: (_ws, plaintext) => sealWithKey(derive(messageKey ?? 'no-message-key'), plaintext),
+    // 留言封箱：AES-256-GCM，密钥是配对时签发的那把留言密钥。
+    // WP137：没签发（老卷里只有配对哈希、没有留言密钥）就不收留言，绝不拿常量封箱
+    seal: (_ws, plaintext) => {
+      if (messageKey === undefined) throw new Error('留言密钥没签发，不该走到封箱')
+      return sealWithKey(sealedKeyOf(messageKey), plaintext)
+    },
+    sealReady: () => messageKey !== undefined,
     newId: () => randomBytes(9).toString('base64url'),
     onEvent: (event) => {
       // 只打计数与状态，不打正文（转发器看得到过路内容但不落盘，日志同理）
@@ -170,7 +192,7 @@ export function startNodeRelayHost(options: NodeHostOptions): NodeHostHandle {
       app = createRelayHttp({
         core,
         workspace: ws,
-        visitorSecret: () => new TextEncoder().encode(derive(`${ws}:visitor`).toString('hex')),
+        visitorSecret: () => visitorSecretOf(serverSecret, ws),
       })
       httpByWorkspace.set(ws, app)
     }
@@ -299,6 +321,28 @@ function readBody(req: IncomingMessage): Promise<string | undefined> {
   })
 }
 
-function derive(seed: string): Buffer {
-  return createHash('sha256').update(`chat-relay:${seed}`).digest()
+/** 卷里存服务端秘密的那一格（与配对哈希同一个文件）。 */
+export const SERVER_SECRET_KEY = 'server-secret'
+
+/**
+ * 取服务端秘密；没有就随机生成 32 字节存进去（首启 / 老部署升级）。
+ * **不打印、不回给调用方之外的任何地方**——它只用来派生访客密钥。
+ */
+export function ensureServerSecret(
+  kv: RelayKv,
+  random: (bytes: number) => Buffer = (n) => randomBytes(n),
+): Buffer {
+  const stored = kv.get(SERVER_SECRET_KEY)
+  if (stored !== undefined) {
+    const bytes = Buffer.from(stored, 'base64url')
+    if (bytes.length >= 32) return bytes
+  }
+  const fresh = random(32)
+  kv.put(SERVER_SECRET_KEY, fresh.toString('base64url'))
+  return fresh
+}
+
+/** 访客密钥 = HMAC(服务端秘密, 工作区)：每个工作区一把，外人没有服务端秘密就推不出来。 */
+export function visitorSecretOf(serverSecret: Buffer, workspace: string): Uint8Array {
+  return createHmac('sha256', serverSecret).update(`chat-relay:visitor:${workspace}`).digest()
 }

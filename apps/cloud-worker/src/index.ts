@@ -285,8 +285,31 @@ export class HostedInstanceDO {
   }
 }
 
+/**
+ * 与自建形态 `deploy/Caddyfile` 的 `header` 块对齐的几条安全头（09-24 首次真部署时冒烟发现：
+ * Workers 形态前面没有 Caddy，没人加这几条）。
+ *
+ * 不加 Caddy 那条严格的 CSP：Workers 形态还托管着 `/admin/*` 的单页应用（要跑脚本），
+ * 一刀切会把后台打死。已经带了同名头的响应不覆盖。
+ */
+const SECURITY_HEADERS: readonly (readonly [string, string])[] = [
+  ['strict-transport-security', 'max-age=31536000; includeSubDomains'],
+  ['x-content-type-options', 'nosniff'],
+  ['x-frame-options', 'DENY'],
+  ['referrer-policy', 'strict-origin-when-cross-origin'],
+]
+
+export function withSecurityHeaders(res: Response): Response {
+  // WebSocket 握手（101）不能重新包：Workers 里 new Response 不接受 101，且会丢掉 webSocket
+  if (res.status === 101 || (res as Response & { webSocket?: unknown }).webSocket) return res
+  const headers = new Headers(res.headers)
+  for (const [k, v] of SECURITY_HEADERS) if (!headers.has(k)) headers.set(k, v)
+  // 流式（SSE）照样流：只换头，body 原样透传
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
+}
+
 export default {
-  fetch(request: Request, env: WorkerEnv): Promise<Response> {
-    return route(request, env)
+  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+    return withSecurityHeaders(await route(request, env))
   },
 }

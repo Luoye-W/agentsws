@@ -72,6 +72,8 @@ upstreams:
       # WP132：0.1.7 起 `dsh-agent-presets`（按目录扫）整包下线，换成 registry（不扫目录、不收路径）
       - 'dsh-agent-preset-registry: ctx.agentPresets.register(definition) + mount(agentCtx, id)；注册即激活'
       - 'dsh-llm: ctx.llm.stream({ system, messages, tools }) 这条"一次性调用方"的路'
+      # WP134：第三种模型来源「用我的 DeepSeek 账号登录」（选了才挂，apps/server/src/deepseek-account.ts）
+      - 'dsh-deepseek-account-platform: startSignIn / cancelSignIn / signOut / getState / getProfile / getBalance / resolveToken / watch；宿主只提供 ctx.webServer.register({ kind: exact })'
     wishlist:
       - 官方 SDK 出现 server→client 请求（dsh-sdk-jsonrpc-server 里的 transport.request）
       - headless 的 turn 驱动能被宿主接管（--json 只是单向投影，不算）
@@ -88,12 +90,18 @@ upstreams:
       # WP132 加：0.1.7-rc.1 的 base patch 又 insert 了 config-editor / settings / deepseek-account
       # 三行（写回 profile patch、默认出网登录），已在 profile 层写死 disabled。
       - 上游给 bundle 里的出网 / 写回类服务加上"headless 默认关"的开关（deepseek-account 现在任何组合默认就挂）
+      # WP134 加：0.1.7-rc.1 的 `dsh-deepseek-account-platform` 里 `Config({}).desktopPlatform` 是 undefined
+      # （文档说默认 null → x-client-platform: web；实际 desktopClientHeaders(undefined) 给的是 desktop-mac）。
+      # 官方组合靠 base patch 显式写这一项所以看不出来；我们不走 bundle，显式传 null。修了就删 OFFICIAL_DEFAULTS。
+      - dsh-deepseek-account-platform 的 desktopPlatform 默认值真的落成 null（schemastery .default(null)）
     covered_by:
       - packages/dsh-adapter/test/seams.test.ts
       - packages/dsh-adapter/test/browser-seam.test.ts
       - packages/dsh-adapter/test/upgrade.test.ts
       # WP133：profile 锁定每一行的 id 对照新版 dsh 的 `--dump-config-schema` 校验（升级时它先红）
       - packages/dsh-adapter/test/profile-lockdown.test.ts
+      # WP134：官方账号模块原样跑的状态机 + 那条上游默认值的哨兵
+      - packages/dsh-adapter/test/deepseek-account.test.ts
       - packages/dsh-adapter/UPGRADE.md
       - docs/42-上游升级流程-v1.md
 

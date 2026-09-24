@@ -122,6 +122,8 @@ describe('BrandIcon', () => {
       'agentsws_cloud',
       'openai-codex',
       'anthropic',
+      // WP134：第三种模型来源「用我的 DeepSeek 账号登录」，戴 DeepSeek 的标志
+      'deepseek_account',
     ])
     for (const kind of kinds) {
       expect(hasBrandIcon(kind), `${kind} 还没配图标`).toBe(true)

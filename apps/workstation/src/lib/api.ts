@@ -5232,3 +5232,100 @@ export const setModelImage = (
     body: input,
     ...withAssignment(assignment),
   })
+
+// ── WP134：第三种模型来源「用我的 DeepSeek 账号登录」─────────────────────
+//
+// **只追加**（WP134 派工单：`lib/api.ts` 只追加）。上面的 `ModelProviderKind` 联合类型与
+// `ModelProviderTemplate.auth` 没有改：新的 `deepseek_account` / `account` 两个串按字符串比
+// （{@link isDeepSeekAccountKind} / {@link isAccountTemplate}），保存那一条走它自己的函数。
+//
+// 凭据纪律同订阅登录：**这里没有、也不会有令牌字段**。授权在系统浏览器里完成，令牌只进 dsh 的
+// 本机凭据库；界面只拿得到「登录了没有 / 账号名 / 余额」。
+
+/** 这一条 provider 在设置里的固定 id（与服务端 `DEEPSEEK_ACCOUNT_PROVIDER_ID` 同一个串）。 */
+export const DEEPSEEK_ACCOUNT_PROVIDER_ID = 'deepseek-account'
+
+/** 这条 provider 是不是「用我的 DeepSeek 账号登录」。 */
+export const isDeepSeekAccountKind = (kind: string): boolean => kind === 'deepseek_account'
+
+/** 这张模板是不是「用我的 DeepSeek 账号登录」那一张（`auth: 'account'`，没有表单）。 */
+export const isAccountTemplate = (tpl: { auth?: string; kind: string }): boolean =>
+  (tpl.auth as string | undefined) === 'account' || isDeepSeekAccountKind(tpl.kind)
+
+/** 一次登录走到哪一步（官方八个值原样）。 */
+export type DeepSeekAccountPhase =
+  | 'initializing'
+  | 'waiting-browser'
+  | 'exchanging'
+  | 'committing'
+  | 'succeeded'
+  | 'cancelled'
+  | 'expired'
+  | 'failed'
+
+export interface DeepSeekWallet {
+  currency: 'CNY' | 'USD'
+  /** 平台给的十进制串，原样显示。 */
+  balance: string
+}
+
+export interface DeepSeekAccountData {
+  available: boolean
+  unavailable_reason?: string
+  enabled: boolean
+  signed_in: boolean
+  attempt?: {
+    id: string
+    phase: DeepSeekAccountPhase
+    /** 只在 `waiting-browser` 时有：交给系统浏览器打开。 */
+    authorize_url?: string
+    expires_at?: string
+    error_code?: 'network' | 'protocol' | 'expired' | 'storage'
+    /** 人话（服务端翻好的）。 */
+    error?: string
+  }
+  account?: string
+  account_error?: string
+  balance?:
+    | { status: 'ready'; wallets: DeepSeekWallet[]; bonus: DeepSeekWallet[] }
+    | { status: 'failed'; message: string }
+  usage_url?: string
+  top_up_url?: string
+  default_model: string
+  region: 'cn'
+}
+
+export const getDeepSeekAccount = (assignment?: string): Promise<DeepSeekAccountData> =>
+  api<DeepSeekAccountData>('/v1/settings/models/deepseek-account', withAssignment(assignment))
+
+/** 选中这条路并起一次登录；回来时（通常）已经带着授权页地址。 */
+export const startDeepSeekAccountLogin = (assignment?: string): Promise<DeepSeekAccountData> =>
+  api<DeepSeekAccountData>('/v1/settings/models/deepseek-account/login', {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+export const cancelDeepSeekAccountLogin = (
+  attempt_id: string,
+  assignment?: string,
+): Promise<DeepSeekAccountData> =>
+  api<DeepSeekAccountData>('/v1/settings/models/deepseek-account/cancel', {
+    method: 'POST',
+    body: { attempt_id },
+    ...withAssignment(assignment),
+  })
+
+/** 登出：官方删本机凭据 + 后台调平台 logout；这条模型来源随之摘掉。 */
+export const signOutDeepSeekAccount = (assignment?: string): Promise<{ signed_out: true }> =>
+  api('/v1/settings/models/deepseek-account', { method: 'DELETE', ...withAssignment(assignment) })
+
+/** 登上之后存这一条 provider（**不带 key**：凭据在 dsh 本机凭据库里）。 */
+export const saveDeepSeekAccountProvider = (
+  model: string,
+  assignment?: string,
+): Promise<ModelProviderView> =>
+  api<ModelProviderView>(`/v1/models/providers/${DEEPSEEK_ACCOUNT_PROVIDER_ID}`, {
+    method: 'PUT',
+    body: { kind: 'deepseek_account', model },
+    ...withAssignment(assignment),
+  })

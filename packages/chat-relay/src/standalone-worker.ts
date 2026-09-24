@@ -8,19 +8,32 @@
  *
  * 这里只做**装配**：协议、判定、限流、四道门全部来自同一份核心与 HTTP 层，
  * 与官方托管 / Docker 一字不差。
+ *
+ * WP137：`VISITOR_SECRET` **必填**（≥ 32 字节）。没配就整台拒绝服务（503，日志里说清楚
+ * 怎么补），不再从工作区号推一把——工作区号写在商家网站的嵌入代码里，是公开的。
+ * 留言要另配 `MESSAGE_KEY`（与本机设置里的「留言密钥」同一把）；没配就不收留言。
  */
-import { createHash } from 'node:crypto'
 import { RelayCore } from './core.js'
 import { createRelayHttp } from './http.js'
 import { type ClientFrame, parseClientFrame, type RelayFrame } from './protocol.js'
+import { sealedKeyOf, sealWithKey } from './sealed.js'
+import { MIN_RELAY_SECRET_BYTES, relaySecretReady, relayUnavailableResponse } from './secrets.js'
 
 export interface StandaloneEnv {
   /** 工作区号（单租户部署：一个 Worker 服务一个工作区）。 */
   WORKSPACE?: string
   /** 配对密钥（`wrangler secret put PAIRING_TOKEN`；不进 wrangler.toml）。 */
   PAIRING_TOKEN?: string
-  /** 访客令牌的 HMAC 种子（可选；不给派生一把）。 */
+  /**
+   * 访客令牌的 HMAC 密钥（**必填**，≥ 32 字节；`wrangler secret put VISITOR_SECRET`）。
+   * 没配 = 整台 503。
+   */
   VISITOR_SECRET?: string
+  /**
+   * 留言封箱密钥（选填；`wrangler secret put MESSAGE_KEY`，同一把填进本机「留言密钥」）。
+   * 没配 = 不收留言（访客面回人话），绝不拿常量封箱。
+   */
+  MESSAGE_KEY?: string
 }
 
 /** WebSocketPair 在 Workers 运行时里是全局的；类型面收窄成我们用到的那几点。 */
@@ -39,6 +52,7 @@ export function createStandaloneWorker(): {
   const workspaceOfEnv = (env: StandaloneEnv): string | undefined =>
     env.WORKSPACE?.trim() || undefined
   const cores = new Map<string, RelayCore>()
+  let warned = false
 
   const coreFor = (workspace: string, env: StandaloneEnv): RelayCore => {
     let core = cores.get(workspace)
@@ -50,6 +64,13 @@ export function createStandaloneWorker(): {
           if (expected === undefined || expected === '') return false
           return timingSafe(expected, token)
         },
+        // 留言封箱：只认部署方给的 MESSAGE_KEY（与 Docker / 官方同一条派生）
+        seal: (_ws, plaintext) => {
+          const key = env.MESSAGE_KEY?.trim()
+          if (key === undefined || key === '') throw new Error('MESSAGE_KEY 没配，不该走到封箱')
+          return sealWithKey(sealedKeyOf(key), plaintext)
+        },
+        sealReady: () => (env.MESSAGE_KEY?.trim() ?? '') !== '',
         newId: () => crypto.randomUUID(),
       })
       cores.set(workspace, core)
@@ -66,6 +87,19 @@ export function createStandaloneWorker(): {
           { code: 'invalid_input', message: '路径里缺工作区号（/relay/<ws>/*）' },
           { status: 400 },
         )
+      // WP137：没有真访客密钥就整台拒绝服务（访客面与本机连接都不接）
+      const visitorSecret = env.VISITOR_SECRET?.trim()
+      if (!relaySecretReady(visitorSecret)) {
+        if (!warned) {
+          warned = true
+          console.error(
+            `[relay] VISITOR_SECRET 没配或短于 ${String(MIN_RELAY_SECRET_BYTES)} 字节：转发器拒绝服务。` +
+              '在 deploy/chat-relay/worker 里跑 `wrangler secret put VISITOR_SECRET`' +
+              '（值用 `openssl rand -base64 32` 生成），不用重新部署。',
+          )
+        }
+        return relayUnavailableResponse()
+      }
       const core = coreFor(workspace, env)
 
       // 商家本机主动外连进来的长连接（单租户：一条就够）
@@ -119,8 +153,7 @@ export function createStandaloneWorker(): {
       const app = createRelayHttp({
         core,
         workspace,
-        visitorSecret: () =>
-          new TextEncoder().encode(env.VISITOR_SECRET ?? `derived:${hash(workspace)}:visitor`),
+        visitorSecret: () => new TextEncoder().encode(visitorSecret),
       })
       return app.fetch(new Request(stripped, request))
     },
@@ -135,8 +168,4 @@ function timingSafe(a: string, b: string): boolean {
   let diff = 0
   for (let i = 0; i < x.length; i += 1) diff |= (x[i] as number) ^ (y[i] as number)
   return diff === 0
-}
-
-function hash(text: string): string {
-  return createHash('sha256').update(text).digest('hex').slice(0, 16)
 }

@@ -1310,3 +1310,70 @@ event instead of looking back through historical events」；只有按需展示�
 - 3 人 pack `--runtime dsh` fast 档：改动前后各跑一次，62/62，**1054 个指标值 0 差**，`summary.txt` 逐字节相同，门禁"通过"。
 - `@agentsws/dsh-adapter` 1020 → 1034 条全过（+7 `profile-lockdown`、+7 `turn-summary`），`seams.test.ts` 30 条不动。
 
+
+## WP134（2026-09-24）：不是升级——官方 DeepSeek 账号登录做成第三种模型来源
+
+版本号一个没动（仍是 0.1.7-rc.1）。`@deepseek-ai/dsh-deepseek-account-platform`、`dsh-deepseek-account`、
+`dsh-credentials-local` 三个包本来就在锁文件里（经 `dsh-base`），这次只是**同版本**写进
+`packages/dsh-adapter/package.json` 的直接依赖，`pnpm-lock.yaml` 只多了三行 importer 记录、解析出的版本与原来逐字相同。
+
+### 1. 红线 7：从"永远关"改成"默认关、选了才开"（路线 b）
+
+WP132 在 profile 层写死了 `deepseek-account: disabled: true`。Luoye 09-24 定做成第三种模型来源之后，派工单给了两条路：
+
+| | 做法 | 为什么选 / 不选 |
+|---|---|---|
+| (a) | patch 里写 `disabled: !!js "!process.env.…"` | **不选**。`--dump-config` 与 `--dump-config-schema` 都**不求值** `!!js`（WP133 实测），锁定测试就看不出"没选时到底关没关"——一行要靠运行时求值才知道开关的锁定，正是 WP133 要消灭的那种"看起来关了" |
+| (b) | profile 层原样关死；用户选中时由服务进程叠一份运行时 patch 打开 | **选这条**。fail-closed 仍在 profile 层（WP133：profile 层解析失败即启动失败）；打开它的是 `profiles/agentsws/deepseek-account.on.patch.yml`（只有 `- id: deepseek-account / disabled: false` 一行，不带任何 config），真起完整 profile 时 `--patch` 叠上 |
+
+我们自己的两档运行时不读 profile（`harness.ts` 自己搭树），所以服务进程里**真正的开关**是
+`apps/server/src/deepseek-account.ts`：没人点「用我的 DeepSeek 账号登录」，进程里一行官方账号模块的代码都没有；
+点了才 `await import('@agentsws/dsh-adapter/deepseek-account')`（**子路径**，主入口不 re-export），挂一棵只为它的最小树
+（`dsh-credentials-local` + `dsh-authorization` + 官方账号模块 + 一个只收 exact 路由的 `webServer` 登记表）。
+
+`test/profile-lockdown.test.ts`：`LOCKDOWN` 七行不动、`FORBIDDEN`（两档模块图里不许有 `dsh-deepseek-account-platform`）不动，
+新增 `OPT_IN` 一组 6 条——opt-in 那一行在 profile 层仍是 `disabled: true`；opt-in 文件只打开它自己那一行；
+**opt-in 文件里的 id 同样走「id 存在、指向的还是那个插件」**（WP133 那条不削弱）；不叠 → 组合树里关；
+叠上 → 只有这一行 `disabled: false`、别的六条锁定照旧；反向哨兵：上游把这个 id 改名，同一套检查报出它。
+
+### 2. 官方默认值：一项显式写了，其余一项不覆盖
+
+派工单要求按官方默认值走（不加 `requestHeaders`、不开 `allowLoopbackHttp`、不开 `rewriteBrowserOrigin`）。
+读 `lib/types/index.d.ts` 与 `lib/index.js` 的 `Config`：`platformOrigin` 默认 `https://platform.deepseek.com`、
+`inferenceOrigin` 默认 `https://api.deepseek.com`、`requestTimeoutMs` 30 秒、`attemptTimeoutMs` 10 分钟、
+`logoutMaxRetries` 5、`logoutRetryDelayMs` 1 秒——**全部照用**。
+
+**上游一个洞（WP134 实测）**：README 写「`desktopPlatform` defaults to `null`. Every profile then sends `x-client-platform: web`」，
+但 `Config({}).desktopPlatform` 回来是 `undefined`（schemastery 的 `.default(null)` 不落值），构造函数里
+`desktopClientHeaders(undefined)` 只认 `=== null`，于是平台请求带的是 `x-client-platform: desktop-mac`。官方自己的组合看不出来：
+`dsh --dump-config` 显示 `dsh-base` 的 patch 替它**显式**写了 `desktopPlatform: !!js "… === 'desktop' && … ? process.platform : null"`。
+我们不走 bundle，所以照那个结果显式传 `desktopPlatform: null`（`src/deepseek-account.ts` 的 `OFFICIAL_DEFAULTS`，唯一一项）。
+哨兵在 `test/deepseek-account.test.ts`：上游修好之后那条会红，届时删掉这一项即可；`upstreams.yml` 的 wishlist 记了一条。
+
+### 3. 宿主要给它的两样东西
+
+- **`webServer`**：官方在"现有的 Host webServer"上 `register({ kind: 'exact', path: '/oauth/callback', handler(req, res) })`。
+  我们不起 `@deepseek-ai/dsh-host-webserver`（它自己 listen 一个端口），给一个登记表；服务进程在自己那个端口的入口
+  （`apps/server/src/server.ts` 的 `listen()`）看到 `/oauth/callback` 就把 node 的 req / res 原样交给官方处理器、回
+  `RESPONSE_ALREADY_SENT`。**不另开端口**，state + PKCE 校验、302 到平台完成页、失败页都是官方自己写的。
+  `callbackOrigin` 是服务进程自己的回环地址（`http://127.0.0.1:<端口>`；官方 `loginOrigin` 只收回环 HTTP + 显式端口），
+  所以这一条只在本机档开（Docker / 托管档浏览器回不来，卡上一句人话）。
+- **`credentials`**：官方 `dsh-credentials-local`，`dshHome` 指到 `<数据目录>/dsh-home`（令牌落 `.credentials.yaml`，0600）。
+  没用用户的 `~/.dsh`：官方 README 说"设备标识由使用同一凭据库的进程共享"，共用会让 Agents 工坊与用户自己装的 dsh
+  互相登录 / 登出。`watch: false`（只有我们这个进程写它）。
+
+### 4. 推理：不走官方适配器，也不走我们的 OpenAI 兼容客户端
+
+官方账号令牌只对 `inferenceOrigin` 给值（`resolveToken(url)`），而官方 `dsh-llm-deepseek` 用它打的是
+**Anthropic Messages** 口（`PUBLIC_BASE_URL = https://api.deepseek.com/anthropic` + `/v1/messages`，头 `x-dsh-auth-token`、
+不加 Bearer、`redirect: 'error'`，README「Messages 和 Files 请求通过 `x-dsh-auth-token` 发送账号 token」）。
+挂官方适配器要连带 attachments / fs / `deepseekLlmApiExtensions`（`session-log-deepseek` 就挂在这条上，profile 里关死的那条），
+所以没挂；`packages/model-gateway/src/providers/deepseek-account.ts` 照同一个口、同一个头写了一个只收整段回复的 provider，
+令牌每次请求现取自官方 `resolveToken`。默认型号 `deepseek-flash`：官方 `DEFAULT_MODELS` 里唯一 `inputModalities` 含 `image`
+的那条（显示名 DeepSeek-V41-Flash）；**DeepSeek 官网文档本单没联网核**，能不能看图以三步验证第 ③ 步为准。
+
+### 5. 证明"没选这一来源时"行为没变
+
+- 两档模块图：`FORBIDDEN` 断言照旧通过（`dsh-deepseek-account-platform` 0 命中）——子路径没被主入口带进来。
+- 3 人 pack `--runtime dsh` fast 档：合并 main 之后本分支与 main（149f5519）各跑一次，62/62，
+  **1054 个指标值 0 差**，`summary.txt` 逐字节相同，门禁"通过"。

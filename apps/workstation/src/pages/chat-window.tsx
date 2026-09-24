@@ -63,9 +63,14 @@ export function ChatWindowPage(): React.ReactNode {
   const [selected, setSelected] = useState<string | undefined>(undefined)
   const [instruction, setInstruction] = useState('')
   const [greetingDraft, setGreetingDraft] = useState('')
-  const [relayForm, setRelayForm] = useState<{ endpoint: string; pairing: string }>({
+  const [relayForm, setRelayForm] = useState<{
+    endpoint: string
+    pairing: string
+    messageKey: string
+  }>({
     endpoint: '',
     pairing: '',
+    messageKey: '',
   })
   const [testResult, setTestResult] = useState<ChatRelayTestView | undefined>(undefined)
 
@@ -98,7 +103,7 @@ export function ChatWindowPage(): React.ReactNode {
   const saveRelay = useMutation({
     mutationFn: setChatRelaySettings,
     onSuccess: async () => {
-      setRelayForm({ endpoint: '', pairing: '' })
+      setRelayForm({ endpoint: '', pairing: '', messageKey: '' })
       await refresh()
     },
   })
@@ -268,16 +273,31 @@ export function ChatWindowPage(): React.ReactNode {
               data-testid="relay-pairing"
               onChange={(e) => setRelayForm((f) => ({ ...f, pairing: e.target.value }))}
             />
+            {/* WP137：留言密钥（自建转发器打印的 / 自建 Worker 的 MESSAGE_KEY）；没有它转发器不收留言 */}
+            <Input
+              type="password"
+              value={relayForm.messageKey}
+              placeholder={
+                relay.data?.has_message_key === true
+                  ? t('chat.window.relay.messageKey.saved')
+                  : t('chat.window.relay.messageKey')
+              }
+              data-testid="relay-message-key"
+              onChange={(e) => setRelayForm((f) => ({ ...f, messageKey: e.target.value }))}
+            />
             <Button
               size="sm"
               variant="secondary"
               className="self-start"
               data-testid="relay-save"
-              disabled={relayForm.endpoint === '' && relayForm.pairing === ''}
+              disabled={
+                relayForm.endpoint === '' && relayForm.pairing === '' && relayForm.messageKey === ''
+              }
               onClick={() =>
                 saveRelay.mutate({
                   ...(relayForm.endpoint === '' ? {} : { endpoint: relayForm.endpoint }),
                   ...(relayForm.pairing === '' ? {} : { pairing_token: relayForm.pairing }),
+                  ...(relayForm.messageKey === '' ? {} : { message_key: relayForm.messageKey }),
                 })
               }
             >

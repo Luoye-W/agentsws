@@ -31,6 +31,7 @@ import {
   SqlIdempotencyStore,
   type SweepableIdempotencyStore,
 } from '@agentsws/api'
+import { relaySecretReady } from '@agentsws/chat-relay'
 import {
   ADMIN_TOKEN_ENV,
   AdminStore,
@@ -153,6 +154,9 @@ export class AccountsCore {
         // WP128：客服增值服务的托管实例（Cloudflare Containers）与它的快照桶
         hosted_instance: env.HOSTED_INSTANCE !== undefined,
         hosted_snapshots: env.HOSTED_SNAPSHOTS !== undefined,
+        // WP137：官方聊天转发——绑没绑、访客密钥配没配（没配 = 访客面一律 503，后台标红）
+        chat_relay: env.CHAT_RELAY !== undefined,
+        chat_relay_key: relaySecretReady(env.AGENTSWS_CHAT_RELAY_KEY),
       },
     }
 

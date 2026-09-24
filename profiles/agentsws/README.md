@@ -7,6 +7,9 @@ dsh profile（16 §1）：**"我们这种模式"的技术实体**。
 - `cordis.patch.yml` —— 我们的 patch 层，**只放锁定**（docs/42 红线 7：上游默认会开、我们必须关的那几行）。
   每一行的 id 由 `packages/dsh-adapter/test/profile-lockdown.test.ts` 对照 `dsh --dump-config-schema`
   导出的配置 schema 校验：id 在当前 dsh 里不存在、或指向的插件换了人，测试就红（WP133）。
+- `deepseek-account.on.patch.yml` —— **运行时 patch**（WP134）：只把 `deepseek-account`（官方 DeepSeek 账号登录）
+  那一行打开。默认不叠——profile 层那一行仍是关死的；用户在向导 / 设置里选了「用我的 DeepSeek 账号登录」才 `--patch` 叠上。
+  钉住"没选关、选了开、别的锁定不动"：`profile-lockdown.test.ts` 的 `OPT_IN` 一组。
 
 profile 与 preset 的分工：profile 决定**装哪些包、锁什么版本、打什么补丁**；
 preset 决定**一个职责用哪些工具、哪段人设**（`presets/<role_id>/agent.cordis.yml`，

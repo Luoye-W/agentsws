@@ -64,6 +64,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
         formSend: '留言',
         formDone: '已收到，我们会用邮件回复你。',
         formNeedEmail: '先填一个邮箱，我们才能回你。',
+        formUnavailable: '现在还不能留言，请稍后再试。',
       }
     : {
         title: 'Chat with us',
@@ -76,6 +77,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
         formSend: 'Send message',
         formDone: 'Got it — we will reply by email.',
         formNeedEmail: 'Please add an email so we can get back to you.',
+        formUnavailable: 'Messages are not available yet — please try again later.',
       }
   function applyLanguage(cfgLang) {
     if (cfgLang !== 'zh' && cfgLang !== 'en') return
@@ -92,6 +94,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
           formSend: '留言',
           formDone: '已收到，我们会用邮件回复你。',
           formNeedEmail: '先填一个邮箱，我们才能回你。',
+          formUnavailable: '现在还不能留言，请稍后再试。',
         }
       : {
           title: 'Chat with us',
@@ -104,6 +107,7 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
           formSend: 'Send message',
           formDone: 'Got it — we will reply by email.',
           formNeedEmail: 'Please add an email so we can get back to you.',
+          formUnavailable: 'Messages are not available yet — please try again later.',
         }
   }
 
@@ -252,6 +256,11 @@ export const CHAT_WIDGET_JS = String.raw`(function () {
         .then(function (r) {
           if (r.status === 429) {
             say(TXT.tooFast, false)
+            return
+          }
+          // WP137：转发器不收（留言密钥没签发 / 转发器没配好）——别假装「已收到」
+          if (!r.ok) {
+            say(TXT.formUnavailable, false)
             return
           }
           wrap.remove()

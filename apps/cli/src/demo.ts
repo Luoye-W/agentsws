@@ -39,7 +39,7 @@ import type {
   Server,
   WorkstationDataSource,
 } from '@agentsws/server'
-import { createServer, periodQueryRunner } from '@agentsws/server'
+import { createServer, deepseekAccountStandIn, periodQueryRunner } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
@@ -1157,6 +1157,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     },
     // 37：委托与事项发言在 demo 里真跑（stub 运行时；事件日志里不会有任何 model.*）
     records: recordSourceOf(world, pack),
+    /*
+     * WP134：「用我的 DeepSeek 账号登录」在 demo 里是**替身**——点登录打开的授权页就是本机回调，
+     * 打开即登录（替身账号、替身余额），三步验证打的是一个认得测试图的假 Messages 口。
+     * demo 不该为了演示去敲 DeepSeek 的服务器，也不该在没网的机器上演不出这张卡。
+     */
+    deepseekAccount: deepseekAccountStandIn(),
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),
     env: {
       ...process.env,

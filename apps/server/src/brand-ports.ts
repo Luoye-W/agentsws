@@ -19,6 +19,7 @@ import type {
   CloudPort,
   ConnectionDirectoryPort,
   ConnectionsPort,
+  DeepSeekAccountView,
   DesignPort,
   KolPort,
   MessagesPort,
@@ -126,6 +127,16 @@ export interface BrandModelsPortOptions {
    * 建好一个、所有品牌共用，`brandModelsPort` 只负责转手。
    */
   subscription?: SubscriptionPortLike
+  /**
+   * WP134：用我的 DeepSeek 账号登录。同订阅：**不按品牌分**（账号在这台机器的 dsh 凭据库里），
+   * 装配方建一份、所有品牌共用。
+   */
+  deepseekAccount?: {
+    view(): Promise<DeepSeekAccountView>
+    login(): Promise<DeepSeekAccountView>
+    cancel(attempt_id: string): Promise<DeepSeekAccountView>
+    signOut(actor: ModelsActor): Promise<void>
+  }
 }
 
 /**
@@ -212,6 +223,18 @@ export function brandModelsPort(options: BrandModelsPortOptions): ModelsPort {
             options.subscription?.selectModel(actor, provider, model),
           subscriptionSignOut: async (actor: ModelsActor, provider: string) => {
             await options.subscription?.signOut(actor, provider)
+          },
+        }),
+    // WP134：DeepSeek 账号登录按机器，一律转给那一份
+    ...(options.deepseekAccount === undefined
+      ? {}
+      : {
+          deepseekAccount: () => options.deepseekAccount?.view(),
+          deepseekAccountLogin: () => options.deepseekAccount?.login(),
+          deepseekAccountCancel: (_actor: ModelsActor, attempt_id: string) =>
+            options.deepseekAccount?.cancel(attempt_id),
+          deepseekAccountSignOut: async (actor: ModelsActor) => {
+            await options.deepseekAccount?.signOut(actor)
           },
         }),
     setInheritance: async (actor: Actor, input: { inherit_org: boolean }) => {

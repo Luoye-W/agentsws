@@ -60,6 +60,7 @@ import {
 } from '@agentsws/contracts'
 import { buildPricing, creditsFor } from '@agentsws/metering'
 import type {
+  AccountFetch,
   CatalogPrice,
   FetchLike,
   ModelGatewayApi,
@@ -69,6 +70,10 @@ import type {
 import {
   catalogModels,
   checkModel,
+  DEEPSEEK_ACCOUNT_BASE_URL,
+  DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
+  DEEPSEEK_ACCOUNT_MODELS,
+  deepseekAccountProvider,
   hostOf,
   NO_IMAGE_MODEL_ZH,
   openaiCompatibleProvider,
@@ -222,6 +227,16 @@ export interface ModelsOptions {
   appendEvent?: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
   /** 记事件要写在哪个工作区。取值函数——身份装在模型面之后。 */
   workspace_id?: () => string | undefined
+  /**
+   * WP134：「用我的 DeepSeek 账号登录」那一路。**只有两样**：登录了没有（同步）与官方
+   * `resolveToken`（每次请求现取）。不给 = 这个进程没装这条路，那种 provider 永远挂不上。
+   */
+  deepseekAccount?: {
+    signedIn(): boolean
+    resolveToken(url: string): Promise<string | undefined>
+    /** 测试 / demo 注入的 Messages 口替身（不联网）。 */
+    fetch?: AccountFetch
+  }
 }
 
 /**
@@ -257,6 +272,10 @@ export interface ModelsAssembly {
    * 返回真的写进去几条。
    */
   importSettings(snapshot: ModelSettingsSnapshot): number
+  /**
+   * WP134：DeepSeek 账号登录 / 登出之后调一次——那条 provider 能不能挂上变了，网关要重装。
+   */
+  accountChanged(): void
 }
 
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
@@ -741,6 +760,32 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     ],
   },
   /*
+   * WP134（Luoye 09-24）：**用我的 DeepSeek 账号登录**——第三种模型来源。
+   *
+   * 没有表单、没有 key：点一下，系统浏览器里走 DeepSeek 官方的授权页（dsh 官方模块
+   * `@deepseek-ai/dsh-deepseek-account-platform`），回来显示账号与余额，接着跑三步验证。
+   * 令牌只存在 dsh 自己的本机凭据库里。**不挂 `vendor`**：它在向导与设置页各是单独一张卡，
+   * 不进"DeepSeek 官方"那张 API key 卡的方案单选（那张卡是"填 key"，这一张是"登录"）。
+   */
+  {
+    kind: 'deepseek_account',
+    label: '用我的 DeepSeek 账号登录',
+    summary: '不用建 key：用 DeepSeek 账号在浏览器里登录一次，按你账号里的余额扣。',
+    plan_label: '用 DeepSeek 账号登录',
+    plan_order: 1,
+    auth: 'account',
+    default_base_url: DEEPSEEK_ACCOUNT_BASE_URL,
+    default_model: DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
+    region: 'cn',
+    steps: [
+      '点"用 DeepSeek 账号登录"——会在浏览器里打开 DeepSeek 的授权页',
+      '在那一页上登录你的 DeepSeek 账号、点同意',
+      '回到这里：显示账号名与余额，接着自动验证三步（连通 → 文字 → 看图）',
+      '钱从你 DeepSeek 账号的余额里扣；要退出就点"登出"',
+    ],
+    links: [{ label: 'DeepSeek 开放平台', url: 'https://platform.deepseek.com' }],
+  },
+  /*
    * 49 M2 第三张卡：**用 agentsws 的**。
    *
    * 与前两张唯一的差别是"要准备什么"那一栏——**什么都不用准备**：不填 key、
@@ -875,6 +920,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   const isCloud = (id: string): boolean =>
     state.providers.find((p) => p.id === id)?.kind === 'agentsws_cloud'
 
+  /** WP134：这条是不是「用我的 DeepSeek 账号登录」那一种（凭据在 dsh 凭据库里，不在我们这儿）。 */
+  const isAccount = (id: string): boolean =>
+    state.providers.find((p) => p.id === id)?.kind === 'deepseek_account'
+
   /** 关联过账号没有（不读值，只看在不在）。 */
   const hasCloudToken = (): boolean =>
     secrets.available && secrets.record(CLOUD_TOKEN_SECRET_ID) !== undefined
@@ -882,6 +931,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   /** 这条 provider 有没有 key（不读值，只看在不在）。 */
   const hasKey = (id: string): boolean => {
     if (isCloud(id)) return hasCloudToken()
+    if (isAccount(id)) return options.deepseekAccount?.signedIn() === true
     if (id === ENV_PROVIDER_ID && envKey() !== undefined) return true
     if (!secrets.available) return false
     return secrets.record(keyOf(id)) !== undefined
@@ -955,6 +1005,22 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   ): ModelProvider | undefined => {
     if (!hasKey(config.id)) return undefined
     const vision = visionOf(config, model)
+    const account = options.deepseekAccount
+    if (config.kind === 'deepseek_account') {
+      if (account === undefined) return undefined
+      /*
+       * WP134：这一路**不走 OpenAI 兼容客户端**。令牌每次请求现取自官方 `resolveToken`
+       * （只对 api.deepseek.com 给值），发到官方的 Messages 口、放在 `x-dsh-auth-token` 头里。
+       */
+      return deepseekAccountProvider({
+        ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
+        resolveToken: (url) => account.resolveToken(url),
+        baseUrl: config.base_url,
+        model,
+        provider: config.id,
+        ...(account.fetch === undefined ? {} : { fetch: account.fetch }),
+      })
+    }
     return openaiCompatibleProvider({
       // WP127：上一次验证的结论就是能力声明；没验证过就不声明（网关照常放行）
       ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
@@ -1190,6 +1256,18 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     fallback?: ModelProviderConfig,
   ): Promise<ModelListing> => {
     const checked_at = clock.now()
+    /*
+     * WP134：账号登录那一路没有 `/models` 可拉（令牌只对 Messages 口给值）。清单就是官方
+     * `dsh-llm-deepseek` 目录里那两条——`ok: false` 如实说明它不是上游报的（WP88 同一条纪律）。
+     */
+    if (fallback?.kind === 'deepseek_account' || isAccount(id)) {
+      return {
+        ok: false,
+        models: DEEPSEEK_ACCOUNT_MODELS.map((m) => m.id),
+        reason: `账号登录这一路不去拉清单。下面是 DeepSeek 官方组件自带的目录（${DEEPSEEK_ACCOUNT_DEFAULT_MODEL} 能看图），能不能用以"测试"为准。`,
+        checked_at,
+      }
+    }
     const base_url = probe?.base_url?.trim() ?? fallback?.base_url ?? ''
     if (base_url === '') {
       return { ok: false, models: [], reason: '还没填接口地址，填了才知道去哪儿拉', checked_at }
@@ -1378,9 +1456,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
               // 云那条不是"没填 key"——它本来就不填 key，是还没关联账号
               config.kind === 'agentsws_cloud'
                 ? '还没关联 agentsws 账号。去"设置 → 账号与积分"里关联一次就能用。'
-                : secrets.available
-                  ? '还没填 API key'
-                  : `这台机器没有秘密库密钥（环境变量 ${SECRETS_KEY_ENV}），key 无处安全存放`,
+                : config.kind === 'deepseek_account'
+                  ? '还没用 DeepSeek 账号登录（或者已经登出）。点"用 DeepSeek 账号登录"，在浏览器里登录一次就能用。'
+                  : secrets.available
+                    ? '还没填 API key'
+                    : `这台机器没有秘密库密钥（环境变量 ${SECRETS_KEY_ENV}），key 无处安全存放`,
           }),
       ...(config.price_in === undefined ? {} : { price_in: config.price_in }),
       ...(config.price_out === undefined ? {} : { price_out: config.price_out }),
@@ -1518,6 +1598,23 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
        * 它的凭据是关联账号时拿到的那把工作区服务令牌，由 WP58 存进秘密库。
        * 这里显式拒掉而不是默默忽略——用户如果真往里填了什么，他该知道那没生效。
        */
+      /*
+       * WP134：**账号登录这一条也不填 key。** 凭据是 dsh 官方模块登录的产物，只在 dsh 本机凭据库里。
+       * 没装这条路的进程（公司档 / 托管档镜像）直接拒；没登录也拒——先登录、再存这一条。
+       */
+      if (input.kind === 'deepseek_account') {
+        if (input.api_key !== undefined && input.api_key.trim() !== '') {
+          throw invalid('"用 DeepSeek 账号登录"这一条不用填 key——点登录，在浏览器里登录一次即可。')
+        }
+        if (options.deepseekAccount === undefined) {
+          throw invalid('这个服务进程没有装配"用 DeepSeek 账号登录"。')
+        }
+        if (!options.deepseekAccount.signedIn()) {
+          throw invalid(
+            '还没用 DeepSeek 账号登录。先点"用 DeepSeek 账号登录"，在浏览器里登录一次。',
+          )
+        }
+      }
       if (input.kind === 'agentsws_cloud') {
         if (input.api_key !== undefined && input.api_key.trim() !== '') {
           throw invalid(
@@ -1636,7 +1733,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         const result: ModelTestResult = {
           ok: false,
           reason: 'no_key',
-          detail: '还没填 API key，先保存一把再测',
+          detail:
+            config.kind === 'deepseek_account'
+              ? '还没用 DeepSeek 账号登录（或者已经登出），先登录再测'
+              : '还没填 API key，先保存一把再测',
           checked_at,
         }
         state.tests[id] = result
@@ -1908,6 +2008,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       return config === undefined ? 'unchecked' : visionStatusOf(config, ref.model)
     },
     exportSettings,
+    accountChanged: () => {
+      reassemble()
+    },
     importSettings(snapshot) {
       // 只往空的里写：已经配过的品牌一条都不动（复制是一次性的，不是同步）
       if (state.providers.length > 0) return 0

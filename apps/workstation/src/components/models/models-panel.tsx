@@ -46,6 +46,8 @@ import {
   getModelDefaults,
   getModelPricing,
   getModelUsage,
+  isAccountTemplate,
+  isDeepSeekAccountKind,
   listModelProviders,
   refreshModelPricing,
   removeModelProvider,
@@ -382,7 +384,8 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         <section className="flex flex-col gap-2">
           <h4 className="text-xs font-medium text-muted-foreground">{t('models.add')}</h4>
           <div className="grid gap-2 lg:grid-cols-2">
-            {groupTemplates(templates).map((card) => (
+            {/* WP134：「用我的 DeepSeek 账号登录」是单独那一张卡（设置页下面），不进这一排 */}
+            {groupTemplates(templates.filter((tpl) => !isAccountTemplate(tpl))).map((card) => (
               <VendorCard
                 key={card.id}
                 card={card}
@@ -568,9 +571,12 @@ function ProviderRow({
           <Button size="xs" variant="outline" disabled={busy} onClick={onTest}>
             {t('models.test')}
           </Button>
-          <Button size="xs" variant="ghost" onClick={onEdit}>
-            {t('models.edit')}
-          </Button>
+          {/* WP134：账号登录那一条没什么可改的（没有 key、地址是官方的）；登出在它自己那张卡上 */}
+          {isDeepSeekAccountKind(provider.kind) ? null : (
+            <Button size="xs" variant="ghost" onClick={onEdit}>
+              {t('models.edit')}
+            </Button>
+          )}
           {provider.from_env === true ? null : (
             <Button size="xs" variant="ghost" disabled={busy} onClick={onRemove}>
               <Trash2 aria-hidden />
