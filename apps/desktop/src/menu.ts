@@ -28,14 +28,32 @@ export type MenuAction =
   | 'export-diagnostics'
   /** WP111：mac / linux 只提示那一档，点它开 Releases 下载页。 */
   | 'open-download-page'
+  /** WP136（docs/79）：切到某个 dsh 场景（`MenuItemModel.scene` 说是哪一个）。 */
+  | 'switch-scene'
+  /** WP136：打开工作台里的场景面板（新建 / 关闭 / 删除都在那儿）。 */
+  | 'manage-scenes'
   | 'quit'
 
 export interface MenuItemModel {
-  id: MenuAction | 'status' | 'separator'
-  type: 'normal' | 'separator' | 'checkbox'
+  id: MenuAction | 'status' | 'separator' | 'submenu'
+  type: 'normal' | 'separator' | 'checkbox' | 'submenu'
   label: string
   enabled: boolean
   checked?: boolean
+  /** `type: 'submenu'` 时的子项。 */
+  submenu?: MenuItemModel[]
+  /** `id: 'switch-scene'` 时切到哪个场景。 */
+  scene?: string
+}
+
+/**
+ * WP136（docs/79）：托盘上认得的一个场景（服务进程 `GET /v1/dsh-scenes` 的精简版）。
+ * 只列点得开的（Agents 工坊与网页场景）；命令行类场景在工作台的场景面板里才看得到。
+ */
+export interface TrayScene {
+  name: string
+  origin: 'agentsws' | 'official' | 'custom'
+  state: 'stopped' | 'starting' | 'running' | 'failed'
 }
 
 export interface TrayModelInput {
@@ -75,6 +93,11 @@ export interface TrayModelInput {
    * 值守是"值守中：云上运行"——后者要回答的是"我关了电脑还有人接活吗"。
    */
   standby?: boolean
+  /**
+   * WP136：能切的场景。`undefined` = 还没问到（服务没起来 / 连公司服务器那一档），
+   * 那时「切换场景」这一项不出现——摆一个点开是空的子菜单比没有它更糟。
+   */
+  scenes?: TrayScene[]
 }
 
 const separator: MenuItemModel = { id: 'separator', type: 'separator', label: '', enabled: false }
@@ -146,6 +169,8 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
       enabled: false,
     },
   ]
+  const scenes = sceneSubmenu(input)
+  if (scenes !== undefined) items.splice(3, 0, scenes, separator)
   const connect = connectStateLabel(input)
   if (connect !== undefined)
     items.push({ id: 'status', type: 'normal', label: connect, enabled: false })
@@ -219,6 +244,53 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
     { id: 'quit', type: 'normal', label: t.quit, enabled: true },
   )
   return items
+}
+
+/**
+ * WP136：「切换场景」子菜单。Agents 工坊第一个、打着勾（这个托盘本身就是它）；
+ * 其余网页场景跟在后面，在跑的挂「运行中」；最后一项「管理场景…」去工作台。
+ *
+ * 只在本机档、服务健康、问到过场景清单时出现：场景是这台电脑上的 dsh 起的，
+ * 连公司服务器那一档这台电脑上没有服务进程可问。
+ */
+export function sceneSubmenu(input: TrayModelInput): MenuItemModel | undefined {
+  if (input.mode === 'remote' || input.scenes === undefined || input.health?.ok !== true)
+    return undefined
+  const t = strings(input.language)
+  const suffix = (s: TrayScene): string =>
+    s.state === 'running'
+      ? `（${t.sceneRunning}）`
+      : s.state === 'starting'
+        ? `（${t.sceneStarting}）`
+        : ''
+  const others = input.scenes.filter((s) => s.origin !== 'agentsws')
+  return {
+    id: 'submenu',
+    type: 'submenu',
+    label: t.switchScene,
+    enabled: true,
+    submenu: [
+      {
+        id: 'switch-scene',
+        type: 'checkbox',
+        label: t.sceneAgentsws,
+        enabled: true,
+        checked: true,
+        scene: 'agentsws',
+      },
+      ...others.map(
+        (s): MenuItemModel => ({
+          id: 'switch-scene',
+          type: 'normal',
+          label: `${s.name}${suffix(s)}`,
+          enabled: true,
+          scene: s.name,
+        }),
+      ),
+      separator,
+      { id: 'manage-scenes', type: 'normal', label: t.manageScenes, enabled: true },
+    ],
+  }
 }
 
 function statusSuffix(input: TrayModelInput): string {

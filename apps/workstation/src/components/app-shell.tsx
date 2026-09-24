@@ -50,6 +50,7 @@ import { NoModelBanner } from '@/components/models/no-model-banner'
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
+import { SceneSwitcher } from '@/components/scene-switcher'
 import { StandbyBadge } from '@/components/standby-badge'
 import { CreditsChip, ModelChip } from '@/components/top-chips'
 import { DemoBadge } from '@/components/ui/demo-badge'
@@ -379,6 +380,8 @@ export function AppShell({
             data-testid="rail-bottom"
           >
             <BrandSwitcher />
+            {/* WP136（docs/79）：账户块上方一行「场景」——切到 dsh 的其他场景（只有所有者看得到） */}
+            <SceneSwitcher />
             <AccountBlock {...(me === undefined ? {} : { me })} />
           </div>
         </aside>

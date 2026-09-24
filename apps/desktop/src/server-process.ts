@@ -78,6 +78,14 @@ export interface ServerSpawnInput {
    * 那一条透传下去——不透传的话服务进程会用它自己的默认值，两边看的就不是同一个 runtime。
    */
   connectUrl?: string
+  /**
+   * WP136（docs/79）：我们自己的 `DSH_HOME`（`<userData>/dsh`）。服务进程拿它当场景目录
+   * （`AGENTSWS_DSH_HOME`），同一个值也作为 `DSH_HOME` 给出去——dsh 的本机凭据库
+   * （`$DSH_HOME/.credentials.yaml`）因此是**所有场景共用的一份**，DeepSeek 账号登录一次就够。
+   */
+  dshHome?: string
+  /** 应用数据目录（`<userData>`）：其他场景的工作目录不许在它里面，也不许包含它。 */
+  appDataDir?: string
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -90,6 +98,10 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     AGENTSWS_VERSION: input.version,
     ...(input.haltFile === undefined ? {} : { AGENTSWS_HALT_FILE: input.haltFile }),
     ...(input.connectUrl === undefined ? {} : { AGENTSWS_CONNECT_URL: input.connectUrl }),
+    ...(input.dshHome === undefined
+      ? {}
+      : { AGENTSWS_DSH_HOME: input.dshHome, DSH_HOME: input.dshHome }),
+    ...(input.appDataDir === undefined ? {} : { AGENTSWS_APP_DATA_DIR: input.appDataDir }),
     ...haltEnv(input.halt),
     ...secretsToEnv(input.secrets),
   }

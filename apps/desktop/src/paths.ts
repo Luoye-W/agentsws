@@ -21,6 +21,12 @@ export interface DesktopPaths {
   serverLogFile: string
   /** 传给服务进程的 `AGENTSWS_DB_DIR`。 */
   serverDataDir: string
+  /**
+   * WP136（docs/79）：我们自己的 `DSH_HOME`——dsh 的各个场景（Profile）与本机凭据库都在这里。
+   * 与 `data/` 平级而不是在它里面（备份 / 导出不把它打进去），也**不是** `~/.dsh`
+   * （用户另装的那份 dsh 用它自己的，两个版本互不改配置）。
+   */
+  dshHome: string
 }
 
 export function desktopPaths(userData: string): DesktopPaths {
@@ -34,5 +40,6 @@ export function desktopPaths(userData: string): DesktopPaths {
     logFile: join(logDir, 'desktop.log'),
     serverLogFile: join(logDir, 'server.log'),
     serverDataDir: join(userData, 'data'),
+    dshHome: join(userData, 'dsh'),
   }
 }
