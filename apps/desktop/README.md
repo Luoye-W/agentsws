@@ -148,6 +148,14 @@ pnpm --filter @agentsws/desktop dist        # macOS .dmg (arm64 / x64) / Windows
 WP111 起**接了更新源**：`publish: github`、渠道 `beta`（见下面「内测安装与升级」）。`asar: false`——服务进程是以子进程跑的，从 asar 里执行脚本
 要额外的 hook，v1 用平铺目录换确定性。
 
+**第三方许可证（WP148）**：安装包的 `<resources>/licenses/` 里有三份——`THIRD_PARTY_LICENSES.txt`
+（`scripts/third-party-licenses.mjs` 按 `pnpm -F "@agentsws/desktop..." licenses list --prod --json` 生成：
+libvips 的 LGPL-3.0 与动态库形态、捆绑的 Node、better-sqlite3 预编译模块写成人话在最前面，
+包里真带着的原生二进制逐个列出，然后按许可证汇总、逐包全文）、Electron 的 `LICENSE.electron.txt`、
+Chromium 的 `LICENSES.chromium.html`（mac 上 electron-builder 会丢掉后两份，所以由 `after-extract.mjs`
+在解包那一刻先存一份）。托盘「开源软件许可」打开的就是那份 txt。**包里带原生二进制、却不在清单里**
+的包有一个，打包就失败。单独生成一份看看：`node apps/desktop/scripts/third-party-licenses.mjs <输出路径>`（不联网）。
+
 ## 内测安装与升级（WP111）
 
 发给一位**非技术用户**的那条路。给她看的一页纸是
