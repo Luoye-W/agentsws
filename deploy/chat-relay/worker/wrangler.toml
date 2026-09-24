@@ -1,11 +1,14 @@
 # Agents 工坊 · 聊天转发器（自建 Cloudflare Worker 档，WP124 / docs/74）
 #
-# 部署到**你自己的** Cloudflare 账号。两步：
-#   1. wrangler secret put PAIRING_TOKEN   # 自己生成一把：openssl rand -base64 32
-#   2. wrangler deploy
+# 部署到**你自己的** Cloudflare 账号。四步：
+#   1. wrangler secret put PAIRING_TOKEN    # 自己生成一把：openssl rand -base64 32
+#   2. wrangler secret put VISITOR_SECRET   # 必填，再生成一把（至少 32 字节）：openssl rand -base64 32
+#   3. wrangler secret put MESSAGE_KEY      # 选填，要收离线留言就配（同一把填进本机「留言密钥」）
+#   4. wrangler deploy
 # 然后把 `https://<你填的子域>.workers.dev/relay/<工作区号>` 填进聊天窗设置。
 #
-# 没有密钥不成跑：没有 PAIRING_TOKEN 的 Worker 一条本机连接都握不上手。
+# 没有密钥不成跑：没有 PAIRING_TOKEN 的 Worker 一条本机连接都握不上手；
+# 没有 VISITOR_SECRET（或短于 32 字节）的 Worker 整台回 503（`wrangler tail` 里有一句说明）。
 # 单租户、内存态：redeploy 会丢没拉走的留言（要持久用 Docker 档）。
 name = "agentsws-chat-relay"
 main = "src/index.ts"
