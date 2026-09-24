@@ -10,9 +10,16 @@
  *    两档同一个挂件、同一段嵌入代码，切档 = 换转发器地址与密钥，商家网站不用改。
  * 4. **谁在聊**：进行中的对话 + 对话界面。底部唯一的输入框是「教 AI」——
  *    **没有接管式回复框**（修订第 1 条：对客直发入口数 = 0，有 grep 守卫测试）。
+ *
+ * WP139（docs/78 阻断 #2）：这一页不属于任何岗位，**两种请求用两条自己的分配**——
+ * 外观 / 转发器是工作区级配置（`store_config` / `policy`），用所有者那条；
+ * 对话列表与教 AI 是 `customer.*`，用网站在线客服那条（`lib/pick-assignment.ts`）。
+ * 都不改全局当前岗位。挑不到在线客服就在「进行中的对话」里说清楚去哪加，不发必 403 的请求。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { DutyNeeded } from '@/components/duty-needed'
+import { PageError } from '@/components/page-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -31,6 +38,8 @@ import {
   testChatRelay,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { LIVE_CHAT_NEED, LIVE_CHAT_TEACH_NEED, OWNER_NEED } from '@/lib/pick-assignment'
+import { assignmentOf, canRequest, useDutyAssignment } from '@/lib/use-duty-assignment'
 import { cn } from '@/lib/utils'
 import { HostedRelayOption } from './chat-window-hosted'
 
@@ -74,20 +83,39 @@ export function ChatWindowPage(): React.ReactNode {
   })
   const [testResult, setTestResult] = useState<ChatRelayTestView | undefined>(undefined)
 
+  // 工作区级配置：所有者那条（不是所有者就退回当前岗位——被拒了照实说）
+  const ownerPick = useDutyAssignment(OWNER_NEED)
+  const cfgAsg = assignmentOf(ownerPick)
+  const cfgReady = ownerPick.kind !== 'loading'
+  // 会话与教 AI：网站在线客服那条
+  const chatPick = useDutyAssignment(LIVE_CHAT_NEED)
+  const chatAsg = assignmentOf(chatPick)
+  const teachAsg = assignmentOf(useDutyAssignment(LIVE_CHAT_TEACH_NEED)) ?? chatAsg
+
   const settings = useQuery({
-    queryKey: ['chat-widget', 'settings'],
-    queryFn: getChatWidgetSettings,
+    queryKey: ['chat-widget', 'settings', cfgAsg],
+    enabled: cfgReady,
+    queryFn: () => getChatWidgetSettings(cfgAsg),
   })
-  const relay = useQuery({ queryKey: ['chat-widget', 'relay'], queryFn: getChatRelaySettings })
-  const status = useQuery({ queryKey: ['chat-widget', 'status'], queryFn: getChatRelayStatus })
+  const relay = useQuery({
+    queryKey: ['chat-widget', 'relay', cfgAsg],
+    enabled: cfgReady,
+    queryFn: () => getChatRelaySettings(cfgAsg),
+  })
+  const status = useQuery({
+    queryKey: ['chat-widget', 'status', cfgAsg],
+    enabled: cfgReady,
+    queryFn: () => getChatRelayStatus(cfgAsg),
+  })
   const sessions = useQuery({
-    queryKey: ['chat-widget', 'sessions'],
-    queryFn: () => listChatSessions(30),
+    queryKey: ['chat-widget', 'sessions', chatAsg],
+    enabled: canRequest(chatPick),
+    queryFn: () => listChatSessions(30, chatAsg),
   })
   const detail = useQuery({
     queryKey: ['chat-widget', 'messages', selected],
     enabled: selected !== undefined,
-    queryFn: () => getChatMessages(selected as string),
+    queryFn: () => getChatMessages(selected as string, chatAsg),
   })
 
   const refresh = async (): Promise<void> => {
@@ -95,20 +123,22 @@ export function ChatWindowPage(): React.ReactNode {
   }
 
   const saveSettings = useMutation({
-    mutationFn: setChatWidgetSettings,
+    mutationFn: (input: Parameters<typeof setChatWidgetSettings>[0]) =>
+      setChatWidgetSettings(input, cfgAsg),
     onSuccess: async () => {
       await refresh()
     },
   })
   const saveRelay = useMutation({
-    mutationFn: setChatRelaySettings,
+    mutationFn: (input: Parameters<typeof setChatRelaySettings>[0]) =>
+      setChatRelaySettings(input, cfgAsg),
     onSuccess: async () => {
       setRelayForm({ endpoint: '', pairing: '', messageKey: '' })
       await refresh()
     },
   })
   const test = useMutation({
-    mutationFn: testChatRelay,
+    mutationFn: () => testChatRelay(cfgAsg),
     onSuccess: (out) => {
       setTestResult(out)
       void refresh()
@@ -116,20 +146,26 @@ export function ChatWindowPage(): React.ReactNode {
   })
   const teach = useMutation({
     mutationFn: (input: { id: string; text: string }) =>
-      teachChatSession(input.id, { instruction: input.text, scope: 'similar_cases' }),
+      teachChatSession(input.id, { instruction: input.text, scope: 'similar_cases' }, teachAsg),
     onSuccess: async () => {
       setInstruction('')
       await refresh()
     },
   })
 
-  if (settings.isPending || relay.isPending) return <Skeleton className="h-96 w-full" />
-  if (settings.error !== null || relay.error !== null)
+  const cfgError = settings.error ?? relay.error
+  if (cfgError !== null)
     return (
-      <p role="alert" className="text-sm text-destructive">
-        {t('error.generic')}
-      </p>
+      <PageError
+        error={cfgError}
+        testid="chat-window-error"
+        onRetry={() => {
+          void settings.refetch()
+          void relay.refetch()
+        }}
+      />
     )
+  if (settings.isPending || relay.isPending) return <Skeleton className="h-96 w-full" />
 
   const cfg = settings.data
   const accent = cfg?.accent ?? '#2563eb'
@@ -306,7 +342,7 @@ export function ChatWindowPage(): React.ReactNode {
             <p className="text-xs text-muted-foreground">{t('chat.window.relay.hosted.hint')}</p>
           </div>
           {/* WP128：第三项接真——订阅后「云端替你值守中」 */}
-          <HostedRelayOption />
+          <HostedRelayOption assignment={cfgAsg} />
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -379,7 +415,18 @@ export function ChatWindowPage(): React.ReactNode {
           <CardTitle className="text-sm">{t('chat.window.conversations')}</CardTitle>
         </CardHeader>
         <CardContent>
-          {activeSessions.length === 0 ? (
+          {chatPick.kind === 'none' || chatPick.kind === 'no_range' ? (
+            <DutyNeeded need={LIVE_CHAT_NEED} kind={chatPick.kind} testid="chat-duty-needed" />
+          ) : sessions.error !== null ? (
+            <PageError
+              error={sessions.error}
+              testid="chat-sessions-error"
+              overrides={{ forbidden: t('chat.forbidden') }}
+              onRetry={() => {
+                void sessions.refetch()
+              }}
+            />
+          ) : activeSessions.length === 0 ? (
             <p className="text-[13px] text-muted-foreground" data-testid="chat-conversations-empty">
               {t('chat.window.conversations.empty')}
             </p>
