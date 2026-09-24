@@ -14,7 +14,8 @@
  *
  * **不联网、不开真浏览器、不启动 cua-driver、不截真屏**：假服务器只回固定内容。
  */
-import { readFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type {
   ChatMessage,
@@ -25,12 +26,104 @@ import type {
   ModelRef,
   RunBrowser,
 } from '@agentsws/contracts'
-import type { ModelGatewayApi } from '@agentsws/model-gateway'
+import { subprocessAvailable } from '@agentsws/dsh-adapter'
+import { type ModelGatewayApi, visionProbeBase64 } from '@agentsws/model-gateway'
 import type { RoleStore } from '@agentsws/roles'
 import { describe, expect, it, vi } from 'vitest'
 import { createRuntime, type RuntimeOptions } from '../src/runtime.js'
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 })
+
+/*
+ * 浏览器那条腿：官方 Playwright 提供方是「`mountSessionMcp` + 起 `@playwright/mcp` 的 cli.js」
+ * 这么一层薄壳。这里只把**那个进程**换成假 MCP 服务器（同 dsh-adapter 的
+ * `screenshots-to-model.test.ts`），其余——官方浏览器 seam、MCP 桥、图片准入、我们的门禁与
+ * 附件库、服务端的分流——全是真的。服务端不直接依赖那个包，所以按 dsh-adapter 那一侧
+ * 解析出来的绝对路径去替换。
+ */
+const PW = vi.hoisted(() => {
+  const { createRequire } = process.getBuiltinModule('node:module')
+  const { fileURLToPath } = process.getBuiltinModule('node:url')
+  const adapter = fileURLToPath(
+    new URL('../../../packages/dsh-adapter/package.json', import.meta.url),
+  )
+  const provider = createRequire(adapter).resolve(
+    '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp',
+  )
+  const runtimeMcp = createRequire(provider).resolve(
+    '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp',
+  )
+  return { provider, runtimeMcp }
+})
+
+vi.mock(PW.provider, async () => {
+  const runtime = (await import(PW.runtimeMcp)) as {
+    BrowserMcpConfig: unknown
+    mountSessionMcp(ctx: unknown, options: unknown): void
+  }
+  // 工厂在测试文件的 import 之前就会跑（dsh-adapter 静态 import 了提供方），所以依赖都现取
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const gw = await import('@agentsws/model-gateway')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentsws-wp148-pw-'))
+  const server = path.join(dir, 'playwright-mcp.cjs')
+  fs.writeFileSync(
+    server,
+    fakeMcpServer(
+      ['browser_navigate', 'browser_snapshot', 'browser_take_screenshot'],
+      gw.visionProbeBase64(),
+    ),
+    'utf8',
+  )
+  return {
+    name: 'experimental-browser-use-playwright-mcp',
+    inject: ['browserUse', 'agents', 'tools', 'systemPrompt'],
+    Config: runtime.BrowserMcpConfig,
+    apply(ctx: unknown) {
+      runtime.mountSessionMcp(ctx, {
+        name: 'playwright-mcp',
+        exclusive: false,
+        command: process.execPath,
+        args: [server],
+      })
+    },
+  }
+})
+
+const PNG = visionProbeBase64()
+
+/**
+ * 一个讲 MCP stdio（一行一条 JSON-RPC）的最小服务器。名字以 `screenshot` / `window_state`
+ * 结尾的工具回「一段文字 + 一张图」，别的只回文字。
+ */
+function fakeMcpServer(tools: string[], png: string): string {
+  return `
+const tools = ${JSON.stringify(tools)}.map((name) => ({ name, description: 'fake ' + name, inputSchema: { type: 'object', properties: { url: { type: 'string' } } } }))
+let buf = ''
+process.stdin.on('data', (chunk) => {
+  buf += chunk
+  let i
+  while ((i = buf.indexOf('\\n')) >= 0) {
+    const line = buf.slice(0, i).trim()
+    buf = buf.slice(i + 1)
+    if (line === '') continue
+    const msg = JSON.parse(line)
+    if (msg.id === undefined) continue
+    const reply = (result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }) + '\\n')
+    if (msg.method === 'initialize') reply({ protocolVersion: msg.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'fake', version: '0.0.0' } })
+    else if (msg.method === 'tools/list') reply({ tools })
+    else if (msg.method === 'ping') reply({})
+    else if (msg.method === 'tools/call') {
+      const name = msg.params.name
+      if (/(screenshot|window_state)$/.test(name)) reply({ content: [{ type: 'text', text: 'page: example.com' }, { type: 'image', data: ${JSON.stringify(png)}, mimeType: 'image/png' }] })
+      else reply({ content: [{ type: 'text', text: 'ok ' + name }] })
+    } else process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'no ' + msg.method } }) + '\\n')
+  }
+})
+process.stdin.on('end', () => process.exit(0))
+`
+}
 
 const GOLDEN = join(dirname(new URL(import.meta.url).pathname), 'fixtures/wp148-direct-events.json')
 
@@ -143,5 +236,176 @@ describe('没开浏览器的运行：照旧走 direct，事件序列与改前逐
     const { events } = await runOnce({ browser_scope: ['example.com'], calls: READ_ONCE })
     const golden = JSON.parse(readFileSync(GOLDEN, 'utf8')) as { no_browser: unknown }
     expect(events).toEqual(golden.no_browser)
+  })
+})
+
+// ── 带浏览器的运行 ───────────────────────────────────────────────────────────
+type Part = Extract<ChatMessage['content'], unknown[]>[number]
+const imagesIn = (messages: ChatMessage[]): Part[] =>
+  messages.flatMap((m) =>
+    typeof m.content === 'string' ? [] : m.content.filter((p) => p.type === 'image'),
+  )
+const payloadsOf = (events: Omit<EventEnvelope, 'id' | 'at'>[], type: string) =>
+  events.filter((e) => e.type === type).map((e) => e.payload as Record<string, unknown>)
+const NAV = 'mcp__playwright-mcp__browser_navigate'
+const SHOT = 'mcp__playwright-mcp__browser_take_screenshot'
+/** 测试里钉成进程内：结果不随「dsh-adapter 编没编出子进程入口」变（服务进程不给 = auto）。 */
+const IN_PROCESS: Partial<RuntimeOptions> = { dshMode: 'in-process' }
+
+describe('官方 Playwright 那一种：服务端的运行走到 dsh，提供方挂上', () => {
+  it('白名单内放、外拒；截图进了替身模型；事件里没有图片字节', async () => {
+    const { events, gateway } = await runOnce({
+      browser_scope: ['example.com'],
+      browser: ATTACH,
+      calls: [
+        { name: NAV, input: { url: 'https://example.com/' } },
+        { name: NAV, input: { url: 'https://evil.test/login' } },
+        { name: SHOT },
+      ],
+      extra: IN_PROCESS,
+    })
+    // 走的是 dsh（direct 那条路自报 `direct-llm`）
+    expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+    // 提供方挂上了：第一次问模型时工具表里就有浏览器工具
+    expect(gateway.seen[0]?.tools).toEqual(expect.arrayContaining([NAV, SHOT]))
+    const results = payloadsOf(events, 'tool.result')
+    expect(results.map((r) => r.status)).toEqual(['ok', 'blocked', 'ok'])
+    expect(String(results[1]?.reason)).toContain('browser_host_not_allowed')
+    // 截图：第四次请求（截图之后那一轮）里有一张图
+    const after = gateway.seen[3]?.messages ?? []
+    expect(imagesIn(after)).toHaveLength(1)
+    expect(after.filter((m) => m.role === 'tool').at(-1)?.name).toBe(SHOT)
+    expect(JSON.stringify(events)).not.toContain(PNG.slice(0, 64))
+    expect(payloadsOf(events, 'run.completed')).toHaveLength(1)
+  })
+
+  /*
+   * 服务进程不给 `dshMode`（= auto）：编过的机器上走子进程档。子进程里没有上面那个替身，
+   * 挂的是**真** Playwright 提供方——attach 一个没人监听的端口（WP82 的办法：`@playwright/mcp`
+   * 启动时不碰浏览器，第一次真调工具才连），所以只调一次会被门禁拦下的导航，工具体根本不跑。
+   */
+  it.runIf(subprocessAvailable())(
+    '子进程档（服务进程的缺省）：真提供方挂上，白名单外照拦',
+    async () => {
+      const { events, gateway } = await runOnce({
+        browser_scope: ['example.com'],
+        browser: { mode: 'attach', endpoint: 'http://127.0.0.1:59321' },
+        calls: [{ name: NAV, input: { url: 'https://evil.test/' } }],
+        extra: { dshMode: 'subprocess' },
+      })
+      expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+      expect(gateway.seen[0]?.tools).toEqual(expect.arrayContaining([NAV, SHOT]))
+      const results = payloadsOf(events, 'tool.result')
+      expect(results.map((r) => r.status)).toEqual(['blocked'])
+      expect(String(results[0]?.reason)).toContain('browser_host_not_allowed')
+    },
+  )
+
+  it('模型没验证过能看图：浏览器照样能用，只是截图不进模型', async () => {
+    const { events, gateway } = await runOnce({
+      browser_scope: ['example.com'],
+      browser: ATTACH,
+      calls: [{ name: SHOT }],
+      extra: { ...IN_PROCESS, modelVision: () => 'unchecked' },
+    })
+    expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+    expect(imagesIn(gateway.seen[1]?.messages ?? [])).toHaveLength(0)
+  })
+})
+
+// ── BrowserSkill 那一种（用户正在用的浏览器）───────────────────────────────────
+const FIXTURES = mkdtempSync(join(tmpdir(), 'agentsws-wp148-bin-'))
+/** 假 `bsk`：任何参数都回一行固定 JSON（同 dsh-adapter 的 `browserskill-seam.test.ts`）。 */
+const FAKE_BSK = join(FIXTURES, 'bsk')
+writeFileSync(FAKE_BSK, '#!/bin/sh\necho \'{"ok":true}\'\nexit 0\n', 'utf8')
+chmodSync(FAKE_BSK, 0o755)
+const BSK_TOOLS = [
+  'browser_assist',
+  'browser_inspect',
+  'browser_interact',
+  'browser_page',
+  'browser_session',
+  'browser_tabs',
+]
+
+describe('BrowserSkill 那一种：同样走到 dsh，门禁照拦', () => {
+  it('六个工具进了工具表；白名单外的地址被拦下', async () => {
+    const before = { ...process.env }
+    try {
+      const { events, gateway } = await runOnce({
+        browser_scope: ['youtube.com'],
+        browser: { mode: 'browserskill', bsk_path: FAKE_BSK },
+        calls: [{ name: 'browser_page', input: { action: 'navigate', url: 'https://evil.test/' } }],
+        extra: IN_PROCESS,
+      })
+      expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+      expect(gateway.seen[0]?.tools).toEqual(expect.arrayContaining(BSK_TOOLS))
+      const results = payloadsOf(events, 'tool.result')
+      expect(results.map((r) => r.status)).toEqual(['blocked'])
+      expect(String(results[0]?.reason)).toContain('browser_host_not_allowed')
+    } finally {
+      // 插件挂之前会往进程环境里写两个更新开关（`applyBskEnv`），测完还原
+      for (const name of ['BSK_AUTO_UPDATE', 'BSK_UPDATE_MANIFEST_URL']) {
+        if (before[name] === undefined) delete process.env[name]
+        else process.env[name] = before[name]
+      }
+    }
+  })
+})
+
+// ── 浏览器 + 电脑操控：同一棵树挂两样 ─────────────────────────────────────────
+/** 假 Cua Driver：一个讲 MCP stdio 的 node 脚本（不启动真驱动、不截真屏）。 */
+const DRIVER = join(FIXTURES, 'cua-driver')
+writeFileSync(
+  DRIVER,
+  `#!${process.execPath}\n${fakeMcpServer(['list_apps', 'get_window_state', 'click'], PNG)}`,
+  'utf8',
+)
+chmodSync(DRIVER, 0o755)
+
+function grantedComputerUse(): NonNullable<RuntimeOptions['computerUse']> {
+  // 授权窗口按墙钟判（harness 缺省 `Date.now`），所以从现在起算
+  const until = new Date(Date.now() + 10 * 60_000).toISOString()
+  return {
+    forRun: () => ({
+      command: DRIVER,
+      args: ['mcp'],
+      minutes: 10,
+      granted_until: until,
+      grant_id: 'apv_cu_1',
+    }),
+    remember: vi.fn(),
+    activate: vi.fn(),
+    deactivate: vi.fn(),
+  } as unknown as NonNullable<RuntimeOptions['computerUse']>
+}
+
+describe('浏览器与电脑操控同时在场', () => {
+  it('同一棵树挂两样：两边的工具都在第一次请求的工具表里', async () => {
+    const computerUse = grantedComputerUse()
+    const { events, gateway } = await runOnce({
+      browser_scope: ['example.com'],
+      browser: ATTACH,
+      calls: [{ name: NAV, input: { url: 'https://example.com/' } }],
+      extra: { ...IN_PROCESS, computerUse },
+    })
+    expect(payloadsOf(events, 'run.started')).toHaveLength(1)
+    expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+    expect(gateway.seen[0]?.tools).toEqual(
+      expect.arrayContaining([NAV, SHOT, 'mcp__cua-driver-mcp__get_window_state']),
+    )
+    expect(payloadsOf(events, 'tool.result').map((r) => r.status)).toEqual(['ok'])
+    expect(computerUse.activate).toHaveBeenCalledTimes(1)
+    expect(computerUse.deactivate).toHaveBeenCalledTimes(1)
+  })
+
+  it('只开电脑操控（WP144 那条路）：照旧走 dsh，没有浏览器工具', async () => {
+    const { events, gateway } = await runOnce({
+      browser_scope: [],
+      extra: { ...IN_PROCESS, computerUse: grantedComputerUse() },
+    })
+    expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+    expect(gateway.seen[0]?.tools.some((t) => t.startsWith('mcp__playwright-mcp__'))).toBe(false)
+    expect(gateway.seen[0]?.tools).toContain('mcp__cua-driver-mcp__click')
   })
 })
