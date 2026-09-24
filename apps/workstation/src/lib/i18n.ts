@@ -2637,6 +2637,11 @@ const zh: Table = {
   'kol.campaign.short.already': '其中 {n} 个已经在合作里了。',
   'kol.campaign.short.import': '导入一张表',
   'kol.campaign.short.link': '关联官方数据接口',
+  'credits.unlinked.lead': '还没关联 Agents 工坊账号。价钱先摆在这儿，关联之后就能充值、用积分。',
+  'credits.link_first': '先关联',
+  'credits.blocks.price': '三块怎么收钱',
+  'credits.blocks.from': '积分起 · {unit}',
+  'credits.pricing.local': '这是本机内置的价目，以关联后显示为准。',
 }
 
 const en: Table = {
@@ -5310,6 +5315,11 @@ const en: Table = {
   'kol.campaign.short.already': '{n} of them are already in a collaboration.',
   'kol.campaign.short.import': 'Import a sheet',
   'kol.campaign.short.link': 'Link the official data API',
+  'credits.unlinked.lead': 'No Agents Workshop account linked yet. Prices are shown here; link one to top up and spend credits.',
+  'credits.link_first': 'Link first',
+  'credits.blocks.price': 'How the three blocks are charged',
+  'credits.blocks.from': 'credits and up · {unit}',
+  'credits.pricing.local': 'This is the built-in price list; the one shown after linking is what counts.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }
