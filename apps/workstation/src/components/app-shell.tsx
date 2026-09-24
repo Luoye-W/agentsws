@@ -34,6 +34,7 @@ import {
   type LucideIcon,
   Megaphone,
   MessageSquare,
+  MessagesSquare,
   Plug,
   Settings,
   Sparkles,
@@ -62,6 +63,7 @@ import {
   type PositionSummary,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { holdsDuty } from '@/lib/pick-assignment'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
@@ -297,6 +299,18 @@ export function AppShell({
               {t('nav.messages')}
               <MessagesUnread />
             </NavLink>
+            {/*
+              WP139（docs/78 阻断 #2 第 4 条）：**聊天窗的常驻入口**。以前只能从「网站在线客服」
+              那条职责的面板进，而那块面板一被「还没分配范围」挡住，全站就没有路通到 /chat-window。
+              放在「消息」正下面：网站访客的对话也是消息，左栏是"去哪儿"（36 §9）。
+              只在名下有这条职责时出现——没有它，这一格点进去也什么都做不了。
+            */}
+            {holdsDuty(me?.assignments ?? [], 'dtc.live-chat') ? (
+              <NavLink to="/chat-window" className={navClass} data-testid="nav-chat-window">
+                <NavIcon icon={MessagesSquare} />
+                {t('nav.chat_window')}
+              </NavLink>
+            ) : null}
             {/* 37 工作模型：待办 / 日历 */}
             <NavLink to="/todos" className={navClass}>
               <NavIcon icon={ListTodo} />

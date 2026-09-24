@@ -4,6 +4,7 @@
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AppShell } from '@/components/app-shell'
 import { ByoSourceCard } from '@/components/connections/data-source-route'
 import { ApiClientError, type Assignment, type Me } from '@/lib/api'
 import { apiErrorText, isPermissionDenied } from '@/lib/error-text'
@@ -158,5 +159,31 @@ describe('连接页「自带数据接口」挑红人职责', () => {
     const line = await screen.findByTestId('byo-duty-needed')
     expect(line.textContent).toContain('红人营销')
     expect(mocks.getKolByoSources).not.toHaveBeenCalled()
+  })
+})
+
+describe('聊天窗常驻入口（左栏「消息」下面）', () => {
+  const shell = (assignments: Assignment[]): void => {
+    renderWithProviders(
+      <AppShell
+        positions={[]}
+        cards={[]}
+        tileLibrary={[]}
+        me={me(assignments)}
+        onAddTile={() => {}}
+      >
+        <div>主区</div>
+      </AppShell>,
+    )
+  }
+
+  it('名下有网站在线客服就出现，点过去是 /chat-window', () => {
+    shell([OWNER, { ...CHAT, ranges: [] }])
+    expect(screen.getByTestId('nav-chat-window').getAttribute('href')).toBe('/chat-window')
+  })
+
+  it('没有（或已撤销）就不出现', () => {
+    shell([OWNER, { ...CHAT, revoked_at: '2026-09-01T00:00:00.000Z' }])
+    expect(screen.queryByTestId('nav-chat-window')).toBeNull()
   })
 })
