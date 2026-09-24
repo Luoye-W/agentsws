@@ -24,6 +24,7 @@ import { PanelRightClose } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
+import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
 import { RailPanel } from '@/components/rail/rail-panel'
 import { type RailTier, railContextOf } from '@/components/rail/rail-scope'
 import { useRailState } from '@/components/rail/rail-state'
@@ -158,6 +159,8 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
 
   return (
     <>
+      {/* WP144（docs/80 §5）：AI 正在操作这台电脑时的那一行（没在操作时不占地方） */}
+      <ComputerUseStrip />
       {/* 窄屏抽屉的背景遮罩：点一下收起（与 `]` 同一件事） */}
       {narrow && open !== null ? (
         <button

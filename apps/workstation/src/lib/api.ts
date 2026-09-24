@@ -5451,3 +5451,51 @@ export const updateAssignmentRanges = (
     body: { ranges },
     ...withAssignment(assignment),
   })
+
+// ── WP144（docs/80）：电脑操控 ──────────────────────────────────────────
+//
+// 一台机器一份（同浏览器）。三层开关：设置页总开关（默认关）→ 哪几条职责可以（默认一条都不勾）
+// → 每次运行第一次要动电脑时的授权卡（在牌堆里批）。这条路上**没有任何凭据**。
+// 形状直接用契约里的（类型按需引入，不改上面那一大段 import）。
+
+export type ComputerUseSettingsView = import('@agentsws/contracts').ComputerUseSettingsView
+export type ComputerUseSelfCheck = import('@agentsws/contracts').ComputerUseSelfCheck
+export type ComputerUseActive = import('@agentsws/contracts').ComputerUseActive
+
+export const getComputerUseSettings = (assignment?: string): Promise<ComputerUseSettingsView> =>
+  api('/v1/settings/computer-use', withAssignment(assignment))
+
+export const setComputerUseSettings = (
+  input: { enabled?: boolean; roles?: string[]; minutes?: number },
+  assignment?: string,
+): Promise<ComputerUseSettingsView> =>
+  api('/v1/settings/computer-use', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+/** 向导第 ① 步：按钉死的版本 + sha256 下载驱动（校验不过什么都不装）。 */
+export const installComputerUseDriver = (assignment?: string): Promise<ComputerUseSettingsView> =>
+  api('/v1/settings/computer-use/install', { method: 'POST', ...withAssignment(assignment) })
+
+/** 向导第 ② 步：打开系统设置里那一页（只打开，不替人点）。 */
+export const openComputerUseSystemSettings = (
+  pane: 'accessibility' | 'screen_recording',
+  assignment?: string,
+): Promise<{ opened: boolean; url: string }> =>
+  api('/v1/settings/computer-use/open-settings', {
+    method: 'POST',
+    body: { pane },
+    ...withAssignment(assignment),
+  })
+
+/** 向导第 ③ 步：自检（驱动 `check_permissions`，`prompt: false`）。 */
+export const checkComputerUse = (assignment?: string): Promise<ComputerUseSelfCheck> =>
+  api('/v1/settings/computer-use/check', { method: 'POST', ...withAssignment(assignment) })
+
+/** 第三栏那一行：现在有没有 AI 在操作这台电脑。 */
+export const getComputerUseActive = (
+  assignment?: string,
+): Promise<{ active?: ComputerUseActive }> =>
+  api('/v1/computer-use/active', withAssignment(assignment))
+
+/** 停止：撤销授权 + 中断那次运行。 */
+export const stopComputerUse = (assignment?: string): Promise<{ stopped: number }> =>
+  api('/v1/computer-use/stop', { method: 'POST', ...withAssignment(assignment) })

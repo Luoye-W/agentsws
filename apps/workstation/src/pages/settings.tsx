@@ -17,6 +17,7 @@ import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
+import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { ModelCloudCard } from '@/components/settings/model-cloud-card'
 import { Button } from '@/components/ui/button'
@@ -205,6 +206,8 @@ export function SettingsPage({
           它比模型更"一次性"（配一次，之后基本不看），而模型那几张卡下面还挂着花费。
         */}
         {ownerId === undefined ? null : <BrowserCard assignment={ownerId} />}
+        {/* WP144（docs/80）：电脑操控，紧跟浏览器（同一类"让 AI 动手的地方"，同一档权限） */}
+        {ownerId === undefined ? null : <ComputerUseCard assignment={ownerId} />}
         {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
         {/* 49 M5 第三张模型卡：agentsws 云（用积分）。不填 key，一键启用 */}
         {ownerId === undefined ? null : <ModelCloudCard assignment={ownerId} />}

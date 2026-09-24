@@ -2629,6 +2629,46 @@ const zh: Table = {
   'need.no_range': '「{duty}」这条职责还没分配店铺 / 品牌，所以这里还用不了。',
   'need.go_assign': '去分配',
   'nav.chat_window': '聊天窗',
+  // WP144（docs/80）：电脑操控——设置页那张卡、第三栏那一行、授权卡
+  'settings.cu': '电脑操控',
+  'settings.cu.hint':
+    '让 AI 在这台电脑上看屏幕、点、输入（比如只有桌面版的软件）。三层开关：这里的总开关 → 勾哪几条职责 → 每次要动电脑前在牌堆里批一张授权卡。',
+  'settings.cu.summary':
+    '有些活只能在电脑上的某个应用里干。默认关；打开后，你勾了的职责在需要时会先出一张授权卡问你。',
+  'settings.cu.enable': '允许 AI 操作这台电脑',
+  'settings.cu.risk':
+    '打开之后：批了授权卡，它就能在那几分钟里看你的屏幕、点、输入——和坐在你电脑前的人一样。遇到登录、密码、支付、验证码它会停下请你来，不会替你输。截图不会发给模型。操作时托盘会变红，随时能点「停止」。',
+  'settings.cu.blocked': '这台服务不在你自己的电脑上，电脑操控开不了。',
+  'settings.cu.minutes': '每次授权',
+  'settings.cu.minutes.suffix': '分钟（1–60）',
+  'settings.cu.roles': '哪几条职责可以操作电脑',
+  'settings.cu.roles.note': '默认一条都不勾。没勾的职责连「请求操作电脑」都不会出现。',
+  'settings.cu.roles.empty': '还没有职责。',
+  'settings.cu.step1': '① 下载驱动',
+  'settings.cu.step1.note':
+    '驱动是开源的 Cua Driver（MIT）。我们钉死版本、校验 sha256 后装进数据目录，不改你的系统设置、不加到 PATH。',
+  'settings.cu.step1.install': '下载',
+  'settings.cu.step1.reinstall': '重新下载',
+  'settings.cu.step1.installed': '已装好（{version}）',
+  'settings.cu.step1.missing': '还没装',
+  'settings.cu.step2': '② 授权系统权限',
+  'settings.cu.step2.note.mac':
+    'macOS 要给「Agents 工坊」打开「辅助功能」和「录屏与系统录音」两项。我们只帮你打开那一页，开关要你自己点；改完要重开 Agents 工坊。',
+  'settings.cu.step2.note.other':
+    'Windows 不需要额外授权。第一次运行如果被 SmartScreen 拦下，点「更多信息 → 仍要运行」。',
+  'settings.cu.step2.ax': '打开「辅助功能」',
+  'settings.cu.step2.sr': '打开「录屏」',
+  'settings.cu.step3': '③ 自检',
+  'settings.cu.step3.note':
+    '让驱动只读地查一次权限（不弹系统框、不截屏、不点任何东西），结果原样列在下面。',
+  'settings.cu.step3.run': '检查',
+  'settings.cu.step3.ok': '都好了',
+  'settings.cu.step3.raw': '驱动原话',
+  'cu.active': 'AI 正在操作电脑（到 {until}）',
+  'cu.stop': '停止',
+  'kind.computer_use': '操作电脑',
+  'category.computer_use': '操作电脑',
+  'verb.policy.approve.computer_use': '允许',
 }
 
 const en: Table = {
@@ -5293,6 +5333,47 @@ const en: Table = {
     'The "{duty}" duty has no store or brand assigned yet, so it cannot be used here.',
   'need.go_assign': 'Assign one',
   'nav.chat_window': 'Live chat',
+  // WP144 (docs/80): computer use — settings card, third-column strip, approval card
+  'settings.cu': 'Computer use',
+  'settings.cu.hint':
+    'Let AI see the screen, click and type on this computer (for desktop-only apps). Three switches: this master switch → which duties → an approval card before each run touches the computer.',
+  'settings.cu.summary':
+    'Some work only happens inside an app on this computer. Off by default; once on, the duties you tick ask you with a card first.',
+  'settings.cu.enable': 'Allow AI to operate this computer',
+  'settings.cu.risk':
+    'Once on: after you approve a card, it can see your screen, click and type for those minutes — like someone sitting at your computer. It stops and hands over at logins, passwords, payments and verification codes. Screenshots are not sent to the model. The tray icon turns red while it works; press Stop any time.',
+  'settings.cu.blocked':
+    'This server is not on your own computer, so computer use cannot be turned on.',
+  'settings.cu.minutes': 'Each approval lasts',
+  'settings.cu.minutes.suffix': 'minutes (1–60)',
+  'settings.cu.roles': 'Duties that may operate the computer',
+  'settings.cu.roles.note': 'None by default. Unticked duties never even see the request.',
+  'settings.cu.roles.empty': 'No duties yet.',
+  'settings.cu.step1': '① Download the driver',
+  'settings.cu.step1.note':
+    'The driver is the open-source Cua Driver (MIT). We pin the version, check its sha256 and put it in the data folder — no system changes, nothing added to PATH.',
+  'settings.cu.step1.install': 'Download',
+  'settings.cu.step1.reinstall': 'Download again',
+  'settings.cu.step1.installed': 'Installed ({version})',
+  'settings.cu.step1.missing': 'Not installed',
+  'settings.cu.step2': '② Grant system permissions',
+  'settings.cu.step2.note.mac':
+    'On macOS, turn on Accessibility and Screen Recording for “Agents Workshop”. We only open the page; you flip the switches. Restart Agents Workshop afterwards.',
+  'settings.cu.step2.note.other':
+    'Windows needs no extra permission. If SmartScreen blocks the first run, choose “More info → Run anyway”.',
+  'settings.cu.step2.ax': 'Open Accessibility',
+  'settings.cu.step2.sr': 'Open Screen Recording',
+  'settings.cu.step3': '③ Self-check',
+  'settings.cu.step3.note':
+    'The driver reads its permissions once (no system prompt, no screenshot, no clicks); results are listed as-is below.',
+  'settings.cu.step3.run': 'Check',
+  'settings.cu.step3.ok': 'All set',
+  'settings.cu.step3.raw': 'Driver output',
+  'cu.active': 'AI is operating this computer (until {until})',
+  'cu.stop': 'Stop',
+  'kind.computer_use': 'Use the computer',
+  'category.computer_use': 'Use the computer',
+  'verb.policy.approve.computer_use': 'Allow',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }
