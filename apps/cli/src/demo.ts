@@ -1022,6 +1022,21 @@ export function demoClockStart(scenarioStart: Iso8601, nowMs: number): Iso8601 {
   return new Date(startMs + days * DAY_MS).toISOString()
 }
 
+/**
+ * WP140：网址夹具的查表键。有没有结尾斜杠、主机名大小写、默认端口都算同一页
+ * （`https://nordvolt.example` 与 `https://nordvolt.example/` 是一页）；解析不了的原样用。
+ */
+export function siteFixtureKey(url: string): string {
+  try {
+    const u = new URL(url.trim())
+    u.hash = ''
+    const path = u.pathname.replace(/\/+$/, '')
+    return `${u.protocol}//${u.host}${path}${u.search}`
+  } catch {
+    return url.trim()
+  }
+}
+
 export async function createDemo(options: DemoOptions): Promise<Demo> {
   const root = options.root
   const scenario = parseScenario(
@@ -1175,7 +1190,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   for (const [name, body] of pack.fixtures) {
     if (!name.startsWith('fixtures/site/')) continue
     const declared = /url:\s*(\S+)/.exec(body.slice(0, 400))?.[1]
-    if (declared !== undefined) siteFixtures.set(declared, body)
+    if (declared !== undefined) siteFixtures.set(siteFixtureKey(declared), body)
   }
 
   /**
@@ -1196,7 +1211,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     staticDir,
     brandData: (ws) => extraBrandData.get(ws),
     brandIntakeFetch: async (url: string) => {
-      const body = siteFixtures.get(url)
+      // WP140（docs/78 §2 向导 ②）：手输不带结尾斜杠的 `https://nordvolt.example` 也认
+      const body = siteFixtures.get(siteFixtureKey(url))
       // 剧本里没有的网址回 **404**，不是 503：这一句会原样显示给用户
       //（"有 N 个页面没读着（…）"），而 503 说的是"对方服务器出错"——
       // 那是替商家的网站撒了一个我们不知道的谎。404 才是"这一页不存在"。

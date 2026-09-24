@@ -5,14 +5,15 @@
  *   **整个 demo 进程没有一次请求打到 cloud.agentsws.com**（全局 fetch 换成记录器）；
  * - 种子：客服岗位四条、红人岗位五条职责都在店主名下（岗位页「N 条」与左栏一致）；
  *   同一条职责不挂两遍（首页「Meta Ads」数据块只出一次）；「正在进行」里没有测试剧本、
- *   负责人叫得出名字。
+ *   负责人叫得出名字；
+ * - 网址夹具认不带结尾斜杠的 `https://nordvolt.example`。
  */
 import { resolve } from 'node:path'
 import type { CloudAccountView } from '@agentsws/api'
 import type { CloudCreditsView, PositionInstance, TopupTiers } from '@agentsws/contracts'
 import { CLOUD_STAND_IN_BASE_URL } from '@agentsws/server'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createDemo, type Demo } from '../src/demo.js'
+import { createDemo, type Demo, siteFixtureKey } from '../src/demo.js'
 
 const ROOT = resolve(import.meta.dirname, '../../..')
 
@@ -132,5 +133,17 @@ describe('WP140 demo 种子', () => {
     expect(text).not.toContain('假指派')
     expect(text).not.toContain('per_')
     for (const item of board.items) expect(item.owner_label).not.toBe(item.owner)
+  })
+
+  it('网址夹具：有没有结尾斜杠是同一页', () => {
+    expect(siteFixtureKey('https://nordvolt.example')).toBe(
+      siteFixtureKey('https://nordvolt.example/'),
+    )
+    expect(siteFixtureKey(' https://NordVolt.example/pages/about/ ')).toBe(
+      siteFixtureKey('https://nordvolt.example/pages/about'),
+    )
+    expect(siteFixtureKey('https://nordvolt.example/pages/about')).not.toBe(
+      siteFixtureKey('https://nordvolt.example/'),
+    )
   })
 })
