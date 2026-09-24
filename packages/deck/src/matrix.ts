@@ -46,6 +46,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   // 46 I3：同意 / 拒绝，没有第三条路——「指导」在这里无从谈起（对方要么进来要么不进来）。
   // 「稍后」不是第三条路，只是「现在先不决定」（WP141：每张卡都有）。
   membership: ['approve', 'reject', 'snooze', 'open'],
+  // WP144：允许 / 不允许；「指导」无从谈起（问的只是能不能碰这台电脑）
+  computer_use: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -70,6 +72,7 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   daily_plan: { approve: '采纳', instruct: '我改几条', snooze: '稍后', open: '打开' },
   review: { approve: '按建议排明天', reject: '我来排', snooze: '稍后', open: '看完' },
   membership: { approve: '让他进来', reject: '不让', open: '看看是谁' },
+  computer_use: { approve: '允许', reject: '不允许', snooze: '稍后' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -100,6 +103,8 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   join_mapping: 'high',
   // 46 I1：放人进来 = 让他看见公司的数据，和 Join 一档
   membership: 'high',
+  // WP144：批了它就能在这台电脑上点、输入、看屏幕
+  computer_use: 'high',
   staged_change: 'medium',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
@@ -137,6 +142,7 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   upstream_upgrade: 5,
   join_mapping: 5,
   membership: 2,
+  computer_use: 1,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,

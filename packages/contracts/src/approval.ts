@@ -62,6 +62,14 @@ export type ApprovalKind =
    * 不改任何东西，它只是"这批人你认不认"。payload = `{ campaign_id, brief, by_channel }`。
    */
   | 'kol_campaign'
+  /**
+   * WP144 / docs/80 §3：**电脑操控授权卡**。
+   *
+   * Agent 第一次要动这台电脑（或者遇到登录 / 密码 / 支付 / 验证码停下来请人接手）时出，
+   * 问「让它在接下来 N 分钟操作这台电脑？」。批了由服务端记一次授权、带着它接着跑这件事
+   * ——**批了这次运行才挂提供方**；不批就什么都不发生。payload = `ComputerUseGrantPayload`。
+   */
+  | 'computer_use'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {
