@@ -637,7 +637,7 @@ async function seedCardGallery(world: World): Promise<void> {
     dedupe_key: `gallery_computer_use:${world.workspace_id}:1`,
     title: '让它在接下来 10 分钟操作这台电脑？',
     summary:
-      '它想：在 Keynote 里把新品发布的封面页导出成 PNG。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。运行时托盘会变色，随时可以点「停止」。',
+      '它想：在 Keynote 里把新品发布的封面页导出成 PNG。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。运行时托盘会变色，随时可以点「停止」。',
     payload: {
       stage: 'authorize',
       run_id: 'run_gallery_cu',
