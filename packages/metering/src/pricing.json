@@ -54,8 +54,8 @@
       "block": "data",
       "basis": "早期拍的数（WP59），WP126 起浏览 / 搜索 / 基准 / 联系方式揭示都按它收；我方成本只有自家库读写 + 云端摊销（每次 < ¥0.001），毛利 > 99%——见 docs/77。",
       "reviewed_at": "2026-09-23",
-      "label_zh": "红人查询（按次）",
-      "label_en": "Creator lookup (per call)"
+      "label_zh": "红人库浏览 / 搜索（按次）",
+      "label_en": "Creator browse / search (per call)"
     },
     {
       "capability": "data.kol.audit",
@@ -74,8 +74,8 @@
       "block": "data",
       "basis": "09-23 Luoye 按 docs/77 定：与 KOLAgents 库内取邮箱价（$0.12 ≈ ¥0.85）对齐，留在 1 积分二次确认线以下。此前与浏览同走 data.kol.lookup 0.2。",
       "reviewed_at": "2026-09-23",
-      "label_zh": "红人查询（按次）",
-      "label_en": "Creator lookup (per call)"
+      "label_zh": "解锁红人联系方式（按次）",
+      "label_en": "Creator contact reveal (per call)"
     },
     {
       "capability": "social.fetch",
