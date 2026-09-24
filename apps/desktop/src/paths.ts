@@ -29,6 +29,16 @@ export interface DesktopPaths {
   dshHome: string
 }
 
+/**
+ * WP148：安装包里的第三方许可证说明（`scripts/after-pack.mjs` 写到 `<resources>/licenses/`）。
+ * 没打包（开发时直接跑）就没有这个目录——回 `undefined`，托盘上那一项不出现。
+ */
+export function thirdPartyLicensesFile(resourcesPath: string | undefined): string | undefined {
+  return resourcesPath === undefined
+    ? undefined
+    : join(resourcesPath, 'licenses', 'THIRD_PARTY_LICENSES.txt')
+}
+
 export function desktopPaths(userData: string): DesktopPaths {
   const logDir = join(userData, 'logs')
   return {

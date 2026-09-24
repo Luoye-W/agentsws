@@ -122,6 +122,12 @@ intersect; scoped registrations remain visible"：provider 在自己那个 agent
 provider 照常起——它只要 `cli.js` 那段 JS。attach 与 `executable_path` 两条路都不需要
 它下载的那份 Chromium（16 §3 因此一行没破）。
 
+**服务端带浏览器的运行走 dsh 运行时（WP148，2026-09-24）。** 上面这些都挂在 dsh 那棵树上，而服务端平时走 direct
+运行时（那条路上没有浏览器工具）。所以照 WP144 电脑操控的分流：`RunRequest.browser` 在场（职责 `browser_scope` 非空 +
+设置页选了一种浏览器 + `forRun()` 给了）的运行改走 dsh 运行时，两种浏览器（官方 Playwright / BrowserSkill）都一样；
+其余运行照旧 direct，一个字节不变（`apps/server/test/browser-dsh-route.test.ts` 用改前录的金样钉着）。
+没配模型的 stub 档不改（没有模型，本来也驱动不了浏览器）。
+
 ---
 
 ## 4. 连接：目录 + 岗位清单 + 职责 preset（Q4）

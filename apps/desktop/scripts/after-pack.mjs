@@ -12,12 +12,28 @@
  * 3. **当场证明它 import 得动**。用捆绑的那份 Node 把服务进程入口 import 一遍、
  *    把 `better-sqlite3` require 一遍。不通就让打包失败——发出去之后再发现，
  *    代价是内测用户的一个下午。交叉平台打包（在 mac 上打 win）时跳过这一步并说明。
+ * 4. **第三方许可证说明**（WP148）。`<resources>/licenses/` 里放三样：按
+ *    `pnpm licenses list` 生成的 `THIRD_PARTY_LICENSES.txt`（`third-party-licenses.mjs`），
+ *    Electron 自己的 LICENSE 与 Chromium 的 `LICENSES.chromium.html`。托盘「开源软件许可」
+ *    打开的就是这个目录里的那份 txt。**包里带原生二进制、却不在清单里**的包有一个就失败。
  */
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmdirSync,
+  rmSync,
+  statSync,
+} from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { stashDirOf } from './after-extract.mjs'
+import { findNativeBinaries, NOTICE_FILE, writeNotice } from './third-party-licenses.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = resolve(here, '..')
@@ -249,6 +265,38 @@ export function probeBundled(nodeExec, appDir, pkgDirs) {
   })
 }
 
+// ── ④ 第三方许可证 ─────────────────────────────────────────────────────
+
+/** 安装包里放许可证的目录（`<resources>/licenses`）。托盘菜单按同一个相对路径找。 */
+export const LICENSES_DIR = 'licenses'
+
+/**
+ * Electron 发行包自带的两份许可证 → `licenses/` 里的名字。
+ * mac 上只剩 `after-extract.mjs` 存下的那份；win / linux 上 electron-builder 把它们留在应用根目录
+ * （`LICENSE.electron.txt` 是它改过的名）——所以几处都找，找到哪份拷哪份。
+ */
+export const ELECTRON_LICENSES = [
+  ['LICENSE.electron.txt', 'LICENSE.electron.txt'],
+  ['LICENSE', 'LICENSE.electron.txt'],
+  ['LICENSES.chromium.html', 'LICENSES.chromium.html'],
+]
+
+export function copyElectronLicenses(searchDirs, licensesDir) {
+  const copied = new Set()
+  mkdirSync(licensesDir, { recursive: true })
+  for (const [from, to] of ELECTRON_LICENSES) {
+    if (copied.has(to)) continue
+    for (const dir of searchDirs) {
+      const source = join(dir, from)
+      if (!existsSync(source)) continue
+      copyFileSync(source, join(licensesDir, to))
+      copied.add(to)
+      break
+    }
+  }
+  return [...copied].sort()
+}
+
 // ── 钩子本体 ────────────────────────────────────────────────────────────
 
 export default async function afterPack(context) {
@@ -279,6 +327,31 @@ export default async function afterPack(context) {
     throw new Error(`这些原生模块没有对应 ABI 的 prebuild：\n  ${missing.join('\n  ')}`)
   for (const item of plan) cpSync(item.from, item.to, { dereference: true })
   log(`原生模块换成捆绑 Node 的 ABI 那份：${plan.length} 个，跳过 ${skipped.length} 个（非运行时）`)
+
+  /*
+   * ④ 许可证：放在冒烟之前——冒烟只在本机平台跑，许可证每个平台都要有。
+   * 原生二进制按**包里真有的**扫（换过 ABI 之后的那一份），清单来自 `pnpm licenses list`。
+   */
+  const licensesDir = join(resources, LICENSES_DIR)
+  const natives = findNativeBinaries(join(appDir, 'node_modules'))
+  const notice = writeNotice(join(licensesDir, NOTICE_FILE), { natives })
+  if (notice.uncovered.length > 0)
+    throw new Error(
+      `这些包带着原生二进制，却不在第三方许可证清单里：${notice.uncovered.join(', ')}`,
+    )
+  // 先找 afterExtract 存下的那份（mac 上只有它），再找 win / linux 留在根目录的那份
+  const stash = stashDirOf(context.appOutDir)
+  const electronLicenses = copyElectronLicenses([stash, context.appOutDir, resources], licensesDir)
+  rmSync(stash, { recursive: true, force: true })
+  try {
+    rmdirSync(dirname(stash)) // 只在空了的时候删得掉（别的架构可能还在用）
+  } catch {
+    // 不空 / 不在：留着
+  }
+  log(
+    `第三方许可证：${notice.packages} 个包，原生二进制 ${natives.length} 个包` +
+      `（libvips：${notice.libvips.join(', ') || '无'}）；Electron / Chromium：${electronLicenses.join(', ') || '没找到'}`,
+  )
 
   const nodeExec =
     platformName === 'win32'

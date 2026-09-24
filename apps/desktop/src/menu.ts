@@ -34,6 +34,8 @@ export type MenuAction =
   | 'manage-scenes'
   /** WP144（docs/80 §5）：AI 正在操作电脑时的「停止」——撤销授权 + 中断那次运行。 */
   | 'stop-computer-use'
+  /** WP148：打开安装包里的第三方许可证说明（`<resources>/licenses/THIRD_PARTY_LICENSES.txt`）。 */
+  | 'open-licenses'
   | 'quit'
 
 export interface MenuItemModel {
@@ -105,6 +107,11 @@ export interface TrayModelInput {
    * 有 = 托盘图标变红、菜单最上面一行「AI 正在操作电脑 · 停止」。`until` 是授权到的 ISO 时间。
    */
   computerUse?: { until: string }
+  /**
+   * WP148：安装包里有没有第三方许可证说明（打包时 `after-pack.mjs` 写的那份）。
+   * 有才出「开源软件许可」这一项；开发时直接跑的那一份没有，就不摆一个点了打不开的菜单项。
+   */
+  licenses?: boolean
 }
 
 const separator: MenuItemModel = { id: 'separator', type: 'separator', label: '', enabled: false }
@@ -267,6 +274,11 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
     // WP111：**一直在**，不像「还原上一份备份」那样只在出事时出现——
     // 出问题的时候她第一反应是找托盘，那一刻不该还要先让某个东西"出现"。
     { id: 'export-diagnostics', type: 'normal', label: t.exportDiagnostics, enabled: true },
+  )
+  // WP148：安装包里的「关于 / 许可证」——这个应用没有主窗口也没有应用菜单，托盘就是它的「关于」
+  if (input.licenses === true)
+    items.push({ id: 'open-licenses', type: 'normal', label: t.openLicenses, enabled: true })
+  items.push(
     {
       id: 'toggle-launch-at-login',
       type: 'checkbox',

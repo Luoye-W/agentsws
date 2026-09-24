@@ -41,7 +41,7 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
-import { createDshRuntime } from '@agentsws/dsh-adapter'
+import { createDshRuntime, type DshRuntimeMode } from '@agentsws/dsh-adapter'
 import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
 import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
@@ -176,6 +176,9 @@ export interface RuntimeOptions {
    * 晚绑定的读法与 `vertical` 同一条理由：用户在设置页里改了浏览器，下一次运行就该
    * 用新的那一套，不该等重启。**不给 / 回 `undefined` = 这次运行不开浏览器**——
    * 工具面里一个 `browser_*` 都不会有（`dsh-adapter` 的 `harness.ts` 连 provider 都不挂）。
+   *
+   * WP148：带 `browser` 的运行**改走 dsh 运行时**（浏览器提供方只在那一条路上挂，
+   * 与 WP144 电脑操控同一个分流）；别的运行照旧走 direct / stub，一个字节不变。
    */
   browser?: () => RunBrowser | undefined
   /**
@@ -242,6 +245,12 @@ export interface RuntimeOptions {
    * 别的运行照旧走 direct / stub，一个字节不变。
    */
   computerUse?: Pick<ComputerUseAssembly, 'forRun' | 'remember' | 'activate' | 'deactivate'>
+  /**
+   * WP148：带浏览器 / 电脑操控的那几次运行，dsh 那棵树怎么装（`createDshRuntime` 的 `mode`）。
+   * 不给 = `auto`（探测得到子进程入口就起子进程，否则进程内）——服务进程就是这样用的。
+   * 测试钉成 `in-process`，结果才不随「dsh-adapter 编没编过」变。
+   */
+  dshMode?: DshRuntimeMode
 }
 
 /**
@@ -713,16 +722,19 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       })
 
   /*
-   * WP144：带 `computer_use` 的运行走 **dsh 运行时**——官方电脑操控提供方只在那一条路上挂
-   * （`dsh-adapter` 的 `harness.ts`）。只在有模型时才建（没模型的 stub 档本来就碰不到电脑），
-   * 而且只给这一种运行用：别的运行照旧 direct，一个字节不变。
+   * WP144 / WP148：带 `computer_use` **或** `browser` 的运行走 **dsh 运行时**——官方电脑操控
+   * 提供方与浏览器提供方（Playwright / BrowserSkill）都只在那一条路上挂（`dsh-adapter` 的
+   * `harness.ts`，顺序 mount → 门禁 → 浏览器 → 电脑操控，两样都在场就同一棵树挂两样）。
+   * 只在有模型时才建（没模型的 stub 档本来就驱动不了浏览器和电脑），而且只给这两种运行用：
+   * 别的运行照旧 direct，一个字节不变。
    */
-  const computerAdapter: RuntimeAdapter | undefined =
-    useDirect && options.computerUse !== undefined
+  const dshAdapter: RuntimeAdapter | undefined =
+    useDirect && (options.computerUse !== undefined || options.browser !== undefined)
       ? createDshRuntime({
           gateway: { complete: (r) => options.models.complete(r) },
           clock,
           seed,
+          ...(options.dshMode === undefined ? {} : { mode: options.dshMode }),
           createDraft,
           createPolicyQuestion,
           requestComputerUse,
@@ -1063,7 +1075,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        */
       const controller = new AbortController()
       const cu = request.computer_use
-      const runner = cu !== undefined && computerAdapter !== undefined ? computerAdapter : adapter
+      // WP148：开了浏览器的运行同样走 dsh（只有那棵树上挂得了浏览器提供方）
+      const needsDsh = cu !== undefined || request.browser !== undefined
+      const runner = needsDsh && dshAdapter !== undefined ? dshAdapter : adapter
       if (cu?.granted_until !== undefined) {
         options.computerUse?.activate(
           {
