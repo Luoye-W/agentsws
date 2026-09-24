@@ -73,8 +73,11 @@ import {
   DEEPSEEK_ACCOUNT_BASE_URL,
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
   DEEPSEEK_ACCOUNT_MODELS,
+  DeepSeekFileStore,
   deepseekAccountProvider,
+  deepseekMessagesProvider,
   hostOf,
+  jsonFileUploadIndex,
   NO_IMAGE_MODEL_ZH,
   openaiCompatibleProvider,
   openaiImageProvider,
@@ -91,6 +94,34 @@ export const MODEL_KEY_PREFIX = 'model_provider:'
 
 /** 无界面时的兜底：这个环境变量还认（`scripts/dev-real.sh` / CI 靠它）。 */
 export const DEEPSEEK_KEY_ENV = 'DEEPSEEK_API_KEY'
+
+/**
+ * WP143：「DeepSeek 官方」API key 那一路改走 **Messages 口**的开关——**默认关**，设成 `1` 才开。
+ *
+ * 官方适配器 `dsh-llm-deepseek` 0.1.7 起只用 Messages（API key 走 `x-api-key`），改过去就能一起用上
+ * Files 复用与思考块原样回传。没默认打开的原因写在 WP143 报告里（没法离线核的几件事：真 key 下
+ * 模型名、看图、计费口径），等 Luoye 用真 key 跑一遍三步验证再定。开了也**只动 DeepSeek 官方这一家**，
+ * 且只认官方地址（`https://api.deepseek.com`）——改过地址的（代理 / 中转）照旧走 OpenAI 兼容口。
+ */
+export const DEEPSEEK_MESSAGES_ENV = 'AGENTSWS_DEEPSEEK_MESSAGES'
+
+/** WP143：这一条 DeepSeek 官方配置要不要走 Messages 口（开关开了 + 官方地址）。 */
+export function deepseekUsesMessages(
+  config: { kind: string; base_url: string },
+  env: Record<string, string | undefined>,
+): boolean {
+  if (config.kind !== 'deepseek' || env[DEEPSEEK_MESSAGES_ENV]?.trim() !== '1') return false
+  try {
+    const url = new URL(config.base_url)
+    return (
+      url.origin === 'https://api.deepseek.com' &&
+      ['', '/', '/v1', '/v1/'].includes(url.pathname) &&
+      url.search === ''
+    )
+  } catch {
+    return false
+  }
+}
 
 /**
  * 49 M2「用 agentsws 的」那条 provider 的凭据在秘密库里叫什么。
@@ -887,6 +918,15 @@ const EMPTY_ROW = (purpose: ModelPurpose): ModelUsageRow => ({
 export function createModels(options: ModelsOptions): ModelsAssembly {
   const { clock, gateway, secrets, env } = options
   const stateFile = options.dbDir === undefined ? undefined : join(options.dbDir, 'models.json')
+  /**
+   * WP143：DeepSeek Messages 口的 Files 复用，这个品牌一份（同一张图在这台机器上只传一次，直到过期）。
+   * 有目录就落 `deepseek-files.json`（0600，只有哈希与 file id；不进备份、不上云），否则只在内存。
+   */
+  const deepseekFiles = new DeepSeekFileStore(
+    options.dbDir === undefined
+      ? {}
+      : { index: jsonFileUploadIndex(join(options.dbDir, 'deepseek-files.json')) },
+  )
 
   let state: ModelsStateFile = { version: 1, providers: [], defaults: {}, tests: {} }
   if (stateFile !== undefined) {
@@ -1018,7 +1058,21 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         baseUrl: config.base_url,
         model,
         provider: config.id,
-        ...(account.fetch === undefined ? {} : { fetch: account.fetch }),
+        // WP143：真网络才开 Files 复用；注入了替身（测试 / demo）就照旧内联
+        ...(account.fetch === undefined ? { files: deepseekFiles } : { fetch: account.fetch }),
+      })
+    }
+    if (deepseekUsesMessages(config, env)) {
+      // WP143：DeepSeek 官方 API key 改走 Messages 口（开关见 DEEPSEEK_MESSAGES_ENV，默认关）
+      return deepseekMessagesProvider({
+        ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
+        credential: { kind: 'api_key', apiKey: keySource(config.id) },
+        baseUrl: DEEPSEEK_ACCOUNT_BASE_URL,
+        model,
+        provider: config.id,
+        ...(options.fetch === undefined
+          ? { files: deepseekFiles }
+          : { fetch: options.fetch as unknown as AccountFetch }),
       })
     }
     return openaiCompatibleProvider({
