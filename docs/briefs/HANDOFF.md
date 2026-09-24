@@ -46,7 +46,7 @@
 | 21 | **WP137（P0 安全）聊天转发三种形态的密钥兜底改成没有真密钥就拒绝** | `WP137-relay-secret-fail-closed.md` | `wp137-relay-secret` · `wp/137-relay-secret` | — | 已合并并上线（09-24，生产 health 两项 true、冒烟 11/0） |
 | 22 | WP138 向导建出来的职责有范围；空范围不再挡红人工作台与聊天入口（docs/78 #1） | `WP138-scope-for-wizard-positions.md` | `wp138-scope` · `wp/138-scope` | — | 已合并（09-24，Fable 终审：新范围「整个品牌」判权与 workspace 档同句、只许挂本工作区；243 文件 3133 条过，六组模拟门禁过；走查 12/41/42/43 通） |
 | 23 | WP139 独立页面按能力挑分配、403 / 501 分开说、聊天窗常驻入口、整页报错留左栏（#2） | `WP139-standalone-pages-identity.md` | `wp139-identity` · `wp/139-identity` | — | 已合并（09-24，Fable 终审：只动工作台与走查脚本；tsc / biome / 生成物零漂移，工作台 + server + api 193 文件 2489 条过；走查 32/33/42/43 通） |
-| 24 | WP140 demo：限流走墙钟、云账号替身、种子对齐、藏四个没做的面板、走查一次跑完（#3、#6 demo 部分） | `WP140-demo-fixes.md` | `wp140-demo` · `wp/140-demo` | — | 待审（报告 docs/briefs/reports/WP140.md） |
+| 24 | WP140 demo：限流走墙钟、云账号替身、种子对齐、藏四个没做的面板、走查一次跑完（#3、#6 demo 部分） | `WP140-demo-fixes.md` | `wp140-demo` · `wp/140-demo` | — | 已合并（09-24，Fable 终审：200 文件 2553 条过，六组模拟门禁过；走查一个 demo 跑完 通 33 / 部分 18 / 不通 0） |
 | 25 | WP141 牌堆能直接找到后面的卡 + 屏幕裸值与卡数口径（#4、§2） | `WP141-deck-and-copy.md` | `wp141-deck` · `wp/141-deck` | — | 进行中（Claude） |
 | 26 | WP142 红人为主的第一步：按主要目的预勾、第 ④ 步只列必需、找人回话、云账号反馈、没关联也看得到价（#5–#7） | `WP142-kol-first-steps.md` | `wp142-kol-first` · `wp/142-kol-first` | WP138 | 进行中（Claude） |
 
