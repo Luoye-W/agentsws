@@ -29,6 +29,7 @@ import {
 } from './upstream-watch.mjs'
 import {
   binReleaseVerdict,
+  checkBinLock,
   checkImagePins,
   checkPins,
   compareVersions,
@@ -81,6 +82,10 @@ describe('仓库根的 upstreams.yml', () => {
       'ego-lite',
       'dsh-im',
       'dsh-experimental',
+      // WP146（Luoye 09-24：引用的开源项目都要进每周评估）
+      'tremor-raw',
+      'shadcn-ui',
+      'simple-icons',
     ]) {
       expect(ids, `少了 ${id}`).toContain(id)
     }
@@ -672,5 +677,88 @@ describe('周报里的镜像一行（WP146）', () => {
     )
     expect(md).toContain('上游最新正式版：查不到（tag 表：503）')
     expect(md).toContain('查不到 ≠ 没变')
+  })
+})
+
+// ── 二进制钉版本：BrowserSkill 的 bsk（WP146 追加）────────────────────────────
+
+const binItem = (over = {}) => ({
+  id: 'bsk',
+  kind: 'runtime-dep',
+  why: '浏览器',
+  npm: 'plug',
+  repo: 'o/bsk',
+  locked_version: '0.3.0',
+  bin_version: '0.3.0',
+  bin_tag_prefix: 'cli-v',
+  bin_lock_file: 'lock.json',
+  watch: ['versions', 'releases'],
+  ...over,
+})
+const binLock = (cli, plugin = { name: 'plug', version: '0.3.0' }) =>
+  imgRepo({ 'lock.json': JSON.stringify({ cli, plugin }) })
+
+describe('二进制钉版本：check-upstreams 对账 bin_lock_file（WP146）', () => {
+  it('cli 与插件两处都对得上 → 没问题', () => {
+    expect(checkBinLock(binItem(), binLock({ version: '0.3.0', tag: 'cli-v0.3.0' }))).toEqual([])
+  })
+
+  it('lock 文件升了 cli 版本、登记表没跟 → 报出来', () => {
+    const p = checkBinLock(binItem(), binLock({ version: '0.3.1', tag: 'cli-v0.3.1' }))
+    expect(p.join('\n')).toContain('cli.version 是 `0.3.1`')
+  })
+
+  it('只改了 lock 文件里的插件版本（两边没一起升）→ 报出来', () => {
+    const p = checkBinLock(
+      binItem(),
+      binLock({ version: '0.3.0', tag: 'cli-v0.3.0' }, { name: 'plug', version: '0.3.1' }),
+    )
+    expect(p.join('\n')).toContain('plugin.version 是 `0.3.1`')
+  })
+
+  it('tag 与前缀 + 版本对不上 / 文件不存在 → 报出来', () => {
+    expect(
+      checkBinLock(binItem(), binLock({ version: '0.3.0', tag: 'v0.3.0' })).join('\n'),
+    ).toContain('应该是 `cli-v0.3.0`')
+    expect(checkBinLock(binItem({ bin_lock_file: 'nope.json' }), tmp()).join('\n')).toContain(
+      '不存在的文件',
+    )
+  })
+
+  it('三项只写了一部分 → 形状报错', () => {
+    expect(validateShape([binItem({ bin_lock_file: undefined })]).join('\n')).toContain(
+      '要么都写、要么都不写',
+    )
+  })
+
+  it('仓库里那一份：browser-skill 是 runtime-dep，插件与 bsk 两样都锁、与 browserskill.lock.json 一致', () => {
+    const bs = loadUpstreams(REPO_ROOT).find((i) => i.id === 'browser-skill')
+    expect(bs.kind).toBe('runtime-dep')
+    expect(bs.npm).toBe('@wxg-prc-cpg/browser-skill-dsh-plugin')
+    expect(bs.locked_in).toContain('packages/dsh-adapter/package.json')
+    expect(bs.bin_lock_file).toBe('browserskill.lock.json')
+    expect(checkBinLock(bs, REPO_ROOT)).toEqual([])
+    const lock = JSON.parse(readFileSync(join(REPO_ROOT, 'browserskill.lock.json'), 'utf8'))
+    expect(lock.cli.version).toBe(bs.bin_version)
+    expect(lock.plugin.version).toBe(bs.locked_version)
+  })
+
+  it('周报：bsk 有新的正式 release → 进"有更新版本的"，提示两边一起升', () => {
+    const it0 = binItem()
+    const md = renderReport(
+      [{ id: 'bsk', item: it0, errors: [], hits: [], bin: { state: 'behind', highest: '0.3.1' } }],
+      opts,
+    )
+    expect(md).toContain('| 有更新版本的 | `bsk` |')
+    expect(md).toContain('上游最新正式 release `cli-v0.3.1`')
+    expect(md).toContain('两边一起改')
+  })
+
+  it('周报：releases 查不到 → bsk 那一行写"查不到"', () => {
+    const md = renderReport(
+      [{ id: 'bsk', item: binItem(), errors: ['x'], hits: [], bin: { error: '403' } }],
+      opts,
+    )
+    expect(md).toContain('上游最新正式 release：查不到（403）')
   })
 })
