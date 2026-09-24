@@ -541,7 +541,7 @@ function ProviderRow({
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">
             <BrandIcon
-              provider={isDeepSeekAccountKind(provider.kind) ? 'deepseek' : provider.kind}
+              provider={provider.kind}
               size={16}
               className="mr-1.5 inline-block align-text-bottom"
             />
