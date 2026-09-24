@@ -342,3 +342,38 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
     },
   }
 }
+
+/**
+ * demo / 截图用的替身（**一个字节都不出网**）：宿主换成 `createStandInDeepSeekAccountHost`
+ * （授权页就是本机回调、打开即登录，账号与余额是替身数据），推理口换成一个认得测试图的假
+ * Messages 口（三步验证照常跑、照常过）。生产路径从不调它。
+ */
+export function deepseekAccountStandIn(
+  options: { balance?: 'ok' | 'fail' } = {},
+): NonNullable<import('./server.js').ServerOptions['deepseekAccount']> {
+  return {
+    createHost: async () => {
+      const { createStandInDeepSeekAccountHost } = await import(
+        '@agentsws/dsh-adapter/deepseek-account-stand-in'
+      )
+      return createStandInDeepSeekAccountHost(
+        options.balance === undefined ? {} : { balance: options.balance },
+      )
+    },
+    fetch: async (_url, init) => {
+      const { VISION_PROBE_WORD } = await import('@agentsws/model-gateway')
+      const req = JSON.parse(init.body) as { messages: { content: { type: string }[] }[] }
+      const image = req.messages.some((m) => m.content.some((b) => b.type === 'image'))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: 'text', text: image ? VISION_PROBE_WORD : '好' }],
+          usage: { input_tokens: 12, output_tokens: 1 },
+        }),
+        text: async () => '',
+      }
+    },
+    signOutGraceMs: 0,
+  }
+}
