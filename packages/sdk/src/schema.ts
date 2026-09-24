@@ -28246,7 +28246,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { position, cards, filters, counts, pinned_p0 } */
+      /** @description { position, cards, filters, counts, pinned_p0, reports } */
       200: {
         headers: {
           [name: string]: unknown

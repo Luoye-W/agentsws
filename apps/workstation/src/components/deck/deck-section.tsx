@@ -30,6 +30,7 @@ import {
   keyboardHints,
 } from '@/components/deck/deck-gestures'
 import { DECK_EXIT_MS, DECK_MAX_WIDTH_CLASS } from '@/components/deck/deck-layout'
+import { ReportBlocks } from '@/components/deck/panel-blocks'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type CardsData, type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -57,6 +58,8 @@ interface DeckData {
   pinned_p0: DeckCard[]
   positions: PositionOption[]
   battle_report?: BattleReport
+  /** 只有岗位路由给：看完即过的报表块（首页的报表块在首页自己那一段） */
+  reports?: DeckCard[]
 }
 
 /** 几条职责的牌合成一副：卡按同一个比较器重排，计数逐项相加。 */
@@ -72,6 +75,7 @@ function mergeDecks(parts: CardsData[]): DeckData {
       matched: sum('matched'),
     },
     pinned_p0: sortCards(parts.flatMap((p) => p.pinned_p0)),
+    reports: parts.flatMap((p) => p.reports ?? []),
     // 岗位页只算一个岗位：不出岗位 chip（职责层在页头折叠里，不在筛选行上）
     positions:
       first === undefined
@@ -324,6 +328,9 @@ export function DeckSection({
           ))}
         </div>
       </div>
+
+      {/* WP141：岗位页的报表块（日报 / 上线检查单）不再混在牌堆里当一张卡 */}
+      <ReportBlocks reports={all.data?.reports ?? []} onOpen={onOpen} />
 
       {/* WP141：决定之后的一句回执（「记下了」），下一次决定时换掉 */}
       {receipt === '' ? null : (

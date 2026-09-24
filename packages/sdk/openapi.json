@@ -33143,7 +33143,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ position, cards, filters, counts, pinned_p0 }",
+            "description": "{ position, cards, filters, counts, pinned_p0, reports }",
             "content": {
               "application/json": {
                 "schema": {
@@ -33234,7 +33234,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ position, cards, filters, counts, pinned_p0 }"
+        "x-returns": "{ position, cards, filters, counts, pinned_p0, reports }"
       }
     },
     "/v1/positions/{id}/summary": {

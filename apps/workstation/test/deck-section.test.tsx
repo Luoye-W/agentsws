@@ -351,7 +351,9 @@ describe('WP141：不决定前一张也能去后面的卡', () => {
       expect(getHome).toHaveBeenLastCalledWith('yesterday', { kind: 'kol_campaign' })
     })
     const values = [...select.options].map((o) => o.value)
-    expect(values).toEqual(expect.arrayContaining(['', 'kol_campaign', 'staged_change', 'outbound_draft']))
+    expect(values).toEqual(
+      expect.arrayContaining(['', 'kol_campaign', 'staged_change', 'outbound_draft']),
+    )
     // 下拉里没有 i18n 键或裸 kind
     expect([...select.options].map((o) => o.textContent).join(' ')).not.toMatch(/kind\.|_/)
     getHome.mockImplementation(async () => home)

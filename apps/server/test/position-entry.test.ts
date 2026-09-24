@@ -133,6 +133,61 @@ describe('54 §1 岗位实体', () => {
   })
 })
 
+describe('WP141：岗位的「N 张待审」与牌堆同一个口径', () => {
+  const card = (kind: 'policy_change' | 'daily_report', proposerAssignment?: string, n = 0) => ({
+    workspace_id: server.bootstrap.workspace.id,
+    schema_version: 1 as const,
+    kind,
+    role_id: 'dtc.store',
+    subject: {
+      object: { type: 'product', id: `prd_${kind}_${proposerAssignment ?? 'none'}_${n}` },
+    },
+    dedupe_key: `dk_${kind}_${proposerAssignment ?? 'none'}_${n}`,
+    title: kind === 'daily_report' ? '店铺日报' : '改价',
+    payload: kind === 'daily_report' ? { sales: 1 } : { target: 'role_policy' },
+    evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
+    proposer: {
+      kind: 'agent' as const,
+      id: 'agent_test',
+      ...(proposerAssignment === undefined ? {} : { assignment_id: proposerAssignment }),
+    },
+    automation: {
+      level_at_creation: 'L1' as const,
+      auto_approved: false,
+      mandate_check: { within: true, caps_hit: [] },
+      sampling: { selected: false },
+    },
+    routing: {
+      recipients: [{ person: server.bootstrap.person.id, via: 'role_holder' as const }],
+      rule: 'role_holder' as const,
+      escalation: {
+        after_hours: 24,
+        business_hours: true,
+        chain: ['scope_manager' as const, 'owner' as const],
+        escalated_at: [],
+      },
+      separation_of_duties: false,
+    },
+    priority: 'queue' as const,
+  })
+
+  it('日报不算卡；没有提案分配的卡（每日计划那种）照样算', async () => {
+    await server.txn.approvals.create(card('policy_change', idOf('dtc.store')))
+    await server.txn.approvals.create(card('policy_change'))
+    await server.txn.approvals.create(card('policy_change', undefined, 1))
+    await server.txn.approvals.create(card('daily_report', idOf('dtc.store')))
+    const view = await dataOf<PositionInstance>(await call('GET', '/v1/positions/web-ops'))
+    // 原来按「提案分配」数：1 张有分配的 + 1 张日报 = 2；现在是三张真卡
+    expect(view.pending_cards).toBe(3)
+    const deck = await dataOf<{ counts: { total: number } }>(
+      await call('GET', `/v1/positions/${idOf('dtc.store')}/cards`, {
+        assignment: idOf('dtc.store'),
+      }),
+    )
+    expect(deck.counts.total).toBe(view.pending_cards)
+  })
+})
+
 describe('54 §2 从岗位开一件事', () => {
   it('「把 A 商品降价 10%」→ 店铺管理 → 起 Run（用的是那条职责的分配）', async () => {
     const out = await dataOf<OpenView>(

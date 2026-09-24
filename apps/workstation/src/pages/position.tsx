@@ -8,7 +8,7 @@ import type { RangeName } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { Link2Off, ScanSearch } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
 import { CalendarLink } from '@/components/calendar/calendar-link'
 import { connectPathFor } from '@/components/connections/links'
@@ -26,7 +26,8 @@ import { PositionEntry } from '@/components/work/position-entry'
 import { getPosition, getPositionRecords, getPositions, getPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
-import { assignmentForPosition } from '@/lib/positions'
+import { assignmentForPosition, myAssignments } from '@/lib/positions'
+import { matterUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
 
@@ -298,6 +299,9 @@ export function PositionPage(): React.ReactNode {
   const tab = search.get('tab') ?? 'cards'
   // WP70：当前分配跟着**岗位**走，所以要知道这条 id 属于哪个岗位（左栏那份就够）
   const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  const navigate = useNavigate()
+  const instance = mine.data?.instances?.find((p) => myAssignments(p).includes(id))
+  const deckIds = instance === undefined ? [id] : myAssignments(instance)
 
   /*
    * 进岗位页就把当前 Assignment 切过去（31 §3.1 一次请求一个 Assignment）。
@@ -349,7 +353,17 @@ export function PositionPage(): React.ReactNode {
         </TabsList>
         <TabsContent value="cards">
           {/* 37 §1：与首页同一副牌，只是钉死在这个岗位上 */}
-          <DeckSection positionId={id} onOpen={() => {}} />
+          {/*
+            WP141：牌堆合的是本人在这个岗位下的**每一条职责**——与页头「N 张待审」、
+            左栏岗位旁的数字同一个口径（54 §4 计数按岗位聚合）。
+          */}
+          <DeckSection
+            positionId={id}
+            positionIds={deckIds}
+            onOpen={(card) => {
+              navigate(matterUrl(card))
+            }}
+          />
         </TabsContent>
         <TabsContent value="view">
           <ViewTab id={id} />

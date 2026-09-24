@@ -164,6 +164,48 @@ describe('岗位三 Tab', () => {
     expect(data.cards[0]?.available_actions).toContain('instruct')
   })
 
+  it('WP141：日报不是卡——不进岗位牌堆、不算张数，另给 reports', async () => {
+    const h = await harness()
+    h.approvals.seed(
+      approvalItem({
+        id: 'ap_daily',
+        kind: 'daily_report',
+        workspace_id: h.workspace_id,
+        title: '店铺日报',
+        payload: { date: '2026-09-07', sales: 100, orders: 3, low_stock: 1, pending: 0 },
+        routing: {
+          recipients: [{ person: h.person_id, via: 'role_holder' }],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 24,
+            business_hours: true,
+            chain: ['scope_manager', 'owner'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        deliveries: [
+          {
+            channel: 'workstation',
+            to: h.person_id,
+            sent_at: '2026-09-07T09:00:00.000Z',
+            view: 'full',
+            decision_token: 'tok_daily',
+            status: 'sent',
+          },
+        ],
+      }),
+    )
+    const data = await json<{
+      cards: DeckCard[]
+      counts: { total: number }
+      reports: DeckCard[]
+    }>(await h.get(`/v1/positions/${h.assignment.id}/cards`))
+    expect(data.cards.map((c) => c.kind)).not.toContain('daily_report')
+    expect(data.counts.total).toBe(data.cards.length)
+    expect(data.reports.map((c) => c.id)).toEqual(['ap_daily'])
+  })
+
   it('面板 Tab 按数据源分块，未连接的不给完整报告链接', async () => {
     const h = await harness()
     const data = await json<{

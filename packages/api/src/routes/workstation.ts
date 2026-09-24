@@ -26,6 +26,7 @@ import {
   filterCards,
   foldCards,
   type HomePosition,
+  isQueueCard,
   MAX_TILES_PER_POSITION,
   projectCard,
   queryDef,
@@ -304,6 +305,24 @@ async function cardsOf(
   )
 }
 
+/**
+ * WP141（docs/78 §2）：岗位页的牌堆与首页同一条「只有要人决定的才是卡」（36 §2.2b）。
+ *
+ * 首页早就把日报 / 上线检查单分去了报表块（`assembleHome`），岗位页这条路由却原样
+ * 全给——于是网站运营页头写「3 张待审」、牌堆里翻出来 4 张（多一张日报）。
+ * 这里按同一个判据（deck 的 `isQueueCard`）分成两份：卡进牌堆，报表另给。
+ */
+function splitQueue(cards: DeckCard[]): { queue: DeckCard[]; reports: DeckCard[] } {
+  const queue: DeckCard[] = []
+  const reports: DeckCard[] = []
+  for (const card of cards) {
+    if (card.kind === 'system_alert' || card.kind === 'digest') continue
+    if (isQueueCard(card.kind, card.change_kind)) queue.push(card)
+    else reports.push(card)
+  }
+  return { queue, reports }
+}
+
 export function workstationRoutes(): Route[] {
   return [
     route(
@@ -437,7 +456,7 @@ export function workstationRoutes(): Route[] {
           { name: 'id', in: 'path', required: true, description: 'position_id = assignment_id' },
           ...FILTER_PARAMS,
         ],
-        returns: '{ position, cards, filters, counts, pinned_p0 }',
+        returns: '{ position, cards, filters, counts, pinned_p0, reports }',
       },
       async (c, deps) => {
         const p = principalOf(c)
@@ -445,13 +464,16 @@ export function workstationRoutes(): Route[] {
         const position = await positionOf(c, deps, actor)
         // 岗位页天生只看这一个岗位；query 里再传 position_id 也不许换成别的（31 §3.1）。
         const filters: DeckFilters = { ...filtersOf(c), position_id: position.position_id }
-        const filtered = filterCards(await cardsOf(deps, actor, position), filters)
+        const { queue, reports } = splitQueue(await cardsOf(deps, actor, position))
+        const filtered = filterCards(queue, filters)
         return ok(c, {
           position,
           cards: foldCards(filtered.cards),
           filters,
           counts: filtered.counts,
           pinned_p0: filtered.pinned_p0,
+          // 只加字段：看完即过的报表块（老前端不读它，照旧）
+          reports,
         })
       },
     ),
@@ -480,7 +502,7 @@ export function workstationRoutes(): Route[] {
         // 三个 Tab 读的是同一份 QueryContext（29 原则 ③：数都在服务端算）——
         // 这条路由存在的全部理由就是「只算一次」。
         const ctx = await w.queryContext(actor, position, range)
-        const cards = await cardsOf(deps, actor, position)
+        const { queue: cards } = splitQueue(await cardsOf(deps, actor, position))
         const filtered = filterCards(cards, { position_id: position.position_id })
         const sections = assembleView(position.role_id as RoleId, ctx)
           .map((s) => ({
