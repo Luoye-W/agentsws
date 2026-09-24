@@ -95,6 +95,10 @@ export {
   extensionFor,
   ollamaTagsUrl,
   openaiCompatibleProvider,
+  // WP147：工具结果里的截图怎么出线（OpenAI 兼容口）
+  TOOL_IMAGE_PLACEHOLDER,
+  TOOL_IMAGES_LEAD,
+  toWireMessages,
 } from './providers/openai-compatible.js'
 export type { OpenAiImageOptions } from './providers/openai-images.js'
 // WP127：生图单独一档的真实现（OpenAI 形态 `/images/generations`）

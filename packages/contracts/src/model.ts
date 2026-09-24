@@ -16,6 +16,10 @@ export type ModelPurpose =
  *
  * 只加不改：老调用方不认得数组就不该看到数组；工具调用 / 多轮还原等
  * 语义只对 string content 有定义，数组只用在 `user` 消息上。
+ *
+ * WP147（只加）：`tool` 消息也可以是数组——工具结果里的截图（电脑操控 / 浏览器）。
+ * 形状与 WP127 看图验证用的是同一种；provider 各按自家线路翻译（OpenAI 兼容口把图挪进
+ * 紧跟的一条 user 消息，Messages 口放进 `tool_result` 的块数组）。图片同样永不进事件日志。
  */
 export type ChatContentPart =
   | { type: 'text'; text: string }

@@ -151,6 +151,56 @@ const toWireMessage = (m: ChatMessage): Record<string, unknown> => ({
       }),
 })
 
+/** 这条消息里带没带图片部件。 */
+const hasImage = (content: string | ChatContentPart[]): content is ChatContentPart[] =>
+  typeof content !== 'string' && content.some((p) => p.type === 'image')
+
+/** WP147：工具结果里图片之外的那段文字（没有文字时给一句占位，照官方 pi-ai）。 */
+export const TOOL_IMAGE_PLACEHOLDER = '(see attached image)'
+/** WP147：工具结果里的图片挪进紧跟的一条 user 消息，开头这一句（照官方 pi-ai 原文）。 */
+export const TOOL_IMAGES_LEAD = 'Attached image(s) from tool result:'
+
+/**
+ * WP147：整份对话出线。与逐条 {@link toWireMessage} 只差一处——**工具结果里的图片**。
+ *
+ * OpenAI 兼容口的 `role: 'tool'` 只收文字（带 `image_url` 的数组各家一律 400），所以照官方
+ * `@earendil-works/pi-ai`（`dsh-llm-pi-ai` 用的那一份，MIT）`openai-completions` 的做法：
+ * 一串相邻的工具结果照常各发一条**纯文字** tool 消息（只有图没字的给 `(see attached image)`），
+ * 这一串结束后补**一条** user 消息「Attached image(s) from tool result:」+ 这些图（`image_url`，
+ * `data:` URL 内联）。没有图的对话与逐条翻译**逐字节相同**。
+ */
+export function toWireMessages(messages: readonly ChatMessage[]): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = []
+  let pending: Record<string, unknown>[] = []
+  const flush = (): void => {
+    if (pending.length === 0) return
+    out.push({ role: 'user', content: [{ type: 'text', text: TOOL_IMAGES_LEAD }, ...pending] })
+    pending = []
+  }
+  for (const m of messages) {
+    if (m.role !== 'tool') flush()
+    if (m.role !== 'tool' || !hasImage(m.content)) {
+      out.push(toWireMessage(m))
+      continue
+    }
+    const text = m.content
+      .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n')
+    out.push(toWireMessage({ ...m, content: text.length > 0 ? text : TOOL_IMAGE_PLACEHOLDER }))
+    for (const part of m.content) {
+      if (part.type === 'image') {
+        pending.push({
+          type: 'image_url',
+          image_url: { url: `data:${part.mime};base64,${part.data}` },
+        })
+      }
+    }
+  }
+  flush()
+  return out
+}
+
 const toWireTool = (t: ToolDef): Record<string, unknown> => ({
   type: 'function',
   function: { name: wireToolName(t.name), description: t.description, parameters: t.input_schema },
@@ -283,7 +333,7 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     async complete(req) {
       const json = (await post('/chat/completions', {
         model: options.model,
-        messages: req.messages.map(toWireMessage),
+        messages: toWireMessages(req.messages),
         ...(req.tools === undefined ? {} : { tools: req.tools.map(toWireTool) }),
         ...(req.seed === undefined ? {} : { seed: req.seed }),
         stream: false,

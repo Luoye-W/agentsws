@@ -130,7 +130,7 @@ type WireBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; source: WireImageSource }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; tool_use_id: string; content: string }
+  | { type: 'tool_result'; tool_use_id: string; content: string | WireBlock[] }
 
 /** 图片来源：内联 base64，或 Files API 的 file id（官方同款，二者在一次请求里不混用）。 */
 export type WireImageSource =
@@ -251,8 +251,18 @@ export function toMessagesRequest(
   for (const m of messages) {
     if (m.role === 'system') continue
     if (m.role === 'tool') {
+      /*
+       * WP147：工具结果里有图（截图）时，`tool_result` 的 content 用块数组（文字 + 图片），
+       * 照官方 `dsh-llm-deepseek`「Messages 只在 user 消息与工具结果里收图」；图片来源同样走
+       * `imageSource`（Files 复用）。没有图的照旧是一段字符串，逐字节不变。
+       */
+      const images = typeof m.content !== 'string' && m.content.some((p) => p.type === 'image')
       push('user', [
-        { type: 'tool_result', tool_use_id: m.tool_call_id ?? '', content: textOf(m.content) },
+        {
+          type: 'tool_result',
+          tool_use_id: m.tool_call_id ?? '',
+          content: images ? blocksOf(m.content, options) : textOf(m.content),
+        },
       ])
       continue
     }
