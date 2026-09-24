@@ -12,8 +12,8 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { CredentialRecord } from '@deepseek-ai/dsh-credentials'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Config as OfficialConfig } from '@deepseek-ai/dsh-deepseek-account-platform'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createDeepSeekAccountHost,
   DEEPSEEK_ACCOUNT_CALLBACK_PATH,
@@ -157,7 +157,12 @@ describe('WP134 登录状态机（官方模块 + 替身平台）', () => {
     const profile = await h.profile()
     expect(profile).toEqual({
       status: 'ready',
-      value: { id: 'stand-in-user', name: '替身账号', contact: 'de***@example.com', avatarUrl: null },
+      value: {
+        id: 'stand-in-user',
+        name: '替身账号',
+        contact: 'de***@example.com',
+        avatarUrl: null,
+      },
     })
     const balance = await h.balance()
     expect(balance?.status).toBe('ready')
