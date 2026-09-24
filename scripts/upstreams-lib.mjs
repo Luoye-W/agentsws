@@ -26,13 +26,25 @@ const SCALAR_FIELDS = [
   'repo',
   'image',
   'image_tag',
+  'image_digest',
   'locked_version',
   'pinned_commit',
   'pin',
   'lockfile_single',
   'release_age_prefix',
+  'bin_version',
+  'bin_tag_prefix',
+  'bin_lock_file',
 ]
-const LIST_FIELDS = ['watch', 'locked_in', 'we_depend_on', 'watch_paths', 'wishlist', 'covered_by']
+const LIST_FIELDS = [
+  'watch',
+  'locked_in',
+  'image_in',
+  'we_depend_on',
+  'watch_paths',
+  'wishlist',
+  'covered_by',
+]
 const ALL_FIELDS = [...SCALAR_FIELDS, ...LIST_FIELDS]
 
 // ── YAML 子集解析 ──────────────────────────────────────────────────────────
@@ -209,6 +221,28 @@ export function validateShape(items) {
     if (it.locked_in?.length && !it.locked_version)
       p(`${where} 有 \`locked_in\` 就要有 \`locked_version\``)
     if (it.image_tag && !it.image) p(`${where} 有 \`image_tag\` 就要有 \`image\``)
+    // WP146：镜像同 npm 一样要锁死——tag 会被重打、`latest` 每次 pull 都可能换，只有 digest 不会变
+    if (it.image_digest !== undefined) {
+      if (!it.image) p(`${where} 有 \`image_digest\` 就要有 \`image\``)
+      if (!DIGEST_RE.test(String(it.image_digest)))
+        p(`${where} \`image_digest\` 要写成 sha256:<64 位十六进制>，写的是 \`${it.image_digest}\``)
+    }
+    if (it.image_in?.length && (!it.image_tag || !it.image_digest))
+      p(`${where} 有 \`image_in\` 就要有 \`image_tag\` 与 \`image_digest\``)
+    if (it.kind === 'runtime-dep' && it.image) {
+      if (!it.image_tag || it.image_tag === 'latest')
+        p(`${where} runtime-dep 的镜像要锁正式版 tag，不许 \`latest\`（docs/42 红线 3）`)
+      if (!it.image_digest)
+        p(`${where} runtime-dep 的镜像要同时锁 \`image_digest\`（tag 会被重打）`)
+      if (!it.image_in?.length) p(`${where} runtime-dep 的镜像要写 \`image_in\`（哪些文件引用它）`)
+    }
+    const bin = ['bin_version', 'bin_tag_prefix', 'bin_lock_file'].filter(
+      (k) => it[k] !== undefined,
+    )
+    if (bin.length > 0 && bin.length < 3)
+      p(`${where} bin_version / bin_tag_prefix / bin_lock_file 要么都写、要么都不写`)
+    if (bin.length === 3 && !it.repo)
+      p(`${where} 有 \`bin_version\` 就要有 \`repo\`（比的是它的 release）`)
     if (it.lockfile_single !== undefined && typeof it.lockfile_single !== 'boolean')
       p(`${where} \`lockfile_single\` 只许 true / false`)
     if (String(it.locked_version ?? '').startsWith('^') && it.pin !== 'allow_caret')
@@ -216,6 +250,8 @@ export function validateShape(items) {
   }
   return problems
 }
+
+export const DIGEST_RE = /^sha256:[0-9a-f]{64}$/
 
 // ── 与仓库实际锁的版本对账 ─────────────────────────────────────────────────
 
@@ -298,10 +334,91 @@ export function checkPins(items, root = REPO_ROOT) {
       }
     }
 
+    problems.push(...checkImagePins(it, root))
+    problems.push(...checkBinLock(it, root))
+
     for (const rel of it.covered_by ?? []) {
       if (!existsSync(join(root, String(rel)))) p(`${where} covered_by 指向不存在的路径：${rel}`)
     }
   }
+  return problems
+}
+
+const escapeRe = (x) => String(x).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+
+/**
+ * 一段文字里对某个镜像的全部**带 tag 或 digest** 的引用（`仓库:tag`、`仓库@sha256:…`、两者都有）。
+ * 光秃秃的仓库名（注释里说"起一个 `ghcr.io/x/y` 容器"）不算引用，不返回。
+ */
+export function findImageRefs(text, image) {
+  const re = new RegExp(
+    `${escapeRe(image)}(?::[A-Za-z0-9_][A-Za-z0-9_.-]*)?(?:@sha256:[0-9a-f]+)?`,
+    'g',
+  )
+  return [...String(text).matchAll(re)].map((m) => m[0]).filter((ref) => ref !== image)
+}
+
+/**
+ * WP146：`image_in` 里的每个文件都必须**至少引用一次**这个镜像，而且每一处都逐字等于
+ * `image:image_tag@image_digest`。compose 里的 digest 被改了、哪一处退回 `:latest`、
+ * 只写 tag 不写 digest —— 都在这里红。
+ * @returns {string[]}
+ */
+export function checkImagePins(it, root = REPO_ROOT) {
+  const problems = []
+  if (!it.image || !it.image_in?.length || !it.image_tag || !it.image_digest) return problems
+  const where = `[${it.id}]`
+  const want = `${it.image}:${it.image_tag}@${it.image_digest}`
+  for (const rel of it.image_in) {
+    const text = readIfExists(join(root, String(rel)))
+    if (text === null) {
+      problems.push(`${where} image_in 指向不存在的文件：${rel}`)
+      continue
+    }
+    const refs = findImageRefs(text, it.image)
+    if (refs.length === 0)
+      problems.push(`${where} ${rel} 里没有引用 \`${it.image}\`（要写成 \`${want}\`）`)
+    for (const ref of new Set(refs)) {
+      if (ref !== want)
+        problems.push(`${where} ${rel} 引用的是 \`${ref}\`，登记表锁的是 \`${want}\``)
+    }
+  }
+  return problems
+}
+
+/**
+ * 不走 npm 的二进制（BrowserSkill 的 `bsk`）：版本与 sha256 钉在一份 JSON 里
+ * （`{ cli: { version, tag }, plugin?: { name, version } }`）。登记表的 `bin_version` 要等于
+ * 它的 `cli.version`、`cli.tag` 要等于 `bin_tag_prefix + bin_version`；同一份文件里若也记了
+ * npm 插件的版本，那也要等于 `locked_version`（两边一起升，不许只改一边）。
+ * @returns {string[]}
+ */
+export function checkBinLock(it, root = REPO_ROOT) {
+  const problems = []
+  if (!it.bin_lock_file || !it.bin_version) return problems
+  const where = `[${it.id}]`
+  const rel = String(it.bin_lock_file)
+  const text = readIfExists(join(root, rel))
+  if (text === null) return [`${where} bin_lock_file 指向不存在的文件：${rel}`]
+  let lock
+  try {
+    lock = JSON.parse(text)
+  } catch {
+    return [`${where} ${rel} 不是合法的 JSON`]
+  }
+  const cli = lock?.cli ?? {}
+  if (cli.version !== String(it.bin_version))
+    problems.push(
+      `${where} ${rel} 的 cli.version 是 \`${cli.version}\`，登记表写的是 \`${it.bin_version}\``,
+    )
+  const wantTag = `${it.bin_tag_prefix ?? ''}${it.bin_version}`
+  if (cli.tag !== wantTag)
+    problems.push(`${where} ${rel} 的 cli.tag 是 \`${cli.tag}\`，应该是 \`${wantTag}\``)
+  const plugin = lock?.plugin
+  if (plugin && it.npm && plugin.name === it.npm && plugin.version !== String(it.locked_version))
+    problems.push(
+      `${where} ${rel} 的 plugin.version 是 \`${plugin.version}\`，登记表锁的是 \`${it.locked_version}\``,
+    )
   return problems
 }
 
@@ -407,6 +524,50 @@ export function versionVerdict(locked, tagVersions, allVersions) {
     highest,
     lockedIsKnown: all.includes(lock),
   }
+}
+
+const stripV = (t) => String(t).replace(/^v/, '')
+
+/** 镜像 tag 里的**正式版**（`v1.2.3` / `1.2.3`）；commit 短哈希、`latest`、`-rc` 一律不算。 */
+export function stableImageTags(tags) {
+  return (tags ?? []).filter((t) => /^v?\d+\.\d+\.\d+$/.test(String(t)))
+}
+
+/**
+ * 镜像锁的版本相对上游处在什么位置（WP146）。
+ *
+ * - `state`：锁的 tag 与上游最高正式版比 —— behind / current / ahead / unknown
+ * - `tagMoved`：锁的那个 tag **现在**指向的 digest 与我们锁的不一样（上游重打了 tag）。
+ *   我们钉了 digest，不受影响；但这是要人看一眼的事，报告里单列。
+ */
+export function imageVerdict({ lockedTag, lockedDigest, tags, lockedTagDigest }) {
+  const stable = stableImageTags(tags)
+  const tagMoved = Boolean(lockedTagDigest && lockedDigest && lockedTagDigest !== lockedDigest)
+  const lockedIsKnown = (tags ?? []).includes(lockedTag)
+  if (stable.length === 0) return { state: 'unknown', highest: null, tagMoved, lockedIsKnown }
+  const highest = stable.reduce((a, b) => (compareVersions(stripV(a), stripV(b)) >= 0 ? a : b))
+  const cmp = compareVersions(stripV(highest), stripV(lockedTag))
+  return {
+    state: cmp > 0 ? 'behind' : cmp === 0 ? 'current' : 'ahead',
+    highest,
+    tagMoved,
+    lockedIsKnown,
+  }
+}
+
+/**
+ * 二进制（`bin_tag_prefix`）在 GitHub releases 里的最新正式版，与锁的比。
+ * 草稿与预发布不算；一条带前缀的都没有就是 unknown（查不到 ≠ 没变）。
+ */
+export function binReleaseVerdict(releases, prefix, locked) {
+  const cand = (releases ?? [])
+    .filter((r) => !r.draft && !r.prerelease && String(r.tag ?? '').startsWith(prefix))
+    .map((r) => String(r.tag).slice(prefix.length))
+    .filter((v) => /^v?\d+\.\d+\.\d+$/.test(v))
+  if (cand.length === 0) return { state: 'unknown', highest: null }
+  const highest = cand.reduce((a, b) => (compareVersions(stripV(a), stripV(b)) >= 0 ? a : b))
+  const cmp = compareVersions(stripV(highest), stripV(locked))
+  return { state: cmp > 0 ? 'behind' : cmp === 0 ? 'current' : 'ahead', highest }
 }
 
 /** 一条记录里 wishlist 的哪些词命中了这段文字。 */
