@@ -421,7 +421,9 @@ describe('46 §3 岗位与职责 → 清单', () => {
       { id: string; roles: { id: string; default: boolean; what_it_does: string }[] }[]
     >(await m.call('GET', '/v1/onboarding/positions'))
     const support = positions.find((p) => p.id === 'customer-care')
-    // WP54（48 v2 L1）+ WP72（56 §4）：勾"客服"= 四条职责全勾（+ 可选的 common.member）
+    // WP54（48 v2 L1）+ WP72（56 §4）：勾"客服"= 四条职责全勾。
+    // WP142：底座职责 `common.member` 不在向导的岗位里（它不属于任何岗位，04 §7）
+    expect(support?.roles.map((r) => r.id)).not.toContain('common.member')
     expect(support?.roles.filter((r) => r.default).map((r) => r.id)).toEqual([
       'dtc.support',
       'dtc.live-chat',
@@ -441,8 +443,11 @@ describe('46 §3 岗位与职责 → 清单', () => {
         'dtc.live-chat',
         'amz.support',
         'dtc.community-support',
-        'common.member',
       ]),
+    )
+    expect(plan.role_ids).not.toContain('common.member')
+    expect(plan.positions.find((p) => p.position_id === 'customer-care')?.role_ids).toHaveLength(
+      plan.role_ids.length,
     )
     // dtc.support 要邮箱与 Shopify，两条都 required
     const services = plan.connectors.map((c) => c.service)
@@ -579,6 +584,26 @@ describe('46 §3 岗位与职责 → 清单', () => {
     )
     expect(again.created_assignments).toEqual([])
     expect(again.skipped).toContain('dtc.support')
+  })
+
+  it('WP142：勾客服不会顺带建 common.member——左栏不多出一个没勾过的「普通成员」', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+    const applied = await data<{ created_assignments: { role_id: string }[] }>(
+      await m.call('POST', '/v1/onboarding/apply', {
+        body: { position_ids: ['customer-care', 'kol-marketing'] },
+      }),
+    )
+    const roles = applied.created_assignments.map((a) => a.role_id)
+    expect(roles).not.toContain('common.member')
+    expect(roles).toContain('kol.youtube')
+    const listed = await data<{ instances?: { position_id: string }[] }>(
+      await m.call('GET', '/v1/positions'),
+    )
+    const ids = (listed.instances ?? []).map((p) => p.position_id)
+    expect(ids).toContain('customer-care')
+    expect(ids).toContain('kol-marketing')
+    expect(ids).not.toContain('member')
   })
 
   it('没这个岗位 → 404；plan 不写任何东西', async () => {

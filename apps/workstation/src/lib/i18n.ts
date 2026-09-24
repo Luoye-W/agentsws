@@ -2608,6 +2608,14 @@ const zh: Table = {
   'onboarding.ai.official.retry': '再试一次',
   'intake.confirmed': '记下了：品牌档案已存好，之后在设置里也能改。点「保存并继续」去选岗位。',
   'intake.confirmed.button': '已确认',
+  'onboarding.purpose.title': '你这次主要想让它干什么？',
+  'onboarding.purpose.kol': '红人营销',
+  'onboarding.purpose.care': '客服',
+  'onboarding.purpose.both': '都要',
+  'onboarding.purpose.hint': '按你选的先把岗位勾好，下面还能改。',
+  'onboarding.done.skipped': '另外 {n} 条你本来就有，没重复建。',
+  'onboarding.done.all_held':
+    '你勾的 {n} 条职责本来就都有了，这次没新建。回首页，把第一件事交给它们。',
 }
 
 const en: Table = {
@@ -5251,6 +5259,15 @@ const en: Table = {
   'intake.confirmed':
     'Saved: the brand profile is stored and can be changed later in Settings. Click "Save and continue" to pick positions.',
   'intake.confirmed.button': 'Confirmed',
+  'onboarding.purpose.title': 'What do you mainly want it to do this time?',
+  'onboarding.purpose.kol': 'Creator marketing',
+  'onboarding.purpose.care': 'Customer care',
+  'onboarding.purpose.both': 'Both',
+  'onboarding.purpose.hint':
+    'We tick the positions for you from this; you can still change them below.',
+  'onboarding.done.skipped': '{n} more you already had, so they were not created again.',
+  'onboarding.done.all_held':
+    'You already had all {n} duties you ticked, so nothing new was created. Head home and hand them the first thing.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }
