@@ -624,6 +624,30 @@ async function seedCardGallery(world: World): Promise<void> {
       '在受控浏览器里打开时被要求重新登录。我不会替你输密码——请在右栏的浏览器里登录后点"继续"。',
     payload: { url: 'https://facebook.com/groups/glass-bowl' },
   })
+
+  /**
+   * WP144（docs/80 §3）：电脑操控授权卡——「让它在接下来 N 分钟操作这台电脑？」。
+   * 摆拍：真卡由 `request_computer_use` 经运行时出（`apps/server/src/runtime.ts`），形状逐字相同。
+   */
+  await world.txn.approvals.create({
+    ...base,
+    kind: 'computer_use',
+    subject: { object: { type: 'matter', id: 'mat_gallery_cu' } },
+    ...routed(at('site.shopify-build')),
+    dedupe_key: `gallery_computer_use:${world.workspace_id}:1`,
+    title: '让它在接下来 10 分钟操作这台电脑？',
+    summary:
+      '它想：在 Keynote 里把新品发布的封面页导出成 PNG。允许后它能看屏幕、点、输入；遇到登录、密码、支付、验证码会停下请你来。运行时托盘会变色，随时可以点「停止」。',
+    payload: {
+      stage: 'authorize',
+      run_id: 'run_gallery_cu',
+      matter_id: 'mat_gallery_cu',
+      role_id: 'site.shopify-build',
+      minutes: 10,
+      reason: '在 Keynote 里把新品发布的封面页导出成 PNG',
+    },
+    priority: 'immediate',
+  })
 }
 
 /** 月初 / 月末（按工作区时区 +8 切），目标的期间用它。 */

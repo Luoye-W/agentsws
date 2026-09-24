@@ -77,6 +77,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
     enabled: settings.data?.enabled === true,
   })
   const [minutes, setMinutes] = useState('')
+  const [allRoles, setAllRoles] = useState(false)
   useEffect(() => {
     if (settings.data !== undefined && minutes === '') setMinutes(String(settings.data.minutes))
   }, [settings.data, minutes])
@@ -112,6 +113,16 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
   const allowed = view.allowed
   const on = view.enabled && allowed
   const mac = view.platform === 'darwin'
+
+  /*
+   * 职责一多（demo 里四十条）整张卡就被一长串勾选框淹了。默认只摆**有人在岗的**与**已经勾了的**，
+   * 其余收在「还有 N 条」后面——没人在岗的职责这台电脑上本来就不会有运行。
+   */
+  const allRoleList = roles.data ?? []
+  const shownRoles = allRoles
+    ? allRoleList
+    : allRoleList.filter((r) => r.holders > 0 || view.roles.includes(r.id))
+  const hiddenRoles = allRoleList.length - shownRoles.length
 
   const toggleRole = (id: string, checked: boolean): void => {
     const next = checked ? [...view.roles, id] : view.roles.filter((r) => r !== id)
@@ -210,7 +221,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                     {t('settings.cu.roles.empty')}
                   </span>
                 ) : null}
-                {(roles.data ?? []).map((r) => (
+                {shownRoles.map((r) => (
                   <label key={r.id} className="flex items-center gap-2 text-xs">
                     <input
                       type="checkbox"
@@ -224,6 +235,18 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                     <span>{r.name}</span>
                   </label>
                 ))}
+                {hiddenRoles === 0 ? null : (
+                  <button
+                    type="button"
+                    className="self-start text-[11px] text-primary underline-offset-4 hover:underline"
+                    data-testid="computer-use-roles-more"
+                    onClick={() => {
+                      setAllRoles(true)
+                    }}
+                  >
+                    {t('settings.cu.roles.more', { n: hiddenRoles })}
+                  </button>
+                )}
               </div>
             </Step>
 
@@ -322,7 +345,8 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                   {check.checks.map((c) => (
                     <li key={c.name} className="flex flex-col text-[11px]">
                       <span className="flex items-center gap-1">
-                        {c.ok ? (
+                        {/* 驱动原话自带 ✅ / ❌ 就不再叠一个我们的勾叉 */}
+                        {/^[✅❌]/u.test(c.detail) ? null : c.ok ? (
                           <Check className="size-3 text-emerald-600" aria-hidden />
                         ) : (
                           <X className="size-3 text-destructive" aria-hidden />

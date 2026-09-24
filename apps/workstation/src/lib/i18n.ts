@@ -2644,6 +2644,7 @@ const zh: Table = {
   'settings.cu.roles': '哪几条职责可以操作电脑',
   'settings.cu.roles.note': '默认一条都不勾。没勾的职责连「请求操作电脑」都不会出现。',
   'settings.cu.roles.empty': '还没有职责。',
+  'settings.cu.roles.more': '还有 {n} 条没人在岗的职责',
   'settings.cu.step1': '① 下载驱动',
   'settings.cu.step1.note':
     '驱动是开源的 Cua Driver（MIT）。我们钉死版本、校验 sha256 后装进数据目录，不改你的系统设置、不加到 PATH。',
@@ -5349,6 +5350,7 @@ const en: Table = {
   'settings.cu.roles': 'Duties that may operate the computer',
   'settings.cu.roles.note': 'None by default. Unticked duties never even see the request.',
   'settings.cu.roles.empty': 'No duties yet.',
+  'settings.cu.roles.more': '{n} more duties nobody holds',
   'settings.cu.step1': '① Download the driver',
   'settings.cu.step1.note':
     'The driver is the open-source Cua Driver (MIT). We pin the version, check its sha256 and put it in the data folder — no system changes, nothing added to PATH.',

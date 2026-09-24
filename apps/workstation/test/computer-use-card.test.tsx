@@ -59,8 +59,9 @@ vi.mock('@/lib/api', async () => {
       return state.view
     },
     listRoleDefinitions: async () => [
-      { id: 'site.builder', name: '建站' },
-      { id: 'support.refund', name: '退款' },
+      { id: 'site.builder', name: '建站', holders: 1 },
+      { id: 'support.refund', name: '退款', holders: 1 },
+      { id: 'pr.press', name: '新闻稿', holders: 0 },
     ],
     installComputerUseDriver: async () => {
       state.installs += 1
@@ -74,7 +75,8 @@ vi.mock('@/lib/api', async () => {
     checkComputerUse: async () => CHECK,
     stopComputerUse: async () => {
       state.stops += 1
-      state.view = { ...state.view, active: undefined } as ComputerUseSettingsView
+      const { active: _gone, ...rest } = state.view
+      state.view = rest
       return { stopped: 1 }
     },
     getPositions: async () => ({
@@ -115,6 +117,10 @@ describe('设置页电脑操控', () => {
     expect(role.checked).toBe(false)
     await userEvent.click(role)
     expect(state.saved.at(-1)).toEqual({ roles: ['site.builder'] })
+    // 没人在岗的职责收在「还有 N 条」后面
+    expect(screen.queryByTestId('computer-use-role-pr.press')).toBeNull()
+    await userEvent.click(screen.getByTestId('computer-use-roles-more'))
+    expect(await screen.findByTestId('computer-use-role-pr.press')).toBeTruthy()
 
     await userEvent.click(screen.getByTestId('computer-use-install'))
     expect(state.installs).toBe(1)
