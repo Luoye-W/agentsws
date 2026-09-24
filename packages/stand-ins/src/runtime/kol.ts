@@ -22,12 +22,17 @@
 import type { ContextItem, ObjectRef, RunRequest } from '@agentsws/contracts'
 import {
   classifyKolTask,
+  describeFindReply,
   describeKolRun,
+  type KolFoundCreator,
   type KolIntent,
+  type KolReplyLinks,
   type KolTaskContext,
   kolChannelOfRole,
+  kolToolZh,
   type PlannedKolCall,
   parseFollowerBand,
+  parseWantedCount,
   planKolTools,
 } from '@agentsws/kol-core'
 
@@ -143,21 +148,43 @@ export interface KolFinding {
   count?: number
   reason?: string
   receipt?: { approval_item_id?: string; change_id?: string }
+  /** WP142：找人那一步找到的是谁（回话里点名前 5 个）。 */
+  creators?: KolFoundCreator[]
+  /** WP142：这一份从哪来（`local_library` = 这条渠道没接数据来源，退到了自己的库）。 */
+  source?: string
 }
 
-const TOOL_ZH: Readonly<Record<string, string>> = {
-  search_creators: '找人',
-  get_creator: '看这个人的资料',
-  list_collaborations: '看合作清单',
-  list_deliverables: '看交付物',
-  score_creator: '打分',
-  add_to_campaign: '进候选池',
-  draft_outreach: '起草开发信',
-  advance_collaboration: '推进合作阶段',
-  register_deliverable: '登记交付物',
-  review_deliverable: '验收交付物',
-  create_tracked_link: '建追踪链接',
-  search_policies: '查政策',
+/** WP142：找人结果里的人（名字 + 粉丝数）与来源。认不出就不给。 */
+export function foundOf(data: unknown): { creators?: KolFoundCreator[]; source?: string } {
+  if (data === null || typeof data !== 'object') return {}
+  const o = data as Record<string, unknown>
+  const source = typeof o.source === 'string' ? o.source : undefined
+  const rows = Array.isArray(o.rows) ? o.rows : undefined
+  const creators = rows?.flatMap((row): KolFoundCreator[] => {
+    if (row === null || typeof row !== 'object') return []
+    const r = row as Record<string, unknown>
+    const name =
+      typeof r.display_name === 'string'
+        ? r.display_name
+        : typeof r.handle === 'string'
+          ? `@${r.handle}`
+          : undefined
+    if (name === undefined) return []
+    return [{ name, ...(typeof r.followers === 'number' ? { followers: r.followers } : {}) }]
+  })
+  return {
+    ...(creators === undefined ? {} : { creators }),
+    ...(source === undefined ? {} : { source }),
+  }
+}
+
+/** 渠道 id → 名字（回话里不露小写的 `youtube`）。 */
+const CHANNEL_ZH: Readonly<Record<string, string>> = {
+  youtube: 'YouTube',
+  instagram: 'Instagram',
+  tiktok: 'TikTok',
+  facebook: 'Facebook',
+  x: 'X',
 }
 
 /**
@@ -172,10 +199,37 @@ export function renderKolAnswer(input: {
   channel: string
   findings: readonly KolFinding[]
   band?: { min: number; max: number }
+  /** WP142：用户点名要几个（「找 20 个」）；没说就不给。 */
+  wanted?: number
+  /** WP142：候选池 / 关联官方数据接口 / 导入一张表的站内链接。 */
+  links?: KolReplyLinks
 }): string {
+  /*
+   * WP142（docs/78 §1 #5）：**找人那一步成了，回话就说是谁**——前 5 个名字 + 去候选池的链接；
+   * 不够数说为什么、给两个动作。其余几步（进候选池等）照旧一行一件事。
+   */
+  const search = input.findings.find((f) => f.tool === 'search_creators' && f.status === 'ok')
+  if (search !== undefined) {
+    const rest = input.findings.filter((f) => f !== search)
+    const lines = describeFindReply({
+      channel: input.channel,
+      band: input.band,
+      wanted: input.wanted,
+      found: search.creators ?? [],
+      source: search.source,
+      links: input.links,
+    })
+    const tail =
+      rest.length === 0
+        ? []
+        : renderKolAnswer({ ...input, findings: rest })
+            .split('\n')
+            .slice(1)
+    return [...lines, ...tail].join('\n')
+  }
   const lines: string[] = []
   for (const f of input.findings) {
-    const what = TOOL_ZH[f.tool] ?? f.tool
+    const what = kolToolZh(f.tool)
     if (f.status !== 'ok') {
       lines.push(`- ${what}：没成——${f.reason ?? '这个进程没接这一步'}。`)
       continue
@@ -187,11 +241,25 @@ export function renderKolAnswer(input: {
     lines.push(`- ${what}：${bits.length > 0 ? bits.join('，') : '完成'}。`)
   }
   if (lines.length === 0) lines.push('- 这次没有一步能走通，下面没有可看的结果。')
+  // 找人没成：同样给下一步（关联官方数据接口 / 导入一张表），不停在一句「没成」
+  const failedFind = input.findings.some((f) => f.tool === 'search_creators' && f.status !== 'ok')
+  if (failedFind) {
+    const actions = [
+      input.links?.linkAccount === undefined
+        ? undefined
+        : `[关联官方数据接口](${input.links.linkAccount})`,
+      input.links?.importTable === undefined
+        ? undefined
+        : `[导入一张表](${input.links.importTable})`,
+    ].filter((a): a is string => a !== undefined)
+    if (actions.length > 0) lines.push(`想找人可以先：${actions.join(' · ')}`)
+  }
+  const where = CHANNEL_ZH[input.channel] ?? input.channel
   const head =
     input.band === undefined
-      ? `${input.channel} 这条渠道上，我按你说的做了这几件事：`
-      : `${input.channel} 这条渠道上，按粉丝 ${input.band.min.toLocaleString('en-US')}–${input.band.max.toLocaleString('en-US')} 这个区间，我做了这几件事：`
+      ? `${where} 这条渠道上，我按你说的做了这几件事：`
+      : `${where} 这条渠道上，按粉丝 ${input.band.min.toLocaleString('en-US')}–${input.band.max.toLocaleString('en-US')} 这个区间，我做了这几件事：`
   return [head, ...lines].join('\n')
 }
 
-export { describeKolRun, parseFollowerBand }
+export { describeKolRun, parseFollowerBand, parseWantedCount }

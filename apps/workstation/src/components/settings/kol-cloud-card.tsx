@@ -42,9 +42,12 @@ function messageOf(err: unknown): string {
 
 export function KolCloudCard({
   assignment,
+  onLinkFirst,
 }: {
   /** 本页可能没有绑分配（设置页在个人档下），那就用 api 层的 currentAssignment 兑底。 */
   assignment?: string | undefined
+  /** WP142：没关联时「订阅」换成「先关联」，点了去关联那张卡。不给就只说一句。 */
+  onLinkFirst?: (() => void) | undefined
 }): React.ReactNode {
   const { t } = useApp()
   const qc = useQueryClient()
@@ -163,9 +166,21 @@ export function KolCloudCard({
 
       {/* 还没关联账号：这一项根本谈不上，一句人话 + 一个去处 */}
       {view?.linked === false ? (
-        <p className="text-xs text-muted-foreground" data-testid="kol-cloud-not-linked">
-          {view.reason ?? t('kol_cloud.not_linked')}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground" data-testid="kol-cloud-not-linked">
+            {view.reason ?? t('kol_cloud.not_linked')}
+          </p>
+          {onLinkFirst === undefined ? null : (
+            <Button
+              size="xs"
+              variant="outline"
+              data-testid="kol-cloud-link-first"
+              onClick={onLinkFirst}
+            >
+              {t('credits.link_first')}
+            </Button>
+          )}
+        </div>
       ) : (
         <>
           {/* 状态那一句：当期到哪天 / 宽限到哪天 / 数据一条没动 */}

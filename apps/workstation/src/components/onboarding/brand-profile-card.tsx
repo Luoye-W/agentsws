@@ -24,17 +24,77 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/lib/app-context'
 
-/** 卡上出现的那几格，以及它们的顺序。 */
-const TEXT_FIELDS = [
-  'brand_name',
-  'legal_name',
-  'one_liner',
-  'category',
-  'support_email',
-  'currency',
-] as const
+/**
+ * 卡上出现的那几格，以及它们的顺序。
+ *
+ * WP142（docs/78 第 5 步）：**「公司全称」不在卡上**——它下面那张「公司名与你的称呼」表单里
+ * 已经有一格，两处各写一个值，用户不知道哪个算数。分析出来的全称直接预填进那一格
+ * （`BusinessStep`），只有一个来源。
+ */
+const TEXT_FIELDS = ['brand_name', 'one_liner', 'category', 'support_email', 'currency'] as const
 
 type TextField = (typeof TEXT_FIELDS)[number]
+
+/**
+ * WP142：标签说人话——语言 `zh-CN` → 「中文（中国）」、市场 `US` → 「美国」、
+ * 社媒 `instagram` → 「Instagram」。认不出来的原样给（总比一片空白强）。
+ */
+export function languageLabel(code: string, lang: 'zh' | 'en'): string {
+  try {
+    return (
+      new Intl.DisplayNames([lang === 'zh' ? 'zh-CN' : 'en'], { type: 'language' }).of(code) ?? code
+    )
+  } catch {
+    return code
+  }
+}
+
+export function marketLabel(code: string, lang: 'zh' | 'en'): string {
+  if (!/^[A-Za-z]{2}$/.test(code)) return code
+  try {
+    return (
+      new Intl.DisplayNames([lang === 'zh' ? 'zh-CN' : 'en'], { type: 'region' }).of(
+        code.toUpperCase(),
+      ) ?? code
+    )
+  } catch {
+    return code
+  }
+}
+
+const SOCIAL_LABELS: Readonly<Record<string, { zh: string; en: string }>> = {
+  instagram: { zh: 'Instagram', en: 'Instagram' },
+  facebook: { zh: 'Facebook', en: 'Facebook' },
+  tiktok: { zh: 'TikTok', en: 'TikTok' },
+  youtube: { zh: 'YouTube', en: 'YouTube' },
+  x: { zh: 'X（推特）', en: 'X (Twitter)' },
+  pinterest: { zh: 'Pinterest', en: 'Pinterest' },
+  linkedin: { zh: '领英', en: 'LinkedIn' },
+  weibo: { zh: '微博', en: 'Weibo' },
+  xiaohongshu: { zh: '小红书', en: 'Xiaohongshu' },
+}
+
+export function socialLabel(platform: string, lang: 'zh' | 'en'): string {
+  const hit = SOCIAL_LABELS[platform]
+  if (hit !== undefined) return hit[lang]
+  return platform.charAt(0).toUpperCase() + platform.slice(1)
+}
+
+/**
+ * WP142：商品价带上币种。`1299.00` + `USD` → 「US$1,299.00」；币种认不出或价不是数就原样。
+ */
+export function priceLabel(price: string, currency: string | undefined, lang: 'zh' | 'en'): string {
+  const n = Number(price.replace(/,/g, ''))
+  if (currency === undefined || currency === '' || !Number.isFinite(n)) return price
+  try {
+    return new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'en-US', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(n)
+  } catch {
+    return price
+  }
+}
 
 export interface BrandProfileCardProps {
   profile: BrandIntakeProfile
@@ -44,6 +104,8 @@ export interface BrandProfileCardProps {
   onConfirm: () => void
   onReanalyze: () => void
   busy?: boolean
+  /** WP142：已经点过「看着没问题」了——给一句回执，按钮换成「已确认」。 */
+  confirmed?: boolean
 }
 
 /** 一格的当前值：用户改过就是他改的那个，否则是分析出来的。 */
@@ -167,8 +229,10 @@ export function BrandProfileCard({
   onConfirm,
   onReanalyze,
   busy = false,
+  confirmed = false,
 }: BrandProfileCardProps): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
+  const currency = currentValue(profile, edits, 'currency')
   const logo = profile.logo_url?.value
   const color = profile.primary_color?.value
   const products = profile.products?.value ?? []
@@ -213,11 +277,21 @@ export function BrandProfileCard({
       {/* 市场 / 语言 / 社媒：画成标签 */}
       {markets.length + languages.length + socials.length === 0 ? null : (
         <div className="flex flex-wrap gap-1" data-testid="intake-tags">
-          {[...markets, ...languages, ...socials.map((s) => s.platform)].map((label) => (
-            <span key={label} className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]">
-              {label}
-            </span>
-          ))}
+          {[
+            ...markets.map((m) => marketLabel(m, lang)),
+            ...languages.map((l) => languageLabel(l, lang)),
+            ...socials.map((s) => socialLabel(s.platform, lang)),
+          ]
+            .filter((label, i, all) => all.indexOf(label) === i)
+            .map((label) => (
+              <span
+                key={label}
+                className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]"
+                data-testid="intake-tag"
+              >
+                {label}
+              </span>
+            ))}
         </div>
       )}
 
@@ -240,7 +314,9 @@ export function BrandProfileCard({
                 {p.title}
               </figcaption>
               {p.price_snapshot === undefined ? null : (
-                <span className="text-ws-muted-fg">{p.price_snapshot}</span>
+                <span className="text-ws-muted-fg" data-testid="intake-price">
+                  {priceLabel(p.price_snapshot, currency === '' ? undefined : currency, lang)}
+                </span>
               )}
             </figure>
           ))}
@@ -266,11 +342,27 @@ export function BrandProfileCard({
         >
           {t('intake.reanalyze')}
         </Button>
-        <Button size="sm" disabled={busy} data-testid="intake-confirm" onClick={onConfirm}>
+        <Button
+          size="sm"
+          variant={confirmed ? 'outline' : 'default'}
+          disabled={busy || confirmed}
+          data-testid="intake-confirm"
+          onClick={onConfirm}
+        >
           <Check size={14} />
-          {t('intake.confirm')}
+          {confirmed ? t('intake.confirmed.button') : t('intake.confirm')}
         </Button>
       </div>
+      {/* WP142（docs/78 第 6 步）：点了要有一句回执，不只是按钮变淡 */}
+      {confirmed ? (
+        <p
+          className="flex items-center gap-1.5 text-xs text-primary"
+          data-testid="intake-confirmed"
+        >
+          <Check size={12} aria-hidden />
+          {t('intake.confirmed')}
+        </p>
+      ) : null}
     </div>
   )
 }

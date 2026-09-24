@@ -24,7 +24,12 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { modelTestKey } from '@/components/onboarding/ai-step'
-import { presetPick } from '@/components/onboarding/preset-roles'
+import {
+  applyPurposes,
+  availablePurposes,
+  presetPick,
+  purposesOf,
+} from '@/components/onboarding/preset-roles'
 import { ProfileForm } from '@/components/onboarding/profile-form'
 import type {
   BrandIntakeRun,
@@ -75,6 +80,16 @@ const POSITIONS: OnboardingPositionView[] = [
       { id: 'social.meta', name: 'Meta', default: true, what_it_does: '发帖与回评论。' },
       { id: 'social.tiktok', name: 'TikTok', default: true, what_it_does: '发短视频。' },
       { id: 'social.reddit', name: 'Reddit', default: false, what_it_does: '看版聊。' },
+    ],
+  },
+  // WP142：红人营销（排在最后，前面几个的下标不动）
+  {
+    id: 'kol-marketing',
+    name: '红人营销',
+    roles: [
+      { id: 'kol.youtube', name: 'YouTube 红人', default: true, what_it_does: '找频道。' },
+      { id: 'kol.instagram', name: 'Instagram 红人', default: true, what_it_does: '找博主。' },
+      { id: 'kol.tiktok', name: 'TikTok 红人', default: false, what_it_does: '找达人。' },
     ],
   },
 ]
@@ -272,6 +287,18 @@ const state = {
   reanalyzes: [] as { id: string; urls?: string[] }[],
   confirms: [] as { id: string; edits?: Record<string, unknown> }[],
   run: undefined as BrandIntakeRun | undefined,
+  /** WP142：发登录信那一跳——连不上云 / 先挂着不回（看「正在连」那一句）。 */
+  linkFail: false,
+  linkHold: undefined as Promise<void> | undefined,
+  /** WP142：第 ① 步「自己的接口」那一排模板（默认两张：云 + DeepSeek）。 */
+  templates: undefined as ModelProviderTemplate[] | undefined,
+  /** WP142：第 ④ 步那张清单（不给就是 PLAN）。 */
+  plan: undefined as OnboardingPlanView | undefined,
+  /** WP142：「完成」那一发服务端回的（完成屏按它说数）。 */
+  applyResult: { created_assignments: [], skipped: [] } as {
+    created_assignments: { id: string; role_id: string; role_name: string }[]
+    skipped: string[]
+  },
 }
 
 vi.mock('@/lib/api', async () => {
@@ -292,11 +319,11 @@ vi.mock('@/lib/api', async () => {
     },
     planOnboarding: async (input: OnboardingPlanInput) => {
       state.plans.push(input)
-      return PLAN
+      return state.plan ?? PLAN
     },
     applyOnboarding: async (input: OnboardingPlanInput) => {
       state.applies.push(input)
-      return { created_assignments: [], skipped: [], ranges: [], plan: PLAN }
+      return { ...state.applyResult, ranges: [], plan: PLAN }
     },
     requestMembership: async (input: {
       code?: string
@@ -316,12 +343,18 @@ vi.mock('@/lib/api', async () => {
     // ── 第 ① 步 ────────────────────────────────────────────────
     listModelProviders: async () => ({
       providers: state.providers,
-      templates: [CLOUD_TEMPLATE, DEEPSEEK_TEMPLATE],
+      templates: state.templates ?? [CLOUD_TEMPLATE, DEEPSEEK_TEMPLATE],
     }),
     getCloudAccount: async () => state.account,
     getCloudCredits: async () => state.credits,
     linkCloudAccount: async (email: string) => {
       state.links.push(email)
+      if (state.linkHold !== undefined) await state.linkHold
+      if (state.linkFail)
+        throw new actual.ApiClientError(503, {
+          code: 'provider_unavailable',
+          message: '网络不通，这一下没连上 Agents 工坊云。检查一下网络再试一次。',
+        })
       return { expires_at: T0, delivered: 'email' as const }
     },
     saveModelProvider: async (
@@ -393,6 +426,11 @@ beforeEach(() => {
   state.reanalyzes = []
   state.confirms = []
   state.run = undefined
+  state.linkFail = false
+  state.linkHold = undefined
+  state.templates = undefined
+  state.applyResult = { created_assignments: [], skipped: [] }
+  state.plan = undefined
 })
 
 /** 走完第 ① 步（走演示旁路——四条路里最短的那条，而且不落任何东西）。 */
@@ -930,11 +968,11 @@ describe('70 §5 第 ③ 步：按分析结果预勾', () => {
     expect(amazon.role_ids).toEqual([])
   })
 
-  it('对照表：社媒勾到渠道，自定义岗位名预填成「社媒运营」', () => {
+  it('对照表：社媒勾到渠道；自定义岗位名不预填（WP142：不替他起名）', () => {
     const pick = presetPick({ run: websiteRun(), positions: POSITIONS })
     expect(pick.position_ids).toEqual(['web-ops', 'customer-care'])
     expect(pick.role_ids).toEqual(['social.meta', 'social.tiktok'])
-    expect(pick.custom_position_name).toBe('社媒运营')
+    expect(pick.custom_position_name).toBe('')
   })
 
   it('对照表：认不出来的平台一条都不勾；没有结果就整个空着', () => {
@@ -1320,5 +1358,379 @@ describe('设置页的公司档案（ProfileForm）', () => {
     )
     expect(await screen.findByText(/只交换一串哈希/)).toBeTruthy()
     expect(screen.getByTestId('company-name-hint').getAttribute('data-hint')).toContain('营业执照')
+  })
+})
+
+/* ── WP142：红人为主的朋友第一步（docs/78 §1 #6 #7、§2「向导」） ───────────────── */
+
+describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', () => {
+  it('发送中说「正在连 Agents 工坊云…」，不只是按钮变灰', async () => {
+    const user = userEvent.setup()
+    let release: () => void = () => {}
+    state.linkHold = new Promise<void>((r) => {
+      release = r
+    })
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.click(screen.getByTestId('ai-official-send'))
+    expect((await screen.findByTestId('ai-official-pending')).textContent).toContain(
+      '正在连 Agents 工坊云',
+    )
+    release()
+    expect(await screen.findByTestId('ai-official-sent')).toBeTruthy()
+    expect(screen.queryByTestId('ai-official-pending')).toBeNull()
+  })
+
+  it('连不上：一句人话 +「再试一次」+「先逛逛演示数据」，不报网址', async () => {
+    const user = userEvent.setup()
+    state.linkFail = true
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.click(screen.getByTestId('ai-official-send'))
+
+    const failed = await screen.findByTestId('ai-official-failed')
+    expect(within(failed).getByTestId('ai-error').textContent).toContain('网络不通')
+    expect(failed.textContent).not.toMatch(/https?:\/\//)
+
+    // 再试一次：同一个邮箱再发一遍，这回通了
+    state.linkFail = false
+    await user.click(within(failed).getByTestId('ai-official-retry'))
+    expect(await screen.findByTestId('ai-official-sent')).toBeTruthy()
+    expect(state.links).toEqual(['wang@nordvolt.cn', 'wang@nordvolt.cn'])
+  })
+
+  it('连不上时「先逛逛演示数据」直接往下走（不接模型也到得了第 ② 步）', async () => {
+    const user = userEvent.setup()
+    state.linkFail = true
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.click(screen.getByTestId('ai-official-send'))
+    await user.click(await screen.findByTestId('ai-official-demo'))
+    expect(await screen.findByTestId('onboarding-business')).toBeTruthy()
+  })
+
+  it('同一家厂商的几个方案收成一个钮，选中后再挑方案（百炼不再出三个同名）', async () => {
+    const user = userEvent.setup()
+    const bailian = (plan: string, url: string, order: number): ModelProviderTemplate => ({
+      kind: 'openai_compatible',
+      label: `阿里云百炼 ${plan}`,
+      summary: '一把 key。',
+      vendor: 'bailian',
+      vendor_label: '阿里云百炼',
+      plan_label: plan,
+      plan_order: order,
+      default_base_url: url,
+      default_model: 'qwen-plus',
+      region: 'cn',
+      steps: [],
+      links: [],
+    })
+    state.templates = [
+      CLOUD_TEMPLATE,
+      DEEPSEEK_TEMPLATE,
+      bailian('Token Plan（订阅）', 'https://tp.example/v1', 2),
+      bailian('按量计费（标准）', 'https://payg.example/v1', 1),
+      bailian('Coding Plan（订阅）', 'https://cp.example/v1', 3),
+    ]
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-own'))
+    const row = await screen.findByTestId('ai-own-templates')
+    const labels = within(row)
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+    expect(labels).toEqual(['DeepSeek 官方', '阿里云百炼'])
+    // 选中百炼才出第二排：三个方案，按 plan_order 排
+    expect(screen.queryByTestId('ai-own-plans')).toBeNull()
+    await user.click(within(row).getByText('阿里云百炼'))
+    const plans = await screen.findByTestId('ai-own-plans')
+    expect(
+      within(plans)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['按量计费（标准）', 'Token Plan（订阅）', 'Coding Plan（订阅）'])
+    expect(within(plans).getAllByRole('button')[0]?.getAttribute('data-picked')).toBe('true')
+  })
+})
+
+describe('WP142 第 ② 步：档案卡说人话、公司全称只有一个来源、确认有回执', () => {
+  const richRun = (): BrandIntakeRun =>
+    websiteRun({
+      pages: [
+        { url: 'https://nordvolt.cn/', kind: 'home', ok: true },
+        {
+          url: 'https://nordvolt.cn/policies/refund',
+          kind: 'policy',
+          ok: false,
+          reason: '这个页面不存在（404）',
+        },
+      ],
+      profile: {
+        ...websiteRun().profile,
+        legal_name: {
+          value: '深圳诺伏特科技有限公司',
+          confidence: 'high',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'jsonld:Organization.legalName' }],
+        },
+        currency: {
+          value: 'USD',
+          confidence: 'high',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'jsonld:Offer.priceCurrency' }],
+        },
+        languages: {
+          value: ['zh-CN'],
+          confidence: 'medium',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'og:locale' }],
+        },
+        products: {
+          value: [{ title: '65W 充电器', price_snapshot: '1299.00' }],
+          confidence: 'medium',
+          evidence: [{ url: 'https://nordvolt.cn/', locator: 'jsonld:Product' }],
+        },
+      },
+    })
+
+  it('标签是中文 / 品牌名，价格带币种，没读着的页面不括号套括号', async () => {
+    state.run = richRun()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    const card = await screen.findByTestId('brand-profile-card')
+    const tags = within(card)
+      .getAllByTestId('intake-tag')
+      .map((t) => t.textContent)
+    expect(tags).toEqual(['中文（中国）', 'Instagram', 'TikTok'])
+    expect(card.textContent).not.toMatch(/zh-CN|instagram|tiktok/)
+    expect(within(card).getByTestId('intake-price').textContent).toContain('US$')
+    const missed = screen.getByTestId('intake-missed').textContent ?? ''
+    expect(missed).toContain('这个页面不存在（404）')
+    expect(missed).not.toMatch(/（[^）]*（/)
+  })
+
+  it('「公司全称」只出一次：卡上不再有，下面那一格预填分析出来的全称', async () => {
+    state.run = richRun()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    const card = await screen.findByTestId('brand-profile-card')
+    expect(within(card).queryByTestId('intake-row-legal_name')).toBeNull()
+    expect((screen.getByTestId('company-legal-name') as HTMLInputElement).value).toBe(
+      '深圳诺伏特科技有限公司',
+    )
+    expect(screen.getAllByText('公司全称')).toHaveLength(1)
+  })
+
+  it('点「看着没问题」有一句回执，按钮换成「已确认」', async () => {
+    const user = userEvent.setup()
+    state.run = richRun()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(await screen.findByTestId('intake-confirm'))
+    expect((await screen.findByTestId('intake-confirmed')).textContent).toContain('已存好')
+    const button = screen.getByTestId('intake-confirm') as HTMLButtonElement
+    expect(button.textContent).toContain('已确认')
+    expect(button.disabled).toBe(true)
+  })
+})
+
+describe('WP142 第 ③ 步：先问「这次主要想让它干什么」，按答案预勾', () => {
+  /** 确认档案卡 → 进第 ③ 步。 */
+  async function toRoles(): Promise<void> {
+    const user = userEvent.setup()
+    await passAi()
+    await user.click(await screen.findByTestId('intake-confirm'))
+    await waitFor(() => {
+      expect(state.confirms).toHaveLength(1)
+    })
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-roles')
+  }
+  const pressed = (id: string): string | null => screen.getByTestId(id).getAttribute('aria-pressed')
+  const positionPressed = (name: string): string | null | undefined =>
+    screen
+      .getAllByTestId('onboarding-position')
+      .find((b) => b.textContent?.startsWith(name))
+      ?.getAttribute('aria-pressed')
+
+  it('默认按网址预勾的结果：官网 → 客服已按下，红人营销没按', async () => {
+    state.run = websiteRun()
+    renderWithProviders(<OnboardingPage />)
+    await toRoles()
+    const purpose = await screen.findByTestId('onboarding-purpose')
+    expect(purpose.textContent).toContain('你这次主要想让它干什么')
+    await waitFor(() => {
+      expect(pressed('onboarding-purpose-care')).toBe('true')
+    })
+    expect(pressed('onboarding-purpose-kol')).toBe('false')
+    expect(pressed('onboarding-purpose-both')).toBe('false')
+  })
+
+  it('选「红人营销」→ 红人营销岗位被勾上（红人从此能被预勾）；网站运营与社媒渠道不动', async () => {
+    const user = userEvent.setup()
+    state.run = websiteRun()
+    renderWithProviders(<OnboardingPage />)
+    await toRoles()
+    await waitFor(() => {
+      expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 6 条')
+    })
+    await user.click(screen.getByTestId('onboarding-purpose-kol'))
+    expect(positionPressed('红人营销')).toBe('true')
+    expect(positionPressed('网站运营')).toBe('true')
+    // 6 + 红人三条 = 9
+    expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 9 条')
+    // 两个都按着 =「都要」亮
+    expect(pressed('onboarding-purpose-both')).toBe('true')
+
+    // 只要红人：把客服按掉，客服岗位跟着去掉
+    await user.click(screen.getByTestId('onboarding-purpose-care'))
+    expect(positionPressed('客服')).toBe('false')
+    expect(positionPressed('红人营销')).toBe('true')
+    expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 7 条')
+    // 「自定义岗位叫什么」不预填（WP142）
+    expect((screen.getByTestId('onboarding-custom') as HTMLInputElement).value).toBe('')
+  })
+
+  it('「还没有网站」也能一下勾齐：按「都要」= 红人营销 + 客服', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-purpose')
+    expect(pressed('onboarding-purpose-kol')).toBe('false')
+    await user.click(screen.getByTestId('onboarding-purpose-both'))
+    expect(positionPressed('红人营销')).toBe('true')
+    expect(positionPressed('客服')).toBe('true')
+    expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 5 条')
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-plan')
+    expect(state.plans.at(-1)?.position_ids).toEqual(['kol-marketing', 'customer-care'])
+  })
+
+  it('对照表：目的只管红人营销与客服两个岗位，别的勾选原样留着', () => {
+    const base = {
+      position_ids: ['web-ops', 'customer-care'],
+      role_ids: ['social.meta'],
+      custom_position_name: '',
+    }
+    expect(purposesOf(base)).toEqual(['care'])
+    expect(applyPurposes(base, ['kol'], POSITIONS)).toEqual({
+      position_ids: ['web-ops', 'kol-marketing'],
+      role_ids: ['social.meta'],
+      custom_position_name: '',
+    })
+    // 这台机器上没装红人营销：不问红人那一项
+    expect(availablePurposes(POSITIONS.slice(0, 3))).toEqual(['care'])
+    expect(applyPurposes(base, ['kol', 'care'], POSITIONS.slice(0, 3)).position_ids).toEqual([
+      'web-ops',
+      'customer-care',
+    ])
+  })
+})
+
+describe('WP142 完成屏：数字与第 ④ 步同口径，已有的被跳过要说', () => {
+  async function finish(): Promise<void> {
+    const user = userEvent.setup()
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    await user.click(screen.getByTestId('onboarding-next'))
+    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-plan')
+    await user.click(screen.getByTestId('onboarding-finish'))
+  }
+
+  it('建了 1 条、跳过 1 条：两个数都说出来', async () => {
+    state.applyResult = {
+      created_assignments: [{ id: 'asg_1', role_id: 'amz.support', role_name: 'Amazon 客服' }],
+      skipped: ['dtc.support'],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await finish()
+    const line = (await screen.findByTestId('onboarding-done-line')).textContent ?? ''
+    expect(line).toContain('1 条职责已经配好')
+    expect(line).toContain('另外 1 条你本来就有')
+  })
+
+  it('一条都没新建（都已经有了）：不说「0 条配好」，说清为什么', async () => {
+    state.applyResult = { created_assignments: [], skipped: ['dtc.support', 'amz.support'] }
+    renderWithProviders(<OnboardingPage />)
+    await finish()
+    const line = (await screen.findByTestId('onboarding-done-line')).textContent ?? ''
+    expect(line).not.toContain('0 条')
+    expect(line).toContain('2 条职责本来就都有了')
+  })
+})
+
+describe('WP142 第 ④ 步：只列必需的，可选的折起来；技能包说中文名', () => {
+  const optional = (service: string, label: string) => ({
+    service,
+    label,
+    required: false,
+    connected: false,
+    needed_by: ['YouTube 红人'],
+  })
+
+  async function toPlan(): Promise<void> {
+    const user = userEvent.setup()
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    await user.click(screen.getByTestId('onboarding-next'))
+    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-plan')
+  }
+
+  it('必需的平铺；可选的折成「还有 N 个可选」，点开才出', async () => {
+    const user = userEvent.setup()
+    state.plan = {
+      ...PLAN,
+      connectors: [
+        ...PLAN.connectors,
+        optional('youtube_data', 'YouTube Data API'),
+        optional('instagram_graph', 'Instagram'),
+        optional('gmail', 'Gmail'),
+      ],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await toPlan()
+    const rows = screen.getAllByTestId('onboarding-plan-connector')
+    expect(rows).toHaveLength(2)
+    expect(rows.every((r) => r.getAttribute('data-required') === 'true')).toBe(true)
+    const toggle = screen.getByTestId('onboarding-plan-optional-toggle')
+    expect(toggle.textContent).toBe('还有 3 个可选')
+    await user.click(toggle)
+    expect(screen.getAllByTestId('onboarding-plan-connector')).toHaveLength(5)
+  })
+
+  it('一个必需的都没有：说一句「现在就能开工」，可选的照样折着', async () => {
+    state.plan = {
+      ...PLAN,
+      connectors: [optional('youtube_data', 'YouTube Data API')],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await toPlan()
+    expect(screen.getByTestId('onboarding-plan-none-required').textContent).toContain(
+      '现在就能开工',
+    )
+    expect(screen.queryAllByTestId('onboarding-plan-connector')).toHaveLength(0)
+  })
+
+  it('技能包显示中文名，包名一个都不露', async () => {
+    state.plan = {
+      ...PLAN,
+      skills: [
+        { name: 'brand-voice', installed: false, needed_by: ['YouTube 红人'] },
+        { name: 'workspace-basics', installed: true, needed_by: ['网站客服'] },
+        { name: 'some-third-party', installed: false, needed_by: ['网站客服'] },
+      ],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await toPlan()
+    const names = screen
+      .getAllByTestId('onboarding-plan-skill')
+      .map((el) => el.querySelector('p')?.textContent)
+    expect(names).toEqual(['品牌话术', '工作台基础', '一个专用技能包'])
+    expect(screen.getByTestId('onboarding-plan').textContent).not.toMatch(/[a-z]+-[a-z]+/)
   })
 })

@@ -218,7 +218,8 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     expect(out.ok).toBe(false)
     // WP126：③（未关联）算"没配"，落到④——source 是④的默认，但工坊那句人话还带在后面
     expect(out.reason).toBe('no_data_source')
-    expect(out.message).toContain('账号与积分')
+    // WP142：两句话 + 两个按钮（「去关联一次」就是 link_account 那个按钮）
+    expect(out.message).toContain('关联 Agents 工坊账号')
     expect(out.entry_points?.map((e) => e.id)).toEqual(['link_account', 'byo'])
   })
 

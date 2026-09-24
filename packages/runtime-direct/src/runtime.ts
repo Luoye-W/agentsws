@@ -558,6 +558,10 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
                 })),
               }),
           ...(completion.reasoning === undefined ? {} : { reasoning: completion.reasoning }),
+          // WP143：思考块签名原样跟着这一轮走，下一轮 Messages 口原样带回
+          ...(completion.reasoning_replay === undefined
+            ? {}
+            : { reasoning_replay: completion.reasoning_replay }),
         })
         if (calls.length === 0) break
 

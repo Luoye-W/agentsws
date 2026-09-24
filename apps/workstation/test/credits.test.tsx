@@ -15,6 +15,7 @@ import { ModelCloudCard } from '@/components/settings/model-cloud-card'
 import type {
   CapabilitySourceSettings,
   CloudCreditsView,
+  KolCloudStatusView,
   ModelProviderTemplate,
   ModelProviderView,
   PricingView,
@@ -153,6 +154,10 @@ const USAGE: Record<string, UsageReportView> = {
 }
 
 const state = {
+  /** WP142：增值服务卡那一份；不给就照旧取不到（与以前一样走真接口失败）。 */
+  kolCloud: undefined as KolCloudStatusView | undefined,
+  /** WP142：建单失败（demo 替身的那一句）。 */
+  topupError: undefined as string | undefined,
   credits: LINKED as CloudCreditsView,
   providers: [] as ModelProviderView[],
   sources: { workspace_id: 'ws_1', capability_sources: {} } as CapabilitySourceSettings,
@@ -170,8 +175,17 @@ vi.mock('@/lib/api', async () => {
     getCloudPricing: async () => PRICING,
     getCloudUsage: async (group: 'capability' | 'workspace' | 'day') => USAGE[group] ?? null,
     getTopupTiers: async () => TIERS,
+    getKolCloudStatus: async () => {
+      if (state.kolCloud === undefined) throw new Error('没配')
+      return state.kolCloud
+    },
     createTopup: async (tier_id: string) => {
       orders.push(tier_id)
+      if (state.topupError !== undefined)
+        throw new actual.ApiClientError(503, {
+          code: 'provider_unavailable',
+          message: state.topupError,
+        })
       return {
         id: 'cs_1',
         credits: 350,
@@ -206,6 +220,9 @@ vi.mock('@/lib/api', async () => {
 })
 
 beforeEach(() => {
+  state.kolCloud = undefined
+  state.topupError = undefined
+  orders.length = 0
   state.credits = LINKED
   state.providers = []
   state.sources = { workspace_id: 'ws_1', capability_sources: {} }
@@ -383,4 +400,98 @@ describe('连接页那个开关（49 M2）', () => {
       unmount()
     }
   })
+})
+
+describe('WP142 没关联也看得到价（docs/78 第 44 步）', () => {
+  it('三块、充值四档、增值服务卡照常显示；按钮换成「先关联」；余额与用量不画 0', async () => {
+    state.credits = NOT_LINKED
+    state.kolCloud = {
+      linked: false,
+      reason: '先关联 agentsws 账号，才能开通这一项。',
+      cloud_reachable: false,
+      pending: 0,
+      conflicts: [],
+      device_id: 'dev_1',
+      at: T0,
+    }
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    expect((await screen.findByTestId('credits-not-linked')).textContent).toContain(
+      '价钱先摆在这儿',
+    )
+    // 三块：还没花钱，每块说的是最低多少
+    const blocks = await screen.findAllByTestId('credits-block')
+    expect(blocks.map((b) => b.getAttribute('data-block'))).toEqual(['data', 'ai', 'service'])
+    await waitFor(() => {
+      expect(blocks.find((b) => b.getAttribute('data-block') === 'data')?.textContent).toContain(
+        '0.02',
+      )
+    })
+    expect(blocks.find((b) => b.getAttribute('data-block') === 'service')?.textContent).toContain(
+      '30',
+    )
+    // 充值四档照常四张，每张写「先关联」而不是「去付款」
+    const tiers = await screen.findAllByTestId('credits-tier')
+    expect(tiers).toHaveLength(4)
+    expect(tiers[1]?.textContent).toContain('US$50')
+    expect(tiers.every((c) => c.textContent?.includes('先关联'))).toBe(true)
+    expect(tiers.some((c) => c.textContent?.includes('去付款'))).toBe(false)
+    // 增值服务卡在，也给「先关联」
+    expect(await screen.findByTestId('kol-cloud-card')).toBeTruthy()
+    expect(await screen.findByTestId('kol-cloud-link-first')).toBeTruthy()
+    // 余额与用量明细不出
+    expect(screen.queryByTestId('credits-balance')).toBeNull()
+    expect(screen.queryByTestId('credits-usage')).toBeNull()
+    // 价目表默认展开，标一句「以关联后显示为准」
+    expect((await screen.findByTestId('credits-pricing-local')).textContent).toContain(
+      '以关联后显示为准',
+    )
+    expect(screen.getAllByTestId('credits-pricing-block')).toHaveLength(3)
+  })
+
+  it('没关联时点一档：不去建单，把人带到上面关联那张卡（滚过去、光标进邮箱框）', async () => {
+    state.credits = NOT_LINKED
+    const card = document.createElement('div')
+    card.setAttribute('data-testid', 'cloud-account')
+    const email = document.createElement('input')
+    email.type = 'email'
+    card.appendChild(email)
+    const scrolled = vi.fn()
+    card.scrollIntoView = scrolled
+    document.body.appendChild(card)
+    try {
+      renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+      const tiers = await screen.findAllByTestId('credits-tier')
+      await userEvent.click(tiers[0] as HTMLElement)
+      expect(orders).toEqual([])
+      expect(scrolled).toHaveBeenCalled()
+      expect(document.activeElement).toBe(email)
+    } finally {
+      card.remove()
+    }
+  })
+
+  it('demo 里点充值：原样说替身那一句（「演示环境，不真收钱」），不再套「建不了充值单：」', async () => {
+    state.topupError =
+      '这是演示环境，不真收钱。正式版里点这一档会打开 Stripe 的付款页，付完积分当场到账。'
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    const tiers = await screen.findAllByTestId('credits-tier')
+    await userEvent.click(tiers[0] as HTMLElement)
+    const said = await screen.findByTestId('credits-tier-error')
+    expect(said.textContent).toBe(state.topupError)
+  })
+})
+
+it('WP142：价目表里每一种单位都有人话（本地价目表里的单位一个不漏，不露 i18n 键）', async () => {
+  const { translate } = await import('@/lib/i18n')
+  const { existsSync, readFileSync } = await import('node:fs')
+  // vitest 可能从仓库根或包目录起跑：两处都认
+  const file = [
+    'packages/metering/src/pricing.json',
+    '../../packages/metering/src/pricing.json',
+  ].find((p) => existsSync(p))
+  if (file === undefined) throw new Error('找不到 pricing.json')
+  const raw = readFileSync(file, 'utf8')
+  const units = [...new Set([...raw.matchAll(/"unit":\s*"([a-z_0-9]+)"/g)].map((m) => m[1]))]
+  expect(units.length).toBeGreaterThan(0)
+  for (const u of units) expect(translate('zh', `credits.unit.${u}`)).not.toContain('credits.unit.')
 })

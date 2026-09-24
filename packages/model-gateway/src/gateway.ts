@@ -406,6 +406,10 @@ class Gateway implements ModelGatewayApi {
             ...(raw.tool_calls === undefined ? {} : { tool_calls: raw.tool_calls }),
             // 思考模型的推理内容要透传：运行时下一轮带回 provider（DeepSeek thinking 模式硬要求）
             ...(raw.reasoning === undefined ? {} : { reasoning: raw.reasoning }),
+            // WP143：Messages 口的思考块（含签名）同样透传
+            ...(raw.reasoning_replay === undefined
+              ? {}
+              : { reasoning_replay: raw.reasoning_replay }),
             usage,
             model: ref,
             static_prefix_hash: staticPrefix,

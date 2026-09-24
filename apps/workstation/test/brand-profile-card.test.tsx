@@ -96,7 +96,8 @@ describe('WP121 品牌档案卡', () => {
     expect(screen.getByTestId('intake-color').getAttribute('title')).toBe('#1f3a5f')
     expect(screen.getByTestId('intake-products').textContent).toContain('Granite Wallet')
     expect(screen.getByTestId('intake-products').textContent).toContain('€49')
-    expect(screen.getByTestId('intake-tags').textContent).toContain('SE')
+    // WP142：市场 `SE` 说人话 →「瑞典」
+    expect(screen.getByTestId('intake-tags').textContent).toContain('瑞典')
     // 政策不逐条铺开，只说读到了几份
     expect(screen.getByTestId('intake-policies').textContent).toContain('1')
   })

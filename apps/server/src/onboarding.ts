@@ -99,6 +99,9 @@ export { companyKey, normalizeCompanyName, normalizeDomain } from '@agentsws/cor
 export const SHOP_CONNECTOR_KINDS: ReadonlySet<string> = new Set(['shop', 'shopify'])
 
 /** 非法值与缺省一律回 `undefined`（调用方按 Shopify 处理）。 */
+/** 工作区的底座职责（"是这个工作区的成员"本身）。向导里不算进任何岗位（WP142）。 */
+const WORKSPACE_BASE_ROLE: RoleId = 'common.member'
+
 export function normalizeStorefrontPlatform(value: unknown): StorefrontPlatform | undefined {
   return STOREFRONT_PLATFORMS.some((p) => p.id === value)
     ? (value as StorefrontPlatform)
@@ -499,6 +502,21 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
    * "我做这个岗位"，不是"我要这个岗位的默认包"；`applyPosition` 的默认包语义留给
    * 制度页的分配向导（05 §2）。展开结果去重，顺序稳定（岗位序 → 模板内的职责序）。
    */
+  /**
+   * WP142（docs/78 第 9、10 步）：**向导里的岗位不含 `common.member`**。
+   *
+   * 种岗位时每个岗位都带着它（`org.ts` 的 `SEED_POSITIONS`），但它是"这个人是这个工作区的
+   * 成员"（04 §7：加入工作区自动获得，不属于任何岗位），不是客服或红人的一条职责。
+   * 算进来的后果有两个，走查都撞到了：第 ③ 步「客服 5」而客服只有 4 条、第 ④ 步各岗位
+   * 「已勾」加起来比完成屏多；更糟的是完成后左栏多出一个没勾过的「普通成员」岗位
+   * （那个岗位的唯一一条职责就是它）。所以向导里摘掉——与岗位视图的 `dutyRolesOf`
+   * （WP125）同一条规则。「普通成员」岗位本身只有这一条，那就不摘（摘完它就没了）。
+   */
+  function wizardRoles<T extends { role: RoleId }>(roles: readonly T[]): T[] {
+    const kept = roles.filter((r) => r.role !== WORKSPACE_BASE_ROLE)
+    return kept.length === 0 ? [...roles] : kept
+  }
+
   function expandRoles(input: OnboardingPlanInput, positions: PositionLike[]): RoleId[] {
     const out: RoleId[] = []
     const seen = new Set<RoleId>()
@@ -512,7 +530,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     for (const id of input.position_ids) {
       const position = positions.find((p) => p.id === id)
       if (position === undefined) throw new OnboardingError('not_found', `没有这个岗位：${id}`)
-      for (const r of position.roles) push(r.role)
+      for (const r of wizardRoles(position.roles)) push(r.role)
     }
     for (const id of input.role_ids) push(id)
     return out
@@ -587,7 +605,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     const held = new Set(activeOf(options.owner).map((a) => a.role_id))
     const plannedPositions: OnboardingPositionPlanItem[] = input.position_ids.map((id) => {
       const position = positions.find((p) => p.id === id)
-      const ids = (position?.roles ?? [])
+      const ids = wizardRoles(position?.roles ?? [])
         .map((r) => r.role)
         .filter((r) => roles.roles.get(r) !== undefined)
       return {
@@ -724,7 +742,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       return options.positions().map((p) => ({
         id: p.id,
         name: p.name.zh,
-        roles: p.roles.flatMap((r) => {
+        roles: wizardRoles(p.roles).flatMap((r) => {
           const def = roles.roles.get(r.role)
           return def === undefined
             ? []
