@@ -100,6 +100,19 @@ describe('SQL push-down (21 §3)', () => {
     ).toHaveLength(0)
   })
 
+  it('WP138: a whole-brand range drops the scope predicate but keeps the sensitivity ceiling', () => {
+    const whole = actor({ grants: [read()], ranges: [{ kind: 'brand', id: 'ws_1' }] })
+    const w = accessWhere('order', whole, 'order', ['read'])
+    expect(w?.sql).toContain('1 = 1')
+    expect(w?.sql).not.toContain('json_each')
+    expect(w?.params).toEqual(['public', 'internal'])
+    const rec = { owners: [], scope: [SHOP_EU], sensitivity: 'internal' as const }
+    expect(admittingGrants(whole, 'order', ['read'], rec)).toHaveLength(1)
+    expect(fieldCeiling(whole, 'order', ['read'], { ...rec, sensitivity: 'restricted' })).toBe(
+      undefined,
+    )
+  })
+
   it('a domain or op mismatch produces no clause', () => {
     const a2 = actor({ grants: [read()], ranges: [SHOP_US] })
     expect(accessWhere('product', a2, 'product', ['read'])).toBeUndefined()

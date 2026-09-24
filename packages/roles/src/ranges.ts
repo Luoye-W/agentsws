@@ -26,9 +26,14 @@ export const PRODUCT_LINE_PARENT_KINDS: readonly RangeRef['kind'][] = ['store', 
  *
  * 同种同 id 当然盖得住；另加 44 G4 的一条父子关系：**`account` 隐含它下面全部 `market`**，
  * 靠的是 market 的 id 约定 `账号id:站点`（`amz_na:US`），不另建一张表。
+ *
+ * WP138：`brand`（整个品牌 = 当前工作区）盖住这个工作区里的一切。店铺 / 账号 / 市场
+ * 这些范围本身不带工作区 id，判的时候调用方拿的本来就是同一个工作区的分配与目标，
+ * 所以这里不再比工作区；两个 `brand` 之间照常比 id。
  */
 export function rangeCoversRef(granted: RangeRef, target: RangeRef): boolean {
   if (granted.kind === target.kind && granted.id === target.id) return true
+  if (granted.kind === 'brand') return target.kind !== 'brand'
   if (granted.kind === 'account' && target.kind === 'market')
     return parseMarketId(target.id)?.account === granted.id
   return false

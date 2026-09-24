@@ -15,6 +15,7 @@ import type {
   ProductLineRule,
   RangeGroup,
   RangeKind,
+  RangeRef,
   RunRequest,
   StagedChange,
   TokenInfo,
@@ -79,6 +80,12 @@ describe('WP47 范围模型（44）', () => {
   it('RangeKind 多了 product_line，品牌不是范围种类', () => {
     const kinds: RangeKind[] = ['store', 'department', 'account', 'market', 'product_line']
     expect(kinds).toHaveLength(5)
+  })
+
+  it('WP138：多了 `brand`（整个品牌 = 当前工作区，id 写工作区 id）', () => {
+    const whole: RangeRef = { kind: 'brand', id: 'ws_1' }
+    const kinds: RangeKind[] = ['store', 'department', 'account', 'market', 'product_line', 'brand']
+    expect(kinds).toContain(whole.kind)
   })
 
   it('market 的 id 是 `账号id:站点`（G4）', () => {
