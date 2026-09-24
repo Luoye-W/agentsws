@@ -41,9 +41,14 @@
 | 16 | WP132 dsh 升级 0.1.6-alpha.2 → 0.1.7-rc.1（照 docs/42 七步；附「0.1.7 官方化了我们哪些自研」清单） | `WP132-dsh-0.1.7.md` | `wp132-dsh` · `wp/132-dsh` | — | 已合并（09-24，Fable 终审：全量过，dsh 运行时两包门禁过，指标零漂移） |
 | 17 | WP133 dsh 两条小收尾：profile 锁定可校验（--dump-config-schema）+ session.eventAt() → read() | `WP133-dsh-followups.md` | `wp133-dsh-follow` · `wp/133-dsh-follow` | — | 已合并（09-24，Fable 终审：全量过，dsh 两包门禁过，指纹零漂移） |
 | 18 | WP134 第三种模型来源：用 DeepSeek 账号登录（dsh 官方模块；默认关、选中才开） | `WP134-deepseek-account-login.md` | `wp134-deepseek-login` · `wp/134-deepseek-login` | — | 已合并（09-24，Fable 终审：全量 250 文件 4021 条过，六组模拟门禁过，没选时零漂移；凭据目录与 WP136 统一见下条） |
-| 19 | WP135 内测前客服线与红人线全流程走查（只出 docs/78 差距清单与可重跑脚本） | `WP135-beta-walkthrough.md` | `wp135-walkthrough` · `wp/135-walkthrough` | — | 进行中（Claude） |
+| 19 | WP135 内测前客服线与红人线全流程走查（只出 docs/78 差距清单与可重跑脚本） | `WP135-beta-walkthrough.md` | `wp135-walkthrough` · `wp/135-walkthrough` | — | 已合并（09-24，Fable 终审：只加文档 / 脚本 / 截图；阻断 7 条拆成 WP138–142） |
 | 20 | WP136 在 Agents 工坊里切换 dsh 场景（Profile）：列表 / 启动官方与自建场景 / 私有 DSH_HOME / 边界说明 | `WP136-dsh-scene-switcher.md` | `wp136-dsh-scenes` · `wp/136-dsh-scenes` | — | 已合并（09-24，Fable 终审：全量 254 文件 4058 条过，六组模拟门禁过；合并时把 WP134 的 DeepSeek 凭据库并到同一个 DSH_HOME） |
-| 21 | **WP137（P0 安全）聊天转发三种形态的密钥兜底改成没有真密钥就拒绝** | `WP137-relay-secret-fail-closed.md` | `wp137-relay-secret` · `wp/137-relay-secret` | — | 进行中（Claude） |
+| 21 | **WP137（P0 安全）聊天转发三种形态的密钥兜底改成没有真密钥就拒绝** | `WP137-relay-secret-fail-closed.md` | `wp137-relay-secret` · `wp/137-relay-secret` | — | 已合并并上线（09-24，生产 health 两项 true、冒烟 11/0） |
+| 22 | WP138 向导建出来的职责有范围；空范围不再挡红人工作台与聊天入口（docs/78 #1） | `WP138-scope-for-wizard-positions.md` | `wp138-scope` · `wp/138-scope` | — | 进行中（Claude） |
+| 23 | WP139 独立页面按能力挑分配、403 / 501 分开说、聊天窗常驻入口、整页报错留左栏（#2） | `WP139-standalone-pages-identity.md` | `wp139-identity` · `wp/139-identity` | — | 进行中（Claude） |
+| 24 | WP140 demo：限流走墙钟、云账号替身、种子对齐、藏四个没做的面板、走查一次跑完（#3、#6 demo 部分） | `WP140-demo-fixes.md` | `wp140-demo` · `wp/140-demo` | — | 进行中（Claude） |
+| 25 | WP141 牌堆能直接找到后面的卡 + 屏幕裸值与卡数口径（#4、§2） | `WP141-deck-and-copy.md` | `wp141-deck` · `wp/141-deck` | — | 进行中（Claude） |
+| 26 | WP142 红人为主的第一步：按主要目的预勾、第 ④ 步只列必需、找人回话、云账号反馈、没关联也看得到价（#5–#7） | `WP142-kol-first-steps.md` | `wp142-kol-first` · `wp/142-kol-first` | WP138 | 待做（WP138 合并后起） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
