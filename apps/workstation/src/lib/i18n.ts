@@ -2519,6 +2519,36 @@ const zh: Table = {
   'models.image.no_choices':
     '上面还没有能出图的接口：接上 Agents 工坊官方接口，或者加一条 OpenAI 兼容口，再回来选。',
   'models.image.saved': '已保存，下一次出图就用它。',
+  // WP136（docs/79）：dsh 场景切换（左下角账户块上方那一行 + 它的面板）
+  'scenes.entry': '场景',
+  'scenes.title': '切换场景',
+  'scenes.hint':
+    'Agents 工坊专做跨境电商与出海营销。想编程或做别的事，切到 dsh 的其他场景——不用另装。',
+  'scenes.agentsws': 'Agents 工坊',
+  'scenes.current': '当前',
+  'scenes.origin.official': '官方',
+  'scenes.origin.custom': '自建',
+  'scenes.state.running': '运行中',
+  'scenes.state.starting': '启动中…',
+  'scenes.state.failed': '没起来',
+  'scenes.open': '打开',
+  'scenes.stop': '关闭',
+  'scenes.restart': '重启',
+  'scenes.delete': '删除',
+  'scenes.delete.confirm': '再输入一遍「{name}」确认删除',
+  'scenes.delete.go': '确认删除',
+  'scenes.delete.note': '只删这个场景自己的文件夹，Agents 工坊的数据不受影响。',
+  'scenes.cli': '命令行场景（给程序用，这里打不开）：{names}',
+  'scenes.new': '新建场景',
+  'scenes.new.name': '名字（小写英文、数字、短横线）',
+  'scenes.new.template': '从哪个官方模板建',
+  'scenes.new.cli': '（命令行）',
+  'scenes.new.go': '建好',
+  'scenes.cancel': '取消',
+  'scenes.notice': '这个场景由 DeepSeek 官方维护，Agents 工坊不对它负责。',
+  'scenes.unavailable': '这台部署不能切换场景：{reason}',
+  'scenes.opened': '已在浏览器里打开「{name}」。',
+  'scenes.error': '没办成：{message}',
 }
 
 const en: Table = {
@@ -5061,6 +5091,38 @@ const en: Table = {
   'models.image.no_choices':
     'Nothing above can draw yet: connect the Agents Workshop official API or add an OpenAI-compatible endpoint, then come back.',
   'models.image.saved': 'Saved — the next picture uses it.',
+  // WP136 (docs/79): switching dsh scenes
+  'scenes.entry': 'Scenes',
+  'scenes.title': 'Switch scene',
+  'scenes.hint':
+    'Agents Workshop is for cross-border e-commerce and marketing. To code or do other things, switch to another dsh scene — nothing else to install.',
+  'scenes.agentsws': 'Agents Workshop',
+  'scenes.current': 'Current',
+  'scenes.origin.official': 'Official',
+  'scenes.origin.custom': 'Yours',
+  'scenes.state.running': 'Running',
+  'scenes.state.starting': 'Starting…',
+  'scenes.state.failed': 'Did not start',
+  'scenes.open': 'Open',
+  'scenes.stop': 'Stop',
+  'scenes.restart': 'Restart',
+  'scenes.delete': 'Delete',
+  'scenes.delete.confirm': 'Type "{name}" again to delete it',
+  'scenes.delete.go': 'Delete',
+  'scenes.delete.note':
+    "Only this scene's own folder is removed. Agents Workshop data is untouched.",
+  'scenes.cli': 'Command-line scenes (for programs, cannot open here): {names}',
+  'scenes.new': 'New scene',
+  'scenes.new.name': 'Name (lowercase letters, digits, dashes)',
+  'scenes.new.template': 'Start from which official template',
+  'scenes.new.cli': ' (command line)',
+  'scenes.new.go': 'Create',
+  'scenes.cancel': 'Cancel',
+  'scenes.notice':
+    'This scene is maintained by DeepSeek. Agents Workshop is not responsible for it.',
+  'scenes.unavailable': 'This deployment cannot switch scenes: {reason}',
+  'scenes.opened': 'Opened "{name}" in your browser.',
+  'scenes.error': 'That did not work: {message}',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

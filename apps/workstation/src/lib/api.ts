@@ -5232,3 +5232,76 @@ export const setModelImage = (
     body: input,
     ...withAssignment(assignment),
   })
+
+// ── WP136（docs/79）：dsh 场景切换 ──────────────────────────────────────────
+
+/** 一个 dsh 场景（`GET /v1/dsh-scenes` 里的一行；形状同契约 `DshSceneView`）。 */
+export interface DshSceneRow {
+  name: string
+  origin: 'agentsws' | 'official' | 'custom'
+  surface: 'agentsws' | 'web' | 'cli'
+  template?: string
+  is_default: boolean
+  deletable: boolean
+  launchable: boolean
+  initialized: boolean
+  state: 'stopped' | 'starting' | 'running' | 'failed'
+  port?: number
+  started_at?: string
+  error?: string
+}
+
+export interface DshScenesData {
+  available: boolean
+  unavailable_reason?: string
+  dsh_version?: string
+  dsh_home?: string
+  workspace_root?: string
+  scenes: DshSceneRow[]
+  templates: { name: string; surface: 'web' | 'cli' }[]
+}
+
+export const getDshScenes = (assignment?: string): Promise<DshScenesData> =>
+  api<DshScenesData>('/v1/dsh-scenes', withAssignment(assignment))
+
+export const createDshScene = (
+  input: { name: string; template: string },
+  assignment?: string,
+): Promise<DshSceneRow> =>
+  api<DshSceneRow>('/v1/dsh-scenes', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** 网页场景：没起就起，回带一次性 token 的网址（只交给打开它的那一方）。 */
+export const openDshScene = (
+  name: string,
+  assignment?: string,
+): Promise<{ scene: DshSceneRow; url: string }> =>
+  api(`/v1/dsh-scenes/${encodeURIComponent(name)}/open`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+export const stopDshScene = (name: string, assignment?: string): Promise<DshSceneRow> =>
+  api(`/v1/dsh-scenes/${encodeURIComponent(name)}/stop`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+export const restartDshScene = (
+  name: string,
+  assignment?: string,
+): Promise<{ scene: DshSceneRow; url: string }> =>
+  api(`/v1/dsh-scenes/${encodeURIComponent(name)}/restart`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
+
+/** 删一个自建场景。`confirm` 必须再写一遍场景名（服务端也查）。 */
+export const deleteDshScene = (
+  name: string,
+  confirm: string,
+  assignment?: string,
+): Promise<{ deleted: true }> =>
+  api(`/v1/dsh-scenes/${encodeURIComponent(name)}?confirm=${encodeURIComponent(confirm)}`, {
+    method: 'DELETE',
+    ...withAssignment(assignment),
+  })
