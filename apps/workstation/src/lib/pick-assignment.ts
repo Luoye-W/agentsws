@@ -68,10 +68,11 @@ export type AssignmentPick =
   /** 名下没有这条职责 */
   | { kind: 'none' }
 
+/** 这条职责在需求里排第几（`kol.*` 按前缀）；不在就是 -1。 */
 function rank(roles: readonly string[], role_id: string): number {
-  return roles.findIndex((r) =>
-    r.endsWith('.*') ? role_id.startsWith(r.slice(0, -1)) : r === role_id,
-  )
+  const matches = (r: string): boolean =>
+    r.endsWith('.*') ? role_id.startsWith(r.slice(0, -1)) : r === role_id
+  return roles.findIndex(matches)
 }
 
 export function pickAssignment(

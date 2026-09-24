@@ -9,6 +9,10 @@
  *
  * 纪律：只渲染在红人那五张数据卡上（`capabilityOf(service)` 以 `kol.` 开头）；
  * 单价常显交给价目表那一层，这里不写死任何数字。
+ *
+ * WP139（docs/78 阻断 #2）：两块用两条**自己的**分配发请求，不跟全局当前岗位——
+ * 路由表是工作区设置，用连接页传下来的所有者那条；自带数据接口是 `creator.*`，
+ * 按「要红人职责」挑自己名下任一条红人职责（`lib/pick-assignment.ts`）。挑不到就说清楚，不发必 403 的请求。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -24,6 +28,10 @@ import {
   testKolByoSource,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { apiErrorText } from '@/lib/error-text'
+import { KOL_NEED } from '@/lib/pick-assignment'
+import { assignmentOf, canRequest, useDutyAssignment } from '@/lib/use-duty-assignment'
+import { DutyNeeded } from '../duty-needed'
 
 /** 界面上三级的顺序（默认顺序；用户可在其中调整）。 */
 const LEVELS: readonly DataSourceLevel[] = ['official_key', 'byo_source', 'workshop']
@@ -50,19 +58,26 @@ function effectiveOrder(
   }
 }
 
-export function DataSourceRouteControl({ channel }: { channel: string }): React.ReactNode {
+export function DataSourceRouteControl({
+  channel,
+  assignment,
+}: {
+  channel: string
+  /** 所有者那条（工作区设置）；没传 = 全局当前岗位 */
+  assignment?: string | undefined
+}): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const capability = `kol.${channel}`
   const sources = useQuery({
-    queryKey: ['capability-sources'],
-    queryFn: () => getCapabilitySources(),
+    queryKey: ['capability-sources', assignment],
+    queryFn: () => getCapabilitySources(assignment),
     retry: false,
   })
 
   const save = useMutation({
     mutationFn: (next: { order: DataSourceLevel[]; disabled: DataSourceLevel[] }) =>
-      setCapabilitySources(sources.data?.capability_sources ?? {}, undefined, {
+      setCapabilitySources(sources.data?.capability_sources ?? {}, assignment, {
         [capability]: next,
       }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['capability-sources'] }),
@@ -140,10 +155,13 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
   const [url, setUrl] = useState('')
   const [key, setKey] = useState('')
   const [result, setResult] = useState<string | undefined>(undefined)
+  const pick = useDutyAssignment(KOL_NEED)
+  const asg = assignmentOf(pick)
 
   const list = useQuery({
-    queryKey: ['kol-byo-sources'],
-    queryFn: () => getKolByoSources(),
+    queryKey: ['kol-byo-sources', asg],
+    enabled: canRequest(pick),
+    queryFn: () => getKolByoSources(asg),
     retry: false,
   })
   const existing = list.data?.rows.find((r) => r.channel === channel)
@@ -154,32 +172,38 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
 
   const save = useMutation({
     mutationFn: () =>
-      setKolByoSource({
-        channel,
-        service_url: url,
-        ...(key === '' ? {} : { api_key: key }),
-      }),
+      setKolByoSource(
+        {
+          channel,
+          service_url: url,
+          ...(key === '' ? {} : { api_key: key }),
+        },
+        asg,
+      ),
     onSuccess: () => {
       invalidate()
       setKey('')
       setResult(t('data.byo.saved'))
     },
-    onError: (e) => setResult(e.message),
+    onError: (e) => setResult(apiErrorText(e, t)),
   })
 
   const test = useMutation({
     mutationFn: () =>
-      testKolByoSource({
-        channel,
-        ...(url === '' ? {} : { service_url: url }),
-        ...(key === '' ? {} : { api_key: key }),
-      }),
+      testKolByoSource(
+        {
+          channel,
+          ...(url === '' ? {} : { service_url: url }),
+          ...(key === '' ? {} : { api_key: key }),
+        },
+        asg,
+      ),
     onSuccess: (r) => setResult(r.message),
-    onError: (e) => setResult(e.message),
+    onError: (e) => setResult(apiErrorText(e, t)),
   })
 
   const remove = useMutation({
-    mutationFn: () => clearKolByoSource(channel),
+    mutationFn: () => clearKolByoSource(channel, asg),
     onSuccess: () => {
       invalidate()
       setUrl('')
@@ -190,10 +214,23 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
 
   const busy = save.isPending || test.isPending || remove.isPending
 
+  if (pick.kind === 'none' || pick.kind === 'no_range')
+    return (
+      <div className="flex flex-col gap-1.5" data-testid="byo-source" data-channel={channel}>
+        <p className="text-xs font-medium">{t('data.byo.title')}</p>
+        <DutyNeeded need={KOL_NEED} kind={pick.kind} testid="byo-duty-needed" compact />
+      </div>
+    )
+
   return (
     <div className="flex flex-col gap-1.5" data-testid="byo-source" data-channel={channel}>
       <p className="text-xs font-medium">{t('data.byo.title')}</p>
       <p className="text-[11px] text-muted-foreground">{t('data.byo.compliance')}</p>
+      {list.error === null ? null : (
+        <p role="alert" className="text-[11px] text-destructive" data-testid="byo-source-error">
+          {apiErrorText(list.error, t)}
+        </p>
+      )}
       <Input
         value={existing === undefined ? url : url === '' ? existing.service_url : url}
         onChange={(e) => setUrl(e.target.value)}
