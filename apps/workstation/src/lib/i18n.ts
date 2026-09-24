@@ -2572,6 +2572,7 @@ const zh: Table = {
   'scenes.new.go': '建好',
   'scenes.cancel': '取消',
   'scenes.notice': '这个场景由 DeepSeek 官方维护，Agents 工坊不对它负责。',
+  'scenes.notice.custom': '这是你自己建的场景（从官方模板起步），Agents 工坊不对它负责。',
   'scenes.unavailable': '这台部署不能切换场景：{reason}',
   'scenes.opened': '已在浏览器里打开「{name}」。',
   'scenes.error': '没办成：{message}',
@@ -5175,6 +5176,8 @@ const en: Table = {
   'scenes.cancel': 'Cancel',
   'scenes.notice':
     'This scene is maintained by DeepSeek. Agents Workshop is not responsible for it.',
+  'scenes.notice.custom':
+    'You created this scene from an official template. Agents Workshop is not responsible for it.',
   'scenes.unavailable': 'This deployment cannot switch scenes: {reason}',
   'scenes.opened': 'Opened "{name}" in your browser.',
   'scenes.error': 'That did not work: {message}',

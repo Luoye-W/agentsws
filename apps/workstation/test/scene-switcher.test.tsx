@@ -105,7 +105,7 @@ afterEach(() => {
 })
 
 describe('左下角「场景」', () => {
-  it('所有者：一行一个图标；点开 Agents 工坊第一个、标「当前」，其余写明官方维护', async () => {
+  it('所有者：一行一个图标；点开 Agents 工坊第一个、标「当前」，官方的写明官方维护、自建的写明自己建的', async () => {
     renderWithProviders(<SceneSwitcher />)
     const toggle = await screen.findByTestId('scene-toggle')
     expect(toggle?.textContent).toContain('场景')
@@ -121,8 +121,12 @@ describe('左下角「场景」', () => {
     expect(rows[0]?.textContent).toContain('Agents 工坊')
     expect(rows[0]?.textContent).toContain('当前')
     expect(rows[0]?.textContent).not.toContain('DeepSeek 官方维护')
-    for (const r of rows.slice(1))
-      expect(r?.textContent).toContain('这个场景由 DeepSeek 官方维护，Agents 工坊不对它负责。')
+    expect(rows[1]?.textContent).toContain('这个场景由 DeepSeek 官方维护，Agents 工坊不对它负责。')
+    // 自建场景不说"官方维护"（它是用户自己从模板建的），但同样写明不对它负责
+    expect(rows[2]?.textContent).not.toContain('DeepSeek 官方维护')
+    expect(rows[2]?.textContent).toContain(
+      '这是你自己建的场景（从官方模板起步），Agents 工坊不对它负责。',
+    )
     expect(screen.getByTestId('scene-cli')?.textContent).toContain('headless、acp')
     // 官方场景没有删除；自建的有
     expect(screen.queryByTestId('scene-delete-web')).toBeNull()

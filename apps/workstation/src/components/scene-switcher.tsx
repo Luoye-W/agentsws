@@ -380,7 +380,9 @@ function SceneRow({
       </div>
       {ours ? null : (
         <>
-          <p className="text-[11px] text-muted-foreground">{t('scenes.notice')}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {t(scene.origin === 'custom' ? 'scenes.notice.custom' : 'scenes.notice')}
+          </p>
           {scene.error === undefined ? null : (
             <p className="text-[11px] text-ws-bad">{scene.error}</p>
           )}
