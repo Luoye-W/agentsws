@@ -26,6 +26,7 @@ import { chatRoutes } from './routes/chat.js'
 // WP59（49 M2 / M5）：云上余额与价目的本地投影 + 每项能力的"用我的 / 用 agentsws 的"开关
 import { cloudRoutes } from './routes/cloud.js'
 import { cloudAccountRoutes } from './routes/cloud-account.js'
+import { computerUseRoutes } from './routes/computer-use.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
 import { designRoutes } from './routes/design.js'
@@ -218,6 +219,8 @@ export function collectRoutes(): Route[] {
      * `pairings` / `tokens` / `pair` / `hello` / `observations` 全是定值段。
      */
     ...extensionRoutes(),
+    // WP144（docs/80）：电脑操控。`/v1/settings/computer-use*` 与 `/v1/computer-use/*` 都是新路径，与别处不撞
+    ...computerUseRoutes(),
   ]
 }
 

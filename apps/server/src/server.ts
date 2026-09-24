@@ -186,6 +186,8 @@ import {
   type CloudFetch,
   createCloudAccount,
 } from './cloud-account.js'
+import { ComputerUseError, createComputerUse } from './computer-use.js'
+import { ComputerUseInstallError } from './computer-use-install.js'
 import { connectBaseUrl } from './connect-url.js'
 // WP83（54 §4）：连接目录 + 岗位连接清单 + 自定义 MCP 服务器（保存 / 校验 / 探测）
 import type { ConnectionDirectoryAssembly } from './connection-directory.js'
@@ -383,6 +385,18 @@ export const BIND_HOST_ENV = 'AGENTSWS_BIND_HOST'
 
 /** 只接受回环与「全部网卡」两种——写别的地址多半是配错了，不如报出来。 */
 /** 从字节认图型（视觉消息的 `mime` 那一格，WP122b 交付 ⑤）。认不出按 jpeg——provider 会拒，别在这一层猜第二遍。 */
+/** WP144：电脑操控的两种错误翻成网关错误（人话原样带出去）。 */
+async function computerUseCall<T>(fn: () => T | Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    if (err instanceof ComputerUseError || err instanceof ComputerUseInstallError) {
+      throw new ApiError(err.code, err.message)
+    }
+    throw err
+  }
+}
+
 function imageMimeOf(bytes: Uint8Array): string {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
     return 'image/jpeg'
@@ -1095,6 +1109,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     defaultBskPath: () => (dbDir === undefined ? undefined : bskPathIn(dbDir)),
   })
+  /*
+   * WP144（docs/80）：电脑操控——**一台机器一份**，理由与浏览器设置逐字相同（操作的是
+   * 这台电脑本身，与卖哪个品牌无关）。驱动装在数据目录下（不进 PATH）；只有本机档给。
+   */
+  const computerUse = createComputerUse({
+    ...(dbDir === undefined ? {} : { dir: dbDir, dataDir: dbDir }),
+    runtimeMode,
+    clock,
+  })
 
   /*
    * WP90（55 §9 Q8）：用 ChatGPT / Claude 的**订阅**登录——也是"一台机器一份"，
@@ -1401,7 +1424,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
 
   // 两层包装：学习回路先落 overlay / 知识卡，目录再看是不是一张晋升卡
-  const approvals = catalog.wrap(learning.wrap(rawApprovals))
+  // WP144：最外一层——`computer_use` 授权卡批了就记一次授权、带着它重跑这件事
+  const approvals = computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))
   // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
   //
   // 从这里开始，连接、活数据源、记录源、工作模型、运行时、渠道、聊天车道与聊天窗、
@@ -2200,6 +2224,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
+            // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
+            computerUse,
             /*
              * WP86（55 §4 第三层）：这条职责登记了哪几台 MCP 服务器。
              *
@@ -4853,6 +4879,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       open: (_actor, name) => dshScenes().open(name),
       stop: (_actor, name) => dshScenes().stop(name),
       restart: (_actor, name) => dshScenes().restart(name),
+    },
+    /*
+     * WP144（docs/80）：电脑操控。**不按品牌**（同浏览器）。下载驱动与自检都是本机的事
+     * （下载 + 校验 sha256 / 起一次驱动），留在服务进程这一侧；设置页只管按钮与结果。
+     */
+    computerUse: {
+      settings: () => computerUse.get(),
+      setSettings: (_actor, input) => computerUseCall(() => computerUse.set(input)),
+      install: () => computerUseCall(() => computerUse.install()),
+      check: () => computerUse.check(),
+      openSettings: (_actor, pane) => computerUseCall(() => computerUse.openSettings(pane)),
+      active: () => {
+        const active = computerUse.active()
+        return active === undefined ? {} : { active }
+      },
+      stop: () => computerUse.stop(),
     },
     browser: {
       settings: () => browserSettings.get(),

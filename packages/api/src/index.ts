@@ -177,6 +177,11 @@ export type {
   CloudUnlinkResult,
 } from './routes/cloud-account.js'
 export { cloudAccountRoutes } from './routes/cloud-account.js'
+export {
+  type ComputerUseActor,
+  type ComputerUsePort,
+  computerUseRoutes,
+} from './routes/computer-use.js'
 export type {
   ConnectionDirectoryItemView,
   ConnectionDirectoryPort,

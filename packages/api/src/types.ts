@@ -62,6 +62,7 @@ import type { ChangeFilesPort } from './routes/changes.js'
 import type { ChatPort } from './routes/chat.js'
 import type { CloudPort } from './routes/cloud.js'
 import type { CloudAccountPort } from './routes/cloud-account.js'
+import type { ComputerUsePort } from './routes/computer-use.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { DesignPort } from './routes/design.js'
@@ -898,6 +899,12 @@ export interface GatewayDeps {
   /** 长轮询用；默认 setTimeout。 */
   sleep?: (ms: number) => Promise<void>
   options?: GatewayOptions
+  /**
+   * WP144（docs/80）：电脑操控——总开关、可以操作电脑的职责、驱动与自检、正在操作 / 停止。
+   * 一台机器一份，只有本机档装配得上有意义的内容；没装配时
+   * `/v1/settings/computer-use*` 与 `/v1/computer-use/*` 回 not_implemented。
+   */
+  computerUse?: ComputerUsePort
 }
 
 /**
