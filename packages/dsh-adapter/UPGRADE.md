@@ -1383,3 +1383,17 @@ WP132 在 profile 层写死了 `deepseek-account: disabled: true`。Luoye 09-24 
 ## WP136：dsh 场景切换（2026-09-24，版本号未动）
 
 一行：`src/scenes.ts` 的官方模板表（`web` / `headless` / `sdk` / `sdk-minimal` / `acp`）由 `test/scenes.test.ts` 逐项对照 `@deepseek-ai/dsh-app-boot` 的 `PROFILE_TEMPLATES`——**升 dsh 时这条红了，就去看上游是不是加 / 删 / 改了模板，同步 `DSH_SCENE_TEMPLATES` 与 docs/79 §1**；另外网页场景靠 stdout 的 `dsh web: <网址>` 那一行判就绪（`parseWebSceneUrl`），上游改了这行的格式 `apps/server/test/dsh-scenes.test.ts` 的真 dsh 用例会红。
+
+## WP147：截图进模型（2026-09-24，版本号未动）
+
+多了三个直接依赖（同 dsh 版本精确钉）：`dsh-attachment`、`dsh-attachment-local`、`dsh-compaction-image-offload`。**升 dsh 时要看**：
+
+- `dsh-mcp-client` README「调用工具与读取结果」「模型体验」两节——图片准入的两个条件（`ctx.attachments` + 确切路由的
+  `inputModalities` 含 `image`）与 `projectContent` 在 post-execute 之前装内容这一点变了没有。`gate.ts` 对带图结果按 `content`
+  接受就是靠它；变了 `test/screenshots-to-model.test.ts` 先红；
+- `dsh-attachment-local` 的 `Config`（`dshHome` 还收不收、缓存是不是还跟着 `dshHome` 走）——我们把它指到一次运行的临时目录、运行完删掉；
+- `dsh-llm` 的 `requiredImageOffload` / `offloadedImageText` / `requestImageHandleText` 与 `IMAGE_OFFLOAD_REQUIRED`，以及
+  `dsh-compaction-image-offload` 是不是还只 `inject: ['agents', 'sessions']`；
+- `dsh-llm-pi-ai` 的 `DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET` / `DEFAULT_REQUEST_IMAGE_MAX_BYTES` 默认值——`llm.ts` 的 `REQUEST_IMAGE_POLICY` 照它抄的。
+
+`sharp`（`dsh-attachment-local` 的依赖）经 `dsh-lazy-require` 用到时才加载：没有截图的运行一次都不碰它。

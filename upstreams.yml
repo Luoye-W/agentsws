@@ -84,6 +84,11 @@ upstreams:
       # WP143：移植（不 import）自 dsh-llm-deepseek 的 Files 复用 / 推理回传（packages/model-gateway/src/providers/deepseek-files.ts）
       - 'dsh-llm-deepseek（移植）: Files 复用——POST /v1/files、anthropic-beta files-api-2025-04-14、按字节去重、失败或超时整份退内联、陈旧 file id 作废重传一次'
       - 'dsh-llm-deepseek（移植）: 推理回传——此前 assistant 轮次的 thinking 块与 signature 原样传回，跨模型去签名'
+      # WP147（截图给 AI 看）：MCP 结果里的图片准入 = 挂着 ctx.attachments + 确切路由 resolveModel 声明 inputModalities 含 image
+      - 'dsh-mcp-client: 图片准入（ctx.attachments + 路由 inputModalities 含 image），projectContent 在 post-execute 之前装好图片块'
+      - 'dsh-attachment-local: dshHome 指一次运行的临时目录；readImageRequest(ref, { width, height, maxBytes })'
+      - 'dsh-llm: requestImageDimensions / requiredImageOffload / projectOffloadedImages / offloadedImageText / requestImageHandleText；IMAGE_OFFLOAD_REQUIRED'
+      - 'dsh-compaction-image-offload: agent/request-error 上的 IMAGE_OFFLOAD_REQUIRED → 记 image/offload、retry'
     wishlist:
       - 官方 SDK 出现 server→client 请求（dsh-sdk-jsonrpc-server 里的 transport.request）
       - headless 的 turn 驱动能被宿主接管（--json 只是单向投影，不算）
@@ -115,6 +120,8 @@ upstreams:
       # WP143：移植自 dsh-llm-deepseek 的 Files 复用与推理回传
       - packages/model-gateway/test/deepseek-files.test.ts
       - packages/model-gateway/test/deepseek-replay.test.ts
+      # WP147：截图进模型（官方 MCP 桥 + 附件库 + 旧图换占位）
+      - packages/dsh-adapter/test/screenshots-to-model.test.ts
       - packages/dsh-adapter/UPGRADE.md
       - docs/42-上游升级流程-v1.md
 
