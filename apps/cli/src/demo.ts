@@ -1081,10 +1081,29 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 转客服）与 `pr.reddit`（外部露出 + 版规检查）。挑这两条是因为它们各自演示了
   // 60 里最要紧的两句话：**客户的问题转客服，公关不答**，以及**在别人的地盘上
   // 版主说了算**。公关库那几行由 `seedDemoPr` 放（`apps/server/src/pr.ts`）。
+  //
+  // WP140（docs/78 §2 / docs/66 #2 #17）：岗位页写「N 条职责」，左栏就得展开出 N 条。
+  // 所以**红人营销五条**、**客服四条**全挂上（模板里默认不勾的那几条也挂——demo 要
+  // 把整个岗位演完整，不是演「刚走完向导」）。另外：pack 的 `assignments.yml` 已经给店主
+  // 挂过其中几条（`ads.meta` / `pr.monitoring` / `site.shopify-build|theme` …），
+  // 之前这里又挂一遍，同一条职责出现两次——首页右侧「Meta Ads」数据块出两次就是它。
+  // 现在已经挂过的跳过。
+  const held = new Set(
+    world.roles.assignments
+      .listByPerson(world.roleHolder, { workspace_id: world.workspace_id })
+      .map((a) => a.role_id),
+  )
   for (const role of [
     'dtc.store',
     'dtc.content',
     'kol.youtube',
+    'kol.instagram',
+    'kol.tiktok',
+    'kol.facebook',
+    'kol.x',
+    // 客服岗位四条（`dtc.support` / `dtc.community-support` 由 pack 挂）
+    'dtc.live-chat',
+    'amz.support',
     'social.meta',
     'social.discord',
     'pr.monitoring',
@@ -1099,6 +1118,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     // WP76（58 §3）：设计岗位挂一条 `design.dtc`（五条骨架相同，只挂一条就够）
     'design.dtc',
   ]) {
+    if (held.has(role)) continue
+    held.add(role)
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,
@@ -1121,6 +1142,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     workspace_id: world.workspace_id,
     workspace_name: pack.workspace.name,
     owner: { id: owner.id, email: owner.email, name: owner.name },
+    // WP140：样例会议的与会人换成这家公司的真人（店主排第一）
+    people: [owner, ...pack.people.filter((p) => p.id !== owner.id)].map((p) => ({
+      id: p.id,
+      name: p.name,
+    })),
     roles: world.roles,
     approvals: world.txn.approvals,
     data: dataSourceOf(world, pack),

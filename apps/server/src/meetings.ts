@@ -367,23 +367,50 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
  */
 export async function seedDemoMeetings(
   assembly: MeetingsAssembly,
-  ctx: { workspace_id: string; owner: string; position_id?: string; clock: Clock },
+  ctx: {
+    workspace_id: string
+    owner: string
+    position_id?: string
+    clock: Clock
+    /**
+     * WP140（docs/78 §2 首页）：这家公司真有的人。给了就把样本里的与会人（罗野 / 张三 / 李四）
+     * 按顺序换成他们——名字换进逐字稿，id 换进与会名单，于是会议里指派出来的待办
+     * 负责人是公司里的真人，「正在进行」上不再出现 `per_luo` 这种认不出的 id。
+     */
+    people?: { id: string; name: string }[]
+  },
 ): Promise<void> {
-  const picks = ['s01_weekly_zh', 's03_policy_srt', 's11_high_risk_assignment']
+  /*
+   * WP140：只挑两份像真会的样本，标题换成人话。
+   * 「假指派：在场的人 + 高风险动作（转账）」是**测试剧本**（验证高风险指派只到 suggested），
+   * 它在 `packages/meetings` 的用例里跑，不该出现在 demo 首页的「正在进行」里。
+   */
+  const picks: [string, string][] = [
+    ['s01_weekly_zh', '周会：新版落地页上线'],
+    ['s03_policy_srt', '售后口径：退货窗口按几天算'],
+  ]
   const day = 86_400_000
   const base = Date.parse(ctx.clock.now())
   let i = 0
-  for (const id of picks) {
+  for (const [id, title] of picks) {
     const sample = MEETING_SAMPLES.find((s) => s.id === id)
     if (sample === undefined) continue
     i += 1
     const start = new Date(base - i * day).toISOString()
+    const cast = sample.participants.map((p, k) => ({ from: p, to: ctx.people?.[k] }))
+    const participants = cast.map(({ from, to }) =>
+      to === undefined ? from : { ...from, person_id: to.id, name: to.name },
+    )
+    let text = sample.text
+    for (const { from, to } of cast)
+      if (to !== undefined && from.name !== undefined && from.name !== '')
+        text = text.split(from.name).join(to.name)
     const meeting = await assembly.store.createMeeting({
       workspace_id: ctx.workspace_id,
-      title: sample.title,
+      title,
       start,
       end: new Date(Date.parse(start) + 3_600_000).toISOString(),
-      participants: sample.participants,
+      participants,
       status: 'done',
       created_by: ctx.owner,
       ...(ctx.position_id === undefined ? {} : { position_id: ctx.position_id }),
@@ -394,7 +421,7 @@ export async function seedDemoMeetings(
       actor: ctx.owner,
       source: sample.source === 'in_app_recording' ? 'manual_notes' : sample.source,
       payload: {
-        text: sample.text,
+        text,
         mime: sample.mime,
         format: sample.format,
         notice_given: true,
