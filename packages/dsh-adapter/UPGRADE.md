@@ -1310,3 +1310,7 @@ event instead of looking back through historical events」；只有按需展示�
 - 3 人 pack `--runtime dsh` fast 档：改动前后各跑一次，62/62，**1054 个指标值 0 差**，`summary.txt` 逐字节相同，门禁"通过"。
 - `@agentsws/dsh-adapter` 1020 → 1034 条全过（+7 `profile-lockdown`、+7 `turn-summary`），`seams.test.ts` 30 条不动。
 
+
+## WP136：dsh 场景切换（2026-09-24，版本号未动）
+
+一行：`src/scenes.ts` 的官方模板表（`web` / `headless` / `sdk` / `sdk-minimal` / `acp`）由 `test/scenes.test.ts` 逐项对照 `@deepseek-ai/dsh-app-boot` 的 `PROFILE_TEMPLATES`——**升 dsh 时这条红了，就去看上游是不是加 / 删 / 改了模板，同步 `DSH_SCENE_TEMPLATES` 与 docs/79 §1**；另外网页场景靠 stdout 的 `dsh web: <网址>` 那一行判就绪（`parseWebSceneUrl`），上游改了这行的格式 `apps/server/test/dsh-scenes.test.ts` 的真 dsh 用例会红。
