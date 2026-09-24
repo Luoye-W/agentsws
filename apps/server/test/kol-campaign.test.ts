@@ -265,12 +265,14 @@ describe('WP68 campaign 向导：不并集权限（05 §4）', () => {
     // 挑到了人，但本人没有这条职责 → 灰显 + 说清楚为什么
     expect(ig?.picks).toHaveLength(1)
     expect(ig?.allowed).toBe(false)
-    expect(ig?.reason).toContain('kol.instagram')
+    // WP141：说「Instagram 红人」这条职责，不把职责 id 印给人看
+    expect(ig?.reason).toContain('Instagram 红人')
+    expect(ig?.reason).not.toContain('kol.instagram')
 
     // 卡上写清楚了哪几组建不了
     const card = await server.txn.approvals.get(plan.approval_item_id as string)
     expect(card?.kind).toBe('kol_campaign')
-    expect(card?.summary).toContain('instagram')
+    expect(card?.summary).toContain('Instagram')
 
     const accepted = await data<{
       created: { channel: string }[]
