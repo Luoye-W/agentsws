@@ -839,14 +839,16 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   /**
    * 第四层（都没有）的那一句人话 + 两个入口（WP126 定论 1）。
    */
+  /*
+   * WP142（docs/78 第 15 步）：**两句话 + 两个按钮**。以前这里是两百字，真正要做的两件事
+   * 埋在中间；现在第一句说为什么搜不了，第二句说怎么办，两件事各是一个按钮（`entry_points`）。
+   */
   const nothingConfigured = (channel: KolChannel): KolSearchResult => ({
     ok: false,
     source: 'channel',
     rows: [],
     reason: 'no_data_source',
-    message:
-      `现在找不到${channelLabel(channel)}上的红人：这台机器既没连${channelLabel(channel)}自己的接口，也没接自己的数据接口，工坊官方数据接口也没开通。两条路任选其一：` +
-      '① 关联 agentsws 账号（新用户送 10 积分，之后按次计价）；② 在连接页接你自己的数据接口（不扣积分）。',
+    message: `现在搜不了${channelLabel(channel)}上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜。`,
     entry_points: [
       {
         id: 'link_account',
@@ -1045,12 +1047,16 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
 
       // ④ 都没有（或都没配）：人话 + 两个入口
       const base = nothingConfigured(channel)
-      return lastWorkshopFailure === undefined
-        ? base
-        : {
-            ...base,
-            message: `${base.message}（刚才试过工坊官方接口：${lastWorkshopFailure.message}）`,
-          }
+      // 压根没关联：那一级等于没配，两句话就是 base（「去关联」是第一个按钮）
+      if (lastWorkshopFailure === undefined || options.publicLibrary?.linked() !== true) return base
+      /*
+       * 工坊那一级试过但没成（关联了但权限不够、云连不上……）：第一句换成它的原因，
+       * 第二句仍是那两条路。原因是云那边给的一句人话，去掉结尾句号再接。
+       */
+      return {
+        ...base,
+        message: `现在搜不了${channelLabel(channel)}上的红人：工坊官方数据接口这次没用上——${(lastWorkshopFailure.message ?? '').replace(/[。.]+$/, '')}。可以去账号与积分看看，或者接你自己的数据接口（不扣积分）。`,
+      }
     },
 
     creator(_actor, id) {

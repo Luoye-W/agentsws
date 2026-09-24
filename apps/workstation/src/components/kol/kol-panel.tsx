@@ -18,7 +18,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Coins, Mail, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -67,6 +67,24 @@ const NEXT_STAGES: Readonly<Record<string, string[]>> = {
   agreed: ['delivering', 'declined'],
   delivering: ['delivered'],
   delivered: ['closed'],
+}
+
+/**
+ * WP142：搜不了时那两个按钮去哪。关联官方账号 → 设置「账号与积分」；
+ * 接自己的数据接口 → 连接页这条渠道的那张卡（卡里有「自带数据接口」）。
+ */
+const CHANNEL_SERVICE: Readonly<Record<KolChannelId, string>> = {
+  youtube: 'youtube_data',
+  instagram: 'instagram_graph',
+  facebook: 'facebook_graph',
+  tiktok: 'tiktok_research',
+  x: 'x_api',
+}
+
+export function entryHref(id: 'link_account' | 'byo', channel: KolChannelId): string {
+  return id === 'link_account'
+    ? '/settings/credits'
+    : `/connections?service=${encodeURIComponent(CHANNEL_SERVICE[channel])}`
 }
 
 const num = (n: number | undefined): string =>
@@ -190,9 +208,28 @@ function Discovery({
           要买档 / 配额用完各说成一句人话，界面照它说，不画一张空表。
         */}
         {found !== undefined && !found.ok ? (
-          <p className="text-sm text-muted-foreground" data-testid="kol-search-blocked">
-            {found.message}
-          </p>
+          <div className="flex flex-col gap-2" data-testid="kol-search-blocked-box">
+            <p className="text-sm text-muted-foreground" data-testid="kol-search-blocked">
+              {found.message}
+            </p>
+            {/* WP142（docs/78 第 15 步）：真正要做的两件事各是一个按钮，不埋在字里 */}
+            {(found.entry_points ?? []).length === 0 ? null : (
+              <div className="flex flex-wrap items-center gap-2">
+                {(found.entry_points ?? []).map((entry) => (
+                  <Button
+                    key={entry.id}
+                    asChild
+                    size="sm"
+                    variant={entry.id === 'link_account' ? 'default' : 'outline'}
+                    title={entry.note}
+                    data-testid={`kol-search-entry-${entry.id}`}
+                  >
+                    <Link to={entryHref(entry.id, channel)}>{entry.label}</Link>
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : null}
 
         {found?.ok === true ? (
@@ -834,9 +871,22 @@ function ImportAndCampaign({
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
+  const [, setSearch] = useSearchParams()
   const fileRef = useRef<HTMLInputElement>(null)
   const [imported, setImported] = useState<KolImportData | undefined>(undefined)
   const [plan, setPlan] = useState<KolCampaignData | undefined>(undefined)
+  /**
+   * WP142（docs/78 第 17 步）：接受之后「一条都没新建」时，说清是**因为都已在合作里**，
+   * 并给下一步（去合作线程看他们 / 找更多人）。以前只说「跳过 2 条」，接受等于什么都没发生。
+   */
+  const [allExisting, setAllExisting] = useState<number | undefined>(undefined)
+  const goView = (view: 'threads' | 'pool'): void => {
+    setSearch((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('kol', view)
+      return next
+    })
+  }
   const [goal, setGoal] = useState('')
   const [budget, setBudget] = useState('1000')
   const [headcount, setHeadcount] = useState('5')
@@ -876,6 +926,7 @@ function ImportAndCampaign({
     onSuccess: (out) => {
       setError(undefined)
       setReceipt(undefined)
+      setAllExisting(undefined)
       setPlan(out)
     },
     onError: (e: unknown) => {
@@ -894,14 +945,27 @@ function ImportAndCampaign({
     mutationFn: (id: string) => acceptKolCampaign(id, assignment),
     onSuccess: (out) => {
       setError(undefined)
+      const picks = (plan?.by_channel ?? []).flatMap((g) => g.picks)
       setPlan(undefined)
       const created = out.created.length
       const skipped = out.skipped.length
-      setReceipt(
-        created === 0
-          ? `一条都没新建（跳过 ${skipped} 条：${out.skipped[0]?.reason ?? '库里已经有了'}）。`
-          : `建了 ${created} 条合作，都在「合作线程」那一页里${skipped === 0 ? '' : `（跳过 ${skipped} 条）`}。`,
-      )
+      // 跳过的每一条都是「清单上就标着已在合作里」的那几位 → 不是出错，是本来就有
+      const existing = out.skipped.filter(
+        (x) =>
+          x.creator_id !== undefined &&
+          picks.some((p) => p.creator_id === x.creator_id && p.already),
+      ).length
+      if (created === 0 && skipped > 0 && existing === skipped) {
+        setAllExisting(existing)
+        setReceipt(undefined)
+      } else {
+        setAllExisting(undefined)
+        setReceipt(
+          created === 0
+            ? `一条都没新建（跳过 ${skipped} 条：${out.skipped[0]?.reason ?? '库里已经有了'}）。`
+            : `建了 ${created} 条合作，都在「合作线程」那一页里${skipped === 0 ? '' : `（跳过 ${skipped} 条）`}。`,
+        )
+      }
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
       void client.invalidateQueries({ queryKey: ['cards'] })
     },
@@ -1033,9 +1097,45 @@ function ImportAndCampaign({
           </div>
           <KolError error={error} testid="kol-campaign-error" />
           <KolReceipt text={receipt} testid="kol-campaign-receipt" />
+          {allExisting === undefined ? null : (
+            <div className="mt-1 flex flex-col gap-1.5" data-testid="kol-campaign-receipt">
+              <p className="text-xs text-muted-foreground">
+                {t('kol.campaign.all_existing', { n: allExisting })}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  data-testid="kol-campaign-go-threads"
+                  onClick={() => {
+                    goView('threads')
+                  }}
+                >
+                  {t('kol.campaign.go_threads')}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  data-testid="kol-campaign-go-pool"
+                  onClick={() => {
+                    goView('pool')
+                  }}
+                >
+                  {t('kol.campaign.find_more')}
+                </Button>
+              </div>
+            </div>
+          )}
           {plan === undefined ? null : (
             <div className="mt-2 flex flex-col gap-2" data-testid="kol-campaign-plan">
               {plan.ready ? null : <p className="text-xs text-destructive">{plan.message}</p>}
+              <CampaignShortfall
+                plan={plan}
+                want={Number(headcount)}
+                onImport={() => {
+                  fileRef.current?.click()
+                }}
+              />
               {plan.by_channel.map((group) => (
                 <div
                   key={group.channel}
@@ -1055,9 +1155,15 @@ function ImportAndCampaign({
                   )}
                   <ul className="text-xs text-muted-foreground">
                     {group.picks.map((p) => (
-                      <li key={p.creator_id}>
+                      <li
+                        key={p.creator_id}
+                        data-testid="kol-campaign-pick"
+                        data-already={p.already}
+                      >
                         {p.display_name} · {t('kol.score', { n: p.score })}
                         {p.why[0] === undefined ? '' : ` · ${p.why[0]}`}
+                        {/* WP142：已经在合作里的当场标出来——接受时不会再建 */}
+                        {p.already ? ` · ${t('kol.campaign.already')}` : ''}
                       </li>
                     ))}
                   </ul>
@@ -1082,6 +1188,54 @@ function ImportAndCampaign({
         </section>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * WP142（docs/78 第 17 步）：清单**不够数**时说一句为什么、给两个动作。
+ *
+ * 「要 5 个出了 2 个」以前没人提，接受完才发现没几个人。现在清单一出来就说：
+ * 想要几个、库里合适的只有几个（其中几个已经在合作里），想要更多人就导入一张表
+ * 或者关联官方数据接口。
+ */
+function CampaignShortfall({
+  plan,
+  want,
+  onImport,
+}: {
+  plan: KolCampaignData
+  want: number
+  onImport: () => void
+}): React.ReactNode {
+  const { t } = useApp()
+  const picks = plan.by_channel.filter((g) => g.allowed).flatMap((g) => g.picks)
+  const fresh = picks.filter((p) => !p.already).length
+  const already = picks.length - fresh
+  if (!Number.isFinite(want) || want <= 0 || fresh >= want) return null
+  return (
+    <div
+      className="flex flex-col gap-1.5 rounded-md border border-dashed p-2"
+      data-testid="kol-campaign-short"
+    >
+      <p className="text-xs text-muted-foreground">
+        {t('kol.campaign.short', { want, n: picks.length })}
+        {already === 0 ? '' : ` ${t('kol.campaign.short.already', { n: already })}`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="xs"
+          variant="outline"
+          data-testid="kol-campaign-short-import"
+          onClick={onImport}
+        >
+          <Upload className="size-3" aria-hidden />
+          {t('kol.campaign.short.import')}
+        </Button>
+        <Button asChild size="xs" variant="ghost" data-testid="kol-campaign-short-link">
+          <Link to="/settings/credits">{t('kol.campaign.short.link')}</Link>
+        </Button>
+      </div>
+    </div>
   )
 }
 

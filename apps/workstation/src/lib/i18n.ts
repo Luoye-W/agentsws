@@ -2629,6 +2629,14 @@ const zh: Table = {
   'skill.name.policy-review': '政策核对',
   'skill.name.returns-policy-calc': '退换货规则',
   'skill.name.workspace-basics': '工作台基础',
+  'kol.campaign.already': '已在合作里',
+  'kol.campaign.all_existing': '清单上这 {n} 位都已经在合作里了，所以没有新建。去合作线程接着谈，或者先找更多人。',
+  'kol.campaign.go_threads': '去合作线程看他们',
+  'kol.campaign.find_more': '找更多人',
+  'kol.campaign.short': '想要 {want} 个，库里合适的只有 {n} 个。',
+  'kol.campaign.short.already': '其中 {n} 个已经在合作里了。',
+  'kol.campaign.short.import': '导入一张表',
+  'kol.campaign.short.link': '关联官方数据接口',
 }
 
 const en: Table = {
@@ -5294,6 +5302,14 @@ const en: Table = {
   'skill.name.policy-review': 'Policy check',
   'skill.name.returns-policy-calc': 'Returns rules',
   'skill.name.workspace-basics': 'Workspace basics',
+  'kol.campaign.already': 'already working together',
+  'kol.campaign.all_existing': 'All {n} people on this list are already in a collaboration, so nothing new was created. Continue in the threads, or find more people first.',
+  'kol.campaign.go_threads': 'See them in the threads',
+  'kol.campaign.find_more': 'Find more people',
+  'kol.campaign.short': 'You want {want}; only {n} in your library fit.',
+  'kol.campaign.short.already': '{n} of them are already in a collaboration.',
+  'kol.campaign.short.import': 'Import a sheet',
+  'kol.campaign.short.link': 'Link the official data API',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }
