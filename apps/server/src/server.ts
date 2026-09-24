@@ -195,6 +195,14 @@ import {
 } from './connections.js'
 import { createDesignService, createDesignStore, designDeckData, seedDemoDesign } from './design.js'
 import type { MdnsFactory } from './discovery.js'
+import {
+  createDshScenes,
+  DSH_APP_DATA_ENV,
+  type DshScenesManager,
+  dshHomeOf,
+  unavailableScenes,
+  workspaceRootOf,
+} from './dsh-scenes.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
@@ -1014,6 +1022,42 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return declared === 'docker' || declared === 'hosted' || declared === 'local'
       ? declared
       : 'local'
+  }
+  /*
+   * WP136（docs/79）：dsh 场景切换。只有本机档（dsh 起在用户那台电脑上）、且有落盘目录时装配；
+   * 别的档 `GET /v1/dsh-scenes` 回 `available: false` 与一句人话，其余几条回 not_implemented。
+   * `DSH_HOME` 在数据目录旁边（桌面壳给的是 `<userData>/dsh`），永远不是 `~/.dsh`。
+   */
+  const dshScenesSetup = ((): { manager?: DshScenesManager; reason: string } => {
+    if (runtimeMode() !== 'local') return { reason: '只有装在你自己电脑上的 Agents 工坊能切换场景' }
+    const home = dshHomeOf(env, dbDir)
+    if (home === undefined) return { reason: '这台服务没有数据目录（全内存档），没有地方放场景' }
+    const appData = env[DSH_APP_DATA_ENV]?.trim()
+    try {
+      return {
+        reason: '',
+        manager: createDshScenes({
+          dshHome: home,
+          workspaceRoot: workspaceRootOf(env),
+          protectedDirs: [
+            ...(dbDir === undefined ? [] : [dbDir]),
+            ...(appData === undefined || appData === '' ? [] : [appData]),
+            home,
+          ],
+          baseEnv: env,
+          log: (line) => {
+            if (options.quiet !== true) process.stdout.write(`${line}\n`)
+          },
+        }),
+      }
+    } catch (err) {
+      return { reason: err instanceof Error ? err.message : String(err) }
+    }
+  })()
+  const dshScenes = (): DshScenesManager => {
+    if (dshScenesSetup.manager === undefined)
+      throw new ApiError('not_implemented', dshScenesSetup.reason)
+    return dshScenesSetup.manager
   }
   const browserSettings = createBrowserSettings({
     ...(dbDir === undefined ? {} : { dir: dbDir }),
@@ -4735,6 +4779,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP82（55 §3 末段）：浏览器设置。**不按品牌**（见上面 `browserSettings` 那段）。
      * 这条路上没有任何凭据：CDP 地址不是密码，登录态在用户自己的 Chrome 里。
      */
+    /*
+     * WP136（docs/79）：dsh 场景切换。其他场景由 DeepSeek 官方维护，这里只是入口；
+     * 打开回的网址带 dsh 发的一次性 token，只在响应里出现、不进日志。
+     */
+    dshScenes: {
+      list: () => dshScenesSetup.manager?.list() ?? unavailableScenes(dshScenesSetup.reason),
+      create: (_actor, input) => dshScenes().create(input),
+      remove: (_actor, name, confirm) => dshScenes().remove(name, confirm),
+      open: (_actor, name) => dshScenes().open(name),
+      stop: (_actor, name) => dshScenes().stop(name),
+      restart: (_actor, name) => dshScenes().restart(name),
+    },
     browser: {
       settings: () => browserSettings.get(),
       setSettings: (_actor, input) => {
@@ -5201,6 +5257,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }
       // WP85：先把两条 IM 长连接收掉（长轮询与 WebSocket 都会拦着进程退出）
       await imChannels.close()
+      // WP136：起过的其他场景一并关掉（它们是这个进程的子进程，不留孤儿占着端口）
+      await dshScenesSetup.manager?.close()
       learning.close()
       knowledge.close()
       data.close()

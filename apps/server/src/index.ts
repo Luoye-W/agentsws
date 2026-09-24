@@ -90,6 +90,19 @@ export {
   type MailProbe,
   smokeDetail,
 } from './connections.js'
+// WP136（docs/79）：dsh 场景切换
+export {
+  createDshScenes,
+  DSH_APP_DATA_ENV,
+  DSH_HOME_ENV,
+  DSH_WORKSPACE_ENV,
+  type DshScenesManager,
+  type DshScenesOptions,
+  dshHomeOf,
+  unavailableScenes,
+  workspaceProblem,
+  workspaceRootOf,
+} from './dsh-scenes.js'
 export {
   createPrivacyErase,
   type EraseInput,
