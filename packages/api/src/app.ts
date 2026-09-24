@@ -231,6 +231,8 @@ export function createGateway(deps: GatewayDeps): Gateway {
     new MemoryIdempotencyStore(deps.options?.idempotencyTtlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS)
   const openapi = buildOpenApi(routes, version)
   const nowMs = (): number => Date.parse(deps.clock.now())
+  /** WP140：限流按墙钟回血（见 `GatewayOptions.wallClockMs`）；真安装本来就是系统时钟，行为不变。 */
+  const wallMs = deps.options?.wallClockMs ?? ((): number => Date.now())
 
   // ── trace：每个请求一个 trace_id，放进异步上下文，事件日志写同一个（28 §1）
   app.use('*', async (c, next) => {
@@ -295,7 +297,7 @@ export function createGateway(deps: GatewayDeps): Gateway {
   const rateLimit: MiddlewareHandler<GatewayEnv> = async (c, next) => {
     const p = c.get('rctx').principal
     if (!p) return next()
-    const verdict = limiter.take(p.workspace_id, p.kind, nowMs())
+    const verdict = limiter.take(p.workspace_id, p.kind, wallMs())
     if (!verdict.allowed)
       throw new ApiError('budget_exhausted', '请求过于频繁', {
         status: 429,

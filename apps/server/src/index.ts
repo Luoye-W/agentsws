@@ -75,6 +75,14 @@ export {
   DEFAULT_CLOUD_BASE_URL,
   LINK_PENDING_TTL_MS,
 } from './cloud-account.js'
+// WP140：demo 里「官方云那一跳」的替身（不出网）
+export {
+  CLOUD_STAND_IN_BASE_URL,
+  type CloudStandIn,
+  type CloudStandInOptions,
+  type CloudStandInRequest,
+  cloudStandIn,
+} from './cloud-stand-in.js'
 export {
   CONNECT_URL_ENV,
   connectBaseUrl,

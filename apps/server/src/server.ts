@@ -504,6 +504,11 @@ export interface MountedWorld {
    * 世界里的 `approval.created` / `run.completed` 根本不在服务进程的日志里（WP21 遗留）。
    */
   eventLog?: EventLogPort
+  /**
+   * WP140：这个世界里的人（id + 名字）。demo 的样例会议用它把与会人换成公司里的真人，
+   * 待办负责人才叫得出名字。不给就用样本自带的那几位。
+   */
+  people?: { id: PersonId; name: string }[]
 }
 
 export interface ServerOptions {
@@ -2943,6 +2948,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       owner: person.id,
       position_id: ownerAssignment.id,
       clock,
+      ...(mount.people === undefined ? {} : { people: mount.people }),
     })
   }
 

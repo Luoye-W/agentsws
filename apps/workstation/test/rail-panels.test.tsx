@@ -194,10 +194,10 @@ describe('第三栏骨架（36 §9）', () => {
     })
   })
 
-  it('还没做的那几个：点了照实说"还没做"，不装成空面板', async () => {
+  it('WP140：还没做的那几个内测期间不上图标轨（开关放出来的那一路见 rail-registry）', () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-data'))
-    expect(await screen.findByTestId('rail-placeholder')).toBeDefined()
+    for (const id of ['data', 'runs', 'schedules', 'files'])
+      expect(screen.queryByTestId(`rail-icon-${id}`)).toBeNull()
   })
 })
 

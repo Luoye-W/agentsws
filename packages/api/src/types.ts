@@ -532,6 +532,14 @@ export interface GatewayOptions {
   rateLimit?: Partial<Record<Principal['kind'], RateLimitPolicy>> & {
     default?: RateLimitPolicy
   }
+  /**
+   * WP140（docs/78 阻断 #3）：限流桶用的**墙钟**（毫秒）。不给就是 `Date.now`。
+   *
+   * 限流防的是真实世界里的刷接口，和合成时间无关：demo 注入的合成时钟只在批卡 / 跳时间时
+   * 才往前走，桶挂在它上面就「用完永不回血」。所以令牌桶一律按真实时间回血；这个口子
+   * 只给测试换一个可拨的墙钟。幂等表的保留时长仍走注入的 `Clock`。
+   */
+  wallClockMs?: () => number
   /** 幂等表保留时长，默认 24h（28 §2）。 */
   idempotencyTtlMs?: number
   /** WP18：不给就用内存档；apps/server 在有数据目录时传 SqliteIdempotencyStore。 */
