@@ -2519,6 +2519,30 @@ const zh: Table = {
   'models.image.no_choices':
     '上面还没有能出图的接口：接上 Agents 工坊官方接口，或者加一条 OpenAI 兼容口，再回来选。',
   'models.image.saved': '已保存，下一次出图就用它。',
+  // WP134：第三种模型来源「用我的 DeepSeek 账号登录」（dsh 官方模块，系统浏览器授权）
+  'onboarding.ai.account': '用我的 DeepSeek 账号登录',
+  'dsa.title': '用我的 DeepSeek 账号登录',
+  'dsa.summary': '不用建 key：在浏览器里登录一次 DeepSeek 账号，按账号里的余额扣。',
+  'dsa.region': '数据在境内',
+  'dsa.login': '用 DeepSeek 账号登录',
+  'dsa.starting': '正在准备登录…',
+  'dsa.waiting': '已在浏览器里打开 DeepSeek 的登录页。登录并点同意，这一页会自己接上。',
+  'dsa.open_again': '没看到浏览器？再打开一次',
+  'dsa.cancel': '取消',
+  'dsa.cancelled': '已取消。',
+  'dsa.signed_in': '已登录：{account}',
+  'dsa.signed_in.unknown': '已登录',
+  'dsa.balance': '余额 {balance}',
+  'dsa.bonus': '另有赠送 {bonus}',
+  'dsa.top_up': '去充值',
+  'dsa.sign_out': '登出',
+  'dsa.sign_out.confirm':
+    '登出这个 DeepSeek 账号？这台电脑上的登录凭据会删掉，这条模型来源随之停用。',
+  'dsa.testing': '正在验证三步（连通 → 文字 → 看图）…',
+  'dsa.ok': '通了：文字能回，图也看得懂。',
+  'dsa.retest': '再测一次',
+  'dsa.err.key': 'DeepSeek 账号的登录失效了。点登出，再登录一次。',
+  'dsa.err.balance': 'DeepSeek 账号余额不足，去开放平台充值后再测。',
 }
 
 const en: Table = {
@@ -5061,6 +5085,33 @@ const en: Table = {
   'models.image.no_choices':
     'Nothing above can draw yet: connect the Agents Workshop official API or add an OpenAI-compatible endpoint, then come back.',
   'models.image.saved': 'Saved — the next picture uses it.',
+  // WP134: the third model source, "Sign in with my DeepSeek account" (official dsh module, system browser)
+  'onboarding.ai.account': 'Sign in with my DeepSeek account',
+  'dsa.title': 'Sign in with my DeepSeek account',
+  'dsa.summary':
+    'No key to create: sign in to your DeepSeek account once in the browser; usage is billed to that account.',
+  'dsa.region': 'Data stays in mainland China',
+  'dsa.login': 'Sign in with DeepSeek',
+  'dsa.starting': 'Getting the sign-in ready…',
+  'dsa.waiting':
+    "DeepSeek's sign-in page is open in your browser. Sign in and approve; this page picks it up by itself.",
+  'dsa.open_again': "Don't see the browser? Open it again",
+  'dsa.cancel': 'Cancel',
+  'dsa.cancelled': 'Cancelled.',
+  'dsa.signed_in': 'Signed in: {account}',
+  'dsa.signed_in.unknown': 'Signed in',
+  'dsa.balance': 'Balance {balance}',
+  'dsa.bonus': 'plus {bonus} in bonus',
+  'dsa.top_up': 'Top up',
+  'dsa.sign_out': 'Sign out',
+  'dsa.sign_out.confirm':
+    'Sign out of this DeepSeek account? The sign-in on this computer is deleted and this model source stops.',
+  'dsa.testing': 'Checking three steps (reachable → text → images)…',
+  'dsa.ok': 'It works: it answers text and reads images.',
+  'dsa.retest': 'Test again',
+  'dsa.err.key': 'The DeepSeek sign-in has expired. Sign out and sign in again.',
+  'dsa.err.balance':
+    'The DeepSeek account is out of balance. Top up on the platform, then test again.',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

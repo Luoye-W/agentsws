@@ -16,13 +16,18 @@
  *   文字 → 带图，WP127）。三步都过才算接上；**看不了图的不放行**（Agents 工坊
  *   只支持多模态模型）；不通说人话（70 §2.2 那几句）。
  *
- * 减字：两张卡各一行说明，选中哪张才展开哪张的正文——两张同时铺开的话，
- * 第一次打开这个产品的人要先读两段字才知道自己该点哪儿。
+ * - **用我的 DeepSeek 账号登录**（WP134，Luoye 09-24 定的第三种来源）：点了在系统浏览器里走
+ *   DeepSeek 官方授权（dsh 官方模块），回来显示账号与余额，接着同样跑三步验证。
+ *   与设置页那张卡是**同一个件**（`DeepSeekAccountLogin`）。数据驻留：境内。
+ *
+ * 减字：每张卡各一行说明，选中哪张才展开哪张的正文——几张同时铺开的话，
+ * 第一次打开这个产品的人要先读几段字才知道自己该点哪儿。
  */
 import { modelFailureKind, VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Cloud, KeyRound, Loader2 } from 'lucide-react'
+import { Check, Cloud, KeyRound, Loader2, LogIn } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
 import { CLOUD_PROVIDER_ID } from '@/components/settings/model-cloud-card'
@@ -34,6 +39,7 @@ import {
   getCapabilitySources,
   getCloudAccount,
   getCloudCredits,
+  isAccountTemplate,
   linkCloudAccount,
   listModelProviders,
   type ModelProviderKind,
@@ -46,7 +52,7 @@ import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
 /** 这一步是靠哪条路接上的。 */
-export type AiChoice = 'official' | 'own'
+export type AiChoice = 'official' | 'own' | 'account'
 
 /**
  * 试跑失败那一句（70 §2.2）。
@@ -213,7 +219,11 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
    * 订阅登录那几张也不算（它们没有表单，走的是另一条登录流程，不该在向导里半途插一脚）。
    */
   const templates = (providers.data?.templates ?? []).filter(
-    (tpl) => tpl.kind !== 'agentsws_cloud' && (tpl.auth ?? 'api_key') === 'api_key',
+    (tpl) =>
+      tpl.kind !== 'agentsws_cloud' &&
+      (tpl.auth ?? 'api_key') === 'api_key' &&
+      // WP134：账号登录那张是第三张大卡，不在"自己的接口"里重复出现
+      !isAccountTemplate(tpl),
   )
   const template = templates.find((tpl) => slugOf(tpl) === picked) ?? templates[0]
   const granted = credits.data?.balance?.granted
@@ -385,6 +395,42 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                 {t(modelTestKey(test), modelTestVars())}
               </p>
             )}
+          </div>
+        ) : null}
+      </section>
+
+      {/* ── 大卡三：用我的 DeepSeek 账号登录（WP134）─────────────────── */}
+      <section
+        data-testid="ai-card-account"
+        data-open={choice === 'account'}
+        className={cn(
+          'rounded-lg border p-3 text-sm',
+          choice === 'account' ? 'border-primary' : 'border-border',
+        )}
+      >
+        <button
+          type="button"
+          data-testid="ai-pick-account"
+          className="flex w-full items-center gap-2 text-left"
+          onClick={() => {
+            setChoice('account')
+          }}
+        >
+          <LogIn aria-hidden className="size-4 shrink-0" />
+          <span className="font-medium">{t('onboarding.ai.account')}</span>
+          <span className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]">
+            {t('dsa.region')}
+          </span>
+        </button>
+        {choice === 'account' ? (
+          <div className="mt-2 flex flex-col gap-2">
+            <p className="text-xs text-ws-muted-fg">{t('dsa.summary')}</p>
+            <DeepSeekAccountLogin
+              {...(assignment === undefined ? {} : { assignment })}
+              onConnected={() => {
+                onConnected('account')
+              }}
+            />
           </div>
         ) : null}
       </section>
