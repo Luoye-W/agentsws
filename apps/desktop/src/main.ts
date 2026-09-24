@@ -4,6 +4,7 @@
  * 这个文件只做**装配**——所有判定（状态机、退避、URL 拦截、菜单模型、配置、密钥）
  * 都在旁边那些不 import electron 的模块里，那些才是被测试覆盖的部分。
  */
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -71,7 +72,7 @@ import {
   nodeTimers,
   systemClock,
 } from './node-runtime.js'
-import { desktopPaths } from './paths.js'
+import { desktopPaths, thirdPartyLicensesFile } from './paths.js'
 import type { FetchLike } from './ports.js'
 import { createRedactor } from './redact.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
@@ -623,6 +624,9 @@ async function bootstrap(): Promise<void> {
   const upgradeNote = (): UpgradeFailureNote | undefined =>
     remote ? undefined : readFailureNote(files, paths.serverDataDir)
 
+  // WP148：安装包里的第三方许可证说明（没打包就没有，托盘上那一项不出现）
+  const licensesFile = thirdPartyLicensesFile(app.isPackaged ? process.resourcesPath : undefined)
+  const licenses = licensesFile !== undefined && existsSync(licensesFile)
   const trayInput = () => ({
     language: config.language,
     serverUrl: serverUrl(),
@@ -641,6 +645,7 @@ async function bootstrap(): Promise<void> {
     ...(updateAvailable === undefined ? {} : { updateAvailable }),
     ...(scenes === undefined ? {} : { scenes }),
     ...(computerUseActive === undefined ? {} : { computerUse: computerUseActive }),
+    licenses,
   })
 
   const model = (): MenuItemModel[] => buildTrayMenu(trayInput())
@@ -1072,6 +1077,9 @@ async function bootstrap(): Promise<void> {
         break
       case 'export-diagnostics':
         void exportDiagnostics()
+        break
+      case 'open-licenses':
+        if (licensesFile !== undefined) void shell.openPath(licensesFile)
         break
       case 'toggle-launch-at-login': {
         config = configStore.update({ launchAtLogin: !config.launchAtLogin })

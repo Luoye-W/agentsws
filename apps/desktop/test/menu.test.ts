@@ -254,3 +254,24 @@ describe('WP36 / 40 §1.3：连公司服务器那一档', () => {
     expect(serverStateLabel(remote({ company: undefined }))).toBe('已连接')
   })
 })
+
+describe('WP148：开源软件许可', () => {
+  it('安装包里有许可证说明才出这一项，摆在「导出诊断包」后面、中英文都有', () => {
+    const ids = (patch: Partial<TrayModelInput>) => buildTrayMenu(input(patch)).map((i) => i.id)
+    expect(ids({})).not.toContain('open-licenses')
+    expect(ids({ licenses: false })).not.toContain('open-licenses')
+    const on = ids({ licenses: true })
+    expect(on.indexOf('open-licenses')).toBe(on.indexOf('export-diagnostics') + 1)
+    const label = (language: TrayModelInput['language']) =>
+      buildTrayMenu(input({ licenses: true, language })).find((i) => i.id === 'open-licenses')
+        ?.label
+    expect(label('zh-CN')).toBe('开源软件许可')
+    expect(label('en-US')).toBe('Open-source licenses')
+  })
+
+  it('连公司服务器那一档也有（许可证说明的是这台电脑上装的这个安装包）', () => {
+    expect(buildTrayMenu(input({ licenses: true, mode: 'remote' })).map((i) => i.id)).toContain(
+      'open-licenses',
+    )
+  })
+})

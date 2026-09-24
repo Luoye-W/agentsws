@@ -37,6 +37,8 @@ export interface Strings {
   openLogs: string
   /** WP111：托盘「导出诊断包」。 */
   exportDiagnostics: string
+  /** WP148：托盘「开源软件许可」（打开安装包里的第三方许可证说明）。 */
+  openLicenses: string
   /** WP111：升级出事之后那一项「还原上一份备份」。 */
   restoreBackup: string
   /** WP111：mac / linux 只提示那一档，托盘上挂的那一项。 */
@@ -104,6 +106,7 @@ const ZH: Strings = {
   browserExtensionBad: '还没好：{detail}',
   openLogs: '打开日志目录',
   exportDiagnostics: '导出诊断包…',
+  openLicenses: '开源软件许可',
   restoreBackup: '还原上一份备份',
   updateAvailable: '有新版本 {version}，去下载…',
   updateAvailableTitle: 'Agents 工坊有新版本',
@@ -163,6 +166,7 @@ const EN: Strings = {
   browserExtensionBad: 'Not ready: {detail}',
   openLogs: 'Open log folder',
   exportDiagnostics: 'Export a diagnostics bundle…',
+  openLicenses: 'Open-source licenses',
   restoreBackup: 'Restore the last backup',
   updateAvailable: 'Version {version} is out — open the download page…',
   updateAvailableTitle: 'A new Agents Workshop is available',

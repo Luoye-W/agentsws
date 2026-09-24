@@ -15,7 +15,7 @@ import { createApiClient } from '../src/api-client.js'
 import type { HealthSnapshot } from '../src/health.js'
 import { strings } from '../src/i18n.js'
 import { buildTrayMenu, sceneSubmenu, type TrayModelInput } from '../src/menu.js'
-import { desktopPaths } from '../src/paths.js'
+import { desktopPaths, thirdPartyLicensesFile } from '../src/paths.js'
 import type { ApiFetchLike, ApiResponseLike } from '../src/ports.js'
 import { serverSpawnRequest } from '../src/server-process.js'
 
@@ -214,5 +214,14 @@ describe('api-client 的两条', () => {
     expect((await api.openScene(session, 'a', 'nourl')).ok).toBe(false)
     await api.openScene(session, 'a', 'a b')
     expect(calls.at(-1)?.url).toContain('/v1/dsh-scenes/a%20b/open')
+  })
+})
+
+describe('WP148：安装包里的第三方许可证说明在哪', () => {
+  it('打包了：<resources>/licenses/THIRD_PARTY_LICENSES.txt；没打包：undefined', () => {
+    expect(thirdPartyLicensesFile('/Applications/agentsws.app/Contents/Resources')).toBe(
+      '/Applications/agentsws.app/Contents/Resources/licenses/THIRD_PARTY_LICENSES.txt',
+    )
+    expect(thirdPartyLicensesFile(undefined)).toBeUndefined()
   })
 })
