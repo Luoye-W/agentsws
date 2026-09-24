@@ -80,6 +80,15 @@ export type ModelProviderKind =
   | 'openai-codex'
   /** WP90：**用 Claude 的订阅登录**（`pi-ai` 的 `anthropic`）。同上。 */
   | 'anthropic'
+  /**
+   * WP134（Luoye 09-24）：**用我的 DeepSeek 账号登录**——第三种模型来源。
+   *
+   * 也没有 key 可填：凭据是 dsh 官方 `@deepseek-ai/dsh-deepseek-account-platform` 在系统浏览器里
+   * 走完 PKCE 授权的产物，**只存在 dsh 自己的本机凭据库里**（不进我们的秘密库、不上云）。
+   * 推理走 `api.deepseek.com` 的 Messages 口、令牌放 `x-dsh-auth-token` 头（官方写法）。
+   * 登录 / 登出 / 余额走 `/v1/settings/models/deepseek-account*` 那几条路。数据驻留：境内。
+   */
+  | 'deepseek_account'
 
 /**
  * 一个 provider 的对外形状。**这里没有、也不会有 key 字段。**
@@ -160,8 +169,12 @@ export interface ModelProviderTemplate {
    *
    * `subscription` 的方案**没有表单**——卡里换成一个"登录"按钮 + 风险提示，
    * 走 `/v1/settings/models/subscription/*` 那几条路。
+   *
+   * WP134：`account` = 用 DeepSeek 账号登录（系统浏览器授权），走
+   * `/v1/settings/models/deepseek-account*`；也没有表单。它单独一张卡（向导第 ① 步与设置页各一张），
+   * 不进"一家一张卡"那一排。
    */
-  auth?: 'api_key' | 'subscription'
+  auth?: 'api_key' | 'subscription' | 'account'
   /** `auth: 'subscription'` 时走哪一家（与 {@link SubscriptionView.provider} 同一个串）。 */
   subscription_provider?: SubscriptionProviderKind
   default_base_url: string
@@ -240,6 +253,72 @@ export interface SubscriptionView {
 export interface SubscriptionLoginInput {
   provider: SubscriptionProviderKind
   method: SubscriptionLoginMethodName
+}
+
+// ── WP134：用我的 DeepSeek 账号登录（第三种模型来源）───────────────────
+
+/**
+ * 一次登录走到哪一步——官方 `SignInAttemptView.phase` 原样透出（八个值，一个不改）。
+ * `waiting-browser` 时界面把 {@link DeepSeekAccountView.authorize_url} 交给系统浏览器打开。
+ */
+export type DeepSeekAccountPhase =
+  | 'initializing'
+  | 'waiting-browser'
+  | 'exchanging'
+  | 'committing'
+  | 'succeeded'
+  | 'cancelled'
+  | 'expired'
+  | 'failed'
+
+/** 一个钱包的余额（币种 + 平台给的十进制串，**不转数字**——保留平台的精度）。 */
+export interface DeepSeekWalletView {
+  currency: 'CNY' | 'USD'
+  balance: string
+}
+
+/**
+ * 「用我的 DeepSeek 账号登录」现在的样子。**这里没有、也不会有令牌字段。**
+ *
+ * 与账号有关的只有三样（派工单原话「我们只读登录了没有 / 账号名 / 余额」）：`signed_in`、
+ * `account`（平台给的名字，或平台**自己脱敏过**的手机号 / 邮箱）、`balance`。
+ */
+export interface DeepSeekAccountView {
+  /** 这台机器能不能用这条路（只有本机档能：授权回调必须回到本机回环地址）。 */
+  available: boolean
+  /** 不能用的原因（人话）。 */
+  unavailable_reason?: string
+  /** 官方模块现在挂着没有（用户选了这条路才挂；默认关）。 */
+  enabled: boolean
+  /** dsh 本机凭据库里有没有这个账号的授权。 */
+  signed_in: boolean
+  /** 最近一次登录尝试（没有就是没登过或已经登出）。 */
+  attempt?: {
+    id: string
+    phase: DeepSeekAccountPhase
+    /** 只在 `waiting-browser` 时有：系统浏览器要打开的授权页（平台源上固定的 `/dsh/authorize`）。 */
+    authorize_url?: string
+    /** 这次登录最晚什么时候作废（ISO8601）。 */
+    expires_at?: string
+    /** 没成的原因码（官方四个：`network` / `protocol` / `expired` / `storage`）。 */
+    error_code?: 'network' | 'protocol' | 'expired' | 'storage'
+    /** 没成的原因（人话）。 */
+    error?: string
+  }
+  /** 账号名：平台上的名字，没有就是平台脱敏过的手机号 / 邮箱。 */
+  account?: string
+  /** 账号资料查不到时的人话（查不到**不等于**没登录）。 */
+  account_error?: string
+  /** 余额：充值钱包与赠送钱包分开；查不到时 `status: 'failed'` + 一句人话，**不会显示成 0**。 */
+  balance?:
+    | { status: 'ready'; wallets: DeepSeekWalletView[]; bonus: DeepSeekWalletView[] }
+    | { status: 'failed'; message: string }
+  /** 平台上看用量 / 充值的地址（官方 `links`，不带令牌）。 */
+  usage_url?: string
+  top_up_url?: string
+  /** 这一路用哪个型号（官方目录里能看图的那一档）与数据驻留（境内）。 */
+  default_model: string
+  region: 'cn'
 }
 
 export interface ModelTestResult {
@@ -537,6 +616,19 @@ export interface ModelsPort {
   ): MaybePromise<SubscriptionView>
   /** 登出 = 销毁本机那条记录。 */
   subscriptionSignOut?(actor: ModelsActor, provider: string): MaybePromise<void>
+
+  /*
+   * WP134：用我的 DeepSeek 账号登录。**四个方法都是可选的**——不实现 = 这个进程没有装配这条路
+   * （公司端 / 托管端镜像），路由回 not_implemented。登录流程本身是 dsh 官方模块的，这里只是投影。
+   */
+  /** 现在什么样（界面登录途中轮询它）。带账号名与余额（登录了才查）。 */
+  deepseekAccount?(actor: ModelsActor): MaybePromise<DeepSeekAccountView>
+  /** 选中这条路 = 挂上官方模块 + 起一次登录；回来时（通常）已经带着授权页地址。 */
+  deepseekAccountLogin?(actor: ModelsActor): MaybePromise<DeepSeekAccountView>
+  /** 取消正在跑的那一次登录（只取消这一次）。 */
+  deepseekAccountCancel?(actor: ModelsActor, attempt_id: string): MaybePromise<DeepSeekAccountView>
+  /** 登出 = 官方 signOut（先删本机凭据、后台调平台 logout）+ 摘掉这条 provider + 关模块。 */
+  deepseekAccountSignOut?(actor: ModelsActor): MaybePromise<void>
 }
 
 /** 装配方给网关的 ModelRef 拆解（`provider/model`）。 */
@@ -554,6 +646,7 @@ const KIND = z.enum([
   'agentsws_cloud',
   'openai-codex',
   'anthropic',
+  'deepseek_account',
 ])
 /** WP90：订阅登录的两家 + 两种方式。值一律白名单，不接受别的串。 */
 const SUBSCRIPTION_PROVIDER = z.enum(['openai-codex', 'anthropic'])
@@ -564,6 +657,8 @@ const SubscriptionLoginBody = z.object({
 /** 贴回来的授权码：只限长度，**值不进任何错误信封**（与 `api_key` 同一条纪律）。 */
 const SubscriptionAnswerBody = z.object({ value: z.string().min(1).max(4096) })
 const SubscriptionModelBody = z.object({ model: z.string().min(1).max(128) })
+/** WP134：取消哪一次登录（官方的尝试 id，UUID）。 */
+const DeepSeekCancelBody = z.object({ attempt_id: z.string().min(1).max(64) })
 const REGION = z.enum(['cn', 'global'])
 const PURPOSE = z.enum(['run', 'extraction', 'reflection', 'embedding', 'judge', 'transcription'])
 
@@ -648,6 +743,14 @@ function subscriptionPortOf(deps: GatewayDeps): ModelsPort {
   const p = portOf(deps)
   if (p.subscriptionLogin === undefined || p.subscription === undefined)
     throw new ApiError('not_implemented', '这个服务进程没有装配订阅登录（55 §9）')
+  return p
+}
+
+/** WP134：装了「用 DeepSeek 账号登录」才有那四条路。 */
+function deepseekAccountPortOf(deps: GatewayDeps): ModelsPort {
+  const p = portOf(deps)
+  if (p.deepseekAccount === undefined || p.deepseekAccountLogin === undefined)
+    throw new ApiError('not_implemented', '这个服务进程没有装配「用 DeepSeek 账号登录」')
   return p
 }
 
@@ -1049,6 +1152,80 @@ export function modelRoutes(): Route[] {
       async (c, deps) => {
         const port = subscriptionPortOf(deps)
         await port.subscriptionSignOut?.(actorOf(c), param(c, 'provider'))
+        return ok(c, { signed_out: true })
+      },
+    ),
+    /*
+     * WP134：用我的 DeepSeek 账号登录。`/v1/settings/models/deepseek-account` 与上面的
+     * `subscription` 是同级的另一个定值段，撞不上；`login` / `cancel` 是它下面的定值段。
+     * 回调**不在这里**：官方模块在服务进程的现有端口上注册 `/oauth/callback`，由它自己校验
+     * state + PKCE（不走 bearer，浏览器那一跳没有我们的会话）。
+     */
+    route(
+      {
+        method: 'get',
+        path: '/v1/settings/models/deepseek-account',
+        operationId: 'getDeepSeekAccount',
+        summary:
+          '「用我的 DeepSeek 账号登录」现在什么样（**永不含令牌**：只有登录了没有、账号名、余额；登录途中带授权页地址）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'DeepSeekAccountView',
+      },
+      async (c, deps) => ok(c, await deepseekAccountPortOf(deps).deepseekAccount?.(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/settings/models/deepseek-account/login',
+        operationId: 'startDeepSeekAccountLogin',
+        summary:
+          '选中这条路并起一次登录（dsh 官方模块，系统浏览器 PKCE）：回来时带授权页地址，界面交给系统浏览器打开、再轮询状态。只在本机档',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'DeepSeekAccountView',
+      },
+      async (c, deps) =>
+        ok(c, await deepseekAccountPortOf(deps).deepseekAccountLogin?.(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/settings/models/deepseek-account/cancel',
+        operationId: 'cancelDeepSeekAccountLogin',
+        summary: '取消正在跑的那一次登录（只取消这一次；迟到的浏览器回调不会再把人登进去）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: DeepSeekCancelBody,
+        returns: 'DeepSeekAccountView',
+      },
+      async (c, deps) => {
+        const port = deepseekAccountPortOf(deps)
+        const input = await body(c, DeepSeekCancelBody)
+        return ok(c, await port.deepseekAccountCancel?.(actorOf(c), input.attempt_id))
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/settings/models/deepseek-account',
+        operationId: 'signOutDeepSeekAccount',
+        summary:
+          '登出：官方先删本机凭据、再在后台调平台 logout；这条模型来源随之摘掉，官方模块关掉',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: '{ signed_out: true }',
+      },
+      async (c, deps) => {
+        await deepseekAccountPortOf(deps).deepseekAccountSignOut?.(actorOf(c))
         return ok(c, { signed_out: true })
       },
     ),
