@@ -159,25 +159,43 @@ const DesignMdBody = lazy(async () => {
   return { default: () => <m.DesignMdPanel /> }
 })
 
-export function ensureBuiltinPanels(): void {
+/**
+ * WP140（docs/78 §2 通用，Fable 定）：**内测期间把还没做的占位面板藏起来**。
+ *
+ * 图标轨上四个格子点开只有一句「这个面板还没做」——内测的朋友会以为是坏了。
+ * 代码不删（位置定了就不该再挪，做好了原位放出来）：做好一个就把它的 id 从
+ * {@link UNBUILT_PANELS} 里删掉（它注册了身体就不再是占位），或者整组放出来就把
+ * {@link SHOW_UNBUILT_PANELS} 改成 `true`——都是一行。
+ */
+export const SHOW_UNBUILT_PANELS = false
+
+/** 还只有类型、没有身体的那几个（数据面板 / 运行中 / 定时任务 / 文件）。 */
+export const UNBUILT_PANELS: readonly string[] = ['data', 'runs', 'schedules', 'files']
+
+export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): void {
   if (panelType('memory') !== undefined) return
+  const showUnbuilt = options.showUnbuilt ?? SHOW_UNBUILT_PANELS
+  /** 占位面板走这一句：开关关着就不上图标轨（注册表里也没有它，⌘K 搜不到、布局恢复当收起）。 */
+  const registerUnbuilt = (definition: Parameters<typeof registerPanelType>[0]): void => {
+    if (showUnbuilt || !UNBUILT_PANELS.includes(definition.id)) registerPanelType(definition)
+  }
 
   // ── 上组：这件事的 ───────────────────────────────────────────────
-  registerPanelType({
+  registerUnbuilt({
     id: 'data',
     label: 'rail.panel.data',
     icon: BarChart3,
     priority: 'builtin',
     group: 'context',
   })
-  registerPanelType({
+  registerUnbuilt({
     id: 'runs',
     label: 'rail.panel.runs',
     icon: Activity,
     priority: 'builtin',
     group: 'context',
   })
-  registerPanelType({
+  registerUnbuilt({
     id: 'schedules',
     label: 'rail.panel.schedules',
     icon: Clock,
@@ -265,7 +283,7 @@ export function ensureBuiltinPanels(): void {
     group: 'tools',
   })
   registerPanelBody('browser', RunBrowserBody)
-  registerPanelType({
+  registerUnbuilt({
     id: 'files',
     label: 'rail.panel.files',
     icon: FolderOpen,
