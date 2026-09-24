@@ -31,6 +31,9 @@ const SCALAR_FIELDS = [
   'pin',
   'lockfile_single',
   'release_age_prefix',
+  // WP144：不走 npm 的产物（驱动这种二进制）钉在一份 JSON 里——哪个文件、哪一格
+  'lock_json',
+  'lock_json_path',
 ]
 const LIST_FIELDS = ['watch', 'locked_in', 'we_depend_on', 'watch_paths', 'wishlist', 'covered_by']
 const ALL_FIELDS = [...SCALAR_FIELDS, ...LIST_FIELDS]
@@ -213,6 +216,9 @@ export function validateShape(items) {
       p(`${where} \`lockfile_single\` 只许 true / false`)
     if (String(it.locked_version ?? '').startsWith('^') && it.pin !== 'allow_caret')
       p(`${where} \`locked_version\` 带 ^ 就要显式写 \`pin: allow_caret\`（docs/42 红线 3）`)
+    if ((it.lock_json === undefined) !== (it.lock_json_path === undefined))
+      p(`${where} \`lock_json\` 与 \`lock_json_path\` 要一起写`)
+    if (it.lock_json && !it.locked_version) p(`${where} 有 \`lock_json\` 就要有 \`locked_version\``)
   }
   return problems
 }
@@ -300,6 +306,30 @@ export function checkPins(items, root = REPO_ROOT) {
 
     for (const rel of it.covered_by ?? []) {
       if (!existsSync(join(root, String(rel)))) p(`${where} covered_by 指向不存在的路径：${rel}`)
+    }
+
+    // WP144：钉在 JSON 里的版本（`computer-use.lock.json` 的 `driver.version` 这种）必须逐字等于登记表
+    if (it.lock_json && it.lock_json_path) {
+      const text = readIfExists(join(root, String(it.lock_json)))
+      if (text === null) p(`${where} lock_json 指向不存在的文件：${it.lock_json}`)
+      else {
+        let value
+        try {
+          value = String(it.lock_json_path)
+            .split('.')
+            .reduce(
+              (node, key) => (node === undefined || node === null ? undefined : node[key]),
+              JSON.parse(text),
+            )
+        } catch {
+          p(`${where} ${it.lock_json} 不是合法的 JSON`)
+        }
+        if (value === undefined) p(`${where} ${it.lock_json} 里没有 \`${it.lock_json_path}\``)
+        else if (String(value) !== stripRange(want))
+          p(
+            `${where} ${it.lock_json} 的 \`${it.lock_json_path}\` 是 ${value}，登记表写的是 ${want}`,
+          )
+      }
     }
   }
   return problems

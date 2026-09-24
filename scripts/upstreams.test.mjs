@@ -68,6 +68,10 @@ describe('仓库根的 upstreams.yml', () => {
       'ego-lite',
       'dsh-im',
       'dsh-experimental',
+      // WP144：电脑操控的两个官方包与驱动
+      'dsh-computer-use',
+      'dsh-experimental-computer-use-cua-driver-mcp',
+      'cua-driver',
     ]) {
       expect(ids, `少了 ${id}`).toContain(id)
     }
@@ -270,6 +274,32 @@ describe('锁的版本与仓库对账', () => {
 
   it('package.json 里压根没依赖这个包 → 报出来', () => {
     expect(pin({ npm: 'other' }, {}).join('\n')).toContain('根本没有依赖')
+  })
+
+  it('WP144：lock_json 里钉的版本与登记表对账（驱动这种不走 npm 的二进制）', () => {
+    const root = fakeRepo({})
+    writeFileSync(join(root, 'driver.lock.json'), JSON.stringify({ driver: { version: '0.28.0' } }))
+    const item = {
+      id: 'drv',
+      kind: 'runtime-dep',
+      why: 'x',
+      repo: 'o/r',
+      watch: ['releases'],
+      locked_version: '0.28.0',
+      lock_json: 'driver.lock.json',
+      lock_json_path: 'driver.version',
+    }
+    expect(checkPins([item], root)).toEqual([])
+    expect(checkPins([{ ...item, locked_version: '0.29.0' }], root).join('\n')).toContain(
+      '`driver.version` 是 0.28.0，登记表写的是 0.29.0',
+    )
+    expect(checkPins([{ ...item, lock_json_path: 'driver.nope' }], root).join('\n')).toContain(
+      '里没有 `driver.nope`',
+    )
+    expect(checkPins([{ ...item, lock_json: 'missing.json' }], root).join('\n')).toContain(
+      'lock_json 指向不存在的文件',
+    )
+    expect(validateShape([{ ...item, lock_json_path: undefined }]).join('\n')).toContain('要一起写')
   })
 })
 
