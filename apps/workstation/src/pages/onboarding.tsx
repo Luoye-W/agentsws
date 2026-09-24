@@ -220,6 +220,8 @@ export function OnboardingPage(): React.ReactNode {
       setFailure(undefined)
       await client.invalidateQueries({ queryKey: ['onboarding'] })
       await client.invalidateQueries({ queryKey: ['positions'] })
+      // WP139：名下多了几条分配——左栏「聊天窗」入口与独立页面挑身份都读 `['session']`
+      await client.invalidateQueries({ queryKey: ['session'] })
       // WP112：不再直接跳首页——先给一屏回执（"一队上岗了"），人自己按按钮进去
       setStep(DONE_STEP)
     },

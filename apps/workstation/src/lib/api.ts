@@ -3455,18 +3455,27 @@ export interface ChatTurnView {
   blocked?: string
 }
 
-export const openChatSession = (): Promise<ChatSessionView> =>
-  api<ChatSessionView>('/v1/chat/sessions', { method: 'POST' })
+// WP139：这一组都多一个可选的 `assignment`——试聊 / 聊天窗不属于任何岗位，
+// 按「要什么职责」挑自己名下那条分配发请求（`lib/pick-assignment.ts`），不改全局当前岗位。
+// 注意别把它们直接当 `queryFn` / `mutationFn` 传：TanStack 会把它的上下文塞进第一个参数。
+export const openChatSession = (assignment?: string): Promise<ChatSessionView> =>
+  api<ChatSessionView>('/v1/chat/sessions', { method: 'POST', ...withAssignment(assignment) })
 
 export const getChatMessages = (
   id: string,
+  assignment?: string,
 ): Promise<{ session: ChatSessionView; messages: ChatMessageView[] }> =>
-  api(`/v1/chat/sessions/${encodeURIComponent(id)}/messages`)
+  api(`/v1/chat/sessions/${encodeURIComponent(id)}/messages`, withAssignment(assignment))
 
-export const sendChatMessage = (id: string, text: string): Promise<ChatTurnView> =>
+export const sendChatMessage = (
+  id: string,
+  text: string,
+  assignment?: string,
+): Promise<ChatTurnView> =>
   api<ChatTurnView>(`/v1/chat/sessions/${encodeURIComponent(id)}/messages`, {
     method: 'POST',
     body: { text },
+    ...withAssignment(assignment),
   })
 
 /**
@@ -3475,11 +3484,14 @@ export const sendChatMessage = (id: string, text: string): Promise<ChatTurnView>
  * 沙盒页自己点这一下，不等服务进程里那个真定时器——不然每发一句都要干等 2 秒
  * 才看得到判定，商家试不下去。真访客那一路仍然由定时器驱动。
  */
-export const advanceChatTurn = (id: string): Promise<ChatTurnView> =>
-  api<ChatTurnView>(`/v1/chat/sessions/${encodeURIComponent(id)}/advance`, { method: 'POST' })
+export const advanceChatTurn = (id: string, assignment?: string): Promise<ChatTurnView> =>
+  api<ChatTurnView>(`/v1/chat/sessions/${encodeURIComponent(id)}/advance`, {
+    method: 'POST',
+    ...withAssignment(assignment),
+  })
 
-export const listChatSessions = (limit = 30): Promise<ChatSessionView[]> =>
-  api<ChatSessionView[]>(`/v1/chat/sessions?limit=${limit}`)
+export const listChatSessions = (limit = 30, assignment?: string): Promise<ChatSessionView[]> =>
+  api<ChatSessionView[]>(`/v1/chat/sessions?limit=${limit}`, withAssignment(assignment))
 
 export interface ChatWidgetSettingsView {
   allowed_origins: string[]
@@ -3489,16 +3501,19 @@ export interface ChatWidgetSettingsView {
   updated_at?: string
 }
 
-export const getChatWidgetSettings = (): Promise<ChatWidgetSettingsView> =>
-  api('/v1/chat/widget/settings')
+export const getChatWidgetSettings = (assignment?: string): Promise<ChatWidgetSettingsView> =>
+  api('/v1/chat/widget/settings', withAssignment(assignment))
 
-export const setChatWidgetSettings = (input: {
-  allowed_origins: string[]
-  accent?: string
-  greeting?: string
-  assist_wait_seconds?: number
-}): Promise<ChatWidgetSettingsView> =>
-  api('/v1/chat/widget/settings', { method: 'PUT', body: input })
+export const setChatWidgetSettings = (
+  input: {
+    allowed_origins: string[]
+    accent?: string
+    greeting?: string
+    assist_wait_seconds?: number
+  },
+  assignment?: string,
+): Promise<ChatWidgetSettingsView> =>
+  api('/v1/chat/widget/settings', { method: 'PUT', body: input, ...withAssignment(assignment) })
 
 export interface ChatRelaySettingsView {
   endpoint?: string
@@ -3507,14 +3522,18 @@ export interface ChatRelaySettingsView {
   configured: boolean
 }
 
-export const getChatRelaySettings = (): Promise<ChatRelaySettingsView> =>
-  api('/v1/chat/relay/settings')
+export const getChatRelaySettings = (assignment?: string): Promise<ChatRelaySettingsView> =>
+  api('/v1/chat/relay/settings', withAssignment(assignment))
 
-export const setChatRelaySettings = (input: {
-  endpoint?: string | null
-  pairing_token?: string
-  message_key?: string
-}): Promise<ChatRelaySettingsView> => api('/v1/chat/relay/settings', { method: 'PUT', body: input })
+export const setChatRelaySettings = (
+  input: {
+    endpoint?: string | null
+    pairing_token?: string
+    message_key?: string
+  },
+  assignment?: string,
+): Promise<ChatRelaySettingsView> =>
+  api('/v1/chat/relay/settings', { method: 'PUT', body: input, ...withAssignment(assignment) })
 
 export interface ChatRelayTestView {
   ok: boolean
@@ -3522,8 +3541,8 @@ export interface ChatRelayTestView {
   client_state: string
 }
 
-export const testChatRelay = (): Promise<ChatRelayTestView> =>
-  api('/v1/chat/relay/test', { method: 'POST' })
+export const testChatRelay = (assignment?: string): Promise<ChatRelayTestView> =>
+  api('/v1/chat/relay/test', { method: 'POST', ...withAssignment(assignment) })
 
 export type HostedInstanceState = 'running' | 'starting' | 'sleeping' | 'stopped'
 
@@ -3540,7 +3559,8 @@ export interface ChatRelayStatusView {
   hosted?: { state: HostedInstanceState; last_heartbeat_at?: string }
 }
 
-export const getChatRelayStatus = (): Promise<ChatRelayStatusView> => api('/v1/chat/relay/status')
+export const getChatRelayStatus = (assignment?: string): Promise<ChatRelayStatusView> =>
+  api('/v1/chat/relay/status', withAssignment(assignment))
 
 /* ── WP128 客服增值服务：云端替你值守（「转发方式」第三项） ─────────────── */
 
@@ -3567,28 +3587,38 @@ export interface ChatRelayHostedView {
   message?: string
 }
 
-export const getChatRelayHosted = (): Promise<ChatRelayHostedView> => api('/v1/chat/relay/hosted')
+export const getChatRelayHosted = (assignment?: string): Promise<ChatRelayHostedView> =>
+  api('/v1/chat/relay/hosted', withAssignment(assignment))
 
-export const subscribeChatRelayHosted = (): Promise<ChatRelayHostedView> =>
-  api('/v1/chat/relay/hosted/subscribe', { method: 'POST' })
+export const subscribeChatRelayHosted = (assignment?: string): Promise<ChatRelayHostedView> =>
+  api('/v1/chat/relay/hosted/subscribe', { method: 'POST', ...withAssignment(assignment) })
 
-export const cancelChatRelayHosted = (): Promise<ChatRelayHostedView> =>
-  api('/v1/chat/relay/hosted/subscribe', { method: 'DELETE' })
+export const cancelChatRelayHosted = (assignment?: string): Promise<ChatRelayHostedView> =>
+  api('/v1/chat/relay/hosted/subscribe', { method: 'DELETE', ...withAssignment(assignment) })
 
-export const bringHomeChatRelayHosted = (): Promise<{
+export const bringHomeChatRelayHosted = (
+  assignment?: string,
+): Promise<{
   saved_to?: string
   bytes?: number
   message: string
-}> => api('/v1/chat/relay/hosted/bring-home', { method: 'POST' })
+}> => api('/v1/chat/relay/hosted/bring-home', { method: 'POST', ...withAssignment(assignment) })
 
-export const seedChatRelayHosted = (): Promise<{ bytes: number; message: string }> =>
-  api('/v1/chat/relay/hosted/seed', { method: 'POST' })
+export const seedChatRelayHosted = (
+  assignment?: string,
+): Promise<{ bytes: number; message: string }> =>
+  api('/v1/chat/relay/hosted/seed', { method: 'POST', ...withAssignment(assignment) })
 
 export const teachChatSession = (
   id: string,
   input: { instruction: string; scope: 'single_reply' | 'similar_cases' | 'global_rule' },
+  assignment?: string,
 ): Promise<{ outcome: string; reply?: string; sediment: string }> =>
-  api(`/v1/chat/sessions/${encodeURIComponent(id)}/teach`, { method: 'POST', body: input })
+  api(`/v1/chat/sessions/${encodeURIComponent(id)}/teach`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
 
 /* ── 49 M1 云账号（WP58）──────────────────────────────────────────────── */
 

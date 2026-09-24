@@ -8,6 +8,7 @@ import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/app-shell'
 import { BootSplash } from '@/components/boot-splash'
+import { PageError } from '@/components/page-error'
 import {
   ensureSession,
   getHome,
@@ -63,7 +64,7 @@ export function App(): ReactNode {
 }
 
 function Workspace(): ReactNode {
-  const { t, selectPosition, position } = useApp()
+  const { selectPosition, position } = useApp()
   const client = useQueryClient()
   const location = useLocation()
 
@@ -139,13 +140,37 @@ function Workspace(): ReactNode {
 
   // WP28：没有会话不是错误，是"该登录了"——工作区现在可能不止一个人
   if (session.error instanceof NeedsLoginError) return <LoginPage />
-  if (session.error !== null) {
+  /*
+   * WP139（docs/78 阻断 #2 第 5 条 / #3 的后半）：整页错误**保留左栏 + 「重试」**。
+   *
+   * 以前会话一出错（哪怕只是后台重取 `/v1/me` 撞上限流）整个工作台就换成白底一行红字，
+   * 等多久都不恢复。现在：
+   * - 已经有会话与岗位时，后台重取失败**不打断**——接着用手上那份（各页自己的请求各自报错）；
+   * - 真的一份都没取到时，左栏照常画（固定那几格；岗位先空着），主区是一句人话 + 「重试」。
+   */
+  const bootError =
+    session.data === undefined
+      ? session.error
+      : positions.data === undefined
+        ? positions.error
+        : null
+  if (bootError !== null) {
     return (
-      <div className="p-6">
-        <p role="alert" className="text-sm text-destructive">
-          {t('error.generic')}：{session.error.message}
-        </p>
-      </div>
+      <AppShell
+        positions={[]}
+        cards={[]}
+        tileLibrary={[]}
+        {...(session.data === undefined ? {} : { me: session.data })}
+        onAddTile={() => {}}
+      >
+        <PageError
+          error={bootError}
+          testid="boot-error"
+          onRetry={() => {
+            void (session.data === undefined ? session.refetch() : positions.refetch())
+          }}
+        />
+      </AppShell>
     )
   }
   // WP112：应用还没起来的那一瞬是**集结**，不是一块灰条——
