@@ -21,6 +21,17 @@ export interface Strings {
   openWorkBrowser: string
   /** WP92（55 §10）：「我正在用的浏览器」那一套（扩展 + bsk）装好没有。 */
   checkBrowserExtension: string
+  /** WP136（docs/79）：托盘「切换场景」子菜单。 */
+  switchScene: string
+  /** Agents 工坊自己那个场景在菜单上叫什么。 */
+  sceneAgentsws: string
+  /** 场景在跑时名字后面挂的那一截。 */
+  sceneRunning: string
+  sceneStarting: string
+  /** 子菜单最后一项：打开工作台里的场景面板（新建 / 删除 / 关闭都在那儿）。 */
+  manageScenes: string
+  /** 场景起不来时弹的那一句。 */
+  sceneOpenFailed: string
   browserExtensionOk: string
   browserExtensionBad: string
   openLogs: string
@@ -79,6 +90,12 @@ const ZH: Strings = {
   rotateSecretsKey: '轮换本机密钥',
   openWorkBrowser: '打开工作用的浏览器',
   checkBrowserExtension: '检查浏览器扩展',
+  switchScene: '切换场景',
+  sceneAgentsws: 'Agents 工坊',
+  sceneRunning: '运行中',
+  sceneStarting: '启动中',
+  manageScenes: '管理场景…',
+  sceneOpenFailed: '场景「{name}」没打开：{detail}',
   browserExtensionOk: '浏览器扩展已连上，可以用你正在用的浏览器干活了。',
   browserExtensionBad: '还没好：{detail}',
   openLogs: '打开日志目录',
@@ -129,6 +146,12 @@ const EN: Strings = {
   rotateSecretsKey: 'Rotate local key',
   openWorkBrowser: 'Open the work browser',
   checkBrowserExtension: 'Check the browser extension',
+  switchScene: 'Switch scene',
+  sceneAgentsws: 'Agents Workshop',
+  sceneRunning: 'running',
+  sceneStarting: 'starting',
+  manageScenes: 'Manage scenes…',
+  sceneOpenFailed: 'Scene "{name}" did not open: {detail}',
   browserExtensionOk:
     'The browser extension is connected — your everyday browser is ready to work.',
   browserExtensionBad: 'Not ready: {detail}',

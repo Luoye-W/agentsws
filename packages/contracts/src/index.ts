@@ -24,6 +24,8 @@ export * from './connection-directory.js'
 export * from './data.js'
 // 58 §1 / §2 设计岗位的五条职责、三个对象与规格表（WP76）
 export * from './design.js'
+// WP136（docs/79）：dsh 的「场景」（Profile）——Agents 工坊是其中一个，其余由 DeepSeek 官方维护
+export * from './dsh-scenes.js'
 export * from './events.js'
 export * from './identity.js'
 export * from './join.js'

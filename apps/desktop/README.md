@@ -5,6 +5,7 @@ Electron 托盘壳（13 §5「桌面壳改为浏览器打开 + 极小启动器�
 
 托盘做五件事：打开工作台（默认应用内窗口）/ 在浏览器打开 / 暂停（急停）/ 状态 / 退出，
 外加重启服务、打开日志目录、开机自启。
+WP136 起还有「切换场景」子菜单（dsh 的其他场景由服务进程用捆绑的 Node 起，网址交系统浏览器；docs/79）。
 
 ## 结构
 
@@ -38,6 +39,7 @@ secrets.bin     safeStorage 密文（macOS 钥匙串 / Windows DPAPI 背书）
 halt.json       急停档位（托盘"暂停"写它）
 logs/           desktop.log、server.log（子进程 stdout / stderr，脱敏后）
 data/           传给服务进程的 AGENTSWS_DB_DIR
+dsh/            WP136：我们自己的 DSH_HOME（dsh 各场景 + 本机凭据库），不是 ~/.dsh；见 docs/79
 ```
 
 `AGENTSWS_DESKTOP_USER_DATA` 可以把整个目录挪走（开发与 e2e 用）。

@@ -59,13 +59,19 @@ const FIRST_URL_WAIT_MS = 5000
 export interface DeepSeekAccountOptions {
   /** 这台机器的档位；只有 `local` 才开这一块。 */
   runtimeMode(): 'local' | 'docker' | 'hosted'
-  /** `deepseek-account.json` 与 dsh 凭据库（`dsh-home/`）落在哪；不给就全内存 + 装不了真模块。 */
+  /** `deepseek-account.json` 落在哪；不给就全内存。 */
   dbDir?: string
+  /**
+   * dsh 本机凭据库所在的 `DSH_HOME`（WP136 的 `dshHomeOf`：数据目录**旁边**的 `<userData>/dsh`，
+   * 所有 dsh 场景共用一份——在哪个场景登录 DeepSeek 都算数；不在数据目录里，备份不打包令牌）。
+   * 不给就装不了真模块。
+   */
+  dshHome?: string
   /** 服务进程现在的回环地址（`http://127.0.0.1:<端口>`）；还没 listen 时回 `undefined`。 */
   callbackOrigin(): string | undefined
   /**
    * 起官方那一侧的宿主。缺省是**懒加载** `@agentsws/dsh-adapter/deepseek-account`，
-   * 凭据库放在 `<dbDir>/dsh-home/.credentials.yaml`。测试与 demo 注入替身。
+   * 凭据库放在 `<dshHome>/.credentials.yaml`。测试与 demo 注入替身。
    */
   createHost?: () => Promise<DeepSeekAccountHost>
   /** 登录状态变了（登上 / 登出）：模型面据此重新装配网关。 */
@@ -119,14 +125,15 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
   const createHost =
     options.createHost ??
     (async (): Promise<DeepSeekAccountHost> => {
-      if (options.dbDir === undefined) {
+      const dshHome = options.dshHome
+      if (dshHome === undefined) {
         throw new ApiError(
           'invalid_input',
           '这个服务进程没有数据目录，DeepSeek 账号的登录凭据无处存放',
         )
       }
       const { createDeepSeekAccountHost } = await import('@agentsws/dsh-adapter/deepseek-account')
-      return createDeepSeekAccountHost({ dshHome: join(options.dbDir, 'dsh-home') })
+      return createDeepSeekAccountHost({ dshHome })
     })
 
   let host: DeepSeekAccountHost | undefined

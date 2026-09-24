@@ -63,6 +63,29 @@ export {
 } from './preset.js'
 export * from './reading.js'
 export { createInProcessDshRuntime, TASK_MESSAGE } from './runtime.js'
+// WP136（docs/79）：dsh 的「场景」（Profile）——官方模板、启动器位置、起其他场景的环境白名单
+export {
+  AGENTSWS_SCENE,
+  DSH_SCENE_TEMPLATES,
+  type DshLauncher,
+  type DshSceneSurface,
+  type DshSceneTemplate,
+  dshLauncher,
+  isInside,
+  parseWebSceneUrl,
+  portOfUrl,
+  RESERVED_SCENE_NAMES,
+  redactSceneUrl,
+  SCENE_INHERITED_ENV,
+  type SceneEnvInput,
+  sceneDir,
+  sceneEnv,
+  sceneNameProblem,
+  sceneTemplate,
+  surfaceOfBundles,
+  WEB_APP_BUNDLE,
+  webSceneArgs,
+} from './scenes.js'
 export type { ShellCheck, ShellCredentialPlan, ShellEffect, ShellPolicyInput } from './shell.js'
 export {
   AgentswsBashExecutor,

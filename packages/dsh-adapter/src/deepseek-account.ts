@@ -196,8 +196,9 @@ export async function createDeepSeekAccountHost(
   if (options.credentials !== undefined) {
     root.plugin(options.credentials as Parameters<Context['plugin']>[0], undefined as never)
   } else {
-    // 本机只有我们这个进程写它：不开文件监视（少一个常驻 watcher）
-    root.plugin(CredentialsLocal as never, { dshHome: options.dshHome, watch: false } as never)
+    // 这份凭据库与其他 dsh 场景共用（WP136：同一个 DSH_HOME）——别的场景里登录 / 登出，
+    // 这边要跟着变，所以照官方默认 `watch: true`（写锁与对账都是官方的）
+    root.plugin(CredentialsLocal as never, { dshHome: options.dshHome } as never)
   }
   root.plugin(Authorization)
   root.plugin(PlatformAccount as never, { ...OFFICIAL_DEFAULTS, ...options.config } as never)

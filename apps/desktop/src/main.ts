@@ -45,7 +45,13 @@ import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
 import { createLogger } from './logging.js'
-import { buildTrayMenu, type MenuAction, type MenuItemModel, trayTooltip } from './menu.js'
+import {
+  buildTrayMenu,
+  type MenuAction,
+  type MenuItemModel,
+  type TrayScene,
+  trayTooltip,
+} from './menu.js'
 import {
   companyLabel,
   configPatchOf,
@@ -353,6 +359,9 @@ async function bootstrap(): Promise<void> {
         haltFile: paths.haltFile,
         halt: halt.read(),
         ...(serverConnectUrl === undefined ? {} : { connectUrl: serverConnectUrl }),
+        // WP136（docs/79）：dsh 场景与本机凭据库住在 `<userData>/dsh`，不碰用户另装的 `~/.dsh`
+        dshHome: paths.dshHome,
+        appDataDir: paths.userData,
         secrets: secrets ?? EMPTY_SECRETS,
         version,
         baseEnv: process.env,
@@ -395,6 +404,8 @@ async function bootstrap(): Promise<void> {
   /** `remote` 档托盘上「已连接 X」里的 X；登录前拿不到，退到主机名（见 `companyLabel`）。 */
   let workspaceName: string | undefined
   let connectStatus: ConnectRuntimeStatus | undefined
+  /** WP136：托盘「切换场景」列的那几个；`undefined` = 还没问到（那一项就不出）。 */
+  let scenes: TrayScene[] | undefined
   let tray: Tray | undefined
   let window: BrowserWindow | undefined
 
@@ -566,6 +577,9 @@ async function bootstrap(): Promise<void> {
   const toTemplate = (items: MenuItemModel[]): MenuItemConstructorOptions[] =>
     items.map((item) => {
       if (item.type === 'separator') return { type: 'separator' }
+      // WP136：「切换场景」是个子菜单
+      if (item.type === 'submenu')
+        return { label: item.label, enabled: item.enabled, submenu: toTemplate(item.submenu ?? []) }
       const action = item.id as MenuAction
       return {
         label: item.label,
@@ -575,7 +589,7 @@ async function bootstrap(): Promise<void> {
           ? {}
           : {
               click: () => {
-                invoke(action)
+                invoke(action, item.scene)
               },
             }),
       }
@@ -606,6 +620,7 @@ async function bootstrap(): Promise<void> {
     upgradeFailed: upgradeNote() !== undefined,
     restorable: canRestore(upgradeNote()),
     ...(updateAvailable === undefined ? {} : { updateAvailable }),
+    ...(scenes === undefined ? {} : { scenes }),
   })
 
   const model = (): MenuItemModel[] => buildTrayMenu(trayInput())
@@ -738,6 +753,57 @@ async function bootstrap(): Promise<void> {
    * 扩展装没装、连没连，只有**用户自己**在他那个浏览器里看得见；出问题时
    * 他第一反应是找托盘，而不是打开工作台翻设置页。
    */
+  /**
+   * WP136（docs/79）：问一遍服务进程有哪些场景（托盘「切换场景」用）。
+   * 连公司服务器那一档、服务没起来、问不到——都把清单清掉，那一项就不出。
+   */
+  async function pollScenes(): Promise<void> {
+    if (remote || health?.ok !== true) {
+      scenes = undefined
+      return
+    }
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) {
+      scenes = undefined
+      return
+    }
+    const out = await api.scenes(s, assignment)
+    scenes = out.ok && out.value.length > 0 ? out.value : undefined
+    refreshTray()
+  }
+
+  /**
+   * WP136：切到一个场景。Agents 工坊 = 打开工作台；别的网页场景 = 让服务进程用捆绑的 Node
+   * 起它，拿回带一次性 token 的网址交给系统浏览器（网址不进日志）。
+   */
+  async function switchScene(name: string | undefined): Promise<void> {
+    if (name === undefined || name === 'agentsws') {
+      await openWorkstation()
+      return
+    }
+    const t = strings(config.language)
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    const out =
+      s === undefined || assignment === undefined
+        ? { ok: false as const, reason: '换不到会话' }
+        : await api.openScene(s, assignment, name)
+    if (out.ok) {
+      logger.info('已打开场景', { scene: name })
+      await shell.openExternal(out.value)
+    } else {
+      logger.warn('打开场景失败', { scene: name, reason: out.reason })
+      dialog
+        .showMessageBox({
+          type: 'warning',
+          message: t.sceneOpenFailed.replace('{name}', name).replace('{detail}', out.reason),
+        })
+        .catch(() => undefined)
+    }
+    await pollScenes()
+  }
+
   async function checkBrowserExtension(): Promise<void> {
     const t = strings(config.language)
     const s = await ensureSession()
@@ -893,8 +959,17 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  function invoke(action: MenuAction): void {
+  function invoke(action: MenuAction, scene?: string): void {
     switch (action) {
+      case 'switch-scene':
+        if (remote) break
+        void switchScene(scene)
+        break
+      case 'manage-scenes':
+        if (remote) break
+        // 工作台看到 `?scenes=1` 就把左下角的场景面板打开
+        void openWorkstation('/?scenes=1')
+        break
       case 'open-workstation':
         void openWindow()
         break
@@ -997,6 +1072,12 @@ async function bootstrap(): Promise<void> {
   }, 5000)
   healthTimer.unref?.()
   void pollHealth()
+
+  // WP136：场景清单 15 秒问一次就够（自己点过的动作做完会立刻再问）
+  const scenesTimer = setInterval(() => {
+    void pollScenes()
+  }, 15_000)
+  scenesTimer.unref?.()
 
   const pollConnect = async (): Promise<void> => {
     if (connect === undefined) return

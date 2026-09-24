@@ -1358,9 +1358,11 @@ WP132 在 profile 层写死了 `deepseek-account: disabled: true`。Luoye 09-24 
   `RESPONSE_ALREADY_SENT`。**不另开端口**，state + PKCE 校验、302 到平台完成页、失败页都是官方自己写的。
   `callbackOrigin` 是服务进程自己的回环地址（`http://127.0.0.1:<端口>`；官方 `loginOrigin` 只收回环 HTTP + 显式端口），
   所以这一条只在本机档开（Docker / 托管档浏览器回不来，卡上一句人话）。
-- **`credentials`**：官方 `dsh-credentials-local`，`dshHome` 指到 `<数据目录>/dsh-home`（令牌落 `.credentials.yaml`，0600）。
-  没用用户的 `~/.dsh`：官方 README 说"设备标识由使用同一凭据库的进程共享"，共用会让 Agents 工坊与用户自己装的 dsh
-  互相登录 / 登出。`watch: false`（只有我们这个进程写它）。
+- **`credentials`**：官方 `dsh-credentials-local`，`dshHome` 指到 WP136 的 `DSH_HOME`（`dshHomeOf`：数据目录**旁边**的
+  `<userData>/dsh`；令牌落 `.credentials.yaml`，0600）。没用用户的 `~/.dsh`：官方 README 说"设备标识由使用同一凭据库的进程共享"，
+  共用会让 Agents 工坊与用户自己装的 dsh 互相登录 / 登出。但**与 Agents 工坊里切出去的其他 dsh 场景共用**（同一个 DSH_HOME），
+  所以 `watch` 照官方默认开着：别的场景里登录 / 登出，这边跟着变。
+  （合并时 Fable 改：WP134 原稿放在 `<数据目录>/dsh-home`、`watch: false`；那样备份会打包令牌，也与 WP136 的共用凭据库分成两份。）
 
 ### 4. 推理：不走官方适配器，也不走我们的 OpenAI 兼容客户端
 
@@ -1377,3 +1379,7 @@ WP132 在 profile 层写死了 `deepseek-account: disabled: true`。Luoye 09-24 
 - 两档模块图：`FORBIDDEN` 断言照旧通过（`dsh-deepseek-account-platform` 0 命中）——子路径没被主入口带进来。
 - 3 人 pack `--runtime dsh` fast 档：合并 main 之后本分支与 main（149f5519）各跑一次，62/62，
   **1054 个指标值 0 差**，`summary.txt` 逐字节相同，门禁"通过"。
+
+## WP136：dsh 场景切换（2026-09-24，版本号未动）
+
+一行：`src/scenes.ts` 的官方模板表（`web` / `headless` / `sdk` / `sdk-minimal` / `acp`）由 `test/scenes.test.ts` 逐项对照 `@deepseek-ai/dsh-app-boot` 的 `PROFILE_TEMPLATES`——**升 dsh 时这条红了，就去看上游是不是加 / 删 / 改了模板，同步 `DSH_SCENE_TEMPLATES` 与 docs/79 §1**；另外网页场景靠 stdout 的 `dsh web: <网址>` 那一行判就绪（`parseWebSceneUrl`），上游改了这行的格式 `apps/server/test/dsh-scenes.test.ts` 的真 dsh 用例会红。

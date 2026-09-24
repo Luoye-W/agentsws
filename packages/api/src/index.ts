@@ -222,6 +222,8 @@ export type {
 } from './routes/design.js'
 export { designRoutes } from './routes/design.js'
 export type { DesignActor } from './routes/design-types.js'
+// WP136（docs/79）：dsh 场景切换
+export { type DshScenesActor, type DshScenesPort, dshScenesRoutes } from './routes/dsh-scenes.js'
 export {
   AssignmentVisibility,
   canReadAll,

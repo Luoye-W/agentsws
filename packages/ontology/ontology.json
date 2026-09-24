@@ -20,6 +20,7 @@
     "packages/contracts/src/connection-directory.ts",
     "packages/contracts/src/data.ts",
     "packages/contracts/src/design.ts",
+    "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/identity.ts",
     "packages/contracts/src/join.ts",
@@ -86,7 +87,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "1f0a42f42ba8d349221b0b67d7d3300d",
+  "source_digest": "90ea6e56e10055a40f8c68ba3d53e09f",
   "objects": [
     {
       "id": "ad",
