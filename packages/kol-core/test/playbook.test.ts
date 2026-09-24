@@ -195,7 +195,7 @@ describe('工具计划', () => {
 describe('摘要', () => {
   it('一句人话，把这次真干过的事按顺序串起来', () => {
     expect(describeKolRun({ intent: 'find', readTools: ['search_creators'], found: 12 })).toBe(
-      '找人；找到 12 个候选；查了 search_creators',
+      '找人；找到 12 个候选；查了红人库',
     )
     expect(
       describeKolRun({
@@ -203,7 +203,7 @@ describe('摘要', () => {
         readTools: ['get_creator', 'get_creator'],
         drafted: true,
       }),
-    ).toBe('建联起草；查了 get_creator；起草了一封开发信（待批）')
+    ).toBe('建联起草；查了红人资料；起草了一封开发信（待批）')
     expect(
       describeKolRun({
         intent: 'negotiate',
@@ -212,9 +212,7 @@ describe('摘要', () => {
         askedWhat: '这个价能接吗',
         exhausted: 'max_tool_calls',
       }),
-    ).toBe(
-      '议价；提了一条合作（待批）；问了一句：这个价能接吗；max_tool_calls 预算耗尽，先停在这里',
-    )
+    ).toBe('议价；提了一条合作（待批）；问了一句：这个价能接吗；这次能查的次数用完了，先停在这里')
   })
 
   it('七类意图都有一个人话名字', () => {
