@@ -32,6 +32,8 @@ export type MenuAction =
   | 'switch-scene'
   /** WP136：打开工作台里的场景面板（新建 / 关闭 / 删除都在那儿）。 */
   | 'manage-scenes'
+  /** WP144（docs/80 §5）：AI 正在操作电脑时的「停止」——撤销授权 + 中断那次运行。 */
+  | 'stop-computer-use'
   | 'quit'
 
 export interface MenuItemModel {
@@ -98,6 +100,11 @@ export interface TrayModelInput {
    * 那时「切换场景」这一项不出现——摆一个点开是空的子菜单比没有它更糟。
    */
   scenes?: TrayScene[]
+  /**
+   * WP144（docs/80 §5）：现在有没有 AI 在操作这台电脑（`GET /v1/computer-use/active`）。
+   * 有 = 托盘图标变红、菜单最上面一行「AI 正在操作电脑 · 停止」。`until` 是授权到的 ISO 时间。
+   */
+  computerUse?: { until: string }
 }
 
 const separator: MenuItemModel = { id: 'separator', type: 'separator', label: '', enabled: false }
@@ -147,10 +154,37 @@ export function canOpenWorkstation(input: TrayModelInput): boolean {
   return input.health?.ok === true
 }
 
+/** 授权到几点（本地时间 HH:MM）；解析不了就原样给。 */
+function clockOf(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/**
+ * WP144：AI 正在操作这台电脑时，托盘菜单**最上面**的两行——一行说明（灰的）、一行「停止」。
+ * 放最上面：这是那一刻用户最该看见、最可能想点的东西。没在操作时一行都不出。
+ */
+export function computerUseItems(input: TrayModelInput): MenuItemModel[] {
+  if (input.mode === 'remote' || input.computerUse === undefined) return []
+  const t = strings(input.language)
+  return [
+    {
+      id: 'status',
+      type: 'normal',
+      label: t.computerUseActive.replace('{until}', clockOf(input.computerUse.until)),
+      enabled: false,
+    },
+    { id: 'stop-computer-use', type: 'normal', label: t.computerUseStop, enabled: true },
+    separator,
+  ]
+}
+
 export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
   const t = strings(input.language)
   const openable = canOpenWorkstation(input)
   const items: MenuItemModel[] = [
+    ...computerUseItems(input),
     { id: 'open-workstation', type: 'normal', label: t.openWorkstation, enabled: openable },
     { id: 'open-browser', type: 'normal', label: t.openInBrowser, enabled: openable },
     separator,
@@ -170,7 +204,7 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
     },
   ]
   const scenes = sceneSubmenu(input)
-  if (scenes !== undefined) items.splice(3, 0, scenes, separator)
+  if (scenes !== undefined) items.splice(3 + computerUseItems(input).length, 0, scenes, separator)
   const connect = connectStateLabel(input)
   if (connect !== undefined)
     items.push({ id: 'status', type: 'normal', label: connect, enabled: false })
@@ -302,7 +336,11 @@ function statusSuffix(input: TrayModelInput): string {
 
 export function trayTooltip(input: TrayModelInput): string {
   const t = strings(input.language)
+  const cu =
+    input.mode !== 'remote' && input.computerUse !== undefined
+      ? ` · ${t.computerUseActive.replace('{until}', clockOf(input.computerUse.until))}`
+      : ''
   return `Agents 工坊 ${input.version} · ${serverStateLabel(input)}${
     input.paused ? ` · ${t.paused}` : ''
-  }`
+  }${cu}`
 }

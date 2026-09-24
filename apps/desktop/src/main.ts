@@ -82,7 +82,12 @@ import {
   serverSpawnRequest,
 } from './server-process.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
-import { TRAY_ICON_2X_DATA_URL, TRAY_ICON_DATA_URL } from './tray-icon.js'
+import {
+  TRAY_ICON_2X_DATA_URL,
+  TRAY_ICON_ACTIVE_2X_DATA_URL,
+  TRAY_ICON_ACTIVE_DATA_URL,
+  TRAY_ICON_DATA_URL,
+} from './tray-icon.js'
 import {
   createReleaseChecker,
   createUpdateGate,
@@ -130,6 +135,16 @@ function trayImage(): Electron.NativeImage {
     dataURL: TRAY_ICON_2X_DATA_URL,
   })
   image.setTemplateImage(true)
+  return image
+}
+
+/**
+ * WP144（docs/80 §5）：AI 正在操作这台电脑时换上的**红色**图标（不是 template，
+ * 否则系统会把它按明暗反色成黑白，就看不出变色了）。
+ */
+function trayImageActive(): Electron.NativeImage {
+  const image = nativeImage.createFromDataURL(TRAY_ICON_ACTIVE_DATA_URL)
+  image.addRepresentation({ scaleFactor: 2, dataURL: TRAY_ICON_ACTIVE_2X_DATA_URL })
   return image
 }
 
@@ -406,6 +421,10 @@ async function bootstrap(): Promise<void> {
   let connectStatus: ConnectRuntimeStatus | undefined
   /** WP136：托盘「切换场景」列的那几个；`undefined` = 还没问到（那一项就不出）。 */
   let scenes: TrayScene[] | undefined
+  /** WP144：AI 正在操作这台电脑（`undefined` = 没有）。托盘变红与最上面那一行读它。 */
+  let computerUseActive: { until: string } | undefined
+  /** 当前挂着的是不是红色那一张（只在变化时换图，免得托盘一闪一闪）。 */
+  let trayShowsActive = false
   let tray: Tray | undefined
   let window: BrowserWindow | undefined
 
@@ -621,6 +640,7 @@ async function bootstrap(): Promise<void> {
     restorable: canRestore(upgradeNote()),
     ...(updateAvailable === undefined ? {} : { updateAvailable }),
     ...(scenes === undefined ? {} : { scenes }),
+    ...(computerUseActive === undefined ? {} : { computerUse: computerUseActive }),
   })
 
   const model = (): MenuItemModel[] => buildTrayMenu(trayInput())
@@ -629,6 +649,51 @@ async function bootstrap(): Promise<void> {
     if (tray === undefined) return
     tray.setContextMenu(Menu.buildFromTemplate(toTemplate(model())))
     tray.setToolTip(trayTooltip(trayInput()))
+    const active = computerUseActive !== undefined
+    if (active !== trayShowsActive) {
+      tray.setImage(active ? trayImageActive() : trayImage())
+      trayShowsActive = active
+    }
+  }
+
+  /**
+   * WP144（docs/80 §5）：问一句「现在有没有 AI 在操作这台电脑」。3 秒一次——
+   * 授权一批下来，托盘该在人还看着的时候就变红，而不是半分钟之后。
+   * 只在本机档、服务健康时问（`remote` 档电脑操控根本不给）。
+   */
+  async function pollComputerUse(): Promise<void> {
+    if (remote || health?.ok !== true) {
+      if (computerUseActive !== undefined) {
+        computerUseActive = undefined
+        refreshTray()
+      }
+      return
+    }
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) return
+    const out = await api.computerUseActive(s, assignment)
+    const next = out.ok ? out.value : undefined
+    if (next?.until !== computerUseActive?.until) {
+      computerUseActive = next
+      refreshTray()
+    }
+  }
+
+  /** WP144：托盘「停止」——撤销授权 + 中断那次运行（服务端 dispose 那棵树，驱动随之断开）。 */
+  async function stopComputerUse(): Promise<void> {
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) {
+      logger.warn('停止电脑操控失败：换不到会话')
+      return
+    }
+    const out = await api.stopComputerUse(s, assignment)
+    if (!out.ok) logger.warn('停止电脑操控失败', { reason: out.reason })
+    else logger.info('已停止电脑操控', { stopped: out.value })
+    computerUseActive = undefined
+    refreshTray()
+    await pollComputerUse()
   }
 
   /**
@@ -1014,6 +1079,10 @@ async function bootstrap(): Promise<void> {
         refreshTray()
         break
       }
+      case 'stop-computer-use':
+        if (remote) break
+        void stopComputerUse()
+        break
       case 'quit':
         quitting = true
         server.stop()
@@ -1072,6 +1141,12 @@ async function bootstrap(): Promise<void> {
   }, 5000)
   healthTimer.unref?.()
   void pollHealth()
+
+  // WP144：AI 正在操作电脑没有——3 秒问一次（托盘要在人还看着的时候就变红）
+  const computerUseTimer = setInterval(() => {
+    void pollComputerUse()
+  }, 3000)
+  computerUseTimer.unref?.()
 
   // WP136：场景清单 15 秒问一次就够（自己点过的动作做完会立刻再问）
   const scenesTimer = setInterval(() => {

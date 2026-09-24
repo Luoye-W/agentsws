@@ -124,6 +124,16 @@ export interface ApiClient {
    * 只交给 `shell.openExternal`，不进日志。
    */
   openScene(session: DesktopSession, assignment: string, name: string): Promise<ApiResult<string>>
+  /**
+   * WP144（docs/80 §5）：现在有没有 AI 在操作这台电脑（`GET /v1/computer-use/active`）。
+   * 服务没装配电脑操控（501）当"没有"——托盘不该因为这一项报错。
+   */
+  computerUseActive(
+    session: DesktopSession,
+    assignment: string,
+  ): Promise<ApiResult<{ until: string } | undefined>>
+  /** WP144：托盘「停止」（`POST /v1/computer-use/stop`）：撤销授权 + 中断那次运行。 */
+  stopComputerUse(session: DesktopSession, assignment: string): Promise<ApiResult<number>>
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -295,6 +305,26 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       return typeof url === 'string'
         ? { ok: true, value: url }
         : { ok: false, reason: '响应里没有网址' }
+    },
+
+    async computerUseActive(session, assignment) {
+      const out = await call<{ active?: { until?: unknown } }>('/v1/computer-use/active', {
+        method: 'GET',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+      })
+      if (!out.ok) return { ok: true, value: undefined }
+      const until = out.value.value.active?.until
+      return { ok: true, value: typeof until === 'string' ? { until } : undefined }
+    },
+
+    async stopComputerUse(session, assignment) {
+      const out = await call<{ stopped?: unknown }>('/v1/computer-use/stop', {
+        method: 'POST',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+      })
+      if (!out.ok) return out
+      const stopped = out.value.value.stopped
+      return { ok: true, value: typeof stopped === 'number' ? stopped : 0 }
     },
 
     async setBrowserEndpoint(session, assignment, endpoint) {
