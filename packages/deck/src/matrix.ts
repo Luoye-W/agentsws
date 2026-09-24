@@ -15,7 +15,14 @@ export const READ_ONLY_ACTIONS: readonly DeckAction[] = ['open']
 
 const FULL: DeckAction[] = ['approve', 'reject', 'instruct', 'snooze', 'open']
 const NO_INSTRUCT: DeckAction[] = ['approve', 'reject', 'snooze', 'open']
-const GENERIC: DeckAction[] = ['approve', 'reject', 'open']
+/**
+ * WP141（docs/78 §1 #4）：通用卡也有「稍后」。
+ *
+ * 原来通用卡只有 批准 / 驳回 / 打开，于是 campaign 名单卡这种走通用卡的排在最前面时，
+ * 人只能先批掉它才看得到后面那张议价卡——「稍后」就是「先不决定这张」的那条路，
+ * 每张还能被决定的卡都该有它。
+ */
+const GENERIC: DeckAction[] = ['approve', 'reject', 'snooze', 'open']
 
 /** kind → 可用动作（顺序即快捷行顺序）。表里没有的走通用卡（36 §2.2 末段）。 */
 const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
@@ -36,8 +43,9 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   // WP63 / 51 §2.1：日报卡是"看完归档"的东西——没有"驳回"可言（数就是那个数），
   // 也没有"指导"（它不提议任何改动）。只剩打开细看与稍后再看。
   daily_report: ['open', 'snooze'],
-  // 46 I3：同意 / 拒绝，没有第三条路——「指导」在这里无从谈起（对方要么进来要么不进来）
-  membership: ['approve', 'reject', 'open'],
+  // 46 I3：同意 / 拒绝，没有第三条路——「指导」在这里无从谈起（对方要么进来要么不进来）。
+  // 「稍后」不是第三条路，只是「现在先不决定」（WP141：每张卡都有）。
+  membership: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
