@@ -24,7 +24,11 @@
  * ```
  * npx tsc -b && pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist
  * node scripts/walkthrough-beta.mjs [--port 4420] [--only A,B,C,C2,D] [--headed] [--live-cloud]
+ *                                   [--give-live-chat-range]
  * ```
+ *
+ * `--give-live-chat-range`（WP139）：C2 段向导建完之后，接口级给「网站在线客服」挂上种子店铺范围
+ * ——向导建的职责范围为空是 WP138 在修的事；这一项让 WP139（独立页面挑身份）在那之前也能验。
  *
  * 退出码恒为 0（走查不是断言）；结果在控制台与 `docs/assets/walkthrough/results.json`。
  */
@@ -1187,7 +1191,7 @@ async function sectionC(careAssignment) {
   )
 }
 
-async function sectionC2() {
+async function sectionC2(token) {
   let liveChat
   await step(
     'C',
@@ -1217,6 +1221,21 @@ async function sectionC2() {
         .first()
       if (await link.count())
         liveChat = /\/positions\/([^/?]+)/.exec((await link.getAttribute('href')) ?? '')?.[1]
+      // WP139：--give-live-chat-range 时给它挂上种子店铺范围（WP138 修好向导之前的验证办法）
+      if (liveChat && flag('--give-live-chat-range') && token) {
+        const owner = await assignmentOf(token, 'common.owner')
+        await fetch(`${BASE}/v1/assignments/${liveChat}`, {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'x-assignment': owner,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ ranges: [{ kind: 'store', id: 'store_main' }] }),
+        })
+        await page.reload({ waitUntil: 'load' })
+        await settle(1500)
+      }
       return liveChat
         ? ok(`左栏客服下：${duties.join('、')}`)
         : part(`左栏客服下：${duties.join('、')}——没有「网站在线客服」`)
@@ -1250,10 +1269,17 @@ async function sectionC2() {
     '三种转发方式看得懂可选；一段能复制的嵌入代码；测试连接给下一步',
     async () => {
       if (!liveChat) fail('名下没有「网站在线客服」职责')
-      // 入口被挡住时，只能整页打开 /chat-window（身份回到店主）——看页面本身长什么样
+      // WP139：职责面板上的入口被挡住时，走左栏「消息」下面那个常驻入口；都没有才手输网址
+      let via = '职责面板入口'
       if (await T('chat-window-entry').count())
         await T('chat-window-entry').locator('a').first().click()
-      else await go('/chat-window')
+      else if (await T('nav-chat-window').count()) {
+        via = '左栏「聊天窗」'
+        await T('nav-chat-window').click()
+      } else {
+        via = '手输网址'
+        await go('/chat-window')
+      }
       await T('chat-window-page').waitFor({ timeout: 15_000 })
       await settle(1500)
       const relay = await T('relay-mode')
@@ -1284,10 +1310,20 @@ async function sectionC2() {
       }
       const body = await page.locator('main').innerText()
       const modes = ['官方', '自建', '本机'].filter((w) => body.includes(w))
-      const msg = `转发方式区块：${oneLine(relay, 60)}；页面出现的方式词：${modes.join('/')}；嵌入代码 ${code ? `${code.length} 字` : '没有'}；测试连接：${test || '（无回执）'}`
-      return code && modes.length >= 2 && !entryNote
-        ? ok(msg)
-        : part(`${msg}${entryNote ? `（${entryNote}，这里是手输网址进来的，身份是店主）` : ''}`)
+      const convo = oneLine(
+        await T('chat-conversations-empty')
+          .or(T('chat-conversations'))
+          .or(T('chat-duty-needed'))
+          .or(T('chat-sessions-error'))
+          .first()
+          .innerText()
+          .catch(() => '（对话区没内容）'),
+        80,
+      )
+      const msg = `从${via}进；转发方式区块：${oneLine(relay, 60)}；页面出现的方式词：${modes.join('/')}；嵌入代码 ${code ? `${code.length} 字` : '没有'}；测试连接：${test || '（无回执）'}；对话区：${convo}`
+      const convoOk =
+        (await T('chat-conversations-empty').count()) + (await T('chat-conversations').count()) > 0
+      return code && modes.length >= 2 && via !== '手输网址' && convoOk ? ok(msg) : part(msg)
     },
   )
 
@@ -1305,9 +1341,7 @@ async function sectionC2() {
       await settle(1500)
       if (!(await T('chat-sandbox').count())) {
         const said = oneLine(await page.locator('main').innerText(), 60)
-        fail(
-          `试聊页只有一句「${said}」——当前身份（范围为空的在线客服职责 / 店主）没有 customer.read，建会话被 403`,
-        )
+        fail(`试聊页没打开，只有一句「${said}」`)
       }
       await T('chat-visitor-input').fill('运费多少？')
       await T('chat-visitor-send').click()
@@ -1531,7 +1565,7 @@ async function main() {
     ['A', async () => sectionA()],
     ['B', async (tok) => sectionB(await assignmentOf(tok, 'kol.youtube'))],
     ['C', async (tok) => sectionC(await assignmentOf(tok, 'dtc.support'))],
-    ['C2', async () => sectionC2()],
+    ['C2', async (tok) => sectionC2(tok)],
     [
       'D',
       async (tok) => {
