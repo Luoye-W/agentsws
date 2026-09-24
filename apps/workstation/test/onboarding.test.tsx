@@ -292,6 +292,8 @@ const state = {
   linkHold: undefined as Promise<void> | undefined,
   /** WP142：第 ① 步「自己的接口」那一排模板（默认两张：云 + DeepSeek）。 */
   templates: undefined as ModelProviderTemplate[] | undefined,
+  /** WP142：第 ④ 步那张清单（不给就是 PLAN）。 */
+  plan: undefined as OnboardingPlanView | undefined,
   /** WP142：「完成」那一发服务端回的（完成屏按它说数）。 */
   applyResult: { created_assignments: [], skipped: [] } as {
     created_assignments: { id: string; role_id: string; role_name: string }[]
@@ -317,7 +319,7 @@ vi.mock('@/lib/api', async () => {
     },
     planOnboarding: async (input: OnboardingPlanInput) => {
       state.plans.push(input)
-      return PLAN
+      return state.plan ?? PLAN
     },
     applyOnboarding: async (input: OnboardingPlanInput) => {
       state.applies.push(input)
@@ -428,6 +430,7 @@ beforeEach(() => {
   state.linkHold = undefined
   state.templates = undefined
   state.applyResult = { created_assignments: [], skipped: [] }
+  state.plan = undefined
 })
 
 /** 走完第 ① 步（走演示旁路——四条路里最短的那条，而且不落任何东西）。 */
@@ -1656,5 +1659,78 @@ describe('WP142 完成屏：数字与第 ④ 步同口径，已有的被跳过�
     const line = (await screen.findByTestId('onboarding-done-line')).textContent ?? ''
     expect(line).not.toContain('0 条')
     expect(line).toContain('2 条职责本来就都有了')
+  })
+})
+
+describe('WP142 第 ④ 步：只列必需的，可选的折起来；技能包说中文名', () => {
+  const optional = (service: string, label: string) => ({
+    service,
+    label,
+    required: false,
+    connected: false,
+    needed_by: ['YouTube 红人'],
+  })
+
+  async function toPlan(): Promise<void> {
+    const user = userEvent.setup()
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    await user.click(screen.getByTestId('onboarding-next'))
+    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-plan')
+  }
+
+  it('必需的平铺；可选的折成「还有 N 个可选」，点开才出', async () => {
+    const user = userEvent.setup()
+    state.plan = {
+      ...PLAN,
+      connectors: [
+        ...PLAN.connectors,
+        optional('youtube_data', 'YouTube Data API'),
+        optional('instagram_graph', 'Instagram'),
+        optional('gmail', 'Gmail'),
+      ],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await toPlan()
+    const rows = screen.getAllByTestId('onboarding-plan-connector')
+    expect(rows).toHaveLength(2)
+    expect(rows.every((r) => r.getAttribute('data-required') === 'true')).toBe(true)
+    const toggle = screen.getByTestId('onboarding-plan-optional-toggle')
+    expect(toggle.textContent).toBe('还有 3 个可选')
+    await user.click(toggle)
+    expect(screen.getAllByTestId('onboarding-plan-connector')).toHaveLength(5)
+  })
+
+  it('一个必需的都没有：说一句「现在就能开工」，可选的照样折着', async () => {
+    state.plan = {
+      ...PLAN,
+      connectors: [optional('youtube_data', 'YouTube Data API')],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await toPlan()
+    expect(screen.getByTestId('onboarding-plan-none-required').textContent).toContain(
+      '现在就能开工',
+    )
+    expect(screen.queryAllByTestId('onboarding-plan-connector')).toHaveLength(0)
+  })
+
+  it('技能包显示中文名，包名一个都不露', async () => {
+    state.plan = {
+      ...PLAN,
+      skills: [
+        { name: 'brand-voice', installed: false, needed_by: ['YouTube 红人'] },
+        { name: 'workspace-basics', installed: true, needed_by: ['网站客服'] },
+        { name: 'some-third-party', installed: false, needed_by: ['网站客服'] },
+      ],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await toPlan()
+    const names = screen
+      .getAllByTestId('onboarding-plan-skill')
+      .map((el) => el.querySelector('p')?.textContent)
+    expect(names).toEqual(['品牌话术', '工作台基础', '一个专用技能包'])
+    expect(screen.getByTestId('onboarding-plan').textContent).not.toMatch(/[a-z]+-[a-z]+/)
   })
 })

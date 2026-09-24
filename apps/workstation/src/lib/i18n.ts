@@ -2616,6 +2616,19 @@ const zh: Table = {
   'onboarding.done.skipped': '另外 {n} 条你本来就有，没重复建。',
   'onboarding.done.all_held':
     '你勾的 {n} 条职责本来就都有了，这次没新建。回首页，把第一件事交给它们。',
+  'onboarding.plan.optional.more': '还有 {n} 个可选',
+  'onboarding.plan.optional.close': '收起可选的',
+  'onboarding.plan.none_required': '没有非连不可的，现在就能开工。下面这些连上了能多干点事。',
+  'onboarding.plan.skill.unknown': '一个专用技能包',
+  'skill.name.ad-copywriting': '广告文案',
+  'skill.name.audience-research': '受众研究',
+  'skill.name.brand-system': '品牌视觉规范',
+  'skill.name.brand-voice': '品牌话术',
+  'skill.name.chargeback-evidence': '拒付举证',
+  'skill.name.customer-care': '客服手册',
+  'skill.name.policy-review': '政策核对',
+  'skill.name.returns-policy-calc': '退换货规则',
+  'skill.name.workspace-basics': '工作台基础',
 }
 
 const en: Table = {
@@ -5268,6 +5281,19 @@ const en: Table = {
   'onboarding.done.skipped': '{n} more you already had, so they were not created again.',
   'onboarding.done.all_held':
     'You already had all {n} duties you ticked, so nothing new was created. Head home and hand them the first thing.',
+  'onboarding.plan.optional.more': '{n} more, optional',
+  'onboarding.plan.optional.close': 'Hide the optional ones',
+  'onboarding.plan.none_required': 'Nothing is required — you can start now. Connecting these lets it do more.',
+  'onboarding.plan.skill.unknown': 'A specialised skill pack',
+  'skill.name.ad-copywriting': 'Ad copywriting',
+  'skill.name.audience-research': 'Audience research',
+  'skill.name.brand-system': 'Brand visual system',
+  'skill.name.brand-voice': 'Brand voice',
+  'skill.name.chargeback-evidence': 'Chargeback evidence',
+  'skill.name.customer-care': 'Customer care playbook',
+  'skill.name.policy-review': 'Policy check',
+  'skill.name.returns-policy-calc': 'Returns rules',
+  'skill.name.workspace-basics': 'Workspace basics',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }
