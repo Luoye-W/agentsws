@@ -15,7 +15,7 @@
  * | 授权窗口 | {@link checkComputerUse}：没授权 / 过期 / 已交还给人 → 立刻拒 |
  * | 硬拒 | 查更新、改驱动配置（出网 / 改自身行为）；`screenshot_out_file`（往任意路径写文件） |
  * | 人接手 | 登录 / 密码 / 支付 / 验证码一律停下，调 {@link COMPUTER_HANDOFF_TOOL} 出卡请人来做 |
- * | 截图不进模型 | 结果里的图片块与 base64 在 `tools/post-execute` 换成一句说明（{@link redactComputerUseValue}） |
+ * | 截图给 AI 看（WP147） | 官方 MCP 桥把截图存进这次运行的附件库、放进工具结果；路由声明能看图才放（`harness.ts` / `llm.ts`） |
  * | 遥测 / 更新 | 驱动的遥测与查更新两个开关都关（{@link applyCuaEnv}） |
  */
 import { accessSync, constants, statSync } from 'node:fs'
@@ -173,7 +173,11 @@ export function cuaDriverUsable(path: string): boolean {
   }
 }
 
-/** 替换掉的截图 / 大段 base64 在模型面前变成这一句。 */
+/**
+ * 替换掉的截图 / 大段 base64 在模型面前变成这一句。
+ *
+ * @deprecated WP147（Luoye 09-24「截图改成给 AI 看」）起门禁不再调它；导出留着只为不改公共签名。
+ */
 export const SCREENSHOT_OMITTED = '[截图不进模型（docs/80 隐私）：请看无障碍树文字 tree_markdown]'
 
 /** 超过这么长、又只由 base64 字符组成的字符串，按"图片数据"处理。 */
@@ -181,7 +185,11 @@ const BASE64_MIN = 2048
 const BASE64_RE = /^[A-Za-z0-9+/=\r\n]+$/u
 
 /**
- * 把驱动结果里的图片拿掉（`tools/post-execute` 在围栏之前调）。
+ * 把驱动结果里的图片拿掉（WP144 时 `tools/post-execute` 在围栏之前调）。
+ *
+ * @deprecated WP147 起**不再调用**：截图经官方 MCP 桥 + 附件库进模型（docs/80 §5）。
+ * 规范值里的 base64 本来就不进模型——模型看的是 `content`（图片块只引用附件库），
+ * 门禁对带图的结果按 content 接受（`gate.ts`）。导出留着只为不改公共签名。
  *
  * v1 的纪律：**截图不进模型**。我们的树里没挂附件库、网关路由也不声明图片输入，
  * 官方 MCP 桥本来就会把图片块换成一段诊断文字；但**规范值**（canonical value）里
@@ -233,7 +241,8 @@ export function computerUseBrief(input: {
     '- **遇到登录、密码、支付、验证码（短信 / 邮件 / 二次验证）、银行卡或证件号：立刻停下**，' +
       `调 \`${COMPUTER_HANDOFF_TOOL}\` 写清楚要用户做什么。不许自己输入、不许猜、不许从别处复制。`,
     '- 不要开终端执行命令、不要改系统设置、不要装或卸软件、不要往磁盘写文件。',
-    '- 截图不会传给你（隐私）：靠窗口状态里的无障碍树文字判断界面。',
+    '- 你能看到截图（窗口状态里会带一张屏幕截图）；**优先读无障碍树文字**（元素名、按钮、输入框），' +
+      '文字说不清的（图标、图表、布局、验证结果）再看截图。截图会发给模型用来看界面，不会存进 Agents 工坊的记录。',
   ].join('\n')
 }
 
