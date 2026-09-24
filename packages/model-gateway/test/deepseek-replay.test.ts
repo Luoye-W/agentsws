@@ -143,3 +143,38 @@ describe('WP143 推理块多轮原样回传', () => {
     expect(wire.messages[3]?.content).toEqual([{ type: 'text', text: 'b' }])
   })
 })
+
+describe('WP143 用量口径：Messages 的缓存命中加回 input_tokens', () => {
+  it('input 100 + 缓存读 900 + 缓存写 50 → input_tokens 1050、cached 900；按价目表算的钱对得上', async () => {
+    const fetch: AccountFetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        content: [{ type: 'text', text: '好' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 10,
+          cache_read_input_tokens: 900,
+          cache_creation_input_tokens: 50,
+        },
+      }),
+      text: async () => '',
+    })
+    const p = deepseekAccountProvider({ resolveToken: async () => 'tok', fetch, provider: 'ds' })
+    const gateway = createModelGateway({
+      providers: [p],
+      policy: policy({
+        default: p.ref,
+        prices: { 'ds/deepseek-flash': { in: 1_000_000, out: 2_000_000, cached: 100_000 } },
+      }),
+      clock: fixedClock(),
+      eventSink: recorder().sink,
+      env: {},
+    })
+    const out = await gateway.complete({ messages: [{ role: 'user', content: 'x' }], meta: meta() })
+    expect(out.usage.input_tokens).toBe(1050)
+    expect(out.usage.cached_tokens).toBe(900)
+    // (1050-900)×1 + 900×0.1 + 10×2 = 150 + 90 + 20
+    expect(out.usage.cost_base).toBeCloseTo(260)
+  })
+})

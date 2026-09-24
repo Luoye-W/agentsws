@@ -153,6 +153,7 @@ interface WireResponse {
     input_tokens?: number
     output_tokens?: number
     cache_read_input_tokens?: number
+    cache_creation_input_tokens?: number
   }
 }
 
@@ -507,7 +508,15 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
           ? {}
           : { reasoning_replay: { kind: 'deepseek-messages' as const, model, blocks: thinking } }),
         usage: {
-          input_tokens: json.usage?.input_tokens ?? 0,
+          /*
+           * WP143：Messages 的 `input_tokens` 只算**没命中缓存**的那部分（官方适配器把缓存读 / 写各记一桶，
+           * 「token 总数包含未缓存输入、输出、缓存读取与缓存写入」）；而我们的口径是 `input_tokens` **含**
+           * `cached_tokens`（`pricing.ts` 的 `costOf`）。不加回来，命中缓存的那部分就被少算甚至不算。
+           */
+          input_tokens:
+            (json.usage?.input_tokens ?? 0) +
+            (json.usage?.cache_read_input_tokens ?? 0) +
+            (json.usage?.cache_creation_input_tokens ?? 0),
           output_tokens: json.usage?.output_tokens ?? 0,
           cached_tokens: json.usage?.cache_read_input_tokens ?? 0,
           cost_base: 0,
