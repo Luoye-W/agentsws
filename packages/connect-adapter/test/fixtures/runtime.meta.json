@@ -7,11 +7,12 @@
   "read_action": "gotify.get_version",
   "write_action": "gotify.send_message",
   "unknown_action": "gotify.__no_such_action__",
-  "connection_id": "c4f08c29-0265-405e-a087-a1679933afd9",
-  "other_connection_id": "6fd0058b-697e-415c-bd0f-5cdc37fbd36f",
-  "other_service_connection_id": "e83d0879-00dd-4179-a156-4c5ae32da8d0",
+  "connection_id": "e5d4f664-85cf-4079-9484-697863992c39",
+  "other_connection_id": "114ebb6c-d44a-46da-acc2-c89c2696e7b8",
+  "other_service_connection_id": "24cdfe11-a3d4-4dbe-ae3d-af79466071fc",
   "assignment_id": "asg_conformance",
   "oauth_service": "gmail",
   "clock_start": "2026-09-09T09:00:00.000Z",
-  "runtime_kind": "docker"
+  "runtime_kind": "docker",
+  "runtime_image": "ghcr.io/oomol-lab/open-connector:v1.6.5@sha256:aa088c5d3f308937ec9b9e8c959a940ff4a6ce3b8ee0abe30a755d5b2400a5b1"
 }

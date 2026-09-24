@@ -26,7 +26,13 @@ import { driveScenarios } from './scenarios.js'
 const RECORD = process.env.RECORD_FIXTURES === '1'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = join(HERE, 'fixtures')
-const IMAGE = process.env.OC_IMAGE ?? 'ghcr.io/oomol-lab/open-connector:latest'
+/**
+ * 缺省录制用的镜像 = 钉住的那一版（WP146）。与 docker-compose.yml、scripts/dev-real.sh 三处一致，
+ * 由 `node scripts/check-upstreams.mjs --check` 对账 upstreams.yml。试新版本就 `OC_IMAGE=… RECORD_FIXTURES=1`。
+ */
+const PINNED_OC_IMAGE =
+  'ghcr.io/oomol-lab/open-connector:v1.6.5@sha256:aa088c5d3f308937ec9b9e8c959a940ff4a6ce3b8ee0abe30a755d5b2400a5b1'
+const IMAGE = process.env.OC_IMAGE ?? PINNED_OC_IMAGE
 const CONTAINER = 'agentsws-wp12-record'
 const PORT = Number(process.env.OC_PORT ?? 39_217)
 const STUB_PORT = Number(process.env.OC_STUB_PORT ?? 39_218)
@@ -232,6 +238,7 @@ describe.skipIf(!RECORD)('录制真 runtime 的 HTTP fixture', () => {
         oauth_service: 'gmail',
         clock_start: CLOCK_START,
         runtime_kind: 'docker',
+        runtime_image: IMAGE,
       }
       mkdirSync(FIXTURES, { recursive: true })
       writeFileSync(
