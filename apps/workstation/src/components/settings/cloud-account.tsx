@@ -13,7 +13,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cloud } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -45,7 +45,21 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
     queryKey: ['cloud-account', assignment],
     queryFn: () => getCloudAccount(assignment),
     retry: false,
+    // WP140：信发出去之后每隔几秒问一次（与向导第 ① 步同一个口径），点开了就停
+    refetchInterval: (q) => (sent && q.state.data?.linked !== true ? 3000 : false),
   })
+
+  /*
+   * WP140：关联一成，下半张「积分」卡那几份（余额 / 用量 / 价目 / 充值档）当场重取——
+   * 它们是关联之前取的，还写着「还没关联」。
+   */
+  const linkedNow = account.data?.linked === true
+  useEffect(() => {
+    if (!linkedNow) return
+    setSent(false)
+    for (const key of ['cloud-credits', 'cloud-usage', 'cloud-pricing', 'cloud-topup-tiers'])
+      void client.invalidateQueries({ queryKey: [key] })
+  }, [linkedNow, client])
 
   const link = useMutation({
     mutationFn: (value: string) => linkCloudAccount(value, assignment),

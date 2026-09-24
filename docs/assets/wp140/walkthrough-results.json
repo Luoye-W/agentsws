@@ -1,0 +1,780 @@
+{
+  "at": "2026-09-24T05:03:08.501Z",
+  "tally": {
+    "通": 33,
+    "部分": 18,
+    "不通": 0
+  },
+  "probe": {
+    "first429": 241,
+    "stillLimited": 429,
+    "waitedMs": 12000,
+    "after": 200
+  },
+  "results": [
+    {
+      "no": 1,
+      "section": "A",
+      "name": "ob-ai",
+      "title": "向导 ① 接上 AI：三张卡 + 演示旁路",
+      "expect": "工坊官方接口 / 自己的接口 / DeepSeek 账号登录 三张卡，外加「先逛逛演示数据」，一屏讲清",
+      "actual": "3 张卡都在；「先逛逛演示数据」是卡下面一行灰字链接",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/01-ob-ai.png",
+      "ms": 2041,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 2,
+      "section": "A",
+      "name": "ob-ai-official",
+      "title": "① 官方接口：填邮箱发登录信",
+      "expect": "10 秒内有明确反馈（已发 / 看得懂的错误和下一步）",
+      "actual": "1.6s 后：信发出去了。去邮箱点那条链接，这一页会自己接上。；替身点了信里的链接，几秒后显示「已关联」",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/02-ob-ai-official.png",
+      "ms": 3836,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 3,
+      "section": "A",
+      "name": "ob-ai-own",
+      "title": "① 自己的接口：模板与表单",
+      "expect": "模板一眼能分清；表单只问必须的",
+      "actual": "模板 7 个（DeepSeek 官方 / OpenAI 兼容（自定义） / 阿里云百炼 / 阿里云百炼 / 阿里云百炼 / OpenAI / ChatGPT / Anthropic / Claude）；表单 11 个输入框；重名：阿里云百炼",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/03-ob-ai-own.png",
+      "ms": 441,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 4,
+      "section": "A",
+      "name": "ob-business-bare",
+      "title": "② 贴网址（用户常见写法，不带结尾斜杠）",
+      "expect": "能分析出品牌档案",
+      "actual": "出了品牌档案卡",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/04-ob-business-bare.png",
+      "ms": 4343,
+      "errors": [
+        "失败 https://nordvolt.example/cdn/logo-512.png net::ERR_CONNECTION_CLOSED",
+        "console: Failed to load resource: net::ERR_CONNECTION_CLOSED"
+      ],
+      "raw": []
+    },
+    {
+      "no": 5,
+      "section": "A",
+      "name": "ob-business",
+      "title": "② 贴网址分析 → 品牌档案卡",
+      "expect": "品牌名 / 公司 / 一句话 / 邮箱 / 币种 / 社媒 / 产品；没有内部值；与下方表单不打架",
+      "actual": "「公司全称」出现两次，档案卡与下方表单值不同（表单：NordVolt Gear）；标签是原始值：zh-CN / instagram / tiktok；价格没有币种符号；「有 3 个页面没读着（这个页面不存在（404））」括号套括号",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/05-ob-business.png",
+      "ms": 351,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 6,
+      "section": "A",
+      "name": "ob-confirm",
+      "title": "② 点「看着没问题」→ 保存并继续",
+      "expect": "点了有回执；进第 ③ 步",
+      "actual": "「看着没问题」点了只是按钮变淡，没有一句回执；进了第 ③ 步",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/06-ob-confirm.png",
+      "ms": 1653,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 7,
+      "section": "A",
+      "name": "ob-roles",
+      "title": "③ 预勾岗位",
+      "expect": "按网址预勾合理的岗位；红人营销为主的朋友能一眼找到并勾上",
+      "actual": "预勾：客服5、网站运营5；已勾 11 条职责；红人营销没有预勾",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/07-ob-roles.png",
+      "ms": 15416,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 8,
+      "section": "A",
+      "name": "ob-plan",
+      "title": "③ 勾红人营销 → ④ 连接与开工",
+      "expect": "只列必需的连接，可选的折起来；没有内部 id",
+      "actual": "列了 16 个连接，其中 13 个标「可选」，全部平铺；技能包显示内部名：brand-voice、chargeback-evidence、customer-care、returns-policy-calc、workspace-basics",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/08-ob-plan.png",
+      "ms": 893,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 9,
+      "section": "A",
+      "name": "ob-done",
+      "title": "④ 完成 → 完成屏动效",
+      "expect": "「一队上岗」动效；职责数与第 ③ 步一致",
+      "actual": "动效 split → breathe；完成屏说「一队上岗了 16 条职责已经配好。回首页，把第一件事交给它们。 进工作台」，第 ④ 步各岗位「已勾」合计 18 条",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/09-ob-done.png",
+      "ms": 2447,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 10,
+      "section": "A",
+      "name": "home",
+      "title": "进工作台 → 首页",
+      "expect": "首页一眼看清；几处\"还剩几张卡\"数字一致；没有测试数据与内部值",
+      "actual": "卡数：页头 7 / 筛选「全部」7 / 翻页「第 1 / 6」/ 今天栏「还有 8」；首张卡「改之前 / 改之后」直接显示 late_return_grace_days: 0 → 7；日报条上 date / sales / orders / low_stock 是英文字段名；左栏多了一个没勾过的「普通成员」岗位",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/10-home.png",
+      "ms": 3053,
+      "errors": [],
+      "raw": [
+        "low_stock",
+        "late_return_grace_days"
+      ]
+    },
+    {
+      "no": 11,
+      "section": "A",
+      "name": "nav-kol",
+      "title": "左栏：展开「红人营销」",
+      "expect": "展开后职责条数 = 岗位页写的条数",
+      "actual": "左栏展开 5 条；岗位页写「这个岗位下的 5 条职责」",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/11-nav-kol.png",
+      "ms": 2318,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 12,
+      "section": "A",
+      "name": "new-kol-duty",
+      "title": "向导新建的「Instagram 红人」→ 面板",
+      "expect": "和 YouTube 红人一样，面板上有候选池 / 活动 / 合作线程 / 演练",
+      "actual": "红人工作台在",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/12-new-kol-duty.png",
+      "ms": 2003,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 13,
+      "section": "B",
+      "name": "kol-position",
+      "title": "红人营销岗位页",
+      "expect": "职责数三处一致；连接卡只列必需的；入口示例贴合红人",
+      "actual": "岗位页「5 条职责」/ 左栏 5 条；「连上这 7 个就能开工」，其中 7 个标「可选」；输入框示例是「一句话说清要办什么，比如「把 A 商品降价 10%」」，与红人无关",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/13-kol-position.png",
+      "ms": 2007,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 14,
+      "section": "B",
+      "name": "kol-ask",
+      "title": "交给它「找 20 个 1 万到 10 万粉的频道」",
+      "expect": "跳到事项页；列出找到的人（或说清为什么不够 20 个、下一步怎么补）",
+      "actual": "找到 2 个；摘要里露出工具名 search_creators；「youtube」小写原始值；时间线只写「找人：N 条」，不列是谁、没有去候选池的链接，也没说为什么不到 20 个",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/14-kol-ask.png",
+      "ms": 4420,
+      "errors": [],
+      "raw": [
+        "search_creators"
+      ]
+    },
+    {
+      "no": 15,
+      "section": "B",
+      "name": "kol-pool",
+      "title": "候选池：关键词搜 + 回车",
+      "expect": "回车就搜；结果或\"没搜到\"的原因与下一步",
+      "actual": "没搜：现在找不到YouTube上的红人：这台机器既没连YouTube自己的接口，也没接自己的数据接口，工坊官方数据接口也没开通。两条路任选其一：① 关联 agentsws 账号（新用户送 10 积分，之后按次计价）；② 在连接页接你自己的数据接口（不扣积分）。（刚才试过工坊官方接口：演示里没有这一项（demo 不连真云））",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/15-kol-pool.png",
+      "ms": 19551,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 16,
+      "section": "B",
+      "name": "kol-campaign-plan",
+      "title": "活动：填目标 → 出清单",
+      "expect": "出一份按渠道分组的清单，带理由",
+      "actual": "YouTube · 2 Gadget Jonas · 90 分 · 48,000 粉，正好在想要的区间里。 Desk Rosa · 90 分 · 31,000 粉，正好在想要的区间里。 接受这份清单",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/16-kol-campaign-plan.png",
+      "ms": 2999,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 17,
+      "section": "B",
+      "name": "kol-campaign-accept",
+      "title": "活动：接受这份清单",
+      "expect": "有回执：建了几条、去哪看",
+      "actual": "一条都没新建（跳过 2 条：这条渠道上已经有一条合作了，不重复建。）。——想要 5 个只出了 2 个，且都已在合作里，接受等于什么都没发生",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/17-kol-campaign-accept.png",
+      "ms": 2952,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 18,
+      "section": "B",
+      "name": "kol-sandbox-on",
+      "title": "打开「演练」",
+      "expect": "铺 24 个合成红人；顶上一直挂「演练中」",
+      "actual": "合成红人 24 · 已发 0 · 回信 0 · 在路上 0 · 演练世界现在是 2026-09-24",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/18-kol-sandbox-on.png",
+      "ms": 2987,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 19,
+      "section": "B",
+      "name": "kol-creator",
+      "title": "选一个合成红人（只谈钱那一类）",
+      "expect": "详情里看得到联系方式、打分、起草入口",
+      "actual": "Urban Pike 005 收起 资料快照 @urbanpike005 YouTube · 粉丝 372k ·互动率 9.2% 看到于 2026-09-24 联系方式 u***@example.co；联系方式来源处露出 i18n 键「kol.contact.source.sandbox」",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/19-kol-creator.png",
+      "ms": 1488,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 20,
+      "section": "B",
+      "name": "kol-outreach",
+      "title": "起草开发信",
+      "expect": "出一张待批的卡；回执说「批了才发」",
+      "actual": "起草好了，在待办里等你批。批了才发。",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/20-kol-outreach.png",
+      "ms": 1434,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 21,
+      "section": "B",
+      "name": "kol-card-approve",
+      "title": "「卡片」tab 批准开发信卡",
+      "expect": "卡上看得到信的正文与收件人；批了卡消失并有回执",
+      "actual": "牌堆第一张是「红人营销 · 建联名单 剩 6 天 证据 5 人 campaign 挑人清单：6」，要先按卡型筛才看得到开发信卡；卡面：红人营销 · 开发信 剩 6 天 证据 5 AI 开发信：Urban Pike 005（一封） 诺伏特户外 × Urban Pike 005：想聊聊合作 展开 / 收起详情 发送 改一下 不发",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/21-kol-card-approve.png",
+      "ms": 6930,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 22,
+      "section": "B",
+      "name": "kol-sent",
+      "title": "回面板看「已发」",
+      "expect": "已发 ≥ 1",
+      "actual": "合成红人 24 · 已发 1 · 回信 0 · 在路上 1 · 演练世界现在是 2026-09-24",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/22-kol-sent.png",
+      "ms": 2051,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 23,
+      "section": "B",
+      "name": "kol-jump",
+      "title": "跳到 3 天后、7 天后",
+      "expect": "回信 ≥ 1",
+      "actual": "合成红人 24 · 已发 1 · 回信 1 · 在路上 0 · 演练世界现在是 2026-10-04",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/23-kol-jump.png",
+      "ms": 5518,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 24,
+      "section": "B",
+      "name": "kol-messages",
+      "title": "回信进「消息」",
+      "expect": "「消息」里看得到红人的回信（与合作线程是同一件事）",
+      "actual": "文件夹：收件箱 / 客服在处理 / 红人合作 / 已发送 / 草稿 / 垃圾邮件 / 垃圾箱；红人文件夹里：U Urban Pike 005 9月24日 09:00 Re: 诺伏特户外 × Urban Pike 005：想聊聊合作 Hi, thanks for reaching out. Before anything else — how mu",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/24-kol-messages.png",
+      "ms": 3461,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 25,
+      "section": "B",
+      "name": "kol-thread",
+      "title": "合作线程：筛「有回音」→ 点开",
+      "expect": "往来里看得到我们发的与他回的，回信带意向分类与跟进节奏",
+      "actual": "出 1 封 / 回 1 封，判成「要报价」",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/25-kol-thread.png",
+      "ms": 3954,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 26,
+      "section": "B",
+      "name": "kol-quote",
+      "title": "报价 800 → 议价卡 → 批准",
+      "expect": "出一张钱款排版的议价卡；批了合作到「谈条件中」并带预算",
+      "actual": "谈条件中 1 条，预算 800 USD",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/26-kol-quote.png",
+      "ms": 9767,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 27,
+      "section": "B",
+      "name": "kol-stage",
+      "title": "推阶段：谈成 → 交付中",
+      "expect": "每推一步有回执",
+      "actual": "现在到哪一步 已交付",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/27-kol-stage.png",
+      "ms": 3524,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 28,
+      "section": "B",
+      "name": "kol-deliverable",
+      "title": "登记交付物 → 验收通过",
+      "expect": "交付物出现在线程上；验收出回执",
+      "actual": "验收结论提上去了，在待办里等你批。批了才算数。",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/28-kol-deliverable.png",
+      "ms": 2602,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 29,
+      "section": "B",
+      "name": "kol-link",
+      "title": "建追踪链接",
+      "expect": "线程上出现一条带 UTM 的链接",
+      "actual": "https://nordvolt.example/p/charger-65w?utm_source=youtube&utm_medium=kol&utm_campaign=cmp_sandbox&utm_content=sbx_col_syn_kol_005 0 次点击 · 0 ",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/29-kol-link.png",
+      "ms": 528,
+      "errors": [],
+      "raw": [
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "cmp_sandbox",
+        "utm_content",
+        "sbx_col_syn_kol_005",
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 30,
+      "section": "B",
+      "name": "kol-funnel",
+      "title": "面板：演练漏斗",
+      "expect": "「建联漏斗」不含演练；「演练漏斗」有数；表格里没有原始值",
+      "actual": "演练漏斗 阶段 人数 已找到 23 已建联 0 已回复 0 谈条件中 0 已签定 0 拍摄制作中 1 已交付 0 已结案 0 已谢绝 0 合作进行中 红人 渠道 阶段 预算 Gadget Jonas youtube 拍摄制作中 US$400；「待审交付物」交付期限是 ISO 时间戳；渠道列是小写 youtube / instagram；形态列是 video / post",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/30-kol-funnel.png",
+      "ms": 3553,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 31,
+      "section": "B",
+      "name": "kol-design-md",
+      "title": "右栏「设计规范」面板",
+      "expect": "面板能打开；没有规范时告诉你去哪弄",
+      "actual": "还没有设计规范。可以从官网抓一份，或者传一份品牌手册。 设计规范",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/31-kol-design-md.png",
+      "ms": 33522,
+      "errors": [],
+      "raw": [
+        "kol_campaign"
+      ]
+    },
+    {
+      "no": 32,
+      "section": "B",
+      "name": "kol-extension",
+      "title": "连接页「浏览器插件」配对码",
+      "expect": "点一下出配对码，说清去哪粘",
+      "actual": "浏览器插件 「Agents 工坊 · 红人助手」装在 Chrome 里，在 YouTube / Instagram / TikTok 页面上给红人做即时体检，你点一下就把他收进这个品牌的红人库。 插件只能做三件事：看红人、收红人、读你的红人库——它发不了信、改不了合作、碰不到订单。 747307 还剩 5:00。去插件",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/32-kol-extension.png",
+      "ms": 2256,
+      "errors": [],
+      "raw": [
+        "business_discovery",
+        "publish_id",
+        "ads_management",
+        "pages_manage_posts"
+      ]
+    },
+    {
+      "no": 33,
+      "section": "C",
+      "name": "chat-direct",
+      "title": "直接打开「试聊」页（⌘K / 书签进，当前身份是店主）",
+      "expect": "要么能用，要么说清「先去网站在线客服那条职责」",
+      "actual": "聊天沙盒 左边扮演访客发一句，右边看在线客服会怎么判、怎么答。 访客这一边 还没有消息。发一句试试。 发 在自动接待 这一轮的判断 发一句之后，这里显示 AI 判成了哪一种、为什么。 教 AI 怎么答",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/33-chat-direct.png",
+      "ms": 3463,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 34,
+      "section": "C",
+      "name": "msg-inbox",
+      "title": "「消息」收件箱与标签",
+      "expect": "左侧文件夹 / 标签，中间列表，点开有正文",
+      "actual": "文件夹 7 个、标签 11 个、列表 5 条；点开：10 月纸箱报价（比上次低 3%） 敏 恒昌纸品 · 周敏 sales@kraft-boxes.example 9月24日 06:00 王总您好，附上 10 月",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/34-msg-inbox.png",
+      "ms": 3448,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 35,
+      "section": "C",
+      "name": "care-position",
+      "title": "客服岗位页：职责与连接",
+      "expect": "四条职责都启用（含网站在线客服）；连接只列必需的",
+      "actual": "岗位页「4 条」/ 左栏 4 条（网站客服、网站在线客服、Amazon 客服、社群管理）；连接卡「连上这 14 个」",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/35-care-position.png",
+      "ms": 2015,
+      "errors": [],
+      "raw": [
+        "late_return_grace_days"
+      ]
+    },
+    {
+      "no": 36,
+      "section": "C",
+      "name": "care-reply-card",
+      "title": "客服信的回复草稿卡",
+      "expect": "卡面：客户问题摘要、AI 拟答、依据；没有裸枚举",
+      "actual": "属于：事项 wi_run_demo_42 客服 · 回信 剩 1 天 证据 6 AI 回复 anna@example.com：Re: Return request for #1001 Thanks for reaching out about order #1001. Its payment status is \"paid\" and its fulfillment status is \"deliv",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/36-care-reply-card.png",
+      "ms": 4435,
+      "errors": [],
+      "raw": [
+        "wi_run_demo_42"
+      ]
+    },
+    {
+      "no": 37,
+      "section": "C",
+      "name": "care-instruct",
+      "title": "在回复卡上「指导」→ 教一句",
+      "expect": "先选作用域（这一封 / 同类 / 全局），再一句话；提交有回执",
+      "actual": "作用域：这条指导管到哪里？ 只这一条 类似情况都这样 以后都这样（进策略变更审批）；提交后没看到明确回执；抽屉里还摆着「示例任务」（一封退货来信 / 破损或漏发 / 售前问能不能用），点一下会把写好的指导整段换掉",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/37-care-instruct.png",
+      "ms": 2492,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 38,
+      "section": "C",
+      "name": "care-policy",
+      "title": "边界问题选择题卡：选一项 → 批准",
+      "expect": "三个选项单选；没选不能批；批了沉淀成策略并有回执；卡面没有内部字段名",
+      "actual": "没选时批准按钮是灰的；卡面「改之前 / 改之后」是 late_return_grace_days: 0 → 7；批了卡消失",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/38-care-policy.png",
+      "ms": 4831,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 39,
+      "section": "C",
+      "name": "knowledge",
+      "title": "知识库与待补知识",
+      "expect": "看得到资料来源、待补知识（缺口），能从缺口一键补",
+      "actual": "待补知识 0 条；资料来源：上传的文件 把文件拖到这里，或者点下面的按钮选。 收这几种：docx / xlsx / xls / csv / pptx / pdf / md / txt；一份最大 64 MB。 选择文件 case-",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/39-knowledge.png",
+      "ms": 3494,
+      "errors": [],
+      "raw": [
+        "order_1002",
+        "historical_case"
+      ]
+    },
+    {
+      "no": 40,
+      "section": "C",
+      "name": "care-onboarding",
+      "title": "（前置）新用户向导里勾「客服」",
+      "expect": "勾了客服之后「网站在线客服」这条职责在我名下",
+      "actual": "左栏客服下：网站客服、网站在线客服、Amazon 客服、社群管理",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/40-care-onboarding.png",
+      "ms": 20049,
+      "errors": [
+        "失败 https://nordvolt.example/cdn/logo-512.png net::ERR_CONNECTION_CLOSED",
+        "console: Failed to load resource: net::ERR_CONNECTION_CLOSED"
+      ],
+      "raw": [
+        "low_stock",
+        "kol_campaign"
+      ]
+    },
+    {
+      "no": 41,
+      "section": "C",
+      "name": "chat-entry",
+      "title": "从「网站在线客服」这条职责找到聊天窗入口",
+      "expect": "职责的面板上有「聊天窗」「试聊」两个入口",
+      "actual": "两个入口都在",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/41-chat-entry.png",
+      "ms": 2018,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 42,
+      "section": "C",
+      "name": "chat-window",
+      "title": "聊天窗设置页：转发方式、嵌入代码、测试连接",
+      "expect": "三种转发方式看得懂可选；一段能复制的嵌入代码；测试连接给下一步",
+      "actual": "从职责面板入口进；转发方式区块：官方托管（免费） 每月 200 个对话；到 80% 提醒你。订阅客服增值服务后不限。；页面出现的方式词：官方/自建/本机；嵌入代码 81 字；测试连接：这个云节点还没开通客服增值服务。 / 还没填转发器地址。三种方式任选：官方托管（免费）/ 自建 / 客服增值服务。；对话区：沙盒访客 AI 在答",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/42-chat-window.png",
+      "ms": 4982,
+      "errors": [
+        "console: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set."
+      ],
+      "raw": []
+    },
+    {
+      "no": 43,
+      "section": "C",
+      "name": "chat-try",
+      "title": "试聊：访客问「运费多少」",
+      "expect": "几秒内 AI 答；教一句有回执",
+      "actual": "状态：等人接手；聊天沙盒 左边扮演访客发一句，右边看在线客服会怎么判、怎么答。 访客这一边 访客 9月24日 运费多少？ AI 客服 9月24日 转人工 这个问题我想给你一个准确答复，正在跟同事确认，稍等一下。 发 等人接手 这一轮的判断 直接答 低风险问题：先按现有信息作答，再在结尾追问缺的那一项。 问的是 买之前的产品问题 碰到钱没有 没有 还缺 具体产品型号或使用场景 花模型了吗 叫了一次轻模型 已经出了一张卡等你定 去看 这一轮没答出来：pro；教一句：模型这会儿不可用；你打的这段留着了，回头再试一次。",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/43-chat-try.png",
+      "ms": 10596,
+      "errors": [],
+      "raw": [
+        "provider_unavailable"
+      ]
+    },
+    {
+      "no": 44,
+      "section": "D",
+      "name": "account",
+      "title": "账号与积分页",
+      "expect": "三块分组、充值四档、增值服务卡；没连云时说清怎么连",
+      "actual": "分组 3 块、充值档 4 个、红人增值卡 1、模型增值卡 0、展开价目表后 3 块",
+      "status": "部分",
+      "shot": "docs/assets/walkthrough/44-account.png",
+      "ms": 19179,
+      "errors": [],
+      "raw": []
+    },
+    {
+      "no": 45,
+      "section": "D",
+      "name": "settings-models",
+      "title": "设置「模型」：文字与看图 / 生图两块",
+      "expect": "两块都在，分别能配",
+      "actual": "「文字 / 看图」有；「生图」有",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/45-settings-models.png",
+      "ms": 3590,
+      "errors": [],
+      "raw": [
+        "launch_item",
+        "shop_app"
+      ]
+    },
+    {
+      "no": 46,
+      "section": "D",
+      "name": "rail-all",
+      "title": "右栏各面板能开",
+      "expect": "每个图标点开都有内容或一句说清为什么空，不报错",
+      "actual": "12 个面板都点得开",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/46-rail-all.png",
+      "ms": 17613,
+      "errors": [],
+      "raw": [
+        "kol_campaign"
+      ]
+    },
+    {
+      "no": 47,
+      "section": "D",
+      "name": "role-persona",
+      "title": "右栏「岗位角色」面板（红人营销）",
+      "expect": "看得到六段角色定位，能改",
+      "actual": "红人营销 包里自带 你是谁：这家公司的红人营销岗位，在各平台上找人、建联、谈合作、验收、算账的那一摊。 你负责：找红人并打分、写建联信、推进合作与寄样、审交付物、建追踪链接并做归因。 你不负责：客户的退款与物流（转客服）、自己账号发帖（转社；有「编辑」",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/47-role-persona.png",
+      "ms": 1323,
+      "errors": [],
+      "raw": [
+        "kol_campaign"
+      ]
+    },
+    {
+      "no": 48,
+      "section": "D",
+      "name": "dark",
+      "title": "深色模式",
+      "expect": "账号菜单里切深色；首页与红人面板都能看清",
+      "actual": "切到深色了",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/48-dark.png",
+      "ms": 5028,
+      "errors": [],
+      "raw": [
+        "2026-09-27T01:00:00.000Z",
+        "2026-10-01T01:00:00.000Z"
+      ]
+    },
+    {
+      "no": 49,
+      "section": "D",
+      "name": "cmdk",
+      "title": "⌘K 命令面板",
+      "expect": "⌘K 打开；输「红人」能跳到岗位",
+      "actual": "候选：红人营销 / 红人营销 › YouTube 红人 / 红人营销 › Instagram 红人 / 红人营销 › TikTok 红人 → 跳到 /positions/asg_33dab26c445c65dc6621",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/49-cmdk.png",
+      "ms": 5297,
+      "errors": [],
+      "raw": [
+        "kol_campaign"
+      ]
+    },
+    {
+      "no": 50,
+      "section": "D",
+      "name": "dark-reset",
+      "title": "（收尾）切回浅色",
+      "expect": "—",
+      "actual": "切回浅色",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/50-dark-reset.png",
+      "ms": 1229,
+      "errors": [],
+      "raw": [
+        "kol_campaign"
+      ]
+    },
+    {
+      "no": 51,
+      "section": "D",
+      "name": "demo-quota",
+      "title": "demo 配额用完之后（接口级探针打满额度，再等 12 秒）",
+      "expect": "用完时回 429；过了窗口额度恢复，页面照常能用",
+      "actual": "探针第 241 次起 429（紧接着再打仍 429），等 12 秒后 → 200；首页照常打开",
+      "status": "通",
+      "shot": "docs/assets/walkthrough/51-demo-quota.png",
+      "ms": 2483,
+      "errors": [],
+      "raw": [
+        "low_stock",
+        "kol_campaign",
+        "provider_unavailable"
+      ]
+    }
+  ]
+}

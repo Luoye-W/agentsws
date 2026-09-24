@@ -77,6 +77,15 @@ describe('可见性谓词（过滤下推）', () => {
     expect(f.params[0]).toBe('ws_1')
   })
 
+  it('WP138：挂整个品牌时 assigned 那几条不再按范围切，只剩工作区那一刀', () => {
+    const shop = visibilityWhere(aftersales())
+    expect(shop.sql).toContain('fact_card_scopes')
+    const whole = visibilityWhere({ ...aftersales(), ranges: [{ kind: 'brand', id: 'ws_1' }] })
+    expect(whole.sql).not.toContain('fact_card_scopes')
+    expect(whole.params[0]).toBe('ws_1')
+    expect(whole.sql).toContain('workspace_id = ?')
+  })
+
   it('sensitivityRank 按 SENSITIVITY_ORDER', () => {
     expect(sensitivityRank('public')).toBe(0)
     expect(sensitivityRank('restricted')).toBe(3)

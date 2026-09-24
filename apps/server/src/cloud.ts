@@ -325,8 +325,18 @@ export function createCloud(options: CloudOptions): CloudAssembly {
 
   const creditsView = async (): Promise<CloudCreditsView> => {
     const nowMs = Date.parse(clock.now())
-    if (cached !== undefined && nowMs - cached.at < CREDITS_CACHE_MS) return cached.view
-    if (tokenOf() === undefined) {
+    /*
+     * WP140：关联状态一变就不认缓存。否则刚关联完的 60 秒里（demo 的合成时钟不走时
+     * 就是永远）设置页还说「还没关联」——缓存省的是打云的次数，不该挡住状态变化。
+     */
+    const linkedNow = tokenOf() !== undefined
+    if (
+      cached !== undefined &&
+      cached.view.linked === linkedNow &&
+      nowMs - cached.at < CREDITS_CACHE_MS
+    )
+      return cached.view
+    if (!linkedNow) {
       const view: CloudCreditsView = { linked: false, reason: NOT_LINKED }
       cached = { at: nowMs, view }
       return view

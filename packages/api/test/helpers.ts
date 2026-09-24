@@ -604,6 +604,8 @@ const COVERS: Record<Range, Range[]> = {
 export async function harness(
   options: {
     rateLimit?: { burst: number; per_second: number }
+    /** WP140：限流用的墙钟（毫秒）；不给就是系统时钟。 */
+    wallClockMs?: () => number
     exposeMagicLinkToken?: boolean
     /** 不装 19 §6 的那几个可选面，用来测「没装配 → 501」。 */
     bareKnowledge?: boolean
@@ -955,6 +957,7 @@ export async function harness(
       events: { pollIntervalMs: 5 },
       ...(options.ws === undefined ? {} : { ws: options.ws }),
       ...(options.rateLimit ? { rateLimit: { default: options.rateLimit } } : {}),
+      ...(options.wallClockMs === undefined ? {} : { wallClockMs: options.wallClockMs }),
       ...(options.exposeMagicLinkToken === undefined
         ? {}
         : { exposeMagicLinkToken: options.exposeMagicLinkToken }),

@@ -726,6 +726,13 @@ const zh: Table = {
     '范围是空的，所以看不到店铺数据——不是没数，是这个岗位还没被指定管哪几家店。',
   'view.no_range.action': '去分配',
   'view.no_range.ask_owner': '找工作区所有者给这个岗位指一下范围。',
+  // WP138：店主本人看时一键挂上整个品牌（红人 / 在线客服不按店划，挂品牌就能开工）
+  'view.no_range.self': '给我自己挂上这个品牌',
+  'view.no_range.self.pending': '正在挂…',
+  'view.no_range.self.error': '没挂上：{message}',
+  'view.no_range.self.hint': '挂上之后，这个岗位管整个品牌；想只管某几家店，去组织页改。',
+  'view.no_range.stores': '只挡店铺数字：红人工作台、聊天入口照常能用。',
+  'range.kind.brand': '整个品牌',
   'view.connect': '去连接',
   'view.report': '查看完整报告 →',
   'block.unknown': '这个积木的组件不在注册表里，不渲染。',
@@ -2350,7 +2357,7 @@ const zh: Table = {
   'chat.subtitle': '左边扮演访客发一句，右边看在线客服会怎么判、怎么答。',
   'chat.intro':
     '网站聊天窗本身要等托管档（widget 与公网端点）。在那之前，在这里先把 AI 的判断试一遍：哪些它直接答、哪些它要你定、哪些它转人工。',
-  'chat.unavailable': '这个服务进程没有装在线客服。',
+  'chat.unavailable': '这台服务上没有装在线客服。',
   'chat.entry.open': '去试一句',
 
   'chat.visitor.title': '访客这一边',
@@ -2603,6 +2610,25 @@ const zh: Table = {
   'kol.contact.source.other': '来源没记下',
   'position.entry.placeholder.plain': '一句话说清要办什么',
   'position.entry.placeholder.example': '一句话说清要办什么，比如「{example}」',
+  // ── WP139（docs/78 阻断 #2）：独立页面挑自己的身份；403 与 501 分开说 ──
+  'error.forbidden': '你现在用的这条职责没有做这件事的权限——不是坏了，是这条职责上没有这一项。',
+  'error.not_implemented': '这台服务上还没装这项功能。',
+  'error.unauthenticated': '登录过期了，刷新一下页面重新登录。',
+  'error.rate_limited': '请求过于频繁，等几秒再试。',
+  'error.server': '服务那边出了点问题，再试一次。',
+  'error.network': '连不上服务，看看它是不是还开着。',
+  'error.retry': '重试',
+  'chat.forbidden': '你现在用的职责没有「网站在线客服」的权限，这里读不到对话。',
+  'need.duty.live_chat': '网站在线客服',
+  'need.duty.kol': '红人营销',
+  'need.duty.owner': '所有者',
+  'need.none': '你名下没有「{duty}」这条职责。',
+  'need.none.how': '在「公司」里给自己加上这条职责，或者重走一遍设置向导把它勾上。',
+  'need.go_org': '去「公司」加上',
+  'need.go_onboarding': '用设置向导加',
+  'need.no_range': '「{duty}」这条职责还没分配店铺 / 品牌，所以这里还用不了。',
+  'need.go_assign': '去分配',
+  'nav.chat_window': '聊天窗',
 }
 
 const en: Table = {
@@ -3335,6 +3361,14 @@ const en: Table = {
     'Its scope is empty, so there is no store data to show — the data exists, this position just has not been told which stores it covers.',
   'view.no_range.action': 'Assign a scope',
   'view.no_range.ask_owner': 'Ask the workspace owner to give this position a scope.',
+  'view.no_range.self': 'Assign this brand to me',
+  'view.no_range.self.pending': 'Assigning…',
+  'view.no_range.self.error': 'That did not work: {message}',
+  'view.no_range.self.hint':
+    'This position will then cover the whole brand. To limit it to certain stores, change it on the Org page.',
+  'view.no_range.stores':
+    'Only store numbers are hidden; the creator workspace and chat entries still work.',
+  'range.kind.brand': 'Whole brand',
   'view.connect': 'Connect',
   'view.report': 'Full report →',
   'block.unknown': 'Unknown component — not rendered.',
@@ -5237,6 +5271,28 @@ const en: Table = {
   'kol.contact.source.other': 'source not recorded',
   'position.entry.placeholder.plain': 'Say what needs doing in one sentence',
   'position.entry.placeholder.example': 'Say what needs doing in one sentence, e.g. "{example}"',
+  // ── WP139 (docs/78 blocker #2): standalone pages pick their own identity; 403 vs 501 ──
+  'error.forbidden':
+    'The duty you are using right now does not have permission for this. Nothing is broken — this duty just does not include it.',
+  'error.not_implemented': 'This server does not have this feature installed.',
+  'error.unauthenticated': 'Your sign-in expired. Refresh the page to sign in again.',
+  'error.rate_limited': 'Too many requests. Wait a few seconds and try again.',
+  'error.server': 'Something went wrong on the server. Try again.',
+  'error.network': 'Cannot reach the server. Check that it is still running.',
+  'error.retry': 'Try again',
+  'chat.forbidden':
+    'The duty you are using has no permission for Website live chat, so conversations cannot be read here.',
+  'need.duty.live_chat': 'Website live chat',
+  'need.duty.kol': 'Creator marketing',
+  'need.duty.owner': 'Owner',
+  'need.none': 'You do not hold the "{duty}" duty.',
+  'need.none.how': 'Add it to yourself under Company, or run the setup wizard again and tick it.',
+  'need.go_org': 'Add it under Company',
+  'need.go_onboarding': 'Add it with the setup wizard',
+  'need.no_range':
+    'The "{duty}" duty has no store or brand assigned yet, so it cannot be used here.',
+  'need.go_assign': 'Assign one',
+  'nav.chat_window': 'Live chat',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

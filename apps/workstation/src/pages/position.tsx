@@ -5,7 +5,7 @@
  * 数据源没接时出「去连接」，不出空图。
  */
 import type { RangeName } from '@agentsws/deck'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link2Off, ScanSearch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -23,7 +23,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LayerMemory } from '@/components/work/layer-memory'
 import { PositionEntry } from '@/components/work/position-entry'
-import { getPosition, getPositionRecords, getPositions, getPositionView } from '@/lib/api'
+import {
+  currentSession,
+  getPosition,
+  getPositionRecords,
+  getPositions,
+  getPositionView,
+  updateAssignmentRanges,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
 import { approvalStateLabel } from '@/lib/humanize'
@@ -41,9 +48,31 @@ const isTile = (block: { component: string }): boolean => block.component === 's
  * 那次验收里岗位的 `ranges: []`，于是 19 §3 的过滤下推把整个「店铺后台」分块
  * 静默去掉了——页面上什么都没有，也没有一个字解释为什么。现在这里说人话，
  * 并且给 owner 一个"去分配"的按钮（不是 owner 的人点不到，只看到那句话）。
+ *
+ * WP138（78 §1 #1）：它**只替换店铺数字那几块**，不再吞掉红人工作台与聊天入口；
+ * 店主本人看时多一个一键「给我自己挂上这个品牌」——调的是组织页那条
+ * `PUT /v1/assignments/:id`，身份用店主那条分配（改分配要的是店主的权限）。
  */
-function NoRangeNotice({ isOwner }: { id: string; isOwner: boolean }): React.ReactNode {
+export function NoRangeNotice({
+  id,
+  isOwner,
+  ownerAssignment,
+}: {
+  id: string
+  isOwner: boolean
+  /** 店主那条分配（`common.owner`）；给了才出一键挂品牌。 */
+  ownerAssignment?: string | undefined
+}): React.ReactNode {
   const { t } = useApp()
+  const client = useQueryClient()
+  const assign = useMutation({
+    mutationFn: async () => {
+      const me = await currentSession()
+      return updateAssignmentRanges(id, [{ kind: 'brand', id: me.workspace.id }], ownerAssignment)
+    },
+    // 范围一变，面板、左栏、红人工作台读到的东西全变——整个缓存作废最省心
+    onSuccess: () => client.invalidateQueries(),
+  })
   return (
     <Card data-testid="no-range-card">
       <CardHeader>
@@ -54,13 +83,36 @@ function NoRangeNotice({ isOwner }: { id: string; isOwner: boolean }): React.Rea
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
         <p>{t('view.no_range.detail')}</p>
+        <p>{t('view.no_range.stores')}</p>
         {isOwner ? (
-          <div>
-            <Button size="sm" variant="outline" asChild>
-              <Link to="/org?tab=positions" data-testid="no-range-assign">
-                {t('view.no_range.action')}
-              </Link>
-            </Button>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              {ownerAssignment === undefined ? null : (
+                <Button
+                  size="sm"
+                  data-testid="no-range-self-assign"
+                  disabled={assign.isPending}
+                  onClick={() => {
+                    assign.mutate()
+                  }}
+                >
+                  {assign.isPending ? t('view.no_range.self.pending') : t('view.no_range.self')}
+                </Button>
+              )}
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/org?tab=positions" data-testid="no-range-assign">
+                  {t('view.no_range.action')}
+                </Link>
+              </Button>
+            </div>
+            {ownerAssignment === undefined ? null : (
+              <p className="text-xs">{t('view.no_range.self.hint')}</p>
+            )}
+            {assign.error === null ? null : (
+              <p className="text-xs text-destructive" data-testid="no-range-self-error">
+                {t('view.no_range.self.error', { message: assign.error.message })}
+              </p>
+            )}
           </div>
         ) : (
           <p data-testid="no-range-ask-owner">{t('view.no_range.ask_owner')}</p>
@@ -115,7 +167,6 @@ function ChatSandboxEntry(): React.ReactNode {
 }
 
 function ViewTab({ id }: { id: string }): React.ReactNode {
-  const { t } = useApp()
   const [range, setRange] = useState<RangeName>('yesterday')
   const view = useQuery({
     queryKey: ['view', id, range],
@@ -124,7 +175,10 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
   // 左栏那份岗位清单里就有 ranges 与 role_id，不用为这一句再加一条接口
   const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const here = mine.data?.positions.find((p) => p.position_id === id)
-  const isOwner = (mine.data?.positions ?? []).some((p) => p.role_id === 'common.owner')
+  const ownerAssignment = (mine.data?.positions ?? []).find(
+    (p) => p.role_id === 'common.owner',
+  )?.position_id
+  const isOwner = ownerAssignment !== undefined
   const isLiveChat = here?.role_id === 'dtc.live-chat'
   /*
    * WP68（48 §5.1）：红人那五条渠道职责的面板上多一块**能动手的**——
@@ -139,14 +193,43 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
    * 而那正是职责页已经回答过的问题（54：岗位是入口、职责各有各的上下文）。
    */
   if (view.isPending) return <Skeleton className="h-64 w-full" />
-  if (here !== undefined && here.ranges.length === 0)
-    return <NoRangeNotice id={id} isOwner={isOwner} />
+  /*
+   * WP138（78 §1 #1）：范围为空**只挡店铺数字**（下面那排时间切换与各数据源分块）。
+   * 红人工作台与聊天窗 / 试聊入口不按店划，照常渲染——以前这里整页 return 掉，
+   * 向导建出来的红人与在线客服就整块看不见了。提示卡排在最前，先说清为什么。
+   */
+  const noRange = here !== undefined && here.ranges.length === 0
   return (
     <div className="flex flex-col gap-6">
+      {noRange ? (
+        <NoRangeNotice id={id} isOwner={isOwner} ownerAssignment={ownerAssignment} />
+      ) : null}
       {/* WP57：在线客服的入口排在最前——它的产出在对话里，不在数字块里 */}
       {isLiveChat ? <ChatWindowEntry /> : null}
       {isLiveChat ? <ChatSandboxEntry /> : null}
       {kolChannel === undefined ? null : <KolPanel assignment={id} channel={kolChannel} />}
+      {noRange ? null : (
+        <StoreSections id={id} range={range} setRange={setRange} view={view.data} />
+      )}
+    </div>
+  )
+}
+
+/** 店铺数字那几块：时间切换 + 各数据源分块（WP138 从 `ViewTab` 里拆出来，范围为空时整块不出）。 */
+function StoreSections({
+  id,
+  range,
+  setRange,
+  view,
+}: {
+  id: string
+  range: RangeName
+  setRange(r: RangeName): void
+  view: Awaited<ReturnType<typeof getPositionView>> | undefined
+}): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <>
       <div className="flex items-center gap-1">
         {RANGES.map((r) => (
           <Button
@@ -162,7 +245,7 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
           </Button>
         ))}
       </div>
-      {(view.data?.sections ?? []).map((section) => (
+      {(view?.sections ?? []).map((section) => (
         <section key={section.source} data-testid="view-section" data-source={section.source}>
           <h3 className="ws-display mb-2.5 text-[17px]">{section.label}</h3>
           {section.connected ? (
@@ -222,7 +305,7 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
           )}
         </section>
       ))}
-    </div>
+    </>
   )
 }
 

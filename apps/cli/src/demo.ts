@@ -39,7 +39,14 @@ import type {
   Server,
   WorkstationDataSource,
 } from '@agentsws/server'
-import { createServer, deepseekAccountStandIn, periodQueryRunner } from '@agentsws/server'
+import {
+  CLOUD_STAND_IN_BASE_URL,
+  type CloudStandIn,
+  cloudStandIn,
+  createServer,
+  deepseekAccountStandIn,
+  periodQueryRunner,
+} from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
@@ -109,12 +116,19 @@ export interface DemoOptions {
    * 去比 `Date.now()`，测的是同义反复。
    */
   now?: number
+  /**
+   * WP140：云账号替身「发登录信」之后多久替用户点链接（毫秒）。**只给测试用**；
+   * 不给就是替身的默认值（1.5 秒）。负数 = 不自动点。
+   */
+  cloudAutoLinkAfterMs?: number
 }
 
 export interface Demo {
   server: Server
   world: World
   pack: Pack
+  /** WP140：官方云那一跳的替身（测试用它断言「走的是替身、没出网」）。 */
+  cloud: CloudStandIn
   /** 施行队列：批准之后由它把变更真的施行掉（15 §5「通过 ≠ 施行」） */
   drain(): Promise<void>
   close(): Promise<void>
@@ -1008,6 +1022,21 @@ export function demoClockStart(scenarioStart: Iso8601, nowMs: number): Iso8601 {
   return new Date(startMs + days * DAY_MS).toISOString()
 }
 
+/**
+ * WP140：网址夹具的查表键。有没有结尾斜杠、主机名大小写、默认端口都算同一页
+ * （`https://nordvolt.example` 与 `https://nordvolt.example/` 是一页）；解析不了的原样用。
+ */
+export function siteFixtureKey(url: string): string {
+  try {
+    const u = new URL(url.trim())
+    u.hash = ''
+    const path = u.pathname.replace(/\/+$/, '')
+    return `${u.protocol}//${u.host}${path}${u.search}`
+  } catch {
+    return url.trim()
+  }
+}
+
 export async function createDemo(options: DemoOptions): Promise<Demo> {
   const root = options.root
   const scenario = parseScenario(
@@ -1067,10 +1096,29 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   // 转客服）与 `pr.reddit`（外部露出 + 版规检查）。挑这两条是因为它们各自演示了
   // 60 里最要紧的两句话：**客户的问题转客服，公关不答**，以及**在别人的地盘上
   // 版主说了算**。公关库那几行由 `seedDemoPr` 放（`apps/server/src/pr.ts`）。
+  //
+  // WP140（docs/78 §2 / docs/66 #2 #17）：岗位页写「N 条职责」，左栏就得展开出 N 条。
+  // 所以**红人营销五条**、**客服四条**全挂上（模板里默认不勾的那几条也挂——demo 要
+  // 把整个岗位演完整，不是演「刚走完向导」）。另外：pack 的 `assignments.yml` 已经给店主
+  // 挂过其中几条（`ads.meta` / `pr.monitoring` / `site.shopify-build|theme` …），
+  // 之前这里又挂一遍，同一条职责出现两次——首页右侧「Meta Ads」数据块出两次就是它。
+  // 现在已经挂过的跳过。
+  const held = new Set(
+    world.roles.assignments
+      .listByPerson(world.roleHolder, { workspace_id: world.workspace_id })
+      .map((a) => a.role_id),
+  )
   for (const role of [
     'dtc.store',
     'dtc.content',
     'kol.youtube',
+    'kol.instagram',
+    'kol.tiktok',
+    'kol.facebook',
+    'kol.x',
+    // 客服岗位四条（`dtc.support` / `dtc.community-support` 由 pack 挂）
+    'dtc.live-chat',
+    'amz.support',
     'social.meta',
     'social.discord',
     'pr.monitoring',
@@ -1085,6 +1133,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     // WP76（58 §3）：设计岗位挂一条 `design.dtc`（五条骨架相同，只挂一条就够）
     'design.dtc',
   ]) {
+    if (held.has(role)) continue
+    held.add(role)
     world.roles.assignments.create({
       person_id: world.roleHolder,
       workspace_id: world.workspace_id,
@@ -1107,6 +1157,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     workspace_id: world.workspace_id,
     workspace_name: pack.workspace.name,
     owner: { id: owner.id, email: owner.email, name: owner.name },
+    // WP140：样例会议的与会人换成这家公司的真人（店主排第一）
+    people: [owner, ...pack.people.filter((p) => p.id !== owner.id)].map((p) => ({
+      id: p.id,
+      name: p.name,
+    })),
     roles: world.roles,
     approvals: world.txn.approvals,
     data: dataSourceOf(world, pack),
@@ -1135,9 +1190,20 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   for (const [name, body] of pack.fixtures) {
     if (!name.startsWith('fixtures/site/')) continue
     const declared = /url:\s*(\S+)/.exec(body.slice(0, 400))?.[1]
-    if (declared !== undefined) siteFixtures.set(declared, body)
+    if (declared !== undefined) siteFixtures.set(siteFixtureKey(declared), body)
   }
 
+  /**
+   * WP140（docs/78 阻断 #6）：官方云那一跳换替身。demo 点「发登录信」不再打生产云：
+   * 替身回「信发出去了」，过一小会儿替用户点链接，于是能看到「已关联」（余额、价目、充值四档）。
+   * 云地址同时换成 `.invalid` 保留域——万一哪条路没走替身，也只会解析失败，不会出网。
+   */
+  const cloud = cloudStandIn({
+    clock: world.clock,
+    ...(options.cloudAutoLinkAfterMs === undefined
+      ? {}
+      : { autoLinkAfterMs: options.cloudAutoLinkAfterMs }),
+  })
   const server = await createServer({
     clock: world.clock,
     random: world.random,
@@ -1145,7 +1211,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     staticDir,
     brandData: (ws) => extraBrandData.get(ws),
     brandIntakeFetch: async (url: string) => {
-      const body = siteFixtures.get(url)
+      // WP140（docs/78 §2 向导 ②）：手输不带结尾斜杠的 `https://nordvolt.example` 也认
+      const body = siteFixtures.get(siteFixtureKey(url))
       // 剧本里没有的网址回 **404**，不是 503：这一句会原样显示给用户
       //（"有 N 个页面没读着（…）"），而 503 说的是"对方服务器出错"——
       // 那是替商家的网站撒了一个我们不知道的谎。404 才是"这一页不存在"。
@@ -1163,12 +1230,15 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * demo 不该为了演示去敲 DeepSeek 的服务器，也不该在没网的机器上演不出这张卡。
      */
     deepseekAccount: deepseekAccountStandIn(),
+    cloudFetch: cloud.fetch,
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),
     env: {
       ...process.env,
       // demo 一律 stub 运行时：即使机器上配了 DEEPSEEK_API_KEY 也不叫模型
       DEEPSEEK_API_KEY: '',
       AGENTSWS_PORT: String(options.port ?? 4317),
+      // WP140：云地址一律是替身那个（覆盖外面环境变量里的，demo 不连任何真云）
+      AGENTSWS_CLOUD_BASE_URL: CLOUD_STAND_IN_BASE_URL,
       /*
        * WP117（66 断点 #6 的环境那一半）：**demo 自带一把临时加密钥匙**。
        *
@@ -1267,6 +1337,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     server,
     world,
     pack,
+    cloud,
     drain,
     async close() {
       await server.close()

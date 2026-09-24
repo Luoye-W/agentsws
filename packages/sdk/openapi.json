@@ -21111,7 +21111,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",
@@ -22912,7 +22919,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",
@@ -24398,7 +24412,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",
@@ -24762,7 +24783,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",
@@ -25153,7 +25181,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",
@@ -25455,7 +25490,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",
@@ -25780,7 +25822,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",
@@ -26978,7 +27027,14 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["store", "department", "account", "market", "product_line"]
+                          "enum": [
+                            "store",
+                            "department",
+                            "account",
+                            "market",
+                            "product_line",
+                            "brand"
+                          ]
                         },
                         "id": {
                           "type": "string",

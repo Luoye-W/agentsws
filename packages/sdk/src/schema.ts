@@ -20509,7 +20509,7 @@ export interface operations {
           /** @default [] */
           ranges?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
           range_groups?: string[]
@@ -21700,7 +21700,7 @@ export interface operations {
         'application/json': {
           ranges?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
           range_groups?: string[]
@@ -22679,7 +22679,7 @@ export interface operations {
           position_id?: string
           ranges?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
         }
@@ -22934,7 +22934,7 @@ export interface operations {
           name: string
           members?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
           parent?: {
@@ -23141,7 +23141,7 @@ export interface operations {
           /** @default [] */
           members?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
           duplicate_ack?: {
@@ -23338,7 +23338,7 @@ export interface operations {
           /** @default [] */
           members?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
           duplicate_ack?: {
@@ -23537,7 +23537,7 @@ export interface operations {
           name?: string
           members?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
           parent?: {
@@ -24185,7 +24185,7 @@ export interface operations {
           name?: string
           members?: {
             /** @enum {string} */
-            kind: 'store' | 'department' | 'account' | 'market' | 'product_line'
+            kind: 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
             id: string
           }[]
           parent?: {

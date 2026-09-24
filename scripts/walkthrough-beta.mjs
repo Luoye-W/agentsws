@@ -10,21 +10,28 @@
  * 纪律（照 WP117b）：
  *
  * 1. **只点界面。** 除了拿一次登录令牌、查一次红人职责的分配 id，不打业务接口。
- *    唯一例外是 D 段最后那一条「demo 配额探针」，它明写是接口级诊断。
+ *    唯一例外是 D 段最后那一条「demo 配额探针」，它明写是接口级诊断：
+ *    先把限流额度打满，再等过一个窗口，看额度回没回来、页面还能不能用。
  * 2. **每一步一张图**，存 `docs/assets/walkthrough/NN-<名字>.png`；
  *    每一步顺带收集：控制台报错、页面异常、接口 4xx / 5xx、请求失败、
  *    屏幕上的**裸值**（snake_case 内部值、ISO 时间戳）。
- * 3. **四段各起一个全新的 demo**（内存库）。原因见 docs/78 阻断 #1：
- *    demo 的限流令牌桶挂在**合成时钟**上，合成时钟不走令牌就不回，一个进程
- *    大约 240 次接口调用之后整个工作台变成「出错了：请求过于频繁」。
- *    四段分开起，每段都在额度以内；这本身也是一条要修的 bug。
+ * 3. **一个 demo 跑完五段**（WP140）。WP135 那一版每段起一个全新的 demo，因为
+ *    demo 的限流令牌桶挂在合成时钟上、用完永不回血（docs/78 阻断 #3）；WP140 把
+ *    限流改成按墙钟回血之后，一个进程从向导点到最后一步都不该出「请求过于频繁」。
+ *    这也更像真用户：向导里建的职责、关联的云账号，后面几段看得见。
+ *    `--only` 仍可只跑某几段（同一个 demo 里按顺序跑）。
+ * 4. **云账号那一跳在 demo 里是替身**（WP140）：「发登录信」不打生产云，默认就点。
  *
  * 用法：
  *
  * ```
  * npx tsc -b && pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist
- * node scripts/walkthrough-beta.mjs [--port 4420] [--only A,B,C,C2,D] [--headed] [--live-cloud]
+ * node scripts/walkthrough-beta.mjs [--port 4420] [--only A,B,C,C2,D] [--headed]
+ *                                   [--give-live-chat-range]
  * ```
+ *
+ * `--give-live-chat-range`（WP139）：C2 段向导建完之后，接口级给「网站在线客服」挂上种子店铺范围
+ * ——向导建的职责范围为空是 WP138 在修的事；这一项让 WP139（独立页面挑身份）在那之前也能验。
  *
  * 退出码恒为 0（走查不是断言）；结果在控制台与 `docs/assets/walkthrough/results.json`。
  */
@@ -323,14 +330,10 @@ async function sectionA() {
       await T('ai-card-official').click()
       await T('ai-official-email').fill('tester@example.com')
       /*
-       * 注意：demo 的这一步**真的会打官方云**（cloud.agentsws.com）——合成世界并没有把
-       * 云账号那一跳换成替身。默认不点「发登录信」，免得每次回归都往生产云发一封信；
-       * 要验这一跳加 `--live-cloud`（收件人是保留域名 example.com，不会真投递）。
+       * WP140：demo 的云账号那一跳是替身（`cloudStandIn`，云地址是 `.invalid` 保留域），
+       * 点「发登录信」不会打生产云——所以默认就点。替身过一小会儿替用户点信里的链接，
+       * 向导每 3 秒问一次，于是能看到「已关联」。
        */
-      if (!flag('--live-cloud'))
-        return part(
-          '填了邮箱没点发送（默认不打生产云；加 --live-cloud 才点）。WP135 手测两次：一次 3.5 秒后「连不上 agentsws 云（https://cloud.agentsws.com）」，一次 4.5 秒后「信发出去了」；两次等待期间都只有按钮变灰',
-        )
       const t0 = Date.now()
       await T('ai-official-send').click()
       await settle(1500)
@@ -344,7 +347,18 @@ async function sectionA() {
         err.waitFor({ timeout: 25_000 }),
       ]).catch(() => {})
       const secs = ((Date.now() - t0) / 1000).toFixed(1)
-      if (await sent.count()) return ok(`${secs}s 后：${oneLine(await sent.innerText())}`)
+      if (await sent.count()) {
+        const said = oneLine(await sent.innerText())
+        const linked = await T('ai-official-linked')
+          .waitFor({ timeout: 8000 })
+          .then(
+            () => true,
+            () => false,
+          )
+        return ok(
+          `${secs}s 后：${said}${linked ? '；替身点了信里的链接，几秒后显示「已关联」' : ''}`,
+        )
+      }
       if (await err.count())
         return part(
           `${secs}s 后才出错：「${oneLine(await err.innerText())}」；等待期间按钮变灰、没有转圈或文字`,
@@ -400,15 +414,19 @@ async function sectionA() {
     '② 贴网址分析 → 品牌档案卡',
     '品牌名 / 公司 / 一句话 / 邮箱 / 币种 / 社媒 / 产品；没有内部值；与下方表单不打架',
     async () => {
-      await T('intake-url').fill('https://nordvolt.example/')
-      await T('intake-start').click()
-      await T('intake-working')
-        .waitFor({ timeout: 3000 })
-        .catch(() => {})
-      await T('intake-working')
-        .waitFor({ state: 'detached', timeout: 30_000 })
-        .catch(() => {})
-      await settle()
+      // WP140：上一步（不带结尾斜杠）已经出了档案卡，就直接看这张；没出才带斜杠再贴一次
+      const already = (await text('onboarding-business').catch(() => '')).includes('品牌名')
+      if (!already) {
+        await T('intake-url').fill('https://nordvolt.example/')
+        await T('intake-start').click()
+        await T('intake-working')
+          .waitFor({ timeout: 3000 })
+          .catch(() => {})
+        await T('intake-working')
+          .waitFor({ state: 'detached', timeout: 30_000 })
+          .catch(() => {})
+        await settle()
+      }
       const body = await text('onboarding-business')
       if (!body.includes('品牌名')) fail(`没出档案卡：${oneLine(body)}`)
       const issues = []
@@ -1191,7 +1209,7 @@ async function sectionC(careAssignment) {
   )
 }
 
-async function sectionC2() {
+async function sectionC2(token) {
   let liveChat
   await step(
     'C',
@@ -1221,6 +1239,21 @@ async function sectionC2() {
         .first()
       if (await link.count())
         liveChat = /\/positions\/([^/?]+)/.exec((await link.getAttribute('href')) ?? '')?.[1]
+      // WP139：--give-live-chat-range 时给它挂上种子店铺范围（WP138 修好向导之前的验证办法）
+      if (liveChat && flag('--give-live-chat-range') && token) {
+        const owner = await assignmentOf(token, 'common.owner')
+        await fetch(`${BASE}/v1/assignments/${liveChat}`, {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'x-assignment': owner,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ ranges: [{ kind: 'store', id: 'store_main' }] }),
+        })
+        await page.reload({ waitUntil: 'load' })
+        await settle(1500)
+      }
       return liveChat
         ? ok(`左栏客服下：${duties.join('、')}`)
         : part(`左栏客服下：${duties.join('、')}——没有「网站在线客服」`)
@@ -1254,10 +1287,17 @@ async function sectionC2() {
     '三种转发方式看得懂可选；一段能复制的嵌入代码；测试连接给下一步',
     async () => {
       if (!liveChat) fail('名下没有「网站在线客服」职责')
-      // 入口被挡住时，只能整页打开 /chat-window（身份回到店主）——看页面本身长什么样
+      // WP139：职责面板上的入口被挡住时，走左栏「消息」下面那个常驻入口；都没有才手输网址
+      let via = '职责面板入口'
       if (await T('chat-window-entry').count())
         await T('chat-window-entry').locator('a').first().click()
-      else await go('/chat-window')
+      else if (await T('nav-chat-window').count()) {
+        via = '左栏「聊天窗」'
+        await T('nav-chat-window').click()
+      } else {
+        via = '手输网址'
+        await go('/chat-window')
+      }
       await T('chat-window-page').waitFor({ timeout: 15_000 })
       await settle(1500)
       const relay = await T('relay-mode')
@@ -1288,10 +1328,20 @@ async function sectionC2() {
       }
       const body = await page.locator('main').innerText()
       const modes = ['官方', '自建', '本机'].filter((w) => body.includes(w))
-      const msg = `转发方式区块：${oneLine(relay, 60)}；页面出现的方式词：${modes.join('/')}；嵌入代码 ${code ? `${code.length} 字` : '没有'}；测试连接：${test || '（无回执）'}`
-      return code && modes.length >= 2 && !entryNote
-        ? ok(msg)
-        : part(`${msg}${entryNote ? `（${entryNote}，这里是手输网址进来的，身份是店主）` : ''}`)
+      const convo = oneLine(
+        await T('chat-conversations-empty')
+          .or(T('chat-conversations'))
+          .or(T('chat-duty-needed'))
+          .or(T('chat-sessions-error'))
+          .first()
+          .innerText()
+          .catch(() => '（对话区没内容）'),
+        80,
+      )
+      const msg = `从${via}进；转发方式区块：${oneLine(relay, 60)}；页面出现的方式词：${modes.join('/')}；嵌入代码 ${code ? `${code.length} 字` : '没有'}；测试连接：${test || '（无回执）'}；对话区：${convo}`
+      const convoOk =
+        (await T('chat-conversations-empty').count()) + (await T('chat-conversations').count()) > 0
+      return code && modes.length >= 2 && via !== '手输网址' && convoOk ? ok(msg) : part(msg)
     },
   )
 
@@ -1309,9 +1359,7 @@ async function sectionC2() {
       await settle(1500)
       if (!(await T('chat-sandbox').count())) {
         const said = oneLine(await page.locator('main').innerText(), 60)
-        fail(
-          `试聊页只有一句「${said}」——当前身份（范围为空的在线客服职责 / 店主）没有 customer.read，建会话被 403`,
-        )
+        fail(`试聊页没打开，只有一句「${said}」`)
       }
       await T('chat-visitor-input').fill('运费多少？')
       await T('chat-visitor-send').click()
@@ -1480,20 +1528,28 @@ async function sectionD(kolAssignment) {
   })
 }
 
-/** 接口级诊断：demo 的限流桶会不会回血。不是界面步骤，单独列。 */
+/**
+ * 接口级诊断：demo 的限流桶用完之后**过一个窗口能不能回血**。不是界面步骤，单独列。
+ *
+ * WP140：限流改成按墙钟回血（`packages/api` 默认 session 档 240 突发、每秒 8 个）。
+ * 探针先把额度打满（出现第一个 429），再等 `RECOVER_WAIT_MS`——够回血一整页首页的
+ * 请求量——然后接口应当回 200，页面应当照常能用。
+ */
+const RECOVER_WAIT_MS = 12_000
 async function rateLimitProbe(token) {
   const hit = async () =>
     (await fetch(`${BASE}/v1/me`, { headers: { authorization: `Bearer ${token}` } })).status
   let first429 = -1
-  for (let i = 0; i < 400; i += 1) {
+  for (let i = 0; i < 600; i += 1) {
     if ((await hit()) === 429) {
       first429 = i
       break
     }
   }
-  await new Promise((r) => setTimeout(r, 10_000))
+  const stillLimited = first429 >= 0 ? await hit() : undefined
+  await new Promise((r) => setTimeout(r, RECOVER_WAIT_MS))
   const after = await hit()
-  return { first429, afterTenSeconds: after }
+  return { first429, stillLimited, waitedMs: RECOVER_WAIT_MS, after }
 }
 
 /* ── main ─────────────────────────────────────────────────────────────── */
@@ -1535,7 +1591,7 @@ async function main() {
     ['A', async () => sectionA()],
     ['B', async (tok) => sectionB(await assignmentOf(tok, 'kol.youtube'))],
     ['C', async (tok) => sectionC(await assignmentOf(tok, 'dtc.support'))],
-    ['C2', async () => sectionC2()],
+    ['C2', async (tok) => sectionC2(tok)],
     [
       'D',
       async (tok) => {
@@ -1544,66 +1600,84 @@ async function main() {
         await step(
           'D',
           'demo-quota',
-          'demo 配额用完之后（接口级探针打满额度，再等 10 秒）',
-          '限流桶随时间回血，页面照常能用',
+          `demo 配额用完之后（接口级探针打满额度，再等 ${RECOVER_WAIT_MS / 1000} 秒）`,
+          '用完时回 429；过了窗口额度恢复，页面照常能用',
           async () => {
             await go('/')
             const body = await page.locator('body').innerText()
-            const msg = `探针第 ${probe.first429} 次起 429，等 10 秒后仍 ${probe.afterTenSeconds}`
-            if (/请求过于频繁/.test(body))
-              fail(`${msg}；整个工作台变成「出错了：请求过于频繁」，只能重启 demo`)
-            return probe.afterTenSeconds === 429 ? part(msg) : ok(msg)
+            const secs = probe.waitedMs / 1000
+            if (probe.first429 < 0) return part('探针 600 次都没打满额度，没验到「用完」那一刻')
+            const msg = `探针第 ${probe.first429} 次起 429（紧接着再打仍 ${probe.stillLimited}），等 ${secs} 秒后 → ${probe.after}`
+            if (/请求过于频繁/.test(body)) fail(`${msg}；整个工作台变成「出错了：请求过于频繁」`)
+            if (probe.after !== 200) fail(`${msg}；过了窗口额度没回来`)
+            return ok(`${msg}；首页照常打开`)
           },
         )
       },
     ],
   ]
 
-  for (const [id, run] of sections) {
-    if (!ONLY.includes(id)) continue
-    const { child, log } = await startDemo()
-    try {
-      await waitForDemo(log)
-      const token = await login()
-      const context = await browser.newContext({
-        viewport: { width: 1360, height: 900 },
-        locale: 'zh-CN',
-      })
-      await context.addInitScript((t) => {
-        try {
-          window.localStorage.setItem('agentsws.session_token', t)
-        } catch {
-          /* 无痕 */
-        }
-      }, token)
-      page = await context.newPage()
-      page.setDefaultTimeout(15_000)
-      page.on('console', (m) => {
-        if (m.type() === 'error') events.push(`console: ${m.text().slice(0, 140)}`)
-      })
-      page.on('pageerror', (e) => events.push(`pageerror: ${e.message.slice(0, 140)}`))
-      page.on('response', (r) => {
-        if (r.status() >= 400)
-          events.push(
-            `${r.status()} ${r.request().method()} ${r.url().replace(BASE, '').split('?')[0]}`,
-          )
-      })
-      page.on('requestfailed', (r) =>
-        events.push(
-          `失败 ${r.url().replace(BASE, '').slice(0, 80)} ${r.failure()?.errorText ?? ''}`,
-        ),
-      )
-      console.log(`\n=== ${id} 段（新 demo：${BASE}）===`)
-      await run(token)
-      await context.close()
-    } catch (err) {
-      console.error(`${id} 段中断：${err?.stack ?? err}`)
-    } finally {
-      await stopDemo(child)
+  /*
+   * WP140：**一个 demo 跑完所有段**（限流按墙钟回血之后不再需要每段重起）。
+   * 每段仍各开一个新的浏览器上下文（本机存储干净），但后端是同一个进程：
+   * 向导里建的、批过的、关联过的，后面几段都看得见——这才是一个真用户的一次使用。
+   */
+  const { child, log } = await startDemo()
+  try {
+    await waitForDemo(log)
+    const token = await login()
+    console.log(`\n=== 一个 demo 跑到底：${BASE}（段：${ONLY.join(' / ')}）===`)
+    for (const [id, run] of sections) {
+      if (!ONLY.includes(id)) continue
+      await runSection(browser, id, run, token)
     }
+  } catch (err) {
+    console.error(`demo 没起来或中途断了：${err?.stack ?? err}`)
+  } finally {
+    await stopDemo(child)
   }
   await browser.close()
+  report(probe)
+}
 
+/** 一段：新浏览器上下文（带同一个登录令牌）→ 跑 → 关。一段中断不影响下一段。 */
+async function runSection(browser, id, run, token) {
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1360, height: 900 },
+      locale: 'zh-CN',
+    })
+    await context.addInitScript((t) => {
+      try {
+        window.localStorage.setItem('agentsws.session_token', t)
+      } catch {
+        /* 无痕 */
+      }
+    }, token)
+    page = await context.newPage()
+    page.setDefaultTimeout(15_000)
+    page.on('console', (m) => {
+      if (m.type() === 'error') events.push(`console: ${m.text().slice(0, 140)}`)
+    })
+    page.on('pageerror', (e) => events.push(`pageerror: ${e.message.slice(0, 140)}`))
+    page.on('response', (r) => {
+      if (r.status() >= 400)
+        events.push(
+          `${r.status()} ${r.request().method()} ${r.url().replace(BASE, '').split('?')[0]}`,
+        )
+    })
+    page.on('requestfailed', (r) =>
+      events.push(`失败 ${r.url().replace(BASE, '').slice(0, 80)} ${r.failure()?.errorText ?? ''}`),
+    )
+    console.log(`\n=== ${id} 段 ===`)
+    await run(token)
+    await context.close()
+  } catch (err) {
+    console.error(`${id} 段中断：${err?.stack ?? err}`)
+  }
+}
+
+function report(probe) {
   const tally = { 通: 0, 部分: 0, 不通: 0 }
   for (const r of results) tally[r.status] += 1
   writeFileSync(
@@ -1613,7 +1687,7 @@ async function main() {
   console.log(`\n总计：通 ${tally['通']} · 部分 ${tally['部分']} · 不通 ${tally['不通']}`)
   if (probe)
     console.log(
-      `demo 配额探针：第 ${probe.first429} 次起 429；等 10 秒后再打一次 → ${probe.afterTenSeconds}`,
+      `demo 配额探针：第 ${probe.first429} 次起 429；等 ${probe.waitedMs / 1000} 秒后再打一次 → ${probe.after}`,
     )
   console.log('结果：docs/assets/walkthrough/results.json')
 }

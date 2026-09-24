@@ -374,6 +374,8 @@ export interface OrgOptions {
   dbDir?: string
   /** 邀请链接的前缀；缺省是相对路径（同源打开工作台就能用）。 */
   baseUrl?: string
+  /** WP138：当前品牌的名字（「选范围」里「整个品牌」那一项显示它）；不给就说「整个品牌」。 */
+  brandName?: () => string
 }
 
 export interface OrgAssembly {
@@ -1541,9 +1543,17 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       await reconcile()
       // 候选就是这个工作区里已经用过的那些范围；第一次分配时允许手填一个新的
       const seen = new Map<string, { kind: RangeRef['kind']; id: string; label: string }>()
+      // WP138：「整个品牌」永远是一个候选（红人 / 在线客服不按店划，没连店也能挂）
+      const brand = { kind: 'brand' as const, id: workspace_id }
+      const brandName = options.brandName?.()
+      seen.set(`brand:${workspace_id}`, {
+        ...brand,
+        label: brandName === undefined ? '整个品牌' : `整个品牌（${brandName}）`,
+      })
       for (const person of await memberIds())
         for (const a of activeAssignments(person))
-          for (const r of a.ranges) seen.set(`${r.kind}:${r.id}`, { ...r, label: r.id })
+          for (const r of a.ranges)
+            if (!seen.has(`${r.kind}:${r.id}`)) seen.set(`${r.kind}:${r.id}`, { ...r, label: r.id })
       // 44 G2：建好的产品线也是候选，而且显示的是名字不是 id
       for (const line of roles.productLines.list(workspace_id))
         seen.set(`product_line:${line.id}`, {

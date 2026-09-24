@@ -22,6 +22,7 @@ import {
   updateMyProfile,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { rangeText } from '@/lib/ranges'
 
 const LEVELS: DisclosureLevel[] = ['self', 'colleagues', 'workspace']
 
@@ -85,7 +86,9 @@ export function ProfileForm({
         <span>
           {profile.ranges.length === 0
             ? '—'
-            : profile.ranges.map((r) => `${r.kind} ${r.id}`).join('、')}
+            : profile.ranges
+                .map((r) => (r.kind === 'brand' ? rangeText(r, t) : `${r.kind} ${r.id}`))
+                .join('、')}
         </span>
       </div>
 

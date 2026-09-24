@@ -16,6 +16,8 @@
  */
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import { ApiClientError } from '@/lib/api'
+import { apiErrorText } from '@/lib/error-text'
+import { translate } from '@/lib/i18n'
 
 /**
  * 一个异常 → 给人看的那句话。
@@ -23,9 +25,17 @@ import { ApiClientError } from '@/lib/api'
  * 服务端的错误体里**已经有一句人话**（「还没建联就说交付完了」这种），
  * 优先用它；真的没有才兜底。不把 `code` 显示给用户——`invalid_input`
  * 对非开发者没有任何信息量。
+ *
+ * WP139：例外是网关自己的那几种（判权限拒的 403、501、401、429、500 internal）——
+ * 它们的原文是 `无权限：creator.read（range=assigned）` 这种内部值，统一走
+ * `apiErrorText` 换成人话（403「这条职责没有这项权限」与 501「这台没装」分开说）。
  */
 export function errorText(e: unknown, fallback: string): string {
-  if (e instanceof ApiClientError) return e.message === '' ? fallback : e.message
+  if (e instanceof ApiClientError) {
+    if (e.message === '') return fallback
+    const human = apiErrorText(e, (k, v) => translate('zh', k, v))
+    return human === e.message ? e.message : human
+  }
   if (e instanceof Error && e.message !== '') return e.message
   return fallback
 }

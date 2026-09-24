@@ -49,13 +49,18 @@ function minutesAgo(at: string | undefined, now: number): number | undefined {
   return Math.max(0, Math.round((now - Date.parse(at)) / 60_000))
 }
 
-export function HostedRelayOption(): React.ReactNode {
+export function HostedRelayOption({
+  assignment,
+}: {
+  /** WP139：工作区级配置用所有者那条分配发（没传 = 全局当前岗位，老行为）。 */
+  assignment?: string | undefined
+} = {}): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const [note, setNote] = useState<string | undefined>(undefined)
   const hosted = useQuery({
     queryKey: ['chat-widget', 'hosted'],
-    queryFn: getChatRelayHosted,
+    queryFn: () => getChatRelayHosted(assignment),
     // 心跳 3 分钟一拍，页面上一分钟刷一次就够
     refetchInterval: 60_000,
   })
@@ -63,18 +68,19 @@ export function HostedRelayOption(): React.ReactNode {
     await client.invalidateQueries({ queryKey: ['chat-widget'] })
   }
   const toggle = useMutation({
-    mutationFn: (on: boolean) => (on ? subscribeChatRelayHosted() : cancelChatRelayHosted()),
+    mutationFn: (on: boolean) =>
+      on ? subscribeChatRelayHosted(assignment) : cancelChatRelayHosted(assignment),
     onSuccess: async (view) => {
       setNote(view.message)
       await refresh()
     },
   })
   const seed = useMutation({
-    mutationFn: seedChatRelayHosted,
+    mutationFn: () => seedChatRelayHosted(assignment),
     onSuccess: (out) => setNote(out.message),
   })
   const bringHome = useMutation({
-    mutationFn: bringHomeChatRelayHosted,
+    mutationFn: () => bringHomeChatRelayHosted(assignment),
     onSuccess: (out) => setNote(out.message),
   })
 

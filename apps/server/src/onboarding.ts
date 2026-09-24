@@ -155,11 +155,15 @@ export function storefrontPlatformChoices(): {
 interface ProfileBackend {
   get(workspace_id: WorkspaceId): WorkspaceProfile | undefined
   put(workspace_id: WorkspaceId, p: WorkspaceProfile): void
+  /** WP138：一次性迁移跑过没有（按名字记，跑过一次就再也不跑）。 */
+  migrated(key: string): boolean
+  markMigrated(key: string, at: string): void
   close(): void
 }
 
 function createMemoryProfileBackend(): ProfileBackend {
   const profiles = new Map<WorkspaceId, WorkspaceProfile>()
+  const done = new Set<string>()
   return {
     get: (ws) => {
       const found = profiles.get(ws)
@@ -167,6 +171,10 @@ function createMemoryProfileBackend(): ProfileBackend {
     },
     put: (ws, p) => {
       profiles.set(ws, { ...p })
+    },
+    migrated: (key) => done.has(key),
+    markMigrated: (key) => {
+      done.add(key)
     },
     close: () => {
       profiles.clear()
@@ -177,6 +185,7 @@ function createMemoryProfileBackend(): ProfileBackend {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS onboarding_profile (id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS onboarding_profiles (workspace_id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS onboarding_migrations (key TEXT PRIMARY KEY NOT NULL, at TEXT NOT NULL);
 `
 
 /**
@@ -207,6 +216,11 @@ function createSqliteProfileBackend(dbPath: string, defaultWorkspace: WorkspaceI
   }
   return {
     get: read,
+    migrated: (key) =>
+      db.prepare('SELECT 1 FROM onboarding_migrations WHERE key = ?').get(key) !== undefined,
+    markMigrated: (key, at) => {
+      db.prepare('INSERT OR IGNORE INTO onboarding_migrations (key, at) VALUES (?, ?)').run(key, at)
+    },
     put: (ws, p) => {
       put.run(ws, JSON.stringify(p))
       // 老库回滚兜底：当前这个工作区的那一份照旧也写进单行表
@@ -336,10 +350,22 @@ export interface OnboardingAssembly {
     workspace_id: WorkspaceId,
     input: { vertical?: WorkspaceVertical; storefront_platform?: StorefrontPlatform },
   ): void
+  /**
+   * WP138（78 §1 #1）：**一次性**给老数据补挂范围。
+   *
+   * 这一版之前向导没连店就把新职责挂空，红人工作台与聊天入口整块被挡住。启动时调一次：
+   * 只补**店主本人名下、店主自己给自己建的、要范围却一条都没有**的职责，补的是向导今天
+   * 会挂的那一份（连了店挂店，没连挂整个品牌）。跑过一次就记下来，之后再也不跑——
+   * 店主后来自己清空的范围不会被它加回去。
+   */
+  backfillWizardRanges(): { patched: string[] }
   discovery: Discovery
   invites: InvitesAssembly
   close(): void
 }
+
+/** WP138：补挂迁移的名字（记在 `onboarding_migrations` 里）。 */
+export const WIZARD_RANGE_BACKFILL = 'wp138_wizard_ranges'
 
 export function createOnboarding(options: OnboardingOptions): OnboardingAssembly {
   const { clock, workspace_id, roles, appendEvent } = options
@@ -444,6 +470,27 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     roles.assignments
       .listByPerson(person_id, { workspace_id })
       .filter((a) => a.revoked_at === undefined)
+
+  /**
+   * 46 §3 I6 + WP138：向导给新职责挂的范围。
+   *
+   * 连上 Shopify 的店照旧挂店（店铺数字要按店切）；**一家都没连就挂整个品牌**
+   * （`brand` = 当前工作区）——红人与在线客服本来就不按店划，挂空只会让它们整块看不见。
+   * 连了店不再额外挂品牌：挂了品牌就等于盖住以后接进来的每一家店，这一步留给店主在
+   * 组织页自己决定。
+   */
+  const wizardRanges = (): RangeRef[] => {
+    const stores = options.shopifyStores().map((s) => ({ kind: 'store' as const, id: s.id }))
+    return stores.length > 0 ? stores : [{ kind: 'brand', id: workspace_id }]
+  }
+  const rangeLabel = (r: RangeRef): string =>
+    r.kind === 'brand'
+      ? `整个品牌（${brandNameOf()}）`
+      : (options.shopifyStores().find((s) => s.id === r.id)?.label ?? r.id)
+
+  /** 这条职责要不要范围（有一条 `range: assigned` 的 scope 就要）。 */
+  const needsRanges = (role_id: string): boolean =>
+    roles.roles.get(role_id)?.scopes.some((s) => s.range === 'assigned') ?? false
 
   /**
    * 46 §1 表 ③「勾岗位 = 它包含的职责全勾上」。
@@ -700,10 +747,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
 
     apply(actor, input) {
       const plan = planOf(input)
-      // 46 §3 I6：连上 Shopify 的店自动挂上；没连就挂空，面板上照 05 §4 明说
-      const ranges: RangeRef[] = options
-        .shopifyStores()
-        .map((s) => ({ kind: 'store' as const, id: s.id }))
+      // 46 §3 I6：连上 Shopify 的店自动挂上；WP138：一家没连就挂整个品牌（不再挂空）
+      const ranges = wizardRanges()
       const held = new Map(activeOf(actor.person_id).map((a) => [a.role_id, a]))
       const created: OnboardingApplyView['created_assignments'] = []
       const skipped: string[] = []
@@ -725,14 +770,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           role_name: roles.roles.get(role_id)?.name.zh ?? role_id,
         })
       }
+      // WP138：留一条痕——以后要分「向导建的」与「手动分配的」，靠的就是它
+      if (created.length > 0)
+        emit('onboarding.applied', actor.person_id, {
+          assignment_ids: created.map((c) => c.id),
+          ranges,
+        })
       return {
         created_assignments: created,
         skipped,
-        ranges: ranges.map((r) => ({
-          kind: r.kind,
-          id: r.id,
-          label: options.shopifyStores().find((s) => s.id === r.id)?.label ?? r.id,
-        })),
+        ranges: ranges.map((r) => ({ kind: r.kind, id: r.id, label: rangeLabel(r) })),
         plan,
       } satisfies OnboardingApplyView
     },
@@ -771,8 +818,27 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     },
   }
 
+  const backfillWizardRanges = (): { patched: string[] } => {
+    if (backend.migrated(WIZARD_RANGE_BACKFILL)) return { patched: [] }
+    const ranges = wizardRanges()
+    const patched: string[] = []
+    for (const a of activeOf(options.owner)) {
+      // 分不出哪条是向导建的（老版本没留痕），所以只认店主自己给自己建的那几条
+      if (a.granted_by !== options.owner) continue
+      if (a.ranges.length > 0 || (a.range_groups ?? []).length > 0) continue
+      if (!needsRanges(a.role_id)) continue
+      roles.assignments.update(a.id, { ranges })
+      patched.push(a.id)
+    }
+    if (patched.length > 0)
+      emit('assignment.range_backfilled', options.owner, { assignment_ids: patched, ranges })
+    backend.markMigrated(WIZARD_RANGE_BACKFILL, clock.now())
+    return { patched }
+  }
+
   return {
     port,
+    backfillWizardRanges,
     companyKey: keyOf,
     companyProfile: () => companyOf(),
     vertical: () => profileOf()?.vertical,

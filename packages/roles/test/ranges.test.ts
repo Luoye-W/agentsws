@@ -510,6 +510,68 @@ describe('44 G4 账号 ⊃ 市场', () => {
   })
 })
 
+describe('WP138 整个品牌（brand = 当前工作区）', () => {
+  it('只挂整个品牌的岗位不是"未分配范围"，assigned 查询照常判得过', () => {
+    const s = store()
+    const a = grant(s, {
+      person_id: 'p_wang',
+      workspace_id: WS,
+      role_id: 'dtc.support',
+      ranges: [{ kind: 'brand', id: WS }],
+      granted_by: 'p_wang',
+    })
+    expect(s.effectiveConfig(a.id).unassigned_range).toBe(false)
+    expect(s.can(a.id, 'customer', 'read', { range: 'assigned', sensitivity: 'internal' })).toBe(
+      true,
+    )
+    s.close()
+  })
+
+  it('整个品牌盖得住这个工作区里的店 / 账号 / 市场 / 产品线；别的品牌盖不住', () => {
+    const whole = { kind: 'brand', id: WS } as const
+    expect(rangeCoversRef(whole, { kind: 'store', id: 'store_main' })).toBe(true)
+    expect(rangeCoversRef(whole, { kind: 'market', id: 'amz_na:US' })).toBe(true)
+    expect(rangeCoversRef(whole, { kind: 'product_line', id: 'pl_1' })).toBe(true)
+    expect(rangeCoversRef(whole, whole)).toBe(true)
+    expect(rangeCoversRef(whole, { kind: 'brand', id: 'ws_other' })).toBe(false)
+    // 反过来不行：一家店盖不住整个品牌
+    expect(rangeCoversRef({ kind: 'store', id: 'store_main' }, whole)).toBe(false)
+  })
+
+  it('整个品牌只能挂本工作区：id 写成别的工作区直接拒', () => {
+    const s = store()
+    expect(() =>
+      grant(s, {
+        person_id: 'p_wang',
+        workspace_id: WS,
+        role_id: 'dtc.support',
+        ranges: [{ kind: 'brand', id: 'ws_other' }],
+        granted_by: 'p_wang',
+      }),
+    ).toThrow(/只能挂本工作区/)
+    s.close()
+  })
+
+  it('targetInRange：挂整个品牌的岗位对任何一家店的商品都放行', () => {
+    const s = store()
+    const a = grant(s, {
+      person_id: 'p_wang',
+      workspace_id: WS,
+      role_id: 'dtc.support',
+      ranges: [{ kind: 'brand', id: WS }],
+      granted_by: 'p_wang',
+    })
+    const r = s.targetInRange(a.id, {
+      platform: 'shopify',
+      product_ids: ['prod_9'],
+      parent: { kind: 'store', id: 'store_eu' },
+    })
+    expect(r.ok).toBe(true)
+    expect(r.matched).toEqual({ kind: 'brand', id: WS })
+    s.close()
+  })
+})
+
 describe('判据与过滤下推（纯函数）', () => {
   it('Shopify 的四种判据都认', () => {
     const target = {
