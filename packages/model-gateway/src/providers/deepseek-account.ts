@@ -14,9 +14,15 @@
  *   即官方 `PUBLIC_BASE_URL` + `/v1/messages`），不是 OpenAI 兼容的 `/chat/completions`——
  *   所以这里是一个单独的 provider，**不走我们的 OpenAI 兼容客户端**。
  *
+ * WP143 起照官方补上 **Files API 复用**（`./deepseek-files.ts`，移植自官方 `dsh-llm-deepseek@0.1.7-rc.1`）：
+ * 图片先 `POST /v1/files` 上传、请求里发 file id（头 `anthropic-beta: files-api-2025-04-14`）；
+ * 同一张图按字节哈希只传一次；**任何一张解析失败或超时 → 整份请求退回内联 base64，一次请求绝不混用**；
+ * 模型口说 file id 不认了（过期 / 404）→ 作废那条映射、重传、只重试一次。
+ * 这一路也可以用 **API key**（`x-api-key`，官方同款）——见 {@link deepseekMessagesProvider}。
+ *
  * 不带的东西（与官方适配器相比）：`x-deepseek-harness-*` 那几个归因头（harness 自己的遥测）、
- * 会话日志上报扩展（`session-log-deepseek`，profile 里关死的那条）、Files API 上传（我们的图只有
- * 一两张，base64 内联就够）、流式（网关按整段收）。
+ * 会话日志上报扩展（`session-log-deepseek`，profile 里关死的那条）、流式（网关按整段收）、
+ * 图片前那段"附件 id + 请求尺寸"的说明文字（我们没有官方的附件服务）。
  */
 import type {
   ChatContentPart,
@@ -28,6 +34,17 @@ import type {
   ToolDef,
 } from '@agentsws/contracts'
 import { GatewayError, ProviderError } from '../types.js'
+import {
+  DEFAULT_FILES_API_TIMEOUT_MS,
+  type DeepSeekFileConnection,
+  DeepSeekFileStore,
+  imageKeyOf,
+  MESSAGES_FILES_BETA,
+  messagesApiRoot,
+  providerErrorDetail,
+  providerRejectedFileId,
+  staleMappings,
+} from './deepseek-files.js'
 import { wireToolName } from './openai-compatible.js'
 
 /** 官方 `dsh-llm-deepseek` 的 `PUBLIC_BASE_URL`：账号令牌能用的 Messages 口的根。 */
@@ -83,13 +100,40 @@ export interface DeepSeekAccountProviderOptions {
   maxTokens?: number
   /** WP127：能力声明（装配方按上一次验证结果填）。 */
   capabilities?: ModelCapabilities
+  /**
+   * WP143：图片走 Files API 复用。给一个 store = 用它（装配方一个进程共用一个，同一张图只传一次）；
+   * `false` = 不用 Files，图一律内联 base64。**不给时**：没注入 `fetch` 就自建一个（真网络）；
+   * 注入了 `fetch`（测试 / demo 替身）就关掉 Files——替身不会顺手让上传走到真网络上去。
+   */
+  files?: DeepSeekFileStore | false
+  /** 一次 Files 解析最多等多久（官方默认 60 秒）。超时 = 整份退内联。 */
+  filesTimeoutMs?: number
+}
+
+/**
+ * WP143：凭据从哪来。账号令牌（`x-dsh-auth-token`，每次现取）或 API key（`x-api-key`，每次现取）。
+ * 官方原话：「Messages 和 Files 请求通过 `x-dsh-auth-token` 发送账号 token，不加 Bearer 前缀；
+ * API Key 使用 `x-api-key`。两种凭据模式均拒绝重定向。」
+ */
+export type DeepSeekMessagesCredential =
+  | { kind: 'account'; resolveToken: (url: string) => Promise<string | undefined> }
+  | { kind: 'api_key'; apiKey: () => string | undefined }
+
+export interface DeepSeekMessagesProviderOptions
+  extends Omit<DeepSeekAccountProviderOptions, 'resolveToken'> {
+  credential: DeepSeekMessagesCredential
 }
 
 type WireBlock =
   | { type: 'text'; text: string }
-  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'image'; source: WireImageSource }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; tool_use_id: string; content: string }
+
+/** 图片来源：内联 base64，或 Files API 的 file id（官方同款，二者在一次请求里不混用）。 */
+export type WireImageSource =
+  | { type: 'base64'; media_type: string; data: string }
+  | { type: 'file'; file_id: string }
 
 interface WireMessage {
   role: 'user' | 'assistant'
@@ -118,7 +162,15 @@ const textOf = (content: string | ChatContentPart[]): string =>
         .map((p) => p.text)
         .join('\n')
 
-const blocksOf = (content: string | ChatContentPart[]): WireBlock[] =>
+/** 一张图在线上长什么样：给了 `imageSource` 就问它（file id），否则内联 base64。 */
+export interface MessagesRequestOptions {
+  imageSource?: (image: { mime: string; data: string }) => WireImageSource
+}
+
+const blocksOf = (
+  content: string | ChatContentPart[],
+  options: MessagesRequestOptions = {},
+): WireBlock[] =>
   typeof content === 'string'
     ? content === ''
       ? []
@@ -126,7 +178,14 @@ const blocksOf = (content: string | ChatContentPart[]): WireBlock[] =>
     : content.map((part) =>
         part.type === 'text'
           ? { type: 'text', text: part.text }
-          : { type: 'image', source: { type: 'base64', media_type: part.mime, data: part.data } },
+          : {
+              type: 'image',
+              source: options.imageSource?.(part) ?? {
+                type: 'base64',
+                media_type: part.mime,
+                data: part.data,
+              },
+            },
       )
 
 /**
@@ -140,7 +199,10 @@ const blocksOf = (content: string | ChatContentPart[]): WireBlock[] =>
  * 上一轮的推理（`reasoning`）**不带回**：Messages 的 thinking 块要带签名，我们手里没有；
  * 这一条没法离线核，写进了报告的「未核」。
  */
-export function toMessagesRequest(messages: readonly ChatMessage[]): {
+export function toMessagesRequest(
+  messages: readonly ChatMessage[],
+  options: MessagesRequestOptions = {},
+): {
   system?: string
   messages: WireMessage[]
 } {
@@ -165,7 +227,7 @@ export function toMessagesRequest(messages: readonly ChatMessage[]): {
     }
     if (m.role === 'assistant') {
       push('assistant', [
-        ...blocksOf(m.content),
+        ...blocksOf(m.content, options),
         ...(m.tool_calls ?? []).map(
           (c): WireBlock => ({
             type: 'tool_use',
@@ -177,7 +239,7 @@ export function toMessagesRequest(messages: readonly ChatMessage[]): {
       ])
       continue
     }
-    push('user', blocksOf(m.content))
+    push('user', blocksOf(m.content, options))
   }
   return { ...(system.length === 0 ? {} : { system: system.join('\n\n') }), messages: out }
 }
@@ -189,12 +251,122 @@ const toWireTool = (t: ToolDef): Record<string, unknown> => ({
 })
 
 export function deepseekAccountProvider(options: DeepSeekAccountProviderOptions): ModelProvider {
+  const { resolveToken, ...rest } = options
+  return deepseekMessagesProvider({ ...rest, credential: { kind: 'account', resolveToken } })
+}
+
+/** 把一次请求里所有图片（按字节去重）挑出来：键、字节、类型。 */
+function requestImages(
+  messages: readonly ChatMessage[],
+): Map<string, { key: string; data: Uint8Array; mime: string }> {
+  const byData = new Map<string, { key: string; data: Uint8Array; mime: string }>()
+  for (const m of messages) {
+    if (typeof m.content === 'string') continue
+    for (const part of m.content) {
+      if (part.type !== 'image') continue
+      const id = `${part.mime}\0${part.data}`
+      if (byData.has(id)) continue
+      const data = new Uint8Array(Buffer.from(part.data, 'base64'))
+      byData.set(id, { key: imageKeyOf(part.mime, data), data, mime: part.mime })
+    }
+  }
+  return byData
+}
+
+/**
+ * DeepSeek 官方 Messages 口（WP134 账号登录那一路；WP143 起也能用 API key）。
+ *
+ * 一次 `complete` 的流程照官方 `DeepSeekAdapter.request`：
+ * 1. 现取凭据（取不到当场失败，一个请求都不发）；
+ * 2. 有图且开着 Files：逐张解析 file id（同图只传一次）；**任何一张失败或超时 → 这一整份请求改走内联**；
+ * 3. 发模型请求（带 file id 时加 `anthropic-beta`）；
+ * 4. 上游说 file id 不认了：作废点名的映射（没点名就作废这次用过的全部），**只重试一次**；
+ *    重试时再解析失败同样整份退内联。
+ */
+export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOptions): ModelProvider {
   const base = (options.baseUrl ?? DEEPSEEK_ACCOUNT_BASE_URL).replace(/\/+$/, '')
-  const root = new URL(base).pathname.endsWith('/v1') ? base : `${base}/v1`
-  const url = `${root}/messages`
+  const url = `${messagesApiRoot(base)}/messages`
   const model = options.model ?? DEEPSEEK_ACCOUNT_DEFAULT_MODEL
   const doFetch: AccountFetch = options.fetch ?? (globalThis.fetch as unknown as AccountFetch)
-  const ref: ModelRef = { provider: options.provider ?? 'deepseek-account', model, region: 'cn' }
+  const files: DeepSeekFileStore | undefined =
+    options.files === false
+      ? undefined
+      : (options.files ?? (options.fetch === undefined ? new DeepSeekFileStore() : undefined))
+  const filesTimeoutMs = options.filesTimeoutMs ?? DEFAULT_FILES_API_TIMEOUT_MS
+  const account = options.credential.kind === 'account'
+  const ref: ModelRef = {
+    provider: options.provider ?? (account ? 'deepseek-account' : 'deepseek'),
+    model,
+    region: 'cn',
+  }
+
+  /** 现取凭据。值只在这一次 complete 里活：进头、当 scope 的哈希输入，然后丢掉。 */
+  const credentialOf = async (): Promise<string> => {
+    const c = options.credential
+    const value = c.kind === 'account' ? await c.resolveToken(url) : c.apiKey()
+    if (value === undefined || value === '') {
+      throw new GatewayError(
+        'invalid_input',
+        c.kind === 'account' ? 'deepseek account is not signed in' : 'missing api key',
+        { source: c.kind === 'account' ? 'deepseek_account' : 'local_vault' },
+      )
+    }
+    return value
+  }
+
+  /** 逐张解析 file id；任何一张失败都回 `undefined`（= 整份退内联）。 */
+  const resolveFileIds = async (
+    images: Map<string, { key: string; data: Uint8Array; mime: string }>,
+    connection: DeepSeekFileConnection,
+    used: { imageKey: string; fileId: string }[],
+  ): Promise<Map<string, string> | undefined> => {
+    if (files === undefined || images.size === 0) return undefined
+    const ids = new Map<string, string>()
+    try {
+      for (const [id, image] of images) {
+        const { fileId } = await files.ensureUploaded(
+          image,
+          connection,
+          AbortSignal.timeout(filesTimeoutMs),
+        )
+        ids.set(id, fileId)
+        used.push({ imageKey: image.key, fileId })
+      }
+    } catch {
+      // 官方 FileResolutionFailure：不细分原因，整份请求改走内联（一次请求绝不混用）
+      return undefined
+    }
+    return ids
+  }
+
+  const post = async (
+    credential: string,
+    body: string,
+    withFiles: boolean,
+  ): Promise<Awaited<ReturnType<AccountFetch>>> => {
+    const signal =
+      options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
+    try {
+      return await doFetch(url, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          'content-type': 'application/json',
+          'anthropic-version': ANTHROPIC_VERSION,
+          ...(account ? { 'x-dsh-auth-token': credential } : { 'x-api-key': credential }),
+          ...(withFiles ? { 'anthropic-beta': MESSAGES_FILES_BETA } : {}),
+        },
+        body,
+        ...(signal === undefined ? {} : { signal }),
+      })
+    } catch (e) {
+      const name = e instanceof Error ? e.name : ''
+      throw new ProviderError(
+        `request to ${url} failed: ${e instanceof Error ? e.message : String(e)}`,
+        { timeout: name === 'TimeoutError' || name === 'AbortError' },
+      )
+    }
+  }
 
   const provider: ModelProvider = {
     ref,
@@ -205,47 +377,66 @@ export function deepseekAccountProvider(options: DeepSeekAccountProviderOptions)
     },
     async complete(req) {
       const names = new Map((req.tools ?? []).map((t) => [wireToolName(t.name), t.name]))
-      const wire = toMessagesRequest(req.messages)
-      const body = JSON.stringify({
-        model,
-        max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
-        ...wire,
-        ...(req.tools === undefined || req.tools.length === 0
-          ? {}
-          : { tools: req.tools.map(toWireTool) }),
-      })
-      // 值只在这一段里活一次：现取 → 进 header → 结束
-      const token = await options.resolveToken(url)
-      if (token === undefined || token === '') {
-        throw new GatewayError('invalid_input', 'deepseek account is not signed in', {
-          source: 'deepseek_account',
-        })
-      }
-      const signal =
-        options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
-      let res: Awaited<ReturnType<AccountFetch>>
-      try {
-        res = await doFetch(url, {
-          method: 'POST',
-          redirect: 'error',
-          headers: {
-            'content-type': 'application/json',
-            'anthropic-version': ANTHROPIC_VERSION,
-            'x-dsh-auth-token': token,
-          },
-          body,
-          ...(signal === undefined ? {} : { signal }),
-        })
-      } catch (e) {
-        const name = e instanceof Error ? e.name : ''
-        throw new ProviderError(
-          `request to ${url} failed: ${e instanceof Error ? e.message : String(e)}`,
-          { timeout: name === 'TimeoutError' || name === 'AbortError' },
+      const bodyOf = (fileIds: Map<string, string> | undefined): string => {
+        const wire = toMessagesRequest(
+          req.messages,
+          fileIds === undefined
+            ? {}
+            : {
+                imageSource: (image) => {
+                  const file_id = fileIds.get(`${image.mime}\0${image.data}`)
+                  // 走到这里说明解析漏了一张：宁可失败也不混用
+                  if (file_id === undefined) {
+                    throw new GatewayError('invalid_input', 'request file id is missing', {})
+                  }
+                  return { type: 'file', file_id }
+                },
+              },
         )
+        return JSON.stringify({
+          model,
+          max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
+          ...wire,
+          ...(req.tools === undefined || req.tools.length === 0
+            ? {}
+            : { tools: req.tools.map(toWireTool) }),
+        })
       }
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '')
-        throw new ProviderError(`provider http ${res.status}: ${detail.slice(0, 200)}`, {
+      // 值只在这一段里活一次：现取 → 进 header / 当哈希输入 → 结束
+      const credential = await credentialOf()
+      const connection: DeepSeekFileConnection = {
+        baseURL: base,
+        credential,
+        accountCredential: account,
+      }
+      const images = requestImages(req.messages)
+      let inline = false
+      let retried = false
+      let res: Awaited<ReturnType<AccountFetch>>
+      for (;;) {
+        const used: { imageKey: string; fileId: string }[] = []
+        const fileIds = inline ? undefined : await resolveFileIds(images, connection, used)
+        if (fileIds === undefined) inline = true
+        res = await post(credential, bodyOf(fileIds), fileIds !== undefined)
+        if (res.ok) break
+        const detailText = await res.text().catch(() => '')
+        if (fileIds !== undefined && files !== undefined) {
+          let raw: unknown
+          try {
+            raw = JSON.parse(detailText)
+          } catch {}
+          const { detail } = providerErrorDetail(raw)
+          if (providerRejectedFileId(detail)) {
+            for (const stale of staleMappings(used, detail)) {
+              files.invalidate(stale.imageKey, stale.fileId, connection)
+            }
+            if (!retried) {
+              retried = true
+              continue
+            }
+          }
+        }
+        throw new ProviderError(`provider http ${res.status}: ${detailText.slice(0, 200)}`, {
           status: res.status,
         })
       }
