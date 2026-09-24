@@ -10,11 +10,17 @@
  * 一个刻意的差别：发完一句之后页面**自己点一下「判完这一轮」**，不等服务进程里
  * 那个 2 秒定时器。真访客那一路照常由定时器驱动——这里是试用场，不是仿真场，
  * 让商家每发一句干等两秒，他试两句就走了。
+ *
+ * WP139（docs/78 阻断 #2）：这一页不属于任何岗位，**按「要网站在线客服」挑自己名下那条分配**
+ * 发请求（不改全局当前岗位）；挑不到就说「你名下没有这条职责」和去哪加，不发必 403 的请求；
+ * 真出错时 403（没权限）与 501（没装）分开说，并给「重试」。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ChatPlanPanel } from '@/components/chat/plan-panel'
 import { ChatTranscript } from '@/components/chat/transcript'
+import { DutyNeeded } from '@/components/duty-needed'
+import { PageError } from '@/components/page-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -29,6 +35,9 @@ import {
   teachChatSession,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { apiErrorText } from '@/lib/error-text'
+import { LIVE_CHAT_NEED, LIVE_CHAT_TEACH_NEED } from '@/lib/pick-assignment'
+import { assignmentOf, canRequest, useDutyAssignment } from '@/lib/use-duty-assignment'
 
 export function ChatSandboxPage(): React.ReactNode {
   const { t } = useApp()
@@ -37,13 +46,22 @@ export function ChatSandboxPage(): React.ReactNode {
   const [instruction, setInstruction] = useState('')
   const [turn, setTurn] = useState<ChatTurnView | undefined>(undefined)
 
+  const pick = useDutyAssignment(LIVE_CHAT_NEED)
+  const asg = assignmentOf(pick)
+  // 教一句要 customer.stage：在线客服职责模板里没有，持有它的客服职责优先（见 pick-assignment）
+  const teachAsg = assignmentOf(useDutyAssignment(LIVE_CHAT_TEACH_NEED)) ?? asg
+
   // 同一个人重复开只拿回同一条会话（唯一键在服务端）
-  const session = useQuery({ queryKey: ['chat', 'session'], queryFn: openChatSession })
+  const session = useQuery({
+    queryKey: ['chat', 'session', asg],
+    enabled: canRequest(pick),
+    queryFn: () => openChatSession(asg),
+  })
   const id = session.data?.id
   const thread = useQuery({
     queryKey: ['chat', 'messages', id],
     enabled: id !== undefined,
-    queryFn: () => getChatMessages(id as string),
+    queryFn: () => getChatMessages(id as string, asg),
   })
 
   const refresh = async (): Promise<void> => {
@@ -54,9 +72,9 @@ export function ChatSandboxPage(): React.ReactNode {
 
   const send = useMutation({
     mutationFn: async (text: string) => {
-      const first = await sendChatMessage(id as string, text)
+      const first = await sendChatMessage(id as string, text, asg)
       // 静默窗口：沙盒里立刻推进，不等真定时器（见文件抬头）
-      return first.plan === undefined ? advanceChatTurn(id as string) : first
+      return first.plan === undefined ? advanceChatTurn(id as string, asg) : first
     },
     onSuccess: async (out) => {
       setTurn(out)
@@ -67,21 +85,28 @@ export function ChatSandboxPage(): React.ReactNode {
 
   const teach = useMutation({
     mutationFn: (text: string) =>
-      teachChatSession(id as string, { instruction: text, scope: 'similar_cases' }),
+      teachChatSession(id as string, { instruction: text, scope: 'similar_cases' }, teachAsg),
     onSuccess: async () => {
       setInstruction('')
       await refresh()
     },
   })
 
-  if (session.isPending) return <Skeleton className="h-96 w-full" />
+  if (pick.kind === 'none' || pick.kind === 'no_range')
+    return <DutyNeeded need={LIVE_CHAT_NEED} kind={pick.kind} testid="chat-duty-needed" />
   if (session.error !== null) {
     return (
-      <p role="alert" className="text-sm text-destructive">
-        {t('chat.unavailable')}
-      </p>
+      <PageError
+        error={session.error}
+        testid="chat-error"
+        overrides={{ forbidden: t('chat.forbidden'), not_implemented: t('chat.unavailable') }}
+        onRetry={() => {
+          void session.refetch()
+        }}
+      />
     )
   }
+  if (session.isPending) return <Skeleton className="h-96 w-full" />
 
   const status = thread.data?.session.status ?? 'open'
 
@@ -137,6 +162,11 @@ export function ChatSandboxPage(): React.ReactNode {
                   {t(`chat.status.${status}`)}
                 </span>
               </div>
+              {send.error === null ? null : (
+                <p role="alert" className="text-xs text-destructive" data-testid="chat-send-error">
+                  {apiErrorText(send.error, t, { forbidden: t('chat.forbidden') })}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -178,6 +208,11 @@ export function ChatSandboxPage(): React.ReactNode {
                   {t('chat.teach.send')}
                 </Button>
               </div>
+              {teach.error === null ? null : (
+                <p role="alert" className="text-xs text-destructive" data-testid="chat-teach-error">
+                  {apiErrorText(teach.error, t)}
+                </p>
+              )}
               {teach.data === undefined ? null : (
                 <p className="text-xs text-muted-foreground" data-testid="chat-teach-outcome">
                   {t(`chat.teach.outcome.${teach.data.outcome}`)}

@@ -202,7 +202,7 @@ export function ProviderCard({
           const channel = capability.slice(4)
           return (
             <>
-              <DataSourceRouteControl channel={channel} />
+              <DataSourceRouteControl channel={channel} assignment={assignment} />
               <ByoSourceCard channel={channel} />
             </>
           )

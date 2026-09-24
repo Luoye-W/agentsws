@@ -15,6 +15,7 @@
 import type { ReactNode } from 'react'
 import { ApiClientError } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { apiErrorText } from '@/lib/error-text'
 
 /** 403 的 `details` 里带着缺的那一条（网关放进去的）。 */
 function missingScope(err: unknown): string | undefined {
@@ -36,7 +37,8 @@ export function PanelError({ error }: { error: unknown }): ReactNode {
     )
   return (
     <p className="text-muted-foreground" data-testid="rail-error">
-      {error instanceof ApiClientError ? error.message : t('error.generic')}
+      {/* WP139：501 / 429 / 连不上……各说各的，不把网关原文端上来 */}
+      {apiErrorText(error, t)}
     </p>
   )
 }
