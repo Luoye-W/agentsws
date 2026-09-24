@@ -7,6 +7,7 @@ import type {
   ObjectRef,
   PromptSection,
   RunBrowser,
+  RunComputerUse,
   RunConnection,
   RunEvent,
   RunRequest,
@@ -71,6 +72,8 @@ export interface RequestOverrides {
   connections?: RunConnection[]
   /** WP89：这次运行的终端与沙箱（不给 = 一个 `bash` 都没有）。 */
   shell?: RunShell
+  /** WP144：这次运行能不能操作电脑（不给 = 连请求工具都没有）。 */
+  computer_use?: RunComputerUse
   /** 换一条职责（preset id 与目录名跟着它走）。 */
   role_id?: string
   workspace_id?: string
@@ -161,6 +164,7 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     ...(o.allowed_hosts === undefined ? {} : { allowed_hosts: o.allowed_hosts }),
     ...(o.connections === undefined ? {} : { connections: o.connections }),
     ...(o.shell === undefined ? {} : { shell: o.shell }),
+    ...(o.computer_use === undefined ? {} : { computer_use: o.computer_use }),
     idempotency_key: 'idem_test',
   }
 }

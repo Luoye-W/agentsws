@@ -28,6 +28,30 @@ export {
   classifyBrowserSkillEffect,
   isBrowserSkillHandoff,
 } from './browserskill.js'
+export type {
+  ComputerUsePolicyInput,
+  ComputerUseToolHooks,
+  CuaProviderConfig,
+} from './computer-use.js'
+export {
+  applyCuaEnv,
+  COMPUTER_HANDOFF_TOOL,
+  CUA_ENV,
+  CUA_SERVER_NAME,
+  CUA_TOOL_PREFIX,
+  CUA_TOOL_TIMEOUT_MS,
+  checkComputerUse,
+  computerUseBrief,
+  computerUseGranted,
+  computerUseProviderConfig,
+  computerUseToolDefinitions,
+  cuaDriverUsable,
+  cuaToolName,
+  isComputerUseOwnTool,
+  REQUEST_COMPUTER_USE_TOOL,
+  redactComputerUseValue,
+  SCREENSHOT_OMITTED,
+} from './computer-use.js'
 export { DshAdapterError } from './errors.js'
 export type { AskedBoundary, DraftArgs, GateApi, GateInput, StageArgs } from './gate.js'
 export { CONTEXT_PREFIX, installGate, PERSONA_SECTION } from './gate.js'

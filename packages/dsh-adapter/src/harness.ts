@@ -22,8 +22,10 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import AgentPresetRegistry from '@deepseek-ai/dsh-agent-preset-registry'
 import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
+import ComputerUseRegistry from '@deepseek-ai/dsh-computer-use'
 import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import * as PlaywrightMcpProvider from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
+import * as CuaDriverMcpProvider from '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
 import type { GenerateOptions, RequestMessage, ToolSchema } from '@deepseek-ai/dsh-llm'
 import LlmRuntime, { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import SandboxLocal from '@deepseek-ai/dsh-sandbox-local'
@@ -40,6 +42,12 @@ import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import * as BrowserSkillPlugin from '@wxg-prc-cpg/browser-skill-dsh-plugin'
 import { browserProviderConfig } from './browser.js'
 import { applyBskEnv, browserSkillPluginConfig, bskBinaryUsable } from './browserskill.js'
+import {
+  applyCuaEnv,
+  computerUseGranted,
+  computerUseProviderConfig,
+  cuaDriverUsable,
+} from './computer-use.js'
 import { DshAdapterError } from './errors.js'
 import type { GateApi, GateInput } from './gate.js'
 import { installGate } from './gate.js'
@@ -294,6 +302,18 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   const browserSkill = browser?.mode === 'browserskill'
   if (browser !== undefined && !browserSkill) root.plugin(BrowserUseRegistry)
   /*
+   * WP144（docs/80）：**只有人批过、而且还没过期，才有电脑操控这一层**。
+   *
+   * `computerUse` 是官方的独占 provider 槽（一棵树一个 provider，第二个激活即失败）；
+   * provider 本身按 Agent 挂在 scoped ctx 上（`setup` 里，排在浏览器之后）。
+   * 只给了 `computer_use`、还没批的运行里**连这个服务都不挂**——模型只看得见
+   * `request_computer_use` 那一个自有工具（`gate.ts`），驱动一个进程都不会起。
+   * 授权按墙钟判（授权是「接下来 N 分钟」，与合成时钟无关）。
+   */
+  const computerUse = input.request.computer_use
+  const cuGranted = computerUseGranted(computerUse, (input.options.wallClockMs ?? Date.now)())
+  if (cuGranted) root.plugin(ComputerUseRegistry)
+  /*
    * WP89（55 §8 Q7）：**只有建站与主题那条职责、而且请求里真给了 `shell`，才有终端**。
    *
    * 挂的是官方那一摞，一个都不是我们写的（顺序就是依赖顺序）：
@@ -370,6 +390,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     'agents',
     'sessions',
     ...(browser === undefined || browserSkill ? [] : ['browserUse']),
+    ...(cuGranted ? ['computerUse'] : []),
     ...(preset === undefined ? [] : ['agentPresets']),
     ...(shell === undefined ? [] : ['shell', 'sandbox', 'sandboxPolicy', 'shellEnv', 'subprocess']),
     // Cordis 的规矩：没 `inject` 过的服务连读都读不到（"cannot get property … without inject"）
@@ -490,45 +511,13 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
         // 工具与 hook 装在宿主 ctx 上（scope-filtered dispatch 按 `exec.agent` 路由），
         // `tools.restrict` 则必须在 Agent 的 scoped ctx 上调——全局 ctx 会抛。
         gate = installGate(ctx, { ...input, agent, agentCtx })
-        if (browser === undefined) return
-        if (browserSkill) {
-          /*
-           * WP92：腾讯官方的 dsh 插件（`@wxg-prc-cpg/browser-skill-dsh-plugin`）。
-           * 挂的位置与官方 provider **一模一样**：同一个 `setup`、同一步（mount →
-           * installGate → 浏览器），挂在 Agent 的 scoped ctx 上——实测它注册的六个工具
-           * 因此是 **scoped registration**（`ctx.tools.restrict` 遮不住、也不能列进
-           * 白名单，列了当场抛 `unknown global tools`）。详见 AGENT-LAYER §9.7。
-           */
-          const config = browserSkillPluginConfig(browser)
-          if (!bskBinaryUsable(config.bskPath)) {
-            /*
-             * **装好了才挂**。`bskPath` 指到一个不存在的文件时，插件加载时那次
-             * `bsk --version` 探活 spawn 失败却仍被记进 in-flight 表，卸载时
-             * `killAll()` 对一个没有 pid 的子进程发 SIGINT——信号落到**我们自己
-             * 这个进程组**上，整个服务进程当场退出（实测，AGENT-LAYER §9.7）。
-             * 所以这里宁可让这次运行明明白白地失败。
-             */
-            throw new DshAdapterError(
-              'invalid_input',
-              `BrowserSkill 没装好：${config.bskPath} 不在，或者不能执行（设置页的第 ② 步「装 bsk」）`,
-            )
-          }
-          // 两个更新开关（55 §10）：不自己换版本，也不去 GitHub 查——实测 `off`
-          // 只关掉"装"，"查"要另设清单地址（`applyBskEnv` 的注释里有复现结论）。
-          applyBskEnv()
-          await agentCtx.plugin(BrowserSkillPlugin, config as never)
-          return
-        }
+        if (browser !== undefined) await mountBrowser(agentCtx)
         /*
-         * 官方 Playwright MCP provider。`setup` 是**只装配**的一跳（官方 `dsh-agent`
-         * 的原话：setup composes, it never drives），而且它跑在 `agent/created`
-         * **之前**——provider 整个挂在那个事件上，所以必须在这里 await 装完，
-         * 晚一步这个 Agent 就拿不到浏览器工具。
-         *
-         * 一个 Agent 一个 MCP 客户端、attach 模式独占（`exclusive: mode === 'attach'`），
-         * `handle.dispose()` 时跟着走 —— 与 17 §5.1「一次运行一棵树」天然一致。
+         * WP144：电脑操控提供方，排在浏览器**之后**（mount → installGate → 浏览器 →
+         * 电脑操控）。挂的位置与浏览器 provider 同类：Agent 的 scoped ctx，工具因此是
+         * scoped registration——`tools.restrict` 遮不住，也不能列进白名单。
          */
-        await agentCtx.plugin(PlaywrightMcpProvider, browserProviderConfig(browser) as never)
+        if (cuGranted && computerUse !== undefined) await mountComputerUse(agentCtx, computerUse)
       },
     })
   } catch (e) {
@@ -536,6 +525,68 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     releaseAdapter()
     await root.fiber.dispose()
     throw e
+  }
+
+  /** WP82 / WP92：浏览器那一层（两种执行器一次只挂一种）。 */
+  async function mountBrowser(agentCtx: Context): Promise<void> {
+    if (browser === undefined) return
+    if (browserSkill) {
+      /*
+       * WP92：腾讯官方的 dsh 插件（`@wxg-prc-cpg/browser-skill-dsh-plugin`）。
+       * 挂的位置与官方 provider **一模一样**：同一个 `setup`、同一步（mount →
+       * installGate → 浏览器），挂在 Agent 的 scoped ctx 上——实测它注册的六个工具
+       * 因此是 **scoped registration**（`ctx.tools.restrict` 遮不住、也不能列进
+       * 白名单，列了当场抛 `unknown global tools`）。详见 AGENT-LAYER §9.7。
+       */
+      const config = browserSkillPluginConfig(browser)
+      if (!bskBinaryUsable(config.bskPath)) {
+        /*
+         * **装好了才挂**。`bskPath` 指到一个不存在的文件时，插件加载时那次
+         * `bsk --version` 探活 spawn 失败却仍被记进 in-flight 表，卸载时
+         * `killAll()` 对一个没有 pid 的子进程发 SIGINT——信号落到**我们自己
+         * 这个进程组**上，整个服务进程当场退出（实测，AGENT-LAYER §9.7）。
+         * 所以这里宁可让这次运行明明白白地失败。
+         */
+        throw new DshAdapterError(
+          'invalid_input',
+          `BrowserSkill 没装好：${config.bskPath} 不在，或者不能执行（设置页的第 ② 步「装 bsk」）`,
+        )
+      }
+      // 两个更新开关（55 §10）：不自己换版本，也不去 GitHub 查——实测 `off`
+      // 只关掉"装"，"查"要另设清单地址（`applyBskEnv` 的注释里有复现结论）。
+      applyBskEnv()
+      await agentCtx.plugin(BrowserSkillPlugin, config as never)
+      return
+    }
+    /*
+     * 官方 Playwright MCP provider。`setup` 是**只装配**的一跳（官方 `dsh-agent`
+     * 的原话：setup composes, it never drives），而且它跑在 `agent/created`
+     * **之前**——provider 整个挂在那个事件上，所以必须在这里 await 装完，
+     * 晚一步这个 Agent 就拿不到浏览器工具。
+     *
+     * 一个 Agent 一个 MCP 客户端、attach 模式独占（`exclusive: mode === 'attach'`），
+     * `handle.dispose()` 时跟着走 —— 与 17 §5.1「一次运行一棵树」天然一致。
+     */
+    await agentCtx.plugin(PlaywrightMcpProvider, browserProviderConfig(browser) as never)
+  }
+
+  /**
+   * WP144（docs/80）：官方 Cua Driver **MCP** 提供方（驱动是独立进程；不用 native）。
+   *
+   * **装好了才挂**（WP92 那条坑的同一条纪律）：驱动路径指错时提供方激活会失败，
+   * 这里宁可在挂之前就让这次运行明明白白地失败——服务端 `forRun` 那一侧更早一步，
+   * 没装根本不给 `computer_use`。挂之前把驱动的遥测与查更新两个开关关掉
+   * （子进程继承我们这个进程的环境，提供方不收 `env`）。
+   */
+  async function mountComputerUse(agentCtx: Context, cu: NonNullable<typeof computerUse>) {
+    if (!cuaDriverUsable(cu.command)) {
+      throw new DshAdapterError(
+        'invalid_input',
+        `电脑操控的驱动没装好：${cu.command} 不在，或者不能执行（设置页「电脑操控」第 ① 步）`,
+      )
+    }
+    applyCuaEnv()
+    await agentCtx.plugin(CuaDriverMcpProvider, computerUseProviderConfig(cu) as never)
   }
   if (gate === undefined) {
     await handle.dispose()

@@ -79,7 +79,28 @@ export interface DshRuntimeOptions {
   subprocessTimeoutMs?: number
   /** 子进程档：显式指定子进程入口（测试用；缺省按 `dist/headless/child.js` 探测）。 */
   childEntry?: string
+  /**
+   * WP144（docs/80）：**电脑操控的授权卡 / 接手卡**。
+   *
+   * Agent 调 `request_computer_use`（没授权时）或 `computer_handoff`（授权中遇到登录 /
+   * 密码 / 支付 / 验证码）时经它出一张 `computer_use` 卡。批了之后由宿主记一次授权、
+   * 带着 `RunRequest.computer_use.granted_until` 重新跑这件事——**批了才挂提供方**。
+   * 不给 = 两个工具一调就失败（fail-closed），提供方永远不挂。
+   */
+  requestComputerUse?: RequestComputerUseFn
+  /**
+   * WP144：墙钟（毫秒）。电脑操控的授权是「接下来 N 分钟」，合成时钟 / 子进程的镜像时钟
+   * 不走的时候它也得走，所以授权过期按它判。缺省 `Date.now`；测试注入。
+   */
+  wallClockMs?: () => number
 }
+
+/** WP144：出一张电脑操控卡；回 `undefined` = 没出成（宿主没接 / 这一档不允许）。 */
+export type RequestComputerUseFn = (input: {
+  request: RunRequest
+  stage: 'authorize' | 'handoff'
+  reason: string
+}) => Promise<{ approval_item_id: string } | undefined>
 
 /** 17 §4 的 dsh 运行时装配形态。 */
 export type DshRuntimeMode = 'in-process' | 'subprocess' | 'auto'

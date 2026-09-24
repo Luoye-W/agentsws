@@ -24,6 +24,7 @@ import {
   type BoundaryParams,
   BRIDGE_PROTOCOL_VERSION,
   type CompleteParams,
+  type ComputerUseCardParams,
   type DraftParams,
   ENV_RUN_TOKEN,
   type EventParams,
@@ -33,6 +34,7 @@ import {
   M_HELLO,
   M_HOST_BOUNDARY,
   M_HOST_COMPLETE,
+  M_HOST_COMPUTER_USE,
   M_HOST_DRAFT,
   M_HOST_STAGE,
   M_HOST_TOOL,
@@ -128,6 +130,7 @@ function wireOptions(options: DshRuntimeOptions): WireRuntimeOptions {
       stage: options.stage !== undefined,
       createDraft: options.createDraft !== undefined,
       createPolicyQuestion: options.createPolicyQuestion !== undefined,
+      requestComputerUse: options.requestComputerUse !== undefined,
     },
   }
 }
@@ -260,6 +263,19 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
         const p = body as unknown as BoundaryParams
         if (options.createPolicyQuestion === undefined || req === undefined) return { now }
         const res = await options.createPolicyQuestion({ request: req, boundary: p.boundary })
+        return {
+          now: options.clock.now(),
+          ...(res === undefined ? {} : { approval_item_id: res.approval_item_id }),
+        }
+      }
+      if (method === M_HOST_COMPUTER_USE) {
+        const p = body as unknown as ComputerUseCardParams
+        if (options.requestComputerUse === undefined || req === undefined) return { now }
+        const res = await options.requestComputerUse({
+          request: req,
+          stage: p.stage,
+          reason: p.reason,
+        })
         return {
           now: options.clock.now(),
           ...(res === undefined ? {} : { approval_item_id: res.approval_item_id }),
