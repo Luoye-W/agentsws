@@ -20,6 +20,8 @@
     "@deepseek-ai/dsh": "0.1.7-rc.1",
     "@deepseek-ai/dsh-agent-preset-registry": "0.1.7-rc.1",
     "@deepseek-ai/dsh-base": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-computer-use": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp": "0.1.7-rc.1",
     "@deepseek-ai/dsh-headless": "0.1.7-rc.1",
     "@deepseek-ai/dsh-llm": "0.1.7-rc.1",
     "@deepseek-ai/dsh-scope": "0.1.7-rc.1",
