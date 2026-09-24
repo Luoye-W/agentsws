@@ -45,6 +45,28 @@ vi.mock('@/lib/api', async () => {
       state.linked.push(email)
       return { expires_at: '2026-09-15T00:15:00.000Z', delivered: 'email' as const }
     },
+    // WP142：积分卡按账号状态回（解除关联之后要换成「没关联」那一面）
+    getCloudCredits: async () =>
+      state.view.linked
+        ? {
+            linked: true,
+            month_credits: 0,
+            balance: {
+              org_id: 'org_1',
+              purchased: 140,
+              granted: 10,
+              available: 150,
+              reserved: 0,
+              expiring: [],
+              low_balance_threshold: 50,
+              low_balance: false,
+              at: '2026-09-15T00:00:00.000Z',
+            },
+          }
+        : { linked: false, reason: '还没关联' },
+    getCloudUsage: async () => null,
+    getCloudPricing: async () => ({ version: 1, as_of: '2026-09-15', entries: [] }),
+    getTopupTiers: async () => ({ version: 1, as_of: '2026-09-15', credits_per_usd: 7, tiers: [] }),
     unlinkCloudAccount: async () => {
       state.unlinked += 1
       state.view = UNLINKED
@@ -100,6 +122,21 @@ describe('49 M1 设置页账号卡', () => {
     await userEvent.click(screen.getByRole('button', { name: '解除关联' }))
     await screen.findByTestId('cloud-account-unlinked')
     expect(state.unlinked).toBe(1)
+  })
+
+  it('WP142：解除关联之后，下面的积分卡当场换成「没关联」那一面（不再摆着余额）', async () => {
+    state.view = LINKED
+    renderWithProviders(
+      <>
+        <CloudAccountCard assignment="asg_1" />
+        <CreditsPanel assignment="asg_1" />
+      </>,
+    )
+    await screen.findByTestId('credits-balance')
+    await userEvent.click(screen.getByRole('button', { name: '解除关联' }))
+    await screen.findByTestId('cloud-account-unlinked')
+    expect(await screen.findByTestId('credits-link-first')).toBeTruthy()
+    expect(screen.queryByTestId('credits-balance')).toBeNull()
   })
 
   it('这台机器没有秘密库密钥时：说清楚为什么，按钮点不动', async () => {
