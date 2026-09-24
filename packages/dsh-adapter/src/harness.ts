@@ -77,6 +77,23 @@ const READY_TIMEOUT_MS = 5000
 /** 一次运行允许的模型步数上限（与 direct-llm 的 turn loop 同一个数）。 */
 export const DEFAULT_MAX_STEPS = 8
 
+/**
+ * 这次运行的模型步数上限（09-24，WP148 合并时 Fable 补）。
+ *
+ * 缺省 8 步——与 direct-llm 的 turn loop 同一个数，普通运行一个字节不变。但**挂了浏览器或
+ * 电脑操控的运行**是「看一眼、点一下、再看一眼」，一步通常只调一个工具：8 步封顶的话，
+ * 预算里给的工具调用上限（浏览器 30、批过授权的电脑操控 40）根本用不到。所以这两类运行的
+ * 步数跟着 `budget.max_tool_calls` 走（+1 留给收尾那一轮），时间与花费上限照旧兜底。
+ */
+export function maxStepsFor(request: {
+  browser?: unknown
+  computer_use?: unknown
+  budget: { max_tool_calls: number }
+}): number {
+  if (request.browser === undefined && request.computer_use === undefined) return DEFAULT_MAX_STEPS
+  return Math.max(DEFAULT_MAX_STEPS, request.budget.max_tool_calls + 1)
+}
+
 export interface HarnessInput extends GateInput {
   meta: ModelMeta
   /** dsh 侧的模型路由；provider 固定为我们的网关适配器。 */
@@ -493,7 +510,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     input.onBudgetExhausted === undefined || input.tokensSpent === undefined
       ? undefined
       : {
-          max_steps: input.maxSteps ?? DEFAULT_MAX_STEPS,
+          max_steps: input.maxSteps ?? maxStepsFor(input.request),
           max_tokens: input.request.budget.max_tokens,
           spent: input.tokensSpent,
           exhausted: (which, used, cap) => input.onBudgetExhausted?.(which, used, cap),

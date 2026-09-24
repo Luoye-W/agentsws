@@ -207,8 +207,8 @@ export function specialSection(rows, versions = {}, natives = undefined) {
     '     我们没有改它，也没有把它静态链接进我们自己的代码。',
     '   你可以：换成你自己编译的、接口兼容的 libvips（替换上面那个目录里的库文件即可）。',
     '   源代码：https://github.com/libvips/libvips ；预编译脚本：https://github.com/lovell/sharp-libvips',
-    '   LGPL-3.0 全文：https://www.gnu.org/licenses/lgpl-3.0.txt',
-    '     （它在 GPL-3.0 之上附加条款，GPL-3.0 全文：https://www.gnu.org/licenses/gpl-3.0.txt）',
+    '   LGPL-3.0 全文：同目录 LGPL-3.0.txt（网上：https://www.gnu.org/licenses/lgpl-3.0.txt）',
+    '     （它在 GPL-3.0 之上附加条款，GPL-3.0 全文：同目录 GPL-3.0.txt，网上：https://www.gnu.org/licenses/gpl-3.0.txt）',
   )
   if (libvips.length === 0) out.push('   这一次打包的依赖里没有 libvips。')
   for (const r of libvips) {

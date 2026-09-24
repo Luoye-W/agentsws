@@ -968,10 +968,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       /*
        * WP144：批过授权的那一次运行，工具调用上限从 12 放到 40——操作桌面是"看一眼、点一下、
        * 再看一眼"，12 次连一个小任务都做不完。时间与花费上限不动。
+       * 09-24（WP148 报告第 1 条，Fable 定）：真挂了浏览器的运行同理，放到 30——
+       * 打开、截图、翻页、再截图，12 次不够一个小任务；比电脑操控低，因为它不需要逐像素找按钮。
        */
       budget: {
         max_tokens: 60_000,
-        max_tool_calls: granted ? 40 : 12,
+        max_tool_calls: granted ? 40 : browser !== undefined && allowed_hosts.length > 0 ? 30 : 12,
         max_seconds: 120,
         max_cost_base: 5,
       },

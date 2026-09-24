@@ -238,3 +238,17 @@ describe('Electron / Chromium 自带的两份许可证', () => {
     expect(copyElectronLicenses([join(root, 'nowhere')], join(root, 'empty'))).toEqual([])
   })
 })
+
+/** 09-24：GPL-3.0 / LGPL-3.0 全文随安装包带（libvips 是 LGPL-3.0），不只给网址。 */
+describe('随安装包带的许可证全文', () => {
+  it('仓库里有两份全文，afterPack 会拷进 licenses/', async () => {
+    const { BUNDLED_LICENSE_TEXTS } = await import('../scripts/after-pack.mjs')
+    const { readFileSync: read } = await import('node:fs')
+    const { join: j, dirname: d } = await import('node:path')
+    const { fileURLToPath: f } = await import('node:url')
+    const root = j(d(f(import.meta.url)), '..', 'licenses')
+    expect(BUNDLED_LICENSE_TEXTS).toEqual(['LGPL-3.0.txt', 'GPL-3.0.txt'])
+    expect(read(j(root, 'LGPL-3.0.txt'), 'utf8')).toContain('GNU LESSER GENERAL PUBLIC LICENSE')
+    expect(read(j(root, 'GPL-3.0.txt'), 'utf8')).toContain('GNU GENERAL PUBLIC LICENSE')
+  })
+})

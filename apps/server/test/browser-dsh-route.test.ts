@@ -328,6 +328,21 @@ const BSK_TOOLS = [
   'browser_tabs',
 ]
 
+describe('带浏览器的运行：工具调用上限 30（09-24，WP148 报告第 1 条）', () => {
+  it('连调 13 次浏览器工具不触顶（没开浏览器的运行上限仍是 12）', async () => {
+    const { events } = await runOnce({
+      browser_scope: ['example.com'],
+      browser: ATTACH,
+      calls: Array.from({ length: 13 }, () => ({ name: SHOT })),
+      extra: IN_PROCESS,
+    })
+    expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+    // 工具次数（30）与模型步数（跟着工具次数走，见 dsh-adapter 的 maxStepsFor）都没触顶
+    expect(payloadsOf(events, 'budget.exhausted')).toHaveLength(0)
+    expect(payloadsOf(events, 'tool.result').filter((r) => r.status === 'ok')).toHaveLength(13)
+  })
+})
+
 describe('BrowserSkill 那一种：同样走到 dsh，门禁照拦', () => {
   it('六个工具进了工具表；白名单外的地址被拦下', async () => {
     const before = { ...process.env }

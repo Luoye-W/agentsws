@@ -54,7 +54,7 @@
 | 29 | WP145 语音转写留「本机识别器」的口（对齐官方 ctx.speechToText，不打包不下载） | `WP145-speech-slot.md` | `wp145-speech-slot` · `wp/145-speech-slot` | — | 已合并（09-24，Fable 终审：128 文件 1594 条过，fast 模拟零漂移；只接了会议一处，云端与自带 key 合成一个识别器） |
 | 30 | WP146 连接器运行时镜像钉版本（tag + digest）+ 进上游哨兵（W39 评估找回的建议） | `WP146-pin-open-connector.md` | `wp146-oc-pin` · `wp/146-oc-pin` | — | 已合并（09-24，Fable 终审：connect-adapter 117 条过、上游登记表测试 101 条过、check-upstreams 对账一致；钉 v1.6.5） |
 | 31 | WP147 截图给 AI 看：打通工具结果图片进模型（电脑操控 + 两种浏览器），隐私告知 | `WP147-screenshots-to-model.md` | `wp147-screenshots` · `wp/147-screenshots` | — | 已合并（09-24，Fable 终审：259 文件 3907 条过，六组模拟门禁过） |
-| 32 | WP148 带浏览器的运行改走 dsh 运行时（服务端真能用浏览器、看截图）+ 安装包第三方许可证说明 | `WP148-browser-runs-on-dsh.md` | `wp148-browser-dsh` · `wp/148-browser-dsh` | — | 进行中（Claude） |
+| 32 | WP148 带浏览器的运行改走 dsh 运行时（服务端真能用浏览器、看截图）+ 安装包第三方许可证说明 | `WP148-browser-runs-on-dsh.md` | `wp148-browser-dsh` · `wp/148-browser-dsh` | — | 已合并（09-24，Fable 终审：172 文件 2945 条过，六组模拟零漂移；合并时补了步数上限与许可证全文） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 

@@ -56,7 +56,7 @@ export { DshAdapterError } from './errors.js'
 export type { AskedBoundary, DraftArgs, GateApi, GateInput, StageArgs } from './gate.js'
 export { CONTEXT_PREFIX, installGate, PERSONA_SECTION } from './gate.js'
 export type { DshHarness, HarnessInput } from './harness.js'
-export { createHarness, DEFAULT_MAX_STEPS } from './harness.js'
+export { createHarness, DEFAULT_MAX_STEPS, maxStepsFor } from './harness.js'
 export {
   createDshRuntime,
   createSubprocessDshRuntime,

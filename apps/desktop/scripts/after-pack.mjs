@@ -270,6 +270,9 @@ export function probeBundled(nodeExec, appDir, pkgDirs) {
 /** 安装包里放许可证的目录（`<resources>/licenses`）。托盘菜单按同一个相对路径找。 */
 export const LICENSES_DIR = 'licenses'
 
+/** 随安装包带的许可证全文（仓库 `apps/desktop/licenses/`，取自 SPDX license-list-data）。 */
+export const BUNDLED_LICENSE_TEXTS = ['LGPL-3.0.txt', 'GPL-3.0.txt']
+
 /**
  * Electron 发行包自带的两份许可证 → `licenses/` 里的名字。
  * mac 上只剩 `after-extract.mjs` 存下的那份；win / linux 上 electron-builder 把它们留在应用根目录
@@ -342,6 +345,10 @@ export default async function afterPack(context) {
   // 先找 afterExtract 存下的那份（mac 上只有它），再找 win / linux 留在根目录的那份
   const stash = stashDirOf(context.appOutDir)
   const electronLicenses = copyElectronLicenses([stash, context.appOutDir, resources], licensesDir)
+  // 09-24：GPL-3.0 / LGPL-3.0 全文随安装包带（libvips 是 LGPL-3.0；仓库里那两份取自 SPDX license-list-data）
+  for (const name of BUNDLED_LICENSE_TEXTS) {
+    copyFileSync(join(DESKTOP_ROOT, 'licenses', name), join(licensesDir, name))
+  }
   rmSync(stash, { recursive: true, force: true })
   try {
     rmdirSync(dirname(stash)) // 只在空了的时候删得掉（别的架构可能还在用）
