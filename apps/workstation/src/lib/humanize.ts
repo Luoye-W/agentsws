@@ -234,3 +234,39 @@ export function recordText(v: unknown, lang: Lang): string {
   }
   return fieldValue('', v, lang)
 }
+
+/**
+ * 面板表格里一格字（WP141，走查第 30 步）：渠道列 `youtube` → YouTube、形态列
+ * `video` → 视频、期限列的 ISO 时间 → 日期。数字不走这里（它们有自己的格式）。
+ */
+export function cellText(key: string, value: string, lang: Lang): string {
+  if (key === 'channel' || key === 'platform') return channelLabel(value, lang)
+  if (key === 'kind' || key === 'format') return value === '' ? '' : formatLabel(value, lang)
+  if (ISO_RE.test(value)) return whenText(value, lang)
+  const def = FIELDS[key]
+  return def?.values?.[value]?.[lang] ?? value
+}
+
+/** 审批项的状态（记录时间线上那一格）：`approved_edited` → 改后批了。 */
+const APPROVAL_STATES: Record<string, Bi> = {
+  proposed: { zh: '提议中', en: 'Proposed' },
+  blocked: { zh: '被拦下', en: 'Blocked' },
+  auto_approved: { zh: '自动批了', en: 'Auto-approved' },
+  pending: { zh: '等你定', en: 'Waiting' },
+  in_review: { zh: '审核中', en: 'In review' },
+  approved: { zh: '批了', en: 'Approved' },
+  approved_edited: { zh: '改后批了', en: 'Approved with edits' },
+  rejected: { zh: '驳回了', en: 'Rejected' },
+  redirected: { zh: '转给别人了', en: 'Redirected' },
+  deferred: { zh: '稍后', en: 'Later' },
+  withdrawn: { zh: '撤回了', en: 'Withdrawn' },
+  expired: { zh: '过期了', en: 'Expired' },
+  superseded: { zh: '被新版替掉', en: 'Superseded' },
+  applying: { zh: '在执行', en: 'Applying' },
+  applied: { zh: '办好了', en: 'Done' },
+  apply_failed: { zh: '没办成', en: 'Failed' },
+}
+
+export function approvalStateLabel(state: string, lang: Lang): string {
+  return APPROVAL_STATES[state]?.[lang] ?? plainKey(state)
+}

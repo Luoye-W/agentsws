@@ -140,6 +140,8 @@ describe('小件', () => {
     )
     expect(screen.getByTestId('ws-status-pill').dataset.tone).toBe('good')
     expect(screen.getByTestId('ws-delta').className).toContain('bg-ws-bad-bg')
+    // WP141：窄格里不竖着折行
+    expect(screen.getByTestId('ws-delta').className).toContain('whitespace-nowrap')
   })
 
   it('火花线两种：竖条与折线', () => {

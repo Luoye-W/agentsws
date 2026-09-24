@@ -1840,12 +1840,12 @@ const zh: Table = {
   'kol.channel.instagram': 'Instagram',
   'kol.channel.tiktok': 'TikTok',
   'kol.channel.x': 'X',
-  'kol.tools.title': '导入与 campaign',
+  'kol.tools.title': '导入与活动',
   'kol.import': '导入红人表',
   'kol.import.hint':
     '认 CSV / TSV。表头中英都认（红人 / 链接 / 粉丝 / 互动率 / 类目 / 邮箱）；去重只按 渠道 + 账号名。',
   'kol.import.rejected': '第 {row} 行没进来：{reason}',
-  'kol.campaign.title': '发起一次 campaign',
+  'kol.campaign.title': '发起一次活动',
   'kol.campaign.goal': '这次想达成什么',
   'kol.campaign.budget': '总预算',
   'kol.campaign.headcount': '找几个人',
@@ -2599,6 +2599,10 @@ const zh: Table = {
   'deck.receipt.reject': '记下了：这张不办，理由会让它下次少犯。',
   'deck.receipt.snooze': '先放一放，过几个小时它再回来。',
   'deck.receipt.choice': '记下了：以后遇到这种情况就按你选的办。',
+  'kol.contact.source.sandbox': '演练里合成的',
+  'kol.contact.source.other': '来源没记下',
+  'position.entry.placeholder.plain': '一句话说清要办什么',
+  'position.entry.placeholder.example': '一句话说清要办什么，比如「{example}」',
 }
 
 const en: Table = {
@@ -5229,6 +5233,10 @@ const en: Table = {
   'deck.receipt.reject': 'Noted: not doing this one, and your reason is kept for next time.',
   'deck.receipt.snooze': 'Put aside; it will come back in a few hours.',
   'deck.receipt.choice': 'Noted: cases like this will follow your choice from now on.',
+  'kol.contact.source.sandbox': 'synthetic (rehearsal)',
+  'kol.contact.source.other': 'source not recorded',
+  'position.entry.placeholder.plain': 'Say what needs doing in one sentence',
+  'position.entry.placeholder.example': 'Say what needs doing in one sentence, e.g. "{example}"',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

@@ -456,7 +456,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
         required: true,
         kind: 'password',
         hint: {
-          zh: '要带 `ads_management` 权限的那一把。与社媒那张卡可以是同一次授权换出来的，但权限要另加。',
+          zh: '要带「管理广告」权限的那一把。与社媒那张卡可以是同一次授权换出来的，但权限要另加。',
           en: 'Must carry `ads_management`. It can come from the same OAuth grant as the social card, but that scope is extra.',
         },
       },
@@ -476,7 +476,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     docs_url: 'https://developers.facebook.com/docs/marketing-apis',
     status: 'available',
     note: {
-      zh: '与社媒那张 `meta_graph` 是**两张卡**：这条要 `ads_management`（能动预算），那条要 `pages_manage_posts`（能发帖）。同一次授权可以一起授，但别把两把钥匙做成一把。',
+      zh: '与社媒那张 Meta 卡是**两张卡**：这条要「管理广告」权限（能动预算），那条要「发主页帖子」权限（能发帖）。同一次授权可以一起授，但别把两把钥匙做成一把。',
       en: 'Separate from the `meta_graph` social card: this one needs `ads_management`, that one `pages_manage_posts`. One grant can cover both, but they stay two keys.',
     },
   },
@@ -740,7 +740,7 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     status: 'available',
     service: 'tiktok_content',
     note: {
-      zh: '申请制，且与红人那条用的 Research API **要分别申请**。发布是两跳（init 拿 publish_id，再轮询状态）。没批下来之前排期、草稿、审批照常。',
+      zh: '申请制，且与红人那条用的 Research API **要分别申请**。发布是两跳（先交给 TikTok，再等它回话发完没有）。没批下来之前排期、草稿、审批照常。',
       en: 'Application-gated, and applied for separately from the Research API. Publishing takes two hops (init, then poll status). Scheduling and drafts work without it.',
     },
   },

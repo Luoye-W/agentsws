@@ -245,5 +245,16 @@ describe('WP98 收口：快捷提示落在岗位页输入框下面', () => {
     renderWithProviders(<PositionEntry id="asg_store" />)
     await screen.findByTestId('position-entry')
     expect(screen.queryByTestId('entry-suggestions')).toBeNull()
+    // WP141：没有提示就不拿别的岗位的活儿举例
+    const box = screen.getByTestId('position-entry-input')
+    expect(box.getAttribute('placeholder')).toBe('一句话说清要办什么')
+  })
+
+  it('WP141：输入框的示例按岗位给——抄这个岗位自己的第一条快捷提示', async () => {
+    renderWithProviders(<PositionEntry id="asg_store" />)
+    await screen.findByTestId('position-entry')
+    const ph = screen.getByTestId('position-entry-input').getAttribute('placeholder') ?? ''
+    expect(ph).toContain('给这个商品降价')
+    expect(ph).not.toContain('把 A 商品降价 10%')
   })
 })

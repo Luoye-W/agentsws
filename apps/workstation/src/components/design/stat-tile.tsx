@@ -70,7 +70,8 @@ export function StatTile({
           <div className="mt-1.5">{fallback}</div>
         </div>
       )}
-      <div className="flex items-end justify-between gap-2.5">
+      {/* WP141：窄格里胶囊与走势线挤不下时走势线换到下一行，胶囊本身不折行 */}
+      <div className="flex flex-wrap items-end justify-between gap-2.5">
         {delta === undefined || fallback !== undefined ? (
           <span />
         ) : (

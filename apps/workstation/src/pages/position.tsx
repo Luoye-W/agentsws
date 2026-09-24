@@ -26,6 +26,7 @@ import { PositionEntry } from '@/components/work/position-entry'
 import { getPosition, getPositionRecords, getPositions, getPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
+import { approvalStateLabel } from '@/lib/humanize'
 import { assignmentForPosition, myAssignments } from '@/lib/positions'
 import { matterUrl } from '@/lib/work'
 
@@ -281,7 +282,7 @@ function RecordRows({ id }: { id: string }): React.ReactNode {
           <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
-            <span className="font-mono">{row.state}</span>
+            <span>{approvalStateLabel(row.state, lang)}</span>
           </div>
           <div className="text-sm">{row.title}</div>
           <p className="text-xs text-muted-foreground">{row.summary}</p>

@@ -96,12 +96,13 @@ export function DeltaPill({
       data-testid="ws-delta"
       data-direction={direction}
       className={cn(
-        'inline-flex h-[22px] w-fit items-center gap-1 rounded-full px-2 text-xs font-semibold',
+        // WP141（docs/78 §2 首页）：窄格里不许竖着折成四行——不折行，放不下就省略号
+        'inline-flex h-[22px] w-fit max-w-full shrink-0 items-center gap-1 rounded-full px-2 text-xs font-semibold whitespace-nowrap',
         TONE_PILL[resolved],
       )}
     >
-      <Arrow className="size-3" aria-hidden />
-      <span className="ws-num">{children}</span>
+      <Arrow className="size-3 shrink-0" aria-hidden />
+      <span className="ws-num truncate">{children}</span>
     </span>
   )
 }
