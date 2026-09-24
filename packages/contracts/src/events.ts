@@ -156,6 +156,13 @@ export type KnownEventType =
   | 'product_line.deleted'
   /** 44 G5：品牌组成员变了，挂了它的岗位范围自动跟着变——**变更必须留痕**（40 §1 的底线）。 */
   | 'assignment.range_expanded'
+  /**
+   * WP138（78 §1 #1）：向导建了哪几条分配、挂的是什么范围（以后分「向导建的」与「手动分配的」靠它）；
+   * 以及启动时那一次补挂——老版本没连店就挂空的职责，补上向导今天会挂的那一份。
+   * payload 只有分配 id 与范围（`{kind, id}`），没有人名。
+   */
+  | 'onboarding.applied'
+  | 'assignment.range_backfilled'
   // WP50：个人用 → 公司用（45）。合并与别名都留痕；payload 只有 id / 名字 / 条数，不含成员内容
   /** 45 H3：两条品牌合成一条（公司那份取并集，个人那份 `superseded_by`）。 */
   | 'range_group.merged'

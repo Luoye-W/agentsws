@@ -3413,6 +3413,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workspace_id: workspace.id,
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
+    brandName: () => brandNameOfWorkspace(workspace.id),
   })
   rangeExpandedSink = org.onRangeExpanded
 
@@ -3493,6 +3494,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       void identity.updateOrganization(bootstrapOrg, patch).catch(() => undefined)
     },
   })
+  /*
+   * WP138（78 §1 #1）：老版本的向导没连店就把新职责挂空。启动时一次性补上
+   * （只补店主自己给自己建的、要范围却一条都没有的；跑过一次就不再跑）。
+   */
+  onboarding.backfillWizardRanges()
 
   /**
    * WP121（70 §3）：贴一个网址，自动分析出品牌档案。
