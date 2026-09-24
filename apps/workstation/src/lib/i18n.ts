@@ -2310,6 +2310,8 @@ const zh: Table = {
   'chat.window.relay.official.hint': '每月 200 个对话；到 80% 提醒你。订阅客服增值服务后不限。',
   'chat.window.relay.endpoint': '转发器地址',
   'chat.window.relay.pairing': '配对密钥（只显示一次的那把）',
+  'chat.window.relay.messageKey': '留言密钥（选填；要收离线留言就填）',
+  'chat.window.relay.messageKey.saved': '留言密钥已保存（要换就重填）',
   'chat.window.relay.hosted.hint':
     '订阅了客服增值服务的话，不用填这里：云端会自动接手，本机开机后再对齐。自建转发就填你自己部署的地址与密钥。',
   'chat.window.relay.test': '测试连接',
@@ -4835,6 +4837,8 @@ const en: Table = {
     '200 conversations per month; we nudge you at 80%. Unlimited with the support subscription.',
   'chat.window.relay.endpoint': 'Relay address',
   'chat.window.relay.pairing': 'Pairing key (the one shown only once)',
+  'chat.window.relay.messageKey': 'Message key (optional; needed for offline messages)',
+  'chat.window.relay.messageKey.saved': 'Message key saved (re-enter to replace)',
   'chat.window.relay.hosted.hint':
     'With the support subscription you can skip this: the hosted instance takes over automatically and realigns when your machine is back. Self-hosting: paste your own relay address and key.',
   'chat.window.relay.test': 'Test connection',
