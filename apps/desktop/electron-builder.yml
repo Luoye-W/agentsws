@@ -24,8 +24,11 @@ extraResources:
     to: node
     filter:
       - '**/*'
-# 打完包再做三件事（见 scripts/after-pack.mjs）：补齐 electron-builder 漏收的 pnpm 依赖、
-# 把原生模块换成捆绑 Node 的 ABI 那份、用捆绑的 Node 冒烟一次 import。
+# 打完包再做四件事（见 scripts/after-pack.mjs）：补齐 electron-builder 漏收的 pnpm 依赖、
+# 把原生模块换成捆绑 Node 的 ABI 那份、用捆绑的 Node 冒烟一次 import、放第三方许可证。
+# WP148：Electron 发行包刚解出来时先存下它自带的两份许可证（mac 上之后会被丢掉），
+# afterPack 再把它们和按 `pnpm licenses list` 生成的第三方清单一起放进 `<resources>/licenses/`。
+afterExtract: scripts/after-extract.mjs
 afterPack: scripts/after-pack.mjs
 mac:
   category: public.app-category.productivity
