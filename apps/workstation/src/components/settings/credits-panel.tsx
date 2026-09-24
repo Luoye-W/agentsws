@@ -13,6 +13,10 @@
  *    任意金额要用户先做一道除法（"我要多少积分？那是多少钱？"）；
  * 6. **价目表**——折叠着，按三块分组。
  *
+ * WP142（docs/78 第 44 步）：**没关联也看得到价**。三块（这时说的是每块最低多少）、充值四档、
+ * 增值服务卡照常显示，只把「充值 / 订阅」换成「先关联」；价目是本地内置那一份（与云同源），
+ * 标一句「以关联后显示为准」。余额、用量明细没关联就没有，不画一堆 0。
+ *
  * 三条纪律：
  * - **这一层不算账**。每个数字都是云上那一份的透传。唯一的例外是三张小卡上那个
  *   和——它是把云上给的每条明细按块相加，加数与加法都看得见，且**不参与任何扣费**。
@@ -21,9 +25,9 @@
  *   界面不做第二次裁剪——裁两次就会有一次是错的。
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Coins, ExternalLink, Wallet } from 'lucide-react'
+import { ChevronDown, ChevronRight, Coins, ExternalLink, Link2, Wallet } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -31,6 +35,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PricingEntry, TopupTierView, UsageReportView } from '@/lib/api'
 import {
+  ApiClientError,
   createTopup,
   getCloudCredits,
   getCloudPricing,
@@ -66,10 +71,31 @@ function blockOf(capability: string, declared?: Block): Block {
 /** 充值页在云上，不在这里——付款永远在对方的页面上（13 §4.3 同一条理由）。 */
 export const TOPUP_PATH = '/billing/topup'
 
+/**
+ * WP142（docs/78 第 44 步）：「先关联」按钮去哪——同一页上面那张「Agents 工坊账号」卡，
+ * 滚过去并把光标放进邮箱框。那张卡不在这一页时（面板被单独放在别处）就去账号与积分那一页。
+ */
+export function goLinkAccount(navigate: (to: string) => void): void {
+  const card = document.querySelector<HTMLElement>('[data-testid="cloud-account"]')
+  if (card === null) {
+    navigate('/settings/credits')
+    return
+  }
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  card.querySelector<HTMLInputElement>('input[type="email"], input')?.focus()
+}
+
+/** 一块里最便宜的那一条（「最低 N 积分 / 每次」）。价目表空着就没有。 */
+export function cheapestOf(entries: readonly PricingEntry[]): PricingEntry | undefined {
+  return [...entries].sort((a, b) => a.credits_per_unit - b.credits_per_unit)[0]
+}
+
 export function CreditsPanel({ assignment }: { assignment?: string }): React.ReactNode {
   const { t, lang } = useApp()
+  const navigate = useNavigate()
   const [group, setGroup] = useState<Group>('capability')
-  const [pricingOpen, setPricingOpen] = useState(false)
+  /** 没关联时默认展开：那时候这张表就是这一页的正文（WP142）。 */
+  const [pricingOpen, setPricingOpen] = useState<boolean | undefined>(undefined)
 
   const credits = useQuery({
     queryKey: ['cloud-credits', assignment],
@@ -97,10 +123,14 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
     enabled: credits.data?.linked === true,
     retry: false,
   })
+  /*
+   * WP142：充值四档**没关联也取**——服务端取不到云就回本地内置那一份（与云同源），
+   * 朋友在关联之前就该看得到要花多少钱。
+   */
   const tiers = useQuery({
     queryKey: ['cloud-topup-tiers', assignment],
     queryFn: () => getTopupTiers(assignment),
-    enabled: credits.data?.linked === true,
+    enabled: credits.data !== undefined,
     retry: false,
   })
   const order = useMutation({
@@ -131,6 +161,10 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
 
   const linked = credits.data?.linked === true
   const balance = credits.data?.balance
+  const showPricing = pricingOpen ?? !linked
+  const linkFirst = (): void => {
+    goLinkAccount(navigate)
+  }
 
   /** 每条能力归哪一块（价目表说了算；表里没有的按前缀兜底）。 */
   const blockOfCapability = (capability: string): Block => {
@@ -157,11 +191,78 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
-        {/* 还没关联账号：一句人话 + 一个去处，而不是一堆 0 */}
+        {/*
+          还没关联账号：一句人话 + 一个去处，而不是一堆 0。
+          WP142：**价目三块、充值四档、增值服务卡照常显示**——只把「充值 / 订阅」换成「先关联」。
+          价是本地那一份（与云同源），标一句「以关联后显示为准」。
+        */}
         {!linked || balance === undefined ? (
-          <p className="text-muted-foreground" data-testid="credits-not-linked">
-            {credits.data?.reason ?? t('credits.not_linked')}
-          </p>
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-muted-foreground" data-testid="credits-not-linked">
+                {linked
+                  ? (credits.data?.reason ?? t('credits.not_linked'))
+                  : t('credits.unlinked.lead')}
+              </p>
+              {linked ? null : (
+                <Button size="sm" data-testid="credits-link-first" onClick={linkFirst}>
+                  {t('credits.link_first')}
+                </Button>
+              )}
+            </div>
+
+            {/* ② 付费三块：还没花钱，所以每块说的是「怎么收、最低多少」 */}
+            <section className="flex flex-col gap-1.5" data-testid="credits-blocks">
+              <h4 className="text-xs font-medium text-muted-foreground">
+                {t('credits.blocks.price')}
+              </h4>
+              <div className="grid grid-cols-3 gap-2">
+                {BLOCKS.map((b) => {
+                  const cheapest = cheapestOf(
+                    (pricing.data?.entries ?? []).filter(
+                      (e) => blockOf(e.capability, e.block) === b,
+                    ),
+                  )
+                  return (
+                    <div
+                      key={b}
+                      className="rounded-lg border p-2"
+                      data-testid="credits-block"
+                      data-block={b}
+                    >
+                      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        {t(`credits.block.${b}`)}
+                        <Hint text={t(`credits.block.${b}.note`)} />
+                      </p>
+                      <p className="text-base tabular-nums">
+                        {cheapest === undefined ? '—' : price(cheapest.credits_per_unit)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {cheapest === undefined
+                          ? t('credits.blocks.none')
+                          : t('credits.blocks.from', { unit: t(`credits.unit.${cheapest.unit}`) })}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+
+            {/* ⑤ 充值四档：照常四张卡，按钮换成「先关联」 */}
+            <Separator />
+            <TierCards
+              tiers={tiers.data?.tiers}
+              pending={tiers.isPending}
+              linked={false}
+              busy={false}
+              num={num}
+              onPick={linkFirst}
+            />
+
+            <Separator />
+            {/* ⑤b 增值服务卡：没关联时它自己说「先关联」 */}
+            <KolCloudCard assignment={assignment} onLinkFirst={linkFirst} />
+          </>
         ) : (
           <>
             {/* ① 余额：两类分开 */}
@@ -265,59 +366,26 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
 
             {/* ⑤ 充值四档：四张卡（67 §2） */}
             <Separator />
-            <section className="flex flex-col gap-2" data-testid="credits-tiers">
-              <div className="flex items-baseline justify-between gap-2">
-                <h4 className="text-xs font-medium text-muted-foreground">{t('credits.tiers')}</h4>
-                <span className="text-[11px] text-muted-foreground">{t('credits.tiers.note')}</span>
-              </div>
-              {tiers.isPending ? (
-                <Skeleton className="h-20 w-full" />
-              ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {(tiers.data?.tiers ?? []).map((tier: TopupTierView) => (
-                    <button
-                      key={tier.id}
-                      type="button"
-                      className={`flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-60 ${
-                        tier.recommended === true ? 'border-primary' : ''
-                      }`}
-                      data-testid="credits-tier"
-                      data-tier={tier.id}
-                      data-recommended={tier.recommended === true ? 'true' : 'false'}
-                      disabled={order.isPending}
-                      onClick={() => {
-                        order.mutate(tier.id)
-                      }}
-                    >
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        {lang === 'zh' ? tier.label_zh : tier.label_en}
-                        {tier.recommended === true ? (
-                          <span className="rounded bg-primary/10 px-1 text-primary">
-                            {t('credits.tiers.recommended')}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="text-lg font-semibold tabular-nums">US${num(tier.usd)}</span>
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {t('credits.tiers.credits', { n: num(tier.credits) })}
-                      </span>
-                      <span className="flex items-center gap-1 text-[11px] text-primary">
-                        <Wallet className="size-3" aria-hidden />
-                        {t('credits.tiers.go')}
-                        <ExternalLink className="size-3" aria-hidden />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {order.isError ? (
-                <p className="text-[11px] text-destructive" data-testid="credits-tier-error">
-                  {t('credits.tiers.failed', {
-                    msg: order.error instanceof Error ? order.error.message : '',
-                  })}
-                </p>
-              ) : null}
-            </section>
+            <TierCards
+              tiers={tiers.data?.tiers}
+              pending={tiers.isPending}
+              linked
+              busy={order.isPending}
+              num={num}
+              onPick={(id) => {
+                order.mutate(id)
+              }}
+            />
+            {order.isError ? (
+              <p className="text-[11px] text-destructive" data-testid="credits-tier-error">
+                {/* WP142：云上说了为什么（demo 里是「不真收钱」）就原样说，不再套一层「建不了充值单：」 */}
+                {order.error instanceof ApiClientError
+                  ? order.error.message
+                  : t('credits.tiers.failed', {
+                      msg: order.error instanceof Error ? order.error.message : '',
+                    })}
+              </p>
+            ) : null}
 
             <Separator />
 
@@ -339,18 +407,22 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
             size="xs"
             variant="ghost"
             className="self-start"
-            aria-expanded={pricingOpen}
+            aria-expanded={showPricing}
             onClick={() => {
-              setPricingOpen((v) => !v)
+              setPricingOpen(!showPricing)
             }}
           >
-            {pricingOpen ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
+            {showPricing ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
             {t('credits.pricing')}
           </Button>
-          {pricingOpen ? (
+          {showPricing ? (
             <div className="rounded-md border bg-muted/30 p-2.5">
               <p className="text-[11px] text-muted-foreground">
                 {t('credits.pricing.note', { as_of: pricing.data?.as_of ?? '' })}
+                {/* WP142：没关联时这一份是本地内置的（与云同源），以关联后云上那一份为准 */}
+                {linked ? null : (
+                  <span data-testid="credits-pricing-local"> {t('credits.pricing.local')}</span>
+                )}
               </p>
               <table className="mt-1.5 w-full text-xs">
                 <thead className="text-muted-foreground">
@@ -407,6 +479,86 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
         </p>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * 充值四档（67 §2）。已关联：点下去去云上建单、开 Stripe 的页面；
+ * WP142 没关联：四张卡照常摆着（朋友看得到多少钱），按钮换成「先关联」。
+ */
+function TierCards({
+  tiers,
+  pending,
+  linked,
+  busy,
+  num,
+  onPick,
+}: {
+  tiers: TopupTierView[] | undefined
+  pending: boolean
+  linked: boolean
+  busy: boolean
+  num: (n: number) => string
+  onPick: (tier_id: string) => void
+}): React.ReactNode {
+  const { t, lang } = useApp()
+  return (
+    <section className="flex flex-col gap-2" data-testid="credits-tiers" data-linked={linked}>
+      <div className="flex items-baseline justify-between gap-2">
+        <h4 className="text-xs font-medium text-muted-foreground">{t('credits.tiers')}</h4>
+        <span className="text-[11px] text-muted-foreground">{t('credits.tiers.note')}</span>
+      </div>
+      {pending ? (
+        <Skeleton className="h-20 w-full" />
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {(tiers ?? []).map((tier: TopupTierView) => (
+            <button
+              key={tier.id}
+              type="button"
+              className={`flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-60 ${
+                tier.recommended === true ? 'border-primary' : ''
+              }`}
+              data-testid="credits-tier"
+              data-tier={tier.id}
+              data-recommended={tier.recommended === true ? 'true' : 'false'}
+              disabled={busy}
+              onClick={() => {
+                onPick(tier.id)
+              }}
+            >
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                {lang === 'zh' ? tier.label_zh : tier.label_en}
+                {tier.recommended === true ? (
+                  <span className="rounded bg-primary/10 px-1 text-primary">
+                    {t('credits.tiers.recommended')}
+                  </span>
+                ) : null}
+              </span>
+              <span className="text-lg font-semibold tabular-nums">US${num(tier.usd)}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {t('credits.tiers.credits', { n: num(tier.credits) })}
+              </span>
+              {linked ? (
+                <span className="flex items-center gap-1 text-[11px] text-primary">
+                  <Wallet className="size-3" aria-hidden />
+                  {t('credits.tiers.go')}
+                  <ExternalLink className="size-3" aria-hidden />
+                </span>
+              ) : (
+                <span
+                  className="flex items-center gap-1 text-[11px] text-primary"
+                  data-testid="credits-tier-link-first"
+                >
+                  <Link2 className="size-3" aria-hidden />
+                  {t('credits.link_first')}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

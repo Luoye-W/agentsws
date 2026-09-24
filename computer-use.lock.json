@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "WP144（docs/80）：电脑操控驱动 cua-driver 的钉版本表。上游哨兵盯这个文件（upstreams.yml 的 cua-driver 一条用 lock_json 对它）。",
+    "WP144（docs/80）：电脑操控驱动 cua-driver 的钉版本表。上游哨兵盯这个文件（upstreams.yml 的 cua-driver 一条用 bin_lock_file 对它：cli.version / cli.tag）。",
     "版本按官方 dsh 0.1.7-rc.1 文档引用的那一版（dsh-experimental-computer-use-cua-driver-mcp README 链接 cua-driver-rs-v0.28.0；",
     "native 提供方的 package.json 也精确钉 @trycua/cua-driver 0.28.0）。上游 cua-driver-rs-v* 在 GitHub 上一律标 prerelease，",
     "这不是 nightly（nightly 是 nightly-cua-driver-rs-v* 另一条 tag），所以照钉这一版。",
@@ -10,7 +10,7 @@
     "（它们装 CuaDriver.app 到 /Applications、改 PATH，而且驱动自带的 update --apply 就是再跑一次它们）。",
     "升版本 = 跟着 dsh 升：dsh 文档引用哪一版就改这里的 version / tag / sha256，与 packages/dsh-adapter 的两个提供方包一起改（docs/42）。"
   ],
-  "driver": {
+  "cli": {
     "name": "cua-driver",
     "upstream": "trycua/cua libs/cua-driver（MIT）",
     "version": "0.28.0",

@@ -20,10 +20,12 @@ import { renderReplyBody, replySubject } from '@agentsws/support-core'
 import {
   countOf,
   describeKolRun,
+  foundOf,
   type KolFinding,
   kolBranch,
   kolRefs,
   parseFollowerBand,
+  parseWantedCount,
   receiptOf,
   renderKolAnswer,
 } from './kol.js'
@@ -500,9 +502,13 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             )
           }
           const count = countOf(res.data)
+          // WP142：找人那一步把找到的是谁带上（回话里点名前 5 个）
+          const found =
+            call.tool === 'search_creators' && res.status === 'ok' ? foundOf(res.data) : {}
           findings.push({
             tool: call.tool,
             status: res.status,
+            ...found,
             ...(count === undefined ? {} : { count }),
             ...(res.reason === undefined ? {} : { reason: res.reason }),
             ...(receipt.approval_item_id === undefined && receipt.change_id === undefined
@@ -511,11 +517,23 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           })
         }
         const band = parseFollowerBand(kol.ctx.text)
+        const wanted = parseWantedCount(kol.ctx.text)
+        /*
+         * WP142：回话里的站内链接。岗位页按**分配 id** 开（`/positions/<分配>`），
+         * 候选池与导入都是那一页的子视图；关联官方数据接口在「账号与积分」。
+         */
+        const home = `/positions/${encodeURIComponent(req.actor.assignment_id)}?tab=view`
         const answer = renderKolAnswer({
           intent: kol.intent,
           channel: kol.channel,
           findings,
           ...(band === undefined ? {} : { band }),
+          ...(wanted === undefined ? {} : { wanted }),
+          links: {
+            pool: `${home}&kol=pool`,
+            linkAccount: '/settings/credits',
+            importTable: `${home}&kol=campaign`,
+          },
         })
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)

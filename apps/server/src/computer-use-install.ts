@@ -40,7 +40,8 @@ export interface CuaDriverAsset {
 
 /** `computer-use.lock.json` 的形状（只列我们读的那几格）。 */
 export interface ComputerUseLock {
-  driver: {
+  /** 与 `browserskill.lock.json` 同形（`cli`），上游哨兵的 `bin_lock_file` 按它对账。 */
+  cli: {
     name: string
     version: string
     tag: string
@@ -98,7 +99,7 @@ export function readLock(path?: string): ComputerUseLock {
     throw new ComputerUseInstallError('not_implemented', '这个发行版里没有 computer-use.lock.json')
   }
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as ComputerUseLock
-  if (typeof parsed.driver?.version !== 'string' || typeof parsed.driver.assets !== 'object') {
+  if (typeof parsed.cli?.version !== 'string' || typeof parsed.cli.assets !== 'object') {
     throw new ComputerUseInstallError('invalid_input', `${file} 不是一份电脑操控驱动的钉版本表`)
   }
   return parsed
@@ -112,9 +113,9 @@ export function driverDirIn(dataDir: string, version: string): string {
 /** 驱动可执行文件的绝对路径。 */
 export function driverPathIn(dataDir: string, lock: ComputerUseLock, key = platformKey()): string {
   const binary =
-    (key === undefined ? undefined : lock.driver.assets[key]?.binary) ??
+    (key === undefined ? undefined : lock.cli.assets[key]?.binary) ??
     (process.platform === 'win32' ? 'cua-driver.exe' : 'cua-driver')
-  return join(driverDirIn(dataDir, lock.driver.version), binary)
+  return join(driverDirIn(dataDir, lock.cli.version), binary)
 }
 
 /**
@@ -167,7 +168,7 @@ export async function installCuaDriver(input: InstallInput): Promise<InstallResu
       `这个平台没有官方产物（${process.platform}/${process.arch}）`,
     )
   }
-  const asset = lock.driver.assets[key]
+  const asset = lock.cli.assets[key]
   if (asset === undefined) {
     throw new ComputerUseInstallError('not_implemented', `钉版本表里没有这个平台：${key}`)
   }
@@ -204,13 +205,13 @@ export async function installCuaDriver(input: InstallInput): Promise<InstallResu
     if (!existsSync(join(staged, asset.binary))) {
       throw new ComputerUseInstallError('provider_error', `包里没有 ${asset.binary} 这个文件`)
     }
-    const target = driverDirIn(input.dataDir, lock.driver.version)
+    const target = driverDirIn(input.dataDir, lock.cli.version)
     mkdirSync(dirname(target), { recursive: true })
     rmSync(target, { recursive: true, force: true })
     renameSync(staged, target)
     const path = join(target, asset.binary)
     chmodSync(path, 0o755)
-    return { path, version: lock.driver.version, sha256: actual }
+    return { path, version: lock.cli.version, sha256: actual }
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }

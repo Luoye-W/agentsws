@@ -13,6 +13,7 @@ import type { CloudAccountView } from '@agentsws/api'
 import type { CloudCreditsView, Pricing, TopupTiers } from '@agentsws/contracts'
 import { pricingBlockOf } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DEMO_TOPUP_MESSAGE } from '../src/cloud-stand-in.js'
 import {
   CLOUD_STAND_IN_BASE_URL,
   type CloudStandIn,
@@ -108,7 +109,10 @@ describe('WP140 云账号替身', () => {
       body: JSON.stringify({ tier_id: 'usd20' }),
     })
     expect(topup.ok).toBe(false)
-    expect(((await topup.json()) as { message: string }).message).not.toContain('internal')
+    const said = ((await topup.json()) as { message: string }).message
+    expect(said).not.toContain('internal')
+    // WP142：demo 里点充值，界面上原样显示的就是替身那一句（不再被换成「建不了充值单」）
+    expect(said).toBe(DEMO_TOPUP_MESSAGE)
 
     // 云侧的每一跳都进了替身，一次都没打到生产云
     expect(cloud.requests().length).toBeGreaterThan(0)

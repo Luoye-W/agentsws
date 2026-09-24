@@ -13,7 +13,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cloud } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -54,12 +54,28 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
    * 它们是关联之前取的，还写着「还没关联」。
    */
   const linkedNow = account.data?.linked === true
+  /*
+   * WP142：**解除关联也要重取**——下半张积分卡解除之后得换成「没关联」那一面
+   * （价目三块、充值四档照常在，按钮换成「先关联」），不能还摆着已关联时的余额。
+   * 只在状态真的变了时重取（第一次取到不算变）。
+   */
+  const seen = useRef<boolean | undefined>(undefined)
   useEffect(() => {
-    if (!linkedNow) return
-    setSent(false)
-    for (const key of ['cloud-credits', 'cloud-usage', 'cloud-pricing', 'cloud-topup-tiers'])
+    if (account.data === undefined) return
+    const before = seen.current
+    seen.current = linkedNow
+    if (linkedNow) setSent(false)
+    if (before === undefined && !linkedNow) return
+    if (before === linkedNow) return
+    for (const key of [
+      'cloud-credits',
+      'cloud-usage',
+      'cloud-pricing',
+      'cloud-topup-tiers',
+      'kol-cloud-status',
+    ])
       void client.invalidateQueries({ queryKey: [key] })
-  }, [linkedNow, client])
+  }, [linkedNow, account.data, client])
 
   const link = useMutation({
     mutationFn: (value: string) => linkCloudAccount(value, assignment),

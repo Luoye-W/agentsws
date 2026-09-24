@@ -16,6 +16,7 @@ import { AskAiPanel } from '@/components/deck/ask-ai-panel'
 import { StatusPill } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { LinkedText } from '@/components/ui/linked-text'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -125,7 +126,10 @@ function TimelineEvent({ event }: { event: MatterEvent }): React.ReactNode {
     >
       <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <div className="min-w-0 flex-1">
-        <p className="whitespace-pre-wrap break-words">{event.text}</p>
+        {/* WP142：回话里的站内链接（「去候选池看全部」）画成可点的 */}
+        <p className="whitespace-pre-wrap break-words">
+          <LinkedText text={event.text} />
+        </p>
         <p className="text-[11px] text-muted-foreground">{formatDateTime(event.at, lang)}</p>
       </div>
     </li>

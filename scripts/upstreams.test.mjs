@@ -5,7 +5,14 @@
  * 真正要出网的那两步（npm registry / GitHub API）在 `pnpm upstream:watch --dry-run` 里演练。
  */
 
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,18 +23,25 @@ import {
   collectWishlistHits,
   isoWeek,
   parseArgs,
+  parseImage,
   renderReport,
   selectUpstreams,
 } from './upstream-watch.mjs'
 import {
+  binReleaseVerdict,
+  checkBinLock,
+  checkImagePins,
   checkPins,
   compareVersions,
+  findImageRefs,
+  imageVerdict,
   keywordsOf,
   loadUpstreams,
   lockfileVersions,
   parseUpstreamsYaml,
   REPO_ROOT,
   releaseAgeExcludes,
+  stableImageTags,
   validateShape,
   versionVerdict,
   wishlistHits,
@@ -72,6 +86,10 @@ describe('仓库根的 upstreams.yml', () => {
       'dsh-computer-use',
       'dsh-experimental-computer-use-cua-driver-mcp',
       'cua-driver',
+      // WP146（Luoye 09-24：引用的开源项目都要进每周评估）
+      'tremor-raw',
+      'shadcn-ui',
+      'simple-icons',
     ]) {
       expect(ids, `少了 ${id}`).toContain(id)
     }
@@ -275,32 +293,6 @@ describe('锁的版本与仓库对账', () => {
   it('package.json 里压根没依赖这个包 → 报出来', () => {
     expect(pin({ npm: 'other' }, {}).join('\n')).toContain('根本没有依赖')
   })
-
-  it('WP144：lock_json 里钉的版本与登记表对账（驱动这种不走 npm 的二进制）', () => {
-    const root = fakeRepo({})
-    writeFileSync(join(root, 'driver.lock.json'), JSON.stringify({ driver: { version: '0.28.0' } }))
-    const item = {
-      id: 'drv',
-      kind: 'runtime-dep',
-      why: 'x',
-      repo: 'o/r',
-      watch: ['releases'],
-      locked_version: '0.28.0',
-      lock_json: 'driver.lock.json',
-      lock_json_path: 'driver.version',
-    }
-    expect(checkPins([item], root)).toEqual([])
-    expect(checkPins([{ ...item, locked_version: '0.29.0' }], root).join('\n')).toContain(
-      '`driver.version` 是 0.28.0，登记表写的是 0.29.0',
-    )
-    expect(checkPins([{ ...item, lock_json_path: 'driver.nope' }], root).join('\n')).toContain(
-      '里没有 `driver.nope`',
-    )
-    expect(checkPins([{ ...item, lock_json: 'missing.json' }], root).join('\n')).toContain(
-      'lock_json 指向不存在的文件',
-    )
-    expect(validateShape([{ ...item, lock_json_path: undefined }]).join('\n')).toContain('要一起写')
-  })
 })
 
 describe('lockfile / workspace 的两个小解析', () => {
@@ -501,5 +493,281 @@ describe('命令行与选表', () => {
       },
     }
     expect(collectWishlistHits(item, o).map((h) => h.where)).toEqual(['release v2'])
+  })
+})
+
+// ── 镜像钉版本（WP146）─────────────────────────────────────────────────────
+
+const IMG = 'ghcr.io/o/connector'
+const DIG = `sha256:${'a'.repeat(64)}`
+const imgItem = (over = {}) => ({
+  id: 'oc',
+  kind: 'runtime-dep',
+  why: '连接器',
+  image: IMG,
+  image_tag: 'v1.2.3',
+  image_digest: DIG,
+  image_in: ['compose.yml'],
+  repo: 'o/connector',
+  pinned_commit: 'x',
+  watch: ['releases'],
+  ...over,
+})
+const imgRepo = (files) => {
+  const root = tmp()
+  for (const [rel, text] of Object.entries(files)) writeFileSync(join(root, rel), text)
+  return root
+}
+
+describe('镜像钉版本：check-upstreams 对账 image_in（WP146）', () => {
+  const good = `image: ${IMG}:v1.2.3@${DIG}\n`
+
+  it('每一处都逐字等于 tag@digest → 没问题；光秃秃的仓库名不算引用', () => {
+    const root = imgRepo({ 'compose.yml': `# 起一个 \`${IMG}\` 容器\n${good}` })
+    expect(checkImagePins(imgItem(), root)).toEqual([])
+  })
+
+  it.each([
+    ['digest 被改', `image: ${IMG}:v1.2.3@sha256:${'b'.repeat(64)}\n`],
+    ['退回 latest', `image: ${IMG}:latest\n`],
+    ['只写 tag 不写 digest', `image: ${IMG}:v1.2.3\n`],
+    ['tag 对不上', `image: ${IMG}:v1.2.4@${DIG}\n`],
+  ])('%s → 报出来', (_name, text) => {
+    const problems = checkImagePins(imgItem(), imgRepo({ 'compose.yml': text }))
+    expect(problems.join('\n')).toContain('登记表锁的是')
+  })
+
+  it('文件里压根没引用 / 文件不存在 → 报出来', () => {
+    expect(checkImagePins(imgItem(), imgRepo({ 'compose.yml': 'nothing\n' })).join('\n')).toContain(
+      '没有引用',
+    )
+    expect(checkImagePins(imgItem({ image_in: ['nope.yml'] }), tmp()).join('\n')).toContain(
+      '不存在的文件',
+    )
+  })
+
+  it('findImageRefs 认得 tag、digest、两者都有', () => {
+    expect(findImageRefs(`${IMG}:v1 ${IMG}@${DIG} ${IMG}:v2@${DIG} ${IMG}.`, IMG)).toEqual([
+      `${IMG}:v1`,
+      `${IMG}@${DIG}`,
+      `${IMG}:v2@${DIG}`,
+    ])
+  })
+
+  it.each([
+    ['runtime-dep 的镜像写 latest', { image_tag: 'latest' }, '不许 `latest`'],
+    ['runtime-dep 的镜像没锁 digest', { image_digest: undefined }, '`image_digest`'],
+    ['digest 格式不对', { image_digest: 'sha256:xyz' }, '64 位十六进制'],
+    ['runtime-dep 的镜像没写 image_in', { image_in: undefined }, '`image_in`'],
+  ])('形状：%s', (_name, over, needle) => {
+    expect(validateShape([imgItem(over)]).join('\n')).toContain(needle)
+  })
+
+  it('仓库里那一份：open-connector 锁的是正式版 tag + digest，不是 latest', () => {
+    const oc = loadUpstreams(REPO_ROOT).find((i) => i.id === 'open-connector')
+    expect(oc.image_tag).toMatch(/^v\d+\.\d+\.\d+$/)
+    expect(oc.image_digest).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(oc.image_in).toEqual(
+      expect.arrayContaining([
+        'docker-compose.yml',
+        'scripts/dev-real.sh',
+        'packages/connect-adapter/test/record-fixtures.test.ts',
+      ]),
+    )
+  })
+
+  it('验收：把真 docker-compose.yml 里的 digest 改坏一位，`--check` 就红', () => {
+    // 仓库根整份软链进临时目录，只把 compose 换成改坏的那一份
+    const root = tmp()
+    for (const e of readdirSync(REPO_ROOT)) {
+      if (e === '.git' || e === 'docker-compose.yml') continue
+      symlinkSync(join(REPO_ROOT, e), join(root, e))
+    }
+    const real = readFileSync(join(REPO_ROOT, 'docker-compose.yml'), 'utf8')
+    writeFileSync(join(root, 'docker-compose.yml'), real)
+    expect(runCheck(['--check'], root)).toBe(0)
+    const broken = real.replace(/(open-connector:[^@\s]+@sha256:)([0-9a-f])/, (_m, head, c) =>
+      head.concat(c === '0' ? '1' : '0'),
+    )
+    expect(broken).not.toBe(real)
+    writeFileSync(join(root, 'docker-compose.yml'), broken)
+    expect(runCheck(['--check'], root)).toBe(1)
+  })
+})
+
+describe('镜像与二进制的"落后没有"（纯函数）', () => {
+  it('正式版只认 vX.Y.Z，commit 短哈希 / latest / rc 不算', () => {
+    expect(stableImageTags(['latest', '6d23b13', 'v1.6.5', 'v1.7.0-rc.1', '1.2.3'])).toEqual([
+      'v1.6.5',
+      '1.2.3',
+    ])
+  })
+
+  it('按 semver 取最高（v1.10.0 > v1.9.9），不按字符串', () => {
+    const v = imageVerdict({ lockedTag: 'v1.9.9', lockedDigest: DIG, tags: ['v1.9.9', 'v1.10.0'] })
+    expect(v).toMatchObject({ state: 'behind', highest: 'v1.10.0', tagMoved: false })
+  })
+
+  it('锁的 tag 被上游重打 → tagMoved', () => {
+    const v = imageVerdict({
+      lockedTag: 'v1.6.5',
+      lockedDigest: DIG,
+      tags: ['v1.6.5'],
+      lockedTagDigest: `sha256:${'c'.repeat(64)}`,
+    })
+    expect(v).toMatchObject({ state: 'current', tagMoved: true, lockedIsKnown: true })
+  })
+
+  it('一个正式版都没有 → unknown，不瞎猜', () => {
+    expect(imageVerdict({ lockedTag: 'v1', tags: ['latest'] }).state).toBe('unknown')
+  })
+
+  it('二进制：只看带前缀的正式 release（草稿 / 预发布 / 别的前缀都不算）', () => {
+    const rel = [
+      { tag: 'ext-v0.9.0' },
+      { tag: 'cli-v0.4.0', prerelease: true },
+      { tag: 'cli-v0.3.1' },
+      { tag: 'cli-v0.3.0' },
+    ]
+    expect(binReleaseVerdict(rel, 'cli-v', '0.3.0')).toEqual({ state: 'behind', highest: '0.3.1' })
+    expect(binReleaseVerdict([], 'cli-v', '0.3.0').state).toBe('unknown')
+  })
+
+  it('parseImage：ghcr 带主机，Docker Hub 官方镜像补 library/', () => {
+    expect(parseImage('ghcr.io/oomol-lab/open-connector')).toEqual({
+      registry: 'ghcr.io',
+      name: 'oomol-lab/open-connector',
+    })
+    expect(parseImage('postgres')).toEqual({
+      registry: 'registry-1.docker.io',
+      name: 'library/postgres',
+    })
+    // 显式写 docker.io/ 的也要落到 Docker Hub 的 registry API 主机上（new-api 就是这么登记的）
+    expect(parseImage('docker.io/calciumion/new-api')).toEqual({
+      registry: 'registry-1.docker.io',
+      name: 'calciumion/new-api',
+    })
+  })
+})
+
+describe('周报里的镜像一行（WP146）', () => {
+  const ocItem = { ...imgItem(), npm: undefined, watch: ['releases'] }
+  const ocObs = (image) => ({ id: 'oc', item: ocItem, errors: [], hits: [], image })
+
+  it('锁的就是最新正式版 → 写清 tag 与 digest，"就是最新的"', () => {
+    const md = renderReport(
+      [ocObs({ tags: 3, verdict: imageVerdict({ lockedTag: 'v1.2.3', tags: ['v1.2.3'] }) })],
+      opts,
+    )
+    expect(md).toContain('锁 `v1.2.3`（`sha256:aaaaaaaa…aaaa`）')
+    expect(md).toContain('就是最新的')
+  })
+
+  it('有更新的正式版 → 进"有更新版本的"，提示按 docs/42 镜像那一步升', () => {
+    const md = renderReport(
+      [
+        ocObs({
+          tags: 3,
+          highestDigest: `sha256:${'d'.repeat(64)}`,
+          verdict: imageVerdict({ lockedTag: 'v1.2.3', tags: ['v1.2.3', 'v1.3.0'] }),
+        }),
+      ],
+      opts,
+    )
+    expect(md).toContain('| 有更新版本的 | `oc` |')
+    expect(md).toContain('上游最新正式版 `v1.3.0`')
+    expect(md).toContain('镜像怎么升')
+  })
+
+  it('registry 查不到 → 如实写"查不到"，不省略这一行', () => {
+    const md = renderReport(
+      [{ ...ocObs({ error: 'tag 表：503' }), errors: ['镜像 registry：503'] }],
+      opts,
+    )
+    expect(md).toContain('上游最新正式版：查不到（tag 表：503）')
+    expect(md).toContain('查不到 ≠ 没变')
+  })
+})
+
+// ── 二进制钉版本：BrowserSkill 的 bsk（WP146 追加）────────────────────────────
+
+const binItem = (over = {}) => ({
+  id: 'bsk',
+  kind: 'runtime-dep',
+  why: '浏览器',
+  npm: 'plug',
+  repo: 'o/bsk',
+  locked_version: '0.3.0',
+  bin_version: '0.3.0',
+  bin_tag_prefix: 'cli-v',
+  bin_lock_file: 'lock.json',
+  watch: ['versions', 'releases'],
+  ...over,
+})
+const binLock = (cli, plugin = { name: 'plug', version: '0.3.0' }) =>
+  imgRepo({ 'lock.json': JSON.stringify({ cli, plugin }) })
+
+describe('二进制钉版本：check-upstreams 对账 bin_lock_file（WP146）', () => {
+  it('cli 与插件两处都对得上 → 没问题', () => {
+    expect(checkBinLock(binItem(), binLock({ version: '0.3.0', tag: 'cli-v0.3.0' }))).toEqual([])
+  })
+
+  it('lock 文件升了 cli 版本、登记表没跟 → 报出来', () => {
+    const p = checkBinLock(binItem(), binLock({ version: '0.3.1', tag: 'cli-v0.3.1' }))
+    expect(p.join('\n')).toContain('cli.version 是 `0.3.1`')
+  })
+
+  it('只改了 lock 文件里的插件版本（两边没一起升）→ 报出来', () => {
+    const p = checkBinLock(
+      binItem(),
+      binLock({ version: '0.3.0', tag: 'cli-v0.3.0' }, { name: 'plug', version: '0.3.1' }),
+    )
+    expect(p.join('\n')).toContain('plugin.version 是 `0.3.1`')
+  })
+
+  it('tag 与前缀 + 版本对不上 / 文件不存在 → 报出来', () => {
+    expect(
+      checkBinLock(binItem(), binLock({ version: '0.3.0', tag: 'v0.3.0' })).join('\n'),
+    ).toContain('应该是 `cli-v0.3.0`')
+    expect(checkBinLock(binItem({ bin_lock_file: 'nope.json' }), tmp()).join('\n')).toContain(
+      '不存在的文件',
+    )
+  })
+
+  it('三项只写了一部分 → 形状报错', () => {
+    expect(validateShape([binItem({ bin_lock_file: undefined })]).join('\n')).toContain(
+      '要么都写、要么都不写',
+    )
+  })
+
+  it('仓库里那一份：browser-skill 是 runtime-dep，插件与 bsk 两样都锁、与 browserskill.lock.json 一致', () => {
+    const bs = loadUpstreams(REPO_ROOT).find((i) => i.id === 'browser-skill')
+    expect(bs.kind).toBe('runtime-dep')
+    expect(bs.npm).toBe('@wxg-prc-cpg/browser-skill-dsh-plugin')
+    expect(bs.locked_in).toContain('packages/dsh-adapter/package.json')
+    expect(bs.bin_lock_file).toBe('browserskill.lock.json')
+    expect(checkBinLock(bs, REPO_ROOT)).toEqual([])
+    const lock = JSON.parse(readFileSync(join(REPO_ROOT, 'browserskill.lock.json'), 'utf8'))
+    expect(lock.cli.version).toBe(bs.bin_version)
+    expect(lock.plugin.version).toBe(bs.locked_version)
+  })
+
+  it('周报：bsk 有新的正式 release → 进"有更新版本的"，提示两边一起升', () => {
+    const it0 = binItem()
+    const md = renderReport(
+      [{ id: 'bsk', item: it0, errors: [], hits: [], bin: { state: 'behind', highest: '0.3.1' } }],
+      opts,
+    )
+    expect(md).toContain('| 有更新版本的 | `bsk` |')
+    expect(md).toContain('上游最新正式 release `cli-v0.3.1`')
+    expect(md).toContain('两边一起改')
+  })
+
+  it('周报：releases 查不到 → bsk 那一行写"查不到"', () => {
+    const md = renderReport(
+      [{ id: 'bsk', item: binItem(), errors: ['x'], hits: [], bin: { error: '403' } }],
+      opts,
+    )
+    expect(md).toContain('上游最新正式 release：查不到（403）')
   })
 })

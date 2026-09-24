@@ -66,12 +66,48 @@ describe('stub 的红人剧本', () => {
     expect(events.some((e) => e.type === 'proposal.created')).toBe(false)
     expect(result.outputs.some((o) => o.kind === 'draft')).toBe(false)
     const answer = result.outputs.find((o) => o.kind === 'answer')
-    expect(answer?.kind === 'answer' ? answer.text : '').toContain('找人')
+    // WP142：回话说「找到几个、是谁」，不是「找人：2 条」
+    expect(answer?.kind === 'answer' ? answer.text : '').toContain('找到 2 个')
+    expect(answer?.kind === 'answer' ? answer.text : '').toContain('@gadgetjonas')
     // 66 断点 #1 的反面：摘要里不许出现退货 / 退款那套词
     expect(result.summary).not.toMatch(/退货|退款|window/)
     expect(result.summary).toContain('找到 2 个候选')
     // 粉丝区间写进了给人看的那段话
     expect(answer?.kind === 'answer' ? answer.text : '').toContain('10,000–100,000')
+  })
+
+  it('WP142 找人回话：前 5 个名字 + 去候选池看全部；不够数说为什么并给两个动作；摘要不露工具名', async () => {
+    const rows = [
+      {
+        creator_id: 'cr_1',
+        display_name: 'Gadget Jonas',
+        handle: 'gadgetjonas',
+        followers: 48_000,
+      },
+      { creator_id: 'cr_2', display_name: 'Desk Rosa', handle: 'deskrosa', followers: 31_000 },
+    ]
+    const rec = recorder({ search_creators: { rows, object: 'creator', source: 'local_library' } })
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'kol.youtube',
+        threadSubject: '找一批 YouTube 红人',
+        threadBody: FIND,
+        allow: ['search_creators'],
+        outputs: ['answer'],
+      }),
+    )
+    const answer = result.outputs.find((o) => o.kind === 'answer')
+    const text = answer?.kind === 'answer' ? answer.text : ''
+    expect(text).toContain('- Gadget Jonas（4.8 万粉）')
+    expect(text).toContain('- Desk Rosa（3.1 万粉）')
+    expect(text).toMatch(/\[去候选池看全部\]\(\/positions\/[^)]+kol=pool\)/)
+    expect(text).toContain('你要 20 个，库里只有 2 个在这个区间')
+    expect(text).toContain('[关联官方数据接口](/settings/credits)')
+    expect(text).toMatch(/\[导入一张表\]\(\/positions\/[^)]+kol=campaign\)/)
+    expect(text).not.toMatch(/\byoutube\b/)
+    expect(result.summary).not.toMatch(/search_creators|[a-z]+_[a-z]+/)
   })
 
   it('起草开发信：先读人、再查政策、最后起草；卡的回执翻成 draft 输出', async () => {

@@ -18,6 +18,24 @@
 | `execute()` | `POST /v1/actions/:id`（经 SDK `OpenConnector.executeRaw`）+ `Idempotency-Key` + `x-oo-connector-alias` |
 | `proxy()` | 一律本地拒绝（role-read 的 `allowedProxies` 恒空；role-apply v1 也不开） |
 
+### 在哪一版上验过（WP146 起镜像钉版本）
+
+| 镜像 | digest（多架构 index） | 验了什么 | 日期 |
+|---|---|---|---|
+| **`v1.6.5`（现在钉的）** | `sha256:aa088c5d3f308937ec9b9e8c959a940ff4a6ce3b8ee0abe30a755d5b2400a5b1` | 真容器录制（全部场景 + 加固探针）→ 磁带回放 → 一致性套件真适配器那一遍 16 条，全绿；磁带就是这一版录的 | 2026-09-24 |
+| `v1.6.3` | `sha256:f25207e6f71eabc70182c4f5db5c01db79091d0f4523a7495b35e649d5b6c006` | 同上一整套，全绿（没钉：派工时 latest 已是 v1.6.5） | 2026-09-24 |
+| `v1.5.0` | `sha256:b9e6133c9caa6d5997fe51784df99a1d43ddd509b6346a0c0245e4512136e781` | WP12 / WP25 那份磁带（当时写的是 `:latest`，事后按本机留存的镜像 digest 对出来是 v1.5.0） | 2026-09-09 |
+
+三版之间请求序列与状态码逐条一致；body 的差异：v1.6.x 的 `/v1/actions` 多了 `operationType`（`read` / `write`），
+gmail 的 `authTypes` 多了 `custom_credential`，虚拟 no_auth 连接多了 `itunes_search`（1.6.3）、`osv`（1.6.5）。
+
+镜像写在四处：`docker-compose.yml`、`scripts/dev-real.sh`、`test/record-fixtures.test.ts` 的缺省 `OC_IMAGE`、
+仓库根 `upstreams.yml`；`node scripts/check-upstreams.mjs --check` 逐字对账（连同 `test/fixtures/runtime.meta.json`
+的 `runtime_image`——换版本就得重录磁带）。怎么升见 docs/42 §1 末尾「镜像怎么升」。
+
+**数据目录**：镜像自带 `OOMOL_CONNECT_DATA_DIR=/app/data`（匿名卷）。compose 与 dev-real 挂的是 `/data`，
+所以两边都显式设 `OOMOL_CONNECT_DATA_DIR=/data`——WP146 以前没设，凭据库其实不在宿主目录里，重建容器就丢。
+
 ### 09-09 在真 runtime 上核实过的几件事（WP25）
 
 - runtime 自己带一份 **`GET /openapi.json`**（要 bearer；`/docs` 是它的 Scalar 页）。上游端点的

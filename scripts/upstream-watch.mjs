@@ -20,6 +20,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import process from 'node:process'
 import {
+  binReleaseVerdict,
+  imageVerdict,
   loadUpstreams,
   REPO_ROOT,
   validateShape,
@@ -143,7 +145,7 @@ async function observeGithub(item, sinceIso) {
   }
 
   if (watch.includes('releases') || watch.includes('wishlist')) {
-    const rel = await getJson(`${base}/releases?per_page=10`, h)
+    const rel = await getJson(`${base}/releases?per_page=30`, h)
     if (rel.error) out.releasesError = rel.error
     else
       out.releases = (Array.isArray(rel.data) ? rel.data : []).map((r) => ({
@@ -153,6 +155,8 @@ async function observeGithub(item, sinceIso) {
         url: r.html_url,
         body: (r.body ?? '').slice(0, 4000),
         fresh: r.published_at ? r.published_at >= sinceIso : false,
+        draft: Boolean(r.draft),
+        prerelease: Boolean(r.prerelease),
       }))
   }
 
@@ -181,6 +185,117 @@ async function observeGithub(item, sinceIso) {
   return out
 }
 
+// ── 镜像（WP146）：OCI registry 的匿名读，只看 tag 表与 digest ────────────────
+
+/** `ghcr.io/owner/name` → registry 主机 + 仓库路径；不带主机的按 Docker Hub 算。 */
+export function parseImage(image) {
+  const parts = String(image).split('/')
+  if (parts.length > 1 && /[.:]/.test(parts[0])) {
+    // `docker.io/…` 是 Docker Hub 的写法，它的 registry API 在 registry-1.docker.io（09-24 new-api 补登时发现）
+    const registry = parts[0] === 'docker.io' ? 'registry-1.docker.io' : parts[0]
+    return { registry, name: parts.slice(1).join('/') }
+  }
+  const name = parts.length === 1 ? `library/${parts[0]}` : parts.join('/')
+  return { registry: 'registry-1.docker.io', name }
+}
+
+const MANIFEST_ACCEPT = [
+  'application/vnd.oci.image.index.v1+json',
+  'application/vnd.docker.distribution.manifest.list.v2+json',
+  'application/vnd.oci.image.manifest.v1+json',
+  'application/vnd.docker.distribution.manifest.v2+json',
+].join(', ')
+
+/**
+ * 对 registry 发一次请求；401 就按 `WWW-Authenticate: Bearer realm=…,service=…,scope=…`
+ * 去换一个匿名 token 再来一次（ghcr / Docker Hub 的公开镜像都这样）。
+ */
+async function registryFetch(url, { method = 'GET', accept = 'application/json', auth } = {}) {
+  const ctl = new AbortController()
+  const t = setTimeout(() => ctl.abort(), TIMEOUT_MS)
+  const go = (bearer) =>
+    fetch(url, {
+      method,
+      signal: ctl.signal,
+      headers: {
+        'user-agent': UA,
+        accept,
+        ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+      },
+    })
+  try {
+    let res = await go(auth.token)
+    if (res.status === 401 && !auth.token) {
+      const ch = res.headers.get('www-authenticate') ?? ''
+      const kv = Object.fromEntries([...ch.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2]]))
+      if (!kv.realm) return { error: `401（registry 没给换 token 的地址）` }
+      const q = new URLSearchParams()
+      if (kv.service) q.set('service', kv.service)
+      if (kv.scope) q.set('scope', kv.scope)
+      const tok = await fetch(`${kv.realm}?${q}`, {
+        signal: ctl.signal,
+        headers: { 'user-agent': UA },
+      })
+      if (!tok.ok) return { error: `换匿名 token 失败：${tok.status} ${tok.statusText}` }
+      const body = await tok.json()
+      auth.token = body.token ?? body.access_token
+      res = await go(auth.token)
+    }
+    if (!res.ok) return { error: `${res.status} ${res.statusText}` }
+    return { res }
+  } catch (e) {
+    return { error: String(e?.message ?? e) }
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+async function observeImage(item) {
+  const { registry, name } = parseImage(item.image)
+  const base = `https://${registry}/v2/${name}`
+  const auth = { token: null }
+  const tags = []
+  let next = `${base}/tags/list?n=1000`
+  for (let page = 0; next && page < 10; page++) {
+    const r = await registryFetch(next, { auth })
+    if (r.error) return { error: `tag 表：${r.error}` }
+    const body = await r.res.json()
+    tags.push(...(body.tags ?? []))
+    const link = r.res.headers.get('link')
+    const m = link ? /<([^>]+)>;\s*rel="next"/.exec(link) : null
+    next = m ? new URL(m[1], `https://${registry}`).href : null
+  }
+  const digestOf = async (tag) => {
+    const r = await registryFetch(`${base}/manifests/${encodeURIComponent(tag)}`, {
+      method: 'HEAD',
+      accept: MANIFEST_ACCEPT,
+      auth,
+    })
+    if (r.error) return { error: `${tag} 的 digest：${r.error}` }
+    return { digest: r.res.headers.get('docker-content-digest') }
+  }
+  const out = { tags: tags.length }
+  const locked = it_tag(item) ? await digestOf(item.image_tag) : { digest: null }
+  if (locked.error) out.lockedTagError = locked.error
+  out.lockedTagDigest = locked.digest ?? null
+  out.verdict = imageVerdict({
+    lockedTag: item.image_tag,
+    lockedDigest: item.image_digest,
+    tags,
+    lockedTagDigest: out.lockedTagDigest,
+  })
+  if (out.verdict.highest && out.verdict.highest !== item.image_tag) {
+    const hi = await digestOf(out.verdict.highest)
+    if (hi.error) out.highestError = hi.error
+    out.highestDigest = hi.digest ?? null
+  } else {
+    out.highestDigest = out.lockedTagDigest
+  }
+  return out
+}
+
+const it_tag = (item) => Boolean(item.image_tag && item.image_tag !== 'latest')
+
 const commitBrief = (c) => ({
   sha: String(c.sha ?? '').slice(0, 8),
   at: c.commit?.author?.date ?? null,
@@ -204,6 +319,22 @@ export async function observe(item, sinceIso) {
     for (const pc of o.gh.pathCommits ?? []) {
       if (pc.error) o.errors.push(`GitHub commits(${pc.path})：${pc.error}`)
     }
+  }
+  // WP146：锁了 tag 的镜像才去 registry 比；`latest` 的只念"等于没锁"
+  if (item.image && it_tag(item)) {
+    o.image = await observeImage(item)
+    if (o.image.error) o.errors.push(`镜像 registry：${o.image.error}`)
+    if (o.image.lockedTagError) o.errors.push(`镜像 registry：${o.image.lockedTagError}`)
+    if (o.image.highestError) o.errors.push(`镜像 registry：${o.image.highestError}`)
+  }
+  if (item.bin_version && item.bin_tag_prefix) {
+    o.bin = o.gh?.releasesError
+      ? { error: o.gh.releasesError }
+      : binReleaseVerdict(o.gh?.releases, String(item.bin_tag_prefix), String(item.bin_version))
+    if (!o.bin.error && o.bin.state === 'unknown')
+      o.errors.push(
+        `GitHub releases：最近 30 个 release 里没有 \`${item.bin_tag_prefix}*\` 的正式版`,
+      )
   }
   o.hits = collectWishlistHits(item, o)
   return o
@@ -238,6 +369,14 @@ const VERDICT_CN = {
   unknown: '查不到',
 }
 
+/** npm 版本、镜像 tag、二进制 release 三样里任何一样落后都算"有更新版本"。 */
+const isBehind = (o) =>
+  o.npm?.verdict?.state === 'behind' ||
+  o.image?.verdict?.state === 'behind' ||
+  o.bin?.state === 'behind'
+
+const shortDigest = (d) => (d ? `${String(d).slice(0, 15)}…${String(d).slice(-4)}` : '?')
+
 export function renderReport(observations, opts) {
   const { scope, windowDays, now } = opts
   const L = []
@@ -252,7 +391,7 @@ export function renderReport(observations, opts) {
   )
   L.push('')
 
-  const behind = observations.filter((o) => o.npm?.verdict?.state === 'behind')
+  const behind = observations.filter(isBehind)
   const hits = observations.filter((o) => o.hits?.length)
   const broken = observations.filter((o) => o.errors.length)
 
@@ -314,13 +453,8 @@ function renderSection(o, opts) {
 
   // 镜像：哨兵查不了 digest（要 registry 认证），但"tag 写的是 latest"这件事
   // 本身就该每周被念一遍——那等于没锁（docs/42 §4 第 2 条）。
-  if (it.image) {
-    L.push(
-      it.image_tag && it.image_tag !== 'latest'
-        ? `- 镜像 \`${it.image}:${it.image_tag}\`（哨兵不查 digest，升级时人工比）`
-        : `- 镜像 \`${it.image}:${it.image_tag ?? 'latest'}\` —— ⚠️ **这等于没锁**：每次 pull 都可能是另一个 digest`,
-    )
-  }
+  if (it.image) L.push(...renderImage(it, o.image))
+  if (it.bin_version) L.push(...renderBin(it, o.bin))
 
   if (it.repo) {
     const repoUrl = `https://github.com/${it.repo}`
@@ -399,19 +533,81 @@ function renderSection(o, opts) {
   return L
 }
 
+/**
+ * 镜像一行（WP146）：锁的 tag / digest 对 registry 上最新的正式版标签。
+ * 查不到就写"查不到"——不许因为 registry 没回话就把这一行省掉。
+ */
+function renderImage(it, img) {
+  const L = []
+  if (!it.image_tag || it.image_tag === 'latest') {
+    L.push(
+      `- 镜像 \`${it.image}:${it.image_tag ?? 'latest'}\` —— ⚠️ **这等于没锁**：每次 pull 都可能是另一个 digest`,
+    )
+    return L
+  }
+  const lock = `锁 \`${it.image_tag}\`（\`${shortDigest(it.image_digest)}\`）`
+  if (!img || img.error) {
+    L.push(
+      `- 镜像 \`${it.image}\`：${lock}；上游最新正式版：查不到（${img?.error ?? '这一趟没查'}）`,
+    )
+    return L
+  }
+  const v = img.verdict
+  if (v.state === 'unknown') {
+    L.push(
+      `- 镜像 \`${it.image}\`：${lock}；上游 ${img.tags} 个 tag 里一个 \`vX.Y.Z\` 正式版都没有 → 查不到`,
+    )
+  } else {
+    const hi =
+      v.highest === it.image_tag
+        ? `\`${v.highest}\``
+        : `\`${v.highest}\`（\`${img.highestError ? '查不到' : shortDigest(img.highestDigest)}\`）`
+    L.push(`- 镜像 \`${it.image}\`：${lock}；上游最新正式版 ${hi} → ${VERDICT_CN[v.state]}`)
+  }
+  if (img.lockedTagError)
+    L.push(`  - 锁的 tag 现在指向哪个 digest：查不到（${img.lockedTagError}）`)
+  if (v.tagMoved)
+    L.push(
+      `  - ⚠️ 上游把 \`${it.image_tag}\` **重打**到了 \`${shortDigest(img.lockedTagDigest)}\`：我们钉的是 digest，拉到的还是原来那份；但要人看一眼上游为什么重打`,
+    )
+  if (!v.lockedIsKnown && v.state !== 'unknown')
+    L.push(`  - ⚠️ 我们锁的 tag \`${it.image_tag}\` **不在上游的 tag 表里**（被删了？）`)
+  return L
+}
+
+/** 二进制一行：锁的版本（bin_lock_file）对 GitHub 上最新的正式 release。 */
+function renderBin(it, bin) {
+  const head = `- 二进制（release \`${it.bin_tag_prefix}*\`，钉在 \`${it.bin_lock_file}\`）：锁 \`${it.bin_version}\``
+  if (!bin || bin.error)
+    return [`${head}；上游最新正式 release：查不到（${bin?.error ?? '这一趟没查'}）`]
+  if (bin.state === 'unknown') return [`${head}；上游最新正式 release：查不到`]
+  return [
+    `${head}；上游最新正式 release \`${it.bin_tag_prefix}${bin.highest}\` → ${VERDICT_CN[bin.state]}`,
+  ]
+}
+
 /** 末尾那一段：给"判断层"（将来的评估例程 / 现在的人）看的提示。 */
 function renderHints(observations) {
   const L = ['## 给评估例程的提示', '']
-  const behind = observations.filter((o) => o.npm?.verdict?.state === 'behind')
+  const behind = observations.filter(isBehind)
   const ahead = observations.filter((o) => o.npm?.verdict?.state === 'ahead')
   const hits = observations.flatMap((o) => (o.hits ?? []).map((h) => ({ id: o.id, ...h })))
   const broken = observations.filter((o) => o.errors.length)
 
   if (behind.length === 0) L.push('- 没有 runtime-dep 落后于上游，这一周不需要动版本号。')
   for (const o of behind) {
-    L.push(
-      `- \`${o.id}\`：\`${o.item.locked_version}\` → \`${o.npm.verdict.highest}\`。按 docs/42 走完 ①→⑦，**先在当前代码树重采基线**，别沿用上一次那份。`,
-    )
+    if (o.npm?.verdict?.state === 'behind')
+      L.push(
+        `- \`${o.id}\`：\`${o.item.locked_version}\` → \`${o.npm.verdict.highest}\`。按 docs/42 走完 ①→⑦，**先在当前代码树重采基线**，别沿用上一次那份。`,
+      )
+    if (o.image?.verdict?.state === 'behind')
+      L.push(
+        `- \`${o.id}\` 镜像：\`${o.item.image_tag}\` → \`${o.image.verdict.highest}\`。按 docs/42「镜像怎么升」：\`image_in\` 那几处一起改 tag + digest，新版上重录磁带、跑一致性套件。`,
+      )
+    if (o.bin?.state === 'behind')
+      L.push(
+        `- \`${o.id}\` 二进制：\`${o.item.bin_version}\` → \`${o.bin.highest}\`。改 \`${o.item.bin_lock_file}\`（版本 / tag / sha256）与 npm 插件版本，两边一起改、一起过测试。`,
+      )
   }
   for (const o of ahead) {
     L.push(

@@ -50,7 +50,7 @@ export function isConnectAdapterError(e: unknown): e is ConnectAdapterError {
 /**
  * OpenConnector 的 `errorCode` → 我们的 `ErrorCode`。
  *
- * 09-09 实测（`open-connector:latest`）：**必须先看 errorCode 再看 HTTP 状态**——
+ * 09-09 实测（`open-connector:latest`，当时 = v1.5.0；WP146 起镜像钉在 v1.6.5，这两条错误码磁带里没录到、未在新版复核）：**必须先看 errorCode 再看 HTTP 状态**——
  * 上游 provider 返回 401 时 runtime 给的是 `403 authorization_failed`，
  * `action_not_allowed` 给的是 `400`，只按状态映射会把两者都归错。
  */

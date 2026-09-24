@@ -29,7 +29,7 @@ const tempDir = () => {
 }
 
 const LOCK: ComputerUseLock = {
-  driver: {
+  cli: {
     name: 'cua-driver',
     version: '0.28.0',
     tag: 'cua-driver-rs-v0.28.0',

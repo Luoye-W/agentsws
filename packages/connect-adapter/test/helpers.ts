@@ -38,4 +38,9 @@ export interface FixtureMeta {
   assignment_id: string
   clock_start: string
   runtime_kind: 'docker' | 'external'
+  /**
+   * 录这份磁带用的镜像（`仓库:tag@sha256:…`，WP146 起写）。`check-upstreams.mjs --check`
+   * 要求它等于 upstreams.yml 里锁的那一版——换了镜像版本就得重录磁带。
+   */
+  runtime_image?: string
 }

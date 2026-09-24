@@ -58,14 +58,38 @@ export {
   priceKey,
 } from './pricing.js'
 // WP134：第三种模型来源「用我的 DeepSeek 账号登录」的推理口（Messages 形态 + x-dsh-auth-token）
-export type { AccountFetch, DeepSeekAccountProviderOptions } from './providers/deepseek-account.js'
+export type {
+  AccountFetch,
+  DeepSeekAccountProviderOptions,
+  DeepSeekMessagesCredential,
+  DeepSeekMessagesProviderOptions,
+  MessagesRequestOptions,
+  WireImageSource,
+} from './providers/deepseek-account.js'
 export {
   DEEPSEEK_ACCOUNT_BASE_URL,
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
   DEEPSEEK_ACCOUNT_MODELS,
   deepseekAccountProvider,
+  deepseekMessagesProvider,
   toMessagesRequest,
 } from './providers/deepseek-account.js'
+// WP143：DeepSeek Files API 复用（移植自官方 dsh-llm-deepseek@0.1.7-rc.1）
+export type {
+  DeepSeekFileConnection,
+  DeepSeekFileStoreOptions,
+  DeepSeekUploadIndex,
+  DeepSeekUploadRecord,
+  FilesFetch,
+} from './providers/deepseek-files.js'
+export {
+  DeepSeekFileStore,
+  DeepSeekFilesError,
+  imageKeyOf,
+  jsonFileUploadIndex,
+  MESSAGES_FILES_BETA,
+  memoryUploadIndex,
+} from './providers/deepseek-files.js'
 export type { FetchLike, OpenAiCompatibleOptions } from './providers/openai-compatible.js'
 export {
   extensionFor,
@@ -79,6 +103,33 @@ export type { StubProviderOptions } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'
 export { decodeReadableText, segmentText, stubAsrProvider } from './providers/stub-asr.js'
+// WP145：语音识别器选择层（对齐官方 ctx.speechToText；现在只有网关这一个识别器）
+export type {
+  LocalSpeechResult,
+  SpeechContext,
+  SpeechErrorCode,
+  SpeechPreparation,
+  SpeechPreparationOptions,
+  SpeechPreparationState,
+  SpeechProvider,
+  SpeechProviderId,
+  SpeechProviderInfo,
+  SpeechProviderView,
+  SpeechRequest,
+  SpeechSelection,
+  SpeechSetupEstimate,
+  SpeechSpec,
+  SpeechToText,
+  SpeechToTextOptions,
+} from './speech.js'
+export {
+  createSpeechToText,
+  GATEWAY_SPEECH_PROVIDER_ID,
+  gatewaySpeechProvider,
+  localTranscription,
+  SpeechError,
+  speechAudioDigest,
+} from './speech.js'
 export type {
   BlockedResidencyPayload,
   BudgetExhaustedPayload,

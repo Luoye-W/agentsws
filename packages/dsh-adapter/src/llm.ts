@@ -11,7 +11,13 @@
  *    自己没有回合预算（官方 agent-loop README「No built-in turn budget」）。每次补全前过一次
  *    预算，超了就回调宿主把 Agent 停下。
  */
-import type { ChatMessage, Completion, ModelMeta, ToolDef } from '@agentsws/contracts'
+import type {
+  ChatMessage,
+  Completion,
+  ModelMeta,
+  ReasoningReplay,
+  ToolDef,
+} from '@agentsws/contracts'
 import type {
   ContentBlock,
   GenerateOptions,
@@ -112,10 +118,14 @@ function parseArguments(raw: string): unknown {
  * 就掉了；而 `ChatMessage.reasoning` 的契约注释写得很清楚——DeepSeek thinking 模式多轮时
  * 不原样带回就 400（09-14 真店实测）。键取这一轮 assistant 的第一个 tool-call id：
  * 有工具调用的 assistant 才会出现在下一轮的历史里，没有的那一轮 loop 已经结束了。
+ *
+ * WP143：`replayByCallId` 同理接回 Messages 口的**思考块原样（含签名）**——官方
+ * `dsh-llm-deepseek` 是「此前 assistant 轮次的推理内容会原样传回」。
  */
 export function toChatMessages(
   options: GenerateOptions,
   reasoningByCallId?: ReadonlyMap<string, string>,
+  replayByCallId?: ReadonlyMap<string, ReasoningReplay>,
 ): ChatMessage[] {
   const messages: ChatMessage[] = []
   if (options.system !== undefined && options.system.length > 0) {
@@ -137,6 +147,7 @@ export function toChatMessages(
         .join('\n')
       const reasoning =
         calls[0] === undefined ? undefined : reasoningByCallId?.get(String(calls[0].id))
+      const replay = calls[0] === undefined ? undefined : replayByCallId?.get(String(calls[0].id))
       messages.push({
         role: 'assistant',
         content,
@@ -150,6 +161,7 @@ export function toChatMessages(
               })),
             }),
         ...(reasoning === undefined || reasoning.length === 0 ? {} : { reasoning }),
+        ...(replay === undefined ? {} : { reasoning_replay: replay }),
       })
       continue
     }
@@ -228,6 +240,8 @@ export class GatewayLlmAdapter extends LlmAdapter {
    * 下一轮 `toChatMessages` 据此把 `reasoning_content` 原样带回（思考模型的硬要求）。
    */
   private readonly reasoningByCallId = new Map<string, string>()
+  /** WP143：同上，Messages 口的思考块原样（含签名）。 */
+  private readonly replayByCallId = new Map<string, ReasoningReplay>()
 
   constructor(private readonly options: GatewayAdapterOptions) {
     super()
@@ -257,7 +271,7 @@ export class GatewayLlmAdapter extends LlmAdapter {
         return
       }
     }
-    const messages = toChatMessages(options, this.reasoningByCallId)
+    const messages = toChatMessages(options, this.reasoningByCallId, this.replayByCallId)
     const tools = toToolDefs(options.tools)
     this.options.onRequest?.({ messages, tools })
     let completion: Completion
@@ -290,6 +304,9 @@ export class GatewayLlmAdapter extends LlmAdapter {
       // 推理跟着这一轮的调用 id 走：下一轮历史里认得出是哪一条 assistant
       if (completion.reasoning !== undefined && completion.reasoning.length > 0) {
         this.reasoningByCallId.set(String(id), completion.reasoning)
+      }
+      if (completion.reasoning_replay !== undefined) {
+        this.replayByCallId.set(String(id), completion.reasoning_replay)
       }
       const args = JSON.stringify(call.input ?? {})
       yield { type: 'block-start', index, blockType: 'tool-call' }

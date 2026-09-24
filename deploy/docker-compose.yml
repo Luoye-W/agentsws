@@ -79,10 +79,13 @@ services:
   # 一个都不进我们的 `.env`（docs/61 §4）。我们只拿一把它的内部令牌
   # （`AGENTSWS_NEWAPI_KEY`），给云进程转发用。
   #
-  # 镜像名以 New API 自己 README 上那一行为准；换一个就改 .env 里的
-  # NEWAPI_IMAGE，不用动这个文件。
+  # 镜像以 New API 官方 docker-compose.yml 为准：Docker Hub 的 `calciumion/new-api`
+  # （09-24 核实：原来写的 ghcr.io/quantumnous/new-api 匿名拉取 401，拉不下来）。
+  # 钉 tag + digest（同 WP146 连接器的做法），`docker compose pull` 不会悄悄换版本；
+  # 与 deploy/.env.example、upstreams.yml 的 new-api 条对账（check-upstreams）。
+  # 真要换版本再改 .env 里的 NEWAPI_IMAGE。
   newapi:
-    image: ${NEWAPI_IMAGE:-ghcr.io/quantumnous/new-api:latest}
+    image: ${NEWAPI_IMAGE:-docker.io/calciumion/new-api:v1.0.0-rc.40@sha256:37c0f99a76ed0a5d5b376b8486173415efd1ec416042b392bd564eb0ae6a55ef}
     restart: unless-stopped
     environment:
       TZ: ${TZ:-Asia/Shanghai}

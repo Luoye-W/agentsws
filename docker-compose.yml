@@ -68,14 +68,20 @@ services:
       start_period: 20s
 
   # 连接器运行时（08 / 18）。加固三件套照 scripts/dev-real.sh 那一份。
+  # 镜像钉版本（WP146）：tag + digest 一起写，`docker compose pull` 不会再悄悄换版本。
+  # 与 scripts/dev-real.sh、connect-adapter 的 record-fixtures.test.ts 三处一致，
+  # 由 `node scripts/check-upstreams.mjs --check` 对账 upstreams.yml。怎么升见 docs/42。
   openconnector:
-    image: ghcr.io/oomol-lab/open-connector:latest
+    image: ghcr.io/oomol-lab/open-connector:v1.6.5@sha256:aa088c5d3f308937ec9b9e8c959a940ff4a6ce3b8ee0abe30a755d5b2400a5b1
     restart: unless-stopped
     environment:
       OOMOL_CONNECT_ENCRYPTION_KEY: ${OOMOL_CONNECT_ENCRYPTION_KEY:?请先跑 deploy/nas/gen-keys.sh 生成密钥}
       OOMOL_CONNECT_ADMIN_TOKEN: ${OOMOL_CONNECT_ADMIN_TOKEN:?同上}
       # 出站代理一律禁掉：连接器只做 OAuth 与凭据保管，不当跳板
       OOMOL_CONNECT_BLOCKED_PROXIES: '*'
+      # 镜像默认把数据写在 /app/data（匿名卷），下面挂的是 /data——不写这一行，
+      # 凭据库其实不在宿主目录里，重建容器（包括升级镜像）就丢（WP146 实测）
+      OOMOL_CONNECT_DATA_DIR: /data
     volumes:
       - ${AGENTSWS_HOST_DATA_DIR:-./.agentsws-data}/openconnector:/data
     # 不对外开端口：只有 server 经内部网络访问它

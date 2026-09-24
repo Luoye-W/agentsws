@@ -78,7 +78,7 @@ function lockFor(
   asset: { url: string; sha256: string; binary: string },
 ): ComputerUseLock {
   return {
-    driver: {
+    cli: {
       name: 'cua-driver',
       version: '0.28.0',
       tag: 'cua-driver-rs-v0.28.0',
@@ -97,9 +97,9 @@ describe('钉版本表（computer-use.lock.json）', () => {
     const path = defaultLockPath()
     expect(path).toBeDefined()
     const lock = readLock(path)
-    expect(lock.driver.version).toBe('0.28.0')
-    expect(lock.driver.tag).toBe('cua-driver-rs-v0.28.0')
-    expect(Object.keys(lock.driver.assets).sort()).toEqual([
+    expect(lock.cli.version).toBe('0.28.0')
+    expect(lock.cli.tag).toBe('cua-driver-rs-v0.28.0')
+    expect(Object.keys(lock.cli.assets).sort()).toEqual([
       'darwin-arm64',
       'darwin-x64',
       'linux-arm64',
@@ -107,9 +107,9 @@ describe('钉版本表（computer-use.lock.json）', () => {
       'windows-arm64',
       'windows-x64',
     ])
-    for (const [key, a] of Object.entries(lock.driver.assets)) {
+    for (const [key, a] of Object.entries(lock.cli.assets)) {
       expect(a.sha256, key).toMatch(/^[0-9a-f]{64}$/u)
-      expect(a.url, key).toContain(`/releases/download/${lock.driver.tag}/`)
+      expect(a.url, key).toContain(`/releases/download/${lock.cli.tag}/`)
       // 不是 nightly，也不是装 .app 的那种包（我们只要扁平的 -binary 包）
       expect(a.url, key).not.toContain('nightly')
       expect(a.url, key).toMatch(/-binary\.(tar\.gz|zip)$/u)

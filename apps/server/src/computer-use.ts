@@ -206,7 +206,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUseAssem
     const lock = lockOf()
     const path = driverPath()
     const key = platformKeyOf()
-    const supported = key !== undefined && lock?.driver.assets[key] !== undefined
+    const supported = key !== undefined && lock?.cli.assets[key] !== undefined
     const act = active()
     return {
       ...settings,
@@ -222,7 +222,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUseAssem
       driver: {
         installed: installed(),
         ...(path === undefined ? {} : { path }),
-        ...(lock === undefined ? {} : { pinned_version: lock.driver.version }),
+        ...(lock === undefined ? {} : { pinned_version: lock.cli.version }),
         ...(key === undefined ? {} : { platform_key: key }),
         ...(options.dataDir === undefined
           ? { detail: '这台服务没有数据目录（全内存档），装不了驱动' }

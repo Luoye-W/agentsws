@@ -232,6 +232,18 @@ docker compose up -d --build
 迁移是幂等的、一次一事务：升级时自动补跑没跑过的版本，中途失败不会留下半张表。
 升级前建议先手动触发一次导出（工作台「设置 → 备份 → 立刻备份」）。
 
+连接器镜像的版本钉在 `docker-compose.yml` 里（tag + digest），`git pull` 带来新版本才会换，
+`docker compose pull` 不会悄悄换版本。
+
+**从 WP146 以前的版本升上来，第一次先把连接器的数据搬出来**（以前的 compose 没让连接器把凭据库写进
+`openconnector/` 目录，它其实在容器自己的匿名卷里；不搬，`up -d` 重建容器后已连好的账号会没了）：
+
+```sh
+docker compose stop openconnector
+docker compose cp openconnector:/app/data/. ./.agentsws-data/openconnector/   # 目录按 .env 的 AGENTSWS_HOST_DATA_DIR
+git pull && docker compose up -d --build
+```
+
 ---
 
 ## 9. 出问题先看这三样
