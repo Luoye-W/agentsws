@@ -71,6 +71,8 @@ const MODULE_LABELS: Record<string, string> = {
   kol_public: '公共红人库（/v1/data/kol）',
   mail: '登录邮件投递',
   admin_topup: '管理员手动充值',
+  chat_relay: '官方聊天转发（/relay）',
+  chat_relay_key: '聊天转发访客密钥',
 }
 
 /** `GET /`：一页说明 + 状态。没有登录表单——登录从本地工作台发起。 */

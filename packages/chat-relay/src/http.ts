@@ -15,6 +15,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Hono } from 'hono'
 import type { RelayCore } from './core.js'
+import { OFFLINE_UNAVAILABLE } from './secrets.js'
 import { CHAT_WIDGET_JS, WIDGET_PATH } from './widget-script.js'
 
 /** 建会话的限流：按来源域名计（同 `apps/server` 的 SESSION_RATE）。 */
@@ -205,6 +206,9 @@ export function createRelayHttp(options: RelayHttpOptions): Hono {
   app.post('/v1/chat/public/offline-messages', async (c) => {
     const origin = allowedOrigin(c.req.header('Origin'))
     if (origin === undefined) return c.json({ error: { code: 'origin_not_allowed' } }, 403)
+    // WP137：留言密钥没签发就不收（不拿常量封箱——那等于明文）
+    if (!core.acceptsOfflineMessages(workspace))
+      return c.json({ error: OFFLINE_UNAVAILABLE }, 503, cors(origin))
     if (!offlineLimiter.take(origin, OFFLINE_RATE, Date.now()))
       return c.json({ error: { code: 'rate_limited' } }, 429)
     let body: { email?: unknown; text?: unknown; order_ref?: unknown; page?: unknown } = {}
