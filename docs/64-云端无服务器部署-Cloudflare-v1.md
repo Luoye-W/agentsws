@@ -172,6 +172,7 @@ pnpm -F @agentsws/cloud-worker exec wrangler email sending dns get agentsws.com 
 cd apps/cloud-worker
 npx wrangler secret put AGENTSWS_NEWAPI_KEY
 npx wrangler secret put AGENTSWS_CLOUD_ADMIN_TOKEN
+npx wrangler secret put AGENTSWS_CHAT_RELAY_KEY
 ```
 
 **全表**（仓库里只有名字，没有值）：
@@ -180,6 +181,7 @@ npx wrangler secret put AGENTSWS_CLOUD_ADMIN_TOKEN
 |---|---|---|---|
 | `AGENTSWS_NEWAPI_KEY` | 模型上游那把 key。内测期就是 DeepSeek 官网 → API Keys 里新建的那一串 | **必填** | `/v1/ai/*` 一律 500，跑不了模型 |
 | `AGENTSWS_CLOUD_ADMIN_TOKEN` | 你自己生成一串：`openssl rand -base64 48`。**至少 32 字节**，短了会拒绝启动 | **必填**（内测期要靠它发积分） | `/v1/admin/topup` 与 `/v1/admin/export` **根本不存在**（404，不是 401）——发不了额度，也导不出备份 |
+| `AGENTSWS_CHAT_RELAY_KEY` | 官方聊天转发的访客令牌种子（WP137）。本机生成 32 字节：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`。**至少 32 字节**，短了当没配。换了它，已经开着的访客会话要重新建（访客刷新一下页面即可），不丢数据 | **必填**（绑了 `CHAT_RELAY` 就必填） | 所有商家网站上的聊天窗**一律 503**「聊天窗暂时不可用」；health 里 `chat_relay_key: false`，后台健康页那一格标红。**没有兜底**——以前那个写死在开源代码里的种子等于任何人都能伪造访客令牌、读别人的聊天 |
 | `STRIPE_SECRET_KEY` | Stripe 后台 → Developers → API keys | 选填 | 用户点"充值"回 501 一句人话（这就是内测期的现状） |
 | `STRIPE_WEBHOOK_SECRET` | Stripe 后台 → Developers → Webhooks → 建一个指向 `https://cloud.agentsws.com/v1/wallet/topup/stripe/webhook`，把 `whsec_…` 抄下来 | 选填 | 同上；配了 secret key 却不配它，webhook 一律 501 |
 | `AGENTSWS_KOL_EMAIL_KEY` | 公共红人库的邮箱密钥（WP116）。本机生成 32 字节：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`。**丢了就解不开已经落库的密文**，存进密码管理器 | 选填（要用公共红人库就必填） | **不存邮箱**（一个字节都不写，绝不降级成明文）；搬家时联系方式那一类全部 `skipped` |
@@ -303,6 +305,7 @@ pnpm -F @agentsws/cloud-worker exec wrangler rollback <版本 id>
 | 发信 503「登录信没发出去」 | `wrangler tail` 实时日志 | 看那一行的 `code=E_…`：`E_SENDER_NOT_VERIFIED` = 域没开通；`E_DAILY_LIMIT_EXCEEDED` = 额度满了 |
 | `/v1/ai/*` 回 500「没有配上游密钥」 | `wrangler secret list` | `AGENTSWS_NEWAPI_KEY` 没填 |
 | `/v1/admin/topup` 回 404 | `wrangler secret list` | `AGENTSWS_CLOUD_ADMIN_TOKEN` 没填——**没配这条路由根本不挂**，这是有意的 |
+| 商家网站上的聊天窗打不开，`/relay/<ws>/*` 回 503「聊天窗暂时不可用」 | `wrangler secret list`；health 里 `chat_relay_key` | `AGENTSWS_CHAT_RELAY_KEY` 没填或短于 32 字节（WP137：没有兜底，宁可不可用也不让人伪造访客令牌） |
 | 用户说"积分不够"但看着有余额 | `GET /v1/wallet`（带他的令牌）看 `reserved` | 有孤儿预扣占着。正常情况下 `WalletDO` 的闹钟每 10 分钟会扫掉超过 1 小时的那些 |
 | 想看实时日志 | `pnpm -F @agentsws/cloud-worker exec wrangler tail` | 日志里**没有令牌、没有完整邮箱**（只有域名）——这是纪律，不是漏打 |
 

@@ -1669,6 +1669,24 @@ export function adminConsoleRoutes(deps: AdminConsoleDeps): CloudRoute[] {
                 : '这个节点没开托管实例（Compose 形态本来就没有）',
           },
           {
+            key: 'chat_relay',
+            label_zh: '官方聊天转发 · 访客密钥',
+            measures_zh:
+              '测量的是「这个节点绑没绑聊天转发（CHAT_RELAY）、配没配访客令牌种子（AGENTSWS_CHAT_RELAY_KEY，至少 32 字节）」。没配种子时访客面一律 503——宁可聊天窗不可用，也不让外人伪造访客令牌读别人的聊天（WP137）。它不测「每个商家的本机此刻在不在线」。',
+            status:
+              modules.chat_relay === true
+                ? modules.chat_relay_key === true
+                  ? 'ok'
+                  : 'bad'
+                : 'unknown',
+            detail:
+              modules.chat_relay === true
+                ? modules.chat_relay_key === true
+                  ? '转发器绑了，访客密钥已配'
+                  : '访客密钥没配或太短：所有商家网站上的聊天窗都打不开。wrangler secret put AGENTSWS_CHAT_RELAY_KEY'
+                : '这个节点没开官方聊天转发（Compose 形态本来就没有）',
+          },
+          {
             key: 'backup',
             label_zh: '备份',
             measures_zh:
