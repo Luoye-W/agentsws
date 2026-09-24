@@ -8,7 +8,7 @@
  *
  * 纯函数：没有 `Date.now()`、没有 IO、没有模型调用（本包的纪律）。
  */
-import type { KolChannel } from '@agentsws/contracts'
+import { KOL_CHANNELS, type KolChannel } from '@agentsws/contracts'
 import type { OutreachStep } from './outreach.js'
 
 /**
@@ -356,6 +356,40 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
   }
 }
 
+/**
+ * 工具名 → 人话（摘要与时间线上用的那几个词；三个运行时同一份）。
+ *
+ * WP142（docs/78 第 14 步）：事项摘要以前直接拼工具名（「查了 search_creators」），
+ * 那是给开发者看的。认不出的工具说「查了一下资料」，也不露名字。
+ */
+export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
+  search_creators: '找人',
+  get_creator: '看这个人的资料',
+  list_collaborations: '看合作清单',
+  list_deliverables: '看交付物',
+  score_creator: '打分',
+  add_to_campaign: '进候选池',
+  draft_outreach: '起草开发信',
+  advance_collaboration: '推进合作阶段',
+  register_deliverable: '登记交付物',
+  review_deliverable: '验收交付物',
+  create_tracked_link: '建追踪链接',
+  search_policies: '查政策',
+}
+
+/** 预算耗尽是哪一项（摘要里说人话，不露 `max_tool_calls`）。 */
+const EXHAUSTED_ZH: Readonly<Record<string, string>> = {
+  max_tool_calls: '工具调用次数',
+  max_tokens: '字数',
+  max_seconds: '时间',
+  max_cost: '花费',
+}
+
+export function kolToolZh(tool: string): string {
+  const bare = tool.includes('.') ? tool.slice(tool.indexOf('.') + 1) : tool
+  return KOL_TOOL_ZH[bare] ?? '查了一下资料'
+}
+
 /** 这次运行的摘要（17 §3，三个运行时同一份拼法）。 */
 export function describeKolRun(input: {
   intent: KolIntent
@@ -366,14 +400,115 @@ export function describeKolRun(input: {
   askedWhat?: string
   exhausted?: string
 }): string {
-  const parts: string[] = [KOL_INTENT_ZH[input.intent]]
+  const head = KOL_INTENT_ZH[input.intent]
+  const parts: string[] = [head]
   if (input.found !== undefined) parts.push(`找到 ${input.found} 个候选`)
-  if (input.readTools.length > 0) parts.push(`查了 ${[...new Set(input.readTools)].join('、')}`)
+  // WP142：工具名换人话；与意图同名的那个（「找人」里的「找人」）不重复说
+  const read = [...new Set(input.readTools.map(kolToolZh))].filter((w) => w !== head)
+  if (read.length > 0) parts.push(`查了：${read.join('、')}`)
   if (input.drafted === true) parts.push('起草了一封开发信（待批）')
   if (input.stagedWhat !== undefined) parts.push(`提了一条${input.stagedWhat}（待批）`)
   if (input.askedWhat !== undefined) parts.push(`问了一句：${input.askedWhat}`)
-  if (input.exhausted !== undefined) parts.push(`${input.exhausted} 预算耗尽，先停在这里`)
+  if (input.exhausted !== undefined)
+    parts.push(`${EXHAUSTED_ZH[input.exhausted] ?? '这次的'}预算用完了，先停在这里`)
   return parts.join('；')
+}
+
+/** 找人回话里的一个人（名字 + 粉丝数，够认人就行）。 */
+export interface KolFoundCreator {
+  name: string
+  followers?: number
+}
+
+/** 回话里那几个站内链接（服务端知道这条职责的分配 id，拼好了递进来）。 */
+export interface KolReplyLinks {
+  /** 候选池（「去候选池看全部」）。 */
+  pool?: string
+  /** 关联官方数据接口（设置 → 账号与积分）。 */
+  linkAccount?: string
+  /** 导入一张表（岗位页「活动」那一栏里的导入）。 */
+  importTable?: string
+}
+
+/** 回话里最多点名几个（多了就是一张表，表在候选池里）。 */
+export const KOL_REPLY_NAMES = 5
+
+/** 粉丝数说人话：48000 → 「4.8 万粉」，8500 → 「8,500 粉」。 */
+export function followersZh(n: number): string {
+  if (n >= 10_000) {
+    const wan = Math.round(n / 1000) / 10
+    return `${wan.toLocaleString('en-US', { maximumFractionDigits: 1 })} 万粉`
+  }
+  return `${n.toLocaleString('en-US')} 粉`
+}
+
+/** 站内链接写成 `[字](/路径)`——工作台时间线把它画成可点的链接（只认 `/` 开头的站内路径）。 */
+function link(label: string, href: string | undefined): string | undefined {
+  return href === undefined ? undefined : `[${label}](${href})`
+}
+
+/**
+ * WP142（docs/78 §1 #5，第 14 步）：「找 N 个」的回话。
+ *
+ * 以前只报一个数（「找人：2 条」），不说是谁、为什么不够、下一步怎么办。现在三段：
+ *
+ * 1. **是谁**：前 5 个名字（带粉丝数）+「去候选池看全部」；
+ * 2. **为什么不够**（找到的少于要的）：库里只有 N 个在这个区间；这一份若是退到了
+ *    本地红人库（这条渠道没连任何数据来源），把这件事说出来；
+ * 3. **下一步**：两个动作——关联官方数据接口 / 导入一张表。
+ *
+ * 纯函数，三个运行时同一份：stub 直接拼；direct / dsh 的模型自己写回话时，
+ * 服务端的时间线兜底也可以用它。
+ */
+export function describeFindReply(input: {
+  channel: string
+  band?: { min: number; max: number } | undefined
+  /** 用户点名要几个；没说就 undefined（不替他说「你要 20 个」）。 */
+  wanted?: number | undefined
+  found: readonly KolFoundCreator[]
+  /** 这一份从哪来：`local_library` = 这条渠道没接数据来源，退到了自己的红人库。 */
+  source?: string | undefined
+  links?: KolReplyLinks | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  const band =
+    input.band === undefined
+      ? ''
+      : `按粉丝 ${input.band.min.toLocaleString('en-US')}–${input.band.max.toLocaleString('en-US')} `
+  const n = input.found.length
+  const lines: string[] = []
+  lines.push(
+    n === 0
+      ? `在 ${where} 上${band}找了一遍，一个合适的都没找到。`
+      : `在 ${where} 上${band}找了一遍，找到 ${n} 个：`,
+  )
+  for (const c of input.found.slice(0, KOL_REPLY_NAMES))
+    lines.push(`- ${c.name}${c.followers === undefined ? '' : `（${followersZh(c.followers)}）`}`)
+  if (n > KOL_REPLY_NAMES) lines.push(`- ……还有 ${n - KOL_REPLY_NAMES} 个`)
+  const pool = link('去候选池看全部', input.links?.pool)
+  if (n > 0 && pool !== undefined) lines.push(pool)
+
+  const short = input.wanted !== undefined && n < input.wanted
+  if (short || n === 0) {
+    const local = input.source === 'local_library'
+    const range = input.band === undefined ? '' : '在这个区间'
+    lines.push(
+      local
+        ? `${input.wanted === undefined ? '' : `你要 ${input.wanted} 个，`}库里只有 ${n} 个${range}——${where} 还没接数据来源，这一份只是你自己红人库里的人。`
+        : `${input.wanted === undefined ? '' : `你要 ${input.wanted} 个，`}这次只找到 ${n} 个${range}。`,
+    )
+    const actions = [
+      link('关联官方数据接口', input.links?.linkAccount),
+      link('导入一张表', input.links?.importTable),
+    ].filter((a): a is string => a !== undefined)
+    if (actions.length > 0) lines.push(`想要更多人：${actions.join(' · ')}`)
+  }
+  return lines
+}
+
+/** 渠道 id → 名字（`youtube` → `YouTube`）。认不出原样给。 */
+function channelZh(channel: string): string {
+  return KOL_CHANNELS.find((c) => c.id === channel)?.zh ?? channel
 }
 
 /** 意图的人话（摘要与时间线上用的就是这几个词）。 */

@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest'
 import {
   channelInText,
   classifyKolTask,
+  describeFindReply,
   describeKolRun,
+  followersZh,
   KOL_INTENT_ZH,
   parseFollowerBand,
   parseOutreachStep,
@@ -194,8 +196,9 @@ describe('工具计划', () => {
 
 describe('摘要', () => {
   it('一句人话，把这次真干过的事按顺序串起来', () => {
+    // WP142：工具名换人话；与意图同名的（「找人」）不重复说
     expect(describeKolRun({ intent: 'find', readTools: ['search_creators'], found: 12 })).toBe(
-      '找人；找到 12 个候选；查了 search_creators',
+      '找人；找到 12 个候选',
     )
     expect(
       describeKolRun({
@@ -203,7 +206,7 @@ describe('摘要', () => {
         readTools: ['get_creator', 'get_creator'],
         drafted: true,
       }),
-    ).toBe('建联起草；查了 get_creator；起草了一封开发信（待批）')
+    ).toBe('建联起草；查了：看这个人的资料；起草了一封开发信（待批）')
     expect(
       describeKolRun({
         intent: 'negotiate',
@@ -212,12 +215,85 @@ describe('摘要', () => {
         askedWhat: '这个价能接吗',
         exhausted: 'max_tool_calls',
       }),
-    ).toBe(
-      '议价；提了一条合作（待批）；问了一句：这个价能接吗；max_tool_calls 预算耗尽，先停在这里',
-    )
+    ).toBe('议价；提了一条合作（待批）；问了一句：这个价能接吗；工具调用次数预算用完了，先停在这里')
+  })
+
+  it('WP142：摘要里一个工具名都不露（认不出的也不露）', () => {
+    const said = describeKolRun({
+      intent: 'collab_status',
+      readTools: ['list_collaborations', 'kol.search_policies', 'some_new_tool'],
+    })
+    expect(said).toBe('看合作进展；查了：看合作清单、查政策、查了一下资料')
+    expect(said).not.toMatch(/[a-z]+_[a-z]+/)
   })
 
   it('七类意图都有一个人话名字', () => {
     for (const key of Object.keys(KOL_INTENT_ZH)) expect(KOL_INTENT_ZH[key as 'find']).toBeTruthy()
+  })
+})
+
+describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
+  const links = {
+    pool: '/positions/asg_1?tab=view&kol=pool',
+    linkAccount: '/settings/credits',
+    importTable: '/positions/asg_1?tab=view&kol=campaign',
+  }
+
+  it('列前 5 个名字（带粉丝数）+ 去候选池看全部', () => {
+    const found = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((name, i) => ({
+      name,
+      followers: 12_000 + i * 1000,
+    }))
+    const lines = describeFindReply({ channel: 'youtube', wanted: 5, found, links })
+    expect(lines[0]).toBe('在 YouTube 上找了一遍，找到 7 个：')
+    expect(lines.slice(1, 6)).toEqual([
+      '- A（1.2 万粉）',
+      '- B（1.3 万粉）',
+      '- C（1.4 万粉）',
+      '- D（1.5 万粉）',
+      '- E（1.6 万粉）',
+    ])
+    expect(lines).toContain('- ……还有 2 个')
+    expect(lines).toContain('[去候选池看全部](/positions/asg_1?tab=view&kol=pool)')
+    // 够数：不说原因、不给那两个动作
+    expect(lines.join('\n')).not.toContain('想要更多人')
+  })
+
+  it('不够数：说库里只有 N 个在这个区间，并给两个动作（关联官方数据接口 / 导入一张表）', () => {
+    const lines = describeFindReply({
+      channel: 'youtube',
+      band: { min: 10_000, max: 100_000 },
+      wanted: 20,
+      found: [
+        { name: 'Gadget Jonas', followers: 48_000 },
+        { name: 'Desk Rosa', followers: 31_000 },
+      ],
+      source: 'local_library',
+      links,
+    })
+    const text = lines.join('\n')
+    expect(lines[0]).toBe('在 YouTube 上按粉丝 10,000–100,000 找了一遍，找到 2 个：')
+    expect(text).toContain('- Gadget Jonas（4.8 万粉）')
+    expect(text).toContain('你要 20 个，库里只有 2 个在这个区间')
+    expect(text).toContain('YouTube 还没接数据来源')
+    expect(text).toContain(
+      '想要更多人：[关联官方数据接口](/settings/credits) · [导入一张表](/positions/asg_1?tab=view&kol=campaign)',
+    )
+    // 原始值一个都不露
+    expect(text).not.toMatch(/\byoutube\b|search_creators/)
+  })
+
+  it('一个都没找到：照实说，同样给下一步；没点名要几个就不替他说「你要 20 个」', () => {
+    const lines = describeFindReply({ channel: 'instagram', found: [], links })
+    expect(lines[0]).toBe('在 Instagram 上找了一遍，一个合适的都没找到。')
+    expect(lines.join('\n')).not.toContain('你要')
+    expect(lines.at(-1)).toContain('关联官方数据接口')
+    expect(lines.join('\n')).not.toContain('去候选池看全部')
+  })
+
+  it('粉丝数说人话', () => {
+    expect(followersZh(48_000)).toBe('4.8 万粉')
+    expect(followersZh(100_000)).toBe('10 万粉')
+    expect(followersZh(8_500)).toBe('8,500 粉')
   })
 })
