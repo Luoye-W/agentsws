@@ -52,7 +52,7 @@
 | 27 | WP143 DeepSeek 图片走 Files API 复用 + 推理内容回传（移植官方 dsh-llm-deepseek）；评估 API key 那一路改走 Messages | `WP143-deepseek-files-api.md` | `wp143-ds-files` · `wp/143-ds-files` | — | 已合并（09-24，Fable 终审：167 文件 2768 条过，六组模拟门禁过；API key 走 Messages 默认关） |
 | 28 | WP144 电脑操控：官方 dsh-computer-use + Cua Driver MCP 提供方，默认关、按职责开、每次运行先授权，跟官方同步升级 | `WP144-computer-use.md` | `wp144-computer-use` · `wp/144-computer-use` | — | 进行中（Claude） |
 | 29 | WP145 语音转写留「本机识别器」的口（对齐官方 ctx.speechToText，不打包不下载） | `WP145-speech-slot.md` | `wp145-speech-slot` · `wp/145-speech-slot` | — | 已合并（09-24，Fable 终审：128 文件 1594 条过，fast 模拟零漂移；只接了会议一处，云端与自带 key 合成一个识别器） |
-| 30 | WP146 连接器运行时镜像钉版本（tag + digest）+ 进上游哨兵（W39 评估找回的建议） | `WP146-pin-open-connector.md` | `wp146-oc-pin` · `wp/146-oc-pin` | — | 进行中（Claude） |
+| 30 | WP146 连接器运行时镜像钉版本（tag + digest）+ 进上游哨兵（W39 评估找回的建议） | `WP146-pin-open-connector.md` | `wp146-oc-pin` · `wp/146-oc-pin` | — | 已合并（09-24，Fable 终审：connect-adapter 117 条过、上游登记表测试 101 条过、check-upstreams 对账一致；钉 v1.6.5） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
