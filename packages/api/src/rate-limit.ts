@@ -40,7 +40,7 @@ export class TokenBucketLimiter {
     return this.#policies[kind] ?? this.#policies.default ?? FALLBACK_POLICY
   }
 
-  /** 取一个令牌。`nowMs` 由调用方经 Clock 给出，不用裸 Date.now。 */
+  /** 取一个令牌。`nowMs` 由调用方给出——网关给的是墙钟（WP140），这里不自己取时间。 */
   take(workspace_id: string, kind: string, nowMs: number): RateLimitVerdict {
     const policy = this.policyFor(kind)
     const key = `${workspace_id}|${kind}`

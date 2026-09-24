@@ -210,7 +210,8 @@ describe('错误码 → HTTP 状态映射（28 §2）', () => {
 
 describe('限流（429 + Retry-After）', () => {
   it('超出令牌桶 → 429 budget_exhausted，带 Retry-After', async () => {
-    const h = await harness({ rateLimit: { burst: 2, per_second: 1 } })
+    let wall = 1_000_000
+    const h = await harness({ rateLimit: { burst: 2, per_second: 1 }, wallClockMs: () => wall })
     expect((await h.get('/v1/approvals')).status).toBe(200)
     expect((await h.get('/v1/approvals')).status).toBe(200)
     const limited = await h.get('/v1/approvals')
@@ -218,9 +219,31 @@ describe('限流（429 + Retry-After）', () => {
     expect(((await limited.json()) as { code: string }).code).toBe('budget_exhausted')
     expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1)
 
-    // 时钟前进 → 令牌恢复
-    h.clock.advance(2000)
+    // 墙钟前进 → 令牌恢复
+    wall += 2000
     expect((await h.get('/v1/approvals')).status).toBe(200)
+  })
+
+  it('WP140：合成时钟不动、墙钟过了窗口 → 额度恢复（demo 不再永久锁死）', async () => {
+    let wall = 5_000_000
+    const h = await harness({ rateLimit: { burst: 2, per_second: 1 }, wallClockMs: () => wall })
+    const frozen = h.clock.now()
+    expect((await h.get('/v1/approvals')).status).toBe(200)
+    expect((await h.get('/v1/approvals')).status).toBe(200)
+    expect((await h.get('/v1/approvals')).status).toBe(429)
+    wall += 3000
+    expect(h.clock.now()).toBe(frozen)
+    expect((await h.get('/v1/approvals')).status).toBe(200)
+    expect((await h.get('/v1/approvals')).status).toBe(200)
+  })
+
+  it('WP140：只拨合成时钟、墙钟不动 → 额度不回血（限流与合成时间无关）', async () => {
+    const wall = 7_000_000
+    const h = await harness({ rateLimit: { burst: 1, per_second: 1 }, wallClockMs: () => wall })
+    expect((await h.get('/v1/approvals')).status).toBe(200)
+    expect((await h.get('/v1/approvals')).status).toBe(429)
+    h.clock.advance(60_000)
+    expect((await h.get('/v1/approvals')).status).toBe(429)
   })
 
   it('不同 workspace × kind 各自一个桶', async () => {
