@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "WP144（docs/80）：电脑操控驱动 cua-driver 的钉版本表。上游哨兵盯这个文件（upstreams.yml 的 cua-driver 一条用 lock_json 对它）。",
+    "版本按官方 dsh 0.1.7-rc.1 文档引用的那一版（dsh-experimental-computer-use-cua-driver-mcp README 链接 cua-driver-rs-v0.28.0；",
+    "native 提供方的 package.json 也精确钉 @trycua/cua-driver 0.28.0）。上游 cua-driver-rs-v* 在 GitHub 上一律标 prerelease，",
+    "这不是 nightly（nightly 是 nightly-cua-driver-rs-v* 另一条 tag），所以照钉这一版。",
+    "sha256 逐字抄自该 release 的 checksums.txt（release-manifest.json 里同一组值）；darwin-universal-binary 与",
+    "windows-x86_64-binary 两个包由 WP144 实现方下载核对过 sha256 与文件结构（包内是扁平的 cua-driver / cua-driver.exe）。",
+    "我们自己下载 + 校验 + 解到 AGENTSWS_DATA_DIR/computer-use/cua-driver-<版本>/，不进 PATH；不用上游 install.sh / install.ps1",
+    "（它们装 CuaDriver.app 到 /Applications、改 PATH，而且驱动自带的 update --apply 就是再跑一次它们）。",
+    "升版本 = 跟着 dsh 升：dsh 文档引用哪一版就改这里的 version / tag / sha256，与 packages/dsh-adapter 的两个提供方包一起改（docs/42）。"
+  ],
+  "driver": {
+    "name": "cua-driver",
+    "upstream": "trycua/cua libs/cua-driver（MIT）",
+    "version": "0.28.0",
+    "tag": "cua-driver-rs-v0.28.0",
+    "released_at": "2026-09-11T08:57:44Z",
+    "release_url": "https://github.com/trycua/cua/releases/tag/cua-driver-rs-v0.28.0",
+    "checksums_url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/checksums.txt",
+    "referenced_by": "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp@0.1.7-rc.1 README（blob/cua-driver-rs-v0.28.0/libs/cua-driver/README.md）",
+    "assets": {
+      "darwin-arm64": {
+        "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/cua-driver-rs-0.28.0-darwin-universal-binary.tar.gz",
+        "sha256": "aaaa29538fe7b1f103afb4eddeefe2dc137690f91f8074e333cfe0e76b49918d",
+        "binary": "cua-driver"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/cua-driver-rs-0.28.0-darwin-universal-binary.tar.gz",
+        "sha256": "aaaa29538fe7b1f103afb4eddeefe2dc137690f91f8074e333cfe0e76b49918d",
+        "binary": "cua-driver"
+      },
+      "windows-x64": {
+        "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/cua-driver-rs-0.28.0-windows-x86_64-binary.zip",
+        "sha256": "9db2096df8d80da4e73ffb797947dcdfab2a362faddd9d1b77682c77aace5aa9",
+        "binary": "cua-driver.exe"
+      },
+      "windows-arm64": {
+        "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/cua-driver-rs-0.28.0-windows-arm64-binary.zip",
+        "sha256": "d8059fa1e963169258e5086029c7d0627bb76bd91703f040aff5286b0cd1b1f5",
+        "binary": "cua-driver.exe"
+      },
+      "linux-x64": {
+        "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/cua-driver-rs-0.28.0-linux-x86_64-binary.tar.gz",
+        "sha256": "120cd7f40340c5e012422aca393932767e228c224dd8b9df2124ca29c5e48226",
+        "binary": "cua-driver"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/cua-driver-rs-0.28.0-linux-arm64-binary.tar.gz",
+        "sha256": "6f687c3eadcc47e0f8cc25cf74f996bf0d55ddc7839154df7bff44bbb7c35c6f",
+        "binary": "cua-driver"
+      }
+    }
+  },
+  "providers": {
+    "@deepseek-ai/dsh-computer-use": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp": "0.1.7-rc.1"
+  }
+}
