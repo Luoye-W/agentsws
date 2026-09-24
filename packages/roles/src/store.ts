@@ -401,6 +401,12 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
   /** 分配挂的范围里引用到的产品线必须存在（写路径上拦；读路径上宽容）。 */
   const requireLines = (workspace: WorkspaceId, ranges: readonly RangeRef[]): void => {
     for (const r of ranges) {
+      // WP138：整个品牌只能是**这个**工作区（它盖住工作区里的一切，id 写错就是越界）
+      if (r.kind === 'brand' && r.id !== workspace)
+        throw new RoleError(
+          'invalid_input',
+          `「整个品牌」只能挂本工作区（${workspace}），不能挂 ${r.id}`,
+        )
       if (r.kind !== 'product_line') continue
       const line = backend.getProductLine(r.id)
       if (line === undefined) throw new RoleError('not_found', `没有这条产品线：${r.id}`)

@@ -5432,3 +5432,20 @@ export const deleteDshScene = (
     method: 'DELETE',
     ...withAssignment(assignment),
   })
+
+/**
+ * WP138：改一条分配的范围（`PUT /v1/assignments/:id`，组织页用的同一条接口）。
+ *
+ * 岗位面板上「给我自己挂上这个品牌」走它：`assignment` 传店主那条分配——改分配要的是
+ * 店主的权限，不是被改的那条职责自己的。
+ */
+export const updateAssignmentRanges = (
+  id: string,
+  ranges: { kind: string; id: string }[],
+  assignment?: string,
+): Promise<OrgAssignmentView> =>
+  api<OrgAssignmentView>(`/v1/assignments/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: { ranges },
+    ...withAssignment(assignment),
+  })

@@ -54,6 +54,8 @@ export function visibilityWhere(actor: GrantedActor, alias = 'c'): SqlFragment {
     if (g.range === 'assigned') {
       if (ranges.length === 0) {
         parts.push('0')
+      } else if ((actor.ranges ?? []).some((r) => r.kind === 'brand')) {
+        // WP138：整个品牌 = 当前工作区；工作区那一刀上面已经切过了，这里不再加条件
       } else {
         parts.push(
           `EXISTS (SELECT 1 FROM fact_card_scopes s WHERE s.card_id = ${alias}.id` +

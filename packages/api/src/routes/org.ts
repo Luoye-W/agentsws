@@ -553,8 +553,8 @@ export interface ProposeRangeChangeInput {
 // ── 校验 ───────────────────────────────────────────────────────────────
 
 const RANGE = z.object({
-  // 44 G2：产品线也是一种范围
-  kind: z.enum(['store', 'department', 'account', 'market', 'product_line']),
+  // 44 G2：产品线也是一种范围；WP138：`brand` = 整个品牌（id 写工作区 id）
+  kind: z.enum(['store', 'department', 'account', 'market', 'product_line', 'brand']),
   id: z.string().min(1).max(128),
 })
 

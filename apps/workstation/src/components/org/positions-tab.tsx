@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { OrgPositionView, RoleSummaryView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { rangeText } from '@/lib/ranges'
 import { cn } from '@/lib/utils'
 
 /** 持有人一枚：一个首字的圆头像 + 名字（+ 他管的范围）。 */
@@ -31,6 +32,7 @@ function Holder({
   name: string
   ranges: { kind: string; id: string }[]
 }): React.ReactNode {
+  const { t } = useApp()
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-2 pl-0.5 text-xs">
       <span
@@ -41,7 +43,9 @@ function Holder({
       </span>
       {name}
       {ranges.length === 0 ? null : (
-        <span className="text-muted-foreground">（{ranges.map((r) => r.id).join('、')}）</span>
+        <span className="text-muted-foreground">
+          （{ranges.map((r) => rangeText(r, t)).join('、')}）
+        </span>
       )}
     </span>
   )

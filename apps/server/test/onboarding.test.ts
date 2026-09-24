@@ -566,11 +566,13 @@ describe('46 §3 岗位与职责 → 清单', () => {
     const applied = await data<{
       created_assignments: { role_id: string }[]
       skipped: string[]
-      ranges: { id: string }[]
+      ranges: { kind: string; id: string }[]
     }>(await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } }))
     expect(applied.created_assignments.map((a) => a.role_id)).toContain('dtc.support')
-    // 46 I6：一家 Shopify 都没连 → 范围挂空（面板照 05 §4 明说"查不到东西"）
-    expect(applied.ranges).toEqual([])
+    // 46 I6 + WP138：一家 Shopify 都没连 → 挂整个品牌（不再挂空；见 wp138-wizard-ranges.test.ts）
+    expect(applied.ranges).toEqual([
+      expect.objectContaining({ kind: 'brand', id: m.server.bootstrap.workspace.id }),
+    ])
 
     const again = await data<{ created_assignments: unknown[]; skipped: string[] }>(
       await m.call('POST', '/v1/onboarding/apply', { body: { position_ids: ['customer-care'] } }),

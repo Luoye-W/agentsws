@@ -181,9 +181,15 @@ export interface ObjectRef {
  *   （Shopify 集合 / 标签 / 供应商 / 商品类型；亚马逊 ASIN 清单 / SKU 前缀 / 品牌）。
  *   定义见 `ProductLine`（44 G2）。
  *
- * 品牌**不是**一种范围，是一组范围的名字：见 `RangeGroup`（44 G1）。
+ * - `brand`（WP138）：**整个品牌** = 当前这个工作区（52 O3：一个品牌一个工作区），
+ *   **id 约定写工作区 id**。它盖住这个工作区里的全部店铺 / 账号 / 市场 / 产品线。
+ *   为的是不按店划的职责（红人、在线客服）：用户没连店也能有一条非空的范围，
+ *   `range: assigned` 的判权照常成立。
+ *
+ * 44 G1 的「品牌」（`RangeGroup`，一组店的名字）**仍然不是**一种范围——那是给一家公司
+ * 名下挑几家店起个名字；`brand` 这一种说的是「这个品牌的全部」，不需要列成员。
  */
-export type RangeKind = 'store' | 'department' | 'account' | 'market' | 'product_line'
+export type RangeKind = 'store' | 'department' | 'account' | 'market' | 'product_line' | 'brand'
 export interface RangeRef {
   kind: RangeKind
   id: string

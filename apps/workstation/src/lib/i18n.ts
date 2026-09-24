@@ -726,6 +726,13 @@ const zh: Table = {
     '范围是空的，所以看不到店铺数据——不是没数，是这个岗位还没被指定管哪几家店。',
   'view.no_range.action': '去分配',
   'view.no_range.ask_owner': '找工作区所有者给这个岗位指一下范围。',
+  // WP138：店主本人看时一键挂上整个品牌（红人 / 在线客服不按店划，挂品牌就能开工）
+  'view.no_range.self': '给我自己挂上这个品牌',
+  'view.no_range.self.pending': '正在挂…',
+  'view.no_range.self.error': '没挂上：{message}',
+  'view.no_range.self.hint': '挂上之后，这个岗位管整个品牌；想只管某几家店，去组织页改。',
+  'view.no_range.stores': '只挡店铺数字：红人工作台、聊天入口照常能用。',
+  'range.kind.brand': '整个品牌',
   'view.connect': '去连接',
   'view.report': '查看完整报告 →',
   'block.unknown': '这个积木的组件不在注册表里，不渲染。',
@@ -3327,6 +3334,14 @@ const en: Table = {
     'Its scope is empty, so there is no store data to show — the data exists, this position just has not been told which stores it covers.',
   'view.no_range.action': 'Assign a scope',
   'view.no_range.ask_owner': 'Ask the workspace owner to give this position a scope.',
+  'view.no_range.self': 'Assign this brand to me',
+  'view.no_range.self.pending': 'Assigning…',
+  'view.no_range.self.error': 'That did not work: {message}',
+  'view.no_range.self.hint':
+    'This position will then cover the whole brand. To limit it to certain stores, change it on the Org page.',
+  'view.no_range.stores':
+    'Only store numbers are hidden; the creator workspace and chat entries still work.',
+  'range.kind.brand': 'Whole brand',
   'view.connect': 'Connect',
   'view.report': 'Full report →',
   'block.unknown': 'Unknown component — not rendered.',

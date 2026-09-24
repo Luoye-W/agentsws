@@ -45,6 +45,8 @@ function rangeCovers(grant: PermissionScope, actor: DataActor, rec: RecordFacts)
   if (grant.range === 'own') return rec.owners.includes(actor.person_id)
   // 'assigned'：31 §3.1 空 range 的 Assignment → 查询返回空
   if (actor.ranges.length === 0) return false
+  // WP138：挂了整个品牌（= 当前工作区）就盖住这个工作区里的每一条记录
+  if (actor.ranges.some((r) => r.kind === 'brand')) return true
   return rec.scope.some((s) => actor.ranges.some((r) => r.kind === s.kind && r.id === s.id))
 }
 
@@ -109,6 +111,9 @@ export function accessWhere(
           ? `EXISTS (SELECT 1 FROM json_each("${table}".owners) AS o WHERE o.value = ?)`
           : `EXISTS (SELECT 1 FROM jsonb_array_elements_text("${table}".owners::jsonb) AS o WHERE o = ?)`
       params.push(actor.person_id)
+    } else if (actor.ranges.some((r) => r.kind === 'brand')) {
+      // WP138：整个品牌 = 当前工作区，与 `workspace` 那一档同一句
+      rangeSql = '1 = 1'
     } else {
       if (actor.ranges.length === 0) continue
       const placeholders = actor.ranges.map(() => '?').join(', ')

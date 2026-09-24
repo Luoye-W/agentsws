@@ -27,6 +27,7 @@ import type {
 import { ensureSession, getPositions, offboardMember } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { groupDutiesByPosition } from '@/lib/positions'
+import { rangeText } from '@/lib/ranges'
 
 export function MembersTab({
   members,
@@ -406,7 +407,7 @@ export function MembersTab({
                               <span className="ml-2 text-muted-foreground text-xs">
                                 {a.ranges.length === 0
                                   ? t('org.assign.range.none')
-                                  : a.ranges.map((r) => r.id).join('、')}
+                                  : a.ranges.map((r) => rangeText(r, t)).join('、')}
                               </span>
                               {a.unassigned_range ? (
                                 <Badge variant="destructive" className="ml-2">
