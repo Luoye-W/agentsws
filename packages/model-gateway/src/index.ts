@@ -79,6 +79,33 @@ export type { StubProviderOptions } from './providers/stub.js'
 export { stubProvider } from './providers/stub.js'
 export type { StubAsrProviderOptions } from './providers/stub-asr.js'
 export { decodeReadableText, segmentText, stubAsrProvider } from './providers/stub-asr.js'
+// WP145：语音识别器选择层（对齐官方 ctx.speechToText；现在只有网关这一个识别器）
+export type {
+  LocalSpeechResult,
+  SpeechContext,
+  SpeechErrorCode,
+  SpeechPreparation,
+  SpeechPreparationOptions,
+  SpeechPreparationState,
+  SpeechProvider,
+  SpeechProviderId,
+  SpeechProviderInfo,
+  SpeechProviderView,
+  SpeechRequest,
+  SpeechSelection,
+  SpeechSetupEstimate,
+  SpeechSpec,
+  SpeechToText,
+  SpeechToTextOptions,
+} from './speech.js'
+export {
+  createSpeechToText,
+  GATEWAY_SPEECH_PROVIDER_ID,
+  gatewaySpeechProvider,
+  localTranscription,
+  SpeechError,
+  speechAudioDigest,
+} from './speech.js'
 export type {
   BlockedResidencyPayload,
   BudgetExhaustedPayload,
