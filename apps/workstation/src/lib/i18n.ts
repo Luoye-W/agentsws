@@ -2643,6 +2643,7 @@ const zh: Table = {
   'credits.blocks.price': '三块怎么收钱',
   'credits.blocks.from': '积分起 · {unit}',
   'credits.pricing.local': '这是本机内置的价目，以关联后显示为准。',
+  'credits.unit.image': '每张',
 }
 
 const en: Table = {
@@ -5325,6 +5326,7 @@ const en: Table = {
   'credits.blocks.from': 'credits and up · {unit}',
   'credits.pricing.local':
     'This is the built-in price list; the one shown after linking is what counts.',
+  'credits.unit.image': 'per image',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

@@ -480,3 +480,18 @@ describe('WP142 没关联也看得到价（docs/78 第 44 步）', () => {
     expect(said.textContent).toBe(state.topupError)
   })
 })
+
+it('WP142：价目表里每一种单位都有人话（本地价目表里的单位一个不漏，不露 i18n 键）', async () => {
+  const { translate } = await import('@/lib/i18n')
+  const { existsSync, readFileSync } = await import('node:fs')
+  // vitest 可能从仓库根或包目录起跑：两处都认
+  const file = [
+    'packages/metering/src/pricing.json',
+    '../../packages/metering/src/pricing.json',
+  ].find((p) => existsSync(p))
+  if (file === undefined) throw new Error('找不到 pricing.json')
+  const raw = readFileSync(file, 'utf8')
+  const units = [...new Set([...raw.matchAll(/"unit":\s*"([a-z_0-9]+)"/g)].map((m) => m[1]))]
+  expect(units.length).toBeGreaterThan(0)
+  for (const u of units) expect(translate('zh', `credits.unit.${u}`)).not.toContain('credits.unit.')
+})

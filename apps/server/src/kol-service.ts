@@ -848,7 +848,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     source: 'channel',
     rows: [],
     reason: 'no_data_source',
-    message: `现在搜不了${channelLabel(channel)}上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜。`,
+    message: `现在搜不了 ${channelLabel(channel)} 上的红人：还没接任何数据来源。关联 Agents 工坊账号（按次扣积分）或者接你自己的数据接口（不扣积分），任选其一就能搜。`,
     entry_points: [
       {
         id: 'link_account',
@@ -1055,7 +1055,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
        */
       return {
         ...base,
-        message: `现在搜不了${channelLabel(channel)}上的红人：工坊官方数据接口这次没用上——${(lastWorkshopFailure.message ?? '').replace(/[。.]+$/, '')}。可以去账号与积分看看，或者接你自己的数据接口（不扣积分）。`,
+        message: `现在搜不了 ${channelLabel(channel)} 上的红人：工坊官方数据接口这次没用上——${(lastWorkshopFailure.message ?? '').replace(/[。.]+$/, '')}。可以去账号与积分看看，或者接你自己的数据接口（不扣积分）。`,
       }
     },
 
