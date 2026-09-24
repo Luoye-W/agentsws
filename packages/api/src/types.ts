@@ -65,6 +65,7 @@ import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
 import type { DesignPort } from './routes/design.js'
+import type { DshScenesPort } from './routes/dsh-scenes.js'
 import type { ExtensionPort } from './routes/extension.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
@@ -782,6 +783,11 @@ export interface GatewayDeps {
    * 只是没有哪条职责开得了浏览器（`RunRequest.browser` 一直是空的）。
    */
   browser?: BrowserPort
+  /**
+   * WP136（docs/79）：dsh 场景切换（列 / 建 / 删自建 / 起停网页场景）。
+   * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。
+   */
+  dshScenes?: DshScenesPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
   /**

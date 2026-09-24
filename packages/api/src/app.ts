@@ -29,6 +29,8 @@ import { cloudAccountRoutes } from './routes/cloud-account.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
 import { designRoutes } from './routes/design.js'
+// WP136（docs/79）：dsh 场景切换
+import { dshScenesRoutes } from './routes/dsh-scenes.js'
 import { eventRoutes } from './routes/events.js'
 // WP119（68）：浏览器插件的本地一面 `/v1/extension/*`（配对、观测、状态）
 import { extensionRoutes } from './routes/extension.js'
@@ -110,6 +112,8 @@ export function collectRoutes(): Route[] {
      * 两条都没有路径参数，撞不上。
      */
     ...browserRoutes(),
+    // WP136（docs/79）：dsh 场景。`/v1/dsh-scenes*` 是新前缀，与别处都不撞
+    ...dshScenesRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
     /*
