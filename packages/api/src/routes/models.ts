@@ -319,6 +319,27 @@ export interface DeepSeekAccountView {
   /** 这一路用哪个型号（官方目录里能看图的那一档）与数据驻留（境内）。 */
   default_model: string
   region: 'cn'
+  /**
+   * WP150：上一次是**登录失效**把人登出的（不是自己点的登出）——DeepSeek 那边不认这份登录了
+   * （推理口 401，或资料 / 余额口 401 / 40003，判定口径照官方）。界面在登录按钮上面说这句人话；
+   * 重新登上之后就没有这一格了。
+   */
+  session_expired?: { at: string; message: string }
+  /**
+   * WP150：现在**正在用这个账号跑**的事（登出前确认框里列的就是它们；确认后先停这些、再登出）。
+   * 只在登录着、且确实有在跑的时候给。
+   */
+  running_tasks?: DeepSeekAccountTaskView[]
+}
+
+/** WP150：一件正在用 DeepSeek 账号跑的事（事项名是人话；没有模型输入、没有令牌）。 */
+export interface DeepSeekAccountTaskView {
+  run_id: string
+  matter_id: string
+  /** 事项名。 */
+  title: string
+  /** 装了好几个品牌时，是哪个品牌的事。 */
+  brand?: string
 }
 
 export interface ModelTestResult {
@@ -1217,7 +1238,7 @@ export function modelRoutes(): Route[] {
         path: '/v1/settings/models/deepseek-account',
         operationId: 'signOutDeepSeekAccount',
         summary:
-          '登出：官方先删本机凭据、再在后台调平台 logout；这条模型来源随之摘掉，官方模块关掉',
+          '登出：有运行正在用这个账号跑就先停掉它们（WP150，界面先确认），再由官方先删本机凭据、后台调平台 logout；这条模型来源随之摘掉，官方模块关掉',
         tag: TAG,
         auth: 'bearer',
         assignment: true,

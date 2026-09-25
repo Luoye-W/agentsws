@@ -325,6 +325,7 @@ export type {
 export { messageRoutes } from './routes/messages.js'
 export type {
   DeepSeekAccountPhase,
+  DeepSeekAccountTaskView,
   DeepSeekAccountView,
   DeepSeekWalletView,
   DiscoverModelsInput,

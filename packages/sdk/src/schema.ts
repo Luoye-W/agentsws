@@ -2009,7 +2009,7 @@ export interface paths {
     get: operations['getDeepSeekAccount']
     put?: never
     post?: never
-    /** 登出：官方先删本机凭据、再在后台调平台 logout；这条模型来源随之摘掉，官方模块关掉 */
+    /** 登出：有运行正在用这个账号跑就先停掉它们（WP150，界面先确认），再由官方先删本机凭据、后台调平台 logout；这条模型来源随之摘掉，官方模块关掉 */
     delete: operations['signOutDeepSeekAccount']
     options?: never
     head?: never
