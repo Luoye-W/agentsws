@@ -690,7 +690,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   }
 
   const hasModel = options.hasModel ?? ((): boolean => hasModelProvider(options.env))
-  const useDirect = (options.prefer ?? (hasModel() ? 'direct' : 'stub')) === 'direct'
+  /*
+   * 09-25（WP150 报告第 3 条，Fable 复核并修）：**每次运行现问**有没有模型，而不是装配时问一次。
+   * 以前在这里算一次就定死——服务启动时还没接模型（新装的机器都是），之后在向导 / 设置里接上，
+   * 不重启的话每次运行都还走替身，回复是假的。内测朋友的第一条路正好是这样。
+   */
+  const useDirect = (): boolean => (options.prefer ?? (hasModel() ? 'direct' : 'stub')) === 'direct'
 
   /**
    * WP44：把 Dev MCP 的三个只读工具并进工具执行器。
@@ -729,26 +734,46 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     }
   })()
 
-  const adapter: RuntimeAdapter = useDirect
-    ? createDirectRuntime({
-        gateway: withToolChoice({
-          complete: (r) => options.models.complete(r),
-          embed: (t, meta, model) => options.models.embed(t, meta, model),
-          usage: (f) => options.models.usage(f),
-          budget: (s) => options.models.budget(s),
-        }),
-        clock,
-        seed,
-        createDraft,
-        ...(executeTool === undefined ? {} : { executeTool }),
-      })
-    : createStubRuntime({
-        clock,
-        seed,
-        createDraft,
-        createPolicyQuestion,
-        ...(executeTool === undefined ? {} : { executeTool }),
-      })
+  const directAdapter = (): RuntimeAdapter =>
+    createDirectRuntime({
+      gateway: withToolChoice({
+        complete: (r) => options.models.complete(r),
+        embed: (t, meta, model) => options.models.embed(t, meta, model),
+        usage: (f) => options.models.usage(f),
+        budget: (s) => options.models.budget(s),
+      }),
+      clock,
+      seed,
+      createDraft,
+      ...(executeTool === undefined ? {} : { executeTool }),
+    })
+  const stubAdapter = (): RuntimeAdapter =>
+    createStubRuntime({
+      clock,
+      seed,
+      createDraft,
+      createPolicyQuestion,
+      ...(executeTool === undefined ? {} : { executeTool }),
+    })
+  /** 两个运行时各建一次（懒），每次运行按「现在有没有模型」挑一个。 */
+  const memo = <T>(make: () => T): (() => T) => {
+    let v: T | undefined
+    return () => {
+      if (v === undefined) v = make()
+      return v
+    }
+  }
+  const direct = memo(directAdapter)
+  const stub = memo(stubAdapter)
+  const current = (): RuntimeAdapter => (useDirect() ? direct() : stub())
+  const adapter: RuntimeAdapter = {
+    get name() {
+      return current().name
+    },
+    capabilities: () => current().capabilities(),
+    run: (req, sink, signal) => current().run(req, sink, signal),
+    health: () => current().health(),
+  }
 
   /*
    * WP144 / WP148：带 `computer_use` **或** `browser` 的运行走 **dsh 运行时**——官方电脑操控
@@ -757,26 +782,31 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 只在有模型时才建（没模型的 stub 档本来就驱动不了浏览器和电脑），而且只给这两种运行用：
    * 别的运行照旧 direct，一个字节不变。
    */
-  const dshAdapter: RuntimeAdapter | undefined =
-    useDirect && (options.computerUse !== undefined || options.browser !== undefined)
-      ? createDshRuntime({
-          gateway: { complete: (r) => options.models.complete(r) },
-          clock,
-          seed,
-          ...(options.dshMode === undefined ? {} : { mode: options.dshMode }),
-          createDraft,
-          createPolicyQuestion,
-          requestComputerUse,
-          /*
-           * WP147：这次运行的模型就是现在的默认模型、而且验证过能看图，才声明图片输入。
-           * 换了模型名（`RunRequest.runtime.model` 与默认不是同一个）一律不声明——
-           * 结论只认测的正是这个模型的那一次（WP127 同一条规矩）。
-           */
-          imageInput: (model) =>
-            declaresImageInput(options.modelVision?.(), options.modelRef?.(), model),
-          ...(executeTool === undefined ? {} : { executeTool }),
-        })
+  const dshAdapterOnce =
+    options.computerUse !== undefined || options.browser !== undefined
+      ? memo(() =>
+          createDshRuntime({
+            gateway: { complete: (r) => options.models.complete(r) },
+            clock,
+            seed,
+            ...(options.dshMode === undefined ? {} : { mode: options.dshMode }),
+            createDraft,
+            createPolicyQuestion,
+            requestComputerUse,
+            /*
+             * WP147：这次运行的模型就是现在的默认模型、而且验证过能看图，才声明图片输入。
+             * 换了模型名（`RunRequest.runtime.model` 与默认不是同一个）一律不声明——
+             * 结论只认测的正是这个模型的那一次（WP127 同一条规矩）。
+             */
+            imageInput: (model) =>
+              declaresImageInput(options.modelVision?.(), options.modelRef?.(), model),
+            ...(executeTool === undefined ? {} : { executeTool }),
+          }),
+        )
       : undefined
+  /** 有模型、且装配时给了浏览器 / 电脑操控才有 dsh 那条路（没模型的替身档驱动不了它们）。 */
+  const dshAdapter = (): RuntimeAdapter | undefined =>
+    dshAdapterOnce !== undefined && useDirect() ? dshAdapterOnce() : undefined
 
   /** 事项现场 → ContextItem[]（37 §2.2b：摘要 + pinned 记录，围栏与出处照旧）。 */
   const contextOf = async (
@@ -1012,7 +1042,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         preset: config.role_id,
         profile: 'server',
         plugins: [],
-        model: useDirect
+        model: useDirect()
           ? (options.modelRef?.() ?? { provider: 'deepseek', model: 'default', region: 'cn' })
           : { provider: 'stub', model: 'default', region: 'cn' },
         seed,
@@ -1062,7 +1092,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         matter_id: input.matter.id,
         title: input.matter.title,
         // 没接模型（stub）时就是 stub：不会被当成"在用某个账号跑"
-        model: useDirect
+        model: useDirect()
           ? (options.runModelRef?.() ?? request.runtime.model)
           : request.runtime.model,
       },
@@ -1128,7 +1158,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       const cu = request.computer_use
       // WP148：开了浏览器的运行同样走 dsh（只有那棵树上挂得了浏览器提供方）
       const needsDsh = cu !== undefined || request.browser !== undefined
-      const runner = needsDsh && dshAdapter !== undefined ? dshAdapter : adapter
+      const dsh = needsDsh ? dshAdapter() : undefined
+      const runner = dsh ?? adapter
       if (cu?.granted_until !== undefined) {
         options.computerUse?.activate(
           {
