@@ -376,3 +376,108 @@ describe('WP134 demo 替身宿主（不挂官方模块）', () => {
     expect(await stand.resolveToken(DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL)).toBeUndefined()
   })
 })
+
+describe('WP150 登录失效（照官方 rc.2 的判定口径）', () => {
+  /** 走一遍登录，停在"已登录"。 */
+  async function signedIn(records = new Map<string, CredentialRecord>()) {
+    const h = await mount(records)
+    await h.startSignIn({ callbackOrigin: origin, locale: 'zh-CN' })
+    await until(
+      () => h.state(),
+      (v) => v.attempt?.phase === 'waiting-browser',
+    )
+    await browserReturns()
+    await until(
+      () => h.state(),
+      (v) => v.status === 'credential-stored',
+    )
+    return h
+  }
+
+  it('余额口回 HTTP 401：官方清掉本机登录、发一次「登录失效」，余额回 null（不是 0）', async () => {
+    const records = new Map<string, CredentialRecord>()
+    const h = await signedIn(records)
+    const expired = vi.fn()
+    const off = h.onSessionExpired?.(expired)
+    platform.setSession('401')
+    expect(await h.balance()).toBeNull()
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect((await h.state()).status).toBe('signed-out')
+    expect(records.has(KEY)).toBe(false)
+    expect(await h.resolveToken(DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL)).toBeUndefined()
+    // 失效不是登出：不去调平台 logout（那份令牌平台已经不认了）
+    expect(platform.requests.some((r) => r.url.endsWith('/users/logout'))).toBe(false)
+    off?.()
+  })
+
+  it('资料口回 HTTP 200 + 顶层 code 40003：同样算失效', async () => {
+    const h = await signedIn()
+    const expired = vi.fn()
+    h.onSessionExpired?.(expired)
+    platform.setSession('40003')
+    // 登上后第一次资料读的是交换时平台回的那份缓存，不出请求；第二次才真去问
+    await h.profile()
+    expect(await h.profile()).toBeNull()
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect((await h.state()).status).toBe('signed-out')
+  })
+
+  it('别的 HTTP 错误（500）不算失效：登录留着', async () => {
+    const h = await signedIn()
+    const expired = vi.fn()
+    h.onSessionExpired?.(expired)
+    platform.setBalance('fail')
+    expect(await h.balance()).toEqual({ status: 'failed' })
+    expect(expired).not.toHaveBeenCalled()
+    expect((await h.state()).status).toBe('credential-stored')
+  })
+
+  it('推理 401 → rejectToken：只有仍是当前那份登录才清；旧令牌迟到的 401 不动新登录', async () => {
+    const records = new Map<string, CredentialRecord>()
+    const h = await signedIn(records)
+    const expired = vi.fn()
+    h.onSessionExpired?.(expired)
+    await h.rejectToken?.('dsk_SOME_OLD_TOKEN')
+    expect(expired).not.toHaveBeenCalled()
+    expect((await h.state()).status).toBe('credential-stored')
+    const token = await h.resolveToken(DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL)
+    await h.rejectToken?.(token ?? '')
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect((await h.state()).status).toBe('signed-out')
+    expect(records.has(KEY)).toBe(false)
+  })
+
+  it('手动登出不发「登录失效」', async () => {
+    const h = await signedIn()
+    const expired = vi.fn()
+    h.onSessionExpired?.(expired)
+    await h.signOut()
+    expect(expired).not.toHaveBeenCalled()
+  })
+
+  it('demo 替身宿主：rejectToken 对得上才清、expire() 模拟平台失效，两条都发「登录失效」', async () => {
+    const stand = createStandInDeepSeekAccountHost()
+    host = stand
+    const expired = vi.fn()
+    stand.onSessionExpired?.(expired)
+    const login = async (): Promise<void> => {
+      const view = await stand.startSignIn({ callbackOrigin: origin, locale: 'zh-CN' })
+      await realFetch(view.attempt?.authorizeUrl ?? '')
+    }
+    await login()
+    const first = await stand.resolveToken(DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL)
+    await stand.rejectToken?.('dsk_not_this_one')
+    expect((await stand.state()).status).toBe('credential-stored')
+    await stand.rejectToken?.(first ?? '')
+    expect((await stand.state()).status).toBe('signed-out')
+    expect(expired).toHaveBeenCalledTimes(1)
+    // 重新登上是新令牌：旧令牌迟到的 401 不清新登录
+    await login()
+    expect(await stand.resolveToken(DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL)).not.toBe(first)
+    await stand.rejectToken?.(first ?? '')
+    expect((await stand.state()).status).toBe('credential-stored')
+    stand.expire()
+    expect((await stand.state()).status).toBe('signed-out')
+    expect(expired).toHaveBeenCalledTimes(2)
+  })
+})

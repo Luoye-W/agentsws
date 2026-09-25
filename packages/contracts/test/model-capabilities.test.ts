@@ -22,6 +22,12 @@ describe('WP127 模型能力', () => {
     expect(modelFailureKind({ detail: 'something odd' })).toBe('other')
   })
 
+  it('WP150：unauthenticated（账号登录失效 / 没登录）归"凭据"那一档', () => {
+    expect(
+      modelFailureKind({ reason: 'unauthenticated', detail: '没通：DeepSeek 账号的登录过期了' }),
+    ).toBe('key')
+  })
+
   it('能力声明是可选的：老 provider 不改一行照样合法', () => {
     const old: ModelProvider = {
       ref: { provider: 'x', model: 'y' },

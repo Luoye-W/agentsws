@@ -12,6 +12,13 @@
  * 3. **登上了** → 账号名 + 余额（查不到就说人话，**不显示成 0**），接着自动存这条模型来源、
  *    跑三步验证（连通 → 文字 → 看图）。三步都过才算接上。
  *
+ * WP150（跟官方 dsh 0.1.7-rc.2）：
+ *
+ * - **登录失效**：DeepSeek 那边不认这份登录了，服务端自动登出、摘掉这条模型来源；这里在登录按钮上面
+ *   说一句"登录过期了，点一下重新登录"，按钮变成「重新登录」。重新登上后照样自动存 + 三步验证。
+ * - **登出前确认并停任务**：点「登出」时先问一次服务端"现在有没有在用这个账号跑的事"。有就在卡片里
+ *   列出这几件（事项名），确认后服务端先停这些、再登出；没有就是原来那个确认框。
+ *
  * 凭据纪律：这个件里没有任何令牌——服务端给的只有「登录了没有 / 账号名 / 余额」。
  */
 import { modelFailureKind, VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
@@ -27,6 +34,7 @@ import {
   cancelDeepSeekAccountLogin,
   DEEPSEEK_ACCOUNT_PROVIDER_ID,
   type DeepSeekAccountData,
+  type DeepSeekAccountTask,
   type DeepSeekWallet,
   getDeepSeekAccount,
   listModelProviders,
@@ -78,6 +86,8 @@ export function DeepSeekAccountLogin({
   const opened = useRef<string | undefined>(undefined)
   /** 登上之后的"存 + 测"只自动跑一次。 */
   const connecting = useRef(false)
+  /** WP150：登出前要确认的那几件正在用账号跑的事（有才出那一块）。 */
+  const [confirming, setConfirming] = useState<DeepSeekAccountTask[] | undefined>(undefined)
 
   const account = useQuery({
     queryKey: ['deepseek-account', assignment],
@@ -101,6 +111,8 @@ export function DeepSeekAccountLogin({
     void client.invalidateQueries({ queryKey: ['deepseek-account'] })
     void client.invalidateQueries({ queryKey: ['model-providers'] })
     void client.invalidateQueries({ queryKey: ['model-defaults'] })
+    // WP150：顶栏那个"现在用哪个模型"的芯片（`['models', 'defaults']`）也跟着变
+    void client.invalidateQueries({ queryKey: ['models'] })
     void client.invalidateQueries({ queryKey: ['home'] })
   }
 
@@ -153,6 +165,7 @@ export function DeepSeekAccountLogin({
   const signOut = useMutation({
     mutationFn: () => signOutDeepSeekAccount(assignment),
     onSuccess: () => {
+      setConfirming(undefined)
       setTest(undefined)
       connecting.current = false
       opened.current = undefined
@@ -165,6 +178,30 @@ export function DeepSeekAccountLogin({
   useEffect(() => {
     openOnce(data)
   })
+
+  /*
+   * WP150：登出了（包括登录失效被自动登出）——上一次的"存 + 测"作废，重新登上时要再跑一遍；
+   * 登出确认那一块也收起来。
+   */
+  const signedIn = data?.signed_in === true
+  useEffect(() => {
+    if (signedIn) return
+    connecting.current = false
+    setTest(undefined)
+    setConfirming(undefined)
+  }, [signedIn])
+
+  /** WP150：点「登出」：先问一次现在有没有在用这个账号跑的事，有就列出来让人确认。 */
+  const askSignOut = async (): Promise<void> => {
+    const fresh = (await account.refetch()).data ?? data
+    const tasks = fresh?.running_tasks ?? []
+    if (tasks.length > 0) {
+      setConfirming(tasks)
+      return
+    }
+    if (!globalThis.confirm(t('dsa.sign_out.confirm'))) return
+    signOut.mutate()
+  }
 
   // 登上了、这条还没存或还没验证过：自己存、自己测（用户按的是"登录"，中间这几下替他做完）
   useEffect(() => {
@@ -286,17 +323,68 @@ export function DeepSeekAccountLogin({
             <Button
               size="xs"
               variant="ghost"
-              disabled={signOut.isPending}
+              disabled={signOut.isPending || confirming !== undefined}
               data-testid="dsa-sign-out"
               onClick={() => {
-                if (!globalThis.confirm(t('dsa.sign_out.confirm'))) return
-                signOut.mutate()
+                void askSignOut()
               }}
             >
               <LogOut aria-hidden className="size-3" />
               {t('dsa.sign_out')}
             </Button>
           </div>
+          {confirming === undefined ? null : (
+            <div
+              role="alertdialog"
+              aria-labelledby="dsa-sign-out-tasks-title"
+              className="flex flex-col gap-1.5 rounded-md bg-ws-warn-bg p-2 text-xs"
+              data-testid="dsa-sign-out-tasks"
+            >
+              <p id="dsa-sign-out-tasks-title" className="font-medium text-ws-warn">
+                {t('dsa.sign_out.tasks', { n: confirming.length })}
+              </p>
+              <ul className="flex flex-col gap-0.5 pl-1">
+                {confirming.map((task) => (
+                  <li
+                    key={task.run_id}
+                    className="flex items-center gap-1.5"
+                    data-testid="dsa-sign-out-task"
+                  >
+                    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-warn" />
+                    <span className="truncate">
+                      {task.brand === undefined ? task.title : `${task.brand} · ${task.title}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-ws-muted-fg">{t('dsa.sign_out.tasks_hint')}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="xs"
+                  variant="destructive"
+                  disabled={signOut.isPending}
+                  data-testid="dsa-sign-out-stop"
+                  onClick={() => {
+                    signOut.mutate()
+                  }}
+                >
+                  {signOut.isPending ? <Loader2 aria-hidden className="animate-spin" /> : null}
+                  {t('dsa.sign_out.stop_and_leave')}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  disabled={signOut.isPending}
+                  data-testid="dsa-sign-out-keep"
+                  onClick={() => {
+                    setConfirming(undefined)
+                  }}
+                >
+                  {t('dsa.sign_out.keep')}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ) : waiting ? (
         <div className="flex flex-col gap-1.5" data-testid="dsa-waiting">
@@ -333,6 +421,12 @@ export function DeepSeekAccountLogin({
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
+          {data?.session_expired === undefined ? null : (
+            // WP150：登录失效被自动登出——说人话，按钮变「重新登录」
+            <p role="alert" className="text-xs text-ws-warn" data-testid="dsa-expired">
+              {t('dsa.expired')}
+            </p>
+          )}
           {phase === 'cancelled' ? (
             <p className="text-xs text-ws-muted-fg" data-testid="dsa-cancelled">
               {t('dsa.cancelled')}
@@ -358,7 +452,7 @@ export function DeepSeekAccountLogin({
             ) : (
               <LogIn aria-hidden />
             )}
-            {t('dsa.login')}
+            {data?.session_expired === undefined ? t('dsa.login') : t('dsa.relogin')}
           </Button>
         </div>
       )}

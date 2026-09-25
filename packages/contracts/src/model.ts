@@ -383,6 +383,8 @@ export const NO_VISION_REASON = 'no_vision'
 export function modelFailureKind(input: { reason?: string; detail?: string }): ModelFailureKind {
   if (input.reason === 'no_key') return 'key'
   if (input.reason === NO_VISION_REASON) return 'vision'
+  // WP150：provider 明说"要重新登录"（DeepSeek 账号登录失效 / 没登录）——同"密钥不对"那一档
+  if (input.reason === 'unauthenticated') return 'key'
   const text = `${input.reason ?? ''} ${input.detail ?? ''}`.toLowerCase()
   if (/401|403|unauthorized|invalid api key|api key/.test(text)) return 'key'
   if (/402|insufficient|balance|余额/.test(text)) return 'balance'

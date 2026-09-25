@@ -81,6 +81,11 @@ export type KnownEventType =
   | 'model.blocked_residency'
   | 'model.provider_down'
   | 'model.budget_frozen'
+  /**
+   * WP150：「用我的 DeepSeek 账号登录」那一条模型来源被摘掉了——手动登出（`reason: 'signed_out'`）
+   * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
+   */
+  | 'model.account_signed_out'
   // knowledge (19)
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'

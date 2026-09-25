@@ -524,7 +524,12 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           const error = failureOf(err)
           closeOpenToolUses(error.code)
           sink({ type: 'run.failed', error })
-          return finish('failed', `模型调用失败：${error.code}`)
+          // WP150：`unauthenticated` 的原文就是给人看的那句（"DeepSeek 账号的登录过期了……去重新登录"），
+          // 摘要直接用它；别的码照旧（码比上游原文稳，回放也逐字节不变）
+          return finish(
+            'failed',
+            error.code === 'unauthenticated' ? error.message : `模型调用失败：${error.code}`,
+          )
         }
 
         usage.input_tokens += completion.usage.input_tokens

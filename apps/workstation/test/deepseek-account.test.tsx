@@ -11,8 +11,10 @@
  *
  * 全是替身，令牌这个概念在界面里根本不存在——测试也就不需要为它设任何值。
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   accountTestKey,
@@ -20,6 +22,7 @@ import {
   formatWallet,
 } from '@/components/models/deepseek-account-login'
 import { ModelsPanel } from '@/components/models/models-panel'
+import { NoModelBanner } from '@/components/models/no-model-banner'
 import { AiStep } from '@/components/onboarding/ai-step'
 import type {
   DeepSeekAccountData,
@@ -27,6 +30,8 @@ import type {
   ModelProviderView,
   ModelTestResult,
 } from '@/lib/api'
+import { AppProvider } from '@/lib/app-context'
+import { keysFor } from '@/lib/realtime'
 import { renderWithProviders } from './helpers'
 
 const T0 = '2026-09-24T09:00:00.000Z'
@@ -180,6 +185,12 @@ vi.mock('@/lib/api', async () => {
     // 向导那两张大卡要的
     getCloudAccount: async () => ({ linked: false, cloud_base_url: 'https://cloud.agentsws.dev' }),
     getCloudCredits: async () => ({ linked: false }),
+    // WP150：顶栏"还没接模型"那个胶囊要知道谁是所有者
+    getPositions: async () => ({
+      positions: [{ position_id: 'pos_owner', role_id: 'common.owner' }],
+      tile_library: [],
+      max_tiles: 6,
+    }),
   }
 })
 
@@ -359,5 +370,159 @@ describe('WP134 设置页：不混进"加一个"那一排', () => {
     const row = screen.getByTestId('model-row')
     expect(within(row).queryByText('修改')).toBeNull()
     expect(within(row).queryByText('改')).toBeNull()
+  })
+})
+
+// ── WP150 ─────────────────────────────────────────────────────────────
+
+const EXPIRED: DeepSeekAccountData = {
+  ...SIGNED_OUT,
+  enabled: true,
+  session_expired: {
+    at: T0,
+    message: 'DeepSeek 账号的登录过期了（DeepSeek 那边不认这次的登录了），点一下重新登录。',
+  },
+}
+
+const TASKS = [
+  { run_id: 'run_1', matter_id: 'mat_1', title: '回复客户 Anna 的退货' },
+  { run_id: 'run_2', matter_id: 'mat_2', title: '给 12 位达人发合作邀约' },
+]
+
+/** 自己拿着 QueryClient 渲染（要模拟"服务端推来一条事件 → 这几条查询失效"）。 */
+function renderWithClient(ui: React.ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AppProvider initialTheme="light" initialLang="zh" initialPosition="asg_1">
+        <MemoryRouter>{ui}</MemoryRouter>
+      </AppProvider>
+    </QueryClientProvider>,
+  )
+  /** 照工作台的实时刷新：推来一条事件 → 它对应的那几条查询失效重取。 */
+  const push = async (name: string) => {
+    for (const key of keysFor(name)) await client.invalidateQueries({ queryKey: key })
+  }
+  return { client, push }
+}
+
+describe('WP150 登录失效：卡片说人话、按钮变「重新登录」，"还没接模型"与三步验证跟着变', () => {
+  it('服务端说是失效登出的：登录按钮上面一句"登录过期了，点一下重新登录"，按钮叫「重新登录」', async () => {
+    state.view = EXPIRED
+    renderWithProviders(<DeepSeekAccountLogin />)
+    const said = await screen.findByTestId('dsa-expired')
+    expect(said.textContent).toBe('DeepSeek 账号的登录过期了，点一下重新登录。')
+    expect(said.getAttribute('role')).toBe('alert')
+    expect(screen.getByTestId('dsa-login').textContent).toContain('重新登录')
+    expect(screen.queryByTestId('dsa-signed-in')).toBeNull()
+  })
+
+  it('用着用着失效了：推来 model.account_signed_out → 卡片变"过期了"、顶栏出"还没接模型"、三步验证结果不再显示；重新登录后再自动存 + 测一遍', async () => {
+    const user = userEvent.setup()
+    state.view = SIGNED_IN
+    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
+    const { push } = renderWithClient(
+      <>
+        <NoModelBanner variant="chip" />
+        <DeepSeekAccountLogin />
+      </>,
+    )
+    await screen.findByTestId('dsa-signed-in')
+    expect(screen.getByTestId('model-check-steps')).toBeTruthy()
+    expect(screen.queryByTestId('no-model-chip')).toBeNull()
+    expect(state.saves).toEqual([]) // 已经验证过的不重复存
+
+    // 服务端：官方说登录失效 → 本机登录清掉、这条来源摘掉 → 推一条事件
+    state.view = EXPIRED
+    state.providers = []
+    await push('model.account_signed_out')
+    expect(await screen.findByTestId('dsa-expired')).toBeTruthy()
+    expect(await screen.findByTestId('no-model-chip')).toBeTruthy()
+    expect(screen.queryByTestId('model-check-steps')).toBeNull()
+
+    // 点「重新登录」→ 登上 → 自己再存一次、再测一次（上一次的"存 + 测"已作废）
+    state.afterLogin = SIGNED_IN
+    await user.click(screen.getByTestId('dsa-login'))
+    await screen.findByTestId('dsa-ok')
+    expect(state.saves).toEqual(['deepseek-flash'])
+    expect(state.tests).toBe(1)
+    await push('model.account_signed_out') // 随便哪次刷新：接上之后胶囊消失
+    await waitFor(() => {
+      expect(screen.queryByTestId('no-model-chip')).toBeNull()
+    })
+    expect(screen.queryByTestId('dsa-expired')).toBeNull()
+  })
+
+  it('验证时撞上失效（unauthenticated）：说"登录失效了，点一下重新登录"', () => {
+    expect(
+      accountTestKey({
+        ok: false,
+        checked_at: T0,
+        reason: 'unauthenticated',
+        detail: 'DeepSeek 账号的登录过期了',
+      }),
+    ).toBe('dsa.err.key')
+  })
+})
+
+describe('WP150 登出前确认并停任务', () => {
+  it('有在用这个账号跑的事：卡片里列出来（事项名），不弹原来那个确认框；「先不登出」收起、什么都不停', async () => {
+    const user = userEvent.setup()
+    state.view = { ...SIGNED_IN, running_tasks: TASKS }
+    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
+    renderWithProviders(<DeepSeekAccountLogin />)
+    await user.click(await screen.findByTestId('dsa-sign-out'))
+    const box = await screen.findByTestId('dsa-sign-out-tasks')
+    expect(box.getAttribute('role')).toBe('alertdialog')
+    expect(box.textContent).toContain('下面这 2 件正在用这个账号跑的事会先停下')
+    expect(screen.getAllByTestId('dsa-sign-out-task').map((li) => li.textContent)).toEqual([
+      '回复客户 Anna 的退货',
+      '给 12 位达人发合作邀约',
+    ])
+    expect(globalThis.confirm).not.toHaveBeenCalled()
+    await user.click(screen.getByTestId('dsa-sign-out-keep'))
+    expect(screen.queryByTestId('dsa-sign-out-tasks')).toBeNull()
+    expect(state.signOuts).toBe(0)
+    expect(screen.getByTestId('dsa-signed-in')).toBeTruthy()
+  })
+
+  it('确认「停掉并登出」：调一次登出（服务端先停这些、再登出），卡片回到"没登录"', async () => {
+    const user = userEvent.setup()
+    state.view = { ...SIGNED_IN, running_tasks: TASKS }
+    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
+    renderWithProviders(<DeepSeekAccountLogin />)
+    await user.click(await screen.findByTestId('dsa-sign-out'))
+    await user.click(await screen.findByTestId('dsa-sign-out-stop'))
+    await waitFor(() => {
+      expect(state.signOuts).toBe(1)
+    })
+    expect(await screen.findByTestId('dsa-login')).toBeTruthy()
+    expect(screen.queryByTestId('dsa-sign-out-tasks')).toBeNull()
+    // 手动登出不是失效：没有"登录过期了"
+    expect(screen.queryByTestId('dsa-expired')).toBeNull()
+  })
+
+  it('点登出那一下现问服务端：刚才还没在跑、现在有了，也照样列出来', async () => {
+    const user = userEvent.setup()
+    state.view = SIGNED_IN
+    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
+    renderWithProviders(<DeepSeekAccountLogin />)
+    await screen.findByTestId('dsa-signed-in')
+    state.view = { ...SIGNED_IN, running_tasks: [TASKS[0] ?? TASKS[1]] } as DeepSeekAccountData
+    await user.click(screen.getByTestId('dsa-sign-out'))
+    expect((await screen.findAllByTestId('dsa-sign-out-task')).length).toBe(1)
+  })
+
+  it('没有在跑的：照原来的确认框', async () => {
+    const user = userEvent.setup()
+    state.view = SIGNED_IN
+    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
+    renderWithProviders(<DeepSeekAccountLogin />)
+    await user.click(await screen.findByTestId('dsa-sign-out'))
+    await waitFor(() => {
+      expect(state.signOuts).toBe(1)
+    })
+    expect(globalThis.confirm).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('dsa-sign-out-tasks')).toBeNull()
   })
 })
