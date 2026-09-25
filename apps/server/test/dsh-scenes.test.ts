@@ -5,7 +5,7 @@
  * 1. 管理器本身（假的 dsh 启动器 `fixtures/fake-dsh.mjs`，同一条 spawn 路径）：列、建、删、起停、失败；
  * 2. **边界（交付 3）**：其他场景的工作目录不指向我们的数据目录，环境里不带我们的任何密钥，
  *    `DSH_HOME` 永远不是 `~/.dsh`；
- * 3. **真的 dsh**（`@deepseek-ai/dsh@0.1.7-rc.1`，不联网）：建一个自建场景、起官方 `web`、
+ * 3. **真的 dsh**（`@deepseek-ai/dsh@0.1.7-rc.2`，不联网）：建一个自建场景、起官方 `web`、
  *    拿带 token 的网址真的 GET 到 200，再关掉；外加 `/v1/dsh-scenes` 走一遍 HTTP。
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
@@ -238,7 +238,7 @@ describe('边界（交付 3）：其他场景够不着我们的数据与密钥',
 
 // ── 真的 dsh（不联网：只起本机网页，不发一条消息） ──────────────────────────────
 
-describe('真的 dsh 0.1.7-rc.1', () => {
+describe('真的 dsh 0.1.7-rc.2', () => {
   it('建自建场景、起官方 web、GET 到 200、关掉；~/.dsh 一个字节没动', async () => {
     const dotDsh = join(homedir(), '.dsh')
     const before = existsSync(dotDsh) ? statSync(dotDsh).mtimeMs : undefined
@@ -253,7 +253,7 @@ describe('真的 dsh 0.1.7-rc.1', () => {
     })
     cleanups.push(() => scenes.close())
 
-    expect(scenes.list().dsh_version).toBe('0.1.7-rc.1')
+    expect(scenes.list().dsh_version).toBe('0.1.7-rc.2')
     const made = await scenes.create({ name: 'coding', template: 'web' })
     expect(made).toMatchObject({ origin: 'custom', template: 'web', surface: 'web' })
 

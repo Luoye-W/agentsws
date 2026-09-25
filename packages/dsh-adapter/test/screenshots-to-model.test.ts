@@ -113,7 +113,9 @@ writeFileSync(
 )
 chmodSync(DRIVER, 0o755)
 
-const T0 = Date.parse('2026-09-24T10:00:00.000Z')
+// 子进程档的门禁用子进程自己的墙钟（`wallClockMs` 是函数、过不了进程边界），
+// 所以授权窗口必须跟真实时间走——写死日期会在第二天变成"授权已过期"（WP149 撞上）。
+const T0 = Date.now()
 const GRANTED: RunComputerUse = {
   command: DRIVER,
   args: ['mcp'],

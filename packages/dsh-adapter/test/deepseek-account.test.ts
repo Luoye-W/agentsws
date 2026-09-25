@@ -10,13 +10,16 @@
  * 不在官方的诊断输出里、不在 `state()` / `profile()` / `balance()` 的返回值里。
  */
 import { createServer, type Server } from 'node:http'
+import { createRequire } from 'node:module'
 import type { AddressInfo } from 'node:net'
 import type { CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { Config as OfficialConfig } from '@deepseek-ai/dsh-deepseek-account-platform'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  accountClientMetadata,
   createDeepSeekAccountHost,
   DEEPSEEK_ACCOUNT_CALLBACK_PATH,
+  DEEPSEEK_ACCOUNT_CLIENT_VERSION,
   DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL,
   type DeepSeekAccountHost,
 } from '../src/deepseek-account.js'
@@ -280,7 +283,7 @@ describe('WP134 登录状态机（官方模块 + 替身平台）', () => {
 })
 
 describe('WP134 官方默认值', () => {
-  it('哨兵：0.1.7-rc.1 的 Config({}) 里 desktopPlatform 没落成文档说的 null（所以我们显式传）', () => {
+  it('哨兵：0.1.7-rc.1 / rc.2 的 Config({}) 里 desktopPlatform 没落成文档说的 null（所以我们显式传）', () => {
     // 上游修好之后这一条会红：那时把 OFFICIAL_DEFAULTS 删掉、这条改成 toBeNull 即可
     expect(OfficialConfig({}).desktopPlatform).toBeUndefined()
     expect(OfficialConfig({ desktopPlatform: null }).desktopPlatform).toBeNull()
@@ -293,6 +296,66 @@ describe('WP134 官方默认值', () => {
     expect(resolved.allowLoopbackHttp).toBe(false)
     expect(resolved.rewriteBrowserOrigin).toBe(false)
     expect(resolved.requestHeaders).toEqual({})
+  })
+})
+
+describe('WP149 调用方身份（dsh 0.1.7-rc.2 起每次平台调用都要带）', () => {
+  it('送的 x-client-version 就是装着的官方账号模块那一版（升 dsh 时这条红 → 改 DEEPSEEK_ACCOUNT_CLIENT_VERSION）', () => {
+    const require = createRequire(import.meta.url)
+    const pkg = require('@deepseek-ai/dsh-deepseek-account-platform/package.json') as {
+      version: string
+    }
+    expect(DEEPSEEK_ACCOUNT_CLIENT_VERSION).toBe(pkg.version)
+  })
+
+  it('时区按官方算法：UTC 以东多少秒', () => {
+    const now = new Date('2026-09-25T00:00:00Z')
+    const meta = accountClientMetadata('zh-CN', now)
+    expect(meta).toEqual({
+      version: DEEPSEEK_ACCOUNT_CLIENT_VERSION,
+      locale: 'zh-CN',
+      timezoneOffsetSeconds: -now.getTimezoneOffset() * 60,
+    })
+  })
+
+  it('起登录、查资料、查余额、登出：每个平台请求都带版本 / 语言 / 时区三个头，平台身份仍是 web', async () => {
+    const h = await mount()
+    await h.startSignIn({ callbackOrigin: origin, locale: 'en-US' })
+    await until(
+      () => h.state(),
+      (v) => v.attempt?.phase === 'waiting-browser',
+    )
+    await browserReturns()
+    await until(
+      () => h.state(),
+      (v) => v.status === 'credential-stored',
+    )
+    await h.profile()
+    await h.balance()
+    await h.signOut()
+    // 官方登出是"先删本机、后台调平台 logout"：等那一下后台请求到了再查
+    await until(
+      async () => platform.requests.some((r) => r.url.endsWith('/users/logout')),
+      (v) => v,
+    )
+    const offset = String(-new Date().getTimezoneOffset() * 60)
+    expect(platform.requests.length).toBeGreaterThanOrEqual(4)
+    for (const r of platform.requests) {
+      expect(r.headers['x-client-version'], r.url).toBe(DEEPSEEK_ACCOUNT_CLIENT_VERSION)
+      expect(r.headers['x-client-timezone-offset'], r.url).toBe(offset)
+      expect(r.headers['x-client-platform'], r.url).toBe('web')
+    }
+    // 起登录（含交换）用调用方给的语言；查资料 / 余额 / 登出用宿主的缺省语言（中文界面）
+    const signIn = platform.requests.filter((r) => r.url.includes('/dsh/auth_'))
+    expect(signIn.length).toBeGreaterThanOrEqual(2)
+    for (const r of signIn) expect(r.headers['x-client-locale'], r.url).toBe('en_US')
+    const later = platform.requests.filter((r) => !r.url.includes('/dsh/auth_'))
+    // 资料那一次不出请求：rc.2 把交换时平台回的 user 缓存成资料（绑在那个令牌上）
+    expect(later.map((r) => new URL(r.url).pathname).sort()).toEqual([
+      '/api/v0/users/get_user_summary',
+      '/auth-api/v0/users/logout',
+    ])
+    for (const r of later) expect(r.headers['x-client-locale'], r.url).toBe('zh_CN')
   })
 })
 

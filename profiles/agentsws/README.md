@@ -3,7 +3,7 @@
 dsh profile（16 §1）：**"我们这种模式"的技术实体**。
 
 - `package.json` —— `dsh.profile.bundles` 列出组合的 bundle，并把每个 `@deepseek-ai/dsh-*`
-  **锁到 0.1.7-rc.1**（不用 `^`：上游预发布期"可自由重命名重组"，浮动版本等于随时炸）。
+  **锁到 0.1.7-rc.2**（WP149；不用 `^`：上游预发布期"可自由重命名重组"，浮动版本等于随时炸）。
 - `cordis.patch.yml` —— 我们的 patch 层，**只放锁定**（docs/42 红线 7：上游默认会开、我们必须关的那几行）。
   每一行的 id 由 `packages/dsh-adapter/test/profile-lockdown.test.ts` 对照 `dsh --dump-config-schema`
   导出的配置 schema 校验：id 在当前 dsh 里不存在、或指向的插件换了人，测试就红（WP133）。
