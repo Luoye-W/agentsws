@@ -133,6 +133,12 @@ export interface RuntimeOptions {
   /** WP25：现在生效的默认模型（进 `RunRequest.runtime.model`）。 */
   modelRef?: () => ModelRef
   /**
+   * WP150：一次运行的模型请求（`purpose: 'run'`）真正会落到哪一条模型来源上——按 purpose 覆盖过
+   * 就是覆盖的那条，否则是默认那条。开跑时记一次（官方同款：看"这次任务绑定的那条模型路由"），
+   * 登出 DeepSeek 账号时据此认出"哪几件事正在用这个账号跑"。不给就用 {@link modelRef}。
+   */
+  runModelRef?: () => ModelRef
+  /**
    * WP147（截图给 AI 看）：现在生效的默认模型**验证过能看图**吗（WP127 三步验证的结论，
    * `ModelsAssembly.visionStatus()`）。只有 `'ok'` 才让 dsh 那条路由声明图片输入——
    * 浏览器 / 电脑操控的截图才进模型；`'no'` / `'unchecked'` / 不接都不声明（截图位置是官方诊断）。
@@ -304,8 +310,25 @@ export interface PositionLayerSource {
   ): Promise<Record<string, unknown> | undefined> | Record<string, unknown> | undefined
 }
 
+/** WP150：一次正在跑的运行（第三栏 / 登出确认框里那一行）。 */
+export interface ActiveRunView {
+  run_id: string
+  matter_id: string
+  /** 事项名（人话，登出确认框里列的就是它）。 */
+  title: string
+  /** 这次运行绑定的模型来源（开跑时的 `purpose: 'run'` 那一条）。 */
+  model: ModelRef
+}
+
 export interface RuntimeAssembly {
   adapter: RuntimeAdapter
+  /** WP150：现在正在跑的运行（跑完就不在了）。 */
+  activeRuns(): ActiveRunView[]
+  /**
+   * WP150：停掉一次正在跑的运行：先在事项时间线上写一句为什么停（`reason`，人话），再中断它，
+   * 等它收尾（最多 `waitMs`，缺省 10 秒）。找不到（已经跑完）回 `false`。
+   */
+  stopRun(run_id: string, reason: string, waitMs?: number): Promise<boolean>
   /** 注入 `createWork`；工作模型与 startRun 互相需要，靠这一步打断环 */
   bind(work: Work): void
   /** WP69：注入岗位面（岗位层技能与岗位层上下文靠它）。 */
@@ -364,6 +387,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
 
   /** 当前这次运行的现场；stub / direct 的回调是同步回到宿主的，所以一个变量够用。 */
   let scope: RunScope | undefined
+
+  /** WP150：正在跑的运行（开跑登记、收尾摘掉）。只在内存里——重启之后本来就没有在跑的。 */
+  const active = new Map<
+    string,
+    { view: ActiveRunView; controller: AbortController; settled: Promise<void> }
+  >()
 
   const appendRunEvent = (req: RunRequest, e: RunEvent): void => {
     const { type, ...payload } = e
@@ -1021,6 +1050,27 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       person_id: input.actor.person_id,
       assignment_id: input.actor.assignment_id,
     })
+    /*
+     * WP150：登记成「正在跑」。controller 以前只给电脑操控的「停止」用，现在任何一次运行都能被停
+     * （DeepSeek 账号登出 / 登录失效时停掉正在用这个账号跑的那几件事）。
+     */
+    const controller = new AbortController()
+    let settle: () => void = () => undefined
+    active.set(run_id, {
+      view: {
+        run_id,
+        matter_id: input.matter.id,
+        title: input.matter.title,
+        // 没接模型（stub）时就是 stub：不会被当成"在用某个账号跑"
+        model: useDirect
+          ? (options.runModelRef?.() ?? request.runtime.model)
+          : request.runtime.model,
+      },
+      controller,
+      settled: new Promise<void>((resolve) => {
+        settle = resolve
+      }),
+    })
     const byId = new Map(request.context.map((c) => [c.id, c]))
     const seen: ObjectRef[] = []
     scope = {
@@ -1075,7 +1125,6 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        * WP144：批过授权的这一次运行登记成「正在操作这台电脑」——托盘变色、第三栏一行；
        * 点「停止」就中断这次运行（dsh 那棵树 dispose，驱动随之断开）。
        */
-      const controller = new AbortController()
       const cu = request.computer_use
       // WP148：开了浏览器的运行同样走 dsh（只有那棵树上挂得了浏览器提供方）
       const needsDsh = cu !== undefined || request.browser !== undefined
@@ -1130,12 +1179,36 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       })
     } finally {
       scope = undefined
+      active.delete(run_id)
+      settle()
     }
     return { run_id }
   }
 
   return {
     adapter,
+    activeRuns: () => [...active.values()].map((r) => ({ ...r.view })),
+    async stopRun(run_id, reason, waitMs = 10_000) {
+      const hit = active.get(run_id)
+      if (hit === undefined) return false
+      work?.appendEvent(hit.view.matter_id, {
+        kind: 'status',
+        text: reason,
+        actor: { kind: 'system', id: 'runtime' },
+        run_id,
+      })
+      hit.controller.abort()
+      let timer: NodeJS.Timeout | undefined
+      await Promise.race([
+        hit.settled,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, waitMs)
+          timer.unref()
+        }),
+      ])
+      if (timer !== undefined) clearTimeout(timer)
+      return true
+    },
     bind(w) {
       work = w
     },

@@ -34,6 +34,7 @@ import {
   DEEPSEEK_ACCOUNT_UNAVAILABLE,
   DEEPSEEK_BALANCE_FAILED,
   DEEPSEEK_SIGN_IN_ERRORS,
+  DEEPSEEK_SIGN_OUT_STOPPED,
 } from '../src/deepseek-account.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 import { createServer, type Server } from '../src/server.js'
@@ -212,13 +213,35 @@ interface Seen {
   body: string
 }
 
+/** WP150：让替身 Messages 口不认这份令牌了（模拟平台那边登录失效）。 */
+let forceUnauthorized = false
+/**
+ * WP150：给了就让替身 Messages 口**卡在这里**，放行后回一个工具调用——模拟"一件正在用账号跑、
+ * 还没跑完的事"（回工具调用，运行循环才会往下走、看得见中断）。
+ */
+let hold: Promise<void> | undefined
+
 /** 替身 Messages 口：看见测试图就念出那个词。 */
 function fakeMessages(): { fetch: AccountFetch; seen: Seen[] } {
   const seen: Seen[] = []
   const fetch: AccountFetch = async (_url, init) => {
     seen.push({ headers: init.headers, body: init.body })
-    if (init.headers['x-dsh-auth-token'] !== TOKEN) {
+    if (forceUnauthorized || init.headers['x-dsh-auth-token'] !== TOKEN) {
       return { ok: false, status: 401, json: async () => ({}), text: async () => 'unauthorized' }
+    }
+    if (hold !== undefined) {
+      const waiting = hold
+      hold = undefined
+      await waiting
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: 'tool_use', id: 't1', name: 'search_policies', input: {} }],
+          usage: { input_tokens: 10, output_tokens: 1 },
+        }),
+        text: async () => '',
+      }
     }
     const req = JSON.parse(init.body) as { messages: { content: { type: string }[] }[] }
     const image = req.messages.some((m) => m.content.some((b) => b.type === 'image'))
@@ -259,6 +282,8 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
     dir = tempDir()
     platform = createFakeDeepSeekPlatform({ token: TOKEN })
     messages = fakeMessages()
+    forceUnauthorized = false
+    hold = undefined
     bodies.length = 0
     logs.length = 0
     for (const level of ['info', 'log', 'warn', 'error', 'debug'] as const) {
@@ -274,7 +299,13 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
       if (new URL(target).hostname === '127.0.0.1') return realFetch(input, init)
       throw new Error(`测试不许出网：${target}`)
     })
-    server = await createServer({
+    server = await boot()
+    ;({ url } = await server.listen(0))
+  })
+
+  /** 起（或重启）服务进程：同一个数据目录、同一个 dsh 凭据库。 */
+  const boot = () =>
+    createServer({
       dbDir: dir,
       quiet: true,
       env: { [SECRETS_KEY_ENV]: SECRETS_KEY, AGENTSWS_RUNTIME_MODE: 'local' },
@@ -290,8 +321,6 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
         signOutGraceMs: 0,
       },
     })
-    ;({ url } = await server.listen(0))
-  })
 
   afterEach(async () => {
     await server.close()
@@ -411,5 +440,149 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
         body: JSON.stringify({ kind: 'deepseek_account', model: 'deepseek-flash' }),
       }),
     ).rejects.toThrow(/还没用 DeepSeek 账号登录/)
+  })
+  /** 登录 → 回调 → 存这一条 → 三步验证过（WP150 两条用例的前半段）。 */
+  const signInAndConnect = async (): Promise<void> => {
+    await api('/v1/settings/models/deepseek-account/login', { method: 'POST' })
+    const init = platform.lastInit()
+    await realFetch(
+      `${init?.redirect_uri}?code=c1&state=${encodeURIComponent(init?.state ?? '')}`,
+      { redirect: 'manual' },
+    )
+    await until(view, (v) => v.signed_in)
+    await api('/v1/models/providers/deepseek-account', {
+      method: 'PUT',
+      body: JSON.stringify({ kind: 'deepseek_account', model: 'deepseek-flash' }),
+    })
+    const tested = (await api('/v1/models/providers/deepseek-account/test', {
+      method: 'POST',
+    })) as ModelTestResult
+    expect(tested.ok).toBe(true)
+  }
+  const providerRows = async () =>
+    ((await api('/v1/models/providers')) as { providers: ModelProviderView[] }).providers
+  const allEvents = async (): Promise<EventEnvelope[]> => {
+    const out: EventEnvelope[] = []
+    for await (const e of server.kernel.eventLog.read({
+      workspace_id: server.bootstrap.workspace.id,
+      limit: 5000,
+    }))
+      out.push(e)
+    return out
+  }
+
+  it('WP150 推理口 401：本机登录清掉、状态未登录 + 一句人话、这条来源摘掉、记一条事件；令牌守卫不退化', async () => {
+    await signInAndConnect()
+    const credentials = join(dir, 'dsh-home', '.credentials.yaml')
+    const before = platform.requests.length
+
+    // 平台那边不认这份登录了：下一次推理回 401（三步验证那一下就是一次推理）
+    forceUnauthorized = true
+    const tested = (await api('/v1/models/providers/deepseek-account/test', {
+      method: 'POST',
+    })) as ModelTestResult
+    expect(tested.ok).toBe(false)
+    expect(tested.reason).toBe('unauthenticated')
+    expect(tested.detail).toContain('DeepSeek 账号的登录过期了')
+
+    const out = await until(view, (v) => !v.signed_in && v.session_expired !== undefined)
+    expect(out.session_expired?.message).toContain('点一下重新登录')
+    expect(out.enabled).toBe(true)
+    // 和手动登出同一条路：这条模型来源摘掉 → "还没接模型"那条提示与三步验证状态跟着变
+    const rows = await until(providerRows, (r) => !r.some((p) => p.id === 'deepseek-account'))
+    expect(rows.some((p) => p.active)).toBe(false)
+    const events = await until(allEvents, (e) =>
+      e.some((x) => x.type === 'model.account_signed_out'),
+    )
+    const dropped = events.find((x) => x.type === 'model.account_signed_out')
+    expect(dropped?.payload).toEqual({ providers: ['deepseek-account'], reason: 'expired' })
+    // 官方清了本机凭据；失效不是登出，不去调平台 logout
+    expect(readFileSync(credentials, 'utf8')).not.toContain(TOKEN)
+    expect(
+      platform.requests.slice(before).some((r) => r.url.endsWith('/auth-api/v0/users/logout')),
+    ).toBe(false)
+
+    // 令牌守卫（WP134 那一套）：不在任何 /v1 响应、我们的库、事件日志、控制台、平台请求体里
+    for (const b of bodies) expect(b).not.toContain(TOKEN)
+    for (const file of filesUnder(dir)) {
+      expect(readFileSync(file).includes(TOKEN), file).toBe(false)
+    }
+    expect(JSON.stringify(events)).not.toContain(TOKEN)
+    for (const r of platform.requests) expect(r.body).not.toContain(TOKEN)
+    expect(logs.join('\n')).not.toContain(TOKEN)
+  })
+
+  it('WP150 平台口 40003（查余额那一下）：同样未登录 + 一句人话 + 来源摘掉；这一轮回的就已经是"过期了"', async () => {
+    await signInAndConnect()
+    platform.setSession('40003')
+    const out = await view()
+    expect(out.signed_in).toBe(false)
+    expect(out.session_expired?.message).toContain('登录过期了')
+    expect(out.balance).toBeUndefined()
+    await until(providerRows, (r) => !r.some((p) => p.id === 'deepseek-account'))
+    // 重新登录：平台又认了 → 登上、那句话消失
+    platform.setSession('ok')
+    await api('/v1/settings/models/deepseek-account/login', { method: 'POST' })
+    const init = platform.lastInit()
+    await realFetch(
+      `${init?.redirect_uri}?code=c2&state=${encodeURIComponent(init?.state ?? '')}`,
+      { redirect: 'manual' },
+    )
+    const back = await until(view, (v) => v.signed_in)
+    expect(back.session_expired).toBeUndefined()
+    for (const b of bodies) expect(b).not.toContain(TOKEN)
+  })
+  it('WP150 登出前停任务（真服务进程）：重启后账号任务真跑在账号上、列进 running_tasks；登出先停它再登出', async () => {
+    await signInAndConnect()
+    // 重启：只接了 DeepSeek 账号的机器，重启后运行时也得是真模型（挂回账号在建品牌之前）
+    await server.close()
+    server = await boot()
+    ;({ url } = await server.listen(0))
+    expect((await view()).signed_in).toBe(true)
+
+    let release: () => void = () => undefined
+    hold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const runtime = server.runtime
+    if (runtime === undefined) throw new Error('没有运行时')
+    const matter = server.work.createMatter({ kind: 'conversation', title: '回复客户 Anna 的退货' })
+    const running = runtime.startRun({
+      matter,
+      brief: '客户问退货进度',
+      actor: {
+        person_id: server.bootstrap.person.id,
+        assignment_id: server.bootstrap.ownerAssignment.id,
+      },
+    } as Parameters<typeof runtime.startRun>[0])
+
+    // 确认框要列的：正在用这个账号跑的那一件（事项名）
+    const listed = await until(view, (v) => (v.running_tasks?.length ?? 0) === 1)
+    expect(listed.running_tasks?.[0]).toMatchObject({
+      matter_id: matter.id,
+      title: '回复客户 Anna 的退货',
+    })
+    const run_id = listed.running_tasks?.[0]?.run_id ?? ''
+
+    // 点了确认：先停这件事（它还卡在模型那一下），停完才登出
+    const signingOut = api('/v1/settings/models/deepseek-account', { method: 'DELETE' })
+    await new Promise((r) => setTimeout(r, 100))
+    expect((await view()).signed_in).toBe(true)
+    release()
+    await signingOut
+    await running
+    const out = await view()
+    expect(out.signed_in).toBe(false)
+    expect(out.running_tasks).toBeUndefined()
+    expect((await providerRows()).some((p) => p.id === 'deepseek-account')).toBe(false)
+    const timeline = (await api(`/v1/matters/${matter.id}/timeline?limit=50`)) as {
+      events: { text?: string }[]
+    }
+    expect(timeline.events.some((e) => e.text === DEEPSEEK_SIGN_OUT_STOPPED)).toBe(true)
+    const events = await allEvents()
+    expect(events.some((e) => e.type === 'run.cancelled' && e.correlation.run_id === run_id)).toBe(
+      true,
+    )
+    for (const b of bodies) expect(b).not.toContain(TOKEN)
   })
 })

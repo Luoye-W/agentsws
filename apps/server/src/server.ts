@@ -1138,6 +1138,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 不按品牌分）；默认关，选了才挂官方模块。登上 / 登出时每个已装配的品牌都重装一次网关。
    */
   const deepseekDshHome = dshHomeOf(env, dbDir)
+  /**
+   * WP150：各品牌里**正在用 DeepSeek 账号跑**的运行——开跑时绑的模型来源（`purpose: 'run'` 那一条）
+   * 就是账号那一条。只看已经建出来的品牌：没建过的品牌不会有在跑的运行。
+   */
+  const deepseekAccountRuns = () => {
+    const loaded = brands?.loaded() ?? []
+    return loaded.flatMap((brand) =>
+      (brand.runtime?.activeRuns() ?? [])
+        .filter((run) => run.model.provider === DEEPSEEK_ACCOUNT_PROVIDER_ID)
+        .map((run) => ({ brand, run, multi: loaded.length > 1 })),
+    )
+  }
+  /** WP150：把各品牌里「用我的 DeepSeek 账号登录」那一条摘掉——手动登出与登录失效**同一条路**。 */
+  const dropDeepSeekAccountProviders = async (reason: 'signed_out' | 'expired'): Promise<void> => {
+    for (const brand of await brandModules.all()) brand.ownModels.dropAccountProvider(reason)
+  }
   const deepseekAccount = createDeepSeekAccount({
     runtimeMode,
     ...(dbDir === undefined ? {} : { dbDir }),
@@ -1147,6 +1163,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     onChange: () => {
       for (const brand of brands?.loaded() ?? []) brand.ownModels.accountChanged()
     },
+    // WP150：登出前确认框里列的、确认后先停掉的那几件事
+    tasks: {
+      list: () =>
+        deepseekAccountRuns().map(({ brand, run, multi }) => ({
+          run_id: run.run_id,
+          matter_id: run.matter_id,
+          title: run.title,
+          ...(multi ? { brand: brandNameOfWorkspace(brand.workspace_id) } : {}),
+        })),
+      stop: async (reason: string) => {
+        await Promise.all(
+          deepseekAccountRuns().map(({ brand, run }) => brand.runtime?.stopRun(run.run_id, reason)),
+        )
+      },
+    },
+    // WP150：登录失效 → 摘掉各品牌里那一条（和手动登出同一条路）
+    onExpired: () => dropDeepSeekAccountProviders('expired'),
+    now: () => clock.now(),
     ...(options.deepseekAccount?.createHost === undefined
       ? {}
       : { createHost: options.deepseekAccount.createHost }),
@@ -2149,6 +2183,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       deepseekAccount: {
         signedIn: () => deepseekAccount.signedIn(),
         resolveToken: (url: string) => deepseekAccount.resolveToken(url),
+        rejectToken: (token: string) => deepseekAccount.rejectToken(token),
         ...(options.deepseekAccount?.fetch === undefined
           ? {}
           : { fetch: options.deepseekAccount.fetch }),
@@ -2198,6 +2233,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP25：有没有模型问模型面（加密库里的配置 + 环境变量兜底）
             hasModel: () => effectiveModels().configured(),
             modelRef: () => effectiveModels().defaultRef(),
+            // WP150：这次运行的模型请求会落到哪条来源（登出 DeepSeek 账号前据此认出在用账号跑的事）
+            runModelRef: () => effectiveModels().purposeRef('run'),
             // WP147：默认模型验证过能看图，浏览器 / 电脑操控的截图才进模型
             modelVision: () => effectiveModels().visionStatus(),
             // WP29：解析后的技能正文进 prompt——采纳过的 overlay 下一次运行就生效
@@ -2849,10 +2886,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
   })
   const brandModules: BrandModules = brands
+  /*
+   * WP134：上次选过「用我的 DeepSeek 账号登录」就把官方模块挂回来（只读本机凭据库，不出网）。
+   * WP150：挪到建品牌**之前**——运行时在建品牌那一刻问一次"有没有模型"定走 direct 还是 stub，
+   * 挂回来之前问，只接了 DeepSeek 账号的机器重启后就一直是 stub（账号任务根本跑不到模型上）。
+   */
+  await deepseekAccount.resume()
   /** bootstrap 品牌那一套：进程自己要用的那几处（会议 ASR、秘书、问 AI）取它。 */
   const boot = await brandModules.forWorkspace(workspace.id)
-  // WP134：上次选过「用我的 DeepSeek 账号登录」就把官方模块挂回来（只读本机凭据库，不出网）
-  await deepseekAccount.resume()
   // WP128：托管的是这家公司的另一个品牌时，品牌那一套是懒装配的——现在就装上，
   // 转发器客户端才会起来外连（不然要等第一条请求进来，而托管实例上不会有请求）
   if (hostedBoot !== undefined) {
@@ -5008,15 +5049,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         view: () => deepseekAccount.view(),
         login: () => deepseekAccount.login(),
         cancel: (id: string) => deepseekAccount.cancel(id),
-        signOut: async (actor: ModelsActor) => {
+        // WP150：先停掉正在用这个账号跑的事（在 signOut 里），再登出，再摘各品牌里那一条
+        signOut: async (_actor: ModelsActor) => {
           await deepseekAccount.signOut()
-          for (const brand of await brandModules.all()) {
-            const listed = brand.ownModels.port
-            const rows = await listed.providers(actor)
-            if (rows.some((p) => p.id === DEEPSEEK_ACCOUNT_PROVIDER_ID)) {
-              await listed.remove(actor, DEEPSEEK_ACCOUNT_PROVIDER_ID)
-            }
-          }
+          await dropDeepSeekAccountProviders('signed_out')
         },
       },
     }),

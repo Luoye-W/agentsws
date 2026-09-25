@@ -146,6 +146,17 @@ export function cloudAiBaseUrl(env: Record<string, string | undefined>): string 
 /** 环境变量兜底出来的那条 provider 的固定 id。 */
 export const ENV_PROVIDER_ID = 'deepseek'
 
+/**
+ * WP150：系统自己摘 DeepSeek 账号那一条时用的身份（登录失效那一下没有"人"在点）。
+ * `remove` 不看 actor（模型面按机器 / 品牌，不按人），这里只是让签名成立。
+ */
+const DROP_ACTOR: ModelsActor = {
+  workspace_id: 'system',
+  person_id: 'system',
+  assignment_id: 'system',
+  role_id: 'system',
+}
+
 /** stub provider 的 ref——一个模型都没配时，运行时落回它（确定性、不花钱）。 */
 export const STUB_REF: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
 
@@ -265,6 +276,8 @@ export interface ModelsOptions {
   deepseekAccount?: {
     signedIn(): boolean
     resolveToken(url: string): Promise<string | undefined>
+    /** WP150：推理口 401 时把那一次的令牌报回官方（官方判断要不要清登录）。 */
+    rejectToken?(token: string): Promise<void>
     /** 测试 / demo 注入的 Messages 口替身（不联网）。 */
     fetch?: AccountFetch
   }
@@ -307,6 +320,18 @@ export interface ModelsAssembly {
    * WP134：DeepSeek 账号登录 / 登出之后调一次——那条 provider 能不能挂上变了，网关要重装。
    */
   accountChanged(): void
+  /**
+   * WP150：某个 purpose 的模型请求现在会落到哪条来源（按 purpose 覆盖过就是覆盖那条，否则默认那条）。
+   * 运行时开跑时记一次，登出 DeepSeek 账号前据此认出"哪几件事正在用这个账号跑"。
+   */
+  purposeRef(purpose: ModelPurpose): ModelRef
+  /**
+   * WP150：把「用我的 DeepSeek 账号登录」那一条模型来源摘掉（手动登出与登录失效**同一条路**：
+   * 同 `port.remove`——配置、默认、按 purpose 的选择、三步验证结果一起清，网关重装），
+   * 并在这个品牌的事件日志里记一条 `model.account_signed_out`（界面据此刷新「还没接模型」与那张卡）。
+   * 这个品牌没有那一条就什么都不做、回 `false`。
+   */
+  dropAccountProvider(reason: 'signed_out' | 'expired'): boolean
 }
 
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
@@ -1055,6 +1080,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       return deepseekAccountProvider({
         ...(vision === undefined ? {} : { capabilities: { vision, image_generation: false } }),
         resolveToken: (url) => account.resolveToken(url),
+        // WP150：推理 401 → 报回官方，失效了就走"登录过期了"那条路
+        ...(account.rejectToken === undefined
+          ? {}
+          : { rejectToken: (token: string) => account.rejectToken?.(token) ?? Promise.resolve() }),
         baseUrl: config.base_url,
         model,
         provider: config.id,
@@ -2065,6 +2094,22 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     accountChanged: () => {
       reassemble()
     },
+    purposeRef: (purpose) => policyOf().by_purpose?.[purpose] ?? defaultRef(),
+    dropAccountProvider(reason) {
+      const rows = state.providers.filter((p) => p.kind === 'deepseek_account')
+      if (rows.length === 0) return false
+      for (const row of rows) port.remove(DROP_ACTOR, row.id)
+      // 事件里只有"哪条、为什么"：没有账号名、没有令牌
+      options.appendEvent?.({
+        schema_version: 1,
+        workspace_id: options.workspace_id?.() ?? 'ws_local',
+        type: 'model.account_signed_out',
+        actor: { kind: 'system', id: 'models.deepseek_account' },
+        correlation: { trace_id: `dsa_${reason}_${clock.now()}` },
+        payload: { providers: rows.map((r) => r.id), reason },
+      })
+      return true
+    },
     importSettings(snapshot) {
       // 只往空的里写：已经配过的品牌一条都不动（复制是一次性的，不是同步）
       if (state.providers.length > 0) return 0
@@ -2142,6 +2187,9 @@ export function humanizeModelError(code: string, message: string): string {
       return `连不上这个地址：检查接口地址、网络，本地模型的话看看它起来了没有（${message}）`
     case 'invalid_input':
       return `配置不完整：${message}`
+    // WP150：provider 自己已经说成人话了（DeepSeek 账号登录过期 / 没登录），原样给
+    case 'unauthenticated':
+      return message
     default:
       return `没通：${message}`
   }
