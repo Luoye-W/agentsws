@@ -28,6 +28,12 @@
  * **凭据纪律**：令牌只在官方模块与 dsh 凭据库之间走。对外只有「登录了没有 / 账号名 / 余额」；
  * 推理时由 {@link DeepSeekAccountHost.resolveToken}（官方 `resolveToken`，只对 `inferenceOrigin`
  * 给值）现取现用，调用方直接放进 `x-dsh-auth-token` 头，不落任何变量。
+ *
+ * **登录失效（WP150，跟官方 0.1.7-rc.2）**：判定与清理全是官方的，这里只把两个口子透出去——
+ * `rejectToken`（推理口 401 时报回那一次用的令牌；做法移植自官方 MIT 包
+ * `@deepseek-ai/dsh-llm-deepseek-account@0.1.7-rc.2` `lib/index.js` 的 `onRequestError`）与
+ * `onSessionExpired`（订阅官方 `dsh-deepseek-account-platform@0.1.7-rc.2` `lib/index.js`
+ * `expireCredential` 发的 `deepseek-account/session-expired`）。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Context } from '@deepseek-ai/cordis'
@@ -118,6 +124,13 @@ export function accountClientMetadata(
 /** 官方模块在宿主 webServer 上注册的回调路径（`lib/index.js`：`path: "/oauth/callback"`）。 */
 export const DEEPSEEK_ACCOUNT_CALLBACK_PATH = '/oauth/callback'
 
+/**
+ * WP150：官方「登录失效」通知（`dsh-deepseek-account-platform` 的 `expireCredential`：
+ * `this.ctx.emit("deepseek-account/session-expired")`）。判定口径全在官方：推理 401（经
+ * `rejectToken`）、资料 / 余额 / 赠送额度接口 HTTP 401 或顶层 `code: 40003`；其他 HTTP 错误保留登录。
+ */
+export const DEEPSEEK_ACCOUNT_SESSION_EXPIRED_EVENT = 'deepseek-account/session-expired'
+
 /** 官方账号模块在 dsh 凭据库里的记录 owner 段（`credentialKey("deepseek-account-platform", …)`）。 */
 export const DEEPSEEK_ACCOUNT_RECORD_SCOPE = 'deepseek-account-platform'
 
@@ -172,6 +185,18 @@ export interface DeepSeekAccountHost {
   signOut(): Promise<AccountView>
   /** 官方 `resolveToken`：只对 `inferenceOrigin` 下的地址给值。**调用方现取现用。** */
   resolveToken(url: string): Promise<string | undefined>
+  /**
+   * WP150（照官方 rc.2 `dsh-llm-deepseek-account`）：推理口回了 **HTTP 401**，把那一次请求用的令牌
+   * 报回官方。官方**只在它仍是当前那份登录时**才清掉本机凭据并发「登录失效」通知——旧请求迟到的
+   * 401 不会清掉用户刚重新登上的新登录。可选：老的替身不实现也照样能装。
+   */
+  rejectToken?(token: string): Promise<void>
+  /**
+   * WP150：官方说「登录失效了」（推理 401 经 {@link rejectToken}，或资料 / 余额口回 HTTP 401 /
+   * 顶层响应码 `40003`）时叫一次 `listener`。回一个退订函数。**手动登出不算**——那一条走
+   * {@link signOut}，不经过这里。可选（同上）。
+   */
+  onSessionExpired?(listener: () => void): () => void
   /** 订阅状态变化（含一份完整初始状态）。`signal` 结束订阅，不取消登录。 */
   watch(signal: AbortSignal): AsyncIterable<AccountView>
   /**
@@ -262,6 +287,17 @@ export async function createDeepSeekAccountHost(
     cancelSignIn: (id) => account.cancelSignIn(id as SignInAttemptId),
     signOut: () => account.signOut(accountClientMetadata(locale)),
     resolveToken: (url) => account.resolveToken(url),
+    rejectToken: (token) => account.rejectToken(token),
+    onSessionExpired(listener) {
+      // 官方 `expireCredential` 删完本机凭据后先发这一条、再发 `signed-out`（手动登出只发后者）
+      const off = (root.on as (name: string, fn: () => void) => () => void)(
+        DEEPSEEK_ACCOUNT_SESSION_EXPIRED_EVENT,
+        listener,
+      )
+      return () => {
+        off()
+      }
+    },
     watch: (signal) => account.watch(signal),
     handle(req, res) {
       let path: string

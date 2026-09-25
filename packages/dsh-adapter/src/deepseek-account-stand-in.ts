@@ -136,6 +136,11 @@ export interface FakeDeepSeekPlatform {
   lastInit(): { state: string; redirect_uri: string; login_source: string } | undefined
   /** 改余额查询的回法（测试"查不到余额说人话"）。 */
   setBalance(mode: 'ok' | 'fail'): void
+  /**
+   * WP150：让平台"不认这份登录了"——资料 / 余额口回 HTTP 401（`'401'`）或 HTTP 200 + 顶层
+   * `code: 40003`（`'40003'`），这两种是官方判定"登录失效"的口径。`'ok'` 恢复。
+   */
+  setSession(mode: 'ok' | '401' | '40003'): void
   /** 只处理平台源的请求；别的源回 `undefined`，调用方自己决定放行还是抛。 */
   handle(url: string, init?: RequestInit): Response | undefined
 }
@@ -162,6 +167,17 @@ export function createFakeDeepSeekPlatform(
   const requests: FakePlatformRequest[] = []
   let init: { state: string; redirect_uri: string; login_source: string } | undefined
   let balance = options.balance ?? 'ok'
+  let session: 'ok' | '401' | '40003' = 'ok'
+  /** WP150：带着账号令牌的资料 / 余额请求，按 {@link FakeDeepSeekPlatform.setSession} 回"登录失效"。 */
+  const rejected = (): Response | undefined =>
+    session === '401'
+      ? new Response('unauthorized', { status: 401 })
+      : session === '40003'
+        ? new Response(JSON.stringify({ code: 40003, msg: 'Authorization Failed' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : undefined
   return {
     origin,
     token,
@@ -169,6 +185,9 @@ export function createFakeDeepSeekPlatform(
     lastInit: () => init,
     setBalance(mode) {
       balance = mode
+    },
+    setSession(mode) {
+      session = mode
     },
     handle(url, requestInit) {
       const target = new URL(url)
@@ -199,13 +218,16 @@ export function createFakeDeepSeekPlatform(
         case '/auth-api/v0/dsh/auth_cancel':
           return ok({})
         case '/auth-api/v0/users/current':
-          return ok(options.user ?? STAND_IN_DEEPSEEK_USER)
-        case '/api/v0/users/get_user_summary':
+          return rejected() ?? ok(options.user ?? STAND_IN_DEEPSEEK_USER)
+        case '/api/v0/users/get_user_summary': {
+          const no = rejected()
+          if (no !== undefined) return no
           if (balance === 'fail') return new Response('upstream down', { status: 500 })
           return ok({
             normal_wallets: [{ currency: 'CNY', balance: '42.50' }],
             bonus_wallets: [{ currency: 'CNY', balance: '10.00' }],
           })
+        }
         case '/auth-api/v0/users/logout':
           return ok({})
         default:
@@ -228,12 +250,22 @@ export interface StandInDeepSeekAccountHostOptions {
  */
 export function createStandInDeepSeekAccountHost(
   options: StandInDeepSeekAccountHostOptions = {},
-): DeepSeekAccountHost & { setBalance(mode: 'ok' | 'fail'): void } {
-  const token = `dsk_stand_in_${randomUUID().replace(/-/g, '')}`
+): DeepSeekAccountHost & {
+  setBalance(mode: 'ok' | 'fail'): void
+  /**
+   * WP150：模拟"平台那边登录失效了"——照官方 `expireCredential` 的次序：删本机登录 → 发「登录失效」
+   * → 状态变化。demo 里点一下就能看到卡片那句"登录过期了"。没登录时什么都不做。
+   */
+  expire(): void
+} {
+  const newToken = (): string => `dsk_stand_in_${randomUUID().replace(/-/g, '')}`
+  // 每登上一次换一份（同官方：新登录是新令牌，旧请求迟到的 401 对不上它）
+  let token = newToken()
   let signedIn = false
   let attempt: (SignInAttemptView & { state: string }) | null = null
   let balance = options.balance ?? 'ok'
   const listeners = new Set<() => void>()
+  const expiredListeners = new Set<() => void>()
   const links = {
     usageUrl: 'https://platform.deepseek.com/usage',
     topUpUrl: 'https://platform.deepseek.com/top_up',
@@ -249,9 +281,27 @@ export function createStandInDeepSeekAccountHost(
   const changed = (): void => {
     for (const l of listeners) l()
   }
+  const expire = (): void => {
+    if (!signedIn) return
+    signedIn = false
+    attempt = null
+    for (const l of expiredListeners) l()
+    changed()
+  }
   return {
     setBalance(mode) {
       balance = mode
+    },
+    expire,
+    async rejectToken(rejected) {
+      // 官方口径：只有仍是当前那份登录时才清（旧请求迟到的 401 不清新登录）
+      if (rejected === token) expire()
+    },
+    onSessionExpired(listener) {
+      expiredListeners.add(listener)
+      return () => {
+        expiredListeners.delete(listener)
+      }
     },
     state: async () => view(),
     profile: async () =>
@@ -334,6 +384,7 @@ export function createStandInDeepSeekAccountHost(
         return true
       }
       signedIn = true
+      token = newToken()
       attempt = { id: attempt.id, phase: 'succeeded', state: attempt.state }
       changed()
       res
@@ -345,6 +396,7 @@ export function createStandInDeepSeekAccountHost(
     },
     async dispose() {
       listeners.clear()
+      expiredListeners.clear()
     },
   }
 }
