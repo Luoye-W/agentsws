@@ -34,6 +34,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Authorization from '@deepseek-ai/dsh-authorization'
 import CredentialsLocal from '@deepseek-ai/dsh-credentials-local'
 import type {
+  AccountClientMetadata,
   AccountDetails,
   AccountView,
   DeepSeekAccount,
@@ -45,6 +46,7 @@ import PlatformAccount, {
 import { DshAdapterError } from './errors.js'
 
 export type {
+  AccountClientMetadata,
   AccountDetails,
   AccountProfile,
   AccountView,
@@ -82,6 +84,37 @@ export const DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL = `${DEEPSEEK_ACCOUNT_INFERENCE_
  */
 export const OFFICIAL_DEFAULTS: PlatformAccountConfig = { desktopPlatform: null }
 
+/**
+ * WP149（dsh 0.1.7-rc.2）：官方账号模块的每一次平台调用（查资料 / 查余额 / 起登录 / 登出）都要带一份
+ * **调用方身份** `AccountClientMetadata`（`version` / `locale` / `timezoneOffsetSeconds`），官方据它拼
+ * `x-client-version` / `x-client-locale` / `x-client-timezone-offset` 三个头（`platformClientHeaders`，
+ * 另两个 `x-client-bundle-id: ""`、`x-client-platform` 与 rc.1 相同）。rc.1 没有这三个头。
+ *
+ * `version`：官方网页客户端送的是它自己那一版 dsh 的构建号（`dsh-client-ui-settings-account` 的
+ * `accountClientMetadata(locale, process.env.DSH_CLIENT_VERSION)`）。我们用的就是这一版 dsh 的账号模块，
+ * 所以送同一个号——**不**冒充别的客户端、也不编一个平台不认识的号。`test/deepseek-account.test.ts` 钉着
+ * 它与装着的 `@deepseek-ai/dsh-deepseek-account-platform` 版本相等：升 dsh 时那条会红，提醒改这里。
+ */
+export const DEEPSEEK_ACCOUNT_CLIENT_VERSION = '0.1.7-rc.2'
+
+/** 没有显式给语言的调用（查资料 / 余额 / 登出）用的界面语言：我们的界面是中文。 */
+export const DEEPSEEK_ACCOUNT_DEFAULT_LOCALE = 'zh-CN'
+
+/**
+ * 一次调用的调用方身份（官方 `accountClientMetadata` 的同一套算法：
+ * `Date.getTimezoneOffset` 是"UTC 以西多少分钟"，平台要"UTC 以东多少秒"）。
+ */
+export function accountClientMetadata(
+  locale: string,
+  now: Date = new Date(),
+): AccountClientMetadata {
+  return {
+    version: DEEPSEEK_ACCOUNT_CLIENT_VERSION,
+    locale,
+    timezoneOffsetSeconds: -now.getTimezoneOffset() * 60,
+  }
+}
+
 /** 官方模块在宿主 webServer 上注册的回调路径（`lib/index.js`：`path: "/oauth/callback"`）。 */
 export const DEEPSEEK_ACCOUNT_CALLBACK_PATH = '/oauth/callback'
 
@@ -106,6 +139,11 @@ export interface DeepSeekAccountHostOptions {
   config?: PlatformAccountConfig
   /** 装配超时（毫秒）。 */
   readyTimeoutMs?: number
+  /**
+   * 查资料 / 余额 / 登出这几次调用报给平台的界面语言（官方据它选服务端文案的语言）。
+   * 缺省 {@link DEEPSEEK_ACCOUNT_DEFAULT_LOCALE}。起登录用 `startSignIn` 自己的 `locale`。
+   */
+  locale?: string
 }
 
 /** 一次登录由谁发起：官方 `loginSource`。我们的界面是网页（桌面壳里也是同一个网页）。 */
@@ -210,14 +248,19 @@ export async function createDeepSeekAccountHost(
   )
   const account = ctx.get('deepseekAccount') as DeepSeekAccount
 
+  const locale = options.locale ?? DEEPSEEK_ACCOUNT_DEFAULT_LOCALE
   return {
     state: () => account.getState(),
-    profile: () => account.getProfile(),
-    balance: () => account.getBalance(),
+    profile: () => account.getProfile(accountClientMetadata(locale)),
+    balance: () => account.getBalance(accountClientMetadata(locale)),
     startSignIn: (input) =>
-      account.startSignIn(input.locale, input.callbackOrigin, input.loginSource ?? 'web'),
+      account.startSignIn(
+        accountClientMetadata(input.locale),
+        input.callbackOrigin,
+        input.loginSource ?? 'web',
+      ),
     cancelSignIn: (id) => account.cancelSignIn(id as SignInAttemptId),
-    signOut: () => account.signOut(),
+    signOut: () => account.signOut(accountClientMetadata(locale)),
     resolveToken: (url) => account.resolveToken(url),
     watch: (signal) => account.watch(signal),
     handle(req, res) {

@@ -1,7 +1,7 @@
 {
   "_comment": [
     "WP144（docs/80）：电脑操控驱动 cua-driver 的钉版本表。上游哨兵盯这个文件（upstreams.yml 的 cua-driver 一条用 bin_lock_file 对它：cli.version / cli.tag）。",
-    "版本按官方 dsh 0.1.7-rc.1 文档引用的那一版（dsh-experimental-computer-use-cua-driver-mcp README 链接 cua-driver-rs-v0.28.0；",
+    "版本按官方 dsh 0.1.7-rc.1 / rc.2 文档引用的那一版（WP149 核过：rc.2 的 README 链接与 native 提供方的 @trycua/cua-driver 仍是 0.28.0，驱动不动）（dsh-experimental-computer-use-cua-driver-mcp README 链接 cua-driver-rs-v0.28.0；",
     "native 提供方的 package.json 也精确钉 @trycua/cua-driver 0.28.0）。上游 cua-driver-rs-v* 在 GitHub 上一律标 prerelease，",
     "这不是 nightly（nightly 是 nightly-cua-driver-rs-v* 另一条 tag），所以照钉这一版。",
     "sha256 逐字抄自该 release 的 checksums.txt（release-manifest.json 里同一组值）；darwin-universal-binary 与",
@@ -18,7 +18,7 @@
     "released_at": "2026-09-11T08:57:44Z",
     "release_url": "https://github.com/trycua/cua/releases/tag/cua-driver-rs-v0.28.0",
     "checksums_url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/checksums.txt",
-    "referenced_by": "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp@0.1.7-rc.1 README（blob/cua-driver-rs-v0.28.0/libs/cua-driver/README.md）",
+    "referenced_by": "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp@0.1.7-rc.2 README（blob/cua-driver-rs-v0.28.0/libs/cua-driver/README.md）",
     "assets": {
       "darwin-arm64": {
         "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.0/cua-driver-rs-0.28.0-darwin-universal-binary.tar.gz",
@@ -53,7 +53,7 @@
     }
   },
   "providers": {
-    "@deepseek-ai/dsh-computer-use": "0.1.7-rc.1",
-    "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp": "0.1.7-rc.1"
+    "@deepseek-ai/dsh-computer-use": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp": "0.1.7-rc.2"
   }
 }

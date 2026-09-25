@@ -10,7 +10,7 @@
  * `apps/server/src/dsh-scenes.ts`。**没有一行 import dsh 的运行期代码**——
  * 启动器永远以子进程跑（`<捆绑的 Node> <dsh 的 bin.js> --profile <名字>`）。
  *
- * 出处（全部查自 `@deepseek-ai/dsh@0.1.7-rc.1` 与 `@deepseek-ai/dsh-app-boot@0.1.7-rc.1`）：
+ * 出处（全部查自 `@deepseek-ai/dsh@0.1.7-rc.1` 与 `@deepseek-ai/dsh-app-boot@0.1.7-rc.1`；WP149 在 rc.2 上复核未变）：
  * - 模板表：`dsh-app-boot` 的 `PROFILE_TEMPLATES`（`lib/index.js`）；`test/scenes.test.ts` 逐项对照，
  *   上游加 / 删 / 改一个模板就红。
  * - `desktop` 这个名字归 Electron 版 dsh（`dsh` 的 `lib/bin.js` 里 `rejectElectronProfile`）。
@@ -38,7 +38,7 @@ export interface DshSceneTemplate {
 }
 
 /**
- * 官方模板（dsh 0.1.7-rc.1）。顺序是界面上的顺序：能开网页的 `web` 在前。
+ * 官方模板（dsh 0.1.7-rc.1；rc.2 未变，WP149）。顺序是界面上的顺序：能开网页的 `web` 在前。
  *
  * **只有 `web` 有界面**：`headless` 跑一件事就退出，`sdk` / `sdk-minimal` / `acp` 是给
  * 程序接的标准输入输出服务——列出来是为了"新建场景"时能选它当底子，也让用户知道有它们；
