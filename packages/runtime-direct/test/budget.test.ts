@@ -1,6 +1,7 @@
+import { createModelGateway, GatewayError } from '@agentsws/model-gateway'
 import { describe, expect, it } from 'vitest'
 import { CLOSED_TOOL_RESULT } from '../src/index.js'
-import { clock, downGateway, eventsOf, harness, makeRequest, types } from './helpers.js'
+import { clock, downGateway, eventsOf, harness, MODEL, makeRequest, types } from './helpers.js'
 
 const LOOP = [
   { tool_calls: [{ name: 'get_order', input: { order_id: 'ord_1001' } }] },
@@ -103,6 +104,37 @@ describe('预算是硬的（17 §5.3 §5.6）', () => {
     expect(result.outputs).toEqual([])
     expect(h.drafts).toEqual([])
     expect(types(h.events)).not.toContain('run.completed')
+  })
+
+  it('WP150：模型说"要重新登录"（unauthenticated）→ 摘要就是那句人话，不是泛泛的码', async () => {
+    const c = clock()
+    const said = 'DeepSeek 账号的登录过期了，这次没跑成。去「设置 → 模型」点一下重新登录。'
+    const gateway = createModelGateway({
+      providers: [
+        {
+          ref: MODEL,
+          async complete() {
+            throw new GatewayError('unauthenticated', said, { source: 'deepseek_account' })
+          },
+        },
+      ],
+      policy: {
+        default: MODEL,
+        data_residency: 'cn',
+        prices: { 'stub/scripted-v1': { in: 1, out: 2, cached: 0.1 } },
+      },
+      clock: c,
+      env: {},
+      eventSink: () => {},
+    })
+    const h = harness({ script: LOOP, clock: c, gateway })
+    const result = await h.run()
+    expect(result.status).toBe('failed')
+    expect(result.summary).toBe(said)
+    const failed = eventsOf(h.events, 'run.failed')[0]
+    expect(failed?.error.code).toBe('unauthenticated')
+    expect(failed?.error.message).toBe(said)
+    expect(failed?.error.retryable).toBe(false)
   })
 
   it('turn 上限：到顶就收尾，未闭合调用补齐', async () => {
