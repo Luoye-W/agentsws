@@ -44,7 +44,14 @@ const INVALIDATIONS: { prefix: string; keys: string[][] }[] = [
    */
   {
     prefix: 'model.account_',
-    keys: [['deepseek-account'], ['model-providers'], ['model-defaults'], ['home'], ['messages']],
+    keys: [
+      ['deepseek-account'],
+      ['model-providers'],
+      ['model-defaults'],
+      ['models'],
+      ['home'],
+      ['messages'],
+    ],
   },
 ]
 

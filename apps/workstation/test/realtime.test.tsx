@@ -84,7 +84,7 @@ describe('事件类型 → 要失效的查询', () => {
 
   it('WP150：DeepSeek 账号来源被摘（登录失效 / 登出）→ 那张卡与模型清单（"还没接模型"、三步验证）一起重取', () => {
     expect(keysFor('model.account_signed_out')).toEqual(
-      expect.arrayContaining([['deepseek-account'], ['model-providers'], ['home']]),
+      expect.arrayContaining([['deepseek-account'], ['model-providers'], ['models'], ['home']]),
     )
   })
 })

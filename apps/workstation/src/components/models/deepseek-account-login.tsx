@@ -111,6 +111,8 @@ export function DeepSeekAccountLogin({
     void client.invalidateQueries({ queryKey: ['deepseek-account'] })
     void client.invalidateQueries({ queryKey: ['model-providers'] })
     void client.invalidateQueries({ queryKey: ['model-defaults'] })
+    // WP150：顶栏那个"现在用哪个模型"的芯片（`['models', 'defaults']`）也跟着变
+    void client.invalidateQueries({ queryKey: ['models'] })
     void client.invalidateQueries({ queryKey: ['home'] })
   }
 
