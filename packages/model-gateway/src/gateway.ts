@@ -360,6 +360,12 @@ class Gateway implements ModelGatewayApi {
     )
 
     const attempts: ProviderDownPayload['attempts'] = []
+    /*
+     * WP150：provider 明说"要重新登录"（`unauthenticated`，例如 DeepSeek 账号登录失效）不是上游宕了——
+     * 降级换一家救不回来，泛泛的 `all providers failed` 也说不清。记进 attempts 之后**原样**往上抛，
+     * 运行的失败原因就是 provider 那句人话。
+     */
+    let signIn: GatewayError | undefined
     try {
       for (const ref of this.candidates(primary)) {
         let provider: ModelProvider
@@ -420,6 +426,10 @@ class Gateway implements ModelGatewayApi {
             ...(e instanceof ProviderError && e.status !== undefined ? { status: e.status } : {}),
             message: messageOf(e),
           })
+          if (e instanceof GatewayError && e.code === 'unauthenticated') {
+            signIn = e
+            break
+          }
           if (!isRetryableProviderError(e)) break
         }
       }
@@ -430,6 +440,7 @@ class Gateway implements ModelGatewayApi {
     this.ledger.release(reservation)
     const payload: ProviderDownPayload = { model: primary, attempts }
     this.emit('model.provider_down', ctx, payload)
+    if (signIn !== undefined) throw signIn
     throw new GatewayError('provider_unavailable', 'all providers failed', payload)
   }
 

@@ -69,7 +69,10 @@ export type {
 export {
   DEEPSEEK_ACCOUNT_BASE_URL,
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
+  // WP150：账号登录失效 / 没登录时那一次调用的失败原因（人话）
+  DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE,
   DEEPSEEK_ACCOUNT_MODELS,
+  DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE,
   deepseekAccountProvider,
   deepseekMessagesProvider,
   toMessagesRequest,

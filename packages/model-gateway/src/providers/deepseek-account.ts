@@ -20,6 +20,14 @@
  * 模型口说 file id 不认了（过期 / 404）→ 作废那条映射、重传、只重试一次。
  * 这一路也可以用 **API key**（`x-api-key`，官方同款）——见 {@link deepseekMessagesProvider}。
  *
+ * **登录失效（WP150，跟官方 0.1.7-rc.2）**：推理口回 **HTTP 401**（与响应正文无关；403 与别的错误不算）
+ * 就把这一次用的令牌经 `rejectToken` 报回官方账号模块——官方只在它仍是当前登录时才清掉本机凭据
+ * 并发「登录失效」通知；这一次调用以 `unauthenticated` + 一句人话失败（{@link DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE}），
+ * 网关原样往上抛，运行的失败原因就是这句话，而不是泛泛的"模型不可用"。没登录（令牌取不到）同理，
+ * 见 {@link DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE}。做法移植自官方 MIT 包
+ * `@deepseek-ai/dsh-llm-deepseek-account@0.1.7-rc.2` `lib/index.js`（`resolveAuth` 里的
+ * `ACCOUNT_SIGN_IN_REQUIRED` 与 `onRequestError` 的 401 → `ACCOUNT_TOKEN_INVALID` + `rejectToken`）。
+ *
  * 不带的东西（与官方适配器相比）：`x-deepseek-harness-*` 那几个归因头（harness 自己的遥测）、
  * 会话日志上报扩展（`session-log-deepseek`，profile 里关死的那条）、流式（网关按整段收）、
  * 图片前那段"附件 id + 请求尺寸"的说明文字（我们没有官方的附件服务）。
@@ -68,6 +76,20 @@ export const DEEPSEEK_ACCOUNT_MODELS: readonly { id: string; name: string; visio
   { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', vision: false },
 ]
 
+/**
+ * WP150：推理口说"这份登录不认了"（HTTP 401）时，这一次调用的失败原因（运行摘要里就是这句）。
+ * 官方同一处的错误码是 `ACCOUNT_TOKEN_INVALID`。
+ */
+export const DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE =
+  'DeepSeek 账号的登录过期了（DeepSeek 那边不认这次的登录了），这次没跑成。去「设置 → 模型」点一下重新登录，再让它重做一遍。'
+
+/**
+ * WP150：取不到账号令牌（没登录、刚登出、或者登录刚失效被清掉）时的失败原因。
+ * 官方同一处的错误码是 `ACCOUNT_SIGN_IN_REQUIRED`（不会退回用 API key）。
+ */
+export const DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE =
+  'DeepSeek 账号没登录（或者登录已经失效），这次没跑成。去「设置 → 模型」用 DeepSeek 账号登录一下，再让它重做一遍。'
+
 /** Messages 协议版本头（官方适配器发的就是这个值）。 */
 const ANTHROPIC_VERSION = '2023-06-01'
 
@@ -91,6 +113,11 @@ export interface DeepSeekAccountProviderOptions {
    * 官方允许的推理源下），这一次调用当场失败并说人话。
    */
   resolveToken: (url: string) => Promise<string | undefined>
+  /**
+   * WP150：官方账号模块的 `rejectToken`。推理口回 401 时拿**这一次请求用的那份令牌**调一次
+   * （官方只在它仍是当前登录时才清）。不给 = 只让这一次失败，不去清登录。
+   */
+  rejectToken?: (token: string) => Promise<void>
   model?: string
   /** 网关里的 provider id（`models.json` 那一条的 id）。 */
   provider?: string
@@ -117,11 +144,16 @@ export interface DeepSeekAccountProviderOptions {
  * API Key 使用 `x-api-key`。两种凭据模式均拒绝重定向。」
  */
 export type DeepSeekMessagesCredential =
-  | { kind: 'account'; resolveToken: (url: string) => Promise<string | undefined> }
+  | {
+      kind: 'account'
+      resolveToken: (url: string) => Promise<string | undefined>
+      /** WP150：推理 401 时把这一次的令牌报回官方（见 {@link DeepSeekAccountProviderOptions.rejectToken}）。 */
+      rejectToken?: (token: string) => Promise<void>
+    }
   | { kind: 'api_key'; apiKey: () => string | undefined }
 
 export interface DeepSeekMessagesProviderOptions
-  extends Omit<DeepSeekAccountProviderOptions, 'resolveToken'> {
+  extends Omit<DeepSeekAccountProviderOptions, 'resolveToken' | 'rejectToken'> {
   credential: DeepSeekMessagesCredential
 }
 
@@ -293,8 +325,15 @@ const toWireTool = (t: ToolDef): Record<string, unknown> => ({
 })
 
 export function deepseekAccountProvider(options: DeepSeekAccountProviderOptions): ModelProvider {
-  const { resolveToken, ...rest } = options
-  return deepseekMessagesProvider({ ...rest, credential: { kind: 'account', resolveToken } })
+  const { resolveToken, rejectToken, ...rest } = options
+  return deepseekMessagesProvider({
+    ...rest,
+    credential: {
+      kind: 'account',
+      resolveToken,
+      ...(rejectToken === undefined ? {} : { rejectToken }),
+    },
+  })
 }
 
 /** 把一次请求里所有图片（按字节去重）挑出来：键、字节、类型。 */
@@ -347,11 +386,14 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
     const c = options.credential
     const value = c.kind === 'account' ? await c.resolveToken(url) : c.apiKey()
     if (value === undefined || value === '') {
-      throw new GatewayError(
-        'invalid_input',
-        c.kind === 'account' ? 'deepseek account is not signed in' : 'missing api key',
-        { source: c.kind === 'account' ? 'deepseek_account' : 'local_vault' },
-      )
+      // WP150：账号这一路照官方 `ACCOUNT_SIGN_IN_REQUIRED`——明说"要重新登录"，网关原样往上抛
+      if (c.kind === 'account') {
+        throw new GatewayError('unauthenticated', DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE, {
+          source: 'deepseek_account',
+          reason: 'account_sign_in_required',
+        })
+      }
+      throw new GatewayError('invalid_input', 'missing api key', { source: 'local_vault' })
     }
     return value
   }
@@ -463,6 +505,25 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
         res = await post(credential, bodyOf(fileIds), fileIds !== undefined)
         if (res.ok) break
         const detailText = await res.text().catch(() => '')
+        /*
+         * WP150：账号令牌被推理口拒了（401，与正文无关——官方同款）。把**这一次**用的令牌报回官方，
+         * 它自己判断还是不是当前登录、要不要清；清不清都让这一次以"登录过期了"失败。
+         */
+        if (account && res.status === 401) {
+          const c = options.credential
+          if (c.kind === 'account') {
+            try {
+              await c.rejectToken?.(credential)
+            } catch {
+              // 官方：清本机凭据失败不改变这一次的失败原因
+            }
+          }
+          throw new GatewayError('unauthenticated', DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE, {
+            source: 'deepseek_account',
+            reason: 'account_token_invalid',
+            status: 401,
+          })
+        }
         if (fileIds !== undefined && files !== undefined) {
           let raw: unknown
           try {

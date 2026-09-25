@@ -17,8 +17,11 @@ import {
   checkModel,
   createModelGateway,
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
+  DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE,
   DEEPSEEK_ACCOUNT_MODELS,
+  DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE,
   deepseekAccountProvider,
+  deepseekMessagesProvider,
   GatewayError,
   ProviderError,
   toMessagesRequest,
@@ -128,8 +131,9 @@ describe('WP134 (a) 凭据：官方 resolveToken 现取、只进 x-dsh-auth-toke
       fetch,
       baseUrl: 'https://evil.example/anthropic',
     })
+    // WP150：没登录那句改成人话（官方 ACCOUNT_SIGN_IN_REQUIRED），错误码 unauthenticated
     await expect(p.complete({ messages: [{ role: 'user', content: 'x' }] })).rejects.toThrow(
-      /not signed in/,
+      DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE,
     )
     expect(seen).toEqual([])
   })
@@ -253,5 +257,116 @@ describe('WP134 (c) 三步验证对这一来源生效（经网关）', () => {
     expect(outcome.ok).toBe(false)
     expect(outcome.failed_step).toBe('vision')
     expect(outcome.reason).toBe(NO_VISION_REASON)
+  })
+})
+
+describe('WP150 登录失效（推理口 401，照官方 dsh-llm-deepseek-account）', () => {
+  it('401：把这一次用的令牌报回 rejectToken，这一次以 unauthenticated + 人话失败；错误里没有令牌', async () => {
+    const { fetch } = fakeMessages({ status: 401 })
+    const rejected: string[] = []
+    const p = deepseekAccountProvider({
+      resolveToken: signedIn,
+      rejectToken: async (t) => {
+        rejected.push(t)
+      },
+      fetch,
+    })
+    const err = await p.complete({ messages: [{ role: 'user', content: 'x' }] }).catch((e) => e)
+    expect(err).toBeInstanceOf(GatewayError)
+    expect((err as GatewayError).code).toBe('unauthenticated')
+    expect((err as GatewayError).message).toBe(DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE)
+    expect(rejected).toEqual([TOKEN])
+    expect(
+      JSON.stringify({ m: (err as Error).message, d: (err as GatewayError).details }),
+    ).not.toContain(TOKEN)
+  })
+
+  it('rejectToken 自己出错也不改这一次的失败原因', async () => {
+    const { fetch } = fakeMessages({ status: 401 })
+    const p = deepseekAccountProvider({
+      resolveToken: signedIn,
+      rejectToken: async () => {
+        throw new Error('credential store locked')
+      },
+      fetch,
+    })
+    await expect(p.complete({ messages: [{ role: 'user', content: 'x' }] })).rejects.toThrow(
+      DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE,
+    )
+  })
+
+  it('403 与别的错误不算失效：不去清登录，照旧是带状态码的 ProviderError', async () => {
+    for (const status of [403, 402, 500]) {
+      const { fetch } = fakeMessages({ status })
+      const rejected: string[] = []
+      const p = deepseekAccountProvider({
+        resolveToken: signedIn,
+        rejectToken: async (t) => {
+          rejected.push(t)
+        },
+        fetch,
+      })
+      const err = await p.complete({ messages: [{ role: 'user', content: 'x' }] }).catch((e) => e)
+      expect(err, String(status)).toBeInstanceOf(ProviderError)
+      expect((err as ProviderError).status).toBe(status)
+      expect(rejected).toEqual([])
+    }
+  })
+
+  it('API key 那一路的 401 不碰账号：照旧 ProviderError', async () => {
+    const { fetch } = fakeMessages({ status: 401 })
+    const p = deepseekMessagesProvider({
+      credential: { kind: 'api_key', apiKey: () => 'sk-x' },
+      fetch,
+    })
+    const err = await p.complete({ messages: [{ role: 'user', content: 'x' }] }).catch((e) => e)
+    expect(err).toBeInstanceOf(ProviderError)
+  })
+
+  it('经网关：不是泛泛的 all providers failed，而是 provider 那句人话原样往上抛；仍记一条 provider_down', async () => {
+    const { fetch } = fakeMessages({ status: 401 })
+    const events = recorder()
+    const provider = deepseekAccountProvider({
+      resolveToken: signedIn,
+      rejectToken: async () => undefined,
+      fetch,
+      provider: 'deepseek-account',
+    })
+    const gateway = createModelGateway({
+      providers: [provider],
+      policy: policy({
+        default: provider.ref,
+        prices: {
+          [`${provider.ref.provider}/${provider.ref.model}`]: { in: 0, out: 0, cached: 0 },
+        },
+      }),
+      clock: fixedClock(),
+      eventSink: events.sink,
+      env: {},
+    })
+    const err = await gateway
+      .complete({ messages: [{ role: 'user', content: 'x' }], meta: meta() })
+      .catch((e) => e)
+    expect(err).toBeInstanceOf(GatewayError)
+    expect((err as GatewayError).code).toBe('unauthenticated')
+    expect((err as GatewayError).message).toBe(DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE)
+    expect(events.events.map((e) => e.type)).toContain('model.provider_down')
+  })
+
+  it('经网关、没登录：同样原样抛"要登录"那句，一个请求都不发', async () => {
+    const { fetch, seen } = fakeMessages()
+    const gateway = gatewayOf(
+      deepseekAccountProvider({
+        resolveToken: async () => undefined,
+        fetch,
+        provider: 'deepseek-account',
+      }),
+    )
+    const err = await gateway
+      .complete({ messages: [{ role: 'user', content: 'x' }], meta: meta() })
+      .catch((e) => e)
+    expect((err as GatewayError).code).toBe('unauthenticated')
+    expect((err as GatewayError).message).toBe(DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE)
+    expect(seen).toEqual([])
   })
 })
