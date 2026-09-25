@@ -36,13 +36,17 @@ import { describe, expect, it } from 'vitest'
  * "cordis 不随 dsh 走"那条断言改成钉死新旧两个号；③ 新加一条"两份 `skipped` 一致"
  * （capture.mjs 的 `CAPTURE_SKIP`，只许跳升级前 main 上就红的场景；这次最终提交的两份
  * 都是完整的 62 条，没有跳）。旧的八份一个不删。
+ *
+ * **WP149（0.1.7-rc.1 → 0.1.7-rc.2）：FROM 直接用仓库里的 `0.1.7-rc.1.json`。** 不是沿用旧的：
+ * 升级前在当前代码树（WP133–WP148 之后）重采了一份，与 `0.1.7-rc.1.json` **逐字节相同**（`cmp` 无输出），
+ * 所以没有另存一份同样内容的 `-wp149` 文件（WP133 同一做法）。cordis 这一跳不动（rc.2 仍要 `~4.0.4`）。
  */
-const FROM_FILE = '0.1.6-alpha.2-wp132'
-const TO_FILE = '0.1.7-rc.1'
-const FROM = '0.1.6-alpha.2'
-const TO = '0.1.7-rc.1'
-/** cordis 这一跳的新旧号（WP132：dsh 0.1.7 的 peer 是 `~4.0.4`）。 */
-const CORDIS_FROM = '4.0.2'
+const FROM_FILE = '0.1.7-rc.1'
+const TO_FILE = '0.1.7-rc.2'
+const FROM = '0.1.7-rc.1'
+const TO = '0.1.7-rc.2'
+/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 不动）。 */
+const CORDIS_FROM = '4.0.4'
 const CORDIS_TO = '4.0.4'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
@@ -138,7 +142,7 @@ describe('升级基线：两份都在，说的是同一件事', () => {
       if (version === null) continue
       if (name === '@deepseek-ai/cordis') {
         // cordis 是 dsh vendored 出来的独立包，不随 dsh 的版本走（34 §核实）；
-        // WP132 这一跳是"必要时"跟着升的那一次（docs/42 ②），新旧号都钉死
+        // WP132 那一跳是"必要时"跟着升的那一次（docs/42 ②）；新旧号都钉死（WP149 两边都是 4.0.4）
         expect(before.packages[name]).toBe(CORDIS_FROM)
         expect(version).toBe(CORDIS_TO)
         continue
