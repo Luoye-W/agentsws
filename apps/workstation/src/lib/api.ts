@@ -5327,6 +5327,18 @@ export interface DeepSeekAccountData {
   top_up_url?: string
   default_model: string
   region: 'cn'
+  /** WP150：上一次是登录失效把人登出的（卡片上说"登录过期了，点一下重新登录"）。 */
+  session_expired?: { at: string; message: string }
+  /** WP150：正在用这个账号跑的事（登出前确认框里列它们，确认后先停再登出）。 */
+  running_tasks?: DeepSeekAccountTask[]
+}
+
+/** WP150：一件正在用 DeepSeek 账号跑的事。 */
+export interface DeepSeekAccountTask {
+  run_id: string
+  matter_id: string
+  title: string
+  brand?: string
 }
 
 export const getDeepSeekAccount = (assignment?: string): Promise<DeepSeekAccountData> =>

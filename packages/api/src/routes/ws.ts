@@ -102,6 +102,8 @@ export const WS_DEFAULT_PREFIXES = [
   'workflow.',
   // 28 §1 急停
   'halt.',
+  // WP150：DeepSeek 账号那一条模型来源被摘了（登录失效 / 登出）；只这一种，model.usage 那些照旧不推
+  'model.account_',
 ] as const
 
 /** 急停 `all` 时唯一还推的东西。 */

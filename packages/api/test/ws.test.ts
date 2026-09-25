@@ -206,6 +206,16 @@ describe('推送', () => {
     expect(sink.frames.map((f) => f.name)).toEqual(['approval.decided'])
   })
 
+  it('WP150：DeepSeek 账号来源被摘（model.account_signed_out）默认推——界面据此刷新「还没接模型」', async () => {
+    const h = await harness()
+    const { session, sink } = await connected(h)
+    sink.clear()
+    seed(h, { type: 'model.usage' })
+    seed(h, { type: 'model.account_signed_out' })
+    await session.pump()
+    expect(sink.frames.map((f) => f.name)).toEqual(['model.account_signed_out'])
+  })
+
   it('types 是前缀：只订 approval. 就只收 approval.*', async () => {
     const h = await harness()
     const { session, sink } = await connected(h, { types: ['approval.'] })

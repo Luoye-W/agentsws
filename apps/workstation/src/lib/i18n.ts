@@ -2550,8 +2550,15 @@ const zh: Table = {
   'dsa.testing': '正在验证三步（连通 → 文字 → 看图）…',
   'dsa.ok': '通了：文字能回，图也看得懂。',
   'dsa.retest': '再测一次',
-  'dsa.err.key': 'DeepSeek 账号的登录失效了。点登出，再登录一次。',
+  'dsa.err.key': 'DeepSeek 账号的登录失效了，点一下重新登录。',
   'dsa.err.balance': 'DeepSeek 账号余额不足，去开放平台充值后再测。',
+  // WP150：登录失效自动登出并提示；登出前确认并停掉正在用账号跑的事
+  'dsa.expired': 'DeepSeek 账号的登录过期了，点一下重新登录。',
+  'dsa.relogin': '重新登录',
+  'dsa.sign_out.tasks': '登出前，下面这 {n} 件正在用这个账号跑的事会先停下：',
+  'dsa.sign_out.tasks_hint': '停下的事不会丢，换个模型或重新登录后可以让它重做。',
+  'dsa.sign_out.stop_and_leave': '停掉并登出',
+  'dsa.sign_out.keep': '先不登出',
   // WP136（docs/79）：dsh 场景切换（左下角账户块上方那一行 + 它的面板）
   'scenes.entry': '场景',
   'scenes.title': '切换场景',
@@ -5288,7 +5295,15 @@ const en: Table = {
   'dsa.testing': 'Checking three steps (reachable → text → images)…',
   'dsa.ok': 'It works: it answers text and reads images.',
   'dsa.retest': 'Test again',
-  'dsa.err.key': 'The DeepSeek sign-in has expired. Sign out and sign in again.',
+  'dsa.err.key': 'The DeepSeek sign-in has expired. Click to sign in again.',
+  'dsa.expired': 'Your DeepSeek sign-in has expired. Click to sign in again.',
+  'dsa.relogin': 'Sign in again',
+  'dsa.sign_out.tasks':
+    'Signing out first stops these {n} things that are running on this account:',
+  'dsa.sign_out.tasks_hint':
+    'Nothing is lost: switch models or sign in again, then ask for them to be redone.',
+  'dsa.sign_out.stop_and_leave': 'Stop them and sign out',
+  'dsa.sign_out.keep': 'Not now',
   'dsa.err.balance':
     'The DeepSeek account is out of balance. Top up on the platform, then test again.',
   // WP136 (docs/79): switching dsh scenes

@@ -38,6 +38,14 @@ const INVALIDATIONS: { prefix: string; keys: string[][] }[] = [
   { prefix: 'meeting.', keys: [['meetings'], ['meeting'], ['meeting-outputs'], ['home']] },
   // WP20 连接面
   { prefix: 'connect.', keys: [['connections'], ['positions'], ['home']] },
+  /*
+   * WP150：DeepSeek 账号那一条模型来源被摘了（登录失效 / 登出）——那张卡、模型清单（顶栏"还没接模型"
+   * 与三步验证状态都读它）、默认模型、首页、邮件助手的"还没接模型"一起重取。
+   */
+  {
+    prefix: 'model.account_',
+    keys: [['deepseek-account'], ['model-providers'], ['model-defaults'], ['home'], ['messages']],
+  },
 ]
 
 /** 一帧摘要 → 要失效的 query key 前缀集合。 */
