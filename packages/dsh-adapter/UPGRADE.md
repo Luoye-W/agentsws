@@ -1625,3 +1625,19 @@ WP143 的移植（`model-gateway` 的 `deepseek-files.ts` / `deepseek-account.ts
 4. **`DEEPSEEK_ACCOUNT_CLIENT_VERSION` 每次升 dsh 都要改**：测试钉着它等于装着的包版本，忘了改会红，不会静默。
 5. `desktopPlatform` 上游洞（WP134）rc.2 仍在，`OFFICIAL_DEFAULTS` 与哨兵留着。
 6. 定时任务 / 时间上下文的"借形借规则"见 §5.1，建议与右栏「定时任务」面板一起排。
+
+## WP150：账号登录失效 / 登出前停任务跟上官方 rc.2（2026-09-25，版本号未动）
+
+WP149 §8 第 1、2 条（Fable 09-25 定：两件都跟）。**判定与清本机凭据全是官方的**，我们只透出两个口子并在宿主一侧做收尾：
+
+- `DeepSeekAccountHost.rejectToken?`（加法）= 官方 `rejectToken`；`deepseekAccountProvider` 推理口 **HTTP 401**（与正文无关，403 / 402 / 5xx 不算）
+  时拿那一次的令牌调它（移植自 `dsh-llm-deepseek-account@0.1.7-rc.2` `lib/index.js` 的 `onRequestError`），这一次以
+  `unauthenticated` + 人话失败，网关原样往上抛（不再是 `all providers failed`）；没登录同理（官方 `ACCOUNT_SIGN_IN_REQUIRED`）。
+- `DeepSeekAccountHost.onSessionExpired?`（加法）订阅官方 `expireCredential` 发的 `deepseek-account/session-expired`（资料 / 余额 / 赠送额度口
+  401 或顶层 `code: 40003`、以及推理口经 `rejectToken`）。手动登出不发这一条。
+- 登出前停任务借的是官方 `installAccountTaskCancellation` 的**判据**（"这次任务绑定的那条模型路由是账号那条"），实现是我们自己的：
+  服务端运行时开跑时记下 `purpose: 'run'` 那一条来源，登出 / 失效时先停这些运行（时间线写原因）再登出 / 摘来源。
+
+**升 dsh 时要看**：`dsh-deepseek-account-platform` README 第三段（哪些状态码 / 响应码算失效）与 `lib/index.js` 的 `expireCredential`
+还发不发 `deepseek-account/session-expired`（事件名写在 `DEEPSEEK_ACCOUNT_SESSION_EXPIRED_EVENT`）；`dsh-llm-deepseek-account` 的
+`onRequestError` 是否仍只认 401。`test/deepseek-account.test.ts` 的「WP150 登录失效」一组用官方模块原样跑这几条，变了会先红。
