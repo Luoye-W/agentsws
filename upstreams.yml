@@ -60,7 +60,7 @@ upstreams:
     why: 我们的 Agent 运行时本体；`packages/dsh-adapter` 是全仓唯一 import dsh 的地方（docs/34）
     npm: '@deepseek-ai/dsh'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.1.7-rc.1
+    locked_version: 0.1.7-rc.2
     pin: exact
     watch: [versions, releases, default_flips, wishlist]
     locked_in:
@@ -81,6 +81,9 @@ upstreams:
       - 'dsh-llm: ctx.llm.stream({ system, messages, tools }) 这条"一次性调用方"的路'
       # WP134：第三种模型来源「用我的 DeepSeek 账号登录」（选了才挂，apps/server/src/deepseek-account.ts）
       - 'dsh-deepseek-account-platform: startSignIn / cancelSignIn / signOut / getState / getProfile / getBalance / resolveToken / watch；宿主只提供 ctx.webServer.register({ kind: exact })'
+      # WP149：rc.2 起 getProfile / getBalance / startSignIn / signOut 都收 AccountClientMetadata（version / locale / timezoneOffsetSeconds），
+      # 官方据它拼 x-client-version / -locale / -timezone-offset；我们送装着的 dsh 版本（deepseek-account.test.ts 钉住相等）
+      - 'dsh-deepseek-account: AccountClientMetadata 三个字段 → platformClientHeaders（每次平台调用）'
       # WP143：移植（不 import）自 dsh-llm-deepseek 的 Files 复用 / 推理回传（packages/model-gateway/src/providers/deepseek-files.ts）
       - 'dsh-llm-deepseek（移植）: Files 复用——POST /v1/files、anthropic-beta files-api-2025-04-14、按字节去重、失败或超时整份退内联、陈旧 file id 作废重传一次'
       - 'dsh-llm-deepseek（移植）: 推理回传——此前 assistant 轮次的 thinking 块与 signature 原样传回，跨模型去签名'
@@ -109,6 +112,10 @@ upstreams:
       # （文档说默认 null → x-client-platform: web；实际 desktopClientHeaders(undefined) 给的是 desktop-mac）。
       # 官方组合靠 base patch 显式写这一项所以看不出来；我们不走 bundle，显式传 null。修了就删 OFFICIAL_DEFAULTS。
       - dsh-deepseek-account-platform 的 desktopPlatform 默认值真的落成 null（schemastery .default(null)）
+      # WP149 加：rc.2 的 dsh-llm-deepseek-account 在推理 401 时调 deepseekAccount.rejectToken(token)（只清还对得上的那份登录）。
+      # 我们的账号推理不经它（model-gateway 自己的 provider），所以登录失效后本机状态仍是"已登录"、每次请求 401；
+      # 要跟就是在 provider 的 401 分支里调 rejectToken（见 dsh-adapter/UPGRADE.md WP149 §5）。
+      - 官方把"推理 401 → rejectToken"做成宿主可复用的库函数（我们就不用在 model-gateway 里照抄）
     covered_by:
       - packages/dsh-adapter/test/seams.test.ts
       - packages/dsh-adapter/test/browser-seam.test.ts
@@ -261,7 +268,7 @@ upstreams:
     why: 电脑操控的独占 provider 槽（一棵树一个提供方）；harness.ts 批过授权才挂（docs/80）
     npm: '@deepseek-ai/dsh-computer-use'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.1.7-rc.1
+    locked_version: 0.1.7-rc.2
     pin: exact
     watch: [versions, default_flips]
     locked_in:
@@ -277,7 +284,7 @@ upstreams:
     why: 电脑操控的 MCP 提供方（驱动是独立进程）；不用 native（原生崩溃可能终止我们的进程），docs/80
     npm: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.1.7-rc.1
+    locked_version: 0.1.7-rc.2
     pin: exact
     watch: [versions, default_flips, wishlist]
     locked_in:
