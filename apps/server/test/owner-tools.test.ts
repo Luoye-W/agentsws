@@ -220,12 +220,16 @@ describe('端到端（stub）：店主问岗位和连接', () => {
   const ASK = '帮我看看有哪些岗位和连接，最该先处理哪三件事'
 
   it('调了两个只读工具；回答里有真岗位名、没有工具名；摘要是这件事本身', async () => {
-    const out = await dataOf<{ matter: { id: string }; run_id?: string }>(
-      await call('POST', `/v1/positions/${owner.id}/matters`, {
-        body: { title: ASK, role_id: 'common.owner' },
-      }),
+    const out = await dataOf<{
+      matter: { id: string }
+      picked?: { role_id: string }
+      run_id?: string
+    }>(
+      // 不点名职责：店主岗位上直接问，岗位内路由要把它交给「工作区所有者」（WP153）
+      await call('POST', '/v1/positions/owner/matters', { body: { title: ASK } }),
     )
     expect(out.run_id).toBeDefined()
+    expect(out.picked?.role_id).toBe('common.owner')
     const run_id = out.run_id ?? ''
     expect(toolsCalled(run_id)).toEqual(['list_positions', 'list_connections'])
     const results = runEvents(run_id).filter(
