@@ -15,6 +15,7 @@
 import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import { aiRoutes } from './ai.js'
+import { searchRoutes } from './search/routes.js'
 import type { EntryDeps, EntryEnv, EntryPrincipal, EntryRoute } from './types.js'
 import { EntryError } from './types.js'
 import { walletRoutes } from './wallet-routes.js'
@@ -85,9 +86,10 @@ export function errorResponse(err: unknown): Response {
   )
 }
 
-/** 全部路由（AI + 钱包）。挂进哪个应用由云侧那边决定。 */
+/** 全部路由（AI + 钱包 + 搜索数据）。挂进哪个应用由云侧那边决定。 */
 export function entryRoutes(deps: EntryDeps): EntryRoute[] {
-  return [...aiRoutes(deps), ...walletRoutes(deps)]
+  // WP155：搜索数据那三条（没配服务商时状态口如实说没开通，另两条 501、一分不扣）
+  return [...aiRoutes(deps), ...walletRoutes(deps), ...searchRoutes(deps)]
 }
 
 function guard(

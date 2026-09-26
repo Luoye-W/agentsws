@@ -31,7 +31,7 @@ describe('价目表', () => {
     expect(pricing.as_of).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  it('十二条能力都在，每条中英标签齐全', () => {
+  it('十四条能力都在，每条中英标签齐全', () => {
     expect(pricing.entries.map((e) => e.capability)).toEqual([
       'ai.chat',
       'ai.embeddings',
@@ -44,6 +44,9 @@ describe('价目表', () => {
       'social.fetch',
       'crawl.page',
       'transcribe.minute',
+      // WP155（docs/81）：搜索数据两条（建议价，reviewed_at 留空等 Luoye 定）
+      'data.search.serp',
+      'data.search.ai_answer',
       'standby.seat.month',
       // WP118 加的两条订阅：红人营销（已上线）与客服（WP124，只登记不接业务）
       'kol.service.monthly',

@@ -163,3 +163,37 @@ describe('54 §2 边界', () => {
     expect(a).toEqual(b)
   })
 })
+
+describe('WP153：问工作区本身的事，交给「工作区所有者」', () => {
+  const owner: RouteRoleProfile = {
+    role_id: 'common.owner',
+    role_name: '工作区所有者',
+    terms: [],
+    positions: [],
+  }
+  const analytics: RouteRoleProfile = {
+    role_id: 'dtc.analytics',
+    role_name: '独立站运营',
+    terms: [],
+    positions: [],
+  }
+
+  it('店主岗位上问「有哪些岗位和连接」→ 工作区所有者（不是独立站运营）', () => {
+    const out = routeWithinPosition('帮我看看有哪些岗位和连接，最该先处理哪三件事', [
+      owner,
+      analytics,
+    ])
+    expect(out.picked).toBe('common.owner')
+    expect(out.ambiguous).toBe(false)
+  })
+
+  it('别的问法照旧：工作区所有者不参赛', () => {
+    const out = routeWithinPosition('上周的转化率怎么样', [owner, analytics])
+    expect(out.picked).toBe('dtc.analytics')
+  })
+
+  it('本人没持有工作区所有者时不走这条', () => {
+    const out = routeWithinPosition('有哪些岗位和连接', [analytics])
+    expect(out.picked).toBe('dtc.analytics')
+  })
+})

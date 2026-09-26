@@ -50,7 +50,9 @@ import {
   type EntryDeps,
   type EntryEnv,
   mountEntryRoutes,
+  type SearchUpstream,
   type StripeConfig,
+  searchProviderOf,
 } from '@agentsws/cloud-entry'
 import type {
   Clock,
@@ -116,6 +118,20 @@ export interface WalletDoOptions {
   ledgerStub?: { fetch(request: Request): Promise<Response> }
   /** `ctx.waitUntil`；测试里给一个同步收集器。不给就直接 `void` 掉那个 Promise。 */
   waitUntil?: (p: Promise<unknown>) => void
+}
+
+/**
+ * WP155：官方数据接口的搜索数据那一家。服务商名是 `[vars]`（非敏感），key 是 secret；
+ * 认不出的服务商名当没开通（不猜）。
+ */
+export function searchUpstreamOf(env: WorkerEnv): SearchUpstream {
+  const named = (env.AGENTSWS_SEARCH_DATA_PROVIDER ?? '').trim().toLowerCase() || 'dataforseo'
+  const provider = searchProviderOf(named)?.id ?? 'dataforseo'
+  return {
+    provider,
+    api_key: () =>
+      searchProviderOf(named) === undefined ? undefined : env.AGENTSWS_SEARCH_DATA_KEY,
+  }
 }
 
 export class WalletCore {
@@ -228,7 +244,8 @@ export class WalletCore {
       verifier,
       wallet: this.wallet,
       pricing: this.pricing,
-      upstream: { ai: upstream },
+      // WP155：搜索数据那一家（key 是取值回调，用到那一刻才取；没配 = 没开通）
+      upstream: { ai: upstream, search: searchUpstreamOf(env) },
       stripe,
       now,
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),

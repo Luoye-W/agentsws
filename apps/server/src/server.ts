@@ -49,6 +49,7 @@ import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
+import type { SearchFetch } from '@agentsws/cloud-entry'
 import type {
   ApprovalBus,
   ApprovalItem,
@@ -266,6 +267,7 @@ import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import { createOwnerToolExecutor } from './owner-tools.js'
 import {
   createFilePersonaBackend,
   createPersonas,
@@ -314,6 +316,12 @@ import {
   type ScheduleAssembly,
   type SchedulePosition,
 } from './schedule.js'
+import {
+  createOfficialSearchClient,
+  createSearchDataService,
+  createSearchDataStore,
+  searchDataApiPort,
+} from './search-data.js'
 import {
   createSecretStore,
   namespaceSecrets,
@@ -606,6 +614,11 @@ export interface ServerOptions {
    * 这五家的接口没有可以随便调的沙箱，所以"形状对不对"只能这么验。
    */
   kolFetch?: KolFetch
+  /**
+   * WP155：自带搜索数据 key 那一档直连服务商用的 fetch。生产不传（走 `globalThis.fetch`）；
+   * 测试传录好的替身响应——服务商一个都不真打。
+   */
+  searchFetch?: SearchFetch
   /**
    * WP121b（70 §3）：品牌接入面（贴一个网址自动分析）抓页面用的 fetch。
    *
@@ -1816,6 +1829,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dbDir === undefined ? {} : { dbDir }),
       now: () => clock.now(),
     })
+    /**
+     * WP155（docs/81）：这个品牌的搜索数据接口（`SearchDataPort`）。三档：官方（打云端，
+     * 令牌是这个品牌那一把）/ 自带 key（本机直连，key 在这个品牌那一段加密库）/ 不接。
+     * 设置文件落在这个品牌自己的目录下。WP154「内容与搜索」经 `brand.searchData` 消费。
+     */
+    const searchData = createSearchDataService({
+      store: createSearchDataStore({
+        secrets: brandSecrets,
+        ...(dir === undefined ? {} : { dir }),
+        now: () => clock.now(),
+      }),
+      official: createOfficialSearchClient({
+        secrets: brandSecrets,
+        baseUrl: cloudBaseUrl(env),
+        tokenSecretId: CLOUD_TOKEN_SECRET_ID,
+        ...(options.cloudFetch === undefined
+          ? {}
+          : { fetch: options.cloudFetch as unknown as SearchFetch }),
+      }),
+      now: () => clock.now(),
+      ...(options.searchFetch === undefined ? {} : { fetch: options.searchFetch }),
+    })
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
@@ -2262,6 +2297,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => kolService.port,
               now: () => clock.now(),
+            }),
+            /*
+             * WP153（09-26 真账号冒烟 §3）：店主的「列岗位 / 列连接」两个只读工具。
+             *
+             * 数据来自现成的两份装配：岗位读制度面（`org.port.positions`，与「岗位」页同一份），
+             * 连接读这个品牌的连接目录（`directoryPortFor` 懒建，与连接页同一份）。
+             * 两样都比运行时晚建——取值函数只在真调工具那一刻才碰它们。
+             */
+            ownerTools: createOwnerToolExecutor({
+              positions: async (actor) =>
+                org.port.positions({
+                  workspace_id: workspace.id,
+                  person_id: actor.person_id,
+                  assignment_id: actor.assignment_id,
+                  role_id: actor.role_id,
+                }),
+              directory: async () => {
+                await directoryPortFor(ws)
+                return directoryAssemblies.get(ws)?.directory()
+              },
+              gaps: async (role_ids) => {
+                await directoryPortFor(ws)
+                return directoryAssemblies.get(ws)?.roleGaps(role_ids)
+              },
+              activeRoleIds: () =>
+                roles.roles
+                  .list()
+                  .map((r) => r.id)
+                  .filter((id) =>
+                    roles.assignments
+                      .listByRole(id, { workspace_id: ws })
+                      .some((a) => a.revoked_at === undefined),
+                  ),
             }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
@@ -2835,6 +2903,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kolService,
       kolSandbox,
       kolPublic,
+      searchData,
       pr,
       prService,
       social,
@@ -4918,6 +4987,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP136（docs/79）：dsh 场景切换。其他场景由 DeepSeek 官方维护，这里只是入口；
      * 打开回的网址带 dsh 发的一次性 token，只在响应里出现、不进日志。
      */
+    /*
+     * WP155（docs/81）：搜索数据接口，按品牌取（设置与自带 key 都在那个品牌名下）。
+     * 自带 key 只从 PUT 进来一次、进加密库，读视图里只有 has_key。
+     */
+    searchData: searchDataApiPort(async (ws) => (await brandModules.forWorkspace(ws)).searchData),
     dshScenes: {
       list: () => dshScenesSetup.manager?.list() ?? unavailableScenes(dshScenesSetup.reason),
       create: (_actor, input) => dshScenes().create(input),

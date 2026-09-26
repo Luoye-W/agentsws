@@ -514,7 +514,8 @@ describe('WP150 登出前确认并停任务', () => {
 const ACCOUNT_TOP_UP = 'https://platform.deepseek.stand-in/top_up'
 const PLATFORM_TOP_UP = 'https://platform.deepseek.com/top_up'
 const ACCOUNT_QUOTA = 'DeepSeek 账号余额不足，充值后再让它接着做。'
-const API_QUOTA = 'DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试。'
+const API_QUOTA =
+  'DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试。'
 
 describe('WP151 余额不足：一行醒目提示 +「去充值」，账号与 API key 各去各的充值页', () => {
   it('账号路：卡片与顶栏出提示，「去充值」打开账号的充值页；登录不变；余额刷新回来提示自己收', async () => {

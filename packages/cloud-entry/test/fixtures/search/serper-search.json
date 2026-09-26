@@ -1,0 +1,6 @@
+{"searchParameters":{"q":"google search","gl":"us","hl":"en","num":10,"autocorrect":true,"page":1,"type":"search"},
+ "knowledgeGraph":{"title":"Google Search","type":"Website","website":"https://google.com/","description":"Google Search is a search engine ..."},
+ "organic":[{"title":"Google","link":"https://www.google.com/?gws_rd=ssl","snippet":"Search the world's information ...","sitelinks":[{"title":"My Activity","link":"https://myactivity.google.com/"}],"position":1},
+  {"title":"Google Search - Stay in the Know with Your Google App","link":"https://www.google.com/search/about/","snippet":"Discover keeps you up to date ...","position":2}],
+ "peopleAlsoAsk":[{"question":"How do I get Google to search?","snippet":"Navigate to google.com ...","title":"3 Ways to Search Google - wikiHow","link":"https://www.wikihow.com/Search-Google"}],
+ "relatedSearches":[{"query":"Google Search Console login"}]}

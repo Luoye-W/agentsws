@@ -75,6 +75,13 @@ export const ACTION_TERMS: Readonly<Record<string, readonly string[]>> = Object.
  */
 export const GENERIC_ROLES: readonly RoleId[] = ['common.member', 'common.owner']
 
+const OWNER_ROLE: RoleId = 'common.owner'
+/**
+ * WP153：「工作区本身」的问法——岗位、职责分配、连接、授权、额度、谁在做什么。
+ * 刻意窄：只认这几个词，不认「看看」「查一下」这种什么都沾的词。
+ */
+const OWNER_INTENT = /岗位|职责|连接|授权|额度|谁在做|谁在岗|分配|position|connection|permission/i
+
 /**
  * 结构类型：路由不 import 完整的 `RoleDefinitionFull`——判据只用得上这五样，
  * 把口子开小一点，调用方（秘书、岗位页、模拟层）递什么都行。
@@ -261,6 +268,23 @@ export function routeWithinPosition(
   roles: readonly RouteRoleProfile[],
   options: { duty_count?: number } = {},
 ): RouteWithinPositionResult {
+  /*
+   * WP153（09-26 真账号冒烟 §3）：**问的是工作区本身的事（岗位、职责、连接、授权、额度），
+   * 而这个岗位里本人又持有「工作区所有者」**，就交给它——这是它的本职（`common.owner` 的
+   * 「你负责」：职责分配、连接器授权）。以前通用职责一概不参赛，于是店主岗位上问
+   * 「有哪些岗位和连接」落到了「独立站运营」，只能去翻规矩库。
+   *
+   * 只认这一种、只在它在场时：别的问法照旧不让它参赛（它什么都沾，参赛等于没路由）。
+   */
+  const owner = roles.find((r) => r.role_id === OWNER_ROLE)
+  if (owner !== undefined && OWNER_INTENT.test(text)) {
+    return {
+      picked: owner.role_id,
+      candidates: [{ role_id: owner.role_id, role_name: owner.role_name, score: 1, why: [] }],
+      ambiguous: false,
+      reason: `问的是岗位、连接这类工作区的事，交给「${owner.role_name}」`,
+    }
+  }
   const eligible = roles.filter((r) => !GENERIC_ROLES.includes(r.role_id))
   // 岗位里只有一条职责：没得选就是它，两条阈值都不看
   const only = eligible[0]

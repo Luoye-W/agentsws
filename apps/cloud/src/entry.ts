@@ -20,7 +20,9 @@ import {
   type EntryEnv,
   type FetchLike,
   mountEntryRoutes,
+  type SearchUpstream,
   type StripeConfig,
+  searchProviderOf,
 } from '@agentsws/cloud-entry'
 import type { Clock, CloudTokenVerifier, Pricing } from '@agentsws/contracts'
 import {
@@ -41,6 +43,9 @@ export const ENTRY_ENV = {
   stripeSecretKey: 'STRIPE_SECRET_KEY',
   stripeWebhookSecret: 'STRIPE_WEBHOOK_SECRET',
   publicUrl: 'AGENTSWS_CLOUD_PUBLIC_URL',
+  /** WP155：官方数据接口的搜索数据服务商（非敏感）与它的 key（敏感）。 */
+  searchProvider: 'AGENTSWS_SEARCH_DATA_PROVIDER',
+  searchKey: 'AGENTSWS_SEARCH_DATA_KEY',
 } as const
 
 export const DEFAULT_NEWAPI_BASE_URL = 'http://127.0.0.1:3000/v1'
@@ -56,6 +61,8 @@ export interface MountEntryOptions {
   fetch?: FetchLike
   pricing?: Pricing
   upstream?: AiUpstream
+  /** WP155：搜索数据那一家（测试注入替身 key + 假上游；不给就从环境变量读）。 */
+  search?: SearchUpstream
   stripe?: StripeConfig
   onWalletEvent?: (e: WalletEvent) => void
   newRequestId?: () => string
@@ -117,11 +124,18 @@ export function mountEntry(server: CloudServer, options: MountEntryOptions = {})
     webhook_secret: () => env[ENTRY_ENV.stripeWebhookSecret],
     ...(publicUrl === undefined ? {} : { return_url: publicUrl }),
   }
+  // WP155：搜索数据那一家——认不出的服务商名当没开通（不猜）；key 用到那一刻才取
+  const searchNamed = (env[ENTRY_ENV.searchProvider] ?? '').trim().toLowerCase() || 'dataforseo'
+  const searchAdapter = searchProviderOf(searchNamed)
+  const search: SearchUpstream = options.search ?? {
+    provider: searchAdapter?.id ?? 'dataforseo',
+    api_key: () => (searchAdapter === undefined ? undefined : env[ENTRY_ENV.searchKey]),
+  }
   const deps: EntryDeps = {
     verifier: options.verifier ?? server.verifyToken,
     wallet,
     pricing,
-    upstream: { ai: upstream },
+    upstream: { ai: upstream, search },
     stripe,
     now,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
