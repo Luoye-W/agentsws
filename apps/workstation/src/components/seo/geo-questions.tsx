@@ -69,7 +69,8 @@ export function GeoQuestions({ assignment }: { assignment: string }): React.Reac
           <Sparkles className="size-4" aria-hidden />
           {t('seo.geo.title')}
         </CardTitle>
-        <p className="text-xs text-muted-foreground" data-testid="geo-cost">
+        {/* 会扣钱的提示：一眼可见（36 §7），标成状态 */}
+        <p className="text-xs text-muted-foreground" data-testid="geo-cost" data-slot="status">
           {settings.enabled ? cost : t('seo.geo.off')}
         </p>
       </CardHeader>
@@ -179,7 +180,11 @@ export function GeoQuestions({ assignment }: { assignment: string }): React.Reac
           >
             {t('seo.run.weekly')}
           </Button>
-          {ran === undefined ? null : <span className="text-xs text-muted-foreground">{ran}</span>}
+          {ran === undefined ? null : (
+            <span className="text-xs text-muted-foreground" data-slot="status">
+              {ran}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>
