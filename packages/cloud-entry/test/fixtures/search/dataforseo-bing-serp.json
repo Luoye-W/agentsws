@@ -1,0 +1,10 @@
+{"version":"0.1.20200129","status_code":20000,"status_message":"Ok.","cost":0.002,"tasks_count":1,"tasks_error":0,
+ "tasks":[{"id":"t2","status_code":20000,"status_message":"Ok.","cost":0.002,"result_count":1,"path":["v3","serp","bing","organic","live","advanced"],
+  "result":[{"keyword":"star wars cast","type":"organic","se_domain":"bing.com","location_code":2840,"language_code":"en","check_url":"https://www.bing.com/search?q=star+wars+cast&cc=US",
+   "item_types":["organic","ai_overview"],"items_count":2,
+   "items":[
+    {"type":"organic","rank_group":1,"rank_absolute":2,"page":1,"position":"left","domain":"www.imdb.com","title":"Star Wars Cast(1977-Present) - IMDb","url":"https://www.imdb.com/list/ls070679507/","cache_url":null,"breadcrumb":"https://www.imdb.com/list/ls070679507","website_name":"IMDb","description":"Star Wars Cast (1977-Present) ...","highlighted":["Mark Hamill."]},
+    {"type":"ai_overview","rank_group":1,"rank_absolute":1,"page":1,"position":"left","markdown":null,
+     "items":[{"type":"ai_overview_element","title":"Title...","text":"The main cast includes Mark Hamill and Carrie Fisher.","images":[],"references":[{"type":"ai_overview_reference","source":"IMDb","domain":"www.imdb.com","url":"https://www.imdb.com/title/tt0076759/fullcredits","title":"Full cast","text":"..."}]}],
+     "references":[]}
+   ]}]}]}

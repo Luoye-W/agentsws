@@ -1,0 +1,6 @@
+{"search_metadata":{"id":"6704d8e815afff064f16921d","status":"Success","created_at":"2026-09-26 07:02:00 UTC","processed_at":"2026-09-26 07:02:00 UTC","total_time_taken":1.37},
+ "search_parameters":{"engine":"google_ai_overview","page_token":"rWmjgXictZPdkqI4FMcv90nWvWBUtO0e7"},
+ "ai_overview":{"text_blocks":[{"type":"paragraph","snippet":"Coffee is a brewed drink; Blue Bottle is a well-known roaster.","reference_indexes":[0,1]},
+   {"type":"list","list":[{"title":"Arabica:","snippet":"Sweeter, softer taste.","reference_indexes":[0]},{"title":"Robusta:","snippet":"Stronger, harsher taste.","list":[{"snippet":"More caffeine."}]}]}],
+  "references":[{"title":"Coffee - Wikipedia","link":"https://en.wikipedia.org/wiki/Coffee","snippet":"...","source":"Wikipedia","index":0},
+   {"title":"Our coffee","link":"https://bluebottlecoffee.com/our-coffee","snippet":"...","source":"Blue Bottle","index":1}]}}

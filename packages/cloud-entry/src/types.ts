@@ -5,9 +5,10 @@
  * 由云侧那个进程（WP58 的 `apps/cloud`）挂上去。这样两件事分得开——
  * 账号 / 令牌 / 组织在那边，价目 / 钱包 / 转发在这边，合并时不会撞同一个文件。
  */
-import type { CloudTokenVerifier, Pricing } from '@agentsws/contracts'
+import type { CloudTokenVerifier, Pricing, SearchDataProvider } from '@agentsws/contracts'
 import type { CostTable, Wallet } from '@agentsws/metering'
 import type { Context } from 'hono'
+import type { SearchCache } from './search/cache.js'
 
 /**
  * 令牌验证：就是 WP58 契约里那份 `CloudTokenVerifier`（合并时由局部声明改成别名）。
@@ -42,6 +43,17 @@ export interface AiUpstream {
   region_map?: RegionMap
 }
 
+/**
+ * WP155：官方数据接口的搜索数据那一家（docs/81）。**不暴露给用户**——对外只叫
+ * 「Agents 工坊官方数据接口」。key 只从 `AGENTSWS_SEARCH_DATA_KEY` 读（Luoye 用
+ * `wrangler secret put` 自己敲，不经 AI），给回调不给值。
+ */
+export interface SearchUpstream {
+  provider: SearchDataProvider
+  /** DataForSEO 是 `login:password`；另两家是一串 key。 */
+  api_key: string | (() => string | undefined)
+}
+
 /** Stripe 装配（值全部从环境变量来；这个包里不写任何 key）。 */
 export interface StripeConfig {
   /** `STRIPE_SECRET_KEY`。 */
@@ -58,7 +70,10 @@ export interface EntryDeps {
   verifier: TokenVerifier
   wallet: Wallet
   pricing: Pricing
-  upstream: { ai: AiUpstream }
+  /** WP155：`search` 不给 = 搜索数据没开通（状态口如实说，另两条回 501，一分不扣）。 */
+  upstream: { ai: AiUpstream; search?: SearchUpstream }
+  /** WP155：搜索数据的结果缓存；不给就用进程内的那份（命中照收同价）。 */
+  searchCache?: SearchCache
   stripe?: StripeConfig
   fetch?: FetchLike
   now?: () => string
