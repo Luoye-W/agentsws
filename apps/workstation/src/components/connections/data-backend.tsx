@@ -191,6 +191,7 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
           className="mt-3 grid gap-3 rounded-lg border bg-muted/20 p-3 text-xs sm:grid-cols-3"
           data-testid="storage-current"
           data-tier={view.tier}
+          data-slot="data"
         >
           <div>
             <dt className="flex items-center gap-1.5 text-muted-foreground">

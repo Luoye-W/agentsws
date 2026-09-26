@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { CATALOG } from '../src/catalog.js'
+import { CATALOG, PLANNED_CONNECTORS } from '../src/catalog.js'
 import { MODEL_TEMPLATES } from '../src/models.js'
 
 const HELP = join(dirname(fileURLToPath(import.meta.url)), '../../../docs/help')
@@ -119,6 +119,22 @@ describe('连接目录的步骤与外链都搬进了教程（WP157）', () => {
       expect(numbered, `${slug}.md「${entry.label}」一节的步骤少了`).toBeGreaterThanOrEqual(
         entry.setup_guide.steps.length,
       )
+    }
+  })
+})
+
+describe('每张连接卡都有压好的一句话（WP157）', () => {
+  it('连接目录与「还没做」那几张，工作台词条里中英各有一句 connections.line.<service>', () => {
+    const i18n = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../workstation/src/lib/i18n.ts'),
+      'utf8',
+    )
+    const cut = i18n.indexOf('const en: Table = {')
+    const zh = i18n.slice(0, cut)
+    const en = i18n.slice(cut)
+    for (const service of [...CATALOG, ...PLANNED_CONNECTORS].map((e) => e.service)) {
+      expect(zh, `中文缺 connections.line.${service}`).toContain(`'connections.line.${service}':`)
+      expect(en, `英文缺 connections.line.${service}`).toContain(`'connections.line.${service}':`)
     }
   })
 })

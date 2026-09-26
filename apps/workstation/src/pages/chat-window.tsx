@@ -298,7 +298,7 @@ export function ChatWindowPage(): React.ReactNode {
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-[13px]">
           <div className="rounded-md border p-2" data-testid="relay-mode">
-            <p className="flex items-center gap-1 font-medium">
+            <p className="flex items-center gap-1 font-medium" data-slot="title">
               {t('chat.window.relay.official')}
               <Hint text={t('chat.window.relay.official.hint')} />
             </p>
@@ -308,11 +308,11 @@ export function ChatWindowPage(): React.ReactNode {
             </p>
           </div>
           <div className="flex flex-col gap-1">
-            <p className="flex items-center gap-1 font-medium">
+            <p className="flex items-center gap-1 font-medium" data-slot="title">
               {t('chat.window.relay.self')}
               <Hint text={t('chat.window.relay.hosted.hint')} />
             </p>
-            <span>{t('chat.window.relay.endpoint')}</span>
+            <span data-slot="title">{t('chat.window.relay.endpoint')}</span>
             <Input
               value={relayForm.endpoint || relay.data?.endpoint || ''}
               placeholder="https://…/relay/<工作区>"
@@ -371,12 +371,13 @@ export function ChatWindowPage(): React.ReactNode {
             {testResult !== undefined ? (
               <span
                 className={testResult.ok ? 'text-xs text-green-700' : 'text-xs text-destructive'}
+                data-slot="status"
               >
                 {testResult.detail}
               </span>
             ) : null}
           </div>
-          <div data-testid="relay-usage">
+          <div data-testid="relay-usage" data-slot="status">
             {status.data !== undefined ? (
               <span className="text-xs text-muted-foreground">
                 {t('chat.window.relay.usage', {
@@ -387,10 +388,13 @@ export function ChatWindowPage(): React.ReactNode {
             ) : null}
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">{t('chat.window.embed')}</span>
+            <span className="text-xs text-muted-foreground" data-slot="title">
+              {t('chat.window.embed')}
+            </span>
             <code
               className="overflow-x-auto rounded-md bg-muted p-2 text-xs"
               data-testid="chat-embed-code"
+              data-slot="data"
             >
               {code}
             </code>

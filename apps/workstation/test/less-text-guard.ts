@@ -10,7 +10,9 @@
  * - 操作：按钮、输入框、下拉、表单（`form` 整个——表单里每格的说明已经是问号）、链接、
  *   **带输入或 `for=` 指着输入框的 `<label>`**（字段名 / 单选 / 勾选的名字就是那个操作的名字）；
  * - 状态与结果：`role=status` / `role=alert` / `[data-slot=status]` / `[data-slot=error]` /
- *   `.text-destructive`、数字与清单（`[data-slot=data]`）、数据表格（`table`）、驱动原话（`pre`）；
+ *   `.text-destructive`、数字与清单（`[data-slot=data]`）、数据表格（`table`）、驱动原话（`pre`）、
+ *   状态徽章（`[data-slot=badge]`，WP157 加）；
+ * - WP157 加：开关两头的选项名（`[data-slot=option]`，"用我的 / 用 Agents 工坊的"——操作的名字）；
  * - 卡里套着的另一张卡（`[data-slot=card]`）：它单独量；
  * - 必须一眼可见的：安全承诺（`[data-slot=safety-note]`）、风险提示（`[data-slot=warning]`）——
  *   它们另有一条规矩：**压到一句**（{@link SAFETY_LIMIT}）；
@@ -37,6 +39,8 @@ const NOT_COUNTED = [
   '[data-slot="card-title"]',
   '[data-slot="title"]',
   '[data-slot="data"]',
+  '[data-slot="badge"]',
+  '[data-slot="option"]',
   '[data-slot="card"]',
   'button',
   '[role="button"]',

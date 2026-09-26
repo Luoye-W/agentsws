@@ -1098,8 +1098,8 @@ const zh: Table = {
   'storage.managed.learn': '看看这一档会是什么样',
   // WP60（49 §6 / 48 L6 / L7）：在线值守与聊天窗托管
   'standby.title': '在线值守（Agents 工坊托管）',
-  'standby.note':
-    '关了电脑也有人接活：你的工作区服务进程搬到云上 7×24 跑，邮箱轮询、聊天窗、跟进都在云上。',
+  'standby.note': '关了电脑也有人接活：服务进程搬到云上 7×24 跑。',
+  'standby.note.hint': '你的工作区服务进程搬到云上跑，邮箱轮询、聊天窗、跟进都在云上。',
   'standby.more.hint':
     '同一时刻只有一个服务进程——开了值守，云上那个就是唯一那个，这台电脑变成它的一个窗口。没有"两边同步"这回事，因为只有一份。随时能接回本机，包格式两边一样。',
   'standby.not_linked': '还没关联 Agents 工坊账号。',
@@ -3963,7 +3963,9 @@ const en: Table = {
   // WP60 (49 §6 / 48 L6 / L7): online standby and hosted chat widget
   'standby.title': 'Online standby (hosted by Agents Workshop)',
   'standby.note':
-    'Someone is on duty after you shut the laptop: your workspace service moves to the cloud and runs 24/7 — mailbox polling, the chat widget, follow-ups, all of it.',
+    'Someone is on duty after you shut the laptop: the service runs 24/7 in the cloud.',
+  'standby.note.hint':
+    'Your workspace service moves to the cloud — mailbox polling, the chat widget, follow-ups, all of it.',
   'standby.more.hint':
     'There is only ever one service process. Turn standby on and the cloud one is it; this machine becomes a window onto it. Nothing to sync, because there is only one copy. You can bring it home any time — same package format both ways.',
   'standby.not_linked': 'No Agents Workshop account linked yet.',

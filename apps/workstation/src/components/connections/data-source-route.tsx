@@ -17,6 +17,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import type { DataSourceLevel } from '@/lib/api'
 import {
@@ -104,7 +105,9 @@ export function DataSourceRouteControl({
 
   return (
     <div className="flex flex-col gap-1" data-testid="data-source-route" data-channel={channel}>
-      <p className="text-xs font-medium">{t('data.route.title')}</p>
+      <p className="text-xs font-medium" data-slot="title">
+        {t('data.route.title')}
+      </p>
       {current.order.map((level, i) => {
         const disabled = current.disabled.includes(level)
         return (
@@ -217,15 +220,20 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
   if (pick.kind === 'none' || pick.kind === 'no_range')
     return (
       <div className="flex flex-col gap-1.5" data-testid="byo-source" data-channel={channel}>
-        <p className="text-xs font-medium">{t('data.byo.title')}</p>
+        <p className="text-xs font-medium" data-slot="title">
+          {t('data.byo.title')}
+        </p>
         <DutyNeeded need={KOL_NEED} kind={pick.kind} testid="byo-duty-needed" compact />
       </div>
     )
 
   return (
     <div className="flex flex-col gap-1.5" data-testid="byo-source" data-channel={channel}>
-      <p className="text-xs font-medium">{t('data.byo.title')}</p>
-      <p className="text-[11px] text-muted-foreground">{t('data.byo.compliance')}</p>
+      {/* WP157：合规那句与返回格式进问号（填之前 hover 一下就看得到） */}
+      <p className="flex items-center gap-1 text-xs font-medium" data-slot="title">
+        {t('data.byo.title')}
+        <Hint text={`${t('data.byo.compliance')} ${t('data.byo.format')}`} testId="byo-hint" />
+      </p>
       {list.error === null ? null : (
         <p role="alert" className="text-[11px] text-destructive" data-testid="byo-source-error">
           {apiErrorText(list.error, t)}
@@ -247,7 +255,6 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
         aria-label={t('data.byo.key')}
         autoComplete="off"
       />
-      <p className="text-[11px] text-muted-foreground">{t('data.byo.format')}</p>
       <div className="flex items-center gap-2">
         <Button size="xs" variant="outline" disabled={busy} onClick={() => save.mutate()}>
           {t('data.byo.save')}
@@ -262,7 +269,11 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
         ) : null}
       </div>
       {result === undefined ? null : (
-        <p className="text-[11px] text-muted-foreground" data-testid="byo-source-result">
+        <p
+          className="text-[11px] text-muted-foreground"
+          data-testid="byo-source-result"
+          data-slot="status"
+        >
           {result}
         </p>
       )}

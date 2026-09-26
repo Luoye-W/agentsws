@@ -36,6 +36,7 @@ export function StatusPill({
   return (
     <span
       data-testid="ws-status-pill"
+      data-slot="status"
       data-tone={tone}
       className={cn(
         'inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium',

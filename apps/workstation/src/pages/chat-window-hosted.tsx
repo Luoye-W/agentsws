@@ -94,7 +94,7 @@ export function HostedRelayOption({
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2" data-testid="relay-hosted">
       <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1 font-medium">
+        <p className="flex items-center gap-1 font-medium" data-slot="title">
           {t('chat.window.hosted.title')}
           <Hint text={t('chat.window.hosted.hint')} />
         </p>

@@ -123,7 +123,7 @@ export function StandbyWizard({
       <p className="flex items-center gap-1 font-medium">
         <Wifi className="size-3.5" aria-hidden />
         {t('standby.title')}
-        <Hint text={t('standby.more.hint')} />
+        <Hint text={`${t('standby.note.hint')} ${t('standby.more.hint')}`} />
       </p>
       <p className="mt-1 text-muted-foreground">{t('standby.note')}</p>
 
@@ -158,36 +158,39 @@ export function StandbyWizard({
                 }}
               />
             </div>
-            <dl className="text-[11px]">
+            <dl className="text-[11px]" data-slot="data">
               <dt className="text-muted-foreground">{t('standby.monthly')}</dt>
               <dd className="font-medium" data-testid="standby-monthly">
                 {monthly === undefined ? '—' : t('standby.credits', { n: monthly })}
               </dd>
             </dl>
-            <dl className="text-[11px]">
+            <dl className="text-[11px]" data-slot="data">
               <dt className="text-muted-foreground">{t('standby.balance')}</dt>
               <dd className="font-medium" data-testid="standby-balance">
                 {available === undefined ? '—' : t('standby.credits', { n: available })}
               </dd>
             </dl>
           </div>
-          <p className="text-muted-foreground">{t('standby.steps')}</p>
-          <Button
-            type="button"
-            size="sm"
-            data-testid="standby-start"
-            disabled={start.isPending}
-            onClick={() => {
-              start.mutate()
-            }}
-          >
-            {start.isPending ? (
-              <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden />
-            ) : (
-              <CloudUpload className="mr-1.5 size-3.5" aria-hidden />
-            )}
-            {start.isPending ? t('standby.starting') : t('standby.start')}
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              data-testid="standby-start"
+              disabled={start.isPending}
+              onClick={() => {
+                start.mutate()
+              }}
+            >
+              {start.isPending ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <CloudUpload className="mr-1.5 size-3.5" aria-hidden />
+              )}
+              {start.isPending ? t('standby.starting') : t('standby.start')}
+            </Button>
+            {/* WP157：「点一下会做哪三件事」进问号 */}
+            <Hint text={t('standby.steps')} testId="standby-steps" />
+          </div>
         </div>
       ) : null}
 
