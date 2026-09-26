@@ -1382,6 +1382,9 @@ importers:
       '@agentsws/secretary':
         specifier: workspace:*
         version: link:../secretary
+      '@agentsws/seo-core':
+        specifier: workspace:*
+        version: link:../seo-core
       '@agentsws/site-core':
         specifier: workspace:*
         version: link:../site-core

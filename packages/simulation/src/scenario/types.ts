@@ -480,6 +480,14 @@ export interface ScenarioStoreDailyReport {
   who: string
 }
 
+/**
+ * WP154：早上那一轮「今天值得动的 5 件事」。数据是替身 Search Console 的一周
+ * （`@agentsws/seo-core` 的合成数据），搜索数据接口按"还没接"——SERP 跳过、其余照跑。
+ */
+export interface ScenarioSeoDaily {
+  who: string
+}
+
 /** WP67 / 48 §5.1：起草并提一封开发信（第一稿故意可以带承诺词）。 */
 export interface ScenarioKolOutreach {
   who: string
@@ -907,6 +915,8 @@ export type ScenarioEvent =
   | { at: string; type: 'content.blog_post'; blog_post: ScenarioContentBlogPost }
   /** WP63：出一张店铺日报卡（51 §2.1，L3 自动出、看完归档）。 */
   | { at: string; type: 'store.daily_report'; daily_report: ScenarioStoreDailyReport }
+  /** WP154：每日读一遍 Search Console → 「今天值得动的 5 件事」报告卡。 */
+  | { at: string; type: 'content.seo_daily'; seo_daily: ScenarioSeoDaily }
   /** WP47：建 / 改一个品牌（44 G1；成员变了岗位范围自动跟并留痕）。 */
   | { at: string; type: 'org.range_group'; range_group: ScenarioOrgRangeGroup }
   /** WP47：建 / 改一条产品线（44 G2）。 */
@@ -1535,6 +1545,14 @@ export interface ScenarioExpected {
   daily_reports?: NumericAssertion
   /** WP63：日报卡里那几个数（`sales` / `orders` / `low_stock` / `pending`）。 */
   daily_report_figures?: Record<string, NumericAssertion>
+  /**
+   * WP154：「今天值得动的 5 件事」那张卡。
+   *
+   * - `picks`：卡上几件（派工单：恰好 5 件）；
+   * - `fix_before_write`：顺序符合先修再写（改现有页 → 交建站 → 交公关 → 新页面）；
+   * - `no_dump`：没有数据倾倒——卡上只有挑出来的那几件，读进来的其余行一行都不上卡。
+   */
+  seo_daily?: { picks?: NumericAssertion; fix_before_write?: boolean; no_dump?: boolean }
   /**
    * WP96（09-18 / 36 §2）：**进人队列的卡**有几张。
    *

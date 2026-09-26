@@ -76,7 +76,8 @@ describe('合成公司生成器（26 §2）', () => {
     // 重新分析不覆盖手改）→ 60
     // WP120（69 §5）再加一条（每个岗位待在自己的道上）→ 61
     // WP127 再加一条（配了看不了图的模型 → 向导不放行）→ 62
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(62)
+    // WP154 再加一条（每日 SEO 卡）→ 63
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(63)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 
