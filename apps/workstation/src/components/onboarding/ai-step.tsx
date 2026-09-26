@@ -20,13 +20,19 @@
  *   DeepSeek 官方授权（dsh 官方模块），回来显示账号与余额，接着同样跑三步验证。
  *   与设置页那张卡是**同一个件**（`DeepSeekAccountLogin`）。数据驻留：境内。
  *
+ * - WP152（Luoye 09-26）：第三张改叫「**DeepSeek 官方**」，DeepSeek 的两种连法都收在这一张里、二选一：
+ *   「官方账户登录」（排第一、默认选中）与「官方 API 接口连接」（原来在"自己的接口"里那条 DeepSeek 表单，
+ *   存完照样当场三步验证）。已经配过 DeepSeek key、没登过账号的人，打开时默认显示 API 那种。
+ *   "自己的接口"那张卡里不再出现 DeepSeek（一家只在一处）。
+ *
  * 减字：每张卡各一行说明，选中哪张才展开哪张的正文——几张同时铺开的话，
  * 第一次打开这个产品的人要先读几段字才知道自己该点哪儿。
  */
 import { modelFailureKind, VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Cloud, KeyRound, Loader2, LogIn } from 'lucide-react'
+import { Check, Cloud, ExternalLink, KeyRound, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { BrandIcon } from '@/components/brand-icons'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
@@ -40,6 +46,7 @@ import {
   getCloudAccount,
   getCloudCredits,
   isAccountTemplate,
+  isDeepSeekAccountKind,
   linkCloudAccount,
   listModelProviders,
   type ModelProviderKind,
@@ -53,6 +60,24 @@ import { cn } from '@/lib/utils'
 
 /** 这一步是靠哪条路接上的。 */
 export type AiChoice = 'official' | 'own' | 'account'
+
+/** WP152：「DeepSeek 官方」那张卡里选的是哪种连法。 */
+export type DeepSeekMode = 'account' | 'api'
+
+/** WP152：这张模板是不是 DeepSeek 那一家的（API key 那条或账号登录那条）。 */
+export function isDeepSeekTemplate(tpl: { kind: string; auth?: string; vendor?: string }): boolean {
+  return tpl.vendor === 'deepseek' || tpl.kind === 'deepseek' || isAccountTemplate(tpl)
+}
+
+/**
+ * WP152：「DeepSeek 官方」卡默认选哪种。默认「官方账户登录」（不用建 key）；已经配过 DeepSeek key、
+ * 又没有账号登录那条的，显示他已有的 API 那种。
+ */
+export function defaultDeepSeekMode(providers: readonly { kind: string }[]): DeepSeekMode {
+  const hasApi = providers.some((p) => p.kind === 'deepseek')
+  const hasAccount = providers.some((p) => isDeepSeekAccountKind(p.kind))
+  return hasApi && !hasAccount ? 'api' : 'account'
+}
 
 /**
  * 试跑失败那一句（70 §2.2）。
@@ -134,6 +159,8 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [test, setTest] = useState<ModelTestResult | undefined>(undefined)
   const [picked, setPicked] = useState<string | undefined>(undefined)
+  /** WP152：「DeepSeek 官方」卡里的二选一；没点过就按已配的推（见 {@link defaultDeepSeekMode}）。 */
+  const [dsPicked, setDsPicked] = useState<DeepSeekMode | undefined>(undefined)
 
   const providers = useQuery({
     queryKey: ['model-providers', assignment],
@@ -267,15 +294,55 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
     (tpl) =>
       tpl.kind !== 'agentsws_cloud' &&
       (tpl.auth ?? 'api_key') === 'api_key' &&
-      // WP134：账号登录那张是第三张大卡，不在"自己的接口"里重复出现
-      !isAccountTemplate(tpl),
+      // WP134 / WP152：DeepSeek 两种连法都在第三张「DeepSeek 官方」卡里，不在"自己的接口"里重复出现
+      !isDeepSeekTemplate(tpl),
   )
+  /** WP152：「DeepSeek 官方」卡里 API 那种用的模板（原 DeepSeek 官方 key 卡的步骤与表单）。 */
+  const dsApiTemplate = (providers.data?.templates ?? []).find(
+    (tpl) => tpl.kind === 'deepseek' && (tpl.auth ?? 'api_key') === 'api_key',
+  )
+  const dsMode: DeepSeekMode =
+    dsApiTemplate === undefined
+      ? 'account'
+      : (dsPicked ?? defaultDeepSeekMode(providers.data?.providers ?? []))
   const template = templates.find((tpl) => slugOf(tpl) === picked) ?? templates[0]
   const groups = vendorGroups(templates)
   const group = groups.find((g) =>
     g.plans.some((p) => template !== undefined && slugOf(p) === slugOf(template)),
   )
   const granted = credits.data?.balance?.granted
+
+  /**
+   * 填 key 那条路存完之后的「正在试 / 三步 / 通了或为什么不通」。"自己的接口"与「DeepSeek 官方」卡的
+   * API 那种共用（同一时间只展开一张卡，所以 testid 不会重复）。
+   */
+  const ownResult = (
+    <>
+      {saveAndTest.isPending ? (
+        <p className="flex items-center gap-1.5 text-ws-muted-fg" data-testid="ai-own-testing">
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          {t('onboarding.ai.own.testing')}
+        </p>
+      ) : null}
+      {/* WP127：三步小清单（与设置页那一行同一个件） */}
+      {test === undefined ? null : <ModelCheckSteps steps={test.steps} />}
+      {test === undefined ? null : test.ok ? (
+        <p className="flex items-center gap-1.5 text-primary" data-testid="ai-own-ok">
+          <Check aria-hidden className="size-4" />
+          {t('onboarding.ai.own.ok')}
+        </p>
+      ) : (
+        <p
+          role="alert"
+          className="text-destructive"
+          data-testid="ai-own-failed"
+          data-kind={modelFailureKind(test)}
+        >
+          {t(modelTestKey(test), modelTestVars())}
+        </p>
+      )}
+    </>
+  )
 
   return (
     <div className="flex flex-col gap-3" data-testid="onboarding-ai">
@@ -409,6 +476,8 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
           data-testid="ai-pick-own"
           className="flex w-full items-center gap-2 text-left"
           onClick={() => {
+            // WP152：从「DeepSeek 官方」卡的 API 那种切过来时，上一次的试跑结果不带过来
+            if (choice !== 'own') setTest(undefined)
             setChoice('own')
           }}
         >
@@ -486,37 +555,12 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
               }}
               takenIds={(providers.data?.providers ?? []).map((p) => p.id)}
             />
-            {saveAndTest.isPending ? (
-              <p
-                className="flex items-center gap-1.5 text-ws-muted-fg"
-                data-testid="ai-own-testing"
-              >
-                <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                {t('onboarding.ai.own.testing')}
-              </p>
-            ) : null}
-            {/* WP127：三步小清单（与设置页那一行同一个件） */}
-            {test === undefined ? null : <ModelCheckSteps steps={test.steps} />}
-            {test === undefined ? null : test.ok ? (
-              <p className="flex items-center gap-1.5 text-primary" data-testid="ai-own-ok">
-                <Check aria-hidden className="size-4" />
-                {t('onboarding.ai.own.ok')}
-              </p>
-            ) : (
-              <p
-                role="alert"
-                className="text-destructive"
-                data-testid="ai-own-failed"
-                data-kind={modelFailureKind(test)}
-              >
-                {t(modelTestKey(test), modelTestVars())}
-              </p>
-            )}
+            {ownResult}
           </div>
         ) : null}
       </section>
 
-      {/* ── 大卡三：用我的 DeepSeek 账号登录（WP134）─────────────────── */}
+      {/* ── 大卡三：DeepSeek 官方（WP134 账号登录 + WP152 合进 API 接口，二选一）──── */}
       <section
         data-testid="ai-card-account"
         data-open={choice === 'account'}
@@ -530,10 +574,13 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
           data-testid="ai-pick-account"
           className="flex w-full items-center gap-2 text-left"
           onClick={() => {
+            if (choice !== 'account') setTest(undefined)
+            // 打开时就定下默认那种：之后存了哪条、列表变了，也不在用户眼前自己跳
+            setDsPicked((m) => m ?? defaultDeepSeekMode(providers.data?.providers ?? []))
             setChoice('account')
           }}
         >
-          <LogIn aria-hidden className="size-4 shrink-0" />
+          <BrandIcon provider="deepseek" size={16} className="shrink-0" />
           <span className="font-medium">{t('onboarding.ai.account')}</span>
           <span className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]">
             {t('dsa.region')}
@@ -541,13 +588,87 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
         </button>
         {choice === 'account' ? (
           <div className="mt-2 flex flex-col gap-2">
-            <p className="text-xs text-ws-muted-fg">{t('dsa.summary')}</p>
-            <DeepSeekAccountLogin
-              {...(assignment === undefined ? {} : { assignment })}
-              onConnected={() => {
-                onConnected('account')
-              }}
-            />
+            {dsApiTemplate === undefined ? null : (
+              <fieldset
+                aria-label={t('onboarding.ai.ds.modes')}
+                className="flex flex-wrap gap-1.5"
+                data-testid="ai-ds-modes"
+              >
+                {(['account', 'api'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={dsMode === mode}
+                    data-testid={`ai-ds-mode-${mode}`}
+                    data-picked={dsMode === mode}
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[11px]',
+                      dsMode === mode ? 'border-primary text-foreground' : 'text-ws-muted-fg',
+                    )}
+                    onClick={() => {
+                      setDsPicked(mode)
+                      setTest(undefined)
+                    }}
+                  >
+                    {t(`onboarding.ai.ds.${mode}`)}
+                  </button>
+                ))}
+              </fieldset>
+            )}
+            {dsMode === 'account' || dsApiTemplate === undefined ? (
+              <>
+                <p className="text-xs text-ws-muted-fg">{t('dsa.summary')}</p>
+                <DeepSeekAccountLogin
+                  {...(assignment === undefined ? {} : { assignment })}
+                  onConnected={() => {
+                    onConnected('account')
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-ws-muted-fg" data-testid="ai-ds-api-hint">
+                  {t('onboarding.ai.ds.api.hint')}
+                </p>
+                {/* 原「DeepSeek 官方」key 卡的几步与开放平台链接（非开发者照着做就行） */}
+                <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-ws-muted-fg">
+                  {dsApiTemplate.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+                <div className="flex flex-wrap gap-2">
+                  {dsApiTemplate.links.map((link) => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline"
+                    >
+                      {link.label}
+                      <ExternalLink className="size-3" aria-hidden />
+                    </a>
+                  ))}
+                </div>
+                <ModelForm
+                  template={dsApiTemplate}
+                  busy={saveAndTest.isPending}
+                  onCancel={() => {
+                    setChoice(undefined)
+                  }}
+                  onSubmit={(values) => {
+                    setTest(undefined)
+                    saveAndTest.mutate({ ...values, kind: dsApiTemplate.kind })
+                  }}
+                  onDiscover={(probe) => {
+                    const { id, ...rest } = probe
+                    return discoverModelProviderModels(id, rest, assignment)
+                  }}
+                  takenIds={(providers.data?.providers ?? []).map((p) => p.id)}
+                />
+                {ownResult}
+              </>
+            )}
           </div>
         ) : null}
       </section>

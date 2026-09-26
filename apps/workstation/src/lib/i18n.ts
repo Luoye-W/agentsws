@@ -2482,6 +2482,11 @@ const zh: Table = {
   'onboarding.ai.official.sent': '信发出去了。去邮箱点那条链接，这一页会自己接上。',
   'onboarding.ai.official.credits': '到账 {credits} 积分，现在就能跑起来。',
   'onboarding.ai.own': '用我自己的模型接口',
+  // WP152（Luoye 09-26）：DeepSeek 两种连法合成一张卡「DeepSeek 官方」，卡里二选一
+  'onboarding.ai.ds.modes': '连接方式',
+  'onboarding.ai.ds.account': '官方账户登录',
+  'onboarding.ai.ds.api': '官方 API 接口连接',
+  'onboarding.ai.ds.api.hint': '去 DeepSeek 开放平台建一把 API key 填进来，按量计费。',
   'onboarding.ai.own.testing': '正在打一次最小请求，看这条路通不通…',
   'onboarding.ai.own.ok': '通了。',
   // 70 §2.2 的四句：说的是**用户该去做什么**，不是上游回了几号错误
@@ -2529,7 +2534,7 @@ const zh: Table = {
     '上面还没有能出图的接口：接上 Agents 工坊官方接口，或者加一条 OpenAI 兼容口，再回来选。',
   'models.image.saved': '已保存，下一次出图就用它。',
   // WP134：第三种模型来源「用我的 DeepSeek 账号登录」（dsh 官方模块，系统浏览器授权）
-  'onboarding.ai.account': '用我的 DeepSeek 账号登录',
+  'onboarding.ai.account': 'DeepSeek 官方',
   'dsa.title': '用我的 DeepSeek 账号登录',
   'dsa.summary': '不用建 key：在浏览器里登录一次 DeepSeek 账号，按账号里的余额扣。',
   'dsa.region': '数据在境内',
@@ -5219,6 +5224,11 @@ const en: Table = {
     'Email sent. Click the link in it — this page picks up from there on its own.',
   'onboarding.ai.official.credits': '{credits} credits are in. You can start right away.',
   'onboarding.ai.own': 'Use my own model endpoint',
+  'onboarding.ai.ds.modes': 'How to connect',
+  'onboarding.ai.ds.account': 'Sign in with my account',
+  'onboarding.ai.ds.api': 'Official API key',
+  'onboarding.ai.ds.api.hint':
+    'Create an API key on the DeepSeek platform and paste it here; pay as you go.',
   'onboarding.ai.own.testing': 'Making one tiny request to see whether this route works…',
   'onboarding.ai.own.ok': 'It works.',
   'onboarding.ai.own.err.key': 'That key is wrong, or it has no access to this model.',
@@ -5272,7 +5282,7 @@ const en: Table = {
     'Nothing above can draw yet: connect the Agents Workshop official API or add an OpenAI-compatible endpoint, then come back.',
   'models.image.saved': 'Saved — the next picture uses it.',
   // WP134: the third model source, "Sign in with my DeepSeek account" (official dsh module, system browser)
-  'onboarding.ai.account': 'Sign in with my DeepSeek account',
+  'onboarding.ai.account': 'DeepSeek (official)',
   'dsa.title': 'Sign in with my DeepSeek account',
   'dsa.summary':
     'No key to create: sign in to your DeepSeek account once in the browser; usage is billed to that account.',
