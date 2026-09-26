@@ -62,7 +62,7 @@ import {
   testModelProvider,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { HELP_BY_VENDOR, templateGuide } from '@/lib/help'
+import { firstSentence, HELP_BY_VENDOR, templateGuide } from '@/lib/help'
 
 /**
  * 一张模板卡的稳定标识（WP88）。
@@ -857,12 +857,8 @@ export function defaultPlanIndex(
   return 0
 }
 
-/** 一段话的第一句（到第一个句号 / 冒号为止）；本来就一句的原样回。 */
-export function firstSentence(text: string): string {
-  const m = /^[^。：:！？!?]*[。！？!?]?/.exec(text.trim())
-  const head = (m?.[0] ?? '').replace(/[：:]$/, '')
-  return head === '' ? text.trim() : head
-}
+/** WP157：挪到 `lib/help.ts`（连接卡也用），这里留一个出口不动调用方。 */
+export { firstSentence }
 
 /** 一张厂商卡：图标 + 卡名 + 一句话 + 方案单选 + 动作（WP156：步骤与外链在教程里）。 */
 function VendorCard({

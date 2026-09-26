@@ -64,7 +64,19 @@ export function Hint({
  *
  * 这是 §2 例外的第一类：用户凭它决定要不要把密钥贴进来，藏了就是失职。
  */
-export function SafetyNote({ text, className }: { text: string; className?: string }): ReactNode {
+export function SafetyNote({
+  text,
+  hint,
+  className,
+}: {
+  text: string
+  /**
+   * WP157：卡上压成一句之后，原话（条款出处、完整的风险说明）放进旁边的问号——
+   * 信息一条不丢，卡面上还是一行。
+   */
+  hint?: string
+  className?: string
+}): ReactNode {
   return (
     <p
       data-slot="safety-note"
@@ -72,6 +84,7 @@ export function SafetyNote({ text, className }: { text: string; className?: stri
     >
       <ShieldCheck aria-hidden className="mt-px size-3.5 shrink-0" />
       <span>{text}</span>
+      {hint === undefined ? null : <Hint text={hint} className="mt-px" />}
     </p>
   )
 }

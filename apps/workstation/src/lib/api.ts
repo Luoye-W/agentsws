@@ -1093,6 +1093,8 @@ export interface ProviderView {
   data_sources: string[]
   setup_guide: { summary: string; steps: string[]; links: { label: string; url: string }[] }
   data_note?: string
+  /** WP63：还没做、只是登记在目录里的那几张（灰着、点不动）。WP157 起工作台读它。 */
+  planned?: boolean
   /** WP25：两种以上接法时给出来，第一条是推荐的那条。 */
   auth_options?: ProviderAuthOption[]
 }

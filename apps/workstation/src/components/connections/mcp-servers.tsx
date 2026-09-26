@@ -18,7 +18,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { SafetyNote } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -135,7 +135,11 @@ export function McpServers({ assignment }: { assignment?: string }): React.React
       data-testid="mcp-servers"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">{t('connections.mcp.hint')}</p>
+        {/* WP157：那段「登记完怎么挂到职责上」进问号，这里只留一句 */}
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          {t('connections.mcp.line')}
+          <Hint text={t('connections.mcp.hint')} testId="mcp-hint" />
+        </p>
         <Button
           size="sm"
           variant={adding ? 'ghost' : 'outline'}
@@ -198,8 +202,9 @@ export function McpServers({ assignment }: { assignment?: string }): React.React
                       saveReadTools(row, event.currentTarget)
                     }}
                   >
-                    <p className="text-xs text-muted-foreground">
-                      {t('connections.mcp.read_tools.hint')}
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      {t('connections.mcp.read_tools.title')}
+                      <Hint text={t('connections.mcp.read_tools.hint')} />
                     </p>
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {row.probe.tools.map((tool) => (
@@ -309,7 +314,10 @@ export function McpServers({ assignment }: { assignment?: string }): React.React
             </div>
           )}
           <div className="flex flex-col gap-1">
-            <Label htmlFor={`${prefix}-headers`}>{t('connections.mcp.headers')}</Label>
+            <span className="flex items-center gap-1">
+              <Label htmlFor={`${prefix}-headers`}>{t('connections.mcp.headers')}</Label>
+              <Hint text={t('connections.mcp.headers.hint')} />
+            </span>
             <Textarea
               id={`${prefix}-headers`}
               name="headers"
@@ -319,7 +327,6 @@ export function McpServers({ assignment }: { assignment?: string }): React.React
               data-1p-ignore
               placeholder={'Authorization: Bearer …'}
             />
-            <p className="text-xs text-muted-foreground">{t('connections.mcp.headers.hint')}</p>
           </div>
           <SafetyNote text={t('connections.never_ai')} />
           {failure === undefined ? null : (
